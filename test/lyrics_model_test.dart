@@ -38,6 +38,25 @@ void main() {
     test('空输入返回空列表', () {
       expect(parseLyrics(''), isEmpty);
     });
+
+    test('统一时间契约：1 位分钟 / 冒号毫秒 / 行内多标签', () {
+      expect(hasLyricTimestamps('[1:02.34]短分钟'), isTrue);
+      expect(hasLyricTimestamps('没有时间标签'), isFalse);
+
+      final lines = parseLyrics(
+        '[1:02.34]短分钟\n'
+        '[00:01][00:05]重复轴\n',
+      );
+      expect(lines, hasLength(2));
+      // 解析后按时间戳排序：1s 的「重复轴」在前，62.34s 的「短分钟」在后。
+      expect(lines[0].timestamp, const Duration(seconds: 1));
+      expect(lines[0].text, '重复轴');
+      expect(
+        lines[1].timestamp,
+        const Duration(minutes: 1, seconds: 2, milliseconds: 340),
+      );
+      expect(lines[1].text, '短分钟');
+    });
   });
 
   group('buildUnsyncedLyrics', () {

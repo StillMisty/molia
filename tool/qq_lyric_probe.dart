@@ -1,7 +1,7 @@
 import 'dart:io';
 
+import 'package:molia/models/lyric_line.dart';
 import 'package:molia/services/lyrics/qq_provider.dart';
-import 'package:molia/utils/lyric_timing_utils.dart';
 
 Future<void> main(List<String> args) async {
   if (args.isEmpty) {
@@ -36,27 +36,37 @@ Future<void> main(List<String> args) async {
   final normalizedLyric =
       payload.lyric != null ? provider.normalizeLyric(payload.lyric!) : '';
 
-  final timingSummary = LyricTimingUtils.summarize(normalizedLyric);
+  // 与运行时同一套时间契约（lib/models/lyric_line.dart）。
+  final hasTimestamps = hasLyricTimestamps(normalizedLyric);
+  final contentLines = normalizedLyric
+      .split('\n')
+      .map((line) => line.trim())
+      .where((line) => line.isNotEmpty)
+      .toList();
+  final timestampedLines =
+      contentLines.where(hasLyricTimestamps).take(3).toList();
+  final plainLines = contentLines
+      .where((line) => !hasLyricTimestamps(line))
+      .take(3)
+      .toList();
 
   stdout.writeln('Primary lyric length: ${normalizedLyric.length} characters.');
   stdout.writeln(
-    'Total content lines: ${timingSummary.totalContentLines}, '
-    'timestamped lines: ${timingSummary.timestampedLineCount}.',
+    'Total content lines: ${contentLines.length}, '
+    'timestamped lines: ${contentLines.where(hasLyricTimestamps).length}.',
   );
-  stdout.writeln(
-    'Contains LRC timestamps: ${timingSummary.hasTimestamps ? 'YES' : 'NO'}',
-  );
+  stdout.writeln('Contains LRC timestamps: ${hasTimestamps ? 'YES' : 'NO'}');
 
-  if (timingSummary.sampleTimestampedLines.isNotEmpty) {
+  if (timestampedLines.isNotEmpty) {
     stdout.writeln('\nSample timestamped lines:');
-    for (final line in timingSummary.sampleTimestampedLines) {
+    for (final line in timestampedLines) {
       stdout.writeln('  $line');
     }
   }
 
-  if (timingSummary.samplePlainLines.isNotEmpty) {
+  if (plainLines.isNotEmpty) {
     stdout.writeln('\nSample plain lines:');
-    for (final line in timingSummary.samplePlainLines) {
+    for (final line in plainLines) {
       stdout.writeln('  $line');
     }
   }

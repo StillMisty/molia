@@ -37,7 +37,7 @@ import 'services/cache_service.dart';
 import 'services/language_service.dart';
 import 'managers/artwork_cache.dart';
 import 'services/data_saver_service.dart';
-import 'services/lyrics_service.dart';
+import 'providers/lyrics_provider.dart';
 import 'services/notification_service.dart';
 import 'services/settings_service.dart';
 import 'sources/source_manager.dart';
@@ -208,7 +208,7 @@ void main() async {
             libraryProvider: context.read<LibraryProvider>(),
           ),
         ),
-        Provider<LyricsService>(create: (_) => LyricsService()),
+        ChangeNotifierProvider(create: (_) => LyricsProvider()),
         // 统一缓存门面（音频/歌词/封面）：设置页缓存管理读写策略与用量。
         Provider<CacheService>.value(value: CacheService.instance),
         Provider<NotificationService>.value(value: notificationService),

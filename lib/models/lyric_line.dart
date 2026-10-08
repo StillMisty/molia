@@ -6,14 +6,23 @@ class LyricLine {
   final String text;
 }
 
-final RegExp _timeTagRegex = RegExp(r'^\[(\d{2,}):(\d{2})\.?(\d{2,3})?\]');
+/// 统一的 LRC 时间标签正则（解析与「是否有时间轴」判断共用同一契约）。
+///
+/// 允许 1–3 位分钟（`[1:02.34]` 与 `[01:02.345]` 都算），
+/// 秒后分隔符 `.` 或 `:`；不再要求标签必须位于行首。
+final RegExp lrcTimeTagRegex =
+    RegExp(r'\[(\d{1,3}):(\d{2})(?:[.:](\d{2,3}))?\]');
 
-/// 解析 LRC：时间标签（兼容 2/3 位毫秒）+ 常见 HTML 实体解码；
+/// 是否含至少一个 LRC 时间标签（与 [parseLyrics] 同一正则，不会互相漂移）。
+bool hasLyricTimestamps(String rawLyrics) =>
+    lrcTimeTagRegex.hasMatch(rawLyrics);
+
+/// 解析 LRC：时间标签（1–3 位分钟 + 2/3 位毫秒）+ 常见 HTML 实体解码；
 /// 无时间标签 / 文本为空的行忽略，单行解析失败不影响其余行。
 List<LyricLine> parseLyrics(String rawLyrics) {
   final result = <LyricLine>[];
   for (final line in rawLyrics.split('\n')) {
-    final match = _timeTagRegex.firstMatch(line);
+    final match = lrcTimeTagRegex.firstMatch(line);
     if (match == null) continue;
     try {
       final minutes = int.parse(match.group(1)!);
@@ -27,7 +36,8 @@ List<LyricLine> parseLyrics(String rawLyrics) {
             : int.parse(millisecondsStr);
       }
 
-      final text = _decodeEntities(line.substring(match.end).trim());
+      // 一行可能带多个时间标签（同一句重复时间轴）：全部剥离后取文本。
+      final text = _decodeEntities(line.replaceAll(lrcTimeTagRegex, '').trim());
       if (text.isEmpty) continue;
       result.add(LyricLine(
         Duration(

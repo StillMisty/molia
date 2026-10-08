@@ -78,6 +78,22 @@ class LyricsService {
     }
   }
 
+  /// 手动选择歌词写入统一缓存（供 LyricsProvider.saveManual 复用）。
+  Future<void> saveLyrics(
+    String trackId,
+    String lyric,
+    String providerName,
+  ) async {
+    await _lyricsCache.write(
+      trackId,
+      LyricCacheData(
+        provider: providerName,
+        lyric: lyric,
+        timestamp: DateTime.now().millisecondsSinceEpoch ~/ 1000,
+      ),
+    );
+  }
+
   /// 从单个提供者获取歌词
   Future<Map<String, String>?> _fetchFromProvider(
       LyricProvider provider, String title, String artist) async {
@@ -85,8 +101,10 @@ class LyricsService {
     return lyric != null ? {'provider': provider.name, 'lyric': lyric} : null;
   }
 
-  /// 从多个提供者并行获取歌词
-  /// 返回 Map 包含 provider 与 lyric
+  /// 并行请求所有提供者，取第一个非空结果。
+  ///
+  /// 失败路径不再顺序重试（旧实现会为每个提供者重复发一轮相同请求，
+  /// 既慢一倍也没有真正的「延长超时」——提供者内部本就没有超时参数）。
   Future<Map<String, String>?> _getFromProviders(String title, String artist) async {
     try {
       final futures = _providers
@@ -101,21 +119,9 @@ class LyricsService {
           .toList();
 
       final results = await Future.wait(futures);
-      final validResults = results.where((result) => result != null).toList();
-
-      if (validResults.isNotEmpty) {
-        return validResults.first;
+      for (final result in results) {
+        if (result != null) return result;
       }
-
-      // 如果并行获取都失败，尝试顺序获取（增加超时时间）
-      for (final provider in _providers) {
-        _logger.i('尝试从 ${provider.name} 获取歌词（延长超时）');
-        final result = await _fetchFromProvider(provider, title, artist);
-        if (result != null) {
-          return result;
-        }
-      }
-
       return null;
     } catch (e) {
       _logger.e('从提供者获取歌词失败: $e');

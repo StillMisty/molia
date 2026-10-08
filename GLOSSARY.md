@@ -21,6 +21,16 @@
 - **Resolved next（下一首解析）** — `PlaybackSnapshot.next`：后端按当前模式解析的下一首
   （shuffle 在单曲内稳定，切歌/切模式重抽）；`upcoming` 只用于队列面板展示。
 
+## 歌词
+
+- **Lyrics session module（歌词会话模块）** — `lib/providers/lyrics_provider.dart`：
+  取词 → 缓存 → 解析（统一时间契约）→ 预取的唯一实现；对外只暴露 `LyricsState`
+  （idle/loading/ready/empty + isSynced + providerName）与 `load/preload/saveManual`。
+  UI 只渲染状态，不再各自构造 `LyricsService` 或直接写 `LyricsCache`。
+- **Lyric timing contract（歌词时间契约）** — `lib/models/lyric_line.dart`：
+  `hasLyricTimestamps` 与 `parseLyrics` 共用同一正则（兼容 1–3 位分钟、`.`/`:` 毫秒
+  分隔与行内多标签）；不再允许「检测用一个正则、解析用另一个」的漂移。
+
 ## 缓存
 
 - **Lyrics cache（歌词缓存模块）** — `lib/services/lyrics_cache.dart`：歌词键（`lyrics_cache_{trackId}`）、读写、用量与清理的唯一实现；TTL 策略属于 `CacheService`（取词时读取）。历史 `manual_lyrics_cache_*` 重复键只清不读。

@@ -110,7 +110,46 @@ void main() {
         expect(result.provider, equals('fake'));
       }
     });
+
+    test('提供者全部失败时只请求一轮（不重复取词）', () async {
+      final first = _CountingProvider(name: 'first', result: null);
+      final second = _CountingProvider(name: 'second', result: null);
+      final service = LyricsService(providers: [first, second]);
+
+      final result =
+          await service.getLyrics('Bohemian Rhapsody', 'Queen', 'no_result');
+
+      expect(result, isNull);
+      expect(first.calls, 1);
+      expect(second.calls, 1);
+    });
   });
+}
+
+class _CountingProvider extends LyricProvider {
+  _CountingProvider({required this.name, required this.result});
+
+  @override
+  final String name;
+
+  final String? result;
+  int calls = 0;
+
+  @override
+  Future<String?> fetchLyric(String songId) async => result;
+
+  @override
+  Future<SongMatch?> search(String title, String artist) async {
+    calls++;
+    return SongMatch(songId: 'counting-$name', title: title, artist: artist);
+  }
+
+  @override
+  Future<List<SongMatch>> searchMultiple(String title, String artist,
+          {int limit = 3}) async =>
+      [
+        SongMatch(songId: 'counting-$name', title: title, artist: artist),
+      ];
 }
 
 class _FakeLyricProvider extends LyricProvider {

@@ -3,6 +3,7 @@ import 'package:molia/domain/models/playback.dart';
 import 'package:molia/domain/models/track.dart';
 import 'package:molia/l10n/app_localizations.dart';
 import 'package:molia/pages/nowplaying.dart';
+import 'package:molia/providers/lyrics_provider.dart';
 import 'package:molia/providers/playback_provider.dart';
 import 'package:molia/widgets/mdtab.dart';
 import 'package:molia/widgets/player.dart';
@@ -59,6 +60,9 @@ void main() {
       MultiProvider(
         providers: [
           ChangeNotifierProvider<PlaybackProvider>.value(value: playback),
+          // 播放页内嵌 LyricsWidget：歌词会话模块由 composition root 提供，
+          // 测试同样注入（真实 LyricsService 在测试 HTTP mock 下快速失败）。
+          ChangeNotifierProvider(create: (_) => LyricsProvider()),
         ],
         child: MaterialApp(
           locale: const Locale('zh'),

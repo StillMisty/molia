@@ -43,7 +43,6 @@ class _LyricsSelectionPageState extends State<LyricsSelectionPage> {
   final Set<int> _selectedIndices = {};
 
   final _scrollController = ScrollController();
-  final SettingsService _settingsService = SettingsService();
 
   @override
   void initState() {
@@ -110,7 +109,10 @@ class _LyricsSelectionPageState extends State<LyricsSelectionPage> {
       return;
     }
 
-    final copyAsSingleLine = await _settingsService.getCopyLyricsAsSingleLine();
+    // 设置来自 Provider 树（composition root 注册的同一实例）。
+    final settingsService =
+        Provider.of<SettingsService>(context, listen: false);
+    final copyAsSingleLine = await settingsService.getCopyLyricsAsSingleLine();
 
     // 根据设置格式化文本
     final String text;

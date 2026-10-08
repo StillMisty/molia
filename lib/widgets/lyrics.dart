@@ -1,6 +1,5 @@
 import 'dart:async';
 
-import 'package:logger/logger.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:material_3_expressive/material_3_expressive.dart';
 import 'package:material_ui/material_ui.dart';
@@ -12,16 +11,13 @@ import '../l10n/app_localizations.dart';
 import '../domain/models/track.dart';
 import '../models/lyric_line.dart';
 import '../models/play_mode.dart';
+import '../providers/lyrics_provider.dart';
 import '../providers/playback_provider.dart';
-import '../services/lyrics_service.dart';
 import '../services/notification_service.dart';
-import '../utils/lyric_timing_utils.dart';
 import '../utils/responsive.dart';
 import 'lyrics_search_page.dart';
 import 'lyrics_selection_page.dart';
 import 'playback_selectors.dart';
-
-final _logger = Logger();
 
 class LyricsWidget extends StatefulWidget {
   const LyricsWidget({super.key, this.quickActionsEnabled = true});
@@ -37,7 +33,6 @@ class LyricsWidget extends StatefulWidget {
 class _LyricsWidgetState extends State<LyricsWidget>
     with AutomaticKeepAliveClientMixin<LyricsWidget> {
   List<LyricLine> _lyrics = [];
-  final LyricsService _lyricsService = LyricsService();
   String? _lastTrackId;
   final ScrollController _scrollController = ScrollController();
   final GlobalKey _listViewKey = GlobalKey();
@@ -56,9 +51,6 @@ class _LyricsWidgetState extends State<LyricsWidget>
   bool _manualQuickActionsVisible = false;
   bool _lyricsContentScrollable = true;
   bool _scrollabilityCheckScheduled = false;
-  Future<void>? _nextTrackPreloadFuture;
-  String? _nextTrackPreloadedId;
-  String? _nextTrackPreloadingId;
   bool _lyricsAreSynced = true;
   bool _isLyricsLoading = false;
 
@@ -92,9 +84,11 @@ class _LyricsWidgetState extends State<LyricsWidget>
     if (!mounted) return;
 
     final provider = Provider.of<PlaybackProvider>(context, listen: false);
+    final lyricsProvider =
+        Provider.of<LyricsProvider>(context, listen: false);
     final currentTrack = provider.snapshot.current;
     if (currentTrack == null) {
-      _nextTrackPreloadFuture = null;
+      lyricsProvider.reset();
       // 无曲目：清空歌词并复位状态
       if (_lyrics.isNotEmpty || _lastTrackId != null) {
         _quickActionsHideTimer?.cancel();
@@ -121,8 +115,6 @@ class _LyricsWidgetState extends State<LyricsWidget>
     if (trackId.isEmpty || trackId == _lastTrackId) return;
 
     _lastTrackId = trackId;
-    final songName = currentTrack.title;
-    final artistName = _getPrimaryArtistName(currentTrack);
 
     if (_scrollController.hasClients) {
       _scrollController.jumpTo(0);
@@ -134,15 +126,13 @@ class _LyricsWidgetState extends State<LyricsWidget>
       _previousLineIndex = -1;
       _syncLineKeys(0);
       _currentTrackDurationMs = trackDurationMs;
-      _nextTrackPreloadedId = null;
-      _nextTrackPreloadingId = null;
       _lyricsAreSynced = true;
       _manualQuickActionsVisible = false;
       _isLyricsLoading = true;
     });
 
-    final lyricsResult =
-        await _lyricsService.getLyrics(songName, artistName, trackId);
+    // 取词/缓存/解析统一走歌词会话模块；此处只把结果落到本地渲染状态。
+    await lyricsProvider.load(currentTrack);
 
     // await 后使用 context 前先检查 mounted
     if (!mounted) return;
@@ -154,61 +144,32 @@ class _LyricsWidgetState extends State<LyricsWidget>
       return;
     }
 
-    if (lyricsResult != null) {
-      final rawLyrics = lyricsResult.lyric;
-      final summary = LyricTimingUtils.summarize(rawLyrics);
-      final parsedLyrics = parseLyrics(rawLyrics);
+    final lyricsState = lyricsProvider.state;
+    if (lyricsState.trackId != trackId ||
+        lyricsState.status == LyricsStatus.loading) {
+      return; // 另一轮加载已接管
+    }
 
-      if (summary.hasTimestamps && parsedLyrics.isNotEmpty) {
-        _quickActionsHideTimer?.cancel();
-        setState(() {
-          _lyricsAreSynced = true;
-          _lyrics = parsedLyrics;
-          _autoScroll = true;
-          _previousLineIndex = -1;
-          _syncLineKeys(_lyrics.length);
-          _currentTrackDurationMs = trackDurationMs;
-          _pendingScrollIndex = null;
-          _lastFallbackIndexAttempted = null;
-          _fallbackAttemptsForCurrentIndex = 0;
-          _manualQuickActionsVisible = false;
-          _isLyricsLoading = false;
-        });
-        // 始终预加载下一首歌词
-        unawaited(_preloadNextTrackResources());
-      } else {
-        final unsyncedLines = buildUnsyncedLyrics(rawLyrics);
-        if (unsyncedLines.isNotEmpty) {
-          _quickActionsHideTimer?.cancel();
-          setState(() {
-            _lyricsAreSynced = false;
-            _lyrics = unsyncedLines;
-            _autoScroll = false;
-            _previousLineIndex = -1;
-            _syncLineKeys(_lyrics.length);
-            _currentTrackDurationMs = trackDurationMs;
-            _pendingScrollIndex = null;
-            _lastFallbackIndexAttempted = null;
-            _fallbackAttemptsForCurrentIndex = 0;
-            _manualQuickActionsVisible = false;
-            _isLyricsLoading = false;
-          });
-          // 始终预加载下一首歌词
-          unawaited(_preloadNextTrackResources());
-        } else {
-          _quickActionsHideTimer?.cancel();
-          setState(() {
-            _lyricsAreSynced = true;
-            _lyrics = [];
-            _autoScroll = true;
-            _syncLineKeys(0);
-            _manualQuickActionsVisible = false;
-            _isLyricsLoading = false;
-          });
-        }
-      }
+    if (lyricsState.status == LyricsStatus.ready) {
+      final synced = lyricsState.isSynced;
+      _quickActionsHideTimer?.cancel();
+      setState(() {
+        _lyricsAreSynced = synced;
+        _lyrics = lyricsState.lines;
+        _autoScroll = synced;
+        _previousLineIndex = -1;
+        _syncLineKeys(_lyrics.length);
+        _currentTrackDurationMs = trackDurationMs;
+        _pendingScrollIndex = null;
+        _lastFallbackIndexAttempted = null;
+        _fallbackAttemptsForCurrentIndex = 0;
+        _manualQuickActionsVisible = false;
+        _isLyricsLoading = false;
+      });
+      // 始终预加载下一首歌词
+      unawaited(_preloadNextTrackResources());
     } else {
-      // 取词失败：保持空歌词列表
+      // 取词失败 / 空歌词：保持空歌词列表
       _quickActionsHideTimer?.cancel();
       setState(() {
         _lyrics = [];
@@ -243,23 +204,15 @@ class _LyricsWidgetState extends State<LyricsWidget>
     return 'Unknown Artist';
   }
 
-  String _getPrimaryArtistName(Track track) {
-    for (final artist in track.artists) {
-      final value = artist.name.trim();
-      if (value.isNotEmpty) {
-        return value;
-      }
-    }
-    return _extractArtistNames(track);
-  }
-
-  /// 预加载下一首歌曲的歌词（写入 LyricsService 缓存）。
+  /// 预加载下一首歌曲的歌词（会话模块负责去重与缓存写入）。
   Future<void> _preloadNextTrackResources() async {
     if (!mounted) {
       return;
     }
 
     final provider = Provider.of<PlaybackProvider>(context, listen: false);
+    final lyricsProvider =
+        Provider.of<LyricsProvider>(context, listen: false);
     final snapshot = provider.snapshot;
     final nextTrack =
         snapshot.next ?? (snapshot.upcoming.isNotEmpty ? snapshot.upcoming.first : null);
@@ -269,45 +222,11 @@ class _LyricsWidgetState extends State<LyricsWidget>
     }
 
     final trackId = nextTrack.id.uri;
-    if (trackId.isEmpty ||
-        trackId == _lastTrackId ||
-        _nextTrackPreloadedId == trackId) {
+    if (trackId.isEmpty || trackId == _lastTrackId) {
       return;
     }
 
-    if (_nextTrackPreloadFuture != null && _nextTrackPreloadingId == trackId) {
-      return;
-    }
-
-    _nextTrackPreloadingId = trackId;
-    _nextTrackPreloadFuture = Future(() async {
-      try {
-        final songName = nextTrack.title;
-        final artistName = _getPrimaryArtistName(nextTrack);
-
-        // 预加载歌词（会自动缓存到 SharedPreferences）
-        final lyricsResult =
-            await _lyricsService.getLyrics(songName, artistName, trackId);
-        if (lyricsResult == null || !mounted) {
-          _logger
-              .d('Preloaded lyrics for next track: $trackId (no lyrics found)');
-          return;
-        }
-
-        _logger.d(
-            'Preloaded lyrics for next track: $trackId (provider: ${lyricsResult.provider})');
-
-        if (!mounted) return;
-        _nextTrackPreloadedId = trackId;
-      } catch (e) {
-        _logger.d('Failed to preload next track resources: $e');
-      } finally {
-        if (_nextTrackPreloadingId == trackId) {
-          _nextTrackPreloadingId = null;
-        }
-        _nextTrackPreloadFuture = null;
-      }
-    });
+    await lyricsProvider.preload(nextTrack);
   }
 
   bool get _requiresManualQuickActions =>
@@ -1097,6 +1016,8 @@ class _LyricsWidgetState extends State<LyricsWidget>
     }
 
     // 打开搜索页
+    final lyricsProvider =
+        Provider.of<LyricsProvider>(context, listen: false);
     Navigator.of(context)
         .push(
       MaterialPageRoute(
@@ -1104,10 +1025,11 @@ class _LyricsWidgetState extends State<LyricsWidget>
           initialTrackTitle: trackName,
           initialArtistName: artistName,
           trackId: trackId,
+          lyricsProvider: lyricsProvider,
         ),
       ),
     )
-        .then((result) {
+        .then((result) async {
       // 搜索页返回后执行
       if (!mounted) return; // Check if widget is still mounted
 
@@ -1121,13 +1043,24 @@ class _LyricsWidgetState extends State<LyricsWidget>
         );
       }
 
-      // 搜索页返回了歌词
+      // 搜索页返回了歌词（搜索页已通过 LyricsProvider.saveManual
+      // 写缓存并更新会话状态；这里只把结果落到本地渲染状态）
       if (selection != null && selection.lyrics.isNotEmpty) {
-        final summary = LyricTimingUtils.summarize(selection.lyrics);
-        final parsed = parseLyrics(selection.lyrics);
-        final bool synced = summary.hasTimestamps && parsed.isNotEmpty;
-        final newLyrics =
-            synced ? parsed : buildUnsyncedLyrics(selection.lyrics);
+        if (result is! LyricsSearchSelection) {
+          await lyricsProvider.saveManual(
+            trackId: trackId,
+            lyric: selection.lyrics,
+            providerName: selection.provider,
+          );
+          if (!mounted) return;
+        }
+        final lyricsState = lyricsProvider.state;
+        if (lyricsState.trackId != trackId ||
+            lyricsState.status != LyricsStatus.ready) {
+          return;
+        }
+        final bool synced = lyricsState.isSynced;
+        final newLyrics = lyricsState.lines;
         _quickActionsHideTimer?.cancel();
         setState(() {
           _lyrics = newLyrics;

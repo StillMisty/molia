@@ -2,14 +2,13 @@ import 'package:material_3_expressive/material_3_expressive.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:logger/logger.dart';
 import 'package:provider/provider.dart';
+import '../providers/lyrics_provider.dart';
 import '../services/lyrics/lyric_provider.dart';
 import '../services/lyrics/qq_provider.dart';
 import '../services/lyrics/lrclib_provider.dart';
 import '../services/lyrics/netease_provider.dart';
 import '../l10n/app_localizations.dart';
 import '../services/notification_service.dart';
-
-import '../services/lyrics_cache.dart';
 
 // 在页面中使用自己的数据结构表示搜索结果
 final _logger = Logger();
@@ -74,11 +73,15 @@ class LyricsSearchPage extends StatefulWidget {
   final String initialArtistName;
   final String trackId; // 保存选择的歌词时需要trackId
 
+  /// 歌词会话模块：手动选择结果经它写缓存并更新展示状态。
+  final LyricsProvider lyricsProvider;
+
   const LyricsSearchPage({
     super.key,
     required this.initialTrackTitle,
     required this.initialArtistName,
     required this.trackId,
+    required this.lyricsProvider,
   });
 
   @override
@@ -273,8 +276,11 @@ class _LyricsSearchPageState extends State<LyricsSearchPage> {
         final normalizedLyric = result.provider.normalizeLyric(rawLyric);
 
         if (normalizedLyric.isNotEmpty) {
-          await _cacheLyric(
-              widget.trackId, normalizedLyric, result.provider.name);
+          await widget.lyricsProvider.saveManual(
+            trackId: widget.trackId,
+            lyric: normalizedLyric,
+            providerName: result.provider.name,
+          );
           _logger.d(
               "手动获取的歌词已缓存，曲目ID：${widget.trackId}，提供者：${result.provider.name}");
           navigator.pop(LyricsSearchSelection(
@@ -300,23 +306,6 @@ class _LyricsSearchPageState extends State<LyricsSearchPage> {
           _isFetchingLyric = false;
         });
       }
-    }
-  }
-
-  // 手动将歌词写入统一歌词缓存（规范键；历史 manual_* 重复键不再写入）
-  Future<void> _cacheLyric(
-      String trackId, String lyric, String providerName) async {
-    try {
-      await LyricsCache().write(
-        trackId,
-        LyricCacheData(
-          provider: providerName,
-          lyric: lyric,
-          timestamp: (DateTime.now().millisecondsSinceEpoch ~/ 1000),
-        ),
-      );
-    } catch (e) {
-      _logger.d('缓存歌词失败: $e');
     }
   }
 
