@@ -1,6 +1,5 @@
 import 'dart:convert';
 
-import '../../data/cache/request_cache.dart';
 import '../../domain/models/discover.dart';
 import '../source_search_result.dart';
 import 'builtin_search.dart';
@@ -19,29 +18,15 @@ import 'tx_search.dart';
 ///   → `uniform_get_Dissinfo` 兜底）、歌单搜索；
 /// - 热搜词：`musicu.fcg` hotkey。
 ///
-/// 网络结果缓存 5 分钟（[RequestCache]）。
+/// 网络结果缓存 5 分钟（统一走 `BuiltinSearch.transport.cached`）。
 class TxDiscoverSource extends DiscoverSource {
   const TxDiscoverSource();
 
-  static const Duration _cacheTtl = Duration(minutes: 5);
   static const int _limitList = 36;
   static const int _limitSong = 100000;
 
   static const String _msieUa =
       'Mozilla/5.0 (compatible; MSIE 9.0; Windows NT 6.1; WOW64; Trident/5.0)';
-
-  static final RequestCache _boardsCache =
-      RequestCache(maxEntries: 16, ttl: _cacheTtl);
-  static final RequestCache _tagsCache =
-      RequestCache(maxEntries: 4, ttl: _cacheTtl);
-  static final RequestCache _listCache =
-      RequestCache(maxEntries: 32, ttl: _cacheTtl);
-  static final RequestCache _detailCache =
-      RequestCache(maxEntries: 16, ttl: _cacheTtl);
-  static final RequestCache _searchCache =
-      RequestCache(maxEntries: 16, ttl: _cacheTtl);
-  static final RequestCache _hotSearchCache =
-      RequestCache(maxEntries: 2, ttl: _cacheTtl);
 
   @override
   String get sourceKey => 'tx';
@@ -84,7 +69,7 @@ class TxDiscoverSource extends DiscoverSource {
 
   @override
   Future<List<DiscoverTrack>> leaderboardTracks(String bangid) {
-    return _boardsCache.getOrCreate(
+    return BuiltinSearch.transport.cached(
       'tx:leaderboard:$bangid',
       () => _fetchLeaderboard(bangid),
     );
@@ -123,7 +108,7 @@ class TxDiscoverSource extends DiscoverSource {
 
   @override
   Future<DiscoverTags> tags() {
-    return _tagsCache.getOrCreate('tx:tags', () async {
+    return BuiltinSearch.transport.cached('tx:tags', () async {
       final results = await Future.wait([_fetchTag(), _fetchHotTag()]);
       return DiscoverTags(
         categories: results[0] as List<DiscoverTagCategory>,
@@ -201,7 +186,7 @@ class TxDiscoverSource extends DiscoverSource {
 
   @override
   Future<DiscoverPlaylistPage> playlists(String tagId, int page) {
-    return _listCache.getOrCreate('tx:playlists:$tagId:$page', () {
+    return BuiltinSearch.transport.cached('tx:playlists:$tagId:$page', () {
       return tagId.isEmpty ? _fetchRecommend(page) : _fetchCategory(tagId, page);
     });
   }
@@ -324,7 +309,7 @@ class TxDiscoverSource extends DiscoverSource {
 
   @override
   Future<DiscoverPlaylistPage> searchPlaylists(String keyword, int page) {
-    return _searchCache.getOrCreate('tx:playlist-search:$keyword:$page', () async {
+    return BuiltinSearch.transport.cached('tx:playlist-search:$keyword:$page', () async {
       final body = await lxHttpGet(
         'https://c.y.qq.com/soso/fcgi-bin/client_music_search_songlist'
         '?page_no=${page - 1}&num_per_page=20&format=json'
@@ -368,7 +353,7 @@ class TxDiscoverSource extends DiscoverSource {
   Future<DiscoverDetail> playlistDetail(String rawId, int page) {
     final id = _parseListId(rawId);
     if (id == null) throw StateError('tx 歌单 id 解析失败');
-    return _detailCache.getOrCreate('tx:playlist-detail:$id', () async {
+    return BuiltinSearch.transport.cached('tx:playlist-detail:$id', () async {
       try {
         return await _fetchDetailByCgi(id);
       } catch (_) {
@@ -496,7 +481,7 @@ class TxDiscoverSource extends DiscoverSource {
 
   @override
   Future<List<String>> hotSearches() {
-    return _hotSearchCache.getOrCreate('tx:hot-search', _fetchHotSearch);
+    return BuiltinSearch.transport.cached('tx:hot-search', _fetchHotSearch);
   }
 
   static Future<List<String>> _fetchHotSearch() {

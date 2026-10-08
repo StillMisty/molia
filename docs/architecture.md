@@ -104,10 +104,10 @@
   处理「渠道被停用」的 UI 回退，不再在两个 provider 之间仲裁同步。
 - **Mapping**：`track_mapper`（`SourceTrack` ↔ `Track`，payload 同一引用往返）。
 - **内置平台**：搜索/发现共用 `BuiltinSearch.transport`
-  （`lib/sources/builtin/builtin_transport.dart`）——客户端可注入、统一请求头/超时
-  与响应级重试（`retryIf`），平台适配器只保留 URL 构造与解析；fetch 路径测试
-  通过注入 `MockClient` 覆盖。发现适配器各自的静态 `RequestCache` 尚未收编到
-  传输层（后续项，当前与传输层单次请求叠加，不产生嵌套重试）。
+  （`lib/sources/builtin/builtin_transport.dart`）——客户端可注入、统一请求头/超时、
+  响应级重试（`retryIf`）与结果缓存（`transport.cached`，single-flight + LRU +
+  TTL 5min）；平台适配器只保留 URL 构造与解析，不再各自持有静态 `RequestCache`。
+  fetch 路径测试通过注入 `MockClient` 覆盖。
 - **资料库写入**：`LibraryProvider` 是收藏 / 历史 / 列表写入的唯一入口。收藏唯一
   入口 `toggleFavoriteTrack(Track)`（播放页经它写入，不再直连 `LibraryRepository`）；
   批量操作按 `PlaylistTrack` 规范形状（`PlaylistTrack.fromHistoryEntry` 负责历史转换）；

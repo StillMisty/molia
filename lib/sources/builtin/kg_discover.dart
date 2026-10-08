@@ -1,6 +1,5 @@
 import 'dart:convert';
 
-import '../../data/cache/request_cache.dart';
 import '../../domain/models/discover.dart';
 import '../source_track.dart';
 import '../source_search_result.dart';
@@ -20,27 +19,13 @@ import 'kg_search.dart';
 ///   `global.data` 歌单 → gateway 批量歌曲信息）、歌单搜索；
 /// - 热搜词：`gateway.kugou.com/.../hot_tab`。
 ///
-/// 网络结果缓存 5 分钟（[RequestCache]）。
+/// 网络结果缓存 5 分钟（统一走 `BuiltinSearch.transport.cached`）。
 class KgDiscoverSource extends DiscoverSource {
   const KgDiscoverSource();
 
-  static const Duration _cacheTtl = Duration(minutes: 5);
   static const int _limitList = 30;
   static const int _limitSong = 100;
   static const String _gatewayKey = 'OIlwieks28dk2k092lksi2UIkp';
-
-  static final RequestCache _leaderboardCache =
-      RequestCache(maxEntries: 16, ttl: _cacheTtl);
-  static final RequestCache _tagsCache =
-      RequestCache(maxEntries: 4, ttl: _cacheTtl);
-  static final RequestCache _listCache =
-      RequestCache(maxEntries: 32, ttl: _cacheTtl);
-  static final RequestCache _detailCache =
-      RequestCache(maxEntries: 16, ttl: _cacheTtl);
-  static final RequestCache _searchCache =
-      RequestCache(maxEntries: 16, ttl: _cacheTtl);
-  static final RequestCache _hotSearchCache =
-      RequestCache(maxEntries: 2, ttl: _cacheTtl);
 
   static final RegExp _listDataExp = RegExp(r'global\.data = (\[.+\]);');
   static final RegExp _listInfoExp = RegExp(
@@ -113,7 +98,7 @@ class KgDiscoverSource extends DiscoverSource {
 
   @override
   Future<List<DiscoverTrack>> leaderboardTracks(String bangid) {
-    return _leaderboardCache.getOrCreate(
+    return BuiltinSearch.transport.cached(
       'kg:leaderboard:$bangid',
       () => _fetchLeaderboard(bangid),
     );
@@ -183,7 +168,7 @@ class KgDiscoverSource extends DiscoverSource {
 
   @override
   Future<DiscoverTags> tags() {
-    return _tagsCache.getOrCreate('kg:tags', () async {
+    return BuiltinSearch.transport.cached('kg:tags', () async {
       final body = await lxHttpGet(
         'http://www2.kugou.kugou.com/yueku/v9/special/getSpecial?is_smarty=1&',
       );
@@ -241,7 +226,7 @@ class KgDiscoverSource extends DiscoverSource {
 
   @override
   Future<DiscoverPlaylistPage> playlists(String tagId, int page) {
-    return _listCache.getOrCreate('kg:playlists:$tagId:$page', () async {
+    return BuiltinSearch.transport.cached('kg:playlists:$tagId:$page', () async {
       final list = await _fetchSongList(tagId, page);
       final info = tagId.isEmpty ? null : await _fetchListInfo(tagId);
       final total = parseSourceCount(info?['total']) ?? list.length;
@@ -310,7 +295,7 @@ class KgDiscoverSource extends DiscoverSource {
 
   @override
   Future<DiscoverPlaylistPage> searchPlaylists(String keyword, int page) {
-    return _searchCache.getOrCreate('kg:playlist-search:$keyword:$page', () async {
+    return BuiltinSearch.transport.cached('kg:playlist-search:$keyword:$page', () async {
       final body = await lxHttpGet(
         'http://msearchretry.kugou.com/api/v3/search/special'
         '?keyword=${Uri.encodeComponent(keyword)}&page=$page&pagesize=20'
@@ -356,7 +341,7 @@ class KgDiscoverSource extends DiscoverSource {
   Future<DiscoverDetail> playlistDetail(String rawId, int page) {
     final id = _parseSpecialId(rawId);
     if (id == null) throw StateError('kg 歌单 id 解析失败');
-    return _detailCache.getOrCreate('kg:playlist-detail:$id', () {
+    return BuiltinSearch.transport.cached('kg:playlist-detail:$id', () {
       return _fetchDetailBySpecialId(id);
     });
   }
@@ -520,7 +505,7 @@ class KgDiscoverSource extends DiscoverSource {
 
   @override
   Future<List<String>> hotSearches() {
-    return _hotSearchCache.getOrCreate('kg:hot-search', _fetchHotSearch);
+    return BuiltinSearch.transport.cached('kg:hot-search', _fetchHotSearch);
   }
 
   static Future<List<String>> _fetchHotSearch() {

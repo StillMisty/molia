@@ -1,20 +1,15 @@
-import '../../data/cache/request_cache.dart';
 import 'builtin_search.dart';
 import 'crypto_utils.dart';
 
 /// 网易云热搜词（移植自 lx-music-mobile `wy/hotSearch.js`）。
 ///
 /// eapi `/api/search/chart/detail`（`HOT_SEARCH_SONG#@#`）→ itemList.searchWord；
-/// 结果缓存 5 分钟。
+/// 结果缓存 5 分钟（统一走 `BuiltinSearch.transport.cached`）。
 class WyHotSearch {
   WyHotSearch._();
 
-  static const Duration cacheTtl = Duration(minutes: 5);
-  static final RequestCache _cache =
-      RequestCache(maxEntries: 2, ttl: cacheTtl);
-
   static Future<List<String>> getList() {
-    return _cache.getOrCreate('wy:hot-search', _fetch);
+    return BuiltinSearch.transport.cached('wy:hot-search', _fetch);
   }
 
   static Future<List<String>> _fetch() async {

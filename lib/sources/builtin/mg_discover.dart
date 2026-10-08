@@ -1,4 +1,3 @@
-import '../../data/cache/request_cache.dart';
 import '../../domain/models/discover.dart';
 import '../source_track.dart';
 import '../source_search_result.dart';
@@ -18,11 +17,10 @@ import 'mg_search.dart';
 ///   （`resource/playlist` + `resource/playlist/song`）、歌单搜索（jadeite）；
 /// - 热搜词：jadeite `hotword`。
 ///
-/// 网络结果缓存 5 分钟（[RequestCache]）。
+/// 网络结果缓存 5 分钟（统一走 `BuiltinSearch.transport.cached`）。
 class MgDiscoverSource extends DiscoverSource {
   const MgDiscoverSource();
 
-  static const Duration _cacheTtl = Duration(minutes: 5);
   static const int _limitList = 30;
   static const int _limitSong = 30;
 
@@ -48,19 +46,6 @@ class MgDiscoverSource extends DiscoverSource {
         'Mobile/15E148 Safari/604.1',
     'Referer': 'https://m.music.migu.cn/',
   };
-
-  static final RequestCache _leaderboardCache =
-      RequestCache(maxEntries: 16, ttl: _cacheTtl);
-  static final RequestCache _tagsCache =
-      RequestCache(maxEntries: 4, ttl: _cacheTtl);
-  static final RequestCache _listCache =
-      RequestCache(maxEntries: 32, ttl: _cacheTtl);
-  static final RequestCache _detailCache =
-      RequestCache(maxEntries: 16, ttl: _cacheTtl);
-  static final RequestCache _searchCache =
-      RequestCache(maxEntries: 16, ttl: _cacheTtl);
-  static final RequestCache _hotSearchCache =
-      RequestCache(maxEntries: 2, ttl: _cacheTtl);
 
   @override
   String get sourceKey => 'mg';
@@ -94,7 +79,7 @@ class MgDiscoverSource extends DiscoverSource {
 
   @override
   Future<List<DiscoverTrack>> leaderboardTracks(String bangid) {
-    return _leaderboardCache.getOrCreate(
+    return BuiltinSearch.transport.cached(
       'mg:leaderboard:$bangid',
       () => _fetchLeaderboard(bangid),
     );
@@ -214,7 +199,7 @@ class MgDiscoverSource extends DiscoverSource {
 
   @override
   Future<DiscoverTags> tags() {
-    return _tagsCache.getOrCreate('mg:tags', () async {
+    return BuiltinSearch.transport.cached('mg:tags', () async {
       final body = await lxHttpGet(
         'https://app.c.nf.migu.cn/pc/v1.0/template/'
         'musiclistplaza-taglist/release',
@@ -268,7 +253,7 @@ class MgDiscoverSource extends DiscoverSource {
 
   @override
   Future<DiscoverPlaylistPage> playlists(String tagId, int page) {
-    return _listCache.getOrCreate('mg:playlists:$tagId:$page', () {
+    return BuiltinSearch.transport.cached('mg:playlists:$tagId:$page', () {
       return tagId.isEmpty ? _fetchRecommend(page) : _fetchTagList(tagId, page);
     });
   }
@@ -388,7 +373,7 @@ class MgDiscoverSource extends DiscoverSource {
 
   @override
   Future<DiscoverPlaylistPage> searchPlaylists(String keyword, int page) {
-    return _searchCache.getOrCreate('mg:playlist-search:$keyword:$page', () async {
+    return BuiltinSearch.transport.cached('mg:playlist-search:$keyword:$page', () async {
       final time = DateTime.now().millisecondsSinceEpoch.toString();
       final sign = md5Hex(
         '$keyword$_signatureMd5'
@@ -454,7 +439,7 @@ class MgDiscoverSource extends DiscoverSource {
   Future<DiscoverDetail> playlistDetail(String rawId, int page) {
     final id = _parsePlaylistId(rawId);
     if (id == null) throw StateError('mg 歌单 id 解析失败');
-    return _detailCache.getOrCreate('mg:playlist-detail:$id', () async {
+    return BuiltinSearch.transport.cached('mg:playlist-detail:$id', () async {
       final results = await Future.wait([
         _fetchDetailList(id),
         _fetchDetailInfo(id),
@@ -560,7 +545,7 @@ class MgDiscoverSource extends DiscoverSource {
 
   @override
   Future<List<String>> hotSearches() {
-    return _hotSearchCache.getOrCreate('mg:hot-search', _fetchHotSearch);
+    return BuiltinSearch.transport.cached('mg:hot-search', _fetchHotSearch);
   }
 
   static Future<List<String>> _fetchHotSearch() {

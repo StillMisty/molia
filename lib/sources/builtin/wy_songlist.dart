@@ -1,6 +1,5 @@
 import 'package:http/http.dart' as http;
 
-import '../../data/cache/request_cache.dart';
 import '../../domain/models/discover.dart';
 import '../source_track.dart';
 import 'builtin_search.dart';
@@ -17,25 +16,15 @@ import 'wy_music_detail.dart';
 ///   trackIds 与 privileges 数量一致时直接解析，否则批量歌曲详情补齐；
 /// - 歌单搜索：eapi `/api/cloudsearch/pc`（type=1000）。
 ///
-/// 网络结果缓存 5 分钟（[RequestCache]）。
+/// 网络结果缓存 5 分钟（统一走 `BuiltinSearch.transport.cached`）。
 class WySongList {
   WySongList._();
 
-  static const Duration cacheTtl = Duration(minutes: 5);
   static const int limitList = 30;
   static const int limitSong = 100000;
 
   /// 歌单详情接口需要的登录 cookie（LX 支持 `id###token` 形式追加 MUSIC_U）。
   static String _cookie = 'MUSIC_U=';
-
-  static final RequestCache _tagsCache =
-      RequestCache(maxEntries: 4, ttl: cacheTtl);
-  static final RequestCache _listCache =
-      RequestCache(maxEntries: 32, ttl: cacheTtl);
-  static final RequestCache _detailCache =
-      RequestCache(maxEntries: 16, ttl: cacheTtl);
-  static final RequestCache _searchCache =
-      RequestCache(maxEntries: 16, ttl: cacheTtl);
 
   static final RegExp _listDetailLink =
       RegExp(r'^.+(?:\?|&)id=(\d+)(?:&.*$|#.*$|$)');
@@ -44,7 +33,7 @@ class WySongList {
   /// 热门标签 + 完整标签目录（两个接口并行，结果缓存 5 分钟）。
   static Future<
       ({List<DiscoverTagCategory> tags, List<DiscoverTag> hotTag})> getTags() {
-    return _tagsCache.getOrCreate('wy:playlist-tags', () async {
+    return BuiltinSearch.transport.cached('wy:playlist-tags', () async {
       final results = await Future.wait([getTag(), getHotTag()]);
       return (
         tags: results[0] as List<DiscoverTagCategory>,
@@ -130,7 +119,7 @@ class WySongList {
     int page,
   ) {
     final key = 'wy:playlists:$sortId:$tagId:$page';
-    return _listCache.getOrCreate(
+    return BuiltinSearch.transport.cached(
       key,
       () => _fetchList(sortId, tagId, page),
     );
@@ -193,7 +182,7 @@ class WySongList {
   /// 歌单详情（支持链接 / ID / `id###token`；结果缓存 5 分钟）。
   static Future<DiscoverDetail> getListDetail(String rawId, int page) {
     final key = 'wy:playlist-detail:$rawId:$page';
-    return _detailCache.getOrCreate(
+    return BuiltinSearch.transport.cached(
       key,
       () => _fetchListDetail(rawId, page),
     );
@@ -351,7 +340,7 @@ class WySongList {
     int limit = 20,
   }) {
     final key = 'wy:playlist-search:$text:$page:$limit';
-    return _searchCache.getOrCreate(
+    return BuiltinSearch.transport.cached(
       key,
       () => _fetchSearch(text, page, limit),
     );

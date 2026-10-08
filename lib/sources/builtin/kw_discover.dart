@@ -1,6 +1,5 @@
 import 'dart:convert';
 
-import '../../data/cache/request_cache.dart';
 import '../../domain/models/discover.dart';
 import '../source_track.dart';
 import '../source_search_result.dart';
@@ -20,26 +19,12 @@ import 'kw_search.dart';
 ///   歌单搜索（`search.kuwo.cn`，伪 JSON 需转义）；
 /// - 热搜词：`hotword.kuwo.cn`。
 ///
-/// 网络结果缓存 5 分钟（[RequestCache]）。
+/// 网络结果缓存 5 分钟（统一走 `BuiltinSearch.transport.cached`）。
 class KwDiscoverSource extends DiscoverSource {
   const KwDiscoverSource();
 
-  static const Duration _cacheTtl = Duration(minutes: 5);
   static const int _limitList = 36;
   static const int _limitSong = 1000;
-
-  static final RequestCache _leaderboardCache =
-      RequestCache(maxEntries: 16, ttl: _cacheTtl);
-  static final RequestCache _tagsCache =
-      RequestCache(maxEntries: 4, ttl: _cacheTtl);
-  static final RequestCache _listCache =
-      RequestCache(maxEntries: 32, ttl: _cacheTtl);
-  static final RequestCache _detailCache =
-      RequestCache(maxEntries: 16, ttl: _cacheTtl);
-  static final RequestCache _searchCache =
-      RequestCache(maxEntries: 16, ttl: _cacheTtl);
-  static final RequestCache _hotSearchCache =
-      RequestCache(maxEntries: 2, ttl: _cacheTtl);
 
   static final RegExp _listDetailLink =
       RegExp(r'^.+\/playlist(?:_detail)?\/(\d+)(?:\?.*|&.*$|#.*$|$)');
@@ -101,7 +86,7 @@ class KwDiscoverSource extends DiscoverSource {
 
   @override
   Future<List<DiscoverTrack>> leaderboardTracks(String bangid) {
-    return _leaderboardCache.getOrCreate(
+    return BuiltinSearch.transport.cached(
       'kw:leaderboard:$bangid',
       () => _fetchLeaderboard(bangid),
     );
@@ -171,7 +156,7 @@ class KwDiscoverSource extends DiscoverSource {
 
   @override
   Future<DiscoverTags> tags() {
-    return _tagsCache.getOrCreate('kw:tags', () async {
+    return BuiltinSearch.transport.cached('kw:tags', () async {
       final results = await Future.wait([_fetchTag(), _fetchHotTag()]);
       return DiscoverTags(
         categories: results[0] as List<DiscoverTagCategory>,
@@ -243,7 +228,7 @@ class KwDiscoverSource extends DiscoverSource {
 
   @override
   Future<DiscoverPlaylistPage> playlists(String tagId, int page) {
-    return _listCache.getOrCreate('kw:playlists:$tagId:$page', () {
+    return BuiltinSearch.transport.cached('kw:playlists:$tagId:$page', () {
       return tagId.isEmpty
           ? _fetchRecommend(page)
           : _fetchTagPlaylist(tagId, page);
@@ -370,7 +355,7 @@ class KwDiscoverSource extends DiscoverSource {
 
   @override
   Future<DiscoverPlaylistPage> searchPlaylists(String keyword, int page) {
-    return _searchCache.getOrCreate('kw:playlist-search:$keyword:$page', () async {
+    return BuiltinSearch.transport.cached('kw:playlist-search:$keyword:$page', () async {
       final text = await lxHttpGetText(
         'http://search.kuwo.cn/r.s?all=${Uri.encodeComponent(keyword)}'
         '&pn=${page - 1}&rn=20&rformat=json&encoding=utf8&ver=mbox'
@@ -421,7 +406,7 @@ class KwDiscoverSource extends DiscoverSource {
   Future<DiscoverDetail> playlistDetail(String rawId, int page) {
     final id = _parsePlaylistId(rawId);
     if (id == null) throw StateError('kw 歌单 id 解析失败');
-    return _detailCache.getOrCreate('kw:playlist-detail:$id', () {
+    return BuiltinSearch.transport.cached('kw:playlist-detail:$id', () {
       return _fetchDetail(id);
     });
   }
@@ -541,7 +526,7 @@ class KwDiscoverSource extends DiscoverSource {
 
   @override
   Future<List<String>> hotSearches() {
-    return _hotSearchCache.getOrCreate('kw:hot-search', _fetchHotSearch);
+    return BuiltinSearch.transport.cached('kw:hot-search', _fetchHotSearch);
   }
 
   static Future<List<String>> _fetchHotSearch() {

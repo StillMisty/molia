@@ -3,6 +3,8 @@ import 'dart:convert';
 
 import 'package:http/http.dart' as http;
 
+import '../../data/cache/request_cache.dart';
+
 /// 内置平台请求失败：传输异常重试耗尽 / 空响应 / 非法 JSON。
 class BuiltinHttpException implements Exception {
   BuiltinHttpException(this.message, {this.attempts = 1});
@@ -20,9 +22,23 @@ class BuiltinHttpException implements Exception {
 /// （`BuiltinSearch.transport = BuiltinTransport(client: MockClient(...))`）
 /// 覆盖 fetch 路径，不再依赖全局 `http.get`（旧实现 fetch 完全不可测）。
 class BuiltinTransport {
-  BuiltinTransport({http.Client? client}) : _client = client ?? http.Client();
+  BuiltinTransport({http.Client? client, RequestCache? cache})
+      : _client = client ?? http.Client(),
+        _cache = cache ?? RequestCache(ttl: defaultCacheTtl);
 
   final http.Client _client;
+
+  /// 内置请求结果的统一缓存（single-flight + LRU + TTL）：发现适配器不再
+  /// 各自持有静态 RequestCache；测试注入新 transport 即得到干净缓存。
+  final RequestCache _cache;
+
+  /// 统一结果缓存 TTL（发现/热搜等，与旧实现一致 5 分钟）。
+  static const Duration defaultCacheTtl = Duration(minutes: 5);
+
+  /// 缓存入口：key 由调用方按 `{platform}:{type}:{params}` 约定拼装，
+  /// [create] 内完成请求与解析（失败不缓存，语义同 [RequestCache]）。
+  Future<T> cached<T>(String key, Future<T> Function() create) =>
+      _cache.getOrCreate(key, create);
 
   static const Duration defaultTimeout = Duration(seconds: 15);
 

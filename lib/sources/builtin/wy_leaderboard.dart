@@ -1,4 +1,3 @@
-import '../../data/cache/request_cache.dart';
 import '../../domain/models/discover.dart';
 import '../source_track.dart';
 import 'builtin_search.dart';
@@ -11,15 +10,9 @@ import 'wy_music_detail.dart';
 /// - 榜单表为 LX 内置静态列表（官方 `weapi/toplist` 接口需要登录态，
 ///   LX 已改为静态表，见其 `getBoards` 注释）；
 /// - `getTracks(bangid)`：weapi v3 歌单详情 → trackIds → 批量歌曲详情；
-/// - 结果缓存 5 分钟（[RequestCache]，single-flight + LRU + TTL）。
+/// - 结果缓存 5 分钟（统一走 `BuiltinSearch.transport.cached`）。
 class WyLeaderboard {
   WyLeaderboard._();
-
-  /// 结果缓存时长（对齐本项目搜索/取链缓存的 5 分钟约定）。
-  static const Duration cacheTtl = Duration(minutes: 5);
-
-  static final RequestCache _cache =
-      RequestCache(maxEntries: 16, ttl: cacheTtl);
 
   /// LX 静态榜单表（`wy/leaderboard.js` 的 topList 原样移植）。
   static const List<DiscoverLeaderboard> boards = [
@@ -96,7 +89,7 @@ class WyLeaderboard {
 
   /// 榜单曲目（带 5 分钟缓存；[bangid] 为榜单 id，如 `3778678`）。
   static Future<List<SourceTrack>> getTracks(String bangid) {
-    return _cache.getOrCreate(
+    return BuiltinSearch.transport.cached(
       'wy:leaderboard:$bangid',
       () => _fetch(bangid),
     );

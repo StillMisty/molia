@@ -6,6 +6,7 @@ import 'package:http/testing.dart';
 import 'package:molia/sources/builtin/builtin_search.dart';
 import 'package:molia/sources/builtin/builtin_transport.dart';
 import 'package:molia/sources/builtin/kw_search.dart';
+import 'package:molia/sources/builtin/wy_hot_search.dart';
 
 /// 内置传输层：客户端注入、请求头/超时、响应级重试、JSON 解码；
 /// 并验证平台搜索 fetch 路径可被 MockClient 完整覆盖（旧实现不可测）。
@@ -156,5 +157,47 @@ void main() {
     final result = await KwSearch.searchWithMeta('hello');
     expect(calls, 2);
     expect(result.tracks, hasLength(1));
+  });
+
+  test('transport.cached：同 key 只创建一次（single-flight/命中）', () async {
+    var creates = 0;
+    final transport = BuiltinTransport();
+    final first = await transport.cached('k', () async {
+      creates++;
+      return 42;
+    });
+    final second = await transport.cached('k', () async {
+      creates++;
+      return 42;
+    });
+    expect(first, 42);
+    expect(second, 42);
+    expect(creates, 1);
+  });
+
+  test('发现适配器 fetch：WyHotSearch 走注入客户端且结果被缓存', () async {
+    var requests = 0;
+    BuiltinSearch.transport =
+        BuiltinTransport(client: MockClient((request) async {
+      requests++;
+      return http.Response.bytes(
+        utf8.encode(jsonEncode({
+          'code': 200,
+          'data': {
+            'itemList': [
+              {'searchWord': '热词一'},
+              {'searchWord': '热词二'},
+            ],
+          },
+        })),
+        200,
+      );
+    }));
+
+    final words = await WyHotSearch.getList();
+    expect(words, ['热词一', '热词二']);
+    final again = await WyHotSearch.getList();
+    expect(again, words);
+    expect(requests, 1, reason: '第二次命中 transport 缓存');
   });
 }
