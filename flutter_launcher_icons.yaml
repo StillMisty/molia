@@ -1,13 +1,18 @@
 # flutter pub run flutter_launcher_icons
+#
+# 注意：Android 图标已改为手绘矢量资源，本工具不再生成 Android 图标（android: false）。
+# 品牌更新时 Android 侧维护方式：
+#   1. 源图：assets/icons/molia_icon_full_bleed.svg
+#      （2048×2048：纯色底 #124537 + 外层 group 变换 + 7 条 path 的 mark）
+#   2. 前景 / 单色层：android/app/src/main/res/drawable/ic_launcher_foreground.xml
+#      （外层 group = 源 SVG 的 translate/scale 展开；单色层复用同一矢量，系统按 alpha 着色）
+#   3. 背景色：android/app/src/main/res/values/launcher_icons.xml
+#   4. 自适应配置：android/app/src/main/res/mipmap-anydpi-v26/launcher_icon.xml
+#   minSdk=37 只会走自适应图标，因此不再保留传统密度 mipmap / drawable PNG。
 flutter_launcher_icons:
   image_path: "assets/icons/image_path_android.png"
 
-  android: "launcher_icon"
-  image_path_android: "assets/icons/image_path_android.png"
-  min_sdk_android: 21 # android min sdk min:16, default 21
-  adaptive_icon_background: "assets/icons/adaptive_icon_background.png"
-  adaptive_icon_foreground: "assets/icons/adaptive_icon_foreground.png"
-  adaptive_icon_monochrome: "assets/icons/adaptive_icon_monochrome.png"
+  android: false
 
   ios: true
   image_path_ios: "assets/icons/image_path_ios.png"
@@ -15,13 +20,3 @@ flutter_launcher_icons:
   image_path_ios_dark_transparent: "assets/icons/image_path_ios_dark_transparent.png"
   image_path_ios_tinted_grayscale: "assets/icons/image_path_ios_tinted_grayscale.png"
   desaturate_tinted_to_grayscale_ios: true
-
-  web:
-    generate: true
-    # maskable 图标会被系统裁切，源图必须全出血不透明：
-    # 使用 iOS 全方形源（四角为品牌绿），而不是圆角透明的 Android 源。
-    image_path: "assets/icons/image_path_ios.png"
-    background_color: "#FBF9E8"
-    theme_color: "#124537"
-
-

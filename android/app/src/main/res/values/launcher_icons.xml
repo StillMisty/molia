@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 启动图标背景色（源：assets/icons/molia_icon_full_bleed.svg 的纯色矩形 #124537）。
+     Android 图标自 2026-10 起为手绘矢量资源，不再由 flutter_launcher_icons 生成；
+     来源与转换方式见 flutter_launcher_icons.yaml 顶部说明。 -->
+<resources>
+    <color name="ic_launcher_background">#124537</color>
+</resources>
