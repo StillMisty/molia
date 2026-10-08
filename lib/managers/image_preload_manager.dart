@@ -4,6 +4,7 @@ import 'dart:collection';
 import 'package:flutter/widgets.dart';
 import 'package:logger/logger.dart';
 
+import '../domain/models/track.dart';
 import 'artwork_cache.dart';
 
 /// 图片预加载管理器
@@ -161,56 +162,28 @@ class _PreloadTask {
 class AlbumArtPreloadStrategy {
   final ImagePreloadManager _manager = ImagePreloadManager();
 
-  /// 从曲目数据中提取封面 URL
-  String? extractAlbumArt(Map<String, dynamic>? track) {
-    if (track == null) return null;
-
-    // 尝试从 item 中获取
-    final item = track['item'] as Map<String, dynamic>?;
-    if (item != null) {
-      return _getAlbumArtFromItem(item);
-    }
-
-    // 直接从 track 获取（队列中的格式）
-    return _getAlbumArtFromItem(track);
-  }
-
-  String? _getAlbumArtFromItem(Map<String, dynamic> item) {
-    final album = item['album'] as Map<String, dynamic>?;
-    if (album == null) return null;
-
-    final images = album['images'] as List?;
-    if (images == null || images.isEmpty) return null;
-
-    // 优先选择中等尺寸的图片（通常是第二张）
-    if (images.length >= 2) {
-      final mediumImage = images[1] as Map<String, dynamic>?;
-      if (mediumImage != null && mediumImage['url'] != null) {
-        return mediumImage['url'] as String;
-      }
-    }
-
-    // 否则返回第一张
-    final firstImage = images[0] as Map<String, dynamic>?;
-    return firstImage?['url'] as String?;
+  /// 从领域曲目提取封面 URL（无封面返回 null）。
+  String? albumArtOf(Track? track) {
+    final artwork = track?.artwork;
+    if (artwork == null) return null;
+    final url = artwork.uri.toString();
+    return url.isEmpty ? null : url;
   }
 
   /// 预加载播放相关的封面
   Future<void> preloadForPlayback({
     required BuildContext context,
-    Map<String, dynamic>? currentTrack,
-    Map<String, dynamic>? nextTrack,
-    List<Map<String, dynamic>>? upcomingTracks,
+    Track? currentTrack,
+    Track? nextTrack,
+    List<Track>? upcomingTracks,
   }) async {
-    final queueArts = upcomingTracks
-        ?.take(5)
-        .map((t) => extractAlbumArt(t))
-        .toList();
+    final queueArts =
+        upcomingTracks?.take(5).map(albumArtOf).toList();
 
     await _manager.preloadPlaybackImages(
       context: context,
-      currentAlbumArt: extractAlbumArt(currentTrack),
-      nextAlbumArt: extractAlbumArt(nextTrack),
+      currentAlbumArt: albumArtOf(currentTrack),
+      nextAlbumArt: albumArtOf(nextTrack),
       queueAlbumArts: queueArts,
     );
   }

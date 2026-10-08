@@ -9,6 +9,7 @@ import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 
 import '../l10n/app_localizations.dart';
+import '../domain/models/track.dart';
 import '../models/lyric_line.dart';
 import '../models/play_mode.dart';
 import '../providers/playback_provider.dart';
@@ -91,7 +92,7 @@ class _LyricsWidgetState extends State<LyricsWidget>
     if (!mounted) return;
 
     final provider = Provider.of<PlaybackProvider>(context, listen: false);
-    final currentTrack = provider.currentTrack;
+    final currentTrack = provider.snapshot.current;
     if (currentTrack == null) {
       _nextTrackPreloadFuture = null;
       // 无曲目：清空歌词并复位状态
@@ -114,19 +115,14 @@ class _LyricsWidgetState extends State<LyricsWidget>
       return;
     }
 
-    final trackId = currentTrack['item']?['id'];
-    final durationValue = currentTrack['item']?['duration_ms'];
-    final trackDurationMs = durationValue is int
-        ? durationValue
-        : durationValue is String
-            ? int.tryParse(durationValue)
-            : null;
+    final trackId = currentTrack.id.uri;
+    final trackDurationMs = currentTrack.duration?.inMilliseconds;
     // 仅当曲目 id 有效且变化时重新加载
-    if (trackId == null || trackId == _lastTrackId) return;
+    if (trackId.isEmpty || trackId == _lastTrackId) return;
 
     _lastTrackId = trackId;
-    final songName = currentTrack['item']?['name'] ?? '';
-    final artistName = currentTrack['item']?['artists']?[0]?['name'] ?? '';
+    final songName = currentTrack.title;
+    final artistName = _getPrimaryArtistName(currentTrack);
 
     if (_scrollController.hasClients) {
       _scrollController.jumpTo(0);
@@ -152,7 +148,7 @@ class _LyricsWidgetState extends State<LyricsWidget>
     if (!mounted) return;
 
     final latestTrackId = Provider.of<PlaybackProvider>(context, listen: false)
-        .currentTrack?['item']?['id'];
+        .snapshot.current?.id.uri;
     // 更新状态前确认歌词仍属于当前曲目
     if (latestTrackId != trackId) {
       return;
@@ -236,40 +232,25 @@ class _LyricsWidgetState extends State<LyricsWidget>
     }
   }
 
-  String _extractArtistNames(Map<String, dynamic> trackItem) {
-    final artists = trackItem['artists'];
-    if (artists is List) {
-      final names = artists
-          .map((artist) {
-            if (artist is Map && artist['name'] != null) {
-              final value = artist['name'].toString().trim();
-              if (value.isNotEmpty) {
-                return value;
-              }
-            }
-            return '';
-          })
-          .where((name) => name.isNotEmpty)
-          .toList();
-      if (names.isNotEmpty) {
-        return names.join(', ');
-      }
+  String _extractArtistNames(Track track) {
+    final names = track.artists
+        .map((artist) => artist.name.trim())
+        .where((name) => name.isNotEmpty)
+        .toList();
+    if (names.isNotEmpty) {
+      return names.join(', ');
     }
     return 'Unknown Artist';
   }
 
-  String _getPrimaryArtistName(Map<String, dynamic> trackItem) {
-    final artists = trackItem['artists'];
-    if (artists is List && artists.isNotEmpty) {
-      final first = artists.first;
-      if (first is Map && first['name'] != null) {
-        final value = first['name'].toString().trim();
-        if (value.isNotEmpty) {
-          return value;
-        }
+  String _getPrimaryArtistName(Track track) {
+    for (final artist in track.artists) {
+      final value = artist.name.trim();
+      if (value.isNotEmpty) {
+        return value;
       }
     }
-    return _extractArtistNames(trackItem);
+    return _extractArtistNames(track);
   }
 
   /// 预加载下一首歌曲的歌词（写入 LyricsService 缓存）。
@@ -279,24 +260,16 @@ class _LyricsWidgetState extends State<LyricsWidget>
     }
 
     final provider = Provider.of<PlaybackProvider>(context, listen: false);
-    final dynamic nextTrackRaw = provider.nextTrack ??
-        (provider.upcomingTracks.isNotEmpty
-            ? provider.upcomingTracks.first
-            : null);
-
-    if (nextTrackRaw == null) {
-      return;
-    }
-
+    final snapshot = provider.snapshot;
     final nextTrack =
-        nextTrackRaw is Map<String, dynamic> ? nextTrackRaw : null;
+        snapshot.next ?? (snapshot.upcoming.isNotEmpty ? snapshot.upcoming.first : null);
+
     if (nextTrack == null) {
       return;
     }
 
-    final trackId = nextTrack['id']?.toString();
-    if (trackId == null ||
-        trackId.isEmpty ||
+    final trackId = nextTrack.id.uri;
+    if (trackId.isEmpty ||
         trackId == _lastTrackId ||
         _nextTrackPreloadedId == trackId) {
       return;
@@ -309,7 +282,7 @@ class _LyricsWidgetState extends State<LyricsWidget>
     _nextTrackPreloadingId = trackId;
     _nextTrackPreloadFuture = Future(() async {
       try {
-        final songName = nextTrack['name']?.toString() ?? '';
+        final songName = nextTrack.title;
         final artistName = _getPrimaryArtistName(nextTrack);
 
         // 预加载歌词（会自动缓存到 SharedPreferences）
@@ -603,8 +576,7 @@ class _LyricsWidgetState extends State<LyricsWidget>
     // 曲目变化走低频快照 Selector；行高亮订阅 position 独立通道，
     // 仅在行号变化时重建（PositionLineIndexBuilder 内部缓存行号）。
     return Selector<PlaybackProvider, String?>(
-      selector: (_, provider) =>
-          provider.currentTrack?['item']?['id']?.toString(),
+      selector: (_, provider) => provider.snapshot.current?.id.uri,
       builder: (context, currentTrackId, _) {
         return PositionLineIndexBuilder(
           position: playbackProvider.position,
@@ -1095,7 +1067,7 @@ class _LyricsWidgetState extends State<LyricsWidget>
 
     final playbackProvider =
         Provider.of<PlaybackProvider>(context, listen: false);
-    final currentTrack = playbackProvider.currentTrack?['item'];
+    final currentTrack = playbackProvider.snapshot.current;
     final notificationService =
         Provider.of<NotificationService>(context, listen: false);
     final l10n = AppLocalizations.of(context)!;
@@ -1105,14 +1077,11 @@ class _LyricsWidgetState extends State<LyricsWidget>
       return;
     }
 
-    final trackId = currentTrack['id'];
-    final trackName = currentTrack['name'] ?? '';
-    final artistName = (currentTrack['artists'] as List?)
-            ?.map((artist) => artist['name'] as String)
-            .join(', ') ??
-        ''; // Join multiple artists
+    final trackId = currentTrack.id.uri;
+    final trackName = currentTrack.title;
+    final artistName = _extractArtistNames(currentTrack);
 
-    if (trackId == null || trackName.isEmpty) {
+    if (trackId.isEmpty || trackName.isEmpty) {
       notificationService.showSnackBar(l10n.cannotGetTrackInfo);
       return;
     }
@@ -1233,7 +1202,7 @@ class _LyricsWidgetState extends State<LyricsWidget>
 
     final playbackProvider =
         Provider.of<PlaybackProvider>(context, listen: false);
-    final currentTrack = playbackProvider.currentTrack?['item'];
+    final currentTrack = playbackProvider.snapshot.current;
     final notificationService =
         Provider.of<NotificationService>(context, listen: false);
     final l10n = AppLocalizations.of(context)!;
@@ -1248,15 +1217,9 @@ class _LyricsWidgetState extends State<LyricsWidget>
       return;
     }
 
-    final trackName = currentTrack['name'] ?? '';
-    final artistName = (currentTrack['artists'] as List?)
-            ?.map((artist) => artist['name'] as String)
-            .join(', ') ??
-        '';
-    final albumCoverUrl =
-        (currentTrack['album']?['images'] as List?)?.isNotEmpty == true
-            ? currentTrack['album']['images'][0]['url']
-            : null;
+    final trackName = currentTrack.title;
+    final artistName = _extractArtistNames(currentTrack);
+    final albumCoverUrl = currentTrack.artwork?.uri.toString();
 
     // 暂停当前的自动滚动
     final wasAutoScrollEnabled = _autoScroll;

@@ -79,17 +79,15 @@ void main() {
     // 恢复态：UI 能拿到曲目/封面/进度/队列。
     expect(provider.hasRestoredSession, isTrue);
     expect(provider.hasTrack, isTrue);
-    expect(provider.currentTrack?['item']?['name'], 'Title b');
-    expect(
-      provider.currentTrack?['item']?['album']?['images']?[0]?['url'],
-      'https://img.example/b.jpg',
-    );
+    expect(provider.snapshot.current?.title, 'Title b');
+    expect(provider.snapshot.current?.artwork?.uri.toString(),
+        'https://img.example/b.jpg');
     expect(provider.currentTrackId, const TrackId('fake', 'b'));
     // 恢复会话保留队列里 index-1：左侧「上一首」封面不因重启丢失。
-    expect(provider.previousTrack?['name'], 'Title a');
+    expect(provider.snapshot.history.last.title, 'Title a');
     expect(provider.position.value, const Duration(seconds: 20));
-    expect(provider.nextTrack, isNull);
-    expect(provider.upcomingTracks, isEmpty);
+    expect(provider.snapshot.next, isNull);
+    expect(provider.snapshot.upcoming, isEmpty);
 
     // 恢复态 seek：只更新保存的进度，不碰真实播放。
     await provider.seekToPosition(25000);

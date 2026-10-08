@@ -47,6 +47,7 @@ void main() {
       current: b,
       queue: [a, b, c],
       currentIndex: 1,
+      next: c,
       upcoming: [c],
       isPlaying: true,
       position: const Duration(seconds: 5),

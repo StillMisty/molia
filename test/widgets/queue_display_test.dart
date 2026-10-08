@@ -66,6 +66,8 @@ void main() {
       current: _track('a'),
       queue: [_track('a'), _track('b')],
       currentIndex: 0,
+      next: _track('b'),
+      upcoming: [_track('b')],
       isPlaying: true,
       position: Duration.zero,
       duration: const Duration(seconds: 30),

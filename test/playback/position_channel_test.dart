@@ -193,8 +193,8 @@ void main() {
       expect(notifies, afterSnapshot,
           reason: 'position tick 不得触发 notifyListeners');
       expect(provider.currentPosition, const Duration(milliseconds: 2500));
-      expect(provider.currentTrack?['progress_ms'], 2500,
-          reason: '兼容 map 的一次性读取仍拿到最新进度');
+      expect(provider.position.value, const Duration(milliseconds: 2500),
+          reason: 'position 通道一次性读取拿到最新进度');
 
       // 快照（播放状态）变化：仍通知。
       backend.emit(snapshotAt(2500, isPlaying: false));

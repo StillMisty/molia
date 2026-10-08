@@ -35,7 +35,8 @@ class ProgressBarSelector extends StatelessWidget {
     return Selector<PlaybackProvider,
         ({int duration, bool isPlaying, bool hasTrack})>(
       selector: (_, provider) => (
-        duration: provider.currentTrack?['item']?['duration_ms'] as int? ?? 1,
+        duration:
+            provider.hasTrack ? provider.snapshot.duration.inMilliseconds : 1,
         isPlaying: provider.isPlaying,
         hasTrack: provider.hasTrack,
       ),

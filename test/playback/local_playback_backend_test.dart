@@ -62,16 +62,17 @@ class _FakeService extends LocalPlaybackService {
   int get currentIndex => _index;
 
   @override
-  Map<String, dynamic>? get currentTrackMap {
+  String? get contextName => _contextName;
+
+  @override
+  SourceTrack? get nextSourceTrack {
     if (!hasTrack) return null;
-    return {
-      'context': {
-        'type': 'lx',
-        'name': _contextName ?? '',
-        'uri': 'lx:${_contextName ?? ''}',
-      },
-    };
+    final next = _index + 1;
+    return next < _queue.length ? _queue[next] : null;
   }
+
+  @override
+  List<SourceTrack> get historyTracks => const [];
 
   void seed(
     List<SourceTrack> tracks, {
@@ -210,7 +211,9 @@ void main() {
     expect(snapshot.current?.id, const TrackId('fake', 'a'));
     expect(snapshot.queue, hasLength(2));
     expect(snapshot.currentIndex, 0);
+    expect(snapshot.next?.id.id, 'b');
     expect(snapshot.upcoming.map((t) => t.id.id), ['b']);
+    expect(snapshot.history, isEmpty);
     expect(snapshot.isPlaying, isTrue);
     expect(snapshot.duration, const Duration(seconds: 42));
     expect(snapshot.context?.name, '集成测试');

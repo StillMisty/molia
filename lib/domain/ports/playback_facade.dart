@@ -30,12 +30,4 @@ abstract interface class PlaybackFacade {
   Future<void> previous();
   Future<void> setMode(PlayMode mode);
   Future<void> stop();
-
-  // 阶段 1–3 兼容层（旧 UI 零改动前提；阶段 5 随 UI 迁移删除）。
-  // 形状与 LocalPlaybackService.currentTrackMap/nextTrackMap/upcomingTrackMaps
-  // 完全一致。
-
-  Map<String, dynamic>? get compatCurrentTrack;
-  Map<String, dynamic>? get compatNextTrack;
-  List<Map<String, dynamic>> get compatUpcoming;
 }

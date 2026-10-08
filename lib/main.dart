@@ -44,7 +44,6 @@ import 'sources/source_manager.dart';
 import 'theme/animated_scheme.dart';
 import 'theme/app_theme.dart';
 import 'utils/responsive.dart';
-import 'utils/track_map_utils.dart';
 import 'widgets/app_network_image.dart';
 import 'widgets/nav_destination_icons.dart';
 import 'widgets/playback_selectors.dart';
@@ -160,6 +159,9 @@ void main() async {
   // 资料库仓库：播放历史 / 我的列表 / 收藏；播放开始时由
   // PlaybackProvider 写历史，资料库页经 LibraryProvider 读取（内存缓存）。
   final libraryRepository = LibraryRepository();
+  // 最近播放上下文（play_contexts）：提前创建，同一实例既进 Provider 树，
+  // 也直接注入 PlaybackProvider（不再经 navigatorKey 反查 provider）。
+  final localDatabaseProvider = LocalDatabaseProvider();
   final playbackProvider = PlaybackProvider(
     facade: playbackFacade,
     messenger: _AppUiMessenger(notificationService),
@@ -168,6 +170,7 @@ void main() async {
     catalogService: catalogService,
     libraryRepository: libraryRepository,
     dataSaver: dataSaver,
+    localDatabaseProvider: localDatabaseProvider,
   );
 
   runApp(
@@ -191,7 +194,7 @@ void main() async {
             sourceRegistry: sourceRegistry,
           ),
         ),
-        ChangeNotifierProvider(create: (_) => LocalDatabaseProvider()),
+        ChangeNotifierProvider.value(value: localDatabaseProvider),
         ChangeNotifierProvider(
           create: (_) => LibraryProvider(
             repository: libraryRepository,
@@ -932,11 +935,13 @@ class _BarCover extends StatelessWidget {
   Widget build(BuildContext context) {
     final (coverUrl, hasTrack) =
         context.select<PlaybackProvider, (String?, bool)>(
-      (provider) => (
-        trackMapImageUrl(
-            provider.currentTrack?['item'] as Map<String, dynamic>?),
-        provider.hasTrack,
-      ),
+      (provider) {
+        final url = provider.snapshot.current?.artwork?.uri.toString();
+        return (
+          url == null || url.isEmpty ? null : url,
+          provider.hasTrack,
+        );
+      },
     );
     final image = AppNetworkImage(
       url: coverUrl,
@@ -998,14 +1003,12 @@ class _BarTrackInfo extends StatelessWidget {
   Widget build(BuildContext context) {
     final info = context.select<PlaybackProvider, (String?, String?)>(
       (provider) {
-        final item = provider.currentTrack?['item'];
-        final name = item?['name'] as String?;
-        final artists = (item?['artists'] as List?)
-            ?.map((artist) => (artist as Map)['name'] as String?)
-            .whereType<String>()
-            .where((value) => value.isNotEmpty)
+        final track = provider.snapshot.current;
+        final artists = track?.artists
+            .map((artist) => artist.name)
+            .where((name) => name.isNotEmpty)
             .join(', ');
-        return (name, artists);
+        return (track?.title, artists);
       },
     );
     final (name, artists) = info;

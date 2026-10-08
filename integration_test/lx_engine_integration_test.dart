@@ -130,15 +130,15 @@ void main() {
       reason: '播放未开始: ${player.lastError ?? ''}',
     );
 
-    final map = player.currentTrackMap!;
-    expect(map['item']['name'], 'Hello LX');
-    expect(map['is_playing'], isTrue);
-    expect(map['context']['name'], '集成测试');
+    final track = player.currentSourceTrack!;
+    expect(track.title, 'Hello LX');
+    expect(player.isPlaying, isTrue);
+    expect(player.contextName, '集成测试');
 
     // 等进度推进
     await Future<void>.delayed(const Duration(seconds: 2));
     await tester.pump();
-    expect(player.currentTrackMap!['progress_ms'], greaterThan(0),
+    expect(player.position, greaterThan(Duration.zero),
         reason: '播放进度没有推进');
 
     // 暂停 / 继续
@@ -151,14 +151,15 @@ void main() {
     await player.skipToNext();
     await waitFor(
       tester,
-      () => player.currentTrackMap!['item']['name'] == 'Second Song',
+      () => player.currentSourceTrack?.title == 'Second Song',
       reason: '下一首未生效',
     );
 
     // seek
     await player.seek(const Duration(milliseconds: 500));
     await tester.pump();
-    expect(player.currentTrackMap!['progress_ms'], greaterThanOrEqualTo(400));
+    expect(player.position,
+        greaterThanOrEqualTo(const Duration(milliseconds: 400)));
 
     await player.stop();
     expect(player.hasTrack, isFalse);

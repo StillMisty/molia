@@ -73,7 +73,9 @@ class FakeBackend implements PlaybackBackend {
       current: current.current,
       queue: current.queue,
       currentIndex: current.currentIndex,
+      next: current.next,
       upcoming: current.upcoming,
+      history: current.history,
       isPlaying: current.isPlaying,
       isLoading: current.isLoading,
       position: current.position,
@@ -305,18 +307,21 @@ void main() {
     });
   });
 
-  group('兼容层形状（与 LocalPlaybackService 一致）', () {
-    test('currentTrack / nextTrack / upcoming', () {
+  group('领域快照形状', () {
+    test('current / next / upcoming / history', () {
       final backend = FakeBackend();
       final facade = DefaultPlaybackFacade(backend: backend);
+      final previous = _track('z');
       final current = _track('a');
       final next = _track('b');
 
       backend.emit(BackendSnapshot(
         current: current,
-        queue: [current, next],
-        currentIndex: 0,
+        queue: [previous, current, next],
+        currentIndex: 1,
+        next: next,
         upcoming: [next],
+        history: [previous],
         isPlaying: true,
         duration: const Duration(seconds: 42),
         context: const PlaybackContext(
@@ -326,65 +331,28 @@ void main() {
         ),
       ));
 
-      final map = facade.compatCurrentTrack!;
-      expect(map['is_playing'], isTrue);
-      expect(map['progress_ms'], isA<int>());
-      expect(map['item'], {
-        'id': 'lx:fake:a',
-        'name': 'Title a',
-        'duration_ms': 42000,
-        'artists': [
-          {'name': 'Artist a'},
-        ],
-        'album': {
-          'name': 'Album',
-          'images': [
-            {'url': 'https://img.example/a.jpg'},
-          ],
-        },
-        'uri': 'lx:fake:a',
-      });
-      expect(map['context'], {
-        'type': 'lx',
-        'name': '集成测试',
-        'uri': 'lx:集成测试',
-      });
-      expect(map['device'], {'id': 'local', 'name': 'Molia', 'is_active': true});
-      expect(map['source'], 'lx');
+      final snapshot = facade.snapshot.value;
+      expect(snapshot.current?.id, const TrackId('fake', 'a'));
+      expect(snapshot.current?.title, 'Title a');
+      expect(snapshot.next?.id, const TrackId('fake', 'b'));
+      expect(snapshot.upcoming.map((track) => track.id.id), ['b']);
+      expect(snapshot.history.map((track) => track.id.id), ['z']);
+      expect(snapshot.isPlaying, isTrue);
+      expect(snapshot.duration, const Duration(seconds: 42));
+      expect(snapshot.context?.name, '集成测试');
 
-      final nextMap = facade.compatNextTrack!;
-      expect(nextMap['id'], 'fake:b');
-      expect(nextMap['uri'], 'lx:fake:b');
-      expect(nextMap['is_next'], isTrue);
-      expect(nextMap['name'], 'Title b');
-      expect(nextMap['type'], 'track');
-      expect(nextMap['duration_ms'], 30000);
-      expect(nextMap['artists'], [
-        {'name': 'Artist b'},
-      ]);
-      expect(nextMap['album'], {
-        'images': [
-          {'url': 'https://img.example/b.jpg'},
-        ],
-      });
-
-      final upcoming = facade.compatUpcoming;
-      expect(upcoming, hasLength(1));
-      expect(upcoming.single['id'], 'fake:b');
-      expect(upcoming.single['is_next'], isFalse);
-
-      // 队列末尾（顺序模式）→ null，与旧 nextTrackMap 一致。
+      // 队列末尾（顺序模式）→ next 为 null（由后端解析），upcoming 为空。
       backend.emit(BackendSnapshot(
         current: next,
-        queue: [current, next],
-        currentIndex: 1,
+        queue: [previous, current, next],
+        currentIndex: 2,
         mode: PlayMode.sequential,
       ));
-      expect(facade.compatNextTrack, isNull);
-      expect(facade.compatUpcoming, isEmpty);
+      expect(facade.snapshot.value.next, isNull);
+      expect(facade.snapshot.value.upcoming, isEmpty);
     });
 
-    test('progress_ms 随 position 通道刷新', () async {
+    test('进度不进入低频快照；seek 立即对齐 position 通道', () async {
       final backend = FakeBackend();
       final facade = DefaultPlaybackFacade(backend: backend);
       final track = _track('a');
@@ -394,10 +362,13 @@ void main() {
         currentIndex: 0,
         isPlaying: true,
       ));
-      expect(facade.compatCurrentTrack!['progress_ms'], 0);
+      expect(facade.snapshot.value.current?.title, 'Title a');
+      expect(facade.position.value, Duration.zero);
 
       await facade.seek(const Duration(milliseconds: 1500));
-      expect(facade.compatCurrentTrack!['progress_ms'], 1500);
+      expect(facade.position.value, const Duration(milliseconds: 1500));
+      // 快照值不变（position 不参与低频快照相等性）。
+      expect(facade.snapshot.value.current?.title, 'Title a');
     });
   });
 
@@ -406,7 +377,7 @@ void main() {
       SharedPreferences.setMockInitialValues({});
     });
 
-    test('状态读 facade 兼容层；错误经 messenger 上报；控制委托 backend',
+    test('状态读领域快照；错误经 messenger 上报；控制委托 backend',
         () async {
       final backend = FakeBackend();
       final facade = DefaultPlaybackFacade(backend: backend);
@@ -426,7 +397,7 @@ void main() {
       expect(provider.hasTrack, isTrue);
       expect(provider.isPlaying, isTrue);
       expect(provider.isLoading, isFalse);
-      expect(provider.currentTrack?['item']?['name'], 'Title a');
+      expect(provider.snapshot.current?.title, 'Title a');
       expect(provider.currentMode, PlayMode.sequential);
 
       expect(messenger.failures, hasLength(1));

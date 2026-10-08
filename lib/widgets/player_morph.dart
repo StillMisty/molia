@@ -6,7 +6,6 @@ import 'package:provider/provider.dart';
 
 import '../managers/artwork_cache.dart';
 import '../providers/playback_provider.dart';
-import '../utils/track_map_utils.dart';
 import 'molia_mark.dart';
 
 /// 顶栏 ↔ 播放页共享元素飞行控制器。
@@ -99,8 +98,10 @@ class PlayerMorphFlight extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final provider = context.watch<PlaybackProvider>();
-    final item = provider.currentTrack?['item'];
-    final String? coverUrl = trackMapImageUrl(item);
+    final track = provider.snapshot.current;
+    final artworkUrl = track?.artwork?.uri.toString();
+    final String? coverUrl =
+        artworkUrl == null || artworkUrl.isEmpty ? null : artworkUrl;
 
     return AnimatedBuilder(
       animation: animation,

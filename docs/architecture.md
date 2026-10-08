@@ -50,6 +50,8 @@
   - `Track` / `TrackId(sourceKey,id)` / `Artist` / `Artwork` / `AudioQuality`；
     `Track.payload` 承载源脚本原始对象（原 `SourceTrack.raw`），**只在 data/sources 传递、必须原样回传**；
   - `PlaybackSnapshot` / `BackendSnapshot` / `PlaybackRequest` / `PlaybackContext`；
+    `PlaybackSnapshot.next` 是后端按当前模式解析出的下一首（shuffle 单曲内稳定），
+    `history` 是实际播放顺序（最近在后），`upcoming` 是队列顺序（非播放顺序）；
   - `SearchQuery` / `SearchResult<T>`；`SourceFailure(kind/l10nKey/retryable)`；
   - `SourceDescriptor` / `SourceCapabilities`。
 - **端口**：`MusicSource`（search/resolve/lyrics/artwork/collection）、`SourceRegistry`
@@ -63,10 +65,14 @@
   `SourceRegistryImpl` 构建 `SourceDescriptor`（排序转发 `lx_source_order`）；
   `CatalogService` 提供 `search`（缓存 5min）与 `resolve`（缓存 10min，key=`url:{source}:{md5(canonical payload)}:{quality}`，
   失败不缓存，可 `invalidatePrefix`），并把异常归一化为 `SourceFailure`。
-- **Playback**：`LocalPlaybackBackend` 组合 `LocalPlaybackService`（值变才发快照）；
+- **Playback**：`LocalPlaybackBackend` 组合 `LocalPlaybackService`（值变才发快照；
+  播放顺序栈 `PlaybackOrder` 记录实际播放过的下标，供 `previous` 与快照 `history`）；
   `DefaultPlaybackFacade` 合并快照通知（`==` 去重）、把进度拆到独立 `position`
-  `ValueNotifier`（≥250ms 去重、换曲/seek 直接对齐、**不进快照**）、错误归一化，
-  并提供兼容 map（`compatCurrentTrack` 等，字段与旧服务逐字段一致）供旧 UI 使用。
+  `ValueNotifier`（≥250ms 去重、换曲/seek 直接对齐、**不进快照**）、错误归一化。
+  `PlaybackProvider` 对外只暴露领域 `PlaybackSnapshot` + position 通道：
+  真实播放取 facade 快照；冷启动恢复态由会话构造覆盖快照（`isPlaying=false`，
+  history 为会话队列前缀），点播放后交还底层。旧「远程播放风格 Map 兼容层」
+  （facade `compat*` / service `currentTrackMap` 等）已删除。
 - **系统媒体会话**（Android/iOS/macOS）：`LocalAudioHandler` 把服务状态映射为
   `MediaItem`/`PlaybackState`；通知/锁屏封面经 `MediaItem.artHeaders` 统一带
   浏览器 UA + 平台 Referer，并复用 `ArtworkCache` 的共享 CacheManager

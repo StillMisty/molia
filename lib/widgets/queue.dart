@@ -2,6 +2,7 @@ import 'package:material_3_expressive/material_3_expressive.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
+import '../domain/models/track.dart';
 import '../providers/playback_provider.dart';
 import '../l10n/app_localizations.dart';
 import 'app_network_image.dart';
@@ -29,11 +30,10 @@ class QueueDisplay extends StatelessWidget {
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context)!;
     final scheme = Theme.of(context).colorScheme;
-    // upcomingTracks 为按快照缓存的稳定 List 实例（同一快照内 identity 不变）：
-    // 进度 tick / 无关通知不会重建队列列表，仅队列快照变化时重建。
-    final currentQueue =
-        context.select<PlaybackProvider, List<Map<String, dynamic>>>(
-      (provider) => provider.upcomingTracks,
+    // snapshot.upcoming 在同一快照内是稳定 List 实例：进度 tick / 无关通知
+    // 不会重建队列列表，仅队列快照变化时重建。
+    final currentQueue = context.select<PlaybackProvider, List<Track>>(
+      (provider) => provider.snapshot.upcoming,
     );
     final nowPlaying =
         context.select<PlaybackProvider, _NowPlayingInfo?>(_selectNowPlaying);
@@ -85,18 +85,16 @@ class QueueDisplay extends StatelessWidget {
                   return M3EListItem(
                     leading: _cover(
                       context,
-                      _albumCoverUrl(track),
+                      _coverUrlOf(track),
                       size: 40,
                       radius: 8,
                     ),
-                    headline: track['name'] as String? ?? '',
-                    supportingText: _artistOf(track),
-                    trailingText: _formatDuration(track['duration_ms']),
+                    headline: track.title,
+                    supportingText: _artistsOf(track),
+                    trailingText: _formatDuration(track.duration),
                     onTap: () {
-                      final trackId = track['id']?.toString();
-                      if (trackId == null) return;
                       // 本地音源曲目：交给本地播放队列（恢复态自动续播）。
-                      playbackProvider.playLocalQueueItemById(trackId);
+                      playbackProvider.playLocalQueueItemById(track.id.uri);
                     },
                   );
                 },
@@ -159,42 +157,30 @@ class QueueDisplay extends StatelessWidget {
 
   /// 当前曲目 → 值语义 record（供 select 使用）。
   static _NowPlayingInfo? _selectNowPlaying(PlaybackProvider provider) {
-    final item = provider.currentTrack?['item'];
-    if (item is! Map) return null;
-    final artist = ((item['artists'] as List?) ?? const [])
-        .map((value) => value is Map ? value['name'] as String? : null)
-        .whereType<String>()
-        .where((name) => name.isNotEmpty)
-        .join(', ');
+    final track = provider.snapshot.current;
+    if (track == null) return null;
     return (
-      name: item['name'] as String? ?? '',
-      artist: artist,
-      coverUrl: _albumCoverUrl(item),
+      name: track.title,
+      artist: _artistsOf(track),
+      coverUrl: _coverUrlOf(track),
       isPlaying: provider.isPlaying,
     );
   }
 
-  static String? _albumCoverUrl(Map track) {
-    final album = track['album'];
-    if (album is! Map) return null;
-    final images = album['images'];
-    if (images is! List || images.isEmpty || images[0] is! Map) return null;
-    final url = (images[0] as Map)['url'];
-    return url is String && url.isNotEmpty ? url : null;
+  static String? _coverUrlOf(Track track) {
+    final url = track.artwork?.uri.toString();
+    return url == null || url.isEmpty ? null : url;
   }
 
-  static String? _artistOf(Map track) {
-    final artists = track['artists'];
-    if (artists is! List || artists.isEmpty || artists[0] is! Map) return null;
-    final name = (artists[0] as Map)['name'];
-    return name is String && name.isNotEmpty ? name : null;
-  }
+  static String _artistsOf(Track track) => track.artists
+      .map((artist) => artist.name)
+      .where((name) => name.isNotEmpty)
+      .join(', ');
 
-  String _formatDuration(Object? milliseconds) {
-    final value = milliseconds is num ? milliseconds.toInt() : 0;
-    final duration = Duration(milliseconds: value);
-    final minutes = duration.inMinutes;
-    final seconds = (duration.inSeconds % 60).toString().padLeft(2, '0');
+  String _formatDuration(Duration? duration) {
+    final value = duration ?? Duration.zero;
+    final minutes = value.inMinutes;
+    final seconds = (value.inSeconds % 60).toString().padLeft(2, '0');
     return '$minutes:$seconds';
   }
 }

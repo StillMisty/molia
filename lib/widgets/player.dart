@@ -17,7 +17,6 @@ import '../models/play_mode.dart';
 import '../providers/theme_provider.dart';
 import '../services/data_saver_service.dart';
 import '../utils/responsive.dart';
-import '../utils/track_map_utils.dart';
 import 'app_network_image.dart';
 import 'molia_mark.dart';
 import 'player_morph.dart';
@@ -57,7 +56,7 @@ class _PlayerState extends State<Player> with TickerProviderStateMixin {
   double? _dragStartY;
   bool _isHorizontalDragConfirmed = false;
   double _dragDx = 0;
-  Map<String, dynamic>? _lastTrack;
+  Track? _lastTrack;
   String? _lastImageUrl;
   String? _previousImageUrl;
   bool _isThemeUpdating = false;
@@ -114,11 +113,10 @@ class _PlayerState extends State<Player> with TickerProviderStateMixin {
 
   /// 三封面堆叠：切歌时当前滑出、邻位进中、新邻位浮现。
   late AnimationController _coverController;
-  final List<Map<String, dynamic>> _trackHistory = [];
-  Map<String, dynamic>? _previousTrack;
-  Map<String, dynamic>? _outgoingTrack;
-  Map<String, dynamic>? _oldNeighbor;
-  Map<String, dynamic>? _lastNextTrack;
+  Track? _previousTrack;
+  Track? _outgoingTrack;
+  Track? _oldNeighbor;
+  Track? _lastNextTrack;
   int _coverDirection = 1; // 1 = 下一首（向左滑出），-1 = 上一首
 
   /// 横向拖动跟手：拖动期间由手指驱动 [_coverController] 的进度，
@@ -462,8 +460,8 @@ class _PlayerState extends State<Player> with TickerProviderStateMixin {
   }
 
   /// 根据当前专辑封面更新主题色
-  void _updateThemeIfNeeded(BuildContext context, Map<String, dynamic>? displayTrack) {
-    final String? currentImageUrl = trackMapImageUrl(displayTrack);
+  void _updateThemeIfNeeded(BuildContext context, Track? displayTrack) {
+    final String? currentImageUrl = _artworkUrlOf(displayTrack);
 
     if (currentImageUrl != null && currentImageUrl != _lastImageUrl) {
       // 省流模式：跳过封面下载与取色（保持现有主题色），
@@ -506,23 +504,33 @@ class _PlayerState extends State<Player> with TickerProviderStateMixin {
     }
   }
 
-  /// 曲目兼容 map 的稳定 key：currentTrack 的 item id 带 `lx:` 前缀，
-  /// 队列项（next/upcoming）不带；统一去掉前缀后比较。
-  static String? _trackKey(Map<String, dynamic>? map) {
-    final id = map?['id']?.toString();
-    if (id == null || id.isEmpty) return null;
-    return id.startsWith('lx:') ? id.substring(3) : id;
+  /// 曲目封面 URL（空串视同无封面；领域 Track 自带可靠 id/artwork）。
+  static String? _artworkUrlOf(Track? track) {
+    final url = track?.artwork?.uri.toString();
+    return url == null || url.isEmpty ? null : url;
+  }
+
+  /// 曲目的稳定 key（领域 id）。
+  static String? _trackKey(Track? track) => track?.id.uri;
+
+  /// 歌手展示名（多歌手逗号连接；无有效歌手回退 Unknown Artist）。
+  static String _artistsLabel(Track track) {
+    final joined = track.artists
+        .map((artist) => artist.name)
+        .where((name) => name.isNotEmpty)
+        .join(', ');
+    return joined.isEmpty ? 'Unknown Artist' : joined;
   }
 
   /// 切歌：判定方向（下一首/上一首/跳转）并维护上一首历史，
   /// 触发三封面滑动与文字 spring 入场。
   void _onTrackChanged(
     String newId,
-    Map<String, dynamic>? oldTrack,
+    Track? oldTrack,
     PlaybackProvider provider,
   ) {
-    final nextId = _trackKey(provider.nextTrack);
-    final prevId = _trackKey(_previousTrack);
+    final nextId = provider.snapshot.next?.id.uri;
+    final prevId = _previousTrack?.id.uri;
     final int direction;
     if (nextId != null && nextId == newId) {
       direction = 1;
@@ -533,22 +541,14 @@ class _PlayerState extends State<Player> with TickerProviderStateMixin {
     }
     _coverDirection = direction == -1 ? -1 : 1;
     _oldNeighbor = direction == -1 ? _lastNextTrack : _previousTrack;
-    if (direction == -1) {
-      // 回到上一首：历史栈弹出一层，新的上一首是更早一首。
-      if (_trackHistory.isNotEmpty) _trackHistory.removeLast();
-    } else {
-      if (oldTrack != null) {
-        _trackHistory.add(oldTrack);
-        if (_trackHistory.length > 20) _trackHistory.removeAt(0);
-      }
-    }
-    _previousTrack = _trackHistory.isNotEmpty
-        ? _trackHistory.last
-        // 冷启动恢复：历史栈为空，用会话队列的前一位补上左侧邻位封面。
-        : provider.previousTrack;
+    // 播放顺序由播放快照维护（后端记录实际播放顺序）：
+    // 最新一首即「上一首」，回退时后端已弹出，这里自然指向更早一首。
+    _previousTrack = provider.snapshot.history.isNotEmpty
+        ? provider.snapshot.history.last
+        : null;
     _outgoingTrack = oldTrack;
     // 旧封面作为切歌动画中未加载完成时的占位，避免黑块闪一下。
-    _previousImageUrl = trackMapImageUrl(oldTrack) ?? _previousImageUrl;
+    _previousImageUrl = _artworkUrlOf(oldTrack) ?? _previousImageUrl;
     _lastAnimatedTrackId = newId;
     // 拖动触发的切歌：过渡可能已经走完（画面即最终态），不要再重放。
     final bool dragTriggered = _dragTriggeredSkip;
@@ -582,8 +582,8 @@ class _PlayerState extends State<Player> with TickerProviderStateMixin {
 
   @override
   Widget build(BuildContext context) {
-    final track = context.select<PlaybackProvider, Map<String, dynamic>?>(
-        (provider) => provider.currentTrack?['item']);
+    final track = context.select<PlaybackProvider, Track?>(
+        (provider) => provider.snapshot.current);
 
     final playbackProvider =
         Provider.of<PlaybackProvider>(context, listen: false);
@@ -601,7 +601,7 @@ class _PlayerState extends State<Player> with TickerProviderStateMixin {
 
     // 空闲帧缓存下一首（上一首方向的旧邻位判定需要）。
     if (!_coverController.isAnimating && !_draggingCover) {
-      _lastNextTrack = playbackProvider.nextTrack;
+      _lastNextTrack = playbackProvider.snapshot.next;
       _outgoingTrack = null;
     }
 
@@ -646,7 +646,7 @@ class _PlayerState extends State<Player> with TickerProviderStateMixin {
   /// 高度感知：可用高度（NowPlaying 传入的 maxHeight）不足时收缩封面，
   /// 避免进度排把歌词区挤出屏幕。
   Widget _buildSmallScreenPlayerLayout(
-    Map<String, dynamic>? displayTrack,
+    Track? displayTrack,
     PlaybackProvider playbackProvider, {
     PlayerMorphController? morph,
   }) {
@@ -690,7 +690,7 @@ class _PlayerState extends State<Player> with TickerProviderStateMixin {
   /// 两套布局始终挂载（完整层按最终高度布局、顶部对齐裁剪），高度过渡
   /// 不再跳变；封面由页内飞行副本在两端锚点间插值，不再是两份封面各淡各的。
   Widget _buildExpandableSmallScreenLayout(
-    Map<String, dynamic>? displayTrack,
+    Track? displayTrack,
     PlaybackProvider playbackProvider,
     Animation<double> expand,
   ) {
@@ -799,7 +799,7 @@ class _PlayerState extends State<Player> with TickerProviderStateMixin {
   /// 首帧即出图（不闪占位）。
   Widget _buildFlightCover(
     BuildContext context,
-    Map<String, dynamic>? track,
+    Track? track,
     double size,
     double radius,
   ) {
@@ -820,7 +820,7 @@ class _PlayerState extends State<Player> with TickerProviderStateMixin {
           ],
         ),
         child: MorphCover(
-          url: trackMapImageUrl(track),
+          url: _artworkUrlOf(track),
           borderRadius: BorderRadius.circular(radius - 1),
           fallback: _buildDefaultImage(),
         ),
@@ -836,14 +836,14 @@ class _PlayerState extends State<Player> with TickerProviderStateMixin {
   /// [context] 传 AnimatedBuilder 的 builder context（select 需在 build 期）。
   Widget _buildArtworkStack(
     BuildContext context,
-    Map<String, dynamic>? displayTrack,
+    Track? displayTrack,
     PlaybackProvider playbackProvider, {
     required double artDimension,
     required double stackDimension,
     required double stackHeight,
     PlayerMorphController? morph,
   }) {
-    final String? currentImageUrl = trackMapImageUrl(displayTrack);
+    final String? currentImageUrl = _artworkUrlOf(displayTrack);
     _lastArtDimension = artDimension;
     return Center(
       child: SizedBox(
@@ -879,7 +879,7 @@ class _PlayerState extends State<Player> with TickerProviderStateMixin {
               // 源侧新邻位浮现（下一首时在右，上一首时在左）。
               // 拖动预览阶段不预取「再下一首」（UI 只有一位前瞻），留空槽。
               if (!dragging) {
-                final nextItem = playbackProvider.nextTrack;
+                final nextItem = playbackProvider.snapshot.next;
                 final sourceTrack = dir == 1 ? nextItem : _previousTrack;
                 children.add(_sideCoverLayer(
                   context,
@@ -921,7 +921,7 @@ class _PlayerState extends State<Player> with TickerProviderStateMixin {
               ));
               children.add(_sideCoverLayer(
                 context,
-                playbackProvider.nextTrack,
+                playbackProvider.snapshot.next,
                 sideSize: sideSize,
                 x: offset,
                 rotation: sideRotation,
@@ -935,8 +935,8 @@ class _PlayerState extends State<Player> with TickerProviderStateMixin {
 
             // 中心位：拖动时由邻位封面顶上（真正的切歌在松手后才发生）；
             // 动画/稳态下就是当前曲目。顶栏⇄播放页飞行时只隐藏这一张。
-            final Map<String, dynamic>? centerTrack = dragging
-                ? (dir == 1 ? playbackProvider.nextTrack : _previousTrack)
+            final Track? centerTrack = dragging
+                ? (dir == 1 ? playbackProvider.snapshot.next : _previousTrack)
                 : displayTrack;
             children.add(_mainCoverLayer(
               context,
@@ -963,7 +963,7 @@ class _PlayerState extends State<Player> with TickerProviderStateMixin {
   /// 邻位封面（压在当前封面之下；[onTap] 非空时可点击切歌）。
   Widget _sideCoverLayer(
     BuildContext context,
-    Map<String, dynamic>? track, {
+    Track? track, {
     required double sideSize,
     required double x,
     required double rotation,
@@ -1003,7 +1003,7 @@ class _PlayerState extends State<Player> with TickerProviderStateMixin {
   /// 当前/滑出封面（可交互时保留滑动手势与点击播放/暂停）。
   Widget _mainCoverLayer(
     BuildContext context,
-    Map<String, dynamic>? track,
+    Track? track,
     PlaybackProvider playbackProvider, {
     required double artDimension,
     required double x,
@@ -1051,13 +1051,13 @@ class _PlayerState extends State<Player> with TickerProviderStateMixin {
   /// 只是 transform 插值，不再因缓存键不同重新解码、闪占位图。
   Widget _buildCoverCard(
     BuildContext context,
-    Map<String, dynamic>? track,
+    Track? track,
     double size, {
     double radius = 18,
     Widget? fallback,
     String? placeholderUrl,
   }) {
-    final url = trackMapImageUrl(track);
+    final url = _artworkUrlOf(track);
     final scheme = Theme.of(context).colorScheme;
     final placeholder = placeholderUrl != null && placeholderUrl != url
         ? AppNetworkImage(
@@ -1154,7 +1154,7 @@ class _PlayerState extends State<Player> with TickerProviderStateMixin {
             final (durationMs, isPlaying) =
                 context.select<PlaybackProvider, (int, bool)>(
               (provider) => (
-                provider.currentTrack?['item']?['duration_ms'] as int? ?? 0,
+                provider.snapshot.duration.inMilliseconds,
                 provider.isPlaying,
               ),
             );
@@ -1218,7 +1218,7 @@ class _PlayerState extends State<Player> with TickerProviderStateMixin {
   /// 标题/作者：单行「歌名 · 作者」+ spring 入场。
   Widget _buildTrackInfo(
     BuildContext context,
-    Map<String, dynamic>? displayTrack,
+    Track? displayTrack,
     PlaybackProvider playbackProvider,
   ) {
     return AnimatedBuilder(
@@ -1234,14 +1234,11 @@ class _PlayerState extends State<Player> with TickerProviderStateMixin {
         );
       },
       child: HeaderAndFooter(
-        header: displayTrack?['name'] ??
+        header: displayTrack?.title ??
             playbackProvider.lastPlayedTrackName ??
             'No track playing',
         footer: displayTrack != null
-            ? (displayTrack['artists'] as List?)
-                    ?.map((artist) => artist['name'] as String)
-                    .join(', ') ??
-                'Unknown Artist'
+            ? _artistsLabel(displayTrack)
             : playbackProvider.lastPlayedArtists ?? 'Unknown Artist',
         track: displayTrack,
       ),
@@ -1269,7 +1266,7 @@ class _PlayerState extends State<Player> with TickerProviderStateMixin {
 
   Widget _buildMiniPlayer(
     BuildContext context,
-    Map<String, dynamic>? track,
+    Track? track,
     PlaybackProvider playback,
   ) {
     final isPlaying = context.select<PlaybackProvider, bool>(
@@ -1309,7 +1306,7 @@ class _PlayerState extends State<Player> with TickerProviderStateMixin {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  track?['name'] ??
+                  track?.title ??
                       playback.lastPlayedTrackName ??
                       'No track playing',
                   // 迷你条文本与列表页契约一致：标题 onSurface、
@@ -1323,10 +1320,7 @@ class _PlayerState extends State<Player> with TickerProviderStateMixin {
                 ),
                 Text(
                   track != null
-                      ? (track['artists'] as List?)
-                              ?.map((artist) => artist['name'] as String)
-                              .join(', ') ??
-                          'Unknown Artist'
+                      ? _artistsLabel(track)
                       : playback.lastPlayedArtists ?? 'Unknown Artist',
                   style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                         color: Theme.of(context).colorScheme.onSurfaceVariant,
@@ -1368,7 +1362,7 @@ class _PlayerState extends State<Player> with TickerProviderStateMixin {
         final (durationMs, isPlaying) =
             context.select<PlaybackProvider, (int, bool)>(
           (provider) => (
-            provider.currentTrack?['item']?['duration_ms'] as int? ?? 0,
+            provider.snapshot.duration.inMilliseconds,
             provider.isPlaying,
           ),
         );
@@ -1514,9 +1508,9 @@ class _PlayerState extends State<Player> with TickerProviderStateMixin {
     );
   }
 
-  Widget _buildMiniAlbumArt(Map<String, dynamic>? track) {
+  Widget _buildMiniAlbumArt(Track? track) {
     final displayTrack = track ?? _lastTrack;
-    final String? currentImageUrl = trackMapImageUrl(displayTrack);
+    final String? currentImageUrl = _artworkUrlOf(displayTrack);
 
     // 不缩放：与顶栏/播放页/预加载共用同一 ImageCache 键，
     // 迷你 ⇄ 完整飞行与切歌动画才能复用同一张已解码图。
@@ -1539,7 +1533,7 @@ class _PlayerState extends State<Player> with TickerProviderStateMixin {
   /// 大屏全屏播放器：与小屏同构（三封面堆叠 → 标题/作者 → 可拖动进度排），
   /// 封面按两轴可用空间自适应。
   Widget _buildLargeScreenPlayerLayout(
-      Map<String, dynamic>? displayTrack, PlaybackProvider playbackProvider) {
+      Track? displayTrack, PlaybackProvider playbackProvider) {
     return LayoutBuilder(
       builder: (BuildContext context, BoxConstraints constraints) {
         const double textSectionFixedHeight = 56.0;
@@ -1592,7 +1586,7 @@ class _PlayerState extends State<Player> with TickerProviderStateMixin {
   }
 
   Widget _buildConfigurableMainContent(
-    Map<String, dynamic>? track,
+    Track? track,
     PlaybackProvider playback, {
     required bool isPlaying,
     required double artDimension,
@@ -1711,7 +1705,7 @@ class _FavoriteButton extends StatelessWidget {
 class HeaderAndFooter extends StatelessWidget {
   final String header;
   final String footer;
-  final Map<String, dynamic>? track;
+  final Track? track;
 
   const HeaderAndFooter({
     super.key,
@@ -1723,11 +1717,11 @@ class HeaderAndFooter extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
-    final artists = ((track?['artists'] as List?) ?? const [])
-        .map((artist) => artist['name'] as String?)
-        .whereType<String>()
-        .where((name) => name.isNotEmpty)
-        .join(', ');
+    final artists = track?.artists
+            .map((artist) => artist.name)
+            .where((name) => name.isNotEmpty)
+            .join(', ') ??
+        '';
     final artistText = artists.isNotEmpty ? artists : footer;
 
     return Row(

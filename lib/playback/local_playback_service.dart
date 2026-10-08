@@ -9,6 +9,7 @@ import '../models/play_mode.dart';
 import '../services/cache_service.dart';
 import '../sources/source_track.dart';
 import 'audio_cache_source.dart';
+import 'playback_order.dart';
 
 /// 将音源曲目解析为可播放 URL 的回调（由 SourceManager 提供）。
 typedef SourceUrlResolver = Future<String> Function(
@@ -42,6 +43,13 @@ class LocalPlaybackService extends ChangeNotifier {
   SourceTrack? _currentTrack;
   String? _contextName;
   PlayMode _mode = PlayMode.sequential;
+
+  /// 已播放顺序（最近一首在后，栈顶供 previous 弹出）；存队列下标，
+  /// 队列仅在 `playTracks` 时整体替换并同步清空。
+  final PlaybackOrder _order = PlaybackOrder();
+
+  /// shuffle 下一次「预览」的随机下标：同一曲目内稳定，避免每次 build 变脸。
+  int? _displayNextIndex;
 
   bool _isPlaying = false;
   bool _isLoading = false;
@@ -101,6 +109,18 @@ class LocalPlaybackService extends ChangeNotifier {
   String? get lastError => _lastError;
   SourceTrack? get currentSourceTrack => _currentTrack;
 
+  /// 最近一次 `playTracks` 传入的上下文名（系统媒体会话/快照映射用）。
+  String? get contextName => _contextName;
+
+  /// 按当前模式解析出的下一首（界面预览；shuffle 在单曲内保持稳定）。
+  SourceTrack? get nextSourceTrack {
+    final index = _nextIndexForDisplay();
+    return index < 0 ? null : _queue[index];
+  }
+
+  /// 已播放顺序（最近在后）。
+  List<SourceTrack> get historyTracks => _order.tracksOf(_queue);
+
   /// 当前播放进度（用于系统媒体会话状态映射）。
   Duration get position => _position;
 
@@ -110,79 +130,6 @@ class LocalPlaybackService extends ChangeNotifier {
   /// 当前队列与下标（用于系统媒体会话的队列展示与跳转）。
   List<SourceTrack> get queueTracks => List.unmodifiable(_queue);
   int get currentIndex => _currentIndex;
-
-  Map<String, dynamic>? get currentTrackMap {
-    final track = _currentTrack;
-    if (track == null) return null;
-    return {
-      'is_playing': _isPlaying,
-      'progress_ms': _position.inMilliseconds,
-      'item': {
-        'id': 'lx:${track.id}',
-        'name': track.title,
-        'duration_ms': _effectiveDuration(track).inMilliseconds,
-        'artists': [
-          {'name': track.artist.isEmpty ? '未知歌手' : track.artist},
-        ],
-        'album': {'name': track.album, 'images': _imagesFor(track)},
-        'uri': 'lx:${track.id}',
-      },
-      'context': {
-        'type': 'lx',
-        'name': _contextName ?? '',
-        'uri': 'lx:${_contextName ?? ''}',
-      },
-      'device': {
-        'id': 'local',
-        'name': 'Molia',
-        'is_active': true,
-      },
-      'source': 'lx',
-    };
-  }
-
-  Map<String, dynamic>? get nextTrackMap {
-    final index = _nextIndex(auto: false);
-    if (index < 0) return null;
-    return _queueItemMap(_queue[index], isNext: true);
-  }
-
-  List<Map<String, dynamic>> get upcomingTrackMaps {
-    if (_queue.isEmpty || _currentIndex < 0) return const [];
-    final result = <Map<String, dynamic>>[];
-    for (var i = _currentIndex + 1; i < _queue.length; i++) {
-      result.add(_queueItemMap(_queue[i]));
-    }
-    return result;
-  }
-
-  Map<String, dynamic> _queueItemMap(SourceTrack track, {bool isNext = false}) {
-    return {
-      'id': track.id,
-      'uri': 'lx:${track.id}',
-      'name': track.title,
-      'type': 'track',
-      'is_next': isNext,
-      'artists': [
-        {'name': track.artist.isEmpty ? '未知歌手' : track.artist},
-      ],
-      'album': {'images': _imagesFor(track)},
-      'duration_ms': _effectiveDuration(track).inMilliseconds,
-    };
-  }
-
-  List<Map<String, dynamic>> _imagesFor(SourceTrack track) {
-    final cover = track.coverUrl;
-    if (cover == null || cover.isEmpty) return const [];
-    return [
-      {'url': cover},
-    ];
-  }
-
-  Duration _effectiveDuration(SourceTrack track) {
-    if (_currentTrack == track && _duration > Duration.zero) return _duration;
-    return track.duration ?? Duration.zero;
-  }
 
   // 播放控制
 
@@ -195,9 +142,12 @@ class LocalPlaybackService extends ChangeNotifier {
     _queue
       ..clear()
       ..addAll(tracks);
+    // 新队列 = 新会话：播放顺序与 shuffle 预览都从头开始。
+    _order.clear();
+    _displayNextIndex = null;
     _contextName = contextName;
     final safeIndex = index.clamp(0, tracks.length - 1);
-    await _playIndex(safeIndex);
+    await _playIndex(safeIndex, recordHistory: false);
   }
 
   Future<void> playTrackId(String trackId) async {
@@ -211,8 +161,13 @@ class LocalPlaybackService extends ChangeNotifier {
     await _playIndex(index);
   }
 
-  Future<void> _playIndex(int index) async {
+  Future<void> _playIndex(int index, {bool recordHistory = true}) async {
     if (index < 0 || index >= _queue.length) return;
+    // 切到不同曲目时把「离开的当前曲目」压入播放顺序；显式回退不重复压栈。
+    if (recordHistory && _currentTrack != null && _currentIndex != index) {
+      _order.record(_currentIndex);
+    }
+    _displayNextIndex = null;
     final requestId = ++_playRequestId;
     final track = _queue[index];
 
@@ -349,15 +304,19 @@ class LocalPlaybackService extends ChangeNotifier {
 
   Future<void> skipToPrevious() async {
     if (_currentTrack == null || _queue.isEmpty) return;
+    // 播放超过 3 秒：先回到本曲开头（行业惯例），不消费播放顺序。
     if (_position.inSeconds > 3) {
       await seek(Duration.zero);
       return;
     }
-    final previous = _currentIndex > 0 ? _currentIndex - 1 : 0;
-    await _playIndex(previous);
+    // 有播放顺序：真正的「上一首」；否则回退到队列前一位（旧行为）。
+    final previous =
+        _order.popPrevious() ?? (_currentIndex > 0 ? _currentIndex - 1 : 0);
+    await _playIndex(previous, recordHistory: false);
   }
 
   Future<void> setMode(PlayMode mode) async {
+    if (_mode != mode) _displayNextIndex = null;
     _mode = mode;
     notifyListeners();
   }
@@ -381,8 +340,29 @@ class LocalPlaybackService extends ChangeNotifier {
       _position = Duration.zero;
       _duration = Duration.zero;
       _contextName = null;
+      _order.clear();
+      _displayNextIndex = null;
     }
     notifyListeners();
+  }
+
+  /// 界面预览用的下一首下标：shuffle 在单曲内缓存随机值（避免每次读取
+  /// 都换一个「下一首」），其余模式与 `_nextIndex(auto: false)` 一致。
+  int _nextIndexForDisplay() {
+    if (_queue.isEmpty || _currentIndex < 0) return -1;
+    if (_mode == PlayMode.shuffle) {
+      if (_queue.length <= 1) return _currentIndex;
+      return _displayNextIndex ??= _randomShuffleIndex();
+    }
+    return _nextIndex(auto: false);
+  }
+
+  int _randomShuffleIndex() {
+    var next = _random.nextInt(_queue.length);
+    if (next == _currentIndex) {
+      next = (next + 1) % _queue.length;
+    }
+    return next;
   }
 
   int _nextIndex({required bool auto}) {
@@ -392,11 +372,7 @@ class LocalPlaybackService extends ChangeNotifier {
     }
     if (_mode == PlayMode.shuffle) {
       if (_queue.length == 1) return _currentIndex;
-      var next = _random.nextInt(_queue.length);
-      if (next == _currentIndex) {
-        next = (next + 1) % _queue.length;
-      }
-      return next;
+      return _randomShuffleIndex();
     }
     if (_currentIndex + 1 < _queue.length) return _currentIndex + 1;
     return -1;

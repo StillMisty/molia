@@ -9,6 +9,18 @@
 - **Canonical id field（规范 id 字段）** — 各平台取链脚本读取的 id 键：wy / tx / kw → `songmid`，kg → `hash`，mg → `copyrightId`。`.lxmc` 导入的 raw 缺少该字段时由 raw track module 补齐。
 - **Platform id（平台 id）** — 不带平台前缀的单曲标识；[`SourceTrack.id`] 为其加上 `sourceKey:` 前缀。`rawIdOf`（通用优先级）与 `platformRawIdOf`（`.lxmc` 导出的平台优先顺序）是它的两个取键入口。
 
+## 播放
+
+- **Playback snapshot（播放快照）** — `lib/domain/models/playback.dart`：UI 播放状态的唯一形状
+  （`current/next/upcoming/history/context/mode/isPlaying/...`）。`PlaybackProvider.snapshot`
+  是其唯一出口：真实播放来自 facade，冷启动恢复态由 `PlaybackSession` 构造覆盖快照；
+  历史兼容 map 形状已删除。
+- **Played order（播放顺序）** — `lib/playback/playback_order.dart`：实际播放过的队列下标栈
+  （最近在后、上限 100、`popPrevious` 供上一首消费）。驱动 `PlaybackSnapshot.history` 与
+  `previous` 语义；与队列顺序 `upcoming` 是两回事。
+- **Resolved next（下一首解析）** — `PlaybackSnapshot.next`：后端按当前模式解析的下一首
+  （shuffle 在单曲内稳定，切歌/切模式重抽）；`upcoming` 只用于队列面板展示。
+
 ## 缓存
 
 - **Lyrics cache（歌词缓存模块）** — `lib/services/lyrics_cache.dart`：歌词键（`lyrics_cache_{trackId}`）、读写、用量与清理的唯一实现；TTL 策略属于 `CacheService`（取词时读取）。历史 `manual_lyrics_cache_*` 重复键只清不读。

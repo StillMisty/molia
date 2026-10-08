@@ -212,11 +212,18 @@ class LocalPlaybackBackend implements PlaybackBackend {
             ? _service.duration
             : (current.duration ?? Duration.zero));
 
+    final nextSource = _service.nextSourceTrack;
+    final history = <Track>[
+      for (final source in _service.historyTracks) _toTrack(source),
+    ];
+
     return BackendSnapshot(
       current: current,
       queue: List<Track>.unmodifiable(queue),
       currentIndex: index,
+      next: nextSource == null ? null : _toTrack(nextSource),
       upcoming: List<Track>.unmodifiable(upcoming),
+      history: List<Track>.unmodifiable(history),
       isPlaying: _service.isPlaying,
       isLoading: _service.isLoading,
       position: _service.position,
@@ -230,17 +237,10 @@ class LocalPlaybackBackend implements PlaybackBackend {
   Track _toTrack(SourceTrack source) =>
       _trackCache.putIfAbsent(source, () => trackFromSourceTrack(source));
 
-  /// 服务不暴露 contextName getter，只能从兼容 map 读取（服务本体不改）。
   PlaybackContext? _readContext() {
-    final map = _service.currentTrackMap;
-    if (map == null) return null;
-    final context = map['context'];
-    if (context is! Map) return null;
-    return PlaybackContext(
-      name: context['name'] as String?,
-      type: context['type'] as String?,
-      uri: context['uri'] as String?,
-    );
+    final name = _service.contextName;
+    if (name == null) return null;
+    return PlaybackContext(name: name, type: 'lx', uri: 'lx:$name');
   }
 
   SourceFailure? _readError() {
