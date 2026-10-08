@@ -6,6 +6,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:molia/data/database_helper.dart';
 import 'package:molia/data/library_repository.dart';
 import 'package:molia/domain/models/library.dart';
+import 'package:molia/domain/models/track.dart';
 import 'package:molia/providers/library_provider.dart';
 import 'package:molia/providers/playback_provider.dart';
 import 'package:molia/sources/source_track.dart';
@@ -149,14 +150,15 @@ void main() {
     expect(track.duration, const Duration(seconds: 1));
   });
 
-  test('playPlaylist：列表曲目委托播放', () async {
+  test('playPlaylistTracks：列表曲目委托播放', () async {
     final result = await provider.importLxmcBytes(
       lxmcBytes([track(1), track(2)]),
     );
     expect(result.imported, 2);
 
-    await provider.loadPlaylistTracks(result.playlistId, force: true);
-    await provider.playPlaylist(result.playlistId, 1, contextName: 'test');
+    final tracks =
+        await provider.loadPlaylistTracks(result.playlistId, force: true);
+    await provider.playPlaylistTracks(tracks, 1, contextName: 'test');
 
     final request = backend.lastRequest;
     expect(request!.tracks, hasLength(2));
@@ -252,10 +254,13 @@ void main() {
   test('removeTrackFromPlaylist / clearHistory 生效', () async {
     final result = await provider.importLxmcBytes(lxmcBytes([track(1)]));
     await provider.loadPlaylistTracks(result.playlistId, force: true);
-    final tracks = provider.cachedTracksOf(result.playlistId)!;
+    final tracks = provider.playlistTracksView(result.playlistId).tracks!;
     expect(await provider.removeTrackFromPlaylist(tracks.single), isTrue);
     await settle();
-    expect(provider.cachedTracksOf(result.playlistId) ?? const [], isEmpty);
+    expect(
+      provider.playlistTracksView(result.playlistId).tracks ?? const [],
+      isEmpty,
+    );
 
     await repository.addHistoryEntry(PlayHistoryEntry(
       sourceKey: 'wy',
@@ -300,7 +305,7 @@ void main() {
       1,
     );
     await settle();
-    expect(provider.cachedTracksOf(target)?.map((t) => t.songId), ['1']);
+    expect(provider.playlistTracksView(target).tracks?.map((t) => t.songId), ['1']);
 
     // 历史：复制到列表 + 批量删除（乐观更新）。
     await repository.addHistoryEntry(PlayHistoryEntry(
@@ -319,7 +324,10 @@ void main() {
     ));
     await settle();
     expect(
-      await provider.addHistoryEntriesToPlaylist(target, provider.history),
+      await provider.addTracksToPlaylist(target, [
+        for (final entry in provider.history)
+          PlaylistTrack.fromHistoryEntry(entry, addedAt: 0),
+      ]),
       2,
     );
     expect(await provider.deleteHistoryEntries(provider.history), 2);
@@ -355,13 +363,46 @@ void main() {
     expect(provider.history.single.songId, '1');
 
     // 历史条目收藏进默认收藏列表。
-    expect(await provider.addHistoryEntriesToFavorites(provider.history), 1);
+    expect(
+      await provider.addTracksToFavorites([
+        for (final entry in provider.history)
+          PlaylistTrack.fromHistoryEntry(entry, addedAt: 0),
+      ]),
+      1,
+    );
     expect(provider.isFavorite('wy', '1'), isTrue);
 
     // 历史条目再次加入历史 = 置顶（不产生重复行）。
-    await provider.addHistoryEntriesToHistory(provider.history);
+    await provider.addTracksToHistory([
+      for (final entry in provider.history)
+        PlaylistTrack.fromHistoryEntry(entry, addedAt: 0),
+    ]);
     await settle();
     expect(provider.history, hasLength(1));
     expect(provider.history.single.songId, '1');
+  });
+
+  test('toggleFavoriteTrack：领域 Track 是收藏的唯一写入口', () async {
+    final domainTrack = Track(
+      id: const TrackId('wy', '1'),
+      title: 'Song 1',
+      artists: const [Artist(name: 'Artist 1')],
+      album: 'Album 1',
+      duration: const Duration(seconds: 30),
+      origin: TrackOrigin.lx,
+      payload: const {'songId': 1},
+    );
+
+    expect(provider.isFavorite('wy', '1'), isFalse);
+    expect(await provider.toggleFavoriteTrack(domainTrack), isTrue);
+    expect(provider.isFavorite('wy', '1'), isTrue);
+
+    final stored = await repository.listPlaylistTracks(
+      (await repository.listPlaylists())
+          .firstWhere((playlist) => playlist.name == kFavoritesPlaylistName)
+          .id,
+    );
+    expect(stored.single.songId, '1');
+    expect(stored.single.raw['songId'], 1);
   });
 }

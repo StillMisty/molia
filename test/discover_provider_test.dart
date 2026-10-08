@@ -99,8 +99,21 @@ void main() {
     await library.refreshPlaylists(force: true);
     final track = (await discover.loadLeaderboardTracks('3778678')).single;
 
-    expect(await discover.addToPlaylist(playlistId, track), isTrue);
-    expect(await discover.addToPlaylist(playlistId, track), isFalse);
+    // 「加入列表」统一流程的数据面：DiscoverTrack → PlaylistTrack → 写入。
+    expect(
+      await library.addTracksToPlaylist(
+        playlistId,
+        [discover.toPlaylistTrack(track)],
+      ),
+      1,
+    );
+    expect(
+      await library.addTracksToPlaylist(
+        playlistId,
+        [discover.toPlaylistTrack(track)],
+      ),
+      0,
+    );
 
     final stored = await repository.listPlaylistTracks(playlistId);
     expect(stored, hasLength(1));
@@ -108,13 +121,15 @@ void main() {
     expect(stored.single.raw['songmid'], 111);
   });
 
-  test('加入我的收藏 / 播放历史', () async {
+  test('加入我的收藏 / 播放历史（统一流程的数据面）', () async {
     final track = (await discover.loadLeaderboardTracks('3778678')).single;
-    expect(await discover.addToFavorites(track), isTrue);
-    expect(await discover.addToFavorites(track), isFalse);
+    final playlistTrack = discover.toPlaylistTrack(track);
+
+    expect(await library.addTracksToFavorites([playlistTrack]), 1);
+    expect(await library.addTracksToFavorites([playlistTrack]), 0);
     expect(await repository.favoriteKeys(), contains('wy:111'));
 
-    await discover.addToHistory(track);
+    await library.addTracksToHistory([playlistTrack]);
     expect((await repository.listHistory()).single.songId, '111');
   });
 

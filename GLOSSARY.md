@@ -31,6 +31,18 @@
   `hasLyricTimestamps` 与 `parseLyrics` 共用同一正则（兼容 1–3 位分钟、`.`/`:` 毫秒
   分隔与行内多标签）；不再允许「检测用一个正则、解析用另一个」的漂移。
 
+## 资料库
+
+- **Library mutation gateway（资料库变更网关）** — `lib/providers/library_provider.dart`：
+  收藏 / 播放历史 / 列表写入的唯一实现。收藏唯一入口 `toggleFavoriteTrack(Track)`
+  （播放页不再直连 `LibraryRepository`）；批量操作按 `PlaylistTrack` 规范形状，
+  `PlaylistTrack.fromHistoryEntry` 负责历史条目转换。
+- **Add-to-library flow（加入列表流程）** — `lib/widgets/add_to_library.dart`：
+  选择目标 → 写入 → 解析新建列表名 → 反馈的唯一实现；收藏页与发现页共用。
+- **Playlist tracks view（列表曲目视图）** — `LibraryProvider.playlistTracksView` +
+  `ensurePlaylistTracks`：页面只读「已缓存/加载中」视图并请求加载，不再探测
+  `cachedTracksOf`/`isPlaylistLoading` 之类的缓存内部。
+
 ## 缓存
 
 - **Lyrics cache（歌词缓存模块）** — `lib/services/lyrics_cache.dart`：歌词键（`lyrics_cache_{trackId}`）、读写、用量与清理的唯一实现；TTL 策略属于 `CacheService`（取词时读取）。历史 `manual_lyrics_cache_*` 重复键只清不读。

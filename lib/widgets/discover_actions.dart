@@ -5,7 +5,8 @@ import 'package:provider/provider.dart';
 import '../domain/models/discover.dart';
 import '../l10n/app_localizations.dart';
 import '../providers/discover_provider.dart';
-import 'add_to_playlist_sheet.dart';
+import '../providers/library_provider.dart';
+import 'add_to_library.dart';
 import 'library_cover.dart';
 
 AppLocalizations _l10n(BuildContext context) =>
@@ -19,59 +20,19 @@ Future<void> toggleDiscoverFavorite(
   await context.read<DiscoverProvider>().toggleFavorite(track);
 }
 
-/// 「加入列表」流程：加载我的列表 → 底部弹层选择目标（收藏/历史/自建）→ 写入并反馈。
+/// 「加入列表」流程：与收藏页共用 [addTracksToLibraryTarget]（选择目标 →
+/// 写入 → 解析新建列表名 → 反馈提示）。
 Future<void> addDiscoverTrackToPlaylist(
   BuildContext context,
   DiscoverTrack track,
-) async {
-  final provider = context.read<DiscoverProvider>();
-  final l10n = _l10n(context);
-
-  await provider.refreshPlaylists();
-  if (!context.mounted) return;
-  final selection = await showAddToPlaylistSheet(
+) {
+  final discover = context.read<DiscoverProvider>();
+  final library = context.read<LibraryProvider>();
+  return addTracksToLibraryTarget(
     context,
-    playlists: provider.playlists,
-    onCreate: provider.createPlaylist,
+    provider: library,
+    tracks: [discover.toPlaylistTrack(track)],
   );
-  if (selection == null || !context.mounted) return;
-  switch (selection.kind) {
-    case AddToPlaylistTargetKind.favorites:
-      final added = await provider.addToFavorites(track);
-      if (!context.mounted) return;
-      M3ESnackbar.show(
-        context,
-        message: added
-            ? l10n.playlistAddedTo(l10n.favoritesPlaylistName)
-            : l10n.playlistAlreadyContains,
-      );
-    case AddToPlaylistTargetKind.history:
-      await provider.addToHistory(track);
-      if (!context.mounted) return;
-      M3ESnackbar.show(
-        context,
-        message: l10n.playlistAddedTo(l10n.libraryHistory),
-      );
-    case AddToPlaylistTargetKind.playlist:
-      final playlistId = selection.playlistId!;
-      final added = await provider.addToPlaylist(playlistId, track);
-      if (!context.mounted) return;
-      // 新建的列表可能尚未进入 provider 缓存，强制刷新后再取显示名。
-      await provider.refreshPlaylists();
-      if (!context.mounted) return;
-      var name = '';
-      for (final playlist in provider.playlists) {
-        if (playlist.id == playlistId) {
-          name = playlist.name;
-          break;
-        }
-      }
-      M3ESnackbar.show(
-        context,
-        message:
-            added ? l10n.playlistAddedTo(name) : l10n.playlistAlreadyContains,
-      );
-  }
 }
 
 /// 发现曲目行：点击播放；菜单支持收藏 / 加入列表。

@@ -13,7 +13,8 @@ import '../providers/discover_provider.dart';
 import '../providers/library_collections.dart';
 import '../providers/library_provider.dart';
 import '../utils/responsive.dart';
-import '../widgets/add_to_playlist_sheet.dart';
+import '../widgets/add_to_library.dart';
+import '../widgets/add_to_playlist_sheet.dart' show showPlaylistNameDialog;
 import '../widgets/library_cover.dart';
 import '../widgets/lxmc_import.dart' show importLxmcFavoritesFlow;
 
@@ -405,64 +406,28 @@ class _FavoritesPageState extends State<FavoritesPage> {
 
   /// 复制曲目/历史到所选目标（我的收藏 / 播放历史 / 自建列表）。
   ///
-  /// 返回是否真正选择了目标（取消为 false）。
+  /// 历史条目先规范化为 [PlaylistTrack]；选择/写入/反馈统一走
+  /// [addTracksToLibraryTarget]（与发现页同一实现）。返回是否真正选择了
+  /// 目标（取消为 false）。
   Future<bool> _copyToPlaylist({
     List<PlaylistTrack>? tracks,
     List<PlayHistoryEntry>? entries,
     bool includeFavorites = true,
     bool includeHistory = true,
-  }) async {
-    final provider = context.read<LibraryProvider>();
-    final l10n = _l10n(context);
-    await provider.refreshPlaylists();
-    if (!mounted) return false;
-    final selection = await showAddToPlaylistSheet(
+  }) {
+    final now = DateTime.now().millisecondsSinceEpoch;
+    final normalized = tracks ??
+        [
+          for (final entry in entries ?? const <PlayHistoryEntry>[])
+            PlaylistTrack.fromHistoryEntry(entry, addedAt: now),
+        ];
+    return addTracksToLibraryTarget(
       context,
-      playlists: provider.customPlaylists,
-      onCreate: provider.createPlaylist,
+      provider: context.read<LibraryProvider>(),
+      tracks: normalized,
       includeFavorites: includeFavorites,
       includeHistory: includeHistory,
     );
-    if (selection == null || !mounted) return false;
-    int added;
-    String name;
-    switch (selection.kind) {
-      case AddToPlaylistTargetKind.favorites:
-        name = l10n.favoritesPlaylistName;
-        added = tracks != null
-            ? await provider.addTracksToFavorites(tracks)
-            : await provider.addHistoryEntriesToFavorites(entries ?? const []);
-      case AddToPlaylistTargetKind.history:
-        name = l10n.libraryHistory;
-        added = tracks != null
-            ? await provider.addTracksToHistory(tracks)
-            : await provider.addHistoryEntriesToHistory(entries ?? const []);
-      case AddToPlaylistTargetKind.playlist:
-        final playlistId = selection.playlistId!;
-        // 新建的列表可能尚未进入 provider 缓存，强制刷新后再取显示名。
-        await provider.refreshPlaylists();
-        if (!mounted) return false;
-        name = '';
-        for (final playlist in provider.customPlaylists) {
-          if (playlist.id == playlistId) {
-            name = playlist.name;
-            break;
-          }
-        }
-        added = tracks != null
-            ? await provider.addTracksToPlaylist(playlistId, tracks)
-            : await provider.addHistoryEntriesToPlaylist(
-                playlistId,
-                entries ?? const [],
-              );
-    }
-    if (!mounted) return false;
-    M3ESnackbar.show(
-      context,
-      message:
-          added > 0 ? l10n.playlistAddedTo(name) : l10n.playlistAlreadyContains,
-    );
-    return true;
   }
 
   /// 合集弹层的「导入收藏夹」：.lxmc 文件 或 五平台歌单链接。
@@ -626,9 +591,11 @@ class _FavoritesPageState extends State<FavoritesPage> {
     final selected = _selectedHistory(view);
     _selection.clear();
     if (selected.isEmpty) return;
-    await context
-        .read<LibraryProvider>()
-        .addHistoryEntriesToFavorites(selected);
+    final now = DateTime.now().millisecondsSinceEpoch;
+    await context.read<LibraryProvider>().addTracksToFavorites([
+      for (final entry in selected)
+        PlaylistTrack.fromHistoryEntry(entry, addedAt: now),
+    ]);
   }
 
   Future<void> _unfavoriteSelectedHistory(_CollectionView view) async {
@@ -680,22 +647,15 @@ class _FavoritesPageState extends State<FavoritesPage> {
         (isFavorites || isHistory) ? favoritesId : selected;
     final displayName = _displayName(l10n, playlists, favoritesId, selected);
 
-    // 选中合集的曲目缓存缺失时补载（与仓库变更流刷新同一模式）；
-    // 播放历史直接读 provider 缓存。
-    final cached = (isHistory || selectedPlaylistId == null)
-        ? null
-        : provider.cachedTracksOf(selectedPlaylistId);
-    if (!isHistory &&
-        selectedPlaylistId != null &&
-        cached == null &&
-        !provider.isPlaylistLoading(selectedPlaylistId)) {
-      final idToLoad = selectedPlaylistId;
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (!mounted) return;
-        context.read<LibraryProvider>().loadPlaylistTracks(idToLoad);
-      });
+    // 选中合集的曲目视图：未缓存时 ensurePlaylistTracks 触发加载
+    // （provider 统一管理 loading），页面不再探测缓存内部。
+    if (!isHistory && selectedPlaylistId != null) {
+      provider.ensurePlaylistTracks(selectedPlaylistId);
     }
-    final tracks = cached ?? const <PlaylistTrack>[];
+    final tracksView = (isHistory || selectedPlaylistId == null)
+        ? null
+        : provider.playlistTracksView(selectedPlaylistId);
+    final tracks = tracksView?.tracks ?? const <PlaylistTrack>[];
     final visible =
         isHistory ? const <PlaylistTrack>[] : _filterAndSort(tracks);
     final history = provider.history;
@@ -704,8 +664,7 @@ class _FavoritesPageState extends State<FavoritesPage> {
     final hasItems = isHistory ? history.isNotEmpty : tracks.isNotEmpty;
     final isLoading = !isHistory &&
         selectedPlaylistId != null &&
-        cached == null &&
-        provider.isPlaylistLoading(selectedPlaylistId);
+        (tracksView?.loading ?? false);
     // 历史为空且正在加载时补一个加载态，其余情况沿用组合集加载态。
     final isHistoryLoading =
         isHistory && history.isEmpty && provider.isHistoryLoading;

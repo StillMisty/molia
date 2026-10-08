@@ -1108,7 +1108,7 @@ class _PlayerState extends State<Player> with TickerProviderStateMixin {
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 2),
       child: Row(
         children: [
-          _buildFavoriteButton(playbackProvider),
+          _buildFavoriteButton(),
           const SizedBox(width: 4),
           Expanded(child: _buildSeekSlider(context, playbackProvider)),
           const SizedBox(width: 4),
@@ -1257,12 +1257,11 @@ class _PlayerState extends State<Player> with TickerProviderStateMixin {
   }
 
   /// 本地收藏按钮：加入/移出默认收藏列表（无当前曲目/资料库时隐藏）。
-  Widget _buildFavoriteButton(
-    PlaybackProvider playback, {
+  Widget _buildFavoriteButton({
     M3EIconButtonSize size = M3EIconButtonSize.sm,
     Size visualSize = const Size(44, 44),
   }) =>
-      _FavoriteButton(playback: playback, size: size, visualSize: visualSize);
+      _FavoriteButton(size: size, visualSize: visualSize);
 
   Widget _buildMiniPlayer(
     BuildContext context,
@@ -1426,7 +1425,6 @@ class _PlayerState extends State<Player> with TickerProviderStateMixin {
       mainAxisSize: MainAxisSize.min,
       children: [
         _buildFavoriteButton(
-          playback,
           size: size,
           visualSize: visualSize,
         ),
@@ -1657,27 +1655,26 @@ class _PlayerState extends State<Player> with TickerProviderStateMixin {
 /// 使用会被 provider 断言拦截）。
 ///
 /// 收藏反馈只靠图标态（实心/空心），不再弹 Snackbar。
+/// 写路径唯一：`LibraryProvider.toggleFavoriteTrack`（播放页不再直连仓库）。
 class _FavoriteButton extends StatelessWidget {
   const _FavoriteButton({
-    required this.playback,
     this.size = M3EIconButtonSize.sm,
     this.visualSize = const Size(44, 44),
   });
 
-  final PlaybackProvider playback;
   final M3EIconButtonSize size;
   final Size visualSize;
 
   @override
   Widget build(BuildContext context) {
     final library = context.watch<LibraryProvider?>();
-    final trackId = context.select<PlaybackProvider, TrackId?>(
-        (provider) => provider.currentTrackId);
-    if (library == null || trackId == null) return const SizedBox.shrink();
+    final track = context.select<PlaybackProvider, Track?>(
+        (provider) => provider.snapshot.current);
+    if (library == null || track == null) return const SizedBox.shrink();
 
     final l10n = AppLocalizations.of(context) ??
         lookupAppLocalizations(const Locale('zh'));
-    final favorite = library.isFavorite(trackId.sourceKey, trackId.id);
+    final favorite = library.isFavorite(track.id.sourceKey, track.id.id);
     return M3EIconButton(
       variant: M3EIconButtonVariant.standard,
       size: size,
@@ -1692,7 +1689,7 @@ class _FavoriteButton extends StatelessWidget {
       tooltip: favorite ? l10n.favoriteRemove : l10n.favoriteAdd,
       onPressed: () async {
         HapticFeedback.lightImpact();
-        await playback.toggleCurrentFavorite();
+        await library.toggleFavoriteTrack(track);
       },
     );
   }

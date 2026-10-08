@@ -320,26 +320,6 @@ class PlaybackProvider extends ChangeNotifier {
     _notifyCategory('track');
   }
 
-  /// 收藏/取消收藏当前曲目（写入默认收藏列表，返回切换后状态）。
-  ///
-  /// raw 取链参数由播放快照（领域 Track.payload）提供；UI 不读取 payload。
-  /// 恢复态下没有真实播放，但曲目元数据完整，收藏同样可用。
-  Future<bool> toggleCurrentFavorite() async {
-    final track = snapshot.current;
-    final repository = _libraryRepository;
-    if (track == null || repository == null) return false;
-    return repository.toggleFavorite(
-      sourceKey: track.id.sourceKey,
-      songId: track.id.id,
-      title: track.title,
-      artist: track.artists.map((artist) => artist.name).join(', '),
-      album: track.album ?? '',
-      coverUrl: track.artwork?.uri.toString(),
-      durationMs: track.duration?.inMilliseconds,
-      raw: Map<String, dynamic>.from(track.payload),
-    );
-  }
-
   /// 停止本地播放并清空状态（同时丢弃恢复会话，避免下次启动又出现）。
   Future<void> stopLocalPlayback() async {
     await _facade.stop();

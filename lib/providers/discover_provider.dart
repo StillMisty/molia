@@ -154,22 +154,6 @@ class DiscoverProvider extends ChangeNotifier {
   bool isFavorite(DiscoverTrack track) =>
       _library.isFavorite(track.sourceKey, track.songId);
 
-  /// 加入我的列表（重复加入返回 false）。
-  Future<bool> addToPlaylist(int playlistId, DiscoverTrack track) =>
-      _library.addSourceTrackToPlaylist(playlistId, _toSourceTrack(track));
-
-  /// 加入默认收藏（「加入列表 → 我的收藏」；重复加入返回 false）。
-  Future<bool> addToFavorites(DiscoverTrack track) async {
-    final added = await _library.addTracksToFavorites([
-      _toPlaylistTrack(track),
-    ]);
-    return added > 0;
-  }
-
-  /// 加入播放历史（「加入列表 → 播放历史」）。
-  Future<void> addToHistory(DiscoverTrack track) =>
-      _library.addTracksToHistory([_toPlaylistTrack(track)]);
-
   /// 把歌单详情导入本地列表（同名列表复用）。
   ///
   /// 返回 `(playlistId, 新增数, 曲目总数)`。
@@ -182,7 +166,7 @@ class DiscoverProvider extends ChangeNotifier {
         : (fallbackName ?? detail.info.id);
     return _library.importTracksAsPlaylist(
       name: name,
-      tracks: [for (final track in detail.tracks) _toPlaylistTrack(track)],
+      tracks: [for (final track in detail.tracks) toPlaylistTrack(track)],
     );
   }
 
@@ -258,7 +242,8 @@ class DiscoverProvider extends ChangeNotifier {
         raw: track.raw,
       );
 
-  PlaylistTrack _toPlaylistTrack(DiscoverTrack track) => PlaylistTrack(
+  /// 发现曲目 → 资料库列表曲目（「加入列表」统一流程使用）。
+  PlaylistTrack toPlaylistTrack(DiscoverTrack track) => PlaylistTrack(
         playlistId: 0,
         sourceKey: track.sourceKey,
         songId: track.songId,

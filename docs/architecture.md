@@ -94,6 +94,11 @@
     并拦截播放预加载、取色预取、audio_service 通知封面与桌面小组件封面地址；
   - 探测失败保守按「未生效」；Android 回前台时由壳层 `refreshConnectivity()` 补一次检测。
 - **Mapping**：`track_mapper`（`SourceTrack` ↔ `Track`，payload 同一引用往返）。
+- **资料库写入**：`LibraryProvider` 是收藏 / 历史 / 列表写入的唯一入口。收藏唯一
+  入口 `toggleFavoriteTrack(Track)`（播放页经它写入，不再直连 `LibraryRepository`）；
+  批量操作按 `PlaylistTrack` 规范形状（`PlaylistTrack.fromHistoryEntry` 负责历史转换）；
+  「加入列表」流程唯一实现在 `lib/widgets/add_to_library.dart`（收藏页与发现页共用）；
+  列表曲目读取经 `playlistTracksView` + `ensurePlaylistTracks`（页面不探测缓存内部）。
 
 ## 4. 状态与通知策略
 

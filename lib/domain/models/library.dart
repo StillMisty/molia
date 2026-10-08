@@ -106,6 +106,26 @@ class PlaylistTrack {
 
   String get key => '$sourceKey:$songId';
 
+  /// 播放历史条目 → 列表曲目（收藏页「历史复制到列表」等场景共用）。
+  factory PlaylistTrack.fromHistoryEntry(
+    PlayHistoryEntry entry, {
+    int playlistId = 0,
+    required int addedAt,
+  }) {
+    return PlaylistTrack(
+      playlistId: playlistId,
+      sourceKey: entry.sourceKey,
+      songId: entry.songId,
+      title: entry.title,
+      artist: entry.artist,
+      album: entry.album,
+      coverUrl: entry.coverUrl,
+      durationMs: entry.durationMs,
+      raw: entry.raw,
+      addedAt: addedAt,
+    );
+  }
+
   @override
   String toString() => 'PlaylistTrack($key, $title)';
 }

@@ -14,7 +14,9 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 
 import '../data/library_repository.dart';
+import '../data/mapping/track_mapper.dart';
 import '../domain/models/library.dart';
+import '../domain/models/track.dart';
 import '../models/play_mode.dart';
 import '../sources/raw_track.dart';
 import '../sources/source_track.dart';
@@ -60,11 +62,38 @@ class LibraryProvider extends ChangeNotifier {
   bool get isHistoryLoading => _isHistoryLoading;
   bool get isPlaylistsLoading => _isPlaylistsLoading;
 
-  bool isPlaylistLoading(int playlistId) =>
-      _loadingPlaylistIds.contains(playlistId);
+  /// 列表曲目视图：`tracks == null` 表示尚未加载；`loading` 表示加载中。
+  /// 页面只读视图并用 [ensurePlaylistTracks] 触发加载，不再探测缓存内部。
+  ({List<PlaylistTrack>? tracks, bool loading}) playlistTracksView(
+          int playlistId) =>
+      (
+        tracks: _tracksByPlaylist[playlistId],
+        loading: _loadingPlaylistIds.contains(playlistId),
+      );
 
-  List<PlaylistTrack>? cachedTracksOf(int playlistId) =>
-      _tracksByPlaylist[playlistId];
+  /// 请求加载列表曲目（未缓存且未在加载中时发起；可在 build 内调用）。
+  void ensurePlaylistTracks(int playlistId) {
+    if (_tracksByPlaylist.containsKey(playlistId) ||
+        !_loadingPlaylistIds.add(playlistId)) {
+      return;
+    }
+    // build 期调用：同步标记 loading（本帧即可显示加载态），通知推迟到
+    // 微任务，避免 setState during build。
+    unawaited(Future<void>.microtask(() async {
+      if (_disposed) return;
+      _notify();
+      try {
+        final tracks = await _repository.listPlaylistTracks(playlistId);
+        if (_disposed) return;
+        _tracksByPlaylist[playlistId] = tracks;
+      } catch (e) {
+        debugPrint('[Library] 加载列表曲目失败: $e');
+      } finally {
+        _loadingPlaylistIds.remove(playlistId);
+        _notify();
+      }
+    }));
+  }
 
   bool isFavorite(String sourceKey, String songId) =>
       _favoriteKeys.contains('$sourceKey:$songId');
@@ -225,13 +254,7 @@ class LibraryProvider extends ChangeNotifier {
     }
   }
 
-  /// 列表曲目：命中缓存直接返回，否则查询并缓存。
-  Future<List<PlaylistTrack>> tracksOf(int playlistId) async {
-    final cached = _tracksByPlaylist[playlistId];
-    if (cached != null) return cached;
-    return loadPlaylistTracks(playlistId);
-  }
-
+  /// 列表曲目：命中缓存直接返回，否则查询并缓存（可等待入口）。
   Future<List<PlaylistTrack>> loadPlaylistTracks(
     int playlistId, {
     bool force = false,
@@ -272,23 +295,6 @@ class LibraryProvider extends ChangeNotifier {
       await _playback.setPlayMode(mode);
     }
     final tracks = [for (final entry in entries) _fromHistory(entry)];
-    await _playback.playSourceTracks(
-      tracks,
-      index.clamp(0, tracks.length - 1),
-      contextName: contextName,
-    );
-  }
-
-  /// 播放指定列表（曲目来自缓存/仓库）。
-  Future<void> playPlaylist(
-    int playlistId,
-    int index, {
-    String? contextName,
-  }) async {
-    final tracks = [
-      for (final track in await tracksOf(playlistId)) _fromPlaylistTrack(track),
-    ];
-    if (tracks.isEmpty) return;
     await _playback.playSourceTracks(
       tracks,
       index.clamp(0, tracks.length - 1),
@@ -369,29 +375,6 @@ class LibraryProvider extends ChangeNotifier {
     return _repository.addTracksToPlaylist(playlistId, tracks);
   }
 
-  /// 批量把播放历史复制到目标列表（历史条目转列表曲目）。
-  Future<int> addHistoryEntriesToPlaylist(
-    int playlistId,
-    List<PlayHistoryEntry> entries,
-  ) {
-    final now = DateTime.now().millisecondsSinceEpoch;
-    return _repository.addTracksToPlaylist(playlistId, [
-      for (final entry in entries)
-        PlaylistTrack(
-          playlistId: playlistId,
-          sourceKey: entry.sourceKey,
-          songId: entry.songId,
-          title: entry.title,
-          artist: entry.artist,
-          album: entry.album,
-          coverUrl: entry.coverUrl,
-          durationMs: entry.durationMs,
-          raw: entry.raw,
-          addedAt: now,
-        ),
-    ]);
-  }
-
   /// 新建列表（收藏页合集弹层 / 「加入列表」弹层使用）。
   Future<int> createPlaylist(String name) => _repository.createPlaylist(name);
 
@@ -425,35 +408,6 @@ class LibraryProvider extends ChangeNotifier {
           durationMs: track.durationMs,
           raw: track.raw,
           playedAt: now + offset++,
-        ),
-    ]);
-  }
-
-  /// 批量把历史条目重新置顶（「加入列表 → 播放历史」）。
-  Future<int> addHistoryEntriesToHistory(List<PlayHistoryEntry> entries) {
-    final now = DateTime.now().millisecondsSinceEpoch;
-    var offset = 0;
-    return _repository.addHistoryEntries([
-      for (final entry in entries) entry.copyWith(playedAt: now + offset++),
-    ]);
-  }
-
-  /// 批量把播放历史收藏进默认收藏列表（返回新增数）。
-  Future<int> addHistoryEntriesToFavorites(List<PlayHistoryEntry> entries) {
-    final now = DateTime.now().millisecondsSinceEpoch;
-    return addTracksToFavorites([
-      for (final entry in entries)
-        PlaylistTrack(
-          playlistId: 0,
-          sourceKey: entry.sourceKey,
-          songId: entry.songId,
-          title: entry.title,
-          artist: entry.artist,
-          album: entry.album,
-          coverUrl: entry.coverUrl,
-          durationMs: entry.durationMs,
-          raw: entry.raw,
-          addedAt: now,
         ),
     ]);
   }
@@ -566,16 +520,22 @@ class LibraryProvider extends ChangeNotifier {
     return favorite;
   }
 
-  Future<bool> toggleFavoriteSourceTrack(SourceTrack track) => toggleFavorite(
-        sourceKey: track.sourceKey,
-        songId: _songIdOfSourceTrack(track),
+  /// 收藏/取消收藏领域曲目（播放页/UI 的收藏唯一入口）。
+  ///
+  /// raw 取链参数由 `Track.payload` 原样提供；UI 不读取 payload。
+  Future<bool> toggleFavoriteTrack(Track track) => toggleFavorite(
+        sourceKey: track.id.sourceKey,
+        songId: track.id.id,
         title: track.title,
-        artist: track.artist,
-        album: track.album,
-        coverUrl: track.coverUrl,
+        artist: track.artists.map((artist) => artist.name).join(', '),
+        album: track.album ?? '',
+        coverUrl: track.artwork?.uri.toString(),
         durationMs: track.duration?.inMilliseconds,
-        raw: track.raw,
+        raw: Map<String, dynamic>.from(track.payload),
       );
+
+  Future<bool> toggleFavoriteSourceTrack(SourceTrack track) =>
+      toggleFavoriteTrack(trackFromSourceTrack(track));
 
   /// 把音源曲目加入指定列表（发现页/搜索等入口使用；重复加入返回 false）。
   Future<bool> addSourceTrackToPlaylist(int playlistId, SourceTrack track) {
@@ -610,29 +570,6 @@ class LibraryProvider extends ChangeNotifier {
     if (sourceTrack is! SourceTrack) return false;
     return isFavorite(sourceTrack.sourceKey, _songIdOfSourceTrack(sourceTrack));
   }
-
-  Future<bool> toggleFavoritePlaylistTrack(PlaylistTrack track) => toggleFavorite(
-        sourceKey: track.sourceKey,
-        songId: track.songId,
-        title: track.title,
-        artist: track.artist,
-        album: track.album,
-        coverUrl: track.coverUrl,
-        durationMs: track.durationMs,
-        raw: track.raw,
-      );
-
-  Future<bool> toggleFavoriteHistoryEntry(PlayHistoryEntry entry) =>
-      toggleFavorite(
-        sourceKey: entry.sourceKey,
-        songId: entry.songId,
-        title: entry.title,
-        artist: entry.artist,
-        album: entry.album,
-        coverUrl: entry.coverUrl,
-        durationMs: entry.durationMs,
-        raw: entry.raw,
-      );
 
   /// 导入 `.lxmc` 收藏夹；失败抛 [LxmcDecodeException]（由 UI 转 l10n 提示）。
   Future<LxmcImportResult> importLxmcBytes(
