@@ -42,6 +42,7 @@
 2. `lib/data/**`、`lib/sources/**`、`lib/playback/**` 禁止 providers/pages/widgets/main；
 3. `lib/providers/**` 禁止 import `lib/main.dart`；
 4. `lib/main.dart` 是唯一 composition root，不允许被其它 lib 文件 import；
+   应用壳（导航栏/顶栏/迷你条）在 `lib/app/app_shell.dart`，测试可直接挂载；
 5. UI 禁止 import `lib/sources/**`（Wave 7 后白名单已清空，新增违规必须修复）。
 
 ## 2. 领域层
