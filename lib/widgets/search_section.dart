@@ -8,6 +8,7 @@ import '../providers/library_provider.dart';
 import '../providers/search_provider.dart';
 import '../utils/responsive.dart';
 import 'app_network_image.dart';
+import 'molia_mark.dart';
 
 /// AppLocalizations 查找：测试等场景可能直接挂载本页而不注册 delegate，
 /// 此时回退到简体中文，保证与中文正式环境文案一致（正式 App 恒有 delegate）。
@@ -356,7 +357,7 @@ class _SearchResultItem extends StatelessWidget {
                               .surfaceContainerHighest,
                         ),
                         child: const Center(
-                          child: Icon(Icons.music_note_rounded, size: 40),
+                          child: MoliaMark(size: 40),
                         ),
                       );
                     }

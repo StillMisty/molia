@@ -7,10 +7,9 @@ import 'package:flutter_test/flutter_test.dart';
 /// 平台自适应（`Icons.adaptive.*`）。
 ///
 /// 唯一例外是导航「未选中」半对（选中/未选中成对图标按 M3 惯例：
-/// 未选中空心、选中实心）：音符 / 资料库没有圆角空心字形，退用 `_outlined`，
-/// 见 `lib/widgets/nav_destination_icons.dart`。
+/// 未选中空心、选中实心）：资料库没有圆角空心字形，退用 `_outlined`；
+/// 音符已改用 Molia 标志组件（`lib/widgets/molia_mark.dart`），不再用字形。
 const Set<String> _outlinedPairAllowlist = {
-  'music_note_outlined',
   'library_music_outlined',
 };
 

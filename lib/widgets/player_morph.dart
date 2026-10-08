@@ -7,6 +7,7 @@ import 'package:provider/provider.dart';
 import '../managers/artwork_cache.dart';
 import '../providers/playback_provider.dart';
 import '../utils/track_map_utils.dart';
+import 'molia_mark.dart';
 
 /// 顶栏 ↔ 播放页共享元素飞行控制器。
 ///
@@ -231,8 +232,7 @@ class _MorphCoverState extends State<MorphCover> {
     return Container(
       color: scheme.surfaceContainerHighest,
       alignment: Alignment.center,
-      child: Icon(
-        Icons.music_note_rounded,
+      child: MoliaMark(
         color: scheme.onSurfaceVariant,
         size: 32,
       ),

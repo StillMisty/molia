@@ -19,6 +19,7 @@ import '../services/data_saver_service.dart';
 import '../utils/responsive.dart';
 import '../utils/track_map_utils.dart';
 import 'app_network_image.dart';
+import 'molia_mark.dart';
 import 'player_morph.dart';
 
 /// 迷你播放条高度（收起态）：展开/收起动画的迷你端基准，播放页共用。
@@ -280,15 +281,14 @@ class _PlayerState extends State<Player> with TickerProviderStateMixin {
     return _buildFallbackArtwork(key: key ?? const ValueKey('default_image'));
   }
 
-  /// 无封面时的中性占位：主题容器色背景 + 音符图标（不内置图片资产）。
+  /// 无封面时的中性占位：主题容器色背景 + Molia 标志。
   Widget _buildFallbackArtwork({Key? key}) {
     final scheme = Theme.of(context).colorScheme;
     return Container(
       key: key,
       color: scheme.surfaceContainerHighest,
       alignment: Alignment.center,
-      child: Icon(
-        Icons.music_note_rounded,
+      child: MoliaMark(
         size: 64,
         color: scheme.onSurfaceVariant,
       ),

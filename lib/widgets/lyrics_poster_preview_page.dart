@@ -129,9 +129,8 @@ class _LyricsPosterPreviewPageState extends State<LyricsPosterPreviewPage> {
     if (!mounted) return;
     HapticFeedback.lightImpact();
     final theme = Theme.of(context);
-    // 获取主题字体或指定默认字体
-    final String uiFontFamily = theme.textTheme.bodyMedium?.fontFamily ??
-        'Montserrat'; // Default to Montserrat if not found
+    // 主题未声明字体时交由系统默认字体（不再内置 Montserrat）
+    final String? uiFontFamily = theme.textTheme.bodyMedium?.fontFamily;
 
     setState(() {
       _isLoading = true;

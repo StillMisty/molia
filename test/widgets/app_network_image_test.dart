@@ -9,6 +9,7 @@ import 'package:molia/managers/artwork_cache.dart';
 import 'package:molia/services/cache_service.dart';
 import 'package:molia/services/cache_storage_stub.dart';
 import 'package:molia/widgets/app_network_image.dart';
+import 'package:molia/widgets/molia_mark.dart';
 import 'package:material_ui/material_ui.dart';
 
 /// 永远失败的 CacheManager：离线验证 error 回退。
@@ -67,7 +68,7 @@ Widget _host(Widget child) => MaterialApp(
     );
 
 void main() {
-  testWidgets('url 为空：直接显示音符回退，不创建网络加载', (tester) async {
+  testWidgets('url 为空：直接显示 Molia 标志回退，不创建网络加载', (tester) async {
     await tester.pumpWidget(_host(const AppNetworkImage(
       url: null,
       width: 40,
@@ -75,7 +76,7 @@ void main() {
       fallbackIconSize: 20,
     )));
 
-    expect(find.byIcon(Icons.music_note_rounded), findsOneWidget);
+    expect(find.byType(MoliaMark), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
 
@@ -95,10 +96,10 @@ void main() {
     await tester.pump(const Duration(milliseconds: 50));
 
     expect(find.byKey(const ValueKey('placeholder')), findsOneWidget);
-    expect(find.byIcon(Icons.music_note_rounded), findsNothing);
+    expect(find.byType(MoliaMark), findsNothing);
   });
 
-  testWidgets('加载失败：回退音符图标（不触网）', (tester) async {
+  testWidgets('加载失败：回退 Molia 标志（不触网）', (tester) async {
     await tester.pumpWidget(_host(AppNetworkImage(
       url: 'https://p1.music.126.net/failing.jpg',
       width: 40,
@@ -110,7 +111,7 @@ void main() {
     await tester.pump(const Duration(milliseconds: 50));
     await tester.pump(const Duration(milliseconds: 50));
 
-    expect(find.byIcon(Icons.music_note_rounded), findsOneWidget);
+    expect(find.byType(MoliaMark), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
 

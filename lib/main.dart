@@ -747,8 +747,8 @@ class _MyAppState extends State<MyApp>
                   destinations: [
                     for (final destination in visibleDestinations)
                       M3ENavigationRailDestination(
-                        icon: Icon(destination.outlinedIcon),
-                        selectedIcon: Icon(destination.filledIcon),
+                        icon: destination.outlinedIcon,
+                        selectedIcon: destination.filledIcon,
                         label: _destinationLabel(l10n, destination),
                       ),
                   ],
@@ -774,8 +774,8 @@ class _MyAppState extends State<MyApp>
                 destinations: [
                   for (final destination in visibleDestinations)
                     M3ENavigationBarDestination(
-                      icon: Icon(destination.outlinedIcon),
-                      selectedIcon: Icon(destination.filledIcon),
+                      icon: destination.outlinedIcon,
+                      selectedIcon: destination.filledIcon,
                       label: _destinationLabel(l10n, destination),
                     ),
                 ],

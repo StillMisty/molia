@@ -1237,7 +1237,13 @@ class _BottomNavSettings extends StatelessWidget {
               color: scheme.secondaryContainer,
               borderRadius: BorderRadius.circular(8),
             ),
-            child: Icon(icon, color: scheme.onSecondaryContainer),
+            child: IconTheme.merge(
+              data: IconThemeData(
+                color: scheme.onSecondaryContainer,
+                size: 24,
+              ),
+              child: icon,
+            ),
           ),
           const SizedBox(width: kElementSpacing),
           Expanded(

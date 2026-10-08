@@ -49,7 +49,18 @@ android {
         release {
             signingConfig signingConfigs.release
             minifyEnabled true
+            // 移除 AAPT 静态分析判定未引用的资源（R.* 代码引用与清单/布局引用会保留）
+            shrinkResources true
             proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
+        }
+    }
+
+    packaging {
+        jniLibs {
+            // sqflite_common_ffi 仅桌面端（Linux/Windows）使用；其传递依赖 sqlite3
+            // 会为 Android 一并生成 native asset（libsqlite3.so，约 1.7MB），
+            // Android 实际走系统 SQLite（sqflite_android），这里显式剔除。
+            excludes += ["**/libsqlite3.so"]
         }
     }
 }

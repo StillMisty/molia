@@ -5,6 +5,7 @@ import 'package:provider/provider.dart';
 import '../providers/playback_provider.dart';
 import '../l10n/app_localizations.dart';
 import 'app_network_image.dart';
+import 'molia_mark.dart';
 
 /// 「正在播放」行所需的最小信息。
 ///
@@ -140,8 +141,7 @@ class QueueDisplay extends StatelessWidget {
       height: size,
       child: url == null
           ? Center(
-              child: Icon(
-                Icons.music_note_rounded,
+              child: MoliaMark(
                 size: size * 0.5,
                 color: Theme.of(context).colorScheme.onSurfaceVariant,
               ),

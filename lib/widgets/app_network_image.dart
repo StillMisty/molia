@@ -6,13 +6,14 @@ import 'package:flutter_cache_manager/flutter_cache_manager.dart';
 import 'package:material_ui/material_ui.dart';
 
 import '../managers/artwork_cache.dart';
+import 'molia_mark.dart';
 
 /// 统一网络图片组件：封面/头像等所有远端图片都走这里。
 ///
 /// - 请求头统一走 [ArtworkCache.headersFor]（浏览器 UA + 平台 Referer，
 ///   修复网易云 CDN 对 Dart UA 的 403）；
 /// - 缓存统一走 [ArtworkCache] 的共享持久 CacheManager（封面分区策略）；
-/// - 占位 / 失败默认回退到音符图标，调用方可覆盖；
+/// - 占位 / 失败默认回退到 Molia 标志，调用方可覆盖；
 /// - [borderRadius] 非空时内部做圆角裁剪（避免各处重复 ClipRRect）。
 class AppNetworkImage extends StatelessWidget {
   const AppNetworkImage({
@@ -26,7 +27,6 @@ class AppNetworkImage extends StatelessWidget {
     this.memCacheHeight,
     this.placeholder,
     this.errorWidget,
-    this.fallbackIcon = Icons.music_note_rounded,
     this.fallbackIconSize,
     this.fallbackColor,
     this.artworkCache,
@@ -45,10 +45,9 @@ class AppNetworkImage extends StatelessWidget {
   /// 加载中占位（默认半透明 surfaceContainerHighest 色块）。
   final Widget? placeholder;
 
-  /// 加载失败回退（默认音符图标）。
+  /// 加载失败回退（默认 Molia 标志）。
   final Widget? errorWidget;
 
-  final IconData fallbackIcon;
   final double? fallbackIconSize;
   final Color? fallbackColor;
 
@@ -125,8 +124,7 @@ class AppNetworkImage extends StatelessWidget {
       height: height,
       color: fallbackColor ?? scheme.surfaceContainerHighest,
       alignment: Alignment.center,
-      child: Icon(
-        fallbackIcon,
+      child: MoliaMark(
         size: size,
         color: scheme.onSurfaceVariant,
       ),

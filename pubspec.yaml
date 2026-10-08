@@ -1,32 +1,13 @@
 name: molia
 description: "Molia（茉咏）—— 多音源本地音乐播放器"
-# The following line prevents the package from being accidentally published to
-# pub.dev using `flutter pub publish`. This is preferred for private packages.
+
 publish_to: "none" # Remove this line if you wish to publish to pub.dev
 
-# The following defines the version and build number for your application.
-# A version number is three numbers separated by dots, like 1.2.43
-# followed by an optional build number separated by a +.
-# Both the version and the builder number may be overridden in flutter
-# build by specifying --build-name and --build-number, respectively.
-# In Android, build-name is used as versionName while build-number used as versionCode.
-# Read more about Android versioning at https://developer.android.com/studio/publish/versioning
-# In iOS, build-name is used as CFBundleShortVersionString while build-number is used as CFBundleVersion.
-# Read more about iOS versioning at
-# https://developer.apple.com/library/archive/documentation/General/Reference/InfoPlistKeyReference/Articles/CoreFoundationKeys.html
-# In Windows, build-name is used as the major, minor, and patch parts
-# of the product and file versions while build-number is used as the build suffix.
 version: 1.0.0+1
 
 environment:
   sdk: ^3.5.4
 
-# Dependencies specify other packages that your package needs in order to work.
-# To automatically upgrade your package dependencies to the latest versions
-# consider running `flutter pub upgrade --major-versions`. Alternatively,
-# dependencies can be manually updated by changing the version numbers below to
-# the latest version available on pub.dev. To see which dependencies have newer
-# versions available, run `flutter pub outdated`.
 dependencies:
   flutter:
     sdk: flutter
@@ -49,31 +30,21 @@ dependencies:
   audio_session: ^0.2.4
   share_plus: ^13.3.1
   file_picker: ^13.1.0
-  flutter_staggered_grid_view: ^0.7.0
   pointycastle: ^4.0.0
   html_unescape: ^2.0.0
-  flutter_markdown_plus: ^1.0.12
   material_color_utilities: ^0.13.0
   dynamic_color: ^2.1.0
-  # 保存海报到系统相册（Android/iOS/macOS/Windows）
   gal: ^2.3.3
   animations: ^3.0.0
-  # 音源（LX Music 自定义源）JS 引擎
   flutter_js: ^0.8.7
-  # 网络类型检测（省流模式：仅移动数据时降低音质/减少封面加载）
   connectivity_plus: ^7.3.2
-  # 本地音频播放（音源取链后由 App 播放）
   just_audio: ^0.10.6
-  # 桌面端（Windows/Linux）音频后端桥接
   just_audio_media_kit: ^2.1.0
   media_kit_libs_linux: ^1.2.1
   media_kit_libs_windows_audio: ^1.0.9
-  # 后台播放与系统媒体通知/耳机键控制（Android/iOS/macOS；其它平台自动降级）
   audio_service: ^0.18.19
-  # Material 3 Expressive 基础 UI 库（替代 flutter/material 的 import 来源）
   material_ui: ^1.6.0
   cupertino_ui: ^1.1.2
-  # M3E 风格组件/主题扩展（P2/P3 逐步启用，本波仅引入依赖）
   material_3_expressive: ^1.1.5
   sqflite_common_ffi: ^2.4.3
 dev_dependencies:
@@ -82,41 +53,14 @@ dev_dependencies:
   integration_test:
     sdk: flutter
   flutter_lints: ^6.0.0
-  # 图标生成器（仅开发期 CLI 使用，配置见 flutter_launcher_icons.yaml）
   flutter_launcher_icons: ^0.14.2
 
-# For information on the generic Dart part of this file, see the
-# following page: https://dart.dev/tools/pub/pubspec
-
-# The following section is specific to Flutter packages.
 flutter:
   generate: true
   uses-material-design: true
 
-  # To add assets to your application, add an assets section, like this:
   assets:
     - assets/icons/adaptive_icon_monochrome.png
+    - assets/icons/molia_logo.png
+    - assets/icons/molia_logo_outline.png
     - assets/lx/
-  #   - images/a_dot_burr.jpeg
-  #   - images/a_dot_ham.jpeg
-
-  # An image asset can refer to one or more resolution-specific "variants", see
-  # https://flutter.dev/to/resolution-aware-images
-
-  # For details regarding adding assets from package dependencies, see
-  # https://flutter.dev/to/asset-from-package
-
-  # To add custom fonts to your application, add a fonts section here,
-  # in this "flutter" section. Each entry in this list should have a
-  # "family" key with the font family name, and a "fonts" key with a
-  # list giving the asset and other descriptors for the font. For
-  # example:
-  fonts:
-    - family: Montserrat
-      fonts:
-        # 常规 (Regular) - 对应 FontWeight.w400 或 FontWeight.normal
-        - asset: assets/fonts/Montserrat-Medium.ttf
-          weight: 400
-        # 粗体 (Bold) - 对应 FontWeight.w700 或 FontWeight.bold
-        - asset: assets/fonts/Montserrat-SemiBold.ttf
-          weight: 700
