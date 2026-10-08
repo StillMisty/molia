@@ -73,11 +73,10 @@ class _FavoritesPageState extends State<FavoritesPage> {
   List<String> _collectionOrder = const [];
   final LibraryCollections _collections = LibraryCollections();
 
-  /// 播放历史分页：滚动到底自动加载下一页（含 loading 尾部）。
+  /// 播放历史分页：滚动到底自动追加下一页窗口（列表已在内存，无需加载态）。
   final ScrollController _historyScrollController = ScrollController();
   static const int _historyPageSize = 50;
   int _visibleHistoryCount = _historyPageSize;
-  bool _historyLoadingMore = false;
 
   bool get _selecting => _selection.isSelectionMode;
 
@@ -163,26 +162,19 @@ class _FavoritesPageState extends State<FavoritesPage> {
   }
 
   void _maybeLoadMoreHistory() {
-    if (_historyLoadingMore) return;
     final total = context.read<LibraryProvider>().history.length;
     if (_visibleHistoryCount >= total) return;
-    setState(() => _historyLoadingMore = true);
-    // 历史已在内存：短暂延迟让 loading 尾部可见（分页节奏）。
-    Future<void>.delayed(const Duration(milliseconds: 240), () {
-      if (!mounted) return;
-      setState(() {
-        _visibleHistoryCount = min(
-          _visibleHistoryCount + _historyPageSize,
-          total,
-        );
-        _historyLoadingMore = false;
-      });
+    // 历史已在内存：直接追加窗口，不再模拟网络分页的 loading 尾部。
+    setState(() {
+      _visibleHistoryCount = min(
+        _visibleHistoryCount + _historyPageSize,
+        total,
+      );
     });
   }
 
   void _resetHistoryPaging() {
     _visibleHistoryCount = _historyPageSize;
-    _historyLoadingMore = false;
   }
 
   // 合集解析
@@ -1348,9 +1340,6 @@ class _FavoritesPageState extends State<FavoritesPage> {
       return _buildEmptyState(context, l10n, view);
     }
     final visibleCount = view.historyVisibleCount;
-    final hasMore = visibleCount < view.visibleHistory.length;
-    // 多选时隐藏分页尾部：选择索引只覆盖已加载曲目，避免选到尾部行。
-    final showFooter = !_selecting && (hasMore || _historyLoadingMore);
     return NotificationListener<ScrollNotification>(
       onNotification: _onHistoryScroll,
       child: Scrollbar(
@@ -1359,7 +1348,7 @@ class _FavoritesPageState extends State<FavoritesPage> {
         interactive: true,
         child: M3EList.scrollable(
           controller: _historyScrollController,
-          itemCount: visibleCount + (showFooter ? 1 : 0),
+          itemCount: visibleCount,
           listPadding: const EdgeInsets.symmetric(vertical: 8),
           gap: 0,
           outerRadius: 0,
@@ -1380,12 +1369,6 @@ class _FavoritesPageState extends State<FavoritesPage> {
             if (index < visibleCount) _enterSelection(index);
           },
           itemBuilder: (context, index) {
-            if (index >= visibleCount) {
-              return const Padding(
-                padding: EdgeInsets.symmetric(vertical: 16),
-                child: Center(child: M3ELoadingIndicator()),
-              );
-            }
             final entry = view.visibleHistory[index];
             return M3EListItem(
               // 稳定 key：收藏切换后列表原地刷新，不整段重建/丢滚动位置。

@@ -9,6 +9,7 @@ import '../domain/models/source.dart' as domain;
 import '../domain/ports/source_registry.dart';
 import '../sources/source_manager.dart' show SourceKind, SourceOption;
 import '../sources/source_track.dart';
+import 'paged_list_controller.dart';
 import 'playback_provider.dart';
 
 final _logger = Logger();
@@ -45,12 +46,13 @@ class SearchProvider extends ChangeNotifier {
   /// 音源搜索结果的原始曲目（用于播放时回传给音源脚本）
   List<SourceTrack> _sourceTracks = const [];
 
-  // 分页状态
+  // 分页状态：唯一状态机 PagedListController（首屏/加载更多/失败/过期守卫/去重）
   static const int _searchPageSize = 30;
-  int _currentPage = 1;
-  int? _totalResults;
-  bool _hasMore = false;
-  bool _isLoadingMore = false;
+
+  /// 当前分页会话的关键词（pager 的 fetchPage 读取；换词/清空时重置）。
+  String _pagerQuery = '';
+
+  late final PagedListController<SourceTrack> _pager;
 
   // Track search requests to avoid applying stale results.
   int _searchRequestId = 0;
@@ -66,6 +68,10 @@ class SearchProvider extends ChangeNotifier {
     SourceRegistry? sourceRegistry,
   })  : _catalogService = catalogService,
         _sourceRegistry = sourceRegistry {
+    _pager = PagedListController<SourceTrack>(
+      keyOf: (track) => track.id,
+      fetchPage: _fetchSearchPage,
+    );
     _registrySubscription =
         _sourceRegistry?.changes.listen((_) => _onSourcesChanged());
     _onSourcesChanged();
@@ -82,16 +88,16 @@ class SearchProvider extends ChangeNotifier {
   String get sourceKey => _sourceKey;
 
   /// 当前已加载到第几页（从 1 开始）。
-  int get currentPage => _currentPage;
+  int get currentPage => _pager.page;
 
   /// 平台返回的结果总数（部分平台/脚本不返回则为 null）。
-  int? get totalResults => _totalResults;
+  int? get totalResults => _pager.total;
 
   /// 是否还有下一页可加载。
-  bool get hasMore => _hasMore;
+  bool get hasMore => _pager.hasMore;
 
   /// 是否正在加载下一页。
-  bool get isLoadingMore => _isLoadingMore;
+  bool get isLoadingMore => _pager.isLoadingMore;
 
   /// 是否已选中可用音源（空音源时搜索结果页展示引导空态）。
   bool get hasSelectedSource => _sourceKey.isNotEmpty;
@@ -138,12 +144,10 @@ class SearchProvider extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// 重置分页状态（换关键词 / 换音源 / 清空搜索时调用）。
+  /// 重置分页状态（换关键词 / 换音源 / 清空搜索时调用）：过期在途请求。
   void _resetPagination() {
-    _currentPage = 1;
-    _totalResults = null;
-    _hasMore = false;
-    _isLoadingMore = false;
+    _pagerQuery = '';
+    _pager.reset();
   }
 
   /// 切换搜索音源。
@@ -318,12 +322,11 @@ class SearchProvider extends ChangeNotifier {
   // Perform the actual search
   Future<void> performSearch(String query, {int? requestId}) async {
     if (query.trim().isEmpty) return;
-
-    final activeRequestId = requestId ?? ++_searchRequestId;
-    final sourceKeyAtStart = _sourceKey;
+    // 旧 debounce 回调（已有更新的请求）直接丢弃。
+    if (requestId != null && requestId != _searchRequestId) return;
 
     // 无可用音源：展示空态引导，不发起请求。
-    if (sourceKeyAtStart.isEmpty) {
+    if (_sourceKey.isEmpty) {
       _isSearching = false;
       _errorMessage = null;
       _failure = null;
@@ -335,105 +338,68 @@ class SearchProvider extends ChangeNotifier {
       return;
     }
 
-    _sourceKeyUsedInRequest = sourceKeyAtStart;
+    _pagerQuery = query;
     _isSearching = true;
     _errorMessage = null;
     _failure = null;
-    _resetPagination();
+    _pager.reset();
     notifyListeners();
 
-    try {
-      final catalog = _catalogService;
-      if (catalog == null) {
-        throw StateError('音源未初始化');
-      }
-      final result = await catalog.search(
-        sourceKeyAtStart,
-        SearchQuery(keyword: query, page: 1, limit: _searchPageSize),
-      );
+    await _pager.loadFirstPage();
+    _applyPagerState();
+    _isSearching = false;
+    notifyListeners();
+  }
 
-      if (!_isLatestRequest(activeRequestId, query)) return;
-
-      final tracks = [
-        for (final track in result.items) sourceTrackFromTrack(track),
-      ];
-      _sourceTracks = tracks;
-      _currentPage = 1;
-      _hasMore = result.hasMore;
-      _totalResults = result.total;
-      _searchResults = {
-        'tracks': tracks.map(_sourceTrackToItem).toList(),
-      };
-      _markFilteredResultsDirty();
-    } catch (e) {
-      _logger.d('Search failed: $e');
-      if (!_isLatestRequest(activeRequestId, query)) return;
-      _failure = SourceFailure.from(e);
-      _errorMessage = 'Search failed: $e';
-    } finally {
-      if (_isLatestRequest(activeRequestId, query)) {
-        _isSearching = false;
-        notifyListeners();
-      }
+  /// pager 的取页实现：按当前音源与分页会话关键词请求 CatalogService。
+  Future<PagedResult<SourceTrack>> _fetchSearchPage(int page) async {
+    final catalog = _catalogService;
+    if (catalog == null) {
+      throw StateError('音源未初始化');
     }
+    final result = await catalog.search(
+      _sourceKey,
+      SearchQuery(keyword: _pagerQuery, page: page, limit: _searchPageSize),
+    );
+    return PagedResult(
+      items: [for (final track in result.items) sourceTrackFromTrack(track)],
+      hasMore: result.hasMore,
+      total: result.total,
+    );
+  }
+
+  /// 把分页状态机的结果映射到搜索兼容状态（tracks map / 失败 / 分页元数据）。
+  ///
+  /// 失败时保留旧结果（与旧实现一致：错误提示与旧列表并存，不闪空）。
+  void _applyPagerState() {
+    final error = _pager.error;
+    if (error != null) {
+      _logger.d('Search failed: $error');
+      _failure = SourceFailure.from(error);
+      _errorMessage = 'Search failed: $error';
+    } else {
+      _sourceTracks = _pager.items;
+      _searchResults = {
+        'tracks': _sourceTracks.map(_sourceTrackToItem).toList(),
+      };
+    }
+    _markFilteredResultsDirty();
   }
 
   /// 加载下一页音源搜索结果。
   ///
-  /// 延续当前 query/音源；若期间用户换了关键词或音源（requestId 变化），
-  /// 结果会被丢弃，避免旧请求覆盖新状态。
+  /// 过期守卫与跨页去重由 [PagedListController] 持有：换词/换音源时
+  /// `_resetPagination` 已使在途请求过期，旧响应不会覆盖新状态。
   Future<void> loadMore() async {
     if (_isSearching ||
-        _isLoadingMore ||
-        !_hasMore ||
+        !_pager.hasMore ||
         !hasSelectedSource ||
-        _searchQuery.trim().isEmpty) {
+        _pagerQuery.trim().isEmpty) {
       return;
     }
-    final catalog = _catalogService;
-    if (catalog == null) return;
-
-    final requestId = _searchRequestId;
-    final sourceKeyAtStart = _sourceKey;
-    final query = _searchQuery;
-    final nextPage = _currentPage + 1;
-
-    _isLoadingMore = true;
+    await _pager.loadMore();
+    _applyPagerState();
     notifyListeners();
-
-    try {
-      final result = await catalog.search(
-        sourceKeyAtStart,
-        SearchQuery(keyword: query, page: nextPage, limit: _searchPageSize),
-      );
-
-      if (!_isLatestRequest(requestId, query)) return;
-
-      // 跨页去重：部分平台分页边界可能重复返回同一首歌
-      final existingIds = _sourceTracks.map((t) => t.id).toSet();
-      final freshTracks = [
-        for (final track in result.items)
-          if (!existingIds.contains(sourceTrackFromTrack(track).id))
-            sourceTrackFromTrack(track),
-      ];
-      _sourceTracks = [..._sourceTracks, ...freshTracks];
-      _currentPage = nextPage;
-      _hasMore = result.hasMore;
-      _totalResults = result.total ?? _totalResults;
-      _searchResults = {
-        'tracks': _sourceTracks.map(_sourceTrackToItem).toList(),
-      };
-      _markFilteredResultsDirty();
-    } catch (e) {
-      _logger.d('Load more failed: $e');
-      if (_isLatestRequest(requestId, query)) {
-        _failure = SourceFailure.from(e);
-        _errorMessage = 'Search failed: $e';
-      }
-    } finally {
-      _isLoadingMore = false;
-      notifyListeners();
-    }
   }
 
   Map<String, dynamic> _sourceTrackToItem(SourceTrack track) {
@@ -459,15 +425,6 @@ class SearchProvider extends ChangeNotifier {
       '_sourceTrack': track,
     };
   }
-
-  bool _isLatestRequest(int requestId, String query) {
-    return requestId == _searchRequestId &&
-        query == _searchQuery &&
-        _sourceKey == _sourceKeyUsedInRequest;
-  }
-
-  /// 缓存发起请求时的音源 key，避免切换音源后旧结果覆盖。
-  String _sourceKeyUsedInRequest = '';
 
   /// 播放搜索结果：本地音源曲目交给 PlaybackProvider 播放。
   void playItem(Map<String, dynamic> item) {
@@ -500,6 +457,7 @@ class SearchProvider extends ChangeNotifier {
   void dispose() {
     _debounceTimer?.cancel();
     _registrySubscription?.cancel();
+    _pager.dispose();
     super.dispose();
   }
 }

@@ -54,9 +54,13 @@ void main() {
     await controller.loadFirstPage();
     expect(controller.failed, isTrue);
     expect(controller.items, isEmpty);
+    expect(controller.error, isA<StateError>());
+    expect(controller.page, 0);
     await controller.loadFirstPage();
     expect(controller.failed, isFalse);
     expect(controller.items, ['ok']);
+    expect(controller.error, isNull);
+    expect(controller.page, 1);
   });
 
   test('加载更多失败：保留已加载项，不进入 failed', () async {
@@ -71,6 +75,9 @@ void main() {
     expect(controller.items, ['a']);
     expect(controller.failed, isFalse);
     expect(controller.isLoadingMore, isFalse);
+    // 追加失败也暴露原始异常（调用方按需归一化），页码停在 1。
+    expect(controller.error, isA<StateError>());
+    expect(controller.page, 1);
   });
 
   test('reset 丢弃在途响应（过期请求不覆盖新状态）', () async {

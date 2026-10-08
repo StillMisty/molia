@@ -38,14 +38,19 @@ class PagedListController<T> extends ChangeNotifier {
   bool _isLoading = false;
   bool _isLoadingMore = false;
   bool _failed = false;
+  Object? _error;
   int _requestId = 0;
 
   List<T> get items => _items;
+  int get page => _page;
   int? get total => _total;
   bool get hasMore => _hasMore;
   bool get isLoading => _isLoading;
   bool get isLoadingMore => _isLoadingMore;
   bool get failed => _failed;
+
+  /// 最近一次请求的原始异常（成功时清空）；调用方按需归一化为领域失败。
+  Object? get error => _error;
 
   /// 使在途请求过期并清空状态（切换筛选条件时调用）。
   void reset() {
@@ -57,6 +62,7 @@ class PagedListController<T> extends ChangeNotifier {
     _isLoading = false;
     _isLoadingMore = false;
     _failed = false;
+    _error = null;
     notifyListeners();
   }
 
@@ -86,8 +92,10 @@ class PagedListController<T> extends ChangeNotifier {
       _total = result.total ?? _total;
       _hasMore = result.hasMore;
       _failed = false;
-    } catch (_) {
+      _error = null;
+    } catch (e) {
       if (requestId != _requestId) return;
+      _error = e;
       if (!append) {
         // 首屏失败：清空并标记失败（可重试）；加载更多失败保留已有项。
         _failed = true;
