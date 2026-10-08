@@ -202,10 +202,18 @@ void main() async {
           ),
         ),
         // 发现页：热榜 / 歌单 / 热搜；播放与收藏复用上面两个 provider。
+        // 渠道变化 → 搜索源跟随的唯一规则点（页面不再同步两个 provider）。
         ChangeNotifierProvider(
           create: (context) => DiscoverProvider(
             playbackProvider: context.read<PlaybackProvider>(),
             libraryProvider: context.read<LibraryProvider>(),
+            onChannelChanged: (key) {
+              final search = context.read<SearchProvider>();
+              if (search.sourceOptions
+                  .any((option) => option.key == key && option.canSearch)) {
+                search.selectSource(key);
+              }
+            },
           ),
         ),
         ChangeNotifierProvider(create: (_) => LyricsProvider()),

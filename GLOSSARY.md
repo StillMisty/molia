@@ -48,6 +48,9 @@
   `PlaylistTrack.fromHistoryEntry` 负责历史条目转换。
 - **Add-to-library flow（加入列表流程）** — `lib/widgets/add_to_library.dart`：
   选择目标 → 写入 → 解析新建列表名 → 反馈的唯一实现；收藏页与发现页共用。
+- **Channel selection（渠道选择）** — `DiscoverProvider.channelKey` 是渠道状态的唯一持有者；
+  渠道变化经注入的 `onChannelChanged`（组合根）触发搜索源跟随（可搜索渠道才跟随），
+  资料页不再在两个 provider 之间仲裁同步，只处理「渠道被停用」的 UI 回退。
 - **Playlist tracks view（列表曲目视图）** — `LibraryProvider.playlistTracksView` +
   `ensurePlaylistTracks`：页面只读「已缓存/加载中」视图并请求加载，不再探测
   `cachedTracksOf`/`isPlaylistLoading` 之类的缓存内部。

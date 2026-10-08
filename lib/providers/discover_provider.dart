@@ -33,9 +33,11 @@ class DiscoverProvider extends ChangeNotifier {
     required PlaybackProvider playbackProvider,
     required LibraryProvider libraryProvider,
     Map<String, DiscoverSource>? sources,
+    void Function(String channelKey)? onChannelChanged,
   })  : _playback = playbackProvider,
         _library = libraryProvider,
-        _sources = sources ?? BuiltinDiscover.sources {
+        _sources = sources ?? BuiltinDiscover.sources,
+        _onChannelChanged = onChannelChanged {
     // 收藏状态/我的列表变化时转发通知，让发现页的收藏按钮保持响应。
     _library.addListener(_onLibraryChanged);
   }
@@ -45,6 +47,9 @@ class DiscoverProvider extends ChangeNotifier {
   final PlaybackProvider _playback;
   final LibraryProvider _library;
   final Map<String, DiscoverSource> _sources;
+
+  /// 渠道变化回调（composition root 注入）：搜索源跟随渠道的唯一规则点。
+  final void Function(String channelKey)? _onChannelChanged;
 
   String _channelKey = 'wy';
 
@@ -72,11 +77,19 @@ class DiscoverProvider extends ChangeNotifier {
   bool get hasDiscoverSource => _source != null;
 
   /// 切换渠道（空值或同值忽略；允许无发现能力的渠道——相关能力降级）。
+  ///
+  /// 渠道变化经 [onChannelChanged] 通知组合根（搜索源跟随规则在那里，
+  /// 页面不再自行同步两个 provider）。
   void selectChannel(String sourceKey) {
     if (sourceKey.isEmpty || sourceKey == _channelKey) return;
     _channelKey = sourceKey;
+    _onChannelChanged?.call(sourceKey);
     notifyListeners();
   }
+
+  /// 让搜索源跟随当前渠道（页面挂载 / 渠道恢复时调用一次；幂等由调用方
+  /// 的比较条件保证）。
+  void syncSearchSource() => _onChannelChanged?.call(_channelKey);
 
   bool get supportsLeaderboards => _source?.supportsLeaderboards ?? false;
   bool get supportsPlaylists => _source?.supportsPlaylists ?? false;

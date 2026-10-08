@@ -98,6 +98,9 @@
   （保留 unauthorized / connectionFailed 语义，不再退化为 unknown）；内置传输错误
   由 `SourceFailure.from` 按类型名识别 `BuiltinHttpException`。providers/UI 只消费
   kind / l10nKey / retryable。
+- **渠道选择**：`DiscoverProvider.channelKey` 是渠道状态的唯一持有者；渠道变化经
+  注入的 `onChannelChanged`（组合根）同步搜索源（可搜索渠道才跟随），资料页只
+  处理「渠道被停用」的 UI 回退，不再在两个 provider 之间仲裁同步。
 - **Mapping**：`track_mapper`（`SourceTrack` ↔ `Track`，payload 同一引用往返）。
 - **内置平台**：搜索/发现共用 `BuiltinSearch.transport`
   （`lib/sources/builtin/builtin_transport.dart`）——客户端可注入、统一请求头/超时

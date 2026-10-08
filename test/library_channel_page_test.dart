@@ -61,6 +61,13 @@ void main() {
         for (final key in const ['wy', 'tx', 'kg', 'kw', 'mg'])
           key: FakeDiscoverSource(sourceKey: key),
       },
+      // 与 composition root 相同的跟随规则：可搜索渠道 → 搜索源跟随。
+      onChannelChanged: (key) {
+        if (search.sourceOptions
+            .any((option) => option.key == key && option.canSearch)) {
+          search.selectSource(key);
+        }
+      },
     );
     engine = _FakeLxEngine();
     supervisor = LxEngineSupervisor(
@@ -224,11 +231,13 @@ void main() {
         key: 'tx',
         displayName: 'QQ音乐',
         kind: domain.SourceKind.builtin,
+        capabilities: domain.SourceCapabilities(search: true),
       ),
       domain.SourceDescriptor(
         key: 'wy',
         displayName: '网易音乐',
         kind: domain.SourceKind.builtin,
+        capabilities: domain.SourceCapabilities(search: true),
       ),
     ]);
     expect(search.sourceKey, 'tx'); // 注册表顺序默认第一个

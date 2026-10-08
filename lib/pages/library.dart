@@ -65,7 +65,8 @@ class _LibraryState extends State<Library> {
       }
     }
 
-    // 渠道失效（被停用 / 脚本删除）或初始搜索源与渠道不一致时校正。
+    // 渠道失效（被停用 / 脚本删除）时校正；初始搜索源与渠道不一致时
+    // 经 DiscoverProvider.syncSearchSource 让搜索跟随渠道（规则在组合根）。
     // 在 post-frame 执行，避免在 build 中修改 provider 状态。
     final needsFallback = current == null && enabledChannels.isNotEmpty;
     final needsSearchSync = current != null &&
@@ -78,8 +79,8 @@ class _LibraryState extends State<Library> {
         if (needsFallback) {
           context.read<DiscoverProvider>().selectChannel(target.key);
         }
-        if (target.canSearch) {
-          context.read<SearchProvider>().selectSource(target.key);
+        if (needsSearchSync && target.canSearch) {
+          context.read<DiscoverProvider>().syncSearchSource();
         }
       });
     }
@@ -174,10 +175,8 @@ class _LibraryState extends State<Library> {
       }
     }
     if (entry == null) return;
+    // 搜索源跟随由 DiscoverProvider 的渠道回调统一处理（组合根注入规则）。
     context.read<DiscoverProvider>().selectChannel(entry.key);
-    if (entry.canSearch) {
-      context.read<SearchProvider>().selectSource(entry.key);
-    }
   }
 
   Widget _tabContent(_LibraryTab tab) => switch (tab) {
