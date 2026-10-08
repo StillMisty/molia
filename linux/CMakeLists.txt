@@ -79,9 +79,12 @@ include(flutter/generated_plugins.cmake)
 # By default, "installing" just makes a relocatable bundle in the build
 # directory.
 set(BUILD_BUNDLE_DIR "${PROJECT_BINARY_DIR}/bundle")
-if(CMAKE_INSTALL_PREFIX_INITIALIZED_TO_DEFAULT)
-  set(CMAKE_INSTALL_PREFIX "${BUILD_BUNDLE_DIR}" CACHE PATH "..." FORCE)
-endif()
+# flutter_js 的 Linux CMake 在插件配置阶段把自己的 BUILD_BUNDLE_DIR
+# （plugins/flutter_js/bundle）FORCE 进 CMAKE_INSTALL_PREFIX 缓存，导致
+# 应用自身的 install 目标全部落到插件目录、真正的 bundle 不生成。
+# 这里无条件把安装前缀拉回应用 bundle（比 upstream 的「仅默认值」判断更强），
+# 否则干净构建下 flutter test -d linux / flutter run 找不到可执行文件。
+set(CMAKE_INSTALL_PREFIX "${BUILD_BUNDLE_DIR}" CACHE PATH "..." FORCE)
 
 # Start with a clean build bundle directory every time.
 install(CODE "
