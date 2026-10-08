@@ -1,10 +1,8 @@
 import 'dart:async';
-import 'dart:convert';
-
-import 'package:http/http.dart' as http;
 
 import '../source_search_result.dart';
 import '../source_track.dart';
+import 'builtin_transport.dart';
 import 'kg_search.dart';
 import 'kw_search.dart';
 import 'mg_search.dart';
@@ -31,12 +29,13 @@ class BuiltinSearch {
 
   static String displayName(String sourceKey) => platforms[sourceKey] ?? sourceKey;
 
-  static const Duration defaultTimeout = Duration(seconds: 15);
+  /// 内置请求传输：测试注入 `MockClient` 覆盖 fetch 路径（唯一入口）。
+  static BuiltinTransport transport = BuiltinTransport();
 
-  static const Map<String, String> defaultHeaders = {
-    'User-Agent':
-        'Mozilla/5.0 (Windows NT 10.0; WOW64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/69.0.3497.100 Safari/537.36',
-  };
+  // 兼容别名：发现适配器仍直接引用（与传输层同一常量）。
+  static const Duration defaultTimeout = BuiltinTransport.defaultTimeout;
+  static const Map<String, String> defaultHeaders =
+      BuiltinTransport.defaultHeaders;
 
   /// 分页搜索（返回曲目与 total/hasMore 等分页信息）。
   static Future<SourceSearchResult> searchWithMeta(
@@ -62,75 +61,55 @@ class BuiltinSearch {
   }
 }
 
-/// 发起 GET 请求并解析 JSON。
+/// 发起 GET 请求并解析 JSON（传输统一入口；[retryIf] 为响应级重试判定）。
 Future<dynamic> lxHttpGet(
   String url, {
   Map<String, String>? headers,
-  Duration timeout = BuiltinSearch.defaultTimeout,
-}) async {
-  final response = await http.get(
-    Uri.parse(url),
-    headers: {...BuiltinSearch.defaultHeaders, ...?headers},
-  ).timeout(timeout);
-  return _decodeBody(response);
+  Duration timeout = BuiltinTransport.defaultTimeout,
+  int retries = 1,
+  bool Function(dynamic json)? retryIf,
+}) {
+  return BuiltinSearch.transport.getJson(
+    url,
+    headers: headers,
+    timeout: timeout,
+    retries: retries,
+    retryIf: retryIf,
+  );
 }
 
 /// 发起 GET 请求并返回文本（HTML 页面等非 JSON 响应）。
 Future<String> lxHttpGetText(
   String url, {
   Map<String, String>? headers,
-  Duration timeout = BuiltinSearch.defaultTimeout,
-}) async {
-  final response = await http.get(
-    Uri.parse(url),
-    headers: {...BuiltinSearch.defaultHeaders, ...?headers},
-  ).timeout(timeout);
-  return utf8.decode(response.bodyBytes, allowMalformed: true);
+  Duration timeout = BuiltinTransport.defaultTimeout,
+}) {
+  return BuiltinSearch.transport.getText(
+    url,
+    headers: headers,
+    timeout: timeout,
+  );
 }
 
-/// 发起 POST 请求并解析 JSON。
+/// 发起 POST 请求并解析 JSON（表单或 JSON body）。
 Future<dynamic> lxHttpPost(
   String url, {
   Map<String, String>? headers,
   Object? body,
   bool form = false,
-  Duration timeout = BuiltinSearch.defaultTimeout,
-}) async {
-  final requestHeaders = {...BuiltinSearch.defaultHeaders, ...?headers};
-  Object? encodedBody;
-  if (form) {
-    requestHeaders.putIfAbsent(
-      'Content-Type',
-      () => 'application/x-www-form-urlencoded',
-    );
-    if (body is Map) {
-      encodedBody = body.entries
-          .map((e) =>
-              '${Uri.encodeQueryComponent(e.key.toString())}=${Uri.encodeQueryComponent(e.value.toString())}')
-          .join('&');
-    } else {
-      encodedBody = body?.toString();
-    }
-  } else {
-    requestHeaders.putIfAbsent('Content-Type', () => 'application/json');
-    encodedBody = body is String ? body : jsonEncode(body);
-  }
-  final response = await http
-      .post(Uri.parse(url), headers: requestHeaders, body: encodedBody)
-      .timeout(timeout);
-  return _decodeBody(response);
-}
-
-dynamic _decodeBody(http.Response response) {
-  final text = utf8.decode(response.bodyBytes, allowMalformed: true);
-  if (text.trim().isEmpty) {
-    throw StateError('HTTP ${response.statusCode}: empty body');
-  }
-  try {
-    return jsonDecode(text);
-  } catch (_) {
-    throw StateError('HTTP ${response.statusCode}: invalid JSON body');
-  }
+  Duration timeout = BuiltinTransport.defaultTimeout,
+  int retries = 1,
+  bool Function(dynamic json)? retryIf,
+}) {
+  return BuiltinSearch.transport.postJson(
+    url,
+    headers: headers,
+    body: body,
+    form: form,
+    timeout: timeout,
+    retries: retries,
+    retryIf: retryIf,
+  );
 }
 
 /// 从 `_types` 风格的数据构建音质列表。

@@ -4,6 +4,7 @@ import 'dart:math';
 import '../source_search_result.dart';
 import '../source_track.dart';
 import 'builtin_search.dart';
+import 'builtin_transport.dart';
 import 'crypto_utils.dart';
 
 /// QQ 音乐搜索（移植自 lx-music-mobile `tx/musicSearch.js`）。
@@ -16,10 +17,7 @@ class TxSearch {
     String keyword, {
     int page = 1,
     int limit = _limit,
-    int retry = 0,
   }) async {
-    if (retry > 5) return SourceSearchResult.empty;
-
     final body = <String, dynamic>{
       'comm': {
         '_channelid': '0',
@@ -61,14 +59,15 @@ class TxSearch {
       url,
       body: bodyText,
       headers: {'User-Agent': 'QQMusic 14090508(android 12)'},
+      retries: BuiltinTransport.defaultRetries,
+      retryIf: (json) => json is! Map || json['code'] != 0,
     );
     if (result is! Map) return SourceSearchResult.empty;
 
     final req = (result['music.search.SearchCgiService'] ??
         result['req']) as Map?;
     if (result['code'] != 0 || req == null || req['code'] != 0) {
-      return searchWithMeta(keyword,
-          page: page, limit: limit, retry: retry + 1);
+      return SourceSearchResult.empty;
     }
 
     final data = req['data'];

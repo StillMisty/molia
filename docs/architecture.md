@@ -94,6 +94,11 @@
     并拦截播放预加载、取色预取、audio_service 通知封面与桌面小组件封面地址；
   - 探测失败保守按「未生效」；Android 回前台时由壳层 `refreshConnectivity()` 补一次检测。
 - **Mapping**：`track_mapper`（`SourceTrack` ↔ `Track`，payload 同一引用往返）。
+- **内置平台**：搜索/发现共用 `BuiltinSearch.transport`
+  （`lib/sources/builtin/builtin_transport.dart`）——客户端可注入、统一请求头/超时
+  与响应级重试（`retryIf`），平台适配器只保留 URL 构造与解析；fetch 路径测试
+  通过注入 `MockClient` 覆盖。发现适配器各自的静态 `RequestCache` 尚未收编到
+  传输层（后续项，当前与传输层单次请求叠加，不产生嵌套重试）。
 - **资料库写入**：`LibraryProvider` 是收藏 / 历史 / 列表写入的唯一入口。收藏唯一
   入口 `toggleFavoriteTrack(Track)`（播放页经它写入，不再直连 `LibraryRepository`）；
   批量操作按 `PlaylistTrack` 规范形状（`PlaylistTrack.fromHistoryEntry` 负责历史转换）；

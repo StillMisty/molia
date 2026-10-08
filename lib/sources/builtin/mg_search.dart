@@ -1,6 +1,7 @@
 import '../source_search_result.dart';
 import '../source_track.dart';
 import 'builtin_search.dart';
+import 'builtin_transport.dart';
 import 'crypto_utils.dart';
 
 /// 咪咕音乐搜索（移植自 lx-music-mobile `mg/musicSearch.js`）。
@@ -16,10 +17,7 @@ class MgSearch {
     String keyword, {
     int page = 1,
     int limit = _limit,
-    int retry = 0,
   }) async {
-    if (retry > 3) return SourceSearchResult.empty;
-
     final time = DateTime.now().millisecondsSinceEpoch.toString();
     final sign = md5Hex(
       '$keyword$_signatureMd5'
@@ -43,11 +41,12 @@ class MgSearch {
         'User-Agent':
             'Mozilla/5.0 (Linux; U; Android 11.0.0; zh-cn; MI 11 Build/OPR1.170623.032) AppleWebKit/534.30 (KHTML, like Gecko) Version/4.0 Mobile Safari/534.30',
       },
+      retries: BuiltinTransport.defaultRetries,
+      retryIf: (json) => json is! Map || json['code'] != '000000',
     );
 
     if (result is! Map || result['code'] != '000000') {
-      return searchWithMeta(keyword,
-          page: page, limit: limit, retry: retry + 1);
+      return SourceSearchResult.empty;
     }
 
     final songResult = result['songResultData'];

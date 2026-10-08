@@ -1,6 +1,7 @@
 import '../source_search_result.dart';
 import '../source_track.dart';
 import 'builtin_search.dart';
+import 'builtin_transport.dart';
 import 'crypto_utils.dart';
 
 /// 酷狗音乐搜索（移植自 lx-music-mobile `kg/musicSearch.js`）。
@@ -12,18 +13,17 @@ class KgSearch {
     String keyword, {
     int page = 1,
     int limit = _limit,
-    int retry = 0,
   }) async {
     final url = 'https://songsearch.kugou.com/song_search_v2'
         '?keyword=${Uri.encodeComponent(keyword)}'
         '&page=$page&pagesize=$limit&userid=0&clientver=&platform=WebFilter'
         '&filter=2&iscorrection=1&privilege_filter=0&area_code=1';
-    final result = await lxHttpGet(url);
+    final result = await lxHttpGet(
+      url,
+      retries: BuiltinTransport.defaultRetries,
+      retryIf: (json) => json is! Map || json['error_code'] != 0,
+    );
     if (result is! Map || result['error_code'] != 0) {
-      if (retry < 3) {
-        return searchWithMeta(keyword,
-            page: page, limit: limit, retry: retry + 1);
-      }
       return SourceSearchResult.empty;
     }
     final data = result['data'];
