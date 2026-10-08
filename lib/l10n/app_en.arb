@@ -1,0 +1,554 @@
+{
+  "@@locale": "en",
+  "settingsTitle": "Settings",
+  "queueTab": "QUEUE",
+  "lyricsTab": "LYRICS",
+  "cancel": "Cancel",
+  "playbackFailed": "Playback failed: {error}",
+  "@playbackFailed": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "searchHint": "Search songs, albums, artists...",
+  "searchIdleHint": "Search songs by keyword",
+  "clearSearch": "Clear search",
+  "copiedToClipboard": "Copied to clipboard",
+  "@copiedToClipboard": {
+    "placeholders": {
+      "type": {
+        "type": "String"
+      }
+    }
+  },
+  "delete": "Delete",
+  "lyricsFetching": "Fetching lyrics...",
+  "lyricsNotFoundForTrack": "No lyrics found for this track.",
+  "lyricsFetchError": "Error fetching lyrics: {error}",
+  "@lyricsFetchError": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "lyricsTitle": "Lyrics",
+  "lyricsLoading": "Loading lyrics...",
+  "lyricsFailedToLoad": "Failed to load lyrics.",
+  "lyricsCopyModeSnackbar": "Copy Lyrics Mode: Single repeat active, auto-scroll disabled.",
+  "centerCurrentLine": "Center Current Line",
+  "exitCopyModeResumeScroll": "Exit Copy Mode & Resume Scroll",
+  "enterCopyLyricsMode": "Enter Copy Lyrics Mode (Single Repeat)",
+  "playlist": "Playlist",
+  "operationFailed": "Operation failed",
+  "settingsAppearanceTitle": "Appearance",
+  "settingsThemeMode": "Theme mode",
+  "themeModeSystem": "System default",
+  "themeModeLight": "Light",
+  "themeModeDark": "Dark",
+  "settingsDynamicColor": "Dynamic color",
+  "settingsDynamicColorSubtitle": "Derive theme colors from album art",
+  "settingsMonetColor": "Monet color",
+  "settingsMonetColorSubtitle": "Use wallpaper colors provided by the system (Android 12+)",
+  "settingsMonetUnavailable": "Not supported on this platform",
+  "settingsPureBlack": "Pure black background",
+  "settingsPureBlackSubtitle": "Use pure black surfaces in dark mode (OLED)",
+  "settingsSeedColor": "Theme color",
+  "colorBlue": "Blue",
+  "colorPurple": "Purple",
+  "colorGreen": "Green",
+  "colorOrange": "Orange",
+  "colorPink": "Pink",
+  "colorTeal": "Teal",
+  "settingsPlaybackTitle": "Playback",
+  "settingsDefaultPlayMode": "Default play mode",
+  "settingsCurrentQuality": "Now playing quality",
+  "settingsDataSaverTitle": "Data saver",
+  "settingsDataSaverSubtitle": "When on, lower audio quality and reduce artwork loading on mobile data",
+  "settingsDataSaverNetworkCellular": "Mobile data · active",
+  "settingsDataSaverNetworkWifi": "Wi-Fi · inactive",
+  "settingsDataSaverNetworkUnknown": "Network type unavailable",
+  "settingsDataSaverQuality": "Data saver quality cap",
+  "settingsDataSaverCovers": "Cached artwork only on mobile data",
+  "settingsDataSaverCoversSubtitle": "Do not request new artwork; show a placeholder when not cached",
+  "settingsSourcesSection": "Sources",
+  "settingsSourcesItemSubtitle": "Import LX Music source scripts to search and play songs from third-party platforms",
+  "settingsBottomNavTitle": "Bottom navigation",
+  "settingsBottomNavHint": "Drag to reorder; toggle to show or hide a tab (at least one stays visible)",
+  "settingsBottomNavKeepOne": "Keep at least one tab visible",
+  "playModeSequential": "Sequential",
+  "playModeShuffle": "Shuffle",
+  "playModeSingleRepeat": "Single repeat",
+  "generalTitle": "General",
+  "copyLyricsAsSingleLineTitle": "Copy lyrics as single line",
+  "copyLyricsAsSingleLineSubtitle": "Replaces line breaks with spaces when copying",
+  "dataManagementTitle": "Data Management",
+  "exportDataTitle": "Export Recent Plays",
+  "exportDataSubtitle": "Export recent play history as a JSON file",
+  "importDataTitle": "Import Recent Plays",
+  "importDataSubtitle": "Import recent play history from an exported JSON file",
+  "clearCacheTitle": "Clear Lyrics Cache",
+  "clearCacheSubtitle": "Clear cached lyrics",
+  "cancelButton": "Cancel",
+  "languageDialogTitle": "Select Language",
+  "languageSaved": "Language setting saved",
+  "exportFailed": "Export failed or cancelled.",
+  "importDialogTitle": "Confirm Import",
+  "importDialogMessage": "Importing data will replace existing recent play entries with the same identifiers. This cannot be undone. Are you sure you want to continue?\n\nEnsure the JSON file is valid and was previously exported from Molia.",
+  "importButton": "Import Data",
+  "importSuccess": "Data imported successfully!",
+  "importFailed": "Failed to import data.",
+  "exportSuccess": "Data exported successfully!",
+  "clearCacheDialogTitle": "Confirm Clear Cache",
+  "clearCacheDialogMessage": "Are you sure you want to clear the lyrics cache? This cannot be undone.",
+  "clearCacheButton": "Clear Cache",
+  "clearingCache": "Clearing cache...",
+  "cacheCleared": "Cache cleared successfully!",
+  "cacheClearFailed": "Failed to clear cache",
+  "failedToChangeLanguage": "Failed to change language: {error}",
+  "@failedToChangeLanguage": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "saveChanges": "Save",
+  "selectLyrics": "Select Lyrics",
+  "selectLyricsTooltip": "Select lyrics fragments for analysis or sharing",
+  "deselectAll": "Deselect All",
+  "noLyricsSelected": "Please select some lyrics first",
+  "sharePoster": "Share Poster",
+  "selectedLyricsCopied": "Copied {count} lines of lyrics",
+  "@selectedLyricsCopied": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "posterGenerationFailed": "Poster generation failed: {error}",
+  "@posterGenerationFailed": {
+    "placeholders": {
+      "error": {
+        "type": "Object"
+      }
+    }
+  },
+  "noLyricsToSelect": "No lyrics available to select",
+  "posterLyricsLimitExceeded": "Maximum 10 lines of lyrics can be selected for poster generation",
+  "tapToSelectLyrics": "Tap lyric line to select",
+  "nowPlayingLabel": "Now Playing",
+  "libraryLabel": "Discover",
+  "libraryTabSearch": "Search",
+  "libraryTabLeaderboards": "Charts",
+  "libraryTabPlaylists": "Playlists",
+  "libraryChannelSelect": "Select channel",
+  "libraryNoChannels": "All channels are disabled. Enable channels in Source Management.",
+  "languageEnglish": "English",
+  "languageSimplifiedChinese": "简体中文",
+  "collapseTooltip": "Collapse",
+  "expandTooltip": "Expand",
+  "noItemsFound": "No items found",
+  "copyButtonText": "Copy",
+  "posterButtonLabel": "Poster",
+  "retryButton": "Retry",
+  "backToLibraryTooltip": "Back to library",
+  "loadingGenerating": "Generating analysis...",
+  "currentQueueEmpty": "Current queue is empty",
+  "nowPlayingSection": "Now Playing",
+  "upNextSection": "Up Next",
+  "searchLyrics": "Search Lyrics",
+  "noCurrentTrackPlaying": "No track currently playing",
+  "cannotGetTrackInfo": "Cannot get current track information",
+  "lyricsSearchAppliedSuccess": "Lyrics successfully searched and applied",
+  "searchResults": "SEARCH RESULTS",
+  "noResultsFound": "No results found",
+  "playlistType": "Playlist",
+  "albumType": "Album",
+  "songType": "Song",
+  "artistType": "Artist",
+  "retry": "Retry",
+  "providerQQMusic": "QQ Music",
+  "providerLRCLIB": "LRCLIB",
+  "providerNetease": "NetEase Cloud Music",
+  "playingFrom": "PLAYING FROM",
+  "playFromAlbum": "PLAY FROM ALBUM",
+  "playFromPlaylist": "PLAY FROM PLAYLIST",
+  "play": "Play",
+  "sourcesTitle": "Source Management",
+  "anyListenEntry": "any-listen",
+  "sourcesWebUnsupported": "LX source scripts are not supported on web (a local JS engine is required).",
+  "sourcesNoneActive": "No source enabled",
+  "sourcesActiveSource": "Active source: {name} {version}",
+  "@sourcesActiveSource": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      },
+      "version": {
+        "type": "String"
+      }
+    }
+  },
+  "sourcesActivating": "Activating…",
+  "sourcesActivationFailed": "Activation failed: {error}",
+  "@sourcesActivationFailed": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "sourcesAuthor": "Author: {author}",
+  "@sourcesAuthor": {
+    "placeholders": {
+      "author": {
+        "type": "String"
+      }
+    }
+  },
+  "sourcesUpdateAlertTitle": "Source update available",
+  "sourcesOpenUpdateUrl": "Open update URL",
+  "sourcesUpdateDismiss": "Got it",
+  "sourcesUpdateNow": "Update now",
+  "sourcesUpdating": "Updating…",
+  "sourcesUpdateSuccess": "Updated to {version}",
+  "@sourcesUpdateSuccess": {
+    "placeholders": {
+      "version": {
+        "type": "String"
+      }
+    }
+  },
+  "sourcesUpdateNoUpdate": "Already up to date",
+  "sourcesUpdateFailed": "Update failed: {reason}",
+  "@sourcesUpdateFailed": {
+    "placeholders": {
+      "reason": {
+        "type": "String"
+      }
+    }
+  },
+  "sourcesUpdateManualHint": "This URL is not a script file. Open the update page and import it manually.",
+  "sourcesImportFromFile": "Import from file",
+  "sourcesImportFromFileSubtitle": "Choose an LX Music source script (.js)",
+  "sourcesImportFromText": "Paste script",
+  "sourcesImportFromTextSubtitle": "Paste the full script from the clipboard",
+  "sourcesImportFromUrl": "Import from URL",
+  "sourcesImportFromUrlSubtitle": "Download the script over HTTP(S)",
+  "sourcesDefaultQuality": "Default quality",
+  "sourcesQualityHiRes": "Hi-Res",
+  "sourcesQualityLossless": "Lossless",
+  "sourcesQualityWav": "WAV",
+  "sourcesQualityApe": "APE",
+  "sourcesQuality320k": "320K",
+  "sourcesQuality192k": "192K",
+  "sourcesQuality128k": "128K",
+  "sourcesQualityHint": "This quality is preferred when resolving a track URL, with automatic fallback when unavailable.",
+  "sourcesSortTitle": "Channel order",
+  "sourcesSortReset": "Reset",
+  "sourcesSortHint": "The channel order on the Discover page matches the list below and also controls the search source order. Newly imported channels are appended at the end; turning a channel off removes it from the Discover page and search results.",
+  "sourcesChannelDisabled": "Disabled",
+  "sourcesNoSearchableSources": "No searchable sources yet. Enable a source script to list searchable platforms here.",
+  "sourcesKindLx": "Script source",
+  "sourcesKindBuiltin": "Built-in platform",
+  "sourcesMoveUp": "Move up",
+  "sourcesMoveDown": "Move down",
+  "sourcesImportedScripts": "Imported scripts ({count})",
+  "@sourcesImportedScripts": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "sourcesNoScripts": "No source scripts imported yet. Community sources can be found on GitHub by searching for “lx-music-source”.",
+  "sourcesScriptByAuthor": "by {author}",
+  "@sourcesScriptByAuthor": {
+    "placeholders": {
+      "author": {
+        "type": "String"
+      }
+    }
+  },
+  "sourcesEnable": "Enable",
+  "sourcesDisable": "Disable",
+  "sourcesActivated": "Source enabled: {name}",
+  "@sourcesActivated": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "sourcesActivateFailed": "Failed to enable: {error}",
+  "@sourcesActivateFailed": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "sourcesDeleteScriptTitle": "Delete source script",
+  "sourcesDeleteScriptConfirm": "Delete “{name}”?",
+  "@sourcesDeleteScriptConfirm": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "sourcesDisclaimerTitle": "Import source script",
+  "sourcesDisclaimerBody": "Source scripts are executable JavaScript code provided by third-party communities.\nOnce imported, they run in the local JS engine and can make network requests.\nImport only scripts from trusted sources; their availability and legality are the responsibility of the provider.",
+  "sourcesContinueImport": "Continue import",
+  "sourcesImportFailed": "Import failed: {error}",
+  "@sourcesImportFailed": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "sourcesPasteTitle": "Paste source script",
+  "sourcesPasteHint": "Paste the full script starting with /** @name ... */",
+  "sourcesImportAction": "Import",
+  "sourcesDownloadAndImport": "Download & import",
+  "searchFailed": "Search failed",
+  "searchNoSourcesTitle": "No sources available",
+  "searchNoSourcesHint": "Import and enable a source in Source Management, or select an available source.",
+  "searchNoResultsInSource": "No results found in “{source}”",
+  "@searchNoResultsInSource": {
+    "placeholders": {
+      "source": {
+        "type": "String"
+      }
+    }
+  },
+  "searchLoadMore": "Load more",
+  "searchLoadMoreWithTotal": "Load more ({total} tracks)",
+  "@searchLoadMoreWithTotal": {
+    "placeholders": {
+      "total": {
+        "type": "int"
+      }
+    }
+  },
+  "languageSettingTitle": "App Language",
+  "languageSettingSubtitle": "Change the interface display language",
+  "languageSystem": "System default",
+  "recentlyPlayedEmpty": "Nothing played recently yet. Albums and playlists you play will show up here.",
+  "libraryRecentPlays": "Recent Plays",
+  "libraryPlaylists": "My Playlists",
+  "libraryImportFavorites": "Import Favorites",
+  "libraryImportFavoritesSubtitle": "Import a favorites list exported from LX Music (.lxmc)",
+  "libraryImportSuccess": "Imported {count} tracks",
+  "@libraryImportSuccess": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "libraryImportFailed": "Import failed: {reason}",
+  "@libraryImportFailed": {
+    "placeholders": {
+      "reason": {
+        "type": "String"
+      }
+    }
+  },
+  "libraryImportUnsupported": "Importing .lxmc favorites is not supported on this platform",
+  "libraryImportNoTracks": "No importable tracks found in the file",
+  "historyClear": "Clear history",
+  "historyClearConfirm": "Clear all play history? This cannot be undone.",
+  "historyEmpty": "No play history yet",
+  "favoriteAdd": "Add to favorites",
+  "favoriteRemove": "Remove from favorites",
+  "favoritesPlaylistName": "Favorites",
+  "favoritesLabel": "Favorites",
+  "favoritesEmpty": "No favorites yet",
+  "favoritesSearchHint": "Search songs",
+  "favoritesSearchEmpty": "No matching tracks",
+  "favoritesSwitchTitle": "Switch collection",
+  "shufflePlay": "Shuffle",
+  "sortTooltip": "Sort",
+  "sortDefaultOrder": "Default order",
+  "sortByTitle": "Title",
+  "sortByArtist": "Artist",
+  "playAll": "Play all",
+  "nextTrackTooltip": "Next track",
+  "playlistEmpty": "No playlists yet. Create one or import an LX Music favorites file.",
+  "playlistTracksEmpty": "This playlist has no tracks yet",
+  "playlistTrackCount": "{count} tracks",
+  "@playlistTrackCount": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "playlistDelete": "Delete playlist",
+  "playlistDeleteConfirm": "Delete “{name}”?",
+  "@playlistDeleteConfirm": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "playlistRemoveTrack": "Remove from playlist",
+  "playlistCreate": "New playlist",
+  "playlistCreateConfirm": "Create",
+  "playlistCreateHint": "Playlist name",
+  "playlistNameRequired": "Enter a playlist name",
+  "playlistNameExists": "A playlist with this name already exists",
+  "playlistRename": "Rename playlist",
+  "addToPlaylist": "Add to playlist",
+  "playlistReorder": "Reorder",
+  "playlistReorderHint": "Long-press and drag to reorder",
+  "playlistReorderDone": "Done",
+  "selectAllItems": "Select all",
+  "historyDeleteEntry": "Delete entry",
+  "playlistAddedTo": "Added to “{name}”",
+  "@playlistAddedTo": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "playlistAlreadyContains": "Already in playlist",
+  "playlistImportToMine": "Import to my playlists",
+  "playlistImportFromFile": "Import from .lxmc file",
+  "playlistImportFromLink": "Import from playlist link",
+  "playlistImportChannel": "Platform",
+  "playlistImportEmpty": "Playlist has no importable tracks",
+  "playlistImportedName": "Imported playlist",
+  "discoverSectionTitle": "Discover",
+  "discoverLeaderboards": "Charts",
+  "discoverPlaylists": "Playlists",
+  "discoverHotSearches": "Trending",
+  "discoverOpenPlaylist": "Open playlist",
+  "discoverOpenPlaylistHint": "Paste a playlist link or ID",
+  "discoverOpen": "Open",
+  "discoverPlaylistSearchHint": "Search playlists",
+  "discoverHotTags": "Popular tags",
+  "discoverAll": "All",
+  "discoverAllTags": "All tags",
+  "discoverLoadMore": "Load more",
+  "discoverLoadFailed": "Failed to load",
+  "discoverRetry": "Retry",
+  "discoverNoContent": "Nothing here yet",
+  "discoverSearchEmpty": "No playlists found",
+  "discoverPlaylistAuthor": "by {author}",
+  "discoverAddToPlaylist": "Add to playlist",
+  "discoverNoPlaylists": "No playlists yet. Favorite a song first to create one.",
+  "@discoverPlaylistAuthor": {
+    "placeholders": {
+      "author": {
+        "type": "String"
+      }
+    }
+  },
+  "discoverPlayCount": "{count} plays",
+  "@discoverPlayCount": {
+    "placeholders": {
+      "count": {
+        "type": "String"
+      }
+    }
+  },
+  "settingsAppTitle": "App name",
+  "settingsAppTitleSubtitle": "Shown in the top bar when nothing is playing",
+  "settingsAppTitleDialogTitle": "App name",
+  "settingsAppTitleHint": "Enter a name",
+  "appName": "Molia",
+  "@appName": {
+    "description": "Default app name (brand title, localized)"
+  },
+  "libraryRecentContexts": "Recently Played",
+  "libraryHistory": "Play History",
+  "libraryListEnd": "— End —",
+  "settingsCacheTitle": "Cache management",
+  "settingsCacheSubtitle": "Audio, lyrics and artwork usage and policies",
+  "cachePartitionAudio": "Audio cache",
+  "cachePartitionLyrics": "Lyrics cache",
+  "cachePartitionArtwork": "Artwork cache",
+  "cacheUsage": "{size} · {count} items",
+  "@cacheUsage": {
+    "placeholders": {
+      "size": {
+        "type": "String"
+      },
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "cacheUsageComputing": "Calculating…",
+  "cachePolicyAudioEnabled": "Cache audio while playing",
+  "cachePolicyAudioMax": "Size limit",
+  "cachePolicyLyricsTtl": "Keep lyrics for",
+  "cachePolicyArtworkMax": "Max artwork objects",
+  "cachePolicyArtworkStale": "Expire artwork after",
+  "cacheUnlimited": "Unlimited",
+  "cacheNeverExpire": "Never",
+  "cacheValueMb": "{value} MB",
+  "@cacheValueMb": {
+    "placeholders": {
+      "value": {
+        "type": "int"
+      }
+    }
+  },
+  "cacheValueDays": "{value} days",
+  "@cacheValueDays": {
+    "placeholders": {
+      "value": {
+        "type": "int"
+      }
+    }
+  },
+  "cacheValueItems": "{value}",
+  "@cacheValueItems": {
+    "placeholders": {
+      "value": {
+        "type": "int"
+      }
+    }
+  },
+  "cacheUnitMb": "MB",
+  "cacheUnitDays": "days",
+  "cacheUnitItems": "items",
+  "cacheCustomHint": "0 = {label} · Range {min}–{max}",
+  "@cacheCustomHint": {
+    "placeholders": {
+      "label": {
+        "type": "String"
+      },
+      "min": {
+        "type": "int"
+      },
+      "max": {
+        "type": "int"
+      }
+    }
+  },
+  "cacheCustomRangeError": "Enter an integer between {min} and {max}",
+  "@cacheCustomRangeError": {
+    "placeholders": {
+      "min": {
+        "type": "int"
+      },
+      "max": {
+        "type": "int"
+      }
+    }
+  },
+  "cacheClearPartition": "Clear",
+  "cacheClearAll": "Clear all caches",
+  "cacheClearAllConfirm": "Clear all caches (audio / lyrics / artwork)? This cannot be undone."
+}
