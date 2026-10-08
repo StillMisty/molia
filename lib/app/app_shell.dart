@@ -5,7 +5,9 @@
 /// 创建 provider 与主题，本文件只消费注入的 provider。
 library;
 
-import 'package:flutter/foundation.dart' show defaultTargetPlatform;
+import 'package:dynamic_color/dynamic_color.dart';
+import 'package:flutter/foundation.dart'
+    show defaultTargetPlatform, kIsWeb;
 import 'package:flutter/services.dart';
 import 'package:material_3_expressive/material_3_expressive.dart';
 import 'package:material_ui/material_ui.dart';
@@ -20,6 +22,10 @@ import '../providers/nav_provider.dart';
 import '../providers/playback_provider.dart';
 import '../providers/theme_provider.dart';
 import '../services/app_branding_service.dart';
+import '../services/data_saver_service.dart';
+import '../services/language_service.dart';
+import '../theme/animated_scheme.dart';
+import '../theme/app_theme.dart';
 import '../utils/responsive.dart';
 import '../widgets/app_network_image.dart';
 import '../widgets/nav_destination_icons.dart';
@@ -723,3 +729,182 @@ class _ShellBarProgress extends StatelessWidget {
     );
   }
 }
+
+final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
+final GlobalKey<ScaffoldMessengerState> scaffoldMessengerKey =
+    GlobalKey<ScaffoldMessengerState>();
+
+/// home 宿主 context：位于 Navigator/Overlay 之下，供 NotificationService
+/// 展示 M3ESnackbar（ScaffoldMessenger 的 context 在 Overlay 之上不可用）。
+final GlobalKey appRootKey = GlobalKey(debugLabel: 'appRoot');
+
+class MyThemedApp extends StatefulWidget {
+  const MyThemedApp({super.key});
+
+  @override
+  State<MyThemedApp> createState() => _MyThemedAppState();
+}
+
+class _MyThemedAppState extends State<MyThemedApp> with WidgetsBindingObserver {
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+    _loadSavedLocale();
+    // 自定义应用名称（顶栏回退文案）需要重建 MaterialApp.title。
+    AppBrandingService.titleNotifier.addListener(_onBrandingChanged);
+    AppBrandingService.load();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    super.didChangeAppLifecycleState(state);
+    // Android 后台不再广播网络变化（Android 8+）：回前台时主动刷新一次，
+    // 否则「离开 Wi-Fi 后仍按 Wi-Fi 判定」，省流模式不会按时生效。
+    if (state == AppLifecycleState.resumed && mounted) {
+      context.read<DataSaverService>().refreshConnectivity();
+    }
+  }
+
+  void _onBrandingChanged() {
+    if (mounted) setState(() {});
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    AppBrandingService.titleNotifier.removeListener(_onBrandingChanged);
+    super.dispose();
+  }
+
+  Future<void> _loadSavedLocale() async {
+    final savedLocale = await LanguageService.getSavedLocale();
+    if (savedLocale != null) {
+      LanguageService.localeNotifier.value = savedLocale;
+    }
+  }
+
+  /// 品牌默认名跟随界面语言（en=Molia / zh=茉咏）。
+  ///
+  /// 只读计算 + 帧末注入：build 阶段直接更新 notifier 会触发
+  /// markNeedsBuild 告警；已自定义名称时 applyLocalizedDefault 内部自动忽略。
+  void _syncLocalizedBranding(Locale? locale) {
+    final effective =
+        locale ?? WidgetsBinding.instance.platformDispatcher.locale;
+    final resolved = LanguageService.supportedLocales
+            .any((supported) => supported.languageCode == effective.languageCode)
+        ? effective
+        : LanguageService.supportedLocales.first;
+    final name = lookupAppLocalizations(resolved).appName;
+    if (name == AppBrandingService.defaultTitle) return;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) {
+        AppBrandingService.applyLocalizedDefault(name);
+      }
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    // ThemeProvider（主题模式 + 封面取色 + 莫奈 + 纯黑）是唯一主题来源：
+    // Selector 提升到壳外，colorScheme 变化时重建整个 M3EMaterialApp，
+    // 同时刷新 material_ui ThemeData 与 M3EThemeData。
+    // 应用语言走 LanguageService.localeNotifier，设置页切换后立即生效。
+    //
+    // 莫奈配色由 DynamicColorBuilder 提供（平台不支持时回调 null）：
+    // 注入必须放到 post-frame，避免在 build 中同步触发 notifyListeners。
+    return DynamicColorBuilder(
+      builder: (lightDynamic, darkDynamic) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (!mounted) return;
+          context
+              .read<ThemeProvider>()
+              .updateMonetSchemes(lightDynamic, darkDynamic);
+        });
+        return ValueListenableBuilder<Locale?>(
+          valueListenable: LanguageService.localeNotifier,
+          builder: (context, locale, _) {
+            // 品牌默认名随界面语言本地化（Molia / 茉咏）。
+            _syncLocalizedBranding(locale);
+            return Selector<ThemeProvider,
+                ({ColorScheme scheme, String? fontFamily})>(
+            selector: (context, provider) => (
+              scheme: provider.colorScheme,
+              fontFamily: provider.appFontFamily,
+            ),
+            // 方案色变化（切歌取色/莫奈/种子色/亮度）经 AnimatedSchemeBuilder
+            // 平滑过渡，避免整站颜色闪变；只插值 ColorScheme，material_ui 与
+            // M3E 两套主题都由同一插值结果重建，保证过渡期一致。
+            // 字体族变化不参与插值，由同一 Selector 直接触发两套主题重建。
+            builder: (context, themeState, _) => AnimatedSchemeBuilder(
+              scheme: themeState.scheme,
+              builder: (context, animatedScheme) {
+                final systemUiOverlayStyle =
+                    buildSystemUiOverlayStyle(animatedScheme);
+                final themedData = buildAppThemeData(
+                  animatedScheme,
+                  systemUiOverlayStyle: systemUiOverlayStyle,
+                  fontFamily: themeState.fontFamily,
+                );
+
+                return M3EMaterialApp(
+                  title: AppBrandingService.titleNotifier.value,
+                  scaffoldMessengerKey: scaffoldMessengerKey,
+                  navigatorKey: navigatorKey,
+                  locale: locale,
+                  // material_ui 的 delegates 已合并 Material/Widgets/Cupertino 三套文案
+                  localizationsDelegates: const [
+                    AppLocalizations.delegate,
+                    ...GlobalMaterialLocalizations.delegates,
+                  ],
+                  supportedLocales: LanguageService.supportedLocales,
+                  // material_ui 透传：既有组件通过 Theme.of 读到的外观保持现状。
+                  theme: themedData,
+                  darkTheme: themedData,
+                  // M3E 侧数据：颜色/字体从 themedData 映射（按 ThemeData 实例缓存）。
+                  data: M3EThemeData.fromMaterial(themedData),
+                  // 方案色过渡已由 AnimatedSchemeBuilder 逐帧插值完成，
+                  // 关掉 MaterialApp 内置主题动画，避免二次缓动造成两套主题不同步。
+                  themeAnimationStyle: AnimationStyle.noAnimation,
+                  // 系统亮度由 ThemeProvider.updateThemeFromSystem 驱动，
+                  // 封面/莫奈取色由 ThemeProvider 内部优先级决定；不启用 M3E
+                  // 自适应与 OS 动态色，避免双主题源互相覆盖。
+                  autoTheming: false,
+                  dynamicColoring: false,
+                  // targetSdk 37（Android 15+ 强制 edge-to-edge）下保持系统栏透明、
+                  // 内容绘制到系统栏下方，与 settings_page.dart 的 edgeToEdge 行为一致。
+                  drawUnderSystemBars: true,
+                  // 原 MaterialApp.builder 逻辑迁移到 appBuilder：M3E 内部已用
+                  // M3ETheme 包裹 child，MaterialApp 的 Theme 又位于 builder 之上
+                  // （见 material_ui app.dart _materialBuilder），因此这里只做
+                  // 系统栏 AnnotatedRegion + Web 字号缩放，不再重复包 Theme。
+                  appBuilder: (context, child) {
+                    final themedChild = child ?? const SizedBox.shrink();
+                    final baseMediaQuery = MediaQuery.of(context);
+                    final double textScaleMultiplier = kIsWeb ? 1.12 : 1.0;
+                    final baseScale = baseMediaQuery.textScaler.scale(1.0);
+                    final mediaData = baseMediaQuery.copyWith(
+                      textScaler:
+                          TextScaler.linear(baseScale * textScaleMultiplier),
+                    );
+
+                    return AnnotatedRegion<SystemUiOverlayStyle>(
+                      value: systemUiOverlayStyle,
+                      child: MediaQuery(
+                        data: mediaData,
+                        child: themedChild,
+                      ),
+                    );
+                  },
+                  home: MyApp(key: appRootKey),
+                );
+              },
+            ),
+          );
+          },
+        );
+      },
+    );
+  }
+}
+
