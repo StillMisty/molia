@@ -23,7 +23,7 @@
 | Flutter | 3.47.6 stable | 当前 stable 最新 |
 | Dart | 随 Flutter（^3.13） | M3E 要求 |
 | JDK | 25+（已在 27 上验证） | `flutter config --jdk-dir=<path>` 可指定 |
-| Gradle | 9.8.0 | `android/gradle/wrapper/gradle-wrapper.properties` |
+| Gradle | 9.8.1 | `android/gradle/wrapper/gradle-wrapper.properties` |
 | AGP / Kotlin | 9.4.1 / 2.4.20 | `android/settings.gradle` |
 | compileSdk/targetSdk/minSdk | 37 / 37 / 37 | Android 17（minSdk=37 → 只有 Android 17+ 可安装） |
 | NDK | 30.0.16248370 | |
@@ -41,14 +41,17 @@ flutter test                         # 单元测试（含音源/播放/架构分
 flutter test integration_test/lx_engine_integration_test.dart -d linux --no-pub
                                      # 端到端（真实引擎+播放+设置页）；测试内置看门狗会自动退出
 flutter build apk --debug            # Android 调试包
-flutter build apk --release --split-per-abi   # 发布体积实测
+flutter build apk --release --split-per-abi --split-debug-info=build/symbols --obfuscate
+                                     # 发布体积实测；obfuscate 混淆 Dart 符号（栈需用 symbols 符号化），
+                                     # symbols 留档（build/ 已 gitignore）；不要加 --no-pub，见已知坑 15
 flutter build web --release          # Web（音源脚本在 Web 不可用，条件导入已处理）
 ```
 
 音源子系统的离线校验（不依赖设备）：
 
 ```bash
-node tool/lx_prelude_harness.mjs          # Node 沙箱验证 lx_prelude.js 协议全链路
+node tool/build_lx_prelude.mjs            # 修改 prelude 源码后重新生成打包压缩版（terser）
+node tool/lx_prelude_harness.mjs          # Node 沙箱验证打包产物 lx_prelude.js 协议全链路
 node tool/gen_search_fixtures.mjs         # 重新抓取平台真实响应更新 test/fixtures/
 ```
 
@@ -125,7 +128,10 @@ lib/
 - 宿主↔脚本：`globalThis.lx.on('request'|'inited'|'updateAlert')`、`lx.send(...)`、`lx.request(url, options, cb)`；
 - 官方 action：`musicUrl` / `lyric` / `pic`（后两者通常仅 `local` 源）；社区扩展 action：`search` / `musicSearch`（非官方约定，本项目兼容）；
 - `lx.utils.crypto/buffer/zlib` 由 Dart 同步函数绑定实现（pointycastle + dart:io zlib），行为有 Node crypto 向量单测；
-- 内联前端前导脚本是 `assets/lx/lx_prelude.js`，修改后请跑 `node tool/lx_prelude_harness.mjs`；
+- 内联前端前导脚本**源码**在 `tool/lx_prelude/lx_prelude.js`；打包产物
+  `assets/lx/lx_prelude.js` 由 `node tool/build_lx_prelude.mjs`（terser 压缩，
+  版本固定）生成——改源码后必须重新生成，`node tool/lx_prelude_harness.mjs`
+  验证的是打包产物；不要手改产物（`--check` 可校验产物与源码是否同步）；
 - 在线导入/更新：脚本 meta 支持 `@updateUrl`；运行时 `lx.updateAlert({log, updateUrl})` 会把
   updateUrl 记入当前脚本；音源管理页支持「立即更新」（下载→校验→原地替换→激活中自动重放）。
 
@@ -191,13 +197,25 @@ lib/
 11. **集成测试挂起保护**：桌面端 media_kit 的原生事件循环会阻止测试进程退出；
     `integration_test/lx_engine_integration_test.dart` 的 `tearDownAll` 有 2s 上报窗口后
     `exit(0)` 的看门狗，不要删除（否则 `flutter test -d linux` 会永久挂起）。
-12. **字体资产不要重复打包**：`assets:` 列表不要再放 `assets/fonts/`（字体会经 `fonts:`
-    声明打包一次）；Montserrat 仅保留 Medium(400)/SemiBold(700)（海报回退字体）。
+12. **不内置字体资产**：界面与海报统一使用设备字体，用户可在设置中切换「应用字体」
+    （枚举实现见 `lib/services/system_fonts_service*.dart`：Android 解析系统
+    `fonts.xml`、iOS 走 `UIFont.familyNames` 通道、Linux 调 `fc-list`），海报页可
+    独立覆盖（`PosterFontStore`）。不要再向 `pubspec.yaml` 的 `fonts:` 或
+    `assets/fonts/` 添加字体，保持包体精简。
 13. **发布体积**：新增资产前先评估体积；不要内置 CJK 字体（系统字体 + 用户安装）。
+    Android 启动图标自 2026-10 起为手绘矢量（`drawable/ic_launcher_foreground.xml`，
+    维护方式见 `flutter_launcher_icons.yaml` 头注释），该工具现在只生成 iOS 图标；
+    `minSdk=37` 下传统 mipmap 密度图无意义，已全部移除，不要用工具再生成。
 14. **省流模式的网络检测**：Android 8+ 后台不广播网络变化，`_MyThemedAppState` 在
     `resumed` 时调 `DataSaverService.refreshConnectivity()`，不要删除；Web 的
     connectivity_plus 拿不到「蜂窝」类型（只会返回 wifi/none），省流在 Web 不会自动生效；
     检测失败时保守按「未生效」处理（`detectionAvailable=false`）。
+15. **`--no-pub` 会跳过插件注册文件再生成**：`flutter build ... --no-pub` 不重写
+    `android/app/src/main/java/io/flutter/plugins/GeneratedPluginRegistrant.java`。
+    若该文件缺失，构建**不会报错**但产物没有插件注册（R8 会把插件类全部裁掉，
+    表现为通知/播放/数据库全失效）；若文件来自 debug/集成测试还会残留
+    `integration_test` 引用，导致 release 编译失败。发布构建不要加 `--no-pub`，
+    它只适合本地快速迭代。
 
 ## 开发约定
 
