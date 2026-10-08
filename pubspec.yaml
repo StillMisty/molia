@@ -45,7 +45,7 @@ dependencies:
   audio_service: ^0.18.19
   material_ui: ^1.6.0
   cupertino_ui: ^1.1.2
-  material_3_expressive: ^1.1.5
+  material_3_expressive: ^1.1.6
   sqflite_common_ffi: ^2.4.3
 dev_dependencies:
   flutter_test:

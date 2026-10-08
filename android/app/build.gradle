@@ -66,14 +66,15 @@ android {
 }
 
 dependencies {
-    implementation 'androidx.core:core-ktx:1.12.0'
-    implementation 'androidx.appcompat:appcompat:1.7.0'
-    implementation 'com.google.android.material:material:1.11.0'
-    implementation 'com.github.bumptech.glide:glide:4.12.0'
-    annotationProcessor 'com.github.bumptech.glide:compiler:4.12.0'
+    implementation 'androidx.core:core-ktx:1.19.1'
+    implementation 'androidx.appcompat:appcompat:1.8.0'
+    implementation 'com.google.android.material:material:1.14.0'
+    // 仅用运行时 API（Glide.with/load/into），未使用 GlideApp 生成 API，
+    // 因此不需要 glide:compiler 注解处理器。
+    implementation 'com.github.bumptech.glide:glide:5.0.9'
 
     // Jetify annotations
-    implementation 'androidx.annotation:annotation:1.7.1'
+    implementation 'androidx.annotation:annotation:1.11.0'
 }
 
 repositories {
