@@ -16,4 +16,12 @@ flutter_launcher_icons:
   image_path_ios_tinted_grayscale: "assets/icons/image_path_ios_tinted_grayscale.png"
   desaturate_tinted_to_grayscale_ios: true
 
+  web:
+    generate: true
+    # maskable 图标会被系统裁切，源图必须全出血不透明：
+    # 使用 iOS 全方形源（四角为品牌绿），而不是圆角透明的 Android 源。
+    image_path: "assets/icons/image_path_ios.png"
+    background_color: "#FBF9E8"
+    theme_color: "#124537"
+
 
