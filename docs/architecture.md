@@ -93,6 +93,11 @@
     只读本地缓存（未命中抛 `ArtworkNetworkBlockedException` → 占位图标），
     并拦截播放预加载、取色预取、audio_service 通知封面与桌面小组件封面地址；
   - 探测失败保守按「未生效」；Android 回前台时由壳层 `refreshConnectivity()` 补一次检测。
+- **失败归一化**：`SourceFailure` 是跨层错误契约（`lib/domain/models/failure.dart`）。
+  sources 适配器在边界转换一次：any-listen 经 `AnyListenException.toSourceFailure()`
+  （保留 unauthorized / connectionFailed 语义，不再退化为 unknown）；内置传输错误
+  由 `SourceFailure.from` 按类型名识别 `BuiltinHttpException`。providers/UI 只消费
+  kind / l10nKey / retryable。
 - **Mapping**：`track_mapper`（`SourceTrack` ↔ `Track`，payload 同一引用往返）。
 - **内置平台**：搜索/发现共用 `BuiltinSearch.transport`
   （`lib/sources/builtin/builtin_transport.dart`）——客户端可注入、统一请求头/超时

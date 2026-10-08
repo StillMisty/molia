@@ -78,6 +78,17 @@ class SourceFailure implements Exception {
       );
     }
 
+    // 内置平台传输失败（lib/sources/builtin/builtin_transport.dart，同上按类型名）。
+    if (typeName == 'BuiltinHttpException' ||
+        message.startsWith('BuiltinHttpException')) {
+      return SourceFailure(
+        kind: FailureKind.network,
+        message: message,
+        cause: error,
+        retryable: true,
+      );
+    }
+
     if (_isNetworkType(typeName) || _looksLikeNetworkMessage(message)) {
       return SourceFailure(
         kind: FailureKind.network,

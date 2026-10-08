@@ -10,6 +10,14 @@
 - **Platform id（平台 id）** — 不带平台前缀的单曲标识；[`SourceTrack.id`] 为其加上 `sourceKey:` 前缀。`rawIdOf`（通用优先级）与 `platformRawIdOf`（`.lxmc` 导出的平台优先顺序）是它的两个取键入口。
 - **Builtin transport（内置传输模块）** — `lib/sources/builtin/builtin_transport.dart`：五个平台搜索/发现共用的 HTTP 入口（客户端可注入、统一请求头/超时、响应级重试 `retryIf` 与 JSON 解码）。`BuiltinSearch.transport` 是唯一实例，测试注入 `MockClient` 即可覆盖 fetch 路径；重试预算统一为 `BuiltinTransport.defaultRetries`（旧实现 2/3/5/3/3 漂移）。
 
+## 错误模型
+
+- **Failure boundary（失败归一化边界）** — `lib/domain/models/failure.dart` 的
+  `SourceFailure` 是跨层错误契约：sources 适配器在边界把结构化异常转换一次
+  （any-listen：`AnyListenException.toSourceFailure()` 保留 unauthorized 等语义；
+  内置传输：`SourceFailure.from` 按类型名识别 `BuiltinHttpException`），
+  providers/UI 只消费 kind / l10nKey / retryable，不再逐层重包装。
+
 ## 播放
 
 - **Playback snapshot（播放快照）** — `lib/domain/models/playback.dart`：UI 播放状态的唯一形状

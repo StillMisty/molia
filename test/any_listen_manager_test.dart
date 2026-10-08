@@ -3,8 +3,8 @@ import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:molia/domain/models/failure.dart';
 import 'package:molia/sources/any_listen/any_listen_config.dart';
-import 'package:molia/sources/any_listen/any_listen_errors.dart';
 import 'package:molia/sources/any_listen/any_listen_source.dart';
 import 'package:molia/sources/source_manager.dart';
 import 'package:molia/sources/source_track.dart';
@@ -54,17 +54,16 @@ void main() {
       manager.dispose();
     });
 
-    test('未配置时路由到 any-listen 的能力方法给出可读异常（不吞不崩）', () async {
+    test('未配置时路由到 any-listen 的能力方法给出领域失败（不吞不崩）', () async {
       final manager = SourceManager();
       await manager.init();
 
+      // 跨出 sources 层后是 SourceFailure（未配置 → unsupported），
+      // 不再是 any-listen 内部异常类型。
       await expectLater(
         manager.search(AnyListenSource.sourceKey, 'x'),
-        throwsA(isA<AnyListenException>().having(
-          (e) => e.kind,
-          'kind',
-          AnyListenErrorKind.notConfigured,
-        )),
+        throwsA(isA<SourceFailure>()
+            .having((e) => e.kind, 'kind', FailureKind.unsupported)),
       );
 
       final track = SourceTrack(
@@ -77,11 +76,8 @@ void main() {
       );
       await expectLater(
         manager.resolveUrl(track),
-        throwsA(isA<AnyListenException>().having(
-          (e) => e.kind,
-          'kind',
-          AnyListenErrorKind.notConfigured,
-        )),
+        throwsA(isA<SourceFailure>()
+            .having((e) => e.kind, 'kind', FailureKind.unsupported)),
       );
 
       // 歌词/封面契约允许失败：返回 null，不抛异常
@@ -207,6 +203,37 @@ void main() {
       expect(
         requests,
         containsAll(['/api/music/search', '/api/music/url']),
+      );
+
+      manager.dispose();
+      await server.close(force: true);
+    });
+
+    test('鉴权失败：401 跨层后仍是 unauthorized（不退化为 unknown）', () async {
+      final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+      server.listen((request) async {
+        try {
+          request.response
+            ..statusCode = 401
+            ..write('{}');
+          await request.response.close();
+        } catch (_) {
+          // 测试收尾时忽略写入异常
+        }
+      });
+
+      final manager = SourceManager();
+      await manager.init();
+      await manager.updateAnyListenConfig(AnyListenConfig(
+        serverUrl: 'http://127.0.0.1:${server.port}',
+        enabled: true,
+      ));
+
+      await expectLater(
+        manager.search(AnyListenSource.sourceKey, 'x'),
+        throwsA(isA<SourceFailure>()
+            .having((e) => e.kind, 'kind', FailureKind.unauthorized)
+            .having((e) => e.retryable, 'retryable', isFalse)),
       );
 
       manager.dispose();

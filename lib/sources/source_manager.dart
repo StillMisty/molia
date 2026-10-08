@@ -7,6 +7,7 @@ import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'any_listen/any_listen_config.dart';
+import 'any_listen/any_listen_errors.dart';
 import 'any_listen/any_listen_source.dart';
 import 'builtin/builtin_search.dart';
 import 'builtin/discover_source.dart';
@@ -476,7 +477,12 @@ class SourceManager extends ChangeNotifier {
   }) async {
     // any-listen 远程音源（未配置/未启用时抛出可读异常，不影响其它分支）
     if (sourceKey == AnyListenSource.sourceKey) {
-      return _anyListenSource.search(keyword, page: page, limit: limit);
+      try {
+        return await _anyListenSource.search(keyword, page: page, limit: limit);
+      } on AnyListenException catch (e) {
+        // 跨出 sources 层的唯一转换点：保留鉴权/连接失败的 kind 语义。
+        throw e.toSourceFailure();
+      }
     }
     final decl = _activeSources[sourceKey];
     if (BuiltinSearch.isBuiltin(sourceKey)) {
@@ -508,7 +514,12 @@ class SourceManager extends ChangeNotifier {
   Future<String> resolveUrl(SourceTrack track, {String? requestedQuality}) async {
     // any-listen 曲目走远程服务器取链；其余曲目保持原有 LX 行为。
     if (AnyListenSource.isAnyListenTrack(track)) {
-      return _anyListenSource.resolveUrl(track, requestedQuality: requestedQuality);
+      try {
+        return await _anyListenSource.resolveUrl(track,
+            requestedQuality: requestedQuality);
+      } on AnyListenException catch (e) {
+        throw e.toSourceFailure();
+      }
     }
     final decl = _activeSources[track.sourceKey];
     if (decl == null) {

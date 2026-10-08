@@ -9,6 +9,7 @@ import 'package:molia/domain/models/playback.dart';
 import 'package:molia/domain/models/source.dart';
 import 'package:molia/domain/models/track.dart';
 import 'package:molia/models/play_mode.dart';
+import 'package:molia/sources/builtin/builtin_transport.dart';
 import 'package:molia/sources/lx/lx_engine_types.dart';
 import 'package:molia/sources/source_track.dart';
 
@@ -116,6 +117,14 @@ void main() {
         SourceFailure.from('某个未知错误').kind,
         FailureKind.unknown,
       );
+    });
+
+    test('内置传输失败按类型名归一化为 network（可重试）', () {
+      final failure = SourceFailure.from(
+        BuiltinHttpException('连接失败', attempts: 3),
+      );
+      expect(failure.kind, FailureKind.network);
+      expect(failure.retryable, isTrue);
     });
 
     test('幂等：传入 SourceFailure 原样返回', () {

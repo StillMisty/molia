@@ -12,6 +12,7 @@ library;
 import 'dart:async';
 
 import '../../domain/models/any_listen.dart';
+import '../../domain/models/failure.dart';
 
 export '../../domain/models/any_listen.dart' show AnyListenErrorKind;
 
@@ -95,6 +96,28 @@ class AnyListenException implements Exception {
       AnyListenErrorKind.badResponse,
       'any-listen 返回异常状态（HTTP $statusCode）',
       statusCode: statusCode,
+    );
+  }
+
+  /// 结构化错误 → 领域 [SourceFailure]：kind / retryable 全保留，
+  /// 鉴权失败不再在跨层时退化为 unknown。
+  ///
+  /// 由 `SourceManager` 在 any-listen 路由分支调用（sources 层跨出到
+  /// data/domain 的唯一转换点）；UI 直连的配置/测试流程仍消费本异常类型。
+  SourceFailure toSourceFailure() {
+    final failureKind = switch (kind) {
+      AnyListenErrorKind.notConfigured => FailureKind.unsupported,
+      AnyListenErrorKind.connectionFailed => FailureKind.network,
+      AnyListenErrorKind.badResponse => FailureKind.unknown,
+      AnyListenErrorKind.unauthorized => FailureKind.unauthorized,
+      AnyListenErrorKind.unsupported => FailureKind.unsupported,
+      AnyListenErrorKind.unknown => FailureKind.unknown,
+    };
+    return SourceFailure(
+      kind: failureKind,
+      message: message,
+      cause: cause,
+      retryable: retryable,
     );
   }
 
