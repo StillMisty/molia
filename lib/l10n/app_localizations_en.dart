@@ -124,6 +124,24 @@ class AppLocalizationsEn extends AppLocalizations {
   String get settingsSeedColor => 'Theme color';
 
   @override
+  String get settingsAppFont => 'App font';
+
+  @override
+  String get fontSystemDefault => 'System default';
+
+  @override
+  String get fontPickerSearchHint => 'Search fonts';
+
+  @override
+  String get fontPickerEmpty => 'No fonts available on this device';
+
+  @override
+  String get posterFontLabel => 'Font';
+
+  @override
+  String get posterFontFollowApp => 'Follow app font';
+
+  @override
   String get colorBlue => 'Blue';
 
   @override

@@ -55,6 +55,24 @@ void main() {
     expect(provider.seedColor.toARGB32(), Colors.blue.toARGB32());
   });
 
+  test('全局应用字体：持久化、恢复与清除', () async {
+    SharedPreferences.setMockInitialValues(
+        {'app_font_family': 'Noto Sans CJK SC'});
+    final provider = ThemeProvider();
+    await provider.preferencesReady;
+    expect(provider.appFontFamily, 'Noto Sans CJK SC');
+
+    await provider.setAppFontFamily('serif');
+    expect(provider.appFontFamily, 'serif');
+    var prefs = await SharedPreferences.getInstance();
+    expect(prefs.getString('app_font_family'), 'serif');
+
+    await provider.setAppFontFamily(null);
+    expect(provider.appFontFamily, isNull);
+    prefs = await SharedPreferences.getInstance();
+    expect(prefs.getString('app_font_family'), isNull);
+  });
+
   testWidgets('ThemeProvider updates when system brightness changes',
       (tester) async {
     final themeProvider = ThemeProvider();

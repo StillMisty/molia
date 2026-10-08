@@ -314,19 +314,25 @@ class _MyThemedAppState extends State<MyThemedApp> with WidgetsBindingObserver {
           builder: (context, locale, _) {
             // 品牌默认名随界面语言本地化（Molia / 茉咏）。
             _syncLocalizedBranding(locale);
-            return Selector<ThemeProvider, ColorScheme>(
-            selector: (context, provider) => provider.colorScheme,
+            return Selector<ThemeProvider,
+                ({ColorScheme scheme, String? fontFamily})>(
+            selector: (context, provider) => (
+              scheme: provider.colorScheme,
+              fontFamily: provider.appFontFamily,
+            ),
             // 方案色变化（切歌取色/莫奈/种子色/亮度）经 AnimatedSchemeBuilder
             // 平滑过渡，避免整站颜色闪变；只插值 ColorScheme，material_ui 与
             // M3E 两套主题都由同一插值结果重建，保证过渡期一致。
-            builder: (context, colorScheme, _) => AnimatedSchemeBuilder(
-              scheme: colorScheme,
+            // 字体族变化不参与插值，由同一 Selector 直接触发两套主题重建。
+            builder: (context, themeState, _) => AnimatedSchemeBuilder(
+              scheme: themeState.scheme,
               builder: (context, animatedScheme) {
                 final systemUiOverlayStyle =
                     buildSystemUiOverlayStyle(animatedScheme);
                 final themedData = buildAppThemeData(
                   animatedScheme,
                   systemUiOverlayStyle: systemUiOverlayStyle,
+                  fontFamily: themeState.fontFamily,
                 );
 
                 return M3EMaterialApp(

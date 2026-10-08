@@ -9,6 +9,7 @@ import '../providers/local_database_provider.dart';
 import '../providers/nav_provider.dart';
 import '../providers/playback_provider.dart';
 import '../providers/theme_provider.dart';
+import '../widgets/font_picker_sheet.dart';
 import '../widgets/lxmc_import.dart' show importLxmcFavoritesFlow;
 import '../widgets/nav_destination_icons.dart';
 import '../services/app_branding_service.dart';
@@ -136,6 +137,7 @@ class _SettingsMenuSectionState extends State<SettingsMenuSection> {
                 bool monetAvailable,
                 bool pureBlack,
                 Color seed,
+                String? appFont,
               })>(
             selector: (context, provider) => (
               mode: provider.themeMode,
@@ -144,6 +146,7 @@ class _SettingsMenuSectionState extends State<SettingsMenuSection> {
               monetAvailable: provider.monetAvailable,
               pureBlack: provider.pureBlackEnabled,
               seed: provider.seedColor,
+              appFont: provider.appFontFamily,
             ),
             builder: (context, appearance, _) {
               final (
@@ -153,6 +156,7 @@ class _SettingsMenuSectionState extends State<SettingsMenuSection> {
                 monetAvailable: monetAvailable,
                 pureBlack: pureBlackEnabled,
                 seed: seedColor,
+                appFont: appFontFamily,
               ) = appearance;
               return Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -217,6 +221,17 @@ class _SettingsMenuSectionState extends State<SettingsMenuSection> {
                     title: l10n.settingsSeedColor,
                     subtitle: _seedColorLabel(l10n, seedColor),
                     onTap: () => _showSeedColorDialog(context, l10n),
+                  ),
+                  const SizedBox(height: kElementSpacing),
+                  // 全局应用字体：来自设备已装字体，null = 系统默认。
+                  _buildSettingMenuItem(
+                    context,
+                    key: const Key('settingsAppFontItem'),
+                    icon: Icons.text_fields_rounded,
+                    title: l10n.settingsAppFont,
+                    subtitle: appFontFamily ?? l10n.fontSystemDefault,
+                    onTap: () =>
+                        _showAppFontPicker(context, l10n, appFontFamily),
                   ),
                 ],
               );
@@ -955,6 +970,22 @@ class _SettingsMenuSectionState extends State<SettingsMenuSection> {
         ],
       ),
     );
+  }
+
+  /// 全局应用字体选择：来自设备已装字体（枚举见 SystemFontsService），
+  /// null 表示系统默认；选择后经 ThemeProvider 立即重建全局主题。
+  Future<void> _showAppFontPicker(
+      BuildContext context, AppLocalizations l10n, String? current) async {
+    final themeProvider = context.read<ThemeProvider>();
+    final choice = await showFontPickerSheet(
+      context,
+      title: l10n.settingsAppFont,
+      selected: current == null
+          ? const FontChoice.system()
+          : FontChoice.family(current),
+    );
+    if (choice == null || choice.inherit) return;
+    await themeProvider.setAppFontFamily(choice.family);
   }
 
   Future<void> _showDefaultPlayModeDialog(

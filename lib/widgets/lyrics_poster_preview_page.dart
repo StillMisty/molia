@@ -6,9 +6,11 @@ import 'package:provider/provider.dart';
 import 'package:path_provider/path_provider.dart'; // 确保导入
 import '../services/notification_service.dart';
 import '../services/lyrics_poster_service.dart';
+import '../services/poster_font_store.dart';
 import '../l10n/app_localizations.dart';
 import '../models/poster_lyric_line.dart';
 import '../utils/responsive.dart';
+import 'font_picker_sheet.dart';
 
 // 海报样式枚举
 enum PosterStyle {
@@ -112,12 +114,23 @@ class _LyricsPosterPreviewPageState extends State<LyricsPosterPreviewPage> {
   String? _tempFilePath; // Store temporary file path for sharing
   String? _errorMessage;
   PosterStyle _currentStyle = PosterStyle.style1; // 当前选择的样式
+
+  /// 海报字体覆盖：null = 跟随应用字体；'' = 强制系统默认；其它 = 字体族名。
+  String? _posterFontOverride;
+
   bool get _isBusy => _isLoading || _isOperating;
 
   @override
   void initState() {
     super.initState();
-    // 首帧后再生成海报：此时才能读取 Theme。
+    _initPosterFont();
+  }
+
+  /// 先恢复海报字体覆盖，再在首帧后生成海报（此时才能读取 Theme）。
+  Future<void> _initPosterFont() async {
+    final saved = await PosterFontStore.load();
+    if (!mounted) return;
+    setState(() => _posterFontOverride = saved);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) {
         _generatePoster();
@@ -129,8 +142,13 @@ class _LyricsPosterPreviewPageState extends State<LyricsPosterPreviewPage> {
     if (!mounted) return;
     HapticFeedback.lightImpact();
     final theme = Theme.of(context);
-    // 主题未声明字体时交由系统默认字体（不再内置 Montserrat）
-    final String? uiFontFamily = theme.textTheme.bodyMedium?.fontFamily;
+    // 海报字体优先级：海报独立覆盖 > 应用字体（主题注入）> 系统默认；
+    // 覆盖值为空串表示显式强制系统默认。
+    final String? uiFontFamily = switch (_posterFontOverride) {
+      null => theme.textTheme.bodyMedium?.fontFamily,
+      '' => null,
+      final family => family,
+    };
 
     setState(() {
       _isLoading = true;
@@ -252,6 +270,41 @@ class _LyricsPosterPreviewPageState extends State<LyricsPosterPreviewPage> {
     });
 
     _generatePoster();
+  }
+
+  /// 选择海报字体：跟随应用字体 / 系统默认 / 设备已装字体。
+  Future<void> _changePosterFont() async {
+    if (_isLoading || _isOperating) return;
+    HapticFeedback.selectionClick();
+    final l10n = AppLocalizations.of(context)!;
+    final choice = await showFontPickerSheet(
+      context,
+      title: l10n.posterFontLabel,
+      includeInherit: true,
+      inheritLabel: l10n.posterFontFollowApp,
+      selected: switch (_posterFontOverride) {
+        null => const FontChoice.inherit(),
+        '' => const FontChoice.system(),
+        final family => FontChoice.family(family),
+      },
+    );
+    if (choice == null || !mounted) return;
+    final value = choice.inherit ? null : (choice.family ?? '');
+    if (value == _posterFontOverride) return;
+    setState(() => _posterFontOverride = value);
+    await PosterFontStore.save(value);
+    if (mounted) {
+      _generatePoster();
+    }
+  }
+
+  /// 底部操作栏的当前字体文案。
+  String _posterFontLabel(AppLocalizations l10n) {
+    return switch (_posterFontOverride) {
+      null => l10n.posterFontFollowApp,
+      '' => l10n.fontSystemDefault,
+      final family => family,
+    };
   }
 
   // 构建样式选择按钮
@@ -417,7 +470,32 @@ class _LyricsPosterPreviewPageState extends State<LyricsPosterPreviewPage> {
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    // 第一行：样式选择按钮
+                    // 第一行：字体选择（跟随应用字体 / 系统默认 / 设备字体）
+                    SizedBox(
+                      width: double.infinity,
+                      child: M3EButton.text(
+                        onPressed: _isLoading || _isOperating
+                            ? null
+                            : _changePosterFont,
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            const Icon(Icons.text_fields_rounded, size: 18),
+                            const SizedBox(width: 8),
+                            Flexible(
+                              child: Text(
+                                _posterFontLabel(
+                                    AppLocalizations.of(context)!),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    // 第二行：样式选择按钮
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                       children: [

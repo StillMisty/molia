@@ -10,13 +10,17 @@ import 'app_semantic_colors.dart';
 /// 各自覆写造成「同语义不同颜色」。
 ///
 /// 只做与配色契约相关的全局配置；具体组件的颜色覆写应优先靠 M3E 默认值。
+/// [fontFamily] 为设备字体族名（设置页「应用字体」），null 时用系统默认字体；
+/// 未覆盖的字形（如 CJK）由引擎逐字回退系统字体。
 ThemeData buildAppThemeData(
   ColorScheme scheme, {
   SystemUiOverlayStyle? systemUiOverlayStyle,
+  String? fontFamily,
 }) {
   return ThemeData(
     colorScheme: scheme,
     useMaterial3: true,
+    fontFamily: fontFamily,
     appBarTheme: AppBarTheme(systemOverlayStyle: systemUiOverlayStyle),
     pageTransitionsTheme: PageTransitionsTheme(
       builders: <TargetPlatform, PageTransitionsBuilder>{

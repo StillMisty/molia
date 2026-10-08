@@ -120,6 +120,24 @@ class AppLocalizationsZh extends AppLocalizations {
   String get settingsSeedColor => '主题色';
 
   @override
+  String get settingsAppFont => '应用字体';
+
+  @override
+  String get fontSystemDefault => '系统默认';
+
+  @override
+  String get fontPickerSearchHint => '搜索字体';
+
+  @override
+  String get fontPickerEmpty => '未找到设备字体';
+
+  @override
+  String get posterFontLabel => '字体';
+
+  @override
+  String get posterFontFollowApp => '跟随应用字体';
+
+  @override
   String get colorBlue => '蓝色';
 
   @override

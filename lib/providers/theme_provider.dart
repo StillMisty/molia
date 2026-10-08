@@ -16,7 +16,8 @@ final logger = Logger();
 /// - `dynamic_color_enabled`：是否用专辑封面取色（默认开启）；
 /// - `monet_color_enabled`：是否用系统莫奈（壁纸）取色（默认关闭）；
 /// - `pure_black_enabled`：深色模式是否使用纯黑背景（默认关闭）；
-/// - `seed_color`：取色关闭（或尚无封面/壁纸）时的种子色，存 ARGB int。
+/// - `seed_color`：取色关闭（或尚无封面/壁纸）时的种子色，存 ARGB int；
+/// - `app_font_family`：全局应用字体族名（设备已装字体，null = 系统默认）。
 ///
 /// 亮度规则：`themeMode` 非 system 时覆盖平台亮度。
 /// 配色优先级：莫奈（系统壁纸）> 封面取色 > [seedColor]；纯黑背景在
@@ -27,6 +28,7 @@ class ThemeProvider extends ChangeNotifier {
   static const String _monetColorKey = 'monet_color_enabled';
   static const String _pureBlackKey = 'pure_black_enabled';
   static const String _seedColorKey = 'seed_color';
+  static const String _appFontKey = 'app_font_family';
 
   /// 主题色预设（设置页色点顺序）：默认蓝与当前行为一致。
   static const List<Color> presetSeedColors = <Color>[
@@ -49,6 +51,9 @@ class ThemeProvider extends ChangeNotifier {
   bool _monetColorEnabled = false;
   bool _pureBlackEnabled = false;
   Color _seedColor = Colors.blue;
+
+  /// 全局应用字体族名（设备已装字体）；null 表示系统默认字体。
+  String? _appFontFamily;
 
   /// 系统莫奈配色，由宿主（DynamicColorBuilder）经 [updateMonetSchemes]
   /// 注入；平台不支持时为 null。
@@ -79,6 +84,9 @@ class ThemeProvider extends ChangeNotifier {
       _monetLightScheme != null || _monetDarkScheme != null;
 
   Color get seedColor => _seedColor;
+
+  /// 全局应用字体族名；null 表示系统默认字体。
+  String? get appFontFamily => _appFontFamily;
 
   /// 持久化偏好加载完成（测试等待启动态就绪）。
   Future<void> get preferencesReady => _preferencesReady;
@@ -167,6 +175,16 @@ class ThemeProvider extends ChangeNotifier {
       forceNotify: true,
     );
     await _persist((prefs) => prefs.setInt(_seedColorKey, color.toARGB32()));
+  }
+
+  /// 设置全局应用字体（null = 系统默认）；字体变化不重算配色，直接通知重build。
+  Future<void> setAppFontFamily(String? family) async {
+    if (_appFontFamily == family) return;
+    _appFontFamily = family;
+    notifyListeners();
+    await _persist((prefs) => family == null
+        ? prefs.remove(_appFontKey)
+        : prefs.setString(_appFontKey, family));
   }
 
   /// 当前模式下的有效亮度：非 system 强制覆盖平台亮度。
@@ -307,6 +325,7 @@ class ThemeProvider extends ChangeNotifier {
       if (seedValue != null) {
         _seedColor = Color(seedValue);
       }
+      _appFontFamily = prefs.getString(_appFontKey);
       // system 模式保留当前亮度，等宿主回调按平台亮度刷新。
       _applyColorScheme(
         _schemeForBrightness(

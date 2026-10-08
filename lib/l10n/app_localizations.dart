@@ -308,6 +308,42 @@ abstract class AppLocalizations {
   /// **'Theme color'**
   String get settingsSeedColor;
 
+  /// No description provided for @settingsAppFont.
+  ///
+  /// In en, this message translates to:
+  /// **'App font'**
+  String get settingsAppFont;
+
+  /// No description provided for @fontSystemDefault.
+  ///
+  /// In en, this message translates to:
+  /// **'System default'**
+  String get fontSystemDefault;
+
+  /// No description provided for @fontPickerSearchHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Search fonts'**
+  String get fontPickerSearchHint;
+
+  /// No description provided for @fontPickerEmpty.
+  ///
+  /// In en, this message translates to:
+  /// **'No fonts available on this device'**
+  String get fontPickerEmpty;
+
+  /// No description provided for @posterFontLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Font'**
+  String get posterFontLabel;
+
+  /// No description provided for @posterFontFollowApp.
+  ///
+  /// In en, this message translates to:
+  /// **'Follow app font'**
+  String get posterFontFollowApp;
+
   /// No description provided for @colorBlue.
   ///
   /// In en, this message translates to:

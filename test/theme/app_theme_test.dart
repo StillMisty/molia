@@ -60,6 +60,21 @@ void main() {
         Brightness.light,
       );
     });
+
+    test('fontFamily 注入 textTheme 并传递到 M3E typeScale', () {
+      final data = buildAppThemeData(light, fontFamily: 'Noto Sans CJK SC');
+      expect(data.textTheme.bodyMedium?.fontFamily, 'Noto Sans CJK SC');
+      expect(
+        M3EThemeData.fromMaterial(data).typeScale.bodyMedium.fontFamily,
+        'Noto Sans CJK SC',
+      );
+
+      // 未指定时沿用 ThemeData 默认字体族（不注入自定义字体）。
+      expect(
+        buildAppThemeData(light).textTheme.bodyMedium?.fontFamily,
+        isNot('Noto Sans CJK SC'),
+      );
+    });
   });
 
   group('AnimatedSchemeBuilder', () {
