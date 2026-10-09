@@ -1987,6 +1987,462 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Clear all caches (audio / lyrics / artwork)? This cannot be undone.'**
   String get cacheClearAllConfirm;
+
+  /// No description provided for @settingsLyricsDisplayTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Lyrics display'**
+  String get settingsLyricsDisplayTitle;
+
+  /// No description provided for @settingsLyricsDisplaySubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Floating lyrics, notification & Bluetooth'**
+  String get settingsLyricsDisplaySubtitle;
+
+  /// No description provided for @lyricsDisplaySharedTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Shared'**
+  String get lyricsDisplaySharedTitle;
+
+  /// No description provided for @lyricsDisplayTranslation.
+  ///
+  /// In en, this message translates to:
+  /// **'Translation'**
+  String get lyricsDisplayTranslation;
+
+  /// No description provided for @lyricsDisplayTranslationSubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Show translation under the current line'**
+  String get lyricsDisplayTranslationSubtitle;
+
+  /// No description provided for @lyricsDisplayRoma.
+  ///
+  /// In en, this message translates to:
+  /// **'Romanization'**
+  String get lyricsDisplayRoma;
+
+  /// No description provided for @lyricsDisplayRomaSubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Show romanized lyrics under the current line'**
+  String get lyricsDisplayRomaSubtitle;
+
+  /// No description provided for @lyricsDisplayUnsynced.
+  ///
+  /// In en, this message translates to:
+  /// **'Unsynced lyrics'**
+  String get lyricsDisplayUnsynced;
+
+  /// No description provided for @lyricsDisplayUnsyncedTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Show song title'**
+  String get lyricsDisplayUnsyncedTitle;
+
+  /// No description provided for @lyricsDisplayUnsyncedHide.
+  ///
+  /// In en, this message translates to:
+  /// **'Hide'**
+  String get lyricsDisplayUnsyncedHide;
+
+  /// No description provided for @lyricsDisplayUnsyncedFirstLine.
+  ///
+  /// In en, this message translates to:
+  /// **'Show first line'**
+  String get lyricsDisplayUnsyncedFirstLine;
+
+  /// No description provided for @lyricsDisplayOffset.
+  ///
+  /// In en, this message translates to:
+  /// **'Lyric offset'**
+  String get lyricsDisplayOffset;
+
+  /// No description provided for @lyricsDisplayOffsetValue.
+  ///
+  /// In en, this message translates to:
+  /// **'{ms} ms'**
+  String lyricsDisplayOffsetValue(int ms);
+
+  /// No description provided for @lyricsDesktopTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Floating lyrics'**
+  String get lyricsDesktopTitle;
+
+  /// No description provided for @lyricsDesktopEnable.
+  ///
+  /// In en, this message translates to:
+  /// **'Enable floating lyrics'**
+  String get lyricsDesktopEnable;
+
+  /// No description provided for @lyricsDesktopEnableSubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Show the current line above other apps'**
+  String get lyricsDesktopEnableSubtitle;
+
+  /// No description provided for @lyricsDesktopPermissionNeeded.
+  ///
+  /// In en, this message translates to:
+  /// **'Overlay permission required'**
+  String get lyricsDesktopPermissionNeeded;
+
+  /// No description provided for @lyricsDesktopPermissionGrant.
+  ///
+  /// In en, this message translates to:
+  /// **'Grant'**
+  String get lyricsDesktopPermissionGrant;
+
+  /// No description provided for @lyricsDesktopPreview.
+  ///
+  /// In en, this message translates to:
+  /// **'Style preview'**
+  String get lyricsDesktopPreview;
+
+  /// No description provided for @lyricsDesktopPreviewLine.
+  ///
+  /// In en, this message translates to:
+  /// **'I can\'t just be an ordinary friend'**
+  String get lyricsDesktopPreviewLine;
+
+  /// No description provided for @lyricsDesktopPreviewTranslation.
+  ///
+  /// In en, this message translates to:
+  /// **'我无法只是普通朋友'**
+  String get lyricsDesktopPreviewTranslation;
+
+  /// No description provided for @lyricsDesktopFontSize.
+  ///
+  /// In en, this message translates to:
+  /// **'Font size'**
+  String get lyricsDesktopFontSize;
+
+  /// No description provided for @lyricsDesktopOpacity.
+  ///
+  /// In en, this message translates to:
+  /// **'Opacity'**
+  String get lyricsDesktopOpacity;
+
+  /// No description provided for @lyricsDesktopWidth.
+  ///
+  /// In en, this message translates to:
+  /// **'Width'**
+  String get lyricsDesktopWidth;
+
+  /// No description provided for @lyricsDesktopMaxLines.
+  ///
+  /// In en, this message translates to:
+  /// **'Visible lines'**
+  String get lyricsDesktopMaxLines;
+
+  /// No description provided for @lyricsDesktopSingleLine.
+  ///
+  /// In en, this message translates to:
+  /// **'Current line only'**
+  String get lyricsDesktopSingleLine;
+
+  /// No description provided for @lyricsDesktopAlign.
+  ///
+  /// In en, this message translates to:
+  /// **'Text align'**
+  String get lyricsDesktopAlign;
+
+  /// No description provided for @lyricsDesktopAlignLeft.
+  ///
+  /// In en, this message translates to:
+  /// **'Left'**
+  String get lyricsDesktopAlignLeft;
+
+  /// No description provided for @lyricsDesktopAlignCenter.
+  ///
+  /// In en, this message translates to:
+  /// **'Center'**
+  String get lyricsDesktopAlignCenter;
+
+  /// No description provided for @lyricsDesktopAlignRight.
+  ///
+  /// In en, this message translates to:
+  /// **'Right'**
+  String get lyricsDesktopAlignRight;
+
+  /// No description provided for @lyricsDesktopAlignTop.
+  ///
+  /// In en, this message translates to:
+  /// **'Top'**
+  String get lyricsDesktopAlignTop;
+
+  /// No description provided for @lyricsDesktopAlignBottom.
+  ///
+  /// In en, this message translates to:
+  /// **'Bottom'**
+  String get lyricsDesktopAlignBottom;
+
+  /// No description provided for @lyricsDesktopColorPlayed.
+  ///
+  /// In en, this message translates to:
+  /// **'Current line color'**
+  String get lyricsDesktopColorPlayed;
+
+  /// No description provided for @lyricsDesktopColorUnplayed.
+  ///
+  /// In en, this message translates to:
+  /// **'Other lines color'**
+  String get lyricsDesktopColorUnplayed;
+
+  /// No description provided for @lyricsDesktopColorShadow.
+  ///
+  /// In en, this message translates to:
+  /// **'Shadow color'**
+  String get lyricsDesktopColorShadow;
+
+  /// No description provided for @lyricsDesktopLock.
+  ///
+  /// In en, this message translates to:
+  /// **'Lock position (click-through)'**
+  String get lyricsDesktopLock;
+
+  /// No description provided for @lyricsDesktopFreeze.
+  ///
+  /// In en, this message translates to:
+  /// **'Freeze while screen off'**
+  String get lyricsDesktopFreeze;
+
+  /// No description provided for @lyricsDesktopPauseBehavior.
+  ///
+  /// In en, this message translates to:
+  /// **'When paused'**
+  String get lyricsDesktopPauseBehavior;
+
+  /// No description provided for @lyricsDesktopNoLyrics.
+  ///
+  /// In en, this message translates to:
+  /// **'Without lyrics'**
+  String get lyricsDesktopNoLyrics;
+
+  /// No description provided for @lyricsDesktopAnimation.
+  ///
+  /// In en, this message translates to:
+  /// **'Line transition animation'**
+  String get lyricsDesktopAnimation;
+
+  /// No description provided for @lyricsDesktopControls.
+  ///
+  /// In en, this message translates to:
+  /// **'Control bar buttons'**
+  String get lyricsDesktopControls;
+
+  /// No description provided for @lyricsDesktopResetPosition.
+  ///
+  /// In en, this message translates to:
+  /// **'Reset position'**
+  String get lyricsDesktopResetPosition;
+
+  /// No description provided for @lyricsControlPlayPause.
+  ///
+  /// In en, this message translates to:
+  /// **'Play / pause'**
+  String get lyricsControlPlayPause;
+
+  /// No description provided for @lyricsControlPrevious.
+  ///
+  /// In en, this message translates to:
+  /// **'Previous'**
+  String get lyricsControlPrevious;
+
+  /// No description provided for @lyricsControlNext.
+  ///
+  /// In en, this message translates to:
+  /// **'Next'**
+  String get lyricsControlNext;
+
+  /// No description provided for @lyricsControlTranslation.
+  ///
+  /// In en, this message translates to:
+  /// **'Translation'**
+  String get lyricsControlTranslation;
+
+  /// No description provided for @lyricsControlLock.
+  ///
+  /// In en, this message translates to:
+  /// **'Lock'**
+  String get lyricsControlLock;
+
+  /// No description provided for @lyricsControlClose.
+  ///
+  /// In en, this message translates to:
+  /// **'Close'**
+  String get lyricsControlClose;
+
+  /// No description provided for @lyricsBehaviorKeep.
+  ///
+  /// In en, this message translates to:
+  /// **'Keep'**
+  String get lyricsBehaviorKeep;
+
+  /// No description provided for @lyricsBehaviorTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Song title'**
+  String get lyricsBehaviorTitle;
+
+  /// No description provided for @lyricsBehaviorClear.
+  ///
+  /// In en, this message translates to:
+  /// **'Clear'**
+  String get lyricsBehaviorClear;
+
+  /// No description provided for @lyricsNotificationTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Notification & lock screen'**
+  String get lyricsNotificationTitle;
+
+  /// No description provided for @lyricsNotificationEnable.
+  ///
+  /// In en, this message translates to:
+  /// **'Show lyrics in notification'**
+  String get lyricsNotificationEnable;
+
+  /// No description provided for @lyricsNotificationEnableSubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Uses the media notification subtitle (no modules needed)'**
+  String get lyricsNotificationEnableSubtitle;
+
+  /// No description provided for @lyricsMetadataTarget.
+  ///
+  /// In en, this message translates to:
+  /// **'Show in'**
+  String get lyricsMetadataTarget;
+
+  /// No description provided for @lyricsMetadataTargetSubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Subtitle'**
+  String get lyricsMetadataTargetSubtitle;
+
+  /// No description provided for @lyricsMetadataTargetArtist.
+  ///
+  /// In en, this message translates to:
+  /// **'Artist'**
+  String get lyricsMetadataTargetArtist;
+
+  /// No description provided for @lyricsMetadataTargetTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Title'**
+  String get lyricsMetadataTargetTitle;
+
+  /// No description provided for @lyricsMetadataTargetAlbum.
+  ///
+  /// In en, this message translates to:
+  /// **'Album'**
+  String get lyricsMetadataTargetAlbum;
+
+  /// No description provided for @lyricsMetadataFormat.
+  ///
+  /// In en, this message translates to:
+  /// **'Format'**
+  String get lyricsMetadataFormat;
+
+  /// No description provided for @lyricsMetadataFormatLyric.
+  ///
+  /// In en, this message translates to:
+  /// **'Lyrics only'**
+  String get lyricsMetadataFormatLyric;
+
+  /// No description provided for @lyricsMetadataFormatLyricTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Lyrics · title'**
+  String get lyricsMetadataFormatLyricTitle;
+
+  /// No description provided for @lyricsMetadataFormatTitleLyric.
+  ///
+  /// In en, this message translates to:
+  /// **'Title · lyrics'**
+  String get lyricsMetadataFormatTitleLyric;
+
+  /// No description provided for @lyricsMetadataIncludeTranslation.
+  ///
+  /// In en, this message translates to:
+  /// **'Include translation'**
+  String get lyricsMetadataIncludeTranslation;
+
+  /// No description provided for @lyricsMetadataPauseBehavior.
+  ///
+  /// In en, this message translates to:
+  /// **'When paused'**
+  String get lyricsMetadataPauseBehavior;
+
+  /// No description provided for @lyricsBluetoothTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Bluetooth lyrics'**
+  String get lyricsBluetoothTitle;
+
+  /// No description provided for @lyricsBluetoothEnable.
+  ///
+  /// In en, this message translates to:
+  /// **'Show lyrics on car display'**
+  String get lyricsBluetoothEnable;
+
+  /// No description provided for @lyricsBluetoothEnableSubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Writes the current line into media metadata (also visible in notification & lock screen)'**
+  String get lyricsBluetoothEnableSubtitle;
+
+  /// No description provided for @lyricsBluetoothOnlyA2dp.
+  ///
+  /// In en, this message translates to:
+  /// **'Only while Bluetooth audio is connected'**
+  String get lyricsBluetoothOnlyA2dp;
+
+  /// No description provided for @lyricsBluetoothStatusConnected.
+  ///
+  /// In en, this message translates to:
+  /// **'Bluetooth audio connected'**
+  String get lyricsBluetoothStatusConnected;
+
+  /// No description provided for @lyricsBluetoothStatusDisconnected.
+  ///
+  /// In en, this message translates to:
+  /// **'Bluetooth audio not connected'**
+  String get lyricsBluetoothStatusDisconnected;
+
+  /// No description provided for @lyricsBluetoothUpdateInterval.
+  ///
+  /// In en, this message translates to:
+  /// **'Update interval'**
+  String get lyricsBluetoothUpdateInterval;
+
+  /// No description provided for @lyricsBluetoothIntervalLine.
+  ///
+  /// In en, this message translates to:
+  /// **'Every line'**
+  String get lyricsBluetoothIntervalLine;
+
+  /// No description provided for @lyricsBluetoothInterval1s.
+  ///
+  /// In en, this message translates to:
+  /// **'Every second'**
+  String get lyricsBluetoothInterval1s;
+
+  /// No description provided for @lyricsBluetoothInterval2s.
+  ///
+  /// In en, this message translates to:
+  /// **'Every 2 seconds'**
+  String get lyricsBluetoothInterval2s;
+
+  /// No description provided for @lyricsDisplayUnsupported.
+  ///
+  /// In en, this message translates to:
+  /// **'Lyric outputs are not available on this platform'**
+  String get lyricsDisplayUnsupported;
 }
 
 class _AppLocalizationsDelegate

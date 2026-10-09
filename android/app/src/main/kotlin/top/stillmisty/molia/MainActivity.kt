@@ -13,6 +13,7 @@ import io.flutter.plugin.common.MethodChannel
 
 class MainActivity: AudioServiceActivity() {
     private var methodChannel: MethodChannel? = null
+    private var lyricsChannel: top.stillmisty.molia.lyrics.LyricsChannelHandler? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -36,6 +37,12 @@ class MainActivity: AudioServiceActivity() {
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         handleIntent(intent)
+    }
+
+    override fun onResume() {
+        super.onResume()
+        // 悬浮窗权限可能在系统设置页被撤销：回前台复查并收窗。
+        lyricsChannel?.onResume()
     }
 
     private fun handleIntent(intent: Intent?) {
@@ -136,5 +143,12 @@ class MainActivity: AudioServiceActivity() {
                 else -> result.notImplemented()
             }
         }
+
+        // 歌词显示通道：桌面悬浮窗 + A2DP 状态（Android）。
+        lyricsChannel = top.stillmisty.molia.lyrics.LyricsChannelHandler(
+            context = this,
+            messenger = flutterEngine.dartExecutor.binaryMessenger,
+            openPermissionActivity = { intent -> startActivity(intent) },
+        )
     }
 }

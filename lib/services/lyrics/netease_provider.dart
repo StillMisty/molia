@@ -9,9 +9,9 @@ import 'lyric_provider.dart';
 /// - 歌词：内置 [WyLyric]（eapi `/api/song/lyric/v1`，含 yrc 逐字歌词
 ///   → LRC/LX 逐字、翻译/罗马音时间轴对齐与时间标签修正）。
 ///
-/// 说明：[WyLyric.fetch] 同时返回 tlyric / rlyric / lxlyric，但当前
-/// [LyricProvider] / `LyricsResult` 只承载原文歌词（翻译/罗马音透传需要
-/// 歌词模型与展示层支持，Wave 11a 暂不扩展）。
+/// 说明：[WyLyric.fetch] 同时返回 tlyric / rlyric / lxlyric；原文与
+/// 翻译 / 罗马音经 [fetchLyrics] 结构化透传（tlyric / rlyric 内部已完成
+/// 时间轴对齐与时间标签修正）。
 class NetEaseProvider extends LyricProvider {
   final Logger _logger = Logger();
 
@@ -46,12 +46,22 @@ class NetEaseProvider extends LyricProvider {
     }
   }
 
-  /// 获取歌词（内置 eapi v1 实现）。
+  /// 获取歌词原文（内置 eapi v1 实现）。
   @override
-  Future<String?> fetchLyric(String songId) async {
+  Future<String?> fetchLyric(String songId) async =>
+      (await fetchLyrics(songId))?.lyric;
+
+  /// 获取结构化歌词：原文 + 翻译（tlyric）+ 罗马音（rlyric）。
+  @override
+  Future<LyricsPayload?> fetchLyrics(String songId) async {
     try {
       final info = await WyLyric.fetch(songId);
-      return info.lyric.isEmpty ? null : info.lyric;
+      if (info.lyric.isEmpty) return null;
+      return LyricsPayload(
+        lyric: info.lyric,
+        translation: info.tlyric.isEmpty ? null : info.tlyric,
+        roma: info.rlyric.isEmpty ? null : info.rlyric,
+      );
     } catch (e, st) {
       _logger.e('获取歌词失败', error: e, stackTrace: st);
       return null;
