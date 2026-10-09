@@ -257,3 +257,17 @@ lib/
 - any-listen 真实协议接入（当前为 HTTP 占位端点，官方为 WS IPC；抽象已就绪）；
 - 真机验证：Android 17 通知/耳机键、iOS 15+ 后台播放（需设备）；
 - M3E 组件目视复核（弹层观感/间距），发布前 release 体积与签名检查。
+
+## Agent skills
+
+### Issue tracker
+
+Issues and specs live as GitHub issues, managed with the `gh` CLI. See `docs/agents/issue-tracker.md`.
+
+### Triage labels
+
+Default five-role vocabulary: `needs-triage` / `needs-info` / `ready-for-agent` / `ready-for-human` / `wontfix`. See `docs/agents/triage-labels.md`.
+
+### Domain docs
+
+Single-context: root `GLOSSARY.md` + `docs/adr/` (ADRs created lazily). See `docs/agents/domain.md`.
