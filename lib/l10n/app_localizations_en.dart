@@ -1052,4 +1052,243 @@ class AppLocalizationsEn extends AppLocalizations {
   @override
   String get cacheClearAllConfirm =>
       'Clear all caches (audio / lyrics / artwork)? This cannot be undone.';
+
+  @override
+  String get settingsLyricsDisplayTitle => 'Lyrics display';
+
+  @override
+  String get settingsLyricsDisplaySubtitle =>
+      'Floating lyrics, notification & Bluetooth';
+
+  @override
+  String get lyricsDisplaySharedTitle => 'Shared';
+
+  @override
+  String get lyricsDisplayTranslation => 'Translation';
+
+  @override
+  String get lyricsDisplayTranslationSubtitle =>
+      'Show translation under the current line';
+
+  @override
+  String get lyricsDisplayRoma => 'Romanization';
+
+  @override
+  String get lyricsDisplayRomaSubtitle =>
+      'Show romanized lyrics under the current line';
+
+  @override
+  String get lyricsDisplayUnsynced => 'Unsynced lyrics';
+
+  @override
+  String get lyricsDisplayUnsyncedTitle => 'Show song title';
+
+  @override
+  String get lyricsDisplayUnsyncedHide => 'Hide';
+
+  @override
+  String get lyricsDisplayUnsyncedFirstLine => 'Show first line';
+
+  @override
+  String get lyricsDisplayOffset => 'Lyric offset';
+
+  @override
+  String lyricsDisplayOffsetValue(int ms) {
+    return '$ms ms';
+  }
+
+  @override
+  String get lyricsDesktopTitle => 'Floating lyrics';
+
+  @override
+  String get lyricsDesktopEnable => 'Enable floating lyrics';
+
+  @override
+  String get lyricsDesktopEnableSubtitle =>
+      'Show the current line above other apps';
+
+  @override
+  String get lyricsDesktopPermissionNeeded => 'Overlay permission required';
+
+  @override
+  String get lyricsDesktopPermissionGrant => 'Grant';
+
+  @override
+  String get lyricsDesktopPreview => 'Style preview';
+
+  @override
+  String get lyricsDesktopPreviewLine => 'I can\'t just be an ordinary friend';
+
+  @override
+  String get lyricsDesktopPreviewTranslation => '我无法只是普通朋友';
+
+  @override
+  String get lyricsDesktopFontSize => 'Font size';
+
+  @override
+  String get lyricsDesktopOpacity => 'Opacity';
+
+  @override
+  String get lyricsDesktopWidth => 'Width';
+
+  @override
+  String get lyricsDesktopMaxLines => 'Visible lines';
+
+  @override
+  String get lyricsDesktopSingleLine => 'Current line only';
+
+  @override
+  String get lyricsDesktopAlign => 'Text align';
+
+  @override
+  String get lyricsDesktopAlignLeft => 'Left';
+
+  @override
+  String get lyricsDesktopAlignCenter => 'Center';
+
+  @override
+  String get lyricsDesktopAlignRight => 'Right';
+
+  @override
+  String get lyricsDesktopAlignTop => 'Top';
+
+  @override
+  String get lyricsDesktopAlignBottom => 'Bottom';
+
+  @override
+  String get lyricsDesktopColorPlayed => 'Current line color';
+
+  @override
+  String get lyricsDesktopColorUnplayed => 'Other lines color';
+
+  @override
+  String get lyricsDesktopColorShadow => 'Shadow color';
+
+  @override
+  String get lyricsDesktopLock => 'Lock position (click-through)';
+
+  @override
+  String get lyricsDesktopFreeze => 'Freeze while screen off';
+
+  @override
+  String get lyricsDesktopPauseBehavior => 'When paused';
+
+  @override
+  String get lyricsDesktopNoLyrics => 'Without lyrics';
+
+  @override
+  String get lyricsDesktopAnimation => 'Line transition animation';
+
+  @override
+  String get lyricsDesktopControls => 'Control bar buttons';
+
+  @override
+  String get lyricsDesktopResetPosition => 'Reset position';
+
+  @override
+  String get lyricsControlPlayPause => 'Play / pause';
+
+  @override
+  String get lyricsControlPrevious => 'Previous';
+
+  @override
+  String get lyricsControlNext => 'Next';
+
+  @override
+  String get lyricsControlTranslation => 'Translation';
+
+  @override
+  String get lyricsControlLock => 'Lock';
+
+  @override
+  String get lyricsControlClose => 'Close';
+
+  @override
+  String get lyricsBehaviorKeep => 'Keep';
+
+  @override
+  String get lyricsBehaviorTitle => 'Song title';
+
+  @override
+  String get lyricsBehaviorClear => 'Clear';
+
+  @override
+  String get lyricsNotificationTitle => 'Notification & lock screen';
+
+  @override
+  String get lyricsNotificationEnable => 'Show lyrics in notification';
+
+  @override
+  String get lyricsNotificationEnableSubtitle =>
+      'Uses the media notification subtitle (no modules needed)';
+
+  @override
+  String get lyricsMetadataTarget => 'Show in';
+
+  @override
+  String get lyricsMetadataTargetSubtitle => 'Subtitle';
+
+  @override
+  String get lyricsMetadataTargetArtist => 'Artist';
+
+  @override
+  String get lyricsMetadataTargetTitle => 'Title';
+
+  @override
+  String get lyricsMetadataTargetAlbum => 'Album';
+
+  @override
+  String get lyricsMetadataFormat => 'Format';
+
+  @override
+  String get lyricsMetadataFormatLyric => 'Lyrics only';
+
+  @override
+  String get lyricsMetadataFormatLyricTitle => 'Lyrics · title';
+
+  @override
+  String get lyricsMetadataFormatTitleLyric => 'Title · lyrics';
+
+  @override
+  String get lyricsMetadataIncludeTranslation => 'Include translation';
+
+  @override
+  String get lyricsMetadataPauseBehavior => 'When paused';
+
+  @override
+  String get lyricsBluetoothTitle => 'Bluetooth lyrics';
+
+  @override
+  String get lyricsBluetoothEnable => 'Show lyrics on car display';
+
+  @override
+  String get lyricsBluetoothEnableSubtitle =>
+      'Writes the current line into media metadata (also visible in notification & lock screen)';
+
+  @override
+  String get lyricsBluetoothOnlyA2dp =>
+      'Only while Bluetooth audio is connected';
+
+  @override
+  String get lyricsBluetoothStatusConnected => 'Bluetooth audio connected';
+
+  @override
+  String get lyricsBluetoothStatusDisconnected =>
+      'Bluetooth audio not connected';
+
+  @override
+  String get lyricsBluetoothUpdateInterval => 'Update interval';
+
+  @override
+  String get lyricsBluetoothIntervalLine => 'Every line';
+
+  @override
+  String get lyricsBluetoothInterval1s => 'Every second';
+
+  @override
+  String get lyricsBluetoothInterval2s => 'Every 2 seconds';
+
+  @override
+  String get lyricsDisplayUnsupported =>
+      'Lyric outputs are not available on this platform';
 }

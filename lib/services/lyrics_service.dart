@@ -26,7 +26,7 @@ class LyricsService {
         _lyricsCache = lyricsCache ?? LyricsCache(prefs: prefs),
         _cacheService = cacheService ?? CacheService.instance;
 
-  /// 获取歌词
+  /// 获取歌词（原文 + 可选翻译 / 罗马音）
   ///
   /// 返回 [LyricsResult] 包含歌词文本与来源信息
   Future<LyricsResult?> getLyrics(String songName, String artistName, String trackId) async {
@@ -41,6 +41,8 @@ class LyricsService {
           _logger.i('从缓存获取歌词: $trackId (来源: ${cached.provider})');
           return LyricsResult(
             lyric: cached.lyric,
+            translation: cached.translation,
+            roma: cached.roma,
             provider: cached.provider,
           );
         }
@@ -50,25 +52,21 @@ class LyricsService {
       // 如果缓存中没有或已过期，从网络获取
       _logger.i('从网络获取歌词: $songName - $artistName');
 
-      final lyrics = await _getFromProviders(songName, artistName);
+      final result = await _getFromProviders(songName, artistName);
 
-      if (lyrics != null) {
-        final provider = lyrics['provider'] as String;
-        final lyricText = lyrics['lyric'] as String;
-
-        final cacheData = LyricCacheData(
-          provider: provider,
-          lyric: lyricText,
-          timestamp: DateTime.now().millisecondsSinceEpoch ~/ 1000,
+      if (result != null) {
+        await _lyricsCache.write(
+          trackId,
+          LyricCacheData(
+            provider: result.provider,
+            lyric: result.lyric,
+            translation: result.translation,
+            roma: result.roma,
+            timestamp: DateTime.now().millisecondsSinceEpoch ~/ 1000,
+          ),
         );
-
-        await _lyricsCache.write(trackId, cacheData);
-        _logger.i('歌词已缓存: $trackId (来源: $provider)');
-
-        return LyricsResult(
-          lyric: lyricText,
-          provider: provider,
-        );
+        _logger.i('歌词已缓存: $trackId (来源: ${result.provider})');
+        return result;
       }
 
       return null;
@@ -79,6 +77,8 @@ class LyricsService {
   }
 
   /// 手动选择歌词写入统一缓存（供 LyricsProvider.saveManual 复用）。
+  ///
+  /// 手动选择的文本没有独立的翻译 / 罗马音，写入时清空旧扩展行。
   Future<void> saveLyrics(
     String trackId,
     String lyric,
@@ -94,18 +94,24 @@ class LyricsService {
     );
   }
 
-  /// 从单个提供者获取歌词
-  Future<Map<String, String>?> _fetchFromProvider(
+  /// 从单个提供者获取结构化歌词
+  Future<LyricsResult?> _fetchFromProvider(
       LyricProvider provider, String title, String artist) async {
-    final lyric = await provider.getLyric(title, artist);
-    return lyric != null ? {'provider': provider.name, 'lyric': lyric} : null;
+    final payload = await provider.getLyrics(title, artist);
+    if (payload == null) return null;
+    return LyricsResult(
+      lyric: payload.lyric,
+      translation: payload.translation,
+      roma: payload.roma,
+      provider: provider.name,
+    );
   }
 
   /// 并行请求所有提供者，取第一个非空结果。
   ///
   /// 失败路径不再顺序重试（旧实现会为每个提供者重复发一轮相同请求，
   /// 既慢一倍也没有真正的「延长超时」——提供者内部本就没有超时参数）。
-  Future<Map<String, String>?> _getFromProviders(String title, String artist) async {
+  Future<LyricsResult?> _getFromProviders(String title, String artist) async {
     try {
       final futures = _providers
           .map((provider) async {

@@ -2,6 +2,7 @@ import 'package:audio_service/audio_service.dart';
 import 'package:flutter/foundation.dart';
 
 import '../managers/artwork_cache.dart';
+import '../services/lyrics_display/media_lyric_composer.dart';
 import '../sources/source_track.dart';
 import 'local_playback_service.dart';
 
@@ -86,6 +87,19 @@ class LocalAudioHandler extends BaseAudioHandler with SeekHandler {
   bool? _lastPlaying;
   bool? _lastLoading;
   Duration _lastPosition = Duration.zero;
+
+  /// 歌词行元数据覆盖（通知/锁屏 + 蓝牙 profile 的合成结果）。
+  LyricMetadataOverride? _lyricMetadataOverride;
+
+  /// 应用歌词覆盖（null = 还原原始元数据）。
+  ///
+  /// 调用方（歌词显示调度）只在合成结果变化时调用；本方法触发一次带
+  /// 去重的广播，通知栏 / 锁屏 / AVRCP 随 MediaItem 一起更新。
+  void setLyricMetadataOverride(LyricMetadataOverride? override) {
+    if (override == _lyricMetadataOverride) return;
+    _lyricMetadataOverride = override;
+    _syncFromService(force: true);
+  }
 
   static const Set<MediaAction> _systemActions = {
     MediaAction.seek,
@@ -211,12 +225,29 @@ class LocalAudioHandler extends BaseAudioHandler with SeekHandler {
     final duration = isCurrent && _service.duration > Duration.zero
         ? _service.duration
         : track.duration;
-    return mediaItemForTrack(
+    final item = mediaItemForTrack(
       track,
       duration: duration,
       artworkBlocked: _artworkBlocked(),
     );
+    if (!isCurrent) return item;
+    return applyLyricMetadataOverride(item, _lyricMetadataOverride);
   }
+}
+
+/// 应用歌词元数据覆盖（纯函数，便于单测）：null 字段保持原值。
+@visibleForTesting
+MediaItem applyLyricMetadataOverride(
+  MediaItem item,
+  LyricMetadataOverride? override,
+) {
+  if (override == null || override.isEmpty) return item;
+  return item.copyWith(
+    title: override.title ?? item.title,
+    artist: override.artist ?? item.artist,
+    album: override.album ?? item.album,
+    displaySubtitle: override.displaySubtitle ?? item.displaySubtitle,
+  );
 }
 
 /// 构造系统媒体会话用的 [MediaItem]（纯函数，便于单测）。

@@ -133,8 +133,9 @@ class QQProvider extends LyricProvider {
     return _extractLyric(result);
   }
 
+  /// Web 端的 QQ 组合接口（/qq/resolveLyric）优先，失败回退到搜索 + 单独取词。
   @override
-  Future<String?> getLyric(String title, String artist) async {
+  Future<LyricsPayload?> getLyrics(String title, String artist) async {
     final payload = await _postJson(
       '/qq/resolveLyric',
       {
@@ -147,11 +148,11 @@ class QQProvider extends LyricProvider {
 
     final lyric = _extractLyric(payload);
     if (lyric != null && lyric.trim().isNotEmpty) {
-      return normalizeLyric(lyric);
+      return LyricsPayload(lyric: normalizeLyric(lyric));
     }
 
     // 如果组合接口失败，回退到搜索 + 单独获取的流程
-    return await super.getLyric(title, artist);
+    return super.getLyrics(title, artist);
   }
 
   String? _extractLyric(Map<String, dynamic>? payload) {

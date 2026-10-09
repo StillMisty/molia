@@ -1020,4 +1020,235 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get cacheClearAllConfirm => '确定清理全部缓存（音频 / 歌词 / 封面）？此操作无法撤销。';
+
+  @override
+  String get settingsLyricsDisplayTitle => '歌词显示';
+
+  @override
+  String get settingsLyricsDisplaySubtitle => '桌面歌词、通知栏·锁屏歌词、蓝牙歌词';
+
+  @override
+  String get lyricsDisplaySharedTitle => '共享';
+
+  @override
+  String get lyricsDisplayTranslation => '翻译';
+
+  @override
+  String get lyricsDisplayTranslationSubtitle => '在当前歌词行下显示翻译';
+
+  @override
+  String get lyricsDisplayRoma => '罗马音';
+
+  @override
+  String get lyricsDisplayRomaSubtitle => '在当前歌词行下显示罗马音';
+
+  @override
+  String get lyricsDisplayUnsynced => '未同步歌词';
+
+  @override
+  String get lyricsDisplayUnsyncedTitle => '显示歌名';
+
+  @override
+  String get lyricsDisplayUnsyncedHide => '隐藏';
+
+  @override
+  String get lyricsDisplayUnsyncedFirstLine => '显示首行';
+
+  @override
+  String get lyricsDisplayOffset => '歌词偏移';
+
+  @override
+  String lyricsDisplayOffsetValue(int ms) {
+    return '$ms 毫秒';
+  }
+
+  @override
+  String get lyricsDesktopTitle => '桌面歌词';
+
+  @override
+  String get lyricsDesktopEnable => '开启桌面歌词';
+
+  @override
+  String get lyricsDesktopEnableSubtitle => '浮在其他应用上显示当前歌词';
+
+  @override
+  String get lyricsDesktopPermissionNeeded => '需要悬浮窗权限';
+
+  @override
+  String get lyricsDesktopPermissionGrant => '去授权';
+
+  @override
+  String get lyricsDesktopPreview => '样式预览';
+
+  @override
+  String get lyricsDesktopPreviewLine => '我无法只是普通朋友';
+
+  @override
+  String get lyricsDesktopPreviewTranslation =>
+      'I can\'t just be an ordinary friend';
+
+  @override
+  String get lyricsDesktopFontSize => '字号';
+
+  @override
+  String get lyricsDesktopOpacity => '透明度';
+
+  @override
+  String get lyricsDesktopWidth => '宽度';
+
+  @override
+  String get lyricsDesktopMaxLines => '显示行数';
+
+  @override
+  String get lyricsDesktopSingleLine => '仅显示当前行';
+
+  @override
+  String get lyricsDesktopAlign => '文本对齐';
+
+  @override
+  String get lyricsDesktopAlignLeft => '左';
+
+  @override
+  String get lyricsDesktopAlignCenter => '中';
+
+  @override
+  String get lyricsDesktopAlignRight => '右';
+
+  @override
+  String get lyricsDesktopAlignTop => '上';
+
+  @override
+  String get lyricsDesktopAlignBottom => '下';
+
+  @override
+  String get lyricsDesktopColorPlayed => '当前行颜色';
+
+  @override
+  String get lyricsDesktopColorUnplayed => '其他行颜色';
+
+  @override
+  String get lyricsDesktopColorShadow => '描边颜色';
+
+  @override
+  String get lyricsDesktopLock => '锁定位置（点击穿透）';
+
+  @override
+  String get lyricsDesktopFreeze => '息屏时冻结歌词';
+
+  @override
+  String get lyricsDesktopPauseBehavior => '暂停时';
+
+  @override
+  String get lyricsDesktopNoLyrics => '无歌词时';
+
+  @override
+  String get lyricsDesktopAnimation => '行切换动画';
+
+  @override
+  String get lyricsDesktopControls => '控制条按钮';
+
+  @override
+  String get lyricsDesktopResetPosition => '重置位置';
+
+  @override
+  String get lyricsControlPlayPause => '播放 / 暂停';
+
+  @override
+  String get lyricsControlPrevious => '上一首';
+
+  @override
+  String get lyricsControlNext => '下一首';
+
+  @override
+  String get lyricsControlTranslation => '翻译';
+
+  @override
+  String get lyricsControlLock => '锁定';
+
+  @override
+  String get lyricsControlClose => '关闭';
+
+  @override
+  String get lyricsBehaviorKeep => '保留';
+
+  @override
+  String get lyricsBehaviorTitle => '显示歌名';
+
+  @override
+  String get lyricsBehaviorClear => '清空';
+
+  @override
+  String get lyricsNotificationTitle => '通知栏 · 锁屏歌词';
+
+  @override
+  String get lyricsNotificationEnable => '在通知栏显示歌词';
+
+  @override
+  String get lyricsNotificationEnableSubtitle => '写入媒体通知副标题，无需安装第三方模块';
+
+  @override
+  String get lyricsMetadataTarget => '显示在';
+
+  @override
+  String get lyricsMetadataTargetSubtitle => '副标题';
+
+  @override
+  String get lyricsMetadataTargetArtist => '艺术家';
+
+  @override
+  String get lyricsMetadataTargetTitle => '标题';
+
+  @override
+  String get lyricsMetadataTargetAlbum => '专辑';
+
+  @override
+  String get lyricsMetadataFormat => '格式';
+
+  @override
+  String get lyricsMetadataFormatLyric => '仅歌词';
+
+  @override
+  String get lyricsMetadataFormatLyricTitle => '歌词 · 歌名';
+
+  @override
+  String get lyricsMetadataFormatTitleLyric => '歌名 · 歌词';
+
+  @override
+  String get lyricsMetadataIncludeTranslation => '包含翻译';
+
+  @override
+  String get lyricsMetadataPauseBehavior => '暂停时';
+
+  @override
+  String get lyricsBluetoothTitle => '蓝牙歌词';
+
+  @override
+  String get lyricsBluetoothEnable => '车机显示歌词';
+
+  @override
+  String get lyricsBluetoothEnableSubtitle => '把当前歌词行写入媒体元数据（通知栏 / 锁屏会同步显示）';
+
+  @override
+  String get lyricsBluetoothOnlyA2dp => '仅在蓝牙音频连接时生效';
+
+  @override
+  String get lyricsBluetoothStatusConnected => '已连接蓝牙音频';
+
+  @override
+  String get lyricsBluetoothStatusDisconnected => '未连接蓝牙音频';
+
+  @override
+  String get lyricsBluetoothUpdateInterval => '更新频率';
+
+  @override
+  String get lyricsBluetoothIntervalLine => '每行';
+
+  @override
+  String get lyricsBluetoothInterval1s => '每秒';
+
+  @override
+  String get lyricsBluetoothInterval2s => '每 2 秒';
+
+  @override
+  String get lyricsDisplayUnsupported => '当前平台暂不支持歌词输出';
 }

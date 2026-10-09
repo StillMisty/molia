@@ -8,11 +8,20 @@ import '../services/lyrics_service.dart';
 enum LyricsStatus { idle, loading, ready, empty }
 
 /// 当前曲目的歌词状态（不可变；lines 仅在 ready 时非空）。
+///
+/// [translations] / [romas] 与 [lines] 等长（'' = 该行无对应扩展文本），
+/// 为空列表表示该曲目没有翻译 / 罗马音。
 @immutable
 class LyricsState {
   final String? trackId;
   final LyricsStatus status;
   final List<LyricLine> lines;
+
+  /// 与 [lines] 等长的翻译文本（'' = 无）。
+  final List<String> translations;
+
+  /// 与 [lines] 等长的罗马音文本（'' = 无）。
+  final List<String> romas;
 
   /// 是否有时间轴（false = 未同步歌词，行时间戳为展示用伪值）。
   final bool isSynced;
@@ -22,6 +31,8 @@ class LyricsState {
     this.trackId,
     this.status = LyricsStatus.idle,
     this.lines = const [],
+    this.translations = const [],
+    this.romas = const [],
     this.isSynced = true,
     this.providerName,
   });
@@ -34,12 +45,21 @@ class LyricsState {
       other.trackId == trackId &&
       other.status == status &&
       listEquals(other.lines, lines) &&
+      listEquals(other.translations, translations) &&
+      listEquals(other.romas, romas) &&
       other.isSynced == isSynced &&
       other.providerName == providerName;
 
   @override
-  int get hashCode =>
-      Object.hash(trackId, status, Object.hashAll(lines), isSynced, providerName);
+  int get hashCode => Object.hash(
+        trackId,
+        status,
+        Object.hashAll(lines),
+        Object.hashAll(translations),
+        Object.hashAll(romas),
+        isSynced,
+        providerName,
+      );
 }
 
 /// 歌词会话模块：取词 → 缓存 → 解析（统一时间契约）→ 预取的唯一实现。
@@ -78,7 +98,7 @@ class LyricsProvider extends ChangeNotifier {
       trackId,
     );
     if (requestId != _requestId) return; // 过期响应：丢弃
-    _setState(_stateFor(trackId, result?.lyric, result?.provider));
+    _setState(_stateFor(trackId, result));
   }
 
   /// 预取下一首歌词（只写缓存，不改变当前展示状态）。
@@ -110,7 +130,10 @@ class LyricsProvider extends ChangeNotifier {
   }) async {
     await _service.saveLyrics(trackId, lyric, providerName);
     if (_state.trackId == trackId) {
-      _setState(_stateFor(trackId, lyric, providerName));
+      _setState(_stateFor(
+        trackId,
+        LyricsResult(lyric: lyric, provider: providerName),
+      ));
     }
   }
 
@@ -120,44 +143,43 @@ class LyricsProvider extends ChangeNotifier {
     _setState(LyricsState.idle);
   }
 
-  LyricsState _stateFor(
-    String trackId,
-    String? rawLyrics,
-    String? providerName,
-  ) {
-    if (rawLyrics == null) {
+  LyricsState _stateFor(String trackId, LyricsResult? result) {
+    if (result == null) {
       return LyricsState(
         trackId: trackId,
         status: LyricsStatus.empty,
-        providerName: providerName,
       );
     }
-    if (hasLyricTimestamps(rawLyrics)) {
-      final parsed = parseLyrics(rawLyrics);
+    if (hasLyricTimestamps(result.lyric)) {
+      final parsed = parseLyrics(result.lyric);
       if (parsed.isNotEmpty) {
         return LyricsState(
           trackId: trackId,
           status: LyricsStatus.ready,
           lines: parsed,
+          translations: alignExtendedLines(parsed, result.translation),
+          romas: alignExtendedLines(parsed, result.roma),
           isSynced: true,
-          providerName: providerName,
+          providerName: result.provider,
         );
       }
     }
-    final unsynced = buildUnsyncedLyrics(rawLyrics);
+    final unsynced = buildUnsyncedLyrics(result.lyric);
     if (unsynced.isEmpty) {
       return LyricsState(
         trackId: trackId,
         status: LyricsStatus.empty,
-        providerName: providerName,
+        providerName: result.provider,
       );
     }
     return LyricsState(
       trackId: trackId,
       status: LyricsStatus.ready,
       lines: unsynced,
+      translations: alignExtendedLines(unsynced, result.translation),
+      romas: alignExtendedLines(unsynced, result.roma),
       isSynced: false,
-      providerName: providerName,
+      providerName: result.provider,
     );
   }
 

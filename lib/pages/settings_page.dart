@@ -18,6 +18,7 @@ import '../services/settings_service.dart';
 import '../services/data_saver_service.dart';
 import '../services/notification_service.dart';
 import 'cache_management_page.dart';
+import 'lyrics_display_page.dart';
 import 'sources_page.dart';
 import '../utils/responsive.dart';
 import 'dart:math' as math;
@@ -349,6 +350,21 @@ class _SettingsMenuSectionState extends State<SettingsMenuSection> {
             icon: Icons.text_format_rounded,
             title: l10n.copyLyricsAsSingleLineTitle,
             subtitle: l10n.copyLyricsAsSingleLineSubtitle,
+          ),
+          const SizedBox(height: kElementSpacing),
+          // 歌词显示：桌面歌词 / 通知·锁屏 / 蓝牙（平台能力不足时页内隐藏分组）。
+          _buildSettingMenuItem(
+            context,
+            key: const Key('settingsLyricsDisplayItem'),
+            icon: Icons.lyrics_rounded,
+            title: l10n.settingsLyricsDisplayTitle,
+            subtitle: l10n.settingsLyricsDisplaySubtitle,
+            onTap: () {
+              ResponsiveNavigation.showAdaptiveModalPage(
+                context: context,
+                child: const LyricsDisplayPage(),
+              );
+            },
           ),
           const SizedBox(height: kSectionSpacing),
 

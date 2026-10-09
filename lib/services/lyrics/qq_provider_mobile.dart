@@ -129,21 +129,36 @@ class QQProvider extends LyricProvider {
   }
 
   @override
-  Future<String?> fetchLyric(String songId) async {
+  Future<String?> fetchLyric(String songId) async =>
+      (await fetchLyrics(songId))?.lyric;
+
+  /// 结构化歌词：PlayLyricInfo 的 lyric / trans / roma；
+  /// 旧 `fcg_query_lyric_new.fcg` 接口（原文 + klyric）作兜底。
+  @override
+  Future<LyricsPayload?> fetchLyrics(String songId) async {
     final viaPlayLyricInfo = await _fetchPlayLyricInfo(songId);
     if (viaPlayLyricInfo != null) {
       return viaPlayLyricInfo;
     }
     final payload = await fetchLyricPayload(songId);
-    return payload?.lyric;
+    if (payload == null ||
+        payload.lyric == null ||
+        payload.lyric!.trim().isEmpty) {
+      return null;
+    }
+    return LyricsPayload(
+      lyric: payload.lyric!,
+      translation: payload.translation,
+      roma: payload.romanizedLyric,
+    );
   }
 
-  /// 获取原文歌词。
+  /// 获取结构化歌词（PlayLyricInfo）。
   ///
   /// 走 `music.musichallSong.PlayLyricInfo.GetPlayLyricInfo`——
   /// 旧的 `fcg_query_lyric_new.fcg` 接口实测已基本不可用，
   /// 只保留作原文兜底。
-  Future<String?> _fetchPlayLyricInfo(String songId) async {
+  Future<LyricsPayload?> _fetchPlayLyricInfo(String songId) async {
     final requestBody = jsonEncode({
       'comm': {
         'cv': 4747474,
@@ -197,7 +212,11 @@ class QQProvider extends LyricProvider {
       if (lyric == null || lyric.trim().isEmpty) {
         return null;
       }
-      return lyric;
+      return LyricsPayload(
+        lyric: lyric,
+        translation: _decodeMaybeBase64(lyricData['trans']),
+        roma: _decodeMaybeBase64(lyricData['roma']),
+      );
     } catch (e) {
       _logger.w('QQ音乐 PlayLyricInfo 获取失败: $e');
       return null;
@@ -290,15 +309,17 @@ class QQProvider extends LyricProvider {
   }
 }
 
-/// 表示 QQ 歌词响应，暴露 API 可能返回的原文与罗马音歌词。
+/// 表示 QQ 歌词响应，暴露 API 可能返回的原文、翻译与罗马音歌词。
 class QQLyricPayload {
   final Map<String, dynamic> raw;
   final String? lyric;
+  final String? translation;
   final String? romanizedLyric;
 
   const QQLyricPayload._({
     required this.raw,
     required this.lyric,
+    required this.translation,
     required this.romanizedLyric,
   });
 
@@ -314,6 +335,9 @@ class QQLyricPayload {
     return QQLyricPayload._(
       raw: json,
       lyric: QQEncoding.normalizeNullable(json['lyric'] as String?),
+      translation: QQEncoding.normalizeNullable(
+        (json['trans'] ?? json['translation']) as String?,
+      ),
       romanizedLyric: QQEncoding.normalizeNullable(romanized),
     );
   }

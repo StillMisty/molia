@@ -101,6 +101,8 @@ lib/
     search_provider.dart       # 经 CatalogService 搜索（兼容 map 结果 + _sourceTracks）
     local_database_provider.dart # 仅 play_contexts（最近播放）
     theme_provider.dart        # 系统亮度 + 专辑封面取色（驱动 M3EThemeData）
+    lyrics_display_provider.dart # 歌词显示调度（桌面悬浮窗 / 通知·锁屏 / 蓝牙输出）
+  services/lyrics_display/     # 歌词显示：设置 / 行跟踪 / 输出契约 / 平台通道 / 媒体元数据合成
   sources/
     source_manager.dart        # 音源注册/调度：search / resolveUrl / fetchLyric / fetchPic
     builtin/                   # 内置平台搜索（kw/kg/tx/wy/mg）+ 加密工具 +
@@ -230,6 +232,14 @@ lib/
     表现为通知/播放/数据库全失效）；若文件来自 debug/集成测试还会残留
     `integration_test` 引用，导致 release 编译失败。发布构建不要加 `--no-pub`，
     它只适合本地快速迭代。
+16. **桌面歌词悬浮窗**：`SYSTEM_ALERT_WINDOW` 是特殊权限（需用户去系统设置授权），
+    窗口类型 `TYPE_APPLICATION_OVERLAY`；`MainActivity.onResume` 复查并收窗的逻辑
+    不要删除。`LyricsChannel` 同名通道只能有一个方法调用处理器（原生事件单点分发），
+    新增原生事件必须走 `LyricsChannel.events`，不要再次 `setMethodCallHandler`。
+17. **歌词展示策略全在 Dart**：行定位 / 偏移 / 翻译拼装 / 暂停与无歌词回退 / 元数据
+    格式 / 蓝牙门控都在 `LyricsDisplayProvider` 与输出映射层完成，原生只渲染与上报
+    交互；新增输出实现 `LyricsOutput` 接口即可（桌面平台输出等 Flutter windowing
+    进入 stable 后再接，见 `docs/lyrics_display.md` §11）。
 
 ## 开发约定
 
@@ -256,4 +266,20 @@ lib/
 
 - any-listen 真实协议接入（当前为 HTTP 占位端点，官方为 WS IPC；抽象已就绪）；
 - 真机验证：Android 17 通知/耳机键、iOS 15+ 后台播放（需设备）；
+- 歌词显示（桌面/通知/蓝牙）：模拟器交互与通知栏验证待跑；A2DP 车载字段映射需真机
+  （见 `docs/lyrics_display.md` §9）；桌面平台输出等 Flutter windowing stable；
 - M3E 组件目视复核（弹层观感/间距），发布前 release 体积与签名检查。
+
+## Agent skills
+
+### Issue tracker
+
+Issues and specs live as GitHub issues, managed with the `gh` CLI. See `docs/agents/issue-tracker.md`.
+
+### Triage labels
+
+Default five-role vocabulary: `needs-triage` / `needs-info` / `ready-for-agent` / `ready-for-human` / `wontfix`. See `docs/agents/triage-labels.md`.
+
+### Domain docs
+
+Single-context: root `GLOSSARY.md` + `docs/adr/` (ADRs created lazily). See `docs/agents/domain.md`.

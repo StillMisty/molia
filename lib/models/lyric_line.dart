@@ -69,6 +69,33 @@ List<LyricLine> buildUnsyncedLyrics(String rawLyrics) {
   ];
 }
 
+/// 把扩展歌词（翻译 / 罗马音）对齐到主行列表。
+///
+/// 返回与 [lines] 等长的文本列表：'' 表示该行没有对应扩展文本。
+/// 扩展歌词按同一时间契约解析（带时间轴走 [parseLyrics]，纯文本走
+/// [buildUnsyncedLyrics] 的伪时间戳）；同时间戳多条合并为一个字符串。
+/// [rawExtended] 为空（或 [lines] 为空）时返回空列表，调用方按「无扩展行」处理。
+List<String> alignExtendedLines(List<LyricLine> lines, String? rawExtended) {
+  if (lines.isEmpty || rawExtended == null || rawExtended.trim().isEmpty) {
+    return const [];
+  }
+  final parsed = hasLyricTimestamps(rawExtended)
+      ? parseLyrics(rawExtended)
+      : buildUnsyncedLyrics(rawExtended);
+  if (parsed.isEmpty) return const [];
+
+  final byTimestamp = <int, List<String>>{};
+  for (final line in parsed) {
+    byTimestamp
+        .putIfAbsent(line.timestamp.inMilliseconds, () => [])
+        .add(line.text);
+  }
+  return [
+    for (final line in lines)
+      byTimestamp[line.timestamp.inMilliseconds]?.join(' ') ?? '',
+  ];
+}
+
 /// 当前行索引：最后一行 timestamp ≤ [position]；早于首行 / 无行返回 -1。
 int lyricLineIndexAt(List<LyricLine> lines, Duration position) {
   if (lines.isEmpty) return -1;

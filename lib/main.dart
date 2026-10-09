@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:material_ui/material_ui.dart';
 import 'package:provider/provider.dart';
 
@@ -17,6 +19,7 @@ import 'playback/local_audio_handler.dart';
 import 'playback/local_playback_service.dart';
 import 'providers/library_provider.dart';
 import 'providers/local_database_provider.dart';
+import 'providers/lyrics_display_provider.dart';
 import 'providers/nav_provider.dart';
 import 'providers/playback_provider.dart';
 import 'providers/search_provider.dart';
@@ -27,6 +30,10 @@ import 'services/cache_service.dart';
 import 'managers/artwork_cache.dart';
 import 'services/data_saver_service.dart';
 import 'providers/lyrics_provider.dart';
+import 'services/lyrics_display/audio_route_monitor.dart';
+import 'services/lyrics_display/desktop_lyrics_output.dart';
+import 'services/lyrics_display/lyrics_display_settings.dart';
+import 'services/lyrics_display/media_lyric_output.dart';
 import 'services/notification_service.dart';
 import 'services/settings_service.dart';
 import 'sources/source_manager.dart';
@@ -117,7 +124,7 @@ void main() async {
   // 之前初始化，并复用同一个 LocalPlaybackService 实例。
   // 不支持 audio_service 的平台（Linux/Windows/Web）返回 null，自动降级。
   // 省流时通知/锁屏封面置空，避免 audio_service 为通知下载封面。
-  await initSystemMediaSession(
+  final audioHandler = await initSystemMediaSession(
     localPlayback,
     artworkBlocked: () => dataSaver.blockNetworkArtwork,
   );
@@ -145,6 +152,52 @@ void main() async {
     dataSaver: dataSaver,
     localDatabaseProvider: localDatabaseProvider,
   );
+
+  // 歌词会话提前创建：歌词显示调度需要主动取词（不依赖播放页打开），
+  // 与播放页共享同一个实例（去重/预取行为不变）。
+  final lyricsProvider = LyricsProvider();
+
+  // 歌词显示（桌面歌词 / 通知·锁屏 / 蓝牙）：配置 + 输出 + 调度。
+  // 输出端能力由平台决定；媒体输出依赖系统媒体会话（audioHandler）。
+  final lyricsDisplaySettings = LyricsDisplaySettings();
+  await lyricsDisplaySettings.init();
+  final audioRouteMonitor = AudioRouteMonitor();
+  unawaited(audioRouteMonitor.init());
+  final lyricsDisplay = LyricsDisplayProvider(
+    settings: lyricsDisplaySettings,
+    outputs: [
+      DesktopLyricsOutput(),
+      MediaLyricOutput(
+        supported: () => audioHandler != null,
+        applyOverride: (override) =>
+            audioHandler?.setLyricMetadataOverride(override),
+        a2dpConnected: () => audioRouteMonitor.connected,
+      ),
+    ],
+    audioRoute: audioRouteMonitor,
+    ensureLyrics: (track) => lyricsProvider.load(track),
+    onPlaybackCommand: (command) {
+      switch (command) {
+        case LyricsPlaybackCommand.playPause:
+          unawaited(playbackProvider.togglePlayPause());
+        case LyricsPlaybackCommand.previous:
+          unawaited(playbackProvider.skipToPrevious());
+        case LyricsPlaybackCommand.next:
+          unawaited(playbackProvider.skipToNext());
+      }
+    },
+  );
+  // 状态接线：播放快照 / 进度 / 歌词状态 → 调度；冷启动恢复态也走同一路径。
+  playbackProvider.addListener(
+    () => lyricsDisplay.syncPlayback(playbackProvider.snapshot),
+  );
+  playbackProvider.position.addListener(
+    () => lyricsDisplay.updatePosition(playbackProvider.currentPosition),
+  );
+  lyricsProvider.addListener(
+    () => lyricsDisplay.syncLyrics(lyricsProvider.state),
+  );
+  lyricsDisplay.syncPlayback(playbackProvider.snapshot);
 
   runApp(
     MultiProvider(
@@ -189,7 +242,10 @@ void main() async {
             },
           ),
         ),
-        ChangeNotifierProvider(create: (_) => LyricsProvider()),
+        ChangeNotifierProvider.value(value: lyricsProvider),
+        // 歌词显示：配置（设置页读写）+ 调度（桌面/通知/蓝牙输出）。
+        ChangeNotifierProvider.value(value: lyricsDisplaySettings),
+        ChangeNotifierProvider.value(value: lyricsDisplay),
         // 统一缓存门面（音频/歌词/封面）：设置页缓存管理读写策略与用量。
         Provider<CacheService>.value(value: CacheService.instance),
         Provider<NotificationService>.value(value: notificationService),
