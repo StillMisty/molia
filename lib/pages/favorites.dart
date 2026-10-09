@@ -1,5 +1,5 @@
 import 'dart:async';
-import 'dart:math';
+import 'dart:math' as math;
 
 import 'package:flutter/services.dart';
 import 'package:material_3_expressive/material_3_expressive.dart';
@@ -15,8 +15,10 @@ import '../providers/library_provider.dart';
 import '../utils/responsive.dart';
 import '../widgets/add_to_library.dart';
 import '../widgets/add_to_playlist_sheet.dart' show showPlaylistNameDialog;
-import '../widgets/library_cover.dart';
+import '../widgets/app_search_bar.dart';
 import '../widgets/lxmc_import.dart' show importLxmcFavoritesFlow;
+import '../widgets/swipe_reveal_row.dart';
+import '../widgets/track_row.dart';
 
 /// AppLocalizations 查找：测试等场景可能直接挂载本页而不注册 delegate，
 /// 此时回退到简体中文（与 lxmc_import / 其他页面同一约定）。
@@ -26,7 +28,7 @@ AppLocalizations _l10n(BuildContext context) =>
 /// 「收藏」页：默认收藏（♥）与已导入/自建列表、播放历史的统一管理入口。
 ///
 /// - 标题行即合集切换器（弹层内可新建/重命名/删除列表、拖动排序合集，
-///   并提供「导入收藏夹」：.lxmc 文件 / 五平台歌单链接）；
+///   并提供「导入收藏」：.lxmc 文件 / 五平台歌单链接）；
 ///   默认落在有曲目的收藏，收藏为空时回退到第一个非空列表；
 /// - 曲目行：点击播放；行尾显示歌曲时长；左滑「加入列表 / 移除类操作」
 ///   （「加入列表」含我的收藏 / 播放历史 / 自建列表）；长按进入多选；
@@ -35,19 +37,16 @@ AppLocalizations _l10n(BuildContext context) =>
 /// - 自建列表支持「调整顺序」模式：长按拖动曲目落位即持久化；
 /// - 播放历史支持单条删除（左滑）与批量删除（多选）。
 class FavoritesPage extends StatefulWidget {
-  const FavoritesPage({super.key});
+  const FavoritesPage({super.key, this.shuffleRandom});
+
+  /// 随机播放起点随机源（测试注入种子；默认系统随机源）。
+  final math.Random? shuffleRandom;
 
   @override
   State<FavoritesPage> createState() => _FavoritesPageState();
 }
 
 enum _CollectionSort { added, title, artist }
-
-/// 列表行的选择视觉：勾选图标翻转 + 双击触发（长按为主入口）。
-const M3EListSelectionState _trackSelectionState = M3EListSelectionState(
-  selectedIcon: Icon(Icons.check_circle_rounded),
-  trigger: M3EListSelectionTrigger.doubleTap,
-);
 
 class _FavoritesPageState extends State<FavoritesPage> {
   final TextEditingController _searchController = TextEditingController();
@@ -73,10 +72,12 @@ class _FavoritesPageState extends State<FavoritesPage> {
   List<String> _collectionOrder = const [];
   final LibraryCollections _collections = LibraryCollections();
 
-  /// 播放历史分页：滚动到底自动追加下一页窗口（列表已在内存，无需加载态）。
+  /// 随机播放起点随机源（测试可注入种子）。
+  late final math.Random _shuffleRandom =
+      widget.shuffleRandom ?? math.Random();
+
+  /// 播放历史列表滚动控制器（常显滚动条，支持手拖定位）。
   final ScrollController _historyScrollController = ScrollController();
-  static const int _historyPageSize = 50;
-  int _visibleHistoryCount = _historyPageSize;
 
   bool get _selecting => _selection.isSelectionMode;
 
@@ -125,7 +126,6 @@ class _FavoritesPageState extends State<FavoritesPage> {
     if (!_searching) return;
     setState(() {
       _searching = false;
-      _resetHistoryPaging();
     });
   }
 
@@ -149,32 +149,6 @@ class _FavoritesPageState extends State<FavoritesPage> {
   void _exitReorder() {
     if (!_reordering) return;
     setState(() => _reordering = false);
-  }
-
-  // 触底 320px 内自动加载下一页历史。
-  bool _onHistoryScroll(ScrollNotification notification) {
-    if (notification.metrics.axis != Axis.vertical) return false;
-    if (notification.metrics.pixels >=
-        notification.metrics.maxScrollExtent - 320) {
-      _maybeLoadMoreHistory();
-    }
-    return false;
-  }
-
-  void _maybeLoadMoreHistory() {
-    final total = context.read<LibraryProvider>().history.length;
-    if (_visibleHistoryCount >= total) return;
-    // 历史已在内存：直接追加窗口，不再模拟网络分页的 loading 尾部。
-    setState(() {
-      _visibleHistoryCount = min(
-        _visibleHistoryCount + _historyPageSize,
-        total,
-      );
-    });
-  }
-
-  void _resetHistoryPaging() {
-    _visibleHistoryCount = _historyPageSize;
   }
 
   // 合集解析
@@ -257,7 +231,7 @@ class _FavoritesPageState extends State<FavoritesPage> {
     return ordered;
   }
 
-  /// 打开合集切换弹层：点行切换、新建/重命名/删除、导入收藏夹、
+  /// 打开合集切换弹层：点行切换、新建/重命名/删除、导入收藏、
   /// 行尾把手拖动排序。
   Future<void> _showCollectionPicker(
     AppLocalizations l10n,
@@ -296,8 +270,6 @@ class _FavoritesPageState extends State<FavoritesPage> {
       _searching = false;
       _reordering = false;
       _searchController.clear();
-      // 历史合集重置分页窗口，避免沿用上次浏览位置。
-      if (picked == LibraryCollections.historySentinel) _resetHistoryPaging();
     });
     _selection.clear();
   }
@@ -330,11 +302,15 @@ class _FavoritesPageState extends State<FavoritesPage> {
     HapticFeedback.lightImpact();
     return context.read<LibraryProvider>().playPlaylistTracks(
           tracks,
-          0,
+          _randomStart(tracks.length),
           contextName: name,
           mode: PlayMode.shuffle,
         );
   }
+
+  /// 随机播放起点：在可见列表内随机取一首（不再固定第一首）。
+  int _randomStart(int count) =>
+      count <= 0 ? 0 : _shuffleRandom.nextInt(count);
 
   Future<void> _playFrom(List<PlaylistTrack> tracks, int index, String name) {
     HapticFeedback.lightImpact();
@@ -422,7 +398,7 @@ class _FavoritesPageState extends State<FavoritesPage> {
     );
   }
 
-  /// 合集弹层的「导入收藏夹」：.lxmc 文件 或 五平台歌单链接。
+  /// 合集弹层的「导入收藏」：.lxmc 文件 或 五平台歌单链接。
   Future<void> _importCollection() async {
     final l10n = _l10n(context);
     final discover = context.read<DiscoverProvider?>();
@@ -672,10 +648,6 @@ class _FavoritesPageState extends State<FavoritesPage> {
       tracks: tracks,
       visible: visible,
       visibleHistory: visibleHistory,
-      historyVisibleCount: _visibleHistoryCount.clamp(
-        0,
-        visibleHistory.length,
-      ),
       hasItems: hasItems,
     );
     final reorderActive =
@@ -888,13 +860,14 @@ class _FavoritesPageState extends State<FavoritesPage> {
   Future<void> _playShuffledFor(_CollectionView view) => view.isHistory
       ? _playHistoryFrom(
           view.visibleHistory,
-          0,
+          _randomStart(view.visibleHistory.length),
           view.displayName,
           mode: PlayMode.shuffle,
         )
       : _playShuffled(view.visible, view.displayName);
 
-  /// 搜索行：返回键 + 输入框 + ⋮（排序 / 调整顺序 / 清空历史）。
+  /// 搜索行：单胶囊布局——返回键、输入框/清除键与 ⋮（排序 / 调整顺序 /
+  /// 清空历史）都收在搜索栏内，日常不展开搜索时不占行高。
   Widget _buildSearchHeader(
     BuildContext context,
     AppLocalizations l10n,
@@ -904,31 +877,20 @@ class _FavoritesPageState extends State<FavoritesPage> {
         context.layoutType(ResponsivePageType.browse).horizontalPadding;
     return Padding(
       padding: EdgeInsets.fromLTRB(horizontalPadding, 12, horizontalPadding, 8),
-      child: Row(
-        children: [
-          M3EIconButton(
-            variant: M3EIconButtonVariant.standard,
-            tooltip: l10n.cancel,
-            icon: const Icon(Icons.arrow_back_rounded),
-            onPressed: _exitSearch,
-          ),
-          const SizedBox(width: 4),
-          Expanded(
-            child: M3ETextField(
-              controller: _searchController,
-              focusNode: _searchFocus,
-              placeholder: l10n.favoritesSearchHint,
-              leading: const Icon(Icons.search_rounded),
-              showClearButton: true,
-              textInputAction: TextInputAction.search,
-              onChanged: (_) => setState(_resetHistoryPaging),
-            ),
-          ),
-          if (view.hasItems) ...[
-            const SizedBox(width: 4),
-            _buildOverflowMenu(context, l10n, view),
-          ],
+      child: AppSearchBar(
+        controller: _searchController,
+        focusNode: _searchFocus,
+        hintText: l10n.favoritesSearchHint,
+        leading: M3EIconButton(
+          variant: M3EIconButtonVariant.standard,
+          tooltip: l10n.cancel,
+          icon: const Icon(Icons.arrow_back_rounded),
+          onPressed: _exitSearch,
+        ),
+        trailing: [
+          if (view.hasItems) _buildOverflowMenu(context, l10n, view),
         ],
+        onChanged: (_) => setState(() {}),
       ),
     );
   }
@@ -1128,7 +1090,7 @@ class _FavoritesPageState extends State<FavoritesPage> {
     final selectionTheme = m3e.selectionTheme;
     final foreground = selectionTheme.contextualForeground(m3e.colorScheme);
     final itemCount =
-        view.isHistory ? view.historyVisibleCount : view.visible.length;
+        view.isHistory ? view.visibleHistory.length : view.visible.length;
     final allSelected = _selection.allSelectedFor(itemCount) == true;
     return ColoredBox(
       color: selectionTheme.contextualBackground(m3e.colorScheme),
@@ -1197,38 +1159,55 @@ class _FavoritesPageState extends State<FavoritesPage> {
         ),
       );
     }
-    final list = M3EList.scrollable(
-      controller: _listController,
-      itemCount: view.visible.length,
-      listPadding: const EdgeInsets.symmetric(vertical: 8),
-      gap: 0,
-      outerRadius: 0,
-      innerRadius: 0,
-      selection: !reorderActive,
-      selectionController: reorderActive ? null : _selection,
-      selectionState: _trackSelectionState,
-      onTap: reorderActive
-          ? null
-          : (index) => _playFrom(view.visible, index, view.displayName),
-      onLongPress: reorderActive ? null : _enterSelection,
-      reorder: reorderActive,
-      onReorder: reorderActive
-          ? (from, to) => unawaited(_reorderTracks(view, from, to))
-          : null,
-      reorderState: const M3EListReorderState(showDragHandle: false),
-      itemBuilder: (context, index) => _buildTrackRow(
-        context,
-        l10n,
-        view,
-        index,
-        reorderActive: reorderActive,
-      ),
-    );
+    // 排序模式：ReorderableListView 固定 extent，长按行内任意位置拖动。
+    if (reorderActive) {
+      return Scrollbar(
+        controller: _listController,
+        thumbVisibility: true,
+        interactive: true,
+        child: ReorderableListView.builder(
+          scrollController: _listController,
+          padding: const EdgeInsets.symmetric(vertical: 8),
+          itemExtent: TrackRow.extent,
+          buildDefaultDragHandles: false,
+          itemCount: view.visible.length,
+          onReorderItem: (from, to) =>
+              unawaited(_reorderTracks(view, from, to)),
+          itemBuilder: (context, index) {
+            final track = view.visible[index];
+            return ReorderableDelayedDragStartListener(
+              // 稳定 key：收藏切换后列表原地刷新，不整段重建/丢滚动位置。
+              key: ValueKey<String>('${track.sourceKey}:${track.songId}'),
+              index: index,
+              child: _buildTrackRow(
+                context,
+                l10n,
+                view,
+                index,
+                reorderActive: true,
+              ),
+            );
+          },
+        ),
+      );
+    }
     return Scrollbar(
       controller: _listController,
       thumbVisibility: true,
       interactive: true,
-      child: list,
+      child: ListView.builder(
+        controller: _listController,
+        padding: const EdgeInsets.symmetric(vertical: 8),
+        itemExtent: TrackRow.extent,
+        itemCount: view.visible.length,
+        itemBuilder: (context, index) => _buildTrackRow(
+          context,
+          l10n,
+          view,
+          index,
+          reorderActive: false,
+        ),
+      ),
     );
   }
 
@@ -1240,25 +1219,35 @@ class _FavoritesPageState extends State<FavoritesPage> {
     required bool reorderActive,
   }) {
     final track = view.visible[index];
-    return M3EListItem(
+    final row = TrackRow(
       // 稳定 key：收藏切换后列表原地刷新，不整段重建/丢滚动位置。
       key: ValueKey<String>('${track.sourceKey}:${track.songId}'),
-      leading: LibraryCoverThumb(url: track.coverUrl),
-      headline: track.title,
-      supportingText: track.artist,
+      title: track.title,
+      artist: track.artist,
+      coverUrl: track.coverUrl,
       trailingText: _durationText(track.durationMs),
-      swipe: (!_selecting && !reorderActive)
-          ? _trackSwipeAction(context, l10n, view, track)
-          : null,
+      selected: _selection.isSelected(index),
       trailing: reorderActive
           ? Icon(
               Icons.drag_handle_rounded,
               color: Theme.of(context).colorScheme.onSurfaceVariant,
             )
-          : _selecting
-              ? null
-              // 占位抑制滑动列表自动附加的「⋮ 露出操作」提示。
-              : const SizedBox.shrink(),
+          : null,
+      onTap: reorderActive
+          ? null
+          : () {
+              if (_selecting) {
+                _selection.toggle(index);
+              } else {
+                _playFrom(view.visible, index, view.displayName);
+              }
+            },
+      onLongPress: reorderActive ? null : () => _enterSelection(index),
+    );
+    if (reorderActive || _selecting) return row;
+    return SwipeRevealRow(
+      actions: _trackSwipeActions(context, l10n, view, track),
+      child: row,
     );
   }
 
@@ -1271,53 +1260,50 @@ class _FavoritesPageState extends State<FavoritesPage> {
   }
 
   /// 曲目左滑操作：加入列表 + 移除类（按合集取语义）。
-  M3EListItemSwipe _trackSwipeAction(
+  List<M3EListSwipeAction> _trackSwipeActions(
     BuildContext context,
     AppLocalizations l10n,
     _CollectionView view,
     PlaylistTrack track,
   ) {
     final scheme = Theme.of(context).colorScheme;
-    return M3EListItemSwipe(
-      mode: M3EListSwipeMode.reveal,
-      trailing: [
-        M3EListSwipeAction(
-          icon: const Icon(Icons.playlist_add_rounded),
-          backgroundColor: scheme.secondaryContainer,
-          foregroundColor: scheme.onSecondaryContainer,
-          onPressed: () => unawaited(
-            _copyToPlaylist(
-              tracks: [track],
-              includeFavorites: !view.isFavorites,
-              includeHistory: !view.isHistory,
-            ),
+    return [
+      M3EListSwipeAction(
+        icon: const Icon(Icons.playlist_add_rounded),
+        backgroundColor: scheme.secondaryContainer,
+        foregroundColor: scheme.onSecondaryContainer,
+        onPressed: () => unawaited(
+          _copyToPlaylist(
+            tracks: [track],
+            includeFavorites: !view.isFavorites,
+            includeHistory: !view.isHistory,
           ),
         ),
-        if (view.isCustom && view.playlistId != null)
-          M3EListSwipeAction(
-            icon: const Icon(Icons.playlist_remove_rounded),
-            backgroundColor: scheme.errorContainer,
-            foregroundColor: scheme.onErrorContainer,
-            onPressed: () => unawaited(
-              context.read<LibraryProvider>().removeTracksFromPlaylist(
-                view.playlistId!,
-                [track],
-              ),
-            ),
-          )
-        else if (view.isFavorites)
-          M3EListSwipeAction(
-            icon: const Icon(Icons.heart_broken_rounded),
-            backgroundColor: scheme.errorContainer,
-            foregroundColor: scheme.onErrorContainer,
-            onPressed: () => unawaited(
-              context.read<LibraryProvider>().removeTracksFromFavorites([
-                (sourceKey: track.sourceKey, songId: track.songId),
-              ]),
+      ),
+      if (view.isCustom && view.playlistId != null)
+        M3EListSwipeAction(
+          icon: const Icon(Icons.playlist_remove_rounded),
+          backgroundColor: scheme.errorContainer,
+          foregroundColor: scheme.onErrorContainer,
+          onPressed: () => unawaited(
+            context.read<LibraryProvider>().removeTracksFromPlaylist(
+              view.playlistId!,
+              [track],
             ),
           ),
-      ],
-    );
+        )
+      else if (view.isFavorites)
+        M3EListSwipeAction(
+          icon: const Icon(Icons.heart_broken_rounded),
+          backgroundColor: scheme.errorContainer,
+          foregroundColor: scheme.onErrorContainer,
+          onPressed: () => unawaited(
+            context.read<LibraryProvider>().removeTracksFromFavorites([
+              (sourceKey: track.sourceKey, songId: track.songId),
+            ]),
+          ),
+        ),
+    ];
   }
 
   Widget _buildHistoryBody(
@@ -1339,79 +1325,65 @@ class _FavoritesPageState extends State<FavoritesPage> {
       }
       return _buildEmptyState(context, l10n, view);
     }
-    final visibleCount = view.historyVisibleCount;
-    return NotificationListener<ScrollNotification>(
-      onNotification: _onHistoryScroll,
-      child: Scrollbar(
+    final scheme = Theme.of(context).colorScheme;
+    return Scrollbar(
+      controller: _historyScrollController,
+      thumbVisibility: true,
+      interactive: true,
+      child: ListView.builder(
         controller: _historyScrollController,
-        thumbVisibility: true,
-        interactive: true,
-        child: M3EList.scrollable(
-          controller: _historyScrollController,
-          itemCount: visibleCount,
-          listPadding: const EdgeInsets.symmetric(vertical: 8),
-          gap: 0,
-          outerRadius: 0,
-          innerRadius: 0,
-          selection: true,
-          selectionController: _selection,
-          selectionState: _trackSelectionState,
-          onTap: (index) {
-            if (index < visibleCount) {
-              _playHistoryFrom(
-                view.visibleHistory,
-                index,
-                view.displayName,
-              );
-            }
-          },
-          onLongPress: (index) {
-            if (index < visibleCount) _enterSelection(index);
-          },
-          itemBuilder: (context, index) {
-            final entry = view.visibleHistory[index];
-            return M3EListItem(
-              // 稳定 key：收藏切换后列表原地刷新，不整段重建/丢滚动位置。
-              key: ValueKey<String>('h:${entry.sourceKey}:${entry.songId}'),
-              leading: LibraryCoverThumb(url: entry.coverUrl),
-              headline: entry.title,
-              supportingText: entry.artist,
-              trailingText: _durationText(entry.durationMs),
-              swipe: _selecting
-                  ? null
-                  : M3EListItemSwipe(
-                      mode: M3EListSwipeMode.reveal,
-                      trailing: [
-                        M3EListSwipeAction(
-                          icon: const Icon(Icons.playlist_add_rounded),
-                          backgroundColor:
-                              Theme.of(context).colorScheme.secondaryContainer,
-                          foregroundColor: Theme.of(context)
-                              .colorScheme
-                              .onSecondaryContainer,
-                          onPressed: () => unawaited(
-                            _copyToPlaylist(
-                              entries: [entry],
-                              includeHistory: false,
-                            ),
-                          ),
-                        ),
-                        M3EListSwipeAction(
-                          icon: const Icon(Icons.delete_outline_rounded),
-                          backgroundColor:
-                              Theme.of(context).colorScheme.errorContainer,
-                          foregroundColor:
-                              Theme.of(context).colorScheme.onErrorContainer,
-                          onPressed: () => unawaited(
-                            provider.deleteHistoryEntry(entry),
-                          ),
-                        ),
-                      ],
-                    ),
-              trailing: _selecting ? null : const SizedBox.shrink(),
-            );
-          },
-        ),
+        padding: const EdgeInsets.symmetric(vertical: 8),
+        itemExtent: TrackRow.extent,
+        itemCount: view.visibleHistory.length,
+        itemBuilder: (context, index) {
+          final entry = view.visibleHistory[index];
+          final row = TrackRow(
+            // 稳定 key：收藏切换后列表原地刷新，不整段重建/丢滚动位置。
+            key: ValueKey<String>('h:${entry.sourceKey}:${entry.songId}'),
+            title: entry.title,
+            artist: entry.artist,
+            coverUrl: entry.coverUrl,
+            trailingText: _durationText(entry.durationMs),
+            selected: _selection.isSelected(index),
+            onTap: () {
+              if (_selecting) {
+                _selection.toggle(index);
+              } else {
+                _playHistoryFrom(
+                  view.visibleHistory,
+                  index,
+                  view.displayName,
+                );
+              }
+            },
+            onLongPress: () => _enterSelection(index),
+          );
+          if (_selecting) return row;
+          return SwipeRevealRow(
+            actions: [
+              M3EListSwipeAction(
+                icon: const Icon(Icons.playlist_add_rounded),
+                backgroundColor: scheme.secondaryContainer,
+                foregroundColor: scheme.onSecondaryContainer,
+                onPressed: () => unawaited(
+                  _copyToPlaylist(
+                    entries: [entry],
+                    includeHistory: false,
+                  ),
+                ),
+              ),
+              M3EListSwipeAction(
+                icon: const Icon(Icons.delete_outline_rounded),
+                backgroundColor: scheme.errorContainer,
+                foregroundColor: scheme.onErrorContainer,
+                onPressed: () => unawaited(
+                  provider.deleteHistoryEntry(entry),
+                ),
+              ),
+            ],
+            child: row,
+          );
+        },
       ),
     );
   }
@@ -1467,7 +1439,6 @@ class _CollectionView {
     required this.tracks,
     required this.visible,
     required this.visibleHistory,
-    required this.historyVisibleCount,
     required this.hasItems,
   });
 
@@ -1487,9 +1458,6 @@ class _CollectionView {
 
   /// 搜索过滤后的历史条目。
   final List<PlayHistoryEntry> visibleHistory;
-
-  /// 历史分页窗口（已加载可见条数）。
-  final int historyVisibleCount;
 
   final bool hasItems;
 }
@@ -1530,7 +1498,7 @@ class _CollectionEntry {
       );
 }
 
-/// 合集弹层结果：切换到某合集 / 请求导入收藏夹。
+/// 合集弹层结果：切换到某合集 / 请求导入收藏。
 class _PickerOutcome {
   const _PickerOutcome.select(this.selectedId) : importRequested = false;
 
@@ -1542,7 +1510,7 @@ class _PickerOutcome {
   final bool importRequested;
 }
 
-/// 合集切换弹层：点行切换；「新建列表」；「导入收藏夹」；自建列表行支持
+/// 合集切换弹层：点行切换；「新建列表」；「导入收藏」；自建列表行支持
 /// 重命名/删除；行尾把手拖动排序（落位即持久化）。
 class _CollectionPickerSheet extends StatefulWidget {
   const _CollectionPickerSheet({
@@ -1830,6 +1798,8 @@ class _LinkImportDialogState extends State<_LinkImportDialog> {
             controller: _controller,
             placeholder: l10n.discoverOpenPlaylistHint,
             autofocus: true,
+            // 弹窗表单与音源配置等其它弹窗一致用 outlined（这不是搜索框）。
+            variant: M3ETextFieldVariant.outlined,
             errorText: _error,
             textInputAction: TextInputAction.done,
             onChanged: (_) {

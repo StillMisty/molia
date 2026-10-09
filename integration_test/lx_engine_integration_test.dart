@@ -186,10 +186,23 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('音源管理'), findsOneWidget);
-    expect(find.text('还没有导入音源脚本。社区音源可在 Github 搜索 “lx-music-source” 获取。'),
-        findsOneWidget);
+    // 空态卡片可能落在首屏视口之外（布局随版本变化）：先滚动到可见。
+    final noScripts = find.textContaining('还没有导入音源脚本');
+    await tester.scrollUntilVisible(
+      noScripts,
+      200,
+      scrollable: find.byType(Scrollable).first,
+    );
+    expect(noScripts, findsOneWidget);
 
-    // 粘贴导入
+    // 粘贴导入（回滚到导入卡片，可能已在视口上方）
+    await tester.scrollUntilVisible(
+      find.text('粘贴脚本导入'),
+      -200,
+      scrollable: find.byType(Scrollable).first,
+    );
+    await tester.ensureVisible(find.text('粘贴脚本导入'));
+    await tester.pumpAndSettle();
     await tester.tap(find.text('粘贴脚本导入'));
     await tester.pumpAndSettle();
     await tester.enterText(find.byType(M3ETextField), script);
@@ -200,12 +213,19 @@ void main() {
     expect(find.text('导入音源脚本'), findsOneWidget);
     await tester.tap(find.text('继续导入'));
 
-    // 等待引擎激活
+    // 等待引擎激活（看 manager 状态；激活卡片可能在首屏视口之外）
     await waitFor(
       tester,
-      () => find.textContaining('当前音源：集成测试音源').evaluate().isNotEmpty,
-      reason: '导入后未显示当前音源（激活失败）',
+      () => manager.hasActiveSource,
+      reason: '导入后激活失败',
     );
+    // 滚动到激活卡片并断言 UI 展示（状态卡在列表顶部，向上滚）
+    await tester.scrollUntilVisible(
+      find.textContaining('当前音源：集成测试音源'),
+      -200,
+      scrollable: find.byType(Scrollable).first,
+    );
+    expect(find.textContaining('当前音源：集成测试音源'), findsOneWidget);
 
     // 列表中脚本与源声明可见
     expect(find.textContaining('集成测试源'), findsWidgets);

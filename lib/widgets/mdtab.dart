@@ -4,14 +4,20 @@ import 'package:material_ui/material_ui.dart';
 /// 歌词/队列切换：小圆点指示器（选中态拉伸），无图标/文字。
 ///
 /// 圆点占位极小，紧凑布局下也放得下；与 PageView 页码双向同步。
+/// 点击未激活圆点切换页面；点击已激活圆点触发 [onActiveTap]（播放页用于
+/// 展开/收起播放器）。
 class LyricsQueueDots extends StatefulWidget {
   final List<PageData> pages;
   final PageController pageController;
+
+  /// 点击「已激活」圆点的回调；为空时点击已激活圆点无动作。
+  final VoidCallback? onActiveTap;
 
   const LyricsQueueDots({
     super.key,
     required this.pages,
     required this.pageController,
+    this.onActiveTap,
   });
 
   @override
@@ -43,7 +49,11 @@ class _LyricsQueueDotsState extends State<LyricsQueueDots> {
   }
 
   void _selectPage(int index) {
-    if (index == currentPage) return;
+    if (index == currentPage) {
+      // 再点已激活圆点：交给宿主（播放页 = 展开/收起切换）。
+      widget.onActiveTap?.call();
+      return;
+    }
     HapticFeedback.lightImpact();
     widget.pageController.animateToPage(
       index,

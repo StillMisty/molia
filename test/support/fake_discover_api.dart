@@ -24,6 +24,13 @@ class FakeDiscoverSource implements DiscoverSource {
   int hotSearchCalls = 0;
   int tagCalls = 0;
 
+  /// 歌单分页测试开关：总页数 × 每页条数（默认单页单条，保持既有用例数据）。
+  int playlistPages = 1;
+  int playlistsPerPage = 1;
+
+  /// 已请求过的歌单页码（自动翻页断言用）。
+  final List<int> playlistPageCalls = [];
+
   final DiscoverTrack track = const DiscoverTrack(
     sourceKey: 'wy',
     songId: '111',
@@ -66,21 +73,26 @@ class FakeDiscoverSource implements DiscoverSource {
   }
 
   @override
-  Future<DiscoverPlaylistPage> playlists(String tagId, int page) => _guard(
-        DiscoverPlaylistPage(
-          playlists: [
-            const DiscoverPlaylist(
-              id: '123',
-              name: '测试歌单',
+  Future<DiscoverPlaylistPage> playlists(String tagId, int page) {
+    playlistPageCalls.add(page);
+    final bool single = playlistPages <= 1 && playlistsPerPage <= 1;
+    return _guard(
+      DiscoverPlaylistPage(
+        playlists: [
+          for (var i = 0; i < playlistsPerPage; i++)
+            DiscoverPlaylist(
+              id: '$tagId-$page-$i',
+              name: single ? '测试歌单' : '歌单 $page-$i',
               author: '作者',
               trackCount: 2,
             ),
-          ],
-          page: page,
-          limit: 30,
-          total: 1,
-        ),
-      );
+        ],
+        page: page,
+        limit: playlistsPerPage,
+        total: playlistsPerPage * playlistPages,
+      ),
+    );
+  }
 
   @override
   Future<DiscoverPlaylistPage> searchPlaylists(String keyword, int page) =>

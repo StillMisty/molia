@@ -23,7 +23,7 @@ enum _LibraryTab { search, leaderboards, playlists }
 ///   搜索、热榜、歌单全部跟随同一个渠道；
 /// - 渠道不支持某个 tab 时自动隐藏（脚本扩展源 / any-listen 无热榜/歌单；
 ///   无脚本时内置平台不可搜索）；
-/// - 个人内容（播放历史 / 我的列表 / 导入收藏夹）在收藏页。
+/// - 个人内容（播放历史 / 我的列表 / 导入收藏）在收藏页。
 class Library extends StatefulWidget {
   const Library({super.key});
 

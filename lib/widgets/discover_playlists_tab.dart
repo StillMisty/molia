@@ -11,6 +11,7 @@ import '../l10n/app_localizations.dart';
 import '../pages/discover_tracks_page.dart';
 import '../providers/discover_provider.dart';
 import '../providers/paged_list_controller.dart';
+import 'app_search_bar.dart';
 import 'library_cover.dart';
 
 AppLocalizations _l10n(BuildContext context) =>
@@ -29,6 +30,9 @@ class _DiscoverPlaylistsTabState extends State<DiscoverPlaylistsTab>
   final TextEditingController _searchController = TextEditingController();
   final FocusNode _searchFocusNode = FocusNode();
 
+  /// 歌单列表滚动控制器（常显滚动条，支持手拖定位）。
+  final ScrollController _scrollController = ScrollController();
+
   List<DiscoverTag> _hotTags = const [];
   List<DiscoverTagCategory> _tagCategories = const [];
 
@@ -38,6 +42,9 @@ class _DiscoverPlaylistsTabState extends State<DiscoverPlaylistsTab>
 
   /// 当前已加载数据的平台（切换平台时重置并重载）。
   String? _loadedSourceKey;
+
+  /// 歌单卡片固定行高：卡片 72（封面 56 + 上下 8）+ 8 间距。
+  static const double _playlistRowExtent = 80;
 
   @override
   bool get wantKeepAlive => true;
@@ -77,7 +84,24 @@ class _DiscoverPlaylistsTabState extends State<DiscoverPlaylistsTab>
     _paged.dispose();
     _searchController.dispose();
     _searchFocusNode.dispose();
+    _scrollController.dispose();
     super.dispose();
+  }
+
+  /// 触底 400px 内自动加载下一页（失败后不自动重试，保留按钮兜底）。
+  bool _onScroll(ScrollNotification notification) {
+    if (notification.metrics.axis != Axis.vertical) return false;
+    if (notification.metrics.pixels >=
+        notification.metrics.maxScrollExtent - 400) {
+      _maybeLoadMore();
+    }
+    return false;
+  }
+
+  void _maybeLoadMore() {
+    if (_paged.isLoading || _paged.isLoadingMore || _paged.failed) return;
+    if (!_paged.hasMore) return;
+    unawaited(_paged.loadMore());
   }
 
   DiscoverProvider get _provider => context.read<DiscoverProvider>();
@@ -115,36 +139,6 @@ class _DiscoverPlaylistsTabState extends State<DiscoverPlaylistsTab>
   Future<void> _reload() async {
     _paged.reset();
     await _paged.loadFirstPage();
-  }
-
-  /// 从歌单列表直接导入：拉取详情并存入本地同名列表。
-  Future<void> _importPlaylist(DiscoverPlaylist playlist) async {
-    final l10n = _l10n(context);
-    try {
-      final detail = await _provider.loadPlaylistDetail(playlist.id, 1);
-      if (!mounted) return;
-      final result = await _provider.importDetailToLibrary(
-        detail,
-        fallbackName: playlist.name,
-      );
-      if (!mounted) return;
-      if (result.total == 0) {
-        M3ESnackbar.show(context, message: l10n.playlistImportEmpty);
-        return;
-      }
-      M3ESnackbar.show(
-        context,
-        message: result.added > 0
-            ? l10n.libraryImportSuccess(result.added)
-            : l10n.playlistAlreadyContains,
-      );
-    } on DiscoverFailure {
-      if (!mounted) return;
-      M3ESnackbar.show(context, message: l10n.discoverLoadFailed);
-    } catch (_) {
-      if (!mounted) return;
-      M3ESnackbar.show(context, message: l10n.discoverLoadFailed);
-    }
   }
 
   void _selectTag(String tagId) {
@@ -286,62 +280,71 @@ class _DiscoverPlaylistsTabState extends State<DiscoverPlaylistsTab>
     }
     final l10n = _l10n(context);
     final theme = Theme.of(context);
-    return SingleChildScrollView(
-      padding: const EdgeInsets.only(top: 12, bottom: 32),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          // 歌单（搜索 / 链接打开）
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16),
-            child: Row(
-              children: [
-                Icon(Icons.queue_music_rounded,
-                    size: 20, color: theme.colorScheme.primary),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: Text(
-                    l10n.discoverPlaylists,
-                    // 标题用正文色，强调色只给图标。
-                    style: theme.textTheme.titleMedium
-                        ?.copyWith(color: theme.colorScheme.onSurface),
-                  ),
+    return NotificationListener<ScrollNotification>(
+      onNotification: _onScroll,
+      child: Scrollbar(
+        controller: _scrollController,
+        thumbVisibility: true,
+        interactive: true,
+        child: CustomScrollView(
+          controller: _scrollController,
+          slivers: [
+            SliverToBoxAdapter(
+              child: Padding(
+                padding: const EdgeInsets.only(top: 12),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    // 歌单（搜索 / 链接打开）
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 16),
+                      child: Row(
+                        children: [
+                          Icon(Icons.queue_music_rounded,
+                              size: 20, color: theme.colorScheme.primary),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Text(
+                              l10n.discoverPlaylists,
+                              // 标题用正文色，强调色只给图标。
+                              style: theme.textTheme.titleMedium
+                                  ?.copyWith(color: theme.colorScheme.onSurface),
+                            ),
+                          ),
+                          M3EIconButton(
+                            variant: M3EIconButtonVariant.standard,
+                            tooltip: l10n.discoverOpenPlaylist,
+                            icon: const Icon(Icons.link_rounded),
+                            onPressed: _openLinkDialog,
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 16),
+                      child: AppSearchBar(
+                        controller: _searchController,
+                        focusNode: _searchFocusNode,
+                        hintText: l10n.discoverPlaylistSearchHint,
+                        onChanged: (value) {
+                          // 提交式搜索：仅当清空（清除键或手动删空）时回到全部歌单。
+                          if (value.trim().isEmpty) _clearSearch();
+                        },
+                        onSubmitted: _submitSearch,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    _buildTagChips(l10n),
+                    const SizedBox(height: 8),
+                  ],
                 ),
-                M3EIconButton(
-                  variant: M3EIconButtonVariant.standard,
-                  tooltip: l10n.discoverOpenPlaylist,
-                  icon: const Icon(Icons.link_rounded),
-                  onPressed: _openLinkDialog,
-                ),
-              ],
+              ),
             ),
-          ),
-          const SizedBox(height: 8),
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16),
-            child: M3ETextField(
-              controller: _searchController,
-              focusNode: _searchFocusNode,
-              placeholder: l10n.discoverPlaylistSearchHint,
-              leading: const Icon(Icons.search_rounded),
-              trailing: _searchController.text.isNotEmpty
-                  ? M3EIconButton(
-                      variant: M3EIconButtonVariant.standard,
-                      icon: const Icon(Icons.clear_rounded),
-                      tooltip: l10n.clearSearch,
-                      onPressed: _clearSearch,
-                    )
-                  : null,
-              onChanged: (_) => setState(() {}),
-              onSubmitted: _submitSearch,
-              textInputAction: TextInputAction.search,
-            ),
-          ),
-          const SizedBox(height: 8),
-          _buildTagChips(l10n),
-          const SizedBox(height: 8),
-          _buildPlaylistArea(l10n, theme),
-        ],
+            ..._buildPlaylistSlivers(l10n, theme),
+            const SliverToBoxAdapter(child: SizedBox(height: 32)),
+          ],
+        ),
       ),
     );
   }
@@ -391,63 +394,82 @@ class _DiscoverPlaylistsTabState extends State<DiscoverPlaylistsTab>
     );
   }
 
-  Widget _buildPlaylistArea(AppLocalizations l10n, ThemeData theme) {
+  List<Widget> _buildPlaylistSlivers(AppLocalizations l10n, ThemeData theme) {
     final items = _paged.items;
     if (_paged.isLoading && items.isEmpty) {
-      return const Padding(
-        padding: EdgeInsets.symmetric(vertical: 24),
-        child: Center(child: M3ELoadingIndicator()),
-      );
-    }
-    if (_paged.failed) {
-      return Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
-        child: Row(
-          children: [
-            Expanded(
-              child: Text(
-                l10n.discoverLoadFailed,
-                style: theme.textTheme.bodyMedium?.copyWith(
-                  color: theme.colorScheme.onSurfaceVariant,
-                ),
-              ),
-            ),
-            M3EButton.text(
-              onPressed: _reload,
-              child: Text(l10n.discoverRetry),
-            ),
-          ],
-        ),
-      );
-    }
-    if (items.isEmpty) {
-      return Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
-        child: Text(
-          _query.isEmpty ? l10n.discoverNoContent : l10n.discoverSearchEmpty,
-          style: theme.textTheme.bodyMedium?.copyWith(
-            color: theme.colorScheme.onSurfaceVariant,
+      return const [
+        SliverToBoxAdapter(
+          child: Padding(
+            padding: EdgeInsets.symmetric(vertical: 24),
+            child: Center(child: M3ELoadingIndicator()),
           ),
         ),
-      );
+      ];
     }
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 16),
-      child: Column(
-        children: [
-          for (final playlist in items)
-            _playlistCard(theme, l10n, playlist),
-          if (_paged.hasMore)
-            Padding(
-              padding: const EdgeInsets.only(top: 4),
+    if (_paged.failed) {
+      return [
+        SliverToBoxAdapter(
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+            child: Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    l10n.discoverLoadFailed,
+                    style: theme.textTheme.bodyMedium?.copyWith(
+                      color: theme.colorScheme.onSurfaceVariant,
+                    ),
+                  ),
+                ),
+                M3EButton.text(
+                  onPressed: _reload,
+                  child: Text(l10n.discoverRetry),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ];
+    }
+    if (items.isEmpty) {
+      return [
+        SliverToBoxAdapter(
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+            child: Text(
+              _query.isEmpty ? l10n.discoverNoContent : l10n.discoverSearchEmpty,
+              style: theme.textTheme.bodyMedium?.copyWith(
+                color: theme.colorScheme.onSurfaceVariant,
+              ),
+            ),
+          ),
+        ),
+      ];
+    }
+    return [
+      SliverPadding(
+        padding: const EdgeInsets.symmetric(horizontal: 16),
+        sliver: SliverFixedExtentList.builder(
+          // 固定行高（卡片 72 + 8 间距）：滚动条拇指与拖动定位精确。
+          itemExtent: _playlistRowExtent,
+          itemCount: items.length,
+          itemBuilder: (context, index) =>
+              _playlistCard(theme, l10n, items[index]),
+        ),
+      ),
+      if (_paged.hasMore)
+        SliverToBoxAdapter(
+          child: Padding(
+            padding: const EdgeInsets.only(top: 4),
+            child: Center(
               child: M3EButton.text(
                 onPressed: _paged.isLoadingMore ? null : _paged.loadMore,
                 child: Text(l10n.discoverLoadMore),
               ),
             ),
-        ],
-      ),
-    );
+          ),
+        ),
+    ];
   }
 
   Widget _playlistCard(
@@ -462,47 +484,45 @@ class _DiscoverPlaylistsTabState extends State<DiscoverPlaylistsTab>
     ].join(' · ');
     return Padding(
       padding: const EdgeInsets.only(bottom: 8),
-      child: M3ECard(
-        variant: M3ECardVariant.filled,
-        onPressed: () => _openPlaylist(playlist),
-        padding: const EdgeInsets.all(8),
-        child: Row(
-          children: [
-            LibraryCoverThumb(url: playlist.coverUrl, size: 56),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    playlist.name,
-                    style: theme.textTheme.titleSmall,
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                  if (subtitle.isNotEmpty) ...[
-                    const SizedBox(height: 2),
+      child: SizedBox(
+        height: 72,
+        child: M3ECard(
+          variant: M3ECardVariant.filled,
+          onPressed: () => _openPlaylist(playlist),
+          padding: const EdgeInsets.all(8),
+          child: Row(
+            children: [
+              LibraryCoverThumb(url: playlist.coverUrl, size: 56),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
                     Text(
-                      subtitle,
-                      style: theme.textTheme.bodySmall?.copyWith(
-                        color: theme.colorScheme.onSurfaceVariant,
-                      ),
+                      playlist.name,
+                      style: theme.textTheme.titleSmall,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                     ),
+                    if (subtitle.isNotEmpty) ...[
+                      const SizedBox(height: 2),
+                      Text(
+                        subtitle,
+                        style: theme.textTheme.bodySmall?.copyWith(
+                          color: theme.colorScheme.onSurfaceVariant,
+                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ],
                   ],
-                ],
+                ),
               ),
-            ),
-            M3EIconButton(
-              variant: M3EIconButtonVariant.standard,
-              tooltip: l10n.playlistImportToMine,
-              icon: const Icon(Icons.download_rounded),
-              onPressed: () => unawaited(_importPlaylist(playlist)),
-            ),
-            Icon(Icons.chevron_right_rounded,
-                color: theme.colorScheme.onSurfaceVariant),
-          ],
+              Icon(Icons.chevron_right_rounded,
+                  color: theme.colorScheme.onSurfaceVariant),
+            ],
+          ),
         ),
       ),
     );

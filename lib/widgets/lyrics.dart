@@ -20,11 +20,19 @@ import 'lyrics_selection_page.dart';
 import 'playback_selectors.dart';
 
 class LyricsWidget extends StatefulWidget {
-  const LyricsWidget({super.key, this.quickActionsEnabled = true});
+  const LyricsWidget({
+    super.key,
+    this.quickActionsEnabled = true,
+    this.controller,
+  });
 
   /// 是否显示歌词快捷操作栏：播放页收起态（歌词区展开）传 true；
   /// 展开态操作栏会与底部控制区重叠，传 false 隐藏。
   final bool quickActionsEnabled;
+
+  /// 外部滚动控制器：宿主用来判断歌词是否已滚到顶部（「到顶继续下拉」
+  /// 切换播放器）。为空时自建并自行释放。
+  final ScrollController? controller;
 
   @override
   State<LyricsWidget> createState() => _LyricsWidgetState();
@@ -34,7 +42,8 @@ class _LyricsWidgetState extends State<LyricsWidget>
     with AutomaticKeepAliveClientMixin<LyricsWidget> {
   List<LyricLine> _lyrics = [];
   String? _lastTrackId;
-  final ScrollController _scrollController = ScrollController();
+  late final ScrollController _scrollController =
+      widget.controller ?? ScrollController();
   final GlobalKey _listViewKey = GlobalKey();
   bool _autoScroll = true;
   bool _isCopyLyricsMode = false;
@@ -76,7 +85,10 @@ class _LyricsWidgetState extends State<LyricsWidget>
   void dispose() {
     _userScrollSuppressionTimer?.cancel();
     _quickActionsHideTimer?.cancel();
-    _scrollController.dispose();
+    // 外部控制器由宿主释放。
+    if (widget.controller == null) {
+      _scrollController.dispose();
+    }
     super.dispose();
   }
 
@@ -214,8 +226,8 @@ class _LyricsWidgetState extends State<LyricsWidget>
     final lyricsProvider =
         Provider.of<LyricsProvider>(context, listen: false);
     final snapshot = provider.snapshot;
-    final nextTrack =
-        snapshot.next ?? (snapshot.upcoming.isNotEmpty ? snapshot.upcoming.first : null);
+    final nextTrack = snapshot.next ??
+        (snapshot.upNext.isNotEmpty ? snapshot.upNext.first : null);
 
     if (nextTrack == null) {
       return;

@@ -76,6 +76,7 @@ class FakePlaybackBackend implements PlaybackBackend {
       currentIndex: current.currentIndex,
       next: current.next,
       upcoming: current.upcoming,
+      upNext: current.upNext,
       history: current.history,
       isPlaying: current.isPlaying,
       isLoading: current.isLoading,

@@ -98,13 +98,9 @@ void main() {
     await tester.pump(const Duration(milliseconds: 600));
   }
 
-  /// 当前封面（唯一带横向拖动 + 点击手势的封面）。
-  Finder mainCoverGesture() => find.byWidgetPredicate(
-        (widget) =>
-            widget is GestureDetector &&
-            widget.onHorizontalDragStart != null &&
-            widget.onTap != null,
-      );
+  /// 封面区手势宿主（唯一带横向拖动识别器的 GestureDetector；点击由
+  /// 中心封面卡片自己承接）。
+  Finder coverSwipeHost() => find.byKey(Player.artworkSwipeHostKey);
 
   /// 邻位封面（可点击切歌；child 是封面卡 SizedBox）。
   Finder sideCoverGesture() => find.byWidgetPredicate(
@@ -133,7 +129,7 @@ void main() {
     expect(slider.onChangeEnd, isNotNull);
     expect(slider.value, 5000);
     expect(slider.max, 30000);
-    expect(mainCoverGesture(), findsOneWidget);
+    expect(coverSwipeHost(), findsOneWidget);
   });
 
   testWidgets('点击封面播放/暂停；点击邻位封面切歌', (tester) async {
@@ -148,7 +144,7 @@ void main() {
     await pumpPlayer(tester, expand: expand);
 
     // 中间封面：播放中 → 点击暂停。
-    await tester.tap(mainCoverGesture());
+    await tester.tap(coverSwipeHost());
     await tester.pump();
     expect(backend.calls, contains('pause'));
 

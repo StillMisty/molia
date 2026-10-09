@@ -599,6 +599,8 @@ class PlaybackProvider extends ChangeNotifier {
           ? session.tracks[session.index + 1]
           : null,
       upcoming: List.unmodifiable(session.tracks.sublist(session.index + 1)),
+      // 恢复态没有洗牌顺序可还原：upNext 按队列顺序近似（与 upcoming 同源）。
+      upNext: List.unmodifiable(session.tracks.sublist(session.index + 1)),
       history: List.unmodifiable(session.tracks.sublist(0, session.index)),
       isPlaying: false,
       isLoading: false,
@@ -771,7 +773,8 @@ class PlaybackProvider extends ChangeNotifier {
     final live = _facade.snapshot.value;
     final currentTrack = live.current;
     final nextTrack = live.next;
-    final upcomingTracks = live.upcoming;
+    // 预加载实际播放顺序（shuffle 为洗牌排列剩余），避免随机模式下白下封面。
+    final upcomingTracks = live.upNext;
 
     Future.microtask(() {
       if (!context.mounted) return;

@@ -23,6 +23,9 @@ class SearchSection extends StatefulWidget {
 }
 
 class _SearchSectionState extends State<SearchSection> {
+  /// 结果区滚动控制器（常显滚动条，支持手拖定位）。
+  final ScrollController _resultsScrollController = ScrollController();
+
   @override
   void initState() {
     super.initState();
@@ -30,6 +33,7 @@ class _SearchSectionState extends State<SearchSection> {
 
   @override
   void dispose() {
+    _resultsScrollController.dispose();
     super.dispose();
   }
 
@@ -63,35 +67,43 @@ class _SearchSectionState extends State<SearchSection> {
             // Error banner with a retry action
             if (error != null) _buildErrorView(l10n, searchProvider),
 
-            // Search results using CustomScrollView for potential future sliver integration
+            // 搜索结果 using CustomScrollView for potential future sliver integration
             Expanded(
+              child: Scrollbar(
+                controller: _resultsScrollController,
+                thumbVisibility: true,
+                interactive: true,
                 child: CustomScrollView(
-              slivers: [
-                if (results.isEmpty &&
-                    !searchProvider.isSearching &&
-                    error == null)
-                  SliverFillRemaining(
-                    hasScrollBody: false,
-                    child: _buildEmptyResultsView(l10n, searchProvider),
-                  )
-                else
-                  SliverPadding(
-                    padding:
-                        EdgeInsets.symmetric(horizontal: horizontalPadding),
-                    sliver: _SearchResultsGrid(
-                      items: results,
-                      gridCrossAxisCount: gridCrossAxisCount,
-                      onItemTap: (item) => searchProvider.playItem(item),
-                    ),
-                  ),
+                  controller: _resultsScrollController,
+                  slivers: [
+                    if (results.isEmpty &&
+                        !searchProvider.isSearching &&
+                        error == null)
+                      SliverFillRemaining(
+                        hasScrollBody: false,
+                        child: _buildEmptyResultsView(l10n, searchProvider),
+                      )
+                    else
+                      SliverPadding(
+                        padding: EdgeInsets.symmetric(
+                            horizontal: horizontalPadding),
+                        sliver: _SearchResultsGrid(
+                          items: results,
+                          gridCrossAxisCount: gridCrossAxisCount,
+                          onItemTap: (item) => searchProvider.playItem(item),
+                        ),
+                      ),
 
-                // 音源搜索分页：列表尾部按钮加载下一页
-                if (results.isNotEmpty &&
-                    searchProvider.hasSelectedSource &&
-                    (searchProvider.hasMore || searchProvider.isLoadingMore))
-                  _buildLoadMoreFooter(l10n, searchProvider),
-              ],
-            )),
+                    // 音源搜索分页：列表尾部按钮加载下一页
+                    if (results.isNotEmpty &&
+                        searchProvider.hasSelectedSource &&
+                        (searchProvider.hasMore ||
+                            searchProvider.isLoadingMore))
+                      _buildLoadMoreFooter(l10n, searchProvider),
+                  ],
+                ),
+              ),
+            ),
           ],
         );
       },

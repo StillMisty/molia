@@ -134,42 +134,82 @@ void main() {
     await tester.pump(const Duration(milliseconds: 50));
   });
 
-  testWidgets('展开只在播放器区域；队列列表滑到顶下拉收起', (tester) async {
+  testWidgets('内容页到顶继续下拉：收缩→展开、展开→收起（队列/歌词都生效）', (tester) async {
     await pumpNowPlaying(tester);
 
-    // 先收起。
+    // 先收起（播放器区域下拉），默认在歌词页。
     await dragPlayer(tester, 300);
     expect(playerHeight(tester), lessThan(100));
 
-    // 歌词页上滑只滚动歌词，不展开。
+    // 上滑（内容滚动方向）不参与切换。
     await tester.dragFrom(
       tester.getCenter(find.byType(PageView)),
       const Offset(0, -160),
     );
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 400));
-    expect(playerHeight(tester), lessThan(100), reason: '歌词页不参与展开');
+    expect(playerHeight(tester), lessThan(100), reason: '上滑滚动不触发展开');
 
-    // 切到队列页：列表上滑同样不展开（展开只在播放器区域）。
-    await selectQueuePage(tester);
-    await tester.dragFrom(
-      tester.getCenter(find.byType(PageView)),
-      const Offset(0, -160),
-    );
-    await tester.pump();
-    await tester.pump(const Duration(milliseconds: 400));
-    expect(playerHeight(tester), lessThan(100), reason: '队列列表不再触发展开');
-
-    // 展开后：队列列表已到顶，继续下滑 = 收起。
-    await dragPlayer(tester, -240);
-    expect(playerHeight(tester), greaterThan(300));
+    // 歌词页已到顶，继续下拉 = 展开。
     await tester.dragFrom(
       tester.getCenter(find.byType(PageView)),
       const Offset(0, 140),
     );
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 400));
-    expect(playerHeight(tester), lessThan(100), reason: '列表滑到顶下拉应收起');
+    expect(playerHeight(tester), greaterThan(300), reason: '歌词页到顶下拉应展开');
+
+    // 展开态：歌词页到顶继续下拉 = 收起。
+    await tester.dragFrom(
+      tester.getCenter(find.byType(PageView)),
+      const Offset(0, 140),
+    );
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 400));
+    expect(playerHeight(tester), lessThan(100), reason: '歌词页到顶下拉应收起');
+
+    // 切到队列页：收缩态到顶下拉 = 展开。
+    await selectQueuePage(tester);
+    await tester.dragFrom(
+      tester.getCenter(find.byType(PageView)),
+      const Offset(0, 140),
+    );
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 400));
+    expect(playerHeight(tester), greaterThan(300), reason: '队列到顶下拉应展开');
+
+    // 展开态：队列页到顶下拉 = 收起（原行为）。
+    await tester.dragFrom(
+      tester.getCenter(find.byType(PageView)),
+      const Offset(0, 140),
+    );
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 400));
+    expect(playerHeight(tester), lessThan(100), reason: '队列到顶下拉应收起');
+
+    // 通知节流计时器跑完，避免 pending timer 报错。
+    await tester.pump(const Duration(milliseconds: 50));
+  });
+
+  testWidgets('点已激活圆点：收缩↔展开切换', (tester) async {
+    await pumpNowPlaying(tester);
+    expect(playerHeight(tester), greaterThan(300));
+
+    final dots = find.descendant(
+      of: find.byType(LyricsQueueDots),
+      matching: find.byType(GestureDetector),
+    );
+    // 默认激活歌词圆点（第二个）：再点一次 = 收起。
+    await tester.tap(dots.at(1));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 400));
+    expect(playerHeight(tester), lessThan(100), reason: '点激活圆点应收起');
+
+    // 再点 = 展开。
+    await tester.tap(dots.at(1));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 400));
+    expect(playerHeight(tester), greaterThan(300), reason: '再点激活圆点应展开');
 
     // 通知节流计时器跑完，避免 pending timer 报错。
     await tester.pump(const Duration(milliseconds: 50));

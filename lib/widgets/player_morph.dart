@@ -82,6 +82,8 @@ class PlayerMorphGeometry {
 /// 前 [flightPortion] 行程完成几何移动并精确落在目标端封面矩形上；宿主在
 /// 到达的那一帧同时亮出目标端真身并移除本副本。不做「副本淡出 + 真身淡入」
 /// 的交叉过渡——两者时间不可能完全对齐，尾段会出现重影与亮度下陷（闪动）。
+/// 圆角/描边/阴影同样精确匹配两端：按「播放页端进度」插值，双向飞行在
+/// 起点（与真身同帧同形）和落点（真身亮出前完全同款）都不会跳变。
 class PlayerMorphFlight extends StatelessWidget {
   const PlayerMorphFlight({
     super.key,
@@ -91,6 +93,13 @@ class PlayerMorphFlight extends StatelessWidget {
 
   /// 几何飞行占比；到达后宿主移除副本并显示目标端真身。
   static const double flightPortion = 0.75;
+
+  /// 顶栏端封面外观：圆角 8、无描边阴影（对应顶栏 32×32 封面真身）。
+  static const double _barRadius = 8;
+
+  /// 播放页端封面外观：外圆角 18、1px 描边 + 柔和阴影
+  /// （对应 `player.dart::_buildCoverCard` 的大封面真身）。
+  static const double _pageRadius = 18;
 
   final Animation<double> animation;
   final PlayerMorphGeometry geometry;
@@ -129,29 +138,38 @@ class PlayerMorphFlight extends StatelessWidget {
     return Positioned.fromRect(rect: rect, child: child);
   }
 
-  /// 封面副本：描边/阴影与播放页真身同款并按 t 插值（顶栏端 32×32、圆角 8、
-  /// 无描边阴影），落位瞬间不出现描边「弹出」。
+  /// 封面副本：圆角/描边/阴影与两端真身同款并按飞行方向插值。
+  ///
+  /// [t] 按飞行方向定义（0 = 起点、1 = 终点），但外观必须按「播放页端
+  /// 进度」插值：反向飞行（播放页 → 顶栏）起飞帧 t=0 在播放页端，若仍按
+  /// t 插值，大封面圆角会从 18 瞬间掉到 8（看起来圆角消失），又在顶栏端
+  /// 以 18 落位（与顶栏真身 8 不匹配）。
   Widget _cover(BuildContext context, String? url, double t) {
     final scheme = Theme.of(context).colorScheme;
-    final radius = lerpDouble(8, 18, t)!;
+    final double pageT = geometry.toPage ? t : 1 - t;
+    final double radius = lerpDouble(_barRadius, _pageRadius, pageT)!;
+    // 顶栏真身没有 1px 描边，图片裁剪半径即外半径；播放页真身描边内缘
+    // 收进 1px（裁剪 17）。描边进度恰好等于裁剪收进量：两端落位都精确
+    // 重合，飞行中图片最多只探入半透明的描边带。
+    final double clipRadius = radius - pageT;
     return Container(
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(radius),
         border: Border.all(
-          color: scheme.outlineVariant.withValues(alpha: t),
+          color: scheme.outlineVariant.withValues(alpha: pageT),
           width: 1,
         ),
         boxShadow: [
           BoxShadow(
-            color: scheme.shadow.withValues(alpha: 0.28 * t),
-            blurRadius: 24 * t,
-            offset: Offset(0, 10 * t),
+            color: scheme.shadow.withValues(alpha: 0.28 * pageT),
+            blurRadius: 24 * pageT,
+            offset: Offset(0, 10 * pageT),
           ),
         ],
       ),
       child: MorphCover(
         url: url,
-        borderRadius: BorderRadius.circular(radius - 1),
+        borderRadius: BorderRadius.circular(clipRadius),
       ),
     );
   }
@@ -211,18 +229,21 @@ class _MorphCoverState extends State<MorphCover> {
   @override
   Widget build(BuildContext context) {
     final provider = _provider;
-    if (provider == null) return _fallback(context);
+    // 回退图（无封面 / 加载中 / 加载失败）也必须裁剪：两端真身都是圆角卡，
+    // 回退时方角会在飞行起点与落点造成「圆角消失」的跳变。
     return ClipRRect(
       borderRadius: widget.borderRadius,
-      child: Image(
-        image: provider,
-        fit: BoxFit.cover,
-        frameBuilder: (context, child, frame, wasSynchronouslyLoaded) {
-          if (wasSynchronouslyLoaded || frame != null) return child;
-          return _fallback(context);
-        },
-        errorBuilder: (_, __, ___) => _fallback(context),
-      ),
+      child: provider == null
+          ? _fallback(context)
+          : Image(
+              image: provider,
+              fit: BoxFit.cover,
+              frameBuilder: (context, child, frame, wasSynchronouslyLoaded) {
+                if (wasSynchronouslyLoaded || frame != null) return child;
+                return _fallback(context);
+              },
+              errorBuilder: (_, __, ___) => _fallback(context),
+            ),
     );
   }
 

@@ -72,6 +72,12 @@ class _FakeService extends LocalPlaybackService {
   }
 
   @override
+  List<SourceTrack> get upNextTracks {
+    if (!hasTrack) return const [];
+    return List.unmodifiable(_queue.sublist(_index + 1));
+  }
+
+  @override
   List<SourceTrack> get historyTracks => const [];
 
   void seed(
@@ -195,7 +201,7 @@ void main() {
     service.dispose();
   });
 
-  test('状态映射：current/queue/upcoming/duration/context/error', () {
+  test('状态映射：current/queue/upcoming/upNext/duration/context/error', () {
     final a = _source('a');
     final b = _source('b');
     service.seed(
@@ -213,6 +219,7 @@ void main() {
     expect(snapshot.currentIndex, 0);
     expect(snapshot.next?.id.id, 'b');
     expect(snapshot.upcoming.map((t) => t.id.id), ['b']);
+    expect(snapshot.upNext.map((t) => t.id.id), ['b']);
     expect(snapshot.history, isEmpty);
     expect(snapshot.isPlaying, isTrue);
     expect(snapshot.duration, const Duration(seconds: 42));

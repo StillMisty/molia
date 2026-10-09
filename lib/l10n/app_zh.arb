@@ -212,7 +212,7 @@
   "recentlyPlayedEmpty": "还没有最近播放内容。播放一些歌曲后，最近播放的专辑/歌单会显示在这里。",
   "libraryRecentPlays": "最近播放",
   "libraryPlaylists": "我的列表",
-  "libraryImportFavorites": "导入收藏夹",
+  "libraryImportFavorites": "导入收藏",
   "libraryImportFavoritesSubtitle": "从 LX Music 导出的收藏夹文件（.lxmc）导入",
   "libraryImportSuccess": "已导入 {count} 首",
   "libraryImportFailed": "导入失败：{reason}",

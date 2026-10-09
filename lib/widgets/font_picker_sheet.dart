@@ -3,6 +3,7 @@ import 'package:material_ui/material_ui.dart';
 
 import '../l10n/app_localizations.dart';
 import '../services/system_fonts_service.dart';
+import 'app_search_bar.dart';
 
 /// AppLocalizations 查找：与收藏页同一约定，测试未注册 delegate 时回退中文。
 AppLocalizations _l10n(BuildContext context) =>
@@ -126,10 +127,9 @@ class _FontPickerSheetState extends State<_FontPickerSheet> {
           if (families != null && families.length > 15)
             Padding(
               padding: const EdgeInsets.fromLTRB(24, 0, 24, 8),
-              child: M3ETextField(
+              child: AppSearchBar(
                 controller: _searchController,
-                placeholder: l10n.fontPickerSearchHint,
-                showClearButton: true,
+                hintText: l10n.fontPickerSearchHint,
                 onChanged: (value) =>
                     setState(() => _query = value.trim().toLowerCase()),
               ),

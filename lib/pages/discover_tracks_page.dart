@@ -45,10 +45,19 @@ class _DiscoverTracksPageState extends State<DiscoverTracksPage> {
   bool _loading = true;
   bool _failed = false;
 
+  /// 曲目区滚动控制器（常显滚动条，支持手拖定位）。
+  final ScrollController _listController = ScrollController();
+
   @override
   void initState() {
     super.initState();
     _load();
+  }
+
+  @override
+  void dispose() {
+    _listController.dispose();
+    super.dispose();
   }
 
   Future<void> _load() async {
@@ -126,13 +135,6 @@ class _DiscoverTracksPageState extends State<DiscoverTracksPage> {
               icon: const Icon(Icons.download_rounded),
               onPressed: _importPlaylist,
             ),
-          if (detail != null && detail.tracks.isNotEmpty)
-            M3EIconButton(
-              variant: M3EIconButtonVariant.standard,
-              tooltip: _l10n(context).playAll,
-              icon: const Icon(Icons.play_arrow_rounded),
-              onPressed: () => _playFrom(0),
-            ),
         ],
       ),
       body: _buildBody(context, detail),
@@ -172,19 +174,25 @@ class _DiscoverTracksPageState extends State<DiscoverTracksPage> {
         ),
       );
     }
-    return ListView.builder(
-      padding: const EdgeInsets.symmetric(vertical: 8),
-      itemCount: detail.tracks.length + 1,
-      itemBuilder: (context, index) {
-        if (index == 0) {
-          return _buildHeader(context, detail);
-        }
-        final trackIndex = index - 1;
-        return DiscoverTrackTile(
-          track: detail.tracks[trackIndex],
-          onTap: () => _playFrom(trackIndex),
-        );
-      },
+    return Scrollbar(
+      controller: _listController,
+      thumbVisibility: true,
+      interactive: true,
+      child: ListView.builder(
+        controller: _listController,
+        padding: const EdgeInsets.symmetric(vertical: 8),
+        itemCount: detail.tracks.length + 1,
+        itemBuilder: (context, index) {
+          if (index == 0) {
+            return _buildHeader(context, detail);
+          }
+          final trackIndex = index - 1;
+          return DiscoverTrackTile(
+            track: detail.tracks[trackIndex],
+            onTap: () => _playFrom(trackIndex),
+          );
+        },
+      ),
     );
   }
 

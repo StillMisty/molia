@@ -205,6 +205,9 @@ class LocalPlaybackBackend implements PlaybackBackend {
         upcoming.add(queue[i]);
       }
     }
+    final upNext = <Track>[
+      for (final source in _service.upNextTracks) _toTrack(source),
+    ];
 
     final duration = current == null
         ? Duration.zero
@@ -223,6 +226,7 @@ class LocalPlaybackBackend implements PlaybackBackend {
       currentIndex: index,
       next: nextSource == null ? null : _toTrack(nextSource),
       upcoming: List<Track>.unmodifiable(upcoming),
+      upNext: List<Track>.unmodifiable(upNext),
       history: List<Track>.unmodifiable(history),
       isPlaying: _service.isPlaying,
       isLoading: _service.isLoading,

@@ -1,118 +1,125 @@
 import 'package:material_3_expressive/material_3_expressive.dart';
 import 'package:material_ui/material_ui.dart';
-import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
+
 import '../domain/models/track.dart';
-import '../providers/playback_provider.dart';
 import '../l10n/app_localizations.dart';
-import 'app_network_image.dart';
-import 'molia_mark.dart';
+import '../providers/playback_provider.dart';
+import 'track_row.dart';
 
-/// 「正在播放」行所需的最小信息。
+/// 播放队列：只列出当前曲目之后的「接下来」。
 ///
-/// record（值语义）而非 Map：`context.select` 返回 Map/List 引用会因每次
-/// 通知都是新对象而失效，导致无关 tick 也重建整个队列。
-typedef _NowPlayingInfo = ({
-  String name,
-  String artist,
-  String? coverUrl,
-  bool isPlaying,
-});
-
-/// 播放队列：顶部「正在播放」高亮行 + 「接下来」列表。
+/// 当前播放曲目由上方播放器承载（封面/标题/进度），列表里不再重复一行。
+/// 懒加载：`SliverFixedExtentList` + [TrackRow] 固定行高，队列再长也只构建
+/// 视口附近的行、只请求视口内的封面；固定 extent 让滚动条拇指尺寸与拖动
+/// 定位精确（`interactive` + `thumbVisibility`，可手按住拖动）。
 ///
-/// 恢复态（冷启动未真正加载）同样可用：当前曲目来自会话快照，
-/// 点击「接下来」条目会从该曲目恢复播放。
+/// 恢复态（冷启动未真正加载）同样可用：点击「接下来」条目会从该曲目恢复播放。
 class QueueDisplay extends StatelessWidget {
-  const QueueDisplay({super.key});
+  const QueueDisplay({
+    super.key,
+    required this.controller,
+    this.topPadding = 0,
+  });
+
+  /// 队列滚动控制器（滚动条与父页面「滑到顶下拉收起」共用）。
+  final ScrollController controller;
+
+  /// 内容顶部额外留白（播放页圆点过渡带）。
+  final double topPadding;
 
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context)!;
-    final scheme = Theme.of(context).colorScheme;
-    // snapshot.upcoming 在同一快照内是稳定 List 实例：进度 tick / 无关通知
-    // 不会重建队列列表，仅队列快照变化时重建。
+    final cardRadius = M3ETheme.of(context).cardTheme.radius;
+
+    // snapshot.upNext 在同一快照内是稳定 List 实例：进度 tick / 无关通知
+    // 不会重建队列列表，仅队列快照变化时重建；shuffle 时即洗牌排列剩余。
     final currentQueue = context.select<PlaybackProvider, List<Track>>(
-      (provider) => provider.snapshot.upcoming,
+      (provider) => provider.snapshot.upNext,
     );
-    final nowPlaying =
-        context.select<PlaybackProvider, _NowPlayingInfo?>(_selectNowPlaying);
     final playbackProvider = context.read<PlaybackProvider>();
 
-    return Container(
-      padding: const EdgeInsets.fromLTRB(24, 0, 24, 16),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          if (nowPlaying != null) ...[
-            _sectionLabel(context, l10n.nowPlayingSection),
-            M3EListItem(
-              selected: true,
-              leading: _cover(context, nowPlaying.coverUrl, size: 44, radius: 10),
-              headline: nowPlaying.name,
-              supportingText: nowPlaying.artist,
-              // 播放中 = 均衡器动效图形（primary 强调）；暂停 = 暂停图形。
-              trailing: Icon(
-                nowPlaying.isPlaying
-                    ? Icons.graphic_eq_rounded
-                    : Icons.pause_rounded,
-                size: 20,
-                color: nowPlaying.isPlaying
-                    ? scheme.primary
-                    : scheme.onSurfaceVariant,
+    return Scrollbar(
+      controller: controller,
+      thumbVisibility: true,
+      interactive: true,
+      child: CustomScrollView(
+        controller: controller,
+        slivers: [
+          SliverPadding(
+            padding: EdgeInsets.fromLTRB(24, topPadding, 24, 0),
+            sliver: SliverToBoxAdapter(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  if (currentQueue.isNotEmpty)
+                    _sectionLabel(context, l10n.upNextSection),
+                ],
               ),
-              onTap: () {
-                HapticFeedback.lightImpact();
-                playbackProvider.togglePlayPause();
-              },
             ),
-            const SizedBox(height: 16),
-          ],
-          if (currentQueue.isNotEmpty) ...[
-            _sectionLabel(context, l10n.upNextSection),
-            M3ECard(
-              variant: M3ECardVariant.filled,
-              padding: EdgeInsets.zero,
-              child: ListView.separated(
-                shrinkWrap: true,
-                physics: const NeverScrollableScrollPhysics(),
-                padding: const EdgeInsets.symmetric(vertical: 4),
+          ),
+          if (currentQueue.isNotEmpty)
+            SliverPadding(
+              padding: const EdgeInsets.symmetric(horizontal: 24),
+              sliver: SliverFixedExtentList.builder(
+                // 行高 + 1px 分隔线：固定 extent，滚动条拖动一次定位。
+                itemExtent: TrackRow.extent + 1,
                 itemCount: currentQueue.length,
-                separatorBuilder: (context, index) => const M3EDivider(),
                 itemBuilder: (context, index) {
                   final track = currentQueue[index];
-                  return M3EListItem(
-                    leading: _cover(
-                      context,
-                      _coverUrlOf(track),
-                      size: 40,
-                      radius: 8,
-                    ),
-                    headline: track.title,
-                    supportingText: _artistsOf(track),
-                    trailingText: _formatDuration(track.duration),
-                    onTap: () {
-                      // 本地音源曲目：交给本地播放队列（恢复态自动续播）。
-                      playbackProvider.playLocalQueueItemById(track.id.uri);
-                    },
+                  final isLast = index == currentQueue.length - 1;
+                  return Column(
+                    children: [
+                      TrackRow(
+                        title: track.title,
+                        artist: _artistsOf(track),
+                        coverUrl: _coverUrlOf(track),
+                        coverSize: 40,
+                        radius: _trackRadius(cardRadius, index, currentQueue.length),
+                        trailingText: _formatDuration(track.duration),
+                        onTap: () {
+                          // 本地音源曲目：交给本地播放队列（恢复态自动续播）。
+                          playbackProvider
+                              .playLocalQueueItemById(track.id.uri);
+                        },
+                      ),
+                      if (!isLast) const M3EDivider(),
+                    ],
                   );
                 },
               ),
-            ),
-          ] else if (nowPlaying == null)
-            Center(
-              child: Padding(
-                padding: const EdgeInsets.all(16),
-                child: Text(
-                  l10n.currentQueueEmpty,
-                  textAlign: TextAlign.center,
+            )
+          else
+            SliverFillRemaining(
+              hasScrollBody: false,
+              child: Center(
+                child: Padding(
+                  padding: const EdgeInsets.all(16),
+                  child: Text(
+                    l10n.currentQueueEmpty,
+                    textAlign: TextAlign.center,
+                  ),
                 ),
               ),
             ),
+          const SliverToBoxAdapter(child: SizedBox(height: 16)),
         ],
       ),
     );
+  }
+
+  /// 整组首/末行取卡片圆角，中间行直角拼成一张连续卡片。
+  BorderRadius _trackRadius(double radius, int index, int count) {
+    if (count <= 1) return BorderRadius.circular(radius);
+    if (index == 0) {
+      return BorderRadius.vertical(top: Radius.circular(radius));
+    }
+    if (index == count - 1) {
+      return BorderRadius.vertical(bottom: Radius.circular(radius));
+    }
+    return BorderRadius.zero;
   }
 
   /// 分组标签：与列表行文字同一文本契约（次要信息用 onSurfaceVariant）。
@@ -125,45 +132,6 @@ class QueueDisplay extends StatelessWidget {
               color: Theme.of(context).colorScheme.onSurfaceVariant,
             ),
       ),
-    );
-  }
-
-  Widget _cover(
-    BuildContext context,
-    String? url, {
-    required double size,
-    required double radius,
-  }) {
-    return SizedBox(
-      width: size,
-      height: size,
-      child: url == null
-          ? Center(
-              child: MoliaMark(
-                size: size * 0.5,
-                color: Theme.of(context).colorScheme.onSurfaceVariant,
-              ),
-            )
-          : AppNetworkImage(
-              url: url,
-              fit: BoxFit.cover,
-              borderRadius: BorderRadius.circular(radius),
-              // 平台封面可能 403（防盗链）：统一组件内部带浏览器 UA/Referer，
-              // 失败回退音符图标。
-              fallbackIconSize: size * 0.5,
-            ),
-    );
-  }
-
-  /// 当前曲目 → 值语义 record（供 select 使用）。
-  static _NowPlayingInfo? _selectNowPlaying(PlaybackProvider provider) {
-    final track = provider.snapshot.current;
-    if (track == null) return null;
-    return (
-      name: track.title,
-      artist: _artistsOf(track),
-      coverUrl: _coverUrlOf(track),
-      isPlaying: provider.isPlaying,
     );
   }
 

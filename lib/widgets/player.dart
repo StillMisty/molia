@@ -2,7 +2,8 @@ import 'dart:async';
 import 'dart:math';
 import 'dart:ui' show lerpDouble;
 
-import 'package:flutter/foundation.dart' show ValueListenable;
+import 'package:flutter/foundation.dart' show Listenable, ValueListenable;
+import 'package:flutter/gestures.dart' show DragStartBehavior;
 import 'package:material_3_expressive/material_3_expressive.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:flutter/services.dart';
@@ -26,6 +27,10 @@ const double miniPlayerHeight = 72;
 
 class Player extends StatefulWidget {
   final bool isLargeScreen;
+
+  /// 封面区横向手势宿主 key：拖动期间 element 必须稳定（识别器不被
+  /// dispose），同时供测试精确定位这一层手势。
+  static const Key artworkSwipeHostKey = ValueKey('artworkSwipeHost');
 
   /// 顶栏共享元素控制器：为封面/歌名/进度提供锚点并接收隐藏状态。
   final PlayerMorphController? morph;
@@ -119,18 +124,37 @@ class _PlayerState extends State<Player> with TickerProviderStateMixin {
   Track? _lastNextTrack;
   int _coverDirection = 1; // 1 = 下一首（向左滑出），-1 = 上一首
 
-  /// 横向拖动跟手：拖动期间由手指驱动 [_coverController] 的进度，
-  /// 中心位显示邻位封面（松手后才真正切歌）。
+  /// 横向拖动跟手：手指驱动 [_coverController] 进度，中心位显示
+  /// [_previewTrack] 封面；松手达标才提交切歌。
   bool _draggingCover = false;
 
-  /// 手指是否仍在拖动（用于区分「拖动进行中」与「松手后等待切歌的预览」）。
+  /// 手指是否仍在拖动（区分「拖动进行中」与「松手后等待切歌的预览」）。
   bool _dragActive = false;
 
-  /// 本次拖动触发了切歌：动画已完成（画面即最终态）时不重放过渡。
-  bool _dragTriggeredSkip = false;
+  /// 松手达标已提交切歌：预览立即走完并保持，等后端把 current 换成目标；
+  /// 期间忽略新的拖动，收到曲目变化（或兜底超时）后对账复位。
+  bool _dragCommitted = false;
+
+  /// 拖动/提交期间中心位预览的目标曲目；未预览时为 null。
+  ///
+  /// 必须在拖动开始时解析并固定，不能在渲染时重读 `snapshot.next`：
+  /// 提交后后端会先推「新的下一首」，重读会让中心封面闪成再下一首。
+  Track? _previewTrack;
 
   /// 拖动切歌的兜底计时器：取链失败等情况下不能永远停在邻位预览。
   Timer? _dragPendingTimer;
+
+  /// 侧边（上一首/下一首）封面入场进度：0 = 藏在中心封面背后（透明、
+  /// 内收、放平），1 = 稳态。三处触发：滑动提交落位、顶栏⇄播放页飞行
+  /// 落位、迷你⇄完整展开落位。
+  late AnimationController _prevNeighborEntrance;
+  late AnimationController _nextNeighborEntrance;
+
+  /// 封面堆叠重绘源：中心过渡 + 两侧入场。
+  late final Listenable _coverStackAnimation;
+
+  /// morph 的 pageHeaderHidden 上一帧值（检测「飞向播放页」与「落位」沿）。
+  bool _pageHeaderWasHidden = false;
 
   @override
   void initState() {
@@ -157,6 +181,23 @@ class _PlayerState extends State<Player> with TickerProviderStateMixin {
       duration: const Duration(milliseconds: 460),
       vsync: this,
     )..value = 1.0;
+
+    _prevNeighborEntrance = AnimationController(
+      duration: const Duration(milliseconds: 300),
+      vsync: this,
+      value: 1.0,
+    );
+    _nextNeighborEntrance = AnimationController(
+      duration: const Duration(milliseconds: 300),
+      vsync: this,
+      value: 1.0,
+    );
+    _coverStackAnimation = Listenable.merge([
+      _coverController,
+      _prevNeighborEntrance,
+      _nextNeighborEntrance,
+    ]);
+    _pageHeaderWasHidden = widget.morph?.pageHeaderHidden ?? false;
 
     widget.expandAnimation?.addStatusListener(_handleExpandStatus);
     // 顶栏⇄播放页飞行时只有封面隐藏：必须监听 morph 控制器才能重建真身。
@@ -207,11 +248,27 @@ class _PlayerState extends State<Player> with TickerProviderStateMixin {
     if (oldWidget.morph != widget.morph) {
       oldWidget.morph?.removeListener(_onMorphChanged);
       widget.morph?.addListener(_onMorphChanged);
+      _pageHeaderWasHidden = widget.morph?.pageHeaderHidden ?? false;
     }
   }
 
   void _onMorphChanged() {
-    if (mounted) setState(() {});
+    if (!mounted) return;
+    // pageHeaderHidden 的上升沿 = 飞向播放页开始（页面淡入阶段侧边封面
+    // 先藏在中心背后）；下降沿 = 中心封面飞行落位（侧边封面从背后展开）。
+    // 离开播放页时该字段不变，侧边封面随整页淡出，不重复演出。
+    final bool hidden = widget.morph?.pageHeaderHidden ?? false;
+    if (hidden != _pageHeaderWasHidden) {
+      _pageHeaderWasHidden = hidden;
+      if (hidden) {
+        _prevNeighborEntrance.value = 0;
+        _nextNeighborEntrance.value = 0;
+      } else {
+        _prevNeighborEntrance.forward(from: 0);
+        _nextNeighborEntrance.forward(from: 0);
+      }
+    }
+    setState(() {});
   }
 
   /// 迷你/完整切换开始：抓取两端封面矩形，交由页内 Stack 飞行；
@@ -227,8 +284,22 @@ class _PlayerState extends State<Player> with TickerProviderStateMixin {
           _coverFlightFrom = from;
           _coverFlightTo = to;
           _coverFlightActive = true;
+          if (status == AnimationStatus.forward) {
+            // 展开：侧边封面先藏在中心背后，等中心飞行落位后展开。
+            _prevNeighborEntrance.value = 0;
+            _nextNeighborEntrance.value = 0;
+          }
         });
       case AnimationStatus.completed:
+        if (!_coverFlightActive) return;
+        setState(() {
+          _coverFlightActive = false;
+          _coverFlightFrom = null;
+          _coverFlightTo = null;
+        });
+        // 展开落位：侧边封面从中心背后展开（收起时随完整层淡出，不演出）。
+        _prevNeighborEntrance.forward(from: 0);
+        _nextNeighborEntrance.forward(from: 0);
       case AnimationStatus.dismissed:
         if (!_coverFlightActive) return;
         setState(() {
@@ -301,6 +372,8 @@ class _PlayerState extends State<Player> with TickerProviderStateMixin {
     _seekSettleTimer?.cancel();
     _dragPendingTimer?.cancel();
     _seekPreviewMs.dispose();
+    _prevNeighborEntrance.dispose();
+    _nextNeighborEntrance.dispose();
     _playStateController.dispose();
     _trackEntranceController.dispose();
     _coverController.dispose();
@@ -308,21 +381,27 @@ class _PlayerState extends State<Player> with TickerProviderStateMixin {
   }
 
   void _handleHorizontalDragStart(DragStartDetails details) {
+    // 提交等待 / 过渡动画 / 迷你⇄完整封面飞行期间不接受新手势：
+    // 一次拖动只对应一次切歌，避免两段过渡叠加。
+    if (_dragCommitted || _coverController.isAnimating || _coverFlightActive) {
+      return;
+    }
+    _dragActive = true;
     _dragStartX = details.globalPosition.dx;
     _dragStartY = details.globalPosition.dy;
     _dragDx = 0;
     _isHorizontalDragConfirmed = false;
-    _dragTriggeredSkip = false;
   }
 
   void _handleHorizontalDragUpdate(DragUpdateDetails details) {
-    if (_dragStartX == null || _dragStartY == null) return;
+    if (!_dragActive || _dragStartX == null || _dragStartY == null) return;
 
     final dx = details.globalPosition.dx - _dragStartX!;
     final dy = details.globalPosition.dy - _dragStartY!;
 
     if (!_isHorizontalDragConfirmed) {
       if (dy.abs() > dx.abs() * 1.5) {
+        // 纵向意图更明确：放弃本次横向拖动（展开/收起交给外层手势）。
         _resetHorizontalDrag();
         return;
       } else if (dx.abs() > 10.0) {
@@ -336,20 +415,57 @@ class _PlayerState extends State<Player> with TickerProviderStateMixin {
     }
   }
 
-  /// 拖动跟手：中心位换邻位封面、按滑动距离过渡（与切歌动画同一进度）。
+  /// 本次拖动方向对应的预览目标；无目标（队列到头/无可回退曲目）返回 null。
+  ///
+  /// 必须与实际的 `skipToNext/skipToPrevious` 同源：next 用快照解析好的
+  /// 下一首（shuffle 会消费同一个随机值），previous 用播放历史、为空时
+  /// 回退队列前一位（与后端 previous 的实现一致）。
+  Track? _previewTargetFor(int dir, PlaybackProvider playback) {
+    final snapshot = playback.snapshot;
+    final Track? target;
+    if (dir == 1) {
+      target = snapshot.next;
+    } else if (snapshot.history.isNotEmpty) {
+      target = snapshot.history.last;
+    } else {
+      final index = snapshot.currentIndex;
+      target = (index > 0 && index < snapshot.queue.length)
+          ? snapshot.queue[index - 1]
+          : null;
+    }
+    if (target == null) return null;
+    // 目标就是当前曲目（如队列首的 previous）：没有可预览的切换，按边界处理。
+    final current = snapshot.current;
+    if (current != null && target.id == current.id) return null;
+    return target;
+  }
+
+  /// 拖动跟手：中心位换预览目标封面、按滑动距离过渡（与切歌动画同一进度）。
   void _updateDragPreview(double dx) {
-    _dragActive = true;
+    final playback = context.read<PlaybackProvider>();
+    final int dir = dx < 0 ? 1 : -1; // 左滑 = 下一首
+    final Track? target = _previewTargetFor(dir, playback);
+
+    if (target == null) {
+      // 队列到头：硬边界，不进入预览（松手也不提交）。若已进入预览后
+      // 反向拖到边界，则撤下预览回弹。
+      if (_draggingCover && !_dragCommitted) {
+        _returnCoverPreview();
+      }
+      return;
+    }
+
     if (!_draggingCover) {
       _draggingCover = true;
       _coverController.stop();
     }
-    final int dir = dx < 0 ? 1 : -1; // 左滑 = 下一首
     if (dir != _coverDirection || _outgoingTrack == null) {
       _coverDirection = dir;
       // 拖动预览里「滑出」的是当前封面；反向侧旧邻位让位。
       _outgoingTrack = _lastTrack;
       _oldNeighbor = dir == 1 ? _previousTrack : _lastNextTrack;
     }
+    _previewTrack = target;
     // 拖动行程：约 0.6 个封面宽度走完整段过渡。
     final double range = max(48.0, _lastArtDimension * 0.6);
     final double visual = (dx.abs() / range).clamp(0.0, 1.0);
@@ -372,13 +488,16 @@ class _PlayerState extends State<Player> with TickerProviderStateMixin {
     return (low + high) / 2;
   }
 
-  /// 松手：达标则从当前拖动进度续播到落位并切歌；未达标回弹。
+  /// 松手：达标且有预览目标则从当前进度续播到落位并提交切歌；
+  /// 未达标/边界回弹。
   void _handleHorizontalDragEnd(
       DragEndDetails details, PlaybackProvider playback) {
+    if (!_dragActive) return; // 本次手势已被忽略（提交等待期间的拖动）
     final velocity = details.velocity.pixelsPerSecond.dx;
     final dx = _dragDx;
     final confirmed = _isHorizontalDragConfirmed;
     final wasDragging = _draggingCover;
+    final previewTrack = _previewTrack;
     _resetHorizontalDrag();
     if (!confirmed) return;
 
@@ -387,72 +506,62 @@ class _PlayerState extends State<Player> with TickerProviderStateMixin {
     final bool trigger =
         velocity.abs() > threshold || dx.abs() > triggerDistance;
 
-    if (wasDragging) {
-      _dragActive = false;
-      if (trigger) {
-        HapticFeedback.mediumImpact();
-        _dragTriggeredSkip = true;
-        // 从当前拖动进度继续走到落位；随后保持「邻位封面」预览，直到曲目
-        // 真正切换（取链可能需要几百毫秒）——否则动画跑完会先回落成旧封面、
-        // 再跳成新封面，看起来像卡住/来回闪。
-        _coverController.forward();
-        _startDragPendingWatchdog();
-        if (dx > 0) {
-          playback.skipToPrevious();
-        } else {
-          playback.skipToNext();
-        }
-      } else {
-        _draggingCover = false;
-        _dragTriggeredSkip = false;
-        _coverController.animateBack(
-          0,
-          duration: const Duration(milliseconds: 220),
-          curve: Curves.easeOut,
-        );
-      }
+    // 只有进入过预览（存在可切换的目标）才允许提交；边界拖动直接回弹。
+    if (!wasDragging || previewTrack == null) {
+      if (wasDragging) _returnCoverPreview();
       return;
     }
 
     if (trigger) {
       HapticFeedback.mediumImpact();
+      _dragCommitted = true;
+      // 从当前拖动进度继续走到落位；随后保持预览，直到曲目真正切换
+      // （取链可能需要几百毫秒）——否则动画跑完会先回落成旧封面、
+      // 再跳成新封面，看起来像卡住/来回闪。
+      _coverController.forward();
+      _startDragPendingWatchdog();
       if (dx > 0) {
         playback.skipToPrevious();
       } else {
         playback.skipToNext();
       }
+    } else {
+      _returnCoverPreview();
     }
   }
 
   void _handleHorizontalDragCancel() {
-    _dragActive = false;
-    if (_draggingCover && !_dragTriggeredSkip) {
-      _draggingCover = false;
-      _coverController.animateBack(
-        0,
-        duration: const Duration(milliseconds: 220),
-        curve: Curves.easeOut,
-      );
-    }
+    if (!_dragActive) return;
     _resetHorizontalDrag();
+    // 已提交的预览不因手势取消而撤下：继续等后端对账（超时有兜底）。
+    if (!_dragCommitted) _returnCoverPreview();
   }
 
-  /// 拖动切歌的兜底：等待曲目切换期间保持预览；超时（如取链失败）则回弹。
+  /// 撤下拖动/提交预览并回弹到稳态（不切歌）。
+  void _returnCoverPreview() {
+    if (!_draggingCover) return;
+    _draggingCover = false;
+    _previewTrack = null;
+    _dragPendingTimer?.cancel();
+    _coverController.animateBack(
+      0,
+      duration: const Duration(milliseconds: 220),
+      curve: Curves.easeOut,
+    );
+  }
+
+  /// 提交切歌的兜底：等待曲目切换期间保持预览；超时（如取链失败）则回弹。
   void _startDragPendingWatchdog() {
     _dragPendingTimer?.cancel();
     _dragPendingTimer = Timer(const Duration(seconds: 6), () {
-      if (!mounted || !_draggingCover) return;
-      _draggingCover = false;
-      _dragTriggeredSkip = false;
-      _coverController.animateBack(
-        0,
-        duration: const Duration(milliseconds: 260),
-        curve: Curves.easeOut,
-      );
+      if (!mounted || !_dragCommitted) return;
+      _dragCommitted = false;
+      _returnCoverPreview();
     });
   }
 
   void _resetHorizontalDrag() {
+    _dragActive = false;
     _dragStartX = null;
     _dragStartY = null;
     _dragDx = 0;
@@ -522,13 +631,51 @@ class _PlayerState extends State<Player> with TickerProviderStateMixin {
     return joined.isEmpty ? 'Unknown Artist' : joined;
   }
 
-  /// 切歌：判定方向（下一首/上一首/跳转）并维护上一首历史，
-  /// 触发三封面滑动与文字 spring 入场。
+  /// 切歌：拖动提交走对账落位；其余切歌判定方向并播放入场动画。
   void _onTrackChanged(
     String newId,
     Track? oldTrack,
     PlaybackProvider provider,
   ) {
+    if (_dragCommitted) {
+      // 拖动提交对账：预览期间画面已经走到目标。不管到位的是不是当初
+      // 预览的那首（队列变化、随机目标、失败恢复），都在这一帧落位到
+      // 实际 current，绝不让预览态悬空（否则只能等 6s 兜底超时）。
+      _dragCommitted = false;
+      _dragPendingTimer?.cancel();
+      _draggingCover = false;
+      _previewTrack = null;
+      _lastAnimatedTrackId = newId;
+      _previousTrack = provider.snapshot.history.isNotEmpty
+          ? provider.snapshot.history.last
+          : null;
+      // 拖动时无法预知「新的再下一首/再上一首」身份（只有一位前瞻），
+      // 落位时让它从中心封面背后补一个入场，而不是直接出现在槽位。
+      // 先同步置 0：避免这一帧先以稳态画出来再回跳（闪一下）。
+      final bool toNext = _coverDirection == 1;
+      if (toNext) {
+        _nextNeighborEntrance.value = 0;
+      } else {
+        _prevNeighborEntrance.value = 0;
+      }
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        _clearSeekPreviewAfterTrackChange();
+        // 过渡已在提交时走完：画面即最终态，直接落位；若还在走（快速
+        // 对账），保持它继续（center 已是 displayTrack，位置连续）。
+        if (!_coverController.isAnimating) {
+          _coverController.value = 1.0;
+        }
+        if (toNext) {
+          _nextNeighborEntrance.forward(from: 0);
+        } else {
+          _prevNeighborEntrance.forward(from: 0);
+        }
+        _trackEntranceController.forward(from: 0);
+      });
+      return;
+    }
+
     final nextId = provider.snapshot.next?.id.uri;
     final prevId = _previousTrack?.id.uri;
     final int direction;
@@ -550,27 +697,16 @@ class _PlayerState extends State<Player> with TickerProviderStateMixin {
     // 旧封面作为切歌动画中未加载完成时的占位，避免黑块闪一下。
     _previousImageUrl = _artworkUrlOf(oldTrack) ?? _previousImageUrl;
     _lastAnimatedTrackId = newId;
-    // 拖动触发的切歌：过渡可能已经走完（画面即最终态），不要再重放。
-    final bool dragTriggered = _dragTriggeredSkip;
-    _dragTriggeredSkip = false;
     _dragPendingTimer?.cancel();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
-      // 切歌后清掉拖动/等待落点的进度预览，避免旧进度残留在滑杆上。
-      _seekTargetMs = null;
-      _seekSettleTimer?.cancel();
-      _seekPreviewMs.value = null;
+      _clearSeekPreviewAfterTrackChange();
       if (_dragActive) {
-        // 用户又开始了新的拖动：预览交给新拖动继续驱动，不接管动画。
+        // 用户正在拖动：预览交给新拖动继续驱动，不接管动画。
         if (_coverController.isAnimating) _coverController.stop();
         return;
       }
-      // 拖动预览（邻位封面）到此才撤下：曲目已经真正切换。
-      _draggingCover = false;
-      if (dragTriggered && !_coverController.isAnimating) {
-        // 拖动已经完成过渡：画面就是最终状态，直接落位。
-        _coverController.value = 1.0;
-      } else if (_coverController.isAnimating) {
+      if (_coverController.isAnimating) {
         // 拖动续播 / 快速连切：从当前进度接着走，不回到起点重放。
         _coverController.forward();
       } else {
@@ -578,6 +714,13 @@ class _PlayerState extends State<Player> with TickerProviderStateMixin {
       }
       _trackEntranceController.forward(from: 0);
     });
+  }
+
+  /// 切歌后清掉进度拖动预览，避免旧进度残留在滑杆上。
+  void _clearSeekPreviewAfterTrackChange() {
+    _seekTargetMs = null;
+    _seekSettleTimer?.cancel();
+    _seekPreviewMs.value = null;
   }
 
   @override
@@ -781,7 +924,7 @@ class _PlayerState extends State<Player> with TickerProviderStateMixin {
                             context,
                             displayTrack,
                             flightRect.width,
-                            lerpDouble(8, 18, t)!,
+                            t,
                           ),
                         ),
                       ),
@@ -797,31 +940,39 @@ class _PlayerState extends State<Player> with TickerProviderStateMixin {
 
   /// 迷你 ⇄ 完整飞行副本封面：与两端真身同键的同步 provider，
   /// 首帧即出图（不闪占位）。
+  ///
+  /// [t] 为展开进度（0 = 迷你端、1 = 完整端）：圆角/描边/阴影按两端真身
+  /// 插值。恒用完整端外观的话，收起到迷你端时多出一圈描边与阴影，落位
+  /// 瞬间会「弹出」；图片裁剪半径同理（迷你真身裁剪 8、完整真身 17）。
   Widget _buildFlightCover(
     BuildContext context,
     Track? track,
     double size,
-    double radius,
+    double t,
   ) {
     final scheme = Theme.of(context).colorScheme;
+    final double radius = lerpDouble(8, 18, t)!;
     return SizedBox(
       width: size,
       height: size,
       child: Container(
         decoration: BoxDecoration(
           borderRadius: BorderRadius.circular(radius),
-          border: Border.all(color: scheme.outlineVariant, width: 1),
+          border: Border.all(
+            color: scheme.outlineVariant.withValues(alpha: t),
+            width: 1,
+          ),
           boxShadow: [
             BoxShadow(
-              color: scheme.shadow.withValues(alpha: 0.28),
-              blurRadius: 24,
-              offset: const Offset(0, 10),
+              color: scheme.shadow.withValues(alpha: 0.28 * t),
+              blurRadius: 24 * t,
+              offset: Offset(0, 10 * t),
             ),
           ],
         ),
         child: MorphCover(
           url: _artworkUrlOf(track),
-          borderRadius: BorderRadius.circular(radius - 1),
+          borderRadius: BorderRadius.circular(radius - t),
           fallback: _buildDefaultImage(),
         ),
       ),
@@ -831,9 +982,12 @@ class _PlayerState extends State<Player> with TickerProviderStateMixin {
   /// 三封面堆叠：左=上一首、中=当前、右=下一首（左右压住露出边缘）。
   ///
   /// 切歌动画与「拖动跟手」共用同一条进度（[`_coverController`]）：横向拖动
-  /// 时中心位由邻位封面顶上、按滑动距离过渡；松手后从同一进度续播或回弹。
+  /// 时中心位由预览目标封面顶上、按滑动距离过渡；松手后从同一进度续播或回弹。
   /// 无上一首/下一首时对应槽位为空（不闪、不空跳）。
-  /// [context] 传 AnimatedBuilder 的 builder context（select 需在 build 期）。
+  ///
+  /// 横向手势宿主固定在 [AnimatedBuilder] 外层：拖动期间中心卡会因
+  /// `interactive` 换型重建，手势挂在卡上会被 dispose（表现为滑到一半冻住、
+  /// 松手无反应）。宿主 element 稳定，控制器逐帧重建只影响子树。
   Widget _buildArtworkStack(
     BuildContext context,
     Track? displayTrack,
@@ -845,122 +999,153 @@ class _PlayerState extends State<Player> with TickerProviderStateMixin {
   }) {
     final String? currentImageUrl = _artworkUrlOf(displayTrack);
     _lastArtDimension = artDimension;
-    return Center(
-      child: SizedBox(
-        width: stackDimension,
-        height: stackHeight,
-        child: AnimatedBuilder(
-          animation: _coverController,
-          builder: (context, _) {
-            // 拖动预览与切歌动画共用渲染：拖动时进度由手指驱动。
-            final dragging = _draggingCover;
-            final animating = dragging || _coverController.isAnimating;
-            final t = Curves.easeOutCubic.transform(_coverController.value);
-            final dir = _coverDirection;
-            final double sideSize = artDimension * 0.78;
-            final double offset = artDimension * 0.30;
-            const double sideRotation = 0.05;
+    return Listener(
+      // DragGestureRecognizer 对「已接受」手势的 PointerCancel 也走 onEnd
+      // （不是 onCancel），而 Listener 先于识别器收到取消事件：这里直接
+      // 按取消处理并复位，随后识别器的 onEnd 因 _dragActive=false 被忽略，
+      // 避免系统打断被当成松手提交切歌。
+      onPointerCancel: (_) => _handleHorizontalDragCancel(),
+      child: GestureDetector(
+        key: Player.artworkSwipeHostKey,
+        behavior: HitTestBehavior.opaque,
+        // 从手指真实按下位置起算位移：默认的 start 会吃掉 touch slop，
+        // 拖动距离与阈值判断都会缩小（110px 的滑动会被量成 80px）。
+        dragStartBehavior: DragStartBehavior.down,
+        onHorizontalDragStart: _handleHorizontalDragStart,
+        onHorizontalDragUpdate: _handleHorizontalDragUpdate,
+        onHorizontalDragEnd: (details) =>
+            _handleHorizontalDragEnd(details, playbackProvider),
+        onHorizontalDragCancel: _handleHorizontalDragCancel,
+        child: Center(
+          child: SizedBox(
+            width: stackDimension,
+            height: stackHeight,
+            child: AnimatedBuilder(
+              animation: _coverStackAnimation,
+              builder: (context, _) {
+                // 拖动预览与切歌动画共用渲染：拖动时进度由手指驱动。
+                final dragging = _draggingCover;
+                final animating = dragging || _coverController.isAnimating;
+                final t = Curves.easeOutCubic.transform(_coverController.value);
+                final dir = _coverDirection;
+                final double sideSize = artDimension * 0.78;
+                final double offset = artDimension * 0.30;
+                const double sideRotation = 0.05;
 
-            final children = <Widget>[];
+                final children = <Widget>[];
 
-            // 旧邻位淡出（方向切换时另一侧让位）。
-            if (animating && _oldNeighbor != null) {
-              children.add(_sideCoverLayer(
-                context,
-                _oldNeighbor,
-                sideSize: sideSize,
-                x: -offset * dir,
-                rotation: -sideRotation * dir,
-                opacity: (1 - t) * 0.85,
-              ));
-            }
+                // 旧邻位淡出（方向切换时另一侧让位）。
+                if (animating && _oldNeighbor != null) {
+                  children.add(_sideCoverLayer(
+                    context,
+                    _oldNeighbor,
+                    sideSize: sideSize,
+                    x: -offset * dir,
+                    rotation: -sideRotation * dir,
+                    opacity: (1 - t) * 0.85,
+                  ));
+                }
 
-            if (animating) {
-              // 源侧新邻位浮现（下一首时在右，上一首时在左）。
-              // 拖动预览阶段不预取「再下一首」（UI 只有一位前瞻），留空槽。
-              if (!dragging) {
-                final nextItem = playbackProvider.snapshot.next;
-                final sourceTrack = dir == 1 ? nextItem : _previousTrack;
-                children.add(_sideCoverLayer(
-                  context,
-                  sourceTrack,
-                  sideSize: sideSize,
-                  x: offset * dir + (1 - t) * offset * 0.3 * dir,
-                  rotation: sideRotation * dir * (0.4 + 0.6 * t),
-                  opacity: t * 0.85,
-                  placeholderUrl: currentImageUrl,
-                ));
-              }
-              // 滑出的旧当前 → 目标邻位。
-              if (_outgoingTrack != null) {
+                if (animating) {
+                  // 源侧新邻位浮现（下一首时在右，上一首时在左）。
+                  // 拖动预览阶段不预取「再下一首」（UI 只有一位前瞻），留空槽。
+                  if (!dragging) {
+                    final nextItem = playbackProvider.snapshot.next;
+                    final sourceTrack = dir == 1 ? nextItem : _previousTrack;
+                    children.add(_sideCoverLayer(
+                      context,
+                      sourceTrack,
+                      sideSize: sideSize,
+                      x: offset * dir + (1 - t) * offset * 0.3 * dir,
+                      rotation: sideRotation * dir * (0.4 + 0.6 * t),
+                      opacity: t * 0.85,
+                      placeholderUrl: currentImageUrl,
+                      // 落位补入场时也作用于这条「源侧浮现」，避免切换
+                      // 与入场叠加时位置/透明度跳变。
+                      entrance: dir == 1
+                          ? _nextNeighborEntrance.value
+                          : _prevNeighborEntrance.value,
+                    ));
+                  }
+                  // 滑出的旧当前 → 目标邻位。
+                  if (_outgoingTrack != null) {
+                    children.add(_mainCoverLayer(
+                      context,
+                      _outgoingTrack,
+                      playbackProvider,
+                      artDimension: artDimension,
+                      x: -offset * dir * t,
+                      rotation: -sideRotation * dir * t,
+                      scale: 1.0 - 0.22 * t,
+                      opacity: 1.0 - 0.15 * t,
+                      interactive: false,
+                    ));
+                  }
+                } else {
+                  // 稳态邻位：可点击切歌（左=上一首，右=下一首）。
+                  children.add(_sideCoverLayer(
+                    context,
+                    _previousTrack,
+                    sideSize: sideSize,
+                    x: -offset,
+                    rotation: -sideRotation,
+                    opacity: 0.85,
+                    placeholderUrl: currentImageUrl,
+                    entrance: _prevNeighborEntrance.value,
+                    onTap: playbackProvider.hasTrack
+                        ? playbackProvider.skipToPrevious
+                        : null,
+                  ));
+                  children.add(_sideCoverLayer(
+                    context,
+                    playbackProvider.snapshot.next,
+                    sideSize: sideSize,
+                    x: offset,
+                    rotation: sideRotation,
+                    opacity: 0.85,
+                    placeholderUrl: currentImageUrl,
+                    entrance: _nextNeighborEntrance.value,
+                    onTap: playbackProvider.hasTrack
+                        ? playbackProvider.skipToNext
+                        : null,
+                  ));
+                }
+
+                // 中心位：拖动/提交时由预览目标封面顶上（真正的切歌在松手后
+                // 才发生）；动画/稳态下就是当前曲目。顶栏⇄播放页飞行时只隐藏
+                // 这一张。预览目标在拖动开始时固定，不重读快照（否则提交后
+                // 快照先推新邻位，中心封面会闪成再下一首）。
+                final Track? centerTrack =
+                    dragging ? (_previewTrack ?? displayTrack) : displayTrack;
                 children.add(_mainCoverLayer(
                   context,
-                  _outgoingTrack,
+                  centerTrack,
                   playbackProvider,
                   artDimension: artDimension,
-                  x: -offset * dir * t,
-                  rotation: -sideRotation * dir * t,
-                  scale: 1.0 - 0.22 * t,
-                  opacity: 1.0 - 0.15 * t,
-                  interactive: false,
+                  x: animating ? dir * offset * (1 - t) : 0,
+                  rotation: animating ? sideRotation * dir * (1 - t) : 0,
+                  scale: animating ? 0.78 + 0.22 * t : 1.0,
+                  opacity: 1,
+                  interactive: !dragging,
+                  coverKey: morph?.pageCoverKey,
+                  hidden: morph?.pageHeaderHidden ?? false,
+                  placeholderUrl:
+                      dragging ? currentImageUrl : _previousImageUrl,
                 ));
-              }
-            } else {
-              // 稳态邻位：可点击切歌（左=上一首，右=下一首）。
-              children.add(_sideCoverLayer(
-                context,
-                _previousTrack,
-                sideSize: sideSize,
-                x: -offset,
-                rotation: -sideRotation,
-                opacity: 0.85,
-                placeholderUrl: currentImageUrl,
-                onTap: playbackProvider.hasTrack
-                    ? playbackProvider.skipToPrevious
-                    : null,
-              ));
-              children.add(_sideCoverLayer(
-                context,
-                playbackProvider.snapshot.next,
-                sideSize: sideSize,
-                x: offset,
-                rotation: sideRotation,
-                opacity: 0.85,
-                placeholderUrl: currentImageUrl,
-                onTap: playbackProvider.hasTrack
-                    ? playbackProvider.skipToNext
-                    : null,
-              ));
-            }
 
-            // 中心位：拖动时由邻位封面顶上（真正的切歌在松手后才发生）；
-            // 动画/稳态下就是当前曲目。顶栏⇄播放页飞行时只隐藏这一张。
-            final Track? centerTrack = dragging
-                ? (dir == 1 ? playbackProvider.snapshot.next : _previousTrack)
-                : displayTrack;
-            children.add(_mainCoverLayer(
-              context,
-              centerTrack,
-              playbackProvider,
-              artDimension: artDimension,
-              x: animating ? dir * offset * (1 - t) : 0,
-              rotation: animating ? sideRotation * dir * (1 - t) : 0,
-              scale: animating ? 0.78 + 0.22 * t : 1.0,
-              opacity: 1,
-              interactive: !dragging,
-              coverKey: morph?.pageCoverKey,
-              hidden: morph?.pageHeaderHidden ?? false,
-              placeholderUrl: dragging ? currentImageUrl : _previousImageUrl,
-            ));
-
-            return Stack(clipBehavior: Clip.none, children: children);
-          },
+                return Stack(clipBehavior: Clip.none, children: children);
+              },
+            ),
+          ),
         ),
       ),
     );
   }
 
   /// 邻位封面（压在当前封面之下；[onTap] 非空时可点击切歌）。
+  ///
+  /// [entrance] 是侧边入场进度（0 = 藏在中心封面背后：透明、内收、放平；
+  /// 1 = 稳态）。只改透明度/位移/旋转/缩放，不参与 hit test（<0.5 忽略）。
   Widget _sideCoverLayer(
     BuildContext context,
     Track? track, {
@@ -970,8 +1155,17 @@ class _PlayerState extends State<Player> with TickerProviderStateMixin {
     required double opacity,
     String? placeholderUrl,
     VoidCallback? onTap,
+    double entrance = 1.0,
   }) {
     if (track == null) return const SizedBox.shrink();
+    // 传入的是入场控制器原始进度，这里统一套 easeOutCubic（先快后缓的展开感）。
+    final double e =
+        Curves.easeOutCubic.transform(entrance.clamp(0.0, 1.0));
+    // 从中心背后滑出：起点更靠中间、更平、略小，终点即稳态。
+    final double entranceX = x * (0.55 + 0.45 * e);
+    final double entranceRotation = rotation * (0.3 + 0.7 * e);
+    final double entranceOpacity = opacity * e;
+    final double entranceScale = 0.92 + 0.08 * e;
     Widget card =
         _buildCoverCard(context, track, sideSize, placeholderUrl: placeholderUrl);
     if (onTap != null) {
@@ -987,12 +1181,15 @@ class _PlayerState extends State<Player> with TickerProviderStateMixin {
     return Positioned.fill(
       child: Center(
         child: Transform.translate(
-          offset: Offset(x, 0),
+          offset: Offset(entranceX, 0),
           child: Transform.rotate(
-            angle: rotation,
+            angle: entranceRotation,
             child: Opacity(
-              opacity: opacity,
-              child: IgnorePointer(ignoring: onTap == null, child: card),
+              opacity: entranceOpacity,
+              child: IgnorePointer(
+                ignoring: onTap == null || e < 0.5,
+                child: Transform.scale(scale: entranceScale, child: card),
+              ),
             ),
           ),
         ),
@@ -1610,12 +1807,8 @@ class _PlayerState extends State<Player> with TickerProviderStateMixin {
       },
       child: GestureDetector(
         behavior: HitTestBehavior.opaque,
-        onHorizontalDragStart: _handleHorizontalDragStart,
-        onHorizontalDragUpdate: _handleHorizontalDragUpdate,
-        onHorizontalDragEnd: (details) =>
-            _handleHorizontalDragEnd(details, playback),
-        onHorizontalDragCancel: _handleHorizontalDragCancel,
-        // 点击封面 = 播放/暂停；上一曲/下一曲由左右邻位封面承接。
+        // 点击封面 = 播放/暂停；横向拖动由封面区手势宿主统一承接
+        // （见 [_buildArtworkStack]：手势不能在拖动期间换型重建）。
         onTap: () {
           HapticFeedback.lightImpact();
           playback.togglePlayPause();

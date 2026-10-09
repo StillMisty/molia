@@ -75,6 +75,7 @@ class FakeBackend implements PlaybackBackend {
       currentIndex: current.currentIndex,
       next: current.next,
       upcoming: current.upcoming,
+      upNext: current.upNext,
       history: current.history,
       isPlaying: current.isPlaying,
       isLoading: current.isLoading,
@@ -308,7 +309,7 @@ void main() {
   });
 
   group('领域快照形状', () {
-    test('current / next / upcoming / history', () {
+    test('current / next / upcoming / upNext / history', () {
       final backend = FakeBackend();
       final facade = DefaultPlaybackFacade(backend: backend);
       final previous = _track('z');
@@ -321,6 +322,7 @@ void main() {
         currentIndex: 1,
         next: next,
         upcoming: [next],
+        upNext: [next],
         history: [previous],
         isPlaying: true,
         duration: const Duration(seconds: 42),
@@ -336,12 +338,13 @@ void main() {
       expect(snapshot.current?.title, 'Title a');
       expect(snapshot.next?.id, const TrackId('fake', 'b'));
       expect(snapshot.upcoming.map((track) => track.id.id), ['b']);
+      expect(snapshot.upNext.map((track) => track.id.id), ['b']);
       expect(snapshot.history.map((track) => track.id.id), ['z']);
       expect(snapshot.isPlaying, isTrue);
       expect(snapshot.duration, const Duration(seconds: 42));
       expect(snapshot.context?.name, '集成测试');
 
-      // 队列末尾（顺序模式）→ next 为 null（由后端解析），upcoming 为空。
+      // 队列末尾（顺序模式）→ next 为 null（由后端解析），upcoming/upNext 为空。
       backend.emit(BackendSnapshot(
         current: next,
         queue: [previous, current, next],
@@ -350,6 +353,7 @@ void main() {
       ));
       expect(facade.snapshot.value.next, isNull);
       expect(facade.snapshot.value.upcoming, isEmpty);
+      expect(facade.snapshot.value.upNext, isEmpty);
     });
 
     test('进度不进入低频快照；seek 立即对齐 position 通道', () async {

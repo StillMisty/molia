@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'dart:io';
+import 'dart:math' as math;
 import 'dart:typed_data';
 
 import 'package:flutter_test/flutter_test.dart';
@@ -10,6 +11,8 @@ import 'package:molia/pages/favorites.dart';
 import 'package:molia/providers/discover_provider.dart';
 import 'package:molia/providers/library_provider.dart';
 import 'package:molia/providers/playback_provider.dart';
+import 'package:molia/widgets/app_search_bar.dart';
+import 'package:molia/widgets/track_row.dart';
 import 'package:material_3_expressive/components/bottom_sheets/components/m3e_bottom_sheet_surface.dart';
 import 'package:material_3_expressive/material_3_expressive.dart';
 import 'package:material_ui/material_ui.dart';
@@ -56,7 +59,10 @@ void main() {
     await repository.dispose();
   });
 
-  Future<void> pumpFavorites(WidgetTester tester) async {
+  Future<void> pumpFavorites(
+    WidgetTester tester, {
+    math.Random? shuffleRandom,
+  }) async {
     tester.view.physicalSize = const Size(1200, 2400);
     tester.view.devicePixelRatio = 1.0;
     addTearDown(() {
@@ -77,7 +83,7 @@ void main() {
             ...GlobalMaterialLocalizations.delegates,
           ],
           supportedLocales: const [Locale('zh')],
-          home: const Scaffold(body: FavoritesPage()),
+          home: Scaffold(body: FavoritesPage(shuffleRandom: shuffleRandom)),
         ),
       ),
     );
@@ -106,8 +112,8 @@ void main() {
   }
 
   List<String> headlines(WidgetTester tester) => tester
-      .widgetList<M3EListItem>(find.byType(M3EListItem))
-      .map((item) => item.headline)
+      .widgetList<TrackRow>(find.byType(TrackRow))
+      .map((row) => row.title)
       .toList();
 
   /// 变更流触发的后台重载在 widget 测试的 fake-async 区之外完成：
@@ -172,14 +178,16 @@ void main() {
     expect(playButton.onPressed, isNull);
     expect(shuffleButton.onPressed, isNull);
     expect(find.byIcon(Icons.search_rounded), findsOneWidget);
-    expect(find.byType(M3ETextField), findsNothing);
+    expect(find.byType(AppSearchBar), findsNothing);
     expect(find.text('0 首'), findsNothing);
-    expect(find.text('导入收藏夹'), findsNothing);
+    expect(find.text('导入收藏'), findsNothing);
   });
 
   testWidgets('默认合集回退：仅有导入列表时两次点击即可播放（播放全部/随机）', (tester) async {
     await importLove(tester);
-    await pumpFavorites(tester);
+    // 随机起点用种子注入：期望值与页面内同一个种子序列一致。
+    final expectedShuffleStart = math.Random(7).nextInt(3);
+    await pumpFavorites(tester, shuffleRandom: math.Random(7));
 
     // 默认选中非空的 love（标题即切换器）。
     expect(find.text('love'), findsOneWidget);
@@ -195,12 +203,13 @@ void main() {
     expect(request.context?.name, 'love');
     expect(playback.currentMode, PlayMode.sequential);
 
+    // 随机播放：整表洗牌 + 随机起点（不再固定第一首）。
     await tester.tap(find.byIcon(Icons.shuffle_rounded));
     await tester.pumpAndSettle();
 
     expect(playback.currentMode, PlayMode.shuffle);
     expect(backend.lastRequest!.tracks, hasLength(3));
-    expect(backend.lastRequest!.startIndex, 0);
+    expect(backend.lastRequest!.startIndex, expectedShuffleStart);
   });
 
   testWidgets('收藏列表：搜索展开收起 / 排序菜单 / 点击播放 / 行尾时长', (tester) async {
@@ -221,15 +230,15 @@ void main() {
 
     // 搜索按钮展开搜索栏，仅此时输入框占位。
     await openSearch(tester);
-    expect(find.byType(M3ETextField), findsOneWidget);
-    await tester.enterText(find.byType(M3ETextField), 'Artist Song A');
+    expect(find.byType(AppSearchBar), findsOneWidget);
+    await tester.enterText(find.byType(AppSearchBar), 'Artist Song A');
     await tester.pumpAndSettle();
     expect(headlines(tester), ['Song A']);
 
     // 退出搜索：过滤清空、输入框收起。
     await tester.tap(find.byIcon(Icons.arrow_back_rounded));
     await tester.pumpAndSettle();
-    expect(find.byType(M3ETextField), findsNothing);
+    expect(find.byType(AppSearchBar), findsNothing);
     expect(headlines(tester), ['Song B', 'Song A', 'Song C']);
 
     // 排序入口在搜索行 ⋮ 菜单；可见顺序即播放队列顺序。
@@ -362,7 +371,7 @@ void main() {
     await openCollectionPicker(tester);
     expect(
       pickerHeadlines(tester),
-      ['新建列表', '导入收藏夹', '我的收藏', '播放历史', 'love'],
+      ['新建列表', '导入收藏', '我的收藏', '播放历史', 'love'],
     );
 
     // 把 love 的把手向上拖到「播放历史」之前。必须小步移动：
@@ -382,7 +391,7 @@ void main() {
 
     expect(
       pickerHeadlines(tester),
-      ['新建列表', '导入收藏夹', '我的收藏', 'love', '播放历史'],
+      ['新建列表', '导入收藏', '我的收藏', 'love', '播放历史'],
     );
 
     final loveId =
@@ -439,7 +448,7 @@ void main() {
     await openCollectionPicker(tester);
     expect(
       pickerHeadlines(tester),
-      ['新建列表', '导入收藏夹', '我的收藏', '播放历史', 'love'],
+      ['新建列表', '导入收藏', '我的收藏', '播放历史', 'love'],
     );
 
     await tester.tap(find.byIcon(Icons.more_vert_rounded));
@@ -453,7 +462,7 @@ void main() {
     // 弹层行局部移除；仓库同步删除。
     expect(
       pickerHeadlines(tester),
-      ['新建列表', '导入收藏夹', '我的收藏', '播放历史'],
+      ['新建列表', '导入收藏', '我的收藏', '播放历史'],
     );
     await flushLibraryReloads(tester);
     expect(await repository.listPlaylists(), isEmpty);
@@ -524,12 +533,12 @@ void main() {
     expect(await repository.favoriteKeys(), contains('wy:1'));
   });
 
-  testWidgets('合集弹层：导入收藏夹入口（文件导入选择）', (tester) async {
+  testWidgets('合集弹层：导入收藏入口（文件导入选择）', (tester) async {
     await seedFavorites(tester);
     await pumpFavorites(tester);
 
     await openCollectionPicker(tester);
-    await tester.tap(find.text('导入收藏夹'));
+    await tester.tap(find.text('导入收藏'));
     await tester.pumpAndSettle();
 
     // 测试环境无 DiscoverProvider → 仅文件导入选项；链接导入在生产环境可见。
@@ -572,7 +581,7 @@ void main() {
     await tester.pumpAndSettle();
 
     await openCollectionPicker(tester);
-    await tester.tap(find.text('导入收藏夹'));
+    await tester.tap(find.text('导入收藏'));
     await tester.pumpAndSettle();
     expect(find.text('从歌单链接导入'), findsOneWidget);
     await tester.tap(find.text('从歌单链接导入'));
@@ -624,7 +633,7 @@ void main() {
     await tester.tap(find.text('调整顺序'));
     await tester.pumpAndSettle();
 
-    expect(find.byType(M3ETextField), findsNothing);
+    expect(find.byType(AppSearchBar), findsNothing);
     expect(find.text('长按拖动调整顺序'), findsOneWidget);
     expect(find.byIcon(Icons.drag_handle_rounded), findsNWidgets(3));
 
@@ -750,6 +759,53 @@ void main() {
     expect(scrollbar.thumbVisibility, isTrue);
     expect(scrollbar.interactive, isTrue);
     expect(scrollbar.controller, isNotNull);
+  });
+
+  testWidgets('大列表：固定行高懒加载，只构建视口附近行，滚动条可手拖', (tester) async {
+    for (var i = 0; i < 200; i++) {
+      await provider.toggleFavorite(
+        sourceKey: 'wy',
+        songId: '$i',
+        title: 'Song $i',
+        artist: 'Artist $i',
+        raw: {'songId': '$i'},
+      );
+    }
+    await pumpFavorites(tester);
+
+    // 懒加载：200 首只构建视口附近的行。
+    final rows = tester.widgetList<TrackRow>(find.byType(TrackRow)).toList();
+    expect(rows, isNotEmpty);
+    expect(rows.length, lessThan(60), reason: '200 首只构建视口附近的行');
+
+    // 固定行高：itemExtent 预取高度（滚动条拇指/拖动精确）。
+    final list = tester.widget<ListView>(find.byType(ListView));
+    expect(list.itemExtent, TrackRow.extent);
+
+    // 标题/歌手都单行省略：固定高度不会被换行撑高。
+    final firstRowTexts = tester
+        .widgetList<Text>(find.descendant(
+          of: find.byType(TrackRow).first,
+          matching: find.byType(Text),
+        ))
+        .toList();
+    expect(firstRowTexts, hasLength(2));
+    expect(firstRowTexts.every((text) => text.maxLines == 1), isTrue);
+
+    // 滚动条常显且可手拖：按住顶部拇指拖动后 offset 变化。
+    final scrollbar = tester.widget<Scrollbar>(find.byType(Scrollbar));
+    expect(scrollbar.interactive, isTrue);
+    final controller = scrollbar.controller!;
+    final rect = tester.getRect(find.byType(Scrollbar));
+    final gesture = await tester.startGesture(
+      Offset(rect.right - 3, rect.top + 10),
+    );
+    await tester.pump();
+    await gesture.moveBy(const Offset(0, 120));
+    await tester.pump();
+    await gesture.up();
+    await tester.pumpAndSettle();
+    expect(controller.offset, greaterThan(0));
   });
 }
 

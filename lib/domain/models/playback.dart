@@ -76,6 +76,10 @@ class BackendSnapshot {
   /// 队列中当前曲目之后的曲目（队列面板展示用，非播放顺序）。
   final List<Track> upcoming;
 
+  /// 实际播放顺序中当前曲目之后的曲目（shuffle 为洗牌排列的剩余；
+  /// 队列面板「接下来」展示用）。
+  final List<Track> upNext;
+
   /// 已播放顺序（最近一首在后）；previous 语义的依据。
   final List<Track> history;
 
@@ -93,6 +97,7 @@ class BackendSnapshot {
     this.currentIndex = -1,
     this.next,
     this.upcoming = const [],
+    this.upNext = const [],
     this.history = const [],
     this.isPlaying = false,
     this.isLoading = false,
@@ -113,6 +118,7 @@ class BackendSnapshot {
       other.currentIndex == currentIndex &&
       other.next == next &&
       deepEquals(other.upcoming, upcoming) &&
+      deepEquals(other.upNext, upNext) &&
       deepEquals(other.history, history) &&
       other.isPlaying == isPlaying &&
       other.isLoading == isLoading &&
@@ -129,6 +135,7 @@ class BackendSnapshot {
         currentIndex,
         next,
         deepHash(upcoming),
+        deepHash(upNext),
         deepHash(history),
         isPlaying,
         isLoading,
@@ -156,6 +163,10 @@ class PlaybackSnapshot {
   /// 队列中当前曲目之后的曲目（队列面板展示用，非播放顺序）。
   final List<Track> upcoming;
 
+  /// 实际播放顺序中当前曲目之后的曲目（shuffle 为洗牌排列的剩余；
+  /// 队列面板「接下来」展示用）。
+  final List<Track> upNext;
+
   /// 已播放顺序（最近一首在后）；恢复态为会话队列的前缀近似。
   final List<Track> history;
 
@@ -173,6 +184,7 @@ class PlaybackSnapshot {
     this.currentIndex = -1,
     this.next,
     this.upcoming = const [],
+    this.upNext = const [],
     this.history = const [],
     this.isPlaying = false,
     this.isLoading = false,
@@ -193,6 +205,7 @@ class PlaybackSnapshot {
       other.currentIndex == currentIndex &&
       other.next == next &&
       deepEquals(other.upcoming, upcoming) &&
+      deepEquals(other.upNext, upNext) &&
       deepEquals(other.history, history) &&
       other.isPlaying == isPlaying &&
       other.isLoading == isLoading &&
@@ -209,6 +222,7 @@ class PlaybackSnapshot {
         currentIndex,
         next,
         deepHash(upcoming),
+        deepHash(upNext),
         deepHash(history),
         isPlaying,
         isLoading,

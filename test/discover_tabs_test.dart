@@ -5,6 +5,7 @@ import 'package:molia/providers/library_provider.dart';
 import 'package:molia/providers/playback_provider.dart';
 import 'package:molia/widgets/discover_leaderboards_tab.dart';
 import 'package:molia/widgets/discover_playlists_tab.dart';
+import 'package:material_3_expressive/material_3_expressive.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -88,6 +89,8 @@ void main() {
     expect(find.text('网易音乐'), findsNothing); // tab 内不再有平台选择
     expect(find.text('歌单'), findsOneWidget); // 区块标题
     expect(find.text('测试歌单'), findsOneWidget); // 歌单卡片
+    // 列表不再提供直接导入：导入入口只在详情页。
+    expect(find.byIcon(Icons.download_rounded), findsNothing);
     expect(find.text('华语'), findsWidgets); // 热门标签
     expect(find.text('全部'), findsOneWidget);
     expect(wy.tagCalls, 1);
@@ -103,6 +106,8 @@ void main() {
     expect(find.text('歌单详情'), findsOneWidget);
     expect(find.text('歌曲A'), findsOneWidget);
     expect(find.text('播放全部'), findsOneWidget);
+    // 「播放全部」只在头部出现一次：顶栏不再有重复的播放图标。
+    expect(find.byIcon(Icons.play_arrow_rounded), findsOneWidget);
 
     await tester.tap(find.text('歌曲A'));
     await tester.pumpAndSettle();
@@ -111,19 +116,6 @@ void main() {
     expect(request, isNotNull);
     expect(request!.tracks.single.title, '歌曲A');
     expect(request.tracks.single.payload['songmid'], 111);
-  });
-
-  testWidgets('歌单 tab：卡片下载按钮直接导入本地列表', (tester) async {
-    await pumpTab(tester, const DiscoverPlaylistsTab());
-
-    await tester.tap(find.byIcon(Icons.download_rounded));
-    await tester.pumpAndSettle();
-
-    expect(find.text('已导入 1 首'), findsOneWidget);
-    final imported = await repository.findPlaylistByName('歌单详情');
-    expect(imported, isNotNull);
-    final tracks = await repository.listPlaylistTracks(imported!.id);
-    expect(tracks.single.songId, '111');
   });
 
   testWidgets('歌单 tab：详情页可导入到我的列表', (tester) async {
@@ -171,6 +163,53 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('歌曲A'), findsOneWidget);
+    expect(find.byIcon(Icons.play_arrow_rounded), findsOneWidget); // 榜单详情同样只保留头部「播放全部」
     expect(wy.leaderboardCalls, greaterThan(0));
+  });
+
+  testWidgets('歌单 tab：固定行高懒加载 + 触底自动加载下一页', (tester) async {
+    wy.playlistPages = 3;
+    wy.playlistsPerPage = 40;
+    await pumpTab(tester, const DiscoverPlaylistsTab());
+
+    // 固定 extent：滚动条拇指尺寸/拖动定位精确。
+    final sliver = tester.widget<SliverFixedExtentList>(
+      find.byType(SliverFixedExtentList),
+    );
+    expect(sliver.itemExtent, 80);
+
+    // 懒加载：2400 高视口只构建视口附近的卡片（一页 40 张不会全部构建）。
+    final cards = tester.widgetList<M3ECard>(find.byType(M3ECard)).length;
+    expect(cards, greaterThan(0));
+    expect(cards, lessThan(60));
+    expect(find.text('歌单 3-39'), findsNothing);
+
+    // 触底自动加载第 2 页（无需点按钮）。
+    await tester.drag(find.byType(CustomScrollView), const Offset(0, -4000));
+    await tester.pumpAndSettle();
+    expect(wy.playlistPageCalls, contains(2));
+  });
+
+  testWidgets('歌单 tab：滚动条常显且可手拖', (tester) async {
+    wy.playlistPages = 3;
+    wy.playlistsPerPage = 40;
+    await pumpTab(tester, const DiscoverPlaylistsTab());
+
+    final scrollbar = tester.widget<Scrollbar>(find.byType(Scrollbar));
+    expect(scrollbar.thumbVisibility, isTrue);
+    expect(scrollbar.interactive, isTrue);
+    final controller = scrollbar.controller!;
+
+    final rect = tester.getRect(find.byType(Scrollbar));
+    final gesture = await tester.startGesture(
+      Offset(rect.right - 3, rect.top + 10),
+    );
+    await tester.pump();
+    await gesture.moveBy(const Offset(0, 120));
+    await tester.pump();
+    await gesture.up();
+    await tester.pumpAndSettle();
+
+    expect(controller.offset, greaterThan(0));
   });
 }

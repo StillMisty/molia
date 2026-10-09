@@ -9,6 +9,7 @@ import '../services/lyrics/lrclib_provider.dart';
 import '../services/lyrics/netease_provider.dart';
 import '../l10n/app_localizations.dart';
 import '../services/notification_service.dart';
+import 'app_search_bar.dart';
 
 // 在页面中使用自己的数据结构表示搜索结果
 final _logger = Logger();
@@ -325,45 +326,35 @@ class _LyricsSearchPageState extends State<LyricsSearchPage> {
           onPressed: () => Navigator.of(context).pop(),
         ),
         bottom: PreferredSize(
-          preferredSize: const Size.fromHeight(kToolbarHeight),
+          // 搜索栏 56 + 上下各 8 的留白：与子组件实际高度一致，避免预留偏差。
+          preferredSize: const Size.fromHeight(kToolbarHeight + 16),
           child: Padding(
             padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
-            child: M3ETextField(
+            child: AppSearchBar(
               controller: _searchController,
               focusNode: _searchFocusNode,
-              placeholder: l10n.searchHint,
-              leading: const Icon(Icons.search_rounded),
-              trailing: _isAnyProviderLoading
-                  ? const Padding(
-                      padding: EdgeInsets.all(12.0),
-                      child: SizedBox(
-                        width: 16,
-                        height: 16,
-                        child: M3EProgressIndicator.circular(
-                          size: 16,
-                          strokeWidth: 2,
-                        ),
+              hintText: l10n.searchHint,
+              trailing: [
+                if (_isAnyProviderLoading)
+                  const Padding(
+                    padding: EdgeInsets.all(12.0),
+                    child: SizedBox(
+                      width: 16,
+                      height: 16,
+                      child: M3EProgressIndicator.circular(
+                        size: 16,
+                        strokeWidth: 2,
                       ),
-                    )
-                  : (_searchController.text.isNotEmpty
-                      ? M3EIconButton(
-                          variant: M3EIconButtonVariant.standard,
-                          icon: const Icon(Icons.clear_rounded),
-                          tooltip: l10n.clearSearch,
-                          onPressed: () {
-                            _searchController.clear();
-                            _performSearch('');
-                            _searchFocusNode.requestFocus();
-                          },
-                        )
-                      : null),
+                    ),
+                  ),
+              ],
               onChanged: (value) {
-                setState(() {});
+                // 清空（清除键或手动删空）：回到初始提示并保留焦点。
+                if (value.isEmpty) _performSearch('');
               },
               onSubmitted: (value) {
                 _performSearch(value);
               },
-              textInputAction: TextInputAction.search,
             ),
           ),
         ),

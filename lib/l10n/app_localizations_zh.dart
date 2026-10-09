@@ -687,7 +687,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get libraryPlaylists => '我的列表';
 
   @override
-  String get libraryImportFavorites => '导入收藏夹';
+  String get libraryImportFavorites => '导入收藏';
 
   @override
   String get libraryImportFavoritesSubtitle => '从 LX Music 导出的收藏夹文件（.lxmc）导入';

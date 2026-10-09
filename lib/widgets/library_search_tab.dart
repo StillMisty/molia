@@ -1,10 +1,9 @@
-import 'package:flutter/services.dart';
-import 'package:material_3_expressive/material_3_expressive.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:provider/provider.dart';
 
 import '../l10n/app_localizations.dart';
 import '../providers/search_provider.dart';
+import 'app_search_bar.dart';
 import 'search_section.dart';
 
 AppLocalizations _l10n(BuildContext context) =>
@@ -51,13 +50,6 @@ class _LibrarySearchTabState extends State<LibrarySearchTab>
     }
   }
 
-  void _clearSearch(SearchProvider searchProvider) {
-    HapticFeedback.lightImpact();
-    _searchController.clear();
-    searchProvider.clearSearch();
-    _searchFocusNode.unfocus();
-  }
-
   @override
   Widget build(BuildContext context) {
     super.build(context);
@@ -77,28 +69,19 @@ class _LibrarySearchTabState extends State<LibrarySearchTab>
         return Column(
           children: [
             Padding(
-              padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
-              child: M3ETextField(
+              // 横向边距由搜索栏自己管（16 → 聚焦 12 弹性展开），这里只留纵向。
+              padding: const EdgeInsets.only(top: 12, bottom: 8),
+              child: AppSearchBar(
                 controller: _searchController,
                 focusNode: _searchFocusNode,
-                placeholder: _l10n(context).searchHint,
-                leading: const Icon(Icons.search_rounded),
-                trailing: _searchController.text.isNotEmpty
-                    ? M3EIconButton(
-                        variant: M3EIconButtonVariant.standard,
-                        icon: const Icon(Icons.clear_rounded),
-                        tooltip: _l10n(context).clearSearch,
-                        onPressed: () => _clearSearch(searchProvider),
-                      )
-                    : null,
-                onChanged: (value) {
-                  setState(() {});
-                },
+                hintText: _l10n(context).searchHint,
+                margin: 16,
+                focusedMargin: 12,
+                expandOnFocus: true,
                 onSubmitted: (value) {
                   searchProvider.submitSearch(value);
                   _searchFocusNode.unfocus();
                 },
-                textInputAction: TextInputAction.search,
               ),
             ),
             Expanded(

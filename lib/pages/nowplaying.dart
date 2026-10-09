@@ -26,8 +26,11 @@ class _NowPlayingState extends State<NowPlaying>
     with AutomaticKeepAliveClientMixin, TickerProviderStateMixin {
   late final PageController _pageController;
 
-  /// 队列页滚动控制器：用于「滑到顶后再下滑收起」判定（不抢列表滚动）。
+  /// 队列页滚动控制器：用于「滑到顶后再下拉切换播放器」判定（不抢列表滚动）。
   late final ScrollController _queueScrollController;
+
+  /// 歌词页滚动控制器：同一判定的歌词侧（外部注入 [LyricsWidget]）。
+  late final ScrollController _lyricsScrollController;
 
   /// 播放器展开进度：0 = 迷你条、1 = 完整播放器（小屏）。
   late final AnimationController _expandController;
@@ -36,9 +39,12 @@ class _NowPlayingState extends State<NowPlaying>
   /// 播放器区域可用的最大高度（跟手拖拽的行程基准）。
   double _playerMaxHeight = 340;
 
-  /// 收起态：内容区上滑/下滑累计位移（用于列表滑到顶下拉收起）。
+  /// 收起态：内容区上滑/下滑累计位移（用于列表滑到顶下拉切换）。
   double _contentSwipeDy = 0;
   double _contentSwipeDx = 0;
+
+  /// 本次内容区手势已触发过切换（一次手势只触发一次）。
+  bool _contentToggleDone = false;
 
   static const int _currentPageIndex = 1; // 默认显示歌词页
 
@@ -52,6 +58,7 @@ class _NowPlayingState extends State<NowPlaying>
     super.initState();
     _pageController = PageController(initialPage: _currentPageIndex);
     _queueScrollController = ScrollController();
+    _lyricsScrollController = ScrollController();
     _expandController = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 360),
@@ -64,6 +71,7 @@ class _NowPlayingState extends State<NowPlaying>
     _expandController.dispose();
     _pageController.dispose();
     _queueScrollController.dispose();
+    _lyricsScrollController.dispose();
     super.dispose();
   }
 
@@ -129,19 +137,10 @@ class _NowPlayingState extends State<NowPlaying>
         title: AppLocalizations.of(context)!.queueTab,
         icon: Icons.queue_music_rounded,
         page: RepaintBoundary(
-          child: SingleChildScrollView(
+          child: QueueDisplay(
             controller: _queueScrollController,
-            child: ConstrainedBox(
-              constraints: const BoxConstraints(minHeight: 0),
-              child: const Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  // 顶部留出圆点过渡带，列表首项不被渐隐吃掉。
-                  SizedBox(height: _dotsBandHeight + 2),
-                  QueueDisplay(),
-                ],
-              ),
-            ),
+            // 顶部留出圆点过渡带，列表首项不被渐隐吃掉。
+            topPadding: _dotsBandHeight + 2,
           ),
         ),
       ),
@@ -150,7 +149,10 @@ class _NowPlayingState extends State<NowPlaying>
         icon: Icons.lyrics_rounded,
         page: RepaintBoundary(
           // 歌词快捷操作只在收起态（歌词区展开）显示。
-          child: LyricsWidget(quickActionsEnabled: _isMini),
+          child: LyricsWidget(
+            quickActionsEnabled: _isMini,
+            controller: _lyricsScrollController,
+          ),
         ),
       ),
     ];
@@ -180,11 +182,14 @@ class _NowPlayingState extends State<NowPlaying>
   static const double _dotsBandHeight = 24;
 
   /// 歌词/队列小圆点切换行（常显；由父级 Positioned 撑满宽度）。
-  Widget _buildDotsRow() {
+  ///
+  /// [onActiveTap] 点击已激活圆点时触发（播放页 = 展开/收起切换）。
+  Widget _buildDotsRow({VoidCallback? onActiveTap}) {
     return Center(
       child: LyricsQueueDots(
         pages: _buildPages(context),
         pageController: _pageController,
+        onActiveTap: onActiveTap,
       ),
     );
   }
@@ -217,9 +222,10 @@ class _NowPlayingState extends State<NowPlaying>
   }
 
   // ---- 手势区域 ----
-  // 展开：播放器区域上滑（迷你态）或队列列表上滑（队列页）；
-  // 收起：播放器区域下滑，或队列列表已滑到顶后继续下滑。
-  // 歌词页不参与展开/收起（上滑是滚动歌词）。
+  // 切换（收缩→展开、展开→收起）：
+  // - 播放器区域跟手上下拖拽；
+  // - 队列/歌词已滑到顶部后继续下拉超过阈值（把内容往上推，不抢内容滚动）。
+  // 内容上下滚动、横向翻页自身不参与切换。
 
   /// 当前内容页（0 = 队列、1 = 歌词）。
   int get _currentContentPage {
@@ -227,21 +233,25 @@ class _NowPlayingState extends State<NowPlaying>
     return _pageController.page?.round() ?? _currentPageIndex;
   }
 
-  /// 队列列表是否已在顶部（未挂载/无滚动条时视为在顶）。
-  bool get _queueAtTop {
-    final controller = _queueScrollController;
+  /// 当前内容页是否已在顶部（未挂载/无滚动条时视为在顶）。
+  bool get _contentAtTop {
+    final controller = _currentContentPage == 0
+        ? _queueScrollController
+        : _lyricsScrollController;
     return !controller.hasClients || controller.offset <= 0;
   }
 
   void _onContentPointerDown(PointerDownEvent event) {
     _contentSwipeDy = 0;
     _contentSwipeDx = 0;
+    _contentToggleDone = false;
   }
 
   void _onContentPointerMove(PointerMoveEvent event) {
-    // 队列列表：已滑到顶后继续下拉才收起（Apple Music 式，不抢列表滚动）。
-    // 上滑展开已取消——展开只在播放器区域（跟手拖拽）。
-    if (_currentContentPage != 0 || _isMini) {
+    if (_contentToggleDone) return;
+    // 不在顶部：位移属于内容滚动本身，不累计——否则「一次拖到顶」会在
+    // 到达顶部的瞬间用积攒的位移误触发切换。
+    if (!_contentAtTop) {
       _resetContentSwipe();
       return;
     }
@@ -250,8 +260,10 @@ class _NowPlayingState extends State<NowPlaying>
     final bool mostlyVertical =
         _contentSwipeDy.abs() > _contentSwipeDx.abs() * 1.5;
     if (!mostlyVertical) return;
-    if (_contentSwipeDy > 80 && _queueAtTop) {
-      // 列表已到顶，继续下滑 = 收起。
+    if (_contentSwipeDy > 80) {
+      // 已在顶部，继续往下拉（内容上推）= 切换播放器展开/收起。
+      // 本次手势只触发一次，避免动画未落定就被反向再触发。
+      _contentToggleDone = true;
       _resetContentSwipe();
       _toggleExpand();
     }
@@ -374,7 +386,9 @@ class _NowPlayingState extends State<NowPlaying>
                       left: 0,
                       right: 0,
                       height: _dotsBandHeight,
-                      child: RepaintBoundary(child: _buildDotsRow()),
+                      child: RepaintBoundary(
+                        child: _buildDotsRow(onActiveTap: _toggleExpand),
+                      ),
                     ),
                   ],
                 ),

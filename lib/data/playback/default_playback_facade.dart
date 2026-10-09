@@ -133,6 +133,7 @@ class DefaultPlaybackFacade implements PlaybackFacade {
       currentIndex: index,
       next: backend.next,
       upcoming: backend.upcoming,
+      upNext: backend.upNext,
       history: backend.history,
       isPlaying: backend.isPlaying,
       isLoading: backend.isLoading,

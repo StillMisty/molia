@@ -10,6 +10,7 @@ import '../services/cache_service.dart';
 import '../sources/source_track.dart';
 import 'audio_cache_source.dart';
 import 'playback_order.dart';
+import 'shuffle_order.dart';
 
 /// 将音源曲目解析为可播放 URL 的回调（由 SourceManager 提供）。
 typedef SourceUrlResolver = Future<String> Function(
@@ -48,8 +49,8 @@ class LocalPlaybackService extends ChangeNotifier {
   /// 队列仅在 `playTracks` 时整体替换并同步清空。
   final PlaybackOrder _order = PlaybackOrder();
 
-  /// shuffle 下一次「预览」的随机下标：同一曲目内稳定，避免每次 build 变脸。
-  int? _displayNextIndex;
+  /// shuffle 播放顺序：队列下标的随机排列（每轮每首恰好一次，轮末自动重洗）。
+  final PlaybackShuffleOrder _shuffleOrder;
 
   bool _isPlaying = false;
   bool _isLoading = false;
@@ -62,15 +63,16 @@ class LocalPlaybackService extends ChangeNotifier {
   Timer? _notifyThrottle;
   bool _notifyPending = false;
   int _playRequestId = 0;
-  final math.Random _random = math.Random();
 
   LocalPlaybackService({
     required SourceUrlResolver resolver,
     CacheService? cacheService,
     String Function()? preferredQuality,
+    math.Random? random,
   })  : _resolver = resolver,
         _cacheService = cacheService ?? CacheService.instance,
-        _preferredQuality = preferredQuality {
+        _preferredQuality = preferredQuality,
+        _shuffleOrder = PlaybackShuffleOrder(random: random) {
     _playerStateSubscription = _player.playerStateStream.listen(_onPlayerState);
     _positionSubscription = _player.positionStream.listen((position) {
       _position = position;
@@ -112,7 +114,8 @@ class LocalPlaybackService extends ChangeNotifier {
   /// 最近一次 `playTracks` 传入的上下文名（系统媒体会话/快照映射用）。
   String? get contextName => _contextName;
 
-  /// 按当前模式解析出的下一首（界面预览；shuffle 在单曲内保持稳定）。
+  /// 按当前模式解析出的下一首（界面预览；shuffle 为排列中的下一首，
+  /// 本轮末尾为空——自动播完/手动切歌时才重洗新一轮）。
   SourceTrack? get nextSourceTrack {
     final index = _nextIndexForDisplay();
     return index < 0 ? null : _queue[index];
@@ -120,6 +123,22 @@ class LocalPlaybackService extends ChangeNotifier {
 
   /// 已播放顺序（最近在后）。
   List<SourceTrack> get historyTracks => _order.tracksOf(_queue);
+
+  /// 实际播放顺序中当前曲目之后的曲目（队列页「接下来」展示用）：
+  /// 顺序模式 = 队列下一位起；shuffle = 本轮洗牌排列的剩余。
+  List<SourceTrack> get upNextTracks {
+    if (_currentIndex < 0 || _queue.isEmpty) return const [];
+    if (_mode == PlayMode.shuffle && _queue.length > 1) {
+      _ensureShuffleOrder();
+      return List.unmodifiable([
+        for (final index in _shuffleOrder.remainingAfter(_currentIndex))
+          _queue[index],
+      ]);
+    }
+    return List.unmodifiable([
+      for (var i = _currentIndex + 1; i < _queue.length; i++) _queue[i],
+    ]);
+  }
 
   /// 当前播放进度（用于系统媒体会话状态映射）。
   Duration get position => _position;
@@ -142,11 +161,15 @@ class LocalPlaybackService extends ChangeNotifier {
     _queue
       ..clear()
       ..addAll(tracks);
-    // 新队列 = 新会话：播放顺序与 shuffle 预览都从头开始。
+    // 新队列 = 新会话：播放顺序从头开始；shuffle 以起播曲目置首重洗。
     _order.clear();
-    _displayNextIndex = null;
-    _contextName = contextName;
     final safeIndex = index.clamp(0, tracks.length - 1);
+    if (_mode == PlayMode.shuffle) {
+      _shuffleOrder.reset(_queue.length, startIndex: safeIndex);
+    } else {
+      _shuffleOrder.clear();
+    }
+    _contextName = contextName;
     await _playIndex(safeIndex, recordHistory: false);
   }
 
@@ -167,7 +190,6 @@ class LocalPlaybackService extends ChangeNotifier {
     if (recordHistory && _currentTrack != null && _currentIndex != index) {
       _order.record(_currentIndex);
     }
-    _displayNextIndex = null;
     final requestId = ++_playRequestId;
     final track = _queue[index];
 
@@ -189,7 +211,16 @@ class LocalPlaybackService extends ChangeNotifier {
       if (requestId != _playRequestId) return;
 
       _duration = _player.duration ?? track.duration ?? Duration.zero;
-      await _player.play();
+      // 播放启动后立即返回：just_audio 的 play() Future 在「播完/暂停」才
+      // 完成，挂在这里会拖住调用方（自动切歌完成处理器）并吞掉后续
+      // completed 事件；启动失败单独捕获进 lastError。
+      unawaited(_player.play().catchError((Object e) {
+        if (requestId == _playRequestId) {
+          _lastError = e.toString();
+          _isPlaying = false;
+          notifyListeners();
+        }
+      }));
     } catch (e) {
       if (requestId != _playRequestId) return;
       _lastError = e.toString();
@@ -281,7 +312,11 @@ class LocalPlaybackService extends ChangeNotifier {
       if (_player.processingState == ProcessingState.completed) {
         await _player.seek(Duration.zero);
       }
-      await _player.play();
+      unawaited(_player.play().catchError((Object e) {
+        _lastError = e.toString();
+        _isPlaying = false;
+        notifyListeners();
+      }));
     }
   }
 
@@ -293,7 +328,9 @@ class LocalPlaybackService extends ChangeNotifier {
   }
 
   Future<void> skipToNext() async {
-    final index = _nextIndex(auto: true);
+    // 手动切歌与界面预览同源：shuffle 走洗牌排列的下一首（本轮末尾自动
+    // 重洗新一轮）；单曲循环下手动切歌走队列下一位（只有自动播完才重播）。
+    final index = _nextIndex(auto: false);
     if (index < 0) {
       await _player.pause();
       await _player.seek(Duration.zero);
@@ -304,20 +341,27 @@ class LocalPlaybackService extends ChangeNotifier {
 
   Future<void> skipToPrevious() async {
     if (_currentTrack == null || _queue.isEmpty) return;
-    // 播放超过 3 秒：先回到本曲开头（行业惯例），不消费播放顺序。
-    if (_position.inSeconds > 3) {
-      await seek(Duration.zero);
-      return;
-    }
-    // 有播放顺序：真正的「上一首」；否则回退到队列前一位（旧行为）。
+    // 永远切上一首：滑动/按钮/耳机键同一语义，不做「>3 秒重播本曲」。
+    // 有播放顺序（含 shuffle）消费最近一首；否则回退到队列前一位。
     final previous =
         _order.popPrevious() ?? (_currentIndex > 0 ? _currentIndex - 1 : 0);
     await _playIndex(previous, recordHistory: false);
   }
 
   Future<void> setMode(PlayMode mode) async {
-    if (_mode != mode) _displayNextIndex = null;
+    final changed = _mode != mode;
     _mode = mode;
+    if (changed) {
+      if (mode == PlayMode.shuffle && _queue.isNotEmpty) {
+        // 以当前曲目置首重洗：切到随机模式不会立刻跳走正在播放的曲目。
+        _shuffleOrder.reset(
+          _queue.length,
+          startIndex: _currentIndex >= 0 ? _currentIndex : 0,
+        );
+      } else if (mode != PlayMode.shuffle) {
+        _shuffleOrder.clear();
+      }
+    }
     notifyListeners();
   }
 
@@ -341,30 +385,24 @@ class LocalPlaybackService extends ChangeNotifier {
       _duration = Duration.zero;
       _contextName = null;
       _order.clear();
-      _displayNextIndex = null;
+      _shuffleOrder.clear();
     }
     notifyListeners();
   }
 
-  /// 界面预览用的下一首下标：shuffle 在单曲内缓存随机值（避免每次读取
-  /// 都换一个「下一首」），其余模式与 `_nextIndex(auto: false)` 一致。
+  /// 界面预览用的下一首下标：shuffle 读排列中的下一首（不重洗，稳定），
+  /// 本轮末尾返回 -1（真正切歌时才会重洗新一轮）；其余模式同手动切歌。
   int _nextIndexForDisplay() {
     if (_queue.isEmpty || _currentIndex < 0) return -1;
     if (_mode == PlayMode.shuffle) {
       if (_queue.length <= 1) return _currentIndex;
-      return _displayNextIndex ??= _randomShuffleIndex();
+      _ensureShuffleOrder();
+      return _shuffleOrder.peekNext(_currentIndex) ?? -1;
     }
     return _nextIndex(auto: false);
   }
 
-  int _randomShuffleIndex() {
-    var next = _random.nextInt(_queue.length);
-    if (next == _currentIndex) {
-      next = (next + 1) % _queue.length;
-    }
-    return next;
-  }
-
+  /// 下一首下标（自动播完 / 手动切歌共用）：shuffle 走排列，轮末重洗。
   int _nextIndex({required bool auto}) {
     if (_queue.isEmpty) return -1;
     if (_mode == PlayMode.singleRepeat && auto) {
@@ -372,10 +410,22 @@ class LocalPlaybackService extends ChangeNotifier {
     }
     if (_mode == PlayMode.shuffle) {
       if (_queue.length == 1) return _currentIndex;
-      return _randomShuffleIndex();
+      _ensureShuffleOrder();
+      return _shuffleOrder.next(_currentIndex);
     }
     if (_currentIndex + 1 < _queue.length) return _currentIndex + 1;
     return -1;
+  }
+
+  /// shuffle 排列缺失时按当前曲目置首补齐（正常路径在 playTracks/setMode
+  /// 已重置；这里兜底，避免读到空排列）。
+  void _ensureShuffleOrder() {
+    if (_queue.isEmpty || _shuffleOrder.isEmpty) {
+      _shuffleOrder.reset(
+        _queue.length,
+        startIndex: _currentIndex >= 0 ? _currentIndex : 0,
+      );
+    }
   }
 
   void _onPlayerState(PlayerState state) {
@@ -395,15 +445,11 @@ class LocalPlaybackService extends ChangeNotifier {
     try {
       if (_mode == PlayMode.singleRepeat) {
         await _player.seek(Duration.zero);
-        await _player.play();
+        _resumeCurrentTrack();
       } else {
         final index = _nextIndex(auto: true);
         if (index >= 0 && index != _currentIndex) {
           await _playIndex(index);
-        } else if (index == _currentIndex &&
-            _mode == PlayMode.singleRepeat) {
-          await _player.seek(Duration.zero);
-          await _player.play();
         } else {
           _isPlaying = false;
           notifyListeners();
@@ -412,6 +458,15 @@ class LocalPlaybackService extends ChangeNotifier {
     } finally {
       _handlingCompletion = false;
     }
+  }
+
+  /// 续播当前曲目（单曲循环重播）：与 `_playIndex` 一致，不等待整曲播完。
+  void _resumeCurrentTrack() {
+    unawaited(_player.play().catchError((Object e) {
+      _lastError = e.toString();
+      _isPlaying = false;
+      notifyListeners();
+    }));
   }
 
   void _scheduleNotify() {
