@@ -420,5 +420,21 @@
   "lyricsBluetoothIntervalLine": "每行",
   "lyricsBluetoothInterval1s": "每秒",
   "lyricsBluetoothInterval2s": "每 2 秒",
-  "lyricsDisplayUnsupported": "当前平台暂不支持歌词输出"
+  "lyricsDisplayUnsupported": "当前平台暂不支持歌词输出",
+  "colorPickerTitle": "选择颜色",
+  "colorPickerCustom": "自定义颜色…",
+  "colorPickerHex": "十六进制颜色",
+  "colorPickerInvalid": "颜色格式无效",
+  "colorPickerHue": "色相",
+  "colorPickerSaturation": "饱和度",
+  "colorPickerBrightness": "明度",
+  "colorPickerOpacity": "不透明度",
+  "lyricsColorSource": "取色方式",
+  "lyricsColorSourceCustom": "自定义",
+  "lyricsColorSourcePrimary": "主题 · 主色",
+  "lyricsColorSourceSecondary": "主题 · 副色",
+  "lyricsColorSourceTertiary": "主题 · 第三色",
+  "lyricsColorSourceOnSurface": "主题 · 正文色",
+  "lyricsColorSourceOnSurfaceVariant": "主题 · 次要文本色",
+  "lyricsDesktopColorThemeHint": "跟随主题时使用莫奈壁纸取色或专辑封面取色，并随主题实时变化。"
 }

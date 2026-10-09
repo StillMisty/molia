@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:molia/domain/models/playback.dart';
 import 'package:molia/domain/models/track.dart';
@@ -130,6 +131,32 @@ void main() {
     expect(settings.desktopEnabled, isFalse);
     provider.dispose();
     await output.controller.close();
+  });
+
+  test('主题变化时重新下发输出配置（跟随主题颜色）', () async {
+    SharedPreferences.setMockInitialValues({});
+    final settings = LyricsDisplaySettings();
+    await settings.setDesktopEnabled(true);
+    final output = _FakeOutput(LyricsOutputIds.desktop);
+    final theme = ChangeNotifier();
+    final provider = LyricsDisplayProvider(
+      settings: settings,
+      outputs: [output],
+      themeListenable: theme,
+    );
+    await pumpEventQueue();
+    expect(output.starts, 1);
+
+    theme.notifyListeners();
+    await pumpEventQueue();
+    expect(output.starts, 2);
+
+    provider.dispose();
+    // 释放后主题通知不再触发输出。
+    theme.notifyListeners();
+    await pumpEventQueue();
+    expect(output.starts, 2);
+    theme.dispose();
   });
 
   test('能力查询返回输出自身能力', () async {

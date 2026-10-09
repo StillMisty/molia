@@ -1,5 +1,6 @@
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:molia/services/lyrics_display/desktop_lyrics_output.dart';
 import 'package:molia/services/lyrics_display/lyrics_channel.dart';
 import 'package:molia/services/lyrics_display/lyrics_display_settings.dart';
@@ -110,6 +111,27 @@ void main() {
     final noLyrics = calls.lastWhere((call) => call.method == 'desktop.update');
     expect((noLyrics.arguments as Map)['line'], '歌名');
 
+    await output.stop();
+  });
+
+  test('跟随主题：配置下发解析后的 ColorScheme 颜色', () async {
+    final scheme = ColorScheme.fromSeed(seedColor: const Color(0xFF3366FF));
+    final channel = LyricsChannel();
+    final output = DesktopLyricsOutput(
+      channel: channel,
+      supported: true,
+      colorScheme: () => scheme,
+    );
+    final settings = await desktopSettings();
+    await settings.setDesktopPlayedColorSource(LyricColorSource.primary);
+    await output.start(settings);
+    await pumpEventQueue();
+
+    final showCall = calls.firstWhere((call) => call.method == 'desktop.show');
+    expect(
+      (showCall.arguments as Map)['playedColor'],
+      scheme.primary.toARGB32(),
+    );
     await output.stop();
   });
 

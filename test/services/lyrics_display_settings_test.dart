@@ -18,6 +18,9 @@ void main() {
     expect(s.offsetMs, 0);
     expect(s.desktopMaxLines, 3);
     expect(s.desktopFontSize, 22);
+    expect(s.desktopPlayedColorSource, LyricColorSource.custom);
+    expect(s.desktopUnplayedColorSource, LyricColorSource.custom);
+    expect(s.desktopShadowColorSource, LyricColorSource.custom);
     expect(s.notificationTarget, LyricsMetadataTarget.subtitle);
     expect(s.bluetoothTarget, LyricsMetadataTarget.artist);
     expect(s.bluetoothOnlyWhenA2dp, isTrue);
@@ -35,6 +38,10 @@ void main() {
     await source.setDesktopOpacity(0.5);
     await source.setDesktopPlayedColor(0xFF00FF00);
     await source.setDesktopShadowColor(0xFF123456);
+    await source.setDesktopPlayedColorSource(LyricColorSource.primary);
+    await source.setDesktopUnplayedColorSource(
+        LyricColorSource.onSurfaceVariant);
+    await source.setDesktopShadowColorSource(LyricColorSource.tertiary);
     await source.setDesktopWidthPercent(80);
     await source.setDesktopSingleLine(true);
     await source.setDesktopTextAlignX(DesktopTextAlignX.left);
@@ -73,6 +80,10 @@ void main() {
     expect(restored.desktopOpacity, 0.5);
     expect(restored.desktopPlayedColor, 0xFF00FF00);
     expect(restored.desktopShadowColor, 0xFF123456);
+    expect(restored.desktopPlayedColorSource, LyricColorSource.primary);
+    expect(restored.desktopUnplayedColorSource,
+        LyricColorSource.onSurfaceVariant);
+    expect(restored.desktopShadowColorSource, LyricColorSource.tertiary);
     expect(restored.desktopWidthPercent, 80);
     expect(restored.desktopSingleLine, isTrue);
     expect(restored.desktopTextAlignX, DesktopTextAlignX.left);

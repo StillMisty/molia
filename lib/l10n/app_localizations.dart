@@ -2443,6 +2443,102 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Lyric outputs are not available on this platform'**
   String get lyricsDisplayUnsupported;
+
+  /// No description provided for @colorPickerTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Pick a color'**
+  String get colorPickerTitle;
+
+  /// No description provided for @colorPickerCustom.
+  ///
+  /// In en, this message translates to:
+  /// **'Custom color…'**
+  String get colorPickerCustom;
+
+  /// No description provided for @colorPickerHex.
+  ///
+  /// In en, this message translates to:
+  /// **'Hex color'**
+  String get colorPickerHex;
+
+  /// No description provided for @colorPickerInvalid.
+  ///
+  /// In en, this message translates to:
+  /// **'Invalid color value'**
+  String get colorPickerInvalid;
+
+  /// No description provided for @colorPickerHue.
+  ///
+  /// In en, this message translates to:
+  /// **'Hue'**
+  String get colorPickerHue;
+
+  /// No description provided for @colorPickerSaturation.
+  ///
+  /// In en, this message translates to:
+  /// **'Saturation'**
+  String get colorPickerSaturation;
+
+  /// No description provided for @colorPickerBrightness.
+  ///
+  /// In en, this message translates to:
+  /// **'Brightness'**
+  String get colorPickerBrightness;
+
+  /// No description provided for @colorPickerOpacity.
+  ///
+  /// In en, this message translates to:
+  /// **'Opacity'**
+  String get colorPickerOpacity;
+
+  /// No description provided for @lyricsColorSource.
+  ///
+  /// In en, this message translates to:
+  /// **'Color source'**
+  String get lyricsColorSource;
+
+  /// No description provided for @lyricsColorSourceCustom.
+  ///
+  /// In en, this message translates to:
+  /// **'Custom'**
+  String get lyricsColorSourceCustom;
+
+  /// No description provided for @lyricsColorSourcePrimary.
+  ///
+  /// In en, this message translates to:
+  /// **'Theme · Primary'**
+  String get lyricsColorSourcePrimary;
+
+  /// No description provided for @lyricsColorSourceSecondary.
+  ///
+  /// In en, this message translates to:
+  /// **'Theme · Secondary'**
+  String get lyricsColorSourceSecondary;
+
+  /// No description provided for @lyricsColorSourceTertiary.
+  ///
+  /// In en, this message translates to:
+  /// **'Theme · Tertiary'**
+  String get lyricsColorSourceTertiary;
+
+  /// No description provided for @lyricsColorSourceOnSurface.
+  ///
+  /// In en, this message translates to:
+  /// **'Theme · On surface'**
+  String get lyricsColorSourceOnSurface;
+
+  /// No description provided for @lyricsColorSourceOnSurfaceVariant.
+  ///
+  /// In en, this message translates to:
+  /// **'Theme · Variant'**
+  String get lyricsColorSourceOnSurfaceVariant;
+
+  /// No description provided for @lyricsDesktopColorThemeHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Theme colors follow Monet (wallpaper) or album artwork colors and update live with the app theme.'**
+  String get lyricsDesktopColorThemeHint;
 }
 
 class _AppLocalizationsDelegate

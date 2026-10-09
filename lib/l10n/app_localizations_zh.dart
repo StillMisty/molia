@@ -1251,4 +1251,52 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get lyricsDisplayUnsupported => '当前平台暂不支持歌词输出';
+
+  @override
+  String get colorPickerTitle => '选择颜色';
+
+  @override
+  String get colorPickerCustom => '自定义颜色…';
+
+  @override
+  String get colorPickerHex => '十六进制颜色';
+
+  @override
+  String get colorPickerInvalid => '颜色格式无效';
+
+  @override
+  String get colorPickerHue => '色相';
+
+  @override
+  String get colorPickerSaturation => '饱和度';
+
+  @override
+  String get colorPickerBrightness => '明度';
+
+  @override
+  String get colorPickerOpacity => '不透明度';
+
+  @override
+  String get lyricsColorSource => '取色方式';
+
+  @override
+  String get lyricsColorSourceCustom => '自定义';
+
+  @override
+  String get lyricsColorSourcePrimary => '主题 · 主色';
+
+  @override
+  String get lyricsColorSourceSecondary => '主题 · 副色';
+
+  @override
+  String get lyricsColorSourceTertiary => '主题 · 第三色';
+
+  @override
+  String get lyricsColorSourceOnSurface => '主题 · 正文色';
+
+  @override
+  String get lyricsColorSourceOnSurfaceVariant => '主题 · 次要文本色';
+
+  @override
+  String get lyricsDesktopColorThemeHint => '跟随主题时使用莫奈壁纸取色或专辑封面取色，并随主题实时变化。';
 }

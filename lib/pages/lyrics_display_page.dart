@@ -6,9 +6,11 @@ import 'package:provider/provider.dart';
 
 import '../l10n/app_localizations.dart';
 import '../providers/lyrics_display_provider.dart';
+import '../services/lyrics_display/lyric_color_resolver.dart';
 import '../services/lyrics_display/lyrics_display_settings.dart';
 import '../services/lyrics_display/lyrics_output.dart';
 import '../theme/app_semantic_colors.dart';
+import '../widgets/app_color_picker.dart';
 
 /// 歌词显示设置页：共享项 + 桌面歌词 / 通知·锁屏 / 蓝牙三组。
 ///
@@ -302,19 +304,34 @@ class _LyricsDisplayPageState extends State<LyricsDisplayPage>
         context,
         title: l10n.lyricsDesktopColorPlayed,
         value: settings.desktopPlayedColor,
+        source: settings.desktopPlayedColorSource,
         onSelected: settings.setDesktopPlayedColor,
+        onSourceChanged: settings.setDesktopPlayedColorSource,
       ),
       _colorRow(
         context,
         title: l10n.lyricsDesktopColorUnplayed,
         value: settings.desktopUnplayedColor,
+        source: settings.desktopUnplayedColorSource,
         onSelected: settings.setDesktopUnplayedColor,
+        onSourceChanged: settings.setDesktopUnplayedColorSource,
       ),
       _colorRow(
         context,
         title: l10n.lyricsDesktopColorShadow,
         value: settings.desktopShadowColor,
+        source: settings.desktopShadowColorSource,
         onSelected: settings.setDesktopShadowColor,
+        onSourceChanged: settings.setDesktopShadowColorSource,
+      ),
+      Padding(
+        padding: const EdgeInsets.only(top: 2, bottom: 4),
+        child: Text(
+          l10n.lyricsDesktopColorThemeHint,
+          style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                color: Theme.of(context).colorScheme.onSurfaceVariant,
+              ),
+        ),
       ),
       _switchRow(
         context,
@@ -696,48 +713,121 @@ class _LyricsDisplayPageState extends State<LyricsDisplayPage>
     );
   }
 
+  /// 颜色行：取色方式（自定义 / 跟随主题角色）+ 自定义时的任意取色。
+  ///
+  /// - 预设色板提供快捷选择；「调色」按钮打开 HSV + Hex 任意调色器；
+  /// - 跟随主题时颜色来自当前 ColorScheme（莫奈 / 封面取色统一出口），
+  ///   主题变化会经调度自动重新下发，无需手动改色。
   Widget _colorRow(
     BuildContext context, {
     required String title,
     required int value,
+    required LyricColorSource source,
     required ValueChanged<int> onSelected,
+    required ValueChanged<LyricColorSource> onSourceChanged,
   }) {
     final scheme = Theme.of(context).colorScheme;
+    final l10n = AppLocalizations.of(context)!;
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 6),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(title),
-          const SizedBox(height: 8),
-          Wrap(
-            spacing: 10,
+          Row(
             children: [
-              for (final preset in _colorPresets)
+              Expanded(child: Text(title)),
+              SizedBox(
+                width: 170,
+                child: M3EDropdownMenu<LyricColorSource>(
+                  items: [
+                    for (final (option, label) in _colorSourceOptions(l10n))
+                      M3EDropdownItem<LyricColorSource>(
+                        label: label,
+                        value: option,
+                        selected: option == source,
+                      ),
+                  ],
+                  singleSelect: true,
+                  showChipAnimation: false,
+                  onSelectionChanged: (items) {
+                    if (items.isNotEmpty) onSourceChanged(items.first.value);
+                  },
+                ),
+              ),
+            ],
+          ),
+          if (source == LyricColorSource.custom) ...[
+            const SizedBox(height: 8),
+            Wrap(
+              spacing: 10,
+              runSpacing: 8,
+              children: [
+                for (final preset in _colorPresets)
+                  InkWell(
+                    onTap: () => onSelected(preset),
+                    customBorder: const CircleBorder(),
+                    child: Container(
+                      width: 28,
+                      height: 28,
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        color: Color(preset),
+                        border: Border.all(
+                          color: preset == value
+                              ? scheme.primary
+                              : scheme.outlineVariant,
+                          width: preset == value ? 3 : 1,
+                        ),
+                      ),
+                    ),
+                  ),
+                // 任意颜色：HSV + Hex，不受预设限制。
                 InkWell(
-                  onTap: () => onSelected(preset),
+                  onTap: () async {
+                    final picked = await showAppColorPicker(
+                      context,
+                      initialColor: value,
+                      withAlpha: true,
+                    );
+                    if (picked != null) onSelected(picked);
+                  },
                   customBorder: const CircleBorder(),
                   child: Container(
                     width: 28,
                     height: 28,
                     decoration: BoxDecoration(
                       shape: BoxShape.circle,
-                      color: Color(preset),
-                      border: Border.all(
-                        color: preset == value
-                            ? scheme.primary
-                            : scheme.outlineVariant,
-                        width: preset == value ? 3 : 1,
-                      ),
+                      border: Border.all(color: scheme.outlineVariant),
+                    ),
+                    child: Icon(
+                      Icons.colorize_rounded,
+                      size: 16,
+                      color: scheme.onSurfaceVariant,
                     ),
                   ),
                 ),
-            ],
-          ),
+              ],
+            ),
+          ],
         ],
       ),
     );
   }
+
+  List<(LyricColorSource, String)> _colorSourceOptions(
+    AppLocalizations l10n,
+  ) =>
+      [
+        (LyricColorSource.custom, l10n.lyricsColorSourceCustom),
+        (LyricColorSource.primary, l10n.lyricsColorSourcePrimary),
+        (LyricColorSource.secondary, l10n.lyricsColorSourceSecondary),
+        (LyricColorSource.tertiary, l10n.lyricsColorSourceTertiary),
+        (LyricColorSource.onSurface, l10n.lyricsColorSourceOnSurface),
+        (
+          LyricColorSource.onSurfaceVariant,
+          l10n.lyricsColorSourceOnSurfaceVariant
+        ),
+      ];
 
   /// 样式预览：用与悬浮窗相同的配置渲染一行示例，调完即所见。
   Widget _previewCard(
@@ -747,9 +837,21 @@ class _LyricsDisplayPageState extends State<LyricsDisplayPage>
   ) {
     final scheme = Theme.of(context).colorScheme;
     final fontSize = math.min(settings.desktopFontSize, 28.0);
-    final played = Color(settings.desktopPlayedColor);
-    final unplayed = Color(settings.desktopUnplayedColor);
-    final shadow = Color(settings.desktopShadowColor);
+    final played = Color(resolveLyricColor(
+      settings.desktopPlayedColorSource,
+      settings.desktopPlayedColor,
+      scheme,
+    ));
+    final unplayed = Color(resolveLyricColor(
+      settings.desktopUnplayedColorSource,
+      settings.desktopUnplayedColor,
+      scheme,
+    ));
+    final shadow = Color(resolveLyricColor(
+      settings.desktopShadowColorSource,
+      settings.desktopShadowColor,
+      scheme,
+    ));
     final previewLines = <Widget>[
       Text(
         l10n.lyricsDesktopPreviewLine,

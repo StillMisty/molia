@@ -9,6 +9,7 @@ import '../providers/local_database_provider.dart';
 import '../providers/nav_provider.dart';
 import '../providers/playback_provider.dart';
 import '../providers/theme_provider.dart';
+import '../widgets/app_color_picker.dart';
 import '../widgets/font_picker_sheet.dart';
 import '../widgets/lxmc_import.dart' show importLxmcFavoritesFlow;
 import '../widgets/nav_destination_icons.dart';
@@ -935,6 +936,15 @@ class _SettingsMenuSectionState extends State<SettingsMenuSection> {
       navigator.pop();
     }
 
+    // 任意自定义色：HSV 滑杆 + Hex 输入（不限预设）。
+    Future<void> pickCustom() async {
+      final initial = themeProvider.seedColor.toARGB32();
+      navigator.pop();
+      final picked = await showAppColorPicker(context, initialColor: initial);
+      if (picked == null) return;
+      await themeProvider.setSeedColor(Color(picked));
+    }
+
     M3EDialog.show<void>(
       context,
       dialog: M3EDialog(
@@ -974,6 +984,33 @@ class _SettingsMenuSectionState extends State<SettingsMenuSection> {
                       ],
                     ),
                   ),
+                const SizedBox(height: kSmallSpacing),
+                // M3EDialog 内容没有 Material 祖先：透明 Material 包一层 InkWell。
+                Material(
+                  type: MaterialType.transparency,
+                  child: InkWell(
+                    key: const Key('settingsSeedColorCustom'),
+                    onTap: pickCustom,
+                    borderRadius: BorderRadius.circular(8),
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(
+                          vertical: 8, horizontal: 4),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(
+                            Icons.colorize_rounded,
+                            size: 20,
+                            color:
+                                Theme.of(context).colorScheme.onSurfaceVariant,
+                          ),
+                          const SizedBox(width: kSmallSpacing),
+                          Text(l10n.colorPickerCustom),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
               ],
             ),
           ),

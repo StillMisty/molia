@@ -91,6 +91,8 @@ Molia 当前只有在播放页内渲染的滚动歌词。桌面悬浮歌词、�
   其后 `maxLines - 1` 行 upcoming 主文本；`singleLine=true` 时只显示当前行。
 - 颜色语义：当前行 = `playedColor`（默认白），其余行 = `unplayedColor`（默认 70% 白），
   文字阴影 = `shadowColor`（默认 60% 黑）；全局 `opacity` 作用于整个视图。
+  三种颜色各支持「自定义（任意 HSV/Hex 取色）」或「跟随主题角色」——主题角色由
+  `ThemeProvider` 统一解析（莫奈壁纸 > 专辑封面取色 > 种子色），随主题实时重下发。
 - 行切换动画：`showToggleAnimation`（默认开）——淡入/上移；关闭则直切。
 - 无歌词：`noLyricsBehavior = title | hide`（默认 `title`，显示歌名）。
 - 暂停：`pauseBehavior = keep | clear | title`（默认 `keep`）。
@@ -236,9 +238,12 @@ abstract class LyricsOutput {
 | `desktop.enabled` | bool | false | | 桌面歌词 |
 | `desktop.fontSize` | double | 22 | 12..48（Android 侧按 sp 解释） | 桌面歌词 |
 | `desktop.opacity` | double | 1.0 | 0.2..1.0 | 桌面歌词 |
-| `desktop.playedColor` | int | 0xFFFFFFFF | ARGB | 桌面歌词 |
-| `desktop.unplayedColor` | int | 0xB3FFFFFF | ARGB | 桌面歌词 |
-| `desktop.shadowColor` | int | 0x99000000 | ARGB | 桌面歌词 |
+| `desktop.playedColor` | int | 0xFFFFFFFF | ARGB（`Source=custom` 时生效） | 桌面歌词 |
+| `desktop.unplayedColor` | int | 0xB3FFFFFF | ARGB（同上） | 桌面歌词 |
+| `desktop.shadowColor` | int | 0x99000000 | ARGB（同上） | 桌面歌词 |
+| `desktop.playedColorSource` | enum | custom | custom/primary/secondary/tertiary/onSurface/onSurfaceVariant | 桌面歌词 |
+| `desktop.unplayedColorSource` | enum | custom | 同上 | 桌面歌词 |
+| `desktop.shadowColorSource` | enum | custom | 同上 | 桌面歌词 |
 | `desktop.widthPercent` | double | 100 | 40..100 | 桌面歌词 |
 | `desktop.singleLine` | bool | false | | 桌面歌词 |
 | `desktop.maxLines` | int | 3 | 1..5（非 singleLine 时） | 桌面歌词 |
@@ -263,6 +268,11 @@ abstract class LyricsOutput {
 | `bluetooth.includeTranslation` | bool | false | | 蓝牙 |
 | `bluetooth.updateIntervalMs` | int | 0 | 0/1000/2000（0 = 仅行变化） | 蓝牙 |
 | `bluetooth.pauseBehavior` | enum | title | keep/title/clear | 蓝牙 |
+
+> **颜色说明**：`custom` 来源的颜色支持任意取色（HSV 滑杆 + Hex 输入 + 透明度，
+> 见通用调色器 `lib/widgets/app_color_picker.dart`），不限于预设色板；主题角色
+> 来源由 `ThemeProvider` 统一解析（莫奈壁纸取色 > 专辑封面取色 > 种子色），
+> 并随主题实时重新下发。应用「主题种子色」同样支持任意颜色取色。
 
 ### 5.8 通道协议（Android）
 
@@ -398,5 +408,6 @@ abstract class LyricsOutput {
 | 桌面歌词（Dart） | `lib/services/lyrics_display/desktop_lyrics_output.dart`、`lyrics_channel.dart` | 通道封装 + 暂停/无歌词回退映射 |
 | 桌面歌词（原生） | `android/.../lyrics/LyricsChannelHandler.kt`、`LyricsOverlayController.kt`、`LyricsOverlayView.kt`、`MainActivity.kt`、`AndroidManifest.xml` | 悬浮窗渲染/拖动/锁定/控制条/息屏冻结/A2DP 监测 |
 | 媒体元数据 | `lib/services/lyrics_display/media_lyric_composer.dart`、`media_lyric_output.dart`、`lib/playback/local_audio_handler.dart` | 通知/锁屏 + 蓝牙 profile 合成 → `MediaItem` 覆盖 |
-| 设置页 | `lib/pages/lyrics_display_page.dart`、`lib/pages/settings_page.dart` | 三分组 + 预览 + 权限引导 |
+| 设置页 | `lib/pages/lyrics_display_page.dart`、`lib/pages/settings_page.dart` | 三分组 + 预览 + 权限引导；主题种子色与歌词颜色共用任意调色器 |
+| 颜色系统 | `lib/services/lyrics_display/lyric_color_resolver.dart`、`lib/widgets/app_color_picker.dart` | 跟随主题解析（莫奈/封面取色经 ThemeProvider）+ 通用 HSV/Hex 任意取色 |
 | 测试 | `test/lyric_line_tracker_test.dart`、`test/services/media_lyric_composer_test.dart`、`test/services/lyrics_display_settings_test.dart`、`test/services/lyrics_display_provider_test.dart`、`test/services/desktop_lyrics_output_test.dart`、`test/services/audio_route_monitor_test.dart`、`test/services/lyrics_cache_translation_test.dart`、`test/lyrics_provider_translation_test.dart` | 单一新 seam：`LyricsOutput` 假输出 |
