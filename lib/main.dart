@@ -159,6 +159,9 @@ void main() async {
 
   // 歌词显示（桌面歌词 / 通知·锁屏 / 蓝牙）：配置 + 输出 + 调度。
   // 输出端能力由平台决定；媒体输出依赖系统媒体会话（audioHandler）。
+  // 主题实例提前创建：桌面歌词「跟随主题」的颜色来自 ThemeProvider
+  // （莫奈 / 封面取色统一出口），主题变化时调度会重新下发配置。
+  final themeProvider = ThemeProvider();
   final lyricsDisplaySettings = LyricsDisplaySettings();
   await lyricsDisplaySettings.init();
   final audioRouteMonitor = AudioRouteMonitor();
@@ -166,7 +169,7 @@ void main() async {
   final lyricsDisplay = LyricsDisplayProvider(
     settings: lyricsDisplaySettings,
     outputs: [
-      DesktopLyricsOutput(),
+      DesktopLyricsOutput(colorScheme: () => themeProvider.colorScheme),
       MediaLyricOutput(
         supported: () => audioHandler != null,
         applyOverride: (override) =>
@@ -175,6 +178,7 @@ void main() async {
       ),
     ],
     audioRoute: audioRouteMonitor,
+    themeListenable: themeProvider,
     ensureLyrics: (track) => lyricsProvider.load(track),
     onPlaybackCommand: (command) {
       switch (command) {
@@ -211,7 +215,7 @@ void main() async {
         Provider<SourceRegistry>.value(value: sourceRegistry),
         Provider<CatalogService>.value(value: catalogService),
         ChangeNotifierProvider.value(value: playbackProvider),
-        ChangeNotifierProvider(create: (_) => ThemeProvider()),
+        ChangeNotifierProvider.value(value: themeProvider),
         ChangeNotifierProvider(create: (_) => NavProvider()),
         ChangeNotifierProvider(
           create: (context) => SearchProvider(

@@ -1291,4 +1291,53 @@ class AppLocalizationsEn extends AppLocalizations {
   @override
   String get lyricsDisplayUnsupported =>
       'Lyric outputs are not available on this platform';
+
+  @override
+  String get colorPickerTitle => 'Pick a color';
+
+  @override
+  String get colorPickerCustom => 'Custom color…';
+
+  @override
+  String get colorPickerHex => 'Hex color';
+
+  @override
+  String get colorPickerInvalid => 'Invalid color value';
+
+  @override
+  String get colorPickerHue => 'Hue';
+
+  @override
+  String get colorPickerSaturation => 'Saturation';
+
+  @override
+  String get colorPickerBrightness => 'Brightness';
+
+  @override
+  String get colorPickerOpacity => 'Opacity';
+
+  @override
+  String get lyricsColorSource => 'Color source';
+
+  @override
+  String get lyricsColorSourceCustom => 'Custom';
+
+  @override
+  String get lyricsColorSourcePrimary => 'Theme · Primary';
+
+  @override
+  String get lyricsColorSourceSecondary => 'Theme · Secondary';
+
+  @override
+  String get lyricsColorSourceTertiary => 'Theme · Tertiary';
+
+  @override
+  String get lyricsColorSourceOnSurface => 'Theme · On surface';
+
+  @override
+  String get lyricsColorSourceOnSurfaceVariant => 'Theme · Variant';
+
+  @override
+  String get lyricsDesktopColorThemeHint =>
+      'Theme colors follow Monet (wallpaper) or album artwork colors and update live with the app theme.';
 }

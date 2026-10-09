@@ -25,6 +25,12 @@ enum DesktopTextAlignX { left, center, right }
 /// 桌面歌词文本垂直对齐。
 enum DesktopTextAlignY { top, center, bottom }
 
+/// 桌面歌词颜色的取色来源。
+///
+/// `custom` = 用户自定义色板；其余值跟随应用主题的 ColorScheme 角色
+/// （莫奈壁纸取色 / 专辑封面取色 / 种子色由 ThemeProvider 统一解析）。
+enum LyricColorSource { custom, primary, secondary, tertiary, onSurface, onSurfaceVariant }
+
 /// 桌面悬浮歌词控制条按钮键（与 [LyricsDisplaySettings.desktopControls] 对应）。
 abstract final class DesktopControlKeys {
   static const playPause = 'playPause';
@@ -69,6 +75,8 @@ class LyricsDisplaySettings extends ChangeNotifier {
   static const int defaultDesktopPlayedColor = 0xFFFFFFFF;
   static const int defaultDesktopUnplayedColor = 0xB3FFFFFF;
   static const int defaultDesktopShadowColor = 0x99000000;
+  static const LyricColorSource defaultDesktopColorSource =
+      LyricColorSource.custom;
   static const double defaultDesktopWidthPercent = 100;
   static const bool defaultDesktopSingleLine = false;
   static const int defaultDesktopMaxLines = 3;
@@ -118,6 +126,9 @@ class LyricsDisplaySettings extends ChangeNotifier {
   int _desktopPlayedColor = defaultDesktopPlayedColor;
   int _desktopUnplayedColor = defaultDesktopUnplayedColor;
   int _desktopShadowColor = defaultDesktopShadowColor;
+  LyricColorSource _desktopPlayedColorSource = defaultDesktopColorSource;
+  LyricColorSource _desktopUnplayedColorSource = defaultDesktopColorSource;
+  LyricColorSource _desktopShadowColorSource = defaultDesktopColorSource;
   double _desktopWidthPercent = defaultDesktopWidthPercent;
   bool _desktopSingleLine = defaultDesktopSingleLine;
   int _desktopMaxLines = defaultDesktopMaxLines;
@@ -159,6 +170,10 @@ class LyricsDisplaySettings extends ChangeNotifier {
   int get desktopPlayedColor => _desktopPlayedColor;
   int get desktopUnplayedColor => _desktopUnplayedColor;
   int get desktopShadowColor => _desktopShadowColor;
+  LyricColorSource get desktopPlayedColorSource => _desktopPlayedColorSource;
+  LyricColorSource get desktopUnplayedColorSource =>
+      _desktopUnplayedColorSource;
+  LyricColorSource get desktopShadowColorSource => _desktopShadowColorSource;
   double get desktopWidthPercent => _desktopWidthPercent;
   bool get desktopSingleLine => _desktopSingleLine;
   int get desktopMaxLines => _desktopMaxLines;
@@ -265,6 +280,24 @@ class LyricsDisplaySettings extends ChangeNotifier {
   Future<void> setDesktopShadowColor(int value) async {
     if (value == _desktopShadowColor) return;
     _desktopShadowColor = value;
+    _commit();
+  }
+
+  Future<void> setDesktopPlayedColorSource(LyricColorSource value) async {
+    if (value == _desktopPlayedColorSource) return;
+    _desktopPlayedColorSource = value;
+    _commit();
+  }
+
+  Future<void> setDesktopUnplayedColorSource(LyricColorSource value) async {
+    if (value == _desktopUnplayedColorSource) return;
+    _desktopUnplayedColorSource = value;
+    _commit();
+  }
+
+  Future<void> setDesktopShadowColorSource(LyricColorSource value) async {
+    if (value == _desktopShadowColorSource) return;
+    _desktopShadowColorSource = value;
     _commit();
   }
 
@@ -422,6 +455,9 @@ class LyricsDisplaySettings extends ChangeNotifier {
         'desktop.playedColor': _desktopPlayedColor,
         'desktop.unplayedColor': _desktopUnplayedColor,
         'desktop.shadowColor': _desktopShadowColor,
+        'desktop.playedColorSource': _desktopPlayedColorSource.name,
+        'desktop.unplayedColorSource': _desktopUnplayedColorSource.name,
+        'desktop.shadowColorSource': _desktopShadowColorSource.name,
         'desktop.widthPercent': _desktopWidthPercent,
         'desktop.singleLine': _desktopSingleLine,
         'desktop.maxLines': _desktopMaxLines,
@@ -467,6 +503,14 @@ class LyricsDisplaySettings extends ChangeNotifier {
         _intOf(json['desktop.unplayedColor'], _desktopUnplayedColor);
     _desktopShadowColor =
         _intOf(json['desktop.shadowColor'], _desktopShadowColor);
+    _desktopPlayedColorSource = _enumOf(json['desktop.playedColorSource'],
+        LyricColorSource.values, _desktopPlayedColorSource);
+    _desktopUnplayedColorSource = _enumOf(
+        json['desktop.unplayedColorSource'],
+        LyricColorSource.values,
+        _desktopUnplayedColorSource);
+    _desktopShadowColorSource = _enumOf(json['desktop.shadowColorSource'],
+        LyricColorSource.values, _desktopShadowColorSource);
     _desktopWidthPercent =
         _doubleOf(json['desktop.widthPercent'], _desktopWidthPercent)
             .clamp(widthRange.first, widthRange.last);

@@ -639,5 +639,21 @@
   "lyricsBluetoothIntervalLine": "Every line",
   "lyricsBluetoothInterval1s": "Every second",
   "lyricsBluetoothInterval2s": "Every 2 seconds",
-  "lyricsDisplayUnsupported": "Lyric outputs are not available on this platform"
+  "lyricsDisplayUnsupported": "Lyric outputs are not available on this platform",
+  "colorPickerTitle": "Pick a color",
+  "colorPickerCustom": "Custom color…",
+  "colorPickerHex": "Hex color",
+  "colorPickerInvalid": "Invalid color value",
+  "colorPickerHue": "Hue",
+  "colorPickerSaturation": "Saturation",
+  "colorPickerBrightness": "Brightness",
+  "colorPickerOpacity": "Opacity",
+  "lyricsColorSource": "Color source",
+  "lyricsColorSourceCustom": "Custom",
+  "lyricsColorSourcePrimary": "Theme · Primary",
+  "lyricsColorSourceSecondary": "Theme · Secondary",
+  "lyricsColorSourceTertiary": "Theme · Tertiary",
+  "lyricsColorSourceOnSurface": "Theme · On surface",
+  "lyricsColorSourceOnSurfaceVariant": "Theme · Variant",
+  "lyricsDesktopColorThemeHint": "Theme colors follow Monet (wallpaper) or album artwork colors and update live with the app theme."
 }
