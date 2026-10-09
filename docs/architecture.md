@@ -148,8 +148,16 @@
   容器配 `on*Container`；状态色走 `AppSemanticColors`（错误用 `scheme.error`）。
   禁止 `Colors.*`/`Color(0x...)` 字面量、`withAlpha/withOpacity`、
   `scaffoldBackgroundColor/dividerColor` 双源属性（`test/architecture/color_usage_test.dart` 扫描强制；
-  海报艺术预设除外）。
-- 组件：UI 全面使用 `M3E*`；基础件（Scaffold/Text/Icon/Theme 等）来自 `material_ui`（M3E 必需依赖）。
+  海报四套配色 `lib/widgets/lyrics_poster_preview_page.dart` 属刻意的艺术预设——角色混搭，
+  不要按常规语义「修正」，但字面量/withAlpha 禁令仍适用）。
+- 组件：UI 全面使用 `M3E*`；基础件（Scaffold/Text/Icon/Theme 等）来自 `material_ui`
+  （M3E 必需依赖，不要试图移除）；禁止 import `package:flutter/material.dart`，
+  组件 import 用 `package:material_3_expressive/material_3_expressive.dart`。
+- 图标：统一圆角风格 `Icons.*_rounded`（不用 `Icons.adaptive.*`，不混 `_outlined`/基础实心）；
+  唯一例外 `library_music_outlined`（资料库未选中半对；音符图标已改用 `MoliaMark` 组件）。
+  `test/architecture/icon_usage_test.dart` 扫描强制。
+- 弹层观感差异（M3E 统一 inverseSurface Snackbar、无红底错误色、Dialog/BottomSheet 圆角与
+  spring 入场）属预期，不是 bug。
 - 已知保留（无法等价替换）：带 `bottom:` 槽的 AppBar（2 处）、`_showCenterDialog`、
   `ScaffoldMessenger` 兼容代码。
 
@@ -171,5 +179,8 @@ flutter build web --release
 
 ## 8. 后续
 
-- any-listen 真实协议（WS IPC）接入；
-- 真机验证（Android 17 通知/耳机键、iOS 后台播放）与 M3E 目视复核。
+- any-listen 真实协议（WS IPC）接入（当前为 HTTP 占位端点，抽象已就绪）；
+- 真机验证：Android 17 通知/耳机键、iOS 15+ 后台播放；歌词显示的模拟器交互与通知栏验证、
+  A2DP 车载字段映射（见 `docs/lyrics_display.md` §9）；
+- 桌面歌词平台输出等 Flutter windowing stable（同上 §11）；M3E 组件目视复核（弹层观感/间距）；
+- 发布前：release 体积与签名检查。

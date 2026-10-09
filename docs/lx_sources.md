@@ -69,8 +69,17 @@ lib/playback/
 - JS → Dart 使用 `sendMessage('lx', JSON)`，Dart → JS 使用 `__lxDeliver(...)`；
 - `lx.utils.crypto / buffer / zlib` 通过 flutter_js 的 JSInvokable 机制**同步**绑定到 Dart
   （pointycastle + dart:io zlib），行为经 Node.js crypto 向量单测校验；
-- 支持 `request`（method/headers/body/form/formData/timeout/follow_max、取消）与
-  `inited / request / updateAlert` 事件；兼容社区扩展 action：`search` / `musicSearch`；
+- 宿主↔脚本：`globalThis.lx.on('request'|'inited'|'updateAlert')`、`lx.send(...)`、
+  `lx.request(url, options, cb)`；支持 `request`（method/headers/body/form/formData/timeout/
+  follow_max、取消）；
+- 官方 action：`musicUrl` / `lyric` / `pic`（后两者通常仅 `local` 源）；社区扩展 action：
+  `search` / `musicSearch`（非官方约定，本项目兼容）；
+- 安全边界：脚本是不可信代码，不暴露文件系统/平台通道，网络只走 `lx.request` 桥；
+  `currentScriptInfo` 必须原样透传（部分脚本有防篡改校验，失败会死循环）；
+- 内联前导脚本**源码**在 `tool/lx_prelude/lx_prelude.js`（唯一修改入口），打包产物
+  `assets/lx/lx_prelude.js` 由 `node tool/build_lx_prelude.mjs`（terser，版本固定）生成；
+  改源码后必须重新生成（`--check` 校验产物同步），不要手改产物；ELECTRON 兼容 shim
+  （`atob/btoa/TextEncoder/setTimeout/window/navigator` 等）也加在这里；
 - **自愈监督**：`LxEngineSupervisor` 崩溃后自动退避重启并重放同一脚本，重启成功刷新
   `activeSources`（修复「引擎已死但源列表还在」）；连续失败进入 `failed` 停用；
 - **请求缓存**：搜索 5min、取链 10min（失败不缓存，single-flight 并发去重）。
@@ -94,11 +103,22 @@ lib/playback/
     - **中文字体**：`sudo pacman -S --needed wqy-microhei`（App 不内置 CJK 字体；否则中文显示方块）
   - Android（用户态安装）：`sdkmanager "platform-tools" "platforms;android-37.0" "build-tools;37.0.0" "ndk;30.0.16248370"`，
     然后 `flutter config --android-sdk "$HOME/Android/Sdk"`
-  - 工程工具链：Gradle 9.8.0 + AGP 9.4.1 + Kotlin 2.4.20 + JDK 27（Flutter 3.47.6 stable），
+  - 工程工具链：Gradle 9.8.1 + AGP 9.4.1 + Kotlin 2.4.20 + JDK 27（Flutter 3.47.6 stable），
     `compileSdk/targetSdk/minSdk = 37`、NDK r30
   - 注意：`minSdk = 37` 意味着只有 Android 17 及以上设备可安装此构建
   - flutter_js 在 Linux 的上游 CMake 存在 bundled library 变量名错误，
     `linux/CMakeLists.txt` 中已显式补装 `libquickjs_c_bridge_plugin.so`（引擎必需）
+
+改动引擎/音源的完整验证清单：
+
+1. `flutter analyze --no-pub` 0 error / 0 warning；
+2. `flutter test --no-pub`（含 `test/lx_core_test.dart`、`test/lx_supervisor_test.dart`、
+   `test/lx_script_update_test.dart`、`test/builtin_search_parse_test.dart`、
+   `test/architecture/layering_test.dart`）；
+3. `node tool/lx_prelude_harness.mjs` 输出 `PROTOCOL OK`；
+4. `flutter test integration_test/lx_engine_integration_test.dart -d linux --no-pub`
+   （真实导入→搜索→取链→歌词；播放测试需要 libmpv）；
+5. 真机/模拟器验证：设置 → 音源管理 → 导入社区脚本（或在线更新）→ 搜索 → 播放。
 
 ## 已知限制（后续计划）
 
