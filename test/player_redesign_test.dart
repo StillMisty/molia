@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:molia/domain/models/playback.dart';
 import 'package:molia/domain/models/track.dart';
@@ -102,15 +104,44 @@ void main() {
   /// 中心封面卡片自己承接）。
   Finder coverSwipeHost() => find.byKey(Player.artworkSwipeHostKey);
 
-  /// 邻位封面（可点击切歌；child 是封面卡 SizedBox）。
-  Finder sideCoverGesture() => find.byWidgetPredicate(
-        (widget) =>
-            widget is GestureDetector &&
-            widget.onTap != null &&
-            widget.onHorizontalDragStart == null &&
-            widget.behavior == HitTestBehavior.opaque &&
-            widget.child is SizedBox,
-      );
+  /// 左/右邻位封面手势（可点击切歌；child 是封面卡 SizedBox）。
+  ///
+  /// 两侧都展示身份时堆叠里并存两个可点邻位，按几何（中心在堆叠中心
+  /// 左侧/右侧）选择要操作的一侧。
+  Finder sideCoverGesture(WidgetTester tester, {required bool left}) {
+    final hostCenter = tester.getCenter(coverSwipeHost()).dx;
+    return find.byElementPredicate((element) {
+      final widget = element.widget;
+      if (widget is! GestureDetector ||
+          widget.onTap == null ||
+          widget.onHorizontalDragStart != null ||
+          widget.behavior != HitTestBehavior.opaque ||
+          widget.child is! SizedBox) {
+        return false;
+      }
+      final renderObject = element.renderObject;
+      if (renderObject is! RenderBox || !renderObject.hasSize) return false;
+      final center =
+          renderObject.localToGlobal(renderObject.size.center(Offset.zero)).dx;
+      return left ? center < hostCenter : center > hostCenter;
+    });
+  }
+
+  /// 邻位封面可见外侧条带上的点击点。
+  ///
+  /// 邻位中心被当前封面盖住，点击必须落在外侧条带；封面较大时条带可能
+  /// 伸出屏幕，取条带外缘但钳制在屏内（左：卡左缘 +8 与屏左 +8 取大；
+  /// 右：卡右缘 -8 与屏右 -8 取小）。
+  Offset sideCoverTapPoint(WidgetTester tester, Finder side,
+      {required bool left}) {
+    final center = tester.getCenter(side);
+    final halfWidth = tester.getSize(side).width / 2;
+    final screen = tester.view.physicalSize / tester.view.devicePixelRatio;
+    final x = left
+        ? math.max(8.0, center.dx - halfWidth + 8)
+        : math.min(screen.width - 8, center.dx + halfWidth - 8);
+    return Offset(x, center.dy);
+  }
 
   testWidgets('完整布局：进度滑杆可拖动、无渲染异常', (tester) async {
     emitThreeTracks();
@@ -148,15 +179,24 @@ void main() {
     await tester.pump();
     expect(backend.calls, contains('pause'));
 
-    // 右邻位封面 = 下一首（上一首历史为空，只有右侧可点）。
-    // 注意：邻位封面只有外侧条带可见，中心被当前封面盖住——
-    // 点击必须落在右缘，否则会命中当前封面（播放/暂停）。
-    final side = sideCoverGesture();
-    expect(side, findsOneWidget);
-    final sideRect = tester.getRect(side);
-    await tester.tapAt(Offset(sideRect.right - 8, sideRect.center.dy));
+    // 邻位封面只有外侧条带可见，中心被当前封面盖住——点击必须落在
+    // 左/右缘，否则会命中当前封面（播放/暂停）。
+    //
+    // 右邻位封面 = 下一首 c：可点，走 skipToNext。
+    final right = sideCoverGesture(tester, left: false);
+    expect(right, findsOneWidget);
+    await tester.tapAt(sideCoverTapPoint(tester, right, left: false));
     await tester.pump();
     expect(backend.calls, contains('next'));
+
+    // 左邻位封面 = 队列前一位 a（无历史回退）：展示身份即可点，
+    // 走 skipToPrevious（与后端 previous 的回退同源）。
+    final left = sideCoverGesture(tester, left: true);
+    expect(left, findsOneWidget);
+    await tester.tapAt(sideCoverTapPoint(tester, left, left: true));
+    await tester.pump();
+    expect(backend.calls, contains('previous'));
+
     // 让 provider 的通知节流计时器跑完，避免测试结束时报 pending timer。
     await tester.pump(const Duration(milliseconds: 50));
   });
