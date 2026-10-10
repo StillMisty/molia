@@ -100,7 +100,8 @@ class _PlayerState extends State<Player> with TickerProviderStateMixin {
   Rect? _coverFlightTo;
   bool _coverFlightActive = false;
 
-  /// 切歌入场：spring 过冲（easeOutBack）驱动文字错位落位。
+  /// 切歌入场：420ms 无过冲（easeOutCubic）驱动文字轻量上移落位，
+  /// 与封面切歌同帧启动。
   late AnimationController _trackEntranceController;
   late Animation<double> _trackEntrance;
 
@@ -108,12 +109,12 @@ class _PlayerState extends State<Player> with TickerProviderStateMixin {
   void initState() {
     super.initState();
     _trackEntranceController = AnimationController(
-      duration: const Duration(milliseconds: 650),
+      duration: const Duration(milliseconds: 420),
       vsync: this,
     )..value = 1.0;
     _trackEntrance = CurvedAnimation(
       parent: _trackEntranceController,
-      curve: Curves.easeOutBack,
+      curve: Curves.easeOutCubic,
     );
 
     widget.expandAnimation?.addStatusListener(_handleExpandStatus);
@@ -165,8 +166,8 @@ class _PlayerState extends State<Player> with TickerProviderStateMixin {
   /// 迷你/完整切换开始：抓取两端封面矩形，交由页内 Stack 飞行；
   /// 结束：撤下飞行副本，恢复真身封面。
   ///
-  /// 侧邻位入场的两条沿（展开开始藏起 / 展开落位演出）由封面堆叠模块
-  /// 自行监听 [Player.expandAnimation] 状态，这里只管理飞行副本。
+  /// 侧邻位没有独立入场演出：随页面层/完整层自身淡入以稳态出现
+  /// （旧的两条入场控制器与状态沿监听已随 #6 删除），这里只管理飞行副本。
   void _handleExpandStatus(AnimationStatus status) {
     switch (status) {
       case AnimationStatus.forward:
@@ -378,7 +379,6 @@ class _PlayerState extends State<Player> with TickerProviderStateMixin {
               fullCoverKey: _fullCoverKey,
               isLargeScreen: widget.isLargeScreen,
               morph: morph,
-              expandAnimation: widget.expandAnimation,
               coverFlightActive: _coverFlightActive,
               onTrackSwapped: _handleTrackSwapped,
             ),
@@ -666,7 +666,7 @@ class _PlayerState extends State<Player> with TickerProviderStateMixin {
     return '$minutes:$seconds';
   }
 
-  /// 标题/作者：单行「歌名 · 作者」+ spring 入场。
+  /// 标题/作者：单行「歌名 · 作者」+ 无过冲轻量入场（420ms、上移 14px）。
   Widget _buildTrackInfo(
     BuildContext context,
     Track? displayTrack,
@@ -677,7 +677,7 @@ class _PlayerState extends State<Player> with TickerProviderStateMixin {
       builder: (context, child) {
         final t = _trackEntrance.value;
         return Transform.translate(
-          offset: Offset(0, (1 - t) * 22),
+          offset: Offset(0, (1 - t) * 14),
           child: Opacity(
             opacity: t.clamp(0.0, 1.0),
             child: child,
@@ -1020,7 +1020,6 @@ class _PlayerState extends State<Player> with TickerProviderStateMixin {
               fullCoverKey: _fullCoverKey,
               isLargeScreen: widget.isLargeScreen,
               morph: widget.morph,
-              expandAnimation: widget.expandAnimation,
               coverFlightActive: _coverFlightActive,
               onTrackSwapped: _handleTrackSwapped,
             ),
