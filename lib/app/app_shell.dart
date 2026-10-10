@@ -352,22 +352,31 @@ class _MyAppState extends State<MyApp>
     return Scaffold(
       appBar: AppBar(
         titleSpacing: 12,
-        title: _ShellBarHeader(morph: _morph),
+        title: _ShellBarHeader(
+          morph: _morph,
+          onOpenPlayer: () => _selectDestination(ShellDestination.nowPlaying),
+        ),
         actions: [
-          const _BarNextButton(),
-          M3EIconButton(
-            variant: M3EIconButtonVariant.tonal,
-            onPressed: () {
-              HapticFeedback.lightImpact();
-              ResponsiveNavigation.showAdaptiveModalPage(
-                context: context,
-                showCloseButton: false,
-                child: const SettingsPage(),
-              );
-            },
-            tooltip: l10n.settingsTitle,
-            icon: const Icon(Icons.settings_rounded),
-          ),
+          // 播放页顶栏只留设置（播放/切歌由页面内部控制区承担）；
+          // 其他页面顶栏是迷你播放器：显式播放/暂停 + 下一首。
+          if (selectedDestination == ShellDestination.nowPlaying)
+            M3EIconButton(
+              variant: M3EIconButtonVariant.standard,
+              onPressed: () {
+                HapticFeedback.lightImpact();
+                ResponsiveNavigation.showAdaptiveModalPage(
+                  context: context,
+                  showCloseButton: false,
+                  child: const SettingsPage(),
+                );
+              },
+              tooltip: l10n.settingsTitle,
+              icon: const Icon(Icons.settings_rounded),
+            )
+          else ...[
+            const _BarPlayPauseButton(),
+            const _BarNextButton(),
+          ],
           const SizedBox(width: 8),
         ],
         bottom: PreferredSize(
@@ -492,11 +501,16 @@ class _ShellPageLayer extends StatelessWidget {
 
 /// 顶栏头部：左侧当前曲目封面（无封面回退音符图标），旁边歌名 + 作者。
 ///
-/// 播放页激活（或飞行中）时交叉淡出为应用图标 + 自定义应用名。
+/// 点击整条头部进入播放页（与点底栏「播放」同路径，触发共享封面飞行）；
+/// 播放页激活（或飞行中）时交叉淡出为应用图标 + 自定义应用名，不响应点击。
 class _ShellBarHeader extends StatelessWidget {
-  const _ShellBarHeader({required this.morph});
+  const _ShellBarHeader({required this.morph, required this.onOpenPlayer});
 
   final PlayerMorphController morph;
+
+  /// 进入播放页。点击区域覆盖封面 + 歌名整条：封面只有 32×32，
+  /// 单独做触控目标达不到 48dp，也不符合迷你条「点哪都进播放页」的惯例。
+  final VoidCallback onOpenPlayer;
 
   @override
   Widget build(BuildContext context) {
@@ -504,116 +518,140 @@ class _ShellBarHeader extends StatelessWidget {
       animation: morph,
       builder: (context, _) {
         final showTrack = !morph.barHeaderHidden;
-        return Row(
-          children: [
-            SizedBox(
-              width: 32,
-              height: 32,
-              child: Stack(
-                fit: StackFit.expand,
-                children: [
-                  AnimatedOpacity(
-                    // 顶栏⇄播放页飞行落位时，真身封面必须与副本移除同帧亮出
-                    // （duration 0 = 同步跳变）；收起方向的淡出保持 160ms。
-                    duration: showTrack
-                        ? Duration.zero
-                        : const Duration(milliseconds: 160),
-                    opacity: showTrack ? 1 : 0,
-                    child: _BarCover(
-                      key: morph.barCoverKey,
-                      enabled: showTrack,
+        // 刻意不用 M3ETappable：它点击时会请求焦点，搜索页输入中点击顶栏
+        // 会打断输入；GestureDetector 与播放页封面的手势实现保持一致。
+        return GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          onTap: showTrack ? onOpenPlayer : null,
+          child: Row(
+            children: [
+              SizedBox(
+                width: 32,
+                height: 32,
+                child: Stack(
+                  fit: StackFit.expand,
+                  children: [
+                    AnimatedOpacity(
+                      // 顶栏⇄播放页飞行落位时，真身封面必须与副本移除同帧亮出
+                      // （duration 0 = 同步跳变）；收起方向的淡出保持 160ms。
+                      duration: showTrack
+                          ? Duration.zero
+                          : const Duration(milliseconds: 160),
+                      opacity: showTrack ? 1 : 0,
+                      child: _BarCover(key: morph.barCoverKey),
                     ),
-                  ),
-                  AnimatedOpacity(
-                    duration: showTrack
-                        ? Duration.zero
-                        : const Duration(milliseconds: 160),
-                    opacity: showTrack ? 0 : 1,
-                    child: Image.asset(
-                      'assets/icons/adaptive_icon_monochrome.png',
-                      color: Theme.of(context).colorScheme.onSurface,
+                    AnimatedOpacity(
+                      duration: showTrack
+                          ? Duration.zero
+                          : const Duration(milliseconds: 160),
+                      opacity: showTrack ? 0 : 1,
+                      child: ColorFiltered(
+                        // 同 MoliaMark：Image.color 在 Impeller 下会引入
+                        // 1px 边缘杂线（见已知坑 19），用 ColorFiltered 着色。
+                        colorFilter: ColorFilter.mode(
+                          Theme.of(context).colorScheme.onSurface,
+                          BlendMode.srcIn,
+                        ),
+                        child: Image.asset(
+                          'assets/icons/adaptive_icon_monochrome.png',
+                        ),
+                      ),
                     ),
-                  ),
-                ],
+                  ],
+                ),
               ),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Stack(
-                alignment: Alignment.centerLeft,
-                children: [
-                  AnimatedOpacity(
-                    duration: const Duration(milliseconds: 160),
-                    opacity: showTrack ? 1 : 0,
-                    child: const _BarTrackInfo(),
-                  ),
-                  AnimatedOpacity(
-                    duration: const Duration(milliseconds: 160),
-                    opacity: showTrack ? 0 : 1,
-                    child: const _AppTitleText(),
-                  ),
-                ],
+              const SizedBox(width: 12),
+              Expanded(
+                child: Stack(
+                  alignment: Alignment.centerLeft,
+                  children: [
+                    AnimatedOpacity(
+                      duration: const Duration(milliseconds: 160),
+                      opacity: showTrack ? 1 : 0,
+                      child: const _BarTrackInfo(),
+                    ),
+                    AnimatedOpacity(
+                      duration: const Duration(milliseconds: 160),
+                      opacity: showTrack ? 0 : 1,
+                      child: const _AppTitleText(),
+                    ),
+                  ],
+                ),
               ),
-            ),
-          ],
+            ],
+          ),
         );
       },
     );
   }
 }
 
-/// 顶栏封面锚点：跟随当前曲目；无封面时音符图标兜底。
+/// 顶栏封面：跟随当前曲目；无封面时音符图标兜底。
 ///
-/// 点击封面切换播放/暂停（与播放页大封面同语义）；仅当顶栏展示曲目封面
-/// （[enabled]，播放页激活/飞行中为 false，此时显示 App 图标）且有可播放
-/// 曲目（含冷启动恢复态）时生效。
+/// 点击进入播放页的手势由 [_ShellBarHeader] 整条承接（封面只有 32×32，
+/// 不单独做触控目标），本组件只负责展示，避免手势与展示耦合。
 class _BarCover extends StatelessWidget {
-  const _BarCover({super.key, required this.enabled});
-
-  /// 顶栏当前是否展示曲目封面（对应 [_ShellBarHeader] 的 showTrack）。
-  final bool enabled;
+  const _BarCover({super.key});
 
   @override
   Widget build(BuildContext context) {
-    final (coverUrl, hasTrack) =
-        context.select<PlaybackProvider, (String?, bool)>(
+    final coverUrl = context.select<PlaybackProvider, String?>(
       (provider) {
         final url = provider.snapshot.current?.artwork?.uri.toString();
-        return (
-          url == null || url.isEmpty ? null : url,
-          provider.hasTrack,
-        );
+        return url == null || url.isEmpty ? null : url;
       },
     );
-    final image = AppNetworkImage(
+    return AppNetworkImage(
       url: coverUrl,
       borderRadius: BorderRadius.circular(8),
       fallbackIconSize: 18,
     );
-    return SizedBox(
-      width: 32,
-      height: 32,
-      // 刻意不用 M3ETappable：它点击时会请求焦点，搜索页输入中点击封面
-      // 会收起软键盘；GestureDetector 与播放页封面的点击实现保持一致。
-      //
-      // 用 onTap null 而不是切换子节点结构：避免 enabled 翻转时 AppNetworkImage
-      // 重新挂载（重订阅/重放淡入），顶栏⇄播放页共享封面交接时闪一下。
-      child: GestureDetector(
-        behavior: HitTestBehavior.opaque,
-        onTap: enabled && hasTrack
-            ? () {
-                HapticFeedback.lightImpact();
-                context.read<PlaybackProvider>().togglePlayPause();
-              }
-            : null,
-        child: image,
+  }
+}
+
+/// 顶栏「播放/暂停」按钮（非播放页）：图标随播放态切换；无曲目（含冷启动
+/// 恢复态）时禁用，与「下一首」同一契约。`select` 只订阅 hasTrack/播放态，
+/// 不触发整个 Shell 重建。
+///
+/// 顶栏唯一的高亮按钮（tonal）：一屏只留一个视觉重点，其余图标无底色。
+class _BarPlayPauseButton extends StatelessWidget {
+  const _BarPlayPauseButton();
+
+  @override
+  Widget build(BuildContext context) {
+    final (hasTrack, isPlaying) =
+        context.select<PlaybackProvider, (bool, bool)>(
+      (provider) => (provider.hasTrack, provider.isPlaying),
+    );
+    final l10n = AppLocalizations.of(context)!;
+    return M3EIconButton(
+      variant: M3EIconButtonVariant.tonal,
+      tooltip: isPlaying ? l10n.pause : l10n.play,
+      icon: AnimatedSwitcher(
+        duration: const Duration(milliseconds: 200),
+        transitionBuilder: (child, animation) => ScaleTransition(
+          scale: animation,
+          child: FadeTransition(opacity: animation, child: child),
+        ),
+        child: Icon(
+          isPlaying ? Icons.pause_rounded : Icons.play_arrow_rounded,
+          key: ValueKey(isPlaying),
+        ),
       ),
+      onPressed: hasTrack
+          ? () {
+              HapticFeedback.lightImpact();
+              context.read<PlaybackProvider>().togglePlayPause();
+            }
+          : null,
     );
   }
 }
 
-/// 顶栏「下一首」按钮（设置按钮左侧）：无曲目（含冷启动恢复态）时禁用，
+/// 顶栏「下一首」按钮（非播放页）：无曲目（含冷启动恢复态）时禁用，
 /// 避免空操作误导；`select` 只订阅 hasTrack，不触发整个 Shell 重建。
+///
+/// 无底色标准样式：顶栏唯一高亮留给旁边的播放/暂停。
 class _BarNextButton extends StatelessWidget {
   const _BarNextButton();
 
@@ -624,7 +662,7 @@ class _BarNextButton extends StatelessWidget {
     );
     final l10n = AppLocalizations.of(context)!;
     return M3EIconButton(
-      variant: M3EIconButtonVariant.tonal,
+      variant: M3EIconButtonVariant.standard,
       tooltip: l10n.nextTrackTooltip,
       icon: const Icon(Icons.skip_next_rounded),
       onPressed: hasTrack

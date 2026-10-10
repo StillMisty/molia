@@ -11,6 +11,7 @@ import 'package:molia/pages/favorites.dart';
 import 'package:molia/providers/discover_provider.dart';
 import 'package:molia/providers/library_provider.dart';
 import 'package:molia/providers/playback_provider.dart';
+import 'package:molia/utils/responsive.dart';
 import 'package:molia/widgets/app_search_bar.dart';
 import 'package:molia/widgets/track_row.dart';
 import 'package:material_3_expressive/components/bottom_sheets/components/m3e_bottom_sheet_surface.dart';
@@ -168,22 +169,20 @@ void main() {
 
     expect(find.text('还没有收藏记录'), findsOneWidget);
     expect(find.byIcon(Icons.favorite_border_rounded), findsOneWidget);
-    // 播放/随机关闭；搜索按钮在；搜索栏/数量行不常驻；导入入口已移至合集弹层。
-    final playButton = tester.widget<M3EIconButton>(
-      find.widgetWithIcon(M3EIconButton, Icons.play_arrow_rounded),
-    );
+    // 随机关闭；「播放全部」已移除（播放/暂停在顶栏）；搜索按钮在；
+    // 搜索栏/数量行不常驻；导入入口已移至合集弹层。
     final shuffleButton = tester.widget<M3EIconButton>(
       find.widgetWithIcon(M3EIconButton, Icons.shuffle_rounded),
     );
-    expect(playButton.onPressed, isNull);
     expect(shuffleButton.onPressed, isNull);
+    expect(find.byIcon(Icons.play_arrow_rounded), findsNothing);
     expect(find.byIcon(Icons.search_rounded), findsOneWidget);
     expect(find.byType(AppSearchBar), findsNothing);
     expect(find.text('0 首'), findsNothing);
     expect(find.text('导入收藏'), findsNothing);
   });
 
-  testWidgets('默认合集回退：仅有导入列表时两次点击即可播放（播放全部/随机）', (tester) async {
+  testWidgets('默认合集回退：仅有导入列表时点随机播放即可播放', (tester) async {
     await importLove(tester);
     // 随机起点用种子注入：期望值与页面内同一个种子序列一致。
     final expectedShuffleStart = math.Random(7).nextInt(3);
@@ -192,24 +191,16 @@ void main() {
     // 默认选中非空的 love（标题即切换器）。
     expect(find.text('love'), findsOneWidget);
 
-    // 第 1 击在导航切 tab（此处已挂载页面），第 2 击播放全部。
-    await tester.tap(find.byIcon(Icons.play_arrow_rounded));
+    // 随机播放：整表洗牌 + 随机起点（不再固定第一首）。
+    await tester.tap(find.byIcon(Icons.shuffle_rounded));
     await tester.pumpAndSettle();
 
     final request = backend.lastRequest;
     expect(request, isNotNull);
     expect(request!.tracks, hasLength(3));
-    expect(request.startIndex, 0);
     expect(request.context?.name, 'love');
-    expect(playback.currentMode, PlayMode.sequential);
-
-    // 随机播放：整表洗牌 + 随机起点（不再固定第一首）。
-    await tester.tap(find.byIcon(Icons.shuffle_rounded));
-    await tester.pumpAndSettle();
-
+    expect(request.startIndex, expectedShuffleStart);
     expect(playback.currentMode, PlayMode.shuffle);
-    expect(backend.lastRequest!.tracks, hasLength(3));
-    expect(backend.lastRequest!.startIndex, expectedShuffleStart);
   });
 
   testWidgets('收藏列表：搜索展开收起 / 排序菜单 / 点击播放 / 行尾时长', (tester) async {
@@ -248,6 +239,28 @@ void main() {
     await tester.tap(find.text('按标题'));
     await tester.pumpAndSettle();
     expect(headlines(tester), ['Song A', 'Song B', 'Song C']);
+  });
+
+  testWidgets('标题行与搜索行高度一致：展开搜索头部不跳高', (tester) async {
+    await seedFavorites(tester);
+    await pumpFavorites(tester);
+
+    final container = find.byType(ResponsivePageContainer);
+    double headerHeight() => tester
+        .getSize(
+          find.descendant(of: container, matching: find.byType(Padding)).first,
+        )
+        .height;
+
+    final idleHeight = headerHeight();
+    await openSearch(tester);
+    final searchHeight = headerHeight();
+    await tester.tap(find.byIcon(Icons.arrow_back_rounded));
+    await tester.pumpAndSettle();
+    final restoredHeight = headerHeight();
+
+    expect(searchHeight, idleHeight, reason: '展开搜索前后头部高度一致');
+    expect(restoredHeight, idleHeight, reason: '收起搜索后头部高度不跳变');
   });
 
   testWidgets('曲目行尾显示歌曲时长', (tester) async {
@@ -308,7 +321,6 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(tester.takeException(), isNull);
-    expect(find.byIcon(Icons.play_arrow_rounded), findsOneWidget);
     expect(find.byIcon(Icons.shuffle_rounded), findsOneWidget);
     expect(find.byIcon(Icons.search_rounded), findsOneWidget);
   });
@@ -357,7 +369,7 @@ void main() {
     expect(find.text('love'), findsOneWidget);
     expect(headlines(tester), ['Song 1', 'Song 2', 'Song 3']);
 
-    await tester.tap(find.byIcon(Icons.play_arrow_rounded));
+    await tester.tap(find.byIcon(Icons.shuffle_rounded));
     await tester.pumpAndSettle();
     expect(backend.lastRequest!.context?.name, 'love');
     expect(backend.lastRequest!.tracks, hasLength(3));

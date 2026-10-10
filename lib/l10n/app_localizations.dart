@@ -950,6 +950,12 @@ abstract class AppLocalizations {
   /// **'Play'**
   String get play;
 
+  /// No description provided for @pause.
+  ///
+  /// In en, this message translates to:
+  /// **'Pause'**
+  String get pause;
+
   /// No description provided for @sourcesTitle.
   ///
   /// In en, this message translates to:

@@ -142,6 +142,7 @@
   "playFromAlbum": "播放自专辑",
   "playFromPlaylist": "播放自播放列表",
   "play": "播放",
+  "pause": "暂停",
   "sourcesTitle": "音源管理",
   "anyListenEntry": "any-listen 接入",
   "sourcesWebUnsupported": "Web 端暂不支持 LX 音源脚本（需要本地 JS 引擎）。",

@@ -32,7 +32,8 @@ AppLocalizations _l10n(BuildContext context) =>
 ///   默认落在有曲目的收藏，收藏为空时回退到第一个非空列表；
 /// - 曲目行：点击播放；行尾显示歌曲时长；左滑「加入列表 / 移除类操作」
 ///   （「加入列表」含我的收藏 / 播放历史 / 自建列表）；长按进入多选；
-/// - 标题右侧提供播放全部（顺序）/ 随机播放两个图标；搜索按钮展开搜索栏
+/// - 标题右侧提供随机播放 / 搜索两个图标（「播放全部」已移除：播放/暂停在
+///   顶栏迷你条，整表播放走随机或点行）；搜索按钮展开搜索栏
 ///   （日常不占用行高），排序与「调整顺序」收在搜索栏的 ⋮ 菜单里；
 /// - 自建列表支持「调整顺序」模式：长按拖动曲目落位即持久化；
 /// - 播放历史支持单条删除（左滑）与批量删除（多选）。
@@ -49,6 +50,10 @@ class FavoritesPage extends StatefulWidget {
 enum _CollectionSort { added, title, artist }
 
 class _FavoritesPageState extends State<FavoritesPage> {
+  /// 标题行 / 搜索行统一内容高度：点搜索展开时头部不跳高
+  /// （M3E 搜索胶囊默认高度 56，标题行按同一高度对齐）。
+  static const double _headerRowHeight = 56;
+
   final TextEditingController _searchController = TextEditingController();
   final FocusNode _searchFocus = FocusNode();
 
@@ -288,16 +293,6 @@ class _FavoritesPageState extends State<FavoritesPage> {
 
   // 播放操作
 
-  Future<void> _playAll(List<PlaylistTrack> tracks, String name) {
-    HapticFeedback.lightImpact();
-    return context.read<LibraryProvider>().playPlaylistTracks(
-          tracks,
-          0,
-          contextName: name,
-          mode: PlayMode.sequential,
-        );
-  }
-
   Future<void> _playShuffled(List<PlaylistTrack> tracks, String name) {
     HapticFeedback.lightImpact();
     return context.read<LibraryProvider>().playPlaylistTracks(
@@ -321,7 +316,7 @@ class _FavoritesPageState extends State<FavoritesPage> {
         );
   }
 
-  /// 播放历史（可见顺序即播放队列；[mode] 用于「播放全部/随机」）。
+  /// 播放历史（可见顺序即播放队列；[mode] 用于「随机播放」）。
   Future<void> _playHistoryFrom(
     List<PlayHistoryEntry> entries,
     int index,
@@ -760,7 +755,7 @@ class _FavoritesPageState extends State<FavoritesPage> {
     );
   }
 
-  /// 常驻标题行：合集切换器 + 播放全部 / 随机 + 搜索按钮。
+  /// 常驻标题行：合集切换器 + 随机播放 / 搜索按钮（播放/暂停在顶栏）。
   Widget _buildTitleRow(
     BuildContext context,
     AppLocalizations l10n,
@@ -777,85 +772,72 @@ class _FavoritesPageState extends State<FavoritesPage> {
         : view.visible.isNotEmpty;
     return Padding(
       padding: EdgeInsets.fromLTRB(horizontalPadding, 12, horizontalPadding, 8),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.center,
-        children: [
-          Expanded(
-            child: InkWell(
-              borderRadius: BorderRadius.circular(12),
-              onTap: () {
-                HapticFeedback.lightImpact();
-                _showCollectionPicker(l10n, playlists, favoritesId, selected);
-              },
-              child: Padding(
-                padding: const EdgeInsets.symmetric(vertical: 4),
-                child: Row(
-                  children: [
-                    Container(
-                      width: 5,
-                      height: 38,
-                      decoration: BoxDecoration(
-                        color: theme.colorScheme.primary,
-                        borderRadius: BorderRadius.circular(3),
-                      ),
-                    ),
-                    const SizedBox(width: 12),
-                    Flexible(
-                      child: Text(
-                        view.displayName,
-                        style: theme.textTheme.headlineSmall?.copyWith(
-                          fontWeight: FontWeight.w800,
-                          letterSpacing: -0.4,
+      child: SizedBox(
+        height: _headerRowHeight,
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.center,
+          children: [
+            Expanded(
+              child: InkWell(
+                borderRadius: BorderRadius.circular(12),
+                onTap: () {
+                  HapticFeedback.lightImpact();
+                  _showCollectionPicker(l10n, playlists, favoritesId, selected);
+                },
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 4),
+                  child: Row(
+                    children: [
+                      Container(
+                        width: 5,
+                        height: 38,
+                        decoration: BoxDecoration(
+                          color: theme.colorScheme.primary,
+                          borderRadius: BorderRadius.circular(3),
                         ),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
                       ),
-                    ),
-                    const SizedBox(width: 2),
-                    Icon(
-                      Icons.expand_more_rounded,
-                      size: 22,
-                      color: theme.colorScheme.onSurfaceVariant,
-                    ),
-                  ],
+                      const SizedBox(width: 12),
+                      Flexible(
+                        child: Text(
+                          view.displayName,
+                          style: theme.textTheme.headlineSmall?.copyWith(
+                            fontWeight: FontWeight.w800,
+                            letterSpacing: -0.4,
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                      const SizedBox(width: 2),
+                      Icon(
+                        Icons.expand_more_rounded,
+                        size: 22,
+                        color: theme.colorScheme.onSurfaceVariant,
+                      ),
+                    ],
+                  ),
                 ),
               ),
             ),
-          ),
-          const SizedBox(width: 8),
-          M3EIconButton(
-            variant: M3EIconButtonVariant.filled,
-            tooltip: l10n.playAll,
-            icon: const Icon(Icons.play_arrow_rounded),
-            onPressed: canPlay ? () => _playAllFor(view) : null,
-          ),
-          const SizedBox(width: 4),
-          M3EIconButton(
-            variant: M3EIconButtonVariant.tonal,
-            tooltip: l10n.shufflePlay,
-            icon: const Icon(Icons.shuffle_rounded),
-            onPressed: canPlay ? () => _playShuffledFor(view) : null,
-          ),
-          const SizedBox(width: 4),
-          M3EIconButton(
-            variant: M3EIconButtonVariant.standard,
-            tooltip: l10n.libraryTabSearch,
-            icon: const Icon(Icons.search_rounded),
-            onPressed: _openSearch,
-          ),
-        ],
+            const SizedBox(width: 8),
+            M3EIconButton(
+              variant: M3EIconButtonVariant.standard,
+              tooltip: l10n.shufflePlay,
+              icon: const Icon(Icons.shuffle_rounded),
+              onPressed: canPlay ? () => _playShuffledFor(view) : null,
+            ),
+            const SizedBox(width: 4),
+            M3EIconButton(
+              variant: M3EIconButtonVariant.standard,
+              tooltip: l10n.libraryTabSearch,
+              icon: const Icon(Icons.search_rounded),
+              onPressed: _openSearch,
+            ),
+          ],
+        ),
       ),
     );
   }
-
-  Future<void> _playAllFor(_CollectionView view) => view.isHistory
-      ? _playHistoryFrom(
-          view.visibleHistory,
-          0,
-          view.displayName,
-          mode: PlayMode.sequential,
-        )
-      : _playAll(view.visible, view.displayName);
 
   Future<void> _playShuffledFor(_CollectionView view) => view.isHistory
       ? _playHistoryFrom(
@@ -877,20 +859,23 @@ class _FavoritesPageState extends State<FavoritesPage> {
         context.layoutType(ResponsivePageType.browse).horizontalPadding;
     return Padding(
       padding: EdgeInsets.fromLTRB(horizontalPadding, 12, horizontalPadding, 8),
-      child: AppSearchBar(
-        controller: _searchController,
-        focusNode: _searchFocus,
-        hintText: l10n.favoritesSearchHint,
-        leading: M3EIconButton(
-          variant: M3EIconButtonVariant.standard,
-          tooltip: l10n.cancel,
-          icon: const Icon(Icons.arrow_back_rounded),
-          onPressed: _exitSearch,
+      child: SizedBox(
+        height: _headerRowHeight,
+        child: AppSearchBar(
+          controller: _searchController,
+          focusNode: _searchFocus,
+          hintText: l10n.favoritesSearchHint,
+          leading: M3EIconButton(
+            variant: M3EIconButtonVariant.standard,
+            tooltip: l10n.cancel,
+            icon: const Icon(Icons.arrow_back_rounded),
+            onPressed: _exitSearch,
+          ),
+          trailing: [
+            if (view.hasItems) _buildOverflowMenu(context, l10n, view),
+          ],
+          onChanged: (_) => setState(() {}),
         ),
-        trailing: [
-          if (view.hasItems) _buildOverflowMenu(context, l10n, view),
-        ],
-        onChanged: (_) => setState(() {}),
       ),
     );
   }

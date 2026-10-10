@@ -463,6 +463,9 @@ class AppLocalizationsEn extends AppLocalizations {
   String get play => 'Play';
 
   @override
+  String get pause => 'Pause';
+
+  @override
   String get sourcesTitle => 'Source Management';
 
   @override

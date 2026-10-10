@@ -184,6 +184,7 @@
   "playFromAlbum": "PLAY FROM ALBUM",
   "playFromPlaylist": "PLAY FROM PLAYLIST",
   "play": "Play",
+  "pause": "Pause",
   "sourcesTitle": "Source Management",
   "anyListenEntry": "any-listen",
   "sourcesWebUnsupported": "LX source scripts are not supported on web (a local JS engine is required).",

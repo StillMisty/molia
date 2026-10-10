@@ -448,6 +448,9 @@ class AppLocalizationsZh extends AppLocalizations {
   String get play => '播放';
 
   @override
+  String get pause => '暂停';
+
+  @override
   String get sourcesTitle => '音源管理';
 
   @override
