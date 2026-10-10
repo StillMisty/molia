@@ -1,9 +1,9 @@
 /// 切歌会话（cover swap session）。
 ///
 /// 收拢封面堆叠模块中「一次拖动 / 一次切歌」从开始到落位的全部可变状态：
-/// 起止身份、方向、旧邻位/历史身份、触发方式、阶段、6 秒兜底计时器与方向
-/// 判定的「变化前」提示。会话只承载状态与语义；唯一一根进度控制器与
-/// 对账落位后的源侧淡入控制器仍归 `player_cover_deck.dart` 的 State 持有。
+/// 起止身份、方向、旧邻位/历史身份、阶段、6 秒兜底计时器与方向判定的
+/// 「变化前」提示。会话只承载状态与语义；唯一一根进度控制器与对账落位后
+/// 的源侧淡入控制器仍归 `player_cover_deck.dart` 的 State 持有。
 ///
 /// 与旧散落字段的对应（#5 收敛，语义逐字段保持不变）：
 /// - [CoverSwapSession.seenTrack] ← `_lastSeenTrack`（上一首非空展示曲目）；
@@ -29,15 +29,6 @@ import 'dart:async';
 
 import '../domain/models/track.dart';
 
-/// 会话触发方式。
-enum CoverSwapTrigger {
-  /// 横向拖动：跟手预览 → 松手续走提交（或回弹）。
-  drag,
-
-  /// 即时切歌：自动切歌、控制按钮、邻位封面点击、队列点选/跳转。
-  immediate,
-}
-
 /// 会话阶段。
 ///
 /// 注意：是否「正在演出动画」仍由进度控制器判定（拖动回弹、快速连切共享
@@ -57,8 +48,9 @@ enum CoverSwapPhase {
   /// 完成中：即时切歌的入场动画（会话身份保留，供 #6/调试观察）。
   settling,
 
-  /// 预留（#7）：提交对账时到位曲目与预览目标不一致，走 220ms 校正淡化。
-  /// #5/#6 不进入本阶段：不匹配与匹配同样直接落位。
+  /// 对账校正：提交后到位曲目与预览目标不一致（随机目标 / 失败恢复 /
+  /// 列表变化）时，中心封面以 220ms 原位交叉淡化校正到实际曲目，
+  /// 随后按新快照重建槽位并回 idle。
   correcting,
 }
 
@@ -98,9 +90,6 @@ class CoverSwapSession {
 
   /// 动画方向：1 = 向前（向左滑出），-1 = 向后。
   int direction = 1;
-
-  /// 触发方式；无活动会话时为 null。
-  CoverSwapTrigger? trigger;
 
   /// 会话阶段，见 [CoverSwapPhase]。
   CoverSwapPhase phase = CoverSwapPhase.idle;

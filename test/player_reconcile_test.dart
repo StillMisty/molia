@@ -286,6 +286,61 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
+  testWidgets('校正期间的新拖动被忽略：不产生新预览/提交，校正照常走完', (tester) async {
+    emitFor('b');
+    await pumpPlayer(tester);
+
+    // 左滑提交下一首（预览目标 c）；提交过渡走完后再对账到 d（不匹配）。
+    await tester.timedDrag(
+      find.byKey(Player.artworkSwipeHostKey),
+      const Offset(-160, 0),
+      const Duration(milliseconds: 300),
+    );
+    expect(backend.calls, contains('next'));
+    await tester.pump(const Duration(milliseconds: 400));
+
+    emitFor('d');
+    await tester.pump(const Duration(milliseconds: 50)); // 校正检测帧
+
+    final outgoing = find.byKey(PlayerCoverDeck.outgoingCoverCardKey);
+    final center = find.byKey(PlayerCoverDeck.centerCoverCardKey);
+    final double outStart = nearestOpacityOf(tester, outgoing);
+    expect(outStart, closeTo(1.0, 0.01));
+
+    // 校正中途尝试拖动：右滑（history 末位 c 是可预览目标，旧实现会接受
+    // 这次拖动并提交 skipToPrevious），两次移动累计超过提交阈值后松手。
+    final gesture = await tester.startGesture(
+        tester.getCenter(find.byKey(Player.artworkSwipeHostKey)));
+    await gesture.moveBy(const Offset(60, 0));
+    await tester.pump(const Duration(milliseconds: 60));
+    await gesture.moveBy(const Offset(60, 0));
+    await tester.pump(const Duration(milliseconds: 60));
+    await gesture.up();
+    await tester.pump(const Duration(milliseconds: 60));
+
+    // 拖动被忽略：没有第二次提交，中心保持校正原位（未进入拖动预览）。
+    expect(backend.calls.where((call) => call == 'next').length, 1,
+        reason: '校正期间的新拖动不得再提交切歌');
+    expect(backend.calls.where((call) => call == 'previous').length, 0);
+    expect(cardDx(tester, center), closeTo(0, 0.5),
+        reason: '校正期间不得进入拖动预览（中心不产生位移）');
+    final double outMid = nearestOpacityOf(tester, outgoing);
+    expect(outMid, lessThan(outStart),
+        reason: '校正照常推进：旧预览卡继续淡出（实际 $outMid）');
+    expect(nearestOpacityOf(tester, center), closeTo(1.0 - outMid, 0.01),
+        reason: '校正交叉淡化不被打断（透明度互补）');
+
+    // 校正走完：中心为实际曲目 d，旧预览卡撤下。
+    await tester.pump(const Duration(milliseconds: 120));
+    expect(outgoing, findsNothing, reason: '校正结束旧预览卡应撤下');
+    expect(find.byKey(PlayerCoverDeck.centerCoverTrackKey(d.id)), findsOneWidget,
+        reason: '校正结束后中心应为实际曲目 d');
+    expect(cardDx(tester, center), closeTo(0, 0.5));
+
+    await tester.pump(const Duration(milliseconds: 400)); // 通知节流计时器跑完
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('提交匹配路径：对账续走落位，动画不回起点重播', (tester) async {
     emitFor('b');
     await pumpPlayer(tester);
@@ -463,6 +518,34 @@ void main() {
 
     await tester.pump(const Duration(milliseconds: 400));
     expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('切歌占位：新曲目无封面时以旧封面 URL 作占位（不闪黑块）', (tester) async {
+    final b1 = _track('b', artwork: 'https://img.example/b.jpg');
+    final c = _track('c'); // 无封面
+    emitCustom(current: b1, queue: [a, b1, c], index: 1, history: [a], next: c);
+    // 直接挂载封面堆叠（带封面的曲目会触发播放器的取色/预取路径）。
+    await pumpDeckHost(tester);
+
+    // 切到无封面的 c：动画期间中心卡（c）以旧封面 b 的 URL 作占位。
+    emitCustom(
+        current: c, queue: [a, b1, c], index: 2, history: [a, b1], next: null);
+    await tester.pump(const Duration(milliseconds: 50)); // 检测帧
+    await tester.pump(); // 动画首 tick
+
+    final center = find.byKey(PlayerCoverDeck.centerCoverCardKey);
+    final image = tester.widget<AppNetworkImage>(
+        find.descendant(of: center, matching: find.byType(AppNetworkImage)).first);
+    expect(image.url, isNull, reason: '新曲目 c 无封面（渲染回退占位）');
+    expect(image.placeholder, isA<AppNetworkImage>(),
+        reason: '无封面卡片应带旧封面占位（不是空占位）');
+    expect((image.placeholder! as AppNetworkImage).url,
+        'https://img.example/b.jpg',
+        reason: '占位应为旧封面 b 的 URL：新封面未加载不闪黑块');
+
+    await tester.pump(const Duration(milliseconds: 400)); // 动画走完
+    expect(tester.takeException(), isNull);
+    await tester.pump(const Duration(milliseconds: 400)); // 通知节流计时器跑完
   });
 
   testWidgets('两侧身份在淡化窗口内先后变化：后变化的一侧同样走交叉淡化', (tester) async {

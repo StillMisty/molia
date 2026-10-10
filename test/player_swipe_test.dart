@@ -4,6 +4,7 @@ import 'package:molia/domain/models/track.dart';
 import 'package:molia/l10n/app_localizations.dart';
 import 'package:molia/providers/playback_provider.dart';
 import 'package:molia/widgets/player.dart';
+import 'package:molia/widgets/player_cover_deck.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -107,6 +108,11 @@ void main() {
   int nextCalls() => backend.calls.where((call) => call == 'next').length;
   int previousCalls() =>
       backend.calls.where((call) => call == 'previous').length;
+
+  /// 中心封面相对堆叠中心的横向偏移（0 = 稳态；拖动预览/切歌期间非 0）。
+  double cardDx(WidgetTester tester, Finder finder) =>
+      tester.getCenter(finder).dx -
+      tester.getCenter(coverSwipeHost()).dx;
 
   testWidgets('逐帧左滑提交下一首，后端到位后落位新曲目', (tester) async {
     emitFor('b');
@@ -240,6 +246,83 @@ void main() {
     await tester.pump(const Duration(milliseconds: 400));
 
     expect(nextCalls(), 0);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('拖动中列表变化（next 变空）：预览保持中间态，不被打断', (tester) async {
+    emitFor('b');
+    await pumpPlayer(tester);
+
+    // 左滑进入预览：-90px 超过 80 阈值但未走完行程，中心偏离稳态。
+    final gesture =
+        await tester.startGesture(tester.getCenter(coverSwipeHost()));
+    await gesture.moveBy(const Offset(-60, 0));
+    await tester.pump();
+    await gesture.moveBy(const Offset(-30, 0));
+    await tester.pump();
+
+    final center = find.byKey(PlayerCoverDeck.centerCoverCardKey);
+    final double midDx = cardDx(tester, center);
+    expect(midDx, greaterThan(4), reason: '拖动应已进入预览（中心偏离稳态）');
+
+    // 拖动中「下一首」变空（播放列表变化）。
+    backend.emit(BackendSnapshot(
+      current: b,
+      queue: [a, b],
+      currentIndex: 1,
+      next: null,
+      upcoming: const [],
+      history: [a],
+      isPlaying: true,
+      position: const Duration(seconds: 5),
+      duration: const Duration(seconds: 30),
+    ));
+    await tester.pump(const Duration(milliseconds: 50)); // 通知检测帧
+
+    // 继续拖动并等待：预览必须保持中间态，不撤下回弹。
+    // （先泵一帧零时长：若实现错误地撤下预览，这一帧建立回弹 ticker 起点，
+    // 下一帧才采样到回弹中间态。）
+    await gesture.moveBy(const Offset(-30, 0));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 250));
+    expect(cardDx(tester, center), closeTo(midDx, 1),
+        reason: '预览已激活时列表变化不应打断预览（中间态不回落）');
+
+    // 松手未达提交阈值：回弹到稳态，不提交切歌。
+    await gesture.moveBy(const Offset(90, 0));
+    await tester.pump();
+    await gesture.up();
+    await tester.pump(const Duration(milliseconds: 300));
+    expect(nextCalls(), 0);
+    expect(previousCalls(), 0);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('提交后 6 秒无对账：兜底回弹到稳态，不卡在预览', (tester) async {
+    emitFor('b');
+    await pumpPlayer(tester);
+
+    await tester.timedDrag(
+      coverSwipeHost(),
+      const Offset(-160, 0),
+      const Duration(milliseconds: 300),
+    );
+    expect(nextCalls(), 1);
+    await tester.pump(const Duration(milliseconds: 400)); // 提交过渡走完，预览保持
+
+    final center = find.byKey(PlayerCoverDeck.centerCoverCardKey);
+    expect(cardDx(tester, center), closeTo(0, 1),
+        reason: '提交等待期间预览应保持落位（不回落）');
+
+    // 后端迟迟不推快照：6 秒兜底计时器触发回弹。
+    await tester.pump(const Duration(milliseconds: 6500));
+    await tester.pump(const Duration(milliseconds: 300)); // 220ms 回弹动画走完
+
+    expect(find.byKey(PlayerCoverDeck.centerCoverTrackKey(b.id)), findsOneWidget,
+        reason: '兜底回弹后中心应回到实际曲目 b');
+    expect(find.byKey(PlayerCoverDeck.outgoingCoverCardKey), findsNothing,
+        reason: '回弹后滑出卡应撤下');
+    expect(cardDx(tester, center), closeTo(0, 1));
     expect(tester.takeException(), isNull);
   });
 }
