@@ -1,9 +1,12 @@
+import 'dart:math' as math;
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:molia/domain/models/playback.dart';
 import 'package:molia/domain/models/track.dart';
 import 'package:molia/l10n/app_localizations.dart';
 import 'package:molia/providers/playback_provider.dart';
 import 'package:molia/widgets/player.dart';
+import 'package:molia/widgets/player_cover_deck.dart';
 import 'package:molia/widgets/player_morph.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:provider/provider.dart';
@@ -11,10 +14,12 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import 'support/fakes.dart';
 
-/// 侧边（上一首/下一首）封面入场动效：0 = 藏在中心封面背后，1 = 稳态。
+/// 切歌视觉（#6 安静化）：窗口化交叉淡化（仅透明度、原位）、320ms、
+/// 滑出卡全程渲染、无「从中心背后展开」入场特例。
 ///
-/// 三处触发都要验证「存在中间态」：从 0 连续走到 0.85，而不是直接出现在
-/// 槽位（pop）。
+/// 断言只读外部可观察行为：封面堆叠内各 Opacity 的透明度与全局位置（不读
+/// 私有字段）。存在常驻波浪动画，不能 pumpAndSettle，按固定时长 pump 采样
+/// 中间态；窗口位置用进度占比换算的 pump 时长表达。
 Track _track(String id) => Track(
       id: TrackId('fake', id),
       title: 'Title $id',
@@ -97,56 +102,224 @@ void main() {
       ),
     );
     await tester.pump();
+    // 首帧切歌入场动画（320ms）：等它结束再操作。
     await tester.pump(const Duration(milliseconds: 600));
   }
 
-  /// 侧边封面的透明度（入场值乘 0.85）。只看封面堆叠内部，避开完整层
-  /// 淡入自身的 Opacity（展开过程中它也是中间值，会干扰判断）。
-  Iterable<double> sideOpacities(WidgetTester tester) => tester
-      .widgetList<Opacity>(find.descendant(
-        of: find.byKey(Player.artworkSwipeHostKey),
-        matching: find.byType(Opacity),
-      ))
-      .map((widget) => widget.opacity);
+  /// 封面堆叠内所有 Opacity 的（相对堆叠中心的横向偏移, 透明度）。
+  List<({double dx, double opacity})> sampleCoverOpacities(
+      WidgetTester tester) {
+    final deckCenter =
+        tester.getCenter(find.byKey(Player.artworkSwipeHostKey));
+    final samples = <({double dx, double opacity})>[];
+    for (final element in find
+        .descendant(
+          of: find.byKey(Player.artworkSwipeHostKey),
+          matching: find.byType(Opacity),
+        )
+        .evaluate()) {
+      final widget = element.widget as Opacity;
+      final renderObject = element.renderObject;
+      if (renderObject is! RenderBox || !renderObject.hasSize) continue;
+      final center =
+          renderObject.localToGlobal(renderObject.size.center(Offset.zero));
+      samples.add((dx: center.dx - deckCenter.dx, opacity: widget.opacity));
+    }
+    samples.sort((left, right) => left.dx.compareTo(right.dx));
+    return samples;
+  }
 
-  bool hasIntermediateSideOpacity(WidgetTester tester) =>
-      sideOpacities(tester).any((opacity) => opacity > 0 && opacity < 0.8);
+  /// 落在 [dx] 附近（默认 ±6）的所有透明度采样值。
+  List<double> opacitiesNear(
+    List<({double dx, double opacity})> samples,
+    double dx, {
+    double radius = 6,
+  }) =>
+      samples
+          .where((sample) => (sample.dx - dx).abs() < radius)
+          .map((sample) => sample.opacity)
+          .toList();
 
-  bool hasSettledSideOpacity(WidgetTester tester) =>
-      sideOpacities(tester).any((opacity) => (opacity - 0.85).abs() < 0.01);
+  /// 指定封面卡最近一层 Opacity 的透明度（卡的动画透明度层）。
+  double nearestOpacityOf(WidgetTester tester, Finder finder) {
+    final elements = finder.evaluate();
+    expect(elements, hasLength(1), reason: '封面卡应唯一存在');
+    double? opacity;
+    elements.single.visitAncestorElements((ancestor) {
+      final widget = ancestor.widget;
+      if (widget is Opacity) {
+        opacity = widget.opacity;
+        return false;
+      }
+      return true;
+    });
+    expect(opacity, isNotNull, reason: '未找到封面卡的透明度层');
+    return opacity!;
+  }
 
-  testWidgets('滑动提交对账：新的再下一首从中心背后入场', (tester) async {
+  /// 指定封面卡相对堆叠中心的横向偏移。
+  double cardDx(WidgetTester tester, Finder finder) =>
+      tester.getCenter(finder).dx -
+      tester.getCenter(find.byKey(Player.artworkSwipeHostKey)).dx;
+
+  testWidgets('即时切歌：旧身份窗口先淡出、源侧新身份窗口后淡入，滑出卡全程渲染', (tester) async {
     emitFor('b');
-    final expand = AnimationController(
-      vsync: const TestVSync(),
-      duration: const Duration(milliseconds: 360),
-      value: 1.0,
-    );
-    addTearDown(expand.dispose);
-    await pumpPlayer(tester, expand: expand);
+    await pumpPlayer(tester);
 
+    // 稳态基准：左=上一首 a、右=下一首 c（位置与 0.85 透明度）。
+    final steady = sampleCoverOpacities(tester);
+    expect(steady, hasLength(3));
+    final double leftDx = steady.first.dx;
+    final double rightDx = steady.last.dx;
+    expect(leftDx, lessThan(-20));
+    expect(rightDx, greaterThan(20));
+    expect(steady.first.opacity, closeTo(0.85, 0.001));
+    expect(steady.last.opacity, closeTo(0.85, 0.001));
+
+    emitFor('c'); // 前进切歌 b→c
+    await tester.pump(const Duration(milliseconds: 50)); // 检测帧：p=0
+
+    // p=0 与稳态一致：滑出卡（旧中封 b）在中心原位，源槽位卡（c）仍是 0.85。
+    final outgoing = find.byKey(PlayerCoverDeck.outgoingCoverCardKey);
+    expect(outgoing, findsOneWidget,
+        reason: '非拖动切歌的滑出卡必须从会话第一帧起渲染（旧实现从不渲染）');
+    expect(cardDx(tester, outgoing), closeTo(0, 1));
+    expect(nearestOpacityOf(tester, outgoing), closeTo(1.0, 0.01));
+    expect(
+      nearestOpacityOf(tester, find.byKey(PlayerCoverDeck.centerCoverCardKey)),
+      closeTo(0.85, 0.01),
+      reason: '进场卡起手透明度应与稳态源槽位卡一致（0.85），不是 1.0',
+    );
+
+    await tester.pump(); // 动画首 tick（elapsed 0）
+    await tester.pump(const Duration(milliseconds: 64)); // p≈0.2
+
+    final early = sampleCoverOpacities(tester);
+    // 目标槽位旧身份（左侧 a）：窗口 p∈[0, 0.4] 淡出，处于中间值。
+    final earlyOld = opacitiesNear(early, leftDx);
+    expect(earlyOld, isNotEmpty);
+    expect(earlyOld.reduce(math.min), allOf(greaterThan(0.0), lessThan(0.85)),
+        reason: 'p≈0.2 旧槽位身份应处于淡出中间值（实际 $earlyOld）');
+    // 源槽位新身份（右侧 d）：窗口 p∈[0.6, 1]，此刻尚未出现。
+    final earlyNew = opacitiesNear(early, rightDx);
+    expect(earlyNew, isNotEmpty);
+    expect(earlyNew.reduce(math.max), lessThan(0.01),
+        reason: 'p≈0.2 源侧新身份尚未出现（实际 $earlyNew）');
+    // 滑出卡：正在向目标槽位滑动（既不在中心也未落位），透明度 1.0→0.85 中间。
+    expect(outgoing, findsOneWidget);
+    final outgoingDx = cardDx(tester, outgoing);
+    expect(outgoingDx, lessThan(-10));
+    expect(outgoingDx, greaterThan(leftDx + 10));
+    expect(nearestOpacityOf(tester, outgoing),
+        allOf(greaterThan(0.85), lessThan(1.0)));
+
+    await tester.pump(const Duration(milliseconds: 192)); // p≈0.8
+    final late = sampleCoverOpacities(tester);
+    // 源侧新身份：淡入窗口中间值。
+    final lateNew = opacitiesNear(late, rightDx);
+    expect(lateNew, isNotEmpty);
+    expect(lateNew.reduce(math.max), allOf(greaterThan(0.0), lessThan(0.85)),
+        reason: 'p≈0.8 源侧新身份应处于淡入中间值（实际 $lateNew）');
+    // 旧身份：淡出窗口已结束，退场为 0。
+    expect(opacitiesNear(late, leftDx).reduce(math.min), lessThan(0.01),
+        reason: 'p≈0.8 旧槽位身份应已淡出');
+
+    await tester.pump(const Duration(milliseconds: 48)); // p≈0.95
+    // 滑出卡逼近目标槽位：位置/透明度与稳态槽位卡完全重合。
+    expect(cardDx(tester, outgoing), closeTo(leftDx, 1.5));
+    expect(nearestOpacityOf(tester, outgoing), closeTo(0.85, 0.01));
+
+    await tester.pump(const Duration(milliseconds: 32)); // p=1.0 完成
+    // 动画结束无 pop：目标槽位由稳态槽位卡无缝承接（同位置、0.85）。
+    expect(outgoing, findsNothing);
+    final idle = sampleCoverOpacities(tester);
+    expect(opacitiesNear(idle, leftDx).reduce(math.max), closeTo(0.85, 0.01),
+        reason: '动画结束无 pop：目标槽位稳态卡应与滑出卡终点重合');
+    expect(opacitiesNear(idle, rightDx).reduce(math.max), closeTo(0.85, 0.01));
+
+    await tester.pump(const Duration(milliseconds: 400)); // 通知节流计时器跑完
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('进场卡透明度：起手 0.85，随进度连续升到 1.0（无起手闪跳）', (tester) async {
+    emitFor('b');
+    await pumpPlayer(tester);
+
+    emitFor('c');
+    await tester.pump(const Duration(milliseconds: 50)); // 检测帧 p=0
+    final centerCard = find.byKey(PlayerCoverDeck.centerCoverCardKey);
+    final start = nearestOpacityOf(tester, centerCard);
+    expect(start, closeTo(0.85, 0.01),
+        reason: '起手透明度应为 0.85（与稳态源槽位卡一致），而不是硬跳 1.0');
+
+    await tester.pump(); // 动画首 tick
+    await tester.pump(const Duration(milliseconds: 160)); // p=0.5
+    final mid = nearestOpacityOf(tester, centerCard);
+    expect(mid, greaterThan(start));
+    expect(mid, lessThan(1.0), reason: '中段应处于 0.85→1.0 之间（实际 $mid）');
+
+    await tester.pump(const Duration(milliseconds: 160)); // p=1.0
+    expect(nearestOpacityOf(tester, centerCard), closeTo(1.0, 0.01));
+
+    await tester.pump(const Duration(milliseconds: 400)); // 通知节流计时器跑完
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('拖动对账落位：源侧新身份 180ms 纯透明度淡入（无位移跳变）', (tester) async {
+    emitFor('b');
+    await pumpPlayer(tester);
+
+    final steady = sampleCoverOpacities(tester);
+    final double leftDx = steady.first.dx;
+    final double rightDx = steady.last.dx;
+
+    // 左滑提交下一首；后端未确认期间预览保持，随后 emitFor('c') 对账。
     await tester.timedDrag(
       find.byKey(Player.artworkSwipeHostKey),
       const Offset(-160, 0),
       const Duration(milliseconds: 300),
     );
-    // 让提交过渡走完（后端还没确认），此时是对账的后半条路径。
-    await tester.pump(const Duration(milliseconds: 700));
+    expect(backend.calls, contains('next'));
+    await tester.pump(const Duration(milliseconds: 400)); // 提交过渡走完，等待对账
 
     emitFor('c');
-    await tester.pump();
-    // 入场在 post-frame 启动：先过一帧（首 tick elapsed=0），再推进到中间态。
-    await tester.pump();
-    await tester.pump(const Duration(milliseconds: 100));
-    expect(hasIntermediateSideOpacity(tester), isTrue,
-        reason: '落位时应看到新邻位淡入的中间态，而不是直接 0.85');
+    await tester.pump(const Duration(milliseconds: 50)); // 对账帧：淡入起点
+    final atStart = sampleCoverOpacities(tester);
+    final startNew = atStart
+        .where((sample) => (sample.dx - rightDx).abs() < 6)
+        .toList();
+    expect(startNew, isNotEmpty);
+    expect(startNew.map((sample) => sample.opacity).reduce(math.max),
+        lessThan(0.01),
+        reason: '对账落位帧源侧新身份从 0 起（不是直接 0.85）');
+    // 纯透明度：起点就在稳态槽位，不做「从中心背后展开」的位移插值。
+    expect(startNew.first.dx, closeTo(rightDx, 0.5));
+    expect(opacitiesNear(atStart, leftDx).reduce(math.max),
+        closeTo(0.85, 0.01),
+        reason: '目标槽位滑出卡已落位（0.85），对账不应让画面回跳');
 
-    await tester.pump(const Duration(milliseconds: 400));
-    expect(hasSettledSideOpacity(tester), isTrue);
+    await tester.pump(); // 淡入首 tick
+    await tester.pump(const Duration(milliseconds: 90)); // 180ms 中段
+    final mid = sampleCoverOpacities(tester);
+    final midNew = mid
+        .where((sample) => (sample.dx - rightDx).abs() < 6)
+        .toList();
+    expect(midNew.map((sample) => sample.opacity).reduce(math.max),
+        allOf(greaterThan(0.0), lessThan(0.85)));
+    for (final sample in midNew) {
+      expect(sample.dx, closeTo(rightDx, 0.5),
+          reason: '源侧新身份淡入期间不得发生位移');
+    }
+
+    await tester.pump(const Duration(milliseconds: 100));
+    final end = sampleCoverOpacities(tester);
+    expect(opacitiesNear(end, rightDx).reduce(math.max), closeTo(0.85, 0.01));
+
+    await tester.pump(const Duration(milliseconds: 400)); // 通知节流计时器跑完
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('顶栏→播放页飞行：侧边封面在落位后从中心背后展开', (tester) async {
+  testWidgets('删除入场特例：顶栏飞行与展开落位不再触发侧邻位演出', (tester) async {
     emitFor('b');
     final morph = PlayerMorphController();
     addTearDown(morph.dispose);
@@ -158,45 +331,38 @@ void main() {
     addTearDown(expand.dispose);
     await pumpPlayer(tester, expand: expand, morph: morph);
 
-    // 飞行开始：侧边封面先藏起来（页面淡入阶段只有中心飞行）。
+    /// 两侧邻位应始终以稳态出现（0.85、稳态槽位位置），无中间态演出。
+    void expectSettledSides() {
+      final sides = sampleCoverOpacities(tester)
+          .where((sample) => sample.dx.abs() > 20)
+          .toList();
+      expect(sides, hasLength(2));
+      for (final sample in sides) {
+        expect(sample.opacity, closeTo(0.85, 0.01));
+      }
+      expect(sides.first.dx, lessThan(-20));
+      expect(sides.last.dx, greaterThan(20));
+    }
+
+    // 顶栏⇄播放页飞行：隐藏沿与落位沿都不再演出。
     morph.setPageHeaderHidden(true);
     await tester.pump();
-    expect(hasIntermediateSideOpacity(tester), isFalse);
-
-    // 飞行落位：侧边封面从中心背后展开。
+    expectSettledSides();
     morph.setPageHeaderHidden(false);
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 100));
-    expect(hasIntermediateSideOpacity(tester), isTrue);
+    expectSettledSides();
 
+    // 迷你 ⇄ 完整：收起与展开落位同样不再演出（随层自身淡入）。
+    expand.reverse();
+    await tester.pump();
     await tester.pump(const Duration(milliseconds: 400));
-    expect(hasSettledSideOpacity(tester), isTrue);
-    expect(tester.takeException(), isNull);
-  });
-
-  testWidgets('展开迷你→完整：侧边封面在飞行落位后展开', (tester) async {
-    emitFor('b');
-    final expand = AnimationController(
-      vsync: const TestVSync(),
-      duration: const Duration(milliseconds: 360),
-    );
-    addTearDown(expand.dispose);
-    await pumpPlayer(tester, expand: expand);
-
-    // 迷你态起步：展开过程侧边封面藏在中心背后。
+    expectSettledSides();
     expand.forward();
     await tester.pump();
-    await tester.pump(const Duration(milliseconds: 200));
-    expect(hasIntermediateSideOpacity(tester), isFalse);
-
-    // 展开完成 = 中心封面飞行落位：侧边封面展开。
-    await tester.pump(const Duration(milliseconds: 200));
-    await tester.pump();
-    await tester.pump(const Duration(milliseconds: 100));
-    expect(hasIntermediateSideOpacity(tester), isTrue);
-
     await tester.pump(const Duration(milliseconds: 400));
-    expect(hasSettledSideOpacity(tester), isTrue);
+    expectSettledSides();
+
     expect(tester.takeException(), isNull);
   });
 }
