@@ -778,9 +778,13 @@ void main() {
     expect(rows, isNotEmpty);
     expect(rows.length, lessThan(60), reason: '200 首只构建视口附近的行');
 
-    // 固定行高：itemExtent 预取高度（滚动条拇指/拖动精确）。
+    // 固定行高：itemExtent 预取高度（行高 + 行距，滚动条拇指/拖动精确）。
     final list = tester.widget<ListView>(find.byType(ListView));
-    expect(list.itemExtent, TrackRow.extent);
+    expect(
+      list.itemExtent,
+      TrackRow.extent +
+          TrackRow.gapOf(tester.element(find.byType(TrackRow).first)),
+    );
 
     // 标题/歌手都单行省略：固定高度不会被换行撑高。
     final firstRowTexts = tester

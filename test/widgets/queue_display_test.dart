@@ -189,11 +189,15 @@ void main() {
     expect(rows.length, lessThan(30), reason: '300 首只构建视口附近的行');
     expect(find.text('Title 299'), findsNothing);
 
-    // 列表使用固定行高：itemExtent = 行高 + 1px 分隔线。
+    // 列表使用固定行高：itemExtent = 行高 + 行距（M3E 列表卡片 token）。
     final sliver = tester.widget<SliverFixedExtentList>(
       find.byType(SliverFixedExtentList),
     );
-    expect(sliver.itemExtent, TrackRow.extent + 1);
+    expect(
+      sliver.itemExtent,
+      TrackRow.extent +
+          TrackRow.gapOf(tester.element(find.byType(TrackRow).first)),
+    );
 
     await tester.scrollUntilVisible(
       find.text('Title 299'),

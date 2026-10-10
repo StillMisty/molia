@@ -170,7 +170,7 @@ class _DiscoverPlaylistsTabState extends State<DiscoverPlaylistsTab>
           title: playlist.name,
           coverUrl: playlist.coverUrl,
           importable: true,
-          loader: () => provider.loadPlaylistDetail(playlist.id, 1),
+          loader: (page) => provider.loadPlaylistDetail(playlist.id, page),
         ),
       ),
     );
@@ -208,7 +208,7 @@ class _DiscoverPlaylistsTabState extends State<DiscoverPlaylistsTab>
         builder: (_) => DiscoverTracksPage(
           title: l10n.discoverOpenPlaylist,
           importable: true,
-          loader: () => provider.loadPlaylistDetail(input, 1),
+          loader: (page) => provider.loadPlaylistDetail(input, page),
         ),
       ),
     );
