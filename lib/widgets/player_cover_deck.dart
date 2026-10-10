@@ -15,6 +15,16 @@
 /// - 两张移动卡（旧中封 → 目标槽位、新中封 ← 源槽位）全程插值，透明度
 ///   1.0 ↔ 0.85 连续过渡（进场卡从 85% 起步，消除起手闪跳）。
 ///
+/// 对账与会话外槽位更新（#7）：
+/// - 提交对账到非预览曲目：进入 `correcting`，中心封面以 220ms 原位交叉淡化
+///   校正（旧预览卡淡出、实际曲目卡淡入，无位移），随后按新快照重建槽位；
+///   提交过渡尚未落位时先让它走完再校正（从稳态起步，避免半途起跳）；
+/// - 空闲期槽位身份变化（加歌/删歌/开关随机/next 变空）：180ms 原位交叉
+///   淡化（旧淡出、新淡入，变空则淡出为空），会话激活期间由会话窗口负责；
+/// - 中心封面同 id、封面 URL 更新（音源补图）：250ms 交叉淡化换图；
+/// - 左槽「上一首」= 播放顺序最近一首（history 末位）→ 队列前一位 → 空
+///   （排除与当前同 id），与后端 `skipToPrevious` 及拖动预览同源。
+///
 /// 切歌检测由播放快照监听驱动（[PlaybackProvider] 通知 → 比较当前曲目 id），
 /// build 期间不再做切歌判定，只刷新空闲缓存（下一首身份与方向提示，必须与旧
 /// 实现同帧刷新才能保持快速连切的方向基准）。
@@ -104,7 +114,23 @@ class PlayerCoverDeck extends StatefulWidget {
 
   /// 滑出（旧中心）封面的语义 key：非拖动切歌的滑出卡是否真正渲染是可观察
   /// 行为（旧实现因空闲缓存清空身份而从不渲染），对外用这个锚点断言。
+  /// 对账校正期间它也是淡出中的旧预览卡（同为「离开中心的封面」）。
   static const Key outgoingCoverCardKey = ValueKey('coverSlotOutgoing');
+
+  /// 中心封面换图（同 id、URL 更新）时旧图卡片的语义 key：换图淡化是否
+  /// 以「旧图淡出 + 新图淡入」表达，对外用这个锚点断言。
+  static const Key outgoingArtworkCardKey = ValueKey('coverArtworkOutgoing');
+
+  /// 左右槽位卡按身份（track id）的语义 key：空闲期身份交叉淡化时同一槽位
+  /// 会并存新旧两张卡（旧淡出、新淡入），测试需要按身份分别定位并采样
+  /// 透明度（不读私有字段）。
+  static Key sideCoverCardKey({required bool left, required TrackId id}) =>
+      ValueKey('coverSlot${left ? 'Left' : 'Right'}:${id.uri}');
+
+  /// 稳态中心封面按身份（track id）的语义 key：对账校正后中心到底展示
+  /// 哪一首是可观察行为，对外用这个锚点断言（不读私有字段）。
+  static Key centerCoverTrackKey(TrackId id) =>
+      ValueKey('coverSlotCenter:${id.uri}');
 
   const PlayerCoverDeck({
     super.key,
@@ -167,6 +193,15 @@ class _PlayerCoverDeckState extends State<PlayerCoverDeck>
   /// 拖动对账落位后源侧新身份的纯透明度淡入时长。
   static const Duration _reconcileFadeDuration = Duration(milliseconds: 180);
 
+  /// 对账校正时长：到位曲目与预览目标不一致时，中心封面原位交叉淡化校正。
+  static const Duration _reconcileCorrectionDuration = Duration(milliseconds: 220);
+
+  /// 空闲期槽位身份交叉淡化时长（原位、纯透明度）。
+  static const Duration _slotIdentityFadeDuration = Duration(milliseconds: 180);
+
+  /// 中心封面同 id 换图（音源补图）交叉淡化时长。
+  static const Duration _artworkRefreshFadeDuration = Duration(milliseconds: 250);
+
   // ---- 横向拖动跟踪（从手指真实按下位置起算） ----
   double? _dragStartX;
   double? _dragStartY;
@@ -189,8 +224,40 @@ class _PlayerCoverDeckState extends State<PlayerCoverDeck>
   /// 特例后的等价替代；只在 idle 稳态渲染里作用于会话方向的源侧槽位）。
   late AnimationController _sourceNeighborFade;
 
-  /// 封面堆叠重绘源：切歌过渡 + 对账后的源侧淡入。
+  /// 对账校正控制器：0→1 期间中心旧预览卡淡出、实际曲目卡淡入（原位无位移）。
+  late AnimationController _reconcileCorrection;
+
+  /// 空闲槽位身份交叉淡化控制器：1 = 稳态；身份变化时 0 → 1。
+  late AnimationController _slotIdentityFade;
+
+  /// 中心封面换图控制器：1 = 稳态；同 id、URL 更新时 0 → 1。
+  late AnimationController _artworkRefreshFade;
+
+  /// 封面堆叠重绘源：切歌过渡 + 对账后的源侧淡入 + 校正/槽位淡换/换图。
   late final Listenable _coverStackAnimation;
+
+  /// 已确认的对账结果：提交过渡尚未落位时先记住，落位后再开始校正
+  /// （校正必须从稳态起步，否则旧预览卡会从半途位置跳回中心）。
+  String? _pendingCorrectionId;
+
+  /// 中心封面当前身份与 URL（同 id 换图时 URL 是淡出起点；起点可以为空，
+  /// 即「音源补图」：从无封面淡入到有封面）。
+  String? _centerTrackId;
+  String? _centerArtworkUrl;
+
+  /// 中心封面是否正在换图（淡出起点 [_outgoingCenterArtworkUrl] 可以为空，
+  /// 所以淡出卡是否渲染不能用「旧 URL 非空」判断）。
+  bool _centerArtworkRefreshing = false;
+
+  /// 中心封面淡出中的旧 URL（换图起点；无封面时为 null）。
+  String? _outgoingCenterArtworkUrl;
+
+  /// 空闲槽位身份跟踪：最近一次稳态渲染的身份（下一次变化的淡出起点）
+  /// 与正在淡出的旧身份。
+  Track? _leftSlotShown;
+  Track? _rightSlotShown;
+  Track? _leftSlotOutgoing;
+  Track? _rightSlotOutgoing;
 
   /// 播放态中心封面轻微缩放（暂停时保持清晰，不做变暗）。
   late AnimationController _playStateController;
@@ -217,12 +284,37 @@ class _PlayerCoverDeckState extends State<PlayerCoverDeck>
       vsync: this,
       value: 1.0,
     );
+    _reconcileCorrection = AnimationController(
+      duration: _reconcileCorrectionDuration,
+      vsync: this,
+      value: 1.0,
+    );
+    _slotIdentityFade = AnimationController(
+      duration: _slotIdentityFadeDuration,
+      vsync: this,
+      value: 1.0,
+    );
+    _artworkRefreshFade = AnimationController(
+      duration: _artworkRefreshFadeDuration,
+      vsync: this,
+      value: 1.0,
+    );
+    // 中心换图的淡出起点必须是「挂载时正在展示的 URL」：首个快照若只补了
+    // 封面 URL（同 id），didUpdateWidget 才能识别为换图而不是首帧接管。
+    _centerTrackId = trackKeyOf(widget.displayTrack);
+    _centerArtworkUrl = artworkUrlOf(widget.displayTrack);
     _coverStackAnimation = Listenable.merge([
       _coverController,
       _sourceNeighborFade,
+      _reconcileCorrection,
+      _slotIdentityFade,
+      _artworkRefreshFade,
     ]);
     // 即时切歌落位即会话结束（完成中 → 空闲）；拖动提交由对账路径收尾。
     _coverController.addStatusListener(_handleCoverStatus);
+    _reconcileCorrection.addStatusListener(_handleCorrectionStatus);
+    _slotIdentityFade.addStatusListener(_handleSlotIdentityStatus);
+    _artworkRefreshFade.addStatusListener(_handleArtworkRefreshStatus);
     // 顶栏⇄播放页飞行时只有封面隐藏：必须监听 morph 控制器才能重建真身
     // （侧邻位随页面层自身淡入，不再有独立入场演出）。
     widget.morph?.addListener(_onMorphChanged);
@@ -245,6 +337,8 @@ class _PlayerCoverDeckState extends State<PlayerCoverDeck>
     // provider 可能被替换：父级重建时重新检查订阅（此时 widget.displayTrack
     // 已来自新快照）。
     _bindPlaybackIfNeeded();
+    // 中心封面同 id、URL 更新（音源补图）：250ms 交叉淡化换图，不播切歌动画。
+    _syncCenterArtwork(widget.displayTrack);
   }
 
   /// 订阅（或换绑）播放 Provider，并在换绑后同步一次会话身份。
@@ -281,8 +375,10 @@ class _PlayerCoverDeckState extends State<PlayerCoverDeck>
       final track = playback.snapshot.current;
       final id = trackKeyOf(track);
       if (id == null || id == _session.animatedTrackId) {
-        // 同一首的重复通知只刷新对象引用（快照值变才发，代价可忽略）。
+        // 同一首的重复通知只刷新对象引用（快照值变才发，代价可忽略）；
+        // current 未变但队列/身份可能变化：刷新空闲槽位淡换与中心换图。
         if (track != null) _session.seenTrack = track;
+        _refreshIdleVisuals(playback);
         return;
       }
       setState(() {
@@ -325,6 +421,155 @@ class _PlayerCoverDeckState extends State<PlayerCoverDeck>
     setState(() {});
   }
 
+  /// current 未变时的空闲刷新：中心换图 + 左右槽位身份淡换。
+  ///
+  /// 在通知微任务里（下一帧构建前）判定并启动淡化：淡化起点必须先把控制器
+  /// 归零，否则会先闪一帧新身份/新图再回跳。会话激活期间（拖动/提交/过渡/
+  /// 校正）槽位身份由会话窗口负责，这里只接管中心换图。
+  void _refreshIdleVisuals(PlaybackProvider playback) {
+    final snapshot = playback.snapshot;
+    final current = snapshot.current;
+    final currentId = trackKeyOf(current);
+    // 中心封面同 id、URL 变化（音源补图）：250ms 交叉淡化换图，不播切歌动画。
+    // current 已变（切歌/清空）时由切歌与校正路径接管，不做换图淡化。
+    if (currentId != null &&
+        currentId == _session.animatedTrackId &&
+        currentId == _centerTrackId) {
+      final url = artworkUrlOf(current);
+      if (url != _centerArtworkUrl) {
+        if (_artworkRefreshFade.isAnimating) {
+          // 换图淡化中再次更新：直接接管新 URL（以当前透明度渲染），不重启动画。
+          _centerArtworkUrl = url;
+        } else {
+          setState(() {
+            _outgoingCenterArtworkUrl = _centerArtworkUrl;
+            _centerArtworkRefreshing = true;
+            _centerArtworkUrl = url;
+            _artworkRefreshFade.value = 0;
+          });
+          _artworkRefreshFade.forward();
+        }
+      }
+    }
+    _refreshIdleSlots(snapshot);
+  }
+
+  /// 空闲期槽位身份变化（加歌/删歌/开关随机导致上一首/下一首换人）：
+  /// 以约 180ms 原位交叉淡化表达；身份变为空则淡出为空。
+  ///
+  /// 门控：只在会话 idle 且过渡动画已停下时接管——拖动/提交/校正期间槽位
+  /// 身份由会话窗口负责，不得叠加。
+  void _refreshIdleSlots(PlaybackSnapshot snapshot) {
+    if (_session.phase != CoverSwapPhase.idle || _coverController.isAnimating) {
+      return;
+    }
+    final left = _resolvePreviousTrack(snapshot);
+    final right = snapshot.next;
+    final bool leftChanged = _leftSlotShown?.id != left?.id;
+    final bool rightChanged = _rightSlotShown?.id != right?.id;
+    if (!leftChanged && !rightChanged) return;
+    if (_slotIdentityFade.isAnimating) {
+      // 淡化中身份再次变化：直接接管新身份（以当前透明度渲染），不重启动画
+      // （重启动画会让已淡出的卡透明度回跳）。该侧若还没在淡出（另一侧先
+      // 变化），补一个淡出起点：从当前透明度起步，避免直接硬切身份。
+      setState(() {
+        if (leftChanged) {
+          _leftSlotOutgoing ??= _leftSlotShown;
+          _leftSlotShown = left;
+        }
+        if (rightChanged) {
+          _rightSlotOutgoing ??= _rightSlotShown;
+          _rightSlotShown = right;
+        }
+      });
+      return;
+    }
+    setState(() {
+      if (leftChanged) {
+        _leftSlotOutgoing = _leftSlotShown;
+        _leftSlotShown = left;
+      }
+      if (rightChanged) {
+        _rightSlotOutgoing = _rightSlotShown;
+        _rightSlotShown = right;
+      }
+      _slotIdentityFade.value = 0;
+    });
+    _slotIdentityFade.forward();
+  }
+
+  /// 会话结束/稳态帧：把槽位身份跟踪对齐到快照（并清掉淡出中的旧身份）。
+  ///
+  /// 会话窗口（切歌/对账）已经把槽位身份演到位，直接接管不补淡换；空闲期
+  /// 后续的变化才会以 [CoverSwapSession] 之外的淡换表达。
+  void _syncSlotIdentityTracking(PlaybackSnapshot snapshot) {
+    _leftSlotShown = _resolvePreviousTrack(snapshot);
+    _rightSlotShown = snapshot.next;
+    _leftSlotOutgoing = null;
+    _rightSlotOutgoing = null;
+  }
+
+  /// 中心封面同 id、封面 URL 变化（音源补图）：以约 250ms 交叉淡化换图。
+  ///
+  /// 只在同一曲目 id 内换 URL 时触发；id 变化（切歌/对账落位）由切歌与校正
+  /// 路径负责，这里只接管新身份、不播换图淡化。放在 didUpdateWidget（父级
+  /// 按快照重建）而不是 build：淡化起点必须在渲染新 URL 之前把控制器归零，
+  /// 否则会先闪一帧新图再回跳旧图。
+  void _syncCenterArtwork(Track? track) {
+    final id = trackKeyOf(track);
+    final url = artworkUrlOf(track);
+    if (id != _centerTrackId) {
+      _centerTrackId = id;
+      _centerArtworkUrl = url;
+      _centerArtworkRefreshing = false;
+      _outgoingCenterArtworkUrl = null;
+      if (_artworkRefreshFade.value != 1.0) _artworkRefreshFade.value = 1.0;
+      return;
+    }
+    if (url == _centerArtworkUrl) return;
+    if (_artworkRefreshFade.isAnimating) {
+      _centerArtworkUrl = url;
+      return;
+    }
+    _outgoingCenterArtworkUrl = _centerArtworkUrl;
+    _centerArtworkRefreshing = true;
+    _centerArtworkUrl = url;
+    _artworkRefreshFade.value = 0;
+    _artworkRefreshFade.forward();
+  }
+
+  /// 换图淡化结束：撤下旧图卡片（稳态只留实际曲目卡）。
+  void _handleArtworkRefreshStatus(AnimationStatus status) {
+    if (status != AnimationStatus.completed) return;
+    if (!_centerArtworkRefreshing) return;
+    setState(() => _centerArtworkRefreshing = false);
+  }
+
+  /// 槽位身份交叉淡化结束：撤下淡出中的旧身份卡。
+  void _handleSlotIdentityStatus(AnimationStatus status) {
+    if (status != AnimationStatus.completed) return;
+    if (_leftSlotOutgoing == null && _rightSlotOutgoing == null) return;
+    setState(() {
+      _leftSlotOutgoing = null;
+      _rightSlotOutgoing = null;
+    });
+  }
+
+  /// 校正结束（220ms 走完）：会话回 idle，槽位身份按新快照稳态接管。
+  void _handleCorrectionStatus(AnimationStatus status) {
+    if (status != AnimationStatus.completed) return;
+    if (_session.phase != CoverSwapPhase.correcting) return;
+    final playback = _playback;
+    setState(() {
+      _session
+        ..phase = CoverSwapPhase.idle
+        ..trigger = null
+        ..to = null
+        ..from = null;
+      if (playback != null) _syncSlotIdentityTracking(playback.snapshot);
+    });
+  }
+
   /// 进度控制器落位（完成中 → 空闲）：即时切歌会话到此结束。
   ///
   /// 拖动提交的收尾在对账路径（[_reconcileDragCommit]）；这里只清理即时
@@ -332,11 +577,24 @@ class _PlayerCoverDeckState extends State<PlayerCoverDeck>
   /// 空闲缓存帧自然覆盖）。
   void _handleCoverStatus(AnimationStatus status) {
     if (status != AnimationStatus.completed) return;
-    if (_session.phase != CoverSwapPhase.settling) return;
-    _session
-      ..phase = CoverSwapPhase.idle
-      ..trigger = null
-      ..to = null;
+    if (_session.phase == CoverSwapPhase.settling) {
+      _session
+        ..phase = CoverSwapPhase.idle
+        ..trigger = null
+        ..to = null;
+      // 会话窗口已把槽位身份演到位：跟踪对齐快照，避免下一次空闲变化
+      // 把切换前的旧身份当成淡出起点（幽灵淡出）。
+      final playback = _playback;
+      if (playback != null) _syncSlotIdentityTracking(playback.snapshot);
+      return;
+    }
+    // 提交过渡落位：对账到别的曲目时现在才开始校正（预览卡已滑到中心，
+    // 从稳态起步，无半途位移跳变）。
+    if (_pendingCorrectionId != null &&
+        _session.phase == CoverSwapPhase.committed) {
+      final playback = _playback;
+      if (playback != null) _startReconcileCorrection(playback: playback);
+    }
   }
 
   @override
@@ -344,6 +602,12 @@ class _PlayerCoverDeckState extends State<PlayerCoverDeck>
     _playback?.removeListener(_handlePlaybackChanged);
     widget.morph?.removeListener(_onMorphChanged);
     _cancelPendingWatchdog();
+    _artworkRefreshFade.removeStatusListener(_handleArtworkRefreshStatus);
+    _artworkRefreshFade.dispose();
+    _slotIdentityFade.removeStatusListener(_handleSlotIdentityStatus);
+    _slotIdentityFade.dispose();
+    _reconcileCorrection.removeStatusListener(_handleCorrectionStatus);
+    _reconcileCorrection.dispose();
     _sourceNeighborFade.dispose();
     _playStateController.dispose();
     _coverController.removeStatusListener(_handleCoverStatus);
@@ -393,14 +657,28 @@ class _PlayerCoverDeckState extends State<PlayerCoverDeck>
   /// 本次拖动方向对应的预览目标；无目标（队列到头/无可回退曲目）返回 null。
   ///
   /// 必须与实际的 `skipToNext/skipToPrevious` 同源：next 用快照解析好的
-  /// 下一首（shuffle 会消费同一个随机值），previous 用播放历史、为空时
-  /// 回退队列前一位（与后端 previous 的实现一致）。
+  /// 下一首（shuffle 会消费同一个随机值），previous 用 [_resolvePreviousTrack]
+  /// （history 末位 → 队列前一位 → 空，与后端 previous 的实现一致）。
   Track? _previewTargetFor(int dir, PlaybackProvider playback) {
     final snapshot = playback.snapshot;
+    final Track? target = dir == 1
+        ? snapshot.next
+        : (dir == -1 ? _resolvePreviousTrack(snapshot) : null);
+    if (target == null) return null;
+    // 目标就是当前曲目（如队列首的 previous）：没有可预览的切换，按边界处理。
+    final current = snapshot.current;
+    if (current != null && target.id == current.id) return null;
+    return target;
+  }
+
+  /// 左槽「上一首」身份：播放顺序最近一首（history 末位）→ 队列前一位
+  /// （`currentIndex > 0` 时的 `queue[currentIndex-1]`）→ 空。
+  ///
+  /// 排除与当前曲目同 id：队首回退时后端会把「当前自身」当成 previous，
+  /// 界面上不能显示一张和自己一样的上一首（显示为空）。
+  Track? _resolvePreviousTrack(PlaybackSnapshot snapshot) {
     final Track? target;
-    if (dir == 1) {
-      target = snapshot.next;
-    } else if (snapshot.history.isNotEmpty) {
+    if (snapshot.history.isNotEmpty) {
       target = snapshot.history.last;
     } else {
       final index = snapshot.currentIndex;
@@ -409,7 +687,6 @@ class _PlayerCoverDeckState extends State<PlayerCoverDeck>
           : null;
     }
     if (target == null) return null;
-    // 目标就是当前曲目（如队列首的 previous）：没有可预览的切换，按边界处理。
     final current = snapshot.current;
     if (current != null && target.id == current.id) return null;
     return target;
@@ -598,6 +875,9 @@ class _PlayerCoverDeckState extends State<PlayerCoverDeck>
     // 拖动预览进行中时，阶段与预览目标归拖动会话（切歌只更新身份供拖动
     // 继续驱动）；其余情况进入即时切歌的「完成中」。
     if (!session.previewActive) {
+      // 上一个会话可能停在（或正在）校正：新切歌直接接管，停掉校正控制器。
+      if (_reconcileCorrection.isAnimating) _reconcileCorrection.stop();
+      _pendingCorrectionId = null;
       session
         ..phase = CoverSwapPhase.settling
         ..trigger = CoverSwapTrigger.immediate
@@ -615,10 +895,10 @@ class _PlayerCoverDeckState extends State<PlayerCoverDeck>
         : session.previous;
     // 新快照即下一次切歌的「变化前」基准（快速连切时动画中不会有空闲帧）。
     _cacheDirectionHints(snapshot);
-    // 播放顺序由播放快照维护（后端记录实际播放顺序）：
-    // 最新一首即「上一首」，回退时后端已弹出，这里自然指向更早一首。
+    // 播放顺序由播放快照维护（后端记录实际播放顺序）：左槽「上一首」=
+    // 播放顺序最近一首 → 队列前一位 → 空（与后端 previous 同源）。
     session
-      ..previous = snapshot.history.isNotEmpty ? snapshot.history.last : null
+      ..previous = _resolvePreviousTrack(snapshot)
       ..from = oldTrack
       // 旧封面作为切歌动画中未加载完成时的占位，避免黑块闪一下。
       ..placeholderUrl = artworkUrlOf(oldTrack) ?? session.placeholderUrl;
@@ -643,24 +923,45 @@ class _PlayerCoverDeckState extends State<PlayerCoverDeck>
 
   /// 拖动提交后的对账落位。
   ///
-  /// 不管到位的是不是当初预览的那首（队列变化、随机目标、失败恢复），都在
-  /// 这一帧落位到实际 current，绝不让预览态悬空（否则只能等 6s 兜底超时）。
-  /// 不匹配时的 220ms 中心淡化校正由后续票（#7）实现；本票两条路径一致：
-  /// 直接按实际 current 落位。
+  /// 等待快照 current 变为会话目标：
+  /// - 匹配 → 无缝完成（过渡已在提交时走完，不回起点、不重播）；
+  /// - 不匹配（随机目标 / 失败恢复 / 列表变化落到别的曲目）→ 进入校正阶段：
+  ///   中心封面以 220ms 原位交叉淡化校正到实际曲目（旧预览卡淡出、实际
+  ///   曲目卡淡入，同位置无位移），随后按新快照重建槽位并回 idle；
+  /// - 提交过渡尚未落位时先记住对账结果，落位后再校正（校正从稳态起步，
+  ///   避免旧预览卡从半途位置跳回中心）。
+  ///
+  /// 不管到位的是不是当初预览的那首，都在这里收尾，绝不让预览态悬空
+  /// （否则只能等 6s 兜底超时）。
   void _reconcileDragCommit({
     required String id,
     required PlaybackProvider playback,
   }) {
-    final session = _session;
-    final history = playback.snapshot.history;
     _cancelPendingWatchdog();
+    if (trackKeyOf(_session.to) == id) {
+      _settleDragCommit(playback: playback);
+      return;
+    }
+    if (_coverController.isAnimating) {
+      _pendingCorrectionId = id;
+      return;
+    }
+    _startReconcileCorrection(playback: playback);
+  }
+
+  /// 对账匹配：无缝落位到目标曲目，并补源侧新身份的 180ms 纯透明度淡入。
+  void _settleDragCommit({required PlaybackProvider playback}) {
+    final session = _session;
+    final snapshot = playback.snapshot;
     session
       ..phase = CoverSwapPhase.idle
       ..to = null
       ..trigger = null
-      ..previous = history.isNotEmpty ? history.last : null;
+      ..previous = _resolvePreviousTrack(snapshot);
     // 对账后新快照即下一次切歌的「变化前」基准。
-    _cacheDirectionHints(playback.snapshot);
+    _cacheDirectionHints(snapshot);
+    // 槽位身份已由切歌窗口演到位：跟踪对齐快照，空闲期不补淡换。
+    _syncSlotIdentityTracking(snapshot);
     // 拖动期间源侧新身份没有渲染（UI 只有一位前瞻），落位时补一个约 180ms
     // 纯透明度淡入（删除「从中心背后展开」入场特例后的等价替代）。
     // 先同步置 0：避免这一帧先以稳态画出来再回跳（闪一下）。
@@ -677,22 +978,55 @@ class _PlayerCoverDeckState extends State<PlayerCoverDeck>
     });
   }
 
+  /// 开始对账校正：中心封面从预览目标以 220ms 原位淡化到实际曲目。
+  ///
+  /// 只在提交过渡落位后调用。校正期间左右槽位直接按新快照稳态渲染（源侧
+  /// 新身份仍走 180ms 纯淡入，与匹配路径一致），校正结束会话回 idle，
+  /// 稳态渲染无缝接管——「按新快照重建槽位身份」在校正窗口内即已到位。
+  void _startReconcileCorrection({required PlaybackProvider playback}) {
+    final snapshot = playback.snapshot;
+    _pendingCorrectionId = null;
+    setState(() {
+      _session
+        ..phase = CoverSwapPhase.correcting
+        ..trigger = null
+        ..previous = _resolvePreviousTrack(snapshot);
+      // 对账后新快照即下一次切歌的「变化前」基准。
+      _cacheDirectionHints(snapshot);
+      // 槽位身份按新快照稳态接管：跟踪对齐，空闲期不把校正前的身份
+      // 当成淡出起点（幽灵淡出）。
+      _syncSlotIdentityTracking(snapshot);
+      _reconcileCorrection.value = 0;
+    });
+    _sourceNeighborFade.value = 0;
+    _reconcileCorrection.forward();
+    _sourceNeighborFade.forward(from: 0);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      widget.onTrackSwapped?.call(false);
+      if (!_coverController.isAnimating) _coverController.value = 1.0;
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
     final playback = context.read<PlaybackProvider>();
 
     // 切歌检测已移到播放快照监听（[_handlePlaybackChanged] / [_syncDisplayTrack]），
-    // build 期间不再做切歌判定，只刷新空闲缓存：下一首身份与方向判定提示
-    // 必须在与旧实现相同的帧上刷新，否则快速连切的方向基准会漂移。
+    // build 期间不再做切歌判定，只刷新空闲缓存：左槽身份、下一首身份与方向
+    // 判定提示必须在与旧实现相同的帧上刷新，否则快速连切的方向基准会漂移。
     if (!_coverController.isAnimating && !_session.previewActive) {
-      _session.lastNext = playback.snapshot.next;
+      final snapshot = playback.snapshot;
+      _session
+        ..lastNext = snapshot.next
+        ..previous = _resolvePreviousTrack(snapshot);
       // 空闲帧清空滑出身份：只清真正结束（idle）的会话。settling 检测帧
       // （动画尚未在 post-frame 启动）必须保留刚建立的滑出身份，否则滑出卡
       // 全程不渲染、结束时目标槽位直接 pop 出旧中封。
       if (_session.phase == CoverSwapPhase.idle) {
         _session.from = null;
       }
-      _cacheDirectionHints(playback.snapshot);
+      _cacheDirectionHints(snapshot);
     }
 
     return _buildArtworkStack(context, playback);
@@ -740,11 +1074,15 @@ class _PlayerCoverDeckState extends State<PlayerCoverDeck>
                 // settling 在检测帧（动画尚未在 post-frame 启动）也按过渡渲染：
                 // 滑出卡必须从会话建立的第一帧起就参与（否则会先画落位态再
                 // 回跳，且空闲缓存可能误清会话身份）。
+                // correcting（对账校正）只走中心交叉淡化：左右槽按新快照
+                // 稳态渲染，不叠加切歌窗口。
                 final session = _session;
+                final correcting = session.phase == CoverSwapPhase.correcting;
                 final dragging = session.previewActive;
-                final animating = dragging ||
-                    _coverController.isAnimating ||
-                    session.phase == CoverSwapPhase.settling;
+                final animating = !correcting &&
+                    (dragging ||
+                        _coverController.isAnimating ||
+                        session.phase == CoverSwapPhase.settling);
                 // p 是进度控制器原始值（线性时间）；窗口化交叉按 p 取窗口，
                 // 移动卡用 easeOutCubic 的 t 做位移/旋转/缩放插值。
                 final double p = _coverController.value;
@@ -805,30 +1143,52 @@ class _PlayerCoverDeckState extends State<PlayerCoverDeck>
                   }
                 } else {
                   // 稳态邻位：可点击切歌（左=上一首，右=下一首）。
-                  // 拖动对账落位后的源侧新身份以约 180ms 纯透明度淡入
-                  // （无位移/缩放/旋转——删除入场特例后的等价替代）；
-                  // 其余时候淡入控制器停在 1，倍率不产生任何影响。
+                  // - 拖动对账落位后的源侧新身份以约 180ms 纯透明度淡入
+                  //   （无位移/缩放/旋转——删除入场特例后的等价替代）；
+                  // - 空闲期身份变化（加歌/删歌/开关随机/next 变空）以约
+                  //   180ms 原位交叉淡化表达（旧身份淡出、新身份淡入）。
+                  // 两个淡化控制器稳态都停在 1，倍率不产生任何影响。
                   final double sourceFade = Curves.easeOut
                       .transform(_sourceNeighborFade.value.clamp(0.0, 1.0));
-                  children.add(_sideCoverLayer(
+                  final double identityFade = Curves.easeOut
+                      .transform(_slotIdentityFade.value.clamp(0.0, 1.0));
+                  if (!_slotIdentityFade.isAnimating) {
+                    // 无淡化进行中：跟踪值与快照同步，作为下一次身份变化的
+                    // 淡出起点（校正/切歌结束帧也走这里对齐）。
+                    _leftSlotShown = session.previous;
+                    _rightSlotShown = playbackProvider.snapshot.next;
+                  }
+                  children.addAll(_idleSideLayers(
                     context,
-                    session.previous,
+                    left: true,
+                    shown: session.previous,
+                    outgoing: _leftSlotOutgoing,
                     sideSize: sideSize,
                     x: -offset,
                     rotation: -sideRotation,
-                    opacity: 0.85 * (dir == -1 ? sourceFade : 1.0),
+                    sourceFade: dir == -1 ? sourceFade : 1.0,
+                    identityFade: identityFade,
                     placeholderUrl: currentImageUrl,
-                    onTap: playbackProvider.hasTrack
+                    // 左槽点击沿用既有邻位点击契约：只有真实播放顺序
+                    // （history）里的上一首可点。无历史时左槽是「队列前一位」
+                    // 的展示身份（与后端 previous 的回退、拖动预览同源），
+                    // 但不接受点击——player_redesign_test 锁定「无历史时只有
+                    // 右侧可点」；拖动右滑仍可提交到队列前一位。
+                    onTap: playbackProvider.hasTrack &&
+                            playbackProvider.snapshot.history.isNotEmpty
                         ? playbackProvider.skipToPrevious
                         : null,
                   ));
-                  children.add(_sideCoverLayer(
+                  children.addAll(_idleSideLayers(
                     context,
-                    playbackProvider.snapshot.next,
+                    left: false,
+                    shown: playbackProvider.snapshot.next,
+                    outgoing: _rightSlotOutgoing,
                     sideSize: sideSize,
                     x: offset,
                     rotation: sideRotation,
-                    opacity: 0.85 * (dir == 1 ? sourceFade : 1.0),
+                    sourceFade: dir == 1 ? sourceFade : 1.0,
+                    identityFade: identityFade,
                     placeholderUrl: currentImageUrl,
                     onTap: playbackProvider.hasTrack
                         ? playbackProvider.skipToNext
@@ -844,25 +1204,59 @@ class _PlayerCoverDeckState extends State<PlayerCoverDeck>
                 // 透明度随进度 0.85→1.0 连续插值：p=0 时与稳态的源槽位卡
                 // 完全一致（0.85），消除「动画首帧硬跳 1.0」的起手闪跳；
                 // p=1 时与稳态中心封面一致（1.0）。
-                final Track? centerTrack = dragging
-                    ? (session.to ?? widget.displayTrack)
-                    : widget.displayTrack;
-                children.add(_mainCoverLayer(
-                  context,
-                  centerTrack,
-                  playbackProvider,
-                  artDimension: widget.artDimension,
-                  slotKey: PlayerCoverDeck.centerCoverCardKey,
-                  x: animating ? dir * offset * (1 - t) : 0,
-                  rotation: animating ? sideRotation * dir * (1 - t) : 0,
-                  scale: animating ? 0.78 + 0.22 * t : 1.0,
-                  opacity: animating ? 0.85 + 0.15 * t : 1,
-                  interactive: !dragging,
-                  coverKey: widget.morph?.pageCoverKey,
-                  hidden: widget.morph?.pageHeaderHidden ?? false,
-                  placeholderUrl:
-                      dragging ? currentImageUrl : session.placeholderUrl,
-                ));
+                if (correcting) {
+                  // 对账校正：旧预览卡（原位）淡出、实际曲目卡淡入，全程
+                  // 无位移/缩放——到位曲目与预览目标不同时只换图不搬位。
+                  final double correctionFade = Curves.easeOut
+                      .transform(_reconcileCorrection.value.clamp(0.0, 1.0));
+                  if (session.to != null) {
+                    children.add(_mainCoverLayer(
+                      context,
+                      session.to,
+                      playbackProvider,
+                      artDimension: widget.artDimension,
+                      slotKey: PlayerCoverDeck.outgoingCoverCardKey,
+                      x: 0,
+                      rotation: 0,
+                      scale: 1.0,
+                      opacity: 1.0 - correctionFade,
+                      interactive: false,
+                    ));
+                  }
+                  children.addAll(_steadyCenterLayers(
+                    context,
+                    playbackProvider,
+                    opacity: correctionFade,
+                  ));
+                } else if (animating) {
+                  final Track? centerTrack = dragging
+                      ? (session.to ?? widget.displayTrack)
+                      : widget.displayTrack;
+                  children.add(_mainCoverLayer(
+                    context,
+                    centerTrack,
+                    playbackProvider,
+                    artDimension: widget.artDimension,
+                    slotKey: PlayerCoverDeck.centerCoverCardKey,
+                    x: dir * offset * (1 - t),
+                    rotation: sideRotation * dir * (1 - t),
+                    scale: 0.78 + 0.22 * t,
+                    opacity: 0.85 + 0.15 * t,
+                    interactive: !dragging,
+                    coverKey: widget.morph?.pageCoverKey,
+                    hidden: widget.morph?.pageHeaderHidden ?? false,
+                    placeholderUrl:
+                        dragging ? currentImageUrl : session.placeholderUrl,
+                  ));
+                } else {
+                  // 稳态中心：同 id、URL 更新（音源补图）时以约 250ms 交叉
+                  // 淡化换图（旧图淡出、新图淡入），不播切歌动画。
+                  children.addAll(_steadyCenterLayers(
+                    context,
+                    playbackProvider,
+                    opacity: 1.0,
+                  ));
+                }
 
                 return Stack(clipBehavior: Clip.none, children: children);
               },
@@ -888,11 +1282,109 @@ class _PlayerCoverDeckState extends State<PlayerCoverDeck>
     return _neighborOpacity * Curves.easeInOut.transform(window);
   }
 
+  /// 稳态邻位槽位的渲染层：身份交叉淡化期间同槽位并存旧（淡出）与新
+  /// （淡入）两张卡，全程稳态几何（无位移/缩放/旋转）；身份变空则只渲染
+  /// 淡出中的旧卡（淡出为空）。[sourceFade] 是对账落位后的源侧纯淡入倍率。
+  List<Widget> _idleSideLayers(
+    BuildContext context, {
+    required bool left,
+    required Track? shown,
+    required Track? outgoing,
+    required double sideSize,
+    required double x,
+    required double rotation,
+    required double sourceFade,
+    required double identityFade,
+    required String? placeholderUrl,
+    required VoidCallback? onTap,
+  }) {
+    final double base = _neighborOpacity * sourceFade;
+    final layers = <Widget>[];
+    if (outgoing != null) {
+      layers.add(_sideCoverLayer(
+        context,
+        outgoing,
+        sideSize: sideSize,
+        x: x,
+        rotation: rotation,
+        opacity: base * (1 - identityFade),
+        cardKey: PlayerCoverDeck.sideCoverCardKey(left: left, id: outgoing.id),
+        placeholderUrl: placeholderUrl,
+      ));
+    }
+    if (shown != null) {
+      layers.add(_sideCoverLayer(
+        context,
+        shown,
+        sideSize: sideSize,
+        x: x,
+        rotation: rotation,
+        opacity: base * identityFade,
+        cardKey: PlayerCoverDeck.sideCoverCardKey(left: left, id: shown.id),
+        placeholderUrl: placeholderUrl,
+        onTap: onTap,
+      ));
+    }
+    return layers;
+  }
+
+  /// 稳态中心封面层：实际曲目卡（交互 + 共享飞行锚点），同 id 换图淡化
+  /// 期间追加旧 URL 卡（原位淡出、不可交互）。
+  List<Widget> _steadyCenterLayers(
+    BuildContext context,
+    PlaybackProvider playbackProvider, {
+    required double opacity,
+  }) {
+    final double artworkFade =
+        Curves.easeOut.transform(_artworkRefreshFade.value.clamp(0.0, 1.0));
+    final layers = <Widget>[];
+    if (_centerArtworkRefreshing && artworkFade < 1) {
+      layers.add(_mainCoverLayer(
+        context,
+        widget.displayTrack,
+        playbackProvider,
+        artDimension: widget.artDimension,
+        slotKey: PlayerCoverDeck.outgoingArtworkCardKey,
+        x: 0,
+        rotation: 0,
+        scale: 1.0,
+        opacity: opacity * (1 - artworkFade),
+        interactive: false,
+        // 空串表达「明确无封面」（音源补图前的起点）：传 null 会被当作
+        // 「未提供覆盖」而回退到曲目当前（新）URL，旧图卡就变成新图了。
+        artworkUrlOverride: _outgoingCenterArtworkUrl ?? '',
+        fallback: buildDefaultArtwork(context),
+      ));
+    }
+    layers.add(_mainCoverLayer(
+      context,
+      widget.displayTrack,
+      playbackProvider,
+      artDimension: widget.artDimension,
+      slotKey: PlayerCoverDeck.centerCoverCardKey,
+      trackKey: widget.displayTrack == null
+          ? null
+          : PlayerCoverDeck.centerCoverTrackKey(widget.displayTrack!.id),
+      x: 0,
+      rotation: 0,
+      scale: 1.0,
+      opacity: opacity * artworkFade,
+      interactive: true,
+      coverKey: widget.morph?.pageCoverKey,
+      hidden: widget.morph?.pageHeaderHidden ?? false,
+      placeholderUrl: _session.placeholderUrl,
+    ));
+    return layers;
+  }
+
   /// 邻位封面（压在当前封面之下；[onTap] 非空时可点击切歌）。
   ///
   /// 只渲染稳态几何（位置/旋转/尺寸固定），透明度由调用方按窗口/淡入
   /// 计算——侧邻位不再有独立的位移/缩放入场演出。不参与 hit test 时
-  /// （[onTap] 为空）忽略指针。
+  /// （[onTap] 为空）忽略指针。[cardKey] 是身份语义 key（空闲淡换时同一
+  /// 槽位并存新旧两张卡，测试按身份定位）；key 落在 SizedBox 卡本体上而不是
+  /// 外层 KeyedSubtree——邻位点击测试用「GestureDetector.child is SizedBox」
+  /// 定位卡片，结构不得改变。
   Widget _sideCoverLayer(
     BuildContext context,
     Track? track, {
@@ -900,12 +1392,13 @@ class _PlayerCoverDeckState extends State<PlayerCoverDeck>
     required double x,
     required double rotation,
     required double opacity,
+    Key? cardKey,
     String? placeholderUrl,
     VoidCallback? onTap,
   }) {
     if (track == null) return const SizedBox.shrink();
-    Widget card =
-        _buildCoverCard(context, track, sideSize, placeholderUrl: placeholderUrl);
+    Widget card = _buildCoverCard(context, track, sideSize,
+        key: cardKey, placeholderUrl: placeholderUrl);
     if (onTap != null) {
       card = GestureDetector(
         behavior: HitTestBehavior.opaque,
@@ -936,6 +1429,10 @@ class _PlayerCoverDeckState extends State<PlayerCoverDeck>
   }
 
   /// 当前/滑出封面（可交互时保留滑动手势与点击播放/暂停）。
+  ///
+  /// [artworkUrlOverride] 用于换图淡化的旧 URL 卡：曲目身份相同、只换图片
+  /// 地址（[fallback] 与稳态中心卡一致，避免缺图时占位不一致）。
+  /// [trackKey] 是中心封面的身份语义 key（校正后展示的是哪一首）。
   Widget _mainCoverLayer(
     BuildContext context,
     Track? track,
@@ -947,9 +1444,12 @@ class _PlayerCoverDeckState extends State<PlayerCoverDeck>
     required double opacity,
     required bool interactive,
     Key? slotKey,
+    Key? trackKey,
     Key? coverKey,
     bool hidden = false,
     String? placeholderUrl,
+    String? artworkUrlOverride,
+    Widget? fallback,
   }) {
     Widget card = interactive
         ? _buildConfigurableMainContent(
@@ -962,9 +1462,14 @@ class _PlayerCoverDeckState extends State<PlayerCoverDeck>
             placeholderUrl: placeholderUrl,
           )
         : _buildCoverCard(context, track, artDimension,
-            placeholderUrl: placeholderUrl);
+            placeholderUrl: placeholderUrl,
+            artworkUrlOverride: artworkUrlOverride,
+            fallback: fallback);
     if (slotKey != null) {
       card = KeyedSubtree(key: slotKey, child: card);
+    }
+    if (trackKey != null) {
+      card = KeyedSubtree(key: trackKey, child: card);
     }
     return Positioned.fill(
       child: Center(
@@ -987,15 +1492,18 @@ class _PlayerCoverDeckState extends State<PlayerCoverDeck>
   ///
   /// 统一走无缩放缓存键（与顶栏/迷你条/预加载一致），邻位封面升到中间
   /// 只是 transform 插值，不再因缓存键不同重新解码、闪占位图。
+  /// [artworkUrlOverride] 供换图淡化渲染旧 URL（曲目身份不变、只换图片地址）。
   Widget _buildCoverCard(
     BuildContext context,
     Track? track,
     double size, {
+    Key? key,
     double radius = 18,
     Widget? fallback,
     String? placeholderUrl,
+    String? artworkUrlOverride,
   }) {
-    final url = artworkUrlOf(track);
+    final url = artworkUrlOverride ?? artworkUrlOf(track);
     final scheme = Theme.of(context).colorScheme;
     final placeholder = placeholderUrl != null && placeholderUrl != url
         ? AppNetworkImage(
@@ -1005,6 +1513,7 @@ class _PlayerCoverDeckState extends State<PlayerCoverDeck>
           )
         : fallback;
     return SizedBox(
+      key: key,
       width: size,
       height: size,
       child: Container(
