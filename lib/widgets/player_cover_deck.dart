@@ -563,7 +563,6 @@ class _PlayerCoverDeckState extends State<PlayerCoverDeck>
     setState(() {
       _session
         ..phase = CoverSwapPhase.idle
-        ..trigger = null
         ..to = null
         ..from = null;
       if (playback != null) _syncSlotIdentityTracking(playback.snapshot);
@@ -580,7 +579,6 @@ class _PlayerCoverDeckState extends State<PlayerCoverDeck>
     if (_session.phase == CoverSwapPhase.settling) {
       _session
         ..phase = CoverSwapPhase.idle
-        ..trigger = null
         ..to = null;
       // 会话窗口已把槽位身份演到位：跟踪对齐快照，避免下一次空闲变化
       // 把切换前的旧身份当成淡出起点（幽灵淡出）。
@@ -709,9 +707,7 @@ class _PlayerCoverDeckState extends State<PlayerCoverDeck>
     }
 
     if (!session.previewActive) {
-      session
-        ..phase = CoverSwapPhase.preview
-        ..trigger = CoverSwapTrigger.drag;
+      session.phase = CoverSwapPhase.preview;
       _coverController.stop();
     }
     if (dir != session.direction || session.from == null) {
@@ -759,7 +755,7 @@ class _PlayerCoverDeckState extends State<PlayerCoverDeck>
 
     final threshold = widget.isLargeScreen ? 400.0 : 800.0;
     final triggerDistance = widget.isLargeScreen ? 40.0 : 80.0;
-    final bool trigger =
+    final bool shouldCommit =
         velocity.abs() > threshold || dx.abs() > triggerDistance;
 
     // 只有进入过预览（存在可切换的目标）才允许提交；边界拖动直接回弹。
@@ -768,7 +764,7 @@ class _PlayerCoverDeckState extends State<PlayerCoverDeck>
       return;
     }
 
-    if (trigger) {
+    if (shouldCommit) {
       HapticFeedback.mediumImpact();
       // 进入「已提交等待对账」：预览立即走完并保持，直到曲目真正切换
       // （取链可能需要几百毫秒）——否则动画跑完会先回落成旧封面、
@@ -799,8 +795,7 @@ class _PlayerCoverDeckState extends State<PlayerCoverDeck>
     if (!_session.previewActive) return;
     _session
       ..phase = CoverSwapPhase.idle
-      ..to = null
-      ..trigger = null;
+      ..to = null;
     _cancelPendingWatchdog();
     _coverController.animateBack(
       0,
@@ -880,7 +875,6 @@ class _PlayerCoverDeckState extends State<PlayerCoverDeck>
       _pendingCorrectionId = null;
       session
         ..phase = CoverSwapPhase.settling
-        ..trigger = CoverSwapTrigger.immediate
         ..to = track;
       // 新会话先把进度钉在起点：检测帧就画在 p=0（与稳态的源槽位卡一致），
       // 而不是先画落位态、动画启动后再回跳。动画在 post-frame 从同一进度
@@ -956,7 +950,6 @@ class _PlayerCoverDeckState extends State<PlayerCoverDeck>
     session
       ..phase = CoverSwapPhase.idle
       ..to = null
-      ..trigger = null
       ..previous = _resolvePreviousTrack(snapshot);
     // 对账后新快照即下一次切歌的「变化前」基准。
     _cacheDirectionHints(snapshot);
@@ -989,7 +982,6 @@ class _PlayerCoverDeckState extends State<PlayerCoverDeck>
     setState(() {
       _session
         ..phase = CoverSwapPhase.correcting
-        ..trigger = null
         ..previous = _resolvePreviousTrack(snapshot);
       // 对账后新快照即下一次切歌的「变化前」基准。
       _cacheDirectionHints(snapshot);
