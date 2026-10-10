@@ -31,7 +31,7 @@ class _DiscoverLeaderboardsTabState extends State<DiscoverLeaderboardsTab>
       MaterialPageRoute<void>(
         builder: (_) => DiscoverTracksPage(
           title: board.name,
-          loader: () async {
+          loader: (_) async {
             final tracks = await provider.loadLeaderboardTracks(board.bangid);
             return DiscoverDetail(
               info: DiscoverPlaylist(id: board.id, name: board.name),

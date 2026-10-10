@@ -31,7 +31,7 @@ class QueueDisplay extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context)!;
-    final cardRadius = M3ETheme.of(context).cardTheme.radius;
+    final cardList = M3ETheme.of(context).listTheme.cardList;
 
     // snapshot.upNext 在同一快照内是稳定 List 实例：进度 tick / 无关通知
     // 不会重建队列列表，仅队列快照变化时重建；shuffle 时即洗牌排列剩余。
@@ -64,8 +64,8 @@ class QueueDisplay extends StatelessWidget {
             SliverPadding(
               padding: const EdgeInsets.symmetric(horizontal: 24),
               sliver: SliverFixedExtentList.builder(
-                // 行高 + 1px 分隔线：固定 extent，滚动条拖动一次定位。
-                itemExtent: TrackRow.extent + 1,
+                // 行高 + 行距：固定 extent，滚动条拖动一次定位。
+                itemExtent: TrackRow.extent + cardList.gap,
                 itemCount: currentQueue.length,
                 itemBuilder: (context, index) {
                   final track = currentQueue[index];
@@ -77,7 +77,8 @@ class QueueDisplay extends StatelessWidget {
                         artist: _artistsOf(track),
                         coverUrl: _coverUrlOf(track),
                         coverSize: 40,
-                        radius: _trackRadius(cardRadius, index, currentQueue.length),
+                        position:
+                            calculateCardPosition(index, currentQueue.length),
                         trailingText: _formatDuration(track.duration),
                         onTap: () {
                           // 本地音源曲目：交给本地播放队列（恢复态自动续播）。
@@ -85,7 +86,7 @@ class QueueDisplay extends StatelessWidget {
                               .playLocalQueueItemById(track.id.uri);
                         },
                       ),
-                      if (!isLast) const M3EDivider(),
+                      if (!isLast) SizedBox(height: cardList.gap),
                     ],
                   );
                 },
@@ -108,18 +109,6 @@ class QueueDisplay extends StatelessWidget {
         ],
       ),
     );
-  }
-
-  /// 整组首/末行取卡片圆角，中间行直角拼成一张连续卡片。
-  BorderRadius _trackRadius(double radius, int index, int count) {
-    if (count <= 1) return BorderRadius.circular(radius);
-    if (index == 0) {
-      return BorderRadius.vertical(top: Radius.circular(radius));
-    }
-    if (index == count - 1) {
-      return BorderRadius.vertical(bottom: Radius.circular(radius));
-    }
-    return BorderRadius.zero;
   }
 
   /// 分组标签：与列表行文字同一文本契约（次要信息用 onSurfaceVariant）。

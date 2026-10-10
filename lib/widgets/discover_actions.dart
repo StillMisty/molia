@@ -7,7 +7,7 @@ import '../l10n/app_localizations.dart';
 import '../providers/discover_provider.dart';
 import '../providers/library_provider.dart';
 import 'add_to_library.dart';
-import 'library_cover.dart';
+import 'track_row.dart';
 
 AppLocalizations _l10n(BuildContext context) =>
     AppLocalizations.of(context) ?? lookupAppLocalizations(const Locale('zh'));
@@ -36,25 +36,35 @@ Future<void> addDiscoverTrackToPlaylist(
 }
 
 /// 发现曲目行：点击播放；菜单支持收藏 / 加入列表。
+///
+/// 表面走统一的 [TrackRow]（形状/交互与队列、收藏一致）；只订阅本行的
+/// 收藏态（`select`），避免曲目长列表因 provider 任意通知整表重建。
 class DiscoverTrackTile extends StatelessWidget {
   final DiscoverTrack track;
+
+  /// 列表内位置（首末行外侧圆角）。
+  final M3ECardPosition position;
+
   final VoidCallback onTap;
 
   const DiscoverTrackTile({
     super.key,
     required this.track,
+    required this.position,
     required this.onTap,
   });
 
   @override
   Widget build(BuildContext context) {
-    final provider = context.watch<DiscoverProvider>();
     final l10n = _l10n(context);
-    final favorite = provider.isFavorite(track);
-    return M3EListItem(
-      leading: LibraryCoverThumb(url: track.coverUrl),
-      headline: track.title,
-      supportingText: track.artist,
+    final favorite = context.select<DiscoverProvider, bool>(
+      (provider) => provider.isFavorite(track),
+    );
+    return TrackRow(
+      title: track.title,
+      artist: track.artist,
+      coverUrl: track.coverUrl,
+      position: position,
       onTap: onTap,
       trailing: M3EMenu.entries(
         position: M3EMenuAnchorPosition.bottomEnd,

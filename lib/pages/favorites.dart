@@ -1160,6 +1160,9 @@ class _FavoritesPageState extends State<FavoritesPage> {
       );
     }
     // 排序模式：ReorderableListView 固定 extent，长按行内任意位置拖动。
+    final horizontalPadding =
+        context.layoutType(ResponsivePageType.browse).horizontalPadding;
+    final gap = TrackRow.gapOf(context);
     if (reorderActive) {
       return Scrollbar(
         controller: _listController,
@@ -1167,8 +1170,8 @@ class _FavoritesPageState extends State<FavoritesPage> {
         interactive: true,
         child: ReorderableListView.builder(
           scrollController: _listController,
-          padding: const EdgeInsets.symmetric(vertical: 8),
-          itemExtent: TrackRow.extent,
+          padding: EdgeInsets.fromLTRB(horizontalPadding, 8, horizontalPadding, 8),
+          itemExtent: TrackRow.extent + gap,
           buildDefaultDragHandles: false,
           itemCount: view.visible.length,
           onReorderItem: (from, to) =>
@@ -1197,8 +1200,8 @@ class _FavoritesPageState extends State<FavoritesPage> {
       interactive: true,
       child: ListView.builder(
         controller: _listController,
-        padding: const EdgeInsets.symmetric(vertical: 8),
-        itemExtent: TrackRow.extent,
+        padding: EdgeInsets.fromLTRB(horizontalPadding, 8, horizontalPadding, 8),
+        itemExtent: TrackRow.extent + gap,
         itemCount: view.visible.length,
         itemBuilder: (context, index) => _buildTrackRow(
           context,
@@ -1226,6 +1229,7 @@ class _FavoritesPageState extends State<FavoritesPage> {
       artist: track.artist,
       coverUrl: track.coverUrl,
       trailingText: _durationText(track.durationMs),
+      position: calculateCardPosition(index, view.visible.length),
       selected: _selection.isSelected(index),
       trailing: reorderActive
           ? Icon(
@@ -1244,10 +1248,15 @@ class _FavoritesPageState extends State<FavoritesPage> {
             },
       onLongPress: reorderActive ? null : () => _enterSelection(index),
     );
-    if (reorderActive || _selecting) return row;
-    return SwipeRevealRow(
-      actions: _trackSwipeActions(context, l10n, view, track),
-      child: row,
+    final Widget content = (reorderActive || _selecting)
+        ? row
+        : SwipeRevealRow(
+            actions: _trackSwipeActions(context, l10n, view, track),
+            child: row,
+          );
+    return Padding(
+      padding: EdgeInsets.only(bottom: TrackRow.gapOf(context)),
+      child: content,
     );
   }
 
@@ -1326,14 +1335,17 @@ class _FavoritesPageState extends State<FavoritesPage> {
       return _buildEmptyState(context, l10n, view);
     }
     final scheme = Theme.of(context).colorScheme;
+    final horizontalPadding =
+        context.layoutType(ResponsivePageType.browse).horizontalPadding;
+    final gap = TrackRow.gapOf(context);
     return Scrollbar(
       controller: _historyScrollController,
       thumbVisibility: true,
       interactive: true,
       child: ListView.builder(
         controller: _historyScrollController,
-        padding: const EdgeInsets.symmetric(vertical: 8),
-        itemExtent: TrackRow.extent,
+        padding: EdgeInsets.fromLTRB(horizontalPadding, 8, horizontalPadding, 8),
+        itemExtent: TrackRow.extent + gap,
         itemCount: view.visibleHistory.length,
         itemBuilder: (context, index) {
           final entry = view.visibleHistory[index];
@@ -1344,6 +1356,7 @@ class _FavoritesPageState extends State<FavoritesPage> {
             artist: entry.artist,
             coverUrl: entry.coverUrl,
             trailingText: _durationText(entry.durationMs),
+            position: calculateCardPosition(index, view.visibleHistory.length),
             selected: _selection.isSelected(index),
             onTap: () {
               if (_selecting) {
@@ -1358,30 +1371,35 @@ class _FavoritesPageState extends State<FavoritesPage> {
             },
             onLongPress: () => _enterSelection(index),
           );
-          if (_selecting) return row;
-          return SwipeRevealRow(
-            actions: [
-              M3EListSwipeAction(
-                icon: const Icon(Icons.playlist_add_rounded),
-                backgroundColor: scheme.secondaryContainer,
-                foregroundColor: scheme.onSecondaryContainer,
-                onPressed: () => unawaited(
-                  _copyToPlaylist(
-                    entries: [entry],
-                    includeHistory: false,
-                  ),
-                ),
-              ),
-              M3EListSwipeAction(
-                icon: const Icon(Icons.delete_outline_rounded),
-                backgroundColor: scheme.errorContainer,
-                foregroundColor: scheme.onErrorContainer,
-                onPressed: () => unawaited(
-                  provider.deleteHistoryEntry(entry),
-                ),
-              ),
-            ],
-            child: row,
+          final Widget content = _selecting
+              ? row
+              : SwipeRevealRow(
+                  actions: [
+                    M3EListSwipeAction(
+                      icon: const Icon(Icons.playlist_add_rounded),
+                      backgroundColor: scheme.secondaryContainer,
+                      foregroundColor: scheme.onSecondaryContainer,
+                      onPressed: () => unawaited(
+                        _copyToPlaylist(
+                          entries: [entry],
+                          includeHistory: false,
+                        ),
+                      ),
+                    ),
+                    M3EListSwipeAction(
+                      icon: const Icon(Icons.delete_outline_rounded),
+                      backgroundColor: scheme.errorContainer,
+                      foregroundColor: scheme.onErrorContainer,
+                      onPressed: () => unawaited(
+                        provider.deleteHistoryEntry(entry),
+                      ),
+                    ),
+                  ],
+                  child: row,
+                );
+          return Padding(
+            padding: EdgeInsets.only(bottom: TrackRow.gapOf(context)),
+            child: content,
           );
         },
       ),
