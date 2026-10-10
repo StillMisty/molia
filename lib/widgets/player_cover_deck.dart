@@ -5,7 +5,12 @@
 /// 飞行锚点与主题取色联动。
 ///
 /// 槽位（slot）：左 = 上一首、中 = 当前（拖动/提交时为预览目标）、右 = 下一首；
-/// 切歌（swap）动画与拖动跟手共用模块内部同一条进度控制器。
+/// 切歌（swap）动画与拖动跟手共用模块内部同一条进度控制器；拖动/提交/对账/
+/// 兜底等全部会话状态收敛在唯一一个 [CoverSwapSession] 中。
+///
+/// 切歌检测由播放快照监听驱动（[PlaybackProvider] 通知 → 比较当前曲目 id），
+/// build 期间不再做切歌判定，只刷新空闲缓存（下一首身份与方向提示，必须与旧
+/// 实现同帧刷新才能保持快速连切的方向基准）。
 ///
 /// 对外公开的最小面：
 /// - [PlayerCoverDeck]：组件（槽位渲染 + 手势宿主 + 切歌会话状态）；
@@ -27,6 +32,7 @@ import '../models/play_mode.dart';
 import '../providers/playback_provider.dart';
 import 'app_network_image.dart';
 import 'molia_mark.dart';
+import 'player_cover_session.dart';
 import 'player_cover_swap.dart';
 import 'player_morph.dart';
 
@@ -146,33 +152,17 @@ class _PlayerCoverDeckState extends State<PlayerCoverDeck>
   bool _isHorizontalDragConfirmed = false;
   double _dragDx = 0;
 
-  // ---- 三封面堆叠切歌：当前滑出、邻位进中、新邻位浮现 ----
+  /// 切歌会话：拖动预览、提交等待、对账、兜底与方向提示的唯一状态对象。
+  final CoverSwapSession _session = CoverSwapSession();
+
+  /// 已订阅的播放 Provider（运行时可能被替换，见 [_bindPlaybackIfNeeded]）。
+  PlaybackProvider? _playback;
+
+  /// 快照通知已排入微任务（同一批通知只对账一次）。
+  bool _trackSyncScheduled = false;
+
+  /// 唯一一根进度控制器：拖动跟手与切歌动画共用（不允许第二条视觉进度）。
   late AnimationController _coverController;
-  Track? _previousTrack;
-  Track? _outgoingTrack;
-  Track? _oldNeighbor;
-  Track? _lastNextTrack;
-  int _coverDirection = 1; // 1 = 下一首（向左滑出），-1 = 上一首
-
-  /// 横向拖动跟手：手指驱动 [_coverController] 进度，中心位显示
-  /// [_previewTrack] 封面；松手达标才提交切歌。
-  bool _draggingCover = false;
-
-  /// 手指是否仍在拖动（区分「拖动进行中」与「松手后等待切歌的预览」）。
-  bool _dragActive = false;
-
-  /// 松手达标已提交切歌：预览立即走完并保持，等后端把 current 换成目标；
-  /// 期间忽略新的拖动，收到曲目变化（或兜底超时）后对账复位。
-  bool _dragCommitted = false;
-
-  /// 拖动/提交期间中心位预览的目标曲目；未预览时为 null。
-  ///
-  /// 必须在拖动开始时解析并固定，不能在渲染时重读 `snapshot.next`：
-  /// 提交后后端会先推「新的下一首」，重读会让中心封面闪成再下一首。
-  Track? _previewTrack;
-
-  /// 拖动切歌的兜底计时器：取链失败等情况下不能永远停在邻位预览。
-  Timer? _dragPendingTimer;
 
   /// 侧边（上一首/下一首）封面入场进度：0 = 藏在中心封面背后（透明、
   /// 内收、放平），1 = 稳态。三处触发：滑动提交落位、顶栏⇄播放页飞行
@@ -186,27 +176,6 @@ class _PlayerCoverDeckState extends State<PlayerCoverDeck>
   /// 播放态中心封面轻微缩放（暂停时保持清晰，不做变暗）。
   late AnimationController _playStateController;
   late Animation<double> _playStateScaleAnimation;
-
-  // ---- 切歌方向提示缓存（「变化前」信息） ----
-  /// 「变化前」的上一首提示（history 末位 = 播放顺序最近一首）。
-  ///
-  /// 方向纯函数消费的是变化前的提示：变化后快照的 next/history 已经翻页，
-  /// 无法代表用户实际来的方向。空闲帧与每次切歌解析后刷新。
-  Track? _prevHintTrack;
-
-  /// 「变化前」的下一首提示（快照 next）。
-  Track? _nextHintTrack;
-
-  /// 「变化前」当前曲目的队列下标（队列点选方向的基准；-1 = 未知）。
-  int _hintQueueIndex = -1;
-
-  // ---- 切歌检测 / 占位 ----
-  /// 上一帧的展示曲目（切歌检测的 oldTrack）。
-  Track? _lastSeenTrack;
-  String? _lastAnimatedTrackId;
-
-  /// 旧封面作为切歌动画中未加载完成时的占位，避免黑块闪一下。
-  String? _previousImageUrl;
 
   /// morph 的 pageHeaderHidden 上一帧值（检测「飞向播放页」与「落位」沿）。
   bool _pageHeaderWasHidden = false;
@@ -242,10 +211,19 @@ class _PlayerCoverDeckState extends State<PlayerCoverDeck>
       _prevNeighborEntrance,
       _nextNeighborEntrance,
     ]);
+    // 即时切歌落位即会话结束（完成中 → 空闲）；拖动提交由对账路径收尾。
+    _coverController.addStatusListener(_handleCoverStatus);
     _pageHeaderWasHidden = widget.morph?.pageHeaderHidden ?? false;
     // 顶栏⇄播放页飞行时只有封面隐藏：必须监听 morph 控制器才能重建真身。
     widget.morph?.addListener(_onMorphChanged);
     widget.expandAnimation?.addStatusListener(_handleExpandStatus);
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    // 快照监听：切歌检测完全由通知驱动（build 期间不再判定切歌）。
+    _bindPlaybackIfNeeded();
   }
 
   @override
@@ -260,6 +238,80 @@ class _PlayerCoverDeckState extends State<PlayerCoverDeck>
       oldWidget.expandAnimation?.removeStatusListener(_handleExpandStatus);
       widget.expandAnimation?.addStatusListener(_handleExpandStatus);
     }
+    // provider 可能被替换：父级重建时重新检查订阅（此时 widget.displayTrack
+    // 已来自新快照）。
+    _bindPlaybackIfNeeded();
+  }
+
+  /// 订阅（或换绑）播放 Provider，并在换绑后同步一次会话身份。
+  ///
+  /// `context.read` 不建立依赖：本模块不因每次通知整树重建，只在检测到曲目
+  /// 变化时 setState——渲染触发时机与旧 build 内检测一致。provider 被替换时
+  /// 必须重新订阅，否则会话会停留在旧 provider 的曲目上。
+  void _bindPlaybackIfNeeded() {
+    final playback = context.read<PlaybackProvider>();
+    if (identical(playback, _playback)) return;
+    _playback?.removeListener(_handlePlaybackChanged);
+    _playback = playback;
+    playback.addListener(_handlePlaybackChanged);
+    // 首帧（或换 provider）：以 deck 实际展示的曲目建立/校正会话身份，
+    // 等价旧实现在首个 build 里的检测路径。
+    _syncDisplayTrack(playback);
+  }
+
+  /// 播放快照通知：合并同一批通知到微任务统一对账。
+  ///
+  /// - 不在通知回调里直接改 UI：通知可能来自构建/布局期间，微任务一定在
+  ///   下一帧构建前运行（不会在 build/布局期间改状态），且同一批（同一次
+  ///   抖动）多条通知只处理一次；
+  /// - current 为 null（停止/清空）不改变动画身份（deck 仍展示上一首），
+  ///   之后同一首恢复也不会重播；只有 id 真正变化才开启新会话。
+  void _handlePlaybackChanged() {
+    if (_trackSyncScheduled) return;
+    _trackSyncScheduled = true;
+    scheduleMicrotask(() {
+      _trackSyncScheduled = false;
+      if (!mounted) return;
+      final playback = _playback;
+      if (playback == null) return;
+      final track = playback.snapshot.current;
+      final id = trackKeyOf(track);
+      if (id == null || id == _session.animatedTrackId) {
+        // 同一首的重复通知只刷新对象引用（快照值变才发，代价可忽略）。
+        if (track != null) _session.seenTrack = track;
+        return;
+      }
+      setState(() {
+        _handleTrackChanged(
+          id: id,
+          track: track!,
+          oldTrack: _session.seenTrack,
+          playback: playback,
+        );
+        _session.seenTrack = track;
+      });
+    });
+  }
+
+  /// 首帧 / 换 provider：以当前展示曲目为基准同步会话身份。
+  ///
+  /// 与旧 build 内首帧检测等价：无旧曲（`oldTrack = null`）时只播放入场
+  /// 动画（方向无意义按向前），不产生「切歌」的滑出身份。
+  void _syncDisplayTrack(PlaybackProvider playback) {
+    final track = widget.displayTrack;
+    final id = trackKeyOf(track);
+    if (id == null) return;
+    if (id == _session.animatedTrackId) {
+      _session.seenTrack = track;
+      return;
+    }
+    _handleTrackChanged(
+      id: id,
+      track: track!,
+      oldTrack: _session.seenTrack,
+      playback: playback,
+    );
+    _session.seenTrack = track;
   }
 
   void _onMorphChanged() {
@@ -299,14 +351,30 @@ class _PlayerCoverDeckState extends State<PlayerCoverDeck>
     }
   }
 
+  /// 进度控制器落位（完成中 → 空闲）：即时切歌会话到此结束。
+  ///
+  /// 拖动提交的收尾在对账路径（[_reconcileDragCommit]）；这里只清理即时
+  /// 切歌的身份，不触发重建（视觉已由控制器最后一帧画完，下一次切歌或
+  /// 空闲缓存帧自然覆盖）。
+  void _handleCoverStatus(AnimationStatus status) {
+    if (status != AnimationStatus.completed) return;
+    if (_session.phase != CoverSwapPhase.settling) return;
+    _session
+      ..phase = CoverSwapPhase.idle
+      ..trigger = null
+      ..to = null;
+  }
+
   @override
   void dispose() {
+    _playback?.removeListener(_handlePlaybackChanged);
     widget.morph?.removeListener(_onMorphChanged);
     widget.expandAnimation?.removeStatusListener(_handleExpandStatus);
-    _dragPendingTimer?.cancel();
+    _cancelPendingWatchdog();
     _prevNeighborEntrance.dispose();
     _nextNeighborEntrance.dispose();
     _playStateController.dispose();
+    _coverController.removeStatusListener(_handleCoverStatus);
     _coverController.dispose();
     super.dispose();
   }
@@ -314,12 +382,12 @@ class _PlayerCoverDeckState extends State<PlayerCoverDeck>
   void _handleHorizontalDragStart(DragStartDetails details) {
     // 提交等待 / 过渡动画 / 迷你⇄完整封面飞行期间不接受新手势：
     // 一次拖动只对应一次切歌，避免两段过渡叠加。
-    if (_dragCommitted ||
+    if (_session.awaitingReconcile ||
         _coverController.isAnimating ||
         widget.coverFlightActive) {
       return;
     }
-    _dragActive = true;
+    _session.dragActive = true;
     _dragStartX = details.globalPosition.dx;
     _dragStartY = details.globalPosition.dy;
     _dragDx = 0;
@@ -327,7 +395,9 @@ class _PlayerCoverDeckState extends State<PlayerCoverDeck>
   }
 
   void _handleHorizontalDragUpdate(DragUpdateDetails details) {
-    if (!_dragActive || _dragStartX == null || _dragStartY == null) return;
+    if (!_session.dragActive || _dragStartX == null || _dragStartY == null) {
+      return;
+    }
 
     final dx = details.globalPosition.dx - _dragStartX!;
     final dy = details.globalPosition.dy - _dragStartY!;
@@ -378,27 +448,30 @@ class _PlayerCoverDeckState extends State<PlayerCoverDeck>
     final playback = context.read<PlaybackProvider>();
     final int dir = dx < 0 ? 1 : -1; // 左滑 = 下一首
     final Track? target = _previewTargetFor(dir, playback);
+    final session = _session;
 
     if (target == null) {
       // 队列到头：硬边界，不进入预览（松手也不提交）。若已进入预览后
       // 反向拖到边界，则撤下预览回弹。
-      if (_draggingCover && !_dragCommitted) {
+      if (session.phase == CoverSwapPhase.preview) {
         _returnCoverPreview();
       }
       return;
     }
 
-    if (!_draggingCover) {
-      _draggingCover = true;
+    if (!session.previewActive) {
+      session
+        ..phase = CoverSwapPhase.preview
+        ..trigger = CoverSwapTrigger.drag;
       _coverController.stop();
     }
-    if (dir != _coverDirection || _outgoingTrack == null) {
-      _coverDirection = dir;
+    if (dir != session.direction || session.from == null) {
+      session.direction = dir;
       // 拖动预览里「滑出」的是当前封面；反向侧旧邻位让位。
-      _outgoingTrack = _lastSeenTrack;
-      _oldNeighbor = dir == 1 ? _previousTrack : _lastNextTrack;
+      session.from = session.seenTrack;
+      session.oldNeighbor = dir == 1 ? session.previous : session.lastNext;
     }
-    _previewTrack = target;
+    session.to = target;
     // 拖动行程：约 0.6 个封面宽度走完整段过渡。
     final double range = max(48.0, widget.artDimension * 0.6);
     final double visual = (dx.abs() / range).clamp(0.0, 1.0);
@@ -425,12 +498,13 @@ class _PlayerCoverDeckState extends State<PlayerCoverDeck>
   /// 未达标/边界回弹。
   void _handleHorizontalDragEnd(
       DragEndDetails details, PlaybackProvider playback) {
-    if (!_dragActive) return; // 本次手势已被忽略（提交等待期间的拖动）
+    // 本次手势已被忽略（提交等待期间的拖动）。
+    if (!_session.dragActive) return;
     final velocity = details.velocity.pixelsPerSecond.dx;
     final dx = _dragDx;
     final confirmed = _isHorizontalDragConfirmed;
-    final wasDragging = _draggingCover;
-    final previewTrack = _previewTrack;
+    final wasPreviewing = _session.previewActive;
+    final previewTrack = _session.to;
     _resetHorizontalDrag();
     if (!confirmed) return;
 
@@ -440,17 +514,18 @@ class _PlayerCoverDeckState extends State<PlayerCoverDeck>
         velocity.abs() > threshold || dx.abs() > triggerDistance;
 
     // 只有进入过预览（存在可切换的目标）才允许提交；边界拖动直接回弹。
-    if (!wasDragging || previewTrack == null) {
-      if (wasDragging) _returnCoverPreview();
+    if (!wasPreviewing || previewTrack == null) {
+      if (wasPreviewing) _returnCoverPreview();
       return;
     }
 
     if (trigger) {
       HapticFeedback.mediumImpact();
-      _dragCommitted = true;
-      // 从当前拖动进度继续走到落位；随后保持预览，直到曲目真正切换
+      // 进入「已提交等待对账」：预览立即走完并保持，直到曲目真正切换
       // （取链可能需要几百毫秒）——否则动画跑完会先回落成旧封面、
       // 再跳成新封面，看起来像卡住/来回闪。
+      _session.phase = CoverSwapPhase.committed;
+      // 从当前拖动进度继续走到落位。
       _coverController.forward();
       _startDragPendingWatchdog();
       if (dx > 0) {
@@ -464,18 +539,20 @@ class _PlayerCoverDeckState extends State<PlayerCoverDeck>
   }
 
   void _handleHorizontalDragCancel() {
-    if (!_dragActive) return;
+    if (!_session.dragActive) return;
     _resetHorizontalDrag();
     // 已提交的预览不因手势取消而撤下：继续等后端对账（超时有兜底）。
-    if (!_dragCommitted) _returnCoverPreview();
+    if (!_session.awaitingReconcile) _returnCoverPreview();
   }
 
   /// 撤下拖动/提交预览并回弹到稳态（不切歌）。
   void _returnCoverPreview() {
-    if (!_draggingCover) return;
-    _draggingCover = false;
-    _previewTrack = null;
-    _dragPendingTimer?.cancel();
+    if (!_session.previewActive) return;
+    _session
+      ..phase = CoverSwapPhase.idle
+      ..to = null
+      ..trigger = null;
+    _cancelPendingWatchdog();
     _coverController.animateBack(
       0,
       duration: const Duration(milliseconds: 220),
@@ -485,16 +562,21 @@ class _PlayerCoverDeckState extends State<PlayerCoverDeck>
 
   /// 提交切歌的兜底：等待曲目切换期间保持预览；超时（如取链失败）则回弹。
   void _startDragPendingWatchdog() {
-    _dragPendingTimer?.cancel();
-    _dragPendingTimer = Timer(const Duration(seconds: 6), () {
-      if (!mounted || !_dragCommitted) return;
-      _dragCommitted = false;
+    _cancelPendingWatchdog();
+    _session.pendingTimer = Timer(const Duration(seconds: 6), () {
+      if (!mounted || !_session.awaitingReconcile) return;
       _returnCoverPreview();
     });
   }
 
+  /// 取消切歌提交的兜底计时器。
+  void _cancelPendingWatchdog() {
+    _session.pendingTimer?.cancel();
+    _session.pendingTimer = null;
+  }
+
   void _resetHorizontalDrag() {
-    _dragActive = false;
+    _session.dragActive = false;
     _dragStartX = null;
     _dragStartY = null;
     _dragDx = 0;
@@ -503,92 +585,69 @@ class _PlayerCoverDeckState extends State<PlayerCoverDeck>
 
   /// 缓存「变化前」的方向判定提示（空闲帧与每次切歌解析后调用）。
   ///
-  /// 空闲帧缓存保证常规切歌拿到最近一次稳态快照；切歌后立即刷新保证快速
-  /// 连切时下一次判定也有正确的「中间态」提示（动画期间没有空闲帧）。
+  /// 方向纯函数消费的是变化前的提示：变化后快照的 next/history 已经翻页，
+  /// 无法代表用户实际来的方向。空闲帧缓存保证常规切歌拿到最近一次稳态
+  /// 快照；切歌后立即刷新保证快速连切时下一次判定也有正确的「中间态」提示。
   void _cacheDirectionHints(PlaybackSnapshot snapshot) {
-    _prevHintTrack =
-        snapshot.history.isNotEmpty ? snapshot.history.last : null;
-    _nextHintTrack = snapshot.next;
-    _hintQueueIndex = snapshot.currentIndex;
+    _session
+      ..prevHint = snapshot.history.isNotEmpty ? snapshot.history.last : null
+      ..nextHint = snapshot.next
+      ..hintIndex = snapshot.currentIndex;
   }
 
-  /// 切歌：拖动提交走对账落位；其余切歌判定方向并播放入场动画。
-  void _onTrackChanged(
-    String newId,
-    Track? oldTrack,
-    PlaybackProvider provider,
-  ) {
-    if (_dragCommitted) {
-      // 拖动提交对账：预览期间画面已经走到目标。不管到位的是不是当初
-      // 预览的那首（队列变化、随机目标、失败恢复），都在这一帧落位到
-      // 实际 current，绝不让预览态悬空（否则只能等 6s 兜底超时）。
-      _dragCommitted = false;
-      _dragPendingTimer?.cancel();
-      _draggingCover = false;
-      _previewTrack = null;
-      _lastAnimatedTrackId = newId;
-      _previousTrack = provider.snapshot.history.isNotEmpty
-          ? provider.snapshot.history.last
-          : null;
-      // 对账后新快照即下一次切歌的「变化前」基准。
-      _cacheDirectionHints(provider.snapshot);
-      // 拖动时无法预知「新的再下一首/再上一首」身份（只有一位前瞻），
-      // 落位时让它从中心封面背后补一个入场，而不是直接出现在槽位。
-      // 先同步置 0：避免这一帧先以稳态画出来再回跳（闪一下）。
-      final bool toNext = _coverDirection == 1;
-      if (toNext) {
-        _nextNeighborEntrance.value = 0;
-      } else {
-        _prevNeighborEntrance.value = 0;
-      }
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (!mounted) return;
-        widget.onTrackSwapped?.call(false);
-        // 过渡已在提交时走完：画面即最终态，直接落位；若还在走（快速
-        // 对账），保持它继续（center 已是 displayTrack，位置连续）。
-        if (!_coverController.isAnimating) {
-          _coverController.value = 1.0;
-        }
-        if (toNext) {
-          _nextNeighborEntrance.forward(from: 0);
-        } else {
-          _prevNeighborEntrance.forward(from: 0);
-        }
-      });
+  /// 展示曲目发生切换：拖动提交走对账落位；其余切歌判定方向并播放入场。
+  void _handleTrackChanged({
+    required String id,
+    required Track track,
+    required Track? oldTrack,
+    required PlaybackProvider playback,
+  }) {
+    _session.animatedTrackId = id;
+    if (_session.awaitingReconcile) {
+      _reconcileDragCommit(id: id, playback: playback);
       return;
     }
 
     // 方向判定：用「变化前」缓存的提示 + 新快照信息调纯函数（规则与优先级
     // 见 player_cover_swap.dart）。据此，队列点选/跳转也能得到真实方向，
     // 不再一律按向前处理。
-    final snapshot = provider.snapshot;
+    final snapshot = playback.snapshot;
     final int direction = resolveCoverSwapDirection(
       from: oldTrack,
-      to: widget.displayTrack,
-      prevHint: _prevHintTrack,
-      nextHint: _nextHintTrack,
+      to: track,
+      prevHint: _session.prevHint,
+      nextHint: _session.nextHint,
       queue: snapshot.queue,
-      oldIndex: _hintQueueIndex,
+      oldIndex: _session.hintIndex,
       newIndex: snapshot.currentIndex,
       shuffle: snapshot.mode == PlayMode.shuffle,
     );
-    _coverDirection = direction == coverSwapBackward ? -1 : 1;
-    _oldNeighbor =
-        direction == coverSwapBackward ? _lastNextTrack : _previousTrack;
+    final session = _session;
+    // 拖动预览进行中时，阶段与预览目标归拖动会话（切歌只更新身份供拖动
+    // 继续驱动）；其余情况进入即时切歌的「完成中」。
+    if (!session.previewActive) {
+      session
+        ..phase = CoverSwapPhase.settling
+        ..trigger = CoverSwapTrigger.immediate
+        ..to = track;
+    }
+    session.direction = direction == coverSwapBackward ? -1 : 1;
+    session.oldNeighbor = direction == coverSwapBackward
+        ? session.lastNext
+        : session.previous;
     // 新快照即下一次切歌的「变化前」基准（快速连切时动画中不会有空闲帧）。
     _cacheDirectionHints(snapshot);
     // 播放顺序由播放快照维护（后端记录实际播放顺序）：
     // 最新一首即「上一首」，回退时后端已弹出，这里自然指向更早一首。
-    _previousTrack =
-        snapshot.history.isNotEmpty ? snapshot.history.last : null;
-    _outgoingTrack = oldTrack;
-    // 旧封面作为切歌动画中未加载完成时的占位，避免黑块闪一下。
-    _previousImageUrl = artworkUrlOf(oldTrack) ?? _previousImageUrl;
-    _lastAnimatedTrackId = newId;
-    _dragPendingTimer?.cancel();
+    session
+      ..previous = snapshot.history.isNotEmpty ? snapshot.history.last : null
+      ..from = oldTrack
+      // 旧封面作为切歌动画中未加载完成时的占位，避免黑块闪一下。
+      ..placeholderUrl = artworkUrlOf(oldTrack) ?? session.placeholderUrl;
+    _cancelPendingWatchdog();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
-      if (_dragActive) {
+      if (_session.dragActive) {
         // 用户正在拖动：预览交给新拖动继续驱动，不接管动画；
         // 标题入场也让位（此时只有进度预览需要清理）。
         widget.onTrackSwapped?.call(true);
@@ -605,24 +664,67 @@ class _PlayerCoverDeckState extends State<PlayerCoverDeck>
     });
   }
 
+  /// 拖动提交后的对账落位。
+  ///
+  /// 不管到位的是不是当初预览的那首（队列变化、随机目标、失败恢复），都在
+  /// 这一帧落位到实际 current，绝不让预览态悬空（否则只能等 6s 兜底超时）。
+  ///
+  /// #6（对账校正淡化）挂点：此处可用 [CoverSwapSession.to]（提交时固定
+  /// 的预览目标）与 [id]（到位曲目）比较；不匹配时进入
+  /// [CoverSwapPhase.correcting]，从当前进度续播 220ms 校正淡化。本票两条
+  /// 路径保持一致：直接按实际 current 落位。
+  void _reconcileDragCommit({
+    required String id,
+    required PlaybackProvider playback,
+  }) {
+    final session = _session;
+    final history = playback.snapshot.history;
+    _cancelPendingWatchdog();
+    session
+      ..phase = CoverSwapPhase.idle
+      ..to = null
+      ..trigger = null
+      ..previous = history.isNotEmpty ? history.last : null;
+    // 对账后新快照即下一次切歌的「变化前」基准。
+    _cacheDirectionHints(playback.snapshot);
+    // 拖动时无法预知「新的再下一首/再上一首」身份（只有一位前瞻），
+    // 落位时让它从中心封面背后补一个入场，而不是直接出现在槽位。
+    // 先同步置 0：避免这一帧先以稳态画出来再回跳（闪一下）。
+    final bool toNext = session.direction == 1;
+    if (toNext) {
+      _nextNeighborEntrance.value = 0;
+    } else {
+      _prevNeighborEntrance.value = 0;
+    }
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      widget.onTrackSwapped?.call(false);
+      // 过渡已在提交时走完：画面即最终态，直接落位；若还在走（快速
+      // 对账），保持它继续（center 已是 displayTrack，位置连续）。
+      if (!_coverController.isAnimating) {
+        _coverController.value = 1.0;
+      }
+      if (toNext) {
+        _nextNeighborEntrance.forward(from: 0);
+      } else {
+        _prevNeighborEntrance.forward(from: 0);
+      }
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
     final playback = context.read<PlaybackProvider>();
 
-    // 切歌检测必须在 _lastSeenTrack 更新前执行（oldTrack 即上一首）。
-    final trackId = trackKeyOf(widget.displayTrack);
-    if (trackId != null && trackId != _lastAnimatedTrackId) {
-      _onTrackChanged(trackId, _lastSeenTrack, playback);
-    }
-    if (widget.displayTrack != null) {
-      _lastSeenTrack = widget.displayTrack;
-    }
-
-    // 空闲帧缓存下一首（上一首方向的旧邻位判定需要）与方向判定提示。
-    if (!_coverController.isAnimating && !_draggingCover) {
-      _lastNextTrack = playback.snapshot.next;
+    // 切歌检测已移到播放快照监听（[_handlePlaybackChanged] / [_syncDisplayTrack]），
+    // build 期间不再做切歌判定，只刷新空闲缓存：下一首身份与方向判定提示
+    // 必须在与旧实现相同的帧上刷新，否则快速连切的方向基准会漂移。
+    if (!_coverController.isAnimating && !_session.previewActive) {
+      _session
+        ..lastNext = playback.snapshot.next
+        // 空闲帧清空滑出身份：动画已落位，陈旧封面不能复活（旧实现同语义）。
+        ..from = null;
       _cacheDirectionHints(playback.snapshot);
-      _outgoingTrack = null;
     }
 
     return _buildArtworkStack(context, playback);
@@ -645,7 +747,7 @@ class _PlayerCoverDeckState extends State<PlayerCoverDeck>
     return Listener(
       // DragGestureRecognizer 对「已接受」手势的 PointerCancel 也走 onEnd
       // （不是 onCancel），而 Listener 先于识别器收到取消事件：这里直接
-      // 按取消处理并复位，随后识别器的 onEnd 因 _dragActive=false 被忽略，
+      // 按取消处理并复位，随后识别器的 onEnd 因 dragActive=false 被忽略，
       // 避免系统打断被当成松手提交切歌。
       onPointerCancel: (_) => _handleHorizontalDragCancel(),
       child: GestureDetector(
@@ -667,10 +769,11 @@ class _PlayerCoverDeckState extends State<PlayerCoverDeck>
               animation: _coverStackAnimation,
               builder: (context, _) {
                 // 拖动预览与切歌动画共用渲染：拖动时进度由手指驱动。
-                final dragging = _draggingCover;
+                final session = _session;
+                final dragging = session.previewActive;
                 final animating = dragging || _coverController.isAnimating;
                 final t = Curves.easeOutCubic.transform(_coverController.value);
-                final dir = _coverDirection;
+                final dir = session.direction;
                 final double sideSize = widget.artDimension * 0.78;
                 final double offset = widget.artDimension * 0.30;
                 const double sideRotation = 0.05;
@@ -678,10 +781,10 @@ class _PlayerCoverDeckState extends State<PlayerCoverDeck>
                 final children = <Widget>[];
 
                 // 旧邻位淡出（方向切换时另一侧让位）。
-                if (animating && _oldNeighbor != null) {
+                if (animating && session.oldNeighbor != null) {
                   children.add(_sideCoverLayer(
                     context,
-                    _oldNeighbor,
+                    session.oldNeighbor,
                     sideSize: sideSize,
                     x: -offset * dir,
                     rotation: -sideRotation * dir,
@@ -694,7 +797,7 @@ class _PlayerCoverDeckState extends State<PlayerCoverDeck>
                   // 拖动预览阶段不预取「再下一首」（UI 只有一位前瞻），留空槽。
                   if (!dragging) {
                     final nextItem = playbackProvider.snapshot.next;
-                    final sourceTrack = dir == 1 ? nextItem : _previousTrack;
+                    final sourceTrack = dir == 1 ? nextItem : session.previous;
                     children.add(_sideCoverLayer(
                       context,
                       sourceTrack,
@@ -711,10 +814,10 @@ class _PlayerCoverDeckState extends State<PlayerCoverDeck>
                     ));
                   }
                   // 滑出的旧当前 → 目标邻位。
-                  if (_outgoingTrack != null) {
+                  if (session.from != null) {
                     children.add(_mainCoverLayer(
                       context,
-                      _outgoingTrack,
+                      session.from,
                       playbackProvider,
                       artDimension: widget.artDimension,
                       x: -offset * dir * t,
@@ -728,7 +831,7 @@ class _PlayerCoverDeckState extends State<PlayerCoverDeck>
                   // 稳态邻位：可点击切歌（左=上一首，右=下一首）。
                   children.add(_sideCoverLayer(
                     context,
-                    _previousTrack,
+                    session.previous,
                     sideSize: sideSize,
                     x: -offset,
                     rotation: -sideRotation,
@@ -759,7 +862,7 @@ class _PlayerCoverDeckState extends State<PlayerCoverDeck>
                 // 这一张。预览目标在拖动开始时固定，不重读快照（否则提交后
                 // 快照先推新邻位，中心封面会闪成再下一首）。
                 final Track? centerTrack = dragging
-                    ? (_previewTrack ?? widget.displayTrack)
+                    ? (session.to ?? widget.displayTrack)
                     : widget.displayTrack;
                 children.add(_mainCoverLayer(
                   context,
@@ -775,7 +878,7 @@ class _PlayerCoverDeckState extends State<PlayerCoverDeck>
                   coverKey: widget.morph?.pageCoverKey,
                   hidden: widget.morph?.pageHeaderHidden ?? false,
                   placeholderUrl:
-                      dragging ? currentImageUrl : _previousImageUrl,
+                      dragging ? currentImageUrl : session.placeholderUrl,
                 ));
 
                 return Stack(clipBehavior: Clip.none, children: children);
