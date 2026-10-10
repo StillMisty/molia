@@ -4,25 +4,6 @@
 /// 起止身份、方向、旧邻位/历史身份、阶段、6 秒兜底计时器与方向判定的
 /// 「变化前」提示。会话只承载状态与语义；唯一一根进度控制器与对账落位后
 /// 的源侧淡入控制器仍归 `player_cover_deck.dart` 的 State 持有。
-///
-/// 与旧散落字段的对应（#5 收敛，语义逐字段保持不变）：
-/// - [CoverSwapSession.seenTrack] ← `_lastSeenTrack`（上一首非空展示曲目）；
-/// - [CoverSwapSession.animatedTrackId] ← `_lastAnimatedTrackId`（检测基准）；
-/// - [CoverSwapSession.from] ← `_outgoingTrack`（滑出的旧当前封面）；
-/// - [CoverSwapSession.to] ← `_previewTrack`（拖动/提交预览目标；即时切歌时
-///   为进场曲目）；
-/// - [CoverSwapSession.oldNeighbor] ← `_oldNeighbor`（方向反转让位的旧邻位）；
-/// - [CoverSwapSession.previous] ← `_previousTrack`（播放历史最近一首）；
-/// - [CoverSwapSession.lastNext] ← `_lastNextTrack`（空闲缓存的下一首）；
-/// - [CoverSwapSession.direction] ← `_coverDirection`；
-/// - [CoverSwapSession.phase] ← `_draggingCover` / `_dragCommitted` 两个布尔；
-/// - [CoverSwapSession.dragActive] ← `_dragActive`（手指是否仍在屏上）；
-/// - [CoverSwapSession.pendingTimer] ← `_dragPendingTimer`（6 秒兜底）；
-/// - [CoverSwapSession.prevHint] / [CoverSwapSession.nextHint] /
-///   [CoverSwapSession.hintIndex] ← `_prevHintTrack` / `_nextHintTrack` /
-///   `_hintQueueIndex`；
-/// - [CoverSwapSession.placeholderUrl] ← `_previousImageUrl`（新封面未出图时
-///   的占位）。
 library;
 
 import 'dart:async';
@@ -45,7 +26,7 @@ enum CoverSwapPhase {
   /// 目标；期间忽略新的拖动，收到曲目变化（或兜底超时）后对账复位。
   committed,
 
-  /// 完成中：即时切歌的入场动画（会话身份保留，供 #6/调试观察）。
+  /// 完成中：即时切歌的入场动画（会话身份保留到落位）。
   settling,
 
   /// 对账校正：提交后到位曲目与预览目标不一致（随机目标 / 失败恢复 /
@@ -116,11 +97,9 @@ class CoverSwapSession {
   String? placeholderUrl;
 
   /// 中心位是否由会话目标 [to] 驱动：拖动跟手或提交等待。
-  ///
-  /// 对应旧实现的 `_draggingCover`（提交后仍为 true，直到对账落位）。
   bool get previewActive =>
       phase == CoverSwapPhase.preview || phase == CoverSwapPhase.committed;
 
-  /// 是否已提交切歌、等待后端对账（旧 `_dragCommitted`）。
+  /// 是否已提交切歌、等待后端对账。
   bool get awaitingReconcile => phase == CoverSwapPhase.committed;
 }

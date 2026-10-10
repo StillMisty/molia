@@ -9,13 +9,12 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import 'support/fakes.dart';
 
-/// 切歌检测的快照监听路径（#5）：deck 不再在自己的 build 里检测曲目变化，
+/// 切歌检测的快照监听路径：deck 不再在自己的 build 里检测曲目变化，
 /// 而是监听 [PlaybackProvider] 通知、比较当前曲目 id 后开启切歌会话。
 ///
 /// 这里把 [PlayerCoverDeck] 直接挂在根上且 `displayTrack` 固定不变：
 /// 父级不会因通知重建，deck 也不可能通过「displayTrack 变化」察觉切歌，
-/// 唯一能启动动画/触发联动的只有快照监听本身。旧实现（build 内检测）在此
-/// 不会得到任何切歌行为，本测试即锁定新契约。
+/// 唯一能启动动画/触发联动的只有快照监听本身；本测试即锁定该契约。
 Track _track(String id) => Track(
       id: TrackId('fake', id),
       title: 'Title $id',

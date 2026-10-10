@@ -8,14 +8,13 @@
 /// 切歌（swap）动画与拖动跟手共用模块内部同一条进度控制器；拖动/提交/对账/
 /// 兜底等全部会话状态收敛在唯一一个 [CoverSwapSession] 中。
 ///
-/// 切歌视觉（#6 安静化）：
+/// 切歌视觉：
 /// - 时长 320ms、easeOutCubic；拖动跟手按同一条曲线反解，松手不跳；
-/// - 目标槽位旧身份与源槽位新身份按进度窗口交叉淡化（仅透明度、原位不动），
-///   不再有「邻位从中心背后展开」的入场演出；
+/// - 目标槽位旧身份与源槽位新身份按进度窗口交叉淡化（仅透明度、原位不动）；
 /// - 两张移动卡（旧中封 → 目标槽位、新中封 ← 源槽位）全程插值，透明度
 ///   1.0 ↔ 0.85 连续过渡（进场卡从 85% 起步，消除起手闪跳）。
 ///
-/// 对账与会话外槽位更新（#7）：
+/// 对账与会话外槽位更新：
 /// - 提交对账到非预览曲目：进入 `correcting`，中心封面以 220ms 原位交叉淡化
 ///   校正（旧预览卡淡出、实际曲目卡淡入，无位移），随后按新快照重建槽位；
 ///   提交过渡尚未落位时先让它走完再校正（从稳态起步，避免半途起跳）；
@@ -111,9 +110,8 @@ class PlayerCoverDeck extends StatefulWidget {
   /// 对外用这个锚点定位中心封面（也供共享飞行之外的调试/断言使用）。
   static const Key centerCoverCardKey = ValueKey('coverSlotCenter');
 
-  /// 滑出（旧中心）封面的语义 key：非拖动切歌的滑出卡是否真正渲染是可观察
-  /// 行为（旧实现因空闲缓存清空身份而从不渲染），对外用这个锚点断言。
-  /// 对账校正期间它也是淡出中的旧预览卡（同为「离开中心的封面」）。
+  /// 滑出（旧中心）封面的语义 key：滑出卡是否参与切歌动画是可观察行为，
+  /// 对外用这个锚点断言。对账校正期间它也是淡出中的旧预览卡。
   static const Key outgoingCoverCardKey = ValueKey('coverSlotOutgoing');
 
   /// 中心封面换图（同 id、URL 更新）时旧图卡片的语义 key：换图淡化是否
@@ -177,7 +175,7 @@ class PlayerCoverDeck extends StatefulWidget {
 
 class _PlayerCoverDeckState extends State<PlayerCoverDeck>
     with TickerProviderStateMixin {
-  /// 切歌过渡时长：320ms（#6 安静化；拖动跟手按同一曲线反解，松手不跳）。
+  /// 切歌过渡时长；拖动跟手按同一曲线反解，松手不跳。
   static const Duration _coverSwapDuration = Duration(milliseconds: 320);
 
   /// 邻位稳态透明度；窗口淡出/淡入的端点值（p=0 / p=1 与稳态卡一致）。
@@ -219,8 +217,8 @@ class _PlayerCoverDeckState extends State<PlayerCoverDeck>
   /// 唯一一根进度控制器：拖动跟手与切歌动画共用（不允许第二条视觉进度）。
   late AnimationController _coverController;
 
-  /// 拖动对账落位后源侧新身份的纯透明度淡入（删除「从中心背后展开」入场
-  /// 特例后的等价替代；只在 idle 稳态渲染里作用于会话方向的源侧槽位）。
+  /// 拖动对账落位后源侧新身份的纯透明度淡入；只在 idle 稳态渲染里作用于
+  /// 会话方向的源侧槽位。
   late AnimationController _sourceNeighborFade;
 
   /// 对账校正控制器：0→1 期间中心旧预览卡淡出、实际曲目卡淡入（原位无位移）。
@@ -314,8 +312,7 @@ class _PlayerCoverDeckState extends State<PlayerCoverDeck>
     _reconcileCorrection.addStatusListener(_handleCorrectionStatus);
     _slotIdentityFade.addStatusListener(_handleSlotIdentityStatus);
     _artworkRefreshFade.addStatusListener(_handleArtworkRefreshStatus);
-    // 顶栏⇄播放页飞行时只有封面隐藏：必须监听 morph 控制器才能重建真身
-    // （侧邻位随页面层自身淡入，不再有独立入场演出）。
+    // 顶栏⇄播放页飞行期间中心封面隐藏，必须监听 morph 控制器重建真身。
     widget.morph?.addListener(_onMorphChanged);
   }
 
@@ -343,8 +340,8 @@ class _PlayerCoverDeckState extends State<PlayerCoverDeck>
   /// 订阅（或换绑）播放 Provider，并在换绑后同步一次会话身份。
   ///
   /// `context.read` 不建立依赖：本模块不因每次通知整树重建，只在检测到曲目
-  /// 变化时 setState——渲染触发时机与旧 build 内检测一致。provider 被替换时
-  /// 必须重新订阅，否则会话会停留在旧 provider 的曲目上。
+  /// 变化时 setState。provider 被替换时必须重新订阅，否则会话会停留在旧
+  /// provider 的曲目上。
   void _bindPlaybackIfNeeded() {
     final playback = context.read<PlaybackProvider>();
     if (identical(playback, _playback)) return;
@@ -352,7 +349,7 @@ class _PlayerCoverDeckState extends State<PlayerCoverDeck>
     _playback = playback;
     playback.addListener(_handlePlaybackChanged);
     // 首帧（或换 provider）：以 deck 实际展示的曲目建立/校正会话身份，
-    // 等价旧实现在首个 build 里的检测路径；播放态缩放同步一次初始值。
+    // 并同步一次播放态缩放初始值。
     _syncDisplayTrack(playback);
     _syncPlayState(playback);
   }
@@ -403,8 +400,8 @@ class _PlayerCoverDeckState extends State<PlayerCoverDeck>
           playback: playback,
         );
         _session.seenTrack = track;
-        // 切歌处理之后按新快照刷新空闲缓存（与旧 build 检测帧的刷新等价：
-        // 快速连切时下一次判定需要「变化前」基准）。
+        // 切歌处理之后按新快照刷新空闲缓存：快速连切时下一次判定需要
+        // 「变化前」基准。
         _refreshIdleCache(playback);
       });
     });
@@ -412,8 +409,8 @@ class _PlayerCoverDeckState extends State<PlayerCoverDeck>
 
   /// 首帧 / 换 provider：以当前展示曲目为基准同步会话身份。
   ///
-  /// 与旧 build 内首帧检测等价：无旧曲（`oldTrack = null`）时只播放入场
-  /// 动画（方向无意义按向前），不产生「切歌」的滑出身份。
+  /// 无旧曲（`oldTrack = null`）时只播放入场动画（方向无意义按向前），
+  /// 不产生「切歌」的滑出身份。
   void _syncDisplayTrack(PlaybackProvider playback) {
     final track = widget.displayTrack;
     final id = trackKeyOf(track);
@@ -439,8 +436,6 @@ class _PlayerCoverDeckState extends State<PlayerCoverDeck>
 
   void _onMorphChanged() {
     if (!mounted) return;
-    // 顶栏⇄播放页飞行时只有中心封面隐藏，必须监听 morph 控制器重建真身
-    // （侧邻位随页面层自身淡入，不再有独立入场演出）。
     setState(() {});
   }
 
@@ -479,10 +474,9 @@ class _PlayerCoverDeckState extends State<PlayerCoverDeck>
 
   /// 空闲缓存刷新：下一首身份、左槽身份、滑出身份清理与方向判定提示。
   ///
-  /// 由播放快照通知（微任务）与挂载同步调用，取代旧 build 内的逐帧刷新
-  /// （build 零写入）：方向纯函数消费「变化前」提示，必须来自最近一次稳态
-  /// 快照，快速连切的方向基准才不漂移。会话激活（拖动/提交/过渡/校正）
-  /// 期间不刷新，由会话窗口负责。
+  /// 由播放快照通知（微任务）与挂载同步调用（build 期间零写入）：方向纯
+  /// 函数消费「变化前」提示，必须来自最近一次稳态快照，快速连切的方向基准
+  /// 才不漂移。会话激活（拖动/提交/过渡/校正）期间不刷新，由会话窗口负责。
   void _refreshIdleCache(PlaybackProvider playback) {
     if (_coverController.isAnimating || _session.previewActive) return;
     final snapshot = playback.snapshot;
@@ -562,9 +556,8 @@ class _PlayerCoverDeckState extends State<PlayerCoverDeck>
   /// 中心封面同 id、封面 URL 变化（音源补图）：以约 250ms 交叉淡化换图。
   ///
   /// 只在同一曲目 id 内换 URL 时触发；id 变化（切歌/对账落位）由切歌与校正
-  /// 路径负责，这里只接管新身份、不播换图淡化。放在 didUpdateWidget（父级
-  /// 按快照重建）而不是 build：淡化起点必须在渲染新 URL 之前把控制器归零，
-  /// 否则会先闪一帧新图再回跳旧图。
+  /// 路径负责，这里只接管新身份、不播换图淡化。淡化起点必须在新 URL 渲染
+  /// 之前把控制器归零，否则会先闪一帧新图再回跳旧图，因此放在这里而不是 build。
   void _syncCenterArtwork(Track? track) {
     final id = trackKeyOf(track);
     final url = artworkUrlOf(track);
@@ -1018,9 +1011,8 @@ class _PlayerCoverDeckState extends State<PlayerCoverDeck>
     _cacheDirectionHints(snapshot);
     // 槽位身份已由切歌窗口演到位：跟踪对齐快照，空闲期不补淡换。
     _syncSlotIdentityTracking(snapshot);
-    // 拖动期间源侧新身份没有渲染（UI 只有一位前瞻），落位时补一个约 180ms
-    // 纯透明度淡入（删除「从中心背后展开」入场特例后的等价替代）。
-    // 先同步置 0：避免这一帧先以稳态画出来再回跳（闪一下）。
+    // 拖动期间源侧新身份没有渲染（UI 只有一位前瞻），落位时补一个纯透明度
+    // 淡入；先同步置 0，避免这一帧先以稳态画出来再回跳（闪一下）。
     _sourceNeighborFade.value = 0;
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
@@ -1066,8 +1058,7 @@ class _PlayerCoverDeckState extends State<PlayerCoverDeck>
   @override
   Widget build(BuildContext context) {
     final playback = context.read<PlaybackProvider>();
-    // 切歌检测与空闲缓存刷新都在播放快照监听里完成（[_handlePlaybackChanged]
-    // / [_syncDisplayTrack]，见 [_refreshIdleCache]）：build 期间零写入，
+    // 切歌检测与空闲缓存刷新都在播放快照监听里完成：build 期间零写入，
     // 这里只渲染当前会话/稳态画面。
     return _buildArtworkStack(context, playback);
   }
@@ -1183,8 +1174,7 @@ class _PlayerCoverDeckState extends State<PlayerCoverDeck>
                   }
                 } else {
                   // 稳态邻位：可点击切歌（左=上一首，右=下一首）。
-                  // - 拖动对账落位后的源侧新身份以约 180ms 纯透明度淡入
-                  //   （无位移/缩放/旋转——删除入场特例后的等价替代）；
+                  // - 拖动对账落位后的源侧新身份以纯透明度淡入（无位移/缩放/旋转）；
                   // - 空闲期身份变化（加歌/删歌/开关随机/next 变空）以约
                   //   180ms 原位交叉淡化表达（旧身份淡出、新身份淡入）。
                   // 两个淡化控制器稳态都停在 1，倍率不产生任何影响。

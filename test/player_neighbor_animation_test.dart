@@ -14,7 +14,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import 'support/fakes.dart';
 
-/// 切歌视觉（#6 安静化）：窗口化交叉淡化（仅透明度、原位）、320ms、
+/// 切歌视觉：窗口化交叉淡化（仅透明度、原位）、320ms、
 /// 滑出卡全程渲染、无「从中心背后展开」入场特例。
 ///
 /// 断言只读外部可观察行为：封面堆叠内各 Opacity 的透明度与全局位置（不读

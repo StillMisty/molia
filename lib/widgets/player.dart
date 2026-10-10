@@ -166,8 +166,7 @@ class _PlayerState extends State<Player> with TickerProviderStateMixin {
   /// 迷你/完整切换开始：抓取两端封面矩形，交由页内 Stack 飞行；
   /// 结束：撤下飞行副本，恢复真身封面。
   ///
-  /// 侧邻位没有独立入场演出：随页面层/完整层自身淡入以稳态出现
-  /// （旧的两条入场控制器与状态沿监听已随 #6 删除），这里只管理飞行副本。
+  /// 侧邻位没有独立入场演出：随页面层/完整层自身淡入以稳态出现。
   void _handleExpandStatus(AnimationStatus status) {
     switch (status) {
       case AnimationStatus.forward:

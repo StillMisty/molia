@@ -12,7 +12,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'support/fakes.dart';
 
 /// 封面堆叠模块的切歌方向：从队列点选/跳转到当前之前的曲目时，进场中心封面
-/// 必须从左侧滑入（方向向后），而不是旧实现的一律按向前。
+/// 必须从左侧滑入（方向向后），而不是一律按向前。
 ///
 /// 方向在动画中间帧是外部可观察的：进场中心封面（[PlayerCoverDeck.
 /// centerCoverCardKey]）的全局中心相对封面手势宿主（堆叠）中心偏左 = 向后
@@ -125,7 +125,7 @@ void main() {
     await pumpPlayer(tester);
 
     // 直接点选队首 A：新快照 next=B 与 history 都命中不了提示，
-    // 旧实现会退化成「一律向前」。
+    // 只能靠队列下标判定方向（防止退化为「一律向前」）。
     emitFor('a');
     final offset = await sampleIncomingOffset(tester);
     expect(offset, lessThan(-4),

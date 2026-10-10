@@ -12,7 +12,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import 'support/fakes.dart';
 
-/// 对账与会话外槽位更新（#7）：
+/// 对账与会话外槽位更新：
 /// - 提交对账到非预览曲目：中心封面 220ms 原位交叉淡化校正；
 /// - 空闲期槽位身份变化（next 换人/变空）：180ms 原位交叉淡化；
 /// - 左槽「上一首」语义（history 末位 → 队列前一位 → 空）；
