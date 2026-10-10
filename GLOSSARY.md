@@ -30,6 +30,29 @@
 - **Resolved next（下一首解析）** — `PlaybackSnapshot.next`：后端按当前模式解析的下一首
   （shuffle 在单曲内稳定，切歌/切模式重抽）；`upcoming` 只用于队列面板展示。
 
+## 播放页封面（cover deck）
+
+- **Cover deck（封面堆叠）** — `lib/widgets/player_cover_deck.dart`：播放页封面区
+  （三槽位渲染、横滑手势、切歌会话与对账）的唯一实现；播放器只提供布局尺寸、
+  顶栏共享飞行锚点与主题联动。会话模型在 `player_cover_session.dart`，方向判定
+  纯函数在 `player_cover_swap.dart`。
+- **Cover slot（封面槽位）** — 堆叠的三个位置：左 = 上一首（播放顺序最近一首
+  history 末位 → 队列前一位 → 空，排除与当前同 id，与后端 `skipToPrevious` 同源）、
+  中 = 当前（拖动/提交等待期间为预览目标）、右 = `PlaybackSnapshot.next`；
+  左右槽只要展示了身份即可点击切歌，为空时不渲染卡片。
+- **Swap session（切歌会话）** — `CoverSwapSession`：一次拖动/切歌从开始到落位的
+  唯一状态对象（起止身份/方向/旧邻位/阶段/6 秒兜底/方向提示）；唯一一根进度
+  控制器归 deck State，拖动跟手与切歌动画共用。
+- **Swap phase（会话阶段）** — `idle`（稳态）→ `preview`（拖动跟手）→
+  `committed`（提交等待对账）→ `settling`（即时切歌完成中）/ `correcting`
+  （对账不匹配校正）；提交等待与校正期间忽略新手势。
+- **Reconcile（对账）** — 提交后等待快照 current 变为会话目标：匹配无缝落位；
+  不匹配（随机目标 / 失败恢复 / 列表变化）走 `correcting`（220ms 中心原位交叉
+  淡化校正到实际曲目）；约 6 秒无对账回弹。
+- **Windowed crossfade（窗口化交叉淡化）** — 切歌进度窗口内的纯透明度交叉：
+  目标槽位旧身份 p∈[0,0.4] 淡出、源槽位新身份 p∈[0.6,1] 淡入（无位移/叠影），
+  移动卡全程插值；空闲期身份变化另有 180ms 原位交叉淡化。
+
 ## 歌词
 
 - **Lyrics session module（歌词会话模块）** — `lib/providers/lyrics_provider.dart`：
