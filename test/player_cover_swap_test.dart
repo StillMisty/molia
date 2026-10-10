@@ -181,6 +181,35 @@ void main() {
         coverSwapBackward,
       );
     });
+
+    test('旧下标失效（队列编辑过）时按 id 回退解析', () {
+      // 缓存旧下标 3 已越界，队列 [a, b, c] 中当前实际在 c(2) → 点选 a(0)。
+      expect(
+        resolveCoverSwapDirection(
+          from: c,
+          to: a,
+          queue: [a, b, c],
+          oldIndex: 3,
+          newIndex: 0,
+        ),
+        coverSwapBackward,
+      );
+    });
+
+    test('新旧下标都失配时按 id 回退解析取最近实例', () {
+      // queue: [a, b, c, a]，oldIndex 越界、newIndex 越界：
+      // c 按 id 找到 2；a 取离 2 最近的实例 3 → 向前。
+      expect(
+        resolveCoverSwapDirection(
+          from: c,
+          to: a,
+          queue: [a, b, c, a],
+          oldIndex: -1,
+          newIndex: 99,
+        ),
+        coverSwapForward,
+      );
+    });
   });
 
   group('规则 6：无法解析 → 兜底向前', () {

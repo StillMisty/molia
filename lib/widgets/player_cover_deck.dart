@@ -21,10 +21,13 @@ import 'package:flutter/services.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:provider/provider.dart';
 
+import '../domain/models/playback.dart';
 import '../domain/models/track.dart';
+import '../models/play_mode.dart';
 import '../providers/playback_provider.dart';
 import 'app_network_image.dart';
 import 'molia_mark.dart';
+import 'player_cover_swap.dart';
 import 'player_morph.dart';
 
 /// 曲目封面 URL（空串视同无封面；领域 Track 自带可靠 id/artwork）。
@@ -81,6 +84,10 @@ class PlayerCoverDeck extends StatefulWidget {
   /// 封面区横向手势宿主 key：拖动期间 element 必须稳定（识别器不被
   /// dispose），同时供测试精确定位这一层手势。
   static const Key swipeHostKey = ValueKey('artworkSwipeHost');
+
+  /// 中心槽位（进场）封面的语义 key：切歌中间帧从哪一侧入场是可观察行为，
+  /// 对外用这个锚点定位中心封面（也供共享飞行之外的调试/断言使用）。
+  static const Key centerCoverCardKey = ValueKey('coverSlotCenter');
 
   const PlayerCoverDeck({
     super.key,
@@ -179,6 +186,19 @@ class _PlayerCoverDeckState extends State<PlayerCoverDeck>
   /// 播放态中心封面轻微缩放（暂停时保持清晰，不做变暗）。
   late AnimationController _playStateController;
   late Animation<double> _playStateScaleAnimation;
+
+  // ---- 切歌方向提示缓存（「变化前」信息） ----
+  /// 「变化前」的上一首提示（history 末位 = 播放顺序最近一首）。
+  ///
+  /// 方向纯函数消费的是变化前的提示：变化后快照的 next/history 已经翻页，
+  /// 无法代表用户实际来的方向。空闲帧与每次切歌解析后刷新。
+  Track? _prevHintTrack;
+
+  /// 「变化前」的下一首提示（快照 next）。
+  Track? _nextHintTrack;
+
+  /// 「变化前」当前曲目的队列下标（队列点选方向的基准；-1 = 未知）。
+  int _hintQueueIndex = -1;
 
   // ---- 切歌检测 / 占位 ----
   /// 上一帧的展示曲目（切歌检测的 oldTrack）。
@@ -481,6 +501,17 @@ class _PlayerCoverDeckState extends State<PlayerCoverDeck>
     _isHorizontalDragConfirmed = false;
   }
 
+  /// 缓存「变化前」的方向判定提示（空闲帧与每次切歌解析后调用）。
+  ///
+  /// 空闲帧缓存保证常规切歌拿到最近一次稳态快照；切歌后立即刷新保证快速
+  /// 连切时下一次判定也有正确的「中间态」提示（动画期间没有空闲帧）。
+  void _cacheDirectionHints(PlaybackSnapshot snapshot) {
+    _prevHintTrack =
+        snapshot.history.isNotEmpty ? snapshot.history.last : null;
+    _nextHintTrack = snapshot.next;
+    _hintQueueIndex = snapshot.currentIndex;
+  }
+
   /// 切歌：拖动提交走对账落位；其余切歌判定方向并播放入场动画。
   void _onTrackChanged(
     String newId,
@@ -499,6 +530,8 @@ class _PlayerCoverDeckState extends State<PlayerCoverDeck>
       _previousTrack = provider.snapshot.history.isNotEmpty
           ? provider.snapshot.history.last
           : null;
+      // 对账后新快照即下一次切歌的「变化前」基准。
+      _cacheDirectionHints(provider.snapshot);
       // 拖动时无法预知「新的再下一首/再上一首」身份（只有一位前瞻），
       // 落位时让它从中心封面背后补一个入场，而不是直接出现在槽位。
       // 先同步置 0：避免这一帧先以稳态画出来再回跳（闪一下）。
@@ -525,23 +558,29 @@ class _PlayerCoverDeckState extends State<PlayerCoverDeck>
       return;
     }
 
-    final nextId = provider.snapshot.next?.id.uri;
-    final prevId = _previousTrack?.id.uri;
-    final int direction;
-    if (nextId != null && nextId == newId) {
-      direction = 1;
-    } else if (prevId != null && prevId == newId) {
-      direction = -1;
-    } else {
-      direction = 0; // 队列点选等跳转：按前进处理
-    }
-    _coverDirection = direction == -1 ? -1 : 1;
-    _oldNeighbor = direction == -1 ? _lastNextTrack : _previousTrack;
+    // 方向判定：用「变化前」缓存的提示 + 新快照信息调纯函数（规则与优先级
+    // 见 player_cover_swap.dart）。据此，队列点选/跳转也能得到真实方向，
+    // 不再一律按向前处理。
+    final snapshot = provider.snapshot;
+    final int direction = resolveCoverSwapDirection(
+      from: oldTrack,
+      to: widget.displayTrack,
+      prevHint: _prevHintTrack,
+      nextHint: _nextHintTrack,
+      queue: snapshot.queue,
+      oldIndex: _hintQueueIndex,
+      newIndex: snapshot.currentIndex,
+      shuffle: snapshot.mode == PlayMode.shuffle,
+    );
+    _coverDirection = direction == coverSwapBackward ? -1 : 1;
+    _oldNeighbor =
+        direction == coverSwapBackward ? _lastNextTrack : _previousTrack;
+    // 新快照即下一次切歌的「变化前」基准（快速连切时动画中不会有空闲帧）。
+    _cacheDirectionHints(snapshot);
     // 播放顺序由播放快照维护（后端记录实际播放顺序）：
     // 最新一首即「上一首」，回退时后端已弹出，这里自然指向更早一首。
-    _previousTrack = provider.snapshot.history.isNotEmpty
-        ? provider.snapshot.history.last
-        : null;
+    _previousTrack =
+        snapshot.history.isNotEmpty ? snapshot.history.last : null;
     _outgoingTrack = oldTrack;
     // 旧封面作为切歌动画中未加载完成时的占位，避免黑块闪一下。
     _previousImageUrl = artworkUrlOf(oldTrack) ?? _previousImageUrl;
@@ -579,9 +618,10 @@ class _PlayerCoverDeckState extends State<PlayerCoverDeck>
       _lastSeenTrack = widget.displayTrack;
     }
 
-    // 空闲帧缓存下一首（上一首方向的旧邻位判定需要）。
+    // 空闲帧缓存下一首（上一首方向的旧邻位判定需要）与方向判定提示。
     if (!_coverController.isAnimating && !_draggingCover) {
       _lastNextTrack = playback.snapshot.next;
+      _cacheDirectionHints(playback.snapshot);
       _outgoingTrack = null;
     }
 
@@ -726,6 +766,7 @@ class _PlayerCoverDeckState extends State<PlayerCoverDeck>
                   centerTrack,
                   playbackProvider,
                   artDimension: widget.artDimension,
+                  slotKey: PlayerCoverDeck.centerCoverCardKey,
                   x: animating ? dir * offset * (1 - t) : 0,
                   rotation: animating ? sideRotation * dir * (1 - t) : 0,
                   scale: animating ? 0.78 + 0.22 * t : 1.0,
@@ -812,11 +853,12 @@ class _PlayerCoverDeckState extends State<PlayerCoverDeck>
     required double scale,
     required double opacity,
     required bool interactive,
+    Key? slotKey,
     Key? coverKey,
     bool hidden = false,
     String? placeholderUrl,
   }) {
-    final Widget card = interactive
+    Widget card = interactive
         ? _buildConfigurableMainContent(
             context,
             track,
@@ -828,6 +870,9 @@ class _PlayerCoverDeckState extends State<PlayerCoverDeck>
           )
         : _buildCoverCard(context, track, artDimension,
             placeholderUrl: placeholderUrl);
+    if (slotKey != null) {
+      card = KeyedSubtree(key: slotKey, child: card);
+    }
     return Positioned.fill(
       child: Center(
         child: Transform.translate(
