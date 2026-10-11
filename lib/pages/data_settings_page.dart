@@ -119,7 +119,7 @@ class DataSettingsPage extends StatelessWidget {
     try {
       bool success = await localDbProvider.exportDataToJson();
       if (!currentContext.mounted) return;
-      // 成功时系统文件选择器本身即反馈，不再弹 toast；失败仍需提示。
+      // 成功时系统文件选择器本身即反馈，失败才提示。
       if (!success) {
         notificationService.showErrorSnackBar(l10n.exportFailed);
       }

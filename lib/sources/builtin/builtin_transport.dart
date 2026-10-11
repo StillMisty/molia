@@ -21,7 +21,7 @@ class BuiltinHttpException implements Exception {
 ///
 /// 五个平台搜索与发现适配器共用同一条传输路径；测试通过注入 `http.Client`
 /// （`BuiltinSearch.transport = BuiltinTransport(client: MockClient(...))`）
-/// 覆盖 fetch 路径，不再依赖全局 `http.get`（旧实现 fetch 完全不可测）。
+/// 覆盖 fetch 路径。
 class BuiltinTransport {
   BuiltinTransport({http.Client? client, RequestCache? cache})
       : _client = client ?? http.Client(),
@@ -29,11 +29,11 @@ class BuiltinTransport {
 
   final http.Client _client;
 
-  /// 内置请求结果的统一缓存（single-flight + LRU + TTL）：发现适配器不再
-  /// 各自持有静态 RequestCache；测试注入新 transport 即得到干净缓存。
+  /// 内置请求结果的统一缓存（single-flight + LRU + TTL）：发现适配器共用
+  /// 此实例；测试注入新 transport 即得到干净缓存。
   final RequestCache _cache;
 
-  /// 统一结果缓存 TTL（发现/热搜等，与旧实现一致 5 分钟）。
+  /// 统一结果缓存 TTL（发现/热搜等，5 分钟）。
   static const Duration defaultCacheTtl = Duration(minutes: 5);
 
   /// 缓存入口：key 由调用方按 `{platform}:{type}:{params}` 约定拼装，
@@ -43,8 +43,7 @@ class BuiltinTransport {
 
   static const Duration defaultTimeout = Duration(seconds: 15);
 
-  /// 统一重试预算（含首次尝试）：平台搜索与发现共用同一策略，
-  /// 不再各自漂移（旧实现 2/3/5/3/3 并存）。
+  /// 统一重试预算（含首次尝试）：平台搜索与发现共用同一策略。
   static const int defaultRetries = 3;
 
   static const Map<String, String> defaultHeaders = {
@@ -55,7 +54,7 @@ class BuiltinTransport {
   /// GET + JSON 解码。
   ///
   /// [retryIf] 为响应级重试判定（「响应有效但为空页/业务码异常」的平台语义）；
-  /// 重试耗尽后返回最后一次结果，由调用方按原有分支处理。
+  /// 重试耗尽后返回最后一次结果，交由调用方处理。
   Future<dynamic> getJson(
     String url, {
     Map<String, String>? headers,

@@ -14,9 +14,8 @@ import '../providers/library_provider.dart';
 AppLocalizations _l10n(BuildContext context) =>
     AppLocalizations.of(context) ?? lookupAppLocalizations(const Locale('zh'));
 
-// .lxmc 导入流程（收藏页与设置页共用）
-
-/// 选文件 → 导入 → SnackBar 反馈（成功 N 首 / 失败原因）。
+/// .lxmc 导入流程（收藏页与设置页共用）：选文件 → 导入 → SnackBar 反馈
+/// （成功 N 首 / 失败原因）。
 Future<void> importLxmcFavoritesFlow(BuildContext context) async {
   final l10n = _l10n(context);
   final provider = context.read<LibraryProvider>();

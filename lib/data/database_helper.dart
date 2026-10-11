@@ -5,7 +5,6 @@ import 'package:sqflite/sqflite.dart';
 import 'dart:convert';
 import 'package:logger/logger.dart';
 
-// 本文件使用的 logger 实例
 final logger = Logger();
 
 /// 本地数据库：最近播放上下文（play_contexts）+ 资料库（播放历史 / 用户列表）
@@ -17,7 +16,7 @@ class DatabaseHelper {
   static const String _dbName = 'molia_database.db';
 
   /// v2：仅保留 play_contexts；升级时丢弃旧的 tracks/records/translations 表。
-  /// v3：新增 play_history / playlists / playlist_tracks（Wave 9 播放持久化）。
+  /// v3：新增 play_history / playlists / playlist_tracks（播放持久化）。
   /// v4：新增 play_events（听歌统计，事件级 append-only）。
   static const int _dbVersion = 4;
 
@@ -47,14 +46,13 @@ class DatabaseHelper {
       version: _dbVersion,
       onCreate: _onCreate,
       onUpgrade: _onUpgrade,
-      // 显式启用外键约束
+      // SQLite 外键默认关闭，这里显式开启
       onConfigure: (db) async {
         await db.execute('PRAGMA foreign_keys = ON');
       },
     );
   }
 
-  // 创建数据库表
   Future<void> _onCreate(Database db, int version) => createSchema(db);
 
   /// 全量建表（onCreate 与测试的 in-memory 库共用同一份 schema）。
@@ -75,7 +73,6 @@ class DatabaseHelper {
         lastPlayedAt INTEGER NOT NULL
       );
     ''');
-    // 为按 lastPlayedAt 排序添加索引
     await db.execute(
         'CREATE INDEX idx_play_contexts_lastPlayedAt ON play_contexts (lastPlayedAt);');
   }
@@ -220,7 +217,6 @@ class DatabaseHelper {
   }
 
   /// 获取最近的播放上下文，按 lastPlayedAt 降序排列。
-  /// 结果数量由 limit 限制。
   Future<List<Map<String, dynamic>>> getRecentPlayContexts(int limit) async {
     final db = await instance.database;
     logger.d(
@@ -272,7 +268,6 @@ class DatabaseHelper {
           context['contextType'] != null &&
           context['contextName'] != null &&
           context['lastPlayedAt'] is int) {
-        // 确保 lastPlayedAt 为 int
         batch.insert(
           'play_contexts',
           context, // 假定 map 结构与表列一致
@@ -296,6 +291,6 @@ class DatabaseHelper {
   Future<void> close() async {
     final db = await instance.database;
     db.close();
-    _database = null; // 重置静态变量
+    _database = null;
   }
 }

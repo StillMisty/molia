@@ -40,7 +40,6 @@ class LyricsDisplayProvider extends ChangeNotifier {
     }
     settings.addListener(_onSettingsChanged);
     _audioRoute?.addListener(_onA2dpChanged);
-    // 主题变化（莫奈 / 封面取色 / 亮度）→ 重新下发跟随主题的颜色。
     _themeListenable?.addListener(_onThemeChanged);
     unawaited(_syncOutputs());
   }

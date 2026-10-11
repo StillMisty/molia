@@ -7,7 +7,7 @@ import 'package:logger/logger.dart';
 import 'lyric_provider.dart';
 import 'qq_encoding.dart';
 
-/// Web-specific QQ歌词提供者，所有请求都通过 Cloudflare Worker 代理。
+/// Web 端 QQ 歌词提供者：所有请求都通过 Cloudflare Worker 代理。
 class QQProvider extends LyricProvider {
   static const String _defaultWorkerBaseUrl = 'https://lyrics.gojyuplus.com';
   static const Duration _requestTimeout = Duration(seconds: 12);
@@ -151,7 +151,6 @@ class QQProvider extends LyricProvider {
       return LyricsPayload(lyric: normalizeLyric(lyric));
     }
 
-    // 如果组合接口失败，回退到搜索 + 单独获取的流程
     return super.getLyrics(title, artist);
   }
 

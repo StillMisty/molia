@@ -17,7 +17,7 @@ enum FailureKind {
   playback,
 }
 
-/// 领域层统一失败模型：UI 只消费 kind / l10nKey / retryable，不再显示 `$e`。
+/// 领域层统一失败模型：UI 只消费 kind / l10nKey / retryable，不直接渲染异常对象。
 ///
 /// 纯 Dart 实现（不依赖 Flutter / HTTP 包）：`from` 通过类型名与字符串特征
 /// 归一化常见错误，避免领域层 import `lib/sources/**`（layering 硬规则）与
@@ -29,10 +29,10 @@ enum FailureKind {
 class SourceFailure implements Exception {
   final FailureKind kind;
 
-  /// 开发/日志用（英文前缀 + 原始错误），兼容期也直接作为提示正文。
+  /// 开发/日志用（英文前缀 + 原始错误）；失败提示文案会插入该原文。
   final String message;
 
-  /// UI 文案 key（阶段 1 起由 composition root 的 UiMessenger 映射 l10n）。
+  /// UI 文案 key（由 composition root 的 UiMessenger 映射 l10n）。
   final String? l10nKey;
 
   final Object? cause;

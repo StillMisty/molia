@@ -15,8 +15,8 @@ import 'any_listen_api.dart';
 import 'any_listen_config.dart';
 import 'any_listen_errors.dart';
 
-/// [AnyListenTestResult] 已迁入 domain；这里 export 保持既有
-/// `any_listen_source.dart` import 的下游零改动。
+/// [AnyListenTestResult] 定义在 domain；这里 export 保持既有
+/// `any_listen_source.dart` 下游 import 零改动。
 export '../../domain/models/any_listen.dart' show AnyListenTestResult;
 
 /// any-listen 歌词结果（对齐上游 Music.LyricInfo 的字段子集）。
@@ -175,8 +175,6 @@ class AnyListenSource {
   void _ensureUsable() {
     if (!isUsable) throw AnyListenException.notConfigured();
   }
-
-  // —————————————————————— 响应解析 ——————————————————————
 
   /// 解析搜索响应。
   ///

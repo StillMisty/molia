@@ -309,8 +309,8 @@ void main() {
     final double outStart = nearestOpacityOf(tester, outgoing);
     expect(outStart, closeTo(1.0, 0.01));
 
-    // 校正中途尝试拖动：右滑（history 末位 c 是可预览目标，旧实现会接受
-    // 这次拖动并提交 skipToPrevious），两次移动累计超过提交阈值后松手。
+    // 校正中途尝试拖动：右滑（history 末位 c 是可预览目标，这次拖动
+    // 本身满足提交条件），但校正期间必须被忽略。两次移动累计超过阈值后松手。
     final gesture = await tester.startGesture(
         tester.getCenter(find.byKey(Player.artworkSwipeHostKey)));
     await gesture.moveBy(const Offset(60, 0));

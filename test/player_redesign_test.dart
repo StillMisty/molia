@@ -16,7 +16,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import 'support/fakes.dart';
 
-/// 播放页重设计 smoke 测试：封面手势（点中间播放/暂停、点邻位切歌）、
+/// 播放页 smoke 测试：封面手势（点中间播放/暂停、点邻位切歌）、
 /// 可拖动进度滑杆、迷你/完整连续过渡与共享封面飞行。
 ///
 /// 曲目刻意不带封面 URL：避免测试中触发网络预取/取色路径。
@@ -270,7 +270,7 @@ void main() {
   }
 
   testWidgets('迷你⇄完整飞行：回退图标按两端真身插值（不再固定 64）', (tester) async {
-    // 回归：副本回退图标曾固定 64——迷你端真身 24、完整端真身（边长 × 0.35）
+    // 回归：副本回退图标固定 64 会与迷你端真身 24、完整端真身（边长 × 0.35）
     // 都不同，起手与落点各跳一次。
     emitThreeTracks();
     final expand = AnimationController(

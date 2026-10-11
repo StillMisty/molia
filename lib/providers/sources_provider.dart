@@ -25,17 +25,14 @@ class SourcesProvider extends ChangeNotifier {
   final SourceManager _manager;
 
   /// 独立连接测试兜底：页面可独立打开探测表单值，不依赖 manager.init()。
-  /// 与旧页面「无 manager 时自建 AnyListenSource」的行为等价。
   AnyListenSource? _testSource;
 
   /// 最近一次 [checkScriptUpdate] 的完整结果：供 [applyScriptUpdate] 复用，
-  /// 避免同一轮更新重复下载（对齐旧页面传 `check` 的行为）。
+  /// 避免同一轮更新重复下载。
   String? _pendingCheckId;
   ScriptUpdateCheck? _pendingCheck;
 
   void _onManagerChanged() => notifyListeners();
-
-  // ——————————————————————— 数据视图 ———————————————————————
 
   /// manager 是否已完成初始化（false 时页面显示加载态）。
   bool get initialized => _manager.initialized;
@@ -118,12 +115,10 @@ class SourcesProvider extends ChangeNotifier {
   /// any-listen 是否「已配置且启用」。
   bool get anyListenAvailable => _manager.anyListenAvailable;
 
-  // ——————————————————————— 命令 ———————————————————————
-
   /// 导入脚本（activate 为 true 或当前无激活脚本时自动激活）。
   ///
-  /// 纯委托：解析失败抛原始 FormatException、激活失败抛 LxEngineException，
-  /// 与旧页面对应的 `$e` 展示保持一致（URL 导入路径在 [importFromUrl] 归一化）。
+  /// 纯委托：解析失败抛原始 FormatException、激活失败抛 LxEngineException
+  /// （URL 导入路径在 [importFromUrl] 归一化）。
   Future<SourceScriptInfo> importScript(
     String script, {
     bool activate = false,
@@ -225,10 +220,8 @@ class SourcesProvider extends ChangeNotifier {
     super.dispose();
   }
 
-  // ——————————————————————— 领域转换 ———————————————————————
-
-  /// 把 sources 层异常归一化为可读的 [SourceScriptException]：
-  /// 与旧页面 `_readableError` 的文案保持一致（更新网页地址可识别）。
+  /// 把 sources 层异常归一化为可读的 [SourceScriptException]
+  /// （更新网页地址可识别）。
   SourceScriptException _wrap(Object error) {
     if (error is ScriptUpdateException) {
       return SourceScriptException(

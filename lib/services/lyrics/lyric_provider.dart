@@ -4,7 +4,7 @@ import 'package:html_unescape/html_unescape.dart';
 
 import 'lyrics_match.dart';
 
-/// 歌词提供者抽象类
+/// 歌词提供者。
 abstract class LyricProvider {
   /// 搜索歌曲，返回平台自己的歌曲ID（单个结果）
   Future<SongMatch?> search(String title, String artist);
@@ -45,7 +45,7 @@ abstract class LyricProvider {
   /// 获取歌词的完整流程（结构化：原文 + 翻译 + 罗马音 + 逐字）。
   ///
   /// 搜索 → 相似度挑选（时长 / 歌名 / 歌手，移植 LX `findMusic`）→ 取词 →
-  /// 规范化；任一环节失败返回 null（与旧 [getLyric] 语义一致）。
+  /// 规范化；任一环节失败返回 null。
   Future<LyricsPayload?> getLyrics(String title, String artist) async {
     try {
       final matches = await searchMultiple(title, artist, limit: 5);

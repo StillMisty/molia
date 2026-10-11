@@ -26,7 +26,7 @@ import 'support/fake_discover_api.dart';
 import 'support/fake_library_repository.dart';
 import 'support/fakes.dart';
 
-/// 「收藏」页 widget 测试（歌曲管理重设计版）。
+/// 「收藏」页 widget 测试。
 ///
 /// 覆盖：快捷播放（两次点击）、搜索按钮展开/收起、排序菜单、行尾 ♥、
 /// 左滑单曲管理（移除/删除记录）、长按多选批量操作、合集弹层
@@ -171,8 +171,8 @@ void main() {
 
     expect(find.text('还没有收藏记录'), findsOneWidget);
     expect(find.byIcon(Icons.favorite_border_rounded), findsOneWidget);
-    // 随机关闭；「播放全部」已移除（播放/暂停在顶栏）；搜索按钮在；
-    // 搜索栏/数量行不常驻；导入入口已移至合集弹层。
+    // 随机关闭；播放/暂停只在顶栏；搜索按钮在；
+    // 搜索栏/数量行不常驻；导入入口在合集弹层。
     final shuffleButton = tester.widget<M3EIconButton>(
       find.widgetWithIcon(M3EIconButton, Icons.shuffle_rounded),
     );
@@ -193,7 +193,7 @@ void main() {
     // 默认选中非空的 love（标题即切换器）。
     expect(find.text('love'), findsOneWidget);
 
-    // 随机播放：整表洗牌 + 随机起点（不再固定第一首）。
+    // 随机播放：整表洗牌 + 随机起点。
     await tester.tap(find.byIcon(Icons.shuffle_rounded));
     await tester.pumpAndSettle();
 
@@ -211,7 +211,7 @@ void main() {
 
     // 收藏非空时默认落在「我的收藏」。
     expect(headlines(tester), ['Song B', 'Song A', 'Song C']);
-    // 行尾不再有爱心按钮。
+    // 行尾无爱心按钮。
     expect(find.byIcon(Icons.favorite_border_rounded), findsNothing);
     expect(find.byIcon(Icons.favorite_rounded), findsNothing);
 

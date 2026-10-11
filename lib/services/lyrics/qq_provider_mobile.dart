@@ -149,7 +149,7 @@ class QQProvider extends LyricProvider {
       (await fetchLyrics(songId))?.lyric;
 
   /// 结构化歌词：QRC 路径优先（lx 同款参数，含翻译/罗马音/逐字），
-  /// 失败回退旧 `PlayLyricInfo`（无 qrc）与 `fcg_query_lyric_new.fcg`。
+  /// 失败依次回退 `PlayLyricInfo`（无 qrc）与 `fcg_query_lyric_new.fcg`。
   @override
   Future<LyricsPayload?> fetchLyrics(String songId) => fetchForMatch(
         SongMatch(songId: songId, title: '', artist: ''),

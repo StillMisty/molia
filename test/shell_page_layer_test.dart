@@ -9,8 +9,8 @@ import 'package:molia/app/app_shell.dart';
 /// 跳变（回归：「飞过头再复位」）。
 void main() {
   test('出场过渡结束：微缩归零（不再残留 0.97）', () {
-    // 回归：出场页曾长期停留在 outgoing 分支、静置在 0.97；若在此时点顶栏
-    // 封面进播放页，副本会飞向缩小后的矩形，交接时真身弹回。
+    // 回归：出场页停在 outgoing 分支、静置在 0.97 时，点顶栏封面进播放页，
+    // 副本会飞向缩小后的矩形，交接时真身弹回。
     final settled = shellPageLayerPresentation(
       selected: false,
       outgoing: true,

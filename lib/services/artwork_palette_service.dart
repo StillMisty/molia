@@ -162,8 +162,8 @@ class ArtworkPaletteService {
 
 /// 播放曲目 → 封面取色的接线：稳态延迟 + 过期丢弃 + 无封面回退。
 ///
-/// 由 composition root 挂到 `PlaybackProvider` 上（不再由播放页 widget
-/// 触发），因此任何页面/后台切歌都走同一条取色链路。
+/// 由 composition root 挂到 `PlaybackProvider` 上，因此任何页面/后台切歌都
+/// 走同一条取色链路。
 ///
 /// - 有封面：等待 [settleDelay]（连读切歌只取最后一首）后提取；提取失败
 ///   保持现色；

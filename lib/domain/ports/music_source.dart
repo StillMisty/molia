@@ -33,7 +33,7 @@ class CancelToken {
   void cancel() => _cancelled = true;
 }
 
-/// 最小歌词文档（阶段 2 由歌词子系统扩展；本波仅定义端口形状）。
+/// 最小歌词文档（音源端口只暴露正文 + 可选翻译）。
 class LyricsDoc {
   final String lyric;
   final String? translation;
@@ -59,7 +59,7 @@ class CollectionPage {
 
 /// 音源（目录源）：搜索 + 元数据 + 取链。任何可搜索/可播放的来源都实现它。
 ///
-/// 阶段 0 只定义契约，尚无实现；阶段 2 由 data/catalog 适配器落地。
+/// 当前实现：data/catalog 的 `SourceManagerMusicSource`（适配 `SourceManager`）。
 abstract interface class MusicSource {
   String get key;
   String get displayName;

@@ -1,4 +1,4 @@
-/// AI 推歌（Phase 2）领域模型：LLM 配置 / 推荐项 / 解析结果 / 批次。
+/// AI 推歌领域模型：LLM 配置 / 推荐项 / 解析结果 / 批次。
 ///
 /// 纯 Dart（无 Flutter/provider 依赖）；提示词构建与网络调用在
 /// `lib/services/ai/**`，模式状态机在 `lib/providers/ai_dj_provider.dart`。

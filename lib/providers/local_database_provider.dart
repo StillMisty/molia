@@ -10,8 +10,6 @@ import 'package:logger/logger.dart';
 final logger = Logger();
 
 /// 本地数据库状态：只保留「最近播放上下文（play_contexts）」。
-///
-/// 笔记 / 记录 / 翻译等数据表已随相关功能移除（见 wave6a）。
 class LocalDatabaseProvider with ChangeNotifier {
   final DatabaseHelper _dbHelper = DatabaseHelper.instance;
 

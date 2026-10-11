@@ -65,8 +65,6 @@ class TxDiscoverSource extends DiscoverSource {
         id: 'tx__131', name: '校园音乐人排行榜', bangid: '131'),
   ];
 
-  // ————————————————————————— 热榜 —————————————————————————
-
   @override
   Future<List<DiscoverTrack>> leaderboardTracks(String bangid) {
     return BuiltinSearch.transport.cached(
@@ -103,8 +101,6 @@ class TxDiscoverSource extends DiscoverSource {
           discoverTrackOf(track),
     ];
   }
-
-  // ————————————————————————— 歌单 —————————————————————————
 
   @override
   Future<DiscoverTags> tags() {

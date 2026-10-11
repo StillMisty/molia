@@ -5,7 +5,7 @@
 ///   绝不让 SocketException / FormatException 等原始异常泄漏到 UI；
 /// - UI 可依据 [AnyListenErrorKind] 给出不同提示，[retryable] 标记是否可重试。
 ///
-/// Wave 7：错误分类 [AnyListenErrorKind] 迁入 domain（`AnyListenTestResult`
+/// 错误分类 [AnyListenErrorKind] 定义在 domain（`AnyListenTestResult`
 /// 的公开字段类型），这里 export 保持既有 import 兼容。
 library;
 
@@ -100,7 +100,7 @@ class AnyListenException implements Exception {
   }
 
   /// 结构化错误 → 领域 [SourceFailure]：kind / retryable 全保留，
-  /// 鉴权失败不再在跨层时退化为 unknown。
+  /// 鉴权失败跨层仍保留为 unauthorized（不退化为 unknown）。
   ///
   /// 由 `SourceManager` 在 any-listen 路由分支调用（sources 层跨出到
   /// data/domain 的唯一转换点）；UI 直连的配置/测试流程仍消费本异常类型。

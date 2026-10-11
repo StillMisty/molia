@@ -79,7 +79,7 @@ class DiscoverProvider extends ChangeNotifier {
   /// 切换渠道（空值或同值忽略；允许无发现能力的渠道——相关能力降级）。
   ///
   /// 渠道变化经 [onChannelChanged] 通知组合根（搜索源跟随规则在那里，
-  /// 页面不再自行同步两个 provider）。
+  /// 页面不自行同步两个 provider）。
   void selectChannel(String sourceKey) {
     if (sourceKey.isEmpty || sourceKey == _channelKey) return;
     _channelKey = sourceKey;
@@ -144,8 +144,6 @@ class DiscoverProvider extends ChangeNotifier {
   Future<DiscoverDetail> loadPlaylistDetail(String rawId, int page) =>
       _guard((source) => source.playlistDetail(rawId, page));
 
-  // ——————————————————————— 播放 / 资料库 ———————————————————————
-
   /// 播放发现曲目队列（[index] 为起始下标）。
   Future<void> playTracks(
     List<DiscoverTrack> tracks,
@@ -207,8 +205,6 @@ class DiscoverProvider extends ChangeNotifier {
 
   /// 刷新我的列表（打开「加入列表」弹层前调用）。
   Future<void> refreshPlaylists() => _library.refreshPlaylists(force: true);
-
-  // ——————————————————————— 内部 ———————————————————————
 
   /// 指定平台的数据源；无内置发现能力时抛 [DiscoverFailure]。
   DiscoverSource _sourceFor(String sourceKey) {

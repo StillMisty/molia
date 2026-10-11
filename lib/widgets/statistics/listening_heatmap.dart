@@ -1,6 +1,6 @@
 /// 听歌热力图：日历热力图（hero）与星期 × 时段作息热力图。
 ///
-/// 形状与动效（issue #8 已拍板 + 首轮实机反馈修订）：
+/// 形状与动效：
 /// - 静默格子 = `M3EShapeKind.square`（小圆角方，密集可读），色阶主导：
 ///   空日 `surfaceContainerHighest`，有数据 `primary` 四档 alpha
 ///   （0.30 / 0.50 / 0.75 / 1.0）——**卡片底色必须比空日格低一档**
@@ -124,7 +124,7 @@ class _HeatCellState extends State<_HeatCell>
   static const double _hoverScale = 0.25;
 
   /// hover / press / 选中缩放：motor 弹簧（M3E standard spatial fast），
-  /// 替代原 120ms 进入 + 200ms 回弹的时长曲线，快速划过格子时带速度续跑。
+  /// 快速划过格子时带速度续跑。
   late final SingleMotionController _progress = SingleMotionController(
     motion: const MaterialSpringMotion.standardSpatialFast(snapToEnd: true),
     vsync: this,

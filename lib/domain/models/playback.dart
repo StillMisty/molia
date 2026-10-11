@@ -3,14 +3,14 @@ import 'equality.dart';
 import 'failure.dart';
 import 'track.dart';
 
-/// 播放后端种类（适配版：仅本地 just_audio 后端；any-listen 为预留）。
+/// 播放后端种类（当前仅本地 just_audio 后端；any-listen 为预留）。
 enum PlaybackBackendKind { local, anyListen }
 
-/// 播放上下文（名称/类型/封面），替代旧服务内部的 `_contextName`。
+/// 播放上下文（名称/类型/封面）。
 class PlaybackContext {
   final String? name;
 
-  /// 旧兼容层固定为 'lx'（本地音源）。
+  /// 本地音源固定为 'lx'。
   final String? type;
   final String? uri;
   final Uri? artwork;

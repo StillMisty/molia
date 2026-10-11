@@ -5,8 +5,8 @@ enum TrackOrigin { builtin, lx, anyListen, localFile }
 
 /// 曲目唯一标识：`sourceKey`（kw / kg / 脚本 key / any_listen）+ 平台内 id。
 ///
-/// `uri` 与旧 `SourceTrack.id` 的 `'$sourceKey:$id'` 约定保持一致，
-/// 阶段 1–3 的兼容层与持久化数据（历史记录里的 `sourceKey:id`）无需迁移。
+/// `uri` 与 `SourceTrack.id` 的 `'$sourceKey:$id'` 约定保持一致：
+/// 兼容层与持久化数据（历史记录里的 `sourceKey:id`）无需迁移。
 class TrackId {
   /// 音源 key：内置平台（kw/kg/tx/wy/mg）、脚本自定义 key 或 any_listen。
   final String sourceKey;
@@ -92,7 +92,7 @@ class AudioQuality {
 /// 领域层统一曲目模型（不可变）。
 ///
 /// 约定：
-/// - [payload] 语义等价于旧 `SourceTrack.raw`，承载原音源数据；
+/// - [payload] 语义同 `SourceTrack.raw`，承载原音源数据；
 ///   **必须原样回传给脚本 `musicUrl / lyric / pic`（不得改写、不得重建）**，
 ///   UI 与 providers 禁止读取该字段（见 docs/architecture.md §2.1/§5）。
 /// - 所有字段不可变；相等性按值比较（payload 深比较 + 引用短路），
@@ -107,7 +107,7 @@ class Track {
   final TrackOrigin origin;
   final List<AudioQuality> qualities;
 
-  /// 原音源数据（旧 `SourceTrack.raw`）：只在 data 层与音源引擎之间传递。
+  /// 原音源数据（`SourceTrack.raw` 的等价形态）：只在 data 层与音源引擎之间传递。
   /// 必须原样回传，UI 禁读。
   final Map<String, Object?> payload;
 

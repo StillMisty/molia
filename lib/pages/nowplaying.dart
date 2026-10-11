@@ -40,7 +40,7 @@ class _NowPlayingState extends State<NowPlaying>
   /// 播放器展开进度：0 = 迷你条、1 = 完整播放器（小屏）。
   ///
   /// motor expressive spatial 弹簧（380/0.8）：拖动跟手直接写进度，松手按
-  /// 手势速度续跑吸附（原实现为固定 360ms tween）。
+  /// 手势速度续跑吸附。
   late final SingleMotionController _expandController;
   bool _isMini = false;
 
@@ -192,7 +192,7 @@ class _NowPlayingState extends State<NowPlaying>
     return _cachedIsLargeScreen!;
   }
 
-  /// 圆点过渡带高度：内容顶部在这条带内渐隐，圆点浮于其中（不再单独占一行）。
+  /// 圆点过渡带高度：内容顶部在这条带内渐隐，圆点浮于其中。
   static const double _dotsBandHeight = 24;
 
   /// 歌词/队列小圆点切换行（常显；由父级 Positioned 撑满宽度）。
@@ -247,7 +247,6 @@ class _NowPlayingState extends State<NowPlaying>
     );
   }
 
-  // ---- 手势区域 ----
   // 切换（收缩→展开、展开→收起）：
   // - 播放器区域跟手上下拖拽；
   // - 队列/歌词已滑到顶部后继续下拉超过阈值（把内容往上推，不抢内容滚动）。
@@ -357,7 +356,7 @@ class _NowPlayingState extends State<NowPlaying>
       return _buildCollapsedLargeLayout(context);
     }
 
-    // 小屏：播放器高度随展开进度连续插值（不再跳变），
+    // 小屏：播放器高度随展开进度连续插值，
     // 下方是歌词/队列圆点切换行与内容区。
     return Scaffold(
       body: LayoutBuilder(
@@ -406,7 +405,6 @@ class _NowPlayingState extends State<NowPlaying>
                         ),
                       ),
                     ),
-                    // 圆点浮在过渡带里（不再单独占一行高度）。
                     Positioned(
                       top: 0,
                       left: 0,

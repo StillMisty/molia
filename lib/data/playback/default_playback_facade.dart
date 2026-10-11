@@ -45,11 +45,9 @@ class DefaultPlaybackFacade implements PlaybackFacade {
   @override
   StateListenable<Duration> get position => _position;
 
-  /// 阶段 1 适配版：只有本地后端。
+  /// 当前只有本地后端。
   @override
   bool get isLocal => true;
-
-  // 控制（委托 backend）
 
   @override
   Future<void> playTracks(PlaybackRequest request) => _backend.load(request);
@@ -114,8 +112,6 @@ class DefaultPlaybackFacade implements PlaybackFacade {
     _snapshot.dispose();
     _position.dispose();
   }
-
-  // 状态映射
 
   void _onBackendState() => _syncFromBackend();
 

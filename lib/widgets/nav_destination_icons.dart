@@ -7,7 +7,7 @@ import 'molia_mark.dart';
 ///
 /// 按 M3 惯例成对使用「未选中空心、选中实心」：
 /// - 空心优先取圆角字形（如 `favorite_border_rounded`）；
-/// - 音符改用 Molia 标志组件（[MoliaMark] 描边/实心版），不再依赖字形；
+/// - 音符用 Molia 标志组件（[MoliaMark] 描边/实心版），不依赖字形；
 /// - 资料库没有圆角空心字形，退用 `_outlined` 变体与实心成对；
 /// - 空心的 `_outlined` 只应出现在本文件的未选中半对中（架构测试兜底）。
 extension ShellDestinationIcons on ShellDestination {

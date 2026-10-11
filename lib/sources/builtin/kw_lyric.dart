@@ -14,7 +14,7 @@ import 'zlib_stub.dart' if (dart.library.io) 'zlib_io.dart' as zlib_impl;
 ///   响应为 `TP=content` 包头的二进制（zlib → base64 → `yeelion` XOR）；
 /// - 行内 `<a,b[,c]>` 词时间按 `[kuwo:...]` 八进制偏移换算为 LX `<start,dur>`；
 /// - 重复时间行的后一次出现视为翻译行（带逐字标记 `isLyricx` 时）；
-/// - 兜底：`m.kuwo.cn/newh5/singles/songinfoandlrc`（旧 H5 JSON 接口）。
+/// - 兜底：`m.kuwo.cn/newh5/singles/songinfoandlrc`（平台 H5 JSON 接口）。
 class KwLyric {
   KwLyric._();
 
@@ -124,7 +124,7 @@ class KwLyric {
     );
   }
 
-  /// 旧 H5 JSON 兜底：`data.songinfo` + `data.lrclist`。
+  /// H5 JSON 兜底：`data.songinfo` + `data.lrclist`。
   static Future<BuiltinLyricResult?> _fetchH5(String songmid) async {
     try {
       final json = await lxHttpGet(
@@ -313,7 +313,7 @@ class KwLyric {
     );
   }
 
-  /// H5 兜底时间格式（旧实现：`mm:ss.xx`）。
+  /// H5 兜底时间格式（`mm:ss.xx`）。
   static String _formatH5Time(double seconds) {
     var m = seconds ~/ 60;
     var s = seconds % 60;

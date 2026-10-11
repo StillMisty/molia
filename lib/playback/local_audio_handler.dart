@@ -22,7 +22,7 @@ bool get isSystemMediaSessionSupported {
 
 /// 初始化系统媒体会话（后台播放 + 通知栏/锁屏/耳机键）。
 ///
-/// 平台不支持或初始化失败时返回 null，播放功能降级为原来的应用内播放，
+/// 平台不支持或初始化失败时返回 null，播放功能降级为应用内播放，
 /// 不阻塞启动。调用点应在 `runApp` 之前（audio_service 要求，保证冷启动
 /// 时媒体按钮事件能被处理）。
 ///
@@ -117,8 +117,6 @@ class LocalAudioHandler extends BaseAudioHandler with SeekHandler {
     MediaAction.skipToPrevious,
   };
 
-  // 系统控制入口（通知栏 / 锁屏 / 耳机键）：委托给 LocalPlaybackService
-
   @override
   Future<void> play() async {
     if (_service.hasTrack && !_service.isPlaying) {
@@ -164,8 +162,6 @@ class LocalAudioHandler extends BaseAudioHandler with SeekHandler {
     await _service.playQueueIndex(index);
     _syncFromService(force: true);
   }
-
-  // 状态映射
 
   void _syncFromService({bool force = false}) {
     final track = _service.currentSourceTrack;

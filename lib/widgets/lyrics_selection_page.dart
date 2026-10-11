@@ -36,7 +36,6 @@ class LyricsSelectionPage extends StatefulWidget {
 
 class _LyricsSelectionPageState extends State<LyricsSelectionPage> {
   late final List<LyricLine> _lyricLines;
-  // bool _isLoading = false; // isLoading can be final
   final bool _isLoading = false;
 
   /// 选中行下标（模型不可变，选中态属于页面状态）。
@@ -114,7 +113,6 @@ class _LyricsSelectionPageState extends State<LyricsSelectionPage> {
         Provider.of<SettingsService>(context, listen: false);
     final copyAsSingleLine = await settingsService.getCopyLyricsAsSingleLine();
 
-    // 根据设置格式化文本
     final String text;
     if (copyAsSingleLine) {
       // 复制为单行，用空格替换换行符
@@ -142,7 +140,7 @@ class _LyricsSelectionPageState extends State<LyricsSelectionPage> {
       return;
     }
 
-    // 检查行数限制
+    // 行数限制：超过 15 行不能生成海报
     if (selectedLyrics.length > 15) {
       Provider.of<NotificationService>(context, listen: false)
           .showSnackBar(l10n.posterLyricsLimitExceeded);
@@ -156,7 +154,6 @@ class _LyricsSelectionPageState extends State<LyricsSelectionPage> {
       return;
     }
 
-    // 导航到海报预览页面
     ResponsiveNavigation.showSecondaryPage(
       context: context,
       child: LyricsPosterPreviewPage(
@@ -239,15 +236,14 @@ class _LyricsSelectionPageState extends State<LyricsSelectionPage> {
             ),
         ],
       ),
-      // 进度订阅 position 独立通道：仅当高亮行号变化时重建，
-      // 不再随每次进度 tick 整页重建。
+      // 进度订阅走 position 独立通道：仅当高亮行号变化时重建，
+      // 避免每次进度 tick 整页重建。
       body: PositionLineIndexBuilder(
         position: playbackProvider.position,
         lineIndexFor: _getCurrentLineIndex,
         builder: (context, currentLineIndex) {
           return Column(
             children: [
-              // 歌词列表 - 包含歌曲信息的统一滚动
               Expanded(
                 child: ResponsivePageContainer(
                   pageType: ResponsivePageType.detail,
@@ -255,11 +251,10 @@ class _LyricsSelectionPageState extends State<LyricsSelectionPage> {
                     controller: _scrollController,
                     physics: const BouncingScrollPhysics(),
                     padding: const EdgeInsets.symmetric(vertical: 8),
-                    itemCount:
-                        _lyricLines.length + 1, // +1 for the song info header
+                    itemCount: _lyricLines.length + 1,
                     itemBuilder: (context, index) {
                       if (index == 0) {
-                        // 第一项：歌曲信息卡片
+                        // 列表首项固定为歌曲信息头部（itemCount = 歌词数 + 1）
                         return Container(
                           margin: const EdgeInsets.symmetric(
                               horizontal: 16, vertical: 8),
@@ -325,7 +320,6 @@ class _LyricsSelectionPageState extends State<LyricsSelectionPage> {
                           ),
                         );
                       } else {
-                        // 其余项：歌词行
                         final lyricIndex = index - 1;
 
                         // 计算当前行是否为连续选中组的首尾
@@ -333,11 +327,9 @@ class _LyricsSelectionPageState extends State<LyricsSelectionPage> {
                         bool isLastInGroup = false;
 
                         if (_selectedIndices.contains(lyricIndex)) {
-                          // 检查是否为组的第一行
                           isFirstInGroup = lyricIndex == 0 ||
                               !_selectedIndices.contains(lyricIndex - 1);
 
-                          // 检查是否为组的最后一行
                           isLastInGroup =
                               lyricIndex == _lyricLines.length - 1 ||
                                   !_selectedIndices.contains(lyricIndex + 1);
@@ -350,8 +342,7 @@ class _LyricsSelectionPageState extends State<LyricsSelectionPage> {
                           onTap: () => _toggleLineSelection(lyricIndex),
                           isFirstInGroup: isFirstInGroup,
                           isLastInGroup: isLastInGroup,
-                          isCurrentlyPlaying:
-                              lyricIndex == currentLineIndex, // 传递当前播放状态
+                          isCurrentlyPlaying: lyricIndex == currentLineIndex,
                         );
                       }
                     },
@@ -363,7 +354,6 @@ class _LyricsSelectionPageState extends State<LyricsSelectionPage> {
         },
       ),
 
-      // 底部操作栏
       bottomNavigationBar: Container(
         padding: EdgeInsets.only(
           left: detailLayout.horizontalPadding,
@@ -429,7 +419,6 @@ class _LyricsSelectionPageState extends State<LyricsSelectionPage> {
   }
 }
 
-// 简化的歌词行组件
 class _LyricTile extends StatelessWidget {
   final int index;
   final LyricLine line;
@@ -440,7 +429,6 @@ class _LyricTile extends StatelessWidget {
   final bool isCurrentlyPlaying;
 
   const _LyricTile({
-    // super.key, // Parameter 'key' is not used
     required this.index,
     required this.line,
     required this.isSelected,
@@ -454,7 +442,6 @@ class _LyricTile extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
 
-    // 计算圆角
     BorderRadius borderRadius;
     if (isSelected) {
       borderRadius = BorderRadius.only(

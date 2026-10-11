@@ -2,7 +2,7 @@ import 'dart:async';
 
 /// 请求级缓存：single-flight（并发同 key 只执行一次）+ LRU（容量上限）+ TTL。
 ///
-/// 施工图 docs/architecture.md §2.5.2：搜索 / 取链 / 歌词 / 封面共用同一实现，
+/// 搜索 / 取链 / 歌词 / 封面共用同一实现，
 /// key 由调用方按 `{type}:{source}:{...}` 约定拼装（本类不解析 key 语义）。
 ///
 /// 语义约定：

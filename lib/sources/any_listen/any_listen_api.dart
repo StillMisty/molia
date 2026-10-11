@@ -34,7 +34,6 @@ class AnyListenEndpoints {
 
   static const String apiPrefix = '/api';
 
-  // —— 已比对上游客端源码的握手端点（用于连接探测）——
   static const String hello = '$apiPrefix/ipc/hello';
   static const String serverId = '$apiPrefix/ipc/id';
   static const String auth = '$apiPrefix/ipc/ah';
@@ -42,7 +41,6 @@ class AnyListenEndpoints {
   /// 握手魔数，对应上游 IPC_CODE.helloMsg。
   static const String helloMagic = 'Hello~::^-^::~v1~';
 
-  // —— 以下为占位资源端点（TODO：真实协议为 WS IPC action）——
   /// TODO(any-listen): 对应 WS action `musicSearch`；
   /// 官方参数为 { name, page, limit, extensionId, source }。
   static const String musicSearch = '$apiPrefix/music/search';

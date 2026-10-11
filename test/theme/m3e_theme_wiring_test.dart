@@ -2,7 +2,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:material_3_expressive/material_3_expressive.dart';
 import 'package:material_ui/material_ui.dart';
 
-/// M3E-P2 主题接线测试：验证 App 壳迁移到 `M3EMaterialApp` 后，
+/// 主题接线测试：验证 App 壳经 `M3EMaterialApp` 承载后，
 /// ThemeProvider 的 ColorScheme 能正确映射为 M3EThemeData，且
 /// material_ui `Theme.of` 与 M3E `M3ETheme.of` 颜色保持一致。
 void main() {

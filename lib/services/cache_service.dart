@@ -11,14 +11,13 @@ export 'cache_storage.dart' show CachePartition, CacheUsage;
 /// 统一缓存门面：音频 / 歌词 / 封面三个分区的策略、统计与清理。
 ///
 /// 设计要点：
-/// - **不依赖 provider**：UI 只读策略、写入策略都直接走本服务；后续在
-///   composition root（main.dart）注册为 Provider 即可，本次先以单例
-///   [instance] 供播放服务与图片组件使用；
+/// - **不依赖 provider**：策略读写都直接走本服务；`main.dart` 以单例
+///   [instance] 注册为 Provider 供 UI 使用；
 /// - **策略持久化**（SharedPreferences，键名固定）：所有 getter 每次从
 ///   prefs 读取，setter 写入后立即触发对应动作，因此**无需重启**：
 ///   - 音频开关：播放时读取；
 ///   - 音频上限：setter 立即执行 [enforceAudioLimit]；
-///   - 歌词 TTL：取词时读取（缩短 TTL 后旧条目立即按过期处理）；
+///   - 歌词 TTL：取词时读取；
 ///   - 封面上限/过期：setter 通知监听者（`ArtworkCache`）立即 sweep；
 /// - **平台文件操作**走 [CacheStorage]（Web 为空实现），策略逻辑与
 ///   `dart:io` 解耦。
@@ -36,14 +35,13 @@ class CacheService {
   /// 全局单例（main.dart 注册前的默认入口）。
   static final CacheService instance = CacheService();
 
-  // --- 策略键名（固定，设置 UI / 测试共用） ---
+  // 策略键名（固定，设置 UI / 测试共用）
   static const String keyAudioEnabled = 'cache_audio_enabled';
   static const String keyAudioMaxMb = 'cache_audio_max_mb';
   static const String keyLyricsTtlDays = 'cache_lyrics_ttl_days';
   static const String keyArtworkMaxObjects = 'cache_artwork_max_objects';
   static const String keyArtworkStaleDays = 'cache_artwork_stale_days';
 
-  // --- 默认值 ---
   static const bool defaultAudioEnabled = true;
   static const int defaultAudioMaxMb = 1024;
   static const int defaultLyricsTtlDays = 30;
@@ -63,10 +61,6 @@ class CacheService {
 
   final List<void Function(CachePartition)> _policyListeners = [];
   final List<void Function(CachePartition)> _clearListeners = [];
-
-  // ---------------------------------------------------------------------------
-  // 策略读写
-  // ---------------------------------------------------------------------------
 
   /// 是否启用音频边播边缓存（默认 true）。
   Future<bool> audioEnabled() async =>
@@ -118,10 +112,6 @@ class CacheService {
     _notify(CachePartition.artwork);
   }
 
-  // ---------------------------------------------------------------------------
-  // 用量 / 清理
-  // ---------------------------------------------------------------------------
-
   /// 分区用量（字节 + 条数）。
   Future<CacheUsage> usage(CachePartition partition) async {
     switch (partition) {
@@ -155,10 +145,6 @@ class CacheService {
       await clear(partition);
     }
   }
-
-  // ---------------------------------------------------------------------------
-  // 分区维护
-  // ---------------------------------------------------------------------------
 
   /// 音频 LRU 淘汰（每次播放写入后 / 修改上限后调用）。
   Future<int> enforceAudioLimit() async {
@@ -229,9 +215,7 @@ class CacheService {
     return '${truncated}_$hash';
   }
 
-  // ---------------------------------------------------------------------------
-  // 策略变更监听（ArtworkCache 用）
-  // ---------------------------------------------------------------------------
+  // 策略变更监听（ArtworkCache 用）。
 
   void addPolicyListener(void Function(CachePartition) listener) {
     if (!_policyListeners.contains(listener)) _policyListeners.add(listener);
@@ -269,10 +253,6 @@ class CacheService {
       }
     }
   }
-
-  // ---------------------------------------------------------------------------
-  // 内部实现
-  // ---------------------------------------------------------------------------
 
   Future<CacheUsage> _dirUsage(String? dir) async {
     if (dir == null) return CacheUsage.zero;

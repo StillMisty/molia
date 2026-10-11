@@ -14,7 +14,6 @@ class SettingsService {
   Future<bool> getCopyLyricsAsSingleLine() async {
     final valueString =
         await _secureStorage.read(key: _copyLyricsAsSingleLineKey);
-    // 解析字符串为 bool；null 时默认 false。
     return valueString?.toLowerCase() == 'true';
   }
 

@@ -32,8 +32,8 @@ AppLocalizations _l10n(BuildContext context) =>
 ///   默认落在有曲目的收藏，收藏为空时回退到第一个非空列表；
 /// - 曲目行：点击播放；行尾显示歌曲时长；左滑「加入列表 / 移除类操作」
 ///   （「加入列表」含我的收藏 / 播放历史 / 自建列表）；长按进入多选；
-/// - 标题右侧提供随机播放 / 搜索两个图标（「播放全部」已移除：播放/暂停在
-///   顶栏迷你条，整表播放走随机或点行）；搜索按钮展开搜索栏
+/// - 标题右侧提供随机播放 / 搜索两个图标（播放/暂停在顶栏迷你条，
+///   整表播放走随机或点行）；搜索按钮展开搜索栏
 ///   （日常不占用行高），排序与「调整顺序」收在搜索栏的 ⋮ 菜单里；
 /// - 自建列表支持「调整顺序」模式：长按拖动曲目落位即持久化；
 /// - 播放历史支持单条删除（左滑）与批量删除（多选）。
@@ -141,8 +141,6 @@ class _FavoritesPageState extends State<FavoritesPage> {
     if (mounted) setState(() {});
   }
 
-  // 状态恢复与持久化
-
   /// 冷启动恢复：合集顺序 + 上次选中的合集 + 各合集滚动位置。
   ///
   /// 三者就绪前 [_restoreDone] 为 false，默认合集回退不会执行——否则
@@ -218,8 +216,6 @@ class _FavoritesPageState extends State<FavoritesPage> {
     });
   }
 
-  // 搜索 / 多选 / 排序模式切换
-
   void _openSearch() {
     HapticFeedback.lightImpact();
     setState(() => _searching = true);
@@ -259,8 +255,6 @@ class _FavoritesPageState extends State<FavoritesPage> {
     setState(() => _reordering = false);
   }
 
-  // 合集解析
-
   String _displayName(
     AppLocalizations l10n,
     List<PlaylistInfo> playlists,
@@ -274,8 +268,6 @@ class _FavoritesPageState extends State<FavoritesPage> {
     }
     return l10n.favoritesPlaylistName;
   }
-
-  // 合集顺序与切换弹层
 
   /// 合集弹层条目：收藏 / 播放历史 / 各列表。按持久化顺序排列，
   /// 未记录的新列表按自然顺序（收藏 → 历史 → 列表）追加在末尾；
@@ -391,8 +383,6 @@ class _FavoritesPageState extends State<FavoritesPage> {
     unawaited(_collections.saveOrder(keys));
   }
 
-  // 播放操作
-
   Future<void> _playShuffled(List<PlaylistTrack> tracks, String name) {
     HapticFeedback.lightImpact();
     return context.read<LibraryProvider>().playPlaylistTracks(
@@ -403,7 +393,7 @@ class _FavoritesPageState extends State<FavoritesPage> {
         );
   }
 
-  /// 随机播放起点：在可见列表内随机取一首（不再固定第一首）。
+  /// 随机播放起点：在可见列表内随机取一首。
   int _randomStart(int count) =>
       count <= 0 ? 0 : _shuffleRandom.nextInt(count);
 
@@ -464,8 +454,6 @@ class _FavoritesPageState extends State<FavoritesPage> {
         .read<LibraryProvider>()
         .reorderPlaylistTracks(playlistId, reordered);
   }
-
-  // 单曲管理（左滑 / 多选共用）
 
   /// 复制曲目/历史到所选目标（我的收藏 / 播放历史 / 自建列表）。
   ///
@@ -612,8 +600,6 @@ class _FavoritesPageState extends State<FavoritesPage> {
     }
   }
 
-  // 多选批量操作
-
   List<PlaylistTrack> _selectedTracks(_CollectionView view) => [
         for (final index in _selection.selectedIndices)
           if (index >= 0 && index < view.visible.length) view.visible[index],
@@ -692,8 +678,6 @@ class _FavoritesPageState extends State<FavoritesPage> {
     if (copied && mounted) _selection.clear();
   }
 
-  // 构建
-
   @override
   Widget build(BuildContext context) {
     final provider = context.watch<LibraryProvider>();
@@ -713,7 +697,7 @@ class _FavoritesPageState extends State<FavoritesPage> {
     final displayName = _displayName(l10n, playlists, favoritesId, selected);
 
     // 选中合集的曲目视图：未缓存时 ensurePlaylistTracks 触发加载
-    // （provider 统一管理 loading），页面不再探测缓存内部。
+    // （provider 统一管理 loading，页面不探测缓存内部）。
     if (!isHistory && selectedPlaylistId != null) {
       provider.ensurePlaylistTracks(selectedPlaylistId);
     }
@@ -860,8 +844,6 @@ class _FavoritesPageState extends State<FavoritesPage> {
     }
     return result;
   }
-
-  // 头部（常驻 / 搜索 / 排序模式）
 
   Widget _buildIdleHeader(
     BuildContext context,
@@ -1129,8 +1111,6 @@ class _FavoritesPageState extends State<FavoritesPage> {
     );
   }
 
-  // 多选上下文操作
-
   List<Widget> _buildSelectionActions(
     BuildContext context,
     AppLocalizations l10n,
@@ -1248,8 +1228,6 @@ class _FavoritesPageState extends State<FavoritesPage> {
       ),
     );
   }
-
-  // 列表
 
   Widget _buildBody(
     BuildContext context,

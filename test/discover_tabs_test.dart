@@ -86,10 +86,10 @@ void main() {
   testWidgets('歌单 tab：歌单卡片 + 热门标签（渠道选择已上移到资料页）', (tester) async {
     await pumpTab(tester, const DiscoverPlaylistsTab());
 
-    expect(find.text('网易音乐'), findsNothing); // tab 内不再有平台选择
+    expect(find.text('网易音乐'), findsNothing); // tab 内无平台选择
     expect(find.text('歌单'), findsOneWidget); // 区块标题
     expect(find.text('测试歌单'), findsOneWidget); // 歌单卡片
-    // 列表不再提供直接导入：导入入口只在详情页。
+    // 导入入口只在详情页（列表不提供直接导入）。
     expect(find.byIcon(Icons.download_rounded), findsNothing);
     expect(find.text('华语'), findsWidgets); // 热门标签
     expect(find.text('全部'), findsOneWidget);
@@ -102,11 +102,10 @@ void main() {
     await tester.tap(find.text('测试歌单'));
     await tester.pumpAndSettle();
 
-    // 详情页：头部 + 曲目
     expect(find.text('歌单详情'), findsOneWidget);
     expect(find.text('歌曲A'), findsOneWidget);
     expect(find.text('播放全部'), findsOneWidget);
-    // 「播放全部」只在头部出现一次：顶栏不再有重复的播放图标。
+    // 「播放全部」只在头部出现一次：顶栏无重复播放图标。
     expect(find.byIcon(Icons.play_arrow_rounded), findsOneWidget);
 
     await tester.tap(find.text('歌曲A'));

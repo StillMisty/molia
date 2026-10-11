@@ -9,8 +9,7 @@ import '../../domain/ports/music_source.dart';
 import '../../domain/ports/source_registry.dart';
 import '../cache/request_cache.dart';
 
-/// 目录服务：聚合 [SourceRegistry] 与请求缓存，是 providers 的唯一搜索入口
-/// （施工图 §2.5.2 / §2.5.3）。
+/// 目录服务：聚合 [SourceRegistry] 与请求缓存，是 providers 的唯一搜索入口。
 ///
 /// 职责：
 /// - `search`：single-flight + LRU + TTL（默认 5min）搜索缓存；
@@ -51,7 +50,7 @@ class CatalogService {
   /// 取本地可播流；同 `source + payload + quality` 在 TTL 内共享结果。
   ///
   /// `quality` 为空时使用 `auto` 占位（实际音质由 SourceManager 按用户偏好
-  /// 决定，切换偏好后 key 不变，10min 内可能命中旧音质的 URL——见交付报告风险）。
+  /// 决定，切换偏好后 key 不变，10min 内可能命中旧音质的 URL）。
   Future<PlayableStream> resolve(Track track, {AudioQuality? quality}) {
     final source = _registry.forTrack(track);
     if (source == null) {
@@ -70,11 +69,11 @@ class CatalogService {
   void invalidateSearchPrefix(String prefix) =>
       _searchCache.invalidatePrefix(prefix);
 
-  /// 搜索缓存 key（施工图 §2.5.2：`search:{source}:{keyword}:{page}:{limit}`）。
+  /// 搜索缓存 key：`search:{source}:{keyword}:{page}:{limit}`。
   static String searchCacheKey(String sourceKey, SearchQuery query) =>
       'search:$sourceKey:${query.keyword}:${query.page}:${query.limit}';
 
-  /// 取链缓存 key（施工图 §2.5.2：`url:{source}:{hash(payload)}:{quality}`）。
+  /// 取链缓存 key：`url:{source}:{hash(payload)}:{quality}`。
   ///
   /// `payload` 用递归排序键的稳定序列化后 md5，保证相同内容生成相同 key；
   /// 无音质参数时以 `auto` 占位。

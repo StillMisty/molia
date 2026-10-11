@@ -61,7 +61,7 @@ const Map<String, List<String>> _platformIdFields = {
   'mg': ['copyrightId', 'songId', 'songmid', 'id'],
 };
 
-/// 未登记平台的取键顺序（与 `.lxmc` 导入的历史行为一致）。
+/// 未登记平台的取键顺序（`.lxmc` 导入共用此顺序）。
 const List<String> _defaultPlatformIdFields = [
   'songId',
   'songmid',
@@ -84,7 +84,7 @@ String platformRawIdOf(String sourceKey, Map<String, dynamic> raw) {
   return '';
 }
 
-/// 规范字段的别名顺序（与 `.lxmc` 导入前的历史实现一致：songmid 优先）。
+/// 规范字段的别名顺序（songmid 优先；沿用 `.lxmc` 导入的取键口径）。
 const List<String> _aliasIdFields = [
   'songmid',
   'hash',

@@ -51,9 +51,7 @@ class PlayStatisticsRepository {
   static const String _countablePredicate =
       "endedAt IS NOT NULL AND COALESCE(endReason, '') <> 'error'";
 
-  // ---------------------------------------------------------------------------
   // 写入（采集服务调用；所有写操作由调用方保证顺序）
-  // ---------------------------------------------------------------------------
 
   /// 开始一次播放事件，返回行 id（`endedAt` 为 null = 进行中）。
   Future<int> startEvent({
@@ -144,10 +142,6 @@ class PlayStatisticsRepository {
     await db.delete('play_events');
     _notifyChanged();
   }
-
-  // ---------------------------------------------------------------------------
-  // 查询
-  // ---------------------------------------------------------------------------
 
   /// 范围内汇总；[since]（epoch ms）为 null 表示全部历史。
   Future<PlayStatisticsSummary> summary({int? since}) async {
@@ -438,7 +432,7 @@ class PlayStatisticsRepository {
 
   /// 拆分 artist 串（`A, B` / `A/B` / `A&B` 等各计一位歌手）。
   ///
-  /// 不做 feat./别名归一（留给 Phase 2，原始串完整保留在事件行里）。
+  /// 不做 feat./别名归一（原始串完整保留在事件行里）。
   static List<String> splitArtistNames(String value) {
     return [
       for (final part in value.split(RegExp(r'[,，/、&;；]')))
@@ -484,10 +478,6 @@ class PlayStatisticsRepository {
         ),
     ];
   }
-
-  // ---------------------------------------------------------------------------
-  // 行映射
-  // ---------------------------------------------------------------------------
 
   PlayEvent _eventFromRow(Map<String, Object?> row) => PlayEvent(
         id: _intOf(row['id']),

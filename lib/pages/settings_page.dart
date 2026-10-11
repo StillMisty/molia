@@ -299,7 +299,7 @@ class _SettingsHomeViewState extends State<_SettingsHomeView> {
                       const SourcesPage(),
                     ),
                   ),
-                  // AI 推歌（Phase 2）：配置与开启入口（模式生效后推荐流出在发现页）。
+                  // AI 推歌：配置与开启入口（模式生效后推荐流出在发现页）。
                   if (!kIsWeb) ...[
                     const SizedBox(height: kSettingsElementSpacing),
                     SettingsNavTile(
@@ -431,7 +431,7 @@ class _SettingsHomeViewState extends State<_SettingsHomeView> {
     });
   }
 
-  /// 主题色显示：统一十六进制（预设色板已移除，任意取色无需色名）。
+  /// 主题色显示：统一十六进制（任意取色无需色名）。
   String _seedColorHex(Color color) {
     final rgb = color.toARGB32() & 0xFFFFFF;
     return '#${rgb.toRadixString(16).padLeft(6, '0').toUpperCase()}';

@@ -19,7 +19,7 @@ const double playerCoverFallbackIconRatio = 0.35;
 /// 顶栏 ↔ 播放页共享元素飞行控制器。
 ///
 /// **只共享封面**：顶栏与播放页各自持有封面真身，切换 tab 时两端封面隐藏，
-/// 由 Overlay 上的飞行副本完成 Rect / 圆角插值。歌名/进度不再参与共享飞行
+/// 由 Overlay 上的飞行副本完成 Rect / 圆角插值。歌名/进度不参与共享飞行
 /// （「所有元素一起飞」观感不成熟，反而廉价）。
 class PlayerMorphController extends ChangeNotifier {
   /// 顶栏封面锚点。
@@ -135,7 +135,7 @@ class PlayerMorphFlight extends StatelessWidget {
       animation: animation,
       builder: (context, _) {
         final value = animation.value;
-        // 弹簧原值即运动曲线（不再叠 easeInOutCubic）；归一化到飞行行程。
+        // 弹簧原值即运动曲线；归一化到飞行行程。
         final t = (value / flightPortion).clamp(0.0, 1.0);
         // 回退图标（无封面 / 加载中）尺寸随几何插值：起点匹配顶栏真身、
         // 落点匹配播放页真身。固定尺寸会在起手与交接两处各跳一次。
@@ -212,7 +212,7 @@ class PlayerMorphFlight extends StatelessWidget {
 
 /// 共享元素封面：直接用与顶栏/播放页同键的 [CachedNetworkImageProvider]，
 /// 命中 Flutter ImageCache 时同步出帧（`wasSynchronouslyLoaded`），
-/// 不再经过 FutureBuilder 造成首帧占位闪烁。
+/// 避免 FutureBuilder 首帧占位闪烁。
 ///
 /// 顶栏↔播放页飞行与播放页内迷你⇄完整飞行共用。
 class MorphCover extends StatefulWidget {
@@ -230,7 +230,7 @@ class MorphCover extends StatefulWidget {
   /// 未命中缓存/加载失败时的回退（默认主题容器色 + 音符图标）。
   final Widget? fallback;
 
-  /// 默认回退图标尺寸（[fallback] 为空时生效）；不传时保持历史固定值 32。
+  /// 默认回退图标尺寸（[fallback] 为空时生效）；不传时为 32。
   final double? fallbackIconSize;
 
   @override

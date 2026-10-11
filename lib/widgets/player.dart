@@ -40,8 +40,7 @@ class Player extends StatefulWidget {
 
   /// 小屏完整页的展开进度（0=迷你、1=完整）；为 null 时直接渲染完整布局。
   ///
-  /// 迷你/完整两套布局由同一控制器驱动：容器高度连续插值、封面飞行共享，
-  /// 不再是两棵独立子树的 150ms 纯淡入淡出。
+  /// 迷你/完整两套布局由同一控制器驱动：容器高度连续插值、封面飞行共享。
   final Animation<double>? expandAnimation;
 
   /// 迷你层被点击时请求展开（由宿主翻转 [expandAnimation]）。
@@ -65,7 +64,6 @@ class _PlayerState extends State<Player> with TickerProviderStateMixin {
   /// 最近一次展示的封面地址：仅供迷你占位与预取复用（取色不在此处触发）。
   String? _lastImageUrl;
 
-  // ---- 完整播放器布局（小屏） ----
   // 标题单行 38、进度排 56、两者间距 14。
   static const double _textSectionHeight = 38;
   static const double _seekSectionHeight = 56;
@@ -73,7 +71,7 @@ class _PlayerState extends State<Player> with TickerProviderStateMixin {
       _textSectionHeight + _seekSectionHeight + 14;
 
   /// 封面堆叠纵向余量：邻位封面缩放 0.78 + 旋转 0.05rad 后并不超出主封面
-  /// 高度，纵向只留阴影的一点余量（旧的 1.38 上下留白全在白占空间）。
+  /// 高度，纵向只留阴影的一点余量。
   static const double _artStackVerticalFactor = 1.06;
 
   /// 封面尺寸：宽向留出邻位封面（96），高向扣掉标题/进度排与阴影余量。
@@ -86,7 +84,7 @@ class _PlayerState extends State<Player> with TickerProviderStateMixin {
     return min(byWidth, byHeight);
   }
 
-  /// 完整播放器内容高度：播放器贴合内容，不再留出大片空白。
+  /// 完整播放器内容高度：高度贴合内容，避免大片留白。
   double _playerContentHeight(double art) =>
       art * _artStackVerticalFactor + _sectionsReservedHeight;
 
@@ -110,8 +108,8 @@ class _PlayerState extends State<Player> with TickerProviderStateMixin {
   bool _coverFlightToMini = false;
 
   /// 切歌入场：M3E no-overshoot spatial 弹簧（aospSpatial 380/1.0）驱动文字
-  /// 轻量上移落位 + 同源淡入，与封面切歌同帧启动；连续切歌带速度续跑
-  /// （原实现为 420ms easeOutCubic，无过冲是刻意保留的设计意图）。
+  /// 轻量上移落位 + 同源淡入，与封面切歌同帧启动；连续切歌带速度续跑。
+  /// 弹簧保持无过冲是刻意的设计意图。
   late SingleMotionController _trackEntrance;
 
   /// 页面可见性（TickerMode）：隐藏时标题入场直接落位，不冻结等回到页面再播。
@@ -250,8 +248,8 @@ class _PlayerState extends State<Player> with TickerProviderStateMixin {
     if (context.read<DataSaverService?>()?.blockNetworkArtwork ?? false) {
       return;
     }
-    // 与封面显示完全同键（共享 CacheManager、无缩放）：预取才真正命中
-    // 后续 AppNetworkImage / 飞行副本的 ImageCache 查询，不再白下载。
+    // 与封面显示完全同键（共享 CacheManager、无缩放）：预取才能命中
+    // 后续 AppNetworkImage / 飞行副本的 ImageCache 查询，避免无效下载。
     final provider = await artworkImageProvider(imageUrl);
     if (!mounted) return;
     await precacheImage(provider, context);
@@ -412,8 +410,8 @@ class _PlayerState extends State<Player> with TickerProviderStateMixin {
 
   /// 迷你 ⇄ 完整：同一控制器驱动容器高度、交叉淡化与封面飞行。
   ///
-  /// 两套布局始终挂载（完整层按最终高度布局、顶部对齐裁剪），高度过渡
-  /// 不再跳变；封面由页内飞行副本在两端锚点间插值，不再是两份封面各淡各的。
+  /// 两套布局始终挂载（完整层按最终高度布局、顶部对齐裁剪），高度连续过渡；
+  /// 封面由页内飞行副本在两端锚点间插值，两套布局共享同一次飞行。
   Widget _buildExpandableSmallScreenLayout(
     Track? displayTrack,
     PlaybackProvider playbackProvider,
@@ -431,7 +429,7 @@ class _PlayerState extends State<Player> with TickerProviderStateMixin {
         return AnimatedBuilder(
           animation: expand,
           builder: (context, _) {
-            // motor 弹簧进度即运动曲线（不再叠 easeInOutCubic）；截断 0..1：
+            // motor 弹簧进度即运动曲线；截断 0..1：
             // 高度不过冲，避免内容区随过冲回流；透明度由同一进度派生。
             final double t = expand.value.clamp(0.0, 1.0);
             final double height = lerpDouble(miniPlayerHeight, fullHeight, t)!;
@@ -596,7 +594,7 @@ class _PlayerState extends State<Player> with TickerProviderStateMixin {
     );
   }
 
-  /// 播放模式：与收藏同一套简单图标按钮（不再用双层错位底片）。
+  /// 播放模式：与收藏同一套简单图标按钮。
   Widget _buildModeButton(
       BuildContext context, PlayMode mode, VoidCallback onPressed) {
     final l10n = AppLocalizations.of(context);
@@ -690,7 +688,7 @@ class _PlayerState extends State<Player> with TickerProviderStateMixin {
     return '$minutes:$seconds';
   }
 
-  /// 标题/作者：单行「歌名 · 作者」+ 无过冲轻量入场（420ms、上移 14px）。
+  /// 标题/作者：单行「歌名 · 作者」+ 无过冲轻量入场（上移 14px）。
   Widget _buildTrackInfo(
     BuildContext context,
     Track? displayTrack,
@@ -805,7 +803,6 @@ class _PlayerState extends State<Player> with TickerProviderStateMixin {
               ],
             ),
           ),
-          // Control Buttons - 响应式设计
           _buildResponsiveControlButtons(context, playback, isPlaying),
                 ],
               ),
@@ -945,7 +942,7 @@ class _PlayerState extends State<Player> with TickerProviderStateMixin {
       variant: M3EIconButtonVariant.standard,
       size: size,
       visualSize: visualSize,
-      // 图标颜色交给 standard 变体默认值（不再手写 primary 强调）。
+      // 图标颜色交给 standard 变体默认值。
       icon: Icon(icon),
       onPressed: onPressed,
     );
@@ -1024,7 +1021,7 @@ class _PlayerState extends State<Player> with TickerProviderStateMixin {
             artExternalPaddingVertical;
         artContentAvailableWidth = max(0, artContentAvailableWidth);
         artContentAvailableHeight = max(0, artContentAvailableHeight);
-        // 纵向同样只留阴影余量（与小屏一致，不再白占空间）。
+        // 纵向同样只留阴影余量（与小屏一致）。
         double artDimension = min(artContentAvailableWidth,
             artContentAvailableHeight / _artStackVerticalFactor);
         artDimension = max(0, artDimension);
@@ -1065,8 +1062,8 @@ class _PlayerState extends State<Player> with TickerProviderStateMixin {
 /// `context.select` 必须发生在组件自身 build 中（State.context 在布局阶段
 /// 使用会被 provider 断言拦截）。
 ///
-/// 收藏反馈只靠图标态（实心/空心），不再弹 Snackbar。
-/// 写路径唯一：`LibraryProvider.toggleFavoriteTrack`（播放页不再直连仓库）。
+/// 收藏反馈只靠图标态（实心/空心），不弹 Snackbar。
+/// 写路径唯一：`LibraryProvider.toggleFavoriteTrack`（播放页不直连仓库）。
 class _FavoriteButton extends StatelessWidget {
   const _FavoriteButton({
     this.size = M3EIconButtonSize.sm,
@@ -1109,7 +1106,7 @@ class _FavoriteButton extends StatelessWidget {
 
 /// 标题/作者单行块：「歌名 · 作者」，超长省略。
 ///
-/// 单行是为了给歌词/队列让出纵向空间（两行版本太占位置）。
+/// 单行是为了给歌词/队列让出纵向空间。
 ///
 /// 标题块不带左侧竖条：它与进度把手同宽、同色、同形，上下相邻时会被读成
 /// 重复元素（用户反馈的「两根竖条」），且形似可拖动的把手却不可交互；

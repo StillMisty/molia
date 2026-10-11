@@ -7,15 +7,14 @@ import 'package:motor/motor.dart';
 /// 固定行高列表的侧滑操作容器（reveal 语义）：
 /// 横向拖动露出动作按钮，松手按位移/速度吸附展开或收起。
 ///
-/// 自绘原因：列表为了精确 extent 改用 `ListView.builder(itemExtent:)`，
-/// 不再走 M3EList。动作配置沿用 [M3EListSwipeAction]，渲染与几何对齐
+/// 自绘原因：列表为了精确 extent 使用 `ListView.builder(itemExtent:)`。
+/// 动作配置沿用 [M3EListSwipeAction]，渲染与几何对齐
 /// M3E 列表规范（`M3EListDismissibleTheme`）：胶囊形图标按钮
 /// （高度 = 行高 − actionVerticalInset、半高圆角；中性 tonal、
 /// 主要/破坏性 filled），动作间距 / 边缘内边距 / 吸附阈值全部取主题。
 ///
 /// 吸附用 motor 有界弹簧（M3E standard spatial）：拖动跟手写 `value`，
-/// 松手按位移/速度吸附，`withVelocity` 让甩动带惯性续跑（旧实现只按
-/// ±350 阈值判定、时长固定 220ms）。
+/// 松手按位移/速度吸附，`withVelocity` 让甩动带惯性续跑。
 class SwipeRevealRow extends StatefulWidget {
   const SwipeRevealRow({
     super.key,

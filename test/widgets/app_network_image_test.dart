@@ -130,7 +130,7 @@ void main() {
         ));
 
     await tester.pumpWidget(build());
-    // 旧实现每次 build 都新建 managerOrNull() Future，FutureBuilder 会重置为
+    // manager Future 必须身份稳定：每次 build 新建会让 FutureBuilder 重置为
     // waiting 渲染占位；切歌动画逐帧重建封面 → 整段动画都是深色占位。
     expect(find.byType(FutureBuilder<CacheManager?>), findsNothing);
     expect(find.byType(CachedNetworkImage), findsOneWidget);

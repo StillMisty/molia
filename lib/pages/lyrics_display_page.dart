@@ -620,8 +620,6 @@ class _LyricsDisplayPageState extends State<LyricsDisplayPage>
         (LyricsPauseBehavior.clear, l10n.lyricsBehaviorClear),
       ];
 
-  // --- 通用行组件 ---
-
   Widget _sectionTitle(BuildContext context, String title) => Padding(
         padding: const EdgeInsets.fromLTRB(4, 20, 4, 8),
         child: Text(

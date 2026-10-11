@@ -3,7 +3,7 @@ import 'package:material_3_expressive/material_3_expressive.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:molia/services/notification_service.dart';
 
-/// M3E-P3-C 回归：NotificationService 内部改走 `M3ESnackbar.show` 后，
+/// 回归：NotificationService 经 `M3ESnackbar.show` 展示时，
 /// 仍能通过 home 宿主 context（ScaffoldMessenger 的 context 在 Overlay
 /// 之上不可用）把提示展示出来，并保持「同时只显示一条」语义。
 void main() {

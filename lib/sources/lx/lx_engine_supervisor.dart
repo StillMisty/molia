@@ -201,8 +201,6 @@ class LxEngineSupervisor {
     await _engine.close();
   }
 
-  // 内部实现
-
   /// invoke 统一入口：确保 ready → 执行 → 崩溃检测/触发重启。
   Future<T> _guard<T>(Future<T> Function() action) async {
     // Web stub：没有 isolate 可自愈，直接透传失败。

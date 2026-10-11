@@ -20,7 +20,7 @@ import 'lxmc_decoder.dart';
 /// 默认收藏列表的内部保留名（UI 显示时映射为本地化文案，不直接展示）。
 const String kFavoritesPlaylistName = '__favorites__';
 
-/// 资料库变更类型：provider 据此决定失效范围（收藏切换不再整体清缓存，
+/// 资料库变更类型：provider 据此决定失效范围（收藏切换只做局部刷新，
 /// 避免列表闪动/滚动位置丢失）。
 enum LibraryChangeKind {
   /// 播放历史变化。
@@ -106,8 +106,6 @@ class LibraryRepository {
     _lastChangePlaylistId = playlistId;
     if (!_changes.isClosed) _changes.add(null);
   }
-
-  // 播放历史
 
   /// 写入/更新时间播放记录（唯一键 `(sourceKey, songId)`），并裁剪到上限。
   Future<void> addHistoryEntry(PlayHistoryEntry entry) async {
@@ -214,8 +212,6 @@ class LibraryRepository {
     await db.delete('play_history');
     _notifyChanged(kind: LibraryChangeKind.history);
   }
-
-  // 用户列表
 
   Future<int> createPlaylist(String name) async {
     final db = await _db;
@@ -490,8 +486,6 @@ class LibraryRepository {
     );
   }
 
-  // 收藏（默认列表）
-
   Future<int> _ensureFavoritesPlaylist() async {
     final existing = await findPlaylistByName(kFavoritesPlaylistName);
     if (existing != null) return existing.id;
@@ -566,8 +560,6 @@ class LibraryRepository {
     if (playlist == null) return 0;
     return removeTracksFromPlaylist(playlist.id, keys, favoriteChange: true);
   }
-
-  // .lxmc 导入
 
   /// 导入 `.lxmc` 收藏夹：同名列表复用（重复导入幂等），逐曲 INSERT OR IGNORE。
   Future<LxmcImportResult> importLxmcBytes(
@@ -655,8 +647,6 @@ class LibraryRepository {
     final added = await addTracksToPlaylist(playlistId, tracks);
     return (playlistId: playlistId, added: added, total: tracks.length);
   }
-
-  // 行映射
 
   PlayHistoryEntry _historyFromRow(Map<String, Object?> row) =>
       PlayHistoryEntry(

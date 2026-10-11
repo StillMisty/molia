@@ -211,7 +211,6 @@ class _PlayerCoverDeckState extends State<PlayerCoverDeck>
   /// 封面按压反馈：按下缩放比例；进/出走 M3E 按压弹簧（见控制器注释）。
   static const double _pressScale = 0.96;
 
-  // ---- 横向拖动跟踪（从手指真实按下位置起算） ----
   double? _dragStartX;
   double? _dragStartY;
   bool _isHorizontalDragConfirmed = false;
@@ -280,7 +279,7 @@ class _PlayerCoverDeckState extends State<PlayerCoverDeck>
   /// 按压反馈控制器：0 = 未按、1 = 按到底（缩放 [_pressScale]）。
   ///
   /// M3E 按压弹簧（`M3EMotion.expressiveSpatialPress` 380/0.55）：按下即时、
-  /// 抬起带轻微回弹（替代原来的 110ms / 180ms 时长曲线）。
+  /// 抬起带轻微回弹。
   late SingleMotionController _pressController;
 
   /// 当前被按压的槽位；抬起回弹结束（[AnimationStatus.dismissed]）后清空。
@@ -366,7 +365,7 @@ class _PlayerCoverDeckState extends State<PlayerCoverDeck>
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    // 快照监听：切歌检测完全由通知驱动（build 期间不再判定切歌）。
+    // 快照监听：切歌检测完全由通知驱动（build 期间不判定切歌）。
     _bindPlaybackIfNeeded();
     // 页面可见性（tab 切换）：任一方向翻转都立即落位。
     _syncTickerMode();
@@ -403,7 +402,7 @@ class _PlayerCoverDeckState extends State<PlayerCoverDeck>
     _syncPlayState(playback);
   }
 
-  /// 播放态中心封面缩放同步：播放 → 1.0、暂停 → 0.98（300ms）。
+  /// 播放态中心封面缩放同步：播放 → 1.0、暂停 → 0.98。
   ///
   /// 由快照通知驱动（build 期间零写入），AnimatedBuilder 监听控制器重建。
   void _syncPlayState(PlaybackProvider playback) {
@@ -1085,8 +1084,7 @@ class _PlayerCoverDeckState extends State<PlayerCoverDeck>
     }
 
     // 方向判定：用「变化前」缓存的提示 + 新快照信息调纯函数（规则与优先级
-    // 见 player_cover_swap.dart）。据此，队列点选/跳转也能得到真实方向，
-    // 不再一律按向前处理。
+    // 见 player_cover_swap.dart）。据此，队列点选/跳转也能得到真实方向。
     final snapshot = playback.snapshot;
     final int direction = resolveCoverSwapDirection(
       from: oldTrack,
@@ -1583,7 +1581,7 @@ class _PlayerCoverDeckState extends State<PlayerCoverDeck>
   /// 邻位封面（压在当前封面之下；[onTap] 非空时可点击切歌）。
   ///
   /// 只渲染稳态几何（位置/旋转/尺寸固定），透明度由调用方按窗口/淡入
-  /// 计算——侧邻位不再有独立的位移/缩放入场演出。不参与 hit test 时
+  /// 计算；侧邻位无独立的位移/缩放入场演出。不参与 hit test 时
   /// （[onTap] 为空）忽略指针。[cardKey] 是身份语义 key（空闲淡换时同一
   /// 槽位并存新旧两张卡，测试按身份定位）；key 落在 SizedBox 卡本体上而不是
   /// 外层 KeyedSubtree——邻位点击测试用「GestureDetector.child is SizedBox」
@@ -1706,7 +1704,7 @@ class _PlayerCoverDeckState extends State<PlayerCoverDeck>
   /// 细描边 + 柔和阴影 + 圆角图。
   ///
   /// 统一走无缩放缓存键（与顶栏/迷你条/预加载一致），邻位封面升到中间
-  /// 只是 transform 插值，不再因缓存键不同重新解码、闪占位图。
+  /// 只是 transform 插值，不会因缓存键不同重新解码、闪占位图。
   /// [artworkUrlOverride] 供换图淡化渲染旧 URL（曲目身份不变、只换图片地址）。
   Widget _buildCoverCard(
     BuildContext context,
@@ -1769,7 +1767,7 @@ class _PlayerCoverDeckState extends State<PlayerCoverDeck>
   }) {
     return AnimatedBuilder(
       // 播放态缩放 × 按压反馈（两者相乘合成，互不覆盖）：播放态只用极轻微
-      // 的缩放，暂停时封面保持清晰（不再变暗 20%，那会让封面看起来像被禁用）。
+      // 的缩放，暂停时封面保持清晰（变暗 20% 会让封面看起来像被禁用）。
       animation: _centerScaleAnimation,
       builder: (context, child) {
         return Transform.scale(

@@ -8,9 +8,8 @@ import 'package:molia/providers/sources_provider.dart';
 import 'package:molia/sources/lx/lx_script_info.dart';
 import 'package:molia/sources/source_manager.dart';
 
-/// M3E-P3-C 回归：音源列表的 `M3EMenu` 操作菜单与 `M3EDialog` 删除确认
-/// 仍可通过文本定位并完成「打开 → 选择 → 取消」交互（旧版为
-/// PopupMenuButton + AlertDialog）。
+/// 回归：音源列表的 `M3EMenu` 操作菜单与 `M3EDialog` 删除确认
+/// 仍可通过文本定位并完成「打开 → 选择 → 取消」交互。
 ///
 /// 说明：脚本直接写入仓库（不激活引擎），避免 widget 测试环境缺少
 /// quickjs 桥接库导致激活失败。

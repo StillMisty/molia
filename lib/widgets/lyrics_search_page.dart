@@ -15,7 +15,6 @@ import '../l10n/app_localizations.dart';
 import '../services/notification_service.dart';
 import 'app_search_bar.dart';
 
-// 在页面中使用自己的数据结构表示搜索结果
 final _logger = Logger();
 
 class LyricsSearchResult {
@@ -76,7 +75,7 @@ class _LyricsSearchEntry {
 class LyricsSearchPage extends StatefulWidget {
   final String initialTrackTitle;
   final String initialArtistName;
-  final String trackId; // 保存选择的歌词时需要trackId
+  final String trackId; // 保存手动选择的歌词时用
 
   /// 当前曲目的平台 key（kw/kg/tx/wy/mg）：该平台提供者的分组置顶。
   final String? preferredSourceKey;
@@ -103,14 +102,11 @@ class _LyricsSearchPageState extends State<LyricsSearchPage> {
   bool _isFetchingLyric = false;
   String _currentQuery = '';
 
-  // 每个提供者的搜索状态和结果
   final Map<String, ProviderSearchState> _providerStates = {};
   final Map<String, List<LyricsSearchResult>> _providerResults = {};
 
-  // 提供者列表
   late final List<LyricProvider> _providers;
 
-  // 注入服务
   late NotificationService _notificationService;
 
   @override
@@ -137,20 +133,17 @@ class _LyricsSearchPageState extends State<LyricsSearchPage> {
             ...providers.where((p) => _sourceKeyOf(p.name) != preferred),
           ];
 
-    // 初始化每个提供者的状态
     for (final provider in _providers) {
       _providerStates[provider.name] = ProviderSearchState.idle;
       _providerResults[provider.name] = [];
     }
 
-    // 设置初始查询并执行第一次搜索
     _currentQuery =
         '${widget.initialTrackTitle} ${widget.initialArtistName}'.trim();
     _searchController.text = _currentQuery;
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
       _performSearch(_currentQuery);
-      // 首帧后请求焦点
       FocusScope.of(context).requestFocus(_searchFocusNode);
       // 选择全部文本方便替换
       _searchController.selection = TextSelection(
@@ -165,13 +158,11 @@ class _LyricsSearchPageState extends State<LyricsSearchPage> {
     super.dispose();
   }
 
-  /// 检查是否有任何提供者正在加载
   bool get _isAnyProviderLoading {
     return _providerStates.values
         .any((state) => state == ProviderSearchState.loading);
   }
 
-  /// 获取所有搜索结果（合并所有提供者）
   List<LyricsSearchResult> get _allResults {
     final results = <LyricsSearchResult>[];
     for (final provider in _providers) {
@@ -211,7 +202,6 @@ class _LyricsSearchPageState extends State<LyricsSearchPage> {
 
   Future<void> _performSearch(String query) async {
     if (!mounted || query.trim().isEmpty) {
-      // 如果查询为空，清除结果
       setState(() {
         _currentQuery = '';
         for (final provider in _providers) {
@@ -226,20 +216,17 @@ class _LyricsSearchPageState extends State<LyricsSearchPage> {
 
     setState(() {
       _currentQuery = query.trim();
-      // 重置所有提供者状态为加载中
       for (final provider in _providers) {
         _providerStates[provider.name] = ProviderSearchState.loading;
         _providerResults[provider.name] = [];
       }
     });
 
-    // 并行搜索所有提供者
     await Future.wait(
       _providers.map((provider) => _searchProvider(provider, _currentQuery)),
     );
   }
 
-  /// 搜索单个提供者
   Future<void> _searchProvider(LyricProvider provider, String query) async {
     const int resultsPerProvider = 3;
 
@@ -273,7 +260,6 @@ class _LyricsSearchPageState extends State<LyricsSearchPage> {
     }
   }
 
-  // 使用我们自己定义的LyricsSearchResult类型
   Future<void> _selectResult(LyricsSearchResult result) async {
     if (!mounted || _isFetchingLyric) return;
 
@@ -427,7 +413,6 @@ class _LyricsSearchPageState extends State<LyricsSearchPage> {
       ),
       body: Stack(
         children: [
-          // 初始状态提示
           if (!_isAnyProviderLoading &&
               allResults.isEmpty &&
               _currentQuery.isEmpty)
@@ -443,7 +428,6 @@ class _LyricsSearchPageState extends State<LyricsSearchPage> {
                 ),
               ),
             )
-          // 显示搜索结果（分组显示）
           else if (allResults.isNotEmpty || _isAnyProviderLoading)
             ListView.builder(
               padding: const EdgeInsets.only(top: 8.0, bottom: 16.0),
@@ -462,7 +446,6 @@ class _LyricsSearchPageState extends State<LyricsSearchPage> {
                 }
               },
             )
-          // 无结果状态（所有提供者都加载完成但没有结果）
           else if (!_isAnyProviderLoading &&
               allResults.isEmpty &&
               _currentQuery.isNotEmpty)
@@ -519,7 +502,6 @@ class _LyricsSearchPageState extends State<LyricsSearchPage> {
             ),
           ),
           const SizedBox(width: 8),
-          // 加载状态指示
           if (state == ProviderSearchState.loading)
             const SizedBox(
               width: 14,

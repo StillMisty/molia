@@ -2,7 +2,7 @@
 ///
 /// 职责：
 /// - 内存缓存 history / playlists / 列表曲目 / 收藏键，仓库变更（[LibraryRepository.changes]）
-///   时失效并重载（对齐「列表/历史查询结果在 provider 内做内存缓存」）；
+///   时失效并重载；
 /// - 把 [PlayHistoryEntry] / [PlaylistTrack] 还原为 [SourceTrack]（raw 原样带上）
 ///   并委托 [PlaybackProvider.playSourceTracks] 播放——播放时按需重新取链，
 ///   不持久化直链；
@@ -63,7 +63,7 @@ class LibraryProvider extends ChangeNotifier {
   bool get isPlaylistsLoading => _isPlaylistsLoading;
 
   /// 列表曲目视图：`tracks == null` 表示尚未加载；`loading` 表示加载中。
-  /// 页面只读视图并用 [ensurePlaylistTracks] 触发加载，不再探测缓存内部。
+  /// 页面只读视图并用 [ensurePlaylistTracks] 触发加载，不直接探测缓存内部。
   ({List<PlaylistTrack>? tracks, bool loading}) playlistTracksView(
           int playlistId) =>
       (
@@ -97,10 +97,6 @@ class LibraryProvider extends ChangeNotifier {
 
   bool isFavorite(String sourceKey, String songId) =>
       _favoriteKeys.contains('$sourceKey:$songId');
-
-  // -------------------------------------------------------------------------
-  // 缓存刷新
-  // -------------------------------------------------------------------------
 
   void _onRepositoryChanged() {
     if (_disposed) return;
@@ -277,9 +273,7 @@ class LibraryProvider extends ChangeNotifier {
     }
   }
 
-  // -------------------------------------------------------------------------
   // 播放接线（raw 原样 → SourceTrack → PlaybackProvider；按需重新取链）
-  // -------------------------------------------------------------------------
 
   /// 播放音乐历史（[entries] 的可见顺序即播放队列顺序；[index] 为起始下标）。
   ///
@@ -324,9 +318,7 @@ class LibraryProvider extends ChangeNotifier {
     );
   }
 
-  // -------------------------------------------------------------------------
   // 变更操作（仓库写 → changes 流触发缓存失效）
-  // -------------------------------------------------------------------------
 
   Future<void> deleteHistoryEntry(PlayHistoryEntry entry) async {
     // 乐观更新本地缓存（列表即时移除，不等待变更流回载）。
@@ -585,10 +577,6 @@ class LibraryProvider extends ChangeNotifier {
     ]);
     return result;
   }
-
-  // -------------------------------------------------------------------------
-  // 模型转换
-  // -------------------------------------------------------------------------
 
   SourceTrack _fromHistory(PlayHistoryEntry entry) => sourceTrackFromRaw(
         sourceKey: entry.sourceKey,

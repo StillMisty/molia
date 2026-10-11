@@ -2,7 +2,7 @@ import '../../domain/models/track.dart';
 import '../../sources/raw_track.dart';
 import '../../sources/source_track.dart';
 
-/// 旧 `SourceTrack` ↔ 领域 `Track` 互转（阶段 1–3 兼容层）。
+/// `SourceTrack` ↔ 领域 `Track` 互转。
 ///
 /// 不变量：`SourceTrack.raw` / `Track.payload` **原样透传**（同一引用），
 /// 取链/歌词/封面请求依赖平台字段（songmid/hash/copyrightId...）。
@@ -65,7 +65,7 @@ Artwork? _artworkFrom(String? coverUrl) {
   return Artwork(uri: uri);
 }
 
-/// 旧字符串来源 → 领域枚举（未知来源按脚本源处理，与本地播放语义一致）。
+/// 字符串来源 → 领域枚举（未知来源按脚本源处理，与本地播放语义一致）。
 TrackOrigin originFromLegacy(String origin) {
   switch (origin) {
     case 'builtin':
@@ -84,7 +84,7 @@ TrackOrigin originFromLegacy(String origin) {
   }
 }
 
-/// 领域枚举 → 旧字符串来源（保持 any-listen 的 `'any_listen'` 约定）。
+/// 领域枚举 → 字符串来源（保持 any-listen 的 `'any_listen'` 约定）。
 String originToLegacy(TrackOrigin origin) {
   switch (origin) {
     case TrackOrigin.builtin:

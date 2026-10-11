@@ -3,7 +3,7 @@ import 'package:material_3_expressive/material_3_expressive.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
-import 'package:path_provider/path_provider.dart'; // 确保导入
+import 'package:path_provider/path_provider.dart';
 import '../services/artwork_palette_service.dart';
 import '../services/notification_service.dart';
 import '../services/lyrics_poster_service.dart';
@@ -41,8 +41,8 @@ class LyricsPosterPreviewPage extends StatefulWidget {
 class _LyricsPosterPreviewPageState extends State<LyricsPosterPreviewPage> {
   bool _isLoading = true;
   bool _isOperating = false; // 保存或分享操作中
-  Uint8List? _posterBytes; // Store image bytes directly
-  String? _tempFilePath; // Store temporary file path for sharing
+  Uint8List? _posterBytes;
+  String? _tempFilePath;
   String? _errorMessage;
 
   /// 海报取色来源（跟随应用主题 / 跟随封面 / 自定义色），独立于全局主题。
@@ -158,14 +158,14 @@ class _LyricsPosterPreviewPageState extends State<LyricsPosterPreviewPage> {
         trackTitle: widget.trackTitle,
         artistName: widget.artistName,
         albumCoverUrl: widget.albumCoverUrl,
-        // 配色由取色来源解析出的单一方案映射（预设样式已移除）
+        // 配色由取色来源解析出的单一方案映射
         backgroundColor: palette.background,
         titleColor: palette.title,
         artistColor: palette.artist,
         lyricsColor: palette.lyrics,
         watermarkColor: palette.watermark,
         separatorColor: palette.separator,
-        fontFamily: uiFontFamily, // 传递字体族
+        fontFamily: uiFontFamily,
         watermarkText: appName,
       );
 
@@ -408,8 +408,7 @@ class _LyricsPosterPreviewPageState extends State<LyricsPosterPreviewPage> {
 
   @override
   Widget build(BuildContext context) {
-    final l10n = AppLocalizations.of(
-        context); // Keep for parts that work in _buildPosterContent
+    final l10n = AppLocalizations.of(context);
     final theme = Theme.of(context);
     final previewLayout = context.layoutType(ResponsivePageType.preview);
 
@@ -484,15 +483,13 @@ class _LyricsPosterPreviewPageState extends State<LyricsPosterPreviewPage> {
                       ),
                     ),
                     const SizedBox(height: 12),
-                    // 第二行：取色来源（跟随应用主题 / 跟随封面 / 自定义色）；
-                    // 预设样式已移除，配色统一由来源方案映射。
+                    // 第二行：取色来源（跟随应用主题 / 跟随封面 / 自定义色）
                     _buildColorSourceRow(l10n!, theme.colorScheme),
                     if (_colorSource == PosterColorSource.custom) ...[
                       const SizedBox(height: 8),
                       _buildCustomColorRow(l10n, theme.colorScheme),
                     ],
                     const SizedBox(height: 12),
-                    // 第三行：保存和分享按钮
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                       children: [

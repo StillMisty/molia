@@ -54,7 +54,8 @@ import 'sources/source_manager.dart';
 /// composition root 内的 UiMessenger 适配器：唯一持有 navigatorKey /
 /// scaffoldMessengerKey 的提示出口，把领域失败映射为 l10n 文案。
 ///
-/// provider 不再 import main.dart，错误提示统一经此注入（docs/architecture.md §2.1）。
+/// 错误提示统一经此注入；provider 不 import `main.dart`
+/// （docs/architecture.md §2.1）。
 class _AppUiMessenger implements UiMessenger {
   const _AppUiMessenger(this._notifications);
 
@@ -91,7 +92,7 @@ class _AppUiMessenger implements UiMessenger {
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
-  // 桌面端（Linux/Windows）初始化 sqflite FFI，保证本地笔记数据库可用
+  // 桌面端（Linux/Windows）初始化 sqflite FFI，保证本地数据库可用
   initDatabaseFactoryIfNeeded();
 
   // 桌面端本地播放后端（Windows/Linux: media_kit）
@@ -154,8 +155,8 @@ void main() async {
     artworkBlocked: () => dataSaver.blockNetworkArtwork,
   );
 
-  // 唯一 composition root：PlaybackProvider 不再 import main.dart，
-  // 错误提示（UiMessenger）与写库/预加载所需 Context 在此注入。
+  // 唯一 composition root：PlaybackProvider 的报错出口（UiMessenger）与
+  // 写库/预加载所需 Context 全部在此注入。
   // NotificationService 提前创建：UiMessenger 与 Provider 共用同一实例。
   final notificationService = NotificationService(
     scaffoldMessengerKey,
@@ -175,7 +176,7 @@ void main() async {
   await playStatisticsService.init();
   unawaited(playStatisticsRepository.closeStaleEvents());
   // 最近播放上下文（play_contexts）：提前创建，同一实例既进 Provider 树，
-  // 也直接注入 PlaybackProvider（不再经 navigatorKey 反查 provider）。
+  // 也直接注入 PlaybackProvider。
   final localDatabaseProvider = LocalDatabaseProvider();
   final playbackProvider = PlaybackProvider(
     facade: playbackFacade,
@@ -195,13 +196,13 @@ void main() async {
   );
 
   // 资料库（收藏/历史/列表）：AI 推歌把「收藏」当喜欢反馈，需要提前创建
-  // 并直接进 Provider 树（不再由树内 create 构造）。
+  // 并直接进 Provider 树。
   final libraryProvider = LibraryProvider(
     repository: libraryRepository,
     playbackProvider: playbackProvider,
   );
 
-  // AI 推歌（Phase 2）：配置（安全存储）+ OpenAI-compatible 客户端 +
+  // AI 推歌：配置（安全存储）+ OpenAI-compatible 客户端 +
   // 画像/生成服务 + 模式控制器。组合根把播放快照 / 进度接进控制器
   //（跳过判定与低水位续推都在控制器里）。
   final aiSettingsStore = AiSettingsStore();
@@ -365,7 +366,7 @@ void main() async {
         ChangeNotifierProvider.value(value: localDatabaseProvider),
         // 资料库（收藏/历史/列表）：顶层创建（AI 推歌读取收藏作为反馈）。
         ChangeNotifierProvider.value(value: libraryProvider),
-        // AI 推歌（Phase 2）：模式控制器 + 配置存储 + 生成服务。
+        // AI 推歌：模式控制器 + 配置存储 + 生成服务。
         ChangeNotifierProvider.value(value: aiDjProvider),
         Provider<AiSettingsStore>.value(value: aiSettingsStore),
         Provider<AiRecommendationService>.value(value: aiRecommendationService),
@@ -381,7 +382,7 @@ void main() async {
           ),
         ),
         // 发现页：热榜 / 歌单 / 热搜；播放与收藏复用上面两个 provider。
-        // 渠道变化 → 搜索源跟随的唯一规则点（页面不再同步两个 provider）。
+        // 渠道变化 → 搜索源跟随的唯一规则点（页面不自行同步两个 provider）。
         ChangeNotifierProvider(
           create: (context) => DiscoverProvider(
             playbackProvider: context.read<PlaybackProvider>(),
@@ -403,7 +404,7 @@ void main() async {
         Provider<CacheService>.value(value: CacheService.instance),
         Provider<NotificationService>.value(value: notificationService),
         Provider<SettingsService>(
-            create: (_) => SettingsService()), // Add this line
+            create: (_) => SettingsService()),
         // 省流模式：设置页读写开关/音质上限；取链与封面网关已在上方接线。
         ChangeNotifierProvider.value(value: dataSaver),
       ],

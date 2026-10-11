@@ -6,8 +6,8 @@ import 'package:material_ui/material_ui.dart';
 /// 注意：`M3ESnackbar.show` 需要能解析到根 Overlay 的 context，而
 /// `ScaffoldMessenger` 位于 Navigator 之上（其 context 没有 Overlay 祖先），
 /// 因此额外接收 [hostContextKey] —— main.dart 挂在 home 上的 GlobalKey。
-/// [scaffoldMessengerKey] 保留以兼容构造签名（当前不再直接展示 material
-/// SnackBar）。
+/// [scaffoldMessengerKey] 保留以兼容构造签名；提示只经 [hostContextKey]
+/// 走 M3ESnackbar 展示。
 class NotificationService {
   NotificationService(
     this.scaffoldMessengerKey, {
@@ -20,8 +20,7 @@ class NotificationService {
   final GlobalKey? hostContextKey;
 
   /// 通用提示（信息 / 错误）。错误语义通过 [isError] 标记与调用方时长体现；
-  /// M3E 的 `M3ESnackbar` 不提供按级别改容器色的 API（统一 inverseSurface），
-  /// 原 material 版的 redAccent 底色不再保留（已在迁移报告中记录）。
+  /// M3E 的 `M3ESnackbar` 不提供按级别改容器色的 API（统一 inverseSurface）。
   void showSnackBar(
     String message, {
     bool isError = false,
@@ -33,8 +32,7 @@ class NotificationService {
     if (context == null) {
       return;
     }
-    // M3ESnackbar 的默认控制器 present 时替换当前条，
-    // 等价于旧的 removeCurrentSnackBar + showSnackBar 组合。
+    // M3ESnackbar 的默认控制器 present 时替换当前条（不排队）。
     M3ESnackbar.show(
       context,
       message: message,

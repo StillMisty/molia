@@ -29,7 +29,6 @@ class _LibrarySearchTabState extends State<LibrarySearchTab>
   @override
   void initState() {
     super.initState();
-    // Add listener to sync text field with provider state
     final searchProvider = Provider.of<SearchProvider>(context, listen: false);
     _searchController.text = searchProvider.searchQuery;
     _searchController.addListener(_onSearchChanged);
@@ -45,7 +44,7 @@ class _LibrarySearchTabState extends State<LibrarySearchTab>
 
   void _onSearchChanged() {
     final searchProvider = Provider.of<SearchProvider>(context, listen: false);
-    // Only update provider if text actually changed to avoid loops
+    // 仅在文本真正变化时回写，避免与 provider 形成回环
     if (_searchController.text != searchProvider.searchQuery) {
       searchProvider.updateSearchQuery(_searchController.text);
     }
@@ -59,7 +58,7 @@ class _LibrarySearchTabState extends State<LibrarySearchTab>
       builder: (context, searchProvider, child) {
         final isSearchActive = searchProvider.isSearchActive;
 
-        // Sync controller if provider clears search
+        // provider 清空搜索时同步清空输入框（须等构建结束再动控制器）
         if (!isSearchActive && _searchController.text.isNotEmpty) {
           WidgetsBinding.instance.addPostFrameCallback((_) {
             if (!mounted) return;

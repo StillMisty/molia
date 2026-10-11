@@ -7,7 +7,7 @@ import '../../sources/source_manager.dart';
 import '../../sources/source_search_result.dart';
 import '../mapping/track_mapper.dart';
 
-/// `SourceManager` → 领域 `MusicSource` 适配器（阶段 2，施工图 §2.3.2）。
+/// `SourceManager` → 领域 `MusicSource` 适配器。
 ///
 /// 一个实例对应一个音源 key（builtin 平台 / 脚本自定义源 / any-listen），
 /// 所有操作转发给共享的 [SourceManager]，由后者完成具体路由。

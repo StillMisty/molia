@@ -1,7 +1,7 @@
 /// 音源种类。
 ///
-/// 本文件自定枚举（阶段 0 不触碰 `lib/sources/**`）；
-/// 阶段 2 与 `source_manager.dart` 的 `SourceKind` 迁移对齐。
+/// 领域层自定枚举（`lib/domain/**` 不依赖 `lib/sources/**`）；
+/// 与 `source_manager.dart` 的同名枚举由 data 层适配器互相映射。
 enum SourceKind { builtin, lx, anyListen }
 
 /// 音源能力位：UI 依据能力显隐控件，禁止散落 `if (isLocalPlayback)` 判断。

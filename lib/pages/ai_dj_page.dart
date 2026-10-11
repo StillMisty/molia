@@ -1,4 +1,4 @@
-/// AI 推歌页（Phase 2）：配置 + 模式开关 + 当前批次 + 反馈摘要。
+/// AI 推歌页：配置 + 模式开关 + 当前批次 + 反馈摘要。
 ///
 /// 入口：统计页右上角「AI 推歌」+ 设置 › 内容（Web 平台隐藏）。
 /// 模式状态机与播放协调在 [AiDjProvider]；本页只做展示与交互。
@@ -88,10 +88,6 @@ class _AiDjPageState extends State<AiDjPage> {
       ),
     );
   }
-
-  // ---------------------------------------------------------------------------
-  // 状态卡（模式开关 + 反馈 + 错误）
-  // ---------------------------------------------------------------------------
 
   Widget _statusCard(AppLocalizations l10n, AiDjProvider provider) {
     final scheme = Theme.of(context).colorScheme;
@@ -185,10 +181,6 @@ class _AiDjPageState extends State<AiDjPage> {
       ),
     );
   }
-
-  // ---------------------------------------------------------------------------
-  // 配置卡
-  // ---------------------------------------------------------------------------
 
   Widget _configCard(AppLocalizations l10n, AiDjProvider provider) {
     return M3ECard(
@@ -330,10 +322,6 @@ class _AiDjPageState extends State<AiDjPage> {
     });
   }
 
-  // ---------------------------------------------------------------------------
-  // 当前批次
-  // ---------------------------------------------------------------------------
-
   Widget _batchCard(AppLocalizations l10n, AiDjProvider provider) {
     final scheme = Theme.of(context).colorScheme;
     final batch = provider.currentBatch!;
@@ -386,10 +374,6 @@ class _AiDjPageState extends State<AiDjPage> {
       ),
     );
   }
-
-  // ---------------------------------------------------------------------------
-  // 操作
-  // ---------------------------------------------------------------------------
 
   Future<void> _start() async {
     final l10n = AppLocalizations.of(context)!;

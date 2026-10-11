@@ -571,7 +571,7 @@ class ResponsiveNavigation {
       context: context,
       barrierDismissible: barrierDismissible,
       barrierLabel: MaterialLocalizations.of(context).modalBarrierDismissLabel,
-      // 遮罩走主题 scrim（随亮度/纯黑变化），不再硬编码黑色。
+      // 遮罩走主题 scrim（随亮度/纯黑变化）。
       barrierColor:
           Theme.of(context).colorScheme.scrim.withValues(alpha: 0.54),
       // 路由时长 = 入场弹簧的落定时间（见 transitionBuilder 注释）。
@@ -670,8 +670,8 @@ class ResponsiveNavigation {
   }) {
     final spec = context.layoutType(pageType);
     final screenHeight = MediaQuery.sizeOf(context).height;
-    // 旧 showModalBottomSheet 的 maxHeight = 屏幕高 × modalMaxHeightFactor；
-    // 换算成 M3E 的顶部留白，保持「内容最高占屏比例」不变。
+    // modalMaxHeightFactor 是内容最高占屏比例；换算成 M3E 的顶部留白，
+    // 保持该比例不变。
     final topMargin = screenHeight * (1 - spec.modalMaxHeightFactor);
     final theme = M3ETheme.of(context).bottomSheetTheme.copyWith(
           compactTopMargin: topMargin,
@@ -680,8 +680,8 @@ class ResponsiveNavigation {
     return M3EBottomSheet.show<T>(
       context,
       theme: theme,
-      // 与旧 isScrollControlled 语义一致：初始展开到内容高度（上限为
-      // 屏幕高度减顶部留白），向下可回落到半屏 collapsed。
+      // 初始展开到内容高度（上限为屏幕高度减顶部留白），向下可回落到
+      // 半屏 collapsed。
       initialValue: M3EBottomSheetValue.expanded,
       showDragHandle: showDragHandle,
       onDismissRequest: onDismissRequest,

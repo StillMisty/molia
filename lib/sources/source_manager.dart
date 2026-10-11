@@ -79,7 +79,7 @@ class SourceManager extends ChangeNotifier {
 
   final LxScriptRepository repository = LxScriptRepository();
 
-  /// 引擎自愈包装（阶段 3）：超时/isolate 退出后自动按退避重启。
+  /// 引擎自愈包装：超时/isolate 退出后自动按退避重启。
   /// 构造参数仅用于测试注入（默认创建真实 supervisor，行为不变）。
   final LxEngineSupervisor _engine;
   final AnyListenSource _anyListenSource = AnyListenSource();
@@ -183,7 +183,6 @@ class SourceManager extends ChangeNotifier {
   /// any-listen（仅「已配置且启用」时出现）。
   List<SourceOption> get _searchableCandidates {
     final candidates = <SourceOption>[];
-    // 脚本扩展搜索源优先展示
     for (final decl in _activeSources.values) {
       if (decl.canSearch) {
         candidates.add(SourceOption(
@@ -194,7 +193,6 @@ class SourceManager extends ChangeNotifier {
         ));
       }
     }
-    // 内置平台搜索（需要脚本支持取链）
     for (final entry in BuiltinSearch.platforms.entries) {
       final decl = _activeSources[entry.key];
       if (decl != null && decl.canResolveUrl) {
@@ -206,8 +204,8 @@ class SourceManager extends ChangeNotifier {
         ));
       }
     }
-    // any-listen 远程音源：仅当已配置且启用时出现；未配置时列表与排序行为
-    // 与旧版本完全一致（新 key 未出现在顺序表中时自动排在末尾）。
+    // any-listen 远程音源：仅当已配置且启用时出现；新 key 未出现在顺序表中
+    // 时自动排在末尾。
     if (_anyListenSource.isUsable) {
       candidates.add(const SourceOption(
         key: AnyListenSource.sourceKey,
@@ -241,7 +239,8 @@ class SourceManager extends ChangeNotifier {
     // 内置平台（kw/kg/tx/wy/mg）的搜索/分页由 Dart 移植实现（BuiltinSearch），
     // 能力跟随「脚本可取链」，与 channels/_searchableCandidates 的 canSearch
     // 保持一致；脚本声明的 canSearch 只描述脚本扩展源自身的社区搜索 action。
-    // 两处不一致会静默拒绝渠道→搜索源同步（搜索停留在旧源，与展示渠道不符）。
+    // 两处不一致会静默拒绝渠道→搜索源同步（搜索停留在上一次选中的源，
+    // 与展示渠道不符）。
     final builtin = BuiltinSearch.isBuiltin(key);
     final builtinSearchable = builtin && (decl?.canResolveUrl ?? false);
     return SourceCapabilities(
@@ -256,7 +255,7 @@ class SourceManager extends ChangeNotifier {
   /// 按照 [order] 整理 [keys]，返回完整排序结果：
   /// 在顺序表中出现过的按表排列，未出现的保持原相对顺序追加在末尾。
   ///
-  /// 这样新导入的音源会自动排在末尾，无需迁移旧的持久化数据。
+  /// 这样新导入的音源会自动排在末尾，无需迁移已有的持久化数据。
   @visibleForTesting
   static List<String> applySourceOrder(List<String> keys, List<String> order) {
     final pending = <String>{...keys};
@@ -527,7 +526,7 @@ class SourceManager extends ChangeNotifier {
 
   /// 解析播放地址。requestedQuality 为空时使用默认音质偏好。
   Future<String> resolveUrl(SourceTrack track, {String? requestedQuality}) async {
-    // any-listen 曲目走远程服务器取链；其余曲目保持原有 LX 行为。
+    // any-listen 曲目走远程服务器取链；其余曲目走 LX 脚本取链。
     if (AnyListenSource.isAnyListenTrack(track)) {
       try {
         return await _anyListenSource.resolveUrl(track,
@@ -628,7 +627,7 @@ class SourceManager extends ChangeNotifier {
     return _builtinPic(track);
   }
 
-  /// 内置平台原生歌词回退（5 分钟缓存；不支持 / 失败返回 null）。
+  /// 内置平台原生歌词回退（不支持 / 失败返回 null）。
   Future<LxLyricResult?> _builtinLyric(SourceTrack track) async {
     if (!BuiltinSearch.isBuiltin(track.sourceKey)) return null;
     try {
@@ -648,7 +647,7 @@ class SourceManager extends ChangeNotifier {
     }
   }
 
-  /// 内置平台原生封面回退（5 分钟缓存；不支持 / 失败返回 null）。
+  /// 内置平台原生封面回退（不支持 / 失败返回 null）。
   Future<String?> _builtinPic(SourceTrack track) async {
     if (!BuiltinSearch.isBuiltin(track.sourceKey)) return null;
     try {

@@ -1,7 +1,7 @@
 /// 听歌统计页：范围切换 + 汇总数字块 + 日历/作息热力图 + 指标 + 榜单。
 ///
-/// 结构（issue #8 已拍板）：
-/// ① 范围切换（M3ESegmentedButton）+ 汇总数字块 ×4（M3E 不规则形状）
+/// 结构：
+/// ① 范围切换（filter 芯片）+ 汇总数字块 ×4
 /// ② hero 日历热力图（**全量历史**；范围切换只做高亮 + 数字联动；
 ///    值可切换 时长/次数）
 /// ③ 作息热力图（7×24，随范围过滤）
@@ -104,10 +104,6 @@ class _PlayStatisticsPageState extends State<PlayStatisticsPage> {
       ),
     );
   }
-
-  // ---------------------------------------------------------------------------
-  // 页面骨架
-  // ---------------------------------------------------------------------------
 
   Widget _content(AppLocalizations l10n, PlayStatisticsProvider provider) {
     final isWide = context.isLargeScreen;
@@ -214,10 +210,6 @@ class _PlayStatisticsPageState extends State<PlayStatisticsPage> {
     );
   }
 
-  // ---------------------------------------------------------------------------
-  // ① 汇总数字块（M3E 不规则形状）
-  // ---------------------------------------------------------------------------
-
   Widget _summaryBlocks(
     AppLocalizations l10n,
     PlayStatisticsProvider provider, {
@@ -294,10 +286,6 @@ class _PlayStatisticsPageState extends State<PlayStatisticsPage> {
         ? '${date.month}/${date.day}'
         : '${date.year}/${date.month}';
   }
-
-  // ---------------------------------------------------------------------------
-  // ② hero 日历热力图 + ③ 作息热力图
-  // ---------------------------------------------------------------------------
 
   Map<DateTime, int> _calendarValues(PlayStatisticsProvider provider) {
     final duration = provider.valueMode == PlayStatisticsValueMode.duration;
@@ -414,10 +402,6 @@ class _PlayStatisticsPageState extends State<PlayStatisticsPage> {
     );
   }
 
-  // ---------------------------------------------------------------------------
-  // ④ 指标行
-  // ---------------------------------------------------------------------------
-
   Widget _metricsSection(
     AppLocalizations l10n,
     PlayStatisticsProvider provider, {
@@ -513,10 +497,6 @@ class _PlayStatisticsPageState extends State<PlayStatisticsPage> {
     }
     return sourceKey;
   }
-
-  // ---------------------------------------------------------------------------
-  // ⑤⑥ 榜单（可点播）
-  // ---------------------------------------------------------------------------
 
   Widget _topTracksSection(
     AppLocalizations l10n,
@@ -630,10 +610,6 @@ class _PlayStatisticsPageState extends State<PlayStatisticsPage> {
     );
   }
 
-  // ---------------------------------------------------------------------------
-  // 播放与数据操作
-  // ---------------------------------------------------------------------------
-
   Future<void> _playTopTracks(
       List<PlayStatTrackEntry> entries, int index) async {
     if (entries.isEmpty) return;
@@ -740,11 +716,7 @@ class _PlayStatisticsPageState extends State<PlayStatisticsPage> {
   }
 }
 
-// -----------------------------------------------------------------------------
-// 局部组件
-// -----------------------------------------------------------------------------
-
-/// 汇总数字卡：常规 M3E 卡片（不再用不规则轮廓）+ 语义图标点缀。
+/// 汇总数字卡：常规 M3E 卡片 + 语义图标点缀。
 class _StatBlock extends StatelessWidget {
   const _StatBlock({
     required this.icon,

@@ -133,7 +133,7 @@ class SourceScriptException implements Exception {
   String toString() => message;
 }
 
-/// 音质通用显示名（覆盖原 `kxQualityDisplayName` 的音质文案与未知回退）。
+/// 音质通用显示名（文案与 `kxQualityDisplayName` 一致，含未知回退）。
 String qualityDisplayName(String quality) {
   switch (quality) {
     case 'flac24bit':

@@ -64,9 +64,7 @@ class LyricsState {
 
 /// 歌词会话模块：取词 → 缓存 → 解析（统一时间契约）→ 预取的唯一实现。
 ///
-/// 旧实现把这些步骤分别拼装在 LyricsWidget / LyricsSearchPage 内
-/// （widget 里 `new LyricsService()`、两套时间戳正则、失败路径重复取词）；
-/// 现在 UI 只调用 [load] / [preload] / [saveManual] 并渲染 [state]。
+/// UI 只调用 [load] / [preload] / [saveManual] 并渲染 [state]。
 class LyricsProvider extends ChangeNotifier {
   LyricsProvider({LyricsService? service})
       : _service = service ?? LyricsService();
@@ -129,7 +127,7 @@ class LyricsProvider extends ChangeNotifier {
 
   /// 手动选择歌词：写统一缓存；若仍是当前曲目则同步展示状态。
   ///
-  /// [translation] / [roma] / [lxlyric] 缺省时清空旧扩展行（旧行为）；
+  /// [translation] / [roma] / [lxlyric] 缺省时清空旧扩展行；
   /// 歌词搜索页透传平台结构化数据时则一并保留。
   Future<void> saveManual({
     required String trackId,

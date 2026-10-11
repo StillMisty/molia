@@ -32,12 +32,11 @@ class DataSaverService extends ChangeNotifier {
         _cellularProbe = cellularProbe,
         _cellularChanges = cellularChanges;
 
-  // --- 持久化键名（设置 UI / 测试共用） ---
+  // 持久化键名（设置 UI / 测试共用）
   static const String keyEnabled = 'data_saver_enabled';
   static const String keyQuality = 'data_saver_quality';
   static const String keyCovers = 'data_saver_covers';
 
-  // --- 默认值 ---
   static const bool defaultEnabled = false;
   static const String defaultQuality = '128k';
   static const bool defaultCovers = true;
@@ -155,10 +154,6 @@ class DataSaverService extends ChangeNotifier {
     _subscription = null;
     super.dispose();
   }
-
-  // ---------------------------------------------------------------------------
-  // 内部
-  // ---------------------------------------------------------------------------
 
   void _setOnCellular(bool value) {
     if (_onCellular == value) return;

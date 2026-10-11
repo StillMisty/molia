@@ -69,8 +69,6 @@ Uint8List aesEcbDecryptPkcs7(List<int> data, List<int> key) {
 String hexEncode(List<int> data) =>
     data.map((b) => b.toRadixString(16).padLeft(2, '0')).join();
 
-// QQ 音乐 zzcSign
-
 const _txPart1Indexes = [23, 14, 6, 36, 16, 40, 7, 19];
 const _txPart2Indexes = [16, 1, 32, 12, 19, 27, 8, 5];
 const _txScrambleValues = [
@@ -125,8 +123,6 @@ dynamic kwWbdDecodeData(String raw) {
   final plain = aesEcbDecryptPkcs7(data, base64.decode(kwWbdKeyBase64));
   return jsonDecode(utf8.decode(plain));
 }
-
-// 网易云 weapi / linuxapi
 
 // 与 LX crypto.js 一致：这些常量在 JS 侧先 btoa（base64 编码），
 // 原生 AES 模块再对 data/key/iv 做 base64 解码后使用，
@@ -204,8 +200,6 @@ String linuxapiParams(Object object) {
   );
   return hexEncode(cipher).toUpperCase();
 }
-
-// 网易云 eapi
 
 const _wyEapiKey = 'e82ckenh8dichen8';
 

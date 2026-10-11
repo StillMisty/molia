@@ -26,7 +26,7 @@ class _BackendStateNotifier extends ValueNotifier<BackendSnapshot>
   _BackendStateNotifier(super.value);
 }
 
-/// 本地播放后端：组合 [LocalPlaybackService]（服务本体不改），
+/// 本地播放后端：组合 [LocalPlaybackService]，
 /// 把服务状态映射为领域 [BackendSnapshot]，并把控制委托给服务。
 class LocalPlaybackBackend implements PlaybackBackend {
   LocalPlaybackBackend({
@@ -70,17 +70,15 @@ class LocalPlaybackBackend implements PlaybackBackend {
   @override
   StateListenable<BackendSnapshot> get state => _state;
 
-  // 解析器端口
-
   /// 领域解析：Track + 音质 → PlayableStream。
   Future<PlayableStream> resolveStream(Track track, [AudioQuality? quality]) =>
       _resolver(track, quality);
 
-  /// 旧服务解析器适配（`LocalPlaybackService` 的 `SourceUrlResolver`）：
+  /// 服务解析器适配（`LocalPlaybackService` 的 `SourceUrlResolver`）：
   /// SourceTrack → Track → PlayableStream → URL 字符串。
   ///
   /// main.dart 用 late 绑定把服务的解析回调接到本方法上，
-  /// 保证取链统一走领域解析器端口（阶段 2 可在其上叠加缓存/去重）。
+  /// 保证取链统一走领域解析器端口。
   Future<String> resolveLegacyUrl(SourceTrack track, {String? quality}) async {
     final stream = await _resolver(
       _toTrack(track),
@@ -88,8 +86,6 @@ class LocalPlaybackBackend implements PlaybackBackend {
     );
     return stream.uri.toString();
   }
-
-  // 控制委托
 
   @override
   Future<void> load(PlaybackRequest request) async {
@@ -168,14 +164,14 @@ class LocalPlaybackBackend implements PlaybackBackend {
     _emit();
   }
 
-  /// 可选能力：本地后端暂不支持（阶段 4+ 按需实现）。
+  /// 可选能力：本地后端暂不支持。
   @override
   Future<bool> toggleFavorite(Track track) async => throw const SourceFailure(
         kind: FailureKind.unsupported,
         message: '本地播放后端暂不支持收藏',
       );
 
-  /// 可选能力：本地后端暂不支持（阶段 4+ 按需实现）。
+  /// 可选能力：本地后端暂不支持。
   @override
   Future<void> setVolume(double value) async => throw const SourceFailure(
         kind: FailureKind.unsupported,
@@ -193,8 +189,6 @@ class LocalPlaybackBackend implements PlaybackBackend {
     _service.removeListener(_onServiceChanged);
     _state.dispose();
   }
-
-  // 状态映射
 
   void _onServiceChanged() => _emit();
 

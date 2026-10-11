@@ -7,8 +7,8 @@ import 'lyric_provider.dart';
 /// 等版本差异的歌词。判定维度：时长（±5s）、归一化歌名、歌手（含多歌手
 /// 排序）、专辑、版本词（live/remix/伴奏…）。
 ///
-/// 与 LX 的差异：LX 在无候选命中时放弃该来源；这里回退到首个候选
-/// （保持旧行为的下限——至少不比现状差，命中时更准）。
+/// 与 LX 的差异：LX 在无候选命中时放弃该来源；这里回退到首个候选，
+/// 保证命中时更准、未命中时至少不比第一个候选差。
 SongMatch? pickBestSongMatch(
   List<SongMatch> candidates, {
   required String title,

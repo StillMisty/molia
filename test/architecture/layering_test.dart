@@ -12,8 +12,8 @@ import 'package:flutter_test/flutter_test.dart';
 /// - R4 `lib/main.dart` 是唯一 composition root：不被任何其他 lib 文件 import；
 /// - R5 `lib/widgets/**`、`lib/pages/**` 禁止 import sources/playback。
 ///
-/// 白名单（阶段迁移豁免，只减不增）：Wave 7 已清空——违规必须修复，
-/// 不再接受新豁免；机制与「陈旧条目失败」检查保留，防止条目复活掩盖违规。
+/// 白名单已清空：违规必须修复，不接受新豁免；
+/// 仍保留「陈旧条目失败」检查，防止条目复活掩盖违规。
 const Map<String, Set<String>> _whitelist = {};
 
 const List<String> _domainForbidden = [
@@ -101,10 +101,6 @@ void main() {
     expect(stale, isEmpty, reason: '白名单条目已失效，请同步删除：\n${stale.join('\n')}');
   });
 }
-
-// ---------------------------------------------------------------------------
-// 扫描实现
-// ---------------------------------------------------------------------------
 
 List<String> _libFiles() {
   final dir = Directory('lib');

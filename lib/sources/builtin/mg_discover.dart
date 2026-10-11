@@ -75,8 +75,6 @@ class MgDiscoverSource extends DiscoverSource {
     DiscoverLeaderboard(id: 'mg__23604040', name: 'KTV榜', bangid: '23604040'),
   ];
 
-  // ————————————————————————— 热榜 —————————————————————————
-
   @override
   Future<List<DiscoverTrack>> leaderboardTracks(String bangid) {
     return BuiltinSearch.transport.cached(
@@ -194,8 +192,6 @@ class MgDiscoverSource extends DiscoverSource {
     if (minutes == null || seconds == null) return null;
     return Duration(minutes: minutes, seconds: seconds);
   }
-
-  // ————————————————————————— 歌单 —————————————————————————
 
   @override
   Future<DiscoverTags> tags() {
@@ -540,8 +536,6 @@ class MgDiscoverSource extends DiscoverSource {
       return null;
     }
   }
-
-  // ————————————————————————— 热搜 —————————————————————————
 
   @override
   Future<List<String>> hotSearches() {

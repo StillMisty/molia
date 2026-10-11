@@ -7,13 +7,7 @@ import 'package:logger/logger.dart';
 import '../domain/models/track.dart';
 import 'artwork_cache.dart';
 
-/// 图片预加载管理器
-///
-/// 功能:
-/// - 智能图片预加载队列
-/// - LRU 缓存管理
-/// - 并发控制
-/// - 优先级队列
+/// 图片预加载管理器：优先级队列、并发控制与 LRU 去重。
 class ImagePreloadManager {
   static final ImagePreloadManager _instance = ImagePreloadManager._internal();
   factory ImagePreloadManager() => _instance;
@@ -24,19 +18,14 @@ class ImagePreloadManager {
   /// 已缓存的图片 URL（LRU 缓存）
   final LinkedHashMap<String, DateTime> _cachedUrls = LinkedHashMap();
 
-  /// 正在加载的图片 URL
   final Set<String> _loadingUrls = {};
 
-  /// 预加载队列（优先级队列）
   final List<_PreloadTask> _queue = [];
 
-  /// 最大缓存数量
   static const int _maxCacheSize = 100;
 
-  /// 最大并发加载数
   static const int _maxConcurrent = 3;
 
-  /// 当前并发数
   int _currentConcurrent = 0;
 
   /// 入队预加载单张图片（内部使用）；[priority] 数值越大越优先。
@@ -56,8 +45,6 @@ class ImagePreloadManager {
   }
 
   /// 预加载当前播放相关的图片
-  ///
-  /// 包括：当前曲目、上一首、下一首、队列前几首
   Future<void> preloadPlaybackImages({
     required BuildContext context,
     String? currentAlbumArt,
@@ -65,16 +52,13 @@ class ImagePreloadManager {
     String? nextAlbumArt,
     List<String?>? queueAlbumArts,
   }) async {
-    // 收集所有需要预加载的任务，然后一次性添加到队列
-    // 这样避免在 async gaps 中使用 context
+    // 先收集任务再统一入队：避免在 async gap 之后使用 context。
     final tasks = <({String url, int priority})>[];
 
-    // 当前曲目最高优先级
     if (currentAlbumArt != null) {
       tasks.add((url: currentAlbumArt, priority: 100));
     }
 
-    // 下一首次高优先级
     if (nextAlbumArt != null) {
       tasks.add((url: nextAlbumArt, priority: 90));
     }
@@ -92,7 +76,6 @@ class ImagePreloadManager {
       }
     }
 
-    // 同步添加所有任务
     for (final task in tasks) {
       _enqueue(task.url, context, priority: task.priority);
     }
@@ -157,8 +140,6 @@ class _PreloadTask {
 }
 
 /// 专辑封面预加载策略
-///
-/// 根据播放状态智能预加载相关专辑封面
 class AlbumArtPreloadStrategy {
   final ImagePreloadManager _manager = ImagePreloadManager();
 

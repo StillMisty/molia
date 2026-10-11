@@ -49,10 +49,6 @@ class FakeLibraryRepository extends LibraryRepository {
     if (!_changes.isClosed) _changes.add(null);
   }
 
-  // -------------------------------------------------------------------------
-  // 播放历史
-  // -------------------------------------------------------------------------
-
   @override
   Future<void> addHistoryEntry(PlayHistoryEntry entry) async {
     _history.removeWhere(
@@ -108,10 +104,6 @@ class FakeLibraryRepository extends LibraryRepository {
     _history.clear();
     _changed(kind: LibraryChangeKind.history);
   }
-
-  // -------------------------------------------------------------------------
-  // 列表
-  // -------------------------------------------------------------------------
 
   @override
   Future<int> createPlaylist(String name) async {
@@ -315,10 +307,6 @@ class FakeLibraryRepository extends LibraryRepository {
     );
   }
 
-  // -------------------------------------------------------------------------
-  // 收藏
-  // -------------------------------------------------------------------------
-
   @override
   Future<Set<String>> favoriteKeys() async => Set.of(_favorites);
 
@@ -399,9 +387,7 @@ class FakeLibraryRepository extends LibraryRepository {
     );
   }
 
-  // -------------------------------------------------------------------------
-  // .lxmc 导入（复用真实解码器，落库为内存）
-  // -------------------------------------------------------------------------
+  // .lxmc 导入：复用真实解码器，落库为内存。
 
   @override
   Future<LxmcImportResult> importLxmcBytes(Uint8List bytes,

@@ -400,7 +400,7 @@ void main() {
     expect(nearestIgnore().ignoring, isFalse);
     expect(nearestOpacity().opacity, 1);
 
-    // 进入复制模式：选中态走工具栏 active（tonal 高亮），不再手写容器颜色。
+    // 进入复制模式：选中态由工具栏 active 承载（tonal 高亮）。
     await tester.tap(find.byIcon(Icons.edit_note_rounded));
     await tester.pump();
     expect(find.byIcon(Icons.playlist_play_rounded), findsOneWidget);

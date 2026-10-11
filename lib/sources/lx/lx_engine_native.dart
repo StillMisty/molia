@@ -338,8 +338,6 @@ class _LxResponse {
   const _LxResponse({required this.ok, this.data, this.error});
 }
 
-// Isolate 内部实现
-
 void _lxIsolateEntry(List<dynamic> args) {
   final mainPort = args[0] as SendPort;
   final config = Map<String, dynamic>.from(args[1] as Map);

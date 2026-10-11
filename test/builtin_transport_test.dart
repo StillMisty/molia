@@ -9,7 +9,7 @@ import 'package:molia/sources/builtin/kw_search.dart';
 import 'package:molia/sources/builtin/wy_hot_search.dart';
 
 /// 内置传输层：客户端注入、请求头/超时、响应级重试、JSON 解码；
-/// 并验证平台搜索 fetch 路径可被 MockClient 完整覆盖（旧实现不可测）。
+/// 并验证平台搜索 fetch 路径可被 MockClient 完整覆盖。
 void main() {
   late BuiltinTransport original;
 

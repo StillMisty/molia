@@ -4,7 +4,6 @@ import 'package:flutter/foundation.dart';
 
 /// 分类通知节流器 - 支持按类别独立节流
 ///
-/// 适用于需要区分不同类型状态更新的场景
 /// 例如：播放进度更新 vs 曲目切换
 class CategorizedNotifyThrottler {
   final VoidCallback notifyCallback;
@@ -21,7 +20,6 @@ class CategorizedNotifyThrottler {
     this.defaultInterval = const Duration(milliseconds: 50),
   });
 
-  /// 按类别请求通知
   void notify(String category) {
     final now = DateTime.now();
     final interval = categoryIntervals[category] ?? defaultInterval;
@@ -50,7 +48,6 @@ class CategorizedNotifyThrottler {
     notifyCallback();
   }
 
-  /// 释放资源
   void dispose() {
     for (final timer in _pendingTimers.values) {
       timer?.cancel();

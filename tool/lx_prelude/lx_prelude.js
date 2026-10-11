@@ -25,10 +25,6 @@
     log: console.log, info: console.info, warn: console.warn, error: console.error, debug: console.debug
   } : null;
 
-  // ---------------------------------------------------------------------------
-  // 基础工具
-  // ---------------------------------------------------------------------------
-
   function __lxErrMessage(err) {
     if (err == null) return 'unknown error';
     if (typeof err === 'string') return err;
@@ -54,9 +50,7 @@
     }
   }
 
-  // ---------------------------------------------------------------------------
-  // console（转发到宿主日志）
-  // ---------------------------------------------------------------------------
+  // console 转发到宿主日志。
 
   if (typeof console === 'undefined') {
     globalThis.console = {};
@@ -80,9 +74,7 @@
     console.dir = function () { console.log.apply(null, arguments); };
   })();
 
-  // ---------------------------------------------------------------------------
-  // 定时器（flutter_js 提供 setTimeout；这里补齐 clearTimeout/setInterval）
-  // ---------------------------------------------------------------------------
+  // 定时器：flutter_js 提供 setTimeout；这里补齐 clearTimeout/setInterval。
 
   (function () {
     var nativeSetTimeout = globalThis.setTimeout;
@@ -131,10 +123,6 @@
       }
     };
   })();
-
-  // ---------------------------------------------------------------------------
-  // 字处理 / Buffer 兼容层
-  // ---------------------------------------------------------------------------
 
   function __lxUtf8Encode(str) {
     str = String(str);
@@ -302,10 +290,6 @@
     globalThis.navigator = { userAgent: 'lx-music-mobile/2.0.0 (Molia)' };
   }
 
-  // ---------------------------------------------------------------------------
-  // utils
-  // ---------------------------------------------------------------------------
-
   function __lxNativeOrThrow(name) {
     var fn = globalThis[name];
     if (typeof fn !== 'function') throw new Error('native helper not available: ' + name);
@@ -344,10 +328,6 @@
     },
   };
 
-  // ---------------------------------------------------------------------------
-  // HTTP 桥接
-  // ---------------------------------------------------------------------------
-
   function __lxRequest(url, options, callback) {
     options = options || {};
     var reqId = 'http_' + (++__lxHttpSeq);
@@ -383,10 +363,6 @@
       __lxSendNative('httpCancel', { reqId: reqId });
     };
   }
-
-  // ---------------------------------------------------------------------------
-  // 请求事件调度（Dart -> JS）
-  // ---------------------------------------------------------------------------
 
   function __lxRespond(reqId, ok, data, error) {
     __lxSendNative('response', {
@@ -442,10 +418,6 @@
       __lxRespond(reqId, false, null, __lxErrMessage(e));
     }
   }
-
-  // ---------------------------------------------------------------------------
-  // 宿主入口
-  // ---------------------------------------------------------------------------
 
   globalThis.__lxSetup = function (info) {
     if (info && typeof info === 'object') {

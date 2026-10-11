@@ -147,7 +147,7 @@ void main() {
     // 恢复态展示会话里的模式。
     expect(provider.currentMode, PlayMode.shuffle);
 
-    // 恢复态切换模式（模式按钮同路径）：UI 立即跟随，不再「点不动」。
+    // 恢复态切换模式（模式按钮同路径）：UI 立即跟随。
     await provider.togglePlayMode();
     expect(provider.currentMode, PlayMode.singleRepeat);
     expect(provider.snapshot.mode, PlayMode.singleRepeat);

@@ -113,7 +113,7 @@ void main() {
 
     expect(tester.takeException(), isNull);
     expect(find.byType(LyricsQueueDots), findsOneWidget);
-    // 旧版图标切换器/收起按钮不应再出现。
+    // 图标切换器/收起按钮不应出现。
     expect(find.byIcon(Icons.queue_music_rounded), findsNothing);
     expect(find.byIcon(Icons.lyrics_rounded), findsNothing);
     expect(find.byIcon(Icons.expand_more_rounded), findsNothing);
@@ -181,7 +181,7 @@ void main() {
     await tester.pump(const Duration(milliseconds: 400));
     expect(playerHeight(tester), greaterThan(300), reason: '队列到顶下拉应展开');
 
-    // 展开态：队列页到顶下拉 = 收起（原行为）。
+    // 展开态：队列页到顶下拉 = 收起。
     await tester.dragFrom(
       tester.getCenter(find.byType(PageView)),
       const Offset(0, 140),

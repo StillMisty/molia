@@ -39,7 +39,7 @@ enum CoverSwapPhase {
 ///
 /// 语义约定：
 /// - [phase] 是拖动机械的唯一真相：`preview`/`committed` 时中心位由 [to]
-///   驱动（跟手或提交等待），渲染不再读取散落的布尔字段；
+///   驱动（跟手或提交等待），渲染不依赖散落的布尔字段；
 /// - [from]/[to]/[oldNeighbor]/[direction] 只在动画期间参与渲染；空闲帧
 ///   在会话真正结束（[phase] 为 idle）后才把 [from] 清空——settling 检测帧
 ///   必须保留刚建立的滑出身份，否则滑出卡全程不渲染、结束时直接 pop。

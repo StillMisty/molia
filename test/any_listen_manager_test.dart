@@ -59,7 +59,7 @@ void main() {
       await manager.init();
 
       // 跨出 sources 层后是 SourceFailure（未配置 → unsupported），
-      // 不再是 any-listen 内部异常类型。
+      // 不暴露 any-listen 内部异常类型。
       await expectLater(
         manager.search(AnyListenSource.sourceKey, 'x'),
         throwsA(isA<SourceFailure>()

@@ -144,7 +144,7 @@ void main() {
     expect(wyChannel.canSearch, isTrue);
     expect(f.provider.searchableSources.map((o) => o.key), contains('wy'));
 
-    // 描述符能力必须与渠道一致；修复前 search=false 会让
+    // 描述符能力必须与渠道一致；search=false 会让
     // 渠道→搜索源同步被静默拒绝（搜索停留在旧源）。
     final wyCaps = f.manager.capabilitiesFor('wy');
     expect(wyCaps.search, isTrue);

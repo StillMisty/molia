@@ -54,20 +54,18 @@ class _SearchSectionState extends State<SearchSection> {
 
         return Column(
           children: [
-            // 结果页不再有独立顶栏（搜索框自身即状态），仅保留少量间距。
+            // 结果页顶部无独立栏（搜索框自身即状态），只留少量间距。
             const SizedBox(height: 8),
 
-            // Loading indicator
             if (searchProvider.isSearching)
               const Padding(
                 padding: EdgeInsets.only(bottom: 8),
                 child: M3EProgressIndicator.linear(),
               ),
 
-            // Error banner with a retry action
             if (error != null) _buildErrorView(l10n, searchProvider),
 
-            // 搜索结果 using CustomScrollView for potential future sliver integration
+            // 搜索结果：用 CustomScrollView 承载（便于后续接入 sliver）
             Expanded(
               child: Scrollbar(
                 controller: _resultsScrollController,
@@ -246,7 +244,6 @@ class _SearchSectionState extends State<SearchSection> {
 }
 
 /// 搜索结果网格：展示封面/名称/类型，点击交给 SearchProvider 播放。
-/// （原 LibraryGrid 的内联精简版，去掉了长按外链与默认播放分支。）
 class _SearchResultsGrid extends StatelessWidget {
   final List<Map<String, dynamic>> items;
   final int gridCrossAxisCount;

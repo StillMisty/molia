@@ -185,7 +185,7 @@ class AiPendingBatchStore {
       final prefs = await _prefsOrNull();
       await prefs?.remove(storageKey);
     } catch (_) {
-      // 忽略。
+      // 清除失败：键仍在，下次启动按缓存命中处理。
     }
   }
 }

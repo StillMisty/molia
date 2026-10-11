@@ -23,7 +23,8 @@ class KgPic {
     String? name,
     String? singer,
   }) async {
-    // 修复歌曲 ID 存储变更导致的封面获取失败（LX `kg/pic.js` 同款兜底）。
+    // songmid 为 32 位 hash（歌曲 ID 存储口径变更）时，改用 audioId 推导
+    // album_audio_id 兜底（LX `kg/pic.js` 同款逻辑）。
     var albumAudioId = songmid;
     if (songmid.length == 32) {
       final audio = audioId ?? '';

@@ -7,7 +7,7 @@ import '../../domain/ports/source_registry.dart';
 import '../../sources/source_manager.dart';
 import 'manager_catalog_source.dart';
 
-/// `SourceManager` → 领域 `SourceRegistry` 适配器（阶段 2，施工图 §2.3.3）。
+/// `SourceManager` → 领域 `SourceRegistry` 适配器。
 ///
 /// 职责：
 /// - `descriptors`：由 `manager.searchableSources` 映射（顺序即用户排序结果，

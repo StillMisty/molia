@@ -168,7 +168,7 @@ class _GeneralSettingsPageState extends State<GeneralSettingsPage> {
             };
             await LanguageService.setAppLocale(locale);
             navigator.pop();
-            // 语言切换后界面立即生效，即反馈；不再弹成功 toast。
+            // 语言切换后界面立即生效，即反馈，无需再弹成功提示。
             onSuccess();
           } catch (e) {
             if (currentContext.mounted) {

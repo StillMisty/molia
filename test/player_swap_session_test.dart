@@ -9,7 +9,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import 'support/fakes.dart';
 
-/// 切歌检测的快照监听路径：deck 不再在自己的 build 里检测曲目变化，
+/// 切歌检测的快照监听路径：deck 不在自己的 build 里检测曲目变化，
 /// 而是监听 [PlaybackProvider] 通知、比较当前曲目 id 后开启切歌会话。
 ///
 /// 这里把 [PlayerCoverDeck] 直接挂在根上且 `displayTrack` 固定不变：

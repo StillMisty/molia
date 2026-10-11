@@ -74,7 +74,7 @@ class _LyricsWidgetState extends State<LyricsWidget>
   bool _autoScroll = true;
   bool _isCopyLyricsMode = false;
   PlayMode? _previousPlayMode;
-  int _previousLineIndex = -1; // Track last scrolled line
+  int _previousLineIndex = -1;
   final List<GlobalKey> _lineKeys = [];
   int? _pendingScrollIndex;
   int? _lastFallbackIndexAttempted;
@@ -109,7 +109,6 @@ class _LyricsWidgetState extends State<LyricsWidget>
   @override
   void initState() {
     super.initState();
-    // 初始默认开启自动滚动
     setState(() {
       _autoScroll = true;
     });
@@ -161,7 +160,7 @@ class _LyricsWidgetState extends State<LyricsWidget>
           _translations = const [];
           _romas = const [];
           _lastTrackId = null;
-          _autoScroll = true; // Default to auto-scroll when lyrics clear/load
+          _autoScroll = true;
           _previousLineIndex = -1;
           _syncLineKeys(0);
           _currentTrackDurationMs = null;
@@ -190,7 +189,7 @@ class _LyricsWidgetState extends State<LyricsWidget>
       _lyrics = [];
       _translations = const [];
       _romas = const [];
-      _autoScroll = true; // Default to auto-scroll when new lyrics load
+      _autoScroll = true;
       _previousLineIndex = -1;
       _syncLineKeys(0);
       _currentTrackDurationMs = trackDurationMs;
@@ -202,7 +201,6 @@ class _LyricsWidgetState extends State<LyricsWidget>
     // 取词/缓存/解析统一走歌词会话模块；此处只把结果落到本地渲染状态。
     await lyricsProvider.load(currentTrack);
 
-    // await 后使用 context 前先检查 mounted
     if (!mounted) return;
 
     final latestTrackId = Provider.of<PlaybackProvider>(context, listen: false)
@@ -236,7 +234,7 @@ class _LyricsWidgetState extends State<LyricsWidget>
         _manualQuickActionsVisible = false;
         _isLyricsLoading = false;
       });
-      // 下一首歌词预载已统一上移到组合根（不依赖本组件是否挂载）。
+      // 下一首歌词预载在组合根统一处理（不依赖本组件是否挂载）。
     } else {
       // 取词失败 / 空歌词：保持空歌词列表
       _quickActionsHideTimer?.cancel();
@@ -435,8 +433,8 @@ class _LyricsWidgetState extends State<LyricsWidget>
     });
   }
 
-  /// 快捷操作栏按钮：能力、显示条件与顺序与原一排 tonal 圆钮一致，
-  /// 交给 [M3EToolbar] 统一呈现（禁用 / 选中高亮 / tooltip 走工具栏语义）。
+  /// 快捷操作栏按钮：交给 [M3EToolbar] 统一呈现
+  /// （禁用 / 选中高亮 / tooltip 走工具栏语义）。
   List<M3EToolbarItem> _buildQuickActions(AppLocalizations l10n) {
     final bool hasLyrics = _lyrics.isNotEmpty;
     return <M3EToolbarItem>[
@@ -452,7 +450,7 @@ class _LyricsWidgetState extends State<LyricsWidget>
             ? Icons.playlist_play_rounded
             : Icons.edit_note_rounded,
         enabled: hasLyrics,
-        // 复制模式 = 工具栏选中态（tonal 高亮），不再手写容器颜色。
+        // 复制模式 = 工具栏选中态（tonal 高亮），颜色交给工具栏。
         active: _isCopyLyricsMode,
         onPressed: () {
           HapticFeedback.lightImpact();
@@ -708,7 +706,6 @@ class _LyricsWidgetState extends State<LyricsWidget>
       if (_isCopyLyricsMode && mounted) {
         Future.microtask(() => _toggleCopyLyricsMode());
       }
-      // 加载新曲目歌词（内部处理 null）
       Future.microtask(() async {
         await _loadLyrics();
       });
@@ -783,11 +780,10 @@ class _LyricsWidgetState extends State<LyricsWidget>
           if (_requiresManualQuickActions && userInitiatedScroll) {
             _showManualQuickActionsTemporarily();
           }
-          return true; // Allow notification to bubble up
+          return true;
         },
         child: Stack(
           children: [
-            // 歌词加载中时显示居中的加载指示器
             if (_lyrics.isEmpty && _isLyricsLoading)
               Positioned.fill(
                 child: Center(
@@ -820,20 +816,18 @@ class _LyricsWidgetState extends State<LyricsWidget>
               controller: _scrollController,
               physics: const BouncingScrollPhysics(),
               scrollCacheExtent: const ScrollCacheExtent.pixels(
-                  1000.0), // Prebuild nearby items to reduce fallback jumps
+                  1000.0), // 预建附近行，减少兜底跳转
               padding: EdgeInsets.only(
                 top: 80 + MediaQuery.of(context).padding.top,
                 bottom: 40 +
                     MediaQuery.of(context)
                         .padding
-                        .bottom, // Reverted bottom padding
+                        .bottom,
               ),
               itemCount: _lyrics.length + 1,
               itemBuilder: (context, index) {
                 if (index == _lyrics.length) {
-                  return SizedBox(
-                      height:
-                          _tailSpace()); // Spacer keeps final line centerable
+                  return SizedBox(height: _tailSpace());
                 }
                 final theme = Theme.of(context);
                 final bool isWideLyricLayout = context
@@ -850,16 +844,12 @@ class _LyricsWidgetState extends State<LyricsWidget>
                 // 仅当前行用 primary 强调（全页唯一强调色）。
                 final Color baseTextColor;
                 if (!lyricsSynced) {
-                  // 无时间戳歌词：普通正文。
                   baseTextColor = theme.colorScheme.onSurface;
                 } else if (isPastLine) {
-                  // 已唱过的行：次要文本。
                   baseTextColor = theme.colorScheme.onSurfaceVariant;
                 } else if (isCurrentLine) {
-                  // 当前行：primary 强调。
                   baseTextColor = theme.colorScheme.primary;
                 } else {
-                  // 即将播放的行：正常正文（配合外层 0.8 透明度）。
                   baseTextColor = theme.colorScheme.onSurface;
                 }
                 final double lyricFontSize = isWideLyricLayout
@@ -895,19 +885,17 @@ class _LyricsWidgetState extends State<LyricsWidget>
                     HapticFeedback.lightImpact();
                     if (!mounted) return;
 
-                    // 跳转到点击行的时间点
                     final tappedTimestamp = _lyrics[index].timestamp;
                     playbackProvider
                         .seekToPosition(tappedTimestamp.inMilliseconds);
 
-                    // 复制模式下退出复制模式，否则确保自动滚动开启
                     bool needsScrollTrigger = false;
                     if (_isCopyLyricsMode) {
-                      _toggleCopyLyricsMode(); // Exits copy mode, enables autoScroll
-                      needsScrollTrigger = true; // Scroll after exiting
+                      _toggleCopyLyricsMode();
+                      needsScrollTrigger = true;
                     } else {
                       if (!_autoScroll) {
-                        needsScrollTrigger = true; // Scroll after enabling
+                        needsScrollTrigger = true;
                         _enableAutoScrollWithSuppression(
                           duration: const Duration(milliseconds: 250),
                         );
@@ -918,14 +906,11 @@ class _LyricsWidgetState extends State<LyricsWidget>
                       }
                     }
 
-                    // 状态变化/seek 后立即触发滚动
                     if (needsScrollTrigger) {
                       WidgetsBinding.instance.addPostFrameCallback((_) {
                         if (mounted && _autoScroll) {
-                          // 立即滚动到点击行
                           _scrollToCurrentLine(index);
-                          _previousLineIndex =
-                              index; // Update index after tap scroll
+                          _previousLineIndex = index;
                         }
                       });
                     }
@@ -938,7 +923,6 @@ class _LyricsWidgetState extends State<LyricsWidget>
                       vertical: isWeb
                           ? (isCurrentLine ? 15.6 : 10.4)
                           : (isCurrentLine ? 12.0 : 8.0),
-                      // 响应式水平留白
                       horizontal: isWideLyricLayout ? 24.0 : 40.0,
                     ),
                     child: AnimatedDefaultTextStyle(
@@ -973,7 +957,7 @@ class _LyricsWidgetState extends State<LyricsWidget>
                             else
                               Text(
                                 line.text,
-                                textAlign: TextAlign.left, // Align text left
+                                textAlign: TextAlign.left,
                               ),
                             // 翻译 / 罗马音：空文本不占位；顺序与
                             // LyricLineTracker 的扩展行拼接一致。
@@ -1001,13 +985,11 @@ class _LyricsWidgetState extends State<LyricsWidget>
                 );
               },
             ),
-            // 顶部渐变遮罩
             Positioned(
               top: 0,
               left: 0,
               right: 0,
-              height: 40 +
-                  MediaQuery.of(context).padding.top, // Reverted height
+              height: 40 + MediaQuery.of(context).padding.top,
               child: IgnorePointer(
                 // 渐变层不接收手势。颜色统一取 colorScheme.surface
                 //（ThemeData.scaffoldBackgroundColor 的取值来源），
@@ -1100,34 +1082,29 @@ class _LyricsWidgetState extends State<LyricsWidget>
 
     setState(() {
       if (_isCopyLyricsMode) {
-        // 退出复制模式
         _isCopyLyricsMode = false;
-        _autoScroll = _lyricsAreSynced; // Resume auto-scroll only when synced
+        _autoScroll = _lyricsAreSynced;
         _temporarilyIgnoreUserScroll = true;
         _quickActionsHideTimer?.cancel();
         _manualQuickActionsVisible = false;
         // 恢复保存的播放模式
         if (_previousPlayMode != null) {
           provider.setPlayMode(_previousPlayMode!);
-          _previousPlayMode = null; // Clear saved mode
+          _previousPlayMode = null;
         }
-        // 退出复制模式并开启自动滚动后触发滚动
         WidgetsBinding.instance.addPostFrameCallback((_) {
           if (mounted && _autoScroll) {
-            // 按当前进度取最新行号
             final currentPosition = provider.currentPosition;
             final latestCurrentIndex = _getCurrentLineIndex(currentPosition);
             if (latestCurrentIndex >= 0) {
               _scrollToCurrentLine(latestCurrentIndex);
-              _previousLineIndex =
-                  latestCurrentIndex; // Update index after scroll
+              _previousLineIndex = latestCurrentIndex;
             }
           }
         });
       } else {
-        // 进入复制模式
         _isCopyLyricsMode = true;
-        _autoScroll = false; // Disable auto-scroll explicitly
+        _autoScroll = false;
         _temporarilyIgnoreUserScroll = false;
         _userScrollSuppressionTimer?.cancel();
         _cancelUserScrollResume();
@@ -1136,12 +1113,11 @@ class _LyricsWidgetState extends State<LyricsWidget>
         _previousPlayMode = provider.currentMode;
         provider.setPlayMode(PlayMode.singleRepeat);
 
-        // 通过 NotificationService 提示
         if (mounted) {
           final l10n = AppLocalizations.of(context)!;
           Provider.of<NotificationService>(context, listen: false).showSnackBar(
-            l10n.lyricsCopyModeSnackbar, // "Lyrics copy mode: Auto-scroll disabled, tap line to seek."
-            duration: const Duration(seconds: 4), // Slightly longer duration
+            l10n.lyricsCopyModeSnackbar,
+            duration: const Duration(seconds: 4),
           );
         }
       }
@@ -1161,7 +1137,6 @@ class _LyricsWidgetState extends State<LyricsWidget>
     }
   }
 
-  // 打开歌词搜索页
   void _showSearchLyricsPage() {
     if (!mounted) return;
 
@@ -1197,7 +1172,6 @@ class _LyricsWidgetState extends State<LyricsWidget>
       });
     }
 
-    // 打开搜索页
     final lyricsProvider =
         Provider.of<LyricsProvider>(context, listen: false);
     Navigator.of(context)
@@ -1213,8 +1187,7 @@ class _LyricsWidgetState extends State<LyricsWidget>
       ),
     )
         .then((result) async {
-      // 搜索页返回后执行
-      if (!mounted) return; // Check if widget is still mounted
+      if (!mounted) return;
 
       LyricsSearchSelection? selection;
       if (result is LyricsSearchSelection) {
@@ -1250,9 +1223,8 @@ class _LyricsWidgetState extends State<LyricsWidget>
           _translations = lyricsState.translations;
           _romas = lyricsState.romas;
           _lyricsAreSynced = synced;
-          _lastTrackId =
-              trackId; // Update last track ID as we applied lyrics for it
-          _previousLineIndex = -1; // Reset previous index
+          _lastTrackId = trackId;
+          _previousLineIndex = -1;
           _syncLineKeys(_lyrics.length);
           _manualQuickActionsVisible = false;
 
@@ -1261,7 +1233,6 @@ class _LyricsWidgetState extends State<LyricsWidget>
             _autoScroll = true;
             _temporarilyIgnoreUserScroll = true;
 
-            // 歌词更新后滚动到当前进度
             WidgetsBinding.instance.addPostFrameCallback((_) {
               if (mounted && _autoScroll) {
                 final currentPosition = playbackProvider.currentPosition;
@@ -1273,7 +1244,7 @@ class _LyricsWidgetState extends State<LyricsWidget>
               }
             });
           } else {
-            _autoScroll = false; // Keep it disabled if it was disabled before
+            _autoScroll = false;
             _temporarilyIgnoreUserScroll = false;
             _userScrollSuppressionTimer?.cancel();
           }
@@ -1292,7 +1263,6 @@ class _LyricsWidgetState extends State<LyricsWidget>
           );
         }
 
-        // 成功提示
         notificationService.showSnackBar(l10n.lyricsSearchAppliedSuccess);
       } else {
         // 未返回歌词或用户取消：
@@ -1319,7 +1289,6 @@ class _LyricsWidgetState extends State<LyricsWidget>
     });
   }
 
-  // 打开歌词选择页
   Future<void> _showLyricsSelectionPage() async {
     if (!mounted) return;
 

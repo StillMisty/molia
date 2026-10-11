@@ -21,8 +21,8 @@ typedef SourceUrlResolver = Future<String> Function(
 
 /// 本地播放服务：音源取链后由 App 直接播放。
 ///
-/// 对外输出与旧远程播放 API 一致的曲目结构，现有 NowPlaying / 队列 / 歌词等
-/// 界面无需感知播放后端差异。
+/// 对外输出 `SourceTrack` 曲目结构，现有 NowPlaying / 队列 / 歌词等界面
+/// 无需感知播放后端差异。
 class LocalPlaybackService extends ChangeNotifier {
   final SourceUrlResolver _resolver;
   final AudioPlayer _player = AudioPlayer();
@@ -108,8 +108,6 @@ class LocalPlaybackService extends ChangeNotifier {
     }
   }
 
-  // 状态
-
   bool get hasTrack => _currentTrack != null;
   bool get isPlaying => _isPlaying;
   bool get isLoading => _isLoading;
@@ -172,8 +170,6 @@ class LocalPlaybackService extends ChangeNotifier {
     }
     notifyListeners();
   }
-
-  // 播放控制
 
   Future<void> playTracks(
     List<SourceTrack> tracks,

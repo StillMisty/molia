@@ -2,9 +2,9 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../domain/models/any_listen.dart';
 
-/// 领域模型已迁移到 `lib/domain/models/any_listen.dart`（Wave 7 分层收口），
-/// 这里 export 以保持既有 `sources/any_listen/any_listen_config.dart`
-/// import 的下游（测试/适配器/管理器）零改动。
+/// 领域模型定义在 `lib/domain/models/any_listen.dart`，这里 export 以保持既有
+/// `sources/any_listen/any_listen_config.dart` import 的下游（测试/适配器/管理器）
+/// 零改动。
 export '../../domain/models/any_listen.dart' show AnyListenConfig;
 
 /// [AnyListenConfig] 的 shared_preferences 持久化。

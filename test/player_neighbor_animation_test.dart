@@ -346,7 +346,7 @@ void main() {
       expect(sides.last.dx, greaterThan(20));
     }
 
-    // 顶栏⇄播放页飞行：隐藏沿与落位沿都不再演出。
+    // 顶栏⇄播放页飞行：隐藏沿与落位沿均无独立演出。
     morph.setPageHeaderHidden(true);
     await tester.pump();
     expectSettledSides();
@@ -355,7 +355,7 @@ void main() {
     await tester.pump(const Duration(milliseconds: 100));
     expectSettledSides();
 
-    // 迷你 ⇄ 完整：收起与展开落位同样不再演出（随层自身淡入）。
+    // 迷你 ⇄ 完整：收起与展开落位同样无独立演出（随层自身淡入）。
     expand.reverse();
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 400));

@@ -92,14 +92,14 @@ class _PositionChannel implements ValueListenable<Duration> {
   void dispose() => _source.removeListener(_relay);
 }
 
-/// UI 播放状态唯一入口：包装 [PlaybackFacade]（阶段 1 起）。
+/// UI 播放状态唯一入口：包装 [PlaybackFacade]。
 ///
 /// 对外只暴露领域 [PlaybackSnapshot]（真实播放来自 facade；冷启动恢复态
-/// 由会话构造展示快照）与高频 position 通道；不再有 Map 形状的兼容层。
-/// 所有播放均走本地音源，不再有远程播放分支。
+/// 由会话构造展示快照）与高频 position 通道。
+/// 所有播放均走本地音源。
 ///
 /// 职责边界（docs/architecture.md §2.1）：
-/// - 不再 import `main.dart`：错误提示走注入的 [UiMessenger]；
+/// - 错误提示走注入的 [UiMessenger]（不依赖 `main.dart`）；
 /// - 状态从 facade 快照/进度通道订阅；
 /// - 持久化 / 写库 / 桌面小组件 / 封面预加载等副作用保留在本类。
 class PlaybackProvider extends ChangeNotifier {
@@ -129,11 +129,10 @@ class PlaybackProvider extends ChangeNotifier {
   /// 返回空表示无法补取（省流网关由注入侧实现）。
   final Future<String?> Function(Track track)? _artworkResolver;
 
-  /// 播放上下文写入（最近播放）：composition root 注入，不再经
-  /// `navigatorKey.currentContext` 反查 provider。
+  /// 播放上下文写入（最近播放）：由 composition root 注入。
   final LocalDatabaseProvider? _localDatabaseProvider;
 
-  /// 过渡期注入（composition root 持有）：封面预加载需要 BuildContext。
+  /// composition root 注入（封面预加载需要 BuildContext）。
   final GlobalKey<NavigatorState>? _navigatorKey;
 
   // 通知节流器 - 减少不必要的 UI 重建
@@ -142,7 +141,6 @@ class PlaybackProvider extends ChangeNotifier {
   /// 高频进度通道（真实播放转发 facade.position；恢复态显示上次进度）。
   late final _PositionChannel _positionChannel;
 
-  // 图片预加载管理器
   final AlbumArtPreloadStrategy _albumArtPreloader = AlbumArtPreloadStrategy();
 
   // 持久化存储最后播放的歌曲信息（用于离线显示）
@@ -218,8 +216,8 @@ class PlaybackProvider extends ChangeNotifier {
         _PositionChannel(_StateValueListenable<Duration>(_facade.position));
     _facade.position.addListener(_onPositionTick);
     _facade.snapshot.addListener(_onFacadeSnapshot);
-    // 阶段 4：position 走独立 ValueListenable 通道（_positionChannel），
-    // 不再转发进 notifyListeners——进度 tick 只重建进度条/歌词行。
+    // position 走独立 ValueListenable 通道（_positionChannel）：进度 tick
+    // 只重建进度条/歌词行，不触发整 Provider 重建。
     _sourceManager?.addListener(_onSourceManagerChanged);
     _dataSaver?.addListener(_onDataSaverChanged);
     _preferencesReady = () async {
@@ -230,10 +228,6 @@ class PlaybackProvider extends ChangeNotifier {
     // 构造时同步一次快照（系统媒体会话可能在构造前已恢复曲目）。
     _handlePlaybackSnapshot();
   }
-
-  // -------------------------------------------------------------------------
-  // 状态（领域快照：真实播放来自 facade；恢复态由会话构造）
-  // -------------------------------------------------------------------------
 
   /// UI 状态唯一入口：真实播放取 facade 快照；冷启动恢复态取会话快照。
   PlaybackSnapshot get snapshot => _restoredSnapshot ?? _facade.snapshot.value;
@@ -284,14 +278,9 @@ class PlaybackProvider extends ChangeNotifier {
   /// 持久化偏好加载完成（测试等待启动态就绪）。
   Future<void> get preferencesReady => _preferencesReady;
 
-  // 获取最后播放的歌曲信息（用于离线默认显示）
   String? get lastPlayedImageUrl => _lastPlayedImageUrl;
   String? get lastPlayedTrackName => _lastPlayedTrackName;
   String? get lastPlayedArtists => _lastPlayedArtists;
-
-  // -------------------------------------------------------------------------
-  // 播放控制（方法名与旧播放 Provider 保持一致）
-  // -------------------------------------------------------------------------
 
   /// 播放音源曲目（本地播放）。[tracks] 为上下文队列。
   Future<void> playSourceTracks(
@@ -510,8 +499,6 @@ class PlaybackProvider extends ChangeNotifier {
     _notifyCategory('queue');
   }
 
-  // 设置播放模式
-  //
   // 恢复态（冷启动未真正播放）下 UI 读的是恢复快照，必须同步更新恢复会话
   // 并持久化，否则模式按钮看起来「点不动」；恢复播放时会把该模式带给后端。
   Future<void> setPlayMode(PlayMode mode) async {
@@ -525,7 +512,6 @@ class PlaybackProvider extends ChangeNotifier {
     _notifyCategory('track');
   }
 
-  // 循环切换播放模式
   Future<void> togglePlayMode() async {
     final next =
         PlayMode.values[(currentMode.index + 1) % PlayMode.values.length];
@@ -572,10 +558,6 @@ class PlaybackProvider extends ChangeNotifier {
       _logger.e('加载默认播放模式失败', error: e);
     }
   }
-
-  // -------------------------------------------------------------------------
-  // 状态变更处理
-  // -------------------------------------------------------------------------
 
   /// facade 低频快照变化：持久化并通知 UI（曲目/队列）。
   void _onFacadeSnapshot() {
@@ -624,10 +606,6 @@ class PlaybackProvider extends ChangeNotifier {
     _maybeShowPlaybackError();
     _maybeRecoverFromPlaybackError();
   }
-
-  // -------------------------------------------------------------------------
-  // 上次播放会话（冷启动恢复）
-  // -------------------------------------------------------------------------
 
   /// 立即把当前播放会话写入本地（进入后台/生命周期 paused 时调用）。
   ///
@@ -687,7 +665,7 @@ class PlaybackProvider extends ChangeNotifier {
   }
 
   /// 用会话构造恢复态展示快照：当前/队列/下标/模式齐备，isPlaying=false；
-  /// 历史用会话队列前缀近似（与旧「index-1 上一首封面」语义一致）。
+  /// 历史用会话队列前缀近似。
   void _publishRestoredSnapshot() {
     final session = _restoredSession;
     final current = session?.current;
@@ -810,10 +788,6 @@ class PlaybackProvider extends ChangeNotifier {
     }
   }
 
-  // -------------------------------------------------------------------------
-  // 最后播放信息持久化（离线默认展示）
-  // -------------------------------------------------------------------------
-
   Future<void> _loadLastPlayedTrackInfo() async {
     try {
       final sp = await SharedPreferences.getInstance();
@@ -863,10 +837,6 @@ class PlaybackProvider extends ChangeNotifier {
       artists: artists.isEmpty ? null : artists,
     ));
   }
-
-  // -------------------------------------------------------------------------
-  // 图片预加载 / 桌面小组件
-  // -------------------------------------------------------------------------
 
   /// 触发播放相关图片的智能预加载
   ///
@@ -939,7 +909,7 @@ class PlaybackProvider extends ChangeNotifier {
           'isPlaying': snapshot.isPlaying,
         });
       } catch (e) {
-        // debugPrint('更新 widget 失败: $e');
+        // 更新失败静默：桌面小组件不影响播放主流程。
       }
     }
   }

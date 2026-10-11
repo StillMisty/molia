@@ -149,7 +149,6 @@ void main() {
     expect(find.text('General'), findsOneWidget);
     expect(find.text('Data & storage'), findsOneWidget);
 
-    // 首屏内联设置项。
     expect(find.text('Theme mode'), findsOneWidget);
     expect(find.text('Base colors'), findsOneWidget);
     expect(find.text('Follow album art'), findsOneWidget);
@@ -158,13 +157,13 @@ void main() {
     expect(find.text('App font'), findsOneWidget);
     expect(find.text('Default play mode'), findsOneWidget);
     expect(find.text('Now playing quality'), findsOneWidget);
-    // 省流只有行标题一处（不再有分区标题）。
+    // 省流只有行标题一处（无分区标题）。
     expect(find.text('Data saver'), findsOneWidget);
     expect(find.text('Lyrics display'), findsOneWidget);
     expect(find.text('Source Management'), findsOneWidget);
     expect(find.text('AI DJ'), findsOneWidget);
 
-    // 已下移到子页的内容不在首屏。
+    // 子页内容不在首屏。
     expect(find.text('Bottom navigation'), findsNothing);
     expect(find.text('App Language'), findsNothing);
     expect(find.text('App name'), findsNothing);

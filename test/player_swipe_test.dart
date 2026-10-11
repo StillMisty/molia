@@ -13,7 +13,7 @@ import 'support/fakes.dart';
 
 /// 封面左右滑动切歌：必须用「move 之间 pump 帧」的拖动（timedDrag 或手动
 /// 逐帧）来测——`tester.drag` 在同一次事件循环里发完 down/move/up，跳过了
-/// 真机每帧重建的节奏，曾让「手势宿主被换型重建 → 识别器 dispose」的
+/// 真机每帧重建的节奏，会让「手势宿主被换型重建 → 识别器 dispose」的
 /// 滑到一半冻住问题在测试里完全隐形。
 Track _track(String id) => Track(
       id: TrackId('fake', id),
@@ -160,7 +160,8 @@ void main() {
 
     final gesture =
         await tester.startGesture(tester.getCenter(coverSwipeHost()));
-    // 总计 100px：旧实现从「手势确认位置」起算只剩 70px，达不到 80 阈值。
+    // 总计 100px：必须从真实按下位置累计；若从「手势确认位置」起算
+    // 只剩 70px，达不到 80 提交阈值。
     await gesture.moveBy(const Offset(-30, 0));
     await tester.pump();
     await gesture.moveBy(const Offset(-70, 0));

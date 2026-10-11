@@ -3,7 +3,7 @@ import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 import 'package:molia/services/lyrics/qq_provider_mobile.dart';
 
-/// QQ 歌词 403/429 的备用域名切换必须收敛（历史上是无上限递归）。
+/// QQ 歌词 403/429 的备用域名切换最多一次，失败即放弃。
 void main() {
   test('403 切换备用域名仅一次，第二次失败即放弃', () async {
     var calls = 0;

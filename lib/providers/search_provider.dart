@@ -14,11 +14,11 @@ import 'playback_provider.dart';
 
 final _logger = Logger();
 
-/// 搜索状态（阶段 2 改道：内部经 [CatalogService]/[SourceRegistry]）。
+/// 搜索状态（内部经 [CatalogService]/[SourceRegistry]）。
 ///
-/// 公开 API / 类名 / `filteredResults` / `loadMore` / `sourceOptions` / 分页 /
-/// 空态行为与改道前完全一致；`_sourceTracks` 旁路保留，`playItem` 仍把
-/// 旧 `SourceTrack` 队列交给 [PlaybackProvider]。
+/// 公开 API：`filteredResults` / `loadMore` / `sourceOptions` / 分页 / 空态；
+/// `_sourceTracks` 旁路保留原始曲目，`playItem` 把 `SourceTrack` 队列交给
+/// [PlaybackProvider] 播放。
 class SearchProvider extends ChangeNotifier {
   final PlaybackProvider _playbackProvider;
 
@@ -30,7 +30,6 @@ class SearchProvider extends ChangeNotifier {
 
   StreamSubscription<void>? _registrySubscription;
 
-  // Search state
   String _searchQuery = '';
   bool _isSearching = false;
   Map<String, List<Map<String, dynamic>>> _searchResults = {};
@@ -54,14 +53,12 @@ class SearchProvider extends ChangeNotifier {
 
   late final PagedListController<SourceTrack> _pager;
 
-  // Track search requests to avoid applying stale results.
+  // 单调递增的请求 id：丢弃过期搜索结果。
   int _searchRequestId = 0;
 
-  // Debounce timer for search
   Timer? _debounceTimer;
   static const _debounceTime = Duration(milliseconds: 500);
 
-  // Constructor
   SearchProvider(
     this._playbackProvider, {
     CatalogService? catalogService,
@@ -77,13 +74,12 @@ class SearchProvider extends ChangeNotifier {
     _onSourcesChanged();
   }
 
-  // Getters
   String get searchQuery => _searchQuery;
   bool get isSearching => _isSearching;
   Map<String, List<Map<String, dynamic>>> get searchResults => _searchResults;
   String? get errorMessage => _errorMessage;
 
-  /// 归一化失败对象（阶段 3 新增；UI 兼容期仍消费 [errorMessage] 字符串）。
+  /// 归一化失败对象（UI 兼容期仍消费 [errorMessage] 字符串）。
   SourceFailure? get failure => _failure;
   String get sourceKey => _sourceKey;
 
@@ -166,10 +162,8 @@ class SearchProvider extends ChangeNotifier {
     }
   }
 
-  // Check if search is active
   bool get isSearchActive => _searchQuery.isNotEmpty;
 
-  // Get combined and filtered search results
   List<Map<String, dynamic>> get filteredResults {
     if (_filteredResultsDirty) {
       _filteredResultsCache = _buildFilteredResults();
@@ -183,7 +177,6 @@ class SearchProvider extends ChangeNotifier {
 
     if (_searchQuery.isEmpty) return result;
 
-    // Add tracks if available
     if (_searchResults.containsKey('tracks')) {
       result.addAll(_searchResults['tracks']!
           .where((t) {
@@ -196,7 +189,6 @@ class SearchProvider extends ChangeNotifier {
           .map((t) => ({...t, 'type': 'track'})));
     }
 
-    // Add albums if available
     if (_searchResults.containsKey('albums')) {
       result.addAll(_searchResults['albums']!
           .where((a) {
@@ -208,7 +200,6 @@ class SearchProvider extends ChangeNotifier {
           .map((a) => ({...a, 'type': 'album'})));
     }
 
-    // Add playlists if available
     if (_searchResults.containsKey('playlists')) {
       result.addAll(_searchResults['playlists']!
           .where((p) {
@@ -220,7 +211,6 @@ class SearchProvider extends ChangeNotifier {
           .map((p) => ({...p, 'type': 'playlist'})));
     }
 
-    // Add artists if available
     if (_searchResults.containsKey('artists')) {
       result.addAll(_searchResults['artists']!
           .where((a) {
@@ -239,11 +229,9 @@ class SearchProvider extends ChangeNotifier {
     _filteredResultsDirty = true;
   }
 
-  // Update search query with debounce
   void updateSearchQuery(String query) {
     if (query == _searchQuery) return;
 
-    // Cancel previous timer only when query changes.
     _debounceTimer?.cancel();
 
     _searchQuery = query;
@@ -252,7 +240,6 @@ class SearchProvider extends ChangeNotifier {
     _resetPagination();
     _markFilteredResultsDirty();
 
-    // Clear results if query is empty
     if (query.isEmpty) {
       _searchResults = {};
       _sourceTracks = const [];
@@ -263,19 +250,16 @@ class SearchProvider extends ChangeNotifier {
       return;
     }
 
-    // Set new timer for search
     final requestId = ++_searchRequestId;
     _debounceTimer = Timer(_debounceTime, () {
       performSearch(query, requestId: requestId);
     });
 
-    // Notify listeners immediately about query change
     notifyListeners();
   }
 
-  // Immediate search without debounce (for submit action)
+  /// 提交搜索（不走防抖，立即发起）。
   void submitSearch(String query) {
-    // Cancel any pending debounce
     _debounceTimer?.cancel();
     _resetPagination();
 
@@ -304,7 +288,6 @@ class SearchProvider extends ChangeNotifier {
     performSearch(query, requestId: requestId);
   }
 
-  // Clear search
   void clearSearch() {
     _debounceTimer?.cancel();
     _searchQuery = '';
@@ -319,7 +302,6 @@ class SearchProvider extends ChangeNotifier {
     notifyListeners();
   }
 
-  // Perform the actual search
   Future<void> performSearch(String query, {int? requestId}) async {
     if (query.trim().isEmpty) return;
     // 旧 debounce 回调（已有更新的请求）直接丢弃。
@@ -370,7 +352,7 @@ class SearchProvider extends ChangeNotifier {
 
   /// 把分页状态机的结果映射到搜索兼容状态（tracks map / 失败 / 分页元数据）。
   ///
-  /// 失败时保留旧结果（与旧实现一致：错误提示与旧列表并存，不闪空）。
+  /// 失败时保留已有结果：错误提示与列表并存，不闪空。
   void _applyPagerState() {
     final error = _pager.error;
     if (error != null) {

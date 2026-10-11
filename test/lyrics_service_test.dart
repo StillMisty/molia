@@ -11,7 +11,6 @@ import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 
 void main() {
-  // 初始化Flutter绑定
   TestWidgetsFlutterBinding.ensureInitialized();
   setUp(() async {
     SharedPreferences.setMockInitialValues({});
@@ -41,7 +40,7 @@ void main() {
               },
             },
           };
-          // Encode properly to avoid invalid characters for `utf8.decode` in QQProvider
+          // 先编码为 UTF-8 字节，避免 QQProvider 内 utf8.decode 遇到非法字符。
           final bodyBytes = utf8.encode(jsonEncode(response));
           return http.Response.bytes(bodyBytes, 200,
               headers: {'content-type': 'application/json; charset=utf-8'});
@@ -68,7 +67,6 @@ void main() {
         expect(lyrics, isNotNull);
 
         if (lyrics != null) {
-          // 验证歌词格式
           expect(lyrics.contains('['), isTrue);
           expect(lyrics.contains(']'), isTrue);
           expect(lyrics.contains('你瞒我瞒'), isTrue);
@@ -86,12 +84,10 @@ void main() {
       if (songMatch != null) {
         final lyrics = await provider.fetchLyric(songMatch.songId);
         if (lyrics != null) {
-          // 验证歌词格式
           expect(lyrics.contains('['), isTrue);
           expect(lyrics.contains(']'), isTrue);
         }
       } else {
-        // 如果API需要登录，打印信息并跳过
         debugPrint('网易云API需要登录，跳过测试');
       }
     }, skip: '网易云API可能需要登录');
@@ -103,10 +99,8 @@ void main() {
 
       expect(result, isNotNull);
       if (result != null) {
-        // 验证歌词格式
         expect(result.lyric.contains('['), isTrue);
         expect(result.lyric.contains(']'), isTrue);
-        // 验证来源信息
         expect(result.provider, equals('fake'));
       }
     });

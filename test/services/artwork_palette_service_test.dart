@@ -42,8 +42,8 @@ void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
   group('ArtworkPaletteService', () {
-    // 取色路径要解码真实 ui.Image：testWidgets + runAsync（与旧主题取色测试
-    // 相同的运行方式），普通 test 的 fake async 区不会完成引擎回调。
+    // 取色路径要解码真实 ui.Image：testWidgets + runAsync 才能完成引擎回调，
+    // 普通 test 的 fake async 区不会完成。
     testWidgets('提取纯色封面：seed → 双亮度方案，缓存命中不重复取图', (tester) async {
       var providerCalls = 0;
       final service = ArtworkPaletteService(providerFor: (url) async {

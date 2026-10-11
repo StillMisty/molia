@@ -4,7 +4,7 @@
 /// - `PlaybackProvider.addListener(aiDjProvider.onPlaybackChanged)`；
 /// - `PlaybackProvider.position.addListener(aiDjProvider.onPositionChanged)`。
 ///
-/// 行为（issue #9 已拍板）：
+/// 行为：
 /// - 批次 20 首；队列剩余 ≤5 首时后台生成下一批并 `enqueueDomainTracks`；
 /// - 跳过 = 曲目被切走时到达位置 < min(30s, 50%×时长)（复用统计口径），
 ///   只做曲目级排除；喜欢 = 收藏（生成时检查会话内曲目是否已收藏）；
@@ -103,10 +103,6 @@ class AiDjProvider extends ChangeNotifier {
   final Map<String, _SessionTrack> _sessionTracks = {};
   String? _trackedUri;
 
-  // ---------------------------------------------------------------------------
-  // 状态读取
-  // ---------------------------------------------------------------------------
-
   LlmConfig? get config => _config;
   bool get hasConfig => _config != null;
   bool get consentGranted => _consentGranted;
@@ -140,10 +136,6 @@ class AiDjProvider extends ChangeNotifier {
   List<String> get skippedLabels => List.unmodifiable(_skippedLabels);
   List<String> get likedLabels => List.unmodifiable(_likedLabels);
 
-  // ---------------------------------------------------------------------------
-  // 配置与隐私确认
-  // ---------------------------------------------------------------------------
-
   Future<void> init() async {
     _config = await _settingsStore.readConfig();
     _consentGranted = await _settingsStore.hasConsent();
@@ -175,10 +167,6 @@ class AiDjProvider extends ChangeNotifier {
   /// 连接测试（页面「测试连接」按钮）；失败抛 [SourceFailure]。
   Future<void> testConnection(LlmConfig config) =>
       _recommendationService.testConnection(config);
-
-  // ---------------------------------------------------------------------------
-  // 模式控制
-  // ---------------------------------------------------------------------------
 
   /// 开启模式：生成第一批并从第 0 首起播（替换当前队列）。
   Future<void> start() async {
@@ -287,7 +275,6 @@ class AiDjProvider extends ChangeNotifier {
       _busy = false;
       notifyListeners();
     }
-    // 起播后立即预取"下一批"。
     unawaited(_prefetchPending());
   }
 
@@ -350,10 +337,6 @@ class AiDjProvider extends ChangeNotifier {
     }
   }
 
-  // ---------------------------------------------------------------------------
-  // 播放接线（组合根调用）
-  // ---------------------------------------------------------------------------
-
   /// 播放快照变化：跳过判定 + 低水位续推 + 播放停止自动退出。
   void onPlaybackChanged() {
     if (_status != AiDjStatus.playing) return;
@@ -381,10 +364,6 @@ class AiDjProvider extends ChangeNotifier {
     final positionMs = _playbackProvider.currentPosition.inMilliseconds;
     if (positionMs > entry.maxPositionMs) entry.maxPositionMs = positionMs;
   }
-
-  // ---------------------------------------------------------------------------
-  // 内部
-  // ---------------------------------------------------------------------------
 
   Future<AiDjBatch> _generate() => _recommendationService.generate(
         config: _config!,

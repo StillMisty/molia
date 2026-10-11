@@ -82,8 +82,6 @@ class KwDiscoverSource extends DiscoverSource {
     DiscoverLeaderboard(id: 'kw__151', name: '腾讯音乐人原创榜', bangid: '151'),
   ];
 
-  // ————————————————————————— 热榜 —————————————————————————
-
   @override
   Future<List<DiscoverTrack>> leaderboardTracks(String bangid) {
     return BuiltinSearch.transport.cached(
@@ -151,8 +149,6 @@ class KwDiscoverSource extends DiscoverSource {
       img: rawItem['pic']?.toString(),
     );
   }
-
-  // ————————————————————————— 歌单 —————————————————————————
 
   @override
   Future<DiscoverTags> tags() {
@@ -293,7 +289,7 @@ class KwDiscoverSource extends DiscoverSource {
         final type = parts.length > 1 ? parts[1] : null;
 
         if (type == '43') {
-          // 旧版聚合数据（mobileinterfaces）：响应为数组，含 songlist/list/album。
+          // 聚合数据接口（mobileinterfaces）：响应为数组，含 songlist/list/album。
           final body = await lxHttpGet(
             'http://mobileinterfaces.kuwo.cn/er.s?type=get_pc_qz_data&f=web'
             '&id=$id&prod=pc',
@@ -521,8 +517,6 @@ class KwDiscoverSource extends DiscoverSource {
     }
     return list;
   }
-
-  // ————————————————————————— 热搜 —————————————————————————
 
   @override
   Future<List<String>> hotSearches() {

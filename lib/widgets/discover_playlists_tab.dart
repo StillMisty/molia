@@ -295,7 +295,6 @@ class _DiscoverPlaylistsTabState extends State<DiscoverPlaylistsTab>
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    // 歌单（搜索 / 链接打开）
                     Padding(
                       padding: const EdgeInsets.symmetric(horizontal: 16),
                       child: Row(

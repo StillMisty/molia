@@ -50,7 +50,7 @@ class LyricsService {
   /// 获取歌词（原文 + 可选翻译 / 罗马音 / 逐字）。
   ///
   /// 顺序：缓存 → 曲目原生取词（精确平台 ID，需传入 [track]）→
-  /// 跨平台名字搜索回退（首个非空结果即返回，不再等待最慢的提供者）。
+  /// 跨平台名字搜索回退（并行竞速）。
   Future<LyricsResult?> getLyrics(
     String songName,
     String artistName,
@@ -92,7 +92,6 @@ class LyricsService {
         }
       }
 
-      // 跨平台名字搜索回退。
       _logger.i('从网络获取歌词: $songName - $artistName');
       final result = await _getFromProviders(songName, artistName);
       if (result != null) {
@@ -124,7 +123,7 @@ class LyricsService {
   /// 手动选择歌词写入统一缓存（供 LyricsProvider.saveManual 复用）。
   ///
   /// 手动选择的文本通常没有独立的翻译 / 罗马音 / 逐字：对应参数缺省时
-  /// 清空旧扩展行（与旧行为一致）；搜索页透传时则保留平台数据。
+  /// 清空扩展行（翻译 / 罗马音 / 逐字）；搜索页透传时则保留平台数据。
   Future<void> saveLyrics(
     String trackId,
     String lyric,
@@ -162,9 +161,8 @@ class LyricsService {
 
   /// 并行请求所有提供者，**首个非空结果即返回**。
   ///
-  /// 旧实现用 `Future.wait` 等全部完成再取第一个非空：歌词展示延迟被最慢
-  /// 的提供者（通常 10s 超时）决定。现在谁先返回非空就用谁；其余请求继续
-  /// 完成但结果丢弃（HTTP 无法真正取消，不阻塞展示即可）。
+  /// 谁先返回非空就用谁，展示延迟不被最慢的提供者（通常 10s 超时）拖住；
+  /// 其余请求继续完成但结果丢弃（HTTP 无法真正取消，不阻塞展示即可）。
   Future<LyricsResult?> _getFromProviders(String title, String artist) {
     if (_providers.isEmpty) return Future.value(null);
     final completer = Completer<LyricsResult?>();

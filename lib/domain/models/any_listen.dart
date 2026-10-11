@@ -1,8 +1,7 @@
 /// any-listen 接入的纯领域模型：配置数据 + 校验 + 连接测试结果 + 错误分类。
 ///
-/// 从 `lib/sources/any_listen/**` 迁出（Wave 7 分层收口）：UI 与 provider
-/// 只依赖本文件，`AnyListenConfigStore`（shared_preferences 持久化）仍留在
-/// sources 层并 `export` 本文件，保证既有 import 兼容。
+/// UI 与 provider 只依赖本文件；`AnyListenConfigStore`（shared_preferences
+/// 持久化）在 sources 层并 `export` 本文件，保证既有 import 兼容。
 library;
 
 /// any-listen 接入配置。

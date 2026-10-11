@@ -1,8 +1,8 @@
 /// 应用壳（App Shell）：导航栏 / 顶栏 / 迷你播放条 / 页面层。
 ///
-/// 从 lib/main.dart 移出：R4 规定 main.dart 是唯一 composition root 且禁止
-/// 被测试 import，壳层放到这里后测试可直接挂载。composition root 仍负责
-/// 创建 provider 与主题，本文件只消费注入的 provider。
+/// main.dart 是唯一 composition root 且禁止被测试 import，壳层独立成文件后
+/// 测试可直接挂载。composition root 仍负责创建 provider 与主题，本文件只
+/// 消费注入的 provider。
 library;
 
 import 'package:dynamic_color/dynamic_color.dart';
@@ -85,7 +85,7 @@ class _ProgressIndicatorState extends State<ProgressIndicator>
     super.didUpdateWidget(oldWidget);
     final target = widget.position.inMilliseconds.toDouble();
     // 仅 seek/切歌等 >1s 的跳变做 300ms 平滑过渡；
-    // 常规推进直接跟随 position 通道（不再有 1s Timer 外推）。
+    // 常规推进直接跟随 position 通道。
     if ((target - _currentProgress).abs() > 1000) {
       final display = _animationController.isAnimating
           ? _progressAnimation.value
@@ -168,8 +168,8 @@ class _MyAppState extends State<MyApp>
   ///
   /// M3E no-overshoot spatial 弹簧（`aospSpatial` 380/1.0，对齐 Android 共享
   /// 元素默认 `spring(StiffnessMediumLow=400, noBouncy)`）：副本在弹簧落定帧
-  /// 零速度精确交接，不再用「75% 行程提前硬切」的时长曲线。每次飞行的起点
-  /// 用新抓取的锚点几何（`from: 0`），中途被打断则直接换新飞。
+  /// 零速度精确交接。每次飞行的起点用新抓取的锚点几何（`from: 0`），中途被
+  /// 打断则直接换新飞。
   late final SingleMotionController _morphAnimation = SingleMotionController(
     motion:
         SpringMotion(M3EMotion.aospSpatial.toDescription(), snapToEnd: true),
@@ -203,7 +203,6 @@ class _MyAppState extends State<MyApp>
     _morph.setBarHeaderHidden(
       _selectedDestination == ShellDestination.nowPlaying,
     );
-    // 初始化时更新主题
     WidgetsBinding.instance.addPostFrameCallback((_) {
       context.read<ThemeProvider>().updateThemeFromSystem(context);
     });
@@ -224,14 +223,12 @@ class _MyAppState extends State<MyApp>
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.resumed) {
-      // 应用从后台恢复时刷新主题
       context.read<ThemeProvider>().updateThemeFromSystem(context);
     }
   }
 
   @override
   void didChangePlatformBrightness() {
-    // 当系统主题改变时更新应用主题
     context.read<ThemeProvider>().updateThemeFromSystem(context);
   }
 
@@ -407,9 +404,8 @@ class _MyAppState extends State<MyApp>
         children: [
           if (isLargeScreen)
             M3ENavigationRail(
-              // 固定 96dp 窄轨（alwaysCollapse）：无展开按钮，
-              // 保持原 NavigationRail 不可展开的交互语义；标签常显，
-              // 替代 Material 侧 hover 才出现的 tooltip。
+              // 固定 96dp 窄轨（alwaysCollapse）：无展开按钮、不可展开；
+              // 标签常显，替代 Material 侧 hover 才出现的 tooltip。
               type: M3ENavigationRailType.alwaysCollapse,
               selectedIndex: selectedIndex,
               onDestinationSelected: (int index) =>
@@ -435,7 +431,7 @@ class _MyAppState extends State<MyApp>
           : SafeArea(
               bottom: false,
               child: M3ENavigationBar(
-                // iOS 使用紧凑高度（Material 侧原为 55，M3E 最小档为 64）
+                // iOS 使用紧凑高度（M3E 最小档 64）。
                 size: defaultTargetPlatform == TargetPlatform.iOS
                     ? M3ENavBarSize.small
                     : M3ENavBarSize.medium,
@@ -960,10 +956,10 @@ class _MyThemedAppState extends State<MyThemedApp> with WidgetsBindingObserver {
                   // targetSdk 37（Android 15+ 强制 edge-to-edge）下保持系统栏透明、
                   // 内容绘制到系统栏下方，与 settings_page.dart 的 edgeToEdge 行为一致。
                   drawUnderSystemBars: true,
-                  // 原 MaterialApp.builder 逻辑迁移到 appBuilder：M3E 内部已用
-                  // M3ETheme 包裹 child，MaterialApp 的 Theme 又位于 builder 之上
-                  // （见 material_ui app.dart _materialBuilder），因此这里只做
-                  // 系统栏 AnnotatedRegion + Web 字号缩放，不再重复包 Theme。
+                  // appBuilder 只做系统栏 AnnotatedRegion + Web 字号缩放：
+                  // M3E 内部已用 M3ETheme 包裹 child，MaterialApp 的 Theme 又
+                  // 位于 builder 之上（见 material_ui app.dart _materialBuilder），
+                  // 此处不重复包 Theme。
                   appBuilder: (context, child) {
                     final themedChild = child ?? const SizedBox.shrink();
                     final baseMediaQuery = MediaQuery.of(context);

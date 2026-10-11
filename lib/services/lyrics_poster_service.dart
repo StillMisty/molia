@@ -11,7 +11,6 @@ import '../models/poster_lyric_line.dart';
 final logger = Logger();
 
 class LyricsPosterService {
-  // 1. 生成海报图片数据 (Uint8List)
   Future<Uint8List> generatePosterData({
     required String lyrics,
     List<PosterLyricLine>? posterLyricLines,
@@ -28,14 +27,12 @@ class LyricsPosterService {
     /// 海报水印品牌名（随界面语言：Molia / 茉咏）。
     String watermarkText = 'Molia',
   }) async {
-    // --- 调整参数 ---
-    const double scaleFactor = 2.0; // 2倍分辨率
+    const double scaleFactor = 2.0;
     const double baseWidth = 720;
     const double width = baseWidth * scaleFactor;
     const double horizontalMargin = 32.0 * scaleFactor;
     const double contentWidth = width - 2 * horizontalMargin;
 
-    // 字号调整 - 按比例缩放
     const double titleFontSize = 28.0 * scaleFactor;
     const double artistFontSize = 28.0 * scaleFactor;
     const double lyricsFontSize = 40 * scaleFactor;
@@ -58,7 +55,6 @@ class LyricsPosterService {
     if (albumCoverUrl != null && albumCoverUrl.isNotEmpty) {
       try {
         loadedAlbumImage = await _loadNetworkImage(albumCoverUrl);
-        // 计算标题和艺术家的高度来确定header区域高度
         final titleStyle = TextStyle(
             fontFamily: fontFamily,
             fontSize: titleFontSize,
@@ -73,7 +69,7 @@ class LyricsPosterService {
             fontFamily: fontFamily,
             fontSize: artistFontSize,
             color: artistColor,
-            fontWeight: FontWeight.w400); // Regular字重
+            fontWeight: FontWeight.w400);
         final artistPainter = TextPainter(
           text: TextSpan(text: artistName, style: artistStyle),
           textDirection: TextDirection.ltr,
@@ -84,7 +80,6 @@ class LyricsPosterService {
         titlePainter.layout(maxWidth: maxTextWidth);
         artistPainter.layout(maxWidth: maxTextWidth);
 
-        // header区域高度取封面高度和文字总高度的较大值
         final textTotalHeight =
             titlePainter.height + interTextSpacing + artistPainter.height;
         headerHeight =
@@ -92,7 +87,6 @@ class LyricsPosterService {
         calculatedHeight += headerHeight + elementSpacing;
       } catch (e) {
         logger.w('Failed to load album cover for height calculation: $e');
-        // 如果封面加载失败，仍然计算标题和艺术家高度
         final titleStyle = TextStyle(
             fontFamily: fontFamily,
             fontSize: titleFontSize,
@@ -121,7 +115,6 @@ class LyricsPosterService {
         calculatedHeight += headerHeight + elementSpacing;
       }
     } else {
-      // 没有封面时，标题和艺术家左对齐显示
       final titleStyle = TextStyle(
           fontFamily: fontFamily,
           fontSize: titleFontSize,
@@ -156,7 +149,7 @@ class LyricsPosterService {
       color: lyricsColor,
       height: 1.3,
       fontWeight: FontWeight.w700,
-    ); // UltraBold 字重
+    );
     final List<PosterLyricLine> lyricEntries =
         (posterLyricLines != null && posterLyricLines.isNotEmpty)
             ? posterLyricLines
@@ -194,7 +187,6 @@ class LyricsPosterService {
     calculatedHeight += totalLyricsBlockHeight;
     if (lyricLinePainters.isNotEmpty) calculatedHeight += elementSpacing;
 
-    // 水印样式
     final watermarkStyle = TextStyle(
         fontFamily: fontFamily,
         fontSize: watermarkFontSize,
@@ -215,9 +207,8 @@ class LyricsPosterService {
       logger.w('Failed to load watermark icon: $e');
     }
 
-    // 计算水印区域高度（图标和文字的较大值）
-    final double iconSize = watermarkPainter.height; // 图标大小与文字高度匹配
-    const double iconTextSpacing = 8.0 * scaleFactor; // 图标和文字之间的间距
+    final double iconSize = watermarkPainter.height;
+    const double iconTextSpacing = 8.0 * scaleFactor;
     double watermarkHeight = watermarkPainter.height;
     if (watermarkIcon != null) {
       watermarkHeight = watermarkHeight > iconSize ? watermarkHeight : iconSize;
@@ -233,7 +224,6 @@ class LyricsPosterService {
     final canvas =
         Canvas(recorder, Rect.fromLTWH(0, 0, width, finalPosterHeight));
 
-    // 使用背景颜色直接作为背景，不进行颜色混合
     final backgroundPaint = Paint()..color = backgroundColor;
     canvas.drawRect(
         Rect.fromLTWH(0, 0, width, finalPosterHeight), backgroundPaint);
@@ -241,7 +231,6 @@ class LyricsPosterService {
     double currentY = topMargin;
 
     if (loadedAlbumImage != null) {
-      // 左对齐布局：封面和文字都从左侧开始
       final titleStyle = TextStyle(
           fontFamily: fontFamily,
           fontSize: titleFontSize,
@@ -267,7 +256,6 @@ class LyricsPosterService {
       titlePainter.layout(maxWidth: maxTextWidth);
       artistPainter.layout(maxWidth: maxTextWidth);
 
-      // 绘制圆角封面（左对齐）
       final albumX = horizontalMargin;
       final albumRect =
           Rect.fromLTWH(albumX, currentY, albumArtSize, albumArtSize);
@@ -285,7 +273,6 @@ class LyricsPosterService {
       );
       canvas.restore();
 
-      // 绘制标题和艺术家（左对齐，在封面右侧）
       final textStartX = albumX + albumArtSize + headerSpacing;
 
       final textTotalHeight =
@@ -301,7 +288,6 @@ class LyricsPosterService {
 
       currentY += headerHeight + elementSpacing;
     } else {
-      // 没有封面时，标题和艺术家左对齐显示
       final titleStyle = TextStyle(
           fontFamily: fontFamily,
           fontSize: titleFontSize,
@@ -346,7 +332,6 @@ class LyricsPosterService {
       currentY += artistPainter.height + elementSpacing;
     }
 
-    // 绘制歌词（左对齐）
     for (int i = 0; i < lyricLinePainters.length; i++) {
       final painter = lyricLinePainters[i];
       _drawTextPainter(
@@ -360,11 +345,9 @@ class LyricsPosterService {
       currentY += elementSpacing;
     }
 
-    // 绘制水印：图标 + 文字组合，左对齐
     final watermarkY = currentY + (watermarkHeight / 2);
 
     if (watermarkIcon != null) {
-      // 左对齐布局
       final watermarkStartX = horizontalMargin;
 
       final iconY =
@@ -385,7 +368,6 @@ class LyricsPosterService {
           (watermarkHeight - watermarkPainter.height) / 2;
       watermarkPainter.paint(canvas, Offset(textX, textY));
     } else {
-      // 如果图标加载失败，只显示文字（左对齐）
       _drawText(canvas, watermarkText, Offset(horizontalMargin, watermarkY),
           watermarkStyle, contentWidth, TextAlign.left);
     }
@@ -397,7 +379,6 @@ class LyricsPosterService {
     return byteData!.buffer.asUint8List();
   }
 
-  // 2. 保存图片数据到相册
   Future<String?> savePosterFromBytes(
       Uint8List imageBytes, String trackTitle) async {
     try {
@@ -415,7 +396,6 @@ class LyricsPosterService {
     }
   }
 
-  // 3. 分享图片文件
   Future<void> sharePosterFile(String imagePath, String textToShare) async {
     try {
       await SharePlus.instance.share(
@@ -428,7 +408,7 @@ class LyricsPosterService {
     }
   }
 
-  // 辅助方法：加载网络图片（统一浏览器 UA + 平台 Referer，修 CDN 403）
+  // 加载网络图片（统一浏览器 UA + 平台 Referer，修 CDN 403）
   Future<ui.Image> _loadNetworkImage(String url) async {
     final response = await http.get(
       Uri.parse(url),
@@ -444,7 +424,6 @@ class LyricsPosterService {
     }
   }
 
-  // 辅助方法：加载本地资源图片
   Future<ui.Image> _loadAssetImage(String assetPath) async {
     final data = await rootBundle.load(assetPath);
     final bytes = data.buffer.asUint8List();
@@ -453,11 +432,10 @@ class LyricsPosterService {
     return frame.image;
   }
 
-  // 辅助方法：绘制文本 (支持左对齐)
   void _drawText(
     Canvas canvas,
     String text,
-    Offset position, // 对于左对齐，这是文本块的左上角位置
+    Offset position, // x 为对齐基准（左/中/右），y 为垂直中心
     TextStyle style,
     double maxWidth,
     TextAlign textAlign,
@@ -475,8 +453,6 @@ class LyricsPosterService {
     } else if (textAlign == TextAlign.right) {
       dx -= textPainter.width;
     }
-    // 对于 TextAlign.left，dx 保持不变
-
     final offsetY = position.dy - textPainter.height / 2;
 
     textPainter.paint(canvas, Offset(dx, offsetY));
@@ -490,8 +466,6 @@ class LyricsPosterService {
     } else if (textAlign == TextAlign.right) {
       dx -= textPainter.width;
     }
-    // 对于 TextAlign.left，dx 保持不变
-
     final offsetY = position.dy - textPainter.height / 2;
     textPainter.paint(canvas, Offset(dx, offsetY));
   }

@@ -8,7 +8,7 @@ import '../theme/app_semantic_colors.dart';
 
 /// any-listen 接入配置页：服务器地址 / 令牌 / 启用开关 / 连接测试 / 保存。
 ///
-/// 分层（Wave 7）：只依赖 [SourcesProvider] 与 domain 模型，不直接
+/// 分层：只依赖 [SourcesProvider] 与 domain 模型，不直接
 /// import `lib/sources/**`（R5）。保存/连接测试/配置刷新全部走 provider：
 /// - 传入 [provider] 时直接使用（集成测试 / 独立打开场景）；
 /// - 不传时从 `context.read<SourcesProvider>()` 获取（正式 App 由

@@ -9,8 +9,8 @@ import 'package:molia/l10n/app_localizations_zh.dart';
 /// 音源管理页 / 搜索结果页 l10n 回归测试。
 ///
 /// 重点保障：
-/// - 新增的 sources* / search* 键在中文中齐全（en 为模板）；
-/// - 已去除日文/繁体支持（arb 与 supportedLocales 均不再包含）。
+/// - sources* / search* 键在中文中齐全（en 为模板）；
+/// - 非 en/zh 语言（日文/繁体）不在 arb 与 supportedLocales 中。
 /// - 集成测试依赖的中文文案保持不变（zh 环境行为不回归）。
 Map<String, dynamic> _arb(String name) =>
     jsonDecode(File('lib/l10n/$name').readAsStringSync())
@@ -20,12 +20,12 @@ void main() {
   final en = _arb('app_en.arb');
   final zh = _arb('app_zh.arb');
 
-  // 音源管理页新增键（en 为模板，其余语言必须有对应翻译）。
+  // 音源管理页键（en 为模板，其余语言必须有对应翻译）。
   final sourceKeys = en.keys
       .where((key) => key.startsWith('sources') && !key.startsWith('@'))
       .toList();
 
-  // 搜索页新增键。
+  // 搜索页键。
   const searchKeys = [
     'searchFailed',
     'searchNoSourcesTitle',

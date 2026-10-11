@@ -24,7 +24,6 @@ vm.createContext(sandbox);
 const prelude = fs.readFileSync(new URL('../assets/lx/lx_prelude.js', import.meta.url), 'utf8');
 vm.runInContext(prelude, sandbox);
 
-// 模拟脚本信息
 vm.runInContext(`__lxSetup(${JSON.stringify({
   name: '测试音乐源', description: '我只是一个测试音乐源哦', version: '1.0.0', author: 'xxx', homepage: 'http://xxx', rawScript: 'RAW',
 })})`, sandbox);
@@ -59,12 +58,10 @@ vm.runInContext(userScript, sandbox);
 const types = sent.map((m) => m.type);
 if (!types.includes('inited')) throw new Error('no inited event: ' + JSON.stringify(sent));
 
-// 模拟宿主发起 musicUrl 请求
 vm.runInContext(`__lxDeliver(${JSON.stringify({ type: 'invoke', reqId: 'r1', payload: { source: 'kw', action: 'musicUrl', info: { type: '320k', musicInfo: { songmid: '42' } } } })})`, sandbox);
 const httpMsg = sent.find((m) => m.type === 'http');
 if (!httpMsg) throw new Error('no http bridge message');
 
-// 模拟 HTTP 返回
 vm.runInContext(`__lxDeliver(${JSON.stringify({ type: 'httpResult', reqId: httpMsg.data.reqId, error: null, response: { statusCode: 200, statusMessage: 'OK', headers: {} }, raw: '{"url":"http://cdn.example.com/42.mp3"}', body: { url: 'http://cdn.example.com/42.mp3' } })})`, sandbox);
 
 await new Promise((r) => setImmediate(r));

@@ -70,10 +70,8 @@ abstract final class DesktopControlKeys {
 class LyricsDisplaySettings extends ChangeNotifier {
   LyricsDisplaySettings({SharedPreferences? prefs}) : _prefsOverride = prefs;
 
-  // --- 持久化键名 ---
   static const String storageKey = 'lyrics_display_settings_v1';
 
-  // --- 默认值 ---
   static const int defaultOffsetMs = 0;
   static const bool defaultTranslationEnabled = true;
   static const bool defaultRomaEnabled = false;
@@ -181,17 +179,14 @@ class LyricsDisplaySettings extends ChangeNotifier {
   int _bluetoothUpdateIntervalMs = defaultBluetoothUpdateIntervalMs;
   LyricsPauseBehavior _bluetoothPauseBehavior = defaultBluetoothPauseBehavior;
 
-  // --- 共享项（输出侧：桌面歌词 / 通知·锁屏 / 蓝牙） ---
   int get offsetMs => _offsetMs;
   bool get translationEnabled => _translationEnabled;
   bool get romaEnabled => _romaEnabled;
   UnsyncedBehavior get unsyncedBehavior => _unsyncedBehavior;
 
-  // --- 歌词页（应用内） ---
   bool get pageTranslationEnabled => _pageTranslationEnabled;
   bool get pageRomaEnabled => _pageRomaEnabled;
 
-  // --- 桌面歌词 ---
   bool get desktopEnabled => _desktopEnabled;
   double get desktopFontSize => _desktopFontSize;
   double get desktopOpacity => _desktopOpacity;
@@ -203,7 +198,6 @@ class LyricsDisplaySettings extends ChangeNotifier {
       _desktopUnplayedColorSource;
   LyricColorSource get desktopShadowColorSource => _desktopShadowColorSource;
 
-  /// 「跟随主题角色」的方案来源（应用主题 / 当前曲目封面）。
   SurfaceColorSource get desktopSchemeSource => _desktopSchemeSource;
   double get desktopWidthPercent => _desktopWidthPercent;
   bool get desktopSingleLine => _desktopSingleLine;
@@ -217,14 +211,12 @@ class LyricsDisplaySettings extends ChangeNotifier {
   bool get desktopShowToggleAnimation => _desktopShowToggleAnimation;
   Map<String, bool> get desktopControls => Map.unmodifiable(_desktopControls);
 
-  // --- 通知栏 / 锁屏 ---
   bool get notificationEnabled => _notificationEnabled;
   LyricsMetadataTarget get notificationTarget => _notificationTarget;
   LyricsMetadataFormat get notificationFormat => _notificationFormat;
   bool get notificationIncludeTranslation => _notificationIncludeTranslation;
   LyricsPauseBehavior get notificationPauseBehavior => _notificationPauseBehavior;
 
-  // --- 蓝牙 ---
   bool get bluetoothEnabled => _bluetoothEnabled;
   bool get bluetoothOnlyWhenA2dp => _bluetoothOnlyWhenA2dp;
   LyricsMetadataTarget get bluetoothTarget => _bluetoothTarget;

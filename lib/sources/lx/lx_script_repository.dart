@@ -75,7 +75,7 @@ class LxScriptRepository {
   /// 语义说明：
   /// - [id]/[importedAt] 始终以原条目为准（更新不应改变脚本身份）；
   /// - [updated] 未声明 updateUrl 时保留原条目的 updateUrl（更新源不变）；
-  /// - 旧的源声明缓存（[LxScriptInfo.sources]）保留，脚本被重新激活时由
+  /// - 替换前的源声明缓存（[LxScriptInfo.sources]）保留，脚本被重新激活时由
   ///   [cacheSources] 覆盖为最新声明；未激活脚本的缓存不参与 UI 展示。
   ///
   /// 找不到 [id] 时抛 [StateError]（调用方应先确认脚本存在）。

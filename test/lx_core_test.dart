@@ -6,7 +6,7 @@ import 'package:molia/sources/builtin/crypto_utils.dart';
 import 'package:molia/sources/lx/lx_native_utils.dart';
 import 'package:molia/sources/lx/lx_script_info.dart';
 
-/// 测试向量由 Node.js 的 crypto 模块生成（见提交说明），
+/// 测试向量由 Node.js 的 crypto 模块生成，
 /// 用于校验 LX utils 与内置平台加密实现的正确性。
 void main() {
   group('LxNativeUtils.md5', () {

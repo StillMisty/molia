@@ -135,19 +135,16 @@ void main() {
     expect(player.isPlaying, isTrue);
     expect(player.contextName, '集成测试');
 
-    // 等进度推进
     await Future<void>.delayed(const Duration(seconds: 2));
     await tester.pump();
     expect(player.position, greaterThan(Duration.zero),
         reason: '播放进度没有推进');
 
-    // 暂停 / 继续
     await player.toggle();
     await waitFor(tester, () => !player.isPlaying, reason: '暂停未生效');
     await player.toggle();
     await waitFor(tester, () => player.isPlaying, reason: '继续播放未生效');
 
-    // 切歌
     await player.skipToNext();
     await waitFor(
       tester,
@@ -155,7 +152,6 @@ void main() {
       reason: '下一首未生效',
     );
 
-    // seek
     await player.seek(const Duration(milliseconds: 500));
     await tester.pump();
     expect(player.position,
@@ -241,10 +237,6 @@ void main() {
     expect(manager.preferredQuality, '320k');
   });
 }
-
-// ---------------------------------------------------------------------------
-// 测试辅助
-// ---------------------------------------------------------------------------
 
 void _handleRequest(HttpRequest request, int port, Uint8List wavBytes) {
   final path = request.uri.path;

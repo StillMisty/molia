@@ -94,8 +94,6 @@ class KgDiscoverSource extends DiscoverSource {
     DiscoverLeaderboard(id: 'kg__33161', name: '古风新歌榜', bangid: '33161'),
   ];
 
-  // ————————————————————————— 热榜 —————————————————————————
-
   @override
   Future<List<DiscoverTrack>> leaderboardTracks(String bangid) {
     return BuiltinSearch.transport.cached(
@@ -163,8 +161,6 @@ class KgDiscoverSource extends DiscoverSource {
       types: types,
     );
   }
-
-  // ————————————————————————— 歌单 —————————————————————————
 
   @override
   Future<DiscoverTags> tags() {
@@ -500,8 +496,6 @@ class KgDiscoverSource extends DiscoverSource {
       types: types,
     );
   }
-
-  // ————————————————————————— 热搜 —————————————————————————
 
   @override
   Future<List<String>> hotSearches() {

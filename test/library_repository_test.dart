@@ -9,7 +9,7 @@ import 'package:molia/data/lxmc_decoder.dart';
 import 'package:molia/domain/models/library.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
-/// 资料库仓库测试：sqflite FFI in-memory 库（schema 与生产一致，v3）。
+/// 资料库仓库测试：sqflite FFI in-memory 库（schema 与生产一致，v4）。
 void main() {
   sqfliteFfiInit();
 

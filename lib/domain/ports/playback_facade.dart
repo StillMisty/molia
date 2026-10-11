@@ -5,7 +5,7 @@ import 'state_listenable.dart';
 
 /// 对 UI 暴露的唯一播放入口：UI 不区分“本地/远程”。
 ///
-/// 阶段 1 适配版：只有本地后端，[isLocal] 恒 true。
+/// 当前只有本地后端，[isLocal] 恒 true。
 abstract interface class PlaybackFacade {
   /// 低频快照：曲目/队列/模式/后端/错误（值变才发）。
   StateListenable<PlaybackSnapshot> get snapshot;
@@ -21,7 +21,7 @@ abstract interface class PlaybackFacade {
   /// 在上下文中播放单曲：队列内已存在则跳转，否则以单曲队列加载。
   Future<void> playTrackInContext(Track track, {PlaybackContext? context});
 
-  /// 在已加载队列内按下标跳转（旧 `playQueueIndex` 语义）。
+  /// 在已加载队列内按下标跳转。
   Future<void> playQueueIndex(int index);
 
   /// 追加曲目到当前队列末尾（不打断当前播放）：顺序模式立即可达；

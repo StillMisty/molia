@@ -8,7 +8,7 @@ import 'package:flutter_test/flutter_test.dart';
 ///
 /// 唯一例外是导航「未选中」半对（选中/未选中成对图标按 M3 惯例：
 /// 未选中空心、选中实心）：资料库没有圆角空心字形，退用 `_outlined`；
-/// 音符已改用 Molia 标志组件（`lib/widgets/molia_mark.dart`），不再用字形。
+/// 音符不使用图标字形，由 Molia 标志组件（`lib/widgets/molia_mark.dart`）承载。
 const Set<String> _outlinedPairAllowlist = {
   'library_music_outlined',
 };
@@ -39,10 +39,6 @@ void main() {
     );
   });
 }
-
-// ---------------------------------------------------------------------------
-// 扫描实现
-// ---------------------------------------------------------------------------
 
 List<String> _libFiles() {
   final dir = Directory('lib');

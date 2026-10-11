@@ -21,7 +21,7 @@ AppLocalizations _l10n(BuildContext context) =>
 
 /// 音源管理页：导入 / 启停 / 删除 LX Music 音源脚本，设置默认音质。
 ///
-/// 分层（Wave 7）：只依赖 [SourcesProvider] 与 domain 模型，
+/// 分层：只依赖 [SourcesProvider] 与 domain 模型，
 /// 不直接 import `lib/sources/**`（R5）。
 class SourcesPage extends StatefulWidget {
   const SourcesPage({super.key});
@@ -110,7 +110,7 @@ class _SourcesPageState extends State<SourcesPage> {
                 provider.hasActiveSource
                     ? Icons.check_circle_rounded
                     : Icons.error_outline_rounded,
-                // 成功态走统一语义色（不再硬编码 Colors.green）。
+                // 成功态走统一语义色。
                 color: provider.hasActiveSource
                     ? semantic.success
                     : theme.colorScheme.error,

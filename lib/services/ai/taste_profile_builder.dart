@@ -1,6 +1,6 @@
 /// 听歌画像构建：把统计仓库的数据整理成 LLM 提示词输入。
 ///
-/// 上行内容（已与项目 owner 拍板）：聚合指标 + Top 艺人与曲目 +
+/// 上行内容：聚合指标 + Top 艺人与曲目 +
 /// 时段/来源分布 + 最近事件明细 + 全量已听排除清单。
 /// **不含 raw payload、不含设备信息**；数量上限集中在这里（token 预算）。
 library;
@@ -42,7 +42,7 @@ class TasteProfileBuilder {
 
   final PlayStatisticsRepository _repository;
 
-  /// token 预算上限（与 issue #9 的「聚合 + 明细」约定一致）。
+  /// token 预算上限（上行「聚合 + 明细」各段的数量约束）。
   static const int topArtistsLimit = 50;
   static const int topTracksLimit = 50;
   static const int recentEventLimit = 200;
