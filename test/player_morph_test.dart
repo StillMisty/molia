@@ -2,6 +2,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:molia/domain/models/playback.dart';
 import 'package:molia/domain/models/track.dart';
 import 'package:molia/providers/playback_provider.dart';
+import 'package:molia/widgets/molia_mark.dart';
 import 'package:molia/widgets/player_morph.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:provider/provider.dart';
@@ -96,6 +97,18 @@ void main() {
     return container.decoration! as BoxDecoration;
   }
 
+  /// 飞行副本内回退图标尺寸（无封面时副本只走默认回退这一个 MoliaMark）。
+  double fallbackIconSize(WidgetTester tester) {
+    return tester
+        .widget<MoliaMark>(
+          find.descendant(
+            of: find.byType(PlayerMorphFlight),
+            matching: find.byType(MoliaMark),
+          ),
+        )
+        .size!;
+  }
+
   testWidgets('前进（顶栏 → 播放页）：起点顶栏外观、落点播放页外观', (tester) async {
     await pumpFlight(tester, toPage: true, value: 0);
     expect(tester.takeException(), isNull);
@@ -142,6 +155,33 @@ void main() {
     expect(end.borderRadius, BorderRadius.circular(8));
     expect(end.border!.top.color.a, 0);
     expect(end.boxShadow!.first.color.a, 0);
+  });
+
+  testWidgets('图标态（无封面）：回退图标尺寸按两端真身插值', (tester) async {
+    // 回归：副本回退图标曾固定 32——起手比顶栏真身（22）大、落点比播放页
+    // 真身（边长 × 0.35）小，两端各跳一次。尺寸必须与几何同步插值。
+    const pageIcon = 280 * playerCoverFallbackIconRatio;
+
+    await pumpFlight(tester, toPage: true, value: 0);
+    expect(fallbackIconSize(tester), barCoverFallbackIconSize);
+
+    await pumpFlight(
+      tester,
+      toPage: true,
+      value: PlayerMorphFlight.flightPortion,
+    );
+    expect(fallbackIconSize(tester), closeTo(pageIcon, 1e-6));
+
+    // 反向：起点即播放页端真身尺寸，落点为顶栏端尺寸。
+    await pumpFlight(tester, toPage: false, value: 0);
+    expect(fallbackIconSize(tester), closeTo(pageIcon, 1e-6));
+
+    await pumpFlight(
+      tester,
+      toPage: false,
+      value: PlayerMorphFlight.flightPortion,
+    );
+    expect(fallbackIconSize(tester), barCoverFallbackIconSize);
   });
 
   testWidgets('rectOf：返回含祖先缩放的真实屏幕矩形', (tester) async {

@@ -5,7 +5,10 @@ import 'package:molia/domain/models/playback.dart';
 import 'package:molia/domain/models/track.dart';
 import 'package:molia/l10n/app_localizations.dart';
 import 'package:molia/providers/playback_provider.dart';
+import 'package:molia/widgets/molia_mark.dart';
 import 'package:molia/widgets/player.dart';
+import 'package:molia/widgets/player_cover_deck.dart';
+import 'package:molia/widgets/player_morph.dart';
 import 'package:material_3_expressive/material_3_expressive.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:provider/provider.dart';
@@ -254,6 +257,73 @@ void main() {
     await tester.pump(const Duration(milliseconds: 220));
     expect(expand.value, 1.0);
     expect(tester.takeException(), isNull);
+  });
+
+  /// 飞行副本封面内的回退图标尺寸（无封面时副本只走默认回退这一颗）。
+  double? flightFallbackIconSize(WidgetTester tester) {
+    final finder = find.descendant(
+      of: find.byType(MorphCover),
+      matching: find.byType(MoliaMark),
+    );
+    if (finder.evaluate().isEmpty) return null;
+    return tester.widget<MoliaMark>(finder).size;
+  }
+
+  testWidgets('迷你⇄完整飞行：回退图标按两端真身插值（不再固定 64）', (tester) async {
+    // 回归：副本回退图标曾固定 64——迷你端真身 24、完整端真身（边长 × 0.35）
+    // 都不同，起手与落点各跳一次。
+    emitThreeTracks();
+    final expand = AnimationController(
+      vsync: const TestVSync(),
+      duration: const Duration(milliseconds: 360),
+      value: 1.0,
+    );
+    addTearDown(expand.dispose);
+
+    await pumpPlayer(tester, expand: expand, onToggleExpand: () {});
+
+    // 完整端真身：卡片边长与稳态回退图标（边长 × 0.35）。
+    final fullCard = find.byKey(
+      PlayerCoverDeck.centerCoverTrackKey(const TrackId('fake', 'b')),
+    );
+    final fullSize = tester.getSize(fullCard).width;
+    final fullIcon = tester
+        .widget<MoliaMark>(
+          find.descendant(of: fullCard, matching: find.byType(MoliaMark)),
+        )
+        .size;
+    expect(fullIcon, closeTo(fullSize * playerCoverFallbackIconRatio, 1e-6));
+
+    // 收起：飞行起手帧与完整端真身同尺寸。
+    expand.reverse();
+    await tester.pump();
+    expect(
+      flightFallbackIconSize(tester),
+      closeTo(fullSize * playerCoverFallbackIconRatio, 0.5),
+    );
+
+    // 收起完成：飞行副本撤下，迷你端真身回退图标 = 24。
+    await tester.pump(const Duration(milliseconds: 400));
+    expect(expand.value, 0.0);
+    expect(flightFallbackIconSize(tester), isNull);
+    final marks = tester
+        .widgetList<MoliaMark>(find.byType(MoliaMark))
+        .map((mark) => mark.size)
+        .toList();
+    expect(marks, contains(miniCoverFallbackIconSize));
+
+    // 展开：飞行起手帧与迷你端真身同尺寸。
+    expand.forward();
+    await tester.pump();
+    expect(
+      flightFallbackIconSize(tester),
+      closeTo(miniCoverFallbackIconSize, 0.5),
+    );
+    await tester.pump(const Duration(milliseconds: 400));
+    expect(expand.value, 1.0);
+    expect(tester.takeException(), isNull);
+    // 通知节流计时器跑完，避免测试结束时报 pending timer。
+    await tester.pump(const Duration(milliseconds: 50));
   });
 
   testWidgets('窄屏（320 逻辑宽）不溢出', (tester) async {

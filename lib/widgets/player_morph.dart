@@ -8,6 +8,14 @@ import '../managers/artwork_cache.dart';
 import '../providers/playback_provider.dart';
 import 'molia_mark.dart';
 
+/// 顶栏封面回退图标尺寸（40×40 顶栏封面真身）；两端真身与飞行副本共用，
+/// 禁止任一端再写死（尺寸漂移会让图标态飞行的起手/落点跳变）。
+const double barCoverFallbackIconSize = 22;
+
+/// 播放页封面卡回退图标尺寸占卡片边长的比例（cover deck 真身）；
+/// 与顶栏端同源共用的原因同上。
+const double playerCoverFallbackIconRatio = 0.35;
+
 /// 顶栏 ↔ 播放页共享元素飞行控制器。
 ///
 /// **只共享封面**：顶栏与播放页各自持有封面真身，切换 tab 时两端封面隐藏，
@@ -127,13 +135,23 @@ class PlayerMorphFlight extends StatelessWidget {
         final t = Curves.easeInOutCubic.transform(
           (value / flightPortion).clamp(0.0, 1.0),
         );
+        // 回退图标（无封面 / 加载中）尺寸随几何插值：起点匹配顶栏真身、
+        // 落点匹配播放页真身。固定尺寸会在起手与交接两处各跳一次。
+        // pageCover 取真实屏幕矩形（rectOf 含祖先缩放），两端真身的回退
+        // 图标随卡片整体缩放，宽度比例天然一致。
+        final double iconT = geometry.toPage ? t : 1 - t;
+        final double fallbackIconSize = lerpDouble(
+          barCoverFallbackIconSize,
+          geometry.pageCover.width * playerCoverFallbackIconRatio,
+          iconT,
+        )!;
         return IgnorePointer(
           child: Stack(
             clipBehavior: Clip.none,
             children: [
               _positioned(
                 Rect.lerp(geometry.coverFrom, geometry.coverTo, t)!,
-                _cover(context, coverUrl, t),
+                _cover(context, coverUrl, t, fallbackIconSize),
               ),
             ],
           ),
@@ -146,13 +164,19 @@ class PlayerMorphFlight extends StatelessWidget {
     return Positioned.fromRect(rect: rect, child: child);
   }
 
-  /// 封面副本：圆角/描边/阴影与两端真身同款并按飞行方向插值。
+  /// 封面副本：圆角/描边/阴影与两端真身同款并按飞行方向插值；
+  /// 回退图标尺寸（[fallbackIconSize]）同理，由调用方按飞行进度插值传入。
   ///
   /// [t] 按飞行方向定义（0 = 起点、1 = 终点），但外观必须按「播放页端
   /// 进度」插值：反向飞行（播放页 → 顶栏）起飞帧 t=0 在播放页端，若仍按
   /// t 插值，大封面圆角会从 18 瞬间掉到 8（看起来圆角消失），又在顶栏端
   /// 以 18 落位（与顶栏真身 8 不匹配）。
-  Widget _cover(BuildContext context, String? url, double t) {
+  Widget _cover(
+    BuildContext context,
+    String? url,
+    double t,
+    double fallbackIconSize,
+  ) {
     final scheme = Theme.of(context).colorScheme;
     final double pageT = geometry.toPage ? t : 1 - t;
     final double radius = lerpDouble(_barRadius, _pageRadius, pageT)!;
@@ -178,6 +202,7 @@ class PlayerMorphFlight extends StatelessWidget {
       child: MorphCover(
         url: url,
         borderRadius: BorderRadius.circular(clipRadius),
+        fallbackIconSize: fallbackIconSize,
       ),
     );
   }
@@ -194,6 +219,7 @@ class MorphCover extends StatefulWidget {
     required this.url,
     required this.borderRadius,
     this.fallback,
+    this.fallbackIconSize,
   });
 
   final String? url;
@@ -201,6 +227,9 @@ class MorphCover extends StatefulWidget {
 
   /// 未命中缓存/加载失败时的回退（默认主题容器色 + 音符图标）。
   final Widget? fallback;
+
+  /// 默认回退图标尺寸（[fallback] 为空时生效）；不传时保持历史固定值 32。
+  final double? fallbackIconSize;
 
   @override
   State<MorphCover> createState() => _MorphCoverState();
@@ -264,7 +293,7 @@ class _MorphCoverState extends State<MorphCover> {
       alignment: Alignment.center,
       child: MoliaMark(
         color: scheme.onSurfaceVariant,
-        size: 32,
+        size: widget.fallbackIconSize ?? 32,
       ),
     );
   }

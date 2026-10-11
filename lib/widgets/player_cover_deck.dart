@@ -61,14 +61,20 @@ String? artworkUrlOf(Track? track) {
 String? trackKeyOf(Track? track) => track?.id.uri;
 
 /// 无封面时的中性占位：主题容器色背景 + Molia 标志。
-Widget buildFallbackArtwork(BuildContext context, {Key? key}) {
+///
+/// [iconSize] 供共享元素飞行副本按两端真身插值（默认 64 = 卡片级占位）。
+Widget buildFallbackArtwork(
+  BuildContext context, {
+  Key? key,
+  double iconSize = 64,
+}) {
   final scheme = Theme.of(context).colorScheme;
   return Container(
     key: key,
     color: scheme.surfaceContainerHighest,
     alignment: Alignment.center,
     child: MoliaMark(
-      size: 64,
+      size: iconSize,
       color: scheme.onSurfaceVariant,
     ),
   );
@@ -76,10 +82,13 @@ Widget buildFallbackArtwork(BuildContext context, {Key? key}) {
 
 /// 构建默认/回退封面：优先使用持久化的最后播放封面；没有（或加载失败）时
 /// 用中性占位图标。
+///
+/// [iconSize] 透传给回退图标（飞行副本按进度插值；默认 64 不变）。
 Widget buildDefaultArtwork(
   BuildContext context, {
   Key? key,
   BoxFit fit = BoxFit.cover,
+  double iconSize = 64,
 }) {
   final lastPlayedImageUrl =
       context.read<PlaybackProvider>().lastPlayedImageUrl;
@@ -88,12 +97,12 @@ Widget buildDefaultArtwork(
       key: key ?? const ValueKey('last_played_image'),
       url: lastPlayedImageUrl,
       fit: fit,
-      fallbackIconSize: 64,
-      errorWidget: buildFallbackArtwork(context, key: key),
+      fallbackIconSize: iconSize,
+      errorWidget: buildFallbackArtwork(context, key: key, iconSize: iconSize),
     );
   }
   return buildFallbackArtwork(context,
-      key: key ?? const ValueKey('default_image'));
+      key: key ?? const ValueKey('default_image'), iconSize: iconSize);
 }
 
 /// 完整播放器封面堆叠：三封面（槽位）渲染 + 横滑切歌手势 + 切歌会话状态。
@@ -1710,7 +1719,7 @@ class _PlayerCoverDeckState extends State<PlayerCoverDeck>
         ? AppNetworkImage(
             url: placeholderUrl,
             fit: BoxFit.cover,
-            fallbackIconSize: size * 0.35,
+            fallbackIconSize: size * playerCoverFallbackIconRatio,
           )
         : fallback;
     return SizedBox(
@@ -1734,7 +1743,8 @@ class _PlayerCoverDeckState extends State<PlayerCoverDeck>
           child: AppNetworkImage(
             url: url,
             fit: BoxFit.cover,
-            fallbackIconSize: size * 0.35,
+            // 与顶栏↔播放页飞行共享同一比例（图标态落点必须与真身同尺寸）。
+            fallbackIconSize: size * playerCoverFallbackIconRatio,
             placeholder: placeholder,
             errorWidget: fallback,
           ),

@@ -627,7 +627,8 @@ class _BarCover extends StatelessWidget {
     return AppNetworkImage(
       url: coverUrl,
       borderRadius: BorderRadius.circular(8),
-      fallbackIconSize: 22,
+      // 与飞行副本共用同一尺寸源（图标态飞行起点必须与真身同尺寸）。
+      fallbackIconSize: barCoverFallbackIconSize,
     );
   }
 }

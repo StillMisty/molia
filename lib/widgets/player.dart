@@ -23,6 +23,10 @@ import 'player_morph.dart';
 /// 迷你播放条高度（收起态）：展开/收起动画的迷你端基准，播放页共用。
 const double miniPlayerHeight = 72;
 
+/// 迷你条封面回退图标尺寸（48dp 迷你封面真身）：迷你⇄完整飞行副本
+/// 按两端真身插值，禁止与完整端各自写死。
+const double miniCoverFallbackIconSize = 24;
+
 class Player extends StatefulWidget {
   final bool isLargeScreen;
 
@@ -510,6 +514,14 @@ class _PlayerState extends State<Player> with TickerProviderStateMixin {
   ) {
     final scheme = Theme.of(context).colorScheme;
     final double radius = lerpDouble(8, 18, t)!;
+    // 回退图标随两端真身插值（迷你端 [miniCoverFallbackIconSize]、完整端
+    // 封面边长 × [playerCoverFallbackIconRatio]；t=1 时 size 即完整端边长）：
+    // 固定尺寸会在起手/交接两处跳变。
+    final double fallbackIconSize = lerpDouble(
+      miniCoverFallbackIconSize,
+      size * playerCoverFallbackIconRatio,
+      t,
+    )!;
     return SizedBox(
       width: size,
       height: size,
@@ -531,7 +543,7 @@ class _PlayerState extends State<Player> with TickerProviderStateMixin {
         child: MorphCover(
           url: artworkUrlOf(track),
           borderRadius: BorderRadius.circular(radius - t),
-          fallback: buildDefaultArtwork(context),
+          fallback: buildDefaultArtwork(context, iconSize: fallbackIconSize),
         ),
       ),
     );
@@ -958,12 +970,12 @@ class _PlayerState extends State<Player> with TickerProviderStateMixin {
       key: ValueKey(currentImageUrl),
       url: currentImageUrl,
       fit: BoxFit.cover,
-      fallbackIconSize: 24,
+      fallbackIconSize: miniCoverFallbackIconSize,
       placeholder: _lastTrack != null && _lastImageUrl != null
           ? AppNetworkImage(
               url: _lastImageUrl,
               fit: BoxFit.cover,
-              fallbackIconSize: 24,
+              fallbackIconSize: miniCoverFallbackIconSize,
             )
           : buildDefaultArtwork(context),
       errorWidget: buildDefaultArtwork(context),
