@@ -84,7 +84,8 @@ lib/
 
 - 状态管理：订阅优先 `Selector`/`ValueListenableBuilder`；`select` 禁止返回 `Map`/`List`
   引用（用不可变对象/record）；
-- 文案必须走 `AppLocalizations`（en/zh + `flutter gen-l10n`）；注释中文为主，关键设计写明「为什么」；
+- 文案必须走 `AppLocalizations`（en/zh + `flutter gen-l10n`）；注释中文为主，关键设计写明「为什么」，
+  噪音注释的界定与清理标准见 `docs/comment_style.md`；
 - UI 硬约定（由 `test/architecture/` 扫描强制，细节见 `docs/architecture.md` §6）：
   图标一律 `Icons.*_rounded`；颜色只走 ColorScheme/`AppSemanticColors`，透明度用
   `withValues(alpha:)`；优先 `M3E*` 组件，禁止 import `package:flutter/material.dart`；
