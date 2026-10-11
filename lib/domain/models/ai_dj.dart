@@ -62,12 +62,12 @@ class LlmProviderPreset {
     LlmProviderPreset(
       name: 'DeepSeek',
       baseUrl: 'https://api.deepseek.com',
-      model: 'deepseek-chat',
+      model: 'deepseek-flash',
     ),
     LlmProviderPreset(
       name: 'OpenAI',
       baseUrl: 'https://api.openai.com/v1',
-      model: 'gpt-4o-mini',
+      model: 'gpt-6-luna',
     ),
   ];
 }
