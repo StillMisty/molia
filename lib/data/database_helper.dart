@@ -8,7 +8,8 @@ import 'package:logger/logger.dart';
 // 本文件使用的 logger 实例
 final logger = Logger();
 
-/// 本地数据库：最近播放上下文（play_contexts）+ 资料库（播放历史 / 用户列表）。
+/// 本地数据库：最近播放上下文（play_contexts）+ 资料库（播放历史 / 用户列表）
+/// + 听歌统计（play_events）。
 class DatabaseHelper {
   static final DatabaseHelper instance = DatabaseHelper._privateConstructor();
   static Database? _database;
@@ -17,7 +18,8 @@ class DatabaseHelper {
 
   /// v2：仅保留 play_contexts；升级时丢弃旧的 tracks/records/translations 表。
   /// v3：新增 play_history / playlists / playlist_tracks（Wave 9 播放持久化）。
-  static const int _dbVersion = 3;
+  /// v4：新增 play_events（听歌统计，事件级 append-only）。
+  static const int _dbVersion = 4;
 
   /// 当前 schema 版本（测试用 in-memory 库按此建表）。
   static int get dbVersion => _dbVersion;
@@ -59,6 +61,7 @@ class DatabaseHelper {
   static Future<void> createSchema(Database db) async {
     await createPlayContextsSchema(db);
     await createLibrarySchema(db);
+    await createPlayStatisticsSchema(db);
   }
 
   /// play_contexts（v1 起的最近播放上下文）。
@@ -126,9 +129,47 @@ class DatabaseHelper {
         'CREATE INDEX IF NOT EXISTS idx_playlist_tracks_order ON playlist_tracks (playlistId, sortOrder, addedAt);');
   }
 
+  /// v4 听歌统计表：一次播放尝试一行（append-only）。
+  ///
+  /// 元数据为播放时快照、自包含（`raw` 供统计页点播）；`endedAt` 为 null
+  /// 表示进行中（进程被杀遗留的行由启动时 `closeStaleEvents()` 收尾）。
+  static Future<void> createPlayStatisticsSchema(Database db) async {
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS play_events (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        sourceKey TEXT NOT NULL,
+        songId TEXT NOT NULL,
+        title TEXT NOT NULL DEFAULT '',
+        artist TEXT NOT NULL DEFAULT '',
+        album TEXT NOT NULL DEFAULT '',
+        coverUrl TEXT,
+        durationMs INTEGER,
+        raw TEXT NOT NULL DEFAULT '{}',
+        startedAt INTEGER NOT NULL,
+        endedAt INTEGER,
+        listenedMs INTEGER NOT NULL DEFAULT 0,
+        maxPositionMs INTEGER NOT NULL DEFAULT 0,
+        endReason TEXT
+      );
+    ''');
+    await db.execute(
+        'CREATE INDEX IF NOT EXISTS idx_play_events_startedAt ON play_events (startedAt);');
+    await db.execute(
+        'CREATE INDEX IF NOT EXISTS idx_play_events_track ON play_events (sourceKey, songId);');
+  }
+
   /// v1 → v2：删除笔记/记录/翻译/曲目表（功能已移除）。
   /// v2 → v3：新增资料库表（保留 play_contexts，不动旧数据）。
-  Future<void> _onUpgrade(Database db, int oldVersion, int newVersion) async {
+  /// v3 → v4：新增听歌统计表（保留全部旧数据）。
+  Future<void> _onUpgrade(Database db, int oldVersion, int newVersion) =>
+      upgradeSchema(db, oldVersion, newVersion);
+
+  /// 版本迁移逻辑（独立静态方法便于迁移测试直接驱动）。
+  static Future<void> upgradeSchema(
+    Database db,
+    int oldVersion,
+    int newVersion,
+  ) async {
     if (oldVersion < 2) {
       await db.execute('DROP TABLE IF EXISTS records');
       await db.execute('DROP TABLE IF EXISTS translations');
@@ -136,6 +177,9 @@ class DatabaseHelper {
     }
     if (oldVersion < 3) {
       await createLibrarySchema(db);
+    }
+    if (oldVersion < 4) {
+      await createPlayStatisticsSchema(db);
     }
   }
 
