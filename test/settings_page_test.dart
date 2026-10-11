@@ -194,6 +194,23 @@ void main() {
     expect(prefs.getString('theme_mode'), 'dark');
   });
 
+  testWidgets('主题模式弹层：取消只关弹层，设置首屏保留', (tester) async {
+    await pumpSettingsPage(tester);
+
+    await tester.tap(find.byKey(const Key('settingsThemeModeItem')));
+    await tester.pumpAndSettle();
+    expect(find.byType(M3EDialog), findsOneWidget);
+
+    // M3EDialog 挂 root navigator；取消若用首屏 context 定向，
+    // 弹掉的是设置弹层内部 Navigator 的首屏，表现为设置内容整块消失。
+    await tester.tap(find.text('Cancel'));
+    await tester.pumpAndSettle();
+
+    expect(find.byType(M3EDialog), findsNothing);
+    expect(find.text('Theme mode'), findsOneWidget);
+    expect(themeProvider.themeMode, ThemeMode.system);
+  });
+
   testWidgets('基础配色弹层：选择自定义颜色后持久化', (tester) async {
     await pumpSettingsPage(tester);
 

@@ -168,7 +168,7 @@ class DataSettingsPage extends StatelessWidget {
         ),
         actions: [
           M3EButton.text(
-            onPressed: () => Navigator.pop(context),
+            onPressed: () => navigator.pop(),
             child: Text(l10n.cancelButton),
           ),
           M3EButton.text(

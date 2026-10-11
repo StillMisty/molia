@@ -563,6 +563,9 @@ class _SourcesPageState extends State<SourcesPage> {
     SourceScriptInfo script,
   ) async {
     final l10n = _l10n(context);
+    // 弹层 dialog 挂 root navigator（M3EDialog.show 语义）；本页位于设置弹层
+    // 的嵌套 Navigator 内，页面 context 上的 pop 会误退本页，关闭要显式定向。
+    final navigator = Navigator.of(context, rootNavigator: true);
     final confirmed = await M3EDialog.show<bool>(
       context,
       dialog: M3EDialog(
@@ -570,11 +573,11 @@ class _SourcesPageState extends State<SourcesPage> {
         content: Text(l10n.sourcesDeleteScriptConfirm(script.name)),
         actions: [
           M3EButton.text(
-            onPressed: () => Navigator.pop(context, false),
+            onPressed: () => navigator.pop(false),
             child: Text(l10n.cancel),
           ),
           M3EButton.filled(
-            onPressed: () => Navigator.pop(context, true),
+            onPressed: () => navigator.pop(true),
             child: Text(l10n.delete),
           ),
         ],
@@ -587,6 +590,8 @@ class _SourcesPageState extends State<SourcesPage> {
 
   Future<bool> _showDisclaimer(BuildContext context) async {
     final l10n = _l10n(context);
+    // 同 _confirmDelete：弹层在 root navigator，关闭需显式定向。
+    final navigator = Navigator.of(context, rootNavigator: true);
     final confirmed = await M3EDialog.show<bool>(
       context,
       dialog: M3EDialog(
@@ -594,11 +599,11 @@ class _SourcesPageState extends State<SourcesPage> {
         content: Text(l10n.sourcesDisclaimerBody),
         actions: [
           M3EButton.text(
-            onPressed: () => Navigator.pop(context, false),
+            onPressed: () => navigator.pop(false),
             child: Text(l10n.cancel),
           ),
           M3EButton.filled(
-            onPressed: () => Navigator.pop(context, true),
+            onPressed: () => navigator.pop(true),
             child: Text(l10n.sourcesContinueImport),
           ),
         ],
@@ -638,6 +643,8 @@ class _SourcesPageState extends State<SourcesPage> {
   ) async {
     final l10n = _l10n(context);
     final controller = TextEditingController();
+    // 同 _confirmDelete：弹层在 root navigator，关闭需显式定向。
+    final navigator = Navigator.of(context, rootNavigator: true);
     final script = await M3EDialog.show<String>(
       context,
       dialog: M3EDialog(
@@ -653,11 +660,11 @@ class _SourcesPageState extends State<SourcesPage> {
         ),
         actions: [
           M3EButton.text(
-            onPressed: () => Navigator.pop(context),
+            onPressed: () => navigator.pop(),
             child: Text(l10n.cancel),
           ),
           M3EButton.filled(
-            onPressed: () => Navigator.pop(context, controller.text),
+            onPressed: () => navigator.pop(controller.text),
             child: Text(l10n.sourcesImportAction),
           ),
         ],
@@ -682,6 +689,8 @@ class _SourcesPageState extends State<SourcesPage> {
   ) async {
     final l10n = _l10n(context);
     final controller = TextEditingController();
+    // 同 _confirmDelete：弹层在 root navigator，关闭需显式定向。
+    final navigator = Navigator.of(context, rootNavigator: true);
     final input = await M3EDialog.show<String>(
       context,
       dialog: M3EDialog(
@@ -696,11 +705,11 @@ class _SourcesPageState extends State<SourcesPage> {
         ),
         actions: [
           M3EButton.text(
-            onPressed: () => Navigator.pop(context),
+            onPressed: () => navigator.pop(),
             child: Text(l10n.cancel),
           ),
           M3EButton.filled(
-            onPressed: () => Navigator.pop(context, controller.text.trim()),
+            onPressed: () => navigator.pop(controller.text.trim()),
             child: Text(l10n.sourcesDownloadAndImport),
           ),
         ],

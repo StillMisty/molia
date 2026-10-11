@@ -395,22 +395,25 @@ class _AiDjPageState extends State<AiDjPage> {
 
   Future<void> _confirmStop() async {
     final l10n = AppLocalizations.of(context)!;
+    // 弹层 dialog 挂 root navigator（M3EDialog.show 语义）；本页位于设置弹层的
+    // 嵌套 Navigator 内，页面 context 上的 pop 会误退本页，关闭要显式定向。
+    final navigator = Navigator.of(context, rootNavigator: true);
     final keepQueue = await M3EDialog.show<bool>(
       context,
       dialog: M3EDialog(
         title: l10n.aiDjStopDialogTitle,
         actions: [
           M3EButton.text(
-            onPressed: () => Navigator.pop(context),
+            onPressed: () => navigator.pop(),
             child: Text(l10n.cancel),
           ),
           M3EButton.text(
             key: const Key('aiDjStopKeepQueueButton'),
-            onPressed: () => Navigator.pop(context, true),
+            onPressed: () => navigator.pop(true),
             child: Text(l10n.aiDjStopKeepQueue),
           ),
           M3EButton.filled(
-            onPressed: () => Navigator.pop(context, false),
+            onPressed: () => navigator.pop(false),
             child: Text(l10n.aiDjStopClearQueue),
           ),
         ],

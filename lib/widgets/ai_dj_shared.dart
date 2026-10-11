@@ -16,6 +16,9 @@ Future<bool> ensureAiDjConsent(
 ) async {
   if (provider.consentGranted) return true;
   final l10n = AppLocalizations.of(context)!;
+  // 弹层 dialog 挂 root navigator（M3EDialog.show 语义）；AI 页位于设置弹层的
+  // 嵌套 Navigator 内，页面 context 上的 pop 会误退本页，关闭要显式定向。
+  final navigator = Navigator.of(context, rootNavigator: true);
   final agreed = await M3EDialog.show<bool>(
     context,
     dialog: M3EDialog(
@@ -23,12 +26,12 @@ Future<bool> ensureAiDjConsent(
       content: SingleChildScrollView(child: Text(l10n.aiDjConsentBody)),
       actions: [
         M3EButton.text(
-          onPressed: () => Navigator.pop(context, false),
+          onPressed: () => navigator.pop(false),
           child: Text(l10n.cancel),
         ),
         M3EButton.filled(
           key: const Key('aiDjConsentAgreeButton'),
-          onPressed: () => Navigator.pop(context, true),
+          onPressed: () => navigator.pop(true),
           child: Text(l10n.aiDjAgree),
         ),
       ],

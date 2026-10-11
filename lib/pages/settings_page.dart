@@ -529,7 +529,7 @@ class _SettingsHomeViewState extends State<_SettingsHomeView> {
         ),
         actions: [
           M3EButton.text(
-            onPressed: () => Navigator.pop(context),
+            onPressed: () => navigator.pop(),
             child: Text(l10n.cancelButton),
           ),
         ],
@@ -589,7 +589,7 @@ class _SettingsHomeViewState extends State<_SettingsHomeView> {
         ),
         actions: [
           M3EButton.text(
-            onPressed: () => Navigator.pop(context),
+            onPressed: () => navigator.pop(),
             child: Text(l10n.cancelButton),
           ),
         ],
@@ -645,7 +645,7 @@ class _SettingsHomeViewState extends State<_SettingsHomeView> {
         ),
         actions: [
           M3EButton.text(
-            onPressed: () => Navigator.pop(context),
+            onPressed: () => navigator.pop(),
             child: Text(l10n.cancelButton),
           ),
         ],
@@ -731,7 +731,7 @@ class _SettingsHomeViewState extends State<_SettingsHomeView> {
         ),
         actions: [
           M3EButton.text(
-            onPressed: () => Navigator.pop(context),
+            onPressed: () => navigator.pop(),
             child: Text(l10n.cancelButton),
           ),
         ],
