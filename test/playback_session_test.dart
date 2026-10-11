@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:molia/domain/models/playback.dart';
 import 'package:molia/domain/models/track.dart';
@@ -18,6 +20,32 @@ Track _track(String id, {String? artwork}) => Track(
       origin: TrackOrigin.lx,
       payload: {'id': id, 'songmid': 'mid_$id'},
     );
+
+/// 模拟真实后端的装载过程：load 时先推送「当前曲目 + 进度 0」的加载态，
+/// 用于复现「恢复播放时进度条先回 0 再跳回恢复进度」；
+/// [gate] 非空时停在取链阶段，模拟慢取链（装载期间的用户操作窗口）。
+class _LoadingBackend extends FakePlaybackBackend {
+  _LoadingBackend({this.gate});
+
+  final Completer<void>? gate;
+
+  @override
+  Future<void> load(PlaybackRequest request) async {
+    await super.load(request);
+    final track = request.tracks[request.startIndex];
+    emit(BackendSnapshot(
+      current: track,
+      queue: request.tracks,
+      currentIndex: request.startIndex,
+      isLoading: true,
+      position: Duration.zero,
+      duration: track.duration ?? Duration.zero,
+      mode: state.value.mode,
+    ));
+    final gate = this.gate;
+    if (gate != null) await gate.future;
+  }
+}
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -101,6 +129,148 @@ void main() {
     expect(provider.hasRestoredSession, isFalse);
     // 恢复播放后进度通道交还底层：落在保存的进度上。
     expect(provider.position.value, const Duration(seconds: 25));
+  });
+
+  test('重启后恢复态仍可调整播放模式，恢复播放沿用所选模式', () async {
+    await PlaybackSessionStore().save(PlaybackSession(
+      tracks: [_track('a')],
+      index: 0,
+      position: Duration.zero,
+      mode: PlayMode.shuffle,
+    ));
+
+    final backend = FakePlaybackBackend();
+    final provider = buildTestPlaybackProvider(backend: backend);
+    addTearDown(provider.dispose);
+    await provider.preferencesReady;
+
+    // 恢复态展示会话里的模式。
+    expect(provider.currentMode, PlayMode.shuffle);
+
+    // 恢复态切换模式（模式按钮同路径）：UI 立即跟随，不再「点不动」。
+    await provider.togglePlayMode();
+    expect(provider.currentMode, PlayMode.singleRepeat);
+    expect(provider.snapshot.mode, PlayMode.singleRepeat);
+    expect(backend.state.value.mode, PlayMode.singleRepeat);
+
+    // 新模式写入恢复会话：重启后仍保留。
+    await Future<void>.delayed(Duration.zero);
+    await Future<void>.delayed(Duration.zero);
+    expect((await PlaybackSessionStore().load())?.mode,
+        PlayMode.singleRepeat);
+
+    // 会话模式与后端不一致（启动默认模式覆盖后端）+ 恢复播放：
+    // 恢复时应把会话模式带给后端（shuffle 顺序依赖装载前的模式）。
+    await provider.setPlayMode(PlayMode.shuffle);
+    await provider.setDefaultPlayMode(PlayMode.sequential);
+    expect(backend.state.value.mode, PlayMode.sequential);
+
+    await provider.resumeRestoredSession();
+    expect(backend.state.value.mode, PlayMode.shuffle);
+    expect(provider.currentMode, PlayMode.shuffle);
+  });
+
+  test('恢复播放：seek 落地前进度不闪回 0（保持恢复进度）', () async {
+    await PlaybackSessionStore().save(PlaybackSession(
+      tracks: [_track('a')],
+      index: 0,
+      position: const Duration(seconds: 20),
+      mode: PlayMode.sequential,
+    ));
+
+    final backend = _LoadingBackend();
+    final provider = buildTestPlaybackProvider(backend: backend);
+    addTearDown(provider.dispose);
+    await provider.preferencesReady;
+    expect(provider.position.value, const Duration(seconds: 20));
+
+    // 记录进度通道暴露给 UI 的全部中间值。
+    final observed = <Duration>[];
+    provider.position.addListener(() => observed.add(provider.position.value));
+
+    await provider.togglePlayPause();
+
+    // 装载时后端进度对齐到 0：期间不应把 0 暴露给 UI（先回首部再跳回）。
+    expect(observed, isNot(contains(Duration.zero)));
+    expect(provider.position.value, const Duration(seconds: 20));
+    expect(backend.calls, contains('seek'));
+
+    // 装载时的强制保存记的是 0；恢复流程末尾应立即写回恢复进度。
+    await Future<void>.delayed(Duration.zero);
+    await Future<void>.delayed(Duration.zero);
+    expect((await PlaybackSessionStore().load())?.position,
+        const Duration(seconds: 20));
+  });
+
+  test('恢复装载期间用户 seek 优先于保存进度', () async {
+    await PlaybackSessionStore().save(PlaybackSession(
+      tracks: [_track('a')],
+      index: 0,
+      position: const Duration(seconds: 20),
+      mode: PlayMode.sequential,
+    ));
+
+    final gate = Completer<void>();
+    final backend = _LoadingBackend(gate: gate);
+    final provider = buildTestPlaybackProvider(backend: backend);
+    addTearDown(provider.dispose);
+    await provider.preferencesReady;
+
+    // 点播放后停在取链阶段，用户此时拖到 60s。
+    final resume = provider.togglePlayPause();
+    await Future<void>.delayed(Duration.zero);
+    await provider.seekToPosition(60000);
+    gate.complete();
+    await resume;
+
+    // 恢复流程不应把用户目标覆盖回保存进度。
+    expect(provider.currentPosition, const Duration(seconds: 60));
+    await Future<void>.delayed(Duration.zero);
+    await Future<void>.delayed(Duration.zero);
+    expect((await PlaybackSessionStore().load())?.position,
+        const Duration(seconds: 60));
+  });
+
+  test('flushPlaybackSession：后台强制保存最新进度（不等节流窗口）', () async {
+    final backend = FakePlaybackBackend();
+    final provider = buildTestPlaybackProvider(backend: backend);
+    addTearDown(provider.dispose);
+    await provider.preferencesReady;
+
+    backend.emit(BackendSnapshot(
+      current: _track('a'),
+      queue: [_track('a')],
+      currentIndex: 0,
+      isPlaying: true,
+      position: const Duration(seconds: 7),
+      duration: const Duration(seconds: 30),
+    ));
+    await Future<void>.delayed(Duration.zero);
+    await Future<void>.delayed(Duration.zero);
+    expect((await PlaybackSessionStore().load())?.position,
+        const Duration(seconds: 7));
+
+    // 播放推进到 30s：节流窗口内不会自动落盘（先强制保存 7s 重置窗口，
+    // 避免测试时长影响节流判定）。
+    provider.flushPlaybackSession();
+    backend.emit(BackendSnapshot(
+      current: _track('a'),
+      queue: [_track('a')],
+      currentIndex: 0,
+      isPlaying: true,
+      position: const Duration(seconds: 30),
+      duration: const Duration(seconds: 30),
+    ));
+    await Future<void>.delayed(Duration.zero);
+    expect((await PlaybackSessionStore().load())?.position,
+        const Duration(seconds: 7));
+
+    // 生命周期 paused：强制落盘到最新进度。
+    provider.flushPlaybackSession();
+    await Future<void>.delayed(Duration.zero);
+    await Future<void>.delayed(Duration.zero);
+    expect((await PlaybackSessionStore().load())?.position,
+        const Duration(seconds: 30));
   });
 
   test('真实播放后保存会话：新实例可恢复（含 raw）', () async {

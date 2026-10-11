@@ -61,6 +61,13 @@ android {
             // 会为 Android 一并生成 native asset（libsqlite3.so，约 1.7MB），
             // Android 实际走系统 SQLite（sqflite_android），这里显式剔除。
             excludes += ["**/libsqlite3.so"]
+
+            // 发布 APK 为直接分发（无 Play/AAB 的分发侧压缩），压缩 native 库以减小下载体积
+            useLegacyPackaging = true
+        }
+        dex {
+            // 同上，压缩 dex（minSdk≥28 时 AGP 默认不压缩以支持 mmap 直载，约 2.2MB → 1.0MB）。
+            useLegacyPackaging = true
         }
     }
 }

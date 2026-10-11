@@ -73,7 +73,9 @@
   `ValueNotifier`（≥250ms 去重、换曲/seek 直接对齐、**不进快照**）、错误归一化。
   `PlaybackProvider` 对外只暴露领域 `PlaybackSnapshot` + position 通道：
   真实播放取 facade 快照；冷启动恢复态由会话构造覆盖快照（`isPlaying=false`，
-  history 为会话队列前缀），点播放后交还底层。旧「远程播放风格 Map 兼容层」
+  history 为会话队列前缀）。恢复播放：会话模式先落到后端（shuffle 洗牌顺序
+  依赖装载前模式）；seek 落地前进度通道继续显示恢复进度（不闪回 0）；装载期间
+  用户 seek 优先；生命周期 `paused` 强制落盘会话。旧「远程播放风格 Map 兼容层」
   （facade `compat*` / service `currentTrackMap` 等）已删除。
 - **Lyrics**：`LyricsProvider`（`lib/providers/lyrics_provider.dart`）是取词 → 缓存 →
   解析 → 预取的唯一实现，对外只暴露 `LyricsState`（idle/loading/ready/empty + isSynced）。
@@ -198,7 +200,8 @@ flutter test --no-pub                    # 含 domain/catalog/playback/layering/
 flutter test integration_test/lx_engine_integration_test.dart -d linux --no-pub
                                          # 3/3；tearDownAll 看门狗自动退出
 flutter build apk --debug
-flutter build apk --release --split-per-abi   # 发布体积
+flutter build apk --release --split-per-abi --split-debug-info=build/symbols --obfuscate \
+  --extra-gen-snapshot-options=--strip   # 发布体积（APK 压缩打包见 android/app/build.gradle：~50%↓）
 flutter build web --release
 ```
 

@@ -801,6 +801,10 @@ class _MyThemedAppState extends State<MyThemedApp> with WidgetsBindingObserver {
     // 否则「离开 Wi-Fi 后仍按 Wi-Fi 判定」，省流模式不会按时生效。
     if (state == AppLifecycleState.resumed && mounted) {
       context.read<DataSaverService>().refreshConnectivity();
+    } else if (state == AppLifecycleState.paused) {
+      // 进入后台立即落盘播放会话：被系统杀进程时冷启动恢复进度更准
+      // （平时按 1s 节流保存）。
+      context.read<PlaybackProvider>().flushPlaybackSession();
     }
   }
 

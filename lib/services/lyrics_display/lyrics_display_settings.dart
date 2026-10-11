@@ -89,7 +89,9 @@ class LyricsDisplaySettings extends ChangeNotifier {
   static const bool defaultDesktopShowToggleAnimation = true;
 
   static const bool defaultNotificationEnabled = false;
-  static const LyricsMetadataTarget defaultNotificationTarget = LyricsMetadataTarget.subtitle;
+  // 第二行写 artist：平台 SystemUI 媒体控件只读 METADATA_KEY_ARTIST
+  // （displaySubtitle 是文档定义的「第二行」字段，但 AOSP 实现不消费）。
+  static const LyricsMetadataTarget defaultNotificationTarget = LyricsMetadataTarget.artist;
   static const LyricsMetadataFormat defaultNotificationFormat = LyricsMetadataFormat.lyric;
   static const bool defaultNotificationIncludeTranslation = true;
   static const LyricsPauseBehavior defaultNotificationPauseBehavior = LyricsPauseBehavior.title;

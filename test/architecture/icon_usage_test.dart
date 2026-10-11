@@ -2,7 +2,7 @@ import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
 
-/// 图标契约守卫（AGENTS.md「M3E 约定」）：
+/// 图标契约守卫（docs/architecture.md §6「M3E 设计语言」）：
 /// 图标统一圆角风格 `Icons.*_rounded`，防止回退到基础实心 / `_outlined` /
 /// 平台自适应（`Icons.adaptive.*`）。
 ///

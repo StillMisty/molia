@@ -21,7 +21,7 @@ void main() {
     expect(s.desktopPlayedColorSource, LyricColorSource.custom);
     expect(s.desktopUnplayedColorSource, LyricColorSource.custom);
     expect(s.desktopShadowColorSource, LyricColorSource.custom);
-    expect(s.notificationTarget, LyricsMetadataTarget.subtitle);
+    expect(s.notificationTarget, LyricsMetadataTarget.artist);
     expect(s.bluetoothTarget, LyricsMetadataTarget.artist);
     expect(s.bluetoothOnlyWhenA2dp, isTrue);
     expect(s.desktopControls.values.every((v) => v), isTrue);

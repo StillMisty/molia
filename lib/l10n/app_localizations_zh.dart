@@ -303,7 +303,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get selectLyrics => '选择歌词';
 
   @override
-  String get selectLyricsTooltip => '选择歌词片段进行分析或分享';
+  String get selectLyricsTooltip => '选择歌词片段生成海报或分享';
 
   @override
   String get deselectAll => '取消全选';
@@ -382,7 +382,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get backToLibraryTooltip => '返回资料库';
 
   @override
-  String get loadingGenerating => '正在生成分析...';
+  String get loadingGenerating => '正在生成海报...';
 
   @override
   String get currentQueueEmpty => '当前队列为空';
@@ -1106,7 +1106,10 @@ class AppLocalizationsZh extends AppLocalizations {
   String get lyricsDesktopSingleLine => '仅显示当前行';
 
   @override
-  String get lyricsDesktopAlign => '文本对齐';
+  String get lyricsDesktopAlign => '水平对齐';
+
+  @override
+  String get lyricsDesktopAlignVertical => '垂直对齐';
 
   @override
   String get lyricsDesktopAlignLeft => '左';
@@ -1187,7 +1190,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get lyricsNotificationEnable => '在通知栏显示歌词';
 
   @override
-  String get lyricsNotificationEnableSubtitle => '写入媒体通知副标题，无需安装第三方模块';
+  String get lyricsNotificationEnableSubtitle => '把当前歌词行写入媒体元数据';
 
   @override
   String get lyricsMetadataTarget => '显示在';

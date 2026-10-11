@@ -40,6 +40,15 @@ class LyricsWidget extends StatefulWidget {
 
 class _LyricsWidgetState extends State<LyricsWidget>
     with AutomaticKeepAliveClientMixin<LyricsWidget> {
+  /// 手动滚动后恢复自动跟随的延迟：太短会打断读词，太长像「不跟了」。
+  static const Duration _userScrollResumeDelay = Duration(seconds: 3);
+
+  /// 激活行锚点相对「可见区域中线」的上移比例（占视口高度）。
+  ///
+  /// 顶栏（顶部渐隐带 + 圆点带）比底栏高，只按可见区域居中会让激活行
+  /// 视觉偏下；上移一点后上下留白更平衡，也接近主流歌词页的中上排版。
+  static const double _activeLineUpwardBias = 0.10;
+
   List<LyricLine> _lyrics = [];
   String? _lastTrackId;
   late final ScrollController _scrollController =
@@ -56,6 +65,9 @@ class _LyricsWidgetState extends State<LyricsWidget>
   int? _currentTrackDurationMs;
   bool _temporarilyIgnoreUserScroll = false;
   Timer? _userScrollSuppressionTimer;
+
+  /// 用户手动滚动后延迟恢复自动跟随的计时器（连续滚动会不断重置）。
+  Timer? _userScrollResumeTimer;
   Timer? _quickActionsHideTimer;
   bool _manualQuickActionsVisible = false;
   bool _lyricsContentScrollable = true;
@@ -84,6 +96,7 @@ class _LyricsWidgetState extends State<LyricsWidget>
   @override
   void dispose() {
     _userScrollSuppressionTimer?.cancel();
+    _userScrollResumeTimer?.cancel();
     _quickActionsHideTimer?.cancel();
     // 外部控制器由宿主释放。
     if (widget.controller == null) {
@@ -94,6 +107,9 @@ class _LyricsWidgetState extends State<LyricsWidget>
 
   Future<void> _loadLyrics() async {
     if (!mounted) return;
+
+    // 换曲/清空时取消待恢复的自动跟随（下方状态复位会重新建立）。
+    _cancelUserScrollResume();
 
     final provider = Provider.of<PlaybackProvider>(context, listen: false);
     final lyricsProvider =
@@ -319,12 +335,16 @@ class _LyricsWidgetState extends State<LyricsWidget>
     });
   }
 
+  /// 激活行锚点：可见区域（去掉顶部渐隐带/底栏）的纵向中线，再整体上移
+  /// `_activeLineUpwardBias` 个视口高度（顶栏比底栏高，居中会视觉偏下）。
   double _computeEffectiveAlignment() {
-    if (!_scrollController.hasClients) return 0.5;
+    if (!_scrollController.hasClients) {
+      return 0.5 - _activeLineUpwardBias;
+    }
 
     final mediaQuery = MediaQuery.of(context);
     final double viewport = _scrollController.position.viewportDimension;
-    if (viewport <= 0) return 0.5;
+    if (viewport <= 0) return 0.5 - _activeLineUpwardBias;
 
     final double topOverlay = 40.0 + mediaQuery.padding.top;
 
@@ -332,9 +352,10 @@ class _LyricsWidgetState extends State<LyricsWidget>
     final double bottomOverlay =
         bottomBarVisible ? (24.0 + mediaQuery.padding.bottom + 48.0) : 0.0;
 
-    final double delta = ((topOverlay - bottomOverlay) / 2.0) / viewport;
-    final double alignment = (0.5 + delta).clamp(0.0, 1.0);
-    return alignment;
+    final double visibleCenter =
+        (topOverlay + (viewport - bottomOverlay)) / 2.0;
+    final double anchor = visibleCenter - viewport * _activeLineUpwardBias;
+    return (anchor / viewport).clamp(0.0, 1.0);
   }
 
   double _tailSpace() {
@@ -355,7 +376,12 @@ class _LyricsWidgetState extends State<LyricsWidget>
 
     final double visibleHeight =
         (viewport - topOverlay - bottomOverlay).clamp(0.0, viewport);
-    return (visibleHeight / 2.0) + bottomOverlay + 8.0;
+    // 尾部留白按激活行锚点（可见区域中线再上移）反推，保证最后一行
+    // 也能滚到锚点位置。
+    return (visibleHeight / 2.0) +
+        bottomOverlay +
+        viewport * _activeLineUpwardBias +
+        8.0;
   }
 
   void _scrollToCurrentLine(int currentLineIndex) {
@@ -475,6 +501,8 @@ class _LyricsWidgetState extends State<LyricsWidget>
     if (!mounted) {
       return;
     }
+    // 无论走哪条分支，排队的「延迟恢复」都已不需要。
+    _cancelUserScrollResume();
     if (!_lyricsAreSynced) {
       setState(() {
         _autoScroll = false;
@@ -495,6 +523,56 @@ class _LyricsWidgetState extends State<LyricsWidget>
         });
       });
     }
+  }
+
+  /// 取消排队的「手动滚动后恢复自动跟随」。
+  void _cancelUserScrollResume() {
+    _userScrollResumeTimer?.cancel();
+    _userScrollResumeTimer = null;
+  }
+
+  /// 用户手动滚动后延迟恢复自动跟随。
+  ///
+  /// 手动滚动只暂停跟随：连续滚动会不断重置计时，停手静置
+  /// [_userScrollResumeDelay] 后自动滚回当前行，避免「看过一次就再也不跟」。
+  /// 复制模式刻意禁用自动滚动、无时间戳歌词没有可跟随目标，两者都不恢复。
+  void _scheduleUserScrollResume() {
+    if (_isCopyLyricsMode || !_lyricsAreSynced || _lyrics.isEmpty) {
+      return;
+    }
+    _userScrollResumeTimer?.cancel();
+    _userScrollResumeTimer = Timer(_userScrollResumeDelay, () {
+      _userScrollResumeTimer = null;
+      _resumeAutoScrollAfterUserScroll();
+    });
+  }
+
+  /// 延迟到点：恢复自动跟随；播放中立即平滑滚回当前行。
+  void _resumeAutoScrollAfterUserScroll() {
+    if (!mounted ||
+        _isCopyLyricsMode ||
+        !_lyricsAreSynced ||
+        _autoScroll ||
+        _lyrics.isEmpty) {
+      return;
+    }
+    _enableAutoScrollWithSuppression();
+    final provider = Provider.of<PlaybackProvider>(context, listen: false);
+    if (!provider.snapshot.isPlaying) {
+      // 暂停中：只恢复跟随状态，不把视图从用户停留处拽回；
+      // 恢复播放后行号变化会自然滚回当前行。
+      return;
+    }
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || !_autoScroll || !_scrollController.hasClients) {
+        return;
+      }
+      final currentIndex = _getCurrentLineIndex(provider.currentPosition);
+      if (currentIndex >= 0) {
+        _scrollToCurrentLine(currentIndex);
+        _previousLineIndex = currentIndex;
+      }
+    });
   }
 
   @override
@@ -577,7 +655,7 @@ class _LyricsWidgetState extends State<LyricsWidget>
           if (!mounted) return true;
 
           bool userInitiatedScroll = false;
-          // 用户手动操作后关闭自动滚动
+          // 用户手动操作后暂停自动滚动（延迟恢复见 _scheduleUserScrollResume）
           if (scrollNotification is UserScrollNotification) {
             if (_temporarilyIgnoreUserScroll) {
               return true;
@@ -601,6 +679,11 @@ class _LyricsWidgetState extends State<LyricsWidget>
             userInitiatedScroll = scrollNotification.dragDetails != null;
           }
 
+          if (userInitiatedScroll || !_autoScroll) {
+            // 拖拽/滚轮以及暂停期间的惯性滑行都重置计时：
+            // 停手（含惯性结束）静置一段时间后才自动恢复跟随。
+            _scheduleUserScrollResume();
+          }
           if (_requiresManualQuickActions && userInitiatedScroll) {
             _showManualQuickActionsTemporarily();
           }
@@ -962,6 +1045,7 @@ class _LyricsWidgetState extends State<LyricsWidget>
         _autoScroll = false; // Disable auto-scroll explicitly
         _temporarilyIgnoreUserScroll = false;
         _userScrollSuppressionTimer?.cancel();
+        _cancelUserScrollResume();
         _quickActionsHideTimer?.cancel();
         // 记录当前模式并切到单曲循环
         _previousPlayMode = provider.currentMode;
@@ -1019,6 +1103,7 @@ class _LyricsWidgetState extends State<LyricsWidget>
 
     // 进入新页面前暂停自动滚动
     final wasAutoScrollEnabled = _autoScroll;
+    _cancelUserScrollResume();
     if (_autoScroll) {
       setState(() {
         _autoScroll = false;
@@ -1138,6 +1223,11 @@ class _LyricsWidgetState extends State<LyricsWidget>
           });
         }
       }
+
+      // 打开页面前处于「手动滚动暂停」：返回后继续延迟恢复跟随。
+      if (!_autoScroll && !_isCopyLyricsMode && _lyricsAreSynced) {
+        _scheduleUserScrollResume();
+      }
     });
   }
 
@@ -1168,6 +1258,7 @@ class _LyricsWidgetState extends State<LyricsWidget>
 
     // 暂停当前的自动滚动
     final wasAutoScrollEnabled = _autoScroll;
+    _cancelUserScrollResume();
     if (_autoScroll) {
       setState(() {
         _autoScroll = false;
@@ -1204,6 +1295,11 @@ class _LyricsWidgetState extends State<LyricsWidget>
           }
         }
       });
+    }
+
+    // 打开页面前处于「手动滚动暂停」：返回后继续延迟恢复跟随。
+    if (!_autoScroll && !_isCopyLyricsMode && _lyricsAreSynced) {
+      _scheduleUserScrollResume();
     }
   }
 }

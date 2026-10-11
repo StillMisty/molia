@@ -51,6 +51,11 @@ Future<LocalAudioHandler?> initSystemMediaSession(
             'top.stillmisty.molia.channel.audio',
         androidNotificationChannelName: 'Molia',
         androidNotificationChannelDescription: '本地音源播放控制',
+        // 通知 small icon 必须指向真实存在的 drawable：audio_service 默认
+        // `mipmap/ic_launcher` 在本项目不存在（改用自适应图标 launcher_icon，
+        // 传统 mipmap 已移除），资源 ID=0 会让 NotificationManager 抛
+        // 「Invalid notification (no valid small icon)」直接崩溃进程。
+        androidNotificationIcon: 'drawable/ic_notification',
         androidNotificationOngoing: false,
         // 暂停时保持前台服务：Android 12+ 禁止后台重新拉起前台服务，
         // 该设置保证从通知栏/耳机键恢复播放不被系统拦截

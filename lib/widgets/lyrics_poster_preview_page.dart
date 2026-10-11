@@ -115,6 +115,11 @@ class _LyricsPosterPreviewPageState extends State<LyricsPosterPreviewPage> {
   String? _errorMessage;
   PosterStyle _currentStyle = PosterStyle.style1; // 当前选择的样式
 
+  /// 最近一次生成海报所用的主题配色签名：主题变化（莫奈 / 封面取色 /
+  /// 亮度 / 种子色）时重新生成，保证海报真正跟随色彩系统。
+  (Brightness, int, int, int)? _lastSchemeSignature;
+  bool _schemeDirty = false;
+
   /// 海报字体覆盖：null = 跟随应用字体；'' = 强制系统默认；其它 = 字体族名。
   String? _posterFontOverride;
 
@@ -124,6 +129,29 @@ class _LyricsPosterPreviewPageState extends State<LyricsPosterPreviewPage> {
   void initState() {
     super.initState();
     _initPosterFont();
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final scheme = Theme.of(context).colorScheme;
+    final signature = (
+      scheme.brightness,
+      scheme.primary.toARGB32(),
+      scheme.surface.toARGB32(),
+      scheme.tertiary.toARGB32(),
+    );
+    if (_lastSchemeSignature == signature) return;
+    final changed = _lastSchemeSignature != null;
+    _lastSchemeSignature = signature;
+    if (!changed) return; // 首次：由 initState 的 post-frame 生成
+    if (_isBusy) {
+      _schemeDirty = true;
+      return;
+    }
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _generatePoster();
+    });
   }
 
   /// 先恢复海报字体覆盖，再在首帧后生成海报（此时才能读取 Theme）。
@@ -197,6 +225,14 @@ class _LyricsPosterPreviewPageState extends State<LyricsPosterPreviewPage> {
         setState(() {
           _errorMessage = e.toString();
           _isLoading = false;
+        });
+      }
+    } finally {
+      // 生成期间主题又变了：补一次生成，保证最终海报与当前配色一致。
+      if (_schemeDirty && mounted) {
+        _schemeDirty = false;
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted) _generatePoster();
         });
       }
     }

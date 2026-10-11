@@ -42,7 +42,7 @@ case "$cmd" in
   text)
     [[ $# -ge 1 ]] || usage
     ensure_adb
-    local t="$*"
+    t="$*"
     "$ADB" -s "$DEVICE_ID" shell input text "${t// /%s}"
     ;;
   key)

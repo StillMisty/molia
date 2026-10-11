@@ -25,7 +25,7 @@ void main() {
 
   Future<LyricsDisplaySettings> settings({
     bool notification = false,
-    LyricsMetadataTarget notificationTarget = LyricsMetadataTarget.subtitle,
+    LyricsMetadataTarget notificationTarget = LyricsMetadataTarget.artist,
     LyricsMetadataFormat notificationFormat = LyricsMetadataFormat.lyric,
     bool notificationTranslation = false,
     LyricsPauseBehavior notificationPause = LyricsPauseBehavior.title,
@@ -51,7 +51,7 @@ void main() {
     return s;
   }
 
-  test('通知 profile 默认写副标题，其他字段保持原值', () async {
+  test('通知 profile 默认写 artist，其他字段保持原值', () async {
     final s = await settings(notification: true);
     final override = composer.compose(
       presentation: presentation(),
@@ -59,15 +59,18 @@ void main() {
       a2dpConnected: false,
     );
     expect(override, isNotNull);
-    expect(override!.displaySubtitle, '歌词行');
-    expect(override.artist, isNull);
+    expect(override!.artist, '歌词行');
+    expect(override.displaySubtitle, isNull);
     expect(override.title, isNull);
     expect(override.album, isNull);
   });
 
   test('翻译按开关拼接', () async {
-    final withTranslation =
-        await settings(notification: true, notificationTranslation: true);
+    final withTranslation = await settings(
+      notification: true,
+      notificationTarget: LyricsMetadataTarget.subtitle,
+      notificationTranslation: true,
+    );
     final override = composer.compose(
       presentation: presentation(extended: ['翻译']),
       settings: withTranslation,
@@ -75,7 +78,10 @@ void main() {
     );
     expect(override!.displaySubtitle, '歌词行 / 翻译');
 
-    final withoutTranslation = await settings(notification: true);
+    final withoutTranslation = await settings(
+      notification: true,
+      notificationTarget: LyricsMetadataTarget.subtitle,
+    );
     final plain = composer.compose(
       presentation: presentation(extended: ['翻译']),
       settings: withoutTranslation,
@@ -87,6 +93,7 @@ void main() {
   test('格式：歌词·歌名 / 歌名·歌词', () async {
     final lyricTitle = await settings(
       notification: true,
+      notificationTarget: LyricsMetadataTarget.subtitle,
       notificationFormat: LyricsMetadataFormat.lyricTitle,
     );
     expect(
@@ -102,6 +109,7 @@ void main() {
 
     final titleLyric = await settings(
       notification: true,
+      notificationTarget: LyricsMetadataTarget.subtitle,
       notificationFormat: LyricsMetadataFormat.titleLyric,
     );
     expect(
@@ -172,6 +180,7 @@ void main() {
   test('暂停回退：保留 / 显示歌名 / 清空', () async {
     final keep = await settings(
       notification: true,
+      notificationTarget: LyricsMetadataTarget.subtitle,
       notificationPause: LyricsPauseBehavior.keep,
     );
     expect(
@@ -185,7 +194,10 @@ void main() {
       '歌词行',
     );
 
-    final showTitle = await settings(notification: true);
+    final showTitle = await settings(
+      notification: true,
+      notificationTarget: LyricsMetadataTarget.subtitle,
+    );
     expect(
       composer
           .compose(
@@ -199,6 +211,7 @@ void main() {
 
     final clear = await settings(
       notification: true,
+      notificationTarget: LyricsMetadataTarget.subtitle,
       notificationPause: LyricsPauseBehavior.clear,
     );
     expect(

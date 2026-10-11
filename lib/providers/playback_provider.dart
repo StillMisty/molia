@@ -108,6 +108,10 @@ class PlaybackProvider extends ChangeNotifier {
   static const String _lastPlayedArtistsKey = 'last_played_artists';
   static const String _defaultPlayModeKey = 'default_play_mode';
 
+  /// 播放会话进度落盘节流：正常播放中最多每秒写一次
+  /// （被系统杀进程时最多丢 ~1s 进度；track 切换/暂停/后台强制写）。
+  static const Duration _sessionSaveInterval = Duration(seconds: 1);
+
   final PlaybackFacade _facade;
   final UiMessenger _messenger;
   final SourceManager? _sourceManager;
@@ -149,6 +153,14 @@ class PlaybackProvider extends ChangeNotifier {
   /// 恢复态展示快照：`snapshot` getter 的覆盖值（无真实播放时生效）。
   PlaybackSnapshot? _restoredSnapshot;
   Duration _restoredPosition = Duration.zero;
+
+  /// 恢复播放进行中（playTracks/seek 未完成）：此时撤下恢复态快照但
+  /// 保留进度通道的恢复进度，避免进度条闪回 0。
+  bool _resumeRestoring = false;
+
+  /// 恢复装载期间用户主动 seek 的目标：恢复流程末尾以用户目标为准，
+  /// 否则用户的拖动/点歌词行会被「跳回保存进度」覆盖。
+  Duration? _resumeSeekTarget;
   DateTime _lastSessionSave = DateTime.fromMillisecondsSinceEpoch(0);
   bool _wasPlaying = false;
 
@@ -347,28 +359,54 @@ class PlaybackProvider extends ChangeNotifier {
   /// 正常取链路径；失败时保留恢复态可重试。
   Future<void> resumeRestoredSession({int? startIndex}) async {
     final session = _restoredSession;
-    if (session == null || session.current == null) return;
+    // 已有恢复流程在跑：忽略重复触发（装载中后端会推送曲目，后续操作走
+    // 真实播放路径，不会再次进入本方法）。
+    if (session == null || session.current == null || _resumeRestoring) return;
     final index = (startIndex ?? session.index)
         .clamp(0, session.tracks.length - 1);
     final seekBack = index == session.index ? _restoredPosition : Duration.zero;
+    // 装载期间保持显示恢复进度：后端装载会把进度通道对齐到 0，
+    // 若立刻交还底层，进度条会先闪回首部再跳到恢复进度。
+    _resumeRestoring = true;
     try {
+      // 会话模式先落地：shuffle 需要在装载队列前生效（决定洗牌顺序）；
+      // 也保证实际播放模式与恢复态 UI 显示的一致。
+      await _facade.setMode(session.mode);
       await _facade.playTracks(PlaybackRequest(
         tracks: session.tracks,
         startIndex: index,
         context: session.context,
       ));
-      if (seekBack > Duration.zero) {
-        await _facade.seek(seekBack);
+      // 装载期间用户主动 seek（拖进度条/点歌词行）优先于保存进度。
+      final targetSeek = _resumeSeekTarget ?? seekBack;
+      if (targetSeek > Duration.zero) {
+        await _facade.seek(targetSeek);
       }
       _clearRestoredSession();
+      // 立刻把恢复进度写回会话：装载时的强制保存记的是 0，
+      // 若在节流窗口内被杀进程，下次冷启动会从 0 开始。
+      _maybeSavePlaybackSession(force: true);
       _notifyCategory('track');
       _notifyCategory('queue');
     } catch (e) {
       _logger.e('恢复上次播放失败', error: e);
+      // 已被真实播放接管（恢复快照已撤下）：交还进度通道，
+      // 避免一直停在旧的恢复进度。
+      if (_restoredSession == null) {
+        _clearRestoredSession();
+      }
+    } finally {
+      _resumeRestoring = false;
+      _resumeSeekTarget = null;
     }
   }
 
   Future<void> seekToPosition(int positionMs) async {
+    // 恢复装载期间的 seek：记下用户目标，恢复流程末尾以它为准
+    // （否则用户的拖动/点歌词行会被恢复流程的「跳回保存进度」覆盖）。
+    if (_resumeRestoring) {
+      _resumeSeekTarget = Duration(milliseconds: positionMs);
+    }
     // 恢复态：只更新保存的进度（点播放时再落到真实播放器上）。
     if (_facade.snapshot.value.current == null && _restoredSession != null) {
       final durationMs =
@@ -425,8 +463,17 @@ class PlaybackProvider extends ChangeNotifier {
   }
 
   // 设置播放模式
+  //
+  // 恢复态（冷启动未真正播放）下 UI 读的是恢复快照，必须同步更新恢复会话
+  // 并持久化，否则模式按钮看起来「点不动」；恢复播放时会把该模式带给后端。
   Future<void> setPlayMode(PlayMode mode) async {
     await _facade.setMode(mode);
+    final session = _restoredSession;
+    if (session != null) {
+      _restoredSession = session.copyWith(mode: mode);
+      _publishRestoredSnapshot();
+      unawaited(_sessionStore.save(_restoredSession!));
+    }
     _notifyCategory('track');
   }
 
@@ -508,8 +555,9 @@ class PlaybackProvider extends ChangeNotifier {
       _processedTrackId = null;
     } else if (trackId != _processedTrackId) {
       _processedTrackId = trackId;
-      // 真实播放接管：撤下冷启动恢复态。
-      _clearRestoredSession();
+      // 真实播放接管：撤下冷启动恢复态。恢复播放的 seek 尚未落地时，
+      // 继续沿用恢复进度显示（见 _resumeRestoring），避免进度条闪回 0。
+      _clearRestoredSession(keepPosition: _resumeRestoring);
       _persistLastPlayedTrackInfo(track!);
       unawaited(_savePlayContextToDatabase(track, live.context));
       unawaited(updateWidget());
@@ -530,6 +578,12 @@ class PlaybackProvider extends ChangeNotifier {
   // 上次播放会话（冷启动恢复）
   // -------------------------------------------------------------------------
 
+  /// 立即把当前播放会话写入本地（进入后台/生命周期 paused 时调用）。
+  ///
+  /// 会话进度平时按 [_sessionSaveInterval] 节流保存；暂停/后台时强制落盘，
+  /// 被系统杀进程时最多丢约 1s 进度。
+  void flushPlaybackSession() => _maybeSavePlaybackSession(force: true);
+
   /// 高频进度 tick：节流保存会话进度。
   void _onPositionTick() {
     _maybeSavePlaybackSession();
@@ -543,8 +597,7 @@ class PlaybackProvider extends ChangeNotifier {
       return;
     }
     final now = DateTime.now();
-    if (!force &&
-        now.difference(_lastSessionSave) < const Duration(seconds: 5)) {
+    if (!force && now.difference(_lastSessionSave) < _sessionSaveInterval) {
       return;
     }
     _lastSessionSave = now;
@@ -611,9 +664,13 @@ class PlaybackProvider extends ChangeNotifier {
   }
 
   /// 撤下恢复态：真实播放接管或停止播放时调用。
-  void _clearRestoredSession() {
+  ///
+  /// [keepPosition] 为 true 时保留进度通道的恢复进度（恢复播放的 seek
+  /// 尚未落地），调用方负责在 seek 完成后再次调用本方法交还进度通道。
+  void _clearRestoredSession({bool keepPosition = false}) {
     _restoredSession = null;
     _restoredSnapshot = null;
+    if (keepPosition) return;
     _restoredPosition = Duration.zero;
     _positionChannel.setRestored(null);
   }

@@ -28,13 +28,18 @@ class MoliaMark extends StatelessWidget {
     final resolvedSize = size ?? iconTheme.size ?? 24.0;
     final resolvedColor =
         color ?? iconTheme.color ?? Theme.of(context).colorScheme.onSurface;
-    return Image.asset(
-      outlined ? _outlinedAsset : _filledAsset,
-      width: resolvedSize,
-      height: resolvedSize,
-      fit: BoxFit.contain,
-      color: resolvedColor,
-      filterQuality: FilterQuality.medium,
+    // 着色用 ColorFiltered 而不是 Image.color：后者在 Impeller（GLES 后端）
+    // 会把色板画进 drawImageRect 的边缘采样，图标四边出现 1px 半透明「杂色
+    // 线条」（模拟器实测，见已知坑 19）；ColorFiltered 走独立层，无此伪影。
+    return ColorFiltered(
+      colorFilter: ColorFilter.mode(resolvedColor, BlendMode.srcIn),
+      child: Image.asset(
+        outlined ? _outlinedAsset : _filledAsset,
+        width: resolvedSize,
+        height: resolvedSize,
+        fit: BoxFit.contain,
+        filterQuality: FilterQuality.medium,
+      ),
     );
   }
 }

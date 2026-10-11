@@ -291,7 +291,7 @@ class _LyricsDisplayPageState extends State<LyricsDisplayPage>
       ),
       _dropdownRow<DesktopTextAlignY>(
         context,
-        title: '',
+        title: l10n.lyricsDesktopAlignVertical,
         value: settings.desktopTextAlignY,
         options: [
           (DesktopTextAlignY.top, l10n.lyricsDesktopAlignTop),

@@ -122,6 +122,39 @@ void main() {
     expect(f.provider.searchableSources.map((o) => o.key).toList(), ['a', 'b']);
   });
 
+  test('capabilitiesFor：内置平台搜索能力跟随脚本可取链，与渠道 canSearch 一致', () async {
+    final f = await fixture(sources: {
+      'wy': const LxSourceDecl(
+        key: 'wy',
+        name: '网易音乐',
+        actions: ['musicUrl'],
+        qualitys: ['320k'],
+      ),
+      'plain': const LxSourceDecl(
+        key: 'plain',
+        name: '仅取链',
+        actions: ['musicUrl'],
+        qualitys: ['320k'],
+      ),
+    });
+    await f.provider.importScript(_script(), activate: true);
+
+    // 渠道侧：内置平台在有可取链脚本时可搜索（搜索由 Dart 移植实现）。
+    final wyChannel = f.provider.channels.firstWhere((o) => o.key == 'wy');
+    expect(wyChannel.canSearch, isTrue);
+    expect(f.provider.searchableSources.map((o) => o.key), contains('wy'));
+
+    // 描述符能力必须与渠道一致；修复前 search=false 会让
+    // 渠道→搜索源同步被静默拒绝（搜索停留在旧源）。
+    final wyCaps = f.manager.capabilitiesFor('wy');
+    expect(wyCaps.search, isTrue);
+    expect(wyCaps.pagination, isTrue);
+    expect(wyCaps.resolveUrl, isTrue);
+
+    // 脚本扩展源仍按脚本声明（未声明 search → 不可搜索）。
+    expect(f.manager.capabilitiesFor('plain').search, isFalse);
+  });
+
   test('setChannelEnabled：停用后从可搜索列表消失，启用后恢复', () async {
     final f = await fixture(sources: {
       'a': const LxSourceDecl(

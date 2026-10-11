@@ -221,8 +221,8 @@ class _SettingsMenuSectionState extends State<SettingsMenuSection> {
                     key: const Key('settingsSeedColorItem'),
                     icon: Icons.color_lens_rounded,
                     title: l10n.settingsSeedColor,
-                    subtitle: _seedColorLabel(l10n, seedColor),
-                    onTap: () => _showSeedColorDialog(context, l10n),
+                    subtitle: _seedColorHex(seedColor),
+                    onTap: () => _pickSeedColor(context),
                   ),
                   const SizedBox(height: kElementSpacing),
                   // 全局应用字体：来自设备已装字体，null = 系统默认。
@@ -786,22 +786,10 @@ class _SettingsMenuSectionState extends State<SettingsMenuSection> {
     );
   }
 
-  /// 预设色名：按 [ThemeProvider.presetSeedColors] 的顺序取标签，
-  /// 避免在设置页重复维护一份颜色字面量；自定义色回退为十六进制。
-  String _seedColorLabel(AppLocalizations l10n, Color color) {
-    final argb = color.toARGB32();
-    final index = ThemeProvider.presetSeedColors
-        .indexWhere((preset) => preset.toARGB32() == argb);
-    return switch (index) {
-      0 => l10n.colorBlue,
-      1 => l10n.colorPurple,
-      2 => l10n.colorGreen,
-      3 => l10n.colorOrange,
-      4 => l10n.colorPink,
-      5 => l10n.colorTeal,
-      _ =>
-        '#${argb.toRadixString(16).padLeft(8, '0').substring(2).toUpperCase()}',
-    };
+  /// 主题色显示：统一十六进制（预设色板已移除，任意取色无需色名）。
+  String _seedColorHex(Color color) {
+    final rgb = color.toARGB32() & 0xFFFFFF;
+    return '#${rgb.toRadixString(16).padLeft(6, '0').toUpperCase()}';
   }
 
   String _playModeLabel(AppLocalizations l10n, PlayMode mode) {
@@ -926,103 +914,18 @@ class _SettingsMenuSectionState extends State<SettingsMenuSection> {
     );
   }
 
-  Future<void> _showSeedColorDialog(
-      BuildContext context, AppLocalizations l10n) async {
+  /// 主题色：直接打开任意取色器（HSV + Hex）。
+  ///
+  /// 预设色板已移除：预设与任意取色并存会让入口显得繁杂，任意取色已覆盖
+  /// 全部能力；默认种子色仍由 ThemeProvider 提供（动态取色关闭时的兜底）。
+  Future<void> _pickSeedColor(BuildContext context) async {
     final themeProvider = context.read<ThemeProvider>();
-    final navigator = Navigator.of(context);
-
-    Future<void> select(int argb) async {
-      await themeProvider.setSeedColor(Color(argb));
-      navigator.pop();
-    }
-
-    // 任意自定义色：HSV 滑杆 + Hex 输入（不限预设）。
-    Future<void> pickCustom() async {
-      final initial = themeProvider.seedColor.toARGB32();
-      navigator.pop();
-      final picked = await showAppColorPicker(context, initialColor: initial);
-      if (picked == null) return;
-      await themeProvider.setSeedColor(Color(picked));
-    }
-
-    M3EDialog.show<void>(
+    final picked = await showAppColorPicker(
       context,
-      dialog: M3EDialog(
-        title: l10n.settingsSeedColor,
-        content: SizedBox(
-          width: _dialogWidth(context),
-          child: M3ERadioGroup<int>(
-            groupValue: themeProvider.seedColor.toARGB32(),
-            onChanged: select,
-            groupLabel: l10n.settingsSeedColor,
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                for (final color in ThemeProvider.presetSeedColors)
-                  M3ERadio<int>(
-                    value: color.toARGB32(),
-                    groupValue: themeProvider.seedColor.toARGB32(),
-                    onChanged: select,
-                    label: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Container(
-                          width: 20,
-                          height: 20,
-                          decoration: BoxDecoration(
-                            color: color,
-                            shape: BoxShape.circle,
-                            border: Border.all(
-                              color:
-                                  Theme.of(context).colorScheme.outlineVariant,
-                            ),
-                          ),
-                        ),
-                        const SizedBox(width: kSmallSpacing),
-                        Text(_seedColorLabel(l10n, color)),
-                      ],
-                    ),
-                  ),
-                const SizedBox(height: kSmallSpacing),
-                // M3EDialog 内容没有 Material 祖先：透明 Material 包一层 InkWell。
-                Material(
-                  type: MaterialType.transparency,
-                  child: InkWell(
-                    key: const Key('settingsSeedColorCustom'),
-                    onTap: pickCustom,
-                    borderRadius: BorderRadius.circular(8),
-                    child: Padding(
-                      padding: const EdgeInsets.symmetric(
-                          vertical: 8, horizontal: 4),
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Icon(
-                            Icons.colorize_rounded,
-                            size: 20,
-                            color:
-                                Theme.of(context).colorScheme.onSurfaceVariant,
-                          ),
-                          const SizedBox(width: kSmallSpacing),
-                          Text(l10n.colorPickerCustom),
-                        ],
-                      ),
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ),
-        actions: [
-          M3EButton.text(
-            onPressed: () => Navigator.pop(context),
-            child: Text(l10n.cancelButton),
-          ),
-        ],
-      ),
+      initialColor: themeProvider.seedColor.toARGB32(),
     );
+    if (picked == null) return;
+    await themeProvider.setSeedColor(Color(picked));
   }
 
   /// 全局应用字体选择：来自设备已装字体（枚举见 SystemFontsService），

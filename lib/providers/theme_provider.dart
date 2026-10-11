@@ -30,16 +30,6 @@ class ThemeProvider extends ChangeNotifier {
   static const String _seedColorKey = 'seed_color';
   static const String _appFontKey = 'app_font_family';
 
-  /// 主题色预设（设置页色点顺序）：默认蓝与当前行为一致。
-  static const List<Color> presetSeedColors = <Color>[
-    Colors.blue,
-    Colors.purple,
-    Colors.green,
-    Colors.orange,
-    Colors.pink,
-    Colors.teal,
-  ];
-
   ColorScheme _colorScheme = ColorScheme.fromSeed(seedColor: Colors.blue);
   final LinkedHashMap<String, ({ColorScheme scheme, Color seed})> _paletteCache =
       LinkedHashMap<String, ({ColorScheme scheme, Color seed})>();

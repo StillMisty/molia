@@ -315,7 +315,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get selectLyricsTooltip =>
-      'Select lyrics fragments for analysis or sharing';
+      'Select lyrics fragments to make a poster or share';
 
   @override
   String get deselectAll => 'Deselect All';
@@ -396,7 +396,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get backToLibraryTooltip => 'Back to library';
 
   @override
-  String get loadingGenerating => 'Generating analysis...';
+  String get loadingGenerating => 'Generating poster...';
 
   @override
   String get currentQueueEmpty => 'Current queue is empty';
@@ -1141,7 +1141,10 @@ class AppLocalizationsEn extends AppLocalizations {
   String get lyricsDesktopSingleLine => 'Current line only';
 
   @override
-  String get lyricsDesktopAlign => 'Text align';
+  String get lyricsDesktopAlign => 'Horizontal align';
+
+  @override
+  String get lyricsDesktopAlignVertical => 'Vertical align';
 
   @override
   String get lyricsDesktopAlignLeft => 'Left';
@@ -1223,7 +1226,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get lyricsNotificationEnableSubtitle =>
-      'Uses the media notification subtitle (no modules needed)';
+      'Writes the current line into media metadata';
 
   @override
   String get lyricsMetadataTarget => 'Show in';

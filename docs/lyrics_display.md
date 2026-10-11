@@ -100,8 +100,10 @@ Molia 当前只有在播放页内渲染的滚动歌词。桌面悬浮歌词、�
 
 ### FR-4 通知栏 / 锁屏歌词（免模块）
 
-- 通过媒体会话元数据实现：`MediaItem.displaySubtitle` 默认写入当前行，
-  Android 13+ 媒体通知与锁屏第二行即显示歌词。
+- 通过媒体会话元数据实现：默认把当前行写入 `artist`，Android 13+ 媒体通知
+  与锁屏第二行即显示歌词。
+  - 依据：平台 SystemUI 媒体控件第二行读 `METADATA_KEY_ARTIST`；`displaySubtitle`
+    虽是 `MediaMetadata` 文档定义的第二行字段，但 AOSP 实现并不消费。
 - 字段、格式、是否含翻译、暂停行为可配置（见 §6）。
 - 纯播放器原则不破坏：歌名、歌手等基础信息永远保留；歌词只覆盖所选字段。
 
@@ -200,7 +202,7 @@ abstract class LyricsOutput {
 
 | 规则 | 说明 |
 |---|---|
-| 字段 | `notification.target`（默认 `subtitle`）、`bluetooth.target`（默认 `artist`）可选 `subtitle/artist/title/album`。 |
+| 字段 | `notification.target`（默认 `artist`）、`bluetooth.target`（默认 `artist`）可选 `subtitle/artist/title/album`。 |
 | 格式 | `lyric`（默认）/ `lyricTitle`（`歌词 · 歌名`）/ `titleLyric`（`歌名 · 歌词`）。 |
 | 翻译 | profile 各自 `includeTranslation`；拼接 `原文 / 翻译`。 |
 | 蓝牙门控 | `enabled && (!onlyWhenA2dp || a2dpConnected)`；断开或关闭时按暂停行为回退。 |
@@ -257,7 +259,7 @@ abstract class LyricsOutput {
 | `desktop.controls` | map | 全开 | playPause/previous/next/translation/lock/close → bool | 桌面歌词 |
 | `desktop.position`（原生） | — | 底部居中 | 窗口位置由原生侧按屏幕可用空间比例持久化；「重置位置」可恢复默认 | 桌面歌词 |
 | `notification.enabled` | bool | false | | 通知/锁屏 |
-| `notification.target` | enum | subtitle | subtitle/artist/title/album | 通知/锁屏 |
+| `notification.target` | enum | artist | subtitle/artist/title/album | 通知/锁屏 |
 | `notification.format` | enum | lyric | lyric/lyricTitle/titleLyric | 通知/锁屏 |
 | `notification.includeTranslation` | bool | true | | 通知/锁屏 |
 | `notification.pauseBehavior` | enum | title | keep/title/clear | 通知/锁屏 |
@@ -359,7 +361,7 @@ abstract class LyricsOutput {
 | | `test/lyrics_display_channel_test.dart` | 通道协议编解码（`TestDefaultBinaryMessenger`） |
 | 架构 | `test/architecture/*` | 分层 / 图标 / 色彩扫描保持全绿 |
 | 模拟器 | `tool/agent/*` | 悬浮窗全交互 + 通知/锁屏歌词 + 截图留档 |
-| 真机 | 清单 | A2DP 车载显示（字段默认值微调）、ROM 通知副标题差异、权限撤销 |
+| 真机 | 清单 | A2DP 车载显示、权限撤销 |
 
 ## 9. 风险与开放问题
 
@@ -369,7 +371,9 @@ abstract class LyricsOutput {
    置顶 / 透明 / 无边框 / 点击穿透 / 不占任务栏。桌面输出实现时大概率仍需平台逃逸口代码，
    工作量按此预期评估。跟踪：flutter/flutter#30701。
 2. **AVRCP 字段差异**：车机对 `artist` / `displaySubtitle` 读取行为不一，默认字段以真机实测微调。
-3. **ROM 差异**：Android 13+ 媒体通知副标题展示受 ROM 定制影响；必要时提供字段选择。
+3. **第二行字段**：平台 SystemUI 媒体控件第二行只读 `METADATA_KEY_ARTIST`
+   （Android 13 与 AOSP main 实现一致，`displaySubtitle` 不被消费）；
+   通知/锁屏默认写 `artist`，字段选择保留给用户。
 4. **主工作树 WIP**：合并本分支到 `main` 前，主工作树里 `lib/playback/local_audio_handler.dart`
    等未提交改动需先提交或暂存——本分支也在同一文件上叠加了歌词元数据覆盖。
 5. **R8**：新增 Kotlin 类均由 `MainActivity` 可达，无需额外 keep 规则；

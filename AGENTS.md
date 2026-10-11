@@ -42,9 +42,8 @@ flutter test --no-pub                  # 单文件：flutter test test/lx_core_t
 flutter test integration_test/lx_engine_integration_test.dart -d linux --no-pub
                                        # 端到端（真实引擎+播放+设置页）；看门狗自动退出，勿删
 flutter build apk --debug
-flutter build apk --release --split-per-abi --split-debug-info=build/symbols --obfuscate
-                                       # 发布构建不要加 --no-pub（pitfalls #15）
 flutter build web --release            # 涉及 UI 组件时加跑；音源脚本在 Web 不可用
+flutter build apk --release --split-per-abi --split-debug-info=build/symbols --obfuscate --extra-gen-snapshot-options=--strip   # 构建发布
 ```
 
 音源 prelude 离线校验（改 `tool/lx_prelude/` 后必跑）：

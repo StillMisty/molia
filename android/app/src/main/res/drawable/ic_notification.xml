@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 通知栏小图标（audio_service 播放通知的 small icon）。
+     复用启动图标前景矢量并按 16% 内缩（与 mipmap-anydpi-v26/launcher_icon.xml
+     的自适应图标 inset 一致）；通知小图标由系统按 alpha 蒙版着色，颜色不重要。
+     不直接用 mipmap/launcher_icon：自适应图标在通知栏不受支持（Android 8+ 会因
+     无效 small icon 抛 IllegalArgumentException 崩溃，见已知坑 18）。 -->
+<inset xmlns:android="http://schemas.android.com/apk/res/android"
+    android:drawable="@drawable/ic_launcher_foreground"
+    android:inset="16%" />

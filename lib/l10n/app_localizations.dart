@@ -671,7 +671,7 @@ abstract class AppLocalizations {
   /// No description provided for @selectLyricsTooltip.
   ///
   /// In en, this message translates to:
-  /// **'Select lyrics fragments for analysis or sharing'**
+  /// **'Select lyrics fragments to make a poster or share'**
   String get selectLyricsTooltip;
 
   /// No description provided for @deselectAll.
@@ -821,7 +821,7 @@ abstract class AppLocalizations {
   /// No description provided for @loadingGenerating.
   ///
   /// In en, this message translates to:
-  /// **'Generating analysis...'**
+  /// **'Generating poster...'**
   String get loadingGenerating;
 
   /// No description provided for @currentQueueEmpty.
@@ -2153,8 +2153,14 @@ abstract class AppLocalizations {
   /// No description provided for @lyricsDesktopAlign.
   ///
   /// In en, this message translates to:
-  /// **'Text align'**
+  /// **'Horizontal align'**
   String get lyricsDesktopAlign;
+
+  /// No description provided for @lyricsDesktopAlignVertical.
+  ///
+  /// In en, this message translates to:
+  /// **'Vertical align'**
+  String get lyricsDesktopAlignVertical;
 
   /// No description provided for @lyricsDesktopAlignLeft.
   ///
@@ -2315,7 +2321,7 @@ abstract class AppLocalizations {
   /// No description provided for @lyricsNotificationEnableSubtitle.
   ///
   /// In en, this message translates to:
-  /// **'Uses the media notification subtitle (no modules needed)'**
+  /// **'Writes the current line into media metadata'**
   String get lyricsNotificationEnableSubtitle;
 
   /// No description provided for @lyricsMetadataTarget.

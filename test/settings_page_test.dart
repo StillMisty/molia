@@ -149,21 +149,23 @@ void main() {
     expect(prefs.getBool('dynamic_color_enabled'), isFalse);
   });
 
-  testWidgets('主题色弹层：选择绿色后 provider 生效', (tester) async {
+  testWidgets('主题色：任意取色（Hex）后 provider 生效', (tester) async {
     await pumpSettingsPage(tester);
 
     await tester.tap(find.byKey(const Key('settingsSeedColorItem')));
     await tester.pumpAndSettle();
     expect(find.byType(M3EDialog), findsOneWidget);
 
-    await tester.tap(find.text('Green'));
+    await tester.enterText(find.byType(M3ETextField), '#00FF00');
+    await tester.pump();
+    await tester.tap(find.widgetWithText(M3EButton, 'Save'));
     await tester.pumpAndSettle();
 
     expect(find.byType(M3EDialog), findsNothing);
-    expect(themeProvider.seedColor.toARGB32(), Colors.green.toARGB32());
+    expect(themeProvider.seedColor.toARGB32(), 0xFF00FF00);
 
     final prefs = await SharedPreferences.getInstance();
-    expect(prefs.getInt('seed_color'), Colors.green.toARGB32());
+    expect(prefs.getInt('seed_color'), 0xFF00FF00);
   });
 
   testWidgets('默认播放模式弹层：选择随机后 provider 生效', (tester) async {

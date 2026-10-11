@@ -229,9 +229,15 @@ class SourceManager extends ChangeNotifier {
       );
     }
     final decl = _activeSources[key];
+    // 内置平台（kw/kg/tx/wy/mg）的搜索/分页由 Dart 移植实现（BuiltinSearch），
+    // 能力跟随「脚本可取链」，与 channels/_searchableCandidates 的 canSearch
+    // 保持一致；脚本声明的 canSearch 只描述脚本扩展源自身的社区搜索 action。
+    // 两处不一致会静默拒绝渠道→搜索源同步（搜索停留在旧源，与展示渠道不符）。
+    final builtinSearchable =
+        BuiltinSearch.isBuiltin(key) && (decl?.canResolveUrl ?? false);
     return SourceCapabilities(
-      search: decl?.canSearch ?? false,
-      pagination: decl?.canSearch ?? false,
+      search: builtinSearchable || (decl?.canSearch ?? false),
+      pagination: builtinSearchable || (decl?.canSearch ?? false),
       resolveUrl: decl?.canResolveUrl ?? false,
       lyrics: key == 'wy' || (decl?.canFetchLyric ?? false),
       artwork: key == 'wy' || (decl?.canFetchPic ?? false),

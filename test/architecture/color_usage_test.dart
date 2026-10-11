@@ -2,7 +2,7 @@ import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
 
-/// 配色契约守卫（AGENTS.md「M3E 约定」/ docs/architecture.md §6）：
+/// 配色契约守卫（docs/architecture.md §6「M3E 设计语言」）：
 /// 颜色只能来自 ColorScheme 角色、AppSemanticColors 语义色或主题基建，
 /// 防止重新长回「同语义不同颜色」的散装取色。
 ///
