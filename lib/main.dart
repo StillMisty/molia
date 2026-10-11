@@ -23,6 +23,7 @@ import 'providers/local_database_provider.dart';
 import 'providers/lyrics_display_provider.dart';
 import 'providers/nav_provider.dart';
 import 'providers/playback_provider.dart';
+import 'providers/play_statistics_provider.dart';
 import 'providers/search_provider.dart';
 import 'providers/discover_provider.dart';
 import 'providers/sources_provider.dart';
@@ -280,6 +281,13 @@ void main() async {
         Provider<PlayStatisticsRepository>.value(
             value: playStatisticsRepository),
         Provider<PlayStatisticsService>.value(value: playStatisticsService),
+        // 听歌统计页状态（范围 / 加载 / 清空 / 导出）；页面打开期间
+        // 自行订阅仓库变更，关闭后取消。
+        ChangeNotifierProvider(
+          create: (_) => PlayStatisticsProvider(
+            repository: playStatisticsRepository,
+          ),
+        ),
         // 发现页：热榜 / 歌单 / 热搜；播放与收藏复用上面两个 provider。
         // 渠道变化 → 搜索源跟随的唯一规则点（页面不再同步两个 provider）。
         ChangeNotifierProvider(

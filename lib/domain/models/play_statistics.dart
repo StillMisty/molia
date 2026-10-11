@@ -234,6 +234,23 @@ class HourListened {
   });
 }
 
+/// 星期 × 时段聚合（作息热力图：`weekday` 0=周一，`hour` 0-23，本地时区）。
+class WeekdayHourListened {
+  final int weekday;
+  final int hour;
+  final int listenedMs;
+
+  /// 有效播放次数。
+  final int playCount;
+
+  const WeekdayHourListened({
+    required this.weekday,
+    required this.hour,
+    required this.listenedMs,
+    required this.playCount,
+  });
+}
+
 /// 来源分布条目（`sourceKey` 维度）。
 class SourceListened {
   final String sourceKey;

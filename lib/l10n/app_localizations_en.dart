@@ -1375,4 +1375,125 @@ class AppLocalizationsEn extends AppLocalizations {
   @override
   String get lyricsDesktopColorThemeHint =>
       'The color source decides which scheme the theme-role rows use: app theme follows the appearance settings; album art updates live with the current track.';
+
+  @override
+  String get statsTitle => 'Listening Stats';
+
+  @override
+  String get statsSubtitle =>
+      'Play counts, listening time, and activity heatmaps (stored on this device only)';
+
+  @override
+  String get statsSettingsSubtitle => 'Plays / activity heatmaps / export';
+
+  @override
+  String get statsRecordSwitch => 'Record listening stats';
+
+  @override
+  String get statsRecordSwitchSubtitle =>
+      'Turn off to stop recording new plays; existing data is kept';
+
+  @override
+  String get statsRangeWeek => '7 days';
+
+  @override
+  String get statsRangeMonth => '30 days';
+
+  @override
+  String get statsRangeAll => 'All';
+
+  @override
+  String get statsValueDuration => 'Time';
+
+  @override
+  String get statsValueCount => 'Plays';
+
+  @override
+  String get statsPlays => 'Valid plays';
+
+  @override
+  String get statsListened => 'Listening time';
+
+  @override
+  String get statsTracks => 'Tracks played';
+
+  @override
+  String get statsSince => 'Since';
+
+  @override
+  String get statsCompleteRate => 'Completion rate';
+
+  @override
+  String get statsSkipRate => 'Skip rate';
+
+  @override
+  String get statsSources => 'Sources';
+
+  @override
+  String get statsTopTracks => 'Most played';
+
+  @override
+  String get statsTopArtists => 'Top artists';
+
+  @override
+  String get statsEmpty => 'No listening history yet';
+
+  @override
+  String get statsEmptyHint => 'Play some songs and come back';
+
+  @override
+  String get statsExport => 'Export listening data';
+
+  @override
+  String statsExportSubtitle(int limit) {
+    return 'JSON file (summary + last $limit events)';
+  }
+
+  @override
+  String get statsExportFailed => 'Export failed';
+
+  @override
+  String get statsClear => 'Clear stats';
+
+  @override
+  String get statsClearConfirm =>
+      'This will delete all listening stat events. This cannot be undone.';
+
+  @override
+  String get statsCleared => 'Listening stats cleared';
+
+  @override
+  String statsPlaysCount(int count) {
+    return '$count plays';
+  }
+
+  @override
+  String statsDurationSeconds(int count) {
+    return '$count s';
+  }
+
+  @override
+  String statsDurationMinutes(int count) {
+    return '$count min';
+  }
+
+  @override
+  String statsDurationHours(int hours, int minutes) {
+    return '$hours h $minutes min';
+  }
+
+  @override
+  String statsDaySummary(int count, String duration) {
+    return '$count plays · $duration';
+  }
+
+  @override
+  String statsTooltip(String date, String value) {
+    return '$date · $value';
+  }
+
+  @override
+  String statsEventListened(String duration) {
+    return 'Listened $duration';
+  }
 }

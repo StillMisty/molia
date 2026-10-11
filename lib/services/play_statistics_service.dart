@@ -16,6 +16,7 @@ library;
 
 import 'dart:async';
 
+import 'package:flutter/foundation.dart';
 import 'package:logger/logger.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -53,6 +54,9 @@ class PlayStatisticsService {
 
   SharedPreferences? _preferences;
 
+  /// 采集开关的可监听出口（设置页开关绑定；值随 [init]/[setEnabled] 更新）。
+  final ValueNotifier<bool> enabledNotifier = ValueNotifier<bool>(true);
+
   /// 串行化所有数据库写入（保证 start → touch → finish 顺序）。
   Future<void> _writes = Future<void>.value();
 
@@ -83,12 +87,14 @@ class PlayStatisticsService {
       _logger.e('读取听歌统计开关失败，按默认开启处理', error: e);
       _enabled = true;
     }
+    enabledNotifier.value = _enabled;
   }
 
   /// 设置采集开关：关闭时先收尾进行中的事件（已存数据保留）。
   Future<void> setEnabled(bool value) async {
     if (_enabled == value) return;
     _enabled = value;
+    enabledNotifier.value = value;
     if (!value) {
       _finishOpen(reason: PlayEventEndReason.stopped);
     }

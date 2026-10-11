@@ -103,6 +103,16 @@
   （保留 unauthorized / connectionFailed 语义，不再退化为 unknown）；内置传输错误
   由 `SourceFailure.from` 按类型名识别 `BuiltinHttpException`。providers/UI 只消费
   kind / l10nKey / retryable。
+- **听歌统计**：`play_events`（一次播放尝试一行，v4 迁移）由
+  `PlayStatisticsRepository` 读写；聚合全部查询时计算，口径常量唯一来源是
+  `PlayStatisticsLimits`（有效播放 = `min(30s, 50%·时长)`，error 事件不计入
+  计数/比率）。采集是 `PlayStatisticsService` 纯观察者——组合根把
+  `PlaybackProvider` 快照 + position 接进去，**零改动播放内核**；
+  真正出声才开事件、暂停不切断、15s 节流落盘、启动收尾遗留事件。
+  统计页（`play_statistics_page.dart`）消费 provider 投影：日历热力图（hero，
+  全量历史 + 范围高亮）、作息热力图（7×24，随范围过滤）、汇总/指标/榜单
+  （Top 曲目可点播）；导出 JSON 面向 AI 消费（全量汇总 + 最近明细、不含 raw）。
+  与 `play_history`（最近播放，500 条上限）是两套数据。
 - **渠道选择**：`DiscoverProvider.channelKey` 是渠道状态的唯一持有者；渠道变化经
   注入的 `onChannelChanged`（组合根）同步搜索源（可搜索渠道才跟随），资料页只
   处理「渠道被停用」的 UI 回退，不再在两个 provider 之间仲裁同步。

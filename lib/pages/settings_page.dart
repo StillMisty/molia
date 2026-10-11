@@ -16,13 +16,16 @@ import '../widgets/lxmc_import.dart' show importLxmcFavoritesFlow;
 import '../widgets/nav_destination_icons.dart';
 import '../services/app_branding_service.dart';
 import '../services/language_service.dart';
+import '../services/play_statistics_service.dart';
 import '../services/settings_service.dart';
 import '../services/data_saver_service.dart';
 import '../services/notification_service.dart';
 import 'cache_management_page.dart';
 import 'lyrics_display_page.dart';
+import 'play_statistics_page.dart';
 import 'sources_page.dart';
 import '../utils/responsive.dart';
+import 'dart:async';
 import 'dart:math' as math;
 
 // 设置页统一间距常量。
@@ -412,6 +415,38 @@ class _SettingsMenuSectionState extends State<SettingsMenuSection> {
                 child: const CacheManagementPage(),
               );
             },
+          ),
+          const SizedBox(height: kElementSpacing),
+          // 听歌统计：事件级采集（本机），播放次数 / 热力图 / 导出。
+          _buildSettingMenuItem(
+            context,
+            key: const Key('settingsPlayStatisticsItem'),
+            icon: Icons.insights_rounded,
+            title: l10n.statsTitle,
+            subtitle: l10n.statsSettingsSubtitle,
+            onTap: () {
+              ResponsiveNavigation.showAdaptiveModalPage(
+                context: context,
+                child: const PlayStatisticsPage(),
+              );
+            },
+          ),
+          const SizedBox(height: kElementSpacing),
+          // 统计采集开关（关闭 = 停止记录新事件，已有数据保留）。
+          ValueListenableBuilder<bool>(
+            valueListenable:
+                context.read<PlayStatisticsService>().enabledNotifier,
+            builder: (context, enabled, _) => _buildValueSwitchMenuItem(
+              context,
+              switchKey: const Key('settingsPlayStatisticsSwitch'),
+              icon: Icons.query_stats_rounded,
+              title: l10n.statsRecordSwitch,
+              subtitle: l10n.statsRecordSwitchSubtitle,
+              value: enabled,
+              onChanged: (value) => unawaited(
+                context.read<PlayStatisticsService>().setEnabled(value),
+              ),
+            ),
           ),
         ],
       ),

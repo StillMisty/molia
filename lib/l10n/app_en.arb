@@ -667,5 +667,104 @@
   "lyricsColorSourceTertiary": "Tertiary",
   "lyricsColorSourceOnSurface": "On surface",
   "lyricsColorSourceOnSurfaceVariant": "Variant",
-  "lyricsDesktopColorThemeHint": "The color source decides which scheme the theme-role rows use: app theme follows the appearance settings; album art updates live with the current track."
+  "lyricsDesktopColorThemeHint": "The color source decides which scheme the theme-role rows use: app theme follows the appearance settings; album art updates live with the current track.",
+  "statsTitle": "Listening Stats",
+  "statsSubtitle": "Play counts, listening time, and activity heatmaps (stored on this device only)",
+  "statsSettingsSubtitle": "Plays / activity heatmaps / export",
+  "statsRecordSwitch": "Record listening stats",
+  "statsRecordSwitchSubtitle": "Turn off to stop recording new plays; existing data is kept",
+  "statsRangeWeek": "7 days",
+  "statsRangeMonth": "30 days",
+  "statsRangeAll": "All",
+  "statsValueDuration": "Time",
+  "statsValueCount": "Plays",
+  "statsPlays": "Valid plays",
+  "statsListened": "Listening time",
+  "statsTracks": "Tracks played",
+  "statsSince": "Since",
+  "statsCompleteRate": "Completion rate",
+  "statsSkipRate": "Skip rate",
+  "statsSources": "Sources",
+  "statsTopTracks": "Most played",
+  "statsTopArtists": "Top artists",
+  "statsEmpty": "No listening history yet",
+  "statsEmptyHint": "Play some songs and come back",
+  "statsExport": "Export listening data",
+  "statsExportSubtitle": "JSON file (summary + last {limit} events)",
+  "@statsExportSubtitle": {
+    "placeholders": {
+      "limit": {
+        "type": "int"
+      }
+    }
+  },
+  "statsExportFailed": "Export failed",
+  "statsClear": "Clear stats",
+  "statsClearConfirm": "This will delete all listening stat events. This cannot be undone.",
+  "statsCleared": "Listening stats cleared",
+  "statsPlaysCount": "{count} plays",
+  "@statsPlaysCount": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "statsDurationSeconds": "{count} s",
+  "@statsDurationSeconds": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "statsDurationMinutes": "{count} min",
+  "@statsDurationMinutes": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "statsDurationHours": "{hours} h {minutes} min",
+  "@statsDurationHours": {
+    "placeholders": {
+      "hours": {
+        "type": "int"
+      },
+      "minutes": {
+        "type": "int"
+      }
+    }
+  },
+  "statsDaySummary": "{count} plays · {duration}",
+  "@statsDaySummary": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      },
+      "duration": {
+        "type": "String"
+      }
+    }
+  },
+  "statsTooltip": "{date} · {value}",
+  "@statsTooltip": {
+    "placeholders": {
+      "date": {
+        "type": "String"
+      },
+      "value": {
+        "type": "String"
+      }
+    }
+  },
+  "statsEventListened": "Listened {duration}",
+  "@statsEventListened": {
+    "placeholders": {
+      "duration": {
+        "type": "String"
+      }
+    }
+  }
 }

@@ -6,6 +6,7 @@ import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:molia/l10n/app_localizations.dart';
+import 'package:molia/data/play_statistics_repository.dart';
 import 'package:molia/models/play_mode.dart';
 import 'package:molia/pages/settings_page.dart';
 import 'package:molia/providers/local_database_provider.dart';
@@ -15,6 +16,7 @@ import 'package:molia/services/data_saver_service.dart';
 import 'package:molia/services/language_service.dart';
 import 'package:molia/services/lyrics_service.dart';
 import 'package:molia/services/notification_service.dart';
+import 'package:molia/services/play_statistics_service.dart';
 import 'package:molia/services/settings_service.dart';
 import 'package:molia/theme/scheme_builder.dart';
 
@@ -68,6 +70,16 @@ void main() {
     addTearDown(playbackProvider.dispose);
     addTearDown(dataSaver.dispose);
 
+    // 听歌统计开关：只读 enabledNotifier，不触碰数据库。
+    final playStatisticsService = PlayStatisticsService(
+      repository: PlayStatisticsRepository(
+        databaseProvider: () async => throw StateError('测试不访问数据库'),
+      ),
+      preferences: await SharedPreferences.getInstance(),
+    );
+    await playStatisticsService.init();
+    addTearDown(playStatisticsService.enabledNotifier.dispose);
+
     final scaffoldMessengerKey = GlobalKey<ScaffoldMessengerState>();
     final themedData = ThemeData(colorScheme: themeProvider.colorScheme);
 
@@ -86,6 +98,7 @@ void main() {
             value: NotificationService(scaffoldMessengerKey),
           ),
           ChangeNotifierProvider<DataSaverService>.value(value: dataSaver),
+          Provider<PlayStatisticsService>.value(value: playStatisticsService),
         ],
         child: M3EMaterialApp(
           data: M3EThemeData.fromMaterial(themedData),

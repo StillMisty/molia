@@ -360,6 +360,38 @@ void main() {
       expect(hours[1].listenedMs, 20000);
     });
 
+    test('listenedByWeekdayHour 按本地星期×小时分桶', () async {
+      // 2026-03-02 是周一，03-03 是周二。
+      final monday = DateTime(2026, 3, 2, 9, 20);
+      final tuesday = DateTime(2026, 3, 3, 23, 40);
+      await insertEvent(
+        songId: 'mon',
+        listenedMs: 60000,
+        durationMs: 200000,
+        endReason: 'completed',
+        startedAt: monday.millisecondsSinceEpoch,
+        endedAt: monday.millisecondsSinceEpoch + 60000,
+      );
+      await insertEvent(
+        songId: 'tue',
+        listenedMs: 20000,
+        durationMs: 200000,
+        endReason: 'completed',
+        startedAt: tuesday.millisecondsSinceEpoch,
+        endedAt: tuesday.millisecondsSinceEpoch + 20000,
+      );
+
+      final buckets = await repository.listenedByWeekdayHour();
+
+      expect(buckets, hasLength(2));
+      expect(buckets[0].weekday, 0, reason: '周一 = 0');
+      expect(buckets[0].hour, 9);
+      expect(buckets[0].listenedMs, 60000);
+      expect(buckets[0].playCount, 1);
+      expect(buckets[1].weekday, 1);
+      expect(buckets[1].hour, 23);
+    });
+
     test('sourceDistribution 按 sourceKey 聚合按时长排序', () async {
       final base = DateTime(2026, 3, 4, 9).millisecondsSinceEpoch;
       await insertEvent(
