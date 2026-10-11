@@ -292,6 +292,8 @@ class _SourcesPageState extends State<SourcesPage> {
           const SizedBox(height: 8),
           Wrap(
             spacing: 8,
+            // 换行后行距不能为 0：chips 贴边会被看成叠在一起。
+            runSpacing: 8,
             children: provider.qualityOptions
                 .map((option) => M3EChip(
                       type: M3EChipType.filter,
