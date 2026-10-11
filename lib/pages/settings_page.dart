@@ -261,8 +261,7 @@ class _SettingsHomeViewState extends State<_SettingsHomeView> {
                       subtitle: qualityLabel,
                     ),
                   ),
-                  // 自动换源：播放失败同源重试仍失败时跨音源严格找回
-                  // （默认开；手动换源不受此开关控制）。
+                  // 自动换源：播放失败后的跨源找回（手动换源不受此开关控制）。
                   if (sourceSwapSettings != null) ...[
                     const SizedBox(height: kSettingsElementSpacing),
                     Selector<SourceSwapSettings, bool>(

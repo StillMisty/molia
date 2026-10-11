@@ -102,7 +102,6 @@ class _SourceSwapSheetState extends State<SourceSwapSheet> {
     );
   }
 
-  /// 头部：换源标题 + 原曲（歌名 · 歌手）。
   Widget _buildHeader(
     BuildContext context,
     AppLocalizations l10n,
@@ -171,7 +170,7 @@ class _SourceSwapSheetState extends State<SourceSwapSheet> {
     );
   }
 
-  /// 音源筛选 chip：按用户音源顺序排列，横向滚动。
+  /// 音源筛选 chip（顺序即用户音源顺序）。
   Widget _buildSourceTabs(
     BuildContext context,
     AppLocalizations l10n,
@@ -199,7 +198,6 @@ class _SourceSwapSheetState extends State<SourceSwapSheet> {
     );
   }
 
-  /// 候选列表：点行 = 选中 + 立即试听（单曲「换源试听」上下文）。
   Widget _buildCandidates(
     BuildContext context,
     SourceSwapProvider provider,
@@ -304,7 +302,7 @@ class _SourceSwapSheetState extends State<SourceSwapSheet> {
     );
   }
 
-  /// 选中 + 立即试听：单曲上下文（试听会打断当前播放，符合试听语义）。
+  /// 选中并立即试听：单曲上下文，试听会打断当前播放。
   void _selectAndPreview(Track track) {
     _provider.select(track);
     unawaited(
@@ -366,7 +364,7 @@ class _SourceSwapSheetState extends State<SourceSwapSheet> {
     }
   }
 
-  /// 毫秒 → `m:ss`；未知/非法时长返回 null（不占行尾）。
+  /// 时长 → `m:ss`；未知/非法时长返回 null（不占行尾）。
   String? _durationText(Duration? duration) {
     final milliseconds = duration?.inMilliseconds ?? 0;
     if (milliseconds <= 0) return null;

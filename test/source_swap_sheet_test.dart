@@ -180,7 +180,6 @@ void main() {
     expect(backend.lastRequest?.context?.name, '换源试听');
     expect(find.byIcon(Icons.check_circle_rounded), findsOneWidget);
 
-    // 确认 → 原位替换 → 提示 → 关闭。
     await tester.tap(find.widgetWithText(M3EButton, '换源'));
     await tester.pumpAndSettle();
     expect(find.text('已换源'), findsOneWidget);

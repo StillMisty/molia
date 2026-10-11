@@ -81,13 +81,11 @@ void main() {
     emitError(failing);
     await pumpEventQueue();
 
-    // 同源重试一次。
     expect(backend.calls, contains('playQueueIndex:0'));
     // 自动换源：provenance 含种子源。
     expect(calls, hasLength(1));
     expect(calls.single.uri, 'fake:a');
     expect(calls.single.exclude, {'fake'});
-    // 队列已替换为新源。
     expect(backend.lastReplacedTrackUri, 'fake:a');
     expect(backend.lastReplacedTrack, same(replacement));
     expect(provider.snapshot.current?.id.uri, 'kg:a');

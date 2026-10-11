@@ -88,7 +88,6 @@ void main() {
     expect(provider.activeSourceKey, 'kg');
     expect(provider.activeItems.map((t) => t.id.uri), ['kg:100', 'kg:101']);
     expect(provider.failedSourceKeys, {'tx'});
-    // 关键词为「歌名 + 歌手」。
     expect(kg.lastQuery?.keyword, 'Title Artist');
     expect(sources['wy']!.searchCalls, 0, reason: '种子源被排除');
   });

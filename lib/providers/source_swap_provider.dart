@@ -97,7 +97,6 @@ class SourceSwapApplyResult {
   final bool queueFollowed;
 }
 
-/// 换源会话状态机（跨音源搜索 + 原位替换 + 队列跟随）。
 class SourceSwapProvider extends ChangeNotifier {
   SourceSwapProvider({
     required CatalogService catalogService,
@@ -368,8 +367,7 @@ class SourceSwapProvider extends ChangeNotifier {
       album: track.album ?? '',
       coverUrl: track.artwork?.uri.toString(),
       durationMs: track.duration?.inMilliseconds,
-      // payload 原样透传（取链依赖平台字段）；此处只做 Map 浅拷贝避免
-      // 把领域对象内部 Map 交给持久化层直接引用。
+      // payload 原样透传（取链依赖平台字段）；浅拷贝避免与领域对象共享引用。
       raw: Map<String, dynamic>.from(track.payload),
       addedAt: DateTime.now().millisecondsSinceEpoch,
     );

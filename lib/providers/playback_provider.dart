@@ -827,8 +827,8 @@ class PlaybackProvider extends ChangeNotifier {
   /// 同源重试完成后的判定：错误仍在且仍是同一首 → 尝试自动换源。
   void _maybeAutoSwapAfterRetry(Track track) {
     final state = _facade.snapshot.value;
-    if (state.error == null) return; // 重试成功
-    if (state.current?.id.uri != track.id.uri) return; // 已切歌
+    if (state.error == null) return;
+    if (state.current?.id.uri != track.id.uri) return;
     unawaited(_tryAutoSourceSwap(track, state.error!));
   }
 
