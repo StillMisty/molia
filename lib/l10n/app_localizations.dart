@@ -434,6 +434,12 @@ abstract class AppLocalizations {
   /// **'Default play mode'**
   String get settingsDefaultPlayMode;
 
+  /// No description provided for @settingsDefaultPlayModeSubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Initial mode for new playback sessions; the current session is unaffected'**
+  String get settingsDefaultPlayModeSubtitle;
+
   /// No description provided for @settingsCurrentQuality.
   ///
   /// In en, this message translates to:
@@ -488,17 +494,23 @@ abstract class AppLocalizations {
   /// **'Do not request new artwork; show a placeholder when not cached'**
   String get settingsDataSaverCoversSubtitle;
 
-  /// No description provided for @settingsSourcesSection.
-  ///
-  /// In en, this message translates to:
-  /// **'Sources'**
-  String get settingsSourcesSection;
-
   /// No description provided for @settingsSourcesItemSubtitle.
   ///
   /// In en, this message translates to:
   /// **'Import LX Music source scripts to search and play songs from third-party platforms'**
   String get settingsSourcesItemSubtitle;
+
+  /// No description provided for @settingsContentSection.
+  ///
+  /// In en, this message translates to:
+  /// **'Content'**
+  String get settingsContentSection;
+
+  /// No description provided for @settingsLyricsSection.
+  ///
+  /// In en, this message translates to:
+  /// **'Lyrics'**
+  String get settingsLyricsSection;
 
   /// No description provided for @settingsBottomNavTitle.
   ///
@@ -542,6 +554,12 @@ abstract class AppLocalizations {
   /// **'General'**
   String get generalTitle;
 
+  /// No description provided for @settingsGeneralSubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Language, app name and bottom navigation'**
+  String get settingsGeneralSubtitle;
+
   /// No description provided for @copyLyricsAsSingleLineTitle.
   ///
   /// In en, this message translates to:
@@ -557,8 +575,26 @@ abstract class AppLocalizations {
   /// No description provided for @dataManagementTitle.
   ///
   /// In en, this message translates to:
-  /// **'Data Management'**
+  /// **'Data & storage'**
   String get dataManagementTitle;
+
+  /// No description provided for @settingsDataSubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Cache, listening stats and data import/export'**
+  String get settingsDataSubtitle;
+
+  /// No description provided for @settingsDataStorageSection.
+  ///
+  /// In en, this message translates to:
+  /// **'Storage & stats'**
+  String get settingsDataStorageSection;
+
+  /// No description provided for @settingsDataPortabilitySection.
+  ///
+  /// In en, this message translates to:
+  /// **'Import & export'**
+  String get settingsDataPortabilitySection;
 
   /// No description provided for @exportDataTitle.
   ///

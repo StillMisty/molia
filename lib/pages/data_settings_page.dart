@@ -1,0 +1,180 @@
+import 'dart:async';
+
+import 'package:flutter/foundation.dart' show kIsWeb;
+import 'package:material_3_expressive/material_3_expressive.dart';
+import 'package:material_ui/material_ui.dart';
+import 'package:provider/provider.dart';
+
+import '../l10n/app_localizations.dart';
+import '../providers/local_database_provider.dart';
+import '../services/notification_service.dart';
+import '../services/play_statistics_service.dart';
+import '../widgets/lxmc_import.dart' show importLxmcFavoritesFlow;
+import '../widgets/settings/settings_tiles.dart';
+import 'cache_management_page.dart';
+import 'play_statistics_page.dart';
+
+/// 数据与存储子页：缓存、听歌统计与数据导入导出。
+///
+/// 从设置首屏「数据与存储」进入，在设置弹层内部导航（见 `settings_page.dart`）。
+class DataSettingsPage extends StatelessWidget {
+  const DataSettingsPage({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context)!;
+    return Scaffold(
+      appBar: M3EAppBar.top(
+        title: Text(l10n.dataManagementTitle),
+        automaticallyImplyLeading: true,
+      ),
+      body: ListView(
+        padding: const EdgeInsets.all(kSettingsPadding),
+        children: [
+          SettingsSectionCard(
+            title: l10n.settingsDataStorageSection,
+            children: [
+              // 缓存管理：音频/歌词/封面占用 + 策略 + 单清/全清。
+              SettingsNavTile(
+                key: const Key('settingsCacheManagementItem'),
+                icon: Icons.storage_rounded,
+                title: l10n.settingsCacheTitle,
+                subtitle: l10n.settingsCacheSubtitle,
+                onTap: () => openSettingsSubPage(
+                  context,
+                  const CacheManagementPage(),
+                ),
+              ),
+              const SizedBox(height: kSettingsElementSpacing),
+              // 听歌统计：事件级采集（本机），播放次数 / 热力图 / 导出。
+              SettingsNavTile(
+                key: const Key('settingsPlayStatisticsItem'),
+                icon: Icons.insights_rounded,
+                title: l10n.statsTitle,
+                subtitle: l10n.statsSettingsSubtitle,
+                onTap: () => openSettingsSubPage(
+                  context,
+                  const PlayStatisticsPage(),
+                ),
+              ),
+              const SizedBox(height: kSettingsElementSpacing),
+              // 统计采集开关（关闭 = 停止记录新事件，已有数据保留）。
+              ValueListenableBuilder<bool>(
+                valueListenable:
+                    context.read<PlayStatisticsService>().enabledNotifier,
+                builder: (context, enabled, _) => SettingsSwitchTile(
+                  switchKey: const Key('settingsPlayStatisticsSwitch'),
+                  icon: Icons.query_stats_rounded,
+                  title: l10n.statsRecordSwitch,
+                  subtitle: l10n.statsRecordSwitchSubtitle,
+                  value: enabled,
+                  onChanged: (value) => unawaited(
+                    context.read<PlayStatisticsService>().setEnabled(value),
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: kSettingsSectionSpacing),
+          SettingsSectionCard(
+            title: l10n.settingsDataPortabilitySection,
+            children: [
+              SettingsNavTile(
+                icon: Icons.upload_file_rounded,
+                title: l10n.exportDataTitle,
+                subtitle: l10n.exportDataSubtitle,
+                onTap: () => _exportData(context, l10n),
+              ),
+              const SizedBox(height: kSettingsElementSpacing),
+              SettingsNavTile(
+                icon: Icons.download_rounded,
+                title: l10n.importDataTitle,
+                subtitle: l10n.importDataSubtitle,
+                onTap: () => _showImportDialog(context, l10n),
+              ),
+              // LX Music 收藏夹（.lxmc）导入：Web 无 gzip/文件系统，隐藏入口。
+              if (!kIsWeb) ...[
+                const SizedBox(height: kSettingsElementSpacing),
+                SettingsNavTile(
+                  icon: Icons.favorite_border_rounded,
+                  title: l10n.libraryImportFavorites,
+                  subtitle: l10n.libraryImportFavoritesSubtitle,
+                  onTap: () => importLxmcFavoritesFlow(context),
+                ),
+              ],
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _exportData(BuildContext context, AppLocalizations l10n) async {
+    final localDbProvider =
+        Provider.of<LocalDatabaseProvider>(context, listen: false);
+    final notificationService =
+        Provider.of<NotificationService>(context, listen: false);
+    final currentContext = context;
+
+    try {
+      bool success = await localDbProvider.exportDataToJson();
+      if (!currentContext.mounted) return;
+      // 成功时系统文件选择器本身即反馈，不再弹 toast；失败仍需提示。
+      if (!success) {
+        notificationService.showErrorSnackBar(l10n.exportFailed);
+      }
+    } catch (e) {
+      if (currentContext.mounted) {
+        notificationService.showErrorSnackBar(l10n.exportFailed);
+      }
+    }
+  }
+
+  Future<void> _showImportDialog(
+      BuildContext context, AppLocalizations l10n) async {
+    final localDbProvider =
+        Provider.of<LocalDatabaseProvider>(context, listen: false);
+    final notificationService =
+        Provider.of<NotificationService>(context, listen: false);
+    final navigator = Navigator.of(context, rootNavigator: true);
+    final currentContext = context;
+
+    M3EDialog.show<void>(
+      currentContext,
+      dialog: M3EDialog(
+        title: l10n.importDialogTitle,
+        content: SizedBox(
+          width: settingsDialogWidth(context),
+          child: Text(
+            l10n.importDialogMessage,
+          ),
+        ),
+        actions: [
+          M3EButton.text(
+            onPressed: () => Navigator.pop(context),
+            child: Text(l10n.cancelButton),
+          ),
+          M3EButton.text(
+            onPressed: () async {
+              navigator.pop();
+              try {
+                bool success = await localDbProvider.importDataFromJson();
+                if (!currentContext.mounted) return;
+                if (success) {
+                  notificationService.showSuccessSnackBar(l10n.importSuccess);
+                } else {
+                  notificationService.showErrorSnackBar(l10n.importFailed);
+                }
+              } catch (e) {
+                if (currentContext.mounted) {
+                  notificationService.showErrorSnackBar(l10n.importFailed);
+                }
+              }
+            },
+            child: Text(l10n.importButton),
+          ),
+        ],
+      ),
+    );
+  }
+}

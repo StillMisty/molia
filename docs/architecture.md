@@ -135,7 +135,7 @@
   `PlaybackProvider.enqueueDomainTracks` 续推（洗牌追加见
   `PlaybackShuffleOrder.extend`）；播放页徽标与 AI 页订阅其状态，发现页推荐流
   （`AiDjCarousel`）消费待播批次（12h 缓存、点卡整批入队起播、尾部换一批），
-  **模式关闭时整条隐藏**（开启入口在设置 › 数据管理 › AI DJ）。
+  **模式关闭时整条隐藏**（开启入口在设置 › 内容 › AI 推歌）。
   首次开启隐私确认、Web 隐藏；定位与边界见 ADR-0002。
 - **渠道选择**：`DiscoverProvider.channelKey` 是渠道状态的唯一持有者；渠道变化经
   注入的 `onChannelChanged`（组合根）同步搜索源（可搜索渠道才跟随），资料页只
@@ -236,6 +236,15 @@
   用 `aospSpatial` 无过冲弹簧并在落定帧零速度交接；不要再用
   `AnimationController` + `Curves`/`SpringSimulation` 手搓 spatial 运动
   （交互细节见 `docs/pitfalls.md` #21）。
+- 设置页：首屏按功能分区（外观 / 播放 / 歌词 / 内容 / 通用 / 数据与存储），每组一张
+  filled 卡片、分组标题在卡片上方，统一行组件在 `lib/widgets/settings/settings_tiles.dart`；
+  子页（音源 / 歌词显示 / AI 推歌 / 通用 / 数据与存储 / 缓存 / 统计）经 `SettingsPage`
+  的内部 Navigator 在同一弹层内 push（`openSettingsSubPage`）。系统返回先退子页、
+  再关弹层：底部弹层由 `showAdaptiveModalPage(onDismissRequest:)` guard 读取
+  `SettingsPage.subPageOpen`（M3E 弹层宿主会给层内所有 PopScope 回调发 didPop=false
+  并请求关闭，必须由 guard 挡下）；对话框 / 独立挂载由 `NavigatorPopHandler` 承接。
+  弹层内 dialog 挂在 root navigator（`M3EDialog.show` 语义），关闭须显式
+  `rootNavigator: true`。
 - 图标：统一圆角风格 `Icons.*_rounded`（不用 `Icons.adaptive.*`，不混 `_outlined`/基础实心）；
   唯一例外 `library_music_outlined`（资料库未选中半对；音符图标已改用 `MoliaMark` 组件）。
   `test/architecture/icon_usage_test.dart` 扫描强制。

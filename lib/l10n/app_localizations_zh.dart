@@ -184,6 +184,9 @@ class AppLocalizationsZh extends AppLocalizations {
   String get settingsDefaultPlayMode => '默认播放模式';
 
   @override
+  String get settingsDefaultPlayModeSubtitle => '新播放会话的初始模式，不打断当前播放';
+
+  @override
   String get settingsCurrentQuality => '当前播放音质';
 
   @override
@@ -211,10 +214,13 @@ class AppLocalizationsZh extends AppLocalizations {
   String get settingsDataSaverCoversSubtitle => '不发起新的封面请求，无缓存时显示占位图标';
 
   @override
-  String get settingsSourcesSection => '音源';
+  String get settingsSourcesItemSubtitle => '导入 LX Music 音源脚本，搜索并播放第三方平台歌曲';
 
   @override
-  String get settingsSourcesItemSubtitle => '导入 LX Music 音源脚本，搜索并播放第三方平台歌曲';
+  String get settingsContentSection => '内容';
+
+  @override
+  String get settingsLyricsSection => '歌词';
 
   @override
   String get settingsBottomNavTitle => '底部导航';
@@ -238,13 +244,25 @@ class AppLocalizationsZh extends AppLocalizations {
   String get generalTitle => '通用';
 
   @override
+  String get settingsGeneralSubtitle => '语言、应用名称与底部导航';
+
+  @override
   String get copyLyricsAsSingleLineTitle => '将歌词复制为单行';
 
   @override
   String get copyLyricsAsSingleLineSubtitle => '复制时将换行符替换为空格';
 
   @override
-  String get dataManagementTitle => '数据管理';
+  String get dataManagementTitle => '数据与存储';
+
+  @override
+  String get settingsDataSubtitle => '缓存、听歌统计与数据导入导出';
+
+  @override
+  String get settingsDataStorageSection => '存储与统计';
+
+  @override
+  String get settingsDataPortabilitySection => '导入与导出';
 
   @override
   String get exportDataTitle => '导出最近播放';

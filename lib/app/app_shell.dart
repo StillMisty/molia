@@ -377,11 +377,16 @@ class _MyAppState extends State<MyApp>
               variant: M3EIconButtonVariant.standard,
               onPressed: () {
                 HapticFeedback.lightImpact();
+                // 弹层内部导航：子页打开时系统返回先退子页（弹层 dismiss
+                // guard 读取子页状态），子页退完后再关弹层；通知器生命周期
+                // 与弹层一致。
+                final subPageOpen = ValueNotifier<bool>(false);
                 ResponsiveNavigation.showAdaptiveModalPage(
                   context: context,
                   showCloseButton: false,
-                  child: const SettingsPage(),
-                );
+                  onDismissRequest: () async => !subPageOpen.value,
+                  child: SettingsPage(subPageOpen: subPageOpen),
+                ).whenComplete(subPageOpen.dispose);
               },
               tooltip: l10n.settingsTitle,
               icon: const Icon(Icons.settings_rounded),

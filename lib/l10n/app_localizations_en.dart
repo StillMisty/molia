@@ -186,6 +186,10 @@ class AppLocalizationsEn extends AppLocalizations {
   String get settingsDefaultPlayMode => 'Default play mode';
 
   @override
+  String get settingsDefaultPlayModeSubtitle =>
+      'Initial mode for new playback sessions; the current session is unaffected';
+
+  @override
   String get settingsCurrentQuality => 'Now playing quality';
 
   @override
@@ -215,11 +219,14 @@ class AppLocalizationsEn extends AppLocalizations {
       'Do not request new artwork; show a placeholder when not cached';
 
   @override
-  String get settingsSourcesSection => 'Sources';
-
-  @override
   String get settingsSourcesItemSubtitle =>
       'Import LX Music source scripts to search and play songs from third-party platforms';
+
+  @override
+  String get settingsContentSection => 'Content';
+
+  @override
+  String get settingsLyricsSection => 'Lyrics';
 
   @override
   String get settingsBottomNavTitle => 'Bottom navigation';
@@ -244,6 +251,10 @@ class AppLocalizationsEn extends AppLocalizations {
   String get generalTitle => 'General';
 
   @override
+  String get settingsGeneralSubtitle =>
+      'Language, app name and bottom navigation';
+
+  @override
   String get copyLyricsAsSingleLineTitle => 'Copy lyrics as single line';
 
   @override
@@ -251,7 +262,17 @@ class AppLocalizationsEn extends AppLocalizations {
       'Replaces line breaks with spaces when copying';
 
   @override
-  String get dataManagementTitle => 'Data Management';
+  String get dataManagementTitle => 'Data & storage';
+
+  @override
+  String get settingsDataSubtitle =>
+      'Cache, listening stats and data import/export';
+
+  @override
+  String get settingsDataStorageSection => 'Storage & stats';
+
+  @override
+  String get settingsDataPortabilitySection => 'Import & export';
 
   @override
   String get exportDataTitle => 'Export Recent Plays';

@@ -460,6 +460,9 @@ class ResponsiveNavigation {
     };
   }
 
+  /// [onDismissRequest] 仅对底部弹层（compact/medium 宽）生效：系统返回 /
+  /// 蒙层点击 / 下滑关闭前先询问，返回 false 保持弹层打开（用于弹层内部
+  /// 导航先退子页）；中心对话框（large 宽）无对应 guard，由内容侧 PopScope 处理。
   static Future<T?> showAdaptiveModalPage<T>({
     required BuildContext context,
     required Widget child,
@@ -468,6 +471,7 @@ class ResponsiveNavigation {
     bool showCloseButton = true,
     bool showDragHandle = true,
     bool barrierDismissible = true,
+    Future<bool> Function()? onDismissRequest,
     SecondaryPageMode largeScreenMode = SecondaryPageMode.centerDialog,
     AdaptiveModalContentLayout contentLayout =
         AdaptiveModalContentLayout.wrapContent,
@@ -482,6 +486,7 @@ class ResponsiveNavigation {
         title: title,
         showCloseButton: showCloseButton,
         showDragHandle: showDragHandle,
+        onDismissRequest: onDismissRequest,
         contentLayout: contentLayout,
         pageType: ResponsivePageType.modal,
       );
@@ -659,6 +664,7 @@ class ResponsiveNavigation {
     String? title,
     bool showCloseButton = true,
     bool showDragHandle = true,
+    Future<bool> Function()? onDismissRequest,
     AdaptiveModalContentLayout contentLayout =
         AdaptiveModalContentLayout.fillHeight,
   }) {
@@ -678,6 +684,7 @@ class ResponsiveNavigation {
       // 屏幕高度减顶部留白），向下可回落到半屏 collapsed。
       initialValue: M3EBottomSheetValue.expanded,
       showDragHandle: showDragHandle,
+      onDismissRequest: onDismissRequest,
       // M3E 弹层不提供 Material 祖先，InkWell 等水波组件会直接崩溃；
       // 透明 Material 只补齐 ink 绘制层，不改变观感。
       builder: (context) => Material(
