@@ -448,5 +448,104 @@
   "lyricsColorSourceTertiary": "第三色",
   "lyricsColorSourceOnSurface": "正文色",
   "lyricsColorSourceOnSurfaceVariant": "次要文本色",
-  "lyricsDesktopColorThemeHint": "取色来源决定三行「跟随主题角色」用哪套方案：跟随应用主题随外观设置变化；跟随封面按当前曲目封面取色并实时更新。"
+  "lyricsDesktopColorThemeHint": "取色来源决定三行「跟随主题角色」用哪套方案：跟随应用主题随外观设置变化；跟随封面按当前曲目封面取色并实时更新。",
+  "statsTitle": "听歌统计",
+  "statsSubtitle": "播放次数、收听时长与热度分布（数据只保存在本机）",
+  "statsSettingsSubtitle": "播放次数 / 时段热力图 / 导出",
+  "statsRecordSwitch": "记录听歌统计",
+  "statsRecordSwitchSubtitle": "关闭后停止记录新的播放事件，已有数据保留",
+  "statsRangeWeek": "近 7 天",
+  "statsRangeMonth": "近 30 天",
+  "statsRangeAll": "全部",
+  "statsValueDuration": "时长",
+  "statsValueCount": "次数",
+  "statsPlays": "有效播放",
+  "statsListened": "收听时长",
+  "statsTracks": "听过曲目",
+  "statsSince": "数据起始",
+  "statsCompleteRate": "完整播放率",
+  "statsSkipRate": "跳过率",
+  "statsSources": "来源分布",
+  "statsTopTracks": "最常听",
+  "statsTopArtists": "常听歌手",
+  "statsEmpty": "还没有听歌记录",
+  "statsEmptyHint": "播放几首歌后回来看看",
+  "statsExport": "导出听歌数据",
+  "statsExportSubtitle": "JSON 文件（汇总 + 最近 {limit} 条明细）",
+  "@statsExportSubtitle": {
+    "placeholders": {
+      "limit": {
+        "type": "int"
+      }
+    }
+  },
+  "statsExportFailed": "导出失败",
+  "statsClear": "清空统计",
+  "statsClearConfirm": "将删除全部听歌统计事件，此操作不可撤销。",
+  "statsCleared": "已清空听歌统计",
+  "statsPlaysCount": "{count} 次",
+  "@statsPlaysCount": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "statsDurationSeconds": "{count} 秒",
+  "@statsDurationSeconds": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "statsDurationMinutes": "{count} 分钟",
+  "@statsDurationMinutes": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "statsDurationHours": "{hours} 小时 {minutes} 分",
+  "@statsDurationHours": {
+    "placeholders": {
+      "hours": {
+        "type": "int"
+      },
+      "minutes": {
+        "type": "int"
+      }
+    }
+  },
+  "statsDaySummary": "{count} 次播放 · {duration}",
+  "@statsDaySummary": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      },
+      "duration": {
+        "type": "String"
+      }
+    }
+  },
+  "statsTooltip": "{date} · {value}",
+  "@statsTooltip": {
+    "placeholders": {
+      "date": {
+        "type": "String"
+      },
+      "value": {
+        "type": "String"
+      }
+    }
+  },
+  "statsEventListened": "听了 {duration}",
+  "@statsEventListened": {
+    "placeholders": {
+      "duration": {
+        "type": "String"
+      }
+    }
+  }
 }

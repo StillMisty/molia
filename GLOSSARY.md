@@ -94,6 +94,29 @@
   `ensurePlaylistTracks`：页面只读「已缓存/加载中」视图并请求加载，不再探测
   `cachedTracksOf`/`isPlaylistLoading` 之类的缓存内部。
 
+## 听歌统计
+
+- **Play event（播放事件）** — `play_events` 一行 = 一次播放尝试（append-only，
+  v4 迁移）：**真正出声才开行**（首个 `position > 0` 的 tick）；切歌 / 播完 /
+  单曲循环每遍 / 位置回到开头（restart）/ 停止各收尾一行；暂停不切断；
+  进程被杀由启动时 `closeStaleEvents()` 收尾为 interrupted。元数据为播放时
+  快照、自包含（`raw` 供统计页点播）。与「播放历史」（`play_history`，
+  最近播放 500 条）是两套数据。
+- **Statistics capture（统计采集）** — `lib/services/play_statistics_service.dart`：
+  纯观察者（组合根接 `PlaybackProvider` 快照 + position 两根监听，零改动
+  `lib/playback`）；`PlayStatisticsLimits` 是口径常量唯一来源
+  （有效播放 = `min(30s, 50%×时长)`；完整播放 = 末尾容差 1s），全部
+  **查询时计算**、不改数据（口径变化不需要回填）；采集开关默认为开。
+- **Listening stats page（听歌统计页）** — `lib/pages/play_statistics_page.dart` +
+  `lib/providers/play_statistics_provider.dart`：范围切换（近 7 天 / 30 天 /
+  全部）只作用于汇总/榜单；**日历热力图固定全量历史**，范围切换只做高亮。
+  形状与色阶约定见 `lib/widgets/statistics/listening_heatmap.dart`
+  （格子静默 `square`、悬停/按压 morph `puffy` 放大，色阶 = `primary`
+  四档 alpha，空日 `surfaceContainerHighest`）。
+- **Listening export（听歌数据导出）** — `lib/services/play_statistics_export.dart`：
+  面向 AI 消费的 JSON（汇总/榜单全量 + 最近 2000 条明细、**不含 raw**、
+  带 `instructions` 提示语）；只出不进，不并入 `molia_backup` 备份。
+
 ## 缓存
 
 - **Lyrics cache（歌词缓存模块）** — `lib/services/lyrics_cache.dart`：歌词键（`lyrics_cache_{trackId}`）、读写、用量与清理的唯一实现；TTL 策略属于 `CacheService`（取词时读取）。历史 `manual_lyrics_cache_*` 重复键只清不读。

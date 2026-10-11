@@ -119,9 +119,14 @@ class TrackRow extends StatelessWidget {
             ),
             if (trailingText != null) ...[
               const SizedBox(width: 12),
-              Text(
-                trailingText!,
-                style: type.labelSmall.copyWith(color: supportingColor),
+              // Flexible：窄屏/长文案时收缩省略，而不是把行撑爆。
+              Flexible(
+                child: Text(
+                  trailingText!,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: type.labelSmall.copyWith(color: supportingColor),
+                ),
               ),
             ],
             if (trailing != null) ...[

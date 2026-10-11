@@ -1337,4 +1337,122 @@ class AppLocalizationsZh extends AppLocalizations {
   @override
   String get lyricsDesktopColorThemeHint =>
       '取色来源决定三行「跟随主题角色」用哪套方案：跟随应用主题随外观设置变化；跟随封面按当前曲目封面取色并实时更新。';
+
+  @override
+  String get statsTitle => '听歌统计';
+
+  @override
+  String get statsSubtitle => '播放次数、收听时长与热度分布（数据只保存在本机）';
+
+  @override
+  String get statsSettingsSubtitle => '播放次数 / 时段热力图 / 导出';
+
+  @override
+  String get statsRecordSwitch => '记录听歌统计';
+
+  @override
+  String get statsRecordSwitchSubtitle => '关闭后停止记录新的播放事件，已有数据保留';
+
+  @override
+  String get statsRangeWeek => '近 7 天';
+
+  @override
+  String get statsRangeMonth => '近 30 天';
+
+  @override
+  String get statsRangeAll => '全部';
+
+  @override
+  String get statsValueDuration => '时长';
+
+  @override
+  String get statsValueCount => '次数';
+
+  @override
+  String get statsPlays => '有效播放';
+
+  @override
+  String get statsListened => '收听时长';
+
+  @override
+  String get statsTracks => '听过曲目';
+
+  @override
+  String get statsSince => '数据起始';
+
+  @override
+  String get statsCompleteRate => '完整播放率';
+
+  @override
+  String get statsSkipRate => '跳过率';
+
+  @override
+  String get statsSources => '来源分布';
+
+  @override
+  String get statsTopTracks => '最常听';
+
+  @override
+  String get statsTopArtists => '常听歌手';
+
+  @override
+  String get statsEmpty => '还没有听歌记录';
+
+  @override
+  String get statsEmptyHint => '播放几首歌后回来看看';
+
+  @override
+  String get statsExport => '导出听歌数据';
+
+  @override
+  String statsExportSubtitle(int limit) {
+    return 'JSON 文件（汇总 + 最近 $limit 条明细）';
+  }
+
+  @override
+  String get statsExportFailed => '导出失败';
+
+  @override
+  String get statsClear => '清空统计';
+
+  @override
+  String get statsClearConfirm => '将删除全部听歌统计事件，此操作不可撤销。';
+
+  @override
+  String get statsCleared => '已清空听歌统计';
+
+  @override
+  String statsPlaysCount(int count) {
+    return '$count 次';
+  }
+
+  @override
+  String statsDurationSeconds(int count) {
+    return '$count 秒';
+  }
+
+  @override
+  String statsDurationMinutes(int count) {
+    return '$count 分钟';
+  }
+
+  @override
+  String statsDurationHours(int hours, int minutes) {
+    return '$hours 小时 $minutes 分';
+  }
+
+  @override
+  String statsDaySummary(int count, String duration) {
+    return '$count 次播放 · $duration';
+  }
+
+  @override
+  String statsTooltip(String date, String value) {
+    return '$date · $value';
+  }
+
+  @override
+  String statsEventListened(String duration) {
+    return '听了 $duration';
+  }
 }

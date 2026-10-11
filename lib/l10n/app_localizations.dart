@@ -2611,6 +2611,210 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'The color source decides which scheme the theme-role rows use: app theme follows the appearance settings; album art updates live with the current track.'**
   String get lyricsDesktopColorThemeHint;
+
+  /// No description provided for @statsTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Listening Stats'**
+  String get statsTitle;
+
+  /// No description provided for @statsSubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Play counts, listening time, and activity heatmaps (stored on this device only)'**
+  String get statsSubtitle;
+
+  /// No description provided for @statsSettingsSubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Plays / activity heatmaps / export'**
+  String get statsSettingsSubtitle;
+
+  /// No description provided for @statsRecordSwitch.
+  ///
+  /// In en, this message translates to:
+  /// **'Record listening stats'**
+  String get statsRecordSwitch;
+
+  /// No description provided for @statsRecordSwitchSubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Turn off to stop recording new plays; existing data is kept'**
+  String get statsRecordSwitchSubtitle;
+
+  /// No description provided for @statsRangeWeek.
+  ///
+  /// In en, this message translates to:
+  /// **'7 days'**
+  String get statsRangeWeek;
+
+  /// No description provided for @statsRangeMonth.
+  ///
+  /// In en, this message translates to:
+  /// **'30 days'**
+  String get statsRangeMonth;
+
+  /// No description provided for @statsRangeAll.
+  ///
+  /// In en, this message translates to:
+  /// **'All'**
+  String get statsRangeAll;
+
+  /// No description provided for @statsValueDuration.
+  ///
+  /// In en, this message translates to:
+  /// **'Time'**
+  String get statsValueDuration;
+
+  /// No description provided for @statsValueCount.
+  ///
+  /// In en, this message translates to:
+  /// **'Plays'**
+  String get statsValueCount;
+
+  /// No description provided for @statsPlays.
+  ///
+  /// In en, this message translates to:
+  /// **'Valid plays'**
+  String get statsPlays;
+
+  /// No description provided for @statsListened.
+  ///
+  /// In en, this message translates to:
+  /// **'Listening time'**
+  String get statsListened;
+
+  /// No description provided for @statsTracks.
+  ///
+  /// In en, this message translates to:
+  /// **'Tracks played'**
+  String get statsTracks;
+
+  /// No description provided for @statsSince.
+  ///
+  /// In en, this message translates to:
+  /// **'Since'**
+  String get statsSince;
+
+  /// No description provided for @statsCompleteRate.
+  ///
+  /// In en, this message translates to:
+  /// **'Completion rate'**
+  String get statsCompleteRate;
+
+  /// No description provided for @statsSkipRate.
+  ///
+  /// In en, this message translates to:
+  /// **'Skip rate'**
+  String get statsSkipRate;
+
+  /// No description provided for @statsSources.
+  ///
+  /// In en, this message translates to:
+  /// **'Sources'**
+  String get statsSources;
+
+  /// No description provided for @statsTopTracks.
+  ///
+  /// In en, this message translates to:
+  /// **'Most played'**
+  String get statsTopTracks;
+
+  /// No description provided for @statsTopArtists.
+  ///
+  /// In en, this message translates to:
+  /// **'Top artists'**
+  String get statsTopArtists;
+
+  /// No description provided for @statsEmpty.
+  ///
+  /// In en, this message translates to:
+  /// **'No listening history yet'**
+  String get statsEmpty;
+
+  /// No description provided for @statsEmptyHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Play some songs and come back'**
+  String get statsEmptyHint;
+
+  /// No description provided for @statsExport.
+  ///
+  /// In en, this message translates to:
+  /// **'Export listening data'**
+  String get statsExport;
+
+  /// No description provided for @statsExportSubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'JSON file (summary + last {limit} events)'**
+  String statsExportSubtitle(int limit);
+
+  /// No description provided for @statsExportFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Export failed'**
+  String get statsExportFailed;
+
+  /// No description provided for @statsClear.
+  ///
+  /// In en, this message translates to:
+  /// **'Clear stats'**
+  String get statsClear;
+
+  /// No description provided for @statsClearConfirm.
+  ///
+  /// In en, this message translates to:
+  /// **'This will delete all listening stat events. This cannot be undone.'**
+  String get statsClearConfirm;
+
+  /// No description provided for @statsCleared.
+  ///
+  /// In en, this message translates to:
+  /// **'Listening stats cleared'**
+  String get statsCleared;
+
+  /// No description provided for @statsPlaysCount.
+  ///
+  /// In en, this message translates to:
+  /// **'{count} plays'**
+  String statsPlaysCount(int count);
+
+  /// No description provided for @statsDurationSeconds.
+  ///
+  /// In en, this message translates to:
+  /// **'{count} s'**
+  String statsDurationSeconds(int count);
+
+  /// No description provided for @statsDurationMinutes.
+  ///
+  /// In en, this message translates to:
+  /// **'{count} min'**
+  String statsDurationMinutes(int count);
+
+  /// No description provided for @statsDurationHours.
+  ///
+  /// In en, this message translates to:
+  /// **'{hours} h {minutes} min'**
+  String statsDurationHours(int hours, int minutes);
+
+  /// No description provided for @statsDaySummary.
+  ///
+  /// In en, this message translates to:
+  /// **'{count} plays · {duration}'**
+  String statsDaySummary(int count, String duration);
+
+  /// No description provided for @statsTooltip.
+  ///
+  /// In en, this message translates to:
+  /// **'{date} · {value}'**
+  String statsTooltip(String date, String value);
+
+  /// No description provided for @statsEventListened.
+  ///
+  /// In en, this message translates to:
+  /// **'Listened {duration}'**
+  String statsEventListened(String duration);
 }
 
 class _AppLocalizationsDelegate

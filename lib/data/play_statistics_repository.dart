@@ -316,6 +316,35 @@ class PlayStatisticsRepository {
     ];
   }
 
+  /// 星期 × 时段分布（作息热力图；`weekday` 0=周一，本地时区）。
+  ///
+  /// 返回稀疏列表（只有有数据的小时），按 (weekday, hour) 升序。
+  Future<List<WeekdayHourListened>> listenedByWeekdayHour({int? since}) async {
+    final rows = await _statsRows(since);
+    final listened = <(int, int), int>{};
+    final counts = <(int, int), int>{};
+    for (final row in rows) {
+      final local = DateTime.fromMillisecondsSinceEpoch(row.startedAt);
+      final key = (local.weekday - 1, local.hour);
+      listened[key] = (listened[key] ?? 0) + row.listenedMs;
+      if (row.qualified) counts[key] = (counts[key] ?? 0) + 1;
+    }
+    final keys = listened.keys.toList()
+      ..sort((a, b) {
+        final byDay = a.$1.compareTo(b.$1);
+        return byDay != 0 ? byDay : a.$2.compareTo(b.$2);
+      });
+    return [
+      for (final key in keys)
+        WeekdayHourListened(
+          weekday: key.$1,
+          hour: key.$2,
+          listenedMs: listened[key] ?? 0,
+          playCount: counts[key] ?? 0,
+        ),
+    ];
+  }
+
   /// 来源分布（`sourceKey` 维度，按时长降序）。
   Future<List<SourceListened>> sourceDistribution({int? since}) async {
     final db = await _db;

@@ -590,7 +590,7 @@ class LibraryProvider extends ChangeNotifier {
   // 模型转换
   // -------------------------------------------------------------------------
 
-  SourceTrack _fromHistory(PlayHistoryEntry entry) => _toSourceTrack(
+  SourceTrack _fromHistory(PlayHistoryEntry entry) => sourceTrackFromRaw(
         sourceKey: entry.sourceKey,
         title: entry.title,
         artist: entry.artist,
@@ -600,7 +600,7 @@ class LibraryProvider extends ChangeNotifier {
         raw: entry.raw,
       );
 
-  SourceTrack _fromPlaylistTrack(PlaylistTrack track) => _toSourceTrack(
+  SourceTrack _fromPlaylistTrack(PlaylistTrack track) => sourceTrackFromRaw(
         sourceKey: track.sourceKey,
         title: track.title,
         artist: track.artist,
@@ -610,7 +610,12 @@ class LibraryProvider extends ChangeNotifier {
         raw: track.raw,
       );
 
-  SourceTrack _toSourceTrack({
+  /// 把「库内形状」的曲目（sourceKey + 元数据 + raw payload）还原为
+  /// [SourceTrack]；播放时按需重新取链。
+  ///
+  /// 与历史 / 列表共用同一转换（raw 原样 + [withCanonicalId] 补齐规范 id），
+  /// 听歌统计页的 Top 曲目 / 当日曲目也走这里。
+  SourceTrack sourceTrackFromRaw({
     required String sourceKey,
     required String title,
     required String artist,
