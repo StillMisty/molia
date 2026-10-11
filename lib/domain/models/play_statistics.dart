@@ -1,0 +1,268 @@
+/// 听歌统计领域模型（纯 Dart，无 Flutter/provider 依赖）。
+///
+/// 一次播放尝试 = 一行 `play_events`（append-only）：元数据为播放时快照、
+/// 自包含（`raw` 供统计页点播）；**聚合口径全部在查询时计算**，采集只负责
+/// 忠实记录（口径变化不需要回填数据）。
+library;
+
+/// 统计口径常量（采集与查询共用的唯一来源）。
+abstract final class PlayStatisticsLimits {
+  const PlayStatisticsLimits._();
+
+  /// 有效播放下限：`listenedMs ≥ min(qualifiedMinListenedMs, 50% × 时长)`。
+  static const int qualifiedMinListenedMs = 30000;
+
+  /// 有效播放比例下限。
+  static const double qualifiedFraction = 0.5;
+
+  /// 完整播放的末尾容差：进度 tick（≤4Hz）的调度抖动内即视为播到末尾。
+  static const int completionToleranceMs = 1000;
+
+  /// 导出明细上限（汇总与榜单覆盖全量，明细取最近 N 条）。
+  static const int exportEventLimit = 2000;
+}
+
+/// 播放事件的结束原因（`play_events.endReason` 的持久化取值）。
+enum PlayEventEndReason {
+  /// 播到末尾（自然播完 / 单曲循环的每一遍）。
+  completed('completed'),
+
+  /// 未达末尾被切歌（手动或自动跳到别的曲目）。
+  skipped('skipped'),
+
+  /// 播放被停止 / 队列清空（未达末尾）。
+  stopped('stopped'),
+
+  /// 同一首从头重播（拖动进度回开头 / 重新点播）。
+  restart('restart'),
+
+  /// 进程被杀等外部中断，由启动时 `closeStaleEvents()` 收尾。
+  interrupted('interrupted'),
+
+  /// 播放错误终止。
+  error('error');
+
+  const PlayEventEndReason(this.storageValue);
+
+  /// 持久化字符串。
+  final String storageValue;
+
+  /// 从持久化取值还原；非法值返回 null（损坏数据降级，不影响统计）。
+  static PlayEventEndReason? fromStorage(Object? value) {
+    for (final reason in values) {
+      if (reason.storageValue == value) return reason;
+    }
+    return null;
+  }
+}
+
+/// 播放事件（`play_events` 一行）。
+class PlayEvent {
+  final int id;
+  final String sourceKey;
+  final String songId;
+  final String title;
+  final String artist;
+  final String album;
+  final String? coverUrl;
+  final int? durationMs;
+
+  /// 取链参数（`Track.payload` 的持久化形态），供统计页点播旧曲目。
+  final Map<String, dynamic> raw;
+
+  final int startedAt;
+
+  /// 收尾时间；null = 进行中（仍在播放或进程被杀遗留）。
+  final int? endedAt;
+
+  /// 实际收听时长（剔除 seek 跳变）。
+  final int listenedMs;
+
+  /// 本次播放到达的最大位置（完整播放判定的原始依据）。
+  final int maxPositionMs;
+
+  final PlayEventEndReason? endReason;
+
+  const PlayEvent({
+    required this.id,
+    required this.sourceKey,
+    required this.songId,
+    required this.title,
+    this.artist = '',
+    this.album = '',
+    this.coverUrl,
+    this.durationMs,
+    this.raw = const {},
+    required this.startedAt,
+    this.endedAt,
+    this.listenedMs = 0,
+    this.maxPositionMs = 0,
+    this.endReason,
+  });
+
+  String get key => '$sourceKey:$songId';
+
+  bool get isFinished => endedAt != null;
+
+  @override
+  String toString() =>
+      'PlayEvent($key, $startedAt, ${endReason?.storageValue})';
+}
+
+/// 范围内汇总（error 事件不计入计数与比率，其数据只保留在原始事件里）。
+class PlayStatisticsSummary {
+  /// 非 error 的已收尾事件数。
+  final int playCount;
+
+  /// 有效播放次数（[PlayStatisticsLimits] 口径）。
+  final int qualifiedPlayCount;
+
+  /// 总收听时长（非 error 事件之和）。
+  final int totalListenedMs;
+
+  /// 去重曲目数（`sourceKey:songId`）。
+  final int uniqueTrackCount;
+
+  /// 完整播放率 = completed / playCount。
+  final double completionRate;
+
+  /// 跳过率 = skipped 且未达有效阈值 / playCount。
+  final double skipRate;
+
+  /// 全局首播时间（**不受范围过滤影响**，用于「数据起始日」）。
+  final int? firstPlayedAt;
+
+  const PlayStatisticsSummary({
+    required this.playCount,
+    required this.qualifiedPlayCount,
+    required this.totalListenedMs,
+    required this.uniqueTrackCount,
+    required this.completionRate,
+    required this.skipRate,
+    this.firstPlayedAt,
+  });
+
+  static const PlayStatisticsSummary empty = PlayStatisticsSummary(
+    playCount: 0,
+    qualifiedPlayCount: 0,
+    totalListenedMs: 0,
+    uniqueTrackCount: 0,
+    completionRate: 0,
+    skipRate: 0,
+  );
+}
+
+/// Top 曲目条目（按曲目聚合）。
+class PlayStatTrackEntry {
+  final String sourceKey;
+  final String songId;
+  final String title;
+  final String artist;
+  final String album;
+  final String? coverUrl;
+  final int? durationMs;
+
+  /// 取链参数：统计页点播需要原样回传。
+  final Map<String, dynamic> raw;
+
+  /// 有效播放次数。
+  final int playCount;
+
+  /// 该曲目在此范围内的总收听时长。
+  final int listenedMs;
+
+  /// 最近一次播放开始时间。
+  final int lastPlayedAt;
+
+  const PlayStatTrackEntry({
+    required this.sourceKey,
+    required this.songId,
+    required this.title,
+    this.artist = '',
+    this.album = '',
+    this.coverUrl,
+    this.durationMs,
+    this.raw = const {},
+    required this.playCount,
+    required this.listenedMs,
+    required this.lastPlayedAt,
+  });
+
+  String get key => '$sourceKey:$songId';
+}
+
+/// Top 歌手条目（artist 串已拆分；同一事件的多位歌手各计一次）。
+class PlayStatArtistEntry {
+  final String artist;
+  final int playCount;
+  final int listenedMs;
+
+  const PlayStatArtistEntry({
+    required this.artist,
+    required this.playCount,
+    required this.listenedMs,
+  });
+}
+
+/// 单日收听聚合（`day` 为本地时区零点）。
+class DayListened {
+  final DateTime day;
+  final int listenedMs;
+
+  /// 有效播放次数。
+  final int playCount;
+
+  const DayListened({
+    required this.day,
+    required this.listenedMs,
+    required this.playCount,
+  });
+}
+
+/// 单小时（0-23，本地时区）收听聚合。
+class HourListened {
+  final int hour;
+  final int listenedMs;
+
+  /// 有效播放次数。
+  final int playCount;
+
+  const HourListened({
+    required this.hour,
+    required this.listenedMs,
+    required this.playCount,
+  });
+}
+
+/// 来源分布条目（`sourceKey` 维度）。
+class SourceListened {
+  final String sourceKey;
+  final int listenedMs;
+  final int playCount;
+
+  const SourceListened({
+    required this.sourceKey,
+    required this.listenedMs,
+    required this.playCount,
+  });
+}
+
+/// 某一天的播放明细（热力图点按弹层用）。
+class DayPlayEvents {
+  /// 本地时区零点。
+  final DateTime day;
+  final int listenedMs;
+
+  /// 有效播放次数。
+  final int playCount;
+
+  /// 当天事件（startedAt 升序；不含 error）。
+  final List<PlayEvent> events;
+
+  const DayPlayEvents({
+    required this.day,
+    required this.listenedMs,
+    required this.playCount,
+    this.events = const [],
+  });
+}

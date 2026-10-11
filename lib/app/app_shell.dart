@@ -24,6 +24,7 @@ import '../providers/theme_provider.dart';
 import '../services/app_branding_service.dart';
 import '../services/data_saver_service.dart';
 import '../services/language_service.dart';
+import '../services/play_statistics_service.dart';
 import '../theme/animated_scheme.dart';
 import '../theme/app_theme.dart';
 import '../utils/responsive.dart';
@@ -805,6 +806,8 @@ class _MyThemedAppState extends State<MyThemedApp> with WidgetsBindingObserver {
       // 进入后台立即落盘播放会话：被系统杀进程时冷启动恢复进度更准
       // （平时按 1s 节流保存）。
       context.read<PlaybackProvider>().flushPlaybackSession();
+      // 听歌统计：立即落盘进行中的播放事件（被杀进程最多丢 ~15s 进度）。
+      context.read<PlayStatisticsService>().flush();
     }
   }
 

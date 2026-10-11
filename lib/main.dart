@@ -7,6 +7,7 @@ import 'app/app_shell.dart';
 import 'data/catalog/catalog_service.dart';
 import 'data/catalog/source_registry_impl.dart';
 import 'data/library_repository.dart';
+import 'data/play_statistics_repository.dart';
 import 'data/playback/default_playback_facade.dart';
 import 'data/playback/local_playback_backend.dart';
 import 'domain/models/failure.dart';
@@ -36,6 +37,7 @@ import 'services/lyrics_display/desktop_lyrics_output.dart';
 import 'services/lyrics_display/lyrics_display_settings.dart';
 import 'services/lyrics_display/media_lyric_output.dart';
 import 'services/notification_service.dart';
+import 'services/play_statistics_service.dart';
 import 'services/settings_service.dart';
 import 'sources/source_manager.dart';
 
@@ -140,6 +142,16 @@ void main() async {
   // 资料库仓库：播放历史 / 我的列表 / 收藏；播放开始时由
   // PlaybackProvider 写历史，资料库页经 LibraryProvider 读取（内存缓存）。
   final libraryRepository = LibraryRepository();
+  // 听歌统计：事件级采集（play_events）与查询；与「最近播放」（play_history，
+  // 500 条上限）是两套数据。采集是纯观察者（服务不持有 provider），
+  // 快照 / 进度经下方 addListener 接线；上次进程被杀遗留的进行中事件
+  // 启动即收尾为 interrupted。
+  final playStatisticsRepository = PlayStatisticsRepository();
+  final playStatisticsService = PlayStatisticsService(
+    repository: playStatisticsRepository,
+  );
+  await playStatisticsService.init();
+  unawaited(playStatisticsRepository.closeStaleEvents());
   // 最近播放上下文（play_contexts）：提前创建，同一实例既进 Provider 树，
   // 也直接注入 PlaybackProvider（不再经 navigatorKey 反查 provider）。
   final localDatabaseProvider = LocalDatabaseProvider();
@@ -224,6 +236,16 @@ void main() async {
   playbackProvider.addListener(syncArtworkPalette);
   syncArtworkPalette();
 
+  // 听歌统计接线：曲目/播放态快照 + 进度 tick → 采集服务（纯观察者，零改动
+  // 播放内核）。与歌词显示同一模式：composition root 只做两根监听。
+  playbackProvider.addListener(
+    () => playStatisticsService.onSnapshot(playbackProvider.snapshot),
+  );
+  playbackProvider.position.addListener(
+    () => playStatisticsService.onPosition(playbackProvider.currentPosition),
+  );
+  playStatisticsService.onSnapshot(playbackProvider.snapshot);
+
   runApp(
     MultiProvider(
       providers: [
@@ -254,6 +276,10 @@ void main() async {
             playbackProvider: playbackProvider,
           ),
         ),
+        // 听歌统计：仓库（查询）与采集服务（开关）；统计页读取这两个实例。
+        Provider<PlayStatisticsRepository>.value(
+            value: playStatisticsRepository),
+        Provider<PlayStatisticsService>.value(value: playStatisticsService),
         // 发现页：热榜 / 歌单 / 热搜；播放与收藏复用上面两个 provider。
         // 渠道变化 → 搜索源跟随的唯一规则点（页面不再同步两个 provider）。
         ChangeNotifierProvider(
