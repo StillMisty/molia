@@ -16,13 +16,15 @@ android {
     compileSdk = 37
     ndkVersion = "30.0.16248370"
 
+    // Java/Kotlin 目标取工具链上限：Kotlin 2.4.21 最高支持 JVM_26（JvmTarget 枚举上限），
+    // 由 JDK 27 编译出 target 26 字节码，D8 正常脱糖。
     compileOptions {
-        sourceCompatibility = JavaVersion.VERSION_17
-        targetCompatibility = JavaVersion.VERSION_17
+        sourceCompatibility = JavaVersion.VERSION_26
+        targetCompatibility = JavaVersion.VERSION_26
     }
 
     kotlinOptions {
-        jvmTarget = '17'
+        jvmTarget = '26'
     }
 
     defaultConfig {

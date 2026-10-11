@@ -15,8 +15,8 @@
 | 组件 | 版本 |
 |---|---|
 | Flutter / Dart | 3.47.6 stable / 3.13.5 |
-| JDK | 25+ |
-| Gradle / AGP / Kotlin | 9.8.1 / 9.4.1 / 2.4.20 |
+| JDK | 26+ |
+| Gradle / AGP / Kotlin | 9.8.1 / 9.4.1 / 2.4.21 |
 | compileSdk/targetSdk/minSdk | 37 / 37 / 37 |
 | NDK | 30.0.16248370 |
 
