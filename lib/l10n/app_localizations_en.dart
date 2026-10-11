@@ -1464,7 +1464,13 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String statsPlaysCount(int count) {
-    return '$count plays';
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count plays',
+      one: '1 play',
+    );
+    return '$_temp0';
   }
 
   @override
@@ -1484,7 +1490,13 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String statsDaySummary(int count, String duration) {
-    return '$count plays · $duration';
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count plays',
+      one: '1 play',
+    );
+    return '$_temp0 · $duration';
   }
 
   @override
@@ -1621,4 +1633,20 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get aiDjBadgeTooltip => 'AI DJ is on';
+
+  @override
+  String get aiDjDiscoverSubtitle =>
+      'Let AI pick songs from your listening history';
+
+  @override
+  String get aiDjManage => 'Manage';
+
+  @override
+  String get aiDjGenerating => 'Generating recommendations…';
+
+  @override
+  String get aiDjBatchFailed => 'Couldn\'t generate a batch';
+
+  @override
+  String get aiDjRefreshBatch => 'New batch';
 }

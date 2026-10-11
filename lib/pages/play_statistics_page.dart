@@ -29,7 +29,6 @@ import '../services/notification_service.dart';
 import '../utils/responsive.dart';
 import '../widgets/statistics/listening_heatmap.dart';
 import '../widgets/track_row.dart';
-import 'ai_dj_page.dart';
 
 class PlayStatisticsPage extends StatefulWidget {
   const PlayStatisticsPage({super.key});
@@ -65,18 +64,6 @@ class _PlayStatisticsPageState extends State<PlayStatisticsPage> {
       appBar: AppBar(
         title: Text(l10n.statsTitle),
         actions: [
-          if (aiDjSupportedPlatform)
-            IconButton(
-              key: const Key('statsAiDjButton'),
-              icon: const Icon(Icons.auto_awesome_rounded),
-              tooltip: l10n.aiDjTitle,
-              onPressed: () {
-                ResponsiveNavigation.showAdaptiveModalPage(
-                  context: context,
-                  child: const AiDjPage(),
-                );
-              },
-            ),
           IconButton(
             icon: const Icon(Icons.ios_share_rounded),
             tooltip: l10n.statsExport,
@@ -146,9 +133,10 @@ class _PlayStatisticsPageState extends State<PlayStatisticsPage> {
       if (provider.isEmpty)
         _emptyState(l10n)
       else ...[
-        _summaryBlocks(l10n, provider, wide: isWide),
-        const SizedBox(height: 16),
+        // 围绕热力图设计：范围切换 → hero 热力图 → 汇总条 → 作息 → 指标 → 榜单。
         _heatmapCard(l10n, provider),
+        const SizedBox(height: 16),
+        _summaryBlocks(l10n, provider, wide: isWide),
         const SizedBox(height: 16),
         _weekdayHourCard(l10n, provider),
         const SizedBox(height: 16),
@@ -237,37 +225,32 @@ class _PlayStatisticsPageState extends State<PlayStatisticsPage> {
   }) {
     final summary = provider.summary;
     final firstPlayedAt = summary.firstPlayedAt;
+    final scheme = Theme.of(context).colorScheme;
+    // 常规卡片 + 语义图标：不规则形状只留在热力图格子/空态/徽标等
+    // 真正需要表现力的地方，汇总统计保持克制。
     final blocks = <Widget>[
       _StatBlock(
-        kind: M3EShapeKind.cookie6Sided,
-        container: Theme.of(context).colorScheme.primaryContainer,
-        onContainer: Theme.of(context).colorScheme.onPrimaryContainer,
+        icon: Icons.headphones_rounded,
+        iconColor: scheme.primary,
         value: '${summary.qualifiedPlayCount}',
         label: l10n.statsPlays,
       ),
       _StatBlock(
-        kind: M3EShapeKind.puffy,
-        container: Theme.of(context).colorScheme.secondaryContainer,
-        onContainer: Theme.of(context).colorScheme.onSecondaryContainer,
+        icon: Icons.schedule_rounded,
+        iconColor: scheme.secondary,
         value: _formatListened(l10n, summary.totalListenedMs),
         label: l10n.statsListened,
       ),
       _StatBlock(
-        kind: M3EShapeKind.softBurst,
-        container: Theme.of(context).colorScheme.tertiaryContainer,
-        onContainer: Theme.of(context).colorScheme.onTertiaryContainer,
+        icon: Icons.library_music_rounded,
+        iconColor: scheme.tertiary,
         value: '${summary.uniqueTrackCount}',
         label: l10n.statsTracks,
       ),
       _StatBlock(
-        kind: M3EShapeKind.clover4Leaf,
-        container: Theme.of(context).colorScheme.surfaceContainerHighest,
-        onContainer: Theme.of(context).colorScheme.onSurface,
-        value: firstPlayedAt == null
-            ? '—'
-            : MaterialLocalizations.of(context).formatShortDate(
-                DateTime.fromMillisecondsSinceEpoch(firstPlayedAt),
-              ),
+        icon: Icons.calendar_month_rounded,
+        iconColor: scheme.onSurfaceVariant,
+        value: firstPlayedAt == null ? '—' : _compactDate(firstPlayedAt),
         label: l10n.statsSince,
       ),
     ];
@@ -303,6 +286,15 @@ class _PlayStatisticsPageState extends State<PlayStatisticsPage> {
     );
   }
 
+  /// 紧凑日期：同年 `M/d`、跨年 `yyyy/M`（完整日期会在窄块里被裁切）。
+  String _compactDate(int epochMs) {
+    final date = DateTime.fromMillisecondsSinceEpoch(epochMs);
+    final now = DateTime.now();
+    return date.year == now.year
+        ? '${date.month}/${date.day}'
+        : '${date.year}/${date.month}';
+  }
+
   // ---------------------------------------------------------------------------
   // ② hero 日历热力图 + ③ 作息热力图
   // ---------------------------------------------------------------------------
@@ -328,6 +320,8 @@ class _PlayStatisticsPageState extends State<PlayStatisticsPage> {
 
     return M3ECard(
       variant: M3ECardVariant.filled,
+      // 底色降一档：空日格（surfaceContainerHighest）才有对比可见。
+      color: Theme.of(context).colorScheme.surfaceContainerLow,
       padding: const EdgeInsets.all(16),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -368,6 +362,7 @@ class _PlayStatisticsPageState extends State<PlayStatisticsPage> {
             values: values,
             firstDay: firstDay,
             lastDay: today,
+            cellSize: 14,
             selectedDay: _selectedDay,
             highlightFrom: provider.rangeStart,
             tooltipFor: (day, value) => l10n.statsTooltip(
@@ -406,6 +401,8 @@ class _PlayStatisticsPageState extends State<PlayStatisticsPage> {
 
     return M3ECard(
       variant: M3ECardVariant.filled,
+      // 与日历热力图同底色：空时段格可见。
+      color: Theme.of(context).colorScheme.surfaceContainerLow,
       padding: const EdgeInsets.all(16),
       child: WeekdayHourHeatmap(
         values: values,
@@ -462,6 +459,7 @@ class _PlayStatisticsPageState extends State<PlayStatisticsPage> {
     );
     return M3ECard(
       variant: M3ECardVariant.filled,
+      color: scheme.surfaceContainerHigh,
       padding: const EdgeInsets.all(16),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -746,54 +744,61 @@ class _PlayStatisticsPageState extends State<PlayStatisticsPage> {
 // 局部组件
 // -----------------------------------------------------------------------------
 
-/// 汇总数字块：不规则形状 + 容器色 + 大数字 + 标签。
+/// 汇总数字卡：常规 M3E 卡片（不再用不规则轮廓）+ 语义图标点缀。
 class _StatBlock extends StatelessWidget {
   const _StatBlock({
-    required this.kind,
-    required this.container,
-    required this.onContainer,
+    required this.icon,
+    required this.iconColor,
     required this.value,
     required this.label,
   });
 
-  final M3EShapeKind kind;
-  final Color container;
-  final Color onContainer;
+  final IconData icon;
+  final Color iconColor;
   final String value;
   final String label;
 
   @override
   Widget build(BuildContext context) {
     final type = Theme.of(context).textTheme;
+    final scheme = Theme.of(context).colorScheme;
     return SizedBox(
-      height: 96,
-      child: M3EShapeContainer(
-        kind: kind,
-        color: container,
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 16),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                value,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: type.titleLarge?.copyWith(
-                  color: onContainer,
-                  fontWeight: FontWeight.w600,
-                ),
+      height: 84,
+      child: M3ECard(
+        variant: M3ECardVariant.filled,
+        color: scheme.surfaceContainerHigh,
+        padding: const EdgeInsets.fromLTRB(16, 12, 14, 12),
+        child: Row(
+          children: [
+            Expanded(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    value,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: type.titleLarge?.copyWith(
+                      color: scheme.onSurface,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    label,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: type.labelSmall?.copyWith(
+                      color: scheme.onSurfaceVariant,
+                    ),
+                  ),
+                ],
               ),
-              const SizedBox(height: 2),
-              Text(
-                label,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: type.labelSmall?.copyWith(color: onContainer),
-              ),
-            ],
-          ),
+            ),
+            const SizedBox(width: 8),
+            Icon(icon, size: 22, color: iconColor),
+          ],
         ),
       ),
     );
@@ -812,6 +817,7 @@ class _RateCard extends StatelessWidget {
     final scheme = Theme.of(context).colorScheme;
     return M3ECard(
       variant: M3ECardVariant.filled,
+      color: scheme.surfaceContainerHigh,
       padding: const EdgeInsets.all(16),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -859,6 +865,7 @@ class _ShareBar extends StatelessWidget {
           alignment: Alignment.centerLeft,
           child: FractionallySizedBox(
             widthFactor: share,
+            heightFactor: 1,
             child: ColoredBox(color: color),
           ),
         ),

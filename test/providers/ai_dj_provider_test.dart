@@ -1,11 +1,11 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:molia/domain/models/ai_dj.dart';
-import 'package:molia/domain/models/failure.dart';
 import 'package:molia/domain/models/playback.dart';
 import 'package:molia/domain/models/track.dart';
 import 'package:molia/providers/ai_dj_provider.dart';
 import 'package:molia/providers/library_provider.dart';
 import 'package:molia/providers/playback_provider.dart';
+import 'package:molia/services/ai/ai_pending_batch_store.dart';
 import 'package:molia/services/ai/ai_recommendation_service.dart';
 import 'package:molia/services/ai/ai_settings_store.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -73,11 +73,12 @@ AiDjBatch _batch(int from, int count) => AiDjBatch(
       items: [
         for (var i = 0; i < count; i++)
           ResolvedRecommendation(
-            source: AiRecommendation(title: 'Song ${from + i}', artist: 'Artist'),
+            source:
+                AiRecommendation(title: 'Song ${from + i}', artist: 'Artist'),
             track: _track(from + i),
           ),
       ],
-      generatedAt: DateTime(2026, 1, 1),
+      generatedAt: DateTime.now(),
     );
 
 void main() {
@@ -165,12 +166,19 @@ void main() {
     expect(backend.lastRequest?.context?.name, kAiDjContextName);
     expect(provider.queuedCount, 3);
     expect(provider.currentBatch, isNotNull);
+
+    // 起播后后台预取"下一批"（carousel 展示用）。
+    await pumpEventQueue();
+    expect(generator.calls, 2);
+    expect(provider.hasPendingBatch, isTrue);
   });
 
-  test('低水位（≤5 首剩余）自动续推并追加队列；充足时不触发', () async {
+  test('低水位（≤5 首剩余）追加待播批次，并继续预取下一批；充足时不触发', () async {
     generator.batchFactory = () => _batch(0, 20);
     await provider.start();
-    expect(generator.calls, 1);
+    await pumpEventQueue();
+    expect(generator.calls, 2, reason: 'start + 预取');
+    expect(provider.pendingBatch?.items.first.track.id.id, '0');
 
     // 剩余充足（currentIndex 0 / 队列 20）：不续推。
     backend.emit(BackendSnapshot(
@@ -181,9 +189,10 @@ void main() {
     ));
     provider.onPlaybackChanged();
     await pumpEventQueue();
-    expect(generator.calls, 1);
+    expect(generator.calls, 2);
+    expect(backend.lastEnqueued, isNull);
 
-    // 剩余 3 首：自动续推并追加。
+    // 剩余 3 首：追加已预取的批次（不再重新生成），随后预取下一批。
     generator.batchFactory = () => _batch(20, 20);
     backend.emit(BackendSnapshot(
       current: _track(16),
@@ -194,38 +203,39 @@ void main() {
     provider.onPlaybackChanged();
     await pumpEventQueue();
 
-    expect(generator.calls, 2);
     expect(backend.lastEnqueued, hasLength(20));
-    expect(backend.lastEnqueued?.first.id.id, '20');
+    expect(backend.lastEnqueued?.first.id.id, '0', reason: '追加的是已预取批次');
     expect(provider.queuedCount, 40);
+    await pumpEventQueue();
+    expect(provider.pendingBatch?.items.first.track.id.id, '20',
+        reason: '追加后立即预取下一批');
   });
 
   test('跳过判定：未达有效阈值被切走 → 反馈回流；听完不算跳过', () async {
     generator.batchFactory = () => _batch(0, 1);
     await provider.start();
     expect(provider.status, AiDjStatus.playing, reason: 'start 应成功');
-    expect(generator.calls, 1);
 
     final aiTrack = _track(0);
     final filler = _track(99);
+    final longQueue = [aiTrack, filler, ..._tracks(200, 18)];
 
     // 记录当前 AI 曲目，推进到 10s（< min(30s, 50%) = 30s）。
     backend.emit(BackendSnapshot(
       current: aiTrack,
-      queue: [aiTrack, filler],
+      queue: longQueue,
       currentIndex: 0,
       isPlaying: true,
       position: const Duration(seconds: 10),
     ));
     provider.onPlaybackChanged();
-    expect(generator.calls, 2, reason: '低水位触发续推');
     expect(provider.skippedLabels, isEmpty);
     provider.onPositionChanged();
 
     // 被切走 → 记为跳过。
     backend.emit(BackendSnapshot(
       current: filler,
-      queue: [aiTrack, filler],
+      queue: longQueue,
       currentIndex: 1,
       isPlaying: true,
     ));
@@ -234,8 +244,8 @@ void main() {
 
     expect(provider.skippedLabels, ['Song 0 - Artist']);
 
-    // 再推一批：跳过反馈随下一批请求回流。
-    await provider.feedMore();
+    // 换一批（重新生成）：跳过反馈随下一批请求回流。
+    await provider.refreshPendingBatch();
     expect(generator.lastSkipped, ['Song 0 - Artist']);
   });
 
@@ -245,9 +255,10 @@ void main() {
 
     final aiTrack = _track(0);
     final filler = _track(99);
+    final longQueue = [aiTrack, filler, ..._tracks(200, 18)];
     backend.emit(BackendSnapshot(
       current: aiTrack,
-      queue: [aiTrack, filler],
+      queue: longQueue,
       currentIndex: 0,
       isPlaying: true,
       position: const Duration(milliseconds: 99500),
@@ -257,7 +268,7 @@ void main() {
 
     backend.emit(BackendSnapshot(
       current: filler,
-      queue: [aiTrack, filler],
+      queue: longQueue,
       currentIndex: 1,
       isPlaying: true,
     ));
@@ -273,19 +284,28 @@ void main() {
 
     await libraryProvider.toggleFavoriteTrack(_track(0));
 
+    // 换一批会重新生成：收藏反馈随生成请求回流。
     generator.batchFactory = () => _batch(2, 2);
-    await provider.feedMore();
+    await provider.refreshPendingBatch();
 
     expect(generator.lastLiked, contains('Song 0 - Artist'));
     expect(provider.likedLabels, contains('Song 0 - Artist'));
   });
 
   test('连续 3 次续推失败自动停止续推（保留队列）', () async {
-    await provider.start();
-    generator.error = const SourceFailure(
-      kind: FailureKind.network,
-      message: '断网',
-    );
+    await provider.grantConsent();
+    generator.batchFactory = () => _batch(0, 3);
+    await provider.ensurePendingBatch();
+
+    // 起播后生成开始失败：入队后的预取失败 → 无待播批次。
+    generator.batchFactory = () => AiDjBatch(
+          items: const [],
+          generatedAt: DateTime.now(),
+        );
+    await provider.playFromPending(0);
+    await pumpEventQueue();
+    expect(provider.status, AiDjStatus.playing);
+    expect(provider.hasPendingBatch, isFalse);
 
     await provider.feedMore();
     expect(provider.status, AiDjStatus.playing, reason: '单次失败保留模式');
@@ -317,6 +337,112 @@ void main() {
     provider.onPlaybackChanged();
 
     expect(provider.status, AiDjStatus.off);
+  });
+
+  test('ensurePendingBatch：生成并缓存待播批次；TTL 内不重复生成', () async {
+    await provider.grantConsent();
+    expect(provider.hasPendingBatch, isFalse);
+
+    await provider.ensurePendingBatch();
+
+    expect(provider.hasPendingBatch, isTrue);
+    expect(generator.calls, 1);
+    expect(provider.pendingBatch?.items, hasLength(3));
+
+    await provider.ensurePendingBatch();
+    expect(generator.calls, 1, reason: 'TTL 内不重复生成');
+  });
+
+  test('未配置 / 未确认隐私时不生成待播批次', () async {
+    await pumpProvider(withConfig: false);
+    await provider.ensurePendingBatch();
+    expect(provider.hasPendingBatch, isFalse);
+    expect(generator.calls, 0);
+
+    await pumpProvider();
+    await provider.ensurePendingBatch();
+    expect(provider.hasPendingBatch, isFalse);
+    expect(generator.calls, 0);
+  });
+
+  test('playFromPending：整批入队从该首起播并接管；随后预取下一批', () async {
+    await provider.grantConsent();
+    generator.batchFactory = () => _batch(0, 3);
+    await provider.ensurePendingBatch();
+
+    await provider.playFromPending(1);
+
+    expect(provider.status, AiDjStatus.playing);
+    expect(backend.lastRequest?.tracks.map((t) => t.title).toList(),
+        ['Song 0', 'Song 1', 'Song 2']);
+    expect(backend.lastRequest?.startIndex, 1);
+    expect(backend.lastRequest?.context?.name, kAiDjContextName);
+    expect(provider.hasPendingBatch, isFalse, reason: '批次已入队');
+
+    await pumpEventQueue();
+    expect(provider.hasPendingBatch, isTrue, reason: '入队后预取下一批');
+  });
+
+  test('推歌中点已在队列的卡片 → 直接跳转，不替换队列', () async {
+    await provider.grantConsent();
+    generator.batchFactory = () => _batch(5, 1);
+    await provider.ensurePendingBatch();
+
+    backend.emit(BackendSnapshot(
+      current: _track(5),
+      queue: _tracks(5, 3),
+      currentIndex: 0,
+      isPlaying: true,
+    ));
+    provider.onPlaybackChanged();
+
+    await provider.playFromPending(0);
+
+    expect(backend.calls, contains('playQueueIndex:0'));
+    expect(backend.lastRequest, isNull, reason: '不重新 load 队列');
+  });
+
+  test('refreshPendingBatch 替换待播批次', () async {
+    await provider.grantConsent();
+    generator.batchFactory = () => _batch(0, 2);
+    await provider.ensurePendingBatch();
+    expect(provider.pendingBatch?.items.first.track.id.id, '0');
+
+    generator.batchFactory = () => _batch(9, 2);
+    await provider.refreshPendingBatch();
+
+    expect(provider.pendingBatch?.items.first.track.id.id, '9');
+  });
+
+  test('启动时恢复持久化的待播批次（raw 原样）', () async {
+    final prefs = await SharedPreferences.getInstance();
+    final store = AiPendingBatchStore(preferences: prefs);
+    await store.save(AiDjBatch(
+      items: [
+        ResolvedRecommendation(
+          source:
+              const AiRecommendation(title: '旧推荐', artist: '歌手', reason: '理由'),
+          track: Track(
+            id: const TrackId('wy', 'restored-1'),
+            title: '旧推荐',
+            artists: const [Artist(name: '歌手')],
+            duration: const Duration(seconds: 200),
+            origin: TrackOrigin.builtin,
+            payload: const {'songmid': 'restored-1'},
+          ),
+        ),
+      ],
+      generatedAt: DateTime.now(),
+    ));
+
+    await pumpProvider();
+    await provider.grantConsent();
+
+    expect(provider.hasPendingBatch, isTrue);
+    final restored = provider.pendingBatch!.items.single;
+    expect(restored.track.title, '旧推荐');
+    expect(restored.track.id.uri, 'wy:restored-1');
+    expect(restored.track.payload['songmid'], 'restored-1');
   });
 
   test('首批没有可播放曲目 → error（不改变当前播放）', () async {

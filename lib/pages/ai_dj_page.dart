@@ -15,6 +15,7 @@ import '../l10n/app_localizations.dart';
 import '../providers/ai_dj_provider.dart';
 import '../providers/playback_provider.dart';
 import '../services/notification_service.dart';
+import '../widgets/ai_dj_shared.dart';
 import '../widgets/track_row.dart';
 
 class AiDjPage extends StatefulWidget {
@@ -38,7 +39,15 @@ class _AiDjPageState extends State<AiDjPage> {
   void initState() {
     super.initState();
     _provider = context.read<AiDjProvider>();
-    _loadConfigIntoControllers(_provider.config);
+    final config = _provider.config;
+    if (config == null) {
+      // 首次配置：默认预填第一个内置预设（DeepSeek），只需粘 API Key。
+      final preset = LlmProviderPreset.builtIn.first;
+      _baseUrlController.text = preset.baseUrl;
+      _modelController.text = preset.model;
+    } else {
+      _loadConfigIntoControllers(config);
+    }
     _editingConfig = !_provider.hasConfig;
   }
 
@@ -158,7 +167,7 @@ class _AiDjPageState extends State<AiDjPage> {
                 const SizedBox(width: 8),
                 Expanded(
                   child: Text(
-                    _failureText(l10n, provider.lastError!),
+                    aiDjFailureText(l10n, provider.lastError!),
                     style: Theme.of(context).textTheme.bodySmall,
                   ),
                 ),
@@ -390,28 +399,7 @@ class _AiDjPageState extends State<AiDjPage> {
       _notify(l10n.aiDjNotConfigured, error: true);
       return;
     }
-    if (!provider.consentGranted) {
-      final agreed = await M3EDialog.show<bool>(
-        context,
-        dialog: M3EDialog(
-          title: l10n.aiDjConsentTitle,
-          content: SingleChildScrollView(child: Text(l10n.aiDjConsentBody)),
-          actions: [
-            M3EButton.text(
-              onPressed: () => Navigator.pop(context, false),
-              child: Text(l10n.cancel),
-            ),
-            M3EButton.filled(
-              key: const Key('aiDjConsentAgreeButton'),
-              onPressed: () => Navigator.pop(context, true),
-              child: Text(l10n.aiDjAgree),
-            ),
-          ],
-        ),
-      );
-      if (agreed != true || !mounted) return;
-      await provider.grantConsent();
-    }
+    if (!await ensureAiDjConsent(context, provider)) return;
     if (!mounted) return;
     setState(() => _busy = true);
     try {
@@ -491,7 +479,7 @@ class _AiDjPageState extends State<AiDjPage> {
       _notify(l10n.aiDjTestSucceeded);
     } on SourceFailure catch (failure) {
       if (!mounted) return;
-      _notify(_failureText(l10n, failure), error: true);
+      _notify(aiDjFailureText(l10n, failure), error: true);
     } catch (_) {
       if (!mounted) return;
       _notify(l10n.aiDjRequestFailed, error: true);
@@ -518,18 +506,6 @@ class _AiDjPageState extends State<AiDjPage> {
     } else {
       notifications.showSuccessSnackBar(message);
     }
-  }
-
-  /// [SourceFailure.l10nKey] → 文案（未知 key 回退通用请求失败）。
-  String _failureText(AppLocalizations l10n, SourceFailure failure) {
-    return switch (failure.l10nKey) {
-      'aiDjNotConfigured' => l10n.aiDjNotConfigured,
-      'aiDjUnauthorized' => l10n.aiDjUnauthorized,
-      'aiDjRateLimited' => l10n.aiDjRateLimited,
-      'aiDjBadResponse' => l10n.aiDjBadResponse,
-      'aiDjNothingResolved' => l10n.aiDjNothingResolved,
-      _ => l10n.aiDjRequestFailed,
-    };
   }
 }
 

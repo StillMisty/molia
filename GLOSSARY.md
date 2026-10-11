@@ -124,6 +124,11 @@
   （`PlaybackProvider.enqueueDomainTracks`）；跳过 = 切走时未达
   `min(30s, 50%×时长)`（复用统计口径，**只做曲目级排除**）；喜欢 = 收藏；
   连续 3 次失败自动停止续推；退出保留队列。播放快照/进度由组合根接进控制器。
+- **Pending batch / discover feed（待播批次 / 发现页推荐流）** —
+  `lib/services/ai/ai_pending_batch_store.dart` + `lib/widgets/ai_dj_carousel.dart`：
+  发现页 carousel 展示的「下一批」（12h 缓存，点击即整批入队并从该首起播）；
+  尾部「换一批」只换下一批、不打断播放；**模式关闭时发现页整条隐藏**
+  （开启入口在设置 › 数据管理 › AI DJ）。
 - **Taste profile（听歌画像）** — `lib/services/ai/taste_profile_builder.dart`：
   上行 LLM 的唯一数据出口（聚合统计 + 最近 200 条明细 + 已听排除清单，
   上限集中在此）；不含 raw payload / 设备信息；首次开启需隐私确认

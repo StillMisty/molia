@@ -702,7 +702,7 @@
   "statsClear": "Clear stats",
   "statsClearConfirm": "This will delete all listening stat events. This cannot be undone.",
   "statsCleared": "Listening stats cleared",
-  "statsPlaysCount": "{count} plays",
+  "statsPlaysCount": "{count, plural, =1{1 play} other{{count} plays}}",
   "@statsPlaysCount": {
     "placeholders": {
       "count": {
@@ -737,7 +737,7 @@
       }
     }
   },
-  "statsDaySummary": "{count} plays · {duration}",
+  "statsDaySummary": "{count, plural, =1{1 play} other{{count} plays}} · {duration}",
   "@statsDaySummary": {
     "placeholders": {
       "count": {
@@ -832,5 +832,10 @@
   },
   "aiDjRetry": "Retry",
   "aiDjOpenSettings": "Set up AI service",
-  "aiDjBadgeTooltip": "AI DJ is on"
+  "aiDjBadgeTooltip": "AI DJ is on",
+  "aiDjDiscoverSubtitle": "Let AI pick songs from your listening history",
+  "aiDjManage": "Manage",
+  "aiDjGenerating": "Generating recommendations…",
+  "aiDjBatchFailed": "Couldn't generate a batch",
+  "aiDjRefreshBatch": "New batch"
 }

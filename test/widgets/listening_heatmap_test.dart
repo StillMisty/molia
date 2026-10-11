@@ -70,6 +70,32 @@ void main() {
     expect(find.byType(CalendarHeatmap), findsOneWidget);
   });
 
+  testWidgets('数据前的补位日渲染为空方格且不可点', (tester) async {
+    final day = DateTime(2026, 3, 5);
+    DateTime? tapped;
+
+    await pump(
+      tester,
+      CalendarHeatmap(
+        values: {day: 60000},
+        firstDay: day,
+        lastDay: day,
+        tooltipFor: (day, value) => 'cell-$day-$value',
+        onDayTap: (value) => tapped = value,
+      ),
+    );
+
+    // 最少填满卡片宽度 → 数据前补位日有键（GitHub 式底格）。
+    final padded = day.subtract(const Duration(days: 42));
+    expect(
+      find.byKey(ValueKey<int>(padded.millisecondsSinceEpoch)),
+      findsOneWidget,
+    );
+
+    await tester.tap(find.byKey(ValueKey<int>(padded.millisecondsSinceEpoch)));
+    expect(tapped, isNull, reason: '首播之前的补位日不可点');
+  });
+
   testWidgets('作息热力图按 7×24 渲染；图例 5 档', (tester) async {
     final values = [
       for (var weekday = 0; weekday < 7; weekday++)
@@ -91,5 +117,9 @@ void main() {
 
     expect(find.byType(WeekdayHourHeatmap), findsOneWidget);
     expect(find.byType(HeatmapLegend), findsOneWidget);
+    // 星期标签隔行（一/三/五/日）：en narrowWeekdays = S M T W T F S，
+    // 行 0/2/4/6 → M / W / F / S；T 不出现。
+    expect(find.text('M'), findsOneWidget);
+    expect(find.text('T'), findsNothing);
   });
 }
