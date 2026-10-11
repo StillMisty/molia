@@ -1,5 +1,6 @@
 import 'package:flutter/services.dart';
 import 'package:material_ui/material_ui.dart';
+import 'package:motor/motor.dart';
 
 /// 歌词/队列切换：小圆点指示器（选中态拉伸），无图标/文字。
 ///
@@ -81,25 +82,78 @@ class _LyricsQueueDotsState extends State<LyricsQueueDots> {
                 width: 36,
                 height: 28,
                 child: Center(
-                  child: AnimatedContainer(
-                    duration: const Duration(milliseconds: 240),
-                    curve: Curves.easeOutCubic,
-                    width: index == currentPage ? 18 : 8,
-                    height: 8,
-                    decoration: BoxDecoration(
-                      borderRadius: BorderRadius.circular(4),
-                      // 选中点用 primary 强调；未选中是「非激活」指示，
-                      // 用中性 onSurfaceVariant（不抢强调色）。
-                      color: index == currentPage
-                          ? scheme.primary
-                          : scheme.onSurfaceVariant,
-                    ),
+                  child: _DotIndicator(
+                    selected: index == currentPage,
+                    activeColor: scheme.primary,
+                    // 未选中是「非激活」指示，用中性 onSurfaceVariant
+                    // （不抢强调色）。
+                    inactiveColor: scheme.onSurfaceVariant,
                   ),
                 ),
               ),
             ),
           ),
       ],
+    );
+  }
+}
+
+/// 单个圆点：选中宽度 8 → 18，颜色与宽度同源派生。
+///
+/// 宽度是 spatial 变化 → motor standard spatial 弹簧（选中/取消切换带速度
+/// 续跑）；颜色按同一进度插值，保证拉伸与变色同帧一致。
+class _DotIndicator extends StatefulWidget {
+  const _DotIndicator({
+    required this.selected,
+    required this.activeColor,
+    required this.inactiveColor,
+  });
+
+  final bool selected;
+  final Color activeColor;
+  final Color inactiveColor;
+
+  @override
+  State<_DotIndicator> createState() => _DotIndicatorState();
+}
+
+class _DotIndicatorState extends State<_DotIndicator>
+    with SingleTickerProviderStateMixin {
+  late final SingleMotionController _progress = SingleMotionController(
+    motion: const MaterialSpringMotion.standardSpatialDefault(snapToEnd: true),
+    vsync: this,
+    initialValue: widget.selected ? 1 : 0,
+  );
+
+  @override
+  void didUpdateWidget(covariant _DotIndicator oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.selected != widget.selected) {
+      _progress.animateTo(widget.selected ? 1 : 0);
+    }
+  }
+
+  @override
+  void dispose() {
+    _progress.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedBuilder(
+      animation: _progress,
+      builder: (context, _) {
+        final double t = _progress.value.clamp(0.0, 1.0);
+        return Container(
+          width: 8 + 10 * t,
+          height: 8,
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(4),
+            color: Color.lerp(widget.inactiveColor, widget.activeColor, t),
+          ),
+        );
+      },
     );
   }
 }

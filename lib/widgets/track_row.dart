@@ -1,6 +1,6 @@
-import 'package:flutter/physics.dart';
 import 'package:material_3_expressive/material_3_expressive.dart';
 import 'package:material_ui/material_ui.dart';
+import 'package:motor/motor.dart';
 
 import 'library_cover.dart';
 
@@ -257,7 +257,7 @@ class _TrackRowSurfaceState extends State<_TrackRowSurface> {
 /// `M3ECardRadiusMotion`，但它是包内部件，未导出）。
 ///
 /// 目标变化时把当前插值形状作为起点、重新起一根 expressive spatial 弹簧；
-/// 结束帧吸附到目标值，避免弹簧容差带来的亚像素偏差。
+/// 直接用 motor（M3E 组件库同款驱动），`snapToEnd` 保证落定精确吸附目标。
 class _RadiusMorph extends StatefulWidget {
   const _RadiusMorph({
     required this.radius,
@@ -275,9 +275,10 @@ class _RadiusMorph extends StatefulWidget {
 
 class _RadiusMorphState extends State<_RadiusMorph>
     with SingleTickerProviderStateMixin {
-  late final AnimationController _controller = AnimationController.unbounded(
+  late final SingleMotionController _controller = SingleMotionController(
+    motion: SpringMotion(widget.spring.toDescription(), snapToEnd: true),
     vsync: this,
-    value: 1,
+    initialValue: 1,
   );
   late BorderRadius _from;
   late BorderRadius _to;
@@ -290,6 +291,12 @@ class _RadiusMorphState extends State<_RadiusMorph>
   }
 
   @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
   void didUpdateWidget(covariant _RadiusMorph oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.radius == widget.radius &&
@@ -298,20 +305,11 @@ class _RadiusMorphState extends State<_RadiusMorph>
     }
     _from = BorderRadius.lerp(_from, _to, _controller.value) ?? _to;
     _to = widget.radius;
-    _controller.value = 0;
-    final TickerFuture flight = _controller.animateWith(
-      SpringSimulation(widget.spring.toDescription(), 0, 1, 0),
-    );
-    // 弹簧在容差范围内结束（终点值可能略偏）：收尾时吸附到精确目标。
-    flight.whenCompleteOrCancel(() {
-      if (mounted && !_controller.isAnimating) setState(() {});
-    });
-  }
-
-  @override
-  void dispose() {
-    _controller.dispose();
-    super.dispose();
+    if (oldWidget.spring != widget.spring) {
+      _controller.motion =
+          SpringMotion(widget.spring.toDescription(), snapToEnd: true);
+    }
+    _controller.animateTo(1, from: 0, withVelocity: 0);
   }
 
   @override
@@ -319,10 +317,10 @@ class _RadiusMorphState extends State<_RadiusMorph>
     return AnimatedBuilder(
       animation: _controller,
       builder: (BuildContext context, Widget? _) {
-        final BorderRadius radius = _controller.isAnimating
-            ? (BorderRadius.lerp(_from, _to, _controller.value) ?? _to)
-            : widget.radius;
-        return widget.builder(context, radius);
+        return widget.builder(
+          context,
+          BorderRadius.lerp(_from, _to, _controller.value) ?? _to,
+        );
       },
     );
   }

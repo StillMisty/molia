@@ -148,7 +148,7 @@ void main() {
     emitFor('b');
     await tester.pump(const Duration(milliseconds: 50)); // 检测帧
     await tester.pump(); // 动画首 tick
-    await tester.pump(const Duration(milliseconds: 200)); // 动画中段
+    await tester.pump(const Duration(milliseconds: 100)); // 动画中段（弹簧 ~0.66）
     expect(centerOffset(tester), greaterThan(4));
 
     // 动画尚未结束就切到 c：应从当前进度续走。

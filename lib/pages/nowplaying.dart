@@ -2,6 +2,7 @@ import 'dart:math';
 
 import 'package:material_ui/material_ui.dart';
 import 'package:flutter/services.dart';
+import 'package:motor/motor.dart';
 import 'package:provider/provider.dart';
 import 'package:molia/utils/responsive.dart';
 import 'package:molia/widgets/player.dart';
@@ -37,7 +38,10 @@ class _NowPlayingState extends State<NowPlaying>
   late final ScrollController _lyricsScrollController;
 
   /// 播放器展开进度：0 = 迷你条、1 = 完整播放器（小屏）。
-  late final AnimationController _expandController;
+  ///
+  /// motor expressive spatial 弹簧（380/0.8）：拖动跟手直接写进度，松手按
+  /// 手势速度续跑吸附（原实现为固定 360ms tween）。
+  late final SingleMotionController _expandController;
   bool _isMini = false;
 
   /// 播放器区域可用的最大高度（跟手拖拽的行程基准）。
@@ -63,11 +67,13 @@ class _NowPlayingState extends State<NowPlaying>
     _pageController = PageController(initialPage: _currentPageIndex);
     _queueScrollController = ScrollController();
     _lyricsScrollController = ScrollController();
-    _expandController = AnimationController(
+    _expandController = SingleMotionController(
+      motion:
+          const MaterialSpringMotion.expressiveSpatialDefault(snapToEnd: true),
       vsync: this,
-      duration: const Duration(milliseconds: 360),
-      value: 1.0,
-    )..addStatusListener(_handleExpandSettled);
+      initialValue: 0,
+    )..value = 1.0;
+    _expandController.addListener(_handleExpandProgress);
   }
 
   @override
@@ -79,22 +85,21 @@ class _NowPlayingState extends State<NowPlaying>
     super.dispose();
   }
 
-  /// 折叠/展开播放器（轻点迷你条 / 列表滑到顶下拉）：同一控制器驱动
-  /// 高度、交叉淡化与封面飞行。
+  /// 展开/收起切换：按当前进度过半决定方向。
+  ///
+  /// 不用落定状态（[_isMini]）判定：弹簧有容差拖尾，「落定回调」晚于视觉
+  /// 落定约 0.35s，滚动到一半连点/到顶快速再拉会打进过期目标。
   void _toggleExpand() {
     HapticFeedback.lightImpact();
-    if (_isMini) {
-      _expandController.forward();
-    } else {
-      _expandController.reverse();
-    }
+    _expandController.animateTo(_expandController.value >= 0.5 ? 0.0 : 1.0);
   }
 
-  /// 展开动画落定后同步迷你态（轻点与跟手拖拽共用同一收尾）。
-  void _handleExpandSettled(AnimationStatus status) {
-    if (status == AnimationStatus.completed) {
+  /// 展开进度跨过阈值即同步迷你态（视觉落定口径，不等弹簧容差拖尾）。
+  void _handleExpandProgress() {
+    final double progress = _expandController.value;
+    if (progress >= 0.99) {
       _setMini(false);
-    } else if (status == AnimationStatus.dismissed) {
+    } else if (progress <= 0.01) {
       _setMini(true);
     }
   }
@@ -108,11 +113,14 @@ class _NowPlayingState extends State<NowPlaying>
     });
   }
 
+  /// 播放器区域跟手拖拽行程基准：约 0.6 个最大高度走完整段（一次拇指
+  /// 上滑即可展开）；也是释放速度 → 进度域的换算基准。
+  double get _expandDragExtent =>
+      max(200.0, (_playerMaxHeight - miniPlayerHeight) * 0.6);
+
   /// 播放器区域跟手拖拽：迷你条上拉展开、播放器下拉收起（过半/甩动吸附）。
   void _handlePlayerDragUpdate(DragUpdateDetails details) {
-    // 约 0.6 个最大高度走完整段（一次拇指上滑即可展开）。
-    final double extent =
-        max(200.0, (_playerMaxHeight - miniPlayerHeight) * 0.6);
+    final double extent = _expandDragExtent;
     // 手指向上（dy 负）→ 展开。
     final double delta = -details.delta.dy / extent;
     _expandController.value =
@@ -124,11 +132,13 @@ class _NowPlayingState extends State<NowPlaying>
     // 位置 + 速度投影：快速甩动即使行程短也按方向吸附。
     final double projected = _expandController.value + upVelocity / 1800;
     HapticFeedback.lightImpact();
-    if (projected >= 0.5) {
-      _expandController.forward();
-    } else {
-      _expandController.reverse();
-    }
+    final bool expand = projected >= 0.5;
+    final double extent = _expandDragExtent;
+    _expandController.animateTo(
+      expand ? 1.0 : 0.0,
+      // 手势速度换算到进度域（上滑 = 展开 = 进度增加），弹簧带惯性续跑。
+      withVelocity: extent <= 0 ? 0 : upVelocity / extent,
+    );
   }
 
   List<PageData> _buildPages(BuildContext context) {

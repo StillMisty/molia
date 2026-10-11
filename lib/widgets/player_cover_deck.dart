@@ -9,7 +9,8 @@
 /// 兜底等全部会话状态收敛在唯一一个 [CoverSwapSession] 中。
 ///
 /// 切歌视觉：
-/// - 时长 320ms、easeOutCubic；拖动跟手按同一条曲线反解，松手不跳；
+/// - motor expressive spatial 弹簧（380/0.8）驱动进度 0→1；拖动跟手直接写
+///   进度（画面=手指位移），松手按速度续跑吸附；
 /// - 目标槽位旧身份与源槽位新身份按进度窗口交叉淡化（仅透明度、原位不动）；
 /// - 两张移动卡（旧中封 → 目标槽位、新中封 ← 源槽位）全程插值，透明度
 ///   1.0 ↔ 0.85 连续过渡（进场卡从 85% 起步，消除起手闪跳）。
@@ -38,7 +39,9 @@ import 'dart:math';
 
 import 'package:flutter/gestures.dart' show DragStartBehavior;
 import 'package:flutter/services.dart';
+import 'package:material_3_expressive/material_3_expressive.dart';
 import 'package:material_ui/material_ui.dart';
+import 'package:motor/motor.dart';
 import 'package:provider/provider.dart';
 
 import '../domain/models/playback.dart';
@@ -184,9 +187,6 @@ class PlayerCoverDeck extends StatefulWidget {
 
 class _PlayerCoverDeckState extends State<PlayerCoverDeck>
     with TickerProviderStateMixin {
-  /// 切歌过渡时长；拖动跟手按同一曲线反解，松手不跳。
-  static const Duration _coverSwapDuration = Duration(milliseconds: 320);
-
   /// 邻位稳态透明度；窗口淡出/淡入的端点值（p=0 / p=1 与稳态卡一致）。
   static const double _neighborOpacity = 0.85;
 
@@ -208,10 +208,8 @@ class _PlayerCoverDeckState extends State<PlayerCoverDeck>
   /// 中心封面同 id 换图（音源补图）交叉淡化时长。
   static const Duration _artworkRefreshFadeDuration = Duration(milliseconds: 250);
 
-  /// 封面按压反馈：按下缩放比例与进/出时长（抬起略慢、无过冲）。
+  /// 封面按压反馈：按下缩放比例；进/出走 M3E 按压弹簧（见控制器注释）。
   static const double _pressScale = 0.96;
-  static const Duration _pressDownDuration = Duration(milliseconds: 110);
-  static const Duration _pressUpDuration = Duration(milliseconds: 180);
 
   // ---- 横向拖动跟踪（从手指真实按下位置起算） ----
   double? _dragStartX;
@@ -229,7 +227,11 @@ class _PlayerCoverDeckState extends State<PlayerCoverDeck>
   bool _trackSyncScheduled = false;
 
   /// 唯一一根进度控制器：拖动跟手与切歌动画共用（不允许第二条视觉进度）。
-  late AnimationController _coverController;
+  ///
+  /// motor expressive spatial 弹簧（380/0.8）：拖动直接写进度（画面 = 手指
+  /// 位移），松手由弹簧带速度续跑；透明度窗口从进度派生并截断 0..1
+  /// （M3E 规范：effects 不过冲）。
+  late SingleMotionController _coverController;
 
   /// 拖动对账落位后源侧新身份的纯透明度淡入；只在 idle 稳态渲染里作用于
   /// 会话方向的源侧槽位。
@@ -271,11 +273,15 @@ class _PlayerCoverDeckState extends State<PlayerCoverDeck>
   Track? _rightSlotOutgoing;
 
   /// 播放态中心封面轻微缩放（暂停时保持清晰，不做变暗）。
-  late AnimationController _playStateController;
+  /// motor expressive spatial 弹簧，暂停/播放来回切换带速度续跑。
+  late SingleMotionController _playStateController;
   late Animation<double> _playStateScaleAnimation;
 
   /// 按压反馈控制器：0 = 未按、1 = 按到底（缩放 [_pressScale]）。
-  late AnimationController _pressController;
+  ///
+  /// M3E 按压弹簧（`M3EMotion.expressiveSpatialPress` 380/0.55）：按下即时、
+  /// 抬起带轻微回弹（替代原来的 110ms / 180ms 时长曲线）。
+  late SingleMotionController _pressController;
 
   /// 当前被按压的槽位；抬起回弹结束（[AnimationStatus.dismissed]）后清空。
   _DeckSlot? _pressedSlot;
@@ -289,17 +295,20 @@ class _PlayerCoverDeckState extends State<PlayerCoverDeck>
   @override
   void initState() {
     super.initState();
-    _playStateController = AnimationController(
-      duration: const Duration(milliseconds: 300),
+    _playStateController = SingleMotionController(
+      motion:
+          const MaterialSpringMotion.expressiveSpatialDefault(snapToEnd: true),
       vsync: this,
+      initialValue: 0,
     );
-    _playStateScaleAnimation = Tween<double>(begin: 0.98, end: 1.0).animate(
-        CurvedAnimation(
-            parent: _playStateController, curve: Curves.easeOutCubic));
+    _playStateScaleAnimation =
+        Tween<double>(begin: 0.98, end: 1.0).animate(_playStateController);
 
-    _coverController = AnimationController(
-      duration: _coverSwapDuration,
+    _coverController = SingleMotionController(
+      motion:
+          const MaterialSpringMotion.expressiveSpatialDefault(snapToEnd: true),
       vsync: this,
+      initialValue: 0,
     )..value = 1.0;
 
     _sourceNeighborFade = AnimationController(
@@ -322,9 +331,13 @@ class _PlayerCoverDeckState extends State<PlayerCoverDeck>
       vsync: this,
       value: 1.0,
     );
-    _pressController = AnimationController(
-      duration: _pressDownDuration,
+    _pressController = SingleMotionController(
+      motion: SpringMotion(
+        M3EMotion.expressiveSpatialPress.toDescription(),
+        snapToEnd: true,
+      ),
       vsync: this,
+      initialValue: 0,
     );
     _centerScaleAnimation =
         Listenable.merge([_playStateController, _pressController]);
@@ -399,11 +412,7 @@ class _PlayerCoverDeckState extends State<PlayerCoverDeck>
       _playStateController.value = playback.isPlaying ? 1.0 : 0.0;
       return;
     }
-    if (playback.isPlaying) {
-      _playStateController.forward();
-    } else {
-      _playStateController.reverse();
-    }
+    _playStateController.animateTo(playback.isPlaying ? 1.0 : 0.0);
   }
 
   /// 页面可见性变化（TickerMode）：切歌动画不跨可见性边界保留。
@@ -422,7 +431,7 @@ class _PlayerCoverDeckState extends State<PlayerCoverDeck>
   /// 把全部封面动画立即落位到稳态（不做过渡；隐藏/恢复时调用）。
   void _settleForVisibility() {
     _cancelPendingWatchdog();
-    _coverController.stop();
+    _coverController.stop(canceled: true);
     _coverController.value = 1.0;
     _sourceNeighborFade.value = 1.0;
     _reconcileCorrection.value = 1.0;
@@ -462,7 +471,7 @@ class _PlayerCoverDeckState extends State<PlayerCoverDeck>
   }) {
     final snapshot = playback.snapshot;
     _cancelPendingWatchdog();
-    _coverController.stop();
+    _coverController.stop(canceled: true);
     _coverController.value = 1.0;
     _sourceNeighborFade.value = 1.0;
     _reconcileCorrection.value = 1.0;
@@ -487,17 +496,13 @@ class _PlayerCoverDeckState extends State<PlayerCoverDeck>
   /// 横滑识别器竞争时要等 100ms 判定或抬手才触发，给不了「按下即反馈」）。
   void _handleCoverPressStart(_DeckSlot slot) {
     _pressedSlot = slot;
-    _pressController.forward();
+    _pressController.animateTo(1);
   }
 
-  /// 按压反馈结束（抬手/取消/横滑接管）：回弹到 1.0。
+  /// 按压反馈结束（抬手/取消/横滑接管）：回弹到 0。
   void _handleCoverPressEnd() {
     if (_pressedSlot == null) return;
-    _pressController.animateBack(
-      0,
-      duration: _pressUpDuration,
-      curve: Curves.easeOut,
-    );
+    _pressController.animateTo(0);
   }
 
   /// 按压回弹结束：清掉按压槽位（缩放已回 1，无需重建）。
@@ -835,7 +840,7 @@ class _PlayerCoverDeckState extends State<PlayerCoverDeck>
     // 中间态跳回旧预览目标（校正被弃）。
     if (_session.awaitingReconcile ||
         _session.phase == CoverSwapPhase.correcting ||
-        _coverController.isAnimating ||
+        _coverSwapMidFlight ||
         widget.coverFlightActive) {
       return;
     }
@@ -908,6 +913,14 @@ class _PlayerCoverDeckState extends State<PlayerCoverDeck>
     return target;
   }
 
+  /// 是否处于「换场中段」。
+  ///
+  /// 弹簧在容差内会一直报 `isAnimating`（进度 ≈1 的不可见拖尾），不能直接
+  /// 当「过渡进行中」判定——否则新手势/新切歌会在尾部窗口被饿死，看起来
+  /// 像动画没播。真正中段才「续走不重放」。
+  bool get _coverSwapMidFlight =>
+      _coverController.isAnimating && _coverController.value < 0.99;
+
   /// 拖动跟手：中心位换预览目标封面、按滑动距离过渡（与切歌动画同一进度）。
   void _updateDragPreview(double dx) {
     final playback = context.read<PlaybackProvider>();
@@ -929,7 +942,7 @@ class _PlayerCoverDeckState extends State<PlayerCoverDeck>
 
     if (!session.previewActive) {
       session.phase = CoverSwapPhase.preview;
-      _coverController.stop();
+      _coverController.stop(canceled: true);
     }
     if (dir != session.direction || session.from == null) {
       session.direction = dir;
@@ -939,26 +952,14 @@ class _PlayerCoverDeckState extends State<PlayerCoverDeck>
     }
     session.to = target;
     // 拖动行程：约 0.6 个封面宽度走完整段过渡。
-    final double range = max(48.0, widget.artDimension * 0.6);
+    final double range = _coverSwapRange;
     final double visual = (dx.abs() / range).clamp(0.0, 1.0);
-    // 反解切歌动画曲线：画面进度与手指位移一致，松手后从同一进度续播不跳。
-    _coverController.value = _inverseCoverCurve(visual);
+    // 进度即画面进度：拖动跟手与弹簧吸附同源，松手从同一进度续播不跳。
+    _coverController.value = visual;
   }
 
-  /// [Curves.easeOutCubic]（切歌动画曲线）的数值反解。
-  double _inverseCoverCurve(double visual) {
-    double low = 0;
-    double high = 1;
-    for (var i = 0; i < 12; i++) {
-      final double mid = (low + high) / 2;
-      if (Curves.easeOutCubic.transform(mid) < visual) {
-        low = mid;
-      } else {
-        high = mid;
-      }
-    }
-    return (low + high) / 2;
-  }
+  /// 拖动行程：约 0.6 个封面宽度走完整段过渡（也是速度→进度的换算基准）。
+  double get _coverSwapRange => max(48.0, widget.artDimension * 0.6);
 
   /// 松手：达标且有预览目标则从当前进度续播到落位并提交切歌；
   /// 未达标/边界回弹。
@@ -991,8 +992,9 @@ class _PlayerCoverDeckState extends State<PlayerCoverDeck>
       // （取链可能需要几百毫秒）——否则动画跑完会先回落成旧封面、
       // 再跳成新封面，看起来像卡住/来回闪。
       _session.phase = CoverSwapPhase.committed;
-      // 从当前拖动进度继续走到落位。
-      _coverController.forward();
+      // 从当前拖动进度继续走到落位；带上手势速度（换算到进度域，
+      // 画面进度 = |dx| / range）。
+      _coverController.animateTo(1, withVelocity: -velocity / _coverSwapRange);
       _startDragPendingWatchdog();
       if (dx > 0) {
         playback.skipToPrevious();
@@ -1000,7 +1002,7 @@ class _PlayerCoverDeckState extends State<PlayerCoverDeck>
         playback.skipToNext();
       }
     } else {
-      _returnCoverPreview();
+      _returnCoverPreview(withVelocity: -velocity / _coverSwapRange);
     }
   }
 
@@ -1012,22 +1014,20 @@ class _PlayerCoverDeckState extends State<PlayerCoverDeck>
   }
 
   /// 撤下拖动/提交预览并回弹到稳态（不切歌）。
-  void _returnCoverPreview() {
+  ///
+  /// [withVelocity] 为进度域速度（画面进度 = |dx| / range），让回弹延续手势。
+  void _returnCoverPreview({double withVelocity = 0}) {
     if (!_session.previewActive) return;
     _session
       ..phase = CoverSwapPhase.idle
       ..to = null;
     _cancelPendingWatchdog();
     if (!_tickersEnabled) {
-      // 不可见：直接回位（ticker 被静音，animateBack 会冻结在半途）。
+      // 不可见：直接回位（ticker 被静音，弹簧会冻结在半途）。
       _coverController.value = 0;
       return;
     }
-    _coverController.animateBack(
-      0,
-      duration: const Duration(milliseconds: 220),
-      curve: Curves.easeOut,
-    );
+    _coverController.animateTo(0, withVelocity: withVelocity);
   }
 
   /// 提交切歌的兜底：等待曲目切换期间保持预览；超时（如取链失败）则回弹。
@@ -1105,15 +1105,17 @@ class _PlayerCoverDeckState extends State<PlayerCoverDeck>
       // 上一个会话可能停在（或正在）校正：新切歌直接接管，停掉校正控制器。
       if (_reconcileCorrection.isAnimating) _reconcileCorrection.stop();
       _pendingCorrectionId = null;
+      // 新会话先把进度钉在起点：检测帧就画在 p=0（与稳态的源槽位卡一致），
+      // 而不是先画落位态、动画启动后再回跳。**须在切 settling 前钉**：
+      // 置 0 会同步触发一次 completed（motor 的落定判定看目标而非边界），
+      // 若此时已是 settling，状态监听会把新会话误收成 idle。
+      // 弹簧尾部（进度 ≈1）按「已落定」处理，从起点完整重播。
+      if (!_coverSwapMidFlight) {
+        _coverController.value = 0;
+      }
       session
         ..phase = CoverSwapPhase.settling
         ..to = track;
-      // 新会话先把进度钉在起点：检测帧就画在 p=0（与稳态的源槽位卡一致），
-      // 而不是先画落位态、动画启动后再回跳。动画在 post-frame 从同一进度
-      // 续走；快速连切（控制器仍在动）保持当前进度，不回起点重放。
-      if (!_coverController.isAnimating) {
-        _coverController.value = 0;
-      }
     }
     session.direction = direction == coverSwapBackward ? -1 : 1;
     session.oldNeighbor = direction == coverSwapBackward
@@ -1134,15 +1136,17 @@ class _PlayerCoverDeckState extends State<PlayerCoverDeck>
       if (_session.previewActive) {
         // 用户正在拖动预览：动画不接管，由手指继续驱动（标题入场也让位）。
         widget.onTrackSwapped?.call(true);
-        if (_coverController.isAnimating) _coverController.stop();
+        if (_coverController.isAnimating) {
+          _coverController.stop(canceled: true);
+        }
         return;
       }
       widget.onTrackSwapped?.call(false);
-      if (_coverController.isAnimating) {
-        // 拖动续播 / 快速连切：从当前进度接着走，不回到起点重放。
-        _coverController.forward();
+      if (_coverSwapMidFlight) {
+        // 拖动续播 / 快速连切：从当前进度接着走（带速度），不回到起点重放。
+        _coverController.animateTo(1);
       } else {
-        _coverController.forward(from: 0);
+        _coverController.animateTo(1, from: 0, withVelocity: 0);
       }
     });
   }
@@ -1193,9 +1197,9 @@ class _PlayerCoverDeckState extends State<PlayerCoverDeck>
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
       widget.onTrackSwapped?.call(false);
-      // 过渡已在提交时走完：画面即最终态，直接落位；若还在走（快速
-      // 对账），保持它继续（center 已是 displayTrack，位置连续）。
-      if (!_coverController.isAnimating) {
+      // 过渡已在提交时走完：画面即最终态，直接落位；若还在换场中段
+      // （快速对账），保持它继续（center 已是 displayTrack，位置连续）。
+      if (!_coverSwapMidFlight) {
         _coverController.value = 1.0;
       }
       _sourceNeighborFade.forward(from: 0);
@@ -1227,7 +1231,7 @@ class _PlayerCoverDeckState extends State<PlayerCoverDeck>
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
       widget.onTrackSwapped?.call(false);
-      if (!_coverController.isAnimating) _coverController.value = 1.0;
+      if (!_coverSwapMidFlight) _coverController.value = 1.0;
     });
   }
 
@@ -1290,10 +1294,11 @@ class _PlayerCoverDeckState extends State<PlayerCoverDeck>
                     (dragging ||
                         _coverController.isAnimating ||
                         session.phase == CoverSwapPhase.settling);
-                // p 是进度控制器原始值（线性时间）；窗口化交叉按 p 取窗口，
-                // 移动卡用 easeOutCubic 的 t 做位移/旋转/缩放插值。
+                // p 是弹簧进度：位移/旋转/缩放直接用 p（spatial 弹簧保留过冲）；
+                // 透明度窗口从 p 派生且截断 0..1（M3E 规范：effects 不过冲）。
                 final double p = _coverController.value;
-                final t = Curves.easeOutCubic.transform(p);
+                final double t = p;
+                final double pClamped = p.clamp(0.0, 1.0);
                 final dir = session.direction;
                 final double sideSize = widget.artDimension * 0.78;
                 final double offset = widget.artDimension * 0.30;
@@ -1311,7 +1316,7 @@ class _PlayerCoverDeckState extends State<PlayerCoverDeck>
                     sideSize: sideSize,
                     x: -offset * dir,
                     rotation: -sideRotation * dir,
-                    opacity: _oldNeighborOpacityAt(p),
+                    opacity: _oldNeighborOpacityAt(pClamped),
                   ));
                 }
 
@@ -1328,7 +1333,7 @@ class _PlayerCoverDeckState extends State<PlayerCoverDeck>
                       sideSize: sideSize,
                       x: offset * dir,
                       rotation: sideRotation * dir,
-                      opacity: _sourceNewNeighborOpacityAt(p),
+                      opacity: _sourceNewNeighborOpacityAt(pClamped),
                       placeholderUrl: currentImageUrl,
                     ));
                   }
@@ -1344,7 +1349,7 @@ class _PlayerCoverDeckState extends State<PlayerCoverDeck>
                       x: -offset * dir * t,
                       rotation: -sideRotation * dir * t,
                       scale: 1.0 - 0.22 * t,
-                      opacity: 1.0 - 0.15 * t,
+                      opacity: 1.0 - 0.15 * pClamped,
                       interactive: false,
                     ));
                   }
@@ -1438,7 +1443,7 @@ class _PlayerCoverDeckState extends State<PlayerCoverDeck>
                     x: dir * offset * (1 - t),
                     rotation: sideRotation * dir * (1 - t),
                     scale: 0.78 + 0.22 * t,
-                    opacity: 0.85 + 0.15 * t,
+                    opacity: 0.85 + 0.15 * pClamped,
                     interactive: !dragging,
                     coverKey: widget.morph?.pageCoverKey,
                     hidden: widget.morph?.pageHeaderHidden ?? false,

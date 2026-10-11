@@ -229,6 +229,13 @@
 - 组件：UI 全面使用 `M3E*`；基础件（Scaffold/Text/Icon/Theme 等）来自 `material_ui`
   （M3E 必需依赖，不要试图移除）；禁止 import `package:flutter/material.dart`，
   组件 import 用 `package:material_3_expressive/material_3_expressive.dart`。
+- 动效：**spatial（位置/尺寸/形状/缩放）走 motor 弹簧**——token 取
+  `M3EMotion.*` / `MaterialSpringMotion.*`，落定统一 `snapToEnd`；
+  **effects（透明度/颜色/文本）保持时长+曲线**，与 spatial 同帧耦合的透明度
+  从同一份弹簧进度派生并截断 0..1（effects 不过冲）。共享元素飞行（顶栏⇄播放页）
+  用 `aospSpatial` 无过冲弹簧并在落定帧零速度交接；不要再用
+  `AnimationController` + `Curves`/`SpringSimulation` 手搓 spatial 运动
+  （交互细节见 `docs/pitfalls.md` #21）。
 - 图标：统一圆角风格 `Icons.*_rounded`（不用 `Icons.adaptive.*`，不混 `_outlined`/基础实心）；
   唯一例外 `library_music_outlined`（资料库未选中半对；音符图标已改用 `MoliaMark` 组件）。
   `test/architecture/icon_usage_test.dart` 扫描强制。

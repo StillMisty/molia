@@ -101,8 +101,9 @@ void main() {
       ),
     );
     await tester.pump();
-    // 首帧切歌入场动画（320ms）：等它结束再操作。
-    await tester.pump(const Duration(milliseconds: 600));
+    // 首帧切歌入场动画：motor expressive spatial 弹簧（含容差拖尾约 0.7s）
+    // 落定后才渲染稳态左右槽位，等它结束再操作。
+    await tester.pump(const Duration(milliseconds: 900));
   }
 
   /// 卡片上下相邻的 Transform 里是否存在「按压缩放」量级：

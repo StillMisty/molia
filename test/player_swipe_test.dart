@@ -316,7 +316,8 @@ void main() {
 
     // 后端迟迟不推快照：6 秒兜底计时器触发回弹。
     await tester.pump(const Duration(milliseconds: 6500));
-    await tester.pump(const Duration(milliseconds: 300)); // 220ms 回弹动画走完
+    // expressive spatial 弹簧回弹到 0（含容差拖尾）约 0.5s。
+    await tester.pump(const Duration(milliseconds: 700));
 
     expect(find.byKey(PlayerCoverDeck.centerCoverTrackKey(b.id)), findsOneWidget,
         reason: '兜底回弹后中心应回到实际曲目 b');

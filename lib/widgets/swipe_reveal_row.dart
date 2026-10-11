@@ -2,6 +2,7 @@ import 'dart:math' as math;
 
 import 'package:material_3_expressive/material_3_expressive.dart';
 import 'package:material_ui/material_ui.dart';
+import 'package:motor/motor.dart';
 
 /// 固定行高列表的侧滑操作容器（reveal 语义）：
 /// 横向拖动露出动作按钮，松手按位移/速度吸附展开或收起。
@@ -11,6 +12,10 @@ import 'package:material_ui/material_ui.dart';
 /// M3E 列表规范（`M3EListDismissibleTheme`）：胶囊形图标按钮
 /// （高度 = 行高 − actionVerticalInset、半高圆角；中性 tonal、
 /// 主要/破坏性 filled），动作间距 / 边缘内边距 / 吸附阈值全部取主题。
+///
+/// 吸附用 motor 有界弹簧（M3E standard spatial）：拖动跟手写 `value`，
+/// 松手按位移/速度吸附，`withVelocity` 让甩动带惯性续跑（旧实现只按
+/// ±350 阈值判定、时长固定 220ms）。
 class SwipeRevealRow extends StatefulWidget {
   const SwipeRevealRow({
     super.key,
@@ -33,10 +38,35 @@ class SwipeRevealRow extends StatefulWidget {
 class _SwipeRevealRowState extends State<SwipeRevealRow>
     with SingleTickerProviderStateMixin {
   /// 0 = 收起，1 = 完全露出。
-  late final AnimationController _reveal = AnimationController(
+  ///
+  /// 默认取 M3E 列表 dismissible 的回弹弹簧（`springBackSpring` 380/0.6，
+  /// 与包内拖拽回弹同源），真实值在 [didChangeDependencies] 从主题同步。
+  late final SingleMotionController _reveal =
+      SingleMotionController.bounded(
+    motion: SpringMotion(
+      const M3ESpring(stiffness: 380, damping: 0.6).toDescription(),
+      snapToEnd: true,
+    ),
     vsync: this,
-    duration: const Duration(milliseconds: 220),
+    initialValue: 0,
   );
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    // 主题弹簧热更新（换主题/覆盖 M3ETheme 后吸附曲线保持一致）。
+    final Motion motion = SpringMotion(
+      M3ETheme.of(context)
+          .listTheme
+          .dismissible
+          .springBackSpring
+          .toDescription(),
+      snapToEnd: true,
+    );
+    if (_reveal.motion != motion) {
+      _reveal.motion = motion;
+    }
+  }
 
   /// 露出总宽：各动作分配宽之和 + 动作间距（与 M3E `_computeActionsWidth` 同源）。
   double get _actionsWidth {
@@ -54,7 +84,7 @@ class _SwipeRevealRowState extends State<SwipeRevealRow>
   }
 
   void _onDragStart(DragStartDetails details) {
-    _reveal.stop();
+    _reveal.stop(canceled: true);
   }
 
   void _onDragUpdate(DragUpdateDetails details) {
@@ -66,23 +96,27 @@ class _SwipeRevealRowState extends State<SwipeRevealRow>
 
   void _onDragEnd(DragEndDetails details, double previewThreshold) {
     final double velocity = details.primaryVelocity ?? 0;
+    final double actionsWidth = _actionsWidth;
+    // 速度换算到进度域（进度 1 = actionsWidth 像素）；左滑（负速度）= 露出。
+    final double progressVelocity =
+        actionsWidth <= 0 ? 0 : -velocity / actionsWidth;
     if (velocity < -350) {
-      _open();
+      _open(withVelocity: progressVelocity);
     } else if (velocity > 350) {
-      _close();
+      _close(withVelocity: progressVelocity);
     } else if (_reveal.value >= previewThreshold) {
-      _open();
+      _open(withVelocity: progressVelocity);
     } else {
-      _close();
+      _close(withVelocity: progressVelocity);
     }
   }
 
-  void _open() {
-    _reveal.animateTo(1, curve: Curves.easeOut);
+  void _open({double withVelocity = 0}) {
+    _reveal.animateTo(1, withVelocity: withVelocity);
   }
 
-  void _close() {
-    _reveal.animateTo(0, curve: Curves.easeOut);
+  void _close({double withVelocity = 0}) {
+    _reveal.animateTo(0, withVelocity: withVelocity);
   }
 
   @override
@@ -99,7 +133,8 @@ class _SwipeRevealRowState extends State<SwipeRevealRow>
           child: AnimatedBuilder(
             animation: _reveal,
             builder: (context, _) {
-              if (_reveal.value == 0) return const SizedBox.shrink();
+              final double reveal = _reveal.value.clamp(0.0, 1.0);
+              if (reveal == 0) return const SizedBox.shrink();
               return Align(
                 alignment: Alignment.centerRight,
                 child: SizedBox(
@@ -116,7 +151,8 @@ class _SwipeRevealRowState extends State<SwipeRevealRow>
         AnimatedBuilder(
           animation: _reveal,
           builder: (context, child) => Transform.translate(
-            offset: Offset(-actionsWidth * _reveal.value, 0),
+            // 弹簧过冲截断在 0..1：行不会越过静止位/露出位。
+            offset: Offset(-actionsWidth * _reveal.value.clamp(0.0, 1.0), 0),
             child: child,
           ),
           child: GestureDetector(

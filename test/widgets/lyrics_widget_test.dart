@@ -4,6 +4,7 @@
 library;
 
 import 'package:flutter_test/flutter_test.dart';
+import 'package:material_3_expressive/material_3_expressive.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -348,5 +349,69 @@ void main() {
     await tester.pump();
     expect(find.text('译 12'), findsNothing);
     expect(find.text('Roma 12'), findsOneWidget);
+  });
+
+  testWidgets('快捷操作栏为 M3EToolbar：按钮能力与选中态随状态同步', (tester) async {
+    await pumpLyrics(tester);
+
+    M3EToolbar toolbar() => tester.widget<M3EToolbar>(find.byType(M3EToolbar));
+    List<M3EToolbarAction> actions() =>
+        toolbar().actions.whereType<M3EToolbarAction>().toList();
+    // 取工具栏最近一层包装：隐藏态判定用 IgnorePointer，透明度用 Opacity。
+    IgnorePointer nearestIgnore() => tester.widget<IgnorePointer>(
+          find
+              .ancestor(
+                of: find.byType(M3EToolbar),
+                matching: find.byType(IgnorePointer),
+              )
+              .first,
+        );
+    Opacity nearestOpacity() => tester.widget<Opacity>(
+          find
+              .ancestor(
+                of: find.byType(M3EToolbar),
+                matching: find.byType(Opacity),
+              )
+              .first,
+        );
+
+    // 自动跟随中：操作栏收起（弹簧落定），手势穿透不挡歌词滚动。
+    expect(nearestIgnore().ignoring, isTrue);
+    expect(nearestOpacity().opacity, 0);
+
+    // 按钮构成与顺序：跟随中不含「居中当前行」。
+    expect(
+      actions().map((action) => action.icon).toList(),
+      const [
+        Icons.edit_note_rounded,
+        Icons.search_rounded,
+        Icons.checklist_rounded,
+      ],
+    );
+    expect(actions().every((action) => action.enabled), isTrue);
+    expect(actions().every((action) => !action.active), isTrue);
+
+    // 手动滚动暂停跟随：居中按钮入列，操作栏展开且可交互。
+    await dragUpSlowly(tester, -300);
+    expect(
+      actions().map((action) => action.icon),
+      contains(Icons.vertical_align_center_rounded),
+    );
+    expect(nearestIgnore().ignoring, isFalse);
+    expect(nearestOpacity().opacity, 1);
+
+    // 进入复制模式：选中态走工具栏 active（tonal 高亮），不再手写容器颜色。
+    await tester.tap(find.byIcon(Icons.edit_note_rounded));
+    await tester.pump();
+    expect(find.byIcon(Icons.playlist_play_rounded), findsOneWidget);
+    expect(
+      actions()
+          .firstWhere((action) => action.icon == Icons.playlist_play_rounded)
+          .active,
+      isTrue,
+    );
+
+    // 播放模式切换的通知节流计时器跑完，避免 pending timer 报错。
+    await tester.pump(const Duration(milliseconds: 300));
   });
 }

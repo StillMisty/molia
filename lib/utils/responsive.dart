@@ -2,6 +2,7 @@ import 'dart:math' as math;
 
 import 'package:material_3_expressive/material_3_expressive.dart';
 import 'package:material_ui/material_ui.dart';
+import 'package:motor/motor.dart';
 
 /// 响应式设计断点常量
 /// 用于在整个应用中统一响应式行为
@@ -568,7 +569,8 @@ class ResponsiveNavigation {
       // 遮罩走主题 scrim（随亮度/纯黑变化），不再硬编码黑色。
       barrierColor:
           Theme.of(context).colorScheme.scrim.withValues(alpha: 0.54),
-      transitionDuration: const Duration(milliseconds: 300),
+      // 路由时长 = 入场弹簧的落定时间（见 transitionBuilder 注释）。
+      transitionDuration: const Duration(milliseconds: 400),
       pageBuilder: (context, animation, secondaryAnimation) {
         return Align(
           alignment: Alignment.centerRight,
@@ -597,7 +599,14 @@ class ResponsiveNavigation {
           ).animate(
             CurvedAnimation(
               parent: animation,
-              curve: Curves.easeOutCubic,
+              // M3E 侧滑弹层入场：spatial default 弹簧（700/0.9，
+              // 对齐包内 `M3ESideSheetMotion.enterSpring`）。`MotionCurve`
+              // 把弹簧按秒采样，因此路由时长取落定时间 400ms（末尾误差
+              // <0.1%，不会收尾跳变）。
+              curve: MotionCurve(
+                motion:
+                    SpringMotion(M3EMotion.spatialDefault.toDescription()),
+              ),
             ),
           ),
           child: child,

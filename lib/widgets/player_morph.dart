@@ -95,8 +95,8 @@ class PlayerMorphGeometry {
 
 /// Overlay 飞行副本：只做封面几何飞行，**全程不透明、精确落位**。
 ///
-/// 前 [flightPortion] 行程完成几何移动并精确落在目标端封面矩形上；宿主在
-/// 到达的那一帧同时亮出目标端真身并移除本副本。不做「副本淡出 + 真身淡入」
+/// 在弹簧落定帧（[flightPortion]）完成几何移动并精确落在目标端封面矩形上；
+/// 宿主在同一帧亮出目标端真身并移除本副本。不做「副本淡出 + 真身淡入」
 /// 的交叉过渡——两者时间不可能完全对齐，尾段会出现重影与亮度下陷（闪动）。
 /// 圆角/描边/阴影同样精确匹配两端：按「播放页端进度」插值，双向飞行在
 /// 起点（与真身同帧同形）和落点（真身亮出前完全同款）都不会跳变。
@@ -107,8 +107,11 @@ class PlayerMorphFlight extends StatelessWidget {
     required this.geometry,
   });
 
-  /// 几何飞行占比；到达后宿主移除副本并显示目标端真身。
-  static const double flightPortion = 0.75;
+  /// 几何飞行终点占比；到达后宿主移除副本并显示目标端真身。
+  ///
+  /// 弹簧驱动时取 1.0：副本在弹簧落定（零速度）那一帧交接，而不是在
+  /// 行程中途硬切——中途切会让副本带着速度消失、真身静态亮出（「被抓住」感）。
+  static const double flightPortion = 1.0;
 
   /// 顶栏端封面外观：圆角 8、无描边阴影（对应顶栏 40×40 封面真身）。
   static const double _barRadius = 8;
@@ -132,9 +135,8 @@ class PlayerMorphFlight extends StatelessWidget {
       animation: animation,
       builder: (context, _) {
         final value = animation.value;
-        final t = Curves.easeInOutCubic.transform(
-          (value / flightPortion).clamp(0.0, 1.0),
-        );
+        // 弹簧原值即运动曲线（不再叠 easeInOutCubic）；归一化到飞行行程。
+        final t = (value / flightPortion).clamp(0.0, 1.0);
         // 回退图标（无封面 / 加载中）尺寸随几何插值：起点匹配顶栏真身、
         // 落点匹配播放页真身。固定尺寸会在起手与交接两处各跳一次。
         // pageCover 取真实屏幕矩形（rectOf 含祖先缩放），两端真身的回退

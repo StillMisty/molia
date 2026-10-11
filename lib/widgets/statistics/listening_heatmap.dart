@@ -8,7 +8,7 @@
 /// - 日历网格最少填满卡片宽度，且首播日之前的补位日渲染为空方格
 ///   （GitHub 式底格），不可点、无 tooltip；
 /// - 悬停/按压 → `Morph(square → puffy)` 多边形形变 + 放大 1.25×，
-///   120ms `easeOutCubic` 进入、200ms 回弹；
+///   motor standard spatial fast 弹簧（快进快出、速度续跑）；
 /// - 选中的一天保持放大 + `primary` 1.5dp 描边（弹层关闭后复原）；
 /// - 命中区 = 格子 + 格距（相邻格无死区，手机 ≈17dp）；范围外（早于
 ///   高亮起点）的格子降透明度而非包 `Opacity`，避免逐格合成层；
@@ -19,6 +19,7 @@ import 'dart:math' as math;
 
 import 'package:material_3_expressive/material_3_expressive.dart';
 import 'package:material_ui/material_ui.dart';
+import 'package:motor/motor.dart';
 
 /// 色阶档位数（0 = 无数据 + 4 档有数据）。
 const int heatmapLevelCount = 5;
@@ -120,18 +121,14 @@ class _HeatCell extends StatefulWidget {
 
 class _HeatCellState extends State<_HeatCell>
     with SingleTickerProviderStateMixin {
-  static const Duration _expandDuration = Duration(milliseconds: 120);
-  static const Duration _settleDuration = Duration(milliseconds: 200);
   static const double _hoverScale = 0.25;
 
-  late final AnimationController _controller = AnimationController(
+  /// hover / press / 选中缩放：motor 弹簧（M3E standard spatial fast），
+  /// 替代原 120ms 进入 + 200ms 回弹的时长曲线，快速划过格子时带速度续跑。
+  late final SingleMotionController _progress = SingleMotionController(
+    motion: const MaterialSpringMotion.standardSpatialFast(snapToEnd: true),
     vsync: this,
-    duration: _expandDuration,
-  );
-  late final Animation<double> _progress = CurvedAnimation(
-    parent: _controller,
-    curve: Curves.easeOutCubic,
-    reverseCurve: Curves.easeInOutCubic,
+    initialValue: widget.selected ? 1 : 0,
   );
 
   bool _hovered = false;
@@ -140,15 +137,15 @@ class _HeatCellState extends State<_HeatCell>
   bool get _active => widget.selected || _hovered || _pressed;
 
   @override
-  void initState() {
-    super.initState();
-    if (widget.selected) _controller.value = 1;
-  }
-
-  @override
   void didUpdateWidget(covariant _HeatCell oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.selected != widget.selected) _sync();
+  }
+
+  @override
+  void dispose() {
+    _progress.dispose();
+    super.dispose();
   }
 
   void _setHovered(bool value) {
@@ -164,19 +161,7 @@ class _HeatCellState extends State<_HeatCell>
   }
 
   void _sync() {
-    if (_active) {
-      _controller.duration = _expandDuration;
-      _controller.forward();
-    } else {
-      _controller.duration = _settleDuration;
-      _controller.reverse();
-    }
-  }
-
-  @override
-  void dispose() {
-    _controller.dispose();
-    super.dispose();
+    _progress.animateTo(_active ? 1 : 0);
   }
 
   @override

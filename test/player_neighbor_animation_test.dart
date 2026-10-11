@@ -102,8 +102,9 @@ void main() {
       ),
     );
     await tester.pump();
-    // 首帧切歌入场动画（320ms）：等它结束再操作。
-    await tester.pump(const Duration(milliseconds: 600));
+    // 首帧切歌入场动画：motor 弹簧（含容差拖尾约 0.7s）落定后才渲染
+    // 稳态槽位，等它结束再操作。
+    await tester.pump(const Duration(milliseconds: 900));
   }
 
   /// 封面堆叠内所有 Opacity 的（相对堆叠中心的横向偏移, 透明度）。
@@ -192,19 +193,19 @@ void main() {
     );
 
     await tester.pump(); // 动画首 tick（elapsed 0）
-    await tester.pump(const Duration(milliseconds: 64)); // p≈0.2
+    await tester.pump(const Duration(milliseconds: 50)); // 弹簧 p≈0.28
 
     final early = sampleCoverOpacities(tester);
     // 目标槽位旧身份（左侧 a）：窗口 p∈[0, 0.4] 淡出，处于中间值。
     final earlyOld = opacitiesNear(early, leftDx);
     expect(earlyOld, isNotEmpty);
     expect(earlyOld.reduce(math.min), allOf(greaterThan(0.0), lessThan(0.85)),
-        reason: 'p≈0.2 旧槽位身份应处于淡出中间值（实际 $earlyOld）');
+        reason: 'p≈0.28 旧槽位身份应处于淡出中间值（实际 $earlyOld）');
     // 源槽位新身份（右侧 d）：窗口 p∈[0.6, 1]，此刻尚未出现。
     final earlyNew = opacitiesNear(early, rightDx);
     expect(earlyNew, isNotEmpty);
     expect(earlyNew.reduce(math.max), lessThan(0.01),
-        reason: 'p≈0.2 源侧新身份尚未出现（实际 $earlyNew）');
+        reason: 'p≈0.28 源侧新身份尚未出现（实际 $earlyNew）');
     // 滑出卡：正在向目标槽位滑动（既不在中心也未落位），透明度 1.0→0.85 中间。
     expect(outgoing, findsOneWidget);
     final outgoingDx = cardDx(tester, outgoing);
@@ -213,23 +214,24 @@ void main() {
     expect(nearestOpacityOf(tester, outgoing),
         allOf(greaterThan(0.85), lessThan(1.0)));
 
-    await tester.pump(const Duration(milliseconds: 192)); // p≈0.8
+    await tester.pump(const Duration(milliseconds: 90)); // 弹簧 p≈0.86
     final late = sampleCoverOpacities(tester);
     // 源侧新身份：淡入窗口中间值。
     final lateNew = opacitiesNear(late, rightDx);
     expect(lateNew, isNotEmpty);
     expect(lateNew.reduce(math.max), allOf(greaterThan(0.0), lessThan(0.85)),
-        reason: 'p≈0.8 源侧新身份应处于淡入中间值（实际 $lateNew）');
+        reason: 'p≈0.86 源侧新身份应处于淡入中间值（实际 $lateNew）');
     // 旧身份：淡出窗口已结束，退场为 0。
     expect(opacitiesNear(late, leftDx).reduce(math.min), lessThan(0.01),
-        reason: 'p≈0.8 旧槽位身份应已淡出');
+        reason: 'p≈0.86 旧槽位身份应已淡出');
 
-    await tester.pump(const Duration(milliseconds: 48)); // p≈0.95
+    await tester.pump(const Duration(milliseconds: 80)); // 弹簧 p≈1.0（轻微过冲）
     // 滑出卡逼近目标槽位：位置/透明度与稳态槽位卡完全重合。
     expect(cardDx(tester, outgoing), closeTo(leftDx, 1.5));
     expect(nearestOpacityOf(tester, outgoing), closeTo(0.85, 0.01));
 
-    await tester.pump(const Duration(milliseconds: 32)); // p=1.0 完成
+    // 弹簧落定（含容差拖尾，视觉上早已静止）。
+    await tester.pump(const Duration(milliseconds: 550));
     // 动画结束无 pop：目标槽位由稳态槽位卡无缝承接（同位置、0.85）。
     expect(outgoing, findsNothing);
     final idle = sampleCoverOpacities(tester);

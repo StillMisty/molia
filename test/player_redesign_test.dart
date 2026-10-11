@@ -98,9 +98,9 @@ void main() {
       ),
     );
     await tester.pump();
-    // 首帧会触发一次切歌入场动画（封面堆叠 460ms）：等它结束再断言
-    // 稳态邻位封面的可点状态。
-    await tester.pump(const Duration(milliseconds: 600));
+    // 首帧会触发一次切歌入场动画（motor 弹簧，含容差拖尾约 0.7s，
+    // 大于封面堆叠的 460ms）：等它结束再断言稳态邻位封面的可点状态。
+    await tester.pump(const Duration(milliseconds: 900));
   }
 
   /// 封面区手势宿主（唯一带横向拖动识别器的 GestureDetector；点击由

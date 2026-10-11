@@ -6,6 +6,7 @@ import 'package:flutter/foundation.dart' show ValueListenable;
 import 'package:material_3_expressive/material_3_expressive.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:flutter/services.dart';
+import 'package:motor/motor.dart';
 import 'package:provider/provider.dart';
 
 import '../domain/models/track.dart';
@@ -104,10 +105,14 @@ class _PlayerState extends State<Player> with TickerProviderStateMixin {
   Rect? _coverFlightTo;
   bool _coverFlightActive = false;
 
-  /// 切歌入场：420ms 无过冲（easeOutCubic）驱动文字轻量上移落位，
-  /// 与封面切歌同帧启动。
-  late AnimationController _trackEntranceController;
-  late Animation<double> _trackEntrance;
+  /// 本次封面飞行的终点端：true = 收起（终点迷你），false = 展开（终点完整）。
+  /// 用于按「进度到达终端阈值」结束飞行，不等弹簧容差拖尾。
+  bool _coverFlightToMini = false;
+
+  /// 切歌入场：M3E no-overshoot spatial 弹簧（aospSpatial 380/1.0）驱动文字
+  /// 轻量上移落位 + 同源淡入，与封面切歌同帧启动；连续切歌带速度续跑
+  /// （原实现为 420ms easeOutCubic，无过冲是刻意保留的设计意图）。
+  late SingleMotionController _trackEntrance;
 
   /// 页面可见性（TickerMode）：隐藏时标题入场直接落位，不冻结等回到页面再播。
   bool _tickersEnabled = true;
@@ -115,16 +120,15 @@ class _PlayerState extends State<Player> with TickerProviderStateMixin {
   @override
   void initState() {
     super.initState();
-    _trackEntranceController = AnimationController(
-      duration: const Duration(milliseconds: 420),
+    _trackEntrance = SingleMotionController(
+      motion:
+          SpringMotion(M3EMotion.aospSpatial.toDescription(), snapToEnd: true),
       vsync: this,
-    )..value = 1.0;
-    _trackEntrance = CurvedAnimation(
-      parent: _trackEntranceController,
-      curve: Curves.easeOutCubic,
+      initialValue: 1,
     );
 
     widget.expandAnimation?.addStatusListener(_handleExpandStatus);
+    widget.expandAnimation?.addListener(_handleExpandValue);
 
     _positionListenable = context.read<PlaybackProvider>().position;
     _positionListenable!.addListener(_handlePositionTick);
@@ -172,12 +176,14 @@ class _PlayerState extends State<Player> with TickerProviderStateMixin {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.expandAnimation != widget.expandAnimation) {
       oldWidget.expandAnimation?.removeStatusListener(_handleExpandStatus);
+      oldWidget.expandAnimation?.removeListener(_handleExpandValue);
       widget.expandAnimation?.addStatusListener(_handleExpandStatus);
+      widget.expandAnimation?.addListener(_handleExpandValue);
     }
   }
 
   /// 迷你/完整切换开始：抓取两端封面矩形，交由页内 Stack 飞行；
-  /// 结束：撤下飞行副本，恢复真身封面。
+  /// 视觉落定即撤下副本（[_handleExpandValue]），状态回调仅兜底。
   ///
   /// 侧邻位没有独立入场演出：随页面层/完整层自身淡入以稳态出现。
   void _handleExpandStatus(AnimationStatus status) {
@@ -191,22 +197,35 @@ class _PlayerState extends State<Player> with TickerProviderStateMixin {
           _coverFlightFrom = from;
           _coverFlightTo = to;
           _coverFlightActive = true;
+          // 起点进度决定结束端：从完整态出发 = 收起，从迷你态出发 = 展开。
+          _coverFlightToMini =
+              (widget.expandAnimation?.value ?? 0) >= 0.5;
         });
       case AnimationStatus.completed:
-        if (!_coverFlightActive) return;
-        setState(() {
-          _coverFlightActive = false;
-          _coverFlightFrom = null;
-          _coverFlightTo = null;
-        });
       case AnimationStatus.dismissed:
-        if (!_coverFlightActive) return;
-        setState(() {
-          _coverFlightActive = false;
-          _coverFlightFrom = null;
-          _coverFlightTo = null;
-        });
+        _endCoverFlight();
     }
+  }
+
+  /// 进度到达终端阈值（~0.5%）即结束飞行。
+  ///
+  /// 弹簧的容差拖尾让落定状态晚于视觉落定（~0.35s），不能让真身封面
+  /// 一直被副本顶替（期间点击封面会落空）。
+  void _handleExpandValue() {
+    if (!_coverFlightActive) return;
+    final double value = widget.expandAnimation?.value ?? 0;
+    if (_coverFlightToMini ? value <= 0.005 : value >= 0.995) {
+      _endCoverFlight();
+    }
+  }
+
+  void _endCoverFlight() {
+    if (!_coverFlightActive) return;
+    setState(() {
+      _coverFlightActive = false;
+      _coverFlightFrom = null;
+      _coverFlightTo = null;
+    });
   }
 
   /// 元素相对播放器 Stack 的本地矩形（飞行副本定位用）。
@@ -241,10 +260,11 @@ class _PlayerState extends State<Player> with TickerProviderStateMixin {
   @override
   void dispose() {
     widget.expandAnimation?.removeStatusListener(_handleExpandStatus);
+    widget.expandAnimation?.removeListener(_handleExpandValue);
     _positionListenable?.removeListener(_handlePositionTick);
     _seekSettleTimer?.cancel();
     _seekPreviewMs.dispose();
-    _trackEntranceController.dispose();
+    _trackEntrance.dispose();
     super.dispose();
   }
 
@@ -281,10 +301,10 @@ class _PlayerState extends State<Player> with TickerProviderStateMixin {
     _clearSeekPreviewAfterTrackChange();
     if (duringDrag) return;
     if (_tickersEnabled) {
-      _trackEntranceController.forward(from: 0);
+      _trackEntrance.animateTo(1, from: 0, withVelocity: 0);
     } else {
       // 页面不可见：直接落位，避免回到播放页时标题再弹一遍。
-      _trackEntranceController.value = 1.0;
+      _trackEntrance.value = 1.0;
     }
   }
 
@@ -411,8 +431,9 @@ class _PlayerState extends State<Player> with TickerProviderStateMixin {
         return AnimatedBuilder(
           animation: expand,
           builder: (context, _) {
-            final double raw = expand.value.clamp(0.0, 1.0);
-            final double t = Curves.easeInOutCubic.transform(raw);
+            // motor 弹簧进度即运动曲线（不再叠 easeInOutCubic）；截断 0..1：
+            // 高度不过冲，避免内容区随过冲回流；透明度由同一进度派生。
+            final double t = expand.value.clamp(0.0, 1.0);
             final double height = lerpDouble(miniPlayerHeight, fullHeight, t)!;
             final double miniOpacity =
                 1 - Curves.easeOutCubic.transform((t / 0.45).clamp(0.0, 1.0));
@@ -425,7 +446,7 @@ class _PlayerState extends State<Player> with TickerProviderStateMixin {
             // 展开完成才挂 morph 锚点：迷你态下顶栏⇄播放页飞行应走
             // 「跳过」路径，避免飞到不可见的完整封面锚点。
             final PlayerMorphController? morph =
-                raw >= 1.0 ? widget.morph : null;
+                t >= 1.0 ? widget.morph : null;
             return SizedBox(
               height: height,
               child: ClipRect(

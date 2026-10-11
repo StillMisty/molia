@@ -70,3 +70,11 @@
     跳成圆角卡片（规范值是 hover 12dp，且应有 shape morph）。`TrackRow` 因此改用底层
     `M3ECard` 自绘表面（静止内 4dp/首末外侧 16dp、hover 12dp、press/选中 16dp，弹簧 morph），
     不要改回 `M3EListItem` / `M3EListRowSurface`。
+21. **motor 弹簧的 `isAnimating` 有容差拖尾**：`SingleMotionController` 在视觉落定后
+    仍会 `isAnimating == true` 约 0.3-0.4s（距离/速度双容差），直接拿它当「过渡进行中」
+    会踩两类坑：新切歌动画被「续走」分支饿死（进度≈1 时 animateTo(1) 一步到位）、
+    新手势/新动画被挡在门外。要按**进度阈值**判定（如 `isAnimating && value < 0.99`，
+    见 `player_cover_deck.dart::_coverSwapMidFlight`）；落定状态（completed/dismissed）
+    永远取决于**目标值 vs `initialValue`**，需要用状态回调时要显式传 `initialValue`
+    （如迷你⇄完整展开传 0 再 `value = 1`）。另外 `animateTo` 的 `withVelocity` 单位是
+    **值域/秒**，手势速度要按进度换算（如 `-pxVelocity / range`）。

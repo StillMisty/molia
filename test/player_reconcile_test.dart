@@ -128,8 +128,9 @@ void main() {
       ),
     );
     await tester.pump();
-    // 首帧切歌入场动画（320ms）：等它结束再操作。
-    await tester.pump(const Duration(milliseconds: 600));
+    // 首帧切歌入场动画：motor 弹簧（含容差拖尾约 0.7s）落定后才渲染
+    // 稳态槽位，等它结束再操作。
+    await tester.pump(const Duration(milliseconds: 900));
   }
 
   /// 直接挂载封面堆叠（不经过播放器：带封面的曲目会触发播放器的取色/
@@ -155,8 +156,9 @@ void main() {
       ),
     );
     await tester.pump();
-    // 首帧切歌入场动画（320ms）：等它结束再操作。
-    await tester.pump(const Duration(milliseconds: 600));
+    // 首帧切歌入场动画：motor 弹簧（含容差拖尾约 0.7s）落定后才渲染
+    // 稳态槽位，等它结束再操作。
+    await tester.pump(const Duration(milliseconds: 900));
   }
 
   /// 封面堆叠内所有 Opacity 的（相对堆叠中心的横向偏移, 透明度）。

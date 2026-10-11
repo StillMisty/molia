@@ -11,6 +11,7 @@ import 'package:flutter/foundation.dart'
 import 'package:flutter/services.dart';
 import 'package:material_3_expressive/material_3_expressive.dart';
 import 'package:material_ui/material_ui.dart';
+import 'package:motor/motor.dart';
 import 'package:provider/provider.dart';
 
 import '../l10n/app_localizations.dart';
@@ -163,10 +164,17 @@ class _MyAppState extends State<MyApp>
     duration: const Duration(milliseconds: 320),
   )..value = 1.0;
 
-  /// 共享元素飞行控制器（前 72% 行程移动，后 28% 与目标端交叉淡出）。
-  late final AnimationController _morphAnimation = AnimationController(
+  /// 共享元素飞行控制器。
+  ///
+  /// M3E no-overshoot spatial 弹簧（`aospSpatial` 380/1.0，对齐 Android 共享
+  /// 元素默认 `spring(StiffnessMediumLow=400, noBouncy)`）：副本在弹簧落定帧
+  /// 零速度精确交接，不再用「75% 行程提前硬切」的时长曲线。每次飞行的起点
+  /// 用新抓取的锚点几何（`from: 0`），中途被打断则直接换新飞。
+  late final SingleMotionController _morphAnimation = SingleMotionController(
+    motion:
+        SpringMotion(M3EMotion.aospSpatial.toDescription(), snapToEnd: true),
     vsync: this,
-    duration: const Duration(milliseconds: 560),
+    initialValue: 1,
   );
 
   OverlayEntry? _morphEntry;
@@ -268,7 +276,9 @@ class _MyAppState extends State<MyApp>
       ),
     );
     Overlay.of(context, rootOverlay: true).insert(_morphEntry!);
-    _morphAnimation.forward(from: 0).whenComplete(() {
+    // 弹簧从起点跑满全程；落定帧由 [_onMorphTick] 完成交接（whenComplete
+    // 只是兜底：中途被新飞行接管会被取消，不触发）。
+    _morphAnimation.animateTo(1, from: 0, withVelocity: 0).whenComplete(() {
       if (!mounted || token != _morphToken) return;
       _completeMorph();
     });
@@ -276,6 +286,8 @@ class _MyAppState extends State<MyApp>
 
   /// 飞行到达（[PlayerMorphFlight.flightPortion]）即在同一帧完成交接：
   /// 先亮出目标端真身、再移除飞行副本，两端封面位置完全一致，无尾段闪烁。
+  ///
+  /// `snapToEnd` 保证最后一步 value 精确为 1.0，此处即落定帧（零速度）。
   void _onMorphTick() {
     if (_morphGeometry == null) return;
     if (_morphAnimation.value >= PlayerMorphFlight.flightPortion) {
