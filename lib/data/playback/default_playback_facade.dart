@@ -55,6 +55,10 @@ class DefaultPlaybackFacade implements PlaybackFacade {
   Future<void> playTracks(PlaybackRequest request) => _backend.load(request);
 
   @override
+  Future<void> enqueueTracks(List<Track> tracks) =>
+      _backend.enqueueTracks(tracks);
+
+  @override
   Future<void> playTrackInContext(Track track,
       {PlaybackContext? context}) async {
     final queue = _snapshot.value.queue;

@@ -72,6 +72,13 @@ abstract interface class PlaybackBackend {
         message: '当前播放后端不支持队列跳转',
       );
 
+  /// 可选能力：追加曲目到当前队列末尾（AI 推歌续推等）。不支持时抛
+  /// `SourceFailure(kind: unsupported)`。
+  Future<void> enqueueTracks(List<Track> tracks) => throw const SourceFailure(
+        kind: FailureKind.unsupported,
+        message: '当前播放后端不支持队列追加',
+      );
+
   /// 可选能力：收藏切换。不支持时抛 `SourceFailure(kind: unsupported)`。
   Future<bool> toggleFavorite(Track track) => throw const SourceFailure(
         kind: FailureKind.unsupported,

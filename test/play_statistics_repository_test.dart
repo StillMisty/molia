@@ -457,6 +457,44 @@ void main() {
       expect(detail.playCount, 2);
     });
 
+    test('listPlayedTrackNames 去重并按最近播放排序', () async {
+      await insertEvent(
+        songId: 'a',
+        title: 'Song A',
+        artist: 'Artist A',
+        startedAt: 1000,
+        endedAt: 2000,
+      );
+      await insertEvent(
+        songId: 'a-live',
+        title: 'Song A',
+        artist: 'Artist A',
+        startedAt: 5000,
+        endedAt: 6000,
+      );
+      await insertEvent(
+        songId: 'b',
+        title: 'Song B',
+        artist: 'Artist B',
+        startedAt: 3000,
+        endedAt: 4000,
+      );
+      // 进行中事件不出现。
+      await insertEvent(
+        songId: 'open',
+        title: 'Open',
+        artist: 'X',
+        startedAt: 9000,
+        endedAt: null,
+      );
+
+      final names = await repository.listPlayedTrackNames();
+
+      expect(names.map((entry) => entry.title).toList(), ['Song A', 'Song B']);
+      expect(names.first.artist, 'Artist A');
+      expect(names.first.title, 'Song A');
+    });
+
     test('listEventsForExport 按时间倒序、遵守上限、含 error 原始日志', () async {
       final base = DateTime(2026, 3, 6, 9).millisecondsSinceEpoch;
       for (var i = 0; i < 4; i++) {

@@ -131,6 +131,16 @@ class _FakeService extends LocalPlaybackService {
     notifyListeners();
   }
 
+  final List<List<SourceTrack>> enqueued = [];
+
+  @override
+  Future<void> enqueueTracks(List<SourceTrack> tracks) async {
+    calls.add('enqueueTracks');
+    enqueued.add(List.of(tracks));
+    _queue.addAll(tracks);
+    notifyListeners();
+  }
+
   @override
   Future<void> toggle() async {
     calls.add('toggle');
@@ -199,6 +209,20 @@ void main() {
   tearDown(() {
     backend.dispose();
     service.dispose();
+  });
+
+  test('enqueueTracks 转换后追加队列（快照队列增长，不打断当前）', () async {
+    service.seed([_source('a')], index: 0, playing: true);
+    final before = backend.state.value.queue.length;
+
+    await backend.enqueueTracks([trackFromSourceTrack(_source('b'))]);
+
+    expect(service.calls, contains('enqueueTracks'));
+    expect(service.enqueued.single.single.id, 'fake:b');
+    final snapshot = backend.state.value;
+    expect(snapshot.queue.length, before + 1);
+    expect(snapshot.queue.last.id.id, 'b');
+    expect(snapshot.current?.id.id, 'a', reason: '当前曲目不变');
   });
 
   test('状态映射：current/queue/upcoming/upNext/duration/context/error', () {

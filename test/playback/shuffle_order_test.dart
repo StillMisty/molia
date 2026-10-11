@@ -56,4 +56,50 @@ void main() {
     expect(order.next(0), 0);
     expect(order.peekNext(0), isNull);
   });
+
+  group('extend（队列追加）', () {
+    test('老歌保持原顺序在前，追加下标随机分布在后且恰好一次', () {
+      final order = PlaybackShuffleOrder(random: Random(5))
+        ..reset(3, startIndex: 0);
+      final before = order.remainingAfter(0);
+
+      order.extend(3, 6);
+
+      final rest = order.remainingAfter(0);
+      expect(rest.sublist(0, before.length), before,
+          reason: '当前轮先放完老歌，顺序不被打乱');
+      final appended = rest.sublist(before.length);
+      expect(appended.toSet(), {3, 4, 5});
+      expect(appended, hasLength(3));
+    });
+
+    test('扩展后轮末重洗覆盖全队列（追加曲目可播）', () {
+      final order = PlaybackShuffleOrder(random: Random(9))
+        ..reset(2, startIndex: 0);
+      order.extend(2, 4);
+
+      // 走完当前轮（老歌 + 追加歌），轮末 next 重洗新一轮。
+      final played = <int>{0};
+      var current = 0;
+      for (var i = 0; i < 3; i++) {
+        current = order.next(current);
+        played.add(current);
+      }
+      expect(played, {0, 1, 2, 3}, reason: '一轮覆盖含追加曲目');
+
+      // 新一轮仍覆盖全量。
+      expect(order.next(current), isNotNull);
+    });
+
+    test('空排列 / 长度不匹配保守跳过', () {
+      final order = PlaybackShuffleOrder(random: Random(1));
+      order.extend(0, 3);
+      expect(order.isEmpty, isTrue, reason: '未洗牌时跳过（后续 reset 重建）');
+
+      order.reset(3, startIndex: 0);
+      order.extend(2, 5);
+      expect(order.remainingAfter(0), hasLength(2),
+          reason: '队列长度与排列不匹配时不扩展');
+    });
+  });
 }

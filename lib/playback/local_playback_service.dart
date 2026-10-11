@@ -173,6 +173,21 @@ class LocalPlaybackService extends ChangeNotifier {
     await _playIndex(safeIndex, recordHistory: false);
   }
 
+  /// 追加曲目到队列末尾（AI 推歌续推等）：不打断当前播放。
+  ///
+  /// 顺序模式立即追加到队尾；shuffle 模式下把新下标扩展到洗牌排列尾部
+  /// （当前轮先放完老歌，轮末重洗覆盖全队列）；空队列时仅入队
+  /// （不自动开播，调用方随后用 [playTracks] 起播）。
+  Future<void> enqueueTracks(List<SourceTrack> tracks) async {
+    if (tracks.isEmpty) return;
+    final oldLength = _queue.length;
+    _queue.addAll(tracks);
+    if (_mode == PlayMode.shuffle) {
+      _shuffleOrder.extend(oldLength, _queue.length);
+    }
+    notifyListeners();
+  }
+
   Future<void> playTrackId(String trackId) async {
     final index = _queue.indexWhere((t) => t.id == trackId);
     if (index < 0) return;

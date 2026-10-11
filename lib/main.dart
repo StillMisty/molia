@@ -8,6 +8,7 @@ import 'data/catalog/catalog_service.dart';
 import 'data/catalog/source_registry_impl.dart';
 import 'data/library_repository.dart';
 import 'data/play_statistics_repository.dart';
+import 'providers/ai_dj_provider.dart';
 import 'data/playback/default_playback_facade.dart';
 import 'data/playback/local_playback_backend.dart';
 import 'domain/models/failure.dart';
@@ -39,6 +40,10 @@ import 'services/lyrics_display/lyrics_display_settings.dart';
 import 'services/lyrics_display/media_lyric_output.dart';
 import 'services/notification_service.dart';
 import 'services/play_statistics_service.dart';
+import 'services/ai/ai_recommendation_service.dart';
+import 'services/ai/ai_settings_store.dart';
+import 'services/ai/llm_client.dart';
+import 'services/ai/taste_profile_builder.dart';
 import 'services/settings_service.dart';
 import 'sources/source_manager.dart';
 
@@ -167,6 +172,33 @@ void main() async {
     localDatabaseProvider: localDatabaseProvider,
   );
 
+  // 资料库（收藏/历史/列表）：AI 推歌把「收藏」当喜欢反馈，需要提前创建
+  // 并直接进 Provider 树（不再由树内 create 构造）。
+  final libraryProvider = LibraryProvider(
+    repository: libraryRepository,
+    playbackProvider: playbackProvider,
+  );
+
+  // AI 推歌（Phase 2）：配置（安全存储）+ OpenAI-compatible 客户端 +
+  // 画像/生成服务 + 模式控制器。组合根把播放快照 / 进度接进控制器
+  //（跳过判定与低水位续推都在控制器里）。
+  final aiSettingsStore = AiSettingsStore();
+  final aiRecommendationService = AiRecommendationService(
+    llm: LlmClient(),
+    catalog: catalogService,
+    registry: sourceRegistry,
+    profileBuilder: TasteProfileBuilder(repository: playStatisticsRepository),
+  );
+  final aiDjProvider = AiDjProvider(
+    playbackProvider: playbackProvider,
+    libraryProvider: libraryProvider,
+    recommendationService: aiRecommendationService,
+    settingsStore: aiSettingsStore,
+  );
+  unawaited(aiDjProvider.init());
+  playbackProvider.addListener(aiDjProvider.onPlaybackChanged);
+  playbackProvider.position.addListener(aiDjProvider.onPositionChanged);
+
   // 歌词会话提前创建：歌词显示调度需要主动取词（不依赖播放页打开），
   // 与播放页共享同一个实例（去重/预取行为不变）。
   final lyricsProvider = LyricsProvider();
@@ -271,12 +303,12 @@ void main() async {
           ),
         ),
         ChangeNotifierProvider.value(value: localDatabaseProvider),
-        ChangeNotifierProvider(
-          create: (_) => LibraryProvider(
-            repository: libraryRepository,
-            playbackProvider: playbackProvider,
-          ),
-        ),
+        // 资料库（收藏/历史/列表）：顶层创建（AI 推歌读取收藏作为反馈）。
+        ChangeNotifierProvider.value(value: libraryProvider),
+        // AI 推歌（Phase 2）：模式控制器 + 配置存储 + 生成服务。
+        ChangeNotifierProvider.value(value: aiDjProvider),
+        Provider<AiSettingsStore>.value(value: aiSettingsStore),
+        Provider<AiRecommendationService>.value(value: aiRecommendationService),
         // 听歌统计：仓库（查询）与采集服务（开关）；统计页读取这两个实例。
         Provider<PlayStatisticsRepository>.value(
             value: playStatisticsRepository),

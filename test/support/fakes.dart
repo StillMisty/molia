@@ -23,6 +23,7 @@ class FakePlaybackBackend implements PlaybackBackend {
 
   final List<String> calls = [];
   PlaybackRequest? lastRequest;
+  List<Track>? lastEnqueued;
 
   void emit(BackendSnapshot snapshot) => _notifier.value = snapshot;
 
@@ -48,6 +49,30 @@ class FakePlaybackBackend implements PlaybackBackend {
   Future<void> load(PlaybackRequest request) async {
     calls.add('load');
     lastRequest = request;
+  }
+
+  @override
+  Future<void> enqueueTracks(List<Track> tracks) async {
+    calls.add('enqueueTracks');
+    lastEnqueued = tracks;
+    // 与真实后端一致：追加后队列增长，推一帧状态让订阅方读到。
+    final current = _notifier.value;
+    _notifier.value = BackendSnapshot(
+      current: current.current,
+      queue: [...current.queue, ...tracks],
+      currentIndex: current.currentIndex,
+      next: current.next,
+      upcoming: [...current.upcoming, ...tracks],
+      upNext: [...current.upNext, ...tracks],
+      history: current.history,
+      isPlaying: current.isPlaying,
+      isLoading: current.isLoading,
+      position: current.position,
+      duration: current.duration,
+      mode: current.mode,
+      context: current.context,
+      error: current.error,
+    );
   }
 
   @override

@@ -47,6 +47,11 @@ class FakeBackend implements PlaybackBackend {
   StateListenable<BackendSnapshot> get state => _notifier;
 
   @override
+  Future<void> enqueueTracks(List<Track> tracks) async {
+    calls.add('enqueueTracks');
+  }
+
+  @override
   Future<void> load(PlaybackRequest request) async {
     calls.add('load');
     lastRequest = request;

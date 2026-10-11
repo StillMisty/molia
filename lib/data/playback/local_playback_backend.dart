@@ -107,6 +107,15 @@ class LocalPlaybackBackend implements PlaybackBackend {
   }
 
   @override
+  Future<void> enqueueTracks(List<Track> tracks) async {
+    if (tracks.isEmpty) return;
+    final legacyTracks =
+        [for (final track in tracks) sourceTrackFromTrack(track)];
+    await _service.enqueueTracks(legacyTracks);
+    _emit();
+  }
+
+  @override
   Future<void> play() async {
     if (_service.hasTrack && !_service.isPlaying) {
       await _service.toggle();

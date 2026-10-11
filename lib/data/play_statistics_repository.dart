@@ -411,6 +411,31 @@ class PlayStatisticsRepository {
     return [for (final row in rows) _eventFromRow(row)];
   }
 
+  /// 已听过的曲目名（title + artist，按最近播放排序去重）。
+  ///
+  /// AI 推歌的排除清单用：不按 sourceKey 去重（同一首在不同平台都一样
+  /// 不该再推），由调用方做规范化去重与截断。
+  Future<List<({String title, String artist})>> listPlayedTrackNames({
+    int limit = 1000,
+  }) async {
+    final db = await _db;
+    final rows = await db.rawQuery('''
+      SELECT title, artist, MAX(startedAt) AS lastAt
+      FROM play_events
+      WHERE endedAt IS NOT NULL
+      GROUP BY title, artist
+      ORDER BY lastAt DESC
+      LIMIT ?
+    ''', [limit]);
+    return [
+      for (final row in rows)
+        (
+          title: row['title'] as String? ?? '',
+          artist: row['artist'] as String? ?? '',
+        ),
+    ];
+  }
+
   /// 拆分 artist 串（`A, B` / `A/B` / `A&B` 等各计一位歌手）。
   ///
   /// 不做 feat./别名归一（留给 Phase 2，原始串完整保留在事件行里）。
