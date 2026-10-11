@@ -2815,6 +2815,234 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Listened {duration}'**
   String statsEventListened(String duration);
+
+  /// No description provided for @aiDjTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'AI DJ'**
+  String get aiDjTitle;
+
+  /// No description provided for @aiDjSettingsSubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'AI-powered radio with your own API key (off by default)'**
+  String get aiDjSettingsSubtitle;
+
+  /// No description provided for @aiDjNotConfigured.
+  ///
+  /// In en, this message translates to:
+  /// **'AI service is not configured yet'**
+  String get aiDjNotConfigured;
+
+  /// No description provided for @aiDjRequestFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'AI request failed. Try again later.'**
+  String get aiDjRequestFailed;
+
+  /// No description provided for @aiDjUnauthorized.
+  ///
+  /// In en, this message translates to:
+  /// **'Invalid API key or permission denied'**
+  String get aiDjUnauthorized;
+
+  /// No description provided for @aiDjRateLimited.
+  ///
+  /// In en, this message translates to:
+  /// **'Rate limited. Try again later.'**
+  String get aiDjRateLimited;
+
+  /// No description provided for @aiDjBadResponse.
+  ///
+  /// In en, this message translates to:
+  /// **'The AI response could not be parsed'**
+  String get aiDjBadResponse;
+
+  /// No description provided for @aiDjNothingResolved.
+  ///
+  /// In en, this message translates to:
+  /// **'No playable tracks in this batch'**
+  String get aiDjNothingResolved;
+
+  /// No description provided for @aiDjStatusOff.
+  ///
+  /// In en, this message translates to:
+  /// **'Off'**
+  String get aiDjStatusOff;
+
+  /// No description provided for @aiDjStatusPreparing.
+  ///
+  /// In en, this message translates to:
+  /// **'Preparing…'**
+  String get aiDjStatusPreparing;
+
+  /// No description provided for @aiDjStatusPlaying.
+  ///
+  /// In en, this message translates to:
+  /// **'Live'**
+  String get aiDjStatusPlaying;
+
+  /// No description provided for @aiDjStatusError.
+  ///
+  /// In en, this message translates to:
+  /// **'Paused (queue kept)'**
+  String get aiDjStatusError;
+
+  /// No description provided for @aiDjToggle.
+  ///
+  /// In en, this message translates to:
+  /// **'AI DJ mode'**
+  String get aiDjToggle;
+
+  /// No description provided for @aiDjToggleSubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Keeps AI-picked songs coming and extends the queue automatically'**
+  String get aiDjToggleSubtitle;
+
+  /// No description provided for @aiDjFeedMore.
+  ///
+  /// In en, this message translates to:
+  /// **'More'**
+  String get aiDjFeedMore;
+
+  /// No description provided for @aiDjStopKeepQueue.
+  ///
+  /// In en, this message translates to:
+  /// **'Keep playing'**
+  String get aiDjStopKeepQueue;
+
+  /// No description provided for @aiDjStopClearQueue.
+  ///
+  /// In en, this message translates to:
+  /// **'Clear queue & stop'**
+  String get aiDjStopClearQueue;
+
+  /// No description provided for @aiDjStopDialogTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Exit AI DJ?'**
+  String get aiDjStopDialogTitle;
+
+  /// No description provided for @aiDjConsentTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Before you start'**
+  String get aiDjConsentTitle;
+
+  /// No description provided for @aiDjConsentBody.
+  ///
+  /// In en, this message translates to:
+  /// **'When enabled, your listening profile (aggregated stats, the latest 200 play events, and the list of already-played tracks) will be sent to the AI service you configure in order to generate recommendations. Data goes straight to that service with no relay through this app, and no bundled API key is provided. Turning the mode off stops continuation; clearing the config disconnects it.'**
+  String get aiDjConsentBody;
+
+  /// No description provided for @aiDjAgree.
+  ///
+  /// In en, this message translates to:
+  /// **'Agree & start'**
+  String get aiDjAgree;
+
+  /// No description provided for @aiDjConfigTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'AI service'**
+  String get aiDjConfigTitle;
+
+  /// No description provided for @aiDjBaseUrl.
+  ///
+  /// In en, this message translates to:
+  /// **'Base URL'**
+  String get aiDjBaseUrl;
+
+  /// No description provided for @aiDjApiKey.
+  ///
+  /// In en, this message translates to:
+  /// **'API key'**
+  String get aiDjApiKey;
+
+  /// No description provided for @aiDjModel.
+  ///
+  /// In en, this message translates to:
+  /// **'Model'**
+  String get aiDjModel;
+
+  /// No description provided for @aiDjPresetCustom.
+  ///
+  /// In en, this message translates to:
+  /// **'Custom'**
+  String get aiDjPresetCustom;
+
+  /// No description provided for @aiDjTestConnection.
+  ///
+  /// In en, this message translates to:
+  /// **'Test connection'**
+  String get aiDjTestConnection;
+
+  /// No description provided for @aiDjTestSucceeded.
+  ///
+  /// In en, this message translates to:
+  /// **'Connected'**
+  String get aiDjTestSucceeded;
+
+  /// No description provided for @aiDjSaveConfig.
+  ///
+  /// In en, this message translates to:
+  /// **'Save'**
+  String get aiDjSaveConfig;
+
+  /// No description provided for @aiDjClearConfig.
+  ///
+  /// In en, this message translates to:
+  /// **'Clear'**
+  String get aiDjClearConfig;
+
+  /// No description provided for @aiDjConfigSaved.
+  ///
+  /// In en, this message translates to:
+  /// **'Saved'**
+  String get aiDjConfigSaved;
+
+  /// No description provided for @aiDjQueued.
+  ///
+  /// In en, this message translates to:
+  /// **'{count} queued this session'**
+  String aiDjQueued(int count);
+
+  /// No description provided for @aiDjSkippedCount.
+  ///
+  /// In en, this message translates to:
+  /// **'{count} skipped'**
+  String aiDjSkippedCount(int count);
+
+  /// No description provided for @aiDjLikedCount.
+  ///
+  /// In en, this message translates to:
+  /// **'{count} liked'**
+  String aiDjLikedCount(int count);
+
+  /// No description provided for @aiDjUnresolved.
+  ///
+  /// In en, this message translates to:
+  /// **'{count} not found on your sources'**
+  String aiDjUnresolved(int count);
+
+  /// No description provided for @aiDjRetry.
+  ///
+  /// In en, this message translates to:
+  /// **'Retry'**
+  String get aiDjRetry;
+
+  /// No description provided for @aiDjOpenSettings.
+  ///
+  /// In en, this message translates to:
+  /// **'Set up AI service'**
+  String get aiDjOpenSettings;
+
+  /// No description provided for @aiDjBadgeTooltip.
+  ///
+  /// In en, this message translates to:
+  /// **'AI DJ is on'**
+  String get aiDjBadgeTooltip;
 }
 
 class _AppLocalizationsDelegate

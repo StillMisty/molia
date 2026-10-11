@@ -84,6 +84,10 @@ class AiDjProvider extends ChangeNotifier {
   int _queuedCount = 0;
   int _failureCount = 0;
 
+  /// 模式状态的可监听出口（播放页徽标等轻量订阅者用；与 [status] 同步）。
+  final ValueNotifier<AiDjStatus> statusListenable =
+      ValueNotifier<AiDjStatus>(AiDjStatus.off);
+
   final List<String> _skippedLabels = [];
   final List<String> _likedLabels = [];
   final Map<String, _SessionTrack> _sessionTracks = {};
@@ -98,6 +102,11 @@ class AiDjProvider extends ChangeNotifier {
   bool get consentGranted => _consentGranted;
 
   AiDjStatus get status => _status;
+
+  void _setStatus(AiDjStatus value) {
+    _status = value;
+    statusListenable.value = value;
+  }
   bool get isActive =>
       _status == AiDjStatus.preparing || _status == AiDjStatus.playing;
   bool get isBusy => _busy;
@@ -157,12 +166,12 @@ class AiDjProvider extends ChangeNotifier {
         message: '未配置 AI 服务',
         l10nKey: 'aiDjNotConfigured',
       );
-      _status = AiDjStatus.error;
+      _setStatus(AiDjStatus.error);
       notifyListeners();
       return;
     }
 
-    _status = AiDjStatus.preparing;
+    _setStatus(AiDjStatus.preparing);
     _lastError = null;
     _busy = true;
     notifyListeners();
@@ -183,11 +192,11 @@ class AiDjProvider extends ChangeNotifier {
         contextName: kAiDjContextName,
       );
       _registerSessionTracks(batch.items);
-      _status = AiDjStatus.playing;
+      _setStatus(AiDjStatus.playing);
       _failureCount = 0;
     } catch (e) {
       _lastError = _failureOf(e);
-      _status = AiDjStatus.error;
+      _setStatus(AiDjStatus.error);
       _logger.e('AI 推歌：首批生成失败', error: e);
     } finally {
       _busy = false;
@@ -200,7 +209,7 @@ class AiDjProvider extends ChangeNotifier {
     if (_busy) return;
     if (_status != AiDjStatus.playing && _status != AiDjStatus.error) return;
     _busy = true;
-    if (_status == AiDjStatus.error) _status = AiDjStatus.playing;
+    if (_status == AiDjStatus.error) _setStatus(AiDjStatus.playing);
     notifyListeners();
     try {
       final batch = await _generate();
@@ -226,7 +235,7 @@ class AiDjProvider extends ChangeNotifier {
       _logger.e('AI 推歌：续推失败（第 $_failureCount 次）', error: e);
       if (_failureCount >= maxConsecutiveFailures) {
         // 自动停止续推（保留当前队列继续播放）。
-        _status = AiDjStatus.off;
+        _setStatus(AiDjStatus.off);
         _trackedUri = null;
       }
     } finally {
@@ -238,7 +247,7 @@ class AiDjProvider extends ChangeNotifier {
   /// 退出模式。默认保留当前队列继续播放（清空由调用方显式传 false）。
   Future<void> stop({bool keepQueue = true}) async {
     if (_status == AiDjStatus.off) return;
-    _status = AiDjStatus.off;
+    _setStatus(AiDjStatus.off);
     _busy = false;
     _failureCount = 0;
     _lastError = null;
@@ -259,7 +268,7 @@ class AiDjProvider extends ChangeNotifier {
     final snapshot = _playbackProvider.snapshot;
     if (snapshot.current == null) {
       // 播放被外部停止：模式随之结束（不报错）。
-      _status = AiDjStatus.off;
+      _setStatus(AiDjStatus.off);
       _trackedUri = null;
       notifyListeners();
       return;

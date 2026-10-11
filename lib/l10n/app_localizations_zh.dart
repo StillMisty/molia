@@ -1455,4 +1455,127 @@ class AppLocalizationsZh extends AppLocalizations {
   String statsEventListened(String duration) {
     return '听了 $duration';
   }
+
+  @override
+  String get aiDjTitle => 'AI 推歌';
+
+  @override
+  String get aiDjSettingsSubtitle => '自备 Key 的 AI 推荐电台（默认关闭）';
+
+  @override
+  String get aiDjNotConfigured => '尚未配置 AI 服务';
+
+  @override
+  String get aiDjRequestFailed => 'AI 请求失败，请稍后重试';
+
+  @override
+  String get aiDjUnauthorized => 'API Key 无效或没有权限';
+
+  @override
+  String get aiDjRateLimited => 'AI 服务限流，请稍后重试';
+
+  @override
+  String get aiDjBadResponse => 'AI 返回内容无法解析';
+
+  @override
+  String get aiDjNothingResolved => '本批没有可播放的曲目';
+
+  @override
+  String get aiDjStatusOff => '未开启';
+
+  @override
+  String get aiDjStatusPreparing => '生成中…';
+
+  @override
+  String get aiDjStatusPlaying => '推歌中';
+
+  @override
+  String get aiDjStatusError => '已暂停（保留当前队列）';
+
+  @override
+  String get aiDjToggle => 'AI 推歌模式';
+
+  @override
+  String get aiDjToggleSubtitle => '开启后 AI 持续选歌入队，播完自动续推';
+
+  @override
+  String get aiDjFeedMore => '再来一批';
+
+  @override
+  String get aiDjStopKeepQueue => '保留队列继续播';
+
+  @override
+  String get aiDjStopClearQueue => '清空队列并停止';
+
+  @override
+  String get aiDjStopDialogTitle => '退出 AI 推歌？';
+
+  @override
+  String get aiDjConsentTitle => '开始前确认';
+
+  @override
+  String get aiDjConsentBody =>
+      '开启后会把你的听歌画像（聚合统计、最近 200 条播放明细、已听曲目清单）发送给你配置的 AI 服务用于生成推荐；数据直达该服务、不经过本应用中转，应用不含内置 Key。关闭模式即停止续推，清除配置即断开连接。';
+
+  @override
+  String get aiDjAgree => '同意并开启';
+
+  @override
+  String get aiDjConfigTitle => 'AI 服务配置';
+
+  @override
+  String get aiDjBaseUrl => 'API 地址';
+
+  @override
+  String get aiDjApiKey => 'API Key';
+
+  @override
+  String get aiDjModel => '模型';
+
+  @override
+  String get aiDjPresetCustom => '自定义';
+
+  @override
+  String get aiDjTestConnection => '测试连接';
+
+  @override
+  String get aiDjTestSucceeded => '连接成功';
+
+  @override
+  String get aiDjSaveConfig => '保存配置';
+
+  @override
+  String get aiDjClearConfig => '清除配置';
+
+  @override
+  String get aiDjConfigSaved => '已保存';
+
+  @override
+  String aiDjQueued(int count) {
+    return '本会话已入队 $count 首';
+  }
+
+  @override
+  String aiDjSkippedCount(int count) {
+    return '跳过 $count';
+  }
+
+  @override
+  String aiDjLikedCount(int count) {
+    return '收藏 $count';
+  }
+
+  @override
+  String aiDjUnresolved(int count) {
+    return '$count 首未找到可播放版本';
+  }
+
+  @override
+  String get aiDjRetry => '重试';
+
+  @override
+  String get aiDjOpenSettings => '配置 AI 服务';
+
+  @override
+  String get aiDjBadgeTooltip => 'AI 推歌进行中';
 }
