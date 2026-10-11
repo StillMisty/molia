@@ -1184,7 +1184,7 @@ class _FavoritesPageState extends State<FavoritesPage> {
       if (view.isHistory)
         M3EIconButton(
           variant: M3EIconButtonVariant.standard,
-          icon: const Icon(Icons.delete_outline_rounded),
+          icon: const Icon(Icons.delete_rounded),
           tooltip: l10n.historyDeleteEntry,
           onPressed: () => unawaited(_deleteSelectedHistory(view)),
         ),
@@ -1383,7 +1383,15 @@ class _FavoritesPageState extends State<FavoritesPage> {
     return '${duration.inMinutes}:$seconds';
   }
 
+  /// 侧滑动作图标：长按/悬停弹出动作名（tooltip 同时承担无障碍语义；
+  /// 纯图标在窄胶囊里不容易自解释）。
+  Widget _swipeActionIcon(IconData icon, String label) =>
+      Tooltip(message: label, child: Icon(icon));
+
   /// 曲目左滑操作：加入列表 + 移除类（按合集取语义）。
+  ///
+  /// 中性动作走 M3E 默认 tonal 胶囊；移除类用 filled + error 配色
+  /// （对齐 M3E 列表示例的删除动作），图标直接表达「从本列表移除」。
   List<M3EListSwipeAction> _trackSwipeActions(
     BuildContext context,
     AppLocalizations l10n,
@@ -1393,9 +1401,10 @@ class _FavoritesPageState extends State<FavoritesPage> {
     final scheme = Theme.of(context).colorScheme;
     return [
       M3EListSwipeAction(
-        icon: const Icon(Icons.playlist_add_rounded),
-        backgroundColor: scheme.secondaryContainer,
-        foregroundColor: scheme.onSecondaryContainer,
+        icon: _swipeActionIcon(
+          Icons.playlist_add_rounded,
+          l10n.addToPlaylist,
+        ),
         onPressed: () => unawaited(
           _copyToPlaylist(
             tracks: [track],
@@ -1406,9 +1415,13 @@ class _FavoritesPageState extends State<FavoritesPage> {
       ),
       if (view.isCustom && view.playlistId != null)
         M3EListSwipeAction(
-          icon: const Icon(Icons.playlist_remove_rounded),
-          backgroundColor: scheme.errorContainer,
-          foregroundColor: scheme.onErrorContainer,
+          icon: _swipeActionIcon(
+            Icons.playlist_remove_rounded,
+            l10n.playlistRemoveTrack,
+          ),
+          isPrimary: true,
+          backgroundColor: scheme.error,
+          foregroundColor: scheme.onError,
           onPressed: () => unawaited(
             context.read<LibraryProvider>().removeTracksFromPlaylist(
               view.playlistId!,
@@ -1418,9 +1431,13 @@ class _FavoritesPageState extends State<FavoritesPage> {
         )
       else if (view.isFavorites)
         M3EListSwipeAction(
-          icon: const Icon(Icons.heart_broken_rounded),
-          backgroundColor: scheme.errorContainer,
-          foregroundColor: scheme.onErrorContainer,
+          icon: _swipeActionIcon(
+            Icons.delete_rounded,
+            l10n.favoriteRemove,
+          ),
+          isPrimary: true,
+          backgroundColor: scheme.error,
+          foregroundColor: scheme.onError,
           onPressed: () => unawaited(
             context.read<LibraryProvider>().removeTracksFromFavorites([
               (sourceKey: track.sourceKey, songId: track.songId),
@@ -1491,9 +1508,10 @@ class _FavoritesPageState extends State<FavoritesPage> {
               : SwipeRevealRow(
                   actions: [
                     M3EListSwipeAction(
-                      icon: const Icon(Icons.playlist_add_rounded),
-                      backgroundColor: scheme.secondaryContainer,
-                      foregroundColor: scheme.onSecondaryContainer,
+                      icon: _swipeActionIcon(
+                        Icons.playlist_add_rounded,
+                        l10n.addToPlaylist,
+                      ),
                       onPressed: () => unawaited(
                         _copyToPlaylist(
                           entries: [entry],
@@ -1502,9 +1520,13 @@ class _FavoritesPageState extends State<FavoritesPage> {
                       ),
                     ),
                     M3EListSwipeAction(
-                      icon: const Icon(Icons.delete_outline_rounded),
-                      backgroundColor: scheme.errorContainer,
-                      foregroundColor: scheme.onErrorContainer,
+                      icon: _swipeActionIcon(
+                        Icons.delete_rounded,
+                        l10n.historyDeleteEntry,
+                      ),
+                      isPrimary: true,
+                      backgroundColor: scheme.error,
+                      foregroundColor: scheme.onError,
                       onPressed: () => unawaited(
                         provider.deleteHistoryEntry(entry),
                       ),

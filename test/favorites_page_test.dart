@@ -14,6 +14,7 @@ import 'package:molia/providers/library_provider.dart';
 import 'package:molia/providers/playback_provider.dart';
 import 'package:molia/utils/responsive.dart';
 import 'package:molia/widgets/app_search_bar.dart';
+import 'package:molia/widgets/swipe_reveal_row.dart';
 import 'package:molia/widgets/track_row.dart';
 import 'package:material_3_expressive/components/bottom_sheets/components/m3e_bottom_sheet_surface.dart';
 import 'package:material_3_expressive/material_3_expressive.dart';
@@ -526,6 +527,37 @@ void main() {
     expect(find.text('已加入「love」'), findsOneWidget);
   });
 
+  testWidgets('左滑动作：M3E 胶囊按钮（tonal + filled）与动作名 tooltip', (tester) async {
+    await seedFavorites(tester);
+    await pumpFavorites(tester);
+
+    await tester.drag(find.text('Song B'), const Offset(-260, 0));
+    await tester.pumpAndSettle();
+
+    final buttons = tester
+        .widgetList<M3EIconButton>(
+          find.descendant(
+            of: find.byType(SwipeRevealRow),
+            matching: find.byType(M3EIconButton),
+          ),
+        )
+        .toList();
+    expect(buttons, hasLength(2));
+    // 中性动作 tonal、移除类 filled（错误色胶囊）。
+    expect(buttons.first.variant, M3EIconButtonVariant.tonal);
+    expect(buttons.last.variant, M3EIconButtonVariant.filled);
+    // 纯图标语义有限：tooltip 承担动作名。
+    expect(find.byTooltip('加入列表'), findsOneWidget);
+    expect(find.byTooltip('取消收藏'), findsOneWidget);
+
+    // 完全露出后：行位移 = Σ 动作宽 + 间距；胶囊均分内宽（行高 − 8 高）。
+    final sizes = [
+      for (final button in buttons) tester.getSize(find.byWidget(button)),
+    ];
+    expect(sizes.first.width, 50);
+    expect(sizes.first.height, 64);
+  });
+
   testWidgets('在自建列表收藏后不会跳回我的收藏（默认选择固定）', (tester) async {
     await importLove(tester);
     await pumpFavorites(tester);
@@ -715,7 +747,7 @@ void main() {
 
     await tester.drag(find.text('Song 2'), const Offset(-260, 0));
     await tester.pumpAndSettle();
-    await tester.tap(find.byIcon(Icons.delete_outline_rounded));
+    await tester.tap(find.byIcon(Icons.delete_rounded));
     await tester.pumpAndSettle();
     await flushLibraryReloads(tester);
 
@@ -735,7 +767,7 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('2'), findsOneWidget);
 
-    await tester.tap(find.byIcon(Icons.delete_outline_rounded));
+    await tester.tap(find.byIcon(Icons.delete_rounded));
     await tester.pumpAndSettle();
     await flushLibraryReloads(tester);
 
