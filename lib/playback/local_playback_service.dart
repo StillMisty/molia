@@ -9,6 +9,7 @@ import '../models/play_mode.dart';
 import '../services/cache_service.dart';
 import '../sources/source_track.dart';
 import 'audio_cache_source.dart';
+import 'next_track_preloader.dart';
 import 'playback_order.dart';
 import 'shuffle_order.dart';
 
@@ -34,6 +35,9 @@ class LocalPlaybackService extends ChangeNotifier {
 
   /// 统一缓存门面（默认全局单例；测试可注入临时目录实现）。
   final CacheService? _cacheService;
+
+  /// 下一首预载器（组合根注入；null = 关闭预载）。
+  final NextTrackPreloader? _nextTrackPreloader;
 
   /// 已知平台后端不支持 StreamAudioSource（如桌面 media_kit）：
   /// 本会话内不再尝试边播边缓存，直接流播。
@@ -69,9 +73,11 @@ class LocalPlaybackService extends ChangeNotifier {
     CacheService? cacheService,
     String Function()? preferredQuality,
     math.Random? random,
+    NextTrackPreloader? nextTrackPreloader,
   })  : _resolver = resolver,
         _cacheService = cacheService ?? CacheService.instance,
         _preferredQuality = preferredQuality,
+        _nextTrackPreloader = nextTrackPreloader,
         _shuffleOrder = PlaybackShuffleOrder(random: random) {
     _playerStateSubscription = _player.playerStateStream.listen(_onPlayerState);
     _positionSubscription = _player.positionStream.listen((position) {
@@ -201,6 +207,8 @@ class LocalPlaybackService extends ChangeNotifier {
 
   Future<void> _playIndex(int index, {bool recordHistory = true}) async {
     if (index < 0 || index >= _queue.length) return;
+    // 预取与边播边缓存不能双写同一缓存文件：起播前取消未完成的预取。
+    _nextTrackPreloader?.cancelPending();
     // 切到不同曲目时把「离开的当前曲目」压入播放顺序；显式回退不重复压栈。
     if (recordHistory && _currentTrack != null && _currentIndex != index) {
       _order.record(_currentIndex);
@@ -236,6 +244,9 @@ class LocalPlaybackService extends ChangeNotifier {
           notifyListeners();
         }
       }));
+      // 当前曲目已起播：后台预载下一首（直链 + 音频缓存；歌词/封面由
+      // 各自链路从播放快照统一触发）。此刻不会与当前取链抢 LX 引擎。
+      unawaited(_nextTrackPreloader?.preload(nextSourceTrack));
     } catch (e) {
       if (requestId != _playRequestId) return;
       _lastError = e.toString();
@@ -388,6 +399,7 @@ class LocalPlaybackService extends ChangeNotifier {
   /// 停止本地播放并清空状态。
   Future<void> stop({bool clear = true}) async {
     _playRequestId++;
+    _nextTrackPreloader?.cancelPending();
     try {
       await _player.stop();
     } catch (_) {}

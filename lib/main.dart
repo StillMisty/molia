@@ -16,9 +16,11 @@ import 'domain/ports/source_registry.dart';
 import 'domain/ports/ui_messenger.dart';
 import 'l10n/app_localizations.dart';
 import 'data/database_factory_init.dart';
+import 'playback/audio_predownloader.dart';
 import 'playback/desktop_audio_init.dart';
 import 'playback/local_audio_handler.dart';
 import 'playback/local_playback_service.dart';
+import 'playback/next_track_preloader.dart';
 import 'providers/library_provider.dart';
 import 'providers/local_database_provider.dart';
 import 'providers/lyrics_display_provider.dart';
@@ -121,6 +123,18 @@ void main() async {
         dataSaver.effectiveQuality(sourceManager.preferredQuality),
     resolver: (track, {String? quality}) =>
         playbackBackend.resolveLegacyUrl(track, quality: quality),
+    // 下一首预载：起播后预热直链（命中取链缓存）+ 音频字节预取到缓存；
+    // 省流实际生效（移动数据 + 已开启）时只预热直链，不预下载。
+    nextTrackPreloader: NextTrackPreloader(
+      resolver: (track, {String? quality}) =>
+          playbackBackend.resolveLegacyUrl(track, quality: quality),
+      preferredQuality: () =>
+          dataSaver.effectiveQuality(sourceManager.preferredQuality),
+      predownloader: CacheAudioPredownloader(
+        cacheService: CacheService.instance,
+        allowed: () => !dataSaver.active,
+      ),
+    ),
   );
   playbackBackend = LocalPlaybackBackend(
     service: localPlayback,
@@ -258,6 +272,27 @@ void main() async {
     () => lyricsDisplay.syncLyrics(lyricsProvider.state),
   );
   lyricsDisplay.syncPlayback(playbackProvider.snapshot);
+
+  // 下一首歌词预载：统一挂在这里，不依赖歌词组件是否挂载/展开；
+  // 去重与缓存写入由 LyricsProvider.preload 负责。
+  String? preloadedNextLyricsId;
+  void syncNextTrackLyricsPreload() {
+    final snapshot = playbackProvider.snapshot;
+    final next = snapshot.next ??
+        (snapshot.upNext.isNotEmpty ? snapshot.upNext.first : null);
+    final id = next?.id.uri;
+    if (next == null ||
+        id == null ||
+        id.isEmpty ||
+        id == preloadedNextLyricsId) {
+      return;
+    }
+    preloadedNextLyricsId = id;
+    unawaited(lyricsProvider.preload(next));
+  }
+
+  playbackProvider.addListener(syncNextTrackLyricsPreload);
+  syncNextTrackLyricsPreload();
 
   // 封面取色接线：任何页面/后台切歌都经同一链路（稳态延迟 + 过期丢弃）。
   // 无封面 → 清空 seed，主题回退基础配色；取色失败保持现色。

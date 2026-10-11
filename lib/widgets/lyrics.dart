@@ -206,8 +206,7 @@ class _LyricsWidgetState extends State<LyricsWidget>
         _manualQuickActionsVisible = false;
         _isLyricsLoading = false;
       });
-      // 始终预加载下一首歌词
-      unawaited(_preloadNextTrackResources());
+      // 下一首歌词预载已统一上移到组合根（不依赖本组件是否挂载）。
     } else {
       // 取词失败 / 空歌词：保持空歌词列表
       _quickActionsHideTimer?.cancel();
@@ -244,31 +243,6 @@ class _LyricsWidgetState extends State<LyricsWidget>
       return names.join(', ');
     }
     return 'Unknown Artist';
-  }
-
-  /// 预加载下一首歌曲的歌词（会话模块负责去重与缓存写入）。
-  Future<void> _preloadNextTrackResources() async {
-    if (!mounted) {
-      return;
-    }
-
-    final provider = Provider.of<PlaybackProvider>(context, listen: false);
-    final lyricsProvider =
-        Provider.of<LyricsProvider>(context, listen: false);
-    final snapshot = provider.snapshot;
-    final nextTrack = snapshot.next ??
-        (snapshot.upNext.isNotEmpty ? snapshot.upNext.first : null);
-
-    if (nextTrack == null) {
-      return;
-    }
-
-    final trackId = nextTrack.id.uri;
-    if (trackId.isEmpty || trackId == _lastTrackId) {
-      return;
-    }
-
-    await lyricsProvider.preload(nextTrack);
   }
 
   bool get _requiresManualQuickActions =>
