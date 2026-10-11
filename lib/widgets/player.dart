@@ -14,12 +14,14 @@ import '../l10n/app_localizations.dart';
 import '../managers/artwork_cache.dart';
 import '../providers/library_provider.dart';
 import '../providers/playback_provider.dart';
+import '../providers/source_swap_provider.dart';
 import '../models/play_mode.dart';
 import '../services/data_saver_service.dart';
 import '../utils/responsive.dart';
 import 'app_network_image.dart';
 import 'player_cover_deck.dart';
 import 'player_morph.dart';
+import 'source_swap_sheet.dart';
 
 /// 迷你播放条高度（收起态）：展开/收起动画的迷你端基准，播放页共用。
 const double miniPlayerHeight = 72;
@@ -583,6 +585,8 @@ class _PlayerState extends State<Player> with TickerProviderStateMixin {
         children: [
           _buildFavoriteButton(),
           const SizedBox(width: 4),
+          const _SwapSourceButton(),
+          const SizedBox(width: 4),
           Expanded(child: _buildSeekSlider(context, playbackProvider)),
           const SizedBox(width: 4),
           _buildModeButton(context, mode, () {
@@ -1098,6 +1102,36 @@ class _FavoriteButton extends StatelessWidget {
       onPressed: () async {
         HapticFeedback.lightImpact();
         await library.toggleFavoriteTrack(track);
+      },
+    );
+  }
+}
+
+/// 换源按钮（播放页）：对当前曲目打开换源弹层（仅队列替换）。
+///
+/// 与收藏按钮同布局约束（独立组件、`context.select` 在自身 build 内）；
+/// 未注入 [SourceSwapProvider]（如最小化挂载播放器的测试）时整体隐藏。
+class _SwapSourceButton extends StatelessWidget {
+  const _SwapSourceButton();
+
+  @override
+  Widget build(BuildContext context) {
+    final hasProvider = context.watch<SourceSwapProvider?>() != null;
+    final track = context.select<PlaybackProvider, Track?>(
+        (provider) => provider.snapshot.current);
+    if (!hasProvider || track == null) return const SizedBox.shrink();
+
+    final l10n = AppLocalizations.of(context) ??
+        lookupAppLocalizations(const Locale('zh'));
+    return M3EIconButton(
+      variant: M3EIconButtonVariant.standard,
+      size: M3EIconButtonSize.sm,
+      visualSize: const Size(44, 44),
+      icon: const Icon(Icons.swap_horiz_rounded),
+      tooltip: l10n.sourceSwap,
+      onPressed: () {
+        HapticFeedback.lightImpact();
+        unawaited(showSourceSwapSheet(context, seed: track));
       },
     );
   }

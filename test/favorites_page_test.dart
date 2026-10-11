@@ -542,20 +542,24 @@ void main() {
           ),
         )
         .toList();
-    expect(buttons, hasLength(2));
-    // 中性动作 tonal、移除类 filled（错误色胶囊）。
-    expect(buttons.first.variant, M3EIconButtonVariant.tonal);
+    expect(buttons, hasLength(3));
+    // 中性动作 tonal（加入列表 / 换源）、移除类 filled（错误色胶囊）。
+    expect(buttons[0].variant, M3EIconButtonVariant.tonal);
+    expect(buttons[1].variant, M3EIconButtonVariant.tonal);
     expect(buttons.last.variant, M3EIconButtonVariant.filled);
     // 纯图标语义有限：tooltip 承担动作名。
     expect(find.byTooltip('加入列表'), findsOneWidget);
+    expect(find.byTooltip('换源'), findsOneWidget);
     expect(find.byTooltip('取消收藏'), findsOneWidget);
 
-    // 完全露出后：行位移 = Σ 动作宽 + 间距；胶囊均分内宽（行高 − 8 高）。
+    // 完全露出后：行位移 = Σ 动作宽 + 间距；胶囊均分内宽（行高 − 8 高），三段等宽。
     final sizes = [
       for (final button in buttons) tester.getSize(find.byWidget(button)),
     ];
-    expect(sizes.first.width, 50);
     expect(sizes.first.height, 64);
+    expect(sizes.last.height, 64);
+    expect(sizes[1].width, moreOrLessEquals(sizes.first.width, epsilon: 0.01));
+    expect(sizes[2].width, moreOrLessEquals(sizes.first.width, epsilon: 0.01));
   });
 
   testWidgets('在自建列表收藏后不会跳回我的收藏（默认选择固定）', (tester) async {

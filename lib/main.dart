@@ -42,6 +42,7 @@ import 'providers/nav_provider.dart';
 import 'providers/playback_provider.dart';
 import 'providers/play_statistics_provider.dart';
 import 'providers/search_provider.dart';
+import 'providers/source_swap_provider.dart';
 import 'providers/discover_provider.dart';
 import 'providers/sources_provider.dart';
 import 'providers/sync_provider.dart';
@@ -66,6 +67,8 @@ import 'services/ai/ai_settings_store.dart';
 import 'services/ai/llm_client.dart';
 import 'services/ai/taste_profile_builder.dart';
 import 'services/settings_service.dart';
+import 'services/source_swap/auto_source_swap_service.dart';
+import 'services/source_swap/source_swap_settings.dart';
 import 'sources/source_manager.dart';
 
 /// composition root 内的 UiMessenger 适配器：唯一持有 navigatorKey /
@@ -202,6 +205,14 @@ void main() async {
   // 最近播放上下文（play_contexts）：提前创建，同一实例既进 Provider 树，
   // 也直接注入 PlaybackProvider。
   final localDatabaseProvider = LocalDatabaseProvider();
+  // 换源偏好（自动换源开关，默认开）与自动换源解析服务：
+  // 播放失败同源重试仍失败时，经注入的 resolver 跨音源严格找回并替换。
+  final sourceSwapSettings = SourceSwapSettings();
+  await sourceSwapSettings.init();
+  final autoSourceSwapService = AutoSourceSwapService(
+    catalog: catalogService,
+    registry: sourceRegistry,
+  );
   final playbackProvider = PlaybackProvider(
     facade: playbackFacade,
     messenger: _AppUiMessenger(notificationService),
@@ -211,6 +222,12 @@ void main() async {
     libraryRepository: libraryRepository,
     dataSaver: dataSaver,
     localDatabaseProvider: localDatabaseProvider,
+    autoSwapSettings: sourceSwapSettings,
+    autoSwapResolver: (track, {required excludeSourceKeys}) =>
+        autoSourceSwapService.findMatch(
+      track,
+      excludeSourceKeys: excludeSourceKeys,
+    ),
     // 封面补取：曲目起播无封面时经 SourceManager 现取（脚本 pic →
     // 内置平台原生取图），省流模式不发请求；取到后原地回写队列曲目。
     artworkResolver: (track) async {
@@ -493,6 +510,15 @@ void main() async {
         ChangeNotifierProvider.value(value: localDatabaseProvider),
         // 资料库（收藏/历史/列表）：顶层创建（AI 推歌读取收藏作为反馈）。
         ChangeNotifierProvider.value(value: libraryProvider),
+        // 换源：跨音源搜索 + 原位替换 + 队列跟随（收藏页 / 播放页入口）。
+        ChangeNotifierProvider(
+          create: (context) => SourceSwapProvider(
+            catalogService: catalogService,
+            sourceRegistry: sourceRegistry,
+            libraryProvider: context.read<LibraryProvider>(),
+            playbackProvider: context.read<PlaybackProvider>(),
+          ),
+        ),
         // AI 推歌：模式控制器 + 配置存储 + 生成服务。
         ChangeNotifierProvider.value(value: aiDjProvider),
         Provider<AiSettingsStore>.value(value: aiSettingsStore),
@@ -536,6 +562,8 @@ void main() async {
         ChangeNotifierProvider.value(value: dataSaver),
         // 跨设备数据同步：设置页读写；Web 不展示入口。
         ChangeNotifierProvider.value(value: syncProvider),
+        // 换源偏好（自动换源开关）：设置页读写；播放链路已在上方接线。
+        ChangeNotifierProvider.value(value: sourceSwapSettings),
       ],
       child: const MyThemedApp(),
     ),

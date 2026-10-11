@@ -98,4 +98,12 @@ abstract interface class PlaybackBackend {
         kind: FailureKind.unsupported,
         message: '当前播放后端不支持更新封面',
       );
+
+  /// 可选能力：原地替换队列中的曲目（换源）。不支持时抛
+  /// `SourceFailure(kind: unsupported)`。
+  Future<void> replaceQueueTrack(String trackUri, Track newTrack) =>
+      throw const SourceFailure(
+        kind: FailureKind.unsupported,
+        message: '当前播放后端不支持队列曲目替换',
+      );
 }

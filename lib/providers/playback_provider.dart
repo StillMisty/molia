@@ -15,6 +15,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../data/catalog/catalog_service.dart';
 import '../data/library_repository.dart';
 import '../data/mapping/track_mapper.dart';
+import '../domain/models/failure.dart';
 import '../domain/models/library.dart';
 import '../domain/models/playback.dart';
 import '../domain/models/track.dart';
@@ -25,12 +26,21 @@ import '../managers/image_preload_manager.dart';
 import '../models/play_mode.dart';
 import '../services/data_saver_service.dart';
 import '../services/playback_session_store.dart';
+import '../services/source_swap/source_swap_settings.dart';
 import '../sources/source_manager.dart';
 import '../sources/source_track.dart';
 import '../utils/notify_throttler.dart';
 import 'local_database_provider.dart';
 
 final _logger = Logger();
+
+/// 自动换源解析器：在其它音源严格找回同一首歌（组合根注入）。
+///
+/// [excludeSourceKeys] 为已尝试来源（provenance，由 provider 维护）。
+typedef AutoSourceSwapResolver = Future<Track?> Function(
+  Track track, {
+  required Set<String> excludeSourceKeys,
+});
 
 /// 领域 [StateListenable] → Flutter [ValueListenable] 适配器。
 ///
@@ -132,6 +142,12 @@ class PlaybackProvider extends ChangeNotifier {
   /// 播放上下文写入（最近播放）：由 composition root 注入。
   final LocalDatabaseProvider? _localDatabaseProvider;
 
+  /// 自动换源开关（设置 › 播放，默认开）；null = 关闭该能力。
+  final SourceSwapSettings? _autoSwapSettings;
+
+  /// 自动换源解析器（组合根注入 `AutoSourceSwapService.findMatch`）。
+  final AutoSourceSwapResolver? _autoSwapResolver;
+
   /// composition root 注入（封面预加载需要 BuildContext）。
   final GlobalKey<NavigatorState>? _navigatorKey;
 
@@ -175,6 +191,14 @@ class PlaybackProvider extends ChangeNotifier {
   /// 已自动重试过的曲目 key（同一操作只重试一次，避免失败循环）。
   String? _retriedTrackKey;
 
+  /// 自动换源：每个曲目 uri 的**已尝试来源**（含种子源；换源后的候选继承
+  /// 并追加自身来源），级联每个来源至多一次、有界；cap 防止长期泄漏。
+  final Map<String, Set<String>> _autoSwapTriedSources = {};
+  static const int _autoSwapProvenanceCap = 64;
+
+  /// 正在自动换源的曲目 uri（防并发重复触发）。
+  final Set<String> _autoSwapping = {};
+
   /// 正在补取封面的曲目 key（去重；同曲目只解析一次）。
   String? _artworkResolvingTrackId;
 
@@ -194,6 +218,8 @@ class PlaybackProvider extends ChangeNotifier {
     LocalDatabaseProvider? localDatabaseProvider,
     PlaybackSessionStore? sessionStore,
     Future<String?> Function(Track track)? artworkResolver,
+    SourceSwapSettings? autoSwapSettings,
+    AutoSourceSwapResolver? autoSwapResolver,
   })  : _facade = facade,
         _messenger = messenger,
         _sourceManager = sourceManager,
@@ -203,6 +229,8 @@ class PlaybackProvider extends ChangeNotifier {
         _dataSaver = dataSaver,
         _localDatabaseProvider = localDatabaseProvider,
         _artworkResolver = artworkResolver,
+        _autoSwapSettings = autoSwapSettings,
+        _autoSwapResolver = autoSwapResolver,
         _sessionStore = sessionStore ?? PlaybackSessionStore() {
     _notifyThrottler = CategorizedNotifyThrottler(
       notifyCallback: super.notifyListeners,
@@ -346,6 +374,38 @@ class PlaybackProvider extends ChangeNotifier {
       _logger.e('enqueueDomainTracks: 追加队列失败', error: e);
       rethrow;
     }
+  }
+
+  /// 换源：把队列中 [oldTrack] 原地替换为 [newTrack]，返回是否命中。
+  ///
+  /// 真实队列经 facade 替换（按 id 全量命中；命中当前曲目会重新取链
+  /// 从头播放）；冷启动恢复态（facade 队列为空）替换保存的会话队列并落盘。
+  /// 未命中不算失败：库内换源与队列跟随解耦（曲目可能不在当前队列）。
+  Future<bool> replaceQueueTrack(Track oldTrack, Track newTrack) async {
+    final uri = oldTrack.id.uri;
+    var hit = false;
+    if (_facade.snapshot.value.queue.any((track) => track.id.uri == uri)) {
+      await _facade.replaceQueueTrack(uri, newTrack);
+      hit = true;
+    }
+    final session = _restoredSession;
+    if (session != null &&
+        session.tracks.any((track) => track.id.uri == uri)) {
+      _restoredSession = session.copyWith(
+        tracks: [
+          for (final track in session.tracks)
+            track.id.uri == uri ? newTrack : track,
+        ],
+      );
+      _publishRestoredSnapshot();
+      unawaited(_sessionStore.save(_restoredSession!));
+      hit = true;
+    }
+    if (hit) {
+      _notifyCategory('track');
+      _notifyCategory('queue');
+    }
+    return hit;
   }
 
   /// 播放本地队列中指定 id 的曲目（队列面板点击）。
@@ -750,10 +810,12 @@ class PlaybackProvider extends ChangeNotifier {
     }
   }
 
-  /// 播放失败恢复：按 sourceKey 失效取链缓存，并自动重试一次。
+  /// 播放失败恢复：按 sourceKey 失效取链缓存，自动重试一次；
+  /// 重试仍失败（或重试成功后再次失败）→ 尝试自动换源。
   ///
-  /// 同一曲目 key 只重试一次（`_retriedTrackKey` 守卫），失败不缓存，
-  /// 下一次播放自然会重新取链，不会形成失败循环。
+  /// 同一曲目 key 只做一次同源重试（`_retriedTrackKey` 守卫），失败不缓存，
+  /// 下一次播放自然会重新取链，不会形成失败循环。自动换源的级联有界见
+  /// [_tryAutoSourceSwap]。
   void _maybeRecoverFromPlaybackError() {
     final state = _facade.snapshot.value;
     final failure = state.error;
@@ -765,17 +827,77 @@ class PlaybackProvider extends ChangeNotifier {
     _catalogService?.invalidateResolvePrefix(track.id.sourceKey);
 
     final key = track.id.uri;
-    if (_retriedTrackKey == key) return;
-    _retriedTrackKey = key;
+    if (_retriedTrackKey != key) {
+      _retriedTrackKey = key;
+      final index = state.currentIndex;
+      unawaited(Future<void>.microtask(() async {
+        try {
+          await _facade.playQueueIndex(index);
+        } catch (e) {
+          _logger.e('播放失败自动重试失败', error: e);
+        }
+        // 重试仍失败（错误快照可能值未变、不会再触发本方法）→ 自动换源。
+        _maybeAutoSwapAfterRetry(track);
+      }));
+      return;
+    }
 
-    final index = state.currentIndex;
-    unawaited(Future<void>.microtask(() async {
-      try {
-        await _facade.playQueueIndex(index);
-      } catch (e) {
-        _logger.e('播放失败自动重试失败', error: e);
-      }
-    }));
+    // 同源重试已发生过（重试成功后中途再失败等）：直接尝试自动换源。
+    unawaited(_tryAutoSourceSwap(track, failure));
+  }
+
+  /// 同源重试完成后的判定：错误仍在且仍是同一首 → 尝试自动换源。
+  void _maybeAutoSwapAfterRetry(Track track) {
+    final state = _facade.snapshot.value;
+    if (state.error == null) return;
+    if (state.current?.id.uri != track.id.uri) return;
+    unawaited(_tryAutoSourceSwap(track, state.error!));
+  }
+
+  /// 自动换源：跨音源严格找回同一首并原地替换队列曲目（静默，对齐 LX）。
+  ///
+  /// 守卫：
+  /// - 开关关闭 / 未注入解析器 / 本地文件 / cancelled·unsupported 失败 → 跳过；
+  /// - provenance（[_autoSwapTriedSources]）记录已尝试来源，候选继承后追加
+  ///   自身来源：级联每个来源至多一次、必然收敛；
+  /// - [_autoSwapping] 防并发重复；换源前复查当前曲目仍是失败的那首。
+  Future<void> _tryAutoSourceSwap(Track track, SourceFailure failure) async {
+    final settings = _autoSwapSettings;
+    final resolver = _autoSwapResolver;
+    if (settings == null || resolver == null || !settings.autoEnabled) return;
+    if (track.origin == TrackOrigin.localFile) return;
+    if (failure.kind == FailureKind.cancelled ||
+        failure.kind == FailureKind.unsupported) {
+      return;
+    }
+    final uri = track.id.uri;
+    if (!_autoSwapping.add(uri)) return;
+    try {
+      final tried = _autoSwapTriedSources[uri] ?? <String>{};
+      tried.add(track.id.sourceKey);
+      final match = await resolver(track, excludeSourceKeys: tried);
+      if (match == null || match.id.uri == uri) return;
+      // 搜索期间可能已切歌/被手动换源：只替换仍是这首的当前曲目。
+      if (_facade.snapshot.value.current?.id.uri != uri) return;
+      _rememberAutoSwapProvenance(
+        match.id.uri,
+        {...tried, match.id.sourceKey},
+      );
+      await _facade.replaceQueueTrack(uri, match);
+      _notifyCategory('track');
+      _notifyCategory('queue');
+    } catch (e) {
+      _logger.w('自动换源失败: $e');
+    } finally {
+      _autoSwapping.remove(uri);
+    }
+  }
+
+  void _rememberAutoSwapProvenance(String uri, Set<String> tried) {
+    if (_autoSwapTriedSources.length >= _autoSwapProvenanceCap) {
+      _autoSwapTriedSources.remove(_autoSwapTriedSources.keys.first);
+    }
+    _autoSwapTriedSources[uri] = tried;
   }
 
   void _maybeShowPlaybackError() {

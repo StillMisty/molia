@@ -300,6 +300,151 @@ void main() {
     });
   });
 
+  group('换源（原位替换）', () {
+    PlaylistTrack track(String songId, {String source = 'wy'}) => PlaylistTrack(
+          playlistId: 0,
+          sourceKey: source,
+          songId: songId,
+          title: 'T$songId',
+          artist: 'A$songId',
+          album: 'B$songId',
+          raw: {'songId': songId, 'origin': source},
+          addedAt: 1,
+        );
+
+    test('列表：保留位置与 sortOrder/addedAt，元数据与 raw 替换', () async {
+      final id = await repository.createPlaylist('L');
+      for (final songId in ['1', '2', '3']) {
+        await repository.addTrackToPlaylist(id, track(songId));
+      }
+      final before = await repository.listPlaylistTracks(id);
+
+      final ok = await repository.replacePlaylistTrack(
+        id,
+        (sourceKey: 'wy', songId: '2'),
+        PlaylistTrack(
+          playlistId: id,
+          sourceKey: 'kg',
+          songId: '900',
+          title: 'T2 kg',
+          artist: 'A2',
+          album: 'B2',
+          coverUrl: 'https://img.example/900.jpg',
+          durationMs: 222000,
+          raw: {'hash': 'h900'},
+          addedAt: 999,
+        ),
+      );
+      expect(ok, isTrue);
+
+      final after = await repository.listPlaylistTracks(id);
+      expect(after.map((t) => t.songId), ['1', '900', '3']);
+      final swapped = after[1];
+      expect(swapped.sourceKey, 'kg');
+      expect(swapped.title, 'T2 kg');
+      expect(swapped.artist, 'A2');
+      expect(swapped.raw['hash'], 'h900');
+      // 原位：位置/sortOrder/addedAt 沿用旧行（忽略 replacement 传入值）。
+      expect(swapped.sortOrder, before[1].sortOrder);
+      expect(swapped.addedAt, before[1].addedAt);
+    });
+
+    test('列表：目标键已存在时去重，旧行落在原位置', () async {
+      final id = await repository.createPlaylist('L');
+      await repository.addTrackToPlaylist(id, track('1'));
+      await repository.addTrackToPlaylist(id, track('2'));
+      await repository.addTrackToPlaylist(id, track('900', source: 'kg'));
+
+      final ok = await repository.replacePlaylistTrack(
+        id,
+        (sourceKey: 'wy', songId: '1'),
+        track('900', source: 'kg'),
+      );
+      expect(ok, isTrue);
+
+      final after = await repository.listPlaylistTracks(id);
+      expect(
+        after.map((t) => '${t.sourceKey}:${t.songId}'),
+        ['kg:900', 'wy:2'],
+      );
+    });
+
+    test('列表：旧键不存在返回 false 且不广播', () async {
+      final id = await repository.createPlaylist('L');
+      final events = <void>[];
+      final subscription = repository.changes.listen(events.add);
+      addTearDown(subscription.cancel);
+
+      final ok = await repository.replacePlaylistTrack(
+        id,
+        (sourceKey: 'wy', songId: '404'),
+        track('900', source: 'kg'),
+      );
+      expect(ok, isFalse);
+      await Future<void>.delayed(Duration.zero);
+      expect(events, isEmpty);
+    });
+
+    test('收藏列表换源：变更类型为 favorites', () async {
+      await repository.toggleFavorite(
+        sourceKey: 'wy',
+        songId: '1',
+        title: 'T1',
+      );
+      final favorites =
+          await repository.findPlaylistByName(kFavoritesPlaylistName);
+
+      final ok = await repository.replacePlaylistTrack(
+        favorites!.id,
+        (sourceKey: 'wy', songId: '1'),
+        track('900', source: 'kg'),
+        favoriteChange: true,
+      );
+      expect(ok, isTrue);
+      expect(repository.lastChangeKind, LibraryChangeKind.favorites);
+      expect(
+        (await repository.listPlaylistTracks(favorites.id))
+            .map((t) => '${t.sourceKey}:${t.songId}'),
+        ['kg:900'],
+      );
+    });
+
+    test('历史：保留 playedAt；目标键已存在时合并去重', () async {
+      await repository.addHistoryEntry(history('1', playedAt: 100));
+      await repository.addHistoryEntry(history('2', playedAt: 200));
+
+      final ok = await repository.replaceHistoryEntry(
+        (sourceKey: 'wy', songId: '1'),
+        PlayHistoryEntry(
+          sourceKey: 'kg',
+          songId: '900',
+          title: 'T900',
+          artist: 'A',
+          raw: {'hash': 'h900'},
+          playedAt: 999,
+        ),
+      );
+      expect(ok, isTrue);
+
+      var list = await repository.listHistory();
+      expect(list.map((e) => e.songId), ['2', '900']);
+      expect(list.last.sourceKey, 'kg');
+      expect(list.last.raw['hash'], 'h900');
+      // 换源不改「何时听的」：沿用旧行 playedAt（忽略 replacement 传入值）。
+      expect(list.last.playedAt, 100);
+
+      // 目标键（wy:2）已存在：删重复行后原位替换，仍保旧 playedAt。
+      final ok2 = await repository.replaceHistoryEntry(
+        (sourceKey: 'kg', songId: '900'),
+        history('2', playedAt: 888),
+      );
+      expect(ok2, isTrue);
+      list = await repository.listHistory();
+      expect(list.map((e) => '${e.sourceKey}:${e.songId}'), ['wy:2']);
+      expect(list.single.playedAt, 100);
+    });
+  });
+
   group('收藏（默认列表）', () {
     test('切换收藏 + favoriteKeys', () async {
       expect(await repository.favoriteKeys(), isEmpty);

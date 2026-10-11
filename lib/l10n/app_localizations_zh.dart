@@ -190,6 +190,12 @@ class AppLocalizationsZh extends AppLocalizations {
   String get settingsCurrentQuality => '当前播放音质';
 
   @override
+  String get settingsAutoSourceSwap => '自动换源';
+
+  @override
+  String get settingsAutoSourceSwapSubtitle => '播放失败时自动在其它音源找回同一首歌并切换（默认开启）';
+
+  @override
   String get settingsDataSaverTitle => '省流模式';
 
   @override
@@ -874,6 +880,47 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get historyDeleteEntry => '删除记录';
+
+  @override
+  String get sourceSwap => '换源';
+
+  @override
+  String get sourceSwapSearching => '正在搜索其它音源…';
+
+  @override
+  String get sourceSwapEmpty => '其它音源没有找到这首歌';
+
+  @override
+  String get sourceSwapNoSources => '没有可用的其它音源';
+
+  @override
+  String sourceSwapFailedSources(int count) {
+    return '$count 个音源搜索失败';
+  }
+
+  @override
+  String get sourceSwapConfirm => '换源';
+
+  @override
+  String get sourceSwapPreviewContext => '换源试听';
+
+  @override
+  String get sourceSwapDuplicateTitle => '曲目已存在';
+
+  @override
+  String get sourceSwapDuplicateMessage => '目标列表已包含这首歌。换源将移除重复项，并以所选版本替换。';
+
+  @override
+  String get sourceSwapDone => '已换源';
+
+  @override
+  String get sourceSwapQueueFollowed => '已换源并切换播放来源';
+
+  @override
+  String get sourceSwapNotFound => '曲目已不在原位置';
+
+  @override
+  String get sourceSwapApplyFailed => '换源失败，请稍后重试';
 
   @override
   String playlistAddedTo(String name) {

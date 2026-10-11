@@ -90,7 +90,8 @@
   采样间线性补间），桌面歌词 / 通知 / 蓝牙输出仍按行。
 - **Lyrics matching（歌词匹配）** — `lib/services/lyrics/lyrics_match.dart`：
   名字搜索候选按时长 ±5s、归一化歌名、歌手包含与版本词（live/伴奏/翻唱…）挑选；
-  全部不匹配时回退首个候选（保持旧行为下限）。
+  全部不匹配时回退首个候选（保持旧行为下限）。判定实现与换源共用
+  `lib/services/song_match.dart`（唯一实现）。
 
 ## 资料库
 
@@ -106,6 +107,25 @@
 - **Playlist tracks view（列表曲目视图）** — `LibraryProvider.playlistTracksView` +
   `ensurePlaylistTracks`：页面只读「已缓存/加载中」视图并请求加载，不再探测
   `cachedTracksOf`/`isPlaylistLoading` 之类的缓存内部。
+
+## 换源
+
+- **Source swap（换源）** — `lib/providers/source_swap_provider.dart` + 
+  `lib/widgets/source_swap_sheet.dart`：按种子曲目「歌名 + 歌手」在其它可搜索音源
+  并行检索（逐源就绪即填充、单源失败隔离），点候选即试听（单曲「换源试听」），
+  确认后原位替换。入口：收藏页三类合集左滑 / 播放页 seek 行（队列入口）。
+- **Swap placement（换源写回位置）** — `SourceSwapPlacement`：`playlist`
+  （收藏/自建列表，仓库事务保 `sortOrder`/`addedAt`）、`history`（保 `playedAt`）、
+  `queue`（仅播放队列，不落库）。库内替换与队列跟随**解耦**：队列中同 id 曲目
+  命中才跟随（`PlaybackFacade.replaceQueueTrack`），未命中不算失败。
+- **Song match（歌曲匹配）** — `lib/services/song_match.dart`：LX `findMusic`
+  判定的唯一实现（时长 ±5s、归一化歌名/歌手/专辑、版本词一致、三阶优先级）。
+  两种消费面：歌词搜索（非严格，未命中回退首候选）与自动换源（严格，未命中
+  返回 null —— 宁可不换，不换错）。
+- **Auto source swap（自动换源）** — `lib/services/source_swap/auto_source_swap_service.dart`
+  + `PlaybackProvider` 的失败恢复链路：同源重试仍失败后跨源严格找回并**静默**
+  替换队列曲目（对齐 LX）；provenance（每个曲目的已尝试来源）保证级联每源
+  至多一次、有界；开关 `SourceSwapSettings`（默认开，设置 › 播放）。
 
 ## 听歌统计
 

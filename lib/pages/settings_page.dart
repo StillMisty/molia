@@ -9,6 +9,7 @@ import '../providers/sync_provider.dart';
 import '../providers/theme_provider.dart';
 import '../services/data_saver_service.dart';
 import '../services/settings_service.dart';
+import '../services/source_swap/source_swap_settings.dart';
 import '../theme/scheme_builder.dart';
 import '../widgets/app_color_picker.dart';
 import '../widgets/font_picker_sheet.dart';
@@ -83,6 +84,8 @@ class _SettingsHomeViewState extends State<_SettingsHomeView> {
     // 跨设备同步：Web 无该能力（点对点/网盘传输依赖 dart:io），缺省时隐藏。
     final syncProvider = context.watch<SyncProvider?>();
     final showSync = syncProvider != null && !kIsWeb;
+    // 换源偏好（自动换源开关）：同样缺省时隐藏。
+    final sourceSwapSettings = context.watch<SourceSwapSettings?>();
     final theme = Theme.of(context);
 
     return Container(
@@ -263,6 +266,22 @@ class _SettingsHomeViewState extends State<_SettingsHomeView> {
                       subtitle: qualityLabel,
                     ),
                   ),
+                  // 自动换源：播放失败后的跨源找回（手动换源不受此开关控制）。
+                  if (sourceSwapSettings != null) ...[
+                    const SizedBox(height: kSettingsElementSpacing),
+                    Selector<SourceSwapSettings, bool>(
+                      selector: (context, settings) => settings.autoEnabled,
+                      builder: (context, autoEnabled, _) => SettingsSwitchTile(
+                        switchKey: const Key('settingsAutoSourceSwapSwitch'),
+                        icon: Icons.swap_horiz_rounded,
+                        title: l10n.settingsAutoSourceSwap,
+                        subtitle: l10n.settingsAutoSourceSwapSubtitle,
+                        value: autoEnabled,
+                        onChanged: (value) =>
+                            sourceSwapSettings.setAutoEnabled(value),
+                      ),
+                    ),
+                  ],
                   // 省流模式：默认关闭，开启后仅移动数据生效。
                   if (dataSaver != null) ...[
                     const SizedBox(height: kSettingsElementSpacing),

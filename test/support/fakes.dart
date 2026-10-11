@@ -133,9 +133,40 @@ class FakePlaybackBackend implements PlaybackBackend {
     lastArtworkUri = artwork?.toString();
   }
 
+  /// 换源：记录调用并把快照中同 id 曲目替换为 [newTrack]（与真实后端一致，
+  /// 推一帧新队列让订阅方读到；替换当前曲目即重新加载，错误清空）。
+  @override
+  Future<void> replaceQueueTrack(String trackUri, Track newTrack) async {
+    calls.add('replaceQueueTrack:$trackUri');
+    lastReplacedTrackUri = trackUri;
+    lastReplacedTrack = newTrack;
+    final current = _notifier.value;
+    Track swap(Track track) => track.id.uri == trackUri ? newTrack : track;
+    _notifier.value = BackendSnapshot(
+      current: current.current == null ? null : swap(current.current!),
+      queue: [for (final track in current.queue) swap(track)],
+      currentIndex: current.currentIndex,
+      next: current.next == null ? null : swap(current.next!),
+      upcoming: [for (final track in current.upcoming) swap(track)],
+      upNext: [for (final track in current.upNext) swap(track)],
+      history: [for (final track in current.history) swap(track)],
+      isPlaying: current.isPlaying,
+      isLoading: current.isLoading,
+      position: current.position,
+      duration: current.duration,
+      mode: current.mode,
+      context: current.context,
+      error: null,
+    );
+  }
+
   /// 最近一次封面回写的曲目与 URL（封面补取测试用）。
   String? lastArtworkTrackUri;
   String? lastArtworkUri;
+
+  /// 最近一次换源的旧曲目 uri 与新曲目（换源测试用）。
+  String? lastReplacedTrackUri;
+  Track? lastReplacedTrack;
 }
 
 class FakeMessenger implements UiMessenger {

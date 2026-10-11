@@ -17,6 +17,7 @@ import '../widgets/add_to_library.dart';
 import '../widgets/add_to_playlist_sheet.dart' show showPlaylistNameDialog;
 import '../widgets/app_search_bar.dart';
 import '../widgets/lxmc_import.dart' show importLxmcFavoritesFlow;
+import '../widgets/source_swap_sheet.dart';
 import '../widgets/swipe_reveal_row.dart';
 import '../widgets/track_row.dart';
 
@@ -1366,7 +1367,7 @@ class _FavoritesPageState extends State<FavoritesPage> {
   Widget _swipeActionIcon(IconData icon, String label) =>
       Tooltip(message: label, child: Icon(icon));
 
-  /// 曲目左滑操作：加入列表 + 移除类（按合集取语义）。
+  /// 曲目左滑操作：加入列表 + 换源 + 移除类（按合集取语义）。
   ///
   /// 中性动作走 M3E 默认 tonal 胶囊；移除类用 filled + error 配色
   /// （对齐 M3E 列表示例的删除动作），图标直接表达「从本列表移除」。
@@ -1377,6 +1378,7 @@ class _FavoritesPageState extends State<FavoritesPage> {
     PlaylistTrack track,
   ) {
     final scheme = Theme.of(context).colorScheme;
+    final playlistId = view.playlistId;
     return [
       M3EListSwipeAction(
         icon: _swipeActionIcon(
@@ -1391,6 +1393,22 @@ class _FavoritesPageState extends State<FavoritesPage> {
           ),
         ),
       ),
+      if (playlistId != null)
+        M3EListSwipeAction(
+          icon: _swipeActionIcon(
+            Icons.swap_horiz_rounded,
+            l10n.sourceSwap,
+          ),
+          onPressed: () => unawaited(
+            showSourceSwapSheet(
+              context,
+              seed: context
+                  .read<LibraryProvider>()
+                  .trackFromPlaylistTrack(track),
+              playlistId: playlistId,
+            ),
+          ),
+        ),
       if (view.isCustom && view.playlistId != null)
         M3EListSwipeAction(
           icon: _swipeActionIcon(
@@ -1494,6 +1512,24 @@ class _FavoritesPageState extends State<FavoritesPage> {
                         _copyToPlaylist(
                           entries: [entry],
                           includeHistory: false,
+                        ),
+                      ),
+                    ),
+                    M3EListSwipeAction(
+                      icon: _swipeActionIcon(
+                        Icons.swap_horiz_rounded,
+                        l10n.sourceSwap,
+                      ),
+                      onPressed: () => unawaited(
+                        showSourceSwapSheet(
+                          context,
+                          seed: context
+                              .read<LibraryProvider>()
+                              .trackFromHistoryEntry(entry),
+                          historyKey: (
+                            sourceKey: entry.sourceKey,
+                            songId: entry.songId,
+                          ),
                         ),
                       ),
                     ),

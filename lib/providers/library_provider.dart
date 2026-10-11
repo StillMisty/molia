@@ -348,6 +348,44 @@ class LibraryProvider extends ChangeNotifier {
     return removed > 0;
   }
 
+  /// 换源：列表内原位替换（收藏列表自动走 favorites 变更类型）。
+  ///
+  /// 位置 / `sortOrder` / `addedAt` 由仓库保留；变更经 [changes] 流
+  /// 自动刷新缓存，不在此手动改内存。
+  Future<bool> replacePlaylistTrack(
+    int playlistId,
+    TrackKey oldKey,
+    PlaylistTrack replacement,
+  ) async {
+    final playlist = await _repository.playlistById(playlistId);
+    return _repository.replacePlaylistTrack(
+      playlistId,
+      oldKey,
+      replacement,
+      favoriteChange: playlist?.name == kFavoritesPlaylistName,
+    );
+  }
+
+  /// 换源：播放历史原位替换（仓库保留旧行 `playedAt`）。
+  Future<bool> replaceHistoryEntry(
+    TrackKey oldKey,
+    PlayHistoryEntry replacement,
+  ) {
+    return _repository.replaceHistoryEntry(oldKey, replacement);
+  }
+
+  /// 目标列表是否已包含某曲目（换源重复确认用；缓存优先）。
+  ///
+  /// 缓存可能略旧：确认放行与否只影响是否弹一次确认框，最终去重由
+  /// [replacePlaylistTrack] 的事务兜底。
+  Future<bool> playlistContains(int playlistId, TrackKey key) async {
+    final cached = _tracksByPlaylist[playlistId];
+    final tracks = cached ?? await loadPlaylistTracks(playlistId);
+    return tracks.any(
+      (track) => track.sourceKey == key.sourceKey && track.songId == key.songId,
+    );
+  }
+
   /// 批量移除列表曲目（返回实际移除数）。
   Future<int> removeTracksFromPlaylist(
     int playlistId,
@@ -634,6 +672,33 @@ class LibraryProvider extends ChangeNotifier {
     final key = rawIdOf(track.raw);
     return key.isNotEmpty ? key : '${track.title}-${track.artist}';
   }
+
+  /// 库内条目 → 领域曲目（换源入口用）：raw 原样还原 + 规范 id 补齐，
+  /// 供换源弹层做跨源搜索种子；UI 不直接读 raw。
+  Track trackFromPlaylistTrack(PlaylistTrack track) => trackFromSourceTrack(
+        sourceTrackFromRaw(
+          sourceKey: track.sourceKey,
+          title: track.title,
+          artist: track.artist,
+          album: track.album,
+          coverUrl: track.coverUrl,
+          durationMs: track.durationMs,
+          raw: track.raw,
+        ),
+      );
+
+  /// 播放历史条目 → 领域曲目（同上）。
+  Track trackFromHistoryEntry(PlayHistoryEntry entry) => trackFromSourceTrack(
+        sourceTrackFromRaw(
+          sourceKey: entry.sourceKey,
+          title: entry.title,
+          artist: entry.artist,
+          album: entry.album,
+          coverUrl: entry.coverUrl,
+          durationMs: entry.durationMs,
+          raw: entry.raw,
+        ),
+      );
 
   /// dispose 后不再向已销毁的监听器发通知（仓库变更流是异步的，存在竞态）。
   void _notify() {

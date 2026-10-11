@@ -107,6 +107,16 @@ class FakeBackend implements PlaybackBackend {
 
   @override
   Future<void> updateTrackArtwork(String trackUri, Uri? artwork) async {}
+
+  @override
+  Future<void> replaceQueueTrack(String trackUri, Track newTrack) async {
+    calls.add('replaceQueueTrack:$trackUri');
+    lastReplacedTrackUri = trackUri;
+    lastReplacedTrack = newTrack;
+  }
+
+  String? lastReplacedTrackUri;
+  Track? lastReplacedTrack;
 }
 
 class FakeMessenger implements UiMessenger {
@@ -290,6 +300,19 @@ void main() {
       expect(backend.calls.last, 'playQueueIndex:1');
       await facade.stop();
       expect(backend.calls.last, 'stop');
+    });
+
+    test('replaceQueueTrack 委托 backend（换源）', () async {
+      final backend = FakeBackend();
+      final facade = DefaultPlaybackFacade(backend: backend);
+      final old = _track('a');
+      final replacement = _track('a', title: '换源后的标题');
+
+      await facade.replaceQueueTrack(old.id.uri, replacement);
+
+      expect(backend.calls.last, 'replaceQueueTrack:fake:a');
+      expect(backend.lastReplacedTrackUri, 'fake:a');
+      expect(backend.lastReplacedTrack, same(replacement));
     });
 
     test('playTrackInContext：队列内跳转 / 队列外单曲加载', () async {

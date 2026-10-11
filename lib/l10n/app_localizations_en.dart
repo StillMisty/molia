@@ -193,6 +193,13 @@ class AppLocalizationsEn extends AppLocalizations {
   String get settingsCurrentQuality => 'Now playing quality';
 
   @override
+  String get settingsAutoSourceSwap => 'Auto source switch';
+
+  @override
+  String get settingsAutoSourceSwapSubtitle =>
+      'When playback fails, find the same song in another source and switch automatically (on by default)';
+
+  @override
   String get settingsDataSaverTitle => 'Data saver';
 
   @override
@@ -903,6 +910,50 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get historyDeleteEntry => 'Delete entry';
+
+  @override
+  String get sourceSwap => 'Change source';
+
+  @override
+  String get sourceSwapSearching => 'Searching other sources…';
+
+  @override
+  String get sourceSwapEmpty => 'No match found in other sources';
+
+  @override
+  String get sourceSwapNoSources => 'No other sources available';
+
+  @override
+  String sourceSwapFailedSources(int count) {
+    return '$count source(s) failed to search';
+  }
+
+  @override
+  String get sourceSwapConfirm => 'Change source';
+
+  @override
+  String get sourceSwapPreviewContext => 'Source preview';
+
+  @override
+  String get sourceSwapDuplicateTitle => 'Track already exists';
+
+  @override
+  String get sourceSwapDuplicateMessage =>
+      'The target playlist already contains this track. Changing the source will remove the duplicate and replace it with the selected version.';
+
+  @override
+  String get sourceSwapDone => 'Source changed';
+
+  @override
+  String get sourceSwapQueueFollowed => 'Source changed and playback switched';
+
+  @override
+  String get sourceSwapNotFound =>
+      'The track is no longer in its original place';
+
+  @override
+  String get sourceSwapApplyFailed =>
+      'Failed to change source, please try again';
 
   @override
   String playlistAddedTo(String name) {
