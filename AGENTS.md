@@ -10,17 +10,6 @@
 - **省流模式**（移动数据下压低取链音质、封面仅本地缓存）、**M3E（Material 3 Expressive）UI**；
 - **明确不含**：在线账号/流媒体后端、AI 功能、笔记/记录/漫游/评分等非播放器能力。
 
-文档入口：
-
-| 文档 | 内容 |
-|---|---|
-| `docs/pitfalls.md` | 已知坑清单（编号被源码注释引用） |
-| `docs/architecture.md` | 分层 / 状态策略 / M3E / 验证（as-built） |
-| `docs/lx_sources.md` | 音源子系统（引擎要点、验证清单、构建环境） |
-| `docs/lyrics_display.md` | 歌词显示（桌面/通知/蓝牙）设计 |
-| `docs/dev_environment.md` | Linux 桌面依赖、WSL 安卓模拟器调试 |
-| `GLOSSARY.md`、`docs/adr/` | 领域词汇与架构决策记录（ADR 按需创建） |
-
 ## 工具链
 
 | 组件 | 版本 | 说明 |
@@ -30,8 +19,6 @@
 | Gradle / AGP / Kotlin | 9.8.1 / 9.4.1 / 2.4.20 | Gradle 9.8 是支持 JDK 27 class 文件的最低版本 |
 | compileSdk/targetSdk/minSdk | 37 / 37 / 37 | minSdk=37 → 只有 Android 17+ 可安装 |
 | NDK | 30.0.16248370 | |
-
-该组合已被 `flutter analyze` / 构建验证通过；降级前先想清楚（Gradle/AGP/Kotlin 相互约束）。
 
 ## 常用命令
 
@@ -101,3 +88,9 @@ lib/
 - 每次改动后至少 `flutter analyze --no-pub` + `flutter test --no-pub`；引擎/音源改动按
   `docs/lx_sources.md` 的验证清单，UI 组件改动加跑 `flutter build web --release`；
 - 不要把密钥（API Key 等）提交进仓库。
+
+## Agent skills
+
+- Issues and specs live as GitHub issues, read/written with the `gh` CLI. See `docs/agents/issue-tracker.md`.
+- Five canonical labels: `needs-triage`, `needs-info`, `ready-for-agent`, `ready-for-human`, `wontfix`. See `docs/agents/triage-labels.md`.
+- Single-context: root `GLOSSARY.md` plus `docs/adr/`. See `docs/agents/domain.md`.
