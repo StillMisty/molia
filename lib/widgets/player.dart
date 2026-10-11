@@ -105,6 +105,9 @@ class _PlayerState extends State<Player> with TickerProviderStateMixin {
   late AnimationController _trackEntranceController;
   late Animation<double> _trackEntrance;
 
+  /// 页面可见性（TickerMode）：隐藏时标题入场直接落位，不冻结等回到页面再播。
+  bool _tickersEnabled = true;
+
   @override
   void initState() {
     super.initState();
@@ -125,6 +128,12 @@ class _PlayerState extends State<Player> with TickerProviderStateMixin {
     if (_lastImageUrl != null) {
       _prefetchImage(_lastImageUrl!);
     }
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _tickersEnabled = TickerMode.valuesOf(context).enabled;
   }
 
   /// seek 提交后，position 追上目标（或超时兜底）才撤下预览，
@@ -260,8 +269,12 @@ class _PlayerState extends State<Player> with TickerProviderStateMixin {
   /// 非拖动中切换时启动标题入场（拖动中让位拖动预览）。
   void _handleTrackSwapped(bool duringDrag) {
     _clearSeekPreviewAfterTrackChange();
-    if (!duringDrag) {
+    if (duringDrag) return;
+    if (_tickersEnabled) {
       _trackEntranceController.forward(from: 0);
+    } else {
+      // 页面不可见：直接落位，避免回到播放页时标题再弹一遍。
+      _trackEntranceController.value = 1.0;
     }
   }
 

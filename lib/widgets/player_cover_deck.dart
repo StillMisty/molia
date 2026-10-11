@@ -199,6 +199,11 @@ class _PlayerCoverDeckState extends State<PlayerCoverDeck>
   /// 中心封面同 id 换图（音源补图）交叉淡化时长。
   static const Duration _artworkRefreshFadeDuration = Duration(milliseconds: 250);
 
+  /// 封面按压反馈：按下缩放比例与进/出时长（抬起略慢、无过冲）。
+  static const double _pressScale = 0.96;
+  static const Duration _pressDownDuration = Duration(milliseconds: 110);
+  static const Duration _pressUpDuration = Duration(milliseconds: 180);
+
   // ---- 横向拖动跟踪（从手指真实按下位置起算） ----
   double? _dragStartX;
   double? _dragStartY;
@@ -260,6 +265,18 @@ class _PlayerCoverDeckState extends State<PlayerCoverDeck>
   late AnimationController _playStateController;
   late Animation<double> _playStateScaleAnimation;
 
+  /// 按压反馈控制器：0 = 未按、1 = 按到底（缩放 [_pressScale]）。
+  late AnimationController _pressController;
+
+  /// 当前被按压的槽位；抬起回弹结束（[AnimationStatus.dismissed]）后清空。
+  _DeckSlot? _pressedSlot;
+
+  /// 中心封面缩放重绘源：播放态缩放 × 按压反馈。
+  late final Listenable _centerScaleAnimation;
+
+  /// 页面可见性（TickerMode）：隐藏时切歌直接落位，不冻结动画（见 [_syncTickerMode]）。
+  bool _tickersEnabled = true;
+
   @override
   void initState() {
     super.initState();
@@ -296,6 +313,12 @@ class _PlayerCoverDeckState extends State<PlayerCoverDeck>
       vsync: this,
       value: 1.0,
     );
+    _pressController = AnimationController(
+      duration: _pressDownDuration,
+      vsync: this,
+    );
+    _centerScaleAnimation =
+        Listenable.merge([_playStateController, _pressController]);
     // 中心换图的淡出起点必须是「挂载时正在展示的 URL」：首个快照若只补了
     // 封面 URL（同 id），didUpdateWidget 才能识别为换图而不是首帧接管。
     _centerTrackId = trackKeyOf(widget.displayTrack);
@@ -306,12 +329,14 @@ class _PlayerCoverDeckState extends State<PlayerCoverDeck>
       _reconcileCorrection,
       _slotIdentityFade,
       _artworkRefreshFade,
+      _pressController,
     ]);
     // 即时切歌落位即会话结束（完成中 → 空闲）；拖动提交由对账路径收尾。
     _coverController.addStatusListener(_handleCoverStatus);
     _reconcileCorrection.addStatusListener(_handleCorrectionStatus);
     _slotIdentityFade.addStatusListener(_handleSlotIdentityStatus);
     _artworkRefreshFade.addStatusListener(_handleArtworkRefreshStatus);
+    _pressController.addStatusListener(_handlePressStatus);
     // 顶栏⇄播放页飞行期间中心封面隐藏，必须监听 morph 控制器重建真身。
     widget.morph?.addListener(_onMorphChanged);
   }
@@ -321,6 +346,8 @@ class _PlayerCoverDeckState extends State<PlayerCoverDeck>
     super.didChangeDependencies();
     // 快照监听：切歌检测完全由通知驱动（build 期间不再判定切歌）。
     _bindPlaybackIfNeeded();
+    // 页面可见性（tab 切换）：任一方向翻转都立即落位。
+    _syncTickerMode();
   }
 
   @override
@@ -358,12 +385,122 @@ class _PlayerCoverDeckState extends State<PlayerCoverDeck>
   ///
   /// 由快照通知驱动（build 期间零写入），AnimatedBuilder 监听控制器重建。
   void _syncPlayState(PlaybackProvider playback) {
+    if (!_tickersEnabled) {
+      // 不可见：直接落位（ticker 被静音，启动动画会冻结、回来再播）。
+      _playStateController.value = playback.isPlaying ? 1.0 : 0.0;
+      return;
+    }
     if (playback.isPlaying) {
       _playStateController.forward();
     } else {
       _playStateController.reverse();
     }
   }
+
+  /// 页面可见性变化（TickerMode）：切歌动画不跨可见性边界保留。
+  ///
+  /// 隐藏期间 ticker 被静音：会话若冻结在中间进度，回到播放页时动画会从
+  /// 冻结进度重播（或跳到结尾），而顶栏⇄播放页飞行在点击那一刻抓取的封面
+  /// 锚点正是这个中间布局——飞行会先落在错误位置再被动画带走。因此任一
+  /// 方向翻转都立即落位到稳态，保证锚点始终是稳态矩形。
+  void _syncTickerMode() {
+    final enabled = TickerMode.valuesOf(context).enabled;
+    if (enabled == _tickersEnabled) return;
+    _tickersEnabled = enabled;
+    _settleForVisibility();
+  }
+
+  /// 把全部封面动画立即落位到稳态（不做过渡；隐藏/恢复时调用）。
+  void _settleForVisibility() {
+    _cancelPendingWatchdog();
+    _coverController.stop();
+    _coverController.value = 1.0;
+    _sourceNeighborFade.value = 1.0;
+    _reconcileCorrection.value = 1.0;
+    _slotIdentityFade.value = 1.0;
+    _artworkRefreshFade.value = 1.0;
+    _pressController.stop();
+    _pressController.value = 0;
+    _pressedSlot = null;
+    _pendingCorrectionId = null;
+    _centerArtworkRefreshing = false;
+    _outgoingCenterArtworkUrl = null;
+    _leftSlotOutgoing = null;
+    _rightSlotOutgoing = null;
+    _session
+      ..phase = CoverSwapPhase.idle
+      ..to = null
+      ..from = null;
+    _resetHorizontalDrag();
+    final playback = _playback;
+    if (playback != null) {
+      final snapshot = playback.snapshot;
+      _session
+        ..previous = _resolvePreviousTrack(snapshot)
+        ..lastNext = snapshot.next;
+      _cacheDirectionHints(snapshot);
+      _syncSlotIdentityTracking(snapshot);
+      _syncPlayState(playback);
+    }
+    _centerTrackId = trackKeyOf(widget.displayTrack);
+    _centerArtworkUrl = artworkUrlOf(widget.displayTrack);
+  }
+
+  /// 页面不可见时的切歌落位：身份直接对齐新快照，不启动任何动画。
+  void _settleHiddenTrackChange({
+    required PlaybackProvider playback,
+    required Track track,
+  }) {
+    final snapshot = playback.snapshot;
+    _cancelPendingWatchdog();
+    _coverController.stop();
+    _coverController.value = 1.0;
+    _sourceNeighborFade.value = 1.0;
+    _reconcileCorrection.value = 1.0;
+    _pendingCorrectionId = null;
+    _centerArtworkRefreshing = false;
+    _outgoingCenterArtworkUrl = null;
+    _centerTrackId = trackKeyOf(track);
+    _centerArtworkUrl = artworkUrlOf(track);
+    _session
+      ..phase = CoverSwapPhase.idle
+      ..to = null
+      ..from = null
+      ..previous = _resolvePreviousTrack(snapshot)
+      ..lastNext = snapshot.next
+      ..placeholderUrl = artworkUrlOf(track) ?? _session.placeholderUrl;
+    _cacheDirectionHints(snapshot);
+    _syncSlotIdentityTracking(snapshot);
+    widget.onTrackSwapped?.call(false);
+  }
+
+  /// 按压反馈开始（原始指针事件驱动：TapGestureRecognizer 的 onTapDown 与
+  /// 横滑识别器竞争时要等 100ms 判定或抬手才触发，给不了「按下即反馈」）。
+  void _handleCoverPressStart(_DeckSlot slot) {
+    _pressedSlot = slot;
+    _pressController.forward();
+  }
+
+  /// 按压反馈结束（抬手/取消/横滑接管）：回弹到 1.0。
+  void _handleCoverPressEnd() {
+    if (_pressedSlot == null) return;
+    _pressController.animateBack(
+      0,
+      duration: _pressUpDuration,
+      curve: Curves.easeOut,
+    );
+  }
+
+  /// 按压回弹结束：清掉按压槽位（缩放已回 1，无需重建）。
+  void _handlePressStatus(AnimationStatus status) {
+    if (status != AnimationStatus.dismissed) return;
+    _pressedSlot = null;
+  }
+
+  /// 某槽位的按压缩放；未按压的槽位恒 1.0。
+  double _pressScaleFor(_DeckSlot slot) => slot == _pressedSlot
+      ? 1 - (1 - _pressScale) * _pressController.value
+      : 1.0;
 
   /// 播放快照通知：合并同一批通知到微任务统一对账。
   ///
@@ -455,8 +592,8 @@ class _PlayerCoverDeckState extends State<PlayerCoverDeck>
         currentId == _centerTrackId) {
       final url = artworkUrlOf(current);
       if (url != _centerArtworkUrl) {
-        if (_artworkRefreshFade.isAnimating) {
-          // 换图淡化中再次更新：直接接管新 URL（以当前透明度渲染），不重启动画。
+        if (!_tickersEnabled || _artworkRefreshFade.isAnimating) {
+          // 不可见（或淡化中再次更新）：直接接管新 URL，不启动/重启动画。
           _centerArtworkUrl = url;
         } else {
           setState(() {
@@ -512,6 +649,20 @@ class _PlayerCoverDeckState extends State<PlayerCoverDeck>
     final bool leftChanged = _leftSlotShown?.id != left?.id;
     final bool rightChanged = _rightSlotShown?.id != right?.id;
     if (!leftChanged && !rightChanged) return;
+    if (!_tickersEnabled) {
+      // 不可见：身份直接对齐，不播淡化（避免回到播放页时补播）。
+      setState(() {
+        if (leftChanged) {
+          _leftSlotShown = left;
+          _leftSlotOutgoing = null;
+        }
+        if (rightChanged) {
+          _rightSlotShown = right;
+          _rightSlotOutgoing = null;
+        }
+      });
+      return;
+    }
     if (_slotIdentityFade.isAnimating) {
       // 淡化中身份再次变化：直接接管新身份（以当前透明度渲染），不重启动画
       // （重启动画会让已淡出的卡透明度回跳）。该侧若还没在淡出（另一侧先
@@ -570,7 +721,8 @@ class _PlayerCoverDeckState extends State<PlayerCoverDeck>
       return;
     }
     if (url == _centerArtworkUrl) return;
-    if (_artworkRefreshFade.isAnimating) {
+    if (_artworkRefreshFade.isAnimating || !_tickersEnabled) {
+      // 不可见（或淡化中再次更新）：直接接管新 URL，不启动/重启动画。
       _centerArtworkUrl = url;
       return;
     }
@@ -659,12 +811,16 @@ class _PlayerCoverDeckState extends State<PlayerCoverDeck>
     _reconcileCorrection.dispose();
     _sourceNeighborFade.dispose();
     _playStateController.dispose();
+    _pressController.removeStatusListener(_handlePressStatus);
+    _pressController.dispose();
     _coverController.removeStatusListener(_handleCoverStatus);
     _coverController.dispose();
     super.dispose();
   }
 
   void _handleHorizontalDragStart(DragStartDetails details) {
+    // 横滑接管：按压反馈让位（拖动跟手本身就是反馈）。
+    _handleCoverPressEnd();
     // 提交等待 / 对账校正 / 过渡动画 / 迷你⇄完整封面飞行期间不接受新手势：
     // 一次拖动只对应一次切歌，避免两段过渡叠加；校正期间放行会把中心从
     // 中间态跳回旧预览目标（校正被弃）。
@@ -853,6 +1009,11 @@ class _PlayerCoverDeckState extends State<PlayerCoverDeck>
       ..phase = CoverSwapPhase.idle
       ..to = null;
     _cancelPendingWatchdog();
+    if (!_tickersEnabled) {
+      // 不可见：直接回位（ticker 被静音，animateBack 会冻结在半途）。
+      _coverController.value = 0;
+      return;
+    }
     _coverController.animateBack(
       0,
       duration: const Duration(milliseconds: 220),
@@ -903,6 +1064,12 @@ class _PlayerCoverDeckState extends State<PlayerCoverDeck>
     required PlaybackProvider playback,
   }) {
     _session.animatedTrackId = id;
+    if (!_tickersEnabled) {
+      // 页面不可见：切歌不播动画，直接落位（ticker 被 TickerMode 静音，
+      // 冻结的中间进度会在回到播放页时重播、并把 morph 锚点带偏）。
+      _settleHiddenTrackChange(playback: playback, track: track);
+      return;
+    }
     if (_session.awaitingReconcile) {
       _reconcileDragCommit(id: id, playback: playback);
       return;
@@ -1344,6 +1511,7 @@ class _PlayerCoverDeckState extends State<PlayerCoverDeck>
         cardKey: PlayerCoverDeck.sideCoverCardKey(left: left, id: shown.id),
         placeholderUrl: placeholderUrl,
         onTap: onTap,
+        pressSlot: left ? _DeckSlot.left : _DeckSlot.right,
       ));
     }
     return layers;
@@ -1416,18 +1584,30 @@ class _PlayerCoverDeckState extends State<PlayerCoverDeck>
     Key? cardKey,
     String? placeholderUrl,
     VoidCallback? onTap,
+    _DeckSlot? pressSlot,
   }) {
     if (track == null) return const SizedBox.shrink();
     Widget card = _buildCoverCard(context, track, sideSize,
         key: cardKey, placeholderUrl: placeholderUrl);
     if (onTap != null) {
-      card = GestureDetector(
-        behavior: HitTestBehavior.opaque,
-        onTap: () {
-          HapticFeedback.lightImpact();
-          onTap();
-        },
-        child: card,
+      final slot = pressSlot!;
+      card = Transform.scale(
+        scale: _pressScaleFor(slot),
+        child: Listener(
+          // 按压反馈走原始指针事件：onTapDown 与横滑识别器竞争时要等
+          // 100ms 判定或抬手才触发，给不了「按下即反馈」。
+          onPointerDown: (_) => _handleCoverPressStart(slot),
+          onPointerUp: (_) => _handleCoverPressEnd(),
+          onPointerCancel: (_) => _handleCoverPressEnd(),
+          child: GestureDetector(
+            behavior: HitTestBehavior.opaque,
+            onTap: () {
+              HapticFeedback.lightImpact();
+              onTap();
+            },
+            child: card,
+          ),
+        ),
       );
     }
     return Positioned.fill(
@@ -1573,43 +1753,50 @@ class _PlayerCoverDeckState extends State<PlayerCoverDeck>
     String? placeholderUrl,
   }) {
     return AnimatedBuilder(
-      // 播放态只用极轻微的缩放：暂停时封面保持清晰（不再变暗 20%，
-      // 那会让封面看起来像被禁用，反而不优雅）。
-      animation: _playStateController,
+      // 播放态缩放 × 按压反馈（两者相乘合成，互不覆盖）：播放态只用极轻微
+      // 的缩放，暂停时封面保持清晰（不再变暗 20%，那会让封面看起来像被禁用）。
+      animation: _centerScaleAnimation,
       builder: (context, child) {
         return Transform.scale(
-          scale: _playStateScaleAnimation.value,
+          scale: _playStateScaleAnimation.value *
+              _pressScaleFor(_DeckSlot.center),
           child: child,
         );
       },
-      child: GestureDetector(
-        behavior: HitTestBehavior.opaque,
-        // 点击封面 = 播放/暂停；横向拖动由封面区手势宿主统一承接
-        // （见 [_buildArtworkStack]：手势不能在拖动期间换型重建）。
-        onTap: () {
-          HapticFeedback.lightImpact();
-          playback.togglePlayPause();
-        },
-        child: RepaintBoundary(
-          child: KeyedSubtree(
-            key: coverKey,
+      child: Listener(
+        // 按压反馈走原始指针事件（见 [_handleCoverPressStart] 注释）。
+        onPointerDown: (_) => _handleCoverPressStart(_DeckSlot.center),
+        onPointerUp: (_) => _handleCoverPressEnd(),
+        onPointerCancel: (_) => _handleCoverPressEnd(),
+        child: GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          // 点击封面 = 播放/暂停；横向拖动由封面区手势宿主统一承接
+          // （见 [_buildArtworkStack]：手势不能在拖动期间换型重建）。
+          onTap: () {
+            HapticFeedback.lightImpact();
+            playback.togglePlayPause();
+          },
+          child: RepaintBoundary(
             child: KeyedSubtree(
-              key: widget.fullCoverKey,
-              child: AnimatedOpacity(
-                // 隐藏用淡出（飞行起点在别处，淡出自然）；亮出必须瞬时——
-                // 飞行副本与真身在同一帧交接，淡入会造成尾段亮度下陷（闪动）。
-                duration: (hidden || widget.coverFlightActive)
-                    ? const Duration(milliseconds: 160)
-                    : Duration.zero,
-                // 顶栏⇄播放页飞行 / 迷你⇄完整飞行期间真身隐藏，
-                // 由飞行副本承接（其余元素不参与共享飞行）。
-                opacity: (hidden || widget.coverFlightActive) ? 0 : 1,
-                child: _buildCoverCard(
-                  context,
-                  track,
-                  artDimension,
-                  fallback: buildDefaultArtwork(context),
-                  placeholderUrl: placeholderUrl,
+              key: coverKey,
+              child: KeyedSubtree(
+                key: widget.fullCoverKey,
+                child: AnimatedOpacity(
+                  // 隐藏用淡出（飞行起点在别处，淡出自然）；亮出必须瞬时——
+                  // 飞行副本与真身在同一帧交接，淡入会造成尾段亮度下陷（闪动）。
+                  duration: (hidden || widget.coverFlightActive)
+                      ? const Duration(milliseconds: 160)
+                      : Duration.zero,
+                  // 顶栏⇄播放页飞行 / 迷你⇄完整飞行期间真身隐藏，
+                  // 由飞行副本承接（其余元素不参与共享飞行）。
+                  opacity: (hidden || widget.coverFlightActive) ? 0 : 1,
+                  child: _buildCoverCard(
+                    context,
+                    track,
+                    artDimension,
+                    fallback: buildDefaultArtwork(context),
+                    placeholderUrl: placeholderUrl,
+                  ),
                 ),
               ),
             ),
@@ -1619,3 +1806,6 @@ class _PlayerCoverDeckState extends State<PlayerCoverDeck>
     );
   }
 }
+
+/// 封面堆叠的槽位标识（按压反馈按槽位定位）。
+enum _DeckSlot { left, center, right }
