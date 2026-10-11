@@ -1086,9 +1086,13 @@ class _FavoriteButton extends StatelessWidget {
 }
 
 
-/// 标题/作者单行块：左侧竖条「书脊」+「歌名 · 作者」，超长省略。
+/// 标题/作者单行块：「歌名 · 作者」，超长省略。
 ///
 /// 单行是为了给歌词/队列让出纵向空间（两行版本太占位置）。
+///
+/// 标题块不带左侧竖条：它与进度把手同宽、同色、同形，上下相邻时会被读成
+/// 重复元素（用户反馈的「两根竖条」），且形似可拖动的把手却不可交互；
+/// 强调色只留给可交互控件（波浪进度/把手）。
 class HeaderAndFooter extends StatelessWidget {
   final String header;
   final String footer;
@@ -1111,44 +1115,29 @@ class HeaderAndFooter extends StatelessWidget {
         '';
     final artistText = artists.isNotEmpty ? artists : footer;
 
-    return Row(
-      children: [
-        Container(
-          width: 4,
-          height: 20,
-          decoration: BoxDecoration(
-            color: scheme.primary,
-            borderRadius: BorderRadius.circular(2),
-          ),
-        ),
-        const SizedBox(width: 10),
-        Expanded(
-          child: Text.rich(
-            TextSpan(
-              children: [
-                TextSpan(
-                  text: header,
-                  // 标题/作者与全 App 文本契约一致：onSurface /
-                  // onSurfaceVariant；强调色只留给左侧标记条。
-                  style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                        fontWeight: FontWeight.bold,
-                        color: scheme.onSurface,
-                      ),
+    return Text.rich(
+      TextSpan(
+        children: [
+          TextSpan(
+            text: header,
+            // 标题/作者与全 App 文本契约一致：onSurface / onSurfaceVariant；
+            // 强调色只给可交互控件（进度波浪/把手）。
+            style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                  fontWeight: FontWeight.bold,
+                  color: scheme.onSurface,
                 ),
-                if (artistText.isNotEmpty)
-                  TextSpan(
-                    text: '  ·  $artistText',
-                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                          color: scheme.onSurfaceVariant,
-                        ),
-                  ),
-              ],
-            ),
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
           ),
-        ),
-      ],
+          if (artistText.isNotEmpty)
+            TextSpan(
+              text: '  ·  $artistText',
+              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                    color: scheme.onSurfaceVariant,
+                  ),
+            ),
+        ],
+      ),
+      maxLines: 1,
+      overflow: TextOverflow.ellipsis,
     );
   }
 }
