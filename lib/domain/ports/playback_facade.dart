@@ -37,4 +37,10 @@ abstract interface class PlaybackFacade {
 
   /// 原地更新队列曲目封面（音源补图；低频快照通知，值变才发）。
   Future<void> updateTrackArtwork(String trackUri, Uri? artwork);
+
+  /// 换源：原地替换队列中 [trackUri] 的曲目（按 id 匹配全部命中项）。
+  ///
+  /// 命中当前播放曲目时重新取链并从头播放（新源音频时长/偏移不可假设）；
+  /// 其余命中项只替换数据，下次播放自然走新源。
+  Future<void> replaceQueueTrack(String trackUri, Track newTrack);
 }

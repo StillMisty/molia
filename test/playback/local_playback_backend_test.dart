@@ -177,6 +177,19 @@ class _FakeService extends LocalPlaybackService {
     _playing = false;
     notifyListeners();
   }
+
+  /// 换源：记录并原地替换（模拟真实服务按 id 全量命中）。
+  final Map<String, SourceTrack> replacedTracks = {};
+
+  @override
+  Future<void> replaceQueueTrack(String trackId, SourceTrack track) async {
+    calls.add('replaceQueueTrack');
+    replacedTracks[trackId] = track;
+    for (var i = 0; i < _queue.length; i++) {
+      if (_queue[i].id == trackId) _queue[i] = track;
+    }
+    notifyListeners();
+  }
 }
 
 SourceTrack _source(String id, {String title = 'Title'}) => SourceTrack(
@@ -331,6 +344,20 @@ void main() {
     await backend.stop();
     expect(service.stopCalls, 1);
     expect(backend.state.value.current, isNull);
+  });
+
+  test('replaceQueueTrack：转换后替换队列同 id 曲目（快照更新，当前不受影响）', () async {
+    service.seed([_source('a'), _source('b')], index: 0, playing: true);
+    final replacement = trackFromSourceTrack(_source('b', title: '新版本'));
+
+    await backend.replaceQueueTrack('fake:b', replacement);
+
+    expect(service.calls, contains('replaceQueueTrack'));
+    expect(service.replacedTracks['fake:b']?.title, '新版本');
+    final snapshot = backend.state.value;
+    expect(snapshot.queue.map((t) => t.title), ['Title', '新版本']);
+    expect(snapshot.queue.last.id, const TrackId('fake', 'b'));
+    expect(snapshot.current?.id.id, 'a', reason: '未命中当前曲目时不重载');
   });
 
   test('可选能力：toggleFavorite / setVolume 抛 unsupported', () async {

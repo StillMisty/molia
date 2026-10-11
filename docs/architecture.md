@@ -151,6 +151,21 @@
   批量操作按 `PlaylistTrack` 规范形状（`PlaylistTrack.fromHistoryEntry` 负责历史转换）；
   「加入列表」流程唯一实现在 `lib/widgets/add_to_library.dart`（收藏页与发现页共用）；
   列表曲目读取经 `playlistTracksView` + `ensurePlaylistTracks`（页面不探测缓存内部）。
+- **换源**：`SourceSwapProvider`（`lib/providers/source_swap_provider.dart`）是
+  跨音源搜索 + 原位替换的唯一状态机：按种子曲目「歌名 + 歌手」在其它可搜索音源
+  并行检索（`CatalogService.search` 复用 5min 缓存；逐源就绪即填充，单源失败进
+  `failedSourceKeys` 可重试），弹层（`lib/widgets/source_swap_sheet.dart`，入口：
+  收藏页三类合集左滑 / 播放页 seek 行）点候选即试听（单曲「换源试听」上下文）、
+  确认后经 `LibraryProvider.replacePlaylistTrack` / `replaceHistoryEntry` 原位
+  替换（仓库事务保 `sortOrder`/`addedAt`/`playedAt`，目标键已存在先确认去重），
+  并经 `PlaybackProvider.replaceQueueTrack` 让队列中同 id 曲目跟随换源（新增
+  `PlaybackFacade.replaceQueueTrack` 端口；命中当前曲目重新取链从头播放，
+  冷启动恢复会话同步替换并落盘）。
+  **自动换源**：播放失败同源重试仍失败后，组合根注入的 `AutoSourceSwapService.findMatch`
+  用 `lib/services/song_match.dart`（LX `findMusic` 判定的唯一实现，与歌词搜索
+  回退共用）**严格匹配**（时长 ±5s、版本词一致）跨源找回并静默替换队列曲目；
+  provenance（每个曲目的已尝试来源）保证级联每源至多一次、有界；
+  开关 `SourceSwapSettings`（`source_swap_auto_enabled`，默认开）在设置 › 播放。
 
 ## 4. 状态与通知策略
 

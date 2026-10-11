@@ -85,6 +85,9 @@ class _FakeBackend implements PlaybackBackend {
 
   @override
   Future<void> updateTrackArtwork(String trackUri, Uri? artwork) async {}
+
+  @override
+  Future<void> replaceQueueTrack(String trackUri, Track newTrack) async {}
 }
 
 class _FakeMessenger implements UiMessenger {

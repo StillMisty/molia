@@ -171,6 +171,29 @@ class LocalPlaybackService extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// 换源：原地替换队列中 [trackId] 的曲目（按 id 匹配全部命中项）。
+  ///
+  /// 命中当前播放曲目时重新取链**从头播放**（新源音频时长/偏移不可假设，
+  /// 与 LX 换源后跳转到新曲目的语义一致）；其余命中项只替换数据，
+  /// 播放到它时自然走新源。命中则触发一次低频快照通知。
+  Future<void> replaceQueueTrack(String trackId, SourceTrack track) async {
+    var hit = false;
+    var currentHit = false;
+    for (var index = 0; index < _queue.length; index++) {
+      if (_queue[index].id != trackId) continue;
+      hit = true;
+      _queue[index] = track;
+      if (index == _currentIndex) currentHit = true;
+    }
+    if (!hit) return;
+    if (currentHit) {
+      // _playIndex 内部同步 _currentTrack / 加载态 / 进度清零与重新取链。
+      await _playIndex(_currentIndex);
+    } else {
+      notifyListeners();
+    }
+  }
+
   Future<void> playTracks(
     List<SourceTrack> tracks,
     int index, {

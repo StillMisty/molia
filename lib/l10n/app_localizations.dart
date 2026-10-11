@@ -446,6 +446,18 @@ abstract class AppLocalizations {
   /// **'Now playing quality'**
   String get settingsCurrentQuality;
 
+  /// No description provided for @settingsAutoSourceSwap.
+  ///
+  /// In en, this message translates to:
+  /// **'Auto source switch'**
+  String get settingsAutoSourceSwap;
+
+  /// No description provided for @settingsAutoSourceSwapSubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'When playback fails, find the same song in another source and switch automatically (on by default)'**
+  String get settingsAutoSourceSwapSubtitle;
+
   /// No description provided for @settingsDataSaverTitle.
   ///
   /// In en, this message translates to:
@@ -1729,6 +1741,84 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Delete entry'**
   String get historyDeleteEntry;
+
+  /// No description provided for @sourceSwap.
+  ///
+  /// In en, this message translates to:
+  /// **'Change source'**
+  String get sourceSwap;
+
+  /// No description provided for @sourceSwapSearching.
+  ///
+  /// In en, this message translates to:
+  /// **'Searching other sources…'**
+  String get sourceSwapSearching;
+
+  /// No description provided for @sourceSwapEmpty.
+  ///
+  /// In en, this message translates to:
+  /// **'No match found in other sources'**
+  String get sourceSwapEmpty;
+
+  /// No description provided for @sourceSwapNoSources.
+  ///
+  /// In en, this message translates to:
+  /// **'No other sources available'**
+  String get sourceSwapNoSources;
+
+  /// No description provided for @sourceSwapFailedSources.
+  ///
+  /// In en, this message translates to:
+  /// **'{count} source(s) failed to search'**
+  String sourceSwapFailedSources(int count);
+
+  /// No description provided for @sourceSwapConfirm.
+  ///
+  /// In en, this message translates to:
+  /// **'Change source'**
+  String get sourceSwapConfirm;
+
+  /// No description provided for @sourceSwapPreviewContext.
+  ///
+  /// In en, this message translates to:
+  /// **'Source preview'**
+  String get sourceSwapPreviewContext;
+
+  /// No description provided for @sourceSwapDuplicateTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Track already exists'**
+  String get sourceSwapDuplicateTitle;
+
+  /// No description provided for @sourceSwapDuplicateMessage.
+  ///
+  /// In en, this message translates to:
+  /// **'The target playlist already contains this track. Changing the source will remove the duplicate and replace it with the selected version.'**
+  String get sourceSwapDuplicateMessage;
+
+  /// No description provided for @sourceSwapDone.
+  ///
+  /// In en, this message translates to:
+  /// **'Source changed'**
+  String get sourceSwapDone;
+
+  /// No description provided for @sourceSwapQueueFollowed.
+  ///
+  /// In en, this message translates to:
+  /// **'Source changed and playback switched'**
+  String get sourceSwapQueueFollowed;
+
+  /// No description provided for @sourceSwapNotFound.
+  ///
+  /// In en, this message translates to:
+  /// **'The track is no longer in its original place'**
+  String get sourceSwapNotFound;
+
+  /// No description provided for @sourceSwapApplyFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Failed to change source, please try again'**
+  String get sourceSwapApplyFailed;
 
   /// No description provided for @playlistAddedTo.
   ///

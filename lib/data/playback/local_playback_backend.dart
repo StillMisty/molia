@@ -185,6 +185,14 @@ class LocalPlaybackBackend implements PlaybackBackend {
     _emit();
   }
 
+  /// 换源：把队列中 [trackUri] 的曲目替换为 [newTrack]（服务重置当前曲目
+  /// 播放时同步发出新快照）。
+  @override
+  Future<void> replaceQueueTrack(String trackUri, Track newTrack) async {
+    await _service.replaceQueueTrack(trackUri, sourceTrackFromTrack(newTrack));
+    _emit();
+  }
+
   void dispose() {
     _service.removeListener(_onServiceChanged);
     _state.dispose();

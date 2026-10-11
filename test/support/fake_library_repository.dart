@@ -308,6 +308,88 @@ class FakeLibraryRepository extends LibraryRepository {
   }
 
   @override
+  Future<bool> replacePlaylistTrack(
+    int playlistId,
+    TrackKey oldKey,
+    PlaylistTrack replacement, {
+    bool favoriteChange = false,
+  }) async {
+    final list = _tracks[playlistId];
+    if (list == null) return false;
+    final oldIndex = list.indexWhere(
+        (t) => t.sourceKey == oldKey.sourceKey && t.songId == oldKey.songId);
+    if (oldIndex < 0) return false;
+    final old = list[oldIndex];
+    final sameKey = replacement.sourceKey == oldKey.sourceKey &&
+        replacement.songId == oldKey.songId;
+    if (!sameKey) {
+      // 去重：目标键已存在时移除（身份与真实仓库事务一致）。
+      list.removeWhere((t) =>
+          t.sourceKey == replacement.sourceKey &&
+          t.songId == replacement.songId);
+    }
+    // 去重可能改动了旧行下标：按对象身份重新定位，保持原位置。
+    final insertIndex = list.indexOf(old);
+    list[insertIndex] = PlaylistTrack(
+      playlistId: playlistId,
+      sourceKey: replacement.sourceKey,
+      songId: replacement.songId,
+      title: replacement.title,
+      artist: replacement.artist,
+      album: replacement.album,
+      coverUrl: replacement.coverUrl,
+      durationMs: replacement.durationMs,
+      raw: replacement.raw,
+      addedAt: old.addedAt,
+      sortOrder: old.sortOrder,
+    );
+    if (favoriteChange) {
+      _favorites.remove('${oldKey.sourceKey}:${oldKey.songId}');
+      _favorites.add('${replacement.sourceKey}:${replacement.songId}');
+    }
+    _syncTrackCount(playlistId);
+    _changed(
+      kind: favoriteChange
+          ? LibraryChangeKind.favorites
+          : LibraryChangeKind.playlistTracks,
+      playlistId: playlistId,
+    );
+    return true;
+  }
+
+  @override
+  Future<bool> replaceHistoryEntry(
+    TrackKey oldKey,
+    PlayHistoryEntry replacement,
+  ) async {
+    final oldIndex = _history.indexWhere(
+        (e) => e.sourceKey == oldKey.sourceKey && e.songId == oldKey.songId);
+    if (oldIndex < 0) return false;
+    final old = _history[oldIndex];
+    final sameKey = replacement.sourceKey == oldKey.sourceKey &&
+        replacement.songId == oldKey.songId;
+    if (!sameKey) {
+      _history.removeWhere((e) =>
+          e.sourceKey == replacement.sourceKey &&
+          e.songId == replacement.songId);
+    }
+    final insertIndex = _history.indexOf(old);
+    _history[insertIndex] = PlayHistoryEntry(
+      sourceKey: replacement.sourceKey,
+      songId: replacement.songId,
+      title: replacement.title,
+      artist: replacement.artist,
+      album: replacement.album,
+      coverUrl: replacement.coverUrl,
+      durationMs: replacement.durationMs,
+      raw: replacement.raw,
+      playedAt: old.playedAt,
+    );
+    _changed(kind: LibraryChangeKind.history);
+    return true;
+  }
+
+  @override
   Future<Set<String>> favoriteKeys() async => Set.of(_favorites);
 
   @override

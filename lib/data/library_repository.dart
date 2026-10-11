@@ -177,6 +177,46 @@ class LibraryRepository {
     return removed;
   }
 
+  /// 换源：播放历史**原位替换**条目（保留 `playedAt` 与时间排序）。
+  ///
+  /// 旧键不存在返回 false；目标键行已存在时先删（历史唯一键语义），
+  /// 保留旧行的 `playedAt`——换源不改变「何时听的」。
+  Future<bool> replaceHistoryEntry(
+    TrackKey oldKey,
+    PlayHistoryEntry replacement,
+  ) async {
+    final db = await _db;
+    var updated = 0;
+    await db.transaction((txn) async {
+      final sameKey = replacement.sourceKey == oldKey.sourceKey &&
+          replacement.songId == oldKey.songId;
+      if (!sameKey) {
+        await txn.delete(
+          'play_history',
+          where: 'sourceKey = ? AND songId = ?',
+          whereArgs: [replacement.sourceKey, replacement.songId],
+        );
+      }
+      updated = await txn.update(
+        'play_history',
+        {
+          'sourceKey': replacement.sourceKey,
+          'songId': replacement.songId,
+          'title': replacement.title,
+          'artist': replacement.artist,
+          'album': replacement.album,
+          'coverUrl': replacement.coverUrl,
+          'durationMs': replacement.durationMs,
+          'raw': jsonEncode(replacement.raw),
+        },
+        where: 'sourceKey = ? AND songId = ?',
+        whereArgs: [oldKey.sourceKey, oldKey.songId],
+      );
+    });
+    if (updated > 0) _notifyChanged(kind: LibraryChangeKind.history);
+    return updated > 0;
+  }
+
   /// 批量写入播放历史（唯一键 upsert + 裁剪上限；单次广播）。
   ///
   /// 供「加入列表 → 播放历史」使用：把曲目记为最近播放。
@@ -484,6 +524,57 @@ class LibraryRepository {
       kind: LibraryChangeKind.playlistTracks,
       playlistId: playlistId,
     );
+  }
+
+  /// 换源：列表内**原位替换**曲目（保留 `id/sortOrder/addedAt` 与列表位置）。
+  ///
+  /// 旧键不存在返回 false；目标键行已存在时先在事务内删除（去重），
+  /// 再把旧行更新为新曲目数据（`playlistId` 以参数为准，忽略
+  /// [replacement] 内的值）。[favoriteChange] 语义同
+  /// [removeTracksFromPlaylist]：收藏列表内换源只做局部刷新。
+  Future<bool> replacePlaylistTrack(
+    int playlistId,
+    TrackKey oldKey,
+    PlaylistTrack replacement, {
+    bool favoriteChange = false,
+  }) async {
+    final db = await _db;
+    var updated = 0;
+    await db.transaction((txn) async {
+      final sameKey = replacement.sourceKey == oldKey.sourceKey &&
+          replacement.songId == oldKey.songId;
+      if (!sameKey) {
+        await txn.delete(
+          'playlist_tracks',
+          where: 'playlistId = ? AND sourceKey = ? AND songId = ?',
+          whereArgs: [playlistId, replacement.sourceKey, replacement.songId],
+        );
+      }
+      updated = await txn.update(
+        'playlist_tracks',
+        {
+          'sourceKey': replacement.sourceKey,
+          'songId': replacement.songId,
+          'title': replacement.title,
+          'artist': replacement.artist,
+          'album': replacement.album,
+          'coverUrl': replacement.coverUrl,
+          'durationMs': replacement.durationMs,
+          'raw': jsonEncode(replacement.raw),
+        },
+        where: 'playlistId = ? AND sourceKey = ? AND songId = ?',
+        whereArgs: [playlistId, oldKey.sourceKey, oldKey.songId],
+      );
+    });
+    if (updated > 0) {
+      _notifyChanged(
+        kind: favoriteChange
+            ? LibraryChangeKind.favorites
+            : LibraryChangeKind.playlistTracks,
+        playlistId: playlistId,
+      );
+    }
+    return updated > 0;
   }
 
   Future<int> _ensureFavoritesPlaylist() async {

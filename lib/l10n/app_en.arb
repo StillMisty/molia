@@ -79,6 +79,8 @@
   "settingsDefaultPlayMode": "Default play mode",
   "settingsDefaultPlayModeSubtitle": "Initial mode for new playback sessions; the current session is unaffected",
   "settingsCurrentQuality": "Now playing quality",
+  "settingsAutoSourceSwap": "Auto source switch",
+  "settingsAutoSourceSwapSubtitle": "When playback fails, find the same song in another source and switch automatically (on by default)",
   "settingsDataSaverTitle": "Data saver",
   "settingsDataSaverSubtitle": "When on, lower audio quality and reduce artwork loading on mobile data",
   "settingsDataSaverNetworkCellular": "Mobile data · active",
@@ -436,6 +438,26 @@
   "playlistReorderDone": "Done",
   "selectAllItems": "Select all",
   "historyDeleteEntry": "Delete entry",
+  "sourceSwap": "Change source",
+  "sourceSwapSearching": "Searching other sources…",
+  "sourceSwapEmpty": "No match found in other sources",
+  "sourceSwapNoSources": "No other sources available",
+  "sourceSwapFailedSources": "{count} source(s) failed to search",
+  "@sourceSwapFailedSources": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "sourceSwapConfirm": "Change source",
+  "sourceSwapPreviewContext": "Source preview",
+  "sourceSwapDuplicateTitle": "Track already exists",
+  "sourceSwapDuplicateMessage": "The target playlist already contains this track. Changing the source will remove the duplicate and replace it with the selected version.",
+  "sourceSwapDone": "Source changed",
+  "sourceSwapQueueFollowed": "Source changed and playback switched",
+  "sourceSwapNotFound": "The track is no longer in its original place",
+  "sourceSwapApplyFailed": "Failed to change source, please try again",
   "playlistAddedTo": "Added to “{name}”",
   "@playlistAddedTo": {
     "placeholders": {

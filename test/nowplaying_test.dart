@@ -1,17 +1,23 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:molia/data/catalog/catalog_service.dart';
 import 'package:molia/domain/models/playback.dart';
 import 'package:molia/domain/models/track.dart';
 import 'package:molia/l10n/app_localizations.dart';
 import 'package:molia/pages/nowplaying.dart';
+import 'package:molia/providers/library_provider.dart';
 import 'package:molia/providers/lyrics_provider.dart';
 import 'package:molia/providers/playback_provider.dart';
+import 'package:molia/providers/source_swap_provider.dart';
 import 'package:molia/services/lyrics_display/lyrics_display_settings.dart';
 import 'package:molia/widgets/mdtab.dart';
 import 'package:molia/widgets/player.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:provider/provider.dart';
+import 'package:provider/single_child_widget.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import 'support/fake_library_repository.dart';
+import 'support/fake_music_source.dart';
 import 'support/fakes.dart';
 
 /// 播放页 smoke 测试：圆点切换行常显 + Apple Music 式跟手拖拽展开/收起。
@@ -40,7 +46,10 @@ void main() {
 
   tearDown(() => playback.dispose());
 
-  Future<void> pumpNowPlaying(WidgetTester tester) async {
+  Future<void> pumpNowPlaying(
+    WidgetTester tester, {
+    List<SingleChildWidget> extraProviders = const [],
+  }) async {
     tester.view.physicalSize = const Size(420, 900);
     tester.view.devicePixelRatio = 1.0;
     addTearDown(() {
@@ -66,6 +75,7 @@ void main() {
           ChangeNotifierProvider(create: (_) => LyricsProvider()),
           // 歌词页扩展行开关：组合根在 main.dart 提供。
           ChangeNotifierProvider(create: (_) => LyricsDisplaySettings()),
+          ...extraProviders,
         ],
         child: MaterialApp(
           locale: const Locale('zh'),
@@ -213,6 +223,53 @@ void main() {
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 400));
     expect(playerHeight(tester), greaterThan(300), reason: '再点激活圆点应展开');
+
+    // 通知节流计时器跑完，避免 pending timer 报错。
+    await tester.pump(const Duration(milliseconds: 50));
+  });
+
+  testWidgets('播放页换源入口：点按钮打开换源弹层（仅队列）', (tester) async {
+    final repository = FakeLibraryRepository();
+    addTearDown(repository.dispose);
+    final library = LibraryProvider(
+      repository: repository,
+      playbackProvider: playback,
+    );
+    addTearDown(library.dispose);
+    final kg = FakeMusicSource('kg');
+    kg.items = [
+      Track(
+        id: const TrackId('kg', '100'),
+        title: 'Title kg',
+        artists: const [Artist(name: 'Artist')],
+        origin: TrackOrigin.builtin,
+        payload: const {'hash': 'h100'},
+      ),
+    ];
+    final registry = FakeSourceRegistry({'kg': kg});
+    final swap = SourceSwapProvider(
+      catalogService: CatalogService(registry: registry),
+      sourceRegistry: registry,
+      libraryProvider: library,
+      playbackProvider: playback,
+    );
+    addTearDown(swap.dispose);
+
+    await pumpNowPlaying(
+      tester,
+      extraProviders: [
+        ChangeNotifierProvider<LibraryProvider>.value(value: library),
+        ChangeNotifierProvider<SourceSwapProvider>.value(value: swap),
+      ],
+    );
+
+    expect(find.byIcon(Icons.swap_horiz_rounded), findsOneWidget);
+    await tester.tap(find.byIcon(Icons.swap_horiz_rounded));
+    await tester.pumpAndSettle();
+
+    // 弹层打开并完成跨源搜索（仅队列位置：无列表写入）。
+    expect(find.text('Title kg'), findsOneWidget);
+    expect(swap.placement, SourceSwapPlacement.queue);
 
     // 通知节流计时器跑完，避免 pending timer 报错。
     await tester.pump(const Duration(milliseconds: 50));
