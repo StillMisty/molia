@@ -613,5 +613,10 @@
   },
   "aiDjRetry": "重试",
   "aiDjOpenSettings": "配置 AI 服务",
-  "aiDjBadgeTooltip": "AI 推歌进行中"
+  "aiDjBadgeTooltip": "AI 推歌进行中",
+  "aiDjDiscoverSubtitle": "用你的听歌记录让 AI 帮你选歌",
+  "aiDjManage": "管理",
+  "aiDjGenerating": "正在生成推荐…",
+  "aiDjBatchFailed": "这批推荐没生成出来",
+  "aiDjRefreshBatch": "换一批"
 }

@@ -1633,4 +1633,20 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get aiDjBadgeTooltip => 'AI DJ is on';
+
+  @override
+  String get aiDjDiscoverSubtitle =>
+      'Let AI pick songs from your listening history';
+
+  @override
+  String get aiDjManage => 'Manage';
+
+  @override
+  String get aiDjGenerating => 'Generating recommendations…';
+
+  @override
+  String get aiDjBatchFailed => 'Couldn\'t generate a batch';
+
+  @override
+  String get aiDjRefreshBatch => 'New batch';
 }

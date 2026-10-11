@@ -3043,6 +3043,36 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'AI DJ is on'**
   String get aiDjBadgeTooltip;
+
+  /// No description provided for @aiDjDiscoverSubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Let AI pick songs from your listening history'**
+  String get aiDjDiscoverSubtitle;
+
+  /// No description provided for @aiDjManage.
+  ///
+  /// In en, this message translates to:
+  /// **'Manage'**
+  String get aiDjManage;
+
+  /// No description provided for @aiDjGenerating.
+  ///
+  /// In en, this message translates to:
+  /// **'Generating recommendations…'**
+  String get aiDjGenerating;
+
+  /// No description provided for @aiDjBatchFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Couldn\'t generate a batch'**
+  String get aiDjBatchFailed;
+
+  /// No description provided for @aiDjRefreshBatch.
+  ///
+  /// In en, this message translates to:
+  /// **'New batch'**
+  String get aiDjRefreshBatch;
 }
 
 class _AppLocalizationsDelegate

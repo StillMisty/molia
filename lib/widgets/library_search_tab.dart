@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 
 import '../l10n/app_localizations.dart';
 import '../providers/search_provider.dart';
+import 'ai_dj_carousel.dart';
 import 'app_search_bar.dart';
 import 'search_section.dart';
 
@@ -84,6 +85,8 @@ class _LibrarySearchTabState extends State<LibrarySearchTab>
                 },
               ),
             ),
+            // 浏览态：AI 推歌推荐流（搜索激活时让位给结果区）。
+            if (!isSearchActive) const AiDjCarousel(),
             Expanded(
               child: RepaintBoundary(
                 child: isSearchActive
@@ -126,4 +129,3 @@ class _LibrarySearchTabState extends State<LibrarySearchTab>
     );
   }
 }
-

@@ -18,10 +18,13 @@ import 'dart:math' as math;
 import 'package:flutter/foundation.dart';
 import 'package:logger/logger.dart';
 
+import '../data/mapping/track_mapper.dart';
 import '../domain/models/ai_dj.dart';
 import '../domain/models/failure.dart';
 import '../domain/models/play_statistics.dart';
 import '../domain/models/playback.dart';
+import '../domain/models/track.dart';
+import '../services/ai/ai_pending_batch_store.dart';
 import '../services/ai/ai_recommendation_service.dart';
 import '../services/ai/ai_settings_store.dart';
 import 'library_provider.dart';
@@ -52,19 +55,25 @@ class AiDjProvider extends ChangeNotifier {
     required LibraryProvider libraryProvider,
     required AiRecommendationGenerator recommendationService,
     required AiSettingsStore settingsStore,
+    AiPendingBatchStore? pendingStore,
   })  : _playbackProvider = playbackProvider,
         _libraryProvider = libraryProvider,
         _recommendationService = recommendationService,
-        _settingsStore = settingsStore;
+        _settingsStore = settingsStore,
+        _pendingStore = pendingStore ?? AiPendingBatchStore();
 
   final PlaybackProvider _playbackProvider;
   final LibraryProvider _libraryProvider;
   final AiRecommendationGenerator _recommendationService;
   final AiSettingsStore _settingsStore;
+  final AiPendingBatchStore _pendingStore;
   final Logger _logger = Logger();
 
   /// 每批推荐数量。
   static const int batchSize = 20;
+
+  /// 待播批次缓存有效期（发现页打开不重复花 token）。
+  static const Duration pendingTtl = Duration(hours: 12);
 
   /// 队列剩余曲目 ≤ 此值时续推。
   static const int lowWatermark = 5;
@@ -79,6 +88,7 @@ class AiDjProvider extends ChangeNotifier {
   bool _consentGranted = false;
   AiDjStatus _status = AiDjStatus.off;
   AiDjBatch? _currentBatch;
+  AiDjBatch? _pendingBatch;
   SourceFailure? _lastError;
   bool _busy = false;
   int _queuedCount = 0;
@@ -107,11 +117,23 @@ class AiDjProvider extends ChangeNotifier {
     _status = value;
     statusListenable.value = value;
   }
+
   bool get isActive =>
       _status == AiDjStatus.preparing || _status == AiDjStatus.playing;
   bool get isBusy => _busy;
   AiDjBatch? get currentBatch => _currentBatch;
   SourceFailure? get lastError => _lastError;
+
+  /// 待播批次（发现页 carousel 展示的"下一批"；播放时入队）。
+  AiDjBatch? get pendingBatch => _pendingBatch;
+  bool get hasPendingBatch =>
+      _pendingBatch != null && _pendingBatch!.items.isNotEmpty;
+
+  /// 待播批次是否过期（超 [pendingTtl]，开页时静默替换）。
+  bool get pendingExpired {
+    final batch = _pendingBatch;
+    return batch != null && !_isFresh(batch);
+  }
 
   /// 会话内已入队的 AI 曲目总数。
   int get queuedCount => _queuedCount;
@@ -125,24 +147,28 @@ class AiDjProvider extends ChangeNotifier {
   Future<void> init() async {
     _config = await _settingsStore.readConfig();
     _consentGranted = await _settingsStore.hasConsent();
+    _pendingBatch = await _restorePendingBatch();
     notifyListeners();
   }
 
   Future<void> saveConfig(LlmConfig config) async {
     await _settingsStore.saveConfig(config);
     _config = config;
+    _lastError = null; // 新配置：允许自动生成/重试
     notifyListeners();
   }
 
   Future<void> clearConfig() async {
     await _settingsStore.clearConfig();
     _config = null;
+    _lastError = null;
     notifyListeners();
   }
 
   Future<void> grantConsent() async {
     await _settingsStore.grantConsent();
     _consentGranted = true;
+    _lastError = null;
     notifyListeners();
   }
 
@@ -175,6 +201,7 @@ class AiDjProvider extends ChangeNotifier {
     _lastError = null;
     _busy = true;
     notifyListeners();
+    var played = false;
     try {
       final batch = await _generate();
       if (batch.isEmpty) {
@@ -194,6 +221,7 @@ class AiDjProvider extends ChangeNotifier {
       _registerSessionTracks(batch.items);
       _setStatus(AiDjStatus.playing);
       _failureCount = 0;
+      played = true;
     } catch (e) {
       _lastError = _failureOf(e);
       _setStatus(AiDjStatus.error);
@@ -202,18 +230,79 @@ class AiDjProvider extends ChangeNotifier {
       _busy = false;
       notifyListeners();
     }
+    // 起播后预取"下一批"：carousel 持续有内容、低水位续推无等待。
+    if (played) unawaited(_prefetchPending());
   }
 
-  /// 继续推一批（手动「换一批」/ 低水位自动续推）：生成并追加到队尾。
+  /// 发现页 carousel 打开时调用：配置 + 隐私确认齐备且缓存缺失/过期时
+  /// 静默生成一批（12h 内不重复花 token）。
+  ///
+  /// 上次生成失败后**不自动重试**（由错误卡的「重试」显式触发，
+  /// 避免每次 rebuild 都刷请求的失败循环）。
+  Future<void> ensurePendingBatch() async {
+    if (!hasConfig || !_consentGranted) return;
+    if (_lastError != null) return;
+    final batch = _pendingBatch;
+    if (batch != null && _isFresh(batch)) return;
+    await _prefetchPending();
+  }
+
+  /// 「换一批」：替换待播批次（推歌中只换"下一批"，不打断当前播放）。
+  Future<void> refreshPendingBatch() => _prefetchPending();
+
+  /// 点击 carousel 卡片：从第 [index] 首开始播放，AI 接管队列。
+  ///
+  /// - 该曲已在队列（推歌中）→ 直接跳转；
+  /// - 否则整批入队并从该首起播（替换当前队列），模式置「推歌中」。
+  Future<void> playFromPending(int index) async {
+    final batch = _pendingBatch;
+    if (batch == null || index < 0 || index >= batch.items.length) return;
+    final uri = batch.items[index].track.id.uri;
+
+    final queue = _playbackProvider.snapshot.queue;
+    if (queue.any((track) => track.id.uri == uri)) {
+      await _playbackProvider.playLocalQueueItemById(uri);
+      return;
+    }
+    if (_busy) return;
+    _busy = true;
+    notifyListeners();
+    try {
+      _resetSession(batch);
+      await _playbackProvider.playDomainTracks(
+        [for (final item in batch.items) item.track],
+        index,
+        contextName: kAiDjContextName,
+      );
+      _registerSessionTracks(batch.items);
+      _setStatus(AiDjStatus.playing);
+      _failureCount = 0;
+      _lastError = null;
+      await _clearPending();
+    } catch (e) {
+      _lastError = _failureOf(e);
+      _setStatus(AiDjStatus.error);
+      _logger.e('AI 推歌：从推荐流起播失败', error: e);
+    } finally {
+      _busy = false;
+      notifyListeners();
+    }
+    // 起播后立即预取"下一批"。
+    unawaited(_prefetchPending());
+  }
+
+  /// 继续推一批（手动「再来一批」/ 低水位自动续推）：
+  /// 保证有待播批次并追加到队尾，随后预取下一批。
   Future<void> feedMore() async {
     if (_busy) return;
     if (_status != AiDjStatus.playing && _status != AiDjStatus.error) return;
     _busy = true;
     if (_status == AiDjStatus.error) _setStatus(AiDjStatus.playing);
     notifyListeners();
+    var appended = false;
     try {
-      final batch = await _generate();
-      if (batch.isEmpty) {
+      final batch = await _ensurePendingForAppend();
+      if (batch == null || batch.items.isEmpty) {
         throw const SourceFailure(
           kind: FailureKind.unknown,
           message: '本批没有可播放的曲目',
@@ -227,8 +316,10 @@ class AiDjProvider extends ChangeNotifier {
       _registerSessionTracks(batch.items);
       _currentBatch = batch;
       _queuedCount += batch.items.length;
+      await _clearPending();
       _failureCount = 0;
       _lastError = null;
+      appended = true;
     } catch (e) {
       _failureCount++;
       _lastError = _failureOf(e);
@@ -242,6 +333,7 @@ class AiDjProvider extends ChangeNotifier {
       _busy = false;
       notifyListeners();
     }
+    if (appended) unawaited(_prefetchPending());
   }
 
   /// 退出模式。默认保留当前队列继续播放（清空由调用方显式传 false）。
@@ -300,6 +392,89 @@ class AiDjProvider extends ChangeNotifier {
         skippedLabels: List.of(_skippedLabels),
         likedLabels: [..._likedLabels, ..._collectNewLikes()],
       );
+
+  /// 预取待播批次（不 append；carousel 展示与后续续推共用）。
+  Future<void> _prefetchPending() async {
+    if (!hasConfig || _busy) return;
+    _busy = true;
+    notifyListeners();
+    try {
+      final batch = await _generate();
+      if (batch.isEmpty) {
+        throw const SourceFailure(
+          kind: FailureKind.unknown,
+          message: '本批没有可播放的曲目',
+          l10nKey: 'aiDjNothingResolved',
+          retryable: true,
+        );
+      }
+      _pendingBatch = batch;
+      _lastError = null;
+      await _pendingStore.save(batch);
+    } catch (e) {
+      // 预取失败只影响 carousel 内容，不触发"连续失败停模式"计数。
+      _lastError = _failureOf(e);
+      _logger.e('AI 推歌：预取推荐失败', error: e);
+    } finally {
+      _busy = false;
+      notifyListeners();
+    }
+  }
+
+  /// 续推取批：优先复用未过期的待播批次，否则现场生成。
+  Future<AiDjBatch?> _ensurePendingForAppend() async {
+    final batch = _pendingBatch;
+    if (batch != null && _isFresh(batch)) return batch;
+    final generated = await _generate();
+    return generated.items.isEmpty ? null : generated;
+  }
+
+  Future<void> _clearPending() async {
+    _pendingBatch = null;
+    await _pendingStore.clear();
+  }
+
+  bool _isFresh(AiDjBatch batch) =>
+      DateTime.now().difference(batch.generatedAt) < pendingTtl;
+
+  /// 启动时恢复上次缓存的待播批次（离线/重启后 carousel 立即有内容）。
+  Future<AiDjBatch?> _restorePendingBatch() async {
+    final stored = await _pendingStore.load();
+    if (stored == null || stored.items.isEmpty) return null;
+    try {
+      return AiDjBatch(
+        items: [
+          for (final item in stored.items)
+            ResolvedRecommendation(
+              source: AiRecommendation(
+                title: item.title,
+                artist: item.artist,
+                reason: item.reason,
+              ),
+              track: _trackFromStored(item),
+            ),
+        ],
+        unresolved: stored.unresolved,
+        generatedAt: stored.generatedAt,
+      );
+    } catch (_) {
+      return null;
+    }
+  }
+
+  /// 库内形状 → 可播放领域 Track（raw 原样 + 规范 id 补齐）。
+  Track _trackFromStored(StoredAiBatchItem item) {
+    final source = _libraryProvider.sourceTrackFromRaw(
+      sourceKey: item.sourceKey,
+      title: item.title,
+      artist: item.artist,
+      album: item.album,
+      coverUrl: item.coverUrl,
+      durationMs: item.durationMs,
+      raw: item.raw,
+    );
+    return trackFromSourceTrack(source);
+  }
 
   void _resetSession(AiDjBatch batch) {
     _skippedLabels.clear();
@@ -374,4 +549,19 @@ class AiDjProvider extends ChangeNotifier {
 
   SourceFailure _failureOf(Object error) =>
       error is SourceFailure ? error : SourceFailure.from(error);
+
+  bool _disposed = false;
+
+  /// dispose 后不再发通知（未 await 的预取/续推可能晚于 dispose）。
+  @override
+  void notifyListeners() {
+    if (_disposed) return;
+    super.notifyListeners();
+  }
+
+  @override
+  void dispose() {
+    _disposed = true;
+    super.dispose();
+  }
 }

@@ -120,7 +120,9 @@
   `CatalogService.search` 并行解析）。`AiDjProvider` 是模式状态机
   （批次 20 / 低水位续推 / 跳过与收藏反馈 / 失败降级），经
   `PlaybackProvider.enqueueDomainTracks` 续推（洗牌追加见
-  `PlaybackShuffleOrder.extend`）；播放页徽标与 AI 页订阅其状态。
+  `PlaybackShuffleOrder.extend`）；播放页徽标与 AI 页订阅其状态，发现页推荐流
+  （`AiDjCarousel`）消费待播批次（12h 缓存、点卡整批入队起播、尾部换一批），
+  **模式关闭时整条隐藏**（开启入口在设置 › 数据管理 › AI DJ）。
   首次开启隐私确认、Web 隐藏；定位与边界见 ADR-0002。
 - **渠道选择**：`DiscoverProvider.channelKey` 是渠道状态的唯一持有者；渠道变化经
   注入的 `onChannelChanged`（组合根）同步搜索源（可搜索渠道才跟随），资料页只

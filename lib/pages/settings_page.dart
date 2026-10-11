@@ -433,23 +433,7 @@ class _SettingsMenuSectionState extends State<SettingsMenuSection> {
             },
           ),
           const SizedBox(height: kElementSpacing),
-          // 统计采集开关（关闭 = 停止记录新事件，已有数据保留）。
-          ValueListenableBuilder<bool>(
-            valueListenable:
-                context.read<PlayStatisticsService>().enabledNotifier,
-            builder: (context, enabled, _) => _buildValueSwitchMenuItem(
-              context,
-              switchKey: const Key('settingsPlayStatisticsSwitch'),
-              icon: Icons.query_stats_rounded,
-              title: l10n.statsRecordSwitch,
-              subtitle: l10n.statsRecordSwitchSubtitle,
-              value: enabled,
-              onChanged: (value) => unawaited(
-                context.read<PlayStatisticsService>().setEnabled(value),
-              ),
-            ),
-          ),
-          // AI 推歌（Phase 2）：用户自备 Key 的推荐电台（默认关闭；Web 隐藏）。
+          // AI 推歌（Phase 2）：配置与开启入口（模式生效后推荐流出在发现页）。
           if (!kIsWeb) ...[
             const SizedBox(height: kElementSpacing),
             _buildSettingMenuItem(
@@ -466,6 +450,23 @@ class _SettingsMenuSectionState extends State<SettingsMenuSection> {
               },
             ),
           ],
+          const SizedBox(height: kElementSpacing),
+          // 统计采集开关（关闭 = 停止记录新事件，已有数据保留）。
+          ValueListenableBuilder<bool>(
+            valueListenable:
+                context.read<PlayStatisticsService>().enabledNotifier,
+            builder: (context, enabled, _) => _buildValueSwitchMenuItem(
+              context,
+              switchKey: const Key('settingsPlayStatisticsSwitch'),
+              icon: Icons.query_stats_rounded,
+              title: l10n.statsRecordSwitch,
+              subtitle: l10n.statsRecordSwitchSubtitle,
+              value: enabled,
+              onChanged: (value) => unawaited(
+                context.read<PlayStatisticsService>().setEnabled(value),
+              ),
+            ),
+          ),
         ],
       ),
     );

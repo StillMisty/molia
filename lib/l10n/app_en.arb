@@ -832,5 +832,10 @@
   },
   "aiDjRetry": "Retry",
   "aiDjOpenSettings": "Set up AI service",
-  "aiDjBadgeTooltip": "AI DJ is on"
+  "aiDjBadgeTooltip": "AI DJ is on",
+  "aiDjDiscoverSubtitle": "Let AI pick songs from your listening history",
+  "aiDjManage": "Manage",
+  "aiDjGenerating": "Generating recommendations…",
+  "aiDjBatchFailed": "Couldn't generate a batch",
+  "aiDjRefreshBatch": "New batch"
 }

@@ -1578,4 +1578,19 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get aiDjBadgeTooltip => 'AI 推歌进行中';
+
+  @override
+  String get aiDjDiscoverSubtitle => '用你的听歌记录让 AI 帮你选歌';
+
+  @override
+  String get aiDjManage => '管理';
+
+  @override
+  String get aiDjGenerating => '正在生成推荐…';
+
+  @override
+  String get aiDjBatchFailed => '这批推荐没生成出来';
+
+  @override
+  String get aiDjRefreshBatch => '换一批';
 }
