@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:material_ui/material_ui.dart';
 
+import '../../theme/scheme_builder.dart';
 import 'lyric_color_resolver.dart';
 import 'lyrics_channel.dart';
 import 'lyrics_display_settings.dart';
@@ -16,9 +17,11 @@ class DesktopLyricsOutput implements InteractiveLyricsOutput {
     LyricsChannel? channel,
     bool? supported,
     ColorScheme Function()? colorScheme,
+    ColorScheme? Function()? artworkColorScheme,
   })  : _channel = channel ?? LyricsChannel.instance,
         _supported = supported ?? LyricsChannel.isSupportedPlatform,
-        _colorScheme = colorScheme {
+        _colorScheme = colorScheme,
+        _artworkColorScheme = artworkColorScheme {
     if (_supported) {
       _eventSub = _channel.events.listen(_onChannelEvent);
     }
@@ -27,8 +30,12 @@ class DesktopLyricsOutput implements InteractiveLyricsOutput {
   final LyricsChannel _channel;
   final bool _supported;
 
-  /// 主题色板提供者（跟随主题的颜色来源；为空时只有自定义色可用）。
+  /// 应用主题色板提供者（跟随主题的来源之一；为空时只有自定义色可用）。
   final ColorScheme Function()? _colorScheme;
+
+  /// 当前曲目封面色板提供者（「跟随封面」来源；无封面时返回 null，
+  /// 由 [resolveSurfaceScheme] 回退应用主题）。
+  final ColorScheme? Function()? _artworkColorScheme;
   final StreamController<LyricsOutputAction> _actions =
       StreamController<LyricsOutputAction>.broadcast();
 
@@ -123,7 +130,7 @@ class DesktopLyricsOutput implements InteractiveLyricsOutput {
   }
 
   Map<String, Object?> _configOf(LyricsDisplaySettings s) {
-    final scheme = _colorScheme?.call();
+    final scheme = _resolveScheme(s);
     return {
       'fontSize': s.desktopFontSize,
       'opacity': s.desktopOpacity,
@@ -143,6 +150,18 @@ class DesktopLyricsOutput implements InteractiveLyricsOutput {
       'showToggleAnimation': s.desktopShowToggleAnimation,
       'controls': s.desktopControls,
     };
+  }
+
+  /// 「跟随主题角色」所用方案：按设置来源解析，封面缺失回退应用主题；
+  /// 应用主题不可用（无宿主注入）时返回 null，颜色行只允许自定义色。
+  ColorScheme? _resolveScheme(LyricsDisplaySettings s) {
+    final appScheme = _colorScheme?.call();
+    if (appScheme == null) return null;
+    return resolveSurfaceScheme(
+      s.desktopSchemeSource,
+      appScheme: appScheme,
+      artworkScheme: _artworkColorScheme?.call(),
+    );
   }
 
   int _resolveColor(LyricColorSource source, int custom, ColorScheme? scheme) =>

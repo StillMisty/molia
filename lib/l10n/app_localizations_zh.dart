@@ -96,16 +96,13 @@ class AppLocalizationsZh extends AppLocalizations {
   String get themeModeDark => '深色';
 
   @override
-  String get settingsDynamicColor => '动态取色';
+  String get settingsBaseColor => '基础配色';
 
   @override
-  String get settingsDynamicColorSubtitle => '从专辑封面提取主题色';
+  String get settingsBaseColorWallpaper => '系统壁纸（莫奈）';
 
   @override
-  String get settingsMonetColor => '莫奈取色';
-
-  @override
-  String get settingsMonetColorSubtitle => '使用系统壁纸提供的配色（Android 12+）';
+  String get settingsBaseColorCustom => '自定义颜色';
 
   @override
   String get settingsMonetUnavailable => '当前平台不支持';
@@ -114,10 +111,17 @@ class AppLocalizationsZh extends AppLocalizations {
   String get settingsPureBlack => '纯黑背景';
 
   @override
-  String get settingsPureBlackSubtitle => '深色模式下使用纯黑背景（OLED 省电）';
+  String get settingsPureBlackSubtitle => '深色模式下把表面覆盖为纯黑（与取色来源叠加，OLED 省电）';
 
   @override
-  String get settingsSeedColor => '主题色';
+  String get settingsSeedColor => '自定义颜色';
+
+  @override
+  String get settingsFollowArtwork => '播放时跟随封面';
+
+  @override
+  String get settingsFollowArtworkSubtitle =>
+      '播放有封面的歌曲时，用封面取色覆盖基础配色；无封面时回退基础配色';
 
   @override
   String get settingsAppFont => '应用字体';
@@ -133,6 +137,24 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get posterFontLabel => '字体';
+
+  @override
+  String get posterColorSource => '取色来源';
+
+  @override
+  String get posterColorSourceAppTheme => '跟随应用主题';
+
+  @override
+  String get posterColorSourceArtwork => '跟随封面';
+
+  @override
+  String get posterColorSourceCustom => '自定义颜色';
+
+  @override
+  String get posterColorCustomLabel => '自定义色';
+
+  @override
+  String get posterColorUnavailable => '当前曲目无封面';
 
   @override
   String get posterFontFollowApp => '跟随应用字体';
@@ -1136,6 +1158,15 @@ class AppLocalizationsZh extends AppLocalizations {
   String get lyricsDesktopColorShadow => '描边颜色';
 
   @override
+  String get lyricsDesktopSchemeSource => '取色来源';
+
+  @override
+  String get lyricsDesktopSchemeAppTheme => '跟随应用主题';
+
+  @override
+  String get lyricsDesktopSchemeArtwork => '跟随封面';
+
+  @override
   String get lyricsDesktopLock => '锁定位置（点击穿透）';
 
   @override
@@ -1283,26 +1314,27 @@ class AppLocalizationsZh extends AppLocalizations {
   String get colorPickerOpacity => '不透明度';
 
   @override
-  String get lyricsColorSource => '取色方式';
+  String get lyricsColorSource => '颜色';
 
   @override
   String get lyricsColorSourceCustom => '自定义';
 
   @override
-  String get lyricsColorSourcePrimary => '主题 · 主色';
+  String get lyricsColorSourcePrimary => '主色';
 
   @override
-  String get lyricsColorSourceSecondary => '主题 · 副色';
+  String get lyricsColorSourceSecondary => '副色';
 
   @override
-  String get lyricsColorSourceTertiary => '主题 · 第三色';
+  String get lyricsColorSourceTertiary => '第三色';
 
   @override
-  String get lyricsColorSourceOnSurface => '主题 · 正文色';
+  String get lyricsColorSourceOnSurface => '正文色';
 
   @override
-  String get lyricsColorSourceOnSurfaceVariant => '主题 · 次要文本色';
+  String get lyricsColorSourceOnSurfaceVariant => '次要文本色';
 
   @override
-  String get lyricsDesktopColorThemeHint => '跟随主题时使用莫奈壁纸取色或专辑封面取色，并随主题实时变化。';
+  String get lyricsDesktopColorThemeHint =>
+      '取色来源决定三行「跟随主题角色」用哪套方案：跟随应用主题随外观设置变化；跟随封面按当前曲目封面取色并实时更新。';
 }

@@ -97,18 +97,13 @@ class AppLocalizationsEn extends AppLocalizations {
   String get themeModeDark => 'Dark';
 
   @override
-  String get settingsDynamicColor => 'Dynamic color';
+  String get settingsBaseColor => 'Base colors';
 
   @override
-  String get settingsDynamicColorSubtitle =>
-      'Derive theme colors from album art';
+  String get settingsBaseColorWallpaper => 'System wallpaper (Monet)';
 
   @override
-  String get settingsMonetColor => 'Monet color';
-
-  @override
-  String get settingsMonetColorSubtitle =>
-      'Use wallpaper colors provided by the system (Android 12+)';
+  String get settingsBaseColorCustom => 'Custom color';
 
   @override
   String get settingsMonetUnavailable => 'Not supported on this platform';
@@ -118,10 +113,17 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get settingsPureBlackSubtitle =>
-      'Use pure black surfaces in dark mode (OLED)';
+      'Use pure black surfaces in dark mode (stacks with the color source; OLED)';
 
   @override
-  String get settingsSeedColor => 'Theme color';
+  String get settingsSeedColor => 'Custom color';
+
+  @override
+  String get settingsFollowArtwork => 'Follow album art';
+
+  @override
+  String get settingsFollowArtworkSubtitle =>
+      'Use album art colors while a track with artwork plays; falls back to base colors otherwise';
 
   @override
   String get settingsAppFont => 'App font';
@@ -137,6 +139,24 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get posterFontLabel => 'Font';
+
+  @override
+  String get posterColorSource => 'Color source';
+
+  @override
+  String get posterColorSourceAppTheme => 'Follow app theme';
+
+  @override
+  String get posterColorSourceArtwork => 'Follow album art';
+
+  @override
+  String get posterColorSourceCustom => 'Custom color';
+
+  @override
+  String get posterColorCustomLabel => 'Custom color';
+
+  @override
+  String get posterColorUnavailable => 'No artwork for this track';
 
   @override
   String get posterFontFollowApp => 'Follow app font';
@@ -1171,6 +1191,15 @@ class AppLocalizationsEn extends AppLocalizations {
   String get lyricsDesktopColorShadow => 'Shadow color';
 
   @override
+  String get lyricsDesktopSchemeSource => 'Color source';
+
+  @override
+  String get lyricsDesktopSchemeAppTheme => 'Follow app theme';
+
+  @override
+  String get lyricsDesktopSchemeArtwork => 'Follow album art';
+
+  @override
   String get lyricsDesktopLock => 'Lock position (click-through)';
 
   @override
@@ -1323,27 +1352,27 @@ class AppLocalizationsEn extends AppLocalizations {
   String get colorPickerOpacity => 'Opacity';
 
   @override
-  String get lyricsColorSource => 'Color source';
+  String get lyricsColorSource => 'Color';
 
   @override
   String get lyricsColorSourceCustom => 'Custom';
 
   @override
-  String get lyricsColorSourcePrimary => 'Theme · Primary';
+  String get lyricsColorSourcePrimary => 'Primary';
 
   @override
-  String get lyricsColorSourceSecondary => 'Theme · Secondary';
+  String get lyricsColorSourceSecondary => 'Secondary';
 
   @override
-  String get lyricsColorSourceTertiary => 'Theme · Tertiary';
+  String get lyricsColorSourceTertiary => 'Tertiary';
 
   @override
-  String get lyricsColorSourceOnSurface => 'Theme · On surface';
+  String get lyricsColorSourceOnSurface => 'On surface';
 
   @override
-  String get lyricsColorSourceOnSurfaceVariant => 'Theme · Variant';
+  String get lyricsColorSourceOnSurfaceVariant => 'Variant';
 
   @override
   String get lyricsDesktopColorThemeHint =>
-      'Theme colors follow Monet (wallpaper) or album artwork colors and update live with the app theme.';
+      'The color source decides which scheme the theme-role rows use: app theme follows the appearance settings; album art updates live with the current track.';
 }

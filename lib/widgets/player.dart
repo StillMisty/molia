@@ -14,7 +14,6 @@ import '../managers/artwork_cache.dart';
 import '../providers/library_provider.dart';
 import '../providers/playback_provider.dart';
 import '../models/play_mode.dart';
-import '../providers/theme_provider.dart';
 import '../services/data_saver_service.dart';
 import '../utils/responsive.dart';
 import 'app_network_image.dart';
@@ -57,8 +56,9 @@ class Player extends StatefulWidget {
 
 class _PlayerState extends State<Player> with TickerProviderStateMixin {
   Track? _lastTrack;
+
+  /// 最近一次展示的封面地址：仅供迷你占位与预取复用（取色不在此处触发）。
   String? _lastImageUrl;
-  bool _isThemeUpdating = false;
 
   // ---- 完整播放器布局（小屏） ----
   // 标题单行 38、进度排 56、两者间距 14。
@@ -229,49 +229,22 @@ class _PlayerState extends State<Player> with TickerProviderStateMixin {
     super.dispose();
   }
 
-  /// 根据当前专辑封面更新主题色
-  void _updateThemeIfNeeded(BuildContext context, Track? displayTrack) {
-    final String? currentImageUrl = artworkUrlOf(displayTrack);
-
-    if (currentImageUrl != null && currentImageUrl != _lastImageUrl) {
-      // 省流模式：跳过封面下载与取色（保持现有主题色），
-      // 也不更新 _lastImageUrl，恢复 Wi-Fi 后仍能补取色。
-      if (context.read<DataSaverService?>()?.blockNetworkArtwork ?? false) {
-        return;
-      }
-
-      _prefetchImage(currentImageUrl);
-
-      if (!_isThemeUpdating) {
-        _isThemeUpdating = true;
-        _lastImageUrl = currentImageUrl;
-
-        // 在异步操作前缓存 context 相关的值
-        final themeProvider = context.read<ThemeProvider>();
-        final screenWidth = MediaQuery.sizeOf(context).width.toInt();
-        final brightness = MediaQuery.platformBrightnessOf(context);
-
-        Future.delayed(const Duration(milliseconds: 500), () async {
-          try {
-            if (!mounted || currentImageUrl != _lastImageUrl) return;
-            // 走共享封面缓存取图：与显示路径同一份磁盘缓存（不再经
-            // 默认 CacheManager 二次下载同一张封面）。
-            final imageProvider = await artworkImageProvider(
-              currentImageUrl,
-              maxWidth: screenWidth,
-            );
-            if (!mounted || currentImageUrl != _lastImageUrl) return;
-            themeProvider.updateThemeFromImage(
-              imageProvider: imageProvider,
-              brightness: brightness,
-              cacheKey: currentImageUrl,
-            );
-          } finally {
-            _isThemeUpdating = false;
-          }
-        });
-      }
+  /// 封面切换时的显示预取：与显示路径完全同键，命中的图直接进 ImageCache。
+  ///
+  /// 取色不在这里触发：composition root 的 `ArtworkThemeSync` 监听
+  /// PlaybackProvider（任何页面/后台切歌都走同一条取色链路，省流时读本地
+  /// 缓存，未命中保持现色）。这里只负责预取，让 AppNetworkImage / 飞行副本
+  /// 复用同一张已解码图。
+  void _prefetchArtworkIfNeeded(BuildContext context, Track? displayTrack) {
+    final currentImageUrl = artworkUrlOf(displayTrack);
+    if (currentImageUrl == null || currentImageUrl == _lastImageUrl) return;
+    _lastImageUrl = currentImageUrl;
+    // 省流模式（移动数据 + 已开启封面省流）：跳过封面预取
+    // （ArtworkCache 网关在只读缓存未命中时会抛错，这里提前拦截）。
+    if (context.read<DataSaverService?>()?.blockNetworkArtwork ?? false) {
+      return;
     }
+    _prefetchImage(currentImageUrl);
   }
 
   /// 歌手展示名（多歌手逗号连接；无有效歌手回退 Unknown Artist）。
@@ -312,8 +285,8 @@ class _PlayerState extends State<Player> with TickerProviderStateMixin {
       _lastTrack = track;
     }
 
-    // 主题更新（对 miniplayer 和全屏播放器都生效）
-    _updateThemeIfNeeded(context, displayTrack);
+    // 封面预取（显示路径；取色由组合根的 ArtworkThemeSync 统一触发）
+    _prefetchArtworkIfNeeded(context, displayTrack);
 
     if (widget.isLargeScreen) {
       return RepaintBoundary(

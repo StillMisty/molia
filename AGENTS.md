@@ -74,7 +74,11 @@ lib/
 - 进度只走 `PlaybackProvider.position`（`ValueListenable`，≤4Hz），不得进 `notifyListeners`；
   快照通知值变才发（对象 `==` 可靠）；
 - UI 消费类型化 `PlaybackSnapshot`（旧 Map 兼容层已删除），不感知播放后端实现；
-- 错误在边界统一为 `SourceFailure`（kind/l10nKey/retryable），UI 不直接展示 `$e`。
+- 错误在边界统一为 `SourceFailure`（kind/l10nKey/retryable），UI 不直接展示 `$e`；
+- 取色模型见 ADR-0001：基础配色（壁纸/自定义）+ 封面覆盖 + 纯黑（正交）；
+  `theme/scheme_builder.dart::buildColorScheme` 是唯一方案工厂，
+  `services/artwork_palette_service.dart` 是唯一封面取色入口（组合根挂播放监听触发）；
+  消费面（桌面歌词/海报）按各自来源经 `resolveSurfaceScheme` 解析，禁止二次提取封面像素。
 
 ## 开发约定
 

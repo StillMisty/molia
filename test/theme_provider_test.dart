@@ -1,41 +1,9 @@
-import 'dart:ui' as ui;
-
-import 'package:flutter/foundation.dart' show SynchronousFuture;
 import 'package:material_ui/material_ui.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:molia/providers/theme_provider.dart';
-
-/// 4x4 纯色图片 provider：驱动封面取色路径（不依赖网络/资产）。
-class _SolidColorImageProvider extends ImageProvider<_SolidColorImageProvider> {
-  _SolidColorImageProvider(this.color);
-
-  final Color color;
-
-  @override
-  Future<_SolidColorImageProvider> obtainKey(ImageConfiguration configuration) {
-    return SynchronousFuture<_SolidColorImageProvider>(this);
-  }
-
-  @override
-  ImageStreamCompleter loadImage(
-      _SolidColorImageProvider key, ImageDecoderCallback decode) {
-    return OneFrameImageStreamCompleter(
-      _createImage().then((image) => ImageInfo(image: image)),
-    );
-  }
-
-  Future<ui.Image> _createImage() {
-    final recorder = ui.PictureRecorder();
-    final canvas = Canvas(recorder);
-    canvas.drawRect(
-      const Rect.fromLTWH(0, 0, 4, 4),
-      Paint()..color = color,
-    );
-    return recorder.endRecording().toImage(4, 4);
-  }
-}
+import 'package:molia/theme/scheme_builder.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -44,15 +12,21 @@ void main() {
     SharedPreferences.setMockInitialValues({});
   });
 
-  test('ThemeProvider initializes with a color scheme', () async {
+  test('初始状态：基础配色=自定义、封面覆盖开、纯黑关', () async {
     final provider = ThemeProvider();
     await provider.preferencesReady;
     expect(provider.colorScheme, isNotNull);
     expect(provider.themeMode, ThemeMode.system);
-    expect(provider.dynamicColorEnabled, isTrue);
-    expect(provider.monetColorEnabled, isFalse);
+    expect(provider.baseColorSource, ColorBaseSource.custom);
+    expect(provider.followArtworkEnabled, isTrue);
+    expect(provider.monetAvailable, isFalse);
     expect(provider.pureBlackEnabled, isFalse);
     expect(provider.seedColor.toARGB32(), Colors.blue.toARGB32());
+    expect(
+      provider.colorScheme,
+      buildColorScheme(Colors.blue, Brightness.light),
+    );
+    expect(provider.artworkColorScheme, isNull);
   });
 
   test('全局应用字体：持久化、恢复与清除', () async {
@@ -169,44 +143,77 @@ void main() {
     expect(prefs.getString('theme_mode'), 'system');
   });
 
-  testWidgets('动态取色开关：关闭忽略封面取色，重新开启恢复', (tester) async {
+  test('封面覆盖：开启时覆盖基础配色，关闭回退且歌词方案仍可用', () async {
     final provider = ThemeProvider();
     await provider.preferencesReady;
-    final seedScheme = ColorScheme.fromSeed(seedColor: Colors.blue);
-    expect(provider.colorScheme, seedScheme);
+    final seedScheme = buildColorScheme(Colors.blue, Brightness.light);
 
-    await provider.setDynamicColorEnabled(false);
-    expect(provider.dynamicColorEnabled, isFalse);
-    expect(provider.colorScheme, seedScheme);
+    provider.applyArtworkSeed(Colors.green);
+    final artworkScheme = provider.colorScheme;
+    expect(artworkScheme, buildColorScheme(Colors.green, Brightness.light));
+    // 消费面（桌面歌词 / 海报）的「跟随封面」方案与主题输出同源。
+    expect(provider.artworkColorScheme, artworkScheme);
 
-    // 关闭状态：封面取色被忽略，配色保持不变。
-    await tester.runAsync(() async {
-      await provider.updateThemeFromImage(
-        imageProvider: _SolidColorImageProvider(const Color(0xFF00FF00)),
-        brightness: Brightness.light,
-      );
-    });
+    // 关闭封面覆盖：主题回退基础配色，但封面色板本身保留。
+    await provider.setFollowArtworkEnabled(false);
+    expect(provider.followArtworkEnabled, isFalse);
     expect(provider.colorScheme, seedScheme);
+    expect(
+      provider.artworkColorScheme,
+      buildColorScheme(Colors.green, Brightness.light),
+    );
 
-    // 开启：封面取色生效。
-    await provider.setDynamicColorEnabled(true);
-    await tester.runAsync(() async {
-      await provider.updateThemeFromImage(
-        imageProvider: _SolidColorImageProvider(const Color(0xFF00FF00)),
-        brightness: Brightness.light,
-      );
-    });
-    final dynamicScheme = provider.colorScheme;
-    expect(dynamicScheme, isNot(seedScheme));
+    // 重新开启：恢复最近一次封面取色。
+    await provider.setFollowArtworkEnabled(true);
+    expect(provider.colorScheme, artworkScheme);
 
-    // 关闭回退种子色；再次开启恢复最近一次封面取色。
-    await provider.setDynamicColorEnabled(false);
+    // 当前曲目无封面：清除 seed 回退基础配色。
+    provider.clearArtworkSeed();
     expect(provider.colorScheme, seedScheme);
-    await provider.setDynamicColorEnabled(true);
-    expect(provider.colorScheme, dynamicScheme);
+    expect(provider.artworkColorScheme, isNull);
 
     final prefs = await SharedPreferences.getInstance();
-    expect(prefs.getBool('dynamic_color_enabled'), isTrue);
+    expect(prefs.getBool('follow_artwork_enabled'), isTrue);
+  });
+
+  test('优先级：封面覆盖 > 壁纸 > 自定义种子色', () async {
+    final provider = ThemeProvider();
+    await provider.preferencesReady;
+    final monetLight = buildColorScheme(Colors.pink, Brightness.light);
+    final monetDark = buildColorScheme(Colors.pink, Brightness.dark);
+    provider.updateMonetSchemes(monetLight, monetDark);
+    expect(provider.monetAvailable, isTrue);
+    // 基础配色=自定义时不生效。
+    expect(provider.colorScheme,
+        buildColorScheme(Colors.blue, Brightness.light));
+
+    await provider.setBaseColorSource(ColorBaseSource.wallpaper);
+    expect(provider.colorScheme, monetLight);
+
+    // 深色模式取对应壁纸方案。
+    await provider.setThemeMode(
+      ThemeMode.dark,
+      platformBrightness: Brightness.light,
+    );
+    expect(provider.colorScheme, monetDark);
+
+    // 封面 seed 覆盖壁纸（含覆盖莫奈）。
+    provider.applyArtworkSeed(Colors.green);
+    expect(provider.colorScheme, buildColorScheme(Colors.green, Brightness.dark));
+
+    // 关闭封面覆盖：回到壁纸方案。
+    await provider.setFollowArtworkEnabled(false);
+    expect(provider.colorScheme, monetDark);
+
+    // 平台不提供壁纸（清空注入）：回退自定义种子色。
+    provider.updateMonetSchemes(null, null);
+    expect(
+      provider.colorScheme,
+      buildColorScheme(Colors.blue, Brightness.dark),
+    );
+
+    final prefs = await SharedPreferences.getInstance();
+    expect(prefs.getString('color_base'), 'wallpaper');
   });
 
   test('种子色持久化并在重启时加载', () async {
@@ -216,83 +223,70 @@ void main() {
 
     await first.setSeedColor(Colors.green);
     expect(first.seedColor.toARGB32(), Colors.green.toARGB32());
-    expect(first.colorScheme, ColorScheme.fromSeed(seedColor: Colors.green));
+    expect(first.colorScheme, buildColorScheme(Colors.green, Brightness.light));
 
     // 模拟重启：新实例从 SharedPreferences 恢复。
     final second = ThemeProvider();
     await second.preferencesReady;
     expect(second.seedColor.toARGB32(), Colors.green.toARGB32());
-    expect(second.colorScheme, ColorScheme.fromSeed(seedColor: Colors.green));
+    expect(second.colorScheme, buildColorScheme(Colors.green, Brightness.light));
 
     final prefs = await SharedPreferences.getInstance();
     expect(prefs.getInt('seed_color'), Colors.green.toARGB32());
   });
 
-  test('主题模式与动态取色开关在重启时加载', () async {
+  test('主题模式与封面覆盖开关在重启时加载', () async {
     final first = ThemeProvider();
     await first.preferencesReady;
     await first.setThemeMode(
       ThemeMode.dark,
       platformBrightness: Brightness.light,
     );
-    await first.setDynamicColorEnabled(false);
+    await first.setFollowArtworkEnabled(false);
 
     final second = ThemeProvider();
     await second.preferencesReady;
     expect(second.themeMode, ThemeMode.dark);
     expect(second.colorScheme.brightness, Brightness.dark);
-    expect(second.dynamicColorEnabled, isFalse);
+    expect(second.followArtworkEnabled, isFalse);
   });
 
-  test('莫奈取色：优先级高于封面取色与种子色，可持久化', () async {
-    final provider = ThemeProvider();
-    await provider.preferencesReady;
-    expect(provider.monetColorEnabled, isFalse);
-    expect(provider.monetAvailable, isFalse);
-
-    final monetLight = ColorScheme.fromSeed(seedColor: Colors.pink);
-    final monetDark = ColorScheme.fromSeed(
-      seedColor: Colors.pink,
-      brightness: Brightness.dark,
-    );
-    provider.updateMonetSchemes(monetLight, monetDark);
-    expect(provider.monetAvailable, isTrue);
-    // 未开启时不生效。
-    expect(provider.colorScheme, ColorScheme.fromSeed(seedColor: Colors.blue));
-
-    await provider.setMonetColorEnabled(true);
-    expect(provider.colorScheme, monetLight);
-
-    // 深色模式取对应方案。
-    await provider.setThemeMode(
-      ThemeMode.dark,
-      platformBrightness: Brightness.light,
-    );
-    expect(provider.colorScheme, monetDark);
-
-    // 关闭后回退种子色（深色）。
-    await provider.setMonetColorEnabled(false);
-    expect(
-      provider.colorScheme,
-      ColorScheme.fromSeed(
-        seedColor: Colors.blue,
-        brightness: Brightness.dark,
-      ),
-    );
-
-    final prefs = await SharedPreferences.getInstance();
-    expect(prefs.getBool('monet_color_enabled'), isFalse);
-  });
-
-  test('莫奈取色与纯黑背景在重启时加载', () async {
+  test('旧键一次性迁移：莫奈/动态取色 → 基础配色/封面覆盖', () async {
     SharedPreferences.setMockInitialValues({
       'monet_color_enabled': true,
+      'dynamic_color_enabled': false,
+      'seed_color': 0xFF00FF00,
       'pure_black_enabled': true,
     });
     final provider = ThemeProvider();
     await provider.preferencesReady;
-    expect(provider.monetColorEnabled, isTrue);
+    expect(provider.baseColorSource, ColorBaseSource.wallpaper);
+    expect(provider.followArtworkEnabled, isFalse);
     expect(provider.pureBlackEnabled, isTrue);
+    expect(provider.seedColor.toARGB32(), 0xFF00FF00);
+
+    final prefs = await SharedPreferences.getInstance();
+    expect(prefs.getString('color_base'), 'wallpaper');
+    expect(prefs.getBool('follow_artwork_enabled'), isFalse);
+    expect(prefs.getBool('monet_color_enabled'), isNull);
+    expect(prefs.getBool('dynamic_color_enabled'), isNull);
+  });
+
+  test('旧键迁移只在缺新键时执行，已有新键不被覆盖', () async {
+    SharedPreferences.setMockInitialValues({
+      'monet_color_enabled': true,
+      'dynamic_color_enabled': true,
+      'color_base': 'custom',
+      'follow_artwork_enabled': false,
+    });
+    final provider = ThemeProvider();
+    await provider.preferencesReady;
+    expect(provider.baseColorSource, ColorBaseSource.custom);
+    expect(provider.followArtworkEnabled, isFalse);
+    // 旧键存在但未被采纳，也不清理（保守策略）。
+    final prefs = await SharedPreferences.getInstance();
+    expect(prefs.getBool('monet_color_enabled'), isTrue);
+    expect(prefs.getString('color_base'), 'custom');
   });
 
   test('纯黑背景：仅深色模式覆盖 surface，浅色不生效', () async {
@@ -310,6 +304,10 @@ void main() {
     expect(provider.colorScheme.surfaceBright.toARGB32(), 0xFF000000);
     expect(provider.colorScheme.surfaceTint.toARGB32(), 0xFF000000);
     expect(provider.colorScheme.brightness, Brightness.dark);
+
+    // 纯黑与取色来源正交：封面覆盖/壁纸同样被叠加。
+    provider.applyArtworkSeed(Colors.green);
+    expect(provider.colorScheme.surface.toARGB32(), 0xFF000000);
 
     // 浅色模式不覆盖。
     await provider.setThemeMode(

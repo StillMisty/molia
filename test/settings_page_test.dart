@@ -16,6 +16,7 @@ import 'package:molia/services/language_service.dart';
 import 'package:molia/services/lyrics_service.dart';
 import 'package:molia/services/notification_service.dart';
 import 'package:molia/services/settings_service.dart';
+import 'package:molia/theme/scheme_builder.dart';
 
 import 'support/fakes.dart';
 
@@ -107,8 +108,10 @@ void main() {
 
     expect(find.text('Appearance'), findsOneWidget);
     expect(find.text('Theme mode'), findsOneWidget);
-    expect(find.text('Dynamic color'), findsOneWidget);
-    expect(find.text('Theme color'), findsOneWidget);
+    expect(find.text('Base colors'), findsOneWidget);
+    expect(find.text('Follow album art'), findsOneWidget);
+    expect(find.text('Pure black background'), findsOneWidget);
+    expect(find.text('Custom color'), findsOneWidget);
     expect(find.text('Playback'), findsOneWidget);
     expect(find.text('Default play mode'), findsOneWidget);
     // 区块标题 + 开关项标题各一处。
@@ -137,16 +140,44 @@ void main() {
     expect(prefs.getString('theme_mode'), 'dark');
   });
 
-  testWidgets('动态取色开关：切换后 provider 状态与持久化生效', (tester) async {
+  testWidgets('基础配色弹层：选择自定义颜色后持久化', (tester) async {
     await pumpSettingsPage(tester);
-    expect(themeProvider.dynamicColorEnabled, isTrue);
 
-    await tester.tap(find.byKey(const Key('settingsDynamicColorSwitch')));
+    // 先切到壁纸（无莫奈注入时解析回退自定义 seed），再经弹层选回自定义：
+    // 覆盖「点选未选中项」的真实交互路径。
+    await themeProvider.setBaseColorSource(ColorBaseSource.wallpaper);
+    await tester.pumpAndSettle();
+    expect(find.text('System wallpaper (Monet)'), findsOneWidget);
+
+    await tester.tap(find.byKey(const Key('settingsBaseColorItem')));
+    await tester.pumpAndSettle();
+    expect(find.byType(M3EDialog), findsOneWidget);
+    // 测试环境无 DynamicColorBuilder：壁纸项不可用，自定义项可选中。
+    expect(find.text('Not supported on this platform'), findsOneWidget);
+
+    await tester.tap(find.descendant(
+      of: find.byType(M3EDialog),
+      matching: find.text('Custom color'),
+    ));
     await tester.pumpAndSettle();
 
-    expect(themeProvider.dynamicColorEnabled, isFalse);
+    expect(find.byType(M3EDialog), findsNothing);
+    // 选回自定义后，自定义颜色项重新出现。
+    expect(find.byKey(const Key('settingsSeedColorItem')), findsOneWidget);
     final prefs = await SharedPreferences.getInstance();
-    expect(prefs.getBool('dynamic_color_enabled'), isFalse);
+    expect(prefs.getString('color_base'), 'custom');
+  });
+
+  testWidgets('播放时跟随封面开关：切换后 provider 状态与持久化生效', (tester) async {
+    await pumpSettingsPage(tester);
+    expect(themeProvider.followArtworkEnabled, isTrue);
+
+    await tester.tap(find.byKey(const Key('settingsFollowArtworkSwitch')));
+    await tester.pumpAndSettle();
+
+    expect(themeProvider.followArtworkEnabled, isFalse);
+    final prefs = await SharedPreferences.getInstance();
+    expect(prefs.getBool('follow_artwork_enabled'), isFalse);
   });
 
   testWidgets('主题色：任意取色（Hex）后 provider 生效', (tester) async {

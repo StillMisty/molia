@@ -16,7 +16,8 @@ import 'package:flutter_test/flutter_test.dart';
 ///
 /// 白名单只放「定义颜色本身」的基础设施，不接受业务页面豁免。
 const Set<String> _colorLiteralAllowlist = {
-  'lib/providers/theme_provider.dart', // 种子色预设 + 纯黑覆盖
+  'lib/providers/theme_provider.dart', // 默认种子色（Colors.blue）
+  'lib/theme/scheme_builder.dart', // 纯黑覆盖
   'lib/theme/app_semantic_colors.dart', // success/warning 种子
   'lib/theme/app_theme.dart', // Colors.transparent 系统栏 + ThemeData 构建
 };

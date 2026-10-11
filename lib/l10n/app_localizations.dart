@@ -260,29 +260,23 @@ abstract class AppLocalizations {
   /// **'Dark'**
   String get themeModeDark;
 
-  /// No description provided for @settingsDynamicColor.
+  /// No description provided for @settingsBaseColor.
   ///
   /// In en, this message translates to:
-  /// **'Dynamic color'**
-  String get settingsDynamicColor;
+  /// **'Base colors'**
+  String get settingsBaseColor;
 
-  /// No description provided for @settingsDynamicColorSubtitle.
+  /// No description provided for @settingsBaseColorWallpaper.
   ///
   /// In en, this message translates to:
-  /// **'Derive theme colors from album art'**
-  String get settingsDynamicColorSubtitle;
+  /// **'System wallpaper (Monet)'**
+  String get settingsBaseColorWallpaper;
 
-  /// No description provided for @settingsMonetColor.
+  /// No description provided for @settingsBaseColorCustom.
   ///
   /// In en, this message translates to:
-  /// **'Monet color'**
-  String get settingsMonetColor;
-
-  /// No description provided for @settingsMonetColorSubtitle.
-  ///
-  /// In en, this message translates to:
-  /// **'Use wallpaper colors provided by the system (Android 12+)'**
-  String get settingsMonetColorSubtitle;
+  /// **'Custom color'**
+  String get settingsBaseColorCustom;
 
   /// No description provided for @settingsMonetUnavailable.
   ///
@@ -299,14 +293,26 @@ abstract class AppLocalizations {
   /// No description provided for @settingsPureBlackSubtitle.
   ///
   /// In en, this message translates to:
-  /// **'Use pure black surfaces in dark mode (OLED)'**
+  /// **'Use pure black surfaces in dark mode (stacks with the color source; OLED)'**
   String get settingsPureBlackSubtitle;
 
   /// No description provided for @settingsSeedColor.
   ///
   /// In en, this message translates to:
-  /// **'Theme color'**
+  /// **'Custom color'**
   String get settingsSeedColor;
+
+  /// No description provided for @settingsFollowArtwork.
+  ///
+  /// In en, this message translates to:
+  /// **'Follow album art'**
+  String get settingsFollowArtwork;
+
+  /// No description provided for @settingsFollowArtworkSubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Use album art colors while a track with artwork plays; falls back to base colors otherwise'**
+  String get settingsFollowArtworkSubtitle;
 
   /// No description provided for @settingsAppFont.
   ///
@@ -337,6 +343,42 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Font'**
   String get posterFontLabel;
+
+  /// No description provided for @posterColorSource.
+  ///
+  /// In en, this message translates to:
+  /// **'Color source'**
+  String get posterColorSource;
+
+  /// No description provided for @posterColorSourceAppTheme.
+  ///
+  /// In en, this message translates to:
+  /// **'Follow app theme'**
+  String get posterColorSourceAppTheme;
+
+  /// No description provided for @posterColorSourceArtwork.
+  ///
+  /// In en, this message translates to:
+  /// **'Follow album art'**
+  String get posterColorSourceArtwork;
+
+  /// No description provided for @posterColorSourceCustom.
+  ///
+  /// In en, this message translates to:
+  /// **'Custom color'**
+  String get posterColorSourceCustom;
+
+  /// No description provided for @posterColorCustomLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Custom color'**
+  String get posterColorCustomLabel;
+
+  /// No description provided for @posterColorUnavailable.
+  ///
+  /// In en, this message translates to:
+  /// **'No artwork for this track'**
+  String get posterColorUnavailable;
 
   /// No description provided for @posterFontFollowApp.
   ///
@@ -2210,6 +2252,24 @@ abstract class AppLocalizations {
   /// **'Shadow color'**
   String get lyricsDesktopColorShadow;
 
+  /// No description provided for @lyricsDesktopSchemeSource.
+  ///
+  /// In en, this message translates to:
+  /// **'Color source'**
+  String get lyricsDesktopSchemeSource;
+
+  /// No description provided for @lyricsDesktopSchemeAppTheme.
+  ///
+  /// In en, this message translates to:
+  /// **'Follow app theme'**
+  String get lyricsDesktopSchemeAppTheme;
+
+  /// No description provided for @lyricsDesktopSchemeArtwork.
+  ///
+  /// In en, this message translates to:
+  /// **'Follow album art'**
+  String get lyricsDesktopSchemeArtwork;
+
   /// No description provided for @lyricsDesktopLock.
   ///
   /// In en, this message translates to:
@@ -2507,7 +2567,7 @@ abstract class AppLocalizations {
   /// No description provided for @lyricsColorSource.
   ///
   /// In en, this message translates to:
-  /// **'Color source'**
+  /// **'Color'**
   String get lyricsColorSource;
 
   /// No description provided for @lyricsColorSourceCustom.
@@ -2519,37 +2579,37 @@ abstract class AppLocalizations {
   /// No description provided for @lyricsColorSourcePrimary.
   ///
   /// In en, this message translates to:
-  /// **'Theme · Primary'**
+  /// **'Primary'**
   String get lyricsColorSourcePrimary;
 
   /// No description provided for @lyricsColorSourceSecondary.
   ///
   /// In en, this message translates to:
-  /// **'Theme · Secondary'**
+  /// **'Secondary'**
   String get lyricsColorSourceSecondary;
 
   /// No description provided for @lyricsColorSourceTertiary.
   ///
   /// In en, this message translates to:
-  /// **'Theme · Tertiary'**
+  /// **'Tertiary'**
   String get lyricsColorSourceTertiary;
 
   /// No description provided for @lyricsColorSourceOnSurface.
   ///
   /// In en, this message translates to:
-  /// **'Theme · On surface'**
+  /// **'On surface'**
   String get lyricsColorSourceOnSurface;
 
   /// No description provided for @lyricsColorSourceOnSurfaceVariant.
   ///
   /// In en, this message translates to:
-  /// **'Theme · Variant'**
+  /// **'Variant'**
   String get lyricsColorSourceOnSurfaceVariant;
 
   /// No description provided for @lyricsDesktopColorThemeHint.
   ///
   /// In en, this message translates to:
-  /// **'Theme colors follow Monet (wallpaper) or album artwork colors and update live with the app theme.'**
+  /// **'The color source decides which scheme the theme-role rows use: app theme follows the appearance settings; album art updates live with the current track.'**
   String get lyricsDesktopColorThemeHint;
 }
 

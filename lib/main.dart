@@ -26,6 +26,7 @@ import 'providers/search_provider.dart';
 import 'providers/discover_provider.dart';
 import 'providers/sources_provider.dart';
 import 'providers/theme_provider.dart';
+import 'services/artwork_palette_service.dart';
 import 'services/cache_service.dart';
 import 'managers/artwork_cache.dart';
 import 'services/data_saver_service.dart';
@@ -159,9 +160,16 @@ void main() async {
 
   // 歌词显示（桌面歌词 / 通知·锁屏 / 蓝牙）：配置 + 输出 + 调度。
   // 输出端能力由平台决定；媒体输出依赖系统媒体会话（audioHandler）。
-  // 主题实例提前创建：桌面歌词「跟随主题」的颜色来自 ThemeProvider
-  // （莫奈 / 封面取色统一出口），主题变化时调度会重新下发配置。
+  // 主题实例提前创建：封面覆盖 / 桌面歌词「跟随主题」「跟随封面」的颜色
+  // 都从 ThemeProvider 取（取色链路在下方接线）。
   final themeProvider = ThemeProvider();
+  // 封面取色服务：全局主题、桌面歌词、海报共用的唯一取色入口。
+  final artworkPaletteService = ArtworkPaletteService();
+  final artworkThemeSync = ArtworkThemeSync(
+    load: artworkPaletteService.load,
+    onPalette: (palette) => themeProvider.applyArtworkSeed(palette.seed),
+    onCleared: themeProvider.clearArtworkSeed,
+  );
   final lyricsDisplaySettings = LyricsDisplaySettings();
   await lyricsDisplaySettings.init();
   final audioRouteMonitor = AudioRouteMonitor();
@@ -169,7 +177,10 @@ void main() async {
   final lyricsDisplay = LyricsDisplayProvider(
     settings: lyricsDisplaySettings,
     outputs: [
-      DesktopLyricsOutput(colorScheme: () => themeProvider.colorScheme),
+      DesktopLyricsOutput(
+        colorScheme: () => themeProvider.colorScheme,
+        artworkColorScheme: () => themeProvider.artworkColorScheme,
+      ),
       MediaLyricOutput(
         supported: () => audioHandler != null,
         applyOverride: (override) =>
@@ -203,6 +214,16 @@ void main() async {
   );
   lyricsDisplay.syncPlayback(playbackProvider.snapshot);
 
+  // 封面取色接线：任何页面/后台切歌都经同一链路（稳态延迟 + 过期丢弃）。
+  // 无封面 → 清空 seed，主题回退基础配色；取色失败保持现色。
+  void syncArtworkPalette() {
+    final artwork = playbackProvider.snapshot.current?.artwork?.uri.toString();
+    artworkThemeSync.onArtworkChanged(artwork);
+  }
+
+  playbackProvider.addListener(syncArtworkPalette);
+  syncArtworkPalette();
+
   runApp(
     MultiProvider(
       providers: [
@@ -216,6 +237,8 @@ void main() async {
         Provider<CatalogService>.value(value: catalogService),
         ChangeNotifierProvider.value(value: playbackProvider),
         ChangeNotifierProvider.value(value: themeProvider),
+        // 封面取色服务（海报「跟随封面」按需查询；主题链路已在上方接线）。
+        Provider<ArtworkPaletteService>.value(value: artworkPaletteService),
         ChangeNotifierProvider(create: (_) => NavProvider()),
         ChangeNotifierProvider(
           create: (context) => SearchProvider(
