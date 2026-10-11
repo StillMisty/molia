@@ -1,13 +1,15 @@
+import 'dart:convert';
+
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../data/library_repository.dart' show kFavoritesPlaylistName;
 import '../domain/models/library.dart';
 
-/// 合集（收藏 / 播放历史 / 自建列表）的哨兵、顺序与默认选择策略。
+/// 合集（收藏 / 播放历史 / 自建列表）的哨兵、顺序、选择与滚动位置策略。
 ///
-/// 从收藏页抽出的逻辑：默认选择解析、顺序应用与持久化可独立测试，
-/// 页面只保留 UI 状态（当前选择、搜索/排序态）。列表顺序键为
+/// 从收藏页抽出的逻辑：默认选择解析、顺序/选择/滚动位置的持久化可独立
+/// 测试，页面只保留 UI 状态（搜索/排序态）。列表顺序键为
 /// `playlist:<id>`，收藏 / 历史为固定键。
 class LibraryCollections {
   LibraryCollections({SharedPreferences? prefs}) : _prefsOverride = prefs;
@@ -24,6 +26,12 @@ class LibraryCollections {
   static const String orderKey = 'favorites_collection_order';
   static const String favoritesOrderKey = 'favorites';
   static const String historyOrderKey = 'history';
+
+  /// 上次选中的合集（含收藏/历史哨兵；未保存时不存在）。
+  static const String selectionKey = 'favorites_selected_collection';
+
+  /// 各合集的滚动位置（JSON map：合集键 → offset）。
+  static const String scrollOffsetsKey = 'favorites_scroll_offsets';
 
   static String playlistOrderKey(int id) => 'playlist:$id';
 
@@ -100,6 +108,56 @@ class LibraryCollections {
       await prefs?.setStringList(orderKey, keys);
     } catch (e) {
       debugPrint('[LibraryCollections] 保存合集顺序失败: $e');
+    }
+  }
+
+  /// 读取上次选中的合集；未保存/不可用时返回 null。
+  Future<int?> loadSelection() async {
+    try {
+      final prefs = await _prefsOrNull();
+      return prefs?.getInt(selectionKey);
+    } catch (e) {
+      debugPrint('[LibraryCollections] 读取合集选择失败: $e');
+      return null;
+    }
+  }
+
+  /// 保存当前选中的合集（含哨兵）；失败静默。
+  Future<void> saveSelection(int id) async {
+    try {
+      final prefs = await _prefsOrNull();
+      await prefs?.setInt(selectionKey, id);
+    } catch (e) {
+      debugPrint('[LibraryCollections] 保存合集选择失败: $e');
+    }
+  }
+
+  /// 读取各合集滚动位置；未保存/数据非法时返回空 map。
+  Future<Map<String, double>> loadScrollOffsets() async {
+    try {
+      final prefs = await _prefsOrNull();
+      final raw = prefs?.getString(scrollOffsetsKey);
+      if (raw == null || raw.isEmpty) return const {};
+      final decoded = jsonDecode(raw);
+      if (decoded is! Map) return const {};
+      return {
+        for (final entry in decoded.entries)
+          if (entry.value is num)
+            entry.key.toString(): (entry.value as num).toDouble(),
+      };
+    } catch (e) {
+      debugPrint('[LibraryCollections] 读取滚动位置失败: $e');
+      return const {};
+    }
+  }
+
+  /// 保存各合集滚动位置（合集键 → offset）；失败静默。
+  Future<void> saveScrollOffsets(Map<String, double> offsets) async {
+    try {
+      final prefs = await _prefsOrNull();
+      await prefs?.setString(scrollOffsetsKey, jsonEncode(offsets));
+    } catch (e) {
+      debugPrint('[LibraryCollections] 保存滚动位置失败: $e');
     }
   }
 

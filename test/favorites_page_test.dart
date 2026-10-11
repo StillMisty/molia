@@ -9,6 +9,7 @@ import 'package:molia/l10n/app_localizations.dart';
 import 'package:molia/models/play_mode.dart';
 import 'package:molia/pages/favorites.dart';
 import 'package:molia/providers/discover_provider.dart';
+import 'package:molia/providers/library_collections.dart';
 import 'package:molia/providers/library_provider.dart';
 import 'package:molia/providers/playback_provider.dart';
 import 'package:molia/utils/responsive.dart';
@@ -822,6 +823,66 @@ void main() {
     await gesture.up();
     await tester.pumpAndSettle();
     expect(controller.offset, greaterThan(0));
+    // 滚动节流落盘（500ms）已触发，避免测试结束挂起计时器。
+    await tester.pump(const Duration(milliseconds: 600));
+  });
+
+  /// 收藏 [count] 首（滚动恢复/落盘用例需要足够长的列表）。
+  Future<void> seedManyFavorites(WidgetTester tester, {int count = 200}) async {
+    for (var i = 0; i < count; i++) {
+      await provider.toggleFavorite(
+        sourceKey: 'wy',
+        songId: '$i',
+        title: 'Song $i',
+        artist: 'Artist $i',
+        raw: {'songId': '$i'},
+      );
+    }
+  }
+
+  testWidgets('重启恢复：活跃合集为播放历史（预置持久化选择）', (tester) async {
+    await repository.addHistoryEntry(_history('1', playedAt: 2));
+    // 模拟上次退出时停留在播放历史。
+    SharedPreferences.setMockInitialValues({
+      'favorites_selected_collection': LibraryCollections.historySentinel,
+    });
+    await pumpFavorites(tester);
+
+    expect(find.text('播放历史'), findsOneWidget);
+    expect(find.text('Song 1'), findsOneWidget);
+  });
+
+  testWidgets('重启恢复：收藏列表滚动位置', (tester) async {
+    await seedManyFavorites(tester);
+    // 模拟上次退出时「我的收藏」滚动到 400。
+    SharedPreferences.setMockInitialValues({
+      'favorites_selected_collection': LibraryCollections.favoritesSentinel,
+      'favorites_scroll_offsets': '{"favorites": 400.0}',
+    });
+    await pumpFavorites(tester);
+
+    expect(find.text('我的收藏'), findsOneWidget);
+    final controller =
+        tester.widget<Scrollbar>(find.byType(Scrollbar)).controller!;
+    expect(controller.offset, closeTo(400, 1));
+    // 恢复触发的落盘节流计时器：推进到触发，避免挂起。
+    await tester.pump(const Duration(milliseconds: 600));
+  });
+
+  testWidgets('滚动位置节流落盘（≥1 次写入）', (tester) async {
+    await seedManyFavorites(tester);
+    await pumpFavorites(tester);
+
+    await tester.drag(find.byType(ListView), const Offset(0, -600));
+    await tester.pumpAndSettle();
+    await tester.pump(const Duration(milliseconds: 600));
+    await tester.pump();
+
+    final prefs = await SharedPreferences.getInstance();
+    final raw = prefs.getString(LibraryCollections.scrollOffsetsKey);
+    expect(raw, isNotNull);
+    final saved = jsonDecode(raw!) as Map<String, dynamic>;
+    expect(saved[LibraryCollections.favoritesOrderKey], greaterThan(0));
   });
 }
 

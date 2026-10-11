@@ -77,6 +77,28 @@ class _FavoritesPageState extends State<FavoritesPage> {
   List<String> _collectionOrder = const [];
   final LibraryCollections _collections = LibraryCollections();
 
+  /// 状态恢复完成前不跑默认合集回退（避免覆盖恢复的选集）。
+  bool _restoreDone = false;
+
+  /// 恢复的选集是否已按首次加载的合集列表校准过（失效选集回退一次）。
+  bool _restoredSelectionChecked = false;
+
+  /// 各合集已保存的滚动位置（键同合集顺序键：`favorites` / `history` /
+  /// `playlist:<id>`）；滚动/切换时增量写回。
+  Map<String, double> _savedScrollOffsets = const {};
+
+  /// 当前 build 对应的合集键（滚动落盘用）。
+  String? _activeCollectionKey;
+
+  /// 已按合集键恢复过滚动位置的键（切换合集时各自只恢复一次）。
+  String? _offsetRestoredFor;
+
+  /// 已调度但未执行的滚动恢复键（避免每帧重复 addPostFrameCallback）。
+  String? _offsetRestorePending;
+
+  /// 滚动落盘节流（≤2 次/秒；不打断持续滚动）。
+  Timer? _scrollSaveTimer;
+
   /// 随机播放起点随机源（测试可注入种子）。
   late final math.Random _shuffleRandom =
       widget.shuffleRandom ?? math.Random();
@@ -90,7 +112,9 @@ class _FavoritesPageState extends State<FavoritesPage> {
   void initState() {
     super.initState();
     _selection.addListener(_onSelectionChanged);
-    unawaited(_loadCollectionOrder());
+    _listController.addListener(_scheduleScrollSave);
+    _historyScrollController.addListener(_scheduleScrollSave);
+    unawaited(_restoreState());
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
       final provider = context.read<LibraryProvider>();
@@ -106,6 +130,8 @@ class _FavoritesPageState extends State<FavoritesPage> {
     _selection.dispose();
     _searchController.dispose();
     _searchFocus.dispose();
+    _scrollSaveTimer?.cancel();
+    _saveScrollOffsets();
     _listController.dispose();
     _historyScrollController.dispose();
     super.dispose();
@@ -113,6 +139,83 @@ class _FavoritesPageState extends State<FavoritesPage> {
 
   void _onSelectionChanged() {
     if (mounted) setState(() {});
+  }
+
+  // 状态恢复与持久化
+
+  /// 冷启动恢复：合集顺序 + 上次选中的合集 + 各合集滚动位置。
+  ///
+  /// 三者就绪前 [_restoreDone] 为 false，默认合集回退不会执行——否则
+  /// 恢复的选集会被默认解析覆盖。
+  Future<void> _restoreState() async {
+    final order = await _collections.loadOrder();
+    final selection = await _collections.loadSelection();
+    final offsets = await _collections.loadScrollOffsets();
+    if (!mounted) return;
+    setState(() {
+      _collectionOrder = order;
+      _savedScrollOffsets = offsets;
+      if (selection != null) _selectedId = selection;
+      _restoreDone = true;
+    });
+  }
+
+  /// 当前合集的持久化键；历史/收藏用固定键，自建列表按 id。
+  String _collectionKeyOf(_CollectionView view) {
+    if (view.isHistory) return LibraryCollections.historyOrderKey;
+    if (view.isFavorites) return LibraryCollections.favoritesOrderKey;
+    final id = view.playlistId;
+    return id == null
+        ? LibraryCollections.favoritesOrderKey
+        : LibraryCollections.playlistOrderKey(id);
+  }
+
+  /// 滚动位置节流落盘：首次滚动即写，之后每 500ms 至多一次。
+  void _scheduleScrollSave() {
+    if (_scrollSaveTimer?.isActive ?? false) return;
+    _scrollSaveTimer = Timer(const Duration(milliseconds: 500), () {
+      _scrollSaveTimer = null;
+      _saveScrollOffsets();
+    });
+  }
+
+  /// 把当前合集滚动位置并入持久化 map 写回（失败静默，不影响功能）。
+  void _saveScrollOffsets() {
+    final key = _activeCollectionKey;
+    if (key == null) return;
+    final controller = key == LibraryCollections.historyOrderKey
+        ? _historyScrollController
+        : _listController;
+    if (!controller.hasClients) return;
+    final offset = controller.offset;
+    if (_savedScrollOffsets[key] == offset) return;
+    final next = Map<String, double>.of(_savedScrollOffsets);
+    next[key] = offset;
+    _savedScrollOffsets = next;
+    unawaited(_collections.saveScrollOffsets(next));
+  }
+
+  /// 合集/内容变化时调度一次滚动恢复（列表布局完成后 jumpTo）。
+  void _scheduleOffsetRestore(String key) {
+    if (key == _offsetRestoredFor || key == _offsetRestorePending) return;
+    _offsetRestorePending = key;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || _offsetRestorePending != key) return;
+      _offsetRestorePending = null;
+      // 合集已切换/列表尚未挂载：交给下一次 build 重新调度。
+      if (_activeCollectionKey != key) return;
+      final controller = key == LibraryCollections.historyOrderKey
+          ? _historyScrollController
+          : _listController;
+      if (!controller.hasClients) return;
+      _offsetRestoredFor = key;
+      final saved = _savedScrollOffsets[key];
+      if (saved == null || saved <= 0) return;
+      final position = controller.position;
+      controller.jumpTo(
+        saved.clamp(position.minScrollExtent, position.maxScrollExtent),
+      );
+    });
   }
 
   // 搜索 / 多选 / 排序模式切换
@@ -269,6 +372,8 @@ class _FavoritesPageState extends State<FavoritesPage> {
     }
     final picked = outcome.selectedId;
     if (picked == null) return;
+    // 切换前先落盘当前合集的滚动位置（控制器即将换内容）。
+    _saveScrollOffsets();
     setState(() {
       _selectedId = picked;
       // 切换合集回到常规浏览态：退出搜索/排序编辑，避免空态困惑。
@@ -276,6 +381,7 @@ class _FavoritesPageState extends State<FavoritesPage> {
       _reordering = false;
       _searchController.clear();
     });
+    unawaited(_collections.saveSelection(picked));
     _selection.clear();
   }
 
@@ -283,12 +389,6 @@ class _FavoritesPageState extends State<FavoritesPage> {
     if (!mounted) return;
     setState(() => _collectionOrder = List.of(keys));
     unawaited(_collections.saveOrder(keys));
-  }
-
-  Future<void> _loadCollectionOrder() async {
-    final stored = await _collections.loadOrder();
-    if (stored.isEmpty || !mounted) return;
-    setState(() => _collectionOrder = stored);
   }
 
   // 播放操作
@@ -470,7 +570,9 @@ class _FavoritesPageState extends State<FavoritesPage> {
         M3ESnackbar.show(context, message: l10n.playlistAlreadyContains);
         return;
       }
+      _saveScrollOffsets();
       setState(() => _selectedId = result.playlistId);
+      unawaited(_collections.saveSelection(result.playlistId));
       M3ESnackbar.show(
         context,
         message: l10n.libraryImportSuccess(result.added),
@@ -648,12 +750,40 @@ class _FavoritesPageState extends State<FavoritesPage> {
     final reorderActive =
         _reordering && view.isCustom && !_searching && view.visible.length >= 2;
 
+    // 滚动位置恢复：内容就绪后按当前合集键恢复一次（切换合集各自恢复）。
+    _activeCollectionKey = _collectionKeyOf(view);
+    if (!isInitialLoading && !isLoading && !isHistoryLoading) {
+      _scheduleOffsetRestore(_activeCollectionKey!);
+    }
+
+    // 恢复的选集校准：首次合集列表加载完成后，若持久化选集已不存在
+    //（列表被删）则回退到默认解析结果并落盘；只校准一次，避免链接导入
+    // 后新列表尚未进 `playlists` 时被误判为失效。
+    if (_restoreDone && !isInitialLoading && !_restoredSelectionChecked) {
+      _restoredSelectionChecked = true;
+      final valid = _selectedId == LibraryCollections.unset ||
+          _selectedId == LibraryCollections.favoritesSentinel ||
+          _selectedId == LibraryCollections.historySentinel ||
+          playlists.any((playlist) => playlist.id == _selectedId);
+      if (!valid) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (!mounted) return;
+          setState(() => _selectedId = selected);
+          unawaited(_collections.saveSelection(selected));
+        });
+      }
+    }
+
     // 首次解析完成后固定合集选择：避免「我的收藏」从无到有时自动跳出
     // 当前正在浏览的列表（例如在自建列表里收藏后跳到收藏）。
-    if (_selectedId == LibraryCollections.unset && !isInitialLoading) {
+    if (_restoreDone &&
+        _selectedId == LibraryCollections.unset &&
+        !isInitialLoading) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (!mounted || _selectedId != LibraryCollections.unset) return;
         setState(() => _selectedId = selected);
+        // 默认落定的合集也持久化：下次启动恢复上次活跃的收藏。
+        unawaited(_collections.saveSelection(selected));
       });
     }
 

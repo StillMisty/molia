@@ -151,5 +151,41 @@ void main() {
     test('未保存时返回空列表', () async {
       expect(await LibraryCollections().loadOrder(), isEmpty);
     });
+
+    test('saveSelection / loadSelection 往返（含哨兵）', () async {
+      final collections = LibraryCollections();
+      expect(await collections.loadSelection(), isNull);
+
+      await collections.saveSelection(LibraryCollections.historySentinel);
+      expect(
+        await collections.loadSelection(),
+        LibraryCollections.historySentinel,
+      );
+
+      await collections.saveSelection(7);
+      expect(await collections.loadSelection(), 7);
+    });
+
+    test('saveScrollOffsets / loadScrollOffsets 往返', () async {
+      final collections = LibraryCollections();
+      expect(await collections.loadScrollOffsets(), isEmpty);
+
+      await collections.saveScrollOffsets({
+        LibraryCollections.favoritesOrderKey: 120.5,
+        'playlist:7': 42,
+      });
+      final loaded = await collections.loadScrollOffsets();
+      expect(loaded[LibraryCollections.favoritesOrderKey], 120.5);
+      expect(loaded['playlist:7'], 42);
+    });
+
+    test('滚动位置非法数据容错为空 map', () async {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString(LibraryCollections.scrollOffsetsKey, 'not json');
+      expect(await LibraryCollections().loadScrollOffsets(), isEmpty);
+
+      await prefs.setString(LibraryCollections.scrollOffsetsKey, '"str"');
+      expect(await LibraryCollections().loadScrollOffsets(), isEmpty);
+    });
   });
 }
