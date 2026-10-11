@@ -311,6 +311,45 @@ class PlaybackProvider extends ChangeNotifier {
     }
   }
 
+  /// 播放领域曲目（AI 推歌：解析结果已是领域 [Track]）。
+  Future<void> playDomainTracks(
+    List<Track> tracks,
+    int index, {
+    String? contextName,
+  }) async {
+    if (tracks.isEmpty) return;
+    try {
+      await _facade.playTracks(PlaybackRequest(
+        tracks: List.of(tracks),
+        startIndex: index,
+        context: contextName == null
+            ? null
+            : PlaybackContext(
+                name: contextName,
+                type: 'lx',
+                uri: 'lx:$contextName',
+              ),
+      ));
+      _notifyCategory('track');
+      _notifyCategory('queue');
+    } catch (e) {
+      _logger.e('playDomainTracks: 播放失败', error: e);
+      rethrow;
+    }
+  }
+
+  /// 追加领域曲目到当前队列末尾（AI 推歌续推）：不打断当前播放。
+  Future<void> enqueueDomainTracks(List<Track> tracks) async {
+    if (tracks.isEmpty) return;
+    try {
+      await _facade.enqueueTracks(List.of(tracks));
+      _notifyCategory('queue');
+    } catch (e) {
+      _logger.e('enqueueDomainTracks: 追加队列失败', error: e);
+      rethrow;
+    }
+  }
+
   /// 播放本地队列中指定 id 的曲目（队列面板点击）。
   ///
   /// 恢复态下 facade 队列为空：命中会话队列则从该曲目恢复播放。

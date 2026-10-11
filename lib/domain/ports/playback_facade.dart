@@ -24,6 +24,10 @@ abstract interface class PlaybackFacade {
   /// 在已加载队列内按下标跳转（旧 `playQueueIndex` 语义）。
   Future<void> playQueueIndex(int index);
 
+  /// 追加曲目到当前队列末尾（不打断当前播放）：顺序模式立即可达；
+  /// 随机模式下本轮排列不变，追加项在本轮结束后纳入新一轮洗牌。
+  Future<void> enqueueTracks(List<Track> tracks);
+
   Future<void> toggle();
   Future<void> seek(Duration position);
   Future<void> next();
