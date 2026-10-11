@@ -21,6 +21,7 @@ import '../services/settings_service.dart';
 import '../services/data_saver_service.dart';
 import '../services/notification_service.dart';
 import 'cache_management_page.dart';
+import 'ai_dj_page.dart';
 import 'lyrics_display_page.dart';
 import 'play_statistics_page.dart';
 import 'sources_page.dart';
@@ -448,6 +449,23 @@ class _SettingsMenuSectionState extends State<SettingsMenuSection> {
               ),
             ),
           ),
+          // AI 推歌（Phase 2）：用户自备 Key 的推荐电台（默认关闭；Web 隐藏）。
+          if (!kIsWeb) ...[
+            const SizedBox(height: kElementSpacing),
+            _buildSettingMenuItem(
+              context,
+              key: const Key('settingsAiDjItem'),
+              icon: Icons.auto_awesome_rounded,
+              title: l10n.aiDjTitle,
+              subtitle: l10n.aiDjSettingsSubtitle,
+              onTap: () {
+                ResponsiveNavigation.showAdaptiveModalPage(
+                  context: context,
+                  child: const AiDjPage(),
+                );
+              },
+            ),
+          ],
         ],
       ),
     );

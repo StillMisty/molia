@@ -120,6 +120,7 @@ void main() {
     expect(find.text('Top artists'), findsOneWidget);
     expect(find.text('Completion rate'), findsOneWidget);
     expect(find.text('Skip rate'), findsOneWidget);
+    expect(find.byKey(const Key('statsAiDjButton')), findsOneWidget);
   });
 
   testWidgets('窄屏（320dp）：布局无溢出', (tester) async {

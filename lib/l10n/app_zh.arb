@@ -547,5 +547,71 @@
         "type": "String"
       }
     }
-  }
+  },
+  "aiDjTitle": "AI 推歌",
+  "aiDjSettingsSubtitle": "自备 Key 的 AI 推荐电台（默认关闭）",
+  "aiDjNotConfigured": "尚未配置 AI 服务",
+  "aiDjRequestFailed": "AI 请求失败，请稍后重试",
+  "aiDjUnauthorized": "API Key 无效或没有权限",
+  "aiDjRateLimited": "AI 服务限流，请稍后重试",
+  "aiDjBadResponse": "AI 返回内容无法解析",
+  "aiDjNothingResolved": "本批没有可播放的曲目",
+  "aiDjStatusOff": "未开启",
+  "aiDjStatusPreparing": "生成中…",
+  "aiDjStatusPlaying": "推歌中",
+  "aiDjStatusError": "已暂停（保留当前队列）",
+  "aiDjToggle": "AI 推歌模式",
+  "aiDjToggleSubtitle": "开启后 AI 持续选歌入队，播完自动续推",
+  "aiDjFeedMore": "再来一批",
+  "aiDjStopKeepQueue": "保留队列继续播",
+  "aiDjStopClearQueue": "清空队列并停止",
+  "aiDjStopDialogTitle": "退出 AI 推歌？",
+  "aiDjConsentTitle": "开始前确认",
+  "aiDjConsentBody": "开启后会把你的听歌画像（聚合统计、最近 200 条播放明细、已听曲目清单）发送给你配置的 AI 服务用于生成推荐；数据直达该服务、不经过本应用中转，应用不含内置 Key。关闭模式即停止续推，清除配置即断开连接。",
+  "aiDjAgree": "同意并开启",
+  "aiDjConfigTitle": "AI 服务配置",
+  "aiDjBaseUrl": "API 地址",
+  "aiDjApiKey": "API Key",
+  "aiDjModel": "模型",
+  "aiDjPresetCustom": "自定义",
+  "aiDjTestConnection": "测试连接",
+  "aiDjTestSucceeded": "连接成功",
+  "aiDjSaveConfig": "保存配置",
+  "aiDjClearConfig": "清除配置",
+  "aiDjConfigSaved": "已保存",
+  "aiDjQueued": "本会话已入队 {count} 首",
+  "@aiDjQueued": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "aiDjSkippedCount": "跳过 {count}",
+  "@aiDjSkippedCount": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "aiDjLikedCount": "收藏 {count}",
+  "@aiDjLikedCount": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "aiDjUnresolved": "{count} 首未找到可播放版本",
+  "@aiDjUnresolved": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "aiDjRetry": "重试",
+  "aiDjOpenSettings": "配置 AI 服务",
+  "aiDjBadgeTooltip": "AI 推歌进行中"
 }

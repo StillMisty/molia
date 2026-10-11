@@ -29,6 +29,7 @@ import '../services/notification_service.dart';
 import '../utils/responsive.dart';
 import '../widgets/statistics/listening_heatmap.dart';
 import '../widgets/track_row.dart';
+import 'ai_dj_page.dart';
 
 class PlayStatisticsPage extends StatefulWidget {
   const PlayStatisticsPage({super.key});
@@ -64,6 +65,18 @@ class _PlayStatisticsPageState extends State<PlayStatisticsPage> {
       appBar: AppBar(
         title: Text(l10n.statsTitle),
         actions: [
+          if (aiDjSupportedPlatform)
+            IconButton(
+              key: const Key('statsAiDjButton'),
+              icon: const Icon(Icons.auto_awesome_rounded),
+              tooltip: l10n.aiDjTitle,
+              onPressed: () {
+                ResponsiveNavigation.showAdaptiveModalPage(
+                  context: context,
+                  child: const AiDjPage(),
+                );
+              },
+            ),
           IconButton(
             icon: const Icon(Icons.ios_share_rounded),
             tooltip: l10n.statsExport,

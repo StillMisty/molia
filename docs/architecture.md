@@ -113,6 +113,15 @@
   全量历史 + 范围高亮）、作息热力图（7×24，随范围过滤）、汇总/指标/榜单
   （Top 曲目可点播）；导出 JSON 面向 AI 消费（全量汇总 + 最近明细、不含 raw）。
   与 `play_history`（最近播放，500 条上限）是两套数据。
+- **AI 推歌（Phase 2，可选，默认关闭）**：`lib/services/ai/**` 是唯一数据出口与
+  网络层——`TasteProfileBuilder`（聚合画像 + 最近 200 条明细 + 排除清单）、
+  `LlmClient`（OpenAI-compatible，错误归一化 `SourceFailure`，Key 不进 message）、
+  `AiRecommendationService`（提示词 → 容错 JSON → 规范化去重 →
+  `CatalogService.search` 并行解析）。`AiDjProvider` 是模式状态机
+  （批次 20 / 低水位续推 / 跳过与收藏反馈 / 失败降级），经
+  `PlaybackProvider.enqueueDomainTracks` 续推（洗牌追加见
+  `PlaybackShuffleOrder.extend`）；播放页徽标与 AI 页订阅其状态。
+  首次开启隐私确认、Web 隐藏；定位与边界见 ADR-0002。
 - **渠道选择**：`DiscoverProvider.channelKey` 是渠道状态的唯一持有者；渠道变化经
   注入的 `onChannelChanged`（组合根）同步搜索源（可搜索渠道才跟随），资料页只
   处理「渠道被停用」的 UI 回退，不再在两个 provider 之间仲裁同步。

@@ -1496,4 +1496,129 @@ class AppLocalizationsEn extends AppLocalizations {
   String statsEventListened(String duration) {
     return 'Listened $duration';
   }
+
+  @override
+  String get aiDjTitle => 'AI DJ';
+
+  @override
+  String get aiDjSettingsSubtitle =>
+      'AI-powered radio with your own API key (off by default)';
+
+  @override
+  String get aiDjNotConfigured => 'AI service is not configured yet';
+
+  @override
+  String get aiDjRequestFailed => 'AI request failed. Try again later.';
+
+  @override
+  String get aiDjUnauthorized => 'Invalid API key or permission denied';
+
+  @override
+  String get aiDjRateLimited => 'Rate limited. Try again later.';
+
+  @override
+  String get aiDjBadResponse => 'The AI response could not be parsed';
+
+  @override
+  String get aiDjNothingResolved => 'No playable tracks in this batch';
+
+  @override
+  String get aiDjStatusOff => 'Off';
+
+  @override
+  String get aiDjStatusPreparing => 'Preparing…';
+
+  @override
+  String get aiDjStatusPlaying => 'Live';
+
+  @override
+  String get aiDjStatusError => 'Paused (queue kept)';
+
+  @override
+  String get aiDjToggle => 'AI DJ mode';
+
+  @override
+  String get aiDjToggleSubtitle =>
+      'Keeps AI-picked songs coming and extends the queue automatically';
+
+  @override
+  String get aiDjFeedMore => 'More';
+
+  @override
+  String get aiDjStopKeepQueue => 'Keep playing';
+
+  @override
+  String get aiDjStopClearQueue => 'Clear queue & stop';
+
+  @override
+  String get aiDjStopDialogTitle => 'Exit AI DJ?';
+
+  @override
+  String get aiDjConsentTitle => 'Before you start';
+
+  @override
+  String get aiDjConsentBody =>
+      'When enabled, your listening profile (aggregated stats, the latest 200 play events, and the list of already-played tracks) will be sent to the AI service you configure in order to generate recommendations. Data goes straight to that service with no relay through this app, and no bundled API key is provided. Turning the mode off stops continuation; clearing the config disconnects it.';
+
+  @override
+  String get aiDjAgree => 'Agree & start';
+
+  @override
+  String get aiDjConfigTitle => 'AI service';
+
+  @override
+  String get aiDjBaseUrl => 'Base URL';
+
+  @override
+  String get aiDjApiKey => 'API key';
+
+  @override
+  String get aiDjModel => 'Model';
+
+  @override
+  String get aiDjPresetCustom => 'Custom';
+
+  @override
+  String get aiDjTestConnection => 'Test connection';
+
+  @override
+  String get aiDjTestSucceeded => 'Connected';
+
+  @override
+  String get aiDjSaveConfig => 'Save';
+
+  @override
+  String get aiDjClearConfig => 'Clear';
+
+  @override
+  String get aiDjConfigSaved => 'Saved';
+
+  @override
+  String aiDjQueued(int count) {
+    return '$count queued this session';
+  }
+
+  @override
+  String aiDjSkippedCount(int count) {
+    return '$count skipped';
+  }
+
+  @override
+  String aiDjLikedCount(int count) {
+    return '$count liked';
+  }
+
+  @override
+  String aiDjUnresolved(int count) {
+    return '$count not found on your sources';
+  }
+
+  @override
+  String get aiDjRetry => 'Retry';
+
+  @override
+  String get aiDjOpenSettings => 'Set up AI service';
+
+  @override
+  String get aiDjBadgeTooltip => 'AI DJ is on';
 }

@@ -117,6 +117,29 @@
   面向 AI 消费的 JSON（汇总/榜单全量 + 最近 2000 条明细、**不含 raw**、
   带 `instructions` 提示语）；只出不进，不并入 `molia_backup` 备份。
 
+## AI 推歌
+
+- **AI DJ mode（AI 推歌模式）** — `lib/providers/ai_dj_provider.dart`：可持续推荐
+  电台的状态机（off/preparing/playing/error）。批次 20 首、队列剩余 ≤5 首后台续推
+  （`PlaybackProvider.enqueueDomainTracks`）；跳过 = 切走时未达
+  `min(30s, 50%×时长)`（复用统计口径，**只做曲目级排除**）；喜欢 = 收藏；
+  连续 3 次失败自动停止续推；退出保留队列。播放快照/进度由组合根接进控制器。
+- **Taste profile（听歌画像）** — `lib/services/ai/taste_profile_builder.dart`：
+  上行 LLM 的唯一数据出口（聚合统计 + 最近 200 条明细 + 已听排除清单，
+  上限集中在此）；不含 raw payload / 设备信息；首次开启需隐私确认
+  （`AiSettingsStore.consentKey`）。
+- **Closed-book + local resolve（闭卷生成 + 本地解析）** —
+  `lib/services/ai/ai_recommendation_service.dart`：LLM 只输出
+  `{title, artist, reason}` JSON（容错解析 + 规范化去重），本地
+  `CatalogService.search` 在用户启用音源里解析成可播放曲目（打分阈值 0.6），
+  失败项折叠展示；推荐结果 100% 来自已启用音源。
+- **LLM config（AI 服务配置）** — `lib/services/ai/ai_settings_store.dart`：
+  Base URL / API Key / 模型（OpenAI-compatible，预设 DeepSeek/OpenAI/自定义）；
+  Key 只写 `flutter_secure_storage`、不进日志；Web 平台隐藏入口（`aiDjSupportedPlatform`）。
+- **Queue enqueue（队列追加）** — `PlaybackFacade/Backend/Service.enqueueTracks` +
+  `PlaybackProvider.enqueueDomainTracks`：顺序模式追加队尾；洗牌模式经
+  `PlaybackShuffleOrder.extend` 扩展排列（当前轮老歌在前，轮末重洗覆盖全队列）。
+
 ## 缓存
 
 - **Lyrics cache（歌词缓存模块）** — `lib/services/lyrics_cache.dart`：歌词键（`lyrics_cache_{trackId}`）、读写、用量与清理的唯一实现；TTL 策略属于 `CacheService`（取词时读取）。历史 `manual_lyrics_cache_*` 重复键只清不读。
