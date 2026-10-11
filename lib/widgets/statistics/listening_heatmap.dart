@@ -1,14 +1,18 @@
 /// 听歌热力图：日历热力图（hero）与星期 × 时段作息热力图。
 ///
-/// 形状与动效（issue #8 已拍板）：
+/// 形状与动效（issue #8 已拍板 + 首轮实机反馈修订）：
 /// - 静默格子 = `M3EShapeKind.square`（小圆角方，密集可读），色阶主导：
 ///   空日 `surfaceContainerHighest`，有数据 `primary` 四档 alpha
-///   （0.25 / 0.45 / 0.70 / 1.0，深色主题天然变亮）；
+///   （0.30 / 0.50 / 0.75 / 1.0）——**卡片底色必须比空日格低一档**
+///   （页面传 `surfaceContainerLow`），否则空格与卡片同色不可见；
+/// - 日历网格最少填满卡片宽度，且首播日之前的补位日渲染为空方格
+///   （GitHub 式底格），不可点、无 tooltip；
 /// - 悬停/按压 → `Morph(square → puffy)` 多边形形变 + 放大 1.25×，
 ///   120ms `easeOutCubic` 进入、200ms 回弹；
 /// - 选中的一天保持放大 + `primary` 1.5dp 描边（弹层关闭后复原）；
-/// - 命中区 = 格子 + 格距（相邻格无死区，手机 ≈14dp）；范围外（早于
-///   高亮起点）的格子降透明度而非包 `Opacity`，避免逐格合成层。
+/// - 命中区 = 格子 + 格距（相邻格无死区，手机 ≈17dp）；范围外（早于
+///   高亮起点）的格子降透明度而非包 `Opacity`，避免逐格合成层；
+/// - 星期标签隔行显示（一/三/五/日）：行距小于字高时全显示会互相遮挡。
 library;
 
 import 'dart:math' as math;
@@ -22,9 +26,9 @@ const int heatmapLevelCount = 5;
 /// 档位 → 颜色（唯一色阶来源；图例与格子共用）。
 Color heatmapLevelColor(ColorScheme scheme, int level) => switch (level) {
       0 => scheme.surfaceContainerHighest,
-      1 => scheme.primary.withValues(alpha: 0.25),
-      2 => scheme.primary.withValues(alpha: 0.45),
-      3 => scheme.primary.withValues(alpha: 0.70),
+      1 => scheme.primary.withValues(alpha: 0.30),
+      2 => scheme.primary.withValues(alpha: 0.50),
+      3 => scheme.primary.withValues(alpha: 0.75),
       _ => scheme.primary,
     };
 
@@ -278,7 +282,7 @@ class CalendarHeatmap extends StatefulWidget {
 
 class _CalendarHeatmapState extends State<CalendarHeatmap> {
   static const double _headerHeight = 16;
-  static const double _labelWidth = 22;
+  static const double _labelWidth = 24;
 
   final ScrollController _controller = ScrollController();
 
@@ -326,67 +330,87 @@ class _CalendarHeatmapState extends State<CalendarHeatmap> {
     final scheme = Theme.of(context).colorScheme;
     final labelStyle = Theme.of(context).textTheme.labelSmall?.copyWith(
           color: scheme.onSurfaceVariant,
+          fontSize: 10,
+          height: 1.0,
         );
     final narrow = MaterialLocalizations.of(context).narrowWeekdays;
     final levels = _HeatLevels.of(widget.values.values);
     final rowHeight = widget.cellSize + widget.cellGap;
 
-    return SizedBox(
-      height: _headerHeight + 7 * rowHeight,
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          SizedBox(
-            width: _labelWidth,
-            child: Column(
-              children: [
-                const SizedBox(height: _headerHeight),
-                for (var row = 0; row < 7; row++)
-                  SizedBox(
-                    height: rowHeight,
-                    child: Align(
-                      alignment: Alignment.centerRight,
-                      child: Text(
-                        // 星期一 / 三 / 五（narrowWeekdays 0 = 周日）。
-                        row == 0 || row == 2 || row == 4
-                            ? narrow[(row + 1) % 7]
-                            : '',
-                        style: labelStyle,
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        // 最少窗口：不足时向左补列（补位日渲染为空方格），保证网格铺满卡片。
+        final rawWeeks = _weekCount;
+        final pitch = widget.cellSize + widget.cellGap;
+        final minWeeks =
+            math.max(1, ((constraints.maxWidth - _labelWidth) / pitch).ceil());
+        final weeks = math.max(rawWeeks, minWeeks);
+        final gridStart =
+            _gridStart.subtract(Duration(days: (weeks - rawWeeks) * 7));
+
+        return SizedBox(
+          height: _headerHeight + 7 * rowHeight,
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              SizedBox(
+                width: _labelWidth,
+                child: Column(
+                  children: [
+                    const SizedBox(height: _headerHeight),
+                    for (var row = 0; row < 7; row++)
+                      SizedBox(
+                        height: rowHeight,
+                        child: Align(
+                          alignment: Alignment.centerRight,
+                          child: Text(
+                            // 星期一 / 三 / 五（narrowWeekdays 0 = 周日）。
+                            row == 0 || row == 2 || row == 4
+                                ? narrow[(row + 1) % 7]
+                                : '',
+                            style: labelStyle,
+                          ),
+                        ),
                       ),
-                    ),
+                  ],
+                ),
+              ),
+              Expanded(
+                child: ListView.builder(
+                  controller: _controller,
+                  scrollDirection: Axis.horizontal,
+                  itemCount: weeks,
+                  itemBuilder: (context, week) => _buildWeek(
+                    context,
+                    gridStart.add(Duration(days: week * 7)),
+                    levels,
+                    labelStyle,
+                    rowHeight,
                   ),
-              ],
-            ),
+                ),
+              ),
+            ],
           ),
-          Expanded(
-            child: ListView.builder(
-              controller: _controller,
-              scrollDirection: Axis.horizontal,
-              itemCount: _weekCount,
-              itemBuilder: (context, week) =>
-                  _buildWeek(context, week, levels, labelStyle, rowHeight),
-            ),
-          ),
-        ],
-      ),
+        );
+      },
     );
   }
 
   Widget _buildWeek(
     BuildContext context,
-    int week,
+    DateTime start,
     _HeatLevels levels,
     TextStyle? labelStyle,
     double rowHeight,
   ) {
-    final start = _gridStart.add(Duration(days: week * 7));
-
-    // 月份标签：本周包含某月 1 日时在列首显示（允许向右溢出列宽）。
+    // 月份标签：本周包含某月 1 日时在列首显示。只保留月份名（去 4 位年份），
+    // 否则 "September 2026" 这类长标签会与下个月标签重叠（列距只有 4 周）。
     String? monthLabel;
     for (var i = 0; i < 7; i++) {
       final day = start.add(Duration(days: i));
       if (day.day == 1) {
-        monthLabel = MaterialLocalizations.of(context).formatMonthYear(day);
+        final raw = MaterialLocalizations.of(context).formatMonthYear(day);
+        monthLabel = raw.replaceAll(RegExp(r'\s*\d{4}\s*年?'), ' ').trim();
         break;
       }
     }
@@ -401,7 +425,7 @@ class _CalendarHeatmapState extends State<CalendarHeatmap> {
           child: monthLabel == null
               ? null
               : OverflowBox(
-                  maxWidth: 120,
+                  maxWidth: 84,
                   alignment: Alignment.centerLeft,
                   child: Text(monthLabel, style: labelStyle),
                 ),
@@ -423,18 +447,21 @@ class _CalendarHeatmapState extends State<CalendarHeatmap> {
     _HeatLevels levels,
     double rowHeight,
   ) {
+    final hitWidth = widget.cellSize + widget.cellGap;
+    // 今天之后不渲染（窗口右端 = 今天）。
+    if (day.isAfter(widget.lastDay)) {
+      return SizedBox(width: hitWidth, height: rowHeight);
+    }
     final inRange =
         !day.isBefore(widget.firstDay) && !day.isAfter(widget.lastDay);
-    final hitWidth = widget.cellSize + widget.cellGap;
-    if (!inRange) return SizedBox(width: hitWidth, height: rowHeight);
-
-    final value = widget.values[day] ?? 0;
+    // 数据范围之前：补位空方格（GitHub 式底格），不可点、无 tooltip。
+    final value = inRange ? (widget.values[day] ?? 0) : 0;
     var color = heatmapLevelColor(
       Theme.of(context).colorScheme,
       levels.levelOf(value),
     );
     final highlightFrom = widget.highlightFrom;
-    if (highlightFrom != null && day.isBefore(highlightFrom)) {
+    if (inRange && highlightFrom != null && day.isBefore(highlightFrom)) {
       // 范围外降透明度（Color 直算，避免逐格 Opacity 合成层）。
       color = color.withValues(alpha: color.a * 0.35);
     }
@@ -445,9 +472,9 @@ class _CalendarHeatmapState extends State<CalendarHeatmap> {
       size: widget.cellSize,
       gap: widget.cellGap,
       color: color,
-      selected: widget.selectedDay == day,
-      tooltip: widget.tooltipFor(day, value),
-      onTap: onDayTap == null ? null : () => onDayTap(day),
+      selected: inRange && widget.selectedDay == day,
+      tooltip: inRange ? widget.tooltipFor(day, value) : null,
+      onTap: inRange && onDayTap != null ? () => onDayTap(day) : null,
     );
   }
 }
@@ -474,10 +501,12 @@ class WeekdayHourHeatmap extends StatelessWidget {
     final scheme = Theme.of(context).colorScheme;
     final labelStyle = Theme.of(context).textTheme.labelSmall?.copyWith(
           color: scheme.onSurfaceVariant,
+          fontSize: 10,
+          height: 1.0,
         );
     final narrow = MaterialLocalizations.of(context).narrowWeekdays;
     final levels = _HeatLevels.of([for (final row in values) ...row]);
-    const labelWidth = 26.0;
+    const labelWidth = 24.0;
 
     return LayoutBuilder(
       builder: (context, constraints) {
@@ -513,8 +542,12 @@ class WeekdayHourHeatmap extends StatelessWidget {
                       alignment: Alignment.centerRight,
                       child: Padding(
                         padding: const EdgeInsets.only(right: 6),
-                        child:
-                            Text(narrow[(weekday + 1) % 7], style: labelStyle),
+                        child: Text(
+                          // 隔行显示（一/三/五/日）：行距小于字高时
+                          // 全显示会互相遮挡。
+                          weekday.isEven ? narrow[(weekday + 1) % 7] : '',
+                          style: labelStyle,
+                        ),
                       ),
                     ),
                   ),

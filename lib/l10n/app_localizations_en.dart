@@ -1464,7 +1464,13 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String statsPlaysCount(int count) {
-    return '$count plays';
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count plays',
+      one: '1 play',
+    );
+    return '$_temp0';
   }
 
   @override
@@ -1484,7 +1490,13 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String statsDaySummary(int count, String duration) {
-    return '$count plays · $duration';
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count plays',
+      one: '1 play',
+    );
+    return '$_temp0 · $duration';
   }
 
   @override

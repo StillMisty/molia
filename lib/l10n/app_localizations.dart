@@ -2777,7 +2777,7 @@ abstract class AppLocalizations {
   /// No description provided for @statsPlaysCount.
   ///
   /// In en, this message translates to:
-  /// **'{count} plays'**
+  /// **'{count, plural, =1{1 play} other{{count} plays}}'**
   String statsPlaysCount(int count);
 
   /// No description provided for @statsDurationSeconds.
@@ -2801,7 +2801,7 @@ abstract class AppLocalizations {
   /// No description provided for @statsDaySummary.
   ///
   /// In en, this message translates to:
-  /// **'{count} plays · {duration}'**
+  /// **'{count, plural, =1{1 play} other{{count} plays}} · {duration}'**
   String statsDaySummary(int count, String duration);
 
   /// No description provided for @statsTooltip.
