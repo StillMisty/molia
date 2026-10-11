@@ -99,12 +99,27 @@ class PlaybackSession {
 class PlaybackSessionStore {
   static const String _key = 'playback_session_v1';
 
+  /// 写入时间戳键（跨设备同步用它判断会话新旧；旧数据缺省按 0 处理）。
+  static const String savedAtKey = 'savedAt';
+
+  /// [preferences] / [clock] 仅测试注入。
+  PlaybackSessionStore({
+    SharedPreferences? preferences,
+    DateTime Function()? clock,
+  })  : _preferences = preferences,
+        _clock = clock ?? DateTime.now;
+
+  final SharedPreferences? _preferences;
+  final DateTime Function() _clock;
+
   final Logger _logger = Logger();
 
   Future<void> save(PlaybackSession session) async {
     try {
-      final sp = await SharedPreferences.getInstance();
-      await sp.setString(_key, jsonEncode(session.toJson()));
+      final sp = _preferences ?? await SharedPreferences.getInstance();
+      final json = session.toJson();
+      json[savedAtKey] = _clock().millisecondsSinceEpoch;
+      await sp.setString(_key, jsonEncode(json));
     } catch (e) {
       _logger.w('保存播放会话失败: $e');
     }
@@ -112,21 +127,42 @@ class PlaybackSessionStore {
 
   Future<PlaybackSession?> load() async {
     try {
-      final sp = await SharedPreferences.getInstance();
-      final raw = sp.getString(_key);
-      if (raw == null || raw.isEmpty) return null;
-      final json = jsonDecode(raw);
-      if (json is! Map<String, dynamic>) return null;
-      return PlaybackSession.fromJson(json);
+      final json = await loadRaw();
+      return json == null ? null : PlaybackSession.fromJson(json);
     } catch (e) {
       _logger.w('加载播放会话失败: $e');
       return null;
     }
   }
 
+  /// 原始 JSON（含 [savedAtKey]）；无记录或损坏返回 null。
+  Future<Map<String, dynamic>?> loadRaw() async {
+    try {
+      final sp = _preferences ?? await SharedPreferences.getInstance();
+      final raw = sp.getString(_key);
+      if (raw == null || raw.isEmpty) return null;
+      final json = jsonDecode(raw);
+      if (json is! Map) return null;
+      return json.cast<String, dynamic>();
+    } catch (e) {
+      _logger.w('加载播放会话失败: $e');
+      return null;
+    }
+  }
+
+  /// 原样写入 JSON（跨设备同步应用远端会话用；内容须自包含 savedAt）。
+  Future<void> saveRaw(Map<String, dynamic> raw) async {
+    try {
+      final sp = _preferences ?? await SharedPreferences.getInstance();
+      await sp.setString(_key, jsonEncode(raw));
+    } catch (e) {
+      _logger.w('保存播放会话失败: $e');
+    }
+  }
+
   Future<void> clear() async {
     try {
-      final sp = await SharedPreferences.getInstance();
+      final sp = _preferences ?? await SharedPreferences.getInstance();
       await sp.remove(_key);
     } catch (e) {
       _logger.w('清除播放会话失败: $e');

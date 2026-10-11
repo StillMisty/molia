@@ -1,0 +1,187 @@
+import 'package:flutter_test/flutter_test.dart';
+import 'package:molia/data/sync/adapters/session_sync_adapter.dart';
+import 'package:molia/data/sync/sync_state_store.dart';
+import 'package:molia/domain/models/device_sync.dart';
+import 'package:molia/domain/models/track.dart';
+import 'package:molia/models/play_mode.dart';
+import 'package:molia/services/playback_session_store.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+
+import 'support/sync_test_support.dart';
+
+/// 上次播放会话适配器：写入时间戳登记、远端应用/删除、本地清空检出。
+void main() {
+  TestWidgetsFlutterBinding.ensureInitialized();
+
+  late SharedPreferences prefs;
+  late SyncStateStore state;
+  late PlaybackSessionStore store;
+  late SessionSyncAdapter adapter;
+  var now = 5000;
+  var changedCount = 0;
+
+  PlaybackSession session({int index = 0, int positionMs = 42000}) =>
+      PlaybackSession(
+        tracks: [
+          Track(
+            id: const TrackId('fake', 'a'),
+            title: 'Title a',
+            artists: const [Artist(name: 'Artist a')],
+            duration: const Duration(seconds: 60),
+            origin: TrackOrigin.lx,
+            payload: const {'id': 'a'},
+          ),
+        ],
+        index: index,
+        position: Duration(milliseconds: positionMs),
+        mode: PlayMode.shuffle,
+      );
+
+  setUp(() async {
+    SharedPreferences.setMockInitialValues({});
+    prefs = await SharedPreferences.getInstance();
+    now = 5000;
+    changedCount = 0;
+    state = SyncStateStore(
+      preferences: prefs,
+      secrets: MemorySyncSecretStore(),
+      clock: () => now,
+    );
+    await state.init();
+    store = PlaybackSessionStore(preferences: prefs, clock: () => DateTime.fromMillisecondsSinceEpoch(now));
+    adapter = SessionSyncAdapter(
+      store: store,
+      state: state,
+      deviceId: () => 'devA',
+      onChanged: () async => changedCount++,
+    );
+  });
+
+  test('本地会话导出：时间戳 = savedAt，数据含队列与进度', () async {
+    await store.save(session());
+    final collected = await adapter.collect();
+    final record = collected[SyncCategory.session]!.single;
+    expect(record.deleted, isFalse);
+    expect(record.updatedAt, 5000);
+    expect(record.updatedBy, 'devA');
+    expect(record.data!['savedAt'], 5000);
+    expect(record.data!['positionMs'], 42000);
+    expect(record.data!['mode'], 'shuffle');
+    expect((record.data!['tracks'] as List), hasLength(1));
+  });
+
+  test('本地写入刷新后重新打戳；未变化时保持原戳', () async {
+    await store.save(session());
+    await adapter.collect();
+
+    now = 9000;
+    await store.save(session(positionMs: 60000));
+    final refreshed = await adapter.collect();
+    expect(refreshed[SyncCategory.session]!.single.updatedAt, 9000);
+
+    final stable = await adapter.collect();
+    expect(stable[SyncCategory.session]!.single.updatedAt, 9000);
+  });
+
+  test('应用远端会话：写入存储、更新登记、触发回调；重复应用幂等', () async {
+    await adapter.collect();
+    final remote = SyncRecord(
+      key: SyncRecordKeys.sessionKey,
+      updatedAt: 20000,
+      updatedBy: 'devB',
+      data: {
+        'savedAt': 20000,
+        'index': 0,
+        'positionMs': 12345,
+        'mode': 'sequential',
+        'tracks': [
+          {
+            'sourceKey': 'fake',
+            'id': 'b',
+            'title': 'Remote Song',
+            'artists': [
+              {'name': 'Remote Artist'},
+            ],
+            'origin': 'lx',
+            'payload': {'id': 'b'},
+          },
+        ],
+      },
+    );
+    final result = await adapter.apply({
+      SyncCategory.session: [remote],
+    });
+    expect(result.applied, 1);
+    expect(changedCount, 1);
+    final loaded = await store.load();
+    expect(loaded!.current!.title, 'Remote Song');
+    expect(loaded.position, const Duration(milliseconds: 12345));
+
+    final again = await adapter.apply({
+      SyncCategory.session: [remote],
+    });
+    expect(again.applied, 0);
+    expect(again.skipped, 1);
+    expect(changedCount, 1);
+  });
+
+  test('旧记录被跳过：本地更新的会话胜出', () async {
+    now = 30000;
+    await store.save(session());
+    await adapter.collect();
+
+    final stale = SyncRecord(
+      key: SyncRecordKeys.sessionKey,
+      updatedAt: 10000,
+      updatedBy: 'devB',
+      data: {'savedAt': 10000, 'positionMs': 1},
+    );
+    final result = await adapter.apply({
+      SyncCategory.session: [stale],
+    });
+    expect(result.applied, 0);
+    final loaded = await store.load();
+    expect(loaded!.position, const Duration(milliseconds: 42000));
+  });
+
+  test('本地清空（停止播放）不回传删除：不产生记录，远端旧会话也不复活', () async {
+    await store.save(session());
+    await adapter.collect();
+
+    now = 40000;
+    await store.clear();
+    final collected = await adapter.collect();
+    expect(collected[SyncCategory.session], isNull);
+
+    // 与本地登记同戳的旧会话不会把已清空的会话填回来。
+    final sameStamp = SyncRecord(
+      key: SyncRecordKeys.sessionKey,
+      updatedAt: 5000,
+      updatedBy: 'devA',
+      data: {'savedAt': 5000, 'positionMs': 1},
+    );
+    final result = await adapter.apply({
+      SyncCategory.session: [sameStamp],
+    });
+    expect(result.applied, 0);
+    expect(await store.load(), isNull);
+  });
+
+  test('远端删除会话：清空存储并撤下恢复态回调', () async {
+    await store.save(session());
+    await adapter.collect();
+
+    final result = await adapter.apply({
+      SyncCategory.session: [
+        SyncRecord.tombstone(
+          key: SyncRecordKeys.sessionKey,
+          updatedAt: 60000,
+          updatedBy: 'devB',
+        ),
+      ],
+    });
+    expect(result.applied, 1);
+    expect(await store.load(), isNull);
+    expect(changedCount, 1);
+  });
+}

@@ -9,10 +9,23 @@ import 'data/catalog/source_registry_impl.dart';
 import 'data/library_repository.dart';
 import 'data/mapping/track_mapper.dart';
 import 'data/play_statistics_repository.dart';
+import 'data/sync/adapters/history_sync_adapter.dart';
+import 'data/sync/adapters/playlist_sync_adapter.dart';
+import 'data/sync/adapters/prefs_sync_adapter.dart';
+import 'data/sync/adapters/script_sync_adapter.dart';
+import 'data/sync/adapters/session_sync_adapter.dart';
+import 'data/sync/adapters/statistics_sync_adapter.dart';
+import 'data/sync/sync_crypto.dart';
+import 'data/sync/sync_engine.dart';
+import 'data/sync/sync_setting_specs.dart';
+import 'data/sync/sync_state_store.dart';
+import 'data/sync/transport/lan_sync_transport.dart';
+import 'data/sync/transport/webdav_sync_transport.dart';
 import 'providers/ai_dj_provider.dart';
 import 'data/playback/default_playback_facade.dart';
 import 'data/playback/local_playback_backend.dart';
 import 'domain/models/failure.dart';
+import 'domain/models/device_sync.dart';
 import 'domain/ports/source_registry.dart';
 import 'domain/ports/ui_messenger.dart';
 import 'l10n/app_localizations.dart';
@@ -31,11 +44,14 @@ import 'providers/play_statistics_provider.dart';
 import 'providers/search_provider.dart';
 import 'providers/discover_provider.dart';
 import 'providers/sources_provider.dart';
+import 'providers/sync_provider.dart';
 import 'providers/theme_provider.dart';
 import 'services/artwork_palette_service.dart';
+import 'services/app_branding_service.dart';
 import 'services/cache_service.dart';
 import 'managers/artwork_cache.dart';
 import 'services/data_saver_service.dart';
+import 'services/language_service.dart';
 import 'providers/lyrics_provider.dart';
 import 'services/lyrics_display/audio_route_monitor.dart';
 import 'services/lyrics_display/desktop_lyrics_output.dart';
@@ -43,6 +59,7 @@ import 'services/lyrics_display/lyrics_display_settings.dart';
 import 'services/lyrics_display/media_lyric_output.dart';
 import 'services/lyrics_service.dart';
 import 'services/notification_service.dart';
+import 'services/playback_session_store.dart';
 import 'services/play_statistics_service.dart';
 import 'services/ai/ai_recommendation_service.dart';
 import 'services/ai/ai_settings_store.dart';
@@ -164,12 +181,19 @@ void main() async {
   );
   // 资料库仓库：播放历史 / 我的列表 / 收藏；播放开始时由
   // PlaybackProvider 写历史，资料库页经 LibraryProvider 读取（内存缓存）。
-  final libraryRepository = LibraryRepository();
+  // 跨设备同步状态提前初始化：资料库/统计的写路径需要设备 id 打同步戳。
+  final syncState = SyncStateStore();
+  await syncState.init();
+  final libraryRepository = LibraryRepository(
+    deviceIdProvider: () => syncState.deviceId,
+  );
   // 听歌统计：事件级采集（play_events）与查询；与「最近播放」（play_history，
   // 500 条上限）是两套数据。采集是纯观察者（服务不持有 provider），
   // 快照 / 进度经下方 addListener 接线；上次进程被杀遗留的进行中事件
   // 启动即收尾为 interrupted。
-  final playStatisticsRepository = PlayStatisticsRepository();
+  final playStatisticsRepository = PlayStatisticsRepository(
+    deviceIdProvider: () => syncState.deviceId,
+  );
   final playStatisticsService = PlayStatisticsService(
     repository: playStatisticsRepository,
   );
@@ -248,6 +272,8 @@ void main() async {
   // 主题实例提前创建：封面覆盖 / 桌面歌词「跟随主题」「跟随封面」的颜色
   // 都从 ThemeProvider 取（取色链路在下方接线）。
   final themeProvider = ThemeProvider();
+  // 导航偏好提前创建：跨设备同步应用远端设置后需要定向重载。
+  final navProvider = NavProvider();
   // 封面取色服务：全局主题、桌面歌词、海报共用的唯一取色入口。
   final artworkPaletteService = ArtworkPaletteService();
   final artworkThemeSync = ArtworkThemeSync(
@@ -340,6 +366,107 @@ void main() async {
   );
   playStatisticsService.onSnapshot(playbackProvider.snapshot);
 
+  // 跨设备数据同步（ADR-0003）：口令即信任根，加入同步的设备完全互信
+  // （含音源脚本与凭证），因此不逐项审批；Web 端不提供入口。
+  final syncCodec = SyncCodec();
+  final sourceCategoryKeys = {
+    for (final spec in kSyncSettingSpecs)
+      if (spec.category == SyncCategory.sources) spec.key,
+  };
+  final settingsCategoryKeys = {
+    for (final spec in kSyncSettingSpecs)
+      if (spec.category == SyncCategory.settings) spec.key,
+  };
+  final playlistSyncAdapter =
+      PlaylistSyncAdapter(repository: libraryRepository);
+  final scriptSyncAdapter = ScriptSyncAdapter(
+    repository: sourceManager.repository,
+    state: syncState,
+    deviceId: () => syncState.deviceId,
+    now: () => DateTime.now().millisecondsSinceEpoch,
+    ready: () => sourceManager.initialized,
+    reservedKeys: sourceCategoryKeys,
+    onScriptsChanged: sourceManager.refreshScriptsFromStorage,
+  );
+  final prefsSyncAdapter = PrefsSyncAdapter(
+    state: syncState,
+    specs: kSyncSettingSpecs,
+    deviceId: () => syncState.deviceId,
+    now: () => DateTime.now().millisecondsSinceEpoch,
+    onApplied: (keys) async {
+      if (keys.any(settingsCategoryKeys.contains)) {
+        await themeProvider.reloadFromPreferences();
+        await navProvider.reloadFromPreferences();
+        await AppBrandingService.load();
+        await LanguageService.reloadFromPreferences();
+        await lyricsDisplaySettings.init();
+        await playStatisticsService.reloadFromPreferences();
+        await playbackProvider.reloadDefaultPlayMode();
+      }
+      if (keys.any(sourceCategoryKeys.contains)) {
+        await sourceManager.reloadPreferences();
+        await sourceManager.reloadAnyListenConfig();
+      }
+    },
+  );
+  final statisticsSyncAdapter =
+      StatisticsSyncAdapter(repository: playStatisticsRepository);
+  final historySyncAdapter =
+      HistorySyncAdapter(repository: libraryRepository);
+  final sessionSyncAdapter = SessionSyncAdapter(
+    store: PlaybackSessionStore(),
+    state: syncState,
+    deviceId: () => syncState.deviceId,
+    onChanged: playbackProvider.reloadRestoredSessionFromStore,
+  );
+
+  late final SyncEngine syncEngine;
+  final lanSyncTransport = LanSyncTransport(
+    deviceId: syncState.deviceId,
+    deviceName: () => syncState.deviceName,
+    codec: syncCodec,
+    passphraseProvider: syncState.readPassphrase,
+    snapshotProvider: () async =>
+        syncEngine.lastEnvelope ??
+        SyncEnvelope(
+          deviceId: syncState.deviceId,
+          deviceName: syncState.deviceName,
+          producedAt: DateTime.now().millisecondsSinceEpoch,
+        ),
+  );
+  final webdavSyncTransport = WebDavSyncTransport(
+    deviceId: syncState.deviceId,
+    codec: syncCodec,
+    passphraseProvider: syncState.readPassphrase,
+    configProvider: () => syncState.webdav,
+    passwordProvider: syncState.readWebdavPassword,
+  );
+  syncEngine = SyncEngine(
+    state: syncState,
+    adapters: [
+      playlistSyncAdapter,
+      historySyncAdapter,
+      scriptSyncAdapter,
+      prefsSyncAdapter,
+      statisticsSyncAdapter,
+      sessionSyncAdapter,
+    ],
+    transports: {'lan': lanSyncTransport, 'webdav': webdavSyncTransport},
+  );
+  final syncProvider = SyncProvider(engine: syncEngine);
+  await syncProvider.init();
+  // 数据变更 → 去抖同步（资料库 / 统计 / 音源配置）；前台恢复补一轮；
+  // 运行期间每 10 分钟一轮（局域网对端在线时也能收敛）。
+  libraryRepository.changes.listen((_) => syncProvider.scheduleSync());
+  playStatisticsRepository.changes.listen((_) => syncProvider.scheduleSync());
+  sourceManager.addListener(syncProvider.scheduleSync);
+  Timer.periodic(const Duration(minutes: 10), (_) {
+    if (syncProvider.enabled) unawaited(syncProvider.syncNow());
+  });
+  AppLifecycleListener(
+    onResume: () => syncProvider.scheduleSync(delay: const Duration(seconds: 3)),
+  );
+
   runApp(
     MultiProvider(
       providers: [
@@ -355,7 +482,7 @@ void main() async {
         ChangeNotifierProvider.value(value: themeProvider),
         // 封面取色服务（海报「跟随封面」按需查询；主题链路已在上方接线）。
         Provider<ArtworkPaletteService>.value(value: artworkPaletteService),
-        ChangeNotifierProvider(create: (_) => NavProvider()),
+        ChangeNotifierProvider.value(value: navProvider),
         ChangeNotifierProvider(
           create: (context) => SearchProvider(
             context.read<PlaybackProvider>(),
@@ -407,14 +534,19 @@ void main() async {
             create: (_) => SettingsService()),
         // 省流模式：设置页读写开关/音质上限；取链与封面网关已在上方接线。
         ChangeNotifierProvider.value(value: dataSaver),
+        // 跨设备数据同步：设置页读写；Web 不展示入口。
+        ChangeNotifierProvider.value(value: syncProvider),
       ],
       child: const MyThemedApp(),
     ),
   );
 
-  // 启动后初始化音源（加载已导入的 LX 音源脚本）
+  // 启动后初始化音源（加载已导入的 LX 音源脚本）；随后发起首轮同步
+  // （音源仓库就绪后脚本适配器才能工作）。
   WidgetsBinding.instance.addPostFrameCallback((_) {
-    sourceManager.init();
+    sourceManager.init().then((_) {
+      if (syncProvider.enabled) unawaited(syncProvider.syncNow());
+    });
   });
 }
 

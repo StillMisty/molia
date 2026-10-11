@@ -559,6 +559,9 @@ class PlaybackProvider extends ChangeNotifier {
     }
   }
 
+  /// 重新读取默认播放模式（跨设备同步应用远端设置后由组合根调用）。
+  Future<void> reloadDefaultPlayMode() => _loadDefaultPlayMode();
+
   /// facade 低频快照变化：持久化并通知 UI（曲目/队列）。
   void _onFacadeSnapshot() {
     _handlePlaybackSnapshot();
@@ -662,6 +665,25 @@ class PlaybackProvider extends ChangeNotifier {
     } catch (e) {
       _logger.e('恢复上次播放会话失败', error: e);
     }
+  }
+
+  /// 跨设备同步写入新会话后重新加载恢复态（仅在没有真实播放/装载时生效）。
+  ///
+  /// 远端删除会话时同步撤下本地恢复态；正在播放的设备不受影响
+  /// （真实播放不会被恢复态覆盖）。
+  Future<void> reloadRestoredSessionFromStore() async {
+    if (_facade.snapshot.value.current != null || _resumeRestoring) return;
+    final session = await _sessionStore.load();
+    if (session == null || session.current == null) {
+      final hadRestored = _restoredSession != null;
+      _clearRestoredSession();
+      if (hadRestored) {
+        _notifyCategory('track');
+        _notifyCategory('queue');
+      }
+      return;
+    }
+    await _loadPlaybackSession();
   }
 
   /// 用会话构造恢复态展示快照：当前/队列/下标/模式齐备，isPlaying=false；

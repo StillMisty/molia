@@ -18,7 +18,10 @@ class DatabaseHelper {
   /// v2：仅保留 play_contexts；升级时丢弃旧的 tracks/records/translations 表。
   /// v3：新增 play_history / playlists / playlist_tracks（播放持久化）。
   /// v4：新增 play_events（听歌统计，事件级 append-only）。
-  static const int _dbVersion = 4;
+  /// v5：新增跨设备同步列（playlists.syncId/updatedAt/updatedBy、
+  ///     playlist_tracks.updatedAt/updatedBy、play_events.syncKey/originDeviceId）
+  ///     与 sync_tombstones（删除墓碑）。
+  static const int _dbVersion = 5;
 
   /// 当前 schema 版本（测试用 in-memory 库按此建表）。
   static int get dbVersion => _dbVersion;
@@ -79,6 +82,10 @@ class DatabaseHelper {
 
   /// v3 资料库表：播放历史（上限 500，重复播放按唯一键更新时间）、
   /// 用户列表与列表曲目（列表内唯一约束保证导入/收藏幂等）。
+  ///
+  /// v5 起列表/曲目带同步戳（`updatedAt` + `updatedBy`）：同步合并按
+  /// `(updatedAt, updatedBy)` 逐行取新；`syncId` 是跨设备稳定的列表标识
+  /// （自增 id 只在本机有效）。
   static Future<void> createLibrarySchema(Database db) async {
     await db.execute('''
       CREATE TABLE IF NOT EXISTS play_history (
@@ -101,9 +108,14 @@ class DatabaseHelper {
       CREATE TABLE IF NOT EXISTS playlists (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         name TEXT NOT NULL,
-        createdAt INTEGER NOT NULL
+        createdAt INTEGER NOT NULL,
+        syncId TEXT,
+        updatedAt INTEGER NOT NULL DEFAULT 0,
+        updatedBy TEXT NOT NULL DEFAULT ''
       );
     ''');
+    await db.execute('CREATE UNIQUE INDEX IF NOT EXISTS idx_playlists_syncId '
+        'ON playlists (syncId) WHERE syncId IS NOT NULL;');
     await db.execute('''
       CREATE TABLE IF NOT EXISTS playlist_tracks (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -118,18 +130,34 @@ class DatabaseHelper {
         raw TEXT NOT NULL DEFAULT '{}',
         addedAt INTEGER NOT NULL,
         sortOrder INTEGER NOT NULL DEFAULT 0,
+        updatedAt INTEGER NOT NULL DEFAULT 0,
+        updatedBy TEXT NOT NULL DEFAULT '',
         UNIQUE (playlistId, sourceKey, songId),
         FOREIGN KEY (playlistId) REFERENCES playlists (id) ON DELETE CASCADE
       );
     ''');
     await db.execute(
         'CREATE INDEX IF NOT EXISTS idx_playlist_tracks_order ON playlist_tracks (playlistId, sortOrder, addedAt);');
+
+    // 删除墓碑：本地删除（列表/曲目/脚本）不保留原行，墓碑承担「删除也取新」
+    // 的合并语义；category 取值见 SyncCategory.name。
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS sync_tombstones (
+        category TEXT NOT NULL,
+        key TEXT NOT NULL,
+        updatedAt INTEGER NOT NULL,
+        updatedBy TEXT NOT NULL DEFAULT '',
+        PRIMARY KEY (category, key)
+      );
+    ''');
   }
 
   /// v4 听歌统计表：一次播放尝试一行（append-only）。
   ///
   /// 元数据为播放时快照、自包含（`raw` 供统计页点播）；`endedAt` 为 null
   /// 表示进行中（进程被杀遗留的行由启动时 `closeStaleEvents()` 收尾）。
+  /// v5 起 `syncKey` 为跨设备去重键（新事件 UUID；存量行导出时回填哈希），
+  /// `originDeviceId` 记录事件产生设备。
   static Future<void> createPlayStatisticsSchema(Database db) async {
     await db.execute('''
       CREATE TABLE IF NOT EXISTS play_events (
@@ -146,18 +174,24 @@ class DatabaseHelper {
         endedAt INTEGER,
         listenedMs INTEGER NOT NULL DEFAULT 0,
         maxPositionMs INTEGER NOT NULL DEFAULT 0,
-        endReason TEXT
+        endReason TEXT,
+        syncKey TEXT,
+        originDeviceId TEXT NOT NULL DEFAULT ''
       );
     ''');
     await db.execute(
         'CREATE INDEX IF NOT EXISTS idx_play_events_startedAt ON play_events (startedAt);');
     await db.execute(
         'CREATE INDEX IF NOT EXISTS idx_play_events_track ON play_events (sourceKey, songId);');
+    await db.execute('CREATE UNIQUE INDEX IF NOT EXISTS idx_play_events_syncKey '
+        'ON play_events (syncKey) WHERE syncKey IS NOT NULL;');
   }
 
   /// v1 → v2：删除笔记/记录/翻译/曲目表（功能已移除）。
   /// v2 → v3：新增资料库表（保留 play_contexts，不动旧数据）。
   /// v3 → v4：新增听歌统计表（保留全部旧数据）。
+  /// v4 → v5：补同步列与删除墓碑表；旧行时间戳用创建/加入时间回填，
+  ///         事件去重键留空（首次导出时按内容哈希回填）。
   Future<void> _onUpgrade(Database db, int oldVersion, int newVersion) =>
       upgradeSchema(db, oldVersion, newVersion);
 
@@ -178,6 +212,51 @@ class DatabaseHelper {
     if (oldVersion < 4) {
       await createPlayStatisticsSchema(db);
     }
+    if (oldVersion < 5) {
+      await _upgradeToV5(db);
+    }
+  }
+
+  /// v5：同步列 + 墓碑表。SQLite 的 ADD COLUMN 需要常量默认值，
+  /// 旧行时间戳用已有列回填。
+  static Future<void> _upgradeToV5(Database db) async {
+    Future<void> addColumn(String table, String column, String definition) async {
+      final columns = await db.rawQuery('PRAGMA table_info($table)');
+      final exists = columns.any((row) => row['name'] == column);
+      if (!exists) {
+        await db.execute('ALTER TABLE $table ADD COLUMN $column $definition');
+      }
+    }
+
+    await addColumn('playlists', 'syncId', 'TEXT');
+    await addColumn('playlists', 'updatedAt', 'INTEGER NOT NULL DEFAULT 0');
+    await addColumn('playlists', 'updatedBy', "TEXT NOT NULL DEFAULT ''");
+    await db.execute(
+        'CREATE UNIQUE INDEX IF NOT EXISTS idx_playlists_syncId '
+        'ON playlists (syncId) WHERE syncId IS NOT NULL;');
+    await db.execute(
+        'UPDATE playlists SET updatedAt = createdAt WHERE updatedAt = 0');
+
+    await addColumn('playlist_tracks', 'updatedAt', 'INTEGER NOT NULL DEFAULT 0');
+    await addColumn('playlist_tracks', 'updatedBy', "TEXT NOT NULL DEFAULT ''");
+    await db.execute(
+        'UPDATE playlist_tracks SET updatedAt = addedAt WHERE updatedAt = 0');
+
+    await addColumn('play_events', 'syncKey', 'TEXT');
+    await addColumn('play_events', 'originDeviceId', "TEXT NOT NULL DEFAULT ''");
+    await db.execute(
+        'CREATE UNIQUE INDEX IF NOT EXISTS idx_play_events_syncKey '
+        'ON play_events (syncKey) WHERE syncKey IS NOT NULL;');
+
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS sync_tombstones (
+        category TEXT NOT NULL,
+        key TEXT NOT NULL,
+        updatedAt INTEGER NOT NULL,
+        updatedBy TEXT NOT NULL DEFAULT '',
+        PRIMARY KEY (category, key)
+      );
+    ''');
   }
 
   /// 插入或更新播放上下文。

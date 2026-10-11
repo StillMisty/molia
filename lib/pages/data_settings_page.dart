@@ -7,6 +7,7 @@ import 'package:provider/provider.dart';
 
 import '../l10n/app_localizations.dart';
 import '../providers/local_database_provider.dart';
+import '../providers/sync_provider.dart';
 import '../services/notification_service.dart';
 import '../services/play_statistics_service.dart';
 import '../widgets/lxmc_import.dart' show importLxmcFavoritesFlow;
@@ -23,6 +24,8 @@ class DataSettingsPage extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context)!;
+    // 完整备份经同步引擎的适配器收集/合并；缺省（测试）时退回旧导出路径。
+    final syncProvider = context.watch<SyncProvider?>();
     return Scaffold(
       appBar: M3EAppBar.top(
         title: Text(l10n.dataManagementTitle),
@@ -83,14 +86,14 @@ class DataSettingsPage extends StatelessWidget {
                 icon: Icons.upload_file_rounded,
                 title: l10n.exportDataTitle,
                 subtitle: l10n.exportDataSubtitle,
-                onTap: () => _exportData(context, l10n),
+                onTap: () => _exportData(context, l10n, syncProvider),
               ),
               const SizedBox(height: kSettingsElementSpacing),
               SettingsNavTile(
                 icon: Icons.download_rounded,
                 title: l10n.importDataTitle,
                 subtitle: l10n.importDataSubtitle,
-                onTap: () => _showImportDialog(context, l10n),
+                onTap: () => _showImportDialog(context, l10n, syncProvider),
               ),
               // LX Music 收藏夹（.lxmc）导入：Web 无 gzip/文件系统，隐藏入口。
               if (!kIsWeb) ...[
@@ -109,7 +112,11 @@ class DataSettingsPage extends StatelessWidget {
     );
   }
 
-  Future<void> _exportData(BuildContext context, AppLocalizations l10n) async {
+  Future<void> _exportData(
+    BuildContext context,
+    AppLocalizations l10n,
+    SyncProvider? syncProvider,
+  ) async {
     final localDbProvider =
         Provider.of<LocalDatabaseProvider>(context, listen: false);
     final notificationService =
@@ -117,7 +124,14 @@ class DataSettingsPage extends StatelessWidget {
     final currentContext = context;
 
     try {
-      bool success = await localDbProvider.exportDataToJson();
+      final bool success;
+      if (syncProvider != null) {
+        // 完整备份：同步引擎收集全部类别（凭证类默认不含）。
+        final json = await syncProvider.engine.exportBackupJson();
+        success = await localDbProvider.shareJsonBackup(json);
+      } else {
+        success = await localDbProvider.exportDataToJson();
+      }
       if (!currentContext.mounted) return;
       // 成功时系统文件选择器本身即反馈，失败才提示。
       if (!success) {
@@ -131,7 +145,10 @@ class DataSettingsPage extends StatelessWidget {
   }
 
   Future<void> _showImportDialog(
-      BuildContext context, AppLocalizations l10n) async {
+    BuildContext context,
+    AppLocalizations l10n,
+    SyncProvider? syncProvider,
+  ) async {
     final localDbProvider =
         Provider.of<LocalDatabaseProvider>(context, listen: false);
     final notificationService =
@@ -158,7 +175,15 @@ class DataSettingsPage extends StatelessWidget {
             onPressed: () async {
               navigator.pop();
               try {
-                bool success = await localDbProvider.importDataFromJson();
+                final bool success;
+                if (syncProvider != null) {
+                  final text = await localDbProvider.pickJsonBackup();
+                  if (text == null) return; // 用户取消
+                  await syncProvider.engine.importBackupJson(text);
+                  success = true;
+                } else {
+                  success = await localDbProvider.importDataFromJson();
+                }
                 if (!currentContext.mounted) return;
                 if (success) {
                   notificationService.showSuccessSnackBar(l10n.importSuccess);

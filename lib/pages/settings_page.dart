@@ -5,6 +5,7 @@ import 'package:provider/provider.dart';
 import '../l10n/app_localizations.dart';
 import '../models/play_mode.dart';
 import '../providers/playback_provider.dart';
+import '../providers/sync_provider.dart';
 import '../providers/theme_provider.dart';
 import '../services/data_saver_service.dart';
 import '../services/settings_service.dart';
@@ -17,6 +18,7 @@ import 'data_settings_page.dart';
 import 'general_settings_page.dart';
 import 'lyrics_display_page.dart';
 import 'sources_page.dart';
+import 'sync_settings_page.dart';
 import '../utils/responsive.dart';
 
 /// 设置弹层：内部 Navigator 承载首屏与子页（避免弹层叠弹层）。
@@ -78,6 +80,9 @@ class _SettingsHomeViewState extends State<_SettingsHomeView> {
     final l10n = AppLocalizations.of(context)!;
     // 省流模式：测试等场景可能不提供 provider，缺省时隐藏该区块。
     final dataSaver = context.watch<DataSaverService?>();
+    // 跨设备同步：Web 无该能力（点对点/网盘传输依赖 dart:io），缺省时隐藏。
+    final syncProvider = context.watch<SyncProvider?>();
+    final showSync = syncProvider != null && !kIsWeb;
     final theme = Theme.of(context);
 
     return Container(
@@ -345,6 +350,19 @@ class _SettingsHomeViewState extends State<_SettingsHomeView> {
                       const DataSettingsPage(),
                     ),
                   ),
+                  if (showSync) ...[
+                    const SizedBox(height: kSettingsElementSpacing),
+                    SettingsNavTile(
+                      key: const Key('settingsSyncItem'),
+                      icon: Icons.sync_rounded,
+                      title: l10n.settingsSyncTitle,
+                      subtitle: l10n.settingsSyncItemSubtitle,
+                      onTap: () => openSettingsSubPage(
+                        context,
+                        const SyncSettingsPage(),
+                      ),
+                    ),
+                  ],
                 ],
               ),
             ],

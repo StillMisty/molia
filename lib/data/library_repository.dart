@@ -9,10 +9,12 @@ library;
 
 import 'dart:async';
 import 'dart:convert';
+import 'dart:math';
 import 'dart:typed_data';
 
 import 'package:sqflite/sqflite.dart';
 
+import '../domain/models/device_sync.dart';
 import '../domain/models/library.dart';
 import 'database_helper.dart';
 import 'lxmc_decoder.dart';
@@ -74,11 +76,22 @@ class LxmcImportResult {
 class LibraryRepository {
   /// [databaseProvider] 仅测试注入（in-memory sqflite FFI）；生产走
   /// [DatabaseHelper.instance]（版本迁移 v2 → v3）。
-  LibraryRepository({Future<Database> Function()? databaseProvider})
-      : _databaseProvider =
-            databaseProvider ?? (() => DatabaseHelper.instance.database);
+  ///
+  /// [deviceIdProvider] / [clock] 供跨设备同步打写入时间戳与来源设备；
+  /// 缺省（测试、同步未启用）时设备为空串，时间戳仍按当前时钟写入。
+  LibraryRepository({
+    Future<Database> Function()? databaseProvider,
+    String Function()? deviceIdProvider,
+    int Function()? clock,
+  })  : _databaseProvider =
+            databaseProvider ?? (() => DatabaseHelper.instance.database),
+        _deviceIdProvider = deviceIdProvider ?? (() => ''),
+        _clock = clock ?? (() => DateTime.now().millisecondsSinceEpoch);
 
   final Future<Database> Function() _databaseProvider;
+  final String Function() _deviceIdProvider;
+  final int Function() _clock;
+  final Random _random = Random.secure();
   final StreamController<void> _changes = StreamController<void>.broadcast();
 
   LibraryChangeKind _lastChangeKind = LibraryChangeKind.playlists;
@@ -97,6 +110,59 @@ class LibraryRepository {
   Stream<void> get changes => _changes.stream;
 
   Future<Database> get _db => _databaseProvider();
+
+  int _nowMs() => _clock();
+
+  String _deviceId() => _deviceIdProvider();
+
+  /// 收藏列表用固定 syncId；其余列表按随机 128bit 生成（跨设备稳定，
+  /// 自增 id 只在本机有效）。
+  String _newSyncId(String name) {
+    if (name == kFavoritesPlaylistName) {
+      return SyncRecordKeys.favoritesPlaylistSyncId;
+    }
+    final buffer = StringBuffer();
+    for (var i = 0; i < 32; i++) {
+      buffer.write('0123456789abcdef'[_random.nextInt(16)]);
+    }
+    return buffer.toString();
+  }
+
+  Future<void> _recordTombstone(
+    DatabaseExecutor executor,
+    String category,
+    String key, {
+    required int updatedAt,
+    required String updatedBy,
+  }) async {
+    await executor.insert(
+      'sync_tombstones',
+      {
+        'category': category,
+        'key': key,
+        'updatedAt': updatedAt,
+        'updatedBy': updatedBy,
+      },
+      conflictAlgorithm: ConflictAlgorithm.replace,
+    );
+  }
+
+  Future<String?> _playlistSyncIdById(DatabaseExecutor executor, int id) async {
+    final rows = await executor.query(
+      'playlists',
+      columns: ['syncId'],
+      where: 'id = ?',
+      whereArgs: [id],
+      limit: 1,
+    );
+    return rows.isEmpty ? null : rows.first['syncId'] as String?;
+  }
+
+  /// 写入用同步戳（updatedAt 按当前时钟，updatedBy 为设备 id）。
+  Map<String, Object?> _stamp() => {
+        'updatedAt': _nowMs(),
+        'updatedBy': _deviceId(),
+      };
 
   void _notifyChanged({
     LibraryChangeKind kind = LibraryChangeKind.playlists,
@@ -125,12 +191,14 @@ class LibraryRepository {
       },
       conflictAlgorithm: ConflictAlgorithm.replace,
     );
+    // 重新播放让条目复活：清除该曲目的历史删除墓碑。
+    await _clearHistoryTombstone(db, entry.sourceKey, entry.songId);
     await _trimHistory(db);
     _notifyChanged(kind: LibraryChangeKind.history);
   }
 
   /// 超出 [historyLimit] 时删除最旧记录。
-  Future<void> _trimHistory(Database db) async {
+  Future<void> _trimHistory(DatabaseExecutor db) async {
     await db.rawDelete(
       'DELETE FROM play_history WHERE rowid NOT IN ('
       'SELECT rowid FROM play_history ORDER BY playedAt DESC, rowid DESC LIMIT ?)',
@@ -151,11 +219,20 @@ class LibraryRepository {
 
   Future<void> deleteHistoryEntry(String sourceKey, String songId) async {
     final db = await _db;
-    await db.delete(
+    final removed = await db.delete(
       'play_history',
       where: 'sourceKey = ? AND songId = ?',
       whereArgs: [sourceKey, songId],
     );
+    if (removed > 0) {
+      await _recordTombstone(
+        db,
+        SyncCategory.history.name,
+        SyncRecordKeys.history(sourceKey, songId),
+        updatedAt: _nowMs(),
+        updatedBy: _deviceId(),
+      );
+    }
     _notifyChanged(kind: LibraryChangeKind.history);
   }
 
@@ -165,12 +242,24 @@ class LibraryRepository {
     final db = await _db;
     var removed = 0;
     await db.transaction((txn) async {
+      final now = _nowMs();
+      final deviceId = _deviceId();
       for (final key in keys) {
-        removed += await txn.delete(
+        final count = await txn.delete(
           'play_history',
           where: 'sourceKey = ? AND songId = ?',
           whereArgs: [key.sourceKey, key.songId],
         );
+        removed += count;
+        if (count > 0) {
+          await _recordTombstone(
+            txn,
+            SyncCategory.history.name,
+            SyncRecordKeys.history(key.sourceKey, key.songId),
+            updatedAt: now,
+            updatedBy: deviceId,
+          );
+        }
       }
     });
     if (removed > 0) _notifyChanged(kind: LibraryChangeKind.history);
@@ -202,6 +291,9 @@ class LibraryRepository {
       );
     }
     await batch.commit(noResult: true);
+    for (final entry in entries) {
+      await _clearHistoryTombstone(db, entry.sourceKey, entry.songId);
+    }
     await _trimHistory(db);
     _notifyChanged(kind: LibraryChangeKind.history);
     return entries.length;
@@ -209,15 +301,53 @@ class LibraryRepository {
 
   Future<void> clearHistory() async {
     final db = await _db;
-    await db.delete('play_history');
+    await db.transaction((txn) async {
+      final rows = await txn.query('play_history',
+          columns: ['sourceKey', 'songId']);
+      if (rows.isEmpty) return;
+      await txn.delete('play_history');
+      final now = _nowMs();
+      final deviceId = _deviceId();
+      for (final row in rows) {
+        await _recordTombstone(
+          txn,
+          SyncCategory.history.name,
+          SyncRecordKeys.history(
+            row['sourceKey'] as String? ?? '',
+            row['songId'] as String? ?? '',
+          ),
+          updatedAt: now,
+          updatedBy: deviceId,
+        );
+      }
+    });
     _notifyChanged(kind: LibraryChangeKind.history);
+  }
+
+  Future<void> _clearHistoryTombstone(
+    DatabaseExecutor executor,
+    String sourceKey,
+    String songId,
+  ) async {
+    await executor.delete(
+      'sync_tombstones',
+      where: 'category = ? AND key = ?',
+      whereArgs: [
+        SyncCategory.history.name,
+        SyncRecordKeys.history(sourceKey, songId),
+      ],
+    );
   }
 
   Future<int> createPlaylist(String name) async {
     final db = await _db;
+    final now = _nowMs();
     final id = await db.insert('playlists', {
       'name': name,
-      'createdAt': DateTime.now().millisecondsSinceEpoch,
+      'createdAt': now,
+      'syncId': _newSyncId(name),
+      'updatedAt': now,
+      'updatedBy': _deviceId(),
     });
     _notifyChanged(kind: LibraryChangeKind.playlists);
     return id;
@@ -265,7 +395,7 @@ class LibraryRepository {
     final db = await _db;
     await db.update(
       'playlists',
-      {'name': name},
+      {'name': name, ..._stamp()},
       where: 'id = ?',
       whereArgs: [id],
     );
@@ -274,10 +404,27 @@ class LibraryRepository {
 
   Future<void> deletePlaylist(int id) async {
     final db = await _db;
+    final rows = await db.query(
+      'playlists',
+      columns: ['syncId'],
+      where: 'id = ?',
+      whereArgs: [id],
+      limit: 1,
+    );
+    final syncId = rows.isEmpty ? null : rows.first['syncId'] as String?;
     await db.transaction((txn) async {
       await txn.delete('playlist_tracks',
           where: 'playlistId = ?', whereArgs: [id]);
       await txn.delete('playlists', where: 'id = ?', whereArgs: [id]);
+      if (syncId != null && syncId.isNotEmpty) {
+        await _recordTombstone(
+          txn,
+          SyncCategory.playlists.name,
+          syncId,
+          updatedAt: _nowMs(),
+          updatedBy: _deviceId(),
+        );
+      }
     });
     _notifyChanged(kind: LibraryChangeKind.playlists);
   }
@@ -333,6 +480,7 @@ class LibraryRepository {
         'raw': jsonEncode(track.raw),
         'addedAt': track.addedAt,
         'sortOrder': nextOrder,
+        ..._stamp(),
       },
       conflictAlgorithm: ConflictAlgorithm.ignore,
     );
@@ -358,6 +506,16 @@ class LibraryRepository {
       whereArgs: [playlistId, sourceKey, songId],
     );
     if (removed > 0) {
+      final syncId = await _playlistSyncIdById(db, playlistId);
+      if (syncId != null && syncId.isNotEmpty) {
+        await _recordTombstone(
+          db,
+          SyncCategory.playlistTracks.name,
+          SyncRecordKeys.playlistTrack(syncId, sourceKey, songId),
+          updatedAt: _nowMs(),
+          updatedBy: _deviceId(),
+        );
+      }
       _notifyChanged(
         kind: favoriteChange
             ? LibraryChangeKind.favorites
@@ -381,12 +539,25 @@ class LibraryRepository {
     final db = await _db;
     var removed = 0;
     await db.transaction((txn) async {
+      final syncId = await _playlistSyncIdById(txn, playlistId);
+      final now = _nowMs();
+      final deviceId = _deviceId();
       for (final key in keys) {
-        removed += await txn.delete(
+        final count = await txn.delete(
           'playlist_tracks',
           where: 'playlistId = ? AND sourceKey = ? AND songId = ?',
           whereArgs: [playlistId, key.sourceKey, key.songId],
         );
+        removed += count;
+        if (count > 0 && syncId != null && syncId.isNotEmpty) {
+          await _recordTombstone(
+            txn,
+            SyncCategory.playlistTracks.name,
+            SyncRecordKeys.playlistTrack(syncId, key.sourceKey, key.songId),
+            updatedAt: now,
+            updatedBy: deviceId,
+          );
+        }
       }
     });
     if (removed > 0) {
@@ -428,6 +599,7 @@ class LibraryRepository {
     var nextOrder = ((maxRow.first['m'] as int?) ?? -1) + 1;
     var added = 0;
     final batch = db.batch();
+    final stamp = _stamp();
     for (final track in tracks) {
       final key = '${track.sourceKey}:${track.songId}';
       if (!known.add(key)) continue;
@@ -445,6 +617,7 @@ class LibraryRepository {
           'raw': jsonEncode(track.raw),
           'addedAt': track.addedAt,
           'sortOrder': nextOrder++,
+          ...stamp,
         },
         conflictAlgorithm: ConflictAlgorithm.ignore,
       );
@@ -469,14 +642,16 @@ class LibraryRepository {
   ) async {
     if (ordered.isEmpty) return;
     final db = await _db;
+    final stamp = _stamp();
     await db.transaction((txn) async {
       for (var index = 0; index < ordered.length; index++) {
         final key = ordered[index];
         await txn.update(
           'playlist_tracks',
-          {'sortOrder': index},
-          where: 'playlistId = ? AND sourceKey = ? AND songId = ?',
-          whereArgs: [playlistId, key.sourceKey, key.songId],
+          {'sortOrder': index, ...stamp},
+          where: 'playlistId = ? AND sourceKey = ? AND songId = ? '
+              'AND sortOrder <> ?',
+          whereArgs: [playlistId, key.sourceKey, key.songId, index],
         );
       }
     });
@@ -593,6 +768,10 @@ class LibraryRepository {
     var nextOrder = ((maxRow.first['m'] as int?) ?? -1) + 1;
 
     final now = DateTime.now().millisecondsSinceEpoch;
+    final stamp = {
+      'updatedAt': _nowMs(),
+      'updatedBy': _deviceId(),
+    };
     var imported = 0;
     final batch = db.batch();
     for (final track in decoded.tracks) {
@@ -613,6 +792,7 @@ class LibraryRepository {
           'raw': jsonEncode(track.raw),
           'addedAt': now,
           'sortOrder': nextOrder++,
+          ...stamp,
         },
         conflictAlgorithm: ConflictAlgorithm.ignore,
       );
@@ -647,6 +827,474 @@ class LibraryRepository {
     final added = await addTracksToPlaylist(playlistId, tracks);
     return (playlistId: playlistId, added: added, total: tracks.length);
   }
+
+  // 跨设备同步（data/sync 适配器消费）
+  //
+  // 契约：导出只读本机视图并补齐缺失的 syncId；应用端逐行按
+  // `(updatedAt, updatedBy)` 取新，写入沿用远端时间戳（幂等，不制造新的
+  // 本地变更），删除经墓碑表表达；旧行（v5 前）在导出/应用前一次性补齐。
+
+  /// 导出列表头。
+  Future<List<Map<String, Object?>>> syncExportPlaylists() async {
+    final db = await _db;
+    await _ensurePlaylistSyncIds(db);
+    return db.query(
+      'playlists',
+      columns: ['id', 'syncId', 'name', 'createdAt', 'updatedAt', 'updatedBy'],
+    );
+  }
+
+  /// 导出列表曲目（携带所属列表 syncId；自增 id 不出本机）。
+  Future<List<Map<String, Object?>>> syncExportPlaylistTracks() async {
+    final db = await _db;
+    await _ensurePlaylistSyncIds(db);
+    return db.rawQuery('''
+      SELECT p.syncId AS playlistSyncId, t.sourceKey, t.songId, t.title,
+             t.artist, t.album, t.coverUrl, t.durationMs, t.raw, t.addedAt,
+             t.sortOrder, t.updatedAt, t.updatedBy
+      FROM playlist_tracks t
+      JOIN playlists p ON p.id = t.playlistId
+      WHERE p.syncId IS NOT NULL
+    ''');
+  }
+
+  /// 导出资料库墓碑（类别见 [SyncCategory]；非资料库类别在此忽略）。
+  Future<List<Map<String, Object?>>> syncExportTombstones(
+    Iterable<String> categories,
+  ) async {
+    final list = categories.toList();
+    if (list.isEmpty) return const [];
+    final db = await _db;
+    final placeholders = List.filled(list.length, '?').join(', ');
+    return db.query(
+      'sync_tombstones',
+      where: 'category IN ($placeholders)',
+      whereArgs: list,
+    );
+  }
+
+  /// 导出播放历史（唯一键 `(sourceKey, songId)`；时间戳 = playedAt）。
+  Future<List<Map<String, Object?>>> syncExportHistory() async {
+    final db = await _db;
+    return db.query(
+      'play_history',
+      columns: [
+        'sourceKey',
+        'songId',
+        'title',
+        'artist',
+        'album',
+        'coverUrl',
+        'durationMs',
+        'raw',
+        'playedAt',
+      ],
+      orderBy: 'playedAt ASC',
+    );
+  }
+
+  /// 应用远端播放历史：逐条按 playedAt 取新，删除经墓碑（同键复活时清墓碑）。
+  ///
+  /// 结束统一裁剪到 [historyLimit]；裁剪不产生墓碑（上限淘汰不是用户删除）。
+  Future<({int applied, int skipped})> syncApplyHistory({
+    List<Map<String, Object?>> entries = const [],
+    List<Map<String, Object?>> tombstones = const [],
+  }) async {
+    if (entries.isEmpty && tombstones.isEmpty) {
+      return (applied: 0, skipped: 0);
+    }
+    final db = await _db;
+    var applied = 0;
+    var skipped = 0;
+    await db.transaction((txn) async {
+      final category = SyncCategory.history.name;
+      for (final row in tombstones) {
+        if ((row['category'] as String? ?? '') != category) {
+          skipped++;
+          continue;
+        }
+        final parsed = SyncRecordKeys.parseHistory(row['key'] as String? ?? '');
+        final updatedAt = (row['updatedAt'] as num?)?.toInt();
+        if (parsed == null || updatedAt == null) {
+          skipped++;
+          continue;
+        }
+        final updatedBy = row['updatedBy'] as String? ?? '';
+        final existingTombstone = await txn.query(
+          'sync_tombstones',
+          columns: ['updatedAt', 'updatedBy'],
+          where: 'category = ? AND key = ?',
+          whereArgs: [category, row['key']],
+          limit: 1,
+        );
+        if (existingTombstone.isEmpty ||
+            _isNewer(updatedAt, updatedBy, _stampOf(existingTombstone.first))) {
+          await _recordTombstone(
+            txn,
+            category,
+            row['key'] as String,
+            updatedAt: updatedAt,
+            updatedBy: updatedBy,
+          );
+        }
+        final local = await txn.query(
+          'play_history',
+          columns: ['playedAt'],
+          where: 'sourceKey = ? AND songId = ?',
+          whereArgs: [parsed.sourceKey, parsed.songId],
+          limit: 1,
+        );
+        if (local.isNotEmpty &&
+            _isNewer(
+              updatedAt,
+              updatedBy,
+              (
+                updatedAt: (local.first['playedAt'] as num?)?.toInt() ?? 0,
+                updatedBy: '',
+              ),
+            )) {
+          await txn.delete(
+            'play_history',
+            where: 'sourceKey = ? AND songId = ?',
+            whereArgs: [parsed.sourceKey, parsed.songId],
+          );
+          applied++;
+        } else {
+          skipped++;
+        }
+      }
+
+      for (final row in entries) {
+        final sourceKey = row['sourceKey'] as String? ?? '';
+        final songId = row['songId'] as String? ?? '';
+        final playedAt = (row['playedAt'] as num?)?.toInt();
+        if (sourceKey.isEmpty || songId.isEmpty || playedAt == null) {
+          skipped++;
+          continue;
+        }
+        final key = SyncRecordKeys.history(sourceKey, songId);
+        final tombstone = await txn.query(
+          'sync_tombstones',
+          columns: ['updatedAt', 'updatedBy'],
+          where: 'category = ? AND key = ?',
+          whereArgs: [category, key],
+          limit: 1,
+        );
+        if (tombstone.isNotEmpty) {
+          final tombstoneAt =
+              (tombstone.first['updatedAt'] as num?)?.toInt() ?? 0;
+          if (playedAt <= tombstoneAt) {
+            skipped++;
+            continue;
+          }
+          // 晚于删除的播放记录复活该曲目。
+          await txn.delete(
+            'sync_tombstones',
+            where: 'category = ? AND key = ?',
+            whereArgs: [category, key],
+          );
+        }
+        final local = await txn.query(
+          'play_history',
+          columns: ['playedAt'],
+          where: 'sourceKey = ? AND songId = ?',
+          whereArgs: [sourceKey, songId],
+          limit: 1,
+        );
+        if (local.isEmpty ||
+            playedAt > ((local.first['playedAt'] as num?)?.toInt() ?? 0)) {
+          await txn.insert(
+            'play_history',
+            {
+              'sourceKey': sourceKey,
+              'songId': songId,
+              'title': row['title'] as String? ?? '',
+              'artist': row['artist'] as String? ?? '',
+              'album': row['album'] as String? ?? '',
+              'coverUrl': row['coverUrl'] as String?,
+              'durationMs': (row['durationMs'] as num?)?.toInt(),
+              'raw': row['raw'] as String? ?? '{}',
+              'playedAt': playedAt,
+            },
+            conflictAlgorithm: ConflictAlgorithm.replace,
+          );
+          applied++;
+        } else {
+          skipped++;
+        }
+      }
+      await _trimHistory(txn);
+    });
+    if (applied > 0) _notifyChanged(kind: LibraryChangeKind.history);
+    return (applied: applied, skipped: skipped);
+  }
+
+  /// 应用远端合并结果（列表 + 曲目 + 墓碑）。
+  ///
+  /// 单事务执行，成功落地后广播一次 [LibraryChangeKind.import]（历史/列表/
+  /// 收藏都可能变化，消费方全量失效最稳妥）。返回落地与跳过计数。
+  Future<({int applied, int skipped})> syncApplyLibrary({
+    List<Map<String, Object?>> playlists = const [],
+    List<Map<String, Object?>> tracks = const [],
+    List<Map<String, Object?>> tombstones = const [],
+  }) async {
+    if (playlists.isEmpty && tracks.isEmpty && tombstones.isEmpty) {
+      return (applied: 0, skipped: 0);
+    }
+    final db = await _db;
+    var applied = 0;
+    var skipped = 0;
+    await db.transaction((txn) async {
+      await _ensurePlaylistSyncIds(txn);
+
+      // 1) 墓碑先行：删除本地旧行并保留墓碑供后续轮次继续传播。
+      for (final row in tombstones) {
+        final category = row['category'] as String? ?? '';
+        final key = row['key'] as String? ?? '';
+        final updatedAt = (row['updatedAt'] as num?)?.toInt();
+        if (key.isEmpty || updatedAt == null) {
+          skipped++;
+          continue;
+        }
+        final updatedBy = row['updatedBy'] as String? ?? '';
+        final existing = await txn.query(
+          'sync_tombstones',
+          columns: ['updatedAt', 'updatedBy'],
+          where: 'category = ? AND key = ?',
+          whereArgs: [category, key],
+          limit: 1,
+        );
+        if (existing.isEmpty ||
+            _isNewer(updatedAt, updatedBy, _stampOf(existing.first))) {
+          await txn.insert(
+            'sync_tombstones',
+            {
+              'category': category,
+              'key': key,
+              'updatedAt': updatedAt,
+              'updatedBy': updatedBy,
+            },
+            conflictAlgorithm: ConflictAlgorithm.replace,
+          );
+        }
+
+        if (category == SyncCategory.playlists.name) {
+          final local = await _playlistRowBySyncId(txn, key);
+          if (local != null &&
+              _isNewer(
+                updatedAt,
+                updatedBy,
+                (updatedAt: local.updatedAt, updatedBy: local.updatedBy),
+              )) {
+            await txn.delete('playlist_tracks',
+                where: 'playlistId = ?', whereArgs: [local.id]);
+            await txn.delete('playlists',
+                where: 'id = ?', whereArgs: [local.id]);
+            applied++;
+          } else {
+            skipped++;
+          }
+        } else if (category == SyncCategory.playlistTracks.name) {
+          final parsed = SyncRecordKeys.parsePlaylistTrack(key);
+          final playlist = parsed == null
+              ? null
+              : await _playlistRowBySyncId(txn, parsed.playlistSyncId);
+          if (parsed == null || playlist == null) {
+            skipped++;
+          } else {
+            final trackRow = await txn.query(
+              'playlist_tracks',
+              columns: ['updatedAt', 'updatedBy'],
+              where: 'playlistId = ? AND sourceKey = ? AND songId = ?',
+              whereArgs: [playlist.id, parsed.sourceKey, parsed.songId],
+              limit: 1,
+            );
+            if (trackRow.isNotEmpty &&
+                _isNewer(updatedAt, updatedBy, _stampOf(trackRow.first))) {
+              await txn.delete(
+                'playlist_tracks',
+                where: 'playlistId = ? AND sourceKey = ? AND songId = ?',
+                whereArgs: [playlist.id, parsed.sourceKey, parsed.songId],
+              );
+              applied++;
+            } else {
+              skipped++;
+            }
+          }
+        } else {
+          skipped++;
+        }
+      }
+
+      // 2) 列表头（新列表按远端 syncId 落库；本地同名不受影响）。
+      final localIds = <String, int>{};
+      for (final row in playlists) {
+        final syncId = row['syncId'] as String? ?? '';
+        final name = row['name'] as String? ?? '';
+        final updatedAt = (row['updatedAt'] as num?)?.toInt() ?? 0;
+        final updatedBy = row['updatedBy'] as String? ?? '';
+        final createdAt = (row['createdAt'] as num?)?.toInt() ?? updatedAt;
+        if (syncId.isEmpty || name.isEmpty) {
+          skipped++;
+          continue;
+        }
+        final local = await _playlistRowBySyncId(txn, syncId);
+        if (local == null) {
+          final id = await txn.insert('playlists', {
+            'name': name,
+            'createdAt': createdAt,
+            'syncId': syncId,
+            'updatedAt': updatedAt,
+            'updatedBy': updatedBy,
+          });
+          localIds[syncId] = id;
+          applied++;
+        } else {
+          localIds[syncId] = local.id;
+          if (_isNewer(
+            updatedAt,
+            updatedBy,
+            (updatedAt: local.updatedAt, updatedBy: local.updatedBy),
+          )) {
+            await txn.update(
+              'playlists',
+              {
+                'name': name,
+                'updatedAt': updatedAt,
+                'updatedBy': updatedBy,
+              },
+              where: 'id = ?',
+              whereArgs: [local.id],
+            );
+            applied++;
+          } else {
+            skipped++;
+          }
+        }
+      }
+
+      // 3) 曲目（所属列表不存在则跳过；新行沿用远端时间戳）。
+      for (final row in tracks) {
+        final playlistSyncId = row['playlistSyncId'] as String? ?? '';
+        final sourceKey = row['sourceKey'] as String? ?? '';
+        final songId = row['songId'] as String? ?? '';
+        final updatedAt = (row['updatedAt'] as num?)?.toInt() ?? 0;
+        final updatedBy = row['updatedBy'] as String? ?? '';
+        if (playlistSyncId.isEmpty || sourceKey.isEmpty || songId.isEmpty) {
+          skipped++;
+          continue;
+        }
+        var localId = localIds[playlistSyncId];
+        if (localId == null) {
+          final playlist = await _playlistRowBySyncId(txn, playlistSyncId);
+          if (playlist == null) {
+            skipped++;
+            continue;
+          }
+          localId = playlist.id;
+        }
+        final existing = await txn.query(
+          'playlist_tracks',
+          columns: ['updatedAt', 'updatedBy'],
+          where: 'playlistId = ? AND sourceKey = ? AND songId = ?',
+          whereArgs: [localId, sourceKey, songId],
+          limit: 1,
+        );
+        if (existing.isEmpty) {
+          await txn.insert('playlist_tracks', {
+            'playlistId': localId,
+            'sourceKey': sourceKey,
+            'songId': songId,
+            'title': row['title'] as String? ?? '',
+            'artist': row['artist'] as String? ?? '',
+            'album': row['album'] as String? ?? '',
+            'coverUrl': row['coverUrl'] as String?,
+            'durationMs': (row['durationMs'] as num?)?.toInt(),
+            'raw': row['raw'] as String? ?? '{}',
+            'addedAt': (row['addedAt'] as num?)?.toInt() ?? updatedAt,
+            'sortOrder': (row['sortOrder'] as num?)?.toInt() ?? 0,
+            'updatedAt': updatedAt,
+            'updatedBy': updatedBy,
+          });
+          applied++;
+        } else if (_isNewer(updatedAt, updatedBy, _stampOf(existing.first))) {
+          await txn.update(
+            'playlist_tracks',
+            {
+              'title': row['title'] as String? ?? '',
+              'artist': row['artist'] as String? ?? '',
+              'album': row['album'] as String? ?? '',
+              'coverUrl': row['coverUrl'] as String?,
+              'durationMs': (row['durationMs'] as num?)?.toInt(),
+              'raw': row['raw'] as String? ?? '{}',
+              'sortOrder': (row['sortOrder'] as num?)?.toInt() ?? 0,
+              'updatedAt': updatedAt,
+              'updatedBy': updatedBy,
+            },
+            where: 'playlistId = ? AND sourceKey = ? AND songId = ?',
+            whereArgs: [localId, sourceKey, songId],
+          );
+          applied++;
+        } else {
+          skipped++;
+        }
+      }
+    });
+    if (applied > 0) _notifyChanged(kind: LibraryChangeKind.import);
+    return (applied: applied, skipped: skipped);
+  }
+
+  /// 补齐 v5 前旧行的 syncId（收藏固定值；其余随机生成，只补一次）。
+  Future<void> _ensurePlaylistSyncIds(DatabaseExecutor executor) async {
+    final rows = await executor.query(
+      'playlists',
+      columns: ['id', 'name', 'syncId'],
+      where: "syncId IS NULL OR syncId = ''",
+    );
+    for (final row in rows) {
+      await executor.update(
+        'playlists',
+        {'syncId': _newSyncId(row['name'] as String? ?? '')},
+        where: 'id = ?',
+        whereArgs: [row['id']],
+      );
+    }
+  }
+
+  Future<({int id, int updatedAt, String updatedBy})?> _playlistRowBySyncId(
+    DatabaseExecutor executor,
+    String syncId,
+  ) async {
+    final rows = await executor.query(
+      'playlists',
+      columns: ['id', 'updatedAt', 'updatedBy'],
+      where: 'syncId = ?',
+      whereArgs: [syncId],
+      limit: 1,
+    );
+    if (rows.isEmpty) return null;
+    return (
+      id: rows.first['id'] as int? ?? -1,
+      updatedAt: (rows.first['updatedAt'] as num?)?.toInt() ?? 0,
+      updatedBy: rows.first['updatedBy'] as String? ?? '',
+    );
+  }
+
+  /// 远端戳是否严格新于本地戳（[updatedAt] 相同用设备 id 决平局）。
+  static bool _isNewer(
+    int updatedAt,
+    String updatedBy,
+    ({int updatedAt, String updatedBy}) local,
+  ) {
+    if (updatedAt != local.updatedAt) return updatedAt > local.updatedAt;
+    return updatedBy.compareTo(local.updatedBy) > 0;
+  }
+
+  static ({int updatedAt, String updatedBy}) _stampOf(Map<String, Object?> row) =>
+      (
+        updatedAt: (row['updatedAt'] as num?)?.toInt() ?? 0,
+        updatedBy: row['updatedBy'] as String? ?? '',
+      );
 
   PlayHistoryEntry _historyFromRow(Map<String, Object?> row) =>
       PlayHistoryEntry(

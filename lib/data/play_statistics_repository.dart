@@ -15,7 +15,9 @@ library;
 
 import 'dart:async';
 import 'dart:convert';
+import 'dart:math';
 
+import 'package:crypto/crypto.dart';
 import 'package:sqflite/sqflite.dart';
 
 import '../domain/models/play_statistics.dart';
@@ -24,11 +26,19 @@ import 'database_helper.dart';
 class PlayStatisticsRepository {
   /// [databaseProvider] 仅测试注入（in-memory sqflite FFI）；生产走
   /// [DatabaseHelper.instance]（版本迁移 v3 → v4）。
-  PlayStatisticsRepository({Future<Database> Function()? databaseProvider})
-      : _databaseProvider =
-            databaseProvider ?? (() => DatabaseHelper.instance.database);
+  ///
+  /// [deviceIdProvider] 供跨设备统计合并标注事件来源设备（缺省为空串，
+  /// 同步未启用时无影响）。
+  PlayStatisticsRepository({
+    Future<Database> Function()? databaseProvider,
+    String Function()? deviceIdProvider,
+  })  : _databaseProvider =
+            databaseProvider ?? (() => DatabaseHelper.instance.database),
+        _deviceIdProvider = deviceIdProvider ?? (() => '');
 
   final Future<Database> Function() _databaseProvider;
+  final String Function() _deviceIdProvider;
+  final Random _random = Random.secure();
   final StreamController<void> _changes = StreamController<void>.broadcast();
 
   /// 统计变更广播（收尾事件 / 清空 / 遗留收尾后触发）。
@@ -80,6 +90,8 @@ class PlayStatisticsRepository {
       'listenedMs': 0,
       'maxPositionMs': 0,
       'endReason': null,
+      'syncKey': _newSyncKey(),
+      'originDeviceId': _deviceIdProvider(),
     });
   }
 
@@ -403,6 +415,125 @@ class PlayStatisticsRepository {
       limit: limit,
     );
     return [for (final row in rows) _eventFromRow(row)];
+  }
+
+  /// 同步导出：全部已收尾事件。
+  ///
+  /// 进行中事件不导出（远端无法继续更新进度，收尾后自然进入下一轮）；
+  /// v5 前的旧行无去重键，按内容哈希一次性回填并落库。
+  Future<List<Map<String, Object?>>> syncExportEvents() async {
+    final db = await _db;
+    final rows = await db.query('play_events', where: 'endedAt IS NOT NULL');
+    final result = <Map<String, Object?>>[];
+    final backfilled = <(int, String)>[];
+    for (final row in rows) {
+      var syncKey = row['syncKey'] as String?;
+      if (syncKey == null || syncKey.isEmpty) {
+        syncKey = _legacySyncKey(row);
+        backfilled.add((row['id'] as int? ?? -1, syncKey));
+      }
+      result.add({...row, 'syncKey': syncKey});
+    }
+    if (backfilled.isNotEmpty) {
+      await db.transaction((txn) async {
+        for (final (id, key) in backfilled) {
+          await txn.update(
+            'play_events',
+            {'syncKey': key},
+            where: 'id = ? AND (syncKey IS NULL OR syncKey = \'\')',
+            whereArgs: [id],
+          );
+        }
+      });
+    }
+    return result;
+  }
+
+  /// 同步应用：按 `syncKey` 去重合并；同键已存在且远端 `endedAt` 更新时
+  /// 覆盖进度（进程被杀后由启动收尾补完的事件会晚于首次同步）。
+  Future<({int applied, int skipped})> syncApplyEvents(
+    List<Map<String, Object?>> events,
+  ) async {
+    if (events.isEmpty) return (applied: 0, skipped: 0);
+    final db = await _db;
+    var applied = 0;
+    var skipped = 0;
+    await db.transaction((txn) async {
+      for (final event in events) {
+        final syncKey = event['syncKey'] as String? ?? '';
+        final endedAt = (event['endedAt'] as num?)?.toInt();
+        if (syncKey.isEmpty || endedAt == null) {
+          skipped++;
+          continue;
+        }
+        final existing = await txn.query(
+          'play_events',
+          columns: ['id', 'endedAt'],
+          where: 'syncKey = ?',
+          whereArgs: [syncKey],
+          limit: 1,
+        );
+        if (existing.isEmpty) {
+          await txn.insert('play_events', {
+            'sourceKey': event['sourceKey'] as String? ?? '',
+            'songId': event['songId'] as String? ?? '',
+            'title': event['title'] as String? ?? '',
+            'artist': event['artist'] as String? ?? '',
+            'album': event['album'] as String? ?? '',
+            'coverUrl': event['coverUrl'] as String?,
+            'durationMs': (event['durationMs'] as num?)?.toInt(),
+            'raw': event['raw'] as String? ?? '{}',
+            'startedAt': (event['startedAt'] as num?)?.toInt() ?? 0,
+            'endedAt': endedAt,
+            'listenedMs': (event['listenedMs'] as num?)?.toInt() ?? 0,
+            'maxPositionMs': (event['maxPositionMs'] as num?)?.toInt() ?? 0,
+            'endReason': event['endReason'] as String?,
+            'syncKey': syncKey,
+            'originDeviceId': event['originDeviceId'] as String? ?? '',
+          });
+          applied++;
+        } else if (endedAt >
+            ((existing.first['endedAt'] as num?)?.toInt() ?? 0)) {
+          await txn.update(
+            'play_events',
+            {
+              'endedAt': endedAt,
+              'listenedMs': (event['listenedMs'] as num?)?.toInt() ?? 0,
+              'maxPositionMs': (event['maxPositionMs'] as num?)?.toInt() ?? 0,
+              'endReason': event['endReason'] as String?,
+            },
+            where: 'id = ?',
+            whereArgs: [existing.first['id']],
+          );
+          applied++;
+        } else {
+          skipped++;
+        }
+      }
+    });
+    if (applied > 0) _notifyChanged();
+    return (applied: applied, skipped: skipped);
+  }
+
+  String _newSyncKey() {
+    const hex = '0123456789abcdef';
+    final buffer = StringBuffer();
+    for (var i = 0; i < 32; i++) {
+      buffer.write(hex[_random.nextInt(hex.length)]);
+    }
+    return buffer.toString();
+  }
+
+  /// 存量事件（v5 前）的确定性去重键：同一条事件在任何设备上哈希一致。
+  static String _legacySyncKey(Map<String, Object?> row) {
+    final content = [
+      row['sourceKey'],
+      row['songId'],
+      row['startedAt'],
+      row['endedAt'],
+      row['listenedMs'],
+    ].join('|');
+    return 'legacy_${sha256.convert(utf8.encode(content))}';
   }
 
   /// 已听过的曲目名（title + artist，按最近播放排序去重）。

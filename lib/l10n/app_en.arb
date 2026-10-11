@@ -104,10 +104,10 @@
   "settingsDataSubtitle": "Cache, listening stats and data import/export",
   "settingsDataStorageSection": "Storage & stats",
   "settingsDataPortabilitySection": "Import & export",
-  "exportDataTitle": "Export Recent Plays",
-  "exportDataSubtitle": "Export recent play history as a JSON file",
-  "importDataTitle": "Import Recent Plays",
-  "importDataSubtitle": "Import recent play history from an exported JSON file",
+  "exportDataTitle": "Export data",
+  "exportDataSubtitle": "Full backup: playlists, sources, settings, stats and history (credentials excluded)",
+  "importDataTitle": "Import data",
+  "importDataSubtitle": "Merge a Molia backup into local data",
   "clearCacheTitle": "Clear Lyrics Cache",
   "clearCacheSubtitle": "Clear cached lyrics",
   "cancelButton": "Cancel",
@@ -850,5 +850,89 @@
   "aiDjManage": "Manage",
   "aiDjGenerating": "Generating recommendations…",
   "aiDjBatchFailed": "Couldn't generate a batch",
-  "aiDjRefreshBatch": "New batch"
+  "aiDjRefreshBatch": "New batch",
+  "settingsSyncTitle": "Cross-device sync",
+  "settingsSyncItemSubtitle": "Playlists, sources, settings and credentials",
+  "syncGeneralSection": "Sync",
+  "syncEnabledTitle": "Enable sync",
+  "syncEnabledSubtitle": "Exchange data with devices that share your passphrase",
+  "syncDeviceNameTitle": "Device name",
+  "syncPassphraseTitle": "Sync passphrase",
+  "syncPassphraseNotSet": "Not set",
+  "syncPassphraseTrustHint": "The passphrase is the trust root: any device holding it is fully trusted. Reset it if it leaks.",
+  "syncPassphraseCopy": "Copy passphrase",
+  "syncPassphraseReset": "Reset passphrase",
+  "syncPassphraseResetConfirm": "All devices must re-enter the new passphrase. Continue?",
+  "syncPassphraseJoin": "Join with existing passphrase",
+  "syncPassphraseJoinTitle": "Enter sync passphrase",
+  "syncPassphraseJoinHint": "Enter the passphrase shown on another device",
+  "syncPassphraseInvalid": "Invalid passphrase (at least 16 characters)",
+  "syncSave": "Save",
+  "syncSyncNow": "Sync now",
+  "syncSyncing": "Syncing…",
+  "syncNever": "Never synced",
+  "syncLastResultOk": "Last sync {time} · {applied} applied",
+  "@syncLastResultOk": {
+    "placeholders": {
+      "time": {
+        "type": "String"
+      },
+      "applied": {
+        "type": "int"
+      }
+    }
+  },
+  "syncLastResultFail": "Last sync failed: {error}",
+  "@syncLastResultFail": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "syncContentSection": "What to sync",
+  "syncCategoryPlaylists": "Playlists & favorites",
+  "syncCategorySources": "Sources (scripts & config)",
+  "syncCategorySettings": "App settings",
+  "syncCategoryStatistics": "Play statistics",
+  "syncCategoryHistory": "Play history",
+  "syncCategorySession": "Last playback session",
+  "syncCategoryCredentials": "AI DJ & credentials",
+  "syncTransportSection": "Transport",
+  "syncLanTitle": "LAN direct",
+  "syncLanSubtitle": "Device-to-device on the same Wi-Fi, no server",
+  "syncWebdavTitle": "WebDAV / cloud",
+  "syncWebdavSubtitle": "Sync across networks via your own WebDAV",
+  "syncWebdavConfigTitle": "WebDAV settings",
+  "syncWebdavServer": "Server URL",
+  "syncWebdavUsername": "Username",
+  "syncWebdavPassword": "Password",
+  "syncWebdavRemoteDir": "Remote directory",
+  "syncWebdavNotConfigured": "Not configured",
+  "syncLogSection": "Sync log",
+  "syncLogEmpty": "No records yet",
+  "syncLogApplied": "{applied} applied, {skipped} skipped",
+  "@syncLogApplied": {
+    "placeholders": {
+      "applied": {
+        "type": "int"
+      },
+      "skipped": {
+        "type": "int"
+      }
+    }
+  },
+  "syncLogFailed": "Failed: {error}",
+  "@syncLogFailed": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "syncDeviceNameDialogTitle": "Device name",
+  "syncRenameHint": "Shown on other devices",
+  "syncDeviceNameEmpty": "Name cannot be empty",
+  "syncCategorySubtitle": "Turning it off stops pushing and applying this data on this device",
+  "syncGeneratedHint": "Passphrase generated; enter it on other devices to join"
 }

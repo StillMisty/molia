@@ -57,5 +57,7 @@
 	<true/>
 	<key>NSPhotoLibraryAddUsageDescription</key>
 	<string>需要保存海报图片到您的照片库。</string>
+	<key>NSLocalNetworkUsageDescription</key>
+	<string>与同一局域网内的其它设备同步歌单、音源与设置。</string>
 </dict>
 </plist>

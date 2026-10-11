@@ -137,6 +137,25 @@
   （`AiDjCarousel`）消费待播批次（12h 缓存、点卡整批入队起播、尾部换一批），
   **模式关闭时整条隐藏**（开启入口在设置 › 内容 › AI 推歌）。
   首次开启隐私确认、Web 隐藏；定位与边界见 ADR-0002。
+- **跨设备数据同步（可选，默认关闭）**：同步歌单 / 收藏 / 音源脚本与配置 /
+  跟人走的设置 / 听歌统计 / 播放历史 / 上次播放会话 / AI DJ 与凭证。信任模型是
+  **同步口令即信任根**（加入即完全互信，无逐项审批），快照以 PBKDF2 +
+  AES-256-GCM 整体加密（帧与信任边界见 ADR-0003）。引擎
+  （`lib/data/sync/sync_engine.dart`）一轮 = 各 `SyncAdapter` 收集本地视图 →
+  `SyncTransport` 拉取远端快照 → 逐键 LWW 合并（`(updatedAt, updatedBy)`，
+  删除为墓碑）→ 适配器写回 → 推送合并视图；全量合并模型天然幂等，推送裁剪
+  90 天前墓碑；入站推送触发的轮次不再推送（防两端乒乓）。传输有两个实现、
+  可分别开关：局域网直连（UDP 探测 + 内置 HTTP 快照端点）与用户自备 WebDAV
+  （`<remoteDir>/<deviceId>.msync` 密文文件，PROPFIND/GET/PUT/MKCOL）。
+  资料库 schema v5 引入 `playlists.syncId` / 行级 `updatedAt+updatedBy` /
+  `sync_tombstones` / `play_events.syncKey`；设置同步用「登记哈希」做变化检测，
+  不改造散落的 SharedPreferences 写入方。播放历史删除（含清空）传播墓碑；
+  上次播放会话按 `savedAt` 时间戳单向推进（本地停止不回传删除），应用后经
+  `PlaybackProvider.reloadRestoredSessionFromStore` 重载恢复态。**完整备份**
+  （数据与存储页导出/导入）复用同一 envelope（`exportBackupJson` /
+  `importBackupJson`），凭证类默认排除。组合根在启动 / 数据变更去抖 /
+  每 10 分钟 / 回前台触发；同步后的定向重载经 `PrefsSyncAdapter.onApplied`
+  接线。设置入口 `settings_page.dart` → `sync_settings_page.dart`，Web 隐藏。
 - **渠道选择**：`DiscoverProvider.channelKey` 是渠道状态的唯一持有者；渠道变化经
   注入的 `onChannelChanged`（组合根）同步搜索源（可搜索渠道才跟随），资料页只
   处理「渠道被停用」的 UI 回退，不再在两个 provider 之间仲裁同步。

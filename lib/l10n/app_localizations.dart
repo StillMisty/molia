@@ -599,25 +599,25 @@ abstract class AppLocalizations {
   /// No description provided for @exportDataTitle.
   ///
   /// In en, this message translates to:
-  /// **'Export Recent Plays'**
+  /// **'Export data'**
   String get exportDataTitle;
 
   /// No description provided for @exportDataSubtitle.
   ///
   /// In en, this message translates to:
-  /// **'Export recent play history as a JSON file'**
+  /// **'Full backup: playlists, sources, settings, stats and history (credentials excluded)'**
   String get exportDataSubtitle;
 
   /// No description provided for @importDataTitle.
   ///
   /// In en, this message translates to:
-  /// **'Import Recent Plays'**
+  /// **'Import data'**
   String get importDataTitle;
 
   /// No description provided for @importDataSubtitle.
   ///
   /// In en, this message translates to:
-  /// **'Import recent play history from an exported JSON file'**
+  /// **'Merge a Molia backup into local data'**
   String get importDataSubtitle;
 
   /// No description provided for @clearCacheTitle.
@@ -3151,6 +3151,306 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'New batch'**
   String get aiDjRefreshBatch;
+
+  /// No description provided for @settingsSyncTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Cross-device sync'**
+  String get settingsSyncTitle;
+
+  /// No description provided for @settingsSyncItemSubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Playlists, sources, settings and credentials'**
+  String get settingsSyncItemSubtitle;
+
+  /// No description provided for @syncGeneralSection.
+  ///
+  /// In en, this message translates to:
+  /// **'Sync'**
+  String get syncGeneralSection;
+
+  /// No description provided for @syncEnabledTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Enable sync'**
+  String get syncEnabledTitle;
+
+  /// No description provided for @syncEnabledSubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Exchange data with devices that share your passphrase'**
+  String get syncEnabledSubtitle;
+
+  /// No description provided for @syncDeviceNameTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Device name'**
+  String get syncDeviceNameTitle;
+
+  /// No description provided for @syncPassphraseTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Sync passphrase'**
+  String get syncPassphraseTitle;
+
+  /// No description provided for @syncPassphraseNotSet.
+  ///
+  /// In en, this message translates to:
+  /// **'Not set'**
+  String get syncPassphraseNotSet;
+
+  /// No description provided for @syncPassphraseTrustHint.
+  ///
+  /// In en, this message translates to:
+  /// **'The passphrase is the trust root: any device holding it is fully trusted. Reset it if it leaks.'**
+  String get syncPassphraseTrustHint;
+
+  /// No description provided for @syncPassphraseCopy.
+  ///
+  /// In en, this message translates to:
+  /// **'Copy passphrase'**
+  String get syncPassphraseCopy;
+
+  /// No description provided for @syncPassphraseReset.
+  ///
+  /// In en, this message translates to:
+  /// **'Reset passphrase'**
+  String get syncPassphraseReset;
+
+  /// No description provided for @syncPassphraseResetConfirm.
+  ///
+  /// In en, this message translates to:
+  /// **'All devices must re-enter the new passphrase. Continue?'**
+  String get syncPassphraseResetConfirm;
+
+  /// No description provided for @syncPassphraseJoin.
+  ///
+  /// In en, this message translates to:
+  /// **'Join with existing passphrase'**
+  String get syncPassphraseJoin;
+
+  /// No description provided for @syncPassphraseJoinTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Enter sync passphrase'**
+  String get syncPassphraseJoinTitle;
+
+  /// No description provided for @syncPassphraseJoinHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Enter the passphrase shown on another device'**
+  String get syncPassphraseJoinHint;
+
+  /// No description provided for @syncPassphraseInvalid.
+  ///
+  /// In en, this message translates to:
+  /// **'Invalid passphrase (at least 16 characters)'**
+  String get syncPassphraseInvalid;
+
+  /// No description provided for @syncSave.
+  ///
+  /// In en, this message translates to:
+  /// **'Save'**
+  String get syncSave;
+
+  /// No description provided for @syncSyncNow.
+  ///
+  /// In en, this message translates to:
+  /// **'Sync now'**
+  String get syncSyncNow;
+
+  /// No description provided for @syncSyncing.
+  ///
+  /// In en, this message translates to:
+  /// **'Syncing…'**
+  String get syncSyncing;
+
+  /// No description provided for @syncNever.
+  ///
+  /// In en, this message translates to:
+  /// **'Never synced'**
+  String get syncNever;
+
+  /// No description provided for @syncLastResultOk.
+  ///
+  /// In en, this message translates to:
+  /// **'Last sync {time} · {applied} applied'**
+  String syncLastResultOk(String time, int applied);
+
+  /// No description provided for @syncLastResultFail.
+  ///
+  /// In en, this message translates to:
+  /// **'Last sync failed: {error}'**
+  String syncLastResultFail(String error);
+
+  /// No description provided for @syncContentSection.
+  ///
+  /// In en, this message translates to:
+  /// **'What to sync'**
+  String get syncContentSection;
+
+  /// No description provided for @syncCategoryPlaylists.
+  ///
+  /// In en, this message translates to:
+  /// **'Playlists & favorites'**
+  String get syncCategoryPlaylists;
+
+  /// No description provided for @syncCategorySources.
+  ///
+  /// In en, this message translates to:
+  /// **'Sources (scripts & config)'**
+  String get syncCategorySources;
+
+  /// No description provided for @syncCategorySettings.
+  ///
+  /// In en, this message translates to:
+  /// **'App settings'**
+  String get syncCategorySettings;
+
+  /// No description provided for @syncCategoryStatistics.
+  ///
+  /// In en, this message translates to:
+  /// **'Play statistics'**
+  String get syncCategoryStatistics;
+
+  /// No description provided for @syncCategoryHistory.
+  ///
+  /// In en, this message translates to:
+  /// **'Play history'**
+  String get syncCategoryHistory;
+
+  /// No description provided for @syncCategorySession.
+  ///
+  /// In en, this message translates to:
+  /// **'Last playback session'**
+  String get syncCategorySession;
+
+  /// No description provided for @syncCategoryCredentials.
+  ///
+  /// In en, this message translates to:
+  /// **'AI DJ & credentials'**
+  String get syncCategoryCredentials;
+
+  /// No description provided for @syncTransportSection.
+  ///
+  /// In en, this message translates to:
+  /// **'Transport'**
+  String get syncTransportSection;
+
+  /// No description provided for @syncLanTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'LAN direct'**
+  String get syncLanTitle;
+
+  /// No description provided for @syncLanSubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Device-to-device on the same Wi-Fi, no server'**
+  String get syncLanSubtitle;
+
+  /// No description provided for @syncWebdavTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'WebDAV / cloud'**
+  String get syncWebdavTitle;
+
+  /// No description provided for @syncWebdavSubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Sync across networks via your own WebDAV'**
+  String get syncWebdavSubtitle;
+
+  /// No description provided for @syncWebdavConfigTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'WebDAV settings'**
+  String get syncWebdavConfigTitle;
+
+  /// No description provided for @syncWebdavServer.
+  ///
+  /// In en, this message translates to:
+  /// **'Server URL'**
+  String get syncWebdavServer;
+
+  /// No description provided for @syncWebdavUsername.
+  ///
+  /// In en, this message translates to:
+  /// **'Username'**
+  String get syncWebdavUsername;
+
+  /// No description provided for @syncWebdavPassword.
+  ///
+  /// In en, this message translates to:
+  /// **'Password'**
+  String get syncWebdavPassword;
+
+  /// No description provided for @syncWebdavRemoteDir.
+  ///
+  /// In en, this message translates to:
+  /// **'Remote directory'**
+  String get syncWebdavRemoteDir;
+
+  /// No description provided for @syncWebdavNotConfigured.
+  ///
+  /// In en, this message translates to:
+  /// **'Not configured'**
+  String get syncWebdavNotConfigured;
+
+  /// No description provided for @syncLogSection.
+  ///
+  /// In en, this message translates to:
+  /// **'Sync log'**
+  String get syncLogSection;
+
+  /// No description provided for @syncLogEmpty.
+  ///
+  /// In en, this message translates to:
+  /// **'No records yet'**
+  String get syncLogEmpty;
+
+  /// No description provided for @syncLogApplied.
+  ///
+  /// In en, this message translates to:
+  /// **'{applied} applied, {skipped} skipped'**
+  String syncLogApplied(int applied, int skipped);
+
+  /// No description provided for @syncLogFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Failed: {error}'**
+  String syncLogFailed(String error);
+
+  /// No description provided for @syncDeviceNameDialogTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Device name'**
+  String get syncDeviceNameDialogTitle;
+
+  /// No description provided for @syncRenameHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Shown on other devices'**
+  String get syncRenameHint;
+
+  /// No description provided for @syncDeviceNameEmpty.
+  ///
+  /// In en, this message translates to:
+  /// **'Name cannot be empty'**
+  String get syncDeviceNameEmpty;
+
+  /// No description provided for @syncCategorySubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Turning it off stops pushing and applying this data on this device'**
+  String get syncCategorySubtitle;
+
+  /// No description provided for @syncGeneratedHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Passphrase generated; enter it on other devices to join'**
+  String get syncGeneratedHint;
 }
 
 class _AppLocalizationsDelegate

@@ -275,17 +275,17 @@ class AppLocalizationsEn extends AppLocalizations {
   String get settingsDataPortabilitySection => 'Import & export';
 
   @override
-  String get exportDataTitle => 'Export Recent Plays';
+  String get exportDataTitle => 'Export data';
 
   @override
-  String get exportDataSubtitle => 'Export recent play history as a JSON file';
+  String get exportDataSubtitle =>
+      'Full backup: playlists, sources, settings, stats and history (credentials excluded)';
 
   @override
-  String get importDataTitle => 'Import Recent Plays';
+  String get importDataTitle => 'Import data';
 
   @override
-  String get importDataSubtitle =>
-      'Import recent play history from an exported JSON file';
+  String get importDataSubtitle => 'Merge a Molia backup into local data';
 
   @override
   String get clearCacheTitle => 'Clear Lyrics Cache';
@@ -1693,4 +1693,170 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get aiDjRefreshBatch => 'New batch';
+
+  @override
+  String get settingsSyncTitle => 'Cross-device sync';
+
+  @override
+  String get settingsSyncItemSubtitle =>
+      'Playlists, sources, settings and credentials';
+
+  @override
+  String get syncGeneralSection => 'Sync';
+
+  @override
+  String get syncEnabledTitle => 'Enable sync';
+
+  @override
+  String get syncEnabledSubtitle =>
+      'Exchange data with devices that share your passphrase';
+
+  @override
+  String get syncDeviceNameTitle => 'Device name';
+
+  @override
+  String get syncPassphraseTitle => 'Sync passphrase';
+
+  @override
+  String get syncPassphraseNotSet => 'Not set';
+
+  @override
+  String get syncPassphraseTrustHint =>
+      'The passphrase is the trust root: any device holding it is fully trusted. Reset it if it leaks.';
+
+  @override
+  String get syncPassphraseCopy => 'Copy passphrase';
+
+  @override
+  String get syncPassphraseReset => 'Reset passphrase';
+
+  @override
+  String get syncPassphraseResetConfirm =>
+      'All devices must re-enter the new passphrase. Continue?';
+
+  @override
+  String get syncPassphraseJoin => 'Join with existing passphrase';
+
+  @override
+  String get syncPassphraseJoinTitle => 'Enter sync passphrase';
+
+  @override
+  String get syncPassphraseJoinHint =>
+      'Enter the passphrase shown on another device';
+
+  @override
+  String get syncPassphraseInvalid =>
+      'Invalid passphrase (at least 16 characters)';
+
+  @override
+  String get syncSave => 'Save';
+
+  @override
+  String get syncSyncNow => 'Sync now';
+
+  @override
+  String get syncSyncing => 'Syncing…';
+
+  @override
+  String get syncNever => 'Never synced';
+
+  @override
+  String syncLastResultOk(String time, int applied) {
+    return 'Last sync $time · $applied applied';
+  }
+
+  @override
+  String syncLastResultFail(String error) {
+    return 'Last sync failed: $error';
+  }
+
+  @override
+  String get syncContentSection => 'What to sync';
+
+  @override
+  String get syncCategoryPlaylists => 'Playlists & favorites';
+
+  @override
+  String get syncCategorySources => 'Sources (scripts & config)';
+
+  @override
+  String get syncCategorySettings => 'App settings';
+
+  @override
+  String get syncCategoryStatistics => 'Play statistics';
+
+  @override
+  String get syncCategoryHistory => 'Play history';
+
+  @override
+  String get syncCategorySession => 'Last playback session';
+
+  @override
+  String get syncCategoryCredentials => 'AI DJ & credentials';
+
+  @override
+  String get syncTransportSection => 'Transport';
+
+  @override
+  String get syncLanTitle => 'LAN direct';
+
+  @override
+  String get syncLanSubtitle => 'Device-to-device on the same Wi-Fi, no server';
+
+  @override
+  String get syncWebdavTitle => 'WebDAV / cloud';
+
+  @override
+  String get syncWebdavSubtitle => 'Sync across networks via your own WebDAV';
+
+  @override
+  String get syncWebdavConfigTitle => 'WebDAV settings';
+
+  @override
+  String get syncWebdavServer => 'Server URL';
+
+  @override
+  String get syncWebdavUsername => 'Username';
+
+  @override
+  String get syncWebdavPassword => 'Password';
+
+  @override
+  String get syncWebdavRemoteDir => 'Remote directory';
+
+  @override
+  String get syncWebdavNotConfigured => 'Not configured';
+
+  @override
+  String get syncLogSection => 'Sync log';
+
+  @override
+  String get syncLogEmpty => 'No records yet';
+
+  @override
+  String syncLogApplied(int applied, int skipped) {
+    return '$applied applied, $skipped skipped';
+  }
+
+  @override
+  String syncLogFailed(String error) {
+    return 'Failed: $error';
+  }
+
+  @override
+  String get syncDeviceNameDialogTitle => 'Device name';
+
+  @override
+  String get syncRenameHint => 'Shown on other devices';
+
+  @override
+  String get syncDeviceNameEmpty => 'Name cannot be empty';
+
+  @override
+  String get syncCategorySubtitle =>
+      'Turning it off stops pushing and applying this data on this device';
+
+  @override
+  String get syncGeneratedHint =>
+      'Passphrase generated; enter it on other devices to join';
 }

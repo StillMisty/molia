@@ -67,6 +67,12 @@ class LanguageService {
       logger.d('Error clearing saved locale: $e');
     }
   }
+
+  /// 重新读取已保存语言并通知（跨设备同步应用远端设置后由组合根调用；
+  /// Android 系统级语言设置需用户下次进入设置页切换，此处只影响应用内）。
+  static Future<void> reloadFromPreferences() async {
+    localeNotifier.value = await getSavedLocale();
+  }
   
   /// 设置应用语言（Android 13+ 使用系统API，其余平台仅应用内切换）
   static Future<void> setAppLocale(Locale? locale) async {

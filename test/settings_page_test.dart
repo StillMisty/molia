@@ -412,8 +412,8 @@ void main() {
 
     expect(find.text('Cache management'), findsOneWidget);
     expect(find.text('Listening Stats'), findsOneWidget);
-    expect(find.text('Export Recent Plays'), findsOneWidget);
-    expect(find.text('Import Recent Plays'), findsOneWidget);
+    expect(find.text('Export data'), findsOneWidget);
+    expect(find.text('Import data'), findsOneWidget);
     expect(find.text('Import Favorites'), findsOneWidget);
     // 采集开关与统计入口同页同组。
     expect(

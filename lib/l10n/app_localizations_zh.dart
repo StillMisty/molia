@@ -265,16 +265,16 @@ class AppLocalizationsZh extends AppLocalizations {
   String get settingsDataPortabilitySection => '导入与导出';
 
   @override
-  String get exportDataTitle => '导出最近播放';
+  String get exportDataTitle => '导出数据';
 
   @override
-  String get exportDataSubtitle => '将最近播放记录导出为 JSON 文件';
+  String get exportDataSubtitle => '完整备份：歌单、音源、设置、统计与历史（不含密钥）';
 
   @override
-  String get importDataTitle => '导入最近播放';
+  String get importDataTitle => '导入数据';
 
   @override
-  String get importDataSubtitle => '从导出的 JSON 文件导入最近播放记录';
+  String get importDataSubtitle => '把 Molia 备份与本地数据合并';
 
   @override
   String get clearCacheTitle => '清除歌词缓存';
@@ -1632,4 +1632,162 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get aiDjRefreshBatch => '换一批';
+
+  @override
+  String get settingsSyncTitle => '跨设备同步';
+
+  @override
+  String get settingsSyncItemSubtitle => '歌单、音源、设置与凭证';
+
+  @override
+  String get syncGeneralSection => '同步';
+
+  @override
+  String get syncEnabledTitle => '启用同步';
+
+  @override
+  String get syncEnabledSubtitle => '与持有同一口令的设备交换数据';
+
+  @override
+  String get syncDeviceNameTitle => '设备名称';
+
+  @override
+  String get syncPassphraseTitle => '同步口令';
+
+  @override
+  String get syncPassphraseNotSet => '未设置';
+
+  @override
+  String get syncPassphraseTrustHint => '口令即信任根：持有口令的设备完全互信；怀疑泄露请重置。';
+
+  @override
+  String get syncPassphraseCopy => '复制口令';
+
+  @override
+  String get syncPassphraseReset => '重置口令';
+
+  @override
+  String get syncPassphraseResetConfirm => '重置后所有设备需重新输入新口令，确定继续？';
+
+  @override
+  String get syncPassphraseJoin => '输入已有口令加入';
+
+  @override
+  String get syncPassphraseJoinTitle => '输入同步口令';
+
+  @override
+  String get syncPassphraseJoinHint => '输入其它设备上显示的同步口令';
+
+  @override
+  String get syncPassphraseInvalid => '口令无效（至少 16 位）';
+
+  @override
+  String get syncSave => '保存';
+
+  @override
+  String get syncSyncNow => '立即同步';
+
+  @override
+  String get syncSyncing => '同步中…';
+
+  @override
+  String get syncNever => '尚未同步';
+
+  @override
+  String syncLastResultOk(String time, int applied) {
+    return '上次同步 $time · 应用 $applied 项';
+  }
+
+  @override
+  String syncLastResultFail(String error) {
+    return '上次同步失败：$error';
+  }
+
+  @override
+  String get syncContentSection => '同步内容';
+
+  @override
+  String get syncCategoryPlaylists => '歌单与收藏';
+
+  @override
+  String get syncCategorySources => '音源（脚本与配置）';
+
+  @override
+  String get syncCategorySettings => '应用设置';
+
+  @override
+  String get syncCategoryStatistics => '听歌统计';
+
+  @override
+  String get syncCategoryHistory => '播放历史';
+
+  @override
+  String get syncCategorySession => '上次播放会话';
+
+  @override
+  String get syncCategoryCredentials => 'AI DJ 与凭证';
+
+  @override
+  String get syncTransportSection => '传输方式';
+
+  @override
+  String get syncLanTitle => '局域网直连';
+
+  @override
+  String get syncLanSubtitle => '同一 Wi-Fi 下设备直连，无需服务器';
+
+  @override
+  String get syncWebdavTitle => 'WebDAV / 云盘';
+
+  @override
+  String get syncWebdavSubtitle => '经你自备的 WebDAV 跨网络同步';
+
+  @override
+  String get syncWebdavConfigTitle => 'WebDAV 配置';
+
+  @override
+  String get syncWebdavServer => '服务器地址';
+
+  @override
+  String get syncWebdavUsername => '用户名';
+
+  @override
+  String get syncWebdavPassword => '密码';
+
+  @override
+  String get syncWebdavRemoteDir => '远端目录';
+
+  @override
+  String get syncWebdavNotConfigured => '未配置';
+
+  @override
+  String get syncLogSection => '同步日志';
+
+  @override
+  String get syncLogEmpty => '暂无记录';
+
+  @override
+  String syncLogApplied(int applied, int skipped) {
+    return '应用 $applied 项、跳过 $skipped 项';
+  }
+
+  @override
+  String syncLogFailed(String error) {
+    return '失败：$error';
+  }
+
+  @override
+  String get syncDeviceNameDialogTitle => '设备名称';
+
+  @override
+  String get syncRenameHint => '其它设备上显示的名称';
+
+  @override
+  String get syncDeviceNameEmpty => '名称不能为空';
+
+  @override
+  String get syncCategorySubtitle => '关闭后本机不推送也不应用该类数据';
+
+  @override
+  String get syncGeneratedHint => '已生成同步口令，在其它设备输入同一口令即可加入';
 }

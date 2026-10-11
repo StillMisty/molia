@@ -158,8 +158,43 @@
   `PlaybackProvider.enqueueDomainTracks`：顺序模式追加队尾；洗牌模式经
   `PlaybackShuffleOrder.extend` 扩展排列（当前轮老歌在前，轮末重洗覆盖全队列）。
 
-## 缓存
+## 跨设备同步
 
+- **Sync envelope（同步快照）** — `lib/domain/models/device_sync.dart`：
+  一次交换的完整视图（设备身份 + 各类别记录）；全量合并模型，设备间互换快照后
+  逐键取新，无增量/版本向量（见 ADR-0003）。
+- **Sync record（同步记录）** — 快照最小单元：`key + updatedAt + updatedBy +
+  data`；删除表示为 `deleted` 墓碑记录，墓碑参与 LWW 并保留 90 天后裁剪。
+- **Sync category（同步类别）** — 可开关的数据类别：`playlists` /
+  `playlistTracks` / `sources` / `settings` / `credentials` / `statistics` /
+  `history` / `session`；关闭的类别既不推送也不应用（本机仍持续登记本地变化）。
+- **Playback session record（会话记录）** — `session` 类别的单例记录：会话 JSON
+  （队列/下标/进度/模式）+ `savedAt` 时间戳；正在播放的设备持续刷新从而抢占，
+  本地停止播放不回传删除（换设备接着听的轻量实现）。
+- **Backup（完整备份）** — `SyncEngine.exportBackupJson` / `importBackupJson`：
+  与同步共用 envelope 与适配器的本地文件备份/合并恢复；不需要启用同步；
+  凭证类默认排除。
+- **LWW stamp（逐键时间戳）** — `(updatedAt, updatedBy)`：时间大者胜，
+  相同时按设备 id 字典序决平局（确定性收敛）；时间戳是设备墙上时钟。
+- **Sync passphrase（同步口令）** — 信任根：PBKDF2 派生 AES-256-GCM 密钥，
+  能解密快照的设备即已授权；生成/归一化在 `sync_passphrase.dart`，加密帧在
+  `sync_crypto.dart`；重置口令 = 撤销全部设备。
+- **Sync transport（同步传输）** — `lib/domain/ports/sync_transport.dart`：
+  `pull` / `push` / `incoming` 三动作；实现为局域网直连
+  （`transport/lan_sync_transport.dart`）与用户自备 WebDAV
+  （`transport/webdav_sync_transport.dart`）。
+- **Sync adapter（同步适配器）** — 类别到本地存储的读写桥
+  （`lib/data/sync/adapters/**`）：收集本地记录 / 应用合并结果，写入必须幂等；
+  设置类用「登记哈希」（`SyncStamp`）做变化检测，不改造散落的写入方。
+- **Sync tombstone（删除墓碑）** — 列表 / 曲目 / 脚本的删除不保留原行，
+  由 `sync_tombstones` 表或同步状态中的登记项承担「删除也取新」的合并语义。
+- **Settings registry（设置登记表）** — `SettingsSyncAdapter` 维护的
+  `key → (值哈希, 时间戳, 设备)`：本地值 vs 登记哈希判定本地修改，
+  应用远端后同步更新，保证重复应用幂等。
+- **Sync report / log（同步结果 / 日志）** — 一轮同步的拉取 / 应用 / 跳过计数
+  与错误（`SyncReport`、`SyncLogEntry`），设置页只读展示，不拦截合并。
+
+## 缓存
 - **Lyrics cache（歌词缓存模块）** — `lib/services/lyrics_cache.dart`：歌词键（`lyrics_cache_{trackId}`）、读写、用量与清理的唯一实现；TTL 策略属于 `CacheService`（取词时读取）。历史 `manual_lyrics_cache_*` 重复键只清不读。
 - **Artwork index（封面索引）** — flutter_cache_manager 的元数据存储；`CacheStorage` 直接删文件后，由 `ArtworkCache` 的 `_pruneMissingEntries` 同步清理失效条目（索引不指向缺失文件）。
 - **Paged list controller（分页列表状态机）** — `lib/providers/paged_list_controller.dart`：首屏 / 加载更多 / 失败态 / 过期响应丢弃 / 跨页去重的唯一实现；持有方提供 `fetchPage`，并可按需读取 `error`（原始异常）与 `page`。发现页歌单 tab 与 `SearchProvider` 均使用它（搜索的 query/source 上下文通过 `reset()` 使在途请求过期，不再自建守卫）。

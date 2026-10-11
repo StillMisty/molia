@@ -63,6 +63,48 @@ class LocalDatabaseProvider with ChangeNotifier {
     }
   }
 
+  /// 分享一份 JSON 文本为备份文件（跨设备同步的完整备份走这里）。
+  Future<bool> shareJsonBackup(
+    String jsonString, {
+    String prefix = 'molia_backup',
+  }) async {
+    try {
+      final tempDir = await getTemporaryDirectory();
+      final timestamp = DateTime.now().toIso8601String().replaceAll(':', '-');
+      final filePath = '${tempDir.path}/${prefix}_$timestamp.json';
+
+      final file = File(filePath);
+      await file.writeAsString(jsonString);
+
+      final result = await SharePlus.instance.share(
+        ShareParams(
+          files: [XFile(filePath, mimeType: 'application/json')],
+          subject: 'Molia Data Backup $timestamp',
+        ),
+      );
+      return result.status == ShareResultStatus.success;
+    } catch (e) {
+      logger.d('Error during data export: $e');
+      return false;
+    }
+  }
+
+  /// 选择并读取一份 JSON 备份文件；取消/读取失败返回 null。
+  Future<String?> pickJsonBackup() async {
+    try {
+      final files = await FilePicker.pickFiles(
+        type: FileType.custom,
+        allowedExtensions: ['json'],
+      );
+      final path = files.isEmpty ? null : files.first.path;
+      if (path == null) return null;
+      return await File(path).readAsString();
+    } catch (e) {
+      logger.d('Error during data import: $e');
+      return null;
+    }
+  }
+
   /// 导出最近播放上下文为 JSON 并分享。
   Future<bool> exportDataToJson() async {
     try {

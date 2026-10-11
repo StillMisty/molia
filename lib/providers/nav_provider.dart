@@ -34,6 +34,9 @@ class NavProvider extends ChangeNotifier {
   /// 持久化偏好加载完成（测试等待启动态就绪）。
   Future<void> get preferencesReady => _preferencesReady;
 
+  /// 重新读取导航偏好（跨设备同步应用远端设置后由组合根调用）。
+  Future<void> reloadFromPreferences() => _loadPreferences();
+
   /// 全部目的地的当前顺序（含隐藏项，设置页按此顺序展示）。
   List<ShellDestination> get order =>
       List<ShellDestination>.unmodifiable(_order);

@@ -90,6 +90,9 @@ class PlayStatisticsService {
     enabledNotifier.value = _enabled;
   }
 
+  /// 重新读取采集开关（跨设备同步应用远端设置后由组合根调用）。
+  Future<void> reloadFromPreferences() => init();
+
   /// 设置采集开关：关闭时先收尾进行中的事件（已存数据保留）。
   Future<void> setEnabled(bool value) async {
     if (_enabled == value) return;

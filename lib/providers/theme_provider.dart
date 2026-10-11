@@ -103,6 +103,9 @@ class ThemeProvider extends ChangeNotifier {
   /// 持久化偏好加载完成（测试等待启动态就绪）。
   Future<void> get preferencesReady => _preferencesReady;
 
+  /// 重新读取持久化偏好（跨设备同步应用远端设置后由组合根调用）。
+  Future<void> reloadFromPreferences() => _loadPreferences();
+
   /// 宿主触发的亮度刷新（启动 / 生命周期恢复 / 系统亮度变化）。
   ///
   /// `themeMode` 非 system 时用强制亮度覆盖平台亮度。

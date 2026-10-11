@@ -326,6 +326,35 @@ class SourceManager extends ChangeNotifier {
     } catch (_) {}
   }
 
+  /// 重新读取渠道偏好（顺序 / 停用 / 音质）。跨设备同步应用远端设置后
+  /// 由组合根调用；先重置为默认再加载，保证远端「清空」也能生效。
+  Future<void> reloadPreferences() async {
+    _preferredQuality = '320k';
+    _sourceOrder = const [];
+    _disabledChannels = <String>{};
+    await _loadPreferences();
+    notifyListeners();
+  }
+
+  /// 脚本被外部（跨设备同步）增删改后刷新引擎状态：
+  /// 有激活脚本则重新激活（重新执行脚本、收集声明的源），否则停用引擎。
+  Future<void> refreshScriptsFromStorage() async {
+    final activeId = repository.activeId;
+    if (activeId == null) {
+      if (_activeSources.isNotEmpty) {
+        await _engine.dispose();
+        _activeSources = {};
+      }
+      notifyListeners();
+      return;
+    }
+    try {
+      await activate(activeId);
+    } catch (_) {
+      // 激活失败保留错误信息供 UI 展示（activate 已写入 _activeError）。
+    }
+  }
+
   Future<void> setPreferredQuality(String quality) async {
     if (!_supportedQualitys.contains(quality)) return;
     _preferredQuality = quality;
