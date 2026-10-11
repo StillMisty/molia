@@ -41,11 +41,19 @@ class PlayerMorphController extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// 读取锚点当前全局矩形；元素未挂载/未布局时返回 null。
+  /// 读取锚点当前屏幕矩形（含祖先变换）；元素未挂载/未布局时返回 null。
+  ///
+  /// 必须映射左上/右下两个角，不能用 `localToGlobal(Offset.zero) & box.size`：
+  /// 祖先存在持续缩放（如暂停态的封面播放态缩放 0.98）时，后者的位置与尺寸
+  /// 都不是真身的屏幕矩形，飞行副本会以错误大小/位置落位、交接瞬间跳变。
+  /// 旋转中的锚点取外接矩形（可接受：抓取只发生在稳态几何上）。
   Rect? rectOf(GlobalKey key) {
     final box = key.currentContext?.findRenderObject() as RenderBox?;
     if (box == null || !box.hasSize) return null;
-    return box.localToGlobal(Offset.zero) & box.size;
+    return Rect.fromPoints(
+      box.localToGlobal(Offset.zero),
+      box.localToGlobal(box.size.bottomRight(Offset.zero)),
+    );
   }
 
   /// 两端封面锚点齐备时的飞行几何；任一缺失返回 null（跳过 morph）。

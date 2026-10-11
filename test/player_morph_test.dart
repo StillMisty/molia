@@ -143,4 +143,25 @@ void main() {
     expect(end.border!.top.color.a, 0);
     expect(end.boxShadow!.first.color.a, 0);
   });
+
+  testWidgets('rectOf：返回含祖先缩放的真实屏幕矩形', (tester) async {
+    // 回归：`localToGlobal(Offset.zero) & box.size` 在祖先有缩放（暂停态
+    // 封面 0.98、按压 0.96）时给出错误尺寸/位置，飞行副本落位跳变。
+    final controller = PlayerMorphController();
+    addTearDown(controller.dispose);
+    final key = GlobalKey();
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Align(
+          alignment: Alignment.topLeft,
+          child: Transform.scale(
+            scale: 0.5,
+            alignment: Alignment.topLeft,
+            child: SizedBox(key: key, width: 200, height: 200),
+          ),
+        ),
+      ),
+    );
+    expect(controller.rectOf(key), const Rect.fromLTWH(0, 0, 100, 100));
+  });
 }

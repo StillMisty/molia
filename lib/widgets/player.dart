@@ -206,13 +206,19 @@ class _PlayerState extends State<Player> with TickerProviderStateMixin {
   }
 
   /// 元素相对播放器 Stack 的本地矩形（飞行副本定位用）。
+  ///
+  /// 同 [PlayerMorphController.rectOf]：必须映射左上/右下两角。完整端封面
+  /// 带播放态缩放（暂停 0.98、按压 0.96），用 `globalToLocal(Offset.zero)`
+  /// 拼 `box.size` 会得到错误的位置/尺寸，飞行起点或落点与真身差一截。
   Rect? _localRectOf(GlobalKey key) {
     final stackBox =
         _playerStackKey.currentContext?.findRenderObject() as RenderBox?;
     final box = key.currentContext?.findRenderObject() as RenderBox?;
     if (stackBox == null || box == null || !box.hasSize) return null;
     final topLeft = stackBox.globalToLocal(box.localToGlobal(Offset.zero));
-    return topLeft & box.size;
+    final bottomRight = stackBox
+        .globalToLocal(box.localToGlobal(box.size.bottomRight(Offset.zero)));
+    return Rect.fromPoints(topLeft, bottomRight);
   }
 
   Future<void> _prefetchImage(String imageUrl) async {
