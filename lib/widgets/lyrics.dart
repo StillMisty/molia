@@ -13,6 +13,7 @@ import '../models/lyric_line.dart';
 import '../models/play_mode.dart';
 import '../providers/lyrics_provider.dart';
 import '../providers/playback_provider.dart';
+import '../services/lyrics_display/lyrics_display_settings.dart';
 import '../services/notification_service.dart';
 import '../utils/responsive.dart';
 import 'lyrics_search_page.dart';
@@ -50,6 +51,11 @@ class _LyricsWidgetState extends State<LyricsWidget>
   static const double _activeLineUpwardBias = 0.10;
 
   List<LyricLine> _lyrics = [];
+
+  /// 与 [_lyrics] 等索引的翻译 / 罗马音（'' = 该行无扩展文本）。
+  /// 来自 [LyricsState] 的同一份时间戳对齐结果，与各输出共用数据源。
+  List<String> _translations = const [];
+  List<String> _romas = const [];
   String? _lastTrackId;
   late final ScrollController _scrollController =
       widget.controller ?? ScrollController();
@@ -122,6 +128,8 @@ class _LyricsWidgetState extends State<LyricsWidget>
         _quickActionsHideTimer?.cancel();
         setState(() {
           _lyrics = [];
+          _translations = const [];
+          _romas = const [];
           _lastTrackId = null;
           _autoScroll = true; // Default to auto-scroll when lyrics clear/load
           _previousLineIndex = -1;
@@ -150,6 +158,8 @@ class _LyricsWidgetState extends State<LyricsWidget>
     _quickActionsHideTimer?.cancel();
     setState(() {
       _lyrics = [];
+      _translations = const [];
+      _romas = const [];
       _autoScroll = true; // Default to auto-scroll when new lyrics load
       _previousLineIndex = -1;
       _syncLineKeys(0);
@@ -184,6 +194,8 @@ class _LyricsWidgetState extends State<LyricsWidget>
       setState(() {
         _lyricsAreSynced = synced;
         _lyrics = lyricsState.lines;
+        _translations = lyricsState.translations;
+        _romas = lyricsState.romas;
         _autoScroll = synced;
         _previousLineIndex = -1;
         _syncLineKeys(_lyrics.length);
@@ -201,6 +213,8 @@ class _LyricsWidgetState extends State<LyricsWidget>
       _quickActionsHideTimer?.cancel();
       setState(() {
         _lyrics = [];
+        _translations = const [];
+        _romas = const [];
         _syncLineKeys(0);
         _lyricsAreSynced = true;
         _manualQuickActionsVisible = false;
@@ -625,6 +639,9 @@ class _LyricsWidgetState extends State<LyricsWidget>
     _syncLineKeys(_lyrics.length);
     _scheduleScrollabilityCheck();
 
+    // 歌词页扩展行开关：独立于输出侧（桌面 / 通知 / 蓝牙）的翻译·罗马音设置。
+    final lyricsDisplaySettings = context.watch<LyricsDisplaySettings>();
+
     final playbackProvider =
         Provider.of<PlaybackProvider>(context, listen: false);
 
@@ -769,6 +786,22 @@ class _LyricsWidgetState extends State<LyricsWidget>
                 final double lyricFontSize = isWideLyricLayout
                     ? (isWeb ? 30.0 : 24.0)
                     : (isWeb ? 36.0 : 22.0);
+                final String lineTranslation =
+                    index < _translations.length ? _translations[index] : '';
+                final String lineRoma =
+                    index < _romas.length ? _romas[index] : '';
+                final bool showTranslation =
+                    lyricsDisplaySettings.pageTranslationEnabled &&
+                        lineTranslation.isNotEmpty;
+                final bool showRoma = lyricsDisplaySettings.pageRomaEnabled &&
+                    lineRoma.isNotEmpty;
+                // 扩展行样式：字号对齐桌面歌词规格（主字号 × 0.8），
+                // 颜色保持行角色契约的次要文本，不参与 primary 强调。
+                final TextStyle extendedLineStyle = TextStyle(
+                  fontSize: lyricFontSize * 0.8,
+                  fontWeight: FontWeight.w500,
+                  color: theme.colorScheme.onSurfaceVariant,
+                );
 
                 return GestureDetector(
                   key: _lineKeys[index],
@@ -840,9 +873,33 @@ class _LyricsWidgetState extends State<LyricsWidget>
                         opacity: lyricsSynced
                             ? (isCurrentLine ? 1.0 : 0.8)
                             : 1.0,
-                        child: Text(
-                          line.text,
-                          textAlign: TextAlign.left, // Align text left
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Text(
+                              line.text,
+                              textAlign: TextAlign.left, // Align text left
+                            ),
+                            // 翻译 / 罗马音：空文本不占位；顺序与
+                            // LyricLineTracker 的扩展行拼接一致。
+                            if (showTranslation) ...[
+                              const SizedBox(height: 2),
+                              Text(
+                                lineTranslation,
+                                textAlign: TextAlign.left,
+                                style: extendedLineStyle,
+                              ),
+                            ],
+                            if (showRoma) ...[
+                              const SizedBox(height: 2),
+                              Text(
+                                lineRoma,
+                                textAlign: TextAlign.left,
+                                style: extendedLineStyle,
+                              ),
+                            ],
+                          ],
                         ),
                       ),
                     ),
@@ -1161,6 +1218,8 @@ class _LyricsWidgetState extends State<LyricsWidget>
         _quickActionsHideTimer?.cancel();
         setState(() {
           _lyrics = newLyrics;
+          _translations = lyricsState.translations;
+          _romas = lyricsState.romas;
           _lyricsAreSynced = synced;
           _lastTrackId =
               trackId; // Update last track ID as we applied lyrics for it

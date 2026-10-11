@@ -78,11 +78,14 @@
   用户 seek 优先；生命周期 `paused` 强制落盘会话。旧「远程播放风格 Map 兼容层」
   （facade `compat*` / service `currentTrackMap` 等）已删除。
 - **Lyrics**：`LyricsProvider`（`lib/providers/lyrics_provider.dart`）是取词 → 缓存 →
-  解析 → 预取的唯一实现，对外只暴露 `LyricsState`（idle/loading/ready/empty + isSynced）。
-  时间契约统一在 `lib/models/lyric_line.dart`：`hasLyricTimestamps` 与 `parseLyrics`
-  共用同一正则（兼容 1–3 位分钟与行内多标签）；`LyricsService` 失败路径不再重复取词。
+  解析 → 预取的唯一实现，对外只暴露 `LyricsState`（idle/loading/ready/empty + isSynced，
+  含按时间戳对齐的翻译 / 罗马音扩展行）。时间契约统一在 `lib/models/lyric_line.dart`：
+  `hasLyricTimestamps` 与 `parseLyrics` 共用同一正则（兼容 1–3 位分钟与行内多标签）；
+  `LyricsService` 失败路径不再重复取词。
   UI（LyricsWidget / 歌词搜索页 / 歌词选择页）只渲染状态与交互，不再各自构造
-  `LyricsService` / 直接写 `LyricsCache` / 拼装解析逻辑。
+  `LyricsService` / 直接写 `LyricsCache` / 拼装解析逻辑；歌词页用「歌词页」独立开关
+  （`page.translationEnabled` / `page.romaEnabled`）在每行下方渲染翻译 / 罗马音，
+  与输出侧（桌面歌词 / 通知 / 蓝牙）的翻译·罗马音开关互不影响，共用同一份对齐数据。
 - **系统媒体会话**（Android/iOS/macOS）：`LocalAudioHandler` 把服务状态映射为
   `MediaItem`/`PlaybackState`；通知/锁屏封面经 `MediaItem.artHeaders` 统一带
   浏览器 UA + 平台 Referer，并复用 `ArtworkCache` 的共享 CacheManager

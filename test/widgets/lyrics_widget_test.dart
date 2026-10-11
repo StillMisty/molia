@@ -13,6 +13,7 @@ import 'package:molia/domain/models/track.dart';
 import 'package:molia/l10n/app_localizations.dart';
 import 'package:molia/providers/lyrics_provider.dart';
 import 'package:molia/providers/playback_provider.dart';
+import 'package:molia/services/lyrics_display/lyrics_display_settings.dart';
 import 'package:molia/services/lyrics_service.dart';
 import 'package:molia/services/notification_service.dart';
 import 'package:molia/widgets/lyrics.dart';
@@ -31,10 +32,24 @@ String _buildLrc() {
   return buffer.toString();
 }
 
+/// 偶数行带扩展文本、奇数行为空：同时覆盖「空翻译不占位」。
+String _buildExtendedLrc(String prefix) {
+  final buffer = StringBuffer();
+  for (var i = 0; i < 30; i += 2) {
+    final seconds = i * 5;
+    final mm = (seconds ~/ 60).toString().padLeft(2, '0');
+    final ss = (seconds % 60).toString().padLeft(2, '0');
+    buffer.writeln('[$mm:$ss.00]$prefix $i');
+  }
+  return buffer.toString();
+}
+
 class _FakeLyricsService extends LyricsService {
-  _FakeLyricsService(this.lrc);
+  _FakeLyricsService(this.lrc, {this.translation, this.roma});
 
   final String lrc;
+  final String? translation;
+  final String? roma;
 
   @override
   Future<LyricsResult?> getLyrics(
@@ -42,7 +57,12 @@ class _FakeLyricsService extends LyricsService {
     String artistName,
     String trackId,
   ) async =>
-      LyricsResult(lyric: lrc, provider: 'test');
+      LyricsResult(
+        lyric: lrc,
+        translation: translation,
+        roma: roma,
+        provider: 'test',
+      );
 }
 
 Track _track() => Track(
@@ -83,7 +103,11 @@ void main() {
   tearDown(() => playback.dispose());
 
   /// 挂载歌词组件：420x900、进度 60s（第 12 行），等首轮歌词加载与自动滚动落定。
-  Future<ScrollController> pumpLyrics(WidgetTester tester) async {
+  Future<ScrollController> pumpLyrics(
+    WidgetTester tester, {
+    LyricsService? service,
+    LyricsDisplaySettings? settings,
+  }) async {
     tester.view.physicalSize = const Size(420, 900);
     tester.view.devicePixelRatio = 1.0;
     addTearDown(() {
@@ -95,13 +119,20 @@ void main() {
 
     final controller = ScrollController();
     addTearDown(controller.dispose);
+    final effectiveSettings = settings ?? LyricsDisplaySettings();
+    addTearDown(effectiveSettings.dispose);
 
     await tester.pumpWidget(
       MultiProvider(
         providers: [
           ChangeNotifierProvider<PlaybackProvider>.value(value: playback),
           ChangeNotifierProvider<LyricsProvider>.value(
-            value: LyricsProvider(service: _FakeLyricsService(_buildLrc())),
+            value: LyricsProvider(
+              service: service ?? _FakeLyricsService(_buildLrc()),
+            ),
+          ),
+          ChangeNotifierProvider<LyricsDisplaySettings>.value(
+            value: effectiveSettings,
           ),
           Provider<NotificationService>.value(
             value: NotificationService(GlobalKey<ScaffoldMessengerState>()),
@@ -264,5 +295,57 @@ void main() {
       lessThan(0.5),
       reason: '激活行应位于视口中线偏上（顶栏比底栏高）',
     );
+  });
+
+  testWidgets('歌词页每行显示翻译，且不受输出侧开关影响', (tester) async {
+    final settings = LyricsDisplaySettings();
+    await pumpLyrics(
+      tester,
+      settings: settings,
+      service: _FakeLyricsService(
+        _buildLrc(),
+        translation: _buildExtendedLrc('译'),
+      ),
+    );
+
+    // 默认开启：当前行（12）有翻译；奇数行无翻译 → 不占位。
+    expect(find.text('译 12'), findsOneWidget);
+    expect(find.text('译 13'), findsNothing);
+
+    // 输出侧（桌面 / 通知 / 蓝牙）开关与歌词页无关。
+    await settings.setTranslationEnabled(false);
+    await tester.pump();
+    expect(find.text('译 12'), findsOneWidget);
+
+    // 歌词页开关关闭后翻译消失。
+    await settings.setPageTranslationEnabled(false);
+    await tester.pump();
+    expect(find.text('译 12'), findsNothing);
+  });
+
+  testWidgets('罗马音按歌词页开关独立门控', (tester) async {
+    final settings = LyricsDisplaySettings();
+    await pumpLyrics(
+      tester,
+      settings: settings,
+      service: _FakeLyricsService(
+        _buildLrc(),
+        translation: _buildExtendedLrc('译'),
+        roma: _buildExtendedLrc('Roma'),
+      ),
+    );
+
+    // 默认关：罗马音不显示，翻译照常。
+    expect(find.text('Roma 12'), findsNothing);
+    expect(find.text('译 12'), findsOneWidget);
+
+    await settings.setPageRomaEnabled(true);
+    await tester.pump();
+    expect(find.text('Roma 12'), findsOneWidget);
+
+    await settings.setPageTranslationEnabled(false);
+    await tester.pump();
+    expect(find.text('译 12'), findsNothing);
+    expect(find.text('Roma 12'), findsOneWidget);
   });
 }

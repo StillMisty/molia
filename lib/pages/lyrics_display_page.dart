@@ -13,9 +13,10 @@ import '../theme/app_semantic_colors.dart';
 import '../theme/scheme_builder.dart';
 import '../widgets/app_color_picker.dart';
 
-/// 歌词显示设置页：共享项 + 桌面歌词 / 通知·锁屏 / 蓝牙三组。
+/// 歌词显示设置页：歌词页（应用内）+ 输出共享项 + 桌面歌词 / 通知·锁屏 / 蓝牙三组。
 ///
 /// - 分组按输出能力显隐（不支持的平台直接隐藏，避免开关撒谎）；
+/// - 「歌词页」分组与输出能力无关，控制应用内歌词页的翻译 / 罗马音；
 /// - 桌面歌词分组对齐 LX 全套配置（样式 / 行为 / 控制条）；
 /// - 媒体元数据两组共用同一输出（通知与蓝牙 profile 合成后写入 MediaItem）。
 class LyricsDisplayPage extends StatefulWidget {
@@ -84,6 +85,9 @@ class _LyricsDisplayPageState extends State<LyricsDisplayPage>
         child: ListView(
           padding: const EdgeInsets.fromLTRB(16, 0, 16, 32),
           children: [
+            // 歌词页（应用内）与输出能力无关，始终可见。
+            _sectionTitle(context, l10n.lyricsPageTitle),
+            _card(context, children: _pageRows(context, l10n, settings)),
             if (!hasAnySupported)
               Padding(
                 padding: const EdgeInsets.only(top: 24),
@@ -136,6 +140,30 @@ class _LyricsDisplayPageState extends State<LyricsDisplayPage>
         ),
       ),
     );
+  }
+
+  /// 歌词页（应用内）行：只影响播放页歌词渲染，与输出侧开关无关。
+  List<Widget> _pageRows(
+    BuildContext context,
+    AppLocalizations l10n,
+    LyricsDisplaySettings settings,
+  ) {
+    return [
+      _switchRow(
+        context,
+        title: l10n.lyricsDisplayTranslation,
+        subtitle: l10n.lyricsPageTranslationSubtitle,
+        value: settings.pageTranslationEnabled,
+        onChanged: settings.setPageTranslationEnabled,
+      ),
+      _switchRow(
+        context,
+        title: l10n.lyricsDisplayRoma,
+        subtitle: l10n.lyricsPageRomaSubtitle,
+        value: settings.pageRomaEnabled,
+        onChanged: settings.setPageRomaEnabled,
+      ),
+    ];
   }
 
   List<Widget> _sharedRows(

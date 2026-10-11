@@ -1053,19 +1053,28 @@ class AppLocalizationsZh extends AppLocalizations {
   String get settingsLyricsDisplaySubtitle => '桌面歌词、通知栏·锁屏歌词、蓝牙歌词';
 
   @override
-  String get lyricsDisplaySharedTitle => '共享';
+  String get lyricsPageTitle => '歌词页';
+
+  @override
+  String get lyricsPageTranslationSubtitle => '在歌词页每行下方显示翻译';
+
+  @override
+  String get lyricsPageRomaSubtitle => '在歌词页每行下方显示罗马音';
+
+  @override
+  String get lyricsDisplaySharedTitle => '歌词输出';
 
   @override
   String get lyricsDisplayTranslation => '翻译';
 
   @override
-  String get lyricsDisplayTranslationSubtitle => '在当前歌词行下显示翻译';
+  String get lyricsDisplayTranslationSubtitle => '在桌面歌词、通知栏与蓝牙歌词中显示翻译';
 
   @override
   String get lyricsDisplayRoma => '罗马音';
 
   @override
-  String get lyricsDisplayRomaSubtitle => '在当前歌词行下显示罗马音';
+  String get lyricsDisplayRomaSubtitle => '在桌面歌词、通知栏与蓝牙歌词中显示罗马音';
 
   @override
   String get lyricsDisplayUnsynced => '未同步歌词';

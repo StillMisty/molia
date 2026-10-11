@@ -16,6 +16,8 @@ void main() {
     expect(s.bluetoothEnabled, isFalse);
     expect(s.translationEnabled, isTrue);
     expect(s.romaEnabled, isFalse);
+    expect(s.pageTranslationEnabled, isTrue);
+    expect(s.pageRomaEnabled, isFalse);
     expect(s.offsetMs, 0);
     expect(s.desktopMaxLines, 3);
     expect(s.desktopFontSize, 22);
@@ -34,6 +36,8 @@ void main() {
     await source.setTranslationEnabled(false);
     await source.setRomaEnabled(true);
     await source.setUnsyncedBehavior(UnsyncedBehavior.firstLine);
+    await source.setPageTranslationEnabled(false);
+    await source.setPageRomaEnabled(true);
     await source.setDesktopEnabled(true);
     await source.setDesktopFontSize(31);
     await source.setDesktopOpacity(0.5);
@@ -77,6 +81,8 @@ void main() {
     expect(restored.translationEnabled, isFalse);
     expect(restored.romaEnabled, isTrue);
     expect(restored.unsyncedBehavior, UnsyncedBehavior.firstLine);
+    expect(restored.pageTranslationEnabled, isFalse);
+    expect(restored.pageRomaEnabled, isTrue);
     expect(restored.desktopEnabled, isTrue);
     expect(restored.desktopFontSize, 31);
     expect(restored.desktopOpacity, 0.5);
@@ -126,6 +132,33 @@ void main() {
     expect(s.unsyncedBehavior, LyricsDisplaySettings.defaultUnsyncedBehavior);
     expect(s.desktopMaxLines, LyricsDisplaySettings.maxLinesRange.last);
     expect(s.desktopEnabled, isFalse);
+    // 旧数据没有 page.* 键：歌词页开关回落默认。
+    expect(s.pageTranslationEnabled,
+        LyricsDisplaySettings.defaultPageTranslationEnabled);
+    expect(s.pageRomaEnabled, LyricsDisplaySettings.defaultPageRomaEnabled);
+  });
+
+  test('歌词页开关与输出侧开关相互独立', () async {
+    SharedPreferences.setMockInitialValues({
+      LyricsDisplaySettings.storageKey: jsonEncode({
+        'version': 1,
+        'translationEnabled': false,
+        'romaEnabled': true,
+        'page.translationEnabled': true,
+        'page.romaEnabled': false,
+      }),
+    });
+    final s = LyricsDisplaySettings();
+    await s.init();
+    expect(s.translationEnabled, isFalse);
+    expect(s.romaEnabled, isTrue);
+    expect(s.pageTranslationEnabled, isTrue);
+    expect(s.pageRomaEnabled, isFalse);
+
+    await s.setPageTranslationEnabled(false);
+    expect(s.translationEnabled, isFalse);
+    await s.setPageRomaEnabled(true);
+    expect(s.romaEnabled, isTrue);
   });
 
   test('范围夹取', () async {

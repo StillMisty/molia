@@ -1084,21 +1084,32 @@ class AppLocalizationsEn extends AppLocalizations {
       'Floating lyrics, notification & Bluetooth';
 
   @override
-  String get lyricsDisplaySharedTitle => 'Shared';
+  String get lyricsPageTitle => 'Lyrics page';
+
+  @override
+  String get lyricsPageTranslationSubtitle =>
+      'Show translation under each line in the lyrics page';
+
+  @override
+  String get lyricsPageRomaSubtitle =>
+      'Show romanization under each line in the lyrics page';
+
+  @override
+  String get lyricsDisplaySharedTitle => 'Lyric outputs';
 
   @override
   String get lyricsDisplayTranslation => 'Translation';
 
   @override
   String get lyricsDisplayTranslationSubtitle =>
-      'Show translation under the current line';
+      'Show translation in floating, notification and Bluetooth lyrics';
 
   @override
   String get lyricsDisplayRoma => 'Romanization';
 
   @override
   String get lyricsDisplayRomaSubtitle =>
-      'Show romanized lyrics under the current line';
+      'Show romanization in floating, notification and Bluetooth lyrics';
 
   @override
   String get lyricsDisplayUnsynced => 'Unsynced lyrics';

@@ -2048,10 +2048,28 @@ abstract class AppLocalizations {
   /// **'Floating lyrics, notification & Bluetooth'**
   String get settingsLyricsDisplaySubtitle;
 
+  /// No description provided for @lyricsPageTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Lyrics page'**
+  String get lyricsPageTitle;
+
+  /// No description provided for @lyricsPageTranslationSubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Show translation under each line in the lyrics page'**
+  String get lyricsPageTranslationSubtitle;
+
+  /// No description provided for @lyricsPageRomaSubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Show romanization under each line in the lyrics page'**
+  String get lyricsPageRomaSubtitle;
+
   /// No description provided for @lyricsDisplaySharedTitle.
   ///
   /// In en, this message translates to:
-  /// **'Shared'**
+  /// **'Lyric outputs'**
   String get lyricsDisplaySharedTitle;
 
   /// No description provided for @lyricsDisplayTranslation.
@@ -2063,7 +2081,7 @@ abstract class AppLocalizations {
   /// No description provided for @lyricsDisplayTranslationSubtitle.
   ///
   /// In en, this message translates to:
-  /// **'Show translation under the current line'**
+  /// **'Show translation in floating, notification and Bluetooth lyrics'**
   String get lyricsDisplayTranslationSubtitle;
 
   /// No description provided for @lyricsDisplayRoma.
@@ -2075,7 +2093,7 @@ abstract class AppLocalizations {
   /// No description provided for @lyricsDisplayRomaSubtitle.
   ///
   /// In en, this message translates to:
-  /// **'Show romanized lyrics under the current line'**
+  /// **'Show romanization in floating, notification and Bluetooth lyrics'**
   String get lyricsDisplayRomaSubtitle;
 
   /// No description provided for @lyricsDisplayUnsynced.

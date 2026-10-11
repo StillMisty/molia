@@ -60,7 +60,7 @@ abstract final class DesktopControlKeys {
   ];
 }
 
-/// 歌词显示配置：共享项 + 桌面歌词 / 通知栏·锁屏 / 蓝牙三组。
+/// 歌词显示配置：歌词页（应用内）+ 输出侧共享项 + 桌面歌词 / 通知栏·锁屏 / 蓝牙三组。
 ///
 /// - 持久化为 SharedPreferences 单 JSON 键（`lyrics_display_settings_v1`），
 ///   读取时与默认值合并，新增键对旧数据向前兼容；
@@ -78,6 +78,10 @@ class LyricsDisplaySettings extends ChangeNotifier {
   static const bool defaultTranslationEnabled = true;
   static const bool defaultRomaEnabled = false;
   static const UnsyncedBehavior defaultUnsyncedBehavior = UnsyncedBehavior.title;
+
+  // 歌词页（应用内）扩展行：与输出侧开关相互独立。
+  static const bool defaultPageTranslationEnabled = true;
+  static const bool defaultPageRomaEnabled = false;
 
   static const bool defaultDesktopEnabled = false;
   static const double defaultDesktopFontSize = 22;
@@ -136,6 +140,9 @@ class LyricsDisplaySettings extends ChangeNotifier {
   bool _romaEnabled = defaultRomaEnabled;
   UnsyncedBehavior _unsyncedBehavior = defaultUnsyncedBehavior;
 
+  bool _pageTranslationEnabled = defaultPageTranslationEnabled;
+  bool _pageRomaEnabled = defaultPageRomaEnabled;
+
   bool _desktopEnabled = defaultDesktopEnabled;
   double _desktopFontSize = defaultDesktopFontSize;
   double _desktopOpacity = defaultDesktopOpacity;
@@ -174,11 +181,15 @@ class LyricsDisplaySettings extends ChangeNotifier {
   int _bluetoothUpdateIntervalMs = defaultBluetoothUpdateIntervalMs;
   LyricsPauseBehavior _bluetoothPauseBehavior = defaultBluetoothPauseBehavior;
 
-  // --- 共享项 ---
+  // --- 共享项（输出侧：桌面歌词 / 通知·锁屏 / 蓝牙） ---
   int get offsetMs => _offsetMs;
   bool get translationEnabled => _translationEnabled;
   bool get romaEnabled => _romaEnabled;
   UnsyncedBehavior get unsyncedBehavior => _unsyncedBehavior;
+
+  // --- 歌词页（应用内） ---
+  bool get pageTranslationEnabled => _pageTranslationEnabled;
+  bool get pageRomaEnabled => _pageRomaEnabled;
 
   // --- 桌面歌词 ---
   bool get desktopEnabled => _desktopEnabled;
@@ -262,6 +273,18 @@ class LyricsDisplaySettings extends ChangeNotifier {
   Future<void> setUnsyncedBehavior(UnsyncedBehavior value) async {
     if (value == _unsyncedBehavior) return;
     _unsyncedBehavior = value;
+    _commit();
+  }
+
+  Future<void> setPageTranslationEnabled(bool value) async {
+    if (value == _pageTranslationEnabled) return;
+    _pageTranslationEnabled = value;
+    _commit();
+  }
+
+  Future<void> setPageRomaEnabled(bool value) async {
+    if (value == _pageRomaEnabled) return;
+    _pageRomaEnabled = value;
     _commit();
   }
 
@@ -475,6 +498,8 @@ class LyricsDisplaySettings extends ChangeNotifier {
         'translationEnabled': _translationEnabled,
         'romaEnabled': _romaEnabled,
         'unsyncedBehavior': _unsyncedBehavior.name,
+        'page.translationEnabled': _pageTranslationEnabled,
+        'page.romaEnabled': _pageRomaEnabled,
         'desktop.enabled': _desktopEnabled,
         'desktop.fontSize': _desktopFontSize,
         'desktop.opacity': _desktopOpacity,
@@ -518,6 +543,10 @@ class LyricsDisplaySettings extends ChangeNotifier {
     _romaEnabled = _boolOf(json['romaEnabled'], _romaEnabled);
     _unsyncedBehavior = _enumOf(
         json['unsyncedBehavior'], UnsyncedBehavior.values, _unsyncedBehavior);
+    _pageTranslationEnabled =
+        _boolOf(json['page.translationEnabled'], _pageTranslationEnabled);
+    _pageRomaEnabled =
+        _boolOf(json['page.romaEnabled'], _pageRomaEnabled);
 
     _desktopEnabled = _boolOf(json['desktop.enabled'], _desktopEnabled);
     _desktopFontSize = _doubleOf(json['desktop.fontSize'], _desktopFontSize)
