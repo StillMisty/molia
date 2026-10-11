@@ -251,7 +251,8 @@ internal class LyricsOverlayView(
             }
             controlBar.addView(button)
         }
-        if (!any) controlsVisible = false
+        // 锁定态窗口已点击穿透：控制条必须收起，否则既可见又点不动。
+        if (config.lock || !any) controlsVisible = false
         controlBar.visibility = if (controlsVisible) VISIBLE else GONE
     }
 
