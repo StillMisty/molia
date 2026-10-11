@@ -105,6 +105,10 @@ class DefaultPlaybackFacade implements PlaybackFacade {
   @override
   Future<void> stop() => _backend.stop();
 
+  @override
+  Future<void> updateTrackArtwork(String trackUri, Uri? artwork) =>
+      _backend.updateTrackArtwork(trackUri, artwork);
+
   void dispose() {
     _backend.state.removeListener(_onBackendState);
     _snapshot.dispose();

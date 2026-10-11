@@ -108,7 +108,7 @@ void main() {
   }
 
   group('SourceManagerMusicSource · 元信息', () {
-    test('capabilities 与路由一致：无脚本内置源不谎报能力', () async {
+    test('capabilities 与路由一致：内置平台歌词/封面为原生能力', () async {
       final manager = SourceManager();
       addTearDown(manager.dispose);
 
@@ -116,12 +116,13 @@ void main() {
       expect(kw.key, 'kw');
       expect(kw.capabilities.search, isFalse);
       expect(kw.capabilities.resolveUrl, isFalse);
-      expect(kw.capabilities.lyrics, isFalse);
-      expect(kw.capabilities.artwork, isFalse);
+      // 内置平台歌词/封面为 Dart 原生实现（脚本未声明时也可用）。
+      expect(kw.capabilities.lyrics, isTrue);
+      expect(kw.capabilities.artwork, isTrue);
       expect(kw.capabilities.collection, isFalse);
       expect(kw.capabilities.favorite, isFalse);
 
-      // wy 无脚本也有内置歌词/封面回退；取链仍需要脚本。
+      // wy 同五平台一致；取链仍需要脚本。
       final wy = SourceManagerMusicSource('wy', manager);
       expect(wy.capabilities.lyrics, isTrue);
       expect(wy.capabilities.artwork, isTrue);

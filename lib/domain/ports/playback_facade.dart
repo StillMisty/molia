@@ -34,4 +34,7 @@ abstract interface class PlaybackFacade {
   Future<void> previous();
   Future<void> setMode(PlayMode mode);
   Future<void> stop();
+
+  /// 原地更新队列曲目封面（音源补图；低频快照通知，值变才发）。
+  Future<void> updateTrackArtwork(String trackUri, Uri? artwork);
 }

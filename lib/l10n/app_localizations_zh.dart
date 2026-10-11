@@ -458,6 +458,18 @@ class AppLocalizationsZh extends AppLocalizations {
   String get providerNetease => '网易云音乐';
 
   @override
+  String get providerKugou => '酷狗音乐';
+
+  @override
+  String get providerKuwo => '酷我音乐';
+
+  @override
+  String get providerMigu => '咪咕音乐';
+
+  @override
+  String get lyricsBestMatch => '最佳匹配';
+
+  @override
   String get playingFrom => '播放自';
 
   @override

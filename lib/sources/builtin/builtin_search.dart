@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:typed_data';
 
 import '../source_search_result.dart';
 import '../source_track.dart';
@@ -88,6 +89,21 @@ Future<String> lxHttpGetText(
     url,
     headers: headers,
     timeout: timeout,
+  );
+}
+
+/// 发起 GET 请求并返回原始字节（二进制歌词响应）。
+Future<Uint8List> lxHttpGetBytes(
+  String url, {
+  Map<String, String>? headers,
+  Duration timeout = BuiltinTransport.defaultTimeout,
+  int retries = 1,
+}) {
+  return BuiltinSearch.transport.getBytes(
+    url,
+    headers: headers,
+    timeout: timeout,
+    retries: retries,
   );
 }
 

@@ -11,6 +11,13 @@ import 'any_listen/any_listen_errors.dart';
 import 'any_listen/any_listen_source.dart';
 import 'builtin/builtin_search.dart';
 import 'builtin/discover_source.dart';
+import 'builtin/kg_lyric.dart';
+import 'builtin/kg_pic.dart';
+import 'builtin/kw_lyric.dart';
+import 'builtin/kw_pic.dart';
+import 'builtin/lyric_result.dart';
+import 'builtin/mg_lyric.dart';
+import 'builtin/tx_lyric.dart';
 import 'builtin/wy_lyric.dart';
 import 'builtin/wy_music_detail.dart';
 import 'lx/lx_engine_supervisor.dart';
@@ -78,11 +85,12 @@ class SourceManager extends ChangeNotifier {
   final AnyListenSource _anyListenSource = AnyListenSource();
   final List<StreamSubscription<dynamic>> _subscriptions = [];
 
-  /// wy 内置歌词/封面回退缓存（脚本不可用时的内置实现；5 分钟 TTL）。
-  final RequestCache _builtinWyLyricCache =
-      RequestCache(maxEntries: 32, ttl: const Duration(minutes: 5));
-  final RequestCache _builtinWyPicCache =
+  /// 内置平台原生歌词/封面回退缓存（脚本不可用 / 未声明时的内置实现；
+  /// 5 分钟 TTL，key 为 `{track.id}:lyric|pic`）。
+  final RequestCache _builtinLyricCache =
       RequestCache(maxEntries: 64, ttl: const Duration(minutes: 5));
+  final RequestCache _builtinPicCache =
+      RequestCache(maxEntries: 128, ttl: const Duration(minutes: 5));
 
   SourceManager({LxEngineSupervisor? engine})
       : _engine = engine ?? LxEngineSupervisor() {
@@ -214,7 +222,8 @@ class SourceManager extends ChangeNotifier {
   /// 音源能力：与路由的实际 gating 一致（registry / 领域适配器共用）。
   ///
   /// - builtin：出现在 [searchableSources] 的前提是已有可取链脚本，因此
-  ///   `resolveUrl` 与脚本声明一致；wy 另有内置歌词/封面回退；
+  ///   `resolveUrl` 与脚本声明一致；歌词/封面为 Dart 原生实现（脚本未声明
+  ///   `lyric`/`pic` action 时也可用）；
   /// - lx：按脚本声明的 action；
   /// - any-listen：已配置且启用时全部可用。
   SourceCapabilities capabilitiesFor(String key) {
@@ -233,14 +242,14 @@ class SourceManager extends ChangeNotifier {
     // 能力跟随「脚本可取链」，与 channels/_searchableCandidates 的 canSearch
     // 保持一致；脚本声明的 canSearch 只描述脚本扩展源自身的社区搜索 action。
     // 两处不一致会静默拒绝渠道→搜索源同步（搜索停留在旧源，与展示渠道不符）。
-    final builtinSearchable =
-        BuiltinSearch.isBuiltin(key) && (decl?.canResolveUrl ?? false);
+    final builtin = BuiltinSearch.isBuiltin(key);
+    final builtinSearchable = builtin && (decl?.canResolveUrl ?? false);
     return SourceCapabilities(
       search: builtinSearchable || (decl?.canSearch ?? false),
       pagination: builtinSearchable || (decl?.canSearch ?? false),
       resolveUrl: decl?.canResolveUrl ?? false,
-      lyrics: key == 'wy' || (decl?.canFetchLyric ?? false),
-      artwork: key == 'wy' || (decl?.canFetchPic ?? false),
+      lyrics: builtin || (decl?.canFetchLyric ?? false),
+      artwork: builtin || (decl?.canFetchPic ?? false),
     );
   }
 
@@ -553,10 +562,10 @@ class SourceManager extends ChangeNotifier {
     return info;
   }
 
-  /// 获取歌词（脚本 lyric action，仅 local 源或支持该 action 的脚本可用）。
+  /// 获取歌词（脚本 lyric action 优先，内置平台原生实现回退）。
   ///
-  /// 无脚本 / 脚本不支持 / 脚本失败时，wy 平台走内置 eapi 歌词回退
-  /// （与 `LyricsService` 的 NetEaseProvider 同一实现）。
+  /// 无脚本 / 脚本不支持 / 脚本失败时走内置实现：
+  /// wy eapi + yrc、QQ PlayLyricInfo + QRC、酷狗 KRC、酷我 LRCX、咪咕 MRC。
   Future<LxLyricResult?> fetchLyric(SourceTrack track) async {
     if (AnyListenSource.isAnyListenTrack(track)) {
       try {
@@ -577,20 +586,23 @@ class SourceManager extends ChangeNotifier {
     final decl = _activeSources[track.sourceKey];
     if (decl != null && decl.canFetchLyric) {
       try {
-        return await _engine.getLyric(
+        final result = await _engine.getLyric(
           source: track.sourceKey,
           musicInfo: track.raw,
         );
+        if (result.lyric.trim().isNotEmpty) return result;
       } catch (_) {
-        // 脚本失败时继续尝试 wy 内置回退（非 wy 平台返回 null）。
+        // 脚本失败时继续尝试内置回退。
       }
     }
-    return _builtinWyLyric(track);
+    return _builtinLyric(track);
   }
 
-  /// 获取封面（脚本 pic action）。
+  /// 获取封面（搜索自带封面 / 脚本 pic action / 内置平台原生实现）。
   ///
-  /// 无脚本 / 脚本不支持 / 脚本失败时，wy 平台用歌曲详情的 `al.picUrl` 回退。
+  /// 平台搜索响应已带封面（wy/tx/mg）时直接复用；否则脚本 pic 优先，
+  /// 再回退内置实现（kw/kg 取图接口、wy 歌曲详情、tx 专辑 mid 拼 URL、
+  /// mg 资源封面）。
   Future<String?> fetchPic(SourceTrack track) async {
     if (AnyListenSource.isAnyListenTrack(track)) {
       try {
@@ -599,6 +611,8 @@ class SourceManager extends ChangeNotifier {
         return null;
       }
     }
+    final existing = track.coverUrl;
+    if (existing != null && existing.isNotEmpty) return existing;
     final decl = _activeSources[track.sourceKey];
     if (decl != null && decl.canFetchPic) {
       try {
@@ -608,26 +622,25 @@ class SourceManager extends ChangeNotifier {
         );
         if (url.isNotEmpty) return url;
       } catch (_) {
-        // 脚本失败时继续尝试 wy 内置回退。
+        // 脚本失败时继续尝试内置回退。
       }
     }
-    return _builtinWyPic(track);
+    return _builtinPic(track);
   }
 
-  /// wy 内置歌词回退（eapi v1 + yrc 逐字解析；5 分钟缓存）。
-  Future<LxLyricResult?> _builtinWyLyric(SourceTrack track) async {
-    if (track.sourceKey != 'wy') return null;
-    final songId = track.raw['songmid'] ?? track.raw['id'];
-    if (songId == null) return null;
+  /// 内置平台原生歌词回退（5 分钟缓存；不支持 / 失败返回 null）。
+  Future<LxLyricResult?> _builtinLyric(SourceTrack track) async {
+    if (!BuiltinSearch.isBuiltin(track.sourceKey)) return null;
     try {
-      return await _builtinWyLyricCache.getOrCreate('wy:lyric:$songId',
-          () async {
-        final info = await WyLyric.fetch(songId.toString());
+      return await _builtinLyricCache.getOrCreate<LxLyricResult?>(
+          '${track.id}:lyric', () async {
+        final info = await _fetchBuiltinLyric(track);
+        if (info == null || info.isEmpty) return null;
         return LxLyricResult(
           lyric: info.lyric,
-          tlyric: info.tlyric.isEmpty ? null : info.tlyric,
-          rlyric: info.rlyric.isEmpty ? null : info.rlyric,
-          lxlyric: info.lxlyric.isEmpty ? null : info.lxlyric,
+          tlyric: _nonEmpty(info.tlyric),
+          rlyric: _nonEmpty(info.rlyric),
+          lxlyric: _nonEmpty(info.lxlyric),
         );
       });
     } catch (_) {
@@ -635,19 +648,123 @@ class SourceManager extends ChangeNotifier {
     }
   }
 
-  /// wy 内置封面回退（歌曲详情 `al.picUrl`；5 分钟缓存）。
-  Future<String?> _builtinWyPic(SourceTrack track) async {
-    if (track.sourceKey != 'wy') return null;
-    final songId = track.raw['songmid'] ?? track.raw['id'];
-    if (songId == null) return null;
+  /// 内置平台原生封面回退（5 分钟缓存；不支持 / 失败返回 null）。
+  Future<String?> _builtinPic(SourceTrack track) async {
+    if (!BuiltinSearch.isBuiltin(track.sourceKey)) return null;
     try {
-      return await _builtinWyPicCache.getOrCreate('wy:pic:$songId', () async {
-        final list = await WyMusicDetail.getList([songId]);
-        return list.isEmpty ? null : list.first.coverUrl;
-      });
+      return await _builtinPicCache.getOrCreate<String?>(
+          '${track.id}:pic', () => _fetchBuiltinPic(track));
     } catch (_) {
       return null;
     }
+  }
+
+  /// 派发到各内置平台的原生取词实现。
+  static Future<BuiltinLyricResult?> _fetchBuiltinLyric(
+    SourceTrack track,
+  ) {
+    final raw = track.raw;
+    switch (track.sourceKey) {
+      case 'wy':
+        final songId = raw['songmid'] ?? raw['id'];
+        if (songId == null) return Future.value(null);
+        return WyLyric.fetch(songId.toString()).then(
+          (info) => BuiltinLyricResult(
+            lyric: info.lyric,
+            tlyric: _nonEmpty(info.tlyric),
+            rlyric: _nonEmpty(info.rlyric),
+            lxlyric: _nonEmpty(info.lxlyric),
+          ),
+        );
+      case 'tx':
+        return TxLyric.fetch(
+          songId: raw['songId']?.toString(),
+          songMid: raw['songmid']?.toString(),
+        );
+      case 'kg':
+        final hash = raw['hash']?.toString();
+        final name = raw['name']?.toString();
+        if (hash == null || hash.isEmpty || name == null || name.isEmpty) {
+          return Future.value(null);
+        }
+        return KgLyric.fetch(
+          name: name,
+          hash: hash,
+          timelengthSeconds: _intervalSecondsOf(raw),
+        );
+      case 'kw':
+        final songmid = raw['songmid']?.toString();
+        if (songmid == null || songmid.isEmpty) return Future.value(null);
+        return KwLyric.fetch(songmid);
+      case 'mg':
+        return MgLyric.fetch(
+          songId: raw['songmid']?.toString(),
+          mrcUrl: raw['mrcUrl']?.toString(),
+          lrcUrl: raw['lrcUrl']?.toString(),
+          trcUrl: raw['trcUrl']?.toString(),
+        );
+      default:
+        return Future.value(null);
+    }
+  }
+
+  /// 派发到各内置平台的原生取图实现。
+  static Future<String?> _fetchBuiltinPic(SourceTrack track) {
+    final raw = track.raw;
+    switch (track.sourceKey) {
+      case 'wy':
+        final songId = raw['songmid'] ?? raw['id'];
+        if (songId == null) return Future.value(null);
+        return WyMusicDetail.getList([songId]).then(
+          (list) => list.isEmpty ? null : list.first.coverUrl,
+        );
+      case 'tx':
+        final albumMid = (raw['albumMid'] ?? raw['albumId'])?.toString();
+        if (albumMid != null && albumMid.isNotEmpty && albumMid != '空') {
+          return Future.value(
+            'https://y.gtimg.cn/music/photo_new/T002R500x500M000$albumMid.jpg',
+          );
+        }
+        return Future.value(null);
+      case 'kg':
+        return KgPic.fetch(
+          songmid: raw['songmid']?.toString() ?? '',
+          audioId: raw['audioId']?.toString(),
+          albumId: raw['albumId']?.toString(),
+          hash: raw['hash']?.toString(),
+          name: raw['name']?.toString(),
+          singer: raw['singer']?.toString(),
+        );
+      case 'kw':
+        return KwPic.fetch(raw['songmid']?.toString() ?? '');
+      case 'mg':
+        final img = raw['img']?.toString();
+        if (img != null && img.isNotEmpty) return Future.value(img);
+        final songId = raw['songmid']?.toString();
+        if (songId == null || songId.isEmpty) return Future.value(null);
+        return MgLyric.coverOf(songId);
+      default:
+        return Future.value(null);
+    }
+  }
+
+  /// 曲目时长（秒）：优先 `_interval`，否则解析 `mm:ss` 文本。
+  static int _intervalSecondsOf(Map<String, dynamic> raw) {
+    final rawInterval = raw['_interval'];
+    if (rawInterval is num) return rawInterval.toInt();
+    if (rawInterval is String) {
+      final parsed = int.tryParse(rawInterval);
+      if (parsed != null) return parsed;
+    }
+    final interval = raw['interval']?.toString() ?? '';
+    final match = RegExp(r'^(\d{1,3}):(\d{2})').firstMatch(interval);
+    if (match == null) return 0;
+    return int.parse(match.group(1)!) * 60 + int.parse(match.group(2)!);
+  }
+
+  static String? _nonEmpty(String? value) {
+    final trimmed = value?.trim();
+    return (trimmed == null || trimmed.isEmpty) ? null : trimmed;
   }
 
   /// 运行期 `updateAlert` 上报的更新地址记入当前激活脚本。

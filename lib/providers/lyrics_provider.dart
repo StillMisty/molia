@@ -96,6 +96,7 @@ class LyricsProvider extends ChangeNotifier {
       track.title,
       _artistNames(track),
       trackId,
+      track: track,
     );
     if (requestId != _requestId) return; // 过期响应：丢弃
     _setState(_stateFor(trackId, result));
@@ -110,8 +111,12 @@ class LyricsProvider extends ChangeNotifier {
       return;
     }
     try {
-      final result =
-          await _service.getLyrics(track.title, _artistNames(track), trackId);
+      final result = await _service.getLyrics(
+        track.title,
+        _artistNames(track),
+        trackId,
+        track: track,
+      );
       if (result != null) {
         _preloadedTrackIds.add(trackId);
       }
@@ -123,16 +128,35 @@ class LyricsProvider extends ChangeNotifier {
   }
 
   /// 手动选择歌词：写统一缓存；若仍是当前曲目则同步展示状态。
+  ///
+  /// [translation] / [roma] / [lxlyric] 缺省时清空旧扩展行（旧行为）；
+  /// 歌词搜索页透传平台结构化数据时则一并保留。
   Future<void> saveManual({
     required String trackId,
     required String lyric,
     required String providerName,
+    String? translation,
+    String? roma,
+    String? lxlyric,
   }) async {
-    await _service.saveLyrics(trackId, lyric, providerName);
+    await _service.saveLyrics(
+      trackId,
+      lyric,
+      providerName,
+      translation: translation,
+      roma: roma,
+      lxlyric: lxlyric,
+    );
     if (_state.trackId == trackId) {
       _setState(_stateFor(
         trackId,
-        LyricsResult(lyric: lyric, provider: providerName),
+        LyricsResult(
+          lyric: lyric,
+          provider: providerName,
+          translation: translation,
+          roma: roma,
+          lxlyric: lxlyric,
+        ),
       ));
     }
   }
@@ -151,7 +175,10 @@ class LyricsProvider extends ChangeNotifier {
       );
     }
     if (hasLyricTimestamps(result.lyric)) {
-      final parsed = parseLyrics(result.lyric);
+      final parsed = attachWordTimings(
+        parseLyrics(result.lyric),
+        result.lxlyric,
+      );
       if (parsed.isNotEmpty) {
         return LyricsState(
           trackId: trackId,

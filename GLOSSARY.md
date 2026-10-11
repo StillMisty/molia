@@ -78,6 +78,19 @@
 - **Lyric timing contract（歌词时间契约）** — `lib/models/lyric_line.dart`：
   `hasLyricTimestamps` 与 `parseLyrics` 共用同一正则（兼容 1–3 位分钟、`.`/`:` 毫秒
   分隔与行内多标签）；不再允许「检测用一个正则、解析用另一个」的漂移。
+- **Track-native lyric/pic（曲目原生取词 / 取图）** — `SourceManager.fetchLyric` /
+  `fetchPic`：按曲目 raw 的平台精确 ID 取词取图，顺序为脚本 `lyric`/`pic` action →
+  any-listen → 内置五平台原生实现（wy eapi + yrc、tx PlayLyricInfo + QRC、
+  kg KRC、kw LRCX、mg MRC；封面 wy 歌曲详情 / tx 专辑 mid / kg `get_res_privilege`
+  / kw `pic.web` / mg 资源封面）。解码器在 `lib/sources/builtin/*_lyric.dart` +
+  `tx_qrc.dart`（zlib 走条件导入，Web 优雅降级）。
+- **Word timing（逐字时间轴）** — `lib/models/lyric_line.dart`：`LyricLine.words`
+  （`LyricWord`：绝对起止 + 文本）由 `lxlyric` 的 `<相对ms,时长ms>` 解析并对齐主行；
+  歌词页当前行用 `KaraokeLyricText` 词级高亮（已唱 primary / 未唱 onSurface，
+  采样间线性补间），桌面歌词 / 通知 / 蓝牙输出仍按行。
+- **Lyrics matching（歌词匹配）** — `lib/services/lyrics/lyrics_match.dart`：
+  名字搜索候选按时长 ±5s、归一化歌名、歌手包含与版本词（live/伴奏/翻唱…）挑选；
+  全部不匹配时回退首个候选（保持旧行为下限）。
 
 ## 资料库
 

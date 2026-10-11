@@ -1,9 +1,26 @@
+/// 一行歌词中的一个词（时间轴为绝对时间；逐字歌词渲染用）。
+class LyricWord {
+  const LyricWord({
+    required this.start,
+    required this.end,
+    required this.text,
+  });
+
+  final Duration start;
+  final Duration end;
+  final String text;
+}
+
 /// 一行歌词（时间戳 + 文本）。不可变：选中态属于 UI，不放进模型。
+///
+/// [words] 为该行的逐字时间轴（可空 = 无逐字数据）；非空时其文本拼接与
+/// [text] 一致，逐字渲染与行级渲染共用同一行模型。
 class LyricLine {
-  const LyricLine(this.timestamp, this.text);
+  const LyricLine(this.timestamp, this.text, {this.words});
 
   final Duration timestamp;
   final String text;
+  final List<LyricWord>? words;
 }
 
 /// 统一的 LRC 时间标签正则（解析与「是否有时间轴」判断共用同一契约）。
@@ -95,6 +112,76 @@ List<String> alignExtendedLines(List<LyricLine> lines, String? rawExtended) {
       byTimestamp[line.timestamp.inMilliseconds]?.join(' ') ?? '',
   ];
 }
+
+/// 解析 LX 逐字歌词行文本（`<相对开始ms,时长ms>词...`）。
+///
+/// 返回词列表（绝对时间）；无逐字标签 / 文本为空时返回 null。
+List<LyricWord>? parseLxWords(String lineText, Duration lineTimestamp) {
+  final matches = _lxWordTag.allMatches(lineText).toList();
+  if (matches.isEmpty) return null;
+  final words = <LyricWord>[];
+  for (var i = 0; i < matches.length; i++) {
+    final match = matches[i];
+    final start = lineTimestamp +
+        Duration(milliseconds: int.parse(match.group(1)!));
+    final duration = int.parse(match.group(2)!);
+    final textStart = match.end;
+    final textEnd =
+        i + 1 < matches.length ? matches[i + 1].start : lineText.length;
+    final text = lineText.substring(textStart, textEnd);
+    if (text.isEmpty) continue;
+    words.add(LyricWord(
+      start: start,
+      end: start + Duration(milliseconds: duration),
+      text: text,
+    ));
+  }
+  return words.isEmpty ? null : words;
+}
+
+/// 把 LX 逐字歌词（`lxlyric`）按时间戳对齐到主行列表。
+///
+/// 逐字行与主行出自同一平台解析，时间标签一致（精确毫秒匹配）；
+/// 任一侧缺失该行时该行保持无逐字数据。
+List<LyricLine> attachWordTimings(List<LyricLine> lines, String? lxlyric) {
+  if (lines.isEmpty || lxlyric == null || lxlyric.trim().isEmpty) return lines;
+  final byTimestamp = <int, List<LyricWord>>{};
+  for (final rawLine in lxlyric.split('\n')) {
+    final match = lrcTimeTagRegex.firstMatch(rawLine);
+    if (match == null) continue;
+    final minutes = int.tryParse(match.group(1)!);
+    final seconds = int.tryParse(match.group(2)!);
+    if (minutes == null || seconds == null) continue;
+    final millisecondsStr = match.group(3);
+    var milliseconds = 0;
+    if (millisecondsStr != null) {
+      milliseconds = millisecondsStr.length == 2
+          ? int.parse(millisecondsStr) * 10
+          : int.parse(millisecondsStr);
+    }
+    final timestamp = Duration(
+      minutes: minutes,
+      seconds: seconds,
+      milliseconds: milliseconds,
+    );
+    final words = parseLxWords(rawLine.substring(match.end), timestamp);
+    if (words != null) byTimestamp[timestamp.inMilliseconds] = words;
+  }
+  if (byTimestamp.isEmpty) return lines;
+  final result = <LyricLine>[];
+  for (final line in lines) {
+    final words = byTimestamp[line.timestamp.inMilliseconds];
+    result.add(
+      words == null
+          ? line
+          : LyricLine(line.timestamp, line.text, words: words),
+    );
+  }
+  return result;
+}
+
+/// LX 逐字标签：`<相对开始ms,时长ms>`（时长与第三字段形态均按 LX 输出约定）。
+final RegExp _lxWordTag = RegExp(r'<(\d+),(\d+)>');
 
 /// 当前行索引：最后一行 timestamp ≤ [position]；早于首行 / 无行返回 -1。
 int lyricLineIndexAt(List<LyricLine> lines, Duration position) {

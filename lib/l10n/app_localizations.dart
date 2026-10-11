@@ -968,6 +968,30 @@ abstract class AppLocalizations {
   /// **'NetEase Cloud Music'**
   String get providerNetease;
 
+  /// No description provided for @providerKugou.
+  ///
+  /// In en, this message translates to:
+  /// **'Kugou Music'**
+  String get providerKugou;
+
+  /// No description provided for @providerKuwo.
+  ///
+  /// In en, this message translates to:
+  /// **'Kuwo Music'**
+  String get providerKuwo;
+
+  /// No description provided for @providerMigu.
+  ///
+  /// In en, this message translates to:
+  /// **'Migu Music'**
+  String get providerMigu;
+
+  /// No description provided for @lyricsBestMatch.
+  ///
+  /// In en, this message translates to:
+  /// **'Best match'**
+  String get lyricsBestMatch;
+
   /// No description provided for @playingFrom.
   ///
   /// In en, this message translates to:

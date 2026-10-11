@@ -104,6 +104,9 @@ class FakeBackend implements PlaybackBackend {
 
   @override
   Future<void> setVolume(double value) async {}
+
+  @override
+  Future<void> updateTrackArtwork(String trackUri, Uri? artwork) async {}
 }
 
 class FakeMessenger implements UiMessenger {

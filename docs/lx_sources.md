@@ -25,7 +25,10 @@
     切换「我的收藏 / 列表 / 播放历史」，行内 ♥ 与搜索/排序语义与收藏一致。
 - **播放**：点击结果后由 App 本地播放（`just_audio`，桌面端经 `media_kit` 后端），
   NowPlaying / 歌词 / 海报等界面自动复用；取链结果有 10min 缓存（key 含音源/payload hash/音质）。
-- **歌词 / 封面**：脚本声明 `lyric` / `pic` 时优先使用脚本返回；歌词失败时回退 QQ / 网易 / LRCLIB 歌词源。
+- **歌词 / 封面**：脚本声明 `lyric` / `pic` 时优先使用脚本返回；否则走内置平台
+  原生实现（wy/tx/kg/kw/mg 的精确 ID 取词取图，含逐字 / 翻译 / 罗马音），
+  全部失败时回退 QQ / 网易 / 酷狗 / 酷我 / 咪咕 / LRCLIB 名字搜索歌词源；
+  曲目起播无封面时自动补取并回写队列（省流模式不发请求）。
 
 ## 使用流程
 
@@ -44,7 +47,12 @@
 lib/sources/
   source_track.dart          # 统一曲目模型（raw 原样回传脚本）
   source_manager.dart        # 音源注册与调度（搜索 / 取链 / 歌词 / 封面 / 排序 / 激活）
-  builtin/                   # 内置平台搜索（kw/kg/tx/wy/mg）与加密工具
+  builtin/                   # 内置平台搜索（kw/kg/tx/wy/mg）、原生取词/取图与加密工具
+    kg_lyric.dart kg_pic.dart    # 酷狗 KRC 取词 / get_res_privilege 取图
+    kw_lyric.dart kw_pic.dart    # 酷我 LRCX 取词（H5 兜底）/ pic.web 取图
+    mg_lyric.dart                # 咪咕 MRC（TEA）取词 / 资源封面
+    tx_lyric.dart tx_qrc.dart    # QQ PlayLyricInfo + QRC（定制 3DES）解码
+    wy_lyric.dart wy_music_detail.dart  # 网易云 eapi + yrc / 歌曲详情
   lx/
     lx_script_info.dart      # 脚本元信息（@name/@version/@updateUrl...）与源声明解析
     lx_script_repository.dart# 脚本持久化（应用支持目录 lx_sources.json；replace 原地更新）
@@ -114,7 +122,8 @@ lib/playback/
 1. `flutter analyze --no-pub` 0 error / 0 warning；
 2. `flutter test --no-pub`（含 `test/lx_core_test.dart`、`test/lx_supervisor_test.dart`、
    `test/lx_script_update_test.dart`、`test/builtin_search_parse_test.dart`、
-   `test/architecture/layering_test.dart`）；
+   `test/builtin_lyric_decode_test.dart`（KRC/LRCX/QRC/MRC 合成数据闭环）、
+   `test/source_manager_builtin_lyric_test.dart`、`test/architecture/layering_test.dart`）；
 3. `node tool/lx_prelude_harness.mjs` 输出 `PROTOCOL OK`；
 4. `flutter test integration_test/lx_engine_integration_test.dart -d linux --no-pub`
    （真实导入→搜索→取链→歌词；播放测试需要 libmpv）；

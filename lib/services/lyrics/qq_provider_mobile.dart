@@ -3,6 +3,7 @@ import 'dart:io';
 import 'dart:async';
 import 'package:http/http.dart' as http;
 import 'package:logger/logger.dart';
+import '../../sources/builtin/tx_lyric.dart';
 import 'lyric_provider.dart';
 import 'qq_encoding.dart';
 
@@ -107,6 +108,13 @@ class QQProvider extends LyricProvider {
         final songmid = songData['mid'];
         if (songmid == null) continue;
 
+        final interval = songData['interval'];
+        final durationSeconds = interval is num
+            ? interval.toInt()
+            : int.tryParse('$interval') ?? 0;
+        final album = songData['album'];
+        final numericId = songData['id']?.toString();
+
         results.add(SongMatch(
           songId: songmid as String,
           title: _normalizeTextField(
@@ -114,6 +122,14 @@ class QQProvider extends LyricProvider {
             title,
           ),
           artist: _normalizeTextField(primaryArtist, artist),
+          album: album is Map ? album['name']?.toString() : null,
+          duration: durationSeconds > 0
+              ? Duration(seconds: durationSeconds)
+              : null,
+          extra: {
+            if (numericId != null && numericId.isNotEmpty)
+              'songId': numericId,
+          },
         ));
       }
       return results;
@@ -132,15 +148,37 @@ class QQProvider extends LyricProvider {
   Future<String?> fetchLyric(String songId) async =>
       (await fetchLyrics(songId))?.lyric;
 
-  /// 结构化歌词：PlayLyricInfo 的 lyric / trans / roma；
-  /// 旧 `fcg_query_lyric_new.fcg` 接口（原文 + klyric）作兜底。
+  /// 结构化歌词：QRC 路径优先（lx 同款参数，含翻译/罗马音/逐字），
+  /// 失败回退旧 `PlayLyricInfo`（无 qrc）与 `fcg_query_lyric_new.fcg`。
   @override
-  Future<LyricsPayload?> fetchLyrics(String songId) async {
-    final viaPlayLyricInfo = await _fetchPlayLyricInfo(songId);
+  Future<LyricsPayload?> fetchLyrics(String songId) => fetchForMatch(
+        SongMatch(songId: songId, title: '', artist: ''),
+      );
+
+  @override
+  Future<LyricsPayload?> fetchForMatch(SongMatch match) async {
+    try {
+      final info = await TxLyric.fetch(
+        songId: match.extra['songId']?.toString(),
+        songMid: match.songId,
+      );
+      if (info != null && !info.isEmpty) {
+        return LyricsPayload(
+          lyric: info.lyric,
+          translation: info.tlyric,
+          roma: info.rlyric,
+          lxlyric: info.lxlyric,
+        );
+      }
+    } catch (e) {
+      _logger.w('QQ 音乐 QRC 取词失败: $e');
+    }
+
+    final viaPlayLyricInfo = await _fetchPlayLyricInfo(match.songId);
     if (viaPlayLyricInfo != null) {
       return viaPlayLyricInfo;
     }
-    final payload = await fetchLyricPayload(songId);
+    final payload = await fetchLyricPayload(match.songId);
     if (payload == null ||
         payload.lyric == null ||
         payload.lyric!.trim().isEmpty) {

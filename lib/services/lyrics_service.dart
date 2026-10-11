@@ -1,35 +1,62 @@
 import 'dart:async';
 import 'package:logger/logger.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import '../domain/models/track.dart';
 import '../models/lyrics_result.dart';
 import 'cache_service.dart';
 import 'lyrics_cache.dart';
 import 'lyrics/lyric_provider.dart';
 import 'lyrics/qq_provider.dart';
 import 'lyrics/netease_provider.dart';
+import 'lyrics/kugou_provider.dart';
+import 'lyrics/kuwo_provider.dart';
+import 'lyrics/migu_provider.dart';
 import 'lyrics/lrclib_provider.dart';
 
 export '../models/lyrics_result.dart';
+
+/// 曲目原生取词加载器（组合根注入：`SourceManager` 路由脚本 `lyric`
+/// action / any-listen / 内置平台原生实现）。
+///
+/// 返回值 [LyricsResult.provider] 为来源标签（如 `kw`/`kg`/脚本 key）。
+typedef TrackLyricLoader = Future<LyricsResult?> Function(Track track);
 
 class LyricsService {
   final Logger _logger = Logger();
   final List<LyricProvider> _providers;
   final CacheService _cacheService;
   final LyricsCache _lyricsCache;
+  final TrackLyricLoader? _trackLyricLoader;
 
   LyricsService({
     List<LyricProvider>? providers,
     SharedPreferences? prefs,
     CacheService? cacheService,
     LyricsCache? lyricsCache,
-  })  : _providers = providers ?? [NetEaseProvider(), QQProvider(), LRCLibProvider()],
+    TrackLyricLoader? trackLyricLoader,
+  })  : _providers = providers ??
+            [
+              NetEaseProvider(),
+              QQProvider(),
+              KugouProvider(),
+              KuwoProvider(),
+              MiguProvider(),
+              LRCLibProvider(),
+            ],
+        _trackLyricLoader = trackLyricLoader,
         _lyricsCache = lyricsCache ?? LyricsCache(prefs: prefs),
         _cacheService = cacheService ?? CacheService.instance;
 
-  /// 获取歌词（原文 + 可选翻译 / 罗马音）
+  /// 获取歌词（原文 + 可选翻译 / 罗马音 / 逐字）。
   ///
-  /// 返回 [LyricsResult] 包含歌词文本与来源信息
-  Future<LyricsResult?> getLyrics(String songName, String artistName, String trackId) async {
+  /// 顺序：缓存 → 曲目原生取词（精确平台 ID，需传入 [track]）→
+  /// 跨平台名字搜索回退（首个非空结果即返回，不再等待最慢的提供者）。
+  Future<LyricsResult?> getLyrics(
+    String songName,
+    String artistName,
+    String trackId, {
+    Track? track,
+  }) async {
     try {
       final cached = await _lyricsCache.read(trackId);
       if (cached != null) {
@@ -43,32 +70,36 @@ class LyricsService {
             lyric: cached.lyric,
             translation: cached.translation,
             roma: cached.roma,
+            lxlyric: cached.lxlyric,
             provider: cached.provider,
           );
         }
         _logger.i('缓存已过期: $trackId');
       }
 
-      // 如果缓存中没有或已过期，从网络获取
+      // 曲目原生取词：平台精确 ID（songmid/hash/mrcUrl…），优先于名字搜索。
+      final loader = _trackLyricLoader;
+      if (track != null && loader != null) {
+        try {
+          final native = await loader(track);
+          if (native != null && native.lyric.trim().isNotEmpty) {
+            await _writeCache(trackId, native);
+            _logger.i('原生取词成功: $trackId (来源: ${native.provider})');
+            return native;
+          }
+        } catch (e) {
+          _logger.w('原生取词失败: $e');
+        }
+      }
+
+      // 跨平台名字搜索回退。
       _logger.i('从网络获取歌词: $songName - $artistName');
-
       final result = await _getFromProviders(songName, artistName);
-
       if (result != null) {
-        await _lyricsCache.write(
-          trackId,
-          LyricCacheData(
-            provider: result.provider,
-            lyric: result.lyric,
-            translation: result.translation,
-            roma: result.roma,
-            timestamp: DateTime.now().millisecondsSinceEpoch ~/ 1000,
-          ),
-        );
+        await _writeCache(trackId, result);
         _logger.i('歌词已缓存: $trackId (来源: ${result.provider})');
         return result;
       }
-
       return null;
     } catch (e) {
       _logger.e('获取歌词失败: $e');
@@ -76,19 +107,40 @@ class LyricsService {
     }
   }
 
+  Future<void> _writeCache(String trackId, LyricsResult result) {
+    return _lyricsCache.write(
+      trackId,
+      LyricCacheData(
+        provider: result.provider,
+        lyric: result.lyric,
+        translation: result.translation,
+        roma: result.roma,
+        lxlyric: result.lxlyric,
+        timestamp: DateTime.now().millisecondsSinceEpoch ~/ 1000,
+      ),
+    );
+  }
+
   /// 手动选择歌词写入统一缓存（供 LyricsProvider.saveManual 复用）。
   ///
-  /// 手动选择的文本没有独立的翻译 / 罗马音，写入时清空旧扩展行。
+  /// 手动选择的文本通常没有独立的翻译 / 罗马音 / 逐字：对应参数缺省时
+  /// 清空旧扩展行（与旧行为一致）；搜索页透传时则保留平台数据。
   Future<void> saveLyrics(
     String trackId,
     String lyric,
-    String providerName,
-  ) async {
+    String providerName, {
+    String? translation,
+    String? roma,
+    String? lxlyric,
+  }) async {
     await _lyricsCache.write(
       trackId,
       LyricCacheData(
         provider: providerName,
         lyric: lyric,
+        translation: translation,
+        roma: roma,
+        lxlyric: lxlyric,
         timestamp: DateTime.now().millisecondsSinceEpoch ~/ 1000,
       ),
     );
@@ -103,36 +155,35 @@ class LyricsService {
       lyric: payload.lyric,
       translation: payload.translation,
       roma: payload.roma,
+      lxlyric: payload.lxlyric,
       provider: provider.name,
     );
   }
 
-  /// 并行请求所有提供者，取第一个非空结果。
+  /// 并行请求所有提供者，**首个非空结果即返回**。
   ///
-  /// 失败路径不再顺序重试（旧实现会为每个提供者重复发一轮相同请求，
-  /// 既慢一倍也没有真正的「延长超时」——提供者内部本就没有超时参数）。
-  Future<LyricsResult?> _getFromProviders(String title, String artist) async {
-    try {
-      final futures = _providers
-          .map((provider) async {
-            try {
-              return await _fetchFromProvider(provider, title, artist);
-            } catch (e) {
-              _logger.w('从 ${provider.name} 获取歌词失败: $e');
-              return null;
-            }
-          })
-          .toList();
-
-      final results = await Future.wait(futures);
-      for (final result in results) {
-        if (result != null) return result;
-      }
-      return null;
-    } catch (e) {
-      _logger.e('从提供者获取歌词失败: $e');
-      return null;
+  /// 旧实现用 `Future.wait` 等全部完成再取第一个非空：歌词展示延迟被最慢
+  /// 的提供者（通常 10s 超时）决定。现在谁先返回非空就用谁；其余请求继续
+  /// 完成但结果丢弃（HTTP 无法真正取消，不阻塞展示即可）。
+  Future<LyricsResult?> _getFromProviders(String title, String artist) {
+    if (_providers.isEmpty) return Future.value(null);
+    final completer = Completer<LyricsResult?>();
+    var remaining = _providers.length;
+    for (final provider in _providers) {
+      _fetchFromProvider(provider, title, artist).then((result) {
+        if (result != null && !completer.isCompleted) {
+          completer.complete(result);
+        }
+      }).catchError((Object e) {
+        _logger.w('从 ${provider.name} 获取歌词失败: $e');
+      }).whenComplete(() {
+        remaining--;
+        if (remaining == 0 && !completer.isCompleted) {
+          completer.complete(null);
+        }
+      });
     }
+    return completer.future;
   }
 
   /// 获取当前使用的提供者列表

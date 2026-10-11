@@ -471,6 +471,18 @@ class AppLocalizationsEn extends AppLocalizations {
   String get providerNetease => 'NetEase Cloud Music';
 
   @override
+  String get providerKugou => 'Kugou Music';
+
+  @override
+  String get providerKuwo => 'Kuwo Music';
+
+  @override
+  String get providerMigu => 'Migu Music';
+
+  @override
+  String get lyricsBestMatch => 'Best match';
+
+  @override
   String get playingFrom => 'PLAYING FROM';
 
   @override

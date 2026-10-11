@@ -156,6 +156,23 @@ class LocalPlaybackService extends ChangeNotifier {
   List<SourceTrack> get queueTracks => List.unmodifiable(_queue);
   int get currentIndex => _currentIndex;
 
+  /// 原地更新队列中某曲目的封面（音源补图）。
+  ///
+  /// 替换队列元素（新对象触发领域映射重建）并同步当前曲目引用；
+  /// 低频快照通知，封面换图淡化由封面堆叠组件消费。
+  void updateTrackArtwork(String trackId, String? coverUrl) {
+    final index = _queue.indexWhere((track) => track.id == trackId);
+    if (index < 0) return;
+    final old = _queue[index];
+    final next = (coverUrl == null || coverUrl.isEmpty) ? null : coverUrl;
+    if (old.coverUrl == next) return;
+    _queue[index] = old.copyWith(coverUrl: next);
+    if (_currentIndex == index) {
+      _currentTrack = _queue[index];
+    }
+    notifyListeners();
+  }
+
   // 播放控制
 
   Future<void> playTracks(

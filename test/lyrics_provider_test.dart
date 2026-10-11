@@ -25,8 +25,9 @@ class _FakeLyricsService extends LyricsService {
   Future<LyricsResult?> getLyrics(
     String songName,
     String artistName,
-    String trackId,
-  ) async {
+    String trackId, {
+    Track? track,
+  }) async {
     requested.add(trackId);
     final delay = delays[trackId];
     if (delay != null) {
@@ -39,8 +40,11 @@ class _FakeLyricsService extends LyricsService {
   Future<void> saveLyrics(
     String trackId,
     String lyric,
-    String providerName,
-  ) async {
+    String providerName, {
+    String? translation,
+    String? roma,
+    String? lxlyric,
+  }) async {
     saved.add((trackId: trackId, provider: providerName));
   }
 }

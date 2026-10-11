@@ -125,6 +125,10 @@ class PlaybackProvider extends ChangeNotifier {
   /// 省流模式（可选注入）：音质标签、封面预加载与桌面小组件封面共用。
   final DataSaverService? _dataSaver;
 
+  /// 封面补取解析器（组合根注入）：曲目起播且无封面时调用；
+  /// 返回空表示无法补取（省流网关由注入侧实现）。
+  final Future<String?> Function(Track track)? _artworkResolver;
+
   /// 播放上下文写入（最近播放）：composition root 注入，不再经
   /// `navigatorKey.currentContext` 反查 provider。
   final LocalDatabaseProvider? _localDatabaseProvider;
@@ -173,6 +177,9 @@ class PlaybackProvider extends ChangeNotifier {
   /// 已自动重试过的曲目 key（同一操作只重试一次，避免失败循环）。
   String? _retriedTrackKey;
 
+  /// 正在补取封面的曲目 key（去重；同曲目只解析一次）。
+  String? _artworkResolvingTrackId;
+
   /// 默认播放模式（设置页配置；启动时无曲目即应用为初始模式）。
   PlayMode _defaultPlayMode = PlayMode.sequential;
 
@@ -188,6 +195,7 @@ class PlaybackProvider extends ChangeNotifier {
     DataSaverService? dataSaver,
     LocalDatabaseProvider? localDatabaseProvider,
     PlaybackSessionStore? sessionStore,
+    Future<String?> Function(Track track)? artworkResolver,
   })  : _facade = facade,
         _messenger = messenger,
         _sourceManager = sourceManager,
@@ -196,6 +204,7 @@ class PlaybackProvider extends ChangeNotifier {
         _libraryRepository = libraryRepository,
         _dataSaver = dataSaver,
         _localDatabaseProvider = localDatabaseProvider,
+        _artworkResolver = artworkResolver,
         _sessionStore = sessionStore ?? PlaybackSessionStore() {
     _notifyThrottler = CategorizedNotifyThrottler(
       notifyCallback: super.notifyListeners,
@@ -602,6 +611,9 @@ class PlaybackProvider extends ChangeNotifier {
       unawaited(updateWidget());
       _triggerImagePreload();
       unawaited(_recordPlayHistory(track));
+      if (track.artwork == null) {
+        unawaited(_resolveMissingArtwork(track));
+      }
       _maybeSavePlaybackSession(force: true);
     }
     // 播放中→暂停/停止：强制保存一次进度（避免节流窗口内丢进度）。
@@ -883,8 +895,34 @@ class PlaybackProvider extends ChangeNotifier {
     });
   }
 
-  Future<void> updateWidget() async {
-    if (!kIsWeb && defaultTargetPlatform == TargetPlatform.android) {
+  /// 封面补取：曲目无封面时经注入解析器取图并原地回写队列。
+  ///
+  /// 去重（同一曲目只解析一次）+ 过期守卫（补图回来时已切歌则丢弃）；
+  /// 失败仅日志——封面是增强项，不影响播放。
+  Future<void> _resolveMissingArtwork(Track track) async {
+    final resolver = _artworkResolver;
+    if (resolver == null) return;
+    final trackId = track.id.uri;
+    if (_artworkResolvingTrackId == trackId) return;
+    _artworkResolvingTrackId = trackId;
+    try {
+      final url = await resolver(track);
+      if (url == null || url.isEmpty) return;
+      final uri = Uri.tryParse(url);
+      if (uri == null) return;
+      if (_facade.snapshot.value.current?.id.uri != trackId) return;
+      await _facade.updateTrackArtwork(trackId, uri);
+      unawaited(updateWidget());
+    } catch (e) {
+      _logger.w('封面补取失败: $e');
+    } finally {
+      if (_artworkResolvingTrackId == trackId) {
+        _artworkResolvingTrackId = null;
+      }
+    }
+  }
+
+  Future<void> updateWidget() async {    if (!kIsWeb && defaultTargetPlatform == TargetPlatform.android) {
       const platform = MethodChannel('top.stillmisty.molia/widget');
       try {
         // 省流时传空封面地址：MusicWidget 对空串跳过 Glide 加载。

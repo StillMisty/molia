@@ -19,7 +19,8 @@ Molia 当前只有在播放页内渲染的滚动歌词。桌面悬浮歌词、�
 - Linux / Windows 桌面歌词（等待 Flutter 官方 windowing API 进入 stable 后实现，见 §11）；
 - 第三方状态栏模块（Lyricon / 墨·状态栏歌词）对接——用户已确认不做；
 - iOS / Web 的歌词输出（入口隐藏，全部 no-op）；
-- 逐字歌词渲染（yrc / lxlyric 数据存在，v1 仍按行显示）。
+- 逐字歌词渲染（yrc / lxlyric 数据存在；**v2 已在应用内歌词页实现词级高亮**，
+  桌面歌词 / 通知 / 蓝牙输出仍按行）。
 
 ## 2. 术语
 
@@ -39,7 +40,7 @@ Molia 当前只有在播放页内渲染的滚动歌词。桌面悬浮歌词、�
 | 播放进度 | `PlaybackProvider.position`（`ValueListenable<Duration>`，≤4Hz，独立通道） | 输出调度订阅它；无输出启用时不订阅。 |
 | 播放状态 | `PlaybackProvider.snapshot`（`PlaybackSnapshot`，低频通知） | 用于曲目变化、播放/暂停、seek 后重算。 |
 | 歌词会话 | `LyricsProvider`（`LyricsState`：`trackId/status/lines/isSynced/providerName`） | 新增翻译/罗马音字段；输出开启且曲目变化时由组合根触发 `load`（不再依赖播放页打开）。 |
-| 取词 | `LyricsService` → `NetEaseProvider`（`WyLyric` 已抓 tlyric/rlyric）、`QQProvider`、`LRCLibProvider` | 扩展为结构化返回（原文 + 翻译 + 罗马音），缓存兼容。 |
+| 取词 | `LyricsService`：缓存 → 曲目原生（`SourceManager.fetchLyric`：脚本 / any-listen / 内置五平台）→ 名字搜索（netease/qq/kugou/kuwo/migu/lrclib，首个非空即返回） | 结构化返回（原文 + 翻译 + 罗马音 + 逐字），缓存兼容；v2 起平台原生优先。 |
 | 系统媒体会话 | `LocalAudioHandler`（audio_service，Android/iOS/macOS） | 增加元数据覆盖（歌词行），不改 `LocalPlaybackService`。 |
 | 设置持久化 | `DataSaverService`（SharedPreferences + ChangeNotifier）为范本 | 新 `LyricsDisplaySettings` 同模式，单 JSON 键 + 版本号。 |
 | 分层约束 | `test/architecture/layering_test.dart` R1–R5 | 新代码放 `lib/services/`、`lib/providers/`，不新增违规。 |
@@ -53,7 +54,9 @@ Molia 当前只有在播放页内渲染的滚动歌词。桌面悬浮歌词、�
    - 网易云：`WyLyric.fetch` 的 `tlyric` / `rlyric` 直接透传（内部已完成时间标签对齐）；
    - QQ：`GetPlayLyricInfo` 增加 `trans` 字段解析（base64 / 明文兼容，与 `lyric` 同规则）；
    - LRCLib：无翻译，留空；
-   - LX / any-listen 路径（`source_manager.fetchLyric` 已有 `tlyric/rlyric/lxlyric`）：本版不改取词路径，只保证模型可承载。
+   - 酷狗 / 酷我 / 咪咕（v2 新增原生提供者）：KRC / LRCX / MRC 解码出翻译、罗马音与逐字；
+   - 曲目原生路径（`source_manager.fetchLyric`：脚本 `lyric` action / any-listen / 内置平台）：
+     v2 起优先于名字搜索，逐字数据随 `lxlyric` 承载。
 3. `LyricsState` 新增 `translationLines` / `romaLines`（按时间戳对齐到主行）。
 4. `LyricsCacheData` 持久化翻译 / 罗马音，**兼容旧缓存**（缺字段 = 无）。
 5. 对齐规则：翻译行按 `parseLyrics` 解析（共用时间契约正则），以毫秒时间戳为键；

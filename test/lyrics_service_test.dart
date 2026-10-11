@@ -139,17 +139,17 @@ class _CountingProvider extends LyricProvider {
   Future<String?> fetchLyric(String songId) async => result;
 
   @override
-  Future<SongMatch?> search(String title, String artist) async {
-    calls++;
-    return SongMatch(songId: 'counting-$name', title: title, artist: artist);
-  }
+  Future<SongMatch?> search(String title, String artist) async =>
+      SongMatch(songId: 'counting-$name', title: title, artist: artist);
 
   @override
   Future<List<SongMatch>> searchMultiple(String title, String artist,
-          {int limit = 3}) async =>
-      [
-        SongMatch(songId: 'counting-$name', title: title, artist: artist),
-      ];
+      {int limit = 3}) async {
+    calls++;
+    return [
+      SongMatch(songId: 'counting-$name', title: title, artist: artist),
+    ];
+  }
 }
 
 class _FakeLyricProvider extends LyricProvider {

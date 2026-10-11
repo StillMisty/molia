@@ -18,15 +18,15 @@ class _CountingProvider extends LyricProvider {
   Future<String?> fetchLyric(String songId) async => '[00:00]fresh lyric';
 
   @override
-  Future<SongMatch?> search(String title, String artist) async {
-    searchCalls++;
-    return SongMatch(songId: 'id', title: title, artist: artist);
-  }
+  Future<SongMatch?> search(String title, String artist) async =>
+      SongMatch(songId: 'id', title: title, artist: artist);
 
   @override
   Future<List<SongMatch>> searchMultiple(String title, String artist,
-          {int limit = 3}) async =>
-      [SongMatch(songId: 'id', title: title, artist: artist)];
+      {int limit = 3}) async {
+    searchCalls++;
+    return [SongMatch(songId: 'id', title: title, artist: artist)];
+  }
 }
 
 void main() {

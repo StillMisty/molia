@@ -38,6 +38,22 @@ class SourceTrack {
     return '$sourceKey:${key.isNotEmpty ? key : '$title-$artist'}';
   }
 
+  /// 仅用于音源补图等原地更新：raw / 音质列表保持同一引用，
+  /// 脚本 `musicUrl / lyric / pic` 回传数据不受影响。
+  SourceTrack copyWith({String? coverUrl}) {
+    return SourceTrack(
+      sourceKey: sourceKey,
+      origin: origin,
+      title: title,
+      artist: artist,
+      album: album,
+      coverUrl: coverUrl ?? this.coverUrl,
+      duration: duration,
+      qualities: qualities,
+      raw: raw,
+    );
+  }
+
   /// 选择请求音质：优先 preferred，其次按 LX 质量顺序回退，最后取支持列表末位。
   String pickQuality(String preferred) => pickQualityFor(
         qualities.map((q) => q.type).where((t) => t.isNotEmpty),

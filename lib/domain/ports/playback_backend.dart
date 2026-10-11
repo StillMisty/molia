@@ -90,4 +90,12 @@ abstract interface class PlaybackBackend {
         kind: FailureKind.unsupported,
         message: '当前播放后端不支持音量控制',
       );
+
+  /// 原地更新队列曲目封面（音源补图）。不支持时抛
+  /// `SourceFailure(kind: unsupported)`。
+  Future<void> updateTrackArtwork(String trackUri, Uri? artwork) =>
+      throw const SourceFailure(
+        kind: FailureKind.unsupported,
+        message: '当前播放后端不支持更新封面',
+      );
 }

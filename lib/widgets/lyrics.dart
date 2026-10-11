@@ -16,6 +16,7 @@ import '../providers/playback_provider.dart';
 import '../services/lyrics_display/lyrics_display_settings.dart';
 import '../services/notification_service.dart';
 import '../utils/responsive.dart';
+import 'lyric_karaoke_text.dart';
 import 'lyrics_search_page.dart';
 import 'lyrics_selection_page.dart';
 import 'playback_selectors.dart';
@@ -769,6 +770,13 @@ class _LyricsWidgetState extends State<LyricsWidget>
                         lineTranslation.isNotEmpty;
                 final bool showRoma = lyricsDisplaySettings.pageRomaEnabled &&
                     lineRoma.isNotEmpty;
+                // 逐字渲染：仅当前行 + 有词时间轴 + 非复制模式；
+                // 已唱/未唱用 primary/onSurface 双色，行级强调由词高亮表达。
+                final List<LyricWord>? lineWords = line.words;
+                final bool useKaraoke = isCurrentLine &&
+                    !_isCopyLyricsMode &&
+                    lineWords != null &&
+                    lineWords.isNotEmpty;
                 // 扩展行样式：字号对齐桌面歌词规格（主字号 × 0.8），
                 // 颜色保持行角色契约的次要文本，不参与 primary 强调。
                 final TextStyle extendedLineStyle = TextStyle(
@@ -851,10 +859,18 @@ class _LyricsWidgetState extends State<LyricsWidget>
                           crossAxisAlignment: CrossAxisAlignment.start,
                           mainAxisSize: MainAxisSize.min,
                           children: [
-                            Text(
-                              line.text,
-                              textAlign: TextAlign.left, // Align text left
-                            ),
+                            if (useKaraoke)
+                              KaraokeLyricText(
+                                words: lineWords,
+                                position: playbackProvider.position,
+                                playedColor: theme.colorScheme.primary,
+                                unplayedColor: theme.colorScheme.onSurface,
+                              )
+                            else
+                              Text(
+                                line.text,
+                                textAlign: TextAlign.left, // Align text left
+                              ),
                             // 翻译 / 罗马音：空文本不占位；顺序与
                             // LyricLineTracker 的扩展行拼接一致。
                             if (showTranslation) ...[
@@ -1154,6 +1170,7 @@ class _LyricsWidgetState extends State<LyricsWidget>
           initialArtistName: artistName,
           trackId: trackId,
           lyricsProvider: lyricsProvider,
+          preferredSourceKey: currentTrack.id.sourceKey,
         ),
       ),
     )

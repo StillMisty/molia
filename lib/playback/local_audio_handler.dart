@@ -93,6 +93,9 @@ class LocalAudioHandler extends BaseAudioHandler with SeekHandler {
   bool? _lastLoading;
   Duration _lastPosition = Duration.zero;
 
+  /// 上次广播的封面 URL（音源补图回写队列后需刷新通知/锁屏封面）。
+  String? _lastArtworkUrl;
+
   /// 歌词行元数据覆盖（通知/锁屏 + 蓝牙 profile 的合成结果）。
   LyricMetadataOverride? _lyricMetadataOverride;
 
@@ -174,19 +177,23 @@ class LocalAudioHandler extends BaseAudioHandler with SeekHandler {
     final trackChanged = trackId != _lastTrackId;
     final playingChanged = playing != _lastPlaying;
     final loadingChanged = loading != _lastLoading;
+    final artworkUrl = track?.coverUrl;
+    final artworkChanged = artworkUrl != _lastArtworkUrl;
     final seeked =
         (position - _lastPosition).abs() > const Duration(seconds: 1);
     if (!force &&
         !trackChanged &&
         !playingChanged &&
         !loadingChanged &&
-        !seeked) {
+        !seeked &&
+        !artworkChanged) {
       return;
     }
     _lastTrackId = trackId;
     _lastPlaying = playing;
     _lastLoading = loading;
     _lastPosition = position;
+    _lastArtworkUrl = artworkUrl;
 
     if (track == null) {
       mediaItem.add(null);

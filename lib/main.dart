@@ -7,6 +7,7 @@ import 'app/app_shell.dart';
 import 'data/catalog/catalog_service.dart';
 import 'data/catalog/source_registry_impl.dart';
 import 'data/library_repository.dart';
+import 'data/mapping/track_mapper.dart';
 import 'data/play_statistics_repository.dart';
 import 'providers/ai_dj_provider.dart';
 import 'data/playback/default_playback_facade.dart';
@@ -40,6 +41,7 @@ import 'services/lyrics_display/audio_route_monitor.dart';
 import 'services/lyrics_display/desktop_lyrics_output.dart';
 import 'services/lyrics_display/lyrics_display_settings.dart';
 import 'services/lyrics_display/media_lyric_output.dart';
+import 'services/lyrics_service.dart';
 import 'services/notification_service.dart';
 import 'services/play_statistics_service.dart';
 import 'services/ai/ai_recommendation_service.dart';
@@ -184,6 +186,12 @@ void main() async {
     libraryRepository: libraryRepository,
     dataSaver: dataSaver,
     localDatabaseProvider: localDatabaseProvider,
+    // 封面补取：曲目起播无封面时经 SourceManager 现取（脚本 pic →
+    // 内置平台原生取图），省流模式不发请求；取到后原地回写队列曲目。
+    artworkResolver: (track) async {
+      if (dataSaver.blockNetworkArtwork) return null;
+      return sourceManager.fetchPic(sourceTrackFromTrack(track));
+    },
   );
 
   // 资料库（收藏/历史/列表）：AI 推歌把「收藏」当喜欢反馈，需要提前创建
@@ -215,7 +223,24 @@ void main() async {
 
   // 歌词会话提前创建：歌词显示调度需要主动取词（不依赖播放页打开），
   // 与播放页共享同一个实例（去重/预取行为不变）。
-  final lyricsProvider = LyricsProvider();
+  // 曲目原生取词经 SourceManager 统一路由：脚本 lyric action →
+  // any-listen → 内置平台原生实现（wy/tx/kg/kw/mg，精确平台 ID）。
+  final lyricsProvider = LyricsProvider(
+    service: LyricsService(
+      trackLyricLoader: (track) async {
+        final result =
+            await sourceManager.fetchLyric(sourceTrackFromTrack(track));
+        if (result == null || result.lyric.trim().isEmpty) return null;
+        return LyricsResult(
+          lyric: result.lyric,
+          translation: result.tlyric,
+          roma: result.rlyric,
+          lxlyric: result.lxlyric,
+          provider: track.id.sourceKey,
+        );
+      },
+    ),
+  );
 
   // 歌词显示（桌面歌词 / 通知·锁屏 / 蓝牙）：配置 + 输出 + 调度。
   // 输出端能力由平台决定；媒体输出依赖系统媒体会话（audioHandler）。

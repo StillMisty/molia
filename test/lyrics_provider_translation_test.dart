@@ -102,7 +102,8 @@ class _FakeLyricsService extends LyricsService {
   Future<LyricsResult?> getLyrics(
     String songName,
     String artistName,
-    String trackId,
-  ) async =>
+    String trackId, {
+    Track? track,
+  }) async =>
       result;
 }

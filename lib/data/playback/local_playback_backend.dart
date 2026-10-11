@@ -182,6 +182,13 @@ class LocalPlaybackBackend implements PlaybackBackend {
         message: '本地播放后端暂不支持音量控制',
       );
 
+  /// 音源补图：原地更新队列曲目封面（新 SourceTrack 触发领域映射重建）。
+  @override
+  Future<void> updateTrackArtwork(String trackUri, Uri? artwork) async {
+    _service.updateTrackArtwork(trackUri, artwork?.toString());
+    _emit();
+  }
+
   void dispose() {
     _service.removeListener(_onServiceChanged);
     _state.dispose();

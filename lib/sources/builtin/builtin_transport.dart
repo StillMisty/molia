@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:typed_data';
 
 import 'package:http/http.dart' as http;
 
@@ -82,6 +83,21 @@ class BuiltinTransport {
       (_) => _client.get(Uri.parse(url), headers: _merge(headers)),
       decode: (response) =>
           utf8.decode(response.bodyBytes, allowMalformed: true),
+      timeout: timeout,
+      retries: retries,
+    );
+  }
+
+  /// GET + 原始字节（酷我 lrcx 等二进制歌词响应）。
+  Future<Uint8List> getBytes(
+    String url, {
+    Map<String, String>? headers,
+    Duration timeout = defaultTimeout,
+    int retries = 1,
+  }) {
+    return _attempt(
+      (_) => _client.get(Uri.parse(url), headers: _merge(headers)),
+      decode: (response) => response.bodyBytes,
       timeout: timeout,
       retries: retries,
     );

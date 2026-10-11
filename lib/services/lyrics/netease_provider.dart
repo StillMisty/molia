@@ -38,6 +38,8 @@ class NetEaseProvider extends LyricProvider {
             songId: track.raw['songmid']?.toString() ?? track.id,
             title: track.title,
             artist: track.artist,
+            album: track.album,
+            duration: track.duration,
           ),
       ];
     } catch (e, st) {
@@ -51,7 +53,7 @@ class NetEaseProvider extends LyricProvider {
   Future<String?> fetchLyric(String songId) async =>
       (await fetchLyrics(songId))?.lyric;
 
-  /// 获取结构化歌词：原文 + 翻译（tlyric）+ 罗马音（rlyric）。
+  /// 获取结构化歌词：原文 + 翻译（tlyric）+ 罗马音（rlyric）+ 逐字（yrc）。
   @override
   Future<LyricsPayload?> fetchLyrics(String songId) async {
     try {
@@ -61,6 +63,7 @@ class NetEaseProvider extends LyricProvider {
         lyric: info.lyric,
         translation: info.tlyric.isEmpty ? null : info.tlyric,
         roma: info.rlyric.isEmpty ? null : info.rlyric,
+        lxlyric: info.lxlyric.isEmpty ? null : info.lxlyric,
       );
     } catch (e, st) {
       _logger.e('获取歌词失败', error: e, stackTrace: st);

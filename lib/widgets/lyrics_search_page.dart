@@ -5,8 +5,12 @@ import 'package:provider/provider.dart';
 import '../providers/lyrics_provider.dart';
 import '../services/lyrics/lyric_provider.dart';
 import '../services/lyrics/qq_provider.dart';
+import '../services/lyrics/kugou_provider.dart';
+import '../services/lyrics/kuwo_provider.dart';
+import '../services/lyrics/migu_provider.dart';
 import '../services/lyrics/lrclib_provider.dart';
 import '../services/lyrics/netease_provider.dart';
+import '../services/lyrics/lyrics_match.dart';
 import '../l10n/app_localizations.dart';
 import '../services/notification_service.dart';
 import 'app_search_bar.dart';
@@ -74,6 +78,9 @@ class LyricsSearchPage extends StatefulWidget {
   final String initialArtistName;
   final String trackId; // 保存选择的歌词时需要trackId
 
+  /// 当前曲目的平台 key（kw/kg/tx/wy/mg）：该平台提供者的分组置顶。
+  final String? preferredSourceKey;
+
   /// 歌词会话模块：手动选择结果经它写缓存并更新展示状态。
   final LyricsProvider lyricsProvider;
 
@@ -83,6 +90,7 @@ class LyricsSearchPage extends StatefulWidget {
     required this.initialArtistName,
     required this.trackId,
     required this.lyricsProvider,
+    this.preferredSourceKey,
   });
 
   @override
@@ -111,12 +119,23 @@ class _LyricsSearchPageState extends State<LyricsSearchPage> {
     _notificationService =
         Provider.of<NotificationService>(context, listen: false);
 
-    // 初始化提供者
-    _providers = [
+    // 初始化提供者：五平台原生（qq/kg/kw/mg/wy）+ LRCLIB 兜底；
+    // 与当前曲目同平台的分组置顶（按 sourceKey 映射）。
+    final providers = <LyricProvider>[
       QQProvider(),
-      LRCLibProvider(),
+      KugouProvider(),
+      KuwoProvider(),
+      MiguProvider(),
       NetEaseProvider(),
+      LRCLibProvider(),
     ];
+    final preferred = widget.preferredSourceKey;
+    _providers = preferred == null || preferred.isEmpty
+        ? providers
+        : [
+            ...providers.where((p) => _sourceKeyOf(p.name) == preferred),
+            ...providers.where((p) => _sourceKeyOf(p.name) != preferred),
+          ];
 
     // 初始化每个提供者的状态
     for (final provider in _providers) {
@@ -269,10 +288,11 @@ class _LyricsSearchPageState extends State<LyricsSearchPage> {
     try {
       _notificationService.showSnackBar(l10n.lyricsFetching);
 
-      final rawLyric = await result.provider.fetchLyric(result.match.songId);
+      final payload = await result.provider.fetchForMatch(result.match);
 
       if (!mounted) return;
 
+      final rawLyric = payload?.lyric;
       if (rawLyric != null) {
         final normalizedLyric = result.provider.normalizeLyric(rawLyric);
 
@@ -281,6 +301,12 @@ class _LyricsSearchPageState extends State<LyricsSearchPage> {
             trackId: widget.trackId,
             lyric: normalizedLyric,
             providerName: result.provider.name,
+            translation: _normalizeOptional(
+              result.provider,
+              payload?.translation,
+            ),
+            roma: _normalizeOptional(result.provider, payload?.roma),
+            lxlyric: _normalizeOptional(result.provider, payload?.lxlyric),
           );
           _logger.d(
               "手动获取的歌词已缓存，曲目ID：${widget.trackId}，提供者：${result.provider.name}");
@@ -308,6 +334,46 @@ class _LyricsSearchPageState extends State<LyricsSearchPage> {
         });
       }
     }
+  }
+
+  /// 平台 key ↔ 提供者名映射（同源置顶用；未知按原名）。
+  static String _sourceKeyOf(String providerName) {
+    switch (providerName) {
+      case 'qq':
+        return 'tx';
+      case 'netease':
+        return 'wy';
+      case 'kugou':
+        return 'kg';
+      case 'kuwo':
+        return 'kw';
+      case 'migu':
+        return 'mg';
+      default:
+        return providerName;
+    }
+  }
+
+  /// 该提供者分组内与当前曲目最相近的结果（时长/歌名/歌手相似度）。
+  LyricsSearchResult? _bestMatchOf(LyricProvider provider) {
+    final results = _providerResults[provider.name] ?? [];
+    if (results.isEmpty) return null;
+    final best = pickBestSongMatch(
+      [for (final result in results) result.match],
+      title: widget.initialTrackTitle,
+      artist: widget.initialArtistName,
+    );
+    if (best == null) return null;
+    for (final result in results) {
+      if (identical(result.match, best)) return result;
+    }
+    return null;
+  }
+
+  static String? _normalizeOptional(LyricProvider provider, String? text) {
+    if (text == null || text.trim().isEmpty) return null;
+    final normalized = provider.normalizeLyric(text);
+    return normalized.isEmpty ? null : normalized;
   }
 
   @override
@@ -482,14 +548,31 @@ class _LyricsSearchPageState extends State<LyricsSearchPage> {
   }
 
   Widget _buildResultTile(LyricsSearchResult result) {
+    final l10n = AppLocalizations.of(context)!;
     final theme = Theme.of(context);
+    final isBest = identical(_bestMatchOf(result.provider), result);
     return M3EListItem(
       headline: result.match.title,
       supportingText: result.match.artist,
-      trailing: Icon(
-        Icons.chevron_right_rounded,
-        color: theme.colorScheme.onSurfaceVariant,
-      ),
+      trailing: isBest
+          ? Container(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+              decoration: BoxDecoration(
+                color: theme.colorScheme.primaryContainer,
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: Text(
+                l10n.lyricsBestMatch,
+                style: theme.textTheme.labelSmall?.copyWith(
+                  color: theme.colorScheme.onPrimaryContainer,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            )
+          : Icon(
+              Icons.chevron_right_rounded,
+              color: theme.colorScheme.onSurfaceVariant,
+            ),
       onTap: _isFetchingLyric ? null : () => _selectResult(result),
       enabled: !_isFetchingLyric,
     );
@@ -531,6 +614,12 @@ class _LyricsSearchPageState extends State<LyricsSearchPage> {
         return l10n.providerLRCLIB;
       case 'netease':
         return l10n.providerNetease;
+      case 'kugou':
+        return l10n.providerKugou;
+      case 'kuwo':
+        return l10n.providerKuwo;
+      case 'migu':
+        return l10n.providerMigu;
       default:
         return providerName;
     }

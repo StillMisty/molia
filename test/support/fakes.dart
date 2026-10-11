@@ -125,6 +125,17 @@ class FakePlaybackBackend implements PlaybackBackend {
 
   @override
   Future<void> setVolume(double value) async {}
+
+  @override
+  Future<void> updateTrackArtwork(String trackUri, Uri? artwork) async {
+    calls.add('updateTrackArtwork:$trackUri');
+    lastArtworkTrackUri = trackUri;
+    lastArtworkUri = artwork?.toString();
+  }
+
+  /// 最近一次封面回写的曲目与 URL（封面补取测试用）。
+  String? lastArtworkTrackUri;
+  String? lastArtworkUri;
 }
 
 class FakeMessenger implements UiMessenger {
