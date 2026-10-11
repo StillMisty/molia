@@ -1,0 +1,218 @@
+import 'dart:async';
+import 'dart:collection';
+import 'dart:ui' as ui;
+
+import 'package:logger/logger.dart';
+import 'package:material_color_utilities/material_color_utilities.dart';
+import 'package:material_ui/material_ui.dart';
+
+import '../managers/artwork_cache.dart';
+import '../theme/scheme_builder.dart';
+
+/// 单张封面的取色结果：种子色 + 双亮度方案（一次提取，多处复用）。
+class ArtworkPalette {
+  const ArtworkPalette({
+    required this.seed,
+    required this.light,
+    required this.dark,
+  });
+
+  /// 统一派生入口：[seed] 经 `buildColorScheme` 生成双亮度方案。
+  factory ArtworkPalette.fromSeed(Color seed) => ArtworkPalette(
+        seed: seed,
+        light: buildColorScheme(seed, Brightness.light),
+        dark: buildColorScheme(seed, Brightness.dark),
+      );
+
+  /// 封面提取出的种子色。
+  final Color seed;
+
+  /// 浅色方案。
+  final ColorScheme light;
+
+  /// 深色方案。
+  final ColorScheme dark;
+
+  ColorScheme schemeFor(Brightness brightness) =>
+      brightness == Brightness.dark ? dark : light;
+}
+
+/// 封面取色服务：像素 → 种子色 → 双亮度 ColorScheme，带 LRU 缓存。
+///
+/// 统一取色口径：全局主题「跟随封面」、桌面歌词「跟随封面」、海报「跟随
+/// 封面」全部查本服务，禁止任何模块自行提取像素。
+///
+/// - 走共享封面缓存（`artworkImageProvider`）：与封面显示同一份磁盘缓存与
+///   请求头，不二次下载；不加缩放参数，命中显示路径的同一条目；
+/// - 省流模式（`ArtworkCache` 网关只读本地缓存）下未命中会抛错：这里吞掉
+///   并返回 null，调用方保持现色（不回退、不闪变）；
+/// - 同 URL 并发请求合并为一次提取；LRU 上限 8 条。
+class ArtworkPaletteService {
+  ArtworkPaletteService({
+    int maxCacheEntries = 8,
+    Future<ImageProvider> Function(String url) providerFor =
+        artworkImageProvider,
+  })  : _maxCacheEntries = maxCacheEntries,
+        _providerFor = providerFor;
+
+  static const int _quantizeColorCount = 128;
+
+  /// 像素采样目标边长：取色只需色调，100x100 足够且快。
+  static const int _sampleTargetSize = 100;
+
+  final int _maxCacheEntries;
+
+  /// 封面取图入口（默认共享封面缓存；测试注入纯色图）。
+  final Future<ImageProvider> Function(String url) _providerFor;
+  final LinkedHashMap<String, ArtworkPalette> _cache =
+      LinkedHashMap<String, ArtworkPalette>();
+  final Map<String, Future<ArtworkPalette?>> _inFlight = {};
+  final Logger _logger = Logger();
+
+  int get cacheSize => _cache.length;
+
+  /// 读取（或提取）封面方案；失败返回 null（调用方保持现色）。
+  Future<ArtworkPalette?> load(String url) {
+    final cached = _cache.remove(url);
+    if (cached != null) {
+      _cache[url] = cached; // 触碰 LRU 顺序
+      return Future.value(cached);
+    }
+    final pending = _inFlight[url];
+    if (pending != null) return pending;
+    // 注意：whenComplete 的回调必须返回 void——返回 `_inFlight.remove(url)`
+    // 会把「清理用的派生 future」指回自身，形成自引用死锁。
+    final future = _extract(url);
+    _inFlight[url] = future;
+    unawaited(future.whenComplete(() {
+      _inFlight.remove(url);
+    }));
+    return future;
+  }
+
+  Future<ArtworkPalette?> _extract(String url) async {
+    try {
+      final imageProvider = await _providerFor(url);
+      final pixels = await _extractPixels(imageProvider);
+      if (pixels.isEmpty) return null;
+
+      final quantized =
+          await QuantizerCelebi().quantize(pixels, _quantizeColorCount);
+      final ranked = Score.score(quantized.colorToCount);
+      if (ranked.isEmpty) return null;
+
+      final palette = ArtworkPalette.fromSeed(Color(ranked.first));
+      _cache[url] = palette;
+      if (_cache.length > _maxCacheEntries) {
+        _cache.remove(_cache.keys.first);
+      }
+      return palette;
+    } catch (e) {
+      // 省流未命中（ArtworkNetworkBlockedException）/ 网络失败 / 解码失败：
+      // 保持现色，不打断主题与歌词显示。
+      _logger.w('封面取色失败（保持现色）: $e');
+      return null;
+    }
+  }
+
+  /// 采样像素（ARGB int 列表）：缩略采样 + 透明像素跳过。
+  Future<List<int>> _extractPixels(ImageProvider imageProvider) async {
+    final completer = Completer<ui.Image>();
+    final stream = imageProvider.resolve(ImageConfiguration.empty);
+
+    late ImageStreamListener listener;
+    listener = ImageStreamListener(
+      (ImageInfo info, bool _) {
+        completer.complete(info.image);
+        stream.removeListener(listener);
+      },
+      onError: (Object exception, StackTrace? stackTrace) {
+        completer.completeError(exception, stackTrace);
+        stream.removeListener(listener);
+      },
+    );
+    stream.addListener(listener);
+
+    final image = await completer.future;
+    final width = image.width;
+    final height = image.height;
+    final stepX = (width / _sampleTargetSize).ceil().clamp(1, width);
+    final stepY = (height / _sampleTargetSize).ceil().clamp(1, height);
+
+    final byteData = await image.toByteData(format: ui.ImageByteFormat.rawRgba);
+    if (byteData == null) return const [];
+
+    final pixels = <int>[];
+    final bytes = byteData.buffer.asUint8List();
+    for (var y = 0; y < height; y += stepY) {
+      for (var x = 0; x < width; x += stepX) {
+        final index = (y * width + x) * 4;
+        if (index + 3 >= bytes.length) continue;
+        final a = bytes[index + 3];
+        if (a < 128) continue;
+        final r = bytes[index];
+        final g = bytes[index + 1];
+        final b = bytes[index + 2];
+        pixels.add((a << 24) | (r << 16) | (g << 8) | b);
+      }
+    }
+    return pixels;
+  }
+}
+
+/// 播放曲目 → 封面取色的接线：稳态延迟 + 过期丢弃 + 无封面回退。
+///
+/// 由 composition root 挂到 `PlaybackProvider` 上（不再由播放页 widget
+/// 触发），因此任何页面/后台切歌都走同一条取色链路。
+///
+/// - 有封面：等待 [settleDelay]（连读切歌只取最后一首）后提取；提取失败
+///   保持现色；
+/// - 无封面：通知 [onCleared] 回退基础配色（与「有封面才覆盖」语义一致）；
+/// - 结果过期（期间又切歌）直接丢弃。
+class ArtworkThemeSync {
+  ArtworkThemeSync({
+    required Future<ArtworkPalette?> Function(String url) load,
+    required void Function(ArtworkPalette palette) onPalette,
+    required void Function() onCleared,
+    Duration settleDelay = const Duration(milliseconds: 500),
+  })  : _load = load,
+        _onPalette = onPalette,
+        _onCleared = onCleared,
+        _settleDelay = settleDelay;
+
+  final Future<ArtworkPalette?> Function(String url) _load;
+  final void Function(ArtworkPalette palette) _onPalette;
+  final void Function() _onCleared;
+  final Duration _settleDelay;
+
+  String? _currentUrl;
+  Timer? _timer;
+  bool _disposed = false;
+
+  /// 播放快照里的当前封面地址变化时调用（null/空串 = 当前曲目无封面）。
+  void onArtworkChanged(String? url) {
+    if (_disposed) return;
+    final normalized = url == null || url.isEmpty ? null : url;
+    if (normalized == _currentUrl) return;
+    _currentUrl = normalized;
+    _timer?.cancel();
+    _timer = null;
+    if (normalized == null) {
+      _onCleared();
+      return;
+    }
+    _timer = Timer(_settleDelay, () => _request(normalized));
+  }
+
+  Future<void> _request(String url) async {
+    final palette = await _load(url);
+    if (_disposed || _currentUrl != url || palette == null) return;
+    _onPalette(palette);
+  }
+
+  void dispose() {
+    _disposed = true;
+    _timer?.cancel();
+    _timer = null;
+  }
+}

@@ -4,87 +4,18 @@ import 'package:material_ui/material_ui.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import 'package:path_provider/path_provider.dart'; // 确保导入
+import '../services/artwork_palette_service.dart';
 import '../services/notification_service.dart';
 import '../services/lyrics_poster_service.dart';
+import '../services/poster_color_store.dart';
 import '../services/poster_font_store.dart';
 import '../l10n/app_localizations.dart';
 import '../models/poster_lyric_line.dart';
+import '../theme/poster_palette.dart';
+import '../theme/scheme_builder.dart';
 import '../utils/responsive.dart';
+import 'app_color_picker.dart';
 import 'font_picker_sheet.dart';
-
-// 海报样式枚举
-enum PosterStyle {
-  style1, // 默认样式
-  style2, // 样式2
-  style3, // 样式3
-  style4, // 样式4
-}
-
-// 海报颜色配置
-class PosterColorConfig {
-  final Color backgroundColor;
-  final Color titleColor;
-  final Color artistColor;
-  final Color lyricsColor;
-  final Color watermarkColor;
-  final Color separatorColor;
-
-  const PosterColorConfig({
-    required this.backgroundColor,
-    required this.titleColor,
-    required this.artistColor,
-    required this.lyricsColor,
-    required this.watermarkColor,
-    required this.separatorColor,
-  });
-
-  // 根据样式和主题获取颜色配置
-  static PosterColorConfig getConfig(
-      PosterStyle style, ColorScheme colorScheme) {
-    switch (style) {
-      case PosterStyle.style1:
-        // 样式1: 歌词正文，脚注与标题：Primary Container, 歌手：Primary, 背景：On Primary Container
-        return PosterColorConfig(
-          backgroundColor: colorScheme.onPrimaryContainer,
-          titleColor: colorScheme.primaryContainer,
-          artistColor: colorScheme.primary,
-          lyricsColor: colorScheme.primaryContainer,
-          watermarkColor: colorScheme.primaryContainer,
-          separatorColor: colorScheme.outline.withValues(alpha: 0.3),
-        );
-      case PosterStyle.style2:
-        // 样式2: 歌词正文，脚注与标题：On Primary Container, 歌手：Primary, 背景：Primary Container
-        return PosterColorConfig(
-          backgroundColor: colorScheme.primaryContainer,
-          titleColor: colorScheme.onPrimaryContainer,
-          artistColor: colorScheme.primary,
-          lyricsColor: colorScheme.onPrimaryContainer,
-          watermarkColor: colorScheme.onPrimaryContainer,
-          separatorColor: colorScheme.outline.withValues(alpha: 0.3),
-        );
-      case PosterStyle.style3:
-        // 样式3: 歌词正文，脚注与标题：On Tertiary, 歌手：Tertiary Container, 背景：Tertiary
-        return PosterColorConfig(
-          backgroundColor: colorScheme.tertiary,
-          titleColor: colorScheme.onTertiary,
-          artistColor: colorScheme.tertiaryContainer,
-          lyricsColor: colorScheme.onTertiary,
-          watermarkColor: colorScheme.onTertiary,
-          separatorColor: colorScheme.outline.withValues(alpha: 0.3),
-        );
-      case PosterStyle.style4:
-        // 样式4: 歌词正文，脚注与标题：On Tertiary Container, 歌手：On Tertiary Container @ 0.7, 背景：Tertiary Container
-        return PosterColorConfig(
-          backgroundColor: colorScheme.tertiaryContainer,
-          titleColor: colorScheme.onTertiaryContainer,
-          artistColor: colorScheme.onTertiaryContainer.withValues(alpha: 0.7),
-          lyricsColor: colorScheme.onTertiaryContainer,
-          watermarkColor: colorScheme.onTertiaryContainer,
-          separatorColor: colorScheme.outline.withValues(alpha: 0.3),
-        );
-    }
-  }
-}
 
 class LyricsPosterPreviewPage extends StatefulWidget {
   final String lyrics;
@@ -113,10 +44,13 @@ class _LyricsPosterPreviewPageState extends State<LyricsPosterPreviewPage> {
   Uint8List? _posterBytes; // Store image bytes directly
   String? _tempFilePath; // Store temporary file path for sharing
   String? _errorMessage;
-  PosterStyle _currentStyle = PosterStyle.style1; // 当前选择的样式
 
-  /// 最近一次生成海报所用的主题配色签名：主题变化（莫奈 / 封面取色 /
-  /// 亮度 / 种子色）时重新生成，保证海报真正跟随色彩系统。
+  /// 海报取色来源（跟随应用主题 / 跟随封面 / 自定义色），独立于全局主题。
+  PosterColorSource _colorSource = PosterColorStore.defaultSource;
+  int _customSeed = PosterColorStore.defaultSeed;
+
+  /// 最近一次生成海报所用的配色签名：主题变化（莫奈 / 封面取色 / 亮度 /
+  /// 种子色）时重新生成，保证海报真正跟随色彩系统。
   (Brightness, int, int, int)? _lastSchemeSignature;
   bool _schemeDirty = false;
 
@@ -125,10 +59,13 @@ class _LyricsPosterPreviewPageState extends State<LyricsPosterPreviewPage> {
 
   bool get _isBusy => _isLoading || _isOperating;
 
+  /// 当前曲目是否带封面（「跟随封面」来源可用性）。
+  bool get _hasArtwork => (widget.albumCoverUrl ?? '').isNotEmpty;
+
   @override
   void initState() {
     super.initState();
-    _initPosterFont();
+    _initPosterSettings();
   }
 
   @override
@@ -154,11 +91,16 @@ class _LyricsPosterPreviewPageState extends State<LyricsPosterPreviewPage> {
     });
   }
 
-  /// 先恢复海报字体覆盖，再在首帧后生成海报（此时才能读取 Theme）。
-  Future<void> _initPosterFont() async {
-    final saved = await PosterFontStore.load();
+  /// 先恢复海报字体覆盖与取色来源，再在首帧后生成海报（此时才能读取 Theme）。
+  Future<void> _initPosterSettings() async {
+    final savedFont = await PosterFontStore.load();
+    final savedColor = await PosterColorStore.load();
     if (!mounted) return;
-    setState(() => _posterFontOverride = saved);
+    setState(() {
+      _posterFontOverride = savedFont;
+      _colorSource = savedColor.source;
+      _customSeed = savedColor.seed;
+    });
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) {
         _generatePoster();
@@ -166,14 +108,34 @@ class _LyricsPosterPreviewPageState extends State<LyricsPosterPreviewPage> {
     });
   }
 
+  /// 解析海报配色来源：封面方案经共享取色服务查询（与主题/歌词同源），
+  /// 无封面或取色失败回退应用主题（不回退到另一套取色）。
+  Future<ColorScheme> _resolveScheme(ColorScheme appScheme) async {
+    switch (_colorSource) {
+      case PosterColorSource.appTheme:
+        return appScheme;
+      case PosterColorSource.custom:
+        return buildColorScheme(Color(_customSeed), appScheme.brightness);
+      case PosterColorSource.artwork:
+        final url = widget.albumCoverUrl;
+        final paletteService = context.read<ArtworkPaletteService?>();
+        if (url == null || url.isEmpty || paletteService == null) {
+          return appScheme;
+        }
+        final palette = await paletteService.load(url);
+        return palette?.schemeFor(appScheme.brightness) ?? appScheme;
+    }
+  }
+
   Future<void> _generatePoster() async {
     if (!mounted) return;
     HapticFeedback.lightImpact();
-    final theme = Theme.of(context);
+    final appScheme = Theme.of(context).colorScheme;
+    final appName = AppLocalizations.of(context)?.appName ?? 'Molia';
     // 海报字体优先级：海报独立覆盖 > 应用字体（主题注入）> 系统默认；
     // 覆盖值为空串表示显式强制系统默认。
     final String? uiFontFamily = switch (_posterFontOverride) {
-      null => theme.textTheme.bodyMedium?.fontFamily,
+      null => Theme.of(context).textTheme.bodyMedium?.fontFamily,
       '' => null,
       final family => family,
     };
@@ -186,9 +148,9 @@ class _LyricsPosterPreviewPageState extends State<LyricsPosterPreviewPage> {
     });
 
     try {
+      final scheme = await _resolveScheme(appScheme);
+      final palette = PosterPalette.fromScheme(scheme);
       final posterService = LyricsPosterService();
-      final colorConfig =
-          PosterColorConfig.getConfig(_currentStyle, theme.colorScheme);
 
       final bytes = await posterService.generatePosterData(
         lyrics: widget.lyrics,
@@ -196,15 +158,15 @@ class _LyricsPosterPreviewPageState extends State<LyricsPosterPreviewPage> {
         trackTitle: widget.trackTitle,
         artistName: widget.artistName,
         albumCoverUrl: widget.albumCoverUrl,
-        // 使用样式配置的颜色
-        backgroundColor: colorConfig.backgroundColor,
-        titleColor: colorConfig.titleColor,
-        artistColor: colorConfig.artistColor,
-        lyricsColor: colorConfig.lyricsColor,
-        watermarkColor: colorConfig.watermarkColor,
-        separatorColor: colorConfig.separatorColor,
+        // 配色由取色来源解析出的单一方案映射（预设样式已移除）
+        backgroundColor: palette.background,
+        titleColor: palette.title,
+        artistColor: palette.artist,
+        lyricsColor: palette.lyrics,
+        watermarkColor: palette.watermark,
+        separatorColor: palette.separator,
         fontFamily: uiFontFamily, // 传递字体族
-        watermarkText: AppLocalizations.of(context)?.appName ?? 'Molia',
+        watermarkText: appName,
       );
 
       final tempDir = await getTemporaryDirectory();
@@ -256,8 +218,9 @@ class _LyricsPosterPreviewPageState extends State<LyricsPosterPreviewPage> {
       }
     } catch (e) {
       if (mounted) {
-        Provider.of<NotificationService>(context, listen: false).showErrorSnackBar(
-            '${AppLocalizations.of(context)!.operationFailed}: ${e.toString()}');
+        Provider.of<NotificationService>(context, listen: false)
+            .showErrorSnackBar(
+                '${AppLocalizations.of(context)!.operationFailed}: ${e.toString()}');
       }
     } finally {
       if (mounted) {
@@ -284,8 +247,9 @@ class _LyricsPosterPreviewPageState extends State<LyricsPosterPreviewPage> {
       );
     } catch (e) {
       if (mounted) {
-        Provider.of<NotificationService>(context, listen: false).showErrorSnackBar(
-            '${AppLocalizations.of(context)!.operationFailed}: ${e.toString()}');
+        Provider.of<NotificationService>(context, listen: false)
+            .showErrorSnackBar(
+                '${AppLocalizations.of(context)!.operationFailed}: ${e.toString()}');
       }
     } finally {
       if (mounted) {
@@ -296,16 +260,35 @@ class _LyricsPosterPreviewPageState extends State<LyricsPosterPreviewPage> {
     }
   }
 
-  // 切换海报样式并重新生成
-  void _changeStyle(PosterStyle newStyle) {
-    if (_currentStyle == newStyle || _isLoading || _isOperating) return;
+  /// 切换取色来源并重新生成；无封面时不允许选「跟随封面」。
+  Future<void> _changeColorSource(PosterColorSource source) async {
+    if (_colorSource == source || _isLoading || _isOperating) return;
+    if (source == PosterColorSource.artwork && !_hasArtwork) return;
 
     HapticFeedback.selectionClick();
     setState(() {
-      _currentStyle = newStyle;
+      _colorSource = source;
     });
+    await PosterColorStore.saveSource(source);
+    if (mounted) _generatePoster();
+  }
 
-    _generatePoster();
+  /// 海报自定义色：任意取色（HSV + Hex），存入海报专属种子。
+  Future<void> _pickPosterColor() async {
+    if (_isLoading || _isOperating) return;
+    HapticFeedback.selectionClick();
+    final picked = await showAppColorPicker(
+      context,
+      initialColor: _customSeed,
+    );
+    if (picked == null || !mounted || picked == _customSeed) return;
+    setState(() {
+      _customSeed = picked;
+      _colorSource = PosterColorSource.custom;
+    });
+    await PosterColorStore.saveSeed(picked);
+    await PosterColorStore.saveSource(PosterColorSource.custom);
+    if (mounted) _generatePoster();
   }
 
   /// 选择海报字体：跟随应用字体 / 系统默认 / 设备已装字体。
@@ -343,113 +326,83 @@ class _LyricsPosterPreviewPageState extends State<LyricsPosterPreviewPage> {
     };
   }
 
-  // 构建样式选择按钮
-  Widget _buildStyleButton(PosterStyle style, String label) {
-    final isSelected = _currentStyle == style;
-    final theme = Theme.of(context);
-    final colorConfig = PosterColorConfig.getConfig(style, theme.colorScheme);
+  /// 自定义色显示：统一六进制（与设置页主题色同一格式）。
+  String _hexOf(int argb) {
+    final rgb = argb & 0xFFFFFF;
+    return '#${rgb.toRadixString(16).padLeft(6, '0').toUpperCase()}';
+  }
 
-    return Expanded(
-      child: Container(
-        margin: const EdgeInsets.symmetric(horizontal: 4),
-        child: AspectRatio(
-          aspectRatio: 1,
-          child: Material(
-            color: isSelected
-                ? theme.colorScheme.primary.withValues(alpha: 0.2)
-                : Colors.transparent,
-            borderRadius: BorderRadius.circular(12),
-            child: InkWell(
-              borderRadius: BorderRadius.circular(12),
-              onTap:
-                  _isLoading || _isOperating ? null : () => _changeStyle(style),
-              child: Container(
-                decoration: BoxDecoration(
-                  border: Border.all(
-                    color: isSelected
-                        ? theme.colorScheme.primary
-                        : theme.colorScheme.outline.withValues(alpha: 0.5),
-                    width: isSelected ? 2 : 1,
-                  ),
-                  borderRadius: BorderRadius.circular(12),
-                  gradient: LinearGradient(
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
-                    colors: [
-                      colorConfig.backgroundColor,
-                      colorConfig.backgroundColor.withValues(alpha: 0.8),
-                    ],
-                  ),
-                ),
-                child: Stack(
-                  children: [
-                    // 预览小样本
-                    Positioned(
-                      top: 8,
-                      left: 8,
-                      right: 8,
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Container(
-                            height: 2,
-                            width: double.infinity,
-                            color: colorConfig.titleColor,
-                          ),
-                          const SizedBox(height: 2),
-                          Container(
-                            height: 1,
-                            width: 20,
-                            color: colorConfig.artistColor,
-                          ),
-                          const SizedBox(height: 4),
-                          Container(
-                            height: 1,
-                            width: 16,
-                            color: colorConfig.lyricsColor,
-                          ),
-                          const SizedBox(height: 1),
-                          Container(
-                            height: 1,
-                            width: 24,
-                            color: colorConfig.lyricsColor,
-                          ),
-                        ],
-                      ),
-                    ),
-                    // 样式标签
-                    Positioned(
-                      bottom: 6,
-                      right: 6,
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 6, vertical: 2),
-                        decoration: BoxDecoration(
-                          color: isSelected
-                              ? theme.colorScheme.primary
-                              : theme.colorScheme.outline
-                                  .withValues(alpha: 0.7),
-                          borderRadius: BorderRadius.circular(8),
-                        ),
-                        child: Text(
-                          label,
-                          style: TextStyle(
-                            color: isSelected
-                                ? theme.colorScheme.onPrimary
-                                : theme.colorScheme.surface,
-                            fontSize: 12,
-                            fontWeight: FontWeight.w600,
-                          ),
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
+  /// 取色来源选择行。
+  Widget _buildColorSourceRow(AppLocalizations l10n, ColorScheme scheme) {
+    return Row(
+      children: [
+        Expanded(child: Text(l10n.posterColorSource)),
+        SizedBox(
+          width: 190,
+          child: M3EDropdownMenu<PosterColorSource>(
+            items: [
+              M3EDropdownItem<PosterColorSource>(
+                label: l10n.posterColorSourceAppTheme,
+                value: PosterColorSource.appTheme,
+                selected: _colorSource == PosterColorSource.appTheme,
               ),
+              M3EDropdownItem<PosterColorSource>(
+                label: l10n.posterColorSourceArtwork,
+                value: PosterColorSource.artwork,
+                selected: _colorSource == PosterColorSource.artwork,
+                // 无封面：置灰并提示（tooltip 不可用于 item，副文案由页面
+                // 状态保证：选中态不会被置灰项污染）。
+                disabled: !_hasArtwork,
+              ),
+              M3EDropdownItem<PosterColorSource>(
+                label: l10n.posterColorSourceCustom,
+                value: PosterColorSource.custom,
+                selected: _colorSource == PosterColorSource.custom,
+              ),
+            ],
+            singleSelect: true,
+            showChipAnimation: false,
+            onSelectionChanged: (items) {
+              if (items.isNotEmpty) _changeColorSource(items.first.value);
+            },
+          ),
+        ),
+      ],
+    );
+  }
+
+  /// 自定义色行：色块 + Hex，点击打开任意取色器。
+  Widget _buildCustomColorRow(AppLocalizations l10n, ColorScheme scheme) {
+    return Row(
+      children: [
+        Expanded(child: Text(l10n.posterColorCustomLabel)),
+        InkWell(
+          onTap: _isBusy ? null : _pickPosterColor,
+          borderRadius: BorderRadius.circular(8),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Container(
+                  width: 20,
+                  height: 20,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    color: Color(_customSeed),
+                    border: Border.all(color: scheme.outlineVariant),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Text(
+                  _hexOf(_customSeed),
+                  style: Theme.of(context).textTheme.bodyMedium,
+                ),
+              ],
             ),
           ),
         ),
-      ),
+      ],
     );
   }
 
@@ -531,18 +484,15 @@ class _LyricsPosterPreviewPageState extends State<LyricsPosterPreviewPage> {
                       ),
                     ),
                     const SizedBox(height: 12),
-                    // 第二行：样式选择按钮
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                      children: [
-                        _buildStyleButton(PosterStyle.style1, '1'),
-                        _buildStyleButton(PosterStyle.style2, '2'),
-                        _buildStyleButton(PosterStyle.style3, '3'),
-                        _buildStyleButton(PosterStyle.style4, '4'),
-                      ],
-                    ),
+                    // 第二行：取色来源（跟随应用主题 / 跟随封面 / 自定义色）；
+                    // 预设样式已移除，配色统一由来源方案映射。
+                    _buildColorSourceRow(l10n!, theme.colorScheme),
+                    if (_colorSource == PosterColorSource.custom) ...[
+                      const SizedBox(height: 8),
+                      _buildCustomColorRow(l10n, theme.colorScheme),
+                    ],
                     const SizedBox(height: 12),
-                    // 第二行：保存和分享按钮
+                    // 第三行：保存和分享按钮
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                       children: [

@@ -95,7 +95,8 @@
     压低音质（缓存键含音质，切换网络自然重解析）；
   - 封面：`ArtworkCache.networkImageBlocked` 网关让 `ArtworkCacheManager.getFileStream`
     只读本地缓存（未命中抛 `ArtworkNetworkBlockedException` → 占位图标），
-    并拦截播放预加载、取色预取、audio_service 通知封面与桌面小组件封面地址；
+    并拦截播放预加载、audio_service 通知封面与桌面小组件封面地址；取色链路同样
+    只读缓存——命中则照常取色，未命中保持现色（`ArtworkPaletteService` 吞掉异常）；
   - 探测失败保守按「未生效」；Android 回前台时由壳层 `refreshConnectivity()` 补一次检测。
 - **失败归一化**：`SourceFailure` 是跨层错误契约（`lib/domain/models/failure.dart`）。
   sources 适配器在边界转换一次：any-listen 经 `AnyListenException.toSourceFailure()`
@@ -167,16 +168,24 @@
 ## 6. M3E 设计语言
 
 - 壳：`M3EMaterialApp(data: M3EThemeData.fromMaterial(themedData), theme: themedData, ...)`；
-  `ThemeProvider`（系统亮度 + 专辑封面取色）是唯一主题源（`autoTheming/dynamicColoring` 关闭）。
+  `ThemeProvider` 是唯一主题源（`autoTheming/dynamicColoring` 关闭）。
+- 取色模型（唯一优先级，见 ADR-0001）：**基础配色**（壁纸 / 自定义，单选）+
+  **封面覆盖**（播放有封面的曲目时用封面 seed 覆盖基础配色，包括盖过莫奈；
+  无封面回退）+ **纯黑**（深色下覆盖 surface 系列，与来源正交可叠加）。
+  解析：`封面 > 壁纸（可用时）> 自定义` → `applyPureBlackScheme`。
 - 主题出口：`lib/theme/app_theme.dart::buildAppThemeData(ColorScheme)` 是唯一 ThemeData 构建处，
   并注册语义色扩展 `AppSemanticColors`（success/warning，固定色调、随亮度派生）；
+  `ColorScheme` 派生唯一入口 `lib/theme/scheme_builder.dart::buildColorScheme`；
   `main.dart` 经 `AnimatedSchemeBuilder`（450ms）平滑过渡方案色，两套主题同源重建。
+- 封面取色：`lib/services/artwork_palette_service.dart` 是唯一取色入口（像素 → seed →
+  双亮度方案 + LRU），由组合根监听 `PlaybackProvider` 触发（任何页面/后台切歌同一链路；
+  省流时本地缓存可取色、未命中保持现色，无封面清除回退）。**任何模块不得二次提取
+  封面像素**；消费面（桌面歌词 / 海报）按各自的 `SurfaceColorSource` 经
+  `resolveSurfaceScheme` 解析（封面方案缺失回退应用主题）。
 - 色彩契约：`primary` 只用于交互/选中/强调图形；正文 `onSurface`、次要文本 `onSurfaceVariant`；
   容器配 `on*Container`；状态色走 `AppSemanticColors`（错误用 `scheme.error`）。
   禁止 `Colors.*`/`Color(0x...)` 字面量、`withAlpha/withOpacity`、
-  `scaffoldBackgroundColor/dividerColor` 双源属性（`test/architecture/color_usage_test.dart` 扫描强制；
-  海报四套配色 `lib/widgets/lyrics_poster_preview_page.dart` 属刻意的艺术预设——角色混搭，
-  不要按常规语义「修正」，但字面量/withAlpha 禁令仍适用）。
+  `scaffoldBackgroundColor/dividerColor` 双源属性（`test/architecture/color_usage_test.dart` 扫描强制）。
 - 组件：UI 全面使用 `M3E*`；基础件（Scaffold/Text/Icon/Theme 等）来自 `material_ui`
   （M3E 必需依赖，不要试图移除）；禁止 import `package:flutter/material.dart`，
   组件 import 用 `package:material_3_expressive/material_3_expressive.dart`。

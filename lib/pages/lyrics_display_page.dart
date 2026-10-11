@@ -10,6 +10,7 @@ import '../services/lyrics_display/lyric_color_resolver.dart';
 import '../services/lyrics_display/lyrics_display_settings.dart';
 import '../services/lyrics_display/lyrics_output.dart';
 import '../theme/app_semantic_colors.dart';
+import '../theme/scheme_builder.dart';
 import '../widgets/app_color_picker.dart';
 
 /// 歌词显示设置页：共享项 + 桌面歌词 / 通知·锁屏 / 蓝牙三组。
@@ -299,6 +300,18 @@ class _LyricsDisplayPageState extends State<LyricsDisplayPage>
           (DesktopTextAlignY.bottom, l10n.lyricsDesktopAlignBottom),
         ],
         onChanged: settings.setDesktopTextAlignY,
+      ),
+      // 取色来源：决定三行「跟随主题角色」用哪套方案（应用主题 / 当前曲目
+      // 封面）；自定义行不受影响。
+      _dropdownRow<SurfaceColorSource>(
+        context,
+        title: l10n.lyricsDesktopSchemeSource,
+        value: settings.desktopSchemeSource,
+        options: [
+          (SurfaceColorSource.appTheme, l10n.lyricsDesktopSchemeAppTheme),
+          (SurfaceColorSource.artwork, l10n.lyricsDesktopSchemeArtwork),
+        ],
+        onChanged: settings.setDesktopSchemeSource,
       ),
       _colorRow(
         context,
@@ -716,8 +729,8 @@ class _LyricsDisplayPageState extends State<LyricsDisplayPage>
   /// 颜色行：取色方式（自定义 / 跟随主题角色）+ 自定义时的任意取色。
   ///
   /// - 预设色板提供快捷选择；「调色」按钮打开 HSV + Hex 任意调色器；
-  /// - 跟随主题时颜色来自当前 ColorScheme（莫奈 / 封面取色统一出口），
-  ///   主题变化会经调度自动重新下发，无需手动改色。
+  /// - 跟随主题角色时颜色来自上方「取色来源」解析出的方案（应用主题或当前
+  ///   曲目封面）；主题 / 切歌变化会经调度自动重新下发，无需手动改色。
   Widget _colorRow(
     BuildContext context, {
     required String title,

@@ -91,8 +91,10 @@ Molia 当前只有在播放页内渲染的滚动歌词。桌面悬浮歌词、�
   其后 `maxLines - 1` 行 upcoming 主文本；`singleLine=true` 时只显示当前行。
 - 颜色语义：当前行 = `playedColor`（默认白），其余行 = `unplayedColor`（默认 70% 白），
   文字阴影 = `shadowColor`（默认 60% 黑）；全局 `opacity` 作用于整个视图。
-  三种颜色各支持「自定义（任意 HSV/Hex 取色）」或「跟随主题角色」——主题角色由
-  `ThemeProvider` 统一解析（莫奈壁纸 > 专辑封面取色 > 种子色），随主题实时重下发。
+  四种颜色来源：每个颜色行可选「自定义（任意 HSV/Hex 取色）」或「跟随主题角色」；
+  「主题角色」用哪套方案由分组的**取色来源**决定——跟随应用主题（外观设置：
+  基础配色 + 封面覆盖 + 纯黑）或跟随当前曲目封面（`ArtworkPaletteService` 的
+  同源色板，无封面回退应用主题）。两者都随主题 / 切歌实时重下发（见 ADR-0001）。
 - 行切换动画：`showToggleAnimation`（默认开）——淡入/上移；关闭则直切。
 - 无歌词：`noLyricsBehavior = title | hide`（默认 `title`，显示歌名）。
 - 暂停：`pauseBehavior = keep | clear | title`（默认 `keep`）。
@@ -273,8 +275,8 @@ abstract class LyricsOutput {
 
 > **颜色说明**：`custom` 来源的颜色支持任意取色（HSV 滑杆 + Hex 输入 + 透明度，
 > 见通用调色器 `lib/widgets/app_color_picker.dart`），不限于预设色板；主题角色
-> 来源由 `ThemeProvider` 统一解析（莫奈壁纸取色 > 专辑封面取色 > 种子色），
-> 并随主题实时重新下发。应用「主题种子色」同样支持任意颜色取色。
+> 来源按分组的「取色来源」解析（跟随应用主题 / 跟随封面，`resolveSurfaceScheme`），
+> 并随主题与切歌实时重新下发。应用「自定义颜色」与海报自定义色同样支持任意取色。
 
 ### 5.8 通道协议（Android）
 
@@ -413,5 +415,5 @@ abstract class LyricsOutput {
 | 桌面歌词（原生） | `android/.../lyrics/LyricsChannelHandler.kt`、`LyricsOverlayController.kt`、`LyricsOverlayView.kt`、`MainActivity.kt`、`AndroidManifest.xml` | 悬浮窗渲染/拖动/锁定/控制条/息屏冻结/A2DP 监测 |
 | 媒体元数据 | `lib/services/lyrics_display/media_lyric_composer.dart`、`media_lyric_output.dart`、`lib/playback/local_audio_handler.dart` | 通知/锁屏 + 蓝牙 profile 合成 → `MediaItem` 覆盖 |
 | 设置页 | `lib/pages/lyrics_display_page.dart`、`lib/pages/settings_page.dart` | 三分组 + 预览 + 权限引导；主题种子色与歌词颜色共用任意调色器 |
-| 颜色系统 | `lib/services/lyrics_display/lyric_color_resolver.dart`、`lib/widgets/app_color_picker.dart` | 跟随主题解析（莫奈/封面取色经 ThemeProvider）+ 通用 HSV/Hex 任意取色 |
+| 颜色系统 | `lib/services/lyrics_display/lyric_color_resolver.dart`、`lib/theme/scheme_builder.dart`、`lib/services/artwork_palette_service.dart` | 跟随主题 / 跟随封面经同一解析函数与同一份封面色板；通用 HSV/Hex 任意取色 |
 | 测试 | `test/lyric_line_tracker_test.dart`、`test/services/media_lyric_composer_test.dart`、`test/services/lyrics_display_settings_test.dart`、`test/services/lyrics_display_provider_test.dart`、`test/services/desktop_lyrics_output_test.dart`、`test/services/audio_route_monitor_test.dart`、`test/services/lyrics_cache_translation_test.dart`、`test/lyrics_provider_translation_test.dart` | 单一新 seam：`LyricsOutput` 假输出 |

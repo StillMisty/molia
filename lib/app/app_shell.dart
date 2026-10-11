@@ -848,13 +848,14 @@ class _MyThemedAppState extends State<MyThemedApp> with WidgetsBindingObserver {
 
   @override
   Widget build(BuildContext context) {
-    // ThemeProvider（主题模式 + 封面取色 + 莫奈 + 纯黑）是唯一主题来源：
+    // ThemeProvider（主题模式 + 基础配色 + 封面覆盖 + 纯黑）是唯一主题来源：
     // Selector 提升到壳外，colorScheme 变化时重建整个 M3EMaterialApp，
     // 同时刷新 material_ui ThemeData 与 M3EThemeData。
     // 应用语言走 LanguageService.localeNotifier，设置页切换后立即生效。
     //
     // 莫奈配色由 DynamicColorBuilder 提供（平台不支持时回调 null）：
-    // 注入必须放到 post-frame，避免在 build 中同步触发 notifyListeners。
+    // 基础配色=壁纸时生效；注入必须放到 post-frame，避免 build 中同步
+    // 触发 notifyListeners。
     return DynamicColorBuilder(
       builder: (lightDynamic, darkDynamic) {
         WidgetsBinding.instance.addPostFrameCallback((_) {

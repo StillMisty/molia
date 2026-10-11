@@ -53,6 +53,22 @@
   目标槽位旧身份 p∈[0,0.4] 淡出、源槽位新身份 p∈[0.6,1] 淡入（无位移/叠影），
   移动卡全程插值；空闲期身份变化另有 180ms 原位交叉淡化。
 
+## 色彩系统
+
+- **Color source model（取色模型）** — 全局主题的解析规则（ADR-0001）：
+  **基础配色**（`ColorBaseSource`：壁纸 / 自定义，单选）+ **封面覆盖**
+  （`follow_artwork_enabled`：有封面时用封面色盖过基础配色，无封面回退）+
+  **纯黑**（深色 surface 覆盖，正交可叠加）。解析唯一：`封面 > 壁纸 > 自定义`。
+- **Scheme factory（方案工厂）** — `lib/theme/scheme_builder.dart::buildColorScheme`：
+  全 App 唯一的 ColorScheme 派生入口（seed + 亮度 → 方案），禁止各处自行
+  `ColorScheme.fromSeed`；`applyPureBlackScheme` 同文件（纯黑覆盖）。
+- **Artwork palette（封面色板）** — `lib/services/artwork_palette_service.dart`：
+  按封面 URL 提取 seed 并派生双亮度方案的唯一入口（LRU + 并发合并 + 省流安全），
+  由组合根监听播放快照触发。任何模块不得二次提取封面像素。
+- **Surface color source（消费面取色来源）** — 桌面歌词 / 海报各自的
+  「跟随应用主题 / 跟随封面（/ 自定义色）」选择；经 `resolveSurfaceScheme`
+  解析，封面方案缺失回退应用主题。
+
 ## 歌词
 
 - **Lyrics session module（歌词会话模块）** — `lib/providers/lyrics_provider.dart`：

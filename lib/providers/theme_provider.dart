@@ -1,44 +1,54 @@
 import 'dart:async';
-import 'dart:collection';
-import 'dart:ui' as ui;
 
 import 'package:material_ui/material_ui.dart';
 import 'package:logger/logger.dart';
-import 'package:material_color_utilities/material_color_utilities.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+
+import '../theme/scheme_builder.dart';
 
 final logger = Logger();
 
-/// 应用主题唯一来源：主题模式 + 系统亮度 + 封面取色 + 用户种子色。
+/// 应用主题唯一来源：主题模式 + 系统亮度 + 基础配色 + 封面覆盖 + 纯黑。
+///
+/// 取色模型（两层 + 一个正交修饰，行为完全可预知）：
+///
+/// 1. **基础配色** [baseColorSource]：壁纸（莫奈）或自定义种子色，二选一；
+/// 2. **封面覆盖** [followArtworkEnabled]：开启且有封面取色结果时，用封面
+///    seed 覆盖基础配色（包括覆盖莫奈）；无封面回退基础配色；
+/// 3. **纯黑背景** [pureBlackEnabled]：深色模式下覆盖 surface 系列，
+///    与取色来源正交可叠加。
+///
+/// 解析顺序（唯一）：
+/// `封面 seed > 壁纸（基础=壁纸且平台可用）> 自定义 seed`，再叠加纯黑。
 ///
 /// 持久化键（SharedPreferences）：
 /// - `theme_mode`：`system` / `light` / `dark`；
-/// - `dynamic_color_enabled`：是否用专辑封面取色（默认开启）；
-/// - `monet_color_enabled`：是否用系统莫奈（壁纸）取色（默认关闭）；
-/// - `pure_black_enabled`：深色模式是否使用纯黑背景（默认关闭）；
-/// - `seed_color`：取色关闭（或尚无封面/壁纸）时的种子色，存 ARGB int；
-/// - `app_font_family`：全局应用字体族名（设备已装字体，null = 系统默认）。
+/// - `color_base`：`wallpaper` / `custom`；
+/// - `follow_artwork_enabled`：播放有封面时是否用封面取色覆盖基础配色
+///   （默认开启）；
+/// - `pure_black_enabled`：深色模式是否使用纯黑表面（默认关闭）；
+/// - `seed_color`：自定义种子色（ARGB int）；
+/// - `app_font_family`：全局应用字体族名（null = 系统默认）。
 ///
-/// 亮度规则：`themeMode` 非 system 时覆盖平台亮度。
-/// 配色优先级：莫奈（系统壁纸）> 封面取色 > [seedColor]；纯黑背景在
-/// 深色模式下覆盖 surface 系列。
+/// 旧键 `dynamic_color_enabled` / `monet_color_enabled` 只读一次并迁移：
+/// 莫奈开 → 基础=壁纸；否则基础=自定义；动态取色 → 封面覆盖开关。
 class ThemeProvider extends ChangeNotifier {
   static const String _themeModeKey = 'theme_mode';
-  static const String _dynamicColorKey = 'dynamic_color_enabled';
-  static const String _monetColorKey = 'monet_color_enabled';
+  static const String _baseColorKey = 'color_base';
+  static const String _followArtworkKey = 'follow_artwork_enabled';
   static const String _pureBlackKey = 'pure_black_enabled';
   static const String _seedColorKey = 'seed_color';
   static const String _appFontKey = 'app_font_family';
 
-  ColorScheme _colorScheme = ColorScheme.fromSeed(seedColor: Colors.blue);
-  final LinkedHashMap<String, ({ColorScheme scheme, Color seed})> _paletteCache =
-      LinkedHashMap<String, ({ColorScheme scheme, Color seed})>();
-  static const int _maxCacheEntries = 8;
-  int _paletteRequestId = 0;
+  /// 旧版键（迁移后删除）。
+  static const String _legacyDynamicKey = 'dynamic_color_enabled';
+  static const String _legacyMonetKey = 'monet_color_enabled';
+
+  ColorScheme _colorScheme = buildColorScheme(Colors.blue, Brightness.light);
 
   ThemeMode _themeMode = ThemeMode.system;
-  bool _dynamicColorEnabled = true;
-  bool _monetColorEnabled = false;
+  ColorBaseSource _baseColorSource = ColorBaseSource.custom;
+  bool _followArtworkEnabled = true;
   bool _pureBlackEnabled = false;
   Color _seedColor = Colors.blue;
 
@@ -50,8 +60,9 @@ class ThemeProvider extends ChangeNotifier {
   ColorScheme? _monetLightScheme;
   ColorScheme? _monetDarkScheme;
 
-  /// 最近一次封面取色得到的种子色：亮度重建与重新开启动态取色时复用。
-  Color? _activeDynamicSeed;
+  /// 最近一次封面取色的种子色：封面覆盖层的数据源，与主题输出解耦
+  /// （即使当前未跟随封面，也保留以便桌面歌词 / 海报按需解析）。
+  Color? _artworkSeed;
 
   late final Future<void> _preferencesReady;
 
@@ -63,9 +74,11 @@ class ThemeProvider extends ChangeNotifier {
 
   ThemeMode get themeMode => _themeMode;
 
-  bool get dynamicColorEnabled => _dynamicColorEnabled;
+  /// 基础配色来源（壁纸 / 自定义）。
+  ColorBaseSource get baseColorSource => _baseColorSource;
 
-  bool get monetColorEnabled => _monetColorEnabled;
+  /// 播放有封面时是否用封面取色覆盖基础配色。
+  bool get followArtworkEnabled => _followArtworkEnabled;
 
   bool get pureBlackEnabled => _pureBlackEnabled;
 
@@ -75,8 +88,17 @@ class ThemeProvider extends ChangeNotifier {
 
   Color get seedColor => _seedColor;
 
-  /// 全局应用字体族名；null 表示系统默认字体。
+  /// 全局应用字体族名；null 表示系统默认。
   String? get appFontFamily => _appFontFamily;
+
+  /// 当前曲目封面的取色方案；无封面取色结果时为 null。
+  ///
+  /// 消费面（桌面歌词 / 海报）选「跟随封面」时用；亮度跟随当前应用方案。
+  ColorScheme? get artworkColorScheme {
+    final seed = _artworkSeed;
+    if (seed == null) return null;
+    return buildColorScheme(seed, _colorScheme.brightness);
+  }
 
   /// 持久化偏好加载完成（测试等待启动态就绪）。
   Future<void> get preferencesReady => _preferencesReady;
@@ -108,29 +130,29 @@ class ThemeProvider extends ChangeNotifier {
     await _persist((prefs) => prefs.setString(_themeModeKey, mode.name));
   }
 
-  /// 动态取色开关：关闭立即回退种子色；重新开启恢复最近封面取色。
-  Future<void> setDynamicColorEnabled(bool enabled) async {
-    if (_dynamicColorEnabled == enabled) return;
-    _dynamicColorEnabled = enabled;
+  /// 设置基础配色来源（壁纸 / 自定义）。
+  Future<void> setBaseColorSource(ColorBaseSource source) async {
+    if (_baseColorSource == source) return;
+    _baseColorSource = source;
     _applyColorScheme(
       _schemeForBrightness(_colorScheme.brightness),
       forceNotify: true,
     );
-    await _persist((prefs) => prefs.setBool(_dynamicColorKey, enabled));
+    await _persist((prefs) => prefs.setString(_baseColorKey, source.name));
   }
 
-  /// 莫奈取色开关：开启后优先使用系统壁纸配色（> 封面取色 > 种子色）。
-  Future<void> setMonetColorEnabled(bool enabled) async {
-    if (_monetColorEnabled == enabled) return;
-    _monetColorEnabled = enabled;
+  /// 封面覆盖开关：关闭立即回退基础配色；重新开启恢复最近封面取色。
+  Future<void> setFollowArtworkEnabled(bool enabled) async {
+    if (_followArtworkEnabled == enabled) return;
+    _followArtworkEnabled = enabled;
     _applyColorScheme(
       _schemeForBrightness(_colorScheme.brightness),
       forceNotify: true,
     );
-    await _persist((prefs) => prefs.setBool(_monetColorKey, enabled));
+    await _persist((prefs) => prefs.setBool(_followArtworkKey, enabled));
   }
 
-  /// 纯黑背景开关（仅深色模式生效，OLED 省电观感）。
+  /// 纯黑背景开关（仅深色模式生效，与取色来源正交）。
   Future<void> setPureBlackEnabled(bool enabled) async {
     if (_pureBlackEnabled == enabled) return;
     _pureBlackEnabled = enabled;
@@ -143,23 +165,45 @@ class ThemeProvider extends ChangeNotifier {
 
   /// 宿主注入系统莫奈配色；平台不支持时传 null。
   ///
-  /// 未开启莫奈时只记录备用，不触发重算；配色实际变化时才应用。
+  /// 未选壁纸基础配色时只记录备用，不触发重算；配色实际变化时才应用。
   void updateMonetSchemes(ColorScheme? light, ColorScheme? dark) {
     if (_monetLightScheme == light && _monetDarkScheme == dark) return;
     _monetLightScheme = light;
     _monetDarkScheme = dark;
-    if (!_monetColorEnabled) return;
+    if (_baseColorSource != ColorBaseSource.wallpaper) return;
     _applyColorScheme(
       _schemeForBrightness(_colorScheme.brightness),
       forceNotify: true,
     );
   }
 
-  /// 选择种子色：用户显式选色立即生效；封面色待下一次曲目切换再接管。
+  /// 应用封面取色结果（由 composition root 的取色链路注入）。
+  ///
+  /// 即使当前未开启封面覆盖也记录 seed（供歌词 / 海报按需解析），
+  /// 并强制通知：消费面需要重新解析「跟随封面」颜色。
+  void applyArtworkSeed(Color seed) {
+    if (_artworkSeed?.toARGB32() == seed.toARGB32()) return;
+    _artworkSeed = seed;
+    _applyColorScheme(
+      _schemeForBrightness(_colorScheme.brightness),
+      forceNotify: true,
+    );
+  }
+
+  /// 当前曲目无封面：清除封面 seed，主题回退基础配色。
+  void clearArtworkSeed() {
+    if (_artworkSeed == null) return;
+    _artworkSeed = null;
+    _applyColorScheme(
+      _schemeForBrightness(_colorScheme.brightness),
+      forceNotify: true,
+    );
+  }
+
+  /// 选择自定义种子色：立即生效（封面覆盖开启时随下一次无封面回退显示）。
   Future<void> setSeedColor(Color color) async {
     if (_seedColor.toARGB32() == color.toARGB32()) return;
     _seedColor = color;
-    _activeDynamicSeed = null;
     _applyColorScheme(
       _schemeForBrightness(_colorScheme.brightness),
       forceNotify: true,
@@ -186,118 +230,29 @@ class ThemeProvider extends ChangeNotifier {
     };
   }
 
-  /// 目标亮度的配色优先级：莫奈（系统壁纸）> 封面取色 > 种子色；
+  /// 目标亮度的配色优先级：封面 seed > 壁纸（基础=壁纸且可用）> 自定义 seed；
   /// 纯黑背景在深色模式下覆盖 surface 系列。
   ColorScheme _schemeForBrightness(Brightness brightness) {
-    final monet = _monetColorEnabled
-        ? (brightness == Brightness.dark
-            ? _monetDarkScheme
-            : _monetLightScheme)
-        : null;
     final ColorScheme scheme;
-    if (monet != null) {
-      scheme = monet;
+    final artworkSeed = _artworkSeed;
+    if (_followArtworkEnabled && artworkSeed != null) {
+      scheme = buildColorScheme(artworkSeed, brightness);
     } else {
-      final seed = _dynamicColorEnabled
-          ? (_activeDynamicSeed ?? _seedColor)
-          : _seedColor;
-      scheme = ColorScheme.fromSeed(seedColor: seed, brightness: brightness);
+      final monet = _baseColorSource == ColorBaseSource.wallpaper
+          ? (brightness == Brightness.dark
+              ? _monetDarkScheme
+              : _monetLightScheme)
+          : null;
+      scheme = monet ?? buildColorScheme(_seedColor, brightness);
     }
-    return _pureBlackEnabled ? _applyPureBlack(scheme) : scheme;
-  }
-
-  /// 纯黑背景：仅深色模式生效，surface 系列全部覆盖为纯黑。
-  ///
-  /// 同时黑掉 surfaceBright/surfaceTint：前者是「更亮的面」角色，后者是
-  /// 高程叠加色调，留色会让纯黑出现发灰的浮层；其余角色（inverseSurface、
-  /// outline 等）保持原样以保留弹层/边界的可辨识度。
-  ColorScheme _applyPureBlack(ColorScheme scheme) {
-    if (scheme.brightness != Brightness.dark) return scheme;
-    const black = Color(0xFF000000);
-    return scheme.copyWith(
-      surface: black,
-      surfaceDim: black,
-      surfaceBright: black,
-      surfaceTint: black,
-      surfaceContainerLowest: black,
-      surfaceContainerLow: black,
-      surfaceContainer: black,
-      surfaceContainerHigh: black,
-      surfaceContainerHighest: black,
-    );
+    return _pureBlackEnabled ? applyPureBlackScheme(scheme) : scheme;
   }
 
   void _applyColorScheme(ColorScheme newScheme, {bool forceNotify = false}) {
     final changed = _colorScheme != newScheme;
-    if (!changed && !forceNotify) {
-      return;
-    }
+    if (!changed && !forceNotify) return;
     _colorScheme = newScheme;
     notifyListeners();
-  }
-
-  Future<void> updateThemeFromImage({
-    required ImageProvider imageProvider,
-    required Brightness brightness,
-    String? cacheKey,
-  }) async {
-    // 关闭动态取色或启用莫奈：忽略封面取色结果。
-    if (!_dynamicColorEnabled || _monetColorEnabled) {
-      return;
-    }
-
-    // 传入的是平台亮度；强制模式下取有效亮度，避免封面取色破坏深/浅色模式。
-    final effectiveBrightness = _effectiveBrightness(brightness);
-    final normalizedCacheKey =
-        cacheKey != null ? '${cacheKey}_${effectiveBrightness.name}' : null;
-
-    if (normalizedCacheKey != null &&
-        _paletteCache.containsKey(normalizedCacheKey)) {
-      final cached = _paletteCache[normalizedCacheKey]!;
-      _activeDynamicSeed = cached.seed;
-      _applyColorScheme(_schemeForBrightness(effectiveBrightness));
-      return;
-    }
-
-    final int requestId = ++_paletteRequestId;
-
-    try {
-      final pixels = await _extractPixelsFromImage(imageProvider);
-      if (pixels.isEmpty) {
-        logger.w('无法从图片提取像素');
-        return;
-      }
-
-      // 量化颜色并评分选择最佳种子色
-      final quantizerResult = await QuantizerCelebi().quantize(pixels, 128);
-      final ranked = Score.score(quantizerResult.colorToCount);
-
-      if (ranked.isEmpty) {
-        logger.w('无法从图片提取种子色');
-        return;
-      }
-
-      if (requestId != _paletteRequestId) {
-        return;
-      }
-
-      final seedColor = Color(ranked.first);
-      logger.d('种子色: #${ranked.first.toRadixString(16).padLeft(8, '0')}');
-
-      final ColorScheme nextScheme = ColorScheme.fromSeed(
-        seedColor: seedColor,
-        brightness: effectiveBrightness,
-      );
-
-      if (normalizedCacheKey != null) {
-        _cacheColorScheme(normalizedCacheKey, nextScheme, seedColor);
-      }
-
-      _activeDynamicSeed = seedColor;
-      _applyColorScheme(_schemeForBrightness(effectiveBrightness));
-    } catch (e) {
-      logger.e('更新主题颜色失败: $e');
-    }
   }
 
   Future<void> _loadPreferences() async {
@@ -308,8 +263,27 @@ class ThemeProvider extends ChangeNotifier {
         (mode) => mode.name == modeName,
         orElse: () => ThemeMode.system,
       );
-      _dynamicColorEnabled = prefs.getBool(_dynamicColorKey) ?? true;
-      _monetColorEnabled = prefs.getBool(_monetColorKey) ?? false;
+
+      // 新键优先；两个新键都不存在时从旧键一次性迁移并清理旧键。
+      final baseName = prefs.getString(_baseColorKey);
+      final followArtwork = prefs.getBool(_followArtworkKey);
+      if (baseName == null && followArtwork == null) {
+        _baseColorSource = (prefs.getBool(_legacyMonetKey) ?? false)
+            ? ColorBaseSource.wallpaper
+            : ColorBaseSource.custom;
+        _followArtworkEnabled = prefs.getBool(_legacyDynamicKey) ?? true;
+        await prefs.setString(_baseColorKey, _baseColorSource.name);
+        await prefs.setBool(_followArtworkKey, _followArtworkEnabled);
+        await prefs.remove(_legacyMonetKey);
+        await prefs.remove(_legacyDynamicKey);
+      } else {
+        _baseColorSource = ColorBaseSource.values.firstWhere(
+          (source) => source.name == baseName,
+          orElse: () => ColorBaseSource.custom,
+        );
+        _followArtworkEnabled = followArtwork ?? true;
+      }
+
       _pureBlackEnabled = prefs.getBool(_pureBlackKey) ?? false;
       final seedValue = prefs.getInt(_seedColorKey);
       if (seedValue != null) {
@@ -334,67 +308,6 @@ class ThemeProvider extends ChangeNotifier {
       await write(prefs);
     } catch (e) {
       logger.e('保存主题偏好失败: $e');
-    }
-  }
-
-  Future<List<int>> _extractPixelsFromImage(ImageProvider imageProvider) async {
-    final completer = Completer<ui.Image>();
-    final stream = imageProvider.resolve(ImageConfiguration.empty);
-
-    late ImageStreamListener listener;
-    listener = ImageStreamListener(
-      (ImageInfo info, bool _) {
-        completer.complete(info.image);
-        stream.removeListener(listener);
-      },
-      onError: (exception, stackTrace) {
-        completer.completeError(exception, stackTrace);
-        stream.removeListener(listener);
-      },
-    );
-    stream.addListener(listener);
-
-    final image = await completer.future;
-
-    // 采样到约 100x100 以提高性能
-    const targetSize = 100;
-    final width = image.width;
-    final height = image.height;
-    final stepX = (width / targetSize).ceil().clamp(1, width);
-    final stepY = (height / targetSize).ceil().clamp(1, height);
-
-    final byteData = await image.toByteData(format: ui.ImageByteFormat.rawRgba);
-    if (byteData == null) {
-      return [];
-    }
-
-    final pixels = <int>[];
-    final bytes = byteData.buffer.asUint8List();
-
-    for (var y = 0; y < height; y += stepY) {
-      for (var x = 0; x < width; x += stepX) {
-        final index = (y * width + x) * 4;
-        if (index + 3 < bytes.length) {
-          final r = bytes[index];
-          final g = bytes[index + 1];
-          final b = bytes[index + 2];
-          final a = bytes[index + 3];
-
-          if (a < 128) continue;
-
-          final argb = (a << 24) | (r << 16) | (g << 8) | b;
-          pixels.add(argb);
-        }
-      }
-    }
-
-    return pixels;
-  }
-
-  void _cacheColorScheme(String cacheKey, ColorScheme scheme, Color seed) {
-    _paletteCache[cacheKey] = (scheme: scheme, seed: seed);
-    if (_paletteCache.length > _maxCacheEntries) {
-      _paletteCache.remove(_paletteCache.keys.first);
     }
   }
 }

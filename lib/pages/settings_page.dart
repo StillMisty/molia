@@ -9,6 +9,7 @@ import '../providers/local_database_provider.dart';
 import '../providers/nav_provider.dart';
 import '../providers/playback_provider.dart';
 import '../providers/theme_provider.dart';
+import '../theme/scheme_builder.dart';
 import '../widgets/app_color_picker.dart';
 import '../widgets/font_picker_sheet.dart';
 import '../widgets/lxmc_import.dart' show importLxmcFavoritesFlow;
@@ -134,8 +135,8 @@ class _SettingsMenuSectionState extends State<SettingsMenuSection> {
               ThemeProvider,
               ({
                 ThemeMode mode,
-                bool dynamicColor,
-                bool monet,
+                ColorBaseSource base,
+                bool followArtwork,
                 bool monetAvailable,
                 bool pureBlack,
                 Color seed,
@@ -143,8 +144,8 @@ class _SettingsMenuSectionState extends State<SettingsMenuSection> {
               })>(
             selector: (context, provider) => (
               mode: provider.themeMode,
-              dynamicColor: provider.dynamicColorEnabled,
-              monet: provider.monetColorEnabled,
+              base: provider.baseColorSource,
+              followArtwork: provider.followArtworkEnabled,
               monetAvailable: provider.monetAvailable,
               pureBlack: provider.pureBlackEnabled,
               seed: provider.seedColor,
@@ -153,8 +154,8 @@ class _SettingsMenuSectionState extends State<SettingsMenuSection> {
             builder: (context, appearance, _) {
               final (
                 mode: themeMode,
-                dynamicColor: dynamicColorEnabled,
-                monet: monetColorEnabled,
+                base: baseColorSource,
+                followArtwork: followArtworkEnabled,
                 monetAvailable: monetAvailable,
                 pureBlack: pureBlackEnabled,
                 seed: seedColor,
@@ -176,32 +177,41 @@ class _SettingsMenuSectionState extends State<SettingsMenuSection> {
                     onTap: () => _showThemeModeDialog(context, l10n),
                   ),
                   const SizedBox(height: kElementSpacing),
-                  _buildValueSwitchMenuItem(
+                  // 基础配色（单选）：壁纸 / 自定义；封面覆盖见下一项。
+                  _buildSettingMenuItem(
                     context,
-                    switchKey: const Key('settingsDynamicColorSwitch'),
+                    key: const Key('settingsBaseColorItem'),
                     icon: Icons.palette_rounded,
-                    title: l10n.settingsDynamicColor,
-                    subtitle: l10n.settingsDynamicColorSubtitle,
-                    value: dynamicColorEnabled,
-                    onChanged: (value) => context
-                        .read<ThemeProvider>()
-                        .setDynamicColorEnabled(value),
+                    title: l10n.settingsBaseColor,
+                    subtitle: baseColorSource == ColorBaseSource.wallpaper
+                        ? l10n.settingsBaseColorWallpaper
+                        : _seedColorHex(seedColor),
+                    onTap: () => _showBaseColorDialog(context, l10n),
                   ),
+                  // 自定义色仅作基础配色时显示，避免与「壁纸」并存产生歧义。
+                  if (baseColorSource == ColorBaseSource.custom) ...[
+                    const SizedBox(height: kElementSpacing),
+                    _buildSettingMenuItem(
+                      context,
+                      key: const Key('settingsSeedColorItem'),
+                      icon: Icons.color_lens_rounded,
+                      title: l10n.settingsSeedColor,
+                      subtitle: _seedColorHex(seedColor),
+                      onTap: () => _pickSeedColor(context),
+                    ),
+                  ],
                   const SizedBox(height: kElementSpacing),
-                  // 莫奈取色：平台（Android 12+）不支持时禁用并提示。
+                  // 封面覆盖层：盖过基础配色（含壁纸）；无封面回退。
                   _buildValueSwitchMenuItem(
                     context,
-                    switchKey: const Key('settingsMonetColorSwitch'),
-                    icon: Icons.wallpaper_rounded,
-                    title: l10n.settingsMonetColor,
-                    subtitle: monetAvailable
-                        ? l10n.settingsMonetColorSubtitle
-                        : l10n.settingsMonetUnavailable,
-                    value: monetColorEnabled,
-                    enabled: monetAvailable,
+                    switchKey: const Key('settingsFollowArtworkSwitch'),
+                    icon: Icons.album_rounded,
+                    title: l10n.settingsFollowArtwork,
+                    subtitle: l10n.settingsFollowArtworkSubtitle,
+                    value: followArtworkEnabled,
                     onChanged: (value) => context
                         .read<ThemeProvider>()
-                        .setMonetColorEnabled(value),
+                        .setFollowArtworkEnabled(value),
                   ),
                   const SizedBox(height: kElementSpacing),
                   _buildValueSwitchMenuItem(
@@ -214,15 +224,6 @@ class _SettingsMenuSectionState extends State<SettingsMenuSection> {
                     onChanged: (value) => context
                         .read<ThemeProvider>()
                         .setPureBlackEnabled(value),
-                  ),
-                  const SizedBox(height: kElementSpacing),
-                  _buildSettingMenuItem(
-                    context,
-                    key: const Key('settingsSeedColorItem'),
-                    icon: Icons.color_lens_rounded,
-                    title: l10n.settingsSeedColor,
-                    subtitle: _seedColorHex(seedColor),
-                    onTap: () => _pickSeedColor(context),
                   ),
                   const SizedBox(height: kElementSpacing),
                   // 全局应用字体：来自设备已装字体，null = 系统默认。
@@ -914,10 +915,66 @@ class _SettingsMenuSectionState extends State<SettingsMenuSection> {
     );
   }
 
+  /// 基础配色弹层：壁纸 / 自定义 二选一；平台不支持壁纸时该项禁用并提示。
+  Future<void> _showBaseColorDialog(
+      BuildContext context, AppLocalizations l10n) async {
+    final themeProvider = context.read<ThemeProvider>();
+    final navigator = Navigator.of(context);
+    final monetAvailable = themeProvider.monetAvailable;
+
+    Future<void> select(ColorBaseSource source) async {
+      await themeProvider.setBaseColorSource(source);
+      navigator.pop();
+    }
+
+    M3EDialog.show<void>(
+      context,
+      dialog: M3EDialog(
+        title: l10n.settingsBaseColor,
+        content: SizedBox(
+          width: _dialogWidth(context),
+          child: M3ERadioGroup<ColorBaseSource>(
+            groupValue: themeProvider.baseColorSource,
+            onChanged: select,
+            groupLabel: l10n.settingsBaseColor,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                M3ERadio<ColorBaseSource>(
+                  value: ColorBaseSource.wallpaper,
+                  groupValue: themeProvider.baseColorSource,
+                  label: Text(
+                    monetAvailable
+                        ? l10n.settingsBaseColorWallpaper
+                        : l10n.settingsMonetUnavailable,
+                  ),
+                  onChanged: monetAvailable ? select : null,
+                ),
+                M3ERadio<ColorBaseSource>(
+                  value: ColorBaseSource.custom,
+                  groupValue: themeProvider.baseColorSource,
+                  label: Text(l10n.settingsBaseColorCustom),
+                  onChanged: select,
+                ),
+              ],
+            ),
+          ),
+        ),
+        actions: [
+          M3EButton.text(
+            onPressed: () => Navigator.pop(context),
+            child: Text(l10n.cancelButton),
+          ),
+        ],
+      ),
+    );
+  }
+
   /// 主题色：直接打开任意取色器（HSV + Hex）。
   ///
-  /// 预设色板已移除：预设与任意取色并存会让入口显得繁杂，任意取色已覆盖
-  /// 全部能力；默认种子色仍由 ThemeProvider 提供（动态取色关闭时的兜底）。
+  /// 自定义色是「基础配色」的一种；封面覆盖开启时，播放有封面的歌曲
+  /// 期间会被封面取色盖过（设置项文案已说明）。
   Future<void> _pickSeedColor(BuildContext context) async {
     final themeProvider = context.read<ThemeProvider>();
     final picked = await showAppColorPicker(

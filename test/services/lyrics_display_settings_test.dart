@@ -2,6 +2,7 @@ import 'dart:convert';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:molia/services/lyrics_display/lyrics_display_settings.dart';
+import 'package:molia/theme/scheme_builder.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 /// 配置模型：默认值 / JSON 往返 / 缺键合并 / 取值夹取 / 非法枚举回落。
@@ -42,6 +43,7 @@ void main() {
     await source.setDesktopUnplayedColorSource(
         LyricColorSource.onSurfaceVariant);
     await source.setDesktopShadowColorSource(LyricColorSource.tertiary);
+    await source.setDesktopSchemeSource(SurfaceColorSource.artwork);
     await source.setDesktopWidthPercent(80);
     await source.setDesktopSingleLine(true);
     await source.setDesktopTextAlignX(DesktopTextAlignX.left);
@@ -84,6 +86,7 @@ void main() {
     expect(restored.desktopUnplayedColorSource,
         LyricColorSource.onSurfaceVariant);
     expect(restored.desktopShadowColorSource, LyricColorSource.tertiary);
+    expect(restored.desktopSchemeSource, SurfaceColorSource.artwork);
     expect(restored.desktopWidthPercent, 80);
     expect(restored.desktopSingleLine, isTrue);
     expect(restored.desktopTextAlignX, DesktopTextAlignX.left);
