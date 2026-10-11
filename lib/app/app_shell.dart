@@ -509,8 +509,8 @@ class _ShellBarHeader extends StatelessWidget {
 
   final PlayerMorphController morph;
 
-  /// 进入播放页。点击区域覆盖封面 + 歌名整条：封面只有 32×32，
-  /// 单独做触控目标达不到 48dp，也不符合迷你条「点哪都进播放页」的惯例。
+  /// 进入播放页。点击区域覆盖封面 + 歌名整条：封面 40×40 仍达不到 48dp
+  /// 的独立触控目标，也不符合迷你条「点哪都进播放页」的惯例。
   final VoidCallback onOpenPlayer;
 
   @override
@@ -526,9 +526,10 @@ class _ShellBarHeader extends StatelessWidget {
           onTap: showTrack ? onOpenPlayer : null,
           child: Row(
             children: [
+              // 封面与歌名+作者两行文本等高（titleMedium 24 + labelSmall 16）。
               SizedBox(
-                width: 32,
-                height: 32,
+                width: 40,
+                height: 40,
                 child: Stack(
                   fit: StackFit.expand,
                   children: [
@@ -589,8 +590,8 @@ class _ShellBarHeader extends StatelessWidget {
 
 /// 顶栏封面：跟随当前曲目；无封面时音符图标兜底。
 ///
-/// 点击进入播放页的手势由 [_ShellBarHeader] 整条承接（封面只有 32×32，
-/// 不单独做触控目标），本组件只负责展示，避免手势与展示耦合。
+/// 点击进入播放页的手势由 [_ShellBarHeader] 整条承接（封面 40×40
+/// 仍小于 48dp 触控目标），本组件只负责展示，避免手势与展示耦合。
 class _BarCover extends StatelessWidget {
   const _BarCover({super.key});
 
@@ -605,7 +606,7 @@ class _BarCover extends StatelessWidget {
     return AppNetworkImage(
       url: coverUrl,
       borderRadius: BorderRadius.circular(8),
-      fallbackIconSize: 18,
+      fallbackIconSize: 22,
     );
   }
 }

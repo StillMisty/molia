@@ -94,7 +94,7 @@ class PlayerMorphFlight extends StatelessWidget {
   /// 几何飞行占比；到达后宿主移除副本并显示目标端真身。
   static const double flightPortion = 0.75;
 
-  /// 顶栏端封面外观：圆角 8、无描边阴影（对应顶栏 32×32 封面真身）。
+  /// 顶栏端封面外观：圆角 8、无描边阴影（对应顶栏 40×40 封面真身）。
   static const double _barRadius = 8;
 
   /// 播放页端封面外观：外圆角 18、1px 描边 + 柔和阴影
