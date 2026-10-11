@@ -14,13 +14,13 @@
 
 ## 工具链
 
-| 组件 | 版本 | 说明 |
-|---|---|---|
-| Flutter / Dart | 3.47.6 stable / 3.13.5 | |
-| JDK | 25+（已在 27 上验证） | `flutter config --jdk-dir=<path>` 可指定 |
-| Gradle / AGP / Kotlin | 9.8.1 / 9.4.1 / 2.4.20 | Gradle 9.8 是支持 JDK 27 class 文件的最低版本 |
-| compileSdk/targetSdk/minSdk | 37 / 37 / 37 | minSdk=37 → 只有 Android 17+ 可安装 |
-| NDK | 30.0.16248370 | |
+| 组件 | 版本 |
+|---|---|
+| Flutter / Dart | 3.47.6 stable / 3.13.5 |
+| JDK | 25+ |
+| Gradle / AGP / Kotlin | 9.8.1 / 9.4.1 / 2.4.20 |
+| compileSdk/targetSdk/minSdk | 37 / 37 / 37 |
+| NDK | 30.0.16248370 |
 
 ## 常用命令
 
