@@ -41,6 +41,29 @@ class BuiltinTransport {
   Future<T> cached<T>(String key, Future<T> Function() create) =>
       _cache.getOrCreate(key, create);
 
+  /// 缓存 + 重试的合并入口（发现适配器的唯一取数方式）。
+  ///
+  /// 语义（与旧的 `cached(...)` 套 `retryRequest(...)` 完全一致）：
+  /// - [attempt] 返回 null = 本次尝试失败（平台业务码异常 / 结构不符），继续重试；
+  /// - 抛异常直接向上传播（不吞错、不重试——异常不是「本次尝试失败」）；
+  /// - 用尽 [maxTries] 抛 [StateError]（[message] 是调用方与上游约定的信号，
+  ///   见 `wy_leaderboard` 对 `'try max num'` 的豁免）；
+  /// - 只有成功结果进缓存（失败不缓存）。
+  Future<T> cachedRetry<T>(
+    String key, {
+    required int maxTries,
+    String message = 'try max num',
+    required Future<T?> Function(int tryNum) attempt,
+  }) {
+    return cached(key, () async {
+      for (var tryNum = 0; tryNum < maxTries; tryNum++) {
+        final result = await attempt(tryNum);
+        if (result != null) return result;
+      }
+      throw StateError(message);
+    });
+  }
+
   static const Duration defaultTimeout = Duration(seconds: 15);
 
   /// 统一重试预算（含首次尝试）：平台搜索与发现共用同一策略。
