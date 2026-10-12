@@ -16,9 +16,19 @@ import 'package:molia/sources/source_manager.dart';
 
 /// 端到端集成测试：真实 App 运行时 + 真实 LX JS 引擎 + 本地 mock HTTP 服务。
 ///
-/// 运行：flutter test integration_test/lx_engine_integration_test.dart -d linux
+/// 走官方 `flutter test integration_test/...` 路径，同一份文件覆盖两类目标：
+/// - Linux 桌面：`tool/agent/test.sh linux`
+///   （等价 `flutter test integration_test/lx_engine_integration_test.dart -d linux`；
+///   播放用例需要 libmpv，无 DISPLAY 的环境用 xvfb-run）；
+/// - Android 模拟器：`tool/agent/test.sh android`（播放用例跳过，模拟器音频不可靠）。
+///
+/// 不要拆成多个集成测试文件：桌面端逐文件重启 App 会互相踩（flutter#101031）。
 void main() {
   IntegrationTestWidgetsFlutterBinding.ensureInitialized();
+  // 播放用例仅桌面运行：Android/iOS 的 just_audio 后端依赖模拟器音频设备，
+  // 结果不可靠（见本文件播放用例内的跳过分支）。
+  final isDesktop =
+      Platform.isLinux || Platform.isWindows || Platform.isMacOS;
   // Linux/Windows 上为 just_audio 注册 media_kit 后端
   initDesktopAudioIfNeeded();
 
@@ -40,7 +50,11 @@ void main() {
     // 桌面端 media_kit（libmpv）的全局原生事件循环会阻止测试进程退出，
     // 导致 `flutter test integration_test/... -d linux` 挂起（CI/子代理卡死）。
     // 测试结果已通过 VM service 上报，这里给出短暂上报窗口后强制退出。
-    Future<void>.delayed(const Duration(seconds: 2), () => exit(0));
+    // Android 不注册：官方 teardown（stopApp/uninstall）能干净退出，注册反而会
+    // 抢在卸载/回收之前退出进程（见 docs/pitfalls.md #11）。
+    if (Platform.isLinux || Platform.isWindows) {
+      Future<void>.delayed(const Duration(seconds: 2), () => exit(0));
+    }
   });
 
   Future<SourceManager> freshManager() async {
@@ -55,7 +69,9 @@ void main() {
   Future<void> waitFor(
     WidgetTester tester,
     bool Function() predicate, {
-    Duration timeout = const Duration(seconds: 40),
+    // 90s：Android 模拟器（无 KVM 直通时尤其慢）冷启动 QuickJS + 首次搜索
+    // 远超桌面耗时，40s 会误报超时。
+    Duration timeout = const Duration(seconds: 90),
     String reason = '',
   }) async {
     final deadline = DateTime.now().add(timeout);
@@ -65,6 +81,30 @@ void main() {
       await Future<void>.delayed(const Duration(milliseconds: 50));
     }
     fail('等待超时: $reason');
+  }
+
+  /// 把目标滚进可见区（目标可能尚未构建，处于列表懒构建范围之外）。
+  ///
+  /// 不要用 `tester.scrollUntilVisible`：它内部逐次 `drag` 增量滚动，而
+  /// Android 真机/模拟器（live binding）下 `drag` 不产生滚动位移（实测
+  /// `ScrollPosition.pixels` 恒为 0），会一直滚到 50 次上限后抛
+  /// `Bad state: No element`。改用 `fling`（真实速度手势），实测可滚。
+  /// 详见 docs/pitfalls.md #24。
+  Future<void> scrollTo(
+    WidgetTester tester,
+    Finder target, {
+    bool up = false,
+  }) async {
+    final scrollable = find.byType(Scrollable).first;
+    for (var i = 0; i < 10 && target.evaluate().isEmpty; i++) {
+      await tester.fling(scrollable, Offset(0, up ? 300 : -300), 1200);
+      await tester.pumpAndSettle();
+    }
+    if (target.evaluate().isEmpty) {
+      fail('滚动后仍找不到目标: $target');
+    }
+    await tester.ensureVisible(target);
+    await tester.pumpAndSettle();
   }
 
   testWidgets('LX 引擎：导入 → 初始化 → 搜索 → 取链 → 歌词', (tester) async {
@@ -103,6 +143,10 @@ void main() {
   });
 
   testWidgets('本地播放：播放 mock 音频，进度推进，暂停/继续/停止', (tester) async {
+    if (!isDesktop) {
+      markTestSkipped('Android/iOS 音频依赖模拟器音频设备、结果不可靠：播放用例仅桌面运行');
+      return;
+    }
     if (!desktopAudioAvailable) {
       markTestSkipped(
           'media_kit 不可用，跳过播放测试（Linux 需安装 mpv/libmpv）：${desktopAudioInitError ?? ''}');
@@ -184,21 +228,11 @@ void main() {
     expect(find.text('音源管理'), findsOneWidget);
     // 空态卡片可能落在首屏视口之外（布局随版本变化）：先滚动到可见。
     final noScripts = find.textContaining('还没有导入音源脚本');
-    await tester.scrollUntilVisible(
-      noScripts,
-      200,
-      scrollable: find.byType(Scrollable).first,
-    );
+    await scrollTo(tester, noScripts);
     expect(noScripts, findsOneWidget);
 
     // 粘贴导入（回滚到导入卡片，可能已在视口上方）
-    await tester.scrollUntilVisible(
-      find.text('粘贴脚本导入'),
-      -200,
-      scrollable: find.byType(Scrollable).first,
-    );
-    await tester.ensureVisible(find.text('粘贴脚本导入'));
-    await tester.pumpAndSettle();
+    await scrollTo(tester, find.text('粘贴脚本导入'), up: true);
     await tester.tap(find.text('粘贴脚本导入'));
     await tester.pumpAndSettle();
     await tester.enterText(find.byType(M3ETextField), script);
@@ -216,11 +250,7 @@ void main() {
       reason: '导入后激活失败',
     );
     // 滚动到激活卡片并断言 UI 展示（状态卡在列表顶部，向上滚）
-    await tester.scrollUntilVisible(
-      find.textContaining('当前音源：集成测试音源'),
-      -200,
-      scrollable: find.byType(Scrollable).first,
-    );
+    await scrollTo(tester, find.textContaining('当前音源：集成测试音源'), up: true);
     expect(find.textContaining('当前音源：集成测试音源'), findsOneWidget);
 
     // 列表中脚本与源声明可见

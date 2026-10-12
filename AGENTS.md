@@ -27,9 +27,11 @@
 flutter pub get
 flutter analyze --no-pub               # 必须保持 0 error / 0 warning
 flutter test --no-pub                  # 单文件：flutter test test/lx_core_test.dart --no-pub
-flutter test integration_test/lx_engine_integration_test.dart -d linux --no-pub
-                                       # 端到端（真实引擎+播放+设置页）；看门狗自动退出，勿删
-flutter build apk --debug
+tool/agent/test.sh linux               # 端到端（真实引擎+播放+设置页）；桌面看门狗自动退出，勿删
+                                       # 等价 flutter test integration_test/... -d linux；无 DISPLAY 自动 xvfb-run
+tool/agent/test.sh android             # 同一套集成测试跑 Android 模拟器（需先 emu.sh start；跳过播放）
+                                       # 首次 Gradle 构建较久，必要时 --timeout 放宽
+flutter build apk --debug              # 手动装包验证用；自动化验证走上面的集成测试
 flutter build web --release            # 涉及 UI 组件时加跑；音源脚本在 Web 不可用
 flutter build apk --release --split-per-abi --split-debug-info=build/symbols --obfuscate --extra-gen-snapshot-options=--strip   # 构建发布
 ```

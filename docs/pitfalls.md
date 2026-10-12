@@ -24,9 +24,14 @@
 10. **插件 JVM target 校验**：`flutter_js` 等插件 Java target(11) 与 Kotlin target(1.8) 不一致，
     AGP 9 默认按错误处理；已在 `android/gradle.properties` 设置
     `kotlin.jvm.target.validation.mode=warning`，不要删除。
-11. **集成测试挂起保护**：桌面端 media_kit 的原生事件循环会阻止测试进程退出；
-    `integration_test/lx_engine_integration_test.dart` 的 `tearDownAll` 有 2s 上报窗口后
-    `exit(0)` 的看门狗，不要删除（否则 `flutter test -d linux` 会永久挂起）。
+11. **集成测试挂起保护（仅桌面）**：桌面端 media_kit（libmpv）的原生事件循环会阻止测试进程
+    退出；`integration_test/lx_engine_integration_test.dart` 的 `tearDownAll` 有 2s 上报窗口后
+    `exit(0)` 的看门狗（只在 Linux/Windows 注册），不要删除、也不要推广到 Android——Android
+    走官方 teardown（stopApp/uninstall）能干净退出，注册看门狗反而会抢在卸载/回收之前退出进程。
+    Android 若遇跑完不退出，是上游 adb teardown 无超时（flutter/flutter#187785 / #187984，
+    3.47.6 已修 DDS 路径），先看 `tool/agent/test.sh` 的日志尾部再判断。
+    另：无显示环境跑 Linux 集成测试必须套 `xvfb-run`（脚本自动处理），否则报
+    「Error waiting for a debug connection」。
 12. **不内置字体资产**：界面与海报统一使用设备字体，用户可在设置中切换「应用字体」
     （枚举实现见 `lib/services/system_fonts_service*.dart`：Android 解析系统
     `fonts.xml`、iOS 走 `UIFont.familyNames` 通道、Linux 调 `fc-list`），海报页可
@@ -91,3 +96,9 @@
     把底部文字裁掉（首卡正常、其余卡只剩半张封面）。文字一律用 `title` / `subtitle`
     （`applyDynamicTextContentTransform: false` 常显），需要压暗用
     `M3ECarouselScrim.gradient()`。
+24. **Android 集成测试里 `tester.drag` 不产生滚动**：live binding 下（模拟器/真机）
+    `drag` 的位移不进 `ScrollPosition`（实测 `pixels` 恒为 0），而 `fling` 正常。因此
+    `tester.scrollUntilVisible`（内部逐次 drag，50 次后抛 `Bad state: No element`）在
+    Android 上必挂；桌面因窗口宽、卡片不换行、目标常在已构建范围内而不暴露。
+    集成测试滚动一律走 `integration_test/lx_engine_integration_test.dart` 的 `scrollTo`
+    助手（fling 版）或 `ensureVisible`，不要用 `scrollUntilVisible`。

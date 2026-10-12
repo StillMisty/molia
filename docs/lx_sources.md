@@ -125,9 +125,11 @@ lib/playback/
    `test/builtin_lyric_decode_test.dart`（KRC/LRCX/QRC/MRC 合成数据闭环）、
    `test/source_manager_builtin_lyric_test.dart`、`test/architecture/layering_test.dart`）；
 3. `node tool/lx_prelude_harness.mjs` 输出 `PROTOCOL OK`；
-4. `flutter test integration_test/lx_engine_integration_test.dart -d linux --no-pub`
-   （真实导入→搜索→取链→歌词；播放测试需要 libmpv）；
-5. 真机/模拟器验证：设置 → 音源管理 → 导入社区脚本（或在线更新）→ 搜索 → 播放。
+4. `tool/agent/test.sh linux`（等价 `flutter test integration_test/lx_engine_integration_test.dart
+   -d linux`）：真实导入→搜索→取链→歌词；播放测试需要 libmpv，无 DISPLAY 的环境自动 xvfb-run；
+5. `tool/agent/test.sh android`（模拟器，官方 flutter test 路径）：同一份引擎/UI 用例，
+   播放用例按平台跳过；跑完自动卸载，不污染设备状态；
+6. 真机/模拟器验证：设置 → 音源管理 → 导入社区脚本（或在线更新）→ 搜索 → 播放。
 
 ## 已知限制（后续计划）
 
