@@ -1,6 +1,8 @@
 import 'package:flutter/foundation.dart';
 import 'package:logger/logger.dart';
-import 'package:shared_preferences/shared_preferences.dart';
+
+import '../data/settings/settings_keys.dart';
+import '../data/settings/settings_registry.dart';
 
 final logger = Logger();
 
@@ -12,8 +14,14 @@ enum ShellDestination { nowPlaying, favorites, library }
 
 /// 底部导航定制：顺序 + 显示/隐藏，SharedPreferences 持久化。
 class NavProvider extends ChangeNotifier {
-  static const String _orderKey = 'shell_nav_order';
-  static const String _hiddenKey = 'shell_nav_hidden';
+  NavProvider({SettingsRegistry? settings})
+      : _settings = settings ?? SettingsRegistry(keys: kAllSettingsKeys) {
+    _settings.bindReload(kShellNavOrder, reloadFromPreferences);
+    _settings.bindReload(kShellNavHidden, reloadFromPreferences);
+    _preferencesReady = _loadPreferences();
+  }
+
+  final SettingsRegistry _settings;
 
   /// 默认顺序：资料 / 播放 / 收藏。
   static const List<ShellDestination> defaultOrder = <ShellDestination>[
@@ -26,10 +34,6 @@ class NavProvider extends ChangeNotifier {
   final Set<ShellDestination> _hidden = <ShellDestination>{};
 
   late final Future<void> _preferencesReady;
-
-  NavProvider() {
-    _preferencesReady = _loadPreferences();
-  }
 
   /// 持久化偏好加载完成（测试等待启动态就绪）。
   Future<void> get preferencesReady => _preferencesReady;
@@ -74,9 +78,8 @@ class NavProvider extends ChangeNotifier {
 
   Future<void> _loadPreferences() async {
     try {
-      final prefs = await SharedPreferences.getInstance();
-      final names = prefs.getStringList(_orderKey);
-      if (names != null) {
+      final names = await _settings.read(kShellNavOrder);
+      if (names.isNotEmpty) {
         final restored = <ShellDestination>[];
         for (final name in names) {
           for (final destination in ShellDestination.values) {
@@ -91,8 +94,8 @@ class NavProvider extends ChangeNotifier {
         }
         _order = restored;
       }
-      final hiddenNames = prefs.getStringList(_hiddenKey);
-      if (hiddenNames != null) {
+      final hiddenNames = await _settings.read(kShellNavHidden);
+      if (hiddenNames.isNotEmpty) {
         _hidden
           ..clear()
           ..addAll(ShellDestination.values.where(
@@ -111,13 +114,12 @@ class NavProvider extends ChangeNotifier {
 
   Future<void> _persist() async {
     try {
-      final prefs = await SharedPreferences.getInstance();
-      await prefs.setStringList(
-        _orderKey,
+      await _settings.write(
+        kShellNavOrder,
         _order.map((destination) => destination.name).toList(),
       );
-      await prefs.setStringList(
-        _hiddenKey,
+      await _settings.write(
+        kShellNavHidden,
         _hidden.map((destination) => destination.name).toList(),
       );
     } catch (e) {

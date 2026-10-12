@@ -4,6 +4,8 @@ import 'package:material_ui/material_ui.dart';
 import 'package:logger/logger.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../data/settings/settings_keys.dart';
+import '../data/settings/settings_registry.dart';
 import '../theme/scheme_builder.dart';
 
 final logger = Logger();
@@ -21,7 +23,7 @@ final logger = Logger();
 /// 解析顺序（唯一）：
 /// `封面 seed > 壁纸（基础=壁纸且平台可用）> 自定义 seed`，再叠加纯黑。
 ///
-/// 持久化键（SharedPreferences）：
+/// 持久化键（登记进设置注册表，跟人走）：
 /// - `theme_mode`：`system` / `light` / `dark`；
 /// - `color_base`：`wallpaper` / `custom`；
 /// - `follow_artwork_enabled`：播放有封面时是否用封面取色覆盖基础配色
@@ -33,11 +35,7 @@ final logger = Logger();
 /// 旧键 `dynamic_color_enabled` / `monet_color_enabled` 只读一次并迁移：
 /// 莫奈开 → 基础=壁纸；否则基础=自定义；动态取色 → 封面覆盖开关。
 class ThemeProvider extends ChangeNotifier {
-  static const String _themeModeKey = 'theme_mode';
-  static const String _baseColorKey = 'color_base';
-  static const String _followArtworkKey = 'follow_artwork_enabled';
-  static const String _pureBlackKey = 'pure_black_enabled';
-  static const String _seedColorKey = 'seed_color';
+  /// 设备本地键（字体来自本机已装字体，不跟人走）。
   static const String _appFontKey = 'app_font_family';
 
   /// 旧版键（迁移后删除）。
@@ -66,9 +64,17 @@ class ThemeProvider extends ChangeNotifier {
 
   late final Future<void> _preferencesReady;
 
-  ThemeProvider() {
+  ThemeProvider({SettingsRegistry? settings})
+      : _settings = settings ?? SettingsRegistry(keys: kAllSettingsKeys) {
+    _settings.bindReload(kThemeMode, reloadFromPreferences);
+    _settings.bindReload(kColorBase, reloadFromPreferences);
+    _settings.bindReload(kFollowArtworkEnabled, reloadFromPreferences);
+    _settings.bindReload(kPureBlackEnabled, reloadFromPreferences);
+    _settings.bindReload(kSeedColor, reloadFromPreferences);
     _preferencesReady = _loadPreferences();
   }
+
+  final SettingsRegistry _settings;
 
   ColorScheme get colorScheme => _colorScheme;
 
@@ -130,7 +136,7 @@ class ThemeProvider extends ChangeNotifier {
       forceNotify: true,
     );
     if (!changed) return;
-    await _persist((prefs) => prefs.setString(_themeModeKey, mode.name));
+    await _persist(() => _settings.write(kThemeMode, mode.name));
   }
 
   /// 设置基础配色来源（壁纸 / 自定义）。
@@ -141,7 +147,7 @@ class ThemeProvider extends ChangeNotifier {
       _schemeForBrightness(_colorScheme.brightness),
       forceNotify: true,
     );
-    await _persist((prefs) => prefs.setString(_baseColorKey, source.name));
+    await _persist(() => _settings.write(kColorBase, source.name));
   }
 
   /// 封面覆盖开关：关闭立即回退基础配色；重新开启恢复最近封面取色。
@@ -152,7 +158,7 @@ class ThemeProvider extends ChangeNotifier {
       _schemeForBrightness(_colorScheme.brightness),
       forceNotify: true,
     );
-    await _persist((prefs) => prefs.setBool(_followArtworkKey, enabled));
+    await _persist(() => _settings.write(kFollowArtworkEnabled, enabled));
   }
 
   /// 纯黑背景开关（仅深色模式生效，与取色来源正交）。
@@ -163,7 +169,7 @@ class ThemeProvider extends ChangeNotifier {
       _schemeForBrightness(_colorScheme.brightness),
       forceNotify: true,
     );
-    await _persist((prefs) => prefs.setBool(_pureBlackKey, enabled));
+    await _persist(() => _settings.write(kPureBlackEnabled, enabled));
   }
 
   /// 宿主注入系统莫奈配色；平台不支持时传 null。
@@ -211,7 +217,7 @@ class ThemeProvider extends ChangeNotifier {
       _schemeForBrightness(_colorScheme.brightness),
       forceNotify: true,
     );
-    await _persist((prefs) => prefs.setInt(_seedColorKey, color.toARGB32()));
+    await _persist(() => _settings.write(kSeedColor, color.toARGB32()));
   }
 
   /// 设置全局应用字体（null = 系统默认）；字体变化不重算配色，直接通知重build。
@@ -219,9 +225,14 @@ class ThemeProvider extends ChangeNotifier {
     if (_appFontFamily == family) return;
     _appFontFamily = family;
     notifyListeners();
-    await _persist((prefs) => family == null
-        ? prefs.remove(_appFontKey)
-        : prefs.setString(_appFontKey, family));
+    await _persist(() async {
+      final prefs = await SharedPreferences.getInstance();
+      if (family == null) {
+        await prefs.remove(_appFontKey);
+      } else {
+        await prefs.setString(_appFontKey, family);
+      }
+    });
   }
 
   /// 当前模式下的有效亮度：非 system 强制覆盖平台亮度。
@@ -260,38 +271,37 @@ class ThemeProvider extends ChangeNotifier {
 
   Future<void> _loadPreferences() async {
     try {
-      final prefs = await SharedPreferences.getInstance();
-      final modeName = prefs.getString(_themeModeKey);
+      final modeName = await _settings.read(kThemeMode);
       _themeMode = ThemeMode.values.firstWhere(
         (mode) => mode.name == modeName,
         orElse: () => ThemeMode.system,
       );
 
       // 新键优先；两个新键都不存在时从旧键一次性迁移并清理旧键。
-      final baseName = prefs.getString(_baseColorKey);
-      final followArtwork = prefs.getBool(_followArtworkKey);
-      if (baseName == null && followArtwork == null) {
+      // 旧键不登记（迁移后即废弃），因此这里仍需直接访问 prefs。
+      final prefs = await SharedPreferences.getInstance();
+      final hasBase = prefs.containsKey(kColorBase.name) ||
+          prefs.containsKey(kFollowArtworkEnabled.name);
+      if (!hasBase) {
         _baseColorSource = (prefs.getBool(_legacyMonetKey) ?? false)
             ? ColorBaseSource.wallpaper
             : ColorBaseSource.custom;
         _followArtworkEnabled = prefs.getBool(_legacyDynamicKey) ?? true;
-        await prefs.setString(_baseColorKey, _baseColorSource.name);
-        await prefs.setBool(_followArtworkKey, _followArtworkEnabled);
+        await _settings.write(kColorBase, _baseColorSource.name);
+        await _settings.write(kFollowArtworkEnabled, _followArtworkEnabled);
         await prefs.remove(_legacyMonetKey);
         await prefs.remove(_legacyDynamicKey);
       } else {
+        final baseName = await _settings.read(kColorBase);
         _baseColorSource = ColorBaseSource.values.firstWhere(
           (source) => source.name == baseName,
           orElse: () => ColorBaseSource.custom,
         );
-        _followArtworkEnabled = followArtwork ?? true;
+        _followArtworkEnabled = await _settings.read(kFollowArtworkEnabled);
       }
 
-      _pureBlackEnabled = prefs.getBool(_pureBlackKey) ?? false;
-      final seedValue = prefs.getInt(_seedColorKey);
-      if (seedValue != null) {
-        _seedColor = Color(seedValue);
-      }
+      _pureBlackEnabled = await _settings.read(kPureBlackEnabled);
+      _seedColor = Color(await _settings.read(kSeedColor));
       _appFontFamily = prefs.getString(_appFontKey);
       // system 模式保留当前亮度，等宿主回调按平台亮度刷新。
       _applyColorScheme(
@@ -305,10 +315,9 @@ class ThemeProvider extends ChangeNotifier {
     }
   }
 
-  Future<void> _persist(Future<void> Function(SharedPreferences) write) async {
+  Future<void> _persist(Future<void> Function() write) async {
     try {
-      final prefs = await SharedPreferences.getInstance();
-      await write(prefs);
+      await write();
     } catch (e) {
       logger.e('保存主题偏好失败: $e');
     }

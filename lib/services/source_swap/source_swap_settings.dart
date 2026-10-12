@@ -1,27 +1,26 @@
 import 'package:flutter/foundation.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 
-/// 换源偏好：自动换源开关（设置 › 播放，**默认开**）。
+import '../../data/settings/settings_keys.dart';
+import '../../data/settings/settings_registry.dart';
+
+/// 换源偏好：自动换源开关（设置 › 播放，**默认开**；跟人走）。
 ///
 /// 只影响播放失败后的自动行为；手动换源不受开关控制。
 class SourceSwapSettings extends ChangeNotifier {
-  SourceSwapSettings({SharedPreferences? preferences})
-      : _prefsOverride = preferences;
+  SourceSwapSettings({SettingsRegistry? settings})
+      : _settings = settings ?? SettingsRegistry(keys: kAllSettingsKeys) {
+    _settings.bindReload(kSourceSwapAutoEnabled, init);
+  }
 
-  static const String keyAutoEnabled = 'source_swap_auto_enabled';
-  static const bool defaultAutoEnabled = true;
+  final SettingsRegistry _settings;
 
-  final SharedPreferences? _prefsOverride;
-
-  bool _autoEnabled = defaultAutoEnabled;
+  bool _autoEnabled = kSourceSwapAutoEnabled.defaultValue;
   bool get autoEnabled => _autoEnabled;
 
   /// 读取持久化值（失败/缺项保持默认；不抛异常）。
   Future<void> init() async {
     try {
-      final prefs = _prefsOverride ?? await SharedPreferences.getInstance();
-      final value = prefs.getBool(keyAutoEnabled);
-      if (value != null) _autoEnabled = value;
+      _autoEnabled = await _settings.read(kSourceSwapAutoEnabled);
       notifyListeners();
     } catch (_) {}
   }
@@ -31,8 +30,7 @@ class SourceSwapSettings extends ChangeNotifier {
     _autoEnabled = value;
     notifyListeners();
     try {
-      final prefs = _prefsOverride ?? await SharedPreferences.getInstance();
-      await prefs.setBool(keyAutoEnabled, value);
+      await _settings.write(kSourceSwapAutoEnabled, value);
     } catch (_) {}
   }
 }

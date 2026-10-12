@@ -2,8 +2,9 @@ import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter/foundation.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 
+import '../../data/settings/settings_keys.dart';
+import '../../data/settings/settings_registry.dart';
 import '../../theme/scheme_builder.dart';
 
 /// 未同步歌词（无时间轴）的展示策略。
@@ -62,15 +63,17 @@ abstract final class DesktopControlKeys {
 
 /// 歌词显示配置：歌词页（应用内）+ 输出侧共享项 + 桌面歌词 / 通知栏·锁屏 / 蓝牙三组。
 ///
-/// - 持久化为 SharedPreferences 单 JSON 键（`lyrics_display_settings_v1`），
-///   读取时与默认值合并，新增键对旧数据向前兼容；
+/// - 持久化为单 JSON 键（`lyrics_display_settings_v1`，跟人走），读取时与
+///   默认值合并，新增键对旧数据向前兼容；
 /// - 模型平台无关：颜色为 ARGB int、宽度为百分比、字号为逻辑字号
 ///   （Android 侧按 sp 解释，未来桌面窗口按逻辑 px 解释）；
 /// - 悬浮窗位置由原生侧自行持久化（系统级窗口状态），不进本模型。
 class LyricsDisplaySettings extends ChangeNotifier {
-  LyricsDisplaySettings({SharedPreferences? prefs}) : _prefsOverride = prefs;
+  LyricsDisplaySettings({SettingsRegistry? settings})
+      : _settings = settings ?? SettingsRegistry(keys: kAllSettingsKeys) {
+    _settings.bindReload(kLyricsDisplaySettings, init);
+  }
 
-  static const String storageKey = 'lyrics_display_settings_v1';
 
   static const int defaultOffsetMs = 0;
   static const bool defaultTranslationEnabled = true;
@@ -127,8 +130,7 @@ class LyricsDisplaySettings extends ChangeNotifier {
   static const List<int> maxLinesRange = [1, 5];
   static const List<int> updateIntervalOptions = [0, 1000, 2000];
 
-  final SharedPreferences? _prefsOverride;
-  SharedPreferences? _prefs;
+  final SettingsRegistry _settings;
 
   bool _loaded = false;
   bool get loaded => _loaded;
@@ -227,8 +229,7 @@ class LyricsDisplaySettings extends ChangeNotifier {
 
   /// 读取持久化配置（启动时调用一次；缺键回落默认值）。
   Future<void> init() async {
-    final prefs = await _prefsOrNull();
-    final raw = prefs?.getString(storageKey);
+    final raw = await _settings.read(kLyricsDisplaySettings);
     if (raw != null) {
       try {
         final json = jsonDecode(raw);
@@ -626,17 +627,10 @@ class LyricsDisplaySettings extends ChangeNotifier {
   }
 
   Future<void> _persist() async {
-    final prefs = await _prefsOrNull();
-    if (prefs == null) return;
-    await prefs.setString(storageKey, jsonEncode(toJson()));
-  }
-
-  Future<SharedPreferences?> _prefsOrNull() async {
-    if (_prefsOverride != null) return _prefsOverride;
     try {
-      return _prefs ??= await SharedPreferences.getInstance();
+      await _settings.write(kLyricsDisplaySettings, jsonEncode(toJson()));
     } catch (_) {
-      return null;
+      // 存储不可用不阻塞 UI（与迁移前一致）；下一次提交会重试。
     }
   }
 

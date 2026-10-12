@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:molia/services/lyrics_display/lyrics_display_settings.dart';
 import 'package:molia/theme/scheme_builder.dart';
+import 'package:molia/data/settings/settings_keys.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 /// 配置模型：默认值 / JSON 往返 / 缺键合并 / 取值夹取 / 非法枚举回落。
@@ -72,7 +73,7 @@ void main() {
     await source.setBluetoothPauseBehavior(LyricsPauseBehavior.keep);
 
     SharedPreferences.setMockInitialValues({
-      LyricsDisplaySettings.storageKey: jsonEncode(source.toJson()),
+      kLyricsDisplaySettings.name: jsonEncode(source.toJson()),
     });
     final restored = LyricsDisplaySettings();
     await restored.init();
@@ -119,7 +120,7 @@ void main() {
 
   test('缺键 / 非法值回落默认值（版本向前兼容）', () async {
     SharedPreferences.setMockInitialValues({
-      LyricsDisplaySettings.storageKey: jsonEncode({
+      kLyricsDisplaySettings.name: jsonEncode({
         'version': 1,
         'offsetMs': 100,
         'unsyncedBehavior': 'not-a-real-value',
@@ -140,7 +141,7 @@ void main() {
 
   test('歌词页开关与输出侧开关相互独立', () async {
     SharedPreferences.setMockInitialValues({
-      LyricsDisplaySettings.storageKey: jsonEncode({
+      kLyricsDisplaySettings.name: jsonEncode({
         'version': 1,
         'translationEnabled': false,
         'romaEnabled': true,

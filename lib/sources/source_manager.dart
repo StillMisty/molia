@@ -4,8 +4,9 @@ import 'dart:convert';
 import 'package:collection/collection.dart';
 import 'package:crypto/crypto.dart';
 import 'package:flutter/foundation.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 
+import '../data/settings/settings_keys.dart';
+import '../data/settings/settings_registry.dart';
 import 'any_listen/any_listen_config.dart';
 import 'any_listen/any_listen_errors.dart';
 import 'any_listen/any_listen_source.dart';
@@ -72,9 +73,6 @@ class SourceOption {
 /// [AnyListenSource] 适配为 [SourceKind.anyListen]。仅当「已配置且启用」
 /// 时才出现在 [searchableSources]，未配置/连接失败时对现有功能零影响。
 class SourceManager extends ChangeNotifier {
-  static const _prefsQualityKey = 'lx_default_quality';
-  static const _prefsSourceOrderKey = 'lx_source_order';
-  static const _prefsDisabledChannelsKey = 'lx_channel_disabled';
   static const _supportedQualitys = kLxQualityOrder;
 
   final LxScriptRepository repository = LxScriptRepository();
@@ -82,7 +80,8 @@ class SourceManager extends ChangeNotifier {
   /// 引擎自愈包装：超时/isolate 退出后自动按退避重启。
   /// 构造参数仅用于测试注入（默认创建真实 supervisor，行为不变）。
   final LxEngineSupervisor _engine;
-  final AnyListenSource _anyListenSource = AnyListenSource();
+  final SettingsRegistry _settings;
+  final AnyListenSource _anyListenSource;
   final List<StreamSubscription<dynamic>> _subscriptions = [];
 
   /// 内置平台原生歌词/封面回退缓存（脚本不可用 / 未声明时的内置实现；
@@ -92,9 +91,18 @@ class SourceManager extends ChangeNotifier {
   final RequestCache _builtinPicCache =
       RequestCache(maxEntries: 128, ttl: const Duration(minutes: 5));
 
-  SourceManager({LxEngineSupervisor? engine})
-      : _engine = engine ?? LxEngineSupervisor() {
+  SourceManager({LxEngineSupervisor? engine, SettingsRegistry? settings})
+      : _engine = engine ?? LxEngineSupervisor(),
+        _settings = settings ?? SettingsRegistry(keys: kAllSettingsKeys),
+        _anyListenSource = AnyListenSource(settings: settings) {
     _engine.onStateChanged = _onEngineStateChanged;
+    // 应用远端设置后的定向重载：渠道偏好 / any-listen 连接。
+    _settings.bindReload(kLxDefaultQuality, reloadPreferences);
+    _settings.bindReload(kLxSourceOrder, reloadPreferences);
+    _settings.bindReload(kLxChannelDisabled, reloadPreferences);
+    _settings.bindReload(kAnyListenServerUrl, reloadAnyListenConfig);
+    _settings.bindReload(kAnyListenToken, reloadAnyListenConfig);
+    _settings.bindReload(kAnyListenEnabled, reloadAnyListenConfig);
   }
 
   bool _initialized = false;
@@ -310,17 +318,16 @@ class SourceManager extends ChangeNotifier {
 
   Future<void> _loadPreferences() async {
     try {
-      final prefs = await SharedPreferences.getInstance();
-      final quality = prefs.getString(_prefsQualityKey);
-      if (quality != null && _supportedQualitys.contains(quality)) {
+      final quality = await _settings.read(kLxDefaultQuality);
+      if (_supportedQualitys.contains(quality)) {
         _preferredQuality = quality;
       }
-      final order = prefs.getStringList(_prefsSourceOrderKey);
-      if (order != null) {
+      final order = await _settings.read(kLxSourceOrder);
+      if (order.isNotEmpty) {
         _sourceOrder = order;
       }
-      final disabled = prefs.getStringList(_prefsDisabledChannelsKey);
-      if (disabled != null) {
+      final disabled = await _settings.read(kLxChannelDisabled);
+      if (disabled.isNotEmpty) {
         _disabledChannels = disabled.toSet();
       }
     } catch (_) {}
@@ -360,8 +367,7 @@ class SourceManager extends ChangeNotifier {
     _preferredQuality = quality;
     notifyListeners();
     try {
-      final prefs = await SharedPreferences.getInstance();
-      await prefs.setString(_prefsQualityKey, quality);
+      await _settings.write(kLxDefaultQuality, quality);
     } catch (_) {}
   }
 
@@ -376,8 +382,7 @@ class SourceManager extends ChangeNotifier {
     _sourceOrder = cleaned;
     notifyListeners();
     try {
-      final prefs = await SharedPreferences.getInstance();
-      await prefs.setStringList(_prefsSourceOrderKey, cleaned);
+      await _settings.write(kLxSourceOrder, cleaned);
     } catch (_) {}
   }
 
@@ -404,11 +409,7 @@ class SourceManager extends ChangeNotifier {
     if (!changed) return;
     notifyListeners();
     try {
-      final prefs = await SharedPreferences.getInstance();
-      await prefs.setStringList(
-        _prefsDisabledChannelsKey,
-        _disabledChannels.toList(),
-      );
+      await _settings.write(kLxChannelDisabled, _disabledChannels.toList());
     } catch (_) {}
   }
 
@@ -418,8 +419,7 @@ class SourceManager extends ChangeNotifier {
     _sourceOrder = const [];
     notifyListeners();
     try {
-      final prefs = await SharedPreferences.getInstance();
-      await prefs.remove(_prefsSourceOrderKey);
+      await _settings.clear(kLxSourceOrder);
     } catch (_) {}
   }
 

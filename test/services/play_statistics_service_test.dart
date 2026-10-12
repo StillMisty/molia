@@ -1,6 +1,7 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:molia/data/database_helper.dart';
 import 'package:molia/data/play_statistics_repository.dart';
+import 'package:molia/data/settings/settings_keys.dart';
 import 'package:molia/domain/models/failure.dart';
 import 'package:molia/domain/models/playback.dart';
 import 'package:molia/domain/models/track.dart';
@@ -322,7 +323,7 @@ void main() {
 
     test('开启状态从 SharedPreferences 读取（默认开）', () async {
       SharedPreferences.setMockInitialValues({
-        PlayStatisticsService.enabledKey: false,
+        kPlayStatisticsEnabled.name: false,
       });
       final another = PlayStatisticsService(
         repository: repository,

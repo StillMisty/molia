@@ -1,13 +1,14 @@
 /// any-listen 接入的纯领域模型：配置数据 + 校验 + 连接测试结果 + 错误分类。
 ///
-/// UI 与 provider 只依赖本文件；`AnyListenConfigStore`（shared_preferences
-/// 持久化）在 sources 层并 `export` 本文件，保证既有 import 兼容。
+/// UI 与 provider 只依赖本文件；`AnyListenConfigStore`（登记键持久化，见
+/// `data/settings/settings_keys.dart`）在 sources 层并 `export` 本文件，
+/// 保证既有 import 兼容。
 library;
 
 /// any-listen 接入配置。
 ///
-/// 持久化键统一使用 `any_listen_` 前缀（由 sources 层的
-/// `AnyListenConfigStore` 读写），与 LX 音源的 `lx_*` 键互不影响。
+/// 持久化走设置注册表（`kAnyListenServerUrl` 等，见
+/// `data/settings/settings_keys.dart`），与 LX 音源的 `lx_*` 键互不影响。
 class AnyListenConfig {
   /// 服务器地址（已归一化：无尾部斜杠；缺省协议时补 `http://`）。
   final String serverUrl;
@@ -17,10 +18,6 @@ class AnyListenConfig {
 
   /// 用户开关。未启用时即使已配置也不参与搜索/播放。
   final bool enabled;
-
-  static const prefsServerUrlKey = 'any_listen_server_url';
-  static const prefsTokenKey = 'any_listen_token';
-  static const prefsEnabledKey = 'any_listen_enabled';
 
   const AnyListenConfig({
     this.serverUrl = '',

@@ -4,6 +4,8 @@ import 'package:material_ui/material_ui.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import 'package:molia/data/settings/settings_keys.dart';
+import 'package:molia/data/settings/settings_registry.dart';
 import 'package:molia/data/sync/adapters/prefs_sync_adapter.dart';
 import 'package:molia/data/sync/sync_engine.dart';
 import 'package:molia/data/sync/sync_state_store.dart';
@@ -19,13 +21,7 @@ import 'support/sync_test_support.dart';
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
-  const specs = [
-    SyncSettingSpec(
-      key: 'theme_mode',
-      category: SyncCategory.settings,
-      defaultValue: 'system',
-    ),
-  ];
+  const keys = [kThemeMode];
 
   late SyncStateStore state;
   late FakeSyncTransport transport;
@@ -34,10 +30,9 @@ void main() {
 
   setUp(() async {
     SharedPreferences.setMockInitialValues({});
-    state = SyncStateStore(
-      preferences: await SharedPreferences.getInstance(),
-      secrets: MemorySyncSecretStore(),
-    );
+    final prefs = await SharedPreferences.getInstance();
+    final secrets = MemorySyncSecretStore();
+    state = SyncStateStore(preferences: prefs, secrets: secrets);
     await state.init();
     transport = FakeSyncTransport();
     engine = SyncEngine(
@@ -45,7 +40,11 @@ void main() {
       adapters: [
         PrefsSyncAdapter(
           state: state,
-          specs: specs,
+          settings: SettingsRegistry(
+            keys: keys,
+            preferences: prefs,
+            secrets: secrets,
+          ),
           deviceId: () => state.deviceId,
           now: () => 7000,
         ),

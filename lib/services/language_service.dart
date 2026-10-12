@@ -1,14 +1,20 @@
 import 'dart:io';
 import 'package:material_ui/material_ui.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 import 'package:flutter/services.dart';
 import 'package:logger/logger.dart';
+
+import '../data/settings/settings_keys.dart';
+import '../data/settings/settings_registry.dart';
 
 final logger = Logger();
 
 class LanguageService {
-  static const String _languageKey = 'selected_language';
   static const MethodChannel _channel = MethodChannel('language_channel');
+
+  /// 设置注册表（组合根启动时注入；本服务全静态，reload 也由组合根代绑）。
+  static late final SettingsRegistry _settings;
+
+  static void attachSettings(SettingsRegistry settings) => _settings = settings;
 
   /// 应用界面语言的运行时通知源。
   ///
@@ -23,8 +29,7 @@ class LanguageService {
   /// 获取当前保存的语言设置
   static Future<Locale?> getSavedLocale() async {
     try {
-      final prefs = await SharedPreferences.getInstance();
-      final languageCode = prefs.getString(_languageKey);
+      final languageCode = await _settings.read(kSelectedLanguage);
       
       if (languageCode == null) return null;
       
@@ -45,12 +50,11 @@ class LanguageService {
   /// 保存语言设置
   static Future<void> saveLocale(Locale locale) async {
     try {
-      final prefs = await SharedPreferences.getInstance();
       final languageCode = locale.countryCode != null 
           ? '${locale.languageCode}_${locale.countryCode}'
           : locale.languageCode;
       
-      await prefs.setString(_languageKey, languageCode);
+      await _settings.write(kSelectedLanguage, languageCode);
       localeNotifier.value = locale;
     } catch (e) {
       logger.d('Error saving locale: $e');
@@ -60,8 +64,7 @@ class LanguageService {
   /// 清除语言设置（跟随系统）
   static Future<void> clearSavedLocale() async {
     try {
-      final prefs = await SharedPreferences.getInstance();
-      await prefs.remove(_languageKey);
+      await _settings.clear(kSelectedLanguage);
       localeNotifier.value = null;
     } catch (e) {
       logger.d('Error clearing saved locale: $e');

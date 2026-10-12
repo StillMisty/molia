@@ -16,6 +16,7 @@ import 'package:molia/widgets/ai_dj_carousel.dart';
 
 import '../support/fake_library_repository.dart';
 import '../support/fakes.dart';
+import '../support/settings_test_support.dart';
 
 /// 假生成器：脚本化推荐列表（不触碰 LLM/网络）。
 class _FakeGenerator implements AiRecommendationGenerator {
@@ -42,19 +43,6 @@ class _FakeGenerator implements AiRecommendationGenerator {
   @override
   Future<AiUpstreamSummary> summarizeUpstream() async =>
       AiUpstreamSummary.empty;
-}
-
-class _MemorySecrets implements AiSecretStorage {
-  final Map<String, String> data = {};
-
-  @override
-  Future<String?> read(String key) async => data[key];
-
-  @override
-  Future<void> write(String key, String value) async => data[key] = value;
-
-  @override
-  Future<void> delete(String key) async => data.remove(key);
 }
 
 AiDjBatch _batch(int from, int count) => AiDjBatch(
@@ -85,7 +73,7 @@ void main() {
   late PlaybackProvider playbackProvider;
   late LibraryProvider libraryProvider;
   late _FakeGenerator generator;
-  late _MemorySecrets secrets;
+  late MemorySettingsSecretStore secrets;
   late AiDjProvider provider;
   var providerCreated = false;
 
@@ -93,7 +81,9 @@ void main() {
     providerCreated = true;
     final prefs = await SharedPreferences.getInstance();
     if (withConfig) {
-      await AiSettingsStore(secrets: secrets, preferences: prefs).saveConfig(
+      await AiSettingsStore(
+            settings: testSettingsRegistry(
+                preferences: prefs, secrets: secrets)).saveConfig(
         const LlmConfig(
           baseUrl: 'https://api.example.com/v1',
           apiKey: 'sk-test',
@@ -107,7 +97,9 @@ void main() {
       playbackProvider: playbackProvider,
       libraryProvider: libraryProvider,
       recommendationService: generator,
-      settingsStore: AiSettingsStore(secrets: secrets, preferences: prefs),
+      settingsStore: AiSettingsStore(
+            settings: testSettingsRegistry(
+                preferences: prefs, secrets: secrets)),
     );
     await provider.init();
   }
@@ -146,7 +138,7 @@ void main() {
 
   setUp(() async {
     SharedPreferences.setMockInitialValues({});
-    secrets = _MemorySecrets();
+    secrets = MemorySettingsSecretStore();
     backend = FakePlaybackBackend();
     playbackProvider = buildTestPlaybackProvider(backend: backend);
     await playbackProvider.preferencesReady;
