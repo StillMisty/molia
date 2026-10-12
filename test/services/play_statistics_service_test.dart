@@ -1,5 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:molia/data/database_helper.dart';
+import 'package:molia/data/molia_database.dart';
 import 'package:molia/data/play_statistics_repository.dart';
 import 'package:molia/data/settings/settings_keys.dart';
 import 'package:molia/domain/models/failure.dart';
@@ -7,15 +7,15 @@ import 'package:molia/domain/models/playback.dart';
 import 'package:molia/domain/models/track.dart';
 import 'package:molia/services/play_statistics_service.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
-/// 听歌统计采集服务测试：真实仓库（in-memory FFI）+ 假时钟，
+import '../support/memory_database.dart';
+
+/// 听歌统计采集服务测试：真实仓库（drift in-memory）+ 假时钟，
 /// 以脚本化快照 / 进度序列逐条驱动六条边界规则。
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
-  sqfliteFfiInit();
 
-  late Database db;
+  late MoliaDatabase db;
   late PlayStatisticsRepository repository;
   late PlayStatisticsService service;
   late DateTime now;
@@ -58,14 +58,8 @@ void main() {
 
   setUp(() async {
     SharedPreferences.setMockInitialValues({});
-    db = await databaseFactoryFfi.openDatabase(
-      inMemoryDatabasePath,
-      options: OpenDatabaseOptions(
-        version: DatabaseHelper.dbVersion,
-        onCreate: (database, version) => DatabaseHelper.createSchema(database),
-      ),
-    );
-    repository = PlayStatisticsRepository(databaseProvider: () async => db);
+    db = openMemoryDatabase();
+    repository = PlayStatisticsRepository(databaseProvider: () => db);
     now = DateTime(2026, 1, 1, 12);
     service = PlayStatisticsService(
       repository: repository,
@@ -81,7 +75,8 @@ void main() {
 
   Future<List<Map<String, Object?>>> rows() async {
     await service.pendingWrites;
-    return db.query('play_events', orderBy: 'id ASC');
+    final rows = await tableRows(db, 'play_events');
+    return rows..sort((a, b) => (a['id']! as int).compareTo(b['id']! as int));
   }
 
   group('开事件与累计', () {
@@ -124,7 +119,7 @@ void main() {
       // 未到 touchInterval：库里仍是最新一次已落盘值（此处为 0）。
       await service.pendingWrites;
       expect(
-        (await db.query('play_events')).single['listenedMs'],
+        (await tableRows(db, 'play_events')).single['listenedMs'],
         0,
         reason: '节流窗口内不写库',
       );
@@ -133,7 +128,7 @@ void main() {
       service.onPosition(const Duration(seconds: 4));
       await service.pendingWrites;
       expect(
-        (await db.query('play_events')).single['listenedMs'],
+        (await tableRows(db, 'play_events')).single['listenedMs'],
         3000,
       );
     });
@@ -278,7 +273,7 @@ void main() {
 
       // 模拟下次冷启动：不经过服务收尾，直接跑遗留清理。
       expect(await repository.closeStaleEvents(), 1);
-      final row = (await db.query('play_events')).single;
+      final row = (await tableRows(db, 'play_events')).single;
       expect(row['endReason'], 'interrupted');
       expect(row['endedAt'], (row['startedAt'] as int) + 2000);
     });

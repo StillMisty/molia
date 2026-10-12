@@ -86,7 +86,7 @@ void main() {
     // 听歌统计开关：只读 enabledNotifier，不触碰数据库。
     playStatisticsService = PlayStatisticsService(
       repository: PlayStatisticsRepository(
-        databaseProvider: () async => throw StateError('测试不访问数据库'),
+        databaseProvider: () => throw StateError('测试不访问数据库'),
       ),
       settings: testSettingsRegistry(
         preferences: await SharedPreferences.getInstance(),

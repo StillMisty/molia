@@ -1,17 +1,17 @@
 import 'dart:convert';
 
+import 'package:drift/drift.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:molia/data/database_helper.dart';
+import 'package:molia/data/molia_database.dart';
 import 'package:molia/data/play_statistics_repository.dart';
 import 'package:molia/domain/models/play_statistics.dart';
 import 'package:molia/providers/play_statistics_provider.dart';
-import 'package:sqflite_common_ffi/sqflite_ffi.dart';
+
+import 'support/memory_database.dart';
 
 /// 听歌统计 Provider 测试：范围过滤、日历全量、清空与维度切换。
 void main() {
-  sqfliteFfiInit();
-
-  late Database db;
+  late MoliaDatabase db;
   late PlayStatisticsRepository repository;
   late PlayStatisticsProvider provider;
 
@@ -23,32 +23,25 @@ void main() {
     String endReason = 'completed',
     String sourceKey = 'wy',
   }) async {
-    return db.insert('play_events', {
-      'sourceKey': sourceKey,
-      'songId': songId,
-      'title': 'Song $songId',
-      'artist': 'Artist',
-      'album': '',
-      'coverUrl': null,
-      'durationMs': durationMs,
-      'raw': jsonEncode({'id': songId}),
-      'startedAt': startedAt,
-      'endedAt': startedAt + listenedMs,
-      'listenedMs': listenedMs,
-      'maxPositionMs': listenedMs,
-      'endReason': endReason,
-    });
+    return db.into(db.playEvents).insert(PlayEventsCompanion.insert(
+          sourceKey: sourceKey,
+          songId: songId,
+          title: Value('Song $songId'),
+          artist: const Value('Artist'),
+          album: const Value(''),
+          durationMs: Value(durationMs),
+          raw: Value(jsonEncode({'id': songId})),
+          startedAt: startedAt,
+          endedAt: Value(startedAt + listenedMs),
+          listenedMs: Value(listenedMs),
+          maxPositionMs: Value(listenedMs),
+          endReason: Value(endReason),
+        ));
   }
 
   setUp(() async {
-    db = await databaseFactoryFfi.openDatabase(
-      inMemoryDatabasePath,
-      options: OpenDatabaseOptions(
-        version: DatabaseHelper.dbVersion,
-        onCreate: (database, version) => DatabaseHelper.createSchema(database),
-      ),
-    );
-    repository = PlayStatisticsRepository(databaseProvider: () async => db);
+    db = openMemoryDatabase();
+    repository = PlayStatisticsRepository(databaseProvider: () => db);
     provider = PlayStatisticsProvider(repository: repository);
   });
 

@@ -6,16 +6,16 @@ library;
 
 import 'dart:convert';
 
+import 'package:drift/drift.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:molia/data/database_helper.dart';
+import 'package:molia/data/molia_database.dart';
 import 'package:molia/data/play_statistics_repository.dart';
 import 'package:molia/domain/models/play_statistics.dart';
-import 'package:sqflite_common_ffi/sqflite_ffi.dart';
+
+import 'support/memory_database.dart';
 
 void main() {
-  sqfliteFfiInit();
-
-  late Database db;
+  late MoliaDatabase db;
   late PlayStatisticsRepository repository;
 
   /// 边界样本：(listenedMs, durationMs) —— 每条覆盖一个门槛分支。
@@ -35,32 +35,25 @@ void main() {
   ];
 
   setUp(() async {
-    db = await databaseFactoryFfi.openDatabase(
-      inMemoryDatabasePath,
-      options: OpenDatabaseOptions(
-        version: DatabaseHelper.dbVersion,
-        onCreate: (database, version) => DatabaseHelper.createSchema(database),
-      ),
-    );
-    repository = PlayStatisticsRepository(databaseProvider: () async => db);
+    db = openMemoryDatabase();
+    repository = PlayStatisticsRepository(databaseProvider: () => db);
     var index = 0;
     for (final (listenedMs, durationMs) in cases) {
       index++;
-      await db.insert('play_events', {
-        'sourceKey': 'wy',
-        'songId': 'case$index',
-        'title': 'Case $index',
-        'artist': 'Artist',
-        'album': '',
-        'coverUrl': null,
-        'durationMs': durationMs,
-        'raw': jsonEncode(<String, Object?>{'id': index}),
-        'startedAt': 1000 + index,
-        'endedAt': 2000 + index,
-        'listenedMs': listenedMs,
-        'maxPositionMs': listenedMs,
-        'endReason': 'completed',
-      });
+      await db.into(db.playEvents).insert(PlayEventsCompanion.insert(
+            sourceKey: 'wy',
+            songId: 'case$index',
+            title: Value('Case $index'),
+            artist: const Value('Artist'),
+            album: const Value(''),
+            durationMs: Value(durationMs),
+            raw: Value(jsonEncode(<String, Object?>{'id': index})),
+            startedAt: 1000 + index,
+            endedAt: Value(2000 + index),
+            listenedMs: Value(listenedMs),
+            maxPositionMs: Value(listenedMs),
+            endReason: const Value('completed'),
+          ));
     }
   });
 

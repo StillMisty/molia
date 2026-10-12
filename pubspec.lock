@@ -1138,7 +1138,7 @@ packages:
     source: hosted
     version: "1.10.2"
   sqflite:
-    dependency: "direct main"
+    dependency: transitive
     description:
       name: sqflite
       sha256: "7419d02d128023f38586481c81e14e5692167f75b7f411a914b1eb50d28c010e"
@@ -1161,14 +1161,6 @@ packages:
       url: "https://pub.flutter-io.cn"
     source: hosted
     version: "2.5.13+1"
-  sqflite_common_ffi:
-    dependency: "direct main"
-    description:
-      name: sqflite_common_ffi
-      sha256: "4ec920a01788641fa1c9922e757c108427e7f8634cce3ce8a1073d573060f4a3"
-      url: "https://pub.flutter-io.cn"
-    source: hosted
-    version: "2.4.3"
   sqflite_darwin:
     dependency: transitive
     description:

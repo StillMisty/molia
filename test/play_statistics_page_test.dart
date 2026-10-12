@@ -2,8 +2,8 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:material_3_expressive/material_3_expressive.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:provider/provider.dart';
-import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
+import 'package:molia/data/molia_database.dart';
 import 'package:molia/data/play_statistics_repository.dart';
 import 'package:molia/domain/models/play_statistics.dart';
 import 'package:molia/l10n/app_localizations.dart';
@@ -12,11 +12,10 @@ import 'package:molia/providers/play_statistics_provider.dart';
 
 /// 听歌统计页冒烟测试：有数据渲染、空态与窄屏无溢出。
 ///
-/// 用数据替身（不触库）：widget 测试的 fake async 与 sqflite FFI 的真实
-/// 异步不兼容；统计仓库的 SQL 行为已由 repository 单测覆盖。
+/// 用数据替身（不触库）：widget 测试的 fake async 与真实数据库异步不兼容；
+/// 统计仓库的 SQL 行为已由 repository 单测覆盖。
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
-  sqfliteFfiInit();
 
   _FakeStatisticsRepository buildFakeRepository() {
     final now = DateTime.now();
@@ -160,7 +159,7 @@ class _FakeStatisticsRepository extends PlayStatisticsRepository {
     this.sourcesData = const [],
   }) : super(databaseProvider: _unusedDatabase);
 
-  static Future<Database> _unusedDatabase() async =>
+  static MoliaDatabase _unusedDatabase() =>
       throw StateError('测试不访问数据库');
 
   final PlayStatisticsSummary summaryData;

@@ -27,8 +27,6 @@ dependencies:
   collection: ^1.19.0
   drift: ^2.35.2
   drift_flutter: ^0.3.1
-  # 手写 sqflite 层仍在使用；随 lib/data/database_helper.dart 删除一并移除。
-  sqflite:
   path_provider: ^2.1.4
   audio_session: ^0.2.4
   share_plus: ^13.3.1
@@ -49,7 +47,6 @@ dependencies:
   cupertino_ui: ^1.1.2
   material_3_expressive: ^1.1.6
   motor: ^1.1.0
-  sqflite_common_ffi: ^2.4.3
 dev_dependencies:
   flutter_test:
     sdk: flutter

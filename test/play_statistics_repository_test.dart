@@ -1,16 +1,16 @@
 import 'dart:convert';
 
+import 'package:drift/drift.dart' hide isNull;
 import 'package:flutter_test/flutter_test.dart';
-import 'package:molia/data/database_helper.dart';
+import 'package:molia/data/molia_database.dart';
 import 'package:molia/data/play_statistics_repository.dart';
 import 'package:molia/domain/models/play_statistics.dart';
-import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
-/// 听歌统计仓库测试：sqflite FFI in-memory 库（schema 与生产一致，v4）。
+import 'support/memory_database.dart';
+
+/// 听歌统计仓库测试：drift in-memory 库（schema 与生产一致）。
 void main() {
-  sqfliteFfiInit();
-
-  late Database db;
+  late MoliaDatabase db;
   late PlayStatisticsRepository repository;
 
   /// 直接插入已收尾/进行中事件（查询测试用，绕开采集服务）。
@@ -29,32 +29,26 @@ void main() {
     String? endReason = 'skipped',
     int? endedAt,
   }) async {
-    return db.insert('play_events', {
-      'sourceKey': sourceKey,
-      'songId': songId,
-      'title': title,
-      'artist': artist,
-      'album': album,
-      'coverUrl': coverUrl,
-      'durationMs': durationMs,
-      'raw': jsonEncode(raw ?? {'id': songId}),
-      'startedAt': startedAt,
-      'endedAt': endedAt,
-      'listenedMs': listenedMs,
-      'maxPositionMs': maxPositionMs,
-      'endReason': endReason,
-    });
+    return db.into(db.playEvents).insert(PlayEventsCompanion.insert(
+          sourceKey: sourceKey,
+          songId: songId,
+          title: Value(title),
+          artist: Value(artist),
+          album: Value(album),
+          coverUrl: Value(coverUrl),
+          durationMs: Value(durationMs),
+          raw: Value(jsonEncode(raw ?? {'id': songId})),
+          startedAt: startedAt,
+          endedAt: Value(endedAt),
+          listenedMs: Value(listenedMs),
+          maxPositionMs: Value(maxPositionMs),
+          endReason: Value(endReason),
+        ));
   }
 
   setUp(() async {
-    db = await databaseFactoryFfi.openDatabase(
-      inMemoryDatabasePath,
-      options: OpenDatabaseOptions(
-        version: DatabaseHelper.dbVersion,
-        onCreate: (database, version) => DatabaseHelper.createSchema(database),
-      ),
-    );
-    repository = PlayStatisticsRepository(databaseProvider: () async => db);
+    db = openMemoryDatabase();
+    repository = PlayStatisticsRepository(databaseProvider: () => db);
   });
 
   tearDown(() async {
@@ -80,7 +74,7 @@ void main() {
       expect(id, greaterThan(0));
 
       await repository.touchEvent(id, listenedMs: 12000, maxPositionMs: 13000);
-      var row = (await db.query('play_events')).single;
+      var row = (await tableRows(db, 'play_events')).single;
       expect(row['endedAt'], isNull);
       expect(row['listenedMs'], 12000);
       expect(row['maxPositionMs'], 13000);
@@ -94,7 +88,7 @@ void main() {
         maxPositionMs: 180500,
         endedAt: 5000,
       );
-      row = (await db.query('play_events')).single;
+      row = (await tableRows(db, 'play_events')).single;
       expect(row['endedAt'], 5000);
       expect(row['endReason'], 'completed');
       expect(changes, hasLength(1));
@@ -112,7 +106,7 @@ void main() {
       await repository.touchEvent(id, listenedMs: 4000, maxPositionMs: 4000);
 
       expect(await repository.closeStaleEvents(), 1);
-      final row = (await db.query('play_events')).single;
+      final row = (await tableRows(db, 'play_events')).single;
       expect(row['endedAt'], 5000, reason: 'endedAt = startedAt + listenedMs');
       expect(row['endReason'], 'interrupted');
       expect(await repository.closeStaleEvents(), 0, reason: '幂等');
@@ -126,7 +120,7 @@ void main() {
 
       await repository.clearAll();
 
-      expect(await db.query('play_events'), isEmpty);
+      expect(await tableRows(db, 'play_events'), isEmpty);
       expect(changes, hasLength(1));
       await subscription.cancel();
     });
@@ -532,7 +526,7 @@ void main() {
       );
       await repository.touchEvent(id, listenedMs: 9999, maxPositionMs: 9999);
 
-      final row = (await db.query('play_events')).single;
+      final row = (await tableRows(db, 'play_events')).single;
       expect(row['listenedMs'], 1000);
     });
   });

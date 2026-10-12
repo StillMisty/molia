@@ -3,7 +3,7 @@ import 'dart:io';
 import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:flutter/foundation.dart';
-import '../data/database_helper.dart';
+import '../data/molia_database.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:logger/logger.dart';
 
@@ -11,13 +11,17 @@ final logger = Logger();
 
 /// 本地数据库状态：只保留「最近播放上下文（play_contexts）」。
 class LocalDatabaseProvider with ChangeNotifier {
-  final DatabaseHelper _dbHelper = DatabaseHelper.instance;
+  /// [database] 仅测试注入；生产走 [MoliaDatabase.instance]（懒加载单例）。
+  LocalDatabaseProvider({MoliaDatabase? database})
+      : _db = database ?? MoliaDatabase.instance;
+
+  final MoliaDatabase _db;
 
   bool _isRecentContextsLoading = false;
   bool get isRecentContextsLoading => _isRecentContextsLoading;
 
-  List<Map<String, dynamic>> _recentContexts = [];
-  List<Map<String, dynamic>> get recentContexts => _recentContexts;
+  List<PlayContext> _recentContexts = [];
+  List<PlayContext> get recentContexts => _recentContexts;
 
   void _setRecentContextsLoading(bool value) {
     if (_isRecentContextsLoading == value) {
@@ -35,7 +39,7 @@ class LocalDatabaseProvider with ChangeNotifier {
     required int lastPlayedAt,
   }) async {
     try {
-      await _dbHelper.insertOrUpdatePlayContext(
+      await _db.insertOrUpdatePlayContext(
         contextUri: contextUri,
         contextType: contextType,
         contextName: contextName,
@@ -51,7 +55,7 @@ class LocalDatabaseProvider with ChangeNotifier {
   Future<void> fetchRecentContexts({int limit = 15}) async {
     _setRecentContextsLoading(true);
     try {
-      final contextsFromDb = await _dbHelper.getRecentPlayContexts(limit);
+      final contextsFromDb = await _db.getRecentPlayContexts(limit);
       _recentContexts = contextsFromDb;
       notifyListeners();
     } catch (e, s) {
@@ -108,10 +112,10 @@ class LocalDatabaseProvider with ChangeNotifier {
   /// 导出最近播放上下文为 JSON 并分享。
   Future<bool> exportDataToJson() async {
     try {
-      final playContexts = await _dbHelper.getAllPlayContexts();
+      final playContexts = await _db.getAllPlayContexts();
 
       final exportData = {
-        'play_contexts': playContexts,
+        'play_contexts': [for (final context in playContexts) context.toJson()],
       };
 
       const jsonEncoder = JsonEncoder.withIndent('  ');
@@ -193,7 +197,7 @@ class LocalDatabaseProvider with ChangeNotifier {
         }
       }
 
-      await _dbHelper.batchInsertOrReplacePlayContexts(contextsToImport);
+      await _db.batchInsertOrReplacePlayContexts(contextsToImport);
       await fetchRecentContexts();
       return true;
     } catch (e) {
