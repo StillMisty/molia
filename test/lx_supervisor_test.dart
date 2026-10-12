@@ -415,7 +415,7 @@ const noop = 1;
       // 重启后脚本声明了新的源：search 触发崩溃检测 → 等待重启 → 刷新列表。
       engine.nextSources = {'test': _decl('test'), 'extra': _decl('extra')};
       engine.running = false;
-      final tracks = await manager.search('test', 'hello');
+      final tracks = (await manager.searchWithMeta('test', 'hello')).tracks;
 
       expect(tracks, isNotEmpty);
       expect(engine.startCalls, 2);

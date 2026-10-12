@@ -61,7 +61,7 @@ void main() {
       // 跨出 sources 层后是 SourceFailure（未配置 → unsupported），
       // 不暴露 any-listen 内部异常类型。
       await expectLater(
-        manager.search(AnyListenSource.sourceKey, 'x'),
+        manager.searchWithMeta(AnyListenSource.sourceKey, 'x'),
         throwsA(isA<SourceFailure>()
             .having((e) => e.kind, 'kind', FailureKind.unsupported)),
       );
@@ -230,7 +230,7 @@ void main() {
       ));
 
       await expectLater(
-        manager.search(AnyListenSource.sourceKey, 'x'),
+        manager.searchWithMeta(AnyListenSource.sourceKey, 'x'),
         throwsA(isA<SourceFailure>()
             .having((e) => e.kind, 'kind', FailureKind.unauthorized)
             .having((e) => e.retryable, 'retryable', isFalse)),

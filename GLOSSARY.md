@@ -9,6 +9,7 @@
 - **Canonical id field（规范 id 字段）** — 各平台取链脚本读取的 id 键：wy / tx / kw → `songmid`，kg → `hash`，mg → `copyrightId`。`.lxmc` 导入的 raw 缺少该字段时由 raw track module 补齐。
 - **Platform id（平台 id）** — 不带平台前缀的单曲标识；[`SourceTrack.id`] 为其加上 `sourceKey:` 前缀。`rawIdOf`（通用优先级）与 `platformRawIdOf`（`.lxmc` 导出的平台优先顺序）是它的两个取键入口。
 - **Builtin transport（内置传输模块）** — `lib/sources/builtin/builtin_transport.dart`：五个平台搜索/发现共用的 HTTP 入口（客户端可注入、统一请求头/超时、响应级重试 `retryIf`、JSON 解码与 `cached` 结果缓存）。`BuiltinSearch.transport` 是唯一实例，测试注入 `MockClient` 即可覆盖 fetch 路径；重试预算统一为 `BuiltinTransport.defaultRetries`，结果缓存统一为 `defaultCacheTtl`（5 分钟，single-flight + LRU + TTL），发现适配器不再各自持有静态 `RequestCache`。
+- **Builtin search runner（内置检索 runner）** — `lib/sources/builtin/builtin_search_runner.dart`：五个平台搜索的执行骨架（`runBuiltinSearch`）与策略的唯一实现——重试预算、分页推断、失败归一；平台变体面（请求方式/URL/body、响应级重试判定、业务码判定、列表路径与解析）收进 `BuiltinSearchCall`，各平台文件只剩字面量与 parser。结果语义分界：**平台返回空** = 正常结果（tracks 空、failure 空）；**业务拒绝 / 传输失败** = `SourceSearchResult.failed`（`SourceSearchResult.failure`，不抛异常，UI 收口前只读 tracks）。内置平台「可搜索」判定唯一来源：`SourceManager._isBuiltinSearchable`（channels 候选 / 能力位 / 搜索路由共用）。
 
 ## 错误模型
 
