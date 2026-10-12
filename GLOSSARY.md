@@ -35,7 +35,19 @@
 - **Cover deck（封面堆叠）** — `lib/widgets/player_cover_deck.dart`：播放页封面区
   （三槽位渲染、横滑手势、会话的效果宿主）的唯一实现；播放器只提供布局尺寸、
   顶栏共享飞行锚点与主题联动。会话状态机在 `player_cover_session.dart`，方向判定
-  纯函数在 `player_cover_swap.dart`。
+  纯函数在 `player_cover_swap.dart`，卡片外观与飞行在 `cover_appearance.dart`。
+- **Cover appearance（封面外观）** — `lib/widgets/cover_appearance.dart::CoverAppearance`：
+  圆角 / 描边 / 阴影 / 回退图标的唯一实现，三个端点是命名值（`bar` / `mini` /
+  `page`）；`CoverCard` 按外观渲染卡片（三端真身与飞行副本共用同一渲染），图片
+  内容 widget 的差异留在调用侧（真身 `AppNetworkImage`、副本 `MorphCover`——
+  同步出帧不闪）。两条不变量是代数关系：描边透明度 = 描边宽度、裁剪半径 =
+  外圆角 − 描边宽度；封面 URL / 稳定 key 的归一化（空串视同无封面）也在这里。
+- **Cover flight（封面共享元素飞行）** — `CoverFlight`（两端矩形 + 外观 + 方向 →
+  `rectAt` / `appearanceAt` / `iconSizeAt`，外观按「播放页端进度」插值，反向飞行
+  起飞不跳）+ `CoverFlightLayer`（副本渲染，返回 `Positioned.fromRect`，挂 Stack
+  下）；顶栏↔播放页（`PlayerMorphFlight`）与迷你⇄完整（`player.dart` 页内）都是
+  它的薄壳。锚点几何读取唯一实现 `player_morph.dart::anchorRectOf(key,
+  {container})`（容器为空 = 全局坐标；含祖先缩放的两角映射）。
 - **Cover slot（封面槽位）** — 堆叠的三个位置：左 = 上一首（播放顺序最近一首
   history 末位 → 队列前一位 → 空，排除与当前同 id，与后端 `skipToPrevious` 同源）、
   中 = 当前（拖动/提交等待期间为预览目标）、右 = `PlaybackSnapshot.next`；
