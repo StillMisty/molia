@@ -207,26 +207,38 @@
 
 ### 播放页封面堆叠（cover deck）
 
-- **模块**：`lib/widgets/player_cover_deck.dart`（组件 + 横滑手势 + 会话状态）、
-  `player_cover_session.dart`（`CoverSwapSession` 会话模型）、`player_cover_swap.dart`
-  （方向判定纯函数）；播放器只提供布局尺寸、顶栏共享飞行锚点与主题联动。
+- **模块**：`lib/widgets/player_cover_deck.dart`（组件 + 横滑手势 + 会话的效果宿主）、
+  `player_cover_session.dart`（`CoverSwapSession` 状态机 + `CoverSwapHost` 意图接口 +
+  曲目封面 URL/key 归一化）、`player_cover_swap.dart`（方向判定纯函数）；播放器只提供
+  布局尺寸、顶栏共享飞行锚点与主题联动。
 - **三槽位模型**：左 = 上一首（播放顺序最近一首 history 末位 → 队列前一位 → 空，
   排除与当前同 id，与后端 `skipToPrevious` 同源）、中 = 当前（拖动/提交等待期间
   为预览目标）、右 = `PlaybackSnapshot.next`；左右槽只要展示了身份即可点击切歌。
-- **会话与阶段**：`CoverSwapSession` 承载一次拖动/切歌的全部可变状态；阶段
-  `idle → preview（跟手）→ committed（提交等待对账）→ settling（即时切歌完成中）`
-  或 `correcting`（对账不匹配校正）。唯一一根进度控制器由 deck State 持有，
-  拖动跟手按 easeOutCubic 反解写入，松手从同一进度续走或回弹，不跳。
-- **窗口时序与常量**：切歌 320ms；目标槽位旧身份 p∈[0,0.4] 淡出、源槽位新身份
+- **会话与宿主（时机 / 效果分离）**：会话只决定「什么时候」，宿主（deck State）决定
+  「怎么做」——会话经 `CoverSwapHost` 意图接口驱动控制器编排、post-frame 与播放命令
+  （`startSettle` / `land` / `releasePreview` / `settleCommit` / `crossfadeCorrection` /
+  `hardReset` / `adoptSteadySlots` / `requestSkip` / `notifySwapped` / `armTimeout` …），
+  次序不变量（例如「settling 前先把进度钉回起点」）由会话的调用顺序持有。会话是
+  `ChangeNotifier`，只在离散迁移通知；拖动跟手的逐帧进度不进会话。
+- **会话与阶段**：阶段 `idle → preview（跟手）→ committed（提交等待对账）→ settling
+  （即时切歌完成中）` 或 `correcting`（对账不匹配校正）。唯一一根进度控制器由 deck
+  State 持有，拖动跟手按位移反解写入，松手从同一进度续走或回弹，不跳；即时切歌由
+  motor expressive spatial 弹簧驱动，无固定时长。
+- **检测与缓存（唯一写入者）**：deck 把快照喂给 `CoverSwapSession.observe`——切歌检测、
+  空闲缓存（左槽身份 / 下一首 / 方向提示）与预览目标全由它派生，调用方不再各刷一半；
+  渲染侧只补空闲视觉（中心同 id 换图 250ms、槽位身份 180ms 原位交叉淡化）。空闲刷新
+  以宿主的 `progressAnimating`（弹簧尾部也算）门控，快照通知仍按微任务合并同批通知，
+  build 期间零写入。
+- **窗口时序与常量**：目标槽位旧身份 p∈[0,0.4] 淡出、源槽位新身份
   p∈[0.6,1] 淡入（仅透明度、无位移，避免叠影）；移动卡全程插值（位移 ±0.30 卡宽、
   旋转 ±0.05rad、缩放 0.78↔1.0、透明度 0.85↔1.0）；拖动对账落位后源侧 180ms
-  纯淡入；空闲槽位身份变化 180ms 原位交叉淡化；对账校正 220ms；中心同 id 换图
-  250ms；提交后约 6 秒无对账回弹。
+  纯淡入；对账校正 220ms；提交后 6 秒（`CoverSwapSession.commitTimeout`）无对账回弹。
 - **对账**：提交后等待快照 current 变为会话目标——匹配无缝落位；不匹配
   （随机目标 / 失败恢复 / 列表变化）先让提交过渡落位，再以 220ms 中心原位
   交叉淡化校正到实际曲目，随后按新快照重建槽位回 idle。
-- **检测与缓存**：切歌检测、空闲缓存（下一首身份 / 方向提示）、空闲槽位淡换与
-  播放态缩放同步全部由播放快照监听（微任务合并同批通知）驱动，build 期间零写入。
+- **非视觉路径（可同步断言）**：可见性翻转（TickerMode，两个方向）与隐藏态切歌都走
+  会话的 no-animation 落位（`setVisible` / 隐藏态 `observe`：`hardReset` + 身份对齐），
+  宿主侧只负责控制器归位与中心身份接管。
 - **与共享飞行的关系**：顶栏↔播放页与迷你↔完整飞行只隐藏/复刻中心封面真身
   （`morph.pageCoverKey`）；侧邻位随页面层自身淡入以稳态出现，无独立入场演出。
 - **飞行几何不变量**：锚点在点击那一刻**同步**抓取，因此①隐藏页层（出场过渡
