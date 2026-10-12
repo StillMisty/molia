@@ -3,24 +3,23 @@ import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:molia/data/database_helper.dart';
 import 'package:molia/data/library_repository.dart';
+import 'package:molia/data/molia_database.dart';
 import 'package:molia/domain/models/library.dart';
 import 'package:molia/domain/models/track.dart';
 import 'package:molia/providers/library_provider.dart';
 import 'package:molia/providers/playback_provider.dart';
 import 'package:molia/sources/source_track.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
 import 'support/fakes.dart';
+import 'support/memory_database.dart';
 
 /// LibraryProvider 测试：内存缓存 / 播放接线 / 收藏 / 导入。
 void main() {
-  sqfliteFfiInit();
   TestWidgetsFlutterBinding.ensureInitialized();
 
-  late Database db;
+  late MoliaDatabase db;
   late LibraryRepository repository;
   late FakePlaybackBackend backend;
   late PlaybackProvider playback;
@@ -55,14 +54,8 @@ void main() {
 
   setUp(() async {
     SharedPreferences.setMockInitialValues({});
-    db = await databaseFactoryFfi.openDatabase(
-      inMemoryDatabasePath,
-      options: OpenDatabaseOptions(
-        version: DatabaseHelper.dbVersion,
-        onCreate: (database, version) => DatabaseHelper.createSchema(database),
-      ),
-    );
-    repository = LibraryRepository(databaseProvider: () async => db);
+    db = openMemoryDatabase();
+    repository = LibraryRepository(databaseProvider: () => db);
     backend = FakePlaybackBackend();
     playback = buildTestPlaybackProvider(
       backend: backend,

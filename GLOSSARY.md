@@ -180,8 +180,8 @@
   `test/play_statistics_formula_test.dart` 用同一批 fixture 行钉住。
 
 
-- **Play event（播放事件）** — `play_events` 一行 = 一次播放尝试（append-only，
-  v4 迁移）：**真正出声才开行**（首个 `position > 0` 的 tick）；切歌 / 播完 /
+- **Play event（播放事件）** — `play_events` 一行 = 一次播放尝试（append-only）：
+  **真正出声才开行**（首个 `position > 0` 的 tick）；切歌 / 播完 /
   单曲循环每遍 / 位置回到开头（restart）/ 停止各收尾一行；暂停不切断；
   进程被杀由启动时 `closeStaleEvents()` 收尾为 interrupted。元数据为播放时
   快照、自包含（`raw` 供统计页点播）。与「播放历史」（`play_history`，

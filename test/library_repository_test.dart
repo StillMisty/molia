@@ -3,17 +3,16 @@ import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:molia/data/database_helper.dart';
 import 'package:molia/data/library_repository.dart';
 import 'package:molia/data/lxmc_decoder.dart';
+import 'package:molia/data/molia_database.dart';
 import 'package:molia/domain/models/library.dart';
-import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
-/// 资料库仓库测试：sqflite FFI in-memory 库（schema 与生产一致，v4）。
+import 'support/memory_database.dart';
+
+/// 资料库仓库测试：drift in-memory 库（schema 与生产一致）。
 void main() {
-  sqfliteFfiInit();
-
-  late Database db;
+  late MoliaDatabase db;
   late LibraryRepository repository;
 
   Uint8List lxmcBytes(Map<String, dynamic> payload) => Uint8List.fromList(
@@ -49,14 +48,8 @@ void main() {
       };
 
   setUp(() async {
-    db = await databaseFactoryFfi.openDatabase(
-      inMemoryDatabasePath,
-      options: OpenDatabaseOptions(
-        version: DatabaseHelper.dbVersion,
-        onCreate: (database, version) => DatabaseHelper.createSchema(database),
-      ),
-    );
-    repository = LibraryRepository(databaseProvider: () async => db);
+    db = openMemoryDatabase();
+    repository = LibraryRepository(databaseProvider: () => db);
   });
 
   tearDown(() async {

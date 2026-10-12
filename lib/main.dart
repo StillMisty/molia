@@ -30,7 +30,6 @@ import 'domain/models/device_sync.dart';
 import 'domain/ports/source_registry.dart';
 import 'domain/ports/ui_messenger.dart';
 import 'l10n/app_localizations.dart';
-import 'data/database_factory_init.dart';
 import 'playback/audio_predownloader.dart';
 import 'playback/desktop_audio_init.dart';
 import 'playback/local_audio_handler.dart';
@@ -112,9 +111,6 @@ class _AppUiMessenger implements UiMessenger {
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
-
-  // 桌面端（Linux/Windows）初始化 sqflite FFI，保证本地数据库可用
-  initDatabaseFactoryIfNeeded();
 
   // 桌面端本地播放后端（Windows/Linux: media_kit）
   initDesktopAudioIfNeeded();

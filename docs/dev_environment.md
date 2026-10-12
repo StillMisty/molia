@@ -6,9 +6,11 @@
 - **中文字体需要系统安装**（App 不内置 CJK 字体，保持包体精简）：
   `sudo pacman -S --needed wqy-microhei`（最小 1.7MB）或 `noto-fonts-cjk`（质量最好但 189MB）；
   否则中文界面显示为方块。
-- 本地数据库（最近播放）依赖 sqflite FFI：`lib/data/database_factory_init*.dart` 已在
-  Linux/Windows 自动 `sqfliteFfiInit`（Linux 用系统 libsqlite3）；缺 `xdg-user-dirs` 时
-  `database_helper` 会回退到应用支持目录。
+- 本地数据库（最近播放 / 资料库 / 听歌统计）走 drift：原生 SQLite 由
+  `sqlite3` 的 Dart build hooks 提供（`flutter test` / 构建时自动生成，无需
+  `sqlite3_flutter_libs`）；缺 `xdg-user-dirs` 时 `molia_database.dart` 会回退到
+  应用支持目录。改表结构后按 ADR-0005 重跑 `build_runner` 与
+  `drift_dev make-migrations`。
 - **集成测试需要显示环境**：跑 `flutter test integration_test/... -d linux` 必须有 DISPLAY
   （官方要求，无显示时 App 起不来）；CI/无头环境用 `xvfb-run -a` 包装
   （`tool/agent/test.sh linux` 会自动检测并套上）。

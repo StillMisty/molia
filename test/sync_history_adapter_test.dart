@@ -1,32 +1,20 @@
-import 'dart:io';
-
 import 'package:flutter_test/flutter_test.dart';
-import 'package:molia/data/database_helper.dart';
 import 'package:molia/data/library_repository.dart';
+import 'package:molia/data/molia_database.dart';
 import 'package:molia/data/sync/adapters/history_sync_adapter.dart';
 import 'package:molia/domain/models/device_sync.dart';
 import 'package:molia/domain/models/library.dart';
-import 'package:sqflite_common_ffi/sqflite_ffi.dart';
+
+import 'support/memory_database.dart';
 
 /// 播放历史适配器测试：两库互导、playedAt 取新、删除墓碑与复活。
 void main() {
-  sqfliteFfiInit();
-
-  late Directory tempDir;
-  late Database dbA;
-  late Database dbB;
+  late MoliaDatabase dbA;
+  late MoliaDatabase dbB;
   late LibraryRepository repoA;
   late LibraryRepository repoB;
   late HistorySyncAdapter adapterA;
   late HistorySyncAdapter adapterB;
-
-  Future<Database> openDb(String name) => databaseFactoryFfi.openDatabase(
-        '${tempDir.path}/$name.db',
-        options: OpenDatabaseOptions(
-          version: DatabaseHelper.dbVersion,
-          onCreate: (database, version) => DatabaseHelper.createSchema(database),
-        ),
-      );
 
   PlayHistoryEntry entry(
     String songId, {
@@ -44,15 +32,14 @@ void main() {
       );
 
   setUp(() async {
-    tempDir = Directory.systemTemp.createTempSync('molia_sync_history');
-    dbA = await openDb('a');
-    dbB = await openDb('b');
+    dbA = openMemoryDatabase();
+    dbB = openMemoryDatabase();
     repoA = LibraryRepository(
-      databaseProvider: () async => dbA,
+      databaseProvider: () => dbA,
       deviceIdProvider: () => 'devA',
     );
     repoB = LibraryRepository(
-      databaseProvider: () async => dbB,
+      databaseProvider: () => dbB,
       deviceIdProvider: () => 'devB',
     );
     adapterA = HistorySyncAdapter(repository: repoA);
@@ -64,11 +51,6 @@ void main() {
     await repoB.dispose();
     await dbA.close();
     await dbB.close();
-    try {
-      tempDir.deleteSync(recursive: true);
-    } catch (_) {
-      // 清理失败不影响测试结果。
-    }
   });
 
   test('A → B：历史整体同步；重复应用幂等', () async {

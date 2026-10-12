@@ -33,7 +33,7 @@ import 'support/fakes.dart';
 /// （切换/新建/重命名/删除/拖拽排序）与常显滚动条。
 ///
 /// 使用 [FakeLibraryRepository]（内存实现）：widget 测试处于 fake-async 区，
-/// 真实 sqflite I/O 不会完成（导致加载动画永不停止）。
+/// 真实数据库 I/O 不会完成（导致加载动画永不停止）。
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 

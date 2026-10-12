@@ -16,7 +16,8 @@
 6. **share_plus 13**：使用 `SharePlus.instance.share(ShareParams(files: ..., text: ...))`，
    `Share.shareXFiles` 已不存在。
 7. **Web 不支持音源**：`kIsWeb` 时 `SourceManager` 不激活引擎；不要移除条件导入
-   （`lx_engine.dart` / `desktop_audio_init.dart` / `database_factory_init.dart` 的 stub 分支）。
+   （`lx_engine.dart` / `desktop_audio_init.dart` 的 stub 分支）。数据库无需处理：
+   `drift_flutter` 自身按平台条件导出，Web 运行时不初始化数据库即可。
 8. **音源脚本是不可信代码**：不要在引擎里暴露文件系统/平台通道；网络只走 `lx.request` 桥。
    `currentScriptInfo` 必须原样透传（部分脚本有防篡改校验，校验失败会死循环）。
 9. **ELECTRON 脚本兼容性**：脚本可能使用 `atob/btoa/TextEncoder/setTimeout/window/navigator`
@@ -48,7 +49,7 @@
 15. **`--no-pub` 会跳过插件注册文件再生成**：`flutter build ... --no-pub` 不重写
     `android/app/src/main/java/io/flutter/plugins/GeneratedPluginRegistrant.java`。
     若该文件缺失，构建**不会报错**但产物没有插件注册（R8 会把插件类全部裁掉，
-    表现为通知/播放/数据库全失效）；若文件来自 debug/集成测试还会残留
+    表现为通知/播放等原生插件全失效；若文件来自 debug/集成测试还会残留
     `integration_test` 引用，导致 release 编译失败。发布构建不要加 `--no-pub`，
     它只适合本地快速迭代。
 16. **桌面歌词悬浮窗**：`SYSTEM_ALERT_WINDOW` 是特殊权限（需用户去系统设置授权），
@@ -118,6 +119,14 @@
     内核设备要求 64 位 .so 的 ELF 段按 16 KB 对齐（Google Play 自 2027-02 起强制）。
     构建侧已满足（AGP ≥ 8.5.1 管 zip 页对齐、NDK r28+ 默认 16 KB 段对齐），但本项目没有
     自己的 native 代码，对齐完全由依赖决定（flutter_js 经 JitPack 的 quickjs、
-    shared_preferences 带的 androidx.datastore 等），升级后可能被换回 4 KB 库。
+    shared_preferences 带的 androidx.datastore、sqlite3 经 Dart hooks 打的
+    libsqlite3 等；libsqlite3 已实测 LOAD 段 Align=0x4000），升级后可能被换回
+    4 KB 库。
     本地默认模拟器就是 16 KB 页，集成测试（`tool/agent/test.sh android`）会当场暴露
     加载失败；必要时用官方 `check_elf_alignment.sh` 或 `zipalign -c -P 16 <apk>` 复查。
+28. **Android 打包不要剔除本地库的 `libsqlite3.so`**：drift 在所有平台都使用
+    `sqlite3` 经 Dart hooks 打进 APK 的 `libsqlite3.so`；`android/app/build.gradle`
+    的 `packaging.jniLibs.excludes` 曾按 sqflite 时代的口径（Android 走系统 SQLite）
+    剔除它，后果是运行期 `dlopen("libsqlite3.so")` 失败、开库直接抛错
+    （`Invalid argument(s): Couldn't resolve native function ...`）。新增 native asset
+    的剔除规则前先确认运行期确实不需要它。

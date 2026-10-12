@@ -1,31 +1,20 @@
-import 'dart:io';
-
+import 'package:drift/drift.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:molia/data/database_helper.dart';
+import 'package:molia/data/molia_database.dart';
 import 'package:molia/data/play_statistics_repository.dart';
 import 'package:molia/data/sync/adapters/statistics_sync_adapter.dart';
 import 'package:molia/domain/models/play_statistics.dart';
-import 'package:sqflite_common_ffi/sqflite_ffi.dart';
+
+import 'support/memory_database.dart';
 
 /// 听歌统计适配器测试：导出 / 去重合并 / 收尾事件覆盖 / 存量键回填。
 void main() {
-  sqfliteFfiInit();
-
-  late Directory tempDir;
-  late Database dbA;
-  late Database dbB;
+  late MoliaDatabase dbA;
+  late MoliaDatabase dbB;
   late PlayStatisticsRepository repoA;
   late PlayStatisticsRepository repoB;
   late StatisticsSyncAdapter adapterA;
   late StatisticsSyncAdapter adapterB;
-
-  Future<Database> openDb(String name) => databaseFactoryFfi.openDatabase(
-        '${tempDir.path}/$name.db',
-        options: OpenDatabaseOptions(
-          version: DatabaseHelper.dbVersion,
-          onCreate: (database, version) => DatabaseHelper.createSchema(database),
-        ),
-      );
 
   Future<int> play(
     PlayStatisticsRepository repo, {
@@ -52,15 +41,14 @@ void main() {
   }
 
   setUp(() async {
-    tempDir = Directory.systemTemp.createTempSync('molia_sync_stats');
-    dbA = await openDb('a');
-    dbB = await openDb('b');
+    dbA = openMemoryDatabase();
+    dbB = openMemoryDatabase();
     repoA = PlayStatisticsRepository(
-      databaseProvider: () async => dbA,
+      databaseProvider: () => dbA,
       deviceIdProvider: () => 'devA',
     );
     repoB = PlayStatisticsRepository(
-      databaseProvider: () async => dbB,
+      databaseProvider: () => dbB,
       deviceIdProvider: () => 'devB',
     );
     adapterA = StatisticsSyncAdapter(repository: repoA);
@@ -72,11 +60,6 @@ void main() {
     await repoB.dispose();
     await dbA.close();
     await dbB.close();
-    try {
-      tempDir.deleteSync(recursive: true);
-    } catch (_) {
-      // 清理失败不影响测试结果。
-    }
   });
 
   test('A → B：事件合并后汇总口径一致；重复应用幂等', () async {
@@ -105,9 +88,11 @@ void main() {
 
     final result = await adapterA.apply(await adapterB.collect());
     expect(result.applied, 1);
-    final rows = await dbA.query('play_events',
-        columns: ['originDeviceId'], where: 'songId = ?', whereArgs: ['s9']);
-    expect(rows.single['originDeviceId'], 'devB');
+    final rows = await dbA.customSelect(
+      'SELECT originDeviceId FROM play_events WHERE songId = ?',
+      variables: [Variable.withString('s9')],
+    ).get();
+    expect(rows.single.data['originDeviceId'], 'devB');
   });
 
   test('进行中事件不导出；收尾后的事件随下一轮同步', () async {
@@ -134,20 +119,20 @@ void main() {
   test('存量事件（无 syncKey）导出时按内容哈希回填且跨库一致', () async {
     // 模拟 v5 前旧行：直接插入不带 syncKey。
     for (final db in [dbA, dbB]) {
-      await db.insert('play_events', {
-        'sourceKey': 'wy',
-        'songId': 'legacy',
-        'title': 'Legacy',
-        'artist': '',
-        'album': '',
-        'raw': '{}',
-        'startedAt': 100,
-        'endedAt': 200,
-        'listenedMs': 100,
-        'maxPositionMs': 100,
-        'endReason': 'completed',
-        'originDeviceId': '',
-      });
+      await db.into(db.playEvents).insert(PlayEventsCompanion.insert(
+            sourceKey: 'wy',
+            songId: 'legacy',
+            title: const Value('Legacy'),
+            artist: const Value(''),
+            album: const Value(''),
+            raw: const Value('{}'),
+            startedAt: 100,
+            endedAt: const Value(200),
+            listenedMs: const Value(100),
+            maxPositionMs: const Value(100),
+            endReason: const Value('completed'),
+            originDeviceId: const Value(''),
+          ));
     }
     final a = await adapterA.collect();
     final keyA = a.values.single.single.key;

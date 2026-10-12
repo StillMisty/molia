@@ -1,8 +1,9 @@
 import 'dart:convert';
 
+import 'package:drift/drift.dart' hide isNull;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:molia/data/catalog/catalog_service.dart';
-import 'package:molia/data/database_helper.dart';
+import 'package:molia/data/molia_database.dart';
 import 'package:molia/data/play_statistics_repository.dart';
 import 'package:molia/domain/models/ai_dj.dart';
 import 'package:molia/domain/models/catalog.dart';
@@ -14,7 +15,8 @@ import 'package:molia/domain/ports/source_registry.dart';
 import 'package:molia/services/ai/ai_recommendation_service.dart';
 import 'package:molia/services/ai/llm_client.dart';
 import 'package:molia/services/ai/taste_profile_builder.dart';
-import 'package:sqflite_common_ffi/sqflite_ffi.dart';
+
+import '../support/memory_database.dart';
 
 /// 假 LLM：直接返回预置文本（不触碰网络）。
 class _FakeLlm extends LlmClient {
@@ -119,9 +121,8 @@ Track _track(String id, String title, String artist) => Track(
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
-  sqfliteFfiInit();
 
-  late Database db;
+  late MoliaDatabase db;
   late PlayStatisticsRepository statistics;
   late _FakeLlm llm;
   late AiRecommendationService service;
@@ -133,19 +134,19 @@ void main() {
   );
 
   Future<void> insertPlayed(String title, String artist) async {
-    await db.insert('play_events', {
-      'sourceKey': 'wy',
-      'songId': '$title-$artist',
-      'title': title,
-      'artist': artist,
-      'durationMs': 200000,
-      'raw': '{}',
-      'startedAt': 1000,
-      'endedAt': 200000,
-      'listenedMs': 150000,
-      'maxPositionMs': 190000,
-      'endReason': 'completed',
-    });
+    await db.into(db.playEvents).insert(PlayEventsCompanion.insert(
+          sourceKey: 'wy',
+          songId: '$title-$artist',
+          title: Value(title),
+          artist: Value(artist),
+          durationMs: const Value(200000),
+          raw: const Value('{}'),
+          startedAt: 1000,
+          endedAt: const Value(200000),
+          listenedMs: const Value(150000),
+          maxPositionMs: const Value(190000),
+          endReason: const Value('completed'),
+        ));
   }
 
   AiRecommendationService buildService(List<MusicSource> sources) {
@@ -161,14 +162,8 @@ void main() {
   }
 
   setUp(() async {
-    db = await databaseFactoryFfi.openDatabase(
-      inMemoryDatabasePath,
-      options: OpenDatabaseOptions(
-        version: DatabaseHelper.dbVersion,
-        onCreate: (database, version) => DatabaseHelper.createSchema(database),
-      ),
-    );
-    statistics = PlayStatisticsRepository(databaseProvider: () async => db);
+    db = openMemoryDatabase();
+    statistics = PlayStatisticsRepository(databaseProvider: () => db);
     llm = _FakeLlm('{}');
     service = buildService(const []);
   });

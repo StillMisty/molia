@@ -118,7 +118,7 @@
   （保留 unauthorized / connectionFailed 语义，不再退化为 unknown）；内置传输错误
   由 `SourceFailure.from` 按类型名识别 `BuiltinHttpException`。providers/UI 只消费
   kind / l10nKey / retryable。
-- **听歌统计**：`play_events`（一次播放尝试一行，v4 迁移）由
+- **听歌统计**：`play_events`（一次播放尝试一行，drift 本地库 v1）由
   `PlayStatisticsRepository` 读写；聚合全部查询时计算，口径常量唯一来源是
   `PlayStatisticsLimits`（有效播放 = `min(30s, 50%·时长)`，error 事件不计入
   计数/比率）。采集是 `PlayStatisticsService` 纯观察者——组合根把
@@ -154,8 +154,9 @@
   90 天前墓碑；入站推送触发的轮次不再推送（防两端乒乓）。传输有两个实现、
   可分别开关：局域网直连（UDP 探测 + 内置 HTTP 快照端点）与用户自备 WebDAV
   （`<remoteDir>/<deviceId>.msync` 密文文件，PROPFIND/GET/PUT/MKCOL）。
-  资料库 schema v5 引入 `playlists.syncId` / 行级 `updatedAt+updatedBy` /
-  `sync_tombstones` / `play_events.syncKey`；设置同步用「登记哈希」做变化检测，
+  资料库 schema（drift，fresh 基线）含 `playlists.syncId` / 行级
+  `updatedAt+updatedBy` / `sync_tombstones` / `play_events.syncKey`；
+  设置同步用「登记哈希」做变化检测，
   不改造散落的 SharedPreferences 写入方。播放历史删除（含清空）传播墓碑；
   上次播放会话按 `savedAt` 时间戳单向推进（本地停止不回传删除），应用后经
   `PlaybackProvider.reloadRestoredSessionFromStore` 重载恢复态。**完整备份**

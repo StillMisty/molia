@@ -1,33 +1,21 @@
-import 'dart:io';
-
 import 'package:flutter_test/flutter_test.dart';
-import 'package:molia/data/database_helper.dart';
 import 'package:molia/data/library_repository.dart';
+import 'package:molia/data/molia_database.dart';
 import 'package:molia/data/sync/adapters/playlist_sync_adapter.dart';
 import 'package:molia/domain/models/device_sync.dart';
 import 'package:molia/domain/models/library.dart';
-import 'package:sqflite_common_ffi/sqflite_ffi.dart';
+
+import 'support/memory_database.dart';
 
 /// 歌单 / 收藏适配器测试：两库互导、LWW、删除墓碑、收藏固定 syncId。
 void main() {
-  sqfliteFfiInit();
-
-  late Directory tempDir;
-  late Database dbA;
-  late Database dbB;
+  late MoliaDatabase dbA;
+  late MoliaDatabase dbB;
   late LibraryRepository repoA;
   late LibraryRepository repoB;
   late PlaylistSyncAdapter adapterA;
   late PlaylistSyncAdapter adapterB;
   var clock = 1000;
-
-  Future<Database> openDb(String name) => databaseFactoryFfi.openDatabase(
-        '${tempDir.path}/$name.db',
-        options: OpenDatabaseOptions(
-          version: DatabaseHelper.dbVersion,
-          onCreate: (database, version) => DatabaseHelper.createSchema(database),
-        ),
-      );
 
   PlaylistTrack track(String id, {String source = 'wy', int sortOrder = 0}) =>
       PlaylistTrack(
@@ -44,16 +32,15 @@ void main() {
 
   setUp(() async {
     clock = 1000;
-    tempDir = Directory.systemTemp.createTempSync('molia_sync_library');
-    dbA = await openDb('a');
-    dbB = await openDb('b');
+    dbA = openMemoryDatabase();
+    dbB = openMemoryDatabase();
     repoA = LibraryRepository(
-      databaseProvider: () async => dbA,
+      databaseProvider: () => dbA,
       deviceIdProvider: () => 'devA',
       clock: () => clock,
     );
     repoB = LibraryRepository(
-      databaseProvider: () async => dbB,
+      databaseProvider: () => dbB,
       deviceIdProvider: () => 'devB',
       clock: () => clock,
     );
@@ -66,11 +53,6 @@ void main() {
     await repoB.dispose();
     await dbA.close();
     await dbB.close();
-    try {
-      tempDir.deleteSync(recursive: true);
-    } catch (_) {
-      // 清理失败不影响测试结果。
-    }
   });
 
   test('A → B：列表、曲目与收藏整体同步', () async {

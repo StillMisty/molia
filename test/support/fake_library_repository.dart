@@ -9,9 +9,9 @@ import 'package:molia/domain/ports/library_store.dart';
 
 /// 内存版资料库：widget 测试专用。
 ///
-/// widget 测试运行在 fake-async 区，真实 sqflite I/O 不会完成（会触发
-/// 「database has been locked」并让加载动画永不停止）；因此 UI 交互测试
-/// 一律使用本假实现，真实 DB 行为由 library_repository_test 覆盖。
+/// widget 测试运行在 fake-async 区，真实数据库 I/O 不会完成（加载动画永不
+/// 停止）；因此 UI 交互测试一律使用本假实现，真实 DB 行为由
+/// library_repository_test 覆盖。
 ///
 /// 只实现 UI 面窄 port（[LibraryStore]）而不是继承真类：同步面（墓碑 / 列名）
 /// 与本假实现无关，新方法也不会静默走真实 SQL。

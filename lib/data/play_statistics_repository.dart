@@ -1,8 +1,12 @@
 /// 听歌统计数据仓库：`play_events` 的读写与查询时聚合。
 ///
 /// 设计对齐 [LibraryRepository]：可注入 [databaseProvider]（测试 in-memory
-/// FFI），写操作后通过 [changes] 广播；只持久化元数据 + raw 取链参数，
+/// drift 库），写操作后通过 [changes] 广播；只持久化元数据 + raw 取链参数，
 /// **不持久化直链**。
+///
+/// 简单读写走 drift DSL；跨行聚合（汇总 / 首播时间 / 榜单 / 来源分布 /
+/// 已听曲目名）保留 `customSelect`：SQL 语义逐字保留，
+/// 口径常量（[_qualifiedPredicate] / [_countablePredicate]）仍是唯一来源。
 ///
 /// 口径（查询时计算，常量见 [PlayStatisticsLimits]）：
 /// - 有效播放：`listenedMs ≥ min(30s, 50% × duration)`；
@@ -18,25 +22,24 @@ import 'dart:convert';
 import 'dart:math';
 
 import 'package:crypto/crypto.dart';
-import 'package:sqflite/sqflite.dart';
+import 'package:drift/drift.dart';
 
 import '../domain/models/play_statistics.dart';
-import 'database_helper.dart';
+import 'molia_database.dart';
 
 class PlayStatisticsRepository {
-  /// [databaseProvider] 仅测试注入（in-memory sqflite FFI）；生产走
-  /// [DatabaseHelper.instance]（版本迁移 v3 → v4）。
+  /// [databaseProvider] 仅测试注入（in-memory drift 库）；生产走
+  /// [MoliaDatabase.instance]。
   ///
   /// [deviceIdProvider] 供跨设备统计合并标注事件来源设备（缺省为空串，
   /// 同步未启用时无影响）。
   PlayStatisticsRepository({
-    Future<Database> Function()? databaseProvider,
+    MoliaDatabase Function()? databaseProvider,
     String Function()? deviceIdProvider,
-  })  : _databaseProvider =
-            databaseProvider ?? (() => DatabaseHelper.instance.database),
+  })  : _databaseProvider = databaseProvider ?? (() => MoliaDatabase.instance),
         _deviceIdProvider = deviceIdProvider ?? (() => '');
 
-  final Future<Database> Function() _databaseProvider;
+  final MoliaDatabase Function() _databaseProvider;
   final String Function() _deviceIdProvider;
   final Random _random = Random.secure();
   final StreamController<void> _changes = StreamController<void>.broadcast();
@@ -44,7 +47,7 @@ class PlayStatisticsRepository {
   /// 统计变更广播（收尾事件 / 清空 / 遗留收尾后触发）。
   Stream<void> get changes => _changes.stream;
 
-  Future<Database> get _db => _databaseProvider();
+  MoliaDatabase get _db => _databaseProvider();
 
   void _notifyChanged() {
     if (!_changes.isClosed) _changes.add(null);
@@ -64,6 +67,14 @@ class PlayStatisticsRepository {
   static const String _countablePredicate =
       "endedAt IS NOT NULL AND COALESCE(endReason, '') <> 'error'";
 
+  /// DSL 查询用的公共过滤（复用 [_countablePredicate] 的同一份 SQL 文本）。
+  Expression<bool> get _countable => CustomExpression<bool>(_countablePredicate);
+
+  /// 公共过滤 + 可选起始时间（[since] 为 null 表示全部历史）。
+  Expression<bool> _countableSince(int? since) => since == null
+      ? _countable
+      : _countable & _db.playEvents.startedAt.isBiggerOrEqualValue(since);
+
   // 写入（采集服务调用；所有写操作由调用方保证顺序）
 
   /// 开始一次播放事件，返回行 id（`endedAt` 为 null = 进行中）。
@@ -77,25 +88,24 @@ class PlayStatisticsRepository {
     int? durationMs,
     Map<String, dynamic> raw = const {},
     required int startedAt,
-  }) async {
-    final db = await _db;
-    return db.insert('play_events', {
-      'sourceKey': sourceKey,
-      'songId': songId,
-      'title': title,
-      'artist': artist,
-      'album': album,
-      'coverUrl': coverUrl,
-      'durationMs': durationMs,
-      'raw': jsonEncode(raw),
-      'startedAt': startedAt,
-      'endedAt': null,
-      'listenedMs': 0,
-      'maxPositionMs': 0,
-      'endReason': null,
-      'syncKey': _newSyncKey(),
-      'originDeviceId': _deviceIdProvider(),
-    });
+  }) {
+    return _db.into(_db.playEvents).insert(PlayEventsCompanion.insert(
+          sourceKey: sourceKey,
+          songId: songId,
+          title: Value(title),
+          artist: Value(artist),
+          album: Value(album),
+          coverUrl: Value(coverUrl),
+          durationMs: Value(durationMs),
+          raw: Value(jsonEncode(raw)),
+          startedAt: startedAt,
+          endedAt: const Value(null),
+          listenedMs: const Value(0),
+          maxPositionMs: const Value(0),
+          endReason: const Value(null),
+          syncKey: Value(_newSyncKey()),
+          originDeviceId: Value(_deviceIdProvider()),
+        ));
   }
 
   /// 落盘进行中事件的进度（节流调用；不广播变更，进行中事件不影响统计）。
@@ -103,14 +113,13 @@ class PlayStatisticsRepository {
     int id, {
     required int listenedMs,
     required int maxPositionMs,
-  }) async {
-    final db = await _db;
-    await db.update(
-      'play_events',
-      {'listenedMs': listenedMs, 'maxPositionMs': maxPositionMs},
-      where: 'id = ? AND endedAt IS NULL',
-      whereArgs: [id],
-    );
+  }) {
+    return (_db.update(_db.playEvents)
+          ..where((t) => t.id.equals(id) & t.endedAt.isNull()))
+        .write(PlayEventsCompanion(
+      listenedMs: Value(listenedMs),
+      maxPositionMs: Value(maxPositionMs),
+    ));
   }
 
   /// 收尾一次播放事件（写入最终进度 + 结束原因）。
@@ -121,18 +130,13 @@ class PlayStatisticsRepository {
     required int maxPositionMs,
     int? endedAt,
   }) async {
-    final db = await _db;
-    await db.update(
-      'play_events',
-      {
-        'endedAt': endedAt ?? DateTime.now().millisecondsSinceEpoch,
-        'listenedMs': listenedMs,
-        'maxPositionMs': maxPositionMs,
-        'endReason': reason.storageValue,
-      },
-      where: 'id = ?',
-      whereArgs: [id],
-    );
+    await (_db.update(_db.playEvents)..where((t) => t.id.equals(id)))
+        .write(PlayEventsCompanion(
+      endedAt: Value(endedAt ?? DateTime.now().millisecondsSinceEpoch),
+      listenedMs: Value(listenedMs),
+      maxPositionMs: Value(maxPositionMs),
+      endReason: Value(reason.storageValue),
+    ));
     _notifyChanged();
   }
 
@@ -141,11 +145,11 @@ class PlayStatisticsRepository {
   /// `endedAt` 取 `startedAt + listenedMs`（最后落盘进度，确定性可测）。
   /// 返回收尾行数。
   Future<int> closeStaleEvents() async {
-    final db = await _db;
-    final closed = await db.rawUpdate(
+    final closed = await _db.customUpdate(
       'UPDATE play_events SET endedAt = startedAt + listenedMs, endReason = ? '
       'WHERE endedAt IS NULL',
-      [PlayEventEndReason.interrupted.storageValue],
+      variables: [Variable.withString(PlayEventEndReason.interrupted.storageValue)],
+      updates: {_db.playEvents},
     );
     if (closed > 0) _notifyChanged();
     return closed;
@@ -153,15 +157,13 @@ class PlayStatisticsRepository {
 
   /// 清空全部统计事件（不可撤销）。
   Future<void> clearAll() async {
-    final db = await _db;
-    await db.delete('play_events');
+    await _db.delete(_db.playEvents).go();
     _notifyChanged();
   }
 
   /// 范围内汇总；[since]（epoch ms）为 null 表示全部历史。
   Future<PlayStatisticsSummary> summary({int? since}) async {
-    final db = await _db;
-    final rows = await db.rawQuery('''
+    final row = await _db.customSelect('''
       SELECT
         SUM(CASE WHEN $_countablePredicate THEN 1 ELSE 0 END) AS playCount,
         SUM(CASE WHEN $_countablePredicate AND ($_qualifiedPredicate)
@@ -175,16 +177,16 @@ class PlayStatisticsRepository {
             THEN 1 ELSE 0 END) AS skippedUnqualifiedCount
       FROM play_events
       WHERE endedAt IS NOT NULL${since != null ? ' AND startedAt >= ?' : ''}
-    ''', [if (since != null) since]);
-    final row = rows.isEmpty ? const <String, Object?>{} : rows.first;
-    final playCount = _intOf(row['playCount']);
-    final completed = _intOf(row['completedCount']);
-    final skippedUnqualified = _intOf(row['skippedUnqualifiedCount']);
+    ''', variables: [if (since != null) Variable.withInt(since)]).getSingle();
+    final data = row.data;
+    final playCount = _intOf(data['playCount']);
+    final completed = _intOf(data['completedCount']);
+    final skippedUnqualified = _intOf(data['skippedUnqualifiedCount']);
     return PlayStatisticsSummary(
       playCount: playCount,
-      qualifiedPlayCount: _intOf(row['qualifiedCount']),
-      totalListenedMs: _intOf(row['listenedMs']),
-      uniqueTrackCount: _intOf(row['uniqueTracks']),
+      qualifiedPlayCount: _intOf(data['qualifiedCount']),
+      totalListenedMs: _intOf(data['listenedMs']),
+      uniqueTrackCount: _intOf(data['uniqueTracks']),
       completionRate: playCount == 0 ? 0 : completed / playCount,
       skipRate: playCount == 0 ? 0 : skippedUnqualified / playCount,
       firstPlayedAt: await firstPlayedAt(),
@@ -217,12 +219,11 @@ class PlayStatisticsRepository {
   }
 
   Future<int?> firstPlayedAt() async {
-    final db = await _db;
-    final rows = await db.rawQuery(
+    final row = await _db.customSelect(
       'SELECT MIN(startedAt) AS firstAt FROM play_events '
       "WHERE endedAt IS NOT NULL AND COALESCE(endReason, '') <> 'error'",
-    );
-    return rows.isEmpty ? null : rows.first['firstAt'] as int?;
+    ).getSingle();
+    return row.data['firstAt'] as int?;
   }
 
   /// Top 曲目（有效播放次数排序；只出现至少一次有效播放的曲目）。
@@ -230,8 +231,7 @@ class PlayStatisticsRepository {
     int? since,
     int limit = 10,
   }) async {
-    final db = await _db;
-    final rows = await db.rawQuery('''
+    final rows = await _db.customSelect('''
       SELECT
         sourceKey,
         songId,
@@ -250,21 +250,24 @@ class PlayStatisticsRepository {
       HAVING playCount > 0
       ORDER BY playCount DESC, listenedMs DESC, lastPlayedAt DESC
       LIMIT ?
-    ''', [if (since != null) since, limit]);
+    ''', variables: [
+      if (since != null) Variable.withInt(since),
+      Variable.withInt(limit),
+    ]).get();
     return [
       for (final row in rows)
         PlayStatTrackEntry(
-          sourceKey: row['sourceKey'] as String? ?? '',
-          songId: row['songId'] as String? ?? '',
-          title: row['title'] as String? ?? '',
-          artist: row['artist'] as String? ?? '',
-          album: row['album'] as String? ?? '',
-          coverUrl: row['coverUrl'] as String?,
-          durationMs: row['durationMs'] as int?,
-          raw: _decodeRaw(row['raw']),
-          playCount: _intOf(row['playCount']),
-          listenedMs: _intOf(row['listenedMs']),
-          lastPlayedAt: _intOf(row['lastPlayedAt']),
+          sourceKey: row.data['sourceKey'] as String? ?? '',
+          songId: row.data['songId'] as String? ?? '',
+          title: row.data['title'] as String? ?? '',
+          artist: row.data['artist'] as String? ?? '',
+          album: row.data['album'] as String? ?? '',
+          coverUrl: row.data['coverUrl'] as String?,
+          durationMs: row.data['durationMs'] as int?,
+          raw: _decodeRaw(row.data['raw']),
+          playCount: _intOf(row.data['playCount']),
+          listenedMs: _intOf(row.data['listenedMs']),
+          lastPlayedAt: _intOf(row.data['lastPlayedAt']),
         ),
     ];
   }
@@ -274,20 +277,17 @@ class PlayStatisticsRepository {
     int? since,
     int limit = 10,
   }) async {
-    final db = await _db;
-    final rows = await db.query(
-      'play_events',
-      columns: ['artist', 'durationMs', 'listenedMs'],
-      where:
-          "$_countablePredicate${since != null ? ' AND startedAt >= ?' : ''}",
-      whereArgs: [if (since != null) since],
-    );
+    final events = _db.playEvents;
+    final rows = await (_db.selectOnly(events)
+          ..addColumns([events.artist, events.durationMs, events.listenedMs])
+          ..where(_countableSince(since)))
+        .get();
     final counts = <String, int>{};
     final listened = <String, int>{};
     for (final row in rows) {
-      if (!_isQualified(row['listenedMs'], row['durationMs'])) continue;
-      final listenedMs = _intOf(row['listenedMs']);
-      for (final name in splitArtistNames(row['artist'] as String? ?? '')) {
+      final listenedMs = row.read(events.listenedMs) ?? 0;
+      if (!_isQualified(listenedMs, row.read(events.durationMs))) continue;
+      for (final name in splitArtistNames(row.read(events.artist) ?? '')) {
         counts[name] = (counts[name] ?? 0) + 1;
         listened[name] = (listened[name] ?? 0) + listenedMs;
       }
@@ -380,8 +380,7 @@ class PlayStatisticsRepository {
 
   /// 来源分布（`sourceKey` 维度，按时长降序）。
   Future<List<SourceListened>> sourceDistribution({int? since}) async {
-    final db = await _db;
-    final rows = await db.rawQuery('''
+    final rows = await _db.customSelect('''
       SELECT
         sourceKey,
         COALESCE(SUM(listenedMs), 0) AS listenedMs,
@@ -390,35 +389,38 @@ class PlayStatisticsRepository {
       WHERE $_countablePredicate${since != null ? ' AND startedAt >= ?' : ''}
       GROUP BY sourceKey
       ORDER BY listenedMs DESC, playCount DESC
-    ''', [if (since != null) since]);
+    ''', variables: [if (since != null) Variable.withInt(since)]).get();
     return [
       for (final row in rows)
         SourceListened(
-          sourceKey: row['sourceKey'] as String? ?? '',
-          listenedMs: _intOf(row['listenedMs']),
-          playCount: _intOf(row['playCount']),
+          sourceKey: row.data['sourceKey'] as String? ?? '',
+          listenedMs: _intOf(row.data['listenedMs']),
+          playCount: _intOf(row.data['playCount']),
         ),
     ];
   }
 
   /// 某一天的播放明细（热力图点按弹层用；不含 error 事件）。
   Future<DayPlayEvents> dayEvents(DateTime day) async {
-    final db = await _db;
+    final db = _db;
     final start = DateTime(day.year, day.month, day.day);
     final end = start.add(const Duration(days: 1));
-    final rows = await db.query(
-      'play_events',
-      where: "$_countablePredicate AND startedAt >= ? AND startedAt < ?",
-      whereArgs: [
-        start.millisecondsSinceEpoch,
-        end.millisecondsSinceEpoch,
-      ],
-      orderBy: 'startedAt ASC, id ASC',
-    );
-    final events = [for (final row in rows) _eventFromRow(row)];
+    final events = db.playEvents;
+    final rows = await (db.select(events)
+          ..where((t) =>
+              _countableSince(null) &
+              t.startedAt
+                  .isBiggerOrEqualValue(start.millisecondsSinceEpoch) &
+              t.startedAt.isSmallerThanValue(end.millisecondsSinceEpoch))
+          ..orderBy([
+            (t) => OrderingTerm.asc(t.startedAt),
+            (t) => OrderingTerm.asc(t.id),
+          ]))
+        .get();
+    final playEvents = [for (final row in rows) _eventFromRow(row)];
     var listenedMs = 0;
     var playCount = 0;
-    for (final event in events) {
+    for (final event in playEvents) {
       listenedMs += event.listenedMs;
       if (_isQualified(event.listenedMs, event.durationMs)) playCount++;
     }
@@ -426,7 +428,7 @@ class PlayStatisticsRepository {
       day: start,
       listenedMs: listenedMs,
       playCount: playCount,
-      events: events,
+      events: playEvents,
     );
   }
 
@@ -434,13 +436,15 @@ class PlayStatisticsRepository {
   Future<List<PlayEvent>> listEventsForExport({
     int limit = PlayStatisticsLimits.exportEventLimit,
   }) async {
-    final db = await _db;
-    final rows = await db.query(
-      'play_events',
-      where: 'endedAt IS NOT NULL',
-      orderBy: 'startedAt DESC, id DESC',
-      limit: limit,
-    );
+    final events = _db.playEvents;
+    final rows = await (_db.select(events)
+          ..where((t) => t.endedAt.isNotNull())
+          ..orderBy([
+            (t) => OrderingTerm.desc(t.startedAt),
+            (t) => OrderingTerm.desc(t.id),
+          ])
+          ..limit(limit))
+        .get();
     return [for (final row in rows) _eventFromRow(row)];
   }
 
@@ -449,27 +453,30 @@ class PlayStatisticsRepository {
   /// 进行中事件不导出（远端无法继续更新进度，收尾后自然进入下一轮）；
   /// v5 前的旧行无去重键，按内容哈希一次性回填并落库。
   Future<List<Map<String, Object?>>> syncExportEvents() async {
-    final db = await _db;
-    final rows = await db.query('play_events', where: 'endedAt IS NOT NULL');
+    final db = _db;
+    // 导出行直接复用列名映射（远端按列名取值；不要改成类型化行）。
+    final rows = await db
+        .customSelect('SELECT * FROM play_events WHERE endedAt IS NOT NULL')
+        .get();
     final result = <Map<String, Object?>>[];
     final backfilled = <(int, String)>[];
     for (final row in rows) {
-      var syncKey = row['syncKey'] as String?;
+      final data = row.data;
+      var syncKey = data['syncKey'] as String?;
       if (syncKey == null || syncKey.isEmpty) {
-        syncKey = _legacySyncKey(row);
-        backfilled.add((row['id'] as int? ?? -1, syncKey));
+        syncKey = _legacySyncKey(data);
+        backfilled.add((data['id'] as int? ?? -1, syncKey));
       }
-      result.add({...row, 'syncKey': syncKey});
+      result.add({...data, 'syncKey': syncKey});
     }
     if (backfilled.isNotEmpty) {
-      await db.transaction((txn) async {
+      await db.transaction(() async {
         for (final (id, key) in backfilled) {
-          await txn.update(
-            'play_events',
-            {'syncKey': key},
-            where: 'id = ? AND (syncKey IS NULL OR syncKey = \'\')',
-            whereArgs: [id],
-          );
+          await (db.update(db.playEvents)
+                ..where((t) =>
+                    t.id.equals(id) &
+                    (t.syncKey.isNull() | t.syncKey.equals(''))))
+              .write(PlayEventsCompanion(syncKey: Value(key)));
         }
       });
     }
@@ -482,10 +489,10 @@ class PlayStatisticsRepository {
     List<Map<String, Object?>> events,
   ) async {
     if (events.isEmpty) return (applied: 0, skipped: 0);
-    final db = await _db;
+    final db = _db;
     var applied = 0;
     var skipped = 0;
-    await db.transaction((txn) async {
+    await db.transaction(() async {
       for (final event in events) {
         final syncKey = event['syncKey'] as String? ?? '';
         final endedAt = (event['endedAt'] as num?)?.toInt();
@@ -493,45 +500,41 @@ class PlayStatisticsRepository {
           skipped++;
           continue;
         }
-        final existing = await txn.query(
-          'play_events',
-          columns: ['id', 'endedAt'],
-          where: 'syncKey = ?',
-          whereArgs: [syncKey],
-          limit: 1,
-        );
-        if (existing.isEmpty) {
-          await txn.insert('play_events', {
-            'sourceKey': event['sourceKey'] as String? ?? '',
-            'songId': event['songId'] as String? ?? '',
-            'title': event['title'] as String? ?? '',
-            'artist': event['artist'] as String? ?? '',
-            'album': event['album'] as String? ?? '',
-            'coverUrl': event['coverUrl'] as String?,
-            'durationMs': (event['durationMs'] as num?)?.toInt(),
-            'raw': event['raw'] as String? ?? '{}',
-            'startedAt': (event['startedAt'] as num?)?.toInt() ?? 0,
-            'endedAt': endedAt,
-            'listenedMs': (event['listenedMs'] as num?)?.toInt() ?? 0,
-            'maxPositionMs': (event['maxPositionMs'] as num?)?.toInt() ?? 0,
-            'endReason': event['endReason'] as String?,
-            'syncKey': syncKey,
-            'originDeviceId': event['originDeviceId'] as String? ?? '',
-          });
+        final existing = await (db.select(db.playEvents)
+              ..where((t) => t.syncKey.equals(syncKey))
+              ..limit(1))
+            .getSingleOrNull();
+        if (existing == null) {
+          await db.into(db.playEvents).insert(PlayEventsCompanion.insert(
+                sourceKey: event['sourceKey'] as String? ?? '',
+                songId: event['songId'] as String? ?? '',
+                title: Value(event['title'] as String? ?? ''),
+                artist: Value(event['artist'] as String? ?? ''),
+                album: Value(event['album'] as String? ?? ''),
+                coverUrl: Value(event['coverUrl'] as String?),
+                durationMs: Value((event['durationMs'] as num?)?.toInt()),
+                raw: Value(event['raw'] as String? ?? '{}'),
+                startedAt: (event['startedAt'] as num?)?.toInt() ?? 0,
+                endedAt: Value(endedAt),
+                listenedMs: Value((event['listenedMs'] as num?)?.toInt() ?? 0),
+                maxPositionMs:
+                    Value((event['maxPositionMs'] as num?)?.toInt() ?? 0),
+                endReason: Value(event['endReason'] as String?),
+                syncKey: Value(syncKey),
+                originDeviceId:
+                    Value(event['originDeviceId'] as String? ?? ''),
+              ));
           applied++;
-        } else if (endedAt >
-            ((existing.first['endedAt'] as num?)?.toInt() ?? 0)) {
-          await txn.update(
-            'play_events',
-            {
-              'endedAt': endedAt,
-              'listenedMs': (event['listenedMs'] as num?)?.toInt() ?? 0,
-              'maxPositionMs': (event['maxPositionMs'] as num?)?.toInt() ?? 0,
-              'endReason': event['endReason'] as String?,
-            },
-            where: 'id = ?',
-            whereArgs: [existing.first['id']],
-          );
+        } else if (endedAt > (existing.endedAt ?? 0)) {
+          await (db.update(db.playEvents)
+                ..where((t) => t.id.equals(existing.id)))
+              .write(PlayEventsCompanion(
+            endedAt: Value(endedAt),
+            listenedMs: Value((event['listenedMs'] as num?)?.toInt() ?? 0),
+            maxPositionMs:
+                Value((event['maxPositionMs'] as num?)?.toInt() ?? 0),
+            endReason: Value(event['endReason'] as String?),
+          ));
           applied++;
         } else {
           skipped++;
@@ -570,20 +573,19 @@ class PlayStatisticsRepository {
   Future<List<({String title, String artist})>> listPlayedTrackNames({
     int limit = 1000,
   }) async {
-    final db = await _db;
-    final rows = await db.rawQuery('''
+    final rows = await _db.customSelect('''
       SELECT title, artist, MAX(startedAt) AS lastAt
       FROM play_events
       WHERE endedAt IS NOT NULL
       GROUP BY title, artist
       ORDER BY lastAt DESC
       LIMIT ?
-    ''', [limit]);
+    ''', variables: [Variable.withInt(limit)]).get();
     return [
       for (final row in rows)
         (
-          title: row['title'] as String? ?? '',
-          artist: row['artist'] as String? ?? '',
+          title: row.data['title'] as String? ?? '',
+          artist: row.data['artist'] as String? ?? '',
         ),
     ];
   }
@@ -599,10 +601,10 @@ class PlayStatisticsRepository {
   }
 
   /// 有效播放判定：委托唯一口径（[PlayStatisticsLimits.isQualified]）。
-  static bool _isQualified(Object? listenedMsRaw, Object? durationMsRaw) =>
+  static bool _isQualified(Object? listenedMsRaw, int? durationMs) =>
       PlayStatisticsLimits.isQualified(
         listenedMs: _intOf(listenedMsRaw),
-        durationMs: durationMsRaw as int?,
+        durationMs: durationMs,
       );
 
   DateTime _localDay(int startedAt) {
@@ -611,40 +613,36 @@ class PlayStatisticsRepository {
   }
 
   Future<List<_StatRow>> _statsRows(int? since) async {
-    final db = await _db;
-    final rows = await db.query(
-      'play_events',
-      columns: ['startedAt', 'listenedMs', 'durationMs'],
-      where:
-          "$_countablePredicate${since != null ? ' AND startedAt >= ?' : ''}",
-      whereArgs: [if (since != null) since],
-      orderBy: 'startedAt ASC',
-    );
+    final events = _db.playEvents;
+    final rows = await (_db.select(events)
+          ..where((t) => _countableSince(since))
+          ..orderBy([(t) => OrderingTerm.asc(t.startedAt)]))
+        .get();
     return [
       for (final row in rows)
         _StatRow(
-          startedAt: _intOf(row['startedAt']),
-          listenedMs: _intOf(row['listenedMs']),
-          qualified: _isQualified(row['listenedMs'], row['durationMs']),
+          startedAt: row.startedAt,
+          listenedMs: row.listenedMs,
+          qualified: _isQualified(row.listenedMs, row.durationMs),
         ),
     ];
   }
 
-  PlayEvent _eventFromRow(Map<String, Object?> row) => PlayEvent(
-        id: _intOf(row['id']),
-        sourceKey: row['sourceKey'] as String? ?? '',
-        songId: row['songId'] as String? ?? '',
-        title: row['title'] as String? ?? '',
-        artist: row['artist'] as String? ?? '',
-        album: row['album'] as String? ?? '',
-        coverUrl: row['coverUrl'] as String?,
-        durationMs: row['durationMs'] as int?,
-        raw: _decodeRaw(row['raw']),
-        startedAt: _intOf(row['startedAt']),
-        endedAt: row['endedAt'] as int?,
-        listenedMs: _intOf(row['listenedMs']),
-        maxPositionMs: _intOf(row['maxPositionMs']),
-        endReason: PlayEventEndReason.fromStorage(row['endReason']),
+  PlayEvent _eventFromRow(PlayEventRow row) => PlayEvent(
+        id: row.id,
+        sourceKey: row.sourceKey,
+        songId: row.songId,
+        title: row.title,
+        artist: row.artist,
+        album: row.album,
+        coverUrl: row.coverUrl,
+        durationMs: row.durationMs,
+        raw: _decodeRaw(row.raw),
+        startedAt: row.startedAt,
+        endedAt: row.endedAt,
+        listenedMs: row.listenedMs,
+        maxPositionMs: row.maxPositionMs,
+        endReason: PlayEventEndReason.fromStorage(row.endReason),
       );
 
   static int _intOf(Object? value) => (value as num?)?.toInt() ?? 0;
