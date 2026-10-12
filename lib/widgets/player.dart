@@ -18,15 +18,16 @@ import '../models/play_mode.dart';
 import '../services/data_saver_service.dart';
 import '../utils/responsive.dart';
 import 'app_network_image.dart';
+import 'cover_appearance.dart';
 import 'player_cover_deck.dart';
 import 'player_morph.dart';
 
+/// 迷你条封面外观与飞行定义在 `cover_appearance.dart`；这里再导出给既有
+/// import 面（迷你封面回退图标尺寸等）。
+export 'cover_appearance.dart' show miniCoverFallbackIconSize;
+
 /// 迷你播放条高度（收起态）：展开/收起动画的迷你端基准，播放页共用。
 const double miniPlayerHeight = 72;
-
-/// 迷你条封面回退图标尺寸（48dp 迷你封面真身）：迷你⇄完整飞行副本
-/// 按两端真身插值，禁止与完整端各自写死。
-const double miniCoverFallbackIconSize = 24;
 
 class Player extends StatefulWidget {
   final bool isLargeScreen;
@@ -188,8 +189,10 @@ class _PlayerState extends State<Player> with TickerProviderStateMixin {
     switch (status) {
       case AnimationStatus.forward:
       case AnimationStatus.reverse:
-        final from = _localRectOf(_miniCoverKey);
-        final to = _localRectOf(_fullCoverKey);
+        // 同一份锚点几何实现（含祖先缩放的两角映射）；这里取页内 Stack 本地坐标。
+        final from =
+            anchorRectOf(_miniCoverKey, container: _playerStackKey);
+        final to = anchorRectOf(_fullCoverKey, container: _playerStackKey);
         if (from == null || to == null) return;
         setState(() {
           _coverFlightFrom = from;
@@ -224,22 +227,6 @@ class _PlayerState extends State<Player> with TickerProviderStateMixin {
       _coverFlightFrom = null;
       _coverFlightTo = null;
     });
-  }
-
-  /// 元素相对播放器 Stack 的本地矩形（飞行副本定位用）。
-  ///
-  /// 同 [PlayerMorphController.rectOf]：必须映射左上/右下两角。完整端封面
-  /// 带播放态缩放（暂停 0.98、按压 0.96），用 `globalToLocal(Offset.zero)`
-  /// 拼 `box.size` 会得到错误的位置/尺寸，飞行起点或落点与真身差一截。
-  Rect? _localRectOf(GlobalKey key) {
-    final stackBox =
-        _playerStackKey.currentContext?.findRenderObject() as RenderBox?;
-    final box = key.currentContext?.findRenderObject() as RenderBox?;
-    if (stackBox == null || box == null || !box.hasSize) return null;
-    final topLeft = stackBox.globalToLocal(box.localToGlobal(Offset.zero));
-    final bottomRight = stackBox
-        .globalToLocal(box.localToGlobal(box.size.bottomRight(Offset.zero)));
-    return Rect.fromPoints(topLeft, bottomRight);
   }
 
   Future<void> _prefetchImage(String imageUrl) async {
@@ -498,16 +485,18 @@ class _PlayerState extends State<Player> with TickerProviderStateMixin {
                     ),
                     // 共享封面飞行副本：真实封面在飞行期间隐藏。
                     if (flightRect != null)
-                      Positioned.fromRect(
-                        rect: flightRect,
-                        child: IgnorePointer(
-                          child: _buildFlightCover(
-                            context,
-                            displayTrack,
-                            flightRect.width,
-                            t,
-                          ),
+                      CoverFlightLayer(
+                        animation: expand,
+                        flight: CoverFlight(
+                          otherRect: _coverFlightFrom!,
+                          pageRect: _coverFlightTo!,
+                          otherAppearance: CoverAppearance.mini,
+                          toPage: true,
                         ),
+                        url: artworkUrlOf(displayTrack),
+                        // 两真身都是主题默认封面（最近播放图/标志）。
+                        fallback: (context, iconSize) =>
+                            buildDefaultArtwork(context, iconSize: iconSize),
                       ),
                   ],
                 ),
@@ -516,55 +505,6 @@ class _PlayerState extends State<Player> with TickerProviderStateMixin {
           },
         );
       },
-    );
-  }
-
-  /// 迷你 ⇄ 完整飞行副本封面：与两端真身同键的同步 provider，
-  /// 首帧即出图（不闪占位）。
-  ///
-  /// [t] 为展开进度（0 = 迷你端、1 = 完整端）：圆角/描边/阴影按两端真身
-  /// 插值。恒用完整端外观的话，收起到迷你端时多出一圈描边与阴影，落位
-  /// 瞬间会「弹出」；图片裁剪半径同理（迷你真身裁剪 8、完整真身 17）。
-  Widget _buildFlightCover(
-    BuildContext context,
-    Track? track,
-    double size,
-    double t,
-  ) {
-    final scheme = Theme.of(context).colorScheme;
-    final double radius = lerpDouble(8, 18, t)!;
-    // 回退图标随两端真身插值（迷你端 [miniCoverFallbackIconSize]、完整端
-    // 封面边长 × [playerCoverFallbackIconRatio]；t=1 时 size 即完整端边长）：
-    // 固定尺寸会在起手/交接两处跳变。
-    final double fallbackIconSize = lerpDouble(
-      miniCoverFallbackIconSize,
-      size * playerCoverFallbackIconRatio,
-      t,
-    )!;
-    return SizedBox(
-      width: size,
-      height: size,
-      child: Container(
-        decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(radius),
-          border: Border.all(
-            color: scheme.outlineVariant.withValues(alpha: t),
-            width: 1,
-          ),
-          boxShadow: [
-            BoxShadow(
-              color: scheme.shadow.withValues(alpha: 0.28 * t),
-              blurRadius: 24 * t,
-              offset: Offset(0, 10 * t),
-            ),
-          ],
-        ),
-        child: MorphCover(
-          url: artworkUrlOf(track),
-          borderRadius: BorderRadius.circular(radius - t),
-          fallback: buildDefaultArtwork(context, iconSize: fallbackIconSize),
-        ),
-      ),
     );
   }
 
@@ -756,19 +696,16 @@ class _PlayerState extends State<Player> with TickerProviderStateMixin {
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.start,
                 children: [
-          ClipRRect(
-            borderRadius: BorderRadius.circular(8),
-            child: SizedBox(
-              width: 48,
-              height: 48,
-              child: KeyedSubtree(
-                key: _miniCoverKey,
-                child: Opacity(
-                  // 迷你 ⇄ 完整飞行期间真身隐藏，由飞行副本承接。
-                  opacity: _coverFlightActive ? 0 : 1,
-                  child: _buildMiniAlbumArt(track),
-                ),
-              ),
+          // 卡片外观（外边圆角 8、裁剪 8、回退图标 24）由 CoverAppearance.mini
+          // 统一给出；迷你 ⇄ 完整飞行期间真身隐藏，由飞行副本承接。
+          Opacity(
+            opacity: _coverFlightActive ? 0 : 1,
+            child: CoverCard(
+              key: _miniCoverKey,
+              size: 48,
+              appearance: CoverAppearance.mini,
+              content: (context, clip, iconSize) =>
+                  _buildMiniAlbumArt(track, iconSize),
             ),
           ),
           SizedBox(width: context.isCompact ? 8 : 16),
@@ -978,7 +915,7 @@ class _PlayerState extends State<Player> with TickerProviderStateMixin {
     );
   }
 
-  Widget _buildMiniAlbumArt(Track? track) {
+  Widget _buildMiniAlbumArt(Track? track, double iconSize) {
     final displayTrack = track ?? _lastTrack;
     final String? currentImageUrl = artworkUrlOf(displayTrack);
 
@@ -988,12 +925,12 @@ class _PlayerState extends State<Player> with TickerProviderStateMixin {
       key: ValueKey(currentImageUrl),
       url: currentImageUrl,
       fit: BoxFit.cover,
-      fallbackIconSize: miniCoverFallbackIconSize,
+      fallbackIconSize: iconSize,
       placeholder: _lastTrack != null && _lastImageUrl != null
           ? AppNetworkImage(
               url: _lastImageUrl,
               fit: BoxFit.cover,
-              fallbackIconSize: miniCoverFallbackIconSize,
+              fallbackIconSize: iconSize,
             )
           : buildDefaultArtwork(context),
       errorWidget: buildDefaultArtwork(context),

@@ -208,9 +208,11 @@
 ### 播放页封面堆叠（cover deck）
 
 - **模块**：`lib/widgets/player_cover_deck.dart`（组件 + 横滑手势 + 会话的效果宿主）、
-  `player_cover_session.dart`（`CoverSwapSession` 状态机 + `CoverSwapHost` 意图接口 +
-  曲目封面 URL/key 归一化）、`player_cover_swap.dart`（方向判定纯函数）；播放器只提供
-  布局尺寸、顶栏共享飞行锚点与主题联动。
+  `player_cover_session.dart`（`CoverSwapSession` 状态机 + `CoverSwapHost` 意图接口）、
+  `cover_appearance.dart`（`CoverAppearance` 外观 / `CoverFlight` + `CoverFlightLayer`
+  飞行 / `CoverCard` 卡片 / `MorphCover` 副本内容 / 封面 URL·key 归一化）、
+  `player_cover_swap.dart`（方向判定纯函数）；播放器只提供布局尺寸、顶栏共享飞行
+  锚点与主题联动。
 - **三槽位模型**：左 = 上一首（播放顺序最近一首 history 末位 → 队列前一位 → 空，
   排除与当前同 id，与后端 `skipToPrevious` 同源）、中 = 当前（拖动/提交等待期间
   为预览目标）、右 = `PlaybackSnapshot.next`；左右槽只要展示了身份即可点击切歌。
@@ -241,12 +243,18 @@
   宿主侧只负责控制器归位与中心身份接管。
 - **与共享飞行的关系**：顶栏↔播放页与迷你↔完整飞行只隐藏/复刻中心封面真身
   （`morph.pageCoverKey`）；侧邻位随页面层自身淡入以稳态出现，无独立入场演出。
-- **飞行几何不变量**：锚点在点击那一刻**同步**抓取，因此①隐藏页层（出场过渡
-  结束/未参与过渡）必须 `scale == 1`（`app_shell.dart::shellPageLayerPresentation`，
-  出场微缩只存在于过渡进行中）；②矩形读取必须映射两角得到真实屏幕矩形
-  （`PlayerMorphController.rectOf` / `Player._localRectOf`），祖先稳态缩放
-  （暂停态 0.98、按压 0.96）不得让副本尺寸/位置错位。回退图标（无封面）尺寸
-  两端与飞行副本共用 `player_morph.dart` 常量并按几何插值。
+- **飞行几何与外观**：外观与插值只有一份实现（`cover_appearance.dart`）——三端真身
+  （顶栏 r8/图标 22、迷你 r8/图标 24、播放页 r18 + 1px 描边 + 柔和阴影/裁剪 17/图标
+  0.35×边长）是 `CoverAppearance` 的命名值，两个飞行是 `CoverFlight` 的薄壳；两条
+  代数不变量：描边透明度 = 描边宽度、裁剪半径 = 外圆角 − 描边宽度。飞行副本经
+  `CoverFlightLayer` 渲染（`CoverCard` + `MorphCover`），外观按「播放页端进度」
+  插值（反向起飞不跳），图标按两端真身尺寸插值。
+- **飞行几何不变量**：锚点在点击那一刻**同步**抓取（封面 URL 同刻确定，飞行中不换
+  图），因此①隐藏页层（出场过渡结束/未参与过渡）必须 `scale == 1`
+  （`app_shell.dart::shellPageLayerPresentation`，出场微缩只存在于过渡进行中）；
+  ②矩形读取必须映射两角得到真实屏幕矩形（唯一实现
+  `player_morph.dart::anchorRectOf`，容器为空 = 全局坐标），祖先稳态缩放
+  （暂停态 0.98、按压 0.96）不得让副本尺寸/位置错位。
 
 ## 5. 音源引擎
 

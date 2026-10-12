@@ -18,18 +18,11 @@ import 'package:flutter/foundation.dart';
 import '../domain/models/playback.dart';
 import '../domain/models/track.dart';
 import '../models/play_mode.dart';
+import 'cover_appearance.dart';
 import 'player_cover_swap.dart';
 
-/// 曲目封面 URL（空串视同无封面；领域 Track 自带可靠 id/artwork）。
-///
-/// 与封面堆叠模块共用（`player_cover_deck.dart` 再导出给迷你条 / 飞行副本）。
-String? artworkUrlOf(Track? track) {
-  final url = track?.artwork?.uri.toString();
-  return url == null || url.isEmpty ? null : url;
-}
-
-/// 曲目的稳定 key（领域 id）。
-String? trackKeyOf(Track? track) => track?.id.uri;
+/// 封面 URL / 稳定 key 与外观词汇定义在 `cover_appearance.dart`（会话只消费）。
+export 'cover_appearance.dart' show artworkUrlOf, trackKeyOf;
 
 /// 会话阶段。
 ///
