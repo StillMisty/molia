@@ -32,6 +32,8 @@ tool/agent/emu.sh stop     # 停止模拟器（app.sh stop 只停 flutter run）
 
 - `app.sh` 把运行设备记入 `/tmp/opencode/molia/flutter-run.device`，`reload`/`stop`/`status`
   均按它操作：`-d linux` 起的桌面会话不会误发给 adb，反之亦然。
+- 模拟器默认 16 KB 页（`google_apis_ps16k` 镜像，`emu.sh status` 会打印页大小）；
+  回 4 KB 需另建 AVD（`-k "system-images;android-37.0;google_apis;x86_64"`）并 `AVD_NAME=... emu.sh start`。
 - 日志 / 截图 / pid 统一放在 `/tmp/opencode/molia`（临时目录，重启可清）；集成测试日志为
   `it-<platform>-<时间戳>.log`，失败时脚本自动回显尾部 40 行。
 - Flutter semantics 节点可能不完整：视觉定位用 `shot.sh --annotate` 生成带编号标注的截图，

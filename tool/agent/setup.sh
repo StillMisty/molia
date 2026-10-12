@@ -5,9 +5,9 @@
 #
 # 做四件事：
 #   1. 检查/创建 ~/.androidrc（指定 SDK 路径）
-#   2. 确保 emulator 组件与 API 37 系统镜像已安装（约 2GB，仅首次）
+#   2. 确保 emulator 组件与 API 37 系统镜像（ps16k）已安装（约 2GB，仅首次）
 #   3. 补齐模拟器系统依赖 libxkbfile（无 root 的临时方案：塞进 emulator/lib64）
-#   4. 确保 AVD 存在并写入调试友好的 config（swiftshader/4G/键盘）
+#   4. 确保 AVD 存在（ps16k 镜像）并写入调试友好的 config（swiftshader/4G/键盘）
 source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/_common.sh"
 
 # Arch 官方镜像的 libxkbfile 包（emulator 的 Qt xcb 依赖；系统装过则跳过）
@@ -31,10 +31,14 @@ if ! "$ANDROID_CLI" sdk list 2>/dev/null | grep -qE '^\s+emulator\s'; then
   "$ANDROID_CLI" sdk install emulator
 fi
 
-# 2b. API 37 系统镜像（项目 minSdk=37，只能用 API 37 镜像；用 google_apis 而非 playstore 更轻）
-if ! "$ANDROID_CLI" sdk list 2>/dev/null | grep -q 'system-images/android-37.0/google_apis/x86_64'; then
-  log "安装 API 37 系统镜像（约 1.5GB）"
-  "$ANDROID_CLI" sdk install "system-images/android-37.0/google_apis/x86_64"
+# 2b. API 37 系统镜像（项目 minSdk=37，只能用 API 37 镜像；用 google_apis 而非 playstore 更轻）。
+#     取 ps16k 变体：默认环境就跑在 16 KB 页上，依赖的页对齐问题会当场暴露。
+# 包路径两种写法：分号给 avdmanager，斜杠给 sdk list 与 AVD config.ini
+SYS_IMAGE="system-images;android-37.0;google_apis_ps16k;x86_64"
+SYS_IMAGE_PATH="system-images/android-37.0/google_apis_ps16k/x86_64"
+if ! "$ANDROID_CLI" sdk list 2>/dev/null | grep -q "$SYS_IMAGE_PATH"; then
+  log "安装 API 37 系统镜像（ps16k，约 2GB）"
+  "$ANDROID_CLI" sdk install "$SYS_IMAGE"
 fi
 
 # 3. libxkbfile：系统级安装优先；否则把库文件放进 emulator/lib64（launcher 会把该目录加进
@@ -51,12 +55,20 @@ if ! ldconfig -p 2>/dev/null | grep -q 'libxkbfile\.so'; then
   log "libxkbfile 补丁就绪"
 fi
 
-# 4a. AVD
+# 4a. AVD：镜像不一致时重建（AVD 只存调试状态，可弃）
+avd_on_16k() {
+  local cfg="$HOME/.android/avd/$AVD_NAME.avd/config.ini"
+  [[ -f "$cfg" ]] && grep -q "^image.sysdir.1=$SYS_IMAGE_PATH/$" "$cfg"
+}
+if "$AVD_MANAGER" list avd 2>/dev/null | grep -q "Name: $AVD_NAME" && ! avd_on_16k; then
+  log "AVD $AVD_NAME 的镜像不是 ps16k，删除重建"
+  "$AVD_MANAGER" delete avd -n "$AVD_NAME" >/dev/null
+fi
 if ! "$AVD_MANAGER" list avd 2>/dev/null | grep -q "Name: $AVD_NAME"; then
   log "创建 AVD: $AVD_NAME"
   echo no | "$AVD_MANAGER" create avd \
     -n "$AVD_NAME" \
-    -k "system-images;android-37.0;google_apis;x86_64" \
+    -k "$SYS_IMAGE" \
     -d medium_phone
 fi
 

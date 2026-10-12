@@ -114,3 +114,10 @@
     `android/gradle/wrapper/gradle-wrapper.properties` 的 distributionUrl 改为
     `gradle-9.8.1-bin.zip`；另注意 JDK 27 + Gradle 9.3.1 会因 class file 71 直接
     失败（Gradle 9.8.1 + JDK 27 已验证可用）。
+27. **16 KB 页对齐是发布硬条件，而且属于「依赖带进来的属性」**：Android 15+ 的 16 KB
+    内核设备要求 64 位 .so 的 ELF 段按 16 KB 对齐（Google Play 自 2027-02 起强制）。
+    构建侧已满足（AGP ≥ 8.5.1 管 zip 页对齐、NDK r28+ 默认 16 KB 段对齐），但本项目没有
+    自己的 native 代码，对齐完全由依赖决定（flutter_js 经 JitPack 的 quickjs、
+    shared_preferences 带的 androidx.datastore 等），升级后可能被换回 4 KB 库。
+    本地默认模拟器就是 16 KB 页，集成测试（`tool/agent/test.sh android`）会当场暴露
+    加载失败；必要时用官方 `check_elf_alignment.sh` 或 `zipalign -c -P 16 <apk>` 复查。

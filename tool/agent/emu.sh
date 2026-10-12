@@ -78,6 +78,7 @@ cmd_status() {
   if [[ -n "$serial" ]]; then
     echo "== 启动状态 ($serial) =="
     "$ADB" -s "$serial" shell getprop sys.boot_completed 2>/dev/null | tr -d '\r'
+    echo "页大小: $("$ADB" -s "$serial" shell getconf PAGE_SIZE 2>/dev/null | tr -d '\r')"
   fi
 }
 
