@@ -6,7 +6,8 @@ import 'package:molia/l10n/app_localizations.dart';
 import 'package:molia/providers/library_provider.dart';
 import 'package:molia/providers/playback_provider.dart';
 import 'package:molia/providers/source_swap_provider.dart';
-import 'package:molia/widgets/source_swap_sheet.dart';
+import 'package:molia/pages/source_swap_page.dart';
+import 'package:molia/providers/lyrics_provider.dart';
 import 'package:material_3_expressive/material_3_expressive.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:provider/provider.dart';
@@ -16,7 +17,7 @@ import 'support/fake_library_repository.dart';
 import 'support/fake_music_source.dart';
 import 'support/fakes.dart';
 
-/// 换源弹层：候选渲染 / 试听 / 原位替换 / 重复确认 / 空态与失败重试。
+/// 换源页（音频 tab）：候选渲染 / 试听 / 原位替换 / 重复确认 / 空态与失败重试。
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
@@ -28,6 +29,7 @@ void main() {
   late FakeMusicSource tx;
   late Map<String, FakeMusicSource> sources;
   late SourceSwapProvider swap;
+  late LyricsProvider lyricsProvider;
 
   setUp(() {
     SharedPreferences.setMockInitialValues({});
@@ -50,9 +52,11 @@ void main() {
       libraryProvider: library,
       playbackProvider: playback,
     );
+    lyricsProvider = LyricsProvider();
   });
 
   tearDown(() async {
+    lyricsProvider.dispose();
     swap.dispose();
     library.dispose();
     playback.dispose();
@@ -130,9 +134,10 @@ void main() {
             builder: (context) => Scaffold(
               body: Center(
                 child: M3EButton.filled(
-                  onPressed: () => showSourceSwapSheet(
+                  onPressed: () => showSourceSwapPage(
                     context,
                     seed: seed,
+                    lyricsProvider: lyricsProvider,
                     playlistId: playlistId,
                   ),
                   child: const Text('open'),
@@ -145,7 +150,7 @@ void main() {
     );
   }
 
-  Future<void> openSheet(WidgetTester tester) async {
+  Future<void> openPage(WidgetTester tester) async {
     await tester.tap(find.text('open'));
     await tester.pumpAndSettle();
   }
@@ -165,7 +170,7 @@ void main() {
     kg.items = [sourceTrack('kg', '100', title: 'Title（kg）')];
 
     await pumpHost(tester, seed: seed, playlistId: playlistId);
-    await openSheet(tester);
+    await openPage(tester);
 
     // 头部 + 音源 chip（tx 无结果不产生分组）+ 候选行。
     expect(find.text('换源'), findsWidgets);
@@ -199,7 +204,7 @@ void main() {
     kg.items = [sourceTrack('kg', '100', title: 'Title（kg）')];
 
     await pumpHost(tester, seed: seed, playlistId: playlistId);
-    await openSheet(tester);
+    await openPage(tester);
     await tester.tap(find.text('Title（kg）'));
     await tester.pumpAndSettle();
 
@@ -231,7 +236,7 @@ void main() {
       ..['wy'] = FakeMusicSource('wy');
 
     await pumpHost(tester, seed: seed, playlistId: playlistId);
-    await openSheet(tester);
+    await openPage(tester);
 
     expect(find.text('没有可用的其它音源'), findsOneWidget);
     final confirm = tester.widget<M3EButton>(
@@ -248,7 +253,7 @@ void main() {
     kg.fail = true;
 
     await pumpHost(tester, seed: seed, playlistId: playlistId);
-    await openSheet(tester);
+    await openPage(tester);
 
     expect(find.text('其它音源没有找到这首歌'), findsOneWidget);
     expect(find.text('1 个音源搜索失败'), findsOneWidget);

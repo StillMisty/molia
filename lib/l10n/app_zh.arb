@@ -287,6 +287,8 @@
   "sourceSwapQueueFollowed": "已换源并切换播放来源",
   "sourceSwapNotFound": "曲目已不在原位置",
   "sourceSwapApplyFailed": "换源失败，请稍后重试",
+  "sourceSwapTabLyrics": "歌词",
+  "sourceSwapTabAudio": "音频",
   "playlistAddedTo": "已加入「{name}」",
   "playlistAlreadyContains": "已在列表中",
   "playlistImportToMine": "导入到我的列表",
@@ -641,12 +643,97 @@
   },
   "aiDjRetry": "重试",
   "aiDjOpenSettings": "配置 AI 服务",
-  "aiDjBadgeTooltip": "AI 推歌进行中",
   "aiDjDiscoverSubtitle": "用你的听歌记录让 AI 帮你选歌",
-  "aiDjManage": "管理",
   "aiDjGenerating": "正在生成推荐…",
   "aiDjBatchFailed": "这批推荐没生成出来",
   "aiDjRefreshBatch": "换一批",
+  "aiDjStatusIdle": "待机",
+  "aiDjTodayTitle": "今日推荐",
+  "aiDjViewAll": "查看全部",
+  "aiDjLastUpdated": "上次更新：{time}",
+  "@aiDjLastUpdated": {
+    "placeholders": {
+      "time": {
+        "type": "String"
+      }
+    }
+  },
+  "aiDjUpdatedJustNow": "刚刚",
+  "aiDjUpdatedMinutesAgo": "{count} 分钟前",
+  "@aiDjUpdatedMinutesAgo": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "aiDjUpdatedHoursAgo": "{count} 小时前",
+  "@aiDjUpdatedHoursAgo": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "aiDjUpdatedYesterday": "昨天 {time}",
+  "@aiDjUpdatedYesterday": {
+    "placeholders": {
+      "time": {
+        "type": "String"
+      }
+    }
+  },
+  "aiDjUpdatedDate": "{month} 月 {day} 日",
+  "@aiDjUpdatedDate": {
+    "placeholders": {
+      "month": {
+        "type": "int"
+      },
+      "day": {
+        "type": "int"
+      }
+    }
+  },
+  "aiDjPlayAll": "播放全部",
+  "aiDjEnqueueAll": "加入队列",
+  "aiDjInQueue": "队列中",
+  "aiDjItemActions": "推荐操作",
+  "aiDjReplaceItem": "换一首",
+  "aiDjNotInterested": "不感兴趣",
+  "aiDjFeedbackTitle": "本轮反馈",
+  "aiDjFeedbackLiked": "喜欢",
+  "aiDjFeedbackSkipped": "跳过",
+  "aiDjUpstreamTitle": "本次发送的数据",
+  "aiDjUpstreamBody": "最近 {events} 条播放记录 · Top 艺人 {artists} 位 · 已听排除 {exclusions} 首",
+  "@aiDjUpstreamBody": {
+    "placeholders": {
+      "events": {
+        "type": "int"
+      },
+      "artists": {
+        "type": "int"
+      },
+      "exclusions": {
+        "type": "int"
+      }
+    }
+  },
+  "aiDjUpstreamHint": "只包含以上统计与曲名/歌手，不含播放链接与设备信息。",
+  "aiDjCacheTtlTitle": "推荐缓存",
+  "aiDjCacheTtlDays": "保留 {days} 天",
+  "@aiDjCacheTtlDays": {
+    "placeholders": {
+      "days": {
+        "type": "int"
+      }
+    }
+  },
+  "aiDjCacheTtlForever": "永久保留",
+  "aiDjCacheTtlHint": "过期后不再作为续推来源，下一次续推自动生成新一批（不打断播放、不提示）。",
+  "aiDjGenerate": "生成推荐",
+  "aiDjEmptyList": "还没有推荐列表",
+  "aiDjEmptyListHint": "生成一批今日推荐，之后可随时播放。",
+  "aiDjEnqueueEmpty": "列表里的歌都已在队列中",
   "settingsSyncTitle": "跨设备同步",
   "settingsSyncItemSubtitle": "歌单、音源、设置与凭证",
   "syncGeneralSection": "同步",

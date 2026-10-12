@@ -23,6 +23,7 @@ class _FakeLlm extends LlmClient {
   String response;
   Object? error;
   String? lastUserPrompt;
+  bool? lastJsonMode;
 
   @override
   Future<String> complete({
@@ -31,8 +32,10 @@ class _FakeLlm extends LlmClient {
     required String userPrompt,
     double temperature = 0.8,
     int maxTokens = 4096,
+    bool jsonMode = false,
   }) async {
     lastUserPrompt = userPrompt;
+    lastJsonMode = jsonMode;
     final failure = error;
     if (failure != null) throw failure;
     return response;
@@ -48,8 +51,19 @@ class _FakeSource implements MusicSource {
 
   final List<Track> results;
 
+  /// 封面补取：非空时 `artwork()` 返回它（统计调用次数）。
+  String? artworkUrl;
+  int artworkCalls = 0;
+
   @override
   String get displayName => key;
+
+  @override
+  Future<Artwork?> artwork(Track track) async {
+    artworkCalls++;
+    final url = artworkUrl;
+    return url == null ? null : Artwork(uri: Uri.parse(url));
+  }
 
   @override
   SourceCapabilities get capabilities => const SourceCapabilities(search: true);
@@ -243,6 +257,52 @@ void main() {
         throwsA(isA<SourceFailure>()
             .having((f) => f.kind, 'kind', FailureKind.rateLimited)),
       );
+    });
+
+    test('命中但无封面 → 经音源 artwork() 补取', () async {
+      llm.response = jsonEncode({
+        'songs': [
+          {'title': '晴天', 'artist': '周杰伦', 'reason': 'x'},
+        ],
+      });
+      final source = _FakeSource('wy', [_track('a', '晴天', '周杰伦')])
+        ..artworkUrl = 'https://img.example/cover.jpg';
+      service = buildService([source]);
+
+      final batch = await service.generate(config: config, count: 20);
+
+      expect(source.artworkCalls, 1);
+      expect(
+        batch.items.single.track.artwork?.uri.toString(),
+        'https://img.example/cover.jpg',
+      );
+    });
+
+    test('请求带 JSON 模式；额外排除清单进入提示词', () async {
+      llm.response = jsonEncode({
+        'songs': [
+          {'title': '歌', 'artist': '手'},
+        ],
+      });
+
+      await service.generate(
+        config: config,
+        count: 1,
+        excludeLabels: const ['已在该列表 - 某'],
+      );
+
+      expect(llm.lastJsonMode, isTrue);
+      expect(llm.lastUserPrompt, contains('这些不要再推荐'));
+      expect(llm.lastUserPrompt, contains('已在该列表'));
+    });
+
+    test('summarizeUpstream 只统计条数', () async {
+      await insertPlayed('晴天', '周杰伦');
+
+      final summary = await service.summarizeUpstream();
+
+      expect(summary.recentEvents, 1);
+      expect(summary.exclusions, 1);
     });
 
     test('提示词包含画像、排除清单与本轮反馈', () async {

@@ -7,7 +7,8 @@
 - **播放**：本地音频（just_audio；桌面 Windows/Linux 走 media_kit/libmpv）、队列/播放模式、后台播放与系统媒体通知（audio_service）
 - **歌词**：QQ/网易/LRCLIB 获取与显示、歌词行选择、歌词海报导出
 - **省流模式**（移动数据下压低取链音质、封面仅本地缓存）、**M3E（Material 3 Expressive）UI**
-- **AI 推歌（可选，默认关闭）**：用户自备 API Key 的 OpenAI-compatible LLM 推荐电台
+- **AI 推歌（可选，默认关闭）**：用户自备 API Key 的 OpenAI-compatible LLM
+  「今日推荐」列表（持久可浏览）+ 可选推歌电台（播放全部即接管队列并自动续推）
 - **跨设备同步（可选，默认关闭）**：歌单/音源/设置/统计/凭证经局域网直连或自备 WebDAV 同步
 
 ## 工具链

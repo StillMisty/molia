@@ -43,7 +43,6 @@ class SyncSettingsPage extends StatelessWidget {
                 onChanged: (value) =>
                     unawaited(_toggleEnabled(context, provider, value, l10n)),
               ),
-              const SizedBox(height: kSettingsElementSpacing),
               SettingsNavTile(
                 key: const Key('settingsSyncDeviceNameItem'),
                 icon: Icons.devices_rounded,
@@ -52,7 +51,6 @@ class SyncSettingsPage extends StatelessWidget {
                 onTap: () => _showRenameDialog(context, provider, l10n),
               ),
               if (provider.enabled) ...[
-                const SizedBox(height: kSettingsElementSpacing),
                 SettingsNavTile(
                   key: const Key('settingsSyncPassphraseItem'),
                   icon: Icons.key_rounded,
@@ -62,7 +60,6 @@ class SyncSettingsPage extends StatelessWidget {
                       : provider.maskedPassphrase,
                   onTap: () => _showPassphraseDialog(context, provider, l10n),
                 ),
-                const SizedBox(height: kSettingsElementSpacing),
                 SettingsNavTile(
                   key: const Key('settingsSyncJoinItem'),
                   icon: Icons.login_rounded,
@@ -70,7 +67,6 @@ class SyncSettingsPage extends StatelessWidget {
                   subtitle: l10n.syncPassphraseJoinHint,
                   onTap: () => _showJoinDialog(context, provider, l10n),
                 ),
-                const SizedBox(height: kSettingsElementSpacing),
                 SettingsNavTile(
                   key: const Key('settingsSyncNowItem'),
                   icon: Icons.sync_lock_rounded,
@@ -87,18 +83,14 @@ class SyncSettingsPage extends StatelessWidget {
               title: l10n.syncContentSection,
               children: [
                 for (final entry in _categoryOrder.entries)
-                  Padding(
-                    padding:
-                        const EdgeInsets.only(bottom: kSettingsElementSpacing),
-                    child: SettingsSwitchTile(
-                      switchKey: Key('settingsSyncCategory-${entry.key.name}'),
-                      icon: entry.value.$1,
-                      title: entry.value.$2(l10n),
-                      subtitle: l10n.syncCategorySubtitle,
-                      value: provider.categories[entry.key] ?? true,
-                      onChanged: (value) =>
-                          unawaited(provider.setCategory(entry.key, value)),
-                    ),
+                  SettingsSwitchTile(
+                    switchKey: Key('settingsSyncCategory-${entry.key.name}'),
+                    icon: entry.value.$1,
+                    title: entry.value.$2(l10n),
+                    subtitle: l10n.syncCategorySubtitle,
+                    value: provider.categories[entry.key] ?? true,
+                    onChanged: (value) =>
+                        unawaited(provider.setCategory(entry.key, value)),
                   ),
               ],
             ),
@@ -115,7 +107,6 @@ class SyncSettingsPage extends StatelessWidget {
                   onChanged: (value) => unawaited(
                       provider.setTransportEnabled('lan', value)),
                 ),
-                const SizedBox(height: kSettingsElementSpacing),
                 SettingsSwitchTile(
                   switchKey: const Key('settingsSyncWebdavSwitch'),
                   icon: Icons.cloud_rounded,
@@ -125,7 +116,6 @@ class SyncSettingsPage extends StatelessWidget {
                   onChanged: (value) => unawaited(
                       provider.setTransportEnabled('webdav', value)),
                 ),
-                const SizedBox(height: kSettingsElementSpacing),
                 SettingsNavTile(
                   key: const Key('settingsSyncWebdavConfigItem'),
                   icon: Icons.settings_rounded,

@@ -1,6 +1,6 @@
 import 'dart:async';
 
-import 'package:flutter/foundation.dart' show kIsWeb;
+import 'package:flutter/foundation.dart' show kIsWeb, listEquals;
 import 'package:material_3_expressive/material_3_expressive.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:flutter/rendering.dart';
@@ -12,14 +12,15 @@ import '../l10n/app_localizations.dart';
 import '../domain/models/track.dart';
 import '../models/lyric_line.dart';
 import '../models/play_mode.dart';
+import '../pages/source_swap_page.dart';
 import '../providers/lyrics_provider.dart';
 import '../providers/playback_provider.dart';
 import '../services/lyrics_display/lyrics_display_settings.dart';
 import '../services/notification_service.dart';
 import '../utils/responsive.dart';
 import 'lyric_karaoke_text.dart';
-import 'lyrics_search_page.dart';
 import 'lyrics_selection_page.dart';
+import 'lyrics_source_search_view.dart';
 import 'playback_selectors.dart';
 
 class LyricsWidget extends StatefulWidget {
@@ -62,6 +63,9 @@ class _LyricsWidgetState extends State<LyricsWidget>
   static const double _activeLineUpwardBias = 0.10;
 
   List<LyricLine> _lyrics = [];
+
+  /// 歌词会话模块（同一份状态源）：监听外部替换（换源页手动保存）以同步展示。
+  LyricsProvider? _lyricsProvider;
 
   /// 与 [_lyrics] 等索引的翻译 / 罗马音（'' = 该行无扩展文本）。
   /// 来自 [LyricsState] 的同一份时间戳对齐结果，与各输出共用数据源。
@@ -128,7 +132,50 @@ class _LyricsWidgetState extends State<LyricsWidget>
   }
 
   @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final provider = Provider.of<LyricsProvider>(context, listen: false);
+    if (identical(provider, _lyricsProvider)) return;
+    _lyricsProvider?.removeListener(_onLyricsProviderChanged);
+    _lyricsProvider = provider;
+    provider.addListener(_onLyricsProviderChanged);
+  }
+
+  /// 同一曲目的歌词被外部替换（换源页手动保存等）时同步到本地渲染状态。
+  ///
+  /// 与本地一致（自己发起加载的落地路径）时直接跳过，避免无谓 setState。
+  void _onLyricsProviderChanged() {
+    final provider = _lyricsProvider;
+    if (!mounted || provider == null) return;
+    final trackId = _lastTrackId;
+    if (trackId == null) return;
+    final state = provider.state;
+    if (state.trackId != trackId || state.status != LyricsStatus.ready) return;
+    if (listEquals(state.lines, _lyrics) &&
+        listEquals(state.translations, _translations) &&
+        listEquals(state.romas, _romas)) {
+      return;
+    }
+    _quickActionsHideTimer?.cancel();
+    setState(() {
+      _lyricsAreSynced = state.isSynced;
+      _lyrics = state.lines;
+      _translations = state.translations;
+      _romas = state.romas;
+      _autoScroll = state.isSynced;
+      _previousLineIndex = -1;
+      _syncLineKeys(_lyrics.length);
+      _pendingScrollIndex = null;
+      _lastFallbackIndexAttempted = null;
+      _fallbackAttemptsForCurrentIndex = 0;
+      _manualQuickActionsVisible = false;
+      _isLyricsLoading = false;
+    });
+  }
+
+  @override
   void dispose() {
+    _lyricsProvider?.removeListener(_onLyricsProviderChanged);
     _userScrollSuppressionTimer?.cancel();
     _userScrollResumeTimer?.cancel();
     _quickActionsHideTimer?.cancel();
@@ -461,9 +508,9 @@ class _LyricsWidgetState extends State<LyricsWidget>
             : l10n.enterCopyLyricsMode,
       ),
       M3EToolbarAction(
-        icon: Icons.search_rounded,
-        onPressed: _showSearchLyricsPage,
-        tooltip: l10n.searchLyrics,
+        icon: Icons.swap_horiz_rounded,
+        onPressed: _showSourceSwapPage,
+        tooltip: l10n.sourceSwap,
       ),
       M3EToolbarAction(
         icon: Icons.checklist_rounded,
@@ -1137,7 +1184,8 @@ class _LyricsWidgetState extends State<LyricsWidget>
     }
   }
 
-  void _showSearchLyricsPage() {
+  /// 换源页（歌词 / 音频双 tab）：默认落在歌词 tab。
+  Future<void> _showSourceSwapPage() async {
     if (!mounted) return;
 
     final playbackProvider =
@@ -1154,7 +1202,6 @@ class _LyricsWidgetState extends State<LyricsWidget>
 
     final trackId = currentTrack.id.uri;
     final trackName = currentTrack.title;
-    final artistName = _extractArtistNames(currentTrack);
 
     if (trackId.isEmpty || trackName.isEmpty) {
       notificationService.showSnackBar(l10n.cannotGetTrackInfo);
@@ -1174,101 +1221,45 @@ class _LyricsWidgetState extends State<LyricsWidget>
 
     final lyricsProvider =
         Provider.of<LyricsProvider>(context, listen: false);
-    Navigator.of(context)
-        .push(
-      MaterialPageRoute(
-        builder: (context) => LyricsSearchPage(
-          initialTrackTitle: trackName,
-          initialArtistName: artistName,
-          trackId: trackId,
-          lyricsProvider: lyricsProvider,
-          preferredSourceKey: currentTrack.id.sourceKey,
-        ),
-      ),
-    )
-        .then((result) async {
-      if (!mounted) return;
+    final result = await showSourceSwapPage(
+      context,
+      seed: currentTrack,
+      lyricsProvider: lyricsProvider,
+      initialTab: SourceSwapTab.lyrics,
+    );
+    if (!mounted) return;
 
-      LyricsSearchSelection? selection;
-      if (result is LyricsSearchSelection) {
-        selection = result;
-      } else if (result is String && result.isNotEmpty) {
-        selection = LyricsSearchSelection(
-          lyrics: result,
-          provider: '',
-        );
+    LyricsSearchSelection? selection;
+    if (result is LyricsSearchSelection) {
+      selection = result;
+    }
+
+    // 换源页歌词 tab 返回了歌词（页面已通过 LyricsProvider.saveManual
+    // 写缓存并更新会话状态；这里只把结果落到本地渲染状态）
+    if (selection != null && selection.lyrics.isNotEmpty) {
+      final lyricsState = lyricsProvider.state;
+      if (lyricsState.trackId != trackId ||
+          lyricsState.status != LyricsStatus.ready) {
+        return;
       }
+      final bool synced = lyricsState.isSynced;
+      final newLyrics = lyricsState.lines;
+      _quickActionsHideTimer?.cancel();
+      setState(() {
+        _lyrics = newLyrics;
+        _translations = lyricsState.translations;
+        _romas = lyricsState.romas;
+        _lyricsAreSynced = synced;
+        _lastTrackId = trackId;
+        _previousLineIndex = -1;
+        _syncLineKeys(_lyrics.length);
+        _manualQuickActionsVisible = false;
 
-      // 搜索页返回了歌词（搜索页已通过 LyricsProvider.saveManual
-      // 写缓存并更新会话状态；这里只把结果落到本地渲染状态）
-      if (selection != null && selection.lyrics.isNotEmpty) {
-        if (result is! LyricsSearchSelection) {
-          await lyricsProvider.saveManual(
-            trackId: trackId,
-            lyric: selection.lyrics,
-            providerName: selection.provider,
-          );
-          if (!mounted) return;
-        }
-        final lyricsState = lyricsProvider.state;
-        if (lyricsState.trackId != trackId ||
-            lyricsState.status != LyricsStatus.ready) {
-          return;
-        }
-        final bool synced = lyricsState.isSynced;
-        final newLyrics = lyricsState.lines;
-        _quickActionsHideTimer?.cancel();
-        setState(() {
-          _lyrics = newLyrics;
-          _translations = lyricsState.translations;
-          _romas = lyricsState.romas;
-          _lyricsAreSynced = synced;
-          _lastTrackId = trackId;
-          _previousLineIndex = -1;
-          _syncLineKeys(_lyrics.length);
-          _manualQuickActionsVisible = false;
+        // 换源前开启过自动滚动则恢复
+        if (wasAutoScrollEnabled && synced) {
+          _autoScroll = true;
+          _temporarilyIgnoreUserScroll = true;
 
-          // 搜索前开启过自动滚动则恢复
-          if (wasAutoScrollEnabled && synced) {
-            _autoScroll = true;
-            _temporarilyIgnoreUserScroll = true;
-
-            WidgetsBinding.instance.addPostFrameCallback((_) {
-              if (mounted && _autoScroll) {
-                final currentPosition = playbackProvider.currentPosition;
-                final currentIndex = _getCurrentLineIndex(currentPosition);
-                if (currentIndex >= 0) {
-                  _scrollToCurrentLine(currentIndex);
-                  _previousLineIndex = currentIndex;
-                }
-              }
-            });
-          } else {
-            _autoScroll = false;
-            _temporarilyIgnoreUserScroll = false;
-            _userScrollSuppressionTimer?.cancel();
-          }
-        });
-
-        if (wasAutoScrollEnabled && _lyricsAreSynced && _autoScroll) {
-          _userScrollSuppressionTimer?.cancel();
-          _userScrollSuppressionTimer = Timer(
-            const Duration(milliseconds: 350),
-            () {
-              if (!mounted) return;
-              setState(() {
-                _temporarilyIgnoreUserScroll = false;
-              });
-            },
-          );
-        }
-
-        notificationService.showSnackBar(l10n.lyricsSearchAppliedSuccess);
-      } else {
-        // 未返回歌词或用户取消：
-        // 恢复此前的自动滚动状态
-        if (wasAutoScrollEnabled && !_autoScroll) {
-          _enableAutoScrollWithSuppression();
           WidgetsBinding.instance.addPostFrameCallback((_) {
             if (mounted && _autoScroll) {
               final currentPosition = playbackProvider.currentPosition;
@@ -1279,14 +1270,49 @@ class _LyricsWidgetState extends State<LyricsWidget>
               }
             }
           });
+        } else {
+          _autoScroll = false;
+          _temporarilyIgnoreUserScroll = false;
+          _userScrollSuppressionTimer?.cancel();
         }
+      });
+
+      if (wasAutoScrollEnabled && _lyricsAreSynced && _autoScroll) {
+        _userScrollSuppressionTimer?.cancel();
+        _userScrollSuppressionTimer = Timer(
+          const Duration(milliseconds: 350),
+          () {
+            if (!mounted) return;
+            setState(() {
+              _temporarilyIgnoreUserScroll = false;
+            });
+          },
+        );
       }
 
-      // 打开页面前处于「手动滚动暂停」：返回后继续延迟恢复跟随。
-      if (!_autoScroll && !_isCopyLyricsMode && _lyricsAreSynced) {
-        _scheduleUserScrollResume();
+      notificationService.showSnackBar(l10n.lyricsSearchAppliedSuccess);
+    } else {
+      // 未返回歌词或用户取消：
+      // 恢复此前的自动滚动状态
+      if (wasAutoScrollEnabled && !_autoScroll) {
+        _enableAutoScrollWithSuppression();
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted && _autoScroll) {
+            final currentPosition = playbackProvider.currentPosition;
+            final currentIndex = _getCurrentLineIndex(currentPosition);
+            if (currentIndex >= 0) {
+              _scrollToCurrentLine(currentIndex);
+              _previousLineIndex = currentIndex;
+            }
+          }
+        });
       }
-    });
+    }
+
+    // 打开页面前处于「手动滚动暂停」：返回后继续延迟恢复跟随。
+    if (!_autoScroll && !_isCopyLyricsMode && _lyricsAreSynced) {
+      _scheduleUserScrollResume();
+    }
   }
 
   Future<void> _showLyricsSelectionPage() async {
@@ -1312,6 +1338,8 @@ class _LyricsWidgetState extends State<LyricsWidget>
     final trackName = currentTrack.title;
     final artistName = _extractArtistNames(currentTrack);
     final albumCoverUrl = currentTrack.artwork?.uri.toString();
+    // 歌词页展示开关：选择页与海报沿用同一对开关（歌词页看到什么就选什么）。
+    final lyricsDisplaySettings = context.read<LyricsDisplaySettings>();
 
     // 暂停当前的自动滚动
     final wasAutoScrollEnabled = _autoScroll;
@@ -1328,6 +1356,10 @@ class _LyricsWidgetState extends State<LyricsWidget>
       context: context,
       child: LyricsSelectionPage(
         lyrics: _lyrics,
+        translations: _translations,
+        romas: _romas,
+        showTranslation: lyricsDisplaySettings.pageTranslationEnabled,
+        showRoma: lyricsDisplaySettings.pageRomaEnabled,
         trackTitle: trackName,
         artistName: artistName,
         albumCoverUrl: albumCoverUrl,

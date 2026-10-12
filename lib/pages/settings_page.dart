@@ -45,6 +45,20 @@ class SettingsPage extends StatefulWidget {
 class _SettingsPageState extends State<SettingsPage> {
   final GlobalKey<NavigatorState> _navigatorKey = GlobalKey<NavigatorState>();
 
+  /// 弹层宿主下发的滚动控制器：首屏滚动视图必须显式挂它，才能保留
+  /// 「列表滚到顶继续下滑 = 收缩/关闭弹层」的联动。
+  ///
+  /// 为什么不能靠 PrimaryScrollController 自动继承：本页内部还有一层
+  /// Navigator，Flutter 的 ModalRoute 会给每条路由装一个自己的
+  /// PrimaryScrollController，会把弹层的控制器遮蔽掉（弹层拖拽随之失效）。
+  M3EBottomSheetScrollController? _sheetScrollController;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _sheetScrollController = M3EBottomSheet.scrollControllerOf(context);
+  }
+
   @override
   Widget build(BuildContext context) {
     return NotificationListener<NavigationNotification>(
@@ -59,7 +73,9 @@ class _SettingsPageState extends State<SettingsPage> {
           key: _navigatorKey,
           onGenerateRoute: (settings) => MaterialPageRoute<void>(
             settings: settings,
-            builder: (_) => const _SettingsHomeView(),
+            builder: (_) => _SettingsHomeView(
+              scrollController: _sheetScrollController,
+            ),
           ),
         ),
       ),
@@ -69,7 +85,10 @@ class _SettingsPageState extends State<SettingsPage> {
 
 /// 设置首屏：分区卡片 + 弹层内部子页入口。
 class _SettingsHomeView extends StatefulWidget {
-  const _SettingsHomeView();
+  const _SettingsHomeView({this.scrollController});
+
+  /// 弹层滚动控制器（独立挂载时为 null，走默认行为）。
+  final ScrollController? scrollController;
 
   @override
   State<_SettingsHomeView> createState() => _SettingsHomeViewState();
@@ -95,6 +114,8 @@ class _SettingsHomeViewState extends State<_SettingsHomeView> {
       ),
       width: double.infinity,
       child: SingleChildScrollView(
+        // 挂弹层的滚动控制器：拖动列表到顶后继续下滑可收缩/关闭弹层。
+        controller: widget.scrollController,
         // 设置页只作为底部弹层/对话框内容出现，状态栏 padding 由弹层承担，
         // 这里再加会造成顶部大片空白。
         padding: const EdgeInsets.symmetric(vertical: kSettingsPadding),
@@ -162,8 +183,8 @@ class _SettingsHomeViewState extends State<_SettingsHomeView> {
                         seed: seedColor,
                         appFont: appFontFamily,
                       ) = appearance;
-                      return Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
+                      // 同一个 Selector 产出的多行：行距由 SettingsRows 统一给。
+                      return SettingsRows(
                         children: [
                           SettingsNavTile(
                             key: const Key('settingsThemeModeItem'),
@@ -176,7 +197,6 @@ class _SettingsHomeViewState extends State<_SettingsHomeView> {
                             },
                             onTap: () => _showThemeModeDialog(context, l10n),
                           ),
-                          const SizedBox(height: kSettingsElementSpacing),
                           // 基础配色（单选）：壁纸 / 自定义；封面覆盖见下一项。
                           SettingsNavTile(
                             key: const Key('settingsBaseColorItem'),
@@ -190,7 +210,6 @@ class _SettingsHomeViewState extends State<_SettingsHomeView> {
                           ),
                           // 自定义色仅作基础配色时显示，避免与「壁纸」并存产生歧义。
                           if (baseColorSource == ColorBaseSource.custom) ...[
-                            const SizedBox(height: kSettingsElementSpacing),
                             SettingsNavTile(
                               key: const Key('settingsSeedColorItem'),
                               icon: Icons.color_lens_rounded,
@@ -199,7 +218,6 @@ class _SettingsHomeViewState extends State<_SettingsHomeView> {
                               onTap: () => _pickSeedColor(context),
                             ),
                           ],
-                          const SizedBox(height: kSettingsElementSpacing),
                           // 封面覆盖层：盖过基础配色（含壁纸）；无封面回退。
                           SettingsSwitchTile(
                             switchKey: const Key('settingsFollowArtworkSwitch'),
@@ -211,7 +229,6 @@ class _SettingsHomeViewState extends State<_SettingsHomeView> {
                                 .read<ThemeProvider>()
                                 .setFollowArtworkEnabled(value),
                           ),
-                          const SizedBox(height: kSettingsElementSpacing),
                           SettingsSwitchTile(
                             switchKey: const Key('settingsPureBlackSwitch'),
                             icon: Icons.dark_mode_rounded,
@@ -222,7 +239,6 @@ class _SettingsHomeViewState extends State<_SettingsHomeView> {
                                 .read<ThemeProvider>()
                                 .setPureBlackEnabled(value),
                           ),
-                          const SizedBox(height: kSettingsElementSpacing),
                           // 全局应用字体：来自设备已装字体，null = 系统默认。
                           SettingsNavTile(
                             key: const Key('settingsAppFontItem'),
@@ -256,7 +272,6 @@ class _SettingsHomeViewState extends State<_SettingsHomeView> {
                       onTap: () => _showDefaultPlayModeDialog(context, l10n),
                     ),
                   ),
-                  const SizedBox(height: kSettingsElementSpacing),
                   Selector<PlaybackProvider, String>(
                     selector: (context, provider) => provider.currentQualityLabel,
                     builder: (context, qualityLabel, _) => SettingsInfoTile(
@@ -268,7 +283,6 @@ class _SettingsHomeViewState extends State<_SettingsHomeView> {
                   ),
                   // 自动换源：播放失败后的跨源找回（手动换源不受此开关控制）。
                   if (sourceSwapSettings != null) ...[
-                    const SizedBox(height: kSettingsElementSpacing),
                     Selector<SourceSwapSettings, bool>(
                       selector: (context, settings) => settings.autoEnabled,
                       builder: (context, autoEnabled, _) => SettingsSwitchTile(
@@ -284,7 +298,6 @@ class _SettingsHomeViewState extends State<_SettingsHomeView> {
                   ],
                   // 省流模式：默认关闭，开启后仅移动数据生效。
                   if (dataSaver != null) ...[
-                    const SizedBox(height: kSettingsElementSpacing),
                     ..._buildDataSaverRows(context, l10n, dataSaver),
                   ],
                 ],
@@ -305,7 +318,6 @@ class _SettingsHomeViewState extends State<_SettingsHomeView> {
                       const LyricsDisplayPage(),
                     ),
                   ),
-                  const SizedBox(height: kSettingsElementSpacing),
                   _buildCopyLyricsTile(context, l10n),
                 ],
               ),
@@ -325,7 +337,6 @@ class _SettingsHomeViewState extends State<_SettingsHomeView> {
                   ),
                   // AI 推歌：配置与开启入口（模式生效后推荐流出在发现页）。
                   if (!kIsWeb) ...[
-                    const SizedBox(height: kSettingsElementSpacing),
                     SettingsNavTile(
                       key: const Key('settingsAiDjItem'),
                       icon: Icons.auto_awesome_rounded,
@@ -370,7 +381,6 @@ class _SettingsHomeViewState extends State<_SettingsHomeView> {
                     ),
                   ),
                   if (showSync) ...[
-                    const SizedBox(height: kSettingsElementSpacing),
                     SettingsNavTile(
                       key: const Key('settingsSyncItem'),
                       icon: Icons.sync_rounded,
@@ -419,7 +429,6 @@ class _SettingsHomeViewState extends State<_SettingsHomeView> {
         onChanged: (value) => dataSaver.setEnabled(value),
       ),
       if (dataSaver.enabled) ...[
-        const SizedBox(height: kSettingsElementSpacing),
         SettingsNavTile(
           key: const Key('settingsDataSaverQualityItem'),
           icon: Icons.graphic_eq_rounded,
@@ -427,7 +436,6 @@ class _SettingsHomeViewState extends State<_SettingsHomeView> {
           subtitle: _dataSaverQualityLabel(l10n, dataSaver.qualityCap),
           onTap: () => _showDataSaverQualityDialog(context, l10n, dataSaver),
         ),
-        const SizedBox(height: kSettingsElementSpacing),
         SettingsSwitchTile(
           switchKey: const Key('settingsDataSaverCoversSwitch'),
           icon: Icons.image_rounded,

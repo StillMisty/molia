@@ -78,3 +78,16 @@
     永远取决于**目标值 vs `initialValue`**，需要用状态回调时要显式传 `initialValue`
     （如迷你⇄完整展开传 0 再 `value = 1`）。另外 `animateTo` 的 `withVelocity` 单位是
     **值域/秒**，手势速度要按进度换算（如 `-pxVelocity / range`）。
+22. **弹层内容里再套 `Navigator` 会遮蔽 M3E 的滚动联动**：M3E 底部弹层把
+    `M3EBottomSheetScrollController` 经 `PrimaryScrollController` 下发给内容，靠它实现
+    「列表滑到顶再下滑 = 收缩/关闭」。而 Flutter 的 `ModalRoute` 会给每条路由装一个
+    自己的 `PrimaryScrollController`（`widgets/routes.dart`），路由内的滚动视图因此
+    挂到路由控制器上——弹层再也收不到拖拽（只有 48dp 拖拽把手能动）。
+    设置弹层（首屏套了一层内部 `Navigator`）踩的正是这个坑：显式把
+    `M3EBottomSheet.scrollControllerOf(context)`（在内部 Navigator 之上取）传给首屏
+    滚动视图即可；子页保持自管控制器（与「子页打开时 guard 挡下关闭」语义一致）。
+23. **M3E carousel 的文字必须走原生槽位**：`M3ECarouselItem.image` 的内容按「最大槽位
+    尺寸布局 + 按当前槽位裁剪」，把封面 + 歌名/歌手/理由整块塞进 `image` 时，非首卡会
+    把底部文字裁掉（首卡正常、其余卡只剩半张封面）。文字一律用 `title` / `subtitle`
+    （`applyDynamicTextContentTransform: false` 常显），需要压暗用
+    `M3ECarouselScrim.gradient()`。

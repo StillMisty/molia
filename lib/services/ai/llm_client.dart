@@ -45,35 +45,47 @@ class LlmClient {
   }
 
   /// 单轮补全：返回 assistant 的文本内容。
+  ///
+  /// [jsonMode] 为 true 时请求 `response_format: {"type":"json_object"}`；
+  /// 若服务商不认该参数（HTTP 400），自动退回一次不带参数的请求（提示词
+  /// 本身已要求纯 JSON，解析侧也容错）。
   Future<String> complete({
     required LlmConfig config,
     required String systemPrompt,
     required String userPrompt,
     double temperature = 0.8,
     int maxTokens = 4096,
+    bool jsonMode = false,
   }) async {
     final uri = chatCompletionsUri(config.baseUrl);
+    Map<String, Object?> requestBody({required bool json}) => {
+          'model': config.model.trim(),
+          'messages': [
+            {'role': 'system', 'content': systemPrompt},
+            {'role': 'user', 'content': userPrompt},
+          ],
+          'temperature': temperature,
+          'max_tokens': maxTokens,
+          'stream': false,
+          if (json) 'response_format': const {'type': 'json_object'},
+        };
+    final headers = {
+      'Content-Type': 'application/json',
+      'Authorization': 'Bearer ${config.apiKey.trim()}',
+    };
+
     http.Response response;
     try {
       response = await _client
-          .post(
-            uri,
-            headers: {
-              'Content-Type': 'application/json',
-              'Authorization': 'Bearer ${config.apiKey.trim()}',
-            },
-            body: jsonEncode({
-              'model': config.model.trim(),
-              'messages': [
-                {'role': 'system', 'content': systemPrompt},
-                {'role': 'user', 'content': userPrompt},
-              ],
-              'temperature': temperature,
-              'max_tokens': maxTokens,
-              'stream': false,
-            }),
-          )
+          .post(uri, headers: headers, body: jsonEncode(requestBody(json: jsonMode)))
           .timeout(_timeout);
+      if (jsonMode && response.statusCode == 400) {
+        // 服务商不支持 response_format：退回一次纯提示词约束。
+        response = await _client
+            .post(uri,
+                headers: headers, body: jsonEncode(requestBody(json: false)))
+            .timeout(_timeout);
+      }
     } on TimeoutException {
       throw const SourceFailure(
         kind: FailureKind.timeout,

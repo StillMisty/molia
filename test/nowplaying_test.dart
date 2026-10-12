@@ -9,8 +9,10 @@ import 'package:molia/providers/lyrics_provider.dart';
 import 'package:molia/providers/playback_provider.dart';
 import 'package:molia/providers/source_swap_provider.dart';
 import 'package:molia/services/lyrics_display/lyrics_display_settings.dart';
+import 'package:molia/services/notification_service.dart';
 import 'package:molia/widgets/mdtab.dart';
 import 'package:molia/widgets/player.dart';
+import 'package:material_3_expressive/material_3_expressive.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:provider/provider.dart';
 import 'package:provider/single_child_widget.dart';
@@ -228,7 +230,7 @@ void main() {
     await tester.pump(const Duration(milliseconds: 50));
   });
 
-  testWidgets('播放页换源入口：点按钮打开换源弹层（仅队列）', (tester) async {
+  testWidgets('歌词快捷操作栏「换源」：打开换源页（歌词 / 音频双 tab）', (tester) async {
     final repository = FakeLibraryRepository();
     addTearDown(repository.dispose);
     final library = LibraryProvider(
@@ -260,16 +262,33 @@ void main() {
       extraProviders: [
         ChangeNotifierProvider<LibraryProvider>.value(value: library),
         ChangeNotifierProvider<SourceSwapProvider>.value(value: swap),
+        Provider<NotificationService>.value(
+          value: NotificationService(GlobalKey<ScaffoldMessengerState>()),
+        ),
       ],
     );
 
+    // 进度排不再有换源按钮（换源入口在歌词快捷操作栏）。
+    expect(
+      find.descendant(
+        of: find.byType(Player),
+        matching: find.byIcon(Icons.swap_horiz_rounded),
+      ),
+      findsNothing,
+    );
+
+    // 收起播放器（歌词区展开）→ 快捷操作栏出现 → 点「换源」。
+    await dragPlayer(tester, 300);
+    await tester.pumpAndSettle();
     expect(find.byIcon(Icons.swap_horiz_rounded), findsOneWidget);
     await tester.tap(find.byIcon(Icons.swap_horiz_rounded));
     await tester.pumpAndSettle();
 
-    // 弹层打开并完成跨源搜索（仅队列位置：无列表写入）。
-    expect(find.text('Title kg'), findsOneWidget);
-    expect(swap.placement, SourceSwapPlacement.queue);
+    // 打开换源页：歌词 / 音频双 tab，默认歌词（音频会话尚未发起）。
+    expect(find.byType(M3ETabs), findsOneWidget);
+    expect(find.text('歌词'), findsWidgets);
+    expect(find.text('音频'), findsWidgets);
+    expect(swap.hasSession, isFalse);
 
     // 通知节流计时器跑完，避免 pending timer 报错。
     await tester.pump(const Duration(milliseconds: 50));

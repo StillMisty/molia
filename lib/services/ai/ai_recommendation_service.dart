@@ -27,15 +27,22 @@ import 'taste_profile_builder.dart';
 /// 推荐生成器接口：模式控制器只依赖这一层（测试可注入假实现）。
 abstract interface class AiRecommendationGenerator {
   /// 生成一批推荐（[count] 首上限）。
+  ///
+  /// [skippedLabels] / [likedLabels] 是本轮反馈；[excludeLabels] 是本次生成
+  /// 额外排除（如「换一首」时排除列表内已有曲目），不进入反馈回流。
   Future<AiDjBatch> generate({
     required LlmConfig config,
     required int count,
     List<String> skippedLabels,
     List<String> likedLabels,
+    List<String> excludeLabels,
   });
 
   /// 连接测试（地址/Key/模型），失败抛 [SourceFailure]。
   Future<void> testConnection(LlmConfig config);
+
+  /// 上行数据摘要（「本次发送的数据」；不触发 LLM 调用）。
+  Future<AiUpstreamSummary> summarizeUpstream();
 }
 
 class AiRecommendationService implements AiRecommendationGenerator {
@@ -72,6 +79,18 @@ class AiRecommendationService implements AiRecommendationGenerator {
   @override
   Future<void> testConnection(LlmConfig config) => _llm.testConnection(config);
 
+  /// 上行数据摘要：只统计条数，不发往任何服务。
+  @override
+  Future<AiUpstreamSummary> summarizeUpstream() async {
+    final profile = await _profileBuilder.build();
+    return AiUpstreamSummary(
+      recentEvents: profile.recentEvents.length,
+      topArtists: profile.topArtists.length,
+      topTracks: profile.topTracks.length,
+      exclusions: profile.exclusionLabels.length,
+    );
+  }
+
   /// 生成一批推荐（[count] 首上限）。
   @override
   Future<AiDjBatch> generate({
@@ -79,6 +98,7 @@ class AiRecommendationService implements AiRecommendationGenerator {
     required int count,
     List<String> skippedLabels = const [],
     List<String> likedLabels = const [],
+    List<String> excludeLabels = const [],
   }) async {
     final profile = await _profileBuilder.build();
     final userPrompt = buildUserPrompt(
@@ -86,11 +106,14 @@ class AiRecommendationService implements AiRecommendationGenerator {
       count: count,
       skippedLabels: skippedLabels,
       likedLabels: likedLabels,
+      excludeLabels: excludeLabels,
     );
+    // 要求服务端返回 JSON 对象（提示词已限定格式；不支持的提供商自动退回）。
     final raw = await _llm.complete(
       config: config,
       systemPrompt: systemPrompt,
       userPrompt: userPrompt,
+      jsonMode: true,
     );
     final parsed = parseRecommendations(raw, limit: count);
     if (parsed.isEmpty) {
@@ -120,12 +143,13 @@ class AiRecommendationService implements AiRecommendationGenerator {
     );
   }
 
-  /// 提示词：画像 JSON + 本轮反馈 + 推荐数量。
+  /// 提示词：画像 JSON + 本轮反馈 + 额外排除 + 推荐数量。
   static String buildUserPrompt({
     required TasteProfile profile,
     required int count,
     List<String> skippedLabels = const [],
     List<String> likedLabels = const [],
+    List<String> excludeLabels = const [],
   }) {
     final summary = profile.summary;
     final data = {
@@ -184,6 +208,7 @@ class AiRecommendationService implements AiRecommendationGenerator {
 
     return '以下是我的听歌数据（JSON）：\n${jsonEncode(data)}\n\n'
         '$feedback\n'
+        '${excludeLabels.isEmpty ? '' : '这些不要再推荐：${excludeLabels.take(50).join('、')}。\n'}'
         '请推荐 $count 首我可能喜欢的新歌（只输出 JSON）。';
   }
 
@@ -300,12 +325,26 @@ class AiRecommendationService implements AiRecommendationGenerator {
           SearchQuery(keyword: keyword, limit: 10),
         );
         final best = pickBestMatch(recommendation, result.items);
-        if (best != null) return best;
+        if (best != null) return await _withArtwork(descriptor, best);
       } catch (_) {
         // 单音源失败（引擎重启/网络）：换下一个；全失败判未解析。
       }
     }
     return null;
+  }
+
+  /// 封面补取：解析命中但无封面时经音源 `artwork()`（脚本 `pic` action /
+  /// 内置平台原生取图）补一张；失败保持无封面（不阻塞解析）。
+  Future<Track> _withArtwork(SourceDescriptor descriptor, Track track) async {
+    if (track.artwork != null) return track;
+    try {
+      final artwork = await _registry.byKey(descriptor.key)?.artwork(track);
+      final uri = artwork?.uri;
+      if (uri == null || uri.toString().isEmpty) return track;
+      return track.copyWith(artwork: artwork);
+    } catch (_) {
+      return track;
+    }
   }
 
   /// 标题/艺人规范化打分（标题精确 0.6、包含 0.35；艺人互含 0.35；

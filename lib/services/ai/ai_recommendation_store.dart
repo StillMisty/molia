@@ -1,8 +1,8 @@
-/// AI 推荐流（待播批次）持久化：SharedPreferences 单键 JSON。
+/// AI 推荐列表持久化：SharedPreferences 单键 JSON。
 ///
-/// 发现页 carousel 展示的就是这份"下一批"：缓存命中（默认 12h）时打开
-/// 发现页不调用 LLM，避免反复花 token；过期后由 provider 静默替换。
-/// 曲目按"库内形状"存储（sourceKey + 元数据 + raw payload），载入时经
+/// 这份列表就是「今日推荐」：持久、可浏览，发现页 carousel 与 AI 推歌页
+/// 共用；「换一批」替换缓存，播放会话不消耗它。曲目按"库内形状"存储
+/// （sourceKey + 元数据 + raw payload），载入时经
 /// `LibraryProvider.sourceTrackFromRaw` 还原为可播放 Track。
 library;
 
@@ -83,11 +83,12 @@ class StoredAiBatch {
   final DateTime generatedAt;
 }
 
-class AiPendingBatchStore {
+class AiRecommendationStore {
   /// [preferences] 仅测试注入；生产走 [SharedPreferences.getInstance]。
-  AiPendingBatchStore({SharedPreferences? preferences})
+  AiRecommendationStore({SharedPreferences? preferences})
       : _preferences = preferences;
 
+  /// 存储键保留旧名（老版本的"待播批次"缓存可直接作为今日推荐列表恢复）。
   static const String storageKey = 'ai_dj_pending_batch_v1';
 
   final SharedPreferences? _preferences;

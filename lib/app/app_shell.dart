@@ -362,6 +362,10 @@ class _MyAppState extends State<MyApp>
     return Scaffold(
       appBar: AppBar(
         titleSpacing: 12,
+        // 壳层是根页面，永远不需要返回键；且路由内的局部历史条目
+        // （如 M3E 下拉菜单打开时）会让 ModalRoute.canPop 变真，
+        // 默认的 automaticallyImplyLeading 会在此刻冒出返回箭头。
+        automaticallyImplyLeading: false,
         title: _ShellBarHeader(
           morph: _morph,
           onOpenPlayer: () => _selectDestination(ShellDestination.nowPlaying),

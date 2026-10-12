@@ -6,8 +6,12 @@ import 'package:provider/provider.dart';
 import '../l10n/app_localizations.dart';
 import '../services/cache_service.dart';
 import '../services/notification_service.dart';
+import '../widgets/settings/settings_tiles.dart';
 
 /// 缓存管理页：音频 / 歌词 / 封面三分区的占用、策略与清理。
+///
+/// 行一律走设置页共享行组件（[SettingsSectionCard] / [SettingsValueTile] /
+/// [SettingsSwitchTile]）：M3E 列表卡片形状 + 排版走 typeScale。
 class CacheManagementPage extends StatefulWidget {
   const CacheManagementPage({super.key});
 
@@ -137,28 +141,29 @@ class _CacheManagementPageState extends State<CacheManagementPage> {
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context)!;
-    final scheme = Theme.of(context).colorScheme;
+    final m3e = M3ETheme.of(context);
 
     return Scaffold(
-      appBar: AppBar(
+      appBar: M3EAppBar.top(
         title: Text(l10n.settingsCacheTitle),
+        automaticallyImplyLeading: true,
       ),
       body: SafeArea(
         child: ListView(
-          padding: const EdgeInsets.fromLTRB(16, 8, 16, 32),
+          padding: const EdgeInsets.all(kSettingsPadding),
           children: [
             Text(
               l10n.settingsCacheSubtitle,
-              style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                    color: scheme.onSurfaceVariant,
-                  ),
+              style: m3e.typeScale.bodySmall.copyWith(
+                color: m3e.colorScheme.onSurfaceVariant,
+              ),
             ),
-            const SizedBox(height: 16),
-            _buildAudioCard(l10n),
-            const SizedBox(height: 16),
-            _buildLyricsCard(l10n),
-            const SizedBox(height: 16),
-            _buildArtworkCard(l10n),
+            const SizedBox(height: kSettingsSectionSpacing),
+            _buildAudioSection(l10n),
+            const SizedBox(height: kSettingsSectionSpacing),
+            _buildLyricsSection(l10n),
+            const SizedBox(height: kSettingsSectionSpacing),
+            _buildArtworkSection(l10n),
             const SizedBox(height: 24),
             M3EButton.icon(
               style: M3EButtonStyle.tonal,
@@ -172,240 +177,146 @@ class _CacheManagementPageState extends State<CacheManagementPage> {
     );
   }
 
-  Widget _buildAudioCard(AppLocalizations l10n) {
-    return _partitionCard(
-      partition: CachePartition.audio,
-      icon: Icons.audiotrack_rounded,
+  Widget _buildAudioSection(AppLocalizations l10n) {
+    return SettingsSectionCard(
       title: l10n.cachePartitionAudio,
-      l10n: l10n,
       children: [
-        _switchRow(
+        // 用量 + 单清：危险操作行（error 容器成对色）。
+        SettingsNavTile(
+          key: const Key('cacheClearAudioItem'),
+          icon: Icons.delete_outline_rounded,
+          title: l10n.cacheClearPartition,
+          subtitle: _usageText(l10n, CachePartition.audio),
+          isDestructive: true,
+          onTap: _busy ? null : () => _clear(CachePartition.audio),
+        ),
+        SettingsSwitchTile(
+          icon: Icons.audiotrack_rounded,
           title: l10n.cachePolicyAudioEnabled,
+          subtitle: '',
           value: _audioEnabled,
           onChanged: (value) async {
             setState(() => _audioEnabled = value);
             await _service.setAudioEnabled(value);
           },
         ),
-        _policyRow(
+        SettingsValueTile(
+          icon: Icons.storage_rounded,
           title: l10n.cachePolicyAudioMax,
           value: _audioMaxMb <= 0
               ? l10n.cacheUnlimited
               : l10n.cacheValueMb(_audioMaxMb),
-          current: _audioMaxMb,
-          min: _audioMaxMinMb,
-          max: _audioMaxMaxMb,
-          unitLabel: l10n.cacheUnitMb,
-          zeroLabel: l10n.cacheUnlimited,
-          onSelected: (value) async {
-            setState(() => _audioMaxMb = value);
-            await _service.setAudioMaxMb(value);
-          },
+          onTap: () => _promptPolicyValue(
+            title: l10n.cachePolicyAudioMax,
+            current: _audioMaxMb,
+            min: _audioMaxMinMb,
+            max: _audioMaxMaxMb,
+            unitLabel: l10n.cacheUnitMb,
+            zeroLabel: l10n.cacheUnlimited,
+            onSelected: (value) async {
+              setState(() => _audioMaxMb = value);
+              await _service.setAudioMaxMb(value);
+            },
+          ),
         ),
       ],
     );
   }
 
-  Widget _buildLyricsCard(AppLocalizations l10n) {
-    return _partitionCard(
-      partition: CachePartition.lyrics,
-      icon: Icons.lyrics_rounded,
+  Widget _buildLyricsSection(AppLocalizations l10n) {
+    return SettingsSectionCard(
       title: l10n.cachePartitionLyrics,
-      l10n: l10n,
       children: [
-        _policyRow(
+        SettingsNavTile(
+          key: const Key('cacheClearLyricsItem'),
+          icon: Icons.delete_outline_rounded,
+          title: l10n.cacheClearPartition,
+          subtitle: _usageText(l10n, CachePartition.lyrics),
+          isDestructive: true,
+          onTap: _busy ? null : () => _clear(CachePartition.lyrics),
+        ),
+        SettingsValueTile(
+          icon: Icons.schedule_rounded,
           title: l10n.cachePolicyLyricsTtl,
           value: _lyricsTtlDays <= 0
               ? l10n.cacheNeverExpire
               : l10n.cacheValueDays(_lyricsTtlDays),
-          current: _lyricsTtlDays,
-          min: _daysMin,
-          max: _daysMax,
-          unitLabel: l10n.cacheUnitDays,
-          zeroLabel: l10n.cacheNeverExpire,
-          onSelected: (value) async {
-            setState(() => _lyricsTtlDays = value);
-            await _service.setLyricsTtlDays(value);
-          },
+          onTap: () => _promptPolicyValue(
+            title: l10n.cachePolicyLyricsTtl,
+            current: _lyricsTtlDays,
+            min: _daysMin,
+            max: _daysMax,
+            unitLabel: l10n.cacheUnitDays,
+            zeroLabel: l10n.cacheNeverExpire,
+            onSelected: (value) async {
+              setState(() => _lyricsTtlDays = value);
+              await _service.setLyricsTtlDays(value);
+            },
+          ),
         ),
       ],
     );
   }
 
-  Widget _buildArtworkCard(AppLocalizations l10n) {
-    return _partitionCard(
-      partition: CachePartition.artwork,
-      icon: Icons.image_rounded,
+  Widget _buildArtworkSection(AppLocalizations l10n) {
+    return SettingsSectionCard(
       title: l10n.cachePartitionArtwork,
-      l10n: l10n,
       children: [
-        _policyRow(
+        SettingsNavTile(
+          key: const Key('cacheClearArtworkItem'),
+          icon: Icons.delete_outline_rounded,
+          title: l10n.cacheClearPartition,
+          subtitle: _usageText(l10n, CachePartition.artwork),
+          isDestructive: true,
+          onTap: _busy ? null : () => _clear(CachePartition.artwork),
+        ),
+        SettingsValueTile(
+          icon: Icons.image_rounded,
           title: l10n.cachePolicyArtworkMax,
           value: _artworkMaxObjects <= 0
               ? l10n.cacheUnlimited
               : l10n.cacheValueItems(_artworkMaxObjects),
-          current: _artworkMaxObjects,
-          min: _artworkMaxMin,
-          max: _artworkMaxMax,
-          unitLabel: l10n.cacheUnitItems,
-          zeroLabel: l10n.cacheUnlimited,
-          onSelected: (value) async {
-            setState(() => _artworkMaxObjects = value);
-            await _service.setArtworkMaxObjects(value);
-          },
+          onTap: () => _promptPolicyValue(
+            title: l10n.cachePolicyArtworkMax,
+            current: _artworkMaxObjects,
+            min: _artworkMaxMin,
+            max: _artworkMaxMax,
+            unitLabel: l10n.cacheUnitItems,
+            zeroLabel: l10n.cacheUnlimited,
+            onSelected: (value) async {
+              setState(() => _artworkMaxObjects = value);
+              await _service.setArtworkMaxObjects(value);
+            },
+          ),
         ),
-        _policyRow(
+        SettingsValueTile(
+          icon: Icons.update_rounded,
           title: l10n.cachePolicyArtworkStale,
           value: _artworkStaleDays <= 0
               ? l10n.cacheNeverExpire
               : l10n.cacheValueDays(_artworkStaleDays),
-          current: _artworkStaleDays,
-          min: _daysMin,
-          max: _daysMax,
-          unitLabel: l10n.cacheUnitDays,
-          zeroLabel: l10n.cacheNeverExpire,
-          onSelected: (value) async {
-            setState(() => _artworkStaleDays = value);
-            await _service.setArtworkStaleDays(value);
-          },
+          onTap: () => _promptPolicyValue(
+            title: l10n.cachePolicyArtworkStale,
+            current: _artworkStaleDays,
+            min: _daysMin,
+            max: _daysMax,
+            unitLabel: l10n.cacheUnitDays,
+            zeroLabel: l10n.cacheNeverExpire,
+            onSelected: (value) async {
+              setState(() => _artworkStaleDays = value);
+              await _service.setArtworkStaleDays(value);
+            },
+          ),
         ),
       ],
     );
   }
 
-  /// 分区卡片：标题 + 用量 + 单清按钮 + 策略行。
-  Widget _partitionCard({
-    required CachePartition partition,
-    required IconData icon,
-    required String title,
-    required AppLocalizations l10n,
-    required List<Widget> children,
-  }) {
-    final scheme = Theme.of(context).colorScheme;
+  /// 分区用量文案（未就绪时显示计算中）。
+  String _usageText(AppLocalizations l10n, CachePartition partition) {
     final usage = _usage[partition];
-    return M3ECard(
-      variant: M3ECardVariant.filled,
-      borderRadius: BorderRadius.circular(20),
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(16, 12, 8, 12),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                Container(
-                  width: 40,
-                  height: 40,
-                  alignment: Alignment.center,
-                  decoration: BoxDecoration(
-                    color: scheme.secondaryContainer,
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: Icon(icon, color: scheme.onSecondaryContainer),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        title,
-                        style: const TextStyle(
-                          fontSize: 16,
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                      Text(
-                        usage == null
-                            ? l10n.cacheUsageComputing
-                            : l10n.cacheUsage(
-                                _formatSize(usage.bytes), usage.count),
-                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                              color: scheme.onSurfaceVariant,
-                            ),
-                      ),
-                    ],
-                  ),
-                ),
-                M3EIconButton(
-                  variant: M3EIconButtonVariant.standard,
-                  tooltip: l10n.cacheClearPartition,
-                  icon: const Icon(Icons.delete_outline_rounded),
-                  onPressed: _busy ? null : () => _clear(partition),
-                ),
-              ],
-            ),
-            const SizedBox(height: 8),
-            ...children,
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _switchRow({
-    required String title,
-    required bool value,
-    required ValueChanged<bool> onChanged,
-  }) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 2),
-      child: Row(
-        children: [
-          Expanded(child: Text(title)),
-          M3ESwitch(value: value, onChanged: onChanged),
-          const SizedBox(width: 8),
-        ],
-      ),
-    );
-  }
-
-  /// 数值策略行：整行可点，点击弹出数字输入弹层（0 = 不限制 / 永不过期）。
-  Widget _policyRow({
-    required String title,
-    required String value,
-    required int current,
-    required int min,
-    required int max,
-    required String unitLabel,
-    required String zeroLabel,
-    required ValueChanged<int> onSelected,
-  }) {
-    final scheme = Theme.of(context).colorScheme;
-    return InkWell(
-      onTap: () => _promptPolicyValue(
-        title: title,
-        current: current,
-        min: min,
-        max: max,
-        unitLabel: unitLabel,
-        zeroLabel: zeroLabel,
-        onSelected: onSelected,
-      ),
-      borderRadius: BorderRadius.circular(8),
-      child: Padding(
-        padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 4),
-        child: Row(
-          children: [
-            Expanded(child: Text(title)),
-            Text(
-              value,
-              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                    // 当前值是信息文本，不用强调色。
-                    color: scheme.onSurfaceVariant,
-                  ),
-            ),
-            const SizedBox(width: 4),
-            Icon(
-              Icons.edit_rounded,
-              size: 18,
-              color: scheme.onSurfaceVariant,
-            ),
-            const SizedBox(width: 8),
-          ],
-        ),
-      ),
-    );
+    if (usage == null) return l10n.cacheUsageComputing;
+    return l10n.cacheUsage(_formatSize(usage.bytes), usage.count);
   }
 
   /// 自定义数值弹层：仅数字输入，0 或 [min, max] 内的整数才可保存。

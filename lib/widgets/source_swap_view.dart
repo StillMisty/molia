@@ -4,7 +4,6 @@ import 'package:material_3_expressive/material_3_expressive.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:provider/provider.dart';
 
-import '../domain/models/library.dart';
 import '../domain/models/track.dart';
 import '../l10n/app_localizations.dart';
 import '../providers/playback_provider.dart';
@@ -16,44 +15,21 @@ import 'track_row.dart';
 AppLocalizations _l10n(BuildContext context) =>
     AppLocalizations.of(context) ?? lookupAppLocalizations(const Locale('zh'));
 
-/// 打开换源弹层：跨音源搜索 → 试听 → 确认原位替换。
+/// 音频换源视图：头部（原曲）→ 音源筛选 chip → 候选列表 → 底部确认。
 ///
-/// 位置由参数决定：`historyKey` → 播放历史原位替换；`playlistId` →
-/// 收藏/自建列表原位替换；都为 null → 仅替换播放队列（播放页入口）。
-Future<void> showSourceSwapSheet(
-  BuildContext context, {
-  required Track seed,
-  int? playlistId,
-  TrackKey? historyKey,
-}) {
-  final request = SourceSwapRequest(
-    seed: seed,
-    placement: historyKey != null
-        ? SourceSwapPlacement.history
-        : playlistId != null
-            ? SourceSwapPlacement.playlist
-            : SourceSwapPlacement.queue,
-    playlistId: playlistId,
-    historyKey: historyKey,
-  );
-  return M3EBottomSheet.show<void>(
-    context,
-    builder: (_) => SourceSwapSheet(request: request),
-  );
-}
-
-/// 换源弹层内容：头部（原曲）→ 音源筛选 chip → 候选列表 → 底部确认。
+/// 供「换源」页的音频 tab 使用；会话状态在 [SourceSwapProvider]，
+/// 本组件只负责呈现与交互。挂载即发起会话、卸载即清空会话。
 @visibleForTesting
-class SourceSwapSheet extends StatefulWidget {
-  const SourceSwapSheet({super.key, required this.request});
+class SourceSwapView extends StatefulWidget {
+  const SourceSwapView({super.key, required this.request});
 
   final SourceSwapRequest request;
 
   @override
-  State<SourceSwapSheet> createState() => _SourceSwapSheetState();
+  State<SourceSwapView> createState() => _SourceSwapViewState();
 }
 
-class _SourceSwapSheetState extends State<SourceSwapSheet> {
+class _SourceSwapViewState extends State<SourceSwapView> {
   late final SourceSwapProvider _provider;
 
   /// 会话已发起（首帧微任务里 begin；发起前显示加载态，避免读到旧会话）。
@@ -84,21 +60,18 @@ class _SourceSwapSheetState extends State<SourceSwapSheet> {
     final l10n = _l10n(context);
     final provider = context.watch<SourceSwapProvider>();
 
-    return SafeArea(
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          _buildHeader(context, l10n, widget.request.seed),
-          if (_started && provider.isSearching)
-            const Padding(
-              padding: EdgeInsets.symmetric(horizontal: 24),
-              child: M3EProgressIndicator.linear(),
-            ),
-          _buildBody(context, l10n, provider),
-          _buildFooter(context, l10n, provider),
-        ],
-      ),
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        _buildHeader(context, l10n, widget.request.seed),
+        if (_started && provider.isSearching)
+          const Padding(
+            padding: EdgeInsets.symmetric(horizontal: 24),
+            child: M3EProgressIndicator.linear(),
+          ),
+        Expanded(child: _buildBody(context, l10n, provider)),
+        _buildFooter(context, l10n, provider),
+      ],
     );
   }
 
@@ -149,10 +122,7 @@ class _SourceSwapSheetState extends State<SourceSwapSheet> {
     SourceSwapProvider provider,
   ) {
     if (!_started || (provider.isSearching && provider.groups.isEmpty)) {
-      return const SizedBox(
-        height: 140,
-        child: Center(child: M3EProgressIndicator.circular()),
-      );
+      return const Center(child: M3EProgressIndicator.circular());
     }
     if (provider.noOtherSources) {
       return _emptyState(Icons.source_rounded, l10n.sourceSwapNoSources);
@@ -162,10 +132,9 @@ class _SourceSwapSheetState extends State<SourceSwapSheet> {
       return _emptyState(Icons.search_off_rounded, l10n.sourceSwapEmpty);
     }
     return Column(
-      mainAxisSize: MainAxisSize.min,
       children: [
         _buildSourceTabs(context, l10n, provider),
-        Flexible(child: _buildCandidates(context, provider)),
+        Expanded(child: _buildCandidates(context, provider)),
       ],
     );
   }
@@ -204,33 +173,29 @@ class _SourceSwapSheetState extends State<SourceSwapSheet> {
   ) {
     final items = provider.activeItems;
     final gap = TrackRow.gapOf(context);
-    return ConstrainedBox(
-      constraints: const BoxConstraints(maxHeight: 320),
-      child: ListView.builder(
-        shrinkWrap: true,
-        padding: const EdgeInsets.fromLTRB(20, 4, 20, 4),
-        itemExtent: TrackRow.extent + gap,
-        itemCount: items.length,
-        itemBuilder: (context, index) {
-          final track = items[index];
-          return Padding(
-            padding: EdgeInsets.only(bottom: gap),
-            child: TrackRow(
-              title: track.title,
-              artist: track.artists
-                  .map((artist) => artist.name)
-                  .where((name) => name.isNotEmpty)
-                  .join(', '),
-              coverUrl: track.artwork?.uri.toString(),
-              coverSize: 40,
-              trailingText: _durationText(track.duration),
-              position: calculateCardPosition(index, items.length),
-              selected: provider.selected?.id == track.id,
-              onTap: () => _selectAndPreview(track),
-            ),
-          );
-        },
-      ),
+    return ListView.builder(
+      padding: const EdgeInsets.fromLTRB(20, 4, 20, 4),
+      itemExtent: TrackRow.extent + gap,
+      itemCount: items.length,
+      itemBuilder: (context, index) {
+        final track = items[index];
+        return Padding(
+          padding: EdgeInsets.only(bottom: gap),
+          child: TrackRow(
+            title: track.title,
+            artist: track.artists
+                .map((artist) => artist.name)
+                .where((name) => name.isNotEmpty)
+                .join(', '),
+            coverUrl: track.artwork?.uri.toString(),
+            coverSize: 40,
+            trailingText: _durationText(track.duration),
+            position: calculateCardPosition(index, items.length),
+            selected: provider.selected?.id == track.id,
+            onTap: () => _selectAndPreview(track),
+          ),
+        );
+      },
     );
   }
 
@@ -283,21 +248,23 @@ class _SourceSwapSheetState extends State<SourceSwapSheet> {
 
   Widget _emptyState(IconData icon, String text) {
     final theme = Theme.of(context);
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(24, 24, 24, 8),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(icon, size: 40, color: theme.colorScheme.onSurfaceVariant),
-          const SizedBox(height: 12),
-          Text(
-            text,
-            textAlign: TextAlign.center,
-            style: theme.textTheme.bodyMedium?.copyWith(
-              color: theme.colorScheme.onSurfaceVariant,
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(24, 24, 24, 8),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(icon, size: 40, color: theme.colorScheme.onSurfaceVariant),
+            const SizedBox(height: 12),
+            Text(
+              text,
+              textAlign: TextAlign.center,
+              style: theme.textTheme.bodyMedium?.copyWith(
+                color: theme.colorScheme.onSurfaceVariant,
+              ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }

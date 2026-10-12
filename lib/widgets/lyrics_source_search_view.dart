@@ -2,6 +2,8 @@ import 'package:material_3_expressive/material_3_expressive.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:logger/logger.dart';
 import 'package:provider/provider.dart';
+
+import '../l10n/app_localizations.dart';
 import '../providers/lyrics_provider.dart';
 import '../services/lyrics/lyric_provider.dart';
 import '../services/lyrics/qq_provider.dart';
@@ -11,7 +13,6 @@ import '../services/lyrics/migu_provider.dart';
 import '../services/lyrics/lrclib_provider.dart';
 import '../services/lyrics/netease_provider.dart';
 import '../services/lyrics/lyrics_match.dart';
-import '../l10n/app_localizations.dart';
 import '../services/notification_service.dart';
 import 'app_search_bar.dart';
 
@@ -72,7 +73,11 @@ class _LyricsSearchEntry {
         result = null;
 }
 
-class LyricsSearchPage extends StatefulWidget {
+/// 歌词换源视图：搜索栏 + 逐平台分组结果；选中即写缓存并退出宿主页。
+///
+/// 作为「换源」页的歌词 tab 使用（宿主页负责标题与 tab 切换）；结果经
+/// `Navigator.pop(LyricsSearchSelection)` 返回给宿主页的调用方。
+class LyricsSourceSearchView extends StatefulWidget {
   final String initialTrackTitle;
   final String initialArtistName;
   final String trackId; // 保存手动选择的歌词时用
@@ -83,20 +88,24 @@ class LyricsSearchPage extends StatefulWidget {
   /// 歌词会话模块：手动选择结果经它写缓存并更新展示状态。
   final LyricsProvider lyricsProvider;
 
-  const LyricsSearchPage({
+  /// 进入时是否自动聚焦搜索框（默认 tab 为歌词时聚焦，否则不抢焦点）。
+  final bool autofocusSearch;
+
+  const LyricsSourceSearchView({
     super.key,
     required this.initialTrackTitle,
     required this.initialArtistName,
     required this.trackId,
     required this.lyricsProvider,
     this.preferredSourceKey,
+    this.autofocusSearch = true,
   });
 
   @override
-  State<LyricsSearchPage> createState() => _LyricsSearchPageState();
+  State<LyricsSourceSearchView> createState() => _LyricsSourceSearchViewState();
 }
 
-class _LyricsSearchPageState extends State<LyricsSearchPage> {
+class _LyricsSourceSearchViewState extends State<LyricsSourceSearchView> {
   final TextEditingController _searchController = TextEditingController();
   final FocusNode _searchFocusNode = FocusNode();
   bool _isFetchingLyric = false;
@@ -144,6 +153,7 @@ class _LyricsSearchPageState extends State<LyricsSearchPage> {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
       _performSearch(_currentQuery);
+      if (!widget.autofocusSearch) return;
       FocusScope.of(context).requestFocus(_searchFocusNode);
       // 选择全部文本方便替换
       _searchController.selection = TextSelection(
@@ -369,110 +379,102 @@ class _LyricsSearchPageState extends State<LyricsSearchPage> {
     final allResults = _allResults;
     final searchEntries = _buildSearchEntries();
 
-    return Scaffold(
-      appBar: AppBar(
-        title: Text(l10n.searchLyrics),
-        leading: M3EIconButton(
-          variant: M3EIconButtonVariant.standard,
-          icon: const Icon(Icons.arrow_back_rounded),
-          onPressed: () => Navigator.of(context).pop(),
+    return Column(
+      children: [
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
+          child: AppSearchBar(
+            controller: _searchController,
+            focusNode: _searchFocusNode,
+            hintText: l10n.searchHint,
+            trailing: [
+              if (_isAnyProviderLoading)
+                const Padding(
+                  padding: EdgeInsets.all(12.0),
+                  child: SizedBox(
+                    width: 16,
+                    height: 16,
+                    child: M3EProgressIndicator.circular(
+                      size: 16,
+                      strokeWidth: 2,
+                    ),
+                  ),
+                ),
+            ],
+            onChanged: (value) {
+              // 清空（清除键或手动删空）：回到初始提示并保留焦点。
+              if (value.isEmpty) _performSearch('');
+            },
+            onSubmitted: (value) {
+              _performSearch(value);
+            },
+          ),
         ),
-        bottom: PreferredSize(
-          // 搜索栏 56 + 上下各 8 的留白：与子组件实际高度一致，避免预留偏差。
-          preferredSize: const Size.fromHeight(kToolbarHeight + 16),
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
-            child: AppSearchBar(
-              controller: _searchController,
-              focusNode: _searchFocusNode,
-              hintText: l10n.searchHint,
-              trailing: [
-                if (_isAnyProviderLoading)
-                  const Padding(
-                    padding: EdgeInsets.all(12.0),
-                    child: SizedBox(
-                      width: 16,
-                      height: 16,
-                      child: M3EProgressIndicator.circular(
-                        size: 16,
-                        strokeWidth: 2,
+        Expanded(
+          child: Stack(
+            children: [
+              if (!_isAnyProviderLoading &&
+                  allResults.isEmpty &&
+                  _currentQuery.isEmpty)
+                Center(
+                  child: Padding(
+                    padding: const EdgeInsets.all(20.0),
+                    child: Text(
+                      l10n.searchHint,
+                      textAlign: TextAlign.center,
+                      style: theme.textTheme.titleMedium?.copyWith(
+                        color: theme.colorScheme.onSurfaceVariant,
                       ),
                     ),
                   ),
-              ],
-              onChanged: (value) {
-                // 清空（清除键或手动删空）：回到初始提示并保留焦点。
-                if (value.isEmpty) _performSearch('');
-              },
-              onSubmitted: (value) {
-                _performSearch(value);
-              },
-            ),
+                )
+              else if (allResults.isNotEmpty || _isAnyProviderLoading)
+                ListView.builder(
+                  padding: const EdgeInsets.only(top: 8.0, bottom: 16.0),
+                  itemCount: searchEntries.length,
+                  itemBuilder: (context, index) {
+                    final entry = searchEntries[index];
+                    switch (entry.type) {
+                      case _LyricsSearchEntryType.header:
+                        return _buildProviderHeader(entry.provider!);
+                      case _LyricsSearchEntryType.result:
+                        return _buildResultTile(entry.result!);
+                      case _LyricsSearchEntryType.loadingPlaceholder:
+                        return _buildLoadingPlaceholder();
+                      case _LyricsSearchEntryType.divider:
+                        return _buildSectionDivider();
+                    }
+                  },
+                )
+              else if (!_isAnyProviderLoading &&
+                  allResults.isEmpty &&
+                  _currentQuery.isNotEmpty)
+                Center(
+                  child: Padding(
+                    padding: const EdgeInsets.all(16.0),
+                    child: Text(
+                      l10n.noResultsFound,
+                      textAlign: TextAlign.center,
+                      style: theme.textTheme.bodyLarge?.copyWith(
+                        color: theme.colorScheme.onSurfaceVariant,
+                      ),
+                    ),
+                  ),
+                ),
+              // 只在获取歌词内容时显示遮罩（背景统一取 colorScheme.surface）。
+              if (_isFetchingLyric)
+                Positioned.fill(
+                  child: Container(
+                    color: theme.colorScheme.surface.withValues(alpha: 0.7),
+                    child: const Center(
+                      child: M3ELoadingIndicator(),
+                    ),
+                  ),
+                ),
+            ],
           ),
         ),
-      ),
-      body: Stack(
-        children: [
-          if (!_isAnyProviderLoading &&
-              allResults.isEmpty &&
-              _currentQuery.isEmpty)
-            Center(
-              child: Padding(
-                padding: const EdgeInsets.all(20.0),
-                child: Text(
-                  l10n.searchHint,
-                  textAlign: TextAlign.center,
-                  style: theme.textTheme.titleMedium?.copyWith(
-                    color: theme.colorScheme.onSurfaceVariant,
-                  ),
-                ),
-              ),
-            )
-          else if (allResults.isNotEmpty || _isAnyProviderLoading)
-            ListView.builder(
-              padding: const EdgeInsets.only(top: 8.0, bottom: 16.0),
-              itemCount: searchEntries.length,
-              itemBuilder: (context, index) {
-                final entry = searchEntries[index];
-                switch (entry.type) {
-                  case _LyricsSearchEntryType.header:
-                    return _buildProviderHeader(entry.provider!);
-                  case _LyricsSearchEntryType.result:
-                    return _buildResultTile(entry.result!);
-                  case _LyricsSearchEntryType.loadingPlaceholder:
-                    return _buildLoadingPlaceholder();
-                  case _LyricsSearchEntryType.divider:
-                    return _buildSectionDivider();
-                }
-              },
-            )
-          else if (!_isAnyProviderLoading &&
-              allResults.isEmpty &&
-              _currentQuery.isNotEmpty)
-            Center(
-              child: Padding(
-                padding: const EdgeInsets.all(16.0),
-                child: Text(
-                  l10n.noResultsFound,
-                  textAlign: TextAlign.center,
-                  style: theme.textTheme.bodyLarge?.copyWith(
-                    color: theme.colorScheme.onSurfaceVariant,
-                  ),
-                ),
-              ),
-            ),
-          // 只在获取歌词内容时显示遮罩（背景统一取 colorScheme.surface）。
-          if (_isFetchingLyric)
-            Positioned.fill(
-              child: Container(
-                color: theme.colorScheme.surface.withValues(alpha: 0.7),
-                child: const Center(
-                  child: M3ELoadingIndicator(),
-                ),
-              ),
-            ),
-        ],
-      ),
+      ],
     );
   }
 

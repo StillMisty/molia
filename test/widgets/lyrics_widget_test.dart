@@ -384,7 +384,8 @@ void main() {
       actions().map((action) => action.icon).toList(),
       const [
         Icons.edit_note_rounded,
-        Icons.search_rounded,
+        // 「换源」（歌词 / 音频双 tab 页）取代原独立歌词搜索入口。
+        Icons.swap_horiz_rounded,
         Icons.checklist_rounded,
       ],
     );

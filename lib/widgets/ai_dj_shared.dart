@@ -53,3 +53,27 @@ String aiDjFailureText(AppLocalizations l10n, SourceFailure failure) {
     _ => l10n.aiDjRequestFailed,
   };
 }
+
+/// 「上次更新」相对时间：刚刚 / N 分钟前 / N 小时前 / 昨天 HH:mm / M月D日。
+///
+/// AI 页与发现页推荐区共用（同一条信息不在两处漂移）。
+String aiDjUpdatedText(AppLocalizations l10n, DateTime time) {
+  final now = DateTime.now();
+  final diff = now.difference(time);
+  if (diff.inMinutes < 1) return l10n.aiDjUpdatedJustNow;
+  if (diff.inMinutes < 60) return l10n.aiDjUpdatedMinutesAgo(diff.inMinutes);
+  final sameDay =
+      now.year == time.year && now.month == time.month && now.day == time.day;
+  if (sameDay && diff.inHours < 24) {
+    return l10n.aiDjUpdatedHoursAgo(diff.inHours);
+  }
+  final hhmm = '${time.hour.toString().padLeft(2, '0')}:'
+      '${time.minute.toString().padLeft(2, '0')}';
+  final yesterday = now.subtract(const Duration(days: 1));
+  if (time.year == yesterday.year &&
+      time.month == yesterday.month &&
+      time.day == yesterday.day) {
+    return l10n.aiDjUpdatedYesterday(hhmm);
+  }
+  return l10n.aiDjUpdatedDate(time.month, time.day);
+}

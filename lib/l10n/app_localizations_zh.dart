@@ -923,6 +923,12 @@ class AppLocalizationsZh extends AppLocalizations {
   String get sourceSwapApplyFailed => '换源失败，请稍后重试';
 
   @override
+  String get sourceSwapTabLyrics => '歌词';
+
+  @override
+  String get sourceSwapTabAudio => '音频';
+
+  @override
   String playlistAddedTo(String name) {
     return '已加入「$name」';
   }
@@ -1663,13 +1669,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get aiDjOpenSettings => '配置 AI 服务';
 
   @override
-  String get aiDjBadgeTooltip => 'AI 推歌进行中';
-
-  @override
   String get aiDjDiscoverSubtitle => '用你的听歌记录让 AI 帮你选歌';
-
-  @override
-  String get aiDjManage => '管理';
 
   @override
   String get aiDjGenerating => '正在生成推荐…';
@@ -1679,6 +1679,107 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get aiDjRefreshBatch => '换一批';
+
+  @override
+  String get aiDjStatusIdle => '待机';
+
+  @override
+  String get aiDjTodayTitle => '今日推荐';
+
+  @override
+  String get aiDjViewAll => '查看全部';
+
+  @override
+  String aiDjLastUpdated(String time) {
+    return '上次更新：$time';
+  }
+
+  @override
+  String get aiDjUpdatedJustNow => '刚刚';
+
+  @override
+  String aiDjUpdatedMinutesAgo(int count) {
+    return '$count 分钟前';
+  }
+
+  @override
+  String aiDjUpdatedHoursAgo(int count) {
+    return '$count 小时前';
+  }
+
+  @override
+  String aiDjUpdatedYesterday(String time) {
+    return '昨天 $time';
+  }
+
+  @override
+  String aiDjUpdatedDate(int month, int day) {
+    return '$month 月 $day 日';
+  }
+
+  @override
+  String get aiDjPlayAll => '播放全部';
+
+  @override
+  String get aiDjEnqueueAll => '加入队列';
+
+  @override
+  String get aiDjInQueue => '队列中';
+
+  @override
+  String get aiDjItemActions => '推荐操作';
+
+  @override
+  String get aiDjReplaceItem => '换一首';
+
+  @override
+  String get aiDjNotInterested => '不感兴趣';
+
+  @override
+  String get aiDjFeedbackTitle => '本轮反馈';
+
+  @override
+  String get aiDjFeedbackLiked => '喜欢';
+
+  @override
+  String get aiDjFeedbackSkipped => '跳过';
+
+  @override
+  String get aiDjUpstreamTitle => '本次发送的数据';
+
+  @override
+  String aiDjUpstreamBody(int events, int artists, int exclusions) {
+    return '最近 $events 条播放记录 · Top 艺人 $artists 位 · 已听排除 $exclusions 首';
+  }
+
+  @override
+  String get aiDjUpstreamHint => '只包含以上统计与曲名/歌手，不含播放链接与设备信息。';
+
+  @override
+  String get aiDjCacheTtlTitle => '推荐缓存';
+
+  @override
+  String aiDjCacheTtlDays(int days) {
+    return '保留 $days 天';
+  }
+
+  @override
+  String get aiDjCacheTtlForever => '永久保留';
+
+  @override
+  String get aiDjCacheTtlHint => '过期后不再作为续推来源，下一次续推自动生成新一批（不打断播放、不提示）。';
+
+  @override
+  String get aiDjGenerate => '生成推荐';
+
+  @override
+  String get aiDjEmptyList => '还没有推荐列表';
+
+  @override
+  String get aiDjEmptyListHint => '生成一批今日推荐，之后可随时播放。';
+
+  @override
+  String get aiDjEnqueueEmpty => '列表里的歌都已在队列中';
 
   @override
   String get settingsSyncTitle => '跨设备同步';

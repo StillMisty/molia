@@ -12,12 +12,13 @@ import '../models/play_mode.dart';
 import '../providers/discover_provider.dart';
 import '../providers/library_collections.dart';
 import '../providers/library_provider.dart';
+import '../providers/lyrics_provider.dart';
+import '../pages/source_swap_page.dart';
 import '../utils/responsive.dart';
 import '../widgets/add_to_library.dart';
 import '../widgets/add_to_playlist_sheet.dart' show showPlaylistNameDialog;
 import '../widgets/app_search_bar.dart';
 import '../widgets/lxmc_import.dart' show importLxmcFavoritesFlow;
-import '../widgets/source_swap_sheet.dart';
 import '../widgets/swipe_reveal_row.dart';
 import '../widgets/track_row.dart';
 
@@ -1400,11 +1401,12 @@ class _FavoritesPageState extends State<FavoritesPage> {
             l10n.sourceSwap,
           ),
           onPressed: () => unawaited(
-            showSourceSwapSheet(
+            showSourceSwapPage(
               context,
               seed: context
                   .read<LibraryProvider>()
                   .trackFromPlaylistTrack(track),
+              lyricsProvider: context.read<LyricsProvider>(),
               playlistId: playlistId,
             ),
           ),
@@ -1521,11 +1523,12 @@ class _FavoritesPageState extends State<FavoritesPage> {
                         l10n.sourceSwap,
                       ),
                       onPressed: () => unawaited(
-                        showSourceSwapSheet(
+                        showSourceSwapPage(
                           context,
                           seed: context
                               .read<LibraryProvider>()
                               .trackFromHistoryEntry(entry),
+                          lyricsProvider: context.read<LyricsProvider>(),
                           historyKey: (
                             sourceKey: entry.sourceKey,
                             songId: entry.songId,

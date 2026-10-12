@@ -956,6 +956,12 @@ class AppLocalizationsEn extends AppLocalizations {
       'Failed to change source, please try again';
 
   @override
+  String get sourceSwapTabLyrics => 'Lyrics';
+
+  @override
+  String get sourceSwapTabAudio => 'Audio';
+
+  @override
   String playlistAddedTo(String name) {
     return 'Added to “$name”';
   }
@@ -1727,14 +1733,8 @@ class AppLocalizationsEn extends AppLocalizations {
   String get aiDjOpenSettings => 'Set up AI service';
 
   @override
-  String get aiDjBadgeTooltip => 'AI DJ is on';
-
-  @override
   String get aiDjDiscoverSubtitle =>
       'Let AI pick songs from your listening history';
-
-  @override
-  String get aiDjManage => 'Manage';
 
   @override
   String get aiDjGenerating => 'Generating recommendations…';
@@ -1744,6 +1744,110 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get aiDjRefreshBatch => 'New batch';
+
+  @override
+  String get aiDjStatusIdle => 'Idle';
+
+  @override
+  String get aiDjTodayTitle => 'Today\'s picks';
+
+  @override
+  String get aiDjViewAll => 'View all';
+
+  @override
+  String aiDjLastUpdated(String time) {
+    return 'Updated $time';
+  }
+
+  @override
+  String get aiDjUpdatedJustNow => 'just now';
+
+  @override
+  String aiDjUpdatedMinutesAgo(int count) {
+    return '$count min ago';
+  }
+
+  @override
+  String aiDjUpdatedHoursAgo(int count) {
+    return '$count h ago';
+  }
+
+  @override
+  String aiDjUpdatedYesterday(String time) {
+    return 'yesterday $time';
+  }
+
+  @override
+  String aiDjUpdatedDate(int month, int day) {
+    return '$month/$day';
+  }
+
+  @override
+  String get aiDjPlayAll => 'Play all';
+
+  @override
+  String get aiDjEnqueueAll => 'Add to queue';
+
+  @override
+  String get aiDjInQueue => 'In queue';
+
+  @override
+  String get aiDjItemActions => 'Recommendation actions';
+
+  @override
+  String get aiDjReplaceItem => 'Swap this one';
+
+  @override
+  String get aiDjNotInterested => 'Not interested';
+
+  @override
+  String get aiDjFeedbackTitle => 'This round';
+
+  @override
+  String get aiDjFeedbackLiked => 'Liked';
+
+  @override
+  String get aiDjFeedbackSkipped => 'Skipped';
+
+  @override
+  String get aiDjUpstreamTitle => 'Data sent this time';
+
+  @override
+  String aiDjUpstreamBody(int events, int artists, int exclusions) {
+    return 'Latest $events play events · top $artists artists · $exclusions already-played excluded';
+  }
+
+  @override
+  String get aiDjUpstreamHint =>
+      'Only the stats above plus titles/artists — no play URLs, no device info.';
+
+  @override
+  String get aiDjCacheTtlTitle => 'Recommendation cache';
+
+  @override
+  String aiDjCacheTtlDays(int days) {
+    return 'Keep $days days';
+  }
+
+  @override
+  String get aiDjCacheTtlForever => 'Keep forever';
+
+  @override
+  String get aiDjCacheTtlHint =>
+      'An expired list stops feeding the radio; the next extension generates a new batch (no interruption, no notice).';
+
+  @override
+  String get aiDjGenerate => 'Generate';
+
+  @override
+  String get aiDjEmptyList => 'No recommendations yet';
+
+  @override
+  String get aiDjEmptyListHint =>
+      'Generate today\'s picks — playable any time.';
+
+  @override
+  String get aiDjEnqueueEmpty => 'Everything here is already queued';
 
   @override
   String get settingsSyncTitle => 'Cross-device sync';

@@ -22,12 +22,25 @@ class LyricsSelectionPage extends StatefulWidget {
   final String artistName;
   final String? albumCoverUrl;
 
+  /// 与 [lyrics] 等索引的翻译 / 罗马音（'' = 该行无扩展文本）。
+  /// 来自歌词页同一份时间戳对齐结果，选择页与海报都据此展示。
+  final List<String> translations;
+  final List<String> romas;
+
+  /// 与歌词页一致的两个展示开关（关闭时扩展行不展示、不进海报）。
+  final bool showTranslation;
+  final bool showRoma;
+
   const LyricsSelectionPage({
     super.key,
     required this.lyrics,
     required this.trackTitle,
     required this.artistName,
     this.albumCoverUrl,
+    this.translations = const [],
+    this.romas = const [],
+    this.showTranslation = false,
+    this.showRoma = false,
   });
 
   @override
@@ -93,8 +106,29 @@ class _LyricsSelectionPageState extends State<LyricsSelectionPage> {
   List<PosterLyricLine> _getPosterLyricLines() => [
         for (var i = 0; i < _lyricLines.length; i++)
           if (_selectedIndices.contains(i))
-            PosterLyricLine(text: _lyricLines[i].text),
+            PosterLyricLine(
+              text: _lyricLines[i].text,
+              // 扩展行与歌词页同一份对齐结果 + 同一对开关：歌词页看到什么，
+              // 海报就画什么。
+              translation: widget.showTranslation && i < widget.translations.length
+                  ? widget.translations[i]
+                  : '',
+              roma: widget.showRoma && i < widget.romas.length
+                  ? widget.romas[i]
+                  : '',
+            ),
       ];
+
+  /// 该行的扩展行文本（展示用；与歌词页一致：空文本不占位）。
+  (String translation, String roma) _extendedOf(int index) {
+    final translation =
+        widget.showTranslation && index < widget.translations.length
+            ? widget.translations[index]
+            : '';
+    final roma =
+        widget.showRoma && index < widget.romas.length ? widget.romas[index] : '';
+    return (translation, roma);
+  }
 
   bool _hasSelectedLyrics() => _selectedIndices.isNotEmpty;
 
@@ -338,6 +372,7 @@ class _LyricsSelectionPageState extends State<LyricsSelectionPage> {
                         return _LyricTile(
                           index: lyricIndex,
                           line: _lyricLines[lyricIndex],
+                          extended: _extendedOf(lyricIndex),
                           isSelected: _selectedIndices.contains(lyricIndex),
                           onTap: () => _toggleLineSelection(lyricIndex),
                           isFirstInGroup: isFirstInGroup,
@@ -422,6 +457,9 @@ class _LyricsSelectionPageState extends State<LyricsSelectionPage> {
 class _LyricTile extends StatelessWidget {
   final int index;
   final LyricLine line;
+
+  /// 该行的扩展行（翻译 / 罗马音；空串 = 无）：与歌词页展示一致。
+  final (String translation, String roma) extended;
   final bool isSelected;
   final VoidCallback onTap;
   final bool isFirstInGroup;
@@ -431,6 +469,7 @@ class _LyricTile extends StatelessWidget {
   const _LyricTile({
     required this.index,
     required this.line,
+    required this.extended,
     required this.isSelected,
     required this.onTap,
     this.isFirstInGroup = false,
@@ -464,6 +503,15 @@ class _LyricTile extends StatelessWidget {
     } else {
       textColor = theme.colorScheme.onSurface;
     }
+    // 扩展行（翻译 / 罗马音）样式与歌词页一致：主字号 × 0.8、次要文本、
+    // 不参与强调色。
+    final TextStyle extendedStyle = TextStyle(
+      fontSize: 18 * 0.8,
+      fontWeight: FontWeight.w500,
+      color: isSelected
+          ? theme.colorScheme.onSecondaryContainer.withValues(alpha: 0.8)
+          : theme.colorScheme.onSurfaceVariant,
+    );
 
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 2, horizontal: 16),
@@ -487,6 +535,14 @@ class _LyricTile extends StatelessWidget {
                 fontWeight: FontWeight.w700,
               ),
             ),
+            if (extended.$1.isNotEmpty) ...[
+              const SizedBox(height: 2),
+              Text(extended.$1, style: extendedStyle),
+            ],
+            if (extended.$2.isNotEmpty) ...[
+              const SizedBox(height: 2),
+              Text(extended.$2, style: extendedStyle),
+            ],
           ],
         ),
       ),

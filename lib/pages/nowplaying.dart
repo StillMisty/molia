@@ -3,7 +3,6 @@ import 'dart:math';
 import 'package:material_ui/material_ui.dart';
 import 'package:flutter/services.dart';
 import 'package:motor/motor.dart';
-import 'package:provider/provider.dart';
 import 'package:molia/utils/responsive.dart';
 import 'package:molia/widgets/player.dart';
 import 'package:molia/widgets/queue.dart';
@@ -11,10 +10,7 @@ import 'package:molia/widgets/lyrics.dart';
 import 'package:molia/widgets/mdtab.dart';
 import 'package:molia/widgets/player_morph.dart';
 
-import '../domain/models/ai_dj.dart';
 import '../l10n/app_localizations.dart';
-import '../providers/ai_dj_provider.dart';
-import 'ai_dj_page.dart';
 
 /// 正在播放页：全屏播放器（可折叠为迷你条）+ 队列/歌词两个 PageView。
 class NowPlaying extends StatefulWidget {
@@ -198,24 +194,16 @@ class _NowPlayingState extends State<NowPlaying>
   /// 歌词/队列小圆点切换行（常显；由父级 Positioned 撑满宽度）。
   ///
   /// [onActiveTap] 点击已激活圆点时触发（播放页 = 展开/收起切换）。
-  /// 右端固定 AI 推歌徽标（模式生效时显示；点按打开 AI 页）。
   Widget _buildDotsRow({VoidCallback? onActiveTap}) {
     return SizedBox(
       width: double.infinity,
       height: _dotsBandHeight,
-      child: Stack(
-        alignment: Alignment.center,
-        children: [
-          Center(
-            child: LyricsQueueDots(
-              pages: _buildPages(context),
-              pageController: _pageController,
-              onActiveTap: onActiveTap,
-            ),
-          ),
-          if (aiDjSupportedPlatform)
-            const Positioned(right: 16, child: _AiDjBadge()),
-        ],
+      child: Center(
+        child: LyricsQueueDots(
+          pages: _buildPages(context),
+          pageController: _pageController,
+          onActiveTap: onActiveTap,
+        ),
       ),
     );
   }
@@ -421,64 +409,6 @@ class _NowPlayingState extends State<NowPlaying>
           );
         },
       ),
-    );
-  }
-}
-
-/// AI 推歌徽标：模式生效（生成中 / 推歌中）时显示在圆点带右端；
-/// 点按打开 AI 推歌页。
-///
-/// 用可空读取 + [AiDjProvider.statusListenable]：播放页在未注册 AI
-/// provider 的上下文（测试/精简壳）里安全降级为不显示。
-class _AiDjBadge extends StatelessWidget {
-  const _AiDjBadge();
-
-  @override
-  Widget build(BuildContext context) {
-    final provider = context.read<AiDjProvider?>();
-    if (provider == null) return const SizedBox.shrink();
-    return ValueListenableBuilder<AiDjStatus>(
-      valueListenable: provider.statusListenable,
-      builder: (context, status, _) {
-        if (status != AiDjStatus.playing && status != AiDjStatus.preparing) {
-          return const SizedBox.shrink();
-        }
-        final scheme = Theme.of(context).colorScheme;
-        return Tooltip(
-          message: AppLocalizations.of(context)!.aiDjBadgeTooltip,
-          child: GestureDetector(
-            key: const Key('aiDjBadge'),
-            onTap: () => ResponsiveNavigation.showAdaptiveModalPage(
-              context: context,
-              child: const AiDjPage(),
-            ),
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-              decoration: BoxDecoration(
-                color: scheme.secondaryContainer,
-                borderRadius: BorderRadius.circular(999),
-              ),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Icon(
-                    Icons.auto_awesome_rounded,
-                    size: 12,
-                    color: scheme.onSecondaryContainer,
-                  ),
-                  const SizedBox(width: 4),
-                  Text(
-                    'AI',
-                    style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                          color: scheme.onSecondaryContainer,
-                        ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-        );
-      },
     );
   }
 }

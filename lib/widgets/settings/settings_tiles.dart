@@ -5,6 +5,7 @@ import 'package:material_3_expressive/material_3_expressive.dart';
 import 'package:material_ui/material_ui.dart';
 
 import '../../utils/responsive.dart';
+import '../card_list_surface.dart';
 
 /// 设置页统一间距常量。
 const double kSettingsPadding = 16.0;
@@ -31,7 +32,32 @@ double settingsDialogWidth(BuildContext context) {
   );
 }
 
-/// 设置分组卡片：可选分组标题（卡片上方，结构标签）+ filled 卡片容器。
+/// 分段行位置：由 [SettingsSectionCard] 按子项下标下发（M3E 列表卡片形状：
+/// 内行 4dp / 首末外侧 16dp）。子项自行构造时缺省为 single。
+class SettingsRowPosition extends InheritedWidget {
+  const SettingsRowPosition({
+    super.key,
+    required this.position,
+    required super.child,
+  });
+
+  final M3ECardPosition position;
+
+  static M3ECardPosition of(BuildContext context) =>
+      context
+          .dependOnInheritedWidgetOfExactType<SettingsRowPosition>()
+          ?.position ??
+      M3ECardPosition.single;
+
+  @override
+  bool updateShouldNotify(SettingsRowPosition oldWidget) =>
+      oldWidget.position != position;
+}
+
+/// 设置分组：标题 + 分段卡片行（M3E 列表规范：行间 `cardList.gap`）。
+///
+/// 行表面由各 tile 经 [CardListSurface] 自绘（形状按分组内位置：内行 4dp、
+/// 首末外侧 16dp；hover 12dp、press 16dp，形状走 spatial 弹簧）。
 class SettingsSectionCard extends StatelessWidget {
   const SettingsSectionCard({super.key, this.title, required this.children});
 
@@ -40,31 +66,56 @@ class SettingsSectionCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    if (children.isEmpty) return const SizedBox.shrink();
     final theme = Theme.of(context);
+    final m3e = M3ETheme.of(context);
+    final gap = m3e.listTheme.cardList.gap;
     return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
+      crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         if (title != null) ...[
           Padding(
             padding: const EdgeInsets.fromLTRB(4, 0, 4, kSettingsSmallSpacing),
             child: Text(
               title!,
-              style: theme.textTheme.titleMedium?.copyWith(
+              style: m3e.typeScale.titleSmall.copyWith(
                 // 分组标题是结构标签，不用强调色（强调色只给交互/选中）。
                 color: theme.colorScheme.onSurfaceVariant,
-                fontWeight: FontWeight.bold,
               ),
             ),
           ),
         ],
-        M3ECard(
-          variant: M3ECardVariant.filled,
-          borderRadius: BorderRadius.circular(kSettingsPadding),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: children,
+        for (var i = 0; i < children.length; i++) ...[
+          if (i > 0) SizedBox(height: gap),
+          SettingsRowPosition(
+            position: calculateCardPosition(i, children.length),
+            child: children[i],
           ),
-        ),
+        ],
+      ],
+    );
+  }
+}
+
+/// 分段卡片行容器（M3E 列表规范：行间 `cardList.gap`，行首末外侧 16dp）。
+///
+/// 用于「一个分组内多行由同一个 widget 产出」的场景（如一个 Selector 里
+/// 的多行）；直接作为 [SettingsSectionCard] 子项的行由分组统一下发行形状。
+class SettingsRows extends StatelessWidget {
+  const SettingsRows({super.key, required this.children});
+
+  final List<Widget> children;
+
+  @override
+  Widget build(BuildContext context) {
+    final gap = M3ETheme.of(context).listTheme.cardList.gap;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        for (var i = 0; i < children.length; i++) ...[
+          if (i > 0) SizedBox(height: gap),
+          children[i],
+        ],
       ],
     );
   }
@@ -84,37 +135,41 @@ class SettingsNavTile extends StatelessWidget {
   final IconData icon;
   final String title;
   final String subtitle;
-  final VoidCallback onTap;
+
+  /// 为 null 时整行禁用（如清理进行中）。
+  final VoidCallback? onTap;
   final bool isDestructive;
 
   @override
   Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
-    return InkWell(
-      onTap: () {
-        HapticFeedback.lightImpact();
-        onTap();
-      },
-      borderRadius: BorderRadius.circular(8),
-      child: Padding(
-        padding: const EdgeInsets.all(kSettingsSmallSpacing),
-        child: Row(
-          children: [
-            _SettingsTileIcon(icon: icon, isDestructive: isDestructive),
-            const SizedBox(width: kSettingsElementSpacing),
-            Expanded(
-              child: _SettingsTileLabel(
-                title: title,
-                subtitle: subtitle,
-                isDestructive: isDestructive,
-              ),
+    final m3e = M3ETheme.of(context);
+    return CardListSurface(
+      position: SettingsRowPosition.of(context),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      semanticLabel: '$title, $subtitle',
+      onPressed: onTap == null
+          ? null
+          : () {
+              HapticFeedback.lightImpact();
+              onTap!();
+            },
+      child: Row(
+        children: [
+          _SettingsTileIcon(icon: icon, isDestructive: isDestructive),
+          const SizedBox(width: 12),
+          Expanded(
+            child: _SettingsTileLabel(
+              title: title,
+              subtitle: subtitle,
+              isDestructive: isDestructive,
             ),
-            Icon(
-              Icons.chevron_right_rounded,
-              color: scheme.onSurfaceVariant,
-            ),
-          ],
-        ),
+          ),
+          Icon(
+            Icons.chevron_right_rounded,
+            size: 20,
+            color: m3e.colorScheme.onSurfaceVariant,
+          ),
+        ],
       ),
     );
   }
@@ -145,37 +200,36 @@ class SettingsSwitchTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return InkWell(
-      onTap: enabled
+    return CardListSurface(
+      position: SettingsRowPosition.of(context),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      semanticLabel: title,
+      onPressed: enabled
           ? () {
               HapticFeedback.lightImpact();
               onChanged(!value);
             }
           : null,
-      borderRadius: BorderRadius.circular(8),
       child: Opacity(
         opacity: enabled ? 1.0 : 0.45,
-        child: Padding(
-          padding: const EdgeInsets.all(kSettingsSmallSpacing),
-          child: Row(
-            children: [
-              _SettingsTileIcon(icon: icon, isDestructive: false),
-              const SizedBox(width: kSettingsElementSpacing),
-              Expanded(
-                child: _SettingsTileLabel(title: title, subtitle: subtitle),
-              ),
-              M3ESwitch(
-                key: switchKey,
-                value: value,
-                onChanged: enabled
-                    ? (bool newValue) {
-                        HapticFeedback.lightImpact();
-                        onChanged(newValue);
-                      }
-                    : null,
-              ),
-            ],
-          ),
+        child: Row(
+          children: [
+            _SettingsTileIcon(icon: icon, isDestructive: false),
+            const SizedBox(width: 12),
+            Expanded(
+              child: _SettingsTileLabel(title: title, subtitle: subtitle),
+            ),
+            M3ESwitch(
+              key: switchKey,
+              value: value,
+              onChanged: enabled
+                  ? (bool newValue) {
+                      HapticFeedback.lightImpact();
+                      onChanged(newValue);
+                    }
+                  : null,
+            ),
+          ],
         ),
       ),
     );
@@ -197,13 +251,77 @@ class SettingsInfoTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.all(kSettingsSmallSpacing),
+    return CardListSurface(
+      position: SettingsRowPosition.of(context),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      onPressed: null,
       child: Row(
         children: [
           _SettingsTileIcon(icon: icon, isDestructive: false),
-          const SizedBox(width: kSettingsElementSpacing),
+          const SizedBox(width: 12),
           Expanded(child: _SettingsTileLabel(title: title, subtitle: subtitle)),
+        ],
+      ),
+    );
+  }
+}
+
+/// 值行（可编辑/可选）：图标 + 标题/副标题 + 当前值 + 编辑图标。
+///
+/// 缓存策略等「点开弹层改一个值」的设置项共用。
+class SettingsValueTile extends StatelessWidget {
+  const SettingsValueTile({
+    super.key,
+    required this.icon,
+    required this.title,
+    required this.value,
+    required this.onTap,
+    this.subtitle,
+  });
+
+  final IconData icon;
+  final String title;
+
+  /// 当前值展示（行尾，次要文本色）。
+  final String value;
+  final String? subtitle;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final m3e = M3ETheme.of(context);
+    return CardListSurface(
+      position: SettingsRowPosition.of(context),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      semanticLabel: '$title, $value',
+      onPressed: () {
+        HapticFeedback.lightImpact();
+        onTap();
+      },
+      child: Row(
+        children: [
+          _SettingsTileIcon(icon: icon, isDestructive: false),
+          const SizedBox(width: 12),
+          Expanded(
+            child: _SettingsTileLabel(
+              title: title,
+              subtitle: subtitle ?? '',
+            ),
+          ),
+          const SizedBox(width: 8),
+          Text(
+            value,
+            style: m3e.typeScale.bodyMedium.copyWith(
+              // 当前值是信息文本，不用强调色。
+              color: m3e.colorScheme.onSurfaceVariant,
+            ),
+          ),
+          const SizedBox(width: 8),
+          Icon(
+            Icons.edit_rounded,
+            size: 18,
+            color: m3e.colorScheme.onSurfaceVariant,
+          ),
         ],
       ),
     );
@@ -226,7 +344,7 @@ class _SettingsTileIcon extends StatelessWidget {
       alignment: Alignment.center,
       decoration: BoxDecoration(
         color: isDestructive ? scheme.errorContainer : scheme.secondaryContainer,
-        borderRadius: BorderRadius.circular(8),
+        borderRadius: BorderRadius.circular(12),
       ),
       child: Icon(
         icon,
@@ -238,7 +356,7 @@ class _SettingsTileIcon extends StatelessWidget {
   }
 }
 
-/// 设置行统一标题/副标题排布。
+/// 设置行统一标题/副标题排布（排版走 M3E typeScale，不写死字号字重）。
 class _SettingsTileLabel extends StatelessWidget {
   const _SettingsTileLabel({
     required this.title,
@@ -252,22 +370,25 @@ class _SettingsTileLabel extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
+    final m3e = M3ETheme.of(context);
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(
           title,
-          style: TextStyle(
-            fontSize: 16,
-            fontWeight: FontWeight.w500,
-            color: isDestructive ? scheme.error : scheme.onSurface,
+          style: m3e.typeScale.bodyLarge.copyWith(
+            color: isDestructive
+                ? m3e.colorScheme.error
+                : m3e.colorScheme.onSurface,
           ),
         ),
-        Text(
-          subtitle,
-          style: Theme.of(context).textTheme.bodySmall,
-        ),
+        if (subtitle.isNotEmpty)
+          Text(
+            subtitle,
+            style: m3e.typeScale.bodySmall.copyWith(
+              color: m3e.colorScheme.onSurfaceVariant,
+            ),
+          ),
       ],
     );
   }

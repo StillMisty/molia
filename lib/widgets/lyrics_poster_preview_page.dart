@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 import 'package:material_3_expressive/material_3_expressive.dart';
 import 'package:material_ui/material_ui.dart';
@@ -41,6 +42,10 @@ class LyricsPosterPreviewPage extends StatefulWidget {
 class _LyricsPosterPreviewPageState extends State<LyricsPosterPreviewPage> {
   bool _isLoading = true;
   bool _isOperating = false; // 保存或分享操作中
+
+  /// 已有海报时的重新生成（换色/换字体/主题变化）：保留旧图不清空，
+  /// 只在预览区叠一层轻量进度，避免整页闪成加载态。
+  bool _isRegenerating = false;
   Uint8List? _posterBytes;
   String? _tempFilePath;
   String? _errorMessage;
@@ -57,7 +62,7 @@ class _LyricsPosterPreviewPageState extends State<LyricsPosterPreviewPage> {
   /// 海报字体覆盖：null = 跟随应用字体；'' = 强制系统默认；其它 = 字体族名。
   String? _posterFontOverride;
 
-  bool get _isBusy => _isLoading || _isOperating;
+  bool get _isBusy => _isLoading || _isOperating || _isRegenerating;
 
   /// 当前曲目是否带封面（「跟随封面」来源可用性）。
   bool get _hasArtwork => (widget.albumCoverUrl ?? '').isNotEmpty;
@@ -140,11 +145,15 @@ class _LyricsPosterPreviewPageState extends State<LyricsPosterPreviewPage> {
       final family => family,
     };
 
+    // 已有海报：保留旧图（不清 bytes），只标记重生成；首刷才进加载态。
+    final bool hasPoster = _posterBytes != null;
     setState(() {
-      _isLoading = true;
+      if (hasPoster) {
+        _isRegenerating = true;
+      } else {
+        _isLoading = true;
+      }
       _errorMessage = null;
-      _posterBytes = null;
-      _tempFilePath = null;
     });
 
     try {
@@ -163,6 +172,7 @@ class _LyricsPosterPreviewPageState extends State<LyricsPosterPreviewPage> {
         titleColor: palette.title,
         artistColor: palette.artist,
         lyricsColor: palette.lyrics,
+        extendedColor: palette.extended,
         watermarkColor: palette.watermark,
         separatorColor: palette.separator,
         fontFamily: uiFontFamily,
@@ -175,19 +185,37 @@ class _LyricsPosterPreviewPageState extends State<LyricsPosterPreviewPage> {
       final file = File('${tempDir.path}/$fileName');
       await file.writeAsBytes(bytes);
 
+      // 旧预览临时文件（分享用）：换新后清理，失败静默。
+      final oldPath = _tempFilePath;
+      if (oldPath != null) {
+        unawaited(File(oldPath).delete().catchError((_) => File(oldPath)));
+      }
+
       if (mounted) {
         setState(() {
           _posterBytes = bytes;
           _tempFilePath = file.path;
           _isLoading = false;
+          _isRegenerating = false;
         });
       }
     } catch (e) {
       if (mounted) {
         setState(() {
-          _errorMessage = e.toString();
           _isLoading = false;
+          _isRegenerating = false;
+          // 已有旧图：保留预览 + 提示，避免整页变错误态。
+          if (!hasPoster) {
+            _errorMessage = e.toString();
+          }
         });
+        if (hasPoster) {
+          Provider.of<NotificationService>(context, listen: false)
+              .showErrorSnackBar(
+            AppLocalizations.of(context)!
+                .posterGenerationFailed(e.toString()),
+          );
+        }
       }
     } finally {
       // 生成期间主题又变了：补一次生成，保证最终海报与当前配色一致。
@@ -439,7 +467,8 @@ class _LyricsPosterPreviewPageState extends State<LyricsPosterPreviewPage> {
                 ),
               ),
             ),
-            if (!_isLoading && _posterBytes != null)
+            // 控制栏：有海报即常驻（重生成期间禁用不消失），避免整条闪现。
+            if (_posterBytes != null)
               Container(
                 padding: EdgeInsets.only(
                   left: previewLayout.horizontalPadding,
@@ -524,6 +553,52 @@ class _LyricsPosterPreviewPageState extends State<LyricsPosterPreviewPage> {
   }
 
   Widget _buildPosterContent(ThemeData theme, AppLocalizations? l10n) {
+    // 有图就展示（重生成期间不卸载旧图，只在上面叠轻量进度）。
+    final bytes = _posterBytes;
+    if (bytes != null) {
+      return Stack(
+        alignment: Alignment.center,
+        children: [
+          ClipRRect(
+            borderRadius: BorderRadius.circular(12),
+            child: Image.memory(
+              bytes,
+              fit: BoxFit.contain,
+              errorBuilder: (context, error, stackTrace) => Column(
+                children: [
+                  Icon(
+                    Icons.broken_image_rounded,
+                    size: 64,
+                    color: theme.colorScheme.error,
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    AppLocalizations.of(context)!.lyricsFailedToLoad,
+                    style: theme.textTheme.bodyMedium,
+                  ),
+                ],
+              ),
+            ),
+          ),
+          if (_isRegenerating)
+            Positioned.fill(
+              child: DecoratedBox(
+                decoration: BoxDecoration(
+                  color: theme.colorScheme.surface.withValues(alpha: 0.6),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: const Center(
+                  child: M3EProgressIndicator.circular(
+                    size: 32,
+                    strokeWidth: 3,
+                  ),
+                ),
+              ),
+            ),
+        ],
+      );
+    }
+
     if (_isLoading) {
       return Column(
         mainAxisAlignment: MainAxisAlignment.center,
@@ -564,29 +639,6 @@ class _LyricsPosterPreviewPageState extends State<LyricsPosterPreviewPage> {
       );
     }
 
-    if (_posterBytes != null) {
-      return ClipRRect(
-        borderRadius: BorderRadius.circular(12),
-        child: Image.memory(
-          _posterBytes!,
-          fit: BoxFit.contain,
-          errorBuilder: (context, error, stackTrace) => Column(
-            children: [
-              Icon(
-                Icons.broken_image_rounded,
-                size: 64,
-                color: theme.colorScheme.error,
-              ),
-              const SizedBox(height: 8),
-              Text(
-                AppLocalizations.of(context)!.lyricsFailedToLoad,
-                style: theme.textTheme.bodyMedium,
-              ),
-            ],
-          ),
-        ),
-      );
-    }
     return const SizedBox.shrink();
   }
 }

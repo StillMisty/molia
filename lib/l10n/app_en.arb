@@ -458,6 +458,8 @@
   "sourceSwapQueueFollowed": "Source changed and playback switched",
   "sourceSwapNotFound": "The track is no longer in its original place",
   "sourceSwapApplyFailed": "Failed to change source, please try again",
+  "sourceSwapTabLyrics": "Lyrics",
+  "sourceSwapTabAudio": "Audio",
   "playlistAddedTo": "Added to “{name}”",
   "@playlistAddedTo": {
     "placeholders": {
@@ -867,12 +869,97 @@
   },
   "aiDjRetry": "Retry",
   "aiDjOpenSettings": "Set up AI service",
-  "aiDjBadgeTooltip": "AI DJ is on",
   "aiDjDiscoverSubtitle": "Let AI pick songs from your listening history",
-  "aiDjManage": "Manage",
   "aiDjGenerating": "Generating recommendations…",
   "aiDjBatchFailed": "Couldn't generate a batch",
   "aiDjRefreshBatch": "New batch",
+  "aiDjStatusIdle": "Idle",
+  "aiDjTodayTitle": "Today's picks",
+  "aiDjViewAll": "View all",
+  "aiDjLastUpdated": "Updated {time}",
+  "@aiDjLastUpdated": {
+    "placeholders": {
+      "time": {
+        "type": "String"
+      }
+    }
+  },
+  "aiDjUpdatedJustNow": "just now",
+  "aiDjUpdatedMinutesAgo": "{count} min ago",
+  "@aiDjUpdatedMinutesAgo": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "aiDjUpdatedHoursAgo": "{count} h ago",
+  "@aiDjUpdatedHoursAgo": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "aiDjUpdatedYesterday": "yesterday {time}",
+  "@aiDjUpdatedYesterday": {
+    "placeholders": {
+      "time": {
+        "type": "String"
+      }
+    }
+  },
+  "aiDjUpdatedDate": "{month}/{day}",
+  "@aiDjUpdatedDate": {
+    "placeholders": {
+      "month": {
+        "type": "int"
+      },
+      "day": {
+        "type": "int"
+      }
+    }
+  },
+  "aiDjPlayAll": "Play all",
+  "aiDjEnqueueAll": "Add to queue",
+  "aiDjInQueue": "In queue",
+  "aiDjItemActions": "Recommendation actions",
+  "aiDjReplaceItem": "Swap this one",
+  "aiDjNotInterested": "Not interested",
+  "aiDjFeedbackTitle": "This round",
+  "aiDjFeedbackLiked": "Liked",
+  "aiDjFeedbackSkipped": "Skipped",
+  "aiDjUpstreamTitle": "Data sent this time",
+  "aiDjUpstreamBody": "Latest {events} play events · top {artists} artists · {exclusions} already-played excluded",
+  "@aiDjUpstreamBody": {
+    "placeholders": {
+      "events": {
+        "type": "int"
+      },
+      "artists": {
+        "type": "int"
+      },
+      "exclusions": {
+        "type": "int"
+      }
+    }
+  },
+  "aiDjUpstreamHint": "Only the stats above plus titles/artists — no play URLs, no device info.",
+  "aiDjCacheTtlTitle": "Recommendation cache",
+  "aiDjCacheTtlDays": "Keep {days} days",
+  "@aiDjCacheTtlDays": {
+    "placeholders": {
+      "days": {
+        "type": "int"
+      }
+    }
+  },
+  "aiDjCacheTtlForever": "Keep forever",
+  "aiDjCacheTtlHint": "An expired list stops feeding the radio; the next extension generates a new batch (no interruption, no notice).",
+  "aiDjGenerate": "Generate",
+  "aiDjEmptyList": "No recommendations yet",
+  "aiDjEmptyListHint": "Generate today's picks — playable any time.",
+  "aiDjEnqueueEmpty": "Everything here is already queued",
   "settingsSyncTitle": "Cross-device sync",
   "settingsSyncItemSubtitle": "Playlists, sources, settings and credentials",
   "syncGeneralSection": "Sync",

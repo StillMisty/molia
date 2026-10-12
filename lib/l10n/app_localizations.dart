@@ -1820,6 +1820,18 @@ abstract class AppLocalizations {
   /// **'Failed to change source, please try again'**
   String get sourceSwapApplyFailed;
 
+  /// No description provided for @sourceSwapTabLyrics.
+  ///
+  /// In en, this message translates to:
+  /// **'Lyrics'**
+  String get sourceSwapTabLyrics;
+
+  /// No description provided for @sourceSwapTabAudio.
+  ///
+  /// In en, this message translates to:
+  /// **'Audio'**
+  String get sourceSwapTabAudio;
+
   /// No description provided for @playlistAddedTo.
   ///
   /// In en, this message translates to:
@@ -3206,23 +3218,11 @@ abstract class AppLocalizations {
   /// **'Set up AI service'**
   String get aiDjOpenSettings;
 
-  /// No description provided for @aiDjBadgeTooltip.
-  ///
-  /// In en, this message translates to:
-  /// **'AI DJ is on'**
-  String get aiDjBadgeTooltip;
-
   /// No description provided for @aiDjDiscoverSubtitle.
   ///
   /// In en, this message translates to:
   /// **'Let AI pick songs from your listening history'**
   String get aiDjDiscoverSubtitle;
-
-  /// No description provided for @aiDjManage.
-  ///
-  /// In en, this message translates to:
-  /// **'Manage'**
-  String get aiDjManage;
 
   /// No description provided for @aiDjGenerating.
   ///
@@ -3241,6 +3241,180 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'New batch'**
   String get aiDjRefreshBatch;
+
+  /// No description provided for @aiDjStatusIdle.
+  ///
+  /// In en, this message translates to:
+  /// **'Idle'**
+  String get aiDjStatusIdle;
+
+  /// No description provided for @aiDjTodayTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Today\'s picks'**
+  String get aiDjTodayTitle;
+
+  /// No description provided for @aiDjViewAll.
+  ///
+  /// In en, this message translates to:
+  /// **'View all'**
+  String get aiDjViewAll;
+
+  /// No description provided for @aiDjLastUpdated.
+  ///
+  /// In en, this message translates to:
+  /// **'Updated {time}'**
+  String aiDjLastUpdated(String time);
+
+  /// No description provided for @aiDjUpdatedJustNow.
+  ///
+  /// In en, this message translates to:
+  /// **'just now'**
+  String get aiDjUpdatedJustNow;
+
+  /// No description provided for @aiDjUpdatedMinutesAgo.
+  ///
+  /// In en, this message translates to:
+  /// **'{count} min ago'**
+  String aiDjUpdatedMinutesAgo(int count);
+
+  /// No description provided for @aiDjUpdatedHoursAgo.
+  ///
+  /// In en, this message translates to:
+  /// **'{count} h ago'**
+  String aiDjUpdatedHoursAgo(int count);
+
+  /// No description provided for @aiDjUpdatedYesterday.
+  ///
+  /// In en, this message translates to:
+  /// **'yesterday {time}'**
+  String aiDjUpdatedYesterday(String time);
+
+  /// No description provided for @aiDjUpdatedDate.
+  ///
+  /// In en, this message translates to:
+  /// **'{month}/{day}'**
+  String aiDjUpdatedDate(int month, int day);
+
+  /// No description provided for @aiDjPlayAll.
+  ///
+  /// In en, this message translates to:
+  /// **'Play all'**
+  String get aiDjPlayAll;
+
+  /// No description provided for @aiDjEnqueueAll.
+  ///
+  /// In en, this message translates to:
+  /// **'Add to queue'**
+  String get aiDjEnqueueAll;
+
+  /// No description provided for @aiDjInQueue.
+  ///
+  /// In en, this message translates to:
+  /// **'In queue'**
+  String get aiDjInQueue;
+
+  /// No description provided for @aiDjItemActions.
+  ///
+  /// In en, this message translates to:
+  /// **'Recommendation actions'**
+  String get aiDjItemActions;
+
+  /// No description provided for @aiDjReplaceItem.
+  ///
+  /// In en, this message translates to:
+  /// **'Swap this one'**
+  String get aiDjReplaceItem;
+
+  /// No description provided for @aiDjNotInterested.
+  ///
+  /// In en, this message translates to:
+  /// **'Not interested'**
+  String get aiDjNotInterested;
+
+  /// No description provided for @aiDjFeedbackTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'This round'**
+  String get aiDjFeedbackTitle;
+
+  /// No description provided for @aiDjFeedbackLiked.
+  ///
+  /// In en, this message translates to:
+  /// **'Liked'**
+  String get aiDjFeedbackLiked;
+
+  /// No description provided for @aiDjFeedbackSkipped.
+  ///
+  /// In en, this message translates to:
+  /// **'Skipped'**
+  String get aiDjFeedbackSkipped;
+
+  /// No description provided for @aiDjUpstreamTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Data sent this time'**
+  String get aiDjUpstreamTitle;
+
+  /// No description provided for @aiDjUpstreamBody.
+  ///
+  /// In en, this message translates to:
+  /// **'Latest {events} play events · top {artists} artists · {exclusions} already-played excluded'**
+  String aiDjUpstreamBody(int events, int artists, int exclusions);
+
+  /// No description provided for @aiDjUpstreamHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Only the stats above plus titles/artists — no play URLs, no device info.'**
+  String get aiDjUpstreamHint;
+
+  /// No description provided for @aiDjCacheTtlTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Recommendation cache'**
+  String get aiDjCacheTtlTitle;
+
+  /// No description provided for @aiDjCacheTtlDays.
+  ///
+  /// In en, this message translates to:
+  /// **'Keep {days} days'**
+  String aiDjCacheTtlDays(int days);
+
+  /// No description provided for @aiDjCacheTtlForever.
+  ///
+  /// In en, this message translates to:
+  /// **'Keep forever'**
+  String get aiDjCacheTtlForever;
+
+  /// No description provided for @aiDjCacheTtlHint.
+  ///
+  /// In en, this message translates to:
+  /// **'An expired list stops feeding the radio; the next extension generates a new batch (no interruption, no notice).'**
+  String get aiDjCacheTtlHint;
+
+  /// No description provided for @aiDjGenerate.
+  ///
+  /// In en, this message translates to:
+  /// **'Generate'**
+  String get aiDjGenerate;
+
+  /// No description provided for @aiDjEmptyList.
+  ///
+  /// In en, this message translates to:
+  /// **'No recommendations yet'**
+  String get aiDjEmptyList;
+
+  /// No description provided for @aiDjEmptyListHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Generate today\'s picks — playable any time.'**
+  String get aiDjEmptyListHint;
+
+  /// No description provided for @aiDjEnqueueEmpty.
+  ///
+  /// In en, this message translates to:
+  /// **'Everything here is already queued'**
+  String get aiDjEnqueueEmpty;
 
   /// No description provided for @settingsSyncTitle.
   ///

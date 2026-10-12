@@ -48,7 +48,6 @@ class DataSettingsPage extends StatelessWidget {
                   const CacheManagementPage(),
                 ),
               ),
-              const SizedBox(height: kSettingsElementSpacing),
               // 听歌统计：事件级采集（本机），播放次数 / 热力图 / 导出。
               SettingsNavTile(
                 key: const Key('settingsPlayStatisticsItem'),
@@ -60,7 +59,6 @@ class DataSettingsPage extends StatelessWidget {
                   const PlayStatisticsPage(),
                 ),
               ),
-              const SizedBox(height: kSettingsElementSpacing),
               // 统计采集开关（关闭 = 停止记录新事件，已有数据保留）。
               ValueListenableBuilder<bool>(
                 valueListenable:
@@ -88,7 +86,6 @@ class DataSettingsPage extends StatelessWidget {
                 subtitle: l10n.exportDataSubtitle,
                 onTap: () => _exportData(context, l10n, syncProvider),
               ),
-              const SizedBox(height: kSettingsElementSpacing),
               SettingsNavTile(
                 icon: Icons.download_rounded,
                 title: l10n.importDataTitle,
@@ -97,7 +94,6 @@ class DataSettingsPage extends StatelessWidget {
               ),
               // LX Music 收藏夹（.lxmc）导入：Web 无 gzip/文件系统，隐藏入口。
               if (!kIsWeb) ...[
-                const SizedBox(height: kSettingsElementSpacing),
                 SettingsNavTile(
                   icon: Icons.favorite_border_rounded,
                   title: l10n.libraryImportFavorites,

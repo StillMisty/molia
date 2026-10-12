@@ -421,6 +421,57 @@ void main() {
     expect(find.text('Open settings'), findsOneWidget);
   });
 
+  testWidgets('底部弹层：列表滑到顶后继续下滑可关闭（M3E 弹层滚动控制器接线）', (tester) async {
+    // 移动端视口 → showAdaptiveModalPage 走底部弹层分支。
+    tester.view.physicalSize = const Size(500, 1400);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(() {
+      tester.view.resetPhysicalSize();
+      tester.view.resetDevicePixelRatio();
+    });
+
+    await pumpApp(
+      tester,
+      Scaffold(
+        body: Builder(
+          builder: (context) => Center(
+            child: M3EButton.filled(
+              onPressed: () {
+                final subPageOpen = ValueNotifier<bool>(false);
+                ResponsiveNavigation.showAdaptiveModalPage(
+                  context: context,
+                  showCloseButton: false,
+                  onDismissRequest: () async => !subPageOpen.value,
+                  child: SettingsPage(subPageOpen: subPageOpen),
+                ).whenComplete(subPageOpen.dispose);
+              },
+              child: const Text('Open settings'),
+            ),
+          ),
+        ),
+      ),
+    );
+
+    await tester.tap(find.text('Open settings'));
+    await tester.pumpAndSettle();
+    expect(find.text('Settings'), findsOneWidget);
+
+    // 列表在顶部继续下滑：设置首屏的滚动视图挂的是弹层控制器，
+    // 拖动应联动收缩/关闭弹层（回归：内嵌 Navigator 路由遮蔽控制器）。
+    for (var i = 0; i < 3; i++) {
+      await tester.fling(
+        find.byType(SingleChildScrollView).first,
+        const Offset(0, 400),
+        1500,
+      );
+      await tester.pumpAndSettle();
+      if (find.text('Settings').evaluate().isEmpty) break;
+    }
+
+    expect(find.text('Open settings'), findsOneWidget);
+    expect(find.text('Settings'), findsNothing);
+  });
+
   testWidgets('数据与存储子页：统计开关与入口同组，返回退回首屏', (tester) async {
     await pumpSettingsPage(tester);
 

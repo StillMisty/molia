@@ -21,6 +21,7 @@ class LyricsPosterService {
     required Color titleColor,
     required Color artistColor,
     required Color lyricsColor,
+    required Color extendedColor,
     required Color watermarkColor,
     required Color separatorColor,
     String? fontFamily,
@@ -150,6 +151,17 @@ class LyricsPosterService {
       height: 1.3,
       fontWeight: FontWeight.w700,
     );
+    // 扩展行（翻译 / 罗马音）：与歌词页同层级（主行下、次级文本），海报
+    // 字号基数大，比例略收到 0.7 更接近观感层级。
+    final extendedLyricsStyle = TextStyle(
+      fontFamily: fontFamily,
+      fontSize: lyricsFontSize * 0.7,
+      color: extendedColor,
+      height: 1.25,
+      fontWeight: FontWeight.w500,
+    );
+    const double lyricExtendedSpacing = 4.0 * scaleFactor;
+    const double lyricExtendedLineSpacing = 2.0 * scaleFactor;
     final List<PosterLyricLine> lyricEntries =
         (posterLyricLines != null && posterLyricLines.isNotEmpty)
             ? posterLyricLines
@@ -159,22 +171,43 @@ class LyricsPosterService {
                 .toList();
 
     final List<TextPainter> lyricLinePainters = [];
+
+    /// 每个 painter 之后要额外留出的间距（主行→扩展行 / 扩展行→扩展行）。
+    final List<double> lyricLineGaps = [];
     double totalLyricsBlockHeight = 0;
     final bool hasNonEmptyLyric =
         lyricEntries.any((entry) => entry.text.trim().isNotEmpty);
 
+    TextPainter layoutLine(String text, TextStyle style) {
+      final painter = TextPainter(
+        text: TextSpan(text: text, style: style),
+        textDirection: TextDirection.ltr,
+        textAlign: TextAlign.left,
+      );
+      painter.layout(maxWidth: contentWidth);
+      return painter;
+    }
+
     if (lyricEntries.isNotEmpty && hasNonEmptyLyric) {
-      for (int i = 0; i < lyricEntries.length; i++) {
-        final entry = lyricEntries[i];
-        final lyricLinePainter = TextPainter(
-          text: TextSpan(
-              text: entry.text.isEmpty ? ' ' : entry.text, style: lyricsStyle),
-          textDirection: TextDirection.ltr,
-          textAlign: TextAlign.left,
+      for (final entry in lyricEntries) {
+        lyricLinePainters.add(
+          layoutLine(entry.text.isEmpty ? ' ' : entry.text, lyricsStyle),
         );
-        lyricLinePainter.layout(maxWidth: contentWidth);
-        lyricLinePainters.add(lyricLinePainter);
-        totalLyricsBlockHeight += lyricLinePainter.height;
+        final extendedTexts = <String>[
+          if (entry.translation.trim().isNotEmpty) entry.translation,
+          if (entry.roma.trim().isNotEmpty) entry.roma,
+        ];
+        lyricLineGaps
+            .add(extendedTexts.isEmpty ? 0.0 : lyricExtendedSpacing);
+        for (var i = 0; i < extendedTexts.length; i++) {
+          lyricLinePainters.add(layoutLine(extendedTexts[i], extendedLyricsStyle));
+          lyricLineGaps.add(
+            i == extendedTexts.length - 1 ? 0.0 : lyricExtendedLineSpacing,
+          );
+        }
+      }
+      for (var i = 0; i < lyricLinePainters.length; i++) {
+        totalLyricsBlockHeight += lyricLinePainters[i].height + lyricLineGaps[i];
       }
     } else {
       final emptyLyricPainter = TextPainter(
@@ -183,6 +216,7 @@ class LyricsPosterService {
       emptyLyricPainter.layout(maxWidth: contentWidth);
       totalLyricsBlockHeight = emptyLyricPainter.height;
       lyricLinePainters.add(emptyLyricPainter);
+      lyricLineGaps.add(0);
     }
     calculatedHeight += totalLyricsBlockHeight;
     if (lyricLinePainters.isNotEmpty) calculatedHeight += elementSpacing;
@@ -339,7 +373,7 @@ class LyricsPosterService {
           painter,
           Offset(horizontalMargin, currentY + painter.height / 2),
           TextAlign.left);
-      currentY += painter.height;
+      currentY += painter.height + lyricLineGaps[i];
     }
     if (lyricLinePainters.isNotEmpty) {
       currentY += elementSpacing;

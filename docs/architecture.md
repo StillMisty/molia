@@ -128,14 +128,19 @@
   与 `play_history`（最近播放，500 条上限）是两套数据。
 - **AI 推歌（Phase 2，可选，默认关闭）**：`lib/services/ai/**` 是唯一数据出口与
   网络层——`TasteProfileBuilder`（聚合画像 + 最近 200 条明细 + 排除清单）、
-  `LlmClient`（OpenAI-compatible，错误归一化 `SourceFailure`，Key 不进 message）、
+  `LlmClient`（OpenAI-compatible，请求带 `response_format: json_object`（不支持时
+  自动退回），错误归一化 `SourceFailure`，Key 不进 message）、
   `AiRecommendationService`（提示词 → 容错 JSON → 规范化去重 →
-  `CatalogService.search` 并行解析）。`AiDjProvider` 是模式状态机
-  （批次 20 / 低水位续推 / 跳过与收藏反馈 / 失败降级），经
-  `PlaybackProvider.enqueueDomainTracks` 续推（洗牌追加见
-  `PlaybackShuffleOrder.extend`）；播放页徽标与 AI 页订阅其状态，发现页推荐流
-  （`AiDjCarousel`）消费待播批次（12h 缓存、点卡整批入队起播、尾部换一批），
-  **模式关闭时整条隐藏**（开启入口在设置 › 内容 › AI 推歌）。
+  `CatalogService.search` 并行解析，命中无封面时经音源 `artwork()` 补取）。
+  `AiDjProvider` 维护两件事：**今日推荐列表**（持久化在
+  `AiRecommendationStore`，任何时刻可浏览/播放，「换一批」替换缓存）与
+  **推歌会话**（`enabled` 功能开关 + `status` 电台状态：播放全部/点某首才接管队列，
+  低水位续推只在当前队列就是 AI 队列时触发；退出队列不关功能）。列表带
+  单曲「换一首」「不感兴趣（可撤销）」与反馈面板；缓存有效期
+  （`aiDjCacheTtlDays`，默认 1 天）只影响续推是否消费旧列表，不做过期提示，
+  「上次更新」只在 AI 页与发现页推荐区展示。发现页 `AiDjCarousel` 用 carousel
+  原生槽位展示歌名/歌手（`applyDynamicTextContentTransform: false`），
+  功能未启用时整条隐藏；播放页不再有 AI 徽标。
   首次开启隐私确认、Web 隐藏；定位与边界见 ADR-0002。
 - **跨设备数据同步（可选，默认关闭）**：同步歌单 / 收藏 / 音源脚本与配置 /
   跟人走的设置 / 听歌统计 / 播放历史 / 上次播放会话 / AI DJ 与凭证。信任模型是
@@ -173,8 +178,10 @@
 - **换源**：`SourceSwapProvider`（`lib/providers/source_swap_provider.dart`）是
   跨音源搜索 + 原位替换的唯一状态机：按种子曲目「歌名 + 歌手」在其它可搜索音源
   并行检索（`CatalogService.search` 复用 5min 缓存；逐源就绪即填充，单源失败进
-  `failedSourceKeys` 可重试），弹层（`lib/widgets/source_swap_sheet.dart`，入口：
-  收藏页三类合集左滑 / 播放页 seek 行）点候选即试听（单曲「换源试听」上下文）、
+  `failedSourceKeys` 可重试），载体是统一的「换源」页
+  （`lib/pages/source_swap_page.dart`：歌词 / 音频两个 tab，歌词侧为
+  `LyricsSourceSearchView`，音频侧为 `SourceSwapView`；入口：播放页歌词快捷操作栏
+  默认歌词 tab、收藏页三类合集左滑默认音频 tab）点候选即试听（单曲「换源试听」上下文）、
   确认后经 `LibraryProvider.replacePlaylistTrack` / `replaceHistoryEntry` 原位
   替换（仓库事务保 `sortOrder`/`addedAt`/`playedAt`，目标键已存在先确认去重），
   并经 `PlaybackProvider.replaceQueueTrack` 让队列中同 id 曲目跟随换源（新增
@@ -270,8 +277,13 @@
   用 `aospSpatial` 无过冲弹簧并在落定帧零速度交接；不要再用
   `AnimationController` + `Curves`/`SpringSimulation` 手搓 spatial 运动
   （交互细节见 `docs/pitfalls.md` #21）。
-- 设置页：首屏按功能分区（外观 / 播放 / 歌词 / 内容 / 通用 / 数据与存储），每组一张
-  filled 卡片、分组标题在卡片上方，统一行组件在 `lib/widgets/settings/settings_tiles.dart`；
+- 设置页：首屏按功能分区（外观 / 播放 / 歌词 / 内容 / 通用 / 数据与存储），分组标题 +
+  分段卡片行：行表面统一走共享的 `lib/widgets/card_list_surface.dart`
+  （`CardListSurface`：静止内 4dp / 首末外侧 16dp、hover 12dp、press 16dp，
+  expressive spatial 形状弹簧；`TrackRow`、设置行、AI 推荐卡同一套形状语言），
+  行间 `cardList.gap`、位置由 `SettingsSectionCard` 下发（`SettingsRowPosition`），
+  排版走 `M3ETypeScale`、不写死字号字重；统一行组件在
+  `lib/widgets/settings/settings_tiles.dart`（`Nav` / `Switch` / `Info` / `Value` 四种）；
   子页（音源 / 歌词显示 / AI 推歌 / 通用 / 数据与存储 / 缓存 / 统计）经 `SettingsPage`
   的内部 Navigator 在同一弹层内 push（`openSettingsSubPage`）。系统返回先退子页、
   再关弹层：底部弹层由 `showAdaptiveModalPage(onDismissRequest:)` guard 读取

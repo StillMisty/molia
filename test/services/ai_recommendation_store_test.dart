@@ -1,7 +1,7 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:molia/domain/models/ai_dj.dart';
 import 'package:molia/domain/models/track.dart';
-import 'package:molia/services/ai/ai_pending_batch_store.dart';
+import 'package:molia/services/ai/ai_recommendation_store.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 /// 待播批次持久化：往返、损坏降级、清空。
@@ -9,12 +9,12 @@ void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
   late SharedPreferences prefs;
-  late AiPendingBatchStore store;
+  late AiRecommendationStore store;
 
   setUp(() async {
     SharedPreferences.setMockInitialValues({});
     prefs = await SharedPreferences.getInstance();
-    store = AiPendingBatchStore(preferences: prefs);
+    store = AiRecommendationStore(preferences: prefs);
   });
 
   AiDjBatch batch() => AiDjBatch(
@@ -60,10 +60,10 @@ void main() {
   });
 
   test('损坏数据降级为无缓存', () async {
-    await prefs.setString(AiPendingBatchStore.storageKey, 'not-json{{{');
+    await prefs.setString(AiRecommendationStore.storageKey, 'not-json{{{');
     expect(await store.load(), isNull);
 
-    await prefs.setString(AiPendingBatchStore.storageKey, '{"items":[]}');
+    await prefs.setString(AiRecommendationStore.storageKey, '{"items":[]}');
     expect(await store.load(), isNull);
   });
 

@@ -152,16 +152,21 @@
 
 ## AI 推歌
 
-- **AI DJ mode（AI 推歌模式）** — `lib/providers/ai_dj_provider.dart`：可持续推荐
-  电台的状态机（off/preparing/playing/error）。批次 20 首、队列剩余 ≤5 首后台续推
+- **AI DJ mode（AI 推歌模式）** — `lib/providers/ai_dj_provider.dart`：两件事的唯一
+  状态机——**今日推荐列表**（持久、可浏览）与**推歌会话（电台）**。
+  `enabled` = 功能启用（持久化；退出队列不关功能）；`status` = 电台状态
+  （off/preparing/playing/error：播放全部或点某首才接管队列）。批次 20 首、
+  队列剩余 ≤5 首且当前队列就是 AI 队列时后台续推
   （`PlaybackProvider.enqueueDomainTracks`）；跳过 = 切走时未达
   `min(30s, 50%×时长)`（复用统计口径，**只做曲目级排除**）；喜欢 = 收藏；
-  连续 3 次失败自动停止续推；退出保留队列。播放快照/进度由组合根接进控制器。
-- **Pending batch / discover feed（待播批次 / 发现页推荐流）** —
-  `lib/services/ai/ai_pending_batch_store.dart` + `lib/widgets/ai_dj_carousel.dart`：
-  发现页 carousel 展示的「下一批」（12h 缓存，点击即整批入队并从该首起播）；
-  尾部「换一批」只换下一批、不打断播放；**模式关闭时发现页整条隐藏**
-  （开启入口在设置 › 内容 › AI 推歌）。
+  「不感兴趣」= 列表移除 + 会话排除（可撤销）；连续 3 次失败自动停止续推；
+  退出保留队列。播放快照/进度由组合根接进控制器。
+- **Today's picks（今日推荐列表）** —
+  `lib/services/ai/ai_recommendation_store.dart` + `lib/widgets/ai_dj_carousel.dart`：
+  持久化的推荐列表（列表项 = 曲目 + AI 理由），「换一批」替换缓存；
+  `aiDjCacheTtlDays`（默认 1 天）只决定续推是否消费旧列表——过期不提示、不删除、
+  不打断播放，「上次更新」在 AI 页与发现页推荐区展示；
+  **功能未启用时发现页整条隐藏**（开启入口在设置 › 内容 › AI 推歌）。
 - **Taste profile（听歌画像）** — `lib/services/ai/taste_profile_builder.dart`：
   上行 LLM 的唯一数据出口（聚合统计 + 最近 200 条明细 + 已听排除清单，
   上限集中在此）；不含 raw payload / 设备信息；首次开启需隐私确认

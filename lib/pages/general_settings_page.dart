@@ -75,7 +75,6 @@ class _GeneralSettingsPageState extends State<GeneralSettingsPage> {
                   );
                 },
               ),
-              const SizedBox(height: kSettingsElementSpacing),
               // 应用名称：顶栏无歌曲时显示的自定义文案。
               ValueListenableBuilder<String>(
                 valueListenable: AppBrandingService.titleNotifier,

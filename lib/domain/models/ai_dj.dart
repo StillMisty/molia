@@ -100,6 +100,9 @@ class ResolvedRecommendation {
 }
 
 /// 一批推荐（含解析失败项，页面折叠展示）。
+///
+/// 语义：**今日推荐列表**——持久化、可浏览，不随播放会话消耗消失；
+/// 「推歌（电台）」只是把这份列表喂进播放队列的自动化。
 class AiDjBatch {
   final List<ResolvedRecommendation> items;
 
@@ -115,6 +118,45 @@ class AiDjBatch {
   });
 
   bool get isEmpty => items.isEmpty;
+
+  AiDjBatch copyWith({
+    List<ResolvedRecommendation>? items,
+    List<AiRecommendation>? unresolved,
+    DateTime? generatedAt,
+  }) =>
+      AiDjBatch(
+        items: items ?? this.items,
+        unresolved: unresolved ?? this.unresolved,
+        generatedAt: generatedAt ?? this.generatedAt,
+      );
+}
+
+/// 「本次发送的数据」摘要：只统计条数，不含内容（隐私透明展示用）。
+class AiUpstreamSummary {
+  /// 最近事件明细条数（TasteProfileBuilder.recentEventLimit 上限）。
+  final int recentEvents;
+
+  /// Top 艺人 / Top 曲目条数。
+  final int topArtists;
+  final int topTracks;
+
+  /// 已听排除清单条数。
+  final int exclusions;
+
+  const AiUpstreamSummary({
+    required this.recentEvents,
+    required this.topArtists,
+    required this.topTracks,
+    required this.exclusions,
+  });
+
+  /// 上游数据为空（没有听歌统计）时也允许生成（画像为空）。
+  static const AiUpstreamSummary empty = AiUpstreamSummary(
+    recentEvents: 0,
+    topArtists: 0,
+    topTracks: 0,
+    exclusions: 0,
+  );
 }
 
 /// AI 推歌模式的队列上下文名（播放页/队列面板展示）。
@@ -122,15 +164,24 @@ const String kAiDjContextName = 'AI 推歌';
 
 /// 模式状态（AI 徽标/页面开关共用）。
 enum AiDjStatus {
-  /// 未开启。
+  /// 未推歌（功能可以仍处于启用：列表可浏览、可手动播放）。
   off,
 
   /// 生成第一批中。
   preparing,
 
-  /// 模式生效：播放 + 后台续推。
+  /// 电台生效：播放 + 后台续推。
   playing,
 
   /// 生成失败（保留当前队列继续播放，可重试）。
   error,
 }
+
+/// 推荐列表缓存有效期选项（天；0 = 永久保留）。
+///
+/// 语义是「缓存本身」而非提示：未过期时续推优先消费这批列表的剩余曲目，
+/// 已过期则直接生成新批（不打断播放，也不弹提示）。
+const List<int> kAiCacheTtlDayOptions = [1, 3, 7, 0];
+
+/// 默认缓存有效期（天）。
+const int kAiDefaultCacheTtlDays = 1;

@@ -17,7 +17,7 @@ import 'package:molia/widgets/ai_dj_carousel.dart';
 import '../support/fake_library_repository.dart';
 import '../support/fakes.dart';
 
-/// 假生成器：脚本化批次（不触碰 LLM/网络）。
+/// 假生成器：脚本化推荐列表（不触碰 LLM/网络）。
 class _FakeGenerator implements AiRecommendationGenerator {
   _FakeGenerator(this.batchFactory);
 
@@ -30,6 +30,7 @@ class _FakeGenerator implements AiRecommendationGenerator {
     required int count,
     List<String> skippedLabels = const [],
     List<String> likedLabels = const [],
+    List<String> excludeLabels = const [],
   }) async {
     calls++;
     return batchFactory();
@@ -37,6 +38,10 @@ class _FakeGenerator implements AiRecommendationGenerator {
 
   @override
   Future<void> testConnection(LlmConfig config) async {}
+
+  @override
+  Future<AiUpstreamSummary> summarizeUpstream() async =>
+      AiUpstreamSummary.empty;
 }
 
 class _MemorySecrets implements AiSecretStorage {
@@ -159,20 +164,18 @@ void main() {
     playbackProvider.dispose();
   });
 
-  testWidgets('模式生效：渲染推荐 carousel，点卡即从该首起播', (tester) async {
+  testWidgets('启用且有列表：渲染推荐卡（歌名/歌手常显），点卡即从该首起播', (tester) async {
     await pumpProvider();
     await provider.grantConsent();
-    generator.batchFactory = () => _batch(0, 3);
-    await provider.ensurePendingBatch();
-    await provider.playFromPending(0);
-    await tester.pump();
-    await tester.pump(const Duration(milliseconds: 80));
+    await provider.setEnabled(true);
+    expect(provider.hasRecommendations, isTrue);
 
     await pumpCarousel(tester);
 
     expect(find.byKey(const Key('aiDjCarousel')), findsOneWidget);
     expect(find.text('Song 0'), findsOneWidget);
-    expect(find.text('Reason 0'), findsOneWidget);
+    // 歌名与歌手是 carousel 原生槽位：每张卡都保留。
+    expect(find.text('Artist'), findsWidgets);
 
     await tester.tap(find.text('Song 1'));
     await tester.pumpAndSettle();
@@ -182,20 +185,18 @@ void main() {
     expect(backend.lastRequest?.startIndex, 1);
   });
 
-  testWidgets('模式生效：滑到末尾显示「换一批」卡，点击触发重新生成', (tester) async {
+  testWidgets('滑到末尾显示「换一批」卡，点击触发重新生成', (tester) async {
     await pumpProvider();
     await provider.grantConsent();
-    generator.batchFactory = () => _batch(0, 3);
-    await provider.ensurePendingBatch();
-    await provider.playFromPending(0);
-    await tester.pump();
-    await tester.pump(const Duration(milliseconds: 80));
+    await provider.setEnabled(true);
+    generator.batchFactory = () => _batch(9, 3);
 
     await pumpCarousel(tester);
     final callsBefore = generator.calls;
 
-    // 每次甩动推进一张卡（carousel 默认单步吸附，需要速度判定）。
-    for (var i = 0; i < 5 && find.text('New batch').evaluate().isEmpty; i++) {
+    for (var i = 0;
+        i < 6 && find.text('New batch').evaluate().isEmpty;
+        i++) {
       await tester.fling(
         find.byKey(const Key('aiDjCarousel')),
         const Offset(-400, 0),
@@ -209,41 +210,57 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(generator.calls, greaterThan(callsBefore));
+    expect(provider.recommendations?.items.first.track.id.id, '9');
   });
 
-  testWidgets('模式生效但生成失败：展示重试卡，点击触发重新生成', (tester) async {
+  testWidgets('启用但列表为空：显示生成引导卡，点击生成', (tester) async {
+    await pumpProvider();
+    // 未确认隐私 → 启用不触发生成（列表为空、无错误）。
+    await provider.setEnabled(true);
+    expect(provider.hasRecommendations, isFalse);
+    expect(provider.lastError, isNull);
+
+    await pumpCarousel(tester);
+
+    expect(find.byKey(const Key('aiDjGenerateCard')), findsOneWidget);
+    final callsBefore = generator.calls;
+
+    await tester.tap(find.byKey(const Key('aiDjGenerateCard')));
+    await tester.pumpAndSettle();
+
+    expect(generator.calls, greaterThan(callsBefore));
+    expect(provider.hasRecommendations, isTrue);
+  });
+
+  testWidgets('生成失败：展示重试卡，点击触发重新生成', (tester) async {
     await pumpProvider();
     await provider.grantConsent();
-    generator.batchFactory = () => _batch(0, 3);
-    await provider.ensurePendingBatch();
-    // 起播后生成开始失败：预取失败 → 无待播批次，模式仍在生效。
     generator.batchFactory = () => AiDjBatch(
           items: const [],
           generatedAt: DateTime.now(),
         );
-    await provider.playFromPending(0);
-    await tester.pump();
-    await tester.pump(const Duration(milliseconds: 80));
-    expect(provider.status, AiDjStatus.playing);
-    expect(provider.hasPendingBatch, isFalse);
+    await provider.setEnabled(true);
+    expect(provider.lastError, isNotNull);
 
     await pumpCarousel(tester);
 
     expect(find.byKey(const Key('aiDjBatchErrorCard')), findsOneWidget);
     final callsBefore = generator.calls;
+    generator.batchFactory = () => _batch(0, 3);
 
     await tester.tap(find.byKey(const Key('aiDjBatchErrorCard')));
     await tester.pumpAndSettle();
 
     expect(generator.calls, greaterThan(callsBefore));
+    expect(provider.hasRecommendations, isTrue);
   });
 
-  testWidgets('模式关闭：即使已配置且有待播批次也整条隐藏', (tester) async {
+  testWidgets('功能未启用：即使有列表缓存也整条隐藏', (tester) async {
     await pumpProvider();
     await provider.grantConsent();
-    generator.batchFactory = () => _batch(0, 3);
-    await provider.ensurePendingBatch();
-    expect(provider.hasPendingBatch, isTrue);
+    await provider.setEnabled(true);
+    expect(provider.hasRecommendations, isTrue);
+    await provider.setEnabled(false);
 
     await pumpCarousel(tester);
 

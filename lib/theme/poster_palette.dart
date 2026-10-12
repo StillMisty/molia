@@ -12,6 +12,7 @@ class PosterPalette {
     required this.title,
     required this.artist,
     required this.lyrics,
+    required this.extended,
     required this.watermark,
     required this.separator,
   });
@@ -22,6 +23,8 @@ class PosterPalette {
         title: scheme.onPrimaryContainer,
         artist: scheme.primary,
         lyrics: scheme.onPrimaryContainer,
+        // 扩展行（翻译 / 罗马音）是次级文本：同前景降透明度。
+        extended: scheme.onPrimaryContainer.withValues(alpha: 0.75),
         watermark: scheme.onPrimaryContainer,
         separator: scheme.outline.withValues(alpha: 0.3),
       );
@@ -37,6 +40,9 @@ class PosterPalette {
 
   /// 歌词正文。
   final Color lyrics;
+
+  /// 歌词扩展行（翻译 / 罗马音）。
+  final Color extended;
 
   /// 底部水印（图标 + 品牌名）。
   final Color watermark;

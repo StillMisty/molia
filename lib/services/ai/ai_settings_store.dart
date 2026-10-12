@@ -10,7 +10,6 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../domain/models/ai_dj.dart';
-
 /// 密钥键值存储的最小接口（测试注入内存实现）。
 abstract interface class AiSecretStorage {
   Future<String?> read(String key);
@@ -49,6 +48,12 @@ class AiSettingsStore {
 
   /// 首次开启前的隐私确认标记（版本化：内容变化时升 v2 重新确认）。
   static const String consentKey = 'ai_dj_consent_v1';
+
+  /// 功能启用标记（与「推歌会话」解耦：退出队列不关功能）。
+  static const String enabledKey = 'ai_dj_enabled';
+
+  /// 推荐列表缓存有效期（天；0 = 永久）。
+  static const String cacheTtlDaysKey = 'ai_dj_cache_ttl_days';
 
   final AiSecretStorage _secrets;
   final SharedPreferences? _preferences;
@@ -105,6 +110,33 @@ class AiSettingsStore {
   Future<void> revokeConsent() async {
     final prefs = await _prefsOrNull();
     await prefs?.remove(consentKey);
+  }
+
+  /// 功能启用状态（默认关闭：AI 是可选功能）。
+  Future<bool> readEnabled() async {
+    final prefs = await _prefsOrNull();
+    return prefs?.getBool(enabledKey) ?? false;
+  }
+
+  Future<void> saveEnabled(bool enabled) async {
+    final prefs = await _prefsOrNull();
+    await prefs?.setBool(enabledKey, enabled);
+  }
+
+  /// 推荐列表缓存有效期（天；非法值回退默认；0 = 永久）。
+  Future<int> readCacheTtlDays() async {
+    final prefs = await _prefsOrNull();
+    final value = prefs?.getInt(cacheTtlDaysKey);
+    if (value == null || !kAiCacheTtlDayOptions.contains(value)) {
+      return kAiDefaultCacheTtlDays;
+    }
+    return value;
+  }
+
+  Future<void> saveCacheTtlDays(int days) async {
+    if (!kAiCacheTtlDayOptions.contains(days)) return;
+    final prefs = await _prefsOrNull();
+    await prefs?.setInt(cacheTtlDaysKey, days);
   }
 }
 
