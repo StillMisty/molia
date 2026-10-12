@@ -15,6 +15,7 @@ LIBXKBFILE_URL="${LIBXKBFILE_URL:-https://geo.mirror.pkgbuild.com/extra/os/x86_6
 AVD_MANAGER="$ANDROID_SDK_ROOT/cmdline-tools/latest/bin/avdmanager"
 
 command -v "$ANDROID_CLI" >/dev/null || die "未找到 android CLI（paru -S android-cli）"
+[[ -x "$AVD_MANAGER" ]] || die "未找到 avdmanager：$AVD_MANAGER（android sdk install \"cmdline-tools;latest\"）"
 command -v curl >/dev/null || die "缺少 curl"
 command -v bsdtar >/dev/null || die "缺少 bsdtar（pacman -S libarchive）"
 

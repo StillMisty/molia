@@ -76,7 +76,7 @@ run_one() { # platform
   local device prefix=()
   if [[ "$platform" == "linux" ]]; then
     device="linux"
-    if [[ -z "${DISPLAY:-}${WAYLAND_DISPLAY:-}" && $use_xvfb -eq 1 ]]; then
+    if ! has_display && (( use_xvfb )); then
       command -v xvfb-run >/dev/null 2>&1 ||
         die "无 DISPLAY 且缺少 xvfb-run：先装 xvfb（pacman -S xorg-server-xvfb / apt install xvfb），或用 --no-xvfb 直接跑看报错"
       prefix=(xvfb-run -a)

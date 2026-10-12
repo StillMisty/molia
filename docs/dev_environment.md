@@ -20,14 +20,18 @@ Android 侧调试全部在 WSL 内完成（KVM 原生模拟器，不依赖 Windo
 ```bash
 tool/agent/setup.sh        # 一次性：装 emulator + API 37 镜像 + 建 AVD（幂等）
 tool/agent/emu.sh start    # 启动模拟器（默认 headless，阻塞到 boot 完成；--window 经 WSLg 显示）
-tool/agent/app.sh run      # 后台 flutter run（首次需 Gradle 构建）
+tool/agent/app.sh run      # 后台 flutter run（默认 Android 模拟器；首次需 Gradle 构建）
+tool/agent/app.sh run -d linux   # Linux 桌面热重载（免模拟器；无 DISPLAY 自动 xvfb-run）
 tool/agent/app.sh reload   # 热重载；restart = 热重启（无 TTY 走 --pid-file + SIGUSR1/2）
+tool/agent/app.sh status   # pid / 设备 / VM Service / 日志路径
 tool/agent/shot.sh [name]  # 截图 → /tmp/opencode/molia/shots/*.png（供 agent 直接读图）
 tool/agent/ui.sh layout|tap|swipe|text|key|launch|force-stop
 tool/agent/test.sh android # 集成测试（官方 flutter test 路径；自动构建/安装 debug APK，跑完卸载）
 tool/agent/emu.sh stop     # 停止模拟器（app.sh stop 只停 flutter run）
 ```
 
+- `app.sh` 把运行设备记入 `/tmp/opencode/molia/flutter-run.device`，`reload`/`stop`/`status`
+  均按它操作：`-d linux` 起的桌面会话不会误发给 adb，反之亦然。
 - 日志 / 截图 / pid 统一放在 `/tmp/opencode/molia`（临时目录，重启可清）；集成测试日志为
   `it-<platform>-<时间戳>.log`，失败时脚本自动回显尾部 40 行。
 - Flutter semantics 节点可能不完整：视觉定位用 `shot.sh --annotate` 生成带编号标注的截图，
