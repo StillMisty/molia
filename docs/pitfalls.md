@@ -5,10 +5,18 @@
 > **编号被源码注释直接引用**（如 `ic_notification.xml` / `molia_mark.dart` 中的「见已知坑 18/19」），
 > 请勿重排；新增条目追加在末尾。
 
-1. **flutter_js 在 Linux 的 QuickJS 桥接库不会自动打包**（上游 CMake 变量名错误）。
-   已在 `linux/CMakeLists.txt` 显式 `install(FILES ... libquickjs_c_bridge_plugin.so)`，不要删除。
-2. **`getJavascriptRuntime()` 必须传 `xhr: false`**。默认开启的 fetch 会在后台 isolate 调用
-   `rootBundle`（依赖平台通道），产生未处理异常并**终止 isolate**，表现为引擎初始化成功但所有请求超时。
+1. **JS 运行时（QuickJS）原生库必须在 Linux bundle 里**（flutter_js 时代的历史坑，已解决）：
+   flutter_js 的上游 Linux CMake 把 bundled libraries 变量命名为
+   `flutter_qjs_bundled_libraries`（Flutter 只识别 `flutter_js_bundled_libraries`），
+   QuickJS 桥接库不会被打进 bundle，曾需仓库在 `linux/CMakeLists.txt` 显式补装。
+   改用 flutter_qjs_next 后，包内 CMake 会把 `libflutter_qjs_next_plugin.so` 正确打进
+   bundle（本机实测存在），补装规则已删除。可迁移经验：再遇「上游 CMake 不打包 .so」，
+   先核对其变量名是否为 `flutter_<包名>_bundled_libraries`。
+2. **引擎不启用 flutter_qjs_next 的内置 fetch**：脚本的网络请求必须统一走 `lx.request`
+   桥接（安全边界，见 #8）。`getJavascriptRuntime()` 默认只装 core Web API，不含
+   fetch/XHR；其 `xhr` 参数只为兼容 flutter_js 调用方保留、实际被忽略
+   （`flutter_qjs.dart` 注释与实现均如此）。给运行时传 `JsWebApis(fetch: ...)` 会在
+   isolate 里开出一条绕过桥接的网络通道，不要加。
 3. **`material_color_utilities` 被 Flutter SDK 固定为 0.13.0**，不要升级为 0.13.1（版本求解会失败）。
 4. **`encrypt` 已移除**：pointycastle 4.x 与其冲突；AES/RSA 统一走 `lx_native_utils.dart`。
 5. **maven.google.com 在部分网络不可达**：`android/app/build.gradle` 仓库显式使用
@@ -22,7 +30,7 @@
    `currentScriptInfo` 必须原样透传（部分脚本有防篡改校验，校验失败会死循环）。
 9. **ELECTRON 脚本兼容性**：脚本可能使用 `atob/btoa/TextEncoder/setTimeout/window/navigator`
    等 shim；扩展能力请加在 `lx_prelude.js` 而不是假设宿主提供。
-10. **插件 JVM target 校验**：`flutter_js` 等插件 Java target(11) 与 Kotlin target(1.8) 不一致，
+10. **插件 JVM target 校验**：部分插件的 Java target(11) 与 Kotlin target(1.8) 不一致，
     AGP 9 默认按错误处理；已在 `android/gradle.properties` 设置
     `kotlin.jvm.target.validation.mode=warning`，不要删除。
 11. **集成测试挂起保护（仅桌面）**：桌面端 media_kit（libmpv）的原生事件循环会阻止测试进程
@@ -118,10 +126,10 @@
 27. **16 KB 页对齐是发布硬条件，而且属于「依赖带进来的属性」**：Android 15+ 的 16 KB
     内核设备要求 64 位 .so 的 ELF 段按 16 KB 对齐（Google Play 自 2027-02 起强制）。
     构建侧已满足（AGP ≥ 8.5.1 管 zip 页对齐、NDK r28+ 默认 16 KB 段对齐），但本项目没有
-    自己的 native 代码，对齐完全由依赖决定（flutter_js 经 JitPack 的 quickjs、
-    shared_preferences 带的 androidx.datastore、sqlite3 经 Dart hooks 打的
-    libsqlite3 等；libsqlite3 已实测 LOAD 段 Align=0x4000），升级后可能被换回
-    4 KB 库。
+    自己的 native 代码，对齐完全由依赖决定（flutter_qjs_next 的 QuickJS 由本仓库 NDK
+    从源码编译、shared_preferences 带的 androidx.datastore、sqlite3 经 Dart hooks
+    打的 libsqlite3 等；`libflutter_qjs_next.so` 与 libsqlite3 均已实测 LOAD 段
+    Align=0x4000），升级后可能被换回 4 KB 库。
     本地默认模拟器就是 16 KB 页，集成测试（`tool/agent/test.sh android`）会当场暴露
     加载失败；必要时用官方 `check_elf_alignment.sh` 或 `zipalign -c -P 16 <apk>` 复查。
 28. **Android 打包不要剔除本地库的 `libsqlite3.so`**：drift 在所有平台都使用
@@ -130,3 +138,10 @@
     剔除它，后果是运行期 `dlopen("libsqlite3.so")` 失败、开库直接抛错
     （`Invalid argument(s): Couldn't resolve native function ...`）。新增 native asset
     的剔除规则前先确认运行期确实不需要它。
+29. **`flutter test` 里实例化 flutter_qjs_next 需要可加载的原生库**：单测运行在 Dart VM，
+    没有打包好的插件库；包优先读环境变量 `FLUTTER_QJS_NEXT_LIBRARY`，Linux 下再尝试
+    若干 `build/linux/.../bundle/lib/` 候选路径，全部失败则抛 `StateError`。
+    本仓库单测只 import 引擎抽象类型、不实例化（用例用 `_FakeLxEngine`），不受影响；
+    集成测试先构建应用，bundle 内原生库自然可用。若未来单测要真跑引擎，先构建一次
+    （如 `flutter build linux --debug`）再以
+    `FLUTTER_QJS_NEXT_LIBRARY=<abs>/libflutter_qjs_next_plugin.so flutter test ...` 运行。
