@@ -1,7 +1,7 @@
 /// 资料库状态：播放历史 / 我的列表 / 收藏 / `.lxmc` 导入 + 播放接线。
 ///
 /// 职责：
-/// - 内存缓存 history / playlists / 列表曲目 / 收藏键，仓库变更（[LibraryRepository.changes]）
+/// - 内存缓存 history / playlists / 列表曲目 / 收藏键，仓库变更（[LibraryStore.changes]）
 ///   时失效并重载；
 /// - 把 [PlayHistoryEntry] / [PlaylistTrack] 还原为 [SourceTrack]（raw 原样带上）
 ///   并委托 [PlaybackProvider.playSourceTracks] 播放——播放时按需重新取链，
@@ -13,7 +13,7 @@ import 'dart:async';
 
 import 'package:flutter/foundation.dart';
 
-import '../data/library_repository.dart';
+import '../domain/ports/library_store.dart';
 import '../data/mapping/track_mapper.dart';
 import '../domain/models/library.dart';
 import '../domain/models/track.dart';
@@ -24,14 +24,14 @@ import 'playback_provider.dart';
 
 class LibraryProvider extends ChangeNotifier {
   LibraryProvider({
-    required LibraryRepository repository,
+    required LibraryStore repository,
     required PlaybackProvider playbackProvider,
   })  : _repository = repository,
         _playback = playbackProvider {
-    _subscription = _repository.changes.listen((_) => _onRepositoryChanged());
+    _subscription = _repository.changes.listen(_onRepositoryChanged);
   }
 
-  final LibraryRepository _repository;
+  final LibraryStore _repository;
   final PlaybackProvider _playback;
   StreamSubscription<void>? _subscription;
 
@@ -56,7 +56,7 @@ class LibraryProvider extends ChangeNotifier {
   /// 自建列表（不含默认收藏的内部保留行）。
   List<PlaylistInfo> get customPlaylists => [
         for (final playlist in _playlists)
-          if (playlist.name != kFavoritesPlaylistName) playlist,
+          if (!playlist.isFavorites) playlist,
       ];
 
   bool get isHistoryLoading => _isHistoryLoading;
@@ -98,28 +98,27 @@ class LibraryProvider extends ChangeNotifier {
   bool isFavorite(String sourceKey, String songId) =>
       _favoriteKeys.contains('$sourceKey:$songId');
 
-  void _onRepositoryChanged() {
+  void _onRepositoryChanged(LibraryChange change) {
     if (_disposed) return;
-    switch (_repository.lastChangeKind) {
-      case LibraryChangeKind.history:
+    switch (change) {
+      case LibraryHistoryChange():
         // 只有历史变化：不清列表/收藏缓存；静默回载（不闪 loading）。
         _historyLoaded = false;
         _pendingReload = _reloadHistoryQuietly();
         unawaited(_pendingReload!);
-      case LibraryChangeKind.favorites:
+      case LibraryFavoritesChange():
         // 收藏切换：收藏键已由 toggleFavorite 乐观更新；这里只做
         // 收藏列表曲目与计数的后台校准（旧列表保持可见，不闪 loading）。
         _pendingReload = _refreshFavoritesQuietly();
         unawaited(_pendingReload!);
-      case LibraryChangeKind.playlistTracks:
-        final playlistId = _repository.lastChangePlaylistId;
+      case LibraryPlaylistTracksChange(:final playlistId):
         _pendingReload = Future.wait([
-          if (playlistId != null) _reloadPlaylistTracksQuietly(playlistId),
+          _reloadPlaylistTracksQuietly(playlistId),
           _refreshPlaylistsQuietly(),
         ]);
         unawaited(_pendingReload!);
-      case LibraryChangeKind.playlists:
-      case LibraryChangeKind.import:
+      case LibraryPlaylistsChange():
+      case LibraryImportChange():
         _invalidateAll();
     }
   }
@@ -198,7 +197,7 @@ class LibraryProvider extends ChangeNotifier {
 
   int? get _favoritesPlaylistId {
     for (final playlist in _playlists) {
-      if (playlist.name == kFavoritesPlaylistName) return playlist.id;
+      if (playlist.isFavorites) return playlist.id;
     }
     return null;
   }
@@ -362,7 +361,7 @@ class LibraryProvider extends ChangeNotifier {
       playlistId,
       oldKey,
       replacement,
-      favoriteChange: playlist?.name == kFavoritesPlaylistName,
+      favoriteChange: playlist?.isFavorites ?? false,
     );
   }
 

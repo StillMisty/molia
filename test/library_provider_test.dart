@@ -399,7 +399,7 @@ void main() {
 
     final stored = await repository.listPlaylistTracks(
       (await repository.listPlaylists())
-          .firstWhere((playlist) => playlist.name == kFavoritesPlaylistName)
+          .firstWhere((playlist) => playlist.isFavorites)
           .id,
     );
     expect(stored.single.songId, '1');

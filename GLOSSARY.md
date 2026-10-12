@@ -114,6 +114,20 @@
 
 ## 资料库
 
+- **Library store（资料库端口）** — `lib/domain/ports/library_store.dart`：领域意图
+  （历史 / 列表 / 曲目 / 收藏 / 导入）+ 类型化变更事件；调用方不感知存储形状
+  （列名 / `sortOrder` / 墓碑 / 保留行名）。实现 `lib/data/library_repository.dart`
+  同时兼同步面（见下条）。
+- **Library sync store（资料库同步端口）** — `lib/domain/ports/library_sync_store.dart`：
+  类型化同步记录出 / 入（`PlaylistSyncRecord` / `PlaylistTrackSyncRecord` /
+  `PlayHistorySyncRecord` / `SyncTombstoneRecord`，定义在 `device_sync.dart`）；
+  列名、行结构与墓碑表只在实现内部；同步适配器只依赖本端口。
+- **Library change（资料库变更事件）** — sealed `LibraryChange`（history /
+  playlists / playlistTracks(id) / favorites / import）：`changes` 广播的载荷，
+  类型即失效范围；取代 `Stream<void>` + 事后回读 `lastChangeKind` /
+  `lastChangePlaylistId` 的侧信道（异步边界后读到的是「最近一次」而不是「本次」）。
+- **Favorites（收藏）** — 领域概念 `PlaylistInfo.isFavorites`；存储层保留行名
+  `__favorites__` 只在实现内部（UI 文案走 l10n，调用方不再按名字比较）。
 - **Library mutation gateway（资料库变更网关）** — `lib/providers/library_provider.dart`：
   收藏 / 播放历史 / 列表写入的唯一实现。收藏唯一入口 `toggleFavoriteTrack(Track)`
   （播放页不再直连 `LibraryRepository`）；批量操作按 `PlaylistTrack` 规范形状，

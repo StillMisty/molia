@@ -16,64 +16,16 @@ import 'package:sqflite/sqflite.dart';
 
 import '../domain/models/device_sync.dart';
 import '../domain/models/library.dart';
+import '../domain/ports/library_store.dart';
+import '../domain/ports/library_sync_store.dart';
 import 'database_helper.dart';
 import 'lxmc_decoder.dart';
 
-/// 默认收藏列表的内部保留名（UI 显示时映射为本地化文案，不直接展示）。
-const String kFavoritesPlaylistName = '__favorites__';
+/// 默认收藏列表的保留行名：实现内部细节（UI 显示走本地化文案，调用方
+/// 判定收藏用 [PlaylistInfo.isFavorites]）。
+const String _favoritesPlaylistName = '__favorites__';
 
-/// 资料库变更类型：provider 据此决定失效范围（收藏切换只做局部刷新，
-/// 避免列表闪动/滚动位置丢失）。
-enum LibraryChangeKind {
-  /// 播放历史变化。
-  history,
-
-  /// 列表集合（新建/重命名/删除）变化。
-  playlists,
-
-  /// 单个列表内曲目变化。
-  playlistTracks,
-
-  /// 收藏状态变化。
-  favorites,
-
-  /// `.lxmc` 批量导入（历史/列表/收藏都可能变化）。
-  import,
-}
-
-/// `.lxmc` 导入结果。
-class LxmcImportResult {
-  /// 落库列表 id（同名列表重复导入时复用）。
-  final int playlistId;
-  final String playlistName;
-
-  /// 文件中的条目总数。
-  final int total;
-
-  /// 本次实际新增的曲目数（重复导入为 0）。
-  final int imported;
-
-  /// 解码时跳过的非法条目数。
-  final int skipped;
-
-  /// 是否复用了同名已存在列表。
-  final bool reusedPlaylist;
-
-  const LxmcImportResult({
-    required this.playlistId,
-    required this.playlistName,
-    required this.total,
-    required this.imported,
-    required this.skipped,
-    required this.reusedPlaylist,
-  });
-
-  @override
-  String toString() =>
-      'LxmcImportResult($playlistName, imported=$imported/$total)';
-}
-
-class LibraryRepository {
+class LibraryRepository implements LibraryStore, LibrarySyncStore {
   /// [databaseProvider] 仅测试注入（in-memory sqflite FFI）；生产走
   /// [DatabaseHelper.instance]（版本迁移 v2 → v3）。
   ///
@@ -92,22 +44,17 @@ class LibraryRepository {
   final String Function() _deviceIdProvider;
   final int Function() _clock;
   final Random _random = Random.secure();
-  final StreamController<void> _changes = StreamController<void>.broadcast();
-
-  LibraryChangeKind _lastChangeKind = LibraryChangeKind.playlists;
-  int? _lastChangePlaylistId;
-
-  /// 最近一次变更的类型（与 [changes] 事件同步更新，供 provider 判定失效范围）。
-  LibraryChangeKind get lastChangeKind => _lastChangeKind;
-
-  /// 最近一次「单列表曲目」变更对应的列表 id（其余类型为 null）。
-  int? get lastChangePlaylistId => _lastChangePlaylistId;
+  final StreamController<LibraryChange> _changes =
+      StreamController<LibraryChange>.broadcast();
 
   /// 播放历史上限（超出删最旧，避免无限增长）。
-  static const int historyLimit = 500;
+  static const int historyLimit = kHistoryLimit;
 
   /// 资料库变更广播（history / playlists / favorites 任一写操作后触发）。
-  Stream<void> get changes => _changes.stream;
+  ///
+  /// 事件类型即失效范围（见 [LibraryChange]）；写入调用栈内同步派发。
+  @override
+  Stream<LibraryChange> get changes => _changes.stream;
 
   Future<Database> get _db => _databaseProvider();
 
@@ -118,7 +65,7 @@ class LibraryRepository {
   /// 收藏列表用固定 syncId；其余列表按随机 128bit 生成（跨设备稳定，
   /// 自增 id 只在本机有效）。
   String _newSyncId(String name) {
-    if (name == kFavoritesPlaylistName) {
+    if (name == _favoritesPlaylistName) {
       return SyncRecordKeys.favoritesPlaylistSyncId;
     }
     final buffer = StringBuffer();
@@ -164,16 +111,12 @@ class LibraryRepository {
         'updatedBy': _deviceId(),
       };
 
-  void _notifyChanged({
-    LibraryChangeKind kind = LibraryChangeKind.playlists,
-    int? playlistId,
-  }) {
-    _lastChangeKind = kind;
-    _lastChangePlaylistId = playlistId;
-    if (!_changes.isClosed) _changes.add(null);
+  void _notifyChanged(LibraryChange change) {
+    if (!_changes.isClosed) _changes.add(change);
   }
 
   /// 写入/更新时间播放记录（唯一键 `(sourceKey, songId)`），并裁剪到上限。
+  @override
   Future<void> addHistoryEntry(PlayHistoryEntry entry) async {
     final db = await _db;
     await db.insert(
@@ -194,7 +137,7 @@ class LibraryRepository {
     // 重新播放让条目复活：清除该曲目的历史删除墓碑。
     await _clearHistoryTombstone(db, entry.sourceKey, entry.songId);
     await _trimHistory(db);
-    _notifyChanged(kind: LibraryChangeKind.history);
+    _notifyChanged(const LibraryChange.history());
   }
 
   /// 超出 [historyLimit] 时删除最旧记录。
@@ -207,6 +150,7 @@ class LibraryRepository {
   }
 
   /// 最近播放（playedAt 倒序）。
+  @override
   Future<List<PlayHistoryEntry>> listHistory({int limit = historyLimit}) async {
     final db = await _db;
     final rows = await db.query(
@@ -217,6 +161,7 @@ class LibraryRepository {
     return [for (final row in rows) _historyFromRow(row)];
   }
 
+  @override
   Future<void> deleteHistoryEntry(String sourceKey, String songId) async {
     final db = await _db;
     final removed = await db.delete(
@@ -233,10 +178,11 @@ class LibraryRepository {
         updatedBy: _deviceId(),
       );
     }
-    _notifyChanged(kind: LibraryChangeKind.history);
+    _notifyChanged(const LibraryChange.history());
   }
 
   /// 批量删除历史记录（事务；返回实际删除数，变更只广播一次）。
+  @override
   Future<int> deleteHistoryEntries(List<TrackKey> keys) async {
     if (keys.isEmpty) return 0;
     final db = await _db;
@@ -262,7 +208,7 @@ class LibraryRepository {
         }
       }
     });
-    if (removed > 0) _notifyChanged(kind: LibraryChangeKind.history);
+    if (removed > 0) _notifyChanged(const LibraryChange.history());
     return removed;
   }
 
@@ -270,6 +216,7 @@ class LibraryRepository {
   ///
   /// 旧键不存在返回 false；目标键行已存在时先删（历史唯一键语义），
   /// 保留旧行的 `playedAt`——换源不改变「何时听的」。
+  @override
   Future<bool> replaceHistoryEntry(
     TrackKey oldKey,
     PlayHistoryEntry replacement,
@@ -302,13 +249,14 @@ class LibraryRepository {
         whereArgs: [oldKey.sourceKey, oldKey.songId],
       );
     });
-    if (updated > 0) _notifyChanged(kind: LibraryChangeKind.history);
+    if (updated > 0) _notifyChanged(const LibraryChange.history());
     return updated > 0;
   }
 
   /// 批量写入播放历史（唯一键 upsert + 裁剪上限；单次广播）。
   ///
   /// 供「加入列表 → 播放历史」使用：把曲目记为最近播放。
+  @override
   Future<int> addHistoryEntries(List<PlayHistoryEntry> entries) async {
     if (entries.isEmpty) return 0;
     final db = await _db;
@@ -335,10 +283,11 @@ class LibraryRepository {
       await _clearHistoryTombstone(db, entry.sourceKey, entry.songId);
     }
     await _trimHistory(db);
-    _notifyChanged(kind: LibraryChangeKind.history);
+    _notifyChanged(const LibraryChange.history());
     return entries.length;
   }
 
+  @override
   Future<void> clearHistory() async {
     final db = await _db;
     await db.transaction((txn) async {
@@ -361,7 +310,7 @@ class LibraryRepository {
         );
       }
     });
-    _notifyChanged(kind: LibraryChangeKind.history);
+    _notifyChanged(const LibraryChange.history());
   }
 
   Future<void> _clearHistoryTombstone(
@@ -379,6 +328,7 @@ class LibraryRepository {
     );
   }
 
+  @override
   Future<int> createPlaylist(String name) async {
     final db = await _db;
     final now = _nowMs();
@@ -389,10 +339,11 @@ class LibraryRepository {
       'updatedAt': now,
       'updatedBy': _deviceId(),
     });
-    _notifyChanged(kind: LibraryChangeKind.playlists);
+    _notifyChanged(const LibraryChange.playlists());
     return id;
   }
 
+  @override
   Future<PlaylistInfo?> findPlaylistByName(String name) async {
     final db = await _db;
     final rows = await db.query(
@@ -406,6 +357,7 @@ class LibraryRepository {
     return _playlistFromRow(rows.first);
   }
 
+  @override
   Future<PlaylistInfo?> playlistById(int id) async {
     final db = await _db;
     final rows = await db.query(
@@ -419,6 +371,7 @@ class LibraryRepository {
   }
 
   /// 全部列表（默认收藏置顶，其余新列表在前），带曲目数。
+  @override
   Future<List<PlaylistInfo>> listPlaylists() async {
     final db = await _db;
     final rows = await db.rawQuery('''
@@ -427,10 +380,11 @@ class LibraryRepository {
       LEFT JOIN playlist_tracks t ON t.playlistId = p.id
       GROUP BY p.id
       ORDER BY CASE WHEN p.name = ? THEN 0 ELSE 1 END, p.createdAt DESC, p.id DESC
-    ''', [kFavoritesPlaylistName]);
+    ''', [_favoritesPlaylistName]);
     return [for (final row in rows) _playlistFromRow(row)];
   }
 
+  @override
   Future<void> renamePlaylist(int id, String name) async {
     final db = await _db;
     await db.update(
@@ -439,9 +393,10 @@ class LibraryRepository {
       where: 'id = ?',
       whereArgs: [id],
     );
-    _notifyChanged(kind: LibraryChangeKind.playlists);
+    _notifyChanged(const LibraryChange.playlists());
   }
 
+  @override
   Future<void> deletePlaylist(int id) async {
     final db = await _db;
     final rows = await db.query(
@@ -466,10 +421,11 @@ class LibraryRepository {
         );
       }
     });
-    _notifyChanged(kind: LibraryChangeKind.playlists);
+    _notifyChanged(const LibraryChange.playlists());
   }
 
   /// 列表内曲目（sortOrder 升序，其次加入时间）。
+  @override
   Future<List<PlaylistTrack>> listPlaylistTracks(int playlistId) async {
     final db = await _db;
     final rows = await db.query(
@@ -484,7 +440,8 @@ class LibraryRepository {
   /// 加入列表（`(playlistId, sourceKey, songId)` 唯一，重复加入返回 false）。
   ///
   /// [favoriteChange] 为 true 时（收藏切换内部调用）变更类型标记为
-  /// [LibraryChangeKind.favorites]，provider 只做局部刷新。
+  /// [LibraryFavoritesChange]，provider 只做局部刷新。
+  @override
   Future<bool> addTrackToPlaylist(
     int playlistId,
     PlaylistTrack track, {
@@ -524,15 +481,13 @@ class LibraryRepository {
       },
       conflictAlgorithm: ConflictAlgorithm.ignore,
     );
-    _notifyChanged(
-      kind: favoriteChange
-          ? LibraryChangeKind.favorites
-          : LibraryChangeKind.playlistTracks,
-      playlistId: playlistId,
-    );
+    _notifyChanged(favoriteChange
+        ? const LibraryChange.favorites()
+        : LibraryChange.playlistTracks(playlistId));
     return true;
   }
 
+  @override
   Future<int> removeTrackFromPlaylist(
     int playlistId,
     String sourceKey,
@@ -556,12 +511,9 @@ class LibraryRepository {
           updatedBy: _deviceId(),
         );
       }
-      _notifyChanged(
-        kind: favoriteChange
-            ? LibraryChangeKind.favorites
-            : LibraryChangeKind.playlistTracks,
-        playlistId: playlistId,
-      );
+      _notifyChanged(favoriteChange
+          ? const LibraryChange.favorites()
+          : LibraryChange.playlistTracks(playlistId));
     }
     return removed;
   }
@@ -569,7 +521,8 @@ class LibraryRepository {
   /// 批量移除列表曲目（事务；返回实际移除数，变更只广播一次）。
   ///
   /// [favoriteChange] 为 true 时（默认收藏批量操作）变更类型标记为
-  /// [LibraryChangeKind.favorites]，provider 只做局部刷新。
+  /// [LibraryFavoritesChange]，provider 只做局部刷新。
+  @override
   Future<int> removeTracksFromPlaylist(
     int playlistId,
     List<TrackKey> keys, {
@@ -601,12 +554,9 @@ class LibraryRepository {
       }
     });
     if (removed > 0) {
-      _notifyChanged(
-        kind: favoriteChange
-            ? LibraryChangeKind.favorites
-            : LibraryChangeKind.playlistTracks,
-        playlistId: playlistId,
-      );
+      _notifyChanged(favoriteChange
+          ? const LibraryChange.favorites()
+          : LibraryChange.playlistTracks(playlistId));
     }
     return removed;
   }
@@ -616,6 +566,7 @@ class LibraryRepository {
   /// [tracks] 来自任意合集（收藏/历史/其他列表）的复制：曲目级字段原样写入，
   /// `playlistId` 以本方法参数为准。[favoriteChange] 语义同
   /// [removeTracksFromPlaylist]。
+  @override
   Future<int> addTracksToPlaylist(
     int playlistId,
     List<PlaylistTrack> tracks, {
@@ -665,17 +616,15 @@ class LibraryRepository {
     }
     if (added > 0) {
       await batch.commit(noResult: true);
-      _notifyChanged(
-        kind: favoriteChange
-            ? LibraryChangeKind.favorites
-            : LibraryChangeKind.playlistTracks,
-        playlistId: playlistId,
-      );
+      _notifyChanged(favoriteChange
+          ? const LibraryChange.favorites()
+          : LibraryChange.playlistTracks(playlistId));
     }
     return added;
   }
 
   /// 按给定顺序重写 `sortOrder`（事务；仅更新仍存在于列表中的键）。
+  @override
   Future<void> reorderPlaylistTracks(
     int playlistId,
     List<TrackKey> ordered,
@@ -695,10 +644,7 @@ class LibraryRepository {
         );
       }
     });
-    _notifyChanged(
-      kind: LibraryChangeKind.playlistTracks,
-      playlistId: playlistId,
-    );
+    _notifyChanged(LibraryChange.playlistTracks(playlistId));
   }
 
   /// 换源：列表内**原位替换**曲目（保留 `id/sortOrder/addedAt` 与列表位置）。
@@ -707,6 +653,7 @@ class LibraryRepository {
   /// 再把旧行更新为新曲目数据（`playlistId` 以参数为准，忽略
   /// [replacement] 内的值）。[favoriteChange] 语义同
   /// [removeTracksFromPlaylist]：收藏列表内换源只做局部刷新。
+  @override
   Future<bool> replacePlaylistTrack(
     int playlistId,
     TrackKey oldKey,
@@ -742,26 +689,24 @@ class LibraryRepository {
       );
     });
     if (updated > 0) {
-      _notifyChanged(
-        kind: favoriteChange
-            ? LibraryChangeKind.favorites
-            : LibraryChangeKind.playlistTracks,
-        playlistId: playlistId,
-      );
+      _notifyChanged(favoriteChange
+          ? const LibraryChange.favorites()
+          : LibraryChange.playlistTracks(playlistId));
     }
     return updated > 0;
   }
 
   Future<int> _ensureFavoritesPlaylist() async {
-    final existing = await findPlaylistByName(kFavoritesPlaylistName);
+    final existing = await findPlaylistByName(_favoritesPlaylistName);
     if (existing != null) return existing.id;
-    return createPlaylist(kFavoritesPlaylistName);
+    return createPlaylist(_favoritesPlaylistName);
   }
 
   /// 收藏键集合（`sourceKey:songId`），供 provider 一次性缓存。
+  @override
   Future<Set<String>> favoriteKeys() async {
     final db = await _db;
-    final playlist = await findPlaylistByName(kFavoritesPlaylistName);
+    final playlist = await findPlaylistByName(_favoritesPlaylistName);
     if (playlist == null) return {};
     final rows = await db.query(
       'playlist_tracks',
@@ -775,6 +720,7 @@ class LibraryRepository {
   }
 
   /// 切换收藏；返回切换后的状态（true = 已收藏）。
+  @override
   Future<bool> toggleFavorite({
     required String sourceKey,
     required String songId,
@@ -813,6 +759,7 @@ class LibraryRepository {
   }
 
   /// 批量加入默认收藏（跳过已收藏；返回新增数）。
+  @override
   Future<int> addFavorites(List<PlaylistTrack> tracks) async {
     if (tracks.isEmpty) return 0;
     final playlistId = await _ensureFavoritesPlaylist();
@@ -820,14 +767,16 @@ class LibraryRepository {
   }
 
   /// 批量取消收藏（返回移除数；无收藏列表时为 0）。
+  @override
   Future<int> removeFavorites(List<TrackKey> keys) async {
     if (keys.isEmpty) return 0;
-    final playlist = await findPlaylistByName(kFavoritesPlaylistName);
+    final playlist = await findPlaylistByName(_favoritesPlaylistName);
     if (playlist == null) return 0;
     return removeTracksFromPlaylist(playlist.id, keys, favoriteChange: true);
   }
 
   /// 导入 `.lxmc` 收藏夹：同名列表复用（重复导入幂等），逐曲 INSERT OR IGNORE。
+  @override
   Future<LxmcImportResult> importLxmcBytes(
     Uint8List bytes, {
     String? fileName,
@@ -893,7 +842,7 @@ class LibraryRepository {
       await batch.commit(noResult: true);
     }
 
-    _notifyChanged(kind: LibraryChangeKind.import, playlistId: playlistId);
+    _notifyChanged(const LibraryChange.import());
     return LxmcImportResult(
       playlistId: playlistId,
       playlistName: decoded.name,
@@ -908,6 +857,7 @@ class LibraryRepository {
   ///
   /// 返回 `(playlistId, 本次新增数, 曲目总数)`；供五平台链接导入与
   /// 发现页歌单导入使用（总数用于区分空歌单与全部重复）。
+  @override
   Future<({int playlistId, int added, int total})> importTracks(
     String name,
     List<PlaylistTrack> tracks,
@@ -925,21 +875,33 @@ class LibraryRepository {
   // `(updatedAt, updatedBy)` 取新，写入沿用远端时间戳（幂等，不制造新的
   // 本地变更），删除经墓碑表表达；旧行（v5 前）在导出/应用前一次性补齐。
 
-  /// 导出列表头。
-  Future<List<Map<String, Object?>>> syncExportPlaylists() async {
+  /// 导出列表头（类型化记录；列名不出实现）。
+  @override
+  Future<List<PlaylistSyncRecord>> syncExportPlaylists() async {
     final db = await _db;
     await _ensurePlaylistSyncIds(db);
-    return db.query(
+    final rows = await db.query(
       'playlists',
-      columns: ['id', 'syncId', 'name', 'createdAt', 'updatedAt', 'updatedBy'],
+      columns: ['syncId', 'name', 'createdAt', 'updatedAt', 'updatedBy'],
     );
+    return [
+      for (final row in rows)
+        PlaylistSyncRecord(
+          syncId: row['syncId'] as String? ?? '',
+          name: row['name'] as String? ?? '',
+          createdAt: (row['createdAt'] as num?)?.toInt() ?? 0,
+          updatedAt: (row['updatedAt'] as num?)?.toInt() ?? 0,
+          updatedBy: row['updatedBy'] as String? ?? '',
+        ),
+    ];
   }
 
   /// 导出列表曲目（携带所属列表 syncId；自增 id 不出本机）。
-  Future<List<Map<String, Object?>>> syncExportPlaylistTracks() async {
+  @override
+  Future<List<PlaylistTrackSyncRecord>> syncExportPlaylistTracks() async {
     final db = await _db;
     await _ensurePlaylistSyncIds(db);
-    return db.rawQuery('''
+    final rows = await db.rawQuery('''
       SELECT p.syncId AS playlistSyncId, t.sourceKey, t.songId, t.title,
              t.artist, t.album, t.coverUrl, t.durationMs, t.raw, t.addedAt,
              t.sortOrder, t.updatedAt, t.updatedBy
@@ -947,27 +909,56 @@ class LibraryRepository {
       JOIN playlists p ON p.id = t.playlistId
       WHERE p.syncId IS NOT NULL
     ''');
+    return [
+      for (final row in rows)
+        PlaylistTrackSyncRecord(
+          playlistSyncId: row['playlistSyncId'] as String? ?? '',
+          sourceKey: row['sourceKey'] as String? ?? '',
+          songId: row['songId'] as String? ?? '',
+          title: row['title'] as String? ?? '',
+          artist: row['artist'] as String? ?? '',
+          album: row['album'] as String? ?? '',
+          coverUrl: row['coverUrl'] as String?,
+          durationMs: (row['durationMs'] as num?)?.toInt(),
+          raw: row['raw'] as String? ?? '{}',
+          addedAt: (row['addedAt'] as num?)?.toInt() ?? 0,
+          sortOrder: (row['sortOrder'] as num?)?.toInt() ?? 0,
+          updatedAt: (row['updatedAt'] as num?)?.toInt() ?? 0,
+          updatedBy: row['updatedBy'] as String? ?? '',
+        ),
+    ];
   }
 
   /// 导出资料库墓碑（类别见 [SyncCategory]；非资料库类别在此忽略）。
-  Future<List<Map<String, Object?>>> syncExportTombstones(
+  @override
+  Future<List<SyncTombstoneRecord>> syncExportTombstones(
     Iterable<String> categories,
   ) async {
     final list = categories.toList();
     if (list.isEmpty) return const [];
     final db = await _db;
     final placeholders = List.filled(list.length, '?').join(', ');
-    return db.query(
+    final rows = await db.query(
       'sync_tombstones',
       where: 'category IN ($placeholders)',
       whereArgs: list,
     );
+    return [
+      for (final row in rows)
+        SyncTombstoneRecord(
+          category: row['category'] as String? ?? '',
+          key: row['key'] as String? ?? '',
+          updatedAt: (row['updatedAt'] as num?)?.toInt() ?? 0,
+          updatedBy: row['updatedBy'] as String? ?? '',
+        ),
+    ];
   }
 
   /// 导出播放历史（唯一键 `(sourceKey, songId)`；时间戳 = playedAt）。
-  Future<List<Map<String, Object?>>> syncExportHistory() async {
+  @override
+  Future<List<PlayHistorySyncRecord>> syncExportHistory() async {
     final db = await _db;
-    return db.query(
+    final rows = await db.query(
       'play_history',
       columns: [
         'sourceKey',
@@ -982,24 +973,41 @@ class LibraryRepository {
       ],
       orderBy: 'playedAt ASC',
     );
+    return [
+      for (final row in rows)
+        PlayHistorySyncRecord(
+          sourceKey: row['sourceKey'] as String? ?? '',
+          songId: row['songId'] as String? ?? '',
+          title: row['title'] as String? ?? '',
+          artist: row['artist'] as String? ?? '',
+          album: row['album'] as String? ?? '',
+          coverUrl: row['coverUrl'] as String?,
+          durationMs: (row['durationMs'] as num?)?.toInt(),
+          raw: row['raw'] as String? ?? '{}',
+          playedAt: (row['playedAt'] as num?)?.toInt() ?? 0,
+        ),
+    ];
   }
 
   /// 应用远端播放历史：逐条按 playedAt 取新，删除经墓碑（同键复活时清墓碑）。
   ///
   /// 结束统一裁剪到 [historyLimit]；裁剪不产生墓碑（上限淘汰不是用户删除）。
+  @override
   Future<({int applied, int skipped})> syncApplyHistory({
-    List<Map<String, Object?>> entries = const [],
-    List<Map<String, Object?>> tombstones = const [],
+    List<PlayHistorySyncRecord> entries = const [],
+    List<SyncTombstoneRecord> tombstones = const [],
   }) async {
     if (entries.isEmpty && tombstones.isEmpty) {
       return (applied: 0, skipped: 0);
     }
+    final entryRows = [for (final entry in entries) entry.toJson()];
+    final tombstoneRows = [for (final record in tombstones) record.toJson()];
     final db = await _db;
     var applied = 0;
     var skipped = 0;
     await db.transaction((txn) async {
       final category = SyncCategory.history.name;
-      for (final row in tombstones) {
+      for (final row in tombstoneRows) {
         if ((row['category'] as String? ?? '') != category) {
           skipped++;
           continue;
@@ -1055,7 +1063,7 @@ class LibraryRepository {
         }
       }
 
-      for (final row in entries) {
+      for (final row in entryRows) {
         final sourceKey = row['sourceKey'] as String? ?? '';
         final songId = row['songId'] as String? ?? '';
         final playedAt = (row['playedAt'] as num?)?.toInt();
@@ -1116,22 +1124,26 @@ class LibraryRepository {
       }
       await _trimHistory(txn);
     });
-    if (applied > 0) _notifyChanged(kind: LibraryChangeKind.history);
+    if (applied > 0) _notifyChanged(const LibraryChange.history());
     return (applied: applied, skipped: skipped);
   }
 
   /// 应用远端合并结果（列表 + 曲目 + 墓碑）。
   ///
-  /// 单事务执行，成功落地后广播一次 [LibraryChangeKind.import]（历史/列表/
+  /// 单事务执行，成功落地后广播一次 [LibraryImportChange]（历史/列表/
   /// 收藏都可能变化，消费方全量失效最稳妥）。返回落地与跳过计数。
+  @override
   Future<({int applied, int skipped})> syncApplyLibrary({
-    List<Map<String, Object?>> playlists = const [],
-    List<Map<String, Object?>> tracks = const [],
-    List<Map<String, Object?>> tombstones = const [],
+    List<PlaylistSyncRecord> playlists = const [],
+    List<PlaylistTrackSyncRecord> tracks = const [],
+    List<SyncTombstoneRecord> tombstones = const [],
   }) async {
     if (playlists.isEmpty && tracks.isEmpty && tombstones.isEmpty) {
       return (applied: 0, skipped: 0);
     }
+    final playlistRows = [for (final record in playlists) record.toJson()];
+    final trackRows = [for (final record in tracks) record.toJson()];
+    final tombstoneRows = [for (final record in tombstones) record.toJson()];
     final db = await _db;
     var applied = 0;
     var skipped = 0;
@@ -1139,7 +1151,7 @@ class LibraryRepository {
       await _ensurePlaylistSyncIds(txn);
 
       // 1) 墓碑先行：删除本地旧行并保留墓碑供后续轮次继续传播。
-      for (final row in tombstones) {
+      for (final row in tombstoneRows) {
         final category = row['category'] as String? ?? '';
         final key = row['key'] as String? ?? '';
         final updatedAt = (row['updatedAt'] as num?)?.toInt();
@@ -1219,7 +1231,7 @@ class LibraryRepository {
 
       // 2) 列表头（新列表按远端 syncId 落库；本地同名不受影响）。
       final localIds = <String, int>{};
-      for (final row in playlists) {
+      for (final row in playlistRows) {
         final syncId = row['syncId'] as String? ?? '';
         final name = row['name'] as String? ?? '';
         final updatedAt = (row['updatedAt'] as num?)?.toInt() ?? 0;
@@ -1265,7 +1277,7 @@ class LibraryRepository {
       }
 
       // 3) 曲目（所属列表不存在则跳过；新行沿用远端时间戳）。
-      for (final row in tracks) {
+      for (final row in trackRows) {
         final playlistSyncId = row['playlistSyncId'] as String? ?? '';
         final sourceKey = row['sourceKey'] as String? ?? '';
         final songId = row['songId'] as String? ?? '';
@@ -1331,7 +1343,7 @@ class LibraryRepository {
         }
       }
     });
-    if (applied > 0) _notifyChanged(kind: LibraryChangeKind.import);
+    if (applied > 0) _notifyChanged(const LibraryChange.import());
     return (applied: applied, skipped: skipped);
   }
 
@@ -1405,6 +1417,7 @@ class LibraryRepository {
         name: row['name'] as String? ?? '',
         createdAt: row['createdAt'] as int? ?? 0,
         trackCount: row['trackCount'] as int? ?? 0,
+        isFavorites: row['name'] == _favoritesPlaylistName,
       );
 
   PlaylistTrack _trackFromRow(Map<String, Object?> row) => PlaylistTrack(
@@ -1434,6 +1447,7 @@ class LibraryRepository {
     return const {};
   }
 
+  @override
   Future<void> dispose() async {
     await _changes.close();
   }

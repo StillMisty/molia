@@ -1,12 +1,21 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:molia/data/library_repository.dart'
-    show kFavoritesPlaylistName;
 import 'package:molia/domain/models/library.dart';
 import 'package:molia/providers/library_collections.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-PlaylistInfo _playlist(int id, {String name = '列表', int trackCount = 0}) =>
-    PlaylistInfo(id: id, name: name, createdAt: 0, trackCount: trackCount);
+PlaylistInfo _playlist(
+  int id, {
+  String name = '列表',
+  int trackCount = 0,
+  bool isFavorites = false,
+}) =>
+    PlaylistInfo(
+      id: id,
+      name: name,
+      createdAt: 0,
+      trackCount: trackCount,
+      isFavorites: isFavorites,
+    );
 
 /// 合集策略模块（默认选择 / 顺序 / 持久化）的单一测试面。
 void main() {
@@ -15,10 +24,10 @@ void main() {
   });
 
   group('favoritesPlaylistId', () {
-    test('按名称查找默认收藏列表', () {
+    test('按概念查找默认收藏列表', () {
       final playlists = [
         _playlist(1, name: '通勤'),
-        _playlist(2, name: kFavoritesPlaylistName),
+        _playlist(2, isFavorites: true),
       ];
       expect(LibraryCollections.favoritesPlaylistId(playlists), 2);
       expect(LibraryCollections.favoritesPlaylistId([_playlist(1)]), isNull);
@@ -26,7 +35,7 @@ void main() {
   });
 
   group('resolveSelection', () {
-    final favorites = _playlist(1, name: kFavoritesPlaylistName, trackCount: 0);
+    final favorites = _playlist(1, isFavorites: true, trackCount: 0);
     final nonEmpty = _playlist(2, trackCount: 3);
     final empty = _playlist(3);
 
@@ -73,7 +82,7 @@ void main() {
         LibraryCollections.resolveSelection(
           selected: LibraryCollections.unset,
           playlists: [
-            _playlist(1, name: kFavoritesPlaylistName, trackCount: 5),
+            _playlist(1, isFavorites: true, trackCount: 5),
             nonEmpty,
           ],
           favoritesId: 1,
