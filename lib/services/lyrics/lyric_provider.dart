@@ -1,6 +1,6 @@
 import 'dart:async';
 
-import 'package:html_unescape/html_unescape.dart';
+import 'package:molia/utils/html_unescape/html_unescape.dart';
 
 import 'lyrics_match.dart';
 
