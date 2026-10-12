@@ -1,0 +1,13 @@
+# drift 代码生成与迁移工具配置。
+#
+# case_from_dart_to_sql: preserve —— 表/列 SQL 名沿用 Dart getter 的
+# camelCase（drift 默认会转 snake_case）；旧 sqflite schema 的列名就是
+# camelCase，这样两边逐字一致，迁移后不必改写任何 SQL / JSON 键。
+targets:
+  $default:
+    builders:
+      drift_dev:
+        options:
+          case_from_dart_to_sql: preserve
+          databases:
+            molia: lib/data/molia_database.dart

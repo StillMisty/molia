@@ -25,6 +25,9 @@ dependencies:
   shared_preferences: ^2.3.3
   url_launcher: ^6.3.1
   collection: ^1.19.0
+  drift: ^2.35.2
+  drift_flutter: ^0.3.1
+  # 手写 sqflite 层仍在使用；随 lib/data/database_helper.dart 删除一并移除。
   sqflite:
   path_provider: ^2.1.4
   audio_session: ^0.2.4
@@ -54,6 +57,8 @@ dev_dependencies:
     sdk: flutter
   flutter_lints: ^6.0.0
   flutter_launcher_icons: ^0.14.2
+  drift_dev: ^2.35.1
+  build_runner: ^2.16.2
 
 flutter:
   generate: true
