@@ -315,3 +315,189 @@ class SyncReport {
   String toString() =>
       'SyncReport(ok=$ok, pulled=$pulled, applied=$applied, skipped=$skipped)';
 }
+
+/// 列表头同步记录（自增 id 不出本机；`syncId` 跨设备稳定，收藏为固定常量）。
+///
+/// 与 `syncExportPlaylists` / `syncApplyLibrary` 的 JSON 形状一一对应；
+/// 列名 / 行结构只存在于资料库实现内部。
+class PlaylistSyncRecord {
+  const PlaylistSyncRecord({
+    required this.syncId,
+    required this.name,
+    required this.createdAt,
+    required this.updatedAt,
+    required this.updatedBy,
+  });
+
+  final String syncId;
+  final String name;
+  final int createdAt;
+  final int updatedAt;
+  final String updatedBy;
+
+  Map<String, Object?> toJson() => {
+        'syncId': syncId,
+        'name': name,
+        'createdAt': createdAt,
+        'updatedAt': updatedAt,
+        'updatedBy': updatedBy,
+      };
+
+  /// 宽容解析：缺失 / 类型不符按空值处理（由应用侧按需跳过并计数）。
+  static PlaylistSyncRecord fromJson(Map<String, Object?> data) =>
+      PlaylistSyncRecord(
+        syncId: data['syncId'] as String? ?? '',
+        name: data['name'] as String? ?? '',
+        createdAt: (data['createdAt'] as num?)?.toInt() ?? 0,
+        updatedAt: (data['updatedAt'] as num?)?.toInt() ?? 0,
+        updatedBy: data['updatedBy'] as String? ?? '',
+      );
+}
+
+/// 列表曲目同步记录（合并键 = `playlistSyncId + sourceKey + songId`）。
+class PlaylistTrackSyncRecord {
+  const PlaylistTrackSyncRecord({
+    required this.playlistSyncId,
+    required this.sourceKey,
+    required this.songId,
+    required this.title,
+    required this.artist,
+    required this.album,
+    required this.coverUrl,
+    required this.durationMs,
+    required this.raw,
+    required this.addedAt,
+    required this.sortOrder,
+    required this.updatedAt,
+    required this.updatedBy,
+  });
+
+  final String playlistSyncId;
+  final String sourceKey;
+  final String songId;
+  final String title;
+  final String artist;
+  final String album;
+  final String? coverUrl;
+  final int? durationMs;
+
+  /// 平台原始对象（JSON 字符串，原样回传给脚本）。
+  final String raw;
+  final int addedAt;
+  final int sortOrder;
+  final int updatedAt;
+  final String updatedBy;
+
+  Map<String, Object?> toJson() => {
+        'playlistSyncId': playlistSyncId,
+        'sourceKey': sourceKey,
+        'songId': songId,
+        'title': title,
+        'artist': artist,
+        'album': album,
+        'coverUrl': coverUrl,
+        'durationMs': durationMs,
+        'raw': raw,
+        'addedAt': addedAt,
+        'sortOrder': sortOrder,
+        'updatedAt': updatedAt,
+        'updatedBy': updatedBy,
+      };
+
+  static PlaylistTrackSyncRecord fromJson(Map<String, Object?> data) =>
+      PlaylistTrackSyncRecord(
+        playlistSyncId: data['playlistSyncId'] as String? ?? '',
+        sourceKey: data['sourceKey'] as String? ?? '',
+        songId: data['songId'] as String? ?? '',
+        title: data['title'] as String? ?? '',
+        artist: data['artist'] as String? ?? '',
+        album: data['album'] as String? ?? '',
+        coverUrl: data['coverUrl'] as String?,
+        durationMs: (data['durationMs'] as num?)?.toInt(),
+        raw: data['raw'] as String? ?? '{}',
+        addedAt: (data['addedAt'] as num?)?.toInt() ?? 0,
+        sortOrder: (data['sortOrder'] as num?)?.toInt() ?? 0,
+        updatedAt: (data['updatedAt'] as num?)?.toInt() ?? 0,
+        updatedBy: data['updatedBy'] as String? ?? '',
+      );
+}
+
+/// 播放历史同步记录（时间戳 = `playedAt`）。
+class PlayHistorySyncRecord {
+  const PlayHistorySyncRecord({
+    required this.sourceKey,
+    required this.songId,
+    required this.title,
+    required this.artist,
+    required this.album,
+    required this.coverUrl,
+    required this.durationMs,
+    required this.raw,
+    required this.playedAt,
+  });
+
+  final String sourceKey;
+  final String songId;
+  final String title;
+  final String artist;
+  final String album;
+  final String? coverUrl;
+  final int? durationMs;
+  final String raw;
+  final int playedAt;
+
+  Map<String, Object?> toJson() => {
+        'sourceKey': sourceKey,
+        'songId': songId,
+        'title': title,
+        'artist': artist,
+        'album': album,
+        'coverUrl': coverUrl,
+        'durationMs': durationMs,
+        'raw': raw,
+        'playedAt': playedAt,
+      };
+
+  static PlayHistorySyncRecord fromJson(Map<String, Object?> data) =>
+      PlayHistorySyncRecord(
+        sourceKey: data['sourceKey'] as String? ?? '',
+        songId: data['songId'] as String? ?? '',
+        title: data['title'] as String? ?? '',
+        artist: data['artist'] as String? ?? '',
+        album: data['album'] as String? ?? '',
+        coverUrl: data['coverUrl'] as String?,
+        durationMs: (data['durationMs'] as num?)?.toInt(),
+        raw: data['raw'] as String? ?? '{}',
+        playedAt: (data['playedAt'] as num?)?.toInt() ?? 0,
+      );
+}
+
+/// 资料库墓碑记录（删除也取新：`category + key` + 时间戳）。
+class SyncTombstoneRecord {
+  const SyncTombstoneRecord({
+    required this.category,
+    required this.key,
+    required this.updatedAt,
+    required this.updatedBy,
+  });
+
+  final String category;
+  final String key;
+  final int updatedAt;
+  final String updatedBy;
+
+  Map<String, Object?> toJson() => {
+        'category': category,
+        'key': key,
+        'updatedAt': updatedAt,
+        'updatedBy': updatedBy,
+      };
+
+  static SyncTombstoneRecord fromJson(Map<String, Object?> data) =>
+      SyncTombstoneRecord(
+        category: data['category'] as String? ?? '',
+        key: data['key'] as String? ?? '',
+        updatedAt: (data['updatedAt'] as num?)?.toInt() ?? 0,
+        updatedBy: data['updatedBy'] as String? ?? '',
+      );
+}

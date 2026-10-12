@@ -63,11 +63,15 @@ class PlaylistInfo {
   final int createdAt;
   final int trackCount;
 
+  /// 是否为默认收藏列表（存储层的保留行名只在实现内；调用方用本概念）。
+  final bool isFavorites;
+
   const PlaylistInfo({
     required this.id,
     required this.name,
     required this.createdAt,
     this.trackCount = 0,
+    this.isFavorites = false,
   });
 
   @override
@@ -129,3 +133,86 @@ class PlaylistTrack {
   @override
   String toString() => 'PlaylistTrack($key, $title)';
 }
+
+/// 资料库变更事件：`LibraryStore.changes` 广播的载荷，类型即失效范围。
+///
+/// 收藏切换只做局部刷新（避免列表闪动 / 滚动位置丢失），所以事件必须携带
+/// 「变了什么、变的是哪个列表」。旧实现是 `Stream<void>` + 事件后回读
+/// `lastChangeKind` / `lastChangePlaylistId` 侧信道：消费方在异步边界之后
+/// 读到的是「最近一次」而不是「本次」，并发写入下有歧义。
+sealed class LibraryChange {
+  const LibraryChange();
+
+  /// 播放历史变化。
+  const factory LibraryChange.history() = LibraryHistoryChange;
+
+  /// 列表集合（新建 / 重命名 / 删除）变化。
+  const factory LibraryChange.playlists() = LibraryPlaylistsChange;
+
+  /// 单个列表内曲目变化。
+  const factory LibraryChange.playlistTracks(int playlistId) =
+      LibraryPlaylistTracksChange;
+
+  /// 收藏状态变化。
+  const factory LibraryChange.favorites() = LibraryFavoritesChange;
+
+  /// `.lxmc` 批量导入（历史 / 列表 / 收藏都可能变化）。
+  const factory LibraryChange.import() = LibraryImportChange;
+}
+
+final class LibraryHistoryChange extends LibraryChange {
+  const LibraryHistoryChange();
+}
+
+final class LibraryPlaylistsChange extends LibraryChange {
+  const LibraryPlaylistsChange();
+}
+
+final class LibraryPlaylistTracksChange extends LibraryChange {
+  const LibraryPlaylistTracksChange(this.playlistId);
+
+  final int playlistId;
+}
+
+final class LibraryFavoritesChange extends LibraryChange {
+  const LibraryFavoritesChange();
+}
+
+final class LibraryImportChange extends LibraryChange {
+  const LibraryImportChange();
+}
+
+/// `.lxmc` 导入结果。
+class LxmcImportResult {
+  /// 落库列表 id（同名列表重复导入时复用）。
+  final int playlistId;
+  final String playlistName;
+
+  /// 文件中的条目总数。
+  final int total;
+
+  /// 本次实际新增的曲目数（重复导入为 0）。
+  final int imported;
+
+  /// 解码时跳过的非法条目数。
+  final int skipped;
+
+  /// 是否复用了同名已存在列表。
+  final bool reusedPlaylist;
+
+  const LxmcImportResult({
+    required this.playlistId,
+    required this.playlistName,
+    required this.total,
+    required this.imported,
+    required this.skipped,
+    required this.reusedPlaylist,
+  });
+
+  @override
+  String toString() =>
+      'LxmcImportResult($playlistName, imported=$imported/$total)';
+}
+
+/// 播放历史上限（超出删最旧，避免无限增长）；实现与端口共用同一常量。
+const int kHistoryLimit = 500;

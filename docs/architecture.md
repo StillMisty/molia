@@ -193,6 +193,20 @@
   provenance（每个曲目的已尝试来源）保证级联每源至多一次、有界；
   开关 `SourceSwapSettings`（`source_swap_auto_enabled`，默认开）在设置 › 播放。
 
+### 资料库（library）
+
+`lib/domain/ports/library_store.dart`（UI 面）与 `library_sync_store.dart`
+（同步面）是两条 seam：同一个实现类（`lib/data/library_repository.dart`）
+兼两者，组合根分别注入。
+
+- **UI 面**：领域意图（历史 / 列表 / 曲目 / 收藏 / 导入）+ 类型化变更事件
+  （`LibraryChange`，类型即失效范围）；`sortOrder`、墓碑、保留行名
+  `__favorites__` 等存储形状不出实现（收藏是 `PlaylistInfo.isFavorites`）；
+- **同步面**：类型化记录出 / 入（`PlaylistSyncRecord` /
+  `PlaylistTrackSyncRecord` / `PlayHistorySyncRecord` / `SyncTombstoneRecord`）；
+  同步适配器不再逐字段读列名，记录形状（含 JSON 键）由 record 类承担；
+- **测试假实现**只实现 UI 面窄 port（不再继承真类）：新方法不会静默走真实 SQL。
+
 ### 设置注册表（settings registry）
 
 `lib/data/settings/`（键声明 / 注册表 / 密钥盒端口）：

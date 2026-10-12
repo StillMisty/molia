@@ -1,9 +1,9 @@
 import 'package:flutter/foundation.dart';
 import 'package:molia/data/catalog/catalog_service.dart';
-import 'package:molia/data/library_repository.dart';
 import 'package:molia/data/playback/default_playback_facade.dart';
 import 'package:molia/domain/models/failure.dart';
 import 'package:molia/domain/models/playback.dart';
+import 'package:molia/domain/ports/library_store.dart';
 import 'package:molia/domain/models/track.dart';
 import 'package:molia/domain/ports/playback_backend.dart';
 import 'package:molia/domain/ports/state_listenable.dart';
@@ -184,7 +184,7 @@ class FakeMessenger implements UiMessenger {
 PlaybackProvider buildTestPlaybackProvider({
   FakePlaybackBackend? backend,
   CatalogService? catalogService,
-  LibraryRepository? libraryRepository,
+  LibraryStore? libraryRepository,
 }) {
   final b = backend ?? FakePlaybackBackend();
   final facade = DefaultPlaybackFacade(backend: b);

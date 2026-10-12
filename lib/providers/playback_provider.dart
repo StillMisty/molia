@@ -13,7 +13,7 @@ import 'package:material_ui/material_ui.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../data/catalog/catalog_service.dart';
-import '../data/library_repository.dart';
+import '../domain/ports/library_store.dart';
 import '../data/settings/settings_keys.dart';
 import '../data/settings/settings_registry.dart';
 import '../data/mapping/track_mapper.dart';
@@ -132,7 +132,7 @@ class PlaybackProvider extends ChangeNotifier {
   final CatalogService? _catalogService;
 
   /// 资料库仓库（播放开始时写 play_history；失败仅日志）。
-  final LibraryRepository? _libraryRepository;
+  final LibraryStore? _libraryRepository;
 
   /// 省流模式（可选注入）：音质标签、封面预加载与桌面小组件封面共用。
   final DataSaverService? _dataSaver;
@@ -215,7 +215,7 @@ class PlaybackProvider extends ChangeNotifier {
     SourceManager? sourceManager,
     GlobalKey<NavigatorState>? navigatorKey,
     CatalogService? catalogService,
-    LibraryRepository? libraryRepository,
+    LibraryStore? libraryRepository,
     DataSaverService? dataSaver,
     LocalDatabaseProvider? localDatabaseProvider,
     PlaybackSessionStore? sessionStore,

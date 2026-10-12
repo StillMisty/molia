@@ -3,7 +3,6 @@ import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-import '../data/library_repository.dart' show kFavoritesPlaylistName;
 import '../domain/models/library.dart';
 
 /// 合集（收藏 / 播放历史 / 自建列表）的哨兵、顺序、选择与滚动位置策略。
@@ -38,10 +37,10 @@ class LibraryCollections {
   final SharedPreferences? _prefsOverride;
   SharedPreferences? _prefs;
 
-  /// 默认收藏列表 id（按名称查找；空收藏可能不存在对应行）。
+  /// 默认收藏列表 id（空收藏可能不存在对应行）。
   static int? favoritesPlaylistId(List<PlaylistInfo> playlists) {
     for (final playlist in playlists) {
-      if (playlist.name == kFavoritesPlaylistName) return playlist.id;
+      if (playlist.isFavorites) return playlist.id;
     }
     return null;
   }

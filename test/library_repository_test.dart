@@ -140,7 +140,7 @@ void main() {
     });
 
     test('批量写入：upsert 置顶 + 单次广播', () async {
-      final events = <void>[];
+      final events = <LibraryChange>[];
       final subscription = repository.changes.listen(events.add);
       addTearDown(subscription.cancel);
 
@@ -371,7 +371,7 @@ void main() {
 
     test('列表：旧键不存在返回 false 且不广播', () async {
       final id = await repository.createPlaylist('L');
-      final events = <void>[];
+      final events = <LibraryChange>[];
       final subscription = repository.changes.listen(events.add);
       addTearDown(subscription.cancel);
 
@@ -385,14 +385,18 @@ void main() {
       expect(events, isEmpty);
     });
 
-    test('收藏列表换源：变更类型为 favorites', () async {
+    test('收藏列表换源：变更事件为 favorites', () async {
+      final events = <LibraryChange>[];
+      final subscription = repository.changes.listen(events.add);
+      addTearDown(subscription.cancel);
+
       await repository.toggleFavorite(
         sourceKey: 'wy',
         songId: '1',
         title: 'T1',
       );
-      final favorites =
-          await repository.findPlaylistByName(kFavoritesPlaylistName);
+      // 保留行名是存储层细节，这里按字面量钉住（既有用户数据的契约）。
+      final favorites = await repository.findPlaylistByName('__favorites__');
 
       final ok = await repository.replacePlaylistTrack(
         favorites!.id,
@@ -401,7 +405,7 @@ void main() {
         favoriteChange: true,
       );
       expect(ok, isTrue);
-      expect(repository.lastChangeKind, LibraryChangeKind.favorites);
+      expect(events.last, isA<LibraryFavoritesChange>());
       expect(
         (await repository.listPlaylistTracks(favorites.id))
             .map((t) => '${t.sourceKey}:${t.songId}'),
@@ -463,7 +467,7 @@ void main() {
       expect(await repository.favoriteKeys(), {'wy:1'});
 
       final favorites = await repository.listPlaylists();
-      expect(favorites.single.name, kFavoritesPlaylistName);
+      expect(favorites.single.name, '__favorites__');
       expect(favorites.single.trackCount, 1);
 
       final removed = await repository.toggleFavorite(
@@ -534,7 +538,7 @@ void main() {
   });
 
   test('changes 流在写操作后广播', () async {
-    final events = <void>[];
+    final events = <LibraryChange>[];
     final subscription = repository.changes.listen(events.add);
     addTearDown(subscription.cancel);
 

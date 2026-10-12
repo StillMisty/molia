@@ -3,23 +3,27 @@ import 'dart:typed_data';
 
 import 'package:flutter/foundation.dart';
 
-import 'package:molia/data/library_repository.dart';
 import 'package:molia/data/lxmc_decoder.dart';
 import 'package:molia/domain/models/library.dart';
+import 'package:molia/domain/ports/library_store.dart';
 
-/// 内存版资料库仓库：widget 测试专用。
+/// 内存版资料库：widget 测试专用。
 ///
 /// widget 测试运行在 fake-async 区，真实 sqflite I/O 不会完成（会触发
 /// 「database has been locked」并让加载动画永不停止）；因此 UI 交互测试
 /// 一律使用本假实现，真实 DB 行为由 library_repository_test 覆盖。
-class FakeLibraryRepository extends LibraryRepository {
-  FakeLibraryRepository()
-      : super(databaseProvider: () async => throw UnimplementedError());
+///
+/// 只实现 UI 面窄 port（[LibraryStore]）而不是继承真类：同步面（墓碑 / 列名）
+/// 与本假实现无关，新方法也不会静默走真实 SQL。
+class FakeLibraryRepository implements LibraryStore {
+
+  /// 与实现一致的收藏保留行名（假实现自持，不依赖实现私有常量）。
+  static const String _favoritesName = '__favorites__';
 
   /// sync: true —— 变更事件在写入调用栈内同步派发，provider 的重载
   /// Future 在 widget 测试的 fake-async 区内正常完成（否则跨 zone 挂起）。
-  final StreamController<void> _changes =
-      StreamController<void>.broadcast(sync: true);
+  final StreamController<LibraryChange> _changes =
+      StreamController<LibraryChange>.broadcast(sync: true);
   final List<PlayHistoryEntry> _history = [];
   final Map<int, PlaylistInfo> _playlists = {};
   final Map<int, List<PlaylistTrack>> _tracks = {};
@@ -27,26 +31,12 @@ class FakeLibraryRepository extends LibraryRepository {
   int _nextPlaylistId = 1;
   int _nextOrder = 0;
 
-  LibraryChangeKind _lastKind = LibraryChangeKind.playlists;
-  int? _lastPlaylistId;
-
   @override
-  Stream<void> get changes => _changes.stream;
+  Stream<LibraryChange> get changes => _changes.stream;
 
-  /// 模拟真实仓库的变更类型（provider 依此决定缓存失效范围）。
-  @override
-  LibraryChangeKind get lastChangeKind => _lastKind;
-
-  @override
-  int? get lastChangePlaylistId => _lastPlaylistId;
-
-  void _changed({
-    LibraryChangeKind kind = LibraryChangeKind.playlists,
-    int? playlistId,
-  }) {
-    _lastKind = kind;
-    _lastPlaylistId = playlistId;
-    if (!_changes.isClosed) _changes.add(null);
+  /// 模拟真实仓库的变更事件（provider 依此决定缓存失效范围）。
+  void _changed(LibraryChange change) {
+    if (!_changes.isClosed) _changes.add(change);
   }
 
   @override
@@ -55,19 +45,19 @@ class FakeLibraryRepository extends LibraryRepository {
         (e) => e.sourceKey == entry.sourceKey && e.songId == entry.songId);
     _history.add(entry);
     _history.sort((a, b) => b.playedAt.compareTo(a.playedAt));
-    _changed(kind: LibraryChangeKind.history);
+    _changed(const LibraryChange.history());
   }
 
   @override
   Future<List<PlayHistoryEntry>> listHistory(
-          {int limit = LibraryRepository.historyLimit}) async =>
+          {int limit = kHistoryLimit}) async =>
       _history.take(limit).toList();
 
   @override
   Future<void> deleteHistoryEntry(String sourceKey, String songId) async {
     _history
         .removeWhere((e) => e.sourceKey == sourceKey && e.songId == songId);
-    _changed(kind: LibraryChangeKind.history);
+    _changed(const LibraryChange.history());
   }
 
   @override
@@ -79,7 +69,7 @@ class FakeLibraryRepository extends LibraryRepository {
     final before = _history.length;
     _history.removeWhere((e) => known.contains('${e.sourceKey}:${e.songId}'));
     final removed = before - _history.length;
-    if (removed > 0) _changed(kind: LibraryChangeKind.history);
+    if (removed > 0) _changed(const LibraryChange.history());
     return removed;
   }
 
@@ -92,17 +82,17 @@ class FakeLibraryRepository extends LibraryRepository {
       _history.add(entry);
     }
     _history.sort((a, b) => b.playedAt.compareTo(a.playedAt));
-    if (_history.length > LibraryRepository.historyLimit) {
-      _history.removeRange(LibraryRepository.historyLimit, _history.length);
+    if (_history.length > kHistoryLimit) {
+      _history.removeRange(kHistoryLimit, _history.length);
     }
-    _changed(kind: LibraryChangeKind.history);
+    _changed(const LibraryChange.history());
     return entries.length;
   }
 
   @override
   Future<void> clearHistory() async {
     _history.clear();
-    _changed(kind: LibraryChangeKind.history);
+    _changed(const LibraryChange.history());
   }
 
   @override
@@ -112,9 +102,10 @@ class FakeLibraryRepository extends LibraryRepository {
       id: id,
       name: name,
       createdAt: DateTime.now().millisecondsSinceEpoch,
+      isFavorites: name == _favoritesName,
     );
     _tracks[id] = [];
-    _changed();
+    _changed(const LibraryChange.playlists());
     return id;
   }
 
@@ -142,15 +133,16 @@ class FakeLibraryRepository extends LibraryRepository {
       name: name,
       createdAt: playlist.createdAt,
       trackCount: playlist.trackCount,
+      isFavorites: playlist.isFavorites,
     );
-    _changed();
+    _changed(const LibraryChange.playlists());
   }
 
   @override
   Future<void> deletePlaylist(int id) async {
     _playlists.remove(id);
     _tracks.remove(id);
-    _changed();
+    _changed(const LibraryChange.playlists());
   }
 
   @override
@@ -169,7 +161,7 @@ class FakeLibraryRepository extends LibraryRepository {
     if (exists) return false;
     list.add(track);
     _syncTrackCount(playlistId);
-    _changed(kind: LibraryChangeKind.playlistTracks, playlistId: playlistId);
+    _changed(LibraryChange.playlistTracks(playlistId));
     return true;
   }
 
@@ -187,7 +179,7 @@ class FakeLibraryRepository extends LibraryRepository {
     final removed = before - list.length;
     if (removed > 0) {
       _syncTrackCount(playlistId);
-      _changed(kind: LibraryChangeKind.playlistTracks, playlistId: playlistId);
+      _changed(LibraryChange.playlistTracks(playlistId));
     }
     return removed;
   }
@@ -209,12 +201,9 @@ class FakeLibraryRepository extends LibraryRepository {
     final removed = before - list.length;
     if (removed > 0) {
       _syncTrackCount(playlistId);
-      _changed(
-        kind: favoriteChange
-            ? LibraryChangeKind.favorites
-            : LibraryChangeKind.playlistTracks,
-        playlistId: playlistId,
-      );
+      _changed(favoriteChange
+          ? const LibraryChange.favorites()
+          : LibraryChange.playlistTracks(playlistId));
     }
     return removed;
   }
@@ -251,12 +240,9 @@ class FakeLibraryRepository extends LibraryRepository {
     }
     if (added > 0) {
       _syncTrackCount(playlistId);
-      _changed(
-        kind: favoriteChange
-            ? LibraryChangeKind.favorites
-            : LibraryChangeKind.playlistTracks,
-        playlistId: playlistId,
-      );
+      _changed(favoriteChange
+          ? const LibraryChange.favorites()
+          : LibraryChange.playlistTracks(playlistId));
     }
     return added;
   }
@@ -293,7 +279,7 @@ class FakeLibraryRepository extends LibraryRepository {
           sortOrder: i,
         ),
     ];
-    _changed(kind: LibraryChangeKind.playlistTracks, playlistId: playlistId);
+    _changed(LibraryChange.playlistTracks(playlistId));
   }
 
   void _syncTrackCount(int playlistId) {
@@ -304,6 +290,7 @@ class FakeLibraryRepository extends LibraryRepository {
       name: playlist.name,
       createdAt: playlist.createdAt,
       trackCount: _tracks[playlistId]?.length ?? 0,
+      isFavorites: playlist.isFavorites,
     );
   }
 
@@ -348,12 +335,9 @@ class FakeLibraryRepository extends LibraryRepository {
       _favorites.add('${replacement.sourceKey}:${replacement.songId}');
     }
     _syncTrackCount(playlistId);
-    _changed(
-      kind: favoriteChange
-          ? LibraryChangeKind.favorites
-          : LibraryChangeKind.playlistTracks,
-      playlistId: playlistId,
-    );
+    _changed(favoriteChange
+        ? const LibraryChange.favorites()
+        : LibraryChange.playlistTracks(playlistId));
     return true;
   }
 
@@ -385,7 +369,7 @@ class FakeLibraryRepository extends LibraryRepository {
       raw: replacement.raw,
       playedAt: old.playedAt,
     );
-    _changed(kind: LibraryChangeKind.history);
+    _changed(const LibraryChange.history());
     return true;
   }
 
@@ -407,7 +391,7 @@ class FakeLibraryRepository extends LibraryRepository {
     final added = _favorites.add(key);
     if (!added) {
       _favorites.remove(key);
-      final favoritesId = (await findPlaylistByName(kFavoritesPlaylistName))?.id;
+      final favoritesId = (await findPlaylistByName(_favoritesName))?.id;
       if (favoritesId != null) {
         await removeTrackFromPlaylist(favoritesId, sourceKey, songId);
       }
@@ -430,14 +414,14 @@ class FakeLibraryRepository extends LibraryRepository {
         ),
       );
     }
-    _changed(kind: LibraryChangeKind.favorites);
+    _changed(const LibraryChange.favorites());
     return added;
   }
 
   Future<int> _ensureFavoritesPlaylist() async {
-    final existing = await findPlaylistByName(kFavoritesPlaylistName);
+    final existing = await findPlaylistByName(_favoritesName);
     if (existing != null) return existing.id;
-    return createPlaylist(kFavoritesPlaylistName);
+    return createPlaylist(_favoritesName);
   }
 
   @override
@@ -457,7 +441,7 @@ class FakeLibraryRepository extends LibraryRepository {
   @override
   Future<int> removeFavorites(List<TrackKey> keys) async {
     if (keys.isEmpty) return 0;
-    final favorites = await findPlaylistByName(kFavoritesPlaylistName);
+    final favorites = await findPlaylistByName(_favoritesName);
     if (favorites == null) return 0;
     for (final key in keys) {
       _favorites.remove('${key.sourceKey}:${key.songId}');

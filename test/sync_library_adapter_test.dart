@@ -107,9 +107,9 @@ void main() {
       title: 'X',
     );
     final playlists = await repoA.syncExportPlaylists();
-    final favorites =
-        playlists.firstWhere((p) => p['name'] == kFavoritesPlaylistName);
-    expect(favorites['syncId'], SyncRecordKeys.favoritesPlaylistSyncId);
+    // 同步记录不带收藏概念（合并键是固定 syncId），按保留行名取。
+    final favorites = playlists.firstWhere((p) => p.name == '__favorites__');
+    expect(favorites.syncId, SyncRecordKeys.favoritesPlaylistSyncId);
   });
 
   test('B 修改后 A 应用：远端更新者胜出（LWW）', () async {
@@ -131,23 +131,23 @@ void main() {
 
     clock = 3000;
     final currentRow = (await repoA.syncExportPlaylists())
-        .firstWhere((p) => p['name'] == '改名歌单');
+        .firstWhere((p) => p.name == '改名歌单');
     final stale = SyncEnvelope(
       deviceId: 'devC',
       producedAt: 1,
       records: {
         SyncCategory.playlists: [
           SyncRecord(
-            key: currentRow['syncId'] as String,
+            key: currentRow.syncId,
             updatedAt: 1,
             updatedBy: 'devC',
-            data: {
-              'syncId': currentRow['syncId'],
-              'name': '旧名字',
-              'createdAt': 1,
-              'updatedAt': 1,
-              'updatedBy': 'devC',
-            },
+            data: PlaylistSyncRecord(
+              syncId: currentRow.syncId,
+              name: '旧名字',
+              createdAt: 1,
+              updatedAt: 1,
+              updatedBy: 'devC',
+            ).toJson(),
           ),
         ],
       },
