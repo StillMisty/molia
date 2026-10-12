@@ -52,13 +52,15 @@ import '../domain/models/playback.dart';
 import '../domain/models/track.dart';
 import '../providers/playback_provider.dart';
 import 'app_network_image.dart';
+import 'cover_appearance.dart';
 import 'molia_mark.dart';
 import 'player_cover_session.dart';
 import 'player_morph.dart';
 
-/// 曲目封面 URL / 稳定 key 定义在 [CoverSwapSession] 一侧（会话与渲染共用
-/// 同一份归一化），这里再导出给迷你条与飞行副本。
-export 'player_cover_session.dart' show artworkUrlOf, trackKeyOf;
+/// 曲目封面 URL / 稳定 key 与卡片外观定义在
+/// `cover_appearance.dart`（会话与渲染共用同一份归一化），这里再导出给
+/// 迷你条 / 飞行副本 / 应用壳。
+export 'cover_appearance.dart' show artworkUrlOf, trackKeyOf;
 
 /// 无封面时的中性占位：主题容器色背景 + Molia 标志。
 ///
@@ -1265,9 +1267,8 @@ class _PlayerCoverDeckState extends State<PlayerCoverDeck>
   /// 只渲染稳态几何（位置/旋转/尺寸固定），透明度由调用方按窗口/淡入
   /// 计算；侧邻位无独立的位移/缩放入场演出。不参与 hit test 时
   /// （[onTap] 为空）忽略指针。[cardKey] 是身份语义 key（空闲淡换时同一
-  /// 槽位并存新旧两张卡，测试按身份定位）；key 落在 SizedBox 卡本体上而不是
-  /// 外层 KeyedSubtree——邻位点击测试用「GestureDetector.child is SizedBox」
-  /// 定位卡片，结构不得改变。
+  /// 槽位并存新旧两张卡，测试按身份定位）。
+  /// 卡本体的渲染归 [CoverCard]（可点邻位的手势 child 即它）。
   Widget _sideCoverLayer(
     BuildContext context,
     Track? track, {
@@ -1382,8 +1383,8 @@ class _PlayerCoverDeckState extends State<PlayerCoverDeck>
     );
   }
 
-  /// 封面卡（三封面/飞行副本共用同一渲染与缓存键）：
-  /// 细描边 + 柔和阴影 + 圆角图。
+  /// 封面卡（三封面/飞行副本共用 [CoverCard]）：外观（r18 + 1px 描边 +
+  /// 柔和阴影、裁剪 17）由 [CoverAppearance.page] 统一给出，与飞行副本同源。
   ///
   /// 统一走无缩放缓存键（与顶栏/迷你条/预加载一致），邻位封面升到中间
   /// 只是 transform 插值，不会因缓存键不同重新解码、闪占位图。
@@ -1393,48 +1394,32 @@ class _PlayerCoverDeckState extends State<PlayerCoverDeck>
     Track? track,
     double size, {
     Key? key,
-    double radius = 18,
     Widget? fallback,
     String? placeholderUrl,
     String? artworkUrlOverride,
   }) {
     final url = artworkUrlOverride ?? artworkUrlOf(track);
-    final scheme = Theme.of(context).colorScheme;
-    final placeholder = placeholderUrl != null && placeholderUrl != url
-        ? AppNetworkImage(
-            url: placeholderUrl,
-            fit: BoxFit.cover,
-            fallbackIconSize: size * playerCoverFallbackIconRatio,
-          )
-        : fallback;
-    return SizedBox(
+    return CoverCard(
       key: key,
-      width: size,
-      height: size,
-      child: Container(
-        decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(radius),
-          border: Border.all(color: scheme.outlineVariant, width: 1),
-          boxShadow: [
-            BoxShadow(
-              color: scheme.shadow.withValues(alpha: 0.28),
-              blurRadius: 24,
-              offset: const Offset(0, 10),
-            ),
-          ],
-        ),
-        child: ClipRRect(
-          borderRadius: BorderRadius.circular(radius - 1),
-          child: AppNetworkImage(
-            url: url,
-            fit: BoxFit.cover,
-            // 与顶栏↔播放页飞行共享同一比例（图标态落点必须与真身同尺寸）。
-            fallbackIconSize: size * playerCoverFallbackIconRatio,
-            placeholder: placeholder,
-            errorWidget: fallback,
-          ),
-        ),
-      ),
+      size: size,
+      appearance: CoverAppearance.page,
+      content: (context, clip, iconSize) {
+        final placeholder = placeholderUrl != null && placeholderUrl != url
+            ? AppNetworkImage(
+                url: placeholderUrl,
+                fit: BoxFit.cover,
+                fallbackIconSize: iconSize,
+              )
+            : fallback;
+        return AppNetworkImage(
+          url: url,
+          fit: BoxFit.cover,
+          // 与顶栏↔播放页飞行共享同一外观源（图标态落点必须与真身同尺寸）。
+          fallbackIconSize: iconSize,
+          placeholder: placeholder,
+          errorWidget: fallback,
+        );
+      },
     );
   }
 

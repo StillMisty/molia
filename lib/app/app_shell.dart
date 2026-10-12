@@ -30,9 +30,14 @@ import '../theme/animated_scheme.dart';
 import '../theme/app_theme.dart';
 import '../utils/responsive.dart';
 import '../widgets/app_network_image.dart';
+import '../widgets/cover_appearance.dart';
 import '../widgets/nav_destination_icons.dart';
 import '../widgets/playback_selectors.dart';
 import '../widgets/player_morph.dart';
+
+/// 当前曲目的封面 URL（空串视同无封面）：顶栏真身与共享飞行副本同一份取值。
+String? _coverUrlOf(PlaybackProvider provider) =>
+    artworkUrlOf(provider.snapshot.current);
 
 
 class ProgressIndicator extends StatefulWidget {
@@ -265,11 +270,14 @@ class _MyAppState extends State<MyApp>
     _morph.setBarHeaderHidden(true);
     if (toPage) _morph.setPageHeaderHidden(true);
     _morphGeometry = geometry;
+    // 封面 URL 与锚点在同一刻抓取：飞行期间不换图（副本承接的是起飞时那一张）。
+    final url = _coverUrlOf(context.read<PlaybackProvider>());
     final token = ++_morphToken;
     _morphEntry = OverlayEntry(
       builder: (context) => PlayerMorphFlight(
         animation: _morphAnimation,
         geometry: geometry,
+        url: url,
       ),
     );
     Overlay.of(context, rootOverlay: true).insert(_morphEntry!);
@@ -636,16 +644,18 @@ class _BarCover extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final coverUrl = context.select<PlaybackProvider, String?>(
-      (provider) {
-        final url = provider.snapshot.current?.artwork?.uri.toString();
-        return url == null || url.isEmpty ? null : url;
-      },
+      _coverUrlOf,
     );
-    return AppNetworkImage(
-      url: coverUrl,
-      borderRadius: BorderRadius.circular(8),
-      // 与飞行副本共用同一尺寸源（图标态飞行起点必须与真身同尺寸）。
-      fallbackIconSize: barCoverFallbackIconSize,
+    // 卡片外观（r8、无描边阴影、回退图标 22）由 CoverAppearance.bar 统一给出。
+    return CoverCard(
+      size: 40,
+      appearance: CoverAppearance.bar,
+      content: (context, clip, iconSize) => AppNetworkImage(
+        url: coverUrl,
+        borderRadius: clip,
+        // 与飞行副本共用同一外观源（图标态飞行起点必须与真身同尺寸）。
+        fallbackIconSize: iconSize,
+      ),
     );
   }
 }

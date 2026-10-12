@@ -5,10 +5,10 @@ import 'package:molia/domain/models/playback.dart';
 import 'package:molia/domain/models/track.dart';
 import 'package:molia/l10n/app_localizations.dart';
 import 'package:molia/providers/playback_provider.dart';
+import 'package:molia/widgets/cover_appearance.dart';
 import 'package:molia/widgets/molia_mark.dart';
 import 'package:molia/widgets/player.dart';
 import 'package:molia/widgets/player_cover_deck.dart';
-import 'package:molia/widgets/player_morph.dart';
 import 'package:material_3_expressive/material_3_expressive.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:provider/provider.dart';
@@ -107,7 +107,7 @@ void main() {
   /// 中心封面卡片自己承接）。
   Finder coverSwipeHost() => find.byKey(Player.artworkSwipeHostKey);
 
-  /// 左/右邻位封面手势（可点击切歌；child 是封面卡 SizedBox）。
+  /// 左/右邻位封面手势（可点击切歌；child 是封面卡 [CoverCard]）。
   ///
   /// 两侧都展示身份时堆叠里并存两个可点邻位，按几何（中心在堆叠中心
   /// 左侧/右侧）选择要操作的一侧。
@@ -119,7 +119,7 @@ void main() {
           widget.onTap == null ||
           widget.onHorizontalDragStart != null ||
           widget.behavior != HitTestBehavior.opaque ||
-          widget.child is! SizedBox) {
+          widget.child is! CoverCard) {
         return false;
       }
       final renderObject = element.renderObject;
