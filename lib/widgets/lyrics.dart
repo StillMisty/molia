@@ -1,6 +1,6 @@
 import 'dart:async';
 
-import 'package:flutter/foundation.dart' show kIsWeb, listEquals;
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:material_3_expressive/material_3_expressive.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:flutter/rendering.dart';
@@ -63,16 +63,25 @@ class _LyricsWidgetState extends State<LyricsWidget>
   /// 视觉偏下；上移一点后上下留白更平衡，也接近主流歌词页的中上排版。
   static const double _activeLineUpwardBias = 0.10;
 
-  List<LyricLine> _lyrics = [];
-
-  /// 歌词会话模块（同一份状态源）：监听外部替换（换源页手动保存）以同步展示。
+  /// 歌词会话模块：会话真相的唯一来源（本组件只消费，不维护镜像字段）。
   LyricsProvider? _lyricsProvider;
 
-  /// 与 [_lyrics] 等索引的翻译 / 罗马音（'' = 该行无扩展文本）。
-  /// 来自 [LyricsState] 的同一份时间戳对齐结果，与各输出共用数据源。
-  List<String> _translations = const [];
-  List<String> _romas = const [];
+  /// 本组件已请求加载的曲目 id（`null` = 尚未请求；渲染侧簿记，非会话状态）。
   String? _lastTrackId;
+
+  /// 上一次已渲染的会话状态（用于「内容变了才重置滚动簿记」）。
+  LyricsState _lastState = LyricsState.idle;
+
+  /// 当前曲目的会话状态：尚未请求加载、或 provider 持有的是别的曲目时为空态。
+  LyricsState get _session {
+    final trackId = _lastTrackId;
+    if (trackId == null) return LyricsState.idle;
+    final state = _lyricsProvider?.state ?? LyricsState.idle;
+    return state.trackId == trackId ? state : LyricsState.idle;
+  }
+
+  /// 会话是否正在加载（渲染侧读取，不再维护标志位）。
+  bool get _isLoading => _session.status == LyricsStatus.loading;
   late final ScrollController _scrollController =
       widget.controller ?? ScrollController();
   final GlobalKey _listViewKey = GlobalKey();
@@ -94,8 +103,6 @@ class _LyricsWidgetState extends State<LyricsWidget>
   bool _manualQuickActionsVisible = false;
   bool _lyricsContentScrollable = true;
   bool _scrollabilityCheckScheduled = false;
-  bool _lyricsAreSynced = true;
-  bool _isLyricsLoading = false;
 
   /// 快捷操作栏显隐弹簧：0 = 完全隐藏、1 = 完全展开。
   ///
@@ -142,36 +149,14 @@ class _LyricsWidgetState extends State<LyricsWidget>
     provider.addListener(_onLyricsProviderChanged);
   }
 
-  /// 同一曲目的歌词被外部替换（换源页手动保存等）时同步到本地渲染状态。
-  ///
-  /// 与本地一致（自己发起加载的落地路径）时直接跳过，避免无谓 setState。
+  /// 会话状态变化（自己的加载落地 / 换源页手动保存等外部替换）：
+  /// 状态值没变就直接跳过，避免无谓 setState。
   void _onLyricsProviderChanged() {
-    final provider = _lyricsProvider;
-    if (!mounted || provider == null) return;
-    final trackId = _lastTrackId;
-    if (trackId == null) return;
-    final state = provider.state;
-    if (state.trackId != trackId || state.status != LyricsStatus.ready) return;
-    if (listEquals(state.lines, _lyrics) &&
-        listEquals(state.translations, _translations) &&
-        listEquals(state.romas, _romas)) {
-      return;
-    }
-    _quickActionsHideTimer?.cancel();
-    setState(() {
-      _lyricsAreSynced = state.isSynced;
-      _lyrics = state.lines;
-      _translations = state.translations;
-      _romas = state.romas;
-      _autoScroll = state.isSynced;
-      _previousLineIndex = -1;
-      _syncLineKeys(_lyrics.length);
-      _pendingScrollIndex = null;
-      _lastFallbackIndexAttempted = null;
-      _fallbackAttemptsForCurrentIndex = 0;
-      _manualQuickActionsVisible = false;
-      _isLyricsLoading = false;
-    });
+    if (!mounted) return;
+    final state = _session;
+    if (state == _lastState) return;
+    _lastState = state;
+    _applySessionChange(state);
   }
 
   @override
@@ -201,18 +186,15 @@ class _LyricsWidgetState extends State<LyricsWidget>
     if (currentTrack == null) {
       lyricsProvider.reset();
       // 无曲目：清空歌词并复位状态
-      if (_lyrics.isNotEmpty || _lastTrackId != null) {
+      if (_session.lines.isNotEmpty || _lastTrackId != null) {
         _quickActionsHideTimer?.cancel();
         setState(() {
-          _lyrics = [];
-          _translations = const [];
-          _romas = const [];
-          _lastTrackId = null;
+          _lastTrackId = null; // 会话状态经 _session 归空
+          _lastState = LyricsState.idle;
           _autoScroll = true;
           _previousLineIndex = -1;
           _syncLineKeys(0);
           _currentTrackDurationMs = null;
-          _lyricsAreSynced = true;
           _manualQuickActionsVisible = false;
         });
         if (_scrollController.hasClients) {
@@ -234,19 +216,15 @@ class _LyricsWidgetState extends State<LyricsWidget>
     }
     _quickActionsHideTimer?.cancel();
     setState(() {
-      _lyrics = [];
-      _translations = const [];
-      _romas = const [];
+      _lastState = LyricsState.idle; // 会话状态经 _session 归空
       _autoScroll = true;
       _previousLineIndex = -1;
       _syncLineKeys(0);
       _currentTrackDurationMs = trackDurationMs;
-      _lyricsAreSynced = true;
       _manualQuickActionsVisible = false;
-      _isLyricsLoading = true;
     });
 
-    // 取词/缓存/解析统一走歌词会话模块；此处只把结果落到本地渲染状态。
+    // 取词/缓存/解析统一走歌词会话模块；本组件只消费 LyricsState。
     await lyricsProvider.load(currentTrack);
 
     if (!mounted) return;
@@ -265,37 +243,29 @@ class _LyricsWidgetState extends State<LyricsWidget>
     }
 
     if (lyricsState.status == LyricsStatus.ready) {
-      final synced = lyricsState.isSynced;
-      _quickActionsHideTimer?.cancel();
-      setState(() {
-        _lyricsAreSynced = synced;
-        _lyrics = lyricsState.lines;
-        _translations = lyricsState.translations;
-        _romas = lyricsState.romas;
-        _autoScroll = synced;
-        _previousLineIndex = -1;
-        _syncLineKeys(_lyrics.length);
-        _currentTrackDurationMs = trackDurationMs;
-        _pendingScrollIndex = null;
-        _lastFallbackIndexAttempted = null;
-        _fallbackAttemptsForCurrentIndex = 0;
-        _manualQuickActionsVisible = false;
-        _isLyricsLoading = false;
-      });
+      _lastState = lyricsState;
+      _applySessionChange(lyricsState, trackDurationMs: trackDurationMs);
       // 下一首歌词预载在组合根统一处理（不依赖本组件是否挂载）。
     } else {
-      // 取词失败 / 空歌词：保持空歌词列表
-      _quickActionsHideTimer?.cancel();
-      setState(() {
-        _lyrics = [];
-        _translations = const [];
-        _romas = const [];
-        _syncLineKeys(0);
-        _lyricsAreSynced = true;
-        _manualQuickActionsVisible = false;
-        _isLyricsLoading = false;
-      });
+      // 取词失败 / 空歌词：会话状态已归空（_session 返回空态），只重置簿记。
+      _lastState = LyricsState.idle;
+      _applySessionChange(LyricsState.idle);
     }
+  }
+
+  /// 会话内容变化后的渲染侧簿记：滚动簿记 / 行 key / 跟随开关统一在这里重置。
+  void _applySessionChange(LyricsState state, {int? trackDurationMs}) {
+    _quickActionsHideTimer?.cancel();
+    setState(() {
+      _autoScroll = state.isSynced;
+      _previousLineIndex = -1;
+      _syncLineKeys(state.lines.length);
+      if (trackDurationMs != null) _currentTrackDurationMs = trackDurationMs;
+      _pendingScrollIndex = null;
+      _lastFallbackIndexAttempted = null;
+      _fallbackAttemptsForCurrentIndex = 0;
+      _manualQuickActionsVisible = false;
+    });
   }
 
   void _syncLineKeys(int targetLength) {
@@ -322,17 +292,17 @@ class _LyricsWidgetState extends State<LyricsWidget>
   }
 
   bool get _requiresManualQuickActions =>
-      _lyrics.isNotEmpty && (!_lyricsAreSynced || !_lyricsContentScrollable);
+      _session.lines.isNotEmpty && (!_session.isSynced || !_lyricsContentScrollable);
 
   bool get _shouldShowQuickActionsBar {
     // 复制模式下必须保留出口（否则收起播放器后无法退出复制模式）。
     if (!widget.quickActionsEnabled && !_isCopyLyricsMode) {
       return false;
     }
-    if (_isCopyLyricsMode || _lyrics.isEmpty) {
+    if (_isCopyLyricsMode || _session.lines.isEmpty) {
       return true;
     }
-    if (_lyricsAreSynced && _lyricsContentScrollable) {
+    if (_session.isSynced && _lyricsContentScrollable) {
       return !_autoScroll;
     }
     return _requiresManualQuickActions && _manualQuickActionsVisible;
@@ -356,7 +326,7 @@ class _LyricsWidgetState extends State<LyricsWidget>
       final bool canScroll =
           (position.maxScrollExtent - position.minScrollExtent).abs() > 1.0;
       final bool nextRequiresManual =
-          _lyrics.isNotEmpty && (!_lyricsAreSynced || !canScroll);
+          _session.lines.isNotEmpty && (!_session.isSynced || !canScroll);
       final bool manualRequirementChanged =
           _requiresManualQuickActions != nextRequiresManual;
       if (_lyricsContentScrollable != canScroll || manualRequirementChanged) {
@@ -375,7 +345,7 @@ class _LyricsWidgetState extends State<LyricsWidget>
     if (!mounted ||
         !_requiresManualQuickActions ||
         _isCopyLyricsMode ||
-        _lyrics.isEmpty) {
+        _session.lines.isEmpty) {
       return;
     }
     if (!_manualQuickActionsVisible) {
@@ -388,7 +358,7 @@ class _LyricsWidgetState extends State<LyricsWidget>
       if (!mounted ||
           !_requiresManualQuickActions ||
           _isCopyLyricsMode ||
-          _lyrics.isEmpty) {
+          _session.lines.isEmpty) {
         return;
       }
       if (_manualQuickActionsVisible) {
@@ -467,10 +437,10 @@ class _LyricsWidgetState extends State<LyricsWidget>
   /// 快捷操作栏按钮：交给 [M3EToolbar] 统一呈现
   /// （禁用 / 选中高亮 / tooltip 走工具栏语义）。
   List<M3EToolbarItem> _buildQuickActions(AppLocalizations l10n) {
-    final bool hasLyrics = _lyrics.isNotEmpty;
+    final bool hasLyrics = _session.lines.isNotEmpty;
     return <M3EToolbarItem>[
       // 居中/恢复跟随：仅「手动滚动暂停 + 有同步歌词」时入列。
-      if (!_autoScroll && hasLyrics && _lyricsAreSynced)
+      if (!_autoScroll && hasLyrics && _session.isSynced)
         M3EToolbarAction(
           icon: Icons.vertical_align_center_rounded,
           onPressed: _centerCurrentLine,
@@ -508,7 +478,7 @@ class _LyricsWidgetState extends State<LyricsWidget>
   void _scrollToCurrentLine(int currentLineIndex) {
     if (!mounted ||
         !_autoScroll ||
-        !_lyricsAreSynced ||
+        !_session.isSynced ||
         !_scrollController.hasClients ||
         currentLineIndex < 0 ||
         currentLineIndex >= _lineKeys.length) {
@@ -529,18 +499,18 @@ class _LyricsWidgetState extends State<LyricsWidget>
       if (position.hasPixels &&
           position.hasContentDimensions &&
           position.viewportDimension > 0 &&
-          _lyrics.isNotEmpty) {
-        final line = _lyrics[currentLineIndex];
+          _session.lines.isNotEmpty) {
+        final line = _session.lines[currentLineIndex];
         double ratio;
         if (_currentTrackDurationMs != null &&
             _currentTrackDurationMs! > 0 &&
             line.timestamp.inMilliseconds >= 0) {
           final double totalMs = _currentTrackDurationMs!.toDouble();
           ratio = line.timestamp.inMilliseconds / totalMs;
-        } else if (_lyrics.length <= 1) {
+        } else if (_session.lines.length <= 1) {
           ratio = 0.0;
         } else {
-          ratio = currentLineIndex / (_lyrics.length - 1);
+          ratio = currentLineIndex / (_session.lines.length - 1);
         }
 
         if (!ratio.isFinite) {
@@ -624,7 +594,7 @@ class _LyricsWidgetState extends State<LyricsWidget>
     }
     // 无论走哪条分支，排队的「延迟恢复」都已不需要。
     _cancelUserScrollResume();
-    if (!_lyricsAreSynced) {
+    if (!_session.isSynced) {
       setState(() {
         _autoScroll = false;
         _temporarilyIgnoreUserScroll = false;
@@ -658,7 +628,7 @@ class _LyricsWidgetState extends State<LyricsWidget>
   /// [_userScrollResumeDelay] 后自动滚回当前行，避免「看过一次就再也不跟」。
   /// 复制模式刻意禁用自动滚动、无时间戳歌词没有可跟随目标，两者都不恢复。
   void _scheduleUserScrollResume() {
-    if (_isCopyLyricsMode || !_lyricsAreSynced || _lyrics.isEmpty) {
+    if (_isCopyLyricsMode || !_session.isSynced || _session.lines.isEmpty) {
       return;
     }
     _userScrollResumeTimer?.cancel();
@@ -672,9 +642,9 @@ class _LyricsWidgetState extends State<LyricsWidget>
   void _resumeAutoScrollAfterUserScroll() {
     if (!mounted ||
         _isCopyLyricsMode ||
-        !_lyricsAreSynced ||
+        !_session.isSynced ||
         _autoScroll ||
-        _lyrics.isEmpty) {
+        _session.lines.isEmpty) {
       return;
     }
     _enableAutoScrollWithSuppression();
@@ -742,7 +712,7 @@ class _LyricsWidgetState extends State<LyricsWidget>
       });
     }
 
-    _syncLineKeys(_lyrics.length);
+    _syncLineKeys(_session.lines.length);
     _scheduleScrollabilityCheck();
 
     // 歌词页扩展行开关：独立于输出侧（桌面 / 通知 / 蓝牙）的翻译·罗马音设置。
@@ -752,7 +722,7 @@ class _LyricsWidgetState extends State<LyricsWidget>
         Provider.of<PlaybackProvider>(context, listen: false);
 
     if (_autoScroll &&
-        _lyrics.isNotEmpty &&
+        _session.lines.isNotEmpty &&
         mounted &&
         currentLineIndex >= 0) {
       if (_previousLineIndex != currentLineIndex ||
@@ -815,7 +785,7 @@ class _LyricsWidgetState extends State<LyricsWidget>
         },
         child: Stack(
           children: [
-            if (_lyrics.isEmpty && _isLyricsLoading)
+            if (_session.lines.isEmpty && _isLoading)
               Positioned.fill(
                 child: Center(
                   child: Column(
@@ -855,9 +825,9 @@ class _LyricsWidgetState extends State<LyricsWidget>
                         .padding
                         .bottom,
               ),
-              itemCount: _lyrics.length + 1,
+              itemCount: _session.lines.length + 1,
               itemBuilder: (context, index) {
-                if (index == _lyrics.length) {
+                if (index == _session.lines.length) {
                   return SizedBox(height: _tailSpace());
                 }
                 final theme = Theme.of(context);
@@ -865,8 +835,8 @@ class _LyricsWidgetState extends State<LyricsWidget>
                     .layoutType(ResponsivePageType.detail)
                     .preferTwoPane;
                 final bool isWeb = kIsWeb;
-                final line = _lyrics[index];
-                final bool lyricsSynced = _lyricsAreSynced;
+                final line = _session.lines[index];
+                final bool lyricsSynced = _session.isSynced;
                 final bool isCurrentLine =
                     lyricsSynced && index == currentLineIndex;
                 final bool isPastLine =
@@ -887,9 +857,9 @@ class _LyricsWidgetState extends State<LyricsWidget>
                     ? (isWeb ? 30.0 : 24.0)
                     : (isWeb ? 36.0 : 22.0);
                 final String lineTranslation =
-                    index < _translations.length ? _translations[index] : '';
+                    index < _session.translations.length ? _session.translations[index] : '';
                 final String lineRoma =
-                    index < _romas.length ? _romas[index] : '';
+                    index < _session.romas.length ? _session.romas[index] : '';
                 final bool showTranslation =
                     lyricsDisplaySettings.pageTranslationEnabled &&
                         lineTranslation.isNotEmpty;
@@ -916,7 +886,7 @@ class _LyricsWidgetState extends State<LyricsWidget>
                     HapticFeedback.lightImpact();
                     if (!mounted) return;
 
-                    final tappedTimestamp = _lyrics[index].timestamp;
+                    final tappedTimestamp = _session.lines[index].timestamp;
                     playbackProvider
                         .seekToPosition(tappedTimestamp.inMilliseconds);
 
@@ -1101,8 +1071,8 @@ class _LyricsWidgetState extends State<LyricsWidget>
   }
 
   int _getCurrentLineIndex(Duration currentPosition) {
-    if (!_lyricsAreSynced) return -1;
-    return lyricLineIndexAt(_lyrics, currentPosition);
+    if (!_session.isSynced) return -1;
+    return lyricLineIndexAt(_session.lines, currentPosition);
   }
 
   void _toggleCopyLyricsMode() {
@@ -1114,7 +1084,7 @@ class _LyricsWidgetState extends State<LyricsWidget>
     setState(() {
       if (_isCopyLyricsMode) {
         _isCopyLyricsMode = false;
-        _autoScroll = _lyricsAreSynced;
+        _autoScroll = _session.isSynced;
         _temporarilyIgnoreUserScroll = true;
         _quickActionsHideTimer?.cancel();
         _manualQuickActionsVisible = false;
@@ -1227,16 +1197,13 @@ class _LyricsWidgetState extends State<LyricsWidget>
         return;
       }
       final bool synced = lyricsState.isSynced;
-      final newLyrics = lyricsState.lines;
       _quickActionsHideTimer?.cancel();
       setState(() {
-        _lyrics = newLyrics;
-        _translations = lyricsState.translations;
-        _romas = lyricsState.romas;
-        _lyricsAreSynced = synced;
+        // 会话状态已由 saveManual 更新（唯一真相），这里只重置渲染侧簿记。
+        _lastState = lyricsState;
         _lastTrackId = trackId;
         _previousLineIndex = -1;
-        _syncLineKeys(_lyrics.length);
+        _syncLineKeys(lyricsState.lines.length);
         _manualQuickActionsVisible = false;
 
         // 换源前开启过自动滚动则恢复
@@ -1261,7 +1228,7 @@ class _LyricsWidgetState extends State<LyricsWidget>
         }
       });
 
-      if (wasAutoScrollEnabled && _lyricsAreSynced && _autoScroll) {
+      if (wasAutoScrollEnabled && _session.isSynced && _autoScroll) {
         _userScrollSuppressionTimer?.cancel();
         _userScrollSuppressionTimer = Timer(
           const Duration(milliseconds: 350),
@@ -1294,7 +1261,7 @@ class _LyricsWidgetState extends State<LyricsWidget>
     }
 
     // 打开页面前处于「手动滚动暂停」：返回后继续延迟恢复跟随。
-    if (!_autoScroll && !_isCopyLyricsMode && _lyricsAreSynced) {
+    if (!_autoScroll && !_isCopyLyricsMode && _session.isSynced) {
       _scheduleUserScrollResume();
     }
   }
@@ -1314,7 +1281,7 @@ class _LyricsWidgetState extends State<LyricsWidget>
       return;
     }
 
-    if (_lyrics.isEmpty) {
+    if (_session.lines.isEmpty) {
       notificationService.showSnackBar(l10n.noLyricsToSelect);
       return;
     }
@@ -1339,9 +1306,9 @@ class _LyricsWidgetState extends State<LyricsWidget>
     await ResponsiveNavigation.showSecondaryPage<void>(
       context: context,
       child: LyricsSelectionPage(
-        lyrics: _lyrics,
-        translations: _translations,
-        romas: _romas,
+        lyrics: _session.lines,
+        translations: _session.translations,
+        romas: _session.romas,
         showTranslation: lyricsDisplaySettings.pageTranslationEnabled,
         showRoma: lyricsDisplaySettings.pageRomaEnabled,
         trackTitle: trackName,
@@ -1371,7 +1338,7 @@ class _LyricsWidgetState extends State<LyricsWidget>
     }
 
     // 打开页面前处于「手动滚动暂停」：返回后继续延迟恢复跟随。
-    if (!_autoScroll && !_isCopyLyricsMode && _lyricsAreSynced) {
+    if (!_autoScroll && !_isCopyLyricsMode && _session.isSynced) {
       _scheduleUserScrollResume();
     }
   }

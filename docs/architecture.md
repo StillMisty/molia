@@ -89,7 +89,9 @@
   `attachWordTimings` 对齐到主行（`LyricLine.words`），歌词页当前行用
   `KaraokeLyricText` 做词级高亮，桌面歌词 / 通知 / 蓝牙仍按行。
   UI（LyricsWidget / 歌词搜索页 / 歌词选择页）只渲染状态与交互，不再各自构造
-  `LyricsService` / 直接写 `LyricsCache` / 拼装解析逻辑；歌词页用「歌词页」独立开关
+  `LyricsService` / 直接写 `LyricsCache` / 拼装解析逻辑；歌词页只消费 `LyricsState`
+  （不维护字段镜像，加载标志由 `status` 推导），滚动/跟随数学在
+  `lib/widgets/lyrics_scroll_policy.dart`（纯函数，可单测）；歌词页用「歌词页」独立开关
   （`page.translationEnabled` / `page.romaEnabled`）在每行下方渲染翻译 / 罗马音，
   与输出侧（桌面歌词 / 通知 / 蓝牙）的翻译·罗马音开关互不影响，共用同一份对齐数据。
 - **封面补取**：曲目起播无封面时 `PlaybackProvider` 经注入 resolver

@@ -20,15 +20,20 @@ ANDROID_CLI="${ANDROID_CLI:-android}"
 AVD_NAME="${AVD_NAME:-molia_api37}"
 DEVICE_ID="${DEVICE_ID:-emulator-5554}"
 APP_ID="${APP_ID:-top.stillmisty.molia}"
+APP_BINARY="${APP_BINARY:-molia}" # 桌面构建产物名（linux/CMakeLists.txt 的 BINARY_NAME）
 
 # 运行产物目录
 RUN_DIR="${RUN_DIR:-/tmp/opencode/molia}"
 SHOT_DIR="${SHOT_DIR:-$RUN_DIR/shots}"
 PID_FILE="$RUN_DIR/flutter-run.pid"
 RUN_LOG="$RUN_DIR/flutter-run.log"
+RUN_DEVICE_FILE="$RUN_DIR/flutter-run.device" # app.sh 记录本次 flutter run 的设备
 
 log() { printf '[agent] %s\n' "$*" >&2; }
 die() { printf '[agent] ERROR: %s\n' "$*" >&2; exit 1; }
+
+# 是否有图形显示（Linux 桌面 flutter run 需要；无则 test.sh / app.sh 可套 xvfb-run）
+has_display() { [[ -n "${DISPLAY:-}${WAYLAND_DISPLAY:-}" ]]; }
 
 # 列出已连接设备（序列号）
 adb_devices() {
@@ -42,6 +47,7 @@ running_emulator() {
 
 # 确保 SDK 内 adb server 已就绪（只用 WSL 侧 server）
 ensure_adb() {
+  [[ -x "$ADB" ]] || die "未找到 adb：$ADB（先执行 tool/agent/setup.sh，或设 ADB=/path/to/adb）"
   "$ADB" start-server >/dev/null 2>&1 || true
 }
 

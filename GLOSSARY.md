@@ -93,7 +93,12 @@
 - **Lyrics session module（歌词会话模块）** — `lib/providers/lyrics_provider.dart`：
   取词 → 缓存 → 解析（统一时间契约）→ 预取的唯一实现；对外只暴露 `LyricsState`
   （idle/loading/ready/empty + isSynced + providerName）与 `load/preload/saveManual`。
-  UI 只渲染状态，不再各自构造 `LyricsService` 或直接写 `LyricsCache`。
+  UI 只渲染状态，不再各自构造 `LyricsService` 或直接写 `LyricsCache`；
+  **歌词页不维护镜像**（`lyrics.dart` 只经 `_session` 读会话状态，加载标志由
+  `status == loading` 推导，写入路径只有「会话变化 → 重置滚动簿记」一条）。
+- **Lyrics scroll policy（歌词滚动策略）** — `lib/widgets/lyrics_scroll_policy.dart`：
+  纯函数（对齐比例 / 尾部留白 / 目标偏移夹取 / 死区）；组件只测量（ScrollController /
+  MediaQuery）与执行（jumpTo / animateTo），策略数学脱离 widget pump 可单测。
 - **Lyric timing contract（歌词时间契约）** — `lib/models/lyric_line.dart`：
   `hasLyricTimestamps` 与 `parseLyrics` 共用同一正则（兼容 1–3 位分钟、`.`/`:` 毫秒
   分隔与行内多标签）；不再允许「检测用一个正则、解析用另一个」的漂移。
