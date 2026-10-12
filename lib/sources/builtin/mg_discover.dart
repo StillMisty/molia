@@ -77,14 +77,12 @@ class MgDiscoverSource extends DiscoverSource {
 
   @override
   Future<List<DiscoverTrack>> leaderboardTracks(String bangid) {
-    return BuiltinSearch.transport.cached(
-      'mg:leaderboard:$bangid',
-      () => _fetchLeaderboard(bangid),
-    );
+    return _fetchLeaderboard(bangid);
   }
 
   static Future<List<DiscoverTrack>> _fetchLeaderboard(String bangid) {
-    return retryRequest(
+    return BuiltinSearch.transport.cachedRetry(
+      'mg:leaderboard:$bangid',
       maxTries: 4,
       attempt: (_) async {
         final body = await lxHttpGet(
@@ -249,14 +247,13 @@ class MgDiscoverSource extends DiscoverSource {
 
   @override
   Future<DiscoverPlaylistPage> playlists(String tagId, int page) {
-    return BuiltinSearch.transport.cached('mg:playlists:$tagId:$page', () {
-      return tagId.isEmpty ? _fetchRecommend(page) : _fetchTagList(tagId, page);
-    });
+    return tagId.isEmpty ? _fetchRecommend(page) : _fetchTagList(tagId, page);
   }
 
   /// 推荐歌单（LX 默认排序 = 推荐）。
   static Future<DiscoverPlaylistPage> _fetchRecommend(int page) {
-    return retryRequest(
+    return BuiltinSearch.transport.cachedRetry(
+      'mg:playlists::$page',
       maxTries: 3,
       attempt: (_) async {
         final body = await lxHttpGet(
@@ -278,7 +275,8 @@ class MgDiscoverSource extends DiscoverSource {
   }
 
   static Future<DiscoverPlaylistPage> _fetchTagList(String tagId, int page) {
-    return retryRequest(
+    return BuiltinSearch.transport.cachedRetry(
+      'mg:playlists:$tagId:$page',
       maxTries: 3,
       attempt: (_) async {
         final body = await lxHttpGet(
@@ -539,11 +537,12 @@ class MgDiscoverSource extends DiscoverSource {
 
   @override
   Future<List<String>> hotSearches() {
-    return BuiltinSearch.transport.cached('mg:hot-search', _fetchHotSearch);
+    return _fetchHotSearch();
   }
 
   static Future<List<String>> _fetchHotSearch() {
-    return retryRequest(
+    return BuiltinSearch.transport.cachedRetry(
+      'mg:hot-search',
       maxTries: 3,
       attempt: (_) async {
         final body = await lxHttpGet(

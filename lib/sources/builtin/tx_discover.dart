@@ -182,14 +182,13 @@ class TxDiscoverSource extends DiscoverSource {
 
   @override
   Future<DiscoverPlaylistPage> playlists(String tagId, int page) {
-    return BuiltinSearch.transport.cached('tx:playlists:$tagId:$page', () {
-      return tagId.isEmpty ? _fetchRecommend(page) : _fetchCategory(tagId, page);
-    });
+    return tagId.isEmpty ? _fetchRecommend(page) : _fetchCategory(tagId, page);
   }
 
   /// 推荐歌单（LX 默认排序 = 推荐）。
   static Future<DiscoverPlaylistPage> _fetchRecommend(int page) {
-    return retryRequest(
+    return BuiltinSearch.transport.cachedRetry(
+      'tx:playlists::$page',
       maxTries: 3,
       attempt: (_) async {
         final data = jsonEncode({
@@ -234,7 +233,8 @@ class TxDiscoverSource extends DiscoverSource {
 
   /// 分类歌单（`get_category_content`）。
   static Future<DiscoverPlaylistPage> _fetchCategory(String tagId, int page) {
-    return retryRequest(
+    return BuiltinSearch.transport.cachedRetry(
+      'tx:playlists:$tagId:$page',
       maxTries: 3,
       attempt: (_) async {
         final id = int.tryParse(tagId) ?? tagId;
@@ -477,11 +477,12 @@ class TxDiscoverSource extends DiscoverSource {
 
   @override
   Future<List<String>> hotSearches() {
-    return BuiltinSearch.transport.cached('tx:hot-search', _fetchHotSearch);
+    return _fetchHotSearch();
   }
 
   static Future<List<String>> _fetchHotSearch() {
-    return retryRequest(
+    return BuiltinSearch.transport.cachedRetry(
+      'tx:hot-search',
       maxTries: 3,
       attempt: (_) async {
         final body = await lxHttpPost(
