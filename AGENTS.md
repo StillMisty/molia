@@ -47,12 +47,19 @@ node tool/gen_search_fixtures.mjs         # 重抓平台真实响应到 test/fix
 
 Android 调试（模拟器 / 热重载 / 截图）走 `tool/agent/*.sh`，用法见 `docs/dev_environment.md`。
 
+本地数据库代码生成（drift，改 `lib/data/molia_database.dart` 后必跑）：
+
+```bash
+dart run build_runner build               # 重新生成 lib/data/molia_database.g.dart（提交生成物）
+dart run drift_dev make-migrations        # 改表结构 + 提 schemaVersion 后：schema 快照 + test/drift 迁移测试
+```
+
 ## 架构地图
 
 ```
 lib/
   domain/          # 纯 Dart：models（Track/PlaybackSnapshot/SearchResult/SourceFailure…）+ ports
-  data/            # 端口实现：catalog（CatalogService）/ playback（facade）/ cache / mapping
+  data/            # 端口实现：db（MoliaDatabase，drift）/ catalog（CatalogService）/ playback（facade）/ cache / mapping
   sources/         # source_manager + builtin（五平台搜索/发现）/ lx（引擎）/ any_listen
   playback/        # LocalPlaybackService（just_audio 后端）+ local_audio_handler（audio_service）
   providers/       # UI 状态：PlaybackProvider / SearchProvider / LibraryProvider / ThemeProvider…

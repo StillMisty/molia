@@ -5,7 +5,7 @@
 /// **不持久化直链**。
 ///
 /// 简单读写走 drift DSL；跨行聚合（汇总 / 首播时间 / 榜单 / 来源分布 /
-/// 已听曲目名）保留 `customSelect`：SQL 语义与 sqflite 时代逐字一致，
+/// 已听曲目名）保留 `customSelect`：SQL 语义逐字保留，
 /// 口径常量（[_qualifiedPredicate] / [_countablePredicate]）仍是唯一来源。
 ///
 /// 口径（查询时计算，常量见 [PlayStatisticsLimits]）：
@@ -454,7 +454,7 @@ class PlayStatisticsRepository {
   /// v5 前的旧行无去重键，按内容哈希一次性回填并落库。
   Future<List<Map<String, Object?>>> syncExportEvents() async {
     final db = _db;
-    // 导出行直接复用列名映射（远端按列名取值，数据形状与 sqflite 时代一致）。
+    // 导出行直接复用列名映射（远端按列名取值；不要改成类型化行）。
     final rows = await db
         .customSelect('SELECT * FROM play_events WHERE endedAt IS NOT NULL')
         .get();

@@ -1,8 +1,8 @@
 /// 本地数据库（drift）：最近播放上下文（play_contexts）+ 资料库
 /// （播放历史 / 用户列表 / 删除墓碑）+ 听歌统计（play_events）。
 ///
-/// fresh 基线：schemaVersion = 1 直接建出全部表，不迁移 sqflite 时代的历史
-/// 数据（设计取舍见 docs/adr/0005-drift-migration.md）。
+/// fresh 基线：schemaVersion = 1 直接建出全部表，不迁移 sqflite 历史库的
+/// 数据（设计取舍与后果见 docs/adr/0005-drift-migration.md）。
 ///
 /// 只 import drift / drift_flutter / path_provider：Web 编译安全
 /// （`NativeDatabase` 仅测试内存库使用，见 test/support/memory_database.dart）。
