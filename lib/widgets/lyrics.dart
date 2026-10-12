@@ -11,6 +11,7 @@ import 'package:provider/provider.dart';
 import '../l10n/app_localizations.dart';
 import '../domain/models/track.dart';
 import '../models/lyric_line.dart';
+import 'lyrics_scroll_policy.dart';
 import '../models/play_mode.dart';
 import '../pages/source_swap_page.dart';
 import '../providers/lyrics_provider.dart';
@@ -404,55 +405,38 @@ class _LyricsWidgetState extends State<LyricsWidget>
     if (!_scrollController.hasClients) {
       return 0.5 - _activeLineUpwardBias;
     }
+    final viewport = _scrollController.position.viewportDimension;
+    return effectiveAlignment(
+      viewport: viewport,
+      topOverlay: _topOverlay(),
+      bottomOverlay: _bottomOverlay(),
+      upwardBias: _activeLineUpwardBias,
+    );
+  }
 
-    final mediaQuery = MediaQuery.of(context);
-    final double viewport = _scrollController.position.viewportDimension;
-    if (viewport <= 0) return 0.5 - _activeLineUpwardBias;
+  /// 顶栏遮挡：渐隐带 + 系统状态栏。
+  double _topOverlay() => kTopFadeBandHeight + MediaQuery.of(context).padding.top;
 
-    final double topOverlay = 40.0 + mediaQuery.padding.top;
-
-    final bool bottomBarVisible = _shouldShowQuickActionsBar;
-    // 快捷操作栏（M3EToolbar 浮动胶囊）从内容底边算起的遮挡高度：
-    // 屏边距（胶囊下沿）+ 胶囊高度 + 底部安全区。
-    final double bottomOverlay = bottomBarVisible
-        ? (mediaQuery.padding.bottom +
-            _quickActionsScreenOffset +
-            _quickActionsContainerSize)
-        : 0.0;
-
-    final double visibleCenter =
-        (topOverlay + (viewport - bottomOverlay)) / 2.0;
-    final double anchor = visibleCenter - viewport * _activeLineUpwardBias;
-    return (anchor / viewport).clamp(0.0, 1.0);
+  /// 底栏遮挡：快捷操作栏（M3EToolbar 浮动胶囊）可见时 = 屏边距（胶囊下沿）
+  /// + 胶囊高度 + 底部安全区；隐藏时为 0。
+  double _bottomOverlay() {
+    if (!_shouldShowQuickActionsBar) return 0.0;
+    final padding = MediaQuery.of(context).padding;
+    return padding.bottom + _quickActionsScreenOffset + _quickActionsContainerSize;
   }
 
   double _tailSpace() {
     if (!_scrollController.hasClients) return 400.0;
-
-    final mediaQuery = MediaQuery.of(context);
     final position = _scrollController.position;
     if (!position.hasPixels || position.viewportDimension <= 0) {
       return 400.0;
     }
-    final double viewport = position.viewportDimension;
-
-    final double topOverlay = 40.0 + mediaQuery.padding.top;
-
-    final bool bottomBarVisible = _shouldShowQuickActionsBar;
-    final double bottomOverlay = bottomBarVisible
-        ? (mediaQuery.padding.bottom +
-            _quickActionsScreenOffset +
-            _quickActionsContainerSize)
-        : 0.0;
-
-    final double visibleHeight =
-        (viewport - topOverlay - bottomOverlay).clamp(0.0, viewport);
-    // 尾部留白按激活行锚点（可见区域中线再上移）反推，保证最后一行
-    // 也能滚到锚点位置。
-    return (visibleHeight / 2.0) +
-        bottomOverlay +
-        viewport * _activeLineUpwardBias +
-        8.0;
+    return tailSpace(
+      viewport: position.viewportDimension,
+      topOverlay: _topOverlay(),
+      bottomOverlay: _bottomOverlay(),
+      upwardBias: _activeLineUpwardBias,
+    );
   }
 
   /// 快捷操作栏显隐：条件变化才起弹簧（建期调用安全，弹簧在下一帧才改值）。
@@ -582,15 +566,15 @@ class _LyricsWidgetState extends State<LyricsWidget>
           targetOffset += direction * extraOffset;
         }
 
-        if (targetOffset < position.minScrollExtent) {
-          targetOffset = position.minScrollExtent;
-        } else if (targetOffset > position.maxScrollExtent) {
-          targetOffset = position.maxScrollExtent;
-        }
+        final clampedTarget = clampScrollOffset(
+          target: targetOffset,
+          minScrollExtent: position.minScrollExtent,
+          maxScrollExtent: position.maxScrollExtent,
+        );
 
         try {
-          if ((position.pixels - targetOffset).abs() > 1.0) {
-            _scrollController.jumpTo(targetOffset);
+          if (shouldScrollTo(current: position.pixels, target: clampedTarget)) {
+            _scrollController.jumpTo(clampedTarget);
           }
         } catch (_) {
           // 跳转失败可忽略：下一帧会重试
@@ -617,10 +601,10 @@ class _LyricsWidgetState extends State<LyricsWidget>
       final double alignment = _computeEffectiveAlignment();
       final reveal = viewport.getOffsetToReveal(renderObject, alignment);
       final position = _scrollController.position;
-      final targetOffset = reveal.offset;
-      final clampedOffset = targetOffset.clamp(
-        position.minScrollExtent,
-        position.maxScrollExtent,
+      final clampedOffset = clampScrollOffset(
+        target: reveal.offset,
+        minScrollExtent: position.minScrollExtent,
+        maxScrollExtent: position.maxScrollExtent,
       );
 
       _scrollController.animateTo(
