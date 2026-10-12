@@ -382,7 +382,7 @@ class DesktopLyricsSettingsPage extends StatelessWidget {
     );
   }
 
-  /// 颜色选择面板：选来源即生效（不再有预设色板）。
+  /// 颜色选择面板：选来源即生效。
   ///
   /// - 选主题角色：直接写入来源并关面板；
   /// - 选自定义：先关面板再打开任意取色器（HSV + Hex + 透明度），

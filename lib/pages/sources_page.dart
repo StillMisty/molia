@@ -23,7 +23,6 @@ AppLocalizations _l10n(BuildContext context) =>
 ///
 /// 分层：只依赖 [SourcesProvider] 与 domain 模型，
 /// 不直接 import `lib/sources/**`（R5）。
-/// 默认音质偏好已上移到设置首屏「播放」区，本页不再重复入口。
 class SourcesPage extends StatefulWidget {
   const SourcesPage({super.key});
 

@@ -39,23 +39,18 @@ class _GeneralSettingsPageState extends State<GeneralSettingsPage> {
   }
 
   /// 行内切换语言：localeNotifier 驱动界面立即生效，即反馈，无需成功提示。
+  ///
+  /// [LanguageService.setAppLocale] 自身吞掉平台通道与持久化错误（失败只记
+  /// 日志、偏好仍尽力保存），因此这里没有可展示的失败路径。
   Future<void> _setLanguage(String value) async {
     final locale = switch (value) {
       'en' => const Locale('en'),
       'zh' => const Locale('zh'),
       _ => null, // system
     };
-    try {
-      await LanguageService.setAppLocale(locale);
-      if (!mounted) return;
-      setState(() => _locale = locale);
-    } catch (e) {
-      if (!mounted) return;
-      final l10n = AppLocalizations.of(context)!;
-      context
-          .read<NotificationService>()
-          .showErrorSnackBar(l10n.failedToChangeLanguage(e.toString()));
-    }
+    await LanguageService.setAppLocale(locale);
+    if (!mounted) return;
+    setState(() => _locale = locale);
   }
 
   @override
@@ -155,9 +150,10 @@ class _GeneralSettingsPageState extends State<GeneralSettingsPage> {
 
 /// 底部导航定制：拖拽排序 + 显示/隐藏（至少保留 1 个），即时生效并持久化。
 ///
-/// 行是标准设置开关行（[SettingsSwitchTile]）+ 拖拽手柄；嵌套在
-/// `ReorderableListView` 里，行形状由本组件按位置自算下发
-/// （[SettingsRowPosition]），与分组内其它行同源。
+/// 行是标准设置开关行（[SettingsSwitchTile]）；拖拽手柄挂在行尾
+/// （[ReorderableDragStartListener] 只包手柄，整行点击仍是显隐开关，
+/// 两种手势互不抢），行形状由本组件按位置自算下发（[SettingsRowPosition]），
+/// 与分组内其它行同源。
 class _BottomNavSettings extends StatelessWidget {
   const _BottomNavSettings({required this.provider});
 
@@ -184,12 +180,9 @@ class _BottomNavSettings extends StatelessWidget {
               Padding(
                 key: ValueKey(order[index]),
                 padding: EdgeInsets.only(top: index == 0 ? 0 : gap),
-                child: ReorderableDragStartListener(
-                  index: index,
-                  child: SettingsRowPosition(
-                    position: calculateCardPosition(index, order.length),
-                    child: _buildRow(context, l10n, nav, order[index]),
-                  ),
+                child: SettingsRowPosition(
+                  position: calculateCardPosition(index, order.length),
+                  child: _buildRow(context, l10n, nav, order[index], index),
                 ),
               ),
           ],
@@ -210,6 +203,7 @@ class _BottomNavSettings extends StatelessWidget {
     AppLocalizations l10n,
     NavProvider nav,
     ShellDestination destination,
+    int index,
   ) {
     final scheme = Theme.of(context).colorScheme;
     final label = switch (destination) {
@@ -224,9 +218,12 @@ class _BottomNavSettings extends StatelessWidget {
       title: label,
       subtitle: '',
       value: nav.isVisible(destination),
-      trailing: Icon(
-        Icons.drag_handle_rounded,
-        color: scheme.onSurfaceVariant,
+      trailing: ReorderableDragStartListener(
+        index: index,
+        child: Icon(
+          Icons.drag_handle_rounded,
+          color: scheme.onSurfaceVariant,
+        ),
       ),
       onChanged: (bool value) async {
         final accepted = await nav.setVisible(destination, value);

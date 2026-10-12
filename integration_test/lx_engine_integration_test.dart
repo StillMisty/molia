@@ -257,8 +257,8 @@ void main() {
     expect(find.textContaining('集成测试源'), findsWidgets);
     expect(find.textContaining('音源管理'), findsWidgets);
 
-    // 默认音质入口已移到设置页「播放」区（音源页不再重复一份）；
-    // 这里验证 manager 的读写闭环，UI 交互由 settings_page_test 覆盖。
+    // 默认音质入口在设置 › 播放；这里验证 manager 的读写闭环，
+    // UI 交互由 settings_page_test 覆盖。
     await manager.setPreferredQuality('128k');
     await tester.pumpAndSettle();
     expect(manager.preferredQuality, '128k');

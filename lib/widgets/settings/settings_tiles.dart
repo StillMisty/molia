@@ -385,18 +385,7 @@ class SettingsChoiceRow<T> extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Row(
-            children: [
-              _SettingsTileIcon(icon: icon, isDestructive: false),
-              const SizedBox(width: 12),
-              Expanded(
-                child: _SettingsTileLabel(
-                  title: title,
-                  subtitle: subtitle ?? '',
-                ),
-              ),
-            ],
-          ),
+          _SettingsTileLead(icon: icon, title: title, subtitle: subtitle),
           const SizedBox(height: kSettingsSmallSpacing),
           SizedBox(
             width: double.infinity,
@@ -434,7 +423,6 @@ class SettingsDropdownRow<T> extends StatelessWidget {
     required this.value,
     required this.options,
     required this.onChanged,
-    this.menuWidth = 170,
   });
 
   final IconData icon;
@@ -449,9 +437,6 @@ class SettingsDropdownRow<T> extends StatelessWidget {
 
   final ValueChanged<T> onChanged;
 
-  /// 行尾字段宽度（设置弹层窄于屏幕，字段定宽避免撑挤标题）。
-  final double menuWidth;
-
   @override
   Widget build(BuildContext context) {
     return CardListSurface(
@@ -461,17 +446,13 @@ class SettingsDropdownRow<T> extends StatelessWidget {
       onPressed: null,
       child: Row(
         children: [
-          _SettingsTileIcon(icon: icon, isDestructive: false),
-          const SizedBox(width: 12),
           Expanded(
-            child: _SettingsTileLabel(
-              title: title,
-              subtitle: subtitle ?? '',
-            ),
+            child: _SettingsTileLead(icon: icon, title: title, subtitle: subtitle),
           ),
           const SizedBox(width: 8),
           SizedBox(
-            width: menuWidth,
+            // 设置弹层窄于屏幕：字段定宽，避免撑挤标题。
+            width: 170,
             child: M3EDropdownMenu<T>(
               items: [
                 for (final (optionValue, label) in options)
@@ -501,7 +482,6 @@ class SettingsSliderRow extends StatelessWidget {
     super.key,
     required this.icon,
     required this.title,
-    this.subtitle,
     required this.valueLabel,
     required this.value,
     required this.min,
@@ -512,7 +492,6 @@ class SettingsSliderRow extends StatelessWidget {
 
   final IconData icon;
   final String title;
-  final String? subtitle;
 
   /// 行尾当前值展示（如 `+50 ms` / `80%`）。
   final String valueLabel;
@@ -536,14 +515,7 @@ class SettingsSliderRow extends StatelessWidget {
         children: [
           Row(
             children: [
-              _SettingsTileIcon(icon: icon, isDestructive: false),
-              const SizedBox(width: 12),
-              Expanded(
-                child: _SettingsTileLabel(
-                  title: title,
-                  subtitle: subtitle ?? '',
-                ),
-              ),
+              Expanded(child: _SettingsTileLead(icon: icon, title: title)),
               const SizedBox(width: 8),
               Text(
                 valueLabel,
@@ -576,14 +548,12 @@ class SettingsColorValueTile extends StatelessWidget {
     super.key,
     required this.icon,
     required this.title,
-    this.subtitle,
     required this.colorArgb,
     required this.onTap,
   });
 
   final IconData icon;
   final String title;
-  final String? subtitle;
 
   /// 当前颜色（ARGB int；颜色契约禁止页面写 `Color(0x...)` 字面量）。
   final int colorArgb;
@@ -607,14 +577,7 @@ class SettingsColorValueTile extends StatelessWidget {
       },
       child: Row(
         children: [
-          _SettingsTileIcon(icon: icon, isDestructive: false),
-          const SizedBox(width: 12),
-          Expanded(
-            child: _SettingsTileLabel(
-              title: title,
-              subtitle: subtitle ?? '',
-            ),
-          ),
+          Expanded(child: _SettingsTileLead(icon: icon, title: title)),
           const SizedBox(width: 8),
           SettingsColorSwatch(color: Color(colorArgb)),
           const SizedBox(width: 8),
@@ -653,6 +616,31 @@ class SettingsColorSwatch extends StatelessWidget {
         borderRadius: BorderRadius.circular(8),
         border: Border.all(color: M3ETheme.of(context).colorScheme.outlineVariant),
       ),
+    );
+  }
+}
+
+/// 行首区：图标底 + 标题/副标题（值类型行共用）。
+///
+/// 内部用 [Expanded] 吃掉剩余宽度把尾部控件推到行尾，因此放在 `Row` 里时
+/// 调用方必须再用 `Expanded` 包一层（非 flex 子项拿到的是无界约束）。
+class _SettingsTileLead extends StatelessWidget {
+  const _SettingsTileLead({required this.icon, required this.title, this.subtitle});
+
+  final IconData icon;
+  final String title;
+  final String? subtitle;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        _SettingsTileIcon(icon: icon, isDestructive: false),
+        const SizedBox(width: 12),
+        Expanded(
+          child: _SettingsTileLabel(title: title, subtitle: subtitle ?? ''),
+        ),
+      ],
     );
   }
 }

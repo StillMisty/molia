@@ -4,8 +4,9 @@ import 'package:provider/provider.dart';
 
 import '../l10n/app_localizations.dart';
 import '../services/data_saver_service.dart';
+import '../utils/data_saver_subtitle.dart';
+import '../utils/source_quality_label.dart';
 import '../widgets/settings/settings_tiles.dart';
-import '../widgets/source_quality_label.dart';
 
 /// 省流模式子页：总开关 + 生效时的音质上限与封面省流。
 ///
@@ -36,7 +37,12 @@ class DataSaverSettingsPage extends StatelessWidget {
                       switchKey: const Key('settingsDataSaverSwitch'),
                       icon: Icons.data_saver_on_rounded,
                       title: l10n.settingsDataSaverTitle,
-                      subtitle: _statusSubtitle(l10n, dataSaver),
+                      subtitle: dataSaverSubtitle(
+                        l10n,
+                        enabled: dataSaver.enabled,
+                        detectionAvailable: dataSaver.detectionAvailable,
+                        onCellular: dataSaver.onCellular,
+                      ),
                       value: dataSaver.enabled,
                       onChanged: (value) => dataSaver.setEnabled(value),
                     ),
@@ -67,17 +73,5 @@ class DataSaverSettingsPage extends StatelessWidget {
               ],
             ),
     );
-  }
-
-  /// 生效状态副标题：仅移动数据生效，网络状态对用户透明。
-  String _statusSubtitle(AppLocalizations l10n, DataSaverService dataSaver) {
-    final status = !dataSaver.detectionAvailable
-        ? l10n.settingsDataSaverNetworkUnknown
-        : (dataSaver.onCellular
-            ? l10n.settingsDataSaverNetworkCellular
-            : l10n.settingsDataSaverNetworkWifi);
-    return dataSaver.enabled
-        ? '${l10n.settingsDataSaverSubtitle} · $status'
-        : l10n.settingsDataSaverSubtitle;
   }
 }

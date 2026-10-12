@@ -668,12 +668,6 @@ abstract class AppLocalizations {
   /// **'Cancel'**
   String get cancelButton;
 
-  /// No description provided for @languageDialogTitle.
-  ///
-  /// In en, this message translates to:
-  /// **'Select Language'**
-  String get languageDialogTitle;
-
   /// No description provided for @languageSaved.
   ///
   /// In en, this message translates to:
@@ -757,12 +751,6 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Failed to clear cache'**
   String get cacheClearFailed;
-
-  /// No description provided for @failedToChangeLanguage.
-  ///
-  /// In en, this message translates to:
-  /// **'Failed to change language: {error}'**
-  String failedToChangeLanguage(String error);
 
   /// No description provided for @saveChanges.
   ///
@@ -2201,7 +2189,7 @@ abstract class AppLocalizations {
   /// No description provided for @cacheAudioMaxSuggested.
   ///
   /// In en, this message translates to:
-  /// **'Suggested {value} (device storage ÷ 128)'**
+  /// **'Suggested {value} (internal storage ÷ 128)'**
   String cacheAudioMaxSuggested(String value);
 
   /// No description provided for @cacheCustomRangeError.

@@ -30,7 +30,7 @@ void main() {
 
   testWidgets('分段行：放松约束父级下仍等宽铺满、可选中', (tester) async {
     var selected = 'a';
-    // Center 只给 loose 约束：旧实现（直接放 Row 尾位/Align）在此塌成零宽。
+    // Center 只给 loose 约束：分段行也必须显式铺满，不能塌成零宽。
     await pumpRow(
       tester,
       Center(

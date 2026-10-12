@@ -116,7 +116,6 @@
   "clearCacheTitle": "Clear Lyrics Cache",
   "clearCacheSubtitle": "Clear cached lyrics",
   "cancelButton": "Cancel",
-  "languageDialogTitle": "Select Language",
   "languageSaved": "Language setting saved",
   "exportFailed": "Export failed or cancelled.",
   "importDialogTitle": "Confirm Import",
@@ -131,14 +130,6 @@
   "clearingCache": "Clearing cache...",
   "cacheCleared": "Cache cleared successfully!",
   "cacheClearFailed": "Failed to clear cache",
-  "failedToChangeLanguage": "Failed to change language: {error}",
-  "@failedToChangeLanguage": {
-    "placeholders": {
-      "error": {
-        "type": "String"
-      }
-    }
-  },
   "saveChanges": "Save",
   "selectLyrics": "Select Lyrics",
   "selectLyricsTooltip": "Select lyrics fragments to make a poster or share",
@@ -596,7 +587,7 @@
       }
     }
   },
-  "cacheAudioMaxSuggested": "Suggested {value} (device storage ÷ 128)",
+  "cacheAudioMaxSuggested": "Suggested {value} (internal storage ÷ 128)",
   "@cacheAudioMaxSuggested": {
     "placeholders": {
       "value": {

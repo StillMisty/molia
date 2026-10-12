@@ -13,11 +13,12 @@ import '../services/settings_service.dart';
 import '../services/source_swap/source_swap_settings.dart';
 import '../theme/scheme_builder.dart';
 import '../utils/color_hex.dart';
+import '../utils/data_saver_subtitle.dart';
 import '../utils/responsive.dart';
+import '../utils/source_quality_label.dart';
 import '../widgets/app_color_picker.dart';
 import '../widgets/font_picker_sheet.dart';
 import '../widgets/settings/settings_tiles.dart';
-import '../widgets/source_quality_label.dart';
 import 'ai_dj_page.dart';
 import 'data_saver_settings_page.dart';
 import 'data_settings_page.dart';
@@ -340,7 +341,7 @@ class _SettingsHomeViewState extends State<_SettingsHomeView> {
                 context.read<PlaybackProvider>().setRestoreSessionEnabled(value),
           ),
         ),
-        // 音源默认音质的唯一入口（音源页不再重复一份）。
+        // 音源默认音质：设置页唯一入口。
         if (sources != null)
           Selector<SourcesProvider, String>(
             selector: (context, provider) => provider.preferredQuality,
@@ -385,7 +386,12 @@ class _SettingsHomeViewState extends State<_SettingsHomeView> {
             key: const Key('settingsDataSaverItem'),
             icon: Icons.data_saver_on_rounded,
             title: l10n.settingsDataSaverTitle,
-            subtitle: _dataSaverSubtitle(l10n, dataSaver),
+            subtitle: dataSaverSubtitle(
+              l10n,
+              enabled: dataSaver.enabled,
+              detectionAvailable: dataSaver.detectionAvailable,
+              onCellular: dataSaver.onCellular,
+            ),
             onTap: () => openSettingsSubPage(
               context,
               const DataSaverSettingsPage(),
@@ -504,19 +510,6 @@ class _SettingsHomeViewState extends State<_SettingsHomeView> {
     return monetAvailable
         ? l10n.settingsBaseColorWallpaper
         : l10n.settingsMonetUnavailable;
-  }
-
-  /// 省流入口副标题：开启后附带当前网络状态（移动数据已生效 / Wi-Fi 未生效 /
-  /// 无法检测），让「仅移动数据生效」的行为对用户透明。
-  String _dataSaverSubtitle(AppLocalizations l10n, DataSaverService dataSaver) {
-    final status = !dataSaver.detectionAvailable
-        ? l10n.settingsDataSaverNetworkUnknown
-        : (dataSaver.onCellular
-            ? l10n.settingsDataSaverNetworkCellular
-            : l10n.settingsDataSaverNetworkWifi);
-    return dataSaver.enabled
-        ? '${l10n.settingsDataSaverSubtitle} · $status'
-        : l10n.settingsDataSaverSubtitle;
   }
 
   /// 「将歌词复制为单行」开关（SettingsService 持久化，与歌词页共用）。

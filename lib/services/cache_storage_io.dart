@@ -37,14 +37,20 @@ class IoCacheStorage implements CacheStorage {
 
   String? _resolvedAudioDir;
   String? _resolvedArtworkDir;
-  Future<int?>? _totalSpaceCache;
+  int? _totalSpaceCache;
 
   @override
-  Future<int?> totalSpaceBytes() =>
-      _totalSpaceCache ??= _queryTotalSpaceBytes();
+  Future<int?> totalSpaceBytes() async {
+    final cached = _totalSpaceCache;
+    if (cached != null) return cached;
+    final value = await _queryTotalSpaceBytes();
+    // 只缓存成功结果：查询失败（通道时序 / 平台异常）下次仍可重试。
+    if (value != null) _totalSpaceCache = value;
+    return value;
+  }
 
-  /// Android 经原生 StatFs 读 `/data` 分区总容量；其余平台/失败返回 null
-  /// （上层回退固定默认值）。结果缓存：容量是设备级常量。
+  /// Android 经原生 StatFs 读内部存储分区总容量；其余平台/失败返回 null
+  /// （上层回退固定默认值）。
   Future<int?> _queryTotalSpaceBytes() async {
     if (!Platform.isAndroid) return null;
     try {

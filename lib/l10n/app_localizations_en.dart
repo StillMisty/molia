@@ -314,9 +314,6 @@ class AppLocalizationsEn extends AppLocalizations {
   String get cancelButton => 'Cancel';
 
   @override
-  String get languageDialogTitle => 'Select Language';
-
-  @override
   String get languageSaved => 'Language setting saved';
 
   @override
@@ -359,11 +356,6 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get cacheClearFailed => 'Failed to clear cache';
-
-  @override
-  String failedToChangeLanguage(String error) {
-    return 'Failed to change language: $error';
-  }
 
   @override
   String get saveChanges => 'Save';
@@ -1168,7 +1160,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String cacheAudioMaxSuggested(String value) {
-    return 'Suggested $value (device storage ÷ 128)';
+    return 'Suggested $value (internal storage ÷ 128)';
   }
 
   @override

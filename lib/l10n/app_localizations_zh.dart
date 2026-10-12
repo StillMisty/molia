@@ -301,9 +301,6 @@ class AppLocalizationsZh extends AppLocalizations {
   String get cancelButton => '取消';
 
   @override
-  String get languageDialogTitle => '选择语言';
-
-  @override
   String get languageSaved => '语言设置已保存';
 
   @override
@@ -345,11 +342,6 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get cacheClearFailed => '清除缓存失败。';
-
-  @override
-  String failedToChangeLanguage(String error) {
-    return '更改语言失败: $error';
-  }
 
   @override
   String get saveChanges => '保存';
@@ -1131,7 +1123,7 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String cacheAudioMaxSuggested(String value) {
-    return '建议 $value（设备存储的 1/128）';
+    return '建议 $value（内部存储的 1/128）';
   }
 
   @override

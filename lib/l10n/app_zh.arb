@@ -95,7 +95,6 @@
   "clearCacheTitle": "清除歌词缓存",
   "clearCacheSubtitle": "清除已缓存的歌词",
   "cancelButton": "取消",
-  "languageDialogTitle": "选择语言",
   "languageSaved": "语言设置已保存",
   "exportFailed": "导出失败或已取消。",
   "importDialogTitle": "确认导入",
@@ -110,7 +109,6 @@
   "clearingCache": "正在清除缓存...",
   "cacheCleared": "缓存清除成功。",
   "cacheClearFailed": "清除缓存失败。",
-  "failedToChangeLanguage": "更改语言失败: {error}",
   "saveChanges": "保存",
   "selectLyrics": "选择歌词",
   "selectLyricsTooltip": "选择歌词片段生成海报或分享",
@@ -350,7 +348,7 @@
   "cacheUnitDays": "天",
   "cacheUnitItems": "个",
   "cacheCustomHint": "0 = {label} · 范围 {min}–{max}",
-  "cacheAudioMaxSuggested": "建议 {value}（设备存储的 1/128）",
+  "cacheAudioMaxSuggested": "建议 {value}（内部存储的 1/128）",
   "@cacheCustomHint": {
     "placeholders": {
       "label": {
