@@ -3,7 +3,7 @@ import 'dart:math' as math;
 import 'dart:typed_data';
 
 import 'package:crypto/crypto.dart' as crypto;
-import 'package:html_unescape/html_unescape.dart';
+import 'package:molia/utils/html_unescape/html_unescape.dart';
 import 'package:pointycastle/export.dart';
 
 import '../lx/lx_native_utils.dart';

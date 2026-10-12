@@ -31,7 +31,6 @@ dependencies:
   share_plus: ^13.3.1
   file_picker: ^13.1.0
   pointycastle: ^4.0.0
-  html_unescape: ^2.0.0
   material_color_utilities: ^0.13.0
   dynamic_color: ^2.1.0
   gal: ^2.3.3
