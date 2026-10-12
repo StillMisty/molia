@@ -1,7 +1,7 @@
 import '../source_search_result.dart';
 import '../source_track.dart';
 import 'builtin_search.dart';
-import 'builtin_transport.dart';
+import 'builtin_search_runner.dart';
 import 'crypto_utils.dart';
 
 /// 咪咕音乐搜索（移植自 lx-music-mobile `mg/musicSearch.js`）。
@@ -17,7 +17,16 @@ class MgSearch {
     String keyword, {
     int page = 1,
     int limit = _limit,
-  }) async {
+  }) {
+    return runBuiltinSearch(
+      _callFor(keyword, page, limit),
+      page: page,
+      limit: limit,
+    );
+  }
+
+  /// 平台变体面：签名 GET / 业务码判定（`code != '000000'`）/ 解析。
+  static BuiltinSearchCall _callFor(String keyword, int page, int limit) {
     final time = DateTime.now().millisecondsSinceEpoch.toString();
     final sign = md5Hex(
       '$keyword$_signatureMd5'
@@ -30,8 +39,12 @@ class MgSearch {
         '&pageSize=$limit&text=${Uri.encodeComponent(keyword)}'
         '&pageNo=$page&sort=0&sid=USS';
 
-    final result = await lxHttpGet(
-      url,
+    bool invalid(dynamic response) =>
+        response is! Map || response['code'] != '000000';
+
+    return BuiltinSearchCall(
+      platform: 'mg',
+      url: url,
       headers: {
         'uiVersion': 'A_music_3.6.1',
         'deviceId': _deviceId,
@@ -41,23 +54,15 @@ class MgSearch {
         'User-Agent':
             'Mozilla/5.0 (Linux; U; Android 11.0.0; zh-cn; MI 11 Build/OPR1.170623.032) AppleWebKit/534.30 (KHTML, like Gecko) Version/4.0 Mobile Safari/534.30',
       },
-      retries: BuiltinTransport.defaultRetries,
-      retryIf: (json) => json is! Map || json['code'] != '000000',
-    );
-
-    if (result is! Map || result['code'] != '000000') {
-      return SourceSearchResult.empty;
-    }
-
-    final songResult = result['songResultData'];
-    final resultList = (songResult is Map && songResult['resultList'] is List)
-        ? songResult['resultList'] as List
-        : const [];
-    return SourceSearchResult.fromPage(
-      tracks: parseItems(resultList),
-      page: page,
-      limit: limit,
-      total: totalOf(result),
+      isInvalid: invalid,
+      parseItems: (response) {
+        final songResult = (response as Map)['songResultData'];
+        final resultList = (songResult is Map && songResult['resultList'] is List)
+            ? songResult['resultList'] as List
+            : const [];
+        return parseItems(resultList);
+      },
+      totalOf: totalOf,
     );
   }
 

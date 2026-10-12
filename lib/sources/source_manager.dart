@@ -202,8 +202,7 @@ class SourceManager extends ChangeNotifier {
       }
     }
     for (final entry in BuiltinSearch.platforms.entries) {
-      final decl = _activeSources[entry.key];
-      if (decl != null && decl.canResolveUrl) {
+      if (_isBuiltinSearchable(entry.key)) {
         candidates.add(SourceOption(
           key: entry.key,
           name: entry.value,
@@ -225,6 +224,13 @@ class SourceManager extends ChangeNotifier {
     return candidates;
   }
 
+  /// 内置平台「是否可搜索」的唯一判定：脚本可取链才有搜索入口
+  /// （channels 的候选列表、[capabilitiesFor] 的能力位与 [searchWithMeta]
+  /// 的路由门共用它——三处各算一份会静默漂移）。
+  bool _isBuiltinSearchable(String key) =>
+      BuiltinSearch.isBuiltin(key) &&
+      (_activeSources[key]?.canResolveUrl ?? false);
+
   /// 音源能力：与路由的实际 gating 一致（registry / 领域适配器共用）。
   ///
   /// - builtin：出现在 [searchableSources] 的前提是已有可取链脚本，因此
@@ -245,12 +251,10 @@ class SourceManager extends ChangeNotifier {
     }
     final decl = _activeSources[key];
     // 内置平台（kw/kg/tx/wy/mg）的搜索/分页由 Dart 移植实现（BuiltinSearch），
-    // 能力跟随「脚本可取链」，与 channels/_searchableCandidates 的 canSearch
-    // 保持一致；脚本声明的 canSearch 只描述脚本扩展源自身的社区搜索 action。
-    // 两处不一致会静默拒绝渠道→搜索源同步（搜索停留在上一次选中的源，
-    // 与展示渠道不符）。
+    // 能力跟随「脚本可取链」；脚本声明的 canSearch 只描述脚本扩展源自身的
+    // 社区搜索 action（见 [_isBuiltinSearchable]）。
     final builtin = BuiltinSearch.isBuiltin(key);
-    final builtinSearchable = builtin && (decl?.canResolveUrl ?? false);
+    final builtinSearchable = _isBuiltinSearchable(key);
     return SourceCapabilities(
       search: builtinSearchable || (decl?.canSearch ?? false),
       pagination: builtinSearchable || (decl?.canSearch ?? false),
@@ -493,25 +497,14 @@ class SourceManager extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// 搜索（兼容入口，只返回曲目列表）。
-  ///
-  /// 需要 total/hasMore 等分页信息时请使用 [searchWithMeta]。
-  Future<List<SourceTrack>> search(
-    String sourceKey,
-    String keyword, {
-    int page = 1,
-    int limit = 30,
-  }) async {
-    final result =
-        await searchWithMeta(sourceKey, keyword, page: page, limit: limit);
-    return result.tracks;
-  }
-
   /// 分页搜索。内置平台走 Dart 移植的搜索接口，脚本自定义源走脚本扩展 action。
   ///
   /// 返回 [SourceSearchResult]，携带 hasMore（由平台总数或本页结果推断）与
   /// total（平台返回时才有）。脚本扩展搜索的返回格式为社区约定，字段兼容性
   /// 尽力而为：优先识别 isEnd / hasMore / total，否则用 tracks.length >= limit 近似。
+  ///
+  /// 内置平台的失败语义：`failure` 非空表示失败（区分「平台返回空」，
+  /// 见 `builtin_search_runner.dart`）。
   Future<SourceSearchResult> searchWithMeta(
     String sourceKey,
     String keyword, {
@@ -529,7 +522,7 @@ class SourceManager extends ChangeNotifier {
     }
     final decl = _activeSources[sourceKey];
     if (BuiltinSearch.isBuiltin(sourceKey)) {
-      if (decl == null || !decl.canResolveUrl) {
+      if (!_isBuiltinSearchable(sourceKey)) {
         throw LxEngineException(
             '当前音源脚本不支持 ${BuiltinSearch.displayName(sourceKey)}，无法播放该平台歌曲');
       }

@@ -1,21 +1,34 @@
+import '../domain/models/failure.dart';
 import 'source_track.dart';
 
 /// 音源搜索结果（携带分页信息）。
 ///
 /// [tracks] 为当前页的曲目；[hasMore] 表示是否可能还有下一页；
 /// [total] 为平台返回的结果总数（部分平台仅在首页返回，可能为空）。
+///
+/// [failure] 非空表示这次搜索**失败**（请求异常或平台业务拒绝），与「平台
+/// 正常返回但没有结果」（tracks 为空、failure 为空）是两回事——内置检索
+/// runner 是唯一区分点（`builtin_search_runner.dart`）。
 class SourceSearchResult {
   final List<SourceTrack> tracks;
   final bool hasMore;
   final int? total;
 
+  /// 失败语义（延迟消费：UI 收口前仍只读 tracks，失败由后续版本展示）。
+  final SourceFailure? failure;
+
   const SourceSearchResult({
     required this.tracks,
     this.hasMore = false,
     this.total,
+    this.failure,
   });
 
   static const SourceSearchResult empty = SourceSearchResult(tracks: []);
+
+  /// 失败结果（无曲目、带归一化失败）。
+  factory SourceSearchResult.failed(SourceFailure failure) =>
+      SourceSearchResult(tracks: const [], failure: failure);
 
   /// 依据平台返回的 [total] / [isEnd] / 本页曲目数推断是否还有下一页。
   ///

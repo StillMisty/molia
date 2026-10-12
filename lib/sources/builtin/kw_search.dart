@@ -1,7 +1,7 @@
 import '../source_search_result.dart';
 import '../source_track.dart';
 import 'builtin_search.dart';
-import 'builtin_transport.dart';
+import 'builtin_search_runner.dart';
 import 'crypto_utils.dart';
 
 /// 酷我音乐搜索（移植自 lx-music-mobile `kw/musicSearch.js`）。
@@ -15,31 +15,35 @@ class KwSearch {
     String keyword, {
     int page = 1,
     int limit = _limit,
-  }) async {
+  }) {
+    return runBuiltinSearch(
+      _callFor(keyword, page, limit),
+      page: page,
+      limit: limit,
+    );
+  }
+
+  /// 平台变体面：请求 / 响应级重试（偶发「总数非 0 但本页为空」）/ 解析。
+  static BuiltinSearchCall _callFor(String keyword, int page, int limit) {
     final url = 'http://search.kuwo.cn/r.s?client=kt'
         '&all=${Uri.encodeComponent(keyword)}'
         '&pn=${page - 1}&rn=$limit'
         '&uid=794762570&ver=kwplayer_ar_9.2.2.1&vipver=1'
         '&show_copyright_off=1&newver=1&ft=music&cluster=0&strategy=2012'
         '&encoding=utf8&rformat=json&vermerge=1&mobi=1&issubtitle=1';
-    // 响应级重试（平台偶发「总数非 0 但本页为空」）；统一预算在传输层。
-    final result = await lxHttpGet(
-      url,
-      retries: BuiltinTransport.defaultRetries,
+    return BuiltinSearchCall(
+      platform: 'kw',
+      method: BuiltinSearchMethod.get,
+      url: url,
       retryIf: (json) {
         if (json is! Map) return false;
         final total = json['TOTAL']?.toString();
         final show = json['SHOW']?.toString();
         return total != '0' && show == '0';
       },
-    );
-    if (result is! Map) return SourceSearchResult.empty;
-
-    return SourceSearchResult.fromPage(
-      tracks: parseItems(result),
-      page: page,
-      limit: limit,
-      total: totalOf(result),
+      isInvalid: (response) => response is! Map,
+      parseItems: parseItems,
+      totalOf: totalOf,
     );
   }
 

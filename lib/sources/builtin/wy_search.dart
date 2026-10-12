@@ -1,7 +1,6 @@
 import '../source_search_result.dart';
 import '../source_track.dart';
-import 'builtin_search.dart';
-import 'builtin_transport.dart';
+import 'builtin_search_runner.dart';
 import 'crypto_utils.dart';
 import 'wy_music_detail.dart';
 
@@ -27,7 +26,16 @@ class WySearch {
     String keyword, {
     int page = 1,
     int limit = _limit,
-  }) async {
+  }) {
+    return runBuiltinSearch(
+      _callFor(keyword, page, limit),
+      page: page,
+      limit: limit,
+    );
+  }
+
+  /// 平台变体面：eapi 表单 POST / 业务码判定（`code != 200`）/ 解析。
+  static BuiltinSearchCall _callFor(String keyword, int page, int limit) {
     final params = eapiParams('/api/search/song/list/page', {
       'keyword': keyword,
       'needCorrect': '1',
@@ -38,8 +46,13 @@ class WySearch {
       'limit': limit,
     });
 
-    final result = await lxHttpPost(
-      'http://interface.music.163.com/eapi/batch',
+    bool invalid(dynamic response) =>
+        response is! Map || response['code'] != 200;
+
+    return BuiltinSearchCall(
+      platform: 'wy',
+      method: BuiltinSearchMethod.post,
+      url: 'http://interface.music.163.com/eapi/batch',
       form: true,
       body: {'params': params},
       headers: {
@@ -47,23 +60,15 @@ class WySearch {
             'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/60.0.3112.90 Safari/537.36',
         'origin': 'https://music.163.com',
       },
-      retries: BuiltinTransport.defaultRetries,
-      retryIf: (json) => json is! Map || json['code'] != 200,
-    );
-
-    if (result is! Map || result['code'] != 200) {
-      return SourceSearchResult.empty;
-    }
-
-    final data = result['data'];
-    final resources = (data is Map && data['resources'] is List)
-        ? data['resources'] as List
-        : const [];
-    return SourceSearchResult.fromPage(
-      tracks: parseItems(resources),
-      page: page,
-      limit: limit,
-      total: totalOf(data),
+      isInvalid: invalid,
+      parseItems: (response) {
+        final data = (response as Map)['data'];
+        final resources = (data is Map && data['resources'] is List)
+            ? data['resources'] as List
+            : const [];
+        return parseItems(resources);
+      },
+      totalOf: (response) => totalOf((response as Map)['data']),
     );
   }
 

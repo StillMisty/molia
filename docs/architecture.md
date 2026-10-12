@@ -172,6 +172,14 @@
   响应级重试（`retryIf`）与结果缓存（`transport.cached`，single-flight + LRU +
   TTL 5min）；平台适配器只保留 URL 构造与解析，不再各自持有静态 `RequestCache`。
   fetch 路径测试通过注入 `MockClient` 覆盖。
+- **内置检索 runner**：`lib/sources/builtin/builtin_search_runner.dart` 是五个平台
+  搜索的执行骨架（`runBuiltinSearch`）：重试预算、分页推断与失败归一各写一次；
+  平台变体面（请求方式/URL/body、响应级重试判定、业务码判定、列表路径与解析）
+  收进 `BuiltinSearchCall`，各平台文件只剩字面量与 parser。结果语义分界：
+  **平台返回空** → 正常结果（`tracks` 为空、`failure` 空）；**业务拒绝 / 传输失败**
+  → `SourceSearchResult.failed`（`SourceSearchResult.failure`，不抛异常；UI 收口前
+  只读 `tracks`）。内置平台「可搜索」的判定唯一来源是
+  `SourceManager._isBuiltinSearchable`（channels 候选、能力位与搜索路由共用）。
 - **资料库写入**：`LibraryProvider` 是收藏 / 历史 / 列表写入的唯一入口。收藏唯一
   入口 `toggleFavoriteTrack(Track)`（播放页经它写入，不再直连 `LibraryRepository`）；
   批量操作按 `PlaylistTrack` 规范形状（`PlaylistTrack.fromHistoryEntry` 负责历史转换）；

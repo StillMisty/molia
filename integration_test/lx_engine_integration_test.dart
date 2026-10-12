@@ -121,7 +121,7 @@ void main() {
     expect(manager.activeSources['test']!.actions,
         containsAll(['musicUrl', 'search', 'lyric']));
 
-    final tracks = await manager.search('test', 'hello');
+    final tracks = (await manager.searchWithMeta('test', 'hello')).tracks;
     expect(tracks, hasLength(2));
     expect(tracks.first.title, 'Hello LX');
     expect(tracks.first.artist, 'Tester');
@@ -137,7 +137,7 @@ void main() {
 
     // 错误路径：脚本拒绝的 action
     expect(
-      () => manager.search('不存在的源', 'x'),
+      () => manager.searchWithMeta('不存在的源', 'x'),
       throwsA(anything),
     );
   });
@@ -158,7 +158,7 @@ void main() {
       manager.dispose();
     });
     await manager.importScript(script, activate: true);
-    final tracks = await manager.search('test', 'hello');
+    final tracks = (await manager.searchWithMeta('test', 'hello')).tracks;
 
     final player = LocalPlaybackService(
       resolver: (track, {String? quality}) =>

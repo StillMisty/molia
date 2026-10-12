@@ -96,14 +96,12 @@ class KgDiscoverSource extends DiscoverSource {
 
   @override
   Future<List<DiscoverTrack>> leaderboardTracks(String bangid) {
-    return BuiltinSearch.transport.cached(
-      'kg:leaderboard:$bangid',
-      () => _fetchLeaderboard(bangid),
-    );
+    return _fetchLeaderboard(bangid);
   }
 
   static Future<List<DiscoverTrack>> _fetchLeaderboard(String bangid) {
-    return retryRequest(
+    return BuiltinSearch.transport.cachedRetry(
+      'kg:leaderboard:$bangid',
       maxTries: 4,
       attempt: (_) async {
         final body = await lxHttpGet(
@@ -337,9 +335,7 @@ class KgDiscoverSource extends DiscoverSource {
   Future<DiscoverDetail> playlistDetail(String rawId, int page) {
     final id = _parseSpecialId(rawId);
     if (id == null) throw StateError('kg 歌单 id 解析失败');
-    return BuiltinSearch.transport.cached('kg:playlist-detail:$id', () {
-      return _fetchDetailBySpecialId(id);
-    });
+    return _fetchDetailBySpecialId(id);
   }
 
   /// 从 `id_123` / `special/single/123-5-9999.html` / 纯数字中提取 specialid。
@@ -353,7 +349,8 @@ class KgDiscoverSource extends DiscoverSource {
   }
 
   static Future<DiscoverDetail> _fetchDetailBySpecialId(String id) {
-    return retryRequest(
+    return BuiltinSearch.transport.cachedRetry(
+      'kg:playlist-detail:$id',
       maxTries: 3,
       attempt: (_) async {
         final html = await lxHttpGetText(
@@ -499,11 +496,12 @@ class KgDiscoverSource extends DiscoverSource {
 
   @override
   Future<List<String>> hotSearches() {
-    return BuiltinSearch.transport.cached('kg:hot-search', _fetchHotSearch);
+    return _fetchHotSearch();
   }
 
   static Future<List<String>> _fetchHotSearch() {
-    return retryRequest(
+    return BuiltinSearch.transport.cachedRetry(
+      'kg:hot-search',
       maxTries: 3,
       attempt: (_) async {
         final body = await lxHttpGet(

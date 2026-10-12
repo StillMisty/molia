@@ -4,7 +4,7 @@ import 'dart:math';
 import '../source_search_result.dart';
 import '../source_track.dart';
 import 'builtin_search.dart';
-import 'builtin_transport.dart';
+import 'builtin_search_runner.dart';
 import 'crypto_utils.dart';
 
 /// QQ 音乐搜索（移植自 lx-music-mobile `tx/musicSearch.js`）。
@@ -17,7 +17,16 @@ class TxSearch {
     String keyword, {
     int page = 1,
     int limit = _limit,
-  }) async {
+  }) {
+    return runBuiltinSearch(
+      _callFor(keyword, page, limit),
+      page: page,
+      limit: limit,
+    );
+  }
+
+  /// 平台变体面：签名 POST 体 / 业务码判定（外层与 req 内层 `code`）/ 解析。
+  static BuiltinSearchCall _callFor(String keyword, int page, int limit) {
     final body = <String, dynamic>{
       'comm': {
         '_channelid': '0',
@@ -53,29 +62,29 @@ class TxSearch {
     // 签名必须与实际发送的 JSON 字符串完全一致
     final bodyText = jsonEncode(body);
     final sign = zzcSign(bodyText);
-    final url = 'https://u.y.qq.com/cgi-bin/musics.fcg?sign=$sign';
 
-    final result = await lxHttpPost(
-      url,
-      body: bodyText,
-      headers: {'User-Agent': 'QQMusic 14090508(android 12)'},
-      retries: BuiltinTransport.defaultRetries,
-      retryIf: (json) => json is! Map || json['code'] != 0,
-    );
-    if (result is! Map) return SourceSearchResult.empty;
-
-    final req = (result['music.search.SearchCgiService'] ??
-        result['req']) as Map?;
-    if (result['code'] != 0 || req == null || req['code'] != 0) {
-      return SourceSearchResult.empty;
+    Map? serviceOf(dynamic response) {
+      if (response is! Map) return null;
+      return (response['music.search.SearchCgiService'] ?? response['req'])
+          as Map?;
     }
 
-    final data = req['data'];
-    return SourceSearchResult.fromPage(
-      tracks: parseItems(data),
-      page: page,
-      limit: limit,
-      total: totalOf(data),
+    bool invalid(dynamic response) {
+      final service = serviceOf(response);
+      if (response is! Map || service == null) return true;
+      return response['code'] != 0 || service['code'] != 0;
+    }
+
+    return BuiltinSearchCall(
+      platform: 'tx',
+      method: BuiltinSearchMethod.post,
+      url: 'https://u.y.qq.com/cgi-bin/musics.fcg?sign=$sign',
+      body: bodyText,
+      headers: {'User-Agent': 'QQMusic 14090508(android 12)'},
+      retryIf: (json) => json is! Map || json['code'] != 0,
+      isInvalid: invalid,
+      parseItems: (response) => parseItems(serviceOf(response)?['data']),
+      totalOf: (response) => totalOf(serviceOf(response)?['data']),
     );
   }
 

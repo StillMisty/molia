@@ -1,7 +1,7 @@
 import '../source_search_result.dart';
 import '../source_track.dart';
 import 'builtin_search.dart';
-import 'builtin_transport.dart';
+import 'builtin_search_runner.dart';
 import 'crypto_utils.dart';
 
 /// 酷狗音乐搜索（移植自 lx-music-mobile `kg/musicSearch.js`）。
@@ -13,27 +13,32 @@ class KgSearch {
     String keyword, {
     int page = 1,
     int limit = _limit,
-  }) async {
+  }) {
+    return runBuiltinSearch(
+      _callFor(keyword, page, limit),
+      page: page,
+      limit: limit,
+    );
+  }
+
+  /// 平台变体面：请求 / 业务码判定（`error_code != 0`）/ 解析。
+  static BuiltinSearchCall _callFor(String keyword, int page, int limit) {
     final url = 'https://songsearch.kugou.com/song_search_v2'
         '?keyword=${Uri.encodeComponent(keyword)}'
         '&page=$page&pagesize=$limit&userid=0&clientver=&platform=WebFilter'
         '&filter=2&iscorrection=1&privilege_filter=0&area_code=1';
-    final result = await lxHttpGet(
-      url,
-      retries: BuiltinTransport.defaultRetries,
-      retryIf: (json) => json is! Map || json['error_code'] != 0,
-    );
-    if (result is! Map || result['error_code'] != 0) {
-      return SourceSearchResult.empty;
-    }
-    final data = result['data'];
-    final rawList = (data is Map) ? data['lists'] : null;
-    if (rawList is! List) return SourceSearchResult.empty;
-    return SourceSearchResult.fromPage(
-      tracks: parseItems(rawList),
-      page: page,
-      limit: limit,
-      total: totalOf(result),
+    bool invalid(dynamic response) =>
+        response is! Map || response['error_code'] != 0;
+    return BuiltinSearchCall(
+      platform: 'kg',
+      url: url,
+      isInvalid: invalid,
+      parseItems: (response) {
+        final data = (response as Map)['data'];
+        final rawList = (data is Map) ? data['lists'] : null;
+        return rawList is List ? parseItems(rawList) : null;
+      },
+      totalOf: totalOf,
     );
   }
 
