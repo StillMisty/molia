@@ -13,6 +13,9 @@ class MemoryCacheStorage implements CacheStorage {
   Future<String?> artworkCacheDir() async => null;
 
   @override
+  Future<int?> totalSpaceBytes() async => null;
+
+  @override
   Future<CacheUsage> usage(String dirPath) async => CacheUsage.zero;
 
   @override

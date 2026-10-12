@@ -17,7 +17,7 @@ import 'play_statistics_page.dart';
 
 /// 数据与存储子页：缓存、听歌统计与数据导入导出。
 ///
-/// 从设置首屏「数据与存储」进入，在设置弹层内部导航（见 `settings_page.dart`）。
+/// 从设置首屏「通用与数据」进入，在设置弹层内部导航（见 `settings_page.dart`）。
 class DataSettingsPage extends StatelessWidget {
   const DataSettingsPage({super.key});
 

@@ -34,6 +34,19 @@ class SyncSettingsPage extends StatelessWidget {
           SettingsSectionCard(
             title: l10n.syncGeneralSection,
             children: [
+              // 信任模型说明行：口令即信任根，先讲清互信范围再给操作。
+              SettingsInfoTile(
+                icon: Icons.verified_user_rounded,
+                title: l10n.syncTrustModelTitle,
+                subtitle: l10n.syncPassphraseTrustHint,
+              ),
+              SettingsNavTile(
+                key: const Key('settingsSyncDeviceNameItem'),
+                icon: Icons.devices_rounded,
+                title: l10n.syncDeviceNameTitle,
+                subtitle: provider.deviceName,
+                onTap: () => _showRenameDialog(context, provider, l10n),
+              ),
               SettingsSwitchTile(
                 switchKey: const Key('settingsSyncSwitch'),
                 icon: Icons.sync_rounded,
@@ -42,13 +55,6 @@ class SyncSettingsPage extends StatelessWidget {
                 value: provider.enabled,
                 onChanged: (value) =>
                     unawaited(_toggleEnabled(context, provider, value, l10n)),
-              ),
-              SettingsNavTile(
-                key: const Key('settingsSyncDeviceNameItem'),
-                icon: Icons.devices_rounded,
-                title: l10n.syncDeviceNameTitle,
-                subtitle: provider.deviceName,
-                onTap: () => _showRenameDialog(context, provider, l10n),
               ),
               if (provider.enabled) ...[
                 SettingsNavTile(

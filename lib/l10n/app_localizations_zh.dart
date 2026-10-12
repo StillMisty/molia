@@ -187,6 +187,12 @@ class AppLocalizationsZh extends AppLocalizations {
   String get settingsDefaultPlayModeSubtitle => '新播放会话的初始模式，不打断当前播放';
 
   @override
+  String get settingsRestoreSessionTitle => '启动时恢复上次播放';
+
+  @override
+  String get settingsRestoreSessionSubtitle => '启动时恢复上次的曲目、队列与进度（默认开启）';
+
+  @override
   String get settingsCurrentQuality => '当前播放音质';
 
   @override
@@ -223,10 +229,10 @@ class AppLocalizationsZh extends AppLocalizations {
   String get settingsSourcesItemSubtitle => '导入 LX Music 音源脚本，搜索并播放第三方平台歌曲';
 
   @override
-  String get settingsContentSection => '内容';
+  String get settingsContentSection => '内容与来源';
 
   @override
-  String get settingsLyricsSection => '歌词';
+  String get settingsLyricsSection => '歌词与展示';
 
   @override
   String get settingsBottomNavTitle => '底部导航';
@@ -248,6 +254,9 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get generalTitle => '通用';
+
+  @override
+  String get settingsGeneralAndDataTitle => '通用与数据';
 
   @override
   String get settingsGeneralSubtitle => '语言、应用名称与底部导航';
@@ -292,9 +301,6 @@ class AppLocalizationsZh extends AppLocalizations {
   String get cancelButton => '取消';
 
   @override
-  String get languageDialogTitle => '选择语言';
-
-  @override
   String get languageSaved => '语言设置已保存';
 
   @override
@@ -336,11 +342,6 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get cacheClearFailed => '清除缓存失败。';
-
-  @override
-  String failedToChangeLanguage(String error) {
-    return '更改语言失败: $error';
-  }
 
   @override
   String get saveChanges => '保存';
@@ -1092,6 +1093,11 @@ class AppLocalizationsZh extends AppLocalizations {
   }
 
   @override
+  String cacheValueGb(int value) {
+    return '$value GB';
+  }
+
+  @override
   String cacheValueDays(int value) {
     return '$value 天';
   }
@@ -1113,6 +1119,11 @@ class AppLocalizationsZh extends AppLocalizations {
   @override
   String cacheCustomHint(String label, int min, int max) {
     return '0 = $label · 范围 $min–$max';
+  }
+
+  @override
+  String cacheAudioMaxSuggested(String value) {
+    return '建议 $value（内部存储的 1/128）';
   }
 
   @override
@@ -1139,6 +1150,9 @@ class AppLocalizationsZh extends AppLocalizations {
   String get lyricsPageTitle => '歌词页';
 
   @override
+  String get lyricsDisplayPageEntrySubtitle => '应用内歌词页的翻译与罗马音';
+
+  @override
   String get lyricsPageTranslationSubtitle => '在歌词页每行下方显示翻译';
 
   @override
@@ -1146,6 +1160,9 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get lyricsDisplaySharedTitle => '歌词输出';
+
+  @override
+  String get lyricsDisplayOutputsEntrySubtitle => '各输出共用的翻译、对齐与无时间轴处理';
 
   @override
   String get lyricsDisplayTranslation => '翻译';
@@ -1181,6 +1198,9 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get lyricsDesktopTitle => '桌面歌词';
+
+  @override
+  String get lyricsDesktopEntrySubtitle => '悬浮窗样式、行为与配色';
 
   @override
   String get lyricsDesktopEnable => '开启桌面歌词';
@@ -1310,6 +1330,9 @@ class AppLocalizationsZh extends AppLocalizations {
   String get lyricsNotificationTitle => '通知栏 · 锁屏歌词';
 
   @override
+  String get lyricsNotificationEntrySubtitle => '写入媒体通知与锁屏的歌词';
+
+  @override
   String get lyricsNotificationEnable => '在通知栏显示歌词';
 
   @override
@@ -1350,6 +1373,9 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get lyricsBluetoothTitle => '蓝牙歌词';
+
+  @override
+  String get lyricsBluetoothEntrySubtitle => '面向 A2DP 车机与耳机的歌词';
 
   @override
   String get lyricsBluetoothEnable => '车机显示歌词';
@@ -1453,6 +1479,9 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get statsRangeAll => '全部';
+
+  @override
+  String get statsRangeTitle => '统计范围';
 
   @override
   String get statsValueDuration => '时长';
@@ -1789,6 +1818,9 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get syncGeneralSection => '同步';
+
+  @override
+  String get syncTrustModelTitle => '信任模型';
 
   @override
   String get syncEnabledTitle => '启用同步';

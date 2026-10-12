@@ -43,7 +43,16 @@ class CacheService {
   static const String keyArtworkStaleDays = 'cache_artwork_stale_days';
 
   static const bool defaultAudioEnabled = true;
+
+  /// 容量不可知（Web / 桌面 / 查询失败）时的音频上限回退值（MB）。
   static const int defaultAudioMaxMb = 1024;
+
+  /// 建议上限 = 设备总容量 ÷ 该除数（128GB 设备 ≈ 1GB）。
+  static const int audioMaxStorageDivisor = 128;
+
+  /// 建议上限的下限（MB）：小容量设备也保留可用缓存。
+  static const int audioMaxSuggestionFloorMb = 256;
+
   static const int defaultLyricsTtlDays = 30;
   static const int defaultArtworkMaxObjects = 1500;
   static const int defaultArtworkStaleDays = 365;
@@ -71,9 +80,38 @@ class CacheService {
     _notify(CachePartition.audio);
   }
 
-  /// 音频缓存上限（MB，默认 1024；0 = 不限制）。
+  /// 音频缓存上限（MB，0 = 不限制）。
+  ///
+  /// 缺键时按 [suggestedAudioMaxMb]（设备总容量 ÷ [audioMaxStorageDivisor]）
+  /// 建议，容量不可知时回退 [defaultAudioMaxMb]；读取不写回（缺省与默认等价）。
   Future<int> audioMaxMb() async =>
-      (await _readInt(keyAudioMaxMb)) ?? defaultAudioMaxMb;
+      (await _readInt(keyAudioMaxMb)) ?? await _resolvedDefaultAudioMaxMb();
+
+  /// 建议的音频缓存上限（MB）：设备总容量 ÷ [audioMaxStorageDivisor]，
+  /// 不低于 [audioMaxSuggestionFloorMb]；容量不可知时返回 null（UI 不展示建议）。
+  Future<int?> suggestedAudioMaxMb() async {
+    final total = await _totalSpaceBytes();
+    if (total == null || total <= 0) return null;
+    final suggested = total ~/ (_mbBytes * audioMaxStorageDivisor);
+    return suggested < audioMaxSuggestionFloorMb
+        ? audioMaxSuggestionFloorMb
+        : suggested;
+  }
+
+  /// 缺键默认值：解析一次后缓存（容量是设备级常量，无需每次查询通道）。
+  int? _defaultAudioMaxMb;
+  Future<int> _resolvedDefaultAudioMaxMb() async =>
+      _defaultAudioMaxMb ??=
+          (await suggestedAudioMaxMb()) ?? defaultAudioMaxMb;
+
+  Future<int?> _totalSpaceBytes() async {
+    try {
+      return await _storage.totalSpaceBytes();
+    } catch (_) {
+      // 平台通道缺失 / 查询失败：按容量不可知处理。
+      return null;
+    }
+  }
 
   /// 写入后立即执行一次 LRU 淘汰，无需重启。
   Future<void> setAudioMaxMb(int value) async {

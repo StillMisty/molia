@@ -3,6 +3,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:material_3_expressive/material_3_expressive.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:provider/provider.dart';
+import 'package:provider/single_child_widget.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:molia/l10n/app_localizations.dart';
@@ -12,6 +13,7 @@ import 'package:molia/pages/settings_page.dart';
 import 'package:molia/providers/local_database_provider.dart';
 import 'package:molia/providers/nav_provider.dart';
 import 'package:molia/providers/playback_provider.dart';
+import 'package:molia/providers/sources_provider.dart';
 import 'package:molia/providers/theme_provider.dart';
 import 'package:molia/services/data_saver_service.dart';
 import 'package:molia/services/language_service.dart';
@@ -19,6 +21,7 @@ import 'package:molia/services/lyrics_service.dart';
 import 'package:molia/services/notification_service.dart';
 import 'package:molia/services/play_statistics_service.dart';
 import 'package:molia/services/settings_service.dart';
+import 'package:molia/sources/source_manager.dart';
 import 'package:molia/theme/scheme_builder.dart';
 import 'package:molia/utils/responsive.dart';
 
@@ -27,7 +30,7 @@ import 'package:molia/data/settings/settings_keys.dart';
 
 import 'support/settings_test_support.dart';
 
-/// 设置页冒烟：首屏分区卡片、弹层内部子页导航与新设置项。
+/// 设置页冒烟：首屏 5 分区、行内分段交互与弹层内部子页导航。
 /// 不触碰真实 DB / 安全存储（fake SettingsService）。
 class _FakeSettingsService extends SettingsService {
   bool copyLyricsAsSingleLine = false;
@@ -55,7 +58,11 @@ void main() {
   });
 
   /// 构造共享 provider 树并挂载 [home]（与真实组合根同源装配）。
-  Future<void> pumpApp(WidgetTester tester, Widget home) async {
+  Future<void> pumpApp(
+    WidgetTester tester,
+    Widget home, {
+    List<SingleChildWidget> extraProviders = const [],
+  }) async {
     themeProvider = ThemeProvider();
     playbackProvider = buildTestPlaybackProvider();
     // 省流模式：注入 fake 探测（Wi-Fi），不触碰 connectivity_plus 通道。
@@ -108,6 +115,7 @@ void main() {
           ),
           ChangeNotifierProvider<DataSaverService>.value(value: dataSaver),
           Provider<PlayStatisticsService>.value(value: playStatisticsService),
+          ...extraProviders,
         ],
         child: M3EMaterialApp(
           data: M3EThemeData.fromMaterial(themedData),
@@ -125,7 +133,10 @@ void main() {
     await tester.pumpAndSettle();
   }
 
-  Future<void> pumpSettingsPage(WidgetTester tester) async {
+  Future<void> pumpSettingsPage(
+    WidgetTester tester, {
+    List<SingleChildWidget> extraProviders = const [],
+  }) async {
     tester.view.physicalSize = const Size(1200, 2400);
     tester.view.devicePixelRatio = 1.0;
     addTearDown(() {
@@ -140,33 +151,42 @@ void main() {
     await pumpApp(
       tester,
       Scaffold(body: SettingsPage(subPageOpen: settingsSubPageOpen)),
+      extraProviders: extraProviders,
     );
   }
 
-  testWidgets('设置首屏：分区卡片齐全，低频内容移出首屏', (tester) async {
+  /// 行内分段按钮的 segment 命中（标签文本在行 key 之内）。
+  Finder segmentOf(Key rowKey, String label) => find.descendant(
+        of: find.byKey(rowKey),
+        matching: find.text(label),
+      );
+
+  testWidgets('设置首屏：5 分区齐全，低频内容移出首屏', (tester) async {
     await pumpSettingsPage(tester);
 
     // 分区卡片标题（卡片上方结构标签）。
     expect(find.text('Appearance'), findsOneWidget);
     expect(find.text('Playback'), findsOneWidget);
-    expect(find.text('Lyrics'), findsOneWidget);
-    expect(find.text('Content'), findsOneWidget);
-    expect(find.text('General'), findsOneWidget);
-    expect(find.text('Data & storage'), findsOneWidget);
+    expect(find.text('Lyrics & display'), findsOneWidget);
+    expect(find.text('Content & sources'), findsOneWidget);
+    expect(find.text('General & data'), findsOneWidget);
 
     expect(find.text('Theme mode'), findsOneWidget);
     expect(find.text('Base colors'), findsOneWidget);
     expect(find.text('Follow album art'), findsOneWidget);
     expect(find.text('Pure black background'), findsOneWidget);
-    expect(find.text('Custom color'), findsOneWidget);
     expect(find.text('App font'), findsOneWidget);
     expect(find.text('Default play mode'), findsOneWidget);
+    expect(find.text('Resume last playback'), findsOneWidget);
     expect(find.text('Now playing quality'), findsOneWidget);
-    // 省流只有行标题一处（无分区标题）。
+    // 省流只有入口行一处（无分区标题、无子项）。
     expect(find.text('Data saver'), findsOneWidget);
     expect(find.text('Lyrics display'), findsOneWidget);
     expect(find.text('Source Management'), findsOneWidget);
     expect(find.text('AI DJ'), findsOneWidget);
+    // 通用与数据：入口行同组。
+    expect(find.text('General'), findsOneWidget);
+    expect(find.text('Data & storage'), findsOneWidget);
 
     // 子页内容不在首屏。
     expect(find.text('Bottom navigation'), findsNothing);
@@ -175,23 +195,20 @@ void main() {
     expect(find.text('Cache management'), findsNothing);
     expect(find.text('Listening Stats'), findsNothing);
     expect(find.text('Export Recent Plays'), findsNothing);
+    // 默认音质入口在播放区（需 SourcesProvider；本树未注入）。
+    expect(find.text('Default quality'), findsNothing);
 
     expect(find.text('Setup'), findsNothing);
     expect(find.text('Tutorial'), findsNothing);
     expect(find.byIcon(Icons.email_rounded), findsNothing);
   });
 
-  testWidgets('主题模式弹层：选择深色后 provider 生效', (tester) async {
+  testWidgets('主题模式：行内分段选择深色后 provider 生效', (tester) async {
     await pumpSettingsPage(tester);
 
-    await tester.tap(find.byKey(const Key('settingsThemeModeItem')));
-    await tester.pumpAndSettle();
-    expect(find.byType(M3EDialog), findsOneWidget);
-
-    await tester.tap(find.text('Dark'));
+    await tester.tap(segmentOf(const Key('settingsThemeModeItem'), 'Dark'));
     await tester.pumpAndSettle();
 
-    expect(find.byType(M3EDialog), findsNothing);
     expect(themeProvider.themeMode, ThemeMode.dark);
     expect(themeProvider.colorScheme.brightness, Brightness.dark);
 
@@ -199,47 +216,27 @@ void main() {
     expect(prefs.getString('theme_mode'), 'dark');
   });
 
-  testWidgets('主题模式弹层：取消只关弹层，设置首屏保留', (tester) async {
+  testWidgets('基础配色：行内分段；无莫奈时壁纸段禁用，自定义可切换', (tester) async {
     await pumpSettingsPage(tester);
 
-    await tester.tap(find.byKey(const Key('settingsThemeModeItem')));
-    await tester.pumpAndSettle();
-    expect(find.byType(M3EDialog), findsOneWidget);
-
-    // M3EDialog 挂 root navigator；取消若用首屏 context 定向，
-    // 弹掉的是设置弹层内部 Navigator 的首屏，表现为设置内容整块消失。
-    await tester.tap(find.text('Cancel'));
-    await tester.pumpAndSettle();
-
-    expect(find.byType(M3EDialog), findsNothing);
-    expect(find.text('Theme mode'), findsOneWidget);
-    expect(themeProvider.themeMode, ThemeMode.system);
-  });
-
-  testWidgets('基础配色弹层：选择自定义颜色后持久化', (tester) async {
-    await pumpSettingsPage(tester);
-
-    // 先切到壁纸（无莫奈注入时解析回退自定义 seed），再经弹层选回自定义：
-    // 覆盖「点选未选中项」的真实交互路径。
-    await themeProvider.setBaseColorSource(ColorBaseSource.wallpaper);
-    await tester.pumpAndSettle();
-    expect(find.text('System wallpaper (Monet)'), findsOneWidget);
-
-    await tester.tap(find.byKey(const Key('settingsBaseColorItem')));
-    await tester.pumpAndSettle();
-    expect(find.byType(M3EDialog), findsOneWidget);
-    // 测试环境无 DynamicColorBuilder：壁纸项不可用，自定义项可选中。
+    // 默认壁纸；测试环境无莫奈注入，副标题给出平台说明。
+    expect(themeProvider.baseColorSource, ColorBaseSource.wallpaper);
     expect(find.text('Not supported on this platform'), findsOneWidget);
 
-    await tester.tap(find.descendant(
-      of: find.byType(M3EDialog),
-      matching: find.text('Custom color'),
-    ));
+    // 壁纸段禁用：点它不产生状态变化。
+    await tester.tap(
+      segmentOf(const Key('settingsBaseColorItem'), 'System wallpaper (Monet)'),
+    );
     await tester.pumpAndSettle();
+    expect(themeProvider.baseColorSource, ColorBaseSource.wallpaper);
 
-    expect(find.byType(M3EDialog), findsNothing);
-    // 选回自定义后，自定义颜色项重新出现。
+    // 选自定义：自定义颜色行出现并持久化。
+    await tester
+        .tap(segmentOf(const Key('settingsBaseColorItem'), 'Custom color'));
+    await tester.pumpAndSettle();
+    expect(themeProvider.baseColorSource, ColorBaseSource.custom);
     expect(find.byKey(const Key('settingsSeedColorItem')), findsOneWidget);
+
     final prefs = await SharedPreferences.getInstance();
     expect(prefs.getString('color_base'), 'custom');
   });
@@ -259,6 +256,10 @@ void main() {
   testWidgets('主题色：任意取色（Hex）后 provider 生效', (tester) async {
     await pumpSettingsPage(tester);
 
+    // 自定义色行只在基础配色=自定义时出现。
+    await themeProvider.setBaseColorSource(ColorBaseSource.custom);
+    await tester.pumpAndSettle();
+
     await tester.tap(find.byKey(const Key('settingsSeedColorItem')));
     await tester.pumpAndSettle();
     expect(find.byType(M3EDialog), findsOneWidget);
@@ -275,58 +276,88 @@ void main() {
     expect(prefs.getInt('seed_color'), 0xFF00FF00);
   });
 
-  testWidgets('默认播放模式：副标题说明「默认」语义，选择随机后生效', (tester) async {
+  testWidgets('取色弹层取消：只关弹层，设置首屏保留', (tester) async {
     await pumpSettingsPage(tester);
 
-    // 当前值 + 语义说明同屏（不打断当前播放）。
-    expect(find.textContaining('Sequential · Initial mode'), findsOneWidget);
-
-    await tester.tap(find.byKey(const Key('settingsDefaultPlayModeItem')));
+    await themeProvider.setBaseColorSource(ColorBaseSource.custom);
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('settingsSeedColorItem')));
     await tester.pumpAndSettle();
     expect(find.byType(M3EDialog), findsOneWidget);
 
-    await tester.tap(find.text('Shuffle'));
+    // M3EDialog 挂 root navigator；取消若用首屏 context 定向，
+    // 弹掉的是设置弹层内部 Navigator 的首屏，表现为设置内容整块消失。
+    await tester.tap(find.text('Cancel'));
     await tester.pumpAndSettle();
 
     expect(find.byType(M3EDialog), findsNothing);
+    expect(find.text('Theme mode'), findsOneWidget);
+  });
+
+  testWidgets('默认播放模式：副标题说明「默认」语义，行内分段选择随机后生效', (tester) async {
+    await pumpSettingsPage(tester);
+
+    // 语义说明常驻（不打断当前播放）。
+    expect(find.textContaining('Initial mode'), findsOneWidget);
+
+    await tester.tap(
+      segmentOf(const Key('settingsDefaultPlayModeItem'), 'Shuffle'),
+    );
+    await tester.pumpAndSettle();
+
     expect(playbackProvider.defaultPlayMode, PlayMode.shuffle);
     // 无曲目：立即应用到播放服务（facade 快照跟随）。
     expect(playbackProvider.currentMode, PlayMode.shuffle);
-    expect(find.textContaining('Shuffle · Initial mode'), findsOneWidget);
 
     final prefs = await SharedPreferences.getInstance();
     expect(prefs.getString('default_play_mode'), 'shuffle');
   });
 
-  testWidgets('省流模式：开关/音质上限/封面省流生效并持久化', (tester) async {
+  testWidgets('启动时恢复上次播放：默认开，关闭后状态与持久化生效', (tester) async {
+    await pumpSettingsPage(tester);
+    expect(playbackProvider.restoreSessionEnabled, isTrue);
+
+    await tester.tap(find.byKey(const Key('settingsRestoreSessionSwitch')));
+    await tester.pumpAndSettle();
+
+    expect(playbackProvider.restoreSessionEnabled, isFalse);
+    final prefs = await SharedPreferences.getInstance();
+    expect(prefs.getBool(kRestoreSessionEnabled.name), isFalse);
+  });
+
+  testWidgets('省流模式：入口进子页，开关/音质上限/封面省流生效并持久化', (tester) async {
     await pumpSettingsPage(tester);
 
-    // 默认关闭：子项隐藏。
-    expect(find.text('Data saver'), findsOneWidget);
+    // 首屏只有入口行，子项在子页。
+    expect(find.byKey(const Key('settingsDataSaverItem')), findsOneWidget);
+    expect(find.byKey(const Key('settingsDataSaverSwitch')), findsNothing);
+
+    final entry = find.byKey(const Key('settingsDataSaverItem'));
+    await tester.ensureVisible(entry);
+    await tester.pumpAndSettle();
+    await tester.tap(entry);
+    await tester.pumpAndSettle();
+
+    // 子页默认关闭：子项隐藏。
+    expect(find.byKey(const Key('settingsDataSaverSwitch')), findsOneWidget);
     expect(find.byKey(const Key('settingsDataSaverQualityItem')), findsNothing);
 
-    final switchFinder = find.byKey(const Key('settingsDataSaverSwitch'));
-    await tester.ensureVisible(switchFinder);
-    await tester.pumpAndSettle();
-    await tester.tap(switchFinder);
+    await tester.tap(find.byKey(const Key('settingsDataSaverSwitch')));
     await tester.pumpAndSettle();
 
     expect(dataSaver.enabled, isTrue);
     final prefs = await SharedPreferences.getInstance();
     expect(prefs.getBool('data_saver_enabled'), isTrue);
 
-    // 开启后子项可见：音质上限弹层选择 192K。
+    // 开启后子项可见：音质上限分段选择 192K。
     final qualityFinder = find.byKey(const Key('settingsDataSaverQualityItem'));
     expect(qualityFinder, findsOneWidget);
     await tester.ensureVisible(qualityFinder);
     await tester.pumpAndSettle();
-    await tester.tap(qualityFinder);
+    await tester.tap(
+      find.descendant(of: qualityFinder, matching: find.text('192K')),
+    );
     await tester.pumpAndSettle();
-    expect(find.byType(M3EDialog), findsOneWidget);
-
-    await tester.tap(find.text('192K'));
-    await tester.pumpAndSettle();
-    expect(find.byType(M3EDialog), findsNothing);
     expect(dataSaver.qualityCap, '192k');
     expect(prefs.getString('data_saver_quality'), '192k');
 
@@ -340,14 +371,53 @@ void main() {
     expect(prefs.getBool('data_saver_covers'), isFalse);
   });
 
-  testWidgets('通用子页：弹层内部导航进入，系统返回退回首屏', (tester) async {
+  testWidgets('默认音质：播放区行内下拉显示当前值并随 provider 变化', (tester) async {
+    late final SourceManager manager;
+    late final SourcesProvider sourcesProvider;
+    await tester.runAsync(() async {
+      manager = SourceManager(
+        settings: testSettingsRegistry(
+          preferences: await SharedPreferences.getInstance(),
+        ),
+      );
+      sourcesProvider = SourcesProvider(manager);
+    });
+    addTearDown(sourcesProvider.dispose);
+    addTearDown(manager.dispose);
+
+    await pumpSettingsPage(
+      tester,
+      extraProviders: [
+        ChangeNotifierProvider<SourcesProvider>.value(value: sourcesProvider),
+      ],
+    );
+
+    expect(find.byKey(const Key('settingsDefaultQualityItem')), findsOneWidget);
+    final qualityRow = find.byKey(const Key('settingsDefaultQualityItem'));
+    expect(
+      find.descendant(of: qualityRow, matching: find.text('320K')),
+      findsOneWidget,
+    );
+
+    await sourcesProvider.setPreferredQuality('192k');
+    await tester.pumpAndSettle();
+    expect(
+      find.descendant(of: qualityRow, matching: find.text('192K')),
+      findsOneWidget,
+    );
+
+    final prefs = await SharedPreferences.getInstance();
+    expect(prefs.getString(kLxDefaultQuality.name), '192k');
+  });
+
+  testWidgets('通用子页：弹层内部导航进入，语言行内分段切换并持久化', (tester) async {
     await pumpSettingsPage(tester);
     expect(settingsSubPageOpen.value, isFalse);
 
     await tester.tap(find.byKey(const Key('settingsGeneralItem')));
     await tester.pumpAndSettle();
 
-    // 子页内容：语言 / 应用名称 / 底部导航定制；首屏内容离屏。
+    // 子页内容：底部导航（行序第一）/ 语言 / 应用名称；首屏内容离屏。
     expect(find.text('App Language'), findsOneWidget);
     expect(find.text('App name'), findsOneWidget);
     expect(find.text('Bottom navigation'), findsOneWidget);
@@ -355,6 +425,20 @@ void main() {
     expect(find.text('Theme mode'), findsNothing);
     // 子页栈状态同步给弹层 guard。
     expect(settingsSubPageOpen.value, isTrue);
+
+    // 语言行内分段：切到简体中文后写入登记键。
+    final prefs = await SharedPreferences.getInstance();
+    LanguageService.attachSettings(
+      testSettingsRegistry(preferences: prefs),
+    );
+    await tester.tap(
+      find.descendant(
+        of: find.byKey(const Key('settingsLanguageItem')),
+        matching: find.text('简体中文'),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(prefs.getString(kSelectedLanguage.name), 'zh');
 
     // 系统返回：先退子页，不关闭设置本身。
     final handled = await tester.binding.handlePopRoute();

@@ -440,6 +440,18 @@ abstract class AppLocalizations {
   /// **'Initial mode for new playback sessions; the current session is unaffected'**
   String get settingsDefaultPlayModeSubtitle;
 
+  /// No description provided for @settingsRestoreSessionTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Resume last playback'**
+  String get settingsRestoreSessionTitle;
+
+  /// No description provided for @settingsRestoreSessionSubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Restore the previous track, queue and position on launch (on by default)'**
+  String get settingsRestoreSessionSubtitle;
+
   /// No description provided for @settingsCurrentQuality.
   ///
   /// In en, this message translates to:
@@ -515,13 +527,13 @@ abstract class AppLocalizations {
   /// No description provided for @settingsContentSection.
   ///
   /// In en, this message translates to:
-  /// **'Content'**
+  /// **'Content & sources'**
   String get settingsContentSection;
 
   /// No description provided for @settingsLyricsSection.
   ///
   /// In en, this message translates to:
-  /// **'Lyrics'**
+  /// **'Lyrics & display'**
   String get settingsLyricsSection;
 
   /// No description provided for @settingsBottomNavTitle.
@@ -565,6 +577,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'General'**
   String get generalTitle;
+
+  /// No description provided for @settingsGeneralAndDataTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'General & data'**
+  String get settingsGeneralAndDataTitle;
 
   /// No description provided for @settingsGeneralSubtitle.
   ///
@@ -650,12 +668,6 @@ abstract class AppLocalizations {
   /// **'Cancel'**
   String get cancelButton;
 
-  /// No description provided for @languageDialogTitle.
-  ///
-  /// In en, this message translates to:
-  /// **'Select Language'**
-  String get languageDialogTitle;
-
   /// No description provided for @languageSaved.
   ///
   /// In en, this message translates to:
@@ -739,12 +751,6 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Failed to clear cache'**
   String get cacheClearFailed;
-
-  /// No description provided for @failedToChangeLanguage.
-  ///
-  /// In en, this message translates to:
-  /// **'Failed to change language: {error}'**
-  String failedToChangeLanguage(String error);
 
   /// No description provided for @saveChanges.
   ///
@@ -2138,6 +2144,12 @@ abstract class AppLocalizations {
   /// **'{value} MB'**
   String cacheValueMb(int value);
 
+  /// No description provided for @cacheValueGb.
+  ///
+  /// In en, this message translates to:
+  /// **'{value} GB'**
+  String cacheValueGb(int value);
+
   /// No description provided for @cacheValueDays.
   ///
   /// In en, this message translates to:
@@ -2173,6 +2185,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'0 = {label} · Range {min}–{max}'**
   String cacheCustomHint(String label, int min, int max);
+
+  /// No description provided for @cacheAudioMaxSuggested.
+  ///
+  /// In en, this message translates to:
+  /// **'Suggested {value} (internal storage ÷ 128)'**
+  String cacheAudioMaxSuggested(String value);
 
   /// No description provided for @cacheCustomRangeError.
   ///
@@ -2216,6 +2234,12 @@ abstract class AppLocalizations {
   /// **'Lyrics page'**
   String get lyricsPageTitle;
 
+  /// No description provided for @lyricsDisplayPageEntrySubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Translation and romanization of the in-app lyrics page'**
+  String get lyricsDisplayPageEntrySubtitle;
+
   /// No description provided for @lyricsPageTranslationSubtitle.
   ///
   /// In en, this message translates to:
@@ -2233,6 +2257,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Lyric outputs'**
   String get lyricsDisplaySharedTitle;
+
+  /// No description provided for @lyricsDisplayOutputsEntrySubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Translation, timing and unsynced handling shared by all outputs'**
+  String get lyricsDisplayOutputsEntrySubtitle;
 
   /// No description provided for @lyricsDisplayTranslation.
   ///
@@ -2299,6 +2329,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Floating lyrics'**
   String get lyricsDesktopTitle;
+
+  /// No description provided for @lyricsDesktopEntrySubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Floating window style, behavior and colors'**
+  String get lyricsDesktopEntrySubtitle;
 
   /// No description provided for @lyricsDesktopEnable.
   ///
@@ -2552,6 +2588,12 @@ abstract class AppLocalizations {
   /// **'Notification & lock screen'**
   String get lyricsNotificationTitle;
 
+  /// No description provided for @lyricsNotificationEntrySubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Lyrics written into the media notification and lock screen'**
+  String get lyricsNotificationEntrySubtitle;
+
   /// No description provided for @lyricsNotificationEnable.
   ///
   /// In en, this message translates to:
@@ -2635,6 +2677,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Bluetooth lyrics'**
   String get lyricsBluetoothTitle;
+
+  /// No description provided for @lyricsBluetoothEntrySubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Lyrics for A2DP car displays and head units'**
+  String get lyricsBluetoothEntrySubtitle;
 
   /// No description provided for @lyricsBluetoothEnable.
   ///
@@ -2839,6 +2887,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'All'**
   String get statsRangeAll;
+
+  /// No description provided for @statsRangeTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Time range'**
+  String get statsRangeTitle;
 
   /// No description provided for @statsValueDuration.
   ///
@@ -3433,6 +3487,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Sync'**
   String get syncGeneralSection;
+
+  /// No description provided for @syncTrustModelTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Trust model'**
+  String get syncTrustModelTitle;
 
   /// No description provided for @syncEnabledTitle.
   ///

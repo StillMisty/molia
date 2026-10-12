@@ -54,6 +54,12 @@ abstract class CacheStorage {
   /// 封面持久缓存目录；平台不可用时返回 null。
   Future<String?> artworkCacheDir();
 
+  /// 设备存储总容量（字节）；平台不支持或查询失败时返回 null。
+  ///
+  /// 默认音频缓存上限的输入（设备容量 ÷ 128，见 `CacheService`）；
+  /// 只读一次即可，容量在同一台设备上不会频繁变化。
+  Future<int?> totalSpaceBytes();
+
   /// 统计目录占用；目录不存在时返回 [CacheUsage.zero]。
   Future<CacheUsage> usage(String dirPath);
 

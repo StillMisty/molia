@@ -19,7 +19,7 @@ import '../theme/app_semantic_colors.dart';
 AppLocalizations _l10n(BuildContext context) =>
     AppLocalizations.of(context) ?? lookupAppLocalizations(const Locale('zh'));
 
-/// 音源管理页：导入 / 启停 / 删除 LX Music 音源脚本，设置默认音质。
+/// 音源管理页：导入 / 启停 / 删除 LX Music 音源脚本。
 ///
 /// 分层：只依赖 [SourcesProvider] 与 domain 模型，
 /// 不直接 import `lib/sources/**`（R5）。
@@ -80,8 +80,6 @@ class _SourcesPageState extends State<SourcesPage> {
               _buildStatusCard(context, provider),
               const SizedBox(height: 16),
               _buildImportCard(context, provider),
-              const SizedBox(height: 16),
-              _buildQualityCard(context, provider),
               const SizedBox(height: 16),
               _buildSortCard(context, provider),
               const SizedBox(height: 16),
@@ -273,41 +271,6 @@ class _SourcesPageState extends State<SourcesPage> {
                     ),
                   )
                 : null,
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildQualityCard(BuildContext context, SourcesProvider provider) {
-    final l10n = _l10n(context);
-    final theme = Theme.of(context);
-    return M3ECard(
-      variant: M3ECardVariant.elevated,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(l10n.sourcesDefaultQuality,
-              style: theme.textTheme.titleMedium),
-          const SizedBox(height: 8),
-          Wrap(
-            spacing: 8,
-            // 换行后行距不能为 0：chips 贴边会被看成叠在一起。
-            runSpacing: 8,
-            children: provider.qualityOptions
-                .map((option) => M3EChip(
-                      type: M3EChipType.filter,
-                      label: _qualityDisplayName(l10n, option),
-                      selected: provider.preferredQuality == option.value,
-                      onPressed: () =>
-                          provider.setPreferredQuality(option.value),
-                    ))
-                .toList(),
-          ),
-          const SizedBox(height: 8),
-          Text(
-            l10n.sourcesQualityHint,
-            style: theme.textTheme.bodySmall,
           ),
         ],
       ),
@@ -752,25 +715,3 @@ String _readableError(Object error) {
   return text.startsWith(prefix) ? text.substring(prefix.length) : text;
 }
 
-/// 音质显示名（[SourceQualityOption.value] 的界面文案）；
-/// 未知音质沿用领域层的通用显示名。
-String _qualityDisplayName(AppLocalizations l10n, SourceQualityOption option) {
-  switch (option.value) {
-    case 'flac24bit':
-      return l10n.sourcesQualityHiRes;
-    case 'flac':
-      return l10n.sourcesQualityLossless;
-    case 'wav':
-      return l10n.sourcesQualityWav;
-    case 'ape':
-      return l10n.sourcesQualityApe;
-    case '320k':
-      return l10n.sourcesQuality320k;
-    case '192k':
-      return l10n.sourcesQuality192k;
-    case '128k':
-      return l10n.sourcesQuality128k;
-    default:
-      return option.displayName;
-  }
-}

@@ -24,9 +24,10 @@ const kThemeMode = SettingsKey<String>(
   'system',
   category: SyncCategory.settings,
 );
+/// 基础配色：默认壁纸（Monet，平台支持时），不可用时回退自定义种子色。
 const kColorBase = SettingsKey<String>(
   'color_base',
-  'custom',
+  'wallpaper',
   category: SyncCategory.settings,
 );
 const kFollowArtworkEnabled = SettingsKey<bool>(
@@ -69,6 +70,12 @@ const kShellNavHidden = SettingsKey<List<String>>(
 const kDefaultPlayMode = SettingsKey<String>(
   'default_play_mode',
   'sequential',
+  category: SyncCategory.settings,
+);
+/// 启动时恢复上次播放（曲目 / 队列 / 进度）；关闭后冷启动不进入恢复态。
+const kRestoreSessionEnabled = SettingsKey<bool>(
+  'restore_session_enabled',
+  true,
   category: SyncCategory.settings,
 );
 const kPlayStatisticsEnabled = SettingsKey<bool>(
@@ -176,6 +183,7 @@ const List<SettingsKey<Object?>> kAllSettingsKeys = [
   kShellNavOrder,
   kShellNavHidden,
   kDefaultPlayMode,
+  kRestoreSessionEnabled,
   kPlayStatisticsEnabled,
   kLyricsDisplaySettings,
   kCopyLyricsSingleLine,
