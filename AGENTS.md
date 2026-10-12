@@ -97,6 +97,14 @@ lib/
   `docs/lx_sources.md` 的验证清单，UI 组件改动加跑 `flutter build web --release`；
 - 不要把密钥（API Key 等）提交进仓库。
 
+## AI 工具链（OpenCode）
+
+- **热重载**：改 `lib/` 下 `.dart` 后，UI 组件 / 简单方法 → hot reload；
+  `initState`、全局/静态状态、`main()` → hot restart；`test/**`、`integration_test/**`、
+  注释或空白不触发；
+- **技能维护**：`.agents/skills/` 为第三方内容，勿手改；更新走 `npx skills update` +
+  `dart run skills@ get --all`。
+
 ## Agent skills
 
 - Issues and specs live as GitHub issues, read/written with the `gh` CLI. See `docs/agents/issue-tracker.md`.

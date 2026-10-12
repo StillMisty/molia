@@ -1,0 +1,45 @@
+{
+  "version": 2,
+  "installations": {
+    "generic": {
+      "package:sqflite": {
+        "skills": [
+          {
+            "name": "sqflite-crud-and-transactions",
+            "installedAt": "2026-10-12T16:06:41.947630Z",
+            "contentHash": "lEO7nhZOzQbXLY8dWXXHNw==",
+            "path": "skills/sqflite-crud-and-transactions"
+          },
+          {
+            "name": "sqflite-testing-and-platforms",
+            "installedAt": "2026-10-12T16:06:41.948973Z",
+            "contentHash": "3tyVO/yHbhJmT4nYerW4tQ==",
+            "path": "skills/sqflite-testing-and-platforms"
+          },
+          {
+            "name": "sqflite-open-database",
+            "installedAt": "2026-10-12T16:06:41.950225Z",
+            "contentHash": "fOmoB+4dNOjQDdvPkJjRXw==",
+            "path": "skills/sqflite-open-database"
+          }
+        ]
+      },
+      "package:sqflite_common_ffi": {
+        "skills": [
+          {
+            "name": "sqflite-common-ffi-testing",
+            "installedAt": "2026-10-12T16:06:41.951683Z",
+            "contentHash": "ffkJjb17Nre1Htty2cCsnw==",
+            "path": "skills/sqflite-common-ffi-testing"
+          },
+          {
+            "name": "sqflite-common-ffi-desktop",
+            "installedAt": "2026-10-12T16:06:41.954169Z",
+            "contentHash": "/TjdIiQZj51UmGToEqg9eA==",
+            "path": "skills/sqflite-common-ffi-desktop"
+          }
+        ]
+      }
+    }
+  }
+}
