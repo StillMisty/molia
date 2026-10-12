@@ -161,6 +161,18 @@
   至多一次、有界；开关 `SourceSwapSettings`（默认开，设置 › 播放）。
 
 ## 听歌统计
+- **Listening statistics snapshot（统计快照）** — `ListeningStatisticsSnapshot`：
+  一次范围查询的全部聚合（汇总 / 榜单 / 日历 / 作息热力图 / 来源分布）；
+  `PlayStatisticsRepository.snapshot(since:)` 并发取回，统计页只渲染它。
+- **Play statistics range（统计范围）** — `PlayStatisticsRange`（周 / 月 / 全部）
+  + 扩展 `startOf(now)` / `sinceMs(now)`：范围 → 时间窗口的唯一映射，
+  查询与热力图高亮共用（本地时间）。
+- **Qualified play（有效播放）** — 口径唯一在 `PlayStatisticsLimits`：
+  `qualifiedThresholdMs(durationMs)` / `isQualified(...)`
+  （`listenedMs ≥ min(30s, 50% × 时长)`，奇数时长向上取整）；SQL 谓词与
+  AI 跳过判定都从它派生，SQL↔Dart 一致性由
+  `test/play_statistics_formula_test.dart` 用同一批 fixture 行钉住。
+
 
 - **Play event（播放事件）** — `play_events` 一行 = 一次播放尝试（append-only，
   v4 迁移）：**真正出声才开行**（首个 `position > 0` 的 tick）；切歌 / 播完 /

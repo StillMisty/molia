@@ -19,9 +19,6 @@ import '../data/play_statistics_repository.dart';
 import '../domain/models/play_statistics.dart';
 import '../services/play_statistics_export.dart';
 
-/// 统计范围（滚动窗口）。
-enum PlayStatisticsRange { week, month, all }
-
 /// 热力图的取值维度。
 enum PlayStatisticsValueMode { duration, count }
 
@@ -40,44 +37,25 @@ class PlayStatisticsProvider extends ChangeNotifier {
   bool _failed = false;
   int _loadToken = 0;
 
-  PlayStatisticsSummary _summary = PlayStatisticsSummary.empty;
-  List<PlayStatTrackEntry> _topTracks = const [];
-  List<PlayStatArtistEntry> _topArtists = const [];
-  List<DayListened> _daily = const [];
-  List<WeekdayHourListened> _byWeekdayHour = const [];
-  List<SourceListened> _sources = const [];
+  /// 最近一次加载完成的聚合快照（null = 尚未加载）。
+  ListeningStatisticsSnapshot? _snapshot;
 
   PlayStatisticsRange get range => _range;
   PlayStatisticsValueMode get valueMode => _valueMode;
   bool get isLoading => _loading;
   bool get hasLoaded => _loaded;
   bool get hasError => _failed;
-  PlayStatisticsSummary get summary => _summary;
-  List<PlayStatTrackEntry> get topTracks => _topTracks;
-  List<PlayStatArtistEntry> get topArtists => _topArtists;
-
-  /// 按日收听（**全量历史**：日历热力图始终展示全部，范围切换只做高亮）。
-  List<DayListened> get daily => _daily;
-
-  /// 星期 × 时段（随范围过滤，作息热力图）。
-  List<WeekdayHourListened> get byWeekdayHour => _byWeekdayHour;
-
-  List<SourceListened> get sources => _sources;
+  /// 聚合快照（汇总 / 榜单 / 日历 / 作息热力图 / 来源分布一次取回）。
+  ListeningStatisticsSnapshot? get snapshot => _snapshot;
 
   /// 范围内没有任何已收尾事件（加载完成的前提下）。
-  bool get isEmpty => _loaded && !_loading && _summary.playCount == 0;
+  bool get isEmpty =>
+      _loaded && !_loading && (_snapshot?.summary.playCount ?? 0) == 0;
 
   /// 范围起点（本地时间；`null` = 全部）。热力图高亮与查询共用同一窗口。
-  DateTime? get rangeStart {
-    final now = DateTime.now();
-    return switch (_range) {
-      PlayStatisticsRange.week => now.subtract(const Duration(days: 7)),
-      PlayStatisticsRange.month => now.subtract(const Duration(days: 30)),
-      PlayStatisticsRange.all => null,
-    };
-  }
+  DateTime? get rangeStart => _range.startOf(DateTime.now());
 
-  int? get _since => rangeStart?.millisecondsSinceEpoch;
+  int? get _since => _range.sinceMs(DateTime.now());
 
   /// 首次打开页面时调用（已加载过则跳过）。
   Future<void> ensureLoaded() async {
@@ -170,23 +148,10 @@ class PlayStatisticsProvider extends ChangeNotifier {
       notifyListeners();
     }
     try {
-      final since = _since;
-      final results = await Future.wait([
-        _repository.summary(since: since),
-        _repository.topTracks(since: since),
-        _repository.topArtists(since: since),
-        // 日历热力图固定全量历史（范围切换只做高亮 + 数字联动）。
-        _repository.listenedByDay(),
-        _repository.listenedByWeekdayHour(since: since),
-        _repository.sourceDistribution(since: since),
-      ]);
+      // 一次快照：查询集合与范围语义都由领域层与仓库承担。
+      final snapshot = await _repository.snapshot(since: _since);
       if (token != _loadToken) return; // 范围已切换：丢弃过期结果。
-      _summary = results[0] as PlayStatisticsSummary;
-      _topTracks = results[1] as List<PlayStatTrackEntry>;
-      _topArtists = results[2] as List<PlayStatArtistEntry>;
-      _daily = results[3] as List<DayListened>;
-      _byWeekdayHour = results[4] as List<WeekdayHourListened>;
-      _sources = results[5] as List<SourceListened>;
+      _snapshot = snapshot;
       _loaded = true;
       _failed = false;
     } catch (e) {

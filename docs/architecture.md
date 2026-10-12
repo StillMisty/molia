@@ -193,6 +193,19 @@
   provenance（每个曲目的已尝试来源）保证级联每源至多一次、有界；
   开关 `SourceSwapSettings`（`source_swap_auto_enabled`，默认开）在设置 › 播放。
 
+### 听歌统计（listening statistics）
+
+- **口径唯一**：`PlayStatisticsLimits.qualifiedThresholdMs` / `isQualified`
+  （`listenedMs ≥ min(30s, 50% × 时长)`）是「有效播放」的唯一实现；SQL 谓词
+  （查询实现内的 `_qualifiedPredicate`）与 AI 跳过判定都从它派生，SQL↔Dart
+  一致性由 `test/play_statistics_formula_test.dart` 用同一批 fixture 行对照
+  （曾经 SQL / Dart / AI 三份手写，奇数时长上 AI 还差 1ms）；
+- **范围值类型**：`PlayStatisticsRange` + `startOf(now)` / `sinceMs(now)`
+  （领域扩展）是范围 → 时间窗口的唯一映射，查询与热力图高亮共用；
+- **一次快照**：`PlayStatisticsRepository.snapshot(since:)` 并发取回
+  `ListeningStatisticsSnapshot`（汇总 / 榜单 / 日历 / 作息热力图 / 来源分布），
+  统计页只渲染它（不再分开读 6 个查询）。
+
 ### 资料库（library）
 
 `lib/domain/ports/library_store.dart`（UI 面）与 `library_sync_store.dart`

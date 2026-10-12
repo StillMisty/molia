@@ -51,6 +51,9 @@ class PlayStatisticsRepository {
   }
 
   /// 有效播放的 SQL 判定式（durationMs 未知时按 30s 兜底）。
+  ///
+  /// 与 [PlayStatisticsLimits.qualifiedThresholdMs] 同口径；一致性由
+  /// test/play_statistics_formula_test.dart 用同一批 fixture 行逐行对照。
   static const String _qualifiedPredicate =
       'listenedMs >= CASE WHEN durationMs IS NULL OR durationMs <= 0 '
       'THEN ${PlayStatisticsLimits.qualifiedMinListenedMs} '
@@ -189,6 +192,30 @@ class PlayStatisticsRepository {
   }
 
   /// 全局首播时间（「数据起始日」；不受范围过滤影响）。
+  /// 一次范围查询的全部聚合（统计页只渲染它）：并发执行、失败整体抛出。
+  ///
+  /// 查询集合固定：汇总 / 榜单 / 日历（固定全量历史）/ 作息热力图 / 来源分布。
+  Future<ListeningStatisticsSnapshot> snapshot({int? since}) async {
+    final (summaryResult, trackResult, artistResult, dayResult,
+            weekdayHourResult, sourceResult) =
+        await (
+      summary(since: since),
+      topTracks(since: since),
+      topArtists(since: since),
+      listenedByDay(),
+      listenedByWeekdayHour(since: since),
+      sourceDistribution(since: since),
+    ).wait;
+    return ListeningStatisticsSnapshot(
+      summary: summaryResult,
+      topTracks: trackResult,
+      topArtists: artistResult,
+      daily: dayResult,
+      byWeekdayHour: weekdayHourResult,
+      sources: sourceResult,
+    );
+  }
+
   Future<int?> firstPlayedAt() async {
     final db = await _db;
     final rows = await db.rawQuery(
@@ -571,19 +598,12 @@ class PlayStatisticsRepository {
     ];
   }
 
-  /// 有效播放判定（与 SQL 的 [_qualifiedPredicate] 同口径：`min(30s, 50%)`）。
-  static bool _isQualified(Object? listenedMsRaw, Object? durationMsRaw) {
-    final listenedMs = _intOf(listenedMsRaw);
-    final durationMs = durationMsRaw as int?;
-    if (durationMs == null || durationMs <= 0) {
-      return listenedMs >= PlayStatisticsLimits.qualifiedMinListenedMs;
-    }
-    final fraction = durationMs * PlayStatisticsLimits.qualifiedFraction;
-    final threshold = fraction < PlayStatisticsLimits.qualifiedMinListenedMs
-        ? fraction
-        : PlayStatisticsLimits.qualifiedMinListenedMs.toDouble();
-    return listenedMs >= threshold;
-  }
+  /// 有效播放判定：委托唯一口径（[PlayStatisticsLimits.isQualified]）。
+  static bool _isQualified(Object? listenedMsRaw, Object? durationMsRaw) =>
+      PlayStatisticsLimits.isQualified(
+        listenedMs: _intOf(listenedMsRaw),
+        durationMs: durationMsRaw as int?,
+      );
 
   DateTime _localDay(int startedAt) {
     final local = DateTime.fromMillisecondsSinceEpoch(startedAt);

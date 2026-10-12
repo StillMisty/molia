@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:molia/data/database_helper.dart';
 import 'package:molia/data/play_statistics_repository.dart';
+import 'package:molia/domain/models/play_statistics.dart';
 import 'package:molia/providers/play_statistics_provider.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
@@ -72,13 +73,13 @@ void main() {
     expect(provider.hasLoaded, isTrue);
     expect(provider.hasError, isFalse);
     expect(provider.range, PlayStatisticsRange.month);
-    expect(provider.summary.playCount, 1, reason: '范围外的事件不计入汇总');
-    expect(provider.daily, hasLength(2), reason: '日历数据不受范围过滤');
+    expect(provider.snapshot!.summary.playCount, 1, reason: '范围外的事件不计入汇总');
+    expect(provider.snapshot!.daily, hasLength(2), reason: '日历数据不受范围过滤');
 
     await provider.setRange(PlayStatisticsRange.all);
 
-    expect(provider.summary.playCount, 2);
-    expect(provider.topTracks, hasLength(2));
+    expect(provider.snapshot!.summary.playCount, 2);
+    expect(provider.snapshot!.topTracks, hasLength(2));
   });
 
   test('范围切换后榜单与作息数据跟随过滤', () async {
@@ -94,9 +95,9 @@ void main() {
     );
 
     await provider.ensureLoaded();
-    expect(provider.byWeekdayHour, hasLength(1));
+    expect(provider.snapshot!.byWeekdayHour, hasLength(1));
     await provider.setRange(PlayStatisticsRange.all);
-    expect(provider.byWeekdayHour, hasLength(2));
+    expect(provider.snapshot!.byWeekdayHour, hasLength(2));
   });
 
   test('valueMode 切换只通知不重查；clearAll 清空后进入空态', () async {
@@ -116,9 +117,9 @@ void main() {
 
     await provider.clearAll();
 
-    expect(provider.summary.playCount, 0);
+    expect(provider.snapshot!.summary.playCount, 0);
     expect(provider.isEmpty, isTrue);
-    expect(provider.daily, isEmpty);
+    expect(provider.snapshot!.daily, isEmpty);
   });
 
   test('loadDay 返回当天明细（含 raw，供点播）', () async {

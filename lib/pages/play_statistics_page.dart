@@ -215,7 +215,9 @@ class _PlayStatisticsPageState extends State<PlayStatisticsPage> {
     PlayStatisticsProvider provider, {
     required bool wide,
   }) {
-    final summary = provider.summary;
+    final snapshot = provider.snapshot;
+    if (snapshot == null) return const SizedBox.shrink();
+    final summary = snapshot.summary;
     final firstPlayedAt = summary.firstPlayedAt;
     final scheme = Theme.of(context).colorScheme;
     // 常规卡片 + 语义图标：不规则形状只留在热力图格子/空态/徽标等
@@ -288,9 +290,11 @@ class _PlayStatisticsPageState extends State<PlayStatisticsPage> {
   }
 
   Map<DateTime, int> _calendarValues(PlayStatisticsProvider provider) {
+    final snapshot = provider.snapshot;
+    if (snapshot == null) return const {};
     final duration = provider.valueMode == PlayStatisticsValueMode.duration;
     return {
-      for (final entry in provider.daily)
+      for (final entry in snapshot.daily)
         entry.day: duration ? entry.listenedMs : entry.playCount,
     };
   }
@@ -298,7 +302,7 @@ class _PlayStatisticsPageState extends State<PlayStatisticsPage> {
   Widget _heatmapCard(AppLocalizations l10n, PlayStatisticsProvider provider) {
     final values = _calendarValues(provider);
     final today = DateUtils.dateOnly(DateTime.now());
-    final firstPlayedAt = provider.summary.firstPlayedAt;
+    final firstPlayedAt = provider.snapshot?.summary.firstPlayedAt;
     final firstDay = firstPlayedAt == null
         ? today
         : DateUtils.dateOnly(
@@ -377,7 +381,9 @@ class _PlayStatisticsPageState extends State<PlayStatisticsPage> {
       for (final row in List.generate(7, (_) => List.filled(24, 0)))
         List<int>.of(row),
     ];
-    for (final entry in provider.byWeekdayHour) {
+    final snapshot = provider.snapshot;
+    if (snapshot == null) return const SizedBox.shrink();
+    for (final entry in snapshot.byWeekdayHour) {
       if (entry.weekday < 0 || entry.weekday > 6) continue;
       values[entry.weekday][entry.hour] =
           provider.valueMode == PlayStatisticsValueMode.duration
@@ -407,7 +413,9 @@ class _PlayStatisticsPageState extends State<PlayStatisticsPage> {
     PlayStatisticsProvider provider, {
     required bool wide,
   }) {
-    final summary = provider.summary;
+    final snapshot = provider.snapshot;
+    if (snapshot == null) return const SizedBox.shrink();
+    final summary = snapshot.summary;
     final cards = [
       _RateCard(title: l10n.statsCompleteRate, value: summary.completionRate),
       _RateCard(title: l10n.statsSkipRate, value: summary.skipRate),
@@ -436,7 +444,7 @@ class _PlayStatisticsPageState extends State<PlayStatisticsPage> {
 
   Widget _sourcesCard(AppLocalizations l10n, PlayStatisticsProvider provider) {
     final scheme = Theme.of(context).colorScheme;
-    final sources = provider.sources;
+    final sources = provider.snapshot?.sources ?? const <SourceListened>[];
     final maxListened = sources.fold<int>(
       0,
       (max, entry) => math.max(max, entry.listenedMs),
@@ -502,7 +510,7 @@ class _PlayStatisticsPageState extends State<PlayStatisticsPage> {
     AppLocalizations l10n,
     PlayStatisticsProvider provider,
   ) {
-    final tracks = provider.topTracks;
+    final tracks = provider.snapshot?.topTracks ?? const <PlayStatTrackEntry>[];
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -530,7 +538,8 @@ class _PlayStatisticsPageState extends State<PlayStatisticsPage> {
     PlayStatisticsProvider provider,
   ) {
     final scheme = Theme.of(context).colorScheme;
-    final artists = provider.topArtists;
+    final artists =
+        provider.snapshot?.topArtists ?? const <PlayStatArtistEntry>[];
     if (artists.isEmpty) return const SizedBox.shrink();
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,

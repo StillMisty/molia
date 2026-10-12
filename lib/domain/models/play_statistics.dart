@@ -20,6 +20,64 @@ abstract final class PlayStatisticsLimits {
 
   /// 导出明细上限（汇总与榜单覆盖全量，明细取最近 N 条）。
   static const int exportEventLimit = 2000;
+
+  /// 有效播放阈值：`min(30s, 50% × 时长)`；时长未知 / 非法取 30s。
+  ///
+  /// **唯一口径**：SQL 谓词（查询实现内的 `_qualifiedPredicate`）与 AI 跳过
+  /// 判定都从这里派生，并由「同一批 fixture 行 → SQL 与 Dart 判定逐行一致」的
+  /// 对照测试钉住（`test/play_statistics_formula_test.dart`）。
+  static int qualifiedThresholdMs(int? durationMs) {
+    if (durationMs == null || durationMs <= 0) return qualifiedMinListenedMs;
+    // 向上取整：与 SQL 的 `listenedMs >= durationMs * 0.5` 等价
+    // （整数毫秒下 500.5 的门槛只有 ≥501 才满足）。
+    final half = (durationMs * qualifiedFraction).ceil();
+    return half < qualifiedMinListenedMs ? half : qualifiedMinListenedMs;
+  }
+
+  /// 有效播放判定：`listenedMs ≥ qualifiedThresholdMs(durationMs)`。
+  static bool isQualified({required int listenedMs, required int? durationMs}) =>
+      listenedMs >= qualifiedThresholdMs(durationMs);
+}
+
+/// 统计范围：周 / 月 / 全部。
+enum PlayStatisticsRange { week, month, all }
+
+/// 范围 → 时间窗口的唯一映射（查询与热力图高亮共用；本地时间）。
+extension PlayStatisticsWindow on PlayStatisticsRange {
+  /// 窗口起点；[PlayStatisticsRange.all] 为 null。
+  DateTime? startOf(DateTime now) => switch (this) {
+        PlayStatisticsRange.week => now.subtract(const Duration(days: 7)),
+        PlayStatisticsRange.month => now.subtract(const Duration(days: 30)),
+        PlayStatisticsRange.all => null,
+      };
+
+  /// 查询用的毫秒纪元（与 [startOf] 同一窗口）。
+  int? sinceMs(DateTime now) => startOf(now)?.millisecondsSinceEpoch;
+}
+
+/// 一次范围查询的全部聚合：统计页只渲染它。
+///
+/// 范围语义（[PlayStatisticsRange]）与口径（[PlayStatisticsLimits]）都在领域层；
+/// 实现（SQL / 分桶 / 去重）在 `lib/data/play_statistics_repository.dart`。
+class ListeningStatisticsSnapshot {
+  const ListeningStatisticsSnapshot({
+    required this.summary,
+    required this.topTracks,
+    required this.topArtists,
+    required this.daily,
+    required this.byWeekdayHour,
+    required this.sources,
+  });
+
+  final PlayStatisticsSummary summary;
+  final List<PlayStatTrackEntry> topTracks;
+  final List<PlayStatArtistEntry> topArtists;
+
+  /// 日历热力图固定全量历史（范围切换只做高亮 + 数字联动）。
+  final List<DayListened> daily;
+
+  final List<WeekdayHourListened> byWeekdayHour;
+  final List<SourceListened> sources;
 }
 
 /// 播放事件的结束原因（`play_events.endReason` 的持久化取值）。

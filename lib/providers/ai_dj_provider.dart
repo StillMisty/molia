@@ -22,7 +22,6 @@
 library;
 
 import 'dart:async';
-import 'dart:math' as math;
 
 import 'package:flutter/foundation.dart';
 import 'package:logger/logger.dart';
@@ -672,12 +671,7 @@ class AiDjProvider extends ChangeNotifier {
     final atEnd = durationMs > 0 &&
         entry.maxPositionMs >= durationMs - completionToleranceMs;
     if (atEnd) return; // 听完：正向默认，不额外回流。
-    final threshold = durationMs <= 0
-        ? PlayStatisticsLimits.qualifiedMinListenedMs
-        : math.min(
-            PlayStatisticsLimits.qualifiedMinListenedMs,
-            (durationMs * 0.5).floor(),
-          );
+    final threshold = PlayStatisticsLimits.qualifiedThresholdMs(durationMs);
     if (entry.maxPositionMs < threshold &&
         !_skippedLabels.contains(entry.label)) {
       _skippedLabels.add(entry.label);
