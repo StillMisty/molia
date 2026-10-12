@@ -8,6 +8,7 @@
 /// 取链/歌词/封面请求会把该对象整体回传（与 LX 脚本 `musicInfo` 的约定一致）。
 library;
 
+import '../../data/settings/settings_registry.dart';
 import '../../domain/models/any_listen.dart';
 import '../source_search_result.dart';
 import '../source_track.dart';
@@ -57,8 +58,9 @@ class AnyListenSource {
   AnyListenSource({
     AnyListenApi? api,
     AnyListenConfigStore? configStore,
+    SettingsRegistry? settings,
   })  : _api = api ?? AnyListenApi(),
-        _configStore = configStore ?? AnyListenConfigStore();
+        _configStore = configStore ?? AnyListenConfigStore(settings: settings);
 
   AnyListenConfig get config => _config;
 

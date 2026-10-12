@@ -17,7 +17,8 @@ import 'data/sync/adapters/session_sync_adapter.dart';
 import 'data/sync/adapters/statistics_sync_adapter.dart';
 import 'data/sync/sync_crypto.dart';
 import 'data/sync/sync_engine.dart';
-import 'data/sync/sync_setting_specs.dart';
+import 'data/settings/settings_keys.dart';
+import 'data/settings/settings_registry.dart';
 import 'data/sync/sync_state_store.dart';
 import 'data/sync/transport/lan_sync_transport.dart';
 import 'data/sync/transport/webdav_sync_transport.dart';
@@ -118,7 +119,17 @@ void main() async {
   // 桌面端本地播放后端（Windows/Linux: media_kit）
   initDesktopAudioIfNeeded();
 
-  final sourceManager = SourceManager();
+  // 设置注册表（登记键的唯一家）：读 / 写 / 同步往返 / 应用远端后的 reload
+  // 钩子都走它；键的声明见 data/settings/settings_keys.dart。
+  final settingsRegistry = SettingsRegistry(keys: kAllSettingsKeys);
+  // 全静态服务（语言 / 品牌名）：attach 注入注册表，reload 由组合根代绑。
+  LanguageService.attachSettings(settingsRegistry);
+  AppBrandingService.attachSettings(settingsRegistry);
+  settingsRegistry.bindReload(
+      kSelectedLanguage, LanguageService.reloadFromPreferences);
+  settingsRegistry.bindReload(kAppDisplayTitle, AppBrandingService.load);
+
+  final sourceManager = SourceManager(settings: settingsRegistry);
 
   // 省流模式（仅移动数据生效）：必须在解析/播放/封面链路创建前就绪，
   // 供取链回调、封面网关与播放 provider 共享同一实例。
@@ -199,6 +210,7 @@ void main() async {
   );
   final playStatisticsService = PlayStatisticsService(
     repository: playStatisticsRepository,
+    settings: settingsRegistry,
   );
   await playStatisticsService.init();
   unawaited(playStatisticsRepository.closeStaleEvents());
@@ -207,13 +219,14 @@ void main() async {
   final localDatabaseProvider = LocalDatabaseProvider();
   // 换源偏好（自动换源开关，默认开）与自动换源解析服务：
   // 播放失败同源重试仍失败时，经注入的 resolver 跨音源严格找回并替换。
-  final sourceSwapSettings = SourceSwapSettings();
+  final sourceSwapSettings = SourceSwapSettings(settings: settingsRegistry);
   await sourceSwapSettings.init();
   final autoSourceSwapService = AutoSourceSwapService(
     catalog: catalogService,
     registry: sourceRegistry,
   );
   final playbackProvider = PlaybackProvider(
+    settings: settingsRegistry,
     facade: playbackFacade,
     messenger: _AppUiMessenger(notificationService),
     sourceManager: sourceManager,
@@ -246,7 +259,7 @@ void main() async {
   // AI 推歌：配置（安全存储）+ OpenAI-compatible 客户端 +
   // 画像/生成服务 + 模式控制器。组合根把播放快照 / 进度接进控制器
   //（跳过判定与低水位续推都在控制器里）。
-  final aiSettingsStore = AiSettingsStore();
+  final aiSettingsStore = AiSettingsStore(settings: settingsRegistry);
   final aiRecommendationService = AiRecommendationService(
     llm: LlmClient(),
     catalog: catalogService,
@@ -288,9 +301,9 @@ void main() async {
   // 输出端能力由平台决定；媒体输出依赖系统媒体会话（audioHandler）。
   // 主题实例提前创建：封面覆盖 / 桌面歌词「跟随主题」「跟随封面」的颜色
   // 都从 ThemeProvider 取（取色链路在下方接线）。
-  final themeProvider = ThemeProvider();
+  final themeProvider = ThemeProvider(settings: settingsRegistry);
   // 导航偏好提前创建：跨设备同步应用远端设置后需要定向重载。
-  final navProvider = NavProvider();
+  final navProvider = NavProvider(settings: settingsRegistry);
   // 封面取色服务：全局主题、桌面歌词、海报共用的唯一取色入口。
   final artworkPaletteService = ArtworkPaletteService();
   final artworkThemeSync = ArtworkThemeSync(
@@ -298,7 +311,8 @@ void main() async {
     onPalette: (palette) => themeProvider.applyArtworkSeed(palette.seed),
     onCleared: themeProvider.clearArtworkSeed,
   );
-  final lyricsDisplaySettings = LyricsDisplaySettings();
+  final lyricsDisplaySettings =
+      LyricsDisplaySettings(settings: settingsRegistry);
   await lyricsDisplaySettings.init();
   final audioRouteMonitor = AudioRouteMonitor();
   unawaited(audioRouteMonitor.init());
@@ -386,13 +400,10 @@ void main() async {
   // 跨设备数据同步（ADR-0003）：口令即信任根，加入同步的设备完全互信
   // （含音源脚本与凭证），因此不逐项审批；Web 端不提供入口。
   final syncCodec = SyncCodec();
+  // 脚本同步的保留键：音源类别的设置键（避免脚本墓碑与设置键同名冲突）。
   final sourceCategoryKeys = {
-    for (final spec in kSyncSettingSpecs)
-      if (spec.category == SyncCategory.sources) spec.key,
-  };
-  final settingsCategoryKeys = {
-    for (final spec in kSyncSettingSpecs)
-      if (spec.category == SyncCategory.settings) spec.key,
+    for (final key in settingsRegistry.keys)
+      if (key.category == SyncCategory.sources) key.name,
   };
   final playlistSyncAdapter =
       PlaylistSyncAdapter(repository: libraryRepository);
@@ -407,24 +418,11 @@ void main() async {
   );
   final prefsSyncAdapter = PrefsSyncAdapter(
     state: syncState,
-    specs: kSyncSettingSpecs,
+    settings: settingsRegistry,
     deviceId: () => syncState.deviceId,
     now: () => DateTime.now().millisecondsSinceEpoch,
-    onApplied: (keys) async {
-      if (keys.any(settingsCategoryKeys.contains)) {
-        await themeProvider.reloadFromPreferences();
-        await navProvider.reloadFromPreferences();
-        await AppBrandingService.load();
-        await LanguageService.reloadFromPreferences();
-        await lyricsDisplaySettings.init();
-        await playStatisticsService.reloadFromPreferences();
-        await playbackProvider.reloadDefaultPlayMode();
-      }
-      if (keys.any(sourceCategoryKeys.contains)) {
-        await sourceManager.reloadPreferences();
-        await sourceManager.reloadAnyListenConfig();
-      }
-    },
+    // 应用远端设置后：注册表按键触发模块自绑的重载钩子（不再手写清单）。
+    onApplied: settingsRegistry.reloadKeys,
   );
   final statisticsSyncAdapter =
       StatisticsSyncAdapter(repository: playStatisticsRepository);
@@ -557,7 +555,7 @@ void main() async {
         Provider<CacheService>.value(value: CacheService.instance),
         Provider<NotificationService>.value(value: notificationService),
         Provider<SettingsService>(
-            create: (_) => SettingsService()),
+            create: (_) => SettingsService(settings: settingsRegistry)),
         // 省流模式：设置页读写开关/音质上限；取链与封面网关已在上方接线。
         ChangeNotifierProvider.value(value: dataSaver),
         // 跨设备数据同步：设置页读写；Web 不展示入口。

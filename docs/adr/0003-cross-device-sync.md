@@ -54,6 +54,16 @@
 6. **设置同步的变化检测用「登记哈希」**：同步层登记每个键的值哈希与时间戳，
    每轮对比当前值判定本地修改，应用远端后同步登记——不改造散落在 19 个文件里的
    SharedPreferences 写入方。
+
+   > **2026-10-12 修订**：登记键（跟人走 / 音源 / 凭证）的读写已收进
+   > `lib/data/settings/settings_registry.dart`，键声明唯一在
+   > `lib/data/settings/settings_keys.dart`；组合根注入唯一实例，模块在构造时
+   > 把 reload 钩子绑到自己的键。本条「不改造写入方」的适用范围收窄为
+   > **未登记的设备本地键**；变化检测仍是登记哈希（同步适配器不再自带键表与
+   > 类型转换）。登记表此前已漏掉三个真实键（`ai_dj_enabled` /
+   > `ai_dj_cache_ttl_days` / `source_swap_auto_enabled`），现按「跟人走」登记；
+   > 漏登记从此等于显式选择不同步，由
+   > `test/architecture/settings_keys_test.dart` 守住「一个键一个家」。
 7. **落位与接线**：领域模型 / 端口在 `lib/domain`；引擎、适配器、传输、状态存储在
    `lib/data/sync`；`SyncProvider` 提供 UI 状态；组合根在 `main.dart` 创建并在
    启动 / 数据变更去抖 / 每 10 分钟 / 回前台时触发同步。Web 隐藏入口（传输依赖

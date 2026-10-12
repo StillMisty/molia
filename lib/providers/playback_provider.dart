@@ -14,6 +14,8 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import '../data/catalog/catalog_service.dart';
 import '../data/library_repository.dart';
+import '../data/settings/settings_keys.dart';
+import '../data/settings/settings_registry.dart';
 import '../data/mapping/track_mapper.dart';
 import '../domain/models/failure.dart';
 import '../domain/models/library.dart';
@@ -116,13 +118,13 @@ class PlaybackProvider extends ChangeNotifier {
   static const String _lastPlayedImageKey = 'last_played_image_url';
   static const String _lastPlayedTrackNameKey = 'last_played_track_name';
   static const String _lastPlayedArtistsKey = 'last_played_artists';
-  static const String _defaultPlayModeKey = 'default_play_mode';
 
   /// 播放会话进度落盘节流：正常播放中最多每秒写一次
   /// （被系统杀进程时最多丢 ~1s 进度；track 切换/暂停/后台强制写）。
   static const Duration _sessionSaveInterval = Duration(seconds: 1);
 
   final PlaybackFacade _facade;
+  final SettingsRegistry _settings;
   final UiMessenger _messenger;
   final SourceManager? _sourceManager;
 
@@ -220,6 +222,7 @@ class PlaybackProvider extends ChangeNotifier {
     Future<String?> Function(Track track)? artworkResolver,
     SourceSwapSettings? autoSwapSettings,
     AutoSourceSwapResolver? autoSwapResolver,
+    SettingsRegistry? settings,
   })  : _facade = facade,
         _messenger = messenger,
         _sourceManager = sourceManager,
@@ -231,7 +234,9 @@ class PlaybackProvider extends ChangeNotifier {
         _artworkResolver = artworkResolver,
         _autoSwapSettings = autoSwapSettings,
         _autoSwapResolver = autoSwapResolver,
+        _settings = settings ?? SettingsRegistry(keys: kAllSettingsKeys),
         _sessionStore = sessionStore ?? PlaybackSessionStore() {
+    _settings.bindReload(kDefaultPlayMode, reloadDefaultPlayMode);
     _notifyThrottler = CategorizedNotifyThrottler(
       notifyCallback: super.notifyListeners,
       categoryIntervals: {
@@ -591,8 +596,7 @@ class PlaybackProvider extends ChangeNotifier {
       _notifyCategory('track');
     }
     try {
-      final sp = await SharedPreferences.getInstance();
-      await sp.setString(_defaultPlayModeKey, mode.name);
+      await _settings.write(kDefaultPlayMode, mode.name);
     } catch (e) {
       _logger.e('保存默认播放模式失败', error: e);
     }
@@ -601,9 +605,7 @@ class PlaybackProvider extends ChangeNotifier {
   /// 启动加载默认播放模式；无曲目时应用到 facade（有曲目时不打断当前会话）。
   Future<void> _loadDefaultPlayMode() async {
     try {
-      final sp = await SharedPreferences.getInstance();
-      final name = sp.getString(_defaultPlayModeKey);
-      if (name == null) return;
+      final name = await _settings.read(kDefaultPlayMode);
       final mode = PlayMode.values.firstWhere(
         (value) => value.name == name,
         orElse: () => PlayMode.sequential,

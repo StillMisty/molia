@@ -1,5 +1,5 @@
-import 'package:shared_preferences/shared_preferences.dart';
-
+import '../../data/settings/settings_keys.dart';
+import '../../data/settings/settings_registry.dart';
 import '../../domain/models/any_listen.dart';
 
 /// 领域模型定义在 `lib/domain/models/any_listen.dart`，这里 export 以保持既有
@@ -7,20 +7,24 @@ import '../../domain/models/any_listen.dart';
 /// 零改动。
 export '../../domain/models/any_listen.dart' show AnyListenConfig;
 
-/// [AnyListenConfig] 的 shared_preferences 持久化。
+/// [AnyListenConfig] 的持久化（经设置注册表，键见 settings_keys.dart）。
 ///
 /// 「零影响」原则：读取失败（如测试环境无插件、存储损坏）静默返回默认配置，
 /// 写入失败返回 false，由调用方决定是否提示，绝不抛出未捕获异常。
 class AnyListenConfigStore {
+  AnyListenConfigStore({SettingsRegistry? settings})
+      : _settings = settings ?? SettingsRegistry(keys: kAllSettingsKeys);
+
+  final SettingsRegistry _settings;
+
   Future<AnyListenConfig> load() async {
     try {
-      final prefs = await SharedPreferences.getInstance();
       return AnyListenConfig(
         serverUrl: AnyListenConfig.normalizeServerUrl(
-          prefs.getString(AnyListenConfig.prefsServerUrlKey) ?? '',
+          await _settings.read(kAnyListenServerUrl),
         ),
-        token: prefs.getString(AnyListenConfig.prefsTokenKey) ?? '',
-        enabled: prefs.getBool(AnyListenConfig.prefsEnabledKey) ?? false,
+        token: await _settings.read(kAnyListenToken),
+        enabled: await _settings.read(kAnyListenEnabled),
       );
     } catch (_) {
       return AnyListenConfig.empty;
@@ -31,11 +35,9 @@ class AnyListenConfigStore {
   Future<bool> save(AnyListenConfig config) async {
     try {
       final normalized = config.normalizedCopy();
-      final prefs = await SharedPreferences.getInstance();
-      await prefs.setString(
-          AnyListenConfig.prefsServerUrlKey, normalized.serverUrl);
-      await prefs.setString(AnyListenConfig.prefsTokenKey, normalized.token);
-      await prefs.setBool(AnyListenConfig.prefsEnabledKey, normalized.enabled);
+      await _settings.write(kAnyListenServerUrl, normalized.serverUrl);
+      await _settings.write(kAnyListenToken, normalized.token);
+      await _settings.write(kAnyListenEnabled, normalized.enabled);
       return true;
     } catch (_) {
       return false;
@@ -45,10 +47,9 @@ class AnyListenConfigStore {
   /// 清空配置，成功返回 true。
   Future<bool> clear() async {
     try {
-      final prefs = await SharedPreferences.getInstance();
-      await prefs.remove(AnyListenConfig.prefsServerUrlKey);
-      await prefs.remove(AnyListenConfig.prefsTokenKey);
-      await prefs.remove(AnyListenConfig.prefsEnabledKey);
+      await _settings.clear(kAnyListenServerUrl);
+      await _settings.clear(kAnyListenToken);
+      await _settings.clear(kAnyListenEnabled);
       return true;
     } catch (_) {
       return false;

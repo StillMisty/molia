@@ -18,9 +18,10 @@ import 'dart:async';
 
 import 'package:flutter/foundation.dart';
 import 'package:logger/logger.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 
 import '../data/play_statistics_repository.dart';
+import '../data/settings/settings_keys.dart';
+import '../data/settings/settings_registry.dart';
 import '../domain/models/playback.dart';
 import '../domain/models/play_statistics.dart';
 import '../domain/models/track.dart';
@@ -28,14 +29,14 @@ import '../domain/models/track.dart';
 class PlayStatisticsService {
   PlayStatisticsService({
     required PlayStatisticsRepository repository,
-    SharedPreferences? preferences,
+    SettingsRegistry? settings,
     DateTime Function()? clock,
   })  : _repository = repository,
-        _preferences = preferences,
-        _clock = clock ?? DateTime.now;
+        _settings = settings ?? SettingsRegistry(keys: kAllSettingsKeys),
+        _clock = clock ?? DateTime.now {
+    _settings.bindReload(kPlayStatisticsEnabled, reloadFromPreferences);
+  }
 
-  /// 采集开关（SharedPreferences 键；默认开启）。
-  static const String enabledKey = 'play_statistics_enabled';
 
   /// 进行中事件的周期落盘间隔（tick 驱动，无 Timer）。
   static const Duration touchInterval = Duration(seconds: 15);
@@ -52,7 +53,7 @@ class PlayStatisticsService {
   final DateTime Function() _clock;
   final Logger _logger = Logger();
 
-  SharedPreferences? _preferences;
+  final SettingsRegistry _settings;
 
   /// 采集开关的可监听出口（设置页开关绑定；值随 [init]/[setEnabled] 更新）。
   final ValueNotifier<bool> enabledNotifier = ValueNotifier<bool>(true);
@@ -81,8 +82,7 @@ class PlayStatisticsService {
   /// 读取开关持久值（组合根在接线前调用；失败按默认开启处理）。
   Future<void> init() async {
     try {
-      final prefs = _preferences ??= await SharedPreferences.getInstance();
-      _enabled = prefs.getBool(enabledKey) ?? true;
+      _enabled = await _settings.read(kPlayStatisticsEnabled);
     } catch (e) {
       _logger.e('读取听歌统计开关失败，按默认开启处理', error: e);
       _enabled = true;
@@ -102,8 +102,7 @@ class PlayStatisticsService {
       _finishOpen(reason: PlayEventEndReason.stopped);
     }
     try {
-      final prefs = _preferences ??= await SharedPreferences.getInstance();
-      await prefs.setBool(enabledKey, value);
+      await _settings.write(kPlayStatisticsEnabled, value);
     } catch (e) {
       _logger.e('写入听歌统计开关失败', error: e);
     }

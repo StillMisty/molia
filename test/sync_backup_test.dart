@@ -1,10 +1,11 @@
 import 'dart:convert';
 
 import 'package:flutter_test/flutter_test.dart';
+import 'package:molia/data/settings/settings_keys.dart';
+import 'package:molia/data/settings/settings_registry.dart';
 import 'package:molia/data/sync/adapters/prefs_sync_adapter.dart';
 import 'package:molia/data/sync/sync_engine.dart';
 import 'package:molia/data/sync/sync_state_store.dart';
-import 'package:molia/domain/models/device_sync.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'support/sync_test_support.dart';
@@ -13,23 +14,12 @@ import 'support/sync_test_support.dart';
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
-  const specs = [
-    SyncSettingSpec(
-      key: 'theme_mode',
-      category: SyncCategory.settings,
-      defaultValue: 'system',
-    ),
-    SyncSettingSpec(
-      key: 'ai_dj_api_key',
-      category: SyncCategory.credentials,
-      store: SyncValueStore.secure,
-      defaultValue: '',
-    ),
-  ];
+  const keys = [kThemeMode, kAiDjApiKey];
 
   late SharedPreferences prefs;
   late MemorySyncSecretStore secrets;
   late SyncStateStore state;
+  late SettingsRegistry registry;
   late SyncEngine engine;
   var now = 7000;
 
@@ -44,12 +34,17 @@ void main() {
       clock: () => now,
     );
     await state.init();
+    registry = SettingsRegistry(
+      keys: keys,
+      preferences: prefs,
+      secrets: secrets,
+    );
     engine = SyncEngine(
       state: state,
       adapters: [
         PrefsSyncAdapter(
           state: state,
-          specs: specs,
+          settings: registry,
           deviceId: () => 'devA',
           now: () => now,
         ),

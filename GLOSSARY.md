@@ -232,9 +232,16 @@
   设置类用「登记哈希」（`SyncStamp`）做变化检测，不改造散落的写入方。
 - **Sync tombstone（删除墓碑）** — 列表 / 曲目 / 脚本的删除不保留原行，
   由 `sync_tombstones` 表或同步状态中的登记项承担「删除也取新」的合并语义。
-- **Settings registry（设置登记表）** — `SettingsSyncAdapter` 维护的
+- **Setting stamps（设置登记哈希）** — `SyncStateStore.settingStamps` 维护的
   `key → (值哈希, 时间戳, 设备)`：本地值 vs 登记哈希判定本地修改，
-  应用远端后同步更新，保证重复应用幂等。
+  应用远端后同步更新，保证重复应用幂等（见 `docs/adr/0003` §6 修订）。
+- **Settings key（登记键）** — `lib/data/settings/settings_key.dart`：一个设置键的
+  全部事实（名字 / 默认值 / 同步类别 / 存放盒）；只有有「第二消费者」的键才登记
+  （同步、备份、应用远端后的重载、整表驱动的测试），设备本地键留在各自模块。
+- **Settings registry（设置注册表）** — `lib/data/settings/settings_registry.dart`：
+  登记键的唯一家（读 / 写 / 同步往返 / 重载钩子）；组合根注入唯一实例，模块在
+  构造时把 reload 钩子绑到自己的键，应用远端值后按变化的键触发；键名字面量只有
+  一份（`settings_keys.dart`），由 `test/architecture/settings_keys_test.dart` 强制。
 - **Sync report / log（同步结果 / 日志）** — 一轮同步的拉取 / 应用 / 跳过计数
   与错误（`SyncReport`、`SyncLogEntry`），设置页只读展示，不拦截合并。
 

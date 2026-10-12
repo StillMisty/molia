@@ -1,34 +1,26 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:molia/data/settings/settings_keys.dart';
 import 'package:molia/domain/models/ai_dj.dart';
 import 'package:molia/services/ai/ai_settings_store.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../support/settings_test_support.dart';
+
 /// 内存密钥存储替身（不触碰 flutter_secure_storage 平台通道）。
-class _MemorySecrets implements AiSecretStorage {
-  final Map<String, String> data = {};
-
-  @override
-  Future<String?> read(String key) async => data[key];
-
-  @override
-  Future<void> write(String key, String value) async => data[key] = value;
-
-  @override
-  Future<void> delete(String key) async => data.remove(key);
-}
-
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
-  late _MemorySecrets secrets;
+  late MemorySettingsSecretStore secrets;
   late SharedPreferences prefs;
   late AiSettingsStore store;
 
   setUp(() async {
     SharedPreferences.setMockInitialValues({});
     prefs = await SharedPreferences.getInstance();
-    secrets = _MemorySecrets();
-    store = AiSettingsStore(secrets: secrets, preferences: prefs);
+    secrets = MemorySettingsSecretStore();
+    store = AiSettingsStore(
+            settings: testSettingsRegistry(
+                preferences: prefs, secrets: secrets));
   });
 
   test('配置保存 / 读取 / 清空往返（去首尾空白）', () async {
@@ -49,7 +41,7 @@ void main() {
   });
 
   test('缺项返回 null（页面据此引导配置）', () async {
-    await secrets.write(AiSettingsStore.baseUrlKey, 'https://x.example');
+    await secrets.write(kAiDjBaseUrl.name, 'https://x.example');
     expect(await store.readConfig(), isNull);
   });
 
@@ -59,7 +51,9 @@ void main() {
     await store.grantConsent();
 
     expect(await store.hasConsent(), isTrue);
-    final fresh = AiSettingsStore(secrets: secrets, preferences: prefs);
+    final fresh = AiSettingsStore(
+            settings: testSettingsRegistry(
+                preferences: prefs, secrets: secrets));
     expect(await fresh.hasConsent(), isTrue);
 
     await store.revokeConsent();

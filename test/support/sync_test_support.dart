@@ -1,11 +1,11 @@
 import 'dart:async';
 
-import 'package:molia/data/sync/sync_state_store.dart';
+import 'package:molia/data/settings/settings_secret_store.dart';
 import 'package:molia/domain/models/device_sync.dart';
 import 'package:molia/domain/ports/sync_transport.dart';
 
 /// 测试用内存密钥存储（替代 flutter_secure_storage）。
-class MemorySyncSecretStore implements SyncSecretStore {
+class MemorySyncSecretStore implements SettingsSecretStore {
   final Map<String, String> values = {};
 
   @override

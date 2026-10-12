@@ -193,6 +193,26 @@
   provenance（每个曲目的已尝试来源）保证级联每源至多一次、有界；
   开关 `SourceSwapSettings`（`source_swap_auto_enabled`，默认开）在设置 › 播放。
 
+### 设置注册表（settings registry）
+
+`lib/data/settings/`（键声明 / 注册表 / 密钥盒端口）：
+
+- `settings_keys.dart`：登记键总表 —— 键名、默认值、同步类别（跟人走 / 音源 /
+  凭证）、存放盒（prefs / secure）的唯一声明处；设备本地键（省流、缓存策略、
+  全局字体、桌面歌词悬浮窗、AI 待处理批次、播放会话、曲库数据…）不登记，
+  留在各自模块（只有一位消费者，收进来只增加门房面积）；
+- `settings_registry.dart`：`read` / `write` / `clear`（模块面）与 `readRaw` /
+  `writeRaw`（同步面，按值类型宽容转换）＋ `bindReload` / `reloadKeys`
+  （应用远端值后按变化的键触发模块自绑的重载钩子）；读失败回默认值、写失败
+  抛出（由模块决定兜底策略），与迁移前各模块行为一致；
+- 键的名字字面量只准出现在 `settings_keys.dart`
+  （`test/architecture/settings_keys_test.dart` 扫描 `lib/**` 强制）：
+  漏登记 = 显式选择「不同步」，不再是静默漂移。
+
+同步适配器（`PrefsSyncAdapter`）不再自带键表与类型转换：键规格、默认值与读写
+都来自注册表；ADR-0003 §6 的「登记哈希」变化检测保留，但适用范围收窄为
+未登记的设备本地键。
+
 ## 4. 状态与通知策略
 
 | 状态 | 频度 | 承载 | 订阅方式 |

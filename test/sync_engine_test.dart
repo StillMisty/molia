@@ -1,4 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:molia/data/settings/settings_keys.dart';
+import 'package:molia/data/settings/settings_registry.dart';
 import 'package:molia/data/sync/adapters/prefs_sync_adapter.dart';
 import 'package:molia/data/sync/sync_engine.dart';
 import 'package:molia/data/sync/sync_state_store.dart';
@@ -11,13 +13,7 @@ import 'support/sync_test_support.dart';
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
-  const specs = [
-    SyncSettingSpec(
-      key: 'theme_mode',
-      category: SyncCategory.settings,
-      defaultValue: 'system',
-    ),
-  ];
+  const keys = [kThemeMode];
 
   late SharedPreferences prefs;
   late MemorySyncSecretStore secrets;
@@ -40,7 +36,11 @@ void main() {
       adapters: [
         PrefsSyncAdapter(
           state: state,
-          specs: specs,
+          settings: SettingsRegistry(
+            keys: keys,
+            preferences: prefs,
+            secrets: secrets,
+          ),
           deviceId: () => state.deviceId,
           now: () => 7000,
         ),

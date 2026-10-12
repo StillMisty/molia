@@ -1,5 +1,7 @@
 import 'package:flutter/foundation.dart';
-import 'package:shared_preferences/shared_preferences.dart';
+
+import '../data/settings/settings_keys.dart';
+import '../data/settings/settings_registry.dart';
 
 /// 应用显示名称（顶栏回退文案与设置项）。
 ///
@@ -20,7 +22,10 @@ class AppBrandingService {
 
   static const int maxLength = 24;
 
-  static const String _prefsKey = 'app_display_title';
+  /// 设置注册表（组合根启动时注入；本服务全静态，reload 也由组合根代绑）。
+  static late final SettingsRegistry _settings;
+
+  static void attachSettings(SettingsRegistry settings) => _settings = settings;
 
   /// 用户是否自定义过名称；自定义后默认名不覆盖标题。
   static bool _customized = false;
@@ -31,8 +36,7 @@ class AppBrandingService {
   /// 启动时载入已保存名称（main 的 composition root 调用）。
   static Future<void> load() async {
     try {
-      final prefs = await SharedPreferences.getInstance();
-      final saved = prefs.getString(_prefsKey)?.trim();
+      final saved = (await _settings.read(kAppDisplayTitle))?.trim();
       if (saved != null && saved.isNotEmpty) {
         _customized = true;
         titleNotifier.value = saved;
@@ -65,11 +69,10 @@ class AppBrandingService {
     _customized = trimmed.isNotEmpty;
     titleNotifier.value = effective;
     try {
-      final prefs = await SharedPreferences.getInstance();
       if (trimmed.isEmpty) {
-        await prefs.remove(_prefsKey);
+        await _settings.clear(kAppDisplayTitle);
       } else {
-        await prefs.setString(_prefsKey, effective);
+        await _settings.write(kAppDisplayTitle, effective);
       }
     } catch (_) {
       // 写入失败仅影响下次启动的持久化，本次会话已生效。

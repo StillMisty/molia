@@ -1,23 +1,20 @@
-import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+import '../data/settings/settings_keys.dart';
+import '../data/settings/settings_registry.dart';
 
 /// 应用设置（纯播放器）：仅保留歌词复制格式。
+///
+/// 值存 secure 盒（历史原因，不进明文备份）；读写经设置注册表。
 class SettingsService {
-  final _secureStorage = FlutterSecureStorage();
+  SettingsService({SettingsRegistry? settings})
+      : _settings = settings ?? SettingsRegistry(keys: kAllSettingsKeys);
 
-  static const _copyLyricsAsSingleLineKey = 'copy_lyrics_single_line';
+  final SettingsRegistry _settings;
 
-  Future<void> saveCopyLyricsAsSingleLine(bool value) async {
-    await _secureStorage.write(
-        key: _copyLyricsAsSingleLineKey, value: value.toString());
-  }
+  Future<void> saveCopyLyricsAsSingleLine(bool value) =>
+      _settings.write(kCopyLyricsSingleLine, value.toString());
 
-  Future<bool> getCopyLyricsAsSingleLine() async {
-    final valueString =
-        await _secureStorage.read(key: _copyLyricsAsSingleLineKey);
-    return valueString?.toLowerCase() == 'true';
-  }
+  Future<bool> getCopyLyricsAsSingleLine() async =>
+      (await _settings.read(kCopyLyricsSingleLine))?.toLowerCase() == 'true';
 
-  Future<void> clearSettings() async {
-    await _secureStorage.delete(key: _copyLyricsAsSingleLineKey);
-  }
+  Future<void> clearSettings() => _settings.clear(kCopyLyricsSingleLine);
 }

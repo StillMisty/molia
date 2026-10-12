@@ -23,6 +23,9 @@ import 'package:molia/theme/scheme_builder.dart';
 import 'package:molia/utils/responsive.dart';
 
 import 'support/fakes.dart';
+import 'package:molia/data/settings/settings_keys.dart';
+
+import 'support/settings_test_support.dart';
 
 /// 设置页冒烟：首屏分区卡片、弹层内部子页导航与新设置项。
 /// 不触碰真实 DB / 安全存储（fake SettingsService）。
@@ -78,7 +81,9 @@ void main() {
       repository: PlayStatisticsRepository(
         databaseProvider: () async => throw StateError('测试不访问数据库'),
       ),
-      preferences: await SharedPreferences.getInstance(),
+      settings: testSettingsRegistry(
+        preferences: await SharedPreferences.getInstance(),
+      ),
     );
     await playStatisticsService.init();
     addTearDown(playStatisticsService.enabledNotifier.dispose);
@@ -494,7 +499,7 @@ void main() {
     await tester.pumpAndSettle();
     expect(playStatisticsService.enabledNotifier.value, isFalse);
     final prefs = await SharedPreferences.getInstance();
-    expect(prefs.getBool(PlayStatisticsService.enabledKey), isFalse);
+    expect(prefs.getBool(kPlayStatisticsEnabled.name), isFalse);
 
     // 应用栏返回箭头退回首屏。
     await tester.tap(find.byIcon(Icons.arrow_back));

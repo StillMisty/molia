@@ -1,7 +1,7 @@
 /// 同步运行状态持久化：设备身份 / 开关 / 传输配置 / 变更登记 / 日志。
 ///
 /// - 非敏感状态走 SharedPreferences 单 JSON 键（`sync_state_v1`）；
-/// - 敏感项（同步口令、WebDAV 密码）走 [SyncSecretStore]（生产 =
+/// - 敏感项（同步口令、WebDAV 密码）走 [SettingsSecretStore]（生产 =
 ///   flutter_secure_storage），口令即信任根（见 ADR-0003）；
 /// - 变更登记（设置键哈希、脚本墓碑、激活脚本指针）是「变化检测」的基线：
 ///   settings 写入方分散在多个服务，同步层用「上次登记值 vs 当前值」判定
@@ -12,34 +12,10 @@ import 'dart:convert';
 import 'dart:math';
 
 import 'package:flutter/foundation.dart';
-import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../domain/models/device_sync.dart';
-
-/// 密钥键值存储最小接口（测试注入内存实现）。
-abstract interface class SyncSecretStore {
-  Future<String?> read(String key);
-  Future<void> write(String key, String value);
-  Future<void> delete(String key);
-}
-
-/// 生产实现：flutter_secure_storage（桌面端依赖系统 keyring）。
-class SecureSyncSecretStore implements SyncSecretStore {
-  const SecureSyncSecretStore();
-
-  FlutterSecureStorage get _storage => const FlutterSecureStorage();
-
-  @override
-  Future<String?> read(String key) => _storage.read(key: key);
-
-  @override
-  Future<void> write(String key, String value) =>
-      _storage.write(key: key, value: value);
-
-  @override
-  Future<void> delete(String key) => _storage.delete(key: key);
-}
+import '../settings/settings_secret_store.dart';
 
 /// WebDAV 传输配置（密码单独走安全存储，不在此结构内）。
 class WebDavConfig {
@@ -163,12 +139,12 @@ class SyncLogEntry {
 class SyncStateStore {
   SyncStateStore({
     SharedPreferences? preferences,
-    SyncSecretStore? secrets,
+    SettingsSecretStore? secrets,
     Random? random,
     String? deviceId,
     int Function()? clock,
   })  : _preferences = preferences,
-        _secrets = secrets ?? const SecureSyncSecretStore(),
+        _secrets = secrets ?? const SecureSettingsSecretStore(),
         _random = random ?? Random.secure(),
         _clock = clock ?? (() => DateTime.now().millisecondsSinceEpoch),
         _deviceId = deviceId ?? '';
@@ -181,7 +157,7 @@ class SyncStateStore {
   static const int logLimit = 20;
 
   final SharedPreferences? _preferences;
-  final SyncSecretStore _secrets;
+  final SettingsSecretStore _secrets;
   final Random _random;
   final int Function() _clock;
 
@@ -195,7 +171,7 @@ class SyncStateStore {
   final Set<String> _enabledTransports = {'lan'};
   WebDavConfig _webdav = const WebDavConfig();
 
-  final Map<String, SyncStamp> _settingsRegistry = {};
+  final Map<String, SyncStamp> _settingStamps = {};
   final Map<String, SyncStamp> _scriptTombstones = {};
   final List<String> _knownScriptIds = [];
   SyncStamp? _activeScriptStamp;
@@ -212,7 +188,7 @@ class SyncStateStore {
   Map<SyncCategory, bool> get categories => Map.unmodifiable(_categories);
   Set<String> get enabledTransports => Set.unmodifiable(_enabledTransports);
   WebDavConfig get webdav => _webdav;
-  Map<String, SyncStamp> get settingsRegistry => _settingsRegistry;
+  Map<String, SyncStamp> get settingStamps => _settingStamps;
   Map<String, SyncStamp> get scriptTombstones => _scriptTombstones;
   List<String> get knownScriptIds => List.unmodifiable(_knownScriptIds);
   SyncStamp? get activeScriptStamp => _activeScriptStamp;
@@ -268,14 +244,6 @@ class SyncStateStore {
   Future<void> writeWebdavPassword(String password) =>
       _secrets.write(webdavPasswordSecretKey, password);
 
-  /// 通用安全存储读写（凭证类同步键：AI Key / any-listen token 等）。
-  Future<String?> readSecretValue(String key) => _secrets.read(key);
-
-  Future<void> writeSecretValue(String key, String value) =>
-      _secrets.write(key, value);
-
-  Future<void> deleteSecretValue(String key) => _secrets.delete(key);
-
   Future<void> setEnabled(bool value) async {
     _enabled = value;
     await save();
@@ -308,7 +276,7 @@ class SyncStateStore {
   }
 
   void putSettingStamp(String key, SyncStamp stamp) {
-    _settingsRegistry[key] = stamp;
+    _settingStamps[key] = stamp;
   }
 
   void putScriptTombstone(String id, SyncStamp stamp) {
@@ -381,7 +349,7 @@ class SyncStateStore {
         'transports': _enabledTransports.toList(),
         'webdav': _webdav.toJson(),
         'settings': {
-          for (final entry in _settingsRegistry.entries)
+          for (final entry in _settingStamps.entries)
             entry.key: entry.value.toJson(),
         },
         'scriptTombstones': {
@@ -418,12 +386,12 @@ class SyncStateStore {
     }
     _webdav = WebDavConfig.fromJson(json['webdav']);
 
-    _settingsRegistry.clear();
+    _settingStamps.clear();
     final settings = json['settings'];
     if (settings is Map) {
       for (final entry in settings.entries) {
         final stamp = SyncStamp.fromJson(entry.value);
-        if (stamp != null) _settingsRegistry[entry.key.toString()] = stamp;
+        if (stamp != null) _settingStamps[entry.key.toString()] = stamp;
       }
     }
     _scriptTombstones.clear();

@@ -1,4 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:molia/data/settings/settings_keys.dart';
+import 'package:molia/data/settings/settings_registry.dart';
 import 'package:molia/data/sync/adapters/prefs_sync_adapter.dart';
 import 'package:molia/data/sync/sync_state_store.dart';
 import 'package:molia/domain/models/device_sync.dart';
@@ -10,33 +12,17 @@ import 'support/sync_test_support.dart';
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
-  const specs = [
-    SyncSettingSpec(
-      key: 'theme_mode',
-      category: SyncCategory.settings,
-      defaultValue: 'system',
-    ),
-    SyncSettingSpec(
-      key: 'lx_default_quality',
-      category: SyncCategory.sources,
-      defaultValue: '320k',
-    ),
-    SyncSettingSpec(
-      key: 'copy_lyrics_single_line',
-      category: SyncCategory.settings,
-      store: SyncValueStore.secure,
-    ),
-    SyncSettingSpec(
-      key: 'ai_dj_api_key',
-      category: SyncCategory.credentials,
-      store: SyncValueStore.secure,
-      defaultValue: '',
-    ),
+  const keys = [
+    kThemeMode,
+    kLxDefaultQuality,
+    kCopyLyricsSingleLine,
+    kAiDjApiKey,
   ];
 
   late SharedPreferences prefs;
   late MemorySyncSecretStore secrets;
   late SyncStateStore state;
+  late SettingsRegistry registry;
   late PrefsSyncAdapter adapter;
   var now = 1000;
 
@@ -51,9 +37,14 @@ void main() {
       clock: () => now,
     );
     await state.init();
+    registry = SettingsRegistry(
+      keys: keys,
+      preferences: prefs,
+      secrets: secrets,
+    );
     adapter = PrefsSyncAdapter(
       state: state,
-      specs: specs,
+      settings: registry,
       deviceId: () => 'devA',
       now: () => now,
     );
@@ -171,7 +162,7 @@ void main() {
     final changedKeys = <String>{};
     final notifying = PrefsSyncAdapter(
       state: state,
-      specs: specs,
+      settings: registry,
       deviceId: () => 'devA',
       now: () => now,
       onApplied: (keys) async => changedKeys.addAll(keys),
@@ -197,15 +188,13 @@ void main() {
   });
 
   test('StringList 类型往返（shell_nav_order 风格）', () async {
-    const listSpec = SyncSettingSpec(
-      key: 'shell_nav_order',
-      category: SyncCategory.settings,
-      kind: SyncValueKind.stringList,
-      defaultValue: ['a', 'b'],
-    );
     final listAdapter = PrefsSyncAdapter(
       state: state,
-      specs: const [listSpec],
+      settings: SettingsRegistry(
+        keys: const [kShellNavOrder],
+        preferences: prefs,
+        secrets: secrets,
+      ),
       deviceId: () => 'devA',
       now: () => now,
     );
