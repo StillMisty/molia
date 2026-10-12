@@ -6,6 +6,20 @@ import 'package:molia/services/cache_service.dart';
 import 'package:molia/services/cache_storage_io.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+/// 固定设备容量的存储假件：容量可控，其余委托真实 IO 实现（指向临时目录）。
+class _FixedSpaceStorage extends IoCacheStorage {
+  _FixedSpaceStorage(this.totalBytes, {required String root})
+      : super(
+          audioDirOverride: '$root/audio_cache',
+          artworkDirOverride: '$root/artwork_cache',
+        );
+
+  final int? totalBytes;
+
+  @override
+  Future<int?> totalSpaceBytes() async => totalBytes;
+}
+
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
@@ -92,6 +106,59 @@ void main() {
     });
   });
 
+  group('设备容量建议默认值', () {
+    test('缺键默认上限 = 设备容量/128，下限 256MB', () async {
+      // 256GB 设备 → 2048MB。
+      final big = CacheService(
+        prefs: prefs,
+        storage: _FixedSpaceStorage(
+          256 * 1024 * 1024 * 1024,
+          root: tempRoot.path,
+        ),
+      );
+      expect(await big.suggestedAudioMaxMb(), 2048);
+      expect(await big.audioMaxMb(), 2048);
+
+      // 8GB 设备 → 64MB，低于下限 → 256MB。
+      final small = CacheService(
+        prefs: prefs,
+        storage: _FixedSpaceStorage(
+          8 * 1024 * 1024 * 1024,
+          root: tempRoot.path,
+        ),
+      );
+      expect(
+        await small.suggestedAudioMaxMb(),
+        CacheService.audioMaxSuggestionFloorMb,
+      );
+      expect(
+        await small.audioMaxMb(),
+        CacheService.audioMaxSuggestionFloorMb,
+      );
+    });
+
+    test('容量不可知：建议为 null，缺键回退固定默认值', () async {
+      final unknown = CacheService(
+        prefs: prefs,
+        storage: _FixedSpaceStorage(null, root: tempRoot.path),
+      );
+      expect(await unknown.suggestedAudioMaxMb(), isNull);
+      expect(await unknown.audioMaxMb(), CacheService.defaultAudioMaxMb);
+    });
+
+    test('已写入的值优先于设备容量建议', () async {
+      await prefs.setInt(CacheService.keyAudioMaxMb, 64);
+      final service = CacheService(
+        prefs: prefs,
+        storage: _FixedSpaceStorage(
+          512 * 1024 * 1024 * 1024,
+          root: tempRoot.path,
+        ),
+      );
+      expect(await service.audioMaxMb(), 64);
+    });
+  });
+
   group('usage / clear', () {
     test('音频/封面按目录统计字节与文件数', () async {
       await writeFile('${tempRoot.path}/audio_cache', 'a.part', 100);
@@ -154,10 +221,12 @@ void main() {
       const size = 600 * 1024; // 600KB
       final oldest =
           await writeFile('${tempRoot.path}/audio_cache', 'oldest', size);
-      final middle = await writeFile('${tempRoot.path}/audio_cache', 'middle',
-          size, age: const Duration(hours: 12));
-      final newest = await writeFile('${tempRoot.path}/audio_cache', 'newest',
-          size, age: const Duration(minutes: 1));
+      final middle = await writeFile(
+          '${tempRoot.path}/audio_cache', 'middle', size,
+          age: const Duration(hours: 12));
+      final newest = await writeFile(
+          '${tempRoot.path}/audio_cache', 'newest', size,
+          age: const Duration(minutes: 1));
 
       // 上限 1MB：1.8MB → 删到 <= 1MB（删 2 个）。
       await service.setAudioMaxMb(1);
@@ -216,7 +285,8 @@ void main() {
     });
 
     test('staleDays=0 且 maxObjects=0 不删除', () async {
-      final old = await writeFile('${tempRoot.path}/artwork_cache', 'old.jpg', 10,
+      final old = await writeFile(
+          '${tempRoot.path}/artwork_cache', 'old.jpg', 10,
           age: const Duration(days: 999));
       await service.setArtworkStaleDays(0);
       await service.setArtworkMaxObjects(0);

@@ -1,8 +1,10 @@
 import 'dart:io';
 
+import 'package:flutter/services.dart';
 import 'package:path_provider/path_provider.dart';
 
 import 'cache_types.dart';
+
 /// IO 平台（Android/iOS/桌面）缓存存储：`dart:io` + `path_provider`。
 ///
 /// 音频与封面目录都放在应用支持目录（持久，系统清理不会触碰）：
@@ -25,12 +27,36 @@ class IoCacheStorage implements CacheStorage {
   static const String audioDirName = 'audio_cache';
   static const String artworkDirName = 'artwork_cache';
 
+  /// 设备存储容量通道（仅 Android 注册；其余平台按不可用处理）。
+  static const MethodChannel _deviceStorageChannel =
+      MethodChannel('top.stillmisty.molia/device_storage');
+
   final String? _audioDirOverride;
   final String? _artworkDirOverride;
   final Future<Directory> Function() _supportDirectory;
 
   String? _resolvedAudioDir;
   String? _resolvedArtworkDir;
+  Future<int?>? _totalSpaceCache;
+
+  @override
+  Future<int?> totalSpaceBytes() =>
+      _totalSpaceCache ??= _queryTotalSpaceBytes();
+
+  /// Android 经原生 StatFs 读 `/data` 分区总容量；其余平台/失败返回 null
+  /// （上层回退固定默认值）。结果缓存：容量是设备级常量。
+  Future<int?> _queryTotalSpaceBytes() async {
+    if (!Platform.isAndroid) return null;
+    try {
+      final bytes =
+          await _deviceStorageChannel.invokeMethod<num>('getTotalBytes');
+      final value = bytes?.toInt();
+      return (value == null || value <= 0) ? null : value;
+    } catch (_) {
+      // 通道缺失（测试 / 独立服务）或查询失败：按不可用处理。
+      return null;
+    }
+  }
 
   @override
   Future<String?> audioCacheDir() async {

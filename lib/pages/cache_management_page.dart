@@ -181,15 +181,6 @@ class _CacheManagementPageState extends State<CacheManagementPage> {
     return SettingsSectionCard(
       title: l10n.cachePartitionAudio,
       children: [
-        // 用量 + 单清：危险操作行（error 容器成对色）。
-        SettingsNavTile(
-          key: const Key('cacheClearAudioItem'),
-          icon: Icons.delete_outline_rounded,
-          title: l10n.cacheClearPartition,
-          subtitle: _usageText(l10n, CachePartition.audio),
-          isDestructive: true,
-          onTap: _busy ? null : () => _clear(CachePartition.audio),
-        ),
         SettingsSwitchTile(
           icon: Icons.audiotrack_rounded,
           title: l10n.cachePolicyAudioEnabled,
@@ -203,21 +194,35 @@ class _CacheManagementPageState extends State<CacheManagementPage> {
         SettingsValueTile(
           icon: Icons.storage_rounded,
           title: l10n.cachePolicyAudioMax,
-          value: _audioMaxMb <= 0
-              ? l10n.cacheUnlimited
-              : l10n.cacheValueMb(_audioMaxMb),
-          onTap: () => _promptPolicyValue(
-            title: l10n.cachePolicyAudioMax,
-            current: _audioMaxMb,
-            min: _audioMaxMinMb,
-            max: _audioMaxMaxMb,
-            unitLabel: l10n.cacheUnitMb,
-            zeroLabel: l10n.cacheUnlimited,
-            onSelected: (value) async {
-              setState(() => _audioMaxMb = value);
-              await _service.setAudioMaxMb(value);
-            },
-          ),
+          value: _policyValueLabel(l10n, _audioMaxMb),
+          onTap: () async {
+            // 建议值来自设备容量（不可知时为 null，不展示建议行）。
+            final suggested = await _service.suggestedAudioMaxMb();
+            if (!mounted) return;
+            await _promptPolicyValue(
+              title: l10n.cachePolicyAudioMax,
+              current: _audioMaxMb,
+              min: _audioMaxMinMb,
+              max: _audioMaxMaxMb,
+              unitLabel: l10n.cacheUnitMb,
+              zeroLabel: l10n.cacheUnlimited,
+              presets: const [256, 512, 1024, 2048, 0],
+              suggestedMb: suggested,
+              onSelected: (value) async {
+                setState(() => _audioMaxMb = value);
+                await _service.setAudioMaxMb(value);
+              },
+            );
+          },
+        ),
+        // 用量 + 单清：危险操作行放分区末行（error 容器成对色）。
+        SettingsNavTile(
+          key: const Key('cacheClearAudioItem'),
+          icon: Icons.delete_outline_rounded,
+          title: l10n.cacheClearPartition,
+          subtitle: _usageText(l10n, CachePartition.audio),
+          isDestructive: true,
+          onTap: _busy ? null : () => _clear(CachePartition.audio),
         ),
       ],
     );
@@ -227,14 +232,6 @@ class _CacheManagementPageState extends State<CacheManagementPage> {
     return SettingsSectionCard(
       title: l10n.cachePartitionLyrics,
       children: [
-        SettingsNavTile(
-          key: const Key('cacheClearLyricsItem'),
-          icon: Icons.delete_outline_rounded,
-          title: l10n.cacheClearPartition,
-          subtitle: _usageText(l10n, CachePartition.lyrics),
-          isDestructive: true,
-          onTap: _busy ? null : () => _clear(CachePartition.lyrics),
-        ),
         SettingsValueTile(
           icon: Icons.schedule_rounded,
           title: l10n.cachePolicyLyricsTtl,
@@ -254,6 +251,14 @@ class _CacheManagementPageState extends State<CacheManagementPage> {
             },
           ),
         ),
+        SettingsNavTile(
+          key: const Key('cacheClearLyricsItem'),
+          icon: Icons.delete_outline_rounded,
+          title: l10n.cacheClearPartition,
+          subtitle: _usageText(l10n, CachePartition.lyrics),
+          isDestructive: true,
+          onTap: _busy ? null : () => _clear(CachePartition.lyrics),
+        ),
       ],
     );
   }
@@ -262,14 +267,6 @@ class _CacheManagementPageState extends State<CacheManagementPage> {
     return SettingsSectionCard(
       title: l10n.cachePartitionArtwork,
       children: [
-        SettingsNavTile(
-          key: const Key('cacheClearArtworkItem'),
-          icon: Icons.delete_outline_rounded,
-          title: l10n.cacheClearPartition,
-          subtitle: _usageText(l10n, CachePartition.artwork),
-          isDestructive: true,
-          onTap: _busy ? null : () => _clear(CachePartition.artwork),
-        ),
         SettingsValueTile(
           icon: Icons.image_rounded,
           title: l10n.cachePolicyArtworkMax,
@@ -308,6 +305,14 @@ class _CacheManagementPageState extends State<CacheManagementPage> {
             },
           ),
         ),
+        SettingsNavTile(
+          key: const Key('cacheClearArtworkItem'),
+          icon: Icons.delete_outline_rounded,
+          title: l10n.cacheClearPartition,
+          subtitle: _usageText(l10n, CachePartition.artwork),
+          isDestructive: true,
+          onTap: _busy ? null : () => _clear(CachePartition.artwork),
+        ),
       ],
     );
   }
@@ -319,10 +324,19 @@ class _CacheManagementPageState extends State<CacheManagementPage> {
     return l10n.cacheUsage(_formatSize(usage.bytes), usage.count);
   }
 
+  /// 策略数值显示：0 = 不限制 / 永不过期；整 GB 显示为 GB（1024 → 1 GB）。
+  String _policyValueLabel(AppLocalizations l10n, int value) {
+    if (value <= 0) return l10n.cacheUnlimited;
+    if (value % 1024 == 0) return l10n.cacheValueGb(value ~/ 1024);
+    return l10n.cacheValueMb(value);
+  }
+
   /// 自定义数值弹层：仅数字输入，0 或 [min, max] 内的整数才可保存。
   ///
   /// 0 沿用 [CacheService] 语义（不限制 / 永不过期）；越界时显示范围
   /// 错误并置灰保存。确认后由调用方写回策略并触发即时生效。
+  /// [presets] / [suggestedMb] 用于大范围绝对量（音频上限）的快捷选择与
+  /// 设备容量建议提示。
   Future<void> _promptPolicyValue({
     required String title,
     required int current,
@@ -330,6 +344,8 @@ class _CacheManagementPageState extends State<CacheManagementPage> {
     required int max,
     required String unitLabel,
     required String zeroLabel,
+    List<int>? presets,
+    int? suggestedMb,
     required ValueChanged<int> onSelected,
   }) async {
     final l10n = AppLocalizations.of(context)!;
@@ -351,19 +367,60 @@ class _CacheManagementPageState extends State<CacheManagementPage> {
             title: title,
             content: SizedBox(
               width: 320,
-              child: M3ETextField(
-                controller: controller,
-                autofocus: true,
-                keyboardType: TextInputType.number,
-                inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-                suffixText: unitLabel,
-                supportingText: l10n.cacheCustomHint(zeroLabel, min, max),
-                errorText: controller.text.isNotEmpty && !valid
-                    ? l10n.cacheCustomRangeError(min, max)
-                    : null,
-                onChanged: (_) => setState(() {}),
-                onSubmitted:
-                    valid ? (_) => Navigator.pop(context, parsed) : null,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  if (suggestedMb != null) ...[
+                    Text(
+                      l10n.cacheAudioMaxSuggested(
+                        _policyValueLabel(l10n, suggestedMb),
+                      ),
+                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                            color:
+                                Theme.of(context).colorScheme.onSurfaceVariant,
+                          ),
+                    ),
+                    const SizedBox(height: 12),
+                  ],
+                  if (presets != null) ...[
+                    Wrap(
+                      spacing: 8,
+                      // 换行后行距不能为 0：chips 贴边会被看成叠在一起。
+                      runSpacing: 8,
+                      children: [
+                        for (final preset in presets)
+                          M3EChip(
+                            type: M3EChipType.filter,
+                            label: _policyValueLabel(l10n, preset),
+                            selected: parsed == preset,
+                            onPressed: () {
+                              controller.text = '$preset';
+                              controller.selection = TextSelection.collapsed(
+                                offset: controller.text.length,
+                              );
+                              setState(() {});
+                            },
+                          ),
+                      ],
+                    ),
+                    const SizedBox(height: 12),
+                  ],
+                  M3ETextField(
+                    controller: controller,
+                    autofocus: true,
+                    keyboardType: TextInputType.number,
+                    inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                    suffixText: unitLabel,
+                    supportingText: l10n.cacheCustomHint(zeroLabel, min, max),
+                    errorText: controller.text.isNotEmpty && !valid
+                        ? l10n.cacheCustomRangeError(min, max)
+                        : null,
+                    onChanged: (_) => setState(() {}),
+                    onSubmitted:
+                        valid ? (_) => Navigator.pop(context, parsed) : null,
+                  ),
+                ],
               ),
             ),
             actions: [

@@ -1,7 +1,7 @@
 /// 听歌统计页：范围切换 + 汇总数字块 + 日历/作息热力图 + 指标 + 榜单。
 ///
 /// 结构：
-/// ① 范围切换（filter 芯片）+ 汇总数字块 ×4
+/// ① 范围切换（设置页共享分段行）+ 汇总数字块 ×4
 /// ② hero 日历热力图（**全量历史**；范围切换只做高亮 + 数字联动；
 ///    值可切换 时长/次数）
 /// ③ 作息热力图（7×24，随范围过滤）
@@ -27,6 +27,7 @@ import '../providers/play_statistics_provider.dart';
 import '../providers/playback_provider.dart';
 import '../services/notification_service.dart';
 import '../utils/responsive.dart';
+import '../widgets/settings/settings_tiles.dart';
 import '../widgets/statistics/listening_heatmap.dart';
 import '../widgets/track_row.dart';
 
@@ -108,23 +109,21 @@ class _PlayStatisticsPageState extends State<PlayStatisticsPage> {
   Widget _content(AppLocalizations l10n, PlayStatisticsProvider provider) {
     final isWide = context.isLargeScreen;
     final isDesktop = context.isDesktop;
-    // 范围切换用 filter 芯片（M3ESegmentedButton 需紧约束宽度才能正确布局，
-    // 芯片内容自适应，放哪都不会溢出）。
-    final rangeChips = <Widget>[
-      for (final (range, label) in [
+    // 范围切换走设置页共享的分段行（SettingsChoiceRow 显式给紧约束宽度，
+    // M3ESegmentedButton 才能等宽铺满；放 Row 尾位会零宽溢出）。
+    final rangeRow = SettingsChoiceRow<PlayStatisticsRange>(
+      icon: Icons.date_range_rounded,
+      title: l10n.statsRangeTitle,
+      value: provider.range,
+      options: [
         (PlayStatisticsRange.week, l10n.statsRangeWeek),
         (PlayStatisticsRange.month, l10n.statsRangeMonth),
         (PlayStatisticsRange.all, l10n.statsRangeAll),
-      ])
-        M3EChip(
-          label: label,
-          type: M3EChipType.filter,
-          selected: provider.range == range,
-          onPressed: () => unawaited(provider.setRange(range)),
-        ),
-    ];
+      ],
+      onChanged: (range) => unawaited(provider.setRange(range)),
+    );
     final sections = <Widget>[
-      Wrap(spacing: 8, runSpacing: 8, children: rangeChips),
+      rangeRow,
       const SizedBox(height: 16),
       if (provider.isEmpty)
         _emptyState(l10n)

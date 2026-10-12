@@ -24,4 +24,12 @@ extension ShellDestinationIcons on ShellDestination {
         ShellDestination.favorites => const Icon(Icons.favorite_rounded),
         ShellDestination.library => const Icon(Icons.library_music_rounded),
       };
+
+  /// 设置行图标块用（`IconData`）：设置行统一 `Icons.*_rounded` 且只收
+  /// 字形，不能内嵌 [MoliaMark] 组件，音符用圆角音符字形代替。
+  IconData get settingsIcon => switch (this) {
+        ShellDestination.nowPlaying => Icons.music_note_rounded,
+        ShellDestination.favorites => Icons.favorite_rounded,
+        ShellDestination.library => Icons.library_music_rounded,
+      };
 }

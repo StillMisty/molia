@@ -330,6 +330,21 @@ class _MyAppState extends State<MyApp>
         ShellDestination.library => l10n.libraryLabel,
       };
 
+  /// 打开设置弹层（顶栏入口，三个目的地共用）。
+  ///
+  /// 弹层内部导航：子页打开时系统返回先退子页（弹层 dismiss guard 读取
+  /// 子页状态），子页退完后再关弹层；通知器生命周期与弹层一致。
+  void _openSettings(BuildContext context) {
+    HapticFeedback.lightImpact();
+    final subPageOpen = ValueNotifier<bool>(false);
+    ResponsiveNavigation.showAdaptiveModalPage(
+      context: context,
+      showCloseButton: false,
+      onDismissRequest: () async => !subPageOpen.value,
+      child: SettingsPage(subPageOpen: subPageOpen),
+    ).whenComplete(subPageOpen.dispose);
+  }
+
   /// 页面分层：选中页在最上层淡入，上一页快速淡出（fade-through）。
   Widget _buildPageStack() {
     final ordered = <ShellDestination>[
@@ -379,31 +394,19 @@ class _MyAppState extends State<MyApp>
           onOpenPlayer: () => _selectDestination(ShellDestination.nowPlaying),
         ),
         actions: [
-          // 播放页顶栏只留设置（播放/切歌由页面内部控制区承担）；
-          // 其他页面顶栏是迷你播放器：显式播放/暂停 + 下一首。
-          if (selectedDestination == ShellDestination.nowPlaying)
-            M3EIconButton(
-              variant: M3EIconButtonVariant.standard,
-              onPressed: () {
-                HapticFeedback.lightImpact();
-                // 弹层内部导航：子页打开时系统返回先退子页（弹层 dismiss
-                // guard 读取子页状态），子页退完后再关弹层；通知器生命周期
-                // 与弹层一致。
-                final subPageOpen = ValueNotifier<bool>(false);
-                ResponsiveNavigation.showAdaptiveModalPage(
-                  context: context,
-                  showCloseButton: false,
-                  onDismissRequest: () async => !subPageOpen.value,
-                  child: SettingsPage(subPageOpen: subPageOpen),
-                ).whenComplete(subPageOpen.dispose);
-              },
-              tooltip: l10n.settingsTitle,
-              icon: const Icon(Icons.settings_rounded),
-            )
-          else ...[
+          // 顶栏右侧：播放页只留设置（播放/切歌由页面内部控制区承担）；
+          // 其余页面（资料库 / 收藏）是迷你播放器（显式播放/暂停 + 下一首）
+          // 加设置入口 —— 设置不再只有播放页够得着。
+          if (selectedDestination != ShellDestination.nowPlaying) ...[
             const _BarPlayPauseButton(),
             const _BarNextButton(),
           ],
+          M3EIconButton(
+            variant: M3EIconButtonVariant.standard,
+            onPressed: () => _openSettings(context),
+            tooltip: l10n.settingsTitle,
+            icon: const Icon(Icons.settings_rounded),
+          ),
           const SizedBox(width: 8),
         ],
         bottom: PreferredSize(

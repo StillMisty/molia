@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter_test/flutter_test.dart';
+import 'package:molia/data/settings/settings_keys.dart';
 import 'package:molia/domain/models/playback.dart';
 import 'package:molia/domain/models/track.dart';
 import 'package:molia/models/play_mode.dart';
@@ -168,6 +169,50 @@ void main() {
     await provider.resumeRestoredSession();
     expect(backend.state.value.mode, PlayMode.shuffle);
     expect(provider.currentMode, PlayMode.shuffle);
+  });
+
+  test('启动恢复开关关闭：冷启动不装载恢复态，会话数据保留', () async {
+    SharedPreferences.setMockInitialValues({
+      kRestoreSessionEnabled.name: false,
+    });
+    await PlaybackSessionStore().save(PlaybackSession(
+      tracks: [_track('a')],
+      index: 0,
+      position: const Duration(seconds: 12),
+      mode: PlayMode.sequential,
+    ));
+
+    final provider = buildTestPlaybackProvider();
+    addTearDown(provider.dispose);
+    await provider.preferencesReady;
+
+    expect(provider.restoreSessionEnabled, isFalse);
+    expect(provider.hasRestoredSession, isFalse);
+    expect(provider.hasTrack, isFalse);
+    // 会话没有被清掉：重新开启开关后仍可恢复。
+    expect(await PlaybackSessionStore().load(), isNotNull);
+  });
+
+  test('关闭启动恢复开关：立即撤下未播放的恢复态并持久化', () async {
+    await PlaybackSessionStore().save(PlaybackSession(
+      tracks: [_track('a')],
+      index: 0,
+      position: const Duration(seconds: 12),
+      mode: PlayMode.sequential,
+    ));
+
+    final provider = buildTestPlaybackProvider();
+    addTearDown(provider.dispose);
+    await provider.preferencesReady;
+    expect(provider.hasRestoredSession, isTrue);
+
+    await provider.setRestoreSessionEnabled(false);
+    expect(provider.restoreSessionEnabled, isFalse);
+    expect(provider.hasRestoredSession, isFalse);
+    expect(provider.hasTrack, isFalse);
+
+    final prefs = await SharedPreferences.getInstance();
+    expect(prefs.getBool(kRestoreSessionEnabled.name), isFalse);
   });
 
   test('恢复播放：seek 落地前进度不闪回 0（保持恢复进度）', () async {

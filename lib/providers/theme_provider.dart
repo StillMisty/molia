@@ -25,7 +25,7 @@ final logger = Logger();
 ///
 /// 持久化键（登记进设置注册表，跟人走）：
 /// - `theme_mode`：`system` / `light` / `dark`；
-/// - `color_base`：`wallpaper` / `custom`；
+/// - `color_base`：`wallpaper` / `custom`（默认壁纸，平台不可用时回退种子色）；
 /// - `follow_artwork_enabled`：播放有封面时是否用封面取色覆盖基础配色
 ///   （默认开启）；
 /// - `pure_black_enabled`：深色模式是否使用纯黑表面（默认关闭）；
@@ -45,7 +45,10 @@ class ThemeProvider extends ChangeNotifier {
   ColorScheme _colorScheme = buildColorScheme(Colors.blue, Brightness.light);
 
   ThemeMode _themeMode = ThemeMode.system;
-  ColorBaseSource _baseColorSource = ColorBaseSource.custom;
+
+  /// 基础配色默认壁纸（Monet）：平台不支持时 [updateMonetSchemes] 不会注入
+  /// 方案，[_schemeForBrightness] 自然回退自定义种子色。
+  ColorBaseSource _baseColorSource = ColorBaseSource.wallpaper;
   bool _followArtworkEnabled = true;
   bool _pureBlackEnabled = false;
   Color _seedColor = Colors.blue;
@@ -283,9 +286,11 @@ class ThemeProvider extends ChangeNotifier {
       final hasBase = prefs.containsKey(kColorBase.name) ||
           prefs.containsKey(kFollowArtworkEnabled.name);
       if (!hasBase) {
-        _baseColorSource = (prefs.getBool(_legacyMonetKey) ?? false)
-            ? ColorBaseSource.wallpaper
-            : ColorBaseSource.custom;
+        // 旧键显式关闭莫奈 → 保持自定义（尊重老用户的选择）；
+        // 从未配置过（无旧键）→ 吃新默认：壁纸（平台支持时）。
+        _baseColorSource = prefs.getBool(_legacyMonetKey) == false
+            ? ColorBaseSource.custom
+            : ColorBaseSource.wallpaper;
         _followArtworkEnabled = prefs.getBool(_legacyDynamicKey) ?? true;
         await _settings.write(kColorBase, _baseColorSource.name);
         await _settings.write(kFollowArtworkEnabled, _followArtworkEnabled);
@@ -295,7 +300,7 @@ class ThemeProvider extends ChangeNotifier {
         final baseName = await _settings.read(kColorBase);
         _baseColorSource = ColorBaseSource.values.firstWhere(
           (source) => source.name == baseName,
-          orElse: () => ColorBaseSource.custom,
+          orElse: () => ColorBaseSource.wallpaper,
         );
         _followArtworkEnabled = await _settings.read(kFollowArtworkEnabled);
       }

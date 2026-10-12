@@ -144,6 +144,25 @@ class MainActivity: AudioServiceActivity() {
             }
         }
 
+        // 设备存储通道：默认音频缓存上限按设备总容量推算（容量 ÷ 128）。
+        val deviceStorageChannel = MethodChannel(
+            flutterEngine.dartExecutor.binaryMessenger,
+            "top.stillmisty.molia/device_storage"
+        )
+        deviceStorageChannel.setMethodCallHandler { call, result ->
+            when (call.method) {
+                "getTotalBytes" -> {
+                    try {
+                        val stat = android.os.StatFs(filesDir.absolutePath)
+                        result.success(stat.blockCountLong * stat.blockSizeLong)
+                    } catch (e: Exception) {
+                        result.error("STORAGE_ERROR", e.message, null)
+                    }
+                }
+                else -> result.notImplemented()
+            }
+        }
+
         // 歌词显示通道：桌面悬浮窗 + A2DP 状态（Android）。
         lyricsChannel = top.stillmisty.molia.lyrics.LyricsChannelHandler(
             context = this,

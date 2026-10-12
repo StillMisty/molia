@@ -78,6 +78,8 @@
   "settingsPlaybackTitle": "Playback",
   "settingsDefaultPlayMode": "Default play mode",
   "settingsDefaultPlayModeSubtitle": "Initial mode for new playback sessions; the current session is unaffected",
+  "settingsRestoreSessionTitle": "Resume last playback",
+  "settingsRestoreSessionSubtitle": "Restore the previous track, queue and position on launch (on by default)",
   "settingsCurrentQuality": "Now playing quality",
   "settingsAutoSourceSwap": "Auto source switch",
   "settingsAutoSourceSwapSubtitle": "When playback fails, find the same song in another source and switch automatically (on by default)",
@@ -90,8 +92,8 @@
   "settingsDataSaverCovers": "Cached artwork only on mobile data",
   "settingsDataSaverCoversSubtitle": "Do not request new artwork; show a placeholder when not cached",
   "settingsSourcesItemSubtitle": "Import LX Music source scripts to search and play songs from third-party platforms",
-  "settingsContentSection": "Content",
-  "settingsLyricsSection": "Lyrics",
+  "settingsContentSection": "Content & sources",
+  "settingsLyricsSection": "Lyrics & display",
   "settingsBottomNavTitle": "Bottom navigation",
   "settingsBottomNavHint": "Drag to reorder; toggle to show or hide a tab (at least one stays visible)",
   "settingsBottomNavKeepOne": "Keep at least one tab visible",
@@ -99,6 +101,7 @@
   "playModeShuffle": "Shuffle",
   "playModeSingleRepeat": "Single repeat",
   "generalTitle": "General",
+  "settingsGeneralAndDataTitle": "General & data",
   "settingsGeneralSubtitle": "Language, app name and bottom navigation",
   "copyLyricsAsSingleLineTitle": "Copy lyrics as single line",
   "copyLyricsAsSingleLineSubtitle": "Replaces line breaks with spaces when copying",
@@ -552,6 +555,14 @@
       }
     }
   },
+  "cacheValueGb": "{value} GB",
+  "@cacheValueGb": {
+    "placeholders": {
+      "value": {
+        "type": "int"
+      }
+    }
+  },
   "cacheValueDays": "{value} days",
   "@cacheValueDays": {
     "placeholders": {
@@ -585,6 +596,14 @@
       }
     }
   },
+  "cacheAudioMaxSuggested": "Suggested {value} (device storage ÷ 128)",
+  "@cacheAudioMaxSuggested": {
+    "placeholders": {
+      "value": {
+        "type": "String"
+      }
+    }
+  },
   "cacheCustomRangeError": "Enter an integer between {min} and {max}",
   "@cacheCustomRangeError": {
     "placeholders": {
@@ -602,9 +621,11 @@
   "settingsLyricsDisplayTitle": "Lyrics display",
   "settingsLyricsDisplaySubtitle": "Floating lyrics, notification & Bluetooth",
   "lyricsPageTitle": "Lyrics page",
+  "lyricsDisplayPageEntrySubtitle": "Translation and romanization of the in-app lyrics page",
   "lyricsPageTranslationSubtitle": "Show translation under each line in the lyrics page",
   "lyricsPageRomaSubtitle": "Show romanization under each line in the lyrics page",
   "lyricsDisplaySharedTitle": "Lyric outputs",
+  "lyricsDisplayOutputsEntrySubtitle": "Translation, timing and unsynced handling shared by all outputs",
   "lyricsDisplayTranslation": "Translation",
   "lyricsDisplayTranslationSubtitle": "Show translation in floating, notification and Bluetooth lyrics",
   "lyricsDisplayRoma": "Romanization",
@@ -623,6 +644,7 @@
   },
   "lyricsDisplayOffsetValue": "{ms} ms",
   "lyricsDesktopTitle": "Floating lyrics",
+  "lyricsDesktopEntrySubtitle": "Floating window style, behavior and colors",
   "lyricsDesktopEnable": "Enable floating lyrics",
   "lyricsDesktopEnableSubtitle": "Show the current line above other apps",
   "lyricsDesktopPermissionNeeded": "Overlay permission required",
@@ -665,6 +687,7 @@
   "lyricsBehaviorTitle": "Song title",
   "lyricsBehaviorClear": "Clear",
   "lyricsNotificationTitle": "Notification & lock screen",
+  "lyricsNotificationEntrySubtitle": "Lyrics written into the media notification and lock screen",
   "lyricsNotificationEnable": "Show lyrics in notification",
   "lyricsNotificationEnableSubtitle": "Writes the current line into media metadata",
   "lyricsMetadataTarget": "Show in",
@@ -679,6 +702,7 @@
   "lyricsMetadataIncludeTranslation": "Include translation",
   "lyricsMetadataPauseBehavior": "When paused",
   "lyricsBluetoothTitle": "Bluetooth lyrics",
+  "lyricsBluetoothEntrySubtitle": "Lyrics for A2DP car displays and head units",
   "lyricsBluetoothEnable": "Show lyrics on car display",
   "lyricsBluetoothEnableSubtitle": "Writes the current line into media metadata (also visible in notification & lock screen)",
   "lyricsBluetoothOnlyA2dp": "Only while Bluetooth audio is connected",
@@ -713,6 +737,7 @@
   "statsRangeWeek": "7 days",
   "statsRangeMonth": "30 days",
   "statsRangeAll": "All",
+  "statsRangeTitle": "Time range",
   "statsValueDuration": "Time",
   "statsValueCount": "Plays",
   "statsPlays": "Valid plays",
@@ -963,6 +988,7 @@
   "settingsSyncTitle": "Cross-device sync",
   "settingsSyncItemSubtitle": "Playlists, sources, settings and credentials",
   "syncGeneralSection": "Sync",
+  "syncTrustModelTitle": "Trust model",
   "syncEnabledTitle": "Enable sync",
   "syncEnabledSubtitle": "Exchange data with devices that share your passphrase",
   "syncDeviceNameTitle": "Device name",

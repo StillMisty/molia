@@ -61,7 +61,8 @@ class _StateValueListenable<T> implements ValueListenable<T> {
   void addListener(VoidCallback listener) => _source.addListener(listener);
 
   @override
-  void removeListener(VoidCallback listener) => _source.removeListener(listener);
+  void removeListener(VoidCallback listener) =>
+      _source.removeListener(listener);
 }
 
 /// 进度通道：真实播放时转发 facade position；恢复态（冷启动未加载）
@@ -207,6 +208,9 @@ class PlaybackProvider extends ChangeNotifier {
   /// 默认播放模式（设置页配置；启动时无曲目即应用为初始模式）。
   PlayMode _defaultPlayMode = PlayMode.sequential;
 
+  /// 启动时是否恢复上次播放（曲目 / 队列 / 进度）；设置页开关，默认开。
+  bool _restoreSessionEnabled = kRestoreSessionEnabled.defaultValue;
+
   late final Future<void> _preferencesReady;
 
   PlaybackProvider({
@@ -237,6 +241,8 @@ class PlaybackProvider extends ChangeNotifier {
         _settings = settings ?? SettingsRegistry(keys: kAllSettingsKeys),
         _sessionStore = sessionStore ?? PlaybackSessionStore() {
     _settings.bindReload(kDefaultPlayMode, reloadDefaultPlayMode);
+    _settings.bindReload(
+        kRestoreSessionEnabled, reloadRestoreSessionPreference);
     _notifyThrottler = CategorizedNotifyThrottler(
       notifyCallback: super.notifyListeners,
       categoryIntervals: {
@@ -269,7 +275,6 @@ class PlaybackProvider extends ChangeNotifier {
   bool get hasRestoredSession =>
       _restoredSession?.current != null &&
       _facade.snapshot.value.current == null;
-
 
   /// 高频进度通道：订阅它做进度条/歌词行更新，避免整 Provider 重建。
   ValueListenable<Duration> get position => _positionChannel;
@@ -394,8 +399,7 @@ class PlaybackProvider extends ChangeNotifier {
       hit = true;
     }
     final session = _restoredSession;
-    if (session != null &&
-        session.tracks.any((track) => track.id.uri == uri)) {
+    if (session != null && session.tracks.any((track) => track.id.uri == uri)) {
       _restoredSession = session.copyWith(
         tracks: [
           for (final track in session.tracks)
@@ -464,8 +468,8 @@ class PlaybackProvider extends ChangeNotifier {
     // 已有恢复流程在跑：忽略重复触发（装载中后端会推送曲目，后续操作走
     // 真实播放路径，不会再次进入本方法）。
     if (session == null || session.current == null || _resumeRestoring) return;
-    final index = (startIndex ?? session.index)
-        .clamp(0, session.tracks.length - 1);
+    final index =
+        (startIndex ?? session.index).clamp(0, session.tracks.length - 1);
     final seekBack = index == session.index ? _restoredPosition : Duration.zero;
     // 装载期间保持显示恢复进度：后端装载会把进度通道对齐到 0，
     // 若立刻交还底层，进度条会先闪回首部再跳到恢复进度。
@@ -624,6 +628,44 @@ class PlaybackProvider extends ChangeNotifier {
   /// 重新读取默认播放模式（跨设备同步应用远端设置后由组合根调用）。
   Future<void> reloadDefaultPlayMode() => _loadDefaultPlayMode();
 
+  /// 启动时恢复上次播放（设置页开关，默认开）。
+  bool get restoreSessionEnabled => _restoreSessionEnabled;
+
+  /// 设置「启动时恢复上次播放」。
+  ///
+  /// 关闭时立即撤下尚未开始播放的恢复态（真实播放不受影响）；会话仍
+  /// 持续落盘，重新开启后冷启动可再次恢复。
+  Future<void> setRestoreSessionEnabled(bool value) async {
+    if (_restoreSessionEnabled != value) {
+      _applyRestoreSessionEnabled(value);
+    }
+    try {
+      await _settings.write(kRestoreSessionEnabled, value);
+    } catch (e) {
+      _logger.e('保存启动恢复开关失败', error: e);
+    }
+  }
+
+  /// 重新读取启动恢复开关（跨设备同步应用远端设置后由组合根调用）。
+  Future<void> reloadRestoreSessionPreference() async {
+    final enabled = await _settings.read(kRestoreSessionEnabled);
+    if (_restoreSessionEnabled == enabled) return;
+    _applyRestoreSessionEnabled(enabled);
+    if (enabled) await _loadPlaybackSession();
+  }
+
+  /// 开关状态落地：关闭且无真实播放时撤下恢复态。
+  void _applyRestoreSessionEnabled(bool enabled) {
+    _restoreSessionEnabled = enabled;
+    if (enabled) return;
+    if (_facade.snapshot.value.current != null || _restoredSession == null) {
+      return;
+    }
+    _clearRestoredSession();
+    _notifyCategory('track');
+    _notifyCategory('queue');
+  }
+
   /// facade 低频快照变化：持久化并通知 UI（曲目/队列）。
   void _onFacadeSnapshot() {
     _handlePlaybackSnapshot();
@@ -687,7 +729,9 @@ class PlaybackProvider extends ChangeNotifier {
   void _maybeSavePlaybackSession({bool force = false}) {
     final snapshot = _facade.snapshot.value;
     final current = snapshot.current;
-    if (current == null || snapshot.queue.isEmpty || snapshot.currentIndex < 0) {
+    if (current == null ||
+        snapshot.queue.isEmpty ||
+        snapshot.currentIndex < 0) {
       return;
     }
     final now = DateTime.now();
@@ -705,8 +749,13 @@ class PlaybackProvider extends ChangeNotifier {
   }
 
   /// 冷启动加载上次播放会话：无真实曲目时进入恢复态。
+  ///
+  /// 开关关闭（设置 › 播放 › 启动时恢复上次播放）或已有真实播放
+  /// （如系统媒体会话恢复）时不装载；同步应用远端会话同样受开关约束。
   Future<void> _loadPlaybackSession() async {
     try {
+      _restoreSessionEnabled = await _settings.read(kRestoreSessionEnabled);
+      if (!_restoreSessionEnabled) return;
       final session = await _sessionStore.load();
       if (session == null || session.current == null) return;
       // 已有真实播放（如系统媒体会话恢复）时不覆盖。
@@ -720,8 +769,7 @@ class PlaybackProvider extends ChangeNotifier {
           current.artists.map((artist) => artist.name).join(', ');
       _lastPlayedImageUrl = current.artwork?.uri.toString();
       _publishRestoredSnapshot();
-      _logger.d(
-          '已恢复上次播放会话: ${current.title} @${session.position.inSeconds}s');
+      _logger.d('已恢复上次播放会话: ${current.title} @${session.position.inSeconds}s');
       _notifyCategory('track');
       _notifyCategory('queue');
     } catch (e) {
@@ -1038,7 +1086,8 @@ class PlaybackProvider extends ChangeNotifier {
     }
   }
 
-  Future<void> updateWidget() async {    if (!kIsWeb && defaultTargetPlatform == TargetPlatform.android) {
+  Future<void> updateWidget() async {
+    if (!kIsWeb && defaultTargetPlatform == TargetPlatform.android) {
       const platform = MethodChannel('top.stillmisty.molia/widget');
       try {
         // 省流时传空封面地址：MusicWidget 对空串跳过 Glide 加载。
@@ -1049,9 +1098,8 @@ class PlaybackProvider extends ChangeNotifier {
           'artistName': track == null || track.artists.isEmpty
               ? ''
               : track.artists.first.name,
-          'albumArtUrl': blockArtwork
-              ? ''
-              : track?.artwork?.uri.toString() ?? '',
+          'albumArtUrl':
+              blockArtwork ? '' : track?.artwork?.uri.toString() ?? '',
           'isPlaying': snapshot.isPlaying,
         });
       } catch (e) {

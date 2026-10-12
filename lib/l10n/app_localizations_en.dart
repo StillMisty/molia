@@ -190,6 +190,13 @@ class AppLocalizationsEn extends AppLocalizations {
       'Initial mode for new playback sessions; the current session is unaffected';
 
   @override
+  String get settingsRestoreSessionTitle => 'Resume last playback';
+
+  @override
+  String get settingsRestoreSessionSubtitle =>
+      'Restore the previous track, queue and position on launch (on by default)';
+
+  @override
   String get settingsCurrentQuality => 'Now playing quality';
 
   @override
@@ -230,10 +237,10 @@ class AppLocalizationsEn extends AppLocalizations {
       'Import LX Music source scripts to search and play songs from third-party platforms';
 
   @override
-  String get settingsContentSection => 'Content';
+  String get settingsContentSection => 'Content & sources';
 
   @override
-  String get settingsLyricsSection => 'Lyrics';
+  String get settingsLyricsSection => 'Lyrics & display';
 
   @override
   String get settingsBottomNavTitle => 'Bottom navigation';
@@ -256,6 +263,9 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get generalTitle => 'General';
+
+  @override
+  String get settingsGeneralAndDataTitle => 'General & data';
 
   @override
   String get settingsGeneralSubtitle =>
@@ -1128,6 +1138,11 @@ class AppLocalizationsEn extends AppLocalizations {
   }
 
   @override
+  String cacheValueGb(int value) {
+    return '$value GB';
+  }
+
+  @override
   String cacheValueDays(int value) {
     return '$value days';
   }
@@ -1149,6 +1164,11 @@ class AppLocalizationsEn extends AppLocalizations {
   @override
   String cacheCustomHint(String label, int min, int max) {
     return '0 = $label · Range $min–$max';
+  }
+
+  @override
+  String cacheAudioMaxSuggested(String value) {
+    return 'Suggested $value (device storage ÷ 128)';
   }
 
   @override
@@ -1177,6 +1197,10 @@ class AppLocalizationsEn extends AppLocalizations {
   String get lyricsPageTitle => 'Lyrics page';
 
   @override
+  String get lyricsDisplayPageEntrySubtitle =>
+      'Translation and romanization of the in-app lyrics page';
+
+  @override
   String get lyricsPageTranslationSubtitle =>
       'Show translation under each line in the lyrics page';
 
@@ -1186,6 +1210,10 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get lyricsDisplaySharedTitle => 'Lyric outputs';
+
+  @override
+  String get lyricsDisplayOutputsEntrySubtitle =>
+      'Translation, timing and unsynced handling shared by all outputs';
 
   @override
   String get lyricsDisplayTranslation => 'Translation';
@@ -1223,6 +1251,10 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get lyricsDesktopTitle => 'Floating lyrics';
+
+  @override
+  String get lyricsDesktopEntrySubtitle =>
+      'Floating window style, behavior and colors';
 
   @override
   String get lyricsDesktopEnable => 'Enable floating lyrics';
@@ -1352,6 +1384,10 @@ class AppLocalizationsEn extends AppLocalizations {
   String get lyricsNotificationTitle => 'Notification & lock screen';
 
   @override
+  String get lyricsNotificationEntrySubtitle =>
+      'Lyrics written into the media notification and lock screen';
+
+  @override
   String get lyricsNotificationEnable => 'Show lyrics in notification';
 
   @override
@@ -1393,6 +1429,10 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get lyricsBluetoothTitle => 'Bluetooth lyrics';
+
+  @override
+  String get lyricsBluetoothEntrySubtitle =>
+      'Lyrics for A2DP car displays and head units';
 
   @override
   String get lyricsBluetoothEnable => 'Show lyrics on car display';
@@ -1502,6 +1542,9 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get statsRangeAll => 'All';
+
+  @override
+  String get statsRangeTitle => 'Time range';
 
   @override
   String get statsValueDuration => 'Time';
@@ -1858,6 +1901,9 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get syncGeneralSection => 'Sync';
+
+  @override
+  String get syncTrustModelTitle => 'Trust model';
 
   @override
   String get syncEnabledTitle => 'Enable sync';

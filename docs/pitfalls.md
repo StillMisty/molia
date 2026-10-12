@@ -102,3 +102,15 @@
     Android 上必挂；桌面因窗口宽、卡片不换行、目标常在已构建范围内而不暴露。
     集成测试滚动一律走 `integration_test/lx_engine_integration_test.dart` 的 `scrollTo`
     助手（fling 版）或 `ensureVisible`，不要用 `scrollUntilVisible`。
+25. **M3E 分段按钮与下拉菜单的两个暗坑**（设置页行组件已收口）：
+    `M3ESegmentedButton` 内部是 `Stack + Positioned.fill + Row(mainAxisSize.min)`，
+    放松约束的父级（`Align` / `Row` 尾位）会塌成零宽并溢出，必须给显式/紧约束宽度
+    （用 `SettingsChoiceRow`；回归见 `test/widgets/settings_choice_row_test.dart`）。
+    `M3EDropdownMenu` 单选必须设 `fieldStyle.hintText`，否则未选中时显示包内英文兜底
+    `Select`（用 `SettingsDropdownRow`，它统一填标题提示）。
+26. **新 worktree 的 Android 构建先对齐 Gradle wrapper**：`/android/gradle/` 被
+    .gitignore 排除，新 worktree 里 Flutter 会按 SDK 模板生成 Gradle 9.3.1，而本项目
+    AGP 要求 ≥ 9.6（工具链表为 9.8.1）。构建前把
+    `android/gradle/wrapper/gradle-wrapper.properties` 的 distributionUrl 改为
+    `gradle-9.8.1-bin.zip`；另注意 JDK 27 + Gradle 9.3.1 会因 class file 71 直接
+    失败（Gradle 9.8.1 + JDK 27 已验证可用）。

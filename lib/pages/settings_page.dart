@@ -5,26 +5,30 @@ import 'package:provider/provider.dart';
 import '../l10n/app_localizations.dart';
 import '../models/play_mode.dart';
 import '../providers/playback_provider.dart';
+import '../providers/sources_provider.dart';
 import '../providers/sync_provider.dart';
 import '../providers/theme_provider.dart';
 import '../services/data_saver_service.dart';
 import '../services/settings_service.dart';
 import '../services/source_swap/source_swap_settings.dart';
 import '../theme/scheme_builder.dart';
+import '../utils/color_hex.dart';
+import '../utils/responsive.dart';
 import '../widgets/app_color_picker.dart';
 import '../widgets/font_picker_sheet.dart';
 import '../widgets/settings/settings_tiles.dart';
+import '../widgets/source_quality_label.dart';
 import 'ai_dj_page.dart';
+import 'data_saver_settings_page.dart';
 import 'data_settings_page.dart';
 import 'general_settings_page.dart';
 import 'lyrics_display_page.dart';
 import 'sources_page.dart';
 import 'sync_settings_page.dart';
-import '../utils/responsive.dart';
 
 /// 设置弹层：内部 Navigator 承载首屏与子页（避免弹层叠弹层）。
 ///
-/// 首屏按功能分区（外观 / 播放 / 歌词 / 内容 / 通用 / 数据与存储）；
+/// 首屏按语义分区：外观 / 播放 / 歌词与展示 / 内容与来源 / 通用与数据；
 /// 子页经 [openSettingsSubPage] 推入本 Navigator，系统返回先退子页，
 /// 回到首屏后再由弹层自身关闭（[NavigatorPopHandler] 转发）。
 class SettingsPage extends StatefulWidget {
@@ -98,13 +102,11 @@ class _SettingsHomeViewState extends State<_SettingsHomeView> {
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context)!;
-    // 省流模式：测试等场景可能不提供 provider，缺省时隐藏该区块。
+    // 以下 provider 在测试等场景可能缺省：缺省时隐藏对应行，不报错。
     final dataSaver = context.watch<DataSaverService?>();
-    // 跨设备同步：Web 无该能力（点对点/网盘传输依赖 dart:io），缺省时隐藏。
     final syncProvider = context.watch<SyncProvider?>();
-    final showSync = syncProvider != null && !kIsWeb;
-    // 换源偏好（自动换源开关）：同样缺省时隐藏。
     final sourceSwapSettings = context.watch<SourceSwapSettings?>();
+    final sources = context.read<SourcesProvider?>();
     final theme = Theme.of(context);
 
     return Container(
@@ -149,251 +151,21 @@ class _SettingsHomeViewState extends State<_SettingsHomeView> {
                 ],
               ),
               const SizedBox(height: kSettingsSectionSpacing),
-
-              SettingsSectionCard(
-                title: l10n.settingsAppearanceTitle,
-                children: [
-                  Selector<
-                      ThemeProvider,
-                      ({
-                        ThemeMode mode,
-                        ColorBaseSource base,
-                        bool followArtwork,
-                        bool monetAvailable,
-                        bool pureBlack,
-                        Color seed,
-                        String? appFont,
-                      })>(
-                    selector: (context, provider) => (
-                      mode: provider.themeMode,
-                      base: provider.baseColorSource,
-                      followArtwork: provider.followArtworkEnabled,
-                      monetAvailable: provider.monetAvailable,
-                      pureBlack: provider.pureBlackEnabled,
-                      seed: provider.seedColor,
-                      appFont: provider.appFontFamily,
-                    ),
-                    builder: (context, appearance, _) {
-                      final (
-                        mode: themeMode,
-                        base: baseColorSource,
-                        followArtwork: followArtworkEnabled,
-                        monetAvailable: monetAvailable,
-                        pureBlack: pureBlackEnabled,
-                        seed: seedColor,
-                        appFont: appFontFamily,
-                      ) = appearance;
-                      // 同一个 Selector 产出的多行：行距由 SettingsRows 统一给。
-                      return SettingsRows(
-                        children: [
-                          SettingsNavTile(
-                            key: const Key('settingsThemeModeItem'),
-                            icon: Icons.brightness_6_rounded,
-                            title: l10n.settingsThemeMode,
-                            subtitle: switch (themeMode) {
-                              ThemeMode.system => l10n.themeModeSystem,
-                              ThemeMode.light => l10n.themeModeLight,
-                              ThemeMode.dark => l10n.themeModeDark,
-                            },
-                            onTap: () => _showThemeModeDialog(context, l10n),
-                          ),
-                          // 基础配色（单选）：壁纸 / 自定义；封面覆盖见下一项。
-                          SettingsNavTile(
-                            key: const Key('settingsBaseColorItem'),
-                            icon: Icons.palette_rounded,
-                            title: l10n.settingsBaseColor,
-                            subtitle:
-                                baseColorSource == ColorBaseSource.wallpaper
-                                    ? l10n.settingsBaseColorWallpaper
-                                    : _seedColorHex(seedColor),
-                            onTap: () => _showBaseColorDialog(context, l10n),
-                          ),
-                          // 自定义色仅作基础配色时显示，避免与「壁纸」并存产生歧义。
-                          if (baseColorSource == ColorBaseSource.custom) ...[
-                            SettingsNavTile(
-                              key: const Key('settingsSeedColorItem'),
-                              icon: Icons.color_lens_rounded,
-                              title: l10n.settingsSeedColor,
-                              subtitle: _seedColorHex(seedColor),
-                              onTap: () => _pickSeedColor(context),
-                            ),
-                          ],
-                          // 封面覆盖层：盖过基础配色（含壁纸）；无封面回退。
-                          SettingsSwitchTile(
-                            switchKey: const Key('settingsFollowArtworkSwitch'),
-                            icon: Icons.album_rounded,
-                            title: l10n.settingsFollowArtwork,
-                            subtitle: l10n.settingsFollowArtworkSubtitle,
-                            value: followArtworkEnabled,
-                            onChanged: (value) => context
-                                .read<ThemeProvider>()
-                                .setFollowArtworkEnabled(value),
-                          ),
-                          SettingsSwitchTile(
-                            switchKey: const Key('settingsPureBlackSwitch'),
-                            icon: Icons.dark_mode_rounded,
-                            title: l10n.settingsPureBlack,
-                            subtitle: l10n.settingsPureBlackSubtitle,
-                            value: pureBlackEnabled,
-                            onChanged: (value) => context
-                                .read<ThemeProvider>()
-                                .setPureBlackEnabled(value),
-                          ),
-                          // 全局应用字体：来自设备已装字体，null = 系统默认。
-                          SettingsNavTile(
-                            key: const Key('settingsAppFontItem'),
-                            icon: Icons.text_fields_rounded,
-                            title: l10n.settingsAppFont,
-                            subtitle: appFontFamily ?? l10n.fontSystemDefault,
-                            onTap: () => _showAppFontPicker(
-                                context, l10n, appFontFamily),
-                          ),
-                        ],
-                      );
-                    },
-                  ),
-                ],
+              _appearanceSection(context, l10n),
+              const SizedBox(height: kSettingsSectionSpacing),
+              _playbackSection(
+                context,
+                l10n,
+                dataSaver: dataSaver,
+                sourceSwapSettings: sourceSwapSettings,
+                sources: sources,
               ),
               const SizedBox(height: kSettingsSectionSpacing),
-
-              SettingsSectionCard(
-                title: l10n.settingsPlaybackTitle,
-                children: [
-                  Selector<PlaybackProvider, PlayMode>(
-                    selector: (context, provider) => provider.defaultPlayMode,
-                    builder: (context, defaultPlayMode, _) => SettingsNavTile(
-                      key: const Key('settingsDefaultPlayModeItem'),
-                      icon: Icons.play_circle_outline_rounded,
-                      title: l10n.settingsDefaultPlayMode,
-                      // 「默认」= 新播放会话的初始模式，不打断当前播放；
-                      // 当前值 + 语义说明同屏展示，避免误读为立即切换。
-                      subtitle:
-                          '${_playModeLabel(l10n, defaultPlayMode)} · ${l10n.settingsDefaultPlayModeSubtitle}',
-                      onTap: () => _showDefaultPlayModeDialog(context, l10n),
-                    ),
-                  ),
-                  Selector<PlaybackProvider, String>(
-                    selector: (context, provider) => provider.currentQualityLabel,
-                    builder: (context, qualityLabel, _) => SettingsInfoTile(
-                      key: const Key('settingsCurrentQualityItem'),
-                      icon: Icons.graphic_eq_rounded,
-                      title: l10n.settingsCurrentQuality,
-                      subtitle: qualityLabel,
-                    ),
-                  ),
-                  // 自动换源：播放失败后的跨源找回（手动换源不受此开关控制）。
-                  if (sourceSwapSettings != null) ...[
-                    Selector<SourceSwapSettings, bool>(
-                      selector: (context, settings) => settings.autoEnabled,
-                      builder: (context, autoEnabled, _) => SettingsSwitchTile(
-                        switchKey: const Key('settingsAutoSourceSwapSwitch'),
-                        icon: Icons.swap_horiz_rounded,
-                        title: l10n.settingsAutoSourceSwap,
-                        subtitle: l10n.settingsAutoSourceSwapSubtitle,
-                        value: autoEnabled,
-                        onChanged: (value) =>
-                            sourceSwapSettings.setAutoEnabled(value),
-                      ),
-                    ),
-                  ],
-                  // 省流模式：默认关闭，开启后仅移动数据生效。
-                  if (dataSaver != null) ...[
-                    ..._buildDataSaverRows(context, l10n, dataSaver),
-                  ],
-                ],
-              ),
+              _lyricsSection(context, l10n),
               const SizedBox(height: kSettingsSectionSpacing),
-
-              SettingsSectionCard(
-                title: l10n.settingsLyricsSection,
-                children: [
-                  // 歌词显示：桌面歌词 / 通知·锁屏 / 蓝牙（平台能力不足时页内隐藏分组）。
-                  SettingsNavTile(
-                    key: const Key('settingsLyricsDisplayItem'),
-                    icon: Icons.lyrics_rounded,
-                    title: l10n.settingsLyricsDisplayTitle,
-                    subtitle: l10n.settingsLyricsDisplaySubtitle,
-                    onTap: () => openSettingsSubPage(
-                      context,
-                      const LyricsDisplayPage(),
-                    ),
-                  ),
-                  _buildCopyLyricsTile(context, l10n),
-                ],
-              ),
+              _contentSection(context, l10n),
               const SizedBox(height: kSettingsSectionSpacing),
-
-              SettingsSectionCard(
-                title: l10n.settingsContentSection,
-                children: [
-                  SettingsNavTile(
-                    icon: Icons.library_music_rounded,
-                    title: l10n.sourcesTitle,
-                    subtitle: l10n.settingsSourcesItemSubtitle,
-                    onTap: () => openSettingsSubPage(
-                      context,
-                      const SourcesPage(),
-                    ),
-                  ),
-                  // AI 推歌：配置与开启入口（模式生效后推荐流出在发现页）。
-                  if (!kIsWeb) ...[
-                    SettingsNavTile(
-                      key: const Key('settingsAiDjItem'),
-                      icon: Icons.auto_awesome_rounded,
-                      title: l10n.aiDjTitle,
-                      subtitle: l10n.aiDjSettingsSubtitle,
-                      onTap: () => openSettingsSubPage(
-                        context,
-                        const AiDjPage(),
-                      ),
-                    ),
-                  ],
-                ],
-              ),
-              const SizedBox(height: kSettingsSectionSpacing),
-
-              SettingsSectionCard(
-                children: [
-                  SettingsNavTile(
-                    key: const Key('settingsGeneralItem'),
-                    icon: Icons.tune_rounded,
-                    title: l10n.generalTitle,
-                    subtitle: l10n.settingsGeneralSubtitle,
-                    onTap: () => openSettingsSubPage(
-                      context,
-                      const GeneralSettingsPage(),
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: kSettingsSectionSpacing),
-
-              SettingsSectionCard(
-                children: [
-                  SettingsNavTile(
-                    key: const Key('settingsDataItem'),
-                    icon: Icons.sd_storage_rounded,
-                    title: l10n.dataManagementTitle,
-                    subtitle: l10n.settingsDataSubtitle,
-                    onTap: () => openSettingsSubPage(
-                      context,
-                      const DataSettingsPage(),
-                    ),
-                  ),
-                  if (showSync) ...[
-                    SettingsNavTile(
-                      key: const Key('settingsSyncItem'),
-                      icon: Icons.sync_rounded,
-                      title: l10n.settingsSyncTitle,
-                      subtitle: l10n.settingsSyncItemSubtitle,
-                      onTap: () => openSettingsSubPage(
-                        context,
-                        const SyncSettingsPage(),
-                      ),
-                    ),
-                  ],
-                ],
-              ),
+              _generalAndDataSection(context, l10n, syncProvider: syncProvider),
             ],
           ),
         ),
@@ -401,51 +173,350 @@ class _SettingsHomeViewState extends State<_SettingsHomeView> {
     );
   }
 
-  /// 省流模式行：总开关 + 生效时的音质上限与封面省流子项。
-  ///
-  /// 副标题在开启后附带当前网络状态（移动数据已生效 / Wi-Fi 未生效 /
-  /// 无法检测），让「仅移动数据生效」的行为对用户透明。
-  List<Widget> _buildDataSaverRows(
+  /// 外观：主题模式 / 基础配色 / 自定义色（仅自定义时） / 封面覆盖 / 纯黑 / 字体。
+  Widget _appearanceSection(BuildContext context, AppLocalizations l10n) {
+    return SettingsSectionCard(
+      title: l10n.settingsAppearanceTitle,
+      children: [
+        Selector<
+            ThemeProvider,
+            ({
+              ThemeMode mode,
+              ColorBaseSource base,
+              bool followArtwork,
+              bool monetAvailable,
+              bool pureBlack,
+              Color seed,
+              String? appFont,
+            })>(
+          selector: (context, provider) => (
+            mode: provider.themeMode,
+            base: provider.baseColorSource,
+            followArtwork: provider.followArtworkEnabled,
+            monetAvailable: provider.monetAvailable,
+            pureBlack: provider.pureBlackEnabled,
+            seed: provider.seedColor,
+            appFont: provider.appFontFamily,
+          ),
+          builder: (context, appearance, _) {
+            final (
+              mode: themeMode,
+              base: baseColorSource,
+              followArtwork: followArtworkEnabled,
+              monetAvailable: monetAvailable,
+              pureBlack: pureBlackEnabled,
+              seed: seedColor,
+              appFont: appFontFamily,
+            ) = appearance;
+            // 同一个 Selector 产出的多行：行距由 SettingsRows 统一给。
+            return SettingsRows(
+              children: [
+                SettingsChoiceRow<ThemeMode>(
+                  key: const Key('settingsThemeModeItem'),
+                  icon: Icons.brightness_6_rounded,
+                  title: l10n.settingsThemeMode,
+                  value: themeMode,
+                  options: [
+                    (ThemeMode.system, l10n.themeModeSystem),
+                    (ThemeMode.light, l10n.themeModeLight),
+                    (ThemeMode.dark, l10n.themeModeDark),
+                  ],
+                  onChanged: (mode) {
+                    // 传平台亮度：system 模式下立即按当前系统亮度生效。
+                    context.read<ThemeProvider>().setThemeMode(
+                          mode,
+                          platformBrightness:
+                              MediaQuery.platformBrightnessOf(context),
+                        );
+                  },
+                ),
+                // 基础配色（单选）：壁纸 / 自定义；封面覆盖见下一项。
+                SettingsChoiceRow<ColorBaseSource>(
+                  key: const Key('settingsBaseColorItem'),
+                  icon: Icons.palette_rounded,
+                  title: l10n.settingsBaseColor,
+                  subtitle: _baseColorSubtitle(
+                    l10n,
+                    baseColorSource,
+                    monetAvailable: monetAvailable,
+                    seedColor: seedColor,
+                  ),
+                  value: baseColorSource,
+                  options: [
+                    (ColorBaseSource.wallpaper, l10n.settingsBaseColorWallpaper),
+                    (ColorBaseSource.custom, l10n.settingsBaseColorCustom),
+                  ],
+                  // 平台无莫奈时壁纸项禁用（仍可显示为选中态，配色回退种子色）。
+                  optionEnabled: (source) =>
+                      source != ColorBaseSource.wallpaper || monetAvailable,
+                  onChanged: (source) =>
+                      context.read<ThemeProvider>().setBaseColorSource(source),
+                ),
+                // 自定义色仅作基础配色时显示，避免与「壁纸」并存产生歧义。
+                if (baseColorSource == ColorBaseSource.custom)
+                  SettingsColorValueTile(
+                    key: const Key('settingsSeedColorItem'),
+                    icon: Icons.color_lens_rounded,
+                    title: l10n.settingsSeedColor,
+                    colorArgb: seedColor.toARGB32(),
+                    onTap: () => _pickSeedColor(context),
+                  ),
+                // 封面覆盖层：盖过基础配色（含壁纸）；无封面回退。
+                SettingsSwitchTile(
+                  switchKey: const Key('settingsFollowArtworkSwitch'),
+                  icon: Icons.album_rounded,
+                  title: l10n.settingsFollowArtwork,
+                  subtitle: l10n.settingsFollowArtworkSubtitle,
+                  value: followArtworkEnabled,
+                  onChanged: (value) => context
+                      .read<ThemeProvider>()
+                      .setFollowArtworkEnabled(value),
+                ),
+                SettingsSwitchTile(
+                  switchKey: const Key('settingsPureBlackSwitch'),
+                  icon: Icons.dark_mode_rounded,
+                  title: l10n.settingsPureBlack,
+                  subtitle: l10n.settingsPureBlackSubtitle,
+                  value: pureBlackEnabled,
+                  onChanged: (value) => context
+                      .read<ThemeProvider>()
+                      .setPureBlackEnabled(value),
+                ),
+                // 全局应用字体：来自设备已装字体，null = 系统默认。
+                SettingsNavTile(
+                  key: const Key('settingsAppFontItem'),
+                  icon: Icons.text_fields_rounded,
+                  title: l10n.settingsAppFont,
+                  subtitle: appFontFamily ?? l10n.fontSystemDefault,
+                  onTap: () =>
+                      _showAppFontPicker(context, l10n, appFontFamily),
+                ),
+              ],
+            );
+          },
+        ),
+      ],
+    );
+  }
+
+  /// 播放：默认播放模式 / 启动恢复 / 默认音质 / 当前音质 / 自动换源 / 省流入口。
+  Widget _playbackSection(
     BuildContext context,
+    AppLocalizations l10n, {
+    required DataSaverService? dataSaver,
+    required SourceSwapSettings? sourceSwapSettings,
+    required SourcesProvider? sources,
+  }) {
+    return SettingsSectionCard(
+      title: l10n.settingsPlaybackTitle,
+      children: [
+        Selector<PlaybackProvider, PlayMode>(
+          selector: (context, provider) => provider.defaultPlayMode,
+          builder: (context, defaultPlayMode, _) => SettingsChoiceRow<PlayMode>(
+            key: const Key('settingsDefaultPlayModeItem'),
+            icon: Icons.play_circle_outline_rounded,
+            title: l10n.settingsDefaultPlayMode,
+            // 「默认」= 新播放会话的初始模式，不打断当前播放。
+            subtitle: l10n.settingsDefaultPlayModeSubtitle,
+            value: defaultPlayMode,
+            options: [
+              (PlayMode.sequential, l10n.playModeSequential),
+              (PlayMode.shuffle, l10n.playModeShuffle),
+              (PlayMode.singleRepeat, l10n.playModeSingleRepeat),
+            ],
+            onChanged: (mode) =>
+                context.read<PlaybackProvider>().setDefaultPlayMode(mode),
+          ),
+        ),
+        Selector<PlaybackProvider, bool>(
+          selector: (context, provider) => provider.restoreSessionEnabled,
+          builder: (context, restoreSession, _) => SettingsSwitchTile(
+            switchKey: const Key('settingsRestoreSessionSwitch'),
+            icon: Icons.restore_rounded,
+            title: l10n.settingsRestoreSessionTitle,
+            subtitle: l10n.settingsRestoreSessionSubtitle,
+            value: restoreSession,
+            onChanged: (value) =>
+                context.read<PlaybackProvider>().setRestoreSessionEnabled(value),
+          ),
+        ),
+        // 音源默认音质的唯一入口（音源页不再重复一份）。
+        if (sources != null)
+          Selector<SourcesProvider, String>(
+            selector: (context, provider) => provider.preferredQuality,
+            builder: (context, quality, _) => SettingsDropdownRow<String>(
+              key: const Key('settingsDefaultQualityItem'),
+              icon: Icons.high_quality_rounded,
+              title: l10n.sourcesDefaultQuality,
+              subtitle: l10n.sourcesQualityHint,
+              value: quality,
+              options: [
+                for (final option in sources.qualityOptions)
+                  (option.value, sourceQualityLabel(l10n, option.value)),
+              ],
+              onChanged: sources.setPreferredQuality,
+            ),
+          ),
+        Selector<PlaybackProvider, String>(
+          selector: (context, provider) => provider.currentQualityLabel,
+          builder: (context, qualityLabel, _) => SettingsInfoTile(
+            key: const Key('settingsCurrentQualityItem'),
+            icon: Icons.graphic_eq_rounded,
+            title: l10n.settingsCurrentQuality,
+            subtitle: qualityLabel,
+          ),
+        ),
+        // 自动换源：播放失败后的跨源找回（手动换源不受此开关控制）。
+        if (sourceSwapSettings != null)
+          Selector<SourceSwapSettings, bool>(
+            selector: (context, settings) => settings.autoEnabled,
+            builder: (context, autoEnabled, _) => SettingsSwitchTile(
+              switchKey: const Key('settingsAutoSourceSwapSwitch'),
+              icon: Icons.swap_horiz_rounded,
+              title: l10n.settingsAutoSourceSwap,
+              subtitle: l10n.settingsAutoSourceSwapSubtitle,
+              value: autoEnabled,
+              onChanged: (value) => sourceSwapSettings.setAutoEnabled(value),
+            ),
+          ),
+        // 省流模式：子页承载开关与子项，入口副标题保留网络状态。
+        if (dataSaver != null)
+          SettingsNavTile(
+            key: const Key('settingsDataSaverItem'),
+            icon: Icons.data_saver_on_rounded,
+            title: l10n.settingsDataSaverTitle,
+            subtitle: _dataSaverSubtitle(l10n, dataSaver),
+            onTap: () => openSettingsSubPage(
+              context,
+              const DataSaverSettingsPage(),
+            ),
+          ),
+      ],
+    );
+  }
+
+  /// 歌词与展示：歌词显示子页入口 + 复制单行开关。
+  Widget _lyricsSection(BuildContext context, AppLocalizations l10n) {
+    return SettingsSectionCard(
+      title: l10n.settingsLyricsSection,
+      children: [
+        // 歌词显示：歌词页 / 歌词输出 / 桌面歌词 / 通知·锁屏 / 蓝牙（二级子页）。
+        SettingsNavTile(
+          key: const Key('settingsLyricsDisplayItem'),
+          icon: Icons.lyrics_rounded,
+          title: l10n.settingsLyricsDisplayTitle,
+          subtitle: l10n.settingsLyricsDisplaySubtitle,
+          onTap: () => openSettingsSubPage(
+            context,
+            const LyricsDisplayPage(),
+          ),
+        ),
+        _buildCopyLyricsTile(context, l10n),
+      ],
+    );
+  }
+
+  /// 内容与来源：音源管理 / AI 推歌。
+  Widget _contentSection(BuildContext context, AppLocalizations l10n) {
+    return SettingsSectionCard(
+      title: l10n.settingsContentSection,
+      children: [
+        SettingsNavTile(
+          icon: Icons.library_music_rounded,
+          title: l10n.sourcesTitle,
+          subtitle: l10n.settingsSourcesItemSubtitle,
+          onTap: () => openSettingsSubPage(
+            context,
+            const SourcesPage(),
+          ),
+        ),
+        // AI 推歌：配置与开启入口（模式生效后推荐流出在发现页）。
+        if (!kIsWeb)
+          SettingsNavTile(
+            key: const Key('settingsAiDjItem'),
+            icon: Icons.auto_awesome_rounded,
+            title: l10n.aiDjTitle,
+            subtitle: l10n.aiDjSettingsSubtitle,
+            onTap: () => openSettingsSubPage(
+              context,
+              const AiDjPage(),
+            ),
+          ),
+      ],
+    );
+  }
+
+  /// 通用与数据：通用子页 / 数据子页 / 同步子页。
+  Widget _generalAndDataSection(
+    BuildContext context,
+    AppLocalizations l10n, {
+    required SyncProvider? syncProvider,
+  }) {
+    final showSync = syncProvider != null && !kIsWeb;
+    return SettingsSectionCard(
+      title: l10n.settingsGeneralAndDataTitle,
+      children: [
+        SettingsNavTile(
+          key: const Key('settingsGeneralItem'),
+          icon: Icons.tune_rounded,
+          title: l10n.generalTitle,
+          subtitle: l10n.settingsGeneralSubtitle,
+          onTap: () => openSettingsSubPage(
+            context,
+            const GeneralSettingsPage(),
+          ),
+        ),
+        SettingsNavTile(
+          key: const Key('settingsDataItem'),
+          icon: Icons.sd_storage_rounded,
+          title: l10n.dataManagementTitle,
+          subtitle: l10n.settingsDataSubtitle,
+          onTap: () => openSettingsSubPage(
+            context,
+            const DataSettingsPage(),
+          ),
+        ),
+        if (showSync)
+          SettingsNavTile(
+            key: const Key('settingsSyncItem'),
+            icon: Icons.sync_rounded,
+            title: l10n.settingsSyncTitle,
+            subtitle: l10n.settingsSyncItemSubtitle,
+            onTap: () => openSettingsSubPage(
+              context,
+              const SyncSettingsPage(),
+            ),
+          ),
+      ],
+    );
+  }
+
+  /// 基础配色副标题：壁纸（平台不支持时说明）或当前自定义色 hex。
+  String _baseColorSubtitle(
     AppLocalizations l10n,
-    DataSaverService dataSaver,
-  ) {
+    ColorBaseSource source, {
+    required bool monetAvailable,
+    required Color seedColor,
+  }) {
+    if (source != ColorBaseSource.wallpaper) {
+      return colorHexLabel(seedColor.toARGB32());
+    }
+    return monetAvailable
+        ? l10n.settingsBaseColorWallpaper
+        : l10n.settingsMonetUnavailable;
+  }
+
+  /// 省流入口副标题：开启后附带当前网络状态（移动数据已生效 / Wi-Fi 未生效 /
+  /// 无法检测），让「仅移动数据生效」的行为对用户透明。
+  String _dataSaverSubtitle(AppLocalizations l10n, DataSaverService dataSaver) {
     final status = !dataSaver.detectionAvailable
         ? l10n.settingsDataSaverNetworkUnknown
         : (dataSaver.onCellular
             ? l10n.settingsDataSaverNetworkCellular
             : l10n.settingsDataSaverNetworkWifi);
-    final subtitle = dataSaver.enabled
+    return dataSaver.enabled
         ? '${l10n.settingsDataSaverSubtitle} · $status'
         : l10n.settingsDataSaverSubtitle;
-
-    return [
-      SettingsSwitchTile(
-        switchKey: const Key('settingsDataSaverSwitch'),
-        icon: Icons.data_saver_on_rounded,
-        title: l10n.settingsDataSaverTitle,
-        subtitle: subtitle,
-        value: dataSaver.enabled,
-        onChanged: (value) => dataSaver.setEnabled(value),
-      ),
-      if (dataSaver.enabled) ...[
-        SettingsNavTile(
-          key: const Key('settingsDataSaverQualityItem'),
-          icon: Icons.graphic_eq_rounded,
-          title: l10n.settingsDataSaverQuality,
-          subtitle: _dataSaverQualityLabel(l10n, dataSaver.qualityCap),
-          onTap: () => _showDataSaverQualityDialog(context, l10n, dataSaver),
-        ),
-        SettingsSwitchTile(
-          switchKey: const Key('settingsDataSaverCoversSwitch'),
-          icon: Icons.image_rounded,
-          title: l10n.settingsDataSaverCovers,
-          subtitle: l10n.settingsDataSaverCoversSubtitle,
-          value: dataSaver.coversSaverEnabled,
-          onChanged: (value) => dataSaver.setCoversSaverEnabled(value),
-        ),
-      ],
-    ];
   }
 
   /// 「将歌词复制为单行」开关（SettingsService 持久化，与歌词页共用）。
@@ -476,191 +547,6 @@ class _SettingsHomeViewState extends State<_SettingsHomeView> {
     });
   }
 
-  /// 主题色显示：统一十六进制（任意取色无需色名）。
-  String _seedColorHex(Color color) {
-    final rgb = color.toARGB32() & 0xFFFFFF;
-    return '#${rgb.toRadixString(16).padLeft(6, '0').toUpperCase()}';
-  }
-
-  String _playModeLabel(AppLocalizations l10n, PlayMode mode) {
-    return switch (mode) {
-      PlayMode.sequential => l10n.playModeSequential,
-      PlayMode.shuffle => l10n.playModeShuffle,
-      PlayMode.singleRepeat => l10n.playModeSingleRepeat,
-    };
-  }
-
-  /// 省流音质上限显示名（复用音源页的音质文案）。
-  String _dataSaverQualityLabel(AppLocalizations l10n, String quality) {
-    return switch (quality) {
-      '320k' => l10n.sourcesQuality320k,
-      '192k' => l10n.sourcesQuality192k,
-      '128k' => l10n.sourcesQuality128k,
-      _ => quality,
-    };
-  }
-
-  Future<void> _showDataSaverQualityDialog(BuildContext context,
-      AppLocalizations l10n, DataSaverService dataSaver) async {
-    // 弹层 dialog 挂 root navigator（M3EDialog.show 语义），关闭要显式定向。
-    final navigator = Navigator.of(context, rootNavigator: true);
-
-    Future<void> select(String quality) async {
-      await dataSaver.setQualityCap(quality);
-      navigator.pop();
-    }
-
-    M3EDialog.show<void>(
-      context,
-      dialog: M3EDialog(
-        title: l10n.settingsDataSaverQuality,
-        content: SizedBox(
-          width: settingsDialogWidth(context),
-          child: M3ERadioGroup<String>(
-            groupValue: dataSaver.qualityCap,
-            onChanged: select,
-            groupLabel: l10n.settingsDataSaverQuality,
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                for (final option in DataSaverService.qualityOptions)
-                  M3ERadio<String>(
-                    value: option,
-                    groupValue: dataSaver.qualityCap,
-                    label: Text(_dataSaverQualityLabel(l10n, option)),
-                    onChanged: select,
-                  ),
-              ],
-            ),
-          ),
-        ),
-        actions: [
-          M3EButton.text(
-            onPressed: () => navigator.pop(),
-            child: Text(l10n.cancelButton),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Future<void> _showThemeModeDialog(
-      BuildContext context, AppLocalizations l10n) async {
-    final themeProvider = context.read<ThemeProvider>();
-    final platformBrightness = MediaQuery.platformBrightnessOf(context);
-    final navigator = Navigator.of(context, rootNavigator: true);
-
-    Future<void> select(ThemeMode mode) async {
-      await themeProvider.setThemeMode(
-        mode,
-        platformBrightness: platformBrightness,
-      );
-      navigator.pop();
-    }
-
-    M3EDialog.show<void>(
-      context,
-      dialog: M3EDialog(
-        title: l10n.settingsThemeMode,
-        content: SizedBox(
-          width: settingsDialogWidth(context),
-          child: M3ERadioGroup<ThemeMode>(
-            groupValue: themeProvider.themeMode,
-            onChanged: select,
-            groupLabel: l10n.settingsThemeMode,
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                M3ERadio<ThemeMode>(
-                  value: ThemeMode.system,
-                  groupValue: themeProvider.themeMode,
-                  label: Text(l10n.themeModeSystem),
-                  onChanged: select,
-                ),
-                M3ERadio<ThemeMode>(
-                  value: ThemeMode.light,
-                  groupValue: themeProvider.themeMode,
-                  label: Text(l10n.themeModeLight),
-                  onChanged: select,
-                ),
-                M3ERadio<ThemeMode>(
-                  value: ThemeMode.dark,
-                  groupValue: themeProvider.themeMode,
-                  label: Text(l10n.themeModeDark),
-                  onChanged: select,
-                ),
-              ],
-            ),
-          ),
-        ),
-        actions: [
-          M3EButton.text(
-            onPressed: () => navigator.pop(),
-            child: Text(l10n.cancelButton),
-          ),
-        ],
-      ),
-    );
-  }
-
-  /// 基础配色弹层：壁纸 / 自定义 二选一；平台不支持壁纸时该项禁用并提示。
-  Future<void> _showBaseColorDialog(
-      BuildContext context, AppLocalizations l10n) async {
-    final themeProvider = context.read<ThemeProvider>();
-    final navigator = Navigator.of(context, rootNavigator: true);
-    final monetAvailable = themeProvider.monetAvailable;
-
-    Future<void> select(ColorBaseSource source) async {
-      await themeProvider.setBaseColorSource(source);
-      navigator.pop();
-    }
-
-    M3EDialog.show<void>(
-      context,
-      dialog: M3EDialog(
-        title: l10n.settingsBaseColor,
-        content: SizedBox(
-          width: settingsDialogWidth(context),
-          child: M3ERadioGroup<ColorBaseSource>(
-            groupValue: themeProvider.baseColorSource,
-            onChanged: select,
-            groupLabel: l10n.settingsBaseColor,
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                M3ERadio<ColorBaseSource>(
-                  value: ColorBaseSource.wallpaper,
-                  groupValue: themeProvider.baseColorSource,
-                  label: Text(
-                    monetAvailable
-                        ? l10n.settingsBaseColorWallpaper
-                        : l10n.settingsMonetUnavailable,
-                  ),
-                  onChanged: monetAvailable ? select : null,
-                ),
-                M3ERadio<ColorBaseSource>(
-                  value: ColorBaseSource.custom,
-                  groupValue: themeProvider.baseColorSource,
-                  label: Text(l10n.settingsBaseColorCustom),
-                  onChanged: select,
-                ),
-              ],
-            ),
-          ),
-        ),
-        actions: [
-          M3EButton.text(
-            onPressed: () => navigator.pop(),
-            child: Text(l10n.cancelButton),
-          ),
-        ],
-      ),
-    );
-  }
-
   /// 主题色：直接打开任意取色器（HSV + Hex）。
   ///
   /// 自定义色是「基础配色」的一种；封面覆盖开启时，播放有封面的歌曲
@@ -689,61 +575,5 @@ class _SettingsHomeViewState extends State<_SettingsHomeView> {
     );
     if (choice == null || choice.inherit) return;
     await themeProvider.setAppFontFamily(choice.family);
-  }
-
-  Future<void> _showDefaultPlayModeDialog(
-      BuildContext context, AppLocalizations l10n) async {
-    final playbackProvider = context.read<PlaybackProvider>();
-    final navigator = Navigator.of(context, rootNavigator: true);
-
-    Future<void> select(PlayMode mode) async {
-      await playbackProvider.setDefaultPlayMode(mode);
-      navigator.pop();
-    }
-
-    M3EDialog.show<void>(
-      context,
-      dialog: M3EDialog(
-        title: l10n.settingsDefaultPlayMode,
-        content: SizedBox(
-          width: settingsDialogWidth(context),
-          child: M3ERadioGroup<PlayMode>(
-            groupValue: playbackProvider.defaultPlayMode,
-            onChanged: select,
-            groupLabel: l10n.settingsDefaultPlayMode,
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                M3ERadio<PlayMode>(
-                  value: PlayMode.sequential,
-                  groupValue: playbackProvider.defaultPlayMode,
-                  label: Text(l10n.playModeSequential),
-                  onChanged: select,
-                ),
-                M3ERadio<PlayMode>(
-                  value: PlayMode.shuffle,
-                  groupValue: playbackProvider.defaultPlayMode,
-                  label: Text(l10n.playModeShuffle),
-                  onChanged: select,
-                ),
-                M3ERadio<PlayMode>(
-                  value: PlayMode.singleRepeat,
-                  groupValue: playbackProvider.defaultPlayMode,
-                  label: Text(l10n.playModeSingleRepeat),
-                  onChanged: select,
-                ),
-              ],
-            ),
-          ),
-        ),
-        actions: [
-          M3EButton.text(
-            onPressed: () => navigator.pop(),
-            child: Text(l10n.cancelButton),
-          ),
-        ],
-      ),
-    );
   }
 }

@@ -4,6 +4,7 @@ import 'package:flutter/services.dart';
 import 'package:material_3_expressive/material_3_expressive.dart';
 import 'package:material_ui/material_ui.dart';
 
+import '../../utils/color_hex.dart';
 import '../../utils/responsive.dart';
 import '../card_list_surface.dart';
 
@@ -178,6 +179,7 @@ class SettingsNavTile extends StatelessWidget {
 /// 开关行：图标 + 标题/副标题 + M3ESwitch；整行可点。
 ///
 /// [enabled] 为 false 时整项禁用（平台不支持的能力）。
+/// [trailing] 追加在开关之后的附属控件（如底部导航行的拖拽手柄）。
 class SettingsSwitchTile extends StatelessWidget {
   const SettingsSwitchTile({
     super.key,
@@ -188,6 +190,7 @@ class SettingsSwitchTile extends StatelessWidget {
     required this.value,
     required this.onChanged,
     this.enabled = true,
+    this.trailing,
   });
 
   final Key? switchKey;
@@ -197,6 +200,7 @@ class SettingsSwitchTile extends StatelessWidget {
   final bool value;
   final ValueChanged<bool> onChanged;
   final bool enabled;
+  final Widget? trailing;
 
   @override
   Widget build(BuildContext context) {
@@ -229,6 +233,10 @@ class SettingsSwitchTile extends StatelessWidget {
                     }
                   : null,
             ),
+            if (trailing != null) ...[
+              const SizedBox(width: kSettingsSmallSpacing),
+              trailing!,
+            ],
           ],
         ),
       ),
@@ -323,6 +331,327 @@ class SettingsValueTile extends StatelessWidget {
             color: m3e.colorScheme.onSurfaceVariant,
           ),
         ],
+      ),
+    );
+  }
+}
+
+/// 单选行：图标 + 标题/副标题 + 独占整行的分段按钮（枚举 2–5 项短文案）。
+///
+/// 为什么分段按钮独占整行且显式宽度：`M3ESegmentedButton` 内部是
+/// `Stack` + `Positioned.fill` + `Row(mainAxisSize.min)`，在放松约束的父级
+/// （`Align` / `Row` 尾位）会塌成零宽并溢出；这里把它放进
+/// `double.infinity` 的紧约束里，多个 segment 才会等宽铺满。
+class SettingsChoiceRow<T> extends StatelessWidget {
+  const SettingsChoiceRow({
+    super.key,
+    required this.icon,
+    required this.title,
+    this.subtitle,
+    required this.value,
+    required this.options,
+    required this.onChanged,
+    this.optionEnabled,
+  }) : assert(
+         options.length >= 2 && options.length <= 5,
+         '分段行需要 2–5 个选项（更多选项请用 SettingsDropdownRow）。',
+       );
+
+  final IconData icon;
+  final String title;
+  final String? subtitle;
+
+  /// 当前值（不在 [options] 中时显示为未选中）。
+  final T value;
+
+  /// 选项（值 + 显示文案）。
+  final List<(T, String)> options;
+
+  final ValueChanged<T> onChanged;
+
+  /// 单项禁用判定（如平台能力不足的选项）；缺省全部可用。
+  final bool Function(T value)? optionEnabled;
+
+  @override
+  Widget build(BuildContext context) {
+    final selected = options.any((option) => option.$1 == value)
+        ? <T>{value}
+        : <T>{};
+    return CardListSurface(
+      position: SettingsRowPosition.of(context),
+      padding: const EdgeInsets.fromLTRB(12, 10, 12, 12),
+      semanticLabel: title,
+      onPressed: null,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(
+            children: [
+              _SettingsTileIcon(icon: icon, isDestructive: false),
+              const SizedBox(width: 12),
+              Expanded(
+                child: _SettingsTileLabel(
+                  title: title,
+                  subtitle: subtitle ?? '',
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: kSettingsSmallSpacing),
+          SizedBox(
+            width: double.infinity,
+            child: M3ESegmentedButton<T>(
+              segments: [
+                for (final (optionValue, label) in options)
+                  M3ESegment<T>(
+                    value: optionValue,
+                    label: label,
+                    enabled: optionEnabled?.call(optionValue) ?? true,
+                  ),
+              ],
+              selected: selected,
+              onSelectionChanged: (selection) {
+                if (selection.isNotEmpty) onChanged(selection.first);
+              },
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// 下拉行：图标 + 标题/副标题 + 行尾下拉菜单（≥5 项或长文案的枚举）。
+///
+/// 单选必须给 `fieldStyle.hintText`：缺省时未选中会显示包内英文兜底
+/// `Select`（与页面语言不符）。
+class SettingsDropdownRow<T> extends StatelessWidget {
+  const SettingsDropdownRow({
+    super.key,
+    required this.icon,
+    required this.title,
+    this.subtitle,
+    required this.value,
+    required this.options,
+    required this.onChanged,
+    this.menuWidth = 170,
+  });
+
+  final IconData icon;
+  final String title;
+  final String? subtitle;
+
+  /// 当前值（不在 [options] 中时字段回落为 [title] 提示文案）。
+  final T value;
+
+  /// 选项（值 + 显示文案）。
+  final List<(T, String)> options;
+
+  final ValueChanged<T> onChanged;
+
+  /// 行尾字段宽度（设置弹层窄于屏幕，字段定宽避免撑挤标题）。
+  final double menuWidth;
+
+  @override
+  Widget build(BuildContext context) {
+    return CardListSurface(
+      position: SettingsRowPosition.of(context),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      semanticLabel: title,
+      onPressed: null,
+      child: Row(
+        children: [
+          _SettingsTileIcon(icon: icon, isDestructive: false),
+          const SizedBox(width: 12),
+          Expanded(
+            child: _SettingsTileLabel(
+              title: title,
+              subtitle: subtitle ?? '',
+            ),
+          ),
+          const SizedBox(width: 8),
+          SizedBox(
+            width: menuWidth,
+            child: M3EDropdownMenu<T>(
+              items: [
+                for (final (optionValue, label) in options)
+                  M3EDropdownItem<T>(
+                    label: label,
+                    value: optionValue,
+                    selected: optionValue == value,
+                  ),
+              ],
+              singleSelect: true,
+              showChipAnimation: false,
+              fieldStyle: M3EDropdownFieldStyle(hintText: title),
+              onSelectionChanged: (items) {
+                if (items.isNotEmpty) onChanged(items.first.value);
+              },
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// 滑杆行：图标 + 标题/当前值 + 独占整行的滑杆（数值有区间）。
+class SettingsSliderRow extends StatelessWidget {
+  const SettingsSliderRow({
+    super.key,
+    required this.icon,
+    required this.title,
+    this.subtitle,
+    required this.valueLabel,
+    required this.value,
+    required this.min,
+    required this.max,
+    required this.onChanged,
+    this.divisions,
+  });
+
+  final IconData icon;
+  final String title;
+  final String? subtitle;
+
+  /// 行尾当前值展示（如 `+50 ms` / `80%`）。
+  final String valueLabel;
+
+  final double value;
+  final double min;
+  final double max;
+  final int? divisions;
+  final ValueChanged<double> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    final m3e = M3ETheme.of(context);
+    return CardListSurface(
+      position: SettingsRowPosition.of(context),
+      padding: const EdgeInsets.fromLTRB(12, 10, 12, 6),
+      semanticLabel: '$title, $valueLabel',
+      onPressed: null,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(
+            children: [
+              _SettingsTileIcon(icon: icon, isDestructive: false),
+              const SizedBox(width: 12),
+              Expanded(
+                child: _SettingsTileLabel(
+                  title: title,
+                  subtitle: subtitle ?? '',
+                ),
+              ),
+              const SizedBox(width: 8),
+              Text(
+                valueLabel,
+                style: m3e.typeScale.bodyMedium.copyWith(
+                  color: m3e.colorScheme.onSurfaceVariant,
+                ),
+              ),
+            ],
+          ),
+          M3ESlider(
+            value: value.clamp(min, max),
+            min: min,
+            max: max,
+            divisions: divisions,
+            size: M3ESliderSize.xs,
+            trackThickness: 6,
+            onChanged: onChanged,
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// 颜色值行：色块 + hex 文本 + 编辑图标（点开取色 / 颜色选择面板）。
+///
+/// hex 在颜色不透明时显示 `#RRGGBB`，带 alpha 时显示 `#AARRGGBB`。
+class SettingsColorValueTile extends StatelessWidget {
+  const SettingsColorValueTile({
+    super.key,
+    required this.icon,
+    required this.title,
+    this.subtitle,
+    required this.colorArgb,
+    required this.onTap,
+  });
+
+  final IconData icon;
+  final String title;
+  final String? subtitle;
+
+  /// 当前颜色（ARGB int；颜色契约禁止页面写 `Color(0x...)` 字面量）。
+  final int colorArgb;
+
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final m3e = M3ETheme.of(context);
+    final hex = colorHexLabel(
+      colorArgb,
+      withAlpha: (colorArgb >> 24) & 0xFF != 0xFF,
+    );
+    return CardListSurface(
+      position: SettingsRowPosition.of(context),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      semanticLabel: '$title, $hex',
+      onPressed: () {
+        HapticFeedback.lightImpact();
+        onTap();
+      },
+      child: Row(
+        children: [
+          _SettingsTileIcon(icon: icon, isDestructive: false),
+          const SizedBox(width: 12),
+          Expanded(
+            child: _SettingsTileLabel(
+              title: title,
+              subtitle: subtitle ?? '',
+            ),
+          ),
+          const SizedBox(width: 8),
+          SettingsColorSwatch(color: Color(colorArgb)),
+          const SizedBox(width: 8),
+          Text(
+            hex,
+            style: m3e.typeScale.bodyMedium.copyWith(
+              color: m3e.colorScheme.onSurfaceVariant,
+            ),
+          ),
+          const SizedBox(width: 8),
+          Icon(
+            Icons.edit_rounded,
+            size: 18,
+            color: m3e.colorScheme.onSurfaceVariant,
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// 颜色色块：圆角方块 + 描边（任意颜色都能看清边界，深色主题下尤其重要）。
+class SettingsColorSwatch extends StatelessWidget {
+  const SettingsColorSwatch({super.key, required this.color, this.size = 24});
+
+  final Color color;
+  final double size;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: size,
+      height: size,
+      decoration: BoxDecoration(
+        color: color,
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: M3ETheme.of(context).colorScheme.outlineVariant),
       ),
     );
   }

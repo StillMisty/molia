@@ -354,14 +354,19 @@
   用 `aospSpatial` 无过冲弹簧并在落定帧零速度交接；不要再用
   `AnimationController` + `Curves`/`SpringSimulation` 手搓 spatial 运动
   （交互细节见 `docs/pitfalls.md` #21）。
-- 设置页：首屏按功能分区（外观 / 播放 / 歌词 / 内容 / 通用 / 数据与存储），分组标题 +
-  分段卡片行：行表面统一走共享的 `lib/widgets/card_list_surface.dart`
+- 设置页：首屏 5 个语义分区（外观 / 播放 / 歌词与展示 / 内容与来源 / 通用与数据），
+  分组标题 + 分段卡片行：行表面统一走共享的 `lib/widgets/card_list_surface.dart`
   （`CardListSurface`：静止内 4dp / 首末外侧 16dp、hover 12dp、press 16dp，
   expressive spatial 形状弹簧；`TrackRow`、设置行、AI 推荐卡同一套形状语言），
   行间 `cardList.gap`、位置由 `SettingsSectionCard` 下发（`SettingsRowPosition`），
   排版走 `M3ETypeScale`、不写死字号字重；统一行组件在
-  `lib/widgets/settings/settings_tiles.dart`（`Nav` / `Switch` / `Info` / `Value` 四种）；
-  子页（音源 / 歌词显示 / AI 推歌 / 通用 / 数据与存储 / 缓存 / 统计）经 `SettingsPage`
+  `lib/widgets/settings/settings_tiles.dart`（Nav / Switch / Info / Value /
+  Choice / Dropdown / Slider / ColorValue），按值类型选型：bool → Switch、
+  2–5 项短枚举 → Choice（行内分段，显式宽度，防 `M3ESegmentedButton` 零宽溢出）、
+  ≥5 项或长文案 → Dropdown（必设 `fieldStyle.hintText`）、区间数值 → Slider、
+  大范围绝对量（缓存上限）→ Value + 输入弹层（带常用预设）；
+  子页（音源 / 歌词显示〔二级：歌词页 / 歌词输出 / 桌面歌词 / 通知·锁屏 / 蓝牙〕/
+  AI 推歌 / 通用 / 数据与存储 / 缓存 / 统计）经 `SettingsPage`
   的内部 Navigator 在同一弹层内 push（`openSettingsSubPage`）。系统返回先退子页、
   再关弹层：底部弹层由 `showAdaptiveModalPage(onDismissRequest:)` guard 读取
   `SettingsPage.subPageOpen`（M3E 弹层宿主会给层内所有 PopScope 回调发 didPop=false

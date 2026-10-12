@@ -1,6 +1,7 @@
+import 'dart:async';
+
 import 'package:material_3_expressive/material_3_expressive.dart';
 import 'package:material_ui/material_ui.dart';
-import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 
 import '../l10n/app_localizations.dart';
@@ -11,9 +12,9 @@ import '../services/notification_service.dart';
 import '../widgets/nav_destination_icons.dart';
 import '../widgets/settings/settings_tiles.dart';
 
-/// 通用设置子页：语言、应用名称与底部导航定制。
+/// 通用设置子页：底部导航、语言与应用名称（按改动频率排序）。
 ///
-/// 从设置首屏「通用」进入，在设置弹层内部导航（见 `settings_page.dart`）。
+/// 从设置首屏「通用与数据」进入，在设置弹层内部导航（见 `settings_page.dart`）。
 class GeneralSettingsPage extends StatefulWidget {
   const GeneralSettingsPage({super.key});
 
@@ -22,8 +23,40 @@ class GeneralSettingsPage extends StatefulWidget {
 }
 
 class _GeneralSettingsPageState extends State<GeneralSettingsPage> {
-  /// 语言切换后强制 FutureBuilder 重新读取保存值。
-  Key _languageKey = UniqueKey();
+  /// 当前语言偏好（null = 跟随系统）；异步装载一次，切换后本地更新。
+  Locale? _locale;
+
+  @override
+  void initState() {
+    super.initState();
+    unawaited(_loadLanguage());
+  }
+
+  Future<void> _loadLanguage() async {
+    final locale = await LanguageService.getSavedLocale();
+    if (!mounted) return;
+    setState(() => _locale = locale);
+  }
+
+  /// 行内切换语言：localeNotifier 驱动界面立即生效，即反馈，无需成功提示。
+  Future<void> _setLanguage(String value) async {
+    final locale = switch (value) {
+      'en' => const Locale('en'),
+      'zh' => const Locale('zh'),
+      _ => null, // system
+    };
+    try {
+      await LanguageService.setAppLocale(locale);
+      if (!mounted) return;
+      setState(() => _locale = locale);
+    } catch (e) {
+      if (!mounted) return;
+      final l10n = AppLocalizations.of(context)!;
+      context
+          .read<NotificationService>()
+          .showErrorSnackBar(l10n.failedToChangeLanguage(e.toString()));
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -39,41 +72,27 @@ class _GeneralSettingsPageState extends State<GeneralSettingsPage> {
       body: ListView(
         padding: const EdgeInsets.all(kSettingsPadding),
         children: [
+          // 行序按改动频率：底部导航（常改）→ 语言 → 应用名称。
+          if (nav != null) ...[
+            SettingsSectionCard(
+              title: l10n.settingsBottomNavTitle,
+              children: [_BottomNavSettings(provider: nav)],
+            ),
+            const SizedBox(height: kSettingsSectionSpacing),
+          ],
           SettingsSectionCard(
             children: [
-              FutureBuilder<Locale?>(
-                future: LanguageService.getSavedLocale(),
-                key: _languageKey,
-                builder: (context, snapshot) {
-                  String languageDisplay = l10n.languageSystem;
-                  if (snapshot.connectionState == ConnectionState.done &&
-                      snapshot.hasData) {
-                    final locale = snapshot.data!;
-                    switch (locale.languageCode) {
-                      case 'en':
-                        languageDisplay = l10n.languageEnglish;
-                        break;
-                      case 'zh':
-                        languageDisplay = l10n.languageSimplifiedChinese;
-                        break;
-                      default:
-                        languageDisplay = locale.toString();
-                    }
-                  }
-                  return SettingsNavTile(
-                    key: const Key('settingsLanguageItem'),
-                    icon: Icons.language_rounded,
-                    title: l10n.languageSettingTitle,
-                    subtitle: languageDisplay.isNotEmpty
-                        ? languageDisplay
-                        : l10n.languageSettingSubtitle,
-                    onTap: () => _showLanguageDialog(context, l10n, () {
-                      setState(() {
-                        _languageKey = UniqueKey();
-                      });
-                    }),
-                  );
-                },
+              SettingsChoiceRow<String>(
+                key: const Key('settingsLanguageItem'),
+                icon: Icons.language_rounded,
+                title: l10n.languageSettingTitle,
+                value: _locale?.languageCode ?? 'system',
+                options: [
+                  ('system', l10n.languageSystem),
+                  ('en', l10n.languageEnglish),
+                  ('zh', l10n.languageSimplifiedChinese),
+                ],
+                onChanged: _setLanguage,
               ),
               // 应用名称：顶栏无歌曲时显示的自定义文案。
               ValueListenableBuilder<String>(
@@ -88,13 +107,6 @@ class _GeneralSettingsPageState extends State<GeneralSettingsPage> {
               ),
             ],
           ),
-          if (nav != null) ...[
-            const SizedBox(height: kSettingsSectionSpacing),
-            SettingsSectionCard(
-              title: l10n.settingsBottomNavTitle,
-              children: [_BottomNavSettings(provider: nav)],
-            ),
-          ],
         ],
       ),
     );
@@ -139,97 +151,13 @@ class _GeneralSettingsPageState extends State<GeneralSettingsPage> {
     );
     controller.dispose();
   }
-
-  String _currentLanguageValue(Locale? locale) {
-    if (locale == null) return 'system';
-    return locale.languageCode;
-  }
-
-  Future<void> _showLanguageDialog(BuildContext context, AppLocalizations l10n,
-      VoidCallback onSuccess) async {
-    final notificationService = context.read<NotificationService>();
-    final navigator = Navigator.of(context, rootNavigator: true);
-    final currentContext = context;
-
-    final currentLocale = await LanguageService.getSavedLocale();
-    if (!currentContext.mounted) return;
-    final currentValue = _currentLanguageValue(currentLocale);
-
-    M3EDialog.show<void>(
-      currentContext,
-      dialog: StatefulBuilder(builder: (context, setState) {
-        Future<void> selectLanguage(String value) async {
-          try {
-            final Locale? locale = switch (value) {
-              'en' => const Locale('en'),
-              'zh' => const Locale('zh'),
-              _ => null, // system
-            };
-            await LanguageService.setAppLocale(locale);
-            navigator.pop();
-            // 语言切换后界面立即生效，即反馈，无需再弹成功提示。
-            onSuccess();
-          } catch (e) {
-            if (currentContext.mounted) {
-              notificationService
-                  .showErrorSnackBar(l10n.failedToChangeLanguage(e.toString()));
-            }
-          }
-        }
-
-        return M3EDialog(
-          title: l10n.languageDialogTitle,
-          content: SizedBox(
-            width: settingsDialogWidth(context),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                M3ERadioGroup<String>(
-                  groupValue: currentValue,
-                  onChanged: selectLanguage,
-                  groupLabel: l10n.languageDialogTitle,
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      M3ERadio<String>(
-                        value: 'system',
-                        groupValue: currentValue,
-                        label: Text(l10n.languageSystem),
-                        onChanged: selectLanguage,
-                      ),
-                      M3ERadio<String>(
-                        value: 'en',
-                        groupValue: currentValue,
-                        label: Text(l10n.languageEnglish),
-                        onChanged: selectLanguage,
-                      ),
-                      M3ERadio<String>(
-                        value: 'zh',
-                        groupValue: currentValue,
-                        label: Text(l10n.languageSimplifiedChinese),
-                        onChanged: selectLanguage,
-                      ),
-                    ],
-                  ),
-                ),
-              ],
-            ),
-          ),
-          actions: [
-            M3EButton.text(
-              onPressed: () => navigator.pop(),
-              child: Text(l10n.cancelButton),
-            ),
-          ],
-        );
-      }),
-    );
-  }
 }
 
 /// 底部导航定制：拖拽排序 + 显示/隐藏（至少保留 1 个），即时生效并持久化。
+///
+/// 行是标准设置开关行（[SettingsSwitchTile]）+ 拖拽手柄；嵌套在
+/// `ReorderableListView` 里，行形状由本组件按位置自算下发
+/// （[SettingsRowPosition]），与分组内其它行同源。
 class _BottomNavSettings extends StatelessWidget {
   const _BottomNavSettings({required this.provider});
 
@@ -240,6 +168,7 @@ class _BottomNavSettings extends StatelessWidget {
     final l10n = AppLocalizations.of(context)!;
     final nav = provider;
     final order = nav.order;
+    final gap = M3ETheme.of(context).listTheme.cardList.gap;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -252,7 +181,17 @@ class _BottomNavSettings extends StatelessWidget {
               nav.reorder(oldIndex, newIndex),
           children: [
             for (var index = 0; index < order.length; index++)
-              _buildRow(context, l10n, nav, order[index], index),
+              Padding(
+                key: ValueKey(order[index]),
+                padding: EdgeInsets.only(top: index == 0 ? 0 : gap),
+                child: ReorderableDragStartListener(
+                  index: index,
+                  child: SettingsRowPosition(
+                    position: calculateCardPosition(index, order.length),
+                    child: _buildRow(context, l10n, nav, order[index]),
+                  ),
+                ),
+              ),
           ],
         ),
         const SizedBox(height: kSettingsSmallSpacing),
@@ -271,69 +210,31 @@ class _BottomNavSettings extends StatelessWidget {
     AppLocalizations l10n,
     NavProvider nav,
     ShellDestination destination,
-    int index,
   ) {
     final scheme = Theme.of(context).colorScheme;
-    // 预览统一用实心变体（与底栏/侧栏选中态一致，识别度更好）。
-    final icon = destination.filledIcon;
     final label = switch (destination) {
       ShellDestination.nowPlaying => l10n.nowPlayingLabel,
       ShellDestination.favorites => l10n.favoritesLabel,
       ShellDestination.library => l10n.libraryLabel,
     };
 
-    return Padding(
-      key: ValueKey(destination),
-      padding: const EdgeInsets.symmetric(vertical: 2),
-      child: Row(
-        children: [
-          Container(
-            width: 40,
-            height: 40,
-            alignment: Alignment.center,
-            decoration: BoxDecoration(
-              color: scheme.secondaryContainer,
-              borderRadius: BorderRadius.circular(8),
-            ),
-            child: IconTheme.merge(
-              data: IconThemeData(
-                color: scheme.onSecondaryContainer,
-                size: 24,
-              ),
-              child: icon,
-            ),
-          ),
-          const SizedBox(width: kSettingsElementSpacing),
-          Expanded(
-            child: Text(
-              label,
-              style: const TextStyle(
-                fontSize: 16,
-                fontWeight: FontWeight.w500,
-              ),
-            ),
-          ),
-          M3ESwitch(
-            value: nav.isVisible(destination),
-            onChanged: (bool value) async {
-              HapticFeedback.lightImpact();
-              final accepted = await nav.setVisible(destination, value);
-              if (!accepted && context.mounted) {
-                Provider.of<NotificationService>(context, listen: false)
-                    .showSnackBar(l10n.settingsBottomNavKeepOne);
-              }
-            },
-          ),
-          ReorderableDragStartListener(
-            index: index,
-            child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 8),
-              child: Icon(Icons.drag_handle_rounded,
-                  color: scheme.onSurfaceVariant),
-            ),
-          ),
-        ],
+    return SettingsSwitchTile(
+      // 图标用实心变体（与底栏/侧栏选中态一致，识别度更好）。
+      icon: destination.settingsIcon,
+      title: label,
+      subtitle: '',
+      value: nav.isVisible(destination),
+      trailing: Icon(
+        Icons.drag_handle_rounded,
+        color: scheme.onSurfaceVariant,
       ),
+      onChanged: (bool value) async {
+        final accepted = await nav.setVisible(destination, value);
+        if (!accepted && context.mounted) {
+          Provider.of<NotificationService>(context, listen: false)
+              .showSnackBar(l10n.settingsBottomNavKeepOne);
+        }
+      },
     );
   }
 }

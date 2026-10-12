@@ -70,7 +70,8 @@ void main() {
   testWidgets('音频容量：点击行内数值可输入任意值并持久化', (tester) async {
     await pumpPage(tester);
 
-    expect(find.text('1024 MB'), findsOneWidget);
+    // 缺键默认 = 设备容量建议；测试环境容量不可知 → 回退 1024MB，显示为 1 GB。
+    expect(find.text('1 GB'), findsOneWidget);
     await tester.tap(find.text('Size limit'));
     await tester.pumpAndSettle();
 
@@ -85,6 +86,21 @@ void main() {
     expect(find.byType(M3EDialog), findsNothing);
     expect(prefs.getInt(CacheService.keyAudioMaxMb), 333);
     expect(find.text('333 MB'), findsOneWidget);
+  });
+
+  testWidgets('音频容量：常用预设 chip 填入数值，保存后持久化并显示 GB', (tester) async {
+    await pumpPage(tester);
+
+    await tester.tap(find.text('Size limit'));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('2 GB'));
+    await tester.pump();
+    await tester.tap(find.text('Save'));
+    await tester.pumpAndSettle();
+
+    expect(prefs.getInt(CacheService.keyAudioMaxMb), 2048);
+    expect(find.text('2 GB'), findsOneWidget);
   });
 
   testWidgets('音频容量：输入 0 表示不限制', (tester) async {
@@ -119,7 +135,7 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.byType(M3EDialog), findsNothing);
     expect(prefs.getInt(CacheService.keyAudioMaxMb), isNull);
-    expect(find.text('1024 MB'), findsOneWidget);
+    expect(find.text('1 GB'), findsOneWidget);
   });
 
   testWidgets('歌词保留时长与封面数量上限同样支持自定义', (tester) async {

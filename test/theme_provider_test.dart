@@ -12,12 +12,13 @@ void main() {
     SharedPreferences.setMockInitialValues({});
   });
 
-  test('初始状态：基础配色=自定义、封面覆盖开、纯黑关', () async {
+  test('初始状态：基础配色=壁纸（无莫奈时回退种子色）、封面覆盖开、纯黑关', () async {
     final provider = ThemeProvider();
     await provider.preferencesReady;
     expect(provider.colorScheme, isNotNull);
     expect(provider.themeMode, ThemeMode.system);
-    expect(provider.baseColorSource, ColorBaseSource.custom);
+    // 从未配置过 → 新默认壁纸；测试环境无莫奈注入，配色回退种子色。
+    expect(provider.baseColorSource, ColorBaseSource.wallpaper);
     expect(provider.followArtworkEnabled, isTrue);
     expect(provider.monetAvailable, isFalse);
     expect(provider.pureBlackEnabled, isFalse);
@@ -27,6 +28,9 @@ void main() {
       buildColorScheme(Colors.blue, Brightness.light),
     );
     expect(provider.artworkColorScheme, isNull);
+    // 迁移把缺省键物化（值 = 新默认），下次启动走「已有新键」分支。
+    final prefs = await SharedPreferences.getInstance();
+    expect(prefs.getString('color_base'), 'wallpaper');
   });
 
   test('全局应用字体：持久化、恢复与清除', () async {
@@ -66,8 +70,9 @@ void main() {
                     onPressed: () => context
                         .read<ThemeProvider>()
                         .updateThemeFromSystem(context),
-                    child: Text(
-                        scheme.brightness == Brightness.dark ? 'dark' : 'light'),
+                    child: Text(scheme.brightness == Brightness.dark
+                        ? 'dark'
+                        : 'light'),
                   );
                 },
               ),
@@ -183,9 +188,13 @@ void main() {
     final monetDark = buildColorScheme(Colors.pink, Brightness.dark);
     provider.updateMonetSchemes(monetLight, monetDark);
     expect(provider.monetAvailable, isTrue);
-    // 基础配色=自定义时不生效。
-    expect(provider.colorScheme,
-        buildColorScheme(Colors.blue, Brightness.light));
+    // 默认基础配色=壁纸：莫奈注入即生效。
+    expect(provider.colorScheme, monetLight);
+
+    // 切到自定义：莫奈不生效，回退种子色。
+    await provider.setBaseColorSource(ColorBaseSource.custom);
+    expect(
+        provider.colorScheme, buildColorScheme(Colors.blue, Brightness.light));
 
     await provider.setBaseColorSource(ColorBaseSource.wallpaper);
     expect(provider.colorScheme, monetLight);
@@ -199,7 +208,8 @@ void main() {
 
     // 封面 seed 覆盖壁纸（含覆盖莫奈）。
     provider.applyArtworkSeed(Colors.green);
-    expect(provider.colorScheme, buildColorScheme(Colors.green, Brightness.dark));
+    expect(
+        provider.colorScheme, buildColorScheme(Colors.green, Brightness.dark));
 
     // 关闭封面覆盖：回到壁纸方案。
     await provider.setFollowArtworkEnabled(false);
@@ -229,7 +239,8 @@ void main() {
     final second = ThemeProvider();
     await second.preferencesReady;
     expect(second.seedColor.toARGB32(), Colors.green.toARGB32());
-    expect(second.colorScheme, buildColorScheme(Colors.green, Brightness.light));
+    expect(
+        second.colorScheme, buildColorScheme(Colors.green, Brightness.light));
 
     final prefs = await SharedPreferences.getInstance();
     expect(prefs.getInt('seed_color'), Colors.green.toARGB32());
@@ -287,6 +298,17 @@ void main() {
     final prefs = await SharedPreferences.getInstance();
     expect(prefs.getBool('monet_color_enabled'), isTrue);
     expect(prefs.getString('color_base'), 'custom');
+  });
+
+  test('旧键显式关闭莫奈：迁移保持自定义，不吃壁纸默认', () async {
+    SharedPreferences.setMockInitialValues({'monet_color_enabled': false});
+    final provider = ThemeProvider();
+    await provider.preferencesReady;
+    expect(provider.baseColorSource, ColorBaseSource.custom);
+
+    final prefs = await SharedPreferences.getInstance();
+    expect(prefs.getString('color_base'), 'custom');
+    expect(prefs.getBool('monet_color_enabled'), isNull);
   });
 
   test('纯黑背景：仅深色模式覆盖 surface，浅色不生效', () async {
