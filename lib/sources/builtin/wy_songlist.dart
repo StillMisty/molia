@@ -118,11 +118,7 @@ class WySongList {
     String tagId,
     int page,
   ) {
-    final key = 'wy:playlists:$sortId:$tagId:$page';
-    return BuiltinSearch.transport.cached(
-      key,
-      () => _fetchList(sortId, tagId, page),
-    );
+    return _fetchList(sortId, tagId, page);
   }
 
   static Future<DiscoverPlaylistPage> _fetchList(
@@ -130,7 +126,8 @@ class WySongList {
     String tagId,
     int page,
   ) {
-    return retryRequest(
+    return BuiltinSearch.transport.cachedRetry(
+      'wy:playlists:$sortId:$tagId:$page',
       maxTries: 3,
       attempt: (_) async {
         final body = await lxHttpPost(
@@ -339,11 +336,7 @@ class WySongList {
     int page, {
     int limit = 20,
   }) {
-    final key = 'wy:playlist-search:$text:$page:$limit';
-    return BuiltinSearch.transport.cached(
-      key,
-      () => _fetchSearch(text, page, limit),
-    );
+    return _fetchSearch(text, page, limit);
   }
 
   static Future<DiscoverPlaylistPage> _fetchSearch(
@@ -351,7 +344,8 @@ class WySongList {
     int page,
     int limit,
   ) {
-    return retryRequest(
+    return BuiltinSearch.transport.cachedRetry(
+      'wy:playlist-search:$text:$page:$limit',
       maxTries: 3,
       attempt: (_) async {
         final body = await lxHttpPost(

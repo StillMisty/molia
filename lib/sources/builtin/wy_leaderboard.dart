@@ -2,7 +2,6 @@ import '../../domain/models/discover.dart';
 import '../source_track.dart';
 import 'builtin_search.dart';
 import 'crypto_utils.dart';
-import 'discover_fetch.dart';
 import 'wy_music_detail.dart';
 
 /// 网易云排行榜（移植自 lx-music-mobile `wy/leaderboard.js`）。
@@ -89,15 +88,13 @@ class WyLeaderboard {
 
   /// 榜单曲目（带 5 分钟缓存；[bangid] 为榜单 id，如 `3778678`）。
   static Future<List<SourceTrack>> getTracks(String bangid) {
-    return BuiltinSearch.transport.cached(
-      'wy:leaderboard:$bangid',
-      () => _fetch(bangid),
-    );
+    return _fetch(bangid);
   }
 
   /// 与 LX 一致：详情失败重试至多 6 次，歌曲详情失败同样重试。
   static Future<List<SourceTrack>> _fetch(String bangid) {
-    return retryRequest(
+    return BuiltinSearch.transport.cachedRetry(
+      'wy:leaderboard:$bangid',
       maxTries: 6,
       attempt: (_) async {
         dynamic body;

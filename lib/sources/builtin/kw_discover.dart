@@ -84,14 +84,12 @@ class KwDiscoverSource extends DiscoverSource {
 
   @override
   Future<List<DiscoverTrack>> leaderboardTracks(String bangid) {
-    return BuiltinSearch.transport.cached(
-      'kw:leaderboard:$bangid',
-      () => _fetchLeaderboard(bangid),
-    );
+    return _fetchLeaderboard(bangid);
   }
 
   static Future<List<DiscoverTrack>> _fetchLeaderboard(String bangid) {
-    return retryRequest(
+    return BuiltinSearch.transport.cachedRetry(
+      'kw:leaderboard:$bangid',
       maxTries: 4,
       attempt: (_) async {
         final body = {
@@ -224,16 +222,15 @@ class KwDiscoverSource extends DiscoverSource {
 
   @override
   Future<DiscoverPlaylistPage> playlists(String tagId, int page) {
-    return BuiltinSearch.transport.cached('kw:playlists:$tagId:$page', () {
-      return tagId.isEmpty
-          ? _fetchRecommend(page)
-          : _fetchTagPlaylist(tagId, page);
-    });
+    return tagId.isEmpty
+        ? _fetchRecommend(page)
+        : _fetchTagPlaylist(tagId, page);
   }
 
   /// 推荐歌单（LX 默认排序 = 最新）。
   static Future<DiscoverPlaylistPage> _fetchRecommend(int page) {
-    return retryRequest(
+    return BuiltinSearch.transport.cachedRetry(
+      'kw:playlists::$page',
       maxTries: 3,
       attempt: (_) async {
         final body = await lxHttpGet(
@@ -281,7 +278,8 @@ class KwDiscoverSource extends DiscoverSource {
     String tagId,
     int page,
   ) {
-    return retryRequest(
+    return BuiltinSearch.transport.cachedRetry(
+      'kw:playlists:$tagId:$page',
       maxTries: 3,
       attempt: (_) async {
         final parts = tagId.split('-');
@@ -520,11 +518,12 @@ class KwDiscoverSource extends DiscoverSource {
 
   @override
   Future<List<String>> hotSearches() {
-    return BuiltinSearch.transport.cached('kw:hot-search', _fetchHotSearch);
+    return _fetchHotSearch();
   }
 
   static Future<List<String>> _fetchHotSearch() {
-    return retryRequest(
+    return BuiltinSearch.transport.cachedRetry(
+      'kw:hot-search',
       maxTries: 3,
       attempt: (_) async {
         final body = await lxHttpGet(

@@ -60,6 +60,14 @@ Future<void> _expectStateError(
   }
 }
 
+/// 同一 transport 的二次调用必须命中缓存（迁移不能把缓存层弄丢）。
+Future<void> _expectCacheHit(_Stub stub, Future<Object?> Function() run) async {
+  stub.install();
+  final before = stub.requests.length;
+  await run();
+  expect(stub.requests, hasLength(before), reason: '二次调用应命中缓存');
+}
+
 /// 酷我 wbd 接口响应需 AES-128-ECB/PKCS7 加密（与适配器解码对称）。
 String _kwWbdResponse(String plainJson) {
   final cipher = LxNativeUtils.aesEncrypt(
@@ -126,6 +134,7 @@ void main() {
       expect(tracks.single.songId, '933');
       expect(tracks.single.durationMs, 212000);
       expect(ok.requests.single.host, 'wbd.kuwo.cn');
+      await _expectCacheHit(ok, () => source.leaderboardTracks('93'));
 
       final bad = _Stub({'bang/bang_info': 'not-base64'});
       await _expectStateError(
@@ -207,6 +216,8 @@ void main() {
       final t = await source.playlists('100-10000', 1);
       expect(t.playlists.single.name, '歌单');
       expect(t.total, 1);
+      await _expectCacheHit(recommend, () => source.playlists('', 1));
+      await _expectCacheHit(tag, () => source.playlists('100-10000', 1));
 
       final bad = _Stub({'getTagPlayList': '{"code":1}'});
       await _expectStateError(
@@ -305,6 +316,7 @@ void main() {
       });
       ok.install();
       expect(await source.hotSearches(), ['热词一', '热词二']);
+      await _expectCacheHit(ok, () => source.hotSearches());
 
       final bad = _Stub({'hotword.kuwo.cn': '{"status":"no"}'});
       await _expectStateError(bad, () => source.hotSearches(), attempts: 3);
@@ -345,6 +357,7 @@ void main() {
       expect(tracks.single.artist, '梁静茹');
       expect(tracks.single.songId, '88');
       expect(ok.requests.single.host, 'mobilecdnbj.kugou.com');
+      await _expectCacheHit(ok, () => source.leaderboardTracks('8888'));
 
       final bad = _Stub({'api/v3/rank/song': '{"errcode":1}'});
       await _expectStateError(
@@ -632,6 +645,8 @@ void main() {
       category.install();
       final c = await source.playlists('3317', 1);
       expect(c.playlists.single.id, '1');
+      await _expectCacheHit(recommend, () => source.playlists('', 1));
+      await _expectCacheHit(category, () => source.playlists('3317', 1));
 
       final bad = _Stub({'musicu.fcg': '{"code":1}'});
       await _expectStateError(
@@ -724,6 +739,7 @@ void main() {
       });
       ok.install();
       expect(await source.hotSearches(), ['热词']);
+      await _expectCacheHit(ok, () => source.hotSearches());
 
       final bad = _Stub({'musicu.fcg': '{"code":1}'});
       await _expectStateError(bad, () => source.hotSearches(), attempts: 3);
@@ -771,6 +787,7 @@ void main() {
       expect(tracks.single.artist, '周深');
       expect(tracks.single.durationMs, 312000);
       expect(ok.requests.single.host, 'app.c.nf.migu.cn');
+      await _expectCacheHit(ok, () => source.leaderboardTracks('27186466'));
 
       final bad = _Stub({'querycontentbyId.do': '{"code":"1"}'});
       await _expectStateError(
@@ -836,6 +853,8 @@ void main() {
       tag.install();
       final t = await source.playlists('1000001672', 1);
       expect(t.playlists.single.name, '歌单二');
+      await _expectCacheHit(recommend, () => source.playlists('', 1));
+      await _expectCacheHit(tag, () => source.playlists('1000001672', 1));
 
       final bad = _Stub({'musiclistplaza-listbytag': '{"code":"1"}'});
       await _expectStateError(
@@ -949,6 +968,7 @@ void main() {
       });
       ok.install();
       expect(await source.hotSearches(), ['热词']);
+      await _expectCacheHit(ok, () => source.hotSearches());
 
       final bad = _Stub({'hotword': '{"code":"1"}'});
       await _expectStateError(bad, () => source.hotSearches(), attempts: 3);
@@ -1004,6 +1024,7 @@ void main() {
       expect(tracks.single.songId, '1');
       expect(tracks.single.durationMs, 180000);
       expect(ok.requests, hasLength(2));
+      await _expectCacheHit(ok, () => source.leaderboardTracks('3778678'));
 
       final bad = _Stub({'weapi/v3/playlist/detail': '{"code":1}'});
       await _expectStateError(
@@ -1067,6 +1088,7 @@ void main() {
       expect(page.playlists.single.id, '1');
       expect(page.playlists.single.createdAt, isNotNull);
       expect(page.total, 1);
+      await _expectCacheHit(ok, () => source.playlists('', 1));
 
       final bad = _Stub({'weapi/playlist/list': '{"code":1}'});
       await _expectStateError(bad, () => source.playlists('', 1), attempts: 3);
@@ -1094,6 +1116,7 @@ void main() {
       final page = await source.searchPlaylists('周', 1);
       expect(page.playlists.single.name, '歌单');
       expect(page.total, 1);
+      await _expectCacheHit(ok, () => source.searchPlaylists('周', 1));
 
       final bad = _Stub({'eapi/batch': '{"code":1}'});
       await _expectStateError(
