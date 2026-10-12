@@ -79,11 +79,11 @@ include(flutter/generated_plugins.cmake)
 # By default, "installing" just makes a relocatable bundle in the build
 # directory.
 set(BUILD_BUNDLE_DIR "${PROJECT_BINARY_DIR}/bundle")
-# flutter_js 的 Linux CMake 在插件配置阶段把自己的 BUILD_BUNDLE_DIR
-# （plugins/flutter_js/bundle）FORCE 进 CMAKE_INSTALL_PREFIX 缓存，导致
-# 应用自身的 install 目标全部落到插件目录、真正的 bundle 不生成。
-# 这里无条件把安装前缀拉回应用 bundle（比 upstream 的「仅默认值」判断更强），
-# 否则干净构建下 flutter test -d linux / flutter run 找不到可执行文件。
+# 无条件把安装前缀拉回应用 bundle（比 upstream 的「仅默认值」判断更强）。
+# 防御性：某些插件的 Linux CMake 会在配置阶段把自己的 BUILD_BUNDLE_DIR
+# FORCE 进 CMAKE_INSTALL_PREFIX 缓存，导致应用自身的 install 目标全部落到
+# 插件目录、真正的 bundle 不生成；干净构建下 flutter test -d linux /
+# flutter run 会找不到可执行文件。
 set(CMAKE_INSTALL_PREFIX "${BUILD_BUNDLE_DIR}" CACHE PATH "..." FORCE)
 
 # Start with a clean build bundle directory every time.
@@ -108,19 +108,6 @@ foreach(bundled_library ${PLUGIN_BUNDLED_LIBRARIES})
     DESTINATION "${INSTALL_BUNDLE_LIB_DIR}"
     COMPONENT Runtime)
 endforeach(bundled_library)
-
-# flutter_js 的上游 Linux CMake 将 bundled libraries 变量命名为
-# flutter_qjs_bundled_libraries（Flutter 只识别 flutter_js_bundled_libraries），
-# 且引用了不存在的 generator 目标，导致其预编译的 QuickJS 桥接库
-# （linux/shared/libquickjs_c_bridge_plugin.so）不会被打进 bundle。
-# 这里显式补一条安装规则，否则运行时 DynamicLibrary.open 会失败。
-set(FLUTTER_JS_QUICKJS_BRIDGE
-  "${CMAKE_CURRENT_SOURCE_DIR}/flutter/ephemeral/.plugin_symlinks/flutter_js/linux/shared/libquickjs_c_bridge_plugin.so")
-if(EXISTS "${FLUTTER_JS_QUICKJS_BRIDGE}")
-  install(FILES "${FLUTTER_JS_QUICKJS_BRIDGE}"
-    DESTINATION "${INSTALL_BUNDLE_LIB_DIR}"
-    COMPONENT Runtime)
-endif()
 
 # Copy the native assets provided by the build.dart from all packages.
 set(NATIVE_ASSETS_DIR "${PROJECT_BUILD_DIR}native_assets/linux/")
