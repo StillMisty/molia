@@ -886,6 +886,15 @@ class _BarRevealTransition extends StatelessWidget {
 /// 隐藏原生标题栏后由它承担系统按钮职责；其余平台整组不构建，
 /// 顶栏与改动前逐像素一致。图标随 [WindowChrome.maximized] 切换
 /// （最大化时显示「还原」），关闭按钮保持标准样式、不做危险色。
+///
+/// 三键与旁边应用按钮**同规格**（M3E `sm` 档：24 图标 / 40 视觉格 /
+/// 48 触控目标），不做桌面风格的紧凑化——顶部一排按钮观感统一优先；
+/// 与应用操作之间用一段短竖线分界，右侧贴窗口角，保留「窗口控制」的
+/// 识别度。
+///
+/// 字形选型：最小化用 [Icons.remove_rounded]（居中横线）而不是
+/// [Icons.minimize_rounded]——后者是 Material 的「下沉横线」设计，
+/// 笔画中心比同排的方形 / 叉低 6/24，看上去像没对齐。
 class _WindowControls extends StatelessWidget {
   const _WindowControls();
 
@@ -895,10 +904,19 @@ class _WindowControls extends StatelessWidget {
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
+        // 与左侧应用操作分界的短竖线（上下各留 10dp，长度约 36dp）。
+        const Padding(
+          padding: EdgeInsets.symmetric(horizontal: 8),
+          child: M3EDivider(
+            axis: M3EDividerAxis.vertical,
+            indent: 10,
+            endIndent: 10,
+          ),
+        ),
         M3EIconButton(
           variant: M3EIconButtonVariant.standard,
           tooltip: l10n.windowMinimize,
-          icon: const Icon(Icons.minimize_rounded),
+          icon: const Icon(Icons.remove_rounded),
           onPressed: WindowChrome.minimize,
         ),
         ValueListenableBuilder<bool>(
@@ -912,6 +930,9 @@ class _WindowControls extends StatelessWidget {
                 maximized
                     ? Icons.filter_none_rounded
                     : Icons.crop_square_rounded,
+                // 20 而不是 24：Material 的方形/双方形字形更实（16dp 笔画），
+                // 与 24 档的叉（12dp）并排时显得重；20 档≈13dp 与叉对齐。
+                size: 20,
               ),
             ),
             onPressed: WindowChrome.toggleMaximize,
