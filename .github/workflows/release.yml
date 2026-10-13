@@ -1,0 +1,359 @@
+name: Release
+
+# 推 `v*` tag 触发：矩阵构建 → 汇总产物 + sha256 + latest.json → GitHub Release。
+# 版本约定（见 docs/release.md）：
+#   稳定版 v1.2.3 / 测试版 v1.2.3-beta.1（发布为 prerelease）
+#   打 tag 前必须先把 pubspec.yaml 的版本改成同一个版本号。
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  PUB_HOSTED_URL: https://pub.flutter-io.cn
+
+jobs:
+  prepare:
+    name: 解析 tag / 校验版本
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.parse.outputs.version }}
+      channel: ${{ steps.parse.outputs.channel }}
+      prerelease: ${{ steps.parse.outputs.prerelease }}
+      build: ${{ steps.parse.outputs.build }}
+    steps:
+      - uses: actions/checkout@v4
+      - id: parse
+        run: |
+          set -euo pipefail
+          tag="$GITHUB_REF_NAME"
+          if [[ ! "$tag" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.]+)?$ ]]; then
+            echo "::error::tag 必须是 v1.2.3 或 v1.2.3-beta.1 形式：$tag"
+            exit 1
+          fi
+          version="${tag#v}"
+          pubspec="$(sed -n 's/^version:[[:space:]]*\([^+]*\).*/\1/p' pubspec.yaml | head -1)"
+          if [[ "$version" != "$pubspec" ]]; then
+            echo "::error::tag（$version）与 pubspec.yaml（$pubspec）不一致：先把 pubspec.yaml 改成 $version 再打 tag"
+            exit 1
+          fi
+          channel=stable
+          prerelease=false
+          if [[ "$version" == *-* ]]; then
+            channel=beta
+            prerelease=true
+          fi
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "channel=$channel" >> "$GITHUB_OUTPUT"
+          echo "prerelease=$prerelease" >> "$GITHUB_OUTPUT"
+          # 构建号与 Android versionCode 同源：run_number 单调递增，
+          # 保证覆盖安装与「有新版本」判定可靠。
+          echo "build=$GITHUB_RUN_NUMBER" >> "$GITHUB_OUTPUT"
+
+  android:
+    name: Android APK / AAB
+    needs: prepare
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "26"
+      - uses: android-actions/setup-android@v3
+      - name: SDK 许可 + NDK
+        run: |
+          yes | sdkmanager --licenses > /dev/null || true
+          sdkmanager --install "ndk;30.0.16248370"
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: 3.47.6
+          channel: stable
+          cache: true
+      - name: 还原签名（Secrets，见 docs/release.md）
+        env:
+          KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          STORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+        run: |
+          set -euo pipefail
+          if [[ -z "${KEYSTORE_BASE64:-}" ]]; then
+            echo "::error::缺少 ANDROID_KEYSTORE_BASE64（docs/release.md 的 secrets 清单）"
+            exit 1
+          fi
+          echo "$KEYSTORE_BASE64" | base64 -d > android/molia-release.jks
+          cat > android/key.properties <<EOF
+          storePassword=$STORE_PASSWORD
+          keyPassword=$KEY_PASSWORD
+          keyAlias=$KEY_ALIAS
+          storeFile=../molia-release.jks
+          EOF
+      - name: pub get
+        run: flutter pub get --enforce-lockfile
+      - name: 构建 APK / AAB
+        run: |
+          set -euo pipefail
+          flags=(
+            --release
+            --build-name "${{ needs.prepare.outputs.version }}"
+            --build-number "${{ needs.prepare.outputs.build }}"
+          )
+          flutter build apk "${flags[@]}" --split-per-abi \
+            --split-debug-info=build/symbols \
+            --obfuscate \
+            --extra-gen-snapshot-options=--strip
+          flutter build appbundle "${flags[@]}"
+      - name: 归一名产物
+        run: |
+          set -euo pipefail
+          v="${{ needs.prepare.outputs.version }}"
+          mkdir -p dist
+          cp build/app/outputs/flutter-apk/app-armeabi-v7a-release.apk "dist/molia-$v-android-armv7.apk"
+          cp build/app/outputs/flutter-apk/app-arm64-v8a-release.apk "dist/molia-$v-android-arm64.apk"
+          cp build/app/outputs/flutter-apk/app-x86_64-release.apk "dist/molia-$v-android-x86_64.apk"
+          cp build/app/outputs/bundle/release/app-release.aab "dist/molia-$v-android.aab"
+          (cd build/symbols && zip -qr "$GITHUB_WORKSPACE/dist/molia-$v-android-symbols.zip" .)
+      - uses: actions/upload-artifact@v4
+        with:
+          name: release-android
+          path: dist/*
+          if-no-files-found: error
+
+  windows:
+    name: Windows x64
+    needs: prepare
+    runs-on: windows-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: 3.47.6
+          channel: stable
+          cache: true
+      - name: pub get
+        run: flutter pub get --enforce-lockfile
+      - name: 构建 + 打包
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          $v = "${{ needs.prepare.outputs.version }}"
+          flutter build windows --release `
+            --build-name "$v" --build-number "${{ needs.prepare.outputs.build }}"
+          $stage = "dist/molia-$v-windows-x64"
+          New-Item -ItemType Directory -Force -Path $stage | Out-Null
+          Copy-Item -Recurse -Force "build/windows/x64/runner/Release/*" $stage
+          Compress-Archive -Path $stage -DestinationPath "dist/molia-$v-windows-x64.zip" -Force
+      - uses: actions/upload-artifact@v4
+        with:
+          name: release-windows
+          path: dist/*.zip
+          if-no-files-found: error
+
+  linux:
+    name: Linux x64
+    needs: prepare
+    # 22.04 构建以兼容更老的 glibc；运行仍需系统 libmpv（见 docs/release.md）。
+    runs-on: ubuntu-22.04
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - name: 系统依赖
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends libgtk-3-dev ninja-build libglu1-mesa
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: 3.47.6
+          channel: stable
+          cache: true
+      - name: pub get
+        run: flutter pub get --enforce-lockfile
+      - name: 构建 + 打包
+        run: |
+          set -euo pipefail
+          v="${{ needs.prepare.outputs.version }}"
+          flutter build linux --release \
+            --build-name "$v" --build-number "${{ needs.prepare.outputs.build }}"
+          stage="dist/molia-$v-linux-x64"
+          mkdir -p "$stage"
+          cp -a build/linux/x64/release/bundle/. "$stage"/
+          tar -czf "dist/molia-$v-linux-x64.tar.gz" -C dist "molia-$v-linux-x64"
+          rm -rf "$stage"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: release-linux
+          path: dist/*.tar.gz
+          if-no-files-found: error
+
+  web:
+    name: Web
+    needs: prepare
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: 3.47.6
+          channel: stable
+          cache: true
+      - name: pub get
+        run: flutter pub get --enforce-lockfile
+      - name: 构建（GitHub Pages 子路径）
+        run: |
+          set -euo pipefail
+          v="${{ needs.prepare.outputs.version }}"
+          flutter build web --release --base-href /molia/ \
+            --build-name "$v" --build-number "${{ needs.prepare.outputs.build }}"
+          mkdir -p dist
+          (cd build/web && zip -qr "$GITHUB_WORKSPACE/dist/molia-$v-web.zip" .)
+      - uses: actions/upload-artifact@v4
+        with:
+          name: release-web
+          path: dist/*.zip
+          if-no-files-found: error
+      # Pages 部署用原始目录（含 index.html 与 flutter_service_worker.js）。
+      - uses: actions/upload-artifact@v4
+        with:
+          name: web-site
+          path: build/web
+          if-no-files-found: error
+
+  ios:
+    name: iOS（无签名校验）
+    needs: prepare
+    runs-on: macos-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: 3.47.6
+          channel: stable
+          cache: true
+      - name: pub get
+        run: flutter pub get --enforce-lockfile
+      - name: 构建（无签名；只验证可编译，产物仅供侧载）
+        run: |
+          set -euo pipefail
+          v="${{ needs.prepare.outputs.version }}"
+          flutter build ios --release --no-codesign \
+            --build-name "$v" --build-number "${{ needs.prepare.outputs.build }}"
+          mkdir -p dist
+          (cd build/ios/iphoneos && zip -qry "$GITHUB_WORKSPACE/dist/molia-$v-ios-unsigned.zip" Runner.app)
+      - uses: actions/upload-artifact@v4
+        with:
+          name: release-ios
+          path: dist/*.zip
+          if-no-files-found: error
+
+  publish:
+    name: 发布 Release + latest.json
+    needs: [prepare, android, windows, linux, web, ios]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: release-*
+          merge-multiple: true
+          path: dist
+      - name: 生成发布说明
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          gh api --method POST "repos/$GITHUB_REPOSITORY/releases/generate-notes" \
+            -f tag_name="$GITHUB_REF_NAME" --jq .body > notes.md
+      - name: 生成更新清单 latest.json
+        run: |
+          set -euo pipefail
+          python3 tool/ci/gen_update_manifest.py \
+            --repo "$GITHUB_REPOSITORY" \
+            --tag "$GITHUB_REF_NAME" \
+            --version "${{ needs.prepare.outputs.version }}" \
+            --build "${{ needs.prepare.outputs.build }}" \
+            --channel "${{ needs.prepare.outputs.channel }}" \
+            --published-at "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+            --notes-file notes.md \
+            --assets-dir dist \
+            --output dist/latest.json
+      - name: 校验和
+        run: |
+          cd dist && sha256sum molia-* > SHA256SUMS.txt
+      - name: 创建 Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          args=(
+            "$GITHUB_REF_NAME"
+            --title "Molia ${{ needs.prepare.outputs.version }}"
+            --notes-file notes.md
+          )
+          if [[ "${{ needs.prepare.outputs.prerelease }}" == "true" ]]; then
+            args+=(--prerelease)
+          fi
+          gh release create "${args[@]}" dist/molia-* dist/latest.json dist/SHA256SUMS.txt
+      - name: 更新测试渠道滚动清单（beta tag）
+        if: needs.prepare.outputs.channel == 'beta'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          # 固定 tag `beta` 指向最新测试版：客户端取
+          # releases/download/beta/latest.json，无需 GitHub API。
+          gh release delete beta --cleanup-tag --yes || true
+          mkdir -p beta-dist
+          cp dist/latest.json beta-dist/
+          gh release create beta \
+            --target "$GITHUB_SHA" \
+            --prerelease \
+            --title "Beta channel" \
+            --notes "测试渠道滚动清单（latest.json 指向最新测试版）。" \
+            beta-dist/latest.json
+      # Pages 部署需要稳定版清单与 Web 目录，单独传给部署 job。
+      - uses: actions/upload-artifact@v4
+        if: needs.prepare.outputs.channel == 'stable'
+        with:
+          name: latest-json
+          path: dist/latest.json
+          if-no-files-found: error
+
+  deploy-pages:
+    name: 部署 Web（GitHub Pages）
+    needs: [prepare, publish, web]
+    if: needs.prepare.outputs.channel == 'stable'
+    runs-on: ubuntu-latest
+    permissions:
+      # 下载构建产物需要 actions: read；Pages 部署需要 pages/id-token。
+      actions: read
+      contents: read
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: web-site
+          path: site
+      - uses: actions/download-artifact@v4
+        with:
+          name: latest-json
+          path: site
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: site
+      - id: deployment
+        uses: actions/deploy-pages@v4
