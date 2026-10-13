@@ -13,7 +13,8 @@
   `drift_dev make-migrations`。
 - **集成测试需要显示环境**：跑 `flutter test integration_test/... -d linux` 必须有 DISPLAY
   （官方要求，无显示时 App 起不来）；CI/无头环境用 `xvfb-run -a` 包装
-  （`tool/agent/test.sh linux` 会自动检测并套上）。
+  （`tool/agent/test.sh linux` 会自动检测并套上；缺命令时
+  `sudo pacman -S xorg-server-xvfb`）。
 
 ## WSL 安卓调试（模拟器 / 热重载 / 截图）
 

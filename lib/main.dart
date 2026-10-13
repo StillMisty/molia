@@ -491,7 +491,15 @@ void main() async {
     transports: {'lan': lanSyncTransport, 'webdav': webdavSyncTransport},
   );
   final syncProvider = SyncProvider(engine: syncEngine);
-  await syncProvider.init();
+  // 可选子系统（跨设备同步）初始化失败不允许阻断启动：runApp 之前任何
+  // 未捕获异常都会让桌面端停在「窗口已显示但没有首帧」的黑窗状态。
+  // 口令读取失败已在 SecureSettingsSecretStore 内降级为「未设置」，
+  // 这里再兜一层其它初始化异常（日志 + 继续，同步页表现为未配置）。
+  try {
+    await syncProvider.init();
+  } catch (e) {
+    debugPrint('[Molia] 同步初始化失败（继续启动）: $e');
+  }
   // 数据变更 → 去抖同步（资料库 / 统计 / 音源配置）；前台恢复补一轮；
   // 运行期间每 10 分钟一轮（局域网对端在线时也能收敛）。
   libraryRepository.changes.listen((_) => syncProvider.scheduleSync());

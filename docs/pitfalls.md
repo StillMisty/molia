@@ -151,9 +151,25 @@
     `window_chrome.dart` 的条件导出（stub/io，同 `system_fonts_service.dart` 模式），
     全仓库只有 `window_chrome_io.dart` 一处 import 该包。
     `TitleBarStyle.hidden` 之后系统标题栏与系统按钮都不复存在，窗口拖动只能靠
-    UI 侧的 `WindowDragArea`（已包在壳层顶栏外层）——不要在别处再隐藏标题栏，
-    也不要把顶栏的拖动区摘掉，否则窗口再也拖不动。
+     UI 侧的 `WindowDragArea`（已包在壳层顶栏外层）——不要在别处再隐藏标题栏，
+     也不要把顶栏的拖动区摘掉，否则窗口再也拖不动。
     另：`flutter test` 跑在 Linux VM，`WindowChrome.isSupported` 为 true 属预期
     （单测里顶栏会构建出三个窗口按钮，但按钮本身不发起插件调用）；除
     `ensureInitialized()`（仅 `main()` 与集成测试调用）外，任何构建期/测试期路径
     都不得调用插件 API，否则撞 `MissingPluginException`。
+31. **Linux 无系统钥匙串时 `flutter_secure_storage` 会抛异常，读取必须容错**：
+    WSLg / 容器 / 无 keyring 的最小桌面没有 `org.freedesktop.secrets`，
+    libsecret 抛 `PlatformException(Libsecret error, ... is not activatable)`。
+    `SyncProvider.init()`（`runApp` 之前）读同步口令时会直接撞上：
+    未捕获 → `main()` 在 `runApp` 前终止 → **窗口已由 window_manager 显示、
+    但没有首帧，表现为永久黑窗（进程还活着）**。现在的契约：
+    `SecureSettingsSecretStore.read` 把读取失败降级为「未设置」（返回 null +
+    只记一次日志），`main.dart` 再兜一层包住 `syncProvider.init()`。
+    新增任何「读安全存储」的路径都要遵守这条：可选子系统的故障不能阻断启动；
+    写入/删除仍保持抛出（用户主动操作要知道失败）。
+32. **`build/linux/x64/debug/bundle` 可能是 `flutter test` 的产物，不是应用**：
+    跑过 `flutter test integration_test/... -d linux` 之后，该目录里的可执行文件
+    入口是测试 listener（VM Service `rootLib` 是 `flutter_test_listener.dart`），
+    单独运行它不执行应用 `main()`——不渲染、窗口不出现，容易误判成「桌面端坏了」。
+    手工验证桌面端用 `flutter run -d linux` 或先 `flutter build linux --debug`
+    再跑 bundle（`tool/agent/test.sh linux` 会自行重建，不影响它）。
