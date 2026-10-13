@@ -28,6 +28,8 @@ tool/agent/app.sh reload   # 热重载；restart = 热重启（无 TTY 走 --pid
 tool/agent/app.sh status   # pid / 设备 / VM Service / 日志路径
 tool/agent/shot.sh [name]  # 截图 → /tmp/opencode/molia/shots/*.png（供 agent 直接读图）
 tool/agent/ui.sh layout|tap|swipe|text|key|launch|force-stop
+tool/agent/seed.sh android favorites|history|session|mock-source|status|clear|restore
+                           # 数据注入：收藏 / 最近播放 / 恢复会话 / mock 音源（见下）
 tool/agent/test.sh android # 集成测试（官方 flutter test 路径；自动构建/安装 debug APK，跑完卸载）
 tool/agent/emu.sh stop     # 停止模拟器（app.sh stop 只停 flutter run）
 ```
@@ -41,6 +43,31 @@ tool/agent/emu.sh stop     # 停止模拟器（app.sh stop 只停 flutter run）
 - Flutter semantics 节点可能不完整：视觉定位用 `shot.sh --annotate` 生成带编号标注的截图，
   再用 `ui.sh resolve 截图.png "#3"` 解析为 `tap X Y`。
 - 输入文本前确保输入框已聚焦（`ui.sh text` 把空格转成 `%s`）。
+
+### 数据注入（seed.sh）
+
+`tool/agent/seed.sh <android|linux> <command>` 把「手工造数据」固化成可复用脚本
+（bash + python3 + adb；写入前自动备份到 `/tmp/opencode/molia/seed-backup/latest`）：
+
+```bash
+tool/agent/seed.sh android favorites 3   # 注入 __favorites__ + 3 首固定样例（含超长标题）
+tool/agent/seed.sh android history 5     # 注入最近播放 5 条
+tool/agent/seed.sh android session       # 写恢复会话（3 首 mock 曲目 / 下标 1 / 进度 20s）
+tool/agent/seed.sh android mock-source   # 生成 mock LX 脚本 + WAV，起宿主机 http 服务并激活音源
+tool/agent/seed.sh android lang zh       # 切换应用语言（截图对照用；system = 跟随系统）
+tool/agent/seed.sh android status        # 三份数据的位置与摘要
+tool/agent/seed.sh android clear         # 清掉注入的收藏/历史/会话
+tool/agent/seed.sh android restore       # 用最近一次备份还原（第一次注入前的状态）
+```
+
+- `mock-source` 的音频 URL 在 Android 上用 `127.0.0.1:<port>` + `adb reverse`
+  （模拟器 NAT 的 `10.0.2.2` 在应用进程内实测会连接超时）、Linux 用 `127.0.0.1:<port>`；
+  脚本直接写 `lx_sources.json` 并置 activeId（绕开应用内 Import from URL）。
+- Android 写入前自动 `force-stop`（SharedPreferences 有内存缓存，运行中写入会被覆盖）；
+  Linux 请先退出应用，且会改动 `~/.local/share/top.stillmisty.molia/` 下的真实数据。
+- 数据位置：Android `/data/data/top.stillmisty.molia/{app_flutter/molia_database.sqlite,
+  shared_prefs/FlutterSharedPreferences.xml, files/lx_sources.json}`；
+  Linux `~/.local/share/top.stillmisty.molia/`（DB 优先 xdg 文档目录）。
 
 ### Android 集成测试
 
