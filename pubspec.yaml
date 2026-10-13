@@ -36,7 +36,7 @@ dependencies:
   dynamic_color: ^2.1.0
   gal: ^2.3.3
   animations: ^3.0.0
-  flutter_js: ^0.8.7
+  flutter_qjs_next: ^1.5.2
   connectivity_plus: ^7.3.2
   just_audio: ^0.10.6
   just_audio_media_kit: ^2.1.0

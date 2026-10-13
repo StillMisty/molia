@@ -58,7 +58,7 @@ lib/sources/
     lx_script_repository.dart# 脚本持久化（应用支持目录 lx_sources.json；replace 原地更新）
     lx_script_update.dart    # 在线检查/更新：下载（10s/1MB 上限）+ 校验 + HTML 识别
     lx_engine.dart           # 引擎入口（Web 平台为占位实现）
-    lx_engine_native.dart    # isolate + flutter_js（QuickJS/JSC）实现
+    lx_engine_native.dart    # isolate + flutter_qjs_next（QuickJS）实现
     lx_engine_supervisor.dart# 状态机 + 退避重启（0.5s/2s/8s，连续 3 次 → failed）
     lx_native_utils.dart     # 同步工具：md5 / AES / RSA NoPadding / randomBytes / zlib
   any_listen/                # any-listen 适配（配置 / API / 错误模型；HTTP 占位，官方为 WS IPC）
@@ -75,7 +75,7 @@ lib/playback/
 
 - 脚本在**独立 isolate** 中运行，出现死循环 / 超时可整体 kill 恢复；
 - JS → Dart 使用 `sendMessage('lx', JSON)`，Dart → JS 使用 `__lxDeliver(...)`；
-- `lx.utils.crypto / buffer / zlib` 通过 flutter_js 的 JSInvokable 机制**同步**绑定到 Dart
+- `lx.utils.crypto / buffer / zlib` 通过 flutter_qjs_next 的 JSInvokable 机制**同步**绑定到 Dart
   （pointycastle + dart:io zlib），行为经 Node.js crypto 向量单测校验；
 - 宿主↔脚本：`globalThis.lx.on('request'|'inited'|'updateAlert')`、`lx.send(...)`、
   `lx.request(url, options, cb)`；支持 `request`（method/headers/body/form/formData/timeout/
@@ -90,7 +90,13 @@ lib/playback/
   （`atob/btoa/TextEncoder/setTimeout/window/navigator` 等）也加在这里；
 - **自愈监督**：`LxEngineSupervisor` 崩溃后自动退避重启并重放同一脚本，重启成功刷新
   `activeSources`（修复「引擎已死但源列表还在」）；连续失败进入 `failed` 停用；
-- **请求缓存**：搜索 5min、取链 10min（失败不缓存，single-flight 并发去重）。
+- **请求缓存**：搜索 5min、取链 10min（失败不缓存，single-flight 并发去重）；
+- **引擎选型**：JS 运行时为 flutter_qjs_next（QuickJS），替换 flutter_js。依据：与 flutter_js
+  API 同源同名（`getJavascriptRuntime` / `JsEvalResult` / `JSInvokable`）可逐点平移；
+  JSInvokable 是**同步** FFI 调用，满足脚本侧 `lx.utils.crypto` 的同步语义（fjs 仅异步
+  bridge、lemon_js API 不同，均不兼容）；Linux / Android 原生库由包自身 CMake 打包，
+  Android 的 QuickJS 由本仓库 NDK 从源码编译（arm64 实测 16 KB 页对齐）；显式传
+  `memoryLimit = 64 MiB`（与包默认值一致）为不可信脚本兜底。
 
 ### any-listen 预留
 
@@ -114,8 +120,8 @@ lib/playback/
   - 工程工具链：Gradle 9.8.1 + AGP 9.4.1 + Kotlin 2.4.21 + JDK 27（Flutter 3.47.6 stable），
     `compileSdk/targetSdk/minSdk = 37`、NDK r30、Java/Kotlin 字节码 target 26（Kotlin 2.4.x JvmTarget 上限）
   - 注意：`minSdk = 37` 意味着只有 Android 17 及以上设备可安装此构建
-  - flutter_js 在 Linux 的上游 CMake 存在 bundled library 变量名错误，
-    `linux/CMakeLists.txt` 中已显式补装 `libquickjs_c_bridge_plugin.so`（引擎必需）
+  - JS 运行时为 flutter_qjs_next（QuickJS），Linux / Android 原生库由包自身 CMake 打包
+    （Linux bundle 实测含 `libflutter_qjs_next_plugin.so`，无需仓库补丁）
 
 改动引擎/音源的完整验证清单：
 

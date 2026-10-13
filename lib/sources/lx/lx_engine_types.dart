@@ -1,4 +1,4 @@
-/// LX 引擎通用类型（Web 与原生共用，不依赖 dart:io / flutter_js）。
+/// LX 引擎通用类型（Web 与原生共用，不依赖 dart:io / flutter_qjs_next）。
 library;
 
 class LxEngineException implements Exception {

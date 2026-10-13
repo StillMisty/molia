@@ -8,7 +8,7 @@
 
 #include <connectivity_plus/connectivity_plus_windows_plugin.h>
 #include <dynamic_color/dynamic_color_plugin_c_api.h>
-#include <flutter_js/flutter_js_plugin.h>
+#include <flutter_qjs_next/flutter_qjs_plugin.h>
 #include <flutter_secure_storage_windows/flutter_secure_storage_windows_plugin.h>
 #include <gal/gal_plugin_c_api.h>
 #include <media_kit_libs_windows_audio/media_kit_libs_windows_audio_plugin_c_api.h>
@@ -20,8 +20,8 @@ void RegisterPlugins(flutter::PluginRegistry* registry) {
       registry->GetRegistrarForPlugin("ConnectivityPlusWindowsPlugin"));
   DynamicColorPluginCApiRegisterWithRegistrar(
       registry->GetRegistrarForPlugin("DynamicColorPluginCApi"));
-  FlutterJsPluginRegisterWithRegistrar(
-      registry->GetRegistrarForPlugin("FlutterJsPlugin"));
+  FlutterQjsPluginRegisterWithRegistrar(
+      registry->GetRegistrarForPlugin("FlutterQjsPlugin"));
   FlutterSecureStorageWindowsPluginRegisterWithRegistrar(
       registry->GetRegistrarForPlugin("FlutterSecureStorageWindowsPlugin"));
   GalPluginCApiRegisterWithRegistrar(

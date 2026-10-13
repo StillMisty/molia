@@ -9,7 +9,7 @@ import 'lx_zlib_stub.dart' if (dart.library.io) 'lx_zlib_io.dart' as zlib_impl;
 
 /// 绑定给 LX 脚本的同步工具函数实现。
 ///
-/// 这些函数通过 flutter_js 的 JSInvokable 机制以同步 FFI 调用的形式暴露给 JS，
+/// 这些函数通过 flutter_qjs_next 的 JSInvokable 机制以同步 FFI 调用的形式暴露给 JS，
 /// 因此必须保持同步执行。对应 `globalThis.lx.utils` 中：
 /// - `crypto.md5 / aesEncrypt / rsaEncrypt / randomBytes`
 /// - `zlib.inflate / deflate`
