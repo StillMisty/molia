@@ -145,3 +145,15 @@
     集成测试先构建应用，bundle 内原生库自然可用。若未来单测要真跑引擎，先构建一次
     （如 `flutter build linux --debug`）再以
     `FLUTTER_QJS_NEXT_LIBRARY=<abs>/libflutter_qjs_next_plugin.so flutter test ...` 运行。
+30. **桌面窗口 chrome 只在 `lib/services/window/` 里碰 window_manager**：
+    `window_manager` 的 Dart 代码 import `dart:io`，任何会参与 Web 编译的代码
+    直接 import 它都会让 `flutter build web` 失败；统一经
+    `window_chrome.dart` 的条件导出（stub/io，同 `system_fonts_service.dart` 模式），
+    全仓库只有 `window_chrome_io.dart` 一处 import 该包。
+    `TitleBarStyle.hidden` 之后系统标题栏与系统按钮都不复存在，窗口拖动只能靠
+    UI 侧的 `WindowDragArea`（已包在壳层顶栏外层）——不要在别处再隐藏标题栏，
+    也不要把顶栏的拖动区摘掉，否则窗口再也拖不动。
+    另：`flutter test` 跑在 Linux VM，`WindowChrome.isSupported` 为 true 属预期
+    （单测里顶栏会构建出三个窗口按钮，但按钮本身不发起插件调用）；除
+    `ensureInitialized()`（仅 `main()` 与集成测试调用）外，任何构建期/测试期路径
+    都不得调用插件 API，否则撞 `MissingPluginException`。
