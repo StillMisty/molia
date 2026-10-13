@@ -15,6 +15,9 @@
     <!-- 桌面歌词：悬浮窗（用户在系统设置中单独授权） -->
     <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW"/>
 
+    <!-- 应用内更新：下载 APK 后交给系统安装器（首次需用户在系统里允许未知来源） -->
+    <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES"/>
+
     <application
         android:name=".MoliaApplication"
         android:label="@string/app_name"
@@ -77,6 +80,17 @@
         <meta-data
             android:name="flutterEmbedding"
             android:value="2" />
+
+        <!-- 应用内更新：把 cache/updates 下的 APK 授权给系统安装器读取 -->
+        <provider
+            android:name="androidx.core.content.FileProvider"
+            android:authorities="${applicationId}.fileprovider"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/file_paths" />
+        </provider>
 
         <receiver android:name=".MusicWidget" android:exported="true">
             <intent-filter>

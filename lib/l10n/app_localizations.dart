@@ -3817,6 +3817,301 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Passphrase generated; enter it on other devices to join'**
   String get syncGeneratedHint;
+
+  /// No description provided for @settingsUpdateTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'About & updates'**
+  String get settingsUpdateTitle;
+
+  /// No description provided for @settingsUpdateSubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Current version {version}'**
+  String settingsUpdateSubtitle(String version);
+
+  /// No description provided for @settingsUpdateAvailable.
+  ///
+  /// In en, this message translates to:
+  /// **'Update available: {version}'**
+  String settingsUpdateAvailable(String version);
+
+  /// No description provided for @updateSettingsSection.
+  ///
+  /// In en, this message translates to:
+  /// **'Updates'**
+  String get updateSettingsSection;
+
+  /// No description provided for @updateChannelTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Update channel'**
+  String get updateChannelTitle;
+
+  /// No description provided for @updateChannelSubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Stable gets releases only; Beta is early access'**
+  String get updateChannelSubtitle;
+
+  /// No description provided for @updateChannelStable.
+  ///
+  /// In en, this message translates to:
+  /// **'Stable'**
+  String get updateChannelStable;
+
+  /// No description provided for @updateChannelBeta.
+  ///
+  /// In en, this message translates to:
+  /// **'Beta'**
+  String get updateChannelBeta;
+
+  /// No description provided for @updateAutoCheckTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Check for updates automatically'**
+  String get updateAutoCheckTitle;
+
+  /// No description provided for @updateAutoCheckSubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Silent check at startup, at most once a day'**
+  String get updateAutoCheckSubtitle;
+
+  /// No description provided for @updateCheckTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Check for updates'**
+  String get updateCheckTitle;
+
+  /// No description provided for @updateStatusIdle.
+  ///
+  /// In en, this message translates to:
+  /// **'Not checked yet'**
+  String get updateStatusIdle;
+
+  /// No description provided for @updateStatusChecking.
+  ///
+  /// In en, this message translates to:
+  /// **'Checking…'**
+  String get updateStatusChecking;
+
+  /// No description provided for @updateStatusUpToDate.
+  ///
+  /// In en, this message translates to:
+  /// **'Up to date'**
+  String get updateStatusUpToDate;
+
+  /// No description provided for @updateStatusAvailable.
+  ///
+  /// In en, this message translates to:
+  /// **'New version {version} available'**
+  String updateStatusAvailable(String version);
+
+  /// No description provided for @updateStatusDownloading.
+  ///
+  /// In en, this message translates to:
+  /// **'Downloading…'**
+  String get updateStatusDownloading;
+
+  /// No description provided for @updateStatusDownloaded.
+  ///
+  /// In en, this message translates to:
+  /// **'Ready to install'**
+  String get updateStatusDownloaded;
+
+  /// No description provided for @updateStatusInstalling.
+  ///
+  /// In en, this message translates to:
+  /// **'Installing…'**
+  String get updateStatusInstalling;
+
+  /// No description provided for @updateLastChecked.
+  ///
+  /// In en, this message translates to:
+  /// **'Last checked {time}'**
+  String updateLastChecked(String time);
+
+  /// No description provided for @updateReleaseSection.
+  ///
+  /// In en, this message translates to:
+  /// **'New version'**
+  String get updateReleaseSection;
+
+  /// No description provided for @updateReleaseTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Molia {version}'**
+  String updateReleaseTitle(String version);
+
+  /// No description provided for @updateReleaseDate.
+  ///
+  /// In en, this message translates to:
+  /// **'Released {date}'**
+  String updateReleaseDate(String date);
+
+  /// No description provided for @updateReleaseDateUnknown.
+  ///
+  /// In en, this message translates to:
+  /// **'Release date unknown'**
+  String get updateReleaseDateUnknown;
+
+  /// No description provided for @updateCancelDownload.
+  ///
+  /// In en, this message translates to:
+  /// **'Cancel'**
+  String get updateCancelDownload;
+
+  /// No description provided for @updateInstallingHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Handed to the installer — follow the system prompts.'**
+  String get updateInstallingHint;
+
+  /// No description provided for @updateIosHint.
+  ///
+  /// In en, this message translates to:
+  /// **'iOS updates come from the App Store; in-app install is not available.'**
+  String get updateIosHint;
+
+  /// No description provided for @updateReloadNow.
+  ///
+  /// In en, this message translates to:
+  /// **'Reload now'**
+  String get updateReloadNow;
+
+  /// No description provided for @updateGrantInstallPermission.
+  ///
+  /// In en, this message translates to:
+  /// **'Grant permission'**
+  String get updateGrantInstallPermission;
+
+  /// No description provided for @updateInstallNow.
+  ///
+  /// In en, this message translates to:
+  /// **'Install now'**
+  String get updateInstallNow;
+
+  /// No description provided for @updateDownloadAndInstall.
+  ///
+  /// In en, this message translates to:
+  /// **'Download and install'**
+  String get updateDownloadAndInstall;
+
+  /// No description provided for @updateOpenDownloadPage.
+  ///
+  /// In en, this message translates to:
+  /// **'Open download page'**
+  String get updateOpenDownloadPage;
+
+  /// No description provided for @updateAdvancedSection.
+  ///
+  /// In en, this message translates to:
+  /// **'Advanced'**
+  String get updateAdvancedSection;
+
+  /// No description provided for @updateManifestOverrideTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Manifest URL'**
+  String get updateManifestOverrideTitle;
+
+  /// No description provided for @updateManifestOverrideDefault.
+  ///
+  /// In en, this message translates to:
+  /// **'Default (official GitHub release)'**
+  String get updateManifestOverrideDefault;
+
+  /// No description provided for @updateManifestOverrideHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Leave empty to use the official URL'**
+  String get updateManifestOverrideHint;
+
+  /// No description provided for @updateDownloadPrefixTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Download mirror prefix'**
+  String get updateDownloadPrefixTitle;
+
+  /// No description provided for @updateDownloadPrefixDefault.
+  ///
+  /// In en, this message translates to:
+  /// **'Default (GitHub direct)'**
+  String get updateDownloadPrefixDefault;
+
+  /// No description provided for @updateDownloadPrefixHint.
+  ///
+  /// In en, this message translates to:
+  /// **'e.g. https://gh-proxy.com/ (verify unofficial mirrors yourself)'**
+  String get updateDownloadPrefixHint;
+
+  /// No description provided for @updateAboutSection.
+  ///
+  /// In en, this message translates to:
+  /// **'About'**
+  String get updateAboutSection;
+
+  /// No description provided for @updateCurrentVersion.
+  ///
+  /// In en, this message translates to:
+  /// **'Current version'**
+  String get updateCurrentVersion;
+
+  /// No description provided for @updatePlatformTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Platform'**
+  String get updatePlatformTitle;
+
+  /// No description provided for @updateErrorNetwork.
+  ///
+  /// In en, this message translates to:
+  /// **'Network error — update check failed'**
+  String get updateErrorNetwork;
+
+  /// No description provided for @updateErrorManifest.
+  ///
+  /// In en, this message translates to:
+  /// **'Invalid update manifest'**
+  String get updateErrorManifest;
+
+  /// No description provided for @updateErrorUnsupported.
+  ///
+  /// In en, this message translates to:
+  /// **'In-app updates are not supported on this platform'**
+  String get updateErrorUnsupported;
+
+  /// No description provided for @updateErrorChecksum.
+  ///
+  /// In en, this message translates to:
+  /// **'Package checksum mismatch; file deleted'**
+  String get updateErrorChecksum;
+
+  /// No description provided for @updateErrorPermission.
+  ///
+  /// In en, this message translates to:
+  /// **'Allow \"Install unknown apps\" to install updates'**
+  String get updateErrorPermission;
+
+  /// No description provided for @updateErrorNotWritable.
+  ///
+  /// In en, this message translates to:
+  /// **'Install directory is read-only; download and replace manually'**
+  String get updateErrorNotWritable;
+
+  /// No description provided for @updateErrorInstall.
+  ///
+  /// In en, this message translates to:
+  /// **'Install failed'**
+  String get updateErrorInstall;
+
+  /// No description provided for @updateDownloadProgress.
+  ///
+  /// In en, this message translates to:
+  /// **'Downloaded {percent}% ({receivedMb} MB, {speedMb} MB/s)'**
+  String updateDownloadProgress(
+      String percent, String receivedMb, String speedMb);
 }
 
 class _AppLocalizationsDelegate

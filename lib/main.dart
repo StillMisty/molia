@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:material_ui/material_ui.dart';
+import 'package:package_info_plus/package_info_plus.dart';
 import 'package:provider/provider.dart';
 
 import 'app/app_shell.dart';
@@ -22,6 +23,8 @@ import 'data/settings/settings_registry.dart';
 import 'data/sync/sync_state_store.dart';
 import 'data/sync/transport/lan_sync_transport.dart';
 import 'data/sync/transport/webdav_sync_transport.dart';
+import 'data/update/update_downloader.dart';
+import 'data/update/update_manifest_client.dart';
 import 'providers/ai_dj_provider.dart';
 import 'data/playback/default_playback_facade.dart';
 import 'data/playback/local_playback_backend.dart';
@@ -47,6 +50,7 @@ import 'providers/discover_provider.dart';
 import 'providers/sources_provider.dart';
 import 'providers/sync_provider.dart';
 import 'providers/theme_provider.dart';
+import 'providers/update_provider.dart';
 import 'services/app_logging.dart';
 import 'services/artwork_palette_service.dart';
 import 'services/app_branding_service.dart';
@@ -70,6 +74,9 @@ import 'services/ai/taste_profile_builder.dart';
 import 'services/settings_service.dart';
 import 'services/source_swap/auto_source_swap_service.dart';
 import 'services/source_swap/source_swap_settings.dart';
+import 'services/update/update_installer.dart';
+import 'services/update/update_preferences.dart';
+import 'services/update/update_service.dart';
 import 'services/window/window_chrome.dart';
 import 'sources/source_manager.dart';
 
@@ -512,6 +519,37 @@ void main() async {
     onResume: () => syncProvider.scheduleSync(delay: const Duration(seconds: 3)),
   );
 
+  // 应用内更新：清单（Release 资产 latest.json）→ 下载（sha256 强制校验）
+  // → 平台安装策略（Android 系统安装器 / 桌面替换脚本 / Web 刷新）。
+  // 版本号来自平台包信息，CI 用 --build-name/--build-number 注入（见
+  // docs/release.md）；读不到时退化为 0.0.0（仍可检查，只是比较无基准）。
+  String appVersion = '0.0.0';
+  int appBuild = 0;
+  try {
+    final packageInfo = await PackageInfo.fromPlatform();
+    appVersion = packageInfo.version;
+    appBuild = int.tryParse(packageInfo.buildNumber) ?? 0;
+  } catch (e) {
+    debugPrint('[Molia] 读取应用版本失败（更新检查按 0.0.0 处理）: $e');
+  }
+  final updatePreferences = UpdatePreferences();
+  final updateProvider = UpdateProvider(
+    service: UpdateService(
+      client: UpdateManifestClient(
+        manifestUrlOverride: () => updatePreferences.manifestUrlOverride,
+        downloadPrefix: () => updatePreferences.downloadPrefix,
+      ),
+      downloader: UpdateDownloader(),
+      installer: UpdateInstaller(),
+    ),
+    preferences: updatePreferences,
+    currentVersion: appVersion,
+    currentBuild: appBuild,
+    // 桌面端替换脚本就绪后由 provider 触发退出，脚本完成替换并重启。
+    quitApp: WindowChrome.close,
+  );
+  await updateProvider.init();
+
   runApp(
     MultiProvider(
       providers: [
@@ -592,14 +630,18 @@ void main() async {
         ChangeNotifierProvider.value(value: syncProvider),
         // 换源偏好（自动换源开关）：设置页读写；播放链路已在上方接线。
         ChangeNotifierProvider.value(value: sourceSwapSettings),
+        // 应用内更新：设置页读写（渠道 / 自动检查 / 下载安装）。
+        ChangeNotifierProvider.value(value: updateProvider),
       ],
       child: const MyThemedApp(),
     ),
   );
 
   // 启动后初始化音源（加载已导入的 LX 音源脚本）；随后发起首轮同步
-  // （音源仓库就绪后脚本适配器才能工作）。
+  // （音源仓库就绪后脚本适配器才能工作）。更新检查默认关闭（用户开启后
+  // 每天最多一轮），网络失败静默不打扰。
   WidgetsBinding.instance.addPostFrameCallback((_) {
+    unawaited(updateProvider.maybeAutoCheck());
     sourceManager.init().then((_) {
       if (syncProvider.enabled) unawaited(syncProvider.syncNow());
     });

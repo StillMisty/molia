@@ -35,6 +35,7 @@ tool/agent/seed.sh android|linux <cmd> # 数据注入：favorites / history / se
 flutter build apk --debug              # 手动装包验证用；自动化验证走上面的集成测试
 flutter build web --release            # 涉及 UI 组件时加跑；音源脚本在 Web 不可用
 flutter build apk --release --split-per-abi --split-debug-info=build/symbols --obfuscate --extra-gen-snapshot-options=--strip   # 构建发布
+git tag v1.2.3 && git push origin v1.2.3  # 发布（tag 即版本；测试版 v1.2.3-beta.1；流程与 secrets 见 docs/release.md）
 ```
 
 音源 prelude 离线校验（改 `tool/lx_prelude/` 后必跑）：
@@ -60,11 +61,11 @@ dart run drift_dev make-migrations        # 改表结构 + 提 schemaVersion 后
 ```
 lib/
   domain/          # 纯 Dart：models（Track/PlaybackSnapshot/SearchResult/SourceFailure…）+ ports
-  data/            # 端口实现：db（MoliaDatabase，drift）/ catalog（CatalogService）/ playback（facade）/ cache / mapping
+  data/            # 端口实现：db（MoliaDatabase，drift）/ catalog（CatalogService）/ playback（facade）/ cache / mapping / update（Release 清单与下载）
   sources/         # source_manager + builtin（五平台搜索/发现）/ lx（引擎）/ any_listen
   playback/        # LocalPlaybackService（just_audio 后端）+ local_audio_handler（audio_service）
   providers/       # UI 状态：PlaybackProvider / SearchProvider / LibraryProvider / ThemeProvider…
-  services/        # 歌词、歌词显示、省流、缓存、字体、设置…
+  services/        # 歌词、歌词显示、省流、缓存、字体、设置、更新（检查/安装策略）…
   app/             # app_shell.dart：应用壳（测试可直接挂载）
   pages/ widgets/  # UI（M3E 组件 + material_ui 基础件）
   main.dart        # 唯一 composition root

@@ -1067,5 +1067,109 @@
   "syncRenameHint": "Shown on other devices",
   "syncDeviceNameEmpty": "Name cannot be empty",
   "syncCategorySubtitle": "Turning it off stops pushing and applying this data on this device",
-  "syncGeneratedHint": "Passphrase generated; enter it on other devices to join"
+  "syncGeneratedHint": "Passphrase generated; enter it on other devices to join",
+  "settingsUpdateTitle": "About & updates",
+  "settingsUpdateSubtitle": "Current version {version}",
+  "settingsUpdateAvailable": "Update available: {version}",
+  "updateSettingsSection": "Updates",
+  "updateChannelTitle": "Update channel",
+  "updateChannelSubtitle": "Stable gets releases only; Beta is early access",
+  "updateChannelStable": "Stable",
+  "updateChannelBeta": "Beta",
+  "updateAutoCheckTitle": "Check for updates automatically",
+  "updateAutoCheckSubtitle": "Silent check at startup, at most once a day",
+  "updateCheckTitle": "Check for updates",
+  "updateStatusIdle": "Not checked yet",
+  "updateStatusChecking": "Checking…",
+  "updateStatusUpToDate": "Up to date",
+  "updateStatusAvailable": "New version {version} available",
+  "updateStatusDownloading": "Downloading…",
+  "updateStatusDownloaded": "Ready to install",
+  "updateStatusInstalling": "Installing…",
+  "updateLastChecked": "Last checked {time}",
+  "updateReleaseSection": "New version",
+  "updateReleaseTitle": "Molia {version}",
+  "updateReleaseDate": "Released {date}",
+  "updateReleaseDateUnknown": "Release date unknown",
+  "updateCancelDownload": "Cancel",
+  "updateInstallingHint": "Handed to the installer — follow the system prompts.",
+  "updateIosHint": "iOS updates come from the App Store; in-app install is not available.",
+  "updateReloadNow": "Reload now",
+  "updateGrantInstallPermission": "Grant permission",
+  "updateInstallNow": "Install now",
+  "updateDownloadAndInstall": "Download and install",
+  "updateOpenDownloadPage": "Open download page",
+  "updateAdvancedSection": "Advanced",
+  "updateManifestOverrideTitle": "Manifest URL",
+  "updateManifestOverrideDefault": "Default (official GitHub release)",
+  "updateManifestOverrideHint": "Leave empty to use the official URL",
+  "updateDownloadPrefixTitle": "Download mirror prefix",
+  "updateDownloadPrefixDefault": "Default (GitHub direct)",
+  "updateDownloadPrefixHint": "e.g. https://gh-proxy.com/ (verify unofficial mirrors yourself)",
+  "updateAboutSection": "About",
+  "updateCurrentVersion": "Current version",
+  "updatePlatformTitle": "Platform",
+  "updateErrorNetwork": "Network error — update check failed",
+  "updateErrorManifest": "Invalid update manifest",
+  "updateErrorUnsupported": "In-app updates are not supported on this platform",
+  "updateErrorChecksum": "Package checksum mismatch; file deleted",
+  "updateErrorPermission": "Allow \"Install unknown apps\" to install updates",
+  "updateErrorNotWritable": "Install directory is read-only; download and replace manually",
+  "updateErrorInstall": "Install failed",
+  "updateDownloadProgress": "Downloaded {percent}% ({receivedMb} MB, {speedMb} MB/s)",
+  "@settingsUpdateSubtitle": {
+    "placeholders": {
+      "version": {
+        "type": "String"
+      }
+    }
+  },
+  "@settingsUpdateAvailable": {
+    "placeholders": {
+      "version": {
+        "type": "String"
+      }
+    }
+  },
+  "@updateStatusAvailable": {
+    "placeholders": {
+      "version": {
+        "type": "String"
+      }
+    }
+  },
+  "@updateLastChecked": {
+    "placeholders": {
+      "time": {
+        "type": "String"
+      }
+    }
+  },
+  "@updateReleaseTitle": {
+    "placeholders": {
+      "version": {
+        "type": "String"
+      }
+    }
+  },
+  "@updateReleaseDate": {
+    "placeholders": {
+      "date": {
+        "type": "String"
+      }
+    }
+  },
+  "@updateDownloadProgress": {
+    "placeholders": {
+      "percent": {
+        "type": "String"
+      },
+      "receivedMb": {
+        "type": "String"
+      },
+      "speedMb": {
+        "type": "String"
+      }
+    }
+  }
 }

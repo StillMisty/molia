@@ -1,0 +1,46 @@
+name: CI
+
+# PR / main 的快速校验：静态分析 + 单元测试 + Web 编译兜底。
+# 发布构建走 release.yml；真实引擎的集成测试走 integration.yml。
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  # pubspec.lock 锁定的是国内镜像源，CI 必须同源，否则 pub 会重写 lock。
+  PUB_HOSTED_URL: https://pub.flutter-io.cn
+
+jobs:
+  analyze-test:
+    name: Analyze / Test / Web build
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+
+      # 版本与 AGENTS.md 的工具链表保持一致（改这里前先改 AGENTS.md）。
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: 3.47.6
+          channel: stable
+          cache: true
+
+      - name: pub get
+        run: flutter pub get --enforce-lockfile
+
+      - name: analyze（0 error / 0 warning）
+        run: flutter analyze --no-pub
+
+      - name: test
+        run: flutter test --no-pub
+
+      # AGENTS.md：UI 组件改动需能通过 Web 编译（音源脚本在 Web 不可用，
+      # 但整仓必须保持可编译）。这里只构建、不部署。
+      - name: web build
+        run: flutter build web --release --no-pub
