@@ -24,9 +24,10 @@ Linux/Windows 桌面端此前保留系统标题栏：窗口最小化/最大化/�
    - `bitsdojo_window`：约 34 个月停更；
    - `titlebar_buttons`：约 56 个月停更；
    - Flutter 官方 windowing API：实验性、只在 main 渠道、官方注明不得用于生产。
-3. **范围**：隐藏标题栏 + 顶栏拖动区 + 三个窗口按钮（最小化 / 最大化-还原 / 关闭）。
+3. **范围**：隐藏标题栏 + 顶栏拖动区（含双击最大化 / 还原）+ 三个窗口按钮
+   （最小化 / 最大化-还原 / 关闭，关闭键 hover/按下走危险色）。
    不做设置开关（默认即最终形态）、不做 macOS（保留原生标题栏）、
-   移动端与 Web 行为零变化（按钮整组不构建、拖动区纯透传）。
+   移动端与 Web 行为零变化（按钮整组不构建、拖动区/双击区纯透传）。
 4. **架构：UI 不得 import `window_manager`**。该包的 Dart 代码 import `dart:io`，
    被 UI 直接引用会让 `flutter build web` 直接失败；统一经
    `lib/services/window/` 条件导出（stub/io，与 `system_fonts_service.dart` 同一模式），
@@ -44,6 +45,21 @@ Linux/Windows 桌面端此前保留系统标题栏：窗口最小化/最大化/�
    - `WindowDragArea` 是 UI 唯一可用的拖动入口（stub 直接返回 child），
      语义同 window_manager 的 `DragToMoveArea`：pan 起始交给原生
      `startDragging()`；
+   - **双击最大化 / 还原**（`WindowDoubleTapMaximize`，包住顶栏标题区）：
+     不用 `GestureDetector(onDoubleTap)`——双击识别器会把同一区域的单击
+     延迟到双击判定结束（实测子按钮 onTap 也延迟约 300ms）；改用被动
+     `Listener` 自己数点击（不参与手势竞技场）：300ms 内两次「原地抬起」
+     （位移 ≤12dp）触发 `toggleMaximize`，单击 / 拖动 / 按钮点击时序不变；
+     只包标题/封面区，按钮区不参与（双击按钮不改变窗口状态）；
+   - **关闭键危险色**：hover / 按下时底色 `errorContainer`、字形
+     `onErrorContainer`（`M3EIconButtonDecoration.overlayColor` 覆盖中性的
+     state layer；字形色由外层 `MouseRegion` 给出——decoration 的
+     `foregroundColor` 不带 hover 状态）。其余按钮保持中性；
+   - **窗口三键规格**：M3E `sm` 档（24 图标 / 40 视觉格 / 48 触控目标），
+     与应用图标按钮同规格；字形用 `Icons.remove_rounded`（居中横线）而不是
+     `Icons.minimize_rounded`（Material 的下沉横线，笔画中心低 6/24），
+     最大化字形 20 档 ≈13dp 与关闭的 12dp 对齐；与应用操作之间以短竖线
+     （`M3EDivider`）分界；
    - 顶栏总高度不变：AppBar 外层包 `PreferredSize`，高度取
      `AppBar.preferredHeightFor(context, appBar.preferredSize)`
      （当前 = 56 工具栏 + 10 波浪进度），与 Scaffold 原本的算法一致。
@@ -75,8 +91,8 @@ Linux/Windows 桌面端此前保留系统标题栏：窗口最小化/最大化/�
 
 - **Windows**：本机只有 Linux，未实机验证（代码路径与 Linux 共用同一
   Dart 实现，但 Windows 的原生插件行为、按钮观感未确认）；
-- **人工手感项**：拖动跟手程度、双击标题栏最大化（本次未实现）、
-  边缘缩放、隐藏标题栏后的窗口阴影/圆角、最小化/关闭的动画；
+- **人工手感项**：拖动跟手程度、边缘缩放、隐藏标题栏后的窗口阴影/圆角、
+  最小化/关闭的动画（双击最大化已实现，见上）。
 - **X11 路径**：`GDK_BACKEND=x11` 下在本机（WSLg 的 X11 显示）跑端到端集成测试
   不稳定——播放用例在 libmpv 起播后卡死、后续用例 `did not complete`；
   已用基线（`main`，无 window_manager）复现同一现象，与本次改动无关。

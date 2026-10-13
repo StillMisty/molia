@@ -106,3 +106,87 @@ class WindowDragArea extends StatelessWidget {
     );
   }
 }
+
+/// 拖动区的双击区（拖动手感项：双击标题栏最大化 / 还原）。
+///
+/// **为什么不用 `GestureDetector(onDoubleTap:)`**：双击识别器要等第二个
+/// 点击超时才让出竞技场，会把同一个区域里的单击一起拖到 300ms 后（实测
+/// 子按钮的 onTap 在 doubleTap 存在时也会延迟）。这里用被动 [Listener]
+/// 自己数点击：不参与手势竞技场，单击、拖动、按钮点击全部保持原时序；
+/// 双击判定窗口内第二次「原地抬起」时触发 [onDoubleTap]。
+///
+/// 只挂在顶栏的非按钮区域（标题/封面条）：按钮区不参与，避免双击按钮
+/// 顺带最大化窗口。
+class WindowDoubleTapMaximize extends StatefulWidget {
+  const WindowDoubleTapMaximize({
+    super.key,
+    required this.child,
+    this.onDoubleTap,
+  });
+
+  final Widget child;
+
+  /// 测试注入；缺省调用 [WindowChrome.toggleMaximize]。
+  final VoidCallback? onDoubleTap;
+
+  @override
+  State<WindowDoubleTapMaximize> createState() =>
+      _WindowDoubleTapMaximizeState();
+}
+
+class _WindowDoubleTapMaximizeState extends State<WindowDoubleTapMaximize> {
+  /// 双击判定窗口（与 Flutter `kDoubleTapTimeout` 一致）。
+  static const Duration _doubleTapWindow = Duration(milliseconds: 300);
+
+  /// 允许的位移：超过视为拖动 / 滑动，不算点击。
+  static const double _slop = 12;
+
+  int? _downPointer;
+  Offset? _downPosition;
+  Duration? _lastTapAt;
+  Offset? _lastTapPosition;
+
+  @override
+  Widget build(BuildContext context) {
+    return Listener(
+      behavior: HitTestBehavior.translucent,
+      onPointerDown: (PointerDownEvent event) {
+        _downPointer = event.pointer;
+        _downPosition = event.position;
+      },
+      onPointerUp: _onPointerUp,
+      child: widget.child,
+    );
+  }
+
+  void _onPointerUp(PointerUpEvent event) {
+    if (event.pointer != _downPointer) return;
+    final down = _downPosition;
+    _downPointer = null;
+    _downPosition = null;
+    // 拖动 / 滑动（含窗口拖动）：不构成点击，并打断双击序列。
+    if (down == null || (event.position - down).distance > _slop) {
+      _lastTapAt = null;
+      _lastTapPosition = null;
+      return;
+    }
+    final lastAt = _lastTapAt;
+    final lastPosition = _lastTapPosition;
+    if (lastAt != null &&
+        lastPosition != null &&
+        event.timeStamp - lastAt <= _doubleTapWindow &&
+        (event.position - lastPosition).distance <= _slop) {
+      _lastTapAt = null;
+      _lastTapPosition = null;
+      final handler = widget.onDoubleTap;
+      if (handler != null) {
+        handler();
+      } else {
+        unawaited(WindowChrome.toggleMaximize());
+      }
+      return;
+    }
+    _lastTapAt = event.timeStamp;
+    _lastTapPosition = event.position;
+  }
+}

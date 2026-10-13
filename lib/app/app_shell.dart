@@ -410,10 +410,14 @@ class _MyAppState extends State<MyApp>
       // （如 M3E 下拉菜单打开时）会让 ModalRoute.canPop 变真，
       // 默认的 automaticallyImplyLeading 会在此刻冒出返回箭头。
       automaticallyImplyLeading: false,
-      title: _ShellBarHeader(
-        morph: _morph,
-        reveal: _barReveal,
-        onOpenPlayer: () => _selectDestination(ShellDestination.nowPlaying),
+      title: WindowDoubleTapMaximize(
+        // 双击顶栏标题区（拖动区的非按钮部分）= 最大化 / 还原（桌面肌肉记忆）；
+        // 按钮区不参与，避免双击按钮顺带改窗口状态。
+        child: _ShellBarHeader(
+          morph: _morph,
+          reveal: _barReveal,
+          onOpenPlayer: () => _selectDestination(ShellDestination.nowPlaying),
+        ),
       ),
       actions: [
         // 顶栏右侧：播放页只留设置（播放/切歌由页面内部控制区承担）；
@@ -885,12 +889,13 @@ class _BarRevealTransition extends StatelessWidget {
 ///
 /// 隐藏原生标题栏后由它承担系统按钮职责；其余平台整组不构建，
 /// 顶栏与改动前逐像素一致。图标随 [WindowChrome.maximized] 切换
-/// （最大化时显示「还原」），关闭按钮保持标准样式、不做危险色。
+/// （最大化时显示「还原」）。
 ///
 /// 三键与旁边应用按钮**同规格**（M3E `sm` 档：24 图标 / 40 视觉格 /
 /// 48 触控目标），不做桌面风格的紧凑化——顶部一排按钮观感统一优先；
 /// 与应用操作之间用一段短竖线分界，右侧贴窗口角，保留「窗口控制」的
-/// 识别度。
+/// 识别度。关闭键遵循桌面习惯：hover / 按下时底色转 `errorContainer`、
+/// 字形转 `onErrorContainer`（危险色只在这里出现，不影响其它按钮）。
 ///
 /// 字形选型：最小化用 [Icons.remove_rounded]（居中横线）而不是
 /// [Icons.minimize_rounded]——后者是 Material 的「下沉横线」设计，
@@ -938,13 +943,50 @@ class _WindowControls extends StatelessWidget {
             onPressed: WindowChrome.toggleMaximize,
           ),
         ),
-        M3EIconButton(
-          variant: M3EIconButtonVariant.standard,
-          tooltip: l10n.windowClose,
-          icon: const Icon(Icons.close_rounded),
-          onPressed: WindowChrome.close,
-        ),
+        const _WindowCloseButton(),
       ],
+    );
+  }
+}
+
+/// 关闭键：hover / 按下走危险色（桌面习惯：关闭是破坏性操作）。
+///
+/// 底色用 `M3EIconButtonDecoration.overlayColor` 覆盖 M3E 的中性 state
+/// layer，字形色由外层 [MouseRegion] 的 hover 状态给出（decoration 的
+/// `foregroundColor` 只在 disabled/selected 上解析，不带 hover）。
+class _WindowCloseButton extends StatefulWidget {
+  const _WindowCloseButton();
+
+  @override
+  State<_WindowCloseButton> createState() => _WindowCloseButtonState();
+}
+
+class _WindowCloseButtonState extends State<_WindowCloseButton> {
+  bool _hovered = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context)!;
+    final scheme = M3ETheme.of(context).colorScheme;
+    return MouseRegion(
+      onEnter: (_) => setState(() => _hovered = true),
+      onExit: (_) => setState(() => _hovered = false),
+      child: M3EIconButton(
+        variant: M3EIconButtonVariant.standard,
+        tooltip: l10n.windowClose,
+        decoration: _hovered
+            ? M3EIconButtonDecoration(
+                overlayColor: WidgetStatePropertyAll<Color?>(
+                  scheme.errorContainer,
+                ),
+              )
+            : null,
+        icon: Icon(
+          Icons.close_rounded,
+          color: _hovered ? scheme.onErrorContainer : null,
+        ),
+        onPressed: WindowChrome.close,
+      ),
     );
   }
 }

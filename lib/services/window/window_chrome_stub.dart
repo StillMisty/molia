@@ -37,3 +37,16 @@ class WindowDragArea extends StatelessWidget {
   @override
   Widget build(BuildContext context) => child;
 }
+
+/// 桌面窗口双击区（本平台为纯透传：没有可最大化的原生窗口）。
+class WindowDoubleTapMaximize extends StatelessWidget {
+  const WindowDoubleTapMaximize({super.key, required this.child, this.onDoubleTap});
+
+  final Widget child;
+
+  /// 测试注入；缺省由平台实现决定（本平台为空操作）。
+  final VoidCallback? onDoubleTap;
+
+  @override
+  Widget build(BuildContext context) => child;
+}
