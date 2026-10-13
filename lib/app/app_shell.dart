@@ -26,6 +26,7 @@ import '../services/app_branding_service.dart';
 import '../services/data_saver_service.dart';
 import '../services/language_service.dart';
 import '../services/play_statistics_service.dart';
+import '../services/window/window_chrome.dart';
 import '../theme/animated_scheme.dart';
 import '../theme/app_theme.dart';
 import '../utils/responsive.dart';
@@ -382,38 +383,49 @@ class _MyAppState extends State<MyApp>
             : visibleDestinations.first);
     final selectedIndex = visibleDestinations.indexOf(selectedDestination);
 
-    return Scaffold(
-      appBar: AppBar(
-        titleSpacing: 12,
-        // 壳层是根页面，永远不需要返回键；且路由内的局部历史条目
-        // （如 M3E 下拉菜单打开时）会让 ModalRoute.canPop 变真，
-        // 默认的 automaticallyImplyLeading 会在此刻冒出返回箭头。
-        automaticallyImplyLeading: false,
-        title: _ShellBarHeader(
-          morph: _morph,
-          onOpenPlayer: () => _selectDestination(ShellDestination.nowPlaying),
-        ),
-        actions: [
-          // 顶栏右侧：播放页只留设置（播放/切歌由页面内部控制区承担）；
-          // 其余页面（资料库 / 收藏）是迷你播放器（显式播放/暂停 + 下一首）
-          // 加设置入口 —— 设置不再只有播放页够得着。
-          if (selectedDestination != ShellDestination.nowPlaying) ...[
-            const _BarPlayPauseButton(),
-            const _BarNextButton(),
-          ],
-          M3EIconButton(
-            variant: M3EIconButtonVariant.standard,
-            onPressed: () => _openSettings(context),
-            tooltip: l10n.settingsTitle,
-            icon: const Icon(Icons.settings_rounded),
-          ),
-          const SizedBox(width: 8),
+    // 顶栏整体是窗口拖动区（隐藏标题栏后唯一的拖动入口）：外层 PreferredSize
+    // 用 AppBar 自报高度（56 工具栏 + 10 波浪进度），总高度与改动前一致，
+    // 非桌面平台 WindowDragArea 是纯透传。
+    final appBar = AppBar(
+      titleSpacing: 12,
+      // 壳层是根页面，永远不需要返回键；且路由内的局部历史条目
+      // （如 M3E 下拉菜单打开时）会让 ModalRoute.canPop 变真，
+      // 默认的 automaticallyImplyLeading 会在此刻冒出返回箭头。
+      automaticallyImplyLeading: false,
+      title: _ShellBarHeader(
+        morph: _morph,
+        onOpenPlayer: () => _selectDestination(ShellDestination.nowPlaying),
+      ),
+      actions: [
+        // 顶栏右侧：播放页只留设置（播放/切歌由页面内部控制区承担）；
+        // 其余页面（资料库 / 收藏）是迷你播放器（显式播放/暂停 + 下一首）
+        // 加设置入口 —— 设置不再只有播放页够得着。
+        if (selectedDestination != ShellDestination.nowPlaying) ...[
+          const _BarPlayPauseButton(),
+          const _BarNextButton(),
         ],
-        bottom: PreferredSize(
-          // 波浪进度条需要振幅空间（M3E 默认 wavyContainerHeight=10）。
-          preferredSize: const Size.fromHeight(10.0),
-          child: _ShellBarProgress(morph: _morph),
+        M3EIconButton(
+          variant: M3EIconButtonVariant.standard,
+          onPressed: () => _openSettings(context),
+          tooltip: l10n.settingsTitle,
+          icon: const Icon(Icons.settings_rounded),
         ),
+        if (WindowChrome.isSupported) const _WindowControls(),
+        const SizedBox(width: 8),
+      ],
+      bottom: PreferredSize(
+        // 波浪进度条需要振幅空间（M3E 默认 wavyContainerHeight=10）。
+        preferredSize: const Size.fromHeight(10.0),
+        child: _ShellBarProgress(morph: _morph),
+      ),
+    );
+
+    return Scaffold(
+      appBar: PreferredSize(
+        preferredSize: Size.fromHeight(
+          AppBar.preferredHeightFor(context, appBar.preferredSize),
+        ),
+        child: WindowDragArea(child: appBar),
       ),
       body: Row(
         children: [
@@ -725,6 +737,50 @@ class _BarNextButton extends StatelessWidget {
               context.read<PlaybackProvider>().skipToNext();
             }
           : null,
+    );
+  }
+}
+
+/// 顶栏窗口按钮（仅 Linux / Windows 桌面构建）：最小化 / 最大化-还原 / 关闭。
+///
+/// 隐藏原生标题栏后由它承担系统按钮职责；其余平台整组不构建，
+/// 顶栏与改动前逐像素一致。图标随 [WindowChrome.maximized] 切换
+/// （最大化时显示「还原」），关闭按钮保持标准样式、不做危险色。
+class _WindowControls extends StatelessWidget {
+  const _WindowControls();
+
+  @override
+  Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context)!;
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        M3EIconButton(
+          variant: M3EIconButtonVariant.standard,
+          tooltip: l10n.windowMinimize,
+          icon: const Icon(Icons.minimize_rounded),
+          onPressed: WindowChrome.minimize,
+        ),
+        ValueListenableBuilder<bool>(
+          valueListenable: WindowChrome.maximized,
+          builder: (context, maximized, _) => M3EIconButton(
+            variant: M3EIconButtonVariant.standard,
+            tooltip: maximized ? l10n.windowRestore : l10n.windowMaximize,
+            icon: Icon(
+              maximized
+                  ? Icons.filter_none_rounded
+                  : Icons.crop_square_rounded,
+            ),
+            onPressed: WindowChrome.toggleMaximize,
+          ),
+        ),
+        M3EIconButton(
+          variant: M3EIconButtonVariant.standard,
+          tooltip: l10n.windowClose,
+          icon: const Icon(Icons.close_rounded),
+          onPressed: WindowChrome.close,
+        ),
+      ],
     );
   }
 }

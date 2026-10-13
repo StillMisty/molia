@@ -47,6 +47,7 @@ dependencies:
   cupertino_ui: ^1.1.2
   material_3_expressive: ^1.1.6
   motor: ^1.1.0
+  window_manager: ^0.5.2
 dev_dependencies:
   flutter_test:
     sdk: flutter

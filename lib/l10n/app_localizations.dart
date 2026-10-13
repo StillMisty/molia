@@ -1640,6 +1640,30 @@ abstract class AppLocalizations {
   /// **'Next track'**
   String get nextTrackTooltip;
 
+  /// No description provided for @windowMinimize.
+  ///
+  /// In en, this message translates to:
+  /// **'Minimize'**
+  String get windowMinimize;
+
+  /// No description provided for @windowMaximize.
+  ///
+  /// In en, this message translates to:
+  /// **'Maximize'**
+  String get windowMaximize;
+
+  /// No description provided for @windowRestore.
+  ///
+  /// In en, this message translates to:
+  /// **'Restore'**
+  String get windowRestore;
+
+  /// No description provided for @windowClose.
+  ///
+  /// In en, this message translates to:
+  /// **'Close'**
+  String get windowClose;
+
   /// No description provided for @playlistEmpty.
   ///
   /// In en, this message translates to:
