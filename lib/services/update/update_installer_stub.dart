@@ -16,6 +16,9 @@ class UpdateInstaller {
 
   Future<void> reloadPage() async => _reloadLocation();
 
+  /// Web 没有安装形态之分（清单里 web 只有 zip，不参与应用内安装）。
+  Future<String?> preferredArchiveKind() async => null;
+
   Future<InstallOutcome> installAndRestart({
     required String archivePath,
     required String archiveKind,

@@ -3,6 +3,7 @@ import 'dart:io';
 
 import 'package:flutter/services.dart';
 import 'package:logging/logging.dart';
+import 'package:path/path.dart' as p;
 
 import 'update_installer_types.dart';
 
@@ -11,10 +12,12 @@ import 'update_installer_types.dart';
 /// - **Android**：下载好的 APK 经 MethodChannel 交给系统安装器
 ///   （Manifest 已声明 FileProvider 与 REQUEST_INSTALL_PACKAGES）；未授予
 ///   「安装未知应用」时返回 [InstallOutcome.needPermission]。
-/// - **Linux / Windows**：把压缩包解到临时目录，写一个「等主进程退出 →
-///   覆盖安装目录 → 重启应用」的助手脚本并 detached 启动；调用方拿到
-///   [InstallOutcome.restartPending] 后应立即退出进程。
-///   只支持「可写的便携安装目录」；系统包管理器安装（目录不可写）降级为
+/// - **Windows 安装版**（目录里有 Inno 的 `unins000.exe`）：静默运行新版
+///   `setup.exe`（`/SILENT /NORESTART /CLOSEAPPLICATIONS`），安装器的 `[Run]`
+///   段在完成后拉起应用；调用方收到 [InstallOutcome.restartPending] 后退出进程。
+/// - **Windows 便携版 / Linux**：把压缩包解到临时目录，写一个「等主进程退出
+///   → 覆盖安装目录 → 重启应用」的助手脚本并 detached 启动；
+///   只支持「可写的便携安装目录」，系统包管理器安装（目录不可写）降级为
 ///   [InstallOutcome.notWritable] 由 UI 引导手动下载。
 /// - **iOS / macOS**：不做应用内安装（平台限制），返回
 ///   [InstallOutcome.unsupported]。
@@ -62,12 +65,32 @@ class UpdateInstaller {
   /// Web 的「刷新以更新」；原生端无需刷新页面，空操作。
   Future<void> reloadPage() async {}
 
+  /// 本机安装形态偏好的产物类别（清单里可能有多种分发形态）。
+  ///
+  /// - Android → `apk`；
+  /// - Windows 安装版（Inno 的 `unins000.exe` 在应用目录）→ `exe`（安装器）；
+  ///   便携版 → `zip`；
+  /// - Linux → `tar.gz`。
+  Future<String?> preferredArchiveKind() async {
+    if (Platform.isAndroid) return 'apk';
+    if (Platform.isLinux) return 'tar.gz';
+    if (Platform.isWindows) {
+      final appDir = File(Platform.resolvedExecutable).parent;
+      final innoUninstaller = File(p.join(appDir.path, 'unins000.exe'));
+      return innoUninstaller.existsSync() ? 'exe' : 'zip';
+    }
+    return null;
+  }
+
   /// 安装已下载的产物并尽力重启应用。
   Future<InstallOutcome> installAndRestart({
     required String archivePath,
     required String archiveKind,
   }) async {
     if (Platform.isAndroid) return _installAndroid(archivePath);
+    if (Platform.isWindows && archiveKind == 'exe') {
+      return _installWindowsSetup(archivePath);
+    }
     if (Platform.isWindows) {
       return _installOnDesktop(
         archivePath: archivePath,
@@ -83,6 +106,30 @@ class UpdateInstaller {
       );
     }
     return InstallOutcome.unsupported;
+  }
+
+  /// Windows 安装版：静默运行新版安装器。
+  ///
+  /// 安装器（windows/installer/molia.iss）在 `[Run]` 段无条件拉起应用，
+  /// 因此静默升级完成后会自动重启；`/CLOSEAPPLICATIONS` 让 Restart Manager
+  /// 兜底关闭仍在运行的 molia。
+  Future<InstallOutcome> _installWindowsSetup(String setupPath) async {
+    final setup = File(setupPath);
+    if (!await setup.exists()) {
+      _logger.warning('安装器不存在: $setupPath');
+      return InstallOutcome.failed;
+    }
+    try {
+      await Process.start(
+        setup.path,
+        const <String>['/SILENT', '/NORESTART', '/CLOSEAPPLICATIONS'],
+        mode: ProcessStartMode.detached,
+      );
+      return InstallOutcome.restartPending;
+    } catch (e) {
+      _logger.warning('启动安装器失败: $e');
+      return InstallOutcome.failed;
+    }
   }
 
   // ── Android ─────────────────────────────────────────────────────────

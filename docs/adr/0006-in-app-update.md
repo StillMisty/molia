@@ -5,6 +5,7 @@
 - 相关：`lib/data/update/**`、`lib/services/update/**`、`lib/providers/update_provider.dart`、
   `lib/pages/update_settings_page.dart`、`lib/main.dart`、
   `android/app/src/main/kotlin/top/stillmisty/molia/MainActivity.kt`、
+  `windows/installer/molia.iss`、
   `.github/workflows/release.yml`、`tool/ci/gen_update_manifest.py`、
   `docs/release.md`
 
@@ -45,9 +46,15 @@
    - Android：MethodChannel（`top.stillmisty.molia/updater`）交给系统安装器，
      FileProvider 暴露 `cacheDir/updates`；未授权「安装未知应用」时返回
      待授权状态并给系统设置深链；应用继续运行（系统安装器接管）。
-   - Linux/Windows：解压到临时目录后写「等主进程退出 → 覆盖安装目录 →
+   - Windows 安装版：静默运行新版 `setup.exe`（Inno Setup，`windows/installer/molia.iss`，
+     按用户装到 `%LOCALAPPDATA%\Programs\Molia`），安装完成由安装器 `[Run]`
+     段自动拉起应用；安装版判定 = 应用目录存在 Inno 的 `unins000.exe`。
+   - Windows 便携版 / Linux：解压到临时目录后写「等主进程退出 → 覆盖安装目录 →
      重启」的助手脚本（`/bin/sh` / `cmd`），detached 启动后应用退出。
      安装目录不可写（包管理器安装等）降级为 `notWritable`，UI 引导手动下载。
+   - 产物类别按安装形态选择：`UpdateInstaller.preferredArchiveKind()`
+     返回 `exe`（安装版）/ `zip`（便携）/ `tar.gz` / `apk`，服务层据此从同一份
+     清单里挑产物，缺失时回退该平台任意产物。
    - Web：不支持安装，`reloadPage()` 刷新页面。
    - iOS：返回不支持，UI 提示走 App Store。
    `dart:io` 只出现在 `update_installer_io.dart` / `update_downloader_io.dart`，
@@ -64,6 +71,8 @@
 
 ## 取舍
 
+- **Windows 双形态**：安装版（Inno Setup）负责「双击即装、可卸载、静默升级」，
+  便携 zip 保留给免安装用户；不做 MSIX（需要代码签名证书，成本高）。
 - **不做**增量更新 / 差分包（下载体积可接受，复杂度不值）；
 - **不做**后台静默安装（桌面替换脚本会退出进程，必须由用户触发）；
 - **不做**自建更新服务（GitHub Release 足够且零运维）；

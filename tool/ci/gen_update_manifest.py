@@ -16,7 +16,8 @@ Web 端另由 Pages 同源提供，避免 GitHub API 的匿名限流。
     molia-<version>-android-arm64.apk / -armv7 / -x86_64
     molia-<version>-android.aab            （不入清单，仅上架用）
     molia-<version>-android-symbols.zip    （不入清单，调试符号）
-    molia-<version>-windows-x64.zip
+    molia-<version>-windows-x64-setup.exe  （安装版首选产物）
+    molia-<version>-windows-x64.zip        （便携版产物）
     molia-<version>-linux-x64.tar.gz
     molia-<version>-web.zip
     molia-<version>-ios-unsigned.zip       （不入清单：iOS 不走应用内更新）
@@ -35,7 +36,7 @@ from pathlib import Path
 _SKIP_TOKENS = {"symbols", "unsigned"}
 _SKIP_KINDS = {"aab"}
 
-_KINDS = ("tar.gz", "apk", "zip", "aab")
+_KINDS = ("tar.gz", "apk", "zip", "aab", "exe")
 
 _ARCHES = {"arm64", "armv7", "x86_64", "x64"}
 

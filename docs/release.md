@@ -63,7 +63,8 @@ git tag v1.2.3-beta.1 && git push origin v1.2.3-beta.1
 molia-1.2.3-android-arm64.apk / -armv7 / -x86_64
 molia-1.2.3-android.aab                 # 上架用，不进更新清单
 molia-1.2.3-android-symbols.zip         # obfuscate 调试符号
-molia-1.2.3-windows-x64.zip
+molia-1.2.3-windows-x64-setup.exe       # Windows 安装器（Inno Setup，安装版首选）
+molia-1.2.3-windows-x64.zip             # Windows 便携版
 molia-1.2.3-linux-x64.tar.gz
 molia-1.2.3-web.zip
 molia-1.2.3-ios-unsigned.zip            # 无签名，仅侧载
@@ -72,6 +73,9 @@ SHA256SUMS.txt
 ```
 
 桌面压缩包顶层是 `molia-<版本>-<平台>/` 单目录，应用内更新会自动下钻一层。
+
+> Actions 运行页面里下载的 artifact 是「zip 套 zip」（CI 中间产物，供 publish job
+> 汇总）；分发给用户请用 Release 资产。
 
 ## 5. latest.json 格式
 
@@ -109,7 +113,12 @@ SHA256SUMS.txt
 - **Linux**：发布包**不含 libmpv**，运行需系统安装（发行版包名如 `mpv` /
   `libmpv2`）；应用内更新只支持可写的便携目录，系统包管理器安装会降级为
   手动下载。
-- **Windows**：应用内更新是「解压覆盖 + 重启」，安装目录需可写。
+- **Windows 安装版**：`setup.exe`（Inno Setup，脚本 `windows/installer/molia.iss`，
+  按用户装到 `%LOCALAPPDATA%\Programs\Molia`，无需管理员）；应用内更新会静默运行
+  新版本安装器（`/SILENT /NORESTART /CLOSEAPPLICATIONS`），安装器的 `[Run]` 段
+  在完成后自动拉起应用。
+- **Windows 便携版**：解压 zip 到任意可写目录运行；应用内更新是「解压覆盖 +
+  重启」，目录不可写时降级为手动下载。
 - **Web**：无应用内安装，检测到新版本后刷新页面（Pages 同源清单）。
 - **iOS**：无应用内更新（App Store 规则），产物仅供侧载验证。
 
@@ -120,4 +129,14 @@ python3 tool/ci/gen_update_manifest.py --help      # 清单脚本自测
 flutter test --no-pub test/update                  # 更新链路单测/组件测试
 # 试发：先推一个测试 tag（会真的创建 Release，确认后再发正式版）
 git tag v0.0.1-beta.1 && git push origin v0.0.1-beta.1
+```
+
+Windows 安装器可在 Windows 本机单独编译验证：
+
+```powershell
+flutter build windows --release
+& "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" `
+  /DAppVersion=0.0.0-test /DVersionNum=0.0.0.0 `
+  /DSourceDir="$PWD\build\windows\x64\runner\Release" `
+  /DOutputDir="$PWD\dist" windows\installer\molia.iss
 ```

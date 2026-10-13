@@ -116,5 +116,46 @@ void main() {
         arch: 'arm64',
       ), isNull);
     });
+
+    test('assetOfKind：同平台多形态（Windows 安装器 / 便携包）按类别挑', () {
+      final multi = [
+        asset('windows', 'x64', kind: 'zip'),
+        asset('windows', 'x64', kind: 'exe'),
+      ];
+      final releaseWithMulti = release(assets: multi);
+      expect(
+        releaseWithMulti.assetOfKind(
+          platform: 'windows',
+          arch: 'x64',
+          kind: 'exe',
+        ),
+        multi[1],
+      );
+      expect(
+        releaseWithMulti.assetOfKind(
+          platform: 'windows',
+          arch: 'x64',
+          kind: 'zip',
+        ),
+        multi[0],
+      );
+      expect(
+        releaseWithMulti.assetOfKind(
+          platform: 'windows',
+          arch: 'x64',
+          kind: 'tar.gz',
+        ),
+        isNull,
+      );
+      // 架构不精确时回退同平台同类别。
+      expect(
+        releaseWithMulti.assetOfKind(
+          platform: 'windows',
+          arch: 'arm64',
+          kind: 'exe',
+        ),
+        multi[1],
+      );
+    });
   });
 }
