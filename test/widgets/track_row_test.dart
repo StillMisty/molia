@@ -114,4 +114,37 @@ void main() {
     await pumpRow(tester);
     expect(TrackRow.gapOf(tester.element(find.byType(TrackRow))), 2);
   });
+
+  testWidgets('行尾元信息贴行右缘（回归：Flexible 曾与标题平分剩余宽度）',
+      (tester) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: Center(
+            child: SizedBox(
+              width: 360,
+              child: TrackRow(
+                title: 'A very long track title that should take the space',
+                artist: 'Artist',
+                trailingText: '03:45',
+                position: M3ECardPosition.single,
+                onTap: () {},
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    // 行尾文本（超时长的自定义文案）右缘 = 行右缘 − CardListSurface 内边距 16dp。
+    final double rowRight = tester.getTopRight(find.byType(TrackRow)).dx;
+    final Rect trailingRect = tester.getRect(find.text('03:45'));
+    expect(trailingRect.right, rowRight - 16);
+
+    // 标题列吃满剩余宽度：右缘紧邻行尾文本左侧的 12dp 间距。
+    final double titleRight =
+        tester.getTopRight(find.textContaining('A very long track')).dx;
+    expect(titleRight, trailingRect.left - 12);
+  });
 }

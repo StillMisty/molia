@@ -76,51 +76,59 @@ class TrackRow extends StatelessWidget {
       semanticLabel: artist.isEmpty ? title : '$title, $artist',
       child: SizedBox(
         height: extent,
-        child: Row(
-          children: [
-            _buildLeading(context, scheme),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    title,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: type.bodyLarge.copyWith(color: contentColor),
-                  ),
-                  if (artist.isNotEmpty)
+        child: LayoutBuilder(
+          builder: (context, constraints) => Row(
+            children: [
+              _buildLeading(context, scheme),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
                     Text(
-                      artist,
+                      title,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
-                      style: type.bodyMedium.copyWith(color: supportingColor),
+                      style: type.bodyLarge.copyWith(color: contentColor),
                     ),
-                ],
-              ),
-            ),
-            if (trailingText != null) ...[
-              const SizedBox(width: 12),
-              // Flexible：窄屏/长文案时收缩省略，而不是把行撑爆。
-              Flexible(
-                child: Text(
-                  trailingText!,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: type.labelSmall.copyWith(color: supportingColor),
+                    if (artist.isNotEmpty)
+                      Text(
+                        artist,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: type.bodyMedium.copyWith(color: supportingColor),
+                      ),
+                  ],
                 ),
               ),
+              if (trailingText != null) ...[
+                const SizedBox(width: 12),
+                // 行尾元信息贴行右缘：普通 Text 取自身宽度（不用 Flexible：
+                // loose Flexible 会与标题列平分剩余宽度，时长只有 28dp 却
+                // 占走一半、右侧留白）。封顶半行宽 + 省略：窄屏/超长元信息
+                // 收缩省略，而不是把行撑溢出。
+                ConstrainedBox(
+                  constraints:
+                      BoxConstraints(maxWidth: constraints.maxWidth / 2),
+                  child: Text(
+                    trailingText!,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    softWrap: false,
+                    style: type.labelSmall.copyWith(color: supportingColor),
+                  ),
+                ),
+              ],
+              if (trailing != null) ...[
+                const SizedBox(width: 12),
+                IconTheme.merge(
+                  data: IconThemeData(color: supportingColor, size: 20),
+                  child: trailing!,
+                ),
+              ],
             ],
-            if (trailing != null) ...[
-              const SizedBox(width: 12),
-              IconTheme.merge(
-                data: IconThemeData(color: supportingColor, size: 20),
-                child: trailing!,
-              ),
-            ],
-          ],
+          ),
         ),
       ),
     );
