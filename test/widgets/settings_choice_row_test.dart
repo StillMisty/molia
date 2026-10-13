@@ -2,6 +2,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:material_3_expressive/material_3_expressive.dart';
 import 'package:material_ui/material_ui.dart';
 
+import 'package:molia/widgets/card_list_surface.dart';
 import 'package:molia/widgets/settings/settings_tiles.dart';
 
 /// 设置行共享组件的布局回归：
@@ -76,5 +77,80 @@ void main() {
     expect(find.text('Select'), findsNothing);
     // 行标题 + 字段提示（hintText = title）两处。
     expect(find.text('Quality'), findsNWidgets(2));
+  });
+
+  testWidgets('标签行：标题 1 行、副标题 2 行封顶（长文案不再折 3 行）',
+      (tester) async {
+    const longSubtitle =
+        'A deliberately long supporting text that would wrap to three or '
+        'even four lines if the label column did not cap the line count for '
+        'every settings row in this list.';
+    await pumpRow(
+      tester,
+      Column(
+        children: [
+          const SettingsInfoTile(
+            icon: Icons.info_rounded,
+            title: 'Short',
+            subtitle: 'One line',
+          ),
+          SettingsInfoTile(
+            icon: Icons.info_rounded,
+            title: 'Long',
+            subtitle: longSubtitle,
+          ),
+        ],
+      ),
+    );
+
+    // 标题 1 行 / 副标题 2 行（组件属性即规范）。
+    final title = tester.widget<Text>(find.text('Long'));
+    expect(title.maxLines, 1);
+    final short = tester.widget<Text>(find.text('One line'));
+    expect(short.maxLines, 2);
+    final long = tester.widget<Text>(find.text(longSubtitle));
+    expect(long.maxLines, 2);
+
+    // 渲染高度：长副标题 = 恰好 2 行（单行高度的 2 倍），不随文案膨胀。
+    final singleHeight = tester.getSize(find.text('One line')).height;
+    final longHeight = tester.getSize(find.text(longSubtitle)).height;
+    expect(longHeight, 2 * singleHeight);
+  });
+
+  testWidgets('行高取 M3E 列表 token：无副标题 56dp，有副标题 72dp', (tester) async {
+    await pumpRow(
+      tester,
+      Builder(
+        builder: (context) {
+          final item = M3ETheme.of(context).listTheme.item;
+          return Column(
+            children: [
+              SettingsInfoTile(
+                icon: Icons.info_rounded,
+                title: 'No subtitle',
+                subtitle: '',
+              ),
+              const SettingsInfoTile(
+                icon: Icons.info_rounded,
+                title: 'With subtitle',
+                subtitle: 'Supporting',
+              ),
+              // 参照物：token 值本身。
+              SizedBox(height: item.twoLineHeight - item.minHeight),
+            ],
+          );
+        },
+      ),
+    );
+
+    final rows = find.byType(CardListSurface);
+    final noSubtitle = tester.getSize(rows.at(0)).height;
+    final withSubtitle = tester.getSize(rows.at(1)).height;
+    final item = M3ETheme.of(
+      tester.element(find.byType(SettingsInfoTile).first),
+    ).listTheme.item;
+    expect(noSubtitle, item.minHeight);
+    expect(withSubtitle, item.twoLineHeight);
+    expect(withSubtitle, greaterThan(noSubtitle));
   });
 }

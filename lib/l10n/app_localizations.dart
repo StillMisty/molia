@@ -245,7 +245,7 @@ abstract class AppLocalizations {
   /// No description provided for @themeModeSystem.
   ///
   /// In en, this message translates to:
-  /// **'System default'**
+  /// **'System'**
   String get themeModeSystem;
 
   /// No description provided for @themeModeLight.
@@ -269,7 +269,7 @@ abstract class AppLocalizations {
   /// No description provided for @settingsBaseColorWallpaper.
   ///
   /// In en, this message translates to:
-  /// **'System wallpaper (Monet)'**
+  /// **'System wallpaper'**
   String get settingsBaseColorWallpaper;
 
   /// No description provided for @settingsBaseColorCustom.
@@ -293,7 +293,7 @@ abstract class AppLocalizations {
   /// No description provided for @settingsPureBlackSubtitle.
   ///
   /// In en, this message translates to:
-  /// **'Use pure black surfaces in dark mode (stacks with the color source; OLED)'**
+  /// **'Use pure black surfaces in dark mode (OLED)'**
   String get settingsPureBlackSubtitle;
 
   /// No description provided for @settingsSeedColor.
@@ -311,7 +311,7 @@ abstract class AppLocalizations {
   /// No description provided for @settingsFollowArtworkSubtitle.
   ///
   /// In en, this message translates to:
-  /// **'Use album art colors while a track with artwork plays; falls back to base colors otherwise'**
+  /// **'Use album art colors while playing; falls back to base colors'**
   String get settingsFollowArtworkSubtitle;
 
   /// No description provided for @settingsAppFont.
@@ -437,7 +437,7 @@ abstract class AppLocalizations {
   /// No description provided for @settingsDefaultPlayModeSubtitle.
   ///
   /// In en, this message translates to:
-  /// **'Initial mode for new playback sessions; the current session is unaffected'**
+  /// **'Initial mode for new sessions; current playback is unaffected'**
   String get settingsDefaultPlayModeSubtitle;
 
   /// No description provided for @settingsRestoreSessionTitle.
@@ -449,7 +449,7 @@ abstract class AppLocalizations {
   /// No description provided for @settingsRestoreSessionSubtitle.
   ///
   /// In en, this message translates to:
-  /// **'Restore the previous track, queue and position on launch (on by default)'**
+  /// **'Restore track, queue and position on launch (on by default)'**
   String get settingsRestoreSessionSubtitle;
 
   /// No description provided for @settingsCurrentQuality.
@@ -467,7 +467,7 @@ abstract class AppLocalizations {
   /// No description provided for @settingsAutoSourceSwapSubtitle.
   ///
   /// In en, this message translates to:
-  /// **'When playback fails, find the same song in another source and switch automatically (on by default)'**
+  /// **'On failure, find the same song in another source and switch (on by default)'**
   String get settingsAutoSourceSwapSubtitle;
 
   /// No description provided for @settingsDataSaverTitle.
@@ -521,7 +521,7 @@ abstract class AppLocalizations {
   /// No description provided for @settingsSourcesItemSubtitle.
   ///
   /// In en, this message translates to:
-  /// **'Import LX Music source scripts to search and play songs from third-party platforms'**
+  /// **'Import LX Music source scripts to search third-party platforms'**
   String get settingsSourcesItemSubtitle;
 
   /// No description provided for @settingsContentSection.
@@ -635,7 +635,7 @@ abstract class AppLocalizations {
   /// No description provided for @exportDataSubtitle.
   ///
   /// In en, this message translates to:
-  /// **'Full backup: playlists, sources, settings, stats and history (credentials excluded)'**
+  /// **'Full backup: playlists, sources, settings, stats, history (no credentials)'**
   String get exportDataSubtitle;
 
   /// No description provided for @importDataTitle.
@@ -1265,7 +1265,7 @@ abstract class AppLocalizations {
   /// No description provided for @sourcesQualityHint.
   ///
   /// In en, this message translates to:
-  /// **'This quality is preferred when resolving a track URL, with automatic fallback when unavailable.'**
+  /// **'Preferred when resolving a track URL; falls back when unavailable.'**
   String get sourcesQualityHint;
 
   /// No description provided for @sourcesSortTitle.
@@ -2762,6 +2762,24 @@ abstract class AppLocalizations {
   /// **'Every 2 seconds'**
   String get lyricsBluetoothInterval2s;
 
+  /// No description provided for @lyricsNotificationPermissionTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Notification permission needed'**
+  String get lyricsNotificationPermissionTitle;
+
+  /// No description provided for @lyricsNotificationPermissionSubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Allow notifications so the media card appears; tap to open system settings'**
+  String get lyricsNotificationPermissionSubtitle;
+
+  /// No description provided for @lyricsMediaSessionUnavailable.
+  ///
+  /// In en, this message translates to:
+  /// **'System media session unavailable: notification / lock-screen lyrics and playback controls are disabled'**
+  String get lyricsMediaSessionUnavailable;
+
   /// No description provided for @lyricsDisplayUnsupported.
   ///
   /// In en, this message translates to:
@@ -3551,7 +3569,7 @@ abstract class AppLocalizations {
   /// No description provided for @syncPassphraseTrustHint.
   ///
   /// In en, this message translates to:
-  /// **'The passphrase is the trust root: any device holding it is fully trusted. Reset it if it leaks.'**
+  /// **'Passphrase is the trust root; every holder is fully trusted. Reset it if leaked.'**
   String get syncPassphraseTrustHint;
 
   /// No description provided for @syncPassphraseCopy.

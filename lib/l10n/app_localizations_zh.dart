@@ -111,7 +111,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get settingsPureBlack => '纯黑背景';
 
   @override
-  String get settingsPureBlackSubtitle => '深色模式下把表面覆盖为纯黑（与取色来源叠加，OLED 省电）';
+  String get settingsPureBlackSubtitle => '深色模式下表面纯黑（OLED 省电；可与取色叠加）';
 
   @override
   String get settingsSeedColor => '自定义颜色';
@@ -120,8 +120,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get settingsFollowArtwork => '播放时跟随封面';
 
   @override
-  String get settingsFollowArtworkSubtitle =>
-      '播放有封面的歌曲时，用封面取色覆盖基础配色；无封面时回退基础配色';
+  String get settingsFollowArtworkSubtitle => '播放有封面歌曲时用封面取色，无封面回退基础配色';
 
   @override
   String get settingsAppFont => '应用字体';
@@ -226,7 +225,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get settingsDataSaverCoversSubtitle => '不发起新的封面请求，无缓存时显示占位图标';
 
   @override
-  String get settingsSourcesItemSubtitle => '导入 LX Music 音源脚本，搜索并播放第三方平台歌曲';
+  String get settingsSourcesItemSubtitle => '导入 LX Music 音源脚本，搜索第三方平台歌曲';
 
   @override
   String get settingsContentSection => '内容与来源';
@@ -613,7 +612,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get sourcesQuality128k => '128K';
 
   @override
-  String get sourcesQualityHint => '取链时会优先使用该音质，不可用时自动回退。';
+  String get sourcesQualityHint => '取链优先使用该音质，不可用时自动回退';
 
   @override
   String get sourcesSortTitle => '渠道排序';
@@ -1417,6 +1416,16 @@ class AppLocalizationsZh extends AppLocalizations {
   String get lyricsBluetoothInterval2s => '每 2 秒';
 
   @override
+  String get lyricsNotificationPermissionTitle => '需要通知权限';
+
+  @override
+  String get lyricsNotificationPermissionSubtitle =>
+      '允许通知后媒体控制卡才能稳定展示；点按前往系统设置';
+
+  @override
+  String get lyricsMediaSessionUnavailable => '系统媒体会话初始化失败：通知栏 / 锁屏歌词与播放控制不可用';
+
+  @override
   String get lyricsDisplayUnsupported => '当前平台暂不支持歌词输出';
 
   @override
@@ -1850,7 +1859,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get syncPassphraseNotSet => '未设置';
 
   @override
-  String get syncPassphraseTrustHint => '口令即信任根：持有口令的设备完全互信；怀疑泄露请重置。';
+  String get syncPassphraseTrustHint => '口令即信任根：持有者完全互信；怀疑泄露请重置。';
 
   @override
   String get syncPassphraseCopy => '复制口令';

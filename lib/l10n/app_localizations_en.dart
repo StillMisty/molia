@@ -88,7 +88,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get settingsThemeMode => 'Theme mode';
 
   @override
-  String get themeModeSystem => 'System default';
+  String get themeModeSystem => 'System';
 
   @override
   String get themeModeLight => 'Light';
@@ -100,7 +100,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get settingsBaseColor => 'Base colors';
 
   @override
-  String get settingsBaseColorWallpaper => 'System wallpaper (Monet)';
+  String get settingsBaseColorWallpaper => 'System wallpaper';
 
   @override
   String get settingsBaseColorCustom => 'Custom color';
@@ -113,7 +113,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get settingsPureBlackSubtitle =>
-      'Use pure black surfaces in dark mode (stacks with the color source; OLED)';
+      'Use pure black surfaces in dark mode (OLED)';
 
   @override
   String get settingsSeedColor => 'Custom color';
@@ -123,7 +123,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get settingsFollowArtworkSubtitle =>
-      'Use album art colors while a track with artwork plays; falls back to base colors otherwise';
+      'Use album art colors while playing; falls back to base colors';
 
   @override
   String get settingsAppFont => 'App font';
@@ -187,14 +187,14 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get settingsDefaultPlayModeSubtitle =>
-      'Initial mode for new playback sessions; the current session is unaffected';
+      'Initial mode for new sessions; current playback is unaffected';
 
   @override
   String get settingsRestoreSessionTitle => 'Resume last playback';
 
   @override
   String get settingsRestoreSessionSubtitle =>
-      'Restore the previous track, queue and position on launch (on by default)';
+      'Restore track, queue and position on launch (on by default)';
 
   @override
   String get settingsCurrentQuality => 'Now playing quality';
@@ -204,7 +204,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get settingsAutoSourceSwapSubtitle =>
-      'When playback fails, find the same song in another source and switch automatically (on by default)';
+      'On failure, find the same song in another source and switch (on by default)';
 
   @override
   String get settingsDataSaverTitle => 'Data saver';
@@ -234,7 +234,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get settingsSourcesItemSubtitle =>
-      'Import LX Music source scripts to search and play songs from third-party platforms';
+      'Import LX Music source scripts to search third-party platforms';
 
   @override
   String get settingsContentSection => 'Content & sources';
@@ -296,7 +296,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get exportDataSubtitle =>
-      'Full backup: playlists, sources, settings, stats and history (credentials excluded)';
+      'Full backup: playlists, sources, settings, stats, history (no credentials)';
 
   @override
   String get importDataTitle => 'Import data';
@@ -636,7 +636,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get sourcesQualityHint =>
-      'This quality is preferred when resolving a track URL, with automatic fallback when unavailable.';
+      'Preferred when resolving a track URL; falls back when unavailable.';
 
   @override
   String get sourcesSortTitle => 'Channel order';
@@ -1469,6 +1469,18 @@ class AppLocalizationsEn extends AppLocalizations {
   String get lyricsBluetoothInterval2s => 'Every 2 seconds';
 
   @override
+  String get lyricsNotificationPermissionTitle =>
+      'Notification permission needed';
+
+  @override
+  String get lyricsNotificationPermissionSubtitle =>
+      'Allow notifications so the media card appears; tap to open system settings';
+
+  @override
+  String get lyricsMediaSessionUnavailable =>
+      'System media session unavailable: notification / lock-screen lyrics and playback controls are disabled';
+
+  @override
   String get lyricsDisplayUnsupported =>
       'Lyric outputs are not available on this platform';
 
@@ -1927,7 +1939,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get syncPassphraseTrustHint =>
-      'The passphrase is the trust root: any device holding it is fully trusted. Reset it if it leaks.';
+      'Passphrase is the trust root; every holder is fully trusted. Reset it if leaked.';
 
   @override
   String get syncPassphraseCopy => 'Copy passphrase';

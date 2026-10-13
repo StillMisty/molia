@@ -108,7 +108,7 @@ class _SettingsHomeViewState extends State<_SettingsHomeView> {
     final syncProvider = context.watch<SyncProvider?>();
     final sourceSwapSettings = context.watch<SourceSwapSettings?>();
     final sources = context.read<SourcesProvider?>();
-    final theme = Theme.of(context);
+    final m3e = M3ETheme.of(context);
 
     return Container(
       padding: ResponsivePadding.horizontal(
@@ -135,7 +135,9 @@ class _SettingsHomeViewState extends State<_SettingsHomeView> {
                     padding: const EdgeInsets.only(left: kSettingsSmallSpacing),
                     child: Text(
                       l10n.settingsTitle,
-                      style: theme.textTheme.headlineSmall,
+                      // 页面标题走 M3E typeScale（与行内排版同一套 token；
+                      // 不再用 material 的 textTheme.headlineSmall）。
+                      style: m3e.typeScale.headlineSmall,
                     ),
                   ),
                   Row(

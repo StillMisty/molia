@@ -24,6 +24,7 @@ import 'package:molia/services/settings_service.dart';
 import 'package:molia/sources/source_manager.dart';
 import 'package:molia/theme/scheme_builder.dart';
 import 'package:molia/utils/responsive.dart';
+import 'package:molia/widgets/card_list_surface.dart';
 
 import 'support/fakes.dart';
 import 'package:molia/data/settings/settings_keys.dart';
@@ -225,7 +226,7 @@ void main() {
 
     // 壁纸段禁用：点它不产生状态变化。
     await tester.tap(
-      segmentOf(const Key('settingsBaseColorItem'), 'System wallpaper (Monet)'),
+      segmentOf(const Key('settingsBaseColorItem'), 'System wallpaper'),
     );
     await tester.pumpAndSettle();
     expect(themeProvider.baseColorSource, ColorBaseSource.wallpaper);
@@ -323,6 +324,75 @@ void main() {
     expect(playbackProvider.restoreSessionEnabled, isFalse);
     final prefs = await SharedPreferences.getInstance();
     expect(prefs.getBool(kRestoreSessionEnabled.name), isFalse);
+  });
+
+  testWidgets('外观分区行高统一：副标题 2 行封顶，行高不随文案漂移', (tester) async {
+    await pumpSettingsPage(tester);
+
+    final item = M3ETheme.of(
+      tester.element(find.byKey(const Key('settingsFollowArtworkSwitch'))),
+    ).listTheme.item;
+    // 行的 CardListSurface：switchKey 挂在开关上（祖先方向），行 key 挂在
+    // tile 上（后代方向）；两种都取到行表面。
+    double rowHeight(Key key) {
+      final target = find.byKey(key);
+      final ancestor =
+          find.ancestor(of: target, matching: find.byType(CardListSurface));
+      if (ancestor.evaluate().isNotEmpty) {
+        return tester.getSize(ancestor.first).height;
+      }
+      return tester.getSize(
+        find
+            .descendant(of: target, matching: find.byType(CardListSurface))
+            .first,
+      ).height;
+    }
+
+    // 修复前三种高度混杂（96 / 118 / 158dp）：带长副标题的标签行现在等高，
+    // 且不超出 M3E 双行 token（测试字体的行高比真机略高，留 4dp 容差）。
+    final followArtwork = rowHeight(const Key('settingsFollowArtworkSwitch'));
+    expect(followArtwork, lessThanOrEqualTo(item.twoLineHeight + 4));
+    expect(rowHeight(const Key('settingsPureBlackSwitch')), followArtwork);
+    expect(rowHeight(const Key('settingsRestoreSessionSwitch')), followArtwork);
+    expect(rowHeight(const Key('settingsDataSaverItem')), followArtwork);
+    expect(rowHeight(const Key('settingsLyricsDisplayItem')), followArtwork);
+
+    // 全页标签行（排除分段 / 滑杆 / 下拉等复合行）都不超过双行 token。
+    for (final element in find.byType(CardListSurface).evaluate()) {
+      final row = find.byWidget(element.widget);
+      final composite = find
+          .descendant(
+            of: row,
+            matching: find.byWidgetPredicate((widget) {
+              final type = widget.runtimeType.toString();
+              return type.startsWith('M3ESegmentedButton') ||
+                  type.startsWith('M3ESlider') ||
+                  type.startsWith('M3EDropdownMenu');
+            }),
+          )
+          .evaluate()
+          .isNotEmpty;
+      if (composite) continue;
+      expect(
+        tester.getSize(row).height,
+        lessThanOrEqualTo(item.twoLineHeight + 4),
+        reason: '标签行高度超出双行 token',
+      );
+    }
+  });
+
+  testWidgets('分段行不显示选中勾（窄弹层下标签不截断）', (tester) async {
+    await pumpSettingsPage(tester);
+
+    // 选中态的勾被裁掉后，「System wallpaper」等长标签可完整显示；
+    // 用行的分段按钮属性断言（文案截断无法在测试字体下精确断言）。
+    final segmented = tester.widget<M3ESegmentedButton<ThemeMode>>(
+      find.descendant(
+        of: find.byKey(const Key('settingsThemeModeItem')),
+        matching: find.byType(M3ESegmentedButton<ThemeMode>),
+      ),
+    );
+    expect(segmented.showSelectedIcon, isFalse);
   });
 
   testWidgets('省流模式：入口进子页，开关/音质上限/封面省流生效并持久化', (tester) async {
