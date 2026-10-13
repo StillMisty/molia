@@ -141,21 +141,38 @@ jobs:
           cache: true
       - name: pub get
         run: flutter pub get --enforce-lockfile
-      - name: 构建 + 打包
+      - name: 安装 Inno Setup（Windows 安装器编译器）
+        shell: pwsh
+        run: choco install innosetup -y --no-progress
+      - name: 构建 + 打包（便携 zip + 安装器 setup.exe）
         shell: pwsh
         run: |
           $ErrorActionPreference = "Stop"
           $v = "${{ needs.prepare.outputs.version }}"
-          flutter build windows --release `
-            --build-name "$v" --build-number "${{ needs.prepare.outputs.build }}"
+          $build = "${{ needs.prepare.outputs.build }}"
+          flutter build windows --release --build-name "$v" --build-number "$build"
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
           $stage = "dist/molia-$v-windows-x64"
           New-Item -ItemType Directory -Force -Path $stage | Out-Null
           Copy-Item -Recurse -Force "build/windows/x64/runner/Release/*" $stage
           Compress-Archive -Path $stage -DestinationPath "dist/molia-$v-windows-x64.zip" -Force
+
+          # 安装器的版本资源必须是纯数字（预发布后缀进不了 x.y.z.w）。
+          $parts = @(($v -split '-')[0].Split('.'))
+          while ($parts.Count -lt 3) { $parts += '0' }
+          $verNum = (($parts[0..2] + $build) -join '.')
+          $iscc = "C:\Program Files (x86)\Inno Setup 6\ISCC.exe"
+          & $iscc "/DAppVersion=$v" "/DVersionNum=$verNum" `
+            "/DSourceDir=$PWD\$stage" "/DOutputDir=$PWD\dist" `
+            "windows/installer/molia.iss"
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
       - uses: actions/upload-artifact@v7
         with:
           name: release-windows
-          path: dist/*.zip
+          path: |
+            dist/*.zip
+            dist/*.exe
           if-no-files-found: error
 
   linux:

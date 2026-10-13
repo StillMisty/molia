@@ -52,16 +52,24 @@ class UpdateService {
   }
 
   /// 下载当前平台适配的产物，返回本地文件路径。
+  ///
+  /// 产物类别按本机安装形态选择（Windows 安装版取 `setup.exe`，便携版取 zip），
+  /// 找不到对应类别时回退到该平台的任意产物。
   Future<String> download({
     required AppRelease release,
     required UpdatePlatformInfo platform,
     required void Function(int received, int total) onProgress,
     CancelToken? cancelToken,
-  }) {
-    final asset = release.assetFor(
-      platform: platform.platform,
-      arch: platform.arch,
-    );
+  }) async {
+    final preferredKind = await _installer.preferredArchiveKind();
+    final asset = (preferredKind == null
+            ? null
+            : release.assetOfKind(
+                platform: platform.platform,
+                arch: platform.arch,
+                kind: preferredKind,
+              )) ??
+        release.assetFor(platform: platform.platform, arch: platform.arch);
     if (asset == null) {
       throw UpdateFailureException(
         UpdateFailureKind.unsupported,

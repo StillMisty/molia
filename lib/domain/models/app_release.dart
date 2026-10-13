@@ -123,6 +123,22 @@ class AppRelease {
     return fallback;
   }
 
+  /// 按平台、架构与产物类别挑产物（同一平台可能有多种分发形态，如
+  /// Windows 的安装器 `exe` 与便携 `zip`）。
+  ReleaseAsset? assetOfKind({
+    required String platform,
+    required String arch,
+    required String kind,
+  }) {
+    ReleaseAsset? fallback;
+    for (final asset in assets) {
+      if (asset.platform != platform || asset.kind != kind) continue;
+      if (asset.arch == arch) return asset;
+      fallback ??= asset;
+    }
+    return fallback;
+  }
+
   @override
   String toString() =>
       'AppRelease(${channel.wireName}, $version+$build, ${assets.length} assets)';
