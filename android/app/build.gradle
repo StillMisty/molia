@@ -1,7 +1,7 @@
 plugins {
+    // Kotlin 由 AGP9 内置 Kotlin 支持编译，本模块不 apply kotlin-android
     id "com.android.application"
-    id "kotlin-android"
-    // The Flutter Gradle Plugin must be applied after the Android and Kotlin Gradle plugins.
+    // The Flutter Gradle Plugin must be applied after the Android Gradle plugin.
     id "dev.flutter.flutter-gradle-plugin"
 }
 
@@ -16,15 +16,11 @@ android {
     compileSdk = 37
     ndkVersion = "30.0.16248370"
 
-    // Java/Kotlin 目标取工具链上限：Kotlin 2.4.21 最高支持 JVM_26（JvmTarget 枚举上限），
+    // Java/Kotlin 目标取工具链上限：KGP 2.4.21 最高支持 JVM_26（JvmTarget 枚举上限），
     // 由 JDK 27 编译出 target 26 字节码，D8 正常脱糖。
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_26
         targetCompatibility = JavaVersion.VERSION_26
-    }
-
-    kotlinOptions {
-        jvmTarget = '26'
     }
 
     defaultConfig {
@@ -66,6 +62,13 @@ android {
             // 同上，压缩 dex（minSdk≥28 时 AGP 默认不压缩以支持 mmap 直载，约 2.2MB → 1.0MB）。
             useLegacyPackaging = true
         }
+    }
+}
+
+// 内置 Kotlin 的编译选项入口：jvmTarget 与 compileOptions 统一取 JVM_26
+kotlin {
+    compilerOptions {
+        jvmTarget = org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_26
     }
 }
 
