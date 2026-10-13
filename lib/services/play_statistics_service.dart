@@ -17,7 +17,7 @@ library;
 import 'dart:async';
 
 import 'package:flutter/foundation.dart';
-import 'package:logger/logger.dart';
+import 'package:logging/logging.dart';
 
 import '../data/play_statistics_repository.dart';
 import '../data/settings/settings_keys.dart';
@@ -51,7 +51,7 @@ class PlayStatisticsService {
 
   final PlayStatisticsRepository _repository;
   final DateTime Function() _clock;
-  final Logger _logger = Logger();
+  final Logger _logger = Logger('molia.play_statistics_service');
 
   final SettingsRegistry _settings;
 
@@ -84,7 +84,7 @@ class PlayStatisticsService {
     try {
       _enabled = await _settings.read(kPlayStatisticsEnabled);
     } catch (e) {
-      _logger.e('读取听歌统计开关失败，按默认开启处理', error: e);
+      _logger.severe('读取听歌统计开关失败，按默认开启处理', e);
       _enabled = true;
     }
     enabledNotifier.value = _enabled;
@@ -104,7 +104,7 @@ class PlayStatisticsService {
     try {
       await _settings.write(kPlayStatisticsEnabled, value);
     } catch (e) {
-      _logger.e('写入听歌统计开关失败', error: e);
+      _logger.severe('写入听歌统计开关失败', e);
     }
   }
 
@@ -281,7 +281,7 @@ class PlayStatisticsService {
   void _enqueue(Future<void> Function() action) {
     _writes = _writes.then((_) => action()).catchError(
       (Object error, StackTrace stackTrace) {
-        _logger.e('听歌统计写入失败', error: error, stackTrace: stackTrace);
+        _logger.severe('听歌统计写入失败', error, stackTrace);
       },
     );
   }

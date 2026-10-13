@@ -1,10 +1,10 @@
 import 'package:flutter/foundation.dart';
-import 'package:logger/logger.dart';
+import 'package:logging/logging.dart';
 
 import '../data/settings/settings_keys.dart';
 import '../data/settings/settings_registry.dart';
 
-final logger = Logger();
+final logger = Logger('molia.nav_provider');
 
 /// 壳层底部导航的三个目的地。
 ///
@@ -108,7 +108,7 @@ class NavProvider extends ChangeNotifier {
       }
       notifyListeners();
     } catch (e) {
-      logger.e('加载底部导航偏好失败: $e');
+      logger.severe('加载底部导航偏好失败: $e');
     }
   }
 
@@ -123,7 +123,7 @@ class NavProvider extends ChangeNotifier {
         _hidden.map((destination) => destination.name).toList(),
       );
     } catch (e) {
-      logger.e('保存底部导航偏好失败: $e');
+      logger.severe('保存底部导航偏好失败: $e');
     }
   }
 }

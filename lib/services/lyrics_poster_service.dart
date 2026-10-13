@@ -2,13 +2,13 @@ import 'dart:ui' as ui;
 import 'package:material_ui/material_ui.dart';
 import 'package:flutter/services.dart';
 import 'package:share_plus/share_plus.dart';
-import 'package:logger/logger.dart';
+import 'package:logging/logging.dart';
 import 'package:http/http.dart' as http;
 import 'package:gal/gal.dart';
 import '../managers/artwork_cache.dart';
 import '../models/poster_lyric_line.dart';
 
-final logger = Logger();
+final logger = Logger('molia.lyrics_poster_service');
 
 class LyricsPosterService {
   Future<Uint8List> generatePosterData({
@@ -87,7 +87,7 @@ class LyricsPosterService {
             albumArtSize > textTotalHeight ? albumArtSize : textTotalHeight;
         calculatedHeight += headerHeight + elementSpacing;
       } catch (e) {
-        logger.w('Failed to load album cover for height calculation: $e');
+        logger.warning('Failed to load album cover for height calculation: $e');
         final titleStyle = TextStyle(
             fontFamily: fontFamily,
             fontSize: titleFontSize,
@@ -238,7 +238,7 @@ class LyricsPosterService {
       watermarkIcon =
           await _loadAssetImage('assets/icons/adaptive_icon_monochrome.png');
     } catch (e) {
-      logger.w('Failed to load watermark icon: $e');
+      logger.warning('Failed to load watermark icon: $e');
     }
 
     final double iconSize = watermarkPainter.height;
@@ -422,10 +422,10 @@ class LyricsPosterService {
         await Gal.requestAccess();
       }
       await Gal.putImageBytes(imageBytes, name: name);
-      logger.d('Poster saved to gallery: $name');
+      logger.fine('Poster saved to gallery: $name');
       return name;
     } catch (e) {
-      logger.e('Error saving poster to gallery: $e');
+      logger.severe('Error saving poster to gallery: $e');
       rethrow;
     }
   }
@@ -435,9 +435,9 @@ class LyricsPosterService {
       await SharePlus.instance.share(
         ShareParams(files: [XFile(imagePath)], text: textToShare),
       );
-      logger.d('Poster shared successfully from file: $imagePath');
+      logger.fine('Poster shared successfully from file: $imagePath');
     } catch (e) {
-      logger.e('Error sharing poster from file: $e');
+      logger.severe('Error sharing poster from file: $e');
       rethrow;
     }
   }

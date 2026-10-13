@@ -1,5 +1,5 @@
 import 'dart:async';
-import 'package:logger/logger.dart';
+import 'package:logging/logging.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../domain/models/track.dart';
 import '../models/lyrics_result.dart';
@@ -22,7 +22,7 @@ export '../models/lyrics_result.dart';
 typedef TrackLyricLoader = Future<LyricsResult?> Function(Track track);
 
 class LyricsService {
-  final Logger _logger = Logger();
+  final Logger _logger = Logger('molia.lyrics_service');
   final List<LyricProvider> _providers;
   final CacheService _cacheService;
   final LyricsCache _lyricsCache;
@@ -65,7 +65,7 @@ class LyricsService {
         final ttlDays = await _cacheService.lyricsTtlDays();
         final ttlSeconds = ttlDays * 24 * 60 * 60;
         if (ttlDays <= 0 || now - cached.timestamp < ttlSeconds) {
-          _logger.i('从缓存获取歌词: $trackId (来源: ${cached.provider})');
+          _logger.info('从缓存获取歌词: $trackId (来源: ${cached.provider})');
           return LyricsResult(
             lyric: cached.lyric,
             translation: cached.translation,
@@ -74,7 +74,7 @@ class LyricsService {
             provider: cached.provider,
           );
         }
-        _logger.i('缓存已过期: $trackId');
+        _logger.info('缓存已过期: $trackId');
       }
 
       // 曲目原生取词：平台精确 ID（songmid/hash/mrcUrl…），优先于名字搜索。
@@ -84,24 +84,24 @@ class LyricsService {
           final native = await loader(track);
           if (native != null && native.lyric.trim().isNotEmpty) {
             await _writeCache(trackId, native);
-            _logger.i('原生取词成功: $trackId (来源: ${native.provider})');
+            _logger.info('原生取词成功: $trackId (来源: ${native.provider})');
             return native;
           }
         } catch (e) {
-          _logger.w('原生取词失败: $e');
+          _logger.warning('原生取词失败: $e');
         }
       }
 
-      _logger.i('从网络获取歌词: $songName - $artistName');
+      _logger.info('从网络获取歌词: $songName - $artistName');
       final result = await _getFromProviders(songName, artistName);
       if (result != null) {
         await _writeCache(trackId, result);
-        _logger.i('歌词已缓存: $trackId (来源: ${result.provider})');
+        _logger.info('歌词已缓存: $trackId (来源: ${result.provider})');
         return result;
       }
       return null;
     } catch (e) {
-      _logger.e('获取歌词失败: $e');
+      _logger.severe('获取歌词失败: $e');
       return null;
     }
   }
@@ -173,7 +173,7 @@ class LyricsService {
           completer.complete(result);
         }
       }).catchError((Object e) {
-        _logger.w('从 ${provider.name} 获取歌词失败: $e');
+        _logger.warning('从 ${provider.name} 获取歌词失败: $e');
       }).whenComplete(() {
         remaining--;
         if (remaining == 0 && !completer.isCompleted) {

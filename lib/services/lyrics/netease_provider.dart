@@ -1,4 +1,4 @@
-import 'package:logger/logger.dart';
+import 'package:logging/logging.dart';
 
 import '../../sources/builtin/wy_lyric.dart';
 import '../../sources/builtin/wy_search.dart';
@@ -13,7 +13,7 @@ import 'lyric_provider.dart';
 /// 翻译 / 罗马音经 [fetchLyrics] 结构化透传（tlyric / rlyric 内部已完成
 /// 时间轴对齐与时间标签修正）。
 class NetEaseProvider extends LyricProvider {
-  final Logger _logger = Logger();
+  final Logger _logger = Logger('molia.netease_provider');
 
   @override
   String get name => 'netease';
@@ -43,7 +43,7 @@ class NetEaseProvider extends LyricProvider {
           ),
       ];
     } catch (e, st) {
-      _logger.e('搜索失败', error: e, stackTrace: st);
+      _logger.severe('搜索失败', e, st);
       return [];
     }
   }
@@ -66,7 +66,7 @@ class NetEaseProvider extends LyricProvider {
         lxlyric: info.lxlyric.isEmpty ? null : info.lxlyric,
       );
     } catch (e, st) {
-      _logger.e('获取歌词失败', error: e, stackTrace: st);
+      _logger.severe('获取歌词失败', e, st);
       return null;
     }
   }

@@ -1,7 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 import 'package:http/http.dart' as http;
-import 'package:logger/logger.dart';
+import 'package:logging/logging.dart';
 
 import 'lyric_provider.dart';
 
@@ -9,7 +9,7 @@ import 'lyric_provider.dart';
 class LRCLibProvider extends LyricProvider {
   static const String _baseUrl = 'https://lrclib.net';
 
-  final Logger _logger = Logger();
+  final Logger _logger = Logger('molia.lrclib_provider');
   final http.Client _client;
 
   LRCLibProvider({http.Client? httpClient}) : _client = httpClient ?? http.Client();
@@ -47,13 +47,13 @@ class LRCLibProvider extends LyricProvider {
       final response = await _client.get(uri).timeout(const Duration(seconds: 10));
 
       if (response.statusCode != 200) {
-        _logger.w('LRCLIB 搜索请求失败，状态码: ${response.statusCode}');
+        _logger.warning('LRCLIB 搜索请求失败，状态码: ${response.statusCode}');
         return [];
       }
 
       final data = json.decode(response.body);
       if (data is! List) {
-        _logger.w('LRCLIB 搜索响应格式异常');
+        _logger.warning('LRCLIB 搜索响应格式异常');
         return [];
       }
 
@@ -78,7 +78,7 @@ class LRCLibProvider extends LyricProvider {
       }
       return results;
     } catch (e, st) {
-      _logger.e('LRCLIB 搜索失败', error: e, stackTrace: st);
+      _logger.severe('LRCLIB 搜索失败', e, st);
       return [];
     }
   }
@@ -90,13 +90,13 @@ class LRCLibProvider extends LyricProvider {
       final response = await _client.get(uri).timeout(const Duration(seconds: 10));
 
       if (response.statusCode != 200) {
-        _logger.w('LRCLIB 获取歌词失败，状态码: ${response.statusCode}');
+        _logger.warning('LRCLIB 获取歌词失败，状态码: ${response.statusCode}');
         return null;
       }
 
       final data = json.decode(response.body);
       if (data is! Map<String, dynamic>) {
-        _logger.w('LRCLIB 获取歌词响应格式异常');
+        _logger.warning('LRCLIB 获取歌词响应格式异常');
         return null;
       }
 
@@ -112,7 +112,7 @@ class LRCLibProvider extends LyricProvider {
 
       return null;
     } catch (e, st) {
-      _logger.e('LRCLIB 获取歌词失败', error: e, stackTrace: st);
+      _logger.severe('LRCLIB 获取歌词失败', e, st);
       return null;
     }
   }

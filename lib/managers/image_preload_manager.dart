@@ -2,7 +2,7 @@ import 'dart:async';
 import 'dart:collection';
 
 import 'package:flutter/widgets.dart';
-import 'package:logger/logger.dart';
+import 'package:logging/logging.dart';
 
 import '../domain/models/track.dart';
 import 'artwork_cache.dart';
@@ -13,7 +13,7 @@ class ImagePreloadManager {
   factory ImagePreloadManager() => _instance;
   ImagePreloadManager._internal();
 
-  final Logger _logger = Logger();
+  final Logger _logger = Logger('molia.image_preload_manager');
 
   /// 已缓存的图片 URL（LRU 缓存）
   final LinkedHashMap<String, DateTime> _cachedUrls = LinkedHashMap();
@@ -99,7 +99,7 @@ class ImagePreloadManager {
       }).catchError((e) {
         _currentConcurrent--;
         _loadingUrls.remove(task.url);
-        _logger.w('预加载图片失败: ${task.url}, 错误: $e');
+        _logger.warning('预加载图片失败: ${task.url}, 错误: $e');
         _processQueue();
       });
     }

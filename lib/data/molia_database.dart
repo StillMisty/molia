@@ -10,12 +10,12 @@ library;
 
 import 'package:drift/drift.dart';
 import 'package:drift_flutter/drift_flutter.dart';
-import 'package:logger/logger.dart';
+import 'package:logging/logging.dart';
 import 'package:path_provider/path_provider.dart';
 
 part 'molia_database.g.dart';
 
-final _logger = Logger();
+final _logger = Logger('molia.molia_database');
 
 /// play_contexts（v1 起的最近播放上下文）。
 @TableIndex(name: 'idx_play_contexts_lastPlayedAt', columns: {#lastPlayedAt})
@@ -258,7 +258,7 @@ class MoliaDatabase extends _$MoliaDatabase {
           lastPlayedAt: context['lastPlayedAt'] as int,
         ));
       } else {
-        _logger.w('[MoliaDatabase] 跳过无效的播放上下文导入行: $context');
+        _logger.warning('[MoliaDatabase] 跳过无效的播放上下文导入行: $context');
       }
     }
     if (rows.isEmpty) return;

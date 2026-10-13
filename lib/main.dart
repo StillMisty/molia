@@ -47,6 +47,7 @@ import 'providers/discover_provider.dart';
 import 'providers/sources_provider.dart';
 import 'providers/sync_provider.dart';
 import 'providers/theme_provider.dart';
+import 'services/app_logging.dart';
 import 'services/artwork_palette_service.dart';
 import 'services/app_branding_service.dart';
 import 'services/cache_service.dart';
@@ -112,6 +113,9 @@ class _AppUiMessenger implements UiMessenger {
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+
+  // 日志装配（package:logging 的 handler / level 只在这里和测试配置里设一次）
+  initAppLogging();
 
   // 桌面窗口 chrome（Linux/Windows）：隐藏原生标题栏，窗口按钮改由顶栏承担；
   // 其余平台是空操作（Web/移动端走 stub，不触碰插件 API）。

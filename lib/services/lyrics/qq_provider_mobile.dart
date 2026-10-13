@@ -2,7 +2,7 @@ import 'dart:convert';
 import 'dart:io';
 import 'dart:async';
 import 'package:http/http.dart' as http;
-import 'package:logger/logger.dart';
+import 'package:logging/logging.dart';
 import '../../sources/builtin/tx_lyric.dart';
 import 'lyric_provider.dart';
 import 'qq_encoding.dart';
@@ -15,7 +15,7 @@ class QQProvider extends LyricProvider {
   static const String _backupLyricUrl =
       'https://u6.y.qq.com/lyric/fcgi-bin/fcg_query_lyric_new.fcg';
 
-  final Logger _logger = Logger();
+  final Logger _logger = Logger('molia.qq_provider_mobile');
   bool _useBackupDomain = false;
   final http.Client _client;
 
@@ -79,7 +79,7 @@ class QQProvider extends LyricProvider {
       );
 
       if (response.statusCode != 200) {
-        _logger.w('QQ音乐搜索请求失败，状态码: ${response.statusCode}');
+        _logger.warning('QQ音乐搜索请求失败，状态码: ${response.statusCode}');
         return [];
       }
 
@@ -134,11 +134,11 @@ class QQProvider extends LyricProvider {
       }
       return results;
     } catch (e) {
-      _logger.e('QQ音乐搜索歌曲失败: $e');
+      _logger.severe('QQ音乐搜索歌曲失败: $e');
       if (e is SocketException) {
-        _logger.e('网络连接错误: ${e.message}');
+        _logger.severe('网络连接错误: ${e.message}');
       } else if (e is TimeoutException) {
-        _logger.w('请求超时: ${e.message}');
+        _logger.warning('请求超时: ${e.message}');
       }
       return [];
     }
@@ -171,7 +171,7 @@ class QQProvider extends LyricProvider {
         );
       }
     } catch (e) {
-      _logger.w('QQ 音乐 QRC 取词失败: $e');
+      _logger.warning('QQ 音乐 QRC 取词失败: $e');
     }
 
     final viaPlayLyricInfo = await _fetchPlayLyricInfo(match.songId);
@@ -235,7 +235,7 @@ class QQProvider extends LyricProvider {
       );
 
       if (response.statusCode != 200) {
-        _logger.w('QQ音乐 PlayLyricInfo 请求失败，状态码: ${response.statusCode}');
+        _logger.warning('QQ音乐 PlayLyricInfo 请求失败，状态码: ${response.statusCode}');
         return null;
       }
 
@@ -256,7 +256,7 @@ class QQProvider extends LyricProvider {
         roma: _decodeMaybeBase64(lyricData['roma']),
       );
     } catch (e) {
-      _logger.w('QQ音乐 PlayLyricInfo 获取失败: $e');
+      _logger.warning('QQ音乐 PlayLyricInfo 获取失败: $e');
       return null;
     }
   }
@@ -302,11 +302,11 @@ class QQProvider extends LyricProvider {
         },
       );
     } catch (e) {
-      _logger.e('QQ音乐获取歌词详情失败: $e');
+      _logger.severe('QQ音乐获取歌词详情失败: $e');
       if (e is SocketException) {
-        _logger.e('网络连接错误: ${e.message}');
+        _logger.severe('网络连接错误: ${e.message}');
       } else if (e is TimeoutException) {
-        _logger.w('请求超时: ${e.message}');
+        _logger.warning('请求超时: ${e.message}');
       }
       return null;
     }
@@ -315,16 +315,16 @@ class QQProvider extends LyricProvider {
     //（两个域名都返回 403/429 时，无限递归会打爆请求）。
     if (response.statusCode == 403 || response.statusCode == 429) {
       if (retriesLeft <= 0) {
-        _logger.w('QQ音乐API限流或拒绝访问（备用域名同样失败），放弃');
+        _logger.warning('QQ音乐API限流或拒绝访问（备用域名同样失败），放弃');
         return null;
       }
-      _logger.w('QQ音乐API限流或拒绝访问，尝试切换到备用域名');
+      _logger.warning('QQ音乐API限流或拒绝访问，尝试切换到备用域名');
       _useBackupDomain = !_useBackupDomain;
       return _fetchLyricPayload(songId, retriesLeft: retriesLeft - 1);
     }
 
     if (response.statusCode != 200) {
-      _logger.w('QQ音乐获取歌词请求失败，状态码: ${response.statusCode}');
+      _logger.warning('QQ音乐获取歌词请求失败，状态码: ${response.statusCode}');
       return null;
     }
 
@@ -333,7 +333,7 @@ class QQProvider extends LyricProvider {
       final data = json.decode(decodedBody) as Map<String, dynamic>;
       return QQLyricPayload.fromJson(data);
     } catch (e) {
-      _logger.e('解析QQ音乐歌词响应失败: $e');
+      _logger.severe('解析QQ音乐歌词响应失败: $e');
       return null;
     }
   }

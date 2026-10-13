@@ -11,7 +11,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter/foundation.dart';
-import 'package:logger/logger.dart';
+import 'package:logging/logging.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
 
@@ -27,7 +27,7 @@ class PlayStatisticsProvider extends ChangeNotifier {
       : _repository = repository;
 
   final PlayStatisticsRepository _repository;
-  final Logger _logger = Logger();
+  final Logger _logger = Logger('molia.play_statistics_provider');
   StreamSubscription<void>? _subscription;
 
   PlayStatisticsRange _range = PlayStatisticsRange.month;
@@ -136,7 +136,7 @@ class PlayStatisticsProvider extends ChangeNotifier {
       );
       return result.status == ShareResultStatus.success;
     } catch (e) {
-      _logger.d('导出听歌数据失败: $e');
+      _logger.fine('导出听歌数据失败: $e');
       return false;
     }
   }
@@ -157,7 +157,7 @@ class PlayStatisticsProvider extends ChangeNotifier {
     } catch (e) {
       if (token != _loadToken) return;
       _failed = true;
-      _logger.e('加载听歌统计失败', error: e);
+      _logger.severe('加载听歌统计失败', e);
     } finally {
       if (token == _loadToken) {
         _loading = false;

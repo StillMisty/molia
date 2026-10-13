@@ -12,7 +12,7 @@
 library;
 
 import 'package:flutter/foundation.dart';
-import 'package:logger/logger.dart';
+import 'package:logging/logging.dart';
 
 import '../data/catalog/catalog_service.dart';
 import '../domain/models/catalog.dart';
@@ -23,7 +23,7 @@ import '../domain/ports/source_registry.dart';
 import 'library_provider.dart';
 import 'playback_provider.dart';
 
-final _logger = Logger();
+final _logger = Logger('molia.source_swap_provider');
 
 /// 换源写回位置。
 enum SourceSwapPlacement {
@@ -351,7 +351,7 @@ class SourceSwapProvider extends ChangeNotifier {
       notifyListeners();
     } catch (e) {
       if (sessionId != _sessionId) return;
-      _logger.d('换源搜索失败 ${descriptor.key}: $e');
+      _logger.fine('换源搜索失败 ${descriptor.key}: $e');
       _failedSourceKeys.add(descriptor.key);
       notifyListeners();
     }

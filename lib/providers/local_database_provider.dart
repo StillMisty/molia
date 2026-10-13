@@ -5,9 +5,9 @@ import 'package:share_plus/share_plus.dart';
 import 'package:flutter/foundation.dart';
 import '../data/molia_database.dart';
 import 'package:file_picker/file_picker.dart';
-import 'package:logger/logger.dart';
+import 'package:logging/logging.dart';
 
-final logger = Logger();
+final logger = Logger('molia.local_database_provider');
 
 /// 本地数据库状态：只保留「最近播放上下文（play_contexts）」。
 class LocalDatabaseProvider with ChangeNotifier {
@@ -48,7 +48,7 @@ class LocalDatabaseProvider with ChangeNotifier {
       );
       await fetchRecentContexts();
     } catch (e, s) {
-      logger.e('Error in insertOrUpdatePlayContext', error: e, stackTrace: s);
+      logger.severe('Error in insertOrUpdatePlayContext', e, s);
     }
   }
 
@@ -59,7 +59,7 @@ class LocalDatabaseProvider with ChangeNotifier {
       _recentContexts = contextsFromDb;
       notifyListeners();
     } catch (e, s) {
-      logger.e('Error fetching recent contexts', error: e, stackTrace: s);
+      logger.severe('Error fetching recent contexts', e, s);
       _recentContexts = [];
       notifyListeners();
     } finally {
@@ -88,7 +88,7 @@ class LocalDatabaseProvider with ChangeNotifier {
       );
       return result.status == ShareResultStatus.success;
     } catch (e) {
-      logger.d('Error during data export: $e');
+      logger.fine('Error during data export: $e');
       return false;
     }
   }
@@ -104,7 +104,7 @@ class LocalDatabaseProvider with ChangeNotifier {
       if (path == null) return null;
       return await File(path).readAsString();
     } catch (e) {
-      logger.d('Error during data import: $e');
+      logger.fine('Error during data import: $e');
       return null;
     }
   }
@@ -137,7 +137,7 @@ class LocalDatabaseProvider with ChangeNotifier {
 
       return result.status == ShareResultStatus.success;
     } catch (e) {
-      logger.d('Error during data export: $e');
+      logger.fine('Error during data export: $e');
       return false;
     }
   }
@@ -201,7 +201,7 @@ class LocalDatabaseProvider with ChangeNotifier {
       await fetchRecentContexts();
       return true;
     } catch (e) {
-      logger.d('Error during data import: $e');
+      logger.fine('Error during data import: $e');
       return false;
     }
   }

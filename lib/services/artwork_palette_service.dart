@@ -2,7 +2,7 @@ import 'dart:async';
 import 'dart:collection';
 import 'dart:ui' as ui;
 
-import 'package:logger/logger.dart';
+import 'package:logging/logging.dart';
 import 'package:material_color_utilities/material_color_utilities.dart';
 import 'package:material_ui/material_ui.dart';
 
@@ -67,7 +67,7 @@ class ArtworkPaletteService {
   final LinkedHashMap<String, ArtworkPalette> _cache =
       LinkedHashMap<String, ArtworkPalette>();
   final Map<String, Future<ArtworkPalette?>> _inFlight = {};
-  final Logger _logger = Logger();
+  final Logger _logger = Logger('molia.artwork_palette_service');
 
   int get cacheSize => _cache.length;
 
@@ -110,7 +110,7 @@ class ArtworkPaletteService {
     } catch (e) {
       // 省流未命中（ArtworkNetworkBlockedException）/ 网络失败 / 解码失败：
       // 保持现色，不打断主题与歌词显示。
-      _logger.w('封面取色失败（保持现色）: $e');
+      _logger.warning('封面取色失败（保持现色）: $e');
       return null;
     }
   }

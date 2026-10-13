@@ -1,4 +1,4 @@
-import 'package:logger/logger.dart';
+import 'package:logging/logging.dart';
 
 import '../../sources/builtin/kw_lyric.dart';
 import '../../sources/builtin/kw_search.dart';
@@ -9,7 +9,7 @@ import 'lyric_provider.dart';
 /// - 搜索复用内置 `kw` 搜索（与内置源同一实现）；
 /// - 取词用 [KwLyric]（`mlyric` LRCX 解码 + H5 兜底），含逐字与翻译。
 class KuwoProvider extends LyricProvider {
-  final Logger _logger = Logger();
+  final Logger _logger = Logger('molia.kuwo_provider');
 
   @override
   String get name => 'kuwo';
@@ -30,7 +30,7 @@ class KuwoProvider extends LyricProvider {
         for (final track in result.tracks.take(limit)) _toMatch(track),
       ];
     } catch (e, st) {
-      _logger.e('搜索失败', error: e, stackTrace: st);
+      _logger.severe('搜索失败', e, st);
       return [];
     }
   }
@@ -62,7 +62,7 @@ class KuwoProvider extends LyricProvider {
         lxlyric: info.lxlyric,
       );
     } catch (e, st) {
-      _logger.e('取词失败', error: e, stackTrace: st);
+      _logger.severe('取词失败', e, st);
       return null;
     }
   }

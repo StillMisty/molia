@@ -1,6 +1,6 @@
 import 'package:material_3_expressive/material_3_expressive.dart';
 import 'package:material_ui/material_ui.dart';
-import 'package:logger/logger.dart';
+import 'package:logging/logging.dart';
 import 'package:provider/provider.dart';
 
 import '../l10n/app_localizations.dart';
@@ -16,7 +16,7 @@ import '../services/lyrics/lyrics_match.dart';
 import '../services/notification_service.dart';
 import 'app_search_bar.dart';
 
-final _logger = Logger();
+final _logger = Logger('molia.lyrics_source_search_view');
 
 class LyricsSearchResult {
   final SongMatch match;
@@ -258,7 +258,7 @@ class _LyricsSourceSearchViewState extends State<LyricsSourceSearchView> {
         _providerStates[provider.name] = ProviderSearchState.loaded;
       });
     } catch (e) {
-      _logger.d('Provider ${provider.name} search error: $e');
+      _logger.fine('Provider ${provider.name} search error: $e');
 
       if (!mounted) return;
       if (query != _currentQuery) return;
@@ -304,7 +304,7 @@ class _LyricsSourceSearchViewState extends State<LyricsSourceSearchView> {
             roma: _normalizeOptional(result.provider, payload?.roma),
             lxlyric: _normalizeOptional(result.provider, payload?.lxlyric),
           );
-          _logger.d(
+          _logger.fine(
               "手动获取的歌词已缓存，曲目ID：${widget.trackId}，提供者：${result.provider.name}");
           navigator.pop(LyricsSearchSelection(
             lyrics: normalizedLyric,

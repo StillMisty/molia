@@ -1,4 +1,4 @@
-import 'package:logger/logger.dart';
+import 'package:logging/logging.dart';
 
 import '../../sources/builtin/mg_lyric.dart';
 import '../../sources/builtin/mg_search.dart';
@@ -9,7 +9,7 @@ import 'lyric_provider.dart';
 /// - 搜索复用内置 `mg` 搜索（与内置源同一实现，响应带 mrc/lrc/trc URL）；
 /// - 取词用 [MgLyric]（MRC 解密 + 逐字；缺 URL 时按 songId 走资源信息兜底）。
 class MiguProvider extends LyricProvider {
-  final Logger _logger = Logger();
+  final Logger _logger = Logger('molia.migu_provider');
 
   @override
   String get name => 'migu';
@@ -30,7 +30,7 @@ class MiguProvider extends LyricProvider {
         for (final track in result.tracks.take(limit)) _toMatch(track),
       ];
     } catch (e, st) {
-      _logger.e('搜索失败', error: e, stackTrace: st);
+      _logger.severe('搜索失败', e, st);
       return [];
     }
   }
@@ -88,7 +88,7 @@ class MiguProvider extends LyricProvider {
         lxlyric: info.lxlyric,
       );
     } catch (e, st) {
-      _logger.e('取词失败', error: e, stackTrace: st);
+      _logger.severe('取词失败', e, st);
       return null;
     }
   }

@@ -1,4 +1,4 @@
-import 'package:logger/logger.dart';
+import 'package:logging/logging.dart';
 
 import '../../sources/builtin/kg_lyric.dart';
 import '../../sources/builtin/kg_search.dart';
@@ -9,7 +9,7 @@ import 'lyric_provider.dart';
 /// - 搜索复用内置 `kg` 搜索（与内置源同一实现，响应带 `hash`/时长）；
 /// - 取词用 [KgLyric]（search + download + KRC 解码），含翻译 / 罗马音 / 逐字。
 class KugouProvider extends LyricProvider {
-  final Logger _logger = Logger();
+  final Logger _logger = Logger('molia.kugou_provider');
 
   @override
   String get name => 'kugou';
@@ -31,7 +31,7 @@ class KugouProvider extends LyricProvider {
         for (final track in result.tracks.take(limit)) _toMatch(track),
       ];
     } catch (e, st) {
-      _logger.e('搜索失败', error: e, stackTrace: st);
+      _logger.severe('搜索失败', e, st);
       return [];
     }
   }
@@ -76,7 +76,7 @@ class KugouProvider extends LyricProvider {
         lxlyric: info.lxlyric,
       );
     } catch (e, st) {
-      _logger.e('取词失败', error: e, stackTrace: st);
+      _logger.severe('取词失败', e, st);
       return null;
     }
   }

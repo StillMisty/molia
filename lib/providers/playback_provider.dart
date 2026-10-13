@@ -8,7 +8,7 @@ import 'package:flutter/foundation.dart'
         defaultTargetPlatform,
         kIsWeb;
 import 'package:flutter/services.dart';
-import 'package:logger/logger.dart';
+import 'package:logging/logging.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -35,7 +35,7 @@ import '../sources/source_track.dart';
 import '../utils/notify_throttler.dart';
 import 'local_database_provider.dart';
 
-final _logger = Logger();
+final _logger = Logger('molia.playback_provider');
 
 /// 自动换源解析器：在其它音源严格找回同一首歌（组合根注入）。
 ///
@@ -347,7 +347,7 @@ class PlaybackProvider extends ChangeNotifier {
       _notifyCategory('track');
       _notifyCategory('queue');
     } catch (e) {
-      _logger.e('playSourceTracks: 播放失败', error: e);
+      _logger.severe('playSourceTracks: 播放失败', e);
       rethrow;
     }
   }
@@ -374,7 +374,7 @@ class PlaybackProvider extends ChangeNotifier {
       _notifyCategory('track');
       _notifyCategory('queue');
     } catch (e) {
-      _logger.e('playDomainTracks: 播放失败', error: e);
+      _logger.severe('playDomainTracks: 播放失败', e);
       rethrow;
     }
   }
@@ -386,7 +386,7 @@ class PlaybackProvider extends ChangeNotifier {
       await _facade.enqueueTracks(List.of(tracks));
       _notifyCategory('queue');
     } catch (e) {
-      _logger.e('enqueueDomainTracks: 追加队列失败', error: e);
+      _logger.severe('enqueueDomainTracks: 追加队列失败', e);
       rethrow;
     }
   }
@@ -500,7 +500,7 @@ class PlaybackProvider extends ChangeNotifier {
       _notifyCategory('track');
       _notifyCategory('queue');
     } catch (e) {
-      _logger.e('恢复上次播放失败', error: e);
+      _logger.severe('恢复上次播放失败', e);
       // 已被真实播放接管（恢复快照已撤下）：交还进度通道，
       // 避免一直停在旧的恢复进度。
       if (_restoredSession == null) {
@@ -600,7 +600,7 @@ class PlaybackProvider extends ChangeNotifier {
     try {
       await _settings.write(kDefaultPlayMode, mode.name);
     } catch (e) {
-      _logger.e('保存默认播放模式失败', error: e);
+      _logger.severe('保存默认播放模式失败', e);
     }
   }
 
@@ -619,7 +619,7 @@ class PlaybackProvider extends ChangeNotifier {
       }
       _notifyCategory('default');
     } catch (e) {
-      _logger.e('加载默认播放模式失败', error: e);
+      _logger.severe('加载默认播放模式失败', e);
     }
   }
 
@@ -640,7 +640,7 @@ class PlaybackProvider extends ChangeNotifier {
     try {
       await _settings.write(kRestoreSessionEnabled, value);
     } catch (e) {
-      _logger.e('保存启动恢复开关失败', error: e);
+      _logger.severe('保存启动恢复开关失败', e);
     }
   }
 
@@ -773,11 +773,11 @@ class PlaybackProvider extends ChangeNotifier {
           current.artists.map((artist) => artist.name).join(', ');
       _lastPlayedImageUrl = current.artwork?.uri.toString();
       _publishRestoredSnapshot();
-      _logger.d('已恢复上次播放会话: ${current.title} @${session.position.inSeconds}s');
+      _logger.fine('已恢复上次播放会话: ${current.title} @${session.position.inSeconds}s');
       _notifyCategory('track');
       _notifyCategory('queue');
     } catch (e) {
-      _logger.e('恢复上次播放会话失败', error: e);
+      _logger.severe('恢复上次播放会话失败', e);
     }
   }
 
@@ -860,7 +860,7 @@ class PlaybackProvider extends ChangeNotifier {
         playedAt: DateTime.now().millisecondsSinceEpoch,
       ));
     } catch (e) {
-      _logger.e('写入播放历史失败', error: e);
+      _logger.severe('写入播放历史失败', e);
     }
   }
 
@@ -888,7 +888,7 @@ class PlaybackProvider extends ChangeNotifier {
         try {
           await _facade.playQueueIndex(index);
         } catch (e) {
-          _logger.e('播放失败自动重试失败', error: e);
+          _logger.severe('播放失败自动重试失败', e);
         }
         // 重试仍失败（错误快照可能值未变、不会再触发本方法）→ 自动换源。
         _maybeAutoSwapAfterRetry(track);
@@ -941,7 +941,7 @@ class PlaybackProvider extends ChangeNotifier {
       _notifyCategory('track');
       _notifyCategory('queue');
     } catch (e) {
-      _logger.w('自动换源失败: $e');
+      _logger.warning('自动换源失败: $e');
     } finally {
       _autoSwapping.remove(uri);
     }
@@ -982,7 +982,7 @@ class PlaybackProvider extends ChangeNotifier {
         lastPlayedAt: DateTime.now().millisecondsSinceEpoch,
       );
     } catch (e) {
-      _logger.e('保存播放上下文失败', error: e);
+      _logger.severe('保存播放上下文失败', e);
     }
   }
 
@@ -992,9 +992,9 @@ class PlaybackProvider extends ChangeNotifier {
       _lastPlayedImageUrl = sp.getString(_lastPlayedImageKey);
       _lastPlayedTrackName = sp.getString(_lastPlayedTrackNameKey);
       _lastPlayedArtists = sp.getString(_lastPlayedArtistsKey);
-      _logger.d('已加载最后播放歌曲信息: $_lastPlayedTrackName - $_lastPlayedArtists');
+      _logger.fine('已加载最后播放歌曲信息: $_lastPlayedTrackName - $_lastPlayedArtists');
     } catch (e) {
-      _logger.e('加载最后播放歌曲信息失败', error: e);
+      _logger.severe('加载最后播放歌曲信息失败', e);
     }
   }
 
@@ -1018,9 +1018,9 @@ class PlaybackProvider extends ChangeNotifier {
         await sp.setString(_lastPlayedArtistsKey, artists);
         _lastPlayedArtists = artists;
       }
-      _logger.d('已保存最后播放歌曲信息: $trackName - $artists');
+      _logger.fine('已保存最后播放歌曲信息: $trackName - $artists');
     } catch (e) {
-      _logger.e('保存最后播放歌曲信息失败', error: e);
+      _logger.severe('保存最后播放歌曲信息失败', e);
     }
   }
 
@@ -1082,7 +1082,7 @@ class PlaybackProvider extends ChangeNotifier {
       await _facade.updateTrackArtwork(trackId, uri);
       unawaited(updateWidget());
     } catch (e) {
-      _logger.w('封面补取失败: $e');
+      _logger.warning('封面补取失败: $e');
     } finally {
       if (_artworkResolvingTrackId == trackId) {
         _artworkResolvingTrackId = null;

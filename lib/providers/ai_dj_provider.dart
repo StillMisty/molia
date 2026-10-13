@@ -24,7 +24,7 @@ library;
 import 'dart:async';
 
 import 'package:flutter/foundation.dart';
-import 'package:logger/logger.dart';
+import 'package:logging/logging.dart';
 
 import '../data/mapping/track_mapper.dart';
 import '../domain/models/ai_dj.dart';
@@ -83,7 +83,7 @@ class AiDjProvider extends ChangeNotifier {
   final AiRecommendationGenerator _recommendationService;
   final AiSettingsStore _settingsStore;
   final AiRecommendationStore _store;
-  final Logger _logger = Logger();
+  final Logger _logger = Logger('molia.ai_dj_provider');
 
   /// 每批推荐数量。
   static const int batchSize = 20;
@@ -212,7 +212,7 @@ class AiDjProvider extends ChangeNotifier {
     try {
       return await _recommendationService.summarizeUpstream();
     } catch (e) {
-      _logger.w('AI 推歌：上行摘要失败 $e');
+      _logger.warning('AI 推歌：上行摘要失败 $e');
       return null;
     }
   }
@@ -275,7 +275,7 @@ class AiDjProvider extends ChangeNotifier {
       await _store.save(batch);
     } catch (e) {
       _lastError = _failureOf(e);
-      _logger.e('AI 推歌：生成推荐列表失败', error: e);
+      _logger.severe('AI 推歌：生成推荐列表失败', e);
     } finally {
       _busy = false;
       notifyListeners();
@@ -320,7 +320,7 @@ class AiDjProvider extends ChangeNotifier {
     } catch (e) {
       _lastError = _failureOf(e);
       _setStatus(AiDjStatus.error);
-      _logger.e('AI 推歌：起播失败', error: e);
+      _logger.severe('AI 推歌：起播失败', e);
     } finally {
       _busy = false;
       notifyListeners();
@@ -351,7 +351,7 @@ class AiDjProvider extends ChangeNotifier {
       _failureCount = 0;
     } catch (e) {
       _lastError = _failureOf(e);
-      _logger.e('AI 推歌：加入队列失败', error: e);
+      _logger.severe('AI 推歌：加入队列失败', e);
     } finally {
       _busy = false;
       notifyListeners();
@@ -397,7 +397,7 @@ class AiDjProvider extends ChangeNotifier {
       _failureCount = 0;
     } catch (e) {
       _lastError = _failureOf(e);
-      _logger.e('AI 推歌：换一首失败', error: e);
+      _logger.severe('AI 推歌：换一首失败', e);
     } finally {
       _busy = false;
       notifyListeners();
@@ -466,7 +466,7 @@ class AiDjProvider extends ChangeNotifier {
     } catch (e) {
       _failureCount++;
       _lastError = _failureOf(e);
-      _logger.e('AI 推歌：续推失败（第 $_failureCount 次）', error: e);
+      _logger.severe('AI 推歌：续推失败（第 $_failureCount 次）', e);
       if (_failureCount >= maxConsecutiveFailures) {
         // 自动停止续推（保留当前队列继续播放；功能与列表保持启用）。
         _setStatus(AiDjStatus.off);

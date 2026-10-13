@@ -1,6 +1,6 @@
 import 'dart:async';
 
-import 'package:logger/logger.dart';
+import 'package:logging/logging.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'cache_storage.dart';
@@ -66,7 +66,7 @@ class CacheService {
   final LyricsCache _lyricsCache;
   final Duration _audioProtectAge;
   SharedPreferences? _prefs;
-  final Logger _logger = Logger();
+  final Logger _logger = Logger('molia.cache_service');
 
   final List<void Function(CachePartition)> _policyListeners = [];
   final List<void Function(CachePartition)> _clearListeners = [];
@@ -197,11 +197,11 @@ class CacheService {
         protectAge: _audioProtectAge,
       );
       if (deleted > 0) {
-        _logger.i('音频缓存 LRU 淘汰 $deleted 个文件（上限 ${maxMb}MB）');
+        _logger.info('音频缓存 LRU 淘汰 $deleted 个文件（上限 ${maxMb}MB）');
       }
       return deleted;
     } catch (e) {
-      _logger.w('音频缓存淘汰失败: $e');
+      _logger.warning('音频缓存淘汰失败: $e');
       return 0;
     }
   }
@@ -219,11 +219,11 @@ class CacheService {
         staleDays: staleDays,
       );
       if (deleted > 0) {
-        _logger.i('封面缓存 sweep 清理 $deleted 个文件');
+        _logger.info('封面缓存 sweep 清理 $deleted 个文件');
       }
       return deleted;
     } catch (e) {
-      _logger.w('封面缓存 sweep 失败: $e');
+      _logger.warning('封面缓存 sweep 失败: $e');
       return 0;
     }
   }
@@ -277,7 +277,7 @@ class CacheService {
       try {
         listener(partition);
       } catch (e) {
-        _logger.w('缓存策略监听回调失败: $e');
+        _logger.warning('缓存策略监听回调失败: $e');
       }
     }
   }
@@ -287,7 +287,7 @@ class CacheService {
       try {
         listener(partition);
       } catch (e) {
-        _logger.w('缓存清理监听回调失败: $e');
+        _logger.warning('缓存清理监听回调失败: $e');
       }
     }
   }
@@ -297,7 +297,7 @@ class CacheService {
     try {
       return await _storage.usage(dir);
     } catch (e) {
-      _logger.w('缓存用量统计失败: $e');
+      _logger.warning('缓存用量统计失败: $e');
       return CacheUsage.zero;
     }
   }
@@ -317,7 +317,7 @@ class CacheService {
     try {
       return _prefs = await SharedPreferences.getInstance();
     } catch (e) {
-      _logger.w('SharedPreferences 不可用: $e');
+      _logger.warning('SharedPreferences 不可用: $e');
       return null;
     }
   }

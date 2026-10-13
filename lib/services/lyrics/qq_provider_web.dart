@@ -2,7 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 
 import 'package:http/http.dart' as http;
-import 'package:logger/logger.dart';
+import 'package:logging/logging.dart';
 
 import 'lyric_provider.dart';
 import 'qq_encoding.dart';
@@ -11,7 +11,7 @@ import 'qq_encoding.dart';
 class QQProvider extends LyricProvider {
   static const String _defaultWorkerBaseUrl = 'https://lyrics.gojyuplus.com';
   static const Duration _requestTimeout = Duration(seconds: 12);
-  final Logger _logger = Logger();
+  final Logger _logger = Logger('molia.qq_provider_web');
   final http.Client _client;
   final String _workerBaseUrl;
   final String? _authSecret;
@@ -61,17 +61,17 @@ class QQProvider extends LyricProvider {
       }
 
       if (response.statusCode == 404 && treatNotFoundAsNull) {
-        _logger.i('Worker未找到资源: $path');
+        _logger.info('Worker未找到资源: $path');
         return null;
       }
 
-      _logger.w(
+      _logger.warning(
         'Worker接口调用失败($path)，状态码: ${response.statusCode}, 响应: ${response.body}',
       );
     } on TimeoutException catch (e) {
-      _logger.w('Worker请求超时: $e');
+      _logger.warning('Worker请求超时: $e');
     } catch (e) {
-      _logger.e('调用Worker失败: $e');
+      _logger.severe('调用Worker失败: $e');
     }
     return null;
   }

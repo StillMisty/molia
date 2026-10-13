@@ -6,7 +6,7 @@ import 'package:flutter/widgets.dart' show ImageProvider, VoidCallback;
 // 需要直接使用其 CacheManager/Config/ImageCacheManager。
 // ignore: depend_on_referenced_packages
 import 'package:flutter_cache_manager/flutter_cache_manager.dart';
-import 'package:logger/logger.dart';
+import 'package:logging/logging.dart';
 
 import '../services/cache_service.dart';
 import 'artwork_cache_fs.dart';
@@ -56,7 +56,7 @@ class ArtworkCache {
   final CacheService _cacheService;
   final CacheManager? _managerOverride;
   final CacheInfoRepository? _repoOverride;
-  final Logger _logger = Logger();
+  final Logger _logger = Logger('molia.artwork_cache');
 
   /// 真实 repo（索引）：sweep / clear 直接删文件后用它清理失效条目。
   CacheInfoRepository? _repo;
@@ -95,7 +95,7 @@ class ArtworkCache {
     try {
       return await manager;
     } catch (e) {
-      _logger.w('封面 CacheManager 不可用: $e');
+      _logger.warning('封面 CacheManager 不可用: $e');
       return null;
     }
   }
@@ -232,9 +232,9 @@ class ArtworkCache {
       }
       if (missing.isEmpty) return;
       final deleted = await repo.deleteAll(missing);
-      _logger.i('封面缓存索引清理 $deleted 个失效条目');
+      _logger.info('封面缓存索引清理 $deleted 个失效条目');
     } catch (e) {
-      _logger.w('封面缓存索引清理失败: $e');
+      _logger.warning('封面缓存索引清理失败: $e');
     }
   }
 }

@@ -1,6 +1,6 @@
 import 'dart:convert';
 
-import 'package:logger/logger.dart';
+import 'package:logging/logging.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../domain/models/playback.dart';
@@ -112,7 +112,7 @@ class PlaybackSessionStore {
   final SharedPreferences? _preferences;
   final DateTime Function() _clock;
 
-  final Logger _logger = Logger();
+  final Logger _logger = Logger('molia.playback_session_store');
 
   Future<void> save(PlaybackSession session) async {
     try {
@@ -121,7 +121,7 @@ class PlaybackSessionStore {
       json[savedAtKey] = _clock().millisecondsSinceEpoch;
       await sp.setString(_key, jsonEncode(json));
     } catch (e) {
-      _logger.w('保存播放会话失败: $e');
+      _logger.warning('保存播放会话失败: $e');
     }
   }
 
@@ -130,7 +130,7 @@ class PlaybackSessionStore {
       final json = await loadRaw();
       return json == null ? null : PlaybackSession.fromJson(json);
     } catch (e) {
-      _logger.w('加载播放会话失败: $e');
+      _logger.warning('加载播放会话失败: $e');
       return null;
     }
   }
@@ -145,7 +145,7 @@ class PlaybackSessionStore {
       if (json is! Map) return null;
       return json.cast<String, dynamic>();
     } catch (e) {
-      _logger.w('加载播放会话失败: $e');
+      _logger.warning('加载播放会话失败: $e');
       return null;
     }
   }
@@ -156,7 +156,7 @@ class PlaybackSessionStore {
       final sp = _preferences ?? await SharedPreferences.getInstance();
       await sp.setString(_key, jsonEncode(raw));
     } catch (e) {
-      _logger.w('保存播放会话失败: $e');
+      _logger.warning('保存播放会话失败: $e');
     }
   }
 
@@ -165,7 +165,7 @@ class PlaybackSessionStore {
       final sp = _preferences ?? await SharedPreferences.getInstance();
       await sp.remove(_key);
     } catch (e) {
-      _logger.w('清除播放会话失败: $e');
+      _logger.warning('清除播放会话失败: $e');
     }
   }
 }

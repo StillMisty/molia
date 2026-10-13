@@ -2,7 +2,7 @@ import 'dart:async';
 
 import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:flutter/foundation.dart';
-import 'package:logger/logger.dart';
+import 'package:logging/logging.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../sources/source_track.dart' show capQualityFor;
@@ -47,7 +47,7 @@ class DataSaverService extends ChangeNotifier {
   final SharedPreferences? _prefsOverride;
   final Future<bool> Function()? _cellularProbe;
   final Stream<bool>? _cellularChanges;
-  final Logger _logger = Logger();
+  final Logger _logger = Logger('molia.data_saver_service');
 
   SharedPreferences? _prefs;
   StreamSubscription<bool>? _subscription;
@@ -100,11 +100,11 @@ class DataSaverService extends ChangeNotifier {
           _setOnCellular(value);
         },
         onError: (Object error) {
-          _logger.w('省流模式：网络变化监听失败: $error');
+          _logger.warning('省流模式：网络变化监听失败: $error');
         },
       );
     } catch (e) {
-      _logger.w('省流模式：网络变化监听初始化失败: $e');
+      _logger.warning('省流模式：网络变化监听初始化失败: $e');
     }
   }
 
@@ -139,7 +139,7 @@ class DataSaverService extends ChangeNotifier {
       _detectionAvailable = true;
       _setOnCellular(cellular);
     } catch (e) {
-      _logger.w('省流模式：网络类型检测失败: $e');
+      _logger.warning('省流模式：网络类型检测失败: $e');
       final changed = _detectionAvailable || _onCellular;
       _detectionAvailable = false;
       // 检测不到时保守保持「未生效」，避免在未知网络上误降音质。
@@ -172,7 +172,7 @@ class DataSaverService extends ChangeNotifier {
       }
       _coversSaverEnabled = prefs.getBool(keyCovers) ?? defaultCovers;
     } catch (e) {
-      _logger.w('省流模式：读取偏好失败: $e');
+      _logger.warning('省流模式：读取偏好失败: $e');
     }
   }
 
@@ -186,7 +186,7 @@ class DataSaverService extends ChangeNotifier {
         await prefs.setString(key, value.toString());
       }
     } catch (e) {
-      _logger.w('省流模式：保存偏好失败: $e');
+      _logger.warning('省流模式：保存偏好失败: $e');
     }
   }
 

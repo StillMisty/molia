@@ -1,12 +1,12 @@
 import 'dart:io';
 import 'package:material_ui/material_ui.dart';
 import 'package:flutter/services.dart';
-import 'package:logger/logger.dart';
+import 'package:logging/logging.dart';
 
 import '../data/settings/settings_keys.dart';
 import '../data/settings/settings_registry.dart';
 
-final logger = Logger();
+final logger = Logger('molia.language_service');
 
 class LanguageService {
   static const MethodChannel _channel = MethodChannel('language_channel');
@@ -42,7 +42,7 @@ class LanguageService {
       
       return null;
     } catch (e) {
-      logger.d('Error getting saved locale: $e');
+      logger.fine('Error getting saved locale: $e');
       return null;
     }
   }
@@ -57,7 +57,7 @@ class LanguageService {
       await _settings.write(kSelectedLanguage, languageCode);
       localeNotifier.value = locale;
     } catch (e) {
-      logger.d('Error saving locale: $e');
+      logger.fine('Error saving locale: $e');
     }
   }
   
@@ -67,7 +67,7 @@ class LanguageService {
       await _settings.clear(kSelectedLanguage);
       localeNotifier.value = null;
     } catch (e) {
-      logger.d('Error clearing saved locale: $e');
+      logger.fine('Error clearing saved locale: $e');
     }
   }
 
@@ -93,7 +93,7 @@ class LanguageService {
               'setAppLocale', {'languageTag': languageTag});
         }
       } catch (e) {
-        logger.d('Error setting app locale: $e');
+        logger.fine('Error setting app locale: $e');
         // 降级到仅保存偏好设置
       }
     }
@@ -112,7 +112,7 @@ class LanguageService {
     try {
       await _channel.invokeMethod('openSystemLanguageSettings');
     } catch (e) {
-      logger.d('Error opening system language settings: $e');
+      logger.fine('Error opening system language settings: $e');
     }
   }
   
@@ -124,7 +124,7 @@ class LanguageService {
       final result = await _channel.invokeMethod('supportsSystemLanguageSettings');
       return result as bool? ?? false;
     } catch (e) {
-      logger.d('Error checking system language support: $e');
+      logger.fine('Error checking system language support: $e');
       return false;
     }
   }

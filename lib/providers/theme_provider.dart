@@ -1,14 +1,14 @@
 import 'dart:async';
 
 import 'package:material_ui/material_ui.dart';
-import 'package:logger/logger.dart';
+import 'package:logging/logging.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../data/settings/settings_keys.dart';
 import '../data/settings/settings_registry.dart';
 import '../theme/scheme_builder.dart';
 
-final logger = Logger();
+final logger = Logger('molia.theme_provider');
 
 /// 应用主题唯一来源：主题模式 + 系统亮度 + 基础配色 + 封面覆盖 + 纯黑。
 ///
@@ -316,7 +316,7 @@ class ThemeProvider extends ChangeNotifier {
         forceNotify: true,
       );
     } catch (e) {
-      logger.e('加载主题偏好失败: $e');
+      logger.severe('加载主题偏好失败: $e');
     }
   }
 
@@ -324,7 +324,7 @@ class ThemeProvider extends ChangeNotifier {
     try {
       await write();
     } catch (e) {
-      logger.e('保存主题偏好失败: $e');
+      logger.severe('保存主题偏好失败: $e');
     }
   }
 }

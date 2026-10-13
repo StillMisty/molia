@@ -1,4 +1,4 @@
-import 'package:logger/logger.dart';
+import 'package:logging/logging.dart';
 import 'dart:async';
 import 'package:material_ui/material_ui.dart';
 import '../data/catalog/catalog_service.dart';
@@ -12,7 +12,7 @@ import '../sources/source_track.dart';
 import 'paged_list_controller.dart';
 import 'playback_provider.dart';
 
-final _logger = Logger();
+final _logger = Logger('molia.search_provider');
 
 /// 搜索状态（内部经 [CatalogService]/[SourceRegistry]）。
 ///
@@ -356,7 +356,7 @@ class SearchProvider extends ChangeNotifier {
   void _applyPagerState() {
     final error = _pager.error;
     if (error != null) {
-      _logger.d('Search failed: $error');
+      _logger.fine('Search failed: $error');
       _failure = SourceFailure.from(error);
       _errorMessage = 'Search failed: $error';
     } else {
@@ -412,7 +412,7 @@ class SearchProvider extends ChangeNotifier {
   void playItem(Map<String, dynamic> item) {
     final sourceTrack = item['_sourceTrack'];
     if (sourceTrack is! SourceTrack) {
-      _logger.d('Error: Search item missing source track.');
+      _logger.fine('Error: Search item missing source track.');
       return;
     }
     final index = _sourceTracks.indexWhere((t) => t.id == sourceTrack.id);
