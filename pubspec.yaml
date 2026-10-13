@@ -53,7 +53,7 @@ dev_dependencies:
   integration_test:
     sdk: flutter
   flutter_lints: ^6.0.0
-  flutter_launcher_icons: ^0.14.2
+  icons_launcher: ^3.1.0
   drift_dev: ^2.35.1
   build_runner: ^2.16.2
 
