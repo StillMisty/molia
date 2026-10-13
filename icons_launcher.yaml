@@ -1,6 +1,6 @@
-# flutter pub run flutter_launcher_icons
+# dart run icons_launcher:create
 #
-# 注意：Android 图标已改为手绘矢量资源，本工具不再生成 Android 图标（android: false）。
+# 注意：Android 图标已改为手绘矢量资源，本工具不再生成 Android 图标（platforms.android.enable: false）。
 # 品牌更新时 Android 侧维护方式：
 #   1. 源图：assets/icons/molia_icon_full_bleed.svg
 #      （2048×2048：纯色底 #124537 + 外层 group 变换 + 7 条 path 的 mark）
@@ -9,14 +9,15 @@
 #   3. 背景色：android/app/src/main/res/values/launcher_icons.xml
 #   4. 自适应配置：android/app/src/main/res/mipmap-anydpi-v26/launcher_icon.xml
 #   minSdk=37 只会走自适应图标，因此不再保留传统密度 mipmap / drawable PNG。
-flutter_launcher_icons:
-  image_path: "assets/icons/image_path_android.png"
-
-  android: false
-
-  ios: true
-  image_path_ios: "assets/icons/image_path_ios.png"
-  remove_alpha_ios: true
-  image_path_ios_dark_transparent: "assets/icons/image_path_ios_dark_transparent.png"
-  image_path_ios_tinted_grayscale: "assets/icons/image_path_ios_tinted_grayscale.png"
-  desaturate_tinted_to_grayscale_ios: true
+#
+# iOS 侧三张源图均为 1024×1024 不透明 RGB：主图带 alpha 时工具会自动移除；
+# tinted 图按原样使用（无去饱和选项），因此该源图必须自身保持灰度。
+icons_launcher:
+  platforms:
+    android:
+      enable: false
+    ios:
+      enable: true
+      image_path: "assets/icons/image_path_ios.png"
+      dark_path: "assets/icons/image_path_ios_dark_transparent.png"
+      tinted_path: "assets/icons/image_path_ios_tinted_grayscale.png"
