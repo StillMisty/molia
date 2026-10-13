@@ -58,6 +58,22 @@ class LyricsCache {
     return CacheUsage(bytes: bytes, count: count);
   }
 
+  /// 单曲歌词缓存占用（只统计规范键，与 [usage] 同一口径）。
+  Future<CacheUsage> usageOf(String trackId) async {
+    final prefs = await _prefsOrNull();
+    final value = prefs?.getString('$keyPrefix$trackId');
+    if (value == null) return CacheUsage.zero;
+    return CacheUsage(bytes: utf8.encode(value).length, count: 1);
+  }
+
+  /// 删除单曲歌词缓存：规范键 + 历史重复键（后者只清不读）。
+  Future<void> remove(String trackId) async {
+    final prefs = await _prefsOrNull();
+    if (prefs == null) return;
+    await prefs.remove('$keyPrefix$trackId');
+    await prefs.remove('$legacyManualKeyPrefix$trackId');
+  }
+
   /// 清除歌词分区：规范键 + 历史重复键。
   Future<void> clear() async {
     final prefs = await _prefsOrNull();

@@ -1,4 +1,7 @@
+import 'dart:convert';
+
 import 'package:flutter_test/flutter_test.dart';
+import 'package:molia/services/cache_service.dart';
 import 'package:molia/services/lyrics/lyric_provider.dart';
 import 'package:molia/services/lyrics_cache.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -48,5 +51,31 @@ void main() {
     expect(prefs.containsKey('lyrics_cache_a'), isFalse);
     expect(prefs.containsKey('manual_lyrics_cache_a'), isFalse);
     expect(prefs.getString('other_key'), 'keep');
+  });
+
+  test('usageOf 只统计该曲目的规范键字节', () async {
+    const value = '{"provider":"qq","lyric":"x","timestamp":1}';
+    SharedPreferences.setMockInitialValues({
+      'lyrics_cache_qy:1': value,
+      'lyrics_cache_qy:2': value,
+      'manual_lyrics_cache_qy:1': value,
+    });
+    final usage = await LyricsCache().usageOf('qy:1');
+    expect(usage.count, 1);
+    expect(usage.bytes, utf8.encode(value).length);
+    expect(await LyricsCache().usageOf('qy:404'), CacheUsage.zero);
+  });
+
+  test('remove 只删该曲目（规范键 + 历史键），其它曲目保留', () async {
+    SharedPreferences.setMockInitialValues({
+      'lyrics_cache_qy:1': '{}',
+      'manual_lyrics_cache_qy:1': '{}',
+      'lyrics_cache_qy:2': '{}',
+    });
+    await LyricsCache().remove('qy:1');
+    final prefs = await SharedPreferences.getInstance();
+    expect(prefs.containsKey('lyrics_cache_qy:1'), isFalse);
+    expect(prefs.containsKey('manual_lyrics_cache_qy:1'), isFalse);
+    expect(prefs.containsKey('lyrics_cache_qy:2'), isTrue);
   });
 }

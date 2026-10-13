@@ -88,6 +88,10 @@ class RequestCache {
     _entries.removeWhere((key, _) => key.startsWith(prefix));
   }
 
+  /// 计算与 [prefix] 匹配的 key 数量（诊断/单曲缓存占用展示用）。
+  int countPrefix(String prefix) =>
+      _entries.keys.where((key) => key.startsWith(prefix)).length;
+
   void _touch(String key, _CacheEntry entry) {
     _entries.remove(key);
     _entries[key] = entry;

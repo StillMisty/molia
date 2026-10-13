@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:cached_network_image/cached_network_image.dart';
+import 'package:flutter/painting.dart' show PaintingBinding;
 import 'package:flutter/widgets.dart' show ImageProvider, VoidCallback;
 // flutter_cache_manager 是 cached_network_image 的传递依赖；封面缓存门面
 // 需要直接使用其 CacheManager/Config/ImageCacheManager。
@@ -175,6 +176,67 @@ class ArtworkCache {
 
   /// 立即按当前策略 sweep 一次（策略变更 / 启动 / 定期触发）。
   Future<void> enforcePolicyNow() => _sweepNow();
+
+  /// 删除单张封面的持久缓存（文件 + 索引条目）与 Flutter 内存缓存条目。
+  ///
+  /// 返回是否命中缓存；未缓存（或平台不可用）返回 false，不算错误。
+  ///
+  /// 文件直删 + `removeFile`（清索引条目）+ `_pruneMissingEntries` 兜底：
+  /// `removeFile` 依赖索引里的自增 id，注入的内存 repo（测试）没有 id，
+  /// 直删文件 + 索引对齐才能保证两条路径结果一致。
+  ///
+  /// 内存缓存只清 keepAlive 条目（`includeLive: false`）：正在显示的封面
+  /// 不在此处 dispose（图还在屏幕上画着）；`CachedNetworkImageProvider`
+  /// 的相等性含缩放尺寸，缩略图变体等 LRU 自然淘汰。
+  Future<bool> remove(String url) async {
+    if (url.isEmpty) return false;
+    var removed = false;
+    try {
+      final manager = await managerOrNull();
+      if (manager != null) {
+        final cached = await manager.getFileFromCache(url);
+        if (cached != null) {
+          try {
+            if (await cached.file.exists()) {
+              await cached.file.delete();
+              removed = true;
+            }
+          } catch (e) {
+            _logger.warning('封面缓存文件删除失败: $e');
+          }
+          await manager.removeFile(url);
+          await _pruneMissingEntries();
+        }
+      }
+    } catch (e) {
+      _logger.warning('封面缓存删除失败: $e');
+    }
+    try {
+      PaintingBinding.instance.imageCache.evict(
+        CachedNetworkImageProvider(url),
+        includeLive: false,
+      );
+    } catch (e) {
+      _logger.fine('封面内存缓存清理失败: $e');
+    }
+    return removed;
+  }
+
+  /// 单张封面的持久缓存占用（命中时为文件字节数，未命中为 zero）。
+  Future<CacheUsage> usageOf(String url) async {
+    if (url.isEmpty) return CacheUsage.zero;
+    try {
+      final manager = await managerOrNull();
+      if (manager == null) return CacheUsage.zero;
+      final cached = await manager.getFileFromCache(url);
+      if (cached == null) return CacheUsage.zero;
+      final length = await cached.file.length();
+      return CacheUsage(bytes: length, count: 1);
+    } catch (e) {
+      _logger.fine('封面缓存统计失败: $e');
+      return CacheUsage.zero;
+    }
+  }
 
   void _onPolicyChanged(CachePartition partition) {
     if (partition != CachePartition.artwork) return;

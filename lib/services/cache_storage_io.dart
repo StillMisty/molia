@@ -115,6 +115,64 @@ class IoCacheStorage implements CacheStorage {
   }
 
   @override
+  Future<CacheUsage> usageMatching(
+    String dirPath, {
+    required String prefix,
+  }) async {
+    final matches = _matchFiles(await _listFiles(dirPath), prefix);
+    var bytes = 0;
+    for (final file in matches) {
+      try {
+        bytes += await file.length();
+      } catch (_) {
+        // 文件可能正被替换/删除：忽略单个文件错误。
+      }
+    }
+    return CacheUsage(bytes: bytes, count: matches.length);
+  }
+
+  @override
+  Future<CacheDeleteResult> deleteMatching(
+    String dirPath, {
+    required String prefix,
+    Duration protectAge = Duration.zero,
+  }) async {
+    final matches = _matchFiles(await _listFiles(dirPath), prefix);
+    if (matches.isEmpty) return const CacheDeleteResult();
+    final now = DateTime.now();
+    var bytes = 0;
+    var deleted = 0;
+    var skipped = 0;
+    for (final file in matches) {
+      try {
+        if (protectAge > Duration.zero) {
+          final modified = (await file.stat()).modified;
+          if (now.difference(modified) < protectAge) {
+            skipped++;
+            continue;
+          }
+        }
+        final size = await file.length();
+        await file.delete();
+        bytes += size;
+        deleted++;
+      } catch (_) {
+        // 忽略单个文件失败：占用/提示按实际删除结果计。
+      }
+    }
+    return CacheDeleteResult(
+      deleted: CacheUsage(bytes: bytes, count: deleted),
+      skipped: skipped,
+    );
+  }
+
+  /// 文件名前缀匹配（只取文件名，不带目录）。
+  List<File> _matchFiles(List<File> files, String prefix) => [
+        for (final file in files)
+          if (file.uri.pathSegments.last.startsWith(prefix)) file,
+      ];
+
+  @override
   Future<int> enforceAudioLimit(
     String dirPath, {
     required int maxBytes,

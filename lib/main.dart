@@ -55,6 +55,7 @@ import 'services/app_logging.dart';
 import 'services/artwork_palette_service.dart';
 import 'services/app_branding_service.dart';
 import 'services/cache_service.dart';
+import 'services/track_cache_service.dart';
 import 'managers/artwork_cache.dart';
 import 'services/data_saver_service.dart';
 import 'services/language_service.dart';
@@ -621,6 +622,14 @@ void main() async {
         ChangeNotifierProvider.value(value: lyricsDisplay),
         // 统一缓存门面（音频/歌词/封面）：设置页缓存管理读写策略与用量。
         Provider<CacheService>.value(value: CacheService.instance),
+        // 单曲缓存门面（音频/歌词/封面/取链）：播放页「歌曲信息」页消费。
+        Provider<TrackCacheService>(
+          create: (_) => TrackCacheService(
+            cacheService: CacheService.instance,
+            artworkCache: ArtworkCache.instance,
+            catalogService: catalogService,
+          ),
+        ),
         Provider<NotificationService>.value(value: notificationService),
         Provider<SettingsService>(
             create: (_) => SettingsService(settings: settingsRegistry)),

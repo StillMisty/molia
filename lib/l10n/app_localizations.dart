@@ -4112,6 +4112,108 @@ abstract class AppLocalizations {
   /// **'Downloaded {percent}% ({receivedMb} MB, {speedMb} MB/s)'**
   String updateDownloadProgress(
       String percent, String receivedMb, String speedMb);
+
+  /// No description provided for @trackInfoTabTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Song info'**
+  String get trackInfoTabTitle;
+
+  /// No description provided for @trackInfoEmpty.
+  ///
+  /// In en, this message translates to:
+  /// **'Nothing playing'**
+  String get trackInfoEmpty;
+
+  /// No description provided for @trackInfoQuality.
+  ///
+  /// In en, this message translates to:
+  /// **'Playing quality'**
+  String get trackInfoQuality;
+
+  /// No description provided for @trackInfoQualityAvailable.
+  ///
+  /// In en, this message translates to:
+  /// **'Available qualities'**
+  String get trackInfoQualityAvailable;
+
+  /// No description provided for @trackInfoQualityUnknown.
+  ///
+  /// In en, this message translates to:
+  /// **'Unknown'**
+  String get trackInfoQualityUnknown;
+
+  /// No description provided for @trackInfoChannel.
+  ///
+  /// In en, this message translates to:
+  /// **'Channel'**
+  String get trackInfoChannel;
+
+  /// No description provided for @trackInfoChannelUnknown.
+  ///
+  /// In en, this message translates to:
+  /// **'Unknown channel'**
+  String get trackInfoChannelUnknown;
+
+  /// No description provided for @trackInfoAlbum.
+  ///
+  /// In en, this message translates to:
+  /// **'Album'**
+  String get trackInfoAlbum;
+
+  /// No description provided for @trackInfoDuration.
+  ///
+  /// In en, this message translates to:
+  /// **'Duration'**
+  String get trackInfoDuration;
+
+  /// No description provided for @trackInfoTrackId.
+  ///
+  /// In en, this message translates to:
+  /// **'Track ID'**
+  String get trackInfoTrackId;
+
+  /// No description provided for @trackInfoIdCopied.
+  ///
+  /// In en, this message translates to:
+  /// **'Track ID copied'**
+  String get trackInfoIdCopied;
+
+  /// No description provided for @trackInfoCacheSection.
+  ///
+  /// In en, this message translates to:
+  /// **'Cache'**
+  String get trackInfoCacheSection;
+
+  /// No description provided for @trackInfoCacheResolve.
+  ///
+  /// In en, this message translates to:
+  /// **'Resolved link cache'**
+  String get trackInfoCacheResolve;
+
+  /// No description provided for @trackInfoCacheNone.
+  ///
+  /// In en, this message translates to:
+  /// **'Not cached'**
+  String get trackInfoCacheNone;
+
+  /// No description provided for @trackInfoCacheEntries.
+  ///
+  /// In en, this message translates to:
+  /// **'{count} entries'**
+  String trackInfoCacheEntries(int count);
+
+  /// No description provided for @trackInfoCacheCleared.
+  ///
+  /// In en, this message translates to:
+  /// **'Cleared {size}'**
+  String trackInfoCacheCleared(String size);
+
+  /// No description provided for @trackInfoCachePlaying.
+  ///
+  /// In en, this message translates to:
+  /// **'Playing — audio cache can be cleared later'**
+  String get trackInfoCachePlaying;
 }
 
 class _AppLocalizationsDelegate

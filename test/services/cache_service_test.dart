@@ -4,6 +4,7 @@ import 'dart:io';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:molia/services/cache_service.dart';
 import 'package:molia/services/cache_storage_io.dart';
+import 'package:molia/services/cache_storage_stub.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 /// 固定设备容量的存储假件：容量可控，其余委托真实 IO 实现（指向临时目录）。
@@ -292,6 +293,127 @@ void main() {
       await service.setArtworkMaxObjects(0);
       await service.enforceArtworkPolicy();
       expect(await old.exists(), isTrue);
+    });
+  });
+
+  group('单曲缓存（音频 / 歌词）', () {
+    test('按曲目前缀统计与清理：命中所有音质变体，不误伤其它曲目', () async {
+      final audioDir = '${tempRoot.path}/audio_cache';
+      final sameTrack320 = CacheService.audioCacheKey(
+          sourceKey: 'wy', songId: '123', quality: '320k');
+      final sameTrackFlac = CacheService.audioCacheKey(
+          sourceKey: 'wy', songId: '123', quality: 'flac');
+      final otherTrack = CacheService.audioCacheKey(
+          sourceKey: 'wy', songId: '1234', quality: '320k');
+      // 特殊字符走哈希后缀路径：前缀匹配同样成立。
+      final specialKey = CacheService.audioCacheKey(
+          sourceKey: 'lx', songId: 'lx:abc/1', quality: '128k');
+      await writeFile(audioDir, sameTrack320, 100);
+      await writeFile(audioDir, sameTrackFlac, 200);
+      await writeFile(audioDir, otherTrack, 400);
+      await writeFile(audioDir, specialKey, 300);
+
+      expect(
+        await service.audioUsageForTrack(sourceKey: 'wy', songId: '123'),
+        const CacheUsage(bytes: 300, count: 2),
+      );
+      expect(
+        await service.audioUsageForTrack(sourceKey: 'lx', songId: 'lx:abc/1'),
+        const CacheUsage(bytes: 300, count: 1),
+      );
+
+      final result =
+          await service.clearAudioForTrack(sourceKey: 'wy', songId: '123');
+      expect(result.deleted, const CacheUsage(bytes: 300, count: 2));
+      expect(result.skipped, 0);
+      expect(File('$audioDir/$sameTrack320').existsSync(), isFalse);
+      expect(File('$audioDir/$otherTrack').existsSync(), isTrue);
+      expect(File('$audioDir/$specialKey').existsSync(), isTrue);
+      expect(
+        await service.audioUsageForTrack(sourceKey: 'wy', songId: '123'),
+        CacheUsage.zero,
+      );
+    });
+
+    test('正在写入（protectAge 内修改）的文件跳过并计数', () async {
+      final active = CacheService(
+        prefs: prefs,
+        storage: storage,
+        audioProtectAge: const Duration(hours: 1),
+      );
+      final writing = CacheService.audioCacheKey(
+          sourceKey: 'kg', songId: '7', quality: '320k');
+      final idle = CacheService.audioCacheKey(
+          sourceKey: 'kg', songId: '7', quality: '128k');
+      await writeFile('${tempRoot.path}/audio_cache', writing, 100,
+          age: Duration.zero);
+      await writeFile('${tempRoot.path}/audio_cache', idle, 200,
+          age: const Duration(days: 1));
+
+      final result =
+          await active.clearAudioForTrack(sourceKey: 'kg', songId: '7');
+      expect(result.deleted, const CacheUsage(bytes: 200, count: 1));
+      expect(result.skipped, 1);
+      expect(File('${tempRoot.path}/audio_cache/$writing').existsSync(), isTrue);
+      expect(File('${tempRoot.path}/audio_cache/$idle').existsSync(), isFalse);
+    });
+
+    test('无缓存 / 无目录（Web stub）：zero 与空结果', () async {
+      expect(
+        await service.audioUsageForTrack(sourceKey: 'kw', songId: 'missing'),
+        CacheUsage.zero,
+      );
+      expect(
+        await service.clearAudioForTrack(sourceKey: 'kw', songId: 'missing'),
+        const CacheDeleteResult(),
+      );
+
+      final webLike = CacheService(
+        prefs: prefs,
+        storage: MemoryCacheStorage(),
+      );
+      expect(
+        await webLike.audioUsageForTrack(sourceKey: 'kw', songId: 'x'),
+        CacheUsage.zero,
+      );
+      expect(
+        (await webLike.clearAudioForTrack(sourceKey: 'kw', songId: 'x'))
+            .deleted,
+        CacheUsage.zero,
+      );
+    });
+
+    test('歌词：单曲占用与清理（规范键 + 历史键）', () async {
+      await prefs.setString('${CacheService.lyricsCacheKeyPrefix}wy:1',
+          jsonEncode({'provider': 'netease', 'lyric': '歌词', 'ts': 1}));
+      await prefs.setString('manual_lyrics_cache_wy:1', '{}');
+      await prefs.setString('${CacheService.lyricsCacheKeyPrefix}wy:2', '{}');
+
+      final usage = await service.lyricsUsageForTrack('wy:1');
+      expect(usage.count, 1);
+      expect(usage.bytes, greaterThan(0));
+
+      await service.clearLyricsForTrack('wy:1');
+      expect(await service.lyricsUsageForTrack('wy:1'), CacheUsage.zero);
+      expect(prefs.getString('manual_lyrics_cache_wy:1'), isNull);
+      expect(
+        prefs.getString('${CacheService.lyricsCacheKeyPrefix}wy:2'),
+        isNotNull,
+      );
+    });
+
+    test('audioCacheKeyPrefix 与 audioCacheKey 同源（文件名以它开头）', () {
+      for (final songId in ['123', 'lx:abc/1']) {
+        final prefix = CacheService.audioCacheKeyPrefix(
+            sourceKey: 'lx', songId: songId);
+        for (final quality in ['auto', '320k', 'flac24bit']) {
+          expect(
+            CacheService.audioCacheKey(
+                sourceKey: 'lx', songId: songId, quality: quality),
+            startsWith(prefix),
+          );
+        }
+      }
     });
   });
 
