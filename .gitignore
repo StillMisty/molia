@@ -50,9 +50,8 @@ app.*.map.json
 /android/local.properties
 /android/**/GeneratedPluginRegistrant.*
 /android/captures/
-/android/gradlew
-/android/gradlew.bat
-/android/gradle/
+# Android Gradle wrapper 必须入库：AGP 9.4.1 要求 Gradle ≥9.6，
+# Flutter 缺失时注入的模板 wrapper（9.3.1）会让 CI 构建失败。
 /android/key.properties
 /android/.idea/
 /android/app/debug/
@@ -81,7 +80,6 @@ app.*.map.json
 
 # iOS build files
 /ios/Pods/
-/ios/Runner.xcworkspace/
 /ios/Runner.xcodeproj/xcuserdata/
 /ios/.symlinks/
 /ios/Flutter/Generated.xcconfig
