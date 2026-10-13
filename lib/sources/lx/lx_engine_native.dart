@@ -4,21 +4,24 @@ import 'dart:isolate';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
-import 'package:flutter_qjs_next/flutter_qjs.dart';
 import 'package:http/http.dart' as http;
+import 'package:quickjs_engine/quickjs_engine.dart';
 
 import 'lx_engine_types.dart';
 import 'lx_native_utils.dart';
 import 'lx_script_info.dart';
 
-/// JS 引擎堆内存上限（64 MiB，与 flutter_qjs_next 的默认值一致）。
+/// JS 引擎堆内存上限（64 MiB）。
 ///
 /// 音源脚本是不可信代码（docs/pitfalls.md #8），显式写明上限便于未来单独调参。
 const int _jsMemoryLimit = 64 * 1024 * 1024;
 
+/// JS 引擎栈上限（1 MiB，引擎默认值）。
+const int _jsStackSize = 1024 * 1024;
+
 /// LX 音源 JS 引擎（原生平台实现）。
 ///
-/// 在独立 isolate 中运行 QuickJS（flutter_qjs_next），并通过其消息通道
+/// 在独立 isolate 中运行 QuickJS（quickjs_engine，QuickJS-NG），并通过其消息通道
 /// 与 Dart 通信：
 /// - JS -> Dart：`sendMessage('lx', JSON.stringify(...))`
 /// - Dart -> JS：`__lxDeliver(...)` / 同步工具函数绑定
@@ -380,10 +383,16 @@ class _LxIsolateHost {
     try {
       // 运行时默认只装 core Web API（无内置 fetch/XHR），音源脚本的网络请求
       // 统一走我们自己的 lx.request 桥接（见 docs/pitfalls.md #2）。
+      // 不用 quickjs_engine 的 getJavascriptRuntime()：它固定装内置 fetch 与
+      // handlePromises 的 JS 辅助函数，这里两样都不需要（Promise 由下面的
+      // 25ms 任务泵推进），直接建 runtime 少装一段无人调用的 JS。
       // 堆上限显式传入：脚本是不可信代码，靠内存上限兜底失控分配；
       // timeout 不设——运行时是长生命周期会话，全局超时会误伤正常长任务，
       // 单次请求超时由 Dart 侧 _invoke 控制，死循环由 kill isolate 兜底。
-      final runtime = getJavascriptRuntime(memoryLimit: _jsMemoryLimit);
+      final runtime = QuickJsRuntime2(
+        stackSize: _jsStackSize,
+        memoryLimit: _jsMemoryLimit,
+      );
       _runtime = runtime;
 
       // 先注册消息通道，避免脚本初始化阶段的 inited 事件丢失

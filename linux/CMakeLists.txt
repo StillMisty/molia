@@ -74,6 +74,14 @@ set_target_properties(${BINARY_NAME}
 # them to the application.
 include(flutter/generated_plugins.cmake)
 
+# quickjs_engine 0.1.6 的 Linux 插件头（linux/include/quickjs_engine/
+# quickjs_engine_plugin.h）漏了 Flutter 官方模板里的 `#ifdef FLUTTER_PLUGIN_IMPL`
+# 导出宏定义块，导致 `FLUTTER_PLUGIN_EXPORT` 未定义、Linux 直接编译失败。
+# 官方模板见 flutter_tools/templates/plugin/linux.tmpl/include/*/*.h.tmpl。
+# 这里按模板补上同一个宏，并只作用在该插件目标上；上游修好后删除本段。
+target_compile_definitions(quickjs_engine_plugin PRIVATE
+  "FLUTTER_PLUGIN_EXPORT=__attribute__((visibility(\"default\")))")
+
 
 # === Installation ===
 # By default, "installing" just makes a relocatable bundle in the build

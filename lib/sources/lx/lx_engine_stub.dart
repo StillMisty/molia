@@ -1,4 +1,4 @@
-/// Web 平台占位实现：LX 音源引擎依赖 QuickJS（flutter_qjs_next 无 Web 实现），不支持 Web。
+/// Web 平台占位实现：LX 音源引擎依赖 QuickJS（quickjs_engine 无 Web 实现），不支持 Web。
 library;
 
 import 'lx_engine_types.dart';

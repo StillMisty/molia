@@ -440,14 +440,6 @@ packages:
     description: flutter
     source: sdk
     version: "0.0.0"
-  flutter_qjs_next:
-    dependency: "direct main"
-    description:
-      name: flutter_qjs_next
-      sha256: e5fd66c5abdb3cb81cb6700e3cc203abb5353b244ec8e6a16ba0304faf1f21b5
-      url: "https://pub.flutter-io.cn"
-    source: hosted
-    version: "1.5.2"
   flutter_secure_storage:
     dependency: "direct main"
     description:
@@ -988,6 +980,14 @@ packages:
       url: "https://pub.flutter-io.cn"
     source: hosted
     version: "1.6.0"
+  quickjs_engine:
+    dependency: "direct main"
+    description:
+      name: quickjs_engine
+      sha256: "7915cd1698b3ceac0db48913c84305167458c3f3ae29a3add8d1b81340450ccb"
+      url: "https://pub.flutter-io.cn"
+    source: hosted
+    version: "0.1.6"
   recase:
     dependency: transitive
     description:

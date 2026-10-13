@@ -36,10 +36,12 @@ dependencies:
   dynamic_color: ^2.1.0
   gal: ^2.3.3
   animations: ^3.0.0
-  flutter_qjs_next: ^1.5.2
   connectivity_plus: ^7.3.2
   just_audio: ^0.10.6
   just_audio_media_kit: ^2.1.0
+  # media_kit 原生库按平台拆分：换 media_kit_libs_audio 会让 Android 每个 ABI
+  # 的 release APK +2.98MB（实测），Android/iOS/macOS 均会多打包 libmpv。
+  # 依据与复现见 docs/media_kit_native_libs.md，改这里前先读它。
   media_kit_libs_linux: ^1.2.1
   media_kit_libs_windows_audio: ^1.0.9
   audio_service: ^0.18.19
@@ -48,6 +50,7 @@ dependencies:
   material_3_expressive: ^1.1.6
   motor: ^1.1.0
   window_manager: ^0.5.2
+  quickjs_engine: ^0.1.6
 dev_dependencies:
   flutter_test:
     sdk: flutter

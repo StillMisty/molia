@@ -5,10 +5,10 @@
 list(APPEND FLUTTER_PLUGIN_LIST
   connectivity_plus
   dynamic_color
-  flutter_qjs_next
   flutter_secure_storage_windows
   gal
   media_kit_libs_windows_audio
+  quickjs_engine
   screen_retriever_windows
   share_plus
   url_launcher_windows
