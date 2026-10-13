@@ -12,6 +12,7 @@ import 'package:molia/services/lyrics_display/lyrics_display_settings.dart';
 import 'package:molia/services/notification_service.dart';
 import 'package:molia/widgets/mdtab.dart';
 import 'package:molia/widgets/player.dart';
+import 'package:molia/widgets/track_info_view.dart';
 import 'package:material_3_expressive/material_3_expressive.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:provider/provider.dart';
@@ -225,6 +226,40 @@ void main() {
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 400));
     expect(playerHeight(tester), greaterThan(300), reason: '再点激活圆点应展开');
+
+    // 通知节流计时器跑完，避免 pending timer 报错。
+    await tester.pump(const Duration(milliseconds: 50));
+  });
+
+  testWidgets('第三个圆点：切到歌曲信息页（信息可见 + 到顶下拉切换播放器）', (tester) async {
+    await pumpNowPlaying(tester);
+
+    final dots = find.descendant(
+      of: find.byType(LyricsQueueDots),
+      matching: find.byType(GestureDetector),
+    );
+    expect(dots, findsNWidgets(3), reason: '队列 / 歌词 / 歌曲信息三页');
+
+    final info = find.byType(TrackInfoView);
+    // 点第三个圆点切到信息页（默认在歌词页）。
+    await tester.tap(dots.at(2));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 400));
+    expect(info, findsOneWidget);
+    expect(find.text('本次播放音质'), findsOneWidget);
+    // 无音源列表注入：渠道回退 track.id.sourceKey。
+    expect(find.text('fake'), findsOneWidget);
+
+    // 信息页与队列/歌词共用「到顶继续下拉」手势：收起态下拉 = 展开。
+    await dragPlayer(tester, 300);
+    expect(playerHeight(tester), lessThan(100));
+    await tester.dragFrom(
+      tester.getCenter(find.byType(PageView)),
+      const Offset(0, 140),
+    );
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 400));
+    expect(playerHeight(tester), greaterThan(300), reason: '信息页到顶下拉应展开');
 
     // 通知节流计时器跑完，避免 pending timer 报错。
     await tester.pump(const Duration(milliseconds: 50));

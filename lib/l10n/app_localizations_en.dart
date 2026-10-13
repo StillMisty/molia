@@ -2248,4 +2248,60 @@ class AppLocalizationsEn extends AppLocalizations {
       String percent, String receivedMb, String speedMb) {
     return 'Downloaded $percent% ($receivedMb MB, $speedMb MB/s)';
   }
+
+  @override
+  String get trackInfoTabTitle => 'Song info';
+
+  @override
+  String get trackInfoEmpty => 'Nothing playing';
+
+  @override
+  String get trackInfoQuality => 'Playing quality';
+
+  @override
+  String get trackInfoQualityAvailable => 'Available qualities';
+
+  @override
+  String get trackInfoQualityUnknown => 'Unknown';
+
+  @override
+  String get trackInfoChannel => 'Channel';
+
+  @override
+  String get trackInfoChannelUnknown => 'Unknown channel';
+
+  @override
+  String get trackInfoAlbum => 'Album';
+
+  @override
+  String get trackInfoDuration => 'Duration';
+
+  @override
+  String get trackInfoTrackId => 'Track ID';
+
+  @override
+  String get trackInfoIdCopied => 'Track ID copied';
+
+  @override
+  String get trackInfoCacheSection => 'Cache';
+
+  @override
+  String get trackInfoCacheResolve => 'Resolved link cache';
+
+  @override
+  String get trackInfoCacheNone => 'Not cached';
+
+  @override
+  String trackInfoCacheEntries(int count) {
+    return '$count entries';
+  }
+
+  @override
+  String trackInfoCacheCleared(String size) {
+    return 'Cleared $size';
+  }
+
+  @override
+  String get trackInfoCachePlaying =>
+      'Playing — audio cache can be cleared later';
 }

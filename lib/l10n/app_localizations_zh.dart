@@ -2154,4 +2154,59 @@ class AppLocalizationsZh extends AppLocalizations {
       String percent, String receivedMb, String speedMb) {
     return '已下载 $percent%（$receivedMb MB，$speedMb MB/s）';
   }
+
+  @override
+  String get trackInfoTabTitle => '歌曲信息';
+
+  @override
+  String get trackInfoEmpty => '暂无播放曲目';
+
+  @override
+  String get trackInfoQuality => '本次播放音质';
+
+  @override
+  String get trackInfoQualityAvailable => '可用音质';
+
+  @override
+  String get trackInfoQualityUnknown => '未知';
+
+  @override
+  String get trackInfoChannel => '渠道';
+
+  @override
+  String get trackInfoChannelUnknown => '未知渠道';
+
+  @override
+  String get trackInfoAlbum => '专辑';
+
+  @override
+  String get trackInfoDuration => '时长';
+
+  @override
+  String get trackInfoTrackId => '曲目 ID';
+
+  @override
+  String get trackInfoIdCopied => '曲目 ID 已复制';
+
+  @override
+  String get trackInfoCacheSection => '缓存';
+
+  @override
+  String get trackInfoCacheResolve => '取链缓存';
+
+  @override
+  String get trackInfoCacheNone => '无缓存';
+
+  @override
+  String trackInfoCacheEntries(int count) {
+    return '$count 条';
+  }
+
+  @override
+  String trackInfoCacheCleared(String size) {
+    return '已清理 $size';
+  }
+
+  @override
+  String get trackInfoCachePlaying => '正在播放，音频缓存稍后再清';
 }

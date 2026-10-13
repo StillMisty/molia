@@ -1171,5 +1171,36 @@
         "type": "String"
       }
     }
-  }
+  },
+  "trackInfoTabTitle": "Song info",
+  "trackInfoEmpty": "Nothing playing",
+  "trackInfoQuality": "Playing quality",
+  "trackInfoQualityAvailable": "Available qualities",
+  "trackInfoQualityUnknown": "Unknown",
+  "trackInfoChannel": "Channel",
+  "trackInfoChannelUnknown": "Unknown channel",
+  "trackInfoAlbum": "Album",
+  "trackInfoDuration": "Duration",
+  "trackInfoTrackId": "Track ID",
+  "trackInfoIdCopied": "Track ID copied",
+  "trackInfoCacheSection": "Cache",
+  "trackInfoCacheResolve": "Resolved link cache",
+  "trackInfoCacheNone": "Not cached",
+  "trackInfoCacheEntries": "{count} entries",
+  "@trackInfoCacheEntries": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "trackInfoCacheCleared": "Cleared {size}",
+  "@trackInfoCacheCleared": {
+    "placeholders": {
+      "size": {
+        "type": "String"
+      }
+    }
+  },
+  "trackInfoCachePlaying": "Playing — audio cache can be cleared later"
 }

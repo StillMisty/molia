@@ -904,5 +904,36 @@
         "type": "String"
       }
     }
-  }
+  },
+  "trackInfoTabTitle": "歌曲信息",
+  "trackInfoEmpty": "暂无播放曲目",
+  "trackInfoQuality": "本次播放音质",
+  "trackInfoQualityAvailable": "可用音质",
+  "trackInfoQualityUnknown": "未知",
+  "trackInfoChannel": "渠道",
+  "trackInfoChannelUnknown": "未知渠道",
+  "trackInfoAlbum": "专辑",
+  "trackInfoDuration": "时长",
+  "trackInfoTrackId": "曲目 ID",
+  "trackInfoIdCopied": "曲目 ID 已复制",
+  "trackInfoCacheSection": "缓存",
+  "trackInfoCacheResolve": "取链缓存",
+  "trackInfoCacheNone": "无缓存",
+  "trackInfoCacheEntries": "{count} 条",
+  "@trackInfoCacheEntries": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "trackInfoCacheCleared": "已清理 {size}",
+  "@trackInfoCacheCleared": {
+    "placeholders": {
+      "size": {
+        "type": "String"
+      }
+    }
+  },
+  "trackInfoCachePlaying": "正在播放，音频缓存稍后再清"
 }

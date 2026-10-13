@@ -43,6 +43,32 @@ class CacheUsage {
   String toString() => 'CacheUsage(bytes: $bytes, count: $count)';
 }
 
+/// 按前缀删除的结果：实际删除的用量 + 因“正在写入”被跳过的文件数。
+///
+/// 单曲清理（见 `CacheService.clearAudioForTrack`）用 [skipped] 区分
+/// 「本来就没缓存」与「正在边播边缓存、暂时不能删」两种空结果。
+class CacheDeleteResult {
+  const CacheDeleteResult({
+    this.deleted = CacheUsage.zero,
+    this.skipped = 0,
+  });
+
+  final CacheUsage deleted;
+  final int skipped;
+
+  @override
+  bool operator ==(Object other) =>
+      other is CacheDeleteResult &&
+      other.deleted == deleted &&
+      other.skipped == skipped;
+
+  @override
+  int get hashCode => Object.hash(deleted, skipped);
+
+  @override
+  String toString() => 'CacheDeleteResult($deleted, skipped: $skipped)';
+}
+
 /// 分区存储抽象：策略/统计逻辑（[CacheService]）与平台文件操作解耦。
 ///
 /// IO 实现走 `path_provider` + `dart:io`（[IoCacheStorage]）；Web 无持久
@@ -62,6 +88,22 @@ abstract class CacheStorage {
 
   /// 统计目录占用；目录不存在时返回 [CacheUsage.zero]。
   Future<CacheUsage> usage(String dirPath);
+
+  /// 统计目录内文件名以 [prefix] 开头的文件（单曲占用展示用）。
+  ///
+  /// 目录不存在/不可读时返回 [CacheUsage.zero]。
+  Future<CacheUsage> usageMatching(String dirPath, {required String prefix});
+
+  /// 删除目录内文件名以 [prefix] 开头的文件，返回删除与跳过的数量。
+  ///
+  /// [protectAge] 内修改过的文件视为“正在写入”跳过（同
+  /// [enforceAudioLimit] 的语义：`LockCachingAudioSource` 边下载边写，
+  /// 删活动文件会破坏本次播放/写入）。
+  Future<CacheDeleteResult> deleteMatching(
+    String dirPath, {
+    required String prefix,
+    Duration protectAge = Duration.zero,
+  });
 
   /// 删除目录内所有缓存文件（保留目录本身）。
   Future<void> clear(String dirPath);

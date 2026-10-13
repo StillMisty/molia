@@ -6,7 +6,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'cache_storage.dart';
 import 'lyrics_cache.dart';
 
-export 'cache_storage.dart' show CachePartition, CacheUsage;
+export 'cache_storage.dart' show CacheDeleteResult, CachePartition, CacheUsage;
 
 /// 统一缓存门面：音频 / 歌词 / 封面三个分区的策略、统计与清理。
 ///
@@ -231,6 +231,77 @@ class CacheService {
   /// 音频缓存目录（持久）；平台不可用（Web）返回 null。
   Future<String?> audioCacheDirPath() => _safeDir(_storage.audioCacheDir);
 
+  /// 单曲音频缓存文件名前缀（`{sourceKey}_{songId}_`，同一替换规则）。
+  ///
+  /// 音质在文件名末尾，因此该前缀命中同一曲目的所有音质变体。
+  /// 与 [audioCacheKey] 的截断/哈希后缀兼容：前缀始终位于文件名开头
+  /// （截断发生在替换后，且哈希后缀追加在末尾）。
+  static String audioCacheKeyPrefix({
+    required String sourceKey,
+    required String songId,
+  }) {
+    final prefix = _sanitize('${sourceKey}_${songId}_');
+    return prefix.length > _maxKeyLength
+        ? prefix.substring(0, _maxKeyLength)
+        : prefix;
+  }
+
+  /// 单曲音频缓存占用（所有音质变体）。
+  Future<CacheUsage> audioUsageForTrack({
+    required String sourceKey,
+    required String songId,
+  }) async {
+    final dir = await _safeDir(_storage.audioCacheDir);
+    if (dir == null) return CacheUsage.zero;
+    try {
+      return await _storage.usageMatching(
+        dir,
+        prefix: audioCacheKeyPrefix(sourceKey: sourceKey, songId: songId),
+      );
+    } catch (e) {
+      _logger.warning('单曲音频缓存统计失败: $e');
+      return CacheUsage.zero;
+    }
+  }
+
+  /// 清理单曲音频缓存（所有音质变体）。
+  ///
+  /// [protectAge] 内修改过的文件视为正在写入（边播边缓存）跳过，
+  /// 结果里的 `skipped` 用于区分「本来没缓存」与「播放中暂不能删」。
+  Future<CacheDeleteResult> clearAudioForTrack({
+    required String sourceKey,
+    required String songId,
+    Duration? protectAge,
+  }) async {
+    final dir = await _safeDir(_storage.audioCacheDir);
+    if (dir == null) return const CacheDeleteResult();
+    try {
+      final result = await _storage.deleteMatching(
+        dir,
+        prefix: audioCacheKeyPrefix(sourceKey: sourceKey, songId: songId),
+        protectAge: protectAge ?? _audioProtectAge,
+      );
+      if (result.deleted.count > 0) {
+        _logger.info(
+          '清理单曲音频缓存 ${result.deleted.count} 个文件'
+          '（${result.deleted.bytes} 字节，跳过 ${result.skipped} 个活动文件）',
+        );
+      }
+      return result;
+    } catch (e) {
+      _logger.warning('单曲音频缓存清理失败: $e');
+      return const CacheDeleteResult();
+    }
+  }
+
+  /// 单曲歌词缓存占用。
+  Future<CacheUsage> lyricsUsageForTrack(String trackId) =>
+      _lyricsCache.usageOf(trackId);
+
+  /// 清理单曲歌词缓存（规范键 + 历史重复键）。
+  Future<void> clearLyricsForTrack(String trackId) =>
+      _lyricsCache.remove(trackId);
+
   /// 封面缓存目录（持久）；平台不可用（Web）返回 null。
   Future<String?> artworkCacheDirPath() => _safeDir(_storage.artworkCacheDir);
 
@@ -245,13 +316,21 @@ class CacheService {
   }) {
     final effectiveQuality = quality.trim().isEmpty ? 'auto' : quality.trim();
     final raw = '${sourceKey}_${songId}_$effectiveQuality';
-    final sanitized = raw.replaceAll(RegExp(r'[^A-Za-z0-9._-]'), '_');
+    final sanitized = _sanitize(raw);
     if (sanitized == raw) return raw;
-    final truncated =
-        sanitized.length > 100 ? sanitized.substring(0, 100) : sanitized;
+    final truncated = sanitized.length > _maxKeyLength
+        ? sanitized.substring(0, _maxKeyLength)
+        : sanitized;
     final hash = raw.hashCode.toUnsigned(32).toRadixString(16);
     return '${truncated}_$hash';
   }
+
+  /// 文件名安全字符集：与 [audioCacheKey] 同一替换规则。
+  static String _sanitize(String raw) =>
+      raw.replaceAll(RegExp(r'[^A-Za-z0-9._-]'), '_');
+
+  /// 替换后文件名的最大长度（超出截断，见 [audioCacheKey]）。
+  static const int _maxKeyLength = 100;
 
   // 策略变更监听（ArtworkCache 用）。
 

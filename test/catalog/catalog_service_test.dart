@@ -277,6 +277,31 @@ void main() {
     );
   });
 
+  test('invalidateResolveForTrack：清该曲目全部音质变体，不动其它曲目', () async {
+    final source = _FakeMusicSource('kw');
+    final registry = _FakeRegistry({'kw': source});
+    addTearDown(registry.dispose);
+    final service = CatalogService(registry: registry);
+
+    final track = _track('kw', 'a');
+    final other = _track('kw', 'b');
+    await service.resolve(track, quality: const AudioQuality(type: '320k'));
+    await service.resolve(track, quality: const AudioQuality(type: '128k'));
+    await service.resolve(other);
+    expect(source.resolveCalls, 3);
+    expect(service.resolveCacheCountForTrack(track), 2);
+
+    final removed = service.invalidateResolveForTrack(track);
+    expect(removed, 2);
+    expect(service.resolveCacheCountForTrack(track), 0);
+    expect(service.resolveCacheCountForTrack(other), 1);
+
+    // 再次取链重新命中引擎；其它曲目仍走缓存。
+    await service.resolve(track, quality: const AudioQuality(type: '320k'));
+    await service.resolve(other);
+    expect(source.resolveCalls, 4);
+  });
+
   test('resolve：失败不缓存，下一次可重试成功', () async {
     final source = _FakeMusicSource('kw')
       ..resolveError = const LxEngineException('取链失败');

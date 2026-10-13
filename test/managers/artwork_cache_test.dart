@@ -353,4 +353,42 @@ void main() {
       expect(info.file.path, file.path);
     });
   });
+
+  group('单曲封面缓存（remove / usageOf）', () {
+    test('删除命中缓存的文件并清空占用；未命中返回 false', () async {
+      final tempRoot = await Directory.systemTemp.createTemp('artwork_remove_');
+      addTearDown(() async {
+        if (await tempRoot.exists()) await tempRoot.delete(recursive: true);
+      });
+      final service = CacheService(
+        prefs: prefs,
+        storage: IoCacheStorage(
+          audioDirOverride: '${tempRoot.path}/audio',
+          artworkDirOverride: '${tempRoot.path}/artwork',
+        ),
+      );
+      final cache = ArtworkCache(
+        cacheService: service,
+        repoOverride: NonStoringObjectProvider(),
+      );
+      const url = 'https://p1.music.126.net/single.jpg';
+      final manager = await cache.manager;
+      final file = await manager.putFile(
+        url,
+        Uint8List.fromList([1, 2, 3, 4, 5]),
+        fileExtension: 'jpg',
+      );
+      expect(await file.exists(), isTrue);
+
+      final usage = await cache.usageOf(url);
+      expect(usage, const CacheUsage(bytes: 5, count: 1));
+
+      expect(await cache.remove(url), isTrue);
+      expect(await file.exists(), isFalse);
+      expect(await cache.usageOf(url), CacheUsage.zero);
+
+      // 未缓存再删：false（不是错误）。
+      expect(await cache.remove(url), isFalse);
+    });
+  });
 }

@@ -226,5 +226,23 @@ void main() {
       expect(await first, 'first');
       expect(await second, 'second');
     });
+
+    test('countPrefix 只数匹配前缀的条目（含 in-flight）', () async {
+      final cache = RequestCache(ttl: const Duration(minutes: 5));
+      final pending = Completer<String>();
+      unawaited(cache.getOrCreate<String>('url:wy:digest:', () => pending.future));
+      await cache.getOrCreate<String>('url:wy:digest:320k', () async => 'a');
+      await cache.getOrCreate<String>('url:wy:digest:flac', () async => 'b');
+      await cache.getOrCreate<String>('url:wy:other:320k', () async => 'c');
+
+      expect(cache.countPrefix('url:wy:digest:'), 3);
+      expect(cache.countPrefix('url:wy:'), 4);
+      expect(cache.countPrefix('url:kg:'), 0);
+
+      cache.invalidatePrefix('url:wy:digest:');
+      expect(cache.countPrefix('url:wy:digest:'), 0);
+      expect(cache.countPrefix('url:wy:'), 1);
+      pending.complete('d');
+    });
   });
 }

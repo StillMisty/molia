@@ -60,6 +60,21 @@ class _FakeCacheStorage implements CacheStorage {
   Future<CacheUsage> usage(String dirPath) async => CacheUsage.zero;
 
   @override
+  Future<CacheUsage> usageMatching(
+    String dirPath, {
+    required String prefix,
+  }) async =>
+      CacheUsage.zero;
+
+  @override
+  Future<CacheDeleteResult> deleteMatching(
+    String dirPath, {
+    required String prefix,
+    Duration protectAge = Duration.zero,
+  }) async =>
+      const CacheDeleteResult();
+
+  @override
   Future<void> clear(String dirPath) async {}
 
   @override

@@ -77,16 +77,39 @@ class CatalogService {
   ///
   /// `payload` 用递归排序键的稳定序列化后 md5，保证相同内容生成相同 key；
   /// 无音质参数时以 `auto` 占位。
-  static String resolveCacheKey(Track track, AudioQuality? quality) {
-    final digest = crypto.md5
-        .convert(utf8.encode(_canonicalJson(track.payload)))
-        .toString();
-    return 'url:${track.id.sourceKey}:$digest:${quality?.type ?? 'auto'}';
-  }
+  static String resolveCacheKey(Track track, AudioQuality? quality) =>
+      'url:${track.id.sourceKey}:${payloadDigestOf(track)}:'
+      '${quality?.type ?? 'auto'}';
+
+  /// 取链缓存 key 的曲目段：`url:{source}:{digest}:`（不含音质）。
+  ///
+  /// 同一曲目的所有音质变体共享该前缀（单曲失效/占用查询用）。
+  static String resolveCacheKeyPrefix(Track track) =>
+      'url:${track.id.sourceKey}:${payloadDigestOf(track)}:';
+
+  /// payload 稳定摘要（排序键 JSON → md5）。
+  static String payloadDigestOf(Track track) => crypto.md5
+      .convert(utf8.encode(_canonicalJson(track.payload)))
+      .toString();
 
   /// 使指定音源的取链缓存失效（预留：播放失败/403 时立即失效并重试）。
   void invalidateResolvePrefix(String sourceKey) =>
       _resolveCache.invalidatePrefix('url:$sourceKey:');
+
+  /// 使指定曲目的取链缓存失效（含所有音质变体；单曲清缓存用）。
+  ///
+  /// 不清取链缓存的话，删掉音频文件后重播仍会命中旧 URL——用户
+  /// 「清理后重来」的意图会落空。
+  int invalidateResolveForTrack(Track track) {
+    final prefix = resolveCacheKeyPrefix(track);
+    final removed = _resolveCache.countPrefix(prefix);
+    _resolveCache.invalidatePrefix(prefix);
+    return removed;
+  }
+
+  /// 指定曲目当前的取链缓存条目数（含 in-flight）。
+  int resolveCacheCountForTrack(Track track) =>
+      _resolveCache.countPrefix(resolveCacheKeyPrefix(track));
 
   /// 归一化音源调用异常；[SourceFailure] 幂等透传。
   Future<T> _guardSourceCall<T>(Future<T> Function() call) async {

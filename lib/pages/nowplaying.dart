@@ -9,10 +9,11 @@ import 'package:molia/widgets/queue.dart';
 import 'package:molia/widgets/lyrics.dart';
 import 'package:molia/widgets/mdtab.dart';
 import 'package:molia/widgets/player_morph.dart';
+import 'package:molia/widgets/track_info_view.dart';
 
 import '../l10n/app_localizations.dart';
 
-/// 正在播放页：全屏播放器（可折叠为迷你条）+ 队列/歌词两个 PageView。
+/// 正在播放页：全屏播放器（可折叠为迷你条）+ 队列/歌词/歌曲信息三个 PageView。
 class NowPlaying extends StatefulWidget {
   /// 顶栏共享元素控制器：全屏播放器为其提供封面/歌名/进度锚点。
   final PlayerMorphController? morph;
@@ -33,6 +34,9 @@ class _NowPlayingState extends State<NowPlaying>
   /// 歌词页滚动控制器：同一判定的歌词侧（外部注入 [LyricsWidget]）。
   late final ScrollController _lyricsScrollController;
 
+  /// 歌曲信息页滚动控制器（同一判定的第三页）。
+  late final ScrollController _infoScrollController;
+
   /// 播放器展开进度：0 = 迷你条、1 = 完整播放器（小屏）。
   ///
   /// motor expressive spatial 弹簧（380/0.8）：拖动跟手直接写进度，松手按
@@ -50,7 +54,10 @@ class _NowPlayingState extends State<NowPlaying>
   /// 本次内容区手势已触发过切换（一次手势只触发一次）。
   bool _contentToggleDone = false;
 
-  static const int _currentPageIndex = 1; // 默认显示歌词页
+  /// 默认显示歌词页；页序见 [_buildPages]：队列 / 歌词 / 歌曲信息。
+  static const int _currentPageIndex = 1;
+  static const int _queuePageIndex = 0;
+  static const int _infoPageIndex = 2;
 
   // 页面与屏幕尺寸缓存：避免 PageView 每次重建导致歌词/队列滚动状态丢失。
   List<PageData>? _cachedPages;
@@ -63,6 +70,7 @@ class _NowPlayingState extends State<NowPlaying>
     _pageController = PageController(initialPage: _currentPageIndex);
     _queueScrollController = ScrollController();
     _lyricsScrollController = ScrollController();
+    _infoScrollController = ScrollController();
     _expandController = SingleMotionController(
       motion:
           const MaterialSpringMotion.expressiveSpatialDefault(snapToEnd: true),
@@ -78,6 +86,7 @@ class _NowPlayingState extends State<NowPlaying>
     _pageController.dispose();
     _queueScrollController.dispose();
     _lyricsScrollController.dispose();
+    _infoScrollController.dispose();
     super.dispose();
   }
 
@@ -165,6 +174,17 @@ class _NowPlayingState extends State<NowPlaying>
           ),
         ),
       ),
+      PageData(
+        title: AppLocalizations.of(context)!.trackInfoTabTitle,
+        icon: Icons.info_rounded,
+        page: RepaintBoundary(
+          child: TrackInfoView(
+            controller: _infoScrollController,
+            // 顶部留出圆点过渡带，内容首行不被渐隐吃掉（与队列页一致）。
+            topPadding: _dotsBandHeight + 2,
+          ),
+        ),
+      ),
     ];
 
     return _cachedPages!;
@@ -240,17 +260,23 @@ class _NowPlayingState extends State<NowPlaying>
   // - 队列/歌词已滑到顶部后继续下拉超过阈值（把内容往上推，不抢内容滚动）。
   // 内容上下滚动、横向翻页自身不参与切换。
 
-  /// 当前内容页（0 = 队列、1 = 歌词）。
+  /// 当前内容页（0 = 队列、1 = 歌词、2 = 歌曲信息）。
   int get _currentContentPage {
     if (!_pageController.hasClients) return _currentPageIndex;
     return _pageController.page?.round() ?? _currentPageIndex;
   }
 
+  /// 页索引 → 滚动控制器（新增页面时必须同步登记，否则该页
+  /// 「滑到顶再下拉收起播放器」失效）。
+  ScrollController _scrollControllerOf(int page) => switch (page) {
+        _queuePageIndex => _queueScrollController,
+        _infoPageIndex => _infoScrollController,
+        _ => _lyricsScrollController,
+      };
+
   /// 当前内容页是否已在顶部（未挂载/无滚动条时视为在顶）。
   bool get _contentAtTop {
-    final controller = _currentContentPage == 0
-        ? _queueScrollController
-        : _lyricsScrollController;
+    final controller = _scrollControllerOf(_currentContentPage);
     return !controller.hasClients || controller.offset <= 0;
   }
 
