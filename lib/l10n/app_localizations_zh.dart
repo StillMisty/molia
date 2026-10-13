@@ -825,6 +825,18 @@ class AppLocalizationsZh extends AppLocalizations {
   String get nextTrackTooltip => '下一首';
 
   @override
+  String get windowMinimize => '最小化';
+
+  @override
+  String get windowMaximize => '最大化';
+
+  @override
+  String get windowRestore => '还原';
+
+  @override
+  String get windowClose => '关闭';
+
+  @override
   String get playlistEmpty => '还没有列表。点「新建列表」创建，或导入 LX Music 收藏夹。';
 
   @override

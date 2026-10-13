@@ -69,6 +69,7 @@ import 'services/ai/taste_profile_builder.dart';
 import 'services/settings_service.dart';
 import 'services/source_swap/auto_source_swap_service.dart';
 import 'services/source_swap/source_swap_settings.dart';
+import 'services/window/window_chrome.dart';
 import 'sources/source_manager.dart';
 
 /// composition root 内的 UiMessenger 适配器：唯一持有 navigatorKey /
@@ -111,6 +112,11 @@ class _AppUiMessenger implements UiMessenger {
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+
+  // 桌面窗口 chrome（Linux/Windows）：隐藏原生标题栏，窗口按钮改由顶栏承担；
+  // 其余平台是空操作（Web/移动端走 stub，不触碰插件 API）。
+  // 放在 runApp 之前：首帧渲染时标题栏已是隐藏态，不会闪一下系统标题栏。
+  await WindowChrome.ensureInitialized();
 
   // 桌面端本地播放后端（Windows/Linux: media_kit）
   initDesktopAudioIfNeeded();

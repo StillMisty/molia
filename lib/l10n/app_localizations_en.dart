@@ -855,6 +855,18 @@ class AppLocalizationsEn extends AppLocalizations {
   String get nextTrackTooltip => 'Next track';
 
   @override
+  String get windowMinimize => 'Minimize';
+
+  @override
+  String get windowMaximize => 'Maximize';
+
+  @override
+  String get windowRestore => 'Restore';
+
+  @override
+  String get windowClose => 'Close';
+
+  @override
   String get playlistEmpty =>
       'No playlists yet. Create one or import an LX Music favorites file.';
 

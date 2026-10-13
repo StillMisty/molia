@@ -12,6 +12,7 @@ import 'package:molia/pages/sources_page.dart';
 import 'package:molia/playback/desktop_audio_init.dart';
 import 'package:molia/playback/local_playback_service.dart';
 import 'package:molia/providers/sources_provider.dart';
+import 'package:molia/services/window/window_chrome.dart';
 import 'package:molia/sources/source_manager.dart';
 
 /// 端到端集成测试：真实 App 运行时 + 真实 LX JS 引擎 + 本地 mock HTTP 服务。
@@ -265,6 +266,16 @@ void main() {
     await manager.setPreferredQuality('320k');
     await tester.pumpAndSettle();
     expect(manager.preferredQuality, '320k');
+  });
+
+  testWidgets('桌面窗口 chrome：隐藏标题栏后系统标题栏高度为 0', (tester) async {
+    // 仅 Linux/Windows 有窗口 chrome；Android/iOS 上 isSupported 为 false，
+    // 本用例直接通过（不触碰插件 API，见 docs/pitfalls.md #30）。
+    if (!WindowChrome.isSupported) return;
+    // 与 lib/main.dart 同一条调用路径：初始化插件 → 隐藏标题栏 → 显示窗口。
+    await WindowChrome.ensureInitialized();
+    final height = await WindowChrome.debugTitleBarHeight();
+    expect(height, 0, reason: '隐藏标题栏后系统标题栏高度应为 0，实际 $height');
   });
 }
 
