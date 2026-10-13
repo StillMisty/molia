@@ -164,6 +164,12 @@ class _MyAppState extends State<MyApp>
   /// 顶栏 ↔ 播放页共享元素飞行控制器。
   final PlayerMorphController _morph = PlayerMorphController();
 
+  /// 顶栏曲目信息区（歌名/作者 + 播放/下一首按钮）的入场进度。
+  ///
+  /// 一根 expressive spatial 弹簧同时驱动文本位移/淡入与按钮缩放 pop：
+  /// 文本与按钮是两个兄弟子树，弹簧必须由共同祖先持有，不能各建一根。
+  late final _BarHeaderReveal _barReveal;
+
   /// tab 淡入淡出（fade-through）控制器。
   late final AnimationController _tabTransition = AnimationController(
     vsync: this,
@@ -209,10 +215,19 @@ class _MyAppState extends State<MyApp>
     _morph.setBarHeaderHidden(
       _selectedDestination == ShellDestination.nowPlaying,
     );
+    _barReveal = _BarHeaderReveal(
+      vsync: this,
+      revealed: !_morph.barHeaderHidden,
+    );
+    _morph.addListener(_syncBarReveal);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       context.read<ThemeProvider>().updateThemeFromSystem(context);
     });
   }
+
+  /// 顶栏曲目信息区跟随 [PlayerMorphController.barHeaderHidden]（飞行起止
+  /// 时也由它统一翻转，避免两处各判一次）。
+  void _syncBarReveal() => _barReveal.setRevealed(!_morph.barHeaderHidden);
 
   @override
   void dispose() {
@@ -220,6 +235,8 @@ class _MyAppState extends State<MyApp>
     _morphAnimation.removeListener(_onMorphTick);
     _morphAnimation.dispose();
     _tabTransition.dispose();
+    _morph.removeListener(_syncBarReveal);
+    _barReveal.dispose();
     _morphEntry?.remove();
     _morphEntry = null;
     _morph.dispose();
@@ -394,15 +411,17 @@ class _MyAppState extends State<MyApp>
       automaticallyImplyLeading: false,
       title: _ShellBarHeader(
         morph: _morph,
+        reveal: _barReveal,
         onOpenPlayer: () => _selectDestination(ShellDestination.nowPlaying),
       ),
       actions: [
         // 顶栏右侧：播放页只留设置（播放/切歌由页面内部控制区承担）；
         // 其余页面（资料库 / 收藏）是迷你播放器（显式播放/暂停 + 下一首）
         // 加设置入口 —— 设置不再只有播放页够得着。
+        // 两个按钮与歌名/作者共用同一根入场弹簧（缩放 pop + 淡入）。
         if (selectedDestination != ShellDestination.nowPlaying) ...[
-          const _BarPlayPauseButton(),
-          const _BarNextButton(),
+          _BarPlayPauseButton(reveal: _barReveal),
+          _BarNextButton(reveal: _barReveal),
         ],
         M3EIconButton(
           variant: M3EIconButtonVariant.standard,
@@ -566,9 +585,16 @@ class _ShellPageLayer extends StatelessWidget {
 /// 点击整条头部进入播放页（与点底栏「播放」同路径，触发共享封面飞行）；
 /// 播放页激活（或飞行中）时交叉淡出为应用图标 + 自定义应用名，不响应点击。
 class _ShellBarHeader extends StatelessWidget {
-  const _ShellBarHeader({required this.morph, required this.onOpenPlayer});
+  const _ShellBarHeader({
+    required this.morph,
+    required this.reveal,
+    required this.onOpenPlayer,
+  });
 
   final PlayerMorphController morph;
+
+  /// 曲目信息区入场进度（与播放/下一首按钮共用一根弹簧，见 [_BarHeaderReveal]）。
+  final _BarHeaderReveal reveal;
 
   /// 进入播放页。点击区域覆盖封面 + 歌名整条：封面 40×40 仍达不到 48dp
   /// 的独立触控目标，也不符合迷你条「点哪都进播放页」的惯例。
@@ -576,6 +602,14 @@ class _ShellBarHeader extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // 无曲目标题时信息区本来就回退应用名，不做入场动画（避免同文案
+    // 位移淡入与标题淡出叠影）。
+    final hasTrackTitle = context.select<PlaybackProvider, bool>(
+      (provider) {
+        final track = provider.snapshot.current;
+        return track != null && track.title.isNotEmpty;
+      },
+    );
     return AnimatedBuilder(
       animation: morph,
       builder: (context, _) {
@@ -625,24 +659,93 @@ class _ShellBarHeader extends StatelessWidget {
               ),
               const SizedBox(width: 12),
               Expanded(
-                child: Stack(
-                  alignment: Alignment.centerLeft,
-                  children: [
-                    AnimatedOpacity(
-                      duration: const Duration(milliseconds: 160),
-                      opacity: showTrack ? 1 : 0,
-                      child: const _BarTrackInfo(),
-                    ),
-                    AnimatedOpacity(
-                      duration: const Duration(milliseconds: 160),
-                      opacity: showTrack ? 0 : 1,
-                      child: const _AppTitleText(),
-                    ),
-                  ],
-                ),
+                child: hasTrackTitle
+                    ? _BarHeaderTransition(reveal: reveal, showTrack: showTrack)
+                    : const _AppTitleText(),
               ),
             ],
           ),
+        );
+      },
+    );
+  }
+}
+
+/// 顶栏曲目信息区（歌名/作者 + 播放/下一首按钮）的共享入场进度。
+///
+/// 一根 expressive spatial 弹簧（800 / 0.6，轻微过冲，`snapToEnd` 落定精确
+/// 吸附）从 0（隐藏）到 1（展示）；消费面把进度 clamp 到 0..1 后派生
+/// 位移 / 缩放与透明度（effects 不过冲）。文本与按钮是两个兄弟子树，
+/// 弹簧由壳层 State 持有后分别消费；快速连切靠 motor 中途重定向续接。
+class _BarHeaderReveal extends ChangeNotifier {
+  _BarHeaderReveal({required TickerProvider vsync, required bool revealed})
+      : _motion = SingleMotionController(
+          motion: SpringMotion(
+            M3EMotion.expressiveSpatialFast.toDescription(),
+            snapToEnd: true,
+          ),
+          vsync: vsync,
+          initialValue: revealed ? 1 : 0,
+        ) {
+    _motion.addListener(notifyListeners);
+  }
+
+  final SingleMotionController _motion;
+
+  /// 原始弹簧进度（可能短暂过冲 1；消费面自行 clamp）。
+  double get progress => _motion.value;
+
+  void setRevealed(bool value) => _motion.animateTo(value ? 1 : 0);
+
+  @override
+  void dispose() {
+    _motion.removeListener(notifyListeners);
+    _motion.dispose();
+    super.dispose();
+  }
+}
+
+/// 顶栏文本区转场：歌名 + 作者作为一块整体入场（不错峰），应用名出场
+/// 先行走短时长淡出（fade-through 先后节奏，消除两段文字长时间叠影）。
+///
+/// 入场方向（曲目信息）：expressive spatial 弹簧驱动 −6dp → 0 位移，
+/// 透明度从同一根弹簧进度 clamp 0..1（spatial 与 effects 同帧耦合）。
+/// 出场方向（应用名）：90ms + 曲线淡出（effects 保持时长+曲线，不走弹簧）。
+class _BarHeaderTransition extends StatelessWidget {
+  const _BarHeaderTransition({required this.reveal, required this.showTrack});
+
+  final _BarHeaderReveal reveal;
+
+  /// true = 展示曲目信息（应用名出场中）。
+  final bool showTrack;
+
+  /// 入场横向位移幅度（dp）：4–8dp 区间，避免与封面飞行的零速度交接打架。
+  static const double _offsetX = 6;
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedBuilder(
+      animation: reveal,
+      builder: (context, _) {
+        final t = reveal.progress.clamp(0.0, 1.0);
+        return Stack(
+          alignment: Alignment.centerLeft,
+          children: [
+            Transform.translate(
+              offset: Offset(-_offsetX * (1 - t), 0),
+              child: Opacity(
+                opacity: t,
+                child: const _BarTrackInfo(),
+              ),
+            ),
+            AnimatedOpacity(
+              // 出场 90ms（先走），入场保持 160ms（与旧观感一致）。
+              duration: Duration(milliseconds: showTrack ? 90 : 160),
+              curve: showTrack ? Curves.easeIn : Curves.easeOut,
+              opacity: showTrack ? 0 : 1,
+              child: const _AppTitleText(),
+            ),
+          ],
         );
       },
     );
@@ -680,8 +783,11 @@ class _BarCover extends StatelessWidget {
 /// 不触发整个 Shell 重建。
 ///
 /// 顶栏唯一的高亮按钮（tonal）：一屏只留一个视觉重点，其余图标无底色。
+/// 入场与歌名/作者共用同一根弹簧：0.92→1 缩放 pop + 透明度同步。
 class _BarPlayPauseButton extends StatelessWidget {
-  const _BarPlayPauseButton();
+  const _BarPlayPauseButton({required this.reveal});
+
+  final _BarHeaderReveal reveal;
 
   @override
   Widget build(BuildContext context) {
@@ -690,26 +796,32 @@ class _BarPlayPauseButton extends StatelessWidget {
       (provider) => (provider.hasTrack, provider.isPlaying),
     );
     final l10n = AppLocalizations.of(context)!;
-    return M3EIconButton(
-      variant: M3EIconButtonVariant.tonal,
-      tooltip: isPlaying ? l10n.pause : l10n.play,
-      icon: AnimatedSwitcher(
-        duration: const Duration(milliseconds: 200),
-        transitionBuilder: (child, animation) => ScaleTransition(
-          scale: animation,
-          child: FadeTransition(opacity: animation, child: child),
-        ),
-        child: Icon(
-          isPlaying ? Icons.pause_rounded : Icons.play_arrow_rounded,
-          key: ValueKey(isPlaying),
+    return AnimatedBuilder(
+      animation: reveal,
+      builder: (context, _) => _BarRevealTransition(
+        progress: reveal.progress,
+        child: M3EIconButton(
+          variant: M3EIconButtonVariant.tonal,
+          tooltip: isPlaying ? l10n.pause : l10n.play,
+          icon: AnimatedSwitcher(
+            duration: const Duration(milliseconds: 200),
+            transitionBuilder: (child, animation) => ScaleTransition(
+              scale: animation,
+              child: FadeTransition(opacity: animation, child: child),
+            ),
+            child: Icon(
+              isPlaying ? Icons.pause_rounded : Icons.play_arrow_rounded,
+              key: ValueKey(isPlaying),
+            ),
+          ),
+          onPressed: hasTrack
+              ? () {
+                  HapticFeedback.lightImpact();
+                  context.read<PlaybackProvider>().togglePlayPause();
+                }
+              : null,
         ),
       ),
-      onPressed: hasTrack
-          ? () {
-              HapticFeedback.lightImpact();
-              context.read<PlaybackProvider>().togglePlayPause();
-            }
-          : null,
     );
   }
 }
@@ -718,8 +830,11 @@ class _BarPlayPauseButton extends StatelessWidget {
 /// 避免空操作误导；`select` 只订阅 hasTrack，不触发整个 Shell 重建。
 ///
 /// 无底色标准样式：顶栏唯一高亮留给旁边的播放/暂停。
+/// 入场与播放/暂停按钮同一根弹簧（与歌名/作者同源）。
 class _BarNextButton extends StatelessWidget {
-  const _BarNextButton();
+  const _BarNextButton({required this.reveal});
+
+  final _BarHeaderReveal reveal;
 
   @override
   Widget build(BuildContext context) {
@@ -727,16 +842,45 @@ class _BarNextButton extends StatelessWidget {
       (provider) => provider.hasTrack,
     );
     final l10n = AppLocalizations.of(context)!;
-    return M3EIconButton(
-      variant: M3EIconButtonVariant.standard,
-      tooltip: l10n.nextTrackTooltip,
-      icon: const Icon(Icons.skip_next_rounded),
-      onPressed: hasTrack
-          ? () {
-              HapticFeedback.lightImpact();
-              context.read<PlaybackProvider>().skipToNext();
-            }
-          : null,
+    return AnimatedBuilder(
+      animation: reveal,
+      builder: (context, _) => _BarRevealTransition(
+        progress: reveal.progress,
+        child: M3EIconButton(
+          variant: M3EIconButtonVariant.standard,
+          tooltip: l10n.nextTrackTooltip,
+          icon: const Icon(Icons.skip_next_rounded),
+          onPressed: hasTrack
+              ? () {
+                  HapticFeedback.lightImpact();
+                  context.read<PlaybackProvider>().skipToNext();
+                }
+              : null,
+        ),
+      ),
+    );
+  }
+}
+
+/// 顶栏按钮的入场表现：缩放 0.92→1（幅度 ≤8%）+ 透明度同源 clamp 0..1。
+/// 完全隐藏时不参与命中测试（flight 期间按钮已挂载但不可见）。
+class _BarRevealTransition extends StatelessWidget {
+  const _BarRevealTransition({required this.progress, required this.child});
+
+  /// 原始弹簧进度（可能短暂过冲）。
+  final double progress;
+
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    final t = progress.clamp(0.0, 1.0);
+    return IgnorePointer(
+      ignoring: t <= 0,
+      child: Opacity(
+        opacity: t,
+        child: Transform.scale(scale: 0.92 + 0.08 * t, child: child),
+      ),
     );
   }
 }
