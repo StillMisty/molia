@@ -13,6 +13,13 @@ const Set<String> _outlinedPairAllowlist = {
   'library_music_outlined',
 };
 
+/// I2 例外：`IconSwap` 本身（配方所在处）与曲目行「缩略图 ⇄ 多选勾选」
+/// （不是按钮图标槽位切换，语义是封面被勾选态替换）。
+const Set<String> _animatedSwitcherAllowlist = {
+  'lib/widgets/icon_swap.dart',
+  'lib/widgets/track_row.dart',
+};
+
 void main() {
   final files = _libFiles();
 
@@ -36,6 +43,22 @@ void main() {
       isEmpty,
       reason: '图标统一 `Icons.*_rounded`（例外见测试文件注释）：\n'
           '${violations.join('\n')}',
+    );
+  });
+
+  test('I2 同一按钮的状态图标切换统一走 IconSwap（不裸写 AnimatedSwitcher）', () {
+    final violations = <String>[];
+    for (final path in files) {
+      if (_animatedSwitcherAllowlist.contains(path)) continue;
+      if (_strippedSource(path).contains('AnimatedSwitcher(')) {
+        violations.add(path);
+      }
+    }
+    expect(
+      violations,
+      isEmpty,
+      reason: '图标切换统一走 `lib/widgets/icon_swap.dart::IconSwap` '
+          '（docs/architecture.md §6）：\n${violations.join('\n')}',
     );
   });
 }

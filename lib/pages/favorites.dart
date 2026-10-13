@@ -18,6 +18,7 @@ import '../utils/responsive.dart';
 import '../widgets/add_to_library.dart';
 import '../widgets/add_to_playlist_sheet.dart' show showPlaylistNameDialog;
 import '../widgets/app_search_bar.dart';
+import '../widgets/icon_swap.dart';
 import '../widgets/lxmc_import.dart' show importLxmcFavoritesFlow;
 import '../widgets/swipe_reveal_row.dart';
 import '../widgets/track_row.dart';
@@ -1138,10 +1139,13 @@ class _FavoritesPageState extends State<FavoritesPage> {
       ),
       M3EIconButton(
         variant: M3EIconButtonVariant.standard,
-        icon: Icon(
-          allFavorited
-              ? Icons.heart_broken_rounded
-              : Icons.favorite_border_rounded,
+        icon: IconSwap<bool>(
+          value: allFavorited,
+          builder: (context, allFavorited) => Icon(
+            allFavorited
+                ? Icons.heart_broken_rounded
+                : Icons.favorite_border_rounded,
+          ),
         ),
         tooltip: allFavorited ? l10n.favoriteRemove : l10n.favoriteAdd,
         onPressed: () {

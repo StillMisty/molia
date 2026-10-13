@@ -5,6 +5,7 @@ import 'package:provider/provider.dart';
 import '../domain/models/any_listen.dart';
 import '../providers/sources_provider.dart';
 import '../theme/app_semantic_colors.dart';
+import '../widgets/icon_swap.dart';
 
 /// any-listen 接入配置页：服务器地址 / 令牌 / 启用开关 / 连接测试 / 保存。
 ///
@@ -221,8 +222,13 @@ class _AnyListenPageState extends State<AnyListenPage> {
             trailing: M3EIconButton(
               variant: M3EIconButtonVariant.standard,
               tooltip: _tokenVisible ? '隐藏令牌' : '显示令牌',
-              icon: Icon(
-                _tokenVisible ? Icons.visibility_off_rounded : Icons.visibility_rounded,
+              icon: IconSwap<bool>(
+                value: _tokenVisible,
+                builder: (context, visible) => Icon(
+                  visible
+                      ? Icons.visibility_off_rounded
+                      : Icons.visibility_rounded,
+                ),
               ),
               onPressed: () => setState(() => _tokenVisible = !_tokenVisible),
             ),

@@ -21,6 +21,7 @@ import '../providers/playback_provider.dart';
 import '../services/notification_service.dart';
 import '../widgets/ai_dj_shared.dart';
 import '../widgets/ai_dj_track_tile.dart';
+import '../widgets/icon_swap.dart';
 import '../widgets/track_row.dart';
 
 class AiDjPage extends StatefulWidget {
@@ -415,10 +416,13 @@ class _AiDjPageState extends State<AiDjPage> {
               ),
               M3EIconButton(
                 variant: M3EIconButtonVariant.standard,
-                icon: Icon(
-                  _showUpstream
-                      ? Icons.expand_less_rounded
-                      : Icons.expand_more_rounded,
+                icon: IconSwap<bool>(
+                  value: _showUpstream,
+                  builder: (context, showUpstream) => Icon(
+                    showUpstream
+                        ? Icons.expand_less_rounded
+                        : Icons.expand_more_rounded,
+                  ),
                 ),
                 tooltip: l10n.aiDjUpstreamTitle,
                 onPressed: _toggleUpstream,

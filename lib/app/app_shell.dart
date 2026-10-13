@@ -32,6 +32,7 @@ import '../theme/app_theme.dart';
 import '../utils/responsive.dart';
 import '../widgets/app_network_image.dart';
 import '../widgets/cover_appearance.dart';
+import '../widgets/icon_swap.dart';
 import '../widgets/nav_destination_icons.dart';
 import '../widgets/playback_selectors.dart';
 import '../widgets/player_morph.dart';
@@ -803,15 +804,10 @@ class _BarPlayPauseButton extends StatelessWidget {
         child: M3EIconButton(
           variant: M3EIconButtonVariant.tonal,
           tooltip: isPlaying ? l10n.pause : l10n.play,
-          icon: AnimatedSwitcher(
-            duration: const Duration(milliseconds: 200),
-            transitionBuilder: (child, animation) => ScaleTransition(
-              scale: animation,
-              child: FadeTransition(opacity: animation, child: child),
-            ),
-            child: Icon(
+          icon: IconSwap<bool>(
+            value: isPlaying,
+            builder: (context, isPlaying) => Icon(
               isPlaying ? Icons.pause_rounded : Icons.play_arrow_rounded,
-              key: ValueKey(isPlaying),
             ),
           ),
           onPressed: hasTrack
@@ -910,10 +906,13 @@ class _WindowControls extends StatelessWidget {
           builder: (context, maximized, _) => M3EIconButton(
             variant: M3EIconButtonVariant.standard,
             tooltip: maximized ? l10n.windowRestore : l10n.windowMaximize,
-            icon: Icon(
-              maximized
-                  ? Icons.filter_none_rounded
-                  : Icons.crop_square_rounded,
+            icon: IconSwap<bool>(
+              value: maximized,
+              builder: (context, maximized) => Icon(
+                maximized
+                    ? Icons.filter_none_rounded
+                    : Icons.crop_square_rounded,
+              ),
             ),
             onPressed: WindowChrome.toggleMaximize,
           ),

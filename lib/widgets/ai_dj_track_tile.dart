@@ -7,6 +7,7 @@ import '../domain/models/track.dart';
 import '../l10n/app_localizations.dart';
 import '../providers/library_provider.dart';
 import 'card_list_surface.dart';
+import 'icon_swap.dart';
 import 'library_cover.dart';
 
 /// AI 推荐卡（「今日推荐」列表项）：封面 + 歌名/歌手 + AI 理由 + 行内操作。
@@ -174,9 +175,12 @@ class _FavoriteAction extends StatelessWidget {
       variant: M3EIconButtonVariant.standard,
       size: M3EIconButtonSize.sm,
       visualSize: const Size(40, 40),
-      icon: Icon(
-        favorite ? Icons.favorite_rounded : Icons.favorite_border_rounded,
-        color: favorite ? scheme.primary : scheme.onSurfaceVariant,
+      icon: IconSwap<bool>(
+        value: favorite,
+        builder: (context, favorite) => Icon(
+          favorite ? Icons.favorite_rounded : Icons.favorite_border_rounded,
+          color: favorite ? scheme.primary : scheme.onSurfaceVariant,
+        ),
       ),
       tooltip: favorite ? l10n.favoriteRemove : l10n.favoriteAdd,
       onPressed: enabled ? () => library.toggleFavoriteTrack(track) : null,

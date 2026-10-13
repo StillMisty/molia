@@ -19,6 +19,7 @@ import '../services/data_saver_service.dart';
 import '../utils/responsive.dart';
 import 'app_network_image.dart';
 import 'cover_appearance.dart';
+import 'icon_swap.dart';
 import 'player_cover_deck.dart';
 import 'player_morph.dart';
 
@@ -548,7 +549,10 @@ class _PlayerState extends State<Player> with TickerProviderStateMixin {
       size: M3EIconButtonSize.sm,
       visualSize: const Size(44, 44),
       // 颜色交给 standard 变体默认值（不手写 primary 强调）。
-      icon: Icon(_getPlayModeIcon(mode)),
+      icon: IconSwap<PlayMode>(
+        value: mode,
+        builder: (context, mode) => Icon(_getPlayModeIcon(mode)),
+      ),
       tooltip: label,
       onPressed: onPressed,
     );
@@ -896,16 +900,11 @@ class _PlayerState extends State<Player> with TickerProviderStateMixin {
       variant: M3EIconButtonVariant.standard,
       size: size,
       visualSize: visualSize,
-      icon: AnimatedSwitcher(
-        duration: const Duration(milliseconds: 200),
-        transitionBuilder: (child, animation) => ScaleTransition(
-          scale: animation,
-          child: FadeTransition(opacity: animation, child: child),
-        ),
-        // 颜色交给 standard 变体默认值。
-        child: Icon(
+      icon: IconSwap<bool>(
+        value: isPlaying,
+        builder: (context, isPlaying) => Icon(
           isPlaying ? Icons.pause_rounded : Icons.play_arrow_rounded,
-          key: ValueKey(isPlaying),
+          // 颜色交给 standard 变体默认值。
         ),
       ),
       onPressed: () {
@@ -1024,12 +1023,15 @@ class _FavoriteButton extends StatelessWidget {
       variant: M3EIconButtonVariant.standard,
       size: size,
       visualSize: visualSize,
-      icon: Icon(
-        favorite ? Icons.favorite_rounded : Icons.favorite_border_rounded,
+      icon: IconSwap<bool>(
+        value: favorite,
         // 与收藏页行内心形同一契约：已收藏 primary、未收藏 onSurfaceVariant。
-        color: favorite
-            ? Theme.of(context).colorScheme.primary
-            : Theme.of(context).colorScheme.onSurfaceVariant,
+        builder: (context, favorite) => Icon(
+          favorite ? Icons.favorite_rounded : Icons.favorite_border_rounded,
+          color: favorite
+              ? Theme.of(context).colorScheme.primary
+              : Theme.of(context).colorScheme.onSurfaceVariant,
+        ),
       ),
       tooltip: favorite ? l10n.favoriteRemove : l10n.favoriteAdd,
       onPressed: () async {

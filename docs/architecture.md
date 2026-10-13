@@ -381,7 +381,10 @@
   `rootNavigator: true`。
 - 图标：统一圆角风格 `Icons.*_rounded`（不用 `Icons.adaptive.*`，不混 `_outlined`/基础实心）；
   唯一例外 `library_music_outlined`（资料库未选中半对；音符图标已改用 `MoliaMark` 组件）。
-  `test/architecture/icon_usage_test.dart` 扫描强制。
+  `test/architecture/icon_usage_test.dart` 扫描强制。**同一按钮的状态图标切换**统一走
+  `lib/widgets/icon_swap.dart::IconSwap`（150ms emphasized 交叉淡入 + 0.85→1 轻微缩放、
+  减弱动效跳变），不要在调用点裸写 `AnimatedSwitcher`；底部导航 `icon↔selectedIcon`
+  由包内 `M3ENavIconScale` 负责，不要再叠。
 - 弹层观感差异（M3E 统一 inverseSurface Snackbar、无红底错误色、Dialog/BottomSheet 圆角与
   spring 入场）属预期，不是 bug。
 - 列表行统一走 `lib/widgets/track_row.dart`（队列/收藏/历史/发现共用）：形状按 M3E 列表规范
