@@ -6,15 +6,14 @@
 library;
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:http/http.dart' as http;
-import 'package:http/testing.dart';
 import 'package:molia/sources/builtin/builtin_transport.dart';
+import 'support/mock_dio.dart';
 
 void main() {
   BuiltinTransport transport({int calls = 0, void Function()? onCall}) =>
-      BuiltinTransport(client: MockClient((_) async {
+      BuiltinTransport(dio: mockDio((_) async {
         onCall?.call();
-        return http.Response('{}', 200);
+        return textResponse('{}', statusCode: 200);
       }));
 
   test('成功即返回，不重试', () async {

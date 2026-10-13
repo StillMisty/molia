@@ -20,8 +20,9 @@ library;
 import 'dart:async';
 import 'dart:convert';
 
-import 'package:http/http.dart' as http;
+import 'package:dio/dio.dart';
 
+import '../../data/http/app_dio.dart';
 import 'any_listen_config.dart';
 import 'any_listen_errors.dart';
 
@@ -71,21 +72,22 @@ class AnyListenProbeResult {
 /// 不做业务字段解析；业务解析在 `AnyListenSource` 中，便于替换本类时对照。
 class AnyListenApi {
   AnyListenApi({
-    http.Client? client,
+    Dio? dio,
     this.timeout = const Duration(seconds: 10),
-  }) : _injectedClient = client;
+  }) : _injectedDio = dio;
 
   /// 外部注入的客户端（可选）；为空时在首次请求时惰性创建。
   ///
   /// 惰性创建很重要：`SourceManager` 在构造时就持有 [AnyListenSource]，
-  /// 若此处立即 `http.Client()`，在 flutter_test 的 mock HttpOverrides 下
-  /// 脱离 test zone 构造会抛异常，也会给未配置用户带来无谓的对象创建。
-  final http.Client? _injectedClient;
-  http.Client? _ownedClient;
+  /// 若此处立即建 `Dio`（其默认适配器会抓 `HttpOverrides.current`），
+  /// 在 flutter_test 的 mock HttpOverrides 下脱离 test zone 构造会抛异常，
+  /// 也会给未配置用户带来无谓的对象创建。
+  final Dio? _injectedDio;
+  Dio? _ownedDio;
 
   final Duration timeout;
 
-  http.Client get _client => _injectedClient ?? (_ownedClient ??= http.Client());
+  Dio get _dio => _injectedDio ?? (_ownedDio ??= createAppDio());
 
   /// 连接探测：`GET /api/ipc/hello` 校验握手魔数，随后尽力获取 server id。
   ///
@@ -183,7 +185,10 @@ class AnyListenApi {
   }) async {
     _requireConfigured(config);
     final response = await _send(
-      () => _client.get(_uri(config, path, query: query), headers: _headers(config)),
+      () => _dio.getUri(
+        _uri(config, path, query: query),
+        options: Options(headers: _headers(config)),
+      ),
     );
     return _decodeText(response);
   }
@@ -207,10 +212,10 @@ class AnyListenApi {
   }) async {
     _requireConfigured(config);
     final response = await _send(
-      () => _client.post(
+      () => _dio.postUri(
         _uri(config, path, query: query),
-        headers: _headers(config, json: true),
-        body: body == null ? null : jsonEncode(body),
+        data: body == null ? null : jsonEncode(body),
+        options: Options(headers: _headers(config, json: true)),
       ),
     );
     return _decodeJson(_decodeText(response));
@@ -218,8 +223,8 @@ class AnyListenApi {
 
   /// 关闭内部创建的 HTTP 客户端（外部注入的客户端由调用方负责）。
   void close() {
-    _ownedClient?.close();
-    _ownedClient = null;
+    _ownedDio?.close();
+    _ownedDio = null;
   }
 
   void _requireConfigured(AnyListenConfig config) {
@@ -243,19 +248,21 @@ class AnyListenApi {
     };
   }
 
-  Future<http.Response> _send(Future<http.Response> Function() request) async {
+  Future<Response<dynamic>> _send(
+      Future<Response<dynamic>> Function() request) async {
     try {
       final response = await request().timeout(timeout);
-      if (response.statusCode < 200 || response.statusCode >= 300) {
-        throw AnyListenException.fromHttpStatus(response.statusCode);
+      if (response.httpStatus < 200 || response.httpStatus >= 300) {
+        throw AnyListenException.fromHttpStatus(response.httpStatus);
       }
       return response;
     } on AnyListenException {
       rethrow;
-    } on http.ClientException catch (error) {
+    } on DioException catch (error) {
+      final message = error.message ?? '';
       throw AnyListenException(
         AnyListenErrorKind.connectionFailed,
-        '无法连接 any-listen 服务器：${error.message.isEmpty ? '网络请求失败' : error.message}',
+        '无法连接 any-listen 服务器：${message.isEmpty ? '网络请求失败' : message}',
         cause: error,
       );
     } catch (error) {
@@ -263,9 +270,8 @@ class AnyListenApi {
     }
   }
 
-  /// 按 UTF-8 解码响应体（http 包默认 charset 缺失时按 latin1 处理，会破坏中文）。
-  String _decodeText(http.Response response) =>
-      utf8.decode(response.bodyBytes, allowMalformed: true);
+  /// 按 UTF-8 解码响应体（不依赖响应头的 charset，平台接口常缺省）。
+  String _decodeText(Response<dynamic> response) => bodyText(response);
 
   dynamic _decodeJson(String text) {
     try {

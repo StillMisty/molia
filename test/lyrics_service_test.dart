@@ -6,9 +6,8 @@ import 'package:molia/services/lyrics_service.dart';
 import 'package:molia/services/lyrics/qq_provider.dart';
 import 'package:molia/services/lyrics/netease_provider.dart';
 import 'package:molia/services/lyrics/lyric_provider.dart';
-import 'package:http/testing.dart';
-import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
+import 'support/mock_dio.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -18,8 +17,8 @@ void main() {
 
   group('LyricsService Tests', () {
     test('QQ Provider can search and fetch lyrics', () async {
-      final mockClient = MockClient((request) async {
-        final path = request.url.path;
+      final mockClient = mockDio((request) async {
+        final path = request.uri.path;
         if (path.contains('musicu.fcg')) {
           final response = {
             'req': {
@@ -42,21 +41,26 @@ void main() {
           };
           // 先编码为 UTF-8 字节，避免 QQProvider 内 utf8.decode 遇到非法字符。
           final bodyBytes = utf8.encode(jsonEncode(response));
-          return http.Response.bytes(bodyBytes, 200,
-              headers: {'content-type': 'application/json; charset=utf-8'});
+          return bytesResponse(bodyBytes, statusCode: 200,
+              headers: {
+                'content-type': ['application/json; charset=utf-8']
+              });
         }
 
         if (path.contains('fcg_query_lyric_new')) {
           final response = {'lyric': '[00:00]你瞒我瞒'};
           final bodyBytes = utf8.encode(jsonEncode(response));
-          return http.Response.bytes(bodyBytes, 200,
-              headers: {'content-type': 'application/json'});
+          return bytesResponse(bodyBytes,
+              statusCode: 200,
+              headers: {
+                'content-type': ['application/json']
+              });
         }
 
-        return http.Response('Not Found', 404);
+        return textResponse('Not Found', statusCode: 404);
       });
 
-      final provider = QQProvider(httpClient: mockClient);
+      final provider = QQProvider(dio: mockClient);
       final songMatch = await provider.search('Bohemian Rhapsody', 'Queen');
 
       expect(songMatch, isNotNull);

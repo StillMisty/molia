@@ -1,12 +1,14 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:isolate';
+import 'dart:typed_data';
 
+import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
-import 'package:http/http.dart' as http;
 import 'package:quickjs_engine/quickjs_engine.dart';
 
+import '../../data/http/app_dio.dart';
 import 'lx_engine_types.dart';
 import 'lx_native_utils.dart';
 import 'lx_script_info.dart';
@@ -364,7 +366,11 @@ class _LxIsolateHost {
   bool _ready = false;
   bool _initFailed = false;
 
-  final Map<String, http.Client> _httpClients = {};
+  /// 每请求一个取消令牌：脚本侧 `httpCancel` 直接取消对应的那一个请求。
+  final Map<String, CancelToken> _cancelTokens = {};
+
+  /// 本 isolate 共用的 HTTP 客户端（音源脚本的网络请求都经 [lx.request] 走这里）。
+  final Dio _dio = createAppDio();
 
   _LxIsolateHost(this._mainPort, Map<String, dynamic> config)
       : _prelude = config['prelude'] as String,
@@ -541,8 +547,7 @@ class _LxIsolateHost {
       case 'httpCancel':
         if (data is Map) {
           final reqId = data['reqId']?.toString();
-          final client = reqId == null ? null : _httpClients.remove(reqId);
-          client?.close();
+          if (reqId != null) _cancelTokens.remove(reqId)?.cancel();
         }
         break;
       case 'log':
@@ -576,49 +581,52 @@ class _LxIsolateHost {
     final timeout = Duration(
       milliseconds: timeoutMs.clamp(1, 120000),
     );
-    final client = http.Client();
-    _httpClients[reqId] = client;
+    final cancelToken = CancelToken();
+    _cancelTokens[reqId] = cancelToken;
 
     try {
-      final request = http.Request(
-        (data['method']?.toString() ?? 'GET').toUpperCase(),
-        Uri.parse(url),
-      );
-
-      final headers = data['headers'];
-      if (headers is Map) {
-        for (final entry in headers.entries) {
-          request.headers[entry.key.toString()] = entry.value.toString();
+      final headers = <String, String>{};
+      final rawHeaders = data['headers'];
+      if (rawHeaders is Map) {
+        for (final entry in rawHeaders.entries) {
+          headers[entry.key.toString()] = entry.value.toString();
         }
       }
 
-      final body = data['body'];
+      Object? body = data['body'];
       final form = data['form'];
       final formData = data['formData'];
       if (form is Map || formData is Map) {
         final fields = (form is Map ? form : formData) as Map;
-        request.body = fields.entries
+        body = fields.entries
             .map((e) =>
                 '${Uri.encodeQueryComponent(e.key.toString())}=${Uri.encodeQueryComponent(e.value.toString())}')
             .join('&');
-        request.headers.putIfAbsent(
+        headers.putIfAbsent(
           'Content-Type',
           () => 'application/x-www-form-urlencoded',
         );
-      } else if (body != null) {
-        if (body is String) {
-          request.body = body;
-        } else {
-          if (!request.headers.containsKey('Content-Type')) {
-            request.headers['Content-Type'] = 'application/json';
-          }
-          request.body = jsonEncode(body);
-        }
+      } else if (body != null && body is! String) {
+        headers.putIfAbsent('Content-Type', () => 'application/json');
+        body = jsonEncode(body);
       }
 
-      final response = await client.send(request).timeout(timeout);
-      final bytes = await response.stream.toBytes();
-      final raw = utf8.decode(bytes, allowMalformed: true);
+      final response = await _dio
+          .requestUri<dynamic>(
+            Uri.parse(url),
+            data: body,
+            cancelToken: cancelToken,
+            options: Options(
+              method: (data['method']?.toString() ?? 'GET').toUpperCase(),
+              headers: headers,
+              responseType: ResponseType.stream,
+            ),
+          )
+          .timeout(timeout);
+      final raw = utf8.decode(
+        await _collectBodyBytes(streamBody(response).stream),
+        allowMalformed: true,
+      );
       dynamic parsed = raw;
       if (raw.trim().isNotEmpty) {
         try {
@@ -634,8 +642,8 @@ class _LxIsolateHost {
         'error': null,
         'response': {
           'statusCode': response.statusCode,
-          'statusMessage': response.reasonPhrase ?? '',
-          'headers': response.headers,
+          'statusMessage': response.statusMessage ?? '',
+          'headers': flatResponseHeaders(response),
         },
         'raw': raw,
         'body': _jsonSafe(parsed),
@@ -653,9 +661,16 @@ class _LxIsolateHost {
         'error': e.toString(),
       });
     } finally {
-      _httpClients.remove(reqId);
-      client.close();
+      _cancelTokens.remove(reqId);
     }
+  }
+
+  static Future<Uint8List> _collectBodyBytes(Stream<Uint8List> stream) async {
+    final builder = BytesBuilder(copy: false);
+    await for (final chunk in stream) {
+      builder.add(chunk);
+    }
+    return builder.toBytes();
   }
 
   void _deliver(Map<String, dynamic> message) {
@@ -693,10 +708,10 @@ class _LxIsolateHost {
   void _shutdown() {
     _pumpTimer?.cancel();
     _pumpTimer = null;
-    for (final client in _httpClients.values) {
-      client.close();
+    for (final token in _cancelTokens.values) {
+      token.cancel();
     }
-    _httpClients.clear();
+    _cancelTokens.clear();
     try {
       _runtime?.dispose();
     } catch (_) {}

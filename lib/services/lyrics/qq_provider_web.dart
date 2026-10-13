@@ -1,9 +1,10 @@
 import 'dart:async';
 import 'dart:convert';
 
-import 'package:http/http.dart' as http;
+import 'package:dio/dio.dart';
 import 'package:logging/logging.dart';
 
+import '../../data/http/app_dio.dart';
 import 'lyric_provider.dart';
 import 'qq_encoding.dart';
 
@@ -12,15 +13,15 @@ class QQProvider extends LyricProvider {
   static const String _defaultWorkerBaseUrl = 'https://lyrics.gojyuplus.com';
   static const Duration _requestTimeout = Duration(seconds: 12);
   final Logger _logger = Logger('molia.qq_provider_web');
-  final http.Client _client;
+  final Dio _dio;
   final String _workerBaseUrl;
   final String? _authSecret;
 
   QQProvider({
-    http.Client? httpClient,
+    Dio? dio,
     String? workerBaseUrl,
     String? authSecret,
-  })  : _client = httpClient ?? http.Client(),
+  })  : _dio = dio ?? createAppDio(),
         _workerBaseUrl = workerBaseUrl ?? _defaultWorkerBaseUrl,
         _authSecret = authSecret;
 
@@ -48,25 +49,25 @@ class QQProvider extends LyricProvider {
     bool treatNotFoundAsNull = true,
   }) async {
     try {
-      final response = await _client
-          .post(
+      final response = await _dio
+          .postUri(
             _endpoint(path),
-            headers: _jsonHeaders,
-            body: jsonEncode(payload),
+            data: jsonEncode(payload),
+            options: Options(headers: _jsonHeaders),
           )
           .timeout(_requestTimeout);
 
-      if (response.statusCode >= 200 && response.statusCode < 300) {
-        return json.decode(response.body) as Map<String, dynamic>;
+      if (response.httpStatus >= 200 && response.httpStatus < 300) {
+        return json.decode(bodyText(response)) as Map<String, dynamic>;
       }
 
-      if (response.statusCode == 404 && treatNotFoundAsNull) {
+      if (response.httpStatus == 404 && treatNotFoundAsNull) {
         _logger.info('Worker未找到资源: $path');
         return null;
       }
 
       _logger.warning(
-        'Worker接口调用失败($path)，状态码: ${response.statusCode}, 响应: ${response.body}',
+        'Worker接口调用失败($path)，状态码: ${response.httpStatus}, 响应: ${bodyText(response)}',
       );
     } on TimeoutException catch (e) {
       _logger.warning('Worker请求超时: $e');

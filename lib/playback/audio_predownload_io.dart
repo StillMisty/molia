@@ -1,8 +1,9 @@
 import 'dart:async';
 import 'dart:io';
 
-import 'package:http/http.dart' as http;
+import 'package:dio/dio.dart';
 
+import '../data/http/app_dio.dart';
 import 'audio_predownload_task.dart';
 
 /// 启动预取；平台不支持 / 目标已缓存时返回 null。
@@ -16,20 +17,24 @@ AudioPredownloadTask? startAudioPredownload({
   // 半成品用独立后缀：just_audio 的 LockCachingAudioSource 使用 `.part`，
   // 两边不能共用同一路径（取消清理会误删对方正在写的文件）。
   final partFile = File('$targetPath.predl');
-  final client = http.Client();
+  final dio = createAppDio();
   final completer = Completer<void>();
   var cancelled = false;
 
   Future<void> run() async {
     IOSink? sink;
     try {
-      final response = await client.send(http.Request('GET', uri));
-      if (response.statusCode < 200 || response.statusCode >= 300) {
-        throw HttpException('HTTP ${response.statusCode}');
+      final response = await dio.requestUri<dynamic>(
+        uri,
+        options: Options(method: 'GET', responseType: ResponseType.stream),
+      );
+      final status = response.statusCode ?? 0;
+      if (status < 200 || status >= 300) {
+        throw HttpException('HTTP $status');
       }
       await partFile.parent.create(recursive: true);
       sink = partFile.openWrite();
-      await for (final chunk in response.stream) {
+      await for (final chunk in streamBody(response).stream) {
         if (cancelled) break;
         sink.add(chunk);
       }
@@ -49,7 +54,7 @@ AudioPredownloadTask? startAudioPredownload({
       } catch (_) {}
       await _deleteQuietly(partFile);
     } finally {
-      client.close();
+      dio.close(force: true);
       if (!completer.isCompleted) completer.complete();
     }
   }
@@ -59,7 +64,7 @@ AudioPredownloadTask? startAudioPredownload({
     done: completer.future,
     onCancel: () {
       cancelled = true;
-      client.close();
+      dio.close(force: true);
     },
   );
 }

@@ -2,9 +2,10 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:typed_data';
 
-import 'package:http/http.dart' as http;
+import 'package:dio/dio.dart';
 
 import '../../data/cache/request_cache.dart';
+import '../../data/http/app_dio.dart';
 
 /// 内置平台请求失败：传输异常重试耗尽 / 空响应 / 非法 JSON。
 class BuiltinHttpException implements Exception {
@@ -19,15 +20,15 @@ class BuiltinHttpException implements Exception {
 
 /// 内置平台 HTTP 传输：客户端注入、统一请求头/超时、响应级重试与解码。
 ///
-/// 五个平台搜索与发现适配器共用同一条传输路径；测试通过注入 `http.Client`
-/// （`BuiltinSearch.transport = BuiltinTransport(client: MockClient(...))`）
+/// 五个平台搜索与发现适配器共用同一条传输路径；测试通过注入 `Dio`
+/// （`BuiltinSearch.transport = BuiltinTransport(dio: appDioWith(MockDioAdapter(...)))`）
 /// 覆盖 fetch 路径。
 class BuiltinTransport {
-  BuiltinTransport({http.Client? client, RequestCache? cache})
-      : _client = client ?? http.Client(),
+  BuiltinTransport({Dio? dio, RequestCache? cache})
+      : _dio = dio ?? createAppDio(),
         _cache = cache ?? RequestCache(ttl: defaultCacheTtl);
 
-  final http.Client _client;
+  final Dio _dio;
 
   /// 内置请求结果的统一缓存（single-flight + LRU + TTL）：发现适配器共用
   /// 此实例；测试注入新 transport 即得到干净缓存。
@@ -86,7 +87,10 @@ class BuiltinTransport {
     bool Function(dynamic json)? retryIf,
   }) {
     return _attempt(
-      (_) => _client.get(Uri.parse(url), headers: _merge(headers)),
+      (_) => _dio.getUri(
+        Uri.parse(url),
+        options: Options(headers: _merge(headers)),
+      ),
       decode: _decodeJson,
       timeout: timeout,
       retries: retries,
@@ -102,9 +106,11 @@ class BuiltinTransport {
     int retries = 1,
   }) {
     return _attempt(
-      (_) => _client.get(Uri.parse(url), headers: _merge(headers)),
-      decode: (response) =>
-          utf8.decode(response.bodyBytes, allowMalformed: true),
+      (_) => _dio.getUri(
+        Uri.parse(url),
+        options: Options(headers: _merge(headers)),
+      ),
+      decode: bodyText,
       timeout: timeout,
       retries: retries,
     );
@@ -118,8 +124,11 @@ class BuiltinTransport {
     int retries = 1,
   }) {
     return _attempt(
-      (_) => _client.get(Uri.parse(url), headers: _merge(headers)),
-      decode: (response) => response.bodyBytes,
+      (_) => _dio.getUri(
+        Uri.parse(url),
+        options: Options(headers: _merge(headers)),
+      ),
+      decode: bodyBytes,
       timeout: timeout,
       retries: retries,
     );
@@ -135,6 +144,9 @@ class BuiltinTransport {
     int retries = 1,
     bool Function(dynamic json)? retryIf,
   }) {
+    // Content-Type 走 headers 而不是 dio 的 `Options.contentType`：
+    // 两者同时设置会触发 RequestOptions 的断言，且 headers 版本能保留
+    // 调用点现有的 `putIfAbsent` 覆盖语义。
     final requestHeaders = _merge(headers);
     Object? encodedBody;
     if (form) {
@@ -155,10 +167,10 @@ class BuiltinTransport {
       encodedBody = body is String ? body : jsonEncode(body);
     }
     return _attempt(
-      (_) => _client.post(
+      (_) => _dio.postUri(
         Uri.parse(url),
-        headers: requestHeaders,
-        body: encodedBody,
+        data: encodedBody,
+        options: Options(headers: requestHeaders),
       ),
       decode: _decodeJson,
       timeout: timeout,
@@ -173,8 +185,8 @@ class BuiltinTransport {
   /// 统一尝试循环：传输异常与 [retryIf] 响应都可重试；
   /// 空 body / 非法 JSON 属响应语义错误，不重试直接抛出。
   Future<T> _attempt<T>(
-    Future<http.Response> Function(int attempt) send, {
-    required T Function(http.Response response) decode,
+    Future<Response<dynamic>> Function(int attempt) send, {
+    required T Function(Response<dynamic> response) decode,
     required Duration timeout,
     required int retries,
     bool Function(T decoded)? retryIf,
@@ -200,8 +212,8 @@ class BuiltinTransport {
     throw BuiltinHttpException('$lastError', attempts: maxAttempts);
   }
 
-  dynamic _decodeJson(http.Response response) {
-    final text = utf8.decode(response.bodyBytes, allowMalformed: true);
+  dynamic _decodeJson(Response<dynamic> response) {
+    final text = bodyText(response);
     if (text.trim().isEmpty) {
       throw BuiltinHttpException('HTTP ${response.statusCode}: empty body');
     }

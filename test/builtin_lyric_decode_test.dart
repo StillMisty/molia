@@ -2,8 +2,6 @@ import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:http/http.dart' as http;
-import 'package:http/testing.dart';
 import 'package:molia/sources/builtin/builtin_search.dart';
 import 'package:molia/sources/builtin/builtin_transport.dart';
 import 'package:molia/sources/builtin/kg_lyric.dart';
@@ -11,6 +9,7 @@ import 'package:molia/sources/builtin/kw_lyric.dart';
 import 'package:molia/sources/builtin/mg_lyric.dart';
 import 'package:molia/sources/builtin/tx_lyric.dart';
 import 'package:molia/sources/builtin/tx_qrc.dart';
+import 'support/mock_dio.dart';
 import 'package:molia/sources/builtin/zlib_io.dart' as zlib_impl;
 
 /// builtin 平台歌词解码/解析单测：用合成数据做「编码 → 平台接口（MockClient）
@@ -78,11 +77,11 @@ void main() {
       });
 
       BuiltinSearch.transport = BuiltinTransport(
-        client: MockClient((request) async {
-          if (request.url.path.contains('/search')) {
-            return http.Response.bytes(utf8.encode(search), 200);
+        dio: mockDio((request) async {
+          if (request.uri.path.contains('/search')) {
+            return bytesResponse(utf8.encode(search), statusCode: 200);
           }
-          return http.Response.bytes(utf8.encode(download), 200);
+          return bytesResponse(utf8.encode(download), statusCode: 200);
         }),
       );
 
@@ -125,8 +124,8 @@ void main() {
           '[00:02.250]<3150,-3150>译<6750,450>文\n'
           '[00:02.250]<3150,-3150>原<6750,450>文\n';
       BuiltinSearch.transport = BuiltinTransport(
-        client: MockClient((request) async {
-          return http.Response.bytes(encodeLrcx(lrcx), 200);
+        dio: mockDio((request) async {
+          return bytesResponse(encodeLrcx(lrcx), statusCode: 200);
         }),
       );
 
@@ -173,8 +172,8 @@ void main() {
       expect(decrypted!.replaceAll(RegExp(r'\x00+$'), ''), raw);
 
       BuiltinSearch.transport = BuiltinTransport(
-        client: MockClient((request) async {
-          return http.Response(encrypted, 200);
+        dio: mockDio((request) async {
+          return textResponse(encrypted, statusCode: 200);
         }),
       );
       // ignore: unawaited_futures

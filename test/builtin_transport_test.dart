@@ -1,12 +1,11 @@
 import 'dart:convert';
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:http/http.dart' as http;
-import 'package:http/testing.dart';
 import 'package:molia/sources/builtin/builtin_search.dart';
 import 'package:molia/sources/builtin/builtin_transport.dart';
 import 'package:molia/sources/builtin/kw_search.dart';
 import 'package:molia/sources/builtin/wy_hot_search.dart';
+import 'support/mock_dio.dart';
 
 /// 内置传输层：客户端注入、请求头/超时、响应级重试、JSON 解码；
 /// 并验证平台搜索 fetch 路径可被 MockClient 完整覆盖。
@@ -23,11 +22,11 @@ void main() {
 
   test('getJson：成功解码并合并默认请求头', () async {
     Uri? seenUri;
-    Map<String, String>? seenHeaders;
-    final transport = BuiltinTransport(client: MockClient((request) async {
-      seenUri = request.url;
+    Map<String, dynamic>? seenHeaders;
+    final transport = BuiltinTransport(dio: mockDio((request) async {
+      seenUri = request.uri;
       seenHeaders = request.headers;
-      return http.Response(jsonEncode({'ok': 1}), 200);
+      return textResponse(jsonEncode({'ok': 1}), statusCode: 200);
     }));
 
     final json = await transport.getJson('https://example.com/x');
@@ -38,9 +37,9 @@ void main() {
 
   test('getJson：空 body / 非法 JSON 抛 BuiltinHttpException 且不重试', () async {
     var calls = 0;
-    final transport = BuiltinTransport(client: MockClient((_) async {
+    final transport = BuiltinTransport(dio: mockDio((_) async {
       calls++;
-      return http.Response('', 200);
+      return textResponse('', statusCode: 200);
     }));
 
     await expectLater(
@@ -52,9 +51,9 @@ void main() {
 
   test('getJson：retryIf 响应级重试，耗尽后返回最后一次结果', () async {
     var calls = 0;
-    final transport = BuiltinTransport(client: MockClient((_) async {
+    final transport = BuiltinTransport(dio: mockDio((_) async {
       calls++;
-      return http.Response(jsonEncode({'code': calls}), 200);
+      return textResponse(jsonEncode({'code': calls}), statusCode: 200);
     }));
 
     final json = await transport.getJson(
@@ -68,9 +67,9 @@ void main() {
 
   test('传输异常：重试耗尽后抛 BuiltinHttpException', () async {
     var calls = 0;
-    final transport = BuiltinTransport(client: MockClient((_) async {
+    final transport = BuiltinTransport(dio: mockDio((_) async {
       calls++;
-      throw http.ClientException('boom');
+      throw Exception('boom');
     }));
 
     await expectLater(
@@ -83,10 +82,10 @@ void main() {
   test('postJson：form 编码与 Content-Type', () async {
     String? seenBody;
     String? contentType;
-    final transport = BuiltinTransport(client: MockClient((request) async {
-      seenBody = request.body;
+    final transport = BuiltinTransport(dio: mockDio((request) async {
+      seenBody = requestBodyText(request);
       contentType = request.headers['Content-Type'];
-      return http.Response(jsonEncode({'ok': true}), 200);
+      return textResponse(jsonEncode({'ok': true}), statusCode: 200);
     }));
 
     await transport.postJson(
@@ -99,9 +98,9 @@ void main() {
   });
 
   test('平台搜索 fetch 路径：注入 MockClient 后 KwSearch 端到端解析', () async {
-    BuiltinSearch.transport = BuiltinTransport(client: MockClient((request) async {
-      expect(request.url.host, 'search.kuwo.cn');
-      return http.Response(
+    BuiltinSearch.transport = BuiltinTransport(dio: mockDio((request) async {
+      expect(request.uri.host, 'search.kuwo.cn');
+      return textResponse(
         jsonEncode({
           'TOTAL': '1',
           'SHOW': '1',
@@ -117,7 +116,7 @@ void main() {
             },
           ],
         }),
-        200,
+        statusCode: 200,
       );
     }));
 
@@ -129,10 +128,10 @@ void main() {
 
   test('平台搜索响应级重试：首轮空页后重试成功', () async {
     var calls = 0;
-    BuiltinSearch.transport = BuiltinTransport(client: MockClient((_) async {
+    BuiltinSearch.transport = BuiltinTransport(dio: mockDio((_) async {
       calls++;
       final first = calls == 1;
-      return http.Response(
+      return textResponse(
         jsonEncode({
           'TOTAL': '1',
           'SHOW': first ? '0' : '1',
@@ -150,7 +149,7 @@ void main() {
                   },
                 ],
         }),
-        200,
+        statusCode: 200,
       );
     }));
 
@@ -178,9 +177,9 @@ void main() {
   test('发现适配器 fetch：WyHotSearch 走注入客户端且结果被缓存', () async {
     var requests = 0;
     BuiltinSearch.transport =
-        BuiltinTransport(client: MockClient((request) async {
+        BuiltinTransport(dio: mockDio((request) async {
       requests++;
-      return http.Response.bytes(
+      return bytesResponse(
         utf8.encode(jsonEncode({
           'code': 200,
           'data': {
@@ -190,7 +189,7 @@ void main() {
             ],
           },
         })),
-        200,
+        statusCode: 200,
       );
     }));
 

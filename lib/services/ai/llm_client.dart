@@ -1,7 +1,7 @@
 /// LLM 客户端：OpenAI-compatible Chat Completions（用户自备 Key）。
 ///
 /// 设计要点：
-/// - `http.Client` 可注入（测试用 MockClient，与 builtin transport 同模式）；
+/// - `Dio` 可注入（测试用 MockDioAdapter，与 builtin transport 同模式）；
 /// - 错误在边界统一为 [SourceFailure]（401/403 → unauthorized、
 ///   429 → rateLimited、超时 → timeout、连接失败 → network、
 ///   响应不可解析 → unknown），UI 只消费 kind/l10nKey/retryable；
@@ -11,19 +11,20 @@ library;
 import 'dart:async';
 import 'dart:convert';
 
-import 'package:http/http.dart' as http;
+import 'package:dio/dio.dart';
 
+import '../../data/http/app_dio.dart';
 import '../../domain/models/ai_dj.dart';
 import '../../domain/models/failure.dart';
 
 class LlmClient {
   LlmClient({
-    http.Client? client,
+    Dio? dio,
     Duration timeout = const Duration(seconds: 30),
-  })  : _client = client ?? http.Client(),
+  })  : _dio = dio ?? createAppDio(),
         _timeout = timeout;
 
-  final http.Client _client;
+  final Dio _dio;
   final Duration _timeout;
 
   /// 请求地址归一：
@@ -74,16 +75,19 @@ class LlmClient {
       'Authorization': 'Bearer ${config.apiKey.trim()}',
     };
 
-    http.Response response;
+    Response<dynamic> response;
     try {
-      response = await _client
-          .post(uri, headers: headers, body: jsonEncode(requestBody(json: jsonMode)))
+      response = await _dio
+          .postUri(uri,
+              data: jsonEncode(requestBody(json: jsonMode)),
+              options: Options(headers: headers))
           .timeout(_timeout);
-      if (jsonMode && response.statusCode == 400) {
+      if (jsonMode && response.httpStatus == 400) {
         // 服务商不支持 response_format：退回一次纯提示词约束。
-        response = await _client
-            .post(uri,
-                headers: headers, body: jsonEncode(requestBody(json: false)))
+        response = await _dio
+            .postUri(uri,
+                data: jsonEncode(requestBody(json: false)),
+                options: Options(headers: headers))
             .timeout(_timeout);
       }
     } on TimeoutException {
@@ -103,7 +107,7 @@ class LlmClient {
       );
     }
 
-    if (response.statusCode == 401 || response.statusCode == 403) {
+    if (response.httpStatus == 401 || response.httpStatus == 403) {
       throw const SourceFailure(
         kind: FailureKind.unauthorized,
         message: 'API Key 无效或没有权限',
@@ -111,7 +115,7 @@ class LlmClient {
         retryable: false,
       );
     }
-    if (response.statusCode == 429) {
+    if (response.httpStatus == 429) {
       throw const SourceFailure(
         kind: FailureKind.rateLimited,
         message: 'AI 服务限流',
@@ -119,18 +123,18 @@ class LlmClient {
         retryable: true,
       );
     }
-    if (response.statusCode >= 400) {
+    if (response.httpStatus >= 400) {
       throw SourceFailure(
         kind: FailureKind.unknown,
-        message: 'AI 服务返回 HTTP ${response.statusCode}',
+        message: 'AI 服务返回 HTTP ${response.httpStatus}',
         l10nKey: 'aiDjRequestFailed',
-        retryable: response.statusCode >= 500,
+        retryable: response.httpStatus >= 500,
       );
     }
 
     final String content;
     try {
-      final decoded = jsonDecode(utf8.decode(response.bodyBytes));
+      final decoded = jsonDecode(bodyText(response));
       content = ((decoded as Map<String, dynamic>)['choices'] as List?)
               ?.firstOrNull?['message']?['content'] as String? ??
           '';
@@ -162,5 +166,5 @@ class LlmClient {
         maxTokens: 16,
       );
 
-  void dispose() => _client.close();
+  void dispose() => _dio.close();
 }

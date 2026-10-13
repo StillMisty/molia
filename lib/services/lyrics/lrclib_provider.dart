@@ -1,8 +1,9 @@
 import 'dart:async';
 import 'dart:convert';
-import 'package:http/http.dart' as http;
+import 'package:dio/dio.dart';
 import 'package:logging/logging.dart';
 
+import '../../data/http/app_dio.dart';
 import 'lyric_provider.dart';
 
 /// LRCLIB 歌词提供者
@@ -10,9 +11,9 @@ class LRCLibProvider extends LyricProvider {
   static const String _baseUrl = 'https://lrclib.net';
 
   final Logger _logger = Logger('molia.lrclib_provider');
-  final http.Client _client;
+  final Dio _dio;
 
-  LRCLibProvider({http.Client? httpClient}) : _client = httpClient ?? http.Client();
+  LRCLibProvider({Dio? dio}) : _dio = dio ?? createAppDio();
 
   @override
   String get name => 'lrclib';
@@ -44,14 +45,14 @@ class LRCLibProvider extends LyricProvider {
       }
 
       final uri = Uri.parse('$_baseUrl/api/search').replace(queryParameters: params);
-      final response = await _client.get(uri).timeout(const Duration(seconds: 10));
+      final response = await _dio.getUri(uri).timeout(const Duration(seconds: 10));
 
       if (response.statusCode != 200) {
         _logger.warning('LRCLIB 搜索请求失败，状态码: ${response.statusCode}');
         return [];
       }
 
-      final data = json.decode(response.body);
+      final data = json.decode(bodyText(response));
       if (data is! List) {
         _logger.warning('LRCLIB 搜索响应格式异常');
         return [];
@@ -87,14 +88,14 @@ class LRCLibProvider extends LyricProvider {
   Future<String?> fetchLyric(String songId) async {
     try {
       final uri = Uri.parse('$_baseUrl/api/get/$songId');
-      final response = await _client.get(uri).timeout(const Duration(seconds: 10));
+      final response = await _dio.getUri(uri).timeout(const Duration(seconds: 10));
 
       if (response.statusCode != 200) {
         _logger.warning('LRCLIB 获取歌词失败，状态码: ${response.statusCode}');
         return null;
       }
 
-      final data = json.decode(response.body);
+      final data = json.decode(bodyText(response));
       if (data is! Map<String, dynamic>) {
         _logger.warning('LRCLIB 获取歌词响应格式异常');
         return null;

@@ -14,13 +14,12 @@ import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:http/http.dart' as http;
-import 'package:http/testing.dart';
 import 'package:molia/sources/builtin/builtin_search.dart';
 import 'package:molia/sources/builtin/builtin_transport.dart';
 import 'package:molia/sources/builtin/crypto_utils.dart';
 import 'package:molia/sources/builtin/discover_source.dart';
 import 'package:molia/sources/lx/lx_native_utils.dart';
+import 'support/mock_dio.dart';
 
 /// 按 URL 子串路由的发现请求桩：记录全部请求；未路由的请求直接失败，
 /// 保证「绕开注入 client 的裸请求」不会被静默放过。
@@ -32,12 +31,12 @@ class _Stub {
   final List<Uri> requests = [];
 
   late final BuiltinTransport transport =
-      BuiltinTransport(client: MockClient((request) async {
-    final url = request.url.toString();
-    requests.add(request.url);
+      BuiltinTransport(dio: mockDio((request) async {
+    final url = request.uri.toString();
+    requests.add(request.uri);
     for (final entry in routes.entries) {
       if (url.contains(entry.key)) {
-        return http.Response.bytes(utf8.encode(entry.value), 200);
+        return bytesResponse(utf8.encode(entry.value), statusCode: 200);
       }
     }
     throw StateError('未路由的请求: $url');

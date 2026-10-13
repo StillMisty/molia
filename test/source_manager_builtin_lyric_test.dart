@@ -2,14 +2,13 @@ import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:http/http.dart' as http;
-import 'package:http/testing.dart';
 import 'package:molia/sources/builtin/builtin_search.dart';
 import 'package:molia/sources/builtin/builtin_transport.dart';
 import 'package:molia/sources/builtin/zlib_io.dart' as zlib_impl;
 import 'package:molia/sources/source_manager.dart';
 import 'package:molia/sources/source_track.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'support/mock_dio.dart';
 
 /// SourceManager 内置平台原生取词/取图路由（脚本不可用时的 Dart 实现）。
 void main() {
@@ -61,10 +60,10 @@ void main() {
 
   test('fetchLyric：kw 曲目走内置 LRCX 解码（脚本缺失时）', () async {
     BuiltinSearch.transport = BuiltinTransport(
-      client: MockClient((request) async {
-        return http.Response.bytes(
+      dio: mockDio((request) async {
+        return bytesResponse(
           encodeLrcx('[kuwo:127]\n[00:00.000]<1120,-1120>你<2400,160>好\n'),
-          200,
+          statusCode: 200,
         );
       }),
     );
@@ -80,9 +79,9 @@ void main() {
   test('fetchPic：已有封面直接复用，不发请求', () async {
     var called = false;
     BuiltinSearch.transport = BuiltinTransport(
-      client: MockClient((request) async {
+      dio: mockDio((request) async {
         called = true;
-        return http.Response('unexpected', 500);
+        return textResponse('unexpected', statusCode: 500);
       }),
     );
 
@@ -97,9 +96,9 @@ void main() {
 
   test('fetchPic：kw 无封面时走 pic.web 接口', () async {
     BuiltinSearch.transport = BuiltinTransport(
-      client: MockClient((request) async {
-        expect(request.url.host, 'artistpicserver.kuwo.cn');
-        return http.Response('http://img.example/228908.jpg', 200);
+      dio: mockDio((request) async {
+        expect(request.uri.host, 'artistpicserver.kuwo.cn');
+        return textResponse('http://img.example/228908.jpg', statusCode: 200);
       }),
     );
 

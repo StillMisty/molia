@@ -1,10 +1,11 @@
 import 'dart:convert';
 import 'dart:io';
 import 'dart:async';
-import 'package:http/http.dart' as http;
+import 'package:dio/dio.dart';
 import 'package:logging/logging.dart';
 import '../../sources/builtin/tx_lyric.dart';
 import 'lyric_provider.dart';
+import '../../data/http/app_dio.dart';
 import 'qq_encoding.dart';
 
 /// QQ音乐歌词提供者
@@ -17,7 +18,7 @@ class QQProvider extends LyricProvider {
 
   final Logger _logger = Logger('molia.qq_provider_mobile');
   bool _useBackupDomain = false;
-  final http.Client _client;
+  final Dio _dio;
 
   final Map<String, String> _headers = {
     'referer': 'https://y.qq.com/',
@@ -30,7 +31,7 @@ class QQProvider extends LyricProvider {
         'content-type': 'application/json;charset=utf-8',
       };
 
-  QQProvider({http.Client? httpClient}) : _client = httpClient ?? http.Client();
+  QQProvider({Dio? dio}) : _dio = dio ?? createAppDio();
 
   @override
   String get name => 'qq';
@@ -65,11 +66,11 @@ class QQProvider extends LyricProvider {
         },
       });
 
-      final response = await _client
-          .post(
+      final response = await _dio
+          .postUri(
         Uri.parse(_baseSearchUrl),
-        headers: _searchHeaders,
-        body: requestBody,
+        data: requestBody,
+        options: Options(headers: _searchHeaders),
       )
           .timeout(
         const Duration(seconds: 10),
@@ -83,7 +84,7 @@ class QQProvider extends LyricProvider {
         return [];
       }
 
-      String bodyString = utf8.decode(response.bodyBytes, allowMalformed: true);
+      String bodyString = bodyText(response);
       final data = json.decode(bodyString);
       final songList = data['req']?['data']?['body']?['song']?['list'];
       if (songList is! List || songList.isEmpty) {
@@ -221,11 +222,11 @@ class QQProvider extends LyricProvider {
     });
 
     try {
-      final response = await _client
-          .post(
+      final response = await _dio
+          .postUri(
         Uri.parse(_baseSearchUrl),
-        headers: _searchHeaders,
-        body: requestBody,
+        data: requestBody,
+        options: Options(headers: _searchHeaders),
       )
           .timeout(
         const Duration(seconds: 10),
@@ -239,7 +240,7 @@ class QQProvider extends LyricProvider {
         return null;
       }
 
-      final decodedBody = utf8.decode(response.bodyBytes, allowMalformed: true);
+      final decodedBody = bodyText(response);
       final data = json.decode(decodedBody) as Map<String, dynamic>;
       final lyricData = data['req_1']?['data'];
       if (lyricData is! Map<String, dynamic>) {
@@ -293,9 +294,10 @@ class QQProvider extends LyricProvider {
       'nobase64': '1'
     });
 
-    http.Response response;
+    Response<dynamic> response;
     try {
-      response = await _client.get(url, headers: _headers).timeout(
+      response = await _dio
+          .getUri(url, options: Options(headers: _headers)).timeout(
         const Duration(seconds: 10),
         onTimeout: () {
           throw TimeoutException('获取歌词请求超时');
@@ -329,7 +331,7 @@ class QQProvider extends LyricProvider {
     }
 
     try {
-      final decodedBody = utf8.decode(response.bodyBytes, allowMalformed: true);
+      final decodedBody = bodyText(response);
       final data = json.decode(decodedBody) as Map<String, dynamic>;
       return QQLyricPayload.fromJson(data);
     } catch (e) {

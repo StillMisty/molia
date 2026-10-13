@@ -3,12 +3,19 @@ import 'package:material_ui/material_ui.dart';
 import 'package:flutter/services.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:logging/logging.dart';
-import 'package:http/http.dart' as http;
+import 'package:dio/dio.dart';
 import 'package:gal/gal.dart';
+import '../data/http/app_dio.dart';
 import '../managers/artwork_cache.dart';
 import '../models/poster_lyric_line.dart';
 
 final logger = Logger('molia.lyrics_poster_service');
+
+/// 海报图片下载用的共享客户端：惰性创建——`Dio` 的默认适配器会抓
+/// `HttpOverrides.current`，在 flutter_test 的 test zone 之外构造会抛异常
+/// （同 `AnyListenApi` 的说明）。
+Dio? _sharedDio;
+Dio get _dio => _sharedDio ??= createAppDio();
 
 class LyricsPosterService {
   Future<Uint8List> generatePosterData({
@@ -444,12 +451,12 @@ class LyricsPosterService {
 
   // 加载网络图片（统一浏览器 UA + 平台 Referer，修 CDN 403）
   Future<ui.Image> _loadNetworkImage(String url) async {
-    final response = await http.get(
+    final response = await _dio.getUri(
       Uri.parse(url),
-      headers: ArtworkCache.headersFor(url),
+      options: Options(headers: ArtworkCache.headersFor(url)),
     );
     if (response.statusCode == 200) {
-      final bytes = response.bodyBytes;
+      final bytes = bodyBytes(response);
       final codec = await ui.instantiateImageCodec(bytes);
       final frame = await codec.getNextFrame();
       return frame.image;

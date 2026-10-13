@@ -1,8 +1,9 @@
 import 'dart:async';
 import 'dart:convert';
 
-import 'package:http/http.dart' as http;
+import 'package:dio/dio.dart';
 
+import '../../data/http/app_dio.dart';
 import 'lx_script_info.dart';
 
 /// 在线更新脚本时的错误类型（UI 可据此给出可读文案）。
@@ -68,23 +69,31 @@ const Duration kLxScriptDownloadTimeout = Duration(seconds: 10);
 /// - 响应体超过 [kLxScriptMaxBytes] 立即中止，避免内存被异常内容占满。
 ///
 /// 所有失败统一抛 [ScriptUpdateException]（可读 message）。
-Future<String> downloadLxScriptText(String url, {http.Client? client}) async {
+Future<String> downloadLxScriptText(String url, {Dio? dio}) async {
   final uri = Uri.tryParse(url.trim());
   if (uri == null || !(uri.isScheme('http') || uri.isScheme('https'))) {
     throw const ScriptUpdateException(
         ScriptUpdateError.downloadFailed, '更新地址不是有效的 HTTP(S) 链接');
   }
-  final ownClient = client ?? http.Client();
+  final ownDio = dio ?? createAppDio();
   try {
-    final request = http.Request('GET', uri)..followRedirects = true;
-    final response =
-        await ownClient.send(request).timeout(kLxScriptDownloadTimeout);
+    final response = await ownDio
+        .requestUri<dynamic>(
+          uri,
+          options: Options(
+            method: 'GET',
+            followRedirects: true,
+            responseType: ResponseType.stream,
+          ),
+        )
+        .timeout(kLxScriptDownloadTimeout);
     if (response.statusCode != 200) {
       throw ScriptUpdateException(ScriptUpdateError.downloadFailed,
           '下载失败：HTTP ${response.statusCode}');
     }
     final bytes = <int>[];
-    await for (final chunk in response.stream.timeout(kLxScriptDownloadTimeout)) {
+    await for (final chunk
+        in streamBody(response).stream.timeout(kLxScriptDownloadTimeout)) {
       bytes.addAll(chunk);
       if (bytes.length > kLxScriptMaxBytes) {
         throw const ScriptUpdateException(ScriptUpdateError.tooLarge,
@@ -101,7 +110,7 @@ Future<String> downloadLxScriptText(String url, {http.Client? client}) async {
     throw ScriptUpdateException(
         ScriptUpdateError.downloadFailed, '下载失败：$e');
   } finally {
-    if (client == null) ownClient.close();
+    if (dio == null) ownDio.close(force: true);
   }
 }
 

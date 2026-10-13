@@ -1,5 +1,6 @@
-import 'package:http/http.dart' as http;
+import 'package:dio/dio.dart';
 
+import '../../data/http/app_dio.dart';
 import '../../domain/models/discover.dart';
 import '../source_track.dart';
 import 'builtin_search.dart';
@@ -7,6 +8,11 @@ import 'crypto_utils.dart';
 import 'discover_fetch.dart';
 import 'discover_track_mapper.dart';
 import 'wy_music_detail.dart';
+
+/// 短链跳转探测用的客户端（只读状态码与 Location，不读 body）。
+/// 惰性创建：`Dio` 的默认适配器会抓 `HttpOverrides.current`（见 AnyListenApi）。
+Dio? _redirectDioInstance;
+Dio get _redirectDio => _redirectDioInstance ??= createAppDio();
 
 /// 网易云歌单（移植自 lx-music-mobile `wy/songList.js`）。
 ///
@@ -406,15 +412,22 @@ class WySongList {
       attempt: (_) async {
         var current = link;
         for (var hop = 0; hop < 5; hop++) {
-          final request = http.Request('GET', Uri.parse(current))
-            ..followRedirects = false
-            ..headers.addAll(BuiltinSearch.defaultHeaders);
-          final response = await request
-              .send()
+          // 只看状态码与 Location，所以用 stream 响应、不读 body
+          final response = await _redirectDio
+              .requestUri<dynamic>(
+                Uri.parse(current),
+                options: Options(
+                  method: 'GET',
+                  headers: BuiltinSearch.defaultHeaders,
+                  followRedirects: false,
+                  responseType: ResponseType.stream,
+                ),
+              )
               .timeout(BuiltinSearch.defaultTimeout);
-          if (response.statusCode > 400) return null;
-          if (response.statusCode >= 300 && response.statusCode < 400) {
-            final location = response.headers['location'];
+          final status = response.statusCode ?? 0;
+          if (status > 400) return null;
+          if (status >= 300 && status < 400) {
+            final location = response.headers.value('location');
             if (location == null || location.isEmpty) break;
             current = Uri.parse(current).resolve(location).toString();
             continue;
