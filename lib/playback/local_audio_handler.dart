@@ -35,14 +35,20 @@ bool get isSystemMediaSessionSupported {
 Future<LocalAudioHandler?> initSystemMediaSession(
   LocalPlaybackService service, {
   bool Function()? artworkBlocked,
+  Future<void> Function()? onRestoredSkipToNext,
+  Future<void> Function()? onRestoredSkipToPrevious,
 }) async {
   if (!isSystemMediaSessionSupported) {
     return null;
   }
   try {
     return await AudioService.init<LocalAudioHandler>(
-      builder: () =>
-          LocalAudioHandler(service, artworkBlocked: artworkBlocked),
+      builder: () => LocalAudioHandler(
+        service,
+        artworkBlocked: artworkBlocked,
+        onRestoredSkipToNext: onRestoredSkipToNext,
+        onRestoredSkipToPrevious: onRestoredSkipToPrevious,
+      ),
       // managerOrNull 内部吞掉构造异常并返回 null（回退默认缓存），
       // 不会把「封面缓存不可用」升级成「媒体会话初始化失败」。
       cacheManager: await ArtworkCache.instance.managerOrNull(),
@@ -75,8 +81,14 @@ Future<LocalAudioHandler?> initSystemMediaSession(
 ///
 /// 这样 UI 侧的 `PlaybackProvider` 仍是唯一状态入口，本地播放公开 API 不变。
 class LocalAudioHandler extends BaseAudioHandler with SeekHandler {
-  LocalAudioHandler(this._service, {bool Function()? artworkBlocked})
-      : _artworkBlocked = artworkBlocked ?? (() => false) {
+  LocalAudioHandler(
+    this._service, {
+    bool Function()? artworkBlocked,
+    Future<void> Function()? onRestoredSkipToNext,
+    Future<void> Function()? onRestoredSkipToPrevious,
+  })  : _artworkBlocked = artworkBlocked ?? (() => false),
+        _onRestoredSkipToNext = onRestoredSkipToNext,
+        _onRestoredSkipToPrevious = onRestoredSkipToPrevious {
     _service.addListener(_syncFromService);
     _syncFromService(force: true);
   }
@@ -85,6 +97,14 @@ class LocalAudioHandler extends BaseAudioHandler with SeekHandler {
 
   /// 省流模式封面网关：返回 true 时媒体项不带 artUri（不为通知下载封面）。
   final bool Function() _artworkBlocked;
+
+  /// 恢复态（冷启动未起播、服务无曲目）切歌键的回落目标。
+  ///
+  /// 恢复态通常没有通知本体，但耳机 / 系统媒体键仍可能到达 handler；
+  /// 回落给 PlaybackProvider 用保存的会话立即恢复播放，补齐控制链一致性。
+  /// 组合根接线（handler 先于 provider 创建，用可变槽位后接）。
+  final Future<void> Function()? _onRestoredSkipToNext;
+  final Future<void> Function()? _onRestoredSkipToPrevious;
 
   // 上次广播的状态，用于去重：位置每 400ms 都会变化，但系统媒体会话只需要
   // 在曲目切换 / 播放状态变化 / 明显跳转（seek）时收到 setState。
@@ -141,12 +161,23 @@ class LocalAudioHandler extends BaseAudioHandler with SeekHandler {
 
   @override
   Future<void> skipToNext() async {
+    // 恢复态（无真实曲目）：回落给注入的 provider 回调（保存会话立即恢复播放）。
+    if (!_service.hasTrack) {
+      await _onRestoredSkipToNext?.call();
+      _syncFromService(force: true);
+      return;
+    }
     await _service.skipToNext();
     _syncFromService(force: true);
   }
 
   @override
   Future<void> skipToPrevious() async {
+    if (!_service.hasTrack) {
+      await _onRestoredSkipToPrevious?.call();
+      _syncFromService(force: true);
+      return;
+    }
     await _service.skipToPrevious();
     _syncFromService(force: true);
   }

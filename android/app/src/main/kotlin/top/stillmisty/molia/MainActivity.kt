@@ -1,8 +1,10 @@
 package top.stillmisty.molia
 
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.os.Build
 import android.os.Bundle
+import android.provider.Settings
 import androidx.annotation.NonNull
 import androidx.appcompat.app.AppCompatDelegate
 import androidx.core.os.LocaleListCompat
@@ -15,22 +17,18 @@ class MainActivity: AudioServiceActivity() {
     private var methodChannel: MethodChannel? = null
     private var lyricsChannel: top.stillmisty.molia.lyrics.LyricsChannelHandler? = null
 
+    /// 通知权限请求的挂起结果（Android 13+）：权限回调后一次性完成。
+    private var notificationPermissionResult: MethodChannel.Result? = null
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         WindowCompat.setDecorFitsSystemWindows(window, false)
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
             window.isNavigationBarContrastEnforced = false
         }
-        // Android 13+：请求通知权限。部分机型/ROM 上媒体通知缺失会导致
-        // 后台播放被限制或没有控制入口（媒体会话虽豁免，但 FGS 通知仍需权限）。
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            val notificationPermission = android.Manifest.permission.POST_NOTIFICATIONS
-            if (checkSelfPermission(notificationPermission) !=
-                android.content.pm.PackageManager.PERMISSION_GRANTED) {
-                requestPermissions(arrayOf(notificationPermission), 1001)
-            }
-        }
-        
+        // 通知权限不在启动时请求：权限时机由 Dart 侧业务决定（首次真正播放 /
+        // 首次开启歌词输出，见 services/notification_permission.dart），
+        // 避免冷启动就弹窗、用户还没听到歌就先被问权限。
         handleIntent(intent)
     }
 
@@ -169,5 +167,83 @@ class MainActivity: AudioServiceActivity() {
             messenger = flutterEngine.dartExecutor.binaryMessenger,
             openPermissionActivity = { intent -> startActivity(intent) },
         )
+
+        // 通知权限通道：请求时机由 Dart 侧业务决定；被永久拒绝时给设置深链。
+        MethodChannel(
+            flutterEngine.dartExecutor.binaryMessenger,
+            "top.stillmisty.molia/notifications"
+        ).setMethodCallHandler { call, result ->
+            when (call.method) {
+                "permissionStatus" -> result.success(notificationPermissionStatus())
+                "requestPermission" -> requestNotificationPermission(result)
+                "openNotificationSettings" -> {
+                    try {
+                        val intent = Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS).apply {
+                            putExtra(Settings.EXTRA_APP_PACKAGE, packageName)
+                        }
+                        startActivity(intent)
+                        result.success(true)
+                    } catch (e: Exception) {
+                        result.error("OPEN_SETTINGS_ERROR", e.message, null)
+                    }
+                }
+                else -> result.notImplemented()
+            }
+        }
+    }
+
+    /// 当前通知权限状态：granted / denied / permanentlyDenied。
+    ///
+    /// 「永久拒绝」判定 = 曾经请求过 + 仍未授权 + 系统不再允许展示
+    /// 说明（shouldShowRequestPermissionRationale=false）；
+    /// 13 以下没有该权限，恒为 granted。
+    private fun notificationPermissionStatus(): String {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) return "granted"
+        val permission = android.Manifest.permission.POST_NOTIFICATIONS
+        if (checkSelfPermission(permission) == PackageManager.PERMISSION_GRANTED) {
+            return "granted"
+        }
+        val requested = getSharedPreferences("FlutterSharedPreferences", MODE_PRIVATE)
+            .getBoolean("flutter.notification_permission_requested", false)
+        if (requested && !shouldShowRequestPermissionRationale(permission)) {
+            return "permanentlyDenied"
+        }
+        return "denied"
+    }
+
+    private fun requestNotificationPermission(result: MethodChannel.Result) {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) {
+            result.success("granted")
+            return
+        }
+        val permission = android.Manifest.permission.POST_NOTIFICATIONS
+        if (checkSelfPermission(permission) == PackageManager.PERMISSION_GRANTED) {
+            result.success("granted")
+            return
+        }
+        if (notificationPermissionStatus() == "permanentlyDenied") {
+            result.success("permanentlyDenied")
+            return
+        }
+        // 记下「已请求过」：权限回调里还要用它区分 denied / permanentlyDenied。
+        getSharedPreferences("FlutterSharedPreferences", MODE_PRIVATE)
+            .edit()
+            .putBoolean("flutter.notification_permission_requested", true)
+            .apply()
+        notificationPermissionResult?.success("denied")
+        notificationPermissionResult = result
+        requestPermissions(arrayOf(permission), 1002)
+    }
+
+    override fun onRequestPermissionsResult(
+        requestCode: Int,
+        permissions: Array<out String>,
+        grantResults: IntArray
+    ) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults)
+        if (requestCode == 1002) {
+            notificationPermissionResult?.success(notificationPermissionStatus())
+            notificationPermissionResult = null
+        }
     }
 }

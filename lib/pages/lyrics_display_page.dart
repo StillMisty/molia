@@ -139,6 +139,19 @@ class _LyricsDisplayPageState extends State<LyricsDisplayPage>
                       ),
                 ),
               ),
+            // 平台支持但媒体会话初始化失败（音频服务 init 返回 null）：
+            // 给出可见提示——否则输出分组消失、只剩日志，用户无法自查。
+            if (display.mediaSessionInitFailed)
+              Padding(
+                padding: const EdgeInsets.only(top: kSettingsSectionSpacing),
+                child: Text(
+                  l10n.lyricsMediaSessionUnavailable,
+                  textAlign: TextAlign.center,
+                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                        color: Theme.of(context).colorScheme.onSurfaceVariant,
+                      ),
+                ),
+              ),
           ],
         ),
       ),

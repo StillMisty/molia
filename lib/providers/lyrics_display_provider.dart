@@ -9,6 +9,7 @@ import '../services/lyrics_display/desktop_lyrics_output.dart';
 import '../services/lyrics_display/lyric_line_tracker.dart';
 import '../services/lyrics_display/lyrics_display_settings.dart';
 import '../services/lyrics_display/lyrics_output.dart';
+import '../services/notification_permission.dart';
 import 'lyrics_provider.dart';
 
 /// 桌面悬浮窗控制条动作 → 播放控制命令（由组合根接回 PlaybackProvider）。
@@ -28,11 +29,13 @@ class LyricsDisplayProvider extends ChangeNotifier {
     Listenable? themeListenable,
     Future<void> Function(Track track)? ensureLyrics,
     void Function(LyricsPlaybackCommand command)? onPlaybackCommand,
+    bool mediaSessionInitFailed = false,
   })  : _outputs = List.unmodifiable(outputs),
         _audioRoute = audioRoute,
         _themeListenable = themeListenable,
         _ensureLyrics = ensureLyrics,
-        _onPlaybackCommand = onPlaybackCommand {
+        _onPlaybackCommand = onPlaybackCommand,
+        _mediaSessionInitFailed = mediaSessionInitFailed {
     for (final output in _outputs) {
       if (output is InteractiveLyricsOutput) {
         _subscriptions.add(output.actions.listen(_onOutputAction));
@@ -42,6 +45,7 @@ class LyricsDisplayProvider extends ChangeNotifier {
     _audioRoute?.addListener(_onA2dpChanged);
     _themeListenable?.addListener(_onThemeChanged);
     unawaited(_syncOutputs());
+    _maybeRequestNotificationPermission();
   }
 
   final LyricsDisplaySettings settings;
@@ -50,6 +54,13 @@ class LyricsDisplayProvider extends ChangeNotifier {
   final Listenable? _themeListenable;
   final Future<void> Function(Track track)? _ensureLyrics;
   final void Function(LyricsPlaybackCommand command)? _onPlaybackCommand;
+
+  /// 系统媒体会话初始化失败（Android 等平台支持但 init 返回 null）：
+  /// 歌词显示设置页据此给出可见提示（否则只剩日志，用户只看到「开关没反应」）。
+  final bool _mediaSessionInitFailed;
+
+  /// 本次会话是否已请求过通知权限（首次开启歌词输出时请求）。
+  bool _notificationPermissionAsked = false;
   final LyricLineTracker _tracker = const LyricLineTracker();
   final List<StreamSubscription<LyricsOutputAction>> _subscriptions = [];
   final Map<String, LyricsPresentation> _applied = {};
@@ -68,6 +79,17 @@ class LyricsDisplayProvider extends ChangeNotifier {
       settings.desktopEnabled ||
       settings.notificationEnabled ||
       settings.bluetoothEnabled;
+
+  /// 系统媒体会话初始化失败（平台支持但初始化返回 null）：
+  /// 歌词显示设置页据此给出可见提示。
+  bool get mediaSessionInitFailed => _mediaSessionInitFailed;
+
+  /// 首次开启任一歌词输出时请求通知权限（通知/锁屏歌词依赖媒体通知）。
+  void _maybeRequestNotificationPermission() {
+    if (_notificationPermissionAsked || !anyOutputEnabled) return;
+    _notificationPermissionAsked = true;
+    unawaited(NotificationPermission.ensureRequested());
+  }
 
   /// 输出能力（设置页按此显隐分组 / 提示权限）。
   LyricsOutputCapability capabilityOf(String outputId) {
@@ -219,6 +241,7 @@ class LyricsDisplayProvider extends ChangeNotifier {
 
   void _onSettingsChanged() {
     if (_disposed) return;
+    _maybeRequestNotificationPermission();
     unawaited(_syncOutputs());
     notifyListeners();
   }

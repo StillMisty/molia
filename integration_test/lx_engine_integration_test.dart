@@ -190,11 +190,19 @@ void main() {
     await player.toggle();
     await waitFor(tester, () => player.isPlaying, reason: '继续播放未生效');
 
+    // 暂停后切歌：新曲目必须自动起播（不能停在暂停态）。
+    await player.toggle();
+    await waitFor(tester, () => !player.isPlaying, reason: '再次暂停未生效');
     await player.skipToNext();
     await waitFor(
       tester,
       () => player.currentSourceTrack?.title == 'Second Song',
       reason: '下一首未生效',
+    );
+    await waitFor(
+      tester,
+      () => player.isPlaying,
+      reason: '暂停后切歌未自动播放',
     );
 
     await player.seek(const Duration(milliseconds: 500));

@@ -1,6 +1,8 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:molia/managers/artwork_cache.dart';
+import 'package:molia/models/play_mode.dart';
 import 'package:molia/playback/local_audio_handler.dart';
+import 'package:molia/playback/local_playback_service.dart';
 import 'package:molia/sources/source_track.dart';
 
 SourceTrack _track({String? coverUrl}) => SourceTrack(
@@ -14,7 +16,59 @@ SourceTrack _track({String? coverUrl}) => SourceTrack(
       raw: const {'songmid': 186016},
     );
 
+/// 只覆写状态的假服务：不触碰 just_audio 平台通道（同
+/// local_playback_backend_test 的模式）。
+class _FakeService extends LocalPlaybackService {
+  _FakeService()
+      : super(
+          resolver: (track, {String? quality}) async => 'http://127.0.0.1/a.wav',
+        );
+
+  bool hasTrackValue = false;
+  int skipToNextCalls = 0;
+  int skipToPreviousCalls = 0;
+
+  @override
+  bool get hasTrack => hasTrackValue;
+
+  @override
+  bool get isPlaying => false;
+
+  @override
+  bool get isLoading => false;
+
+  @override
+  PlayMode get mode => PlayMode.sequential;
+
+  @override
+  SourceTrack? get currentSourceTrack => null;
+
+  @override
+  Duration get position => Duration.zero;
+
+  @override
+  Duration get duration => Duration.zero;
+
+  @override
+  List<SourceTrack> get queueTracks => const [];
+
+  @override
+  int get currentIndex => -1;
+
+  @override
+  Future<void> skipToNext() async {
+    skipToNextCalls++;
+  }
+
+  @override
+  Future<void> skipToPrevious() async {
+    skipToPreviousCalls++;
+  }
+}
+
 void main() {
+  TestWidgetsFlutterBinding.ensureInitialized();
+
   group('mediaItemForTrack：系统媒体会话封面', () {
     test('封面 URL 带统一请求头（修复通知封面 403）', () {
       final item = mediaItemForTrack(
@@ -105,6 +159,43 @@ void main() {
       );
       expect(parseArtUri('a.com/x.jpg'), isNull);
       expect(parseArtUri(null), isNull);
+    });
+  });
+
+  group('恢复态切歌键回落', () {
+    test('服务无曲目（冷启动恢复态）：回落给注入的 provider 回调', () async {
+      final service = _FakeService();
+      addTearDown(service.dispose);
+      var restoredNext = 0;
+      var restoredPrevious = 0;
+      final handler = LocalAudioHandler(
+        service,
+        onRestoredSkipToNext: () async => restoredNext++,
+        onRestoredSkipToPrevious: () async => restoredPrevious++,
+      );
+
+      await handler.skipToNext();
+      await handler.skipToPrevious();
+
+      expect(restoredNext, 1);
+      expect(restoredPrevious, 1);
+      expect(service.skipToNextCalls, 0);
+      expect(service.skipToPreviousCalls, 0);
+    });
+
+    test('服务已有真实曲目：走正常切歌，不触发回落', () async {
+      final service = _FakeService()..hasTrackValue = true;
+      addTearDown(service.dispose);
+      var restoredCalls = 0;
+      final handler = LocalAudioHandler(
+        service,
+        onRestoredSkipToNext: () async => restoredCalls++,
+      );
+
+      await handler.skipToNext();
+
+      expect(service.skipToNextCalls, 1);
+      expect(restoredCalls, 0);
     });
   });
 }

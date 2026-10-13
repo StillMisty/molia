@@ -27,6 +27,7 @@ import '../domain/ports/ui_messenger.dart';
 import '../managers/image_preload_manager.dart';
 import '../models/play_mode.dart';
 import '../services/data_saver_service.dart';
+import '../services/notification_permission.dart';
 import '../services/playback_session_store.dart';
 import '../services/source_swap/source_swap_settings.dart';
 import '../sources/source_manager.dart';
@@ -193,6 +194,10 @@ class PlaybackProvider extends ChangeNotifier {
 
   /// 已自动重试过的曲目 key（同一操作只重试一次，避免失败循环）。
   String? _retriedTrackKey;
+
+  /// 本次会话是否已请求过通知权限（首次真正播放时请求，见
+  /// [NotificationPermission.ensureRequested]）。
+  bool _notificationPermissionAsked = false;
 
   /// 自动换源：每个曲目 uri 的**已尝试来源**（含种子源；换源后的候选继承
   /// 并追加自身来源），级联每个来源至多一次、有界；cap 防止长期泄漏。
@@ -536,7 +541,12 @@ class PlaybackProvider extends ChangeNotifier {
   Future<void> skipToNext() async {
     if (_facade.snapshot.value.current == null &&
         _restoredSession?.current != null) {
-      _moveRestoredIndex(1);
+      // 恢复态切歌 = 从新下标立即恢复播放（与点队列条目同一契约）；
+      // 语义上「切歌」包含起播，只移动下标会与队列条目点击不一致。
+      final session = _restoredSession!;
+      final next = session.index + 1;
+      if (next >= session.tracks.length) return;
+      await resumeRestoredSession(startIndex: next);
       return;
     }
     await _facade.next();
@@ -546,26 +556,14 @@ class PlaybackProvider extends ChangeNotifier {
   Future<void> skipToPrevious() async {
     if (_facade.snapshot.value.current == null &&
         _restoredSession?.current != null) {
-      _moveRestoredIndex(-1);
+      final session = _restoredSession!;
+      final previous = session.index - 1;
+      if (previous < 0) return;
+      await resumeRestoredSession(startIndex: previous);
       return;
     }
     await _facade.previous();
     _notifyCategory('track');
-  }
-
-  /// 恢复态切歌：只在保存的队列内移动下标（点播放时从新下标开始）。
-  void _moveRestoredIndex(int delta) {
-    final session = _restoredSession;
-    if (session == null) return;
-    final next = session.index + delta;
-    if (next < 0 || next >= session.tracks.length) return;
-    _restoredSession = session.copyWith(index: next, position: Duration.zero);
-    _restoredPosition = Duration.zero;
-    _positionChannel.setRestored(Duration.zero);
-    _publishRestoredSnapshot();
-    unawaited(_sessionStore.save(_restoredSession!));
-    _notifyCategory('track');
-    _notifyCategory('queue');
   }
 
   // 恢复态（冷启动未真正播放）下 UI 读的是恢复快照，必须同步更新恢复会话
@@ -708,6 +706,12 @@ class PlaybackProvider extends ChangeNotifier {
     // 播放中→暂停/停止：强制保存一次进度（避免节流窗口内丢进度）。
     if (_wasPlaying && !live.isPlaying) {
       _maybeSavePlaybackSession(force: true);
+    }
+    // 首次真正出声时才请求通知权限（用户已经听到歌，权限弹窗有上下文；
+    // 媒体通知依赖它才不会在部分 ROM 上被静默丢弃）。
+    if (live.isPlaying && !_notificationPermissionAsked) {
+      _notificationPermissionAsked = true;
+      unawaited(NotificationPermission.ensureRequested());
     }
     _wasPlaying = live.isPlaying;
     _maybeShowPlaybackError();

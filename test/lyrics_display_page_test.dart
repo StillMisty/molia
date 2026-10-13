@@ -1,3 +1,4 @@
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:material_3_expressive/material_3_expressive.dart';
 import 'package:material_ui/material_ui.dart';
@@ -33,7 +34,11 @@ void main() {
   });
 
   /// 构造共享 provider 树并挂载 [home]（与真实组合根同源装配）。
-  Future<void> pumpApp(WidgetTester tester, Widget home) async {
+  Future<void> pumpApp(
+    WidgetTester tester,
+    Widget home, {
+    bool mediaSessionInitFailed = false,
+  }) async {
     themeProvider = ThemeProvider();
     await themeProvider.preferencesReady;
     addTearDown(themeProvider.dispose);
@@ -46,8 +51,11 @@ void main() {
     addTearDown(settings.dispose);
 
     // outputs 为空：能力全部 unsupported（hub 隐藏输出入口，子页仍可独立挂载）。
-    final display =
-        LyricsDisplayProvider(settings: settings, outputs: const []);
+    final display = LyricsDisplayProvider(
+      settings: settings,
+      outputs: const [],
+      mediaSessionInitFailed: mediaSessionInitFailed,
+    );
     addTearDown(display.dispose);
 
     final themedData = ThemeData(colorScheme: themeProvider.colorScheme);
@@ -202,6 +210,44 @@ void main() {
     expect(
       prefs.getString(kLyricsDisplaySettings.name),
       contains('"notification.format":"lyric"'),
+    );
+  });
+
+  testWidgets('歌词显示 hub：媒体会话初始化失败给出可见提示', (tester) async {
+    useLargeViewport(tester);
+    await pumpApp(tester, const LyricsDisplayPage(),
+        mediaSessionInitFailed: true);
+
+    expect(
+      find.textContaining('System media session unavailable'),
+      findsOneWidget,
+    );
+  });
+
+  testWidgets('通知·锁屏页：通知权限被拒显示系统设置深链', (tester) async {
+    const channel = MethodChannel('top.stillmisty.molia/notifications');
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(channel, (call) async {
+      if (call.method == 'permissionStatus') return 'denied';
+      return null;
+    });
+    addTearDown(() {
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(channel, null);
+    });
+
+    await pumpApp(tester, const NotificationLyricsSettingsPage());
+    // 开关未开时不提示（避免没启用输出就先报权限）。
+    expect(
+      find.byKey(const Key('lyricsNotificationPermissionItem')),
+      findsNothing,
+    );
+
+    await settings.setNotificationEnabled(true);
+    await tester.pumpAndSettle();
+    expect(
+      find.byKey(const Key('lyricsNotificationPermissionItem')),
+      findsOneWidget,
     );
   });
 }

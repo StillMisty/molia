@@ -183,9 +183,18 @@ void main() async {
   // 之前初始化，并复用同一个 LocalPlaybackService 实例。
   // 不支持 audio_service 的平台（Linux/Windows/Web）返回 null，自动降级。
   // 省流时通知/锁屏封面置空，避免 audio_service 为通知下载封面。
+  // 恢复态（冷启动未起播）切歌键回落给 PlaybackProvider：handler 先于
+  // provider 创建，这里用可变槽位在下方创建后接线。
+  PlaybackProvider? restoredControlsTarget;
   final audioHandler = await initSystemMediaSession(
     localPlayback,
     artworkBlocked: () => dataSaver.blockNetworkArtwork,
+    onRestoredSkipToNext: () async {
+      await restoredControlsTarget?.skipToNext();
+    },
+    onRestoredSkipToPrevious: () async {
+      await restoredControlsTarget?.skipToPrevious();
+    },
   );
 
   // 唯一 composition root：PlaybackProvider 的报错出口（UiMessenger）与
@@ -250,6 +259,9 @@ void main() async {
       return sourceManager.fetchPic(sourceTrackFromTrack(track));
     },
   );
+  // 系统媒体会话的恢复态切歌键（耳机/媒体键）落到 provider：用保存的
+  // 会话立即恢复播放（handler 创建时 provider 尚不存在，见上方注释）。
+  restoredControlsTarget = playbackProvider;
 
   // 资料库（收藏/历史/列表）：AI 推歌把「收藏」当喜欢反馈，需要提前创建
   // 并直接进 Provider 树。
@@ -332,6 +344,10 @@ void main() async {
         a2dpConnected: () => audioRouteMonitor.connected,
       ),
     ],
+    // 平台支持媒体会话但初始化失败（audio_service init 返回 null）：
+    // 歌词显示设置页据此给出可见提示，而不是静默隐藏输出分组。
+    mediaSessionInitFailed:
+        isSystemMediaSessionSupported && audioHandler == null,
     audioRoute: audioRouteMonitor,
     themeListenable: themeProvider,
     ensureLyrics: (track) => lyricsProvider.load(track),

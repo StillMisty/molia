@@ -132,6 +132,34 @@ void main() {
     expect(provider.position.value, const Duration(seconds: 25));
   });
 
+  test('恢复态切歌：从新下标立即恢复播放，首/末越界 no-op', () async {
+    await PlaybackSessionStore().save(PlaybackSession(
+      tracks: [_track('a'), _track('b')],
+      index: 0,
+      position: const Duration(seconds: 12),
+      mode: PlayMode.sequential,
+    ));
+
+    final backend = FakePlaybackBackend();
+    final provider = buildTestPlaybackProvider(backend: backend);
+    addTearDown(provider.dispose);
+    await provider.preferencesReady;
+    expect(provider.hasRestoredSession, isTrue);
+
+    // 首曲跳过 previous：越界 no-op，保持恢复态。
+    await provider.skipToPrevious();
+    expect(backend.calls, isNot(contains('load')));
+    expect(provider.hasRestoredSession, isTrue);
+
+    // 切下一首：立即起播（与点队列条目同一语义）；不 seek 回旧曲进度。
+    await provider.skipToNext();
+    expect(backend.calls, contains('load'));
+    expect(backend.lastRequest?.startIndex, 1);
+    expect(backend.calls, isNot(contains('seek')));
+    expect(provider.hasRestoredSession, isFalse);
+    expect(provider.currentPosition, Duration.zero);
+  });
+
   test('重启后恢复态仍可调整播放模式，恢复播放沿用所选模式', () async {
     await PlaybackSessionStore().save(PlaybackSession(
       tracks: [_track('a')],

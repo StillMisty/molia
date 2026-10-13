@@ -102,7 +102,12 @@
   `MediaItem`/`PlaybackState`；通知/锁屏封面经 `MediaItem.artHeaders` 统一带
   浏览器 UA + 平台 Referer，并复用 `ArtworkCache` 的共享 CacheManager
   （audio_service 在 Dart 侧下载封面，网易 CDN 对默认 UA 返回 403）；
-  省流模式整体置空封面地址。
+  省流模式整体置空封面地址。恢复态（冷启动未起播）下切歌键回落给
+  `PlaybackProvider`（保存会话立即恢复播放）。`POST_NOTIFICATIONS` 不在启动时
+  请求——由 `lib/services/notification_permission.dart` 在「首次真正播放 /
+  首次开启歌词输出」时弹窗（每会话一次），被永久拒绝时
+  通知·锁屏设置页给系统设置深链；媒体会话初始化失败（平台支持但
+  `initSystemMediaSession` 返回 null）时歌词显示页给可见提示。
 - **Cache**：`RequestCache`（single-flight + LRU 64 + TTL + 可注入时钟）。
 - **省流**：`DataSaverService`（services 层，默认关闭）持有「开启 + 音质上限 +
   封面省流」策略与 connectivity_plus 网络探测；仅在移动数据（`active`）时生效：
