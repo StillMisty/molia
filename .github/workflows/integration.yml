@@ -18,10 +18,10 @@ env:
 jobs:
   linux-integration:
     name: flutter test -d linux (xvfb)
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 60
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       # 桌面端构建依赖：GTK3、ninja、clang/cmake；播放依赖 libmpv；
       # 集成测试需要显示环境（xvfb）与中文字体（界面文案断言）。

@@ -21,14 +21,14 @@ env:
 jobs:
   prepare:
     name: 解析 tag / 校验版本
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     outputs:
       version: ${{ steps.parse.outputs.version }}
       channel: ${{ steps.parse.outputs.channel }}
       prerelease: ${{ steps.parse.outputs.prerelease }}
       build: ${{ steps.parse.outputs.build }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - id: parse
         run: |
           set -euo pipefail
@@ -59,15 +59,15 @@ jobs:
   android:
     name: Android APK / AAB
     needs: prepare
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 60
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-java@v4
+      - uses: actions/checkout@v7
+      - uses: actions/setup-java@v6
         with:
           distribution: temurin
           java-version: "26"
-      - uses: android-actions/setup-android@v3
+      - uses: android-actions/setup-android@v4
       - name: SDK 许可 + NDK
         run: |
           yes | sdkmanager --licenses > /dev/null || true
@@ -121,7 +121,7 @@ jobs:
           cp build/app/outputs/flutter-apk/app-x86_64-release.apk "dist/molia-$v-android-x86_64.apk"
           cp build/app/outputs/bundle/release/app-release.aab "dist/molia-$v-android.aab"
           (cd build/symbols && zip -qr "$GITHUB_WORKSPACE/dist/molia-$v-android-symbols.zip" .)
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: release-android
           path: dist/*
@@ -133,7 +133,7 @@ jobs:
     runs-on: windows-latest
     timeout-minutes: 60
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: subosito/flutter-action@v2
         with:
           flutter-version: 3.47.6
@@ -152,7 +152,7 @@ jobs:
           New-Item -ItemType Directory -Force -Path $stage | Out-Null
           Copy-Item -Recurse -Force "build/windows/x64/runner/Release/*" $stage
           Compress-Archive -Path $stage -DestinationPath "dist/molia-$v-windows-x64.zip" -Force
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: release-windows
           path: dist/*.zip
@@ -165,7 +165,7 @@ jobs:
     runs-on: ubuntu-22.04
     timeout-minutes: 60
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: 系统依赖
         run: |
           sudo apt-get update
@@ -188,7 +188,7 @@ jobs:
           cp -a build/linux/x64/release/bundle/. "$stage"/
           tar -czf "dist/molia-$v-linux-x64.tar.gz" -C dist "molia-$v-linux-x64"
           rm -rf "$stage"
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: release-linux
           path: dist/*.tar.gz
@@ -197,10 +197,10 @@ jobs:
   web:
     name: Web
     needs: prepare
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 45
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: subosito/flutter-action@v2
         with:
           flutter-version: 3.47.6
@@ -216,13 +216,13 @@ jobs:
             --build-name "$v" --build-number "${{ needs.prepare.outputs.build }}"
           mkdir -p dist
           (cd build/web && zip -qr "$GITHUB_WORKSPACE/dist/molia-$v-web.zip" .)
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: release-web
           path: dist/*.zip
           if-no-files-found: error
       # Pages 部署用原始目录（含 index.html 与 flutter_service_worker.js）。
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: web-site
           path: build/web
@@ -234,7 +234,7 @@ jobs:
     runs-on: macos-latest
     timeout-minutes: 60
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: subosito/flutter-action@v2
         with:
           flutter-version: 3.47.6
@@ -250,7 +250,7 @@ jobs:
             --build-name "$v" --build-number "${{ needs.prepare.outputs.build }}"
           mkdir -p dist
           (cd build/ios/iphoneos && zip -qry "$GITHUB_WORKSPACE/dist/molia-$v-ios-unsigned.zip" Runner.app)
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: release-ios
           path: dist/*.zip
@@ -259,10 +259,10 @@ jobs:
   publish:
     name: 发布 Release + latest.json
     needs: [prepare, android, windows, linux, web, ios]
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/download-artifact@v4
+      - uses: actions/checkout@v7
+      - uses: actions/download-artifact@v8
         with:
           pattern: release-*
           merge-multiple: true
@@ -322,7 +322,7 @@ jobs:
             --notes "测试渠道滚动清单（latest.json 指向最新测试版）。" \
             beta-dist/latest.json
       # Pages 部署需要稳定版清单与 Web 目录，单独传给部署 job。
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         if: needs.prepare.outputs.channel == 'stable'
         with:
           name: latest-json
@@ -333,7 +333,7 @@ jobs:
     name: 部署 Web（GitHub Pages）
     needs: [prepare, publish, web]
     if: needs.prepare.outputs.channel == 'stable'
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     permissions:
       # 下载构建产物需要 actions: read；Pages 部署需要 pages/id-token。
       actions: read
@@ -344,16 +344,16 @@ jobs:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
     steps:
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
         with:
           name: web-site
           path: site
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
         with:
           name: latest-json
           path: site
-      - uses: actions/upload-pages-artifact@v3
+      - uses: actions/upload-pages-artifact@v5
         with:
           path: site
       - id: deployment
-        uses: actions/deploy-pages@v4
+        uses: actions/deploy-pages@v5
