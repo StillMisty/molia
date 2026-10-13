@@ -1991,4 +1991,167 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get syncGeneratedHint => '已生成同步口令，在其它设备输入同一口令即可加入';
+
+  @override
+  String get settingsUpdateTitle => '关于与更新';
+
+  @override
+  String settingsUpdateSubtitle(String version) {
+    return '当前版本 $version';
+  }
+
+  @override
+  String settingsUpdateAvailable(String version) {
+    return '可更新至 $version';
+  }
+
+  @override
+  String get updateSettingsSection => '更新';
+
+  @override
+  String get updateChannelTitle => '更新渠道';
+
+  @override
+  String get updateChannelSubtitle => '稳定版只收正式发布，测试版提前体验';
+
+  @override
+  String get updateChannelStable => '稳定版';
+
+  @override
+  String get updateChannelBeta => '测试版';
+
+  @override
+  String get updateAutoCheckTitle => '自动检查更新';
+
+  @override
+  String get updateAutoCheckSubtitle => '启动时静默检查，每天最多一次';
+
+  @override
+  String get updateCheckTitle => '检查更新';
+
+  @override
+  String get updateStatusIdle => '尚未检查';
+
+  @override
+  String get updateStatusChecking => '正在检查…';
+
+  @override
+  String get updateStatusUpToDate => '已是最新版本';
+
+  @override
+  String updateStatusAvailable(String version) {
+    return '发现新版本 $version';
+  }
+
+  @override
+  String get updateStatusDownloading => '正在下载…';
+
+  @override
+  String get updateStatusDownloaded => '安装包已就绪';
+
+  @override
+  String get updateStatusInstalling => '正在安装…';
+
+  @override
+  String updateLastChecked(String time) {
+    return '上次检查：$time';
+  }
+
+  @override
+  String get updateReleaseSection => '新版本';
+
+  @override
+  String updateReleaseTitle(String version) {
+    return 'Molia $version';
+  }
+
+  @override
+  String updateReleaseDate(String date) {
+    return '发布于 $date';
+  }
+
+  @override
+  String get updateReleaseDateUnknown => '发布时间未知';
+
+  @override
+  String get updateCancelDownload => '取消下载';
+
+  @override
+  String get updateInstallingHint => '已交给安装程序，按系统提示完成即可。';
+
+  @override
+  String get updateIosHint => 'iOS 通过 App Store 更新，应用内不提供安装。';
+
+  @override
+  String get updateReloadNow => '立即刷新';
+
+  @override
+  String get updateGrantInstallPermission => '去授权';
+
+  @override
+  String get updateInstallNow => '立即安装';
+
+  @override
+  String get updateDownloadAndInstall => '下载并安装';
+
+  @override
+  String get updateOpenDownloadPage => '打开下载页';
+
+  @override
+  String get updateAdvancedSection => '高级';
+
+  @override
+  String get updateManifestOverrideTitle => '更新清单地址';
+
+  @override
+  String get updateManifestOverrideDefault => '默认（官方 GitHub Release）';
+
+  @override
+  String get updateManifestOverrideHint => '留空使用官方地址';
+
+  @override
+  String get updateDownloadPrefixTitle => '下载镜像前缀';
+
+  @override
+  String get updateDownloadPrefixDefault => '默认（GitHub 直连）';
+
+  @override
+  String get updateDownloadPrefixHint =>
+      '如 https://gh-proxy.com/（非官方镜像请自行确认可信）';
+
+  @override
+  String get updateAboutSection => '关于';
+
+  @override
+  String get updateCurrentVersion => '当前版本';
+
+  @override
+  String get updatePlatformTitle => '平台';
+
+  @override
+  String get updateErrorNetwork => '网络错误，检查更新失败';
+
+  @override
+  String get updateErrorManifest => '更新清单无效';
+
+  @override
+  String get updateErrorUnsupported => '当前平台不支持应用内更新';
+
+  @override
+  String get updateErrorChecksum => '安装包校验失败，已删除';
+
+  @override
+  String get updateErrorPermission => '需要允许「安装未知应用」才能自动安装';
+
+  @override
+  String get updateErrorNotWritable => '安装目录不可写，请手动下载覆盖安装';
+
+  @override
+  String get updateErrorInstall => '安装失败';
+
+  @override
+  String updateDownloadProgress(
+      String percent, String receivedMb, String speedMb) {
+    return '已下载 $percent%（$receivedMb MB，$speedMb MB/s）';
+  }
 }

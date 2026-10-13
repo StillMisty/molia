@@ -2076,4 +2076,176 @@ class AppLocalizationsEn extends AppLocalizations {
   @override
   String get syncGeneratedHint =>
       'Passphrase generated; enter it on other devices to join';
+
+  @override
+  String get settingsUpdateTitle => 'About & updates';
+
+  @override
+  String settingsUpdateSubtitle(String version) {
+    return 'Current version $version';
+  }
+
+  @override
+  String settingsUpdateAvailable(String version) {
+    return 'Update available: $version';
+  }
+
+  @override
+  String get updateSettingsSection => 'Updates';
+
+  @override
+  String get updateChannelTitle => 'Update channel';
+
+  @override
+  String get updateChannelSubtitle =>
+      'Stable gets releases only; Beta is early access';
+
+  @override
+  String get updateChannelStable => 'Stable';
+
+  @override
+  String get updateChannelBeta => 'Beta';
+
+  @override
+  String get updateAutoCheckTitle => 'Check for updates automatically';
+
+  @override
+  String get updateAutoCheckSubtitle =>
+      'Silent check at startup, at most once a day';
+
+  @override
+  String get updateCheckTitle => 'Check for updates';
+
+  @override
+  String get updateStatusIdle => 'Not checked yet';
+
+  @override
+  String get updateStatusChecking => 'Checking…';
+
+  @override
+  String get updateStatusUpToDate => 'Up to date';
+
+  @override
+  String updateStatusAvailable(String version) {
+    return 'New version $version available';
+  }
+
+  @override
+  String get updateStatusDownloading => 'Downloading…';
+
+  @override
+  String get updateStatusDownloaded => 'Ready to install';
+
+  @override
+  String get updateStatusInstalling => 'Installing…';
+
+  @override
+  String updateLastChecked(String time) {
+    return 'Last checked $time';
+  }
+
+  @override
+  String get updateReleaseSection => 'New version';
+
+  @override
+  String updateReleaseTitle(String version) {
+    return 'Molia $version';
+  }
+
+  @override
+  String updateReleaseDate(String date) {
+    return 'Released $date';
+  }
+
+  @override
+  String get updateReleaseDateUnknown => 'Release date unknown';
+
+  @override
+  String get updateCancelDownload => 'Cancel';
+
+  @override
+  String get updateInstallingHint =>
+      'Handed to the installer — follow the system prompts.';
+
+  @override
+  String get updateIosHint =>
+      'iOS updates come from the App Store; in-app install is not available.';
+
+  @override
+  String get updateReloadNow => 'Reload now';
+
+  @override
+  String get updateGrantInstallPermission => 'Grant permission';
+
+  @override
+  String get updateInstallNow => 'Install now';
+
+  @override
+  String get updateDownloadAndInstall => 'Download and install';
+
+  @override
+  String get updateOpenDownloadPage => 'Open download page';
+
+  @override
+  String get updateAdvancedSection => 'Advanced';
+
+  @override
+  String get updateManifestOverrideTitle => 'Manifest URL';
+
+  @override
+  String get updateManifestOverrideDefault =>
+      'Default (official GitHub release)';
+
+  @override
+  String get updateManifestOverrideHint =>
+      'Leave empty to use the official URL';
+
+  @override
+  String get updateDownloadPrefixTitle => 'Download mirror prefix';
+
+  @override
+  String get updateDownloadPrefixDefault => 'Default (GitHub direct)';
+
+  @override
+  String get updateDownloadPrefixHint =>
+      'e.g. https://gh-proxy.com/ (verify unofficial mirrors yourself)';
+
+  @override
+  String get updateAboutSection => 'About';
+
+  @override
+  String get updateCurrentVersion => 'Current version';
+
+  @override
+  String get updatePlatformTitle => 'Platform';
+
+  @override
+  String get updateErrorNetwork => 'Network error — update check failed';
+
+  @override
+  String get updateErrorManifest => 'Invalid update manifest';
+
+  @override
+  String get updateErrorUnsupported =>
+      'In-app updates are not supported on this platform';
+
+  @override
+  String get updateErrorChecksum => 'Package checksum mismatch; file deleted';
+
+  @override
+  String get updateErrorPermission =>
+      'Allow \"Install unknown apps\" to install updates';
+
+  @override
+  String get updateErrorNotWritable =>
+      'Install directory is read-only; download and replace manually';
+
+  @override
+  String get updateErrorInstall => 'Install failed';
+
+  @override
+  String updateDownloadProgress(
+      String percent, String receivedMb, String speedMb) {
+    return 'Downloaded $percent% ($receivedMb MB, $speedMb MB/s)';
+  }
 }

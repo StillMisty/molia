@@ -800,5 +800,109 @@
   "syncRenameHint": "其它设备上显示的名称",
   "syncDeviceNameEmpty": "名称不能为空",
   "syncCategorySubtitle": "关闭后本机不推送也不应用该类数据",
-  "syncGeneratedHint": "已生成同步口令，在其它设备输入同一口令即可加入"
+  "syncGeneratedHint": "已生成同步口令，在其它设备输入同一口令即可加入",
+  "settingsUpdateTitle": "关于与更新",
+  "settingsUpdateSubtitle": "当前版本 {version}",
+  "settingsUpdateAvailable": "可更新至 {version}",
+  "updateSettingsSection": "更新",
+  "updateChannelTitle": "更新渠道",
+  "updateChannelSubtitle": "稳定版只收正式发布，测试版提前体验",
+  "updateChannelStable": "稳定版",
+  "updateChannelBeta": "测试版",
+  "updateAutoCheckTitle": "自动检查更新",
+  "updateAutoCheckSubtitle": "启动时静默检查，每天最多一次",
+  "updateCheckTitle": "检查更新",
+  "updateStatusIdle": "尚未检查",
+  "updateStatusChecking": "正在检查…",
+  "updateStatusUpToDate": "已是最新版本",
+  "updateStatusAvailable": "发现新版本 {version}",
+  "updateStatusDownloading": "正在下载…",
+  "updateStatusDownloaded": "安装包已就绪",
+  "updateStatusInstalling": "正在安装…",
+  "updateLastChecked": "上次检查：{time}",
+  "updateReleaseSection": "新版本",
+  "updateReleaseTitle": "Molia {version}",
+  "updateReleaseDate": "发布于 {date}",
+  "updateReleaseDateUnknown": "发布时间未知",
+  "updateCancelDownload": "取消下载",
+  "updateInstallingHint": "已交给安装程序，按系统提示完成即可。",
+  "updateIosHint": "iOS 通过 App Store 更新，应用内不提供安装。",
+  "updateReloadNow": "立即刷新",
+  "updateGrantInstallPermission": "去授权",
+  "updateInstallNow": "立即安装",
+  "updateDownloadAndInstall": "下载并安装",
+  "updateOpenDownloadPage": "打开下载页",
+  "updateAdvancedSection": "高级",
+  "updateManifestOverrideTitle": "更新清单地址",
+  "updateManifestOverrideDefault": "默认（官方 GitHub Release）",
+  "updateManifestOverrideHint": "留空使用官方地址",
+  "updateDownloadPrefixTitle": "下载镜像前缀",
+  "updateDownloadPrefixDefault": "默认（GitHub 直连）",
+  "updateDownloadPrefixHint": "如 https://gh-proxy.com/（非官方镜像请自行确认可信）",
+  "updateAboutSection": "关于",
+  "updateCurrentVersion": "当前版本",
+  "updatePlatformTitle": "平台",
+  "updateErrorNetwork": "网络错误，检查更新失败",
+  "updateErrorManifest": "更新清单无效",
+  "updateErrorUnsupported": "当前平台不支持应用内更新",
+  "updateErrorChecksum": "安装包校验失败，已删除",
+  "updateErrorPermission": "需要允许「安装未知应用」才能自动安装",
+  "updateErrorNotWritable": "安装目录不可写，请手动下载覆盖安装",
+  "updateErrorInstall": "安装失败",
+  "updateDownloadProgress": "已下载 {percent}%（{receivedMb} MB，{speedMb} MB/s）",
+  "@settingsUpdateSubtitle": {
+    "placeholders": {
+      "version": {
+        "type": "String"
+      }
+    }
+  },
+  "@settingsUpdateAvailable": {
+    "placeholders": {
+      "version": {
+        "type": "String"
+      }
+    }
+  },
+  "@updateStatusAvailable": {
+    "placeholders": {
+      "version": {
+        "type": "String"
+      }
+    }
+  },
+  "@updateLastChecked": {
+    "placeholders": {
+      "time": {
+        "type": "String"
+      }
+    }
+  },
+  "@updateReleaseTitle": {
+    "placeholders": {
+      "version": {
+        "type": "String"
+      }
+    }
+  },
+  "@updateReleaseDate": {
+    "placeholders": {
+      "date": {
+        "type": "String"
+      }
+    }
+  },
+  "@updateDownloadProgress": {
+    "placeholders": {
+      "percent": {
+        "type": "String"
+      },
+      "receivedMb": {
+        "type": "String"
+      },
+      "speedMb": {
+        "type": "String"
+      }
+    }
+  }
 }

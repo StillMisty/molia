@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  应用内更新：FileProvider 暴露的可读路径。
+  Dart 侧下载目录 = path_provider 的 getTemporaryDirectory()/updates
+  = Android 的 cacheDir/updates，因此这里只放 cache-path。
+-->
+<paths>
+    <cache-path name="updates" path="updates/" />
+</paths>

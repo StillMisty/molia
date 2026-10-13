@@ -7,11 +7,13 @@ import android.os.Bundle
 import android.provider.Settings
 import androidx.annotation.NonNull
 import androidx.appcompat.app.AppCompatDelegate
+import androidx.core.content.FileProvider
 import androidx.core.os.LocaleListCompat
 import androidx.core.view.WindowCompat
 import com.ryanheise.audioservice.AudioServiceActivity
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodChannel
+import java.io.File
 
 class MainActivity: AudioServiceActivity() {
     private var methodChannel: MethodChannel? = null
@@ -189,6 +191,66 @@ class MainActivity: AudioServiceActivity() {
                 }
                 else -> result.notImplemented()
             }
+        }
+
+        // 应用内更新通道：安装下载好的 APK 与「安装未知应用」授权状态。
+        // 下载目录（Dart 侧 getTemporaryDirectory()/updates）与
+        // res/xml/file_paths.xml 的 cache-path 对齐，FileProvider 才能把
+        // 文件 URI 授权给系统安装器。
+        MethodChannel(
+            flutterEngine.dartExecutor.binaryMessenger,
+            "top.stillmisty.molia/updater"
+        ).setMethodCallHandler { call, result ->
+            when (call.method) {
+                "supportedAbi" ->
+                    result.success(Build.SUPPORTED_ABIS.firstOrNull() ?: "")
+                "canInstallPackages" ->
+                    result.success(packageManager.canRequestPackageInstalls())
+                "installApk" -> installApk(call.argument<String>("path"), result)
+                "openInstallPermissionSettings" -> {
+                    try {
+                        val intent = Intent(Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES).apply {
+                            data = android.net.Uri.fromParts("package", packageName, null)
+                        }
+                        startActivity(intent)
+                        result.success(true)
+                    } catch (e: Exception) {
+                        result.error("OPEN_SETTINGS_ERROR", e.message, null)
+                    }
+                }
+                else -> result.notImplemented()
+            }
+        }
+    }
+
+    /// 把下载好的 APK 交给系统安装器。
+    ///
+    /// 返回 ok / needPermission / missingArchive；异常经 error 通道上报
+    /// （Dart 侧统一归一化为安装失败）。
+    private fun installApk(path: String?, result: MethodChannel.Result) {
+        if (path.isNullOrEmpty()) {
+            result.error("INVALID_ARGUMENT", "apk path is null", null)
+            return
+        }
+        try {
+            if (!packageManager.canRequestPackageInstalls()) {
+                result.success("needPermission")
+                return
+            }
+            val file = File(path)
+            if (!file.exists()) {
+                result.success("missingArchive")
+                return
+            }
+            val uri = FileProvider.getUriForFile(this, "$packageName.fileprovider", file)
+            val intent = Intent(Intent.ACTION_VIEW).apply {
+                setDataAndType(uri, "application/vnd.android.package-archive")
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_GRANT_READ_URI_PERMISSION)
+            }
+            startActivity(intent)
+            result.success("ok")
+        } catch (e: Exception) {
+            result.error("INSTALL_APK_ERROR", e.message, null)
         }
     }
 

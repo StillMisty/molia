@@ -8,6 +8,7 @@ import '../providers/playback_provider.dart';
 import '../providers/sources_provider.dart';
 import '../providers/sync_provider.dart';
 import '../providers/theme_provider.dart';
+import '../providers/update_provider.dart';
 import '../services/data_saver_service.dart';
 import '../services/settings_service.dart';
 import '../services/source_swap/source_swap_settings.dart';
@@ -26,6 +27,7 @@ import 'general_settings_page.dart';
 import 'lyrics_display_page.dart';
 import 'sources_page.dart';
 import 'sync_settings_page.dart';
+import 'update_settings_page.dart';
 
 /// 设置弹层：内部 Navigator 承载首屏与子页（避免弹层叠弹层）。
 ///
@@ -106,6 +108,7 @@ class _SettingsHomeViewState extends State<_SettingsHomeView> {
     // 以下 provider 在测试等场景可能缺省：缺省时隐藏对应行，不报错。
     final dataSaver = context.watch<DataSaverService?>();
     final syncProvider = context.watch<SyncProvider?>();
+    final updateProvider = context.watch<UpdateProvider?>();
     final sourceSwapSettings = context.watch<SourceSwapSettings?>();
     final sources = context.read<SourcesProvider?>();
     final m3e = M3ETheme.of(context);
@@ -168,7 +171,12 @@ class _SettingsHomeViewState extends State<_SettingsHomeView> {
               const SizedBox(height: kSettingsSectionSpacing),
               _contentSection(context, l10n),
               const SizedBox(height: kSettingsSectionSpacing),
-              _generalAndDataSection(context, l10n, syncProvider: syncProvider),
+              _generalAndDataSection(
+                context,
+                l10n,
+                syncProvider: syncProvider,
+                updateProvider: updateProvider,
+              ),
             ],
           ),
         ),
@@ -454,11 +462,12 @@ class _SettingsHomeViewState extends State<_SettingsHomeView> {
     );
   }
 
-  /// 通用与数据：通用子页 / 数据子页 / 同步子页。
+  /// 通用与数据：通用子页 / 数据子页 / 同步子页 / 关于与更新。
   Widget _generalAndDataSection(
     BuildContext context,
     AppLocalizations l10n, {
     required SyncProvider? syncProvider,
+    required UpdateProvider? updateProvider,
   }) {
     final showSync = syncProvider != null && !kIsWeb;
     return SettingsSectionCard(
@@ -495,8 +504,29 @@ class _SettingsHomeViewState extends State<_SettingsHomeView> {
               const SyncSettingsPage(),
             ),
           ),
+        // 关于与更新：版本 / 渠道 / 自动检查 / 下载安装。
+        if (updateProvider != null)
+          SettingsNavTile(
+            key: const Key('settingsUpdateItem'),
+            icon: Icons.system_update_alt_rounded,
+            title: l10n.settingsUpdateTitle,
+            subtitle: _updateSubtitle(l10n, updateProvider),
+            onTap: () => openSettingsSubPage(
+              context,
+              const UpdateSettingsPage(),
+            ),
+          ),
       ],
     );
+  }
+
+  /// 更新入口副标题：优先「可更新至 x.y.z」，否则显示当前版本。
+  String _updateSubtitle(AppLocalizations l10n, UpdateProvider provider) {
+    final version = provider.release?.version;
+    if (provider.updateAvailable && version != null && version.isNotEmpty) {
+      return l10n.settingsUpdateAvailable(version);
+    }
+    return l10n.settingsUpdateSubtitle(provider.currentVersionLabel);
   }
 
   /// 基础配色副标题：壁纸（平台不支持时说明）或当前自定义色 hex。
