@@ -170,25 +170,32 @@ class DesktopLyricsOutput implements InteractiveLyricsOutput {
   Map<String, Object?> _presentationMap(
       LyricsPresentation p, LyricsDisplaySettings s) {
     var line = p.line;
+    // 无歌词回退 / 暂停回退（歌名 / 清空）下主行已不是歌词行：翻译与罗马音
+    // 必须同步撤下，否则主行换成歌名（或清空）后扩展行仍残留在悬浮窗上。
+    // keep 保留原行，扩展行原样下发。
+    var replacedLine = false;
     if (!p.hasLyrics) {
       line = s.desktopNoLyricsBehavior == DesktopNoLyricsBehavior.title
           ? p.title
           : '';
+      replacedLine = true;
     } else if (!p.isPlaying) {
       switch (s.desktopPauseBehavior) {
         case LyricsPauseBehavior.keep:
           break;
         case LyricsPauseBehavior.title:
           line = p.title;
+          replacedLine = true;
         case LyricsPauseBehavior.clear:
           line = '';
+          replacedLine = true;
       }
     }
     return {
       'title': p.title,
       'line': line,
-      'extended': p.extended,
-      'upcoming': p.upcoming,
+      'extended': replacedLine ? const <String>[] : p.extended,
+      'upcoming': replacedLine ? const <String>[] : p.upcoming,
       'isPlaying': p.isPlaying,
       'hasLyrics': p.hasLyrics,
     };

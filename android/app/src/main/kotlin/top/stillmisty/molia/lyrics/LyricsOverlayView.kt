@@ -215,7 +215,14 @@ internal class LyricsOverlayView(
                 gravity = textColumn.gravity
                 maxLines = 1
                 setSingleLine(true)
-                ellipsize = android.text.TextUtils.TruncateAt.END
+                // 过长行左右滚动（原生 marquee）而不是截断省略号：
+                // 需要 ellipsize=MARQUEE + 持续循环 + selected 才会滚动，
+                // 文本未超宽时仍保持静止（marquee 不产生位移）。
+                ellipsize = android.text.TextUtils.TruncateAt.MARQUEE
+                marqueeRepeatLimit = -1
+                isSelected = true
+                isFocusable = false
+                isFocusableInTouchMode = false
             }
             textColumn.addView(view)
         }

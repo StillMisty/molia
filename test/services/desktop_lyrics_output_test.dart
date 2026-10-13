@@ -45,11 +45,15 @@ void main() {
     String line = 'A',
     bool isPlaying = true,
     bool hasLyrics = true,
+    List<String> extended = const [],
+    List<String> upcoming = const [],
   }) =>
       LyricsPresentation(
         trackId: 'fake:1',
         title: '歌名',
         line: line,
+        extended: extended,
+        upcoming: upcoming,
         isPlaying: isPlaying,
         hasLyrics: hasLyrics,
       );
@@ -103,13 +107,72 @@ void main() {
     await settings.setDesktopPauseBehavior(LyricsPauseBehavior.title);
     await output.start(settings);
 
-    await output.apply(presentation(isPlaying: false));
+    await output.apply(presentation(
+      isPlaying: false,
+      extended: const ['翻译'],
+      upcoming: const ['下一行'],
+    ));
     final paused = calls.lastWhere((call) => call.method == 'desktop.update');
     expect((paused.arguments as Map)['line'], '歌名');
+    expect((paused.arguments as Map)['extended'], isEmpty);
 
     await output.apply(presentation(hasLyrics: false, line: ''));
     final noLyrics = calls.lastWhere((call) => call.method == 'desktop.update');
     expect((noLyrics.arguments as Map)['line'], '歌名');
+    expect((noLyrics.arguments as Map)['extended'], isEmpty);
+
+    await output.stop();
+  });
+
+  test('暂停回退同步清空翻译/罗马音与后续行（三种策略）', () async {
+    final channel = LyricsChannel();
+    final output = DesktopLyricsOutput(channel: channel, supported: true);
+    final settings = await desktopSettings();
+    await output.start(settings);
+
+    Future<Map> lastUpdate() async {
+      await pumpEventQueue();
+      final call = calls.lastWhere((call) => call.method == 'desktop.update');
+      return call.arguments as Map;
+    }
+
+    // keep：主行与扩展行原样保留。
+    await settings.setDesktopPauseBehavior(LyricsPauseBehavior.keep);
+    await output.apply(presentation(
+      isPlaying: false,
+      line: 'B',
+      extended: const ['翻译'],
+      upcoming: const ['下一行'],
+    ));
+    var map = await lastUpdate();
+    expect(map['line'], 'B');
+    expect(map['extended'], ['翻译']);
+    expect(map['upcoming'], ['下一行']);
+
+    // title：主行换歌名，翻译/罗马音与后续行撤下。
+    await settings.setDesktopPauseBehavior(LyricsPauseBehavior.title);
+    await output.apply(presentation(
+      isPlaying: false,
+      extended: const ['翻译'],
+      upcoming: const ['下一行'],
+    ));
+    map = await lastUpdate();
+    expect(map['line'], '歌名');
+    expect(map['extended'], isEmpty);
+    expect(map['upcoming'], isEmpty);
+
+    // clear：主行清空，扩展行同样撤下。
+    await settings.setDesktopPauseBehavior(LyricsPauseBehavior.clear);
+    await output.apply(presentation(
+      isPlaying: false,
+      line: '',
+      extended: const ['翻译'],
+      upcoming: const ['下一行'],
+    ));
+    map = await lastUpdate();
+    expect(map['line'], '');
+    expect(map['extended'], isEmpty);
+    expect(map['upcoming'], isEmpty);
 
     await output.stop();
   });
