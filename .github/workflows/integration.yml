@@ -31,21 +31,8 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends \
-            libgtk-3-dev libmpv2 libsecret-1-dev xvfb fonts-wqy-microhei ninja-build libglu1-mesa
-
-      # 无声卡的 runner：给 ALSA 一个 null 默认设备。否则 libmpv 打不开音频
-      # 输出，媒体流会被立即判为播放完成 → 自动切歌，播放用例必挂
-      # （2026-10-14：断言拿到 'Second Song' 而不是 'Hello LX'）。
-      - name: 音频设备（ALSA null 默认设备）
-        run: |
-          cat > "$HOME/.asoundrc" <<'EOF'
-          pcm.!default {
-            type null
-          }
-          ctl.!default {
-            type null
-          }
-          EOF
+            libgtk-3-dev libmpv2 libsecret-1-dev xvfb fonts-wqy-microhei ninja-build libglu1-mesa \
+            pulseaudio pulseaudio-utils
 
       - uses: subosito/flutter-action@v2
         with:
@@ -56,5 +43,16 @@ jobs:
       - name: pub get
         run: flutter pub get --enforce-lockfile
 
+      # 无头 runner 的虚拟音频设备：PulseAudio + null sink。null sink 按实时
+      # 速率消费数据，libmpv 才会正常走完播放（对比：ALSA 的 null PCM 不
+      # 节流，整首歌瞬间“播完”→自动切歌；无声卡时则是打不开输出，同样
+      # 立即判完成）。两者都会让「本地播放」用例必挂。
       - name: 集成测试（无 DISPLAY 时 xvfb-run）
-        run: xvfb-run -a flutter test integration_test/lx_engine_integration_test.dart -d linux --no-pub -r expanded
+        run: |
+          export XDG_RUNTIME_DIR=/tmp/pulse-runtime
+          mkdir -p "$XDG_RUNTIME_DIR" && chmod 700 "$XDG_RUNTIME_DIR"
+          pulseaudio -D --exit-idle-time=-1 --disable-shm
+          pactl load-module module-null-sink sink_name=molia_ci
+          pactl set-default-sink molia_ci
+          pactl info | head -5
+          xvfb-run -a flutter test integration_test/lx_engine_integration_test.dart -d linux --no-pub -r expanded
