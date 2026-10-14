@@ -43,6 +43,7 @@ void main() {
     expect(
       [for (final row in rows) row['name']],
       [
+        'downloads',
         'play_contexts',
         'play_events',
         'play_history',
@@ -56,6 +57,23 @@ void main() {
 
   test('列定义逐字一致（名/类型/NOT NULL/默认值/主键序）', () async {
     const expected = <String, List<String>>{
+      'downloads': [
+        'id|INTEGER|0|null|1',
+        'originSourceKey|TEXT|1|null|0',
+        'originSongId|TEXT|1|null|0',
+        'title|TEXT|1|null|0',
+        "artist|TEXT|1|''|0",
+        "album|TEXT|1|''|0",
+        'coverUrl|TEXT|0|null|0',
+        'durationMs|INTEGER|0|null|0',
+        "raw|TEXT|1|'{}'|0",
+        "quality|TEXT|1|''|0",
+        'filePath|TEXT|1|null|0',
+        'sizeBytes|INTEGER|1|0|0',
+        'lyricPath|TEXT|0|null|0',
+        'coverPath|TEXT|0|null|0',
+        'downloadedAt|INTEGER|1|null|0',
+      ],
       'play_contexts': [
         'contextUri|TEXT|0|null|1',
         'contextType|TEXT|1|null|0',
@@ -142,6 +160,8 @@ void main() {
     expect(
       {for (final row in rows) row['name']: row['sql']},
       {
+        'idx_downloads_downloadedAt':
+            'CREATE INDEX idx_downloads_downloadedAt ON downloads (downloadedAt)',
         'idx_play_contexts_lastPlayedAt':
             'CREATE INDEX idx_play_contexts_lastPlayedAt '
                 'ON play_contexts (lastPlayedAt)',
