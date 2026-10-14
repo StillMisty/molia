@@ -1,6 +1,8 @@
 /// 应用内更新的测试支撑：服务 / 偏好替身（provider 与页面测试共用）。
 library;
 
+import 'dart:async';
+
 import 'package:dio/dio.dart';
 import 'package:molia/domain/models/app_release.dart';
 import 'package:molia/services/update/update_installer_types.dart';
@@ -18,6 +20,10 @@ class FakeUpdateService implements UpdateService {
   bool installPermission = true;
   String downloadPath = '/tmp/updates/molia-1.2.3-linux-x64.tar.gz';
   UpdateChannel? lastCheckChannel;
+  int downloadCalls = 0;
+
+  /// 非空时 check 会等待该 Completer（测试「检查中」界面态用）。
+  Completer<void>? checkGate;
   int reloadCalls = 0;
   int openPermissionCalls = 0;
   int installCalls = 0;
@@ -50,6 +56,8 @@ class FakeUpdateService implements UpdateService {
   }) async {
     final error = checkError;
     if (error != null) throw error;
+    final gate = checkGate;
+    if (gate != null) await gate.future;
     lastCheckChannel = channel;
     final latest = manifest ?? release('1.2.3', 42);
     return UpdateCheckResult(
@@ -70,6 +78,7 @@ class FakeUpdateService implements UpdateService {
   }) async {
     final error = downloadError;
     if (error != null) throw error;
+    downloadCalls++;
     onProgress(5, 10);
     onProgress(10, 10);
     return downloadPath;

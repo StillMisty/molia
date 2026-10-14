@@ -516,9 +516,6 @@ void main() async {
   Timer.periodic(const Duration(minutes: 10), (_) {
     if (syncProvider.enabled) unawaited(syncProvider.syncNow());
   });
-  AppLifecycleListener(
-    onResume: () => syncProvider.scheduleSync(delay: const Duration(seconds: 3)),
-  );
 
   // 应用内更新：清单（Release 资产 latest.json）→ 下载（sha256 强制校验）
   // → 平台安装策略（Android 系统安装器 / 桌面替换脚本 / Web 刷新）。
@@ -550,6 +547,15 @@ void main() async {
     quitApp: WindowChrome.close,
   );
   await updateProvider.init();
+
+  // 前台恢复：补一轮同步；并复查更新安装权限——从「安装未知应用」系统
+  // 授权页返回后要把按钮从「去授权」切回「立即安装」。
+  AppLifecycleListener(
+    onResume: () {
+      syncProvider.scheduleSync(delay: const Duration(seconds: 3));
+      unawaited(updateProvider.handleAppResumed());
+    },
+  );
 
   runApp(
     MultiProvider(

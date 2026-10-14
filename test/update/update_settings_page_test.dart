@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:material_3_expressive/material_3_expressive.dart';
 import 'package:material_ui/material_ui.dart';
@@ -144,5 +146,57 @@ void main() {
     expect(find.text('默认（官方 GitHub Release）'), findsOneWidget);
     expect(find.text('下载镜像前缀'), findsOneWidget);
     expect(find.text('默认（GitHub 直连）'), findsOneWidget);
+  });
+
+  testWidgets('检查进行中：隐藏上一次的发布卡片（不显示旧下载版本）', (tester) async {
+    await pumpPage(tester);
+    await tapKey(tester, const Key('settingsUpdateCheckItem'));
+    expect(find.text('Molia 1.2.3'), findsOneWidget);
+
+    // 第二次检查挂起在网关后：期间只应看到「正在检查…」。
+    service.checkGate = Completer<void>();
+    await tester.tap(find.byKey(const Key('settingsUpdateCheckItem')));
+    await tester.pump();
+
+    expect(find.text('正在检查…'), findsOneWidget);
+    expect(find.text('Molia 1.2.3'), findsNothing);
+    expect(find.byKey(const Key('settingsUpdateDownloadButton')), findsNothing);
+
+    service.checkGate!.complete();
+    await tester.pumpAndSettle();
+    expect(
+      find.byKey(const Key('settingsUpdateDownloadButton')),
+      findsOneWidget,
+    );
+  });
+
+  testWidgets('缺少权限：先提示去授权，授权返回后回到可下载态', (tester) async {
+    service.platform =
+        const UpdatePlatformInfo(platform: 'android', arch: 'arm64');
+    service.installPermission = false;
+    await pumpPage(tester);
+
+    await tapKey(tester, const Key('settingsUpdateCheckItem'));
+    await tapKey(tester, const Key('settingsUpdateDownloadButton'));
+
+    expect(
+      find.byKey(const Key('settingsUpdatePermissionButton')),
+      findsOneWidget,
+    );
+    expect(service.downloadCalls, 0, reason: '无权限时不先下载');
+
+    // 模拟用户去系统设置授权后回到前台（组合根在 onResume 复查）。
+    service.installPermission = true;
+    await provider.handleAppResumed();
+    await tester.pumpAndSettle();
+
+    expect(
+      find.byKey(const Key('settingsUpdateDownloadButton')),
+      findsOneWidget,
+    );
+    expect(
+      find.byKey(const Key('settingsUpdatePermissionButton')),
+      findsNothing,
+    );
   });
 }

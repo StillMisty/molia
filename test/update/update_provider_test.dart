@@ -136,26 +136,61 @@ void main() {
     expect(quitCalls, 0);
   });
 
-  test('缺少安装权限：停在 downloaded 等授权，授权后可重试安装', () async {
-    service.platform = const UpdatePlatformInfo(platform: 'android', arch: 'arm64');
+  test('缺少安装权限：先不下载，提示去授权；授权后可直接下载安装', () async {
+    service.platform =
+        const UpdatePlatformInfo(platform: 'android', arch: 'arm64');
     service.installPermission = false;
     final provider = buildProvider();
     await provider.init();
     await provider.check();
 
     await provider.downloadAndInstall();
-    expect(provider.status, UpdateStatus.downloaded);
+    expect(provider.status, UpdateStatus.available);
     expect(provider.failure, UpdateFailureKind.permission);
-    expect(provider.hasDownloadedPackage, isTrue);
+    expect(provider.hasDownloadedPackage, isFalse);
+    expect(service.downloadCalls, 0, reason: '无权限时不应先下载十几 MB');
     expect(service.installCalls, 0);
 
     await provider.openInstallPermissionSettings();
     expect(service.openPermissionCalls, 1);
 
+    // 用户授权后回到前台：待授权态清除，回到「下载并安装」。
     service.installPermission = true;
+    await provider.handleAppResumed();
+    expect(provider.failure, isNull);
+    expect(provider.status, UpdateStatus.available);
+
+    await provider.downloadAndInstall();
+    expect(service.downloadCalls, 1);
+    expect(provider.status, UpdateStatus.installing);
+  });
+
+  test('系统安装器被取消 / 权限被撤销：回到可重试态', () async {
+    service.platform =
+        const UpdatePlatformInfo(platform: 'android', arch: 'arm64');
+    final provider = buildProvider();
+    await provider.init();
+    await provider.check();
+    await provider.downloadAndInstall();
+    expect(provider.status, UpdateStatus.installing);
+
+    // 用户取消系统安装器后回到前台：回到「安装包已就绪」可重试。
+    await provider.handleAppResumed();
+    expect(provider.status, UpdateStatus.downloaded);
+    expect(provider.hasDownloadedPackage, isTrue);
+
+    // 权限被用户在系统里撤销：停在待授权。
+    service.installPermission = false;
+    await provider.installDownloaded();
+    expect(provider.failure, UpdateFailureKind.permission);
+    expect(provider.status, UpdateStatus.downloaded);
+
+    // 重新授权返回 → 切回「立即安装」。
+    service.installPermission = true;
+    await provider.handleAppResumed();
+    expect(provider.failure, isNull);
     await provider.installDownloaded();
     expect(provider.status, UpdateStatus.installing);
-    expect(service.installCalls, 1);
   });
 
   test('安装目录不可写：保留安装包并提示手动更新', () async {
@@ -223,5 +258,64 @@ void main() {
     expect(provider.channel, UpdateChannel.beta);
     expect(provider.status, UpdateStatus.idle);
     expect(provider.release, isNull);
+  });
+
+  test('检查到与已下载包同一发布：保持 downloaded 态，不回到「下载并安装」', () async {
+    final provider = buildProvider();
+    await provider.init();
+    await provider.check();
+    await provider.downloadAndInstall();
+    expect(provider.status, UpdateStatus.installing);
+
+    // 重进设置页再检查一次：同一发布的包仍在，应回到「安装包已就绪」。
+    await provider.check();
+    expect(provider.status, UpdateStatus.downloaded);
+    expect(provider.hasDownloadedPackage, isTrue);
+  });
+
+  test('检查到新发布：旧安装包状态作废（不显示上一个版本）', () async {
+    final provider = buildProvider();
+    await provider.init();
+    await provider.check();
+    await provider.downloadAndInstall();
+
+    service.manifest = service.release('1.2.4', 43);
+    await provider.check();
+    expect(provider.status, UpdateStatus.available);
+    expect(provider.release?.version, '1.2.4');
+    expect(provider.hasDownloadedPackage, isFalse);
+  });
+
+  test('切换渠道作废已下载包（避免跨渠道安装旧包）', () async {
+    final provider = buildProvider();
+    await provider.init();
+    await provider.check();
+    await provider.downloadAndInstall();
+    expect(provider.hasDownloadedPackage, isTrue);
+
+    await provider.setChannel(UpdateChannel.beta);
+    expect(provider.hasDownloadedPackage, isFalse);
+    expect(provider.status, UpdateStatus.idle);
+  });
+
+  test('handleAppResumed：未下载时授权返回 → 回到「下载并安装」', () async {
+    service.platform =
+        const UpdatePlatformInfo(platform: 'android', arch: 'arm64');
+    service.installPermission = false;
+    final provider = buildProvider();
+    await provider.init();
+    await provider.check();
+    await provider.downloadAndInstall();
+    expect(provider.failure, UpdateFailureKind.permission);
+    expect(provider.status, UpdateStatus.available);
+
+    // 仍未授权：不动状态。
+    await provider.handleAppResumed();
+    expect(provider.failure, UpdateFailureKind.permission);
+
+    service.installPermission = true;
+    await provider.handleAppResumed();
+    expect(provider.failure, isNull);
+    expect(provider.status, UpdateStatus.available);
   });
 }
