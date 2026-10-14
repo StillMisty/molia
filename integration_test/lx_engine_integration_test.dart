@@ -332,7 +332,10 @@ Future<void> _serveAudio(HttpRequest request, Uint8List wavBytes) async {
 
 Uint8List _buildWav() {
   const sampleRate = 8000;
-  const seconds = 3;
+  // 30s 而不是 3s：CI runner（xvfb、无音频设备）起播慢，3 秒的曲目会在
+  // 「起播 → 断言当前曲目」之间自然播完并自动切歌，断言拿到的是下一首
+  // （2026-10-14 定时集成任务即因此失败）。时长与脚本里的 interval 同步。
+  const seconds = 30;
   const samples = sampleRate * seconds;
   const dataSize = samples; // 8-bit mono
   final builder = BytesBuilder();
@@ -402,8 +405,8 @@ on(EVENT_NAMES.request, function (payload) {
     return Promise.resolve({
       isEnd: true,
       list: [
-        { id: '1', name: 'Hello LX', singer: 'Tester', albumName: 'Album', source: 'test', interval: '00:03' },
-        { id: '2', name: 'Second Song', singer: 'Tester', albumName: 'Album', source: 'test', interval: '00:03' }
+        { id: '1', name: 'Hello LX', singer: 'Tester', albumName: 'Album', source: 'test', interval: '00:30' },
+        { id: '2', name: 'Second Song', singer: 'Tester', albumName: 'Album', source: 'test', interval: '00:30' }
       ]
     })
   }
