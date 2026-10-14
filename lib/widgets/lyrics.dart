@@ -14,7 +14,7 @@ import '../domain/models/track.dart';
 import '../models/lyric_line.dart';
 import 'lyrics_scroll_policy.dart';
 import '../models/play_mode.dart';
-import '../pages/lyrics_display/lyrics_page_settings_page.dart';
+import '../pages/lyrics_display/lyrics_content_settings_page.dart';
 import '../pages/source_swap_page.dart';
 import '../providers/lyrics_provider.dart';
 import '../providers/playback_provider.dart';
@@ -512,11 +512,11 @@ class _LyricsWidgetState extends State<LyricsWidget>
     ];
   }
 
-  /// 歌词显示设置（翻译 / 罗马音开关）：无歌词时的 FAB menu 入口。
+  /// 歌词显示设置（歌词页 + 输出共享项）：无歌词时的 FAB menu 入口。
   Future<void> _showLyricsDisplaySettings() {
     return ResponsiveNavigation.showSecondaryPage<void>(
       context: context,
-      child: const LyricsPageSettingsPage(),
+      child: const LyricsContentSettingsPage(),
       preferredMode: SecondaryPageMode.sideSheet,
       maxWidth: 520,
       showCloseButton: false,
