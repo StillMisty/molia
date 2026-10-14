@@ -10,6 +10,7 @@ import 'generated/schema_v1.dart' as v1;
 import 'generated/schema_v2.dart' as v2;
 import 'generated/schema_v3.dart' as v3;
 import 'generated/schema_v4.dart' as v4;
+import 'generated/schema_v5.dart' as v5;
 
 void main() {
   driftRuntimeOptions.dontWarnAboutMultipleDatabases = true;
@@ -340,6 +341,56 @@ void main() {
         expect(rows.last.filePath, null);
         expect(rows.last.lyricPath, '/downloads/lyrics/Artist b - Title b.lrc');
         expect(rows.last.publicUri, null);
+      },
+    );
+  });
+
+  // 迁移不破坏既有数据：v4 → v5 只新增 `imported` 列，既有行保持原值。
+  test('migration from v4 to v5 keeps download records', () async {
+    const oldDownloadsData = [
+      v4.DownloadsData(
+        id: 1,
+        originSourceKey: 'kw',
+        originSongId: 'a',
+        title: 'Title a',
+        artist: 'Artist a',
+        album: '',
+        coverUrl: null,
+        durationMs: null,
+        raw: '{}',
+        quality: '320k',
+        filePath: '/downloads/Artist a - Title a.mp3',
+        sizeBytes: 1024,
+        lyricPath: null,
+        coverPath: null,
+        publicUri: 'content://media/external/downloads/1',
+        downloadedAt: 1000,
+      ),
+    ];
+
+    await verifier.testWithDataIntegrity(
+      oldVersion: 4,
+      newVersion: 5,
+      createOld: v4.DatabaseAtV4.new,
+      createNew: v5.DatabaseAtV5.new,
+      openTestedDatabase: MoliaDatabase.new,
+      createItems: (batch, oldDb) {
+        batch.insertAll(oldDb.downloads, oldDownloadsData);
+      },
+      validateItems: (newDb) async {
+        final rows = await newDb.select(newDb.downloads).get();
+        expect(rows, hasLength(1));
+        expect(rows.first.filePath, '/downloads/Artist a - Title a.mp3');
+        expect(
+          rows.first.publicUri,
+          'content://media/external/downloads/1',
+          reason: '既有列不丢',
+        );
+        expect(
+          rows.first.imported,
+          0,
+          reason: 'v5 新列默认 0（下载）；生成 schema 的布尔列是 int',
+        );
       },
     );
   });

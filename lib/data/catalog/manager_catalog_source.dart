@@ -138,12 +138,29 @@ class SourceManagerMusicSource implements MusicSource {
     CollectionRef ref, {
     int page = 1,
     int limit = 50,
-  }) {
-    // capabilities.collection == false：明确抛 unsupported，避免静默空结果。
-    return Future.error(const SourceFailure(
-      kind: FailureKind.unsupported,
-      message: 'SourceManagerMusicSource does not support collection',
-    ));
+  }) async {
+    if (!capabilities.collection) {
+      // capabilities.collection == false：明确抛 unsupported，避免静默空结果。
+      throw SourceFailure(
+        kind: FailureKind.unsupported,
+        message: '音源 $key 不支持专辑/歌单详情',
+      );
+    }
+    // 目前只有内置五平台的专辑详情（playlist / artist 尚无实现）。
+    if (ref.type != 'album') {
+      throw SourceFailure(
+        kind: FailureKind.unsupported,
+        message: '音源 $key 暂不支持 ${ref.type} 详情',
+      );
+    }
+    try {
+      final album =
+          await _manager.fetchAlbum(key, ref.id, page: page, limit: limit);
+      return CollectionPage(items: album.tracks, hasMore: album.hasMore);
+    } catch (e) {
+      // 边界错误归一化（幂等：AlbumService 再包一层也不会重复包装）。
+      throw SourceFailure.from(e);
+    }
   }
 
   @override

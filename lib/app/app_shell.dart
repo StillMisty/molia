@@ -41,7 +41,19 @@ import '../widgets/player_morph.dart';
 String? _coverUrlOf(PlaybackProvider provider) =>
     artworkUrlOf(provider.snapshot.current);
 
+/// 顶栏进度条槽高（= M3E 波浪进度条容器高 `wavyContainerHeight`，振幅有空间）。
+///
+/// 高度必须由消费面钉死：`AppBar.bottom` 只声明 `preferredSize`、**不给子级
+/// 收紧约束**，AppBar 内部又把 bottom 放进 `Column(spaceBetween)` —— 子级拿到
+/// 松约束并底对齐。平直态（暂停）自身只有 4dp 高，不钉住时其中心比波浪态
+/// （10dp）低 3dp，play/pause 切换整条跳变。
+const double _shellBarProgressHeight = 10;
 
+
+/// 顶栏底部进度条：播放中波浪、暂停平直（波浪动画不会停，会像还在播放）。
+///
+/// 槽高固定为 [_shellBarProgressHeight]：两种形态同槽心，play/pause 切换
+/// 不跳（AppBar.bottom 给子级的是松约束，见常量注释）。
 class ProgressIndicator extends StatefulWidget {
   /// 当前进度（来自 provider.position 单一时钟，无自外推）。
   final Duration position;
@@ -130,25 +142,29 @@ class _ProgressIndicatorState extends State<ProgressIndicator>
             : null;
 
         // 暂停时切到平直进度条：波浪动画不会停，与暂停状态矛盾。
-        return widget.isPlaying
-            ? M3EProgressIndicator.linearWavy(
-                value: fraction,
-                linearSize: M3EProgressIndicatorSize.s,
-                strokeWidth: 4.0,
-                trackStrokeWidth: 4.0,
-                trackColor:
-                    Theme.of(context).colorScheme.surfaceContainerHighest,
-                color: Theme.of(context).colorScheme.primary,
-              )
-            : M3EProgressIndicator.linear(
-                value: fraction,
-                linearSize: M3EProgressIndicatorSize.s,
-                strokeWidth: 4.0,
-                trackStrokeWidth: 4.0,
-                trackColor:
-                    Theme.of(context).colorScheme.surfaceContainerHighest,
-                color: Theme.of(context).colorScheme.primary,
-              );
+        // 固定槽高见 [_shellBarProgressHeight]：两种形态同槽心，不跳变。
+        return SizedBox(
+          height: _shellBarProgressHeight,
+          child: widget.isPlaying
+              ? M3EProgressIndicator.linearWavy(
+                  value: fraction,
+                  linearSize: M3EProgressIndicatorSize.s,
+                  strokeWidth: 4.0,
+                  trackStrokeWidth: 4.0,
+                  trackColor:
+                      Theme.of(context).colorScheme.surfaceContainerHighest,
+                  color: Theme.of(context).colorScheme.primary,
+                )
+              : M3EProgressIndicator.linear(
+                  value: fraction,
+                  linearSize: M3EProgressIndicatorSize.s,
+                  strokeWidth: 4.0,
+                  trackStrokeWidth: 4.0,
+                  trackColor:
+                      Theme.of(context).colorScheme.surfaceContainerHighest,
+                  color: Theme.of(context).colorScheme.primary,
+                ),
+        );
       },
     );
   }
@@ -429,8 +445,9 @@ class _MyAppState extends State<MyApp>
         const SizedBox(width: 8),
       ],
       bottom: PreferredSize(
-        // 波浪进度条需要振幅空间（M3E 默认 wavyContainerHeight=10）。
-        preferredSize: const Size.fromHeight(10.0),
+        // 波浪进度条需要振幅空间（M3E 默认 wavyContainerHeight=10）；
+        // 高度同时由 `_shellBarProgressHeight` 钉在进度条自身，见该常量注释。
+        preferredSize: const Size.fromHeight(_shellBarProgressHeight),
         child: _ShellBarProgress(morph: _morph),
       ),
     );
@@ -1061,7 +1078,9 @@ class _ShellBarProgress extends StatelessWidget {
         opacity: morph.barHeaderHidden ? 0 : 1,
         child: ProgressBarSelector(
           builder: (context, position, state, child) {
-            if (!state.hasTrack) return const SizedBox(height: 10);
+            if (!state.hasTrack) {
+              return const SizedBox(height: _shellBarProgressHeight);
+            }
             return ProgressIndicator(
               position: position,
               duration: state.duration.toDouble(),

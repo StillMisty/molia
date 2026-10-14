@@ -57,6 +57,7 @@
   - `SearchQuery` / `SearchResult<T>`；`SourceFailure(kind/l10nKey/retryable)`；
   - `Comment` / `CommentPage`（评论正文 / 时间 / IP 归属 / 点赞 / 引用 / 楼中楼，
     `CommentKind` 区分热门与最新）；
+  - `Album`（专辑 id / 名称 / 歌手 / 封面 / 年份 / 曲目列表 / 分页）；
   - `SourceDescriptor` / `SourceCapabilities`。
 - **端口**：`MusicSource`（search/resolve/lyrics/artwork/comments/collection）、`SourceRegistry`
   （descriptors/byKey/forTrack/setOrder/changes）、`PlaybackBackend`（state ValueListenable +
@@ -109,6 +110,20 @@
   懒加载 + 分页 + 错误归一化），UI 为 `lib/pages/song_comments_page.dart` +
   `lib/widgets/comment_list_view.dart`；入口：歌曲信息页「评论」行（能力位判定唯一
   来源 `CommentsProvider.supports`，不支持时行内说明；展开态播放器进度排不再放入口）。
+- **专辑**：`AlbumService`（`lib/data/catalog/album_service.dart`）是专辑分页的唯一取数
+  入口（single-flight + LRU + TTL 10min，key=`album:{source}:{id}:{page}:{limit}`，
+  失败不缓存，`invalidateAlbum` 供重试）；取数函数由组合根注入
+  `SourceManager.fetchAlbum`（能力位 `capabilities.collection`：仅内置五平台置真，
+  LX 脚本 / any-listen / local 为假）→ `lib/sources/builtin/{wy,tx,kg,kw,mg}_album.dart`
+  按专辑 id 精确拉取（wy `api/v1/album`、tx `music.musichallAlbum.AlbumSongList` 模块、
+  kg `album/song` + `album/info`、kw `r.s stype=albuminfo`、mg `queryAlbumSong` +
+  `MIGUM3.0/resource/album`），解析直接产出领域 `Album`（曲目 payload 经 track_mapper
+  原样透传）；真实响应快照见 `test/fixtures/albums/`（抓取脚本
+  `tool/gen_album_fixtures.mjs`），端点均需真机复验。端口路由：
+  `MusicSource.collection(CollectionRef(type: album))` 在能力位为真时转发
+  `fetchAlbum`（playlist / artist 仍 unsupported）。UI 为 `lib/pages/album_page.dart`
+  （头部元信息 + 播放全部 + 加入列表 + `TrackRow` 分页列表），入口：歌曲信息页
+  「专辑」行（payload 专辑 id + 能力位双判定，`platformAlbumId`；否则保持只读）。
 - **系统媒体会话**（Android/iOS/macOS）：`LocalAudioHandler` 把服务状态映射为
   `MediaItem`/`PlaybackState`；通知/锁屏封面经 `MediaItem.artHeaders` 统一带
   浏览器 UA + 平台 Referer，并复用 `ArtworkCache` 的共享 CacheManager
@@ -208,7 +223,8 @@
   `failedSourceKeys` 可重试），载体是统一的「换源」页
   （`lib/pages/source_swap_page.dart`：歌词 / 音频两个 tab，歌词侧为
   `LyricsSourceSearchView`，音频侧为 `SourceSwapView`；入口：歌曲信息页「换源」
-  默认音频 tab、歌词页 FAB menu「换歌词」默认歌词 tab、收藏页三类合集左滑默认音频 tab）点候选即试听（单曲「换源试听」上下文）、
+  默认音频 tab、歌词页 FAB menu「换歌词」默认歌词 tab、收藏页合集（收藏 / 历史 /
+  自建列表）左滑默认音频 tab）点候选即试听（单曲「换源试听」上下文）、
   确认后经 `LibraryProvider.replacePlaylistTrack` / `replaceHistoryEntry` 原位
   替换（仓库事务保 `sortOrder`/`addedAt`/`playedAt`，目标键已存在先确认去重），
   并经 `PlaybackProvider.replaceQueueTrack` 让队列中同 id 曲目跟随换源（新增
@@ -276,12 +292,19 @@
   无 `.part`）命中时直接拷贝不触网；歌词经注入的 `LyricsService`（缓存 →
   原生取词 → 跨平台回退，与播放页同一链路）；封面经 `ArtworkCache.bytesOf`
   命中直读、未命中取图后 `putBytes` 回填；
-- **落库**：drift `downloads` 表（schema v4，`filePath` 可空——记录可以只含
-  歌词或只含封面；`publicUri` 存 Android 公共副本定位）存原音源曲目键 +
+- **落库**：drift `downloads` 表（schema v5，`filePath` 可空——记录可以只含
+  歌词或只含封面；`publicUri` 存 Android 公共副本定位；`imported` 标记
+  **本地导入**：就地引用用户文件、删除只移行）存原音源曲目键 +
   自包含快照 + 原 raw + 音频路径/音质/大小 + 歌词/封面路径；
   `DownloadsRepository` 负责行 ↔ `DownloadedTrack` 映射；
   半成品 `.part` → 原子改名 → 落库，播放取链只认数据库记录；启动时清扫
   崩溃遗留 `.part`；
+- **本地导入**：`DownloadService.importLocalFiles`（收藏页「本地歌曲」合集 →
+  「导入本地歌曲」：多选音频文件）**不复制文件**——记录以
+  `local:<绝对路径>` 为原音源键（同路径重复导入幂等），`filePath` 指向原文件；
+  标签读 `lib/data/downloads/audio_tag_reader.dart`（mp3 ID3v2 / flac Vorbis
+  Comment + 时长），其余格式按 `歌手 - 歌名` 文件名兜底。删除导入项只移除
+  记录（原文件保留），补发布 / 旧位置迁移 / 孤儿清理都跳过导入项；
 - **标签嵌入**：音频就绪后把标题 / 歌手 / 专辑 / 歌词 / 封面写进文件标签
   （`lib/data/downloads/audio_tag_writer.dart`：自写 MP3 ID3v2.3
   UTF-16+BOM 文本 / USLT / APIC 与 FLAC Vorbis Comment + PICTURE，ffprobe
@@ -310,7 +333,8 @@
   下载管理页（`lib/pages/downloads_manage_page.dart`，设置 › 数据与存储）：
   进行中任务 + 批量下载（当前队列 / 指定歌单，跳过已下载与本地曲目；
   **不做断点续传**：平台直链多为一次性签名地址）+ 文件维护（`.part` 清扫、
-  孤儿文件回收、旧位置迁移、Android 补发布公共副本）+ 已下载列表入口；
+  孤儿文件回收、旧位置迁移、Android 补发布公共副本）；已下载列表不再单独成页，
+  由收藏页「本地歌曲」合集浏览（下载副本 + 导入的本地文件）；
   省流生效（移动数据 + 已开启）时下载前先确认。
 
 ### 设置注册表（settings registry）
@@ -478,10 +502,15 @@
   曲目级操作的打开编排（能力位、守卫、换源页 tab）唯一实现在
   `lib/widgets/track_actions.dart`；单曲缓存清理在 `lib/pages/track_cache_page.dart`
   （逐项确认），缓存内容变更经 `CacheService.revision` 跨页刷新占用。
-- 列表行统一走 `lib/widgets/track_row.dart`（队列/收藏/历史/发现共用）：形状按 M3E 列表规范
+- 列表行统一走 `lib/widgets/track_row.dart`（队列/收藏/历史/本地歌曲/发现/搜索结果共用）：形状按 M3E 列表规范
   （静止内 4dp、首末外侧 16dp；hover 12dp；press/选中 16dp），带 expressive spatial 弹簧
   morph；分段列表用 `cardList.gap`（2dp）行距、`itemExtent = TrackRow.extent + gap`，
   列表一律懒构建（发现详情滚到底自动加载下一页）。不要改回 `M3EListItem`（原因见 pitfalls #20）。
+- 曲目行尾的 ⋮ 菜单统一走 `lib/widgets/track_actions_menu.dart`（发现详情 / 搜索结果 /
+  AI 推歌共用）：锚点固定 standard 图标按钮 + tooltip，条目一律「leading 图标 + 文案」，
+  收藏这类开关态用图标 + 文案表达（选中即关菜单，不留勾选态）。行本体（收藏 / 加入列表
+  两条动作 + 领域接线）见 `lib/widgets/track_menu_tile.dart`，发现详情与搜索结果共用，
+  领域状态由调用方 `select` 后传入。
 - 已知保留（无法等价替换）：带 `bottom:` 槽的 AppBar（2 处）、`_showCenterDialog`、
   `ScaffoldMessenger` 兼容代码。
 

@@ -264,6 +264,7 @@
   "favoritesSwitchTitle": "切换收藏夹",
   "shufflePlay": "随机播放",
   "sortTooltip": "排序",
+  "trackActionsTooltip": "曲目操作",
   "sortDefaultOrder": "默认顺序",
   "sortByTitle": "按标题",
   "sortByArtist": "按艺术家",
@@ -334,6 +335,9 @@
   "discoverAddToPlaylist": "加入列表",
   "discoverNoPlaylists": "还没有列表。先在资料库中收藏歌曲创建列表。",
   "discoverPlayCount": "{count} 次播放",
+  "albumEmpty": "该专辑暂无歌曲",
+  "albumLoadFailed": "专辑加载失败",
+  "albumYear": "{year} 年",
   "settingsAppTitle": "应用名称",
   "settingsAppTitleSubtitle": "无歌曲播放时显示在顶栏",
   "settingsAppTitleDialogTitle": "应用名称",
@@ -341,6 +345,30 @@
   "appName": "茉咏",
   "libraryRecentContexts": "最近播放",
   "libraryHistory": "播放历史",
+  "libraryLocalSongs": "本地歌曲",
+  "libraryImportLocalSongs": "导入本地歌曲",
+  "libraryImportLocalSongsDone": "已导入 {count} 首",
+  "@libraryImportLocalSongsDone": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "libraryImportLocalSongsSkipped": "已导入 {imported} 首，{skipped} 个文件跳过",
+  "@libraryImportLocalSongsSkipped": {
+    "placeholders": {
+      "imported": {
+        "type": "int"
+      },
+      "skipped": {
+        "type": "int"
+      }
+    }
+  },
+  "localSongsEmpty": "还没有本地歌曲",
+  "localSongsRemove": "从列表移除",
+  "localSongsRemoveConfirm": "仅从列表移除，不会删除原文件。",
   "libraryListEnd": "— 到底了 —",
   "settingsCacheTitle": "缓存管理",
   "settingsCacheSubtitle": "音频 / 歌词 / 封面占用与策略",
@@ -1093,6 +1121,7 @@
   "downloadCancel": "取消下载",
   "downloadDelete": "删除下载",
   "downloadDeleteConfirm": "删除本地副本？音频、歌词与封面文件将一并删除。",
+  "downloadDeleteConfirmMixed": "删除本地副本？音频、歌词与封面文件将一并删除；导入的本地歌曲只从列表移除。",
   "downloadShare": "分享导出",
   "downloadProgressPercent": "{percent}%",
   "@downloadProgressPercent": {
@@ -1119,20 +1148,7 @@
   "downloadContinue": "继续",
   "downloadFileMissing": "本地文件不存在，可能已被删除",
   "downloadSourceLocal": "本地下载",
-  "downloadsTitle": "已下载",
   "downloadsEmpty": "还没有下载的歌曲",
-  "downloadsSummary": "{count} 首 · {size}",
-  "@downloadsSummary": {
-    "placeholders": {
-      "count": {
-        "type": "int"
-      },
-      "size": {
-        "type": "String"
-      }
-    }
-  },
-  "downloadsUnsupported": "当前平台不支持下载",
   "downloadsManageTitle": "下载管理",
   "downloadsManageSubtitle": "任务队列、批量下载与文件维护",
   "downloadsActiveSection": "进行中",
@@ -1195,7 +1211,6 @@
       }
     }
   },
-  "downloadsOpenLibrary": "已下载列表",
   "downloadsBatchPlaylist": "下载指定歌单",
   "downloadsBatchPlaylistSubtitle": "选择歌单后批量下载（跳过已下载与本地曲目）",
   "downloadsPickPlaylist": "选择歌单",

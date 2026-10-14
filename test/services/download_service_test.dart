@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:dio/dio.dart';
@@ -344,6 +345,138 @@ void main() {
     expect(service.initialized, isTrue);
     expect(service.downloads, hasLength(1));
     expect(service.recordFor('kw', '9')!.title, '已有下载');
+  });
+
+  group('导入本地文件', () {
+    /// 最小 ID3v2.3 标签 + 音频字节（TIT2/TPE1，UTF-16+BOM 文本）。
+    List<int> localMp3({required String title, required String artist}) {
+      List<int> frame(String id, String text) {
+        final body = <int>[
+          0x01, 0xFF, 0xFE, // UTF-16LE + BOM
+          for (final unit in text.codeUnits) ...[unit & 0xFF, unit >> 8],
+        ];
+        return [
+          ...ascii.encode(id),
+          (body.length >> 24) & 0xFF,
+          (body.length >> 16) & 0xFF,
+          (body.length >> 8) & 0xFF,
+          body.length & 0xFF,
+          0x00, 0x00,
+          ...body,
+        ];
+      }
+
+      final body = [...frame('TIT2', title), ...frame('TPE1', artist)];
+      return [
+        0x49, 0x44, 0x33, 0x03, 0x00, 0x00,
+        (body.length >> 21) & 0x7F,
+        (body.length >> 14) & 0x7F,
+        (body.length >> 7) & 0x7F,
+        body.length & 0x7F,
+        ...body,
+        // 音频：一个 128kbps / 44100Hz 的 MPEG1 Layer III 帧头。
+        0xFF, 0xFB, 0x90, 0x00,
+        for (var i = 0; i < 400; i++) 0x00,
+      ];
+    }
+
+    test('读标签落记录：就地引用（imported）+ 原文件不动', () async {
+      storage.files['/music/歌手 - 歌名.mp3'] =
+          localMp3(title: '标签标题', artist: '标签歌手');
+      final service = makeService();
+      await service.init();
+
+      final (imported, skipped) =
+          await service.importLocalFiles(['/music/歌手 - 歌名.mp3']);
+
+      expect((imported, skipped), (1, 0));
+      final record = service.downloads.single;
+      expect(record.imported, isTrue);
+      expect(record.title, '标签标题', reason: '优先读文件标签');
+      expect(record.artist, '标签歌手');
+      expect(record.filePath, '/music/歌手 - 歌名.mp3');
+      expect(record.sizeBytes, storage.files['/music/歌手 - 歌名.mp3']!.length);
+      expect(record.localTrack?.id.sourceKey, kLocalSourceKey);
+      expect(record.localTrack?.payload['path'], '/music/歌手 - 歌名.mp3');
+      // 落库（跨启动恢复）且原文件保留。
+      expect(await repository.findByOrigin(kLocalSourceKey, '/music/歌手 - 歌名.mp3'),
+          isNotNull);
+      expect(storage.files.containsKey('/music/歌手 - 歌名.mp3'), isTrue);
+    });
+
+    test('无标签：文件名兜底拆「歌手 - 歌名」', () async {
+      storage.files['/music/老王 - 晚风.mp3'] = [1, 2, 3, 4];
+      final service = makeService();
+      await service.init();
+
+      await service.importLocalFiles(['/music/老王 - 晚风.mp3']);
+
+      final record = service.downloads.single;
+      expect(record.title, '晚风');
+      expect(record.artist, '老王');
+      expect(record.durationMs, isNull);
+    });
+
+    test('跳过：非音频后缀 / 文件不存在 / 重复导入幂等', () async {
+      storage.files['/music/a.mp3'] = localMp3(title: 'A', artist: 'B');
+      final service = makeService();
+      await service.init();
+
+      final result = await service.importLocalFiles([
+        '/music/a.mp3',
+        '/music/cover.jpg',
+        '/music/missing.mp3',
+      ]);
+
+      expect(result, (1, 2));
+      expect(service.downloads, hasLength(1));
+
+      // 重复导入同一路径：同键替换，不新增记录。
+      final again = await service.importLocalFiles(['/music/a.mp3']);
+      expect(again.$1, 1);
+      expect(service.downloads, hasLength(1));
+    });
+
+    test('存储不可用（Web）：全部跳过', () async {
+      storage.available = false;
+      final service = makeService();
+      await service.init();
+
+      expect(await service.importLocalFiles(['/music/a.mp3']), (0, 1));
+      expect(service.downloads, isEmpty);
+    });
+
+    test('删除导入项：只移除记录，不删原文件', () async {
+      storage.files['/music/a.mp3'] = localMp3(title: 'A', artist: 'B');
+      final service = makeService();
+      await service.init();
+      await service.importLocalFiles(['/music/a.mp3']);
+      final record = service.downloads.single;
+
+      await service.delete(record);
+
+      expect(service.downloads, isEmpty);
+      expect(
+        await repository.findByOrigin(kLocalSourceKey, '/music/a.mp3'),
+        isNull,
+      );
+      expect(storage.files.containsKey('/music/a.mp3'), isTrue, reason: '不动原文件');
+      expect(storage.deleted, isEmpty, reason: '不触发任何删除');
+    });
+
+    test('补发布 / 迁移旧位置：跳过导入项', () async {
+      storage.files['/music/a.mp3'] = localMp3(title: 'A', artist: 'B');
+      storage.legacyRoot = '/music';
+      final publisher = FakeDownloadsPublisher();
+      final service = makeService(publisher: publisher);
+      await service.init();
+      await service.importLocalFiles(['/music/a.mp3']);
+
+      expect(await service.publishMissingPublicCopies(), (0, 0));
+      expect(publisher.published, isEmpty);
+      expect(await service.migrateLegacyDownloads(), (0, 0));
+      expect(storage.files.containsKey('/music/a.mp3'), isTrue);
+    });
   });
 
   test('文件名与扩展名工具函数', () {

@@ -10,6 +10,7 @@ import '../data/settings/settings_registry.dart';
 import 'any_listen/any_listen_config.dart';
 import 'any_listen/any_listen_errors.dart';
 import 'any_listen/any_listen_source.dart';
+import 'builtin/album_source.dart';
 import 'builtin/builtin_search.dart';
 import 'builtin/comment_source.dart';
 import 'builtin/discover_source.dart';
@@ -31,6 +32,7 @@ import 'lx/lx_search_parse.dart';
 import 'source_search_result.dart';
 import 'source_track.dart';
 import '../data/cache/request_cache.dart';
+import '../domain/models/album.dart';
 import '../domain/models/comment.dart';
 import '../domain/models/failure.dart';
 import '../domain/models/source.dart';
@@ -265,6 +267,8 @@ class SourceManager extends ChangeNotifier {
       lyrics: builtin || (decl?.canFetchLyric ?? false),
       artwork: builtin || (decl?.canFetchPic ?? false),
       comment: BuiltinComments.isSupported(key),
+      // 专辑详情同样只由内置实现提供（LX 脚本 / any-listen 无稳定专辑 id）。
+      collection: BuiltinAlbums.isSupported(key),
     );
   }
 
@@ -645,6 +649,35 @@ class SourceManager extends ChangeNotifier {
         track.sourceKey,
         track.raw,
         kind: kind,
+        page: page,
+        limit: limit,
+      );
+    } catch (e) {
+      throw SourceFailure.from(e);
+    }
+  }
+
+  /// 获取专辑（内置五平台；脚本扩展源 / any-listen 无专辑能力）。
+  ///
+  /// [albumId] 为平台内专辑 id（wy 数字 id / tx albumMid / kg/kw/mg albumId，
+  /// 取自曲目 payload 的 `albumId` / `albumMid` 原样字段）。失败统一归一化为
+  /// [SourceFailure]；分页与缓存由 data 层 `AlbumService` 承担。
+  Future<Album> fetchAlbum(
+    String sourceKey,
+    String albumId, {
+    int page = 1,
+    int limit = kAlbumPageSize,
+  }) async {
+    if (!BuiltinAlbums.isSupported(sourceKey)) {
+      throw SourceFailure(
+        kind: FailureKind.unsupported,
+        message: '音源 $sourceKey 不支持专辑',
+      );
+    }
+    try {
+      return await BuiltinAlbums.fetch(
+        sourceKey,
+        albumId,
         page: page,
         limit: limit,
       );

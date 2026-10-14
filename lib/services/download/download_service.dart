@@ -31,6 +31,7 @@ import 'package:logging/logging.dart';
 import 'package:path/path.dart' as p;
 
 import '../../data/catalog/catalog_service.dart';
+import '../../data/downloads/audio_tag_reader.dart';
 import '../../data/downloads/audio_tag_writer.dart';
 import '../../data/downloads/download_storage.dart';
 import '../../data/downloads/downloads_publisher.dart';
@@ -265,6 +266,8 @@ class DownloadService extends ChangeNotifier {
     var moved = 0;
     var failed = 0;
     for (final record in List<DownloadedTrack>.of(_records.values)) {
+      // 本地导入是就地引用：文件在用户目录，不属于下载根迁移范围。
+      if (record.imported) continue;
       final audio = record.filePath;
       if (audio == null || !audio.startsWith(legacyRoot)) continue;
       try {
@@ -301,6 +304,7 @@ class DownloadService extends ChangeNotifier {
           lyricPath: newLyric,
           coverPath: newCover,
           publicUri: record.publicUri,
+          imported: record.imported,
           downloadedAt: record.downloadedAt,
         );
         await _repository.insert(updated);
@@ -643,24 +647,79 @@ class DownloadService extends ChangeNotifier {
 
   /// 删除下载：先删数据库记录（避免残留半删记录），再删音频 / 歌词 / 封面文件
   /// 与公共 Downloads 副本（发布副本随下载一起回收；失败只记日志）。
+  ///
+  /// 本地导入（`imported`）是就地引用：只移除记录，**不动用户原文件**。
   Future<void> delete(DownloadedTrack record) async {
     await _repository.delete(record.originSourceKey, record.originSongId);
     _records.remove(record.key);
-    final audio = record.filePath;
-    if (audio != null) await _storage.deleteQuietly(audio);
-    final lyric = record.lyricPath;
-    if (lyric != null) {
-      await _storage.deleteQuietly(lyric);
-      final translation = record.translationLyricPath;
-      if (translation != null) await _storage.deleteQuietly(translation);
-    }
-    final cover = record.coverPath;
-    if (cover != null) await _storage.deleteQuietly(cover);
-    final publicUri = record.publicUri;
-    if (publicUri != null && publicUri.isNotEmpty) {
-      await _removePublicCopy(publicUri);
+    if (!record.imported) {
+      final audio = record.filePath;
+      if (audio != null) await _storage.deleteQuietly(audio);
+      final lyric = record.lyricPath;
+      if (lyric != null) {
+        await _storage.deleteQuietly(lyric);
+        final translation = record.translationLyricPath;
+        if (translation != null) await _storage.deleteQuietly(translation);
+      }
+      final cover = record.coverPath;
+      if (cover != null) await _storage.deleteQuietly(cover);
+      final publicUri = record.publicUri;
+      if (publicUri != null && publicUri.isNotEmpty) {
+        await _removePublicCopy(publicUri);
+      }
     }
     notifyListeners();
+  }
+
+  /// 导入本地音频文件（就地引用：不复制、不移动，删除记录不动原文件）。
+  ///
+  /// 记录的原音源键 = `local:<绝对路径>`（同路径重复导入幂等：刷新元数据并
+  /// 按导入时间置顶）；标题/歌手/专辑读文件标签（mp3 / flac，见
+  /// `audio_tag_reader.dart`），其余格式按 `歌手 - 歌名` 文件名兜底。
+  ///
+  /// 返回 `(导入数, 跳过数)`：路径为空 / 文件不存在 / 非音频后缀 /
+  /// 存储不可用（Web）计入跳过。
+  Future<(int, int)> importLocalFiles(Iterable<String> paths) async {
+    var imported = 0;
+    var skipped = 0;
+    if (!_supported) return (0, paths.length);
+    for (final rawPath in paths) {
+      final path = p.normalize(rawPath.trim());
+      // 后缀不带点（`audioExtensions` 约定）；标签解析要带点的原始后缀。
+      final extension = p.extension(path).toLowerCase();
+      final extensionName = extension.replaceFirst('.', '');
+      if (path.isEmpty || !audioExtensions.contains(extensionName)) {
+        skipped++;
+        continue;
+      }
+      final size = await _storage.fileSize(path);
+      if (size <= 0) {
+        skipped++;
+        continue;
+      }
+      final head =
+          await _storage.readHead(path, kAudioTagReadLimit) ?? Uint8List(0);
+      final tags = readAudioTags(head, extension: extension, fileSize: size);
+      final fallback = splitFileNameMetadata(p.basenameWithoutExtension(path));
+      final record = DownloadedTrack(
+        originSourceKey: kLocalSourceKey,
+        originSongId: path,
+        title: tags.title ?? fallback.title,
+        artist: tags.artist ?? fallback.artist,
+        album: tags.album ?? '',
+        durationMs: tags.durationMs,
+        quality: '',
+        filePath: path,
+        sizeBytes: size,
+        imported: true,
+        downloadedAt: _clock(),
+      );
+      await _repository.insert(record);
+      _records[record.key] = record;
+      imported++;
+    }
+    if (imported > 0) notifyListeners();
+    return (imported, skipped);
   }
 
   /// 补发布：把已有音频但还没有公共副本的记录发布到公共 Downloads。
@@ -672,6 +731,8 @@ class DownloadService extends ChangeNotifier {
     var published = 0;
     var failed = 0;
     for (final record in List<DownloadedTrack>.of(_records.values)) {
+      // 本地导入是就地引用：不发布到公共 Downloads（文件本来就在用户目录）。
+      if (record.imported) continue;
       final audio = record.filePath;
       if (audio == null || audio.isEmpty) continue;
       if (record.hasPublicCopy) continue;
@@ -700,6 +761,7 @@ class DownloadService extends ChangeNotifier {
         lyricPath: record.lyricPath,
         coverPath: record.coverPath,
         publicUri: uri,
+        imported: record.imported,
         downloadedAt: record.downloadedAt,
       );
       await _repository.insert(updated);
@@ -827,6 +889,7 @@ class DownloadService extends ChangeNotifier {
       lyricPath: lyricPath ?? existing?.lyricPath,
       coverPath: coverPath ?? existing?.coverPath,
       publicUri: existing?.publicUri,
+      imported: existing?.imported ?? false,
       downloadedAt: existing?.downloadedAt ?? _clock(),
     );
     await _repository.insert(record);
@@ -1192,13 +1255,17 @@ class DownloadService extends ChangeNotifier {
     return String.fromCharCodes(collapsed.runes.take(maxLength)).trim();
   }
 
+  /// 可下载 / 可导入的音频后缀（小写、不含点）。
+  ///
+  /// 唯一来源：直链扩展名推断（[extensionFor]）与本地导入校验共用。
+  static const Set<String> audioExtensions = {
+    'mp3', 'flac', 'm4a', 'aac', 'ogg', 'oga', 'opus',
+    'wav', 'ape', 'wma', 'mka', 'mp4',
+  };
+
   /// 扩展名：URL 路径里的音频后缀优先，否则按音质推断（默认 mp3）。
   @visibleForTesting
   static String extensionFor(Uri url, String quality) {
-    const audioExtensions = {
-      'mp3', 'flac', 'm4a', 'aac', 'ogg', 'oga', 'opus',
-      'wav', 'ape', 'wma', 'mka', 'mp4',
-    };
     final ext = p.extension(url.path).toLowerCase().replaceFirst('.', '');
     if (audioExtensions.contains(ext)) return ext == 'oga' ? 'ogg' : ext;
     return _extensionForQuality(quality);

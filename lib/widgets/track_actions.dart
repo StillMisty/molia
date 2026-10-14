@@ -11,6 +11,7 @@ import 'package:provider/provider.dart';
 
 import '../domain/models/track.dart';
 import '../l10n/app_localizations.dart';
+import '../pages/album_page.dart';
 import '../pages/song_comments_page.dart';
 import '../pages/source_swap_page.dart';
 import '../providers/comments_provider.dart';
@@ -28,6 +29,48 @@ Future<void> openTrackComments(
   required Track track,
 }) {
   return showSongCommentsPage(context, track: track);
+}
+
+/// 曲目在原生平台上的专辑 id（payload 原样字段）；无法提取时返回 null。
+///
+/// 仅内置五平台有稳定专辑 id：wy/kg/kw/mg 读 `albumId`，tx 读 `albumMid`
+/// （缺省回退 `albumId`）。与 [platformTrackPageUrl] 同一口径：只读 payload
+/// 的稳定平台字段，不做猜测。
+String? platformAlbumId(Track track) {
+  String payloadString(String key) => track.payload[key]?.toString() ?? '';
+  switch (track.id.sourceKey) {
+    case 'wy':
+    case 'kg':
+    case 'kw':
+    case 'mg':
+      final id = payloadString('albumId');
+      return id.isEmpty ? null : id;
+    case 'tx':
+      final mid = payloadString('albumMid');
+      final id = mid.isEmpty ? payloadString('albumId') : mid;
+      return id.isEmpty ? null : id;
+    default:
+      return null;
+  }
+}
+
+/// 打开专辑页（能力位由调用方先行判定，这里只做守卫与打开）。
+///
+/// [fallbackName] 默认取曲目自带的专辑名：加载完成前 / 平台未返回名称时
+/// 作为标题回退。
+Future<void> openTrackAlbum(
+  BuildContext context, {
+  required Track track,
+  String? fallbackName,
+}) {
+  final albumId = platformAlbumId(track);
+  if (albumId == null) return Future.value();
+  return showAlbumPage(
+    context,
+    track.id.sourceKey,
+    albumId,
+    fallbackName: fallbackName ?? track.album,
+  );
 }
 
 /// 打开换源页（音频 / 歌词两个 tab 同一页面）。

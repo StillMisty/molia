@@ -882,6 +882,9 @@ class AppLocalizationsEn extends AppLocalizations {
   String get sortTooltip => 'Sort';
 
   @override
+  String get trackActionsTooltip => 'Track actions';
+
+  @override
   String get sortDefaultOrder => 'Default order';
 
   @override
@@ -1109,6 +1112,17 @@ class AppLocalizationsEn extends AppLocalizations {
   }
 
   @override
+  String get albumEmpty => 'No tracks in this album';
+
+  @override
+  String get albumLoadFailed => 'Failed to load album';
+
+  @override
+  String albumYear(int year) {
+    return '$year';
+  }
+
+  @override
   String get settingsAppTitle => 'App name';
 
   @override
@@ -1129,6 +1143,32 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get libraryHistory => 'Play History';
+
+  @override
+  String get libraryLocalSongs => 'Local tracks';
+
+  @override
+  String get libraryImportLocalSongs => 'Import local tracks';
+
+  @override
+  String libraryImportLocalSongsDone(int count) {
+    return 'Imported $count tracks';
+  }
+
+  @override
+  String libraryImportLocalSongsSkipped(int imported, int skipped) {
+    return 'Imported $imported tracks, $skipped skipped';
+  }
+
+  @override
+  String get localSongsEmpty => 'No local tracks yet';
+
+  @override
+  String get localSongsRemove => 'Remove from list';
+
+  @override
+  String get localSongsRemoveConfirm =>
+      'Removes the entry only; the original file is kept.';
 
   @override
   String get libraryListEnd => '— End —';
@@ -2622,6 +2662,10 @@ class AppLocalizationsEn extends AppLocalizations {
       'Delete the local copy? Audio, lyrics and cover files will be removed.';
 
   @override
+  String get downloadDeleteConfirmMixed =>
+      'Delete the local copies? Audio, lyrics and cover files will be removed; imported local tracks are only removed from the list.';
+
+  @override
   String get downloadShare => 'Share / export';
 
   @override
@@ -2663,9 +2707,6 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get downloadSourceLocal => 'Local download';
-
-  @override
-  String get downloadsTitle => 'Downloads';
 
   @override
   String get downloadsManageTitle => 'Downloads';
@@ -2734,9 +2775,6 @@ class AppLocalizationsEn extends AppLocalizations {
   }
 
   @override
-  String get downloadsOpenLibrary => 'Downloaded tracks';
-
-  @override
   String get downloadsBatchPlaylist => 'Download a playlist';
 
   @override
@@ -2776,15 +2814,6 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get downloadsEmpty => 'No downloaded tracks yet';
-
-  @override
-  String downloadsSummary(int count, String size) {
-    return '$count tracks · $size';
-  }
-
-  @override
-  String get downloadsUnsupported =>
-      'Downloads are not supported on this platform';
 
   @override
   String get sleepTimerTitle => 'Sleep timer';
