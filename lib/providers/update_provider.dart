@@ -104,6 +104,9 @@ class UpdateProvider extends ChangeNotifier {
   UpdatePlatformInfo? _platform;
   String? _downloadedPath;
   String? _downloadedKind;
+
+  /// 已下载安装包对应的发布：检查结果换版本后必须作废，避免把旧包当新包安装。
+  AppRelease? _downloadedRelease;
   CancelToken? _cancelToken;
   DateTime? _lastProgressEmit;
   DateTime? _downloadStartedAt;
@@ -154,8 +157,9 @@ class UpdateProvider extends ChangeNotifier {
     return platform != null && platform != 'web' && platform != 'ios';
   }
 
-  /// 是否已有下载好的安装包（授权后可直接重试安装）。
-  bool get hasDownloadedPackage => _downloadedPath != null;
+  /// 是否已有「与当前清单一致」的下载包（授权后可直接重试安装）。
+  bool get hasDownloadedPackage =>
+      _downloadedPath != null && _sameAsDownloaded(_release);
 
   Future<void> init() async {
     await _preferences.load();
@@ -184,6 +188,7 @@ class UpdateProvider extends ChangeNotifier {
         _status == UpdateStatus.downloading) {
       return;
     }
+    final previousFailure = _failure;
     _failure = null;
     _setStatus(UpdateStatus.checking);
     try {
@@ -192,11 +197,28 @@ class UpdateProvider extends ChangeNotifier {
         currentVersion: _currentVersion,
         currentBuild: _currentBuild,
       );
+      // 已下载的安装包只在「还是同一发布」时保留：换版本后旧包作废，
+      // 否则会把上一次下载的版本当成当前可安装版本展示/安装。
+      final sameAsDownloaded = _sameAsDownloaded(result.release);
+      if (_downloadedPath != null && !sameAsDownloaded) {
+        _clearDownloaded();
+      }
       _release = result.release;
       await _preferences.markChecked(_now());
-      _setStatus(
-        result.available ? UpdateStatus.available : UpdateStatus.upToDate,
-      );
+      if (!result.available) {
+        _failure = null;
+        _setStatus(UpdateStatus.upToDate);
+      } else if (sameAsDownloaded) {
+        // 同一发布的包已就绪：保留 downloaded 态（含「待授权」失败态），
+        // 不因一次检查回退成「下载并安装」。
+        _failure = previousFailure == UpdateFailureKind.permission
+            ? previousFailure
+            : null;
+        _setStatus(UpdateStatus.downloaded);
+      } else {
+        _failure = null;
+        _setStatus(UpdateStatus.available);
+      }
     } on UpdateFailureException catch (e) {
       _logger.info('检查更新失败: $e');
       if (silent) {
@@ -225,6 +247,18 @@ class UpdateProvider extends ChangeNotifier {
     if (_release == null || _platform == null) return;
     if (_status == UpdateStatus.downloading) return;
 
+    // 先确认安装权限再下载：Android 没有「安装未知应用」权限时，下完再被
+    // 系统安装器拦下会白等十几 MB。
+    if (!await _service.canInstallPackages()) {
+      _failure = UpdateFailureKind.permission;
+      _setStatus(
+        _downloadedPath != null
+            ? UpdateStatus.downloaded
+            : UpdateStatus.available,
+      );
+      return;
+    }
+
     _failure = null;
     _setStatus(UpdateStatus.downloading);
     _resetProgress();
@@ -244,6 +278,7 @@ class UpdateProvider extends ChangeNotifier {
         platform: _platform!.platform,
         arch: _platform!.arch,
       )?.kind;
+      _downloadedRelease = _release;
       _setStatus(UpdateStatus.downloaded);
       await installDownloaded();
     } on UpdateFailureException catch (e) {
@@ -326,6 +361,29 @@ class UpdateProvider extends ChangeNotifier {
   Future<void> openInstallPermissionSettings() =>
       _service.openInstallPermissionSettings();
 
+  /// App 回到前台时的更新态复查（组合根在 onResume 调用）。
+  ///
+  /// - 系统安装器被用户取消：状态停在 installing 但没有真的安装 → 回到
+  ///   「安装包已就绪」，允许重试；
+  /// - 从「安装未知应用」授权页返回：复查权限，把「去授权」切回可安装/可下载态。
+  Future<void> handleAppResumed() async {
+    if (_status == UpdateStatus.installing && _downloadedPath != null) {
+      _setStatus(UpdateStatus.downloaded);
+    }
+    if (_failure != UpdateFailureKind.permission) return;
+    if (!await _service.canInstallPackages()) return;
+    _failure = null;
+    if (_release == null) {
+      _setStatus(UpdateStatus.idle);
+    } else {
+      _setStatus(
+        _downloadedPath != null
+            ? UpdateStatus.downloaded
+            : UpdateStatus.available,
+      );
+    }
+  }
+
   /// Web 的「刷新以更新」。
   Future<void> reloadPage() => _service.reloadPage();
 
@@ -338,9 +396,10 @@ class UpdateProvider extends ChangeNotifier {
   Future<void> setChannel(UpdateChannel value) async {
     if (_preferences.channel == value) return;
     await _preferences.setChannel(value);
-    // 渠道切换后旧结果作废（新渠道可能没有更新或版本更旧）。
+    // 渠道切换后旧结果与旧安装包都作废（新渠道可能没有更新或版本更旧）。
     _release = null;
     _failure = null;
+    _clearDownloaded();
     _setStatus(UpdateStatus.idle);
     notifyListeners();
   }
@@ -355,6 +414,21 @@ class UpdateProvider extends ChangeNotifier {
     if (_preferences.downloadPrefix == value.trim()) return;
     await _preferences.setDownloadPrefix(value);
     notifyListeners();
+  }
+
+  /// 清单里的发布是否与已下载安装包同源（版本 + 构建号一致）。
+  bool _sameAsDownloaded(AppRelease? release) {
+    final downloaded = _downloadedRelease;
+    if (release == null || downloaded == null) return false;
+    return downloaded.version == release.version &&
+        downloaded.build == release.build;
+  }
+
+  /// 作废已下载的安装包状态（文件留待下次下载时统一清理）。
+  void _clearDownloaded() {
+    _downloadedPath = null;
+    _downloadedKind = null;
+    _downloadedRelease = null;
   }
 
   void _onProgress(int received, int total) {

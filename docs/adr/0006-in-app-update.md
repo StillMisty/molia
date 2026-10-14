@@ -64,6 +64,9 @@
    （idle/checking/upToDate/available/downloading/downloaded/installing/error），
    下载进度走独立 `ValueListenable`（不进 notifyListeners，仓库约定）；
    错误归类为 `UpdateFailureKind` 映射 l10n 文案，不展示原始异常。
+   已下载安装包与「哪个发布」绑定：检查结果换版本/切换渠道即作废，避免把
+   旧包当新包安装；Android 先确认「安装未知应用」权限再下载，App 回前台
+   （`handleAppResumed`）复查权限与安装器取消后的重试态。
 7. **自动检查默认关闭、每天最多一次**：更新属于低频且桌面端会替换文件，
    默认静默反而有打扰/风险；开启后启动静默检查，失败不进入错误态。
    偏好（渠道 / 自动检查 / 清单地址覆盖 / 镜像前缀）是设备本地项，

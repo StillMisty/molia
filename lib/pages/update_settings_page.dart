@@ -36,8 +36,11 @@ class UpdateSettingsPage extends StatelessWidget {
               padding: const EdgeInsets.all(kSettingsPadding),
               children: [
                 _UpdateSection(provider: provider, l10n: l10n),
+                // 检查中不展示上一次的结果：否则会把上一次下载过的版本
+                // 当成当前可安装版本显示（状态未对齐的观感 bug）。
                 if (provider.release != null &&
-                    provider.status != UpdateStatus.upToDate) ...[
+                    provider.status != UpdateStatus.upToDate &&
+                    provider.status != UpdateStatus.checking) ...[
                   const SizedBox(height: kSettingsSectionSpacing),
                   _ReleaseSection(provider: provider, l10n: l10n),
                 ],
