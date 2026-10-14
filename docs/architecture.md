@@ -498,10 +498,15 @@
   曲目级操作的打开编排（能力位、守卫、换源页 tab）唯一实现在
   `lib/widgets/track_actions.dart`；单曲缓存清理在 `lib/pages/track_cache_page.dart`
   （逐项确认），缓存内容变更经 `CacheService.revision` 跨页刷新占用。
-- 列表行统一走 `lib/widgets/track_row.dart`（队列/收藏/历史/本地歌曲/发现共用）：形状按 M3E 列表规范
+- 列表行统一走 `lib/widgets/track_row.dart`（队列/收藏/历史/本地歌曲/发现/搜索结果共用）：形状按 M3E 列表规范
   （静止内 4dp、首末外侧 16dp；hover 12dp；press/选中 16dp），带 expressive spatial 弹簧
   morph；分段列表用 `cardList.gap`（2dp）行距、`itemExtent = TrackRow.extent + gap`，
   列表一律懒构建（发现详情滚到底自动加载下一页）。不要改回 `M3EListItem`（原因见 pitfalls #20）。
+- 曲目行尾的 ⋮ 菜单统一走 `lib/widgets/track_actions_menu.dart`（发现详情 / 搜索结果 /
+  AI 推歌共用）：锚点固定 standard 图标按钮 + tooltip，条目一律「leading 图标 + 文案」，
+  收藏这类开关态用图标 + 文案表达（选中即关菜单，不留勾选态）。行本体（收藏 / 加入列表
+  两条动作 + 领域接线）见 `lib/widgets/track_menu_tile.dart`，发现详情与搜索结果共用，
+  领域状态由调用方 `select` 后传入。
 - 已知保留（无法等价替换）：带 `bottom:` 槽的 AppBar（2 处）、`_showCenterDialog`、
   `ScaffoldMessenger` 兼容代码。
 

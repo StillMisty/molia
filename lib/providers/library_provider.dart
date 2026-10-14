@@ -571,6 +571,18 @@ class LibraryProvider extends ChangeNotifier {
   Future<bool> addSourceTrackToPlaylist(int playlistId, SourceTrack track) {
     return _repository.addTrackToPlaylist(
       playlistId,
+      playlistTrackOfSourceTrack(track, playlistId: playlistId),
+    );
+  }
+
+  /// 音源曲目 → 列表项（加入列表 / 写入列表的唯一规范化处）。
+  ///
+  /// UI 层拿不到 `SourceTrack` 类型（分层约束禁止 widgets import `lib/sources/**`），
+  /// 搜索结果等入口经 [playlistTrackFromSearchItem] 走同一实现。
+  PlaylistTrack playlistTrackOfSourceTrack(
+    SourceTrack track, {
+    int playlistId = 0,
+  }) =>
       PlaylistTrack(
         playlistId: playlistId,
         sourceKey: track.sourceKey,
@@ -582,8 +594,13 @@ class LibraryProvider extends ChangeNotifier {
         durationMs: track.duration?.inMilliseconds,
         raw: track.raw,
         addedAt: DateTime.now().millisecondsSinceEpoch,
-      ),
-    );
+      );
+
+  /// 搜索结果项 → 列表项（`_sourceTrack` 无法识别时返回 null，调用方忽略）。
+  PlaylistTrack? playlistTrackFromSearchItem(Map<String, dynamic> item) {
+    final sourceTrack = item['_sourceTrack'];
+    if (sourceTrack is! SourceTrack) return null;
+    return playlistTrackOfSourceTrack(sourceTrack);
   }
 
   /// 搜索结果项收藏切换（item map 由 SearchProvider 生成，含 `_sourceTrack`）。

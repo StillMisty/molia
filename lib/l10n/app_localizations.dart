@@ -1580,6 +1580,12 @@ abstract class AppLocalizations {
   /// **'Sort'**
   String get sortTooltip;
 
+  /// No description provided for @trackActionsTooltip.
+  ///
+  /// In en, this message translates to:
+  /// **'Track actions'**
+  String get trackActionsTooltip;
+
   /// No description provided for @sortDefaultOrder.
   ///
   /// In en, this message translates to:

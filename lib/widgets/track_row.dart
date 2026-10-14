@@ -3,7 +3,7 @@ import 'package:material_ui/material_ui.dart';
 import 'card_list_surface.dart';
 import 'library_cover.dart';
 
-/// 固定行高的曲目行（队列 / 收藏 / 历史 / 发现页共用）。
+/// 固定行高的曲目行（队列 / 收藏 / 历史 / 发现详情 / 搜索结果共用）。
 ///
 /// 行高固定为 [extent]（标题/歌手都单行省略），列表可以传 `itemExtent`
 /// 预取高度（分段列表再加 [gapOf] 行距），滚动条拇指尺寸与拖动定位精确。

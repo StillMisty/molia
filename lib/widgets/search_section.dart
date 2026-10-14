@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/services.dart';
 import 'package:material_3_expressive/material_3_expressive.dart';
 import 'package:material_ui/material_ui.dart';
@@ -6,15 +8,22 @@ import 'package:provider/provider.dart';
 import '../l10n/app_localizations.dart';
 import '../providers/library_provider.dart';
 import '../providers/search_provider.dart';
+import '../utils/duration_text.dart';
 import '../utils/responsive.dart';
-import 'app_network_image.dart';
-import 'molia_mark.dart';
+import 'add_to_library.dart';
+import 'track_menu_tile.dart';
+import 'track_row.dart';
 
 /// AppLocalizations 查找：测试等场景可能直接挂载本页而不注册 delegate，
 /// 此时回退到简体中文，保证与中文正式环境文案一致（正式 App 恒有 delegate）。
 AppLocalizations _l10n(BuildContext context) =>
     AppLocalizations.of(context) ?? lookupAppLocalizations(const Locale('zh'));
 
+/// 搜索结果区：与收藏页同形的曲目列表 + 音源分页。
+///
+/// 结果行与发现详情页共用 [TrackMenuTile]（点击播放；行尾菜单收藏 / 加入
+/// 列表），本组件只做搜索域接线。当前音源搜索只产出曲目，因此行形态固定；
+/// 若将来回归专辑 / 歌单结果，需要按类型另做行形态。
 class SearchSection extends StatefulWidget {
   const SearchSection({super.key});
 
@@ -42,13 +51,8 @@ class _SearchSectionState extends State<SearchSection> {
     return Consumer<SearchProvider>(
       builder: (context, searchProvider, child) {
         final l10n = _l10n(context);
-        final browseLayout = context.layoutType(ResponsivePageType.browse);
-        final gridCrossAxisCount = context.adaptiveColumns(
-          minTileWidth: browseLayout.defaultMinTileWidth,
-          min: 3,
-          max: 6,
-        );
-        final horizontalPadding = browseLayout.horizontalPadding;
+        final horizontalPadding =
+            context.layoutType(ResponsivePageType.browse).horizontalPadding;
         final results = searchProvider.filteredResults;
         final error = searchProvider.errorMessage;
 
@@ -65,7 +69,6 @@ class _SearchSectionState extends State<SearchSection> {
 
             if (error != null) _buildErrorView(l10n, searchProvider),
 
-            // 搜索结果：用 CustomScrollView 承载（便于后续接入 sliver）
             Expanded(
               child: Scrollbar(
                 controller: _resultsScrollController,
@@ -85,9 +88,8 @@ class _SearchSectionState extends State<SearchSection> {
                       SliverPadding(
                         padding: EdgeInsets.symmetric(
                             horizontal: horizontalPadding),
-                        sliver: _SearchResultsGrid(
+                        sliver: _SearchResultsList(
                           items: results,
-                          gridCrossAxisCount: gridCrossAxisCount,
                           onItemTap: (item) => searchProvider.playItem(item),
                         ),
                       ),
@@ -243,15 +245,13 @@ class _SearchSectionState extends State<SearchSection> {
   }
 }
 
-/// 搜索结果网格：展示封面/名称/类型，点击交给 SearchProvider 播放。
-class _SearchResultsGrid extends StatelessWidget {
+/// 搜索结果列表：固定行高（收藏页同款 [TrackRow] 行），懒构建。
+class _SearchResultsList extends StatelessWidget {
   final List<Map<String, dynamic>> items;
-  final int gridCrossAxisCount;
   final void Function(Map<String, dynamic>)? onItemTap;
 
-  const _SearchResultsGrid({
+  const _SearchResultsList({
     required this.items,
-    required this.gridCrossAxisCount,
     this.onItemTap,
   });
 
@@ -263,153 +263,115 @@ class _SearchResultsGrid extends StatelessWidget {
         child: Center(
           child: Padding(
             padding: const EdgeInsets.all(16),
-            child: Text(AppLocalizations.of(context)!.noItemsFound),
+            child: Text(_l10n(context).noItemsFound),
           ),
         ),
       );
     }
 
-    return SliverGrid(
-      delegate: SliverChildBuilderDelegate(
-        (context, index) {
-          final item = items[index];
-          return _SearchResultItem(
+    final gap = TrackRow.gapOf(context);
+    return SliverFixedExtentList.builder(
+      // 行高 + 行距：固定 extent，长列表滚动条拖动一次定位。
+      itemExtent: TrackRow.extent + gap,
+      itemCount: items.length,
+      itemBuilder: (context, index) {
+        final item = items[index];
+        return Padding(
+          padding: EdgeInsets.only(bottom: gap),
+          child: _SearchResultTile(
             key: ValueKey(item['id']),
             item: item,
-            onTap: onItemTap != null ? () => onItemTap!(item) : null,
-          );
-        },
-        childCount: items.length,
-      ),
-      gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-        crossAxisCount: gridCrossAxisCount,
-        childAspectRatio: 0.75,
-        crossAxisSpacing: 16,
-        mainAxisSpacing: 16,
-      ),
+            index: index,
+            count: items.length,
+            onTap: onItemTap == null ? null : () => onItemTap!(item),
+          ),
+        );
+      },
     );
   }
 }
 
-class _SearchResultItem extends StatelessWidget {
-  final Map<String, dynamic> item;
-  final VoidCallback? onTap;
-
-  const _SearchResultItem({
+/// 搜索结果行（[TrackMenuTile] 的搜索域适配层）：
+/// 点击播放；行尾菜单收藏 / 加入列表（菜单形状与发现详情页一致）。
+class _SearchResultTile extends StatelessWidget {
+  const _SearchResultTile({
     super.key,
     required this.item,
+    required this.index,
+    required this.count,
     required this.onTap,
   });
 
+  final Map<String, dynamic> item;
+  final int index;
+  final int count;
+  final VoidCallback? onTap;
+
   @override
   Widget build(BuildContext context) {
-    final library = context.watch<LibraryProvider?>();
-    final favorite = library?.isFavoriteSearchItem(item) ?? false;
     final l10n = _l10n(context);
-
-    // 长按结果项弹出菜单（收藏/取消收藏）；锚点即结果项本身。
-    return M3EMenu.entries(
-      position: M3EMenuAnchorPosition.bottomEnd,
-      anchorBuilder: (context, open) => GestureDetector(
-        key: key,
-        onTap: onTap == null
-            ? null
-            : () {
-                HapticFeedback.lightImpact();
-                onTap!();
-              },
-        onLongPress: () {
-          HapticFeedback.lightImpact();
-          open();
-        },
-        child: _buildTile(context),
-      ),
-      onSelected: (value) async {
-        if (value != 'favorite' || library == null) return;
-        final result = await library.toggleFavoriteSearchItem(item);
-        if (result == null || !context.mounted) return;
-        M3ESnackbar.show(
-          context,
-          message: result ? l10n.favoriteAdd : l10n.favoriteRemove,
-        );
-      },
-      entries: [
-        M3EMenuEntry(
-          label: favorite ? l10n.favoriteRemove : l10n.favoriteAdd,
-          value: 'favorite',
-        ),
-      ],
+    // 只订阅本行的收藏态：长列表不因 provider 任意通知整表重建。
+    final favorite = context.select<LibraryProvider?, bool>(
+      (provider) => provider?.isFavoriteSearchItem(item) ?? false,
+    );
+    return TrackMenuTile(
+      title: item['name']?.toString() ?? '',
+      artist: _artistOf(item),
+      coverUrl: _coverUrlOf(item),
+      trailingText: durationText(_durationMsOf(item)),
+      position: calculateCardPosition(index, count),
+      onTap: onTap == null
+          ? null
+          : () {
+              HapticFeedback.lightImpact();
+              onTap!();
+            },
+      favorite: favorite,
+      onToggleFavorite: () => unawaited(_toggleFavorite(context, l10n)),
+      onAddToPlaylist: () => unawaited(_addToPlaylist(context)),
     );
   }
 
-  Widget _buildTile(BuildContext context) {
-    return Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Expanded(
-            child: AspectRatio(
-              aspectRatio: 1,
-              child: ClipRRect(
-                borderRadius: BorderRadius.circular(12),
-                child: LayoutBuilder(
-                  builder: (context, constraints) {
-                    final pixelRatio = MediaQuery.of(context).devicePixelRatio;
-                    final cacheSize = constraints.maxWidth > 0
-                        ? (constraints.maxWidth * pixelRatio).round()
-                        : null;
-                    final imageUrl = _imageUrlOf(item);
-                    if (imageUrl == null) {
-                      return DecoratedBox(
-                        decoration: BoxDecoration(
-                          color: Theme.of(context)
-                              .colorScheme
-                              .surfaceContainerHighest,
-                        ),
-                        child: const Center(
-                          child: MoliaMark(size: 40),
-                        ),
-                      );
-                    }
-                    return AppNetworkImage(
-                      url: imageUrl,
-                      width: double.infinity,
-                      memCacheWidth: cacheSize,
-                      memCacheHeight: cacheSize,
-                      fit: BoxFit.cover,
-                      fallbackColor: Theme.of(context)
-                          .colorScheme
-                          .surfaceContainerHighest,
-                      fallbackIconSize: 40,
-                    );
-                  },
-                ),
-              ),
-            ),
-          ),
-          const SizedBox(height: 4),
-          Text(
-            item['name']?.toString() ?? '',
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            // 结果标题是正文内容，不用强调色（强调色只留给交互/选中）。
-            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                  color: Theme.of(context).colorScheme.onSurface,
-                  fontWeight: FontWeight.w500,
-                ),
-          ),
-          Text(
-            _getItemSubtitle(context, item),
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                  color: Theme.of(context).colorScheme.onSurfaceVariant,
-                ),
-          ),
-      ],
+  /// 收藏 / 取消收藏：结果列表只需 snackbar 确认（菜单文案已表达当前状态）。
+  Future<void> _toggleFavorite(
+    BuildContext context,
+    AppLocalizations l10n,
+  ) async {
+    final library = context.read<LibraryProvider?>();
+    if (library == null) return;
+    final favorite = await library.toggleFavoriteSearchItem(item);
+    if (favorite == null || !context.mounted) return;
+    M3ESnackbar.show(
+      context,
+      message: favorite ? l10n.favoriteAdd : l10n.favoriteRemove,
     );
   }
 
-  String? _imageUrlOf(Map<String, dynamic> item) {
+  /// 加入列表：与收藏页 / 发现页共用同一目标选择与反馈流程。
+  Future<void> _addToPlaylist(BuildContext context) async {
+    final library = context.read<LibraryProvider?>();
+    if (library == null) return;
+    final track = library.playlistTrackFromSearchItem(item);
+    if (track == null) return;
+    await addTracksToLibraryTarget(
+      context,
+      provider: library,
+      tracks: [track],
+    );
+  }
+
+  /// 首位艺术家；无艺术家信息返回空串（[TrackRow] 据此隐藏副标题行）。
+  String _artistOf(Map<String, dynamic> item) {
+    final artists = item['artists'];
+    if (artists is List && artists.isNotEmpty && artists[0] is Map) {
+      final name = artists[0]['name'];
+      if (name is String) return name;
+    }
+    return '';
+  }
+
+  /// 封面地址：曲目图优先，其次专辑图（与旧的网格卡片同一取法）。
+  String? _coverUrlOf(Map<String, dynamic> item) {
     final images = item['images'];
     if (images is List && images.isNotEmpty && images[0] is Map) {
       final url = images[0]['url'];
@@ -428,24 +390,11 @@ class _SearchResultItem extends StatelessWidget {
     return null;
   }
 
-  String _getItemSubtitle(BuildContext context, Map<String, dynamic> item) {
-    switch (item['type']) {
-      case 'playlist':
-        return AppLocalizations.of(context)!.playlistType;
-      case 'album':
-        if (item['artists'] != null && item['artists'].isNotEmpty) {
-          return '${AppLocalizations.of(context)!.albumType} • ${item['artists'][0]['name']}';
-        }
-        return AppLocalizations.of(context)!.albumType;
-      case 'track':
-        if (item['artists'] != null && item['artists'].isNotEmpty) {
-          return '${AppLocalizations.of(context)!.songType} • ${item['artists'][0]['name']}';
-        }
-        return AppLocalizations.of(context)!.songType;
-      case 'artist':
-        return AppLocalizations.of(context)!.artistType;
-      default:
-        return item['type']?.toString() ?? '';
-    }
+  /// 时长（毫秒）；缺失 / 非法时返回 null（行尾不占位）。
+  int? _durationMsOf(Map<String, dynamic> item) {
+    final value = item['duration_ms'];
+    if (value is int) return value;
+    if (value is num) return value.toInt();
+    return null;
   }
 }
