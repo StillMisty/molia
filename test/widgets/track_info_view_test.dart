@@ -360,4 +360,18 @@ void main() {
     expect(find.text('已下载'), findsOneWidget);
     expect(find.text('2 KB'), findsOneWidget);
   });
+
+  testWidgets('本地曲目：下载记录已删时提示文件缺失（不显示下载动作）', (tester) async {
+    const localTrack = Track(
+      id: TrackId('local', 'kw:a'),
+      title: '本地歌曲',
+      origin: TrackOrigin.localFile,
+      payload: {'path': '/downloads/a.mp3', 'songId': 'kw:a'},
+    );
+    await pumpView(tester, track: localTrack, downloads: downloadService);
+    await scrollToBottom(tester);
+
+    expect(find.text('本地文件不存在，可能已被删除'), findsOneWidget);
+    expect(find.byKey(const Key('trackInfoDownloadStart')), findsNothing);
+  });
 }

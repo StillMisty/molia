@@ -412,6 +412,18 @@ class _TrackInfoViewState extends State<TrackInfoView> {
         ),
       ];
     }
+    // 本地曲目但下载记录已删（例如从「已下载」页删除后仍在收藏里）：
+    // 文件已不在，不提供无意义的「下载」动作，明确提示缺失。
+    if (track.id.sourceKey == kLocalSourceKey) {
+      return [
+        SettingsInfoTile(
+          key: const Key('trackInfoDownloadStatus'),
+          icon: Icons.error_outline_rounded,
+          title: l10n.downloadSourceLocal,
+          subtitle: l10n.downloadFileMissing,
+        ),
+      ];
+    }
     if (progress != null) {
       final percent = progress.percent;
       return [
