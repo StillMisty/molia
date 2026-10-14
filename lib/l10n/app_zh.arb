@@ -247,6 +247,7 @@
   "favoritesSwitchTitle": "切换收藏夹",
   "shufflePlay": "随机播放",
   "sortTooltip": "排序",
+  "trackActionsTooltip": "曲目操作",
   "sortDefaultOrder": "默认顺序",
   "sortByTitle": "按标题",
   "sortByArtist": "按艺术家",

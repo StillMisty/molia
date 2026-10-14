@@ -9,6 +9,7 @@ import '../providers/library_provider.dart';
 import 'card_list_surface.dart';
 import 'icon_swap.dart';
 import 'library_cover.dart';
+import 'track_actions_menu.dart';
 
 /// AI 推荐卡（「今日推荐」列表项）：封面 + 歌名/歌手 + AI 理由 + 行内操作。
 ///
@@ -125,16 +126,10 @@ class AiDjTrackTile extends StatelessWidget {
             ),
           ),
           _FavoriteAction(track: track, enabled: !busy),
-          M3EMenu.entries(
-            position: M3EMenuAnchorPosition.bottomEnd,
-            anchorBuilder: (context, open) => M3EIconButton(
-              variant: M3EIconButtonVariant.standard,
-              size: M3EIconButtonSize.sm,
-              visualSize: const Size(40, 40),
-              icon: const Icon(Icons.more_vert_rounded),
-              tooltip: l10n.aiDjItemActions,
-              onPressed: busy ? null : open,
-            ),
+          TrackActionsMenu(
+            compact: true,
+            enabled: !busy,
+            tooltip: l10n.aiDjItemActions,
             onSelected: (value) {
               switch (value) {
                 case 'replace':
@@ -144,9 +139,14 @@ class AiDjTrackTile extends StatelessWidget {
               }
             },
             entries: [
-              M3EMenuEntry(label: l10n.aiDjReplaceItem, value: 'replace'),
+              M3EMenuEntry(
+                label: l10n.aiDjReplaceItem,
+                leading: const Icon(Icons.refresh_rounded),
+                value: 'replace',
+              ),
               M3EMenuEntry(
                 label: l10n.aiDjNotInterested,
+                leading: const Icon(Icons.visibility_off_rounded),
                 value: 'notInterested',
               ),
             ],

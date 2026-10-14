@@ -3,14 +3,10 @@ import 'package:material_ui/material_ui.dart';
 import 'package:provider/provider.dart';
 
 import '../domain/models/discover.dart';
-import '../l10n/app_localizations.dart';
 import '../providers/discover_provider.dart';
 import '../providers/library_provider.dart';
 import 'add_to_library.dart';
-import 'track_row.dart';
-
-AppLocalizations _l10n(BuildContext context) =>
-    AppLocalizations.of(context) ?? lookupAppLocalizations(const Locale('zh'));
+import 'track_menu_tile.dart';
 
 /// 收藏 / 取消收藏：图标态本身即反馈，不弹提示。
 Future<void> toggleDiscoverFavorite(
@@ -35,10 +31,10 @@ Future<void> addDiscoverTrackToPlaylist(
   );
 }
 
-/// 发现曲目行：点击播放；菜单支持收藏 / 加入列表。
+/// 发现曲目行：点击播放；菜单支持收藏 / 加入列表（[TrackMenuTile] 的
+/// 发现域适配层：只把 DiscoverProvider 的状态与写入流程接上去）。
 ///
-/// 表面走统一的 [TrackRow]（形状/交互与队列、收藏一致）；只订阅本行的
-/// 收藏态（`select`），避免曲目长列表因 provider 任意通知整表重建。
+/// 只订阅本行的收藏态（`select`），避免曲目长列表因 provider 任意通知整表重建。
 class DiscoverTrackTile extends StatelessWidget {
   final DiscoverTrack track;
 
@@ -56,42 +52,18 @@ class DiscoverTrackTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final l10n = _l10n(context);
     final favorite = context.select<DiscoverProvider, bool>(
       (provider) => provider.isFavorite(track),
     );
-    return TrackRow(
+    return TrackMenuTile(
       title: track.title,
       artist: track.artist,
       coverUrl: track.coverUrl,
       position: position,
       onTap: onTap,
-      trailing: M3EMenu.entries(
-        position: M3EMenuAnchorPosition.bottomEnd,
-        anchorBuilder: (context, open) => M3EIconButton(
-          variant: M3EIconButtonVariant.standard,
-          icon: Icon(Icons.more_vert_rounded),
-          onPressed: open,
-        ),
-        onSelected: (value) {
-          switch (value) {
-            case 'favorite':
-              toggleDiscoverFavorite(context, track);
-            case 'add':
-              addDiscoverTrackToPlaylist(context, track);
-          }
-        },
-        entries: [
-          M3EMenuEntry(
-            label: favorite ? l10n.favoriteRemove : l10n.favoriteAdd,
-            value: 'favorite',
-          ),
-          M3EMenuEntry(
-            label: l10n.addToPlaylist,
-            value: 'add',
-          ),
-        ],
-      ),
+      favorite: favorite,
+      onToggleFavorite: () => toggleDiscoverFavorite(context, track),
+      onAddToPlaylist: () => addDiscoverTrackToPlaylist(context, track),
     );
   }
 }

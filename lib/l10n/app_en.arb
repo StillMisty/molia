@@ -390,6 +390,7 @@
   "favoritesSwitchTitle": "Switch collection",
   "shufflePlay": "Shuffle",
   "sortTooltip": "Sort",
+  "trackActionsTooltip": "Track actions",
   "sortDefaultOrder": "Default order",
   "sortByTitle": "Title",
   "sortByArtist": "Artist",

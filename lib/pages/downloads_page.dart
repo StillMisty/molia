@@ -18,6 +18,7 @@ import '../domain/models/download.dart';
 import '../l10n/app_localizations.dart';
 import '../providers/library_provider.dart';
 import '../services/download/download_service.dart';
+import '../utils/duration_text.dart';
 import '../utils/responsive.dart';
 import '../widgets/add_to_library.dart';
 import '../widgets/swipe_reveal_row.dart';
@@ -133,7 +134,7 @@ class DownloadsPage extends StatelessWidget {
       title: record.title,
       artist: record.artist,
       coverUrl: record.artworkUri?.toString(),
-      trailingText: _durationText(record.durationMs),
+      trailingText: durationText(record.durationMs),
       position: calculateCardPosition(index, downloads.length),
       onTap: () => _play(context, l10n, downloads, index),
     );
@@ -280,14 +281,6 @@ class DownloadsPage extends StatelessWidget {
         ),
       ),
     );
-  }
-
-  /// 毫秒 → `m:ss`；未知/非法时长返回 null（不占行尾）。
-  static String? _durationText(int? milliseconds) {
-    if (milliseconds == null || milliseconds <= 0) return null;
-    final duration = Duration(milliseconds: milliseconds);
-    final seconds = (duration.inSeconds % 60).toString().padLeft(2, '0');
-    return '${duration.inMinutes}:$seconds';
   }
 
   static String _formatSize(int bytes) {

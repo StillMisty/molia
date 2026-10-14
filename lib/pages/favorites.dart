@@ -17,6 +17,7 @@ import '../providers/lyrics_provider.dart';
 import '../pages/downloads_page.dart';
 import '../pages/source_swap_page.dart';
 import '../services/download/download_service.dart';
+import '../utils/duration_text.dart';
 import '../utils/responsive.dart';
 import '../widgets/add_to_library.dart';
 import '../widgets/add_to_playlist_sheet.dart' show showPlaylistNameDialog;
@@ -1340,7 +1341,7 @@ class _FavoritesPageState extends State<FavoritesPage> {
       title: track.title,
       artist: track.artist,
       coverUrl: track.coverUrl,
-      trailingText: _durationText(track.durationMs),
+      trailingText: durationText(track.durationMs),
       position: calculateCardPosition(index, view.visible.length),
       selected: _selection.isSelected(index),
       trailing: reorderActive
@@ -1370,14 +1371,6 @@ class _FavoritesPageState extends State<FavoritesPage> {
       padding: EdgeInsets.only(bottom: TrackRow.gapOf(context)),
       child: content,
     );
-  }
-
-  /// 毫秒 → `m:ss`；未知/非法时长返回 null（不占行尾）。
-  String? _durationText(int? milliseconds) {
-    if (milliseconds == null || milliseconds <= 0) return null;
-    final duration = Duration(milliseconds: milliseconds);
-    final seconds = (duration.inSeconds % 60).toString().padLeft(2, '0');
-    return '${duration.inMinutes}:$seconds';
   }
 
   /// 侧滑动作图标：长按/悬停弹出动作名（tooltip 同时承担无障碍语义；
@@ -1502,7 +1495,7 @@ class _FavoritesPageState extends State<FavoritesPage> {
             title: entry.title,
             artist: entry.artist,
             coverUrl: entry.coverUrl,
-            trailingText: _durationText(entry.durationMs),
+            trailingText: durationText(entry.durationMs),
             position: calculateCardPosition(index, view.visibleHistory.length),
             selected: _selection.isSelected(index),
             onTap: () {
