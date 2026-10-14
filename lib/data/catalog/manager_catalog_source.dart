@@ -1,4 +1,5 @@
 import '../../domain/models/catalog.dart';
+import '../../domain/models/comment.dart';
 import '../../domain/models/failure.dart';
 import '../../domain/models/source.dart';
 import '../../domain/models/track.dart';
@@ -103,6 +104,33 @@ class SourceManagerMusicSource implements MusicSource {
     if (url == null || url.isEmpty) return null;
     final uri = Uri.tryParse(url);
     return uri == null ? null : Artwork(uri: uri);
+  }
+
+  @override
+  Future<CommentPage> comments(
+    Track track, {
+    required CommentKind kind,
+    int page = 1,
+    int limit = 20,
+  }) async {
+    if (!capabilities.comment) {
+      // 无能力时明确抛 unsupported（与 collection 同一约定，不静默返回空页）。
+      throw SourceFailure(
+        kind: FailureKind.unsupported,
+        message: '音源 $key 不支持评论',
+      );
+    }
+    try {
+      return await _manager.fetchComments(
+        sourceTrackFromTrack(track),
+        kind: kind,
+        page: page,
+        limit: limit,
+      );
+    } catch (e) {
+      // 边界错误归一化（幂等：CommentsService 再包一层也不会重复包装）。
+      throw SourceFailure.from(e);
+    }
   }
 
   @override

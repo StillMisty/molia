@@ -4,6 +4,7 @@ import 'dart:io';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:molia/data/mapping/track_mapper.dart';
 import 'package:molia/domain/models/catalog.dart';
+import 'package:molia/domain/models/comment.dart';
 import 'package:molia/domain/models/failure.dart';
 import 'package:molia/domain/models/playback.dart';
 import 'package:molia/domain/models/source.dart';
@@ -298,6 +299,69 @@ void main() {
           capabilities: caps,
           order: 1,
         ),
+      );
+    });
+
+    test('SourceCapabilities.comment 参与相等性', () {
+      expect(
+        const SourceCapabilities(search: true, comment: true),
+        const SourceCapabilities(search: true, comment: true),
+      );
+      expect(
+        const SourceCapabilities(search: true, comment: true),
+        isNot(const SourceCapabilities(search: true)),
+      );
+    });
+
+    test('Comment / CommentPage 相等性（含引用与楼中楼）', () {
+      const quoted = Comment(id: 'q', text: '被引用');
+      const a = Comment(
+        id: '1',
+        text: '正文',
+        authorName: 'A',
+        likedCount: 2,
+        quoted: quoted,
+        replies: [quoted],
+      );
+      const b = Comment(
+        id: '1',
+        text: '正文',
+        authorName: 'A',
+        likedCount: 2,
+        quoted: quoted,
+        replies: [quoted],
+      );
+      expect(a, b);
+      expect(a.hashCode, b.hashCode);
+      expect(a.hasReplies, isTrue);
+      expect(a, isNot(const Comment(id: '1', text: '正文')));
+
+      final page = CommentPage.fromPage(
+        kind: CommentKind.hot,
+        items: const [a],
+        page: 1,
+        limit: 20,
+        total: 40,
+      );
+      final same = CommentPage.fromPage(
+        kind: CommentKind.hot,
+        items: const [b],
+        page: 1,
+        limit: 20,
+        total: 40,
+      );
+      expect(page, same);
+      expect(page.hasMore, isTrue);
+      expect(
+        page,
+        isNot(CommentPage.fromPage(
+          kind: CommentKind.latest,
+          items: const [a],
+          page: 1,
+          limit: 20,
+          total: 40,
+        )),
+        reason: '类型参与相等性',
       );
     });
   });

@@ -1,4 +1,5 @@
 import '../models/catalog.dart';
+import '../models/comment.dart';
 import '../models/source.dart';
 import '../models/track.dart';
 
@@ -77,6 +78,18 @@ abstract interface class MusicSource {
   /// 无能力或无结果返回 null。
   Future<LyricsDoc?> lyrics(Track track);
   Future<Artwork?> artwork(Track track);
+
+  /// 取曲目评论（热门 / 最新，分页）；仅 `capabilities.comment` 为 true 时调用。
+  ///
+  /// 无能力时抛 `SourceFailure(kind: unsupported)`；平台业务失败同样归一化为
+  /// [SourceFailure]（失败不缓存由 `CommentsService` 保证）。
+  Future<CommentPage> comments(
+    Track track, {
+    required CommentKind kind,
+    int page = 1,
+    int limit = 20,
+  });
+
   Future<CollectionPage> collection(CollectionRef ref,
       {int page = 1, int limit = 50});
 

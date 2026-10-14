@@ -11,6 +11,7 @@ import 'any_listen/any_listen_config.dart';
 import 'any_listen/any_listen_errors.dart';
 import 'any_listen/any_listen_source.dart';
 import 'builtin/builtin_search.dart';
+import 'builtin/comment_source.dart';
 import 'builtin/discover_source.dart';
 import 'builtin/kg_lyric.dart';
 import 'builtin/kg_pic.dart';
@@ -30,6 +31,8 @@ import 'lx/lx_search_parse.dart';
 import 'source_search_result.dart';
 import 'source_track.dart';
 import '../data/cache/request_cache.dart';
+import '../domain/models/comment.dart';
+import '../domain/models/failure.dart';
 import '../domain/models/source.dart';
 
 // UI（音源页）白名单仅允许直连 source_manager，这里把在线更新流程的
@@ -252,7 +255,7 @@ class SourceManager extends ChangeNotifier {
     final decl = _activeSources[key];
     // 内置平台（kw/kg/tx/wy/mg）的搜索/分页由 Dart 移植实现（BuiltinSearch），
     // 能力跟随「脚本可取链」；脚本声明的 canSearch 只描述脚本扩展源自身的
-    // 社区搜索 action（见 [_isBuiltinSearchable]）。
+    // 社区搜索 action（见 [_isBuiltinSearchable]）。评论同样只由内置实现提供。
     final builtin = BuiltinSearch.isBuiltin(key);
     final builtinSearchable = _isBuiltinSearchable(key);
     return SourceCapabilities(
@@ -261,6 +264,7 @@ class SourceManager extends ChangeNotifier {
       resolveUrl: decl?.canResolveUrl ?? false,
       lyrics: builtin || (decl?.canFetchLyric ?? false),
       artwork: builtin || (decl?.canFetchPic ?? false),
+      comment: BuiltinComments.isSupported(key),
     );
   }
 
@@ -617,6 +621,35 @@ class SourceManager extends ChangeNotifier {
       }
     }
     return _builtinLyric(track);
+  }
+
+  /// 获取曲目评论（内置五平台；脚本扩展源 / any-listen 无评论能力）。
+  ///
+  /// 失败统一归一化为 [SourceFailure]（业务拒绝 → unknown/retryable，
+  /// 传输失败 → network）；分页与缓存由 data 层 `CommentsService` 承担。
+  Future<CommentPage> fetchComments(
+    SourceTrack track, {
+    required CommentKind kind,
+    int page = 1,
+    int limit = kCommentPageSize,
+  }) async {
+    if (!BuiltinComments.isSupported(track.sourceKey)) {
+      throw SourceFailure(
+        kind: FailureKind.unsupported,
+        message: '音源 ${track.sourceKey} 不支持评论',
+      );
+    }
+    try {
+      return await BuiltinComments.fetch(
+        track.sourceKey,
+        track.raw,
+        kind: kind,
+        page: page,
+        limit: limit,
+      );
+    } catch (e) {
+      throw SourceFailure.from(e);
+    }
   }
 
   /// 获取封面（搜索自带封面 / 脚本 pic action / 内置平台原生实现）。
