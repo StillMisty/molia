@@ -63,16 +63,10 @@ class AppLocalizationsZh extends AppLocalizations {
   String get lyricsFailedToLoad => '加载歌词失败。';
 
   @override
-  String get lyricsCopyModeSnackbar => '歌词复制模式：单曲重复已激活，自动滚动已禁用。';
+  String get lyricsCopyModeSnackbar => '歌词复制模式：已切到单曲循环、暂停自动跟随；退出时恢复原播放模式。';
 
   @override
   String get centerCurrentLine => '居中当前行';
-
-  @override
-  String get exitCopyModeResumeScroll => '退出复制模式并恢复滚动';
-
-  @override
-  String get enterCopyLyricsMode => '进入歌词复制模式（单曲重复）';
 
   @override
   String get playlist => '播放列表';
@@ -190,9 +184,6 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get settingsRestoreSessionSubtitle => '启动时恢复上次的曲目、队列与进度（默认开启）';
-
-  @override
-  String get settingsCurrentQuality => '当前播放音质';
 
   @override
   String get settingsAutoSourceSwap => '自动换源';
@@ -2209,6 +2200,125 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get trackInfoCachePlaying => '正在播放，音频缓存稍后再清';
+
+  @override
+  String get trackActionCommentsSubtitle => '热门与最新评论';
+
+  @override
+  String get trackActionSwapSubtitle => '跨音源找回音频或歌词';
+
+  @override
+  String get trackInfoSource => '来源';
+
+  @override
+  String get trackInfoLyricsSource => '歌词来源';
+
+  @override
+  String get trackInfoLyricsSourceNone => '暂无歌词';
+
+  @override
+  String get trackInfoAlbumOpen => '查看专辑';
+
+  @override
+  String get trackInfoSourceUnknownId => '未知曲目 ID';
+
+  @override
+  String get sharePlatformPage => '分享平台页面';
+
+  @override
+  String get openPlatformPage => '打开平台页面';
+
+  @override
+  String get shareTrackFile => '分享歌曲文件';
+
+  @override
+  String get downloadAndShare => '下载并分享';
+
+  @override
+  String get platformPageUnavailable => '当前音源没有平台页面';
+
+  @override
+  String get shareDownloading => '正在下载，完成后自动分享';
+
+  @override
+  String get trackCachePageTitle => '单曲缓存';
+
+  @override
+  String get trackCacheClearAll => '全部清理';
+
+  @override
+  String trackCacheClearConfirm(String part) {
+    return '清理「$part」？';
+  }
+
+  @override
+  String get trackCacheClearAllConfirm => '清理这首歌的全部缓存？';
+
+  @override
+  String get trackCacheClearHint => '只清理缓存副本，不影响已下载文件与当前播放。';
+
+  @override
+  String get trackCacheEmpty => '这首歌没有缓存';
+
+  @override
+  String get cacheAudioPlatformUnsupported => '当前平台不缓存音频';
+
+  @override
+  String get cacheAudioDisabled => '音频缓存已关闭';
+
+  @override
+  String get downloadAudioSection => '音频';
+
+  @override
+  String get downloadQualityLabel => '音质';
+
+  @override
+  String get downloadQualityCached => '本地缓存';
+
+  @override
+  String get downloadExtrasSection => '附加内容';
+
+  @override
+  String get downloadCoverPart => '封面';
+
+  @override
+  String get downloadPartDownload => '单独下载';
+
+  @override
+  String get downloadPartRemove => '清理';
+
+  @override
+  String get downloadAll => '全部下载';
+
+  @override
+  String get downloadFromCache => '命中本地缓存，无需下载';
+
+  @override
+  String get downloadLyricsDone => '歌词已下载';
+
+  @override
+  String get downloadCoverDone => '封面已下载';
+
+  @override
+  String get downloadNoArtwork => '这首歌没有封面';
+
+  @override
+  String get downloadNoLyrics => '未找到歌词';
+
+  @override
+  String get lyricsEmptyState => '这首歌暂时没找到词，换一个来源试试？ (´･ω･`)';
+
+  @override
+  String get lyricsDisplaySettingsAction => '歌词显示设置';
+
+  @override
+  String get lyricsSwapAction => '换歌词';
+
+  @override
+  String get lyricsCopyModeAction => '复制歌词模式';
+
+  @override
+  String get lyricsCopyModeExit => '退出复制模式';
 
   @override
   String get commentsTitle => '评论';

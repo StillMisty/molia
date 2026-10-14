@@ -1,8 +1,6 @@
 import 'dart:async';
 
-import 'package:flutter/foundation.dart'
-    show TargetPlatform, defaultTargetPlatform, kIsWeb;
-
+import '../services/audio_cache_platform.dart';
 import '../services/cache_service.dart';
 import '../sources/source_track.dart';
 import 'audio_cache_source.dart' show audioCacheFilePath;
@@ -78,11 +76,7 @@ class CacheAudioPredownloader implements AudioPredownloader {
     return task;
   }
 
-  /// 与 `LocalPlaybackService._platformSupportsAudioCaching` 同一平台集合。
-  static bool get _platformSupportsAudioCaching {
-    if (kIsWeb) return false;
-    return defaultTargetPlatform == TargetPlatform.android ||
-        defaultTargetPlatform == TargetPlatform.iOS ||
-        defaultTargetPlatform == TargetPlatform.macOS;
-  }
+  /// 与 `LocalPlaybackService` 同一平台判定（唯一实现见
+  /// [platformSupportsAudioCaching]）。
+  static bool get _platformSupportsAudioCaching => platformSupportsAudioCaching();
 }

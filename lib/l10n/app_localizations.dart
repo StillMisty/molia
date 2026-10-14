@@ -197,7 +197,7 @@ abstract class AppLocalizations {
   /// No description provided for @lyricsCopyModeSnackbar.
   ///
   /// In en, this message translates to:
-  /// **'Copy Lyrics Mode: Single repeat active, auto-scroll disabled.'**
+  /// **'Copy lyrics mode: single repeat is on and auto-follow is paused; your previous play mode returns when you exit.'**
   String get lyricsCopyModeSnackbar;
 
   /// No description provided for @centerCurrentLine.
@@ -205,18 +205,6 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Center Current Line'**
   String get centerCurrentLine;
-
-  /// No description provided for @exitCopyModeResumeScroll.
-  ///
-  /// In en, this message translates to:
-  /// **'Exit Copy Mode & Resume Scroll'**
-  String get exitCopyModeResumeScroll;
-
-  /// No description provided for @enterCopyLyricsMode.
-  ///
-  /// In en, this message translates to:
-  /// **'Enter Copy Lyrics Mode (Single Repeat)'**
-  String get enterCopyLyricsMode;
 
   /// No description provided for @playlist.
   ///
@@ -451,12 +439,6 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Restore track, queue and position on launch (on by default)'**
   String get settingsRestoreSessionSubtitle;
-
-  /// No description provided for @settingsCurrentQuality.
-  ///
-  /// In en, this message translates to:
-  /// **'Now playing quality'**
-  String get settingsCurrentQuality;
 
   /// No description provided for @settingsAutoSourceSwap.
   ///
@@ -4214,6 +4196,240 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Playing — audio cache can be cleared later'**
   String get trackInfoCachePlaying;
+
+  /// No description provided for @trackActionCommentsSubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Hot and latest comments'**
+  String get trackActionCommentsSubtitle;
+
+  /// No description provided for @trackActionSwapSubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Find this track\'s audio or lyrics on another source'**
+  String get trackActionSwapSubtitle;
+
+  /// No description provided for @trackInfoSource.
+  ///
+  /// In en, this message translates to:
+  /// **'Source'**
+  String get trackInfoSource;
+
+  /// No description provided for @trackInfoLyricsSource.
+  ///
+  /// In en, this message translates to:
+  /// **'Lyrics source'**
+  String get trackInfoLyricsSource;
+
+  /// No description provided for @trackInfoLyricsSourceNone.
+  ///
+  /// In en, this message translates to:
+  /// **'No lyrics yet'**
+  String get trackInfoLyricsSourceNone;
+
+  /// No description provided for @trackInfoAlbumOpen.
+  ///
+  /// In en, this message translates to:
+  /// **'View album'**
+  String get trackInfoAlbumOpen;
+
+  /// No description provided for @trackInfoSourceUnknownId.
+  ///
+  /// In en, this message translates to:
+  /// **'Unknown track ID'**
+  String get trackInfoSourceUnknownId;
+
+  /// No description provided for @sharePlatformPage.
+  ///
+  /// In en, this message translates to:
+  /// **'Share platform page'**
+  String get sharePlatformPage;
+
+  /// No description provided for @openPlatformPage.
+  ///
+  /// In en, this message translates to:
+  /// **'Open platform page'**
+  String get openPlatformPage;
+
+  /// No description provided for @shareTrackFile.
+  ///
+  /// In en, this message translates to:
+  /// **'Share song file'**
+  String get shareTrackFile;
+
+  /// No description provided for @downloadAndShare.
+  ///
+  /// In en, this message translates to:
+  /// **'Download & share'**
+  String get downloadAndShare;
+
+  /// No description provided for @platformPageUnavailable.
+  ///
+  /// In en, this message translates to:
+  /// **'This source has no platform page'**
+  String get platformPageUnavailable;
+
+  /// No description provided for @shareDownloading.
+  ///
+  /// In en, this message translates to:
+  /// **'Downloading — sharing when done'**
+  String get shareDownloading;
+
+  /// No description provided for @trackCachePageTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Track cache'**
+  String get trackCachePageTitle;
+
+  /// No description provided for @trackCacheClearAll.
+  ///
+  /// In en, this message translates to:
+  /// **'Clear all'**
+  String get trackCacheClearAll;
+
+  /// No description provided for @trackCacheClearConfirm.
+  ///
+  /// In en, this message translates to:
+  /// **'Clear \"{part}\"?'**
+  String trackCacheClearConfirm(String part);
+
+  /// No description provided for @trackCacheClearAllConfirm.
+  ///
+  /// In en, this message translates to:
+  /// **'Clear all cached data for this track?'**
+  String get trackCacheClearAllConfirm;
+
+  /// No description provided for @trackCacheClearHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Only cached copies are removed; downloads and playback are unaffected.'**
+  String get trackCacheClearHint;
+
+  /// No description provided for @trackCacheEmpty.
+  ///
+  /// In en, this message translates to:
+  /// **'Nothing cached for this track'**
+  String get trackCacheEmpty;
+
+  /// No description provided for @cacheAudioPlatformUnsupported.
+  ///
+  /// In en, this message translates to:
+  /// **'Audio caching isn\'t available on this platform'**
+  String get cacheAudioPlatformUnsupported;
+
+  /// No description provided for @cacheAudioDisabled.
+  ///
+  /// In en, this message translates to:
+  /// **'Audio caching is off'**
+  String get cacheAudioDisabled;
+
+  /// No description provided for @downloadAudioSection.
+  ///
+  /// In en, this message translates to:
+  /// **'Audio'**
+  String get downloadAudioSection;
+
+  /// No description provided for @downloadQualityLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Quality'**
+  String get downloadQualityLabel;
+
+  /// No description provided for @downloadQualityCached.
+  ///
+  /// In en, this message translates to:
+  /// **'Cached'**
+  String get downloadQualityCached;
+
+  /// No description provided for @downloadExtrasSection.
+  ///
+  /// In en, this message translates to:
+  /// **'Extras'**
+  String get downloadExtrasSection;
+
+  /// No description provided for @downloadCoverPart.
+  ///
+  /// In en, this message translates to:
+  /// **'Cover'**
+  String get downloadCoverPart;
+
+  /// No description provided for @downloadPartDownload.
+  ///
+  /// In en, this message translates to:
+  /// **'Download'**
+  String get downloadPartDownload;
+
+  /// No description provided for @downloadPartRemove.
+  ///
+  /// In en, this message translates to:
+  /// **'Remove'**
+  String get downloadPartRemove;
+
+  /// No description provided for @downloadAll.
+  ///
+  /// In en, this message translates to:
+  /// **'Download all'**
+  String get downloadAll;
+
+  /// No description provided for @downloadFromCache.
+  ///
+  /// In en, this message translates to:
+  /// **'Using local cache'**
+  String get downloadFromCache;
+
+  /// No description provided for @downloadLyricsDone.
+  ///
+  /// In en, this message translates to:
+  /// **'Lyrics downloaded'**
+  String get downloadLyricsDone;
+
+  /// No description provided for @downloadCoverDone.
+  ///
+  /// In en, this message translates to:
+  /// **'Cover downloaded'**
+  String get downloadCoverDone;
+
+  /// No description provided for @downloadNoArtwork.
+  ///
+  /// In en, this message translates to:
+  /// **'No cover for this track'**
+  String get downloadNoArtwork;
+
+  /// No description provided for @downloadNoLyrics.
+  ///
+  /// In en, this message translates to:
+  /// **'No lyrics found'**
+  String get downloadNoLyrics;
+
+  /// No description provided for @lyricsEmptyState.
+  ///
+  /// In en, this message translates to:
+  /// **'No lyrics for this one yet — try another source? (´･ω･`)'**
+  String get lyricsEmptyState;
+
+  /// No description provided for @lyricsDisplaySettingsAction.
+  ///
+  /// In en, this message translates to:
+  /// **'Lyrics display settings'**
+  String get lyricsDisplaySettingsAction;
+
+  /// No description provided for @lyricsSwapAction.
+  ///
+  /// In en, this message translates to:
+  /// **'Change lyrics'**
+  String get lyricsSwapAction;
+
+  /// No description provided for @lyricsCopyModeAction.
+  ///
+  /// In en, this message translates to:
+  /// **'Copy lyrics mode'**
+  String get lyricsCopyModeAction;
+
+  /// No description provided for @lyricsCopyModeExit.
+  ///
+  /// In en, this message translates to:
+  /// **'Exit copy mode'**
+  String get lyricsCopyModeExit;
 
   /// No description provided for @commentsTitle.
   ///

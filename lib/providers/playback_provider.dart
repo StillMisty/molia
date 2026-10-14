@@ -311,8 +311,7 @@ class PlaybackProvider extends ChangeNotifier {
   ///
   /// 偏好音质 × 曲目可用音质（纯函数 [pickQualityFor]）；无曲目或曲目无
   /// 可用音质时回退到偏好音质。省流生效（移动数据 + 已开启）时按上限取值。
-  /// UI 需要展示时用 `sourceQualityLabel(l10n, type)` 本地化，不要用
-  /// [currentQualityLabel] 的通用名（后者不随界面语言变化）。
+  /// UI 展示统一用 `sourceQualityLabel(l10n, type)` 本地化（歌曲信息页）。
   String get currentQualityType {
     final preferred = _sourceManager?.preferredQuality ?? '320k';
     final effective = _dataSaver?.effectiveQuality(preferred) ?? preferred;
@@ -324,12 +323,6 @@ class PlaybackProvider extends ChangeNotifier {
             .where((type) => type.isNotEmpty);
     return pickQualityFor(supported, effective);
   }
-
-  /// 当前曲目的预期音质标签：[currentQualityType] 的通用展示名。
-  ///
-  /// 不随界面语言变化（设置页的「当前播放音质」信息行用它）；需要本地化
-  /// 展示（歌曲信息页）时改用 `sourceQualityLabel(l10n, currentQualityType)`。
-  String get currentQualityLabel => kxQualityDisplayName(currentQualityType);
 
   bool get isPlaying => snapshot.isPlaying;
 

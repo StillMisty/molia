@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:flutter/foundation.dart' show ValueNotifier;
 import 'package:logging/logging.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -34,6 +35,20 @@ class CacheService {
 
   /// 全局单例（main.dart 注册前的默认入口）。
   static final CacheService instance = CacheService();
+
+  /// 缓存内容版本号：写入 / 清理 / 淘汰后递增，供「占用展示」跨页刷新。
+  ///
+  /// 值本身无意义，只表示「缓存变了」；消费方用 [ValueListenableBuilder] 或
+  /// 监听后重算占用（歌曲信息页 / 单曲缓存子页）。
+  final ValueNotifier<int> revision = ValueNotifier<int>(0);
+
+  /// 通知缓存内容已变化（微任务里递增）。
+  ///
+  /// 调用点可能位于图片加载完成回调或构建期附近，同步通知会触发
+  /// 「构建期 setState」断言；占用展示晚一帧无感知。
+  void notifyCacheChanged() {
+    scheduleMicrotask(() => revision.value++);
+  }
 
   // 策略键名（固定，设置 UI / 测试共用）
   static const String keyAudioEnabled = 'cache_audio_enabled';
@@ -78,6 +93,7 @@ class CacheService {
   Future<void> setAudioEnabled(bool value) async {
     await _write(keyAudioEnabled, value);
     _notify(CachePartition.audio);
+    notifyCacheChanged();
   }
 
   /// 音频缓存上限（MB，0 = 不限制）。
@@ -175,6 +191,7 @@ class CacheService {
         if (dir != null) await _storage.clear(dir);
     }
     _notifyCleared(partition);
+    notifyCacheChanged();
   }
 
   /// 清理全部分区。
@@ -198,6 +215,7 @@ class CacheService {
       );
       if (deleted > 0) {
         _logger.info('音频缓存 LRU 淘汰 $deleted 个文件（上限 ${maxMb}MB）');
+        notifyCacheChanged();
       }
       return deleted;
     } catch (e) {
@@ -220,6 +238,7 @@ class CacheService {
       );
       if (deleted > 0) {
         _logger.info('封面缓存 sweep 清理 $deleted 个文件');
+        notifyCacheChanged();
       }
       return deleted;
     } catch (e) {
@@ -286,6 +305,7 @@ class CacheService {
           '清理单曲音频缓存 ${result.deleted.count} 个文件'
           '（${result.deleted.bytes} 字节，跳过 ${result.skipped} 个活动文件）',
         );
+        notifyCacheChanged();
       }
       return result;
     } catch (e) {
@@ -299,8 +319,10 @@ class CacheService {
       _lyricsCache.usageOf(trackId);
 
   /// 清理单曲歌词缓存（规范键 + 历史重复键）。
-  Future<void> clearLyricsForTrack(String trackId) =>
-      _lyricsCache.remove(trackId);
+  Future<void> clearLyricsForTrack(String trackId) async {
+    await _lyricsCache.remove(trackId);
+    notifyCacheChanged();
+  }
 
   /// 封面缓存目录（持久）；平台不可用（Web）返回 null。
   Future<String?> artworkCacheDirPath() => _safeDir(_storage.artworkCacheDir);

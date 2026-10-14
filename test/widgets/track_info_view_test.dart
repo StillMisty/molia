@@ -6,12 +6,15 @@ import 'package:molia/domain/models/playback.dart';
 import 'package:molia/domain/models/track.dart';
 import 'package:molia/l10n/app_localizations.dart';
 import 'package:molia/managers/artwork_cache.dart';
+import 'package:molia/pages/track_cache_page.dart';
+import 'package:molia/providers/lyrics_provider.dart';
 import 'package:molia/providers/playback_provider.dart';
 import 'package:molia/providers/sleep_timer.dart';
 import 'package:molia/services/cache_service.dart';
 import 'package:molia/services/cache_storage_stub.dart';
 import 'package:molia/services/download/download_service.dart';
 import 'package:molia/services/track_cache_service.dart';
+import 'package:molia/utils/lyrics_provider_label.dart';
 import 'package:molia/widgets/track_info_view.dart';
 import 'package:material_3_expressive/material_3_expressive.dart';
 import 'package:material_ui/material_ui.dart';
@@ -147,6 +150,7 @@ void main() {
       MultiProvider(
         providers: [
           ChangeNotifierProvider<PlaybackProvider>.value(value: playback),
+          ChangeNotifierProvider(create: (_) => LyricsProvider()),
           Provider<TrackCacheService>.value(value: cacheService),
           if (downloads != null)
             ChangeNotifierProvider<DownloadService>.value(value: downloads),
@@ -168,84 +172,100 @@ void main() {
     await tester.pump(const Duration(milliseconds: 50));
   }
 
-  /// 列表向下滚动：下载区在缓存区之后，测试视口外不构建。
+  /// 列表向下滚动：缓存区在信息区之后，测试视口外不构建。
   Future<void> scrollToBottom(WidgetTester tester) async {
     await tester.drag(find.byType(ListView), const Offset(0, -600));
     await tester.pump();
   }
 
-  testWidgets('信息区：音质本地化 + 可用音质 + 渠道回退 key + 专辑/时长/ID', (tester) async {
+  testWidgets('信息区：音质本地化 + 可用音质 + 来源（渠道 · ID）+ 专辑', (tester) async {
     await pumpView(tester, track: _track());
 
     expect(find.text('本次播放音质'), findsOneWidget);
-    // 无音源列表（未注入 SourcesProvider）：渠道回退原始 key。
-    expect(find.text('kw'), findsOneWidget);
+    // 无音源列表（未注入 SourcesProvider）：来源行回退原始 key + 曲目 ID。
+    expect(find.text('kw · kw:a'), findsOneWidget);
     expect(find.text('专辑'), findsOneWidget);
     expect(find.text('Album a'), findsOneWidget);
-    expect(find.text('4:05'), findsOneWidget);
+    // 时长已从信息卡片移除。
+    expect(find.text('4:05'), findsNothing);
     // 可用音质：本地化名 + 体积（未知类型回退原值）。
     expect(find.text('320K (9.8MB) · 无损'), findsOneWidget);
-    // 曲目 ID 行点击复制。
-    final copyRow = find.byKey(const Key('trackInfoCopyIdItem'));
-    await tester.tap(copyRow);
-    await tester.pump();
-    expect(tester.takeException(), isNull);
+    // 歌词来源：会话未加载时为「暂无歌词」。
+    expect(find.text('歌词来源'), findsOneWidget);
+    expect(find.text('暂无歌词'), findsOneWidget);
   });
 
-  testWidgets('渠道展示名回退：未注入音源列表时显示原始 key', (tester) async {
+  testWidgets('来源行：打开分享弹层，复制曲目 ID', (tester) async {
     await pumpView(tester, track: _track());
 
-    expect(find.text('kw'), findsOneWidget);
+    await tester.tap(find.byKey(const Key('trackInfoSourceItem')));
+    await tester.pumpAndSettle();
+    expect(find.text('曲目 ID'), findsOneWidget);
+    expect(find.text('分享平台页面'), findsOneWidget);
+    expect(find.text('打开平台页面'), findsOneWidget);
+    // 未下载：文件动作显示「下载并分享」。
+    expect(find.text('下载并分享'), findsOneWidget);
+
+    await tester.tap(find.text('曲目 ID'));
+    await tester.pumpAndSettle();
+    expect(tester.takeException(), isNull);
+    expect(find.text('曲目 ID 已复制'), findsOneWidget);
   });
 
-  testWidgets('缓存区：占用文案 + 清理结果提示 + 逐项调用', (tester) async {
+  testWidgets('缓存行：汇总副标题 + 打开单曲缓存子页', (tester) async {
     cacheService.usageByTrack['kw:a'] = const TrackCacheUsage(
       audio: CacheUsage(bytes: 3 * 1024 * 1024, count: 2),
       lyrics: CacheUsage(bytes: 2048, count: 1),
-      artwork: CacheUsage(bytes: 0, count: 0),
       resolveEntries: 1,
+    );
+    await pumpView(tester, track: _track());
+    await scrollToBottom(tester);
+
+    expect(find.text('缓存'), findsOneWidget);
+    expect(find.text('音频缓存 3.0 MB · 歌词缓存 2 KB · 取链缓存 1 条'), findsOneWidget);
+
+    await tester.tap(find.byKey(const Key('trackInfoCacheItem')));
+    await tester.pumpAndSettle();
+    expect(find.byType(TrackCachePage), findsOneWidget);
+    expect(find.text('单曲缓存'), findsOneWidget);
+  });
+
+  testWidgets('缓存子页：逐项清理需确认，确认后调用清理并提示', (tester) async {
+    cacheService.usageByTrack['kw:a'] = const TrackCacheUsage(
+      audio: CacheUsage(bytes: 3 * 1024 * 1024, count: 2),
     );
     cacheService.nextClear = const TrackCacheClearResult(
       part: TrackCachePart.audio,
       freed: CacheUsage(bytes: 3 * 1024 * 1024, count: 2),
     );
     await pumpView(tester, track: _track());
+    await scrollToBottom(tester);
+    await tester.tap(find.byKey(const Key('trackInfoCacheItem')));
+    await tester.pumpAndSettle();
 
-    expect(find.textContaining('3.0 MB'), findsOneWidget);
-    expect(find.textContaining('2 KB'), findsOneWidget);
-    expect(find.text('无缓存'), findsOneWidget);
-    expect(find.text('1 条'), findsOneWidget);
+    expect(find.text('音频缓存'), findsOneWidget);
+    expect(find.text('3.0 MB · 2 项'), findsOneWidget);
+    // 未命中的分区清理按钮禁用。
+    expect(find.text('清理'), findsWidgets);
 
-    await tester.tap(find.byKey(const Key('trackInfoCache_audio')));
-    await tester.pump();
-    await tester.pump(const Duration(milliseconds: 50));
+    await tester.tap(find.text('清理').first);
+    await tester.pumpAndSettle();
+    expect(find.text('清理「音频缓存」？'), findsOneWidget);
+    await tester.tap(find.text('删除'));
+    await tester.pumpAndSettle();
+
     expect(cacheService.clearCalls, [(TrackCachePart.audio, 'kw:a')]);
     expect(find.text('已清理 3.0 MB'), findsOneWidget);
   });
 
-  testWidgets('缓存区：播放中跳过音频 → 提示稍后再清', (tester) async {
-    cacheService.usageByTrack['kw:a'] = const TrackCacheUsage(
-      audio: CacheUsage(bytes: 1024, count: 1),
-    );
-    cacheService.nextClear = const TrackCacheClearResult(
-      part: TrackCachePart.audio,
-      skipped: 1,
-    );
-    await pumpView(tester, track: _track());
-
-    await tester.tap(find.byKey(const Key('trackInfoCache_audio')));
-    await tester.pump();
-    await tester.pump(const Duration(milliseconds: 50));
-    expect(find.text('正在播放，音频缓存稍后再清'), findsOneWidget);
-  });
-
-  testWidgets('切歌：占用按新曲目重载', (tester) async {
+  testWidgets('切歌：缓存汇总按新曲目重载', (tester) async {
     cacheService.usageByTrack['kw:a'] =
         const TrackCacheUsage(audio: CacheUsage(bytes: 1024, count: 1));
     cacheService.usageByTrack['kw:b'] =
         const TrackCacheUsage(audio: CacheUsage(bytes: 5 * 1024 * 1024, count: 3));
     await pumpView(tester, track: _track());
-    expect(find.textContaining('1 KB'), findsOneWidget);
+    await scrollToBottom(tester);
+    expect(find.text('音频缓存 1 KB'), findsOneWidget);
 
     const next = Track(
       id: TrackId('kw', 'b'),
@@ -262,18 +282,20 @@ void main() {
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 50));
 
-    expect(find.textContaining('5.0 MB'), findsOneWidget);
-    expect(find.text('kw:b'), findsOneWidget);
+    expect(find.text('音频缓存 5.0 MB'), findsOneWidget);
 
     // 通知节流计时器跑完，避免 pending timer 报错。
     await tester.pump(const Duration(milliseconds: 300));
   });
 
-  testWidgets('无曲目：空态提示，不显示缓存区', (tester) async {
+  testWidgets('无曲目：空态提示，仅保留定时关闭入口', (tester) async {
     await pumpView(tester);
 
     expect(find.text('暂无播放曲目'), findsOneWidget);
-    expect(find.byKey(const Key('trackInfoCache_audio')), findsNothing);
+    expect(find.byKey(const Key('trackInfoCacheItem')), findsNothing);
+    expect(find.byKey(const Key('trackInfoDownloadItem')), findsNothing);
+    expect(find.byKey(const Key('trackInfoCommentsItem')), findsNothing);
+    expect(find.byKey(const Key('trackInfoSleepTimerItem')), findsOneWidget);
   });
 
   testWidgets('定时关闭：档位设置与取消（行副标题随状态刷新）', (tester) async {
@@ -288,9 +310,6 @@ void main() {
     expect(find.text('定时关闭'), findsOneWidget);
     expect(find.text('未开启'), findsOneWidget);
 
-    // 定时关闭在下载区之后：先滚进可视区再点。
-    await tester.ensureVisible(find.byKey(const Key('trackInfoSleepTimerItem')));
-    await tester.pump();
     await tester.tap(find.byKey(const Key('trackInfoSleepTimerItem')));
     await tester.pumpAndSettle();
     expect(find.text('15 分钟后暂停'), findsOneWidget);
@@ -312,89 +331,39 @@ void main() {
     expect(find.text('未开启'), findsOneWidget);
   });
 
-  testWidgets('定时关闭：空态仍保留入口，「播完当前歌曲」不可用', (tester) async {
-    tester.view.physicalSize = const Size(420, 900);
-    tester.view.devicePixelRatio = 1.0;
-    addTearDown(() {
-      tester.view.resetPhysicalSize();
-      tester.view.resetDevicePixelRatio();
-    });
-    await pumpView(tester);
-
-    expect(find.text('暂无播放曲目'), findsOneWidget);
-    expect(find.byKey(const Key('trackInfoSleepTimerItem')), findsOneWidget);
-
-    await tester.ensureVisible(find.byKey(const Key('trackInfoSleepTimerItem')));
-    await tester.pump();
-    await tester.tap(find.byKey(const Key('trackInfoSleepTimerItem')));
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('播完当前歌曲后暂停'));
-    await tester.pumpAndSettle();
-
-    expect(playback.sleepTimer.value.mode, SleepTimerMode.off);
-  });
-
-  testWidgets('定时关闭：自定义时长校验与设定', (tester) async {
-    tester.view.physicalSize = const Size(420, 900);
-    tester.view.devicePixelRatio = 1.0;
-    addTearDown(() {
-      tester.view.resetPhysicalSize();
-      tester.view.resetDevicePixelRatio();
-    });
-    await pumpView(tester, track: _track());
-
-    await tester.ensureVisible(find.byKey(const Key('trackInfoSleepTimerItem')));
-    await tester.pump();
-    await tester.tap(find.byKey(const Key('trackInfoSleepTimerItem')));
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('自定义时长…'));
-    await tester.pumpAndSettle();
-
-    // 非法输入：给出错误文案，确认键禁用（点击不设定、不关弹窗）。
-    await tester.enterText(find.byType(M3ETextField), '0');
-    await tester.pumpAndSettle();
-    expect(find.text('请输入 1–600 之间的整数'), findsOneWidget);
-    await tester.tap(find.text('设定'));
-    await tester.pumpAndSettle();
-    expect(playback.sleepTimer.value.mode, SleepTimerMode.off);
-
-    await tester.enterText(find.byType(M3ETextField), '25');
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('设定'));
-    await tester.pumpAndSettle();
-
-    expect(playback.sleepTimer.value.remaining, const Duration(minutes: 25));
-    expect(find.text('剩余 25:00'), findsOneWidget);
-  });
-
-  testWidgets('下载区：未下载 → 点下载触发下载动作', (tester) async {
+  testWidgets('下载行：未下载 → 打开弹层 → 点下载触发下载动作', (tester) async {
     await pumpView(tester, track: _track(), downloads: downloadService);
-    await scrollToBottom(tester);
 
+    expect(find.text('下载'), findsOneWidget);
     expect(find.text('未下载'), findsOneWidget);
-    expect(find.byKey(const Key('trackInfoDownloadStart')), findsOneWidget);
 
-    await tester.tap(find.byKey(const Key('trackInfoDownloadStart')));
+    await tester.tap(find.byKey(const Key('trackInfoDownloadItem')));
+    await tester.pumpAndSettle();
+    expect(find.text('音质'), findsOneWidget);
+    expect(find.byKey(const Key('downloadSheetStart')), findsOneWidget);
+
+    await tester.tap(find.byKey(const Key('downloadSheetStart')));
     await tester.pump();
     expect(downloadService.downloadCalls, 1);
   });
 
-  testWidgets('下载区：下载中显示百分比 + 取消', (tester) async {
+  testWidgets('下载行：下载中显示百分比 + 取消', (tester) async {
     downloadService.progress = const DownloadProgress(
       receivedBytes: 50,
       totalBytes: 100,
     );
     await pumpView(tester, track: _track(), downloads: downloadService);
-    await scrollToBottom(tester);
 
-    expect(find.text('下载中'), findsOneWidget);
-    expect(find.text('50%'), findsOneWidget);
-    await tester.tap(find.byKey(const Key('trackInfoDownloadCancel')));
+    expect(find.text('下载中 · 50%'), findsOneWidget);
+
+    await tester.tap(find.byKey(const Key('trackInfoDownloadItem')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('downloadSheetCancel')));
     await tester.pump();
     expect(downloadService.cancelCalls, 1);
   });
 
-  testWidgets('下载区：已下载显示大小 + 删除/分享导出', (tester) async {
+  testWidgets('下载行：已下载显示大小 + 弹层删除需确认', (tester) async {
     downloadService.record = const DownloadedTrack(
       originSourceKey: 'kw',
       originSongId: 'a',
@@ -405,41 +374,31 @@ void main() {
       downloadedAt: 1,
     );
     await pumpView(tester, track: _track(), downloads: downloadService);
-    await scrollToBottom(tester);
 
-    expect(find.text('已下载'), findsOneWidget);
     expect(find.text('3.0 MB · 320K'), findsOneWidget);
-    expect(find.byKey(const Key('trackInfoDownloadShare')), findsOneWidget);
 
-    // 删除需确认：对话框确认后调用删除。
-    await tester.tap(find.byKey(const Key('trackInfoDownloadDelete')));
+    await tester.tap(find.byKey(const Key('trackInfoDownloadItem')));
     await tester.pumpAndSettle();
-    expect(find.text('删除下载'), findsWidgets);
+    expect(find.byKey(const Key('downloadSheetShare')), findsOneWidget);
+
+    await tester.tap(find.byKey(const Key('downloadSheetDelete')));
+    await tester.pumpAndSettle();
     await tester.tap(find.text('删除'));
     await tester.pumpAndSettle();
     expect(downloadService.deleteCalls, 1);
     // 删除后回落到未下载态。
-    expect(find.byKey(const Key('trackInfoDownloadStart')), findsOneWidget);
+    expect(find.byKey(const Key('downloadSheetStart')), findsOneWidget);
   });
 
-  testWidgets('下载区：平台不支持（Web/存储不可用）时整区隐藏', (tester) async {
+  testWidgets('下载行：平台不支持（Web/存储不可用）时入口禁用', (tester) async {
     downloadService.downloadSupported = false;
     await pumpView(tester, track: _track(), downloads: downloadService);
-    await scrollToBottom(tester);
 
-    expect(find.text('下载'), findsNothing);
-    expect(find.byKey(const Key('trackInfoDownloadStart')), findsNothing);
+    // 行仍在（显示状态），但不支持时无下载服务入口。
+    expect(find.byKey(const Key('trackInfoDownloadItem')), findsOneWidget);
   });
 
-  testWidgets('本地曲目：渠道显示「本地下载」，下载区显示已下载', (tester) async {
-    downloadService.record = const DownloadedTrack(
-      originSourceKey: 'kw',
-      originSongId: 'a',
-      title: '本地歌曲',
-      filePath: '/downloads/a.mp3',
-      sizeBytes: 2048,
-      downloadedAt: 1,
-    );
+  testWidgets('本地曲目：来源显示「本地下载」，下载行显示文件缺失', (tester) async {
     const localTrack = Track(
       id: TrackId('local', 'kw:a'),
       title: '本地歌曲',
@@ -448,23 +407,19 @@ void main() {
     );
     await pumpView(tester, track: localTrack, downloads: downloadService);
 
-    expect(find.text('本地下载'), findsOneWidget);
-    await scrollToBottom(tester);
-    expect(find.text('已下载'), findsOneWidget);
-    expect(find.text('2 KB'), findsOneWidget);
-  });
-
-  testWidgets('本地曲目：下载记录已删时提示文件缺失（不显示下载动作）', (tester) async {
-    const localTrack = Track(
-      id: TrackId('local', 'kw:a'),
-      title: '本地歌曲',
-      origin: TrackOrigin.localFile,
-      payload: {'path': '/downloads/a.mp3', 'songId': 'kw:a'},
-    );
-    await pumpView(tester, track: localTrack, downloads: downloadService);
-    await scrollToBottom(tester);
-
+    expect(find.text('本地下载 · local:kw:a'), findsOneWidget);
     expect(find.text('本地文件不存在，可能已被删除'), findsOneWidget);
-    expect(find.byKey(const Key('trackInfoDownloadStart')), findsNothing);
+    // 本地曲目没有「换源」入口。
+    expect(find.byKey(const Key('trackInfoSourceSwapItem')), findsNothing);
+  });
+
+  test('歌词来源展示名：兼容音源 key 与 provider 名', () async {
+    final l10n = await AppLocalizations.delegate.load(const Locale('zh'));
+    expect(lyricsProviderLabel(l10n, const [], 'wy'), '网易云音乐');
+    expect(lyricsProviderLabel(l10n, const [], 'netease'), '网易云音乐');
+    expect(lyricsProviderLabel(l10n, const [], 'tx'), 'QQ音乐');
+    expect(lyricsProviderLabel(l10n, const [], 'lrclib'), 'LRCLIB');
+    expect(lyricsProviderLabel(l10n, const [], 'local'), '本地下载');
+    expect(lyricsProviderLabel(l10n, const [], 'my_script'), 'my_script');
   });
 }

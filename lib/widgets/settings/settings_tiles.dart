@@ -469,11 +469,15 @@ class SettingsDropdownRow<T> extends StatelessWidget {
     required this.value,
     required this.options,
     required this.onChanged,
+    this.fieldWidth = 170,
   });
 
   final IconData icon;
   final String title;
   final String? subtitle;
+
+  /// 行尾下拉字段宽度（默认 170；短标签枚举可收窄，把宽度让给标题）。
+  final double fieldWidth;
 
   /// 当前值（不在 [options] 中时字段回落为 [title] 提示文案）。
   final T value;
@@ -501,7 +505,7 @@ class SettingsDropdownRow<T> extends StatelessWidget {
             const SizedBox(width: 8),
             SizedBox(
               // 设置弹层窄于屏幕：字段定宽，避免撑挤标题。
-              width: 170,
+              width: fieldWidth,
               child: M3EDropdownMenu<T>(
                 items: [
                   for (final (optionValue, label) in options)

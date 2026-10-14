@@ -137,24 +137,3 @@ String capQualityFor(String preferred, String cap) {
   if (preferredIndex < 0) return cap;
   return preferredIndex < capIndex ? cap : preferred;
 }
-
-String kxQualityDisplayName(String quality) {
-  switch (quality) {
-    case 'flac24bit':
-      return 'Hi-Res';
-    case 'flac':
-      return '无损';
-    case 'wav':
-      return 'WAV';
-    case 'ape':
-      return 'APE';
-    case '320k':
-      return '320K';
-    case '192k':
-      return '192K';
-    case '128k':
-      return '128K';
-    default:
-      return quality;
-  }
-}

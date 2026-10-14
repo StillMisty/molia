@@ -64,16 +64,10 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get lyricsCopyModeSnackbar =>
-      'Copy Lyrics Mode: Single repeat active, auto-scroll disabled.';
+      'Copy lyrics mode: single repeat is on and auto-follow is paused; your previous play mode returns when you exit.';
 
   @override
   String get centerCurrentLine => 'Center Current Line';
-
-  @override
-  String get exitCopyModeResumeScroll => 'Exit Copy Mode & Resume Scroll';
-
-  @override
-  String get enterCopyLyricsMode => 'Enter Copy Lyrics Mode (Single Repeat)';
 
   @override
   String get playlist => 'Playlist';
@@ -195,9 +189,6 @@ class AppLocalizationsEn extends AppLocalizations {
   @override
   String get settingsRestoreSessionSubtitle =>
       'Restore track, queue and position on launch (on by default)';
-
-  @override
-  String get settingsCurrentQuality => 'Now playing quality';
 
   @override
   String get settingsAutoSourceSwap => 'Auto source switch';
@@ -2303,6 +2294,130 @@ class AppLocalizationsEn extends AppLocalizations {
   @override
   String get trackInfoCachePlaying =>
       'Playing — audio cache can be cleared later';
+
+  @override
+  String get trackActionCommentsSubtitle => 'Hot and latest comments';
+
+  @override
+  String get trackActionSwapSubtitle =>
+      'Find this track\'s audio or lyrics on another source';
+
+  @override
+  String get trackInfoSource => 'Source';
+
+  @override
+  String get trackInfoLyricsSource => 'Lyrics source';
+
+  @override
+  String get trackInfoLyricsSourceNone => 'No lyrics yet';
+
+  @override
+  String get trackInfoAlbumOpen => 'View album';
+
+  @override
+  String get trackInfoSourceUnknownId => 'Unknown track ID';
+
+  @override
+  String get sharePlatformPage => 'Share platform page';
+
+  @override
+  String get openPlatformPage => 'Open platform page';
+
+  @override
+  String get shareTrackFile => 'Share song file';
+
+  @override
+  String get downloadAndShare => 'Download & share';
+
+  @override
+  String get platformPageUnavailable => 'This source has no platform page';
+
+  @override
+  String get shareDownloading => 'Downloading — sharing when done';
+
+  @override
+  String get trackCachePageTitle => 'Track cache';
+
+  @override
+  String get trackCacheClearAll => 'Clear all';
+
+  @override
+  String trackCacheClearConfirm(String part) {
+    return 'Clear \"$part\"?';
+  }
+
+  @override
+  String get trackCacheClearAllConfirm =>
+      'Clear all cached data for this track?';
+
+  @override
+  String get trackCacheClearHint =>
+      'Only cached copies are removed; downloads and playback are unaffected.';
+
+  @override
+  String get trackCacheEmpty => 'Nothing cached for this track';
+
+  @override
+  String get cacheAudioPlatformUnsupported =>
+      'Audio caching isn\'t available on this platform';
+
+  @override
+  String get cacheAudioDisabled => 'Audio caching is off';
+
+  @override
+  String get downloadAudioSection => 'Audio';
+
+  @override
+  String get downloadQualityLabel => 'Quality';
+
+  @override
+  String get downloadQualityCached => 'Cached';
+
+  @override
+  String get downloadExtrasSection => 'Extras';
+
+  @override
+  String get downloadCoverPart => 'Cover';
+
+  @override
+  String get downloadPartDownload => 'Download';
+
+  @override
+  String get downloadPartRemove => 'Remove';
+
+  @override
+  String get downloadAll => 'Download all';
+
+  @override
+  String get downloadFromCache => 'Using local cache';
+
+  @override
+  String get downloadLyricsDone => 'Lyrics downloaded';
+
+  @override
+  String get downloadCoverDone => 'Cover downloaded';
+
+  @override
+  String get downloadNoArtwork => 'No cover for this track';
+
+  @override
+  String get downloadNoLyrics => 'No lyrics found';
+
+  @override
+  String get lyricsEmptyState =>
+      'No lyrics for this one yet — try another source? (´･ω･`)';
+
+  @override
+  String get lyricsDisplaySettingsAction => 'Lyrics display settings';
+
+  @override
+  String get lyricsSwapAction => 'Change lyrics';
+
+  @override
+  String get lyricsCopyModeAction => 'Copy lyrics mode';
+
+  @override
+  String get lyricsCopyModeExit => 'Exit copy mode';
 
   @override
   String get commentsTitle => 'Comments';

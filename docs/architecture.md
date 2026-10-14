@@ -107,8 +107,8 @@
   → `lib/sources/builtin/{wy,tx,kg,kw,mg}_comment.dart`（移植 LX：热门 / 最新、分页、
   表情还原、引用 / 楼中楼归一化）。页面状态在 `CommentsProvider`（热门 / 最新两个 tab
   懒加载 + 分页 + 错误归一化），UI 为 `lib/pages/song_comments_page.dart` +
-  `lib/widgets/comment_list_view.dart`；入口：歌词快捷工具栏与展开态播放器进度排
-  （`SourceRegistry` 能力位判定，无能力时禁用）。
+  `lib/widgets/comment_list_view.dart`；入口：歌曲信息页「评论」行（能力位判定唯一
+  来源 `CommentsProvider.supports`，不支持时行内说明；展开态播放器进度排不再放入口）。
 - **系统媒体会话**（Android/iOS/macOS）：`LocalAudioHandler` 把服务状态映射为
   `MediaItem`/`PlaybackState`；通知/锁屏封面经 `MediaItem.artHeaders` 统一带
   浏览器 UA + 平台 Referer，并复用 `ArtworkCache` 的共享 CacheManager
@@ -207,8 +207,8 @@
   并行检索（`CatalogService.search` 复用 5min 缓存；逐源就绪即填充，单源失败进
   `failedSourceKeys` 可重试），载体是统一的「换源」页
   （`lib/pages/source_swap_page.dart`：歌词 / 音频两个 tab，歌词侧为
-  `LyricsSourceSearchView`，音频侧为 `SourceSwapView`；入口：播放页歌词快捷操作栏
-  默认歌词 tab、收藏页三类合集左滑默认音频 tab）点候选即试听（单曲「换源试听」上下文）、
+  `LyricsSourceSearchView`，音频侧为 `SourceSwapView`；入口：歌曲信息页「换源」
+  默认音频 tab、歌词页 FAB menu「换歌词」默认歌词 tab、收藏页三类合集左滑默认音频 tab）点候选即试听（单曲「换源试听」上下文）、
   确认后经 `LibraryProvider.replacePlaylistTrack` / `replaceHistoryEntry` 原位
   替换（仓库事务保 `sortOrder`/`addedAt`/`playedAt`，目标键已存在先确认去重），
   并经 `PlaybackProvider.replaceQueueTrack` 让队列中同 id 曲目跟随换源（新增
@@ -276,7 +276,7 @@
 - **同步过滤**：歌单曲目 / 历史 / 统计 / 播放会话适配器都过滤
   `sourceKey = local` 的条目（含墓碑）——文件是设备本机持久副本，
   同步到其它设备不可播放；
-- **UI**：歌曲信息页「下载」区（未下载 / 下载中 + 取消 / 已下载 +
+- **UI**：歌曲信息页「下载」行 → 下载弹层（未下载 / 下载中 + 取消 / 已下载 +
   分享导出 + 删除）与收藏页「已下载」入口（`lib/pages/downloads_page.dart`）；
   省流生效（移动数据 + 已开启）时下载前先确认。
 
@@ -432,6 +432,15 @@
   由包内 `M3ENavIconScale` 负责，不要再叠。
 - 弹层观感差异（M3E 统一 inverseSurface Snackbar、无红底错误色、Dialog/BottomSheet 圆角与
   spring 入场）属预期，不是 bug。
+- 播放页操作按作用对象分三域（见 ADR-0007）：**歌词域**（会话 / 来源 / 展示 / 导出）
+  在歌词页，操作收敛为底部左侧 `M3EFabMenu`（换歌词 / 复制模式 / 歌词选择·海报 /
+  居中跟随；无歌词时 = 换歌词 + 歌词显示设置；无曲目隐藏）；**曲目域**
+  （身份 / 渠道 / 音质 / 缓存 / 下载 / 评论）在歌曲信息页，段落顺序 =
+  操作（评论 / 定时关闭 / 换源）→ 下载 → 信息（音质 / 可用音质 / 专辑 / 来源 /
+  歌词来源）→ 缓存；**播放域**（模式 / 收藏 / 定时）在播放器进度排 + 信息页。
+  曲目级操作的打开编排（能力位、守卫、换源页 tab）唯一实现在
+  `lib/widgets/track_actions.dart`；单曲缓存清理在 `lib/pages/track_cache_page.dart`
+  （逐项确认），缓存内容变更经 `CacheService.revision` 跨页刷新占用。
 - 列表行统一走 `lib/widgets/track_row.dart`（队列/收藏/历史/发现共用）：形状按 M3E 列表规范
   （静止内 4dp、首末外侧 16dp；hover 12dp；press/选中 16dp），带 expressive spatial 弹簧
   morph；分段列表用 `cardList.gap`（2dp）行距、`itemExtent = TrackRow.extent + gap`，
