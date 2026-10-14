@@ -114,6 +114,9 @@ class _AppUiMessenger implements UiMessenger {
   /// failure.l10nKey 分发，未知 key 回退通用播放失败文案。
   String _localize(AppLocalizations l10n, SourceFailure failure) {
     switch (failure.l10nKey) {
+      case 'downloadFileMissing':
+        // 本地下载文件缺失：播放取链时归一化出的可读提示。
+        return l10n.downloadFileMissing;
       case null:
       case 'playbackFailed':
         return l10n.playbackFailed(failure.message);

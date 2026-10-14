@@ -440,10 +440,16 @@ class _LyricsWidgetState extends State<LyricsWidget>
   List<M3EToolbarItem> _buildQuickActions(AppLocalizations l10n) {
     final bool hasLyrics = _session.lines.isNotEmpty;
     // 本地下载曲目：文件是持久副本，不提供「换源」入口（自动换源也已跳过）。
-    final isLocalTrack = context.select<PlaybackProvider, bool>(
-      (provider) =>
-          provider.snapshot.current?.id.sourceKey == kLocalSourceKey,
-    );
+    // 用 listen:false 读取：本方法在 PositionLineIndexBuilder 的 build 内被
+    // 调用，context.select 在该阶段会触发 provider 断言；曲目变化时外层
+    // Selector（按 track uri）会重建整个歌词内容，取值仍是最新。
+    final isLocalTrack =
+        Provider.of<PlaybackProvider>(context, listen: false)
+                .snapshot
+                .current
+                ?.id
+                .sourceKey ==
+            kLocalSourceKey;
     return <M3EToolbarItem>[
       // 居中/恢复跟随：仅「手动滚动暂停 + 有同步歌词」时入列。
       if (!_autoScroll && hasLyrics && _session.isSynced)

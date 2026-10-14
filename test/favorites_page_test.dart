@@ -4,6 +4,9 @@ import 'dart:math' as math;
 import 'dart:typed_data';
 
 import 'package:flutter_test/flutter_test.dart';
+import 'package:molia/data/catalog/catalog_service.dart';
+import 'package:molia/data/downloads/downloads_repository.dart';
+import 'package:molia/domain/models/download.dart';
 import 'package:molia/domain/models/library.dart';
 import 'package:molia/l10n/app_localizations.dart';
 import 'package:molia/models/play_mode.dart';
@@ -12,6 +15,7 @@ import 'package:molia/providers/discover_provider.dart';
 import 'package:molia/providers/library_collections.dart';
 import 'package:molia/providers/library_provider.dart';
 import 'package:molia/providers/playback_provider.dart';
+import 'package:molia/services/download/download_service.dart';
 import 'package:molia/utils/responsive.dart';
 import 'package:molia/widgets/app_search_bar.dart';
 import 'package:molia/widgets/swipe_reveal_row.dart';
@@ -23,8 +27,28 @@ import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'support/fake_discover_api.dart';
+import 'support/fake_download_storage.dart';
 import 'support/fake_library_repository.dart';
+import 'support/fake_music_source.dart';
 import 'support/fakes.dart';
+
+/// 下载服务桩：只验证收藏页「已下载」入口的显隐与打开。
+class _StubDownloadService extends DownloadService {
+  _StubDownloadService()
+      : super(
+          catalog: CatalogService(registry: FakeSourceRegistry(const {})),
+          repository: DownloadsRepository(
+            databaseProvider: () => throw UnimplementedError(),
+          ),
+          storage: FakeDownloadStorage(),
+        );
+
+  @override
+  bool get supported => true;
+
+  @override
+  List<DownloadedTrack> get downloads => const [];
+}
 
 /// 「收藏」页 widget 测试。
 ///
@@ -65,6 +89,7 @@ void main() {
   Future<void> pumpFavorites(
     WidgetTester tester, {
     math.Random? shuffleRandom,
+    DownloadService? downloads,
   }) async {
     tester.view.physicalSize = const Size(1200, 2400);
     tester.view.devicePixelRatio = 1.0;
@@ -78,6 +103,8 @@ void main() {
         providers: [
           ChangeNotifierProvider<PlaybackProvider>.value(value: playback),
           ChangeNotifierProvider<LibraryProvider>.value(value: provider),
+          if (downloads != null)
+            ChangeNotifierProvider<DownloadService>.value(value: downloads),
         ],
         child: MaterialApp(
           locale: const Locale('zh'),
@@ -919,6 +946,24 @@ void main() {
     expect(raw, isNotNull);
     final saved = jsonDecode(raw!) as Map<String, dynamic>;
     expect(saved[LibraryCollections.favoritesOrderKey], greaterThan(0));
+  });
+
+  testWidgets('已下载入口：存储可用时显示并打开已下载页', (tester) async {
+    await pumpFavorites(tester, downloads: _StubDownloadService());
+
+    final entry = find.byKey(const Key('favoritesDownloadsEntry'));
+    expect(entry, findsOneWidget);
+
+    await tester.tap(entry);
+    await tester.pumpAndSettle();
+    expect(find.text('已下载'), findsWidgets);
+    expect(find.text('还没有下载的歌曲'), findsOneWidget);
+  });
+
+  testWidgets('已下载入口：未注入下载服务（Web / 不支持）时隐藏', (tester) async {
+    await pumpFavorites(tester);
+
+    expect(find.byKey(const Key('favoritesDownloadsEntry')), findsNothing);
   });
 }
 
