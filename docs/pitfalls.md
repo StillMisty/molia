@@ -192,3 +192,15 @@
     `pactl load-module module-null-sink` → `pactl set-default-sink`，
     并在同一步 export `XDG_RUNTIME_DIR`（daemon 与客户端的 socket 都靠它）。
     另：mock 音频时长要留足（现为 30s），别用 3s——慢 runner 上起播本身就要几秒。
+34. **release 的 `shrinkResources` 会删掉「字符串引用」的资源，媒体通知直接不出现**：
+    release 开了 `minifyEnabled + shrinkResources`，AAPT 只按静态引用判定资源存活；
+    `ic_notification`（Dart 侧 `androidNotificationIcon` 按字符串引用）与
+    `audio_service_*` 七个动作图标（audio_service 运行时 `getIdentifier`）在代码里
+    看不到引用，发布包里会被整个删掉。后果不是「图标退化成默认」而是**通知完全发不出来**：
+    Android 13+ 构建「停止」CustomAction 时 icon id=0 →
+    `IllegalArgumentException: You must specify an icon resource id to build a CustomAction`
+    → 通知构建中途中止、媒体会话状态停更——真机表现为通知栏完全没有播放卡片，
+    而 debug 包（不压缩资源）一切正常，极易误判成 ROM（如 ColorOS）问题。
+    修复：`android/app/src/main/res/raw/keep.xml` 用 `tools:keep` 保留
+    `@drawable/ic_notification,@drawable/audio_service_*`；`release.yml` 加了产物校验。
+    今后新增任何「字符串引用」的资源（自定义 MediaControl 图标等）都要同步进 keep.xml。

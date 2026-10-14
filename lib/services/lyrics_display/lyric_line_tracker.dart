@@ -1,3 +1,5 @@
+import 'package:flutter/foundation.dart';
+
 import '../../models/lyric_line.dart';
 import 'lyrics_display_settings.dart' show UnsyncedBehavior;
 
@@ -10,11 +12,24 @@ class TrackedLine {
   final List<String> extended;
   final List<String> upcoming;
 
+  /// 当前行的逐字时间轴（可空 = 该行没有逐字数据）。
+  final List<LyricWord>? words;
+
+  /// 当前行的时间轴（毫秒；-1 = 未知）。
+  ///
+  /// 桌面歌词用它给「跟随进度」的横向滚动做线性外推（无逐字数据时）；
+  /// [lineEndMs] 取下一行时间戳（最后一行回退到末词结束），未知为 -1。
+  final int lineStartMs;
+  final int lineEndMs;
+
   const TrackedLine({
     this.index = -1,
     this.line = '',
     this.extended = const [],
     this.upcoming = const [],
+    this.words,
+    this.lineStartMs = -1,
+    this.lineEndMs = -1,
   });
 
   @override
@@ -23,11 +38,21 @@ class TrackedLine {
       other.index == index &&
       other.line == line &&
       _listEquals(other.extended, extended) &&
-      _listEquals(other.upcoming, upcoming);
+      _listEquals(other.upcoming, upcoming) &&
+      listEquals(other.words, words) &&
+      other.lineStartMs == lineStartMs &&
+      other.lineEndMs == lineEndMs;
 
   @override
-  int get hashCode =>
-      Object.hash(index, line, Object.hashAll(extended), Object.hashAll(upcoming));
+  int get hashCode => Object.hash(
+        index,
+        line,
+        Object.hashAll(extended),
+        Object.hashAll(upcoming),
+        words == null ? null : Object.hashAll(words!),
+        lineStartMs,
+        lineEndMs,
+      );
 
   static bool _listEquals(List<String> a, List<String> b) {
     if (identical(a, b)) return true;
@@ -79,6 +104,7 @@ class LyricLineTracker {
               romaEnabled: romaEnabled,
             ),
             upcoming: _upcoming(lines, 0, maxLines),
+            words: lines.first.words,
           );
       }
     }
@@ -87,6 +113,16 @@ class LyricLineTracker {
     final effectivePosition = position + Duration(milliseconds: offsetMs);
     final index = lyricLineIndexAt(lines, effectivePosition);
     if (index < 0) return const TrackedLine();
+
+    // 行时间轴：终点取下一行时间戳；最后一行回退到末词结束；非法值归一为未知。
+    final words = lines[index].words;
+    final startMs = lines[index].timestamp.inMilliseconds;
+    var endMs =
+        index + 1 < lines.length ? lines[index + 1].timestamp.inMilliseconds : -1;
+    if (endMs <= startMs && words != null && words.isNotEmpty) {
+      endMs = words.last.end.inMilliseconds;
+    }
+    if (endMs <= startMs) endMs = -1;
 
     return TrackedLine(
       index: index,
@@ -99,6 +135,9 @@ class LyricLineTracker {
         romaEnabled: romaEnabled,
       ),
       upcoming: _upcoming(lines, index, maxLines),
+      words: words,
+      lineStartMs: startMs,
+      lineEndMs: endMs,
     );
   }
 

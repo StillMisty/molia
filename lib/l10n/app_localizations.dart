@@ -2210,29 +2210,23 @@ abstract class AppLocalizations {
   /// **'Clear all caches (audio / lyrics / artwork)? This cannot be undone.'**
   String get cacheClearAllConfirm;
 
-  /// No description provided for @settingsLyricsDisplayTitle.
+  /// No description provided for @lyricsContentTitle.
   ///
   /// In en, this message translates to:
-  /// **'Lyrics display'**
-  String get settingsLyricsDisplayTitle;
+  /// **'Lyrics & outputs'**
+  String get lyricsContentTitle;
 
-  /// No description provided for @settingsLyricsDisplaySubtitle.
+  /// No description provided for @lyricsContentSubtitle.
   ///
   /// In en, this message translates to:
-  /// **'Lyrics page, notification and Bluetooth lyrics'**
-  String get settingsLyricsDisplaySubtitle;
+  /// **'Lyrics page, translation, offset and shared options'**
+  String get lyricsContentSubtitle;
 
   /// No description provided for @lyricsPageTitle.
   ///
   /// In en, this message translates to:
   /// **'Lyrics page'**
   String get lyricsPageTitle;
-
-  /// No description provided for @lyricsDisplayPageEntrySubtitle.
-  ///
-  /// In en, this message translates to:
-  /// **'Translation and romanization of the in-app lyrics page'**
-  String get lyricsDisplayPageEntrySubtitle;
 
   /// No description provided for @lyricsPageTranslationSubtitle.
   ///
@@ -2251,12 +2245,6 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Lyric outputs'**
   String get lyricsDisplaySharedTitle;
-
-  /// No description provided for @lyricsDisplayOutputsEntrySubtitle.
-  ///
-  /// In en, this message translates to:
-  /// **'Translation, timing and unsynced handling shared by all outputs'**
-  String get lyricsDisplayOutputsEntrySubtitle;
 
   /// No description provided for @lyricsDisplayTranslation.
   ///
@@ -2395,12 +2383,6 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Visible lines'**
   String get lyricsDesktopMaxLines;
-
-  /// No description provided for @lyricsDesktopSingleLine.
-  ///
-  /// In en, this message translates to:
-  /// **'Current line only'**
-  String get lyricsDesktopSingleLine;
 
   /// No description provided for @lyricsDesktopAlign.
   ///
@@ -2564,6 +2546,18 @@ abstract class AppLocalizations {
   /// **'Close'**
   String get lyricsControlClose;
 
+  /// No description provided for @lyricsSystemMediaTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'System media lyrics'**
+  String get lyricsSystemMediaTitle;
+
+  /// No description provided for @lyricsSystemMediaSubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Notification, lock screen and Bluetooth'**
+  String get lyricsSystemMediaSubtitle;
+
   /// No description provided for @lyricsBehaviorKeep.
   ///
   /// In en, this message translates to:
@@ -2587,12 +2581,6 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Notification & lock screen'**
   String get lyricsNotificationTitle;
-
-  /// No description provided for @lyricsNotificationEntrySubtitle.
-  ///
-  /// In en, this message translates to:
-  /// **'Lyrics written into the media notification and lock screen'**
-  String get lyricsNotificationEntrySubtitle;
 
   /// No description provided for @lyricsNotificationEnable.
   ///
@@ -2677,12 +2665,6 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Bluetooth lyrics'**
   String get lyricsBluetoothTitle;
-
-  /// No description provided for @lyricsBluetoothEntrySubtitle.
-  ///
-  /// In en, this message translates to:
-  /// **'Lyrics for A2DP car displays and head units'**
-  String get lyricsBluetoothEntrySubtitle;
 
   /// No description provided for @lyricsBluetoothEnable.
   ///

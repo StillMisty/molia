@@ -9,6 +9,16 @@ class LyricWord {
   final Duration start;
   final Duration end;
   final String text;
+
+  @override
+  bool operator ==(Object other) =>
+      other is LyricWord &&
+      other.start == start &&
+      other.end == end &&
+      other.text == text;
+
+  @override
+  int get hashCode => Object.hash(start, end, text);
 }
 
 /// 一行歌词（时间戳 + 文本）。不可变：选中态属于 UI，不放进模型。

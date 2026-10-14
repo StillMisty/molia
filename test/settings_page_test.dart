@@ -184,7 +184,7 @@ void main() {
     expect(find.text('Resume last playback'), findsOneWidget);
     // 省流只有入口行一处（无分区标题、无子项）。
     expect(find.text('Data saver'), findsOneWidget);
-    expect(find.text('Lyrics display'), findsOneWidget);
+    expect(find.text('Lyrics & outputs'), findsOneWidget);
     expect(find.text('Source Management'), findsOneWidget);
     expect(find.text('AI DJ'), findsOneWidget);
     // 通用与数据：入口行同组。
@@ -357,7 +357,7 @@ void main() {
     expect(rowHeight(const Key('settingsPureBlackSwitch')), followArtwork);
     expect(rowHeight(const Key('settingsRestoreSessionSwitch')), followArtwork);
     expect(rowHeight(const Key('settingsDataSaverItem')), followArtwork);
-    expect(rowHeight(const Key('settingsLyricsDisplayItem')), followArtwork);
+    expect(rowHeight(const Key('settingsLyricsContentItem')), followArtwork);
 
     // 全页标签行（排除分段 / 滑杆 / 下拉等复合行）都不超过双行 token。
     for (final element in find.byType(CardListSurface).evaluate()) {
@@ -627,7 +627,7 @@ void main() {
     expect(find.text('Open settings'), findsOneWidget);
   });
 
-  testWidgets('首屏：桌面歌词直达入口（能力就绪时显示并进入聚合子页）', (tester) async {
+  testWidgets('首屏：歌词分区三条直达入口（能力就绪时全显示并进入子页）', (tester) async {
     final prefs = await SharedPreferences.getInstance();
     final lyricsSettings = LyricsDisplaySettings(
       settings: testSettingsRegistry(preferences: prefs),
@@ -636,7 +636,7 @@ void main() {
     addTearDown(lyricsSettings.dispose);
     final display = LyricsDisplayProvider(
       settings: lyricsSettings,
-      outputs: [_FakeDesktopOutput()],
+      outputs: [_FakeDesktopOutput(), _FakeMediaOutput()],
     );
     addTearDown(display.dispose);
 
@@ -650,16 +650,66 @@ void main() {
       ],
     );
 
-    // 直达行在首屏「歌词与展示」分区；不再经过「歌词显示」hub。
+    // 三条叶子入口都在首屏「歌词与展示」分区，不再经过任何 hub。
     expect(find.byKey(const Key('settingsDesktopLyricsItem')), findsOneWidget);
+    expect(find.byKey(const Key('settingsLyricsContentItem')), findsOneWidget);
+    expect(
+      find.byKey(const Key('settingsSystemMediaLyricsItem')),
+      findsOneWidget,
+    );
 
     await tester.tap(find.byKey(const Key('settingsDesktopLyricsItem')));
     await tester.pumpAndSettle();
 
-    // 子页聚合：启用开关与共享展示项（翻译/偏移）同页。
+    // 桌面歌词子页聚合：启用开关与共享展示项（翻译/偏移）同页。
     expect(find.text('Enable floating lyrics'), findsOneWidget);
     expect(find.text('Lyric display'), findsOneWidget);
     expect(find.text('Unsynced lyrics'), findsOneWidget);
+  });
+
+  testWidgets('首屏：无输出能力时只留「歌词与输出」入口并给出平台提示', (tester) async {
+    await pumpSettingsPage(tester);
+
+    expect(find.byKey(const Key('settingsLyricsContentItem')), findsOneWidget);
+    expect(find.byKey(const Key('settingsDesktopLyricsItem')), findsNothing);
+    expect(
+      find.byKey(const Key('settingsSystemMediaLyricsItem')),
+      findsNothing,
+    );
+    expect(
+      find.text('Lyric outputs are not available on this platform'),
+      findsOneWidget,
+    );
+  });
+
+  testWidgets('首屏：媒体会话初始化失败给出可见提示', (tester) async {
+    final prefs = await SharedPreferences.getInstance();
+    final lyricsSettings = LyricsDisplaySettings(
+      settings: testSettingsRegistry(preferences: prefs),
+    );
+    await lyricsSettings.init();
+    addTearDown(lyricsSettings.dispose);
+    final display = LyricsDisplayProvider(
+      settings: lyricsSettings,
+      outputs: [_FakeDesktopOutput(), _FakeMediaOutput()],
+      mediaSessionInitFailed: true,
+    );
+    addTearDown(display.dispose);
+
+    await pumpSettingsPage(
+      tester,
+      extraProviders: [
+        ChangeNotifierProvider<LyricsDisplaySettings>.value(
+          value: lyricsSettings,
+        ),
+        ChangeNotifierProvider<LyricsDisplayProvider>.value(value: display),
+      ],
+    );
+
+    expect(
+      find.textContaining('System media session unavailable'),
+      findsOneWidget,
+    );
   });
 
   testWidgets('底部弹层：列表滑到顶后继续下滑可关闭（M3E 弹层滚动控制器接线）', (tester) async {
@@ -767,6 +817,27 @@ void main() {
 class _FakeDesktopOutput implements LyricsOutput {
   @override
   String get id => LyricsOutputIds.desktop;
+
+  @override
+  LyricsOutputCapability get capability => LyricsOutputCapability.ready;
+
+  @override
+  Future<void> start(LyricsDisplaySettings settings) async {}
+
+  @override
+  Future<void> apply(LyricsPresentation presentation) async {}
+
+  @override
+  Future<void> clear() async {}
+
+  @override
+  Future<void> stop() async {}
+}
+
+/// 最小媒体（通知 / 蓝牙）歌词输出：能力就绪，不触碰平台通道。
+class _FakeMediaOutput implements LyricsOutput {
+  @override
+  String get id => LyricsOutputIds.media;
 
   @override
   LyricsOutputCapability get capability => LyricsOutputCapability.ready;

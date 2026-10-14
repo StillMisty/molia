@@ -128,26 +128,18 @@ class DesktopLyricsSettingsPage extends StatelessWidget {
                 divisions: 12,
                 onChanged: (value) => settings.setDesktopWidthPercent(value),
               ),
-              SettingsSwitchTile(
-                icon: Icons.notes_rounded,
-                title: l10n.lyricsDesktopSingleLine,
-                subtitle: '',
-                value: settings.desktopSingleLine,
-                onChanged: settings.setDesktopSingleLine,
+              // 显示行数（默认 1 = 只显示当前行；旧的「仅显示当前行」开关已合并到这里）。
+              // 保持 dropdown：选项多、文案是纯数字，下拉比分段更省横向空间。
+              SettingsDropdownRow<int>(
+                icon: Icons.format_list_numbered_rounded,
+                title: l10n.lyricsDesktopMaxLines,
+                value: settings.desktopMaxLines,
+                options: [
+                  for (final value in const [1, 2, 3, 4, 5])
+                    (value, '$value'),
+                ],
+                onChanged: settings.setDesktopMaxLines,
               ),
-              // 单行模式下行数无意义，随开关显隐（保持 dropdown：选项多、
-              // 文案是纯数字，下拉比分段更省横向空间）。
-              if (!settings.desktopSingleLine)
-                SettingsDropdownRow<int>(
-                  icon: Icons.format_list_numbered_rounded,
-                  title: l10n.lyricsDesktopMaxLines,
-                  value: settings.desktopMaxLines,
-                  options: [
-                    for (final value in const [1, 2, 3, 4, 5])
-                      (value, '$value'),
-                  ],
-                  onChanged: settings.setDesktopMaxLines,
-                ),
               SettingsChoiceRow<DesktopTextAlignX>(
                 icon: Icons.format_align_center_rounded,
                 title: l10n.lyricsDesktopAlign,
@@ -483,7 +475,7 @@ class DesktopLyricsSettingsPage extends StatelessWidget {
         ),
       ),
     ];
-    if (settings.translationEnabled && !settings.desktopSingleLine) {
+    if (settings.translationEnabled) {
       previewLines.add(
         Text(
           l10n.lyricsDesktopPreviewTranslation,

@@ -20,7 +20,8 @@ void main() {
     expect(s.pageTranslationEnabled, isTrue);
     expect(s.pageRomaEnabled, isFalse);
     expect(s.offsetMs, 0);
-    expect(s.desktopMaxLines, 3);
+    // 默认只显示当前行（旧的「仅显示当前行」开关已并入显示行数）。
+    expect(s.desktopMaxLines, 1);
     expect(s.desktopFontSize, 22);
     // 默认直接跟随应用主题角色：当前行主色 / 其余行次要文本色 / 描边表面色。
     expect(s.desktopPlayedColorSource, LyricColorSource.primary);
@@ -51,7 +52,7 @@ void main() {
     await source.setDesktopShadowColorSource(LyricColorSource.tertiary);
     await source.setDesktopSchemeSource(SurfaceColorSource.artwork);
     await source.setDesktopWidthPercent(80);
-    await source.setDesktopSingleLine(true);
+    await source.setDesktopMaxLines(4);
     await source.setDesktopTextAlignX(DesktopTextAlignX.left);
     await source.setDesktopTextAlignY(DesktopTextAlignY.bottom);
     await source.setDesktopLock(true);
@@ -96,7 +97,7 @@ void main() {
     expect(restored.desktopShadowColorSource, LyricColorSource.tertiary);
     expect(restored.desktopSchemeSource, SurfaceColorSource.artwork);
     expect(restored.desktopWidthPercent, 80);
-    expect(restored.desktopSingleLine, isTrue);
+    expect(restored.desktopMaxLines, 4);
     expect(restored.desktopTextAlignX, DesktopTextAlignX.left);
     expect(restored.desktopTextAlignY, DesktopTextAlignY.bottom);
     expect(restored.desktopLock, isTrue);
@@ -138,6 +139,31 @@ void main() {
     expect(s.pageTranslationEnabled,
         LyricsDisplaySettings.defaultPageTranslationEnabled);
     expect(s.pageRomaEnabled, LyricsDisplaySettings.defaultPageRomaEnabled);
+  });
+
+  test('旧配置兼容：singleLine=true 一次性映射为显示行数 1', () async {
+    SharedPreferences.setMockInitialValues({
+      kLyricsDisplaySettings.name: jsonEncode({
+        'version': 1,
+        'desktop.singleLine': true,
+        'desktop.maxLines': 3,
+      }),
+    });
+    final s = LyricsDisplaySettings();
+    await s.init();
+    expect(s.desktopMaxLines, 1);
+
+    // singleLine=false 的旧配置保持原显示行数（只改默认、不做其它迁移）。
+    SharedPreferences.setMockInitialValues({
+      kLyricsDisplaySettings.name: jsonEncode({
+        'version': 1,
+        'desktop.singleLine': false,
+        'desktop.maxLines': 3,
+      }),
+    });
+    final kept = LyricsDisplaySettings();
+    await kept.init();
+    expect(kept.desktopMaxLines, 3);
   });
 
   test('歌词页开关与输出侧开关相互独立', () async {

@@ -61,11 +61,19 @@ void main() {
 
     provider.updatePosition(const Duration(seconds: 1));
     await pumpEventQueue();
-    expect(output.applied.length, baseline, reason: '同一行不应重复下发');
+    expect(output.applied.length, baseline + 1,
+        reason: '位置变化要转发给输出（逐字渐染的进度来源）');
+    expect(output.applied.last.line, 'A');
+    expect(output.applied.last.positionMs, 1000);
+
+    // 位置没有变化时不重复下发（去重仍然有效）。
+    provider.updatePosition(const Duration(seconds: 1));
+    await pumpEventQueue();
+    expect(output.applied.length, baseline + 1);
 
     provider.updatePosition(const Duration(seconds: 6));
     await pumpEventQueue();
-    expect(output.applied.length, baseline + 1);
+    expect(output.applied.length, baseline + 2);
     expect(output.applied.last.line, 'B');
 
     await settings.setDesktopEnabled(false);

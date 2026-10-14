@@ -1137,16 +1137,13 @@ class AppLocalizationsZh extends AppLocalizations {
   String get cacheClearAllConfirm => '确定清理全部缓存（音频 / 歌词 / 封面）？此操作无法撤销。';
 
   @override
-  String get settingsLyricsDisplayTitle => '歌词显示';
+  String get lyricsContentTitle => '歌词与输出';
 
   @override
-  String get settingsLyricsDisplaySubtitle => '歌词页、通知栏·锁屏与蓝牙歌词';
+  String get lyricsContentSubtitle => '歌词页、翻译、偏移等共享设置';
 
   @override
   String get lyricsPageTitle => '歌词页';
-
-  @override
-  String get lyricsDisplayPageEntrySubtitle => '应用内歌词页的翻译与罗马音';
 
   @override
   String get lyricsPageTranslationSubtitle => '在歌词页每行下方显示翻译';
@@ -1156,9 +1153,6 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get lyricsDisplaySharedTitle => '歌词输出';
-
-  @override
-  String get lyricsDisplayOutputsEntrySubtitle => '各输出共用的翻译、对齐与无时间轴处理';
 
   @override
   String get lyricsDisplayTranslation => '翻译';
@@ -1231,9 +1225,6 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get lyricsDesktopMaxLines => '显示行数';
-
-  @override
-  String get lyricsDesktopSingleLine => '仅显示当前行';
 
   @override
   String get lyricsDesktopAlign => '水平对齐';
@@ -1317,6 +1308,12 @@ class AppLocalizationsZh extends AppLocalizations {
   String get lyricsControlClose => '关闭';
 
   @override
+  String get lyricsSystemMediaTitle => '系统媒体歌词';
+
+  @override
+  String get lyricsSystemMediaSubtitle => '通知栏·锁屏与蓝牙歌词';
+
+  @override
   String get lyricsBehaviorKeep => '保留';
 
   @override
@@ -1327,9 +1324,6 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get lyricsNotificationTitle => '通知栏 · 锁屏歌词';
-
-  @override
-  String get lyricsNotificationEntrySubtitle => '写入媒体通知与锁屏的歌词';
 
   @override
   String get lyricsNotificationEnable => '在通知栏显示歌词';
@@ -1372,9 +1366,6 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get lyricsBluetoothTitle => '蓝牙歌词';
-
-  @override
-  String get lyricsBluetoothEntrySubtitle => '面向 A2DP 车机与耳机的歌词';
 
   @override
   String get lyricsBluetoothEnable => '车机显示歌词';

@@ -29,7 +29,8 @@ import 'data_saver_settings_page.dart';
 import 'data_settings_page.dart';
 import 'general_settings_page.dart';
 import 'lyrics_display/desktop_lyrics_settings_page.dart';
-import 'lyrics_display_page.dart';
+import 'lyrics_display/lyrics_content_settings_page.dart';
+import 'lyrics_display/system_media_lyrics_settings_page.dart';
 import 'sources_page.dart';
 import 'sync_settings_page.dart';
 import 'update_settings_page.dart';
@@ -469,43 +470,87 @@ class _SettingsHomeViewState extends State<_SettingsHomeView>
     );
   }
 
-  /// 歌词与展示：桌面歌词直达 + 歌词显示（歌词页 / 输出 / 通知 / 蓝牙）。
+  /// 歌词与展示：桌面歌词 / 歌词与输出 / 系统媒体歌词（三条叶子入口）。
+  ///
+  /// 输出入口按平台能力显隐（桌面歌词＝悬浮窗能力、系统媒体＝媒体会话能力；
+  /// 不支持的平台隐藏入口，避免开关撒谎）；「歌词与输出」与应用内歌词页
+  /// 及共享项相关，与输出能力无关，始终可见。
   Widget _lyricsSection(
     BuildContext context,
     AppLocalizations l10n,
     LyricsDisplayProvider? lyricsDisplay,
   ) {
-    final bool desktopSupported = lyricsDisplay != null &&
-        lyricsDisplay.capabilityOf(LyricsOutputIds.desktop) !=
-            LyricsOutputCapability.unsupported;
-    return SettingsSectionCard(
-      title: l10n.settingsLyricsSection,
+    final LyricsOutputCapability desktopCapability = lyricsDisplay == null
+        ? LyricsOutputCapability.unsupported
+        : lyricsDisplay.capabilityOf(LyricsOutputIds.desktop);
+    final LyricsOutputCapability mediaCapability = lyricsDisplay == null
+        ? LyricsOutputCapability.unsupported
+        : lyricsDisplay.capabilityOf(LyricsOutputIds.media);
+    final bool desktopSupported =
+        desktopCapability != LyricsOutputCapability.unsupported;
+    final bool mediaSupported =
+        mediaCapability != LyricsOutputCapability.unsupported;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        // 桌面歌词直达，不再经过「歌词显示」hub；平台不支持时隐藏入口，
-        // 避免开关撒谎（与 hub 的能力门控一致）。
-        if (desktopSupported)
-          SettingsNavTile(
-            key: const Key('settingsDesktopLyricsItem'),
-            icon: Icons.picture_in_picture_alt_rounded,
-            title: l10n.lyricsDesktopTitle,
-            subtitle: l10n.lyricsDesktopEntrySubtitle,
-            onTap: () => openSettingsSubPage(
-              context,
-              const DesktopLyricsSettingsPage(),
+        SettingsSectionCard(
+          title: l10n.settingsLyricsSection,
+          children: [
+            if (desktopSupported)
+              SettingsNavTile(
+                key: const Key('settingsDesktopLyricsItem'),
+                icon: Icons.picture_in_picture_alt_rounded,
+                title: l10n.lyricsDesktopTitle,
+                subtitle: l10n.lyricsDesktopEntrySubtitle,
+                onTap: () => openSettingsSubPage(
+                  context,
+                  const DesktopLyricsSettingsPage(),
+                ),
+              ),
+            SettingsNavTile(
+              key: const Key('settingsLyricsContentItem'),
+              icon: Icons.lyrics_rounded,
+              title: l10n.lyricsContentTitle,
+              subtitle: l10n.lyricsContentSubtitle,
+              onTap: () => openSettingsSubPage(
+                context,
+                const LyricsContentSettingsPage(),
+              ),
             ),
-          ),
-        // 歌词显示：歌词页 / 歌词输出 / 通知·锁屏 / 蓝牙（二级子页）。
-        SettingsNavTile(
-          key: const Key('settingsLyricsDisplayItem'),
-          icon: Icons.lyrics_rounded,
-          title: l10n.settingsLyricsDisplayTitle,
-          subtitle: l10n.settingsLyricsDisplaySubtitle,
-          onTap: () => openSettingsSubPage(
-            context,
-            const LyricsDisplayPage(),
-          ),
+            if (mediaSupported)
+              SettingsNavTile(
+                key: const Key('settingsSystemMediaLyricsItem'),
+                icon: Icons.notifications_active_rounded,
+                title: l10n.lyricsSystemMediaTitle,
+                subtitle: l10n.lyricsSystemMediaSubtitle,
+                onTap: () => openSettingsSubPage(
+                  context,
+                  const SystemMediaLyricsSettingsPage(),
+                ),
+              ),
+          ],
         ),
+        // 全部输出都不支持（Web / 桌面等）：给一句解释，而不是静默只剩一条入口。
+        if (!desktopSupported && !mediaSupported)
+          _lyricsSectionHint(context, l10n.lyricsDisplayUnsupported),
+        // 平台支持但媒体会话初始化失败（音频服务 init 返回 null）：
+        // 给出可见提示——否则系统媒体入口消失、只剩日志，用户无法自查。
+        if (mediaSupported && lyricsDisplay?.mediaSessionInitFailed == true)
+          _lyricsSectionHint(context, l10n.lyricsMediaSessionUnavailable),
       ],
+    );
+  }
+
+  Widget _lyricsSectionHint(BuildContext context, String text) {
+    return Padding(
+      padding: const EdgeInsets.only(top: kSettingsSectionSpacing),
+      child: Text(
+        text,
+        textAlign: TextAlign.center,
+        style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+              color: Theme.of(context).colorScheme.onSurfaceVariant,
+            ),
+      ),
     );
   }
 

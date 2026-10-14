@@ -1,5 +1,6 @@
 import 'package:flutter/foundation.dart';
 
+import '../../models/lyric_line.dart';
 import 'lyrics_display_settings.dart';
 
 /// 输出能力：平台是否支持 / 权限是否就绪。
@@ -25,6 +26,19 @@ class LyricsPresentation {
   final bool isPlaying;
   final bool hasLyrics;
 
+  /// 当前行的逐字时间轴（可空 = 该行无逐字数据，按整行着色）。
+  final List<LyricWord>? words;
+
+  /// 本次投送时的有效播放位置（毫秒，已叠加歌词偏移）。
+  ///
+  /// 桌面歌词用它给逐字渐染做插值基准；位置变化会让 presentation 变化，
+  /// 从而在播放中以位置通道的频率（≤4Hz）刷新悬浮窗。
+  final int positionMs;
+
+  /// 当前行时间轴（毫秒；-1 = 未知）：桌面歌词「跟随进度」横向滚动的兜底。
+  final int lineStartMs;
+  final int lineEndMs;
+
   const LyricsPresentation({
     required this.trackId,
     required this.title,
@@ -33,6 +47,10 @@ class LyricsPresentation {
     this.upcoming = const [],
     required this.isPlaying,
     required this.hasLyrics,
+    this.words,
+    this.positionMs = 0,
+    this.lineStartMs = -1,
+    this.lineEndMs = -1,
   });
 
   @override
@@ -44,7 +62,11 @@ class LyricsPresentation {
       listEquals(other.extended, extended) &&
       listEquals(other.upcoming, upcoming) &&
       other.isPlaying == isPlaying &&
-      other.hasLyrics == hasLyrics;
+      other.hasLyrics == hasLyrics &&
+      listEquals(other.words, words) &&
+      other.positionMs == positionMs &&
+      other.lineStartMs == lineStartMs &&
+      other.lineEndMs == lineEndMs;
 
   @override
   int get hashCode => Object.hash(
@@ -55,6 +77,10 @@ class LyricsPresentation {
         Object.hashAll(upcoming),
         isPlaying,
         hasLyrics,
+        words == null ? null : Object.hashAll(words!),
+        positionMs,
+        lineStartMs,
+        lineEndMs,
       );
 }
 
