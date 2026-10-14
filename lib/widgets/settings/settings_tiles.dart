@@ -129,7 +129,7 @@ class SettingsRows extends StatelessWidget {
 /// 设置行统一高度（M3E 列表 token）：有副标题取
 /// `M3EListItemTheme.twoLineHeight`（72dp）、无取 `minHeight`（56dp）。
 ///
-/// 副标题封顶 2 行（见 [_SettingsTileLabel]），行高不再随文案长度在
+/// 副标题封顶 2 行（见 [SettingsTileLabel]），行高不再随文案长度在
 /// 56–158dp 之间漂移；内容在行内垂直居中（Row 默认 crossAxisAlignment）。
 class _SettingsRowContent extends StatelessWidget {
   const _SettingsRowContent({required this.hasSubtitle, required this.child});
@@ -160,12 +160,16 @@ class SettingsNavTile extends StatelessWidget {
     required this.title,
     required this.subtitle,
     required this.onTap,
+    this.trailing,
     this.isDestructive = false,
   });
 
   final IconData icon;
   final String title;
   final String subtitle;
+
+  /// chevron 之前的附属控件（如「Aa」字体样例）；缺省只有 chevron。
+  final Widget? trailing;
 
   /// 为 null 时整行禁用（如清理进行中）。
   final VoidCallback? onTap;
@@ -188,15 +192,19 @@ class SettingsNavTile extends StatelessWidget {
         hasSubtitle: subtitle.isNotEmpty,
         child: Row(
           children: [
-            _SettingsTileIcon(icon: icon, isDestructive: isDestructive),
+            SettingsTileIcon(icon: icon, isDestructive: isDestructive),
             const SizedBox(width: 12),
             Expanded(
-              child: _SettingsTileLabel(
+              child: SettingsTileLabel(
                 title: title,
                 subtitle: subtitle,
                 isDestructive: isDestructive,
               ),
             ),
+            if (trailing != null) ...[
+              const SizedBox(width: kSettingsSmallSpacing),
+              trailing!,
+            ],
             Icon(
               Icons.chevron_right_rounded,
               size: 20,
@@ -253,10 +261,10 @@ class SettingsSwitchTile extends StatelessWidget {
           hasSubtitle: subtitle.isNotEmpty,
           child: Row(
             children: [
-              _SettingsTileIcon(icon: icon, isDestructive: false),
+              SettingsTileIcon(icon: icon, isDestructive: false),
               const SizedBox(width: 12),
               Expanded(
-                child: _SettingsTileLabel(title: title, subtitle: subtitle),
+                child: SettingsTileLabel(title: title, subtitle: subtitle),
               ),
               M3ESwitch(
                 key: switchKey,
@@ -303,10 +311,10 @@ class SettingsInfoTile extends StatelessWidget {
         hasSubtitle: subtitle.isNotEmpty,
         child: Row(
           children: [
-            _SettingsTileIcon(icon: icon, isDestructive: false),
+            SettingsTileIcon(icon: icon, isDestructive: false),
             const SizedBox(width: 12),
             Expanded(
-                child: _SettingsTileLabel(title: title, subtitle: subtitle)),
+                child: SettingsTileLabel(title: title, subtitle: subtitle)),
           ],
         ),
       ),
@@ -350,10 +358,10 @@ class SettingsValueTile extends StatelessWidget {
         hasSubtitle: subtitle != null && subtitle!.isNotEmpty,
         child: Row(
           children: [
-            _SettingsTileIcon(icon: icon, isDestructive: false),
+            SettingsTileIcon(icon: icon, isDestructive: false),
             const SizedBox(width: 12),
             Expanded(
-              child: _SettingsTileLabel(
+              child: SettingsTileLabel(
                 title: title,
                 subtitle: subtitle ?? '',
               ),
@@ -385,6 +393,10 @@ class SettingsValueTile extends StatelessWidget {
 /// `Stack` + `Positioned.fill` + `Row(mainAxisSize.min)`，在放松约束的父级
 /// （`Align` / `Row` 尾位）会塌成零宽并溢出；这里把它放进
 /// `double.infinity` 的紧约束里，多个 segment 才会等宽铺满。
+///
+/// M3E 选中形态（[icons] 全齐时）：选中段的图标位置改画对勾（勾替换图标，
+/// 不额外占宽）；没有逐项图标的行保持「无勾、仅容器填充」——勾会挤占标签
+/// 宽度，在窄弹层里把长文案截断（回归见 settings_choice_row_test）。
 class SettingsChoiceRow<T> extends StatelessWidget {
   const SettingsChoiceRow({
     super.key,
@@ -395,6 +407,7 @@ class SettingsChoiceRow<T> extends StatelessWidget {
     required this.options,
     required this.onChanged,
     this.optionEnabled,
+    this.icons,
   }) : assert(
          options.length >= 2 && options.length <= 5,
          '分段行需要 2–5 个选项（更多选项请用 SettingsDropdownRow）。',
@@ -410,10 +423,17 @@ class SettingsChoiceRow<T> extends StatelessWidget {
   /// 选项（值 + 显示文案）。
   final List<(T, String)> options;
 
+  /// 逐项图标：每个选项都有时选中段显示对勾（替换图标）；缺省/不齐则不显示。
+  final Map<T, IconData>? icons;
+
   final ValueChanged<T> onChanged;
 
   /// 单项禁用判定（如平台能力不足的选项）；缺省全部可用。
   final bool Function(T value)? optionEnabled;
+
+  /// 是否处于 M3E 选中形态：每个选项都配了图标。
+  bool get _showSelectedIcon =>
+      icons != null && options.every((option) => icons!.containsKey(option.$1));
 
   @override
   Widget build(BuildContext context) {
@@ -428,19 +448,22 @@ class SettingsChoiceRow<T> extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          _SettingsTileLead(icon: icon, title: title, subtitle: subtitle),
+          SettingsTileLead(icon: icon, title: title, subtitle: subtitle),
           const SizedBox(height: kSettingsSmallSpacing),
           SizedBox(
             width: double.infinity,
             child: M3ESegmentedButton<T>(
-              // 关掉选中勾图标：勾 + 文案在窄弹层里会把标签挤到截断
-              // （「System …」）；选中态仍有容器填充可辨。
-              showSelectedIcon: false,
+              // 只有逐项图标齐全时才显示选中勾（勾替换图标、不占额外宽度）；
+              // 纯文字分段的勾会把标签挤到截断（「System …」），见类注释。
+              showSelectedIcon: _showSelectedIcon,
               segments: [
                 for (final (optionValue, label) in options)
                   M3ESegment<T>(
                     value: optionValue,
                     label: label,
+                    icon: icons?[optionValue] == null
+                        ? null
+                        : Icon(icons![optionValue]!),
                     enabled: optionEnabled?.call(optionValue) ?? true,
                   ),
               ],
@@ -499,7 +522,7 @@ class SettingsDropdownRow<T> extends StatelessWidget {
         child: Row(
           children: [
             Expanded(
-              child: _SettingsTileLead(
+              child: SettingsTileLead(
                   icon: icon, title: title, subtitle: subtitle),
             ),
             const SizedBox(width: 8),
@@ -569,7 +592,7 @@ class SettingsSliderRow extends StatelessWidget {
         children: [
           Row(
             children: [
-              Expanded(child: _SettingsTileLead(icon: icon, title: title)),
+              Expanded(child: SettingsTileLead(icon: icon, title: title)),
               const SizedBox(width: 8),
               Text(
                 valueLabel,
@@ -633,7 +656,7 @@ class SettingsColorValueTile extends StatelessWidget {
         hasSubtitle: false,
         child: Row(
           children: [
-            Expanded(child: _SettingsTileLead(icon: icon, title: title)),
+            Expanded(child: SettingsTileLead(icon: icon, title: title)),
             const SizedBox(width: 8),
             SettingsColorSwatch(color: Color(colorArgb)),
             const SizedBox(width: 8),
@@ -681,8 +704,16 @@ class SettingsColorSwatch extends StatelessWidget {
 ///
 /// 内部用 [Expanded] 吃掉剩余宽度把尾部控件推到行尾，因此放在 `Row` 里时
 /// 调用方必须再用 `Expanded` 包一层（非 flex 子项拿到的是无界约束）。
-class _SettingsTileLead extends StatelessWidget {
-  const _SettingsTileLead({required this.icon, required this.title, this.subtitle});
+///
+/// 公开给需要自绘行内容的页面（如音源管理页的状态行）：与内置行共用同一
+/// 套图标底 / 排版 / 间距，避免页面各写一份。
+class SettingsTileLead extends StatelessWidget {
+  const SettingsTileLead({
+    super.key,
+    required this.icon,
+    required this.title,
+    this.subtitle,
+  });
 
   final IconData icon;
   final String title;
@@ -692,10 +723,10 @@ class _SettingsTileLead extends StatelessWidget {
   Widget build(BuildContext context) {
     return Row(
       children: [
-        _SettingsTileIcon(icon: icon, isDestructive: false),
+        SettingsTileIcon(icon: icon, isDestructive: false),
         const SizedBox(width: 12),
         Expanded(
-          child: _SettingsTileLabel(title: title, subtitle: subtitle ?? ''),
+          child: SettingsTileLabel(title: title, subtitle: subtitle ?? ''),
         ),
       ],
     );
@@ -703,8 +734,12 @@ class _SettingsTileLead extends StatelessWidget {
 }
 
 /// 设置行统一图标底：40dp 圆角块（危险操作走 error 容器成对色）。
-class _SettingsTileIcon extends StatelessWidget {
-  const _SettingsTileIcon({required this.icon, required this.isDestructive});
+class SettingsTileIcon extends StatelessWidget {
+  const SettingsTileIcon({
+    super.key,
+    required this.icon,
+    required this.isDestructive,
+  });
 
   final IconData icon;
   final bool isDestructive;
@@ -736,8 +771,9 @@ class _SettingsTileIcon extends StatelessWidget {
 ///
 /// 标题 1 行省略 + 副标题 2 行封顶省略：长副标题不再把行撑到 3 行/158dp，
 /// 行高由 [_SettingsRowContent] 统一（有/无副标题 72/56dp）。
-class _SettingsTileLabel extends StatelessWidget {
-  const _SettingsTileLabel({
+class SettingsTileLabel extends StatelessWidget {
+  const SettingsTileLabel({
+    super.key,
     required this.title,
     required this.subtitle,
     this.isDestructive = false,

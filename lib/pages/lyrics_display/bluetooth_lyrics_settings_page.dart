@@ -107,6 +107,7 @@ class BluetoothLyricsSettingsPage extends StatelessWidget {
                 title: l10n.lyricsMetadataPauseBehavior,
                 value: settings.bluetoothPauseBehavior,
                 options: lyricsPauseBehaviorOptions(l10n),
+                icons: lyricsPauseBehaviorIcons,
                 onChanged: settings.setBluetoothPauseBehavior,
               ),
             ],

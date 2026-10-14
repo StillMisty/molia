@@ -60,6 +60,50 @@ void main() {
     expect(selected, 'b');
   });
 
+  testWidgets('分段行：逐项图标齐全时选中段显示对勾（M3E 替换图标）', (tester) async {
+    await pumpRow(
+      tester,
+      Center(
+        child: SettingsChoiceRow<String>(
+          icon: Icons.repeat_rounded,
+          title: 'Mode',
+          value: 'a',
+          options: const [('a', 'One'), ('b', 'Two'), ('c', 'Three')],
+          icons: const {
+            'a': Icons.repeat_rounded,
+            'b': Icons.shuffle_rounded,
+            'c': Icons.repeat_one_rounded,
+          },
+          onChanged: (_) {},
+        ),
+      ),
+    );
+
+    // 每个选项都有自然图标：上勾（替换图标、不额外占宽）。
+    final segmented =
+        tester.widget<M3ESegmentedButton<String>>(find.byType(M3ESegmentedButton<String>));
+    expect(segmented.showSelectedIcon, isTrue);
+  });
+
+  testWidgets('分段行：无逐项图标时保持无勾（勾会挤断长标签）', (tester) async {
+    await pumpRow(
+      tester,
+      Center(
+        child: SettingsChoiceRow<String>(
+          icon: Icons.language_rounded,
+          title: 'Language',
+          value: 'a',
+          options: const [('a', 'System'), ('b', 'English')],
+          onChanged: (_) {},
+        ),
+      ),
+    );
+
+    final segmented =
+        tester.widget<M3ESegmentedButton<String>>(find.byType(M3ESegmentedButton<String>));
+    expect(segmented.showSelectedIcon, isFalse);
+  });
+
   testWidgets('下拉行：未选中显示标题提示，不落英文兜底 Select', (tester) async {
     await pumpRow(
       tester,

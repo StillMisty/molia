@@ -149,6 +149,11 @@ class DesktopLyricsSettingsPage extends StatelessWidget {
                   (DesktopTextAlignX.center, l10n.lyricsDesktopAlignCenter),
                   (DesktopTextAlignX.right, l10n.lyricsDesktopAlignRight),
                 ],
+                icons: const {
+                  DesktopTextAlignX.left: Icons.format_align_left_rounded,
+                  DesktopTextAlignX.center: Icons.format_align_center_rounded,
+                  DesktopTextAlignX.right: Icons.format_align_right_rounded,
+                },
                 onChanged: settings.setDesktopTextAlignX,
               ),
               SettingsChoiceRow<DesktopTextAlignY>(
@@ -160,6 +165,11 @@ class DesktopLyricsSettingsPage extends StatelessWidget {
                   (DesktopTextAlignY.center, l10n.lyricsDesktopAlignCenter),
                   (DesktopTextAlignY.bottom, l10n.lyricsDesktopAlignBottom),
                 ],
+                icons: const {
+                  DesktopTextAlignY.top: Icons.vertical_align_top_rounded,
+                  DesktopTextAlignY.center: Icons.vertical_align_center_rounded,
+                  DesktopTextAlignY.bottom: Icons.vertical_align_bottom_rounded,
+                },
                 onChanged: settings.setDesktopTextAlignY,
               ),
               // 取色来源：决定三行「跟随主题角色」用哪套方案（应用主题 /
@@ -178,6 +188,10 @@ class DesktopLyricsSettingsPage extends StatelessWidget {
                     l10n.lyricsDesktopSchemeArtwork,
                   ),
                 ],
+                icons: const {
+                  SurfaceColorSource.appTheme: Icons.palette_rounded,
+                  SurfaceColorSource.artwork: Icons.album_rounded,
+                },
                 onChanged: settings.setDesktopSchemeSource,
               ),
               _colorRow(
@@ -273,6 +287,10 @@ class DesktopLyricsSettingsPage extends StatelessWidget {
                     l10n.lyricsDisplayUnsyncedHide,
                   ),
                 ],
+                icons: const {
+                  DesktopNoLyricsBehavior.title: Icons.title_rounded,
+                  DesktopNoLyricsBehavior.hide: Icons.visibility_off_rounded,
+                },
                 onChanged: settings.setDesktopNoLyricsBehavior,
               ),
               _controlSwitch(

@@ -110,9 +110,6 @@ class AppLocalizationsEn extends AppLocalizations {
       'Use pure black surfaces in dark mode (OLED)';
 
   @override
-  String get settingsSeedColor => 'Custom color';
-
-  @override
   String get settingsFollowArtwork => 'Follow album art';
 
   @override

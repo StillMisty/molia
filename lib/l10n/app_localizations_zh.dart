@@ -108,9 +108,6 @@ class AppLocalizationsZh extends AppLocalizations {
   String get settingsPureBlackSubtitle => '深色模式下表面纯黑（OLED 省电；可与取色叠加）';
 
   @override
-  String get settingsSeedColor => '自定义颜色';
-
-  @override
   String get settingsFollowArtwork => '播放时跟随封面';
 
   @override

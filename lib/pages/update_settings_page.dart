@@ -80,6 +80,11 @@ class _UpdateSection extends StatelessWidget {
               (UpdateChannel.stable, l10n.updateChannelStable),
               (UpdateChannel.beta, l10n.updateChannelBeta),
             ],
+            // 逐项图标：选中段的对勾替换图标（M3E 分段形态）。
+            icons: const {
+              UpdateChannel.stable: Icons.verified_rounded,
+              UpdateChannel.beta: Icons.science_rounded,
+            },
             onChanged: (channel) => unawaited(provider.setChannel(channel)),
           ),
         SettingsSwitchTile(

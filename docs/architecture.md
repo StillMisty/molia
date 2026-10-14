@@ -446,12 +446,18 @@
   排版走 `M3ETypeScale`、不写死字号字重；统一行组件在
   `lib/widgets/settings/settings_tiles.dart`（Nav / Switch / Info / Value /
   Choice / Dropdown / Slider / ColorValue），按值类型选型：bool → Switch、
-  2–5 项短枚举 → Choice（行内分段，显式宽度，防 `M3ESegmentedButton` 零宽溢出）、
+  2–5 项短枚举 → Choice（行内分段，显式宽度，防 `M3ESegmentedButton` 零宽溢出；
+  逐项图标齐全时选中段的对勾替换图标——M3E 选中形态，无图标行保持无勾，
+  勾会挤断长标签）、可视化枚举（主题模式 / 基础配色）→ `settings_swatch_row.dart`
+  的 Swatch（56dp 预览圆 + 名称，选中 3dp 描边 + 对勾；主题/配色的预览方案由
+  `ThemeProvider.previewScheme` 解析，不含封面覆盖，保证预览稳定）、
   ≥5 项或长文案 → Dropdown（必设 `fieldStyle.hintText`）、区间数值 → Slider、
   大范围绝对量（缓存上限）→ Value + 输入弹层（带常用预设）；
   子页（音源 / 歌词显示〔二级：歌词页 / 歌词输出 / 桌面歌词 / 通知·锁屏 / 蓝牙〕/
   AI 推歌 / 通用 / 数据与存储 / 缓存 / 统计）经 `SettingsPage`
-  的内部 Navigator 在同一弹层内 push（`openSettingsSubPage`）。系统返回先退子页、
+  的内部 Navigator 在同一弹层内 push（`openSettingsSubPage`）；省流模式不单开
+  子页，开关与生效子项并回首屏「播放」分区。音源管理页（`sources_page.dart`）
+  与 any-listen 页同样使用这套设置行组件与分段卡片行距。系统返回先退子页、
   再关弹层：底部弹层由 `showAdaptiveModalPage(onDismissRequest:)` guard 读取
   `SettingsPage.subPageOpen`（M3E 弹层宿主会给层内所有 PopScope 回调发 didPop=false
   并请求关闭，必须由 guard 挡下）；对话框 / 独立挂载由 `NavigatorPopHandler` 承接。
