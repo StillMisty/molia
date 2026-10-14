@@ -182,7 +182,7 @@ void main() {
     expect(find.text('App font'), findsOneWidget);
     expect(find.text('Default play mode'), findsOneWidget);
     expect(find.text('Resume last playback'), findsOneWidget);
-    // 省流只有入口行一处（无分区标题、无子项）。
+    // 省流并回播放分区：默认关闭时只有开关行（无子项）。
     expect(find.text('Data saver'), findsOneWidget);
     expect(find.text('Lyrics & outputs'), findsOneWidget);
     expect(find.text('Source Management'), findsOneWidget);
@@ -356,7 +356,7 @@ void main() {
     expect(followArtwork, lessThanOrEqualTo(item.twoLineHeight + 4));
     expect(rowHeight(const Key('settingsPureBlackSwitch')), followArtwork);
     expect(rowHeight(const Key('settingsRestoreSessionSwitch')), followArtwork);
-    expect(rowHeight(const Key('settingsDataSaverItem')), followArtwork);
+    expect(rowHeight(const Key('settingsDataSaverSwitch')), followArtwork);
     expect(rowHeight(const Key('settingsLyricsContentItem')), followArtwork);
 
     // 全页标签行（排除分段 / 滑杆 / 下拉等复合行）都不超过双行 token。
@@ -397,24 +397,18 @@ void main() {
     expect(segmented.showSelectedIcon, isFalse);
   });
 
-  testWidgets('省流模式：入口进子页，开关/音质上限/封面省流生效并持久化', (tester) async {
+  testWidgets('省流模式：开关/音质上限/封面省流在播放分区内生效并持久化', (tester) async {
     await pumpSettingsPage(tester);
 
-    // 首屏只有入口行，子项在子页。
-    expect(find.byKey(const Key('settingsDataSaverItem')), findsOneWidget);
-    expect(find.byKey(const Key('settingsDataSaverSwitch')), findsNothing);
-
-    final entry = find.byKey(const Key('settingsDataSaverItem'));
-    await tester.ensureVisible(entry);
-    await tester.pumpAndSettle();
-    await tester.tap(entry);
-    await tester.pumpAndSettle();
-
-    // 子页默认关闭：子项隐藏。
+    // 默认关闭：只有开关行，子项不出现。
     expect(find.byKey(const Key('settingsDataSaverSwitch')), findsOneWidget);
     expect(find.byKey(const Key('settingsDataSaverQualityItem')), findsNothing);
+    expect(find.byKey(const Key('settingsDataSaverCoversSwitch')), findsNothing);
 
-    await tester.tap(find.byKey(const Key('settingsDataSaverSwitch')));
+    final switchFinder = find.byKey(const Key('settingsDataSaverSwitch'));
+    await tester.ensureVisible(switchFinder);
+    await tester.pumpAndSettle();
+    await tester.tap(switchFinder);
     await tester.pumpAndSettle();
 
     expect(dataSaver.enabled, isTrue);

@@ -25,7 +25,6 @@ import '../widgets/app_color_picker.dart';
 import '../widgets/font_picker_sheet.dart';
 import '../widgets/settings/settings_tiles.dart';
 import 'ai_dj_page.dart';
-import 'data_saver_settings_page.dart';
 import 'data_settings_page.dart';
 import 'general_settings_page.dart';
 import 'lyrics_display/desktop_lyrics_settings_page.dart';
@@ -375,7 +374,10 @@ class _SettingsHomeViewState extends State<_SettingsHomeView>
     );
   }
 
-  /// 播放：默认播放模式 / 启动恢复 / 默认音质 / 当前音质 / 自动换源 / 省流入口。
+  /// 播放：默认播放模式 / 启动恢复 / 默认音质 / 自动换源 / 省流（开关与生效子项）。
+  ///
+  /// 省流不单开子页：开关行排在分区末位，开启时才展开音质上限与封面省流
+  /// （三行共用同一套设置行，行为与独立子页一致）。
   Widget _playbackSection(
     BuildContext context,
     AppLocalizations l10n, {
@@ -449,10 +451,11 @@ class _SettingsHomeViewState extends State<_SettingsHomeView>
               onChanged: (value) => sourceSwapSettings.setAutoEnabled(value),
             ),
           ),
-        // 省流模式：子页承载开关与子项，入口副标题保留网络状态。
-        if (dataSaver != null)
-          SettingsNavTile(
-            key: const Key('settingsDataSaverItem'),
+        // 省流模式：开关行在分区末位，开启时才展开跟随子项（音质上限 / 封面省流）；
+        // 副标题保留当前网络状态，让「仅移动数据生效」对用户透明。
+        if (dataSaver != null) ...[
+          SettingsSwitchTile(
+            switchKey: const Key('settingsDataSaverSwitch'),
             icon: Icons.data_saver_on_rounded,
             title: l10n.settingsDataSaverTitle,
             subtitle: dataSaverSubtitle(
@@ -461,11 +464,31 @@ class _SettingsHomeViewState extends State<_SettingsHomeView>
               detectionAvailable: dataSaver.detectionAvailable,
               onCellular: dataSaver.onCellular,
             ),
-            onTap: () => openSettingsSubPage(
-              context,
-              const DataSaverSettingsPage(),
-            ),
+            value: dataSaver.enabled,
+            onChanged: (value) => dataSaver.setEnabled(value),
           ),
+          if (dataSaver.enabled) ...[
+            SettingsChoiceRow<String>(
+              key: const Key('settingsDataSaverQualityItem'),
+              icon: Icons.graphic_eq_rounded,
+              title: l10n.settingsDataSaverQuality,
+              value: dataSaver.qualityCap,
+              options: [
+                for (final option in DataSaverService.qualityOptions)
+                  (option, sourceQualityLabel(l10n, option)),
+              ],
+              onChanged: (value) => dataSaver.setQualityCap(value),
+            ),
+            SettingsSwitchTile(
+              switchKey: const Key('settingsDataSaverCoversSwitch'),
+              icon: Icons.image_rounded,
+              title: l10n.settingsDataSaverCovers,
+              subtitle: l10n.settingsDataSaverCoversSubtitle,
+              value: dataSaver.coversSaverEnabled,
+              onChanged: (value) => dataSaver.setCoversSaverEnabled(value),
+            ),
+          ],
+        ],
       ],
     );
   }
