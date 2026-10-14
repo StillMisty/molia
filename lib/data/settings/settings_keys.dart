@@ -88,12 +88,6 @@ const kLyricsDisplaySettings = SettingsKey<String?>(
   null,
   category: SyncCategory.settings,
 );
-const kCopyLyricsSingleLine = SettingsKey<String?>(
-  'copy_lyrics_single_line',
-  null,
-  category: SyncCategory.settings,
-  store: SettingsValueStore.secure,
-);
 
 // ── 跟人走：AI 推歌开关与偏好（连接信息见凭证区） ────────────────────
 const kAiDjEnabled = SettingsKey<bool>(
@@ -186,7 +180,6 @@ const List<SettingsKey<Object?>> kAllSettingsKeys = [
   kRestoreSessionEnabled,
   kPlayStatisticsEnabled,
   kLyricsDisplaySettings,
-  kCopyLyricsSingleLine,
   kAiDjEnabled,
   kAiDjCacheTtlDays,
   kSourceSwapAutoEnabled,

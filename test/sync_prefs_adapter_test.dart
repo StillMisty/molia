@@ -15,7 +15,8 @@ void main() {
   const keys = [
     kThemeMode,
     kLxDefaultQuality,
-    kCopyLyricsSingleLine,
+    kPlayStatisticsEnabled,
+    kAiDjBaseUrl,
     kAiDjApiKey,
   ];
 
@@ -58,13 +59,18 @@ void main() {
     expect(theme.updatedAt, 1000);
     expect(theme.updatedBy, 'devA');
     expect(theme.data, {'v': 'dark'});
-    final secure = settings.firstWhere((r) => r.key == 'copy_lyrics_single_line');
-    expect(secure.updatedAt, 0);
-    expect(secure.updatedBy, '');
-    expect(secure.data, {'v': null});
+    // 未改过、取默认值的键：时间戳 0、无修改者。
+    final untouched =
+        settings.firstWhere((r) => r.key == 'play_statistics_enabled');
+    expect(untouched.updatedAt, 0);
+    expect(untouched.updatedBy, '');
+    expect(untouched.data, {'v': true});
 
     expect(collected[SyncCategory.sources]!.single.key, 'lx_default_quality');
-    expect(collected[SyncCategory.credentials]!.single.key, 'ai_dj_api_key');
+    expect(
+      collected[SyncCategory.credentials]!.map((r) => r.key),
+      containsAll(['ai_dj_base_url', 'ai_dj_api_key']),
+    );
   });
 
   test('本地修改检测：值变化后重新打戳', () async {
@@ -127,18 +133,16 @@ void main() {
     expect(prefs.getString('theme_mode'), 'dark');
   });
 
-  test('安全存储键：远端写入与读取（copy_lyrics_single_line / ai key）', () async {
+  test('安全存储键：远端写入与读取（ai key 组）', () async {
     await adapter.collect();
     final result = await adapter.apply({
-      SyncCategory.settings: [
+      SyncCategory.credentials: [
         SyncRecord(
-          key: 'copy_lyrics_single_line',
+          key: 'ai_dj_base_url',
           updatedAt: 100,
           updatedBy: 'devB',
-          data: {'v': 'true'},
+          data: {'v': 'https://api.example.com'},
         ),
-      ],
-      SyncCategory.credentials: [
         SyncRecord(
           key: 'ai_dj_api_key',
           updatedAt: 100,
@@ -148,13 +152,18 @@ void main() {
       ],
     });
     expect(result.applied, 2);
-    expect(secrets.values['copy_lyrics_single_line'], 'true');
+    expect(secrets.values['ai_dj_base_url'], 'https://api.example.com');
     expect(secrets.values['ai_dj_api_key'], 'sk-test');
 
     final collected = await adapter.collect();
+    final credentials = collected[SyncCategory.credentials]!;
     expect(
-      collected[SyncCategory.credentials]!.single.data,
+      credentials.firstWhere((r) => r.key == 'ai_dj_api_key').data,
       {'v': 'sk-test'},
+    );
+    expect(
+      credentials.firstWhere((r) => r.key == 'ai_dj_base_url').data,
+      {'v': 'https://api.example.com'},
     );
   });
 
@@ -177,10 +186,10 @@ void main() {
           data: {'v': 'dark'},
         ),
         SyncRecord(
-          key: 'copy_lyrics_single_line',
+          key: 'play_statistics_enabled',
           updatedAt: 0,
           updatedBy: '',
-          data: {'v': null},
+          data: {'v': true},
         ),
       ],
     });

@@ -11,39 +11,26 @@ import 'package:molia/data/play_statistics_repository.dart';
 import 'package:molia/models/play_mode.dart';
 import 'package:molia/pages/settings_page.dart';
 import 'package:molia/providers/local_database_provider.dart';
+import 'package:molia/providers/lyrics_display_provider.dart';
 import 'package:molia/providers/nav_provider.dart';
 import 'package:molia/providers/playback_provider.dart';
 import 'package:molia/providers/sources_provider.dart';
 import 'package:molia/providers/theme_provider.dart';
 import 'package:molia/services/data_saver_service.dart';
 import 'package:molia/services/language_service.dart';
+import 'package:molia/services/lyrics_display/lyrics_display_settings.dart';
+import 'package:molia/services/lyrics_display/lyrics_output.dart';
 import 'package:molia/services/lyrics_service.dart';
 import 'package:molia/services/notification_service.dart';
 import 'package:molia/services/play_statistics_service.dart';
-import 'package:molia/services/settings_service.dart';
 import 'package:molia/sources/source_manager.dart';
 import 'package:molia/theme/scheme_builder.dart';
-import 'package:molia/utils/responsive.dart';
 import 'package:molia/widgets/card_list_surface.dart';
 
 import 'support/fakes.dart';
 import 'package:molia/data/settings/settings_keys.dart';
 
 import 'support/settings_test_support.dart';
-
-/// 设置页冒烟：首屏 5 分区、行内分段交互与弹层内部子页导航。
-/// 不触碰真实 DB / 安全存储（fake SettingsService）。
-class _FakeSettingsService extends SettingsService {
-  bool copyLyricsAsSingleLine = false;
-
-  @override
-  Future<bool> getCopyLyricsAsSingleLine() async => copyLyricsAsSingleLine;
-
-  @override
-  Future<void> saveCopyLyricsAsSingleLine(bool value) async {
-    copyLyricsAsSingleLine = value;
-  }
-}
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -52,7 +39,6 @@ void main() {
   late PlaybackProvider playbackProvider;
   late DataSaverService dataSaver;
   late PlayStatisticsService playStatisticsService;
-  late ValueNotifier<bool> settingsSubPageOpen;
 
   setUp(() {
     SharedPreferences.setMockInitialValues({});
@@ -106,7 +92,6 @@ void main() {
           ChangeNotifierProvider<PlaybackProvider>.value(
               value: playbackProvider),
           ChangeNotifierProvider<NavProvider>.value(value: navProvider),
-          Provider<SettingsService>(create: (_) => _FakeSettingsService()),
           ChangeNotifierProvider<LocalDatabaseProvider>(
             create: (_) => LocalDatabaseProvider(),
           ),
@@ -145,13 +130,10 @@ void main() {
       tester.view.resetDevicePixelRatio();
     });
 
-    // 弹层 guard 状态出口（app_shell 接线同款）。
-    settingsSubPageOpen = ValueNotifier<bool>(false);
-    addTearDown(settingsSubPageOpen.dispose);
-
+    // 直接挂载设置页（弹层宿主由各用例按需提供）。
     await pumpApp(
       tester,
-      Scaffold(body: SettingsPage(subPageOpen: settingsSubPageOpen)),
+      const Scaffold(body: SettingsPage()),
       extraProviders: extraProviders,
     );
   }
@@ -161,6 +143,27 @@ void main() {
         of: find.byKey(rowKey),
         matching: find.text(label),
       );
+
+  Map<String, dynamic> backArgs(double progress) => <String, dynamic>{
+        'touchOffset': <double>[5, 600],
+        'progress': progress,
+        'swipeEdge': 0,
+      };
+
+  /// 模拟 Android 预测返回手势通道事件（start / update / commit / cancel）。
+  Future<void> sendBack(
+    WidgetTester tester,
+    String method, [
+    Map<String, dynamic>? args,
+  ]) async {
+    final data = const StandardMethodCodec()
+        .encodeMethodCall(MethodCall(method, args));
+    await tester.binding.defaultBinaryMessenger.handlePlatformMessage(
+      SystemChannels.backGesture.name,
+      data,
+      (ByteData? _) {},
+    );
+  }
 
   testWidgets('设置首屏：5 分区齐全，低频内容移出首屏', (tester) async {
     await pumpSettingsPage(tester);
@@ -482,7 +485,6 @@ void main() {
 
   testWidgets('通用子页：弹层内部导航进入，语言行内分段切换并持久化', (tester) async {
     await pumpSettingsPage(tester);
-    expect(settingsSubPageOpen.value, isFalse);
 
     await tester.tap(find.byKey(const Key('settingsGeneralItem')));
     await tester.pumpAndSettle();
@@ -493,8 +495,6 @@ void main() {
     expect(find.text('Bottom navigation'), findsOneWidget);
     expect(find.byType(ReorderableListView), findsOneWidget);
     expect(find.text('Theme mode'), findsNothing);
-    // 子页栈状态同步给弹层 guard。
-    expect(settingsSubPageOpen.value, isTrue);
 
     // 语言行内分段：切到简体中文后写入登记键。
     final prefs = await SharedPreferences.getInstance();
@@ -516,7 +516,6 @@ void main() {
     expect(handled, isTrue);
     expect(find.text('Theme mode'), findsOneWidget);
     expect(find.text('App Language'), findsNothing);
-    expect(settingsSubPageOpen.value, isFalse);
   });
 
   testWidgets('底部弹层 guard：子页打开时系统返回先退子页、不退弹层', (tester) async {
@@ -528,22 +527,14 @@ void main() {
       tester.view.resetDevicePixelRatio();
     });
 
-    // 复现 app_shell 接线：弹层 dismiss guard + SettingsPage(subPageOpen)。
+    // 复用 app_shell 接线：从入口打开设置弹层（guard 退子页后弹层才关闭）。
     await pumpApp(
       tester,
       Scaffold(
         body: Builder(
           builder: (context) => Center(
             child: M3EButton.filled(
-              onPressed: () {
-                final subPageOpen = ValueNotifier<bool>(false);
-                ResponsiveNavigation.showAdaptiveModalPage(
-                  context: context,
-                  showCloseButton: false,
-                  onDismissRequest: () async => !subPageOpen.value,
-                  child: SettingsPage(subPageOpen: subPageOpen),
-                ).whenComplete(subPageOpen.dispose);
-              },
+              onPressed: () => showSettingsSheet(context),
               child: const Text('Open settings'),
             ),
           ),
@@ -580,6 +571,98 @@ void main() {
     expect(find.text('Open settings'), findsOneWidget);
   });
 
+  testWidgets('底部弹层：预测返回提交先退子页、再关弹层（guard 接管手势）', (tester) async {
+    // 移动端视口 → showAdaptiveModalPage 走底部弹层分支。
+    tester.view.physicalSize = const Size(500, 1400);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(() {
+      tester.view.resetPhysicalSize();
+      tester.view.resetDevicePixelRatio();
+    });
+
+    await pumpApp(
+      tester,
+      Scaffold(
+        body: Builder(
+          builder: (context) => Center(
+            child: M3EButton.filled(
+              onPressed: () => showSettingsSheet(context),
+              child: const Text('Open settings'),
+            ),
+          ),
+        ),
+      ),
+    );
+
+    await tester.tap(find.text('Open settings'));
+    await tester.pumpAndSettle();
+
+    // 进入通用子页。
+    final generalItem = find.byKey(const Key('settingsGeneralItem'));
+    await tester.scrollUntilVisible(
+      generalItem,
+      300,
+      scrollable: find.byType(Scrollable).first,
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(generalItem);
+    await tester.pumpAndSettle();
+    expect(find.text('App Language'), findsOneWidget);
+
+    // 预测返回提交：guard 退子页（弹层保持打开、预览回弹由包负责）。
+    await sendBack(tester, 'startBackGesture', backArgs(0));
+    await sendBack(tester, 'updateBackGestureProgress', backArgs(1));
+    await tester.pump();
+    await sendBack(tester, 'commitBackGesture');
+    await tester.pumpAndSettle();
+    expect(find.text('App Language'), findsNothing);
+    expect(find.text('Settings'), findsOneWidget);
+
+    // 回到首屏后再次提交：允许关闭弹层。
+    await sendBack(tester, 'startBackGesture', backArgs(0));
+    await sendBack(tester, 'updateBackGestureProgress', backArgs(1));
+    await tester.pump();
+    await sendBack(tester, 'commitBackGesture');
+    await tester.pumpAndSettle();
+    expect(find.text('Settings'), findsNothing);
+    expect(find.text('Open settings'), findsOneWidget);
+  });
+
+  testWidgets('首屏：桌面歌词直达入口（能力就绪时显示并进入聚合子页）', (tester) async {
+    final prefs = await SharedPreferences.getInstance();
+    final lyricsSettings = LyricsDisplaySettings(
+      settings: testSettingsRegistry(preferences: prefs),
+    );
+    await lyricsSettings.init();
+    addTearDown(lyricsSettings.dispose);
+    final display = LyricsDisplayProvider(
+      settings: lyricsSettings,
+      outputs: [_FakeDesktopOutput()],
+    );
+    addTearDown(display.dispose);
+
+    await pumpSettingsPage(
+      tester,
+      extraProviders: [
+        ChangeNotifierProvider<LyricsDisplaySettings>.value(
+          value: lyricsSettings,
+        ),
+        ChangeNotifierProvider<LyricsDisplayProvider>.value(value: display),
+      ],
+    );
+
+    // 直达行在首屏「歌词与展示」分区；不再经过「歌词显示」hub。
+    expect(find.byKey(const Key('settingsDesktopLyricsItem')), findsOneWidget);
+
+    await tester.tap(find.byKey(const Key('settingsDesktopLyricsItem')));
+    await tester.pumpAndSettle();
+
+    // 子页聚合：启用开关与共享展示项（翻译/偏移）同页。
+    expect(find.text('Enable floating lyrics'), findsOneWidget);
+    expect(find.text('Lyric display'), findsOneWidget);
+    expect(find.text('Unsynced lyrics'), findsOneWidget);
+  });
+
   testWidgets('底部弹层：列表滑到顶后继续下滑可关闭（M3E 弹层滚动控制器接线）', (tester) async {
     // 移动端视口 → showAdaptiveModalPage 走底部弹层分支。
     tester.view.physicalSize = const Size(500, 1400);
@@ -595,15 +678,7 @@ void main() {
         body: Builder(
           builder: (context) => Center(
             child: M3EButton.filled(
-              onPressed: () {
-                final subPageOpen = ValueNotifier<bool>(false);
-                ResponsiveNavigation.showAdaptiveModalPage(
-                  context: context,
-                  showCloseButton: false,
-                  onDismissRequest: () async => !subPageOpen.value,
-                  child: SettingsPage(subPageOpen: subPageOpen),
-                ).whenComplete(subPageOpen.dispose);
-              },
+              onPressed: () => showSettingsSheet(context),
               child: const Text('Open settings'),
             ),
           ),
@@ -687,4 +762,25 @@ void main() {
       isNot(contains('SystemChrome.setEnabledSystemUIMode')),
     );
   });
+}
+
+/// 最小桌面歌词输出：能力就绪，不触碰平台通道。
+class _FakeDesktopOutput implements LyricsOutput {
+  @override
+  String get id => LyricsOutputIds.desktop;
+
+  @override
+  LyricsOutputCapability get capability => LyricsOutputCapability.ready;
+
+  @override
+  Future<void> start(LyricsDisplaySettings settings) async {}
+
+  @override
+  Future<void> apply(LyricsPresentation presentation) async {}
+
+  @override
+  Future<void> clear() async {}
+
+  @override
+  Future<void> stop() async {}
 }

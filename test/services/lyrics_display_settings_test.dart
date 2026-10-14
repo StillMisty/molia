@@ -22,9 +22,10 @@ void main() {
     expect(s.offsetMs, 0);
     expect(s.desktopMaxLines, 3);
     expect(s.desktopFontSize, 22);
-    expect(s.desktopPlayedColorSource, LyricColorSource.custom);
-    expect(s.desktopUnplayedColorSource, LyricColorSource.custom);
-    expect(s.desktopShadowColorSource, LyricColorSource.custom);
+    // 默认直接跟随应用主题角色：当前行主色 / 其余行次要文本色 / 描边表面色。
+    expect(s.desktopPlayedColorSource, LyricColorSource.primary);
+    expect(s.desktopUnplayedColorSource, LyricColorSource.onSurfaceVariant);
+    expect(s.desktopShadowColorSource, LyricColorSource.surface);
     expect(s.notificationTarget, LyricsMetadataTarget.artist);
     expect(s.bluetoothTarget, LyricsMetadataTarget.artist);
     expect(s.bluetoothOnlyWhenA2dp, isTrue);

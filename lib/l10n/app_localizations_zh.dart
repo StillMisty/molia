@@ -261,12 +261,6 @@ class AppLocalizationsZh extends AppLocalizations {
   String get settingsGeneralSubtitle => '语言、应用名称与底部导航';
 
   @override
-  String get copyLyricsAsSingleLineTitle => '将歌词复制为单行';
-
-  @override
-  String get copyLyricsAsSingleLineSubtitle => '复制时将换行符替换为空格';
-
-  @override
   String get dataManagementTitle => '数据与存储';
 
   @override
@@ -1155,7 +1149,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get settingsLyricsDisplayTitle => '歌词显示';
 
   @override
-  String get settingsLyricsDisplaySubtitle => '桌面歌词、通知栏·锁屏歌词、蓝牙歌词';
+  String get settingsLyricsDisplaySubtitle => '歌词页、通知栏·锁屏与蓝牙歌词';
 
   @override
   String get lyricsPageTitle => '歌词页';
@@ -1305,7 +1299,10 @@ class AppLocalizationsZh extends AppLocalizations {
   String get lyricsDesktopAnimation => '行切换动画';
 
   @override
-  String get lyricsDesktopControls => '控制条按钮';
+  String get lyricsDesktopBehaviorSection => '行为与控制条';
+
+  @override
+  String get lyricsSharedDisplaySection => '歌词展示';
 
   @override
   String get lyricsDesktopResetPosition => '重置位置';
@@ -1472,6 +1469,9 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get lyricsColorSourceOnSurfaceVariant => '次要文本色';
+
+  @override
+  String get lyricsColorSourceSurface => '表面色';
 
   @override
   String get lyricsDesktopColorThemeHint =>

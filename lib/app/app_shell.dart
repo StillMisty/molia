@@ -349,19 +349,10 @@ class _MyAppState extends State<MyApp>
         ShellDestination.library => l10n.libraryLabel,
       };
 
-  /// 打开设置弹层（顶栏入口，三个目的地共用）。
-  ///
-  /// 弹层内部导航：子页打开时系统返回先退子页（弹层 dismiss guard 读取
-  /// 子页状态），子页退完后再关弹层；通知器生命周期与弹层一致。
+  /// 打开设置弹层（顶栏入口，三个目的地共用）；返回处理见 [showSettingsSheet]。
   void _openSettings(BuildContext context) {
     HapticFeedback.lightImpact();
-    final subPageOpen = ValueNotifier<bool>(false);
-    ResponsiveNavigation.showAdaptiveModalPage(
-      context: context,
-      showCloseButton: false,
-      onDismissRequest: () async => !subPageOpen.value,
-      child: SettingsPage(subPageOpen: subPageOpen),
-    ).whenComplete(subPageOpen.dispose);
+    showSettingsSheet(context);
   }
 
   /// 页面分层：选中页在最上层淡入，上一页快速淡出（fade-through）。
