@@ -130,6 +130,10 @@ class SyncTombstones extends Table {
 ///
 /// 歌词/封面路径指向 `downloads/lyrics|covers/` 下的长期文件（Phase 2），
 /// 删除下载时一并删除；「清理缓存」永不触碰这些文件。
+///
+/// `publicUri`（v4）是 Android 公共 Downloads 副本的 content URI：应用目录里的
+/// 文件仍是唯一播放取链目标，公共副本只让用户在文件管理器里可见，删除下载时
+/// 经平台通道一并回收。
 @DataClassName('DownloadRow')
 @TableIndex(name: 'idx_downloads_downloadedAt', columns: {#downloadedAt})
 class Downloads extends Table {
@@ -151,6 +155,9 @@ class Downloads extends Table {
   IntColumn get sizeBytes => integer().withDefault(const Constant(0))();
   TextColumn get lyricPath => text().nullable()();
   TextColumn get coverPath => text().nullable()();
+  // 公共 Downloads 副本的 content URI（Android MediaStore）；未发布 / 其余
+  // 平台为 null。播放取链不读它，只在删除下载时回收副本。
+  TextColumn get publicUri => text().nullable()();
   IntColumn get downloadedAt => integer()();
 
   @override
@@ -235,8 +242,9 @@ class MoliaDatabase extends _$MoliaDatabase {
   ///
   /// v2：新增 `downloads` 表（本地下载持久副本）。
   /// v3：`downloads.filePath` 改可空（下载记录可只含歌词 / 封面）。
+  /// v4：`downloads.publicUri` 新增（Android 公共 Downloads 副本定位）。
   @override
-  int get schemaVersion => 3;
+  int get schemaVersion => 4;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -251,6 +259,10 @@ class MoliaDatabase extends _$MoliaDatabase {
           from2To3: (m, schema) async {
             // 仅 filePath 由 NOT NULL 改为可空：重建表并原样搬运数据。
             await m.alterTable(TableMigration(schema.downloads));
+          },
+          from3To4: (m, schema) async {
+            // 仅新增可空列：ADD COLUMN，既有行原样保留（publicUri 为 null）。
+            await m.addColumn(schema.downloads, schema.downloads.publicUri);
           },
         ),
         beforeOpen: (details) async {

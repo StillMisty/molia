@@ -2343,6 +2343,13 @@ class AppLocalizationsZh extends AppLocalizations {
       '写入音频文件标签（MP3 / FLAC），其它播放器也能读到；失败时保留同名文件';
 
   @override
+  String get downloadPublishToPublicDir => '发布到公共下载目录';
+
+  @override
+  String get downloadPublishToPublicDirSubtitle =>
+      '下载完成后额外拷贝一份到系统「下载」目录（Android 公共目录），文件管理器与其它播放器可见；播放仍用应用内的副本';
+
+  @override
   String get downloadLocationInfo => '下载目录';
 
   @override
@@ -2582,6 +2589,17 @@ class AppLocalizationsZh extends AppLocalizations {
   @override
   String downloadsMigrateLegacyDone(int moved, int failed) {
     return '已迁移 $moved 首，失败 $failed 首';
+  }
+
+  @override
+  String get downloadsPublishPublic => '补发布到公共目录';
+
+  @override
+  String get downloadsPublishPublicSubtitle => '把还没有公共副本的下载拷进系统「下载」目录（Android）';
+
+  @override
+  String downloadsPublishPublicDone(int published, int failed) {
+    return '已发布 $published 首，失败 $failed 首';
   }
 
   @override

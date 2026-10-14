@@ -1259,6 +1259,8 @@
   "downloadReset": "Reset to default",
   "downloadEmbedTags": "Embed lyrics & cover tags",
   "downloadEmbedTagsSubtitle": "Write tags into the audio file (MP3 / FLAC) so other players can read them; sidecar files remain when writing fails",
+  "downloadPublishToPublicDir": "Publish to system Downloads",
+  "downloadPublishToPublicDirSubtitle": "Also copy finished downloads into the system Downloads folder (Android public storage) so file managers and other players can see them; playback still uses the in-app copy",
   "downloadLocationInfo": "Download folder",
   "downloadLocationUnsupported": "Downloading is not supported on this platform",
   "save": "Save",
@@ -1440,6 +1442,19 @@
   "@downloadsMigrateLegacyDone": {
     "placeholders": {
       "moved": {
+        "type": "int"
+      },
+      "failed": {
+        "type": "int"
+      }
+    }
+  },
+  "downloadsPublishPublic": "Publish to system Downloads",
+  "downloadsPublishPublicSubtitle": "Copy downloads that have no public copy yet into the system Downloads folder (Android)",
+  "downloadsPublishPublicDone": "{published} published, {failed} failed",
+  "@downloadsPublishPublicDone": {
+    "placeholders": {
+      "published": {
         "type": "int"
       },
       "failed": {

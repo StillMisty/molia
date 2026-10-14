@@ -12,10 +12,12 @@ import 'package:molia/domain/models/failure.dart';
 import 'package:molia/domain/models/track.dart';
 import 'package:molia/services/cache_service.dart';
 import 'package:molia/services/cache_storage.dart';
+import 'package:molia/data/downloads/downloads_publisher.dart';
 import 'package:molia/services/download/download_service.dart';
 import 'package:molia/services/download/download_settings.dart';
 
 import '../support/fake_download_storage.dart';
+import '../support/fake_downloads_publisher.dart';
 import '../support/fake_music_source.dart';
 import '../support/memory_database.dart';
 import '../support/mock_dio.dart';
@@ -50,6 +52,7 @@ void main() {
     DownloadLyricsResolver? lyrics,
     DownloadArtworkResolver? artwork,
     DownloadSettings? settings,
+    DownloadsPublisher? publisher,
   }) {
     final registry = FakeSourceRegistry({
       'kw': kwSource,
@@ -64,6 +67,7 @@ void main() {
       lyricsResolver: lyrics,
       artworkResolver: artwork,
       settings: settings,
+      publisher: publisher,
       preferredQuality: () => '320k',
       clock: () => 1000,
     );
@@ -679,6 +683,149 @@ void main() {
     expect(storage.files.containsKey('/legacy/downloads/lyrics/歌手 - 测试歌曲.lrc'), isFalse);
   });
 
+  test('公共目录发布：音频拷进公共 Downloads，URI 落库且迁移保留', () async {
+    final publisher = FakeDownloadsPublisher();
+    final dio = mockDio(
+      (options) => bytesResponse([1, 2], headers: {'content-length': ['2']}),
+    );
+    final service = makeService(dio: dio, publisher: publisher);
+    await service.init();
+    expect(service.publisherSupported, isTrue);
+
+    await service.download(makeTrack());
+    final record = service.recordFor('kw', '1')!;
+    expect(record.publicUri, 'content://media/external/downloads/1');
+    expect(record.hasPublicCopy, isTrue);
+    // 发布的是应用目录里的最终文件（标签嵌入之后），不是半成品。
+    expect(publisher.published, [record.filePath]);
+    expect(publisher.displayNames, ['歌手 - 测试歌曲.mp3']);
+    expect(publisher.mimeTypes, ['audio/mpeg']);
+    // 落库（重新读库确认 publicUri 持久化）。
+    expect((await repository.findByOrigin('kw', '1'))!.publicUri,
+        'content://media/external/downloads/1');
+
+    // 旧位置迁移不丢公共副本定位。
+    storage.root = '/new/downloads';
+    storage.legacyRoot = '/downloads';
+    final (moved, failed) = await service.migrateLegacyDownloads();
+    expect((moved, failed), (1, 0));
+    expect(
+      service.recordFor('kw', '1')!.publicUri,
+      'content://media/external/downloads/1',
+    );
+  });
+
+  test('公共目录发布失败：下载照常成功，publicUri 为空', () async {
+    final publisher = FakeDownloadsPublisher(failPublish: true);
+    final dio = mockDio(
+      (options) => bytesResponse([1, 2], headers: {'content-length': ['2']}),
+    );
+    final service = makeService(dio: dio, publisher: publisher);
+    await service.init();
+
+    await service.download(makeTrack());
+    final record = service.recordFor('kw', '1')!;
+    expect(record.hasAudio, isTrue);
+    expect(record.publicUri, null);
+  });
+
+  test('公共目录发布关闭 / 平台不支持：不调用发布器', () async {
+    SharedPreferences.setMockInitialValues({});
+    final settings = DownloadSettings();
+    await settings.init();
+    await settings.setPublishToPublicDir(false);
+    final publisher = FakeDownloadsPublisher();
+    final dio = mockDio(
+      (options) => bytesResponse([1, 2], headers: {'content-length': ['2']}),
+    );
+    final service = makeService(
+      dio: dio,
+      settings: settings,
+      publisher: publisher,
+    );
+    await service.init();
+    await service.download(makeTrack());
+    expect(service.recordFor('kw', '1')!.publicUri, null);
+    expect(publisher.published, isEmpty);
+
+    // 非 Android（发布器不支持）：同样 no-op，且 supported 为 false。
+    final unsupported = makeService(
+      dio: dio,
+      publisher: FakeDownloadsPublisher(supported: false),
+    );
+    await unsupported.init();
+    await unsupported.download(makeTrack(sourceKey: 'tx', songId: '2'));
+    expect(unsupported.publisherSupported, isFalse);
+    expect(unsupported.recordFor('tx', '2')!.publicUri, null);
+  });
+
+  test('删除下载：回收公共副本（不支持时跳过）', () async {
+    final publisher = FakeDownloadsPublisher();
+    final dio = mockDio(
+      (options) => bytesResponse([1, 2], headers: {'content-length': ['2']}),
+    );
+    final service = makeService(dio: dio, publisher: publisher);
+    await service.init();
+    await service.download(makeTrack());
+    final record = service.recordFor('kw', '1')!;
+
+    await service.delete(record);
+    expect(publisher.removed, ['content://media/external/downloads/1']);
+  });
+
+  test('补发布：跳过已有副本，发布缺失记录', () async {
+    final publisher = FakeDownloadsPublisher();
+    // 已有音频但无公共副本（旧版本留下的记录）。
+    storage.files['/downloads/旧歌.mp3'] = [1];
+    await repository.insert(DownloadedTrack(
+      originSourceKey: 'kw',
+      originSongId: '9',
+      title: '旧歌',
+      filePath: '/downloads/旧歌.mp3',
+      sizeBytes: 1,
+      downloadedAt: 500,
+    ));
+    // 文件缺失的记录：计入失败。
+    await repository.insert(DownloadedTrack(
+      originSourceKey: 'tx',
+      originSongId: '8',
+      title: '丢失',
+      filePath: '/downloads/丢失.mp3',
+      sizeBytes: 1,
+      downloadedAt: 400,
+    ));
+
+    final dio = mockDio(
+      (options) => bytesResponse([1, 2], headers: {'content-length': ['2']}),
+    );
+    final service = makeService(dio: dio, publisher: publisher);
+    await service.init();
+    await service.download(makeTrack(sourceKey: 'kw', songId: '1'));
+    expect(publisher.published, hasLength(1)); // 下载时发布的那条
+
+    final (published, failed) = await service.publishMissingPublicCopies();
+    expect((published, failed), (1, 1));
+    expect(
+      service.recordFor('kw', '9')!.publicUri,
+      'content://media/external/downloads/2',
+    );
+    expect(
+      (await repository.findByOrigin('kw', '9'))!.publicUri,
+      'content://media/external/downloads/2',
+    );
+    expect(service.recordFor('tx', '8')!.publicUri, null);
+  });
+
+  test('音频 MIME 类型映射（公共目录发布用）', () {
+    expect(DownloadService.audioMimeTypeForPath('/a/b.mp3'), 'audio/mpeg');
+    expect(DownloadService.audioMimeTypeForPath('/a/b.FLAC'), 'audio/flac');
+    expect(DownloadService.audioMimeTypeForPath('/a/b.m4a'), 'audio/mp4');
+    expect(DownloadService.audioMimeTypeForPath('/a/b.opus'), 'audio/opus');
+    expect(
+      DownloadService.audioMimeTypeForPath('/a/b.unknown'),
+      'application/octet-stream',
+    );
+  });
 }
 
 /// 假缓存存储：音频目录可控（音频缓存命中测试用）。

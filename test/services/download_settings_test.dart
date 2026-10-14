@@ -8,12 +8,13 @@ void main() {
 
   setUp(() => SharedPreferences.setMockInitialValues({}));
 
-  test('默认值：默认目录 / 默认模板 / 嵌入开启', () async {
+  test('默认值：默认目录 / 默认模板 / 嵌入开启 / 公共目录发布开启', () async {
     final settings = DownloadSettings();
     await settings.init();
     expect(settings.saveDir, '');
     expect(settings.filenameTemplate, kDefaultFilenameTemplate);
     expect(settings.embedTags, isTrue);
+    expect(settings.publishToPublicDir, isTrue);
   });
 
   test('持久化：设置后重新加载仍生效', () async {
@@ -22,12 +23,14 @@ void main() {
     await settings.setSaveDir('/home/user/Music/Molia');
     await settings.setFilenameTemplate('{title} - {artist}');
     await settings.setEmbedTags(false);
+    await settings.setPublishToPublicDir(false);
 
     final reloaded = DownloadSettings();
     await reloaded.init();
     expect(reloaded.saveDir, '/home/user/Music/Molia');
     expect(reloaded.filenameTemplate, '{title} - {artist}');
     expect(reloaded.embedTags, isFalse);
+    expect(reloaded.publishToPublicDir, isFalse);
   });
 
   test('模板替换：多占位符 / 未知占位符原样保留 / 空模板回默认', () async {

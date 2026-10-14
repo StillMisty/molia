@@ -139,6 +139,18 @@ class _DownloadsManagePageState extends State<DownloadsManagePage> {
                     ? null
                     : () => unawaited(_migrateLegacy(downloads)),
               ),
+              // 公共目录补发布只在 Android 有语义（其余平台下载根目录本身
+              // 就是公共目录）。
+              if (downloads?.publisherSupported ?? false)
+                SettingsNavTile(
+                  key: const Key('downloadsPublishPublicItem'),
+                  icon: Icons.public_rounded,
+                  title: l10n.downloadsPublishPublic,
+                  subtitle: l10n.downloadsPublishPublicSubtitle,
+                  onTap: _busy || downloads == null
+                      ? null
+                      : () => unawaited(_publishPublic(downloads)),
+                ),
               FutureBuilder<String?>(
                 future: downloads?.rootPath(),
                 builder: (context, snapshot) => SettingsInfoTile(
@@ -244,6 +256,19 @@ class _DownloadsManagePageState extends State<DownloadsManagePage> {
       final (moved, failed) = await downloads.migrateLegacyDownloads();
       if (!mounted) return;
       _showMessage(l10n.downloadsMigrateLegacyDone(moved, failed));
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  /// 补发布：把还没有公共副本的下载拷进系统「下载」目录（Android）。
+  Future<void> _publishPublic(DownloadService downloads) async {
+    final l10n = AppLocalizations.of(context)!;
+    setState(() => _busy = true);
+    try {
+      final (published, failed) = await downloads.publishMissingPublicCopies();
+      if (!mounted) return;
+      _showMessage(l10n.downloadsPublishPublicDone(published, failed));
     } finally {
       if (mounted) setState(() => _busy = false);
     }

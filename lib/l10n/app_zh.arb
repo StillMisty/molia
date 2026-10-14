@@ -992,6 +992,8 @@
   "downloadReset": "恢复默认",
   "downloadEmbedTags": "嵌入歌词与封面标签",
   "downloadEmbedTagsSubtitle": "写入音频文件标签（MP3 / FLAC），其它播放器也能读到；失败时保留同名文件",
+  "downloadPublishToPublicDir": "发布到公共下载目录",
+  "downloadPublishToPublicDirSubtitle": "下载完成后额外拷贝一份到系统「下载」目录（Android 公共目录），文件管理器与其它播放器可见；播放仍用应用内的副本",
   "downloadLocationInfo": "下载目录",
   "downloadLocationUnsupported": "当前平台不支持下载",
   "save": "保存",
@@ -1186,6 +1188,19 @@
   "@downloadsMigrateLegacyDone": {
     "placeholders": {
       "moved": {
+        "type": "int"
+      },
+      "failed": {
+        "type": "int"
+      }
+    }
+  },
+  "downloadsPublishPublic": "补发布到公共目录",
+  "downloadsPublishPublicSubtitle": "把还没有公共副本的下载拷进系统「下载」目录（Android）",
+  "downloadsPublishPublicDone": "已发布 {published} 首，失败 {failed} 首",
+  "@downloadsPublishPublicDone": {
+    "placeholders": {
+      "published": {
         "type": "int"
       },
       "failed": {
