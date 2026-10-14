@@ -108,8 +108,12 @@ class LyricsDisplaySettings extends ChangeNotifier {
   static const SurfaceColorSource defaultDesktopSchemeSource =
       SurfaceColorSource.appTheme;
   static const double defaultDesktopWidthPercent = 100;
-  static const bool defaultDesktopSingleLine = false;
-  static const int defaultDesktopMaxLines = 3;
+
+  /// 默认只显示当前行（单行）；用户可在「显示行数」里放宽到 1–5 行。
+  ///
+  /// 历史配置兼容：旧版本的「仅显示当前行」开关（`desktop.singleLine`）已移除，
+  /// 读取到 true 时一次性映射为 `maxLines = 1`，之后再落盘就不再有该键。
+  static const int defaultDesktopMaxLines = 1;
   static const DesktopTextAlignX defaultDesktopTextAlignX = DesktopTextAlignX.center;
   static const DesktopTextAlignY defaultDesktopTextAlignY = DesktopTextAlignY.center;
   static const bool defaultDesktopLock = false;
@@ -167,7 +171,6 @@ class LyricsDisplaySettings extends ChangeNotifier {
       defaultDesktopShadowColorSource;
   SurfaceColorSource _desktopSchemeSource = defaultDesktopSchemeSource;
   double _desktopWidthPercent = defaultDesktopWidthPercent;
-  bool _desktopSingleLine = defaultDesktopSingleLine;
   int _desktopMaxLines = defaultDesktopMaxLines;
   DesktopTextAlignX _desktopTextAlignX = defaultDesktopTextAlignX;
   DesktopTextAlignY _desktopTextAlignY = defaultDesktopTextAlignY;
@@ -215,7 +218,6 @@ class LyricsDisplaySettings extends ChangeNotifier {
 
   SurfaceColorSource get desktopSchemeSource => _desktopSchemeSource;
   double get desktopWidthPercent => _desktopWidthPercent;
-  bool get desktopSingleLine => _desktopSingleLine;
   int get desktopMaxLines => _desktopMaxLines;
   DesktopTextAlignX get desktopTextAlignX => _desktopTextAlignX;
   DesktopTextAlignY get desktopTextAlignY => _desktopTextAlignY;
@@ -360,12 +362,6 @@ class LyricsDisplaySettings extends ChangeNotifier {
     final clamped = value.clamp(widthRange.first, widthRange.last);
     if (clamped == _desktopWidthPercent) return;
     _desktopWidthPercent = clamped;
-    _commit();
-  }
-
-  Future<void> setDesktopSingleLine(bool value) async {
-    if (value == _desktopSingleLine) return;
-    _desktopSingleLine = value;
     _commit();
   }
 
@@ -517,7 +513,6 @@ class LyricsDisplaySettings extends ChangeNotifier {
         'desktop.shadowColorSource': _desktopShadowColorSource.name,
         'desktop.schemeSource': _desktopSchemeSource.name,
         'desktop.widthPercent': _desktopWidthPercent,
-        'desktop.singleLine': _desktopSingleLine,
         'desktop.maxLines': _desktopMaxLines,
         'desktop.textAlignX': _desktopTextAlignX.name,
         'desktop.textAlignY': _desktopTextAlignY.name,
@@ -578,10 +573,12 @@ class LyricsDisplaySettings extends ChangeNotifier {
     _desktopWidthPercent =
         _doubleOf(json['desktop.widthPercent'], _desktopWidthPercent)
             .clamp(widthRange.first, widthRange.last);
-    _desktopSingleLine =
-        _boolOf(json['desktop.singleLine'], _desktopSingleLine);
-    _desktopMaxLines = _intOf(json['desktop.maxLines'], _desktopMaxLines)
-        .clamp(maxLinesRange.first, maxLinesRange.last);
+    // 旧版本「仅显示当前行」开关 → 显示行数 1（一次性兼容，读完即弃）。
+    final legacySingleLine = json['desktop.singleLine'] == true;
+    _desktopMaxLines = legacySingleLine
+        ? 1
+        : _intOf(json['desktop.maxLines'], _desktopMaxLines)
+            .clamp(maxLinesRange.first, maxLinesRange.last);
     _desktopTextAlignX = _enumOf(
         json['desktop.textAlignX'], DesktopTextAlignX.values, _desktopTextAlignX);
     _desktopTextAlignY = _enumOf(

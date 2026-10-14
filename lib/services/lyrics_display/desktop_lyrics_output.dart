@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:material_ui/material_ui.dart';
 
+import '../../models/lyric_line.dart';
 import '../../theme/scheme_builder.dart';
 import 'lyric_color_resolver.dart';
 import 'lyrics_channel.dart';
@@ -141,7 +142,6 @@ class DesktopLyricsOutput implements InteractiveLyricsOutput {
       'shadowColor':
           _resolveColor(s.desktopShadowColorSource, s.desktopShadowColor, scheme),
       'widthPercent': s.desktopWidthPercent,
-      'singleLine': s.desktopSingleLine,
       'maxLines': s.desktopMaxLines,
       'textAlignX': s.desktopTextAlignX.name,
       'textAlignY': s.desktopTextAlignY.name,
@@ -149,6 +149,12 @@ class DesktopLyricsOutput implements InteractiveLyricsOutput {
       'freezeOnScreenOff': s.desktopFreezeOnScreenOff,
       'showToggleAnimation': s.desktopShowToggleAnimation,
       'controls': s.desktopControls,
+      // 控制条配色与描边同源（跟随同一套解析方案），保证悬浮窗在任意背景
+      // 上都有一致的 M3 观感；无方案（无宿主注入）时给深色兜底。
+      'controlBackground': scheme == null
+          ? 0xEE1B1B1F
+          : scheme.surfaceContainerHigh.withValues(alpha: 0.94).toARGB32(),
+      'controlTint': scheme?.onSurfaceVariant.toARGB32() ?? 0xFFFFFFFF,
     };
   }
 
@@ -198,6 +204,22 @@ class DesktopLyricsOutput implements InteractiveLyricsOutput {
       'upcoming': replacedLine ? const <String>[] : p.upcoming,
       'isPlaying': p.isPlaying,
       'hasLyrics': p.hasLyrics,
+      'positionMs': p.positionMs,
+      // 回退行（歌名 / 清空）没有逐字时间轴；正常歌词行原样下发。
+      'words': replacedLine ? null : _wordsMap(p.words),
     };
+  }
+
+  /// 逐字时间轴 → 通道结构（绝对毫秒；文本拼接与主行一致）。
+  List<Map<String, Object>>? _wordsMap(List<LyricWord>? words) {
+    if (words == null || words.isEmpty) return null;
+    return [
+      for (final word in words)
+        <String, Object>{
+          't': word.text,
+          's': word.start.inMilliseconds,
+          'e': word.end.inMilliseconds,
+        },
+    ];
   }
 }

@@ -460,7 +460,8 @@ on(EVENT_NAMES.request, function (payload) {
       lyric: '[00:00.00]第一行歌词\n[00:04.00]这一行歌词特别长特别长特别长特别长特别长特别长特别长特别长用来测试桌面歌词横向滚动\n[00:08.00]第三行歌词',
       tlyric: '[00:00.00]translation one\n[00:04.00]translation two long long long long long long long long long long long',
       rlyric: null,
-      lxlyric: null
+      // 逐字时间轴：文本拼接与主行一致，供桌面歌词逐字渐染的视觉验证。
+      lxlyric: '[00:00.00]<0,500>第一行<500,500>歌词\n[00:04.00]<0,800>这一行歌词<800,900>特别长<1700,900>特别长<2600,900>特别长<3500,900>特别长<4400,900>特别长<5300,900>特别长<6200,900>特别长<7100,900>特别长<8000,1000>用来测试桌面歌词横向滚动\n[00:08.00]<0,500>第三<500,500>行歌词'
     })
   }
   return Promise.reject(new Error('action not support: ' + action))

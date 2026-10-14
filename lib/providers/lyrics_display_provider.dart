@@ -176,7 +176,7 @@ class LyricsDisplayProvider extends ChangeNotifier {
             romaEnabled: settings.romaEnabled,
             unsyncedBehavior: settings.unsyncedBehavior,
             maxLines:
-                settings.desktopSingleLine ? 1 : settings.desktopMaxLines,
+                settings.desktopMaxLines,
           )
         : const TrackedLine();
     return LyricsPresentation(
@@ -187,6 +187,9 @@ class LyricsDisplayProvider extends ChangeNotifier {
       upcoming: tracked.upcoming,
       isPlaying: _isPlaying,
       hasLyrics: ready,
+      words: tracked.words,
+      // 与行跟踪同一有效位置（叠加歌词偏移），逐字渐染与之对齐。
+      positionMs: _position.inMilliseconds + settings.offsetMs,
     );
   }
 

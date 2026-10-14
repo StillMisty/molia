@@ -19,8 +19,8 @@ Molia 当前只有在播放页内渲染的滚动歌词。桌面悬浮歌词、�
 - Linux / Windows 桌面歌词（等待 Flutter 官方 windowing API 进入 stable 后实现，见 §11）；
 - 第三方状态栏模块（Lyricon / 墨·状态栏歌词）对接——用户已确认不做；
 - iOS / Web 的歌词输出（入口隐藏，全部 no-op）；
-- 逐字歌词渲染（yrc / lxlyric 数据存在；**v2 已在应用内歌词页实现词级高亮**，
-  桌面歌词 / 通知 / 蓝牙输出仍按行）。
+- 逐字歌词渲染（yrc / lxlyric 数据存在；应用内歌词页与应用**桌面歌词**
+  均已实现词级高亮，通知 / 蓝牙输出仍按行）。
 
 ## 2. 术语
 
@@ -85,7 +85,10 @@ Molia 当前只有在播放页内渲染的滚动歌词。桌面悬浮歌词、�
 - 拖动移动，位置以屏幕尺寸比例持久化（横竖屏换算、边缘吸附/夹取）。
 - 锁定模式：窗口 `FLAG_NOT_TOUCHABLE`（点击穿透）；解锁才可拖动 / 点按；
   锁定态控制条强制收起（点击穿透下按钮既不可点也不应可见）。
-- 点按弹出小控制条（各项可配置显隐）：播放/暂停、上一首、下一首、翻译开关、锁定、关闭。
+- 点按弹出控制条（各项可配置显隐）：上一首、播放/暂停、下一首、翻译开关、锁定、关闭。
+  控制条是 M3E 观感的 pill：圆角容器（`surfaceContainerHigh` 系，随取色来源解析）
+  + 24dp 图标按钮 + 圆形状态层（ripple）+ 出入场淡入缩放；播放/暂停图标随播放态
+  即时切换。
 - 权限：`SYSTEM_ALERT_WINDOW`。开启流程：设置页开关 → `canDrawOverlays` 检查 →
   未授权跳 `ACTION_MANAGE_OVERLAY_PERMISSION`；未授权不自动开启；回前台重读状态；
   权限被撤销时自动关闭开关并提示。
@@ -95,7 +98,12 @@ Molia 当前只有在播放页内渲染的滚动歌词。桌面悬浮歌词、�
 **渲染**
 
 - 行内容：当前行（主文本）、扩展行（翻译 / 罗马音，字号 = 主字号 × 0.8）、
-  其后 `maxLines - 1` 行 upcoming 主文本；`singleLine=true` 时只显示当前行。
+  其后 `maxLines - 1` 行 upcoming 主文本；显示行数默认 1（只显示当前行，
+  旧版「仅显示当前行」开关已并入该设置）。
+- 逐字变色：当前行有逐字时间轴（`LyricLine.words`）时按词渐染 `playedColor`
+  （词内线性插值，与歌词页 `KaraokeLyricText` 同语义）；无逐字数据的行整行着色。
+  进度来自 Dart 下发的有效播放位置（≤4Hz），原生用帧回调在采样点之间外推，
+  暂停 / seek 直接落位。
 - 颜色语义：当前行 = `playedColor`（默认跟随应用主题主色），其余行 =
   `unplayedColor`（默认跟随主题次要文本色），文字阴影 = `shadowColor`
   （默认跟随主题表面色：深色主题近黑 / 浅色主题近白，天然适配悬浮窗落在任意
@@ -104,7 +112,9 @@ Molia 当前只有在播放页内渲染的滚动歌词。桌面悬浮歌词、�
   「主题角色」用哪套方案由分组的**取色来源**决定——跟随应用主题（外观设置：
   基础配色 + 封面覆盖 + 纯黑）或跟随当前曲目封面（`ArtworkPaletteService` 的
   同源色板，无封面回退应用主题）。两者都随主题 / 切歌实时重下发（见 ADR-0001）。
-- 行切换动画：`showToggleAnimation`（默认开）——淡入/上移；关闭则直切。
+- 行切换动画：`showToggleAnimation`（默认开）——内容结构变化时整块上浮 + 逐行
+  错峰淡入（M3 强调缓动，~200ms）；同结构更新（逐字进度 / 播放态）不重建视图，
+  不打断 marquee 与动画；关闭则直切。
 - 无歌词：`noLyricsBehavior = title | hide`（默认 `title`，显示歌名）。
 - 暂停：`pauseBehavior = keep | clear | title`（默认 `keep`）。
 - 所有策略计算在 Dart 侧完成，原生只渲染 + 交互（保持"原生哑渲染"）。
@@ -129,13 +139,18 @@ Molia 当前只有在播放页内渲染的滚动歌词。桌面悬浮歌词、�
 
 ### FR-6 配置与设置 UI
 
-- 设置首屏「歌词与展示」分区**直达桌面歌词入口**（按能力显隐）；「歌词显示」
-  hub 收纳歌词页（应用内）/ 歌词输出 / 通知栏·锁屏 / 蓝牙四个入口。
+- 设置首屏「歌词与展示」分区直列三条叶子入口（全部 ≤2 层，无 hub）：
+  **桌面歌词**（悬浮窗能力支持时显示）、**歌词与输出**（应用内歌词页 +
+  全部输出的共享展示项）、**系统媒体歌词**（媒体会话能力支持时显示）。
 - 桌面歌词页聚合三组：外观与配色（启用开关 + 权限提示 + 样式预览 + 样式 +
   取色来源与三行颜色）、**歌词展示**（翻译 / 罗马音 / 偏移 / 未同步回退，
-  与「歌词输出」页共用 `LyricsSharedDisplaySection`）、行为与控制条
+  与「歌词与输出」页共用 `LyricsSharedDisplaySection`）、行为与控制条
   （行为开关 + 控制条按钮 + 重置位置）。
-- 分组按输出能力渲染：`unsupported` 时隐藏（v1 在 iOS/Web/桌面隐藏全部输出组）。
+- 「歌词与输出」页＝分组「歌词页」（`page.*` 开关）+ 分组「歌词输出」（共享项）；
+  「系统媒体歌词」页＝分组「通知栏·锁屏歌词」+ 分组「蓝牙歌词」（共用媒体元数据
+  选项构造，权限被拒时通知组给系统设置深链）。
+- 入口按输出能力渲染：`unsupported` 时隐藏对应入口；全部输出不支持时在分区下
+  给出一句平台提示。
 - 样式预览卡片（Flutter 渲染，与悬浮窗语义一致）；
   这是未来桌面渲染端复用的第一块积木。
 - 返回行为：小屏弹层的 dismiss guard 是返回唯一入口——先在弹层内退子页，
@@ -268,8 +283,7 @@ abstract class LyricsOutput {
 | `desktop.unplayedColorSource` | enum | onSurfaceVariant | 同上 | 桌面歌词 |
 | `desktop.shadowColorSource` | enum | surface | 同上 | 桌面歌词 |
 | `desktop.widthPercent` | double | 100 | 40..100 | 桌面歌词 |
-| `desktop.singleLine` | bool | false | | 桌面歌词 |
-| `desktop.maxLines` | int | 3 | 1..5（非 singleLine 时） | 桌面歌词 |
+| `desktop.maxLines` | int | 1 | 1..5（默认 1 = 只显示当前行） | 桌面歌词 |
 | `desktop.textAlignX` | enum | center | left/center/right | 桌面歌词 |
 | `desktop.textAlignY` | enum | center | top/center/bottom | 桌面歌词 |
 | `desktop.lock` | bool | false | | 桌面歌词 |
@@ -401,7 +415,9 @@ abstract class LyricsOutput {
    通知/锁屏默认写 `artist`，字段选择保留给用户。
 4. **主工作树 WIP**：合并本分支到 `main` 前，主工作树里 `lib/playback/local_audio_handler.dart`
    等未提交改动需先提交或暂存——本分支也在同一文件上叠加了歌词元数据覆盖。
-5. **R8**：新增 Kotlin 类均由 `MainActivity` 可达，无需额外 keep 规则；
+5. **R8 / 资源压缩**：新增 Kotlin 类均由 `MainActivity` 可达，无需额外 keep 规则；
+   但 release 的 `shrinkResources` 会删掉「字符串引用」的资源（通知动作图标、
+   通知小图标），必须进 `res/raw/keep.xml`（见已知坑 34）；
    若未来接入第三方 SDK（如 Lyricon）需补 keep。
 6. **开源许可**：本规格不引入任何新第三方依赖。
 
@@ -413,7 +429,7 @@ abstract class LyricsOutput {
 | `desktopLyric.isLock` | `desktop.lock` | 锁定 = 点击穿透 |
 | `desktopLyric.width` | `desktop.widthPercent` | |
 | `desktopLyric.maxLineNum` | `desktop.maxLines` | |
-| `desktopLyric.isSingleLine` | `desktop.singleLine` | |
+| `desktopLyric.isSingleLine` | 已移除（并入 `desktop.maxLines`） | 读取到旧值 `true` 时一次性映射为行数 1 |
 | `desktopLyric.textSize` | `desktop.fontSize` | LX 存 0.1 倍值；本项目存 sp 数值（Android 侧按 sp 解释） |
 | `desktopLyric.opacity` | `desktop.opacity` | |
 | `unplayColor/playedColor/shadowColor` | `desktop.unplayedColor/playedColor/shadowColor` | |
@@ -436,8 +452,8 @@ abstract class LyricsOutput {
 | 输出契约 | `lib/services/lyrics_display/lyrics_output.dart` | `LyricsOutput` / `InteractiveLyricsOutput` / `LyricsPresentation` |
 | 调度 | `lib/providers/lyrics_display_provider.dart` | 去重投送、自动取词、动作分发、能力查询 |
 | 桌面歌词（Dart） | `lib/services/lyrics_display/desktop_lyrics_output.dart`、`lyrics_channel.dart` | 通道封装 + 暂停/无歌词回退映射 |
-| 桌面歌词（原生） | `android/.../lyrics/LyricsChannelHandler.kt`、`LyricsOverlayController.kt`、`LyricsOverlayView.kt`、`MainActivity.kt`、`AndroidManifest.xml` | 悬浮窗渲染/拖动/锁定/控制条/息屏冻结/A2DP 监测 |
-| 媒体元数据 | `lib/services/lyrics_display/media_lyric_composer.dart`、`media_lyric_output.dart`、`lib/playback/local_audio_handler.dart` | 通知/锁屏 + 蓝牙 profile 合成 → `MediaItem` 覆盖 |
-| 设置页 | `lib/pages/lyrics_display_page.dart`、`lib/pages/settings_page.dart` | 歌词页分组 + 输出三分组 + 预览 + 权限引导；主题种子色与歌词颜色共用任意调色器 |
+| 桌面歌词（原生） | `android/.../lyrics/LyricsChannelHandler.kt`、`LyricsOverlayController.kt`、`LyricsOverlayView.kt`、`MainActivity.kt`、`AndroidManifest.xml` | 悬浮窗渲染（整行 + 逐字渐染）/拖动/锁定/M3E 控制条/息屏冻结/A2DP 监测；控制条图标在 `res/drawable/ic_lyrics_*` |
+| 媒体元数据 | `lib/services/lyrics_display/media_lyric_composer.dart`、`media_lyric_output.dart`、`lib/playback/local_audio_handler.dart` | 通知/锁屏 + 蓝牙 profile 合成 → `MediaItem` 覆盖；通知动作图标在 `res/drawable/audio_service_*`（`res/raw/keep.xml` 防资源压缩，见已知坑 34） |
+| 设置页 | `lib/pages/settings_page.dart`、`lib/pages/lyrics_display/*` | 首屏三条直达入口（桌面歌词 / 歌词与输出 / 系统媒体歌词）；歌词页分组 + 输出共享分组 + 预览 + 权限引导；主题种子色与歌词颜色共用任意调色器 |
 | 颜色系统 | `lib/services/lyrics_display/lyric_color_resolver.dart`、`lib/theme/scheme_builder.dart`、`lib/services/artwork_palette_service.dart` | 跟随主题 / 跟随封面经同一解析函数与同一份封面色板；通用 HSV/Hex 任意取色 |
 | 测试 | `test/lyric_line_tracker_test.dart`、`test/services/media_lyric_composer_test.dart`、`test/services/lyrics_display_settings_test.dart`、`test/services/lyrics_display_provider_test.dart`、`test/services/desktop_lyrics_output_test.dart`、`test/services/audio_route_monitor_test.dart`、`test/services/lyrics_cache_translation_test.dart`、`test/lyrics_provider_translation_test.dart` | 单一新 seam：`LyricsOutput` 假输出 |

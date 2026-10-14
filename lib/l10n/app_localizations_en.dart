@@ -1184,18 +1184,14 @@ class AppLocalizationsEn extends AppLocalizations {
       'Clear all caches (audio / lyrics / artwork)? This cannot be undone.';
 
   @override
-  String get settingsLyricsDisplayTitle => 'Lyrics display';
+  String get lyricsContentTitle => 'Lyrics & outputs';
 
   @override
-  String get settingsLyricsDisplaySubtitle =>
-      'Lyrics page, notification and Bluetooth lyrics';
+  String get lyricsContentSubtitle =>
+      'Lyrics page, translation, offset and shared options';
 
   @override
   String get lyricsPageTitle => 'Lyrics page';
-
-  @override
-  String get lyricsDisplayPageEntrySubtitle =>
-      'Translation and romanization of the in-app lyrics page';
 
   @override
   String get lyricsPageTranslationSubtitle =>
@@ -1207,10 +1203,6 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get lyricsDisplaySharedTitle => 'Lyric outputs';
-
-  @override
-  String get lyricsDisplayOutputsEntrySubtitle =>
-      'Translation, timing and unsynced handling shared by all outputs';
 
   @override
   String get lyricsDisplayTranslation => 'Translation';
@@ -1286,9 +1278,6 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get lyricsDesktopMaxLines => 'Visible lines';
-
-  @override
-  String get lyricsDesktopSingleLine => 'Current line only';
 
   @override
   String get lyricsDesktopAlign => 'Horizontal align';
@@ -1372,6 +1361,13 @@ class AppLocalizationsEn extends AppLocalizations {
   String get lyricsControlClose => 'Close';
 
   @override
+  String get lyricsSystemMediaTitle => 'System media lyrics';
+
+  @override
+  String get lyricsSystemMediaSubtitle =>
+      'Notification, lock screen and Bluetooth';
+
+  @override
   String get lyricsBehaviorKeep => 'Keep';
 
   @override
@@ -1382,10 +1378,6 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get lyricsNotificationTitle => 'Notification & lock screen';
-
-  @override
-  String get lyricsNotificationEntrySubtitle =>
-      'Lyrics written into the media notification and lock screen';
 
   @override
   String get lyricsNotificationEnable => 'Show lyrics in notification';
@@ -1429,10 +1421,6 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get lyricsBluetoothTitle => 'Bluetooth lyrics';
-
-  @override
-  String get lyricsBluetoothEntrySubtitle =>
-      'Lyrics for A2DP car displays and head units';
 
   @override
   String get lyricsBluetoothEnable => 'Show lyrics on car display';

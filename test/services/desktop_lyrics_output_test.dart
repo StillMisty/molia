@@ -1,6 +1,7 @@
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:material_ui/material_ui.dart';
+import 'package:molia/models/lyric_line.dart';
 import 'package:molia/services/lyrics_display/desktop_lyrics_output.dart';
 import 'package:molia/services/lyrics_display/lyrics_channel.dart';
 import 'package:molia/services/lyrics_display/lyrics_display_settings.dart';
@@ -78,6 +79,11 @@ void main() {
         calls.firstWhere((call) => call.method == 'desktop.update');
     expect((updateCall.arguments as Map)['line'], 'A');
 
+    // 控制条配色随配置下发（M3E pill 的容器 / 图标色）。
+    final config = showCall.arguments as Map;
+    expect(config['controlBackground'], isA<int>());
+    expect(config['controlTint'], isA<int>());
+
     await output.stop();
     expect(calls.map((call) => call.method), contains('desktop.hide'));
   });
@@ -97,6 +103,65 @@ void main() {
     await pumpEventQueue();
     expect(output.capability, LyricsOutputCapability.needsPermission);
     expect(calls.map((call) => call.method), isNot(contains('desktop.show')));
+    await output.stop();
+  });
+
+  test('逐字时间轴与位置随更新下发，回退行不带逐字', () async {
+    final channel = LyricsChannel();
+    final output = DesktopLyricsOutput(channel: channel, supported: true);
+    final settings = await desktopSettings();
+    await output.start(settings);
+
+    await output.apply(LyricsPresentation(
+      trackId: 'fake:1',
+      title: '歌名',
+      line: 'AB',
+      isPlaying: true,
+      hasLyrics: true,
+      positionMs: 1500,
+      words: const [
+        LyricWord(
+          start: Duration(milliseconds: 1000),
+          end: Duration(milliseconds: 2000),
+          text: 'A',
+        ),
+        LyricWord(
+          start: Duration(milliseconds: 2000),
+          end: Duration(milliseconds: 3000),
+          text: 'B',
+        ),
+      ],
+    ));
+    await pumpEventQueue();
+    final update = calls.lastWhere((call) => call.method == 'desktop.update');
+    final map = update.arguments as Map;
+    expect(map['positionMs'], 1500);
+    final words = map['words'] as List;
+    expect(words, hasLength(2));
+    expect((words.first as Map)['t'], 'A');
+    expect((words.first as Map)['s'], 1000);
+    expect((words.first as Map)['e'], 2000);
+
+    // 暂停回退为歌名：逐字时间轴必须撤下（歌名没有词轴）。
+    await settings.setDesktopPauseBehavior(LyricsPauseBehavior.title);
+    await output.apply(LyricsPresentation(
+      trackId: 'fake:1',
+      title: '歌名',
+      line: 'AB',
+      isPlaying: false,
+      hasLyrics: true,
+      positionMs: 1500,
+      words: const [
+        LyricWord(
+          start: Duration(milliseconds: 1000),
+          end: Duration(milliseconds: 2000),
+          text: 'A',
+        ),
+      ],
+    ));
+    await pumpEventQueue();
+    final fallback = calls.lastWhere((call) => call.method == 'desktop.update');
+    expect((fallback.arguments as Map)['words'], isNull);
     await output.stop();
   });
 

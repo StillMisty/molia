@@ -5,13 +5,14 @@ import 'package:provider/provider.dart';
 import '../../l10n/app_localizations.dart';
 import '../../services/lyrics_display/lyrics_display_settings.dart';
 import '../../widgets/settings/settings_tiles.dart';
+import 'lyrics_shared_display_section.dart';
 
-/// 歌词页（应用内）子页：只控制播放页歌词渲染的翻译 / 罗马音。
+/// 歌词与输出页：应用内歌词页（翻译 / 罗马音）+ 全部输出的共享展示策略。
 ///
-/// 与输出侧开关相互独立（[LyricsOutputSettingsPage] 管悬浮窗 / 通知 /
-/// 蓝牙共用项），所以两组开关不共用同一配置字段。
-class LyricsPageSettingsPage extends StatelessWidget {
-  const LyricsPageSettingsPage({super.key});
+/// 两组开关相互独立——`page.*` 只影响播放页歌词，共享项影响桌面歌词 /
+/// 通知 / 蓝牙；两侧行副标题都写明了生效范围，避免两个「翻译」互相混淆。
+class LyricsContentSettingsPage extends StatelessWidget {
+  const LyricsContentSettingsPage({super.key});
 
   @override
   Widget build(BuildContext context) {
@@ -19,13 +20,14 @@ class LyricsPageSettingsPage extends StatelessWidget {
     final settings = context.watch<LyricsDisplaySettings>();
     return Scaffold(
       appBar: M3EAppBar.top(
-        title: Text(l10n.lyricsPageTitle),
+        title: Text(l10n.lyricsContentTitle),
         automaticallyImplyLeading: true,
       ),
       body: ListView(
         padding: const EdgeInsets.all(kSettingsPadding),
         children: [
           SettingsSectionCard(
+            title: l10n.lyricsPageTitle,
             children: [
               SettingsSwitchTile(
                 icon: Icons.translate_rounded,
@@ -43,6 +45,8 @@ class LyricsPageSettingsPage extends StatelessWidget {
               ),
             ],
           ),
+          const SizedBox(height: kSettingsSectionSpacing),
+          LyricsSharedDisplaySection(title: l10n.lyricsDisplaySharedTitle),
         ],
       ),
     );

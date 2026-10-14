@@ -8,9 +8,8 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:molia/data/settings/settings_keys.dart';
 import 'package:molia/l10n/app_localizations.dart';
 import 'package:molia/pages/lyrics_display/desktop_lyrics_settings_page.dart';
-import 'package:molia/pages/lyrics_display/lyrics_output_settings_page.dart';
-import 'package:molia/pages/lyrics_display/notification_lyrics_settings_page.dart';
-import 'package:molia/pages/lyrics_display_page.dart';
+import 'package:molia/pages/lyrics_display/lyrics_content_settings_page.dart';
+import 'package:molia/pages/lyrics_display/system_media_lyrics_settings_page.dart';
 import 'package:molia/providers/lyrics_display_provider.dart';
 import 'package:molia/providers/theme_provider.dart';
 import 'package:molia/services/language_service.dart';
@@ -18,11 +17,12 @@ import 'package:molia/services/lyrics_display/lyric_color_resolver.dart';
 import 'package:molia/services/lyrics_display/lyrics_display_settings.dart';
 import 'package:molia/theme/scheme_builder.dart';
 import 'package:molia/utils/color_hex.dart';
+import 'package:molia/widgets/settings/settings_tiles.dart';
 
 import 'support/settings_test_support.dart';
 
-/// 歌词显示二级设置页：hub 入口导航、输出共享项、桌面歌词颜色面板、
-/// 通知格式分段。不触碰真实 DB / 安全存储（内存注册表 + mock prefs）。
+/// 歌词显示设置页：歌词与输出（页内分组）、系统媒体歌词（通知 + 蓝牙）、
+/// 桌面歌词颜色面板。不触碰真实 DB / 安全存储（内存注册表 + mock prefs）。
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
@@ -50,7 +50,7 @@ void main() {
     await settings.init();
     addTearDown(settings.dispose);
 
-    // outputs 为空：能力全部 unsupported（hub 隐藏输出入口，子页仍可独立挂载）。
+    // outputs 为空：输出能力全部 unsupported（页面本身仍可独立挂载）。
     final display = LyricsDisplayProvider(
       settings: settings,
       outputs: const [],
@@ -90,36 +90,37 @@ void main() {
     });
   }
 
-  testWidgets('歌词显示 hub：入口行齐全，点击进入歌词输出子页', (tester) async {
+  testWidgets('歌词与输出页：页内分组齐全（应用内歌词页 + 输出共享）', (tester) async {
     useLargeViewport(tester);
-    await pumpApp(tester, const LyricsDisplayPage());
+    await pumpApp(tester, const LyricsContentSettingsPage());
 
-    expect(find.byKey(const Key('lyricsPageEntry')), findsOneWidget);
-    expect(find.byKey(const Key('lyricsOutputsEntry')), findsOneWidget);
-    // 桌面歌词入口已提升到设置首屏，hub 内不再有；其余输出入口按能力显隐，
-    // outputs 为空（能力 unsupported）时隐藏，只留平台不支持说明。
-    expect(find.byKey(const Key('lyricsDesktopEntry')), findsNothing);
-    expect(find.byKey(const Key('lyricsNotificationEntry')), findsNothing);
-    expect(find.byKey(const Key('lyricsBluetoothEntry')), findsNothing);
+    // 两个分组标题 + 两组开关（同名的「翻译」用副标题区分生效范围）。
+    expect(find.text('Lyrics page'), findsOneWidget);
+    expect(find.text('Lyric outputs'), findsOneWidget);
     expect(
-      find.text('Lyric outputs are not available on this platform'),
+      find.text('Show translation under each line in the lyrics page'),
       findsOneWidget,
     );
-
-    await tester.tap(find.byKey(const Key('lyricsOutputsEntry')));
-    await tester.pumpAndSettle();
-
-    // 子页标题 + 共享输出项（无时间轴分段行）。
-    expect(find.text('Lyric outputs'), findsOneWidget);
+    expect(
+      find.text('Show translation in floating, notification and Bluetooth lyrics'),
+      findsOneWidget,
+    );
     expect(find.text('Unsynced lyrics'), findsOneWidget);
-    expect(find.byKey(const Key('lyricsPageEntry')), findsNothing);
   });
 
-  testWidgets('歌词输出页：无时间轴分段选择「隐藏」并持久化', (tester) async {
-    await pumpApp(tester, const LyricsOutputSettingsPage());
+  testWidgets('歌词与输出页：无时间轴分段选择「隐藏」并持久化', (tester) async {
+    useLargeViewport(tester);
+    await pumpApp(tester, const LyricsContentSettingsPage());
     expect(settings.unsyncedBehavior, UnsyncedBehavior.title);
 
-    await tester.tap(find.text('Hide'));
+    final hide = find.text('Hide');
+    await tester.scrollUntilVisible(
+      hide,
+      200,
+      scrollable: find.byType(Scrollable).first,
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(hide);
     await tester.pumpAndSettle();
 
     expect(settings.unsyncedBehavior, UnsyncedBehavior.hide);
@@ -207,12 +208,23 @@ void main() {
     );
   });
 
-  testWidgets('通知·锁屏页：格式分段切回「仅歌词」', (tester) async {
-    await pumpApp(tester, const NotificationLyricsSettingsPage());
+  testWidgets('系统媒体歌词页：通知格式分段切回「仅歌词」', (tester) async {
+    useLargeViewport(tester);
+    await pumpApp(tester, const SystemMediaLyricsSettingsPage());
     await settings.setNotificationFormat(LyricsMetadataFormat.titleLyric);
     await tester.pumpAndSettle();
 
-    await tester.tap(find.text('Lyrics only'));
+    // 通知与蓝牙两组都有「格式」分段：按分组卡片限定作用域。
+    final notificationSection = find.ancestor(
+      of: find.text('Notification & lock screen'),
+      matching: find.byType(SettingsSectionCard),
+    );
+    await tester.tap(
+      find.descendant(
+        of: notificationSection,
+        matching: find.text('Lyrics only'),
+      ),
+    );
     await tester.pumpAndSettle();
 
     expect(settings.notificationFormat, LyricsMetadataFormat.lyric);
@@ -223,18 +235,7 @@ void main() {
     );
   });
 
-  testWidgets('歌词显示 hub：媒体会话初始化失败给出可见提示', (tester) async {
-    useLargeViewport(tester);
-    await pumpApp(tester, const LyricsDisplayPage(),
-        mediaSessionInitFailed: true);
-
-    expect(
-      find.textContaining('System media session unavailable'),
-      findsOneWidget,
-    );
-  });
-
-  testWidgets('通知·锁屏页：通知权限被拒显示系统设置深链', (tester) async {
+  testWidgets('系统媒体歌词页：权限被拒且通知开关打开时显示系统设置深链', (tester) async {
     const channel = MethodChannel('top.stillmisty.molia/notifications');
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
         .setMockMethodCallHandler(channel, (call) async {
@@ -246,7 +247,7 @@ void main() {
           .setMockMethodCallHandler(channel, null);
     });
 
-    await pumpApp(tester, const NotificationLyricsSettingsPage());
+    await pumpApp(tester, const SystemMediaLyricsSettingsPage());
     // 开关未开时不提示（避免没启用输出就先报权限）。
     expect(
       find.byKey(const Key('lyricsNotificationPermissionItem')),

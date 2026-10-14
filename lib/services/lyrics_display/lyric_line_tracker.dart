@@ -1,3 +1,5 @@
+import 'package:flutter/foundation.dart';
+
 import '../../models/lyric_line.dart';
 import 'lyrics_display_settings.dart' show UnsyncedBehavior;
 
@@ -10,11 +12,15 @@ class TrackedLine {
   final List<String> extended;
   final List<String> upcoming;
 
+  /// 当前行的逐字时间轴（可空 = 该行没有逐字数据）。
+  final List<LyricWord>? words;
+
   const TrackedLine({
     this.index = -1,
     this.line = '',
     this.extended = const [],
     this.upcoming = const [],
+    this.words,
   });
 
   @override
@@ -23,11 +29,12 @@ class TrackedLine {
       other.index == index &&
       other.line == line &&
       _listEquals(other.extended, extended) &&
-      _listEquals(other.upcoming, upcoming);
+      _listEquals(other.upcoming, upcoming) &&
+      listEquals(other.words, words);
 
   @override
-  int get hashCode =>
-      Object.hash(index, line, Object.hashAll(extended), Object.hashAll(upcoming));
+  int get hashCode => Object.hash(index, line, Object.hashAll(extended),
+      Object.hashAll(upcoming), words == null ? null : Object.hashAll(words!));
 
   static bool _listEquals(List<String> a, List<String> b) {
     if (identical(a, b)) return true;
@@ -79,6 +86,7 @@ class LyricLineTracker {
               romaEnabled: romaEnabled,
             ),
             upcoming: _upcoming(lines, 0, maxLines),
+            words: lines.first.words,
           );
       }
     }
@@ -99,6 +107,7 @@ class LyricLineTracker {
         romaEnabled: romaEnabled,
       ),
       upcoming: _upcoming(lines, index, maxLines),
+      words: lines[index].words,
     );
   }
 

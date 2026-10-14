@@ -46,6 +46,51 @@ void main() {
     expect(result.upcoming, ['ten', 'fifteen']);
   });
 
+  test('当前行的逐字时间轴随行下发，无逐字的行不带', () {
+    final wordedLines = [
+      const LyricLine(
+        Duration(seconds: 2),
+        'two',
+        words: [
+          LyricWord(
+            start: Duration(seconds: 2),
+            end: Duration(milliseconds: 2400),
+            text: 'tw',
+          ),
+          LyricWord(
+            start: Duration(milliseconds: 2400),
+            end: Duration(milliseconds: 3000),
+            text: 'o',
+          ),
+        ],
+      ),
+      const LyricLine(Duration(seconds: 5), 'five'),
+    ];
+    TrackedLine trackWorded(Duration position) => tracker.track(
+          lines: wordedLines,
+          translations: const ['', ''],
+          romas: const ['', ''],
+          isSynced: true,
+          position: position,
+          title: title,
+          offsetMs: 0,
+          translationEnabled: false,
+          romaEnabled: false,
+          unsyncedBehavior: UnsyncedBehavior.title,
+          maxLines: 3,
+        );
+
+    final worded = trackWorded(const Duration(seconds: 3));
+    expect(worded.index, 0);
+    expect(worded.words, hasLength(2));
+    expect(worded.words!.first.text, 'tw');
+
+    // 切到无逐字数据的行：words 为空（上层回退整行着色）。
+    final plain = trackWorded(const Duration(seconds: 6));
+    expect(plain.index, 1);
+    expect(plain.words, isNull);
+  });
+
   test('首行之前返回空行（前奏）', () {
     final result = track(const Duration(seconds: 1));
     expect(result.index, -1);
