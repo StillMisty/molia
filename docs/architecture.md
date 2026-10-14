@@ -256,18 +256,30 @@
   系统下载目录下 `Molia/`（Linux 读 XDG `XDG_DOWNLOAD_DIR`，回退
   `~/Downloads`；Windows `%USERPROFILE%\Downloads`），iOS = 应用文档目录
   `Molia/`（Files app 可见），Android = 应用支持目录 `downloads/`
-  （公共 Downloads 走 MediaStore，见 issue #17）；设置页可选自定义目录
+  （**公共副本**另经 MediaStore 发布，见下）；设置页可选自定义目录
   （`DownloadSettings.saveDir`，存储层每次解析读取，改设置无需重启）；
   `lyrics/` + `covers/` 子目录与 `cache/audio_cache` 完全隔离——「清理缓存」
   永不触碰下载，「删除下载」是独立动作；`DownloadStorage` 是平台 seam
   （IO 实现 / Web 空实现，存储不可用时 `supported=false`，UI 隐藏全部入口）；
+- **Android 公共目录发布**（issue #17）：下载完成后把音频 best-effort 拷进
+  MediaStore 的 Downloads 集合（`Download/Molia/`，与桌面同构），用户在文件
+  管理器 / 其它播放器里可见。**公共副本是发布副本，不参与播放取链**：应用
+  目录里的 `filePath` 仍是唯一播放源，`publicUri`（schema v4）只用于删除时
+  回收副本；API 29+ `insert + openOutputStream`（应用自己创建的行无需存储
+  权限，`IS_PENDING` 防半成品可见），< 29 返回 null 不支持；平台 seam
+  `DownloadsPublisher`（`lib/data/downloads/downloads_publisher.dart`：
+  IO = MethodChannel `top.stillmisty.molia/downloads`，Web = 空实现，
+  失败 / 通道缺失一律 no-op 只记日志）；发布开关
+  `DownloadSettings.publishToPublicDir`（默认开，仅 Android 显示），管理页
+  提供「补发布到公共目录」回收旧记录；
 - **缓存优先**：所选音质的完整音频缓存（`CacheService.audioCacheKey` 同名且
   无 `.part`）命中时直接拷贝不触网；歌词经注入的 `LyricsService`（缓存 →
   原生取词 → 跨平台回退，与播放页同一链路）；封面经 `ArtworkCache.bytesOf`
   命中直读、未命中取图后 `putBytes` 回填；
-- **落库**：drift `downloads` 表（schema v3，`filePath` 可空——记录可以只含
-  歌词或只含封面）存原音源曲目键 + 自包含快照 + 原 raw + 音频路径/音质/大小
-  + 歌词/封面路径；`DownloadsRepository` 负责行 ↔ `DownloadedTrack` 映射；
+- **落库**：drift `downloads` 表（schema v4，`filePath` 可空——记录可以只含
+  歌词或只含封面；`publicUri` 存 Android 公共副本定位）存原音源曲目键 +
+  自包含快照 + 原 raw + 音频路径/音质/大小 + 歌词/封面路径；
+  `DownloadsRepository` 负责行 ↔ `DownloadedTrack` 映射；
   半成品 `.part` → 原子改名 → 落库，播放取链只认数据库记录；启动时清扫
   崩溃遗留 `.part`；
 - **标签嵌入**：音频就绪后把标题 / 歌手 / 专辑 / 歌词 / 封面写进文件标签
@@ -291,13 +303,14 @@
   `sourceKey = local` 的条目（含墓碑）——文件是设备本机持久副本，
   同步到其它设备不可播放；
 - **设置与管理**：`DownloadSettings`（设备本地键，不登记同步：保存位置 /
-  文件名模板 `{artist}`/`{title}`/`{album}` / 标签嵌入开关）；
+  文件名模板 `{artist}`/`{title}`/`{album}` / 标签嵌入开关 /
+  Android 公共目录发布开关）；
   下载弹层（`lib/widgets/download_sheet.dart`）：音质选择（命中缓存的音质
   标「本地缓存」）+ 音频动作 + 歌词/封面单独下载 + 全部下载；
   下载管理页（`lib/pages/downloads_manage_page.dart`，设置 › 数据与存储）：
   进行中任务 + 批量下载（当前队列 / 指定歌单，跳过已下载与本地曲目；
   **不做断点续传**：平台直链多为一次性签名地址）+ 文件维护（`.part` 清扫、
-  孤儿文件回收、旧位置迁移）+ 已下载列表入口；
+  孤儿文件回收、旧位置迁移、Android 补发布公共副本）+ 已下载列表入口；
   省流生效（移动数据 + 已开启）时下载前先确认。
 
 ### 设置注册表（settings registry）
