@@ -57,6 +57,7 @@
   - `SearchQuery` / `SearchResult<T>`；`SourceFailure(kind/l10nKey/retryable)`；
   - `Comment` / `CommentPage`（评论正文 / 时间 / IP 归属 / 点赞 / 引用 / 楼中楼，
     `CommentKind` 区分热门与最新）；
+  - `Album`（专辑 id / 名称 / 歌手 / 封面 / 年份 / 曲目列表 / 分页）；
   - `SourceDescriptor` / `SourceCapabilities`。
 - **端口**：`MusicSource`（search/resolve/lyrics/artwork/comments/collection）、`SourceRegistry`
   （descriptors/byKey/forTrack/setOrder/changes）、`PlaybackBackend`（state ValueListenable +
@@ -109,6 +110,20 @@
   懒加载 + 分页 + 错误归一化），UI 为 `lib/pages/song_comments_page.dart` +
   `lib/widgets/comment_list_view.dart`；入口：歌曲信息页「评论」行（能力位判定唯一
   来源 `CommentsProvider.supports`，不支持时行内说明；展开态播放器进度排不再放入口）。
+- **专辑**：`AlbumService`（`lib/data/catalog/album_service.dart`）是专辑分页的唯一取数
+  入口（single-flight + LRU + TTL 10min，key=`album:{source}:{id}:{page}:{limit}`，
+  失败不缓存，`invalidateAlbum` 供重试）；取数函数由组合根注入
+  `SourceManager.fetchAlbum`（能力位 `capabilities.collection`：仅内置五平台置真，
+  LX 脚本 / any-listen / local 为假）→ `lib/sources/builtin/{wy,tx,kg,kw,mg}_album.dart`
+  按专辑 id 精确拉取（wy `api/v1/album`、tx `music.musichallAlbum.AlbumSongList` 模块、
+  kg `album/song` + `album/info`、kw `r.s stype=albuminfo`、mg `queryAlbumSong` +
+  `MIGUM3.0/resource/album`），解析直接产出领域 `Album`（曲目 payload 经 track_mapper
+  原样透传）；真实响应快照见 `test/fixtures/albums/`（抓取脚本
+  `tool/gen_album_fixtures.mjs`），端点均需真机复验。端口路由：
+  `MusicSource.collection(CollectionRef(type: album))` 在能力位为真时转发
+  `fetchAlbum`（playlist / artist 仍 unsupported）。UI 为 `lib/pages/album_page.dart`
+  （头部元信息 + 播放全部 + 加入列表 + `TrackRow` 分页列表），入口：歌曲信息页
+  「专辑」行（payload 专辑 id + 能力位双判定，`platformAlbumId`；否则保持只读）。
 - **系统媒体会话**（Android/iOS/macOS）：`LocalAudioHandler` 把服务状态映射为
   `MediaItem`/`PlaybackState`；通知/锁屏封面经 `MediaItem.artHeaders` 统一带
   浏览器 UA + 平台 Referer，并复用 `ArtworkCache` 的共享 CacheManager

@@ -503,6 +503,16 @@
       }
     }
   },
+  "albumEmpty": "No tracks in this album",
+  "albumLoadFailed": "Failed to load album",
+  "albumYear": "{year}",
+  "@albumYear": {
+    "placeholders": {
+      "year": {
+        "type": "int"
+      }
+    }
+  },
   "settingsAppTitle": "App name",
   "settingsAppTitleSubtitle": "Shown in the top bar when nothing is playing",
   "settingsAppTitleDialogTitle": "App name",

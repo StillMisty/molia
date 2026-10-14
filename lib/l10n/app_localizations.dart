@@ -2006,6 +2006,24 @@ abstract class AppLocalizations {
   /// **'{count} plays'**
   String discoverPlayCount(String count);
 
+  /// No description provided for @albumEmpty.
+  ///
+  /// In en, this message translates to:
+  /// **'No tracks in this album'**
+  String get albumEmpty;
+
+  /// No description provided for @albumLoadFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Failed to load album'**
+  String get albumLoadFailed;
+
+  /// No description provided for @albumYear.
+  ///
+  /// In en, this message translates to:
+  /// **'{year}'**
+  String albumYear(int year);
+
   /// No description provided for @settingsAppTitle.
   ///
   /// In en, this message translates to:

@@ -1054,6 +1054,17 @@ class AppLocalizationsEn extends AppLocalizations {
   }
 
   @override
+  String get albumEmpty => 'No tracks in this album';
+
+  @override
+  String get albumLoadFailed => 'Failed to load album';
+
+  @override
+  String albumYear(int year) {
+    return '$year';
+  }
+
+  @override
   String get settingsAppTitle => 'App name';
 
   @override
