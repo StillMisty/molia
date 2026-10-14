@@ -55,8 +55,10 @@
     `PlaybackSnapshot.next` 是后端按当前模式解析出的下一首（shuffle 单曲内稳定），
     `history` 是实际播放顺序（最近在后），`upcoming` 是队列顺序（非播放顺序）；
   - `SearchQuery` / `SearchResult<T>`；`SourceFailure(kind/l10nKey/retryable)`；
+  - `Comment` / `CommentPage`（评论正文 / 时间 / IP 归属 / 点赞 / 引用 / 楼中楼，
+    `CommentKind` 区分热门与最新）；
   - `SourceDescriptor` / `SourceCapabilities`。
-- **端口**：`MusicSource`（search/resolve/lyrics/artwork/collection）、`SourceRegistry`
+- **端口**：`MusicSource`（search/resolve/lyrics/artwork/comments/collection）、`SourceRegistry`
   （descriptors/byKey/forTrack/setOrder/changes）、`PlaybackBackend`（state ValueListenable +
   load/play/pause/seek/next/previous/setMode/stop）、`PlaybackFacade`（snapshot + position +
   控制方法）、`UiMessenger`（showMessage/showFailure）、`StateListenable<T>`。
@@ -98,6 +100,15 @@
   （`SourceManager.fetchPic`：脚本 `pic` action → 内置原生取图；省流模式不发请求）
   取图，经 `PlaybackFacade.updateTrackArtwork` 原地回写队列曲目（新 `Track` 触发
   封面堆叠换图淡化、主题取色与系统媒体通知封面更新）。
+- **Comments**：`CommentsService`（`lib/data/catalog/comments_service.dart`）是评论分页的
+  唯一取数入口（single-flight + LRU + TTL 5min，key=`comments:{source}:{songId}:{kind}:{page}`，
+  失败不缓存，`invalidateTrack` 供下拉刷新）。取数经 `MusicSource.comments`
+  （能力位 `capabilities.comment`：仅内置五平台）→ `SourceManager.fetchComments`
+  → `lib/sources/builtin/{wy,tx,kg,kw,mg}_comment.dart`（移植 LX：热门 / 最新、分页、
+  表情还原、引用 / 楼中楼归一化）。页面状态在 `CommentsProvider`（热门 / 最新两个 tab
+  懒加载 + 分页 + 错误归一化），UI 为 `lib/pages/song_comments_page.dart` +
+  `lib/widgets/comment_list_view.dart`；入口：歌词快捷工具栏与展开态播放器进度排
+  （`SourceRegistry` 能力位判定，无能力时禁用）。
 - **系统媒体会话**（Android/iOS/macOS）：`LocalAudioHandler` 把服务状态映射为
   `MediaItem`/`PlaybackState`；通知/锁屏封面经 `MediaItem.artHeaders` 统一带
   浏览器 UA + 平台 Referer，并复用 `ArtworkCache` 的共享 CacheManager
