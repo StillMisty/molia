@@ -33,6 +33,20 @@ jobs:
           sudo apt-get install -y --no-install-recommends \
             libgtk-3-dev libmpv2 libsecret-1-dev xvfb fonts-wqy-microhei ninja-build libglu1-mesa
 
+      # 无声卡的 runner：给 ALSA 一个 null 默认设备。否则 libmpv 打不开音频
+      # 输出，媒体流会被立即判为播放完成 → 自动切歌，播放用例必挂
+      # （2026-10-14：断言拿到 'Second Song' 而不是 'Hello LX'）。
+      - name: 音频设备（ALSA null 默认设备）
+        run: |
+          cat > "$HOME/.asoundrc" <<'EOF'
+          pcm.!default {
+            type null
+          }
+          ctl.!default {
+            type null
+          }
+          EOF
+
       - uses: subosito/flutter-action@v2
         with:
           flutter-version: 3.47.6
