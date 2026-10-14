@@ -13,6 +13,7 @@
 library;
 
 import '../../domain/models/catalog.dart';
+import '../../domain/models/comment.dart';
 import '../../domain/models/failure.dart';
 import '../../domain/models/source.dart';
 import '../../domain/models/track.dart';
@@ -85,6 +86,20 @@ class LocalMusicSource implements MusicSource {
 
   @override
   Future<LyricsDoc?> lyrics(Track track) async => null;
+
+  /// 本地副本没有评论能力（与 `capabilities.comment = false` 一致）。
+  @override
+  Future<CommentPage> comments(
+    Track track, {
+    required CommentKind kind,
+    int page = 1,
+    int limit = kCommentPageSize,
+  }) {
+    return Future.error(const SourceFailure(
+      kind: FailureKind.unsupported,
+      message: '本地音源不支持评论',
+    ));
+  }
 
   @override
   Future<Artwork?> artwork(Track track) async => null;
