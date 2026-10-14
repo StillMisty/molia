@@ -23,8 +23,6 @@ import '../utils/responsive.dart';
 import '../utils/source_quality_label.dart';
 import '../widgets/app_color_picker.dart';
 import '../widgets/font_picker_sheet.dart';
-import '../widgets/settings/appearance_swatches.dart';
-import '../widgets/settings/settings_swatch_row.dart';
 import '../widgets/settings/settings_tiles.dart';
 import 'ai_dj_page.dart';
 import 'data_settings_page.dart';
@@ -250,8 +248,7 @@ class _SettingsHomeViewState extends State<_SettingsHomeView>
     );
   }
 
-  /// 外观：主题模式 / 基础配色（可视化预览）+ 自定义色（并入配色 swatch）+
-  /// 封面覆盖 / 纯黑 / 字体。
+  /// 外观：主题模式 / 基础配色 / 自定义色（仅自定义时） / 封面覆盖 / 纯黑 / 字体。
   Widget _appearanceSection(BuildContext context, AppLocalizations l10n) {
     return SettingsSectionCard(
       title: l10n.settingsAppearanceTitle,
@@ -287,104 +284,59 @@ class _SettingsHomeViewState extends State<_SettingsHomeView>
               appFont: appFontFamily,
             ) = appearance;
             final m3e = M3ETheme.of(context);
-            // 预览方案统一从 provider 解析（唯一取色来源）；appearance 记录已
-            // 覆盖纯黑 / 种子 / 壁纸可用性，读到的方案与记录同批。
-            final provider = context.read<ThemeProvider>();
-            final effectiveBrightness = switch (themeMode) {
-              ThemeMode.system => MediaQuery.platformBrightnessOf(context),
-              ThemeMode.light => Brightness.light,
-              ThemeMode.dark => Brightness.dark,
-            };
             // 同一个 Selector 产出的多行：行距由 SettingsRows 统一给。
             return SettingsRows(
               children: [
-                // 主题模式：三段预览圆；浅/深用当前基础配色在两种亮度下的方案。
-                SettingsSwatchRow<ThemeMode>(
+                SettingsChoiceRow<ThemeMode>(
                   key: const Key('settingsThemeModeItem'),
                   icon: Icons.brightness_6_rounded,
                   title: l10n.settingsThemeMode,
                   value: themeMode,
                   options: [
-                    SettingsSwatchOption(
-                      value: ThemeMode.system,
-                      label: l10n.themeModeSystem,
-                      swatch: SystemSchemeSwatchPreview(
-                        lightScheme: provider.previewScheme(
-                          baseColorSource,
-                          Brightness.light,
-                        ),
-                        darkScheme: provider.previewScheme(
-                          baseColorSource,
-                          Brightness.dark,
-                        ),
-                      ),
-                    ),
-                    SettingsSwatchOption(
-                      value: ThemeMode.light,
-                      label: l10n.themeModeLight,
-                      swatch: SchemeSwatchPreview(
-                        scheme: provider.previewScheme(
-                          baseColorSource,
-                          Brightness.light,
-                        ),
-                      ),
-                    ),
-                    SettingsSwatchOption(
-                      value: ThemeMode.dark,
-                      label: l10n.themeModeDark,
-                      swatch: SchemeSwatchPreview(
-                        scheme: provider.previewScheme(
-                          baseColorSource,
-                          Brightness.dark,
-                        ),
-                      ),
-                    ),
+                    (ThemeMode.system, l10n.themeModeSystem),
+                    (ThemeMode.light, l10n.themeModeLight),
+                    (ThemeMode.dark, l10n.themeModeDark),
                   ],
                   onChanged: (mode) {
                     // 传平台亮度：system 模式下立即按当前系统亮度生效。
-                    provider.setThemeMode(
-                      mode,
-                      platformBrightness:
-                          MediaQuery.platformBrightnessOf(context),
-                    );
+                    context.read<ThemeProvider>().setThemeMode(
+                          mode,
+                          platformBrightness:
+                              MediaQuery.platformBrightnessOf(context),
+                        );
                   },
                 ),
                 // 基础配色（单选）：壁纸 / 自定义；封面覆盖见下一项。
-                // 自定义色值并入 swatch 副标题，点该项即打开取色器（同时是编辑入口）。
-                SettingsSwatchRow<ColorBaseSource>(
+                SettingsChoiceRow<ColorBaseSource>(
                   key: const Key('settingsBaseColorItem'),
                   icon: Icons.palette_rounded,
                   title: l10n.settingsBaseColor,
-                  subtitle: monetAvailable ? null : l10n.settingsMonetUnavailable,
+                  subtitle: _baseColorSubtitle(
+                    l10n,
+                    baseColorSource,
+                    monetAvailable: monetAvailable,
+                    seedColor: seedColor,
+                  ),
                   value: baseColorSource,
                   options: [
-                    SettingsSwatchOption(
-                      value: ColorBaseSource.wallpaper,
-                      label: l10n.settingsBaseColorWallpaper,
-                      swatch: WallpaperSwatchPreview(
-                        scheme: provider.previewScheme(
-                          ColorBaseSource.wallpaper,
-                          effectiveBrightness,
-                        ),
-                      ),
-                    ),
-                    SettingsSwatchOption(
-                      value: ColorBaseSource.custom,
-                      label: l10n.settingsBaseColorCustom,
-                      supportingText: colorHexLabel(seedColor.toARGB32()),
-                      swatch: SchemeSwatchPreview(
-                        scheme: provider.previewScheme(
-                          ColorBaseSource.custom,
-                          effectiveBrightness,
-                        ),
-                      ),
-                    ),
+                    (ColorBaseSource.wallpaper, l10n.settingsBaseColorWallpaper),
+                    (ColorBaseSource.custom, l10n.settingsBaseColorCustom),
                   ],
-                  // 平台无莫奈时壁纸项禁用（配色回退自定义种子色）。
+                  // 平台无莫奈时壁纸项禁用（仍可显示为选中态，配色回退种子色）。
                   optionEnabled: (source) =>
                       source != ColorBaseSource.wallpaper || monetAvailable,
-                  onChanged: (source) => _setBaseColorSource(context, source),
+                  onChanged: (source) =>
+                      context.read<ThemeProvider>().setBaseColorSource(source),
                 ),
+                // 自定义色仅作基础配色时显示，避免与「壁纸」并存产生歧义。
+                if (baseColorSource == ColorBaseSource.custom)
+                  SettingsColorValueTile(
+                    key: const Key('settingsSeedColorItem'),
+                    icon: Icons.color_lens_rounded,
+                    title: l10n.settingsSeedColor,
+                    colorArgb: seedColor.toARGB32(),
+                    onTap: () => _pickSeedColor(context),
+                  ),
                 // 封面覆盖层：盖过基础配色（含壁纸）；无封面回退。
                 SettingsSwitchTile(
                   switchKey: const Key('settingsFollowArtworkSwitch'),
@@ -458,12 +410,6 @@ class _SettingsHomeViewState extends State<_SettingsHomeView>
               (PlayMode.shuffle, l10n.playModeShuffle),
               (PlayMode.singleRepeat, l10n.playModeSingleRepeat),
             ],
-            // 逐项图标：选中段的对勾替换图标（M3E 分段形态，不额外占宽）。
-            icons: const {
-              PlayMode.sequential: Icons.repeat_rounded,
-              PlayMode.shuffle: Icons.shuffle_rounded,
-              PlayMode.singleRepeat: Icons.repeat_one_rounded,
-            },
             onChanged: (mode) =>
                 context.read<PlaybackProvider>().setDefaultPlayMode(mode),
           ),
@@ -736,14 +682,19 @@ class _SettingsHomeViewState extends State<_SettingsHomeView>
     return l10n.settingsUpdateSubtitle(provider.currentVersionLabel);
   }
 
-  /// 基础配色切换：点「自定义颜色」一步到位打开取色器——swatch 同时是编辑
-  /// 入口（否则已选中自定义时再点无处改色）。
-  void _setBaseColorSource(BuildContext context, ColorBaseSource source) {
-    final provider = context.read<ThemeProvider>();
-    provider.setBaseColorSource(source);
-    if (source == ColorBaseSource.custom) {
-      _pickSeedColor(context);
+  /// 基础配色副标题：壁纸（平台不支持时说明）或当前自定义色 hex。
+  String _baseColorSubtitle(
+    AppLocalizations l10n,
+    ColorBaseSource source, {
+    required bool monetAvailable,
+    required Color seedColor,
+  }) {
+    if (source != ColorBaseSource.wallpaper) {
+      return colorHexLabel(seedColor.toARGB32());
     }
+    return monetAvailable
+        ? l10n.settingsBaseColorWallpaper
+        : l10n.settingsMonetUnavailable;
   }
 
   /// 主题色：直接打开任意取色器（HSV + Hex）。

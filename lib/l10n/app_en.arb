@@ -52,6 +52,7 @@
   "settingsMonetUnavailable": "Not supported on this platform",
   "settingsPureBlack": "Pure black background",
   "settingsPureBlackSubtitle": "Use pure black surfaces in dark mode (OLED)",
+  "settingsSeedColor": "Custom color",
   "settingsFollowArtwork": "Follow album art",
   "settingsFollowArtworkSubtitle": "Use album art colors while playing; falls back to base colors",
   "settingsAppFont": "App font",

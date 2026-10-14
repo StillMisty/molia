@@ -138,6 +138,10 @@ class SettingsSectionHint extends StatelessWidget {
 ///
 /// 用于「一个分组内多行由同一个 widget 产出」的场景（如一个 Selector 里
 /// 的多行）；直接作为 [SettingsSectionCard] 子项的行由分组统一下发行形状。
+///
+/// 行形状必须在这里逐行下发：外层分组只看到「一个子项」（position=single），
+/// 不覆盖的话整组都会按 single 画成四角 16dp，与其它分组的首末 16dp /
+/// 内行 4dp 不一致（回归见 settings_choice_row_test）。
 class SettingsRows extends StatelessWidget {
   const SettingsRows({super.key, required this.children});
 
@@ -151,7 +155,10 @@ class SettingsRows extends StatelessWidget {
       children: [
         for (var i = 0; i < children.length; i++) ...[
           if (i > 0) SizedBox(height: gap),
-          children[i],
+          SettingsRowPosition(
+            position: calculateCardPosition(i, children.length),
+            child: children[i],
+          ),
         ],
       ],
     );
@@ -426,9 +433,11 @@ class SettingsValueTile extends StatelessWidget {
 /// （`Align` / `Row` 尾位）会塌成零宽并溢出；这里把它放进
 /// `double.infinity` 的紧约束里，多个 segment 才会等宽铺满。
 ///
-/// M3E 选中形态（[icons] 全齐时）：选中段的图标位置改画对勾（勾替换图标，
-/// 不额外占宽）；没有逐项图标的行保持「无勾、仅容器填充」——勾会挤占标签
-/// 宽度，在窄弹层里把长文案截断（回归见 settings_choice_row_test）。
+/// M3E 选中形态（[icons] 提供时）：选中段的图标位置改画对勾（勾替换图标，
+/// 不额外占宽）。只在「图标 + 文案」放得下的行使用（2–3 段、短标签：对齐 /
+/// 更新渠道）；长标签（Sequential / Single repeat / Song title）加图标会把
+/// 文案挤到截断，保持纯文字分段——勾 + 长文案同理（回归见
+/// settings_choice_row_test）。
 class SettingsChoiceRow<T> extends StatelessWidget {
   const SettingsChoiceRow({
     super.key,
@@ -455,7 +464,8 @@ class SettingsChoiceRow<T> extends StatelessWidget {
   /// 选项（值 + 显示文案）。
   final List<(T, String)> options;
 
-  /// 逐项图标：每个选项都有时选中段显示对勾（替换图标）；缺省/不齐则不显示。
+  /// 逐项图标：选项文案放得下时使用（图标 + 文案，选中段对勾替换图标）；
+  /// 缺省 / 不齐时保持纯文字分段（勾会挤占标签宽度）。
   final Map<T, IconData>? icons;
 
   final ValueChanged<T> onChanged;
@@ -466,6 +476,8 @@ class SettingsChoiceRow<T> extends StatelessWidget {
   /// 是否处于 M3E 选中形态：每个选项都配了图标。
   bool get _showSelectedIcon =>
       icons != null && options.every((option) => icons!.containsKey(option.$1));
+
+  /// 图标 + 文案的分段：勾替换图标位，选中段不额外变宽。
 
   @override
   Widget build(BuildContext context) {

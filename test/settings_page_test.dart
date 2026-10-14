@@ -206,7 +206,7 @@ void main() {
     expect(find.byIcon(Icons.email_rounded), findsNothing);
   });
 
-  testWidgets('主题模式：预览圆选择深色后 provider 生效', (tester) async {
+  testWidgets('主题模式：行内分段选择深色后 provider 生效', (tester) async {
     await pumpSettingsPage(tester);
 
     await tester.tap(optionOf(const Key('settingsThemeModeItem'), 'Dark'));
@@ -219,30 +219,27 @@ void main() {
     expect(prefs.getString('theme_mode'), 'dark');
   });
 
-  testWidgets('基础配色：预览圆；无莫奈时壁纸禁用，自定义选中即开取色器', (tester) async {
+  testWidgets('基础配色：行内分段；无莫奈时壁纸段禁用，自定义可切换', (tester) async {
     await pumpSettingsPage(tester);
 
     // 默认壁纸；测试环境无莫奈注入，副标题给出平台说明。
     expect(themeProvider.baseColorSource, ColorBaseSource.wallpaper);
     expect(find.text('Not supported on this platform'), findsOneWidget);
 
-    // 壁纸项禁用：点它不产生状态变化、不弹取色器。
+    // 壁纸段禁用：点它不产生状态变化。
     await tester.tap(
       optionOf(const Key('settingsBaseColorItem'), 'System wallpaper'),
     );
     await tester.pumpAndSettle();
     expect(themeProvider.baseColorSource, ColorBaseSource.wallpaper);
-    expect(find.byType(M3EDialog), findsNothing);
 
-    // 选自定义：一步到位打开取色器（swatch 同时是编辑入口），取消不改色。
+    // 选自定义：自定义颜色行出现并持久化。
     await tester.tap(
       optionOf(const Key('settingsBaseColorItem'), 'Custom color'),
     );
     await tester.pumpAndSettle();
     expect(themeProvider.baseColorSource, ColorBaseSource.custom);
-    expect(find.byType(M3EDialog), findsOneWidget);
-    await tester.tap(find.text('Cancel'));
-    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('settingsSeedColorItem')), findsOneWidget);
 
     final prefs = await SharedPreferences.getInstance();
     expect(prefs.getString('color_base'), 'custom');
@@ -260,13 +257,14 @@ void main() {
     expect(prefs.getBool('follow_artwork_enabled'), isFalse);
   });
 
-  testWidgets('主题色：点自定义 swatch 打开取色器，Hex 保存后 provider 生效', (tester) async {
+  testWidgets('主题色：任意取色（Hex）后 provider 生效', (tester) async {
     await pumpSettingsPage(tester);
 
-    // 自定义 swatch 同时是编辑入口：直接点即选中并打开取色器。
-    await tester.tap(
-      optionOf(const Key('settingsBaseColorItem'), 'Custom color'),
-    );
+    // 自定义色行只在基础配色=自定义时出现。
+    await themeProvider.setBaseColorSource(ColorBaseSource.custom);
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byKey(const Key('settingsSeedColorItem')));
     await tester.pumpAndSettle();
     expect(find.byType(M3EDialog), findsOneWidget);
 
@@ -276,7 +274,6 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.byType(M3EDialog), findsNothing);
-    expect(themeProvider.baseColorSource, ColorBaseSource.custom);
     expect(themeProvider.seedColor.toARGB32(), 0xFF00FF00);
 
     final prefs = await SharedPreferences.getInstance();
@@ -286,9 +283,9 @@ void main() {
   testWidgets('取色弹层取消：只关弹层，设置首屏保留', (tester) async {
     await pumpSettingsPage(tester);
 
-    await tester.tap(
-      optionOf(const Key('settingsBaseColorItem'), 'Custom color'),
-    );
+    await themeProvider.setBaseColorSource(ColorBaseSource.custom);
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('settingsSeedColorItem')));
     await tester.pumpAndSettle();
     expect(find.byType(M3EDialog), findsOneWidget);
 
@@ -363,7 +360,7 @@ void main() {
     expect(rowHeight(const Key('settingsDataSaverSwitch')), followArtwork);
     expect(rowHeight(const Key('settingsLyricsContentItem')), followArtwork);
 
-    // 全页标签行（排除分段 / 预览圆 / 滑杆 / 下拉等复合行）都不超过双行 token。
+    // 全页标签行（排除分段 / 滑杆 / 下拉等复合行）都不超过双行 token。
     for (final element in find.byType(CardListSurface).evaluate()) {
       final row = find.byWidget(element.widget);
       final composite = find
@@ -373,9 +370,7 @@ void main() {
               final type = widget.runtimeType.toString();
               return type.startsWith('M3ESegmentedButton') ||
                   type.startsWith('M3ESlider') ||
-                  type.startsWith('M3EDropdownMenu') ||
-                  // 预览圆（可视化选择行）自带 56dp 圆+标签，行高更宽。
-                  type.startsWith('M3ETappable');
+                  type.startsWith('M3EDropdownMenu');
             }),
           )
           .evaluate()
@@ -389,17 +384,18 @@ void main() {
     }
   });
 
-  testWidgets('分段行选中形态：有逐项图标时显示选中勾（M3E 替换图标）', (tester) async {
+  testWidgets('分段行：长标签不显示选中勾（图标 + 文案会截断）', (tester) async {
     await pumpSettingsPage(tester);
 
-    // 播放模式三个选项都有自然图标：选中段的图标位改画对勾，不额外占宽。
+    // 播放模式标签长（Sequential / Single repeat）：纯文字分段、无勾
+    // （勾会挤占标签宽度；图标形态的回归见 settings_choice_row_test）。
     final segmented = tester.widget<M3ESegmentedButton<PlayMode>>(
       find.descendant(
         of: find.byKey(const Key('settingsDefaultPlayModeItem')),
         matching: find.byType(M3ESegmentedButton<PlayMode>),
       ),
     );
-    expect(segmented.showSelectedIcon, isTrue);
+    expect(segmented.showSelectedIcon, isFalse);
   });
 
   testWidgets('省流模式：开关/音质上限/封面省流在播放分区内生效并持久化', (tester) async {

@@ -57,11 +57,6 @@ class LyricsSharedDisplaySection extends StatelessWidget {
             (UnsyncedBehavior.hide, l10n.lyricsDisplayUnsyncedHide),
             (UnsyncedBehavior.firstLine, l10n.lyricsDisplayUnsyncedFirstLine),
           ],
-          icons: const {
-            UnsyncedBehavior.title: Icons.title_rounded,
-            UnsyncedBehavior.hide: Icons.visibility_off_rounded,
-            UnsyncedBehavior.firstLine: Icons.short_text_rounded,
-          },
           onChanged: settings.setUnsyncedBehavior,
         ),
       ],

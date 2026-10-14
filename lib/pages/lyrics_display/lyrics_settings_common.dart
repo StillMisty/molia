@@ -1,5 +1,3 @@
-import 'package:material_ui/material_ui.dart';
-
 import '../../l10n/app_localizations.dart';
 import '../../services/lyrics_display/lyrics_display_settings.dart';
 
@@ -35,9 +33,3 @@ List<(LyricsPauseBehavior, String)> lyricsPauseBehaviorOptions(
       (LyricsPauseBehavior.clear, l10n.lyricsBehaviorClear),
     ];
 
-/// 暂停行为逐项图标：分段行选中段用它换对勾（M3E 选中形态）。
-const Map<LyricsPauseBehavior, IconData> lyricsPauseBehaviorIcons = {
-  LyricsPauseBehavior.keep: Icons.lyrics_rounded,
-  LyricsPauseBehavior.title: Icons.title_rounded,
-  LyricsPauseBehavior.clear: Icons.clear_all_rounded,
-};

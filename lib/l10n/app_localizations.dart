@@ -284,6 +284,12 @@ abstract class AppLocalizations {
   /// **'Use pure black surfaces in dark mode (OLED)'**
   String get settingsPureBlackSubtitle;
 
+  /// No description provided for @settingsSeedColor.
+  ///
+  /// In en, this message translates to:
+  /// **'Custom color'**
+  String get settingsSeedColor;
+
   /// No description provided for @settingsFollowArtwork.
   ///
   /// In en, this message translates to:

@@ -60,7 +60,61 @@ void main() {
     expect(selected, 'b');
   });
 
-  testWidgets('分段行：逐项图标齐全时选中段显示对勾（M3E 替换图标）', (tester) async {
+  testWidgets('多行分组：SettingsRows 逐行下发形状（首末 16dp、内行 4dp）', (tester) async {
+    // 一个分组里「单个子项产出多行」时必须逐行覆盖行位置，否则整组按
+    // single 画成四角 16dp（外观分区踩过：与其它分组的内行圆角不一致）。
+    Widget tile(String title) => SettingsInfoTile(
+          icon: Icons.info_rounded,
+          title: title,
+          subtitle: '',
+        );
+    await pumpRow(
+      tester,
+      Column(
+        children: [
+          SettingsSectionCard(
+            title: 'Composite',
+            children: [
+              SettingsRows(children: [tile('A'), tile('B'), tile('C')]),
+            ],
+          ),
+          const SizedBox(height: 24),
+          SettingsSectionCard(
+            title: 'Direct',
+            children: [tile('D'), tile('E'), tile('F')],
+          ),
+        ],
+      ),
+    );
+
+    final radii = tester
+        .widgetList<M3ECard>(find.byType(M3ECard))
+        .map((card) => card.borderRadius)
+        .toList();
+    expect(radii, hasLength(6));
+    // 复合组（前 3 行）与直挂组（后 3 行）逐行同形。
+    for (var i = 0; i < 3; i++) {
+      expect(radii[i], radii[3 + i], reason: '第 ${i + 1} 行形状不一致');
+    }
+    // 首行外侧 16dp、内行 4dp、末行外侧 16dp。
+    expect(
+      radii[0],
+      const BorderRadius.vertical(
+        top: Radius.circular(16),
+        bottom: Radius.circular(4),
+      ),
+    );
+    expect(radii[1], BorderRadius.circular(4));
+    expect(
+      radii[2],
+      const BorderRadius.vertical(
+        top: Radius.circular(4),
+        bottom: Radius.circular(16),
+      ),
+    );
+  });
+
+  testWidgets('分段行：短标签行上图标后选中段显示对勾（M3E 替换图标）', (tester) async {
     await pumpRow(
       tester,
       Center(
@@ -79,7 +133,8 @@ void main() {
       ),
     );
 
-    // 每个选项都有自然图标：上勾（替换图标、不额外占宽）。
+    // 短标签 + 逐项图标：上勾（替换图标、不额外占宽）；长标签行不配图标
+    // （图标 + 文案会截断，见 settings_page_test 的播放模式用例）。
     final segmented =
         tester.widget<M3ESegmentedButton<String>>(find.byType(M3ESegmentedButton<String>));
     expect(segmented.showSelectedIcon, isTrue);

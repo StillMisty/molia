@@ -188,10 +188,6 @@ class DesktopLyricsSettingsPage extends StatelessWidget {
                     l10n.lyricsDesktopSchemeArtwork,
                   ),
                 ],
-                icons: const {
-                  SurfaceColorSource.appTheme: Icons.palette_rounded,
-                  SurfaceColorSource.artwork: Icons.album_rounded,
-                },
                 onChanged: settings.setDesktopSchemeSource,
               ),
               _colorRow(
@@ -287,10 +283,6 @@ class DesktopLyricsSettingsPage extends StatelessWidget {
                     l10n.lyricsDisplayUnsyncedHide,
                   ),
                 ],
-                icons: const {
-                  DesktopNoLyricsBehavior.title: Icons.title_rounded,
-                  DesktopNoLyricsBehavior.hide: Icons.visibility_off_rounded,
-                },
                 onChanged: settings.setDesktopNoLyricsBehavior,
               ),
               _controlSwitch(

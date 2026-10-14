@@ -116,7 +116,6 @@ class _NotificationLyricsSettingsPageState
                 title: l10n.lyricsMetadataPauseBehavior,
                 value: settings.notificationPauseBehavior,
                 options: lyricsPauseBehaviorOptions(l10n),
-                icons: lyricsPauseBehaviorIcons,
                 onChanged: settings.setNotificationPauseBehavior,
               ),
             ],

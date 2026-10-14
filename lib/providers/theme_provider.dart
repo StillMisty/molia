@@ -247,32 +247,23 @@ class ThemeProvider extends ChangeNotifier {
     };
   }
 
-  /// 外观预览用：给定「基础配色来源 + 亮度」解析出的方案。
-  ///
-  /// 与 [_schemeForBrightness] 同一取色优先级（壁纸可用时莫奈 > 自定义种子）
-  /// 并叠加纯黑，但**不含封面覆盖**：设置页 swatch 预览要与基础配色选项
-  /// 一一对应且稳定（封面覆盖是独立开关行，效果在播放时的真实界面里可见）。
-  ColorScheme previewScheme(ColorBaseSource source, Brightness brightness) {
-    final monet = source == ColorBaseSource.wallpaper
-        ? (brightness == Brightness.dark
-            ? _monetDarkScheme
-            : _monetLightScheme)
-        : null;
-    return _applyPureBlack(monet ?? buildColorScheme(_seedColor, brightness));
-  }
-
   /// 目标亮度的配色优先级：封面 seed > 壁纸（基础=壁纸且可用）> 自定义 seed；
   /// 纯黑背景在深色模式下覆盖 surface 系列。
   ColorScheme _schemeForBrightness(Brightness brightness) {
+    final ColorScheme scheme;
     final artworkSeed = _artworkSeed;
     if (_followArtworkEnabled && artworkSeed != null) {
-      return _applyPureBlack(buildColorScheme(artworkSeed, brightness));
+      scheme = buildColorScheme(artworkSeed, brightness);
+    } else {
+      final monet = _baseColorSource == ColorBaseSource.wallpaper
+          ? (brightness == Brightness.dark
+              ? _monetDarkScheme
+              : _monetLightScheme)
+          : null;
+      scheme = monet ?? buildColorScheme(_seedColor, brightness);
     }
-    return previewScheme(_baseColorSource, brightness);
+    return _pureBlackEnabled ? applyPureBlackScheme(scheme) : scheme;
   }
-
-  ColorScheme _applyPureBlack(ColorScheme scheme) =>
-      _pureBlackEnabled ? applyPureBlackScheme(scheme) : scheme;
 
   void _applyColorScheme(ColorScheme newScheme, {bool forceNotify = false}) {
     final changed = _colorScheme != newScheme;

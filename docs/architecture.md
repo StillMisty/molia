@@ -447,10 +447,8 @@
   `lib/widgets/settings/settings_tiles.dart`（Nav / Switch / Info / Value /
   Choice / Dropdown / Slider / ColorValue），按值类型选型：bool → Switch、
   2–5 项短枚举 → Choice（行内分段，显式宽度，防 `M3ESegmentedButton` 零宽溢出；
-  逐项图标齐全时选中段的对勾替换图标——M3E 选中形态，无图标行保持无勾，
-  勾会挤断长标签）、可视化枚举（主题模式 / 基础配色）→ `settings_swatch_row.dart`
-  的 Swatch（56dp 预览圆 + 名称，选中 3dp 描边 + 对勾；主题/配色的预览方案由
-  `ThemeProvider.previewScheme` 解析，不含封面覆盖，保证预览稳定）、
+  短标签行可配逐项图标——选中段的对勾替换图标，M3E 选中形态；长标签行
+  （Sequential / Single repeat）保持纯文字分段，图标或勾都会挤断文案）、
   ≥5 项或长文案 → Dropdown（必设 `fieldStyle.hintText`）、区间数值 → Slider、
   大范围绝对量（缓存上限）→ Value + 输入弹层（带常用预设）；
   子页（音源 / 歌词显示〔二级：歌词页 / 歌词输出 / 桌面歌词 / 通知·锁屏 / 蓝牙〕/
