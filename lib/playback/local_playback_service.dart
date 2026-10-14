@@ -6,6 +6,7 @@ import 'package:flutter/foundation.dart';
 import 'package:just_audio/just_audio.dart';
 
 import '../models/play_mode.dart';
+import '../services/audio_cache_platform.dart';
 import '../services/cache_service.dart';
 import '../sources/source_track.dart';
 import 'audio_cache_source.dart';
@@ -354,17 +355,8 @@ class LocalPlaybackService extends ChangeNotifier {
         .timeout(const Duration(seconds: 30));
   }
 
-  /// 是否尝试边播边缓存：仅 Android / iOS / macOS。
-  ///
-  /// 桌面（Windows/Linux）的 media_kit 后端把 StreamAudioSource 当普通 URI
-  /// 交给 mpv 走 just_audio 本地代理，遇到开放式 Range 请求会触发 just_audio
-  /// 内部空值错误；Web 无文件系统。这些平台直接流播，避免缓存拖垮播放。
-  bool get _platformSupportsAudioCaching {
-    if (kIsWeb) return false;
-    return defaultTargetPlatform == TargetPlatform.android ||
-        defaultTargetPlatform == TargetPlatform.iOS ||
-        defaultTargetPlatform == TargetPlatform.macOS;
-  }
+  /// 是否尝试边播边缓存：仅 Android / iOS / macOS（见 [platformSupportsAudioCaching]）。
+  bool get _platformSupportsAudioCaching => platformSupportsAudioCaching();
 
   Future<void> toggle() async {
     if (_currentTrack == null) return;

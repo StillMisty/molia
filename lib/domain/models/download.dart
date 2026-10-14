@@ -49,8 +49,8 @@ class DownloadedTrack {
   /// 实际下载音质（LX 音质标识，如 `320k` / `flac`）。
   final String quality;
 
-  /// 音频文件绝对路径。
-  final String filePath;
+  /// 音频文件绝对路径；**可空**：记录可以只含歌词或只含封面（分项下载）。
+  final String? filePath;
 
   final int sizeBytes;
 
@@ -72,7 +72,7 @@ class DownloadedTrack {
     this.durationMs,
     this.raw = const {},
     this.quality = '',
-    required this.filePath,
+    this.filePath,
     this.sizeBytes = 0,
     this.lyricPath,
     this.coverPath,
@@ -82,6 +82,15 @@ class DownloadedTrack {
   /// 翻译歌词边车文件路径（约定见 [translationLyricPathOf]）。
   String? get translationLyricPath => translationLyricPathOf(lyricPath);
 
+  /// 是否已有音频文件（分项记录可能只有歌词 / 封面）。
+  bool get hasAudio => filePath != null && filePath!.isNotEmpty;
+
+  /// 是否已有歌词文件。
+  bool get hasLyrics => lyricPath != null && lyricPath!.isNotEmpty;
+
+  /// 是否已有封面文件。
+  bool get hasCover => coverPath != null && coverPath!.isNotEmpty;
+
   /// 下载记录键 = 原音源曲目键（`downloads` 表唯一约束同构）。
   String get key => '$originSourceKey:$originSongId';
 
@@ -90,7 +99,7 @@ class DownloadedTrack {
 
   /// 本地曲目 payload（含路径的 raw；UI 禁读，只走音源链路）。
   Map<String, dynamic> get localPayload => {
-        'path': filePath,
+        if (hasAudio) 'path': filePath,
         // rawIdOf 取键优先级含 songId：本地曲目 id 稳定为 `{origin}:{id}`。
         'songId': localSongId,
         if (lyricPath != null) 'lyricPath': lyricPath,
@@ -108,20 +117,25 @@ class DownloadedTrack {
     return Uri.tryParse(remote);
   }
 
-  /// 还原本地领域曲目（origin = localFile，自动换源显式跳过该来源）。
-  Track get localTrack => Track(
-        id: TrackId(kLocalSourceKey, localSongId),
-        title: title,
-        artists: artist.isEmpty ? const [] : [Artist(name: artist)],
-        album: (album.isEmpty) ? null : album,
-        duration: (durationMs != null && durationMs! > 0)
-            ? Duration(milliseconds: durationMs!)
-            : null,
-        artwork: artworkUri == null ? null : Artwork(uri: artworkUri!),
-        origin: TrackOrigin.localFile,
-        qualities: quality.isEmpty ? const [] : [AudioQuality(type: quality)],
-        payload: localPayload,
-      );
+  /// 还原本地领域曲目（origin = localFile，自动换源显式跳过该来源）；
+  /// 记录只有歌词 / 封面（无音频）时返回 null。
+  Track? get localTrack {
+    final path = filePath;
+    if (path == null || path.isEmpty) return null;
+    return Track(
+      id: TrackId(kLocalSourceKey, localSongId),
+      title: title,
+      artists: artist.isEmpty ? const [] : [Artist(name: artist)],
+      album: (album.isEmpty) ? null : album,
+      duration: (durationMs != null && durationMs! > 0)
+          ? Duration(milliseconds: durationMs!)
+          : null,
+      artwork: artworkUri == null ? null : Artwork(uri: artworkUri!),
+      origin: TrackOrigin.localFile,
+      qualities: quality.isEmpty ? const [] : [AudioQuality(type: quality)],
+      payload: localPayload,
+    );
+  }
 
   /// 还原为歌单/收藏快照（`playlist_tracks` 自包含，无需改表）。
   PlaylistTrack toPlaylistTrack({int playlistId = 0, required int addedAt}) =>

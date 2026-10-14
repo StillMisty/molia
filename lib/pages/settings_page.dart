@@ -424,6 +424,9 @@ class _SettingsHomeViewState extends State<_SettingsHomeView>
               icon: Icons.high_quality_rounded,
               title: l10n.sourcesDefaultQuality,
               subtitle: l10n.sourcesQualityHint,
+              // 音质标签都是短词（无损 / 320K / Hi-Res）：字段收窄，
+              // 把行内宽度让给标题与说明。
+              fieldWidth: 112,
               value: quality,
               options: [
                 for (final option in sources.qualityOptions)
@@ -432,15 +435,6 @@ class _SettingsHomeViewState extends State<_SettingsHomeView>
               onChanged: sources.setPreferredQuality,
             ),
           ),
-        Selector<PlaybackProvider, String>(
-          selector: (context, provider) => provider.currentQualityLabel,
-          builder: (context, qualityLabel, _) => SettingsInfoTile(
-            key: const Key('settingsCurrentQualityItem'),
-            icon: Icons.graphic_eq_rounded,
-            title: l10n.settingsCurrentQuality,
-            subtitle: qualityLabel,
-          ),
-        ),
         // 自动换源：播放失败后的跨源找回（手动换源不受此开关控制）。
         if (sourceSwapSettings != null)
           Selector<SourceSwapSettings, bool>(

@@ -11,11 +11,10 @@ import 'package:provider/provider.dart';
 import '../l10n/app_localizations.dart';
 import '../domain/models/download.dart' show kLocalSourceKey;
 import '../domain/models/track.dart';
-import '../domain/ports/source_registry.dart';
 import '../models/lyric_line.dart';
 import 'lyrics_scroll_policy.dart';
 import '../models/play_mode.dart';
-import '../pages/song_comments_page.dart';
+import '../pages/lyrics_display/lyrics_page_settings_page.dart';
 import '../pages/source_swap_page.dart';
 import '../providers/lyrics_provider.dart';
 import '../providers/playback_provider.dart';
@@ -53,12 +52,11 @@ class _LyricsWidgetState extends State<LyricsWidget>
   /// 手动滚动后恢复自动跟随的延迟：太短会打断读词，太长像「不跟了」。
   static const Duration _userScrollResumeDelay = Duration(seconds: 3);
 
-  /// 快捷操作栏：M3EToolbar 浮动胶囊的屏边距（工具栏默认 screenOffset）。
+  /// 快捷操作栏：M3EFabMenu 浮动 FAB 的屏边距。
   static const double _quickActionsScreenOffset = 16;
 
-  /// 快捷操作栏胶囊高度：M3EToolbar.containerSize。
-  static const double _quickActionsContainerSize =
-      M3EToolbarTokens.containerSize;
+  /// 快捷操作栏 FAB 容器尺寸（M3EFabSize.regular = 56dp，与展开态关闭键一致）。
+  static const double _quickActionsFabSize = 56;
 
   /// 激活行锚点相对「可见区域中线」的上移比例（占视口高度）。
   ///
@@ -115,6 +113,9 @@ class _LyricsWidgetState extends State<LyricsWidget>
   /// 省掉容差收尾补丁。透明度同源并截断到 0..1（M3E 规范：effects 不过冲）。
   late final SingleMotionController _quickActionsMotion;
 
+  /// FAB menu 控制器：隐藏时强制收起（打开状态不能随弹簧「藏起来」）。
+  final M3EFabMenuController _fabMenuController = M3EFabMenuController();
+
   /// 快捷操作栏当前目标（true = 展开）；只在变化时起弹簧。
   bool _quickActionsExpanded = true;
 
@@ -169,6 +170,7 @@ class _LyricsWidgetState extends State<LyricsWidget>
     _userScrollResumeTimer?.cancel();
     _quickActionsHideTimer?.cancel();
     _quickActionsMotion.dispose();
+    _fabMenuController.dispose();
     // 外部控制器由宿主释放。
     if (widget.controller == null) {
       _scrollController.dispose();
@@ -297,11 +299,17 @@ class _LyricsWidgetState extends State<LyricsWidget>
   bool get _requiresManualQuickActions =>
       _session.lines.isNotEmpty && (!_session.isSynced || !_lyricsContentScrollable);
 
+  /// 当前是否有曲目（无曲目时 FAB 隐藏：换歌词 / 显示设置都没有对象）。
+  bool get _hasTrack =>
+      Provider.of<PlaybackProvider>(context, listen: false).snapshot.current !=
+      null;
+
   bool get _shouldShowQuickActionsBar {
     // 复制模式下必须保留出口（否则收起播放器后无法退出复制模式）。
     if (!widget.quickActionsEnabled && !_isCopyLyricsMode) {
       return false;
     }
+    if (!_hasTrack) return false;
     if (_isCopyLyricsMode || _session.lines.isEmpty) {
       return true;
     }
@@ -390,12 +398,12 @@ class _LyricsWidgetState extends State<LyricsWidget>
   /// 顶栏遮挡：渐隐带 + 系统状态栏。
   double _topOverlay() => kTopFadeBandHeight + MediaQuery.of(context).padding.top;
 
-  /// 底栏遮挡：快捷操作栏（M3EToolbar 浮动胶囊）可见时 = 屏边距（胶囊下沿）
-  /// + 胶囊高度 + 底部安全区；隐藏时为 0。
+  /// 底栏遮挡：快捷操作栏（FAB menu 的 FAB）可见时 = 屏边距 + FAB 尺寸
+  /// + 底部安全区；隐藏时为 0。
   double _bottomOverlay() {
     if (!_shouldShowQuickActionsBar) return 0.0;
     final padding = MediaQuery.of(context).padding;
-    return padding.bottom + _quickActionsScreenOffset + _quickActionsContainerSize;
+    return padding.bottom + _quickActionsScreenOffset + _quickActionsFabSize;
   }
 
   double _tailSpace() {
@@ -418,6 +426,10 @@ class _LyricsWidgetState extends State<LyricsWidget>
   void _syncQuickActions(bool show) {
     if (_quickActionsExpanded == show) return;
     _quickActionsExpanded = show;
+    if (!show) {
+      // 收起时先关掉打开的菜单：FAB 藏起来但菜单还开着会失去出口。
+      _fabMenuController.close();
+    }
     _quickActionsMotion.animateTo(show ? 1.0 : 0.0);
   }
 
@@ -437,9 +449,12 @@ class _LyricsWidgetState extends State<LyricsWidget>
     });
   }
 
-  /// 快捷操作栏按钮：交给 [M3EToolbar] 统一呈现
-  /// （禁用 / 选中高亮 / tooltip 走工具栏语义）。
-  List<M3EToolbarItem> _buildQuickActions(AppLocalizations l10n) {
+  /// FAB menu 项（歌词域操作）：换歌词 / 复制模式 / 歌词选择·海报 /
+  /// 居中跟随（条件）；无歌词时 = 换歌词 + 歌词显示设置。
+  ///
+  /// `M3EFabMenu` 要求 2–6 项且不支持 disabled：条件项只能增删，因此无歌词
+  /// 时用「显示设置」凑下限，而不是展示禁用项。
+  List<M3EFabMenuItem> _buildQuickActions(AppLocalizations l10n) {
     final bool hasLyrics = _session.lines.isNotEmpty;
     // 本地下载曲目：文件是持久副本，不提供「换源」入口（自动换源也已跳过）。
     // 用 listen:false 读取：本方法在 PositionLineIndexBuilder 的 build 内被
@@ -452,48 +467,60 @@ class _LyricsWidgetState extends State<LyricsWidget>
                 ?.id
                 .sourceKey ==
             kLocalSourceKey;
-    return <M3EToolbarItem>[
-      // 居中/恢复跟随：仅「手动滚动暂停 + 有同步歌词」时入列。
-      if (!_autoScroll && hasLyrics && _session.isSynced)
-        M3EToolbarAction(
-          icon: Icons.vertical_align_center_rounded,
-          onPressed: _centerCurrentLine,
-          tooltip: l10n.centerCurrentLine,
+    return <M3EFabMenuItem>[
+      // 换歌词：歌词页的快捷入口（信息页歌词来源行是数据面入口）。
+      if (!isLocalTrack)
+        M3EFabMenuItem(
+          icon: const Icon(Icons.swap_horiz_rounded),
+          label: l10n.lyricsSwapAction,
+          onPressed: () => unawaited(_showSourceSwapPage()),
         ),
-      M3EToolbarAction(
-        icon: _isCopyLyricsMode
-            ? Icons.playlist_play_rounded
-            : Icons.edit_note_rounded,
-        enabled: hasLyrics,
-        // 复制模式 = 工具栏选中态（tonal 高亮），颜色交给工具栏。
-        active: _isCopyLyricsMode,
+      M3EFabMenuItem(
+        icon: Icon(
+          _isCopyLyricsMode
+              ? Icons.playlist_play_rounded
+              : Icons.edit_note_rounded,
+        ),
+        label: _isCopyLyricsMode
+            ? l10n.lyricsCopyModeExit
+            : l10n.lyricsCopyModeAction,
         onPressed: () {
           HapticFeedback.lightImpact();
           _toggleCopyLyricsMode();
         },
-        tooltip: _isCopyLyricsMode
-            ? l10n.exitCopyModeResumeScroll
-            : l10n.enterCopyLyricsMode,
       ),
-      if (!isLocalTrack)
-        M3EToolbarAction(
-          icon: Icons.swap_horiz_rounded,
-          onPressed: _showSourceSwapPage,
-          tooltip: l10n.sourceSwap,
+      if (hasLyrics)
+        M3EFabMenuItem(
+          icon: const Icon(Icons.checklist_rounded),
+          label: l10n.selectLyricsTooltip,
+          onPressed: () => unawaited(_showLyricsSelectionPage()),
         ),
-      M3EToolbarAction(
-        icon: Icons.comment_rounded,
-        enabled: _commentsSupported,
-        onPressed: _showCommentsPage,
-        tooltip: l10n.commentsTitle,
-      ),
-      M3EToolbarAction(
-        icon: Icons.checklist_rounded,
-        enabled: hasLyrics,
-        onPressed: _showLyricsSelectionPage,
-        tooltip: l10n.selectLyricsTooltip,
-      ),
+      // 居中/恢复跟随：仅「手动滚动暂停 + 有同步歌词」时入列。
+      if (hasLyrics && !_autoScroll && _session.isSynced)
+        M3EFabMenuItem(
+          icon: const Icon(Icons.vertical_align_center_rounded),
+          label: l10n.centerCurrentLine,
+          onPressed: _centerCurrentLine,
+        ),
+      // 无歌词：歌词显示设置（与「换歌词」一起满足 2 项下限）。
+      if (!hasLyrics)
+        M3EFabMenuItem(
+          icon: const Icon(Icons.tune_rounded),
+          label: l10n.lyricsDisplaySettingsAction,
+          onPressed: () => unawaited(_showLyricsDisplaySettings()),
+        ),
     ];
+  }
+
+  /// 歌词显示设置（翻译 / 罗马音开关）：无歌词时的 FAB menu 入口。
+  Future<void> _showLyricsDisplaySettings() {
+    return ResponsiveNavigation.showSecondaryPage<void>(
+      context: context,
+      child: const LyricsPageSettingsPage(),
+      preferredMode: SecondaryPageMode.sideSheet,
+      maxWidth: 520,
+      showCloseButton: false,
+    );
   }
 
   void _scrollToCurrentLine(int currentLineIndex) {
@@ -833,6 +860,27 @@ class _LyricsWidgetState extends State<LyricsWidget>
                   ),
                 ),
               ),
+            // 空态（取词失败 / 没找到词）：俏皮话提示，动作由 FAB menu
+            // （换歌词 / 显示设置）承担；不拦截手势。
+            if (_session.lines.isEmpty && !_isLoading && currentTrackId != null)
+              Positioned.fill(
+                child: IgnorePointer(
+                  child: Center(
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 40),
+                      child: Text(
+                        l10n.lyricsEmptyState,
+                        textAlign: TextAlign.center,
+                        style: TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.w500,
+                          color: Theme.of(context).colorScheme.onSurfaceVariant,
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ),
             ListView.builder(
               key: _listViewKey,
               controller: _scrollController,
@@ -1039,13 +1087,14 @@ class _LyricsWidgetState extends State<LyricsWidget>
                 ),
               ),
             ),
-            // 底部快捷操作栏：M3EToolbar 浮动胶囊（底部左侧）。
-            // 常驻挂载 + 弹性滑入淡出（进度 0..1）；隐藏态 IgnorePointer
-            // 让手势穿透到歌词滚动，不与「到顶继续下拉」切换播放器竞争。
+            // 底部快捷操作栏：M3EFabMenu（底部左侧 FAB → 带文字 label 的
+            // 操作胶囊）。常驻挂载 + 弹性滑入淡出（进度 0..1）；隐藏态
+            // IgnorePointer 让手势穿透到歌词滚动，不与「到顶继续下拉」
+            // 切换播放器竞争。
             Positioned(
-              left: 0,
-              right: 0,
-              bottom: 0,
+              left: _quickActionsScreenOffset,
+              bottom: _quickActionsScreenOffset +
+                  MediaQuery.of(context).padding.bottom,
               child: IgnorePointer(
                 ignoring: !shouldShowQuickActions,
                 child: ExcludeSemantics(
@@ -1059,12 +1108,12 @@ class _LyricsWidgetState extends State<LyricsWidget>
                         // M3E 规范：effects（透明度）不过冲，位移保留过冲弹性。
                         opacity: raw.clamp(0.0, 1.0),
                         child: Transform.translate(
-                          // 下滑完整高度（外层屏边距 + 胶囊 + 底部安全区）保证出画。
+                          // 下滑完整高度（外层屏边距 + FAB + 底部安全区）保证出画。
                           offset: Offset(
                             0,
                             (1 - raw) *
                                 (2 * _quickActionsScreenOffset +
-                                    _quickActionsContainerSize +
+                                    _quickActionsFabSize +
                                     MediaQuery.of(context).padding.bottom),
                           ),
                           child: child,
@@ -1072,13 +1121,13 @@ class _LyricsWidgetState extends State<LyricsWidget>
                       );
                     },
                     child: RepaintBoundary(
-                      child: M3EToolbar(
+                      child: M3EFabMenu(
                         key: const Key('lyricsQuickActions'),
-                        alignment: AlignmentDirectional.bottomStart,
-                        screenOffset: _quickActionsScreenOffset,
-                        dockEdge: M3EToolbarDockEdge.bottom,
-                        safeArea: true,
-                        actions: _buildQuickActions(l10n),
+                        controller: _fabMenuController,
+                        size: M3EFabSize.regular,
+                        position: M3EFabMenuPosition.left,
+                        icon: const Icon(Icons.more_horiz_rounded),
+                        items: _buildQuickActions(l10n),
                       ),
                     ),
                   ),
@@ -1157,26 +1206,6 @@ class _LyricsWidgetState extends State<LyricsWidget>
         },
       );
     }
-  }
-
-  /// 当前曲目渠道是否支持评论（能力位来自 `SourceRegistry`；无曲目 /
-  /// 未注册注册表（组件级测试）时视为不支持，入口禁用）。
-  bool get _commentsSupported {
-    final track = Provider.of<PlaybackProvider>(context, listen: false)
-        .snapshot
-        .current;
-    if (track == null) return false;
-    final registry = Provider.of<SourceRegistry?>(context, listen: false);
-    return registry?.byKey(track.id.sourceKey)?.capabilities.comment ?? false;
-  }
-
-  /// 评论页：当前曲目的热门 / 最新评论。
-  Future<void> _showCommentsPage() async {
-    if (!mounted) return;
-    final currentTrack =
-        Provider.of<PlaybackProvider>(context, listen: false).snapshot.current;
-    if (currentTrack == null) return;
-    await showSongCommentsPage(context, track: currentTrack);
   }
 
   /// 换源页（歌词 / 音频双 tab）：默认落在歌词 tab。

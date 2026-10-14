@@ -14,6 +14,7 @@ import 'package:molia/domain/models/source.dart';
 import 'package:molia/domain/models/track.dart';
 import 'package:molia/domain/ports/source_registry.dart';
 import 'package:molia/l10n/app_localizations.dart';
+import 'package:molia/models/play_mode.dart';
 import 'package:molia/providers/lyrics_provider.dart';
 import 'package:molia/providers/playback_provider.dart';
 import 'package:molia/services/lyrics_display/lyrics_display_settings.dart';
@@ -194,32 +195,49 @@ void main() {
     }
   }
 
+  /// FAB menu 的项（组件常驻挂载，未展开也可读取）。
+  List<M3EFabMenuItem> fabItems(WidgetTester tester) =>
+      tester.widget<M3EFabMenu>(find.byType(M3EFabMenu)).items;
+
+  /// FAB menu 项的图标（顺序即菜单自上而下的顺序）。
+  List<IconData> fabIcons(WidgetTester tester) => [
+        for (final item in fabItems(tester)) (item.icon as Icon).icon!,
+      ];
+
+  /// 展开 FAB menu 并点击指定 label 的项（等菜单弹簧落定）。
+  Future<void> tapFabItem(WidgetTester tester, String label) async {
+    await tester.tap(find.byKey(const Key('lyricsQuickActions')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text(label));
+    await tester.pumpAndSettle();
+  }
+
   testWidgets('手动滚动后延迟自动恢复跟随并滚回当前行', (tester) async {
     final controller = await pumpLyrics(tester);
 
-    // 初次加载即自动跟随：不应出现「居中当前行」按钮。
+    // 初次加载即自动跟随：菜单里不应出现「居中当前行」。
     expect(
-      find.byIcon(Icons.vertical_align_center_rounded),
-      findsNothing,
-      reason: '自动跟随中不显示恢复按钮',
+      fabIcons(tester),
+      isNot(contains(Icons.vertical_align_center_rounded)),
+      reason: '自动跟随中不显示恢复项',
     );
     final double followingOffset = controller.offset;
 
-    // 手动上滑远离当前行：暂停跟随，出现恢复按钮。
+    // 手动上滑远离当前行：暂停跟随，菜单出现恢复项。
     await dragUpSlowly(tester, -300);
     expect(
-      find.byIcon(Icons.vertical_align_center_rounded),
-      findsOneWidget,
-      reason: '手动滚动后应暂停跟随并显示恢复按钮',
+      fabIcons(tester),
+      contains(Icons.vertical_align_center_rounded),
+      reason: '手动滚动后应暂停跟随并显示恢复项',
     );
     final double pausedOffset = controller.offset;
     expect(pausedOffset, greaterThan(followingOffset));
 
-    // 停手静置满恢复延迟：自动跟随恢复，滚回当前行，按钮消失。
+    // 停手静置满恢复延迟：自动跟随恢复，滚回当前行，恢复项消失。
     await pumpResume(tester);
     expect(
-      find.byIcon(Icons.vertical_align_center_rounded),
-      findsNothing,
+      fabIcons(tester),
+      isNot(contains(Icons.vertical_align_center_rounded)),
       reason: '延迟到点后应自动恢复跟随',
     );
     expect(controller.offset, closeTo(followingOffset, 2.0));
@@ -231,12 +249,11 @@ void main() {
 
     // 手动滚动：暂停跟随并排队「延迟恢复」。
     await dragUpSlowly(tester, -260);
-    expect(find.byIcon(Icons.edit_note_rounded), findsOneWidget);
+    expect(fabIcons(tester), contains(Icons.edit_note_rounded));
 
     // 恢复计时到点前进入复制模式：队列中的恢复应被取消。
-    await tester.tap(find.byIcon(Icons.edit_note_rounded));
-    await tester.pump();
-    expect(find.byIcon(Icons.playlist_play_rounded), findsOneWidget);
+    await tapFabItem(tester, '复制歌词模式');
+    expect(playback.currentMode, PlayMode.singleRepeat);
     final double pausedOffset = controller.offset;
     expect(pausedOffset, greaterThan(followingOffset));
 
@@ -246,7 +263,8 @@ void main() {
       closeTo(pausedOffset, 1.0),
       reason: '复制模式下不应自动恢复跟随',
     );
-    expect(find.byIcon(Icons.playlist_play_rounded), findsOneWidget);
+    // 复制模式出口保留：菜单项文案变为「退出复制模式」。
+    expect(fabItems(tester).map((item) => item.label), contains('退出复制模式'));
   });
 
   testWidgets('暂停中恢复只还原跟随状态，播放后继续跟随', (tester) async {
@@ -357,10 +375,10 @@ void main() {
     expect(find.text('Roma 12'), findsOneWidget);
   });
 
-  testWidgets('快捷操作栏为 M3EToolbar：按钮能力与选中态随状态同步', (tester) async {
+  testWidgets('歌词页操作 FAB menu：项集与显隐随状态同步', (tester) async {
     await pumpLyrics(
       tester,
-      // 渠道支持评论：评论动作入列且可用（能力位来自 SourceRegistry）。
+      // 渠道支持评论：与信息页入口共享能力位（歌词页不再放评论项）。
       registry: FakeSourceRegistry({
         'fake': FakeMusicSource(
           'fake',
@@ -369,14 +387,11 @@ void main() {
       }),
     );
 
-    M3EToolbar toolbar() => tester.widget<M3EToolbar>(find.byType(M3EToolbar));
-    List<M3EToolbarAction> actions() =>
-        toolbar().actions.whereType<M3EToolbarAction>().toList();
-    // 取工具栏最近一层包装：隐藏态判定用 IgnorePointer，透明度用 Opacity。
+    // 取 FAB menu 最近一层包装：隐藏态判定用 IgnorePointer，透明度用 Opacity。
     IgnorePointer nearestIgnore() => tester.widget<IgnorePointer>(
           find
               .ancestor(
-                of: find.byType(M3EToolbar),
+                of: find.byType(M3EFabMenu),
                 matching: find.byType(IgnorePointer),
               )
               .first,
@@ -384,7 +399,7 @@ void main() {
     Opacity nearestOpacity() => tester.widget<Opacity>(
           find
               .ancestor(
-                of: find.byType(M3EToolbar),
+                of: find.byType(M3EFabMenu),
                 matching: find.byType(Opacity),
               )
               .first,
@@ -394,59 +409,39 @@ void main() {
     expect(nearestIgnore().ignoring, isTrue);
     expect(nearestOpacity().opacity, 0);
 
-    // 按钮构成与顺序：跟随中不含「居中当前行」。
+    // 项集与顺序：跟随中不含「居中当前行」；评论已迁到信息页。
     expect(
-      actions().map((action) => action.icon).toList(),
+      fabIcons(tester),
       const [
-        Icons.edit_note_rounded,
-        // 「换源」（歌词 / 音频双 tab 页）取代原独立歌词搜索入口。
         Icons.swap_horiz_rounded,
-        // 「评论」（评论页）：与换源相邻。
-        Icons.comment_rounded,
+        Icons.edit_note_rounded,
         Icons.checklist_rounded,
       ],
     );
-    expect(actions().every((action) => action.enabled), isTrue);
-    expect(actions().every((action) => !action.active), isTrue);
 
-    // 手动滚动暂停跟随：居中按钮入列，操作栏展开且可交互。
+    // 手动滚动暂停跟随：居中项入列，操作栏展开且可交互。
     await dragUpSlowly(tester, -300);
-    expect(
-      actions().map((action) => action.icon),
-      contains(Icons.vertical_align_center_rounded),
-    );
+    expect(fabIcons(tester), contains(Icons.vertical_align_center_rounded));
     expect(nearestIgnore().ignoring, isFalse);
     expect(nearestOpacity().opacity, 1);
 
-    // 进入复制模式：选中态由工具栏 active 承载（tonal 高亮）。
-    await tester.tap(find.byIcon(Icons.edit_note_rounded));
-    await tester.pump();
-    expect(find.byIcon(Icons.playlist_play_rounded), findsOneWidget);
-    expect(
-      actions()
-          .firstWhere((action) => action.icon == Icons.playlist_play_rounded)
-          .active,
-      isTrue,
-    );
+    // 进入复制模式：菜单项文案切换为出口。
+    await tapFabItem(tester, '复制歌词模式');
+    expect(playback.currentMode, PlayMode.singleRepeat);
+    expect(fabItems(tester).map((item) => item.label), contains('退出复制模式'));
+    expect(fabIcons(tester), contains(Icons.playlist_play_rounded));
 
     // 播放模式切换的通知节流计时器跑完，避免 pending timer 报错。
     await tester.pump(const Duration(milliseconds: 300));
   });
 
-  testWidgets('评论入口：渠道不支持评论时禁用', (tester) async {
-    // 未注册 SourceRegistry（或渠道无评论能力）时入口禁用。
+  testWidgets('评论入口不在歌词页：评论已迁到歌曲信息页', (tester) async {
     await pumpLyrics(tester);
 
-    final actions = tester
-        .widget<M3EToolbar>(find.byType(M3EToolbar))
-        .actions
-        .whereType<M3EToolbarAction>();
-    final comment =
-        actions.firstWhere((action) => action.icon == Icons.comment_rounded);
-    expect(comment.enabled, isFalse);
+    expect(fabIcons(tester), isNot(contains(Icons.comment_rounded)));
   });
 
-  testWidgets('本地下载曲目：快捷操作栏隐藏「换源」入口', (tester) async {
+  testWidgets('本地下载曲目：FAB menu 隐藏「换歌词」入口', (tester) async {
     await pumpLyrics(tester);
 
     const localTrack = Track(
@@ -467,11 +462,7 @@ void main() {
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 50));
 
-    final toolbar = tester.widget<M3EToolbar>(find.byType(M3EToolbar));
-    final icons = toolbar.actions
-        .whereType<M3EToolbarAction>()
-        .map((action) => action.icon)
-        .toList();
+    final icons = fabIcons(tester);
     expect(icons, isNot(contains(Icons.swap_horiz_rounded)));
     expect(icons, contains(Icons.checklist_rounded));
 

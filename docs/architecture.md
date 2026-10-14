@@ -107,8 +107,8 @@
   → `lib/sources/builtin/{wy,tx,kg,kw,mg}_comment.dart`（移植 LX：热门 / 最新、分页、
   表情还原、引用 / 楼中楼归一化）。页面状态在 `CommentsProvider`（热门 / 最新两个 tab
   懒加载 + 分页 + 错误归一化），UI 为 `lib/pages/song_comments_page.dart` +
-  `lib/widgets/comment_list_view.dart`；入口：歌词快捷工具栏与展开态播放器进度排
-  （`SourceRegistry` 能力位判定，无能力时禁用）。
+  `lib/widgets/comment_list_view.dart`；入口：歌曲信息页「评论」行（能力位判定唯一
+  来源 `CommentsProvider.supports`，不支持时行内说明；展开态播放器进度排不再放入口）。
 - **系统媒体会话**（Android/iOS/macOS）：`LocalAudioHandler` 把服务状态映射为
   `MediaItem`/`PlaybackState`；通知/锁屏封面经 `MediaItem.artHeaders` 统一带
   浏览器 UA + 平台 Referer，并复用 `ArtworkCache` 的共享 CacheManager
@@ -207,8 +207,8 @@
   并行检索（`CatalogService.search` 复用 5min 缓存；逐源就绪即填充，单源失败进
   `failedSourceKeys` 可重试），载体是统一的「换源」页
   （`lib/pages/source_swap_page.dart`：歌词 / 音频两个 tab，歌词侧为
-  `LyricsSourceSearchView`，音频侧为 `SourceSwapView`；入口：播放页歌词快捷操作栏
-  默认歌词 tab、收藏页三类合集左滑默认音频 tab）点候选即试听（单曲「换源试听」上下文）、
+  `LyricsSourceSearchView`，音频侧为 `SourceSwapView`；入口：歌曲信息页「换源」
+  默认音频 tab、歌词页 FAB menu「换歌词」默认歌词 tab、收藏页三类合集左滑默认音频 tab）点候选即试听（单曲「换源试听」上下文）、
   确认后经 `LibraryProvider.replacePlaylistTrack` / `replaceHistoryEntry` 原位
   替换（仓库事务保 `sortOrder`/`addedAt`/`playedAt`，目标键已存在先确认去重），
   并经 `PlaybackProvider.replaceQueueTrack` 让队列中同 id 曲目跟随换源（新增
@@ -250,16 +250,30 @@
 ### 本地下载（downloads）
 
 `lib/services/download/download_service.dart` 是单曲下载的唯一实现，
-组合根（`main.dart`）注入取链 / 取词 / 取图与省流上限：
+组合根（`main.dart`）注入取链 / 取词 / 取图 / 缓存 / 设置与省流上限：
 
-- **目录隔离**：`downloads/`（应用支持目录；`lyrics/` + `covers/` 子目录）
-  与 `cache/audio_cache` 完全隔离——「清理缓存」永不触碰下载，「删除下载」
-  是独立动作；`DownloadStorage` 是平台 seam（IO 实现 / Web 空实现，
-  存储不可用时 `supported=false`，UI 隐藏全部入口）；
-- **落库**：drift `downloads` 表（schema v2）存原音源曲目键 + 自包含快照 +
-  原 raw + 音频路径/音质/大小 + 歌词/封面路径；`DownloadsRepository` 负责
-  行 ↔ `DownloadedTrack` 映射；半成品 `.part` → 原子改名 → 落库，
-  播放取链只认数据库记录，不会读到半成品；
+- **目录与位置**：下载根目录按平台解析（`IoDownloadStorage`）——桌面 =
+  系统下载目录下 `Molia/`（Linux 读 XDG `XDG_DOWNLOAD_DIR`，回退
+  `~/Downloads`；Windows `%USERPROFILE%\Downloads`），iOS = 应用文档目录
+  `Molia/`（Files app 可见），Android = 应用支持目录 `downloads/`
+  （公共 Downloads 走 MediaStore，见 issue #17）；设置页可选自定义目录
+  （`DownloadSettings.saveDir`，存储层每次解析读取，改设置无需重启）；
+  `lyrics/` + `covers/` 子目录与 `cache/audio_cache` 完全隔离——「清理缓存」
+  永不触碰下载，「删除下载」是独立动作；`DownloadStorage` 是平台 seam
+  （IO 实现 / Web 空实现，存储不可用时 `supported=false`，UI 隐藏全部入口）；
+- **缓存优先**：所选音质的完整音频缓存（`CacheService.audioCacheKey` 同名且
+  无 `.part`）命中时直接拷贝不触网；歌词经注入的 `LyricsService`（缓存 →
+  原生取词 → 跨平台回退，与播放页同一链路）；封面经 `ArtworkCache.bytesOf`
+  命中直读、未命中取图后 `putBytes` 回填；
+- **落库**：drift `downloads` 表（schema v3，`filePath` 可空——记录可以只含
+  歌词或只含封面）存原音源曲目键 + 自包含快照 + 原 raw + 音频路径/音质/大小
+  + 歌词/封面路径；`DownloadsRepository` 负责行 ↔ `DownloadedTrack` 映射；
+  半成品 `.part` → 原子改名 → 落库，播放取链只认数据库记录；启动时清扫
+  崩溃遗留 `.part`；
+- **标签嵌入**：音频就绪后把标题 / 歌手 / 专辑 / 歌词 / 封面写进文件标签
+  （`lib/data/downloads/audio_tag_writer.dart`：自写 MP3 ID3v2.3
+  UTF-16+BOM 文本 / USLT / APIC 与 FLAC Vorbis Comment + PICTURE，ffprobe
+  验证可读；不引入 FFI/TagLib 依赖），失败保留 sidecar；开关在下载设置；
 - **`local` 音源**：`lib/data/catalog/local_music_source.dart`
   （capabilities 只有 `resolveUrl`，读 payload.path → `Uri.file`；
   文件缺失归一化 `notFound` + `downloadFileMissing`）；
@@ -276,8 +290,14 @@
 - **同步过滤**：歌单曲目 / 历史 / 统计 / 播放会话适配器都过滤
   `sourceKey = local` 的条目（含墓碑）——文件是设备本机持久副本，
   同步到其它设备不可播放；
-- **UI**：歌曲信息页「下载」区（未下载 / 下载中 + 取消 / 已下载 +
-  分享导出 + 删除）与收藏页「已下载」入口（`lib/pages/downloads_page.dart`）；
+- **设置与管理**：`DownloadSettings`（设备本地键，不登记同步：保存位置 /
+  文件名模板 `{artist}`/`{title}`/`{album}` / 标签嵌入开关）；
+  下载弹层（`lib/widgets/download_sheet.dart`）：音质选择（命中缓存的音质
+  标「本地缓存」）+ 音频动作 + 歌词/封面单独下载 + 全部下载；
+  下载管理页（`lib/pages/downloads_manage_page.dart`，设置 › 数据与存储）：
+  进行中任务 + 批量下载（当前队列 / 指定歌单，跳过已下载与本地曲目；
+  **不做断点续传**：平台直链多为一次性签名地址）+ 文件维护（`.part` 清扫、
+  孤儿文件回收、旧位置迁移）+ 已下载列表入口；
   省流生效（移动数据 + 已开启）时下载前先确认。
 
 ### 设置注册表（settings registry）
@@ -432,6 +452,15 @@
   由包内 `M3ENavIconScale` 负责，不要再叠。
 - 弹层观感差异（M3E 统一 inverseSurface Snackbar、无红底错误色、Dialog/BottomSheet 圆角与
   spring 入场）属预期，不是 bug。
+- 播放页操作按作用对象分三域（见 ADR-0007）：**歌词域**（会话 / 来源 / 展示 / 导出）
+  在歌词页，操作收敛为底部左侧 `M3EFabMenu`（换歌词 / 复制模式 / 歌词选择·海报 /
+  居中跟随；无歌词时 = 换歌词 + 歌词显示设置；无曲目隐藏）；**曲目域**
+  （身份 / 渠道 / 音质 / 缓存 / 下载 / 评论）在歌曲信息页，段落顺序 =
+  操作（评论 / 定时关闭 / 换源）→ 下载 → 信息（音质 / 可用音质 / 专辑 / 来源 /
+  歌词来源）→ 缓存；**播放域**（模式 / 收藏 / 定时）在播放器进度排 + 信息页。
+  曲目级操作的打开编排（能力位、守卫、换源页 tab）唯一实现在
+  `lib/widgets/track_actions.dart`；单曲缓存清理在 `lib/pages/track_cache_page.dart`
+  （逐项确认），缓存内容变更经 `CacheService.revision` 跨页刷新占用。
 - 列表行统一走 `lib/widgets/track_row.dart`（队列/收藏/历史/发现共用）：形状按 M3E 列表规范
   （静止内 4dp、首末外侧 16dp；hover 12dp；press/选中 16dp），带 expressive spatial 弹簧
   morph；分段列表用 `cardList.gap`（2dp）行距、`itemExtent = TrackRow.extent + gap`，

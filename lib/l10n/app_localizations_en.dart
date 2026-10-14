@@ -64,16 +64,10 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get lyricsCopyModeSnackbar =>
-      'Copy Lyrics Mode: Single repeat active, auto-scroll disabled.';
+      'Copy lyrics mode: single repeat is on and auto-follow is paused; your previous play mode returns when you exit.';
 
   @override
   String get centerCurrentLine => 'Center Current Line';
-
-  @override
-  String get exitCopyModeResumeScroll => 'Exit Copy Mode & Resume Scroll';
-
-  @override
-  String get enterCopyLyricsMode => 'Enter Copy Lyrics Mode (Single Repeat)';
 
   @override
   String get playlist => 'Playlist';
@@ -195,9 +189,6 @@ class AppLocalizationsEn extends AppLocalizations {
   @override
   String get settingsRestoreSessionSubtitle =>
       'Restore track, queue and position on launch (on by default)';
-
-  @override
-  String get settingsCurrentQuality => 'Now playing quality';
 
   @override
   String get settingsAutoSourceSwap => 'Auto source switch';
@@ -2305,6 +2296,188 @@ class AppLocalizationsEn extends AppLocalizations {
       'Playing — audio cache can be cleared later';
 
   @override
+  String get trackActionCommentsSubtitle => 'Hot and latest comments';
+
+  @override
+  String get trackActionSwapSubtitle =>
+      'Find this track\'s audio or lyrics on another source';
+
+  @override
+  String get trackInfoSource => 'Source';
+
+  @override
+  String get trackInfoLyricsSource => 'Lyrics source';
+
+  @override
+  String get trackInfoLyricsSourceNone => 'No lyrics yet';
+
+  @override
+  String get trackInfoAlbumOpen => 'View album';
+
+  @override
+  String get trackInfoSourceUnknownId => 'Unknown track ID';
+
+  @override
+  String get sharePlatformPage => 'Share platform page';
+
+  @override
+  String get openPlatformPage => 'Open platform page';
+
+  @override
+  String get shareTrackFile => 'Share song file';
+
+  @override
+  String get downloadAndShare => 'Download & share';
+
+  @override
+  String get platformPageUnavailable => 'This source has no platform page';
+
+  @override
+  String get shareDownloading => 'Downloading — sharing when done';
+
+  @override
+  String get trackCachePageTitle => 'Track cache';
+
+  @override
+  String get trackCacheClearAll => 'Clear all';
+
+  @override
+  String trackCacheClearConfirm(String part) {
+    return 'Clear \"$part\"?';
+  }
+
+  @override
+  String get trackCacheClearAllConfirm =>
+      'Clear all cached data for this track?';
+
+  @override
+  String get trackCacheClearHint =>
+      'Only cached copies are removed; downloads and playback are unaffected.';
+
+  @override
+  String cacheClearPart(String part) {
+    return 'Clear \"$part\"?';
+  }
+
+  @override
+  String get clear => 'Clear';
+
+  @override
+  String get trackCacheEmpty => 'Nothing cached for this track';
+
+  @override
+  String get cacheAudioPlatformUnsupported =>
+      'Audio caching isn\'t available on this platform';
+
+  @override
+  String get cacheAudioDisabled => 'Audio caching is off';
+
+  @override
+  String get downloadAudioSection => 'Audio';
+
+  @override
+  String get downloadQualityLabel => 'Quality';
+
+  @override
+  String get downloadQualityCached => 'Cached';
+
+  @override
+  String get downloadExtrasSection => 'Extras';
+
+  @override
+  String get downloadCoverPart => 'Cover';
+
+  @override
+  String get downloadPartDownload => 'Download';
+
+  @override
+  String get downloadPartRemove => 'Remove';
+
+  @override
+  String get downloadAll => 'Download all';
+
+  @override
+  String get downloadFromCache => 'Using local cache';
+
+  @override
+  String get downloadLyricsDone => 'Lyrics downloaded';
+
+  @override
+  String get downloadCoverDone => 'Cover downloaded';
+
+  @override
+  String get downloadNoArtwork => 'No cover for this track';
+
+  @override
+  String get downloadNoLyrics => 'No lyrics found';
+
+  @override
+  String get downloadSettingsTitle => 'Download settings';
+
+  @override
+  String get downloadSettingsSubtitle =>
+      'Save location, file names and tag embedding';
+
+  @override
+  String get downloadSaveLocation => 'Save location';
+
+  @override
+  String get downloadSaveLocationDefault => 'Default (system Downloads)';
+
+  @override
+  String get downloadSaveLocationFixedHint =>
+      'Fixed to the app folder on this platform; files are visible in the Files app';
+
+  @override
+  String get downloadPickDirectory => 'Choose folder';
+
+  @override
+  String get downloadFilenameTemplate => 'File name format';
+
+  @override
+  String get downloadFilenameTemplateHint =>
+      'Variables: artist / title / album';
+
+  @override
+  String get downloadFilenamePreview => 'Preview';
+
+  @override
+  String get downloadReset => 'Reset to default';
+
+  @override
+  String get downloadEmbedTags => 'Embed lyrics & cover tags';
+
+  @override
+  String get downloadEmbedTagsSubtitle =>
+      'Write tags into the audio file (MP3 / FLAC) so other players can read them; sidecar files remain when writing fails';
+
+  @override
+  String get downloadLocationInfo => 'Download folder';
+
+  @override
+  String get downloadLocationUnsupported =>
+      'Downloading is not supported on this platform';
+
+  @override
+  String get save => 'Save';
+
+  @override
+  String get lyricsEmptyState =>
+      'No lyrics for this one yet — try another source? (´･ω･`)';
+
+  @override
+  String get lyricsDisplaySettingsAction => 'Lyrics display settings';
+
+  @override
+  String get lyricsSwapAction => 'Change lyrics';
+
+  @override
+  String get lyricsCopyModeAction => 'Copy lyrics mode';
+
+  @override
+  String get lyricsCopyModeExit => 'Exit copy mode';
+
+  @override
   String get commentsTitle => 'Comments';
 
   @override
@@ -2440,6 +2613,101 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get downloadsTitle => 'Downloads';
+
+  @override
+  String get downloadsManageTitle => 'Downloads';
+
+  @override
+  String get downloadsManageSubtitle =>
+      'Task queue, batch download and file maintenance';
+
+  @override
+  String get downloadsActiveSection => 'In progress';
+
+  @override
+  String get downloadsActiveEmpty => 'No downloads in progress';
+
+  @override
+  String downloadsActiveCount(int count) {
+    return '$count task(s)';
+  }
+
+  @override
+  String get downloadsBatchSection => 'Batch download';
+
+  @override
+  String get downloadsBatchQueue => 'Download current queue';
+
+  @override
+  String downloadsBatchQueueSubtitle(int count) {
+    return '$count track(s); skips downloaded and local tracks';
+  }
+
+  @override
+  String downloadsBatchStarted(int count) {
+    return 'Batch download started ($count)';
+  }
+
+  @override
+  String downloadsBatchDone(int done, int failed) {
+    return 'Batch finished: $done succeeded, $failed failed';
+  }
+
+  @override
+  String get downloadsMaintenanceSection => 'File maintenance';
+
+  @override
+  String get downloadsCleanupParts => 'Remove unfinished downloads';
+
+  @override
+  String get downloadsCleanupPartsSubtitle =>
+      'Leftover .part files from crashes; finished downloads are untouched';
+
+  @override
+  String downloadsCleanupPartsDone(int count) {
+    return 'Removed $count unfinished file(s)';
+  }
+
+  @override
+  String get downloadsCleanupOrphans => 'Remove orphan files';
+
+  @override
+  String get downloadsCleanupOrphansSubtitle =>
+      'Delete files in the download folder that no record references';
+
+  @override
+  String downloadsCleanupOrphansDone(int count) {
+    return 'Removed $count orphan file(s)';
+  }
+
+  @override
+  String get downloadsOpenLibrary => 'Downloaded tracks';
+
+  @override
+  String get downloadsBatchPlaylist => 'Download a playlist';
+
+  @override
+  String get downloadsBatchPlaylistSubtitle =>
+      'Pick a playlist and download it in batch (skips downloaded and local tracks)';
+
+  @override
+  String get downloadsPickPlaylist => 'Choose a playlist';
+
+  @override
+  String get downloadsMigrateLegacy => 'Move downloads to the new location';
+
+  @override
+  String get downloadsMigrateLegacySubtitle =>
+      'Move files from the legacy app folder into the current download folder';
+
+  @override
+  String downloadsMigrateLegacyDone(int moved, int failed) {
+    return 'Moved $moved, failed $failed';
+  }
+
+  @override
+  String get downloadsNoResume =>
+      'No resume support: platform links are usually one-time signed URLs; re-downloading is more reliable';
 
   @override
   String get downloadsEmpty => 'No downloaded tracks yet';

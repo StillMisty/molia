@@ -37,10 +37,8 @@
   "lyricsTitle": "Lyrics",
   "lyricsLoading": "Loading lyrics...",
   "lyricsFailedToLoad": "Failed to load lyrics.",
-  "lyricsCopyModeSnackbar": "Copy Lyrics Mode: Single repeat active, auto-scroll disabled.",
+  "lyricsCopyModeSnackbar": "Copy lyrics mode: single repeat is on and auto-follow is paused; your previous play mode returns when you exit.",
   "centerCurrentLine": "Center Current Line",
-  "exitCopyModeResumeScroll": "Exit Copy Mode & Resume Scroll",
-  "enterCopyLyricsMode": "Enter Copy Lyrics Mode (Single Repeat)",
   "playlist": "Playlist",
   "operationFailed": "Operation failed",
   "settingsAppearanceTitle": "Appearance",
@@ -80,7 +78,6 @@
   "settingsDefaultPlayModeSubtitle": "Initial mode for new sessions; current playback is unaffected",
   "settingsRestoreSessionTitle": "Resume last playback",
   "settingsRestoreSessionSubtitle": "Restore track, queue and position on launch (on by default)",
-  "settingsCurrentQuality": "Now playing quality",
   "settingsAutoSourceSwap": "Auto source switch",
   "settingsAutoSourceSwapSubtitle": "On failure, find the same song in another source and switch (on by default)",
   "settingsDataSaverTitle": "Data saver",
@@ -1203,6 +1200,76 @@
     }
   },
   "trackInfoCachePlaying": "Playing — audio cache can be cleared later",
+  "trackActionCommentsSubtitle": "Hot and latest comments",
+  "trackActionSwapSubtitle": "Find this track's audio or lyrics on another source",
+  "trackInfoSource": "Source",
+  "trackInfoLyricsSource": "Lyrics source",
+  "trackInfoLyricsSourceNone": "No lyrics yet",
+  "trackInfoAlbumOpen": "View album",
+  "trackInfoSourceUnknownId": "Unknown track ID",
+  "sharePlatformPage": "Share platform page",
+  "openPlatformPage": "Open platform page",
+  "shareTrackFile": "Share song file",
+  "downloadAndShare": "Download & share",
+  "platformPageUnavailable": "This source has no platform page",
+  "shareDownloading": "Downloading — sharing when done",
+  "trackCachePageTitle": "Track cache",
+  "trackCacheClearAll": "Clear all",
+  "trackCacheClearConfirm": "Clear \"{part}\"?",
+  "@trackCacheClearConfirm": {
+    "placeholders": {
+      "part": {
+        "type": "String"
+      }
+    }
+  },
+  "trackCacheClearAllConfirm": "Clear all cached data for this track?",
+  "trackCacheClearHint": "Only cached copies are removed; downloads and playback are unaffected.",
+  "cacheClearPart": "Clear \"{part}\"?",
+  "@cacheClearPart": {
+    "placeholders": {
+      "part": {
+        "type": "String"
+      }
+    }
+  },
+  "clear": "Clear",
+  "trackCacheEmpty": "Nothing cached for this track",
+  "cacheAudioPlatformUnsupported": "Audio caching isn't available on this platform",
+  "cacheAudioDisabled": "Audio caching is off",
+  "downloadAudioSection": "Audio",
+  "downloadQualityLabel": "Quality",
+  "downloadQualityCached": "Cached",
+  "downloadExtrasSection": "Extras",
+  "downloadCoverPart": "Cover",
+  "downloadPartDownload": "Download",
+  "downloadPartRemove": "Remove",
+  "downloadAll": "Download all",
+  "downloadFromCache": "Using local cache",
+  "downloadLyricsDone": "Lyrics downloaded",
+  "downloadCoverDone": "Cover downloaded",
+  "downloadNoArtwork": "No cover for this track",
+  "downloadNoLyrics": "No lyrics found",
+  "downloadSettingsTitle": "Download settings",
+  "downloadSettingsSubtitle": "Save location, file names and tag embedding",
+  "downloadSaveLocation": "Save location",
+  "downloadSaveLocationDefault": "Default (system Downloads)",
+  "downloadSaveLocationFixedHint": "Fixed to the app folder on this platform; files are visible in the Files app",
+  "downloadPickDirectory": "Choose folder",
+  "downloadFilenameTemplate": "File name format",
+  "downloadFilenameTemplateHint": "Variables: artist / title / album",
+  "downloadFilenamePreview": "Preview",
+  "downloadReset": "Reset to default",
+  "downloadEmbedTags": "Embed lyrics & cover tags",
+  "downloadEmbedTagsSubtitle": "Write tags into the audio file (MP3 / FLAC) so other players can read them; sidecar files remain when writing fails",
+  "downloadLocationInfo": "Download folder",
+  "downloadLocationUnsupported": "Downloading is not supported on this platform",
+  "save": "Save",
+  "lyricsEmptyState": "No lyrics for this one yet — try another source? (´･ω･`)",
+  "lyricsDisplaySettingsAction": "Lyrics display settings",
+  "lyricsSwapAction": "Change lyrics",
+  "lyricsCopyModeAction": "Copy lyrics mode",
+  "lyricsCopyModeExit": "Exit copy mode",
   "commentsTitle": "Comments",
   "commentsTabHot": "Hot",
   "commentsTabHotCount": "Hot ({count})",
@@ -1304,6 +1371,86 @@
   "downloadFileMissing": "The local file is missing and may have been deleted",
   "downloadSourceLocal": "Local download",
   "downloadsTitle": "Downloads",
+  "downloadsManageTitle": "Downloads",
+  "downloadsManageSubtitle": "Task queue, batch download and file maintenance",
+  "downloadsActiveSection": "In progress",
+  "downloadsActiveEmpty": "No downloads in progress",
+  "downloadsActiveCount": "{count} task(s)",
+  "@downloadsActiveCount": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "downloadsBatchSection": "Batch download",
+  "downloadsBatchQueue": "Download current queue",
+  "downloadsBatchQueueSubtitle": "{count} track(s); skips downloaded and local tracks",
+  "@downloadsBatchQueueSubtitle": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "downloadsBatchStarted": "Batch download started ({count})",
+  "@downloadsBatchStarted": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "downloadsBatchDone": "Batch finished: {done} succeeded, {failed} failed",
+  "@downloadsBatchDone": {
+    "placeholders": {
+      "done": {
+        "type": "int"
+      },
+      "failed": {
+        "type": "int"
+      }
+    }
+  },
+  "downloadsMaintenanceSection": "File maintenance",
+  "downloadsCleanupParts": "Remove unfinished downloads",
+  "downloadsCleanupPartsSubtitle": "Leftover .part files from crashes; finished downloads are untouched",
+  "downloadsCleanupPartsDone": "Removed {count} unfinished file(s)",
+  "@downloadsCleanupPartsDone": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "downloadsCleanupOrphans": "Remove orphan files",
+  "downloadsCleanupOrphansSubtitle": "Delete files in the download folder that no record references",
+  "downloadsCleanupOrphansDone": "Removed {count} orphan file(s)",
+  "@downloadsCleanupOrphansDone": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "downloadsOpenLibrary": "Downloaded tracks",
+  "downloadsBatchPlaylist": "Download a playlist",
+  "downloadsBatchPlaylistSubtitle": "Pick a playlist and download it in batch (skips downloaded and local tracks)",
+  "downloadsPickPlaylist": "Choose a playlist",
+  "downloadsMigrateLegacy": "Move downloads to the new location",
+  "downloadsMigrateLegacySubtitle": "Move files from the legacy app folder into the current download folder",
+  "downloadsMigrateLegacyDone": "Moved {moved}, failed {failed}",
+  "@downloadsMigrateLegacyDone": {
+    "placeholders": {
+      "moved": {
+        "type": "int"
+      },
+      "failed": {
+        "type": "int"
+      }
+    }
+  },
+  "downloadsNoResume": "No resume support: platform links are usually one-time signed URLs; re-downloading is more reliable",
   "downloadsEmpty": "No downloaded tracks yet",
   "downloadsSummary": "{count} tracks · {size}",
   "@downloadsSummary": {

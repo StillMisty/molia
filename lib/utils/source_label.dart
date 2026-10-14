@@ -11,3 +11,12 @@ String sourceChannelLabel(Iterable<SourceEntry> channels, String key) {
   }
   return key;
 }
+
+/// 渠道名（不含 key）：与曲目 ID 拼接展示时用（`酷我 · kw:12345`）。
+String sourceChannelName(Iterable<SourceEntry> channels, String key) {
+  if (key.isEmpty) return key;
+  for (final entry in channels) {
+    if (entry.key == key) return entry.name;
+  }
+  return key;
+}

@@ -182,7 +182,6 @@ void main() {
     expect(find.text('App font'), findsOneWidget);
     expect(find.text('Default play mode'), findsOneWidget);
     expect(find.text('Resume last playback'), findsOneWidget);
-    expect(find.text('Now playing quality'), findsOneWidget);
     // 省流只有入口行一处（无分区标题、无子项）。
     expect(find.text('Data saver'), findsOneWidget);
     expect(find.text('Lyrics display'), findsOneWidget);

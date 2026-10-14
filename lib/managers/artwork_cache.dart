@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:typed_data';
 
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/painting.dart' show PaintingBinding;
@@ -241,6 +242,37 @@ class ArtworkCache {
     } catch (e) {
       _logger.fine('封面缓存统计失败: $e');
       return CacheUsage.zero;
+    }
+  }
+
+  /// 读取单张封面的持久缓存字节；未缓存 / 平台不可用返回 null。
+  ///
+  /// 下载链路「封面走缓存」的读取口：命中即直接落盘到下载目录，不触网。
+  Future<Uint8List?> bytesOf(String url) async {
+    if (url.isEmpty) return null;
+    try {
+      final manager = await managerOrNull();
+      if (manager == null) return null;
+      final cached = await manager.getFileFromCache(url);
+      if (cached == null) return null;
+      if (!await cached.file.exists()) return null;
+      return await cached.file.readAsBytes();
+    } catch (e) {
+      _logger.fine('封面缓存读取失败: $e');
+      return null;
+    }
+  }
+
+  /// 把已取得的封面字节写入持久缓存（下载取图后回填，后续命中缓存）。
+  Future<void> putBytes(String url, Uint8List bytes) async {
+    if (url.isEmpty || bytes.isEmpty) return;
+    try {
+      final manager = await managerOrNull();
+      if (manager == null) return;
+      await manager.putFile(url, bytes);
+      _cacheService.notifyCacheChanged();
+    } catch (e) {
+      _logger.warning('封面缓存写入失败: $e');
     }
   }
 

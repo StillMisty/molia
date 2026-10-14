@@ -247,8 +247,8 @@ void main() {
     await tester.pump(const Duration(milliseconds: 400));
     expect(info, findsOneWidget);
     expect(find.text('本次播放音质'), findsOneWidget);
-    // 无音源列表注入：渠道回退 track.id.sourceKey。
-    expect(find.text('fake'), findsOneWidget);
+    // 无音源列表注入：来源行回退 key（渠道名 · 曲目 ID）。
+    expect(find.text('fake · fake:a'), findsOneWidget);
 
     // 信息页与队列/歌词共用「到顶继续下拉」手势：收起态下拉 = 展开。
     await dragPlayer(tester, 300);
@@ -303,7 +303,7 @@ void main() {
       ],
     );
 
-    // 进度排不再有换源按钮（换源入口在歌词快捷操作栏）。
+    // 进度排不再有换源按钮（换源入口在歌词页 FAB menu / 信息页）。
     expect(
       find.descendant(
         of: find.byType(Player),
@@ -312,11 +312,15 @@ void main() {
       findsNothing,
     );
 
-    // 收起播放器（歌词区展开）→ 快捷操作栏出现 → 点「换源」。
+    // 收起播放器（歌词区展开）→ FAB 出现 → 展开菜单 → 点「换歌词」。
     await dragPlayer(tester, 300);
     await tester.pumpAndSettle();
-    expect(find.byIcon(Icons.swap_horiz_rounded), findsOneWidget);
-    await tester.tap(find.byIcon(Icons.swap_horiz_rounded));
+    final fab = find.byKey(const Key('lyricsQuickActions'));
+    expect(fab, findsOneWidget);
+    await tester.tap(fab);
+    await tester.pumpAndSettle();
+    expect(find.text('换歌词'), findsOneWidget);
+    await tester.tap(find.text('换歌词'));
     await tester.pumpAndSettle();
 
     // 打开换源页：歌词 / 音频双 tab，默认歌词（音频会话尚未发起）。

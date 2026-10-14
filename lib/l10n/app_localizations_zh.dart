@@ -63,16 +63,10 @@ class AppLocalizationsZh extends AppLocalizations {
   String get lyricsFailedToLoad => '加载歌词失败。';
 
   @override
-  String get lyricsCopyModeSnackbar => '歌词复制模式：单曲重复已激活，自动滚动已禁用。';
+  String get lyricsCopyModeSnackbar => '歌词复制模式：已切到单曲循环、暂停自动跟随；退出时恢复原播放模式。';
 
   @override
   String get centerCurrentLine => '居中当前行';
-
-  @override
-  String get exitCopyModeResumeScroll => '退出复制模式并恢复滚动';
-
-  @override
-  String get enterCopyLyricsMode => '进入歌词复制模式（单曲重复）';
 
   @override
   String get playlist => '播放列表';
@@ -190,9 +184,6 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get settingsRestoreSessionSubtitle => '启动时恢复上次的曲目、队列与进度（默认开启）';
-
-  @override
-  String get settingsCurrentQuality => '当前播放音质';
 
   @override
   String get settingsAutoSourceSwap => '自动换源';
@@ -2211,6 +2202,180 @@ class AppLocalizationsZh extends AppLocalizations {
   String get trackInfoCachePlaying => '正在播放，音频缓存稍后再清';
 
   @override
+  String get trackActionCommentsSubtitle => '热门与最新评论';
+
+  @override
+  String get trackActionSwapSubtitle => '跨音源找回音频或歌词';
+
+  @override
+  String get trackInfoSource => '来源';
+
+  @override
+  String get trackInfoLyricsSource => '歌词来源';
+
+  @override
+  String get trackInfoLyricsSourceNone => '暂无歌词';
+
+  @override
+  String get trackInfoAlbumOpen => '查看专辑';
+
+  @override
+  String get trackInfoSourceUnknownId => '未知曲目 ID';
+
+  @override
+  String get sharePlatformPage => '分享平台页面';
+
+  @override
+  String get openPlatformPage => '打开平台页面';
+
+  @override
+  String get shareTrackFile => '分享歌曲文件';
+
+  @override
+  String get downloadAndShare => '下载并分享';
+
+  @override
+  String get platformPageUnavailable => '当前音源没有平台页面';
+
+  @override
+  String get shareDownloading => '正在下载，完成后自动分享';
+
+  @override
+  String get trackCachePageTitle => '单曲缓存';
+
+  @override
+  String get trackCacheClearAll => '全部清理';
+
+  @override
+  String trackCacheClearConfirm(String part) {
+    return '清理「$part」？';
+  }
+
+  @override
+  String get trackCacheClearAllConfirm => '清理这首歌的全部缓存？';
+
+  @override
+  String get trackCacheClearHint => '只清理缓存副本，不影响已下载文件与当前播放。';
+
+  @override
+  String cacheClearPart(String part) {
+    return '清理「$part」？';
+  }
+
+  @override
+  String get clear => '清理';
+
+  @override
+  String get trackCacheEmpty => '这首歌没有缓存';
+
+  @override
+  String get cacheAudioPlatformUnsupported => '当前平台不缓存音频';
+
+  @override
+  String get cacheAudioDisabled => '音频缓存已关闭';
+
+  @override
+  String get downloadAudioSection => '音频';
+
+  @override
+  String get downloadQualityLabel => '音质';
+
+  @override
+  String get downloadQualityCached => '本地缓存';
+
+  @override
+  String get downloadExtrasSection => '附加内容';
+
+  @override
+  String get downloadCoverPart => '封面';
+
+  @override
+  String get downloadPartDownload => '单独下载';
+
+  @override
+  String get downloadPartRemove => '清理';
+
+  @override
+  String get downloadAll => '全部下载';
+
+  @override
+  String get downloadFromCache => '命中本地缓存，无需下载';
+
+  @override
+  String get downloadLyricsDone => '歌词已下载';
+
+  @override
+  String get downloadCoverDone => '封面已下载';
+
+  @override
+  String get downloadNoArtwork => '这首歌没有封面';
+
+  @override
+  String get downloadNoLyrics => '未找到歌词';
+
+  @override
+  String get downloadSettingsTitle => '下载设置';
+
+  @override
+  String get downloadSettingsSubtitle => '保存位置、文件名与标签嵌入';
+
+  @override
+  String get downloadSaveLocation => '保存位置';
+
+  @override
+  String get downloadSaveLocationDefault => '默认（系统下载目录）';
+
+  @override
+  String get downloadSaveLocationFixedHint => '当前平台固定在应用目录，文件可在系统「文件」应用中访问';
+
+  @override
+  String get downloadPickDirectory => '选择目录';
+
+  @override
+  String get downloadFilenameTemplate => '文件名格式';
+
+  @override
+  String get downloadFilenameTemplateHint =>
+      '可用变量：artist（歌手）/ title（歌名）/ album（专辑）';
+
+  @override
+  String get downloadFilenamePreview => '预览';
+
+  @override
+  String get downloadReset => '恢复默认';
+
+  @override
+  String get downloadEmbedTags => '嵌入歌词与封面标签';
+
+  @override
+  String get downloadEmbedTagsSubtitle =>
+      '写入音频文件标签（MP3 / FLAC），其它播放器也能读到；失败时保留同名文件';
+
+  @override
+  String get downloadLocationInfo => '下载目录';
+
+  @override
+  String get downloadLocationUnsupported => '当前平台不支持下载';
+
+  @override
+  String get save => '保存';
+
+  @override
+  String get lyricsEmptyState => '这首歌暂时没找到词，换一个来源试试？ (´･ω･`)';
+
+  @override
+  String get lyricsDisplaySettingsAction => '歌词显示设置';
+
+  @override
+  String get lyricsSwapAction => '换歌词';
+
+  @override
+  String get lyricsCopyModeAction => '复制歌词模式';
+
+  @override
+  String get lyricsCopyModeExit => '退出复制模式';
+
+  @override
   String get commentsTitle => '评论';
 
   @override
@@ -2341,6 +2506,95 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get downloadsTitle => '已下载';
+
+  @override
+  String get downloadsManageTitle => '下载管理';
+
+  @override
+  String get downloadsManageSubtitle => '任务队列、批量下载与文件维护';
+
+  @override
+  String get downloadsActiveSection => '进行中';
+
+  @override
+  String get downloadsActiveEmpty => '没有进行中的下载';
+
+  @override
+  String downloadsActiveCount(int count) {
+    return '$count 个任务';
+  }
+
+  @override
+  String get downloadsBatchSection => '批量下载';
+
+  @override
+  String get downloadsBatchQueue => '下载当前队列';
+
+  @override
+  String downloadsBatchQueueSubtitle(int count) {
+    return '共 $count 首；跳过已下载与本地曲目';
+  }
+
+  @override
+  String downloadsBatchStarted(int count) {
+    return '已开始批量下载（$count 首）';
+  }
+
+  @override
+  String downloadsBatchDone(int done, int failed) {
+    return '批量下载完成：成功 $done，失败 $failed';
+  }
+
+  @override
+  String get downloadsMaintenanceSection => '文件维护';
+
+  @override
+  String get downloadsCleanupParts => '清理未完成的下载文件';
+
+  @override
+  String get downloadsCleanupPartsSubtitle => '崩溃遗留的半成品（.part），不影响已完成下载';
+
+  @override
+  String downloadsCleanupPartsDone(int count) {
+    return '已清理 $count 个未完成文件';
+  }
+
+  @override
+  String get downloadsCleanupOrphans => '清理无记录的孤儿文件';
+
+  @override
+  String get downloadsCleanupOrphansSubtitle => '删除下载目录中不被任何记录引用的文件';
+
+  @override
+  String downloadsCleanupOrphansDone(int count) {
+    return '已清理 $count 个孤儿文件';
+  }
+
+  @override
+  String get downloadsOpenLibrary => '已下载列表';
+
+  @override
+  String get downloadsBatchPlaylist => '下载指定歌单';
+
+  @override
+  String get downloadsBatchPlaylistSubtitle => '选择歌单后批量下载（跳过已下载与本地曲目）';
+
+  @override
+  String get downloadsPickPlaylist => '选择歌单';
+
+  @override
+  String get downloadsMigrateLegacy => '迁移旧位置的下载';
+
+  @override
+  String get downloadsMigrateLegacySubtitle => '把旧版应用目录里的下载文件搬到当前下载目录';
+
+  @override
+  String downloadsMigrateLegacyDone(int moved, int failed) {
+    return '已迁移 $moved 首，失败 $failed 首';
+  }
+
+  @override
+  String get downloadsNoResume => '不做断点续传：平台直链多为一次性签名地址，失败后重下更可靠';
 
   @override
   String get downloadsEmpty => '还没有下载的歌曲';

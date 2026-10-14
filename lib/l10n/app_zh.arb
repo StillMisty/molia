@@ -16,10 +16,8 @@
   "lyricsTitle": "歌词",
   "lyricsLoading": "正在加载歌词...",
   "lyricsFailedToLoad": "加载歌词失败。",
-  "lyricsCopyModeSnackbar": "歌词复制模式：单曲重复已激活，自动滚动已禁用。",
+  "lyricsCopyModeSnackbar": "歌词复制模式：已切到单曲循环、暂停自动跟随；退出时恢复原播放模式。",
   "centerCurrentLine": "居中当前行",
-  "exitCopyModeResumeScroll": "退出复制模式并恢复滚动",
-  "enterCopyLyricsMode": "进入歌词复制模式（单曲重复）",
   "playlist": "播放列表",
   "operationFailed": "操作失败",
   "settingsAppearanceTitle": "外观",
@@ -59,7 +57,6 @@
   "settingsDefaultPlayModeSubtitle": "新播放会话的初始模式，不打断当前播放",
   "settingsRestoreSessionTitle": "启动时恢复上次播放",
   "settingsRestoreSessionSubtitle": "启动时恢复上次的曲目、队列与进度（默认开启）",
-  "settingsCurrentQuality": "当前播放音质",
   "settingsAutoSourceSwap": "自动换源",
   "settingsAutoSourceSwapSubtitle": "播放失败时自动在其它音源找回同一首歌并切换（默认开启）",
   "settingsDataSaverTitle": "省流模式",
@@ -936,6 +933,76 @@
     }
   },
   "trackInfoCachePlaying": "正在播放，音频缓存稍后再清",
+  "trackActionCommentsSubtitle": "热门与最新评论",
+  "trackActionSwapSubtitle": "跨音源找回音频或歌词",
+  "trackInfoSource": "来源",
+  "trackInfoLyricsSource": "歌词来源",
+  "trackInfoLyricsSourceNone": "暂无歌词",
+  "trackInfoAlbumOpen": "查看专辑",
+  "trackInfoSourceUnknownId": "未知曲目 ID",
+  "sharePlatformPage": "分享平台页面",
+  "openPlatformPage": "打开平台页面",
+  "shareTrackFile": "分享歌曲文件",
+  "downloadAndShare": "下载并分享",
+  "platformPageUnavailable": "当前音源没有平台页面",
+  "shareDownloading": "正在下载，完成后自动分享",
+  "trackCachePageTitle": "单曲缓存",
+  "trackCacheClearAll": "全部清理",
+  "trackCacheClearConfirm": "清理「{part}」？",
+  "@trackCacheClearConfirm": {
+    "placeholders": {
+      "part": {
+        "type": "String"
+      }
+    }
+  },
+  "trackCacheClearAllConfirm": "清理这首歌的全部缓存？",
+  "trackCacheClearHint": "只清理缓存副本，不影响已下载文件与当前播放。",
+  "cacheClearPart": "清理「{part}」？",
+  "@cacheClearPart": {
+    "placeholders": {
+      "part": {
+        "type": "String"
+      }
+    }
+  },
+  "clear": "清理",
+  "trackCacheEmpty": "这首歌没有缓存",
+  "cacheAudioPlatformUnsupported": "当前平台不缓存音频",
+  "cacheAudioDisabled": "音频缓存已关闭",
+  "downloadAudioSection": "音频",
+  "downloadQualityLabel": "音质",
+  "downloadQualityCached": "本地缓存",
+  "downloadExtrasSection": "附加内容",
+  "downloadCoverPart": "封面",
+  "downloadPartDownload": "单独下载",
+  "downloadPartRemove": "清理",
+  "downloadAll": "全部下载",
+  "downloadFromCache": "命中本地缓存，无需下载",
+  "downloadLyricsDone": "歌词已下载",
+  "downloadCoverDone": "封面已下载",
+  "downloadNoArtwork": "这首歌没有封面",
+  "downloadNoLyrics": "未找到歌词",
+  "downloadSettingsTitle": "下载设置",
+  "downloadSettingsSubtitle": "保存位置、文件名与标签嵌入",
+  "downloadSaveLocation": "保存位置",
+  "downloadSaveLocationDefault": "默认（系统下载目录）",
+  "downloadSaveLocationFixedHint": "当前平台固定在应用目录，文件可在系统「文件」应用中访问",
+  "downloadPickDirectory": "选择目录",
+  "downloadFilenameTemplate": "文件名格式",
+  "downloadFilenameTemplateHint": "可用变量：artist（歌手）/ title（歌名）/ album（专辑）",
+  "downloadFilenamePreview": "预览",
+  "downloadReset": "恢复默认",
+  "downloadEmbedTags": "嵌入歌词与封面标签",
+  "downloadEmbedTagsSubtitle": "写入音频文件标签（MP3 / FLAC），其它播放器也能读到；失败时保留同名文件",
+  "downloadLocationInfo": "下载目录",
+  "downloadLocationUnsupported": "当前平台不支持下载",
+  "save": "保存",
+  "lyricsEmptyState": "这首歌暂时没找到词，换一个来源试试？ (´･ω･`)",
+  "lyricsDisplaySettingsAction": "歌词显示设置",
+  "lyricsSwapAction": "换歌词",
+  "lyricsCopyModeAction": "复制歌词模式",
+  "lyricsCopyModeExit": "退出复制模式",
   "commentsTitle": "评论",
   "commentsTabHot": "热门",
   "commentsTabHotCount": "热门 ({count})",
@@ -1050,6 +1117,86 @@
     }
   },
   "downloadsUnsupported": "当前平台不支持下载",
+  "downloadsManageTitle": "下载管理",
+  "downloadsManageSubtitle": "任务队列、批量下载与文件维护",
+  "downloadsActiveSection": "进行中",
+  "downloadsActiveEmpty": "没有进行中的下载",
+  "downloadsActiveCount": "{count} 个任务",
+  "@downloadsActiveCount": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "downloadsBatchSection": "批量下载",
+  "downloadsBatchQueue": "下载当前队列",
+  "downloadsBatchQueueSubtitle": "共 {count} 首；跳过已下载与本地曲目",
+  "@downloadsBatchQueueSubtitle": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "downloadsBatchStarted": "已开始批量下载（{count} 首）",
+  "@downloadsBatchStarted": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "downloadsBatchDone": "批量下载完成：成功 {done}，失败 {failed}",
+  "@downloadsBatchDone": {
+    "placeholders": {
+      "done": {
+        "type": "int"
+      },
+      "failed": {
+        "type": "int"
+      }
+    }
+  },
+  "downloadsMaintenanceSection": "文件维护",
+  "downloadsCleanupParts": "清理未完成的下载文件",
+  "downloadsCleanupPartsSubtitle": "崩溃遗留的半成品（.part），不影响已完成下载",
+  "downloadsCleanupPartsDone": "已清理 {count} 个未完成文件",
+  "@downloadsCleanupPartsDone": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "downloadsCleanupOrphans": "清理无记录的孤儿文件",
+  "downloadsCleanupOrphansSubtitle": "删除下载目录中不被任何记录引用的文件",
+  "downloadsCleanupOrphansDone": "已清理 {count} 个孤儿文件",
+  "@downloadsCleanupOrphansDone": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "downloadsOpenLibrary": "已下载列表",
+  "downloadsBatchPlaylist": "下载指定歌单",
+  "downloadsBatchPlaylistSubtitle": "选择歌单后批量下载（跳过已下载与本地曲目）",
+  "downloadsPickPlaylist": "选择歌单",
+  "downloadsMigrateLegacy": "迁移旧位置的下载",
+  "downloadsMigrateLegacySubtitle": "把旧版应用目录里的下载文件搬到当前下载目录",
+  "downloadsMigrateLegacyDone": "已迁移 {moved} 首，失败 {failed} 首",
+  "@downloadsMigrateLegacyDone": {
+    "placeholders": {
+      "moved": {
+        "type": "int"
+      },
+      "failed": {
+        "type": "int"
+      }
+    }
+  },
+  "downloadsNoResume": "不做断点续传：平台直链多为一次性签名地址，失败后重下更可靠",
   "sleepTimerTitle": "定时关闭",
   "sleepTimerHint": "到点自动暂停播放",
   "sleepTimerOff": "未开启",

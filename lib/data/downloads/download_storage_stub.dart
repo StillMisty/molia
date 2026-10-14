@@ -1,3 +1,5 @@
+import 'dart:typed_data';
+
 import 'download_storage_types.dart';
 
 /// Web / 不支持平台的内存空实现：无持久文件系统，下载能力整体关闭。
@@ -9,10 +11,22 @@ class MemoryDownloadStorage implements DownloadStorage {
   Future<String?> downloadsRoot() async => null;
 
   @override
+  Future<String?> legacyDownloadsRoot() async => null;
+
+  @override
   Future<bool> fileExists(String path) async => false;
 
   @override
   Future<int> fileSize(String path) async => 0;
+
+  @override
+  Future<void> copyFile(String from, String to) async {}
+
+  @override
+  Future<List<String>> listFiles(String dirPath) async => const [];
+
+  @override
+  Future<Uint8List?> readBytes(String path) async => null;
 
   @override
   Future<void> writeStream(
@@ -42,4 +56,5 @@ class MemoryDownloadStorage implements DownloadStorage {
 }
 
 /// 工厂：`download_storage.dart` 的条件导入入口。
-DownloadStorage createDownloadStorage() => MemoryDownloadStorage();
+DownloadStorage createDownloadStorage({String? Function()? customRoot}) =>
+    MemoryDownloadStorage();

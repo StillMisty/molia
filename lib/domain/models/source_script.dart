@@ -133,7 +133,9 @@ class SourceScriptException implements Exception {
   String toString() => message;
 }
 
-/// 音质通用显示名（文案与 `kxQualityDisplayName` 一致，含未知回退）。
+/// 音质通用显示名（LX 音质标识的中文通用名，含未知回退）。
+///
+/// UI 需要本地化时用 `sourceQualityLabel(l10n, quality)`（`lib/utils/`）。
 String qualityDisplayName(String quality) {
   switch (quality) {
     case 'flac24bit':

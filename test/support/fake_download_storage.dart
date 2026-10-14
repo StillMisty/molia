@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:typed_data';
 
 import 'package:molia/data/downloads/download_storage.dart';
 
@@ -16,14 +17,42 @@ class FakeDownloadStorage implements DownloadStorage {
   /// 已删除过的路径（含重复删除尝试）。
   final List<String> deleted = [];
 
+  /// 旧位置（迁移测试用）：非空且与 [root] 不同时生效。
+  String? legacyRoot;
+
   @override
   Future<String?> downloadsRoot() async => available ? root : null;
+
+  @override
+  Future<String?> legacyDownloadsRoot() async {
+    final legacy = legacyRoot;
+    if (legacy == null || legacy == root) return null;
+    return legacy;
+  }
 
   @override
   Future<bool> fileExists(String path) async => files.containsKey(path);
 
   @override
   Future<int> fileSize(String path) async => files[path]?.length ?? 0;
+
+  @override
+  Future<void> copyFile(String from, String to) async {
+    final bytes = files[from];
+    if (bytes != null) files[to] = List<int>.of(bytes);
+  }
+
+  @override
+  Future<List<String>> listFiles(String dirPath) async => [
+        for (final path in files.keys)
+          if (path.startsWith(dirPath)) path,
+      ];
+
+  @override
+  Future<Uint8List?> readBytes(String path) async {
+    final bytes = files[path];
+    return bytes == null ? null : Uint8List.fromList(bytes);
+  }
 
   @override
   Future<void> writeStream(

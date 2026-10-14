@@ -61,7 +61,7 @@ class DownloadsRepository {
             durationMs: Value(track.durationMs),
             raw: Value(jsonEncode(track.raw)),
             quality: Value(track.quality),
-            filePath: track.filePath,
+          filePath: Value(track.filePath),
             sizeBytes: Value(track.sizeBytes),
             lyricPath: Value(track.lyricPath),
             coverPath: Value(track.coverPath),

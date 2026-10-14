@@ -2877,8 +2877,8 @@ class $DownloadsTable extends Downloads
       const VerificationMeta('filePath');
   @override
   late final GeneratedColumn<String> filePath = GeneratedColumn<String>(
-      'filePath', aliasedName, false,
-      type: DriftSqlType.string, requiredDuringInsert: true);
+      'filePath', aliasedName, true,
+      type: DriftSqlType.string, requiredDuringInsert: false);
   static const VerificationMeta _sizeBytesMeta =
       const VerificationMeta('sizeBytes');
   @override
@@ -2987,8 +2987,6 @@ class $DownloadsTable extends Downloads
     if (data.containsKey('filePath')) {
       context.handle(_filePathMeta,
           filePath.isAcceptableOrUnknown(data['filePath']!, _filePathMeta));
-    } else if (isInserting) {
-      context.missing(_filePathMeta);
     }
     if (data.containsKey('sizeBytes')) {
       context.handle(_sizeBytesMeta,
@@ -3040,7 +3038,7 @@ class $DownloadsTable extends Downloads
       quality: attachedDatabase.typeMapping
           .read(DriftSqlType.string, data['${effectivePrefix}quality'])!,
       filePath: attachedDatabase.typeMapping
-          .read(DriftSqlType.string, data['${effectivePrefix}filePath'])!,
+          .read(DriftSqlType.string, data['${effectivePrefix}filePath']),
       sizeBytes: attachedDatabase.typeMapping
           .read(DriftSqlType.int, data['${effectivePrefix}sizeBytes'])!,
       lyricPath: attachedDatabase.typeMapping
@@ -3069,7 +3067,7 @@ class DownloadRow extends DataClass implements Insertable<DownloadRow> {
   final int? durationMs;
   final String raw;
   final String quality;
-  final String filePath;
+  final String? filePath;
   final int sizeBytes;
   final String? lyricPath;
   final String? coverPath;
@@ -3085,7 +3083,7 @@ class DownloadRow extends DataClass implements Insertable<DownloadRow> {
       this.durationMs,
       required this.raw,
       required this.quality,
-      required this.filePath,
+      this.filePath,
       required this.sizeBytes,
       this.lyricPath,
       this.coverPath,
@@ -3107,7 +3105,9 @@ class DownloadRow extends DataClass implements Insertable<DownloadRow> {
     }
     map['raw'] = Variable<String>(raw);
     map['quality'] = Variable<String>(quality);
-    map['filePath'] = Variable<String>(filePath);
+    if (!nullToAbsent || filePath != null) {
+      map['filePath'] = Variable<String>(filePath);
+    }
     map['sizeBytes'] = Variable<int>(sizeBytes);
     if (!nullToAbsent || lyricPath != null) {
       map['lyricPath'] = Variable<String>(lyricPath);
@@ -3135,7 +3135,9 @@ class DownloadRow extends DataClass implements Insertable<DownloadRow> {
           : Value(durationMs),
       raw: Value(raw),
       quality: Value(quality),
-      filePath: Value(filePath),
+      filePath: filePath == null && nullToAbsent
+          ? const Value.absent()
+          : Value(filePath),
       sizeBytes: Value(sizeBytes),
       lyricPath: lyricPath == null && nullToAbsent
           ? const Value.absent()
@@ -3161,7 +3163,7 @@ class DownloadRow extends DataClass implements Insertable<DownloadRow> {
       durationMs: serializer.fromJson<int?>(json['durationMs']),
       raw: serializer.fromJson<String>(json['raw']),
       quality: serializer.fromJson<String>(json['quality']),
-      filePath: serializer.fromJson<String>(json['filePath']),
+      filePath: serializer.fromJson<String?>(json['filePath']),
       sizeBytes: serializer.fromJson<int>(json['sizeBytes']),
       lyricPath: serializer.fromJson<String?>(json['lyricPath']),
       coverPath: serializer.fromJson<String?>(json['coverPath']),
@@ -3182,7 +3184,7 @@ class DownloadRow extends DataClass implements Insertable<DownloadRow> {
       'durationMs': serializer.toJson<int?>(durationMs),
       'raw': serializer.toJson<String>(raw),
       'quality': serializer.toJson<String>(quality),
-      'filePath': serializer.toJson<String>(filePath),
+      'filePath': serializer.toJson<String?>(filePath),
       'sizeBytes': serializer.toJson<int>(sizeBytes),
       'lyricPath': serializer.toJson<String?>(lyricPath),
       'coverPath': serializer.toJson<String?>(coverPath),
@@ -3201,7 +3203,7 @@ class DownloadRow extends DataClass implements Insertable<DownloadRow> {
           Value<int?> durationMs = const Value.absent(),
           String? raw,
           String? quality,
-          String? filePath,
+          Value<String?> filePath = const Value.absent(),
           int? sizeBytes,
           Value<String?> lyricPath = const Value.absent(),
           Value<String?> coverPath = const Value.absent(),
@@ -3217,7 +3219,7 @@ class DownloadRow extends DataClass implements Insertable<DownloadRow> {
         durationMs: durationMs.present ? durationMs.value : this.durationMs,
         raw: raw ?? this.raw,
         quality: quality ?? this.quality,
-        filePath: filePath ?? this.filePath,
+        filePath: filePath.present ? filePath.value : this.filePath,
         sizeBytes: sizeBytes ?? this.sizeBytes,
         lyricPath: lyricPath.present ? lyricPath.value : this.lyricPath,
         coverPath: coverPath.present ? coverPath.value : this.coverPath,
@@ -3321,7 +3323,7 @@ class DownloadsCompanion extends UpdateCompanion<DownloadRow> {
   final Value<int?> durationMs;
   final Value<String> raw;
   final Value<String> quality;
-  final Value<String> filePath;
+  final Value<String?> filePath;
   final Value<int> sizeBytes;
   final Value<String?> lyricPath;
   final Value<String?> coverPath;
@@ -3354,7 +3356,7 @@ class DownloadsCompanion extends UpdateCompanion<DownloadRow> {
     this.durationMs = const Value.absent(),
     this.raw = const Value.absent(),
     this.quality = const Value.absent(),
-    required String filePath,
+    this.filePath = const Value.absent(),
     this.sizeBytes = const Value.absent(),
     this.lyricPath = const Value.absent(),
     this.coverPath = const Value.absent(),
@@ -3362,7 +3364,6 @@ class DownloadsCompanion extends UpdateCompanion<DownloadRow> {
   })  : originSourceKey = Value(originSourceKey),
         originSongId = Value(originSongId),
         title = Value(title),
-        filePath = Value(filePath),
         downloadedAt = Value(downloadedAt);
   static Insertable<DownloadRow> custom({
     Expression<int>? id,
@@ -3411,7 +3412,7 @@ class DownloadsCompanion extends UpdateCompanion<DownloadRow> {
       Value<int?>? durationMs,
       Value<String>? raw,
       Value<String>? quality,
-      Value<String>? filePath,
+      Value<String?>? filePath,
       Value<int>? sizeBytes,
       Value<String?>? lyricPath,
       Value<String?>? coverPath,
@@ -4971,7 +4972,7 @@ typedef $$DownloadsTableCreateCompanionBuilder = DownloadsCompanion Function({
   Value<int?> durationMs,
   Value<String> raw,
   Value<String> quality,
-  required String filePath,
+  Value<String?> filePath,
   Value<int> sizeBytes,
   Value<String?> lyricPath,
   Value<String?> coverPath,
@@ -4988,7 +4989,7 @@ typedef $$DownloadsTableUpdateCompanionBuilder = DownloadsCompanion Function({
   Value<int?> durationMs,
   Value<String> raw,
   Value<String> quality,
-  Value<String> filePath,
+  Value<String?> filePath,
   Value<int> sizeBytes,
   Value<String?> lyricPath,
   Value<String?> coverPath,
@@ -5200,7 +5201,7 @@ class $$DownloadsTableTableManager extends RootTableManager<
             Value<int?> durationMs = const Value.absent(),
             Value<String> raw = const Value.absent(),
             Value<String> quality = const Value.absent(),
-            Value<String> filePath = const Value.absent(),
+            Value<String?> filePath = const Value.absent(),
             Value<int> sizeBytes = const Value.absent(),
             Value<String?> lyricPath = const Value.absent(),
             Value<String?> coverPath = const Value.absent(),
@@ -5234,7 +5235,7 @@ class $$DownloadsTableTableManager extends RootTableManager<
             Value<int?> durationMs = const Value.absent(),
             Value<String> raw = const Value.absent(),
             Value<String> quality = const Value.absent(),
-            required String filePath,
+            Value<String?> filePath = const Value.absent(),
             Value<int> sizeBytes = const Value.absent(),
             Value<String?> lyricPath = const Value.absent(),
             Value<String?> coverPath = const Value.absent(),
