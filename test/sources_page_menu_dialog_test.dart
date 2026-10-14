@@ -73,12 +73,20 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    // 打开 trailing 菜单（M3EMenu anchor）。
+    // 启停是行内开关（与渠道行一致）；菜单只留「更新 / 删除」。
+    expect(
+      find.byWidgetPredicate(
+        (widget) =>
+            widget is M3ESwitch &&
+            (widget.key?.toString().contains('sourcesScriptSwitch') ?? false),
+      ),
+      findsOneWidget,
+    );
     final more = find.byIcon(Icons.more_vert_rounded);
     expect(more, findsOneWidget);
     await tester.tap(more);
     await tester.pumpAndSettle();
-    expect(find.text('启用'), findsOneWidget);
+    expect(find.text('启用'), findsNothing);
     expect(find.text('删除'), findsOneWidget);
 
     // 点击删除 → M3EDialog 确认框。

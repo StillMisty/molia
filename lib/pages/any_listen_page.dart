@@ -3,14 +3,23 @@ import 'package:material_ui/material_ui.dart';
 import 'package:provider/provider.dart';
 
 import '../domain/models/any_listen.dart';
+import '../l10n/app_localizations.dart';
 import '../providers/sources_provider.dart';
 import '../theme/app_semantic_colors.dart';
+import '../widgets/card_list_surface.dart';
 import '../widgets/icon_swap.dart';
+import '../widgets/settings/settings_tiles.dart';
+
+/// AppLocalizations 查找：测试/独立挂载场景未注册 delegate 时回退简体中文
+/// （与音源管理页同一约定）。
+AppLocalizations _l10n(BuildContext context) =>
+    AppLocalizations.of(context) ?? lookupAppLocalizations(const Locale('zh'));
 
 /// any-listen 接入配置页：服务器地址 / 令牌 / 启用开关 / 连接测试 / 保存。
 ///
-/// 分层：只依赖 [SourcesProvider] 与 domain 模型，不直接
-/// import `lib/sources/**`（R5）。保存/连接测试/配置刷新全部走 provider：
+/// 与设置页共用同一套 M3E 语言（`SettingsSectionCard` + `CardListSurface` 行、
+/// `M3ETypeScale` 排版）；分层：只依赖 [SourcesProvider] 与 domain 模型，
+/// 不直接 import `lib/sources/**`（R5）。保存/连接测试/配置刷新全部走 provider：
 /// - 传入 [provider] 时直接使用（集成测试 / 独立打开场景）；
 /// - 不传时从 `context.read<SourcesProvider>()` 获取（正式 App 由
 ///   composition root 注册）。
@@ -74,14 +83,17 @@ class _AnyListenPageState extends State<AnyListenPage> {
       );
 
   /// 地址校验：未启用时允许留空（用于清除配置）。
-  String? _validateAddress() {
+  String? _validateAddress(AppLocalizations l10n) {
     final raw = _serverUrlController.text.trim();
-    if (raw.isEmpty) return _enabled ? '启用前请填写服务器地址' : null;
+    if (raw.isEmpty) {
+      return _enabled ? l10n.anyListenServerUrlRequiredToEnable : null;
+    }
     return AnyListenConfig.validateServerUrl(raw);
   }
 
   Future<void> _save() async {
-    final error = _validateAddress();
+    final l10n = _l10n(context);
+    final error = _validateAddress(l10n);
     if (error != null) {
       setState(() => _serverUrlError = error);
       return;
@@ -96,15 +108,16 @@ class _AnyListenPageState extends State<AnyListenPage> {
     if (!mounted) return;
     setState(() => _saving = false);
     if (!saved) {
-      M3ESnackbar.show(context, message: '保存失败：无法写入本地存储');
+      M3ESnackbar.show(context, message: l10n.anyListenSaveFailed);
     }
   }
 
   Future<void> _test() async {
+    final l10n = _l10n(context);
     final raw = _serverUrlController.text.trim();
     if (raw.isEmpty) {
       setState(() {
-        _serverUrlError = '请先填写服务器地址';
+        _serverUrlError = l10n.anyListenServerUrlRequired;
         _testMessage = null;
       });
       return;
@@ -135,174 +148,206 @@ class _AnyListenPageState extends State<AnyListenPage> {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = _l10n(context);
     return Scaffold(
       appBar: M3EAppBar.top(
-        title: const Text('any-listen 接入'),
+        title: Text(l10n.anyListenEntry),
         automaticallyImplyLeading: true,
       ),
       body: _loading
           ? const Center(child: M3ELoadingIndicator())
           : ListView(
-              padding: const EdgeInsets.all(16),
+              padding: const EdgeInsets.all(kSettingsPadding),
               children: [
-                _buildIntroCard(context),
-                const SizedBox(height: 16),
-                _buildFormCard(context),
-              ],
-            ),
-    );
-  }
-
-  Widget _buildIntroCard(BuildContext context) {
-    final theme = Theme.of(context);
-    return M3ECard(
-      variant: M3ECardVariant.elevated,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Icon(Icons.info_outline_rounded, color: theme.colorScheme.primary),
-              const SizedBox(width: 8),
-              Text('any-listen', style: theme.textTheme.titleMedium),
-            ],
-          ),
-          const SizedBox(height: 8),
-          Text(
-            'any-listen 是自托管的私有音乐播放服务。填写服务器地址并启用后，'
-            '服务器提供的在线音源会出现在搜索页的音源列表中。',
-            style: theme.textTheme.bodyMedium,
-          ),
-          const SizedBox(height: 8),
-          Text(
-            '当前为骨架实现：握手探测（/api/ipc/hello、/api/ipc/id）已对照官方源码，'
-            '搜索/取链/歌词/封面接口尚未与真实服务器验证，可能暂不可用。',
-            style: theme.textTheme.bodySmall?.copyWith(
-              color: theme.colorScheme.onSurfaceVariant,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildFormCard(BuildContext context) {
-    final theme = Theme.of(context);
-    final semantic = AppSemanticColors.of(context);
-    return M3ECard(
-      variant: M3ECardVariant.elevated,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text('服务器配置', style: theme.textTheme.titleMedium),
-          const SizedBox(height: 12),
-          M3ETextField(
-            controller: _serverUrlController,
-            keyboardType: TextInputType.url,
-            variant: M3ETextFieldVariant.outlined,
-            label: '服务器地址',
-            placeholder: 'http://192.168.1.10:9500',
-            supportingText: 'Docker / 桌面端部署的 any-listen 服务地址',
-            errorText: _serverUrlError,
-            leading: const Icon(Icons.dns_rounded),
-            onChanged: (_) {
-              if (_serverUrlError != null) {
-                setState(() => _serverUrlError = null);
-              }
-            },
-          ),
-          const SizedBox(height: 12),
-          M3ETextField(
-            controller: _tokenController,
-            obscureText: !_tokenVisible,
-            variant: M3ETextFieldVariant.outlined,
-            label: '访问令牌（可选）',
-            placeholder: '连接测试通过后可粘贴服务器下发的令牌',
-            leading: const Icon(Icons.key_rounded),
-            trailing: M3EIconButton(
-              variant: M3EIconButtonVariant.standard,
-              tooltip: _tokenVisible ? '隐藏令牌' : '显示令牌',
-              icon: IconSwap<bool>(
-                value: _tokenVisible,
-                builder: (context, visible) => Icon(
-                  visible
-                      ? Icons.visibility_off_rounded
-                      : Icons.visibility_rounded,
+                SettingsSectionCard(
+                  children: [_introRow(context, l10n)],
                 ),
-              ),
-              onPressed: () => setState(() => _tokenVisible = !_tokenVisible),
-            ),
-          ),
-          const SizedBox(height: 8),
-          M3EListItem(
-            headline: '启用 any-listen 音源',
-            supportingText: '关闭后不会出现在搜索页，也不发起任何请求',
-            trailing: M3ESwitch(
-              value: _enabled,
-              onChanged: (value) => setState(() => _enabled = value),
-            ),
-            onTap: () => setState(() => _enabled = !_enabled),
-          ),
-          const SizedBox(height: 8),
-          Wrap(
-            spacing: 12,
-            runSpacing: 8,
-            children: [
-              M3EButton.icon(
-                onPressed: _saving ? null : _save,
-                icon: _saving
-                    ? const SizedBox(
-                        width: 16,
-                        height: 16,
-                        child: M3EProgressIndicator.circular(
-                          size: 16,
-                          strokeWidth: 2,
-                        ),
-                      )
-                    : const Icon(Icons.save_rounded),
-                label: const Text('保存'),
-              ),
-              M3EButton.icon(
-                style: M3EButtonStyle.outlined,
-                onPressed: _testing ? null : _test,
-                icon: _testing
-                    ? const SizedBox(
-                        width: 16,
-                        height: 16,
-                        child: M3EProgressIndicator.circular(
-                          size: 16,
-                          strokeWidth: 2,
-                        ),
-                      )
-                    : const Icon(Icons.network_check_rounded),
-                label: const Text('连接测试'),
-              ),
-            ],
-          ),
-          if (_testMessage != null) ...[
-            const SizedBox(height: 12),
-            Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Icon(
-                  _testOk ? Icons.check_circle_rounded : Icons.error_outline_rounded,
-                  size: 18,
-                  color: _testOk ? semantic.success : theme.colorScheme.error,
-                ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: Text(
-                    _testMessage!,
-                    style: TextStyle(
-                      color: _testOk ? semantic.success : theme.colorScheme.error,
+                const SizedBox(height: kSettingsSectionSpacing),
+                SettingsSectionCard(
+                  title: l10n.anyListenServerSection,
+                  children: [
+                    _fieldRow(
+                      context,
+                      icon: Icons.dns_rounded,
+                      label: l10n.anyListenServerUrl,
+                      child: M3ETextField(
+                        controller: _serverUrlController,
+                        keyboardType: TextInputType.url,
+                        variant: M3ETextFieldVariant.outlined,
+                        placeholder: l10n.anyListenServerUrlHint,
+                        errorText: _serverUrlError,
+                        leading: const Icon(Icons.dns_rounded),
+                        onChanged: (_) {
+                          if (_serverUrlError != null) {
+                            setState(() => _serverUrlError = null);
+                          }
+                        },
+                      ),
                     ),
-                  ),
+                    _fieldRow(
+                      context,
+                      icon: Icons.key_rounded,
+                      label: l10n.anyListenToken,
+                      child: M3ETextField(
+                        controller: _tokenController,
+                        obscureText: !_tokenVisible,
+                        variant: M3ETextFieldVariant.outlined,
+                        placeholder: l10n.anyListenTokenPlaceholder,
+                        leading: const Icon(Icons.key_rounded),
+                        trailing: M3EIconButton(
+                          variant: M3EIconButtonVariant.standard,
+                          tooltip: _tokenVisible
+                              ? l10n.anyListenTokenHide
+                              : l10n.anyListenTokenShow,
+                          icon: IconSwap<bool>(
+                            value: _tokenVisible,
+                            builder: (context, visible) => Icon(
+                              visible
+                                  ? Icons.visibility_off_rounded
+                                  : Icons.visibility_rounded,
+                            ),
+                          ),
+                          onPressed: () =>
+                              setState(() => _tokenVisible = !_tokenVisible),
+                        ),
+                      ),
+                    ),
+                    SettingsSwitchTile(
+                      switchKey: const Key('anyListenEnableSwitch'),
+                      icon: Icons.cloud_rounded,
+                      title: l10n.anyListenEnable,
+                      subtitle: l10n.anyListenEnableSubtitle,
+                      value: _enabled,
+                      onChanged: (value) => setState(() => _enabled = value),
+                    ),
+                    Padding(
+                      padding: const EdgeInsets.only(top: kSettingsSmallSpacing),
+                      child: Wrap(
+                        spacing: 12,
+                        runSpacing: 8,
+                        children: [
+                          M3EButton.icon(
+                            onPressed: _saving ? null : _save,
+                            icon: _saving
+                                ? const _ButtonSpinner()
+                                : const Icon(Icons.save_rounded),
+                            label: Text(l10n.anyListenSave),
+                          ),
+                          M3EButton.icon(
+                            style: M3EButtonStyle.outlined,
+                            onPressed: _testing ? null : _test,
+                            icon: _testing
+                                ? const _ButtonSpinner()
+                                : const Icon(Icons.network_check_rounded),
+                            label: Text(l10n.anyListenTest),
+                          ),
+                        ],
+                      ),
+                    ),
+                    if (_testMessage != null)
+                      Padding(
+                        padding: const EdgeInsets.only(top: kSettingsSmallSpacing),
+                        child: _testResultRow(context, _testMessage!),
+                      ),
+                  ],
                 ),
               ],
             ),
-          ],
+    );
+  }
+
+  /// 说明行：品牌图标底 + 段落（骨架实现的边界说明；标题不重复顶栏文案）。
+  Widget _introRow(BuildContext context, AppLocalizations l10n) {
+    final m3e = M3ETheme.of(context);
+    final scheme = m3e.colorScheme;
+    return CardListSurface(
+      position: SettingsRowPosition.of(context),
+      padding: kSettingsRowPadding,
+      onPressed: null,
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const SettingsTileIcon(icon: Icons.info_outline_rounded),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  l10n.anyListenIntroBody,
+                  style:
+                      m3e.typeScale.bodyMedium.copyWith(color: scheme.onSurface),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  l10n.anyListenIntroHint,
+                  style: m3e.typeScale.bodySmall
+                      .copyWith(color: scheme.onSurfaceVariant),
+                ),
+              ],
+            ),
+          ),
         ],
       ),
+    );
+  }
+
+  /// 输入行：图标 + 行标题 + 输入框（设置行形状，与其它行同源）。
+  Widget _fieldRow(
+    BuildContext context, {
+    required IconData icon,
+    required String label,
+    required Widget child,
+  }) {
+    return CardListSurface(
+      position: SettingsRowPosition.of(context),
+      padding: kSettingsRowPadding,
+      onPressed: null,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          SettingsTileLead(icon: icon, title: label),
+          const SizedBox(height: kSettingsSmallSpacing),
+          child,
+        ],
+      ),
+    );
+  }
+
+  /// 连接测试结果：成功/失败成对语义色 + 一句话。
+  Widget _testResultRow(BuildContext context, String message) {
+    final m3e = M3ETheme.of(context);
+    final semantic = AppSemanticColors.of(context);
+    final color = _testOk ? semantic.success : m3e.colorScheme.error;
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Icon(
+          _testOk ? Icons.check_circle_rounded : Icons.error_outline_rounded,
+          size: 18,
+          color: color,
+        ),
+        const SizedBox(width: kSettingsSmallSpacing),
+        Expanded(
+          child: Text(message, style: m3e.typeScale.bodySmall.copyWith(color: color)),
+        ),
+      ],
+    );
+  }
+}
+
+/// 按钮内联进度（保存 / 连接测试的进行态）。
+class _ButtonSpinner extends StatelessWidget {
+  const _ButtonSpinner();
+
+  @override
+  Widget build(BuildContext context) {
+    return const SizedBox(
+      width: 16,
+      height: 16,
+      child: M3EProgressIndicator.circular(size: 16, strokeWidth: 2),
     );
   }
 }

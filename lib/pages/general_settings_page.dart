@@ -10,6 +10,7 @@ import '../services/app_branding_service.dart';
 import '../services/language_service.dart';
 import '../services/notification_service.dart';
 import '../widgets/nav_destination_icons.dart';
+import '../widgets/settings/settings_reorderable_rows.dart';
 import '../widgets/settings/settings_tiles.dart';
 
 /// 通用设置子页：底部导航、语言与应用名称（按改动频率排序）。
@@ -71,6 +72,7 @@ class _GeneralSettingsPageState extends State<GeneralSettingsPage> {
           if (nav != null) ...[
             SettingsSectionCard(
               title: l10n.settingsBottomNavTitle,
+              footer: SettingsSectionHint(text: l10n.settingsBottomNavHint),
               children: [_BottomNavSettings(provider: nav)],
             ),
             const SizedBox(height: kSettingsSectionSpacing),
@@ -152,8 +154,7 @@ class _GeneralSettingsPageState extends State<GeneralSettingsPage> {
 ///
 /// 行是标准设置开关行（[SettingsSwitchTile]）；拖拽手柄挂在行尾
 /// （[ReorderableDragStartListener] 只包手柄，整行点击仍是显隐开关，
-/// 两种手势互不抢），行形状由本组件按位置自算下发（[SettingsRowPosition]），
-/// 与分组内其它行同源。
+/// 两种手势互不抢），排序容器与音源渠道共用 [SettingsReorderableRows]。
 class _BottomNavSettings extends StatelessWidget {
   const _BottomNavSettings({required this.provider});
 
@@ -164,37 +165,13 @@ class _BottomNavSettings extends StatelessWidget {
     final l10n = AppLocalizations.of(context)!;
     final nav = provider;
     final order = nav.order;
-    final gap = M3ETheme.of(context).listTheme.cardList.gap;
 
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        ReorderableListView(
-          shrinkWrap: true,
-          physics: const NeverScrollableScrollPhysics(),
-          buildDefaultDragHandles: false,
-          onReorderItem: (oldIndex, newIndex) =>
-              nav.reorder(oldIndex, newIndex),
-          children: [
-            for (var index = 0; index < order.length; index++)
-              Padding(
-                key: ValueKey(order[index]),
-                padding: EdgeInsets.only(top: index == 0 ? 0 : gap),
-                child: SettingsRowPosition(
-                  position: calculateCardPosition(index, order.length),
-                  child: _buildRow(context, l10n, nav, order[index], index),
-                ),
-              ),
-          ],
-        ),
-        const SizedBox(height: kSettingsSmallSpacing),
-        Text(
-          l10n.settingsBottomNavHint,
-          style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                color: Theme.of(context).colorScheme.onSurfaceVariant,
-              ),
-        ),
-      ],
+    return SettingsReorderableRows(
+      itemCount: order.length,
+      itemKey: (index) => ValueKey(order[index]),
+      itemBuilder: (context, index) =>
+          _buildRow(context, l10n, nav, order[index], index),
+      onReorder: (oldIndex, newIndex) => nav.reorder(oldIndex, newIndex),
     );
   }
 

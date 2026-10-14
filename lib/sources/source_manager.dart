@@ -394,17 +394,18 @@ class SourceManager extends ChangeNotifier {
     } catch (_) {}
   }
 
-  /// 将渠道（含内置发现平台）在渠道列表中上移/下移 [delta] 位
-  /// （-1 上移，1 下移；停用项同样参与排序）。
-  Future<void> moveChannel(String key, int delta) async {
-    if (delta == 0) return;
+  /// 拖拽排序：把渠道列表（含内置发现平台；停用项同样参与排序）第
+  /// [oldIndex] 项移动到 [newIndex]。
+  ///
+  /// [newIndex] 是 `ReorderableListView.onReorderItem` 语义（已按「移除
+  /// oldIndex 后」校正），直接按下标搬移。
+  Future<void> reorderChannel(int oldIndex, int newIndex) async {
     final keys = channels.map((o) => o.key).toList();
-    final index = keys.indexOf(key);
-    if (index < 0) return;
-    final target = index + delta;
-    if (target < 0 || target >= keys.length) return;
-    keys.removeAt(index);
-    keys.insert(target, key);
+    if (oldIndex < 0 || oldIndex >= keys.length) return;
+    final target = newIndex.clamp(0, keys.length - 1);
+    if (target == oldIndex) return;
+    final moved = keys.removeAt(oldIndex);
+    keys.insert(target, moved);
     await setSourceOrder(keys);
   }
 

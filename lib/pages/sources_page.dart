@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:file_picker/file_picker.dart';
@@ -13,14 +14,20 @@ import '../domain/models/source_script.dart';
 import '../l10n/app_localizations.dart';
 import '../providers/sources_provider.dart';
 import '../theme/app_semantic_colors.dart';
+import '../widgets/card_list_surface.dart';
+import '../widgets/settings/settings_reorderable_rows.dart';
+import '../widgets/settings/settings_tiles.dart';
 
 /// AppLocalizations 查找：集成测试等场景会直接挂载本页而不注册 delegate，
 /// 此时回退到简体中文，保证与中文正式环境文案一致（正式 App 恒有 delegate）。
 AppLocalizations _l10n(BuildContext context) =>
     AppLocalizations.of(context) ?? lookupAppLocalizations(const Locale('zh'));
 
-/// 音源管理页：导入 / 启停 / 删除 LX Music 音源脚本。
+/// 音源管理页：导入 / 启停 / 排序 / 删除 LX Music 音源脚本。
 ///
+/// 与设置页共用同一套 M3E 语言：`SettingsSectionCard` + 设置行
+/// （`CardListSurface` 形状、`cardList.gap` 行距、`M3ETypeScale` 排版），
+/// 渠道排序复用 [SettingsReorderableRows] 的拖拽手柄模式。
 /// 分层：只依赖 [SourcesProvider] 与 domain 模型，
 /// 不直接 import `lib/sources/**`（R5）。
 class SourcesPage extends StatefulWidget {
@@ -75,15 +82,15 @@ class _SourcesPageState extends State<SourcesPage> {
             return const Center(child: M3ELoadingIndicator());
           }
           return ListView(
-            padding: const EdgeInsets.all(16),
+            padding: const EdgeInsets.all(kSettingsPadding),
             children: [
-              _buildStatusCard(context, provider),
-              const SizedBox(height: 16),
-              _buildImportCard(context, provider),
-              const SizedBox(height: 16),
-              _buildSortCard(context, provider),
-              const SizedBox(height: 16),
-              _buildScriptsCard(context, provider),
+              _buildStatusSection(context, l10n, provider),
+              const SizedBox(height: kSettingsSectionSpacing),
+              _buildImportSection(context, l10n, provider),
+              const SizedBox(height: kSettingsSectionSpacing),
+              _buildSortSection(context, l10n, provider),
+              const SizedBox(height: kSettingsSectionSpacing),
+              _buildScriptsSection(context, l10n, provider),
             ],
           );
         },
@@ -91,356 +98,379 @@ class _SourcesPageState extends State<SourcesPage> {
     );
   }
 
-  Widget _buildStatusCard(BuildContext context, SourcesProvider provider) {
-    final l10n = _l10n(context);
-    final theme = Theme.of(context);
+  /// 当前状态：状态图标 + 当前音源/错误/作者 + 源能力 chips；有更新提示时
+  /// 同组追加警告色的提示行（按钮就地处理）。
+  Widget _buildStatusSection(
+    BuildContext context,
+    AppLocalizations l10n,
+    SourcesProvider provider,
+  ) {
+    final m3e = M3ETheme.of(context);
+    final scheme = m3e.colorScheme;
     final semantic = AppSemanticColors.of(context);
     final active = provider.activeScript;
     final sources = provider.activeSourceEntries;
-    return M3ECard(
-      variant: M3ECardVariant.elevated,
-      child: Column(
+    final hasActive = provider.hasActiveSource;
+    final alert = provider.lastUpdateAlert;
+
+    final Widget statusRow = CardListSurface(
+      position: SettingsRowPosition.of(context),
+      padding: kSettingsRowPadding,
+      onPressed: null,
+      child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
-            children: [
-              Icon(
-                provider.hasActiveSource
-                    ? Icons.check_circle_rounded
-                    : Icons.error_outline_rounded,
-                // 成功态走统一语义色。
-                color: provider.hasActiveSource
-                    ? semantic.success
-                    : theme.colorScheme.error,
-              ),
-              const SizedBox(width: 8),
-              Expanded(
-                child: Text(
-                  active == null
-                      ? l10n.sourcesNoneActive
-                      : l10n.sourcesActiveSource(active.name, active.version),
-                  style: theme.textTheme.titleMedium,
+          SettingsTileIcon(
+            icon: hasActive
+                ? Icons.check_circle_rounded
+                : Icons.error_outline_rounded,
+            containerColor:
+                hasActive ? semantic.successContainer : scheme.errorContainer,
+            foregroundColor:
+                hasActive ? semantic.onSuccessContainer : scheme.onErrorContainer,
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        active == null
+                            ? l10n.sourcesNoneActive
+                            : l10n.sourcesActiveSource(
+                                active.name,
+                                active.version,
+                              ),
+                        style: m3e.typeScale.bodyLarge.copyWith(
+                          color: scheme.onSurface,
+                        ),
+                      ),
+                    ),
+                    if (provider.isActivating) ...[
+                      const SizedBox(width: kSettingsSmallSpacing),
+                      const SizedBox(
+                        width: 18,
+                        height: 18,
+                        child: M3EProgressIndicator.circular(
+                          size: 18,
+                          strokeWidth: 2,
+                        ),
+                      ),
+                      const SizedBox(width: kSettingsSmallSpacing),
+                      Text(
+                        l10n.sourcesActivating,
+                        style: m3e.typeScale.bodySmall.copyWith(
+                          color: scheme.onSurfaceVariant,
+                        ),
+                      ),
+                    ],
+                  ],
                 ),
-              ),
-              if (provider.isActivating) ...[
-                const SizedBox(
+                if (provider.activeError != null)
+                  Text(
+                    l10n.sourcesActivationFailed(provider.activeError!),
+                    style: m3e.typeScale.bodySmall.copyWith(
+                      color: scheme.error,
+                    ),
+                  ),
+                if (active != null && active.author.isNotEmpty)
+                  Text(
+                    l10n.sourcesAuthor(active.author),
+                    style: m3e.typeScale.bodySmall.copyWith(
+                      color: scheme.onSurfaceVariant,
+                    ),
+                  ),
+                if (sources.isNotEmpty) ...[
+                  const SizedBox(height: kSettingsSmallSpacing),
+                  Wrap(
+                    spacing: kSettingsSmallSpacing,
+                    runSpacing: kSettingsSmallSpacing,
+                    children: [
+                      for (final decl in sources)
+                        M3EChip(
+                          type: M3EChipType.assist,
+                          label: '${decl.name} · ${decl.actions.join('/')}',
+                        ),
+                    ],
+                  ),
+                ],
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+
+    return SettingsSectionCard(
+      title: l10n.sourcesStatusSection,
+      children: [
+        statusRow,
+        if (alert != null)
+          CardListSurface(
+            position: SettingsRowPosition.of(context),
+            padding: kSettingsRowPadding,
+            // 「有可用更新」是提醒语义：统一 warning 容器色。
+            color: semantic.warningContainer,
+            onPressed: null,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Row(
+                  children: [
+                    Icon(
+                      Icons.warning_amber_rounded,
+                      size: 20,
+                      color: semantic.onWarningContainer,
+                    ),
+                    const SizedBox(width: kSettingsSmallSpacing),
+                    Expanded(
+                      child: Text(
+                        l10n.sourcesUpdateAlertTitle,
+                        style: m3e.typeScale.titleSmall.copyWith(
+                          color: semantic.onWarningContainer,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  alert.log,
+                  style: m3e.typeScale.bodySmall.copyWith(
+                    color: semantic.onWarningContainer,
+                  ),
+                ),
+                const SizedBox(height: kSettingsSmallSpacing),
+                Wrap(
+                  spacing: kSettingsSmallSpacing,
+                  runSpacing: 4,
+                  crossAxisAlignment: WrapCrossAlignment.center,
+                  children: [
+                    if (active != null && active.hasUpdateUrl)
+                      M3EButton.filled(
+                        onPressed: _updatingScriptId != null
+                            ? null
+                            : () => _updateScript(
+                                  context,
+                                  provider,
+                                  active,
+                                  fromAlert: true,
+                                ),
+                        child: _updatingScriptId == active.id
+                            ? _updatingLabel(l10n)
+                            : Text(l10n.sourcesUpdateNow),
+                      ),
+                    if (alert.updateUrl != null)
+                      M3EButton.text(
+                        onPressed: () =>
+                            launchUrl(Uri.parse(alert.updateUrl!)),
+                        child: Text(l10n.sourcesOpenUpdateUrl),
+                      ),
+                    M3EButton.text(
+                      onPressed: provider.clearUpdateAlert,
+                      child: Text(l10n.sourcesUpdateDismiss),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+      ],
+    );
+  }
+
+  /// 导入脚本：三条导航行（文件 / 粘贴 / 链接），链接导入进行中给行尾进度。
+  Widget _buildImportSection(
+    BuildContext context,
+    AppLocalizations l10n,
+    SourcesProvider provider,
+  ) {
+    return SettingsSectionCard(
+      title: l10n.sourcesImportSection,
+      children: [
+        SettingsNavTile(
+          key: const Key('sourcesImportFileItem'),
+          icon: Icons.file_open_rounded,
+          title: l10n.sourcesImportFromFile,
+          subtitle: l10n.sourcesImportFromFileSubtitle,
+          onTap: () => _importFromFile(context, provider),
+        ),
+        SettingsNavTile(
+          key: const Key('sourcesImportTextItem'),
+          icon: Icons.edit_note_rounded,
+          title: l10n.sourcesImportFromText,
+          subtitle: l10n.sourcesImportFromTextSubtitle,
+          onTap: () => _importFromText(context, provider),
+        ),
+        SettingsNavTile(
+          key: const Key('sourcesImportUrlItem'),
+          icon: Icons.link_rounded,
+          title: l10n.sourcesImportFromUrl,
+          subtitle: l10n.sourcesImportFromUrlSubtitle,
+          // 下载中禁用整行并显示进度（点按不再重复发起）。
+          onTap: _importingFromUrl
+              ? null
+              : () => _importFromUrl(context, provider),
+          trailing: _importingFromUrl
+              ? const SizedBox(
                   width: 18,
                   height: 18,
                   child: M3EProgressIndicator.circular(
                     size: 18,
                     strokeWidth: 2,
                   ),
-                ),
-                const SizedBox(width: 8),
-                Text(
-                  l10n.sourcesActivating,
-                  style: theme.textTheme.bodySmall,
-                ),
-              ],
-            ],
-          ),
-          if (provider.activeError != null) ...[
-            const SizedBox(height: 8),
-            Text(
-              l10n.sourcesActivationFailed(provider.activeError!),
-              style: TextStyle(color: theme.colorScheme.error),
-            ),
-          ],
-          if (active != null && active.author.isNotEmpty) ...[
-            const SizedBox(height: 4),
-            Text(
-              l10n.sourcesAuthor(active.author),
-              style: theme.textTheme.bodySmall,
-            ),
-          ],
-          if (sources.isNotEmpty) ...[
-            const SizedBox(height: 12),
-            Wrap(
-              spacing: 8,
-              runSpacing: 8,
-              children: sources
-                  .map((decl) => M3EChip(
-                        type: M3EChipType.assist,
-                        label: '${decl.name} · ${decl.actions.join('/')}',
-                        onPressed: () {},
-                      ))
-                  .toList(),
-            ),
-          ],
-          if (provider.lastUpdateAlert != null) ...[
-            const SizedBox(height: 12),
-            Material(
-              // 「有可用更新」是提醒语义：统一 warning 容器色。
-              color: semantic.warningContainer,
-              borderRadius: BorderRadius.circular(8),
-              child: Padding(
-                padding: const EdgeInsets.all(12),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      l10n.sourcesUpdateAlertTitle,
-                      style: TextStyle(
-                        color: semantic.onWarningContainer,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                    const SizedBox(height: 4),
-                    Text(
-                      provider.lastUpdateAlert!.log,
-                      style: TextStyle(color: semantic.onWarningContainer),
-                    ),
-                    const SizedBox(height: 4),
-                    Wrap(
-                      spacing: 8,
-                      runSpacing: 4,
-                      crossAxisAlignment: WrapCrossAlignment.center,
-                      children: [
-                        if (active != null && active.hasUpdateUrl)
-                          M3EButton.filled(
-                            onPressed: _updatingScriptId != null
-                                ? null
-                                : () => _updateScript(
-                                      context,
-                                      provider,
-                                      active,
-                                      fromAlert: true,
-                                    ),
-                            child: _updatingScriptId == active.id
-                                ? _updatingLabel(l10n)
-                                : Text(l10n.sourcesUpdateNow),
-                          ),
-                        if (provider.lastUpdateAlert!.updateUrl != null)
-                          M3EButton.text(
-                            onPressed: () => launchUrl(
-                                Uri.parse(provider.lastUpdateAlert!.updateUrl!)),
-                            child: Text(l10n.sourcesOpenUpdateUrl),
-                          ),
-                        M3EButton.text(
-                          onPressed: provider.clearUpdateAlert,
-                          child: Text(l10n.sourcesUpdateDismiss),
-                        ),
-                      ],
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          ],
-        ],
-      ),
+                )
+              : null,
+        ),
+      ],
     );
   }
 
-  Widget _buildImportCard(BuildContext context, SourcesProvider provider) {
-    final l10n = _l10n(context);
-    return M3ECard(
-      variant: M3ECardVariant.elevated,
-      padding: EdgeInsets.zero,
-      child: Column(
-        children: [
-          M3EListItem(
-            leading: const Icon(Icons.file_open_rounded),
-            headline: l10n.sourcesImportFromFile,
-            supportingText: l10n.sourcesImportFromFileSubtitle,
-            onTap: () => _importFromFile(context, provider),
-          ),
-          const M3EDivider(),
-          M3EListItem(
-            leading: const Icon(Icons.edit_note_rounded),
-            headline: l10n.sourcesImportFromText,
-            supportingText: l10n.sourcesImportFromTextSubtitle,
-            onTap: () => _importFromText(context, provider),
-          ),
-          const M3EDivider(),
-          M3EListItem(
-            leading: const Icon(Icons.link_rounded),
-            headline: l10n.sourcesImportFromUrl,
-            supportingText: l10n.sourcesImportFromUrlSubtitle,
-            enabled: !_importingFromUrl,
-            onTap: _importingFromUrl
-                ? null
-                : () => _importFromUrl(context, provider),
-            trailing: _importingFromUrl
-                ? const SizedBox(
-                    width: 18,
-                    height: 18,
-                    child: M3EProgressIndicator.circular(
-                      size: 18,
-                      strokeWidth: 2,
-                    ),
-                  )
-                : null,
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildSortCard(BuildContext context, SourcesProvider provider) {
-    final l10n = _l10n(context);
-    final theme = Theme.of(context);
+  /// 渠道排序：拖拽手柄排序 + 启停开关；有自定义顺序时给「重置」动作行。
+  Widget _buildSortSection(
+    BuildContext context,
+    AppLocalizations l10n,
+    SourcesProvider provider,
+  ) {
     // 渠道 = 可搜索源 + 内置发现平台的并集（含停用项，便于再次启用）。
     final channels = provider.channels;
-    return M3ECard(
-      variant: M3ECardVariant.elevated,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Expanded(
-                child: Text(l10n.sourcesSortTitle,
-                    style: theme.textTheme.titleMedium),
-              ),
-              if (provider.sourceOrder.isNotEmpty)
-                M3EButton.text(
-                  onPressed: provider.resetChannelOrder,
-                  child: Text(l10n.sourcesSortReset),
-                ),
-            ],
+    return SettingsSectionCard(
+      title: l10n.sourcesSortTitle,
+      // 空态解释（无渠道）与排序规则提示共用卡片下方说明位。
+      footer: channels.isEmpty
+          ? SettingsSectionHint(text: l10n.sourcesNoSearchableSources)
+          : SettingsSectionHint(text: l10n.sourcesSortHint),
+      children: [
+        if (channels.isNotEmpty)
+          SettingsReorderableRows(
+            itemCount: channels.length,
+            itemKey: (index) => ValueKey(channels[index].key),
+            itemBuilder: (context, index) =>
+                _channelRow(context, l10n, provider, channels[index], index),
+            onReorder: provider.reorderChannel,
           ),
-          const SizedBox(height: 4),
-          Text(
-            l10n.sourcesSortHint,
-            style: theme.textTheme.bodySmall,
+        // 重置动作只在有自定义顺序时出现（默认顺序下重置无意义）。
+        if (provider.sourceOrder.isNotEmpty)
+          SettingsNavTile(
+            key: const Key('sourcesSortResetItem'),
+            icon: Icons.restart_alt_rounded,
+            title: l10n.sourcesSortReset,
+            subtitle: l10n.sourcesSortResetSubtitle,
+            onTap: provider.resetChannelOrder,
           ),
-          const SizedBox(height: 8),
-          if (channels.isEmpty)
-            Text(l10n.sourcesNoSearchableSources)
-          else
-            ...List.generate(channels.length, (index) {
-              final entry = channels[index];
-              final kindLabel = entry.kind == SourceKind.lx
-                  ? l10n.sourcesKindLx
-                  : l10n.sourcesKindBuiltin;
-              final supporting = StringBuffer(
-                '${index + 1}. ${entry.key} · $kindLabel',
-              );
-              if (!entry.enabled) {
-                supporting.write(' · ${l10n.sourcesChannelDisabled}');
-              }
-              return M3EListItem(
-                leading: M3ESwitch(
-                  value: entry.enabled,
-                  semanticLabel: entry.name,
-                  onChanged: (value) =>
-                      provider.setChannelEnabled(entry.key, value),
-                ),
-                headline: entry.name,
-                supportingText: supporting.toString(),
-                trailing: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    M3EIconButton(
-                      variant: M3EIconButtonVariant.standard,
-                      tooltip: l10n.sourcesMoveUp,
-                      icon: const Icon(Icons.arrow_upward_rounded, size: 20),
-                      onPressed: index > 0
-                          ? () => provider.moveChannel(entry.key, -1)
-                          : null,
-                    ),
-                    M3EIconButton(
-                      variant: M3EIconButtonVariant.standard,
-                      tooltip: l10n.sourcesMoveDown,
-                      icon: const Icon(Icons.arrow_downward_rounded, size: 20),
-                      onPressed: index < channels.length - 1
-                          ? () => provider.moveChannel(entry.key, 1)
-                          : null,
-                    ),
-                  ],
-                ),
-              );
-            }),
-        ],
+      ],
+    );
+  }
+
+  /// 单个渠道行：开关（启停）+ 行尾拖拽手柄（排序），行序即发现页/搜索顺序。
+  Widget _channelRow(
+    BuildContext context,
+    AppLocalizations l10n,
+    SourcesProvider provider,
+    SourceEntry entry,
+    int index,
+  ) {
+    final kindLabel =
+        entry.kind == SourceKind.lx ? l10n.sourcesKindLx : l10n.sourcesKindBuiltin;
+    final supporting = StringBuffer('${index + 1}. ${entry.key} · $kindLabel');
+    if (!entry.enabled) {
+      supporting.write(' · ${l10n.sourcesChannelDisabled}');
+    }
+    return SettingsSwitchTile(
+      switchKey: ValueKey('sourcesChannelSwitch_${entry.key}'),
+      icon: entry.kind == SourceKind.lx
+          ? Icons.code_rounded
+          : Icons.radio_rounded,
+      title: entry.name,
+      subtitle: supporting.toString(),
+      value: entry.enabled,
+      onChanged: (value) => provider.setChannelEnabled(entry.key, value),
+      trailing: ReorderableDragStartListener(
+        index: index,
+        child: Icon(
+          Icons.drag_handle_rounded,
+          color: M3ETheme.of(context).colorScheme.onSurfaceVariant,
+        ),
       ),
     );
   }
 
-  Widget _buildScriptsCard(BuildContext context, SourcesProvider provider) {
-    final l10n = _l10n(context);
-    final theme = Theme.of(context);
+  /// 已导入脚本：开关启停 + 行尾菜单（更新 / 删除）；空态在卡片下方给引导。
+  Widget _buildScriptsSection(
+    BuildContext context,
+    AppLocalizations l10n,
+    SourcesProvider provider,
+  ) {
     final scripts = provider.scripts;
-    return M3ECard(
-      variant: M3ECardVariant.elevated,
-      padding: EdgeInsets.zero,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Padding(
-            padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
-            child: Text(l10n.sourcesImportedScripts(scripts.length),
-                style: theme.textTheme.titleMedium),
+    return SettingsSectionCard(
+      title: l10n.sourcesImportedScripts(scripts.length),
+      footer: scripts.isEmpty
+          ? SettingsSectionHint(text: l10n.sourcesNoScripts)
+          : null,
+      children: [
+        for (final script in scripts)
+          _scriptRow(context, l10n, provider, script),
+      ],
+    );
+  }
+
+  Widget _scriptRow(
+    BuildContext context,
+    AppLocalizations l10n,
+    SourcesProvider provider,
+    SourceScriptInfo script,
+  ) {
+    final isActive = provider.activeScriptId == script.id;
+    return SettingsSwitchTile(
+      switchKey: ValueKey('sourcesScriptSwitch_${script.id}'),
+      icon: Icons.code_rounded,
+      title: script.name,
+      subtitle: [
+        if (script.version.isNotEmpty) script.version,
+        if (script.author.isNotEmpty) l10n.sourcesScriptByAuthor(script.author),
+        if (script.description.isNotEmpty) script.description,
+      ].join(' · '),
+      value: isActive,
+      // 激活进行中禁用整行：避免并发切换脚本与引擎重启打架。
+      enabled: !provider.isActivating,
+      onChanged: (value) {
+        if (value) {
+          unawaited(_activate(context, provider, script));
+        } else {
+          unawaited(provider.deactivate());
+        }
+      },
+      trailing: M3EMenu.entries(
+        position: M3EMenuAnchorPosition.bottomEnd,
+        anchorBuilder: (context, open) => M3EIconButton(
+          variant: M3EIconButtonVariant.standard,
+          icon: const Icon(Icons.more_vert_rounded),
+          onPressed: open,
+        ),
+        onSelected: (value) {
+          if (value == 'delete') {
+            _confirmDelete(context, provider, script);
+          } else if (value == 'update') {
+            _updateScript(context, provider, script);
+          }
+        },
+        entries: [
+          if (script.hasUpdateUrl)
+            M3EMenuEntry(
+              label: l10n.sourcesUpdateNow,
+              value: 'update',
+              enabled: _updatingScriptId == null,
+            ),
+          M3EMenuEntry(
+            label: l10n.delete,
+            value: 'delete',
+            isDestructive: true,
           ),
-          if (scripts.isEmpty)
-            Padding(
-              padding: const EdgeInsets.all(16),
-              child: Text(l10n.sourcesNoScripts),
-            )
-          else
-            ...scripts.map((script) {
-              final isActive = provider.activeScriptId == script.id;
-              return M3EListItem(
-                leading: Icon(
-                  isActive
-                      ? Icons.radio_button_checked_rounded
-                      : Icons.radio_button_off_rounded,
-                  color: isActive ? theme.colorScheme.primary : null,
-                ),
-                headline: script.name,
-                supportingText: [
-                  if (script.version.isNotEmpty) script.version,
-                  if (script.author.isNotEmpty)
-                    l10n.sourcesScriptByAuthor(script.author),
-                  if (script.description.isNotEmpty) script.description,
-                ].join(' · '),
-                onTap: isActive
-                    ? null
-                    : () => _activate(context, provider, script),
-                trailing: M3EMenu.entries(
-                  position: M3EMenuAnchorPosition.bottomEnd,
-                  anchorBuilder: (context, open) => M3EIconButton(
-                    variant: M3EIconButtonVariant.standard,
-                    icon: Icon(Icons.more_vert_rounded),
-                    onPressed: open,
-                  ),
-                  onSelected: (value) {
-                    if (value == 'delete') {
-                      _confirmDelete(context, provider, script);
-                    } else if (value == 'activate') {
-                      _activate(context, provider, script);
-                    } else if (value == 'deactivate') {
-                      provider.deactivate();
-                    } else if (value == 'update') {
-                      _updateScript(context, provider, script);
-                    }
-                  },
-                  entries: [
-                    if (!isActive)
-                      M3EMenuEntry(
-                        label: l10n.sourcesEnable,
-                        value: 'activate',
-                      ),
-                    if (isActive)
-                      M3EMenuEntry(
-                        label: l10n.sourcesDisable,
-                        value: 'deactivate',
-                      ),
-                    if (script.hasUpdateUrl)
-                      M3EMenuEntry(
-                        label: l10n.sourcesUpdateNow,
-                        value: 'update',
-                        enabled: _updatingScriptId == null,
-                      ),
-                    M3EMenuEntry(
-                      label: l10n.delete,
-                      value: 'delete',
-                    ),
-                  ],
-                ),
-              );
-            }),
-          const SizedBox(height: 8),
         ],
       ),
     );
@@ -468,7 +498,7 @@ class _SourcesPageState extends State<SourcesPage> {
 
   /// 一键在线更新：检查 → 应用 → SnackBar 反馈（按钮 loading 由调用方渲染）。
   ///
-  /// [fromAlert] 为 true 时成功后清除更新提示卡（提示已处理完毕）。
+  /// [fromAlert] 为 true 时成功后清除更新提示行（提示已处理完毕）。
   Future<void> _updateScript(
     BuildContext context,
     SourcesProvider provider,
@@ -714,4 +744,3 @@ String _readableError(Object error) {
   const prefix = 'Exception: ';
   return text.startsWith(prefix) ? text.substring(prefix.length) : text;
 }
-

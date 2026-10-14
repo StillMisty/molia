@@ -12,6 +12,19 @@ void main() {
     SharedPreferences.setMockInitialValues({});
   });
 
+  /// 高视口挂载：页面为设置行分组（含说明/字段/开关/按钮），600dp 默认高度
+  /// 会把按钮挤出视口，点击无法命中。
+  Future<void> pumpPage(WidgetTester tester, AnyListenPage page) async {
+    tester.view.physicalSize = const Size(1200, 2400);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(() {
+      tester.view.resetPhysicalSize();
+      tester.view.resetDevicePixelRatio();
+    });
+    await tester.pumpWidget(MaterialApp(home: page));
+    await tester.pumpAndSettle();
+  }
+
   /// 页面测试统一走 SourcesProvider（独立例：fresh manager；manager 例：
   /// 复用同一 manager 断言状态）。
   SourcesProvider mountProvider(SourceManager manager) {
@@ -23,10 +36,7 @@ void main() {
 
   testWidgets('独立打开：渲染表单且不提示错误', (tester) async {
     final provider = mountProvider(SourceManager());
-    await tester.pumpWidget(
-      MaterialApp(home: AnyListenPage(provider: provider)),
-    );
-    await tester.pumpAndSettle();
+    await pumpPage(tester, AnyListenPage(provider: provider));
 
     expect(find.text('any-listen 接入'), findsOneWidget);
     expect(find.text('服务器地址'), findsOneWidget);
@@ -38,10 +48,7 @@ void main() {
 
   testWidgets('保存：校验地址、写入 any_listen_ 前缀的 prefs', (tester) async {
     final provider = mountProvider(SourceManager());
-    await tester.pumpWidget(
-      MaterialApp(home: AnyListenPage(provider: provider)),
-    );
-    await tester.pumpAndSettle();
+    await pumpPage(tester, AnyListenPage(provider: provider));
 
     // 启用但不填地址：保存时给出提示且不落盘
     await tester.tap(find.text('启用 any-listen 音源'));
@@ -62,10 +69,7 @@ void main() {
 
   testWidgets('连接测试：缺少地址时给出可读提示（不发请求）', (tester) async {
     final provider = mountProvider(SourceManager());
-    await tester.pumpWidget(
-      MaterialApp(home: AnyListenPage(provider: provider)),
-    );
-    await tester.pumpAndSettle();
+    await pumpPage(tester, AnyListenPage(provider: provider));
 
     await tester.tap(find.text('连接测试'));
     await tester.pump();
@@ -76,10 +80,7 @@ void main() {
     final manager = SourceManager();
     final provider = mountProvider(manager);
 
-    await tester.pumpWidget(
-      MaterialApp(home: AnyListenPage(provider: provider)),
-    );
-    await tester.pumpAndSettle();
+    await pumpPage(tester, AnyListenPage(provider: provider));
 
     await tester.enterText(
       find.byType(M3ETextField).first,

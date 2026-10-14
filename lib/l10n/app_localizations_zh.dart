@@ -494,7 +494,63 @@ class AppLocalizationsZh extends AppLocalizations {
   String get sourcesTitle => '音源管理';
 
   @override
+  String get sourcesStatusSection => '当前状态';
+
+  @override
+  String get sourcesImportSection => '导入脚本';
+
+  @override
   String get anyListenEntry => 'any-listen 接入';
+
+  @override
+  String get anyListenIntroBody =>
+      'any-listen 是自托管的私有音乐播放服务。填写服务器地址并启用后，服务器提供的在线音源会出现在搜索页的音源列表中。';
+
+  @override
+  String get anyListenIntroHint =>
+      '当前为骨架实现：握手探测（/api/ipc/hello、/api/ipc/id）已对照官方源码，搜索/取链/歌词/封面接口尚未与真实服务器验证，可能暂不可用。';
+
+  @override
+  String get anyListenServerSection => '服务器配置';
+
+  @override
+  String get anyListenServerUrl => '服务器地址';
+
+  @override
+  String get anyListenServerUrlHint => 'Docker / 桌面端部署的 any-listen 服务地址';
+
+  @override
+  String get anyListenServerUrlRequired => '请先填写服务器地址';
+
+  @override
+  String get anyListenServerUrlRequiredToEnable => '启用前请填写服务器地址';
+
+  @override
+  String get anyListenToken => '访问令牌（可选）';
+
+  @override
+  String get anyListenTokenPlaceholder => '连接测试通过后可粘贴服务器下发的令牌';
+
+  @override
+  String get anyListenTokenShow => '显示令牌';
+
+  @override
+  String get anyListenTokenHide => '隐藏令牌';
+
+  @override
+  String get anyListenEnable => '启用 any-listen 音源';
+
+  @override
+  String get anyListenEnableSubtitle => '关闭后不会出现在搜索页，也不发起任何请求';
+
+  @override
+  String get anyListenSave => '保存';
+
+  @override
+  String get anyListenTest => '连接测试';
+
+  @override
+  String get anyListenSaveFailed => '保存失败：无法写入本地存储';
 
   @override
   String get sourcesWebUnsupported => 'Web 端暂不支持 LX 音源脚本（需要本地 JS 引擎）。';
@@ -603,6 +659,9 @@ class AppLocalizationsZh extends AppLocalizations {
   String get sourcesSortReset => '重置';
 
   @override
+  String get sourcesSortResetSubtitle => '恢复「脚本音源在前、内置平台在后」的默认顺序';
+
+  @override
   String get sourcesSortHint =>
       '发现页的渠道顺序与下方一致，同时决定搜索音源顺序；新导入的渠道自动排在末尾，关闭开关后该渠道不再出现在发现页与搜索结果中。';
 
@@ -617,12 +676,6 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get sourcesKindBuiltin => '内置平台';
-
-  @override
-  String get sourcesMoveUp => '上移';
-
-  @override
-  String get sourcesMoveDown => '下移';
 
   @override
   String sourcesImportedScripts(int count) {

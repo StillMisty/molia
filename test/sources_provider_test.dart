@@ -93,7 +93,8 @@ void main() {
     expect(f.manager.scripts, isEmpty);
   });
 
-  test('channels / moveChannel / resetChannelOrder：含内置发现平台且可排序', () async {
+  test('channels / reorderChannel / resetChannelOrder：含内置发现平台且可排序',
+      () async {
     final f = await fixture(sources: {
       'a': const LxSourceDecl(
           key: 'a', name: 'A', actions: ['search'], qualitys: []),
@@ -113,7 +114,8 @@ void main() {
     );
     expect(f.provider.searchableSources.map((o) => o.key).toList(), ['a', 'b']);
 
-    await f.provider.moveChannel('b', -1);
+    // 拖拽语义：onReorderItem 的 newIndex 已校正，直接按下标搬移。
+    await f.provider.reorderChannel(1, 0);
     expect(f.provider.sourceOrder, ['b', 'a', 'wy', 'tx', 'kg', 'kw', 'mg']);
     expect(f.provider.searchableSources.map((o) => o.key).toList(), ['b', 'a']);
 

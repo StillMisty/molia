@@ -10,7 +10,7 @@ AppLocalizations _l10n(BuildContext context) =>
 /// 发现页统一渠道下拉框：搜索 / 热榜 / 歌单共用同一个渠道选择。
 ///
 /// 只接收纯数据（[channels] + [selectedKey]）；渠道的顺序与启停由
-/// 「音源管理」页维护（`SourcesProvider.moveChannel / setChannelEnabled`）。
+/// 「音源管理」页维护（`SourcesProvider.reorderChannel / setChannelEnabled`）。
 class LibraryChannelSelector extends StatelessWidget {
   const LibraryChannelSelector({
     super.key,

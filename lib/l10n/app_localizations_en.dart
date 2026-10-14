@@ -512,7 +512,67 @@ class AppLocalizationsEn extends AppLocalizations {
   String get sourcesTitle => 'Source Management';
 
   @override
+  String get sourcesStatusSection => 'Status';
+
+  @override
+  String get sourcesImportSection => 'Import script';
+
+  @override
   String get anyListenEntry => 'any-listen';
+
+  @override
+  String get anyListenIntroBody =>
+      'any-listen is a self-hosted private music service. Once the server address is set and the source is enabled, its online sources appear in search.';
+
+  @override
+  String get anyListenIntroHint =>
+      'Skeleton implementation: the handshake probes (/api/ipc/hello, /api/ipc/id) follow the official source; search / url / lyric / pic endpoints are not yet verified against a real server and may not work.';
+
+  @override
+  String get anyListenServerSection => 'Server';
+
+  @override
+  String get anyListenServerUrl => 'Server address';
+
+  @override
+  String get anyListenServerUrlHint =>
+      'Address of a Docker / desktop any-listen deployment';
+
+  @override
+  String get anyListenServerUrlRequired => 'Enter the server address first';
+
+  @override
+  String get anyListenServerUrlRequiredToEnable =>
+      'Enter the server address before enabling';
+
+  @override
+  String get anyListenToken => 'Access token (optional)';
+
+  @override
+  String get anyListenTokenPlaceholder =>
+      'Paste the token issued by the server after a successful test';
+
+  @override
+  String get anyListenTokenShow => 'Show token';
+
+  @override
+  String get anyListenTokenHide => 'Hide token';
+
+  @override
+  String get anyListenEnable => 'Enable any-listen source';
+
+  @override
+  String get anyListenEnableSubtitle =>
+      'When off, it does not appear in search and makes no requests';
+
+  @override
+  String get anyListenSave => 'Save';
+
+  @override
+  String get anyListenTest => 'Test connection';
+
+  @override
+  String get anyListenSaveFailed => 'Save failed: cannot write local storage';
 
   @override
   String get sourcesWebUnsupported =>
@@ -626,6 +686,10 @@ class AppLocalizationsEn extends AppLocalizations {
   String get sourcesSortReset => 'Reset';
 
   @override
+  String get sourcesSortResetSubtitle =>
+      'Restore the default order: script sources first, built-in platforms after';
+
+  @override
   String get sourcesSortHint =>
       'The channel order on the Discover page matches the list below and also controls the search source order. Newly imported channels are appended at the end; turning a channel off removes it from the Discover page and search results.';
 
@@ -641,12 +705,6 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get sourcesKindBuiltin => 'Built-in platform';
-
-  @override
-  String get sourcesMoveUp => 'Move up';
-
-  @override
-  String get sourcesMoveDown => 'Move down';
 
   @override
   String sourcesImportedScripts(int count) {

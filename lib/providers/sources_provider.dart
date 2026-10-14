@@ -153,8 +153,8 @@ class SourcesProvider extends ChangeNotifier {
   Future<void> deactivate() => _manager.deactivate();
 
   /// 将渠道在渠道列表中上移/下移（含内置发现平台与停用项）。
-  Future<void> moveChannel(String key, int delta) =>
-      _manager.moveChannel(key, delta);
+  Future<void> reorderChannel(int oldIndex, int newIndex) =>
+      _manager.reorderChannel(oldIndex, newIndex);
 
   /// 启用 / 停用渠道（停用后不出现在资料页与搜索结果中）。
   Future<void> setChannelEnabled(String key, bool enabled) =>

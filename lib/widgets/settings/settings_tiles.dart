@@ -63,15 +63,24 @@ class SettingsRowPosition extends InheritedWidget {
 ///
 /// 行表面由各 tile 经 [CardListSurface] 自绘（形状按分组内位置：内行 4dp、
 /// 首末外侧 16dp；hover 12dp、press 16dp，形状走 spatial 弹簧）。
+/// [footer] 是卡片下方的分组说明（如排序规则、空态引导），由调用方给文案。
 class SettingsSectionCard extends StatelessWidget {
-  const SettingsSectionCard({super.key, this.title, required this.children});
+  const SettingsSectionCard({
+    super.key,
+    this.title,
+    required this.children,
+    this.footer,
+  });
 
   final String? title;
   final List<Widget> children;
 
+  /// 卡片下方的说明文字（[SettingsSectionHint] 或任意组件）。
+  final Widget? footer;
+
   @override
   Widget build(BuildContext context) {
-    if (children.isEmpty) return const SizedBox.shrink();
+    if (children.isEmpty && footer == null) return const SizedBox.shrink();
     final theme = Theme.of(context);
     final m3e = M3ETheme.of(context);
     final gap = m3e.listTheme.cardList.gap;
@@ -97,7 +106,30 @@ class SettingsSectionCard extends StatelessWidget {
             child: children[i],
           ),
         ],
+        if (footer != null) ...[
+          const SizedBox(height: kSettingsSmallSpacing),
+          footer!,
+        ],
       ],
+    );
+  }
+}
+
+/// 分组说明文字：卡片下方的次要文本（排序规则 / 空态引导等）。
+class SettingsSectionHint extends StatelessWidget {
+  const SettingsSectionHint({super.key, required this.text});
+
+  final String text;
+
+  @override
+  Widget build(BuildContext context) {
+    final m3e = M3ETheme.of(context);
+    final theme = Theme.of(context);
+    return Text(
+      text,
+      style: m3e.typeScale.bodySmall.copyWith(
+        color: theme.colorScheme.onSurfaceVariant,
+      ),
     );
   }
 }
@@ -734,15 +766,22 @@ class SettingsTileLead extends StatelessWidget {
 }
 
 /// 设置行统一图标底：40dp 圆角块（危险操作走 error 容器成对色）。
+///
+/// [containerColor] / [foregroundColor] 供页面自绘行覆盖成对色（如音源状态行
+/// 的成功/错误容器）；缺省走 secondaryContainer 或 errorContainer。
 class SettingsTileIcon extends StatelessWidget {
   const SettingsTileIcon({
     super.key,
     required this.icon,
-    required this.isDestructive,
+    this.isDestructive = false,
+    this.containerColor,
+    this.foregroundColor,
   });
 
   final IconData icon;
   final bool isDestructive;
+  final Color? containerColor;
+  final Color? foregroundColor;
 
   @override
   Widget build(BuildContext context) {
@@ -754,14 +793,16 @@ class SettingsTileIcon extends StatelessWidget {
       height: 40,
       alignment: Alignment.center,
       decoration: BoxDecoration(
-        color: isDestructive ? scheme.errorContainer : scheme.secondaryContainer,
+        color: containerColor ??
+            (isDestructive ? scheme.errorContainer : scheme.secondaryContainer),
         borderRadius: BorderRadius.circular(12),
       ),
       child: Icon(
         icon,
-        color: isDestructive
-            ? scheme.onErrorContainer
-            : scheme.onSecondaryContainer,
+        color: foregroundColor ??
+            (isDestructive
+                ? scheme.onErrorContainer
+                : scheme.onSecondaryContainer),
       ),
     );
   }

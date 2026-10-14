@@ -1046,11 +1046,119 @@ abstract class AppLocalizations {
   /// **'Source Management'**
   String get sourcesTitle;
 
+  /// No description provided for @sourcesStatusSection.
+  ///
+  /// In en, this message translates to:
+  /// **'Status'**
+  String get sourcesStatusSection;
+
+  /// No description provided for @sourcesImportSection.
+  ///
+  /// In en, this message translates to:
+  /// **'Import script'**
+  String get sourcesImportSection;
+
   /// No description provided for @anyListenEntry.
   ///
   /// In en, this message translates to:
   /// **'any-listen'**
   String get anyListenEntry;
+
+  /// No description provided for @anyListenIntroBody.
+  ///
+  /// In en, this message translates to:
+  /// **'any-listen is a self-hosted private music service. Once the server address is set and the source is enabled, its online sources appear in search.'**
+  String get anyListenIntroBody;
+
+  /// No description provided for @anyListenIntroHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Skeleton implementation: the handshake probes (/api/ipc/hello, /api/ipc/id) follow the official source; search / url / lyric / pic endpoints are not yet verified against a real server and may not work.'**
+  String get anyListenIntroHint;
+
+  /// No description provided for @anyListenServerSection.
+  ///
+  /// In en, this message translates to:
+  /// **'Server'**
+  String get anyListenServerSection;
+
+  /// No description provided for @anyListenServerUrl.
+  ///
+  /// In en, this message translates to:
+  /// **'Server address'**
+  String get anyListenServerUrl;
+
+  /// No description provided for @anyListenServerUrlHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Address of a Docker / desktop any-listen deployment'**
+  String get anyListenServerUrlHint;
+
+  /// No description provided for @anyListenServerUrlRequired.
+  ///
+  /// In en, this message translates to:
+  /// **'Enter the server address first'**
+  String get anyListenServerUrlRequired;
+
+  /// No description provided for @anyListenServerUrlRequiredToEnable.
+  ///
+  /// In en, this message translates to:
+  /// **'Enter the server address before enabling'**
+  String get anyListenServerUrlRequiredToEnable;
+
+  /// No description provided for @anyListenToken.
+  ///
+  /// In en, this message translates to:
+  /// **'Access token (optional)'**
+  String get anyListenToken;
+
+  /// No description provided for @anyListenTokenPlaceholder.
+  ///
+  /// In en, this message translates to:
+  /// **'Paste the token issued by the server after a successful test'**
+  String get anyListenTokenPlaceholder;
+
+  /// No description provided for @anyListenTokenShow.
+  ///
+  /// In en, this message translates to:
+  /// **'Show token'**
+  String get anyListenTokenShow;
+
+  /// No description provided for @anyListenTokenHide.
+  ///
+  /// In en, this message translates to:
+  /// **'Hide token'**
+  String get anyListenTokenHide;
+
+  /// No description provided for @anyListenEnable.
+  ///
+  /// In en, this message translates to:
+  /// **'Enable any-listen source'**
+  String get anyListenEnable;
+
+  /// No description provided for @anyListenEnableSubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'When off, it does not appear in search and makes no requests'**
+  String get anyListenEnableSubtitle;
+
+  /// No description provided for @anyListenSave.
+  ///
+  /// In en, this message translates to:
+  /// **'Save'**
+  String get anyListenSave;
+
+  /// No description provided for @anyListenTest.
+  ///
+  /// In en, this message translates to:
+  /// **'Test connection'**
+  String get anyListenTest;
+
+  /// No description provided for @anyListenSaveFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Save failed: cannot write local storage'**
+  String get anyListenSaveFailed;
 
   /// No description provided for @sourcesWebUnsupported.
   ///
@@ -1244,6 +1352,12 @@ abstract class AppLocalizations {
   /// **'Reset'**
   String get sourcesSortReset;
 
+  /// No description provided for @sourcesSortResetSubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Restore the default order: script sources first, built-in platforms after'**
+  String get sourcesSortResetSubtitle;
+
   /// No description provided for @sourcesSortHint.
   ///
   /// In en, this message translates to:
@@ -1273,18 +1387,6 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Built-in platform'**
   String get sourcesKindBuiltin;
-
-  /// No description provided for @sourcesMoveUp.
-  ///
-  /// In en, this message translates to:
-  /// **'Move up'**
-  String get sourcesMoveUp;
-
-  /// No description provided for @sourcesMoveDown.
-  ///
-  /// In en, this message translates to:
-  /// **'Move down'**
-  String get sourcesMoveDown;
 
   /// No description provided for @sourcesImportedScripts.
   ///
