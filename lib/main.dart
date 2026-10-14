@@ -345,6 +345,9 @@ void main() async {
   // any-listen → 内置平台原生实现（wy/tx/kg/kw/mg，精确平台 ID）。
   final lyricsProvider = LyricsProvider(
     service: LyricsService(
+      // 本地下载曲目：离线歌词缺失时不回退网络（离线播放全程不触网）。
+      networkFallbackAllowed: (track) =>
+          track.id.sourceKey != kLocalSourceKey,
       trackLyricLoader: (track) async {
         // 本地下载曲目：读 downloads/lyrics/ 的离线歌词（不触网）；
         // 无离线歌词返回 null，交给既有歌词源（在线时仍可补全）。

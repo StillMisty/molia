@@ -28,12 +28,19 @@ class LyricsService {
   final LyricsCache _lyricsCache;
   final TrackLyricLoader? _trackLyricLoader;
 
+  /// 是否允许网络歌词回退（缺省允许）。
+  ///
+  /// 组合根对本地下载曲目返回 false：离线歌词缺失时不发起跨平台网络搜索
+  /// （「离线播放全程不联网」）；在线曲目行为不变。
+  final bool Function(Track track)? _networkFallbackAllowed;
+
   LyricsService({
     List<LyricProvider>? providers,
     SharedPreferences? prefs,
     CacheService? cacheService,
     LyricsCache? lyricsCache,
     TrackLyricLoader? trackLyricLoader,
+    bool Function(Track track)? networkFallbackAllowed,
   })  : _providers = providers ??
             [
               NetEaseProvider(),
@@ -44,6 +51,7 @@ class LyricsService {
               LRCLibProvider(),
             ],
         _trackLyricLoader = trackLyricLoader,
+        _networkFallbackAllowed = networkFallbackAllowed,
         _lyricsCache = lyricsCache ?? LyricsCache(prefs: prefs),
         _cacheService = cacheService ?? CacheService.instance;
 
@@ -90,6 +98,12 @@ class LyricsService {
         } catch (e) {
           _logger.warning('原生取词失败: $e');
         }
+      }
+
+      // 本地下载曲目：离线歌词缺失时不回退网络（离线播放全程不触网）。
+      if (track != null && !(_networkFallbackAllowed?.call(track) ?? true)) {
+        _logger.info('跳过网络歌词回退（离线曲目）: $trackId');
+        return null;
       }
 
       _logger.info('从网络获取歌词: $songName - $artistName');

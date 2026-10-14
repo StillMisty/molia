@@ -155,8 +155,11 @@ class DownloadService extends ChangeNotifier {
   Future<void> init() async {
     try {
       _supported = await _storage.downloadsRoot() != null;
-      final records = await _repository.listAll();
-      _records = {for (final record in records) record.key: record};
+      // Web（存储不可用）不触碰数据库：本机下载整体关闭。
+      if (_supported) {
+        final records = await _repository.listAll();
+        _records = {for (final record in records) record.key: record};
+      }
     } catch (e) {
       _logger.warning('下载初始化失败: $e');
     }
