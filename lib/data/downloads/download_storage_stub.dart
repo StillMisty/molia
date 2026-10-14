@@ -11,6 +11,9 @@ class MemoryDownloadStorage implements DownloadStorage {
   Future<String?> downloadsRoot() async => null;
 
   @override
+  Future<String?> legacyDownloadsRoot() async => null;
+
+  @override
   Future<bool> fileExists(String path) async => false;
 
   @override

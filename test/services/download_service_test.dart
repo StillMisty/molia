@@ -635,6 +635,50 @@ void main() {
     expect(service.activeTasks, isEmpty);
   });
 
+  test('迁移旧位置：文件搬到新根并更新记录，旧文件删除', () async {
+    final dio = mockDio((options) {
+      if (options.uri.path.endsWith('cover.jpg')) {
+        return bytesResponse([9, 9, 9]);
+      }
+      return bytesResponse([1, 2], headers: {'content-length': ['2']});
+    });
+    final service = makeService(
+      dio: dio,
+      lyrics: (track) async => const DownloadLyrics(lyric: '[00:01]词'),
+      artwork: (track) async => 'https://img.example.com/cover.jpg',
+    );
+    // 旧版布局：应用支持目录。
+    storage.root = '/legacy/downloads';
+    await service.init();
+    await service.download(makeTrack());
+    expect(
+      service.recordFor('kw', '1')!.filePath,
+      '/legacy/downloads/歌手 - 测试歌曲.mp3',
+    );
+
+    // 公共目录改造后：新根 + 旧根并存。
+    storage.root = '/new/downloads';
+    storage.legacyRoot = '/legacy/downloads';
+    final (moved, failed) = await service.migrateLegacyDownloads();
+    expect(moved, 1);
+    expect(failed, 0);
+
+    final migrated = service.recordFor('kw', '1')!;
+    expect(migrated.filePath, '/new/downloads/歌手 - 测试歌曲.mp3');
+    expect(migrated.lyricPath, '/new/downloads/lyrics/歌手 - 测试歌曲.lrc');
+    expect(migrated.coverPath, '/new/downloads/covers/歌手 - 测试歌曲.jpg');
+    expect(
+      storage.files.containsKey('/new/downloads/歌手 - 测试歌曲.mp3'),
+      isTrue,
+    );
+    expect(
+      storage.files.containsKey('/legacy/downloads/歌手 - 测试歌曲.mp3'),
+      isFalse,
+      reason: '旧文件应删除',
+    );
+    expect(storage.files.containsKey('/legacy/downloads/lyrics/歌手 - 测试歌曲.lrc'), isFalse);
+  });
+
 }
 
 /// 假缓存存储：音频目录可控（音频缓存命中测试用）。

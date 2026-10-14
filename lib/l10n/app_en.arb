@@ -1434,6 +1434,22 @@
     }
   },
   "downloadsOpenLibrary": "Downloaded tracks",
+  "downloadsBatchPlaylist": "Download a playlist",
+  "downloadsBatchPlaylistSubtitle": "Pick a playlist and download it in batch (skips downloaded and local tracks)",
+  "downloadsPickPlaylist": "Choose a playlist",
+  "downloadsMigrateLegacy": "Move downloads to the new location",
+  "downloadsMigrateLegacySubtitle": "Move files from the legacy app folder into the current download folder",
+  "downloadsMigrateLegacyDone": "Moved {moved}, failed {failed}",
+  "@downloadsMigrateLegacyDone": {
+    "placeholders": {
+      "moved": {
+        "type": "int"
+      },
+      "failed": {
+        "type": "int"
+      }
+    }
+  },
   "downloadsNoResume": "No resume support: platform links are usually one-time signed URLs; re-downloading is more reliable",
   "downloadsEmpty": "No downloaded tracks yet",
   "downloadsSummary": "{count} tracks · {size}",

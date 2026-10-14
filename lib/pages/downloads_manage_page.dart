@@ -10,8 +10,10 @@ import 'package:material_3_expressive/material_3_expressive.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:provider/provider.dart';
 
+import '../domain/models/library.dart';
 import '../domain/models/track.dart';
 import '../l10n/app_localizations.dart';
+import '../providers/library_provider.dart';
 import '../providers/playback_provider.dart';
 import '../services/download/download_service.dart';
 import '../services/notification_service.dart';
@@ -90,6 +92,13 @@ class _DownloadsManagePageState extends State<DownloadsManagePage> {
                     ? null
                     : () => unawaited(_batchDownload(downloads, queue)),
               ),
+              SettingsNavTile(
+                key: const Key('downloadsBatchPlaylistItem'),
+                icon: Icons.queue_music_rounded,
+                title: l10n.downloadsBatchPlaylist,
+                subtitle: l10n.downloadsBatchPlaylistSubtitle,
+                onTap: _busy ? null : () => unawaited(_pickPlaylist()),
+              ),
               SettingsInfoTile(
                 icon: Icons.info_rounded,
                 title: l10n.downloadsNoResume,
@@ -120,6 +129,15 @@ class _DownloadsManagePageState extends State<DownloadsManagePage> {
                 onTap: _busy || downloads == null
                     ? null
                     : () => unawaited(_cleanupOrphans(downloads)),
+              ),
+              SettingsNavTile(
+                key: const Key('downloadsMigrateLegacyItem'),
+                icon: Icons.drive_file_move_rounded,
+                title: l10n.downloadsMigrateLegacy,
+                subtitle: l10n.downloadsMigrateLegacySubtitle,
+                onTap: _busy || downloads == null
+                    ? null
+                    : () => unawaited(_migrateLegacy(downloads)),
               ),
               FutureBuilder<String?>(
                 future: downloads?.rootPath(),
@@ -162,6 +180,70 @@ class _DownloadsManagePageState extends State<DownloadsManagePage> {
       final (done, failed) = await downloads.downloadBatch(queue);
       if (!mounted) return;
       _showMessage(l10n.downloadsBatchDone(done, failed));
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  /// 选择歌单 → 批量下载（跳过已下载与本地曲目）。
+  Future<void> _pickPlaylist() async {
+    final l10n = AppLocalizations.of(context)!;
+    final library = context.read<LibraryProvider?>();
+    final downloads = context.read<DownloadService?>();
+    if (library == null || downloads == null) return;
+    final playlists = library.playlists;
+    if (playlists.isEmpty) {
+      _showMessage(l10n.downloadsEmpty);
+      return;
+    }
+    final picked = await M3EDialog.show<PlaylistInfo>(
+      context,
+      dialog: M3EDialog(
+        title: l10n.downloadsPickPlaylist,
+        content: SizedBox(
+          width: settingsDialogWidth(context),
+          child: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                for (final playlist in playlists)
+                  M3EListItem(
+                    key: Key('downloadsPlaylist_${playlist.id}'),
+                    leading: const Icon(Icons.queue_music_rounded),
+                    headline: playlist.isFavorites
+                        ? l10n.favoritesPlaylistName
+                        : playlist.name,
+                    onTap: () => Navigator.pop(context, playlist),
+                  ),
+              ],
+            ),
+          ),
+        ),
+        actions: [
+          M3EButton.text(
+            onPressed: () => Navigator.pop(context),
+            child: Text(l10n.cancel),
+          ),
+        ],
+      ),
+    );
+    if (picked == null || !mounted) return;
+    final tracks = await library.loadPlaylistTracks(picked.id);
+    if (!mounted) return;
+    final domainTracks = [
+      for (final track in tracks) library.trackFromPlaylistTrack(track),
+    ];
+    await _batchDownload(downloads, domainTracks);
+  }
+
+  /// 迁移旧位置（应用支持目录）的下载文件到当前下载目录。
+  Future<void> _migrateLegacy(DownloadService downloads) async {
+    final l10n = AppLocalizations.of(context)!;
+    setState(() => _busy = true);
+    try {
+      final (moved, failed) = await downloads.migrateLegacyDownloads();
+      if (!mounted) return;
+      _showMessage(l10n.downloadsMigrateLegacyDone(moved, failed));
     } finally {
       if (mounted) setState(() => _busy = false);
     }

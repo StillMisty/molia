@@ -1180,6 +1180,22 @@
     }
   },
   "downloadsOpenLibrary": "已下载列表",
+  "downloadsBatchPlaylist": "下载指定歌单",
+  "downloadsBatchPlaylistSubtitle": "选择歌单后批量下载（跳过已下载与本地曲目）",
+  "downloadsPickPlaylist": "选择歌单",
+  "downloadsMigrateLegacy": "迁移旧位置的下载",
+  "downloadsMigrateLegacySubtitle": "把旧版应用目录里的下载文件搬到当前下载目录",
+  "downloadsMigrateLegacyDone": "已迁移 {moved} 首，失败 {failed} 首",
+  "@downloadsMigrateLegacyDone": {
+    "placeholders": {
+      "moved": {
+        "type": "int"
+      },
+      "failed": {
+        "type": "int"
+      }
+    }
+  },
   "downloadsNoResume": "不做断点续传：平台直链多为一次性签名地址，失败后重下更可靠",
   "sleepTimerTitle": "定时关闭",
   "sleepTimerHint": "到点自动暂停播放",

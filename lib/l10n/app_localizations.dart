@@ -4869,6 +4869,42 @@ abstract class AppLocalizations {
   /// **'Downloaded tracks'**
   String get downloadsOpenLibrary;
 
+  /// No description provided for @downloadsBatchPlaylist.
+  ///
+  /// In en, this message translates to:
+  /// **'Download a playlist'**
+  String get downloadsBatchPlaylist;
+
+  /// No description provided for @downloadsBatchPlaylistSubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Pick a playlist and download it in batch (skips downloaded and local tracks)'**
+  String get downloadsBatchPlaylistSubtitle;
+
+  /// No description provided for @downloadsPickPlaylist.
+  ///
+  /// In en, this message translates to:
+  /// **'Choose a playlist'**
+  String get downloadsPickPlaylist;
+
+  /// No description provided for @downloadsMigrateLegacy.
+  ///
+  /// In en, this message translates to:
+  /// **'Move downloads to the new location'**
+  String get downloadsMigrateLegacy;
+
+  /// No description provided for @downloadsMigrateLegacySubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Move files from the legacy app folder into the current download folder'**
+  String get downloadsMigrateLegacySubtitle;
+
+  /// No description provided for @downloadsMigrateLegacyDone.
+  ///
+  /// In en, this message translates to:
+  /// **'Moved {moved}, failed {failed}'**
+  String downloadsMigrateLegacyDone(int moved, int failed);
+
   /// No description provided for @downloadsNoResume.
   ///
   /// In en, this message translates to:

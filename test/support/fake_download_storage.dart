@@ -17,8 +17,18 @@ class FakeDownloadStorage implements DownloadStorage {
   /// 已删除过的路径（含重复删除尝试）。
   final List<String> deleted = [];
 
+  /// 旧位置（迁移测试用）：非空且与 [root] 不同时生效。
+  String? legacyRoot;
+
   @override
   Future<String?> downloadsRoot() async => available ? root : null;
+
+  @override
+  Future<String?> legacyDownloadsRoot() async {
+    final legacy = legacyRoot;
+    if (legacy == null || legacy == root) return null;
+    return legacy;
+  }
 
   @override
   Future<bool> fileExists(String path) async => files.containsKey(path);

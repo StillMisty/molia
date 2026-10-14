@@ -2684,6 +2684,28 @@ class AppLocalizationsEn extends AppLocalizations {
   String get downloadsOpenLibrary => 'Downloaded tracks';
 
   @override
+  String get downloadsBatchPlaylist => 'Download a playlist';
+
+  @override
+  String get downloadsBatchPlaylistSubtitle =>
+      'Pick a playlist and download it in batch (skips downloaded and local tracks)';
+
+  @override
+  String get downloadsPickPlaylist => 'Choose a playlist';
+
+  @override
+  String get downloadsMigrateLegacy => 'Move downloads to the new location';
+
+  @override
+  String get downloadsMigrateLegacySubtitle =>
+      'Move files from the legacy app folder into the current download folder';
+
+  @override
+  String downloadsMigrateLegacyDone(int moved, int failed) {
+    return 'Moved $moved, failed $failed';
+  }
+
+  @override
   String get downloadsNoResume =>
       'No resume support: platform links are usually one-time signed URLs; re-downloading is more reliable';
 

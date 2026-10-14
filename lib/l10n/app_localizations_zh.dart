@@ -2574,6 +2574,26 @@ class AppLocalizationsZh extends AppLocalizations {
   String get downloadsOpenLibrary => '已下载列表';
 
   @override
+  String get downloadsBatchPlaylist => '下载指定歌单';
+
+  @override
+  String get downloadsBatchPlaylistSubtitle => '选择歌单后批量下载（跳过已下载与本地曲目）';
+
+  @override
+  String get downloadsPickPlaylist => '选择歌单';
+
+  @override
+  String get downloadsMigrateLegacy => '迁移旧位置的下载';
+
+  @override
+  String get downloadsMigrateLegacySubtitle => '把旧版应用目录里的下载文件搬到当前下载目录';
+
+  @override
+  String downloadsMigrateLegacyDone(int moved, int failed) {
+    return '已迁移 $moved 首，失败 $failed 首';
+  }
+
+  @override
   String get downloadsNoResume => '不做断点续传：平台直链多为一次性签名地址，失败后重下更可靠';
 
   @override
