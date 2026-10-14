@@ -11,6 +11,12 @@ import 'package:molia/sources/builtin/wy_comment.dart';
 
 /// 五平台评论解析：使用真实平台响应快照（test/fixtures/comments/*.json，
 /// 每类保留前几条）验证字段归一化（文本 / 时间 / IP / 点赞 / 引用 / 楼中楼）。
+///
+/// fixture 来源：按各平台真实接口抓取后截断列表（kw `ncomment.kuwo.cn`、
+/// kg `m.comment.service.kugou.com`、mg `app.c.nf.migu.cn`、tx `u.y.qq.com` /
+/// `c.y.qq.com`）；wy 的 weapi 接口需 RSA/AES 签名，无法用脚本直接抓取，
+/// 因此用平台公开评论接口的真实条目 + weapi 响应外壳（`{code, data:{comments,
+/// totalCount, cursor}}` / `{code, hotComments, total}`）重组。
 dynamic _fixture(String name) =>
     jsonDecode(File('test/fixtures/comments/$name.json').readAsStringSync());
 
