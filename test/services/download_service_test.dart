@@ -13,6 +13,7 @@ import 'package:molia/domain/models/track.dart';
 import 'package:molia/services/cache_service.dart';
 import 'package:molia/services/cache_storage.dart';
 import 'package:molia/services/download/download_service.dart';
+import 'package:molia/services/download/download_settings.dart';
 
 import '../support/fake_download_storage.dart';
 import '../support/fake_music_source.dart';
@@ -48,6 +49,7 @@ void main() {
     Dio? dio,
     DownloadLyricsResolver? lyrics,
     DownloadArtworkResolver? artwork,
+    DownloadSettings? settings,
   }) {
     final registry = FakeSourceRegistry({
       'kw': kwSource,
@@ -61,6 +63,7 @@ void main() {
           mockDio((options) => textResponse('unexpected', statusCode: 500)),
       lyricsResolver: lyrics,
       artworkResolver: artwork,
+      settings: settings,
       preferredQuality: () => '320k',
       clock: () => 1000,
     );
@@ -508,6 +511,128 @@ void main() {
         (e) => e is SourceFailure && e.l10nKey == 'downloadNoArtwork',
       )),
     );
+  });
+
+  test('文件名模板：按下载设置生成基名', () async {
+    SharedPreferences.setMockInitialValues({});
+    final settings = DownloadSettings();
+    await settings.init();
+    await settings.setFilenameTemplate('{title} - {artist}');
+    final dio = mockDio(
+      (options) => bytesResponse([1, 2], headers: {'content-length': ['2']}),
+    );
+    final service = makeService(dio: dio, settings: settings);
+    await service.init();
+
+    await service.download(makeTrack());
+    expect(
+      service.recordFor('kw', '1')!.filePath,
+      '/downloads/测试歌曲 - 歌手.mp3',
+    );
+  });
+
+  test('标签嵌入开关关闭：文件保持原始下载内容', () async {
+    SharedPreferences.setMockInitialValues({});
+    final settings = DownloadSettings();
+    await settings.init();
+    await settings.setEmbedTags(false);
+    final dio = mockDio(
+      (options) => bytesResponse([1, 2], headers: {'content-length': ['2']}),
+    );
+    final service = makeService(dio: dio, settings: settings);
+    await service.init();
+
+    await service.download(makeTrack());
+    final record = service.recordFor('kw', '1')!;
+    expect(storage.files[record.filePath], [1, 2]);
+  });
+
+  test('文件维护：半成品清扫 / 孤儿文件扫描与删除', () async {
+    final service = makeService();
+    await service.init();
+    // 预置：一个已完成文件 + 一个半成品 + 一个孤儿。
+    storage.files['/downloads/歌手 - 测试歌曲.mp3'] = [1];
+    storage.files['/downloads/歌手 - 测试歌曲.mp3.part'] = [2];
+    storage.files['/downloads/orphan.mp3'] = [3];
+    storage.files['/downloads/lyrics/orphan.lrc'] = [4];
+
+    final cleaned = await service.cleanupIncompleteDownloads();
+    expect(cleaned, 1);
+    expect(storage.files.containsKey('/downloads/歌手 - 测试歌曲.mp3.part'), isFalse);
+
+    final orphans = await service.orphanFiles();
+    expect(orphans, containsAll(['/downloads/orphan.mp3', '/downloads/lyrics/orphan.lrc']));
+    expect(orphans, contains('/downloads/歌手 - 测试歌曲.mp3'));
+
+    final deleted = await service.deleteOrphanFiles();
+    expect(deleted, 3);
+    expect(storage.files.keys, isEmpty);
+  });
+
+  test('孤儿文件：已被记录引用的文件不算孤儿', () async {
+    final dio = mockDio((options) {
+      if (options.uri.path.endsWith('cover.jpg')) {
+        return bytesResponse([9, 9, 9]);
+      }
+      return bytesResponse([1, 2], headers: {'content-length': ['2']});
+    });
+    final service = makeService(
+      dio: dio,
+      lyrics: (track) async => const DownloadLyrics(lyric: '[00:01]词'),
+      artwork: (track) async => 'https://img.example.com/cover.jpg',
+    );
+    await service.init();
+    await service.download(makeTrack());
+
+    expect(await service.orphanFiles(), isEmpty);
+  });
+
+  test('批量下载：顺序执行，跳过已下载与本地曲目', () async {
+    final dio = mockDio(
+      (options) => bytesResponse([1, 2], headers: {'content-length': ['2']}),
+    );
+    final service = makeService(dio: dio);
+    await service.init();
+
+    // 先下载 kw:1（批内应被跳过）。
+    await service.download(makeTrack());
+    const local = Track(
+      id: TrackId('local', 'kw:9'),
+      title: '本地',
+      origin: TrackOrigin.localFile,
+      payload: {'path': '/downloads/x.mp3'},
+    );
+    final (done, failed) = await service.downloadBatch([
+      makeTrack(),
+      makeTrack(sourceKey: 'tx', songId: '2'),
+      local,
+    ]);
+    expect(done, 1);
+    expect(failed, 0);
+    expect(service.recordFor('tx', '2')?.hasAudio, isTrue);
+  });
+
+  test('进行中任务：activeTasks 暴露曲目与进度，完成后清空', () async {
+    final controller = StreamController<Uint8List>();
+    final dio = mockDio(
+      (options) => ResponseBody(
+        controller.stream,
+        200,
+        headers: {'content-length': ['65536']},
+      ),
+    );
+    final service = makeService(dio: dio);
+    await service.init();
+
+    final track = makeTrack();
+    final download = service.download(track);
+    await Future<void>.delayed(Duration.zero);
+    expect(service.activeTasks.single.$1.id, track.id);
+
+    controller.add(Uint8List.fromList(List.filled(65536, 0)));
+    await controller.close();
+    await download;
+    expect(service.activeTasks, isEmpty);
   });
 
 }

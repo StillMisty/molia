@@ -40,6 +40,9 @@ abstract interface class DownloadStorage {
   /// 复制文件（缓存 → 下载目录的命中拷贝；父目录自动创建）。
   Future<void> copyFile(String from, String to);
 
+  /// 递归列出目录下的文件绝对路径（维护页清扫用）；目录不存在返回空。
+  Future<List<String>> listFiles(String dirPath);
+
   /// 读取文件字节；不存在 / 不可读返回 null。
   Future<Uint8List?> readBytes(String path);
 

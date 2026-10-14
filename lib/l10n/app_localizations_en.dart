@@ -2412,6 +2412,56 @@ class AppLocalizationsEn extends AppLocalizations {
   String get downloadNoLyrics => 'No lyrics found';
 
   @override
+  String get downloadSettingsTitle => 'Download settings';
+
+  @override
+  String get downloadSettingsSubtitle =>
+      'Save location, file names and tag embedding';
+
+  @override
+  String get downloadSaveLocation => 'Save location';
+
+  @override
+  String get downloadSaveLocationDefault => 'Default (system Downloads)';
+
+  @override
+  String get downloadSaveLocationFixedHint =>
+      'Fixed to the app folder on this platform; files are visible in the Files app';
+
+  @override
+  String get downloadPickDirectory => 'Choose folder';
+
+  @override
+  String get downloadFilenameTemplate => 'File name format';
+
+  @override
+  String get downloadFilenameTemplateHint =>
+      'Variables: artist / title / album';
+
+  @override
+  String get downloadFilenamePreview => 'Preview';
+
+  @override
+  String get downloadReset => 'Reset to default';
+
+  @override
+  String get downloadEmbedTags => 'Embed lyrics & cover tags';
+
+  @override
+  String get downloadEmbedTagsSubtitle =>
+      'Write tags into the audio file (MP3 / FLAC) so other players can read them; sidecar files remain when writing fails';
+
+  @override
+  String get downloadLocationInfo => 'Download folder';
+
+  @override
+  String get downloadLocationUnsupported =>
+      'Downloading is not supported on this platform';
+
+  @override
+  String get save => 'Save';
+
+  @override
   String get lyricsEmptyState =>
       'No lyrics for this one yet — try another source? (´･ω･`)';
 
@@ -2563,6 +2613,79 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get downloadsTitle => 'Downloads';
+
+  @override
+  String get downloadsManageTitle => 'Downloads';
+
+  @override
+  String get downloadsManageSubtitle =>
+      'Task queue, batch download and file maintenance';
+
+  @override
+  String get downloadsActiveSection => 'In progress';
+
+  @override
+  String get downloadsActiveEmpty => 'No downloads in progress';
+
+  @override
+  String downloadsActiveCount(int count) {
+    return '$count task(s)';
+  }
+
+  @override
+  String get downloadsBatchSection => 'Batch download';
+
+  @override
+  String get downloadsBatchQueue => 'Download current queue';
+
+  @override
+  String downloadsBatchQueueSubtitle(int count) {
+    return '$count track(s); skips downloaded and local tracks';
+  }
+
+  @override
+  String downloadsBatchStarted(int count) {
+    return 'Batch download started ($count)';
+  }
+
+  @override
+  String downloadsBatchDone(int done, int failed) {
+    return 'Batch finished: $done succeeded, $failed failed';
+  }
+
+  @override
+  String get downloadsMaintenanceSection => 'File maintenance';
+
+  @override
+  String get downloadsCleanupParts => 'Remove unfinished downloads';
+
+  @override
+  String get downloadsCleanupPartsSubtitle =>
+      'Leftover .part files from crashes; finished downloads are untouched';
+
+  @override
+  String downloadsCleanupPartsDone(int count) {
+    return 'Removed $count unfinished file(s)';
+  }
+
+  @override
+  String get downloadsCleanupOrphans => 'Remove orphan files';
+
+  @override
+  String get downloadsCleanupOrphansSubtitle =>
+      'Delete files in the download folder that no record references';
+
+  @override
+  String downloadsCleanupOrphansDone(int count) {
+    return 'Removed $count orphan file(s)';
+  }
+
+  @override
+  String get downloadsOpenLibrary => 'Downloaded tracks';
+
+  @override
+  String get downloadsNoResume =>
+      'No resume support: platform links are usually one-time signed URLs; re-downloading is more reliable';
 
   @override
   String get downloadsEmpty => 'No downloaded tracks yet';

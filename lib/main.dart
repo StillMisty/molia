@@ -65,6 +65,7 @@ import 'services/track_cache_service.dart';
 import 'managers/artwork_cache.dart';
 import 'services/data_saver_service.dart';
 import 'services/download/download_service.dart';
+import 'services/download/download_settings.dart';
 import 'services/language_service.dart';
 import 'providers/lyrics_provider.dart';
 import 'services/lyrics_display/audio_route_monitor.dart';
@@ -171,7 +172,11 @@ void main() async {
   // key = comments:{source}:{songId}:{kind}:{page}）。
   final commentsService = CommentsService(registry: sourceRegistry);
 
-  // 本地下载：downloads/ 持久副本 + 离线歌词/封面 + 音频标签嵌入。
+  // 下载设置（设备本地：保存位置 / 文件名格式 / 标签嵌入开关）。
+  final downloadSettings = DownloadSettings();
+  await downloadSettings.init();
+
+  // 本地下载：持久副本 + 离线歌词/封面 + 音频标签嵌入。
   // 存储不可用（Web）时 supported=false，UI 隐藏下载入口；初始化失败不阻断
   // 启动（init 内部已吞错）。下载时的取词/取图**缓存优先**：歌词与播放页
   // 共用同一个 LyricsService（缓存 → 原生 → 跨平台回退），封面经 ArtworkCache
@@ -180,9 +185,12 @@ void main() async {
   final downloadService = DownloadService(
     catalog: catalogService,
     repository: DownloadsRepository(),
-    storage: createDownloadStorage(),
+    storage: createDownloadStorage(
+      customRoot: () => downloadSettings.saveDir,
+    ),
     cacheService: CacheService.instance,
     artworkCache: ArtworkCache.instance,
+    settings: downloadSettings,
     lyricsResolver: (track) async {
       final result = await lyricsService.getLyrics(
         track.title,
@@ -703,9 +711,11 @@ void main() async {
             catalogService: catalogService,
           ),
         ),
-        // 本地下载：歌曲信息页「下载」区与「已下载」列表共用同一状态源。
+        // 本地下载：歌曲信息页「下载」行与「已下载」列表共用同一状态源。
         // 与缓存门面是两套东西：清缓存不触碰 downloads/，删下载是独立动作。
         ChangeNotifierProvider.value(value: downloadService),
+        // 下载设置：保存位置 / 文件名格式 / 标签嵌入（设置页读写）。
+        ChangeNotifierProvider.value(value: downloadSettings),
         Provider<NotificationService>.value(value: notificationService),
         // 省流模式：设置页读写开关/音质上限；取链与封面网关已在上方接线。
         ChangeNotifierProvider.value(value: dataSaver),

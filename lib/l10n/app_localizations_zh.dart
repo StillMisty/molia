@@ -2314,6 +2314,53 @@ class AppLocalizationsZh extends AppLocalizations {
   String get downloadNoLyrics => '未找到歌词';
 
   @override
+  String get downloadSettingsTitle => '下载设置';
+
+  @override
+  String get downloadSettingsSubtitle => '保存位置、文件名与标签嵌入';
+
+  @override
+  String get downloadSaveLocation => '保存位置';
+
+  @override
+  String get downloadSaveLocationDefault => '默认（系统下载目录）';
+
+  @override
+  String get downloadSaveLocationFixedHint => '当前平台固定在应用目录，文件可在系统「文件」应用中访问';
+
+  @override
+  String get downloadPickDirectory => '选择目录';
+
+  @override
+  String get downloadFilenameTemplate => '文件名格式';
+
+  @override
+  String get downloadFilenameTemplateHint =>
+      '可用变量：artist（歌手）/ title（歌名）/ album（专辑）';
+
+  @override
+  String get downloadFilenamePreview => '预览';
+
+  @override
+  String get downloadReset => '恢复默认';
+
+  @override
+  String get downloadEmbedTags => '嵌入歌词与封面标签';
+
+  @override
+  String get downloadEmbedTagsSubtitle =>
+      '写入音频文件标签（MP3 / FLAC），其它播放器也能读到；失败时保留同名文件';
+
+  @override
+  String get downloadLocationInfo => '下载目录';
+
+  @override
+  String get downloadLocationUnsupported => '当前平台不支持下载';
+
+  @override
+  String get save => '保存';
+
+  @override
   String get lyricsEmptyState => '这首歌暂时没找到词，换一个来源试试？ (´･ω･`)';
 
   @override
@@ -2459,6 +2506,75 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get downloadsTitle => '已下载';
+
+  @override
+  String get downloadsManageTitle => '下载管理';
+
+  @override
+  String get downloadsManageSubtitle => '任务队列、批量下载与文件维护';
+
+  @override
+  String get downloadsActiveSection => '进行中';
+
+  @override
+  String get downloadsActiveEmpty => '没有进行中的下载';
+
+  @override
+  String downloadsActiveCount(int count) {
+    return '$count 个任务';
+  }
+
+  @override
+  String get downloadsBatchSection => '批量下载';
+
+  @override
+  String get downloadsBatchQueue => '下载当前队列';
+
+  @override
+  String downloadsBatchQueueSubtitle(int count) {
+    return '共 $count 首；跳过已下载与本地曲目';
+  }
+
+  @override
+  String downloadsBatchStarted(int count) {
+    return '已开始批量下载（$count 首）';
+  }
+
+  @override
+  String downloadsBatchDone(int done, int failed) {
+    return '批量下载完成：成功 $done，失败 $failed';
+  }
+
+  @override
+  String get downloadsMaintenanceSection => '文件维护';
+
+  @override
+  String get downloadsCleanupParts => '清理未完成的下载文件';
+
+  @override
+  String get downloadsCleanupPartsSubtitle => '崩溃遗留的半成品（.part），不影响已完成下载';
+
+  @override
+  String downloadsCleanupPartsDone(int count) {
+    return '已清理 $count 个未完成文件';
+  }
+
+  @override
+  String get downloadsCleanupOrphans => '清理无记录的孤儿文件';
+
+  @override
+  String get downloadsCleanupOrphansSubtitle => '删除下载目录中不被任何记录引用的文件';
+
+  @override
+  String downloadsCleanupOrphansDone(int count) {
+    return '已清理 $count 个孤儿文件';
+  }
+
+  @override
+  String get downloadsOpenLibrary => '已下载列表';
+
+  @override
+  String get downloadsNoResume => '不做断点续传：平台直链多为一次性签名地址，失败后重下更可靠';
 
   @override
   String get downloadsEmpty => '还没有下载的歌曲';

@@ -13,6 +13,8 @@ import '../services/play_statistics_service.dart';
 import '../widgets/lxmc_import.dart' show importLxmcFavoritesFlow;
 import '../widgets/settings/settings_tiles.dart';
 import 'cache_management_page.dart';
+import 'download_settings_page.dart';
+import 'downloads_manage_page.dart';
 import 'play_statistics_page.dart';
 
 /// 数据与存储子页：缓存、听歌统计与数据导入导出。
@@ -46,6 +48,28 @@ class DataSettingsPage extends StatelessWidget {
                 onTap: () => openSettingsSubPage(
                   context,
                   const CacheManagementPage(),
+                ),
+              ),
+              // 下载设置：保存位置 / 文件名格式 / 标签嵌入。
+              SettingsNavTile(
+                key: const Key('settingsDownloadSettingsItem'),
+                icon: Icons.download_rounded,
+                title: l10n.downloadSettingsTitle,
+                subtitle: l10n.downloadSettingsSubtitle,
+                onTap: () => openSettingsSubPage(
+                  context,
+                  const DownloadSettingsPage(),
+                ),
+              ),
+              // 下载管理：任务队列 / 批量下载 / 文件维护。
+              SettingsNavTile(
+                key: const Key('settingsDownloadsManageItem'),
+                icon: Icons.download_for_offline_rounded,
+                title: l10n.downloadsManageTitle,
+                subtitle: l10n.downloadsManageSubtitle,
+                onTap: () => openSettingsSubPage(
+                  context,
+                  const DownloadsManagePage(),
                 ),
               ),
               // 听歌统计：事件级采集（本机），播放次数 / 热力图 / 导出。

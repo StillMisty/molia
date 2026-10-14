@@ -20,6 +20,9 @@ class MemoryDownloadStorage implements DownloadStorage {
   Future<void> copyFile(String from, String to) async {}
 
   @override
+  Future<List<String>> listFiles(String dirPath) async => const [];
+
+  @override
   Future<Uint8List?> readBytes(String path) async => null;
 
   @override
@@ -50,4 +53,5 @@ class MemoryDownloadStorage implements DownloadStorage {
 }
 
 /// 工厂：`download_storage.dart` 的条件导入入口。
-DownloadStorage createDownloadStorage() => MemoryDownloadStorage();
+DownloadStorage createDownloadStorage({String? Function()? customRoot}) =>
+    MemoryDownloadStorage();

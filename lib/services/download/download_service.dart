@@ -39,6 +39,7 @@ import '../../managers/artwork_cache.dart';
 import '../../models/lyrics_result.dart';
 import '../../services/cache_service.dart';
 import '../../sources/source_track.dart' show pickQualityFor;
+import 'download_settings.dart';
 
 /// 下载时取词结果（主歌词 + 可选翻译；罗马音/逐字不落盘）。
 class DownloadLyrics {
@@ -100,6 +101,7 @@ class DownloadService extends ChangeNotifier {
     DownloadArtworkResolver? artworkResolver,
     CacheService? cacheService,
     ArtworkCache? artworkCache,
+    DownloadSettings? settings,
     String Function()? preferredQuality,
     int Function()? clock,
   })  : _catalog = catalog,
@@ -110,6 +112,7 @@ class DownloadService extends ChangeNotifier {
         _artworkResolver = artworkResolver,
         _cacheService = cacheService,
         _artworkCache = artworkCache,
+        _settings = settings,
         _preferredQuality = preferredQuality,
         _clock = clock ?? (() => DateTime.now().millisecondsSinceEpoch);
 
@@ -121,6 +124,7 @@ class DownloadService extends ChangeNotifier {
   final DownloadArtworkResolver? _artworkResolver;
   final CacheService? _cacheService;
   final ArtworkCache? _artworkCache;
+  final DownloadSettings? _settings;
   final String Function()? _preferredQuality;
   final int Function() _clock;
 
@@ -132,6 +136,9 @@ class DownloadService extends ChangeNotifier {
   /// 进行中的下载（键同上）。
   final Map<String, DownloadProgress> _active = {};
   final Map<String, CancelToken> _tokens = {};
+
+  /// 进行中任务对应的曲目（下载管理页展示用）。
+  final Map<String, Track> _activeTracks = {};
 
   bool _supported = false;
   bool _initialized = false;
@@ -168,6 +175,90 @@ class DownloadService extends ChangeNotifier {
     return _active['${track.id.sourceKey}:${track.id.id}'];
   }
 
+  /// 当前解析出的下载根目录（设置页展示；不可用返回 null）。
+  Future<String?> rootPath() => _storage.downloadsRoot();
+
+  /// 进行中的任务（曲目 + 进度）：下载管理页展示。
+  List<(Track, DownloadProgress)> get activeTasks => [
+        for (final entry in _active.entries)
+          if (_activeTracks[entry.key] != null)
+            (_activeTracks[entry.key]!, entry.value),
+      ];
+
+  /// 清扫崩溃遗留的半成品（`*.part`），返回删除数量。
+  Future<int> cleanupIncompleteDownloads() async {
+    final root = await _storage.downloadsRoot();
+    if (root == null) return 0;
+    var deleted = 0;
+    try {
+      final files = await _storage.listFiles(root);
+      for (final path in files) {
+        if (!path.endsWith(downloadPartSuffix)) continue;
+        await _storage.deleteQuietly(path);
+        deleted++;
+      }
+    } catch (e) {
+      _logger.warning('半成品清扫失败: $e');
+    }
+    return deleted;
+  }
+
+  /// 无记录引用的孤儿文件（删除下载失败 / 手工拷贝残留），返回绝对路径。
+  Future<List<String>> orphanFiles() async {
+    final root = await _storage.downloadsRoot();
+    if (root == null) return const [];
+    final referenced = <String>{
+      for (final record in _records.values) ...[
+        if (record.filePath != null) record.filePath!,
+        if (record.lyricPath != null) record.lyricPath!,
+        if (record.translationLyricPath != null) record.translationLyricPath!,
+        if (record.coverPath != null) record.coverPath!,
+      ],
+    };
+    try {
+      final files = await _storage.listFiles(root);
+      return [
+        for (final path in files)
+          if (!path.endsWith(downloadPartSuffix) && !referenced.contains(path))
+            path,
+      ];
+    } catch (e) {
+      _logger.warning('孤儿文件扫描失败: $e');
+      return const [];
+    }
+  }
+
+  /// 删除全部孤儿文件，返回删除数量。
+  Future<int> deleteOrphanFiles() async {
+    final orphans = await orphanFiles();
+    for (final path in orphans) {
+      await _storage.deleteQuietly(path);
+    }
+    return orphans.length;
+  }
+
+  /// 批量下载（队列全量）：顺序执行，跳过已下载与不支持项。
+  ///
+  /// 不做断点续传（平台直链多为一次性签名地址，续传价值低）；
+  /// 单项失败不影响后续，返回 `(下载数, 失败数)`。
+  Future<(int, int)> downloadBatch(Iterable<Track> tracks) async {
+    var done = 0;
+    var failed = 0;
+    for (final track in tracks) {
+      if (recordForTrack(track)?.hasAudio ?? false) continue;
+      if (track.id.sourceKey == kLocalSourceKey) continue;
+      try {
+        await download(track);
+        done++;
+      } on SourceFailure catch (failure) {
+        if (failure.kind != FailureKind.cancelled) failed++;
+      } catch (_) {
+        failed++;
+      }
+    }
+    return (done, failed);
+  }
+
   /// 指定音质是否命中完整音频缓存（下载弹层的「本地缓存」标记）。
   Future<bool> audioCacheHit(Track track, String quality) async =>
       await _completeAudioCachePath(track, quality) != null;
@@ -183,6 +274,9 @@ class DownloadService extends ChangeNotifier {
       if (_supported) {
         final records = await _repository.listAll();
         _records = {for (final record in records) record.key: record};
+        // 崩溃遗留的半成品（.part）清扫：不阻断启动，失败仅记日志。
+        final cleaned = await cleanupIncompleteDownloads();
+        if (cleaned > 0) _logger.info('清理未完成的下载文件 $cleaned 个');
       }
     } catch (e) {
       _logger.warning('下载初始化失败: $e');
@@ -220,6 +314,7 @@ class DownloadService extends ChangeNotifier {
 
     final resolvedQuality = quality ?? _pickQuality(track);
     _active[key] = const DownloadProgress(receivedBytes: 0);
+    _activeTracks[key] = track;
     final cancelToken = CancelToken();
     _tokens[key] = cancelToken;
     notifyListeners();
@@ -237,7 +332,7 @@ class DownloadService extends ChangeNotifier {
       if (cached != null) {
         _logger.info('音频缓存命中，直接拷贝: $cached');
         final extension = _extensionForQuality(resolvedQuality);
-        base = await _uniqueBaseName(root, baseNameFor(track), extension);
+        base = await _uniqueBaseName(root, _baseNameFor(track), extension);
         filePath = p.join(root, '$base.$extension');
         partPath = '$filePath$downloadPartSuffix';
         await _storage.copyFile(cached, partPath);
@@ -260,7 +355,7 @@ class DownloadService extends ChangeNotifier {
           );
         }
         final extension = extensionFor(url, resolvedQuality);
-        base = await _uniqueBaseName(root, baseNameFor(track), extension);
+        base = await _uniqueBaseName(root, _baseNameFor(track), extension);
         filePath = p.join(root, '$base.$extension');
         partPath = '$filePath$downloadPartSuffix';
         final response = await _dio.get<ResponseBody>(
@@ -313,17 +408,19 @@ class DownloadService extends ChangeNotifier {
       }
       _throwIfCancelled(cancelToken);
 
-      // 4) 标签嵌入（best-effort：失败保留 sidecar）。
-      await embedDownloadTags(
-        storage: _storage,
-        filePath: filePath,
-        title: track.title,
-        artist: _artistLabel(track),
-        album: track.album ?? '',
-        lyrics: lyrics?.lyric,
-        coverBytes: cover?.bytes,
-        coverMimeType: cover?.mimeType ?? 'image/jpeg',
-      );
+      // 4) 标签嵌入（best-effort：失败保留 sidecar；可在下载设置关闭）。
+      if (_settings?.embedTags ?? true) {
+        await embedDownloadTags(
+          storage: _storage,
+          filePath: filePath,
+          title: track.title,
+          artist: _artistLabel(track),
+          album: track.album ?? '',
+          lyrics: lyrics?.lyric,
+          coverBytes: cover?.bytes,
+          coverMimeType: cover?.mimeType ?? 'image/jpeg',
+        );
+      }
 
       final previous = _records[key];
       final record = DownloadedTrack(
@@ -366,6 +463,7 @@ class DownloadService extends ChangeNotifier {
     } finally {
       _active.remove(key);
       _tokens.remove(key);
+      _activeTracks.remove(key);
       _lastProgressNotified.remove(key);
       notifyListeners();
     }
@@ -548,6 +646,7 @@ class DownloadService extends ChangeNotifier {
 
   /// 已有音频时把（sidecar 里的）歌词 / 封面补写进标签。
   Future<void> _embedTagsFromFiles(Track track) async {
+    if (!(_settings?.embedTags ?? true)) return;
     final record = recordForTrack(track);
     final audioPath = record?.filePath;
     if (record == null || audioPath == null) return;
@@ -798,7 +897,7 @@ class DownloadService extends ChangeNotifier {
       return p.basenameWithoutExtension(existing);
     }
     final root = await _requireRoot();
-    final desired = baseNameFor(track);
+    final desired = _baseNameFor(track);
     var candidate = desired;
     var index = 2;
     while (await _storage.fileExists(
@@ -862,6 +961,17 @@ class DownloadService extends ChangeNotifier {
       if (path != null) await _storage.deleteQuietly(path);
       return null;
     }
+  }
+
+  /// 文件名基名：按下载设置模板（默认 `{artist} - {title}`）生成并清洗。
+  String _baseNameFor(Track track) {
+    final template = _settings?.filenameTemplate ?? kDefaultFilenameTemplate;
+    final raw = DownloadSettings.applyTemplate(template, {
+      'artist': _artistLabel(track),
+      'title': track.title,
+      'album': track.album ?? '',
+    });
+    return sanitizeFileName(raw);
   }
 
   static String _artistLabel(Track track) => track.artists

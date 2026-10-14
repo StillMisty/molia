@@ -27,21 +27,31 @@ class IoDownloadStorage implements DownloadStorage {
   IoDownloadStorage({
     String? rootOverride,
     Future<Directory> Function()? supportDirectory,
+    String? Function()? customRoot,
   })  : _rootOverride = rootOverride,
-        _supportDirectory = supportDirectory ?? getApplicationSupportDirectory;
+        _supportDirectory = supportDirectory ?? getApplicationSupportDirectory,
+        _customRoot = customRoot;
 
   final String? _rootOverride;
   final Future<Directory> Function() _supportDirectory;
 
+  /// 设置页选择的保存位置（每次解析重新读取；改设置无需重启）。
+  final String? Function()? _customRoot;
+
   String? _resolvedRoot;
+  String? _resolvedFor;
 
   @override
   Future<String?> downloadsRoot() async {
     final override = _rootOverride;
     if (override != null) return override;
-    if (_resolvedRoot != null) return _resolvedRoot;
+    final custom = _customRoot?.call()?.trim() ?? '';
+    // 自定义根变化（或首次解析）时重新计算。
+    if (_resolvedRoot != null && _resolvedFor == custom) return _resolvedRoot;
     try {
-      return _resolvedRoot = await _resolveRoot();
+      final resolved = custom.isNotEmpty ? custom : await _resolveRoot();
+      _resolvedFor = custom;
+      return _resolvedRoot = resolved;
     } catch (_) {
       // 目录不可用（测试 / 平台异常）：按不支持处理，UI 隐藏下载入口。
       return null;
@@ -127,6 +137,21 @@ class IoDownloadStorage implements DownloadStorage {
   }
 
   @override
+  Future<List<String>> listFiles(String dirPath) async {
+    final dir = Directory(dirPath);
+    if (!await dir.exists()) return const [];
+    final files = <String>[];
+    try {
+      await for (final entity in dir.list(recursive: true, followLinks: false)) {
+        if (entity is File) files.add(entity.path);
+      }
+    } catch (_) {
+      // 权限 / 并发删除：返回已扫描到的部分。
+    }
+    return files;
+  }
+
+  @override
   Future<Uint8List?> readBytes(String path) async {
     try {
       final file = File(path);
@@ -208,4 +233,5 @@ class IoDownloadStorage implements DownloadStorage {
 }
 
 /// 工厂：`download_storage.dart` 的条件导入入口。
-DownloadStorage createDownloadStorage() => IoDownloadStorage();
+DownloadStorage createDownloadStorage({String? Function()? customRoot}) =>
+    IoDownloadStorage(customRoot: customRoot);

@@ -33,6 +33,12 @@ class FakeDownloadStorage implements DownloadStorage {
   }
 
   @override
+  Future<List<String>> listFiles(String dirPath) async => [
+        for (final path in files.keys)
+          if (path.startsWith(dirPath)) path,
+      ];
+
+  @override
   Future<Uint8List?> readBytes(String path) async {
     final bytes = files[path];
     return bytes == null ? null : Uint8List.fromList(bytes);

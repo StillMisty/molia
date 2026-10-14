@@ -1250,6 +1250,21 @@
   "downloadCoverDone": "Cover downloaded",
   "downloadNoArtwork": "No cover for this track",
   "downloadNoLyrics": "No lyrics found",
+  "downloadSettingsTitle": "Download settings",
+  "downloadSettingsSubtitle": "Save location, file names and tag embedding",
+  "downloadSaveLocation": "Save location",
+  "downloadSaveLocationDefault": "Default (system Downloads)",
+  "downloadSaveLocationFixedHint": "Fixed to the app folder on this platform; files are visible in the Files app",
+  "downloadPickDirectory": "Choose folder",
+  "downloadFilenameTemplate": "File name format",
+  "downloadFilenameTemplateHint": "Variables: artist / title / album",
+  "downloadFilenamePreview": "Preview",
+  "downloadReset": "Reset to default",
+  "downloadEmbedTags": "Embed lyrics & cover tags",
+  "downloadEmbedTagsSubtitle": "Write tags into the audio file (MP3 / FLAC) so other players can read them; sidecar files remain when writing fails",
+  "downloadLocationInfo": "Download folder",
+  "downloadLocationUnsupported": "Downloading is not supported on this platform",
+  "save": "Save",
   "lyricsEmptyState": "No lyrics for this one yet — try another source? (´･ω･`)",
   "lyricsDisplaySettingsAction": "Lyrics display settings",
   "lyricsSwapAction": "Change lyrics",
@@ -1356,6 +1371,70 @@
   "downloadFileMissing": "The local file is missing and may have been deleted",
   "downloadSourceLocal": "Local download",
   "downloadsTitle": "Downloads",
+  "downloadsManageTitle": "Downloads",
+  "downloadsManageSubtitle": "Task queue, batch download and file maintenance",
+  "downloadsActiveSection": "In progress",
+  "downloadsActiveEmpty": "No downloads in progress",
+  "downloadsActiveCount": "{count} task(s)",
+  "@downloadsActiveCount": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "downloadsBatchSection": "Batch download",
+  "downloadsBatchQueue": "Download current queue",
+  "downloadsBatchQueueSubtitle": "{count} track(s); skips downloaded and local tracks",
+  "@downloadsBatchQueueSubtitle": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "downloadsBatchStarted": "Batch download started ({count})",
+  "@downloadsBatchStarted": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "downloadsBatchDone": "Batch finished: {done} succeeded, {failed} failed",
+  "@downloadsBatchDone": {
+    "placeholders": {
+      "done": {
+        "type": "int"
+      },
+      "failed": {
+        "type": "int"
+      }
+    }
+  },
+  "downloadsMaintenanceSection": "File maintenance",
+  "downloadsCleanupParts": "Remove unfinished downloads",
+  "downloadsCleanupPartsSubtitle": "Leftover .part files from crashes; finished downloads are untouched",
+  "downloadsCleanupPartsDone": "Removed {count} unfinished file(s)",
+  "@downloadsCleanupPartsDone": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "downloadsCleanupOrphans": "Remove orphan files",
+  "downloadsCleanupOrphansSubtitle": "Delete files in the download folder that no record references",
+  "downloadsCleanupOrphansDone": "Removed {count} orphan file(s)",
+  "@downloadsCleanupOrphansDone": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "downloadsOpenLibrary": "Downloaded tracks",
+  "downloadsNoResume": "No resume support: platform links are usually one-time signed URLs; re-downloading is more reliable",
   "downloadsEmpty": "No downloaded tracks yet",
   "downloadsSummary": "{count} tracks · {size}",
   "@downloadsSummary": {
