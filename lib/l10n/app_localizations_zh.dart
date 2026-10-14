@@ -1016,6 +1016,17 @@ class AppLocalizationsZh extends AppLocalizations {
   }
 
   @override
+  String get albumEmpty => '该专辑暂无歌曲';
+
+  @override
+  String get albumLoadFailed => '专辑加载失败';
+
+  @override
+  String albumYear(int year) {
+    return '$year 年';
+  }
+
+  @override
   String get settingsAppTitle => '应用名称';
 
   @override

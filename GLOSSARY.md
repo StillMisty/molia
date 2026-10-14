@@ -142,6 +142,28 @@
   两个 tab 的懒加载、分页（跨页按 id 去重）、刷新与错误态；能力位 `capabilities.comment`
   决定入口显隐与「渠道不支持」空态。
 
+## 专辑
+
+- **Album（专辑模型）** — `lib/domain/models/album.dart`：专辑 id / 名称 / 歌手 /
+  封面 / 年份 / 曲目（领域 `Track`）/ `hasMore`，不可变 + 值相等；年份从平台
+  发行时间派生（解析失败为 null，UI 不展示）。
+- **Builtin albums（内置专辑取数）** — `lib/sources/builtin/album_source.dart` +
+  `{wy,tx,kg,kw,mg}_album.dart`：五平台按专辑 id **精确拉取**（不再用专辑名搜索
+  兜底）的唯一实现，解析直接产出领域 `Album`（曲目经 `track_mapper` 原样透传
+  payload）；真实响应快照在 `test/fixtures/albums/`（抓取脚本
+  `tool/gen_album_fixtures.mjs`），端点均需真机复验。
+- **Album service（专辑服务）** — `lib/data/catalog/album_service.dart`：专辑分页的
+  唯一取数入口（single-flight + LRU + TTL 10min + `SourceFailure` 归一化），
+  key 为 `album:{source}:{id}:{page}:{limit}`；取数函数由组合根注入
+  `SourceManager.fetchAlbum`（服务不依赖 sources 层）。
+- **Collection routing（集合路由）** — `MusicSource.collection(CollectionRef)` 在
+  能力位 `capabilities.collection`（仅内置五平台）为真时转发 `SourceManager.fetchAlbum`
+  并映射为 `CollectionPage`；目前只支持 `album` 类型，playlist / artist 与
+  LX 脚本 / any-listen / local 一律 `SourceFailure(unsupported)`。
+- **Album entry（专辑入口）** — 歌曲信息页「专辑」行：payload 专辑 id
+  （`platformAlbumId`：wy/kg/kw/mg `albumId`、tx `albumMid`）与能力位双判定为真时
+  变为可点行（副标题「查看专辑」），否则保持只读信息行。
+
 ## 资料库
 
 - **Library store（资料库端口）** — `lib/domain/ports/library_store.dart`：领域意图

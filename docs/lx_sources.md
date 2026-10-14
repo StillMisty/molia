@@ -110,10 +110,13 @@ lib/playback/
 ## 开发与验证
 
 - `flutter test`：加密向量、脚本元信息解析、引擎监督状态机、在线更新流程、
-  内置平台搜索解析（真实响应夹具）、any-listen 配置、架构分层扫描。
+  内置平台搜索解析（真实响应夹具）、专辑解析（`test/builtin_album_parse_test.dart`，
+  真实响应夹具）、any-listen 配置、架构分层扫描。
 - `node tool/lx_prelude_harness.mjs`：在 Node 沙箱中验证 prelude 协议全链路
   （inited → request → musicUrl → response、utils 桥接）。
 - `node tool/gen_search_fixtures.mjs`：重新抓取各平台真实响应，更新 `test/fixtures/*.json`。
+- `node tool/gen_album_fixtures.mjs`：重新抓取各平台真实专辑响应，更新
+  `test/fixtures/albums/*.json`（曲目列表截断到 3 条控制体积）。
 - 构建环境（WSL/Arch 参考）：
   - Linux 桌面：`sudo pacman -S --needed base-devel ninja cmake clang pkgconf gtk3 mesa-utils`
     - 本地播放依赖 libmpv：`sudo pacman -S --needed mpv`（media_kit 后端需要）

@@ -4,6 +4,8 @@
 /// **不持久化播放直链**（直链有时效）；播放时用 [raw] 按需重新取链。
 library;
 
+import 'track.dart';
+
 /// 曲目在列表/播放历史中的唯一键（`sourceKey` + `songId`）。
 ///
 /// 列表与历史都以该组合为唯一约束，批量操作（移除/排序/删除）按此定位。
@@ -126,6 +128,32 @@ class PlaylistTrack {
       coverUrl: entry.coverUrl,
       durationMs: entry.durationMs,
       raw: entry.raw,
+      addedAt: addedAt,
+    );
+  }
+
+  /// 领域曲目 → 列表曲目（专辑页等「加入列表」场景共用）。
+  ///
+  /// payload 浅拷贝原样透传（取链依赖平台字段）；歌手以 `, ` 连接，
+  /// 与列表 / 历史的既有展示口径一致。
+  factory PlaylistTrack.fromTrack(
+    Track track, {
+    int playlistId = 0,
+    required int addedAt,
+  }) {
+    return PlaylistTrack(
+      playlistId: playlistId,
+      sourceKey: track.id.sourceKey,
+      songId: track.id.id,
+      title: track.title,
+      artist: track.artists
+          .map((artist) => artist.name)
+          .where((name) => name.isNotEmpty)
+          .join(', '),
+      album: track.album ?? '',
+      coverUrl: track.artwork?.uri.toString(),
+      durationMs: track.duration?.inMilliseconds,
+      raw: Map<String, dynamic>.from(track.payload),
       addedAt: addedAt,
     );
   }

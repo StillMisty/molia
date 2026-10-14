@@ -4,14 +4,19 @@ import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:molia/data/catalog/manager_catalog_source.dart';
+import 'package:molia/data/http/app_dio.dart';
 import 'package:molia/domain/models/catalog.dart';
 import 'package:molia/domain/models/failure.dart';
 import 'package:molia/domain/models/track.dart';
 import 'package:molia/domain/ports/music_source.dart';
 import 'package:molia/sources/any_listen/any_listen_config.dart';
 import 'package:molia/sources/any_listen/any_listen_source.dart';
+import 'package:molia/sources/builtin/builtin_search.dart';
+import 'package:molia/sources/builtin/builtin_transport.dart';
 import 'package:molia/sources/source_manager.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+
+import '../support/mock_dio.dart';
 
 /// 适配器测试：真实 SourceManager + any-listen 本地 mock HTTP 服务
 /// （与 any_listen_manager_test.dart 相同手法，不访问真实网络）。
@@ -116,10 +121,10 @@ void main() {
       expect(kw.key, 'kw');
       expect(kw.capabilities.search, isFalse);
       expect(kw.capabilities.resolveUrl, isFalse);
-      // 内置平台歌词/封面为 Dart 原生实现（脚本未声明时也可用）。
+      // 内置平台歌词/封面/专辑为 Dart 原生实现（脚本未声明时也可用）。
       expect(kw.capabilities.lyrics, isTrue);
       expect(kw.capabilities.artwork, isTrue);
-      expect(kw.capabilities.collection, isFalse);
+      expect(kw.capabilities.collection, isTrue);
       expect(kw.capabilities.favorite, isFalse);
 
       // wy 同五平台一致；取链仍需要脚本。
@@ -166,16 +171,58 @@ void main() {
       expect(source.adopt(other), isNull);
     });
 
-    test('collection 不支持时抛 SourceFailure(unsupported)', () async {
+    test('collection：无能力（脚本源）抛 SourceFailure(unsupported)', () async {
       final manager = SourceManager();
       addTearDown(manager.dispose);
-      final source = SourceManagerMusicSource('kw', manager);
+      final source = SourceManagerMusicSource('lx_custom', manager);
+      expect(source.capabilities.collection, isFalse);
 
       await expectLater(
         source.collection(const CollectionRef(type: 'album', id: 'a')),
         throwsA(isA<SourceFailure>()
             .having((f) => f.kind, 'kind', FailureKind.unsupported)),
       );
+    });
+
+    test('collection：内置平台仅专辑类型支持（歌单/艺人抛 unsupported）', () async {
+      final manager = SourceManager();
+      addTearDown(manager.dispose);
+      final source = SourceManagerMusicSource('kw', manager);
+      expect(source.capabilities.collection, isTrue);
+
+      await expectLater(
+        source.collection(const CollectionRef(type: 'playlist', id: 'a')),
+        throwsA(isA<SourceFailure>()
+            .having((f) => f.kind, 'kind', FailureKind.unsupported)),
+      );
+    });
+
+    test('collection：内置平台专辑路由到 SourceManager.fetchAlbum', () async {
+      final original = BuiltinSearch.transport;
+      BuiltinSearch.transport = BuiltinTransport(
+        dio: createAppDio(
+          adapter: MockDioAdapter(
+            (options) async => textResponse(
+              "{'albumid':'1433','name':'黑色香水','artist':'曹方',"
+              "'songnum':'12','musiclist':[{'id':'81642','name':'黑色香水',"
+              "'artist':'曹方','album':'黑色香水','albumId':1433,"
+              "'duration':'240','N_MINFO':'level:h,bitrate:320,format:mp3,size:9.17Mb'}]}",
+            ),
+          ),
+        ),
+      );
+      addTearDown(() => BuiltinSearch.transport = original);
+
+      final manager = SourceManager();
+      addTearDown(manager.dispose);
+      final source = SourceManagerMusicSource('kw', manager);
+      final page = await source.collection(
+        const CollectionRef(type: 'album', id: '1433'),
+      );
+      expect(page.items, hasLength(1));
+      expect(page.items.single.id, const TrackId('kw', '81642'));
+      expect(page.items.single.payload['albumId'], '1433');
+      expect(page.hasMore, isFalse, reason: 'songnum=12 < 默认每页 50');
     });
   });
 
