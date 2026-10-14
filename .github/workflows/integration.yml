@@ -24,12 +24,14 @@ jobs:
       - uses: actions/checkout@v7
 
       # 桌面端构建依赖：GTK3、ninja、clang/cmake；播放依赖 libmpv；
-      # 集成测试需要显示环境（xvfb）与中文字体（界面文案断言）。
+      # libsecret 是 flutter_secure_storage_linux 的 CMake 依赖（缺失会
+      # 直接 "Unable to generate build files"）；集成测试需要显示环境
+      # （xvfb）与中文字体（界面文案断言）。
       - name: 系统依赖
         run: |
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends \
-            libgtk-3-dev libmpv2 xvfb fonts-wqy-microhei ninja-build libglu1-mesa
+            libgtk-3-dev libmpv2 libsecret-1-dev xvfb fonts-wqy-microhei ninja-build libglu1-mesa
 
       - uses: subosito/flutter-action@v2
         with:
