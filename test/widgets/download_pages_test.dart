@@ -13,6 +13,7 @@ import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../support/fake_download_storage.dart';
+import '../support/fake_downloads_publisher.dart';
 import '../support/fake_music_source.dart';
 import '../support/fakes.dart';
 
@@ -36,6 +37,8 @@ void main() {
       ),
       storage: FakeDownloadStorage(),
       settings: settings,
+      // Android 语义（发布器支持）：设置页 / 管理页显示公共目录条目。
+      publisher: FakeDownloadsPublisher(),
     );
     await downloads.init();
     backend = FakePlaybackBackend();
@@ -81,11 +84,56 @@ void main() {
     expect(find.text('{artist} - {title}'), findsOneWidget);
     expect(find.text('嵌入歌词与封面标签'), findsOneWidget);
     expect(find.text('下载目录'), findsOneWidget);
+    // 发布器支持（Android）：公共目录发布开关可见，默认开。
+    expect(find.byKey(const Key('downloadPublishPublicSwitch')), findsOneWidget);
+    expect(find.text('发布到公共下载目录'), findsOneWidget);
 
     // 关闭标签嵌入：持久化。
     await tester.tap(find.byKey(const Key('downloadEmbedTagsSwitch')));
     await tester.pumpAndSettle();
     expect(settings.embedTags, isFalse);
+
+    // 关闭公共目录发布：持久化。
+    await tester.tap(find.byKey(const Key('downloadPublishPublicSwitch')));
+    await tester.pumpAndSettle();
+    expect(settings.publishToPublicDir, isFalse);
+  });
+
+  testWidgets('下载设置页：发布器不支持（桌面 / Web）时隐藏公共目录开关',
+      (tester) async {
+    final desktop = DownloadService(
+      catalog: CatalogService(registry: FakeSourceRegistry(const {})),
+      repository: DownloadsRepository(
+        databaseProvider: () => throw UnimplementedError(),
+      ),
+      storage: FakeDownloadStorage(),
+      settings: settings,
+      publisher: FakeDownloadsPublisher(supported: false),
+    );
+    await desktop.init();
+    addTearDown(desktop.dispose);
+    await tester.pumpWidget(
+      MultiProvider(
+        providers: [
+          ChangeNotifierProvider<DownloadSettings>.value(value: settings),
+          ChangeNotifierProvider<DownloadService>.value(value: desktop),
+          ChangeNotifierProvider<PlaybackProvider>.value(value: playback),
+        ],
+        child: MaterialApp(
+          locale: const Locale('zh'),
+          localizationsDelegates: const [
+            AppLocalizations.delegate,
+            ...GlobalMaterialLocalizations.delegates,
+          ],
+          supportedLocales: const [Locale('zh')],
+          home: const DownloadSettingsPage(),
+        ),
+      ),
+    );
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 50));
+
+    expect(find.byKey(const Key('downloadPublishPublicSwitch')), findsNothing);
   });
 
   testWidgets('下载设置页：文件名模板弹层实时预览并可保存', (tester) async {
@@ -117,6 +165,9 @@ void main() {
     expect(find.byKey(const Key('downloadsCleanupPartsItem')), findsOneWidget);
     expect(find.byKey(const Key('downloadsCleanupOrphansItem')), findsOneWidget);
     expect(find.byKey(const Key('downloadsMigrateLegacyItem')), findsOneWidget);
+    // 发布器支持（Android）：补发布入口可见。
+    expect(find.byKey(const Key('downloadsPublishPublicItem')), findsOneWidget);
+    expect(find.text('补发布到公共目录'), findsOneWidget);
   });
 
   testWidgets('下载管理页：半成品清扫提示数量', (tester) async {

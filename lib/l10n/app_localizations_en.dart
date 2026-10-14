@@ -2452,6 +2452,13 @@ class AppLocalizationsEn extends AppLocalizations {
       'Write tags into the audio file (MP3 / FLAC) so other players can read them; sidecar files remain when writing fails';
 
   @override
+  String get downloadPublishToPublicDir => 'Publish to system Downloads';
+
+  @override
+  String get downloadPublishToPublicDirSubtitle =>
+      'Also copy finished downloads into the system Downloads folder (Android public storage) so file managers and other players can see them; playback still uses the in-app copy';
+
+  @override
   String get downloadLocationInfo => 'Download folder';
 
   @override
@@ -2703,6 +2710,18 @@ class AppLocalizationsEn extends AppLocalizations {
   @override
   String downloadsMigrateLegacyDone(int moved, int failed) {
     return 'Moved $moved, failed $failed';
+  }
+
+  @override
+  String get downloadsPublishPublic => 'Publish to system Downloads';
+
+  @override
+  String get downloadsPublishPublicSubtitle =>
+      'Copy downloads that have no public copy yet into the system Downloads folder (Android)';
+
+  @override
+  String downloadsPublishPublicDone(int published, int failed) {
+    return '$published published, $failed failed';
   }
 
   @override

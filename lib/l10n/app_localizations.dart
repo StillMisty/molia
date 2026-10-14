@@ -4485,6 +4485,18 @@ abstract class AppLocalizations {
   /// **'Write tags into the audio file (MP3 / FLAC) so other players can read them; sidecar files remain when writing fails'**
   String get downloadEmbedTagsSubtitle;
 
+  /// No description provided for @downloadPublishToPublicDir.
+  ///
+  /// In en, this message translates to:
+  /// **'Publish to system Downloads'**
+  String get downloadPublishToPublicDir;
+
+  /// No description provided for @downloadPublishToPublicDirSubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Also copy finished downloads into the system Downloads folder (Android public storage) so file managers and other players can see them; playback still uses the in-app copy'**
+  String get downloadPublishToPublicDirSubtitle;
+
   /// No description provided for @downloadLocationInfo.
   ///
   /// In en, this message translates to:
@@ -4904,6 +4916,24 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Moved {moved}, failed {failed}'**
   String downloadsMigrateLegacyDone(int moved, int failed);
+
+  /// No description provided for @downloadsPublishPublic.
+  ///
+  /// In en, this message translates to:
+  /// **'Publish to system Downloads'**
+  String get downloadsPublishPublic;
+
+  /// No description provided for @downloadsPublishPublicSubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Copy downloads that have no public copy yet into the system Downloads folder (Android)'**
+  String get downloadsPublishPublicSubtitle;
+
+  /// No description provided for @downloadsPublishPublicDone.
+  ///
+  /// In en, this message translates to:
+  /// **'{published} published, {failed} failed'**
+  String downloadsPublishPublicDone(int published, int failed);
 
   /// No description provided for @downloadsNoResume.
   ///

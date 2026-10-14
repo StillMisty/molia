@@ -77,6 +77,18 @@ class DownloadSettingsPage extends StatelessWidget {
                 value: settings.embedTags,
                 onChanged: (value) => unawaited(settings.setEmbedTags(value)),
               ),
+              // 公共目录发布只在 Android 有语义（其余平台的下载根目录本身
+              // 就是公共目录）；发布器不支持时整行不显示。
+              if (downloads?.publisherSupported ?? false)
+                SettingsSwitchTile(
+                  switchKey: const Key('downloadPublishPublicSwitch'),
+                  icon: Icons.public_rounded,
+                  title: l10n.downloadPublishToPublicDir,
+                  subtitle: l10n.downloadPublishToPublicDirSubtitle,
+                  value: settings.publishToPublicDir,
+                  onChanged: (value) =>
+                      unawaited(settings.setPublishToPublicDir(value)),
+                ),
             ],
           ),
           const SizedBox(height: kSettingsSectionSpacing),
