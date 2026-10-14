@@ -2060,6 +2060,48 @@ abstract class AppLocalizations {
   /// **'Play History'**
   String get libraryHistory;
 
+  /// No description provided for @libraryLocalSongs.
+  ///
+  /// In en, this message translates to:
+  /// **'Local tracks'**
+  String get libraryLocalSongs;
+
+  /// No description provided for @libraryImportLocalSongs.
+  ///
+  /// In en, this message translates to:
+  /// **'Import local tracks'**
+  String get libraryImportLocalSongs;
+
+  /// No description provided for @libraryImportLocalSongsDone.
+  ///
+  /// In en, this message translates to:
+  /// **'Imported {count} tracks'**
+  String libraryImportLocalSongsDone(int count);
+
+  /// No description provided for @libraryImportLocalSongsSkipped.
+  ///
+  /// In en, this message translates to:
+  /// **'Imported {imported} tracks, {skipped} skipped'**
+  String libraryImportLocalSongsSkipped(int imported, int skipped);
+
+  /// No description provided for @localSongsEmpty.
+  ///
+  /// In en, this message translates to:
+  /// **'No local tracks yet'**
+  String get localSongsEmpty;
+
+  /// No description provided for @localSongsRemove.
+  ///
+  /// In en, this message translates to:
+  /// **'Remove from list'**
+  String get localSongsRemove;
+
+  /// No description provided for @localSongsRemoveConfirm.
+  ///
+  /// In en, this message translates to:
+  /// **'Removes the entry only; the original file is kept.'**
+  String get localSongsRemoveConfirm;
+
   /// No description provided for @libraryListEnd.
   ///
   /// In en, this message translates to:
@@ -4695,6 +4737,12 @@ abstract class AppLocalizations {
   /// **'Delete the local copy? Audio, lyrics and cover files will be removed.'**
   String get downloadDeleteConfirm;
 
+  /// No description provided for @downloadDeleteConfirmMixed.
+  ///
+  /// In en, this message translates to:
+  /// **'Delete the local copies? Audio, lyrics and cover files will be removed; imported local tracks are only removed from the list.'**
+  String get downloadDeleteConfirmMixed;
+
   /// No description provided for @downloadShare.
   ///
   /// In en, this message translates to:
@@ -4766,12 +4814,6 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Local download'**
   String get downloadSourceLocal;
-
-  /// No description provided for @downloadsTitle.
-  ///
-  /// In en, this message translates to:
-  /// **'Downloads'**
-  String get downloadsTitle;
 
   /// No description provided for @downloadsManageTitle.
   ///
@@ -4875,12 +4917,6 @@ abstract class AppLocalizations {
   /// **'Removed {count} orphan file(s)'**
   String downloadsCleanupOrphansDone(int count);
 
-  /// No description provided for @downloadsOpenLibrary.
-  ///
-  /// In en, this message translates to:
-  /// **'Downloaded tracks'**
-  String get downloadsOpenLibrary;
-
   /// No description provided for @downloadsBatchPlaylist.
   ///
   /// In en, this message translates to:
@@ -4946,18 +4982,6 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'No downloaded tracks yet'**
   String get downloadsEmpty;
-
-  /// No description provided for @downloadsSummary.
-  ///
-  /// In en, this message translates to:
-  /// **'{count} tracks · {size}'**
-  String downloadsSummary(int count, String size);
-
-  /// No description provided for @downloadsUnsupported.
-  ///
-  /// In en, this message translates to:
-  /// **'Downloads are not supported on this platform'**
-  String get downloadsUnsupported;
 
   /// No description provided for @sleepTimerTitle.
   ///

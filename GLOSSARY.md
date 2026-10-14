@@ -198,7 +198,8 @@
 - **Source swap（换源）** — `lib/providers/source_swap_provider.dart` + 
   `lib/widgets/source_swap_sheet.dart`：按种子曲目「歌名 + 歌手」在其它可搜索音源
   并行检索（逐源就绪即填充、单源失败隔离），点候选即试听（单曲「换源试听」），
-  确认后原位替换。入口：收藏页三类合集左滑 / 播放页 seek 行（队列入口）。
+  确认后原位替换。入口：收藏页合集（收藏 / 历史 / 自建列表）左滑 /
+  播放页 seek 行（队列入口）；本地歌曲不含换源（本地文件无在线音源可换）。
 - **Swap placement（换源写回位置）** — `SourceSwapPlacement`：`playlist`
   （收藏/自建列表，仓库事务保 `sortOrder`/`addedAt`）、`history`（保 `playedAt`）、
   `queue`（仅播放队列，不落库）。库内替换与队列跟随**解耦**：队列中同 id 曲目
@@ -327,4 +328,6 @@
 - **Lyrics cache（歌词缓存模块）** — `lib/services/lyrics_cache.dart`：歌词键（`lyrics_cache_{trackId}`）、读写、用量与清理的唯一实现；TTL 策略属于 `CacheService`（取词时读取）。历史 `manual_lyrics_cache_*` 重复键只清不读。
 - **Artwork index（封面索引）** — flutter_cache_manager 的元数据存储；`CacheStorage` 直接删文件后，由 `ArtworkCache` 的 `_pruneMissingEntries` 同步清理失效条目（索引不指向缺失文件）。
 - **Paged list controller（分页列表状态机）** — `lib/providers/paged_list_controller.dart`：首屏 / 加载更多 / 失败态 / 过期响应丢弃 / 跨页去重的唯一实现；持有方提供 `fetchPage`，并可按需读取 `error`（原始异常）与 `page`。发现页歌单 tab 与 `SearchProvider` 均使用它（搜索的 query/source 上下文通过 `reset()` 使在途请求过期，不再自建守卫）。
-- **Library collections（合集策略模块）** — `lib/providers/library_collections.dart`：收藏 / 播放历史 / 自建列表的哨兵、默认选择解析（`resolveSelection`）、顺序应用（`applyOrder`）与持久化（`favorites_collection_order`）的唯一实现；收藏页只保留 UI 状态。
+- **Library collections（合集策略模块）** — `lib/providers/library_collections.dart`：收藏 / 播放历史 / 本地歌曲 / 自建列表的哨兵（`unset` / `favoritesSentinel` / `historySentinel` / `downloadsSentinel`）、默认选择解析（`resolveSelection`，后两者仅显式选择进入）、顺序应用（`applyOrder`）与持久化（顺序 / 选择 / 滚动位置的唯一实现）；收藏页只保留 UI 状态。
+- **Local songs（本地歌曲合集）** — 收藏页的伪合集（`downloadsSentinel` ↔ `downloadsOrderKey`）：数据来自 `DownloadService.downloads`（下载副本 + 本地导入），不落列表表；仅在下载能力可用（`DownloadService.supported`）时出现在合集弹层，排序固定按下载 / 导入时间倒序。
+- **Local import（本地导入）** — `downloads` 表 `imported` 行 = **就地引用**用户自己的音频文件：`originSourceKey = 'local'`、`originSongId` = 文件绝对路径（同路径重复导入幂等），`filePath` 指向原文件；删除记录只移行、不删文件，补发布 / 旧位置迁移都跳过。写入唯一入口 `DownloadService.importLocalFiles`（标签解析见 `lib/data/downloads/audio_tag_reader.dart`：mp3 ID3v2 / flac Vorbis Comment，其余格式按文件名兜底）。

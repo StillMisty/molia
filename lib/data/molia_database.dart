@@ -123,7 +123,7 @@ class SyncTombstones extends Table {
 
 /// 本地下载（持久副本，不参与缓存 LRU 淘汰）。
 ///
-/// 行内保存曲目自包含快照（元数据 + 原音源 raw 取链参数），供「已下载」
+/// 行内保存曲目自包含快照（元数据 + 原音源 raw 取链参数），供「本地歌曲」
 /// 列表还原本地曲目（`sourceKey = 'local'` + 带路径的 payload）与加入歌单；
 /// `originSourceKey`/`originSongId` 是**原音源**的曲目键（本地副本删除后
 /// 用户仍可回到在线音源播放），唯一约束保证一首原曲只下载一份。
@@ -134,6 +134,9 @@ class SyncTombstones extends Table {
 /// `publicUri`（v4）是 Android 公共 Downloads 副本的 content URI：应用目录里的
 /// 文件仍是唯一播放取链目标，公共副本只让用户在文件管理器里可见，删除下载时
 /// 经平台通道一并回收。
+///
+/// `imported`（v5）= 本地导入（就地引用用户自己文件）：`originSourceKey = 'local'`、
+/// `originSongId` = 文件绝对路径；删除记录只移除行，不删原文件。
 @DataClassName('DownloadRow')
 @TableIndex(name: 'idx_downloads_downloadedAt', columns: {#downloadedAt})
 class Downloads extends Table {
@@ -158,6 +161,8 @@ class Downloads extends Table {
   // 公共 Downloads 副本的 content URI（Android MediaStore）；未发布 / 其余
   // 平台为 null。播放取链不读它，只在删除下载时回收副本。
   TextColumn get publicUri => text().nullable()();
+  // 本地导入（就地引用）：删除只移除记录、不动原文件。
+  BoolColumn get imported => boolean().withDefault(const Constant(false))();
   IntColumn get downloadedAt => integer()();
 
   @override
@@ -243,8 +248,9 @@ class MoliaDatabase extends _$MoliaDatabase {
   /// v2：新增 `downloads` 表（本地下载持久副本）。
   /// v3：`downloads.filePath` 改可空（下载记录可只含歌词 / 封面）。
   /// v4：`downloads.publicUri` 新增（Android 公共 Downloads 副本定位）。
+  /// v5：`downloads.imported` 新增（本地导入：就地引用用户文件，删除只移行）。
   @override
-  int get schemaVersion => 4;
+  int get schemaVersion => 5;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -263,6 +269,10 @@ class MoliaDatabase extends _$MoliaDatabase {
           from3To4: (m, schema) async {
             // 仅新增可空列：ADD COLUMN，既有行原样保留（publicUri 为 null）。
             await m.addColumn(schema.downloads, schema.downloads.publicUri);
+          },
+          from4To5: (m, schema) async {
+            // 仅新增带默认值的布尔列：ADD COLUMN，既有行 imported=0（下载）。
+            await m.addColumn(schema.downloads, schema.downloads.imported);
           },
         ),
         beforeOpen: (details) async {

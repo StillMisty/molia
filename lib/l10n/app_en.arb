@@ -522,6 +522,30 @@
   },
   "libraryRecentContexts": "Recently Played",
   "libraryHistory": "Play History",
+  "libraryLocalSongs": "Local tracks",
+  "libraryImportLocalSongs": "Import local tracks",
+  "libraryImportLocalSongsDone": "Imported {count} tracks",
+  "@libraryImportLocalSongsDone": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "libraryImportLocalSongsSkipped": "Imported {imported} tracks, {skipped} skipped",
+  "@libraryImportLocalSongsSkipped": {
+    "placeholders": {
+      "imported": {
+        "type": "int"
+      },
+      "skipped": {
+        "type": "int"
+      }
+    }
+  },
+  "localSongsEmpty": "No local tracks yet",
+  "localSongsRemove": "Remove from list",
+  "localSongsRemoveConfirm": "Removes the entry only; the original file is kept.",
   "libraryListEnd": "— End —",
   "settingsCacheTitle": "Cache management",
   "settingsCacheSubtitle": "Audio, lyrics and artwork usage and policies",
@@ -1353,6 +1377,7 @@
   "downloadCancel": "Cancel download",
   "downloadDelete": "Delete download",
   "downloadDeleteConfirm": "Delete the local copy? Audio, lyrics and cover files will be removed.",
+  "downloadDeleteConfirmMixed": "Delete the local copies? Audio, lyrics and cover files will be removed; imported local tracks are only removed from the list.",
   "downloadShare": "Share / export",
   "downloadProgressPercent": "{percent}%",
   "@downloadProgressPercent": {
@@ -1379,7 +1404,6 @@
   "downloadContinue": "Continue",
   "downloadFileMissing": "The local file is missing and may have been deleted",
   "downloadSourceLocal": "Local download",
-  "downloadsTitle": "Downloads",
   "downloadsManageTitle": "Downloads",
   "downloadsManageSubtitle": "Task queue, batch download and file maintenance",
   "downloadsActiveSection": "In progress",
@@ -1442,7 +1466,6 @@
       }
     }
   },
-  "downloadsOpenLibrary": "Downloaded tracks",
   "downloadsBatchPlaylist": "Download a playlist",
   "downloadsBatchPlaylistSubtitle": "Pick a playlist and download it in batch (skips downloaded and local tracks)",
   "downloadsPickPlaylist": "Choose a playlist",
@@ -1474,18 +1497,6 @@
   },
   "downloadsNoResume": "No resume support: platform links are usually one-time signed URLs; re-downloading is more reliable",
   "downloadsEmpty": "No downloaded tracks yet",
-  "downloadsSummary": "{count} tracks · {size}",
-  "@downloadsSummary": {
-    "placeholders": {
-      "count": {
-        "type": "int"
-      },
-      "size": {
-        "type": "String"
-      }
-    }
-  },
-  "downloadsUnsupported": "Downloads are not supported on this platform",
   "sleepTimerTitle": "Sleep timer",
   "sleepTimerHint": "Pauses playback when the timer ends",
   "sleepTimerOff": "Off",

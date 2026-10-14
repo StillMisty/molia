@@ -2,7 +2,7 @@
 ///
 /// 下载是**不参与缓存 LRU 淘汰的持久副本**：行内保存原音源曲目键
 /// （`originSourceKey`/`originSongId`）+ 自包含元数据快照 + 原音源 raw
-/// 取链参数，供「已下载」列表还原为本地曲目（`sourceKey = kLocalSourceKey`）
+/// 取链参数，供「本地歌曲」列表还原为本地曲目（`sourceKey = kLocalSourceKey`）
 /// 与加入歌单（歌单表存快照，无需改表）。
 library;
 
@@ -64,6 +64,11 @@ class DownloadedTrack {
   /// 平台为 null）。仅用于删除下载时回收公共副本——播放取链只认 [filePath]。
   final String? publicUri;
 
+  /// 本地导入（就地引用）：`filePath` 指向用户自己的文件，不复制副本，
+  /// 删除记录时**不删除原文件**；`originSourceKey` 固定 `local`、
+  /// `originSongId` 为文件绝对路径（同路径重复导入幂等）。
+  final bool imported;
+
   final int downloadedAt;
 
   const DownloadedTrack({
@@ -81,6 +86,7 @@ class DownloadedTrack {
     this.lyricPath,
     this.coverPath,
     this.publicUri,
+    this.imported = false,
     required this.downloadedAt,
   });
 

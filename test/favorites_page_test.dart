@@ -32,10 +32,11 @@ import 'support/fake_library_repository.dart';
 import 'support/fake_music_source.dart';
 import 'support/fakes.dart';
 
-/// 下载服务桩：只验证收藏页「已下载」入口的显隐与打开。
+/// 下载服务桩：验证收藏页「本地歌曲」合集的显隐、列表与删除动作。
 class _StubDownloadService extends DownloadService {
-  _StubDownloadService()
-      : super(
+  _StubDownloadService({List<DownloadedTrack>? seed})
+      : _seed = List.of(seed ?? const []),
+        super(
           catalog: CatalogService(registry: FakeSourceRegistry(const {})),
           repository: DownloadsRepository(
             databaseProvider: () => throw UnimplementedError(),
@@ -43,12 +44,46 @@ class _StubDownloadService extends DownloadService {
           storage: FakeDownloadStorage(),
         );
 
+  List<DownloadedTrack> _seed;
+
+  /// 已删除的记录（断言删除路径）。
+  final List<DownloadedTrack> deleted = [];
+
   @override
   bool get supported => true;
 
   @override
-  List<DownloadedTrack> get downloads => const [];
+  bool get initialized => true;
+
+  @override
+  List<DownloadedTrack> get downloads => List.unmodifiable(_seed);
+
+  @override
+  Future<void> delete(DownloadedTrack record) async {
+    deleted.add(record);
+    _seed = [for (final song in _seed) if (song.key != record.key) song];
+    notifyListeners();
+  }
 }
+
+/// 本地歌曲记录：`imported` 决定删除语义（就地引用 / 下载副本）。
+DownloadedTrack _localSong(
+  String id, {
+  String? title,
+  String artist = '歌手',
+  bool imported = false,
+  int? durationMs = 180000,
+}) =>
+    DownloadedTrack(
+      originSourceKey: imported ? kLocalSourceKey : 'kw',
+      originSongId: id,
+      title: title ?? '本地 $id',
+      artist: artist,
+      durationMs: durationMs,
+      filePath: '/downloads/$id.mp3',
+      downloadedAt: 1,
+      imported: imported,
+    );
 
 /// 「收藏」页 widget 测试。
 ///
@@ -90,8 +125,9 @@ void main() {
     WidgetTester tester, {
     math.Random? shuffleRandom,
     DownloadService? downloads,
+    Size size = const Size(1200, 2400),
   }) async {
-    tester.view.physicalSize = const Size(1200, 2400);
+    tester.view.physicalSize = size;
     tester.view.devicePixelRatio = 1.0;
     addTearDown(() {
       tester.view.resetPhysicalSize();
@@ -169,7 +205,7 @@ void main() {
         ),
       );
 
-  /// 弹层内合集行的显示顺序（含「新建列表」行）。
+  /// 弹层内合集行的显示顺序（合集行；新建 / 导入是标题行按钮）。
   List<String> pickerHeadlines(WidgetTester tester) => tester
       .widgetList<M3EListItem>(
         find.descendant(
@@ -404,6 +440,52 @@ void main() {
     expect(backend.lastRequest!.tracks, hasLength(3));
   });
 
+  testWidgets('合集弹层：当前合集走 M3E selected 态，数量走 trailingText', (tester) async {
+    await seedFavorites(tester);
+    await importLove(tester);
+    await pumpFavorites(tester);
+
+    await openCollectionPicker(tester);
+
+    // 标题行两个小按钮（新建 / 导入），列表里不再有动作行。
+    expect(find.byKey(const Key('favoritesCreatePlaylist')), findsOneWidget);
+    expect(find.byKey(const Key('favoritesImportCollection')), findsOneWidget);
+
+    final current = tester.widget<M3EListItem>(pickerRow('我的收藏'));
+    expect(current.selected, isTrue, reason: '当前合集用 M3E 选中态');
+    expect(current.trailingText, '3 首', reason: '数量走 M3E 元文本槽');
+
+    final other = tester.widget<M3EListItem>(pickerRow('love'));
+    expect(other.selected, isFalse);
+    expect(other.trailingText, '3 首');
+  });
+
+  testWidgets('合集弹层：窄屏（手机宽度）不溢出，行内容齐全', (tester) async {
+    await seedFavorites(tester);
+    await importLove(tester);
+    await provider.createPlaylist('一个特别长的列表名称用来验证省略号与布局稳定性');
+    await pumpFavorites(
+      tester,
+      downloads: _StubDownloadService(seed: [_localSong('1')]),
+      size: const Size(360, 780),
+    );
+
+    await openCollectionPicker(tester);
+
+    expect(tester.takeException(), isNull);
+    for (final name in [
+      '我的收藏',
+      '播放历史',
+      '本地歌曲',
+      '一个特别长的列表名称用来验证省略号与布局稳定性',
+      'love',
+    ]) {
+      expect(pickerRow(name), findsOneWidget, reason: name);
+    }
+    expect(find.byKey(const Key('favoritesCreatePlaylist')), findsOneWidget);
+    expect(find.byKey(const Key('favoritesImportCollection')), findsOneWidget);
+  });
+
   testWidgets('合集弹层：拖动把手自定义顺序并持久化', (tester) async {
     await seedFavorites(tester);
     await importLove(tester);
@@ -412,7 +494,7 @@ void main() {
     await openCollectionPicker(tester);
     expect(
       pickerHeadlines(tester),
-      ['新建列表', '导入收藏', '我的收藏', '播放历史', 'love'],
+      ['我的收藏', '播放历史', 'love'],
     );
 
     // 把 love 的把手向上拖到「播放历史」之前。必须小步移动：
@@ -432,7 +514,7 @@ void main() {
 
     expect(
       pickerHeadlines(tester),
-      ['新建列表', '导入收藏', '我的收藏', 'love', '播放历史'],
+      ['我的收藏', 'love', '播放历史'],
     );
 
     final loveId =
@@ -449,7 +531,7 @@ void main() {
     await pumpFavorites(tester);
 
     await openCollectionPicker(tester);
-    await tester.tap(find.text('新建列表'));
+    await tester.tap(find.byKey(const Key('favoritesCreatePlaylist')));
     await tester.pumpAndSettle();
 
     // 命名对话框：输入名称并创建。
@@ -489,7 +571,7 @@ void main() {
     await openCollectionPicker(tester);
     expect(
       pickerHeadlines(tester),
-      ['新建列表', '导入收藏', '我的收藏', '播放历史', 'love'],
+      ['我的收藏', '播放历史', 'love'],
     );
 
     await tester.tap(find.byIcon(Icons.more_vert_rounded));
@@ -503,7 +585,7 @@ void main() {
     // 弹层行局部移除；仓库同步删除。
     expect(
       pickerHeadlines(tester),
-      ['新建列表', '导入收藏', '我的收藏', '播放历史'],
+      ['我的收藏', '播放历史'],
     );
     await flushLibraryReloads(tester);
     expect(await repository.listPlaylists(), isEmpty);
@@ -614,7 +696,7 @@ void main() {
     await pumpFavorites(tester);
 
     await openCollectionPicker(tester);
-    await tester.tap(find.text('导入收藏'));
+    await tester.tap(find.byKey(const Key('favoritesImportCollection')));
     await tester.pumpAndSettle();
 
     // 测试环境无 DiscoverProvider → 仅文件导入选项；链接导入在生产环境可见。
@@ -657,7 +739,7 @@ void main() {
     await tester.pumpAndSettle();
 
     await openCollectionPicker(tester);
-    await tester.tap(find.text('导入收藏'));
+    await tester.tap(find.byKey(const Key('favoritesImportCollection')));
     await tester.pumpAndSettle();
     expect(find.text('从歌单链接导入'), findsOneWidget);
     await tester.tap(find.text('从歌单链接导入'));
@@ -948,22 +1030,125 @@ void main() {
     expect(saved[LibraryCollections.favoritesOrderKey], greaterThan(0));
   });
 
-  testWidgets('已下载入口：存储可用时显示并打开已下载页', (tester) async {
-    await pumpFavorites(tester, downloads: _StubDownloadService());
+  testWidgets('本地歌曲：弹层出现合集，进入后播放 / 搜索过滤', (tester) async {
+    final service = _StubDownloadService(seed: [
+      _localSong('1', title: '下载的歌'),
+      _localSong('2', title: '导入的歌', imported: true),
+    ]);
+    await pumpFavorites(tester, downloads: service);
 
-    final entry = find.byKey(const Key('favoritesDownloadsEntry'));
-    expect(entry, findsOneWidget);
-
-    await tester.tap(entry);
+    await openCollectionPicker(tester);
+    expect(pickerHeadlines(tester), ['我的收藏', '播放历史', '本地歌曲']);
+    await tester.tap(pickerRow('本地歌曲'));
     await tester.pumpAndSettle();
-    expect(find.text('已下载'), findsWidgets);
-    expect(find.text('还没有下载的歌曲'), findsOneWidget);
+
+    // 标题行即合集名；导入按钮只在本地歌曲合集显示。
+    expect(find.text('本地歌曲'), findsOneWidget);
+    expect(find.byKey(const Key('localSongsImportButton')), findsOneWidget);
+    expect(headlines(tester), ['下载的歌', '导入的歌']);
+
+    // 点行播放：可见顺序即队列，来源为本地曲目。
+    await tester.tap(find.text('导入的歌'));
+    await tester.pumpAndSettle();
+    final request = backend.lastRequest;
+    expect(request, isNotNull);
+    expect(request!.startIndex, 1);
+    expect(request.context?.name, '本地歌曲');
+    expect(request.tracks.first.id.sourceKey, kLocalSourceKey);
+
+    // 搜索过滤（同一语义：标题 / 歌手子串）。
+    await openSearch(tester);
+    await tester.enterText(find.byType(AppSearchBar), '导入');
+    await tester.pumpAndSettle();
+    expect(headlines(tester), ['导入的歌']);
   });
 
-  testWidgets('已下载入口：未注入下载服务（Web / 不支持）时隐藏', (tester) async {
+  testWidgets('本地歌曲：左滑删除按来源区分（下载删文件 / 导入只移出列表）', (tester) async {
+    final service = _StubDownloadService(seed: [
+      _localSong('1', title: '下载的歌'),
+      _localSong('2', title: '导入的歌', imported: true),
+    ]);
+    await pumpFavorites(tester, downloads: service);
+    await selectCollection(tester, '本地歌曲');
+
+    // 导入项：确认文案是「从列表移除」。
+    await tester.drag(find.text('导入的歌'), const Offset(-260, 0));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byIcon(Icons.delete_rounded));
+    await tester.pumpAndSettle();
+    expect(find.text('从列表移除'), findsWidgets);
+    await tester.tap(find.widgetWithText(M3EButton, '删除'));
+    await tester.pumpAndSettle();
+    expect(service.deleted.map((song) => song.key), ['local:2']);
+    expect(headlines(tester), ['下载的歌']);
+
+    // 下载副本：确认文案是「删除下载」。
+    await tester.drag(find.text('下载的歌'), const Offset(-260, 0));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byIcon(Icons.delete_rounded));
+    await tester.pumpAndSettle();
+    expect(find.text('删除下载'), findsWidgets);
+    await tester.tap(find.widgetWithText(M3EButton, '删除'));
+    await tester.pumpAndSettle();
+    expect(service.deleted.map((song) => song.key), ['local:2', 'kw:1']);
+    expect(find.text('还没有本地歌曲'), findsOneWidget);
+  });
+
+  testWidgets('本地歌曲：长按多选删除（混合来源文案）', (tester) async {
+    final service = _StubDownloadService(seed: [
+      _localSong('1', title: '下载的歌'),
+      _localSong('2', title: '导入的歌', imported: true),
+    ]);
+    await pumpFavorites(tester, downloads: service);
+    await selectCollection(tester, '本地歌曲');
+
+    await tester.longPress(find.text('下载的歌'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('导入的歌'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byIcon(Icons.delete_rounded));
+    await tester.pumpAndSettle();
+    expect(
+      find.text('删除本地副本？音频、歌词与封面文件将一并删除；导入的本地歌曲只从列表移除。'),
+      findsOneWidget,
+    );
+    await tester.tap(find.widgetWithText(M3EButton, '删除'));
+    await tester.pumpAndSettle();
+    expect(service.deleted.map((song) => song.key), ['kw:1', 'local:2']);
+    expect(find.text('还没有本地歌曲'), findsOneWidget);
+  });
+
+  testWidgets('本地歌曲：未注入下载服务（Web / 不支持）时合集与入口隐藏', (tester) async {
     await pumpFavorites(tester);
 
-    expect(find.byKey(const Key('favoritesDownloadsEntry')), findsNothing);
+    await openCollectionPicker(tester);
+    expect(pickerHeadlines(tester), ['我的收藏', '播放历史']);
+  });
+
+  testWidgets('本地歌曲：空态显示导入入口', (tester) async {
+    await pumpFavorites(tester, downloads: _StubDownloadService());
+    await selectCollection(tester, '本地歌曲');
+
+    expect(find.text('还没有本地歌曲'), findsOneWidget);
+    expect(find.widgetWithText(M3EButton, '导入本地歌曲'), findsOneWidget);
+  });
+
+  testWidgets('本地歌曲：滚动位置独立持久化', (tester) async {
+    final service = _StubDownloadService(seed: [
+      for (var i = 0; i < 40; i++) _localSong('$i', title: '本地 ${i.toString().padLeft(2, '0')}'),
+    ]);
+    await pumpFavorites(tester, downloads: service);
+    await selectCollection(tester, '本地歌曲');
+
+    await tester.drag(find.byType(ListView), const Offset(0, -400));
+    await tester.pumpAndSettle();
+    await tester.pump(const Duration(milliseconds: 600));
+
+    final prefs = await SharedPreferences.getInstance();
+    final raw = prefs.getString(LibraryCollections.scrollOffsetsKey);
+    expect(raw, isNotNull);
+    final saved = jsonDecode(raw!) as Map<String, dynamic>;
+    expect(saved[LibraryCollections.downloadsOrderKey], greaterThan(0));
   });
 }
 

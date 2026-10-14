@@ -299,7 +299,8 @@ class _DownloadSheetState extends State<_DownloadSheet> {
         SettingsNavTile(
           key: const Key('downloadSheetDelete'),
           icon: Icons.delete_rounded,
-          title: l10n.downloadDelete,
+          // 本地导入是就地引用：文案区分「删除下载」与「从列表移除」。
+          title: record.imported ? l10n.localSongsRemove : l10n.downloadDelete,
           subtitle: '',
           isDestructive: true,
           onTap: _audioBusy
@@ -444,6 +445,8 @@ class _DownloadSheetState extends State<_DownloadSheet> {
   }
 
   /// 删除下载（确认后删除音频 + 歌词 + 封面；不影响缓存）。
+  ///
+  /// 本地导入（`record.imported`）只移除记录：文案与确认都用「从列表移除」。
   Future<void> _confirmDelete(
     DownloadService? downloads,
     DownloadedTrack record,
@@ -453,8 +456,12 @@ class _DownloadSheetState extends State<_DownloadSheet> {
     final confirmed = await M3EDialog.show<bool>(
       context,
       dialog: M3EDialog(
-        title: l10n.downloadDelete,
-        content: Text(l10n.downloadDeleteConfirm),
+        title: record.imported ? l10n.localSongsRemove : l10n.downloadDelete,
+        content: Text(
+          record.imported
+              ? l10n.localSongsRemoveConfirm
+              : l10n.downloadDeleteConfirm,
+        ),
         actions: [
           M3EButton.text(
             onPressed: () => Navigator.pop(context, false),

@@ -223,7 +223,8 @@
   `failedSourceKeys` 可重试），载体是统一的「换源」页
   （`lib/pages/source_swap_page.dart`：歌词 / 音频两个 tab，歌词侧为
   `LyricsSourceSearchView`，音频侧为 `SourceSwapView`；入口：歌曲信息页「换源」
-  默认音频 tab、歌词页 FAB menu「换歌词」默认歌词 tab、收藏页三类合集左滑默认音频 tab）点候选即试听（单曲「换源试听」上下文）、
+  默认音频 tab、歌词页 FAB menu「换歌词」默认歌词 tab、收藏页合集（收藏 / 历史 /
+  自建列表）左滑默认音频 tab）点候选即试听（单曲「换源试听」上下文）、
   确认后经 `LibraryProvider.replacePlaylistTrack` / `replaceHistoryEntry` 原位
   替换（仓库事务保 `sortOrder`/`addedAt`/`playedAt`，目标键已存在先确认去重），
   并经 `PlaybackProvider.replaceQueueTrack` 让队列中同 id 曲目跟随换源（新增
@@ -291,12 +292,19 @@
   无 `.part`）命中时直接拷贝不触网；歌词经注入的 `LyricsService`（缓存 →
   原生取词 → 跨平台回退，与播放页同一链路）；封面经 `ArtworkCache.bytesOf`
   命中直读、未命中取图后 `putBytes` 回填；
-- **落库**：drift `downloads` 表（schema v4，`filePath` 可空——记录可以只含
-  歌词或只含封面；`publicUri` 存 Android 公共副本定位）存原音源曲目键 +
+- **落库**：drift `downloads` 表（schema v5，`filePath` 可空——记录可以只含
+  歌词或只含封面；`publicUri` 存 Android 公共副本定位；`imported` 标记
+  **本地导入**：就地引用用户文件、删除只移行）存原音源曲目键 +
   自包含快照 + 原 raw + 音频路径/音质/大小 + 歌词/封面路径；
   `DownloadsRepository` 负责行 ↔ `DownloadedTrack` 映射；
   半成品 `.part` → 原子改名 → 落库，播放取链只认数据库记录；启动时清扫
   崩溃遗留 `.part`；
+- **本地导入**：`DownloadService.importLocalFiles`（收藏页「本地歌曲」合集 →
+  「导入本地歌曲」：多选音频文件）**不复制文件**——记录以
+  `local:<绝对路径>` 为原音源键（同路径重复导入幂等），`filePath` 指向原文件；
+  标签读 `lib/data/downloads/audio_tag_reader.dart`（mp3 ID3v2 / flac Vorbis
+  Comment + 时长），其余格式按 `歌手 - 歌名` 文件名兜底。删除导入项只移除
+  记录（原文件保留），补发布 / 旧位置迁移 / 孤儿清理都跳过导入项；
 - **标签嵌入**：音频就绪后把标题 / 歌手 / 专辑 / 歌词 / 封面写进文件标签
   （`lib/data/downloads/audio_tag_writer.dart`：自写 MP3 ID3v2.3
   UTF-16+BOM 文本 / USLT / APIC 与 FLAC Vorbis Comment + PICTURE，ffprobe
@@ -325,7 +333,8 @@
   下载管理页（`lib/pages/downloads_manage_page.dart`，设置 › 数据与存储）：
   进行中任务 + 批量下载（当前队列 / 指定歌单，跳过已下载与本地曲目；
   **不做断点续传**：平台直链多为一次性签名地址）+ 文件维护（`.part` 清扫、
-  孤儿文件回收、旧位置迁移、Android 补发布公共副本）+ 已下载列表入口；
+  孤儿文件回收、旧位置迁移、Android 补发布公共副本）；已下载列表不再单独成页，
+  由收藏页「本地歌曲」合集浏览（下载副本 + 导入的本地文件）；
   省流生效（移动数据 + 已开启）时下载前先确认。
 
 ### 设置注册表（settings registry）
@@ -489,7 +498,7 @@
   曲目级操作的打开编排（能力位、守卫、换源页 tab）唯一实现在
   `lib/widgets/track_actions.dart`；单曲缓存清理在 `lib/pages/track_cache_page.dart`
   （逐项确认），缓存内容变更经 `CacheService.revision` 跨页刷新占用。
-- 列表行统一走 `lib/widgets/track_row.dart`（队列/收藏/历史/发现共用）：形状按 M3E 列表规范
+- 列表行统一走 `lib/widgets/track_row.dart`（队列/收藏/历史/本地歌曲/发现共用）：形状按 M3E 列表规范
   （静止内 4dp、首末外侧 16dp；hover 12dp；press/选中 16dp），带 expressive spatial 弹簧
   morph；分段列表用 `cardList.gap`（2dp）行距、`itemExtent = TrackRow.extent + gap`，
   列表一律懒构建（发现详情滚到底自动加载下一页）。不要改回 `M3EListItem`（原因见 pitfalls #20）。

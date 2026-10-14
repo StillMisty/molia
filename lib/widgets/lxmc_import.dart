@@ -6,6 +6,7 @@ import 'package:material_ui/material_ui.dart';
 import 'package:provider/provider.dart';
 
 import '../data/lxmc_decoder.dart';
+import '../domain/models/library.dart';
 import '../l10n/app_localizations.dart';
 import '../providers/library_provider.dart';
 
@@ -16,7 +17,9 @@ AppLocalizations _l10n(BuildContext context) =>
 
 /// .lxmc 导入流程（收藏页与设置页共用）：选文件 → 导入 → SnackBar 反馈
 /// （成功 N 首 / 失败原因）。
-Future<void> importLxmcFavoritesFlow(BuildContext context) async {
+///
+/// 成功返回导入结果（收藏页据此切换到新列表）；取消 / 失败返回 null。
+Future<LxmcImportResult?> importLxmcFavoritesFlow(BuildContext context) async {
   final l10n = _l10n(context);
   final provider = context.read<LibraryProvider>();
   final messengerContext = context;
@@ -34,9 +37,9 @@ Future<void> importLxmcFavoritesFlow(BuildContext context) async {
         message: l10n.libraryImportFailed('$e'),
       );
     }
-    return;
+    return null;
   }
-  if (files.isEmpty) return;
+  if (files.isEmpty) return null;
 
   final file = files.first;
   final Uint8List bytes;
@@ -50,28 +53,31 @@ Future<void> importLxmcFavoritesFlow(BuildContext context) async {
         message: l10n.libraryImportFailed('$e'),
       );
     }
-    return;
+    return null;
   }
 
   try {
     final result = await provider.importLxmcBytes(bytes, fileName: file.name);
-    if (!messengerContext.mounted) return;
+    if (!messengerContext.mounted) return null;
     M3ESnackbar.show(
       messengerContext,
       message: l10n.libraryImportSuccess(result.imported),
     );
+    return result;
   } on LxmcDecodeException catch (e) {
-    if (!messengerContext.mounted) return;
+    if (!messengerContext.mounted) return null;
     M3ESnackbar.show(
       messengerContext,
       message: _decodeErrorMessage(l10n, e.reason),
     );
+    return null;
   } catch (e) {
-    if (!messengerContext.mounted) return;
+    if (!messengerContext.mounted) return null;
     M3ESnackbar.show(
       messengerContext,
       message: l10n.libraryImportFailed('$e'),
     );
+    return null;
   }
 }
 

@@ -29,6 +29,9 @@ class MemoryDownloadStorage implements DownloadStorage {
   Future<Uint8List?> readBytes(String path) async => null;
 
   @override
+  Future<Uint8List?> readHead(String path, int length) async => null;
+
+  @override
   Future<void> writeStream(
     String path,
     Stream<List<int>> stream, {
