@@ -1202,5 +1202,71 @@
       }
     }
   },
-  "trackInfoCachePlaying": "Playing — audio cache can be cleared later"
+  "trackInfoCachePlaying": "Playing — audio cache can be cleared later",
+  "commentsTitle": "Comments",
+  "commentsTabHot": "Hot",
+  "commentsTabHotCount": "Hot ({count})",
+  "@commentsTabHotCount": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "commentsTabLatest": "Latest",
+  "commentsTabLatestCount": "Latest ({count})",
+  "@commentsTabLatestCount": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "commentsEmpty": "No comments yet",
+  "commentsUnsupported": "Comments are not available for this channel",
+  "commentsLoadFailed": "Failed to load comments",
+  "commentsLoadMoreFailed": "Failed to load more comments",
+  "commentsNoMore": "No more comments",
+  "commentsRefresh": "Refresh comments",
+  "commentsIpLocation": "IP: {location}",
+  "@commentsIpLocation": {
+    "placeholders": {
+      "location": {
+        "type": "String"
+      }
+    }
+  },
+  "commentsQuotedAuthor": "{name}: ",
+  "@commentsQuotedAuthor": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "commentsLikedCount": "{count} likes",
+  "@commentsLikedCount": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "commentsTimeJustNow": "Just now",
+  "commentsTimeMinutesAgo": "{count} min ago",
+  "@commentsTimeMinutesAgo": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "commentsTimeHoursAgo": "{count} h ago",
+  "@commentsTimeHoursAgo": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  }
 }

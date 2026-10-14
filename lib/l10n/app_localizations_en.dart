@@ -2304,4 +2304,70 @@ class AppLocalizationsEn extends AppLocalizations {
   @override
   String get trackInfoCachePlaying =>
       'Playing — audio cache can be cleared later';
+
+  @override
+  String get commentsTitle => 'Comments';
+
+  @override
+  String get commentsTabHot => 'Hot';
+
+  @override
+  String commentsTabHotCount(int count) {
+    return 'Hot ($count)';
+  }
+
+  @override
+  String get commentsTabLatest => 'Latest';
+
+  @override
+  String commentsTabLatestCount(int count) {
+    return 'Latest ($count)';
+  }
+
+  @override
+  String get commentsEmpty => 'No comments yet';
+
+  @override
+  String get commentsUnsupported =>
+      'Comments are not available for this channel';
+
+  @override
+  String get commentsLoadFailed => 'Failed to load comments';
+
+  @override
+  String get commentsLoadMoreFailed => 'Failed to load more comments';
+
+  @override
+  String get commentsNoMore => 'No more comments';
+
+  @override
+  String get commentsRefresh => 'Refresh comments';
+
+  @override
+  String commentsIpLocation(String location) {
+    return 'IP: $location';
+  }
+
+  @override
+  String commentsQuotedAuthor(String name) {
+    return '$name: ';
+  }
+
+  @override
+  String commentsLikedCount(int count) {
+    return '$count likes';
+  }
+
+  @override
+  String get commentsTimeJustNow => 'Just now';
+
+  @override
+  String commentsTimeMinutesAgo(int count) {
+    return '$count min ago';
+  }
+
+  @override
+  String commentsTimeHoursAgo(int count) {
+    return '$count h ago';
+  }
 }

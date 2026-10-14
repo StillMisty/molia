@@ -1,4 +1,5 @@
 import 'package:molia/domain/models/catalog.dart';
+import 'package:molia/domain/models/comment.dart';
 import 'package:molia/domain/models/failure.dart';
 import 'package:molia/domain/models/source.dart';
 import 'package:molia/domain/models/track.dart';
@@ -8,10 +9,19 @@ import 'package:molia/domain/ports/source_registry.dart';
 /// 内存音源（provider / widget 测试用）：可配置结果 / 失败 / 自定义回调，
 /// 记录查询关键词。
 class FakeMusicSource implements MusicSource {
-  FakeMusicSource(this.key, {List<Track>? items}) : items = items ?? const [];
+  FakeMusicSource(
+    this.key, {
+    List<Track>? items,
+    SourceCapabilities? capabilities,
+  })  : items = items ?? const [],
+        capabilities = capabilities ??
+            const SourceCapabilities(search: true, pagination: true);
 
   @override
   final String key;
+
+  @override
+  final SourceCapabilities capabilities;
 
   List<Track> items;
   bool fail = false;
@@ -19,12 +29,14 @@ class FakeMusicSource implements MusicSource {
   SearchQuery? lastQuery;
   Future<SearchResult<Track>> Function(SearchQuery query)? onSearch;
 
-  @override
-  String get displayName => key;
+  /// 评论取数回调（按 kind + page 返回）；未设置时抛 unsupported，
+  /// 与真实适配器「无能力即 unsupported」的行为一致。
+  Future<CommentPage> Function(CommentKind kind, int page, int limit)?
+      onComments;
+  int commentCalls = 0;
 
   @override
-  SourceCapabilities get capabilities =>
-      const SourceCapabilities(search: true, pagination: true);
+  String get displayName => key;
 
   @override
   Future<void> init() async {}
@@ -63,6 +75,24 @@ class FakeMusicSource implements MusicSource {
 
   @override
   Future<Artwork?> artwork(Track track) async => null;
+
+  @override
+  Future<CommentPage> comments(
+    Track track, {
+    required CommentKind kind,
+    int page = 1,
+    int limit = 20,
+  }) async {
+    commentCalls++;
+    final handler = onComments;
+    if (handler == null) {
+      throw const SourceFailure(
+        kind: FailureKind.unsupported,
+        message: 'fake source does not support comments',
+      );
+    }
+    return handler(kind, page, limit);
+  }
 
   @override
   Future<CollectionPage> collection(

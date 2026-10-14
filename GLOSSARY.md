@@ -118,6 +118,24 @@
   全部不匹配时回退首个候选（保持旧行为下限）。判定实现与换源共用
   `lib/services/song_match.dart`（唯一实现）。
 
+## 评论
+
+- **Builtin comments（内置评论取数）** — `lib/sources/builtin/comment_source.dart` +
+  `{wy,tx,kg,kw,mg}_comment.dart`：五平台「热门 / 最新」分页取数的唯一实现，
+  直接产出领域 `CommentPage`（不经 sources→data 映射层：评论没有脚本回传需求）。
+  文本表情还原（wy `[名称]` / tx `[em]eXXXX[/em]`）、IP 归属、点赞、引用
+  （wy `beReplied` / kg `pcontent`）与随列表返回的楼中楼（tx / kw / mg）在此归一化。
+- **Comment cursor store（评论游标存储）** — `lib/sources/builtin/comment_utils.dart`：
+  游标分页会话状态（wy 最新评论的 `cursor`、mg 最新评论的 `commentId`），
+  按「曲目 + 页码」保存平台游标（取第 N 页读 key N，第 N-1 页写入），
+  只保留最近两页 + 有限曲目数；缺游标时 mg 直接失败（不静默返回首页数据）。
+- **Comments service（评论服务）** — `lib/data/catalog/comments_service.dart`：评论分页的
+  唯一取数入口（single-flight + LRU + TTL 5min + `SourceFailure` 归一化），
+  key 为 `comments:{source}:{songId}:{kind}:{page}`；`invalidateTrack` 供下拉刷新。
+- **Comments session（评论会话）** — `lib/providers/comments_provider.dart`：热门 / 最新
+  两个 tab 的懒加载、分页（跨页按 id 去重）、刷新与错误态；能力位 `capabilities.comment`
+  决定入口显隐与「渠道不支持」空态。
+
 ## 资料库
 
 - **Library store（资料库端口）** — `lib/domain/ports/library_store.dart`：领域意图

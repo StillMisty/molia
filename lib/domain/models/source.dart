@@ -21,6 +21,9 @@ class SourceCapabilities {
   final bool favorite;
   final bool lyricsTranslation;
 
+  /// 能按曲目取评论（热门 / 最新，分页）。
+  final bool comment;
+
   const SourceCapabilities({
     this.search = false,
     this.pagination = false,
@@ -30,6 +33,7 @@ class SourceCapabilities {
     this.collection = false,
     this.favorite = false,
     this.lyricsTranslation = false,
+    this.comment = false,
   });
 
   @override
@@ -42,7 +46,8 @@ class SourceCapabilities {
       other.artwork == artwork &&
       other.collection == collection &&
       other.favorite == favorite &&
-      other.lyricsTranslation == lyricsTranslation;
+      other.lyricsTranslation == lyricsTranslation &&
+      other.comment == comment;
 
   @override
   int get hashCode => Object.hash(
@@ -54,6 +59,7 @@ class SourceCapabilities {
         collection,
         favorite,
         lyricsTranslation,
+        comment,
       );
 }
 

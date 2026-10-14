@@ -4,6 +4,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:molia/data/cache/request_cache.dart';
 import 'package:molia/data/catalog/catalog_service.dart';
 import 'package:molia/domain/models/catalog.dart';
+import 'package:molia/domain/models/comment.dart';
 import 'package:molia/domain/models/failure.dart';
 import 'package:molia/domain/models/source.dart';
 import 'package:molia/domain/models/track.dart';
@@ -79,6 +80,21 @@ class _FakeMusicSource implements MusicSource {
 
   @override
   Future<Artwork?> artwork(Track track) async => null;
+
+  @override
+  Future<CommentPage> comments(
+    Track track, {
+    required CommentKind kind,
+    int page = 1,
+    int limit = 20,
+  }) async =>
+      CommentPage.fromPage(
+        kind: kind,
+        items: const [],
+        page: page,
+        limit: limit,
+        total: 0,
+      );
 
   @override
   Future<CollectionPage> collection(

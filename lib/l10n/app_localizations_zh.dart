@@ -2209,4 +2209,69 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get trackInfoCachePlaying => '正在播放，音频缓存稍后再清';
+
+  @override
+  String get commentsTitle => '评论';
+
+  @override
+  String get commentsTabHot => '热门';
+
+  @override
+  String commentsTabHotCount(int count) {
+    return '热门 ($count)';
+  }
+
+  @override
+  String get commentsTabLatest => '最新';
+
+  @override
+  String commentsTabLatestCount(int count) {
+    return '最新 ($count)';
+  }
+
+  @override
+  String get commentsEmpty => '还没有评论';
+
+  @override
+  String get commentsUnsupported => '当前渠道不支持评论';
+
+  @override
+  String get commentsLoadFailed => '评论加载失败';
+
+  @override
+  String get commentsLoadMoreFailed => '加载更多评论失败';
+
+  @override
+  String get commentsNoMore => '没有更多评论了';
+
+  @override
+  String get commentsRefresh => '刷新评论';
+
+  @override
+  String commentsIpLocation(String location) {
+    return 'IP 属地：$location';
+  }
+
+  @override
+  String commentsQuotedAuthor(String name) {
+    return '$name：';
+  }
+
+  @override
+  String commentsLikedCount(int count) {
+    return '$count 赞';
+  }
+
+  @override
+  String get commentsTimeJustNow => '刚刚';
+
+  @override
+  String commentsTimeMinutesAgo(int count) {
+    return '$count 分钟前';
+  }
+
+  @override
+  String commentsTimeHoursAgo(int count) {
+    return '$count 小时前';
+  }
 }

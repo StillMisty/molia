@@ -188,6 +188,22 @@ Map<String, String> weapiForm(Object object, {String? secretKey}) {
   return {'params': result.params, 'encSecKey': result.encSecKey};
 }
 
+/// 酷狗请求签名（移植自 LX `kg/util.js` `signatureParams`）：
+/// `md5(keyparam + 参数按字典序拼接 + body + keyparam)`。
+///
+/// 评论接口（`m.comment.service.kugou.com`）与其它带签名接口共用该算法。
+String kgSignatureParams(
+  String params, {
+  String platform = 'android',
+  String body = '',
+}) {
+  final keyparam = platform == 'web'
+      ? 'NVPh5oo715z5DIWAeQlhMDsWXXQV4hwt'
+      : 'OIlwieks28dk2k092lksi2UIkp';
+  final list = params.split('&')..sort();
+  return md5Hex('$keyparam${list.join()}$body$keyparam');
+}
+
 /// linuxapi 加密（移植自 LX crypto.js `linuxapi`）：
 /// AES-128-ECB/PKCS7 加密 JSON 文本，密文转十六进制大写。
 String linuxapiParams(Object object) {
