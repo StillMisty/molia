@@ -1,11 +1,16 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:molia/data/catalog/album_service.dart';
 import 'package:molia/data/catalog/catalog_service.dart';
 import 'package:molia/data/downloads/downloads_repository.dart';
+import 'package:molia/domain/models/album.dart';
 import 'package:molia/domain/models/download.dart';
 import 'package:molia/domain/models/playback.dart';
+import 'package:molia/domain/models/source.dart';
 import 'package:molia/domain/models/track.dart';
+import 'package:molia/domain/ports/source_registry.dart';
 import 'package:molia/l10n/app_localizations.dart';
 import 'package:molia/managers/artwork_cache.dart';
+import 'package:molia/pages/album_page.dart';
 import 'package:molia/pages/track_cache_page.dart';
 import 'package:molia/providers/lyrics_provider.dart';
 import 'package:molia/providers/playback_provider.dart';
@@ -106,18 +111,18 @@ class _FakeDownloadService extends DownloadService {
   }
 }
 
-Track _track() => const Track(
-      id: TrackId('kw', 'a'),
+Track _track({String? albumId}) => Track(
+      id: const TrackId('kw', 'a'),
       title: 'Title a',
-      artists: [Artist(name: 'Artist a')],
+      artists: const [Artist(name: 'Artist a')],
       album: 'Album a',
-      duration: Duration(seconds: 245),
+      duration: const Duration(seconds: 245),
       origin: TrackOrigin.lx,
-      qualities: [
+      qualities: const [
         AudioQuality(type: '320k', size: '9.8MB'),
         AudioQuality(type: 'flac'),
       ],
-      payload: {'id': 'a'},
+      payload: {'id': 'a', if (albumId != null) 'albumId': albumId},
     );
 
 void main() {
@@ -142,6 +147,8 @@ void main() {
     WidgetTester tester, {
     Track? track,
     DownloadService? downloads,
+    SourceRegistry? registry,
+    AlbumService? albumService,
   }) async {
     backend.emit(BackendSnapshot(
       current: track,
@@ -158,6 +165,9 @@ void main() {
           Provider<TrackCacheService>.value(value: cacheService),
           if (downloads != null)
             ChangeNotifierProvider<DownloadService>.value(value: downloads),
+          if (registry != null) Provider<SourceRegistry>.value(value: registry),
+          if (albumService != null)
+            Provider<AlbumService>.value(value: albumService),
         ],
         child: MaterialApp(
           locale: const Locale('zh'),
@@ -197,6 +207,66 @@ void main() {
     // 歌词来源：会话未加载时为「暂无歌词」。
     expect(find.text('歌词来源'), findsOneWidget);
     expect(find.text('暂无歌词'), findsOneWidget);
+  });
+
+  testWidgets('专辑行：payload 有专辑 id 且渠道支持时改为可点，进入专辑页', (tester) async {
+    final registry = FakeSourceRegistry({
+      'kw': FakeMusicSource(
+        'kw',
+        capabilities: const SourceCapabilities(search: true, collection: true),
+      ),
+    });
+    final albumService = AlbumService(
+      fetch: (sourceKey, albumId, {required page, required limit}) async =>
+          Album(
+        id: albumId,
+        name: 'Album a',
+        artist: 'Artist a',
+        tracks: const [
+          Track(id: TrackId('kw', 'a'), title: 'Title a', origin: TrackOrigin.lx),
+        ],
+      ),
+    );
+    await pumpView(
+      tester,
+      track: _track(albumId: '123'),
+      registry: registry,
+      albumService: albumService,
+    );
+
+    expect(find.byKey(const Key('trackInfoAlbumItem')), findsOneWidget);
+    expect(find.text('Album a · 查看专辑'), findsOneWidget);
+
+    await tester.tap(find.byKey(const Key('trackInfoAlbumItem')));
+    await tester.pumpAndSettle();
+    expect(find.byType(AlbumPage), findsOneWidget);
+    expect(find.text('Album a'), findsWidgets);
+  });
+
+  testWidgets('专辑行：渠道不支持专辑能力时保持只读信息行', (tester) async {
+    final registry = FakeSourceRegistry({
+      'kw': FakeMusicSource(
+        'kw',
+        capabilities: const SourceCapabilities(search: true),
+      ),
+    });
+    await pumpView(tester, track: _track(albumId: '123'), registry: registry);
+
+    expect(find.byKey(const Key('trackInfoAlbumItem')), findsNothing);
+    expect(find.text('Album a'), findsOneWidget);
+  });
+
+  testWidgets('专辑行：payload 无专辑 id 时保持只读信息行', (tester) async {
+    final registry = FakeSourceRegistry({
+      'kw': FakeMusicSource(
+        'kw',
+        capabilities: const SourceCapabilities(search: true, collection: true),
+      ),
+    });
+    await pumpView(tester, track: _track(), registry: registry);
+
+    expect(find.byKey(const Key('trackInfoAlbumItem')), findsNothing);
+    expect(find.text('Album a'), findsOneWidget);
   });
 
   testWidgets('来源行：打开分享弹层，复制曲目 ID', (tester) async {

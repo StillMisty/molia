@@ -5,6 +5,7 @@ import 'package:package_info_plus/package_info_plus.dart';
 import 'package:provider/provider.dart';
 
 import 'app/app_shell.dart';
+import 'data/catalog/album_service.dart';
 import 'data/catalog/catalog_service.dart';
 import 'data/catalog/comments_service.dart';
 import 'data/catalog/source_registry_impl.dart';
@@ -171,6 +172,14 @@ void main() async {
   // 评论：与目录服务同构的缓存层（single-flight + LRU + 5min TTL，
   // key = comments:{source}:{songId}:{kind}:{page}）。
   final commentsService = CommentsService(registry: sourceRegistry);
+  // 专辑：同一取数模式（single-flight + LRU + 10min TTL，
+  // key = album:{source}:{albumId}:{page}）；取数注入 SourceManager.fetchAlbum，
+  // 服务本身不依赖 sources 层。
+  final albumService = AlbumService(
+    fetch: (sourceKey, albumId, {required page, required limit}) =>
+        sourceManager.fetchAlbum(sourceKey, albumId,
+            page: page, limit: limit),
+  );
 
   // 下载设置（设备本地：保存位置 / 文件名格式 / 标签嵌入开关）。
   final downloadSettings = DownloadSettings();
@@ -636,6 +645,8 @@ void main() async {
         ),
         Provider<SourceRegistry>.value(value: sourceRegistry),
         Provider<CatalogService>.value(value: catalogService),
+        // 专辑页取数（缓存/错误边界在服务内；页面只消费领域 Album）。
+        Provider<AlbumService>.value(value: albumService),
         // 评论页状态：热门 / 最新分页 + 刷新（评论缓存走 CommentsService）。
         ChangeNotifierProvider(
           create: (_) => CommentsProvider(

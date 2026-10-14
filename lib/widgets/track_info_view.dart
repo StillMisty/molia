@@ -5,6 +5,7 @@ import 'package:provider/provider.dart';
 
 import '../domain/models/download.dart';
 import '../domain/models/track.dart';
+import '../domain/ports/source_registry.dart';
 import '../l10n/app_localizations.dart';
 import '../pages/source_swap_page.dart';
 import '../pages/track_cache_page.dart';
@@ -141,6 +142,15 @@ class _TrackInfoViewState extends State<TrackInfoView> {
     final commentsSupported = context.select<CommentsProvider?, bool>(
       (provider) => track == null ? false : (provider?.supports(track) ?? false),
     );
+    // 专辑行：payload 有专辑 id 且渠道能力位为真时可点（否则保持只读信息行）。
+    final sourceRegistry = context.watch<SourceRegistry?>();
+    final albumSupported = track != null &&
+        platformAlbumId(track) != null &&
+        (sourceRegistry
+                ?.byKey(track.id.sourceKey)
+                ?.capabilities
+                .collection ??
+            false);
     final lyricsProviderName = context.select<LyricsProvider, String?>(
       (provider) =>
           track != null && provider.state.trackId == track.id.uri
@@ -261,11 +271,21 @@ class _TrackInfoViewState extends State<TrackInfoView> {
                   subtitle: _availableQualitiesLabel(l10n, track),
                 ),
                 if ((track.album ?? '').isNotEmpty)
-                  SettingsInfoTile(
-                    icon: Icons.album_rounded,
-                    title: l10n.trackInfoAlbum,
-                    subtitle: track.album!,
-                  ),
+                  albumSupported
+                      ? SettingsNavTile(
+                          key: const Key('trackInfoAlbumItem'),
+                          icon: Icons.album_rounded,
+                          title: l10n.trackInfoAlbum,
+                          subtitle:
+                              '${track.album!} · ${l10n.trackInfoAlbumOpen}',
+                          onTap: () =>
+                              unawaited(openTrackAlbum(context, track: track)),
+                        )
+                      : SettingsInfoTile(
+                          icon: Icons.album_rounded,
+                          title: l10n.trackInfoAlbum,
+                          subtitle: track.album!,
+                        ),
                 SettingsNavTile(
                   key: const Key('trackInfoSourceItem'),
                   icon: Icons.hub_rounded,
