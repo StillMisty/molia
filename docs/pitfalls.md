@@ -178,3 +178,17 @@
     单独运行它不执行应用 `main()`——不渲染、窗口不出现，容易误判成「桌面端坏了」。
     手工验证桌面端用 `flutter run -d linux` 或先 `flutter build linux --debug`
     再跑 bundle（`tool/agent/test.sh linux` 会自行重建，不影响它）。
+
+33. **无头 CI 跑桌面集成测试要给 libmpv 一个「按实时速率消费」的虚拟音频输出**：
+    runner 无声卡时 libmpv 有两种失败形态，症状都不是「没声音」而是**播放瞬间结束**——
+    (a) 打不开音频输出（`Could not open/initialize audio device`）；
+    (b) 输出能打开但不节流（如 ALSA 的 `type null` PCM）。
+    两者都会让媒体流立即进入 `ProcessingState.completed`，`LocalPlaybackService`
+    随即自动切歌：表现为断言拿到下一首（`Hello LX` vs `Second Song`）或
+    「等待超时: 播放未开始」（`isPlaying` 从未为 true）。
+    正确做法是 PulseAudio + null sink（按实时速率消费数据），见
+    `.github/workflows/integration.yml` 的「集成测试」步骤：
+    `pulseaudio -D --exit-idle-time=-1 --disable-shm` →
+    `pactl load-module module-null-sink` → `pactl set-default-sink`，
+    并在同一步 export `XDG_RUNTIME_DIR`（daemon 与客户端的 socket 都靠它）。
+    另：mock 音频时长要留足（现为 30s），别用 3s——慢 runner 上起播本身就要几秒。
