@@ -111,6 +111,22 @@ jobs:
             --obfuscate \
             --extra-gen-snapshot-options=--strip
           flutter build appbundle "${flags[@]}"
+      - name: 校验 release 资源（shrinkResources 不能删掉通知图标，见已知坑 34）
+        run: |
+          set -euo pipefail
+          apk="build/app/outputs/flutter-apk/app-arm64-v8a-release.apk"
+          sdk="${ANDROID_SDK_ROOT:-$ANDROID_HOME}"
+          aapt2="$(find "$sdk/build-tools" -name aapt2 | sort -V | tail -1)"
+          "$aapt2" dump resources "$apk" > /tmp/release-resources.txt
+          missing=0
+          for res in ic_notification audio_service_play_arrow audio_service_pause \
+                     audio_service_skip_previous audio_service_skip_next audio_service_stop; do
+            if ! grep -q "drawable/$res" /tmp/release-resources.txt; then
+              echo "::error::release 包缺少 @drawable/$res（检查 android/app/src/main/res/raw/keep.xml）"
+              missing=1
+            fi
+          done
+          exit "$missing"
       - name: 归一名产物
         run: |
           set -euo pipefail
