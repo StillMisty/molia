@@ -19,7 +19,6 @@ import '../services/download/download_service.dart';
 import '../services/notification_service.dart';
 import '../utils/track_cache_label.dart';
 import '../widgets/settings/settings_tiles.dart';
-import 'downloads_page.dart';
 
 class DownloadsManagePage extends StatefulWidget {
   const DownloadsManagePage({super.key});
@@ -161,18 +160,6 @@ class _DownloadsManagePageState extends State<DownloadsManagePage> {
                       ? l10n.downloadLocationUnsupported
                       : snapshot.data ?? l10n.cacheUsageComputing,
                 ),
-              ),
-            ],
-          ),
-          const SizedBox(height: kSettingsSectionSpacing),
-          SettingsSectionCard(
-            children: [
-              SettingsNavTile(
-                key: const Key('downloadsOpenLibraryItem'),
-                icon: Icons.library_music_rounded,
-                title: l10n.downloadsOpenLibrary,
-                subtitle: '',
-                onTap: () => unawaited(showDownloadsPage(context)),
               ),
             ],
           ),

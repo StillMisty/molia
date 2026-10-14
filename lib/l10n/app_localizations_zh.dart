@@ -1048,6 +1048,31 @@ class AppLocalizationsZh extends AppLocalizations {
   String get libraryHistory => '播放历史';
 
   @override
+  String get libraryLocalSongs => '本地歌曲';
+
+  @override
+  String get libraryImportLocalSongs => '导入本地歌曲';
+
+  @override
+  String libraryImportLocalSongsDone(int count) {
+    return '已导入 $count 首';
+  }
+
+  @override
+  String libraryImportLocalSongsSkipped(int imported, int skipped) {
+    return '已导入 $imported 首，$skipped 个文件跳过';
+  }
+
+  @override
+  String get localSongsEmpty => '还没有本地歌曲';
+
+  @override
+  String get localSongsRemove => '从列表移除';
+
+  @override
+  String get localSongsRemoveConfirm => '仅从列表移除，不会删除原文件。';
+
+  @override
   String get libraryListEnd => '— 到底了 —';
 
   @override
@@ -2474,6 +2499,10 @@ class AppLocalizationsZh extends AppLocalizations {
   String get downloadDeleteConfirm => '删除本地副本？音频、歌词与封面文件将一并删除。';
 
   @override
+  String get downloadDeleteConfirmMixed =>
+      '删除本地副本？音频、歌词与封面文件将一并删除；导入的本地歌曲只从列表移除。';
+
+  @override
   String get downloadShare => '分享导出';
 
   @override
@@ -2512,9 +2541,6 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get downloadSourceLocal => '本地下载';
-
-  @override
-  String get downloadsTitle => '已下载';
 
   @override
   String get downloadsManageTitle => '下载管理';
@@ -2580,9 +2606,6 @@ class AppLocalizationsZh extends AppLocalizations {
   }
 
   @override
-  String get downloadsOpenLibrary => '已下载列表';
-
-  @override
   String get downloadsBatchPlaylist => '下载指定歌单';
 
   @override
@@ -2618,14 +2641,6 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get downloadsEmpty => '还没有下载的歌曲';
-
-  @override
-  String downloadsSummary(int count, String size) {
-    return '$count 首 · $size';
-  }
-
-  @override
-  String get downloadsUnsupported => '当前平台不支持下载';
 
   @override
   String get sleepTimerTitle => '定时关闭';

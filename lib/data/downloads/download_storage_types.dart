@@ -50,6 +50,10 @@ abstract interface class DownloadStorage {
   /// 读取文件字节；不存在 / 不可读返回 null。
   Future<Uint8List?> readBytes(String path);
 
+  /// 读取文件开头 [length] 字节（本地导入解析标签只读头部，不整文件读入）；
+  /// 文件短于 [length] 时返回全部；不存在 / 不可读返回 null。
+  Future<Uint8List?> readHead(String path, int length);
+
   /// 流式写入文件（父目录自动创建）。
   ///
   /// [total] 为预期总字节（响应头 Content-Length，未知时 null）；

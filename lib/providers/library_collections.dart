@@ -5,11 +5,12 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import '../domain/models/library.dart';
 
-/// 合集（收藏 / 播放历史 / 自建列表）的哨兵、顺序、选择与滚动位置策略。
+/// 合集（收藏 / 播放历史 / 下载记录 / 自建列表）的哨兵、顺序、选择与
+/// 滚动位置策略。
 ///
 /// 从收藏页抽出的逻辑：默认选择解析、顺序/选择/滚动位置的持久化可独立
 /// 测试，页面只保留 UI 状态（搜索/排序态）。列表顺序键为
-/// `playlist:<id>`，收藏 / 历史为固定键。
+/// `playlist:<id>`，收藏 / 历史 / 下载记录为固定键。
 class LibraryCollections {
   LibraryCollections({SharedPreferences? prefs}) : _prefsOverride = prefs;
 
@@ -22,9 +23,13 @@ class LibraryCollections {
   /// 播放历史伪合集哨兵（仅显式选择进入，不参与默认回退）。
   static const int historySentinel = -3;
 
+  /// 下载记录伪合集哨兵（同上；数据来自 `DownloadService`，不落列表表）。
+  static const int downloadsSentinel = -4;
+
   static const String orderKey = 'favorites_collection_order';
   static const String favoritesOrderKey = 'favorites';
   static const String historyOrderKey = 'history';
+  static const String downloadsOrderKey = 'downloads';
 
   /// 上次选中的合集（含收藏/历史哨兵；未保存时不存在）。
   static const String selectionKey = 'favorites_selected_collection';
@@ -48,13 +53,14 @@ class LibraryCollections {
   /// 当前应展示的合集：手动选择有效则沿用；否则优先有曲目的收藏，
   /// 其次第一个非空列表，最后回退到（可能为空的）收藏。
   ///
-  /// 播放历史是显式选择才会进入的伪合集，不参与默认回退。
+  /// 播放历史 / 下载记录是显式选择才会进入的伪合集，不参与默认回退。
   static int resolveSelection({
     required int selected,
     required List<PlaylistInfo> playlists,
     required int? favoritesId,
   }) {
     if (selected == historySentinel) return historySentinel;
+    if (selected == downloadsSentinel) return downloadsSentinel;
     if (selected != unset && selected != favoritesSentinel) {
       if (playlists.any((playlist) => playlist.id == selected)) return selected;
     } else if (selected == favoritesSentinel) {
