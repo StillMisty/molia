@@ -590,18 +590,6 @@ abstract class AppLocalizations {
   /// **'Language, app name and bottom navigation'**
   String get settingsGeneralSubtitle;
 
-  /// No description provided for @copyLyricsAsSingleLineTitle.
-  ///
-  /// In en, this message translates to:
-  /// **'Copy lyrics as single line'**
-  String get copyLyricsAsSingleLineTitle;
-
-  /// No description provided for @copyLyricsAsSingleLineSubtitle.
-  ///
-  /// In en, this message translates to:
-  /// **'Replaces line breaks with spaces when copying'**
-  String get copyLyricsAsSingleLineSubtitle;
-
   /// No description provided for @dataManagementTitle.
   ///
   /// In en, this message translates to:
@@ -2249,7 +2237,7 @@ abstract class AppLocalizations {
   /// No description provided for @settingsLyricsDisplaySubtitle.
   ///
   /// In en, this message translates to:
-  /// **'Floating lyrics, notification & Bluetooth'**
+  /// **'Lyrics page, notification and Bluetooth lyrics'**
   String get settingsLyricsDisplaySubtitle;
 
   /// No description provided for @lyricsPageTitle.
@@ -2540,11 +2528,17 @@ abstract class AppLocalizations {
   /// **'Line transition animation'**
   String get lyricsDesktopAnimation;
 
-  /// No description provided for @lyricsDesktopControls.
+  /// No description provided for @lyricsDesktopBehaviorSection.
   ///
   /// In en, this message translates to:
-  /// **'Control bar buttons'**
-  String get lyricsDesktopControls;
+  /// **'Behavior & controls'**
+  String get lyricsDesktopBehaviorSection;
+
+  /// No description provided for @lyricsSharedDisplaySection.
+  ///
+  /// In en, this message translates to:
+  /// **'Lyric display'**
+  String get lyricsSharedDisplaySection;
 
   /// No description provided for @lyricsDesktopResetPosition.
   ///
@@ -2875,6 +2869,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Variant'**
   String get lyricsColorSourceOnSurfaceVariant;
+
+  /// No description provided for @lyricsColorSourceSurface.
+  ///
+  /// In en, this message translates to:
+  /// **'Surface'**
+  String get lyricsColorSourceSurface;
 
   /// No description provided for @lyricsDesktopColorThemeHint.
   ///

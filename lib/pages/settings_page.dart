@@ -1,16 +1,20 @@
+import 'dart:async';
+
 import 'package:material_3_expressive/material_3_expressive.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:provider/provider.dart';
+
 import '../l10n/app_localizations.dart';
 import '../models/play_mode.dart';
+import '../providers/lyrics_display_provider.dart';
 import '../providers/playback_provider.dart';
 import '../providers/sources_provider.dart';
 import '../providers/sync_provider.dart';
 import '../providers/theme_provider.dart';
 import '../providers/update_provider.dart';
 import '../services/data_saver_service.dart';
-import '../services/settings_service.dart';
+import '../services/lyrics_display/lyrics_output.dart';
 import '../services/source_swap/source_swap_settings.dart';
 import '../theme/scheme_builder.dart';
 import '../utils/color_hex.dart';
@@ -24,33 +28,67 @@ import 'ai_dj_page.dart';
 import 'data_saver_settings_page.dart';
 import 'data_settings_page.dart';
 import 'general_settings_page.dart';
+import 'lyrics_display/desktop_lyrics_settings_page.dart';
 import 'lyrics_display_page.dart';
 import 'sources_page.dart';
 import 'sync_settings_page.dart';
 import 'update_settings_page.dart';
 
+/// 打开设置弹层（顶栏入口与测试共用）。
+///
+/// 小屏（底部弹层）：dismiss guard 是返回的唯一入口——先在弹层内部退子页
+/// （立即返回 false、不等待退栈动画，让预测返回预览与官方 Compose
+/// `settleToDismiss` 的「收起一级」语义一样立即回弹），子页退完后再允许
+/// 关闭；弹层宿主在 guard 存在时也参与预测返回预览。
+/// 大屏（居中对话框）忽略 guard，返回由 [SettingsPage] 页内处理。
+Future<void> showSettingsSheet(BuildContext context) {
+  final navigatorKey = GlobalKey<NavigatorState>();
+  return ResponsiveNavigation.showAdaptiveModalPage<void>(
+    context: context,
+    showCloseButton: false,
+    onDismissRequest: () async {
+      final navigator = navigatorKey.currentState;
+      if (navigator != null && navigator.canPop()) {
+        unawaited(navigator.maybePop());
+        return false;
+      }
+      return true;
+    },
+    child: SettingsPage(navigatorKey: navigatorKey),
+  );
+}
+
 /// 设置弹层：内部 Navigator 承载首屏与子页（避免弹层叠弹层）。
 ///
 /// 首屏按语义分区：外观 / 播放 / 歌词与展示 / 内容与来源 / 通用与数据；
-/// 子页经 [openSettingsSubPage] 推入本 Navigator，系统返回先退子页，
-/// 回到首屏后再由弹层自身关闭（[NavigatorPopHandler] 转发）。
+/// 子页经 [openSettingsSubPage] 推入本 Navigator。
+///
+/// 返回处理按宿主形态分叉：
+/// - 小屏（M3E 底部弹层）：弹层宿主的 dismiss guard（见 `showSettingsSheet`）
+///   负责「先在弹层内退子页、再关弹层」，预测返回手势保持预览（对齐 Compose
+///   `settleToDismiss` 的「收起一级」语义）；本页不再挂 PopScope，避免同一次
+///   返回被两处处理。
+/// - 大屏（居中对话框）：没有宿主 guard，由 [NavigatorPopHandler] 转发系统
+///   返回——先退子页，回到首屏后对话框正常关闭。
 class SettingsPage extends StatefulWidget {
-  const SettingsPage({super.key, this.subPageOpen});
+  const SettingsPage({super.key, this.navigatorKey});
 
-  /// 子页栈状态出口（true = 内部有子页可退）。
+  /// 弹层宿主与 dismiss guard 共享的内部导航 key。
   ///
-  /// M3E 底部弹层在系统返回时会给弹层内所有 PopScope 回调发
-  /// didPop=false，并据此请求关闭；调用方把本通知器接到弹层
-  /// `onDismissRequest` guard（false 保持弹层打开），系统返回才能
-  /// 先退子页、再关弹层。中心对话框（large 宽）无需此出口。
-  final ValueNotifier<bool>? subPageOpen;
+  /// 小屏时宿主的 guard 需要读取内部 Navigator 的栈状态并退子页；缺省
+  /// （如测试直接挂载）时内部自建 key。
+  final GlobalKey<NavigatorState>? navigatorKey;
 
   @override
   State<SettingsPage> createState() => _SettingsPageState();
 }
 
 class _SettingsPageState extends State<SettingsPage> {
-  final GlobalKey<NavigatorState> _navigatorKey = GlobalKey<NavigatorState>();
+  final GlobalKey<NavigatorState> _fallbackNavigatorKey =
+      GlobalKey<NavigatorState>();
+
+  GlobalKey<NavigatorState> get _navigatorKey =>
+      widget.navigatorKey ?? _fallbackNavigatorKey;
 
   /// 弹层宿主下发的滚动控制器：首屏滚动视图必须显式挂它，才能保留
   /// 「列表滚到顶继续下滑 = 收缩/关闭弹层」的联动。
@@ -68,24 +106,21 @@ class _SettingsPageState extends State<SettingsPage> {
 
   @override
   Widget build(BuildContext context) {
-    return NotificationListener<NavigationNotification>(
-      onNotification: (notification) {
-        // 嵌套 Navigator 的可弹栈状态：同步给弹层 dismiss guard。
-        widget.subPageOpen?.value = notification.canHandlePop;
-        return false;
-      },
-      child: NavigatorPopHandler(
-        onPopWithResult: (_) => _navigatorKey.currentState?.maybePop(),
-        child: Navigator(
-          key: _navigatorKey,
-          onGenerateRoute: (settings) => MaterialPageRoute<void>(
-            settings: settings,
-            builder: (_) => _SettingsHomeView(
-              scrollController: _sheetScrollController,
-            ),
-          ),
+    final navigator = Navigator(
+      key: _navigatorKey,
+      onGenerateRoute: (settings) => MaterialPageRoute<void>(
+        settings: settings,
+        builder: (_) => _SettingsHomeView(
+          scrollController: _sheetScrollController,
         ),
       ),
+    );
+    if (!context.isLargeScreen) {
+      return navigator;
+    }
+    return NavigatorPopHandler(
+      onPopWithResult: (_) => _navigatorKey.currentState?.maybePop(),
+      child: navigator,
     );
   }
 }
@@ -101,7 +136,34 @@ class _SettingsHomeView extends StatefulWidget {
   State<_SettingsHomeView> createState() => _SettingsHomeViewState();
 }
 
-class _SettingsHomeViewState extends State<_SettingsHomeView> {
+class _SettingsHomeViewState extends State<_SettingsHomeView>
+    with WidgetsBindingObserver {
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) {
+        // 首屏直达的桌面歌词入口按能力显隐：打开设置时先复查一次。
+        context.read<LyricsDisplayProvider?>()?.refreshCapabilities();
+      }
+    });
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed && mounted) {
+      // 从系统「显示在其他应用上层」授权页返回：复查桌面歌词能力。
+      context.read<LyricsDisplayProvider?>()?.refreshCapabilities();
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context)!;
@@ -111,6 +173,7 @@ class _SettingsHomeViewState extends State<_SettingsHomeView> {
     final updateProvider = context.watch<UpdateProvider?>();
     final sourceSwapSettings = context.watch<SourceSwapSettings?>();
     final sources = context.read<SourcesProvider?>();
+    final lyricsDisplay = context.watch<LyricsDisplayProvider?>();
     final m3e = M3ETheme.of(context);
 
     return Container(
@@ -147,9 +210,10 @@ class _SettingsHomeViewState extends State<_SettingsHomeView> {
                     children: [
                       M3EIconButton(
                         variant: M3EIconButtonVariant.standard,
-                        // 关闭的是承载设置的弹层（内部 Navigator 之上）。
+                        // 关闭的是承载设置的弹层/对话框本体：用 pop 绕过
+                        // dismiss guard，子页打开时也整个关闭。
                         onPressed: () => Navigator.of(context, rootNavigator: true)
-                            .maybePop(),
+                            .pop(),
                         icon: const Icon(Icons.close_rounded),
                       ),
                     ],
@@ -167,7 +231,7 @@ class _SettingsHomeViewState extends State<_SettingsHomeView> {
                 sources: sources,
               ),
               const SizedBox(height: kSettingsSectionSpacing),
-              _lyricsSection(context, l10n),
+              _lyricsSection(context, l10n, lyricsDisplay),
               const SizedBox(height: kSettingsSectionSpacing),
               _contentSection(context, l10n),
               const SizedBox(height: kSettingsSectionSpacing),
@@ -411,12 +475,32 @@ class _SettingsHomeViewState extends State<_SettingsHomeView> {
     );
   }
 
-  /// 歌词与展示：歌词显示子页入口 + 复制单行开关。
-  Widget _lyricsSection(BuildContext context, AppLocalizations l10n) {
+  /// 歌词与展示：桌面歌词直达 + 歌词显示（歌词页 / 输出 / 通知 / 蓝牙）。
+  Widget _lyricsSection(
+    BuildContext context,
+    AppLocalizations l10n,
+    LyricsDisplayProvider? lyricsDisplay,
+  ) {
+    final bool desktopSupported = lyricsDisplay != null &&
+        lyricsDisplay.capabilityOf(LyricsOutputIds.desktop) !=
+            LyricsOutputCapability.unsupported;
     return SettingsSectionCard(
       title: l10n.settingsLyricsSection,
       children: [
-        // 歌词显示：歌词页 / 歌词输出 / 桌面歌词 / 通知·锁屏 / 蓝牙（二级子页）。
+        // 桌面歌词直达，不再经过「歌词显示」hub；平台不支持时隐藏入口，
+        // 避免开关撒谎（与 hub 的能力门控一致）。
+        if (desktopSupported)
+          SettingsNavTile(
+            key: const Key('settingsDesktopLyricsItem'),
+            icon: Icons.picture_in_picture_alt_rounded,
+            title: l10n.lyricsDesktopTitle,
+            subtitle: l10n.lyricsDesktopEntrySubtitle,
+            onTap: () => openSettingsSubPage(
+              context,
+              const DesktopLyricsSettingsPage(),
+            ),
+          ),
+        // 歌词显示：歌词页 / 歌词输出 / 通知·锁屏 / 蓝牙（二级子页）。
         SettingsNavTile(
           key: const Key('settingsLyricsDisplayItem'),
           icon: Icons.lyrics_rounded,
@@ -427,7 +511,6 @@ class _SettingsHomeViewState extends State<_SettingsHomeView> {
             const LyricsDisplayPage(),
           ),
         ),
-        _buildCopyLyricsTile(context, l10n),
       ],
     );
   }
@@ -542,34 +625,6 @@ class _SettingsHomeViewState extends State<_SettingsHomeView> {
     return monetAvailable
         ? l10n.settingsBaseColorWallpaper
         : l10n.settingsMonetUnavailable;
-  }
-
-  /// 「将歌词复制为单行」开关（SettingsService 持久化，与歌词页共用）。
-  Widget _buildCopyLyricsTile(BuildContext context, AppLocalizations l10n) {
-    final settingsService =
-        Provider.of<SettingsService>(context, listen: false);
-    return StatefulBuilder(builder: (context, setState) {
-      return FutureBuilder<bool>(
-          future: settingsService.getCopyLyricsAsSingleLine(),
-          builder: (context, snapshot) {
-            bool copyAsSingleLine = false;
-            if (snapshot.hasData) {
-              copyAsSingleLine = snapshot.data!;
-            }
-
-            return SettingsSwitchTile(
-              icon: Icons.text_format_rounded,
-              title: l10n.copyLyricsAsSingleLineTitle,
-              subtitle: l10n.copyLyricsAsSingleLineSubtitle,
-              value: copyAsSingleLine,
-              enabled: snapshot.hasData,
-              onChanged: (value) {
-                settingsService.saveCopyLyricsAsSingleLine(value);
-                setState(() {});
-              },
-            );
-          });
-    });
   }
 
   /// 主题色：直接打开任意取色器（HSV + Hex）。

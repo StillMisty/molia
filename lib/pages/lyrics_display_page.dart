@@ -7,15 +7,15 @@ import '../providers/lyrics_display_provider.dart';
 import '../services/lyrics_display/lyrics_output.dart';
 import '../widgets/settings/settings_tiles.dart';
 import 'lyrics_display/bluetooth_lyrics_settings_page.dart';
-import 'lyrics_display/desktop_lyrics_settings_page.dart';
 import 'lyrics_display/lyrics_output_settings_page.dart';
 import 'lyrics_display/lyrics_page_settings_page.dart';
 import 'lyrics_display/notification_lyrics_settings_page.dart';
 
-/// 歌词显示设置 hub：歌词页 / 歌词输出 / 桌面歌词 / 通知·锁屏 / 蓝牙。
+/// 歌词显示设置 hub：歌词页 / 歌词输出 / 通知·锁屏 / 蓝牙。
 ///
 /// - 输出分组入口按平台能力显隐（不支持的平台直接隐藏，避免开关撒谎）；
 /// - 「歌词页」与「歌词输出」与输出能力无关，始终可见；
+/// - 桌面歌词已提升到设置首屏直达，不再经过本页；
 /// - 具体配置在二级子页（经 [openSettingsSubPage] 推入），本页只做导航与
 ///   能力复查。
 class LyricsDisplayPage extends StatefulWidget {
@@ -93,17 +93,6 @@ class _LyricsDisplayPageState extends State<LyricsDisplayPage>
                     const LyricsOutputSettingsPage(),
                   ),
                 ),
-                if (desktopCapability != LyricsOutputCapability.unsupported)
-                  SettingsNavTile(
-                    key: const Key('lyricsDesktopEntry'),
-                    icon: Icons.picture_in_picture_alt_rounded,
-                    title: l10n.lyricsDesktopTitle,
-                    subtitle: l10n.lyricsDesktopEntrySubtitle,
-                    onTap: () => openSettingsSubPage(
-                      context,
-                      const DesktopLyricsSettingsPage(),
-                    ),
-                  ),
                 if (mediaCapability != LyricsOutputCapability.unsupported) ...[
                   SettingsNavTile(
                     key: const Key('lyricsNotificationEntry'),

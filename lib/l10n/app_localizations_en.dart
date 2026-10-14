@@ -272,13 +272,6 @@ class AppLocalizationsEn extends AppLocalizations {
       'Language, app name and bottom navigation';
 
   @override
-  String get copyLyricsAsSingleLineTitle => 'Copy lyrics as single line';
-
-  @override
-  String get copyLyricsAsSingleLineSubtitle =>
-      'Replaces line breaks with spaces when copying';
-
-  @override
   String get dataManagementTitle => 'Data & storage';
 
   @override
@@ -1195,7 +1188,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get settingsLyricsDisplaySubtitle =>
-      'Floating lyrics, notification & Bluetooth';
+      'Lyrics page, notification and Bluetooth lyrics';
 
   @override
   String get lyricsPageTitle => 'Lyrics page';
@@ -1352,7 +1345,10 @@ class AppLocalizationsEn extends AppLocalizations {
   String get lyricsDesktopAnimation => 'Line transition animation';
 
   @override
-  String get lyricsDesktopControls => 'Control bar buttons';
+  String get lyricsDesktopBehaviorSection => 'Behavior & controls';
+
+  @override
+  String get lyricsSharedDisplaySection => 'Lyric display';
 
   @override
   String get lyricsDesktopResetPosition => 'Reset position';
@@ -1528,6 +1524,9 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get lyricsColorSourceOnSurfaceVariant => 'Variant';
+
+  @override
+  String get lyricsColorSourceSurface => 'Surface';
 
   @override
   String get lyricsDesktopColorThemeHint =>

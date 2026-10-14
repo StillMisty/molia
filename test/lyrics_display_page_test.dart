@@ -96,7 +96,8 @@ void main() {
 
     expect(find.byKey(const Key('lyricsPageEntry')), findsOneWidget);
     expect(find.byKey(const Key('lyricsOutputsEntry')), findsOneWidget);
-    // 无输出能力（outputs 为空）：输出入口隐藏，只留平台不支持说明。
+    // 桌面歌词入口已提升到设置首屏，hub 内不再有；其余输出入口按能力显隐，
+    // outputs 为空（能力 unsupported）时隐藏，只留平台不支持说明。
     expect(find.byKey(const Key('lyricsDesktopEntry')), findsNothing);
     expect(find.byKey(const Key('lyricsNotificationEntry')), findsNothing);
     expect(find.byKey(const Key('lyricsBluetoothEntry')), findsNothing);
@@ -128,7 +129,7 @@ void main() {
     expect(raw, contains('"unsyncedBehavior":"hide"'));
   });
 
-  testWidgets('桌面歌词页：颜色行显示解析色，面板选「主色」即生效', (tester) async {
+  testWidgets('桌面歌词页：颜色默认跟随主题，面板选「表面色」即生效', (tester) async {
     useLargeViewport(tester);
     await pumpApp(tester, const DesktopLyricsSettingsPage());
 
@@ -145,11 +146,16 @@ void main() {
     String hexOf(int argb) =>
         colorHexLabel(argb, withAlpha: (argb >> 24) & 0xFF != 0xFF);
 
-    // 默认自定义白（不透明）→ 行内 hex 与 resolveLyricColor 结果一致。
-    expect(playedArgb, 0xFFFFFFFF);
-    expect(find.text(hexOf(playedArgb)), findsOneWidget);
+    final playedRow = find.byKey(const Key('desktopColorPlayedRow'));
 
-    final playedRow = find.text('Current line color');
+    // 默认开箱即用：当前行颜色直接跟随应用主题主色。
+    expect(settings.desktopPlayedColorSource, LyricColorSource.primary);
+    expect(playedArgb, scheme.primary.toARGB32());
+    expect(
+      find.descendant(of: playedRow, matching: find.text(hexOf(playedArgb))),
+      findsOneWidget,
+    );
+
     await tester.scrollUntilVisible(
       playedRow,
       200,
@@ -159,9 +165,10 @@ void main() {
     await tester.tap(playedRow);
     await tester.pumpAndSettle();
 
-    // 颜色面板：6 个来源候选项，主色候选 hex 与方案一致。
+    // 颜色面板：7 个来源候选项（含表面色），主色候选 hex 与方案一致。
     expect(find.byType(M3EDialog), findsOneWidget);
     expect(find.text('Custom'), findsOneWidget);
+    expect(find.text('Surface'), findsOneWidget);
     final primaryArgb = scheme.primary.toARGB32();
     expect(
       find.descendant(
@@ -174,26 +181,29 @@ void main() {
     await tester.tap(
       find.descendant(
         of: find.byType(M3EDialog),
-        matching: find.text('Primary'),
+        matching: find.text('Surface'),
       ),
     );
     await tester.pumpAndSettle();
 
     expect(find.byType(M3EDialog), findsNothing);
-    expect(settings.desktopPlayedColorSource, LyricColorSource.primary);
+    expect(settings.desktopPlayedColorSource, LyricColorSource.surface);
     // 行内色值跟随来源刷新（与 resolveLyricColor 同源）。
     expect(
-      find.text(hexOf(resolveLyricColor(
-        settings.desktopPlayedColorSource,
-        settings.desktopPlayedColor,
-        scheme,
-      ))),
+      find.descendant(
+        of: playedRow,
+        matching: find.text(hexOf(resolveLyricColor(
+          settings.desktopPlayedColorSource,
+          settings.desktopPlayedColor,
+          scheme,
+        ))),
+      ),
       findsOneWidget,
     );
     final prefs = await SharedPreferences.getInstance();
     expect(
       prefs.getString(kLyricsDisplaySettings.name),
-      contains('"desktop.playedColorSource":"primary"'),
+      contains('"desktop.playedColorSource":"surface"'),
     );
   });
 

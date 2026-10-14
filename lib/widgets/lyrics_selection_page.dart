@@ -8,7 +8,6 @@ import '../models/lyric_line.dart';
 import '../models/poster_lyric_line.dart';
 import '../providers/playback_provider.dart';
 import '../services/notification_service.dart';
-import '../services/settings_service.dart';
 import '../theme/app_semantic_colors.dart';
 import '../utils/responsive.dart';
 import 'app_network_image.dart';
@@ -142,19 +141,8 @@ class _LyricsSelectionPageState extends State<LyricsSelectionPage> {
       return;
     }
 
-    // 设置来自 Provider 树（composition root 注册的同一实例）。
-    final settingsService =
-        Provider.of<SettingsService>(context, listen: false);
-    final copyAsSingleLine = await settingsService.getCopyLyricsAsSingleLine();
-
-    final String text;
-    if (copyAsSingleLine) {
-      // 复制为单行，用空格替换换行符
-      text = selectedLyrics.join(' ');
-    } else {
-      // 复制为多行，保持原有格式
-      text = selectedLyrics.join('\n');
-    }
+    // 复制保持原有分行格式（不合并为单行）。
+    final String text = selectedLyrics.join('\n');
 
     await Clipboard.setData(ClipboardData(text: text));
 

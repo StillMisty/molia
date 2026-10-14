@@ -96,9 +96,11 @@ Molia 当前只有在播放页内渲染的滚动歌词。桌面悬浮歌词、�
 
 - 行内容：当前行（主文本）、扩展行（翻译 / 罗马音，字号 = 主字号 × 0.8）、
   其后 `maxLines - 1` 行 upcoming 主文本；`singleLine=true` 时只显示当前行。
-- 颜色语义：当前行 = `playedColor`（默认白），其余行 = `unplayedColor`（默认 70% 白），
-  文字阴影 = `shadowColor`（默认 60% 黑）；全局 `opacity` 作用于整个视图。
-  四种颜色来源：每个颜色行可选「自定义（任意 HSV/Hex 取色）」或「跟随主题角色」；
+- 颜色语义：当前行 = `playedColor`（默认跟随应用主题主色），其余行 =
+  `unplayedColor`（默认跟随主题次要文本色），文字阴影 = `shadowColor`
+  （默认跟随主题表面色：深色主题近黑 / 浅色主题近白，天然适配悬浮窗落在任意
+  背景）；全局 `opacity` 作用于整个视图。
+  每个颜色行可选「自定义（任意 HSV/Hex 取色）」或「跟随主题角色」；
   「主题角色」用哪套方案由分组的**取色来源**决定——跟随应用主题（外观设置：
   基础配色 + 封面覆盖 + 纯黑）或跟随当前曲目封面（`ArtworkPaletteService` 的
   同源色板，无封面回退应用主题）。两者都随主题 / 切歌实时重下发（见 ADR-0001）。
@@ -127,11 +129,19 @@ Molia 当前只有在播放页内渲染的滚动歌词。桌面悬浮歌词、�
 
 ### FR-6 配置与设置 UI
 
-- 设置页新增「歌词显示」入口 → 子页（沿用 `cache_management_page.dart` 的导航模式）：
-  歌词页（应用内）+ 共享项 + 三个分组（桌面歌词 / 通知栏·锁屏歌词 / 蓝牙歌词）。
-- 分组按输出能力渲染：`unsupported` 时隐藏（v1 在 iOS/Web/桌面隐藏全部三组）。
-- 桌面歌词分组提供「样式预览」卡片（Flutter 渲染，与悬浮窗语义一致）；
+- 设置首屏「歌词与展示」分区**直达桌面歌词入口**（按能力显隐）；「歌词显示」
+  hub 收纳歌词页（应用内）/ 歌词输出 / 通知栏·锁屏 / 蓝牙四个入口。
+- 桌面歌词页聚合三组：外观与配色（启用开关 + 权限提示 + 样式预览 + 样式 +
+  取色来源与三行颜色）、**歌词展示**（翻译 / 罗马音 / 偏移 / 未同步回退，
+  与「歌词输出」页共用 `LyricsSharedDisplaySection`）、行为与控制条
+  （行为开关 + 控制条按钮 + 重置位置）。
+- 分组按输出能力渲染：`unsupported` 时隐藏（v1 在 iOS/Web/桌面隐藏全部输出组）。
+- 样式预览卡片（Flutter 渲染，与悬浮窗语义一致）；
   这是未来桌面渲染端复用的第一块积木。
+- 返回行为：小屏弹层的 dismiss guard 是返回唯一入口——先在弹层内退子页，
+  子页退完再关弹层；预测返回手势保持预览（提交后 guard 拒绝则预览回弹，
+  对齐 Compose `settleToDismiss` 的「收起一级」语义，见包内
+  `m3e_bottom_sheet_modal_host.dart`）。
 - 文案全部走 l10n（en/zh）；组件用 M3E（含圆角图标、色彩契约）。
 
 ### FR-7 平台能力抽象（预留桌面）
@@ -254,9 +264,9 @@ abstract class LyricsOutput {
 | `desktop.playedColor` | int | 0xFFFFFFFF | ARGB（`Source=custom` 时生效） | 桌面歌词 |
 | `desktop.unplayedColor` | int | 0xB3FFFFFF | ARGB（同上） | 桌面歌词 |
 | `desktop.shadowColor` | int | 0x99000000 | ARGB（同上） | 桌面歌词 |
-| `desktop.playedColorSource` | enum | custom | custom/primary/secondary/tertiary/onSurface/onSurfaceVariant | 桌面歌词 |
-| `desktop.unplayedColorSource` | enum | custom | 同上 | 桌面歌词 |
-| `desktop.shadowColorSource` | enum | custom | 同上 | 桌面歌词 |
+| `desktop.playedColorSource` | enum | primary | custom/primary/secondary/tertiary/onSurface/onSurfaceVariant/surface | 桌面歌词 |
+| `desktop.unplayedColorSource` | enum | onSurfaceVariant | 同上 | 桌面歌词 |
+| `desktop.shadowColorSource` | enum | surface | 同上 | 桌面歌词 |
 | `desktop.widthPercent` | double | 100 | 40..100 | 桌面歌词 |
 | `desktop.singleLine` | bool | false | | 桌面歌词 |
 | `desktop.maxLines` | int | 3 | 1..5（非 singleLine 时） | 桌面歌词 |
@@ -286,6 +296,10 @@ abstract class LyricsOutput {
 > 见通用调色器 `lib/widgets/app_color_picker.dart`），不限于预设色板；主题角色
 > 来源按分组的「取色来源」解析（跟随应用主题 / 跟随封面，`resolveSurfaceScheme`），
 > 并随主题与切歌实时重新下发。应用「自定义颜色」与海报自定义色同样支持任意取色。
+>
+> **默认值**：三行颜色默认即跟随应用主题角色（主色 / 次要文本色 / 表面色），
+> 开箱即用、改主题自动协调；`surface` 角色用于描边（深色主题近黑、浅色主题近白）。
+> 默认值调整不迁移存量配置（已落盘的旧值保持），只影响新装与清数据后的用户。
 
 ### 5.8 通道协议（Android）
 

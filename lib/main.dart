@@ -72,7 +72,6 @@ import 'services/ai/ai_recommendation_service.dart';
 import 'services/ai/ai_settings_store.dart';
 import 'services/ai/llm_client.dart';
 import 'services/ai/taste_profile_builder.dart';
-import 'services/settings_service.dart';
 import 'services/source_swap/auto_source_swap_service.dart';
 import 'services/source_swap/source_swap_settings.dart';
 import 'services/update/update_installer.dart';
@@ -637,8 +636,6 @@ void main() async {
           ),
         ),
         Provider<NotificationService>.value(value: notificationService),
-        Provider<SettingsService>(
-            create: (_) => SettingsService(settings: settingsRegistry)),
         // 省流模式：设置页读写开关/音质上限；取链与封面网关已在上方接线。
         ChangeNotifierProvider.value(value: dataSaver),
         // 跨设备数据同步：设置页读写；Web 不展示入口。

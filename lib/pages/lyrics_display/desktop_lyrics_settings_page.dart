@@ -16,8 +16,9 @@ import '../../theme/scheme_builder.dart';
 import '../../utils/color_hex.dart';
 import '../../widgets/app_color_picker.dart';
 import '../../widgets/settings/settings_tiles.dart';
+import 'lyrics_shared_display_section.dart';
 
-/// 桌面歌词子页：开关与权限、样式（含配色）、行为、控制条按钮。
+/// 桌面歌词子页：外观与配色（含开关与权限）、共享展示项、行为与控制条。
 ///
 /// 颜色解析与悬浮窗下发同源：先按「取色来源」解析出方案（应用主题 /
 /// 当前曲目封面），再用 [resolveLyricColor] 得到角色色或自定义色；
@@ -47,6 +48,7 @@ class DesktopLyricsSettingsPage extends StatelessWidget {
         padding: const EdgeInsets.all(kSettingsPadding),
         children: [
           SettingsSectionCard(
+            title: l10n.lyricsDesktopTitle,
             children: [
               SettingsSwitchTile(
                 icon: Icons.picture_in_picture_alt_rounded,
@@ -57,7 +59,7 @@ class DesktopLyricsSettingsPage extends StatelessWidget {
                   if (value &&
                       capability == LyricsOutputCapability.needsPermission) {
                     // 未授权：不假装开启，直接引导到系统授权页；
-                    // 授权返回后由回前台复查（hub 的 lifecycle 监听）刷新能力。
+                    // 授权返回后由设置首屏的 lifecycle 监听复查能力。
                     await display.requestDesktopOverlayPermission();
                     return;
                   }
@@ -93,12 +95,6 @@ class DesktopLyricsSettingsPage extends StatelessWidget {
                     ],
                   ),
                 ),
-            ],
-          ),
-          const SizedBox(height: kSettingsSectionSpacing),
-          SettingsSectionCard(
-            title: l10n.lyricsDesktopTitle,
-            children: [
               _previewCard(context, l10n, settings, scheme),
               SettingsSliderRow(
                 icon: Icons.format_size_rounded,
@@ -194,6 +190,7 @@ class DesktopLyricsSettingsPage extends StatelessWidget {
               ),
               _colorRow(
                 context,
+                rowKey: const Key('desktopColorPlayedRow'),
                 icon: Icons.text_fields_rounded,
                 title: l10n.lyricsDesktopColorPlayed,
                 source: settings.desktopPlayedColorSource,
@@ -204,6 +201,7 @@ class DesktopLyricsSettingsPage extends StatelessWidget {
               ),
               _colorRow(
                 context,
+                rowKey: const Key('desktopColorUnplayedRow'),
                 icon: Icons.text_fields_rounded,
                 title: l10n.lyricsDesktopColorUnplayed,
                 source: settings.desktopUnplayedColorSource,
@@ -214,6 +212,7 @@ class DesktopLyricsSettingsPage extends StatelessWidget {
               ),
               _colorRow(
                 context,
+                rowKey: const Key('desktopColorShadowRow'),
                 icon: Icons.blur_on_rounded,
                 title: l10n.lyricsDesktopColorShadow,
                 source: settings.desktopShadowColorSource,
@@ -234,7 +233,10 @@ class DesktopLyricsSettingsPage extends StatelessWidget {
             ],
           ),
           const SizedBox(height: kSettingsSectionSpacing),
+          LyricsSharedDisplaySection(title: l10n.lyricsSharedDisplaySection),
+          const SizedBox(height: kSettingsSectionSpacing),
           SettingsSectionCard(
+            title: l10n.lyricsDesktopBehaviorSection,
             children: [
               SettingsSwitchTile(
                 icon: Icons.lock_rounded,
@@ -281,12 +283,6 @@ class DesktopLyricsSettingsPage extends StatelessWidget {
                 ],
                 onChanged: settings.setDesktopNoLyricsBehavior,
               ),
-            ],
-          ),
-          const SizedBox(height: kSettingsSectionSpacing),
-          SettingsSectionCard(
-            title: l10n.lyricsDesktopControls,
-            children: [
               _controlSwitch(
                 l10n.lyricsControlPlayPause,
                 Icons.play_arrow_rounded,
@@ -358,6 +354,7 @@ class DesktopLyricsSettingsPage extends StatelessWidget {
   /// 颜色行：显示当前解析出的颜色，点开「颜色选择面板」。
   Widget _colorRow(
     BuildContext context, {
+    required Key rowKey,
     required IconData icon,
     required String title,
     required LyricColorSource source,
@@ -367,6 +364,7 @@ class DesktopLyricsSettingsPage extends StatelessWidget {
     required Future<void> Function(int) onCustomColorChanged,
   }) {
     return SettingsColorValueTile(
+      key: rowKey,
       icon: icon,
       title: title,
       colorArgb: resolveLyricColor(source, customColor, scheme),
@@ -604,4 +602,5 @@ String _colorSourceLabel(AppLocalizations l10n, LyricColorSource source) =>
       LyricColorSource.onSurface => l10n.lyricsColorSourceOnSurface,
       LyricColorSource.onSurfaceVariant =>
         l10n.lyricsColorSourceOnSurfaceVariant,
+      LyricColorSource.surface => l10n.lyricsColorSourceSurface,
     };

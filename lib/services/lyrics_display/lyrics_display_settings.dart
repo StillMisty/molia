@@ -33,13 +33,17 @@ enum DesktopTextAlignY { top, center, bottom }
 /// `custom` = 用户自定义色板；其余值取「跟随主题角色」——所用方案由
 /// [LyricsDisplaySettings.desktopSchemeSource] 决定（应用主题 / 当前曲目
 /// 封面），两者都由 `ThemeProvider` 统一解析。
+///
+/// `surface` 是主题表面色：深色主题下接近黑、浅色主题下接近白，适合做
+/// 悬浮窗文字描边（默认），随主题明暗自动反向。
 enum LyricColorSource {
   custom,
   primary,
   secondary,
   tertiary,
   onSurface,
-  onSurfaceVariant
+  onSurfaceVariant,
+  surface
 }
 
 /// 桌面悬浮歌词控制条按钮键（与 [LyricsDisplaySettings.desktopControls] 对应）。
@@ -90,8 +94,15 @@ class LyricsDisplaySettings extends ChangeNotifier {
   static const int defaultDesktopPlayedColor = 0xFFFFFFFF;
   static const int defaultDesktopUnplayedColor = 0xB3FFFFFF;
   static const int defaultDesktopShadowColor = 0x99000000;
-  static const LyricColorSource defaultDesktopColorSource =
-      LyricColorSource.custom;
+  // 默认直接跟随应用主题角色（开箱即用，改主题自动协调）：当前行取主色、
+  // 其余行取次要文本色、描边取表面色（深色主题近黑 / 浅色主题近白，
+  // 天然适配悬浮窗落在任意背景上）；自定义色板仅作为用户显式选择。
+  static const LyricColorSource defaultDesktopPlayedColorSource =
+      LyricColorSource.primary;
+  static const LyricColorSource defaultDesktopUnplayedColorSource =
+      LyricColorSource.onSurfaceVariant;
+  static const LyricColorSource defaultDesktopShadowColorSource =
+      LyricColorSource.surface;
 
   /// 「跟随主题角色」时所用方案的来源（应用主题 / 当前曲目封面）。
   static const SurfaceColorSource defaultDesktopSchemeSource =
@@ -149,9 +160,11 @@ class LyricsDisplaySettings extends ChangeNotifier {
   int _desktopPlayedColor = defaultDesktopPlayedColor;
   int _desktopUnplayedColor = defaultDesktopUnplayedColor;
   int _desktopShadowColor = defaultDesktopShadowColor;
-  LyricColorSource _desktopPlayedColorSource = defaultDesktopColorSource;
-  LyricColorSource _desktopUnplayedColorSource = defaultDesktopColorSource;
-  LyricColorSource _desktopShadowColorSource = defaultDesktopColorSource;
+  LyricColorSource _desktopPlayedColorSource = defaultDesktopPlayedColorSource;
+  LyricColorSource _desktopUnplayedColorSource =
+      defaultDesktopUnplayedColorSource;
+  LyricColorSource _desktopShadowColorSource =
+      defaultDesktopShadowColorSource;
   SurfaceColorSource _desktopSchemeSource = defaultDesktopSchemeSource;
   double _desktopWidthPercent = defaultDesktopWidthPercent;
   bool _desktopSingleLine = defaultDesktopSingleLine;

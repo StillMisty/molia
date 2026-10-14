@@ -19,5 +19,6 @@ int resolveLyricColor(
     LyricColorSource.tertiary => scheme.tertiary.toARGB32(),
     LyricColorSource.onSurface => scheme.onSurface.toARGB32(),
     LyricColorSource.onSurfaceVariant => scheme.onSurfaceVariant.toARGB32(),
+    LyricColorSource.surface => scheme.surface.toARGB32(),
   };
 }
