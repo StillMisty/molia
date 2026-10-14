@@ -935,5 +935,71 @@
       }
     }
   },
-  "trackInfoCachePlaying": "正在播放，音频缓存稍后再清"
+  "trackInfoCachePlaying": "正在播放，音频缓存稍后再清",
+  "commentsTitle": "评论",
+  "commentsTabHot": "热门",
+  "commentsTabHotCount": "热门 ({count})",
+  "@commentsTabHotCount": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "commentsTabLatest": "最新",
+  "commentsTabLatestCount": "最新 ({count})",
+  "@commentsTabLatestCount": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "commentsEmpty": "还没有评论",
+  "commentsUnsupported": "当前渠道不支持评论",
+  "commentsLoadFailed": "评论加载失败",
+  "commentsLoadMoreFailed": "加载更多评论失败",
+  "commentsNoMore": "没有更多评论了",
+  "commentsRefresh": "刷新评论",
+  "commentsIpLocation": "IP 属地：{location}",
+  "@commentsIpLocation": {
+    "placeholders": {
+      "location": {
+        "type": "String"
+      }
+    }
+  },
+  "commentsQuotedAuthor": "{name}：",
+  "@commentsQuotedAuthor": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "commentsLikedCount": "{count} 赞",
+  "@commentsLikedCount": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "commentsTimeJustNow": "刚刚",
+  "commentsTimeMinutesAgo": "{count} 分钟前",
+  "@commentsTimeMinutesAgo": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "commentsTimeHoursAgo": "{count} 小时前",
+  "@commentsTimeHoursAgo": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  }
 }

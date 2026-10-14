@@ -10,7 +10,9 @@ import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:molia/domain/models/playback.dart';
+import 'package:molia/domain/models/source.dart';
 import 'package:molia/domain/models/track.dart';
+import 'package:molia/domain/ports/source_registry.dart';
 import 'package:molia/l10n/app_localizations.dart';
 import 'package:molia/providers/lyrics_provider.dart';
 import 'package:molia/providers/playback_provider.dart';
@@ -19,6 +21,7 @@ import 'package:molia/services/lyrics_service.dart';
 import 'package:molia/services/notification_service.dart';
 import 'package:molia/widgets/lyrics.dart';
 
+import '../support/fake_music_source.dart';
 import '../support/fakes.dart';
 
 /// 30 行、每行 5 秒的时间轴歌词：60s 处正好是第 12 行。
@@ -109,6 +112,7 @@ void main() {
     WidgetTester tester, {
     LyricsService? service,
     LyricsDisplaySettings? settings,
+    SourceRegistry? registry,
   }) async {
     tester.view.physicalSize = const Size(420, 900);
     tester.view.devicePixelRatio = 1.0;
@@ -139,6 +143,8 @@ void main() {
           Provider<NotificationService>.value(
             value: NotificationService(GlobalKey<ScaffoldMessengerState>()),
           ),
+          // 评论入口的能力判定来源（未注册 = 视为不支持，入口禁用）。
+          Provider<SourceRegistry?>.value(value: registry),
         ],
         child: MaterialApp(
           locale: const Locale('zh'),
@@ -352,7 +358,16 @@ void main() {
   });
 
   testWidgets('快捷操作栏为 M3EToolbar：按钮能力与选中态随状态同步', (tester) async {
-    await pumpLyrics(tester);
+    await pumpLyrics(
+      tester,
+      // 渠道支持评论：评论动作入列且可用（能力位来自 SourceRegistry）。
+      registry: FakeSourceRegistry({
+        'fake': FakeMusicSource(
+          'fake',
+          capabilities: const SourceCapabilities(search: true, comment: true),
+        ),
+      }),
+    );
 
     M3EToolbar toolbar() => tester.widget<M3EToolbar>(find.byType(M3EToolbar));
     List<M3EToolbarAction> actions() =>
@@ -386,6 +401,8 @@ void main() {
         Icons.edit_note_rounded,
         // 「换源」（歌词 / 音频双 tab 页）取代原独立歌词搜索入口。
         Icons.swap_horiz_rounded,
+        // 「评论」（评论页）：与换源相邻。
+        Icons.comment_rounded,
         Icons.checklist_rounded,
       ],
     );
@@ -414,5 +431,18 @@ void main() {
 
     // 播放模式切换的通知节流计时器跑完，避免 pending timer 报错。
     await tester.pump(const Duration(milliseconds: 300));
+  });
+
+  testWidgets('评论入口：渠道不支持评论时禁用', (tester) async {
+    // 未注册 SourceRegistry（或渠道无评论能力）时入口禁用。
+    await pumpLyrics(tester);
+
+    final actions = tester
+        .widget<M3EToolbar>(find.byType(M3EToolbar))
+        .actions
+        .whereType<M3EToolbarAction>();
+    final comment =
+        actions.firstWhere((action) => action.icon == Icons.comment_rounded);
+    expect(comment.enabled, isFalse);
   });
 }

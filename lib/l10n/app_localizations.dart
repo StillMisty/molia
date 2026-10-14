@@ -4214,6 +4214,108 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Playing — audio cache can be cleared later'**
   String get trackInfoCachePlaying;
+
+  /// No description provided for @commentsTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Comments'**
+  String get commentsTitle;
+
+  /// No description provided for @commentsTabHot.
+  ///
+  /// In en, this message translates to:
+  /// **'Hot'**
+  String get commentsTabHot;
+
+  /// No description provided for @commentsTabHotCount.
+  ///
+  /// In en, this message translates to:
+  /// **'Hot ({count})'**
+  String commentsTabHotCount(int count);
+
+  /// No description provided for @commentsTabLatest.
+  ///
+  /// In en, this message translates to:
+  /// **'Latest'**
+  String get commentsTabLatest;
+
+  /// No description provided for @commentsTabLatestCount.
+  ///
+  /// In en, this message translates to:
+  /// **'Latest ({count})'**
+  String commentsTabLatestCount(int count);
+
+  /// No description provided for @commentsEmpty.
+  ///
+  /// In en, this message translates to:
+  /// **'No comments yet'**
+  String get commentsEmpty;
+
+  /// No description provided for @commentsUnsupported.
+  ///
+  /// In en, this message translates to:
+  /// **'Comments are not available for this channel'**
+  String get commentsUnsupported;
+
+  /// No description provided for @commentsLoadFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Failed to load comments'**
+  String get commentsLoadFailed;
+
+  /// No description provided for @commentsLoadMoreFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Failed to load more comments'**
+  String get commentsLoadMoreFailed;
+
+  /// No description provided for @commentsNoMore.
+  ///
+  /// In en, this message translates to:
+  /// **'No more comments'**
+  String get commentsNoMore;
+
+  /// No description provided for @commentsRefresh.
+  ///
+  /// In en, this message translates to:
+  /// **'Refresh comments'**
+  String get commentsRefresh;
+
+  /// No description provided for @commentsIpLocation.
+  ///
+  /// In en, this message translates to:
+  /// **'IP: {location}'**
+  String commentsIpLocation(String location);
+
+  /// No description provided for @commentsQuotedAuthor.
+  ///
+  /// In en, this message translates to:
+  /// **'{name}: '**
+  String commentsQuotedAuthor(String name);
+
+  /// No description provided for @commentsLikedCount.
+  ///
+  /// In en, this message translates to:
+  /// **'{count} likes'**
+  String commentsLikedCount(int count);
+
+  /// No description provided for @commentsTimeJustNow.
+  ///
+  /// In en, this message translates to:
+  /// **'Just now'**
+  String get commentsTimeJustNow;
+
+  /// No description provided for @commentsTimeMinutesAgo.
+  ///
+  /// In en, this message translates to:
+  /// **'{count} min ago'**
+  String commentsTimeMinutesAgo(int count);
+
+  /// No description provided for @commentsTimeHoursAgo.
+  ///
+  /// In en, this message translates to:
+  /// **'{count} h ago'**
+  String commentsTimeHoursAgo(int count);
 }
 
 class _AppLocalizationsDelegate

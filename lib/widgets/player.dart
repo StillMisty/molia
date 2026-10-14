@@ -12,6 +12,8 @@ import 'package:provider/provider.dart';
 import '../domain/models/track.dart';
 import '../l10n/app_localizations.dart';
 import '../managers/artwork_cache.dart';
+import '../pages/song_comments_page.dart';
+import '../providers/comments_provider.dart';
 import '../providers/library_provider.dart';
 import '../providers/playback_provider.dart';
 import '../models/play_mode.dart';
@@ -509,8 +511,9 @@ class _PlayerState extends State<Player> with TickerProviderStateMixin {
     );
   }
 
-  /// 进度排：收藏（左）+ 可拖动波浪进度（中）+ 播放模式（右）。
+  /// 进度排：收藏 + 评论（左）+ 可拖动波浪进度（中）+ 播放模式（右）。
   ///
+  /// 评论入口在展开态提供（收起态的入口在歌词快捷工具栏）。
   /// 拖动期间本地预览、松手才提交 seek。
   Widget _buildSeekBar(
     BuildContext context,
@@ -523,6 +526,8 @@ class _PlayerState extends State<Player> with TickerProviderStateMixin {
       child: Row(
         children: [
           _buildFavoriteButton(),
+          const SizedBox(width: 4),
+          const _CommentButton(),
           const SizedBox(width: 4),
           Expanded(child: _buildSeekSlider(context, playbackProvider)),
           const SizedBox(width: 4),
@@ -1038,6 +1043,35 @@ class _FavoriteButton extends StatelessWidget {
         HapticFeedback.lightImpact();
         await library.toggleFavoriteTrack(track);
       },
+    );
+  }
+}
+
+/// 评论入口（展开态播放器）：当前曲目渠道支持评论时显示，打开评论页。
+///
+/// 收起态播放页的入口在歌词快捷工具栏（`lib/widgets/lyrics.dart`），
+/// 两处共用 `CommentsProvider.supports` 的能力判定。
+class _CommentButton extends StatelessWidget {
+  const _CommentButton();
+
+  @override
+  Widget build(BuildContext context) {
+    final track = context.select<PlaybackProvider, Track?>(
+        (provider) => provider.snapshot.current);
+    // 无 provider（组件级测试直接挂载 Player）或无当前曲目：不占位。
+    final comments = context.watch<CommentsProvider?>();
+    if (track == null || comments == null || !comments.supports(track)) {
+      return const SizedBox.shrink();
+    }
+    final l10n = AppLocalizations.of(context) ??
+        lookupAppLocalizations(const Locale('zh'));
+    return M3EIconButton(
+      variant: M3EIconButtonVariant.standard,
+      size: M3EIconButtonSize.sm,
+      visualSize: const Size(44, 44),
+      icon: const Icon(Icons.comment_rounded),
+      tooltip: l10n.commentsTitle,
+      onPressed: () => unawaited(showSongCommentsPage(context, track: track)),
     );
   }
 }

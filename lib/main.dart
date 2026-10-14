@@ -6,6 +6,7 @@ import 'package:provider/provider.dart';
 
 import 'app/app_shell.dart';
 import 'data/catalog/catalog_service.dart';
+import 'data/catalog/comments_service.dart';
 import 'data/catalog/source_registry_impl.dart';
 import 'data/library_repository.dart';
 import 'data/mapping/track_mapper.dart';
@@ -38,6 +39,7 @@ import 'playback/desktop_audio_init.dart';
 import 'playback/local_audio_handler.dart';
 import 'playback/local_playback_service.dart';
 import 'playback/next_track_preloader.dart';
+import 'providers/comments_provider.dart';
 import 'providers/library_provider.dart';
 import 'providers/local_database_provider.dart';
 import 'providers/lyrics_display_provider.dart';
@@ -158,6 +160,9 @@ void main() async {
   // SearchProvider 只依赖后两者（搜索缓存 single-flight + LRU + TTL 5min）。
   final sourceRegistry = SourceRegistryImpl(sourceManager);
   final catalogService = CatalogService(registry: sourceRegistry);
+  // 评论：与目录服务同构的缓存层（single-flight + LRU + 5min TTL，
+  // key = comments:{source}:{songId}:{kind}:{page}）。
+  final commentsService = CommentsService(registry: sourceRegistry);
 
   // 本地播放后端：backend 持有领域解析器端口（Track → PlayableStream），
   // 服务的解析回调 late 绑定到 backend；resolver 走 CatalogService.resolve
@@ -562,6 +567,13 @@ void main() async {
         ),
         Provider<SourceRegistry>.value(value: sourceRegistry),
         Provider<CatalogService>.value(value: catalogService),
+        // 评论页状态：热门 / 最新分页 + 刷新（评论缓存走 CommentsService）。
+        ChangeNotifierProvider(
+          create: (_) => CommentsProvider(
+            service: commentsService,
+            registry: sourceRegistry,
+          ),
+        ),
         ChangeNotifierProvider.value(value: playbackProvider),
         ChangeNotifierProvider.value(value: themeProvider),
         // 封面取色服务（海报「跟随封面」按需查询；主题链路已在上方接线）。

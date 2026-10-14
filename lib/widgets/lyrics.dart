@@ -10,9 +10,11 @@ import 'package:provider/provider.dart';
 
 import '../l10n/app_localizations.dart';
 import '../domain/models/track.dart';
+import '../domain/ports/source_registry.dart';
 import '../models/lyric_line.dart';
 import 'lyrics_scroll_policy.dart';
 import '../models/play_mode.dart';
+import '../pages/song_comments_page.dart';
 import '../pages/source_swap_page.dart';
 import '../providers/lyrics_provider.dart';
 import '../providers/playback_provider.dart';
@@ -465,6 +467,12 @@ class _LyricsWidgetState extends State<LyricsWidget>
         icon: Icons.swap_horiz_rounded,
         onPressed: _showSourceSwapPage,
         tooltip: l10n.sourceSwap,
+      ),
+      M3EToolbarAction(
+        icon: Icons.comment_rounded,
+        enabled: _commentsSupported,
+        onPressed: _showCommentsPage,
+        tooltip: l10n.commentsTitle,
       ),
       M3EToolbarAction(
         icon: Icons.checklist_rounded,
@@ -1136,6 +1144,26 @@ class _LyricsWidgetState extends State<LyricsWidget>
         },
       );
     }
+  }
+
+  /// 当前曲目渠道是否支持评论（能力位来自 `SourceRegistry`；无曲目 /
+  /// 未注册注册表（组件级测试）时视为不支持，入口禁用）。
+  bool get _commentsSupported {
+    final track = Provider.of<PlaybackProvider>(context, listen: false)
+        .snapshot
+        .current;
+    if (track == null) return false;
+    final registry = Provider.of<SourceRegistry?>(context, listen: false);
+    return registry?.byKey(track.id.sourceKey)?.capabilities.comment ?? false;
+  }
+
+  /// 评论页：当前曲目的热门 / 最新评论。
+  Future<void> _showCommentsPage() async {
+    if (!mounted) return;
+    final currentTrack =
+        Provider.of<PlaybackProvider>(context, listen: false).snapshot.current;
+    if (currentTrack == null) return;
+    await showSongCommentsPage(context, track: currentTrack);
   }
 
   /// 换源页（歌词 / 音频双 tab）：默认落在歌词 tab。
