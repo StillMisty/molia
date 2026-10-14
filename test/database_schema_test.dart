@@ -72,6 +72,7 @@ void main() {
         'sizeBytes|INTEGER|1|0|0',
         'lyricPath|TEXT|0|null|0',
         'coverPath|TEXT|0|null|0',
+        'publicUri|TEXT|0|null|0',
         'downloadedAt|INTEGER|1|null|0',
       ],
       'play_contexts': [

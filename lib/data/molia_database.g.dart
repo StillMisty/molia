@@ -2899,6 +2899,12 @@ class $DownloadsTable extends Downloads
   late final GeneratedColumn<String> coverPath = GeneratedColumn<String>(
       'coverPath', aliasedName, true,
       type: DriftSqlType.string, requiredDuringInsert: false);
+  static const VerificationMeta _publicUriMeta =
+      const VerificationMeta('publicUri');
+  @override
+  late final GeneratedColumn<String> publicUri = GeneratedColumn<String>(
+      'publicUri', aliasedName, true,
+      type: DriftSqlType.string, requiredDuringInsert: false);
   static const VerificationMeta _downloadedAtMeta =
       const VerificationMeta('downloadedAt');
   @override
@@ -2921,6 +2927,7 @@ class $DownloadsTable extends Downloads
         sizeBytes,
         lyricPath,
         coverPath,
+        publicUri,
         downloadedAt
       ];
   @override
@@ -3000,6 +3007,10 @@ class $DownloadsTable extends Downloads
       context.handle(_coverPathMeta,
           coverPath.isAcceptableOrUnknown(data['coverPath']!, _coverPathMeta));
     }
+    if (data.containsKey('publicUri')) {
+      context.handle(_publicUriMeta,
+          publicUri.isAcceptableOrUnknown(data['publicUri']!, _publicUriMeta));
+    }
     if (data.containsKey('downloadedAt')) {
       context.handle(
           _downloadedAtMeta,
@@ -3045,6 +3056,8 @@ class $DownloadsTable extends Downloads
           .read(DriftSqlType.string, data['${effectivePrefix}lyricPath']),
       coverPath: attachedDatabase.typeMapping
           .read(DriftSqlType.string, data['${effectivePrefix}coverPath']),
+      publicUri: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}publicUri']),
       downloadedAt: attachedDatabase.typeMapping
           .read(DriftSqlType.int, data['${effectivePrefix}downloadedAt'])!,
     );
@@ -3071,6 +3084,7 @@ class DownloadRow extends DataClass implements Insertable<DownloadRow> {
   final int sizeBytes;
   final String? lyricPath;
   final String? coverPath;
+  final String? publicUri;
   final int downloadedAt;
   const DownloadRow(
       {required this.id,
@@ -3087,6 +3101,7 @@ class DownloadRow extends DataClass implements Insertable<DownloadRow> {
       required this.sizeBytes,
       this.lyricPath,
       this.coverPath,
+      this.publicUri,
       required this.downloadedAt});
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
@@ -3114,6 +3129,9 @@ class DownloadRow extends DataClass implements Insertable<DownloadRow> {
     }
     if (!nullToAbsent || coverPath != null) {
       map['coverPath'] = Variable<String>(coverPath);
+    }
+    if (!nullToAbsent || publicUri != null) {
+      map['publicUri'] = Variable<String>(publicUri);
     }
     map['downloadedAt'] = Variable<int>(downloadedAt);
     return map;
@@ -3145,6 +3163,9 @@ class DownloadRow extends DataClass implements Insertable<DownloadRow> {
       coverPath: coverPath == null && nullToAbsent
           ? const Value.absent()
           : Value(coverPath),
+      publicUri: publicUri == null && nullToAbsent
+          ? const Value.absent()
+          : Value(publicUri),
       downloadedAt: Value(downloadedAt),
     );
   }
@@ -3167,6 +3188,7 @@ class DownloadRow extends DataClass implements Insertable<DownloadRow> {
       sizeBytes: serializer.fromJson<int>(json['sizeBytes']),
       lyricPath: serializer.fromJson<String?>(json['lyricPath']),
       coverPath: serializer.fromJson<String?>(json['coverPath']),
+      publicUri: serializer.fromJson<String?>(json['publicUri']),
       downloadedAt: serializer.fromJson<int>(json['downloadedAt']),
     );
   }
@@ -3188,6 +3210,7 @@ class DownloadRow extends DataClass implements Insertable<DownloadRow> {
       'sizeBytes': serializer.toJson<int>(sizeBytes),
       'lyricPath': serializer.toJson<String?>(lyricPath),
       'coverPath': serializer.toJson<String?>(coverPath),
+      'publicUri': serializer.toJson<String?>(publicUri),
       'downloadedAt': serializer.toJson<int>(downloadedAt),
     };
   }
@@ -3207,6 +3230,7 @@ class DownloadRow extends DataClass implements Insertable<DownloadRow> {
           int? sizeBytes,
           Value<String?> lyricPath = const Value.absent(),
           Value<String?> coverPath = const Value.absent(),
+          Value<String?> publicUri = const Value.absent(),
           int? downloadedAt}) =>
       DownloadRow(
         id: id ?? this.id,
@@ -3223,6 +3247,7 @@ class DownloadRow extends DataClass implements Insertable<DownloadRow> {
         sizeBytes: sizeBytes ?? this.sizeBytes,
         lyricPath: lyricPath.present ? lyricPath.value : this.lyricPath,
         coverPath: coverPath.present ? coverPath.value : this.coverPath,
+        publicUri: publicUri.present ? publicUri.value : this.publicUri,
         downloadedAt: downloadedAt ?? this.downloadedAt,
       );
   DownloadRow copyWithCompanion(DownloadsCompanion data) {
@@ -3246,6 +3271,7 @@ class DownloadRow extends DataClass implements Insertable<DownloadRow> {
       sizeBytes: data.sizeBytes.present ? data.sizeBytes.value : this.sizeBytes,
       lyricPath: data.lyricPath.present ? data.lyricPath.value : this.lyricPath,
       coverPath: data.coverPath.present ? data.coverPath.value : this.coverPath,
+      publicUri: data.publicUri.present ? data.publicUri.value : this.publicUri,
       downloadedAt: data.downloadedAt.present
           ? data.downloadedAt.value
           : this.downloadedAt,
@@ -3269,6 +3295,7 @@ class DownloadRow extends DataClass implements Insertable<DownloadRow> {
           ..write('sizeBytes: $sizeBytes, ')
           ..write('lyricPath: $lyricPath, ')
           ..write('coverPath: $coverPath, ')
+          ..write('publicUri: $publicUri, ')
           ..write('downloadedAt: $downloadedAt')
           ..write(')'))
         .toString();
@@ -3290,6 +3317,7 @@ class DownloadRow extends DataClass implements Insertable<DownloadRow> {
       sizeBytes,
       lyricPath,
       coverPath,
+      publicUri,
       downloadedAt);
   @override
   bool operator ==(Object other) =>
@@ -3309,6 +3337,7 @@ class DownloadRow extends DataClass implements Insertable<DownloadRow> {
           other.sizeBytes == this.sizeBytes &&
           other.lyricPath == this.lyricPath &&
           other.coverPath == this.coverPath &&
+          other.publicUri == this.publicUri &&
           other.downloadedAt == this.downloadedAt);
 }
 
@@ -3327,6 +3356,7 @@ class DownloadsCompanion extends UpdateCompanion<DownloadRow> {
   final Value<int> sizeBytes;
   final Value<String?> lyricPath;
   final Value<String?> coverPath;
+  final Value<String?> publicUri;
   final Value<int> downloadedAt;
   const DownloadsCompanion({
     this.id = const Value.absent(),
@@ -3343,6 +3373,7 @@ class DownloadsCompanion extends UpdateCompanion<DownloadRow> {
     this.sizeBytes = const Value.absent(),
     this.lyricPath = const Value.absent(),
     this.coverPath = const Value.absent(),
+    this.publicUri = const Value.absent(),
     this.downloadedAt = const Value.absent(),
   });
   DownloadsCompanion.insert({
@@ -3360,6 +3391,7 @@ class DownloadsCompanion extends UpdateCompanion<DownloadRow> {
     this.sizeBytes = const Value.absent(),
     this.lyricPath = const Value.absent(),
     this.coverPath = const Value.absent(),
+    this.publicUri = const Value.absent(),
     required int downloadedAt,
   })  : originSourceKey = Value(originSourceKey),
         originSongId = Value(originSongId),
@@ -3380,6 +3412,7 @@ class DownloadsCompanion extends UpdateCompanion<DownloadRow> {
     Expression<int>? sizeBytes,
     Expression<String>? lyricPath,
     Expression<String>? coverPath,
+    Expression<String>? publicUri,
     Expression<int>? downloadedAt,
   }) {
     return RawValuesInsertable({
@@ -3397,6 +3430,7 @@ class DownloadsCompanion extends UpdateCompanion<DownloadRow> {
       if (sizeBytes != null) 'sizeBytes': sizeBytes,
       if (lyricPath != null) 'lyricPath': lyricPath,
       if (coverPath != null) 'coverPath': coverPath,
+      if (publicUri != null) 'publicUri': publicUri,
       if (downloadedAt != null) 'downloadedAt': downloadedAt,
     });
   }
@@ -3416,6 +3450,7 @@ class DownloadsCompanion extends UpdateCompanion<DownloadRow> {
       Value<int>? sizeBytes,
       Value<String?>? lyricPath,
       Value<String?>? coverPath,
+      Value<String?>? publicUri,
       Value<int>? downloadedAt}) {
     return DownloadsCompanion(
       id: id ?? this.id,
@@ -3432,6 +3467,7 @@ class DownloadsCompanion extends UpdateCompanion<DownloadRow> {
       sizeBytes: sizeBytes ?? this.sizeBytes,
       lyricPath: lyricPath ?? this.lyricPath,
       coverPath: coverPath ?? this.coverPath,
+      publicUri: publicUri ?? this.publicUri,
       downloadedAt: downloadedAt ?? this.downloadedAt,
     );
   }
@@ -3481,6 +3517,9 @@ class DownloadsCompanion extends UpdateCompanion<DownloadRow> {
     if (coverPath.present) {
       map['coverPath'] = Variable<String>(coverPath.value);
     }
+    if (publicUri.present) {
+      map['publicUri'] = Variable<String>(publicUri.value);
+    }
     if (downloadedAt.present) {
       map['downloadedAt'] = Variable<int>(downloadedAt.value);
     }
@@ -3504,6 +3543,7 @@ class DownloadsCompanion extends UpdateCompanion<DownloadRow> {
           ..write('sizeBytes: $sizeBytes, ')
           ..write('lyricPath: $lyricPath, ')
           ..write('coverPath: $coverPath, ')
+          ..write('publicUri: $publicUri, ')
           ..write('downloadedAt: $downloadedAt')
           ..write(')'))
         .toString();
@@ -4976,6 +5016,7 @@ typedef $$DownloadsTableCreateCompanionBuilder = DownloadsCompanion Function({
   Value<int> sizeBytes,
   Value<String?> lyricPath,
   Value<String?> coverPath,
+  Value<String?> publicUri,
   required int downloadedAt,
 });
 typedef $$DownloadsTableUpdateCompanionBuilder = DownloadsCompanion Function({
@@ -4993,6 +5034,7 @@ typedef $$DownloadsTableUpdateCompanionBuilder = DownloadsCompanion Function({
   Value<int> sizeBytes,
   Value<String?> lyricPath,
   Value<String?> coverPath,
+  Value<String?> publicUri,
   Value<int> downloadedAt,
 });
 
@@ -5047,6 +5089,9 @@ class $$DownloadsTableFilterComposer
 
   ColumnFilters<String> get coverPath => $composableBuilder(
       column: $table.coverPath, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get publicUri => $composableBuilder(
+      column: $table.publicUri, builder: (column) => ColumnFilters(column));
 
   ColumnFilters<int> get downloadedAt => $composableBuilder(
       column: $table.downloadedAt, builder: (column) => ColumnFilters(column));
@@ -5105,6 +5150,9 @@ class $$DownloadsTableOrderingComposer
   ColumnOrderings<String> get coverPath => $composableBuilder(
       column: $table.coverPath, builder: (column) => ColumnOrderings(column));
 
+  ColumnOrderings<String> get publicUri => $composableBuilder(
+      column: $table.publicUri, builder: (column) => ColumnOrderings(column));
+
   ColumnOrderings<int> get downloadedAt => $composableBuilder(
       column: $table.downloadedAt,
       builder: (column) => ColumnOrderings(column));
@@ -5161,6 +5209,9 @@ class $$DownloadsTableAnnotationComposer
   GeneratedColumn<String> get coverPath =>
       $composableBuilder(column: $table.coverPath, builder: (column) => column);
 
+  GeneratedColumn<String> get publicUri =>
+      $composableBuilder(column: $table.publicUri, builder: (column) => column);
+
   GeneratedColumn<int> get downloadedAt => $composableBuilder(
       column: $table.downloadedAt, builder: (column) => column);
 }
@@ -5205,6 +5256,7 @@ class $$DownloadsTableTableManager extends RootTableManager<
             Value<int> sizeBytes = const Value.absent(),
             Value<String?> lyricPath = const Value.absent(),
             Value<String?> coverPath = const Value.absent(),
+            Value<String?> publicUri = const Value.absent(),
             Value<int> downloadedAt = const Value.absent(),
           }) =>
               DownloadsCompanion(
@@ -5222,6 +5274,7 @@ class $$DownloadsTableTableManager extends RootTableManager<
             sizeBytes: sizeBytes,
             lyricPath: lyricPath,
             coverPath: coverPath,
+            publicUri: publicUri,
             downloadedAt: downloadedAt,
           ),
           createCompanionCallback: ({
@@ -5239,6 +5292,7 @@ class $$DownloadsTableTableManager extends RootTableManager<
             Value<int> sizeBytes = const Value.absent(),
             Value<String?> lyricPath = const Value.absent(),
             Value<String?> coverPath = const Value.absent(),
+            Value<String?> publicUri = const Value.absent(),
             required int downloadedAt,
           }) =>
               DownloadsCompanion.insert(
@@ -5256,6 +5310,7 @@ class $$DownloadsTableTableManager extends RootTableManager<
             sizeBytes: sizeBytes,
             lyricPath: lyricPath,
             coverPath: coverPath,
+            publicUri: publicUri,
             downloadedAt: downloadedAt,
           ),
           withReferenceMapper: (p0) => p0

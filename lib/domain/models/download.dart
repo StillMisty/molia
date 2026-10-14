@@ -60,6 +60,10 @@ class DownloadedTrack {
   /// 封面文件路径（`downloads/covers/`；无封面为 null）。
   final String? coverPath;
 
+  /// 公共 Downloads 副本的 content URI（Android MediaStore；未发布 / 其余
+  /// 平台为 null）。仅用于删除下载时回收公共副本——播放取链只认 [filePath]。
+  final String? publicUri;
+
   final int downloadedAt;
 
   const DownloadedTrack({
@@ -76,6 +80,7 @@ class DownloadedTrack {
     this.sizeBytes = 0,
     this.lyricPath,
     this.coverPath,
+    this.publicUri,
     required this.downloadedAt,
   });
 
@@ -90,6 +95,9 @@ class DownloadedTrack {
 
   /// 是否已有封面文件。
   bool get hasCover => coverPath != null && coverPath!.isNotEmpty;
+
+  /// 是否已发布公共 Downloads 副本（Android；其余平台恒为 false）。
+  bool get hasPublicCopy => publicUri != null && publicUri!.isNotEmpty;
 
   /// 下载记录键 = 原音源曲目键（`downloads` 表唯一约束同构）。
   String get key => '$originSourceKey:$originSongId';

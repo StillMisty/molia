@@ -65,6 +65,7 @@ class DownloadsRepository {
             sizeBytes: Value(track.sizeBytes),
             lyricPath: Value(track.lyricPath),
             coverPath: Value(track.coverPath),
+            publicUri: Value(track.publicUri),
             downloadedAt: track.downloadedAt,
           ),
           mode: InsertMode.insertOrReplace,
@@ -100,6 +101,7 @@ class DownloadsRepository {
         sizeBytes: row.sizeBytes,
         lyricPath: row.lyricPath,
         coverPath: row.coverPath,
+        publicUri: row.publicUri,
         downloadedAt: row.downloadedAt,
       );
 

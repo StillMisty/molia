@@ -9,6 +9,7 @@ import 'generated/schema.dart';
 import 'generated/schema_v1.dart' as v1;
 import 'generated/schema_v2.dart' as v2;
 import 'generated/schema_v3.dart' as v3;
+import 'generated/schema_v4.dart' as v4;
 
 void main() {
   driftRuntimeOptions.dontWarnAboutMultipleDatabases = true;
@@ -273,6 +274,72 @@ void main() {
         expect(rows.single.lyricPath, '/downloads/lyrics/Artist a - Title a.lrc');
         expect(rows.single.coverPath, '/downloads/covers/Artist a - Title a.jpg');
         expect(rows.single.quality, '320k');
+      },
+    );
+  });
+
+  // 迁移不破坏既有数据：v3 → v4 只新增可空列 publicUri，
+  // 既有下载记录（含音频 / 歌词 / 封面路径）逐行保留，publicUri 为 null。
+  test('migration from v3 to v4 keeps download records', () async {
+    const oldDownloadsData = [
+      v3.DownloadsData(
+        id: 1,
+        originSourceKey: 'kw',
+        originSongId: 'a',
+        title: 'Title a',
+        artist: 'Artist a',
+        album: 'Album a',
+        coverUrl: 'https://example.com/a.jpg',
+        durationMs: 245000,
+        raw: '{"id":"a"}',
+        quality: '320k',
+        filePath: '/downloads/Artist a - Title a.mp3',
+        sizeBytes: 3 * 1024 * 1024,
+        lyricPath: '/downloads/lyrics/Artist a - Title a.lrc',
+        coverPath: '/downloads/covers/Artist a - Title a.jpg',
+        downloadedAt: 1000,
+      ),
+      // 分项记录（只有歌词、无音频）：v3 起 filePath 可空，迁移后保持 null。
+      v3.DownloadsData(
+        id: 2,
+        originSourceKey: 'tx',
+        originSongId: 'b',
+        title: 'Title b',
+        artist: 'Artist b',
+        album: '',
+        coverUrl: null,
+        durationMs: null,
+        raw: '{}',
+        quality: '',
+        filePath: null,
+        sizeBytes: 0,
+        lyricPath: '/downloads/lyrics/Artist b - Title b.lrc',
+        coverPath: null,
+        downloadedAt: 2000,
+      ),
+    ];
+
+    await verifier.testWithDataIntegrity(
+      oldVersion: 3,
+      newVersion: 4,
+      createOld: v3.DatabaseAtV3.new,
+      createNew: v4.DatabaseAtV4.new,
+      openTestedDatabase: MoliaDatabase.new,
+      createItems: (batch, oldDb) {
+        batch.insertAll(oldDb.downloads, oldDownloadsData);
+      },
+      validateItems: (newDb) async {
+        final rows = await newDb.select(newDb.downloads).get()
+          ..sort((a, b) => a.id.compareTo(b.id));
+        expect(rows, hasLength(2));
+        expect(rows.first.filePath, '/downloads/Artist a - Title a.mp3');
+        expect(rows.first.lyricPath, '/downloads/lyrics/Artist a - Title a.lrc');
+        expect(rows.first.coverPath, '/downloads/covers/Artist a - Title a.jpg');
+        expect(rows.first.quality, '320k');
+        expect(rows.first.publicUri, null, reason: 'v4 新列默认 null');
+        expect(rows.last.filePath, null);
+        expect(rows.last.lyricPath, '/downloads/lyrics/Artist b - Title b.lrc');
+        expect(rows.last.publicUri, null);
       },
     );
   });
