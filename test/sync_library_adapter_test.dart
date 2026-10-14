@@ -175,4 +175,44 @@ void main() {
     final tracksA = await repoA.listPlaylistTracks(playlistId);
     expect(tracksA.map((t) => t.songId), containsAll(['remote-1', 'local-added']));
   });
+
+  test('本地下载曲目（local）不同步：曲目与墓碑都过滤', () async {
+    final playlistId = await repoA.createPlaylist('混合');
+    await repoA.addTrackToPlaylist(playlistId, track('t1'));
+    await repoA.addTrackToPlaylist(playlistId, track('wy:9', source: 'local'));
+    // 加一条本地曲目再移除：产生 local 墓碑。
+    await repoA.addTrackToPlaylist(playlistId, track('wy:8', source: 'local'));
+    await repoA.removeTrackFromPlaylist(playlistId, 'local', 'wy:8');
+
+    final collected = await adapterA.collect();
+    final trackRecords = collected[SyncCategory.playlistTracks]!;
+    expect(
+      trackRecords.where((record) => !record.deleted).map(
+            (record) => record.data!['sourceKey'],
+          ),
+      ['wy'],
+    );
+    expect(trackRecords.where((record) => record.deleted), isEmpty);
+
+    // 对端收到 local 曲目也忽略（防御：旧版本或异常数据）。
+    final result = await adapterB.apply({
+      SyncCategory.playlistTracks: [
+        SyncRecord(
+          key: SyncRecordKeys.playlistTrack('sync-1', 'local', 'wy:9'),
+          updatedAt: 3000,
+          updatedBy: 'devA',
+          data: const {
+            'playlistSyncId': 'sync-1',
+            'sourceKey': 'local',
+            'songId': 'wy:9',
+            'title': '本地下载',
+            'updatedAt': 3000,
+            'updatedBy': 'devA',
+          },
+        ),
+      ],
+    });
+    expect(result.applied, 0);
+    expect(await repoB.findPlaylistByName('混合'), isNull);
+  });
 }

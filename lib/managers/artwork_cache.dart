@@ -10,6 +10,7 @@ import 'package:flutter_cache_manager/flutter_cache_manager.dart';
 import 'package:logging/logging.dart';
 
 import '../services/cache_service.dart';
+import '../utils/local_image_provider.dart';
 import 'artwork_cache_fs.dart';
 
 /// 封面缓存管理器：统一请求头（修 CDN 403）+ 共享持久 CacheManager。
@@ -160,11 +161,16 @@ class ArtworkCache {
   }
 
   /// 统一 ImageProvider（带 headers + 共享 cacheManager）。
+  ///
+  /// `file://` 地址（本地下载封面）返回 [FileImage]，供封面取色复用；
+  /// 其余走 CachedNetworkImageProvider（省流网关语义不变）。
   Future<ImageProvider> imageProvider(
     String url, {
     int? maxWidth,
     int? maxHeight,
   }) async {
+    final local = localFileImageProvider(url);
+    if (local != null) return local;
     return CachedNetworkImageProvider(
       url,
       headers: headersFor(url),

@@ -7,6 +7,8 @@ import 'package:provider/provider.dart';
 import 'app/app_shell.dart';
 import 'data/catalog/catalog_service.dart';
 import 'data/catalog/source_registry_impl.dart';
+import 'data/downloads/download_storage.dart';
+import 'data/downloads/downloads_repository.dart';
 import 'data/library_repository.dart';
 import 'data/mapping/track_mapper.dart';
 import 'data/play_statistics_repository.dart';
@@ -28,8 +30,10 @@ import 'data/update/update_manifest_client.dart';
 import 'providers/ai_dj_provider.dart';
 import 'data/playback/default_playback_facade.dart';
 import 'data/playback/local_playback_backend.dart';
+import 'domain/models/download.dart';
 import 'domain/models/failure.dart';
 import 'domain/models/device_sync.dart';
+import 'domain/ports/music_source.dart' show PlayableStream;
 import 'domain/ports/source_registry.dart';
 import 'domain/ports/ui_messenger.dart';
 import 'l10n/app_localizations.dart';
@@ -58,6 +62,7 @@ import 'services/cache_service.dart';
 import 'services/track_cache_service.dart';
 import 'managers/artwork_cache.dart';
 import 'services/data_saver_service.dart';
+import 'services/download/download_service.dart';
 import 'services/language_service.dart';
 import 'providers/lyrics_provider.dart';
 import 'services/lyrics_display/audio_route_monitor.dart';
@@ -159,6 +164,30 @@ void main() async {
   final sourceRegistry = SourceRegistryImpl(sourceManager);
   final catalogService = CatalogService(registry: sourceRegistry);
 
+  // 本地下载（Phase 1/2）：downloads/ 持久副本 + 离线歌词/封面。
+  // 存储不可用（Web）时 supported=false，UI 隐藏下载入口；初始化失败不阻断
+  // 启动（init 内部已吞错）。下载时的取词/取图与播放链路同源（脚本 action
+  // → 内置平台原生实现），省流上限同样经 preferredQuality 压低。
+  final downloadService = DownloadService(
+    catalog: catalogService,
+    repository: DownloadsRepository(),
+    storage: createDownloadStorage(),
+    lyricsResolver: (track) async {
+      final result =
+          await sourceManager.fetchLyric(sourceTrackFromTrack(track));
+      if (result == null || result.lyric.trim().isEmpty) return null;
+      return DownloadLyrics(
+        lyric: result.lyric,
+        translation: result.tlyric,
+      );
+    },
+    artworkResolver: (track) =>
+        sourceManager.fetchPic(sourceTrackFromTrack(track)),
+    preferredQuality: () =>
+        dataSaver.effectiveQuality(sourceManager.preferredQuality),
+  );
+  await downloadService.init();
+
   // 本地播放后端：backend 持有领域解析器端口（Track → PlayableStream），
   // 服务的解析回调 late 绑定到 backend；resolver 走 CatalogService.resolve
   // （single-flight + LRU + 10min TTL），重播/循环播放命中缓存。
@@ -186,8 +215,13 @@ void main() async {
   );
   playbackBackend = LocalPlaybackBackend(
     service: localPlayback,
-    resolver: (track, quality) =>
-        catalogService.resolve(track, quality: quality),
+    // 取链外层装饰：优先命中本地下载副本（文件存在时直接 file://），
+    // 未命中回落既有 CatalogService（single-flight + LRU + TTL 不变）。
+    resolver: (track, quality) async {
+      final local = await downloadService.localUriFor(track);
+      if (local != null) return PlayableStream(local);
+      return catalogService.resolve(track, quality: quality);
+    },
   );
   final playbackFacade = DefaultPlaybackFacade(backend: playbackBackend);
 
@@ -309,6 +343,11 @@ void main() async {
   final lyricsProvider = LyricsProvider(
     service: LyricsService(
       trackLyricLoader: (track) async {
+        // 本地下载曲目：读 downloads/lyrics/ 的离线歌词（不触网）；
+        // 无离线歌词返回 null，交给既有歌词源（在线时仍可补全）。
+        if (track.id.sourceKey == kLocalSourceKey) {
+          return downloadService.localLyricsFor(track);
+        }
         final result =
             await sourceManager.fetchLyric(sourceTrackFromTrack(track));
         if (result == null || result.lyric.trim().isEmpty) return null;
@@ -630,6 +669,9 @@ void main() async {
             catalogService: catalogService,
           ),
         ),
+        // 本地下载：歌曲信息页「下载」区与「已下载」列表共用同一状态源。
+        // 与缓存门面是两套东西：清缓存不触碰 downloads/，删下载是独立动作。
+        ChangeNotifierProvider.value(value: downloadService),
         Provider<NotificationService>.value(value: notificationService),
         Provider<SettingsService>(
             create: (_) => SettingsService(settings: settingsRegistry)),

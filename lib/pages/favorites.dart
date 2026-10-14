@@ -6,6 +6,7 @@ import 'package:material_3_expressive/material_3_expressive.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:provider/provider.dart';
 
+import '../domain/models/download.dart' show kLocalSourceKey;
 import '../domain/models/library.dart';
 import '../l10n/app_localizations.dart';
 import '../models/play_mode.dart';
@@ -1398,7 +1399,7 @@ class _FavoritesPageState extends State<FavoritesPage> {
           ),
         ),
       ),
-      if (playlistId != null)
+      if (playlistId != null && track.sourceKey != kLocalSourceKey)
         M3EListSwipeAction(
           icon: _swipeActionIcon(
             Icons.swap_horiz_rounded,
@@ -1521,25 +1522,26 @@ class _FavoritesPageState extends State<FavoritesPage> {
                         ),
                       ),
                     ),
-                    M3EListSwipeAction(
-                      icon: _swipeActionIcon(
-                        Icons.swap_horiz_rounded,
-                        l10n.sourceSwap,
-                      ),
-                      onPressed: () => unawaited(
-                        showSourceSwapPage(
-                          context,
-                          seed: context
-                              .read<LibraryProvider>()
-                              .trackFromHistoryEntry(entry),
-                          lyricsProvider: context.read<LyricsProvider>(),
-                          historyKey: (
-                            sourceKey: entry.sourceKey,
-                            songId: entry.songId,
+                    if (entry.sourceKey != kLocalSourceKey)
+                      M3EListSwipeAction(
+                        icon: _swipeActionIcon(
+                          Icons.swap_horiz_rounded,
+                          l10n.sourceSwap,
+                        ),
+                        onPressed: () => unawaited(
+                          showSourceSwapPage(
+                            context,
+                            seed: context
+                                .read<LibraryProvider>()
+                                .trackFromHistoryEntry(entry),
+                            lyricsProvider: context.read<LyricsProvider>(),
+                            historyKey: (
+                              sourceKey: entry.sourceKey,
+                              songId: entry.songId,
+                            ),
                           ),
                         ),
                       ),
-                    ),
                     M3EListSwipeAction(
                       icon: _swipeActionIcon(
                         Icons.delete_rounded,

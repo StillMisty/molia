@@ -114,4 +114,45 @@ void main() {
     expect(parsed.songId, 'mid:1');
     expect(SyncRecordKeys.parseHistory('broken'), isNull);
   });
+
+  test('本地下载曲目（local）不同步：条目与墓碑都过滤', () async {
+    await repoA.addHistoryEntry(entry('s1', playedAt: 1000));
+    await repoA.addHistoryEntry(PlayHistoryEntry(
+      sourceKey: 'local',
+      songId: 'wy:9',
+      title: '本地下载',
+      playedAt: 2000,
+    ));
+    await repoA.deleteHistoryEntry('local', 'wy:8'); // 无对应行 → 不产生墓碑
+
+    final collected = await adapterA.collect();
+    expect(
+      collected[SyncCategory.history]!.map((record) => record.key),
+      [SyncRecordKeys.history('wy', 's1')],
+    );
+
+    // 对端收到 local 条目 / 墓碑也忽略（防御：旧版本或异常数据）。
+    final result = await adapterB.apply({
+      SyncCategory.history: [
+        SyncRecord(
+          key: SyncRecordKeys.history('local', 'wy:9'),
+          updatedAt: 3000,
+          updatedBy: 'devA',
+          data: const {
+            'sourceKey': 'local',
+            'songId': 'wy:9',
+            'title': '本地下载',
+            'playedAt': 3000,
+          },
+        ),
+        SyncRecord.tombstone(
+          key: SyncRecordKeys.history('local', 'wy:8'),
+          updatedAt: 4000,
+          updatedBy: 'devA',
+        ),
+      ],
+    });
+    expect(result.applied, 0);
+    expect(await repoB.listHistory(), isEmpty);
+  });
 }

@@ -9,6 +9,7 @@ import 'package:motor/motor.dart';
 import 'package:provider/provider.dart';
 
 import '../l10n/app_localizations.dart';
+import '../domain/models/download.dart' show kLocalSourceKey;
 import '../domain/models/track.dart';
 import '../models/lyric_line.dart';
 import 'lyrics_scroll_policy.dart';
@@ -438,6 +439,11 @@ class _LyricsWidgetState extends State<LyricsWidget>
   /// （禁用 / 选中高亮 / tooltip 走工具栏语义）。
   List<M3EToolbarItem> _buildQuickActions(AppLocalizations l10n) {
     final bool hasLyrics = _session.lines.isNotEmpty;
+    // 本地下载曲目：文件是持久副本，不提供「换源」入口（自动换源也已跳过）。
+    final isLocalTrack = context.select<PlaybackProvider, bool>(
+      (provider) =>
+          provider.snapshot.current?.id.sourceKey == kLocalSourceKey,
+    );
     return <M3EToolbarItem>[
       // 居中/恢复跟随：仅「手动滚动暂停 + 有同步歌词」时入列。
       if (!_autoScroll && hasLyrics && _session.isSynced)
@@ -461,11 +467,12 @@ class _LyricsWidgetState extends State<LyricsWidget>
             ? l10n.exitCopyModeResumeScroll
             : l10n.enterCopyLyricsMode,
       ),
-      M3EToolbarAction(
-        icon: Icons.swap_horiz_rounded,
-        onPressed: _showSourceSwapPage,
-        tooltip: l10n.sourceSwap,
-      ),
+      if (!isLocalTrack)
+        M3EToolbarAction(
+          icon: Icons.swap_horiz_rounded,
+          onPressed: _showSourceSwapPage,
+          tooltip: l10n.sourceSwap,
+        ),
       M3EToolbarAction(
         icon: Icons.checklist_rounded,
         enabled: hasLyrics,

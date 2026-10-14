@@ -184,4 +184,54 @@ void main() {
     expect(await store.load(), isNull);
     expect(changedCount, 1);
   });
+
+  test('会话里的本地下载曲目导出时过滤，并按删除数校正下标', () async {
+    await store.save(PlaybackSession(
+      tracks: [
+        Track(
+          id: const TrackId('wy', '1'),
+          title: '在线曲目',
+          origin: TrackOrigin.builtin,
+          payload: const {'songId': '1'},
+        ),
+        Track(
+          id: const TrackId('local', 'wy:9'),
+          title: '本地下载',
+          origin: TrackOrigin.localFile,
+          payload: const {'path': '/data/a.mp3', 'songId': 'wy:9'},
+        ),
+        Track(
+          id: const TrackId('wy', '2'),
+          title: '在线曲目 2',
+          origin: TrackOrigin.builtin,
+          payload: const {'songId': '2'},
+        ),
+      ],
+      index: 2,
+    ));
+
+    final collected = await adapter.collect();
+    final data = collected[SyncCategory.session]!.single.data!;
+    final tracks = (data['tracks'] as List).cast<Map>();
+    expect(tracks.map((track) => track['sourceKey']), ['wy', 'wy']);
+    // 被移除的本地曲目在当前曲目之前：下标前移一位。
+    expect(data['index'], 1);
+  });
+
+  test('会话里全是本地曲目：不回传同步记录', () async {
+    await store.save(PlaybackSession(
+      tracks: [
+        Track(
+          id: const TrackId('local', 'wy:9'),
+          title: '本地下载',
+          origin: TrackOrigin.localFile,
+          payload: const {'path': '/data/a.mp3', 'songId': 'wy:9'},
+        ),
+      ],
+      index: 0,
+    ));
+
+    final collected = await adapter.collect();
+    expect(collected, isEmpty);
+  });
 }

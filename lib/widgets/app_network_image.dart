@@ -6,6 +6,7 @@ import 'package:flutter_cache_manager/flutter_cache_manager.dart';
 import 'package:material_ui/material_ui.dart';
 
 import '../managers/artwork_cache.dart';
+import '../utils/local_image_provider.dart';
 import 'molia_mark.dart';
 
 /// 统一网络图片组件：封面/头像等所有远端图片都走这里。
@@ -13,6 +14,7 @@ import 'molia_mark.dart';
 /// - 请求头统一走 [ArtworkCache.headersFor]（浏览器 UA + 平台 Referer，
 ///   修复网易云 CDN 对 Dart UA 的 403）；
 /// - 缓存统一走 [ArtworkCache] 的共享持久 CacheManager（封面分区策略）；
+/// - `file://` 地址（本地下载封面）直接走 [FileImage]，不经过网络缓存；
 /// - 占位 / 失败默认回退到 Molia 标志，调用方可覆盖；
 /// - [borderRadius] 非空时内部做圆角裁剪（避免各处重复 ClipRRect）。
 class AppNetworkImage extends StatelessWidget {
@@ -63,6 +65,20 @@ class AppNetworkImage extends StatelessWidget {
 
     if (imageUrl == null || imageUrl.isEmpty) {
       return wrap(_fallback(context));
+    }
+
+    // 本地文件（下载封面）：FileImage 直读，不经过网络缓存与省流网关。
+    final localProvider = localFileImageProvider(imageUrl);
+    if (localProvider != null) {
+      return wrap(
+        Image(
+          image: localProvider,
+          width: width,
+          height: height,
+          fit: fit,
+          errorBuilder: (_, __, ___) => errorWidget ?? _fallback(context),
+        ),
+      );
     }
 
     final cache = artworkCache ?? ArtworkCache.instance;

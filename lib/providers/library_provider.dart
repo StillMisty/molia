@@ -15,6 +15,7 @@ import 'package:flutter/foundation.dart';
 
 import '../domain/ports/library_store.dart';
 import '../data/mapping/track_mapper.dart';
+import '../domain/models/download.dart' show kLocalSourceKey;
 import '../domain/models/library.dart';
 import '../domain/models/track.dart';
 import '../models/play_mode.dart';
@@ -640,6 +641,9 @@ class LibraryProvider extends ChangeNotifier {
   ///
   /// 与历史 / 列表共用同一转换（raw 原样 + [withCanonicalId] 补齐规范 id），
   /// 听歌统计页的 Top 曲目 / 当日曲目也走这里。
+  ///
+  /// `local`（本地下载副本）映射为 `localFile` 来源：自动换源显式跳过该
+  /// 来源，且本地条目不提供「换源」入口（UI 按来源过滤）。
   SourceTrack sourceTrackFromRaw({
     required String sourceKey,
     required String title,
@@ -651,7 +655,7 @@ class LibraryProvider extends ChangeNotifier {
   }) {
     return SourceTrack(
       sourceKey: sourceKey,
-      origin: 'lx',
+      origin: sourceKey == kLocalSourceKey ? 'localFile' : 'lx',
       title: title,
       artist: artist,
       album: album,
