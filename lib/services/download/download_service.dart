@@ -1,5 +1,5 @@
 /// 单曲下载服务：取链 → 下载音频（或缓存命中直接拷贝）→ 离线包
-/// （歌词/封面，可单独下载）→ 音频标签嵌入 → 落库。
+/// （歌词/封面，可单独下载）→ 音频标签嵌入 → 落库 → 公共目录发布。
 ///
 /// 设计要点：
 /// - 目录隔离：写 `downloads/`（应用支持目录），与 `cache/audio_cache`
@@ -8,6 +8,9 @@
 ///   拷贝不触网；歌词经注入的解析器（组合根接 `LyricsService`：缓存 →
 ///   原生取词 → 跨平台回退）；封面经 [ArtworkCache] 命中直读、未命中取图
 ///   后回填缓存；
+/// - **公共目录发布**（Android）：音频就绪后 best-effort 拷进 MediaStore
+///   Downloads（[DownloadsPublisher]），content URI 落库供删除时回收；
+///   **公共副本不参与播放取链**——播放只认应用目录里的 `filePath`；
 /// - **分项记录**：`downloads.filePath` 可空——记录可以只含歌词或只含封面
 ///   （`downloadLyrics` / `downloadCover`），音频下载可一次带全；
 /// - **标签嵌入**：音频就绪后把标题/歌手/专辑/歌词/封面写进文件标签
@@ -30,6 +33,7 @@ import 'package:path/path.dart' as p;
 import '../../data/catalog/catalog_service.dart';
 import '../../data/downloads/audio_tag_writer.dart';
 import '../../data/downloads/download_storage.dart';
+import '../../data/downloads/downloads_publisher.dart';
 import '../../data/downloads/downloads_repository.dart';
 import '../../data/http/app_dio.dart';
 import '../../domain/models/download.dart';
@@ -102,6 +106,7 @@ class DownloadService extends ChangeNotifier {
     CacheService? cacheService,
     ArtworkCache? artworkCache,
     DownloadSettings? settings,
+    DownloadsPublisher? publisher,
     String Function()? preferredQuality,
     int Function()? clock,
   })  : _catalog = catalog,
@@ -113,6 +118,7 @@ class DownloadService extends ChangeNotifier {
         _cacheService = cacheService,
         _artworkCache = artworkCache,
         _settings = settings,
+        _publisher = publisher ?? const NoopDownloadsPublisher(),
         _preferredQuality = preferredQuality,
         _clock = clock ?? (() => DateTime.now().millisecondsSinceEpoch);
 
@@ -125,6 +131,11 @@ class DownloadService extends ChangeNotifier {
   final CacheService? _cacheService;
   final ArtworkCache? _artworkCache;
   final DownloadSettings? _settings;
+
+  /// 公共 Downloads 发布器（组合根注入 `createDownloadsPublisher()`；
+  /// 未注入 / 非 Android 时为空实现，发布整体 no-op）。
+  final DownloadsPublisher _publisher;
+
   final String Function()? _preferredQuality;
   final int Function() _clock;
 
@@ -145,6 +156,10 @@ class DownloadService extends ChangeNotifier {
 
   /// 下载目录是否可用（Web 为 false，UI 隐藏下载入口）。
   bool get supported => _supported;
+
+  /// 是否支持发布公共 Downloads 副本（仅 Android；UI 据此显隐发布设置 /
+  /// 补发布入口）。
+  bool get publisherSupported => _publisher.supported;
 
   /// 记录是否已加载（启动时 [init] 一次）。
   bool get initialized => _initialized;
@@ -285,6 +300,7 @@ class DownloadService extends ChangeNotifier {
           sizeBytes: record.sizeBytes,
           lyricPath: newLyric,
           coverPath: newCover,
+          publicUri: record.publicUri,
           downloadedAt: record.downloadedAt,
         );
         await _repository.insert(updated);
@@ -499,6 +515,12 @@ class DownloadService extends ChangeNotifier {
       }
 
       final previous = _records[key];
+      // 5) 公共目录发布（best-effort）：Android 拷进 MediaStore Downloads，
+      //    用户在文件管理器 / 其它播放器里可见；失败只记日志，不影响下载。
+      final publicUri = await _publishPublicCopy(
+        filePath,
+        p.basename(filePath),
+      );
       final record = DownloadedTrack(
         originSourceKey: track.id.sourceKey,
         originSongId: track.id.id,
@@ -514,6 +536,7 @@ class DownloadService extends ChangeNotifier {
         // 分项合并：先前单独下载的歌词 / 封面不被本次下载覆盖丢失。
         lyricPath: lyricPath ?? previous?.lyricPath,
         coverPath: coverPath ?? previous?.coverPath,
+        publicUri: publicUri ?? previous?.publicUri,
         downloadedAt: _clock(),
       );
       await _repository.insert(record);
@@ -618,7 +641,8 @@ class DownloadService extends ChangeNotifier {
     cancel(track.id.sourceKey, track.id.id);
   }
 
-  /// 删除下载：先删数据库记录（避免残留半删记录），再删音频 / 歌词 / 封面文件。
+  /// 删除下载：先删数据库记录（避免残留半删记录），再删音频 / 歌词 / 封面文件
+  /// 与公共 Downloads 副本（发布副本随下载一起回收；失败只记日志）。
   Future<void> delete(DownloadedTrack record) async {
     await _repository.delete(record.originSourceKey, record.originSongId);
     _records.remove(record.key);
@@ -632,7 +656,58 @@ class DownloadService extends ChangeNotifier {
     }
     final cover = record.coverPath;
     if (cover != null) await _storage.deleteQuietly(cover);
+    final publicUri = record.publicUri;
+    if (publicUri != null && publicUri.isNotEmpty) {
+      await _removePublicCopy(publicUri);
+    }
     notifyListeners();
+  }
+
+  /// 补发布：把已有音频但还没有公共副本的记录发布到公共 Downloads。
+  ///
+  /// 用于旧版本留下的下载（v4 之前）或发布失败的记录；返回
+  /// `(发布数, 失败数)`。平台不支持（非 Android）时返回 `(0, 0)`。
+  Future<(int, int)> publishMissingPublicCopies() async {
+    if (!_publisher.supported) return (0, 0);
+    var published = 0;
+    var failed = 0;
+    for (final record in List<DownloadedTrack>.of(_records.values)) {
+      final audio = record.filePath;
+      if (audio == null || audio.isEmpty) continue;
+      if (record.hasPublicCopy) continue;
+      if (!await _storage.fileExists(audio)) {
+        _logger.warning('补发布跳过（文件缺失）: $audio');
+        failed++;
+        continue;
+      }
+      final uri = await _publishPublicCopy(audio, p.basename(audio));
+      if (uri == null) {
+        failed++;
+        continue;
+      }
+      final updated = DownloadedTrack(
+        originSourceKey: record.originSourceKey,
+        originSongId: record.originSongId,
+        title: record.title,
+        artist: record.artist,
+        album: record.album,
+        coverUrl: record.coverUrl,
+        durationMs: record.durationMs,
+        raw: record.raw,
+        quality: record.quality,
+        filePath: record.filePath,
+        sizeBytes: record.sizeBytes,
+        lyricPath: record.lyricPath,
+        coverPath: record.coverPath,
+        publicUri: uri,
+        downloadedAt: record.downloadedAt,
+      );
+      await _repository.insert(updated);
+      _records[record.key] = updated;
+      published++;
+    }
+    if (published > 0) notifyListeners();
+    return (published, failed);
   }
 
   /// 播放取链优先命中本地副本：原音源曲目已有下载且文件存在时返回 file URI。
@@ -669,6 +744,43 @@ class DownloadService extends ChangeNotifier {
   }
 
   // 内部：守卫与记录
+
+  /// 发布公共 Downloads 副本（best-effort）。
+  ///
+  /// 平台不支持（非 Android）/ 设置关闭 / 失败一律返回 null，调用方继续
+  /// 落库（公共副本只是发布副本，不参与播放取链）。
+  Future<String?> _publishPublicCopy(String filePath, String displayName) async {
+    if (!_publisher.supported) return null;
+    if (!(_settings?.publishToPublicDir ?? true)) return null;
+    try {
+      final uri = await _publisher.publish(
+        sourcePath: filePath,
+        displayName: displayName,
+        mimeType: audioMimeTypeForPath(filePath),
+      );
+      if (uri == null) {
+        _logger.warning('公共目录发布失败: $displayName');
+      } else {
+        _logger.info('公共目录发布完成: $uri');
+      }
+      return uri;
+    } catch (e) {
+      _logger.warning('公共目录发布失败: $e');
+      return null;
+    }
+  }
+
+  /// 回收公共 Downloads 副本（best-effort：失败只记日志）。
+  Future<void> _removePublicCopy(String uri) async {
+    if (!_publisher.supported) return;
+    try {
+      if (!await _publisher.remove(uri)) {
+        _logger.warning('公共副本删除失败: $uri');
+      }
+    } catch (e) {
+      _logger.warning('公共副本删除失败: $e');
+    }
+  }
 
   void _guardDownloadable(Track track) {
     if (track.id.sourceKey == kLocalSourceKey) {
@@ -714,6 +826,7 @@ class DownloadService extends ChangeNotifier {
       sizeBytes: existing?.sizeBytes ?? 0,
       lyricPath: lyricPath ?? existing?.lyricPath,
       coverPath: coverPath ?? existing?.coverPath,
+      publicUri: existing?.publicUri,
       downloadedAt: existing?.downloadedAt ?? _clock(),
     );
     await _repository.insert(record);
@@ -1109,6 +1222,26 @@ class DownloadService extends ChangeNotifier {
       'gif' => 'image/gif',
       'bmp' => 'image/bmp',
       _ => 'image/jpeg',
+    };
+  }
+
+  /// 公共目录发布用的音频 MIME 类型（MediaStore 按它归类；未知回退
+  /// `application/octet-stream`）。
+  @visibleForTesting
+  static String audioMimeTypeForPath(String path) {
+    final ext = p.extension(path).toLowerCase().replaceFirst('.', '');
+    return switch (ext) {
+      'mp3' => 'audio/mpeg',
+      'flac' => 'audio/flac',
+      'm4a' || 'mp4' => 'audio/mp4',
+      'aac' => 'audio/aac',
+      'ogg' || 'oga' => 'audio/ogg',
+      'opus' => 'audio/opus',
+      'wav' => 'audio/wav',
+      'ape' => 'audio/x-ape',
+      'wma' => 'audio/x-ms-wma',
+      'mka' => 'audio/x-matroska',
+      _ => 'application/octet-stream',
     };
   }
 }

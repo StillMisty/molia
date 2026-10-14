@@ -1,9 +1,12 @@
 package top.stillmisty.molia
 
+import android.content.ContentValues
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.os.Build
 import android.os.Bundle
+import android.os.Environment
+import android.provider.MediaStore
 import android.provider.Settings
 import androidx.annotation.NonNull
 import androidx.appcompat.app.AppCompatDelegate
@@ -16,6 +19,10 @@ import io.flutter.plugin.common.MethodChannel
 import java.io.File
 
 class MainActivity: AudioServiceActivity() {
+    /// 公共 Downloads 里的应用子目录（与桌面 `~/Downloads/Molia`、iOS 文档
+    /// 目录 `Molia/` 对齐；`Environment.DIRECTORY_DOWNLOADS` = "Download"）。
+    private val publicDownloadsRelativePath = "${Environment.DIRECTORY_DOWNLOADS}/Molia"
+
     private var methodChannel: MethodChannel? = null
     private var lyricsChannel: top.stillmisty.molia.lyrics.LyricsChannelHandler? = null
 
@@ -193,6 +200,38 @@ class MainActivity: AudioServiceActivity() {
             }
         }
 
+        // 公共下载目录通道（MediaStore Downloads 集合）：把应用私有目录里的
+        // 下载副本发布到公共 Downloads，用户在文件管理器 / 其它播放器里可见。
+        // API 29+ 走 MediaStore insert + openOutputStream（应用自己创建的行，
+        // 无需任何存储权限）；更低版本返回 null 表示不支持（本应用 minSdk 37，
+        // 实际不会走到，保留分支只作语义声明）。
+        MethodChannel(
+            flutterEngine.dartExecutor.binaryMessenger,
+            "top.stillmisty.molia/downloads"
+        ).setMethodCallHandler { call, result ->
+            when (call.method) {
+                "publish" -> {
+                    val sourcePath = call.argument<String>("sourcePath")
+                    val displayName = call.argument<String>("displayName")
+                    val mimeType = call.argument<String>("mimeType")
+                    if (sourcePath.isNullOrEmpty() || displayName.isNullOrEmpty()) {
+                        result.error("INVALID_ARGUMENT", "sourcePath / displayName is required", null)
+                    } else {
+                        result.success(publishToPublicDownloads(sourcePath, displayName, mimeType))
+                    }
+                }
+                "remove" -> {
+                    val uriString = call.argument<String>("uri")
+                    if (uriString.isNullOrEmpty()) {
+                        result.success(false)
+                    } else {
+                        result.success(removeFromPublicDownloads(uriString))
+                    }
+                }
+                else -> result.notImplemented()
+            }
+        }
+
         // 应用内更新通道：安装下载好的 APK 与「安装未知应用」授权状态。
         // 下载目录（Dart 侧 getTemporaryDirectory()/updates）与
         // res/xml/file_paths.xml 的 cache-path 对齐，FileProvider 才能把
@@ -220,6 +259,59 @@ class MainActivity: AudioServiceActivity() {
                 }
                 else -> result.notImplemented()
             }
+        }
+    }
+
+    /// 把应用私有文件发布到公共 Downloads（MediaStore），返回 content URI；
+    /// 不支持（API < 29）/ 失败返回 null（Dart 侧 best-effort，只记日志）。
+    ///
+    /// 公共副本是**发布副本**：播放取链仍只认应用目录里的原文件，删除下载时
+    /// 经 `remove` 一并删除。`IS_PENDING` 保证写入期间其它 App 读不到半成品；
+    /// 失败时删掉可能已插入的行，避免公共目录残留空文件。
+    private fun publishToPublicDownloads(
+        sourcePath: String,
+        displayName: String,
+        mimeType: String?
+    ): String? {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) return null
+        val source = File(sourcePath)
+        if (!source.exists()) return null
+        var inserted: android.net.Uri? = null
+        return try {
+            val values = ContentValues().apply {
+                put(MediaStore.MediaColumns.DISPLAY_NAME, displayName)
+                put(MediaStore.MediaColumns.MIME_TYPE, mimeType ?: "application/octet-stream")
+                put(MediaStore.MediaColumns.RELATIVE_PATH, publicDownloadsRelativePath)
+                put(MediaStore.MediaColumns.IS_PENDING, 1)
+            }
+            val uri = contentResolver.insert(MediaStore.Downloads.EXTERNAL_CONTENT_URI, values)
+                ?: return null
+            inserted = uri
+            val output = contentResolver.openOutputStream(uri)
+                ?: throw java.io.IOException("openOutputStream returned null")
+            output.use { out ->
+                source.inputStream().use { input -> input.copyTo(out) }
+            }
+            contentResolver.update(
+                uri,
+                ContentValues().apply { put(MediaStore.MediaColumns.IS_PENDING, 0) },
+                null,
+                null
+            )
+            uri.toString()
+        } catch (e: Exception) {
+            inserted?.let { runCatching { contentResolver.delete(it, null, null) } }
+            null
+        }
+    }
+
+    /// 删除公共副本；行已不存在（用户在文件管理器里删掉）也算成功（幂等）。
+    private fun removeFromPublicDownloads(uriString: String): Boolean {
+        return try {
+            contentResolver.delete(android.net.Uri.parse(uriString), null, null)
+            true
+        } catch (e: Exception) {
+            false
         }
     }
 

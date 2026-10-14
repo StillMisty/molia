@@ -9,6 +9,7 @@ import 'data/catalog/catalog_service.dart';
 import 'data/catalog/comments_service.dart';
 import 'data/catalog/source_registry_impl.dart';
 import 'data/downloads/download_storage.dart';
+import 'data/downloads/downloads_publisher.dart';
 import 'data/downloads/downloads_repository.dart';
 import 'data/library_repository.dart';
 import 'data/mapping/track_mapper.dart';
@@ -191,6 +192,7 @@ void main() async {
     cacheService: CacheService.instance,
     artworkCache: ArtworkCache.instance,
     settings: downloadSettings,
+    publisher: createDownloadsPublisher(),
     lyricsResolver: (track) async {
       final result = await lyricsService.getLyrics(
         track.title,

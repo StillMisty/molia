@@ -1,7 +1,8 @@
-/// 下载设置（设备本地项：保存位置 / 文件名格式 / 标签嵌入开关）。
+/// 下载设置（设备本地项：保存位置 / 文件名格式 / 标签嵌入 / 公共目录发布）。
 ///
 /// 为什么**不登记**进 `SettingsRegistry`：保存位置是设备相关路径、文件名
-/// 模板是设备偏好，跨设备同步过去只会互相打架（与缓存策略键同一取舍）。
+/// 模板是设备偏好、公共目录发布是 Android 平台能力，跨设备同步过去只会
+/// 互相打架（与缓存策略键同一取舍）。
 /// 键名只出现在本文件（`settings_keys_test` 只约束登记键）。
 library;
 
@@ -25,6 +26,7 @@ class DownloadSettings extends ChangeNotifier {
   static const String keySaveDir = 'download_save_dir';
   static const String keyFilenameTemplate = 'download_filename_template';
   static const String keyEmbedTags = 'download_embed_tags';
+  static const String keyPublishToPublicDir = 'download_publish_public_dir';
 
   SharedPreferences? _prefs;
 
@@ -35,9 +37,13 @@ class DownloadSettings extends ChangeNotifier {
 
   bool _embedTags = true;
 
+  /// 发布公共 Downloads 副本（仅 Android 生效；默认开）。
+  bool _publishToPublicDir = true;
+
   String get saveDir => _saveDir;
   String get filenameTemplate => _filenameTemplate;
   bool get embedTags => _embedTags;
+  bool get publishToPublicDir => _publishToPublicDir;
 
   /// 绑定 prefs 并加载已保存值（组合根 / 测试调用一次）。
   Future<void> init() async {
@@ -47,6 +53,7 @@ class DownloadSettings extends ChangeNotifier {
     _filenameTemplate =
         prefs?.getString(keyFilenameTemplate) ?? kDefaultFilenameTemplate;
     _embedTags = prefs?.getBool(keyEmbedTags) ?? true;
+    _publishToPublicDir = prefs?.getBool(keyPublishToPublicDir) ?? true;
     notifyListeners();
   }
 
@@ -70,6 +77,14 @@ class DownloadSettings extends ChangeNotifier {
     if (value == _embedTags) return;
     _embedTags = value;
     await _prefs?.setBool(keyEmbedTags, value);
+    notifyListeners();
+  }
+
+  /// 公共目录发布开关（只影响之后的下载；已有下载用管理页「补发布」）。
+  Future<void> setPublishToPublicDir(bool value) async {
+    if (value == _publishToPublicDir) return;
+    _publishToPublicDir = value;
+    await _prefs?.setBool(keyPublishToPublicDir, value);
     notifyListeners();
   }
 

@@ -7,11 +7,13 @@ import 'package:material_3_expressive/material_3_expressive.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:integration_test/integration_test.dart';
+import 'package:path_provider/path_provider.dart';
 import 'package:provider/provider.dart';
 import 'package:molia/pages/sources_page.dart';
 import 'package:molia/playback/desktop_audio_init.dart';
 import 'package:molia/playback/local_playback_service.dart';
 import 'package:molia/providers/sources_provider.dart';
+import 'package:molia/data/downloads/downloads_publisher.dart';
 import 'package:molia/services/window/window_chrome.dart';
 import 'package:molia/sources/source_manager.dart';
 
@@ -284,6 +286,59 @@ void main() {
     await WindowChrome.ensureInitialized();
     final height = await WindowChrome.debugTitleBarHeight();
     expect(height, 0, reason: '隐藏标题栏后系统标题栏高度应为 0，实际 $height');
+  });
+
+  // 公共下载目录（MediaStore）平台通道：真实设备上发布 → 删除闭环。
+  // 其余平台由下载根目录本身承担公共目录语义（发布器 supported=false），
+  // 这里跳过（也覆盖了「通道缺失时 no-op 兜底不崩」的语义）。
+  testWidgets('公共下载目录通道：发布 → 删除（仅 Android）', (tester) async {
+    final publisher = createDownloadsPublisher();
+    if (!Platform.isAndroid) {
+      expect(publisher.supported, isFalse);
+      expect(
+        await publisher.publish(
+          sourcePath: '/nonexistent.mp3',
+          displayName: 'x.mp3',
+          mimeType: 'audio/mpeg',
+        ),
+        isNull,
+      );
+      expect(await publisher.remove('content://media/external/downloads/0'),
+          isFalse);
+      markTestSkipped('公共目录发布仅 Android：其余平台下载根目录即公共目录');
+      return;
+    }
+
+    expect(publisher.supported, isTrue);
+    // 源文件：应用私有目录里的真实文件（MediaStore 拷贝的输入）。
+    final dir = await getApplicationSupportDirectory();
+    final source = File('${dir.path}/publish_it_source.mp3');
+    await source.writeAsBytes(List<int>.generate(4096, (i) => i % 256));
+    addTearDown(() async {
+      if (await source.exists()) await source.delete();
+    });
+
+    final uri = await publisher.publish(
+      sourcePath: source.path,
+      displayName: 'molia_integration_test.mp3',
+      mimeType: 'audio/mpeg',
+    );
+    expect(uri, isNotNull, reason: '发布应返回 MediaStore content URI');
+    expect(uri, startsWith('content://media/'));
+
+    // 幂等删除：行已不存在（被用户在文件管理器里删掉）也算成功。
+    expect(await publisher.remove(uri!), isTrue);
+    expect(await publisher.remove(uri), isTrue);
+
+    // 源文件缺失：发布失败但不抛异常（best-effort 语义）。
+    expect(
+      await publisher.publish(
+        sourcePath: '${dir.path}/missing.mp3',
+        displayName: 'missing.mp3',
+        mimeType: 'audio/mpeg',
+      ),
+      isNull,
+    );
   });
 }
 
