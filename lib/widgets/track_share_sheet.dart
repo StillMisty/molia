@@ -178,8 +178,13 @@ class _TrackShareSheet extends StatelessWidget {
       }
     }
     try {
+      final path = target.filePath;
+      if (path == null || path.isEmpty) {
+        message(l10n.downloadFileMissing);
+        return;
+      }
       await SharePlus.instance.share(
-        ShareParams(files: [XFile(target.filePath)]),
+        ShareParams(files: [XFile(path)]),
       );
     } catch (_) {
       message(l10n.exportFailed);

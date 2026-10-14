@@ -8,6 +8,7 @@ import 'generated/schema.dart';
 
 import 'generated/schema_v1.dart' as v1;
 import 'generated/schema_v2.dart' as v2;
+import 'generated/schema_v3.dart' as v3;
 
 void main() {
   driftRuntimeOptions.dontWarnAboutMultipleDatabases = true;
@@ -229,6 +230,49 @@ void main() {
             await newDb.select(newDb.playEvents).get());
         // v2 新增表：迁移后存在且为空。
         expect(await newDb.select(newDb.downloads).get(), isEmpty);
+      },
+    );
+  });
+
+  // 迁移不破坏既有数据：v2 → v3 只把 downloads.filePath 改为可空，
+  // 已有下载记录（含音频路径）逐行保留。
+  test('migration from v2 to v3 keeps download records', () async {
+    const oldDownloadsData = [
+      v2.DownloadsData(
+        id: 1,
+        originSourceKey: 'kw',
+        originSongId: 'a',
+        title: 'Title a',
+        artist: 'Artist a',
+        album: 'Album a',
+        coverUrl: 'https://example.com/a.jpg',
+        durationMs: 245000,
+        raw: '{"id":"a"}',
+        quality: '320k',
+        filePath: '/downloads/Artist a - Title a.mp3',
+        sizeBytes: 3 * 1024 * 1024,
+        lyricPath: '/downloads/lyrics/Artist a - Title a.lrc',
+        coverPath: '/downloads/covers/Artist a - Title a.jpg',
+        downloadedAt: 1000,
+      ),
+    ];
+
+    await verifier.testWithDataIntegrity(
+      oldVersion: 2,
+      newVersion: 3,
+      createOld: v2.DatabaseAtV2.new,
+      createNew: v3.DatabaseAtV3.new,
+      openTestedDatabase: MoliaDatabase.new,
+      createItems: (batch, oldDb) {
+        batch.insertAll(oldDb.downloads, oldDownloadsData);
+      },
+      validateItems: (newDb) async {
+        final rows = await newDb.select(newDb.downloads).get();
+        expect(rows, hasLength(1));
+        expect(rows.single.filePath, '/downloads/Artist a - Title a.mp3');
+        expect(rows.single.lyricPath, '/downloads/lyrics/Artist a - Title a.lrc');
+        expect(rows.single.coverPath, '/downloads/covers/Artist a - Title a.jpg');
+        expect(rows.single.quality, '320k');
       },
     );
   });

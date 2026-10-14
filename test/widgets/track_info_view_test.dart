@@ -16,7 +16,6 @@ import 'package:molia/services/download/download_service.dart';
 import 'package:molia/services/track_cache_service.dart';
 import 'package:molia/utils/lyrics_provider_label.dart';
 import 'package:molia/widgets/track_info_view.dart';
-import 'package:material_3_expressive/material_3_expressive.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -85,7 +84,12 @@ class _FakeDownloadService extends DownloadService {
   DownloadProgress? progressForTrack(Track track) => progress;
 
   @override
-  Future<void> download(Track track) async {
+  Future<void> download(
+    Track track, {
+    String? quality,
+    bool includeLyrics = true,
+    bool includeCover = true,
+  }) async {
     downloadCalls++;
   }
 
@@ -339,7 +343,13 @@ void main() {
 
     await tester.tap(find.byKey(const Key('trackInfoDownloadItem')));
     await tester.pumpAndSettle();
-    expect(find.text('音质'), findsOneWidget);
+    // 弹层：音频段（音质选项 + 状态 + 下载）+ 附加内容段 + 全部下载。
+    expect(find.text('音频'), findsOneWidget);
+    expect(find.text('附加内容'), findsOneWidget);
+    expect(find.byKey(const Key('downloadQuality_320k')), findsOneWidget);
+    expect(find.byKey(const Key('downloadLyricsPart')), findsOneWidget);
+    expect(find.byKey(const Key('downloadCoverPart')), findsOneWidget);
+    expect(find.byKey(const Key('downloadAll')), findsOneWidget);
     expect(find.byKey(const Key('downloadSheetStart')), findsOneWidget);
 
     await tester.tap(find.byKey(const Key('downloadSheetStart')));

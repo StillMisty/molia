@@ -526,8 +526,210 @@ i1.GeneratedColumn<String> _column_40(String aliasedName) =>
 i1.GeneratedColumn<int> _column_41(String aliasedName) =>
     i1.GeneratedColumn<int>('downloadedAt', aliasedName, false,
         type: i1.DriftSqlType.int, $customConstraints: 'NOT NULL');
+
+final class Schema3 extends i0.VersionedSchema {
+  Schema3({required super.database}) : super(version: 3);
+  @override
+  late final List<i1.DatabaseSchemaEntity> entities = [
+    playContexts,
+    playHistory,
+    playlists,
+    playlistTracks,
+    syncTombstones,
+    playEvents,
+    downloads,
+    idxPlayContextsLastPlayedAt,
+    idxPlayHistoryPlayedAt,
+    idxPlaylistsSyncId,
+    idxPlaylistTracksOrder,
+    idxPlayEventsStartedAt,
+    idxPlayEventsTrack,
+    idxPlayEventsSyncKey,
+    idxDownloadsDownloadedAt,
+  ];
+  late final Shape0 playContexts = Shape0(
+      source: i0.VersionedTable(
+        entityName: 'play_contexts',
+        withoutRowId: false,
+        isStrict: false,
+        tableConstraints: [
+          'PRIMARY KEY(contextUri)',
+        ],
+        columns: [
+          _column_0,
+          _column_1,
+          _column_2,
+          _column_3,
+          _column_4,
+        ],
+        attachedDatabase: database,
+      ),
+      alias: null);
+  late final Shape1 playHistory = Shape1(
+      source: i0.VersionedTable(
+        entityName: 'play_history',
+        withoutRowId: false,
+        isStrict: false,
+        tableConstraints: [
+          'UNIQUE(sourceKey, songId)',
+        ],
+        columns: [
+          _column_5,
+          _column_6,
+          _column_7,
+          _column_8,
+          _column_9,
+          _column_10,
+          _column_11,
+          _column_12,
+          _column_13,
+        ],
+        attachedDatabase: database,
+      ),
+      alias: null);
+  late final Shape2 playlists = Shape2(
+      source: i0.VersionedTable(
+        entityName: 'playlists',
+        withoutRowId: false,
+        isStrict: false,
+        tableConstraints: [],
+        columns: [
+          _column_14,
+          _column_15,
+          _column_16,
+          _column_17,
+          _column_18,
+          _column_19,
+        ],
+        attachedDatabase: database,
+      ),
+      alias: null);
+  late final Shape3 playlistTracks = Shape3(
+      source: i0.VersionedTable(
+        entityName: 'playlist_tracks',
+        withoutRowId: false,
+        isStrict: false,
+        tableConstraints: [
+          'UNIQUE(playlistId, sourceKey, songId)',
+          'FOREIGN KEY(playlistId)REFERENCES playlists(id)ON DELETE CASCADE',
+        ],
+        columns: [
+          _column_14,
+          _column_20,
+          _column_5,
+          _column_6,
+          _column_7,
+          _column_8,
+          _column_9,
+          _column_10,
+          _column_11,
+          _column_12,
+          _column_21,
+          _column_22,
+          _column_18,
+          _column_19,
+        ],
+        attachedDatabase: database,
+      ),
+      alias: null);
+  late final Shape4 syncTombstones = Shape4(
+      source: i0.VersionedTable(
+        entityName: 'sync_tombstones',
+        withoutRowId: false,
+        isStrict: false,
+        tableConstraints: [
+          'PRIMARY KEY(category, "key")',
+        ],
+        columns: [
+          _column_23,
+          _column_24,
+          _column_25,
+          _column_19,
+        ],
+        attachedDatabase: database,
+      ),
+      alias: null);
+  late final Shape5 playEvents = Shape5(
+      source: i0.VersionedTable(
+        entityName: 'play_events',
+        withoutRowId: false,
+        isStrict: false,
+        tableConstraints: [],
+        columns: [
+          _column_14,
+          _column_5,
+          _column_6,
+          _column_26,
+          _column_8,
+          _column_9,
+          _column_10,
+          _column_11,
+          _column_12,
+          _column_27,
+          _column_28,
+          _column_29,
+          _column_30,
+          _column_31,
+          _column_32,
+          _column_33,
+        ],
+        attachedDatabase: database,
+      ),
+      alias: null);
+  late final Shape6 downloads = Shape6(
+      source: i0.VersionedTable(
+        entityName: 'downloads',
+        withoutRowId: false,
+        isStrict: false,
+        tableConstraints: [
+          'UNIQUE(originSourceKey, originSongId)',
+        ],
+        columns: [
+          _column_14,
+          _column_34,
+          _column_35,
+          _column_7,
+          _column_8,
+          _column_9,
+          _column_10,
+          _column_11,
+          _column_12,
+          _column_36,
+          _column_42,
+          _column_38,
+          _column_39,
+          _column_40,
+          _column_41,
+        ],
+        attachedDatabase: database,
+      ),
+      alias: null);
+  final i1.Index idxPlayContextsLastPlayedAt = i1.Index(
+      'idx_play_contexts_lastPlayedAt',
+      'CREATE INDEX idx_play_contexts_lastPlayedAt ON play_contexts (lastPlayedAt)');
+  final i1.Index idxPlayHistoryPlayedAt = i1.Index('idx_play_history_playedAt',
+      'CREATE INDEX idx_play_history_playedAt ON play_history (playedAt)');
+  final i1.Index idxPlaylistsSyncId = i1.Index('idx_playlists_syncId',
+      'CREATE UNIQUE INDEX idx_playlists_syncId ON playlists (syncId) WHERE syncId IS NOT NULL');
+  final i1.Index idxPlaylistTracksOrder = i1.Index('idx_playlist_tracks_order',
+      'CREATE INDEX idx_playlist_tracks_order ON playlist_tracks (playlistId, sortOrder, addedAt)');
+  final i1.Index idxPlayEventsStartedAt = i1.Index('idx_play_events_startedAt',
+      'CREATE INDEX idx_play_events_startedAt ON play_events (startedAt)');
+  final i1.Index idxPlayEventsTrack = i1.Index('idx_play_events_track',
+      'CREATE INDEX idx_play_events_track ON play_events (sourceKey, songId)');
+  final i1.Index idxPlayEventsSyncKey = i1.Index('idx_play_events_syncKey',
+      'CREATE UNIQUE INDEX idx_play_events_syncKey ON play_events (syncKey) WHERE syncKey IS NOT NULL');
+  final i1.Index idxDownloadsDownloadedAt = i1.Index(
+      'idx_downloads_downloadedAt',
+      'CREATE INDEX idx_downloads_downloadedAt ON downloads (downloadedAt)');
+}
+
+i1.GeneratedColumn<String> _column_42(String aliasedName) =>
+    i1.GeneratedColumn<String>('filePath', aliasedName, true,
+        type: i1.DriftSqlType.string, $customConstraints: 'NULL');
 i0.MigrationStepWithVersion migrationSteps({
   required Future<void> Function(i1.Migrator m, Schema2 schema) from1To2,
+  required Future<void> Function(i1.Migrator m, Schema3 schema) from2To3,
 }) {
   return (currentVersion, database) async {
     switch (currentVersion) {
@@ -536,6 +738,11 @@ i0.MigrationStepWithVersion migrationSteps({
         final migrator = i1.Migrator(database, schema);
         await from1To2(migrator, schema);
         return 2;
+      case 2:
+        final schema = Schema3(database: database);
+        final migrator = i1.Migrator(database, schema);
+        await from2To3(migrator, schema);
+        return 3;
       default:
         throw ArgumentError.value('Unknown migration from $currentVersion');
     }
@@ -544,8 +751,10 @@ i0.MigrationStepWithVersion migrationSteps({
 
 i1.OnUpgrade stepByStep({
   required Future<void> Function(i1.Migrator m, Schema2 schema) from1To2,
+  required Future<void> Function(i1.Migrator m, Schema3 schema) from2To3,
 }) =>
     i0.VersionedSchema.stepByStepHelper(
         step: migrationSteps(
       from1To2: from1To2,
+      from2To3: from2To3,
     ));

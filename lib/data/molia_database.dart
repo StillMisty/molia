@@ -146,7 +146,8 @@ class Downloads extends Table {
   IntColumn get durationMs => integer().nullable()();
   TextColumn get raw => text().withDefault(const Constant('{}'))();
   TextColumn get quality => text().withDefault(const Constant(''))();
-  TextColumn get filePath => text()();
+  // 可空：下载记录可以只含歌词或只含封面（分项下载），音频未下载时为 null。
+  TextColumn get filePath => text().nullable()();
   IntColumn get sizeBytes => integer().withDefault(const Constant(0))();
   TextColumn get lyricPath => text().nullable()();
   TextColumn get coverPath => text().nullable()();
@@ -233,8 +234,9 @@ class MoliaDatabase extends _$MoliaDatabase {
   /// fresh 基线：v1 直接建出全部表，不写任何历史数据迁移。
   ///
   /// v2：新增 `downloads` 表（本地下载持久副本）。
+  /// v3：`downloads.filePath` 改可空（下载记录可只含歌词 / 封面）。
   @override
-  int get schemaVersion => 2;
+  int get schemaVersion => 3;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -245,6 +247,10 @@ class MoliaDatabase extends _$MoliaDatabase {
           from1To2: (m, schema) async {
             await m.createTable(schema.downloads);
             await m.createIndex(schema.idxDownloadsDownloadedAt);
+          },
+          from2To3: (m, schema) async {
+            // 仅 filePath 由 NOT NULL 改为可空：重建表并原样搬运数据。
+            await m.alterTable(TableMigration(schema.downloads));
           },
         ),
         beforeOpen: (details) async {

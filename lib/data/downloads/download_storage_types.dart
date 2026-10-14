@@ -5,8 +5,13 @@
 /// 同时保证 Web 编译不引入 `dart:io`。
 library;
 
+import 'dart:typed_data';
+
 /// 下载根目录名（应用支持目录下，与 `cache/audio_cache` 完全隔离）。
 const String downloadsDirName = 'downloads';
+
+/// 公共下载目录下的应用子目录名（桌面 / iOS：`<系统下载目录>/Molia`）。
+const String publicDownloadsDirName = 'Molia';
 
 /// 歌词子目录（长期存储，不走 `LyricsCache` 的 TTL 语义）。
 const String downloadsLyricsDirName = 'lyrics';
@@ -31,6 +36,12 @@ abstract interface class DownloadStorage {
 
   /// 文件大小（字节）；不存在 / 不可读返回 0。
   Future<int> fileSize(String path);
+
+  /// 复制文件（缓存 → 下载目录的命中拷贝；父目录自动创建）。
+  Future<void> copyFile(String from, String to);
+
+  /// 读取文件字节；不存在 / 不可读返回 null。
+  Future<Uint8List?> readBytes(String path);
 
   /// 流式写入文件（父目录自动创建）。
   ///

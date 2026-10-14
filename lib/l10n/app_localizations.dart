@@ -4305,6 +4305,18 @@ abstract class AppLocalizations {
   /// **'Only cached copies are removed; downloads and playback are unaffected.'**
   String get trackCacheClearHint;
 
+  /// No description provided for @cacheClearPart.
+  ///
+  /// In en, this message translates to:
+  /// **'Clear \"{part}\"?'**
+  String cacheClearPart(String part);
+
+  /// No description provided for @clear.
+  ///
+  /// In en, this message translates to:
+  /// **'Clear'**
+  String get clear;
+
   /// No description provided for @trackCacheEmpty.
   ///
   /// In en, this message translates to:

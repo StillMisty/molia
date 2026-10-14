@@ -68,7 +68,7 @@ void main() {
         'durationMs|INTEGER|0|null|0',
         "raw|TEXT|1|'{}'|0",
         "quality|TEXT|1|''|0",
-        'filePath|TEXT|1|null|0',
+        'filePath|TEXT|0|null|0',
         'sizeBytes|INTEGER|1|0|0',
         'lyricPath|TEXT|0|null|0',
         'coverPath|TEXT|0|null|0',

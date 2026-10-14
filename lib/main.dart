@@ -171,21 +171,32 @@ void main() async {
   // key = comments:{source}:{songId}:{kind}:{page}）。
   final commentsService = CommentsService(registry: sourceRegistry);
 
-  // 本地下载（Phase 1/2）：downloads/ 持久副本 + 离线歌词/封面。
+  // 本地下载：downloads/ 持久副本 + 离线歌词/封面 + 音频标签嵌入。
   // 存储不可用（Web）时 supported=false，UI 隐藏下载入口；初始化失败不阻断
-  // 启动（init 内部已吞错）。下载时的取词/取图与播放链路同源（脚本 action
-  // → 内置平台原生实现），省流上限同样经 preferredQuality 压低。
+  // 启动（init 内部已吞错）。下载时的取词/取图**缓存优先**：歌词与播放页
+  // 共用同一个 LyricsService（缓存 → 原生 → 跨平台回退），封面经 ArtworkCache
+  // 命中直读、未命中取图后回填；音频命中完整缓存时直接拷贝，不触网。
+  late final LyricsService lyricsService;
   final downloadService = DownloadService(
     catalog: catalogService,
     repository: DownloadsRepository(),
     storage: createDownloadStorage(),
+    cacheService: CacheService.instance,
+    artworkCache: ArtworkCache.instance,
     lyricsResolver: (track) async {
-      final result =
-          await sourceManager.fetchLyric(sourceTrackFromTrack(track));
+      final result = await lyricsService.getLyrics(
+        track.title,
+        track.artists
+            .map((artist) => artist.name)
+            .where((name) => name.isNotEmpty)
+            .join(', '),
+        track.id.uri,
+        track: track,
+      );
       if (result == null || result.lyric.trim().isEmpty) return null;
       return DownloadLyrics(
         lyric: result.lyric,
-        translation: result.tlyric,
+        translation: result.translation,
       );
     },
     artworkResolver: (track) =>
@@ -348,7 +359,7 @@ void main() async {
   // 曲目原生取词经 SourceManager 统一路由：脚本 lyric action →
   // any-listen → 内置平台原生实现（wy/tx/kg/kw/mg，精确平台 ID）。
   final lyricsProvider = LyricsProvider(
-    service: LyricsService(
+    service: lyricsService = LyricsService(
       // 本地下载曲目：离线歌词缺失时不回退网络（离线播放全程不触网）。
       networkFallbackAllowed: (track) =>
           track.id.sourceKey != kLocalSourceKey,

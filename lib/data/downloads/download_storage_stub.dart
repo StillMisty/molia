@@ -1,3 +1,5 @@
+import 'dart:typed_data';
+
 import 'download_storage_types.dart';
 
 /// Web / 不支持平台的内存空实现：无持久文件系统，下载能力整体关闭。
@@ -13,6 +15,12 @@ class MemoryDownloadStorage implements DownloadStorage {
 
   @override
   Future<int> fileSize(String path) async => 0;
+
+  @override
+  Future<void> copyFile(String from, String to) async {}
+
+  @override
+  Future<Uint8List?> readBytes(String path) async => null;
 
   @override
   Future<void> writeStream(

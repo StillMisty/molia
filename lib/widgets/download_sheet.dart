@@ -1,7 +1,8 @@
-/// 下载弹层：当前曲目的下载状态与动作（歌曲信息页「下载」行唯一入口）。
+/// 下载弹层：音频（音质选择 / 状态 / 下载动作）+ 附加内容（歌词 / 封面
+/// 单独下载）+ 全部下载（歌曲信息页「下载」行唯一入口）。
 ///
-/// 结构：曲目头 → 音频段（音质 + 状态 + 下载/取消/删除/分享）。
-/// 歌词 / 封面的单独下载与音质选择器随下载改造接入（记录已支持分项状态）。
+/// 缓存优先的语义在这里可见：命中完整音频缓存的音质标「本地缓存」，
+/// 选中后下载直接拷贝不触网；歌词 / 封面命中缓存同样直接落盘。
 library;
 
 import 'dart:async';
@@ -16,10 +17,9 @@ import '../domain/models/download.dart';
 import '../domain/models/failure.dart';
 import '../domain/models/track.dart';
 import '../l10n/app_localizations.dart';
-import '../services/notification_service.dart';
-import '../providers/sources_provider.dart';
 import '../services/data_saver_service.dart';
 import '../services/download/download_service.dart';
+import '../services/notification_service.dart';
 import '../utils/download_failure_label.dart';
 import '../utils/responsive.dart';
 import '../utils/source_quality_label.dart';
@@ -45,15 +45,54 @@ class _DownloadSheet extends StatefulWidget {
 }
 
 class _DownloadSheetState extends State<_DownloadSheet> {
-  /// 下载动作进行中（下载 / 删除 / 分享互斥，避免重复触发）。
-  bool _busy = false;
+  /// 音频动作进行中（下载 / 删除 / 分享互斥，避免重复触发）。
+  bool _audioBusy = false;
+
+  /// 附加内容动作进行中（歌词 / 封面单独下载）。
+  bool _partBusy = false;
+
+  /// 当前选中的下载音质（缺省 = 服务端偏好音质 × 曲目可用音质）。
+  String? _quality;
+
+  /// 音质 → 是否命中完整音频缓存（弹层打开时探测一次）。
+  final Map<String, bool> _cacheHits = {};
+
+  @override
+  void initState() {
+    super.initState();
+    scheduleMicrotask(_probeCacheHits);
+  }
+
+  Future<void> _probeCacheHits() async {
+    final downloads = context.read<DownloadService?>();
+    if (downloads == null) return;
+    final qualities = _qualityOptions(widget.track);
+    final hits = <String, bool>{};
+    for (final quality in qualities) {
+      hits[quality] = await downloads.audioCacheHit(widget.track, quality);
+    }
+    if (!mounted) return;
+    setState(() {
+      _cacheHits
+        ..clear()
+        ..addAll(hits);
+    });
+  }
+
+  /// 可选音质（LX 标识，去重保序；空曲目列表回退偏好音质）。
+  static List<String> _qualityOptions(Track track) {
+    final types = <String>[];
+    for (final quality in track.qualities) {
+      final type = quality.type;
+      if (type.isNotEmpty && !types.contains(type)) types.add(type);
+    }
+    return types;
+  }
 
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context)!;
     final downloads = context.read<DownloadService?>();
-    final preferredQuality =
-        context.watch<SourcesProvider?>()?.preferredQuality ?? '320k';
     final (record, progress) =
         context.select<DownloadService?, (DownloadedTrack?, DownloadProgress?)>(
       (service) {
@@ -64,6 +103,10 @@ class _DownloadSheetState extends State<_DownloadSheet> {
         );
       },
     );
+    final qualities = _qualityOptions(widget.track);
+    final selectedQuality = _quality ??
+        downloads?.defaultQualityFor(widget.track) ??
+        (qualities.isEmpty ? '' : qualities.first);
 
     return SingleChildScrollView(
       child: Column(
@@ -73,29 +116,101 @@ class _DownloadSheetState extends State<_DownloadSheet> {
           _buildTrackHeader(context),
           Padding(
             padding: const EdgeInsets.fromLTRB(16, 4, 16, 16),
-            child: SettingsSectionCard(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                SettingsInfoTile(
-                  key: const Key('downloadSheetQuality'),
-                  icon: Icons.high_quality_rounded,
-                  title: l10n.downloadQualityLabel,
-                  subtitle: sourceQualityLabel(l10n, preferredQuality),
+                SettingsSectionCard(
+                  title: l10n.downloadAudioSection,
+                  children: [
+                    if (qualities.isNotEmpty)
+                      for (final quality in qualities)
+                        M3EListItem(
+                          key: Key('downloadQuality_$quality'),
+                          leading: Icon(
+                            quality == selectedQuality
+                                ? Icons.radio_button_checked_rounded
+                                : Icons.radio_button_unchecked_rounded,
+                          ),
+                          headline: sourceQualityLabel(l10n, quality),
+                          trailingText: _cacheHits[quality] == true
+                              ? l10n.downloadQualityCached
+                              : null,
+                          selected: quality == selectedQuality,
+                          enabled: record == null || !record.hasAudio,
+                          onTap: record == null || !record.hasAudio
+                              ? () => setState(() => _quality = quality)
+                              : null,
+                        ),
+                    SettingsInfoTile(
+                      key: const Key('downloadSheetStatus'),
+                      icon: record?.hasAudio ?? false
+                          ? Icons.download_done_rounded
+                          : progress != null
+                              ? Icons.downloading_rounded
+                              : Icons.download_rounded,
+                      title: record?.hasAudio ?? false
+                          ? l10n.downloadStatusDownloaded
+                          : progress != null
+                              ? l10n.downloadStatusDownloading
+                              : l10n.downloadStatusNotDownloaded,
+                      subtitle: _statusSubtitle(l10n, record, progress),
+                    ),
+                    ..._buildAudioActions(
+                      context,
+                      l10n,
+                      downloads,
+                      record,
+                      progress,
+                      selectedQuality,
+                    ),
+                  ],
                 ),
-                SettingsInfoTile(
-                  key: const Key('downloadSheetStatus'),
-                  icon: record != null
-                      ? Icons.download_done_rounded
-                      : progress != null
-                          ? Icons.downloading_rounded
-                          : Icons.download_rounded,
-                  title: record != null
-                      ? l10n.downloadStatusDownloaded
-                      : progress != null
-                          ? l10n.downloadStatusDownloading
-                          : l10n.downloadStatusNotDownloaded,
-                  subtitle: _statusSubtitle(l10n, record, progress),
+                const SizedBox(height: kSettingsSectionSpacing),
+                SettingsSectionCard(
+                  title: l10n.downloadExtrasSection,
+                  children: [
+                    _buildPartTile(
+                      key: const Key('downloadLyricsPart'),
+                      icon: Icons.lyrics_rounded,
+                      title: l10n.lyricsTitle,
+                      downloaded: record?.hasLyrics ?? false,
+                      onDownload: downloads == null
+                          ? null
+                          : () => unawaited(
+                                _downloadPart(downloads, lyrics: true),
+                              ),
+                    ),
+                    _buildPartTile(
+                      key: const Key('downloadCoverPart'),
+                      icon: Icons.image_rounded,
+                      title: l10n.downloadCoverPart,
+                      downloaded: record?.hasCover ?? false,
+                      onDownload: downloads == null
+                          ? null
+                          : () => unawaited(
+                                _downloadPart(downloads, lyrics: false),
+                              ),
+                    ),
+                  ],
                 ),
-                ..._buildActions(context, l10n, downloads, record, progress),
+                const SizedBox(height: kSettingsSectionSpacing),
+                M3EButton.filled(
+                  key: const Key('downloadAll'),
+                  onPressed: downloads == null ||
+                          !downloads.supported ||
+                          _audioBusy ||
+                          (record?.hasAudio ?? false)
+                      ? null
+                      : () => unawaited(
+                            _startDownload(
+                              downloads,
+                              quality: selectedQuality,
+                              includeLyrics: true,
+                              includeCover: true,
+                            ),
+                          ),
+                  child: Text(l10n.downloadAll),
+                ),
               ],
             ),
           ),
@@ -115,7 +230,10 @@ class _DownloadSheetState extends State<_DownloadSheet> {
       padding: const EdgeInsets.fromLTRB(24, 8, 24, 8),
       child: Row(
         children: [
-          Icon(Icons.music_note_rounded, color: theme.colorScheme.onSurfaceVariant),
+          Icon(
+            Icons.music_note_rounded,
+            color: theme.colorScheme.onSurfaceVariant,
+          ),
           const SizedBox(width: 12),
           Expanded(
             child: Text(
@@ -139,7 +257,7 @@ class _DownloadSheetState extends State<_DownloadSheet> {
     DownloadedTrack? record,
     DownloadProgress? progress,
   ) {
-    if (record != null) {
+    if (record != null && record.hasAudio) {
       final quality = record.quality.isEmpty
           ? ''
           : sourceQualityLabel(l10n, record.quality);
@@ -160,22 +278,23 @@ class _DownloadSheetState extends State<_DownloadSheet> {
   }
 
   /// 音频动作行：按状态给出下载 / 取消 / 删除 / 分享。
-  List<Widget> _buildActions(
+  List<Widget> _buildAudioActions(
     BuildContext context,
     AppLocalizations l10n,
     DownloadService? downloads,
     DownloadedTrack? record,
     DownloadProgress? progress,
+    String selectedQuality,
   ) {
     final supported = downloads != null && downloads.supported;
-    if (record != null) {
+    if (record != null && record.hasAudio) {
       return [
         SettingsNavTile(
           key: const Key('downloadSheetShare'),
           icon: Icons.ios_share_rounded,
           title: l10n.downloadShare,
           subtitle: '',
-          onTap: _busy ? null : () => unawaited(_share(record)),
+          onTap: _audioBusy ? null : () => unawaited(_share(record)),
         ),
         SettingsNavTile(
           key: const Key('downloadSheetDelete'),
@@ -183,8 +302,9 @@ class _DownloadSheetState extends State<_DownloadSheet> {
           title: l10n.downloadDelete,
           subtitle: '',
           isDestructive: true,
-          onTap:
-              _busy ? null : () => unawaited(_confirmDelete(downloads, record)),
+          onTap: _audioBusy
+              ? null
+              : () => unawaited(_confirmDelete(downloads, record)),
         ),
       ];
     }
@@ -210,16 +330,75 @@ class _DownloadSheetState extends State<_DownloadSheet> {
         icon: Icons.download_rounded,
         title: l10n.downloadAction,
         subtitle: '',
-        onTap: !supported || _busy
+        onTap: !supported || _audioBusy
             ? null
-            : () => unawaited(_startDownload(downloads)),
+            : () => unawaited(
+                  _startDownload(
+                    downloads,
+                    quality: selectedQuality,
+                    includeLyrics: true,
+                    includeCover: true,
+                  ),
+                ),
       ),
     ];
   }
 
-  /// 下载当前曲目；省流生效（移动数据 + 已开启）时先确认再下载。
-  Future<void> _startDownload(DownloadService? downloads) async {
-    if (downloads == null || _busy) return;
+  /// 附加内容行：状态 + 「单独下载」（缓存优先，与音频同一套机制）。
+  Widget _buildPartTile({
+    required Key key,
+    required IconData icon,
+    required String title,
+    required bool downloaded,
+    required VoidCallback? onDownload,
+  }) {
+    final l10n = AppLocalizations.of(context)!;
+    return SettingsNavTile(
+      key: key,
+      icon: icon,
+      title: title,
+      subtitle: downloaded
+          ? l10n.downloadStatusDownloaded
+          : l10n.downloadStatusNotDownloaded,
+      onTap: _partBusy || downloaded ? null : onDownload,
+    );
+  }
+
+  /// 单独下载歌词 / 封面。
+  Future<void> _downloadPart(
+    DownloadService downloads, {
+    required bool lyrics,
+  }) async {
+    if (_partBusy) return;
+    final l10n = AppLocalizations.of(context)!;
+    HapticFeedback.lightImpact();
+    setState(() => _partBusy = true);
+    try {
+      if (lyrics) {
+        await downloads.downloadLyrics(widget.track);
+        if (mounted) _showMessage(l10n.downloadLyricsDone);
+      } else {
+        await downloads.downloadCover(widget.track);
+        if (mounted) _showMessage(l10n.downloadCoverDone);
+      }
+    } on SourceFailure catch (failure) {
+      if (!mounted || failure.kind == FailureKind.cancelled) return;
+      _showMessage(downloadFailureLabel(l10n, failure));
+    } catch (e) {
+      if (mounted) _showMessage(l10n.downloadFailed(e.toString()));
+    } finally {
+      if (mounted) setState(() => _partBusy = false);
+    }
+  }
+
+  /// 下载音频；省流生效（移动数据 + 已开启）时先确认再下载。
+  Future<void> _startDownload(
+    DownloadService? downloads, {
+    required String quality,
+    required bool includeLyrics,
+    required bool includeCover,
+  }) async {
+    if (downloads == null || _audioBusy) return;
     final l10n = AppLocalizations.of(context)!;
     final dataSaver = context.read<DataSaverService?>();
     if (dataSaver?.active ?? false) {
@@ -243,9 +422,14 @@ class _DownloadSheetState extends State<_DownloadSheet> {
       if (confirmed != true || !mounted) return;
     }
     HapticFeedback.lightImpact();
-    setState(() => _busy = true);
+    setState(() => _audioBusy = true);
     try {
-      await downloads.download(widget.track);
+      await downloads.download(
+        widget.track,
+        quality: quality.isEmpty ? null : quality,
+        includeLyrics: includeLyrics,
+        includeCover: includeCover,
+      );
       if (!mounted) return;
       _showMessage(l10n.downloadCompleted);
     } on SourceFailure catch (failure) {
@@ -255,7 +439,7 @@ class _DownloadSheetState extends State<_DownloadSheet> {
       if (!mounted) return;
       _showMessage(l10n.downloadFailed(e.toString()));
     } finally {
-      if (mounted) setState(() => _busy = false);
+      if (mounted) setState(() => _audioBusy = false);
     }
   }
 
@@ -264,7 +448,7 @@ class _DownloadSheetState extends State<_DownloadSheet> {
     DownloadService? downloads,
     DownloadedTrack record,
   ) async {
-    if (downloads == null || _busy) return;
+    if (downloads == null || _audioBusy) return;
     final l10n = AppLocalizations.of(context)!;
     final confirmed = await M3EDialog.show<bool>(
       context,
@@ -285,21 +469,23 @@ class _DownloadSheetState extends State<_DownloadSheet> {
     );
     if (confirmed != true || !mounted) return;
     HapticFeedback.lightImpact();
-    setState(() => _busy = true);
+    setState(() => _audioBusy = true);
     try {
       await downloads.delete(record);
     } finally {
-      if (mounted) setState(() => _busy = false);
+      if (mounted) setState(() => _audioBusy = false);
     }
   }
 
   /// 分享导出音频文件（系统分享面板；桌面端为分享/另存入口）。
   Future<void> _share(DownloadedTrack record) async {
-    if (_busy) return;
+    if (_audioBusy) return;
+    final path = record.filePath;
+    if (path == null || path.isEmpty) return;
     final l10n = AppLocalizations.of(context)!;
     try {
       await SharePlus.instance.share(
-        ShareParams(files: [XFile(record.filePath)]),
+        ShareParams(files: [XFile(path)]),
       );
     } catch (_) {
       if (mounted) _showMessage(l10n.exportFailed);

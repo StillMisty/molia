@@ -2258,6 +2258,14 @@ class AppLocalizationsZh extends AppLocalizations {
   String get trackCacheClearHint => '只清理缓存副本，不影响已下载文件与当前播放。';
 
   @override
+  String cacheClearPart(String part) {
+    return '清理「$part」？';
+  }
+
+  @override
+  String get clear => '清理';
+
+  @override
   String get trackCacheEmpty => '这首歌没有缓存';
 
   @override

@@ -3,12 +3,15 @@ import 'dart:typed_data';
 
 import 'package:dio/dio.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:molia/data/catalog/catalog_service.dart';
 import 'package:molia/data/downloads/downloads_repository.dart';
 import 'package:molia/data/molia_database.dart';
 import 'package:molia/domain/models/download.dart';
 import 'package:molia/domain/models/failure.dart';
 import 'package:molia/domain/models/track.dart';
+import 'package:molia/services/cache_service.dart';
+import 'package:molia/services/cache_storage.dart';
 import 'package:molia/services/download/download_service.dart';
 
 import '../support/fake_download_storage.dart';
@@ -109,7 +112,9 @@ void main() {
     expect(record.lyricPath, '/downloads/lyrics/歌手 - 测试歌曲.lrc');
     expect(record.translationLyricPath, '/downloads/lyrics/歌手 - 测试歌曲.t.lrc');
     expect(record.coverPath, '/downloads/covers/歌手 - 测试歌曲.jpg');
-    expect(storage.files[record.filePath], [1, 2, 3, 4]);
+    // 音频文件尾部是下载内容（头部是写入的 ID3 标签）。
+    final audioBytes = storage.files[record.filePath!]!;
+    expect(audioBytes.sublist(audioBytes.length - 4), [1, 2, 3, 4]);
     expect(storage.files[record.lyricPath], isNotNull);
     expect(storage.files[record.translationLyricPath], isNotNull);
     expect(storage.files[record.coverPath], isNotNull);
@@ -118,10 +123,10 @@ void main() {
     // 落库（重新读库确认）。
     expect(await repository.findByOrigin('kw', '1'), isNotNull);
     // 播放取链优先命中本地副本。
-    expect(await service.localUriFor(track), Uri.file(record.filePath));
+    expect(await service.localUriFor(track), Uri.file(record.filePath!));
     // 已下载状态与本地曲目还原。
     expect(service.recordForTrack(track)!.key, 'kw:1');
-    final local = record.localTrack;
+    final local = record.localTrack!;
     expect(local.id.sourceKey, kLocalSourceKey);
     expect(local.id.id, 'kw:1');
     expect(local.origin, TrackOrigin.localFile);
@@ -265,7 +270,7 @@ void main() {
       )),
     );
     await expectLater(
-      service.download(service.recordFor('kw', '1')!.localTrack),
+      service.download(service.recordFor('kw', '1')!.localTrack!),
       throwsA(predicate(
         (e) => e is SourceFailure && e.l10nKey == 'downloadLocalTrack',
       )),
@@ -310,7 +315,7 @@ void main() {
 
     expect(service.recordFor('kw', '1'), isNull);
     expect(await repository.findByOrigin('kw', '1'), isNull);
-    expect(storage.files.containsKey(record.filePath), isFalse);
+    expect(storage.files.containsKey(record.filePath!), isFalse);
     expect(storage.files.containsKey(record.lyricPath), isFalse);
     expect(storage.files.containsKey(record.translationLyricPath), isFalse);
     expect(storage.files.containsKey(record.coverPath), isFalse);
@@ -363,4 +368,199 @@ void main() {
       'mp3',
     );
   });
+
+  test('指定音质下载：取链使用所选音质，记录写入所选音质', () async {
+    final dio = mockDio(
+      (options) => bytesResponse([1, 2], headers: {'content-length': ['2']}),
+    );
+    final service = makeService(dio: dio);
+    await service.init();
+
+    await service.download(makeTrack(), quality: '128k');
+    expect(kwSource.lastResolveQuality?.type, '128k');
+    expect(service.recordFor('kw', '1')!.quality, '128k');
+  });
+
+  test('音频缓存命中：直接拷贝到下载目录，不取链 / 不请求网络', () async {
+    SharedPreferences.setMockInitialValues({});
+    final prefs = await SharedPreferences.getInstance();
+    final cacheService = CacheService(
+      storage: _FakeCacheStorage(audioDir: '/cache/audio'),
+      prefs: prefs,
+    );
+    final dio = mockDio(
+      (options) => textResponse('should not be requested', statusCode: 500),
+    );
+    final service = DownloadService(
+      catalog: CatalogService(registry: FakeSourceRegistry({'kw': kwSource})),
+      repository: repository,
+      storage: storage,
+      dio: dio,
+      cacheService: cacheService,
+      preferredQuality: () => '320k',
+      clock: () => 1000,
+    );
+    await service.init();
+
+    final cacheName = CacheService.audioCacheKey(
+      sourceKey: 'kw',
+      songId: '1',
+      quality: '320k',
+    );
+    storage.files['/cache/audio/$cacheName'] = [7, 7, 7];
+
+    await service.download(makeTrack());
+    final record = service.recordFor('kw', '1')!;
+    expect(record.filePath, '/downloads/歌手 - 测试歌曲.mp3');
+    final copied = storage.files[record.filePath]!;
+    expect(copied.sublist(copied.length - 3), [7, 7, 7]);
+    expect(record.sizeBytes, 3);
+  });
+
+  test('音频缓存半成品（同名 .part）：不视为命中，回退网络下载', () async {
+    SharedPreferences.setMockInitialValues({});
+    final prefs = await SharedPreferences.getInstance();
+    final cacheService = CacheService(
+      storage: _FakeCacheStorage(audioDir: '/cache/audio'),
+      prefs: prefs,
+    );
+    final dio = mockDio(
+      (options) => bytesResponse([1, 2], headers: {'content-length': ['2']}),
+    );
+    final service = DownloadService(
+      catalog: CatalogService(registry: FakeSourceRegistry({'kw': kwSource})),
+      repository: repository,
+      storage: storage,
+      dio: dio,
+      cacheService: cacheService,
+      preferredQuality: () => '320k',
+      clock: () => 1000,
+    );
+    await service.init();
+
+    final cacheName = CacheService.audioCacheKey(
+      sourceKey: 'kw',
+      songId: '1',
+      quality: '320k',
+    );
+    storage.files['/cache/audio/$cacheName'] = [7, 7, 7];
+    storage.files['/cache/audio/$cacheName.part'] = [7];
+
+    await service.download(makeTrack());
+    final record = service.recordFor('kw', '1')!;
+    final downloaded = storage.files[record.filePath]!;
+    expect(
+      downloaded.sublist(downloaded.length - 2),
+      [1, 2],
+      reason: '回退网络下载',
+    );
+  });
+
+  test('分项下载：先歌词 / 封面，再音频补齐且不丢分项', () async {
+    final dio = mockDio((options) {
+      if (options.uri.path.endsWith('cover.jpg')) {
+        return bytesResponse([9, 9, 9]);
+      }
+      return bytesResponse([1, 2], headers: {'content-length': ['2']});
+    });
+    final service = makeService(
+      dio: dio,
+      lyrics: (track) async => const DownloadLyrics(lyric: '[00:01]词'),
+      artwork: (track) async => 'https://img.example.com/cover.jpg',
+    );
+    await service.init();
+    final track = makeTrack();
+
+    await service.downloadLyrics(track);
+    var record = service.recordFor('kw', '1')!;
+    expect(record.hasAudio, isFalse);
+    expect(record.hasLyrics, isTrue);
+    expect(record.lyricPath, '/downloads/lyrics/歌手 - 测试歌曲.lrc');
+
+    await service.downloadCover(track);
+    record = service.recordFor('kw', '1')!;
+    expect(record.hasCover, isTrue);
+    expect(record.coverPath, '/downloads/covers/歌手 - 测试歌曲.jpg');
+
+    // 再下音频（不带分项）：既有歌词 / 封面保留。
+    await service.download(track, includeLyrics: false, includeCover: false);
+    record = service.recordFor('kw', '1')!;
+    expect(record.hasAudio, isTrue);
+    expect(record.hasLyrics, isTrue);
+    expect(record.hasCover, isTrue);
+    expect(record.filePath, '/downloads/歌手 - 测试歌曲.mp3');
+  });
+
+  test('分项下载：无歌词 / 无封面时抛可读失败', () async {
+    final service = makeService();
+    await service.init();
+    final track = makeTrack();
+
+    await expectLater(
+      service.downloadLyrics(track),
+      throwsA(predicate(
+        (e) => e is SourceFailure && e.l10nKey == 'downloadNoLyrics',
+      )),
+    );
+    await expectLater(
+      service.downloadCover(track),
+      throwsA(predicate(
+        (e) => e is SourceFailure && e.l10nKey == 'downloadNoArtwork',
+      )),
+    );
+  });
+
+}
+
+/// 假缓存存储：音频目录可控（音频缓存命中测试用）。
+class _FakeCacheStorage implements CacheStorage {
+  _FakeCacheStorage({this.audioDir = '/cache/audio'});
+
+  final String? audioDir;
+
+  @override
+  Future<String?> audioCacheDir() async => audioDir;
+
+  @override
+  Future<String?> artworkCacheDir() async => null;
+
+  @override
+  Future<int?> totalSpaceBytes() async => null;
+
+  @override
+  Future<CacheUsage> usage(String dirPath) async => CacheUsage.zero;
+
+  @override
+  Future<CacheUsage> usageMatching(
+    String dirPath, {
+    required String prefix,
+  }) async =>
+      CacheUsage.zero;
+
+  @override
+  Future<CacheDeleteResult> deleteMatching(
+    String dirPath, {
+    required String prefix,
+    Duration protectAge = Duration.zero,
+  }) async =>
+      const CacheDeleteResult();
+
+  @override
+  Future<void> clear(String dirPath) async {}
+
+  @override
+  Future<int> enforceAudioLimit(
+    String dirPath, {
+    required int maxBytes,
+    required Duration protectAge,
+  }) async =>
+      0;
+
+  @override
+  Future<int> sweepArtwork(
+    String dirPath, {
+    required int maxObjects,
+    required int staleDays,
+  }) async =>
+      0;
 }

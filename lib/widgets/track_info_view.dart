@@ -317,6 +317,14 @@ class _TrackInfoViewState extends State<TrackInfoView> {
     DownloadProgress? progress,
   ) {
     if (record != null) {
+      if (!record.hasAudio) {
+        // 只有歌词 / 封面：音频未下载，副标题列出已下载的附加项。
+        final parts = <String>[
+          if (record.hasLyrics) l10n.lyricsTitle,
+          if (record.hasCover) l10n.downloadCoverPart,
+        ];
+        return parts.isEmpty ? l10n.downloadStatusNotDownloaded : parts.join(' · ');
+      }
       final quality = record.quality.isEmpty
           ? ''
           : sourceQualityLabel(l10n, record.quality);

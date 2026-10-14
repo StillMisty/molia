@@ -958,6 +958,15 @@
   },
   "trackCacheClearAllConfirm": "清理这首歌的全部缓存？",
   "trackCacheClearHint": "只清理缓存副本，不影响已下载文件与当前播放。",
+  "cacheClearPart": "清理「{part}」？",
+  "@cacheClearPart": {
+    "placeholders": {
+      "part": {
+        "type": "String"
+      }
+    }
+  },
+  "clear": "清理",
   "trackCacheEmpty": "这首歌没有缓存",
   "cacheAudioPlatformUnsupported": "当前平台不缓存音频",
   "cacheAudioDisabled": "音频缓存已关闭",

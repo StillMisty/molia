@@ -1225,6 +1225,15 @@
   },
   "trackCacheClearAllConfirm": "Clear all cached data for this track?",
   "trackCacheClearHint": "Only cached copies are removed; downloads and playback are unaffected.",
+  "cacheClearPart": "Clear \"{part}\"?",
+  "@cacheClearPart": {
+    "placeholders": {
+      "part": {
+        "type": "String"
+      }
+    }
+  },
+  "clear": "Clear",
   "trackCacheEmpty": "Nothing cached for this track",
   "cacheAudioPlatformUnsupported": "Audio caching isn't available on this platform",
   "cacheAudioDisabled": "Audio caching is off",

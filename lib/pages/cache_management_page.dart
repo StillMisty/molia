@@ -82,7 +82,30 @@ class _CacheManagementPageState extends State<CacheManagementPage> {
     });
   }
 
+  /// 单分区清理：与「全部清理」同一口径，先确认再执行（防误触）。
   Future<void> _clear(CachePartition partition) async {
+    final l10n = AppLocalizations.of(context)!;
+    // 弹层 dialog 挂 root navigator（M3EDialog.show 语义）；本页位于设置弹层的
+    // 嵌套 Navigator 内，页面 context 上的 pop 会误退本页，关闭要显式定向。
+    final navigator = Navigator.of(context, rootNavigator: true);
+    final confirmed = await M3EDialog.show<bool>(
+      context,
+      dialog: M3EDialog(
+        title: l10n.cacheClearPart(_partitionLabel(l10n, partition)),
+        content: Text(l10n.trackCacheClearHint),
+        actions: [
+          M3EButton.text(
+            onPressed: () => navigator.pop(false),
+            child: Text(l10n.cancel),
+          ),
+          M3EButton.filled(
+            onPressed: () => navigator.pop(true),
+            child: Text(l10n.clear),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
     setState(() => _busy = true);
     try {
       await _service.clear(partition);
@@ -126,6 +149,15 @@ class _CacheManagementPageState extends State<CacheManagementPage> {
     } finally {
       if (mounted) setState(() => _busy = false);
     }
+  }
+
+  /// 分区显示名（确认弹窗标题用）。
+  static String _partitionLabel(AppLocalizations l10n, CachePartition partition) {
+    return switch (partition) {
+      CachePartition.audio => l10n.cachePartitionAudio,
+      CachePartition.lyrics => l10n.cachePartitionLyrics,
+      CachePartition.artwork => l10n.cachePartitionArtwork,
+    };
   }
 
   void _notifyCleared() {

@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:typed_data';
 
 import 'package:molia/data/downloads/download_storage.dart';
 
@@ -24,6 +25,18 @@ class FakeDownloadStorage implements DownloadStorage {
 
   @override
   Future<int> fileSize(String path) async => files[path]?.length ?? 0;
+
+  @override
+  Future<void> copyFile(String from, String to) async {
+    final bytes = files[from];
+    if (bytes != null) files[to] = List<int>.of(bytes);
+  }
+
+  @override
+  Future<Uint8List?> readBytes(String path) async {
+    final bytes = files[path];
+    return bytes == null ? null : Uint8List.fromList(bytes);
+  }
 
   @override
   Future<void> writeStream(

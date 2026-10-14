@@ -2355,6 +2355,14 @@ class AppLocalizationsEn extends AppLocalizations {
       'Only cached copies are removed; downloads and playback are unaffected.';
 
   @override
+  String cacheClearPart(String part) {
+    return 'Clear \"$part\"?';
+  }
+
+  @override
+  String get clear => 'Clear';
+
+  @override
   String get trackCacheEmpty => 'Nothing cached for this track';
 
   @override
