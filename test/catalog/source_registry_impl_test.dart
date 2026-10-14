@@ -1,4 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:molia/data/catalog/local_music_source.dart';
 import 'package:molia/data/catalog/source_registry_impl.dart';
 import 'package:molia/domain/models/source.dart' as domain;
 import 'package:molia/domain/models/track.dart';
@@ -79,6 +80,33 @@ void main() {
     );
     expect(registry.forTrack(track)!.key, 'kw');
     expect(registry.forTrack(track), same(registry.byKey('kw')));
+  });
+
+  test('local key 路由到 LocalMusicSource（不撞 manager、不进 descriptors）', () async {
+    final manager = SourceManager();
+    await manager.init();
+    final registry = SourceRegistryImpl(manager);
+    addTearDown(() {
+      registry.dispose();
+      manager.dispose();
+    });
+
+    final source = registry.byKey('local');
+    expect(source, isA<LocalMusicSource>());
+    expect(source!.capabilities.resolveUrl, isTrue);
+    expect(source.capabilities.search, isFalse);
+    // 懒创建 + 缓存：同 key 恒为同一实例。
+    expect(registry.byKey('local'), same(source));
+    // 本地下载源不参与搜索/渠道排序。
+    expect(registry.descriptors.any((d) => d.key == 'local'), isFalse);
+
+    final localTrack = Track(
+      id: const TrackId('local', 'kw:1'),
+      title: '本地',
+      origin: TrackOrigin.localFile,
+      payload: const {'path': '/data/a.mp3'},
+    );
+    expect(registry.forTrack(localTrack), same(source));
   });
 
   test('changes 转发 manager 通知；refresh 也广播一次', () async {

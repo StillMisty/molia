@@ -424,6 +424,9 @@ class SearchProvider extends ChangeNotifier {
   }
 
   /// 领域音源种类 → 兼容 `SourceKind`（两者枚举名一一对应）。
+  ///
+  /// `local`（本地下载副本）不出现在搜索 / 渠道列表，该分支不可达；
+  /// 出现即编程错误，显式抛出而不是静默兜底。
   SourceKind _legacyKind(domain.SourceKind kind) {
     switch (kind) {
       case domain.SourceKind.builtin:
@@ -432,6 +435,8 @@ class SearchProvider extends ChangeNotifier {
         return SourceKind.lx;
       case domain.SourceKind.anyListen:
         return SourceKind.anyListen;
+      case domain.SourceKind.local:
+        throw StateError('本地下载音源不参与搜索');
     }
   }
 
