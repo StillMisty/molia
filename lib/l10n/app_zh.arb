@@ -1049,5 +1049,31 @@
       }
     }
   },
-  "downloadsUnsupported": "当前平台不支持下载"
+  "downloadsUnsupported": "当前平台不支持下载",
+  "sleepTimerTitle": "定时关闭",
+  "sleepTimerHint": "到点自动暂停播放",
+  "sleepTimerOff": "未开启",
+  "sleepTimerRemaining": "剩余 {time}",
+  "@sleepTimerRemaining": {
+    "placeholders": {
+      "time": {
+        "type": "String"
+      }
+    }
+  },
+  "sleepTimerAfterTrack": "播完当前歌曲后暂停",
+  "sleepTimerMinutes": "{minutes} 分钟后暂停",
+  "@sleepTimerMinutes": {
+    "placeholders": {
+      "minutes": {
+        "type": "int"
+      }
+    }
+  },
+  "sleepTimerCancel": "关闭定时",
+  "sleepTimerCustom": "自定义时长…",
+  "sleepTimerCustomTitle": "自定义时长",
+  "sleepTimerCustomHint": "分钟数（1–600）",
+  "sleepTimerCustomInvalid": "请输入 1–600 之间的整数",
+  "sleepTimerCustomConfirm": "设定"
 }

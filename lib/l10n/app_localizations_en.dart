@@ -2452,4 +2452,44 @@ class AppLocalizationsEn extends AppLocalizations {
   @override
   String get downloadsUnsupported =>
       'Downloads are not supported on this platform';
+
+  @override
+  String get sleepTimerTitle => 'Sleep timer';
+
+  @override
+  String get sleepTimerHint => 'Pauses playback when the timer ends';
+
+  @override
+  String get sleepTimerOff => 'Off';
+
+  @override
+  String sleepTimerRemaining(String time) {
+    return '$time left';
+  }
+
+  @override
+  String get sleepTimerAfterTrack => 'Pause after current track';
+
+  @override
+  String sleepTimerMinutes(int minutes) {
+    return 'Pause in $minutes minutes';
+  }
+
+  @override
+  String get sleepTimerCancel => 'Turn off timer';
+
+  @override
+  String get sleepTimerCustom => 'Custom duration…';
+
+  @override
+  String get sleepTimerCustomTitle => 'Custom duration';
+
+  @override
+  String get sleepTimerCustomHint => 'Minutes (1–600)';
+
+  @override
+  String get sleepTimerCustomInvalid => 'Enter an integer between 1 and 600';
+
+  @override
+  String get sleepTimerCustomConfirm => 'Set';
 }

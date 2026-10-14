@@ -85,6 +85,9 @@ class DefaultPlaybackFacade implements PlaybackFacade {
   }
 
   @override
+  Future<void> pause() => _backend.pause();
+
+  @override
   Future<void> seek(Duration position) async {
     await _backend.seek(position);
     // 立即对齐进度通道（拖动结束不跳回）；不触碰低频快照。

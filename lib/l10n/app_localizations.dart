@@ -4460,6 +4460,78 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Downloads are not supported on this platform'**
   String get downloadsUnsupported;
+
+  /// No description provided for @sleepTimerTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Sleep timer'**
+  String get sleepTimerTitle;
+
+  /// No description provided for @sleepTimerHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Pauses playback when the timer ends'**
+  String get sleepTimerHint;
+
+  /// No description provided for @sleepTimerOff.
+  ///
+  /// In en, this message translates to:
+  /// **'Off'**
+  String get sleepTimerOff;
+
+  /// No description provided for @sleepTimerRemaining.
+  ///
+  /// In en, this message translates to:
+  /// **'{time} left'**
+  String sleepTimerRemaining(String time);
+
+  /// No description provided for @sleepTimerAfterTrack.
+  ///
+  /// In en, this message translates to:
+  /// **'Pause after current track'**
+  String get sleepTimerAfterTrack;
+
+  /// No description provided for @sleepTimerMinutes.
+  ///
+  /// In en, this message translates to:
+  /// **'Pause in {minutes} minutes'**
+  String sleepTimerMinutes(int minutes);
+
+  /// No description provided for @sleepTimerCancel.
+  ///
+  /// In en, this message translates to:
+  /// **'Turn off timer'**
+  String get sleepTimerCancel;
+
+  /// No description provided for @sleepTimerCustom.
+  ///
+  /// In en, this message translates to:
+  /// **'Custom duration…'**
+  String get sleepTimerCustom;
+
+  /// No description provided for @sleepTimerCustomTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Custom duration'**
+  String get sleepTimerCustomTitle;
+
+  /// No description provided for @sleepTimerCustomHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Minutes (1–600)'**
+  String get sleepTimerCustomHint;
+
+  /// No description provided for @sleepTimerCustomInvalid.
+  ///
+  /// In en, this message translates to:
+  /// **'Enter an integer between 1 and 600'**
+  String get sleepTimerCustomInvalid;
+
+  /// No description provided for @sleepTimerCustomConfirm.
+  ///
+  /// In en, this message translates to:
+  /// **'Set'**
+  String get sleepTimerCustomConfirm;
 }
 
 class _AppLocalizationsDelegate

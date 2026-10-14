@@ -30,6 +30,12 @@
   `previous` 语义；与队列顺序 `upcoming` 是两回事。
 - **Resolved next（下一首解析）** — `PlaybackSnapshot.next`：后端按当前模式解析的下一首
   （shuffle 在单曲内稳定，切歌/切模式重抽）；`upcoming` 只用于队列面板展示。
+- **Sleep timer（定时关闭）** — `lib/providers/sleep_timer.dart`：歌曲信息页入口的
+  「到点暂停」。两种模式：倒计时（**仅播放时计时**，暂停冻结，剩余时间按 `now()`
+  差值累计）与「播完当前歌曲」（纯事件驱动，无定时器）。判定只读 **facade 原始
+  通道**（真实播放），恢复态覆盖值不参与；到点动作经注入的 `onFire` 落地
+  （组合根注入 `facade.pause`）。剩余时间每秒走 `ValueListenable`（不进聚合通知），
+  不持久化，`stopLocalPlayback` 一并撤销。
 
 ## 播放页封面（cover deck）
 

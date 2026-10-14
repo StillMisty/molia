@@ -2352,4 +2352,44 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get downloadsUnsupported => '当前平台不支持下载';
+
+  @override
+  String get sleepTimerTitle => '定时关闭';
+
+  @override
+  String get sleepTimerHint => '到点自动暂停播放';
+
+  @override
+  String get sleepTimerOff => '未开启';
+
+  @override
+  String sleepTimerRemaining(String time) {
+    return '剩余 $time';
+  }
+
+  @override
+  String get sleepTimerAfterTrack => '播完当前歌曲后暂停';
+
+  @override
+  String sleepTimerMinutes(int minutes) {
+    return '$minutes 分钟后暂停';
+  }
+
+  @override
+  String get sleepTimerCancel => '关闭定时';
+
+  @override
+  String get sleepTimerCustom => '自定义时长…';
+
+  @override
+  String get sleepTimerCustomTitle => '自定义时长';
+
+  @override
+  String get sleepTimerCustomHint => '分钟数（1–600）';
+
+  @override
+  String get sleepTimerCustomInvalid => '请输入 1–600 之间的整数';
+
+  @override
+  String get sleepTimerCustomConfirm => '设定';
 }

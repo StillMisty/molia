@@ -11,6 +11,7 @@ import '../domain/models/failure.dart';
 import '../domain/models/track.dart';
 import '../l10n/app_localizations.dart';
 import '../providers/playback_provider.dart';
+import '../providers/sleep_timer.dart';
 import '../providers/sources_provider.dart';
 import '../services/cache_service.dart';
 import '../services/data_saver_service.dart';
@@ -20,6 +21,7 @@ import '../services/track_cache_service.dart';
 import '../utils/source_label.dart';
 import '../utils/source_quality_label.dart';
 import 'settings/settings_tiles.dart';
+import 'sleep_timer_sheet.dart';
 
 /// 播放页第三个 tab：当前曲目信息 + 单曲缓存管理 + 本地下载。
 ///
@@ -372,6 +374,22 @@ class _TrackInfoViewState extends State<TrackInfoView> {
               ),
             ],
           ],
+          const SizedBox(height: kSettingsSectionSpacing),
+          // 定时关闭：与曲目无关的播放控制，空态下也保留（队列播完后仍可取消）。
+          SettingsSectionCard(
+            children: [
+              ValueListenableBuilder<SleepTimerState>(
+                valueListenable: context.read<PlaybackProvider>().sleepTimer,
+                builder: (context, timerState, _) => SettingsNavTile(
+                  key: const Key('trackInfoSleepTimerItem'),
+                  icon: Icons.bedtime_rounded,
+                  title: l10n.sleepTimerTitle,
+                  subtitle: sleepTimerStatusLabel(l10n, timerState),
+                  onTap: () => showSleepTimerSheet(context),
+                ),
+              ),
+            ],
+          ),
         ],
       ),
     );

@@ -7,11 +7,13 @@ import 'package:molia/domain/models/track.dart';
 import 'package:molia/l10n/app_localizations.dart';
 import 'package:molia/managers/artwork_cache.dart';
 import 'package:molia/providers/playback_provider.dart';
+import 'package:molia/providers/sleep_timer.dart';
 import 'package:molia/services/cache_service.dart';
 import 'package:molia/services/cache_storage_stub.dart';
 import 'package:molia/services/download/download_service.dart';
 import 'package:molia/services/track_cache_service.dart';
 import 'package:molia/widgets/track_info_view.dart';
+import 'package:material_3_expressive/material_3_expressive.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -272,6 +274,97 @@ void main() {
 
     expect(find.text('暂无播放曲目'), findsOneWidget);
     expect(find.byKey(const Key('trackInfoCache_audio')), findsNothing);
+  });
+
+  testWidgets('定时关闭：档位设置与取消（行副标题随状态刷新）', (tester) async {
+    tester.view.physicalSize = const Size(420, 900);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(() {
+      tester.view.resetPhysicalSize();
+      tester.view.resetDevicePixelRatio();
+    });
+    await pumpView(tester, track: _track());
+
+    expect(find.text('定时关闭'), findsOneWidget);
+    expect(find.text('未开启'), findsOneWidget);
+
+    // 定时关闭在下载区之后：先滚进可视区再点。
+    await tester.ensureVisible(find.byKey(const Key('trackInfoSleepTimerItem')));
+    await tester.pump();
+    await tester.tap(find.byKey(const Key('trackInfoSleepTimerItem')));
+    await tester.pumpAndSettle();
+    expect(find.text('15 分钟后暂停'), findsOneWidget);
+
+    await tester.tap(find.text('15 分钟后暂停'));
+    await tester.pumpAndSettle();
+    expect(playback.sleepTimer.value.remaining, const Duration(minutes: 15));
+    expect(find.text('剩余 15:00'), findsOneWidget);
+
+    // 再开弹层：显示关闭定时 + 当前状态（行副标题与弹层状态行同时可见）。
+    await tester.tap(find.byKey(const Key('trackInfoSleepTimerItem')));
+    await tester.pumpAndSettle();
+    expect(find.text('关闭定时'), findsOneWidget);
+    expect(find.text('剩余 15:00'), findsNWidgets(2));
+    await tester.tap(find.text('关闭定时'));
+    await tester.pumpAndSettle();
+
+    expect(playback.sleepTimer.value.mode, SleepTimerMode.off);
+    expect(find.text('未开启'), findsOneWidget);
+  });
+
+  testWidgets('定时关闭：空态仍保留入口，「播完当前歌曲」不可用', (tester) async {
+    tester.view.physicalSize = const Size(420, 900);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(() {
+      tester.view.resetPhysicalSize();
+      tester.view.resetDevicePixelRatio();
+    });
+    await pumpView(tester);
+
+    expect(find.text('暂无播放曲目'), findsOneWidget);
+    expect(find.byKey(const Key('trackInfoSleepTimerItem')), findsOneWidget);
+
+    await tester.ensureVisible(find.byKey(const Key('trackInfoSleepTimerItem')));
+    await tester.pump();
+    await tester.tap(find.byKey(const Key('trackInfoSleepTimerItem')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('播完当前歌曲后暂停'));
+    await tester.pumpAndSettle();
+
+    expect(playback.sleepTimer.value.mode, SleepTimerMode.off);
+  });
+
+  testWidgets('定时关闭：自定义时长校验与设定', (tester) async {
+    tester.view.physicalSize = const Size(420, 900);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(() {
+      tester.view.resetPhysicalSize();
+      tester.view.resetDevicePixelRatio();
+    });
+    await pumpView(tester, track: _track());
+
+    await tester.ensureVisible(find.byKey(const Key('trackInfoSleepTimerItem')));
+    await tester.pump();
+    await tester.tap(find.byKey(const Key('trackInfoSleepTimerItem')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('自定义时长…'));
+    await tester.pumpAndSettle();
+
+    // 非法输入：给出错误文案，确认键禁用（点击不设定、不关弹窗）。
+    await tester.enterText(find.byType(M3ETextField), '0');
+    await tester.pumpAndSettle();
+    expect(find.text('请输入 1–600 之间的整数'), findsOneWidget);
+    await tester.tap(find.text('设定'));
+    await tester.pumpAndSettle();
+    expect(playback.sleepTimer.value.mode, SleepTimerMode.off);
+
+    await tester.enterText(find.byType(M3ETextField), '25');
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('设定'));
+    await tester.pumpAndSettle();
+
+    expect(playback.sleepTimer.value.remaining, const Duration(minutes: 25));
+    expect(find.text('剩余 25:00'), findsOneWidget);
   });
 
   testWidgets('下载区：未下载 → 点下载触发下载动作', (tester) async {
