@@ -445,4 +445,36 @@ void main() {
         actions.firstWhere((action) => action.icon == Icons.comment_rounded);
     expect(comment.enabled, isFalse);
   });
+
+  testWidgets('本地下载曲目：快捷操作栏隐藏「换源」入口', (tester) async {
+    await pumpLyrics(tester);
+
+    const localTrack = Track(
+      id: TrackId('local', 'fake:lyrics-scroll'),
+      title: '本地歌曲',
+      artists: [Artist(name: 'Artist')],
+      origin: TrackOrigin.localFile,
+      payload: {'path': '/downloads/a.mp3', 'songId': 'fake:lyrics-scroll'},
+    );
+    backend.emit(const BackendSnapshot(
+      current: localTrack,
+      queue: [localTrack],
+      currentIndex: 0,
+      isPlaying: true,
+      position: Duration(seconds: 60),
+      duration: Duration(minutes: 10),
+    ));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 50));
+
+    final toolbar = tester.widget<M3EToolbar>(find.byType(M3EToolbar));
+    final icons = toolbar.actions
+        .whereType<M3EToolbarAction>()
+        .map((action) => action.icon)
+        .toList();
+    expect(icons, isNot(contains(Icons.swap_horiz_rounded)));
+    expect(icons, contains(Icons.checklist_rounded));
+
+    await tester.pump(const Duration(milliseconds: 300));
+  });
 }

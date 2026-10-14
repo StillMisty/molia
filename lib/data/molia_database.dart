@@ -2,7 +2,8 @@
 /// （播放历史 / 用户列表 / 删除墓碑）+ 听歌统计（play_events）。
 ///
 /// fresh 基线：schemaVersion = 1 直接建出全部表，不迁移 sqflite 历史库的
-/// 数据（设计取舍与后果见 docs/adr/0005-drift-migration.md）。
+/// 数据（设计取舍与后果见 docs/adr/0005-drift-migration.md）；
+/// v2 新增 `downloads` 表（本地下载持久副本）。
 ///
 /// 只 import drift / drift_flutter / path_provider：Web 编译安全
 /// （`NativeDatabase` 仅测试内存库使用，见 test/support/memory_database.dart）。
@@ -12,6 +13,8 @@ import 'package:drift/drift.dart';
 import 'package:drift_flutter/drift_flutter.dart';
 import 'package:logging/logging.dart';
 import 'package:path_provider/path_provider.dart';
+
+import 'molia_database.steps.dart';
 
 part 'molia_database.g.dart';
 
@@ -118,6 +121,43 @@ class SyncTombstones extends Table {
   Set<Column> get primaryKey => {category, key};
 }
 
+/// 本地下载（持久副本，不参与缓存 LRU 淘汰）。
+///
+/// 行内保存曲目自包含快照（元数据 + 原音源 raw 取链参数），供「已下载」
+/// 列表还原本地曲目（`sourceKey = 'local'` + 带路径的 payload）与加入歌单；
+/// `originSourceKey`/`originSongId` 是**原音源**的曲目键（本地副本删除后
+/// 用户仍可回到在线音源播放），唯一约束保证一首原曲只下载一份。
+///
+/// 歌词/封面路径指向 `downloads/lyrics|covers/` 下的长期文件（Phase 2），
+/// 删除下载时一并删除；「清理缓存」永不触碰这些文件。
+@DataClassName('DownloadRow')
+@TableIndex(name: 'idx_downloads_downloadedAt', columns: {#downloadedAt})
+class Downloads extends Table {
+  @override
+  String get tableName => 'downloads';
+
+  IntColumn get id => integer().autoIncrement()();
+  TextColumn get originSourceKey => text()();
+  TextColumn get originSongId => text()();
+  TextColumn get title => text()();
+  TextColumn get artist => text().withDefault(const Constant(''))();
+  TextColumn get album => text().withDefault(const Constant(''))();
+  TextColumn get coverUrl => text().nullable()();
+  IntColumn get durationMs => integer().nullable()();
+  TextColumn get raw => text().withDefault(const Constant('{}'))();
+  TextColumn get quality => text().withDefault(const Constant(''))();
+  TextColumn get filePath => text()();
+  IntColumn get sizeBytes => integer().withDefault(const Constant(0))();
+  TextColumn get lyricPath => text().nullable()();
+  TextColumn get coverPath => text().nullable()();
+  IntColumn get downloadedAt => integer()();
+
+  @override
+  List<String> get customConstraints => const [
+        'UNIQUE (originSourceKey, originSongId)',
+      ];
+}
+
 /// 听歌统计事件：一次播放尝试一行（append-only）。
 ///
 /// 元数据为播放时快照、自包含（`raw` 供统计页点播）；`endedAt` 为 null
@@ -163,6 +203,7 @@ const String moliaDatabaseFileName = 'molia_database';
   PlaylistTracks,
   SyncTombstones,
   PlayEvents,
+  Downloads,
 ])
 class MoliaDatabase extends _$MoliaDatabase {
   MoliaDatabase(super.e);
@@ -190,12 +231,22 @@ class MoliaDatabase extends _$MoliaDatabase {
   }
 
   /// fresh 基线：v1 直接建出全部表，不写任何历史数据迁移。
+  ///
+  /// v2：新增 `downloads` 表（本地下载持久副本）。
   @override
-  int get schemaVersion => 1;
+  int get schemaVersion => 2;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
         onCreate: (m) => m.createAll(),
+        // 增量迁移走 make-migrations 生成的版本化 schema（steps 文件）：
+        // createTable 不含索引声明，索引需单独创建。
+        onUpgrade: stepByStep(
+          from1To2: (m, schema) async {
+            await m.createTable(schema.downloads);
+            await m.createIndex(schema.idxDownloadsDownloadedAt);
+          },
+        ),
         beforeOpen: (details) async {
           // SQLite 外键默认关闭，这里显式开启（列表删除级联依赖它）。
           await customStatement('PRAGMA foreign_keys = ON');

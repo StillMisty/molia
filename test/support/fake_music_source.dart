@@ -35,6 +35,16 @@ class FakeMusicSource implements MusicSource {
       onComments;
   int commentCalls = 0;
 
+  /// 取链直链（设置后 [resolve] 返回该地址；与 [onResolve] 二选一）。
+  String? resolveUrl;
+
+  /// 自定义取链回调（优先于 [resolveUrl]）。
+  Future<PlayableStream> Function(Track track, AudioQuality? quality)?
+      onResolve;
+
+  /// 最近一次取链请求的音质。
+  AudioQuality? lastResolveQuality;
+
   @override
   String get displayName => key;
 
@@ -67,6 +77,11 @@ class FakeMusicSource implements MusicSource {
     Track track, {
     AudioQuality? preferredQuality,
   }) {
+    lastResolveQuality = preferredQuality;
+    final custom = onResolve;
+    if (custom != null) return custom(track, preferredQuality);
+    final url = resolveUrl;
+    if (url != null) return Future.value(PlayableStream(Uri.parse(url)));
     throw UnimplementedError();
   }
 

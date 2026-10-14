@@ -3,6 +3,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:molia/data/molia_database.dart';
 import 'package:molia/data/play_statistics_repository.dart';
 import 'package:molia/data/sync/adapters/statistics_sync_adapter.dart';
+import 'package:molia/domain/models/device_sync.dart';
 import 'package:molia/domain/models/play_statistics.dart';
 
 import 'support/memory_database.dart';
@@ -143,5 +144,51 @@ void main() {
     final result = await adapterB.apply(a);
     expect(result.applied, 0);
     expect((await repoB.summary()).playCount, 1);
+  });
+
+  test('本地下载曲目（local）事件不同步：导出与应用两侧过滤', () async {
+    final localId = await repoA.startEvent(
+      sourceKey: 'local',
+      songId: 'wy:9',
+      title: '本地下载',
+      artist: '歌手',
+      startedAt: 1000,
+    );
+    await repoA.finishEvent(
+      localId,
+      reason: PlayEventEndReason.completed,
+      listenedMs: 60000,
+      maxPositionMs: 60000,
+      endedAt: 61000,
+    );
+    await play(repoA, songId: 's1', startedAt: 2000, endedAt: 62000);
+
+    final collected = await adapterA.collect();
+    final keys = collected[SyncCategory.statistics]!;
+    expect(keys, hasLength(1));
+    expect(keys.single.data!['sourceKey'], 'wy');
+
+    // 对端收到 local 事件也忽略（防御：旧版本或异常数据）。
+    final result = await adapterB.apply({
+      SyncCategory.statistics: [
+        SyncRecord(
+          key: 'legacy_local_key',
+          updatedAt: 61000,
+          updatedBy: 'devA',
+          data: const {
+            'sourceKey': 'local',
+            'songId': 'wy:9',
+            'title': '本地下载',
+            'startedAt': 1000,
+            'endedAt': 61000,
+            'listenedMs': 60000,
+            'maxPositionMs': 60000,
+            'endReason': 'completed',
+          },
+        ),
+      ],
+    });
+    expect(result.applied, 0);
+    expect((await repoB.summary()).playCount, 0);
   });
 }

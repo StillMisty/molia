@@ -2,7 +2,8 @@
 ///
 /// 领域层自定枚举（`lib/domain/**` 不依赖 `lib/sources/**`）；
 /// 与 `source_manager.dart` 的同名枚举由 data 层适配器互相映射。
-enum SourceKind { builtin, lx, anyListen }
+/// `local` 是本地下载副本（不参与搜索/发现/渠道排序）。
+enum SourceKind { builtin, lx, anyListen, local }
 
 /// 音源能力位：UI 依据能力显隐控件，禁止散落 `if (isLocalPlayback)` 判断。
 class SourceCapabilities {

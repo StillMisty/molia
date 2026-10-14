@@ -1268,5 +1268,53 @@
         "type": "int"
       }
     }
-  }
+  },
+  "downloadSection": "Download",
+  "downloadStatusNotDownloaded": "Not downloaded",
+  "downloadStatusDownloading": "Downloading",
+  "downloadStatusDownloaded": "Downloaded",
+  "downloadAction": "Download",
+  "downloadCancel": "Cancel download",
+  "downloadDelete": "Delete download",
+  "downloadDeleteConfirm": "Delete the local copy? Audio, lyrics and cover files will be removed.",
+  "downloadShare": "Share / export",
+  "downloadProgressPercent": "{percent}%",
+  "@downloadProgressPercent": {
+    "placeholders": {
+      "percent": {
+        "type": "int"
+      }
+    }
+  },
+  "downloadCompleted": "Download complete",
+  "downloadFailed": "Download failed: {message}",
+  "@downloadFailed": {
+    "placeholders": {
+      "message": {
+        "type": "String"
+      }
+    }
+  },
+  "downloadUnsupported": "Downloads are not supported on this platform",
+  "downloadAlreadyExists": "This track is already downloaded",
+  "downloadCancelled": "Download cancelled",
+  "downloadDataSaverTitle": "Data saver is active",
+  "downloadDataSaverConfirm": "You are on mobile data with data saver enabled. Downloading will use mobile data. Continue?",
+  "downloadContinue": "Continue",
+  "downloadFileMissing": "The local file is missing and may have been deleted",
+  "downloadSourceLocal": "Local download",
+  "downloadsTitle": "Downloads",
+  "downloadsEmpty": "No downloaded tracks yet",
+  "downloadsSummary": "{count} tracks · {size}",
+  "@downloadsSummary": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      },
+      "size": {
+        "type": "String"
+      }
+    }
+  },
+  "downloadsUnsupported": "Downloads are not supported on this platform"
 }

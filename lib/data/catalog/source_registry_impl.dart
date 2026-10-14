@@ -5,6 +5,7 @@ import '../../domain/models/track.dart';
 import '../../domain/ports/music_source.dart';
 import '../../domain/ports/source_registry.dart';
 import '../../sources/source_manager.dart';
+import 'local_music_source.dart';
 import 'manager_catalog_source.dart';
 
 /// `SourceManager` → 领域 `SourceRegistry` 适配器。
@@ -13,6 +14,7 @@ import 'manager_catalog_source.dart';
 /// - `descriptors`：由 `manager.searchableSources` 映射（顺序即用户排序结果，
 ///   `order` 为列表下标，0 起）；`lx_source_order` 的读写完全由 manager 承担；
 /// - `byKey`/`forTrack`：懒创建并缓存 [SourceManagerMusicSource]（按 key 单例）；
+///   `local` key 特殊路由到 [LocalMusicSource]（本地下载副本，manager 不认识）；
 /// - `changes`：把 manager 的 ChangeNotifier 通知转发为广播流；
 /// - `refresh`：仅广播一次变更（manager 状态变化本就自动通知），供外部
 ///   状态（登录态等）变化后强制消费方重读描述列表。
@@ -21,13 +23,17 @@ import 'manager_catalog_source.dart';
 /// 以便播放队列中“源已停用”的曲目仍能路由到 manager 并得到可读错误；
 /// 只有空 key 返回 null。
 class SourceRegistryImpl implements SourceRegistry {
-  SourceRegistryImpl(this._manager) {
+  SourceRegistryImpl(this._manager, {LocalMusicSource? localSource}) {
     _manager.addListener(_onManagerChanged);
+    _localSource = localSource ?? LocalMusicSource();
   }
 
   final SourceManager _manager;
   final StreamController<void> _changes = StreamController<void>.broadcast();
   final Map<String, SourceManagerMusicSource> _sources = {};
+
+  /// 本地下载音源（`local` key 唯一实例）。
+  late final LocalMusicSource _localSource;
 
   bool _disposed = false;
 
@@ -50,6 +56,9 @@ class SourceRegistryImpl implements SourceRegistry {
   @override
   MusicSource? byKey(String key) {
     if (key.isEmpty) return null;
+    // 本地下载副本：manager 不认识该 key，直接返回本地音源
+    //（否则会被懒造成 SourceManagerMusicSource 并撞 manager 报错）。
+    if (key == LocalMusicSource.sourceKey) return _localSource;
     return _sources.putIfAbsent(
       key,
       () => SourceManagerMusicSource(key, _manager),

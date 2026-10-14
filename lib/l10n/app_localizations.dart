@@ -4316,6 +4316,150 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'{count} h ago'**
   String commentsTimeHoursAgo(int count);
+
+  /// No description provided for @downloadSection.
+  ///
+  /// In en, this message translates to:
+  /// **'Download'**
+  String get downloadSection;
+
+  /// No description provided for @downloadStatusNotDownloaded.
+  ///
+  /// In en, this message translates to:
+  /// **'Not downloaded'**
+  String get downloadStatusNotDownloaded;
+
+  /// No description provided for @downloadStatusDownloading.
+  ///
+  /// In en, this message translates to:
+  /// **'Downloading'**
+  String get downloadStatusDownloading;
+
+  /// No description provided for @downloadStatusDownloaded.
+  ///
+  /// In en, this message translates to:
+  /// **'Downloaded'**
+  String get downloadStatusDownloaded;
+
+  /// No description provided for @downloadAction.
+  ///
+  /// In en, this message translates to:
+  /// **'Download'**
+  String get downloadAction;
+
+  /// No description provided for @downloadCancel.
+  ///
+  /// In en, this message translates to:
+  /// **'Cancel download'**
+  String get downloadCancel;
+
+  /// No description provided for @downloadDelete.
+  ///
+  /// In en, this message translates to:
+  /// **'Delete download'**
+  String get downloadDelete;
+
+  /// No description provided for @downloadDeleteConfirm.
+  ///
+  /// In en, this message translates to:
+  /// **'Delete the local copy? Audio, lyrics and cover files will be removed.'**
+  String get downloadDeleteConfirm;
+
+  /// No description provided for @downloadShare.
+  ///
+  /// In en, this message translates to:
+  /// **'Share / export'**
+  String get downloadShare;
+
+  /// No description provided for @downloadProgressPercent.
+  ///
+  /// In en, this message translates to:
+  /// **'{percent}%'**
+  String downloadProgressPercent(int percent);
+
+  /// No description provided for @downloadCompleted.
+  ///
+  /// In en, this message translates to:
+  /// **'Download complete'**
+  String get downloadCompleted;
+
+  /// No description provided for @downloadFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Download failed: {message}'**
+  String downloadFailed(String message);
+
+  /// No description provided for @downloadUnsupported.
+  ///
+  /// In en, this message translates to:
+  /// **'Downloads are not supported on this platform'**
+  String get downloadUnsupported;
+
+  /// No description provided for @downloadAlreadyExists.
+  ///
+  /// In en, this message translates to:
+  /// **'This track is already downloaded'**
+  String get downloadAlreadyExists;
+
+  /// No description provided for @downloadCancelled.
+  ///
+  /// In en, this message translates to:
+  /// **'Download cancelled'**
+  String get downloadCancelled;
+
+  /// No description provided for @downloadDataSaverTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Data saver is active'**
+  String get downloadDataSaverTitle;
+
+  /// No description provided for @downloadDataSaverConfirm.
+  ///
+  /// In en, this message translates to:
+  /// **'You are on mobile data with data saver enabled. Downloading will use mobile data. Continue?'**
+  String get downloadDataSaverConfirm;
+
+  /// No description provided for @downloadContinue.
+  ///
+  /// In en, this message translates to:
+  /// **'Continue'**
+  String get downloadContinue;
+
+  /// No description provided for @downloadFileMissing.
+  ///
+  /// In en, this message translates to:
+  /// **'The local file is missing and may have been deleted'**
+  String get downloadFileMissing;
+
+  /// No description provided for @downloadSourceLocal.
+  ///
+  /// In en, this message translates to:
+  /// **'Local download'**
+  String get downloadSourceLocal;
+
+  /// No description provided for @downloadsTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Downloads'**
+  String get downloadsTitle;
+
+  /// No description provided for @downloadsEmpty.
+  ///
+  /// In en, this message translates to:
+  /// **'No downloaded tracks yet'**
+  String get downloadsEmpty;
+
+  /// No description provided for @downloadsSummary.
+  ///
+  /// In en, this message translates to:
+  /// **'{count} tracks · {size}'**
+  String downloadsSummary(int count, String size);
+
+  /// No description provided for @downloadsUnsupported.
+  ///
+  /// In en, this message translates to:
+  /// **'Downloads are not supported on this platform'**
+  String get downloadsUnsupported;
 }
 
 class _AppLocalizationsDelegate

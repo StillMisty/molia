@@ -1,4 +1,5 @@
 import '../../../domain/models/device_sync.dart';
+import '../../../domain/models/download.dart' show kLocalSourceKey;
 import '../../../services/playback_session_store.dart';
 import '../sync_adapter.dart';
 import '../sync_state_store.dart';
@@ -36,7 +37,13 @@ class SessionSyncAdapter implements SyncAdapter {
 
   @override
   Future<Map<SyncCategory, List<SyncRecord>>> collect() async {
-    final raw = await _store.loadRaw();
+    final loaded = await _store.loadRaw();
+    // 本地下载曲目不同步：文件是设备本机的持久副本，其它设备无法播放。
+    final raw = loaded == null ? null : _withoutLocalTracks(loaded);
+    if (loaded != null && raw == null) {
+      // 会话里全是本地曲目：没有可同步内容，也不回传删除。
+      return const {};
+    }
     final stamp = _state.sessionStamp;
     if (raw == null) {
       // 本地会话被清空（停止播放）：不回传删除；保持登记不变，
@@ -123,5 +130,32 @@ class SessionSyncAdapter implements SyncAdapter {
     final changed = _onChanged;
     if (changed != null) await changed();
     return const SyncApplyOutcome(applied: 1);
+  }
+
+  /// 过滤会话里的本地下载曲目（`sourceKey = local`），并按删除数校正下标。
+  ///
+  /// 无本地曲目时返回原 map；过滤后没有剩余曲目时返回 null（无可同步会话）。
+  static Map<String, dynamic>? _withoutLocalTracks(Map<String, dynamic> raw) {
+    final tracks = raw['tracks'];
+    if (tracks is! List) return raw;
+    final index = (raw['index'] as num?)?.toInt() ?? 0;
+    final kept = <Object?>[];
+    var removedBeforeIndex = 0;
+    for (var i = 0; i < tracks.length; i++) {
+      final track = tracks[i];
+      final isLocal = track is Map && track['sourceKey'] == kLocalSourceKey;
+      if (isLocal) {
+        if (i < index) removedBeforeIndex++;
+        continue;
+      }
+      kept.add(track);
+    }
+    if (kept.length == tracks.length) return raw;
+    if (kept.isEmpty) return null;
+    return {
+      ...raw,
+      'tracks': kept,
+      'index': (index - removedBeforeIndex).clamp(0, kept.length - 1),
+    };
   }
 }

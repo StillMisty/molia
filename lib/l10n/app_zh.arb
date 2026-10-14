@@ -1001,5 +1001,53 @@
         "type": "int"
       }
     }
-  }
+  },
+  "downloadSection": "下载",
+  "downloadStatusNotDownloaded": "未下载",
+  "downloadStatusDownloading": "下载中",
+  "downloadStatusDownloaded": "已下载",
+  "downloadAction": "下载",
+  "downloadCancel": "取消下载",
+  "downloadDelete": "删除下载",
+  "downloadDeleteConfirm": "删除本地副本？音频、歌词与封面文件将一并删除。",
+  "downloadShare": "分享导出",
+  "downloadProgressPercent": "{percent}%",
+  "@downloadProgressPercent": {
+    "placeholders": {
+      "percent": {
+        "type": "int"
+      }
+    }
+  },
+  "downloadCompleted": "下载完成",
+  "downloadFailed": "下载失败：{message}",
+  "@downloadFailed": {
+    "placeholders": {
+      "message": {
+        "type": "String"
+      }
+    }
+  },
+  "downloadUnsupported": "当前平台不支持下载",
+  "downloadAlreadyExists": "该曲目已下载",
+  "downloadCancelled": "已取消下载",
+  "downloadDataSaverTitle": "省流模式生效中",
+  "downloadDataSaverConfirm": "当前为移动数据且已开启省流，继续下载会消耗流量。是否继续？",
+  "downloadContinue": "继续",
+  "downloadFileMissing": "本地文件不存在，可能已被删除",
+  "downloadSourceLocal": "本地下载",
+  "downloadsTitle": "已下载",
+  "downloadsEmpty": "还没有下载的歌曲",
+  "downloadsSummary": "{count} 首 · {size}",
+  "@downloadsSummary": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      },
+      "size": {
+        "type": "String"
+      }
+    }
+  },
+  "downloadsUnsupported": "当前平台不支持下载"
 }

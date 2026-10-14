@@ -2,6 +2,7 @@ import 'dart:convert';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:molia/domain/models/track.dart';
 import 'package:molia/services/lyrics_service.dart';
 import 'package:molia/services/lyrics/qq_provider.dart';
 import 'package:molia/services/lyrics/netease_provider.dart';
@@ -120,6 +121,44 @@ void main() {
       expect(result, isNull);
       expect(first.calls, 1);
       expect(second.calls, 1);
+    });
+
+    test('网络回退开关：本地下载曲目无离线歌词时跳过网络提供者', () async {
+      final counting = _CountingProvider(name: 'counting', result: 'lyric');
+      final service = LyricsService(
+        providers: [counting],
+        networkFallbackAllowed: (track) => track.id.sourceKey != 'local',
+      );
+
+      const localTrack = Track(
+        id: TrackId('local', 'wy:1'),
+        title: '本地歌曲',
+        origin: TrackOrigin.localFile,
+        payload: {'path': '/downloads/a.mp3', 'songId': 'wy:1'},
+      );
+      final local = await service.getLyrics(
+        '本地歌曲',
+        '歌手',
+        'local:wy:1',
+        track: localTrack,
+      );
+      expect(local, isNull);
+      expect(counting.calls, 0, reason: '离线曲目不发起网络歌词请求');
+
+      // 在线曲目行为不变：仍走网络提供者。
+      const onlineTrack = Track(
+        id: TrackId('wy', '1'),
+        title: '在线歌曲',
+        origin: TrackOrigin.builtin,
+      );
+      final online = await service.getLyrics(
+        '在线歌曲',
+        '歌手',
+        'wy:1',
+        track: onlineTrack,
+      );
+      expect(online, isNotNull);
+      expect(counting.calls, 1);
     });
   });
 }

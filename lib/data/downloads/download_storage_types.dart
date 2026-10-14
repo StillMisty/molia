@@ -1,0 +1,61 @@
+/// 下载存储的公共类型与目录约定。
+///
+/// 独立成文件，避免工厂（`download_storage.dart`）与平台实现
+/// （`download_storage_io.dart` / `download_storage_stub.dart`）循环依赖，
+/// 同时保证 Web 编译不引入 `dart:io`。
+library;
+
+/// 下载根目录名（应用支持目录下，与 `cache/audio_cache` 完全隔离）。
+const String downloadsDirName = 'downloads';
+
+/// 歌词子目录（长期存储，不走 `LyricsCache` 的 TTL 语义）。
+const String downloadsLyricsDirName = 'lyrics';
+
+/// 封面子目录。
+const String downloadsCoversDirName = 'covers';
+
+/// 下载中的半成品文件后缀（完成后原子改名为最终文件名）。
+const String downloadPartSuffix = '.part';
+
+/// 下载文件存储抽象：下载服务与平台文件操作解耦。
+///
+/// IO 实现（`IoDownloadStorage`）走 `path_provider` + `dart:io`；
+/// Web 无持久文件系统，使用空实现（`MemoryDownloadStorage`），
+/// `downloadsRoot()` 返回 null，UI 据此隐藏下载入口。
+abstract interface class DownloadStorage {
+  /// 下载根目录绝对路径；平台不可用（Web）时返回 null。
+  Future<String?> downloadsRoot();
+
+  /// 文件是否存在。
+  Future<bool> fileExists(String path);
+
+  /// 文件大小（字节）；不存在 / 不可读返回 0。
+  Future<int> fileSize(String path);
+
+  /// 流式写入文件（父目录自动创建）。
+  ///
+  /// [total] 为预期总字节（响应头 Content-Length，未知时 null）；
+  /// [onProgress] 在每个分片写入后回调（received 为累计字节）。
+  /// 流异常 / 取消时向上抛出，调用方负责清理半成品。
+  Future<void> writeStream(
+    String path,
+    Stream<List<int>> stream, {
+    int? total,
+    void Function(int received, int? total)? onProgress,
+  });
+
+  /// 写入字节（歌词 / 封面小文件）。
+  Future<void> writeBytes(String path, List<int> bytes);
+
+  /// 写入 UTF-8 文本。
+  Future<void> writeString(String path, String content);
+
+  /// 读取 UTF-8 文本；文件不存在 / 不可读返回 null。
+  Future<String?> readString(String path);
+
+  /// 同目录内原子改名（半成品 → 最终文件）。
+  Future<void> rename(String from, String to);
+
+  /// 删除文件；失败静默（清理路径不应抛错）。
+  Future<void> deleteQuietly(String path);
+}

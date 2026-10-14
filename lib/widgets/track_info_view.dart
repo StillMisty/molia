@@ -4,23 +4,29 @@ import 'package:flutter/services.dart';
 import 'package:material_3_expressive/material_3_expressive.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:provider/provider.dart';
+import 'package:share_plus/share_plus.dart';
 
+import '../domain/models/download.dart';
+import '../domain/models/failure.dart';
 import '../domain/models/track.dart';
 import '../l10n/app_localizations.dart';
 import '../providers/playback_provider.dart';
 import '../providers/sources_provider.dart';
 import '../services/cache_service.dart';
 import '../services/data_saver_service.dart';
+import '../services/download/download_service.dart';
 import '../services/notification_service.dart';
 import '../services/track_cache_service.dart';
 import '../utils/source_label.dart';
 import '../utils/source_quality_label.dart';
 import 'settings/settings_tiles.dart';
 
-/// 播放页第三个 tab：当前曲目信息 + 单曲缓存管理。
+/// 播放页第三个 tab：当前曲目信息 + 单曲缓存管理 + 本地下载。
 ///
 /// - 信息区：本次播放音质、可用音质、渠道、专辑、时长、曲目 ID（复制）；
-/// - 缓存区：音频 / 歌词 / 封面 / 取链四项占用与清理。
+/// - 缓存区：音频 / 歌词 / 封面 / 取链四项占用与清理；
+/// - 下载区：未下载 / 下载中（百分比 + 取消）/ 已下载（大小 + 删除 +
+///   分享导出）。下载与缓存是**两套东西**：清缓存永不触碰 `downloads/`。
 ///
 /// 口径说明：音质显示的是**本次请求音质**（偏好音质 × 曲目可用列表 ×
 /// 省流上限 = `PlaybackProvider.currentQualityType`，展示名本地化）；
@@ -46,16 +52,21 @@ class TrackInfoView extends StatefulWidget {
 class _TrackInfoViewState extends State<TrackInfoView> {
   PlaybackProvider? _playback;
   TrackCacheService? _cacheService;
+  DownloadService? _downloadService;
 
   /// 当前已加载占用的曲目；用于切歌重载与过期结果丢弃。
   TrackId? _usageForTrack;
   TrackCacheUsage? _usage;
   bool _busy = false;
 
+  /// 下载动作进行中（下载/删除/分享互斥，避免重复触发）。
+  bool _downloadBusy = false;
+
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
     _cacheService = context.read<TrackCacheService?>();
+    _downloadService = context.read<DownloadService?>();
     final playback = context.read<PlaybackProvider?>();
     if (playback != null && !identical(_playback, playback)) {
       _playback?.removeListener(_syncTrack);
@@ -130,6 +141,115 @@ class _TrackInfoViewState extends State<TrackInfoView> {
     }
   }
 
+  // 下载动作（与缓存清理是两套东西：删除下载只删 downloads/ 下的副本）
+
+  /// 下载当前曲目；省流生效（移动数据 + 已开启）时先确认再下载。
+  Future<void> _startDownload(Track track) async {
+    final service = _downloadService;
+    if (service == null || _downloadBusy) return;
+    final l10n = AppLocalizations.of(context)!;
+    final dataSaver = context.read<DataSaverService?>();
+    if (dataSaver?.active ?? false) {
+      final confirmed = await M3EDialog.show<bool>(
+        context,
+        dialog: M3EDialog(
+          title: l10n.downloadDataSaverTitle,
+          content: Text(l10n.downloadDataSaverConfirm),
+          actions: [
+            M3EButton.text(
+              onPressed: () => Navigator.pop(context, false),
+              child: Text(l10n.cancel),
+            ),
+            M3EButton.filled(
+              onPressed: () => Navigator.pop(context, true),
+              child: Text(l10n.downloadContinue),
+            ),
+          ],
+        ),
+      );
+      if (confirmed != true || !mounted) return;
+    }
+    HapticFeedback.lightImpact();
+    setState(() => _downloadBusy = true);
+    try {
+      await service.download(track);
+      if (!mounted) return;
+      _showMessage(l10n.downloadCompleted);
+    } on SourceFailure catch (failure) {
+      if (!mounted || failure.kind == FailureKind.cancelled) return;
+      _showMessage(_downloadFailureMessage(l10n, failure));
+    } catch (e) {
+      if (!mounted) return;
+      _showMessage(l10n.downloadFailed(e.toString()));
+    } finally {
+      if (mounted) setState(() => _downloadBusy = false);
+    }
+  }
+
+  /// 删除下载（确认后删除音频 + 歌词 + 封面；不影响缓存）。
+  Future<void> _confirmDeleteDownload(DownloadedTrack record) async {
+    final service = _downloadService;
+    if (service == null || _downloadBusy) return;
+    final l10n = AppLocalizations.of(context)!;
+    final confirmed = await M3EDialog.show<bool>(
+      context,
+      dialog: M3EDialog(
+        title: l10n.downloadDelete,
+        content: Text(l10n.downloadDeleteConfirm),
+        actions: [
+          M3EButton.text(
+            onPressed: () => Navigator.pop(context, false),
+            child: Text(l10n.cancel),
+          ),
+          M3EButton.filled(
+            onPressed: () => Navigator.pop(context, true),
+            child: Text(l10n.delete),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+    HapticFeedback.lightImpact();
+    setState(() => _downloadBusy = true);
+    try {
+      await service.delete(record);
+    } finally {
+      if (mounted) setState(() => _downloadBusy = false);
+    }
+  }
+
+  /// 分享导出音频文件（系统分享面板；桌面端为分享/另存入口）。
+  Future<void> _shareDownload(DownloadedTrack record) async {
+    if (_downloadBusy) return;
+    final l10n = AppLocalizations.of(context)!;
+    try {
+      await SharePlus.instance.share(
+        ShareParams(files: [XFile(record.filePath)]),
+      );
+    } catch (_) {
+      if (mounted) _showMessage(l10n.exportFailed);
+    }
+  }
+
+  /// 下载失败文案：已知 l10nKey 精确映射，未知回退通用失败（带原始信息）。
+  String _downloadFailureMessage(
+    AppLocalizations l10n,
+    SourceFailure failure,
+  ) {
+    switch (failure.l10nKey) {
+      case 'downloadUnsupported':
+        return l10n.downloadUnsupported;
+      case 'downloadAlreadyExists':
+        return l10n.downloadAlreadyExists;
+      case 'downloadCancelled':
+        return l10n.downloadCancelled;
+      case 'downloadFileMissing':
+        return l10n.downloadFileMissing;
+      default:
+        return l10n.downloadFailed(failure.message);
+    }
+  }
+
   void _showMessage(String message) {
     final notifications = context.read<NotificationService?>();
     if (notifications != null) {
@@ -151,6 +271,20 @@ class _TrackInfoViewState extends State<TrackInfoView> {
       (provider) => (provider.snapshot.current, provider.currentQualityType),
     );
     final qualityLabel = sourceQualityLabel(l10n, qualityType);
+    // 下载状态订阅：仅当前曲目的「记录 / 进度」变化时重建。
+    final (downloadRecord, downloadProgress) =
+        context.select<DownloadService?, (DownloadedTrack?, DownloadProgress?)>(
+      (service) {
+        final current = track;
+        if (service == null || current == null) return (null, null);
+        return (
+          service.recordForTrack(current),
+          service.progressForTrack(current),
+        );
+      },
+    );
+    final downloadService = _downloadService;
+    final showDownload = downloadService != null && downloadService.supported;
 
     return Scrollbar(
       controller: widget.controller,
@@ -225,10 +359,113 @@ class _TrackInfoViewState extends State<TrackInfoView> {
                     title: l10n.trackInfoCacheResolve),
               ],
             ),
+            if (showDownload) ...[
+              const SizedBox(height: kSettingsSectionSpacing),
+              SettingsSectionCard(
+                title: l10n.downloadSection,
+                children: _downloadTiles(
+                  l10n,
+                  track,
+                  downloadRecord,
+                  downloadProgress,
+                ),
+              ),
+            ],
           ],
         ],
       ),
     );
+  }
+
+  /// 下载区行：未下载（下载）/ 下载中（百分比 + 取消）/ 已下载
+  /// （大小 + 分享导出 + 删除）。本地曲目（`local`）同样是「已下载」。
+  List<Widget> _downloadTiles(
+    AppLocalizations l10n,
+    Track track,
+    DownloadedTrack? record,
+    DownloadProgress? progress,
+  ) {
+    if (record != null) {
+      return [
+        SettingsInfoTile(
+          key: const Key('trackInfoDownloadStatus'),
+          icon: Icons.download_done_rounded,
+          title: l10n.downloadStatusDownloaded,
+          subtitle: _downloadedSubtitle(l10n, record),
+        ),
+        SettingsNavTile(
+          key: const Key('trackInfoDownloadShare'),
+          icon: Icons.ios_share_rounded,
+          title: l10n.downloadShare,
+          subtitle: '',
+          onTap: _downloadBusy ? null : () => unawaited(_shareDownload(record)),
+        ),
+        SettingsNavTile(
+          key: const Key('trackInfoDownloadDelete'),
+          icon: Icons.delete_rounded,
+          title: l10n.downloadDelete,
+          subtitle: '',
+          isDestructive: true,
+          onTap: _downloadBusy
+              ? null
+              : () => unawaited(_confirmDeleteDownload(record)),
+        ),
+      ];
+    }
+    // 本地曲目但下载记录已删（例如从「已下载」页删除后仍在收藏里）：
+    // 文件已不在，不提供无意义的「下载」动作，明确提示缺失。
+    if (track.id.sourceKey == kLocalSourceKey) {
+      return [
+        SettingsInfoTile(
+          key: const Key('trackInfoDownloadStatus'),
+          icon: Icons.error_outline_rounded,
+          title: l10n.downloadSourceLocal,
+          subtitle: l10n.downloadFileMissing,
+        ),
+      ];
+    }
+    if (progress != null) {
+      final percent = progress.percent;
+      return [
+        SettingsInfoTile(
+          key: const Key('trackInfoDownloadStatus'),
+          icon: Icons.downloading_rounded,
+          title: l10n.downloadStatusDownloading,
+          subtitle: percent == null
+              ? _formatSize(progress.receivedBytes)
+              : l10n.downloadProgressPercent(percent),
+        ),
+        SettingsNavTile(
+          key: const Key('trackInfoDownloadCancel'),
+          icon: Icons.close_rounded,
+          title: l10n.downloadCancel,
+          subtitle: '',
+          isDestructive: true,
+          onTap: () {
+            HapticFeedback.lightImpact();
+            _downloadService?.cancelTrack(track);
+          },
+        ),
+      ];
+    }
+    return [
+      SettingsNavTile(
+        key: const Key('trackInfoDownloadStart'),
+        icon: Icons.download_rounded,
+        title: l10n.downloadAction,
+        subtitle: l10n.downloadStatusNotDownloaded,
+        onTap: _downloadBusy ? null : () => unawaited(_startDownload(track)),
+      ),
+    ];
+  }
+
+  /// 已下载副标题：`大小 · 音质`（音质未知时只显示大小）。
+  String _downloadedSubtitle(AppLocalizations l10n, DownloadedTrack record) {
+    final quality = record.quality.isEmpty
+        ? ''
+        : sourceQualityLabel(l10n, record.quality);
+    if (quality.isEmpty) return record.sizeLabel;
+    return '${record.sizeLabel} · $quality';
   }
 
   Widget _buildEmptyState(AppLocalizations l10n) {
@@ -305,6 +542,7 @@ class _TrackInfoViewState extends State<TrackInfoView> {
   }
 
   /// 渠道展示名：音源列表（含停用项）查 key；查不到回退原始 key。
+  /// 本地下载曲目固定显示「本地下载」。
   String _channelLabel(
     AppLocalizations l10n,
     SourcesProvider? sources,
@@ -312,6 +550,7 @@ class _TrackInfoViewState extends State<TrackInfoView> {
   ) {
     final key = track.id.sourceKey;
     if (key.isEmpty) return l10n.trackInfoChannelUnknown;
+    if (key == kLocalSourceKey) return l10n.downloadSourceLocal;
     return sourceChannelLabel(sources?.channels ?? const [], key);
   }
 

@@ -247,6 +247,39 @@
   同步适配器不再逐字段读列名，记录形状（含 JSON 键）由 record 类承担；
 - **测试假实现**只实现 UI 面窄 port（不再继承真类）：新方法不会静默走真实 SQL。
 
+### 本地下载（downloads）
+
+`lib/services/download/download_service.dart` 是单曲下载的唯一实现，
+组合根（`main.dart`）注入取链 / 取词 / 取图与省流上限：
+
+- **目录隔离**：`downloads/`（应用支持目录；`lyrics/` + `covers/` 子目录）
+  与 `cache/audio_cache` 完全隔离——「清理缓存」永不触碰下载，「删除下载」
+  是独立动作；`DownloadStorage` 是平台 seam（IO 实现 / Web 空实现，
+  存储不可用时 `supported=false`，UI 隐藏全部入口）；
+- **落库**：drift `downloads` 表（schema v2）存原音源曲目键 + 自包含快照 +
+  原 raw + 音频路径/音质/大小 + 歌词/封面路径；`DownloadsRepository` 负责
+  行 ↔ `DownloadedTrack` 映射；半成品 `.part` → 原子改名 → 落库，
+  播放取链只认数据库记录，不会读到半成品；
+- **`local` 音源**：`lib/data/catalog/local_music_source.dart`
+  （capabilities 只有 `resolveUrl`，读 payload.path → `Uri.file`；
+  文件缺失归一化 `notFound` + `downloadFileMissing`）；
+  `SourceRegistryImpl.byKey('local')` 特殊路由（manager 不认识该 key），
+  不出现在搜索 / 发现 / 渠道排序；本地曲目 `origin = localFile`，
+  自动换源与「换源」入口都按来源跳过；
+- **本地副本优先取链**：组合根在 `LocalPlaybackBackend` 的 resolver 外层
+  装饰（`DownloadService.localUriFor`：命中下载记录且文件存在 → `file://`），
+  未命中回落 `CatalogService.resolve`，缓存策略不变；
+- **离线播放**：封面走本地文件（`AppNetworkImage` / `ArtworkCache` 对
+  `file://` 走 `FileImage`）；歌词由组合根的歌词加载器读
+  `downloads/lyrics/`（翻译 `.t.lrc` 边车），且 `LyricsService` 对本地
+  曲目禁用网络回退（离线播放不触网）；
+- **同步过滤**：歌单曲目 / 历史 / 统计 / 播放会话适配器都过滤
+  `sourceKey = local` 的条目（含墓碑）——文件是设备本机持久副本，
+  同步到其它设备不可播放；
+- **UI**：歌曲信息页「下载」区（未下载 / 下载中 + 取消 / 已下载 +
+  分享导出 + 删除）与收藏页「已下载」入口（`lib/pages/downloads_page.dart`）；
+  省流生效（移动数据 + 已开启）时下载前先确认。
+
 ### 设置注册表（settings registry）
 
 `lib/data/settings/`（键声明 / 注册表 / 密钥盒端口）：

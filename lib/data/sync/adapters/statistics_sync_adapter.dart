@@ -1,4 +1,5 @@
 import '../../../domain/models/device_sync.dart';
+import '../../../domain/models/download.dart' show kLocalSourceKey;
 import '../../play_statistics_repository.dart';
 import '../sync_adapter.dart';
 
@@ -7,6 +8,9 @@ import '../sync_adapter.dart';
 /// append-only 语义：记录键 = `syncKey`（跨设备去重的唯一键），时间戳取
 /// `endedAt`（同键覆盖只可能来自「先同步了中途收尾的事件、之后才真正
 /// 收尾」的场景）。删除不参与同步。
+///
+/// 本地下载曲目（`sourceKey = local`）的事件不同步：文件是设备本机的持久
+/// 副本，其它设备无法复现该曲目；本机统计不受影响。
 class StatisticsSyncAdapter implements SyncAdapter {
   StatisticsSyncAdapter({required PlayStatisticsRepository repository})
       : _repository = repository;
@@ -25,7 +29,8 @@ class StatisticsSyncAdapter implements SyncAdapter {
     return {
       SyncCategory.statistics: [
         for (final event in events)
-          if ((event['syncKey'] as String?)?.isNotEmpty ?? false)
+          if (event['sourceKey'] != kLocalSourceKey &&
+              ((event['syncKey'] as String?)?.isNotEmpty ?? false))
             SyncRecord(
               key: event['syncKey'] as String,
               updatedAt: (event['endedAt'] as num?)?.toInt() ?? 0,
@@ -48,6 +53,11 @@ class StatisticsSyncAdapter implements SyncAdapter {
     for (final record
         in records[SyncCategory.statistics] ?? const <SyncRecord>[]) {
       if (record.deleted || record.data == null) {
+        skipped++;
+        continue;
+      }
+      // 本地下载曲目的事件不落地（对端文件在本机不存在）。
+      if (record.data!['sourceKey'] == kLocalSourceKey) {
         skipped++;
         continue;
       }

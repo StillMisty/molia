@@ -2274,4 +2274,82 @@ class AppLocalizationsZh extends AppLocalizations {
   String commentsTimeHoursAgo(int count) {
     return '$count 小时前';
   }
+
+  @override
+  String get downloadSection => '下载';
+
+  @override
+  String get downloadStatusNotDownloaded => '未下载';
+
+  @override
+  String get downloadStatusDownloading => '下载中';
+
+  @override
+  String get downloadStatusDownloaded => '已下载';
+
+  @override
+  String get downloadAction => '下载';
+
+  @override
+  String get downloadCancel => '取消下载';
+
+  @override
+  String get downloadDelete => '删除下载';
+
+  @override
+  String get downloadDeleteConfirm => '删除本地副本？音频、歌词与封面文件将一并删除。';
+
+  @override
+  String get downloadShare => '分享导出';
+
+  @override
+  String downloadProgressPercent(int percent) {
+    return '$percent%';
+  }
+
+  @override
+  String get downloadCompleted => '下载完成';
+
+  @override
+  String downloadFailed(String message) {
+    return '下载失败：$message';
+  }
+
+  @override
+  String get downloadUnsupported => '当前平台不支持下载';
+
+  @override
+  String get downloadAlreadyExists => '该曲目已下载';
+
+  @override
+  String get downloadCancelled => '已取消下载';
+
+  @override
+  String get downloadDataSaverTitle => '省流模式生效中';
+
+  @override
+  String get downloadDataSaverConfirm => '当前为移动数据且已开启省流，继续下载会消耗流量。是否继续？';
+
+  @override
+  String get downloadContinue => '继续';
+
+  @override
+  String get downloadFileMissing => '本地文件不存在，可能已被删除';
+
+  @override
+  String get downloadSourceLocal => '本地下载';
+
+  @override
+  String get downloadsTitle => '已下载';
+
+  @override
+  String get downloadsEmpty => '还没有下载的歌曲';
+
+  @override
+  String downloadsSummary(int count, String size) {
+    return '$count 首 · $size';
+  }
+
+  @override
+  String get downloadsUnsupported => '当前平台不支持下载';
 }

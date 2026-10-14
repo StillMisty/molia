@@ -2370,4 +2370,87 @@ class AppLocalizationsEn extends AppLocalizations {
   String commentsTimeHoursAgo(int count) {
     return '$count h ago';
   }
+
+  @override
+  String get downloadSection => 'Download';
+
+  @override
+  String get downloadStatusNotDownloaded => 'Not downloaded';
+
+  @override
+  String get downloadStatusDownloading => 'Downloading';
+
+  @override
+  String get downloadStatusDownloaded => 'Downloaded';
+
+  @override
+  String get downloadAction => 'Download';
+
+  @override
+  String get downloadCancel => 'Cancel download';
+
+  @override
+  String get downloadDelete => 'Delete download';
+
+  @override
+  String get downloadDeleteConfirm =>
+      'Delete the local copy? Audio, lyrics and cover files will be removed.';
+
+  @override
+  String get downloadShare => 'Share / export';
+
+  @override
+  String downloadProgressPercent(int percent) {
+    return '$percent%';
+  }
+
+  @override
+  String get downloadCompleted => 'Download complete';
+
+  @override
+  String downloadFailed(String message) {
+    return 'Download failed: $message';
+  }
+
+  @override
+  String get downloadUnsupported =>
+      'Downloads are not supported on this platform';
+
+  @override
+  String get downloadAlreadyExists => 'This track is already downloaded';
+
+  @override
+  String get downloadCancelled => 'Download cancelled';
+
+  @override
+  String get downloadDataSaverTitle => 'Data saver is active';
+
+  @override
+  String get downloadDataSaverConfirm =>
+      'You are on mobile data with data saver enabled. Downloading will use mobile data. Continue?';
+
+  @override
+  String get downloadContinue => 'Continue';
+
+  @override
+  String get downloadFileMissing =>
+      'The local file is missing and may have been deleted';
+
+  @override
+  String get downloadSourceLocal => 'Local download';
+
+  @override
+  String get downloadsTitle => 'Downloads';
+
+  @override
+  String get downloadsEmpty => 'No downloaded tracks yet';
+
+  @override
+  String downloadsSummary(int count, String size) {
+    return '$count tracks · $size';
+  }
+
+  @override
+  String get downloadsUnsupported =>
+      'Downloads are not supported on this platform';
 }

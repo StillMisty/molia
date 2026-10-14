@@ -1,5 +1,7 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:molia/data/catalog/catalog_service.dart';
+import 'package:molia/data/downloads/downloads_repository.dart';
+import 'package:molia/domain/models/download.dart';
 import 'package:molia/domain/models/playback.dart';
 import 'package:molia/domain/models/track.dart';
 import 'package:molia/l10n/app_localizations.dart';
@@ -7,12 +9,14 @@ import 'package:molia/managers/artwork_cache.dart';
 import 'package:molia/providers/playback_provider.dart';
 import 'package:molia/services/cache_service.dart';
 import 'package:molia/services/cache_storage_stub.dart';
+import 'package:molia/services/download/download_service.dart';
 import 'package:molia/services/track_cache_service.dart';
 import 'package:molia/widgets/track_info_view.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../support/fake_download_storage.dart';
 import '../support/fake_music_source.dart';
 import '../support/fakes.dart';
 
@@ -48,6 +52,51 @@ class _FakeTrackCacheService extends TrackCacheService {
   }
 }
 
+/// 可编排的下载服务假件：只覆盖页面消费的状态与动作。
+class _FakeDownloadService extends DownloadService {
+  _FakeDownloadService()
+      : super(
+          catalog: CatalogService(registry: FakeSourceRegistry(const {})),
+          repository: DownloadsRepository(
+            databaseProvider: () => throw UnimplementedError(),
+          ),
+          storage: FakeDownloadStorage(),
+        );
+
+  DownloadedTrack? record;
+  DownloadProgress? progress;
+  bool downloadSupported = true;
+  int downloadCalls = 0;
+  int cancelCalls = 0;
+  int deleteCalls = 0;
+
+  @override
+  bool get supported => downloadSupported;
+
+  @override
+  DownloadedTrack? recordForTrack(Track track) => record;
+
+  @override
+  DownloadProgress? progressForTrack(Track track) => progress;
+
+  @override
+  Future<void> download(Track track) async {
+    downloadCalls++;
+  }
+
+  @override
+  void cancelTrack(Track track) {
+    cancelCalls++;
+  }
+
+  @override
+  Future<void> delete(DownloadedTrack downloaded) async {
+    deleteCalls++;
+    record = null;
+    notifyListeners();
+  }
+}
+
 Track _track() => const Track(
       id: TrackId('kw', 'a'),
       title: 'Title a',
@@ -68,12 +117,14 @@ void main() {
   late FakePlaybackBackend backend;
   late PlaybackProvider playback;
   late _FakeTrackCacheService cacheService;
+  late _FakeDownloadService downloadService;
 
   setUp(() {
     SharedPreferences.setMockInitialValues({});
     backend = FakePlaybackBackend();
     playback = buildTestPlaybackProvider(backend: backend);
     cacheService = _FakeTrackCacheService();
+    downloadService = _FakeDownloadService();
   });
 
   tearDown(() => playback.dispose());
@@ -81,6 +132,7 @@ void main() {
   Future<void> pumpView(
     WidgetTester tester, {
     Track? track,
+    DownloadService? downloads,
   }) async {
     backend.emit(BackendSnapshot(
       current: track,
@@ -94,6 +146,8 @@ void main() {
         providers: [
           ChangeNotifierProvider<PlaybackProvider>.value(value: playback),
           Provider<TrackCacheService>.value(value: cacheService),
+          if (downloads != null)
+            ChangeNotifierProvider<DownloadService>.value(value: downloads),
         ],
         child: MaterialApp(
           locale: const Locale('zh'),
@@ -110,6 +164,12 @@ void main() {
     );
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 50));
+  }
+
+  /// 列表向下滚动：下载区在缓存区之后，测试视口外不构建。
+  Future<void> scrollToBottom(WidgetTester tester) async {
+    await tester.drag(find.byType(ListView), const Offset(0, -600));
+    await tester.pump();
   }
 
   testWidgets('信息区：音质本地化 + 可用音质 + 渠道回退 key + 专辑/时长/ID', (tester) async {
@@ -212,5 +272,106 @@ void main() {
 
     expect(find.text('暂无播放曲目'), findsOneWidget);
     expect(find.byKey(const Key('trackInfoCache_audio')), findsNothing);
+  });
+
+  testWidgets('下载区：未下载 → 点下载触发下载动作', (tester) async {
+    await pumpView(tester, track: _track(), downloads: downloadService);
+    await scrollToBottom(tester);
+
+    expect(find.text('未下载'), findsOneWidget);
+    expect(find.byKey(const Key('trackInfoDownloadStart')), findsOneWidget);
+
+    await tester.tap(find.byKey(const Key('trackInfoDownloadStart')));
+    await tester.pump();
+    expect(downloadService.downloadCalls, 1);
+  });
+
+  testWidgets('下载区：下载中显示百分比 + 取消', (tester) async {
+    downloadService.progress = const DownloadProgress(
+      receivedBytes: 50,
+      totalBytes: 100,
+    );
+    await pumpView(tester, track: _track(), downloads: downloadService);
+    await scrollToBottom(tester);
+
+    expect(find.text('下载中'), findsOneWidget);
+    expect(find.text('50%'), findsOneWidget);
+    await tester.tap(find.byKey(const Key('trackInfoDownloadCancel')));
+    await tester.pump();
+    expect(downloadService.cancelCalls, 1);
+  });
+
+  testWidgets('下载区：已下载显示大小 + 删除/分享导出', (tester) async {
+    downloadService.record = const DownloadedTrack(
+      originSourceKey: 'kw',
+      originSongId: 'a',
+      title: 'Title a',
+      filePath: '/downloads/a.mp3',
+      quality: '320k',
+      sizeBytes: 3 * 1024 * 1024,
+      downloadedAt: 1,
+    );
+    await pumpView(tester, track: _track(), downloads: downloadService);
+    await scrollToBottom(tester);
+
+    expect(find.text('已下载'), findsOneWidget);
+    expect(find.text('3.0 MB · 320K'), findsOneWidget);
+    expect(find.byKey(const Key('trackInfoDownloadShare')), findsOneWidget);
+
+    // 删除需确认：对话框确认后调用删除。
+    await tester.tap(find.byKey(const Key('trackInfoDownloadDelete')));
+    await tester.pumpAndSettle();
+    expect(find.text('删除下载'), findsWidgets);
+    await tester.tap(find.text('删除'));
+    await tester.pumpAndSettle();
+    expect(downloadService.deleteCalls, 1);
+    // 删除后回落到未下载态。
+    expect(find.byKey(const Key('trackInfoDownloadStart')), findsOneWidget);
+  });
+
+  testWidgets('下载区：平台不支持（Web/存储不可用）时整区隐藏', (tester) async {
+    downloadService.downloadSupported = false;
+    await pumpView(tester, track: _track(), downloads: downloadService);
+    await scrollToBottom(tester);
+
+    expect(find.text('下载'), findsNothing);
+    expect(find.byKey(const Key('trackInfoDownloadStart')), findsNothing);
+  });
+
+  testWidgets('本地曲目：渠道显示「本地下载」，下载区显示已下载', (tester) async {
+    downloadService.record = const DownloadedTrack(
+      originSourceKey: 'kw',
+      originSongId: 'a',
+      title: '本地歌曲',
+      filePath: '/downloads/a.mp3',
+      sizeBytes: 2048,
+      downloadedAt: 1,
+    );
+    const localTrack = Track(
+      id: TrackId('local', 'kw:a'),
+      title: '本地歌曲',
+      origin: TrackOrigin.localFile,
+      payload: {'path': '/downloads/a.mp3', 'songId': 'kw:a'},
+    );
+    await pumpView(tester, track: localTrack, downloads: downloadService);
+
+    expect(find.text('本地下载'), findsOneWidget);
+    await scrollToBottom(tester);
+    expect(find.text('已下载'), findsOneWidget);
+    expect(find.text('2 KB'), findsOneWidget);
+  });
+
+  testWidgets('本地曲目：下载记录已删时提示文件缺失（不显示下载动作）', (tester) async {
+    const localTrack = Track(
+      id: TrackId('local', 'kw:a'),
+      title: '本地歌曲',
+      origin: TrackOrigin.localFile,
+      payload: {'path': '/downloads/a.mp3', 'songId': 'kw:a'},
+    );
+    await pumpView(tester, track: localTrack, downloads: downloadService);
+    await scrollToBottom(tester);
+
+    expect(find.text('本地文件不存在，可能已被删除'), findsOneWidget);
+    expect(find.byKey(const Key('trackInfoDownloadStart')), findsNothing);
   });
 }

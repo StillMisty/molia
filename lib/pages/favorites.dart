@@ -6,6 +6,7 @@ import 'package:material_3_expressive/material_3_expressive.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:provider/provider.dart';
 
+import '../domain/models/download.dart' show kLocalSourceKey;
 import '../domain/models/library.dart';
 import '../l10n/app_localizations.dart';
 import '../models/play_mode.dart';
@@ -13,7 +14,9 @@ import '../providers/discover_provider.dart';
 import '../providers/library_collections.dart';
 import '../providers/library_provider.dart';
 import '../providers/lyrics_provider.dart';
+import '../pages/downloads_page.dart';
 import '../pages/source_swap_page.dart';
+import '../services/download/download_service.dart';
 import '../utils/responsive.dart';
 import '../widgets/add_to_library.dart';
 import '../widgets/add_to_playlist_sheet.dart' show showPlaylistNameDialog;
@@ -941,6 +944,16 @@ class _FavoritesPageState extends State<FavoritesPage> {
               icon: const Icon(Icons.shuffle_rounded),
               onPressed: canPlay ? () => _playShuffledFor(view) : null,
             ),
+            if (context.read<DownloadService?>()?.supported ?? false) ...[
+              const SizedBox(width: 4),
+              M3EIconButton(
+                key: const Key('favoritesDownloadsEntry'),
+                variant: M3EIconButtonVariant.standard,
+                tooltip: l10n.downloadsTitle,
+                icon: const Icon(Icons.download_rounded),
+                onPressed: () => unawaited(showDownloadsPage(context)),
+              ),
+            ],
             const SizedBox(width: 4),
             M3EIconButton(
               variant: M3EIconButtonVariant.standard,
@@ -1398,7 +1411,7 @@ class _FavoritesPageState extends State<FavoritesPage> {
           ),
         ),
       ),
-      if (playlistId != null)
+      if (playlistId != null && track.sourceKey != kLocalSourceKey)
         M3EListSwipeAction(
           icon: _swipeActionIcon(
             Icons.swap_horiz_rounded,
@@ -1521,25 +1534,26 @@ class _FavoritesPageState extends State<FavoritesPage> {
                         ),
                       ),
                     ),
-                    M3EListSwipeAction(
-                      icon: _swipeActionIcon(
-                        Icons.swap_horiz_rounded,
-                        l10n.sourceSwap,
-                      ),
-                      onPressed: () => unawaited(
-                        showSourceSwapPage(
-                          context,
-                          seed: context
-                              .read<LibraryProvider>()
-                              .trackFromHistoryEntry(entry),
-                          lyricsProvider: context.read<LyricsProvider>(),
-                          historyKey: (
-                            sourceKey: entry.sourceKey,
-                            songId: entry.songId,
+                    if (entry.sourceKey != kLocalSourceKey)
+                      M3EListSwipeAction(
+                        icon: _swipeActionIcon(
+                          Icons.swap_horiz_rounded,
+                          l10n.sourceSwap,
+                        ),
+                        onPressed: () => unawaited(
+                          showSourceSwapPage(
+                            context,
+                            seed: context
+                                .read<LibraryProvider>()
+                                .trackFromHistoryEntry(entry),
+                            lyricsProvider: context.read<LyricsProvider>(),
+                            historyKey: (
+                              sourceKey: entry.sourceKey,
+                              songId: entry.songId,
+                            ),
                           ),
                         ),
                       ),
-                    ),
                     M3EListSwipeAction(
                       icon: _swipeActionIcon(
                         Icons.delete_rounded,
