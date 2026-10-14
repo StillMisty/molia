@@ -29,6 +29,11 @@ abstract interface class PlaybackFacade {
   Future<void> enqueueTracks(List<Track> tracks);
 
   Future<void> toggle();
+
+  /// 暂停（幂等）。定时关闭等「必须停下、不能被 toggle 成播放」的路径用它：
+  /// 与用户操作竞态时，toggle 语义可能把刚暂停的播放重新拉起。
+  Future<void> pause();
+
   Future<void> seek(Duration position);
   Future<void> next();
   Future<void> previous();

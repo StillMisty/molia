@@ -1316,5 +1316,31 @@
       }
     }
   },
-  "downloadsUnsupported": "Downloads are not supported on this platform"
+  "downloadsUnsupported": "Downloads are not supported on this platform",
+  "sleepTimerTitle": "Sleep timer",
+  "sleepTimerHint": "Pauses playback when the timer ends",
+  "sleepTimerOff": "Off",
+  "sleepTimerRemaining": "{time} left",
+  "@sleepTimerRemaining": {
+    "placeholders": {
+      "time": {
+        "type": "String"
+      }
+    }
+  },
+  "sleepTimerAfterTrack": "Pause after current track",
+  "sleepTimerMinutes": "Pause in {minutes} minutes",
+  "@sleepTimerMinutes": {
+    "placeholders": {
+      "minutes": {
+        "type": "int"
+      }
+    }
+  },
+  "sleepTimerCancel": "Turn off timer",
+  "sleepTimerCustom": "Custom duration…",
+  "sleepTimerCustomTitle": "Custom duration",
+  "sleepTimerCustomHint": "Minutes (1–600)",
+  "sleepTimerCustomInvalid": "Enter an integer between 1 and 600",
+  "sleepTimerCustomConfirm": "Set"
 }

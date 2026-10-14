@@ -305,6 +305,7 @@
 | 状态 | 频度 | 承载 | 订阅方式 |
 |---|---|---|---|
 | 播放进度 | ≤4Hz | `PlaybackProvider.position`（ValueListenable） | `ValueListenableBuilder`（进度条/歌词行） |
+| 定时关闭剩余 | 1Hz（仅倒计时且播放中） | `PlaybackProvider.sleepTimer`（ValueListenable） | `ValueListenableBuilder`（歌曲信息页/弹层） |
 | 曲目/播放/队列/模式 | 事件级 | facade 快照（值变才发） | `Selector`（不可变对象/record） |
 | 搜索结果/分页 | 交互级 | `SearchProvider`（分页状态机 `PagedListController`） | 局部 select |
 | 音源列表/顺序 | 事件级 | `SourceRegistry.changes` | 选择器/管理页 |

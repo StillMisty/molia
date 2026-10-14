@@ -34,6 +34,7 @@ import '../sources/source_manager.dart';
 import '../sources/source_track.dart';
 import '../utils/notify_throttler.dart';
 import 'local_database_provider.dart';
+import 'sleep_timer.dart';
 
 final _logger = Logger('molia.playback_provider');
 
@@ -161,6 +162,10 @@ class PlaybackProvider extends ChangeNotifier {
   /// 高频进度通道（真实播放转发 facade.position；恢复态显示上次进度）。
   late final _PositionChannel _positionChannel;
 
+  /// 定时关闭（歌曲信息页入口）：只决定「什么时候暂停」，暂停动作走
+  /// `facade.pause`；状态经 [SleepTimerController] 的 ValueListenable 暴露。
+  late final SleepTimerController sleepTimer;
+
   final AlbumArtPreloadStrategy _albumArtPreloader = AlbumArtPreloadStrategy();
 
   // 持久化存储最后播放的歌曲信息（用于离线显示）
@@ -258,6 +263,12 @@ class PlaybackProvider extends ChangeNotifier {
     );
     _positionChannel =
         _PositionChannel(_StateValueListenable<Duration>(_facade.position));
+    // 定时关闭：判定用 facade 原始通道（恢复态覆盖值不是真实播放进度）。
+    sleepTimer = SleepTimerController(
+      snapshot: _facade.snapshot,
+      position: _facade.position,
+      onFire: () => _facade.pause(),
+    );
     _facade.position.addListener(_onPositionTick);
     _facade.snapshot.addListener(_onFacadeSnapshot);
     // position 走独立 ValueListenable 通道（_positionChannel）：进度 tick
@@ -455,6 +466,8 @@ class PlaybackProvider extends ChangeNotifier {
   /// 停止本地播放并清空状态（同时丢弃恢复会话，避免下次启动又出现）。
   Future<void> stopLocalPlayback() async {
     await _facade.stop();
+    // 主动停止 = 本次会话结束：定时关闭一并撤销（不留下无播放可暂停的定时）。
+    sleepTimer.cancel();
     _clearRestoredSession();
     unawaited(_sessionStore.clear());
     _notifyCategory('track');
@@ -1131,6 +1144,7 @@ class PlaybackProvider extends ChangeNotifier {
     _facade.snapshot.removeListener(_onFacadeSnapshot);
     _facade.position.removeListener(_onPositionTick);
     _positionChannel.dispose();
+    sleepTimer.dispose();
     _sourceManager?.removeListener(_onSourceManagerChanged);
     _dataSaver?.removeListener(_onDataSaverChanged);
     // 注意：facade / backend / LocalPlaybackService 由 main 创建并注入
