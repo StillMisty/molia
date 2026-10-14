@@ -205,7 +205,9 @@ class DesktopLyricsOutput implements InteractiveLyricsOutput {
       'isPlaying': p.isPlaying,
       'hasLyrics': p.hasLyrics,
       'positionMs': p.positionMs,
-      // 回退行（歌名 / 清空）没有逐字时间轴；正常歌词行原样下发。
+      // 回退行（歌名 / 清空）没有逐字时间轴，也没有行时间轴（不滚动）。
+      'lineStartMs': replacedLine ? -1 : p.lineStartMs,
+      'lineEndMs': replacedLine ? -1 : p.lineEndMs,
       'words': replacedLine ? null : _wordsMap(p.words),
     };
   }

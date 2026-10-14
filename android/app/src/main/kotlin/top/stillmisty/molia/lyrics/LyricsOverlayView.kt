@@ -7,6 +7,7 @@ import android.graphics.Color
 import android.graphics.drawable.GradientDrawable
 import android.graphics.drawable.RippleDrawable
 import android.os.SystemClock
+import android.text.Layout
 import android.text.SpannableStringBuilder
 import android.text.Spanned
 import android.text.TextPaint
@@ -111,6 +112,9 @@ internal data class OverlayPresentation(
     val hasLyrics: Boolean = false,
     /** 本次投送时的有效播放位置（已叠加偏移）。 */
     val positionMs: Long = 0L,
+    /** 当前行时间轴（-1 = 未知）：无逐字数据时横向滚动按行进度线性外推。 */
+    val lineStartMs: Long = -1L,
+    val lineEndMs: Long = -1L,
     /** 当前行的逐字时间轴（null = 无逐字数据，按整行着色）。 */
     val words: List<OverlayWord>? = null,
 ) {
@@ -136,6 +140,8 @@ internal data class OverlayPresentation(
                 isPlaying = map["isPlaying"] as? Boolean ?: false,
                 hasLyrics = map["hasLyrics"] as? Boolean ?: false,
                 positionMs = (map["positionMs"] as? Number)?.toLong() ?: 0L,
+                lineStartMs = (map["lineStartMs"] as? Number)?.toLong() ?: -1L,
+                lineEndMs = (map["lineEndMs"] as? Number)?.toLong() ?: -1L,
                 words = words,
             )
         }
@@ -147,20 +153,24 @@ private val EASE_DECELERATE = PathInterpolator(0.05f, 0.7f, 0.1f, 1f)
 private val EASE_ACCELERATE = PathInterpolator(0.3f, 0f, 0.8f, 0.15f)
 
 /**
- * 逐字变色的当前行视图：按词时间轴把已唱部分渐染成 played 色。
+ * 当前行视图：逐字渐染 + 跟随进度的横向滚动。
  *
- * 进度基准来自 Dart 侧下发的位置（跟随播放位置通道，≤4Hz）；词内用帧回调
- * 线性外推，每次收到新位置就重新对齐（暂停 / seek 直接落位）。
- * 用可变 color span 而不是自绘：逐字与原生 marquee 滚动可以共存，且更新
- * 颜色不触发重新排版。
+ * - 有逐字时间轴时按词插值 playedColor；无逐字数据时整行 playedColor；
+ * - 进度基准来自 Dart 侧下发的位置（跟随播放位置通道，≤4Hz），词内 / 行内
+ *   用帧回调线性外推，每次收到新位置就重新对齐（暂停 / seek 直接落位）；
+ * - 行宽超出视图时按「已唱边界」滚动（边界锚定在视图宽度的 2/3 处），
+ *   不使用原生 marquee 循环滚动：暂停时滚动随进度一起停住。
+ * 颜色用可变 color span 而不是自绘：更新颜色不触发重新排版。
  */
 @SuppressLint("ViewConstructor")
-internal class KaraokeLineView(context: Context) : TextView(context) {
+internal class CurrentLineView(context: Context) : TextView(context) {
 
     private var words: List<OverlayWord> = emptyList()
     private var spans: List<MutableColorSpan> = emptyList()
     private var playedColor = 0xFFFFFFFF.toInt()
     private var unplayedColor = 0xB3FFFFFF.toInt()
+    private var lineStartMs = -1L
+    private var lineEndMs = -1L
     private var basePositionMs = 0L
     private var baseUptimeMs = 0L
     private var playing = false
@@ -168,22 +178,32 @@ internal class KaraokeLineView(context: Context) : TextView(context) {
 
     private val tick = Runnable {
         tickScheduled = false
-        if (words.isEmpty()) return@Runnable
         val estimated = estimateMs()
         applyColors(estimated)
-        if (playing && estimated < words.last().endMs) scheduleTick()
+        applyScroll(estimated)
+        if (shouldKeepTicking(estimated)) scheduleTick()
     }
 
-    /** 绑定/更新词轴与配色；词轴变化时重建 span。 */
-    fun bind(words: List<OverlayWord>?, playedColor: Int, unplayedColor: Int) {
+    /** 绑定/更新词轴、行时间轴与配色；词轴变化时重建 span。 */
+    fun bind(
+        words: List<OverlayWord>?,
+        playedColor: Int,
+        unplayedColor: Int,
+        lineStartMs: Long,
+        lineEndMs: Long,
+    ) {
         this.playedColor = playedColor
         this.unplayedColor = unplayedColor
+        this.lineStartMs = lineStartMs
+        this.lineEndMs = lineEndMs
         val next = words ?: emptyList()
         if (next != this.words) {
             this.words = next
             rebuildSpans()
         }
-        applyColors(estimateMs())
+        val estimated = estimateMs()
+        applyColors(estimated)
+        applyScroll(estimated)
     }
 
     /** 对齐到新的播放位置与播放态（每次收到投送都会调用）。 */
@@ -193,15 +213,26 @@ internal class KaraokeLineView(context: Context) : TextView(context) {
         playing = isPlaying
         val estimated = estimateMs()
         applyColors(estimated)
-        if (isPlaying && words.isNotEmpty() && estimated < words.last().endMs) {
-            scheduleTick()
-        }
+        applyScroll(estimated)
+        if (shouldKeepTicking(estimated)) scheduleTick()
+    }
+
+    override fun onSizeChanged(w: Int, h: Int, oldw: Int, oldh: Int) {
+        super.onSizeChanged(w, h, oldw, oldh)
+        // 首次布局 / 宽度变化后补一次滚动（bind 时布局可能还没完成）。
+        post { applyScroll(estimateMs()) }
     }
 
     private fun estimateMs(): Long {
         if (!playing) return basePositionMs
         val elapsed = SystemClock.elapsedRealtime() - baseUptimeMs
         return basePositionMs + max(0L, elapsed)
+    }
+
+    private fun shouldKeepTicking(estimatedMs: Long): Boolean {
+        if (!playing) return false
+        val end = max(lineEndMs, words.lastOrNull()?.endMs ?: -1L)
+        return end > 0 && estimatedMs < end
     }
 
     private fun rebuildSpans() {
@@ -239,6 +270,60 @@ internal class KaraokeLineView(context: Context) : TextView(context) {
         invalidate()
     }
 
+    /**
+     * 跟随进度的横向滚动：把「已唱边界」锚定在视图宽度的 2/3 处。
+     *
+     * 有逐字数据时边界取当前词内的插值位置；否则按行时间轴线性外推；
+     * 两者都没有（或文本未超宽）时保持不动。
+     */
+    private fun applyScroll(estimatedMs: Long) {
+        val layout = layout ?: return
+        val viewWidth = width
+        if (viewWidth <= 0 || layout.width <= 0) return
+        val contentWidth = layout.width + compoundPaddingLeft + compoundPaddingRight
+        val maxScroll = (contentWidth - viewWidth).coerceAtLeast(0)
+        if (maxScroll == 0) {
+            if (scrollX != 0) scrollTo(0, 0)
+            return
+        }
+        val edge = playedEdgeX(layout, estimatedMs) ?: return
+        val anchor = viewWidth * ANCHOR_FRACTION
+        val target =
+            (edge + compoundPaddingLeft - anchor).coerceIn(0f, maxScroll.toFloat())
+        val targetInt = target.toInt()
+        if (targetInt != scrollX) scrollTo(targetInt, 0)
+    }
+
+    private fun playedEdgeX(layout: Layout, estimatedMs: Long): Float? {
+        if (words.isEmpty()) {
+            if (lineStartMs < 0 || lineEndMs <= lineStartMs) return null
+            val progress =
+                ((estimatedMs - lineStartMs).toFloat() / (lineEndMs - lineStartMs))
+                    .coerceIn(0f, 1f)
+            return layout.width * progress
+        }
+        var index = words.size
+        var fraction = 0f
+        for (i in words.indices) {
+            val word = words[i]
+            if (estimatedMs >= word.endMs) continue
+            index = i
+            fraction = if (estimatedMs <= word.startMs || word.endMs <= word.startMs) {
+                0f
+            } else {
+                (estimatedMs - word.startMs).toFloat() / (word.endMs - word.startMs)
+            }
+            break
+        }
+        if (index >= words.size) return layout.width.toFloat()
+        var charStart = 0
+        for (i in 0 until index) charStart += words[i].text.length
+        val charEnd = (charStart + words[index].text.length).coerceAtMost(text.length)
+        val startX = layout.getPrimaryHorizontal(charStart.coerceAtMost(text.length))
+        val endX = layout.getPrimaryHorizontal(charEnd)
+        return startX + (endX - startX) * fraction
+    }
+
     private fun scheduleTick() {
         if (!tickScheduled) {
             tickScheduled = true
@@ -260,6 +345,9 @@ internal class KaraokeLineView(context: Context) : TextView(context) {
     }
 
     private companion object {
+        /** 已唱边界在视图中的锚定位置（视图宽度的比例）。 */
+        const val ANCHOR_FRACTION = 0.66f
+
         fun blend(from: Int, to: Int, fraction: Float): Int {
             val f = fraction.coerceIn(0f, 1f)
             val a = (Color.alpha(from) + (Color.alpha(to) - Color.alpha(from)) * f).toInt()
@@ -275,8 +363,8 @@ internal class KaraokeLineView(context: Context) : TextView(context) {
  * 桌面歌词悬浮视图：拖动移动、点按呼出控制条、锁定后不可触摸（窗口级）。
  *
  * - 文本策略（暂停回退 / 无歌词回退 / 行数 / 翻译开关）由 Dart 侧决定；
- * - 当前行有逐字时间轴时用 [KaraokeLineView] 渐染，其余行整行着色；
- * - 内容变化只做增量重建（同结构更新不碰视图，避免打断 marquee 与动画）；
+ * - 当前行用 [CurrentLineView]（逐字渐染 + 跟随进度滚动），其余行整行着色；
+ * - 内容变化只做增量重建（同结构更新不碰视图，避免打断滚动与动画）；
  * - 控制条是 M3E 观感的 pill（圆角容器 + 图标按钮 + 状态层），
  *   颜色由 Dart 侧解析后下发。
  */
@@ -295,7 +383,7 @@ internal class LyricsOverlayView(
     private var pending: OverlayPresentation? = null
     private var renderedTexts: List<String> = emptyList()
     private var entryViews = mutableListOf<TextView>()
-    private var karaokeView: KaraokeLineView? = null
+    private var currentLineView: CurrentLineView? = null
     private var playPauseButton: ImageView? = null
     private var lastIsPlaying = false
     private var controlsVisible = false
@@ -372,17 +460,20 @@ internal class LyricsOverlayView(
         current = presentation
         val entries = buildEntries(presentation)
         val texts = entries.map { it.text }
-        val karaokeMatches =
-            (presentation.words?.isNotEmpty() == true) == (karaokeView != null)
         val structureSame = !force &&
             texts == renderedTexts &&
-            textColumn.childCount == texts.size &&
-            karaokeMatches
+            textColumn.childCount == texts.size
         if (structureSame) {
-            // 仅逐字进度 / 播放态变化：更新视图内状态，不重建（marquee 不重启）。
-            karaokeView?.let { karaoke ->
-                karaoke.bind(presentation.words, config.playedColor, config.unplayedColor)
-                karaoke.syncPosition(presentation.positionMs, presentation.isPlaying)
+            // 仅进度 / 播放态变化：更新视图内状态，不重建（不打断滚动与动画）。
+            currentLineView?.let { line ->
+                line.bind(
+                    presentation.words,
+                    config.playedColor,
+                    config.unplayedColor,
+                    presentation.lineStartMs,
+                    presentation.lineEndMs,
+                )
+                line.syncPosition(presentation.positionMs, presentation.isPlaying)
             }
             updatePlayPauseIconIfNeeded()
             return
@@ -416,11 +507,11 @@ internal class LyricsOverlayView(
         textColumn.animate().cancel()
         textColumn.removeAllViews()
         entryViews = mutableListOf()
-        karaokeView = null
+        currentLineView = null
         for (entry in entries) {
             val view: TextView =
-                if (entry.isCurrent && entry.words?.isNotEmpty() == true) {
-                    KaraokeLineView(context).also { karaokeView = it }
+                if (entry.isCurrent) {
+                    CurrentLineView(context).also { currentLineView = it }
                 } else {
                     TextView(context)
                 }
@@ -435,21 +526,29 @@ internal class LyricsOverlayView(
                 gravity = textColumn.gravity
                 maxLines = 1
                 setSingleLine(true)
-                // 过长行左右滚动（原生 marquee）而不是截断省略号：
-                // 需要 ellipsize=MARQUEE + 持续循环 + selected 才会滚动，
-                // 文本未超宽时仍保持静止（marquee 不产生位移）。
-                ellipsize = TextUtils.TruncateAt.MARQUEE
-                marqueeRepeatLimit = -1
-                isSelected = true
+                isSelected = false
                 isFocusable = false
                 isFocusableInTouchMode = false
+                if (entry.isCurrent) {
+                    // 当前行不做 marquee：横向滚动由播放进度驱动（CurrentLineView）。
+                    ellipsize = null
+                } else {
+                    // 非当前行不做无限循环滚动：超宽截断省略。
+                    ellipsize = TextUtils.TruncateAt.END
+                }
             }
             textColumn.addView(view)
             entryViews.add(view)
         }
-        karaokeView?.let { karaoke ->
-            karaoke.bind(current.words, config.playedColor, config.unplayedColor)
-            karaoke.syncPosition(current.positionMs, current.isPlaying)
+        currentLineView?.let { line ->
+            line.bind(
+                current.words,
+                config.playedColor,
+                config.unplayedColor,
+                current.lineStartMs,
+                current.lineEndMs,
+            )
+            line.syncPosition(current.positionMs, current.isPlaying)
         }
         if (animate && entryViews.isNotEmpty()) {
             // 整块从下方轻微上浮 + 逐行错峰淡入（M3 强调缓动）。

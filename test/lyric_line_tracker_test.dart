@@ -84,11 +84,17 @@ void main() {
     expect(worded.index, 0);
     expect(worded.words, hasLength(2));
     expect(worded.words!.first.text, 'tw');
+    // 行时间轴：终点取下一行时间戳（无逐字数据时进度滚动的兜底）。
+    expect(worded.lineStartMs, 2000);
+    expect(worded.lineEndMs, 5000);
 
-    // 切到无逐字数据的行：words 为空（上层回退整行着色）。
+    // 切到无逐字数据的行：words 为空（上层回退整行着色）；
+    // 最后一行且无逐字 → 行终点未知。
     final plain = trackWorded(const Duration(seconds: 6));
     expect(plain.index, 1);
     expect(plain.words, isNull);
+    expect(plain.lineStartMs, 5000);
+    expect(plain.lineEndMs, -1);
   });
 
   test('首行之前返回空行（前奏）', () {

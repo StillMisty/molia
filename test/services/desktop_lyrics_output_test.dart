@@ -119,6 +119,8 @@ void main() {
       isPlaying: true,
       hasLyrics: true,
       positionMs: 1500,
+      lineStartMs: 1000,
+      lineEndMs: 3000,
       words: const [
         LyricWord(
           start: Duration(milliseconds: 1000),
@@ -136,6 +138,8 @@ void main() {
     final update = calls.lastWhere((call) => call.method == 'desktop.update');
     final map = update.arguments as Map;
     expect(map['positionMs'], 1500);
+    expect(map['lineStartMs'], 1000);
+    expect(map['lineEndMs'], 3000);
     final words = map['words'] as List;
     expect(words, hasLength(2));
     expect((words.first as Map)['t'], 'A');
@@ -162,6 +166,9 @@ void main() {
     await pumpEventQueue();
     final fallback = calls.lastWhere((call) => call.method == 'desktop.update');
     expect((fallback.arguments as Map)['words'], isNull);
+    // 回退行同时撤下行时间轴（不参与进度滚动）。
+    expect((fallback.arguments as Map)['lineStartMs'], -1);
+    expect((fallback.arguments as Map)['lineEndMs'], -1);
     await output.stop();
   });
 

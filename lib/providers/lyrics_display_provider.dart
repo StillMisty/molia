@@ -190,6 +190,8 @@ class LyricsDisplayProvider extends ChangeNotifier {
       words: tracked.words,
       // 与行跟踪同一有效位置（叠加歌词偏移），逐字渐染与之对齐。
       positionMs: _position.inMilliseconds + settings.offsetMs,
+      lineStartMs: tracked.lineStartMs,
+      lineEndMs: tracked.lineEndMs,
     );
   }
 

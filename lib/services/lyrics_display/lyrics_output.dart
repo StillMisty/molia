@@ -35,6 +35,10 @@ class LyricsPresentation {
   /// 从而在播放中以位置通道的频率（≤4Hz）刷新悬浮窗。
   final int positionMs;
 
+  /// 当前行时间轴（毫秒；-1 = 未知）：桌面歌词「跟随进度」横向滚动的兜底。
+  final int lineStartMs;
+  final int lineEndMs;
+
   const LyricsPresentation({
     required this.trackId,
     required this.title,
@@ -45,6 +49,8 @@ class LyricsPresentation {
     required this.hasLyrics,
     this.words,
     this.positionMs = 0,
+    this.lineStartMs = -1,
+    this.lineEndMs = -1,
   });
 
   @override
@@ -58,7 +64,9 @@ class LyricsPresentation {
       other.isPlaying == isPlaying &&
       other.hasLyrics == hasLyrics &&
       listEquals(other.words, words) &&
-      other.positionMs == positionMs;
+      other.positionMs == positionMs &&
+      other.lineStartMs == lineStartMs &&
+      other.lineEndMs == lineEndMs;
 
   @override
   int get hashCode => Object.hash(
@@ -71,6 +79,8 @@ class LyricsPresentation {
         hasLyrics,
         words == null ? null : Object.hashAll(words!),
         positionMs,
+        lineStartMs,
+        lineEndMs,
       );
 }
 
