@@ -14,7 +14,7 @@ import 'package:molia/l10n/app_localizations.dart';
 import 'package:molia/managers/artwork_cache.dart';
 import 'package:molia/pages/album_page.dart';
 import 'package:molia/pages/artist_page.dart';
-import 'package:molia/pages/track_cache_page.dart';
+import 'package:molia/pages/track_local_data_page.dart';
 import 'package:molia/providers/lyrics_provider.dart';
 import 'package:molia/providers/playback_provider.dart';
 import 'package:molia/providers/sleep_timer.dart';
@@ -22,8 +22,9 @@ import 'package:molia/services/cache_service.dart';
 import 'package:molia/services/cache_storage_stub.dart';
 import 'package:molia/services/download/download_service.dart';
 import 'package:molia/services/notification_service.dart';
-import 'package:molia/services/track_cache_service.dart';
+import 'package:molia/services/track_local_data_service.dart';
 import 'package:molia/utils/lyrics_provider_label.dart';
+import 'package:molia/widgets/settings/settings_tiles.dart';
 import 'package:molia/widgets/track_info_view.dart';
 import 'package:material_3_expressive/material_3_expressive.dart';
 import 'package:material_ui/material_ui.dart';
@@ -53,9 +54,10 @@ class _RecordingNotificationService extends NotificationService {
   }
 }
 
-/// 可编排的单曲缓存假件：只覆盖页面消费的两个方法。
-class _FakeTrackCacheService extends TrackCacheService {
-  _FakeTrackCacheService() : super(
+/// 可编排的单曲本地数据假件：数据来自假下载服务记录 + 各分项占用表。
+class _FakeLocalDataService extends TrackLocalDataService {
+  _FakeLocalDataService({required this.downloads})
+      : super(
           cacheService: CacheService(storage: MemoryCacheStorage()),
           artworkCache: ArtworkCache(
             cacheService: CacheService(storage: MemoryCacheStorage()),
@@ -65,20 +67,39 @@ class _FakeTrackCacheService extends TrackCacheService {
           ),
         );
 
-  /// 按曲目 id 返回占用（验证切歌后重载）。
-  final Map<String, TrackCacheUsage> usageByTrack = {};
-  TrackCacheClearResult nextClear =
-      const TrackCacheClearResult(part: TrackCachePart.audio);
-  final List<(TrackCachePart, String)> clearCalls = [];
+  final _FakeDownloadService downloads;
+
+  /// 按曲目 id 编排缓存（验证两档状态与切歌后重载）。
+  final Map<String, CacheUsage> audioCacheByTrack = {};
+  final Map<String, CacheUsage> audioWritingByTrack = {};
+  final Map<String, CacheUsage> lyricsCacheByTrack = {};
+  final Map<String, CacheUsage> artworkCacheByTrack = {};
+  final Map<String, List<String>> cachedQualitiesByTrack = {};
+  final Map<String, int> resolveByTrack = {};
+
+  LocalCacheClearResult nextClear =
+      const LocalCacheClearResult(part: LocalCachePart.audio);
+  final List<(LocalCachePart, String)> clearCalls = [];
 
   @override
-  Future<TrackCacheUsage> usage(Track track) async =>
-      usageByTrack[track.id.uri] ?? const TrackCacheUsage();
+  TrackLocalData downloadState(Track track) =>
+      TrackLocalData(download: downloads.record);
 
   @override
-  Future<TrackCacheClearResult> clear(
+  Future<TrackLocalData> load(Track track) async => TrackLocalData(
+        download: downloads.record,
+        audioCache: audioCacheByTrack[track.id.uri] ?? CacheUsage.zero,
+        audioWriting: audioWritingByTrack[track.id.uri] ?? CacheUsage.zero,
+        lyricsCache: lyricsCacheByTrack[track.id.uri] ?? CacheUsage.zero,
+        artworkCache: artworkCacheByTrack[track.id.uri] ?? CacheUsage.zero,
+        cachedQualities: cachedQualitiesByTrack[track.id.uri] ?? const [],
+        resolveEntries: resolveByTrack[track.id.uri] ?? 0,
+      );
+
+  @override
+  Future<LocalCacheClearResult> clear(
     Track track,
-    TrackCachePart part,
+    LocalCachePart part,
   ) async {
     clearCalls.add((part, track.id.uri));
     return nextClear;
@@ -103,9 +124,6 @@ class _FakeDownloadService extends DownloadService {
   int cancelCalls = 0;
   int deleteCalls = 0;
 
-  /// 完整缓存命中（按音质）：缓存 = 已下载识别用。
-  final Map<String, AudioCacheHit> audioCacheByQuality = {};
-
   @override
   bool get supported => downloadSupported;
 
@@ -114,21 +132,6 @@ class _FakeDownloadService extends DownloadService {
 
   @override
   DownloadProgress? progressForTrack(Track track) => progress;
-
-  @override
-  Future<AudioCacheHit?> audioCacheFor(
-    Track track, {
-    Iterable<String>? qualities,
-  }) async {
-    if (qualities == null) {
-      return audioCacheByQuality.isEmpty ? null : audioCacheByQuality.values.first;
-    }
-    for (final quality in qualities) {
-      final hit = audioCacheByQuality[quality];
-      if (hit != null) return hit;
-    }
-    return null;
-  }
 
   @override
   Future<void> download(
@@ -177,15 +180,15 @@ void main() {
 
   late FakePlaybackBackend backend;
   late PlaybackProvider playback;
-  late _FakeTrackCacheService cacheService;
   late _FakeDownloadService downloadService;
+  late _FakeLocalDataService localDataService;
 
   setUp(() {
     SharedPreferences.setMockInitialValues({});
     backend = FakePlaybackBackend();
     playback = buildTestPlaybackProvider(backend: backend);
-    cacheService = _FakeTrackCacheService();
     downloadService = _FakeDownloadService();
+    localDataService = _FakeLocalDataService(downloads: downloadService);
   });
 
   tearDown(() => playback.dispose());
@@ -211,7 +214,7 @@ void main() {
         providers: [
           ChangeNotifierProvider<PlaybackProvider>.value(value: playback),
           ChangeNotifierProvider(create: (_) => LyricsProvider()),
-          Provider<TrackCacheService>.value(value: cacheService),
+          Provider<TrackLocalDataService>.value(value: localDataService),
           if (downloads != null)
             ChangeNotifierProvider<DownloadService>.value(value: downloads),
           if (registry != null) Provider<SourceRegistry>.value(value: registry),
@@ -243,6 +246,18 @@ void main() {
   Future<void> scrollToBottom(WidgetTester tester) async {
     await tester.drag(find.byType(ListView), const Offset(0, -600));
     await tester.pump();
+  }
+
+  /// 「本地数据」页向下滚动：缓存占用段在视口外。
+  Future<void> scrollLocalDataPage(WidgetTester tester) async {
+    await tester.drag(
+      find.descendant(
+        of: find.byType(TrackLocalDataPage),
+        matching: find.byType(Scrollable),
+      ),
+      const Offset(0, -400),
+    );
+    await tester.pumpAndSettle();
   }
 
   testWidgets('信息区：音质本地化 + 可用音质 + 来源（渠道 · ID）+ 专辑', (tester) async {
@@ -465,41 +480,47 @@ void main() {
     expect(find.text('曲目 ID 已复制'), findsOneWidget);
   });
 
-  testWidgets('缓存行：汇总副标题 + 打开单曲缓存子页', (tester) async {
-    cacheService.usageByTrack['kw:a'] = const TrackCacheUsage(
-      audio: CacheUsage(bytes: 3 * 1024 * 1024, count: 2),
-      lyrics: CacheUsage(bytes: 2048, count: 1),
-      resolveEntries: 1,
-    );
+  testWidgets('本地数据行：两档汇总副标题 + 打开本地数据页', (tester) async {
+    localDataService.audioCacheByTrack['kw:a'] =
+        const CacheUsage(bytes: 3 * 1024 * 1024, count: 2);
+    localDataService.cachedQualitiesByTrack['kw:a'] = const ['320k'];
+    localDataService.lyricsCacheByTrack['kw:a'] =
+        const CacheUsage(bytes: 2048, count: 1);
     await pumpView(tester, track: _track());
     await scrollToBottom(tester);
 
-    expect(find.text('缓存'), findsOneWidget);
-    expect(find.text('音频缓存 3.0 MB · 歌词缓存 2 KB · 取链缓存 1 条'), findsOneWidget);
+    expect(find.text('本地数据'), findsOneWidget);
+    expect(find.text('已缓存 · 320K · 3.0 MB · 可离线使用'), findsOneWidget);
 
-    await tester.tap(find.byKey(const Key('trackInfoCacheItem')));
+    await tester.tap(find.byKey(const Key('trackInfoLocalDataItem')));
     await tester.pumpAndSettle();
-    expect(find.byType(TrackCachePage), findsOneWidget);
-    expect(find.text('单曲缓存'), findsOneWidget);
+    expect(find.byType(TrackLocalDataPage), findsOneWidget);
   });
 
-  testWidgets('缓存子页：逐项清理需确认，确认后调用清理并提示', (tester) async {
-    cacheService.usageByTrack['kw:a'] = const TrackCacheUsage(
-      audio: CacheUsage(bytes: 3 * 1024 * 1024, count: 2),
-    );
-    cacheService.nextClear = const TrackCacheClearResult(
-      part: TrackCachePart.audio,
+  testWidgets('本地数据行：只有歌词缓存时列出分区，不误报音频状态', (tester) async {
+    localDataService.lyricsCacheByTrack['kw:a'] =
+        const CacheUsage(bytes: 2048, count: 1);
+    await pumpView(tester, track: _track());
+    await scrollToBottom(tester);
+
+    expect(find.text('歌词 已缓存'), findsOneWidget);
+  });
+
+  testWidgets('本地数据页：逐项清理需确认，确认后调用清理并提示', (tester) async {
+    localDataService.audioCacheByTrack['kw:a'] =
+        const CacheUsage(bytes: 3 * 1024 * 1024, count: 2);
+    localDataService.nextClear = const LocalCacheClearResult(
+      part: LocalCachePart.audio,
       freed: CacheUsage(bytes: 3 * 1024 * 1024, count: 2),
     );
     await pumpView(tester, track: _track());
     await scrollToBottom(tester);
-    await tester.tap(find.byKey(const Key('trackInfoCacheItem')));
+    await tester.tap(find.byKey(const Key('trackInfoLocalDataItem')));
     await tester.pumpAndSettle();
+    await scrollLocalDataPage(tester);
 
     expect(find.text('音频缓存'), findsOneWidget);
     expect(find.text('3.0 MB · 2 项'), findsOneWidget);
-    // 未命中的分区清理按钮禁用。
-    expect(find.text('清理'), findsWidgets);
 
     await tester.tap(find.text('清理').first);
     await tester.pumpAndSettle();
@@ -507,18 +528,18 @@ void main() {
     await tester.tap(find.text('删除'));
     await tester.pumpAndSettle();
 
-    expect(cacheService.clearCalls, [(TrackCachePart.audio, 'kw:a')]);
+    expect(localDataService.clearCalls, [(LocalCachePart.audio, 'kw:a')]);
     expect(find.text('已清理 3.0 MB'), findsOneWidget);
   });
 
-  testWidgets('切歌：缓存汇总按新曲目重载', (tester) async {
-    cacheService.usageByTrack['kw:a'] =
-        const TrackCacheUsage(audio: CacheUsage(bytes: 1024, count: 1));
-    cacheService.usageByTrack['kw:b'] =
-        const TrackCacheUsage(audio: CacheUsage(bytes: 5 * 1024 * 1024, count: 3));
+  testWidgets('切歌：本地数据汇总按新曲目重载', (tester) async {
+    localDataService.audioCacheByTrack['kw:a'] =
+        const CacheUsage(bytes: 1024, count: 1);
+    localDataService.audioCacheByTrack['kw:b'] =
+        const CacheUsage(bytes: 5 * 1024 * 1024, count: 3);
     await pumpView(tester, track: _track());
     await scrollToBottom(tester);
-    expect(find.text('音频缓存 1 KB'), findsOneWidget);
+    expect(find.text('已缓存 · 1 KB · 可离线使用'), findsOneWidget);
 
     const next = Track(
       id: TrackId('kw', 'b'),
@@ -535,7 +556,7 @@ void main() {
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 50));
 
-    expect(find.text('音频缓存 5.0 MB'), findsOneWidget);
+    expect(find.text('已缓存 · 5.0 MB · 可离线使用'), findsOneWidget);
 
     // 通知节流计时器跑完，避免 pending timer 报错。
     await tester.pump(const Duration(milliseconds: 300));
@@ -545,8 +566,7 @@ void main() {
     await pumpView(tester);
 
     expect(find.text('暂无播放曲目'), findsOneWidget);
-    expect(find.byKey(const Key('trackInfoCacheItem')), findsNothing);
-    expect(find.byKey(const Key('trackInfoDownloadItem')), findsNothing);
+    expect(find.byKey(const Key('trackInfoLocalDataItem')), findsNothing);
     expect(find.byKey(const Key('trackInfoCommentsItem')), findsNothing);
     expect(find.byKey(const Key('trackInfoSleepTimerItem')), findsOneWidget);
   });
@@ -640,45 +660,49 @@ void main() {
     expect(playback.sleepTimer.value.mode, SleepTimerMode.countdown);
   });
 
-  testWidgets('下载行：未下载 → 打开弹层 → 点下载触发下载动作', (tester) async {
+  testWidgets('本地数据页：未下载 → 打开页 → 点下载触发下载动作', (tester) async {
     await pumpView(tester, track: _track(), downloads: downloadService);
 
-    expect(find.text('下载'), findsOneWidget);
+    expect(find.text('本地数据'), findsOneWidget);
     expect(find.text('未下载'), findsOneWidget);
 
-    await tester.tap(find.byKey(const Key('trackInfoDownloadItem')));
+    await tester.tap(find.byKey(const Key('trackInfoLocalDataItem')));
     await tester.pumpAndSettle();
-    // 弹层：音频段（音质选项 + 状态 + 下载）+ 附加内容段 + 全部下载。
+    // 页内：音频段（音质 + 状态 + 下载）+ 附加内容段 + 缓存占用段。
     expect(find.text('音频'), findsOneWidget);
     expect(find.text('附加内容'), findsOneWidget);
-    expect(find.byKey(const Key('downloadQuality_320k')), findsOneWidget);
-    expect(find.byKey(const Key('downloadLyricsPart')), findsOneWidget);
-    expect(find.byKey(const Key('downloadCoverPart')), findsOneWidget);
-    expect(find.byKey(const Key('downloadAll')), findsOneWidget);
-    expect(find.byKey(const Key('downloadSheetStart')), findsOneWidget);
+    expect(find.byKey(const Key('localDataQuality_320k')), findsOneWidget);
+    expect(find.byKey(const Key('localDataLyricsPart')), findsOneWidget);
+    expect(find.byKey(const Key('localDataCoverPart')), findsOneWidget);
+    expect(find.byKey(const Key('localDataAudioStatus')), findsOneWidget);
+    expect(find.byKey(const Key('localDataDownloadAudio')), findsOneWidget);
 
-    await tester.tap(find.byKey(const Key('downloadSheetStart')));
+    await tester.tap(find.byKey(const Key('localDataDownloadAudio')));
     await tester.pump();
     expect(downloadService.downloadCalls, 1);
+
+    await scrollLocalDataPage(tester);
+    expect(find.text('缓存占用'), findsOneWidget);
   });
 
-  testWidgets('下载行：下载中显示百分比 + 取消', (tester) async {
+  testWidgets('本地数据页：下载中显示百分比 + 取消', (tester) async {
     downloadService.progress = const DownloadProgress(
       receivedBytes: 50,
       totalBytes: 100,
     );
     await pumpView(tester, track: _track(), downloads: downloadService);
 
+    expect(find.text('已缓存 · 50%'), findsNothing);
+    await tester.tap(find.byKey(const Key('trackInfoLocalDataItem')));
+    await tester.pumpAndSettle();
     expect(find.text('下载中 · 50%'), findsOneWidget);
 
-    await tester.tap(find.byKey(const Key('trackInfoDownloadItem')));
-    await tester.pumpAndSettle();
-    await tester.tap(find.byKey(const Key('downloadSheetCancel')));
+    await tester.tap(find.byKey(const Key('localDataCancel')));
     await tester.pump();
     expect(downloadService.cancelCalls, 1);
   });
 
-  testWidgets('下载行：已下载显示大小 + 弹层删除需确认', (tester) async {
+  testWidgets('本地数据页：已下载显示大小 + 删除需确认', (tester) async {
     downloadService.record = const DownloadedTrack(
       originSourceKey: 'kw',
       originSongId: 'a',
@@ -690,54 +714,58 @@ void main() {
     );
     await pumpView(tester, track: _track(), downloads: downloadService);
 
-    expect(find.text('3.0 MB · 320K'), findsOneWidget);
+    expect(find.text('已下载 · 320K · 3.0 MB'), findsOneWidget);
 
-    await tester.tap(find.byKey(const Key('trackInfoDownloadItem')));
+    await tester.tap(find.byKey(const Key('trackInfoLocalDataItem')));
     await tester.pumpAndSettle();
-    expect(find.byKey(const Key('downloadSheetShare')), findsOneWidget);
+    expect(find.byKey(const Key('localDataShare')), findsOneWidget);
 
-    await tester.tap(find.byKey(const Key('downloadSheetDelete')));
+    await tester.tap(find.byKey(const Key('localDataDeleteDownload')));
     await tester.pumpAndSettle();
     await tester.tap(find.text('删除'));
     await tester.pumpAndSettle();
     expect(downloadService.deleteCalls, 1);
     // 删除后回落到未下载态。
-    expect(find.byKey(const Key('downloadSheetStart')), findsOneWidget);
+    expect(find.byKey(const Key('localDataDownloadAudio')), findsOneWidget);
   });
 
-  testWidgets('下载行：平台不支持（Web/存储不可用）时入口禁用', (tester) async {
+  testWidgets('本地数据行：平台不支持（Web/存储不可用）时入口禁用', (tester) async {
     downloadService.downloadSupported = false;
     await pumpView(tester, track: _track(), downloads: downloadService);
 
-    // 行仍在（显示状态），但不支持时无下载服务入口。
-    expect(find.byKey(const Key('trackInfoDownloadItem')), findsOneWidget);
+    // 行仍在（显示状态），但不支持时页内下载动作禁用。
+    expect(find.byKey(const Key('trackInfoLocalDataItem')), findsOneWidget);
+    await tester.tap(find.byKey(const Key('trackInfoLocalDataItem')));
+    await tester.pumpAndSettle();
+    final action = tester.widget<SettingsNavTile>(
+      find.byKey(const Key('localDataDownloadAudio')),
+    );
+    expect(action.onTap, isNull);
   });
 
-  testWidgets('下载行：完整缓存命中显示已下载（体积 · 音质 · 缓存副本）', (tester) async {
-    downloadService.audioCacheByQuality['320k'] = const AudioCacheHit(
-      quality: '320k',
-      path: '/cache/audio/a.mp3',
-      sizeBytes: 3 * 1024 * 1024,
-    );
+  testWidgets('本地数据页：完整缓存命中按「已缓存」呈现，动作是转存', (tester) async {
+    localDataService.audioCacheByTrack['kw:a'] =
+        const CacheUsage(bytes: 3 * 1024 * 1024, count: 1);
+    localDataService.cachedQualitiesByTrack['kw:a'] = const ['320k'];
     await pumpView(tester, track: _track(), downloads: downloadService);
 
-    expect(find.text('未下载'), findsNothing);
-    expect(find.text('3.0 MB · 320K · 缓存副本'), findsOneWidget);
+    // 缓存不是下载：行副标题说「已缓存」，不说「已下载」。
+    expect(find.text('已下载 · 320K · 3.0 MB'), findsNothing);
+    expect(find.text('已缓存 · 320K · 3.0 MB · 可离线使用'), findsOneWidget);
 
-    // 弹层：状态与主按钮按「缓存 = 已下载」呈现，动作为转存到本地文件夹。
-    await tester.tap(find.byKey(const Key('trackInfoDownloadItem')));
+    await tester.tap(find.byKey(const Key('trackInfoLocalDataItem')));
     await tester.pumpAndSettle();
-    expect(find.text('已下载'), findsOneWidget);
-    expect(find.text('本地缓存'), findsOneWidget);
-    expect(find.text('下载到本地文件夹'), findsNWidgets(2));
-    expect(find.text('全部下载'), findsNothing);
+    expect(find.text('已缓存'), findsWidgets);
+    expect(find.text('已缓存 · 320K · 3.0 MB · 可离线使用'), findsWidgets);
+    // 命中缓存的音质带标记；动作为转存（拷缓存，不触网）。
+    expect(find.text('转存到本地文件夹'), findsOneWidget);
 
-    await tester.tap(find.byKey(const Key('downloadSheetStart')));
+    await tester.tap(find.byKey(const Key('localDataDownloadAudio')));
     await tester.pump();
     expect(downloadService.downloadCalls, 1);
   });
 
-  testWidgets('本地曲目：来源显示「本地下载」，下载行显示文件缺失', (tester) async {
+  testWidgets('本地曲目：来源显示「本地下载」，本地数据行显示文件缺失', (tester) async {
     const localTrack = Track(
       id: TrackId('local', 'kw:a'),
       title: '本地歌曲',

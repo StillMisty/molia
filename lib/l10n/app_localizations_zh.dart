@@ -1181,6 +1181,13 @@ class AppLocalizationsZh extends AppLocalizations {
   String get cachePolicyAudioEnabled => '边播边缓存';
 
   @override
+  String get cachePolicyAudioScope => '听过即缓存';
+
+  @override
+  String get cachePolicyAudioHint =>
+      '移动端边播边写；桌面端由后台下载补齐。命中缓存可离线播放、可转存为下载；容量上限与 LRU 淘汰照常生效。';
+
+  @override
   String get cachePolicyAudioMax => '容量上限';
 
   @override
@@ -2289,7 +2296,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get trackInfoIdCopied => '曲目 ID 已复制';
 
   @override
-  String get trackInfoCacheSection => '缓存';
+  String get localDataTitle => '本地数据';
 
   @override
   String get trackInfoCacheResolve => '取链缓存';
@@ -2353,7 +2360,22 @@ class AppLocalizationsZh extends AppLocalizations {
   String get shareDownloading => '正在下载，完成后自动分享';
 
   @override
-  String get trackCachePageTitle => '单曲缓存';
+  String get localDataCacheSection => '缓存占用';
+
+  @override
+  String get localDataStateCached => '已缓存';
+
+  @override
+  String get localDataOfflineAvailable => '可离线使用';
+
+  @override
+  String get localDataTransferToFolder => '转存到本地文件夹';
+
+  @override
+  String get localDataTransferHint => '已缓存 · 转存不触网';
+
+  @override
+  String get localDataAudioPlatformHint => '当前平台不写播放缓存，播放过会自动补齐缓存副本';
 
   @override
   String get trackCacheClearAll => '全部清理';
@@ -2398,7 +2420,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get downloadQualityLabel => '音质';
 
   @override
-  String get downloadQualityCached => '本地缓存';
+  String get downloadQualityCached => '已缓存';
 
   @override
   String get downloadExtrasSection => '附加内容';
@@ -2565,9 +2587,6 @@ class AppLocalizationsZh extends AppLocalizations {
   }
 
   @override
-  String get downloadSection => '下载';
-
-  @override
   String get downloadStatusNotDownloaded => '未下载';
 
   @override
@@ -2591,12 +2610,6 @@ class AppLocalizationsZh extends AppLocalizations {
   @override
   String get downloadDeleteConfirmMixed =>
       '删除本地副本？音频、歌词与封面文件将一并删除；导入的本地歌曲只从列表移除。';
-
-  @override
-  String get downloadStatusCachedCopy => '缓存副本';
-
-  @override
-  String get downloadToFolder => '下载到本地文件夹';
 
   @override
   String get localSongsCachedTag => '缓存';

@@ -1224,6 +1224,13 @@ class AppLocalizationsEn extends AppLocalizations {
   String get cachePolicyAudioEnabled => 'Cache audio while playing';
 
   @override
+  String get cachePolicyAudioScope => 'Cache on play';
+
+  @override
+  String get cachePolicyAudioHint =>
+      'Written while playing on mobile; filled in by a background download on desktop. Cached tracks play offline and can be saved as downloads; the size limit and LRU eviction still apply.';
+
+  @override
   String get cachePolicyAudioMax => 'Size limit';
 
   @override
@@ -2385,7 +2392,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get trackInfoIdCopied => 'Track ID copied';
 
   @override
-  String get trackInfoCacheSection => 'Cache';
+  String get localDataTitle => 'Local data';
 
   @override
   String get trackInfoCacheResolve => 'Resolved link cache';
@@ -2451,7 +2458,23 @@ class AppLocalizationsEn extends AppLocalizations {
   String get shareDownloading => 'Downloading — sharing when done';
 
   @override
-  String get trackCachePageTitle => 'Track cache';
+  String get localDataCacheSection => 'Cache usage';
+
+  @override
+  String get localDataStateCached => 'Cached';
+
+  @override
+  String get localDataOfflineAvailable => 'Available offline';
+
+  @override
+  String get localDataTransferToFolder => 'Save a copy to folder';
+
+  @override
+  String get localDataTransferHint => 'Cached · transfers without network';
+
+  @override
+  String get localDataAudioPlatformHint =>
+      'Playback caching is off here; a cache copy is written in the background';
 
   @override
   String get trackCacheClearAll => 'Clear all';
@@ -2671,9 +2694,6 @@ class AppLocalizationsEn extends AppLocalizations {
   }
 
   @override
-  String get downloadSection => 'Download';
-
-  @override
   String get downloadStatusNotDownloaded => 'Not downloaded';
 
   @override
@@ -2698,12 +2718,6 @@ class AppLocalizationsEn extends AppLocalizations {
   @override
   String get downloadDeleteConfirmMixed =>
       'Delete the local copies? Audio, lyrics and cover files will be removed; imported local tracks are only removed from the list.';
-
-  @override
-  String get downloadStatusCachedCopy => 'Cached copy';
-
-  @override
-  String get downloadToFolder => 'Save to downloads folder';
 
   @override
   String get localSongsCachedTag => 'Cached';

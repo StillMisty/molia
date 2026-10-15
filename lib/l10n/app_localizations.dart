@@ -2306,6 +2306,18 @@ abstract class AppLocalizations {
   /// **'Cache audio while playing'**
   String get cachePolicyAudioEnabled;
 
+  /// No description provided for @cachePolicyAudioScope.
+  ///
+  /// In en, this message translates to:
+  /// **'Cache on play'**
+  String get cachePolicyAudioScope;
+
+  /// No description provided for @cachePolicyAudioHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Written while playing on mobile; filled in by a background download on desktop. Cached tracks play offline and can be saved as downloads; the size limit and LRU eviction still apply.'**
+  String get cachePolicyAudioHint;
+
   /// No description provided for @cachePolicyAudioMax.
   ///
   /// In en, this message translates to:
@@ -4359,11 +4371,11 @@ abstract class AppLocalizations {
   /// **'Track ID copied'**
   String get trackInfoIdCopied;
 
-  /// No description provided for @trackInfoCacheSection.
+  /// No description provided for @localDataTitle.
   ///
   /// In en, this message translates to:
-  /// **'Cache'**
-  String get trackInfoCacheSection;
+  /// **'Local data'**
+  String get localDataTitle;
 
   /// No description provided for @trackInfoCacheResolve.
   ///
@@ -4479,11 +4491,41 @@ abstract class AppLocalizations {
   /// **'Downloading — sharing when done'**
   String get shareDownloading;
 
-  /// No description provided for @trackCachePageTitle.
+  /// No description provided for @localDataCacheSection.
   ///
   /// In en, this message translates to:
-  /// **'Track cache'**
-  String get trackCachePageTitle;
+  /// **'Cache usage'**
+  String get localDataCacheSection;
+
+  /// No description provided for @localDataStateCached.
+  ///
+  /// In en, this message translates to:
+  /// **'Cached'**
+  String get localDataStateCached;
+
+  /// No description provided for @localDataOfflineAvailable.
+  ///
+  /// In en, this message translates to:
+  /// **'Available offline'**
+  String get localDataOfflineAvailable;
+
+  /// No description provided for @localDataTransferToFolder.
+  ///
+  /// In en, this message translates to:
+  /// **'Save a copy to folder'**
+  String get localDataTransferToFolder;
+
+  /// No description provided for @localDataTransferHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Cached · transfers without network'**
+  String get localDataTransferHint;
+
+  /// No description provided for @localDataAudioPlatformHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Playback caching is off here; a cache copy is written in the background'**
+  String get localDataAudioPlatformHint;
 
   /// No description provided for @trackCacheClearAll.
   ///
@@ -4857,12 +4899,6 @@ abstract class AppLocalizations {
   /// **'{count} h ago'**
   String commentsTimeHoursAgo(int count);
 
-  /// No description provided for @downloadSection.
-  ///
-  /// In en, this message translates to:
-  /// **'Download'**
-  String get downloadSection;
-
   /// No description provided for @downloadStatusNotDownloaded.
   ///
   /// In en, this message translates to:
@@ -4910,18 +4946,6 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Delete the local copies? Audio, lyrics and cover files will be removed; imported local tracks are only removed from the list.'**
   String get downloadDeleteConfirmMixed;
-
-  /// No description provided for @downloadStatusCachedCopy.
-  ///
-  /// In en, this message translates to:
-  /// **'Cached copy'**
-  String get downloadStatusCachedCopy;
-
-  /// No description provided for @downloadToFolder.
-  ///
-  /// In en, this message translates to:
-  /// **'Save to downloads folder'**
-  String get downloadToFolder;
 
   /// No description provided for @localSongsCachedTag.
   ///

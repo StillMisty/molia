@@ -7,13 +7,17 @@ import 'package:material_3_expressive/material_3_expressive.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:integration_test/integration_test.dart';
+import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 import 'package:provider/provider.dart';
 import 'package:molia/pages/sources_page.dart';
+import 'package:molia/playback/audio_predownloader.dart';
 import 'package:molia/playback/desktop_audio_init.dart';
 import 'package:molia/playback/local_playback_service.dart';
+import 'package:molia/playback/playing_track_cache_writer.dart';
 import 'package:molia/providers/sources_provider.dart';
 import 'package:molia/data/downloads/downloads_publisher.dart';
+import 'package:molia/services/cache_service.dart';
 import 'package:molia/services/window/window_chrome.dart';
 import 'package:molia/sources/source_manager.dart';
 
@@ -40,12 +44,16 @@ void main() {
   late Uint8List wavBytes;
   late String script;
 
+  /// 缓存用例的曲目 id：每次运行唯一，避免重复跑集成测试时命中上次残留的
+  /// 缓存文件（那样「后台写入」用例会假通过）。
+  final cacheTrackId = 'cache-${DateTime.now().millisecondsSinceEpoch}';
+
   setUpAll(() async {
     wavBytes = _buildWav();
     server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
     port = server.port;
     server.listen((request) => _handleRequest(request, port, wavBytes));
-    script = _buildScript(port);
+    script = _buildScript(port, cacheTrackId);
   });
 
   tearDownAll(() async {
@@ -125,11 +133,14 @@ void main() {
         containsAll(['musicUrl', 'search', 'lyric']));
 
     final tracks = (await manager.searchWithMeta('test', 'hello')).tracks;
-    expect(tracks, hasLength(2));
+    expect(tracks, hasLength(3));
     expect(tracks.first.title, 'Hello LX');
     expect(tracks.first.artist, 'Tester');
     expect(tracks.first.sourceKey, 'test');
     expect(tracks.first.raw['id'], '1');
+    // 第三条是缓存用例的曲目（id 每次运行唯一）。
+    expect(tracks.last.title, 'Cache Me');
+    expect(tracks.last.raw['id'], cacheTrackId);
 
     final url = await manager.resolveUrl(tracks.first);
     expect(url, 'http://127.0.0.1:$port/audio.wav');
@@ -214,6 +225,75 @@ void main() {
 
     await player.stop();
     expect(player.hasTrack, isFalse);
+  });
+
+  testWidgets('桌面：播放过的曲目由后台字节下载补齐音频缓存（两档模型的基础）', (tester) async {
+    if (!isDesktop) {
+      markTestSkipped('Android/iOS 播放用例不可靠：后台缓存写入用例仅桌面运行');
+      return;
+    }
+    if (!desktopAudioAvailable) {
+      markTestSkipped(
+          'media_kit 不可用，跳过（Linux 需安装 mpv/libmpv）：${desktopAudioInitError ?? ''}');
+      return;
+    }
+    final manager = await freshManager();
+    addTearDown(() async {
+      await manager.deactivate();
+      manager.dispose();
+    });
+    await manager.importScript(script, activate: true);
+    final tracks = (await manager.searchWithMeta('test', 'hello')).tracks;
+    final cacheTrack = tracks.firstWhere((track) => track.title == 'Cache Me');
+
+    final cache = CacheService.instance;
+    final directory = await cache.audioCacheDirPath();
+    if (directory == null) {
+      markTestSkipped('当前平台没有音频缓存目录');
+      return;
+    }
+    // 写入侧 key（播放 / 预取的实际入口）。
+    final expected = CacheService.audioCacheKeyForSource(cacheTrack);
+    final expectedFile = File(p.join(directory, expected));
+    if (expectedFile.existsSync()) await expectedFile.delete();
+
+    final player = LocalPlaybackService(
+      resolver: (track, {String? quality}) =>
+          manager.resolveUrl(track, requestedQuality: quality),
+      audioCacheWriter: PlayingTrackCacheWriter(
+        predownloader: CacheAudioPredownloader(cacheService: cache),
+      ),
+    );
+    addTearDown(player.dispose);
+
+    await player.playTracks(
+      tracks,
+      tracks.indexOf(cacheTrack),
+      contextName: '集成测试-缓存',
+    );
+    await waitFor(tester, () => player.isPlaying, reason: '缓存用例播放未开始');
+
+    // 播放仍走网络；缓存由后台下载原子落位（先落位再断言，避免读到半成品）。
+    await waitFor(
+      tester,
+      () => expectedFile.existsSync(),
+      timeout: const Duration(seconds: 60),
+      reason: '后台缓存未落位: $expected',
+    );
+
+    // 读取侧（单曲占用 / 命中探测 / 转存）与写入侧同名：占用必须看见它。
+    final usage = await cache.audioUsageForTrack(
+      sourceKey: cacheTrack.sourceKey,
+      songId: cacheTrack.songId,
+    );
+    expect(
+      usage.count,
+      greaterThan(0),
+      reason: '写入侧文件名与读取侧不同名（读取侧看不到缓存）',
+    );
+    expect(usage.bytes, greaterThan(0));
+
+    await player.stop();
   });
 
   testWidgets('设置页 UI：粘贴导入音源脚本并激活', (tester) async {
@@ -427,7 +507,7 @@ Uint8List _buildWav() {
   return builder.toBytes();
 }
 
-String _buildScript(int port) => '''
+String _buildScript(int port, String cacheTrackId) => '''
 /**
  * @name 集成测试音源
  * @description 仅用于 Molia 集成测试
@@ -461,7 +541,8 @@ on(EVENT_NAMES.request, function (payload) {
       isEnd: true,
       list: [
         { id: '1', name: 'Hello LX', singer: 'Tester', albumName: 'Album', source: 'test', interval: '00:30' },
-        { id: '2', name: 'Second Song', singer: 'Tester', albumName: 'Album', source: 'test', interval: '00:30' }
+        { id: '2', name: 'Second Song', singer: 'Tester', albumName: 'Album', source: 'test', interval: '00:30' },
+        { id: '$cacheTrackId', name: 'Cache Me', singer: 'Tester', albumName: 'Album', source: 'test', interval: '00:30' }
       ]
     })
   }

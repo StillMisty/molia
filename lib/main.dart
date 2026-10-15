@@ -66,7 +66,7 @@ import 'services/app_logging.dart';
 import 'services/artwork_palette_service.dart';
 import 'services/app_branding_service.dart';
 import 'services/cache_service.dart';
-import 'services/track_cache_service.dart';
+import 'services/track_local_data_service.dart';
 import 'managers/artwork_cache.dart';
 import 'services/data_saver_service.dart';
 import 'services/download/download_service.dart';
@@ -774,15 +774,17 @@ void main() async {
         ChangeNotifierProvider.value(value: lyricsDisplay),
         // 统一缓存门面（音频/歌词/封面）：设置页缓存管理读写策略与用量。
         Provider<CacheService>.value(value: CacheService.instance),
-        // 单曲缓存门面（音频/歌词/封面/取链）：播放页「歌曲信息」页消费。
-        Provider<TrackCacheService>(
-          create: (_) => TrackCacheService(
+        // 单曲本地数据门面（下载记录 + 音频/歌词/封面/取链缓存）：
+        // 播放页「本地数据」行与其子页消费（两档词表的唯一读取口）。
+        Provider<TrackLocalDataService>(
+          create: (_) => TrackLocalDataService(
             cacheService: CacheService.instance,
             artworkCache: ArtworkCache.instance,
             catalogService: catalogService,
+            downloadService: downloadService,
           ),
         ),
-        // 本地下载：歌曲信息页「下载」行与「已下载」列表共用同一状态源。
+        // 本地下载：信息页「本地数据」页与「已下载」列表共用同一状态源。
         // 与缓存门面是两套东西：清缓存不触碰 downloads/，删下载是独立动作。
         ChangeNotifierProvider.value(value: downloadService),
         // 下载设置：保存位置 / 文件名格式 / 标签嵌入（设置页读写）。

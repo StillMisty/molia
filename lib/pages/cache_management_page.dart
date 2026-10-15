@@ -247,6 +247,11 @@ class _CacheManagementPageState extends State<CacheManagementPage> {
             );
           },
         ),
+        SettingsInfoTile(
+          icon: Icons.offline_pin_rounded,
+          title: l10n.cachePolicyAudioScope,
+          subtitle: l10n.cachePolicyAudioHint,
+        ),
         // 用量 + 单清：危险操作行放分区末行（error 容器成对色）。
         SettingsNavTile(
           key: const Key('cacheClearAudioItem'),

@@ -17,7 +17,7 @@ import '../providers/library_provider.dart';
 import '../providers/playback_provider.dart';
 import '../services/download/download_service.dart';
 import '../services/notification_service.dart';
-import '../utils/track_cache_label.dart';
+import '../utils/track_local_data_label.dart';
 import '../widgets/settings/settings_tiles.dart';
 
 class DownloadsManagePage extends StatefulWidget {
