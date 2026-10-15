@@ -94,9 +94,12 @@
   UI（LyricsWidget / 歌词搜索页 / 歌词选择页）只渲染状态与交互，不再各自构造
   `LyricsService` / 直接写 `LyricsCache` / 拼装解析逻辑；歌词页只消费 `LyricsState`
   （不维护字段镜像，加载标志由 `status` 推导），滚动/跟随数学在
-  `lib/widgets/lyrics_scroll_policy.dart`（纯函数，可单测）；歌词页用「歌词页」独立开关
-  （`page.translationEnabled` / `page.romaEnabled`）在每行下方渲染翻译 / 罗马音，
-  与输出侧（桌面歌词 / 通知 / 蓝牙）的翻译·罗马音开关互不影响，共用同一份对齐数据。
+  `lib/widgets/lyrics_scroll_policy.dart`（纯函数，可单测）：自动滚动把「主行文本块
+  顶边」锚定在可见区域中线偏上（不按整项高度缩放，长行换行 / 扩展行不影响落点）。
+  歌词页用「歌词页」独立开关（`page.translationEnabled` / `page.romaEnabled`）
+  只在当前行下方渲染翻译 / 罗马音（随行切换淡出 + 收起；未同步歌词无当前行概念，
+  保持逐行），与输出侧（桌面歌词 / 通知 / 蓝牙）的翻译·罗马音开关互不影响，
+  共用同一份对齐数据。
 - **封面补取**：曲目起播无封面时 `PlaybackProvider` 经注入 resolver
   （`SourceManager.fetchPic`：脚本 `pic` action → 内置原生取图；省流模式不发请求）
   取图，经 `PlaybackFacade.updateTrackArtwork` 原地回写队列曲目（新 `Track` 触发

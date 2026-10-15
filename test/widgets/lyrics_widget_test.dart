@@ -299,31 +299,64 @@ void main() {
     await pumpLyrics(tester);
 
     final viewport = tester.getRect(find.byType(ListView));
-    // 行组件（含内边距）的顶边即 getOffsetToReveal 的定位对象。
-    final lineFinder = find
-        .ancestor(
-          of: find.text('Line 12'),
-          matching: find.byType(GestureDetector),
-        )
-        .first;
-    final lineRect = tester.getRect(lineFinder);
+    // 锚定对象是「主行文本块」的顶边：直接落在锚点比例处（不按目标高度
+    // 缩放，长行换行 / 带扩展行的项越高，落点也不会偏）。
+    final textRect = tester.getRect(find.text('Line 12'));
 
     // 自动跟随中底栏隐藏：锚点 = 可见区域中线（40px 顶部渐变带）再上移
-    // 10% 视口高度；Reveal 把行顶边放在 alignment * (视口高 - 行高) 处。
-    final double alignment =
+    // 10% 视口高度。
+    final double anchorFraction =
         ((40.0 + viewport.height) / 2.0 - viewport.height * 0.10) /
             viewport.height;
-    final double expectedTop =
-        viewport.top + alignment * (viewport.height - lineRect.height);
-    expect(lineRect.top, closeTo(expectedTop, 1.0));
+    final double expectedTop = viewport.top + anchorFraction * viewport.height;
+    expect(textRect.top, closeTo(expectedTop, 1.0));
     expect(
-      (lineRect.top - viewport.top) / viewport.height,
+      (textRect.top - viewport.top) / viewport.height,
       lessThan(0.5),
       reason: '激活行应位于视口中线偏上（顶栏比底栏高）',
     );
   });
 
-  testWidgets('歌词页每行显示翻译，且不受输出侧开关影响', (tester) async {
+  testWidgets('长行换行时仍按主行顶边锚定（扩展行不影响落点）', (tester) async {
+    final settings = LyricsDisplaySettings();
+    const longLine = '这是一句特别特别长的歌词要换很多行才能放得下';
+    // 12 行引导 + 60s 处的长行（换行多行）+ 扩展行；当前行前要有足够内容，
+    // 锚点位置才可达（贴顶时列表无法把行往上推）。
+    final buffer = StringBuffer();
+    for (var i = 0; i < 12; i++) {
+      final seconds = i * 5;
+      final mm = (seconds ~/ 60).toString().padLeft(2, '0');
+      final ss = (seconds % 60).toString().padLeft(2, '0');
+      buffer.writeln('[$mm:$ss.00]Line $i');
+    }
+    buffer.writeln('[01:00.00]$longLine$longLine$longLine');
+    buffer.writeln('[02:00.00]结束');
+    await pumpLyrics(
+      tester,
+      settings: settings,
+      service: _FakeLyricsService(
+        buffer.toString(),
+        translation: '[01:00.00]这是当前行的翻译',
+      ),
+    );
+
+    final viewport = tester.getRect(find.byType(ListView));
+    final textRect = tester.getRect(find.text('$longLine$longLine$longLine'));
+    // 长行确实换行了：高度是多行（远超普通单行）。
+    final double singleRowHeight = tester.getRect(find.text('Line 11')).height;
+    expect(textRect.height, greaterThan(singleRowHeight * 3));
+    // 扩展行显示在当前行下方，但落点仍以主行顶边为准。
+    expect(find.text('这是当前行的翻译'), findsOneWidget);
+    final double anchorFraction =
+        ((40.0 + viewport.height) / 2.0 - viewport.height * 0.10) /
+            viewport.height;
+    expect(
+      textRect.top,
+      closeTo(viewport.top + anchorFraction * viewport.height, 1.0),
+    );
+  });
+
+  testWidgets('歌词页翻译只跟当前行显示，且不受输出侧开关影响', (tester) async {
     final settings = LyricsDisplaySettings();
     await pumpLyrics(
       tester,
@@ -334,19 +367,42 @@ void main() {
       ),
     );
 
-    // 默认开启：当前行（12）有翻译；奇数行无翻译 → 不占位。
+    // 当前行（12，偶数行有翻译）显示；其他行即使有翻译也不渲染。
     expect(find.text('译 12'), findsOneWidget);
-    expect(find.text('译 13'), findsNothing);
+    expect(find.text('译 14'), findsNothing);
+    expect(find.text('译 10'), findsNothing);
 
     // 输出侧（桌面 / 通知 / 蓝牙）开关与歌词页无关。
     await settings.setTranslationEnabled(false);
     await tester.pump();
     expect(find.text('译 12'), findsOneWidget);
 
-    // 歌词页开关关闭后翻译消失。
+    // 歌词页开关关闭后翻译消失（收起动画走完）。
     await settings.setPageTranslationEnabled(false);
     await tester.pump();
+    await tester.pump(const Duration(milliseconds: 500));
     expect(find.text('译 12'), findsNothing);
+  });
+
+  testWidgets('行切换后上一行的翻译随该行一起消失', (tester) async {
+    final settings = LyricsDisplaySettings();
+    await pumpLyrics(
+      tester,
+      settings: settings,
+      service: _FakeLyricsService(
+        _buildLrc(),
+        translation: _buildExtendedLrc('译'),
+      ),
+    );
+    expect(find.text('译 12'), findsOneWidget);
+
+    // 推进到第 14 行（偶数行，也有翻译）：12 的翻译消失、14 的出现。
+    backend.emit(_snapshot(positionSeconds: 70));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 700));
+    await tester.pump(const Duration(milliseconds: 700));
+    expect(find.text('译 12'), findsNothing);
+    expect(find.text('译 14'), findsOneWidget);
   });
 
   testWidgets('罗马音按歌词页开关独立门控', (tester) async {

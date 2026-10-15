@@ -127,4 +127,45 @@ void main() {
       expect(shouldScrollTo(current: 100, target: 99), isFalse);
     });
   });
+
+  group('anchoredLineOffset（主行锚定）', () {
+    test('目标顶边落在锚点处', () {
+      // 顶边对齐视口顶边时偏移 1000；视口 800、锚点 0.4 → 1000 − 320。
+      expect(
+        anchoredLineOffset(
+          leadingOffset: 1000,
+          viewport: 800,
+          anchorFraction: 0.4,
+        ),
+        680,
+      );
+    });
+
+    test('不按目标高度缩放：高目标与矮目标落点一致', () {
+      // 与 getOffsetToReveal 的 alignment 语义（alignment × (视口高 − 目标高)）
+      // 不同，这里同样输入下结果与目标高度无关。
+      const double leading = 500;
+      const double viewport = 900;
+      const double anchor = 0.45;
+      expect(
+        anchoredLineOffset(
+          leadingOffset: leading,
+          viewport: viewport,
+          anchorFraction: anchor,
+        ),
+        leading - anchor * viewport,
+      );
+    });
+
+    test('锚点 0 时即为顶边对齐偏移', () {
+      expect(
+        anchoredLineOffset(
+          leadingOffset: 123.5,
+          viewport: 800,
+          anchorFraction: 0,
+        ),
+        123.5,
+      );
+    });
+  });
 }
