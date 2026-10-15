@@ -574,7 +574,7 @@ class DownloadService extends ChangeNotifier {
           storage: _storage,
           filePath: filePath,
           title: track.title,
-          artist: _artistLabel(track),
+          artist: track.artistLabel,
           album: track.album ?? '',
           lyrics: lyrics?.lyric,
           coverBytes: cover?.bytes,
@@ -593,7 +593,7 @@ class DownloadService extends ChangeNotifier {
         originSourceKey: track.id.sourceKey,
         originSongId: track.id.id,
         title: track.title,
-        artist: _artistLabel(track),
+        artist: track.artistLabel,
         album: track.album ?? '',
         coverUrl: track.artwork?.uri.toString(),
         durationMs: track.duration?.inMilliseconds,
@@ -940,7 +940,7 @@ class DownloadService extends ChangeNotifier {
       originSourceKey: track.id.sourceKey,
       originSongId: track.id.id,
       title: track.title,
-      artist: _artistLabel(track),
+      artist: track.artistLabel,
       album: track.album ?? '',
       coverUrl: track.artwork?.uri.toString(),
       durationMs: track.duration?.inMilliseconds,
@@ -1281,24 +1281,18 @@ class DownloadService extends ChangeNotifier {
   String _baseNameFor(Track track) {
     final template = _settings?.filenameTemplate ?? kDefaultFilenameTemplate;
     final raw = DownloadSettings.applyTemplate(template, {
-      'artist': _artistLabel(track),
+      'artist': track.artistLabel,
       'title': track.title,
       'album': track.album ?? '',
     });
     return sanitizeFileName(raw);
   }
 
-  static String _artistLabel(Track track) => track.artists
-      .map((artist) => artist.name)
-      .where((name) => name.isNotEmpty)
-      .join(', ');
-
   /// `{歌手} - {歌名}`；无歌手只用歌名；非法字符替换、空白折叠、限长。
   @visibleForTesting
   static String baseNameFor(Track track) {
-    final raw = _artistLabel(track).isEmpty
-        ? track.title
-        : '${_artistLabel(track)} - ${track.title}';
+    final artist = track.artistLabel;
+    final raw = artist.isEmpty ? track.title : '$artist - ${track.title}';
     return sanitizeFileName(raw);
   }
 

@@ -57,6 +57,56 @@ void main() {
       expect(a, isNot(c));
     });
 
+    test('artistLabel：`, ` 连接、过滤空名、全空为空串（唯一展示 / 持久化词表）',
+        () {
+      const multi = Track(
+        id: TrackId('kw', '1'),
+        title: 'Title',
+        artists: [
+          Artist(name: 'A'),
+          Artist(name: ''),
+          Artist(name: 'B'),
+        ],
+        origin: TrackOrigin.builtin,
+      );
+      expect(multi.artistLabel, 'A, B');
+
+      const none = Track(
+        id: TrackId('kw', '2'),
+        title: 'Title',
+        artists: [Artist(name: '')],
+        origin: TrackOrigin.builtin,
+      );
+      expect(none.artistLabel, '');
+      expect(
+        const Track(
+          id: TrackId('kw', '3'),
+          title: 'Title',
+          origin: TrackOrigin.builtin,
+        ).artistLabel,
+        '',
+      );
+    });
+
+    test('primaryArtistName：首个有效歌手名，全空为空串', () {
+      const multi = Track(
+        id: TrackId('kw', '1'),
+        title: 'Title',
+        artists: [Artist(name: ''), Artist(name: 'B')],
+        origin: TrackOrigin.builtin,
+      );
+      expect(multi.primaryArtistName, 'B');
+      expect(
+        const Track(
+          id: TrackId('kw', '2'),
+          title: 'Title',
+          artists: [Artist(name: '')],
+          origin: TrackOrigin.builtin,
+        ).primaryArtistName,
+        '',
+      );
+    });
+
     test('copyWith 替换封面且原对象不变', () {
       final original = _track();
       final updated = original.copyWith(

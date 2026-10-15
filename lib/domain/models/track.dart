@@ -123,6 +123,22 @@ class Track {
     this.payload = const {},
   });
 
+  /// 歌手标签：多歌手按 `, ` 连接的**唯一展示 / 持久化词表**（过滤空名，
+  /// 全空返回空串）。脚本回传面（`SourceTrack.artist`）另有 `/` 约定，
+  /// 不走这里；全空的 UI 兜底文案由调用方按 l10n 提供，不进领域层。
+  String get artistLabel => [
+        for (final artist in artists)
+          if (artist.name.isNotEmpty) artist.name,
+      ].join(', ');
+
+  /// 首位有效歌手名（没有歌手 / 全空返回空串）。
+  String get primaryArtistName {
+    for (final artist in artists) {
+      if (artist.name.isNotEmpty) return artist.name;
+    }
+    return '';
+  }
+
   /// 常规 copyWith（注意：无法把可空字段显式置回 null，领域内暂不需要该用法）。
   Track copyWith({
     TrackId? id,

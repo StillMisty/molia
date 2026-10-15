@@ -92,7 +92,7 @@ class LyricsProvider extends ChangeNotifier {
     _setState(LyricsState(trackId: trackId, status: LyricsStatus.loading));
     final result = await _service.getLyrics(
       track.title,
-      _artistNames(track),
+      track.artistLabel,
       trackId,
       track: track,
     );
@@ -111,7 +111,7 @@ class LyricsProvider extends ChangeNotifier {
     try {
       final result = await _service.getLyrics(
         track.title,
-        _artistNames(track),
+        track.artistLabel,
         trackId,
         track: track,
       );
@@ -213,9 +213,4 @@ class LyricsProvider extends ChangeNotifier {
     _state = next;
     notifyListeners();
   }
-
-  static String _artistNames(Track track) => track.artists
-      .map((artist) => artist.name)
-      .where((name) => name.isNotEmpty)
-      .join(', ');
 }

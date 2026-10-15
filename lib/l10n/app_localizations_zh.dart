@@ -1099,6 +1099,9 @@ class AppLocalizationsZh extends AppLocalizations {
   String get artistNotFound => '未找到该歌手';
 
   @override
+  String get unknownArtist => '未知歌手';
+
+  @override
   String artistSongCount(int count) {
     return '$count 首歌曲';
   }

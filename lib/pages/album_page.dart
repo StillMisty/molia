@@ -1,6 +1,6 @@
 /// 专辑页：头部（封面 / 专辑名 / 歌手 / 年份）+ 「播放全部」+「加入列表」+
-/// 曲目列表（`TrackMenuTile`，与搜索结果 / 歌手页同款：行尾菜单收藏 / 加入列表；
-/// 滚到底加载下一页）。
+/// 曲目列表（`FavoriteTrackTile`，与搜索结果 / 歌手页同款：行尾菜单收藏 /
+/// 加入列表；滚到底加载下一页）。
 ///
 /// 入口：歌曲信息页「专辑」行（payload 专辑 id + 渠道能力位判定，见
 /// `lib/widgets/track_actions.dart`）。取数与缓存由 `AlbumService` 承担，
@@ -24,11 +24,10 @@ import '../models/play_mode.dart';
 import '../providers/library_provider.dart';
 import '../providers/paged_list_controller.dart';
 import '../providers/playback_provider.dart';
-import '../utils/duration_text.dart';
 import '../utils/responsive.dart';
 import '../widgets/add_to_library.dart';
 import '../widgets/app_network_image.dart';
-import '../widgets/track_menu_tile.dart';
+import '../widgets/favorite_track_tile.dart';
 import '../widgets/track_row.dart';
 
 AppLocalizations _l10n(BuildContext context) =>
@@ -283,7 +282,7 @@ class _AlbumPageState extends State<AlbumPage> {
   ) {
     final track = tracks[index];
     final l10n = _l10n(context);
-    return _AlbumTrackRow(
+    return FavoriteTrackTile.track(
       track: track,
       fallbackCoverUrl: album.coverUrl,
       position: calculateCardPosition(index, tracks.length),
@@ -453,51 +452,6 @@ class _AlbumPageState extends State<AlbumPage> {
           ),
         ],
       ),
-    );
-  }
-}
-
-/// 专辑页曲目行：与搜索结果 / 歌手页同款（行尾菜单收藏 / 加入列表）。
-///
-/// 独立组件而不是在 sliver 的 itemBuilder 里直接 `select`：provider 禁止在
-/// SliverList 的 itemBuilder 中 select（会整表重建并触发断言）。
-class _AlbumTrackRow extends StatelessWidget {
-  const _AlbumTrackRow({
-    required this.track,
-    required this.fallbackCoverUrl,
-    required this.position,
-    required this.onTap,
-    required this.onToggleFavorite,
-    required this.onAddToPlaylist,
-  });
-
-  final Track track;
-  final String? fallbackCoverUrl;
-  final M3ECardPosition position;
-  final VoidCallback onTap;
-  final VoidCallback onToggleFavorite;
-  final VoidCallback onAddToPlaylist;
-
-  @override
-  Widget build(BuildContext context) {
-    // 只订阅本行的收藏态：长列表不因 provider 任意通知整表重建
-    // （可空：页面测试等场景可能不挂 LibraryProvider）。
-    final favorite = context.select<LibraryProvider?, bool>(
-      (library) => library?.isFavorite(track.id.sourceKey, track.id.id) ?? false,
-    );
-    return TrackMenuTile(
-      title: track.title,
-      artist: track.artists
-          .map((artist) => artist.name)
-          .where((name) => name.isNotEmpty)
-          .join(', '),
-      coverUrl: track.artwork?.uri.toString() ?? fallbackCoverUrl,
-      trailingText: durationText(track.duration?.inMilliseconds),
-      position: position,
-      onTap: onTap,
-      favorite: favorite,
-      onToggleFavorite: onToggleFavorite,
-      onAddToPlaylist: onAddToPlaylist,
     );
   }
 }

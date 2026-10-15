@@ -74,7 +74,7 @@ class QueueDisplay extends StatelessWidget {
                     children: [
                       TrackRow(
                         title: track.title,
-                        artist: _artistsOf(track),
+                        artist: track.artistLabel,
                         coverUrl: _coverUrlOf(track),
                         coverSize: 40,
                         position:
@@ -128,11 +128,6 @@ class QueueDisplay extends StatelessWidget {
     final url = track.artwork?.uri.toString();
     return url == null || url.isEmpty ? null : url;
   }
-
-  static String _artistsOf(Track track) => track.artists
-      .map((artist) => artist.name)
-      .where((name) => name.isNotEmpty)
-      .join(', ');
 
   String _formatDuration(Duration? duration) {
     final value = duration ?? Duration.zero;

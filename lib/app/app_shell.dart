@@ -1044,11 +1044,7 @@ class _BarTrackInfo extends StatelessWidget {
     final info = context.select<PlaybackProvider, (String?, String?)>(
       (provider) {
         final track = provider.snapshot.current;
-        final artists = track?.artists
-            .map((artist) => artist.name)
-            .where((name) => name.isNotEmpty)
-            .join(', ');
-        return (track?.title, artists);
+        return (track?.title, track?.artistLabel);
       },
     );
     final (name, artists) = info;

@@ -158,7 +158,7 @@ class AiRecommendationStore {
                 'sourceKey': item.track.id.sourceKey,
                 'songId': item.track.id.id,
                 'title': item.track.title,
-                'artist': item.track.artists.map((a) => a.name).join(', '),
+                'artist': item.track.artistLabel,
                 'album': item.track.album ?? '',
                 'reason': item.source.reason,
                 'coverUrl': item.track.artwork?.uri.toString(),

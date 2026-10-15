@@ -277,10 +277,8 @@ class _AiDjCarouselState extends State<AiDjCarousel> {
     );
   }
 
-  static String _artistOf(ResolvedRecommendation item) => item.track.artists
-      .map((artist) => artist.name)
-      .where((name) => name.isNotEmpty)
-      .join(', ');
+  static String _artistOf(ResolvedRecommendation item) =>
+      item.track.artistLabel;
 
   String _semanticLabel(ResolvedRecommendation item) {
     final artist = _artistOf(item);

@@ -87,10 +87,7 @@ class AutoSourceSwapService {
 
   static SongMatchInfo _infoOf(Track track) => SongMatchInfo(
         title: track.title,
-        artist: track.artists
-            .map((artist) => artist.name)
-            .where((name) => name.isNotEmpty)
-            .join('、'),
+        artist: track.artistLabel,
         album: track.album,
         duration: track.duration,
       );

@@ -30,6 +30,11 @@ export 'cover_appearance.dart' show miniCoverFallbackIconSize;
 /// 迷你播放条高度（收起态）：展开/收起动画的迷你端基准，播放页共用。
 const double miniPlayerHeight = 72;
 
+/// AppLocalizations 查找：测试等场景可能直接挂载本组件而不注册 delegate，
+/// 此时回退到简体中文（与其它行组件同一约定）。
+AppLocalizations _l10n(BuildContext context) =>
+    AppLocalizations.of(context) ?? lookupAppLocalizations(const Locale('zh'));
+
 class Player extends StatefulWidget {
   final bool isLargeScreen;
 
@@ -272,13 +277,10 @@ class _PlayerState extends State<Player> with TickerProviderStateMixin {
     _prefetchImage(currentImageUrl);
   }
 
-  /// 歌手展示名（多歌手逗号连接；无有效歌手回退 Unknown Artist）。
-  static String _artistsLabel(Track track) {
-    final joined = track.artists
-        .map((artist) => artist.name)
-        .where((name) => name.isNotEmpty)
-        .join(', ');
-    return joined.isEmpty ? 'Unknown Artist' : joined;
+  /// 歌手展示名（唯一词表 [Track.artistLabel]；无有效歌手回退 l10n 兜底）。
+  static String _artistsLabel(BuildContext context, Track track) {
+    final label = track.artistLabel;
+    return label.isEmpty ? _l10n(context).unknownArtist : label;
   }
 
   /// 封面模块的切歌联动（切歌帧的 post-frame 触发）：清掉进度拖动预览、
@@ -650,15 +652,51 @@ class _PlayerState extends State<Player> with TickerProviderStateMixin {
           ),
         );
       },
-      child: HeaderAndFooter(
-        header: displayTrack?.title ??
-            playbackProvider.lastPlayedTrackName ??
-            'No track playing',
-        footer: displayTrack != null
-            ? _artistsLabel(displayTrack)
-            : playbackProvider.lastPlayedArtists ?? 'Unknown Artist',
-        track: displayTrack,
+      child: _buildTrackInfoText(context, displayTrack, playbackProvider),
+    );
+  }
+
+  /// 「歌名 · 作者」单行块：超长省略（单行是为了给歌词/队列让出纵向空间）。
+  ///
+  /// 标题块不带左侧竖条：它与进度把手同宽、同色、同形，上下相邻时会被读成
+  /// 重复元素（用户反馈的「两根竖条」），且形似可拖动的把手却不可交互；
+  /// 强调色只留给可交互控件（波浪进度/把手）。
+  Widget _buildTrackInfoText(
+    BuildContext context,
+    Track? displayTrack,
+    PlaybackProvider playbackProvider,
+  ) {
+    final scheme = Theme.of(context).colorScheme;
+    final header = displayTrack?.title ??
+        playbackProvider.lastPlayedTrackName ??
+        'No track playing';
+    final artistText = displayTrack != null
+        ? _artistsLabel(context, displayTrack)
+        : playbackProvider.lastPlayedArtists ?? _l10n(context).unknownArtist;
+
+    return Text.rich(
+      TextSpan(
+        children: [
+          TextSpan(
+            text: header,
+            // 标题/作者与全 App 文本契约一致：onSurface / onSurfaceVariant；
+            // 强调色只给可交互控件（进度波浪/把手）。
+            style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                  fontWeight: FontWeight.bold,
+                  color: scheme.onSurface,
+                ),
+          ),
+          if (artistText.isNotEmpty)
+            TextSpan(
+              text: '  ·  $artistText',
+              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                    color: scheme.onSurfaceVariant,
+                  ),
+            ),
+        ],
       ),
+      maxLines: 1,
+      overflow: TextOverflow.ellipsis,
     );
   }
 
@@ -733,8 +771,9 @@ class _PlayerState extends State<Player> with TickerProviderStateMixin {
                 ),
                 Text(
                   track != null
-                      ? _artistsLabel(track)
-                      : playback.lastPlayedArtists ?? 'Unknown Artist',
+                      ? _artistsLabel(context, track)
+                      : playback.lastPlayedArtists ??
+                          _l10n(context).unknownArtist,
                   style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                         color: Theme.of(context).colorScheme.onSurfaceVariant,
                       ),
@@ -1038,62 +1077,6 @@ class _FavoriteButton extends StatelessWidget {
         HapticFeedback.lightImpact();
         await library.toggleFavoriteTrack(track);
       },
-    );
-  }
-}
-
-/// 标题/作者单行块：「歌名 · 作者」，超长省略。
-///
-/// 单行是为了给歌词/队列让出纵向空间。
-///
-/// 标题块不带左侧竖条：它与进度把手同宽、同色、同形，上下相邻时会被读成
-/// 重复元素（用户反馈的「两根竖条」），且形似可拖动的把手却不可交互；
-/// 强调色只留给可交互控件（波浪进度/把手）。
-class HeaderAndFooter extends StatelessWidget {
-  final String header;
-  final String footer;
-  final Track? track;
-
-  const HeaderAndFooter({
-    super.key,
-    required this.header,
-    required this.footer,
-    this.track,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
-    final artists = track?.artists
-            .map((artist) => artist.name)
-            .where((name) => name.isNotEmpty)
-            .join(', ') ??
-        '';
-    final artistText = artists.isNotEmpty ? artists : footer;
-
-    return Text.rich(
-      TextSpan(
-        children: [
-          TextSpan(
-            text: header,
-            // 标题/作者与全 App 文本契约一致：onSurface / onSurfaceVariant；
-            // 强调色只给可交互控件（进度波浪/把手）。
-            style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                  fontWeight: FontWeight.bold,
-                  color: scheme.onSurface,
-                ),
-          ),
-          if (artistText.isNotEmpty)
-            TextSpan(
-              text: '  ·  $artistText',
-              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                    color: scheme.onSurfaceVariant,
-                  ),
-            ),
-        ],
-      ),
-      maxLines: 1,
-      overflow: TextOverflow.ellipsis,
     );
   }
 }

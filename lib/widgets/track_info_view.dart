@@ -162,12 +162,7 @@ class _TrackInfoViewState extends State<TrackInfoView> {
             false);
     // 歌手行：能力位为真且能定位歌手时可点——优先 raw 歌手 id，历史数据
     // （无 id）按歌手名回退解析（见 track_actions.openTrackArtist）。
-    final artistNames = track == null
-        ? ''
-        : track.artists
-            .map((artist) => artist.name)
-            .where((name) => name.isNotEmpty)
-            .join('、');
+    final artistNames = track?.artistLabel ?? '';
     final artistSupported = track != null &&
         trackHasArtistEntry(track) &&
         (sourceRegistry

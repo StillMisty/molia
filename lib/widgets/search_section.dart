@@ -16,7 +16,7 @@ import '../utils/duration_text.dart';
 import '../utils/responsive.dart';
 import 'add_to_library.dart';
 import 'artist_row.dart';
-import 'track_menu_tile.dart';
+import 'favorite_track_tile.dart';
 import 'track_row.dart';
 
 /// AppLocalizations 查找：测试等场景可能直接挂载本页而不注册 delegate，
@@ -26,7 +26,7 @@ AppLocalizations _l10n(BuildContext context) =>
 
 /// 搜索结果区：类型分段（单曲 / 歌手 / 歌词）+ 各类型的结果列表与音源分页。
 ///
-/// 结果行与发现详情页共用 [TrackMenuTile]（点击播放；行尾菜单收藏 / 加入
+/// 结果行与发现详情页共用 [FavoriteTrackTile]（点击播放；行尾菜单收藏 / 加入
 /// 列表），歌手类型用 [ArtistRow]（点击进歌手页）；分段按渠道能力位显隐
 /// （脚本源只有单曲）。
 class SearchSection extends StatefulWidget {
@@ -428,7 +428,7 @@ class _SearchResultsList extends StatelessWidget {
   }
 }
 
-/// 搜索结果行（[TrackMenuTile] 的搜索域适配层）：
+/// 搜索结果行（[FavoriteTrackTile] 的搜索域适配层）：
 /// 点击播放；行尾菜单收藏 / 加入列表（菜单形状与发现详情页一致）。
 class _SearchResultTile extends StatelessWidget {
   const _SearchResultTile({
@@ -447,10 +447,6 @@ class _SearchResultTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final l10n = _l10n(context);
-    // 只订阅本行的收藏态：长列表不因 provider 任意通知整表重建。
-    final favorite = context.select<LibraryProvider?, bool>(
-      (provider) => provider?.isFavoriteSearchItem(item) ?? false,
-    );
     // 歌手链接能力位（同一平台固定）：内置平台为真时逐个歌手名可点。
     final sourceKey = item['source']?.toString() ?? '';
     final artistTapsEnabled = sourceKey.isNotEmpty &&
@@ -463,7 +459,7 @@ class _SearchResultTile extends StatelessWidget {
     final artistLinks = snippet.isEmpty
         ? _artistLinksOf(context, item, tapsEnabled: artistTapsEnabled)
         : null;
-    return TrackMenuTile(
+    return FavoriteTrackTile(
       title: item['name']?.toString() ?? '',
       artist: snippet.isEmpty ? _artistOf(item) : snippet,
       artists: artistLinks,
@@ -476,11 +472,17 @@ class _SearchResultTile extends StatelessWidget {
               HapticFeedback.lightImpact();
               onTap!();
             },
-      favorite: favorite,
+      favoriteOf: _favoriteOf,
       onToggleFavorite: () => unawaited(_toggleFavorite(context, l10n)),
       onAddToPlaylist: () => unawaited(_addToPlaylist(context)),
     );
   }
+
+  /// 本行收藏态（每行一个 `select` 订阅，不能在列表 itemBuilder 里直接订阅）。
+  bool _favoriteOf(BuildContext context) =>
+      context.select<LibraryProvider?, bool>(
+        (provider) => provider?.isFavoriteSearchItem(item) ?? false,
+      );
 
   /// 收藏 / 取消收藏：结果列表只需 snackbar 确认（菜单文案已表达当前状态）。
   Future<void> _toggleFavorite(

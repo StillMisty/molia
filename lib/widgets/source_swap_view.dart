@@ -81,10 +81,7 @@ class _SourceSwapViewState extends State<SourceSwapView> {
     Track seed,
   ) {
     final theme = Theme.of(context);
-    final artist = seed.artists
-        .map((artist) => artist.name)
-        .where((name) => name.isNotEmpty)
-        .join(', ');
+    final artist = seed.artistLabel;
     return Padding(
       padding: const EdgeInsets.fromLTRB(24, 12, 24, 8),
       child: Row(
@@ -183,10 +180,7 @@ class _SourceSwapViewState extends State<SourceSwapView> {
           padding: EdgeInsets.only(bottom: gap),
           child: TrackRow(
             title: track.title,
-            artist: track.artists
-                .map((artist) => artist.name)
-                .where((name) => name.isNotEmpty)
-                .join(', '),
+            artist: track.artistLabel,
             coverUrl: track.artwork?.uri.toString(),
             coverSize: 40,
             trailingText: _durationText(track.duration),

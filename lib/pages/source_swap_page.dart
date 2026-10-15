@@ -97,10 +97,7 @@ class _SourceSwapPageState extends State<SourceSwapPage> {
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context)!;
     final seed = widget.request.seed;
-    final artist = seed.artists
-        .map((artist) => artist.name)
-        .where((name) => name.isNotEmpty)
-        .join(', ');
+    final artist = seed.artistLabel;
     final selectedIndex = _tabs.indexOf(_tab);
 
     return Scaffold(
