@@ -28,9 +28,11 @@ class _FakeMusicSource implements MusicSource {
 
   int searchCalls = 0;
   int artistSearchCalls = 0;
+  int lyricSearchCalls = 0;
   int resolveCalls = 0;
   Object? searchError;
   Object? artistSearchError;
+  Object? lyricSearchError;
   Object? resolveError;
 
   @override
@@ -74,6 +76,28 @@ class _FakeMusicSource implements MusicSource {
     return SearchResult(
       items: [
         ArtistSummary(id: '${query.keyword}-a${query.page}', name: '歌手 A'),
+      ],
+      hasMore: true,
+      total: 1,
+    );
+  }
+
+  @override
+  Future<SearchResult<LyricHit>> searchLyrics(
+    SearchQuery query, {
+    CancelToken? cancel,
+  }) async {
+    lyricSearchCalls++;
+    if (lyricSearchError != null) throw lyricSearchError!;
+    return SearchResult(
+      items: [
+        LyricHit(
+          track: _track(
+            key,
+            '${query.keyword}-l${query.page}',
+          ),
+          snippet: '命中歌词 ${query.keyword}',
+        ),
       ],
       hasMore: true,
       total: 1,
@@ -460,6 +484,34 @@ void main() {
     expect(
       CatalogService.searchCacheKey('kw', const SearchQuery(keyword: '周杰伦')),
       'search:kw:周杰伦:1:30',
+    );
+  });
+
+  test('searchLyrics：同 key 命中缓存；key 带 lyric 段；失败不缓存', () async {
+    final source = _FakeMusicSource('kw');
+    final registry = _FakeRegistry({'kw': source});
+    addTearDown(registry.dispose);
+    final service = CatalogService(registry: registry);
+    const query = SearchQuery(keyword: '雨下整夜');
+
+    final first = await service.searchLyrics('kw', query);
+    expect(first.items.single.snippet, contains('雨下整夜'));
+    expect(first.items.single.track.id.uri, 'kw:雨下整夜-l1');
+    await service.searchLyrics('kw', query);
+    expect(source.lyricSearchCalls, 1, reason: '同 key 命中缓存');
+
+    source.lyricSearchError = StateError('boom');
+    await expectLater(
+      service.searchLyrics('kw', const SearchQuery(keyword: '失败')),
+      throwsA(isA<SourceFailure>()),
+    );
+    source.lyricSearchError = null;
+    await service.searchLyrics('kw', const SearchQuery(keyword: '失败'));
+    expect(source.lyricSearchCalls, 3, reason: '失败不缓存，重试重新搜索');
+
+    expect(
+      CatalogService.lyricSearchCacheKey('kw', query),
+      'search:kw:lyric:雨下整夜:1:30',
     );
   });
 

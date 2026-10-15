@@ -114,9 +114,12 @@ class _FakeMusicSource implements MusicSource {
 
   int searchCalls = 0;
   int artistSearchCalls = 0;
+  int lyricSearchCalls = 0;
   Object? searchError;
   Object? artistSearchError;
+  Object? lyricSearchError;
   Future<SearchResult<Track>> Function(SearchQuery query)? onSearch;
+  Future<SearchResult<LyricHit>> Function(SearchQuery query)? onSearchLyrics;
 
   @override
   String get displayName => key;
@@ -155,6 +158,30 @@ class _FakeMusicSource implements MusicSource {
       ],
       hasMore: true,
       total: 42,
+    );
+  }
+
+  @override
+  Future<SearchResult<LyricHit>> searchLyrics(
+    SearchQuery query, {
+    CancelToken? cancel,
+  }) async {
+    lyricSearchCalls++;
+    if (lyricSearchError != null) throw lyricSearchError!;
+    final handler = onSearchLyrics;
+    if (handler != null) return handler(query);
+    return SearchResult(
+      items: [
+        LyricHit(
+          track: _track(
+            key,
+            '${query.keyword}-l${query.page}',
+          ),
+          snippet: '命中歌词 ${query.keyword}',
+        ),
+      ],
+      hasMore: true,
+      total: 1,
     );
   }
 
@@ -573,6 +600,69 @@ void main() {
     await _waitUntil(() => provider.artistResults.isNotEmpty);
     expect(source.artistSearchCalls, 3);
     expect(provider.artistResults.single.name, '歌手 林俊杰');
+  });
+
+  test('歌词类型：切换触发歌词搜索；片段随结果发布；播放队列取歌词列表', () async {
+    final source = _FakeMusicSource(
+      'kw',
+      capabilities: const domain.SourceCapabilities(
+        search: true,
+        pagination: true,
+        lyricSearch: true,
+      ),
+    );
+    source.onSearch = (query) => Future.value(SearchResult(
+          items: [_track('kw', 'a')],
+          total: 1,
+        ));
+    source.onSearchLyrics = (query) => Future.value(SearchResult(
+          items: [
+            LyricHit(track: _track('kw', 'l1'), snippet: '雨下整夜'),
+          ],
+          total: 1,
+        ));
+    final registry = _FakeRegistry(
+      {'kw': source},
+      [_descriptor('kw', '酷我')],
+    );
+    addTearDown(registry.dispose);
+    final provider = buildProvider(registry);
+
+    expect(provider.supportedSearchKinds,
+        [SearchKind.song, SearchKind.lyric]);
+
+    provider.submitSearch('雨下整夜');
+    await _waitUntil(() => !provider.isSearching);
+    expect(source.lyricSearchCalls, 0, reason: '单曲类型不请求歌词搜索');
+
+    provider.selectSearchKind(SearchKind.lyric);
+    await _waitUntil(() => provider.lyricResults.isNotEmpty);
+    expect(source.lyricSearchCalls, 1);
+    expect(provider.lyricResults.single['lyric_snippet'], '雨下整夜');
+    expect(provider.lyricResults.single['name'], 'Title l1');
+    expect(provider.totalResults, 1, reason: '分页元数据取当前类型');
+
+    // 播放：队列取歌词结果（下标与歌词列表一致），payload 原样保留。
+    provider.playItem(provider.lyricResults.single);
+    final request = backend.lastRequest;
+    expect(request, isNotNull);
+    expect(request!.startIndex, 0);
+    expect(request.tracks.single.id.uri, 'kw:l1');
+  });
+
+  test('歌词类型：能力位不足时分段不出现且切换被忽略', () async {
+    final source = _FakeMusicSource('kw');
+    final registry = _FakeRegistry(
+      {'kw': source},
+      [_descriptor('kw', '酷我')],
+    );
+    addTearDown(registry.dispose);
+    final provider = buildProvider(registry);
+
+    expect(provider.supportedSearchKinds, [SearchKind.song]);
+    provider.selectSearchKind(SearchKind.lyric);
+    expect(provider.searchKind, SearchKind.song);
+    expect(source.lyricSearchCalls, 0);
   });
 
   test('歌手类型：换源后能力位不足时回退单曲', () async {

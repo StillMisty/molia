@@ -65,6 +65,22 @@ class CatalogService {
     );
   }
 
+  /// 按歌词搜歌（搜索页「歌词」分段）；缓存口径与单曲搜索一致。
+  Future<SearchResult<LyricHit>> searchLyrics(
+    String sourceKey,
+    SearchQuery query,
+  ) {
+    final source = _registry.byKey(sourceKey);
+    if (source == null) {
+      return Future.error(StateError('未知音源: $sourceKey'));
+    }
+    final key = lyricSearchCacheKey(sourceKey, query);
+    return _searchCache.getOrCreate<SearchResult<LyricHit>>(
+      key,
+      () => _guardSourceCall(() => source.searchLyrics(query)),
+    );
+  }
+
   /// 取本地可播流；同 `source + payload + quality` 在 TTL 内共享结果。
   ///
   /// `quality` 为空时使用 `auto` 占位（实际音质由 SourceManager 按用户偏好
@@ -95,6 +111,10 @@ class CatalogService {
   /// （`search:{source}:` 前缀失效对单曲与歌手同时生效）。
   static String artistSearchCacheKey(String sourceKey, SearchQuery query) =>
       'search:$sourceKey:artist:${query.keyword}:${query.page}:${query.limit}';
+
+  /// 歌词搜索缓存 key：`search:{source}:lyric:{keyword}:{page}:{limit}`。
+  static String lyricSearchCacheKey(String sourceKey, SearchQuery query) =>
+      'search:$sourceKey:lyric:${query.keyword}:${query.page}:${query.limit}';
 
   /// 取链缓存 key：`url:{source}:{hash(payload)}:{quality}`。
   ///

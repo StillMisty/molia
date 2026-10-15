@@ -39,12 +39,14 @@ void main() {
         origin: TrackOrigin.builtin,
       );
 
-  FakeMusicSource source({required bool artist}) => FakeMusicSource(
+  FakeMusicSource source({bool artist = false, bool lyric = false}) =>
+      FakeMusicSource(
         'kw',
         capabilities: SourceCapabilities(
           search: true,
           pagination: true,
           artist: artist,
+          lyricSearch: lyric,
         ),
       )
         ..onSearch = ((query) async => SearchResult(
@@ -136,6 +138,39 @@ void main() {
     await tester.tap(find.text('581 首歌曲'));
     await tester.pumpAndSettle();
     expect(find.byType(ArtistPage), findsOneWidget);
+  });
+
+  testWidgets('歌词类型：条目副标题显示命中片段；点击播放歌词结果', (tester) async {
+    final musicSource = source(lyric: true)
+      ..onSearchLyrics = ((query) async => SearchResult(
+            items: const [
+              LyricHit(
+                track: Track(
+                  id: TrackId('kw', 'l1'),
+                  title: '七里香',
+                  origin: TrackOrigin.builtin,
+                  payload: {'songmid': 'l1'},
+                ),
+                snippet: '雨下整夜 我的爱溢出就像雨水',
+              ),
+            ],
+            total: 1,
+          ));
+    final provider = await pumpSection(tester, musicSource: musicSource);
+    provider.submitSearch('雨下整夜');
+    await tester.pumpAndSettle();
+    expect(find.text('歌词'), findsOneWidget);
+
+    await tester.tap(find.text('歌词'));
+    await tester.pumpAndSettle();
+
+    expect(musicSource.lyricSearchCalls, 1);
+    expect(find.text('七里香'), findsOneWidget);
+    expect(find.text('雨下整夜 我的爱溢出就像雨水'), findsOneWidget);
+
+    await tester.tap(find.text('七里香'));
+    await tester.pump();
+    expect(backend.lastRequest?.tracks.single.id.uri, 'kw:l1');
   });
 
   testWidgets('歌手条目无歌曲数：不显示计数副标题', (tester) async {

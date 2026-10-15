@@ -129,20 +129,32 @@ class MgSearch {
   }
 
   static SourceTrack? _parseItem(dynamic rawItem, Set<String> ids) {
+    final track = parseResultItem(rawItem);
+    if (track == null) return null;
+    if (!ids.add(track.raw['copyrightId']?.toString() ?? '')) return null;
+    return track;
+  }
+
+  /// 搜索结果条目（单曲 / 歌词搜索的 `result` 项；歌手歌曲的 `songItem`
+  /// 同构）→ 音源曲目。
+  ///
+  /// 字段在各端点基本一致，仅少数键名有差异（`name`/`songName`、
+  /// `mrcUrl`/`mrcurl`），一并兼容；空字段（如歌词搜索无 `img3`）自然回退。
+  static SourceTrack? parseResultItem(dynamic rawItem) {
     if (rawItem is! Map) return null;
     final songId = rawItem['songId']?.toString() ?? '';
     final copyrightId = rawItem['copyrightId']?.toString() ?? '';
     if (songId.isEmpty || copyrightId.isEmpty) return null;
-    if (!ids.add(copyrightId)) return null;
 
     final duration = rawItem['duration'];
     final durationSeconds =
         duration is num ? duration.toInt() : int.tryParse('$duration') ?? 0;
+    final name = (rawItem['name'] ?? rawItem['songName'])?.toString() ?? '';
 
     return buildTrack(
       songId: songId,
       copyrightId: copyrightId,
-      name: rawItem['name']?.toString() ?? '',
+      name: name,
       artist: decodeName(joinSingerNames(rawItem['singerList'])),
       artists: artistRefsOf(rawItem['singerList']),
       album: rawItem['album']?.toString() ?? '',
@@ -154,7 +166,7 @@ class MgSearch {
       types: parseTypes(rawItem['audioFormats']),
       img: fixCoverUrl(rawItem['img3'] ?? rawItem['img2'] ?? rawItem['img1']),
       lrcUrl: rawItem['lrcUrl']?.toString(),
-      mrcUrl: rawItem['mrcurl']?.toString(),
+      mrcUrl: (rawItem['mrcUrl'] ?? rawItem['mrcurl'])?.toString(),
       trcUrl: rawItem['trcUrl']?.toString(),
     );
   }

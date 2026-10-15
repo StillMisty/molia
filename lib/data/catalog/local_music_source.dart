@@ -103,6 +103,17 @@ class LocalMusicSource implements MusicSource {
   }
 
   @override
+  Future<SearchResult<LyricHit>> searchLyrics(
+    SearchQuery query, {
+    CancelToken? cancel,
+  }) {
+    return Future.error(const SourceFailure(
+      kind: FailureKind.unsupported,
+      message: '本地音源不支持歌词搜索',
+    ));
+  }
+
+  @override
   Future<SearchResult<ArtistSummary>> searchArtists(
     SearchQuery query, {
     CancelToken? cancel,

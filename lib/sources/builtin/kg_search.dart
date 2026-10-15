@@ -203,6 +203,7 @@ class KgSearch {
     required Map<String, Map<String, dynamic>> types,
     int? rawInterval,
     List<SourceArtistRef>? artists,
+    String? img,
   }) {
     final raw = <String, dynamic>{
       'singer': artist,
@@ -215,7 +216,7 @@ class KgSearch {
       'source': 'kg',
       'interval': intervalText,
       if (rawInterval != null) '_interval': rawInterval,
-      'img': null,
+      'img': img,
       'lrc': null,
       'otherSource': null,
       'hash': hash,
@@ -236,6 +237,7 @@ class KgSearch {
       title: name,
       artist: artist,
       album: album,
+      coverUrl: (img?.isEmpty ?? true) ? null : img,
       duration: duration,
       qualities: buildQualities(types),
       raw: raw,

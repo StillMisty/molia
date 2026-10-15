@@ -20,6 +20,7 @@ import 'builtin/kg_pic.dart';
 import 'builtin/kw_lyric.dart';
 import 'builtin/kw_pic.dart';
 import 'builtin/lyric_result.dart';
+import 'builtin/lyric_search.dart';
 import 'builtin/mg_lyric.dart';
 import 'builtin/tx_lyric.dart';
 import 'builtin/wy_lyric.dart';
@@ -273,6 +274,8 @@ class SourceManager extends ChangeNotifier {
       collection: BuiltinAlbums.isSupported(key),
       // 歌手（搜索 + 详情/歌曲）：同上，只由内置实现提供。
       artist: BuiltinArtists.isSupported(key),
+      // 按歌词搜歌：内置平台的歌词检索接口（脚本源无此约定）。
+      lyricSearch: BuiltinLyricSearch.isSupported(key),
     );
   }
 
@@ -738,6 +741,35 @@ class SourceManager extends ChangeNotifier {
     }
     try {
       return await BuiltinArtists.search(
+        sourceKey,
+        keyword,
+        page: page,
+        limit: limit,
+      );
+    } catch (e) {
+      throw SourceFailure.from(e);
+    }
+  }
+
+  /// 按歌词搜歌（内置五平台；脚本扩展源 / any-listen 无此能力）。
+  ///
+  /// 失败归一化为 [SourceFailure]；分页与缓存由 data 层（CatalogService）
+  /// 承担。平台差异（kw 模糊匹配 / mg 排序偏翻唱）见各 `*_lyric_search.dart`。
+  Future<LyricSearchPage> searchLyrics(
+    String sourceKey,
+    String keyword, {
+    int page = 1,
+    int limit = 30,
+  }) async {
+    if (!BuiltinSearch.isBuiltin(sourceKey) ||
+        !_isBuiltinSearchable(sourceKey)) {
+      throw SourceFailure(
+        kind: FailureKind.unsupported,
+        message: '音源 $sourceKey 不支持歌词搜索',
+      );
+    }
+    try {
+      return await BuiltinLyricSearch.searchWithMeta(
         sourceKey,
         keyword,
         page: page,

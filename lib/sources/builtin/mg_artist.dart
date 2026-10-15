@@ -159,29 +159,8 @@ class MgArtist {
   /// 歌手歌曲条目（`ZJ-Singer-Song-Item`）→ 领域曲目。
   static Track? parseSong(dynamic raw) {
     if (raw is! Map) return null;
-    final item = raw['songItem'];
-    if (item is! Map) return null;
-    final songId = item['songId']?.toString() ?? '';
-    final copyrightId = item['copyrightId']?.toString() ?? '';
-    if (songId.isEmpty || copyrightId.isEmpty) return null;
-
-    final duration = parseSourceCount(item['duration']) ?? 0;
-    return trackFromSourceTrack(MgSearch.buildTrack(
-      songId: songId,
-      copyrightId: copyrightId,
-      name: item['songName']?.toString() ?? '',
-      artist: MgSearch.joinSingerNames(item['singerList']),
-      artists: MgSearch.artistRefsOf(item['singerList']),
-      album: item['album']?.toString() ?? '',
-      albumId: item['albumId']?.toString() ?? '',
-      intervalText: duration > 0 ? formatPlayTime(duration) : null,
-      duration: duration > 0 ? Duration(seconds: duration) : null,
-      types: MgSearch.parseTypes(item['audioFormats']),
-      img: MgSearch.fixCoverUrl(item['img3'] ?? item['img2'] ?? item['img1']),
-      lrcUrl: item['lrcUrl']?.toString(),
-      mrcUrl: item['mrcUrl']?.toString(),
-      trcUrl: item['trcUrl']?.toString(),
-    ));
+    final track = MgSearch.parseResultItem(raw['songItem']);
+    return track == null ? null : trackFromSourceTrack(track);
   }
 
   /// `data.contents` 里按 `view` 取分区（咪咕接口的分区式响应结构）。

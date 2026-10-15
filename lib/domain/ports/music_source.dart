@@ -82,6 +82,13 @@ abstract interface class MusicSource {
     CancelToken? cancel,
   });
 
+  /// 按歌词搜歌（搜索页「歌词」分段）；仅 `capabilities.lyricSearch` 为 true
+  /// 时调用。无能力的音源抛 `SourceFailure(kind: unsupported)`。
+  Future<SearchResult<LyricHit>> searchLyrics(
+    SearchQuery query, {
+    CancelToken? cancel,
+  });
+
   /// 取本地可播流；仅 `capabilities.resolveUrl` 为 true 时调用。
   Future<PlayableStream> resolve(Track track, {AudioQuality? preferredQuality});
 

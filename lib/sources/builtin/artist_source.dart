@@ -12,6 +12,7 @@ library;
 
 import '../../domain/models/artist.dart';
 import '../../domain/models/failure.dart';
+import 'builtin_search.dart';
 import 'kg_artist.dart';
 import 'kw_artist.dart';
 import 'mg_artist.dart';
@@ -39,11 +40,7 @@ class ArtistSearchPage {
 
 /// 平台业务拒绝 / 缺少取歌手所需字段的统一失败（可重试：多为平台抖动）。
 SourceFailure artistPlatformFailure(String platform, String reason) =>
-    SourceFailure(
-      kind: FailureKind.unknown,
-      message: '$platform: $reason',
-      retryable: true,
-    );
+    builtinPlatformFailure(platform, reason);
 
 class BuiltinArtists {
   BuiltinArtists._();

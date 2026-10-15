@@ -62,7 +62,13 @@ class _SearchSectionState extends State<SearchSection> {
         final artistResults = searchProvider.artistResults;
         final isArtistKind =
             searchProvider.searchKind == SearchKind.artist;
-        final itemCount = isArtistKind ? artistResults.length : results.length;
+        final isLyricKind = searchProvider.searchKind == SearchKind.lyric;
+        final lyricResults = searchProvider.lyricResults;
+        final itemCount = isArtistKind
+            ? artistResults.length
+            : isLyricKind
+                ? lyricResults.length
+                : results.length;
         final error = searchProvider.errorMessage;
         final kinds = searchProvider.supportedSearchKinds;
 
@@ -117,7 +123,8 @@ class _SearchSectionState extends State<SearchSection> {
                         padding: EdgeInsets.symmetric(
                             horizontal: horizontalPadding),
                         sliver: _SearchResultsList(
-                          items: results,
+                          // 歌词类型：条目带 `lyric_snippet`（行副标题显示命中片段）。
+                          items: isLyricKind ? lyricResults : results,
                           onItemTap: (item) => searchProvider.playItem(item),
                         ),
                       ),
@@ -445,14 +452,14 @@ class _SearchResultTile extends StatelessWidget {
           (registry) =>
               registry?.byKey(sourceKey)?.capabilities.artist ?? false,
         );
-    final artistLinks = _artistLinksOf(
-      context,
-      item,
-      tapsEnabled: artistTapsEnabled,
-    );
+    // 歌词命中片段优先做副标题（此时不渲染歌手链接：副标题让位给歌词）。
+    final snippet = item['lyric_snippet']?.toString() ?? '';
+    final artistLinks = snippet.isEmpty
+        ? _artistLinksOf(context, item, tapsEnabled: artistTapsEnabled)
+        : null;
     return TrackMenuTile(
       title: item['name']?.toString() ?? '',
-      artist: _artistOf(item),
+      artist: snippet.isEmpty ? _artistOf(item) : snippet,
       artists: artistLinks,
       coverUrl: _coverUrlOf(item),
       trailingText: durationText(_durationMsOf(item)),
