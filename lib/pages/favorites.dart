@@ -65,6 +65,10 @@ class _FavoritesPageState extends State<FavoritesPage> {
   /// （M3E 搜索胶囊默认高度 56，标题行按同一高度对齐）。
   static const double _headerRowHeight = 56;
 
+  /// 头部（标题行 / 搜索行 / 多选栏）垂直留白：三者切换头部不跳高。
+  static const double _headerPaddingTop = 12;
+  static const double _headerPaddingBottom = 8;
+
   final TextEditingController _searchController = TextEditingController();
   final FocusNode _searchFocus = FocusNode();
 
@@ -1081,7 +1085,8 @@ class _FavoritesPageState extends State<FavoritesPage> {
             ? view.visibleLocalSongs.isNotEmpty
             : view.visible.isNotEmpty;
     return Padding(
-      padding: EdgeInsets.fromLTRB(horizontalPadding, 12, horizontalPadding, 8),
+      padding: EdgeInsets.fromLTRB(horizontalPadding, _headerPaddingTop,
+          horizontalPadding, _headerPaddingBottom),
       child: SizedBox(
         height: _headerRowHeight,
         child: Row(
@@ -1186,7 +1191,8 @@ class _FavoritesPageState extends State<FavoritesPage> {
     final horizontalPadding =
         context.layoutType(ResponsivePageType.browse).horizontalPadding;
     return Padding(
-      padding: EdgeInsets.fromLTRB(horizontalPadding, 12, horizontalPadding, 8),
+      padding: EdgeInsets.fromLTRB(horizontalPadding, _headerPaddingTop,
+          horizontalPadding, _headerPaddingBottom),
       child: SizedBox(
         height: _headerRowHeight,
         child: AppSearchBar(
@@ -1220,7 +1226,8 @@ class _FavoritesPageState extends State<FavoritesPage> {
     final horizontalPadding =
         context.layoutType(ResponsivePageType.browse).horizontalPadding;
     return Padding(
-      padding: EdgeInsets.fromLTRB(horizontalPadding, 12, horizontalPadding, 8),
+      padding: EdgeInsets.fromLTRB(horizontalPadding, _headerPaddingTop,
+          horizontalPadding, _headerPaddingBottom),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -1430,40 +1437,48 @@ class _FavoritesPageState extends State<FavoritesPage> {
     final allSelected = _selection.allSelectedFor(itemCount) == true;
     return ColoredBox(
       color: selectionTheme.contextualBackground(m3e.colorScheme),
-      child: IconTheme.merge(
-        data: IconThemeData(color: foreground),
-        child: SizedBox(
-          height: 56,
-          child: Row(
-            children: [
-              const SizedBox(width: 4),
-              M3EIconButton(
-                variant: M3EIconButtonVariant.standard,
-                icon: const Icon(Icons.close_rounded),
-                tooltip: l10n.cancel,
-                onPressed: _selection.clear,
-              ),
-              Expanded(
-                child: Text(
-                  '${_selection.selectedCount}',
-                  style: m3e.typeScale.titleLarge.copyWith(color: foreground),
+      // 与标题行 / 搜索行同一套垂直留白：进入 / 退出多选头部不跳高。
+      child: Padding(
+        padding: const EdgeInsets.only(
+          top: _headerPaddingTop,
+          bottom: _headerPaddingBottom,
+        ),
+        child: IconTheme.merge(
+          data: IconThemeData(color: foreground),
+          child: SizedBox(
+            height: _headerRowHeight,
+            child: Row(
+              children: [
+                const SizedBox(width: 4),
+                M3EIconButton(
+                  variant: M3EIconButtonVariant.standard,
+                  icon: const Icon(Icons.close_rounded),
+                  tooltip: l10n.cancel,
+                  onPressed: _selection.clear,
                 ),
-              ),
-              M3EIconButton(
-                variant: M3EIconButtonVariant.standard,
-                icon: const Icon(Icons.select_all_rounded),
-                tooltip: allSelected ? l10n.deselectAll : l10n.selectAllItems,
-                onPressed: () {
-                  if (allSelected) {
-                    _selection.clear();
-                  } else {
-                    _selection.selectAll(itemCount);
-                  }
-                },
-              ),
-              ..._buildSelectionActions(context, l10n, provider, view),
-              const SizedBox(width: 4),
-            ],
+                Expanded(
+                  child: Text(
+                    '${_selection.selectedCount}',
+                    style: m3e.typeScale.titleLarge.copyWith(color: foreground),
+                  ),
+                ),
+                M3EIconButton(
+                  variant: M3EIconButtonVariant.standard,
+                  icon: const Icon(Icons.select_all_rounded),
+                  tooltip:
+                      allSelected ? l10n.deselectAll : l10n.selectAllItems,
+                  onPressed: () {
+                    if (allSelected) {
+                      _selection.clear();
+                    } else {
+                      _selection.selectAll(itemCount);
+                    }
+                  },
+                ),
+                ..._buildSelectionActions(context, l10n, provider, view),
+                const SizedBox(width: 4),
+              ],
+            ),
           ),
         ),
       ),

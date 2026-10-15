@@ -328,6 +328,29 @@ void main() {
     expect(restoredHeight, idleHeight, reason: '收起搜索后头部高度不跳变');
   });
 
+  testWidgets('标题行与多选栏高度一致：进入/退出多选头部不跳高', (tester) async {
+    await seedFavorites(tester);
+    await pumpFavorites(tester);
+
+    final container = find.byType(ResponsivePageContainer);
+    double headerHeight() => tester
+        .getSize(
+          find.descendant(of: container, matching: find.byType(Padding)).first,
+        )
+        .height;
+
+    final idleHeight = headerHeight();
+    await tester.longPress(find.text('Song A'));
+    await tester.pumpAndSettle();
+    final selectingHeight = headerHeight();
+    await tester.tap(find.byIcon(Icons.close_rounded));
+    await tester.pumpAndSettle();
+    final restoredHeight = headerHeight();
+
+    expect(selectingHeight, idleHeight, reason: '进入多选前后头部高度一致');
+    expect(restoredHeight, idleHeight, reason: '退出多选后头部高度不跳变');
+  });
+
   testWidgets('曲目行尾显示歌曲时长', (tester) async {
     await importLove(tester);
     await pumpFavorites(tester);
