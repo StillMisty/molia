@@ -17,7 +17,9 @@ import 'package:molia/sources/lx/lx_engine_supervisor.dart';
 import 'package:molia/sources/lx/lx_engine_types.dart';
 import 'package:molia/sources/lx/lx_script_info.dart';
 import 'package:molia/sources/source_manager.dart';
+import 'package:molia/widgets/discover_playlists_tab.dart';
 import 'package:molia/widgets/library_channel_selector.dart';
+import 'package:molia/widgets/shell_reselect.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -38,6 +40,7 @@ void main() {
   late SearchProvider search;
   late SourceManager manager;
   late SourcesProvider sources;
+  late FakeDiscoverSource wyDiscover;
   late _FakeLxEngine engine;
   late LxEngineSupervisor supervisor;
   bool scriptActive = false;
@@ -54,11 +57,13 @@ void main() {
       repository: repository,
       playbackProvider: playback,
     );
+    wyDiscover = FakeDiscoverSource();
     discover = DiscoverProvider(
       playbackProvider: playback,
       libraryProvider: library,
       sources: {
-        for (final key in const ['wy', 'tx', 'kg', 'kw', 'mg'])
+        'wy': wyDiscover,
+        for (final key in const ['tx', 'kg', 'kw', 'mg'])
           key: FakeDiscoverSource(sourceKey: key),
       },
       // 与 composition root 相同的跟随规则：可搜索渠道 → 搜索源跟随。
@@ -124,7 +129,10 @@ void main() {
     scriptActive = true;
   }
 
-  Future<void> pumpLibrary(WidgetTester tester) async {
+  Future<void> pumpLibrary(
+    WidgetTester tester, {
+    ShellReselectSignal? reselect,
+  }) async {
     tester.view.physicalSize = const Size(1200, 2400);
     tester.view.devicePixelRatio = 1.0;
     addTearDown(() {
@@ -148,7 +156,7 @@ void main() {
             ...GlobalMaterialLocalizations.delegates,
           ],
           supportedLocales: const [Locale('zh')],
-          home: const Scaffold(body: Library()),
+          home: Scaffold(body: Library(reselect: reselect)),
         ),
       ),
     );
@@ -173,6 +181,35 @@ void main() {
 
     expect(discover.channelKey, 'kw');
     expect(find.text('酷我音乐'), findsOneWidget);
+  });
+
+  testWidgets('重复点击资料库：当前 tab 列表回到顶部', (tester) async {
+    // 歌单 tab 注入多页数据，列表可滚。
+    wyDiscover.playlistsPerPage = 40;
+    wyDiscover.playlistPages = 1;
+    search = buildSearch(const []);
+    final reselect = ShellReselectSignal();
+    addTearDown(reselect.dispose);
+    await pumpLibrary(tester, reselect: reselect);
+
+    // 无脚本：可见 tab = 热榜 / 歌单（默认渲染热榜）。切到歌单。
+    await tester.tap(find.text('歌单'));
+    await tester.pumpAndSettle();
+
+    final controller = tester
+        .widget<Scrollbar>(find.descendant(
+          of: find.byType(DiscoverPlaylistsTab),
+          matching: find.byType(Scrollbar),
+        ))
+        .controller!;
+    await tester.drag(find.byType(DiscoverPlaylistsTab), const Offset(0, -600));
+    await tester.pumpAndSettle();
+    expect(controller.offset, greaterThan(0), reason: '先滚离顶部');
+
+    // 底栏重复点击「资料库」→ 当前（歌单）列表回到顶部。
+    reselect.trigger();
+    await tester.pumpAndSettle();
+    expect(controller.offset, 0, reason: '壳层重复点击应回到顶部');
   });
 
   testWidgets('全部渠道停用：展示空态引导', (tester) async {

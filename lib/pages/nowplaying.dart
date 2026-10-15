@@ -9,6 +9,7 @@ import 'package:molia/widgets/queue.dart';
 import 'package:molia/widgets/lyrics.dart';
 import 'package:molia/widgets/mdtab.dart';
 import 'package:molia/widgets/player_morph.dart';
+import 'package:molia/widgets/shell_reselect.dart';
 import 'package:molia/widgets/track_info_view.dart';
 
 import '../l10n/app_localizations.dart';
@@ -18,7 +19,10 @@ class NowPlaying extends StatefulWidget {
   /// 顶栏共享元素控制器：全屏播放器为其提供封面/歌名/进度锚点。
   final PlayerMorphController? morph;
 
-  const NowPlaying({super.key, this.morph});
+  /// 壳层「重复点击底栏 / 导航轨播放目的地」的请求通道：迷你 ⇄ 完整切换。
+  final ShellReselectSignal? reselect;
+
+  const NowPlaying({super.key, this.morph, this.reselect});
 
   @override
   State<NowPlaying> createState() => _NowPlayingState();
@@ -43,6 +47,10 @@ class _NowPlayingState extends State<NowPlaying>
   /// 手势速度续跑吸附。
   late final SingleMotionController _expandController;
   bool _isMini = false;
+
+  /// 当前布局是否为大屏（两栏）：大屏播放器始终完整、没有迷你态，
+  /// 重复点击请求直接忽略（不能让 `_isMini` 在大屏被翻转）。布局期写入。
+  bool _isLargeScreen = false;
 
   /// 播放器区域可用的最大高度（跟手拖拽的行程基准）。
   double _playerMaxHeight = 340;
@@ -78,10 +86,21 @@ class _NowPlayingState extends State<NowPlaying>
       initialValue: 0,
     )..value = 1.0;
     _expandController.addListener(_handleExpandProgress);
+    widget.reselect?.addListener(_handleReselect);
+  }
+
+  @override
+  void didUpdateWidget(covariant NowPlaying oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.reselect != widget.reselect) {
+      oldWidget.reselect?.removeListener(_handleReselect);
+      widget.reselect?.addListener(_handleReselect);
+    }
   }
 
   @override
   void dispose() {
+    widget.reselect?.removeListener(_handleReselect);
     _expandController.dispose();
     _pageController.dispose();
     _queueScrollController.dispose();
@@ -97,6 +116,14 @@ class _NowPlayingState extends State<NowPlaying>
   void _toggleExpand() {
     HapticFeedback.lightImpact();
     _expandController.animateTo(_expandController.value >= 0.5 ? 0.0 : 1.0);
+  }
+
+  /// 壳层重复点击「播放」目的地：与迷你条点击 / 圆点点击 / 到顶下拉同一入口。
+  ///
+  /// 大屏没有迷你态（播放器始终完整），忽略请求。
+  void _handleReselect() {
+    if (_isLargeScreen) return;
+    _toggleExpand();
   }
 
   /// 展开进度跨过阈值即同步迷你态（视觉落定口径，不等弹簧容差拖尾）。
@@ -365,6 +392,8 @@ class _NowPlayingState extends State<NowPlaying>
   Widget build(BuildContext context) {
     super.build(context);
     final bool isLargeScreen = _getIsLargeScreen(context);
+    // 布局期写入（不触发重建）：壳层重复点击的忽略判定要读最新布局。
+    _isLargeScreen = isLargeScreen;
 
     if (isLargeScreen) {
       return _buildCollapsedLargeLayout(context);

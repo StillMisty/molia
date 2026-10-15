@@ -152,6 +152,19 @@ void main() {
     expect(find.text('测试歌单'), findsNothing);
   });
 
+  testWidgets('列表滚动控制器可注入（宿主页面重复点击回顶的数据通路）', (tester) async {
+    final leaderboards = ScrollController();
+    final playlists = ScrollController();
+    addTearDown(leaderboards.dispose);
+    addTearDown(playlists.dispose);
+
+    await pumpTab(tester, DiscoverLeaderboardsTab(controller: leaderboards));
+    expect(leaderboards.hasClients, isTrue, reason: '热榜内容应挂在注入的控制器上');
+
+    await pumpTab(tester, DiscoverPlaylistsTab(controller: playlists));
+    expect(playlists.hasClients, isTrue, reason: '歌单列表应挂在注入的控制器上');
+  });
+
   testWidgets('热榜 tab：榜单 chips；点击进入榜单详情', (tester) async {
     await pumpTab(tester, const DiscoverLeaderboardsTab());
 

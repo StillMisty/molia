@@ -11,7 +11,9 @@ import 'package:molia/providers/source_swap_provider.dart';
 import 'package:molia/services/lyrics_display/lyrics_display_settings.dart';
 import 'package:molia/services/notification_service.dart';
 import 'package:molia/widgets/mdtab.dart';
+import 'package:molia/widgets/lyrics.dart';
 import 'package:molia/widgets/player.dart';
+import 'package:molia/widgets/shell_reselect.dart';
 import 'package:molia/widgets/track_info_view.dart';
 import 'package:material_3_expressive/material_3_expressive.dart';
 import 'package:material_ui/material_ui.dart';
@@ -52,8 +54,10 @@ void main() {
   Future<void> pumpNowPlaying(
     WidgetTester tester, {
     List<SingleChildWidget> extraProviders = const [],
+    ShellReselectSignal? reselect,
+    Size size = const Size(420, 900),
   }) async {
-    tester.view.physicalSize = const Size(420, 900);
+    tester.view.physicalSize = size;
     tester.view.devicePixelRatio = 1.0;
     addTearDown(() {
       tester.view.resetPhysicalSize();
@@ -87,7 +91,7 @@ void main() {
             ...GlobalMaterialLocalizations.delegates,
           ],
           supportedLocales: const [Locale('zh')],
-          home: const NowPlaying(),
+          home: NowPlaying(reselect: reselect),
         ),
       ),
     );
@@ -228,6 +232,57 @@ void main() {
     expect(playerHeight(tester), greaterThan(300), reason: '再点激活圆点应展开');
 
     // 通知节流计时器跑完，避免 pending timer 报错。
+    await tester.pump(const Duration(milliseconds: 50));
+  });
+
+  testWidgets('底栏重复点击（壳层请求）：迷你 ⇄ 完整切换', (tester) async {
+    final reselect = ShellReselectSignal();
+    addTearDown(reselect.dispose);
+    await pumpNowPlaying(tester, reselect: reselect);
+    expect(playerHeight(tester), greaterThan(300), reason: '默认完整态');
+
+    // 完整 → 迷你。
+    reselect.trigger();
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 400));
+    expect(playerHeight(tester), lessThan(100), reason: '壳层重复点击应收起为迷你条');
+
+    // 迷你 → 完整。
+    reselect.trigger();
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 400));
+    expect(playerHeight(tester), greaterThan(300), reason: '再点应展开');
+
+    // 通知节流计时器跑完，避免 pending timer 报错。
+    await tester.pump(const Duration(milliseconds: 50));
+  });
+
+  testWidgets('底栏重复点击：大屏（两栏）忽略，不进入迷你态', (tester) async {
+    final reselect = ShellReselectSignal();
+    addTearDown(reselect.dispose);
+    // 大屏：播放器 + 内容两栏，播放器始终完整、没有迷你态。
+    await pumpNowPlaying(
+      tester,
+      reselect: reselect,
+      size: const Size(1400, 900),
+    );
+    expect(
+      tester.widget<LyricsWidget>(find.byType(LyricsWidget)).quickActionsEnabled,
+      isFalse,
+      reason: '大屏没有迷你态：歌词页快捷操作应保持关闭',
+    );
+
+    reselect.trigger();
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 400));
+
+    // 误响应会让 `_isMini` 翻转 → 歌词页快捷操作被启用（页面实例重建）。
+    expect(
+      tester.widget<LyricsWidget>(find.byType(LyricsWidget)).quickActionsEnabled,
+      isFalse,
+      reason: '大屏应忽略重复点击',
+    );
+
     await tester.pump(const Duration(milliseconds: 50));
   });
 

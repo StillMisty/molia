@@ -13,16 +13,33 @@ AppLocalizations _l10n(BuildContext context) =>
 
 /// 资料页「热榜」tab：平台选择 + 榜单 chips（点击进入榜单曲目页）。
 class DiscoverLeaderboardsTab extends StatefulWidget {
-  const DiscoverLeaderboardsTab({super.key});
+  const DiscoverLeaderboardsTab({super.key, this.controller});
+
+  /// 内容滚动控制器（宿主页面注入：重复点击底栏资料库时回顶）；
+  /// 为空时自建（独立挂载 / 测试）。
+  final ScrollController? controller;
 
   @override
-  State<DiscoverLeaderboardsTab> createState() => _DiscoverLeaderboardsTabState();
+  State<DiscoverLeaderboardsTab> createState() =>
+      _DiscoverLeaderboardsTabState();
 }
 
 class _DiscoverLeaderboardsTabState extends State<DiscoverLeaderboardsTab>
     with AutomaticKeepAliveClientMixin {
+  /// 自带控制器：宿主未注入时使用（随 State 释放）。
+  ScrollController? _ownedController;
+
+  ScrollController get _controller =>
+      widget.controller ?? (_ownedController ??= ScrollController());
+
   @override
   bool get wantKeepAlive => true;
+
+  @override
+  void dispose() {
+    _ownedController?.dispose();
+    super.dispose();
+  }
 
   void _openBoard(DiscoverLeaderboard board) {
     HapticFeedback.lightImpact();
@@ -56,6 +73,7 @@ class _DiscoverLeaderboardsTabState extends State<DiscoverLeaderboardsTab>
     final boards = provider.leaderboards;
 
     return SingleChildScrollView(
+      controller: _controller,
       padding: const EdgeInsets.only(top: 12, bottom: 32),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,

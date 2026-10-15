@@ -36,6 +36,7 @@ import '../widgets/icon_swap.dart';
 import '../widgets/nav_destination_icons.dart';
 import '../widgets/playback_selectors.dart';
 import '../widgets/player_morph.dart';
+import '../widgets/shell_reselect.dart';
 
 /// 当前曲目的封面 URL（空串视同无封面）：顶栏真身与共享飞行副本同一份取值。
 String? _coverUrlOf(PlaybackProvider provider) =>
@@ -210,12 +211,26 @@ class _MyAppState extends State<MyApp>
   PlayerMorphGeometry? _morphGeometry;
   int _morphToken = 0;
 
+  /// 每个目的地一个「重复点击」意图通道：页面订阅后自行响应
+  /// （播放页 = 迷你 ⇄ 完整；资料库 / 收藏 = 回到列表顶部），壳层不消费。
+  final Map<ShellDestination, ShellReselectSignal> _reselect = {
+    for (final destination in ShellDestination.values)
+      destination: ShellReselectSignal(),
+  };
+
   /// 页面实例固定（key 稳定），顺序/显隐只影响底栏映射与分层透明度，
   /// 页面状态（滚动/搜索词等）天然保持。
   late final Map<ShellDestination, Widget> _pages = {
-    ShellDestination.nowPlaying: NowPlaying(morph: _morph),
-    ShellDestination.favorites: const FavoritesPage(),
-    ShellDestination.library: const Library(),
+    ShellDestination.nowPlaying: NowPlaying(
+      morph: _morph,
+      reselect: _reselect[ShellDestination.nowPlaying],
+    ),
+    ShellDestination.favorites: FavoritesPage(
+      reselect: _reselect[ShellDestination.favorites],
+    ),
+    ShellDestination.library: Library(
+      reselect: _reselect[ShellDestination.library],
+    ),
   };
 
   /// 当前选中的目的地（与底栏顺序解耦；默认落在播放页）。
@@ -257,6 +272,9 @@ class _MyAppState extends State<MyApp>
     _morphEntry?.remove();
     _morphEntry = null;
     _morph.dispose();
+    for (final signal in _reselect.values) {
+      signal.dispose();
+    }
     super.dispose();
   }
 
@@ -270,6 +288,24 @@ class _MyAppState extends State<MyApp>
   @override
   void didChangePlatformBrightness() {
     context.read<ThemeProvider>().updateThemeFromSystem(context);
+  }
+
+  /// 目的地被点击（底栏与导航轨共用）：
+  /// - 未选中 → 切页（含顶栏 ⇄ 播放页共享元素飞行）；
+  /// - 已选中 → 把重复点击交给页面：播放页切换迷你 ⇄ 完整、
+  ///   资料库 / 收藏回到列表顶部。
+  ///
+  /// 进入播放页的飞行期间忽略重复点击：此刻折叠会与飞行副本抢封面
+  /// （页内迷你 ⇄ 完整飞行与顶栏飞行同帧竞争），等飞行落定（~0.4s）再切换。
+  void _onDestinationSelected(ShellDestination destination) {
+    if (destination != _selectedDestination) {
+      _selectDestination(destination);
+      return;
+    }
+    if (destination == ShellDestination.nowPlaying && _morphGeometry != null) {
+      return;
+    }
+    _reselect[destination]?.trigger();
   }
 
   void _selectDestination(ShellDestination destination) {
@@ -468,7 +504,7 @@ class _MyAppState extends State<MyApp>
               type: M3ENavigationRailType.alwaysCollapse,
               selectedIndex: selectedIndex,
               onDestinationSelected: (int index) =>
-                  _selectDestination(visibleDestinations[index]),
+                  _onDestinationSelected(visibleDestinations[index]),
               sections: [
                 M3ENavigationRailSection(
                   destinations: [
@@ -497,7 +533,7 @@ class _MyAppState extends State<MyApp>
                 labelBehavior: M3ENavBarLabelBehavior.onlySelected,
                 selectedIndex: selectedIndex,
                 onDestinationSelected: (int index) =>
-                    _selectDestination(visibleDestinations[index]),
+                    _onDestinationSelected(visibleDestinations[index]),
                 destinations: [
                   for (final destination in visibleDestinations)
                     M3ENavigationBarDestination(

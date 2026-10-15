@@ -12,7 +12,11 @@ AppLocalizations _l10n(BuildContext context) =>
 
 /// 发现页「搜索」tab：搜索框 + 搜索结果。
 class LibrarySearchTab extends StatefulWidget {
-  const LibrarySearchTab({super.key});
+  const LibrarySearchTab({super.key, this.controller});
+
+  /// 结果列表滚动控制器（宿主页面注入：重复点击底栏资料库时回顶）；
+  /// 为空时由 [SearchSection] 自建。
+  final ScrollController? controller;
 
   @override
   State<LibrarySearchTab> createState() => _LibrarySearchTabState();
@@ -89,7 +93,7 @@ class _LibrarySearchTabState extends State<LibrarySearchTab>
             Expanded(
               child: RepaintBoundary(
                 child: isSearchActive
-                    ? const SearchSection()
+                    ? SearchSection(controller: widget.controller)
                     : _buildIdle(context),
               ),
             ),

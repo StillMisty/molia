@@ -20,6 +20,7 @@ import 'package:molia/services/cache_storage.dart';
 import 'package:molia/services/download/download_service.dart';
 import 'package:molia/utils/responsive.dart';
 import 'package:molia/widgets/app_search_bar.dart';
+import 'package:molia/widgets/shell_reselect.dart';
 import 'package:molia/widgets/swipe_reveal_row.dart';
 import 'package:molia/widgets/track_row.dart';
 import 'package:material_3_expressive/components/bottom_sheets/components/m3e_bottom_sheet_surface.dart';
@@ -211,6 +212,7 @@ void main() {
     DownloadService? downloads,
     CacheService? cache,
     Size size = const Size(1200, 2400),
+    ShellReselectSignal? reselect,
   }) async {
     tester.view.physicalSize = size;
     tester.view.devicePixelRatio = 1.0;
@@ -235,7 +237,12 @@ void main() {
             ...GlobalMaterialLocalizations.delegates,
           ],
           supportedLocales: const [Locale('zh')],
-          home: Scaffold(body: FavoritesPage(shuffleRandom: shuffleRandom)),
+          home: Scaffold(
+            body: FavoritesPage(
+              shuffleRandom: shuffleRandom,
+              reselect: reselect,
+            ),
+          ),
         ),
       ),
     );
@@ -1120,6 +1127,27 @@ void main() {
         tester.widget<Scrollbar>(find.byType(Scrollbar)).controller!;
     expect(controller.offset, closeTo(400, 1));
     // 恢复触发的落盘节流计时器：推进到触发，避免挂起。
+    await tester.pump(const Duration(milliseconds: 600));
+  });
+
+  testWidgets('底栏重复点击（壳层请求）：当前合集回到列表顶部', (tester) async {
+    final reselect = ShellReselectSignal();
+    addTearDown(reselect.dispose);
+    await seedManyFavorites(tester);
+    await pumpFavorites(tester, reselect: reselect);
+
+    final controller =
+        tester.widget<Scrollbar>(find.byType(Scrollbar)).controller!;
+    await tester.drag(find.byType(ListView), const Offset(0, -600));
+    await tester.pumpAndSettle();
+    expect(controller.offset, greaterThan(0), reason: '先滚离顶部');
+
+    // 底栏重复点击「收藏」→ 当前合集的列表回到顶部。
+    reselect.trigger();
+    await tester.pumpAndSettle();
+    expect(controller.offset, 0, reason: '壳层重复点击应回到顶部');
+
+    // 滚动落盘节流计时器跑完，避免挂起。
     await tester.pump(const Duration(milliseconds: 600));
   });
 

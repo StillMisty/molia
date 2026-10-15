@@ -9,10 +9,12 @@ import '../providers/discover_provider.dart';
 import '../providers/search_provider.dart';
 import '../providers/sources_provider.dart';
 import '../utils/responsive.dart';
+import '../utils/scroll_to_top.dart';
 import '../widgets/discover_leaderboards_tab.dart';
 import '../widgets/discover_playlists_tab.dart';
 import '../widgets/library_channel_selector.dart';
 import '../widgets/library_search_tab.dart';
+import '../widgets/shell_reselect.dart';
 
 /// 发现页 tab 标识（可见性随当前渠道能力变化，不用下标表示）。
 enum _LibraryTab { search, leaderboards, playlists }
@@ -25,7 +27,11 @@ enum _LibraryTab { search, leaderboards, playlists }
 ///   无脚本时内置平台不可搜索）；
 /// - 个人内容（播放历史 / 我的列表 / 导入收藏）在收藏页。
 class Library extends StatefulWidget {
-  const Library({super.key});
+  const Library({super.key, this.reselect});
+
+  /// 壳层「重复点击底栏 / 导航轨资料库目的地」的请求通道：
+  /// 当前渲染 tab 的列表回到顶部。
+  final ShellReselectSignal? reselect;
 
   @override
   State<Library> createState() => _LibraryState();
@@ -35,15 +41,60 @@ class _LibraryState extends State<Library> {
   /// 用户选中的 tab（默认搜索）；隐藏是临时的，不覆盖该意图。
   _LibraryTab _tab = _LibraryTab.search;
 
+  /// 当前渲染的 tab（选中项被隐藏时是第一个可见 tab）：重复点击回顶按它取列表。
+  /// build 期写入，不触发重建。
+  _LibraryTab _renderedTab = _LibraryTab.search;
+
+  /// 各 tab 列表的滚动控制器。由页面持有（重复点击资料库要按当前 tab 回顶），
+  /// 下传给 tab 子组件；子组件在未注入时仍可自建（独立挂载 / 测试）。
+  final ScrollController _searchResultsController = ScrollController();
+  final ScrollController _leaderboardsController = ScrollController();
+  final ScrollController _playlistsController = ScrollController();
+
+  @override
+  void initState() {
+    super.initState();
+    widget.reselect?.addListener(_handleReselect);
+  }
+
+  @override
+  void didUpdateWidget(covariant Library oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.reselect != widget.reselect) {
+      oldWidget.reselect?.removeListener(_handleReselect);
+      widget.reselect?.addListener(_handleReselect);
+    }
+  }
+
+  @override
+  void dispose() {
+    widget.reselect?.removeListener(_handleReselect);
+    _searchResultsController.dispose();
+    _leaderboardsController.dispose();
+    _playlistsController.dispose();
+    super.dispose();
+  }
+
+  /// 壳层重复点击「资料库」目的地：当前渲染 tab 的列表回到顶部
+  /// （列表未挂载 / 已在顶部 = 空操作）。
+  void _handleReselect() {
+    animateScrollToTop(switch (_renderedTab) {
+      _LibraryTab.search => _searchResultsController,
+      _LibraryTab.leaderboards => _leaderboardsController,
+      _LibraryTab.playlists => _playlistsController,
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context)!;
     // Web 不支持音源，仅保留搜索（无渠道选择）。
     if (kIsWeb) {
+      _renderedTab = _LibraryTab.search;
       return ResponsivePageContainer(
         pageType: ResponsivePageType.browse,
         alignment: Alignment.topCenter,
-        child: const LibrarySearchTab(),
+        child: LibrarySearchTab(controller: _searchResultsController),
       );
     }
 
@@ -105,6 +156,8 @@ class _LibraryState extends State<Library> {
     }
 
     final selectedIndex = _indexOf(visibleTabs);
+    // 布局期写入（不触发重建）：重复点击回顶要滚「真正在渲染」的那个列表。
+    _renderedTab = visibleTabs[selectedIndex];
 
     return ResponsivePageContainer(
       pageType: ResponsivePageType.browse,
@@ -180,9 +233,12 @@ class _LibraryState extends State<Library> {
   }
 
   Widget _tabContent(_LibraryTab tab) => switch (tab) {
-        _LibraryTab.search => const LibrarySearchTab(),
-        _LibraryTab.leaderboards => const DiscoverLeaderboardsTab(),
-        _LibraryTab.playlists => const DiscoverPlaylistsTab(),
+        _LibraryTab.search =>
+          LibrarySearchTab(controller: _searchResultsController),
+        _LibraryTab.leaderboards =>
+          DiscoverLeaderboardsTab(controller: _leaderboardsController),
+        _LibraryTab.playlists =>
+          DiscoverPlaylistsTab(controller: _playlistsController),
       };
 
   M3ETab _tabSpec(AppLocalizations l10n, _LibraryTab tab) => switch (tab) {

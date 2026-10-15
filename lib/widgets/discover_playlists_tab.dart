@@ -19,7 +19,11 @@ AppLocalizations _l10n(BuildContext context) =>
 
 /// 资料页「歌单」tab：平台选择 + 歌单搜索 / 标签筛选 / 歌单列表（分页）。
 class DiscoverPlaylistsTab extends StatefulWidget {
-  const DiscoverPlaylistsTab({super.key});
+  const DiscoverPlaylistsTab({super.key, this.controller});
+
+  /// 歌单列表滚动控制器（宿主页面注入：重复点击底栏资料库时回顶）；
+  /// 为空时自建（独立挂载 / 测试）。
+  final ScrollController? controller;
 
   @override
   State<DiscoverPlaylistsTab> createState() => _DiscoverPlaylistsTabState();
@@ -30,8 +34,12 @@ class _DiscoverPlaylistsTabState extends State<DiscoverPlaylistsTab>
   final TextEditingController _searchController = TextEditingController();
   final FocusNode _searchFocusNode = FocusNode();
 
+  /// 自带控制器：宿主未注入时使用（随 State 释放）。
+  ScrollController? _ownedController;
+
   /// 歌单列表滚动控制器（常显滚动条，支持手拖定位）。
-  final ScrollController _scrollController = ScrollController();
+  ScrollController get _scrollController =>
+      widget.controller ?? (_ownedController ??= ScrollController());
 
   List<DiscoverTag> _hotTags = const [];
   List<DiscoverTagCategory> _tagCategories = const [];
@@ -84,7 +92,7 @@ class _DiscoverPlaylistsTabState extends State<DiscoverPlaylistsTab>
     _paged.dispose();
     _searchController.dispose();
     _searchFocusNode.dispose();
-    _scrollController.dispose();
+    _ownedController?.dispose();
     super.dispose();
   }
 

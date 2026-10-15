@@ -79,7 +79,7 @@ void main() {
     await repository.dispose();
   });
 
-  Future<void> pumpSection(WidgetTester tester) async {
+  Future<void> pumpSection(WidgetTester tester, {ScrollController? controller}) async {
     tester.view.physicalSize = const Size(1200, 2400);
     tester.view.devicePixelRatio = 1.0;
     addTearDown(() {
@@ -100,7 +100,7 @@ void main() {
             ...GlobalMaterialLocalizations.delegates,
           ],
           supportedLocales: const [Locale('zh')],
-          home: const Scaffold(body: SearchSection()),
+          home: Scaffold(body: SearchSection(controller: controller)),
         ),
       ),
     );
@@ -113,6 +113,26 @@ void main() {
     await tester.pumpAndSettle();
     expect(search.filteredResults, hasLength(3), reason: '搜索结果应已落地');
   }
+
+  testWidgets('结果列表滚动控制器可注入（底栏重复点击回顶的数据通路）', (tester) async {
+    source.onSearch = (query) => Future.value(
+          SearchResult(
+            items: [for (var i = 0; i < 60; i++) track('$i')],
+            hasMore: false,
+            total: 60,
+          ),
+        );
+    final controller = ScrollController();
+    addTearDown(controller.dispose);
+    await pumpSection(tester, controller: controller);
+    search.submitSearch('hello');
+    await tester.pumpAndSettle();
+
+    expect(controller.hasClients, isTrue, reason: '结果列表应挂在注入的控制器上');
+    await tester.drag(find.byType(CustomScrollView), const Offset(0, -300));
+    await tester.pumpAndSettle();
+    expect(controller.offset, greaterThan(0), reason: '拖动应作用在注入的控制器上');
+  });
 
   testWidgets('结果列表：收藏页同形曲目行（标题 / 歌手 / 时长）', (tester) async {
     await pumpSection(tester);

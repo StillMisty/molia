@@ -30,24 +30,27 @@ AppLocalizations _l10n(BuildContext context) =>
 /// 列表），歌手类型用 [ArtistRow]（点击进歌手页）；分段按渠道能力位显隐
 /// （脚本源只有单曲）。
 class SearchSection extends StatefulWidget {
-  const SearchSection({super.key});
+  const SearchSection({super.key, this.controller});
+
+  /// 结果列表滚动控制器（宿主页面注入：重复点击底栏资料库时回顶）；
+  /// 为空时自建（独立挂载 / 测试）。
+  final ScrollController? controller;
 
   @override
   State<SearchSection> createState() => _SearchSectionState();
 }
 
 class _SearchSectionState extends State<SearchSection> {
-  /// 结果区滚动控制器（常显滚动条，支持手拖定位）。
-  final ScrollController _resultsScrollController = ScrollController();
+  /// 自带控制器：宿主未注入时使用（随 State 释放）。
+  ScrollController? _ownedController;
 
-  @override
-  void initState() {
-    super.initState();
-  }
+  /// 结果列表滚动控制器（常显滚动条，支持手拖定位）。
+  ScrollController get _controller =>
+      widget.controller ?? (_ownedController ??= ScrollController());
 
   @override
   void dispose() {
-    _resultsScrollController.dispose();
+    _ownedController?.dispose();
     super.dispose();
   }
 
@@ -95,11 +98,11 @@ class _SearchSectionState extends State<SearchSection> {
 
             Expanded(
               child: Scrollbar(
-                controller: _resultsScrollController,
+                controller: _controller,
                 thumbVisibility: true,
                 interactive: true,
                 child: CustomScrollView(
-                  controller: _resultsScrollController,
+                  controller: _controller,
                   slivers: [
                     if (itemCount == 0 &&
                         !searchProvider.isSearching &&
