@@ -307,4 +307,44 @@ void main() {
     );
     expect(find.textContaining('top 3 artists'), findsOneWidget);
   });
+
+  testWidgets('收藏收进行尾菜单：行内无独立收藏按钮，菜单可切换', (tester) async {
+    await pumpProvider();
+    await pumpPage(tester);
+    await provider.grantConsent();
+    await provider.setEnabled(true);
+    await tester.pumpAndSettle();
+
+    // 行内不再有独立收藏按钮（收藏只出现在 ⋮ 菜单里）。
+    expect(find.byIcon(Icons.favorite_border_rounded), findsNothing);
+
+    await tester.tap(find.byIcon(Icons.more_vert_rounded).first);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Add to favorites'));
+    await tester.pumpAndSettle();
+    expect(libraryProvider.isFavorite('wy', '0'), isTrue);
+
+    await tester.tap(find.byIcon(Icons.more_vert_rounded).first);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Remove from favorites'));
+    await tester.pumpAndSettle();
+    expect(libraryProvider.isFavorite('wy', '0'), isFalse);
+  });
+
+  testWidgets('测试连接成功：自动保存表单里的新配置并收起表单', (tester) async {
+    await pumpProvider();
+    await pumpPage(tester);
+
+    await tester.tap(find.byKey(const Key('aiDjManageConfigButton')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('aiDjBaseUrlField')), findsOneWidget);
+
+    await tester.enterText(find.byKey(const Key('aiDjApiKeyField')), 'sk-new');
+    await tester.tap(find.byKey(const Key('aiDjTestConnectionButton')));
+    await tester.pumpAndSettle();
+
+    expect(provider.config?.apiKey, 'sk-new');
+    expect(find.byKey(const Key('aiDjBaseUrlField')), findsNothing);
+    expect(find.text('Connected — config saved'), findsOneWidget);
+  });
 }

@@ -673,6 +673,7 @@
   "aiDjPresetCustom": "自定义",
   "aiDjTestConnection": "测试连接",
   "aiDjTestSucceeded": "连接成功",
+  "aiDjTestSaved": "连接成功，配置已保存",
   "aiDjSaveConfig": "保存配置",
   "aiDjClearConfig": "清除配置",
   "aiDjConfigSaved": "已保存",
@@ -787,7 +788,7 @@
   },
   "aiDjUpstreamHint": "只包含以上统计与曲名/歌手，不含播放链接与设备信息。",
   "aiDjCacheTtlTitle": "推荐缓存",
-  "aiDjCacheTtlDays": "保留 {days} 天",
+  "aiDjCacheTtlDays": "{days} 天",
   "@aiDjCacheTtlDays": {
     "placeholders": {
       "days": {
@@ -795,7 +796,7 @@
       }
     }
   },
-  "aiDjCacheTtlForever": "永久保留",
+  "aiDjCacheTtlForever": "永久",
   "aiDjCacheTtlHint": "过期后不再作为续推来源，下一次续推自动生成新一批（不打断播放、不提示）。",
   "aiDjGenerate": "生成推荐",
   "aiDjEmptyList": "还没有推荐列表",

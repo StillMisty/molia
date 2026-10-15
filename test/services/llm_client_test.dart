@@ -190,4 +190,99 @@ void main() {
 
     expect(called, isTrue);
   });
+
+  group('响应形状容错（换服务商后「无法解析」误报的回归）', () {
+    ResponseBody raw(String body, [int status = 200]) =>
+        bytesResponse(utf8.encode(body), statusCode: status);
+
+    test('响应体带 BOM：剥掉后正常解析', () async {
+      final llm = LlmClient(
+        dio: mockDio((_) async => raw('\uFEFF${okBody('带 BOM 的正文')}')),
+      );
+
+      final content = await llm.complete(
+        config: config(),
+        systemPrompt: 's',
+        userPrompt: 'u',
+      );
+
+      expect(content, '带 BOM 的正文');
+    });
+
+    test('content 为 parts 数组：拼接 text 片段', () async {
+      final llm = LlmClient(
+        dio: mockDio(
+          (_) async => raw(jsonEncode({
+            'choices': [
+              {
+                'message': {
+                  'content': [
+                    {'type': 'text', 'text': '分'},
+                    {'type': 'text', 'text': '片'},
+                  ],
+                },
+              },
+            ],
+          })),
+        ),
+      );
+
+      final content = await llm.complete(
+        config: config(),
+        systemPrompt: 's',
+        userPrompt: 'u',
+      );
+
+      expect(content, '分片');
+    });
+
+    test('旧式 choices[0].text：兼容读取', () async {
+      final llm = LlmClient(
+        dio: mockDio(
+          (_) async => raw(jsonEncode({
+            'choices': [
+              {'text': '旧式正文'},
+            ],
+          })),
+        ),
+      );
+
+      final content = await llm.complete(
+        config: config(),
+        systemPrompt: 's',
+        userPrompt: 'u',
+      );
+
+      expect(content, '旧式正文');
+    });
+
+    test('testConnection：2xx + choices 即通过（正文为空也算通）', () async {
+      final llm = LlmClient(
+        dio: mockDio(
+          (_) async => raw(jsonEncode({
+            'choices': [
+              {
+                'message': {'content': '', 'reasoning_content': '推理模型只回了思维链'},
+              },
+            ],
+          })),
+        ),
+      );
+
+      await llm.testConnection(config());
+    });
+
+    test('testConnection：响应不含对话结果 → unknown', () async {
+      final llm = LlmClient(
+        dio: mockDio(
+          (_) async => raw(jsonEncode({'error': {'message': 'nope'}})),
+        ),
+      );
+
+      final failure = await failureOf(() => llm.testConnection(config()));
+
+      expect(failure.kind, FailureKind.unknown);
+      expect(failure.l10nKey, 'aiDjBadResponse');
+    });
+  });
 }

@@ -920,6 +920,7 @@
   "aiDjPresetCustom": "Custom",
   "aiDjTestConnection": "Test connection",
   "aiDjTestSucceeded": "Connected",
+  "aiDjTestSaved": "Connected — config saved",
   "aiDjSaveConfig": "Save",
   "aiDjClearConfig": "Clear",
   "aiDjConfigSaved": "Saved",
@@ -1034,7 +1035,7 @@
   },
   "aiDjUpstreamHint": "Only the stats above plus titles/artists — no play URLs, no device info.",
   "aiDjCacheTtlTitle": "Recommendation cache",
-  "aiDjCacheTtlDays": "Keep {days} days",
+  "aiDjCacheTtlDays": "{days} days",
   "@aiDjCacheTtlDays": {
     "placeholders": {
       "days": {
@@ -1042,7 +1043,7 @@
       }
     }
   },
-  "aiDjCacheTtlForever": "Keep forever",
+  "aiDjCacheTtlForever": "Forever",
   "aiDjCacheTtlHint": "An expired list stops feeding the radio; the next extension generates a new batch (no interruption, no notice).",
   "aiDjGenerate": "Generate",
   "aiDjEmptyList": "No recommendations yet",

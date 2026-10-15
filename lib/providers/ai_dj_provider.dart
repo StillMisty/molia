@@ -189,6 +189,21 @@ class AiDjProvider extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// 重新从存储读取配置（跨设备同步应用远端凭证后由注册表重载钩子调用）。
+  ///
+  /// 为什么需要：`_config` 只在本类写入时更新，同步/其它来源落盘的新配置
+  /// 若不回收，测试连接与生成会一直用旧值直到重启。
+  Future<void> reloadConfig() async {
+    final config = await _settingsStore.readConfig();
+    if (_sameConfig(_config, config)) return;
+    _config = config;
+    _lastError = null;
+    notifyListeners();
+  }
+
+  static bool _sameConfig(LlmConfig? a, LlmConfig? b) =>
+      a?.baseUrl == b?.baseUrl && a?.apiKey == b?.apiKey && a?.model == b?.model;
+
   Future<void> clearConfig() async {
     await _settingsStore.clearConfig();
     _config = null;

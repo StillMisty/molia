@@ -3464,6 +3464,12 @@ abstract class AppLocalizations {
   /// **'Connected'**
   String get aiDjTestSucceeded;
 
+  /// No description provided for @aiDjTestSaved.
+  ///
+  /// In en, this message translates to:
+  /// **'Connected — config saved'**
+  String get aiDjTestSaved;
+
   /// No description provided for @aiDjSaveConfig.
   ///
   /// In en, this message translates to:
@@ -3677,13 +3683,13 @@ abstract class AppLocalizations {
   /// No description provided for @aiDjCacheTtlDays.
   ///
   /// In en, this message translates to:
-  /// **'Keep {days} days'**
+  /// **'{days} days'**
   String aiDjCacheTtlDays(int days);
 
   /// No description provided for @aiDjCacheTtlForever.
   ///
   /// In en, this message translates to:
-  /// **'Keep forever'**
+  /// **'Forever'**
   String get aiDjCacheTtlForever;
 
   /// No description provided for @aiDjCacheTtlHint.

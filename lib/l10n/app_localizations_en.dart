@@ -1874,6 +1874,9 @@ class AppLocalizationsEn extends AppLocalizations {
   String get aiDjTestSucceeded => 'Connected';
 
   @override
+  String get aiDjTestSaved => 'Connected — config saved';
+
+  @override
   String get aiDjSaveConfig => 'Save';
 
   @override
@@ -2002,11 +2005,11 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String aiDjCacheTtlDays(int days) {
-    return 'Keep $days days';
+    return '$days days';
   }
 
   @override
-  String get aiDjCacheTtlForever => 'Keep forever';
+  String get aiDjCacheTtlForever => 'Forever';
 
   @override
   String get aiDjCacheTtlHint =>
