@@ -12,29 +12,22 @@ import 'any_listen/any_listen_errors.dart';
 import 'any_listen/any_listen_source.dart';
 import 'builtin/album_source.dart';
 import 'builtin/artist_source.dart';
+import 'builtin/builtin_lyric_dispatch.dart';
+import 'builtin/builtin_pic_dispatch.dart';
 import 'builtin/builtin_search.dart';
 import 'builtin/comment_source.dart';
 import 'builtin/discover_source.dart';
-import 'builtin/kg_lyric.dart';
-import 'builtin/kg_pic.dart';
-import 'builtin/kw_lyric.dart';
-import 'builtin/kw_pic.dart';
-import 'builtin/lyric_result.dart';
 import 'builtin/lyric_hit.dart';
 import 'builtin/lyric_search.dart';
-import 'builtin/mg_lyric.dart';
-import 'builtin/tx_lyric.dart';
-import 'builtin/wy_lyric.dart';
-import 'builtin/wy_music_detail.dart';
 import 'lx/lx_engine_supervisor.dart';
 import 'lx/lx_engine_types.dart';
 import 'lx/lx_script_info.dart';
 import 'lx/lx_script_repository.dart';
 import 'lx/lx_script_update.dart';
 import 'lx/lx_search_parse.dart';
+import 'source_preferences.dart';
 import 'source_search_result.dart';
 import 'source_track.dart';
-import '../data/cache/request_cache.dart';
 import '../domain/models/album.dart';
 import '../domain/models/artist.dart';
 import '../domain/models/comment.dart';
@@ -82,8 +75,6 @@ class SourceOption {
 /// [AnyListenSource] 适配为 [SourceKind.anyListen]。仅当「已配置且启用」
 /// 时才出现在 [searchableSources]，未配置/连接失败时对现有功能零影响。
 class SourceManager extends ChangeNotifier {
-  static const _supportedQualitys = kLxQualityOrder;
-
   final LxScriptRepository repository = LxScriptRepository();
 
   /// 引擎自愈包装：超时/isolate 退出后自动按退避重启。
@@ -93,22 +84,23 @@ class SourceManager extends ChangeNotifier {
   final AnyListenSource _anyListenSource;
   final List<StreamSubscription<dynamic>> _subscriptions = [];
 
-  /// 内置平台原生歌词/封面回退缓存（脚本不可用 / 未声明时的内置实现；
-  /// 5 分钟 TTL，key 为 `{track.id}:lyric|pic`）。
-  final RequestCache _builtinLyricCache =
-      RequestCache(maxEntries: 64, ttl: const Duration(minutes: 5));
-  final RequestCache _builtinPicCache =
-      RequestCache(maxEntries: 128, ttl: const Duration(minutes: 5));
+  /// 渠道偏好（音质 / 顺序 / 停用）的唯一持有者；变化经本类转发给 UI。
+  late final SourcePreferences _preferences;
+
+  /// 内置平台原生歌词回退（脚本不可用 / 未声明 lyric action 时的 Dart 实现）。
+  final BuiltinLyricDispatch _builtinLyricFallback = BuiltinLyricDispatch();
+
+  /// 内置平台原生封面回退（同上）。
+  final BuiltinPicDispatch _builtinPicFallback = BuiltinPicDispatch();
 
   SourceManager({LxEngineSupervisor? engine, SettingsRegistry? settings})
       : _engine = engine ?? LxEngineSupervisor(),
         _settings = settings ?? SettingsRegistry(keys: kAllSettingsKeys),
         _anyListenSource = AnyListenSource(settings: settings) {
+    _preferences = SourcePreferences(_settings)..addListener(notifyListeners);
     _engine.onStateChanged = _onEngineStateChanged;
-    // 应用远端设置后的定向重载：渠道偏好 / any-listen 连接。
-    _settings.bindReload(kLxDefaultQuality, reloadPreferences);
-    _settings.bindReload(kLxSourceOrder, reloadPreferences);
-    _settings.bindReload(kLxChannelDisabled, reloadPreferences);
+    // 应用远端设置后的定向重载：渠道偏好（自绑于 SourcePreferences）/
+    // any-listen 连接。
     _settings.bindReload(kAnyListenServerUrl, reloadAnyListenConfig);
     _settings.bindReload(kAnyListenToken, reloadAnyListenConfig);
     _settings.bindReload(kAnyListenEnabled, reloadAnyListenConfig);
@@ -118,10 +110,7 @@ class SourceManager extends ChangeNotifier {
   String? _activatingId;
   String? _activeError;
   Map<String, LxSourceDecl> _activeSources = {};
-  String _preferredQuality = '320k';
   LxUpdateAlert? _lastUpdateAlert;
-  List<String> _sourceOrder = const [];
-  Set<String> _disabledChannels = {};
 
   bool get initialized => _initialized;
   bool get isActivating => _activatingId != null;
@@ -131,15 +120,15 @@ class SourceManager extends ChangeNotifier {
   List<LxScriptInfo> get scripts => repository.scripts;
   LxScriptInfo? get activeScript => repository.activeScript;
   bool get engineReady => _engine.isRunning;
-  String get preferredQuality => _preferredQuality;
+  String get preferredQuality => _preferences.preferredQuality;
   LxUpdateAlert? get lastUpdateAlert => _lastUpdateAlert;
 
   /// 用户自定义的渠道顺序（持久化于 shared_preferences；同时决定渠道路由
   /// 之外的展示顺序与搜索音源顺序）。
-  List<String> get sourceOrder => List.unmodifiable(_sourceOrder);
+  List<String> get sourceOrder => _preferences.sourceOrder;
 
   /// 已停用的渠道集合（持久化；停用只影响列表/选择，不影响已保存曲目的取链）。
-  Set<String> get disabledChannels => Set.unmodifiable(_disabledChannels);
+  Set<String> get disabledChannels => _preferences.disabledChannels;
 
   /// 当前音源是否可用（激活了脚本且引擎就绪）。
   bool get hasActiveSource =>
@@ -159,6 +148,7 @@ class SourceManager extends ChangeNotifier {
   /// 资料页的渠道选择与「音源管理」的渠道排序都消费该列表；脚本扩展源 /
   /// any-listen 只有搜索能力，内置发现平台无论是否有脚本都保留发现入口。
   List<SourceOption> get channels {
+    final disabled = _preferences.disabledChannels;
     final candidates = <SourceOption>[
       for (final option in _searchableCandidates)
         SourceOption(
@@ -167,7 +157,7 @@ class SourceManager extends ChangeNotifier {
           kind: option.kind,
           canSearch: option.canSearch,
           discoverable: BuiltinDiscover.isSupported(option.key),
-          enabled: !_disabledChannels.contains(option.key),
+          enabled: !disabled.contains(option.key),
         ),
     ];
     final existing = candidates.map((o) => o.key).toSet();
@@ -180,12 +170,12 @@ class SourceManager extends ChangeNotifier {
         kind: SourceKind.builtin,
         canSearch: false,
         discoverable: true,
-        enabled: !_disabledChannels.contains(key),
+        enabled: !disabled.contains(key),
       ));
     }
 
-    final orderedKeys =
-        applySourceOrder(candidates.map((o) => o.key).toList(), _sourceOrder);
+    final orderedKeys = applySourceOrder(
+        candidates.map((o) => o.key).toList(), _preferences.sourceOrder);
     final byKey = {for (final option in candidates) option.key: option};
     return [for (final key in orderedKeys) byKey[key]!];
   }
@@ -311,7 +301,7 @@ class SourceManager extends ChangeNotifier {
 
   Future<void> init() async {
     await repository.init();
-    await _loadPreferences();
+    await _preferences.load();
     // 只读本地配置，不发起网络请求；失败时 AnyListenSource 维持默认（未配置）。
     await _anyListenSource.init();
 
@@ -338,32 +328,10 @@ class SourceManager extends ChangeNotifier {
     }
   }
 
-  Future<void> _loadPreferences() async {
-    try {
-      final quality = await _settings.read(kLxDefaultQuality);
-      if (_supportedQualitys.contains(quality)) {
-        _preferredQuality = quality;
-      }
-      final order = await _settings.read(kLxSourceOrder);
-      if (order.isNotEmpty) {
-        _sourceOrder = order;
-      }
-      final disabled = await _settings.read(kLxChannelDisabled);
-      if (disabled.isNotEmpty) {
-        _disabledChannels = disabled.toSet();
-      }
-    } catch (_) {}
-  }
-
-  /// 重新读取渠道偏好（顺序 / 停用 / 音质）。跨设备同步应用远端设置后
-  /// 由组合根调用；先重置为默认再加载，保证远端「清空」也能生效。
-  Future<void> reloadPreferences() async {
-    _preferredQuality = '320k';
-    _sourceOrder = const [];
-    _disabledChannels = <String>{};
-    await _loadPreferences();
-    notifyListeners();
-  }
+  /// 重新读取渠道偏好（顺序 / 停用 / 音质）。跨设备同步应用远端设置后由
+  /// 组合根经 [SettingsRegistry.bindReload] 触发；先重置为默认再加载，
+  /// 保证远端「清空」也能生效。状态与重载实现见 [SourcePreferences]。
+  Future<void> reloadPreferences() => _preferences.reload();
 
   /// 脚本被外部（跨设备同步）增删改后刷新引擎状态：
   /// 有激活脚本则重新激活（重新执行脚本、收集声明的源），否则停用引擎。
@@ -384,29 +352,12 @@ class SourceManager extends ChangeNotifier {
     }
   }
 
-  Future<void> setPreferredQuality(String quality) async {
-    if (!_supportedQualitys.contains(quality)) return;
-    _preferredQuality = quality;
-    notifyListeners();
-    try {
-      await _settings.write(kLxDefaultQuality, quality);
-    } catch (_) {}
-  }
+  Future<void> setPreferredQuality(String quality) =>
+      _preferences.setPreferredQuality(quality);
 
   /// 覆盖音源顺序（去重后持久化）。
-  Future<void> setSourceOrder(List<String> keys) async {
-    final cleaned = <String>[];
-    for (final key in keys) {
-      if (key.isEmpty || cleaned.contains(key)) continue;
-      cleaned.add(key);
-    }
-    if (listEquals(_sourceOrder, cleaned)) return;
-    _sourceOrder = cleaned;
-    notifyListeners();
-    try {
-      await _settings.write(kLxSourceOrder, cleaned);
-    } catch (_) {}
-  }
+  Future<void> setSourceOrder(List<String> keys) =>
+      _preferences.setSourceOrder(keys);
 
   /// 拖拽排序：把渠道列表（含内置发现平台；停用项同样参与排序）第
   /// [oldIndex] 项移动到 [newIndex]。
@@ -425,26 +376,11 @@ class SourceManager extends ChangeNotifier {
 
   /// 启用 / 停用渠道（持久化）。停用后该渠道不再出现在资料页渠道选择
   /// 与搜索结果中；已保存内容仍可通过内部路由取链播放。
-  Future<void> setChannelEnabled(String key, bool enabled) async {
-    if (key.isEmpty) return;
-    final changed =
-        enabled ? _disabledChannels.remove(key) : _disabledChannels.add(key);
-    if (!changed) return;
-    notifyListeners();
-    try {
-      await _settings.write(kLxChannelDisabled, _disabledChannels.toList());
-    } catch (_) {}
-  }
+  Future<void> setChannelEnabled(String key, bool enabled) =>
+      _preferences.setChannelEnabled(key, enabled);
 
   /// 清空自定义渠道顺序，恢复「脚本音源在前、内置平台在后」的默认排序。
-  Future<void> resetChannelOrder() async {
-    if (_sourceOrder.isEmpty) return;
-    _sourceOrder = const [];
-    notifyListeners();
-    try {
-      await _settings.clear(kLxSourceOrder);
-    } catch (_) {}
-  }
+  Future<void> resetChannelOrder() => _preferences.resetChannelOrder();
 
   /// 保存 any-listen 配置（设置页调用），并刷新音源可见性。
   ///
@@ -462,7 +398,8 @@ class SourceManager extends ChangeNotifier {
   }
 
   /// 导入脚本（不激活时可用于预览）。
-  Future<LxScriptInfo> importScript(String script, {bool activate = false}) async {
+  Future<LxScriptInfo> importScript(String script,
+      {bool activate = false}) async {
     final info = LxScriptInfo.parse(script);
     if (info == null) {
       throw const FormatException('无法解析音源脚本：缺少以 /** @name ... */ 开头的元信息');
@@ -554,7 +491,8 @@ class SourceManager extends ChangeNotifier {
     if (!decl.canSearch) {
       throw LxEngineException('音源「${decl.name}」不支持搜索');
     }
-    final action = decl.actions.contains('musicSearch') ? 'musicSearch' : 'search';
+    final action =
+        decl.actions.contains('musicSearch') ? 'musicSearch' : 'search';
     final data = await _engine.search(
       source: sourceKey,
       action: action,
@@ -566,7 +504,8 @@ class SourceManager extends ChangeNotifier {
   }
 
   /// 解析播放地址。requestedQuality 为空时使用默认音质偏好。
-  Future<String> resolveUrl(SourceTrack track, {String? requestedQuality}) async {
+  Future<String> resolveUrl(SourceTrack track,
+      {String? requestedQuality}) async {
     // any-listen 曲目走远程服务器取链；其余曲目走 LX 脚本取链。
     if (AnyListenSource.isAnyListenTrack(track)) {
       try {
@@ -583,7 +522,8 @@ class SourceManager extends ChangeNotifier {
     if (!decl.canResolveUrl) {
       throw LxEngineException('音源「${decl.name}」不支持获取播放地址');
     }
-    final picked = track.pickQuality(requestedQuality ?? _preferredQuality);
+    final picked =
+        track.pickQuality(requestedQuality ?? _preferences.preferredQuality);
     final musicInfo = _withPickedHash(track, picked);
     return _engine.getMusicUrl(
       source: track.sourceKey,
@@ -595,7 +535,8 @@ class SourceManager extends ChangeNotifier {
   /// 酷狗等平台不同音质对应不同 hash，取链前替换为所选音质的 hash。
   Map<String, dynamic> _withPickedHash(SourceTrack track, String quality) {
     final info = Map<String, dynamic>.from(track.raw);
-    final qualityInfo = track.qualities.where((q) => q.type == quality).firstOrNull;
+    final qualityInfo =
+        track.qualities.where((q) => q.type == quality).firstOrNull;
     if (qualityInfo?.hash != null && qualityInfo!.hash!.isNotEmpty) {
       info['hash'] = qualityInfo.hash;
     }
@@ -635,7 +576,7 @@ class SourceManager extends ChangeNotifier {
         // 脚本失败时继续尝试内置回退。
       }
     }
-    return _builtinLyric(track);
+    return _builtinLyricFallback.fetch(track);
   }
 
   /// 获取曲目评论（内置五平台；脚本扩展源 / any-listen 无评论能力）。
@@ -810,146 +751,7 @@ class SourceManager extends ChangeNotifier {
         // 脚本失败时继续尝试内置回退。
       }
     }
-    return _builtinPic(track);
-  }
-
-  /// 内置平台原生歌词回退（不支持 / 失败返回 null）。
-  Future<LxLyricResult?> _builtinLyric(SourceTrack track) async {
-    if (!BuiltinSearch.isBuiltin(track.sourceKey)) return null;
-    try {
-      return await _builtinLyricCache.getOrCreate<LxLyricResult?>(
-          '${track.id}:lyric', () async {
-        final info = await _fetchBuiltinLyric(track);
-        if (info == null || info.isEmpty) return null;
-        return LxLyricResult(
-          lyric: info.lyric,
-          tlyric: _nonEmpty(info.tlyric),
-          rlyric: _nonEmpty(info.rlyric),
-          lxlyric: _nonEmpty(info.lxlyric),
-        );
-      });
-    } catch (_) {
-      return null;
-    }
-  }
-
-  /// 内置平台原生封面回退（不支持 / 失败返回 null）。
-  Future<String?> _builtinPic(SourceTrack track) async {
-    if (!BuiltinSearch.isBuiltin(track.sourceKey)) return null;
-    try {
-      return await _builtinPicCache.getOrCreate<String?>(
-          '${track.id}:pic', () => _fetchBuiltinPic(track));
-    } catch (_) {
-      return null;
-    }
-  }
-
-  /// 派发到各内置平台的原生取词实现。
-  static Future<BuiltinLyricResult?> _fetchBuiltinLyric(
-    SourceTrack track,
-  ) {
-    final raw = track.raw;
-    switch (track.sourceKey) {
-      case 'wy':
-        final songId = raw['songmid'] ?? raw['id'];
-        if (songId == null) return Future.value(null);
-        return WyLyric.fetch(songId.toString()).then(
-          (info) => BuiltinLyricResult(
-            lyric: info.lyric,
-            tlyric: _nonEmpty(info.tlyric),
-            rlyric: _nonEmpty(info.rlyric),
-            lxlyric: _nonEmpty(info.lxlyric),
-          ),
-        );
-      case 'tx':
-        return TxLyric.fetch(
-          songId: raw['songId']?.toString(),
-          songMid: raw['songmid']?.toString(),
-        );
-      case 'kg':
-        final hash = raw['hash']?.toString();
-        final name = raw['name']?.toString();
-        if (hash == null || hash.isEmpty || name == null || name.isEmpty) {
-          return Future.value(null);
-        }
-        return KgLyric.fetch(
-          name: name,
-          hash: hash,
-          timelengthSeconds: _intervalSecondsOf(raw),
-        );
-      case 'kw':
-        final songmid = raw['songmid']?.toString();
-        if (songmid == null || songmid.isEmpty) return Future.value(null);
-        return KwLyric.fetch(songmid);
-      case 'mg':
-        return MgLyric.fetch(
-          songId: raw['songmid']?.toString(),
-          mrcUrl: raw['mrcUrl']?.toString(),
-          lrcUrl: raw['lrcUrl']?.toString(),
-          trcUrl: raw['trcUrl']?.toString(),
-        );
-      default:
-        return Future.value(null);
-    }
-  }
-
-  /// 派发到各内置平台的原生取图实现。
-  static Future<String?> _fetchBuiltinPic(SourceTrack track) {
-    final raw = track.raw;
-    switch (track.sourceKey) {
-      case 'wy':
-        final songId = raw['songmid'] ?? raw['id'];
-        if (songId == null) return Future.value(null);
-        return WyMusicDetail.getList([songId]).then(
-          (list) => list.isEmpty ? null : list.first.coverUrl,
-        );
-      case 'tx':
-        final albumMid = (raw['albumMid'] ?? raw['albumId'])?.toString();
-        if (albumMid != null && albumMid.isNotEmpty && albumMid != '空') {
-          return Future.value(
-            'https://y.gtimg.cn/music/photo_new/T002R500x500M000$albumMid.jpg',
-          );
-        }
-        return Future.value(null);
-      case 'kg':
-        return KgPic.fetch(
-          songmid: raw['songmid']?.toString() ?? '',
-          audioId: raw['audioId']?.toString(),
-          albumId: raw['albumId']?.toString(),
-          hash: raw['hash']?.toString(),
-          name: raw['name']?.toString(),
-          singer: raw['singer']?.toString(),
-        );
-      case 'kw':
-        return KwPic.fetch(raw['songmid']?.toString() ?? '');
-      case 'mg':
-        final img = raw['img']?.toString();
-        if (img != null && img.isNotEmpty) return Future.value(img);
-        final songId = raw['songmid']?.toString();
-        if (songId == null || songId.isEmpty) return Future.value(null);
-        return MgLyric.coverOf(songId);
-      default:
-        return Future.value(null);
-    }
-  }
-
-  /// 曲目时长（秒）：优先 `_interval`，否则解析 `mm:ss` 文本。
-  static int _intervalSecondsOf(Map<String, dynamic> raw) {
-    final rawInterval = raw['_interval'];
-    if (rawInterval is num) return rawInterval.toInt();
-    if (rawInterval is String) {
-      final parsed = int.tryParse(rawInterval);
-      if (parsed != null) return parsed;
-    }
-    final interval = raw['interval']?.toString() ?? '';
-    final match = RegExp(r'^(\d{1,3}):(\d{2})').firstMatch(interval);
-    if (match == null) return 0;
-    return int.parse(match.group(1)!) * 60 + int.parse(match.group(2)!);
-  }
-
-  static String? _nonEmpty(String? value) {
-    final trimmed = value?.trim();
-    return (trimmed == null || trimmed.isEmpty) ? null : trimmed;
+    return _builtinPicFallback.fetch(track);
   }
 
   /// 运行期 `updateAlert` 上报的更新地址记入当前激活脚本。
@@ -1032,6 +834,8 @@ class SourceManager extends ChangeNotifier {
     for (final subscription in _subscriptions) {
       subscription.cancel();
     }
+    _preferences.removeListener(notifyListeners);
+    _preferences.dispose();
     _anyListenSource.dispose();
     _engine.onStateChanged = null;
     _engine.close();
