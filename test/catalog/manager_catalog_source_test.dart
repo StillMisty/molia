@@ -226,6 +226,47 @@ void main() {
     });
   });
 
+  group('SourceManagerMusicSource · 歌手 / 歌词', () {
+    test('searchArtists / searchLyrics：非内置源无能力 → unsupported', () async {
+      final manager = SourceManager();
+      addTearDown(manager.dispose);
+      final source = SourceManagerMusicSource('lx_custom', manager);
+      expect(source.capabilities.artist, isFalse);
+      expect(source.capabilities.lyricSearch, isFalse);
+
+      await expectLater(
+        source.searchArtists(const SearchQuery(keyword: 'x')),
+        throwsA(isA<SourceFailure>()
+            .having((f) => f.kind, 'kind', FailureKind.unsupported)),
+      );
+      await expectLater(
+        source.searchLyrics(const SearchQuery(keyword: 'x')),
+        throwsA(isA<SourceFailure>()
+            .having((f) => f.kind, 'kind', FailureKind.unsupported)),
+      );
+    });
+
+    test('searchArtists：内置平台未配脚本时歌手搜索同门被拒（详情能力仍在）', () async {
+      final manager = SourceManager();
+      addTearDown(manager.dispose);
+      final source = SourceManagerMusicSource('kw', manager);
+      // 能力位与专辑同一口径：歌手详情可浏览（不依赖脚本），搜索需可播放。
+      expect(source.capabilities.artist, isTrue);
+      expect(source.capabilities.lyricSearch, isTrue);
+
+      await expectLater(
+        source.searchArtists(const SearchQuery(keyword: '周杰伦')),
+        throwsA(isA<SourceFailure>()
+            .having((f) => f.kind, 'kind', FailureKind.unsupported)),
+      );
+      await expectLater(
+        source.searchLyrics(const SearchQuery(keyword: '雨下整夜')),
+        throwsA(isA<SourceFailure>()
+            .having((f) => f.kind, 'kind', FailureKind.unsupported)),
+      );
+    });
+  });
+
   group('SourceManagerMusicSource · search/resolve/lyrics/artwork', () {
     test('search：SourceTrack → Track 映射，hasMore/total 原样透传', () async {
       final manager = await configuredManager();
