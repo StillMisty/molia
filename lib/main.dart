@@ -463,6 +463,10 @@ void main() async {
     recommendationService: aiRecommendationService,
     settingsStore: aiSettingsStore,
   );
+  // AI 凭证属同步类别：远端应用后要立即回读，否则测试连接/生成仍用旧配置。
+  settingsRegistry.bindReload(kAiDjBaseUrl, aiDjProvider.reloadConfig);
+  settingsRegistry.bindReload(kAiDjApiKey, aiDjProvider.reloadConfig);
+  settingsRegistry.bindReload(kAiDjModel, aiDjProvider.reloadConfig);
   unawaited(aiDjProvider.init());
   playbackProvider.addListener(aiDjProvider.onPlaybackChanged);
   playbackProvider.position.addListener(aiDjProvider.onPositionChanged);

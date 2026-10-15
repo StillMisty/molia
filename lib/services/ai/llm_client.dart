@@ -5,6 +5,8 @@
 /// - 错误在边界统一为 [SourceFailure]（401/403 → unauthorized、
 ///   429 → rateLimited、超时 → timeout、连接失败 → network、
 ///   响应不可解析 → unknown），UI 只消费 kind/l10nKey/retryable；
+/// - 响应形状容错：BOM、`content` 为 parts 数组、旧式 `text` 字段等兼容实现
+///   都能读出正文（形状差异不该被误判成「服务不可用」）；
 /// - apiKey 只进请求头，绝不出现在异常 message/日志里。
 library;
 
@@ -12,6 +14,7 @@ import 'dart:async';
 import 'dart:convert';
 
 import 'package:dio/dio.dart';
+import 'package:logging/logging.dart';
 
 import '../../data/http/app_dio.dart';
 import '../../domain/models/ai_dj.dart';
@@ -26,6 +29,7 @@ class LlmClient {
 
   final Dio _dio;
   final Duration _timeout;
+  final Logger _logger = Logger('molia.llm_client');
 
   /// 请求地址归一：
   /// - 已以 `/chat/completions` 结尾 → 原样；
@@ -56,6 +60,66 @@ class LlmClient {
     required String userPrompt,
     double temperature = 0.8,
     int maxTokens = 4096,
+    bool jsonMode = false,
+  }) async {
+    final decoded = await _chatCompletions(
+      config: config,
+      systemPrompt: systemPrompt,
+      userPrompt: userPrompt,
+      temperature: temperature,
+      maxTokens: maxTokens,
+      jsonMode: jsonMode,
+    );
+    final content = extractAssistantContent(decoded);
+    if (content == null || content.trim().isEmpty) {
+      // 推理模型会把输出预算花在思维链上、正文留空：生成侧必须拿到正文，
+      // 记下 finish_reason 以便区分「模型没答」与「解析坏了」。
+      _logger.warning(
+        'AI 响应无正文（finish_reason: ${finishReasonOf(decoded) ?? '未知'}）',
+      );
+      throw const SourceFailure(
+        kind: FailureKind.unknown,
+        message: 'AI 服务返回空内容',
+        l10nKey: 'aiDjBadResponse',
+        retryable: true,
+      );
+    }
+    return content;
+  }
+
+  /// 连接测试：发一条极小请求验证地址/Key/模型可用。
+  ///
+  /// 判据刻意放宽为「2xx + 对话结果（`choices` 非空）」：正文是否为空不代表
+  /// 连接不可用（推理模型可能只回思维链、兼容实现可能返回特殊结构），连接
+  /// 测试只关心地址、凭证、模型名能否走通。
+  Future<void> testConnection(LlmConfig config) async {
+    final decoded = await _chatCompletions(
+      config: config,
+      systemPrompt: '你是连接测试助手。',
+      userPrompt: '只回复两个字：可用',
+      temperature: 0,
+      maxTokens: 64,
+    );
+    if (!hasChoices(decoded)) {
+      _logger.warning(
+        'AI 连接测试：响应不含对话结果（HTTP 200）：${_snippet(jsonEncode(decoded))}',
+      );
+      throw const SourceFailure(
+        kind: FailureKind.unknown,
+        message: 'AI 服务未返回对话结果',
+        l10nKey: 'aiDjBadResponse',
+        retryable: true,
+      );
+    }
+  }
+
+  /// 发一轮 Chat Completions，返回解码后的 JSON 对象。
+  Future<Map<String, dynamic>> _chatCompletions({
+    required LlmConfig config,
+    required String systemPrompt,
+    required String userPrompt,
+    required double temperature,
+    required int maxTokens,
     bool jsonMode = false,
   }) async {
     final uri = chatCompletionsUri(config.baseUrl);
@@ -132,13 +196,16 @@ class LlmClient {
       );
     }
 
-    final String content;
+    final body = _stripBom(bodyText(response));
     try {
-      final decoded = jsonDecode(bodyText(response));
-      content = ((decoded as Map<String, dynamic>)['choices'] as List?)
-              ?.firstOrNull?['message']?['content'] as String? ??
-          '';
+      final decoded = jsonDecode(body);
+      if (decoded is Map<String, dynamic>) return decoded;
+      throw const FormatException('响应不是 JSON 对象');
     } catch (e) {
+      // 记录一段响应片段（不含任何凭证），便于定位网关/兼容实现的形状差异。
+      _logger.warning(
+        'AI 响应解析失败（HTTP ${response.httpStatus}）：${_snippet(body)}',
+      );
       throw SourceFailure(
         kind: FailureKind.unknown,
         message: 'AI 服务响应不可解析',
@@ -146,25 +213,76 @@ class LlmClient {
         cause: e,
       );
     }
-    if (content.trim().isEmpty) {
-      throw const SourceFailure(
-        kind: FailureKind.unknown,
-        message: 'AI 服务返回空内容',
-        l10nKey: 'aiDjBadResponse',
-        retryable: true,
-      );
-    }
-    return content;
   }
 
-  /// 连接测试：发一条极小请求验证地址/Key/模型可用。
-  Future<void> testConnection(LlmConfig config) => complete(
-        config: config,
-        systemPrompt: '你是连接测试助手。',
-        userPrompt: '只回复两个字：可用',
-        temperature: 0,
-        maxTokens: 16,
-      );
+  /// 从对话响应提取正文：兼容 `choices[0].message.content` 的字符串 /
+  /// content parts 数组 / 单对象，以及旧式 `choices[0].text`。
+  static String? extractAssistantContent(Map<String, dynamic> decoded) {
+    final choice = _firstChoice(decoded);
+    if (choice == null) return null;
+    final message = choice['message'];
+    if (message is Map) {
+      final text = _contentText(message['content']);
+      if (text != null && text.isNotEmpty) return text;
+    }
+    final legacy = choice['text'];
+    if (legacy is String && legacy.isNotEmpty) return legacy;
+    return null;
+  }
+
+  /// 响应是否含对话结果（连接测试判据）。
+  static bool hasChoices(Map<String, dynamic> decoded) =>
+      _firstChoice(decoded) != null;
+
+  /// 首个 choice 的 finish_reason（诊断用；未知返回 null）。
+  static String? finishReasonOf(Map<String, dynamic> decoded) {
+    final reason = _firstChoice(decoded)?['finish_reason'];
+    return reason is String ? reason : null;
+  }
+
+  static Map? _firstChoice(Map<String, dynamic> decoded) {
+    final choices = decoded['choices'];
+    if (choices is! List || choices.isEmpty) return null;
+    final first = choices.first;
+    return first is Map ? first : null;
+  }
+
+  /// content 归一：字符串原样；parts 数组 / 单对象取其中的 `text` 拼接。
+  static String? _contentText(dynamic content) {
+    if (content is String) return content;
+    if (content is Map) {
+      final text = content['text'];
+      return text is String ? text : null;
+    }
+    if (content is List) {
+      final parts = <String>[];
+      for (final part in content) {
+        if (part is Map) {
+          final text = part['text'];
+          if (text is String && text.isNotEmpty) parts.add(text);
+        } else if (part is String && part.isNotEmpty) {
+          parts.add(part);
+        }
+      }
+      return parts.isEmpty ? null : parts.join();
+    }
+    return null;
+  }
+
+  /// 去掉 UTF-8 BOM 与首尾空白：部分网关会在 JSON 前带 BOM，jsonDecode 会拒。
+  static String _stripBom(String text) {
+    var value = text.trim();
+    while (value.startsWith('\uFEFF')) {
+      value = value.substring(1).trimLeft();
+    }
+    return value;
+  }
+
+  /// 日志用响应片段：压成单行并截断（只用于定位响应形状，不含凭证）。
+  static String _snippet(String text) {
+    final single = text.replaceAll(RegExp(r'\s+'), ' ').trim();
+    return single.length <= 200 ? single : '${single.substring(0, 200)}…';
+  }
 
   void dispose() => _dio.close();
 }
