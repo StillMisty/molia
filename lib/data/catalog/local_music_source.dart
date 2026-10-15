@@ -12,6 +12,7 @@
 /// - 文件缺失归一化为可读 [SourceFailure]（notFound），供 UI 提示重下。
 library;
 
+import '../../domain/models/artist.dart';
 import '../../domain/models/catalog.dart';
 import '../../domain/models/comment.dart';
 import '../../domain/models/failure.dart';
@@ -98,6 +99,17 @@ class LocalMusicSource implements MusicSource {
     return Future.error(const SourceFailure(
       kind: FailureKind.unsupported,
       message: '本地音源不支持评论',
+    ));
+  }
+
+  @override
+  Future<SearchResult<ArtistSummary>> searchArtists(
+    SearchQuery query, {
+    CancelToken? cancel,
+  }) {
+    return Future.error(const SourceFailure(
+      kind: FailureKind.unsupported,
+      message: '本地音源不支持歌手搜索',
     ));
   }
 

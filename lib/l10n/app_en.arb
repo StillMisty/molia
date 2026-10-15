@@ -359,6 +359,9 @@
       }
     }
   },
+  "searchKindSongs": "Songs",
+  "searchKindArtists": "Artists",
+  "searchKindLyrics": "Lyrics",
   "searchLoadMore": "Load more",
   "searchLoadMoreWithTotal": "Load more ({total} tracks)",
   "@searchLoadMoreWithTotal": {

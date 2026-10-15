@@ -760,6 +760,15 @@ class AppLocalizationsZh extends AppLocalizations {
   }
 
   @override
+  String get searchKindSongs => '单曲';
+
+  @override
+  String get searchKindArtists => '歌手';
+
+  @override
+  String get searchKindLyrics => '歌词';
+
+  @override
   String get searchLoadMore => '加载更多';
 
   @override

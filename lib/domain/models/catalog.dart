@@ -1,5 +1,11 @@
 import 'equality.dart';
 
+/// 搜索类型（搜索页「单曲 / 歌手 / 歌词」分段）。
+///
+/// 各类型的可取性与分页相互独立：能力位在 `SourceCapabilities`
+/// （song 恒有；artist / lyricSearch 按平台），UI 按能力位显隐分段。
+enum SearchKind { song, artist, lyric }
+
 /// 搜索请求（page 从 1 开始）。
 class SearchQuery {
   final String keyword;

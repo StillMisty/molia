@@ -1520,6 +1520,24 @@ abstract class AppLocalizations {
   /// **'No results found in “{source}”'**
   String searchNoResultsInSource(String source);
 
+  /// No description provided for @searchKindSongs.
+  ///
+  /// In en, this message translates to:
+  /// **'Songs'**
+  String get searchKindSongs;
+
+  /// No description provided for @searchKindArtists.
+  ///
+  /// In en, this message translates to:
+  /// **'Artists'**
+  String get searchKindArtists;
+
+  /// No description provided for @searchKindLyrics.
+  ///
+  /// In en, this message translates to:
+  /// **'Lyrics'**
+  String get searchKindLyrics;
+
   /// No description provided for @searchLoadMore.
   ///
   /// In en, this message translates to:

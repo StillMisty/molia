@@ -791,6 +791,15 @@ class AppLocalizationsEn extends AppLocalizations {
   }
 
   @override
+  String get searchKindSongs => 'Songs';
+
+  @override
+  String get searchKindArtists => 'Artists';
+
+  @override
+  String get searchKindLyrics => 'Lyrics';
+
+  @override
   String get searchLoadMore => 'Load more';
 
   @override

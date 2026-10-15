@@ -1,9 +1,11 @@
+import '../../domain/models/artist.dart';
 import '../../domain/models/catalog.dart';
 import '../../domain/models/comment.dart';
 import '../../domain/models/failure.dart';
 import '../../domain/models/source.dart';
 import '../../domain/models/track.dart';
 import '../../domain/ports/music_source.dart';
+import '../../sources/builtin/artist_source.dart';
 import '../../sources/source_manager.dart';
 import '../../sources/source_search_result.dart';
 import '../mapping/track_mapper.dart';
@@ -70,6 +72,40 @@ class SourceManagerMusicSource implements MusicSource {
       items: [for (final track in result.tracks) trackFromSourceTrack(track)],
       hasMore: result.hasMore,
       total: result.total,
+    );
+  }
+
+  @override
+  Future<SearchResult<ArtistSummary>> searchArtists(
+    SearchQuery query, {
+    CancelToken? cancel,
+  }) async {
+    if (!capabilities.artist) {
+      // 无能力时明确抛 unsupported（与 collection / comments 同一约定）。
+      throw SourceFailure(
+        kind: FailureKind.unsupported,
+        message: '音源 $key 不支持歌手搜索',
+      );
+    }
+    if (cancel?.isCancelled ?? false) return SearchResult.empty<ArtistSummary>();
+    final ArtistSearchPage page;
+    try {
+      page = await _manager.searchArtists(
+        key,
+        query.keyword,
+        page: query.page,
+        limit: query.limit,
+      );
+    } catch (e) {
+      // 边界错误归一化：上层只消费 SourceFailure（kind/retryable）。
+      throw SourceFailure.from(e);
+    }
+    // 协议层不支持取消：以“丢弃结果”等价实现。
+    if (cancel?.isCancelled ?? false) return SearchResult.empty<ArtistSummary>();
+    return SearchResult<ArtistSummary>(
+      items: page.items,
+      hasMore: page.hasMore,
+      total: page.total,
     );
   }
 

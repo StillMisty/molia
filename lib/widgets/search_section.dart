@@ -5,6 +5,8 @@ import 'package:material_3_expressive/material_3_expressive.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:provider/provider.dart';
 
+import '../domain/models/artist.dart';
+import '../domain/models/catalog.dart' show SearchKind;
 import '../domain/ports/source_registry.dart';
 import '../l10n/app_localizations.dart';
 import '../pages/artist_page.dart';
@@ -13,6 +15,7 @@ import '../providers/search_provider.dart';
 import '../utils/duration_text.dart';
 import '../utils/responsive.dart';
 import 'add_to_library.dart';
+import 'artist_row.dart';
 import 'track_menu_tile.dart';
 import 'track_row.dart';
 
@@ -21,11 +24,11 @@ import 'track_row.dart';
 AppLocalizations _l10n(BuildContext context) =>
     AppLocalizations.of(context) ?? lookupAppLocalizations(const Locale('zh'));
 
-/// 搜索结果区：与收藏页同形的曲目列表 + 音源分页。
+/// 搜索结果区：类型分段（单曲 / 歌手 / 歌词）+ 各类型的结果列表与音源分页。
 ///
 /// 结果行与发现详情页共用 [TrackMenuTile]（点击播放；行尾菜单收藏 / 加入
-/// 列表），本组件只做搜索域接线。当前音源搜索只产出曲目，因此行形态固定；
-/// 若将来回归专辑 / 歌单结果，需要按类型另做行形态。
+/// 列表），歌手类型用 [ArtistRow]（点击进歌手页）；分段按渠道能力位显隐
+/// （脚本源只有单曲）。
 class SearchSection extends StatefulWidget {
   const SearchSection({super.key});
 
@@ -56,12 +59,25 @@ class _SearchSectionState extends State<SearchSection> {
         final horizontalPadding =
             context.layoutType(ResponsivePageType.browse).horizontalPadding;
         final results = searchProvider.filteredResults;
+        final artistResults = searchProvider.artistResults;
+        final isArtistKind =
+            searchProvider.searchKind == SearchKind.artist;
+        final itemCount = isArtistKind ? artistResults.length : results.length;
         final error = searchProvider.errorMessage;
+        final kinds = searchProvider.supportedSearchKinds;
 
         return Column(
           children: [
             // 结果页顶部无独立栏（搜索框自身即状态），只留少量间距。
             const SizedBox(height: 8),
+
+            // 类型分段：仅在有多个可选类型且搜索已激活时显示。
+            if (searchProvider.isSearchActive && kinds.length > 1)
+              Padding(
+                padding: EdgeInsets.fromLTRB(
+                    horizontalPadding, 0, horizontalPadding, 8),
+                child: _buildKindSwitch(l10n, searchProvider, kinds),
+              ),
 
             if (searchProvider.isSearching)
               const Padding(
@@ -79,12 +95,22 @@ class _SearchSectionState extends State<SearchSection> {
                 child: CustomScrollView(
                   controller: _resultsScrollController,
                   slivers: [
-                    if (results.isEmpty &&
+                    if (itemCount == 0 &&
                         !searchProvider.isSearching &&
                         error == null)
                       SliverFillRemaining(
                         hasScrollBody: false,
                         child: _buildEmptyResultsView(l10n, searchProvider),
+                      )
+                    else if (isArtistKind)
+                      SliverPadding(
+                        padding: EdgeInsets.symmetric(
+                            horizontal: horizontalPadding),
+                        sliver: _ArtistResultsList(
+                          items: artistResults,
+                          onItemTap: (artist) =>
+                              unawaited(_openArtist(searchProvider, artist)),
+                        ),
                       )
                     else
                       SliverPadding(
@@ -97,7 +123,7 @@ class _SearchSectionState extends State<SearchSection> {
                       ),
 
                     // 音源搜索分页：列表尾部按钮加载下一页
-                    if (results.isNotEmpty &&
+                    if (itemCount > 0 &&
                         searchProvider.hasSelectedSource &&
                         (searchProvider.hasMore ||
                             searchProvider.isLoadingMore))
@@ -109,6 +135,50 @@ class _SearchSectionState extends State<SearchSection> {
           ],
         );
       },
+    );
+  }
+
+  /// 类型分段（单曲 / 歌手 / 歌词）：M3E 分段按钮需要紧约束铺满
+  /// （内部 `Positioned.fill`，放松约束会塌成零宽）。
+  Widget _buildKindSwitch(
+    AppLocalizations l10n,
+    SearchProvider searchProvider,
+    List<SearchKind> kinds,
+  ) {
+    return SizedBox(
+      width: double.infinity,
+      child: M3ESegmentedButton<SearchKind>(
+        segments: [
+          for (final kind in kinds)
+            M3ESegment<SearchKind>(
+              value: kind,
+              label: _kindLabel(l10n, kind),
+            ),
+        ],
+        selected: {searchProvider.searchKind},
+        onSelectionChanged: (selection) {
+          // 单选：M3E 语义下重按已选中项不会清空。
+          if (selection.isNotEmpty) {
+            searchProvider.selectSearchKind(selection.first);
+          }
+        },
+      ),
+    );
+  }
+
+  String _kindLabel(AppLocalizations l10n, SearchKind kind) => switch (kind) {
+        SearchKind.song => l10n.searchKindSongs,
+        SearchKind.artist => l10n.searchKindArtists,
+        SearchKind.lyric => l10n.searchKindLyrics,
+      };
+
+  /// 打开歌手页（歌手条目 → 平台内歌手 id）。
+  Future<void> _openArtist(SearchProvider searchProvider, ArtistSummary artist) {
+    return showArtistPage(
+      context,
+      searchProvider.sourceKey,
+      artist.id,
+      fallbackName: artist.name,
     );
   }
 
@@ -244,6 +314,58 @@ class _SearchSectionState extends State<SearchSection> {
       }
     }
     return null;
+  }
+}
+
+/// 歌手结果列表：固定行高（[ArtistRow]，点击进歌手页），懒构建。
+class _ArtistResultsList extends StatelessWidget {
+  final List<ArtistSummary> items;
+  final void Function(ArtistSummary artist)? onItemTap;
+
+  const _ArtistResultsList({required this.items, this.onItemTap});
+
+  @override
+  Widget build(BuildContext context) {
+    if (items.isEmpty) {
+      return SliverFillRemaining(
+        hasScrollBody: false,
+        child: Center(
+          child: Padding(
+            padding: const EdgeInsets.all(16),
+            child: Text(_l10n(context).noItemsFound),
+          ),
+        ),
+      );
+    }
+
+    final l10n = _l10n(context);
+    final gap = ArtistRow.gapOf(context);
+    return SliverFixedExtentList.builder(
+      // 行高 + 行距：固定 extent，长列表滚动条拖动一次定位。
+      itemExtent: ArtistRow.extent + gap,
+      itemCount: items.length,
+      itemBuilder: (context, index) {
+        final artist = items[index];
+        return Padding(
+          padding: EdgeInsets.only(bottom: gap),
+          child: ArtistRow(
+            key: ValueKey(artist.id),
+            name: artist.name,
+            avatarUrl: artist.avatarUrl,
+            subtitle: artist.songCount == null
+                ? null
+                : l10n.artistSongCount(artist.songCount!),
+            position: calculateCardPosition(index, items.length),
+            onTap: onItemTap == null
+                ? null
+                : () {
+                    HapticFeedback.lightImpact();
+                    onItemTap!(artist);
+                  },
+          ),
+        );
+      },
+    );
   }
 }
 

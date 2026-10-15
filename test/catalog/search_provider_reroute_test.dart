@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:molia/data/catalog/catalog_service.dart';
 import 'package:molia/data/playback/default_playback_facade.dart';
+import 'package:molia/domain/models/artist.dart';
 import 'package:molia/domain/models/catalog.dart';
 import 'package:molia/domain/models/comment.dart';
 import 'package:molia/domain/models/failure.dart';
@@ -100,21 +101,25 @@ class _FakeMessenger implements UiMessenger {
 }
 
 class _FakeMusicSource implements MusicSource {
-  _FakeMusicSource(this.key);
+  _FakeMusicSource(this.key, {this.capabilities = _searchOnly});
+
+  static const _searchOnly =
+      domain.SourceCapabilities(search: true, pagination: true);
 
   @override
   final String key;
 
+  @override
+  final domain.SourceCapabilities capabilities;
+
   int searchCalls = 0;
+  int artistSearchCalls = 0;
   Object? searchError;
+  Object? artistSearchError;
   Future<SearchResult<Track>> Function(SearchQuery query)? onSearch;
 
   @override
   String get displayName => key;
-
-  @override
-  domain.SourceCapabilities get capabilities =>
-      const domain.SourceCapabilities(search: true, pagination: true);
 
   @override
   Future<void> init() async {}
@@ -132,6 +137,25 @@ class _FakeMusicSource implements MusicSource {
     final handler = onSearch;
     if (handler != null) return handler(query);
     return SearchResult(items: [_track(key, '${query.keyword}-${query.page}')]);
+  }
+
+  @override
+  Future<SearchResult<ArtistSummary>> searchArtists(
+    SearchQuery query, {
+    CancelToken? cancel,
+  }) async {
+    artistSearchCalls++;
+    if (artistSearchError != null) throw artistSearchError!;
+    return SearchResult(
+      items: [
+        ArtistSummary(
+          id: '${query.keyword}-a${query.page}',
+          name: '歌手 ${query.keyword}',
+        ),
+      ],
+      hasMore: true,
+      total: 42,
+    );
   }
 
   @override
@@ -450,6 +474,134 @@ void main() {
     await _waitUntil(() => provider.sourceKey.isEmpty);
     expect(provider.hasSelectedSource, isFalse);
     expect(provider.sourceOptions, isEmpty);
+  });
+
+  test('搜索类型：能力位决定分段；不支持的类型切换被忽略', () async {
+    final script = _FakeMusicSource('script');
+    final registry = _FakeRegistry(
+      {'kw': _FakeMusicSource('kw'), 'script': script},
+      [_descriptor('kw', '酷我'), _descriptor('script', '脚本源')],
+    );
+    addTearDown(registry.dispose);
+    final provider = buildProvider(registry);
+
+    // kw 的音乐源能力位由 `_descriptor` 决定（无 artist）→ 只有单曲。
+    expect(provider.searchKind, SearchKind.song);
+    expect(provider.supportedSearchKinds, [SearchKind.song]);
+    provider.selectSearchKind(SearchKind.artist);
+    expect(provider.searchKind, SearchKind.song, reason: '不支持的类型忽略');
+    expect(script.artistSearchCalls, 0);
+  });
+
+  test('歌手类型：切换触发独立搜索；分页 / 错误取当前类型视图', () async {
+    final source = _FakeMusicSource(
+      'kw',
+      capabilities: const domain.SourceCapabilities(
+        search: true,
+        pagination: true,
+        artist: true,
+      ),
+    );
+    final registry = _FakeRegistry(
+      {'kw': source},
+      [_descriptor('kw', '酷我')],
+    );
+    addTearDown(registry.dispose);
+    final provider = buildProvider(registry);
+
+    expect(provider.supportedSearchKinds, [SearchKind.song, SearchKind.artist]);
+
+    provider.submitSearch('周杰伦');
+    await _waitUntil(() => !provider.isSearching);
+    expect(provider.searchResults, isNotEmpty);
+
+    provider.selectSearchKind(SearchKind.artist);
+    await _waitUntil(() => !provider.isSearching && provider.artistResults.isNotEmpty);
+    expect(source.artistSearchCalls, 1, reason: '切到歌手类型才发起歌手搜索');
+    expect(provider.artistResults.single.name, '歌手 周杰伦');
+    expect(provider.totalResults, 42, reason: '分页元数据取当前类型');
+    expect(provider.hasMore, isTrue);
+
+    // 切回单曲：命中已有结果，不重复请求。
+    provider.selectSearchKind(SearchKind.song);
+    await Future<void>.delayed(const Duration(milliseconds: 10));
+    expect(source.searchCalls, 1);
+
+    // 歌手类型加载下一页。
+    provider.selectSearchKind(SearchKind.artist);
+    await provider.loadMore();
+    await _waitUntil(() => source.artistSearchCalls == 2);
+    expect(provider.artistResults, hasLength(2));
+  });
+
+  test('歌手类型：换关键词清空会话，切回重新搜索', () async {
+    final source = _FakeMusicSource(
+      'kw',
+      capabilities: const domain.SourceCapabilities(
+        search: true,
+        pagination: true,
+        artist: true,
+      ),
+    );
+    final registry = _FakeRegistry(
+      {'kw': source},
+      [_descriptor('kw', '酷我')],
+    );
+    addTearDown(registry.dispose);
+    final provider = buildProvider(registry);
+
+    provider.submitSearch('周杰伦');
+    await _waitUntil(() => !provider.isSearching);
+    provider.selectSearchKind(SearchKind.artist);
+    await _waitUntil(() => provider.artistResults.isNotEmpty);
+    expect(source.artistSearchCalls, 1);
+
+    // 歌手类型处于激活态时换词：直接按新关键词刷新（同一会话）。
+    provider.submitSearch('温岚');
+    await _waitUntil(() =>
+        provider.artistResults.isNotEmpty &&
+        provider.artistResults.single.name == '歌手 温岚');
+    expect(source.artistSearchCalls, 2);
+
+    // 切回单曲后换词：非激活类型的会话被清空，切回时重新搜索。
+    provider.selectSearchKind(SearchKind.song);
+    provider.submitSearch('林俊杰');
+    await _waitUntil(() => !provider.isSearching);
+    expect(provider.artistResults, isEmpty, reason: '换词清空非激活类型的会话');
+
+    provider.selectSearchKind(SearchKind.artist);
+    await _waitUntil(() => provider.artistResults.isNotEmpty);
+    expect(source.artistSearchCalls, 3);
+    expect(provider.artistResults.single.name, '歌手 林俊杰');
+  });
+
+  test('歌手类型：换源后能力位不足时回退单曲', () async {
+    final script = _FakeMusicSource('script');
+    final registry = _FakeRegistry(
+      {
+        'kw': _FakeMusicSource(
+          'kw',
+          capabilities: const domain.SourceCapabilities(
+            search: true,
+            pagination: true,
+            artist: true,
+          ),
+        ),
+        'script': script,
+      },
+      [_descriptor('kw', '酷我'), _descriptor('script', '脚本源')],
+    );
+    addTearDown(registry.dispose);
+    final provider = buildProvider(registry);
+
+    provider.submitSearch('周杰伦');
+    await _waitUntil(() => !provider.isSearching);
+    provider.selectSearchKind(SearchKind.artist);
+    await _waitUntil(() => provider.artistResults.isNotEmpty);
+
+    provider.selectSource('script');
+    expect(provider.searchKind, SearchKind.song, reason: '换源回退单曲');
+    expect(provider.supportedSearchKinds, [SearchKind.song]);
   });
 
   test('无音源（未注入 service/registry）：空态行为不变', () async {
