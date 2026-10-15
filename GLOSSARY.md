@@ -383,8 +383,9 @@
 ## 缓存
 - **Local data（本地数据）** — 单曲在本机的东西，分两档：**已缓存**（易失副本：边播边缓存 / 后台下载 / 取词 / 取图产生，可离线播放，会被 LRU / TTL / 清理回收）与**已下载**（持久副本：`downloads/` + drift 记录，可分享、清缓存不影响），两档都没有就是「未下载」。两档都不是的那首曲目在信息页与页内统一显示「未下载」。唯一读取口 `lib/services/track_local_data_service.dart`（`TrackLocalData`），词表唯一出处 `LocalPartState`；**禁止** 页面或模块另写「算不算有」的判据（见 ADR-0008）。
 - **转存（Save a copy）** — 把已缓存的一档「固化」成持久下载：拷贝缓存内容到 `downloads/`（不触网）+ 落库，动作文案「转存到本地文件夹」。缓存命中时下载动作本身就是转存；转存后状态从「已缓存」变「已下载」。
-- **音频缓存键** — 缓存文件名 `{sourceKey}_{songId}_{quality}`（`CacheService.audioCacheKeyForSource` / `…ForTrack`）。`songId` 必须与 `TrackId.id` 同源（`SourceTrack.songId`，不带 `sourceKey:` 前缀）——写入侧与读取侧同名是硬约束，否则文件写了也没人找得到。
-- **半成品（partial）** — 音频缓存目录里未落成的文件：just_audio 边下载边写 `*.part`、字节预取写 `*.predl`、MIME 边车 `*.mime`。它们占磁盘但不是可播放缓存：索引 / 占用 / 命中一律排除，单独计为「写入中」，启动时清扫（写入者在本进程内，重启后残留必为孤儿）。
+- **Audio cache store（音频缓存约定模块）** — `lib/services/audio_cache_store.dart`：音频缓存目录磁盘约定的唯一实现（写入 / 读取两侧 key 命名、完整文件判据、完整文件索引、命中路径、按曲目的已缓存音质、半成品清扫、旧命名迁移）。`CacheService` 的同名静态方法保留为薄委托（门面）；文件存在性由调用方注入（命中探测与其后的拷贝必须同一文件系统视图）。见 ADR-0008。
+- **音频缓存键** — 缓存文件名 `{sourceKey}_{songId}_{quality}`（Audio cache store 的 `keyForSource` / `keyForTrack`；`CacheService.audioCacheKeyForSource` / `…ForTrack` 是兼容门面）。`songId` 必须与 `TrackId.id` 同源（`SourceTrack.songId`，不带 `sourceKey:` 前缀）——写入侧与读取侧同名是硬约束，否则文件写了也没人找得到。
+- **半成品（partial）** — 音频缓存目录里未落成的文件：just_audio 边下载边写 `*.part`、字节预取写 `*.predl`、MIME 边车 `*.mime`。它们占磁盘但不是可播放缓存：索引 / 占用 / 命中一律排除（判据在 Audio cache store），单独计为「写入中」，启动时清扫（写入者在本进程内，重启后残留必为孤儿）。
 - **Lyrics cache（歌词缓存模块）** — `lib/services/lyrics_cache.dart`：歌词键（`lyrics_cache_{trackId}`）、读写、用量与清理的唯一实现；TTL 策略属于 `CacheService`（取词时读取）。历史 `manual_lyrics_cache_*` 重复键只清不读。
 - **Artwork index（封面索引）** — flutter_cache_manager 的元数据存储；`CacheStorage` 直接删文件后，由 `ArtworkCache` 的 `_pruneMissingEntries` 同步清理失效条目（索引不指向缺失文件）。
 - **Paged list controller（分页列表状态机）** — `lib/providers/paged_list_controller.dart`：首屏 / 加载更多 / 失败态 / 过期响应丢弃 / 跨页去重的唯一实现；持有方提供 `fetchPage`，并可按需读取 `error`（原始异常）与 `page`。发现页歌单 tab 与 `SearchProvider` 均使用它（搜索的 query/source 上下文通过 `reset()` 使在途请求过期，不再自建守卫）。

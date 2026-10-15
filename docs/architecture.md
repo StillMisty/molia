@@ -321,9 +321,11 @@
   （`.mime`）：占用展示、命中探测、「缓存曲目」列表同一口径；半成品单独统计
   （页内「写入中」）。启动清扫中断残留半成品，旧命名（复合曲目 id 时代的
   `{sourceKey}_{sourceKey}:{songId}_*`）文件一次性清理（prefs 版本键）；
-  缓存文件名唯一入口 `CacheService.audioCacheKeyForSource`（写入侧，
-  `SourceTrack.songId`）与 `audioCacheKeyForTrack`（读取侧，`TrackId.id`），
-  两侧必须同名（回归测试见 `test/services/track_local_data_service_test.dart`）；
+  磁盘约定（命名 / 完整判据 / 索引 / 清扫 / 迁移）的唯一实现在
+  `lib/services/audio_cache_store.dart`（Audio cache store），`CacheService`
+  的同名静态方法是薄委托；缓存文件名写入侧（`SourceTrack.songId`）与读取侧
+  （`TrackId.id`）必须同名（回归测试见
+  `test/services/track_local_data_service_test.dart`）；
 - **落库**：drift `downloads` 表（schema v5，`filePath` 可空——记录可以只含
   歌词或只含封面；`publicUri` 存 Android 公共副本定位；`imported` 标记
   **本地导入**：就地引用用户文件、删除只移行）存原音源曲目键 +
