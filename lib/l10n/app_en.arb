@@ -1588,5 +1588,13 @@
   "sleepTimerCustom": "Custom duration…",
   "sleepTimerCustomTitle": "Custom duration",
   "sleepTimerCustomInvalid": "Duration must be between 1 minute and 10 hours",
-  "sleepTimerCustomConfirm": "Set"
+  "sleepTimerCustomConfirm": "Set",
+  "trayShowWindow": "Show window",
+  "trayPrevious": "Previous track",
+  "trayNext": "Next track",
+  "trayQuit": "Quit",
+  "settingsDesktopSection": "Desktop",
+  "settingsCloseToTray": "Minimize to tray on close",
+  "settingsCloseToTraySubtitle": "Keep playing in the background; reopen or quit from the tray icon",
+  "settingsTrayLinuxHint": "The tray icon needs a system tray host; GNOME requires the AppIndicator extension. Without one, closing quits"
 }

@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/foundation.dart';
 import 'package:flutter/widgets.dart';
 
@@ -12,16 +14,29 @@ class WindowChrome {
 
   static Future<void> ensureInitialized() async {}
 
+  /// 关闭策略（本平台无原生窗口，注入即失效；保留 API 使组合根无需分支）。
+  static void setCloseHandler(FutureOr<void> Function() handler) {}
+
   static Future<void> minimize() async {}
 
   static Future<void> toggleMaximize() async {}
 
   static Future<void> close() async {}
 
+  static Future<void> hide() async {}
+
+  static Future<void> show() async {}
+
+  static Future<void> quit() async {}
+
   static final ValueNotifier<bool> _maximized = ValueNotifier<bool>(false);
 
   /// 当前窗口是否最大化（本平台恒为 false）。
   static ValueListenable<bool> get maximized => _maximized;
+
+  /// 窗口可见性（本平台恒为 false，仅诊断/测试用）。
+  @visibleForTesting
+  static Future<bool> isVisible() async => false;
 
   /// 原生标题栏高度（仅诊断/测试用）：本平台无窗口 chrome，恒为 0。
   @visibleForTesting

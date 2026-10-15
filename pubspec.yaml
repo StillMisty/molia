@@ -51,6 +51,7 @@ dependencies:
   quickjs_engine: ^0.1.6
   dio: ^5.11.1
   package_info_plus: ^10.2.2
+  tray_manager: ^0.8.0
 dev_dependencies:
   flutter_test:
     sdk: flutter
@@ -69,4 +70,5 @@ flutter:
     - assets/icons/adaptive_icon_monochrome.png
     - assets/icons/molia_logo.png
     - assets/icons/molia_logo_outline.png
+    - assets/icons/tray_icon.png
     - assets/lx/

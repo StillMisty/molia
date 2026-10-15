@@ -38,6 +38,7 @@ import 'domain/models/catalog.dart' show SearchQuery;
 import 'domain/models/download.dart';
 import 'domain/models/failure.dart';
 import 'domain/models/device_sync.dart';
+import 'domain/models/track.dart';
 import 'domain/ports/music_source.dart' show PlayableStream;
 import 'domain/ports/source_registry.dart';
 import 'domain/ports/ui_messenger.dart';
@@ -90,6 +91,8 @@ import 'services/source_swap/source_swap_settings.dart';
 import 'services/update/update_installer.dart';
 import 'services/update/update_preferences.dart';
 import 'services/update/update_service.dart';
+import 'services/window/app_tray.dart';
+import 'services/window/tray_settings.dart';
 import 'services/window/window_chrome.dart';
 import 'sources/source_manager.dart';
 
@@ -388,6 +391,62 @@ void main() async {
     playbackProvider: playbackProvider,
   );
 
+  // 托盘与关闭行为（设备本地偏好，不登记设置注册表）：关闭窗口时默认
+  // 最小化到托盘（播放不中断），可在设置 › 通用 › 桌面 改为直接退出。
+  final traySettings = TraySettings();
+  await traySettings.init();
+
+  // 统一退出路径（托盘「退出」/ 更新安装后的重启替换）：先把播放会话与
+  // 统计落盘（等价于 App 进入后台的 flush，两者都是同步的「标记 + 触发」），
+  // 再无视关闭策略销毁窗口。落盘失败不阻断退出（否则窗口已关、进程却退不掉）。
+  Future<void> quitApp() async {
+    try {
+      playbackProvider.flushPlaybackSession();
+      playStatisticsService.flush();
+    } catch (e) {
+      debugPrint('[Molia] 退出前落盘失败（继续退出）: $e');
+    }
+    await WindowChrome.quit();
+  }
+
+  // 关闭请求（顶栏关闭键 / 系统关闭按钮）→ 按设置分流：隐藏到托盘或退出。
+  // 无托盘宿主（GNOME 未装 AppIndicator 扩展、无面板的裸 WM）时不做隐藏：
+  // 藏起来就没有找回入口，退回直接退出（设置页对 Linux 有同一提示）。
+  WindowChrome.setCloseHandler(() async {
+    if (traySettings.closeToTray && await AppTray.detectHost()) {
+      await WindowChrome.hide();
+    } else {
+      await quitApp();
+    }
+  });
+
+  // 托盘（Linux/Windows）：菜单动作全部落到既有 provider；文案 / tooltip /
+  // 菜单可用性跟随播放、收藏、语言与品牌名变化。其余平台是空实现，
+  // 下面的调用是安全的空操作（设置页据此隐藏入口）。
+  void syncTray() {
+    final snapshot = playbackProvider.snapshot;
+    final track = snapshot.current;
+    final brand = AppBrandingService.titleNotifier.value;
+    AppTray.setLabels(_trayLabels());
+    AppTray.setPlaybackState(
+      hasTrack: track != null,
+      isPlaying: snapshot.isPlaying,
+    );
+    AppTray.setFavorite(
+      track != null &&
+          libraryProvider.isFavorite(track.id.sourceKey, track.id.id),
+    );
+    AppTray.setTooltip(
+      track == null ? brand : '$brand · ${_trackTooltip(track)}',
+    );
+  }
+
+  playbackProvider.addListener(syncTray);
+  libraryProvider.addListener(syncTray);
+  AppBrandingService.titleNotifier.addListener(syncTray);
+  LanguageService.localeNotifier.addListener(syncTray);
+  syncTray();
+
   // AI 推歌：配置（安全存储）+ OpenAI-compatible 客户端 +
   // 画像/生成服务 + 模式控制器。组合根把播放快照 / 进度接进控制器
   //（跳过判定与低水位续推都在控制器里）。
@@ -678,8 +737,10 @@ void main() async {
     preferences: updatePreferences,
     currentVersion: appVersion,
     currentBuild: appBuild,
-    // 桌面端替换脚本就绪后由 provider 触发退出，脚本完成替换并重启。
-    quitApp: WindowChrome.close,
+    // 桌面端替换脚本就绪后由 provider 触发退出，脚本完成替换并重启；
+    // 走统一退出路径（flush 会话/统计 → 无视关闭策略销毁窗口），否则
+    // 会被「关闭最小化到托盘」拦截，替换脚本永远等不到进程退出。
+    quitApp: quitApp,
   );
   await updateProvider.init();
 
@@ -796,6 +857,8 @@ void main() async {
         ChangeNotifierProvider.value(value: syncProvider),
         // 换源偏好（自动换源开关）：设置页读写；播放链路已在上方接线。
         ChangeNotifierProvider.value(value: sourceSwapSettings),
+        // 托盘行为（关闭时最小化到托盘）：设置页读写；关闭策略已在上方接线。
+        ChangeNotifierProvider.value(value: traySettings),
         // 应用内更新：设置页读写（渠道 / 自动检查 / 下载安装）。
         ChangeNotifierProvider.value(value: updateProvider),
       ],
@@ -807,10 +870,56 @@ void main() async {
   // （音源仓库就绪后脚本适配器才能工作）。更新检查默认关闭（用户开启后
   // 每天最多一轮），网络失败静默不打扰。
   WidgetsBinding.instance.addPostFrameCallback((_) {
+    // 托盘在首帧后创建：此时图标资源可读，且不占启动关键路径。
+    // 宿主探测预热：关闭策略首次触发时直接读缓存结果（并留下启动日志）。
+    unawaited(AppTray.detectHost());
+    AppTray.init(
+      labels: _trayLabels(),
+      onShowWindow: () => unawaited(WindowChrome.show()),
+      onTogglePlay: () => unawaited(playbackProvider.togglePlayPause()),
+      onPrevious: () => unawaited(playbackProvider.skipToPrevious()),
+      onNext: () => unawaited(playbackProvider.skipToNext()),
+      onToggleFavorite: () {
+        final track = playbackProvider.snapshot.current;
+        if (track != null) {
+          unawaited(libraryProvider.toggleFavoriteTrack(track));
+        }
+      },
+      onQuit: () => unawaited(quitApp()),
+    );
     unawaited(updateProvider.maybeAutoCheck());
     sourceManager.init().then((_) {
       if (syncProvider.enabled) unawaited(syncProvider.syncNow());
     });
   });
+}
+
+/// 托盘菜单文案：按当前界面语言解析（未选择语言时跟随系统；与
+/// `app_shell.dart` 的品牌名解析同一规则）。
+TrayMenuLabels _trayLabels() {
+  final effective = LanguageService.localeNotifier.value ??
+      WidgetsBinding.instance.platformDispatcher.locale;
+  final resolved = LanguageService.supportedLocales.any(
+    (supported) => supported.languageCode == effective.languageCode,
+  )
+      ? effective
+      : LanguageService.supportedLocales.first;
+  final l10n = lookupAppLocalizations(resolved);
+  return TrayMenuLabels(
+    showWindow: l10n.trayShowWindow,
+    play: l10n.play,
+    pause: l10n.pause,
+    previous: l10n.trayPrevious,
+    next: l10n.trayNext,
+    addFavorite: l10n.favoriteAdd,
+    removeFavorite: l10n.favoriteRemove,
+    quit: l10n.trayQuit,
+  );
+}
+
+/// 托盘 tooltip 的曲目部分：`曲名 - 歌手`（无歌手时只留曲名）。
+String _trackTooltip(Track track) {
+  final artists = track.artists.map((artist) => artist.name).join(' / ');
+  return artists.isEmpty ? track.title : '${track.title} - $artists';
 }
 

@@ -3,6 +3,11 @@
 ## Linux 桌面运行要求
 
 - 本地播放需要 `libmpv`：`sudo pacman -S --needed mpv`（Debian/Ubuntu: `libmpv2`）。
+- **桌面托盘（Linux/Windows）需要 X11 / Xi 开发文件**参与构建（nativeapi 的
+  build hook 经 pkg-config 链接 `gtk+-3.0 x11 xi`；Arch 随 `libx11` / `libxi`
+  提供，Debian/Ubuntu 需 `libx11-dev libxi-dev`）。运行期依赖这些系统库的
+  常规共享版本（任何桌面都有）；无 StatusNotifier 宿主时图标不显示（GNOME
+  需 AppIndicator 扩展），应用自动降级、不影响其余功能。
 - **中文字体需要系统安装**（App 不内置 CJK 字体，保持包体精简）：
   `sudo pacman -S --needed wqy-microhei`（最小 1.7MB）或 `noto-fonts-cjk`（质量最好但 189MB）；
   否则中文界面显示为方块。

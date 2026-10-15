@@ -17,24 +17,40 @@ class WindowChrome {
   static final ValueNotifier<bool> _maximized = ValueNotifier<bool>(false);
   static final _MaximizedStateListener _listener = _MaximizedStateListener();
 
+  /// 关闭请求策略（顶栏关闭键 / 系统关闭按钮）：由组合根注入
+  /// （最小化到托盘 / 真正退出）。未注入时保持历史行为——直接退出。
+  static FutureOr<void> Function()? _onCloseRequested;
+
   /// 当前窗口是否最大化：窗口按钮用它切换「最大化 / 还原」图标。
   static ValueListenable<bool> get maximized => _maximized;
+
+  /// 注入关闭策略（组合根调用一次）。
+  static void setCloseHandler(FutureOr<void> Function() handler) {
+    _onCloseRequested = handler;
+  }
 
   /// 隐藏原生标题栏并在首帧前显示窗口；由 main 在 runApp 前调用一次。
   ///
   /// `titleBarStyle: hidden` 之后系统标题栏与系统按钮都不复存在，
   /// 窗口拖动全靠 UI 侧的 [WindowDragArea]，不要在别处再隐藏标题栏。
+  ///
+  /// 同时打开 `preventClose`：原生关闭不再销毁窗口，而是转到
+  /// [WindowListener.onWindowClose]，由注入的策略决定「隐藏到托盘」还是
+  /// 「退出」。真正退出走 [quit]（先解除拦截再销毁）。
+  ///
+  /// show / focus 显式 await（不放进 `waitUntilReadyToShow` 的 callback）：
+  /// callback 是同步签名，内部的异步链会让「就绪即显示」晚于调用方后续操作
+  /// （集成测试里表现为 hide() 后又被 show() 拉回），这里保证返回时窗口已显示。
   static Future<void> ensureInitialized() async {
     if (!isSupported) return;
     await windowManager.ensureInitialized();
     windowManager.addListener(_listener);
+    await windowManager.setPreventClose(true);
     await windowManager.waitUntilReadyToShow(
       const WindowOptions(titleBarStyle: TitleBarStyle.hidden),
-      () async {
-        await windowManager.show();
-        await windowManager.focus();
-      },
     );
+    await windowManager.show();
+    await windowManager.focus();
   }
 
   static Future<void> minimize() async {
@@ -53,9 +69,40 @@ class WindowChrome {
     }
   }
 
+  /// 发起关闭请求（顶栏关闭键）：与系统关闭按钮同一条路径，
+  /// 由注入的关闭策略决定实际行为（隐藏到托盘 / 退出）。
   static Future<void> close() async {
     if (!isSupported) return;
     await windowManager.close();
+  }
+
+  /// 隐藏窗口（「关闭时最小化到托盘」）：进程与播放继续，任务栏/Tab 列表里
+  /// 不再出现窗口；从托盘「显示主窗口」或单击图标恢复。
+  static Future<void> hide() async {
+    if (!isSupported) return;
+    await windowManager.hide();
+  }
+
+  /// 显示并聚焦窗口（托盘「显示主窗口」/ 图标单击）。
+  static Future<void> show() async {
+    if (!isSupported) return;
+    await windowManager.show();
+    await windowManager.focus();
+  }
+
+  /// 无视关闭策略真正退出（托盘「退出」/ 更新安装后的重启替换）：
+  /// 先解除关闭拦截再销毁窗口；退出前的落盘由调用方负责。
+  static Future<void> quit() async {
+    if (!isSupported) return;
+    await windowManager.setPreventClose(false);
+    await windowManager.destroy();
+  }
+
+  /// 窗口当前是否可见（仅诊断/测试用）。
+  @visibleForTesting
+  static Future<bool> isVisible() async {
+    if (!isSupported) return false;
+    return windowManager.isVisible();
   }
 
   /// 原生标题栏高度（仅诊断/测试用）：隐藏标题栏后必须为 0。
@@ -66,13 +113,26 @@ class WindowChrome {
   }
 }
 
-/// 原生窗口状态 → [WindowChrome.maximized]。
+/// 原生窗口状态 → [WindowChrome.maximized]；关闭请求 → 组合根策略。
 class _MaximizedStateListener extends WindowListener {
   @override
   void onWindowMaximize() => WindowChrome._maximized.value = true;
 
   @override
   void onWindowUnmaximize() => WindowChrome._maximized.value = false;
+
+  /// 关闭请求：`preventClose` 打开后原生关闭不会销毁窗口，这里把控制权交回
+  /// Dart 策略；未注入策略（如集成测试直接调 ensureInitialized）时保持
+  /// 历史行为——直接退出，避免窗口关闭键变成「点了没反应」。
+  @override
+  void onWindowClose() {
+    final handler = WindowChrome._onCloseRequested;
+    if (handler == null) {
+      unawaited(WindowChrome.quit());
+    } else {
+      unawaited(Future.sync(handler));
+    }
+  }
 
   /// 从最小化恢复不代表退出最大化（最大化的窗口最小化后再恢复仍是最大化），
   /// 因此重新查询真实状态而不是直接置 false。

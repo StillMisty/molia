@@ -204,3 +204,16 @@
     修复：`android/app/src/main/res/raw/keep.xml` 用 `tools:keep` 保留
     `@drawable/ic_notification,@drawable/audio_service_*`；`release.yml` 加了产物校验。
     今后新增任何「字符串引用」的资源（自定义 MediaControl 图标等）都要同步进 keep.xml。
+35. **托盘对象必须长期持有（nativeapi finalizer），且 Linux 必须显式设置菜单触发方式**：
+    `tray_manager 0.8` 的 `TrayIcon` / `Menu` / `MenuItem` / `Image` 都挂 nativeapi
+    的 finalizer，对象被 GC 时会释放原生句柄——托盘图标或菜单会从系统里
+    「无声消失」（不是崩溃）。所有创建出来的对象都要持有到 `dispose()`
+    （`AppTray` 用静态字段 + `_itemListeners` 列表），不要只留局部变量。
+    另一条同源事实：Linux 上必须
+    `setContextMenuTrigger(ContextMenuTrigger.rightClicked)`——nativeapi 默认是
+    `none`，此时 SNI 的菜单路径为 `/NO_DBUSMENU`，面板**完全没有菜单**
+    （不是点不出来）。最后：Linux 图标是 StatusNotifierItem，需要有宿主
+    （KDE / GNOME + AppIndicator 扩展）；无宿主的 Xvfb / WSLg 环境里图标不出现
+    属预期，`AppTray` 会静默降级（只记日志），不要据此判定托盘实现坏了；
+    组合根的关闭策略经 `AppTray.detectHost()` 判定宿主，无宿主时自动退回
+    「关闭即退出」，不会把窗口藏成没有找回入口的状态。

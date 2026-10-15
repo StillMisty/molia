@@ -5324,6 +5324,54 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Set'**
   String get sleepTimerCustomConfirm;
+
+  /// No description provided for @trayShowWindow.
+  ///
+  /// In en, this message translates to:
+  /// **'Show window'**
+  String get trayShowWindow;
+
+  /// No description provided for @trayPrevious.
+  ///
+  /// In en, this message translates to:
+  /// **'Previous track'**
+  String get trayPrevious;
+
+  /// No description provided for @trayNext.
+  ///
+  /// In en, this message translates to:
+  /// **'Next track'**
+  String get trayNext;
+
+  /// No description provided for @trayQuit.
+  ///
+  /// In en, this message translates to:
+  /// **'Quit'**
+  String get trayQuit;
+
+  /// No description provided for @settingsDesktopSection.
+  ///
+  /// In en, this message translates to:
+  /// **'Desktop'**
+  String get settingsDesktopSection;
+
+  /// No description provided for @settingsCloseToTray.
+  ///
+  /// In en, this message translates to:
+  /// **'Minimize to tray on close'**
+  String get settingsCloseToTray;
+
+  /// No description provided for @settingsCloseToTraySubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Keep playing in the background; reopen or quit from the tray icon'**
+  String get settingsCloseToTraySubtitle;
+
+  /// No description provided for @settingsTrayLinuxHint.
+  ///
+  /// In en, this message translates to:
+  /// **'The tray icon needs a system tray host; GNOME requires the AppIndicator extension. Without one, closing quits'**
+  String get settingsTrayLinuxHint;
 }
 
 class _AppLocalizationsDelegate

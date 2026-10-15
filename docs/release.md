@@ -111,8 +111,9 @@ SHA256SUMS.txt
 - **Android**：应用内更新走系统安装器（`REQUEST_INSTALL_PACKAGES` +
   FileProvider，`cacheDir/updates`）；首次需用户在系统里允许「安装未知应用」。
 - **Linux**：发布包**不含 libmpv**，运行需系统安装（发行版包名如 `mpv` /
-  `libmpv2`）；应用内更新只支持可写的便携目录，系统包管理器安装会降级为
-  手动下载。
+  `libmpv2`）；托盘图标依赖系统 libX11 / libXi（桌面发行版默认都有）与
+  StatusNotifier 宿主（GNOME 需 AppIndicator 扩展，缺失时自动降级为无托盘）；
+  应用内更新只支持可写的便携目录，系统包管理器安装会降级为手动下载。
 - **Windows 安装版**：`setup.exe`（Inno Setup，脚本 `windows/installer/molia.iss`，
   按用户装到 `%LOCALAPPDATA%\Programs\Molia`，无需管理员）；应用内更新会静默运行
   新版本安装器（`/SILENT /NORESTART /CLOSEAPPLICATIONS`），安装器的 `[Run]` 段

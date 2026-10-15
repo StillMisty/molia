@@ -202,7 +202,7 @@ jobs:
       - name: 系统依赖
         run: |
           sudo apt-get update
-          sudo apt-get install -y --no-install-recommends libgtk-3-dev ninja-build libglu1-mesa
+          sudo apt-get install -y --no-install-recommends libgtk-3-dev libx11-dev libxi-dev ninja-build libglu1-mesa
       - uses: subosito/flutter-action@v2
         with:
           flutter-version: 3.47.6
