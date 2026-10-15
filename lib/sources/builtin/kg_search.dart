@@ -1,3 +1,6 @@
+import '../../data/mapping/track_mapper.dart';
+import '../../domain/models/track.dart';
+import '../raw_track.dart';
 import '../source_search_result.dart';
 import '../source_track.dart';
 import 'builtin_search.dart';
@@ -103,6 +106,7 @@ class KgSearch {
       songId: item['Audioid']?.toString() ?? '',
       name: decodeName(name),
       artist: decodeName(singerNames.join('、')),
+      artists: artistRefsOf(singers),
       album: decodeName(item['AlbumName']?.toString()),
       albumId: item['AlbumID']?.toString() ?? '',
       hash: item['FileHash']?.toString() ?? '',
@@ -111,6 +115,20 @@ class KgSearch {
       types: types,
       rawInterval: duration,
     );
+  }
+
+  /// 搜索条目的歌手引用（`Singers` 数组，名字 + 平台 id）。
+  static List<SourceArtistRef> artistRefsOf(dynamic singers) {
+    if (singers is! List) return const [];
+    final artists = <SourceArtistRef>[];
+    for (final singer in singers) {
+      if (singer is! Map) continue;
+      final name = decodeName(singer['name']?.toString());
+      if (name.isEmpty) continue;
+      final id = singer['id']?.toString();
+      artists.add(SourceArtistRef(name: name, id: (id?.isEmpty ?? true) ? null : id));
+    }
+    return artists;
   }
 
   /// 记录一档酷狗音质（`sizeFormat(size)` + hash；[requireHash] 时缺 hash 跳过）。
@@ -127,6 +145,51 @@ class KgSearch {
     types[type] = {'size': sizeFormat(sizeNum), 'hash': hash?.toString()};
   }
 
+  /// 列表条目（专辑歌曲 / 歌手歌曲接口的 item 同构）→ 领域曲目。
+  ///
+  /// 歌名与歌手由 `filename`（`歌手 - 歌名`）拆分（缺分隔时用 [fallbackArtist]）；
+  /// 音质档位与搜索共用 [addKgQuality]（`filesize` / `320filesize` / `sqfilesize`）。
+  static Track? parseListSong(
+    dynamic raw, {
+    required String albumName,
+    required String albumId,
+    String fallbackArtist = '',
+    List<SourceArtistRef>? artists,
+  }) {
+    if (raw is! Map) return null;
+    final hash = raw['hash']?.toString() ?? '';
+    if (hash.isEmpty) return null;
+
+    final parts = (raw['filename']?.toString() ?? '').split(' - ');
+    final artist = parts.length > 1 ? parts.first.trim() : fallbackArtist;
+    final name =
+        (parts.length > 1 ? parts.sublist(1).join(' - ') : parts.first).trim();
+    if (name.isEmpty) return null;
+
+    final types = <String, Map<String, dynamic>>{};
+    addKgQuality(types, '128k',
+        size: raw['filesize'], hash: hash, requireHash: true);
+    addKgQuality(types, '320k',
+        size: raw['320filesize'], hash: raw['320hash'], requireHash: true);
+    addKgQuality(types, 'flac',
+        size: raw['sqfilesize'], hash: raw['sqhash'], requireHash: true);
+
+    final duration = parseSourceCount(raw['duration']) ?? 0;
+    return trackFromSourceTrack(buildTrack(
+      songId: raw['audio_id']?.toString() ?? '',
+      name: decodeName(name),
+      artist: decodeName(artist),
+      artists: artists,
+      album: albumName,
+      albumId: albumId,
+      hash: hash,
+      intervalText: duration > 0 ? formatPlayTime(duration) : null,
+      duration: duration > 0 ? Duration(seconds: duration) : null,
+      types: types,
+      rawInterval: duration,
+    ));
+  }
+
   /// 由已解析字段构建酷狗曲目（搜索 / 榜单 / 歌单详情共用同一 raw 约定）。
   static SourceTrack buildTrack({
     required String songId,
@@ -139,9 +202,12 @@ class KgSearch {
     required Duration? duration,
     required Map<String, Map<String, dynamic>> types,
     int? rawInterval,
+    List<SourceArtistRef>? artists,
   }) {
     final raw = <String, dynamic>{
       'singer': artist,
+      if (artists != null && artists.isNotEmpty)
+        kRawArtistsField: [for (final item in artists) item.toJson()],
       'name': name,
       'albumName': album,
       'albumId': albumId,

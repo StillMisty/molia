@@ -1,6 +1,7 @@
 import 'dart:convert';
 
 import '../../domain/models/discover.dart';
+import '../raw_track.dart';
 import '../source_track.dart';
 import '../source_search_result.dart';
 import 'builtin_search.dart';
@@ -140,6 +141,7 @@ class KwDiscoverSource extends DiscoverSource {
       songId: rawItem['id']?.toString() ?? '',
       name: decodeName(rawItem['name']?.toString()),
       artist: formatSinger(decodeName(rawItem['artist']?.toString())),
+      artists: artistRefsOf(rawItem),
       album: decodeName(rawItem['album']?.toString()),
       albumId: rawItem['albumId']?.toString() ?? '',
       intervalSeconds: duration,
@@ -506,6 +508,7 @@ class KwDiscoverSource extends DiscoverSource {
         songId: item['id']?.toString() ?? '',
         name: decodeName(item['name']?.toString()),
         artist: formatSinger(decodeName(item['artist']?.toString())),
+        artists: artistRefsOf(item),
         album: decodeName(item['album']?.toString()),
         albumId: item['albumid']?.toString() ?? '',
         intervalSeconds: duration,
@@ -550,3 +553,22 @@ class KwDiscoverSource extends DiscoverSource {
 
 /// 酷我歌手名 `&` → `、`（与搜索模块同一约定）。
 String formatSinger(String raw) => raw.replaceAll('&', '、');
+
+/// 榜单 / 歌单条目的歌手引用：`artist` 为 `、` 拼接串，`artistId` 只对应首位
+/// （歌单详情字段名为 `artistid`，两处兼容）。
+List<SourceArtistRef> artistRefsOf(dynamic rawItem) {
+  if (rawItem is! Map) return const [];
+  final artist = formatSinger(decodeName(rawItem['artist']?.toString()));
+  final id = (rawItem['artistId'] ?? rawItem['artistid'])?.toString() ?? '';
+  final names = <String>[
+    for (final name in artist.split('、'))
+      if (name.trim().isNotEmpty) name.trim(),
+  ];
+  return [
+    for (var index = 0; index < names.length; index++)
+      SourceArtistRef(
+        name: names[index],
+        id: index == 0 && id.isNotEmpty ? id : null,
+      ),
+  ];
+}

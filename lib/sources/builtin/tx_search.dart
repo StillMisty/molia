@@ -1,10 +1,12 @@
 import 'dart:convert';
 import 'dart:math';
 
+import '../raw_track.dart';
 import '../source_search_result.dart';
 import '../source_track.dart';
 import 'builtin_search.dart';
 import 'builtin_search_runner.dart';
+import 'builtin_transport.dart';
 import 'crypto_utils.dart';
 
 /// QQ 音乐搜索（移植自 lx-music-mobile `tx/musicSearch.js`）。
@@ -27,7 +29,52 @@ class TxSearch {
 
   /// 平台变体面：签名 POST 体 / 业务码判定（外层与 req 内层 `code`）/ 解析。
   static BuiltinSearchCall _callFor(String keyword, int page, int limit) {
-    final body = <String, dynamic>{
+    final body = searchBody(
+      keyword: keyword,
+      page: page,
+      limit: limit,
+      searchType: _searchTypeSong,
+    );
+
+    // 签名必须与实际发送的 JSON 字符串完全一致
+    final bodyText = jsonEncode(body);
+    final sign = zzcSign(bodyText);
+
+    bool invalid(dynamic response) {
+      final service = moduleOf(response, _searchModule);
+      if (response is! Map || service == null) return true;
+      return response['code'] != 0 || service['code'] != 0;
+    }
+
+    return BuiltinSearchCall(
+      platform: 'tx',
+      method: BuiltinSearchMethod.post,
+      url: 'https://u.y.qq.com/cgi-bin/musics.fcg?sign=$sign',
+      body: bodyText,
+      headers: {'User-Agent': 'QQMusic 14090508(android 12)'},
+      retryIf: (json) => json is! Map || json['code'] != 0,
+      isInvalid: invalid,
+      parseItems: (response) =>
+          parseItems(moduleOf(response, _searchModule)?['data']),
+      totalOf: (response) =>
+          totalOf(moduleOf(response, _searchModule)?['data']),
+    );
+  }
+
+  /// 搜索模块名（歌手 / 歌词搜索同模块，仅 `search_type` 不同）。
+  static const String _searchModule = 'music.search.SearchCgiService';
+
+  /// 单曲搜索 `search_type`（歌手 `1`、歌词 `7`）。
+  static const int _searchTypeSong = 0;
+
+  /// musicu 搜索请求体（单曲 / 歌手 / 歌词共用同一客户端指纹块）。
+  static Map<String, dynamic> searchBody({
+    required String keyword,
+    required int page,
+    required int limit,
+    required int searchType,
+  }) {
+    return <String, dynamic>{
       'comm': {
         '_channelid': '0',
         '_os_version': '6.2.9200-2',
@@ -44,8 +91,8 @@ class TxSearch {
         'uin': '0',
         'wid': '7223299733393904640',
       },
-      'music.search.SearchCgiService': {
-        'module': 'music.search.SearchCgiService',
+      _searchModule: {
+        'module': _searchModule,
         'method': 'DoSearchForQQMusicDesktop',
         'param': {
           'grp': 1,
@@ -53,39 +100,30 @@ class TxSearch {
           'page_num': page,
           'query': keyword,
           'remoteplace': 'txt.newclient.top',
-          'search_type': 0,
+          'search_type': searchType,
           'searchid': _searchId(),
         },
       },
     };
+  }
 
-    // 签名必须与实际发送的 JSON 字符串完全一致
+  /// musicu 签名 POST（搜索之外的模块共用；签名必须与发送体完全一致）。
+  static Future<dynamic> musicuPost(Map<String, dynamic> body) {
     final bodyText = jsonEncode(body);
     final sign = zzcSign(bodyText);
-
-    Map? serviceOf(dynamic response) {
-      if (response is! Map) return null;
-      return (response['music.search.SearchCgiService'] ?? response['req'])
-          as Map?;
-    }
-
-    bool invalid(dynamic response) {
-      final service = serviceOf(response);
-      if (response is! Map || service == null) return true;
-      return response['code'] != 0 || service['code'] != 0;
-    }
-
-    return BuiltinSearchCall(
-      platform: 'tx',
-      method: BuiltinSearchMethod.post,
-      url: 'https://u.y.qq.com/cgi-bin/musics.fcg?sign=$sign',
+    return lxHttpPost(
+      'https://u.y.qq.com/cgi-bin/musics.fcg?sign=$sign',
       body: bodyText,
-      headers: {'User-Agent': 'QQMusic 14090508(android 12)'},
-      retryIf: (json) => json is! Map || json['code'] != 0,
-      isInvalid: invalid,
-      parseItems: (response) => parseItems(serviceOf(response)?['data']),
-      totalOf: (response) => totalOf(serviceOf(response)?['data']),
+      headers: const {'User-Agent': 'QQMusic 14090508(android 12)'},
+      retries: BuiltinTransport.defaultRetries,
     );
+  }
+
+  /// 响应中取模块数据（键即模块名；兼容旧 `req` 形态）。
+  static Map? moduleOf(dynamic response, String module) {
+    if (response is! Map) return null;
+    final value = response[module] ?? response['req'];
+    return value is Map ? value : null;
   }
 
   /// 从响应 `data` 提取结果总数（供搜索与单元测试复用）。
@@ -147,14 +185,19 @@ class TxSearch {
     final albumId = album is Map ? album['mid']?.toString() ?? '' : '';
 
     final singers = rawItem['singer'];
-    final singerNames = <String>[];
+    final artistRefs = <SourceArtistRef>[];
     if (singers is List) {
       for (final singer in singers) {
-        final name = (singer is Map ? singer['name'] : null)?.toString();
-        if (name != null && name.isNotEmpty) singerNames.add(name);
+        if (singer is! Map) continue;
+        final name = singer['name']?.toString() ?? '';
+        if (name.isEmpty) continue;
+        final mid = singer['mid']?.toString() ?? '';
+        artistRefs.add(
+          SourceArtistRef(name: name, id: mid.isEmpty ? null : mid),
+        );
       }
     }
-    final singer = singerNames.join('、');
+    final singer = artistRefs.map((artist) => artist.name).join('、');
 
     String cover = '';
     if (albumId.isNotEmpty && albumId != '空') {
@@ -173,6 +216,8 @@ class TxSearch {
 
     final raw = <String, dynamic>{
       'singer': singer,
+      if (artistRefs.isNotEmpty)
+        kRawArtistsField: [for (final artist in artistRefs) artist.toJson()],
       'name': rawItem['title']?.toString() ?? '',
       'albumName': albumName,
       'albumId': albumId,

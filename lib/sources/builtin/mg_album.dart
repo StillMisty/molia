@@ -109,6 +109,7 @@ class MgAlbum {
       copyrightId: copyrightId,
       name: raw['songName']?.toString() ?? '',
       artist: artist,
+      artists: MgSearch.artistRefsOf(raw['singerList']),
       album: raw['album']?.toString() ?? '',
       albumId: raw['albumId']?.toString() ?? albumId,
       intervalText: duration > 0 ? formatPlayTime(duration) : null,

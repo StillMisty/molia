@@ -11,6 +11,7 @@ import 'any_listen/any_listen_config.dart';
 import 'any_listen/any_listen_errors.dart';
 import 'any_listen/any_listen_source.dart';
 import 'builtin/album_source.dart';
+import 'builtin/artist_source.dart';
 import 'builtin/builtin_search.dart';
 import 'builtin/comment_source.dart';
 import 'builtin/discover_source.dart';
@@ -33,6 +34,7 @@ import 'source_search_result.dart';
 import 'source_track.dart';
 import '../data/cache/request_cache.dart';
 import '../domain/models/album.dart';
+import '../domain/models/artist.dart';
 import '../domain/models/comment.dart';
 import '../domain/models/failure.dart';
 import '../domain/models/source.dart';
@@ -269,6 +271,8 @@ class SourceManager extends ChangeNotifier {
       comment: BuiltinComments.isSupported(key),
       // 专辑详情同样只由内置实现提供（LX 脚本 / any-listen 无稳定专辑 id）。
       collection: BuiltinAlbums.isSupported(key),
+      // 歌手（搜索 + 详情/歌曲）：同上，只由内置实现提供。
+      artist: BuiltinArtists.isSupported(key),
     );
   }
 
@@ -678,6 +682,64 @@ class SourceManager extends ChangeNotifier {
       return await BuiltinAlbums.fetch(
         sourceKey,
         albumId,
+        page: page,
+        limit: limit,
+      );
+    } catch (e) {
+      throw SourceFailure.from(e);
+    }
+  }
+
+  /// 获取歌手详情 + 一页歌手歌曲（内置五平台；脚本扩展源 / any-listen 无歌手能力）。
+  ///
+  /// [artistId] 为平台内歌手 id（与曲目 payload 的歌手引用同体系；取自
+  /// `_artists` 字段）。失败统一归一化为 [SourceFailure]；分页与缓存由
+  /// data 层 `ArtistService` 承担。
+  Future<ArtistDetail> fetchArtist(
+    String sourceKey,
+    String artistId, {
+    int page = 1,
+    int limit = kArtistPageSize,
+  }) async {
+    if (!BuiltinArtists.isSupported(sourceKey)) {
+      throw SourceFailure(
+        kind: FailureKind.unsupported,
+        message: '音源 $sourceKey 不支持歌手',
+      );
+    }
+    try {
+      return await BuiltinArtists.fetch(
+        sourceKey,
+        artistId,
+        page: page,
+        limit: limit,
+      );
+    } catch (e) {
+      throw SourceFailure.from(e);
+    }
+  }
+
+  /// 歌手搜索（内置五平台；搜索页「歌手」类型）。
+  ///
+  /// 可搜索性与单曲搜索同门（[_isBuiltinSearchable]：脚本可取链才有歌手
+  /// 搜索入口）；失败归一化为 [SourceFailure]，不静默吞成空结果。
+  Future<ArtistSearchPage> searchArtists(
+    String sourceKey,
+    String keyword, {
+    int page = 1,
+    int limit = 30,
+  }) async {
+    if (!BuiltinSearch.isBuiltin(sourceKey) ||
+        !_isBuiltinSearchable(sourceKey)) {
+      throw SourceFailure(
+        kind: FailureKind.unsupported,
+        message: '音源 $sourceKey 不支持歌手搜索',
+      );
+    }
+    try {
+      return await BuiltinArtists.search(
+        sourceKey,
+        keyword,
         page: page,
         limit: limit,
       );

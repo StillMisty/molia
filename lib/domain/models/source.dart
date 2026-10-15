@@ -19,6 +19,10 @@ class SourceCapabilities {
 
   /// 专辑/歌单/艺人详情。
   final bool collection;
+
+  /// 歌手能力：歌手搜索 + 歌手详情（歌手页取数）。
+  final bool artist;
+
   final bool favorite;
   final bool lyricsTranslation;
 
@@ -32,6 +36,7 @@ class SourceCapabilities {
     this.lyrics = false,
     this.artwork = false,
     this.collection = false,
+    this.artist = false,
     this.favorite = false,
     this.lyricsTranslation = false,
     this.comment = false,
@@ -46,6 +51,7 @@ class SourceCapabilities {
       other.lyrics == lyrics &&
       other.artwork == artwork &&
       other.collection == collection &&
+      other.artist == artist &&
       other.favorite == favorite &&
       other.lyricsTranslation == lyricsTranslation &&
       other.comment == comment;
@@ -58,6 +64,7 @@ class SourceCapabilities {
         lyrics,
         artwork,
         collection,
+        artist,
         favorite,
         lyricsTranslation,
         comment,

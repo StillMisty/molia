@@ -1,3 +1,4 @@
+import '../raw_track.dart';
 import '../source_track.dart';
 import 'builtin_search.dart';
 import 'crypto_utils.dart';
@@ -93,6 +94,7 @@ class WyMusicDetail {
         songId: raw['id'],
         name: name,
         singer: singer,
+        artists: artistRefsOf(raw['ar']),
         albumName: albumName,
         albumId: albumId,
         img: cover,
@@ -157,9 +159,12 @@ class WyMusicDetail {
     required Duration? duration,
     required List<Map<String, dynamic>> types,
     required Map<String, Map<String, dynamic>> typeMap,
+    List<SourceArtistRef>? artists,
   }) {
     final rawInfo = <String, dynamic>{
       'singer': singer,
+      if (artists != null && artists.isNotEmpty)
+        kRawArtistsField: [for (final item in artists) item.toJson()],
       'name': name,
       'albumName': albumName,
       'albumId': albumId,
@@ -201,5 +206,23 @@ class WyMusicDetail {
       }
     }
     return names.join('、');
+  }
+
+  /// 歌手列表（`ar` / `artists`）→ 歌手引用（名字 + 平台 id）。
+  ///
+  /// 旧版接口用 `artists` 键、搜索用 `ar`，结构相同；缺 id 时保留名字。
+  static List<SourceArtistRef> artistRefsOf(Object? artists) {
+    if (artists is! List) return const [];
+    final refs = <SourceArtistRef>[];
+    for (final artist in artists) {
+      if (artist is! Map) continue;
+      final name = (artist['name'] ?? '').toString();
+      if (name.isEmpty) continue;
+      final id = artist['id']?.toString();
+      refs.add(
+        SourceArtistRef(name: name, id: (id?.isEmpty ?? true) ? null : id),
+      );
+    }
+    return refs;
   }
 }

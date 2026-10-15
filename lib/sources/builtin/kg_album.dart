@@ -1,11 +1,9 @@
-import '../../data/mapping/track_mapper.dart';
 import '../../domain/models/album.dart';
 import '../../domain/models/track.dart';
 import '../source_search_result.dart';
 import 'album_utils.dart';
 import 'builtin_search.dart';
 import 'builtin_transport.dart';
-import 'crypto_utils.dart';
 import 'kg_search.dart';
 
 /// 酷狗音乐专辑（`mobilecdn.kugou.com/api/v3/album/song` + `album/info`）。
@@ -108,43 +106,17 @@ class KgAlbum {
     );
   }
 
-  /// 单曲响应 → 领域曲目（`filename` = `歌手 - 歌名`，缺分隔时用专辑歌手兜底）。
+  /// 单曲响应 → 领域曲目（委托 [KgSearch.parseListSong]，保持专辑侧签名）。
   static Track? parseSong(
     dynamic raw, {
     required String albumName,
     required String albumId,
     String fallbackArtist = '',
-  }) {
-    if (raw is! Map) return null;
-    final hash = raw['hash']?.toString() ?? '';
-    if (hash.isEmpty) return null;
-
-    final parts = (raw['filename']?.toString() ?? '').split(' - ');
-    final artist = parts.length > 1 ? parts.first.trim() : fallbackArtist;
-    final name =
-        (parts.length > 1 ? parts.sublist(1).join(' - ') : parts.first).trim();
-    if (name.isEmpty) return null;
-
-    final types = <String, Map<String, dynamic>>{};
-    KgSearch.addKgQuality(types, '128k',
-        size: raw['filesize'], hash: hash, requireHash: true);
-    KgSearch.addKgQuality(types, '320k',
-        size: raw['320filesize'], hash: raw['320hash'], requireHash: true);
-    KgSearch.addKgQuality(types, 'flac',
-        size: raw['sqfilesize'], hash: raw['sqhash'], requireHash: true);
-
-    final duration = parseSourceCount(raw['duration']) ?? 0;
-    return trackFromSourceTrack(KgSearch.buildTrack(
-      songId: raw['audio_id']?.toString() ?? '',
-      name: decodeName(name),
-      artist: decodeName(artist),
-      album: albumName,
-      albumId: albumId,
-      hash: hash,
-      intervalText: duration > 0 ? formatPlayTime(duration) : null,
-      duration: duration > 0 ? Duration(seconds: duration) : null,
-      types: types,
-      rawInterval: duration,
-    ));
-  }
+  }) =>
+      KgSearch.parseListSong(
+        raw,
+        albumName: albumName,
+        albumId: albumId,
+        fallbackArtist: fallbackArtist,
+      );
 }

@@ -1,16 +1,37 @@
+import 'dart:convert';
+
+import '../raw_track.dart';
 import '../source_search_result.dart';
 import '../source_track.dart';
 import 'builtin_search.dart';
 import 'builtin_search_runner.dart';
 import 'crypto_utils.dart';
 
+/// `searchAll` 请求（签名 URL + headers；见 [MgSearch.searchAllRequest]）。
+class MgSearchAllRequest {
+  final String url;
+  final Map<String, String> headers;
+
+  const MgSearchAllRequest({required this.url, required this.headers});
+}
+
 /// 咪咕音乐搜索（移植自 lx-music-mobile `mg/musicSearch.js`）。
 class MgSearch {
   static const _limit = 20;
   static const _deviceId = '963B7AA0D21511ED807EE5846EC87D20';
   static const _signatureMd5 = '6cdc72a439cef99a3418d2a78aa28c73';
-  static const _searchSwitch =
-      '%7B%22song%22%3A1%2C%22album%22%3A0%2C%22singer%22%3A0%2C%22tagSong%22%3A1%2C%22mvSong%22%3A0%2C%22bestShow%22%3A1%2C%22songlist%22%3A0%2C%22lyricSong%22%3A0%7D';
+
+  /// 单曲搜索的分区开关（歌手 / 歌词搜索各自只开对应分区）。
+  static const Map<String, Object> _searchSwitch = {
+    'song': 1,
+    'album': 0,
+    'singer': 0,
+    'tagSong': 1,
+    'mvSong': 0,
+    'bestShow': 1,
+    'songlist': 0,
+    'lyricSong': 0,
+  };
 
   /// 分页搜索：响应 `songResultData.totalCount` 用于计算 hasMore。
   static Future<SourceSearchResult> searchWithMeta(
@@ -25,35 +46,54 @@ class MgSearch {
     );
   }
 
-  /// 平台变体面：签名 GET / 业务码判定（`code != '000000'`）/ 解析。
-  static BuiltinSearchCall _callFor(String keyword, int page, int limit) {
+  /// `searchAll` 的签名 URL 与 headers（单曲 / 歌手 / 歌词搜索共用）。
+  ///
+  /// [searchSwitch] 决定返回哪些分区（如只开 `singer` 时结果在
+  /// `singerResultData`）；签名与实际 `text` 绑定，必须同步构造。
+  static MgSearchAllRequest searchAllRequest({
+    required String text,
+    required int page,
+    required int limit,
+    required Map<String, Object> searchSwitch,
+  }) {
     final time = DateTime.now().millisecondsSinceEpoch.toString();
     final sign = md5Hex(
-      '$keyword$_signatureMd5'
+      '$text$_signatureMd5'
       'yyapp2d16148780a1dcc7408e06336b98cfd50'
       '$_deviceId$time',
     );
-
     final url = 'https://jadeite.migu.cn/music_search/v3/search/searchAll'
-        '?isCorrect=0&isCopyright=1&searchSwitch=$_searchSwitch'
-        '&pageSize=$limit&text=${Uri.encodeComponent(keyword)}'
+        '?isCorrect=0&isCopyright=1'
+        '&searchSwitch=${Uri.encodeComponent(jsonEncode(searchSwitch))}'
+        '&pageSize=$limit&text=${Uri.encodeComponent(text)}'
         '&pageNo=$page&sort=0&sid=USS';
+    return MgSearchAllRequest(url: url, headers: {
+      'uiVersion': 'A_music_3.6.1',
+      'deviceId': _deviceId,
+      'timestamp': time,
+      'sign': sign,
+      'channel': '0146921',
+      'User-Agent':
+          'Mozilla/5.0 (Linux; U; Android 11.0.0; zh-cn; MI 11 Build/OPR1.170623.032) AppleWebKit/534.30 (KHTML, like Gecko) Version/4.0 Mobile Safari/534.30',
+    });
+  }
+
+  /// 平台变体面：签名 GET / 业务码判定（`code != '000000'`）/ 解析。
+  static BuiltinSearchCall _callFor(String keyword, int page, int limit) {
+    final request = searchAllRequest(
+      text: keyword,
+      page: page,
+      limit: limit,
+      searchSwitch: _searchSwitch,
+    );
 
     bool invalid(dynamic response) =>
         response is! Map || response['code'] != '000000';
 
     return BuiltinSearchCall(
       platform: 'mg',
-      url: url,
-      headers: {
-        'uiVersion': 'A_music_3.6.1',
-        'deviceId': _deviceId,
-        'timestamp': time,
-        'sign': sign,
-        'channel': '0146921',
-        'User-Agent':
-            'Mozilla/5.0 (Linux; U; Android 11.0.0; zh-cn; MI 11 Build/OPR1.170623.032) AppleWebKit/534.30 (KHTML, like Gecko) Version/4.0 Mobile Safari/534.30',
-      },
+      url: request.url,
+      headers: request.headers,
       isInvalid: invalid,
       parseItems: (response) {
         final songResult = (response as Map)['songResultData'];
@@ -104,6 +144,7 @@ class MgSearch {
       copyrightId: copyrightId,
       name: rawItem['name']?.toString() ?? '',
       artist: decodeName(joinSingerNames(rawItem['singerList'])),
+      artists: artistRefsOf(rawItem['singerList']),
       album: rawItem['album']?.toString() ?? '',
       albumId: rawItem['albumId']?.toString() ?? '',
       intervalText:
@@ -163,6 +204,22 @@ class MgSearch {
     return names.join('、');
   }
 
+  /// 歌手列表（`singerList` / `artists`）→ 歌手引用（名字 + 平台 id）。
+  static List<SourceArtistRef> artistRefsOf(dynamic singers) {
+    if (singers is! List) return const [];
+    final refs = <SourceArtistRef>[];
+    for (final singer in singers) {
+      if (singer is! Map) continue;
+      final name = (singer['name'] ?? '').toString();
+      if (name.isEmpty) continue;
+      final id = singer['id']?.toString();
+      refs.add(
+        SourceArtistRef(name: name, id: (id?.isEmpty ?? true) ? null : id),
+      );
+    }
+    return refs;
+  }
+
   /// 由已解析字段构建咪咕曲目（搜索 / 榜单 / 歌单共用同一 raw 约定）。
   static SourceTrack buildTrack({
     required String songId,
@@ -178,9 +235,12 @@ class MgSearch {
     String? lrcUrl,
     String? mrcUrl,
     String? trcUrl,
+    List<SourceArtistRef>? artists,
   }) {
     final raw = <String, dynamic>{
       'singer': artist,
+      if (artists != null && artists.isNotEmpty)
+        kRawArtistsField: [for (final item in artists) item.toJson()],
       'name': name,
       'albumName': album,
       'albumId': albumId,
