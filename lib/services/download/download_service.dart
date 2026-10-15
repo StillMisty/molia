@@ -36,6 +36,7 @@ import '../../data/downloads/audio_tag_writer.dart';
 import '../../data/downloads/download_storage.dart';
 import '../../data/downloads/downloads_publisher.dart';
 import '../../data/downloads/downloads_repository.dart';
+import '../../data/downloads/local_lyrics.dart';
 import '../../data/http/app_dio.dart';
 import '../../domain/models/download.dart';
 import '../../domain/models/failure.dart';
@@ -859,24 +860,11 @@ class DownloadService extends ChangeNotifier {
   }
 
   /// 本地曲目的离线歌词（读 `downloads/lyrics/`，不触网）；无歌词返回 null。
-  Future<LyricsResult?> localLyricsFor(Track track) async {
-    if (track.id.sourceKey != kLocalSourceKey) return null;
-    final lyricPath = track.payload['lyricPath'];
-    if (lyricPath is! String || lyricPath.isEmpty) return null;
-    final lyric = await _storage.readString(lyricPath);
-    if (lyric == null || lyric.trim().isEmpty) return null;
-    String? translation;
-    final translationPath = track.payload['translationLyricPath'];
-    if (translationPath is String && translationPath.isNotEmpty) {
-      final text = await _storage.readString(translationPath);
-      if (text != null && text.trim().isNotEmpty) translation = text;
-    }
-    return LyricsResult(
-      lyric: lyric,
-      translation: translation,
-      provider: kLocalSourceKey,
-    );
-  }
+  ///
+  /// 实现见 [readDownloadedLyrics]：同一份读取逻辑也供组合根的歌词服务使用
+  /// （歌词服务先于下载服务构建，避免两者互为依赖）。
+  Future<LyricsResult?> localLyricsFor(Track track) =>
+      readDownloadedLyrics(_storage, track);
 
   // 内部：守卫与记录
 
