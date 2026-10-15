@@ -80,6 +80,7 @@ import 'services/lyrics_display/lyrics_display_settings.dart';
 import 'services/lyrics_display/media_lyric_output.dart';
 import 'services/lyrics_service.dart';
 import 'services/notification_service.dart';
+import 'services/playback_observer.dart';
 import 'services/playback_session_store.dart';
 import 'services/play_statistics_service.dart';
 import 'services/ai/ai_recommendation_service.dart';
@@ -325,8 +326,8 @@ void main() async {
     scaffoldMessengerKey,
     hostContextKey: appRootKey,
   );
-  // 资料库仓库：播放历史 / 我的列表 / 收藏；播放开始时由
-  // PlaybackProvider 写历史，资料库页经 LibraryProvider 读取（内存缓存）。
+  // 资料库仓库：播放历史 / 我的列表 / 收藏；播放开始时由播放观察者（下方
+  // PlaybackObserver）写历史，资料库页经 LibraryProvider 读取（内存缓存）。
   // 跨设备同步状态提前初始化：资料库/统计的写路径需要设备 id 打同步戳。
   final syncState = SyncStateStore();
   await syncState.init();
@@ -357,22 +358,18 @@ void main() async {
     catalog: catalogService,
     registry: sourceRegistry,
   );
-  final playbackProvider = PlaybackProvider(
-    settings: settingsRegistry,
+  // 播放观察者：快照副作用扇出（最后播放 / 播放上下文 / 桌面小组件 / 历史 /
+  // 会话落盘 / 封面预取与补取 / 通知权限）。先建观察者，provider 创建后再
+  // 挂接——facade 监听顺序保持「provider 先处理恢复态、观察者后写副作用」。
+  // 会话存储两处共用同一实例：恢复态读写在 provider，实时会话节流在观察者。
+  final sessionStore = PlaybackSessionStore();
+  final playbackObserver = PlaybackObserver(
     facade: playbackFacade,
-    messenger: _AppUiMessenger(notificationService),
-    sourceManager: sourceManager,
-    navigatorKey: navigatorKey,
-    catalogService: catalogService,
-    libraryRepository: libraryRepository,
+    sessionStore: sessionStore,
     dataSaver: dataSaver,
-    localDatabaseProvider: localDatabaseProvider,
-    autoSwapSettings: sourceSwapSettings,
-    autoSwapResolver: (track, {required excludeSourceKeys}) =>
-        autoSourceSwapService.findMatch(
-      track,
-      excludeSourceKeys: excludeSourceKeys,
-    ),
+    libraryRepository: libraryRepository,
+    playContextWriter: localDatabaseProvider.insertOrUpdatePlayContext,
+    navigatorKey: navigatorKey,
     // 封面补取：曲目起播无封面时经 SourceManager 现取（脚本 pic →
     // 内置平台原生取图），省流模式不发请求；取到后原地回写队列曲目。
     artworkResolver: (track) async {
@@ -380,6 +377,23 @@ void main() async {
       return sourceManager.fetchPic(sourceTrackFromTrack(track));
     },
   );
+  final playbackProvider = PlaybackProvider(
+    settings: settingsRegistry,
+    facade: playbackFacade,
+    messenger: _AppUiMessenger(notificationService),
+    sourceManager: sourceManager,
+    catalogService: catalogService,
+    dataSaver: dataSaver,
+    observer: playbackObserver,
+    sessionStore: sessionStore,
+    autoSwapSettings: sourceSwapSettings,
+    autoSwapResolver: (track, {required excludeSourceKeys}) =>
+        autoSourceSwapService.findMatch(
+      track,
+      excludeSourceKeys: excludeSourceKeys,
+    ),
+  );
+  playbackObserver.attach();
   // 系统媒体会话的恢复态切歌键（耳机/媒体键）落到 provider：用保存的
   // 会话立即恢复播放（handler 创建时 provider 尚不存在，见上方注释）。
   restoredControlsTarget = playbackProvider;
