@@ -2150,6 +2150,12 @@ abstract class AppLocalizations {
   /// **'Failed to load artist'**
   String get artistLoadFailed;
 
+  /// No description provided for @artistNotFound.
+  ///
+  /// In en, this message translates to:
+  /// **'Artist not found'**
+  String get artistNotFound;
+
   /// No description provided for @artistSongCount.
   ///
   /// In en, this message translates to:

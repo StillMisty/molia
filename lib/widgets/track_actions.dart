@@ -66,25 +66,49 @@ Artist? platformArtistOf(Track track) {
   return null;
 }
 
+/// 无平台歌手 id 时的回退名：首个歌手名的首段。
+///
+/// 历史数据（歌手入口上线之前收藏 / 导入的曲目）raw 里没有 `_artists`，
+/// 多歌手被拼成一串（分隔符可能是 `、` / `, ` / `&`）；取首段按名字解析歌手。
+String? fallbackArtistNameOf(Track track) {
+  for (final artist in track.artists) {
+    final first = _firstArtistSegment(artist.name);
+    if (first.isNotEmpty) return first;
+  }
+  return null;
+}
+
+/// 曲目能否进入歌手页：带平台歌手 id，或至少有一个可回退的名字。
+bool trackHasArtistEntry(Track track) =>
+    platformArtistOf(track) != null || fallbackArtistNameOf(track) != null;
+
 /// 打开歌手页（能力位由调用方先行判定，这里只做守卫与打开）。
 ///
-/// [artist] 为多歌手行中被点击的那一位；缺省取首位带 id 的歌手。
+/// [artist] 为多歌手行中被点击的那一位。有平台歌手 id 直接进；没有 id
+/// （历史收藏 / 导入列表）时按名字回退解析（见 [showArtistPageByName]）。
 Future<void> openTrackArtist(
   BuildContext context, {
   required Track track,
   Artist? artist,
 }) {
-  final target = platformArtistOf(track);
-  final id = (artist?.id ?? '').isNotEmpty ? artist!.id! : target?.id;
-  final name = (artist?.id ?? '').isNotEmpty ? artist!.name : target?.name;
-  if (id == null || id.isEmpty) return Future.value();
-  return showArtistPage(
-    context,
-    track.id.sourceKey,
-    id,
-    fallbackName: name,
-  );
+  final sourceKey = track.id.sourceKey;
+  final id = (artist?.id ?? '').isNotEmpty ? artist!.id! : platformArtistOf(track)?.id;
+  if (id != null && id.isNotEmpty) {
+    final name = (artist?.name ?? '').isNotEmpty
+        ? artist!.name
+        : platformArtistOf(track)?.name;
+    return showArtistPage(context, sourceKey, id, fallbackName: name);
+  }
+
+  final clicked = _firstArtistSegment(artist?.name ?? '');
+  final name = clicked.isNotEmpty ? clicked : fallbackArtistNameOf(track);
+  if (name == null || name.isEmpty) return Future.value();
+  return showArtistPageByName(context, sourceKey, name);
 }
+
+/// 歌手名首段（多歌手拼接串 → 首个名字）。
+String _firstArtistSegment(String name) =>
+    name.split(RegExp(r'、|, |&')).first.trim();
 
 /// 打开专辑页（能力位由调用方先行判定，这里只做守卫与打开）。
 ///

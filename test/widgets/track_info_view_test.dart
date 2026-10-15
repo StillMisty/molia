@@ -153,10 +153,15 @@ class _FakeDownloadService extends DownloadService {
   }
 }
 
-Track _track({String? albumId, String? artistId}) => Track(
+Track _track({
+  String? albumId,
+  String? artistId,
+  String artistName = 'Artist a',
+}) =>
+    Track(
       id: const TrackId('kw', 'a'),
       title: 'Title a',
-      artists: [Artist(name: 'Artist a', id: artistId)],
+      artists: [Artist(name: artistName, id: artistId)],
       album: 'Album a',
       duration: const Duration(seconds: 245),
       origin: TrackOrigin.lx,
@@ -367,17 +372,78 @@ void main() {
     expect(find.text('Artist a'), findsOneWidget);
   });
 
-  testWidgets('歌手行：曲目无歌手 id 时保持只读信息行', (tester) async {
+  testWidgets('歌手行：曲目无歌手 id 时按名字回退解析（历史收藏可跳转）', (tester) async {
     final registry = FakeSourceRegistry({
       'kw': FakeMusicSource(
         'kw',
         capabilities: const SourceCapabilities(search: true, artist: true),
       ),
     });
-    await pumpView(tester, track: _track(), registry: registry);
+    final searched = <String>[];
+    final artistService = ArtistService(
+      fetch: (sourceKey, artistId, {required page, required limit}) async =>
+          const ArtistDetail(id: '9527', name: 'Artist a'),
+      search: (sourceKey, name) async {
+        searched.add(name);
+        return [ArtistSummary(id: '9527', name: name)];
+      },
+    );
+    await pumpView(
+      tester,
+      track: _track(),
+      registry: registry,
+      artistService: artistService,
+    );
+
+    expect(find.byKey(const Key('trackInfoArtistItem')), findsOneWidget);
+    expect(find.text('Artist a · 查看歌手'), findsOneWidget);
+
+    await tester.tap(find.byKey(const Key('trackInfoArtistItem')));
+    await tester.pumpAndSettle();
+    expect(searched, ['Artist a'], reason: '无 id 时按歌手名回退检索');
+    expect(find.byType(ArtistPage), findsOneWidget);
+  });
+
+  testWidgets('歌手行：未找到回退歌手时显示「未找到该歌手」', (tester) async {
+    final registry = FakeSourceRegistry({
+      'kw': FakeMusicSource(
+        'kw',
+        capabilities: const SourceCapabilities(search: true, artist: true),
+      ),
+    });
+    final artistService = ArtistService(
+      fetch: (sourceKey, artistId, {required page, required limit}) async =>
+          throw StateError('不应到这里'),
+      search: (sourceKey, name) async => const [],
+    );
+    await pumpView(
+      tester,
+      track: _track(),
+      registry: registry,
+      artistService: artistService,
+    );
+
+    await tester.tap(find.byKey(const Key('trackInfoArtistItem')));
+    await tester.pumpAndSettle();
+    expect(find.text('未找到该歌手'), findsOneWidget);
+    expect(find.text('重试'), findsOneWidget);
+  });
+
+  testWidgets('歌手行：曲目没有歌手名时整行隐藏', (tester) async {
+    final registry = FakeSourceRegistry({
+      'kw': FakeMusicSource(
+        'kw',
+        capabilities: const SourceCapabilities(search: true, artist: true),
+      ),
+    });
+    await pumpView(
+      tester,
+      track: _track(artistName: ''),
+      registry: registry,
+    );
 
     expect(find.byKey(const Key('trackInfoArtistItem')), findsNothing);
-    expect(find.text('Artist a'), findsOneWidget);
+    expect(find.text('歌手'), findsNothing);
   });
 
   testWidgets('来源行：打开分享弹层，复制曲目 ID', (tester) async {

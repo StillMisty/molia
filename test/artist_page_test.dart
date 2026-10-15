@@ -180,6 +180,35 @@ void main() {
     expect(find.text('歌手加载失败'), findsNothing);
   });
 
+  testWidgets('曲目行：与搜索页同款行尾菜单（收藏 / 加入列表）', (tester) async {
+    await pumpPage(tester, (page) async => artistOf(page));
+
+    // 行尾菜单存在（每行一个）。
+    expect(find.byIcon(Icons.more_vert_rounded), findsWidgets);
+
+    await tester.tap(find.byIcon(Icons.more_vert_rounded).first);
+    await tester.pumpAndSettle();
+    expect(find.text('加入列表'), findsWidgets);
+
+    await tester.tap(find.text('收藏').last);
+    await tester.pumpAndSettle();
+    expect(await repository.favoriteKeys(), hasLength(1), reason: '行菜单收藏写入仓库');
+  });
+
+  testWidgets('曲目行菜单：加入列表走目标选择流程', (tester) async {
+    await pumpPage(tester, (page) async => artistOf(page));
+
+    await tester.tap(find.byIcon(Icons.more_vert_rounded).first);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('加入列表').last);
+    await tester.pumpAndSettle();
+    expect(find.text('我的收藏'), findsOneWidget);
+
+    await tester.tap(find.text('我的收藏'));
+    await tester.pumpAndSettle();
+    expect(await repository.favoriteKeys(), hasLength(1));
+  });
+
   testWidgets('加入列表：弹层选择收藏后批量写入', (tester) async {
     await pumpPage(tester, (page) async => artistOf(page));
 

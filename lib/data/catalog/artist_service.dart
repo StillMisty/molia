@@ -2,6 +2,15 @@ import '../../domain/models/artist.dart';
 import '../../domain/models/failure.dart';
 import '../cache/request_cache.dart';
 
+/// 歌手名 → 歌手条目的检索函数（组合根注入 `CatalogService.searchArtists`）。
+///
+/// 只在曲目 payload 没有歌手 id 时用到（历史收藏 / 导入列表 / 部分入口），
+/// 精确匹配策略由 [ArtistService.resolveByName] 持有。
+typedef ArtistSearchFetcher = Future<List<ArtistSummary>> Function(
+  String sourceKey,
+  String name,
+);
+
 /// 歌手分页取数函数（组合根注入 `SourceManager.fetchArtist`）。
 ///
 /// 用函数类型而不是直接依赖 `SourceManager`：`ArtistService` 与 sources 层
@@ -22,13 +31,21 @@ typedef ArtistFetcher = Future<ArtistDetail> Function(
 class ArtistService {
   ArtistService({
     required ArtistFetcher fetch,
+    ArtistSearchFetcher? search,
     RequestCache? cache,
+    RequestCache? nameCache,
     Duration ttl = const Duration(minutes: 10),
   })  : _fetch = fetch,
-        _cache = cache ?? RequestCache(maxEntries: 64, ttl: ttl);
+        _search = search,
+        _cache = cache ?? RequestCache(maxEntries: 64, ttl: ttl),
+        _nameCache = nameCache ?? RequestCache(maxEntries: 64, ttl: ttl);
 
   final ArtistFetcher _fetch;
+  final ArtistSearchFetcher? _search;
   final RequestCache _cache;
+
+  /// 名字 → id 的解析缓存（命中 / 未命中都缓存 TTL；检索抛错不缓存）。
+  final RequestCache _nameCache;
 
   /// 取一页歌手详情；同 key 在 TTL 内共享结果，异常归一化为 [SourceFailure]。
   ///
@@ -48,6 +65,31 @@ class ArtistService {
       ),
     );
   }
+
+  /// 按名字解析歌手（精确匹配：trim + 忽略大小写）；未命中 / 无检索能力
+  /// 返回 null。同一名字在 TTL 内不重复检索（正负结果都缓存）。
+  ///
+  /// 用途：曲目 payload 没有歌手 id 时（历史收藏 / 导入列表）回退进歌手页。
+  Future<ArtistSummary?> resolveByName(String sourceKey, String name) {
+    final query = name.trim();
+    final searcher = _search;
+    if (query.isEmpty || searcher == null) return Future.value(null);
+    return _nameCache.getOrCreate<ArtistSummary?>(
+      nameCacheKey(sourceKey, query),
+      () async {
+        final items = await searcher(sourceKey, query);
+        final expected = query.toLowerCase();
+        for (final item in items) {
+          if (item.name.trim().toLowerCase() == expected) return item;
+        }
+        return null;
+      },
+    );
+  }
+
+  /// 名字解析缓存 key：`artist-name:{source}:{name}`。
+  static String nameCacheKey(String sourceKey, String name) =>
+      'artist-name:$sourceKey:$name';
 
   /// 使该歌手的缓存全部失效（重试 / 手动刷新用）。
   void invalidateArtist(String sourceKey, String artistId) =>

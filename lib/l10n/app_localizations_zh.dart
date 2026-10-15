@@ -1093,6 +1093,9 @@ class AppLocalizationsZh extends AppLocalizations {
   String get artistLoadFailed => '歌手加载失败';
 
   @override
+  String get artistNotFound => '未找到该歌手';
+
+  @override
   String artistSongCount(int count) {
     return '$count 首歌曲';
   }

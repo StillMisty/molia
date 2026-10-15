@@ -179,17 +179,18 @@ class _TrackInfoViewState extends State<TrackInfoView> {
                 ?.capabilities
                 .collection ??
             false);
-    // 歌手行：曲目带歌手 id（raw `_artists`）且渠道能力位为真时可点。
-    final artistRef = track == null ? null : platformArtistOf(track);
+    // 歌手行：能力位为真且能定位歌手时可点——优先 raw 歌手 id，历史数据
+    // （无 id）按歌手名回退解析（见 track_actions.openTrackArtist）。
     final artistNames = track == null
         ? ''
         : track.artists
             .map((artist) => artist.name)
             .where((name) => name.isNotEmpty)
             .join('、');
-    final artistSupported = artistRef != null &&
+    final artistSupported = track != null &&
+        trackHasArtistEntry(track) &&
         (sourceRegistry
-                ?.byKey(track!.id.sourceKey)
+                ?.byKey(track.id.sourceKey)
                 ?.capabilities
                 .artist ??
             false);

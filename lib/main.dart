@@ -34,6 +34,7 @@ import 'data/update/update_manifest_client.dart';
 import 'providers/ai_dj_provider.dart';
 import 'data/playback/default_playback_facade.dart';
 import 'data/playback/local_playback_backend.dart';
+import 'domain/models/catalog.dart' show SearchQuery;
 import 'domain/models/download.dart';
 import 'domain/models/failure.dart';
 import 'domain/models/device_sync.dart';
@@ -188,6 +189,12 @@ void main() async {
     fetch: (sourceKey, artistId, {required page, required limit}) =>
         sourceManager.fetchArtist(sourceKey, artistId,
             page: page, limit: limit),
+    // 历史收藏 / 导入列表没有 raw 歌手 id：按名字回退检索（精确匹配在服务内）。
+    search: (sourceKey, name) async => (await catalogService.searchArtists(
+      sourceKey,
+      SearchQuery(keyword: name, limit: 10),
+    ))
+        .items,
   );
 
   // 下载设置（设备本地：保存位置 / 文件名格式 / 标签嵌入开关）。

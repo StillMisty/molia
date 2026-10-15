@@ -168,10 +168,16 @@
 ## 歌手与歌词搜索
 
 - **Artist page（歌手页）** — `lib/pages/artist_page.dart`（头部头像 / 名字 / 简介 +
-  播放全部 / 加入列表 + 触底分页），入口：歌曲信息页「歌手」行、搜索结果行内歌手名、
+  播放全部 / 加入列表 + 曲目列表；曲目行与搜索结果行同款 `TrackMenuTile`，行尾菜单
+  收藏 / 加入列表），入口：歌曲信息页「歌手」行、搜索结果行内歌手名、
   搜索「歌手」类型条目；取数走 **Artist service（歌手服务）**
   `lib/data/catalog/artist_service.dart`（single-flight + LRU + TTL 10min，
   key `artist:{source}:{id}:{page}:{limit}`，注入 `SourceManager.fetchArtist`）。
+- **Artist name fallback（歌手名回退）** — 曲目 raw 没有歌手 id 时（历史收藏 /
+  `.lxmc` 导入 / 部分内置入口）按名字进歌手页：`ArtistService.resolveByName`
+  歌手搜索 + 精确匹配（trim、忽略大小写；正负结果都缓存），id 解析在
+  `showArtistPageByName` 的页面加载内完成（加载态 / 未找到文案 `artistNotFound`）；
+  名字取首个歌手名的首段（历史数据多歌手被拼成 `、` / `, ` / `&` 分隔的一串）。
 - **Builtin artists（内置歌手取数）** — `lib/sources/builtin/artist_source.dart`
   （`BuiltinArtists` 调度）+ `{kw,kg,tx,wy,mg}_artist.dart`：五平台歌手搜索与
   「详情 + 歌曲」的唯一实现（解析直接产出领域 `ArtistSummary` / `ArtistDetail`）；

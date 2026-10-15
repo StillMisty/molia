@@ -16,6 +16,7 @@ import 'package:provider/provider.dart';
 
 import '../data/catalog/artist_service.dart';
 import '../domain/models/artist.dart';
+import '../domain/models/failure.dart';
 import '../domain/models/library.dart';
 import '../domain/models/track.dart';
 import '../l10n/app_localizations.dart';
@@ -25,6 +26,7 @@ import '../utils/duration_text.dart';
 import '../utils/responsive.dart';
 import '../widgets/add_to_library.dart';
 import '../widgets/app_network_image.dart';
+import '../widgets/track_menu_tile.dart';
 import '../widgets/track_row.dart';
 
 AppLocalizations _l10n(BuildContext context) =>
@@ -46,6 +48,39 @@ Future<void> showArtistPage(
     child: ArtistPage(
       fallbackName: fallbackName,
       loader: (page) => service.load(sourceKey, artistId, page: page),
+    ),
+  );
+}
+
+/// 按歌手名打开歌手页（曲目 payload 没有歌手 id 时的回退入口）。
+///
+/// id 解析延迟到页面加载：解析期间显示加载态，解析失败（未找到）显示可重试
+/// 的错误态；解析结果在 `ArtistService` 内缓存（同一名字不重复检索）。
+Future<void> showArtistPageByName(
+  BuildContext context,
+  String sourceKey,
+  String name,
+) {
+  final service = context.read<ArtistService?>();
+  if (service == null) return Future.value();
+  String? resolvedId;
+  return ResponsiveNavigation.showSecondaryPage<void>(
+    context: context,
+    showCloseButton: false,
+    child: ArtistPage(
+      fallbackName: name,
+      loader: (page) async {
+        resolvedId ??= (await service.resolveByName(sourceKey, name))?.id;
+        final id = resolvedId;
+        if (id == null || id.isEmpty) {
+          throw const SourceFailure(
+            kind: FailureKind.notFound,
+            message: '歌手未找到',
+            l10nKey: 'artistNotFound',
+          );
+        }
+        return service.load(sourceKey, id, page: page);
+      },
     ),
   );
 }
@@ -77,6 +112,9 @@ class _ArtistPageState extends State<ArtistPage> {
 
   bool _loading = true;
   bool _failed = false;
+
+  /// 最近一次失败（`notFound` 与一般加载失败是两种文案）。
+  Object? _error;
   bool _loadingMore = false;
   bool _loadMoreFailed = false;
   bool _hasMore = false;
@@ -99,6 +137,7 @@ class _ArtistPageState extends State<ArtistPage> {
     setState(() {
       _loading = true;
       _failed = false;
+      _error = null;
     });
     try {
       final artist = await widget.loader(1);
@@ -112,9 +151,10 @@ class _ArtistPageState extends State<ArtistPage> {
         _loading = false;
         _hasMore = artist.hasMore;
       });
-    } catch (_) {
+    } catch (error) {
       if (!mounted) return;
       setState(() {
+        _error = error;
         _failed = true;
         _loading = false;
       });
@@ -224,12 +264,15 @@ class _ArtistPageState extends State<ArtistPage> {
     }
     final artist = _artist;
     if (_failed || artist == null) {
+      final error = _error;
+      final notFound =
+          error is SourceFailure && error.kind == FailureKind.notFound;
       return Center(
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
             Text(
-              l10n.artistLoadFailed,
+              notFound ? l10n.artistNotFound : l10n.artistLoadFailed,
               style: Theme.of(context).textTheme.bodyLarge,
             ),
             const SizedBox(height: 12),
@@ -292,16 +335,46 @@ class _ArtistPageState extends State<ArtistPage> {
 
   Widget _buildTrackRow(BuildContext context, int index, ArtistDetail artist) {
     final track = _tracks[index];
-    return TrackRow(
-      title: track.title,
-      artist: track.artists
-          .map((item) => item.name)
-          .where((name) => name.isNotEmpty)
-          .join(', '),
-      coverUrl: track.artwork?.uri.toString() ?? artist.avatarUrl,
-      trailingText: durationText(track.duration?.inMilliseconds),
+    final l10n = _l10n(context);
+    return _ArtistTrackRow(
+      track: track,
+      fallbackCoverUrl: artist.avatarUrl,
       position: calculateCardPosition(index, _tracks.length),
       onTap: () => _playFrom(index),
+      onToggleFavorite: () => unawaited(_toggleFavorite(context, track, l10n)),
+      onAddToPlaylist: () => unawaited(_addTrackToPlaylist(context, track)),
+    );
+  }
+
+  /// 行尾菜单收藏切换：与播放页同一入口（[LibraryProvider.toggleFavoriteTrack]）。
+  Future<void> _toggleFavorite(
+    BuildContext context,
+    Track track,
+    AppLocalizations l10n,
+  ) async {
+    final library = context.read<LibraryProvider?>();
+    if (library == null) return;
+    final favorite = await library.toggleFavoriteTrack(track);
+    if (!context.mounted) return;
+    M3ESnackbar.show(
+      context,
+      message: favorite ? l10n.favoriteAdd : l10n.favoriteRemove,
+    );
+  }
+
+  /// 行尾菜单「加入列表」：与收藏页 / 发现页共用同一流程。
+  Future<void> _addTrackToPlaylist(BuildContext context, Track track) async {
+    final library = context.read<LibraryProvider?>();
+    if (library == null) return;
+    await addTracksToLibraryTarget(
+      context,
+      provider: library,
+      tracks: [
+        PlaylistTrack.fromTrack(
+          track,
+          addedAt: DateTime.now().millisecondsSinceEpoch,
+        ),
+      ],
     );
   }
 
@@ -421,4 +494,49 @@ class _ArtistPageState extends State<ArtistPage> {
           color: theme.colorScheme.onSurfaceVariant,
         ),
       );
+}
+
+/// 歌手页曲目行：与搜索结果行同款（行尾菜单收藏 / 加入列表）。
+///
+/// 独立组件而不是在 sliver 的 itemBuilder 里直接 `select`：provider 禁止在
+/// SliverList 的 itemBuilder 中 select（会整表重建并触发断言）。
+class _ArtistTrackRow extends StatelessWidget {
+  const _ArtistTrackRow({
+    required this.track,
+    required this.fallbackCoverUrl,
+    required this.position,
+    required this.onTap,
+    required this.onToggleFavorite,
+    required this.onAddToPlaylist,
+  });
+
+  final Track track;
+  final String? fallbackCoverUrl;
+  final M3ECardPosition position;
+  final VoidCallback onTap;
+  final VoidCallback onToggleFavorite;
+  final VoidCallback onAddToPlaylist;
+
+  @override
+  Widget build(BuildContext context) {
+    // 只订阅本行的收藏态：长列表不因 provider 任意通知整表重建
+    // （可空：页面测试等场景可能不挂 LibraryProvider）。
+    final favorite = context.select<LibraryProvider?, bool>(
+      (library) => library?.isFavorite(track.id.sourceKey, track.id.id) ?? false,
+    );
+    return TrackMenuTile(
+      title: track.title,
+      artist: track.artists
+          .map((artist) => artist.name)
+          .where((name) => name.isNotEmpty)
+          .join(', '),
+      coverUrl: track.artwork?.uri.toString() ?? fallbackCoverUrl,
+      trailingText: durationText(track.duration?.inMilliseconds),
+      position: position,
+      onTap: onTap,
+      favorite: favorite,
+      onToggleFavorite: onToggleFavorite,
+      onAddToPlaylist: onAddToPlaylist,
+    );
+  }
 }

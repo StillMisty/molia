@@ -527,6 +527,7 @@
   "albumLoadFailed": "Failed to load album",
   "artistEmpty": "No tracks for this artist",
   "artistLoadFailed": "Failed to load artist",
+  "artistNotFound": "Artist not found",
   "artistSongCount": "{count} songs",
   "@artistSongCount": {
     "placeholders": {
