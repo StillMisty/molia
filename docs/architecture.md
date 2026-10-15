@@ -581,7 +581,8 @@
   AI 推歌共用）：锚点固定 standard 图标按钮 + tooltip，条目一律「leading 图标 + 文案」，
   收藏这类开关态用图标 + 文案表达（选中即关菜单，不留勾选态）。行本体（收藏 / 加入列表
   两条动作 + 领域接线）见 `lib/widgets/track_menu_tile.dart`，发现详情与搜索结果共用，
-  领域状态由调用方 `select` 后传入。
+  领域状态由调用方 `select` 后传入；收藏域的行适配（歌手页 / 专辑页 / 收藏页 / 搜索行）
+  统一走 `lib/widgets/favorite_track_tile.dart`。
 - 按钮选型（按作用对象与意图，已按 M3E 1.1.6 实测校正）：
   - 同一批对象的 2–3 个平级动作（图标 + 文案）→ `M3EButtonGroup`
     （`standard` 间距、组级统一 `tonal`；命令式动作把 `selectedIndex` 恒留空、
