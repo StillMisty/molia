@@ -70,8 +70,18 @@ jobs:
       - uses: android-actions/setup-android@v4
       - name: SDK 许可 + NDK
         run: |
+          set -euo pipefail
+          # 与 android/app/build.gradle 的 ndkVersion / AGENTS.md 工具链表一致。
+          ndk_version=30.0.16248370
           yes | sdkmanager --licenses > /dev/null || true
-          sdkmanager --install "ndk;30.0.16248370"
+          sdkmanager --install "ndk;$ndk_version"
+          # 原生资产（hook）构建由 native_toolchain_c 解析 NDK，优先读 ANDROID_NDK /
+          # ANDROID_NDK_HOME；runner 镜像预置的这两项指向默认 NDK 27.x，其 armv7
+          # 工具链不完整（链接期找不到 crtbegin_so.o / -llog / -landroid），
+          # cnativeapi 这类带 C 代码的包会直接构建失败。显式指向固定版本，与
+          # Gradle 侧的 ndkVersion 走同一个 NDK。
+          echo "ANDROID_NDK=$ANDROID_HOME/ndk/$ndk_version" >> "$GITHUB_ENV"
+          echo "ANDROID_NDK_HOME=$ANDROID_HOME/ndk/$ndk_version" >> "$GITHUB_ENV"
       - uses: subosito/flutter-action@v2
         with:
           flutter-version: 3.47.6
