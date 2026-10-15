@@ -8,10 +8,11 @@ import 'track_row.dart';
 AppLocalizations _l10n(BuildContext context) =>
     AppLocalizations.of(context) ?? lookupAppLocalizations(const Locale('zh'));
 
-/// 曲目行（发现详情 / 搜索结果共用）：点击播放 + 行尾 ⋮ 菜单。
+/// 曲目行（行渲染 + 行尾 ⋮ 菜单）：点击播放 + 行尾 ⋮ 菜单。
 ///
-/// 菜单固定「收藏 / 加入列表」两条动作——两个入口的语义本来就相同，
-/// 差异只在领域对象上，因此收藏态与写入流程都由调用方注入：
+/// 收藏域（歌手页 / 专辑页 / 搜索结果）经 [FavoriteTrackTile] 适配层使用；
+/// 发现详情页直接使用。菜单固定「收藏 / 加入列表」两条动作——各入口的语义
+/// 本来就相同，差异只在领域对象上，因此收藏态与写入流程都由调用方注入：
 /// - 收藏态用 `select` 订阅后传入（组件不认具体 provider，避免把
 ///   DiscoverProvider / LibraryProvider 焊进共享件，也避免整表重建）；
 /// - 行尾元信息（时长）由调用方按数据可得性传入，未知传 null 不占位。

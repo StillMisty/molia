@@ -557,7 +557,7 @@ class LibraryProvider extends ChangeNotifier {
         sourceKey: track.id.sourceKey,
         songId: track.id.id,
         title: track.title,
-        artist: track.artists.map((artist) => artist.name).join(', '),
+        artist: track.artistLabel,
         album: track.album ?? '',
         coverUrl: track.artwork?.uri.toString(),
         durationMs: track.duration?.inMilliseconds,

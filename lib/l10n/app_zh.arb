@@ -343,6 +343,7 @@
   "artistEmpty": "该歌手暂无歌曲",
   "artistLoadFailed": "歌手加载失败",
   "artistNotFound": "未找到该歌手",
+  "unknownArtist": "未知歌手",
   "artistSongCount": "{count} 首歌曲",
   "albumYear": "{year} 年",
   "settingsAppTitle": "应用名称",

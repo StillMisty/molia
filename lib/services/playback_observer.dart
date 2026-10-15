@@ -189,7 +189,7 @@ class PlaybackObserver {
   /// 曲目并未真正起播，只在 UI 空态复用该信息；provider 装载恢复会话时调用。
   void showRestoredTrack(Track track) {
     _lastPlayedTrackName = track.title;
-    _lastPlayedArtists = track.artists.map((artist) => artist.name).join(', ');
+    _lastPlayedArtists = track.artistLabel;
     _lastPlayedImageUrl = track.artwork?.uri.toString();
   }
 
@@ -269,7 +269,7 @@ class PlaybackObserver {
         sourceKey: track.id.sourceKey,
         songId: track.id.id,
         title: track.title,
-        artist: track.artists.map((artist) => artist.name).join(', '),
+        artist: track.artistLabel,
         album: track.album ?? '',
         coverUrl: track.artwork?.uri.toString(),
         durationMs: track.duration?.inMilliseconds,
@@ -347,10 +347,7 @@ class PlaybackObserver {
   }
 
   void _persistLastPlayedTrackInfo(Track track) {
-    final artists = track.artists
-        .map((artist) => artist.name)
-        .where((name) => name.isNotEmpty)
-        .join(', ');
+    final artists = track.artistLabel;
     unawaited(_saveLastPlayedTrackInfo(
       imageUrl: track.artwork?.uri.toString(),
       trackName: track.title,
@@ -421,9 +418,7 @@ class PlaybackObserver {
     final blockArtwork = _dataSaver?.blockNetworkArtwork ?? false;
     await _widgetUpdater({
       'songName': track?.title ?? '未在播放',
-      'artistName': track == null || track.artists.isEmpty
-          ? ''
-          : track.artists.first.name,
+      'artistName': track?.primaryArtistName ?? '',
       'albumArtUrl': blockArtwork ? '' : track?.artwork?.uri.toString() ?? '',
       'isPlaying': live.isPlaying,
     });

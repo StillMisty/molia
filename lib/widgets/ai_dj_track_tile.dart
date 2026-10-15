@@ -57,10 +57,7 @@ class AiDjTrackTile extends StatelessWidget {
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
     final track = item.track;
-    final artist = track.artists
-        .map((artist) => artist.name)
-        .where((name) => name.isNotEmpty)
-        .join(', ');
+    final artist = track.artistLabel;
     final reason = item.source.reason;
 
     return CardListSurface(

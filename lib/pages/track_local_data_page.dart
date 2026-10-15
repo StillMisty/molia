@@ -381,10 +381,7 @@ class _TrackLocalDataPageState extends State<TrackLocalDataPage> {
               SettingsInfoTile(
                 icon: Icons.music_note_rounded,
                 title: widget.track.title,
-                subtitle: widget.track.artists
-                    .map((artist) => artist.name)
-                    .where((name) => name.isNotEmpty)
-                    .join(', '),
+                subtitle: widget.track.artistLabel,
               ),
             ],
           ),

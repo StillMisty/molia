@@ -162,10 +162,7 @@ class _SongCommentsPageState extends State<SongCommentsPage> {
   Widget _buildTrackHeader(BuildContext context, AppLocalizations l10n) {
     final theme = Theme.of(context);
     final seed = widget.track;
-    final artist = seed.artists
-        .map((artist) => artist.name)
-        .where((name) => name.isNotEmpty)
-        .join(', ');
+    final artist = seed.artistLabel;
     return Padding(
       padding: const EdgeInsets.fromLTRB(24, 8, 24, 8),
       child: Row(

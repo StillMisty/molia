@@ -528,6 +528,7 @@
   "artistEmpty": "No tracks for this artist",
   "artistLoadFailed": "Failed to load artist",
   "artistNotFound": "Artist not found",
+  "unknownArtist": "Unknown artist",
   "artistSongCount": "{count} songs",
   "@artistSongCount": {
     "placeholders": {

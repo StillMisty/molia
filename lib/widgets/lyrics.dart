@@ -302,15 +302,9 @@ class _LyricsWidgetState extends State<LyricsWidget>
     }
   }
 
-  String _extractArtistNames(Track track) {
-    final names = track.artists
-        .map((artist) => artist.name.trim())
-        .where((name) => name.isNotEmpty)
-        .toList();
-    if (names.isNotEmpty) {
-      return names.join(', ');
-    }
-    return 'Unknown Artist';
+  String _extractArtistNames(AppLocalizations l10n, Track track) {
+    final label = track.artistLabel;
+    return label.isEmpty ? l10n.unknownArtist : label;
   }
 
   bool get _requiresManualQuickActions =>
@@ -1414,7 +1408,7 @@ class _LyricsWidgetState extends State<LyricsWidget>
     }
 
     final trackName = currentTrack.title;
-    final artistName = _extractArtistNames(currentTrack);
+    final artistName = _extractArtistNames(l10n, currentTrack);
     final albumCoverUrl = currentTrack.artwork?.uri.toString();
     // 歌词页展示开关：选择页与海报沿用同一对开关（歌词页看到什么就选什么）。
     final lyricsDisplaySettings = context.read<LyricsDisplaySettings>();

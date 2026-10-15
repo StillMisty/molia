@@ -1136,6 +1136,9 @@ class AppLocalizationsEn extends AppLocalizations {
   String get artistNotFound => 'Artist not found';
 
   @override
+  String get unknownArtist => 'Unknown artist';
+
+  @override
   String artistSongCount(int count) {
     return '$count songs';
   }
