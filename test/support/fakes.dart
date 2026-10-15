@@ -10,6 +10,8 @@ import 'package:molia/domain/ports/state_listenable.dart';
 import 'package:molia/domain/ports/ui_messenger.dart';
 import 'package:molia/models/play_mode.dart';
 import 'package:molia/providers/playback_provider.dart';
+import 'package:molia/services/playback_observer.dart';
+import 'package:molia/services/playback_session_store.dart';
 
 /// 领域端口的 ValueNotifier 实现（与数据层实现同构，测试用）。
 class TestListenable<T> extends ValueNotifier<T> implements StateListenable<T> {
@@ -181,17 +183,33 @@ class FakeMessenger implements UiMessenger {
 }
 
 /// 用假后端组装 PlaybackProvider（不触碰真实播放服务/SharedPreferences）。
+///
+/// 副作用观察者与组合根同构接线（先建观察者、provider 创建后挂接）；
+/// 会话落盘 / 历史 / 封面补取等经它生效。`provider.dispose` 会一并释放它。
 PlaybackProvider buildTestPlaybackProvider({
   FakePlaybackBackend? backend,
   CatalogService? catalogService,
   LibraryStore? libraryRepository,
+  PlaybackSessionStore? sessionStore,
+  Future<String?> Function(Track track)? artworkResolver,
 }) {
   final b = backend ?? FakePlaybackBackend();
   final facade = DefaultPlaybackFacade(backend: b);
-  return PlaybackProvider(
+  final store = sessionStore ?? PlaybackSessionStore();
+  final observer = PlaybackObserver(
+    facade: facade,
+    sessionStore: store,
+    libraryRepository: libraryRepository,
+    artworkResolver: artworkResolver,
+  );
+  final provider = PlaybackProvider(
     facade: facade,
     messenger: FakeMessenger(),
     catalogService: catalogService,
-    libraryRepository: libraryRepository,
+    observer: observer,
+    sessionStore: store,
   );
+  // 与组合根同构：provider 先订阅、观察者后挂接（facade 监听顺序一致）。
+  observer.attach();
+  return provider;
 }

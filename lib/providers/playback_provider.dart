@@ -1,39 +1,27 @@
 import 'dart:async';
 
-import 'package:flutter/foundation.dart'
-    show
-        TargetPlatform,
-        ValueListenable,
-        VoidCallback,
-        defaultTargetPlatform,
-        kIsWeb;
-import 'package:flutter/services.dart';
+import 'package:flutter/foundation.dart' show ValueListenable, VoidCallback;
 import 'package:logging/logging.dart';
 import 'package:material_ui/material_ui.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 
 import '../data/catalog/catalog_service.dart';
-import '../domain/ports/library_store.dart';
 import '../data/settings/settings_keys.dart';
 import '../data/settings/settings_registry.dart';
 import '../data/mapping/track_mapper.dart';
 import '../domain/models/failure.dart';
-import '../domain/models/library.dart';
 import '../domain/models/playback.dart';
 import '../domain/models/track.dart';
 import '../domain/ports/playback_facade.dart';
 import '../domain/ports/state_listenable.dart';
 import '../domain/ports/ui_messenger.dart';
-import '../managers/image_preload_manager.dart';
 import '../models/play_mode.dart';
 import '../services/data_saver_service.dart';
-import '../services/notification_permission.dart';
+import '../services/playback_observer.dart';
 import '../services/playback_session_store.dart';
 import '../services/source_swap/source_swap_settings.dart';
 import '../sources/source_manager.dart';
 import '../sources/source_track.dart';
 import '../utils/notify_throttler.dart';
-import 'local_database_provider.dart';
 import 'sleep_timer.dart';
 
 final _logger = Logger('molia.playback_provider');
@@ -116,16 +104,11 @@ class _PositionChannel implements ValueListenable<Duration> {
 /// 职责边界（docs/architecture.md §2.1）：
 /// - 错误提示走注入的 [UiMessenger]（不依赖 `main.dart`）；
 /// - 状态从 facade 快照/进度通道订阅；
-/// - 持久化 / 写库 / 桌面小组件 / 封面预加载等副作用保留在本类。
+/// - 只保留命令 / 队列 / 模式 / 恢复态 / 失败恢复：持久化 / 写库 / 桌面
+///   小组件 / 封面预取与补取 / 历史 / 会话落盘等副作用由 [PlaybackObserver]
+///   承担（组合根创建并挂接），本类只转发 [flushPlaybackSession] 与
+///   最后播放信息读取。
 class PlaybackProvider extends ChangeNotifier {
-  static const String _lastPlayedImageKey = 'last_played_image_url';
-  static const String _lastPlayedTrackNameKey = 'last_played_track_name';
-  static const String _lastPlayedArtistsKey = 'last_played_artists';
-
-  /// 播放会话进度落盘节流：正常播放中最多每秒写一次
-  /// （被系统杀进程时最多丢 ~1s 进度；track 切换/暂停/后台强制写）。
-  static const Duration _sessionSaveInterval = Duration(seconds: 1);
-
   final PlaybackFacade _facade;
   final SettingsRegistry _settings;
   final UiMessenger _messenger;
@@ -134,27 +117,18 @@ class PlaybackProvider extends ChangeNotifier {
   /// 取链缓存失效入口（播放失败时按 sourceKey 失效，下一次播放重试）。
   final CatalogService? _catalogService;
 
-  /// 资料库仓库（播放开始时写 play_history；失败仅日志）。
-  final LibraryStore? _libraryRepository;
-
-  /// 省流模式（可选注入）：音质标签、封面预加载与桌面小组件封面共用。
+  /// 省流模式（可选注入）：音质标签读取（`currentQualityType`）。
   final DataSaverService? _dataSaver;
 
-  /// 封面补取解析器（组合根注入）：曲目起播且无封面时调用；
-  /// 返回空表示无法补取（省流网关由注入侧实现）。
-  final Future<String?> Function(Track track)? _artworkResolver;
-
-  /// 播放上下文写入（最近播放）：由 composition root 注入。
-  final LocalDatabaseProvider? _localDatabaseProvider;
+  /// 播放副作用观察者（组合根创建、注入并挂接）：最后播放信息 / 播放上下文 /
+  /// 桌面小组件 / 历史 / 会话落盘 / 封面预取与补取由它承担。
+  final PlaybackObserver? _observer;
 
   /// 自动换源开关（设置 › 播放，默认开）；null = 关闭该能力。
   final SourceSwapSettings? _autoSwapSettings;
 
   /// 自动换源解析器（组合根注入 `AutoSourceSwapService.findMatch`）。
   final AutoSourceSwapResolver? _autoSwapResolver;
-
-  /// composition root 注入（封面预加载需要 BuildContext）。
-  final GlobalKey<NavigatorState>? _navigatorKey;
 
   // 通知节流器 - 减少不必要的 UI 重建
   late final CategorizedNotifyThrottler _notifyThrottler;
@@ -165,13 +139,6 @@ class PlaybackProvider extends ChangeNotifier {
   /// 定时关闭（歌曲信息页入口）：只决定「什么时候暂停」，暂停动作走
   /// `facade.pause`；状态经 [SleepTimerController] 的 ValueListenable 暴露。
   late final SleepTimerController sleepTimer;
-
-  final AlbumArtPreloadStrategy _albumArtPreloader = AlbumArtPreloadStrategy();
-
-  // 持久化存储最后播放的歌曲信息（用于离线显示）
-  String? _lastPlayedImageUrl;
-  String? _lastPlayedTrackName;
-  String? _lastPlayedArtists;
 
   /// 上次播放会话持久化（冷启动恢复封面/标题/进度，点播放重新取链）。
   final PlaybackSessionStore _sessionStore;
@@ -188,10 +155,8 @@ class PlaybackProvider extends ChangeNotifier {
   /// 恢复装载期间用户主动 seek 的目标：恢复流程末尾以用户目标为准，
   /// 否则用户的拖动/点歌词行会被「跳回保存进度」覆盖。
   Duration? _resumeSeekTarget;
-  DateTime _lastSessionSave = DateTime.fromMillisecondsSinceEpoch(0);
-  bool _wasPlaying = false;
 
-  /// 已处理过的当前曲目（用于去重持久化 / 写库 / 预加载）。
+  /// 已处理过的当前曲目（用于去重撤下恢复态）。
   String? _processedTrackId;
 
   /// 已展示过的播放错误（避免同一错误反复弹提示）。
@@ -200,10 +165,6 @@ class PlaybackProvider extends ChangeNotifier {
   /// 已自动重试过的曲目 key（同一操作只重试一次，避免失败循环）。
   String? _retriedTrackKey;
 
-  /// 本次会话是否已请求过通知权限（首次真正播放时请求，见
-  /// [NotificationPermission.ensureRequested]）。
-  bool _notificationPermissionAsked = false;
-
   /// 自动换源：每个曲目 uri 的**已尝试来源**（含种子源；换源后的候选继承
   /// 并追加自身来源），级联每个来源至多一次、有界；cap 防止长期泄漏。
   final Map<String, Set<String>> _autoSwapTriedSources = {};
@@ -211,9 +172,6 @@ class PlaybackProvider extends ChangeNotifier {
 
   /// 正在自动换源的曲目 uri（防并发重复触发）。
   final Set<String> _autoSwapping = {};
-
-  /// 正在补取封面的曲目 key（去重；同曲目只解析一次）。
-  String? _artworkResolvingTrackId;
 
   /// 默认播放模式（设置页配置；启动时无曲目即应用为初始模式）。
   PlayMode _defaultPlayMode = PlayMode.sequential;
@@ -227,25 +185,19 @@ class PlaybackProvider extends ChangeNotifier {
     required PlaybackFacade facade,
     required UiMessenger messenger,
     SourceManager? sourceManager,
-    GlobalKey<NavigatorState>? navigatorKey,
     CatalogService? catalogService,
-    LibraryStore? libraryRepository,
     DataSaverService? dataSaver,
-    LocalDatabaseProvider? localDatabaseProvider,
+    PlaybackObserver? observer,
     PlaybackSessionStore? sessionStore,
-    Future<String?> Function(Track track)? artworkResolver,
     SourceSwapSettings? autoSwapSettings,
     AutoSourceSwapResolver? autoSwapResolver,
     SettingsRegistry? settings,
   })  : _facade = facade,
         _messenger = messenger,
         _sourceManager = sourceManager,
-        _navigatorKey = navigatorKey,
         _catalogService = catalogService,
-        _libraryRepository = libraryRepository,
         _dataSaver = dataSaver,
-        _localDatabaseProvider = localDatabaseProvider,
-        _artworkResolver = artworkResolver,
+        _observer = observer,
         _autoSwapSettings = autoSwapSettings,
         _autoSwapResolver = autoSwapResolver,
         _settings = settings ?? SettingsRegistry(keys: kAllSettingsKeys),
@@ -269,14 +221,13 @@ class PlaybackProvider extends ChangeNotifier {
       position: _facade.position,
       onFire: () => _facade.pause(),
     );
-    _facade.position.addListener(_onPositionTick);
     _facade.snapshot.addListener(_onFacadeSnapshot);
     // position 走独立 ValueListenable 通道（_positionChannel）：进度 tick
-    // 只重建进度条/歌词行，不触发整 Provider 重建。
+    // 只重建进度条/歌词行，不触发整 Provider 重建（节流落盘在观察者里）。
     _sourceManager?.addListener(_onSourceManagerChanged);
     _dataSaver?.addListener(_onDataSaverChanged);
     _preferencesReady = () async {
-      await _loadLastPlayedTrackInfo();
+      if (_observer != null) await _observer.ready;
       await _loadDefaultPlayMode();
       await _loadPlaybackSession();
     }();
@@ -334,9 +285,10 @@ class PlaybackProvider extends ChangeNotifier {
   /// 持久化偏好加载完成（测试等待启动态就绪）。
   Future<void> get preferencesReady => _preferencesReady;
 
-  String? get lastPlayedImageUrl => _lastPlayedImageUrl;
-  String? get lastPlayedTrackName => _lastPlayedTrackName;
-  String? get lastPlayedArtists => _lastPlayedArtists;
+  /// 最后播放曲目信息（离线空态展示）：状态与持久化在 [PlaybackObserver]。
+  String? get lastPlayedImageUrl => _observer?.lastPlayedImageUrl;
+  String? get lastPlayedTrackName => _observer?.lastPlayedTrackName;
+  String? get lastPlayedArtists => _observer?.lastPlayedArtists;
 
   /// 播放音源曲目（本地播放）。[tracks] 为上下文队列。
   Future<void> playSourceTracks(
@@ -511,7 +463,7 @@ class PlaybackProvider extends ChangeNotifier {
       _clearRestoredSession();
       // 立刻把恢复进度写回会话：装载时的强制保存记的是 0，
       // 若在节流窗口内被杀进程，下次冷启动会从 0 开始。
-      _maybeSavePlaybackSession(force: true);
+      _observer?.flushSession();
       _notifyCategory('track');
       _notifyCategory('queue');
     } catch (e) {
@@ -679,7 +631,8 @@ class PlaybackProvider extends ChangeNotifier {
     _notifyCategory('queue');
   }
 
-  /// facade 低频快照变化：持久化并通知 UI（曲目/队列）。
+  /// facade 低频快照变化：撤下恢复态 / 处理失败并通知 UI（曲目/队列）；
+  /// 副作用扇出在 [PlaybackObserver] 的同源监听里。
   void _onFacadeSnapshot() {
     _handlePlaybackSnapshot();
     _notifyCategory('track');
@@ -695,12 +648,11 @@ class PlaybackProvider extends ChangeNotifier {
     _notifyCategory('default');
   }
 
-  /// 曲目切换时：持久化最后播放信息、写入播放上下文（最近播放）、
-  /// 更新桌面小组件并触发封面预加载；同时维护「上次播放会话」。
+  /// 曲目切换时：维护恢复态撤下；失败提示与恢复见 [_maybeShowPlaybackError]
+  /// / [_maybeRecoverFromPlaybackError]。写入类副作用（最后播放 / 播放上下文 /
+  /// 小组件 / 历史 / 会话落盘 / 预取 / 补封面）在 [PlaybackObserver]。
   void _handlePlaybackSnapshot() {
-    final live = _facade.snapshot.value;
-    final track = live.current;
-    final trackId = track?.id.uri;
+    final trackId = _facade.snapshot.value.current?.id.uri;
     if (trackId == null) {
       _processedTrackId = null;
     } else if (trackId != _processedTrackId) {
@@ -708,64 +660,16 @@ class PlaybackProvider extends ChangeNotifier {
       // 真实播放接管：撤下冷启动恢复态。恢复播放的 seek 尚未落地时，
       // 继续沿用恢复进度显示（见 _resumeRestoring），避免进度条闪回 0。
       _clearRestoredSession(keepPosition: _resumeRestoring);
-      _persistLastPlayedTrackInfo(track!);
-      unawaited(_savePlayContextToDatabase(track, live.context));
-      unawaited(updateWidget());
-      _triggerImagePreload();
-      unawaited(_recordPlayHistory(track));
-      if (track.artwork == null) {
-        unawaited(_resolveMissingArtwork(track));
-      }
-      _maybeSavePlaybackSession(force: true);
     }
-    // 播放中→暂停/停止：强制保存一次进度（避免节流窗口内丢进度）。
-    if (_wasPlaying && !live.isPlaying) {
-      _maybeSavePlaybackSession(force: true);
-    }
-    // 首次真正出声时才请求通知权限（用户已经听到歌，权限弹窗有上下文；
-    // 媒体通知依赖它才不会在部分 ROM 上被静默丢弃）。
-    if (live.isPlaying && !_notificationPermissionAsked) {
-      _notificationPermissionAsked = true;
-      unawaited(NotificationPermission.ensureRequested());
-    }
-    _wasPlaying = live.isPlaying;
     _maybeShowPlaybackError();
     _maybeRecoverFromPlaybackError();
   }
 
   /// 立即把当前播放会话写入本地（进入后台/生命周期 paused 时调用）。
   ///
-  /// 会话进度平时按 [_sessionSaveInterval] 节流保存；暂停/后台时强制落盘，
+  /// 会话进度平时由 [PlaybackObserver] 按 1s 节流保存；暂停/后台时强制落盘，
   /// 被系统杀进程时最多丢约 1s 进度。
-  void flushPlaybackSession() => _maybeSavePlaybackSession(force: true);
-
-  /// 高频进度 tick：节流保存会话进度。
-  void _onPositionTick() {
-    _maybeSavePlaybackSession();
-  }
-
-  /// 保存当前播放会话（节流；track 切换/暂停时强制）。
-  void _maybeSavePlaybackSession({bool force = false}) {
-    final snapshot = _facade.snapshot.value;
-    final current = snapshot.current;
-    if (current == null ||
-        snapshot.queue.isEmpty ||
-        snapshot.currentIndex < 0) {
-      return;
-    }
-    final now = DateTime.now();
-    if (!force && now.difference(_lastSessionSave) < _sessionSaveInterval) {
-      return;
-    }
-    _lastSessionSave = now;
-    unawaited(_sessionStore.save(PlaybackSession(
-      tracks: snapshot.queue,
-      index: snapshot.currentIndex,
-      position: _facade.position.value,
-      mode: snapshot.mode,
-      context: snapshot.context,
-    )));
-  }
+  void flushPlaybackSession() => _observer?.flushSession();
 
   /// 冷启动加载上次播放会话：无真实曲目时进入恢复态。
   ///
@@ -783,10 +687,8 @@ class PlaybackProvider extends ChangeNotifier {
       _restoredPosition = session.position;
       _positionChannel.setRestored(session.position);
       final current = session.current!;
-      _lastPlayedTrackName = current.title;
-      _lastPlayedArtists =
-          current.artists.map((artist) => artist.name).join(', ');
-      _lastPlayedImageUrl = current.artwork?.uri.toString();
+      // 恢复曲目并未真正起播，只把信息交给观察者作为「最后播放」展示。
+      _observer?.showRestoredTrack(current);
       _publishRestoredSnapshot();
       _logger.fine('已恢复上次播放会话: ${current.title} @${session.position.inSeconds}s');
       _notifyCategory('track');
@@ -853,30 +755,6 @@ class PlaybackProvider extends ChangeNotifier {
     if (keepPosition) return;
     _restoredPosition = Duration.zero;
     _positionChannel.setRestored(null);
-  }
-
-  /// 播放开始时写入播放历史（元数据 + raw 取链参数；不写直链）。
-  ///
-  /// 失败仅日志：历史持久化不能影响播放主流程。
-  Future<void> _recordPlayHistory(Track track) async {
-    final repository = _libraryRepository;
-    if (repository == null) return;
-    try {
-      await repository.addHistoryEntry(PlayHistoryEntry(
-        sourceKey: track.id.sourceKey,
-        songId: track.id.id,
-        title: track.title,
-        artist: track.artists.map((artist) => artist.name).join(', '),
-        album: track.album ?? '',
-        coverUrl: track.artwork?.uri.toString(),
-        durationMs: track.duration?.inMilliseconds,
-        // raw 原样持久化（play_history.raw），供下次播放按需重新取链。
-        raw: Map<String, dynamic>.from(track.payload),
-        playedAt: DateTime.now().millisecondsSinceEpoch,
-      ));
-    } catch (e) {
-      _logger.severe('写入播放历史失败', e);
-    }
   }
 
   /// 播放失败恢复：按 sourceKey 失效取链缓存，自动重试一次；
@@ -976,157 +854,6 @@ class PlaybackProvider extends ChangeNotifier {
     _messenger.showFailure(failure);
   }
 
-  /// 把当前播放上下文写入本地数据库（媒体库「最近播放」使用）。
-  Future<void> _savePlayContextToDatabase(
-    Track track,
-    PlaybackContext? context,
-  ) async {
-    final name = context?.name;
-    if (name == null || name.isEmpty) return;
-    final localDbProvider = _localDatabaseProvider;
-    if (localDbProvider == null) return;
-
-    final type = context?.type ?? 'lx';
-    final uri = context?.uri ?? 'lx:$name';
-    try {
-      await localDbProvider.insertOrUpdatePlayContext(
-        contextUri: uri,
-        contextType: type,
-        contextName: name,
-        imageUrl: track.artwork?.uri.toString(),
-        lastPlayedAt: DateTime.now().millisecondsSinceEpoch,
-      );
-    } catch (e) {
-      _logger.severe('保存播放上下文失败', e);
-    }
-  }
-
-  Future<void> _loadLastPlayedTrackInfo() async {
-    try {
-      final sp = await SharedPreferences.getInstance();
-      _lastPlayedImageUrl = sp.getString(_lastPlayedImageKey);
-      _lastPlayedTrackName = sp.getString(_lastPlayedTrackNameKey);
-      _lastPlayedArtists = sp.getString(_lastPlayedArtistsKey);
-      _logger.fine('已加载最后播放歌曲信息: $_lastPlayedTrackName - $_lastPlayedArtists');
-    } catch (e) {
-      _logger.severe('加载最后播放歌曲信息失败', e);
-    }
-  }
-
-  Future<void> _saveLastPlayedTrackInfo({
-    String? imageUrl,
-    String? trackName,
-    String? artists,
-  }) async {
-    if (imageUrl == null && trackName == null && artists == null) return;
-    try {
-      final sp = await SharedPreferences.getInstance();
-      if (imageUrl != null && imageUrl != _lastPlayedImageUrl) {
-        await sp.setString(_lastPlayedImageKey, imageUrl);
-        _lastPlayedImageUrl = imageUrl;
-      }
-      if (trackName != null && trackName != _lastPlayedTrackName) {
-        await sp.setString(_lastPlayedTrackNameKey, trackName);
-        _lastPlayedTrackName = trackName;
-      }
-      if (artists != null && artists != _lastPlayedArtists) {
-        await sp.setString(_lastPlayedArtistsKey, artists);
-        _lastPlayedArtists = artists;
-      }
-      _logger.fine('已保存最后播放歌曲信息: $trackName - $artists');
-    } catch (e) {
-      _logger.severe('保存最后播放歌曲信息失败', e);
-    }
-  }
-
-  void _persistLastPlayedTrackInfo(Track track) {
-    final artists = track.artists
-        .map((artist) => artist.name)
-        .where((name) => name.isNotEmpty)
-        .join(', ');
-    unawaited(_saveLastPlayedTrackInfo(
-      imageUrl: track.artwork?.uri.toString(),
-      trackName: track.title,
-      artists: artists.isEmpty ? null : artists,
-    ));
-  }
-
-  /// 触发播放相关图片的智能预加载
-  ///
-  /// 使用 ImagePreloadManager 预加载当前曲目、下一首、以及队列中的封面图片。
-  /// 省流模式阻止封面网络请求时直接跳过（避免注定失败的下载与日志噪音）。
-  void _triggerImagePreload() {
-    if (_dataSaver?.blockNetworkArtwork ?? false) return;
-    final context = _navigatorKey?.currentContext;
-    if (context == null || !context.mounted) return;
-
-    // 异步执行预加载，不阻塞主流程
-    final live = _facade.snapshot.value;
-    final currentTrack = live.current;
-    final nextTrack = live.next;
-    // 预加载实际播放顺序（shuffle 为洗牌排列剩余），避免随机模式下白下封面。
-    final upcomingTracks = live.upNext;
-
-    Future.microtask(() {
-      if (!context.mounted) return;
-      _albumArtPreloader.preloadForPlayback(
-        context: context,
-        currentTrack: currentTrack,
-        nextTrack: nextTrack,
-        upcomingTracks: upcomingTracks,
-      );
-    });
-  }
-
-  /// 封面补取：曲目无封面时经注入解析器取图并原地回写队列。
-  ///
-  /// 去重（同一曲目只解析一次）+ 过期守卫（补图回来时已切歌则丢弃）；
-  /// 失败仅日志——封面是增强项，不影响播放。
-  Future<void> _resolveMissingArtwork(Track track) async {
-    final resolver = _artworkResolver;
-    if (resolver == null) return;
-    final trackId = track.id.uri;
-    if (_artworkResolvingTrackId == trackId) return;
-    _artworkResolvingTrackId = trackId;
-    try {
-      final url = await resolver(track);
-      if (url == null || url.isEmpty) return;
-      final uri = Uri.tryParse(url);
-      if (uri == null) return;
-      if (_facade.snapshot.value.current?.id.uri != trackId) return;
-      await _facade.updateTrackArtwork(trackId, uri);
-      unawaited(updateWidget());
-    } catch (e) {
-      _logger.warning('封面补取失败: $e');
-    } finally {
-      if (_artworkResolvingTrackId == trackId) {
-        _artworkResolvingTrackId = null;
-      }
-    }
-  }
-
-  Future<void> updateWidget() async {
-    if (!kIsWeb && defaultTargetPlatform == TargetPlatform.android) {
-      const platform = MethodChannel('top.stillmisty.molia/widget');
-      try {
-        // 省流时传空封面地址：MusicWidget 对空串跳过 Glide 加载。
-        final blockArtwork = _dataSaver?.blockNetworkArtwork ?? false;
-        final track = snapshot.current;
-        await platform.invokeMethod('updateWidget', {
-          'songName': track?.title ?? '未在播放',
-          'artistName': track == null || track.artists.isEmpty
-              ? ''
-              : track.artists.first.name,
-          'albumArtUrl':
-              blockArtwork ? '' : track?.artwork?.uri.toString() ?? '',
-          'isPlaying': snapshot.isPlaying,
-        });
-      } catch (e) {
-        // 更新失败静默：桌面小组件不影响播放主流程。
-      }
-    }
-  }
-
   /// 分类通知 - 根据更新类型使用不同的节流策略
   void _notifyCategory(String category) {
     _notifyThrottler.notify(category);
@@ -1135,11 +862,13 @@ class PlaybackProvider extends ChangeNotifier {
   @override
   void dispose() {
     _facade.snapshot.removeListener(_onFacadeSnapshot);
-    _facade.position.removeListener(_onPositionTick);
     _positionChannel.dispose();
     sleepTimer.dispose();
     _sourceManager?.removeListener(_onSourceManagerChanged);
     _dataSaver?.removeListener(_onDataSaverChanged);
+    // 观察者由组合根创建、与 provider 同生命周期：这里一并拆线
+    // （组合根不单独释放）。
+    _observer?.dispose();
     // 注意：facade / backend / LocalPlaybackService 由 main 创建并注入
     // （audio_service 复用），此处不能 dispose，只解除监听。
     _notifyThrottler.dispose();
