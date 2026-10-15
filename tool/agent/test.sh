@@ -2,7 +2,8 @@
 # 集成测试运行器：官方 flutter test 路径（Linux 桌面 / Android 模拟器）
 #
 # 用法:
-#   tool/agent/test.sh linux                 # -d linux；无 DISPLAY 时自动套 xvfb-run
+#   tool/agent/test.sh linux                 # -d linux；默认 Xvfb 虚拟显示（不弹窗）
+#   tool/agent/test.sh linux --window        # 在真实显示上跑（WSLg 会弹窗，供肉眼观察）
 #   tool/agent/test.sh android [serial]      # 默认取运行中的模拟器（未起则提示 emu.sh start）
 #   tool/agent/test.sh all [serial]          # 先 linux 后 android（任一失败即停）
 #
@@ -10,11 +11,14 @@
 #   --file <path>      集成测试文件（默认 integration_test/lx_engine_integration_test.dart）
 #   --timeout <秒>     墙钟超时（默认 linux 900 / android 1800；Android 首次 Gradle 构建需放宽）
 #   --no-pub           跳过 flutter pub get（仅本地快速迭代；发布/首次构建勿用，见 pitfalls #15）
-#   --no-xvfb          无 DISPLAY 时不套 xvfb-run（用于直接观察启动报错）
+#   --window           在真实 DISPLAY/WAYLAND 上跑（默认 headless；`--no-xvfb` 为旧别名）
 #   --no-uninstall     Android 跑完保留安装（调试安装态时用；默认卸载）
 #
 # 设计说明:
 # - 判定只看 flutter test 退出码：设备侧异常会被捕获上报，失败必为非零，不依赖人工看截图；
+# - Linux 默认 headless：无条件套 xvfb-run，在 WSLg 下也不会把窗口弹到 Windows 桌面；
+#   只改 DISPLAY 不够——GDK 见到 WAYLAND_DISPLAY 会优先连真实 Wayland 合成器，
+#   故同时 `env -u WAYLAND_DISPLAY` + `GDK_BACKEND=x11`；
 # - 日志写 /tmp/opencode/molia/it-<platform>-<时间戳>.log，失败时回显尾部 40 行；
 # - Android 由 flutter test 自动构建并安装 debug APK（不需要先 flutter build apk）。
 source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/_common.sh"
@@ -22,12 +26,13 @@ source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/_common.sh"
 usage() {
   cat >&2 <<'EOF'
 用法:
-  test.sh linux [--timeout N] [--no-pub] [--no-xvfb]
+  test.sh linux [--timeout N] [--no-pub] [--window]
   test.sh android [serial] [--timeout N] [--no-pub] [--no-uninstall]
   test.sh all [serial] [--timeout N] [--no-pub]
 
 公共选项:
   --file <path>   集成测试文件（默认 integration_test/lx_engine_integration_test.dart）
+  --window        在真实显示上跑（默认 Xvfb 无窗口）
 EOF
   exit 2
 }
@@ -39,7 +44,7 @@ test_file="integration_test/lx_engine_integration_test.dart"
 timeout_s=""
 serial=""
 no_pub=0
-use_xvfb=1
+headless=1
 extra_flags=()
 
 case "$platform" in
@@ -52,7 +57,7 @@ while (($#)); do
     --file) test_file="$2"; shift ;;
     --timeout) timeout_s="$2"; shift ;;
     --no-pub) no_pub=1 ;;
-    --no-xvfb) use_xvfb=0 ;;
+    --window|--no-xvfb) headless=0 ;;
     --no-uninstall) extra_flags+=(--no-uninstall) ;;
     -*) usage ;;
     *)
@@ -76,11 +81,14 @@ run_one() { # platform
   local device prefix=()
   if [[ "$platform" == "linux" ]]; then
     device="linux"
-    if ! has_display && (( use_xvfb )); then
+    if (( headless )); then
       command -v xvfb-run >/dev/null 2>&1 ||
-        die "无 DISPLAY 且缺少 xvfb-run：先装 xvfb（pacman -S xorg-server-xvfb / apt install xvfb），或用 --no-xvfb 直接跑看报错"
-      prefix=(xvfb-run -a)
-      log "未检测到 DISPLAY，使用 xvfb-run -a"
+        die "缺少 xvfb-run：先装 xvfb（pacman -S xorg-server-xvfb / apt install xvfb），或用 --window 在真实显示上跑"
+      # GDK_BACKEND=x11 + 去掉 WAYLAND_DISPLAY：否则 WSLg 下 GTK 会绕过 Xvfb 连真实合成器弹窗
+      prefix=(env -u WAYLAND_DISPLAY GDK_BACKEND=x11 xvfb-run -a)
+      log "headless: xvfb-run -a（不弹窗；--window 可切回真实显示）"
+    elif ! has_display; then
+      log "警告：--window 但未检测到 DISPLAY/WAYLAND_DISPLAY，仍直接跑（启动报错看日志）"
     fi
   else
     device="${serial:-}"

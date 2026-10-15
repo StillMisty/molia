@@ -32,7 +32,7 @@ RUN_DEVICE_FILE="$RUN_DIR/flutter-run.device" # app.sh 记录本次 flutter run 
 log() { printf '[agent] %s\n' "$*" >&2; }
 die() { printf '[agent] ERROR: %s\n' "$*" >&2; exit 1; }
 
-# 是否有图形显示（Linux 桌面 flutter run 需要；无则 test.sh / app.sh 可套 xvfb-run）
+# 是否有图形显示（Linux 桌面运行需要；test.sh 默认套 xvfb-run，app.sh 无显示时套）
 has_display() { [[ -n "${DISPLAY:-}${WAYLAND_DISPLAY:-}" ]]; }
 
 # 列出已连接设备（序列号）

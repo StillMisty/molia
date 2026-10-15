@@ -11,10 +11,11 @@
   `sqlite3_flutter_libs`）；缺 `xdg-user-dirs` 时 `molia_database.dart` 会回退到
   应用支持目录。改表结构后按 ADR-0005 重跑 `build_runner` 与
   `drift_dev make-migrations`。
-- **集成测试需要显示环境**：跑 `flutter test integration_test/... -d linux` 必须有 DISPLAY
-  （官方要求，无显示时 App 起不来）；CI/无头环境用 `xvfb-run -a` 包装
-  （`tool/agent/test.sh linux` 会自动检测并套上；缺命令时
-  `sudo pacman -S xorg-server-xvfb`）。
+- **集成测试默认 headless**：`tool/agent/test.sh linux` 无条件套 `xvfb-run -a`
+  （并强制 `GDK_BACKEND=x11`、去掉 `WAYLAND_DISPLAY`——只改 DISPLAY 挡不住 GTK 走 WSLg
+  Wayland，窗口照样弹）；要肉眼观察加 `--window`。等价裸命令
+  `flutter test integration_test/... -d linux` 必须有 DISPLAY（官方要求，无显示时 App 起不来）；
+  缺 `xvfb-run` 时 `sudo pacman -S xorg-server-xvfb`。
 
 ## WSL 安卓调试（模拟器 / 热重载 / 截图）
 
@@ -40,7 +41,8 @@ tool/agent/emu.sh stop     # 停止模拟器（app.sh stop 只停 flutter run）
 - 模拟器默认 16 KB 页（`google_apis_ps16k` 镜像，`emu.sh status` 会打印页大小）；
   回 4 KB 需另建 AVD（`-k "system-images;android-37.0;google_apis;x86_64"`）并 `AVD_NAME=... emu.sh start`。
 - 日志 / 截图 / pid 统一放在 `/tmp/opencode/molia`（临时目录，重启可清）；集成测试日志为
-  `it-<platform>-<时间戳>.log`，失败时脚本自动回显尾部 40 行。
+  `it-<platform>-<时间戳>.log`，失败时脚本自动回显尾部 40 行。Linux 集成测试默认跑在
+  Xvfb 虚拟显示上（`test.sh linux --window` 才上真实显示，WSLg 下会弹窗）。
 - Flutter semantics 节点可能不完整：视觉定位用 `shot.sh --annotate` 生成带编号标注的截图，
   再用 `ui.sh resolve 截图.png "#3"` 解析为 `tap X Y`。
 - 输入文本前确保输入框已聚焦（`ui.sh text` 把空格转成 `%s`）。

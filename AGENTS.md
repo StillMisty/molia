@@ -29,7 +29,8 @@ flutter pub get
 flutter analyze --no-pub               # 必须保持 0 error / 0 warning
 flutter test --no-pub                  # 单文件：flutter test test/lx_core_test.dart --no-pub
 tool/agent/test.sh linux               # 端到端（真实引擎+播放+设置页）；桌面看门狗自动退出，勿删
-                                       # 等价 flutter test integration_test/... -d linux；无 DISPLAY 自动 xvfb-run
+                                       # 等价 flutter test integration_test/... -d linux；默认 Xvfb 无窗口
+                                       # （不弹窗打扰桌面），要肉眼观察加 --window
 tool/agent/test.sh android             # 同一套集成测试跑 Android 模拟器（需先 emu.sh start；跳过播放）
                                        # 首次 Gradle 构建较久，必要时 --timeout 放宽
 tool/agent/seed.sh android|linux <cmd> # 数据注入：favorites / history / session / mock-source / status / clear / restore

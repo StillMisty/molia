@@ -22,7 +22,7 @@ import 'package:molia/sources/source_manager.dart';
 /// 走官方 `flutter test integration_test/...` 路径，同一份文件覆盖两类目标：
 /// - Linux 桌面：`tool/agent/test.sh linux`
 ///   （等价 `flutter test integration_test/lx_engine_integration_test.dart -d linux`；
-///   播放用例需要 libmpv，无 DISPLAY 的环境用 xvfb-run）；
+///   播放用例需要 libmpv；默认跑在 Xvfb 上（无窗口），`--window` 才上真实显示）；
 /// - Android 模拟器：`tool/agent/test.sh android`（播放用例跳过，模拟器音频不可靠）。
 ///
 /// 不要拆成多个集成测试文件：桌面端逐文件重启 App 会互相踩（flutter#101031）。

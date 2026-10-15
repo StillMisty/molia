@@ -544,7 +544,7 @@
 ```bash
 flutter analyze --no-pub                 # 0 error / 0 warning
 flutter test --no-pub                    # 含 domain/catalog/playback/layering/supervisor/update
-tool/agent/test.sh linux                 # 集成测试 3/3；桌面看门狗自动退出；无 DISPLAY 自动 xvfb-run
+tool/agent/test.sh linux                 # 集成测试 3/3；桌面看门狗自动退出；默认 Xvfb 无窗口（--window 才弹窗）
 tool/agent/test.sh android               # 同一份集成测试跑模拟器（播放用例跳过，跑完自动卸载）
 flutter build apk --debug
 flutter build apk --release --split-per-abi --split-debug-info=build/symbols --obfuscate \
