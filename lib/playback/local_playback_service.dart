@@ -7,6 +7,7 @@ import 'package:just_audio/just_audio.dart';
 
 import '../models/play_mode.dart';
 import '../services/audio_cache_platform.dart';
+import '../services/audio_cache_store.dart';
 import '../services/cache_service.dart';
 import '../sources/source_track.dart';
 import 'audio_cache_source.dart';
@@ -339,7 +340,7 @@ class LocalPlaybackService extends ChangeNotifier {
         if (await cache.audioEnabled()) {
           final directory = await cache.audioCacheDirPath();
           if (directory != null) {
-            final fileName = CacheService.audioCacheKeyForSource(
+            final fileName = AudioCacheStore.keyForSource(
               track,
               quality: quality ?? '',
             );
@@ -505,8 +506,8 @@ class LocalPlaybackService extends ChangeNotifier {
   }
 
   void _onPlayerState(PlayerState state) {
-    _isPlaying = state.playing &&
-        state.processingState != ProcessingState.completed;
+    _isPlaying =
+        state.playing && state.processingState != ProcessingState.completed;
     if (state.processingState == ProcessingState.completed) {
       _handleTrackCompleted();
     }

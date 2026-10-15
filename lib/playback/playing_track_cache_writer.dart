@@ -3,7 +3,7 @@
 /// 只用于**播放侧不能边播边缓存的平台**（桌面 media_kit 后端）或播放侧
 /// 后退到直接流播的会话（`LocalPlaybackService._audioCacheUnsupported`）：
 /// 移动端正常路径由 `LockCachingAudioSource` 自己写同一文件，重复写会互相
-/// 破坏（见 `CacheService.audioCacheKeyForSource`）。
+/// 破坏（见 `AudioCacheStore.keyForSource`）。
 ///
 /// 播放仍走网络；整个文件落成（`.predl` → 原子改名）后，下一次播放经
 /// `DownloadService.localUriFor` 命中 `file://` —— 桌面同样「听过就有缓存、
