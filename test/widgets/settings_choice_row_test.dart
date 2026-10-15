@@ -114,6 +114,44 @@ void main() {
     );
   });
 
+  testWidgets('分段行：enabled=false 时整行置灰、点选无效（被上游开关接管）', (tester) async {
+    var changed = false;
+    await pumpRow(
+      tester,
+      Center(
+        child: SettingsChoiceRow<String>(
+          icon: Icons.pause_rounded,
+          title: 'When paused',
+          subtitle: 'Inactive',
+          value: 'a',
+          enabled: false,
+          options: const [('a', 'One'), ('b', 'Two')],
+          onChanged: (_) => changed = true,
+        ),
+      ),
+    );
+
+    final segmented = tester.widget<M3ESegmentedButton<String>>(
+      find.byType(M3ESegmentedButton<String>),
+    );
+    expect(segmented.enabled, isFalse);
+
+    // 置灰与被禁用同源：行内最外层 Opacity 降至 0.45。
+    final rowOpacity = tester.widget<Opacity>(
+      find
+          .descendant(
+            of: find.byType(SettingsChoiceRow<String>),
+            matching: find.byType(Opacity),
+          )
+          .first,
+    );
+    expect(rowOpacity.opacity, 0.45);
+
+    await tester.tap(find.text('Two'), warnIfMissed: false);
+    await tester.pumpAndSettle();
+    expect(changed, isFalse);
+  });
+
   testWidgets('分段行：短标签行上图标后选中段显示对勾（M3E 替换图标）', (tester) async {
     await pumpRow(
       tester,

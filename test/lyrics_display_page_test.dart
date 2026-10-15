@@ -208,6 +208,47 @@ void main() {
     );
   });
 
+  testWidgets('桌面歌词页：暂停时隐藏默认开，置灰的回退行随开关恢复', (tester) async {
+    useLargeViewport(tester);
+    await pumpApp(tester, const DesktopLyricsSettingsPage());
+
+    expect(settings.desktopHideOnPause, isTrue);
+    Finder pauseRow() => find.ancestor(
+          of: find.text('When paused'),
+          matching: find.byType(SettingsChoiceRow<LyricsPauseBehavior>),
+        );
+    // 默认整窗隐藏：回退策略不生效，行置灰但值保留。
+    expect(pauseRow(), findsOneWidget);
+    expect(
+      tester.widget<SettingsChoiceRow<LyricsPauseBehavior>>(pauseRow()).enabled,
+      isFalse,
+    );
+
+    final switchRow = find.ancestor(
+      of: find.text('Hide when paused'),
+      matching: find.byType(SettingsSwitchTile),
+    );
+    await tester.scrollUntilVisible(
+      switchRow,
+      200,
+      scrollable: find.byType(Scrollable).first,
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(switchRow);
+    await tester.pumpAndSettle();
+
+    expect(settings.desktopHideOnPause, isFalse);
+    expect(
+      tester.widget<SettingsChoiceRow<LyricsPauseBehavior>>(pauseRow()).enabled,
+      isTrue,
+    );
+    final prefs = await SharedPreferences.getInstance();
+    expect(
+      prefs.getString(kLyricsDisplaySettings.name),
+      contains('"desktop.hideOnPause":false'),
+    );
+  });
+
   testWidgets('系统媒体歌词页：通知格式分段切回「仅歌词」', (tester) async {
     useLargeViewport(tester);
     await pumpApp(tester, const SystemMediaLyricsSettingsPage());

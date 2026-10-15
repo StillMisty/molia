@@ -1390,6 +1390,15 @@ class AppLocalizationsZh extends AppLocalizations {
   String get lyricsDesktopPauseBehavior => '暂停时';
 
   @override
+  String get lyricsDesktopHideOnPause => '暂停时隐藏';
+
+  @override
+  String get lyricsDesktopHideOnPauseSubtitle => '暂停后收起悬浮窗，恢复播放时再显示';
+
+  @override
+  String get lyricsDesktopPauseFallbackOverridden => '暂停时已整窗隐藏，此回退不生效';
+
+  @override
   String get lyricsDesktopNoLyrics => '无歌词时';
 
   @override

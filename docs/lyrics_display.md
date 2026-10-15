@@ -122,7 +122,10 @@ Molia 当前只有在播放页内渲染的滚动歌词。桌面悬浮歌词、�
   （旧块上移滚出、新块自下滚入，视口高度按新内容固定，M3 强调缓动 ~240ms）；
   同结构更新（逐字进度 / 播放态）不重建视图，不打断滚动与动画；关闭则直切。
 - 无歌词：`noLyricsBehavior = title | hide`（默认 `title`，显示歌名）。
-- 暂停：`pauseBehavior = keep | clear | title`（默认 `keep`）。
+- 暂停：`hideOnPause`（默认开）＝**整窗隐藏**——暂停即 `desktop.hide` 移除悬浮窗
+  （含触摸区），恢复播放时重建窗口 + 回投内容，位置由原生持久化（回到原处）；
+  关闭该开关后按 `pauseBehavior = keep | clear | title`（默认 `keep`）在窗口内
+  做内容回退（`clear` 会留下空窗，与整窗隐藏不同）。
 - 所有策略计算在 Dart 侧完成，原生只渲染 + 交互（保持"原生哑渲染"）。
 
 ### FR-4 通知栏 / 锁屏歌词（免模块）
@@ -151,7 +154,8 @@ Molia 当前只有在播放页内渲染的滚动歌词。桌面悬浮歌词、�
 - 桌面歌词页聚合三组：外观与配色（启用开关 + 权限提示 + 样式预览 + 样式 +
   取色来源与三行颜色）、**歌词展示**（翻译 / 罗马音 / 偏移 / 未同步回退，
   与「歌词与输出」页共用 `LyricsSharedDisplaySection`）、行为与控制条
-  （行为开关 + 控制条按钮 + 重置位置）。
+  （行为开关 + 控制条按钮 + 重置位置）。行为组里「暂停时隐藏」为整窗开关，
+  打开时其下的「暂停时」内容回退行置灰（值保留，关掉开关即生效）。
 - 「歌词与输出」页＝分组「歌词页」（`page.*` 开关）+ 分组「歌词输出」（共享项）；
   「系统媒体歌词」页＝分组「通知栏·锁屏歌词」+ 分组「蓝牙歌词」（共用媒体元数据
   选项构造，权限被拒时通知组给系统设置深链）。
@@ -294,6 +298,7 @@ abstract class LyricsOutput {
 | `desktop.textAlignY` | enum | center | top/center/bottom | 桌面歌词 |
 | `desktop.lock` | bool | false | | 桌面歌词 |
 | `desktop.freezeOnScreenOff` | bool | true | | 桌面歌词 |
+| `desktop.hideOnPause` | bool | true | | 桌面歌词（暂停整窗隐藏；关闭后 `desktop.pauseBehavior` 才生效） |
 | `desktop.pauseBehavior` | enum | keep | keep/clear/title | 桌面歌词 |
 | `desktop.noLyricsBehavior` | enum | title | title/hide | 桌面歌词 |
 | `desktop.showToggleAnimation` | bool | true | | 桌面歌词 |
@@ -444,7 +449,7 @@ abstract class LyricsOutput {
 | 视图位置（原生持久化） | — | 原生按屏幕比例保存；「重置位置」恢复默认 |
 | `desktopLyric.isAutoPause`（息屏） | `desktop.freezeOnScreenOff` | 冻结歌词更新，不暂停音频 |
 | 翻译 / 罗马音开关 | `translationEnabled` / `romaEnabled` | 本项目为输出侧共享项；歌词页另有独立开关 `page.*` |
-| —（LX 无） | `desktop.pauseBehavior` / `noLyricsBehavior` | 本项目新增 |
+| —（LX 无） | `desktop.hideOnPause` / `pauseBehavior` / `noLyricsBehavior` | 本项目新增（暂停整窗隐藏 / 内容回退 / 无歌词回退） |
 | —（LX 无） | `notification.*` / `bluetooth.*` | 本项目新增 |
 
 ## 12. 实现映射（as-built）
@@ -457,7 +462,7 @@ abstract class LyricsOutput {
 | 行跟踪 | `lib/services/lyrics_display/lyric_line_tracker.dart` | 纯逻辑（偏移/未同步/扩展行/后续行） |
 | 输出契约 | `lib/services/lyrics_display/lyrics_output.dart` | `LyricsOutput` / `InteractiveLyricsOutput` / `LyricsPresentation` |
 | 调度 | `lib/providers/lyrics_display_provider.dart` | 去重投送、自动取词、动作分发、能力查询 |
-| 桌面歌词（Dart） | `lib/services/lyrics_display/desktop_lyrics_output.dart`、`lyrics_channel.dart` | 通道封装 + 暂停/无歌词回退映射 |
+| 桌面歌词（Dart） | `lib/services/lyrics_display/desktop_lyrics_output.dart`、`lyrics_channel.dart` | 通道封装 + 窗口生命周期（暂停隐藏 / 恢复重显）+ 暂停与无歌词回退映射 |
 | 桌面歌词（原生） | `android/.../lyrics/LyricsChannelHandler.kt`、`LyricsOverlayController.kt`、`LyricsOverlayView.kt`、`MainActivity.kt`、`AndroidManifest.xml` | 悬浮窗渲染（整行 + 逐字渐染）/拖动/锁定/M3E 控制条/息屏冻结/A2DP 监测；控制条图标在 `res/drawable/ic_lyrics_*` |
 | 媒体元数据 | `lib/services/lyrics_display/media_lyric_composer.dart`、`media_lyric_output.dart`、`lib/playback/local_audio_handler.dart` | 通知/锁屏 + 蓝牙 profile 合成 → `MediaItem` 覆盖；通知动作图标在 `res/drawable/audio_service_*`（`res/raw/keep.xml` 防资源压缩，见已知坑 34） |
 | 设置页 | `lib/pages/settings_page.dart`、`lib/pages/lyrics_display/*` | 首屏三条直达入口（桌面歌词 / 歌词与输出 / 系统媒体歌词）；歌词页分组 + 输出共享分组 + 预览 + 权限引导；主题种子色与歌词颜色共用任意调色器 |

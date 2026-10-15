@@ -13,6 +13,8 @@ import 'lyrics_output.dart';
 ///
 /// 展示策略（暂停回退 / 无歌词回退 / 翻译开关）在 Dart 侧应用后再下发；
 /// 原生只渲染文本、处理拖动/锁定/控制条，并自行持久化窗口位置。
+/// 窗口生命周期同样在本层：暂停整窗隐藏（`desktop.hideOnPause`）与恢复
+/// 重显都经 `_canShow` 判定，原生不感知「暂停」这一概念。
 class DesktopLyricsOutput implements InteractiveLyricsOutput {
   DesktopLyricsOutput({
     LyricsChannel? channel,
@@ -44,6 +46,12 @@ class DesktopLyricsOutput implements InteractiveLyricsOutput {
   LyricsDisplaySettings? _settings;
   LyricsOutputCapability _capability = LyricsOutputCapability.unsupported;
   bool _shown = false;
+
+  /// 上次投送的播放态（暂停隐藏 `desktop.hideOnPause` 的窗口生命周期依据）。
+  ///
+  /// 未知视为未播放：首次投送到达前不主动显示，避免恢复出的暂停会话先闪
+  /// 一下窗口；播放中启用桌面歌词时，首次投送会立刻把窗口带出来。
+  bool _playing = false;
 
   @override
   String get id => LyricsOutputIds.desktop;
@@ -93,8 +101,7 @@ class DesktopLyricsOutput implements InteractiveLyricsOutput {
     _settings = settings;
     if (!_supported) return;
     await refreshCapability();
-    if (!settings.desktopEnabled ||
-        _capability != LyricsOutputCapability.ready) {
+    if (!_canShow(settings)) {
       await _hideIfShown();
       return;
     }
@@ -106,10 +113,31 @@ class DesktopLyricsOutput implements InteractiveLyricsOutput {
     await _channel.setDesktopConfig(config);
   }
 
+  /// 当前是否应显示悬浮窗：配置开启 + 权限就绪 + 不在「暂停隐藏」态。
+  ///
+  /// 权限判定与 [start] 的复查同源——[apply] 也用它决定要不要自行 `show`，
+  /// 无权限时绝不 addView（原生会抛 SecurityException）。
+  bool _canShow(LyricsDisplaySettings s) =>
+      s.desktopEnabled &&
+      _capability == LyricsOutputCapability.ready &&
+      !(s.desktopHideOnPause && !_playing);
+
   @override
   Future<void> apply(LyricsPresentation presentation) async {
     final settings = _settings;
-    if (!_shown || settings == null || !settings.desktopEnabled) return;
+    if (settings == null) return;
+    _playing = presentation.isPlaying;
+    if (!_canShow(settings)) {
+      // 暂停隐藏（或权限被撤 / 配置关闭）：窗口整体移除，自然也不投送内容。
+      await _hideIfShown();
+      return;
+    }
+    if (!_shown) {
+      // 恢复播放（或清空后重新具备条件）：重建窗口 + 首次内容一起下发，
+      // 位置由原生按比例持久化，回到暂停前的位置。
+      await _channel.showDesktop(_configOf(settings));
+      _shown = true;
+    }
     await _channel.updateDesktop(_presentationMap(presentation, settings));
   }
 

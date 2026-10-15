@@ -1440,6 +1440,17 @@ class AppLocalizationsEn extends AppLocalizations {
   String get lyricsDesktopPauseBehavior => 'When paused';
 
   @override
+  String get lyricsDesktopHideOnPause => 'Hide when paused';
+
+  @override
+  String get lyricsDesktopHideOnPauseSubtitle =>
+      'Collapse the floating window while paused; it returns when playback resumes';
+
+  @override
+  String get lyricsDesktopPauseFallbackOverridden =>
+      'The window is hidden while paused, so this fallback is inactive';
+
+  @override
   String get lyricsDesktopNoLyrics => 'Without lyrics';
 
   @override

@@ -118,6 +118,12 @@ class LyricsDisplaySettings extends ChangeNotifier {
   static const DesktopTextAlignY defaultDesktopTextAlignY = DesktopTextAlignY.center;
   static const bool defaultDesktopLock = false;
   static const bool defaultDesktopFreezeOnScreenOff = true;
+
+  /// 暂停时整窗隐藏（默认开）：暂停即收起悬浮窗，恢复播放再出现。
+  ///
+  /// 与 [defaultDesktopPauseBehavior] 不同——后者只决定窗口里显示什么内容；
+  /// 本开关打开时窗口整体移除（含触摸区），回退策略不生效。
+  static const bool defaultDesktopHideOnPause = true;
   static const LyricsPauseBehavior defaultDesktopPauseBehavior = LyricsPauseBehavior.keep;
   static const DesktopNoLyricsBehavior defaultDesktopNoLyricsBehavior = DesktopNoLyricsBehavior.title;
   static const bool defaultDesktopShowToggleAnimation = true;
@@ -176,6 +182,7 @@ class LyricsDisplaySettings extends ChangeNotifier {
   DesktopTextAlignY _desktopTextAlignY = defaultDesktopTextAlignY;
   bool _desktopLock = defaultDesktopLock;
   bool _desktopFreezeOnScreenOff = defaultDesktopFreezeOnScreenOff;
+  bool _desktopHideOnPause = defaultDesktopHideOnPause;
   LyricsPauseBehavior _desktopPauseBehavior = defaultDesktopPauseBehavior;
   DesktopNoLyricsBehavior _desktopNoLyricsBehavior = defaultDesktopNoLyricsBehavior;
   bool _desktopShowToggleAnimation = defaultDesktopShowToggleAnimation;
@@ -223,6 +230,7 @@ class LyricsDisplaySettings extends ChangeNotifier {
   DesktopTextAlignY get desktopTextAlignY => _desktopTextAlignY;
   bool get desktopLock => _desktopLock;
   bool get desktopFreezeOnScreenOff => _desktopFreezeOnScreenOff;
+  bool get desktopHideOnPause => _desktopHideOnPause;
   LyricsPauseBehavior get desktopPauseBehavior => _desktopPauseBehavior;
   DesktopNoLyricsBehavior get desktopNoLyricsBehavior => _desktopNoLyricsBehavior;
   bool get desktopShowToggleAnimation => _desktopShowToggleAnimation;
@@ -396,6 +404,12 @@ class LyricsDisplaySettings extends ChangeNotifier {
     _commit();
   }
 
+  Future<void> setDesktopHideOnPause(bool value) async {
+    if (value == _desktopHideOnPause) return;
+    _desktopHideOnPause = value;
+    _commit();
+  }
+
   Future<void> setDesktopPauseBehavior(LyricsPauseBehavior value) async {
     if (value == _desktopPauseBehavior) return;
     _desktopPauseBehavior = value;
@@ -518,6 +532,7 @@ class LyricsDisplaySettings extends ChangeNotifier {
         'desktop.textAlignY': _desktopTextAlignY.name,
         'desktop.lock': _desktopLock,
         'desktop.freezeOnScreenOff': _desktopFreezeOnScreenOff,
+        'desktop.hideOnPause': _desktopHideOnPause,
         'desktop.pauseBehavior': _desktopPauseBehavior.name,
         'desktop.noLyricsBehavior': _desktopNoLyricsBehavior.name,
         'desktop.showToggleAnimation': _desktopShowToggleAnimation,
@@ -586,6 +601,8 @@ class LyricsDisplaySettings extends ChangeNotifier {
     _desktopLock = _boolOf(json['desktop.lock'], _desktopLock);
     _desktopFreezeOnScreenOff =
         _boolOf(json['desktop.freezeOnScreenOff'], _desktopFreezeOnScreenOff);
+    _desktopHideOnPause =
+        _boolOf(json['desktop.hideOnPause'], _desktopHideOnPause);
     _desktopPauseBehavior = _enumOf(json['desktop.pauseBehavior'],
         LyricsPauseBehavior.values, _desktopPauseBehavior);
     _desktopNoLyricsBehavior = _enumOf(json['desktop.noLyricsBehavior'],
