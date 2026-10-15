@@ -501,8 +501,9 @@ class DownloadService extends ChangeNotifier {
         // 2) 网络下载（扩展名优先取 URL 后缀，回退音质推断）。
         final stream = await _catalog.resolve(
           track,
-          quality:
-              resolvedQuality.isEmpty ? null : AudioQuality(type: resolvedQuality),
+          quality: resolvedQuality.isEmpty
+              ? null
+              : AudioQuality(type: resolvedQuality),
         );
         final url = stream.uri;
         if (url.scheme != 'http' && url.scheme != 'https') {
@@ -883,7 +884,8 @@ class DownloadService extends ChangeNotifier {
   ///
   /// 平台不支持（非 Android）/ 设置关闭 / 失败一律返回 null，调用方继续
   /// 落库（公共副本只是发布副本，不参与播放取链）。
-  Future<String?> _publishPublicCopy(String filePath, String displayName) async {
+  Future<String?> _publishPublicCopy(
+      String filePath, String displayName) async {
     if (!_publisher.supported) return null;
     if (!(_settings?.publishToPublicDir ?? true)) return null;
     try {
@@ -995,17 +997,18 @@ class DownloadService extends ChangeNotifier {
   // 内部：缓存优先取数
 
   /// 完整音频缓存路径：命中返回路径，未命中 / 仍在写入（`.part`）返回 null。
+  ///
+  /// 命名与完整判据的唯一实现在 `AudioCacheStore`（见
+  /// `CacheService.audioStore`）；存在性探测走 [DownloadStorage]——与随后
+  /// 拷贝缓存文件的是同一个文件系统视图。
   Future<String?> _completeAudioCachePath(Track track, String quality) async {
     final cache = _cacheService;
     if (cache == null) return null;
-    final dir = await cache.audioCacheDirPath();
-    if (dir == null) return null;
-    final name = CacheService.audioCacheKeyForTrack(track, quality: quality);
-    final path = p.join(dir, name);
-    if (!await _storage.fileExists(path)) return null;
-    // 半成品（`.part`）说明完整文件还没落成，不算命中。
-    if (await _storage.fileExists('$path$audioCachePartSuffix')) return null;
-    return path;
+    return cache.audioStore.hitPathForTrack(
+      track,
+      quality: quality,
+      fileExists: _storage.fileExists,
+    );
   }
 
   Future<DownloadLyrics?> _resolveLyrics(Track track) async {
@@ -1224,7 +1227,9 @@ class DownloadService extends ChangeNotifier {
     while (await _storage.fileExists(
       p.join(root, subdir, '$candidate.$extension'),
     )) {
-      if (index > 999) return '$desired (${DateTime.now().millisecondsSinceEpoch})';
+      if (index > 999) {
+        return '$desired (${DateTime.now().millisecondsSinceEpoch})';
+      }
       candidate = '$desired ($index)';
       index++;
     }
@@ -1328,8 +1333,18 @@ class DownloadService extends ChangeNotifier {
   ///
   /// 唯一来源：直链扩展名推断（[extensionFor]）与本地导入校验共用。
   static const Set<String> audioExtensions = {
-    'mp3', 'flac', 'm4a', 'aac', 'ogg', 'oga', 'opus',
-    'wav', 'ape', 'wma', 'mka', 'mp4',
+    'mp3',
+    'flac',
+    'm4a',
+    'aac',
+    'ogg',
+    'oga',
+    'opus',
+    'wav',
+    'ape',
+    'wma',
+    'mka',
+    'mp4',
   };
 
   /// 扩展名：URL 路径里的音频后缀优先，否则按音质推断（默认 mp3）。

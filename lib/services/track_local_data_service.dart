@@ -19,6 +19,7 @@ import '../data/catalog/catalog_service.dart';
 import '../domain/models/download.dart';
 import '../domain/models/track.dart';
 import '../managers/artwork_cache.dart';
+import 'audio_cache_store.dart';
 import 'cache_service.dart';
 import 'download/download_service.dart';
 
@@ -150,13 +151,14 @@ class TrackLocalDataService {
 
   /// 完整读取（下载记录 + 四项缓存占用 + 命中音质）。
   Future<TrackLocalData> load(Track track) async {
+    final store = _cacheService.audioStore;
     final results = await Future.wait([
-      _cacheService.audioCacheIndex(),
-      _cacheService.audioUsageForTrack(
+      store.index(),
+      store.usageForTrack(
         sourceKey: track.id.sourceKey,
         songId: track.id.id,
       ),
-      _cacheService.audioWritingUsageForTrack(
+      store.writingUsageForTrack(
         sourceKey: track.id.sourceKey,
         songId: track.id.id,
       ),
@@ -170,30 +172,9 @@ class TrackLocalDataService {
       audioWriting: results[2] as CacheUsage,
       lyricsCache: results[3] as CacheUsage,
       artworkCache: results[4] as CacheUsage,
-      cachedQualities: cachedQualitiesForTrack(track, index),
+      cachedQualities: AudioCacheStore.cachedQualitiesForTrack(track, index),
       resolveEntries: _catalogService.resolveCacheCountForTrack(track),
     );
-  }
-
-  /// 命中完整缓存的音质（一次索引列举；同名 `.part` 说明仍在写入，不算命中）。
-  ///
-  /// 索引口径（完整文件）与 `DownloadService._completeAudioCachePath`
-  /// （无 `.part`）一致：状态展示与转存 / 离线播放不会各说各话。
-  static List<String> cachedQualitiesForTrack(
-    Track track,
-    Map<String, int> index,
-  ) {
-    final result = <String>[];
-    for (final quality in track.qualities) {
-      final type = quality.type;
-      if (type.isEmpty || result.contains(type)) continue;
-      final name = CacheService.audioCacheKeyForTrack(track, quality: type);
-      final size = index[name];
-      if (size == null || size <= 0) continue;
-      if (index.containsKey('$name$audioCachePartSuffix')) continue;
-      result.add(type);
-    }
-    return result;
   }
 
   /// 清理单项缓存（音频跳过正在写入的文件，见

@@ -6,6 +6,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import '../domain/models/track.dart';
 import '../sources/source_track.dart';
+import 'audio_cache_store.dart';
 import 'cache_storage.dart';
 import 'lyrics_cache.dart';
 
@@ -30,7 +31,10 @@ export 'cache_storage.dart'
 ///   - 歌词 TTL：取词时读取；
 ///   - 封面上限/过期：setter 通知监听者（`ArtworkCache`）立即 sweep；
 /// - **平台文件操作**走 [CacheStorage]（Web 为空实现），策略逻辑与
-///   `dart:io` 解耦。
+///   `dart:io` 解耦；
+/// - **音频缓存磁盘约定**（文件名 / 完整判据 / 索引 / 命中 / 清扫 / 迁移）
+///   唯一实现在 [AudioCacheStore]：本服务只做策略与通知，避免写入侧与读取侧
+///   再次分叉（见 ADR-0008）。
 class CacheService {
   CacheService({
     SharedPreferences? prefs,
@@ -40,7 +44,13 @@ class CacheService {
   })  : _prefs = prefs,
         _storage = storage ?? createPlatformCacheStorage(),
         _lyricsCache = lyricsCache ?? LyricsCache(prefs: prefs),
-        _audioProtectAge = audioProtectAge;
+        _audioProtectAge = audioProtectAge {
+    _audioStore = AudioCacheStore(
+      storage: _storage,
+      // 迁移版本标记与策略读写共用同一 prefs 解析（不可用时按旧命名处理）。
+      preferences: _getPrefs,
+    );
+  }
 
   /// 全局单例（main.dart 注册前的默认入口）。
   static final CacheService instance = CacheService();
@@ -89,8 +99,12 @@ class CacheService {
   final CacheStorage _storage;
   final LyricsCache _lyricsCache;
   final Duration _audioProtectAge;
+  late final AudioCacheStore _audioStore;
   SharedPreferences? _prefs;
   final Logger _logger = Logger('molia.cache_service');
+
+  /// 音频缓存目录约定（命名 / 完整性 / 索引 / 命中 / 清扫 / 迁移）的唯一实现。
+  AudioCacheStore get audioStore => _audioStore;
 
   final List<void Function(CachePartition)> _policyListeners = [];
   final List<void Function(CachePartition)> _clearListeners = [];
@@ -126,8 +140,7 @@ class CacheService {
   /// 缺键默认值：解析一次后缓存（容量是设备级常量，无需每次查询通道）。
   int? _defaultAudioMaxMb;
   Future<int> _resolvedDefaultAudioMaxMb() async =>
-      _defaultAudioMaxMb ??=
-          (await suggestedAudioMaxMb()) ?? defaultAudioMaxMb;
+      _defaultAudioMaxMb ??= (await suggestedAudioMaxMb()) ?? defaultAudioMaxMb;
 
   Future<int?> _totalSpaceBytes() async {
     try {
@@ -257,99 +270,50 @@ class CacheService {
   }
 
   /// 音频缓存目录（持久）；平台不可用（Web）返回 null。
-  Future<String?> audioCacheDirPath() => _safeDir(_storage.audioCacheDir);
+  Future<String?> audioCacheDirPath() => _audioStore.directoryPath();
 
   /// 音频缓存索引（**只含完整可播放文件**：文件名 → 字节数）。
   ///
-  /// 半成品（[audioCachePartSuffix] / [audioCachePredownloadSuffix]）与 MIME
-  /// 边车（[audioCacheMimeSuffix]）不是可播放缓存，一律排除：占用展示、
-  /// 命中探测、「缓存曲目」列表共用同一口径，避免出现「缓存页说命中、
-  /// 播放 / 转存却拿不到文件」的两套答案。
-  /// 一次目录列举，供「缓存曲目」列表（`audioCacheKeyPrefix` 前缀匹配）与
-  /// 缓存命中探测复用；命中语义见 `DownloadService.audioCacheFor`。
-  Future<Map<String, int>> audioCacheIndex() async {
-    final files = await _audioFiles();
-    return {
-      for (final entry in files.entries)
-        if (isCompleteAudioCacheFile(entry.key)) entry.key: entry.value,
-    };
-  }
+  /// 完整判据与列举口径见 [AudioCacheStore.index]。
+  Future<Map<String, int>> audioCacheIndex() => _audioStore.index();
 
-  /// 文件名是否为完整可播放的音频缓存。
-  static bool isCompleteAudioCacheFile(String name) {
-    final lower = name.toLowerCase();
-    return !lower.endsWith(audioCachePartSuffix) &&
-        !lower.endsWith(audioCachePredownloadSuffix) &&
-        !lower.endsWith(audioCacheMimeSuffix);
-  }
+  /// 文件名是否为完整可播放的音频缓存
+  /// （口径见 [AudioCacheStore.isCompleteFileName]）。
+  static bool isCompleteAudioCacheFile(String name) =>
+      AudioCacheStore.isCompleteFileName(name);
 
-  /// 音频缓存目录原始列举（含半成品 / 边车）；不可用 / 失败返回空表。
-  Future<Map<String, int>> _audioFiles() async {
-    final dir = await _safeDir(_storage.audioCacheDir);
-    if (dir == null) return const {};
-    try {
-      return await _storage.listFiles(dir);
-    } catch (e) {
-      _logger.warning('音频缓存列举失败: $e');
-      return const {};
-    }
-  }
-
-  /// 单曲音频缓存文件名前缀（`{sourceKey}_{songId}_`，同一替换规则）。
-  ///
-  /// 音质在文件名末尾，因此该前缀命中同一曲目的所有音质变体。
-  /// 与 [audioCacheKey] 的截断/哈希后缀兼容：前缀始终位于文件名开头
-  /// （截断发生在替换后，且哈希后缀追加在末尾）。
+  /// 单曲音频缓存文件名前缀（`{sourceKey}_{songId}_`，同一替换规则）；
+  /// 见 [AudioCacheStore.keyPrefix]。
   static String audioCacheKeyPrefix({
     required String sourceKey,
     required String songId,
-  }) {
-    final prefix = _sanitize('${sourceKey}_${songId}_');
-    return prefix.length > _maxKeyLength
-        ? prefix.substring(0, _maxKeyLength)
-        : prefix;
-  }
+  }) =>
+      AudioCacheStore.keyPrefix(sourceKey: sourceKey, songId: songId);
 
-  /// 单曲音频缓存文件名（**写入侧唯一入口**）：由 `SourceTrack` 派生。
-  ///
-  /// `songId` 必须用 [SourceTrack.songId]（与 `TrackId.id` 同源）；用
-  /// `SourceTrack.id`（含 sourceKey 的复合 id）写出来的文件没有任何读取
-  /// 路径能匹配到，等于没缓存。
+  /// 单曲音频缓存文件名（**写入侧唯一入口**）：由 `SourceTrack` 派生；
+  /// 见 [AudioCacheStore.keyForSource]。
   static String audioCacheKeyForSource(
     SourceTrack track, {
     String quality = '',
   }) =>
-      audioCacheKey(
-        sourceKey: track.sourceKey,
-        songId: track.songId,
-        quality: quality,
-      );
+      AudioCacheStore.keyForSource(track, quality: quality);
 
-  /// 单曲音频缓存文件名（**读取侧唯一入口**）：由领域 `Track` 派生。
+  /// 单曲音频缓存文件名（**读取侧唯一入口**）：由领域 `Track` 派生；
+  /// 见 [AudioCacheStore.keyForTrack]。
   static String audioCacheKeyForTrack(Track track, {String quality = ''}) =>
-      audioCacheKey(
-        sourceKey: track.id.sourceKey,
-        songId: track.id.id,
-        quality: quality,
-      );
+      AudioCacheStore.keyForTrack(track, quality: quality);
 
-  /// 单曲音频缓存前缀（命中该曲目所有音质变体）：由领域 `Track` 派生。
-  static String audioCacheKeyPrefixForTrack(Track track) => audioCacheKeyPrefix(
-        sourceKey: track.id.sourceKey,
-        songId: track.id.id,
-      );
+  /// 单曲音频缓存前缀（命中该曲目所有音质变体）：由领域 `Track` 派生；
+  /// 见 [AudioCacheStore.keyPrefixForTrack]。
+  static String audioCacheKeyPrefixForTrack(Track track) =>
+      AudioCacheStore.keyPrefixForTrack(track);
 
   /// 单曲音频缓存占用（所有音质变体；只认完整文件）。
   Future<CacheUsage> audioUsageForTrack({
     required String sourceKey,
     required String songId,
-  }) async {
-    final index = await audioCacheIndex();
-    return _usageMatching(
-      index,
-      audioCacheKeyPrefix(sourceKey: sourceKey, songId: songId),
-    );
-  }
+  }) =>
+      _audioStore.usageForTrack(sourceKey: sourceKey, songId: songId);
 
   /// 单曲音频缓存「写入中」占用（半成品 / 边车）。
   ///
@@ -357,29 +321,8 @@ class CacheService {
   Future<CacheUsage> audioWritingUsageForTrack({
     required String sourceKey,
     required String songId,
-  }) async {
-    final files = await _audioFiles();
-    final partials = {
-      for (final entry in files.entries)
-        if (!isCompleteAudioCacheFile(entry.key)) entry.key: entry.value,
-    };
-    return _usageMatching(
-      partials,
-      audioCacheKeyPrefix(sourceKey: sourceKey, songId: songId),
-    );
-  }
-
-  /// 前缀匹配统计（文件名 → 字节数）。
-  static CacheUsage _usageMatching(Map<String, int> files, String prefix) {
-    var bytes = 0;
-    var count = 0;
-    for (final entry in files.entries) {
-      if (!entry.key.startsWith(prefix)) continue;
-      bytes += entry.value;
-      count++;
-    }
-    return CacheUsage(bytes: bytes, count: count);
-  }
+  }) =>
+      _audioStore.writingUsageForTrack(sourceKey: sourceKey, songId: songId);
 
   /// 清理单曲音频缓存（所有音质变体，含半成品）。
   ///
@@ -390,72 +333,44 @@ class CacheService {
     required String songId,
     Duration? protectAge,
   }) async {
-    final dir = await _safeDir(_storage.audioCacheDir);
-    if (dir == null) return const CacheDeleteResult();
-    try {
-      final result = await _storage.deleteMatching(
-        dir,
-        prefix: audioCacheKeyPrefix(sourceKey: sourceKey, songId: songId),
-        protectAge: protectAge ?? _audioProtectAge,
+    final result = await _audioStore.clearForTrack(
+      sourceKey: sourceKey,
+      songId: songId,
+      protectAge: protectAge ?? _audioProtectAge,
+    );
+    if (result.deleted.count > 0) {
+      _logger.info(
+        '清理单曲音频缓存 ${result.deleted.count} 个文件'
+        '（${result.deleted.bytes} 字节，跳过 ${result.skipped} 个活动文件）',
       );
-      if (result.deleted.count > 0) {
-        _logger.info(
-          '清理单曲音频缓存 ${result.deleted.count} 个文件'
-          '（${result.deleted.bytes} 字节，跳过 ${result.skipped} 个活动文件）',
-        );
-        notifyCacheChanged();
-      }
-      return result;
-    } catch (e) {
-      _logger.warning('单曲音频缓存清理失败: $e');
-      return const CacheDeleteResult();
+      notifyCacheChanged();
     }
+    return result;
   }
 
   /// 启动清扫音频缓存半成品（`.part` / `.predl`）。
   ///
-  /// 半成品的写法只存在于本进程（just_audio 边下载边写 / 字节预取）：
-  /// 重启后残留的不可能是活动下载，留着只会白占 LRU 额度。
-  /// `.mime` 是完整文件的边车，随完整文件一起处理，不在这里单独删。
+  /// 半成品只可能由本进程写出，重启后残留的一律是中断产物；`.mime` 是完整
+  /// 文件的边车，不在这里单独删（见 [AudioCacheStore.cleanupPartials]）。
   Future<int> cleanupAudioPartials() async {
-    final dir = await _safeDir(_storage.audioCacheDir);
-    if (dir == null) return 0;
-    try {
-      final deleted = await _storage.deleteWhere(
-        dir,
-        test: (name) {
-          final lower = name.toLowerCase();
-          return lower.endsWith(audioCachePartSuffix) ||
-              lower.endsWith(audioCachePredownloadSuffix);
-        },
-      );
-      if (deleted > 0) {
-        _logger.info('清扫音频缓存半成品 $deleted 个');
-        notifyCacheChanged();
-      }
-      return deleted;
-    } catch (e) {
-      _logger.warning('音频缓存半成品清扫失败: $e');
-      return 0;
+    final deleted = await _audioStore.cleanupPartials();
+    if (deleted > 0) {
+      _logger.info('清扫音频缓存半成品 $deleted 个');
+      notifyCacheChanged();
     }
+    return deleted;
   }
 
   /// 音频缓存命名版本键：1（缺省）= 旧命名，2 = 当前命名。
-  static const String keyAudioNamingVersion = 'cache_audio_naming_version';
-  static const int audioNamingVersion = 2;
+  static const String keyAudioNamingVersion = AudioCacheStore.keyNamingVersion;
+  static const int audioNamingVersion = AudioCacheStore.namingVersion;
 
-  /// 一次性迁移：清理旧命名写入的音频缓存。
-  ///
-  /// 旧版本把 `SourceTrack.id`（`{sourceKey}:{songId}` 复合 id）当成 songId
-  /// 写文件名，结果文件名里带了重复的 sourceKey 且任何读取路径都匹配不到
-  /// —— 文件既不能被播放命中、也不能被转存，属纯垃圾，直接清空音频分区。
+  /// 一次性迁移：清理旧命名写入的音频缓存（见
+  /// [AudioCacheStore.migrateNamingIfNeeded]）；清掉内容后联动刷新占用展示。
   Future<void> migrateAudioCacheNamingIfNeeded() async {
-    final prefs = await _getPrefs();
-    final version = prefs?.getInt(keyAudioNamingVersion) ?? 1;
-    if (version >= audioNamingVersion) return;
-    await clear(CachePartition.audio);
-    await prefs?.setInt(keyAudioNamingVersion, audioNamingVersion);
-    _logger.info('音频缓存命名修复：旧命名缓存已清理');
+    if (!await _audioStore.migrateNamingIfNeeded()) return;
+    _notifyCleared(CachePartition.audio);
+    notifyCacheChanged();
   }
 
   /// 单曲歌词缓存占用。
@@ -471,32 +386,18 @@ class CacheService {
   /// 封面缓存目录（持久）；平台不可用（Web）返回 null。
   Future<String?> artworkCacheDirPath() => _safeDir(_storage.artworkCacheDir);
 
-  /// 生成音频缓存文件名：`sourceKey_songId_quality`（quality 未知用 auto）。
-  ///
-  /// 非文件名字符（`:`、`/` 等）替换为 `_`；发生替换时追加原串哈希后缀，
-  /// 避免 `a:b` 与 `a_b` 这类不同 key 映射到同一文件名。
+  /// 生成音频缓存文件名：`sourceKey_songId_quality`（quality 未知用 auto）；
+  /// 替换规则 / 哈希后缀 / 截断见 [AudioCacheStore.key]。
   static String audioCacheKey({
     required String sourceKey,
     required String songId,
     String quality = 'auto',
-  }) {
-    final effectiveQuality = quality.trim().isEmpty ? 'auto' : quality.trim();
-    final raw = '${sourceKey}_${songId}_$effectiveQuality';
-    final sanitized = _sanitize(raw);
-    if (sanitized == raw) return raw;
-    final truncated = sanitized.length > _maxKeyLength
-        ? sanitized.substring(0, _maxKeyLength)
-        : sanitized;
-    final hash = raw.hashCode.toUnsigned(32).toRadixString(16);
-    return '${truncated}_$hash';
-  }
-
-  /// 文件名安全字符集：与 [audioCacheKey] 同一替换规则。
-  static String _sanitize(String raw) =>
-      raw.replaceAll(RegExp(r'[^A-Za-z0-9._-]'), '_');
-
-  /// 替换后文件名的最大长度（超出截断，见 [audioCacheKey]）。
-  static const int _maxKeyLength = 100;
+  }) =>
+      AudioCacheStore.key(
+        sourceKey: sourceKey,
+        songId: songId,
+        quality: quality,
+      );
 
   // 策略变更监听（ArtworkCache 用）。
 

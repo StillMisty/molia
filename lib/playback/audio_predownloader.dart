@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import '../services/audio_cache_platform.dart';
+import '../services/audio_cache_store.dart';
 import '../services/cache_service.dart';
 import '../sources/source_track.dart';
 import 'audio_cache_source.dart' show audioCacheFilePath;
@@ -61,7 +62,7 @@ class CacheAudioPredownloader implements AudioPredownloader {
     final directory = await _cache.audioCacheDirPath();
     if (directory == null) return null;
 
-    final fileName = CacheService.audioCacheKeyForSource(
+    final fileName = AudioCacheStore.keyForSource(
       track,
       quality: quality ?? '',
     );
