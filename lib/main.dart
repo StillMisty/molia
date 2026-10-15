@@ -47,6 +47,7 @@ import 'playback/desktop_audio_init.dart';
 import 'playback/local_audio_handler.dart';
 import 'playback/local_playback_service.dart';
 import 'playback/next_track_preloader.dart';
+import 'playback/playing_track_cache_writer.dart';
 import 'providers/comments_provider.dart';
 import 'providers/library_provider.dart';
 import 'providers/local_database_provider.dart';
@@ -244,6 +245,15 @@ void main() async {
   // 服务的解析回调 late 绑定到 backend；resolver 走 CatalogService.resolve
   // （single-flight + LRU + 10min TTL），重播/循环播放命中缓存。
   late final LocalPlaybackBackend playbackBackend;
+  // 音频缓存字节写入器：两处复用同一实例——
+  // 1) 下一首字节预取（`NextTrackPreloader`，起播后预热下一首）；
+  // 2) 当前曲目后台缓存（`PlayingTrackCacheWriter`，桌面等播放侧不写缓存的
+  //    平台由它补齐缓存，重播经 `localUriFor` 命中 file://）。
+  // 省流实际生效（移动数据 + 已开启）时两边都跳过，只预热直链。
+  final audioCacheWriter = CacheAudioPredownloader(
+    cacheService: CacheService.instance,
+    allowed: () => !dataSaver.active,
+  );
   final localPlayback = LocalPlaybackService(
     // 由服务按实际选择的音质调用解析器（同一音质也用于音频缓存键）。
     // 省流上限只在 preferredQuality 一处压低：resolve 缓存键包含真实音质
@@ -252,17 +262,16 @@ void main() async {
         dataSaver.effectiveQuality(sourceManager.preferredQuality),
     resolver: (track, {String? quality}) =>
         playbackBackend.resolveLegacyUrl(track, quality: quality),
-    // 下一首预载：起播后预热直链（命中取链缓存）+ 音频字节预取到缓存；
-    // 省流实际生效（移动数据 + 已开启）时只预热直链，不预下载。
+    // 下一首预载：起播后预热直链（命中取链缓存）+ 音频字节预取到缓存。
     nextTrackPreloader: NextTrackPreloader(
       resolver: (track, {String? quality}) =>
           playbackBackend.resolveLegacyUrl(track, quality: quality),
       preferredQuality: () =>
           dataSaver.effectiveQuality(sourceManager.preferredQuality),
-      predownloader: CacheAudioPredownloader(
-        cacheService: CacheService.instance,
-        allowed: () => !dataSaver.active,
-      ),
+      predownloader: audioCacheWriter,
+    ),
+    audioCacheWriter: PlayingTrackCacheWriter(
+      predownloader: audioCacheWriter,
     ),
   );
   playbackBackend = LocalPlaybackBackend(

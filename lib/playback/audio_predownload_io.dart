@@ -4,6 +4,7 @@ import 'dart:io';
 import 'package:dio/dio.dart';
 
 import '../data/http/app_dio.dart';
+import '../services/cache_service.dart';
 import 'audio_predownload_task.dart';
 
 /// 启动预取；平台不支持 / 目标已缓存时返回 null。
@@ -14,9 +15,9 @@ AudioPredownloadTask? startAudioPredownload({
   // 已有完整缓存文件：边播边缓存会直接命中，无需重复下载。
   if (File(targetPath).existsSync()) return null;
 
-  // 半成品用独立后缀：just_audio 的 LockCachingAudioSource 使用 `.part`，
-  // 两边不能共用同一路径（取消清理会误删对方正在写的文件）。
-  final partFile = File('$targetPath.predl');
+  // 半成品用独立后缀：just_audio 的 LockCachingAudioSource 使用
+  // `audioCachePartSuffix`，两边不能共用同一路径（取消清理会误删对方正在写的文件）。
+  final partFile = File('$targetPath$audioCachePredownloadSuffix');
   final dio = createAppDio();
   final completer = Completer<void>();
   var cancelled = false;
