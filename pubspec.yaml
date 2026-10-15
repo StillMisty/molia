@@ -45,6 +45,9 @@ dependencies:
   audio_service: ^0.18.19
   material_ui: ^1.6.0
   cupertino_ui: ^1.1.2
+  # 预测返回：含「guard 非空时弹层也接管手势（跟手预览 + 提交后回弹）」修复的
+  # 上游版本尚未发版；升级本依赖后把「guard → 无预览」的三处描述改回：
+  # docs/architecture.md §6、docs/lyrics_display.md、lib/pages/settings_page.dart。
   material_3_expressive: ^1.1.6
   motor: ^1.1.0
   window_manager: ^0.5.2
