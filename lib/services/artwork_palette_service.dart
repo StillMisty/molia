@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:collection';
+import 'dart:typed_data';
 import 'dart:ui' as ui;
 
 import 'package:logging/logging.dart';
@@ -8,6 +9,7 @@ import 'package:material_ui/material_ui.dart';
 
 import '../managers/artwork_cache.dart';
 import '../theme/scheme_builder.dart';
+import '../utils/local_image_provider.dart';
 
 /// 单张封面的取色结果：种子色 + 双亮度方案（一次提取，多处复用）。
 class ArtworkPalette {
@@ -46,24 +48,36 @@ class ArtworkPalette {
 ///   请求头，不二次下载；不加缩放参数，命中显示路径的同一条目；
 /// - 省流模式（`ArtworkCache` 网关只读本地缓存）下未命中会抛错：这里吞掉
 ///   并返回 null，调用方保持现色（不回退、不闪变）；
-/// - 同 URL 并发请求合并为一次提取；LRU 上限 8 条。
+/// - 同 URL 并发请求合并为一次提取；LRU 上限 8 条；
+/// - 启动预解析 [loadCached] 只吃本地已有封面（不触网），由组合根在
+///   `runApp` 前调用，让首帧直接是封面色。
 class ArtworkPaletteService {
   ArtworkPaletteService({
     int maxCacheEntries = 8,
     Future<ImageProvider> Function(String url) providerFor =
         artworkImageProvider,
+    Future<Uint8List?> Function(String url) cachedBytesFor =
+        _cachedBytesFromStore,
   })  : _maxCacheEntries = maxCacheEntries,
-        _providerFor = providerFor;
+        _providerFor = providerFor,
+        _cachedBytesFor = cachedBytesFor;
 
   static const int _quantizeColorCount = 128;
 
   /// 像素采样目标边长：取色只需色调，100x100 足够且快。
   static const int _sampleTargetSize = 100;
 
+  /// 默认本地缓存字节读取（共享封面 CacheManager 的文件缓存）。
+  static Future<Uint8List?> _cachedBytesFromStore(String url) =>
+      ArtworkCache.instance.bytesOf(url);
+
   final int _maxCacheEntries;
 
   /// 封面取图入口（默认共享封面缓存；测试注入纯色图）。
   final Future<ImageProvider> Function(String url) _providerFor;
+
+  /// 本地缓存字节读取入口（启动预解析用；测试注入固定字节）。
+  final Future<Uint8List?> Function(String url) _cachedBytesFor;
   final LinkedHashMap<String, ArtworkPalette> _cache =
       LinkedHashMap<String, ArtworkPalette>();
   final Map<String, Future<ArtworkPalette?>> _inFlight = {};
@@ -72,7 +86,28 @@ class ArtworkPaletteService {
   int get cacheSize => _cache.length;
 
   /// 读取（或提取）封面方案；失败返回 null（调用方保持现色）。
-  Future<ArtworkPalette?> load(String url) {
+  Future<ArtworkPalette?> load(String url) =>
+      _resolve(url, () => _extract(url));
+
+  /// 启动预解析：只吃本地已有封面（磁盘缓存 / 本地文件），未命中立即返回
+  /// null，不发任何网络请求。
+  ///
+  /// 供组合根在 `runApp` 前调用：命中时首帧直接是封面色，不再先出基础配色
+  /// （莫奈）再渐变；未命中/失败不等待网络，回退稳态链路
+  /// （[ArtworkThemeSync] 在封面就绪后照常过渡）。
+  Future<ArtworkPalette?> loadCached(String url) => _resolve(url, () async {
+        // 本地下载封面（`file://`）本身就是本地文件：走统一取图路径。
+        if (localFileImageProvider(url) != null) return _extract(url);
+        final bytes = await _cachedBytesFor(url);
+        if (bytes == null || bytes.isEmpty) return null;
+        return _extractFromBytes(url, bytes);
+      });
+
+  /// LRU 命中 / 并发合并：同一 URL 的进行中提取只做一次。
+  Future<ArtworkPalette?> _resolve(
+    String url,
+    Future<ArtworkPalette?> Function() extract,
+  ) {
     final cached = _cache.remove(url);
     if (cached != null) {
       _cache[url] = cached; // 触碰 LRU 顺序
@@ -82,7 +117,7 @@ class ArtworkPaletteService {
     if (pending != null) return pending;
     // 注意：whenComplete 的回调必须返回 void——返回 `_inFlight.remove(url)`
     // 会把「清理用的派生 future」指回自身，形成自引用死锁。
-    final future = _extract(url);
+    final future = extract();
     _inFlight[url] = future;
     unawaited(future.whenComplete(() {
       _inFlight.remove(url);
@@ -94,19 +129,7 @@ class ArtworkPaletteService {
     try {
       final imageProvider = await _providerFor(url);
       final pixels = await _extractPixels(imageProvider);
-      if (pixels.isEmpty) return null;
-
-      final quantized =
-          await QuantizerCelebi().quantize(pixels, _quantizeColorCount);
-      final ranked = Score.score(quantized.colorToCount);
-      if (ranked.isEmpty) return null;
-
-      final palette = ArtworkPalette.fromSeed(Color(ranked.first));
-      _cache[url] = palette;
-      if (_cache.length > _maxCacheEntries) {
-        _cache.remove(_cache.keys.first);
-      }
-      return palette;
+      return await _paletteFromPixels(url, pixels);
     } catch (e) {
       // 省流未命中（ArtworkNetworkBlockedException）/ 网络失败 / 解码失败：
       // 保持现色，不打断主题与歌词显示。
@@ -115,7 +138,46 @@ class ArtworkPaletteService {
     }
   }
 
-  /// 采样像素（ARGB int 列表）：缩略采样 + 透明像素跳过。
+  /// 本地缓存字节 → 方案（启动预解析路径：不取图、不触网）。
+  Future<ArtworkPalette?> _extractFromBytes(String url, Uint8List bytes) async {
+    try {
+      // 取色只需色调：按采样边长缩略解码，避免整图解码开销。
+      final codec = await ui.instantiateImageCodec(
+        bytes,
+        targetWidth: _sampleTargetSize,
+      );
+      final frame = await codec.getNextFrame();
+      return await _paletteFromPixels(url, await _samplePixels(frame.image));
+    } catch (e) {
+      // 缓存文件损坏 / 解码失败：返回 null，调用方回退稳态链路。
+      _logger.warning('封面缓存取色失败（保持现色）: $e');
+      return null;
+    }
+  }
+
+  /// 采样像素 → 量化 → 方案，并写入 LRU；无有效像素 / 量化失败返回 null。
+  Future<ArtworkPalette?> _paletteFromPixels(
+    String url,
+    List<int> pixels,
+  ) async {
+    if (pixels.isEmpty) return null;
+    final quantized =
+        await QuantizerCelebi().quantize(pixels, _quantizeColorCount);
+    final ranked = Score.score(quantized.colorToCount);
+    if (ranked.isEmpty) return null;
+    return _store(url, ArtworkPalette.fromSeed(Color(ranked.first)));
+  }
+
+  /// 写入 LRU（超出上限淘汰最早条目）。
+  ArtworkPalette _store(String url, ArtworkPalette palette) {
+    _cache[url] = palette;
+    if (_cache.length > _maxCacheEntries) {
+      _cache.remove(_cache.keys.first);
+    }
+    return palette;
+  }
+
+  /// 取图 → 采样像素。
   Future<List<int>> _extractPixels(ImageProvider imageProvider) async {
     final completer = Completer<ui.Image>();
     final stream = imageProvider.resolve(ImageConfiguration.empty);
@@ -133,7 +195,11 @@ class ArtworkPaletteService {
     );
     stream.addListener(listener);
 
-    final image = await completer.future;
+    return _samplePixels(await completer.future);
+  }
+
+  /// 采样像素（ARGB int 列表）：缩略采样 + 透明像素跳过。
+  Future<List<int>> _samplePixels(ui.Image image) async {
     final width = image.width;
     final height = image.height;
     final stepX = (width / _sampleTargetSize).ceil().clamp(1, width);

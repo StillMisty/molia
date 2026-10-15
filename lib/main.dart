@@ -512,6 +512,27 @@ void main() async {
   playbackProvider.addListener(syncArtworkPalette);
   syncArtworkPalette();
 
+  // 启动预解析（runApp 前，决定首帧配色）：先按平台亮度定亮度，再在恢复
+  // 会话的当前封面已在本地缓存时取色——进入应用即封面色，不再先出基础
+  // 配色（莫奈）再渐变；未命中不等待网络，回退上面的稳态链路（settleDelay
+  // 后取色再过渡）。
+  await themeProvider.preferencesReady;
+  themeProvider.applyPlatformBrightness(
+    WidgetsBinding.instance.platformDispatcher.platformBrightness,
+  );
+  await playbackProvider.preferencesReady;
+  if (themeProvider.followArtworkEnabled) {
+    final startupArtwork =
+        playbackProvider.snapshot.current?.artwork?.uri.toString();
+    if (startupArtwork != null && startupArtwork.isNotEmpty) {
+      final startupPalette =
+          await artworkPaletteService.loadCached(startupArtwork);
+      if (startupPalette != null) {
+        themeProvider.applyArtworkSeed(startupPalette.seed);
+      }
+    }
+  }
+
   // 听歌统计接线：曲目/播放态快照 + 进度 tick → 采集服务（纯观察者，零改动
   // 播放内核）。与歌词显示同一模式：composition root 只做两根监听。
   playbackProvider.addListener(

@@ -148,6 +148,22 @@ void main() {
     expect(prefs.getString('theme_mode'), 'system');
   });
 
+  test('平台亮度入口（runApp 前首帧同路径）：system 跟随、强制模式覆盖', () async {
+    final provider = ThemeProvider();
+    await provider.preferencesReady;
+
+    // 默认 system：直接按平台亮度出方案。
+    provider.applyPlatformBrightness(Brightness.dark);
+    expect(provider.colorScheme.brightness, Brightness.dark);
+    provider.applyPlatformBrightness(Brightness.light);
+    expect(provider.colorScheme.brightness, Brightness.light);
+
+    // 强制深色：平台亮度不生效。
+    await provider.setThemeMode(ThemeMode.dark);
+    provider.applyPlatformBrightness(Brightness.light);
+    expect(provider.colorScheme.brightness, Brightness.dark);
+  });
+
   test('封面覆盖：开启时覆盖基础配色，关闭回退且歌词方案仍可用', () async {
     final provider = ThemeProvider();
     await provider.preferencesReady;

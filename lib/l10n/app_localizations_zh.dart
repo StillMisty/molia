@@ -114,7 +114,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get settingsFollowArtwork => '播放时跟随封面';
 
   @override
-  String get settingsFollowArtworkSubtitle => '播放有封面歌曲时用封面取色，无封面回退基础配色';
+  String get settingsFollowArtworkSubtitle => '按当前曲目封面取色，无封面回退基础配色';
 
   @override
   String get settingsAppFont => '应用字体';
