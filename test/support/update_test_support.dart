@@ -33,6 +33,9 @@ class FakeUpdateService implements UpdateService {
         channel: UpdateChannel.stable,
         version: version,
         build: build,
+        // 真实清单带 notesUrl（发布页）：页面据此把「打开下载页」收进
+        // 主操作的尾部菜单。
+        notesUrl: Uri.parse('https://example.com/releases/tag/v$version'),
         assets: [
           ReleaseAsset(
             platform: 'linux',

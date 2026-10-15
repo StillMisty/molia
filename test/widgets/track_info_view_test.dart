@@ -522,7 +522,7 @@ void main() {
     expect(find.text('音频缓存'), findsOneWidget);
     expect(find.text('3.0 MB · 2 项'), findsOneWidget);
 
-    await tester.tap(find.text('清理').first);
+    await tester.tap(find.byIcon(Icons.delete_outline_rounded).first);
     await tester.pumpAndSettle();
     expect(find.text('清理「音频缓存」？'), findsOneWidget);
     await tester.tap(find.text('删除'));

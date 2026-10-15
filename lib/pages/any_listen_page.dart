@@ -222,26 +222,32 @@ class _AnyListenPageState extends State<AnyListenPage> {
                     ),
                     Padding(
                       padding: const EdgeInsets.only(top: kSettingsSmallSpacing),
-                      child: Wrap(
-                        spacing: 12,
-                        runSpacing: 8,
-                        children: [
-                          M3EButton.icon(
-                            onPressed: _saving ? null : _save,
+                      child: M3EButtonGroup(
+                        type: M3EButtonGroupType.standard,
+                        style: M3EButtonStyle.tonal,
+                        actions: [
+                          M3EButtonGroupAction(
                             icon: _saving
                                 ? const _ButtonSpinner()
                                 : const Icon(Icons.save_rounded),
                             label: Text(l10n.anyListenSave),
+                            enabled: !_saving,
                           ),
-                          M3EButton.icon(
-                            style: M3EButtonStyle.outlined,
-                            onPressed: _testing ? null : _test,
+                          M3EButtonGroupAction(
                             icon: _testing
                                 ? const _ButtonSpinner()
                                 : const Icon(Icons.network_check_rounded),
                             label: Text(l10n.anyListenTest),
+                            enabled: !_testing,
                           ),
                         ],
+                        onSelectedIndexChanged: (index) {
+                          if (index == 0) {
+                            _save();
+                          } else if (index == 1) {
+                            _test();
+                          }
+                        },
                       ),
                     ),
                     if (_testMessage != null)

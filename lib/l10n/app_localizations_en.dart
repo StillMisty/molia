@@ -906,6 +906,9 @@ class AppLocalizationsEn extends AppLocalizations {
   String get playAll => 'Play all';
 
   @override
+  String get playAllShuffled => 'Shuffle all';
+
+  @override
   String get nextTrackTooltip => 'Next track';
 
   @override
@@ -2338,6 +2341,9 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get updatePlatformTitle => 'Platform';
+
+  @override
+  String get updateGithubTitle => 'GitHub repository';
 
   @override
   String get updateErrorNetwork => 'Network error — update check failed';

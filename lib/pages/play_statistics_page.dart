@@ -62,29 +62,33 @@ class _PlayStatisticsPageState extends State<PlayStatisticsPage> {
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context)!;
     return Scaffold(
-      appBar: AppBar(
+      appBar: M3EAppBar.top(
         title: Text(l10n.statsTitle),
+        automaticallyImplyLeading: true,
         actions: [
-          IconButton(
+          M3EIconButton(
+            variant: M3EIconButtonVariant.standard,
             icon: const Icon(Icons.ios_share_rounded),
             tooltip: l10n.statsExport,
             onPressed: _export,
           ),
-          PopupMenuButton<String>(
-            icon: const Icon(Icons.more_vert_rounded),
+          M3EMenu.entries(
+            position: M3EMenuAnchorPosition.bottomEnd,
+            anchorBuilder: (context, open) => M3EIconButton(
+              variant: M3EIconButtonVariant.standard,
+              icon: const Icon(Icons.more_vert_rounded),
+              tooltip: l10n.statsClear,
+              onPressed: open,
+            ),
             onSelected: (value) {
               if (value == 'clear') unawaited(_confirmClear());
             },
-            itemBuilder: (context) => [
-              PopupMenuItem<String>(
+            entries: [
+              M3EMenuEntry(
+                label: l10n.statsClear,
                 value: 'clear',
-                child: Row(
-                  children: [
-                    const Icon(Icons.delete_outline_rounded),
-                    const SizedBox(width: 12),
-                    Text(l10n.statsClear),
-                  ],
-                ),
+                leading: const Icon(Icons.delete_outline_rounded),
+                isDestructive: true,
               ),
             ],
           ),
@@ -169,7 +173,7 @@ class _PlayStatisticsPageState extends State<PlayStatisticsPage> {
           const SizedBox(height: 12),
           Text(l10n.statsEmpty),
           const SizedBox(height: 12),
-          M3EButton.text(
+          M3EButton.filled(
             onPressed: () => unawaited(provider.refresh()),
             child: Text(l10n.retry),
           ),

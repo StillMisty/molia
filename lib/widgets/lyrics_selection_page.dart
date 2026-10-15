@@ -204,30 +204,49 @@ class _LyricsSelectionPageState extends State<LyricsSelectionPage> {
         title: Text(l10n.selectLyrics),
         automaticallyImplyLeading: true,
         actions: [
-          M3EMenu.entries(
-            position: M3EMenuAnchorPosition.bottomEnd,
-            anchorBuilder: (context, open) => M3EIconButton(
-              variant: M3EIconButtonVariant.standard,
-              icon: Icon(Icons.more_vert_rounded),
-              onPressed: open,
-              tooltip: l10n.copyButtonText,
-            ),
-            onSelected: (value) {
-              if (value == 'copyAll') {
-                _copyAllOriginalLyrics();
-              }
-            },
-            entries: [
-              M3EMenuEntry(
-                label: '${l10n.copyButtonText} · ${l10n.lyricsTitle}',
-                value: 'copyAll',
-              ),
-            ],
-          ),
+          // 有选中行时：「复制选中」是主操作，菜单里是它的变体「复制全部」，
+          // 合并成一个 split button（原来的独立 ⋮ 只有这一条菜单项）。
           if (_hasSelectedLyrics())
-            M3EButton.text(
-              onPressed: _isLoading ? null : _copySelectedLyrics,
-              child: Text(l10n.copyButtonText),
+            M3ESplitButton<String>(
+              key: const Key('lyricsSelectionCopy'),
+              label: l10n.copyButtonText,
+              leadingIcon: Icons.copy_rounded,
+              style: M3EButtonStyle.outlined,
+              enabled: !_isLoading,
+              onPressed: _copySelectedLyrics,
+              items: [
+                M3ESplitButtonItem<String>(
+                  value: 'copyAll',
+                  child: Text('${l10n.copyButtonText} · ${l10n.lyricsTitle}'),
+                ),
+              ],
+              onSelected: (value) {
+                if (value == 'copyAll') {
+                  _copyAllOriginalLyrics();
+                }
+              },
+            )
+          // 未选中任何行：没有主操作可拆，保留 ⋮（复制全部原文歌词）。
+          else
+            M3EMenu.entries(
+              position: M3EMenuAnchorPosition.bottomEnd,
+              anchorBuilder: (context, open) => M3EIconButton(
+                variant: M3EIconButtonVariant.standard,
+                icon: Icon(Icons.more_vert_rounded),
+                onPressed: open,
+                tooltip: l10n.copyButtonText,
+              ),
+              onSelected: (value) {
+                if (value == 'copyAll') {
+                  _copyAllOriginalLyrics();
+                }
+              },
+              entries: [
+                M3EMenuEntry(
+                  label: '${l10n.copyButtonText} · ${l10n.lyricsTitle}',
+                  value: 'copyAll',
+                ),
+              ],
             ),
           if (_hasSelectedLyrics())
             Padding(

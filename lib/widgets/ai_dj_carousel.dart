@@ -78,7 +78,7 @@ class _AiDjCarouselState extends State<AiDjCarousel> {
                       ],
                     ),
                   ),
-                  TextButton(
+                  M3EButton.text(
                     key: const Key('aiDjManageButton'),
                     onPressed: () => _openPage(context),
                     child: Text(l10n.aiDjViewAll),

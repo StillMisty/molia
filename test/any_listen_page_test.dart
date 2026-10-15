@@ -42,8 +42,8 @@ void main() {
     expect(find.text('服务器地址'), findsOneWidget);
     expect(find.text('访问令牌（可选）'), findsOneWidget);
     expect(find.text('启用 any-listen 音源'), findsOneWidget);
-    expect(find.text('保存'), findsOneWidget);
-    expect(find.text('连接测试'), findsOneWidget);
+    expect(find.text('保存').hitTestable(), findsOneWidget);
+    expect(find.text('连接测试').hitTestable(), findsOneWidget);
   });
 
   testWidgets('保存：校验地址、写入 any_listen_ 前缀的 prefs', (tester) async {
@@ -53,13 +53,13 @@ void main() {
     // 启用但不填地址：保存时给出提示且不落盘
     await tester.tap(find.text('启用 any-listen 音源'));
     await tester.pump();
-    await tester.tap(find.text('保存'));
+    await tester.tap(find.text('保存').hitTestable());
     await tester.pumpAndSettle();
     expect(find.text('启用前请填写服务器地址'), findsOneWidget);
 
     // 填写地址后保存成功
     await tester.enterText(find.byType(M3ETextField).first, '127.0.0.1:9500/');
-    await tester.tap(find.text('保存'));
+    await tester.tap(find.text('保存').hitTestable());
     await tester.pumpAndSettle();
 
     final prefs = await SharedPreferences.getInstance();
@@ -71,7 +71,7 @@ void main() {
     final provider = mountProvider(SourceManager());
     await pumpPage(tester, AnyListenPage(provider: provider));
 
-    await tester.tap(find.text('连接测试'));
+    await tester.tap(find.text('连接测试').hitTestable());
     await tester.pump();
     expect(find.text('请先填写服务器地址'), findsOneWidget);
   });
@@ -88,7 +88,7 @@ void main() {
     );
     await tester.tap(find.text('启用 any-listen 音源'));
     await tester.pump();
-    await tester.tap(find.text('保存'));
+    await tester.tap(find.text('保存').hitTestable());
     await tester.pumpAndSettle();
 
     expect(manager.anyListenAvailable, isTrue);

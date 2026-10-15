@@ -176,13 +176,17 @@ class _SleepTimerSheet extends StatelessWidget {
           ),
           if (active) ...[
             const SizedBox(width: 8),
-            M3EButton.text(
+            // 状态卡里只保留图标键：语义由 tooltip 承担，文本按钮会把
+            // 「剩余 12:34」这行挤断（窄屏最明显）。
+            M3EIconButton(
               key: const Key('sleepTimerCancelButton'),
+              variant: M3EIconButtonVariant.standard,
+              icon: const Icon(Icons.timer_off_rounded),
+              tooltip: l10n.sleepTimerCancel,
               onPressed: () {
                 HapticFeedback.lightImpact();
                 timer.cancel();
               },
-              child: Text(l10n.sleepTimerCancel),
             ),
           ],
         ],

@@ -1,6 +1,7 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:molia/domain/models/discover.dart';
 import 'package:molia/l10n/app_localizations.dart';
+import 'package:molia/models/play_mode.dart';
 import 'package:molia/pages/discover_tracks_page.dart';
 import 'package:molia/providers/discover_provider.dart';
 import 'package:molia/providers/library_provider.dart';
@@ -84,6 +85,25 @@ void main() {
     );
     await tester.pumpAndSettle();
   }
+
+  testWidgets('随机播放全部：切换 shuffle 模式并从随机曲目起播', (tester) async {
+    await pumpPage(tester, (page) async => detailFor(page));
+
+    final split = find.byKey(const Key('discoverTracksPlayAll'));
+    expect(split, findsOneWidget);
+
+    // 尾部菜单（split button 右缘即触发器）。
+    final rect = tester.getRect(split);
+    await tester.tapAt(Offset(rect.right - 16, rect.center.dy));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('随机播放全部'));
+    await tester.pumpAndSettle();
+
+    expect(backend.lastRequest?.tracks, hasLength(30));
+    expect(backend.lastRequest?.context?.name, '歌单');
+    expect(backend.lastRequest!.startIndex, inInclusiveRange(0, 29));
+    expect(playback.currentMode, PlayMode.shuffle);
+  });
 
   testWidgets('滚到底自动加载下一页；取满总数后停止（无限滚动）', (tester) async {
     final calls = <int>[];

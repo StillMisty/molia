@@ -261,7 +261,7 @@ void main() {
     // 重试：失败源恢复后候选出现。
     kg.fail = false;
     kg.items = [sourceTrack('kg', '100', title: 'Title（kg）')];
-    await tester.tap(find.text('重试'));
+    await tester.tap(find.byKey(const Key('sourceSwapRetryFailedSources')));
     await tester.pumpAndSettle();
     expect(find.text('Title（kg）'), findsOneWidget);
     expect(find.text('1 个音源搜索失败'), findsNothing);

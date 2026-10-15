@@ -97,9 +97,29 @@ void main() {
 
     expect(find.text('尚未检查'), findsOneWidget);
     expect(find.text('1.2.2+41'), findsOneWidget);
+    // 关于：项目主页行（跳转 GitHub）。
+    expect(find.byKey(const Key('settingsAboutGithubItem')), findsOneWidget);
+    expect(find.text('GitHub 项目主页'), findsOneWidget);
+    expect(find.text('StillMisty/molia'), findsOneWidget);
     // 未检查前没有发布卡片。
     expect(find.text('新版本'), findsNothing);
     expect(find.text('下载并安装'), findsNothing);
+  });
+
+  testWidgets('发布卡：打开发布页收进主操作的尾部菜单', (tester) async {
+    await pumpPage(tester);
+
+    await tapKey(tester, const Key('settingsUpdateCheckItem'));
+
+    final primary = find.byKey(const Key('settingsUpdateDownloadButton'));
+    expect(primary, findsOneWidget);
+    // 未展开菜单时次要出口不可见。
+    expect(find.text('打开下载页'), findsNothing);
+
+    final rect = tester.getRect(primary);
+    await tester.tapAt(Offset(rect.right - 16, rect.center.dy));
+    await tester.pumpAndSettle();
+    expect(find.text('打开下载页'), findsOneWidget);
   });
 
   testWidgets('检查更新 → 发布卡片 → 下载安装', (tester) async {

@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:math' as math;
 
 import 'package:flutter/services.dart';
 import 'package:material_3_expressive/material_3_expressive.dart';
@@ -7,6 +8,7 @@ import 'package:provider/provider.dart';
 
 import '../domain/models/discover.dart';
 import '../l10n/app_localizations.dart';
+import '../models/play_mode.dart';
 import '../providers/discover_provider.dart';
 import '../providers/paged_list_controller.dart';
 import '../utils/responsive.dart';
@@ -62,6 +64,9 @@ class _DiscoverTracksPageState extends State<DiscoverTracksPage> {
 
   /// 曲目区滚动控制器（常显滚动条，支持手拖定位）。
   final ScrollController _listController = ScrollController();
+
+  /// 随机播放起点用（与收藏页同一做法：可见列表内随机取一首起播）。
+  final math.Random _shuffleRandom = math.Random();
 
   @override
   void initState() {
@@ -129,6 +134,23 @@ class _DiscoverTracksPageState extends State<DiscoverTracksPage> {
           contextName: (info != null && info.name.isNotEmpty)
               ? info.name
               : widget.title,
+        );
+  }
+
+  /// 「随机播放全部」：先落 shuffle 模式再装载（洗牌顺序依赖装载前模式），
+  /// 起点在已加载曲目内随机；与收藏页 / 歌手页同一约定。
+  Future<void> _playShuffled() async {
+    final tracks = _paged.state.items;
+    if (tracks.isEmpty) return;
+    HapticFeedback.lightImpact();
+    final info = _detail?.info;
+    await context.read<DiscoverProvider>().playTracks(
+          tracks,
+          _shuffleRandom.nextInt(tracks.length),
+          contextName: (info != null && info.name.isNotEmpty)
+              ? info.name
+              : widget.title,
+          mode: PlayMode.shuffle,
         );
   }
 
@@ -382,11 +404,23 @@ class _DiscoverTracksPageState extends State<DiscoverTracksPage> {
           const SizedBox(height: 12),
           Align(
             alignment: Alignment.centerLeft,
-            child: M3EButton.icon(
+            // 播放全部 = 主操作 + 尾部菜单（随机播放全部）；导入到我的列表
+            // 仍在 AppBar 的图标键上，两者不重复。
+            child: M3ESplitButton<String>(
+              key: const Key('discoverTracksPlayAll'),
+              label: l10n.playAll,
+              leadingIcon: Icons.play_arrow_rounded,
               style: M3EButtonStyle.filled,
               onPressed: () => _playFrom(0),
-              icon: const Icon(Icons.play_arrow_rounded),
-              label: Text(l10n.playAll),
+              items: [
+                M3ESplitButtonItem<String>(
+                  value: 'shuffle',
+                  child: Text(l10n.playAllShuffled),
+                ),
+              ],
+              onSelected: (value) {
+                if (value == 'shuffle') unawaited(_playShuffled());
+              },
             ),
           ),
         ],

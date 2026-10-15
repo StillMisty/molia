@@ -88,9 +88,11 @@ class DesktopLyricsSettingsPage extends StatelessWidget {
                                   ),
                         ),
                       ),
-                      M3EButton.text(
+                      M3EButton.icon(
+                        style: M3EButtonStyle.text,
                         onPressed: display.requestDesktopOverlayPermission,
-                        child: Text(l10n.lyricsDesktopPermissionGrant),
+                        icon: const Icon(Icons.lock_open_rounded, size: 18),
+                        label: Text(l10n.lyricsDesktopPermissionGrant),
                       ),
                     ],
                   ),

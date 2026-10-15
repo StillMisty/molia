@@ -871,6 +871,9 @@ class AppLocalizationsZh extends AppLocalizations {
   String get playAll => '播放全部';
 
   @override
+  String get playAllShuffled => '随机播放全部';
+
+  @override
   String get nextTrackTooltip => '下一首';
 
   @override
@@ -2243,6 +2246,9 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get updatePlatformTitle => '平台';
+
+  @override
+  String get updateGithubTitle => 'GitHub 项目主页';
 
   @override
   String get updateErrorNetwork => '网络错误，检查更新失败';

@@ -218,11 +218,13 @@ class _AiDjPageState extends State<AiDjPage> {
                   style: theme.textTheme.bodySmall,
                 ),
               ),
-              TextButton(
+              M3EButton.icon(
+                style: M3EButtonStyle.text,
                 onPressed: provider.isBusy
                     ? null
                     : () => unawaited(provider.refreshRecommendations()),
-                child: Text(l10n.aiDjRetry),
+                icon: const Icon(Icons.refresh_rounded, size: 18),
+                label: Text(l10n.aiDjRetry),
               ),
             ],
           ),
@@ -503,22 +505,31 @@ class _AiDjPageState extends State<AiDjPage> {
       Divider(color: scheme.outlineVariant.withValues(alpha: 0.5)),
       _cacheTtlRow(l10n, provider),
       const SizedBox(height: 4),
-      Row(
-        children: [
-          M3EButton.tonal(
-            key: const Key('aiDjTestConnectionButton'),
-            onPressed: _busy ? null : _testConnection,
+      // 两个配置动作（测试连接 / 清除配置）平级，收进同一组：tonal 统一语气，
+      // 按下即分发命令（selectedIndex 恒空、不留选中态）。
+      M3EButtonGroup(
+        type: M3EButtonGroupType.standard,
+        style: M3EButtonStyle.tonal,
+        actions: [
+          M3EButtonGroupAction(
             icon: const Icon(Icons.wifi_tethering_rounded),
             label: Text(l10n.aiDjTestConnection),
+            enabled: !_busy,
           ),
-          if (!_editingConfig && provider.hasConfig) ...[
-            const SizedBox(width: 8),
-            M3EButton.text(
-              onPressed: _busy ? null : _clearConfig,
-              child: Text(l10n.aiDjClearConfig),
+          if (!_editingConfig && provider.hasConfig)
+            M3EButtonGroupAction(
+              icon: const Icon(Icons.delete_rounded),
+              label: Text(l10n.aiDjClearConfig),
+              enabled: !_busy,
             ),
-          ],
         ],
+        onSelectedIndexChanged: (index) {
+          if (index == 0) {
+            _testConnection();
+          } else if (index == 1) {
+            _clearConfig();
+          }
+        },
       ),
     ];
   }

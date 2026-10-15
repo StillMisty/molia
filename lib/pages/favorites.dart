@@ -2156,6 +2156,9 @@ class _CollectionPickerSheetState extends State<_CollectionPickerSheet> {
                 Expanded(
                   child: Text(widget.title, style: theme.textTheme.titleMedium),
                 ),
+                // 这是两个工具动作（新建 / 导入）。M3EButtonGroup 在 1.1.6
+                // 只渲染「图标 + 文案」都有的动作（icon-only / 纯文案动作会
+                // 渲染成空按钮），所以这里保持两个标准图标键。
                 M3EIconButton(
                   key: const Key('favoritesCreatePlaylist'),
                   variant: M3EIconButtonVariant.standard,

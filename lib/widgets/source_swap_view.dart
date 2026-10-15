@@ -230,9 +230,12 @@ class _SourceSwapViewState extends State<SourceSwapView> {
                     ),
                   ),
                 ),
-                M3EButton.text(
+                M3EIconButton(
+                  key: const Key('sourceSwapRetryFailedSources'),
+                  variant: M3EIconButtonVariant.standard,
+                  icon: const Icon(Icons.refresh_rounded),
+                  tooltip: l10n.retry,
                   onPressed: provider.retryFailed,
-                  child: Text(l10n.retry),
                 ),
               ],
             ),

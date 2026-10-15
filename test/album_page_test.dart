@@ -2,6 +2,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:molia/domain/models/album.dart';
 import 'package:molia/domain/models/track.dart';
 import 'package:molia/l10n/app_localizations.dart';
+import 'package:molia/models/play_mode.dart';
 import 'package:molia/pages/album_page.dart';
 import 'package:molia/providers/library_provider.dart';
 import 'package:molia/providers/playback_provider.dart';
@@ -40,6 +41,13 @@ void main() {
     playback.dispose();
     await repository.dispose();
   });
+
+  /// 打开 split button 的尾部菜单：点击控件右缘即菜单触发器。
+  Future<void> openSplitMenu(WidgetTester tester, Key key) async {
+    final rect = tester.getRect(find.byKey(key));
+    await tester.tapAt(Offset(rect.right - 16, rect.center.dy));
+    await tester.pumpAndSettle();
+  }
 
   Track trackOf(String id) => Track(
         id: TrackId('wy', id),
@@ -97,13 +105,34 @@ void main() {
     expect(find.text('专辑名'), findsOneWidget);
     expect(find.text('歌手 · 2012 年 · 8 首'), findsOneWidget);
     expect(find.byKey(const Key('albumPlayAll')), findsOneWidget);
-    expect(find.byKey(const Key('albumAddToLibrary')), findsOneWidget);
+
+    // 「加入列表 / 随机播放全部」在主操作的尾部菜单里（split button）。
+    await openSplitMenu(tester, const Key('albumPlayAll'));
+    expect(find.text('随机播放全部'), findsOneWidget);
+    expect(find.text('加入列表'), findsOneWidget);
+    // 关掉菜单（点击外部）后再验证主操作。
+    await tester.tapAt(const Offset(10, 10));
+    await tester.pumpAndSettle();
 
     await tester.tap(find.byKey(const Key('albumPlayAll')));
     await tester.pump();
     expect(backend.lastRequest?.startIndex, 0);
     expect(backend.lastRequest?.tracks, hasLength(8));
     expect(backend.lastRequest?.context?.name, '专辑名');
+  });
+
+  testWidgets('随机播放全部：切换 shuffle 模式并从随机曲目起播', (tester) async {
+    await pumpPage(tester, (page) async => albumOf(page));
+
+    await openSplitMenu(tester, const Key('albumPlayAll'));
+    await tester.tap(find.text('随机播放全部'));
+    await tester.pumpAndSettle();
+
+    expect(backend.lastRequest?.tracks, hasLength(8));
+    expect(backend.lastRequest?.context?.name, '专辑名');
+    // 起点在已加载曲目内随机（0..7），模式先落到后端。
+    expect(backend.lastRequest!.startIndex, inInclusiveRange(0, 7));
+    expect(playback.currentMode, PlayMode.shuffle);
   });
 
   testWidgets('曲目行：与搜索页同款行尾菜单（收藏 / 加入列表）', (tester) async {
@@ -210,7 +239,8 @@ void main() {
   testWidgets('加入列表：弹层选择收藏后批量写入', (tester) async {
     await pumpPage(tester, (page) async => albumOf(page));
 
-    await tester.tap(find.byKey(const Key('albumAddToLibrary')));
+    await openSplitMenu(tester, const Key('albumPlayAll'));
+    await tester.tap(find.text('加入列表'));
     await tester.pumpAndSettle();
     expect(find.text('我的收藏'), findsOneWidget);
 

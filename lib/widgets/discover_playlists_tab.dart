@@ -435,9 +435,12 @@ class _DiscoverPlaylistsTabState extends State<DiscoverPlaylistsTab>
                     ),
                   ),
                 ),
-                M3EButton.text(
+                M3EIconButton(
+                  key: const Key('discoverPlaylistsRetry'),
+                  variant: M3EIconButtonVariant.standard,
+                  icon: const Icon(Icons.refresh_rounded),
+                  tooltip: l10n.discoverRetry,
                   onPressed: _reload,
-                  child: Text(l10n.discoverRetry),
                 ),
               ],
             ),
@@ -476,11 +479,13 @@ class _DiscoverPlaylistsTabState extends State<DiscoverPlaylistsTab>
           child: Padding(
             padding: const EdgeInsets.only(top: 4),
             child: Center(
-              child: M3EButton.text(
+              child: M3EButton.icon(
+                style: M3EButtonStyle.text,
                 onPressed: state.isLoadingMore
                     ? null
                     : () => unawaited(_paged.loadMore()),
-                child: Text(l10n.discoverLoadMore),
+                icon: const Icon(Icons.expand_more_rounded),
+                label: Text(l10n.discoverLoadMore),
               ),
             ),
           ),

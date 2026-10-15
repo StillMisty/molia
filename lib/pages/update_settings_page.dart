@@ -6,6 +6,7 @@ import 'package:material_ui/material_ui.dart';
 import 'package:provider/provider.dart';
 import 'package:url_launcher/url_launcher.dart';
 
+import '../data/update/update_repository.dart';
 import '../domain/models/app_release.dart';
 import '../l10n/app_localizations.dart';
 import '../providers/update_provider.dart';
@@ -206,6 +207,10 @@ class _DownloadProgress extends StatelessWidget {
 }
 
 /// 操作按钮：按状态与平台给出唯一主操作 + 兜底出口。
+///
+/// 「打开发布页」是主操作的次要出口（自动安装失败时的逃生门），
+/// 有主操作时收进 split button 的尾部菜单；没有主操作的平台/状态
+/// （iOS、安装中）保留独立文本按钮。
 class _ReleaseActions extends StatelessWidget {
   const _ReleaseActions({required this.provider, required this.l10n});
 
@@ -216,18 +221,23 @@ class _ReleaseActions extends StatelessWidget {
   Widget build(BuildContext context) {
     final status = provider.status;
     final platform = provider.platform?.platform;
-    final canOpenPage = provider.release?.notesUrl != null;
+    final canOpenPage =
+        provider.release?.notesUrl != null && status != UpdateStatus.downloading;
     final permissionMissing =
         provider.failure == UpdateFailureKind.permission;
+
+    final primary = _primaryAction(context, status, platform, permissionMissing);
 
     final actions = <Widget>[];
 
     if (status == UpdateStatus.downloading) {
       actions.add(
-        M3EButton.text(
+        M3EButton.icon(
           key: const Key('settingsUpdateCancelButton'),
+          style: M3EButtonStyle.text,
           onPressed: provider.cancelDownload,
-          child: Text(l10n.updateCancelDownload),
+          icon: const Icon(Icons.close_rounded, size: 18),
+          label: Text(l10n.updateCancelDownload),
         ),
       );
     } else if (status == UpdateStatus.installing) {
@@ -244,47 +254,45 @@ class _ReleaseActions extends StatelessWidget {
       );
     } else if (platform == 'ios') {
       actions.add(Text(l10n.updateIosHint));
-    } else if (platform == 'web') {
+    } else if (primary != null && canOpenPage) {
       actions.add(
-        M3EButton.filled(
-          key: const Key('settingsUpdateReloadButton'),
-          onPressed: () => unawaited(provider.reloadPage()),
-          child: Text(l10n.updateReloadNow),
+        M3ESplitButton<String>(
+          key: primary.key,
+          label: primary.label,
+          leadingIcon: primary.icon,
+          style: M3EButtonStyle.filled,
+          onPressed: primary.onPressed,
+          items: [
+            M3ESplitButtonItem<String>(
+              value: 'openPage',
+              child: Text(l10n.updateOpenDownloadPage),
+            ),
+          ],
+          onSelected: (value) {
+            if (value == 'openPage') unawaited(_openReleasePage(context));
+          },
         ),
       );
-    } else if (permissionMissing) {
+    } else if (primary != null) {
       actions.add(
-        M3EButton.filled(
-          key: const Key('settingsUpdatePermissionButton'),
-          onPressed: () =>
-              unawaited(provider.openInstallPermissionSettings()),
-          child: Text(l10n.updateGrantInstallPermission),
-        ),
-      );
-    } else if (provider.hasDownloadedPackage && status != UpdateStatus.available) {
-      actions.add(
-        M3EButton.filled(
-          key: const Key('settingsUpdateInstallButton'),
-          onPressed: () => unawaited(provider.installDownloaded()),
-          child: Text(l10n.updateInstallNow),
-        ),
-      );
-    } else {
-      actions.add(
-        M3EButton.filled(
-          key: const Key('settingsUpdateDownloadButton'),
-          onPressed: () => unawaited(provider.downloadAndInstall()),
-          child: Text(l10n.updateDownloadAndInstall),
+        M3EButton.icon(
+          key: primary.key,
+          style: M3EButtonStyle.filled,
+          onPressed: primary.onPressed,
+          icon: Icon(primary.icon),
+          label: Text(primary.label),
         ),
       );
     }
 
-    if (canOpenPage && status != UpdateStatus.downloading) {
+    if (primary == null && canOpenPage) {
       actions.add(
-        M3EButton.text(
+        M3EButton.icon(
           key: const Key('settingsUpdateOpenPageButton'),
+          style: M3EButtonStyle.text,
           onPressed: () => unawaited(_openReleasePage(context)),
-          child: Text(l10n.updateOpenDownloadPage),
+          icon: const Icon(Icons.open_in_new_rounded, size: 18),
+          label: Text(l10n.updateOpenDownloadPage),
         ),
       );
     }
@@ -296,6 +304,51 @@ class _ReleaseActions extends StatelessWidget {
         runSpacing: kSettingsSmallSpacing,
         children: actions,
       ),
+    );
+  }
+
+  /// 当前状态/平台的唯一主操作；iOS 与安装中无主操作（只有说明文案）。
+  ({Key key, IconData icon, String label, VoidCallback onPressed})?
+      _primaryAction(
+    BuildContext context,
+    UpdateStatus status,
+    String? platform,
+    bool permissionMissing,
+  ) {
+    if (status == UpdateStatus.downloading ||
+        status == UpdateStatus.installing ||
+        platform == 'ios') {
+      return null;
+    }
+    if (platform == 'web') {
+      return (
+        key: const Key('settingsUpdateReloadButton'),
+        icon: Icons.refresh_rounded,
+        label: l10n.updateReloadNow,
+        onPressed: () => unawaited(provider.reloadPage()),
+      );
+    }
+    if (permissionMissing) {
+      return (
+        key: const Key('settingsUpdatePermissionButton'),
+        icon: Icons.app_settings_alt_rounded,
+        label: l10n.updateGrantInstallPermission,
+        onPressed: () => unawaited(provider.openInstallPermissionSettings()),
+      );
+    }
+    if (provider.hasDownloadedPackage && status != UpdateStatus.available) {
+      return (
+        key: const Key('settingsUpdateInstallButton'),
+        icon: Icons.install_mobile_rounded,
+        label: l10n.updateInstallNow,
+        onPressed: () => unawaited(provider.installDownloaded()),
+      );
+    }
+    return (
+      key: const Key('settingsUpdateDownloadButton'),
+      icon: Icons.download_rounded,
+      label: l10n.updateDownloadAndInstall,
+      onPressed: () => unawaited(provider.downloadAndInstall()),
     );
   }
 
@@ -393,7 +446,7 @@ class _AdvancedSection extends StatelessWidget {
   }
 }
 
-/// 关于：当前版本与平台。
+/// 关于：当前版本 / 平台 / 项目主页。
 class _AboutSection extends StatelessWidget {
   const _AboutSection({required this.provider, required this.l10n});
 
@@ -419,7 +472,22 @@ class _AboutSection extends StatelessWidget {
             title: l10n.updatePlatformTitle,
             subtitle: '${platform.platform} · ${platform.arch}',
           ),
+        // 项目主页：仓库地址与更新清单/发布目标同源（kUpdateRepository）。
+        SettingsNavTile(
+          key: const Key('settingsAboutGithubItem'),
+          icon: Icons.code_rounded,
+          title: l10n.updateGithubTitle,
+          subtitle: kUpdateRepository,
+          onTap: () => unawaited(_openGithub()),
+        ),
       ],
+    );
+  }
+
+  Future<void> _openGithub() async {
+    await launchUrl(
+      Uri.parse('https://github.com/$kUpdateRepository'),
+      mode: LaunchMode.externalApplication,
     );
   }
 }

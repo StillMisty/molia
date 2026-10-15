@@ -3,6 +3,7 @@ import 'package:flutter/foundation.dart';
 import '../domain/models/discover.dart';
 import '../domain/models/failure.dart';
 import '../domain/models/library.dart';
+import '../models/play_mode.dart';
 import '../sources/builtin/builtin_search.dart';
 import '../sources/builtin/discover_source.dart';
 import '../sources/raw_track.dart';
@@ -145,13 +146,19 @@ class DiscoverProvider extends ChangeNotifier {
       _guard((source) => source.playlistDetail(rawId, page));
 
   /// 播放发现曲目队列（[index] 为起始下标）。
+  /// 播放歌单曲目（`mode` 非空时先切换播放模式：「随机播放全部」→ shuffle，
+  /// 与收藏页 / 歌手页同一约定；单曲点击不传，尊重用户当前模式）。
   Future<void> playTracks(
     List<DiscoverTrack> tracks,
     int index, {
     String? contextName,
-  }) {
-    if (tracks.isEmpty) return Future.value();
-    return _playback.playSourceTracks(
+    PlayMode? mode,
+  }) async {
+    if (tracks.isEmpty) return;
+    if (mode != null) {
+      await _playback.setPlayMode(mode);
+    }
+    await _playback.playSourceTracks(
       [for (final track in tracks) _toSourceTrack(track)],
       index.clamp(0, tracks.length - 1),
       contextName: contextName,

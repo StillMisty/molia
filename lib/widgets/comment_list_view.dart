@@ -126,9 +126,12 @@ class CommentListView extends StatelessWidget {
               ),
             ),
             const SizedBox(height: 4),
-            M3EButton.text(
+            M3EIconButton(
+              key: const Key('commentsLoadMoreRetry'),
+              variant: M3EIconButtonVariant.standard,
+              icon: const Icon(Icons.refresh_rounded),
+              tooltip: l10n.retry,
               onPressed: () => unawaited(provider.loadMore()),
-              child: Text(l10n.retry),
             ),
           ],
         ),

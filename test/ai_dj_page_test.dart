@@ -340,7 +340,9 @@ void main() {
     expect(find.byKey(const Key('aiDjBaseUrlField')), findsOneWidget);
 
     await tester.enterText(find.byKey(const Key('aiDjApiKeyField')), 'sk-new');
-    await tester.tap(find.byKey(const Key('aiDjTestConnectionButton')));
+    // 配置行动作在 M3EButtonGroup 里（按钮组会构建一份不可见的测量副本，
+    // 用 hitTestable 过滤出真实可点的那一个）。
+    await tester.tap(find.text('Test connection').hitTestable());
     await tester.pumpAndSettle();
 
     expect(provider.config?.apiKey, 'sk-new');

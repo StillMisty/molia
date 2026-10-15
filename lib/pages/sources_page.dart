@@ -246,37 +246,7 @@ class _SourcesPageState extends State<SourcesPage> {
                   ),
                 ),
                 const SizedBox(height: kSettingsSmallSpacing),
-                Wrap(
-                  spacing: kSettingsSmallSpacing,
-                  runSpacing: 4,
-                  crossAxisAlignment: WrapCrossAlignment.center,
-                  children: [
-                    if (active != null && active.hasUpdateUrl)
-                      M3EButton.filled(
-                        onPressed: _updatingScriptId != null
-                            ? null
-                            : () => _updateScript(
-                                  context,
-                                  provider,
-                                  active,
-                                  fromAlert: true,
-                                ),
-                        child: _updatingScriptId == active.id
-                            ? _updatingLabel(l10n)
-                            : Text(l10n.sourcesUpdateNow),
-                      ),
-                    if (alert.updateUrl != null)
-                      M3EButton.text(
-                        onPressed: () =>
-                            launchUrl(Uri.parse(alert.updateUrl!)),
-                        child: Text(l10n.sourcesOpenUpdateUrl),
-                      ),
-                    M3EButton.text(
-                      onPressed: provider.clearUpdateAlert,
-                      child: Text(l10n.sourcesUpdateDismiss),
-                    ),
-                  ],
-                ),
+                _buildUpdateAlertActions(context, l10n, provider, active),
               ],
             ),
           ),
@@ -549,6 +519,65 @@ class _SourcesPageState extends State<SourcesPage> {
         const SizedBox(width: 8),
         Text(l10n.sourcesUpdating),
       ],
+    );
+  }
+
+  /// 更新提示卡的动作行：三个动作同权重（更新 / 打开地址 / 忽略），
+  /// 统一走 button group，按下即分发命令（selectedIndex 恒空、不留选中态）。
+  ///
+  /// 动作随状态增删（脚本无 updateUrl / 提示无网址时不出现），因此用
+  /// 并列的 handlers 按下标分发，不依赖固定顺序。
+  Widget _buildUpdateAlertActions(
+    BuildContext context,
+    AppLocalizations l10n,
+    SourcesProvider provider,
+    SourceScriptInfo? active,
+  ) {
+    final alert = provider.lastUpdateAlert!;
+    final handlers = <VoidCallback>[];
+    final actions = <M3EButtonGroupAction>[];
+
+    if (active != null && active.hasUpdateUrl) {
+      handlers.add(
+        () => _updateScript(context, provider, active, fromAlert: true),
+      );
+      actions.add(
+        M3EButtonGroupAction(
+          icon: const Icon(Icons.system_update_alt_rounded),
+          label: _updatingScriptId == active.id
+              ? _updatingLabel(l10n)
+              : Text(l10n.sourcesUpdateNow),
+          enabled: _updatingScriptId == null,
+        ),
+      );
+    }
+
+    final updateUrl = alert.updateUrl;
+    if (updateUrl != null) {
+      handlers.add(() => launchUrl(Uri.parse(updateUrl)));
+      actions.add(
+        M3EButtonGroupAction(
+          icon: const Icon(Icons.open_in_new_rounded),
+          label: Text(l10n.sourcesOpenUpdateUrl),
+        ),
+      );
+    }
+
+    handlers.add(provider.clearUpdateAlert);
+    actions.add(
+      M3EButtonGroupAction(
+        icon: const Icon(Icons.close_rounded),
+        label: Text(l10n.sourcesUpdateDismiss),
+      ),
+    );
+
+    return M3EButtonGroup(
+      type: M3EButtonGroupType.standard,
+      style: M3EButtonStyle.tonal,
+      actions: actions,
+      onSelectedIndexChanged: (index) {
+        if (index != null) handlers[index]();
+      },
     );
   }
 

@@ -613,12 +613,14 @@ class _TrackLocalDataPageState extends State<TrackLocalDataPage> {
             supportingText: data == null
                 ? l10n.cacheUsageComputing
                 : _cachePartSubtitle(l10n, part, data),
-            trailing: M3EButton.text(
+            trailing: M3EIconButton(
+              variant: M3EIconButtonVariant.standard,
+              icon: const Icon(Icons.delete_outline_rounded),
+              tooltip: l10n.downloadPartRemove,
               onPressed:
                   data == null || _busy || !_cachePartHasCache(part, data)
                       ? null
                       : () => unawaited(_clearCache(part)),
-              child: Text(l10n.downloadPartRemove),
             ),
           ),
         if (data != null && !data.hasAnyCache)
@@ -633,11 +635,13 @@ class _TrackLocalDataPageState extends State<TrackLocalDataPage> {
           ),
         Padding(
           padding: const EdgeInsets.only(top: kSettingsSectionSpacing / 2),
-          child: M3EButton.tonal(
+          child: M3EButton.icon(
+            style: M3EButtonStyle.tonal,
             onPressed: data == null || _busy || !data.hasAnyCache
                 ? null
                 : _clearAllCache,
-            child: Text(l10n.trackCacheClearAll),
+            icon: const Icon(Icons.delete_sweep_rounded),
+            label: Text(l10n.trackCacheClearAll),
           ),
         ),
       ],

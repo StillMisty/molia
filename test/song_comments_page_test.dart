@@ -229,7 +229,7 @@ void main() {
     );
 
     failPage2 = false;
-    await tester.tap(find.text('重试'));
+    await tester.tap(find.byKey(const Key('commentsLoadMoreRetry')));
     await tester.pumpAndSettle();
 
     expect(find.text('加载更多评论失败'), findsNothing);

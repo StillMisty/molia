@@ -1730,6 +1730,12 @@ abstract class AppLocalizations {
   /// **'Play all'**
   String get playAll;
 
+  /// No description provided for @playAllShuffled.
+  ///
+  /// In en, this message translates to:
+  /// **'Shuffle all'**
+  String get playAllShuffled;
+
   /// No description provided for @nextTrackTooltip.
   ///
   /// In en, this message translates to:
@@ -4273,6 +4279,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Platform'**
   String get updatePlatformTitle;
+
+  /// No description provided for @updateGithubTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'GitHub repository'**
+  String get updateGithubTitle;
 
   /// No description provided for @updateErrorNetwork.
   ///

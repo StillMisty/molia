@@ -8,6 +8,7 @@
 library;
 
 import 'dart:async';
+import 'dart:math' as math;
 
 import 'package:flutter/services.dart';
 import 'package:material_3_expressive/material_3_expressive.dart';
@@ -20,6 +21,7 @@ import '../domain/models/failure.dart';
 import '../domain/models/library.dart';
 import '../domain/models/track.dart';
 import '../l10n/app_localizations.dart';
+import '../models/play_mode.dart';
 import '../providers/library_provider.dart';
 import '../providers/paged_list_controller.dart';
 import '../providers/playback_provider.dart';
@@ -111,6 +113,9 @@ class _ArtistPageState extends State<ArtistPage> {
 
   final ScrollController _listController = ScrollController();
 
+  /// 随机播放起点用（与收藏页同一做法：可见列表内随机取一首起播）。
+  final math.Random _shuffleRandom = math.Random();
+
   @override
   void initState() {
     super.initState();
@@ -167,6 +172,22 @@ class _ArtistPageState extends State<ArtistPage> {
             index,
             contextName: name.isEmpty ? null : name,
           ),
+    );
+  }
+
+  /// 「随机播放全部」：先落 shuffle 模式再装载队列（洗牌顺序依赖装载前模式，
+  /// 与收藏页一致），起点在已加载曲目内随机。
+  Future<void> _playShuffled() async {
+    final tracks = _paged.state.items;
+    if (tracks.isEmpty) return;
+    HapticFeedback.lightImpact();
+    final name = _titleOf(_artist);
+    final playback = context.read<PlaybackProvider>();
+    await playback.setPlayMode(PlayMode.shuffle);
+    await playback.playDomainTracks(
+      List<Track>.of(tracks),
+      _shuffleRandom.nextInt(tracks.length),
+      contextName: name.isEmpty ? null : name,
     );
   }
 
@@ -434,24 +455,32 @@ class _ArtistPageState extends State<ArtistPage> {
             ),
           ],
           const SizedBox(height: 12),
-          Row(
-            children: [
-              M3EButton.icon(
-                key: const Key('artistPlayAll'),
-                style: M3EButtonStyle.filled,
-                onPressed: () => _playFrom(0),
-                icon: const Icon(Icons.play_arrow_rounded),
-                label: Text(l10n.playAll),
+          // 播放全部 = 主操作 + 尾部菜单（随机播放全部 / 加入列表）：
+          // 头部动作数收缩为一个 split button，主次层级保持不变。
+          M3ESplitButton<String>(
+            key: const Key('artistPlayAll'),
+            label: l10n.playAll,
+            leadingIcon: Icons.play_arrow_rounded,
+            style: M3EButtonStyle.filled,
+            onPressed: () => _playFrom(0),
+            items: [
+              M3ESplitButtonItem<String>(
+                value: 'shuffle',
+                child: Text(l10n.playAllShuffled),
               ),
-              const SizedBox(width: 12),
-              M3EButton.icon(
-                key: const Key('artistAddToLibrary'),
-                style: M3EButtonStyle.outlined,
-                onPressed: () => unawaited(_addToLibrary()),
-                icon: const Icon(Icons.playlist_add_rounded),
-                label: Text(l10n.addToPlaylist),
+              M3ESplitButtonItem<String>(
+                value: 'addToLibrary',
+                child: Text(l10n.addToPlaylist),
               ),
             ],
+            onSelected: (value) {
+              switch (value) {
+                case 'shuffle':
+                  unawaited(_playShuffled());
+                case 'addToLibrary':
+                  unawaited(_addToLibrary());
+              }
+            },
           ),
         ],
       ),
