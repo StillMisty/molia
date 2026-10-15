@@ -9,6 +9,7 @@
 - **Canonical id field（规范 id 字段）** — 各平台取链脚本读取的 id 键：wy / tx / kw → `songmid`，kg → `hash`，mg → `copyrightId`。`.lxmc` 导入的 raw 缺少该字段时由 raw track module 补齐。
 - **Artist ref（歌手引用）** — raw 的项目内部字段 `_artists`（`[{'name','id'}]`，与 `_types` / `_interval` 同约定：内置平台解析时增补、LX 字段只增不删）：平台内歌手 id 与曲目 payload 同体系（kw `allartistid` / `ARTISTID`（多歌手按 `&` 与名字同序）/ kg `Singers[].id` / tx `singer[].mid` / wy `ar[].id` / mg `singerList[].id`）。唯一读取入口 `raw_track.dart::artistsFromRaw`，由 `track_mapper` 填进 `Track.artists[].id`；UI 只读 `Track.artists`（不读 payload），据此把歌手名做成歌手页链接。脚本扩展源 / 旧数据没有该字段 → 歌手入口按只读降级。
 - **Platform id（平台 id）** — 不带平台前缀的单曲标识；[`SourceTrack.id`] 为其加上 `sourceKey:` 前缀。`rawIdOf`（通用优先级）与 `platformRawIdOf`（`.lxmc` 导出的平台优先顺序）是它的两个取键入口。
+- **Source preferences（渠道偏好模块）** — `lib/sources/source_preferences.dart`：渠道偏好（音质 / 顺序 / 停用）的状态与持久化唯一实现（写失败吞错收拢为统一策略），`settings_registry` 的 reload 由模块自绑；`SourceManager` 保留同名方法委托并向 UI 转发通知。
 - **Builtin transport（内置传输模块）** — `lib/sources/builtin/builtin_transport.dart`：五个平台搜索/发现共用的 HTTP 入口（客户端可注入、统一请求头/超时、响应级重试 `retryIf`、JSON 解码与 `cached` 结果缓存）。`BuiltinSearch.transport` 是唯一实例，测试注入 `MockClient` 即可覆盖 fetch 路径；重试预算统一为 `BuiltinTransport.defaultRetries`，结果缓存统一为 `defaultCacheTtl`（5 分钟，single-flight + LRU + TTL），发现适配器不再各自持有静态 `RequestCache`。
 - **Builtin search runner（内置检索 runner）** — `lib/sources/builtin/builtin_search_runner.dart`：五个平台搜索的执行骨架（`runBuiltinSearch`）与策略的唯一实现——重试预算、分页推断、失败归一；平台变体面（请求方式/URL/body、响应级重试判定、业务码判定、列表路径与解析）收进 `BuiltinSearchCall`，各平台文件只剩字面量与 parser。结果语义分界：**平台返回空** = 正常结果（tracks 空、failure 空）；**业务拒绝 / 传输失败** = `SourceSearchResult.failed`（`SourceSearchResult.failure`，不抛异常，UI 收口前只读 tracks）。内置平台「可搜索」判定唯一来源：`SourceManager._isBuiltinSearchable`（channels 候选 / 能力位 / 搜索路由共用）。
 
@@ -124,7 +125,9 @@
   any-listen → 内置五平台原生实现（wy eapi + yrc、tx PlayLyricInfo + QRC、
   kg KRC、kw LRCX、mg MRC；封面 wy 歌曲详情 / tx 专辑 mid / kg `get_res_privilege`
   / kw `pic.web` / mg 资源封面）。解码器在 `lib/sources/builtin/*_lyric.dart` +
-  `tx_qrc.dart`（zlib 走条件导入，Web 优雅降级）。
+  `tx_qrc.dart`（zlib 走条件导入，Web 优雅降级）。内置派发的唯一实现（五平台
+  switch + 结果缓存）在 `lib/sources/builtin/builtin_lyric_dispatch.dart` /
+  `builtin_pic_dispatch.dart`，与平台适配器同门。
 - **Word timing（逐字时间轴）** — `lib/models/lyric_line.dart`：`LyricLine.words`
   （`LyricWord`：绝对起止 + 文本）由 `lxlyric` 的 `<相对ms,时长ms>` 解析并对齐主行；
   歌词页当前行用 `KaraokeLyricText` 词级高亮（已唱 primary / 未唱 onSurface，

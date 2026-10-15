@@ -210,7 +210,10 @@
   （`lib/sources/builtin/builtin_transport.dart`）——客户端可注入、统一请求头/超时、
   响应级重试（`retryIf`）与结果缓存（`transport.cached`，single-flight + LRU +
   TTL 5min）；平台适配器只保留 URL 构造与解析，不再各自持有静态 `RequestCache`。
-  fetch 路径测试通过注入 `MockClient` 覆盖。
+  fetch 路径测试通过注入 `MockClient` 覆盖。取词 / 取图的内置派发（五平台 switch
+  + 结果缓存）同样收在同目录 `builtin_lyric_dispatch.dart` /
+  `builtin_pic_dispatch.dart`；渠道偏好（音质 / 顺序 / 停用）在
+  `lib/sources/source_preferences.dart`，`SourceManager` 同名方法为其委托。
 - **内置检索 runner**：`lib/sources/builtin/builtin_search_runner.dart` 是五个平台
   搜索的执行骨架（`runBuiltinSearch`）：重试预算、分页推断与失败归一各写一次；
   平台变体面（请求方式/URL/body、响应级重试判定、业务码判定、列表路径与解析）
