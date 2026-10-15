@@ -291,15 +291,7 @@ internal class CurrentLineView(context: Context) : TextView(context) {
         val textWidth = measuredTextWidth()
         val overflow = textWidth - viewWidth
         if (overflow <= 0f) return 0f
-        val fraction = playedFraction(estimatedMs)
-        if (overflow > 20000f) {
-            android.util.Log.i(
-                "MoliaLyrics",
-                "bigOverflow textW=$textWidth viewW=$viewWidth frac=$fraction " +
-                    "layoutW=${layout?.width} lines=${layout?.lineCount} len=${text?.length}",
-            )
-        }
-        return (fraction * overflow).coerceIn(0f, overflow)
+        return (playedFraction(estimatedMs) * overflow).coerceIn(0f, overflow)
     }
 
     /** 单行真实文本宽：Layout 的行宽；未布局时退回 Paint 测量。 */
@@ -420,8 +412,11 @@ internal class LyricsOverlayView(
     private var lastIsPlaying = false
     private var controlsVisible = false
 
-    /** 行内对齐（配置的横向对齐）；行自建后各自应用。 */
+    /** 行内对齐（配置的横向对齐）；普通行各自应用。 */
     private var rowGravity = Gravity.START
+
+    /** 配置的横向对齐原始值（滚动组自行实现对齐，见 applyGroupScroll）。 */
+    private var rowAlignX = "center"
 
     /** 当前行的滚动组：主行 + 翻译 / 罗马音（宿主统一应用组偏移）。 */
     private var scrollGroup = mutableListOf<TextView>()
@@ -473,12 +468,6 @@ internal class LyricsOverlayView(
 
     fun applyConfig(next: OverlayConfig) {
         config = next
-        android.util.Log.i(
-            TAG,
-            "applyConfig lines=${next.maxLines} font=${next.fontSize} opacity=${next.opacity} " +
-                "played=${Integer.toHexString(next.playedColor)} unplayed=${Integer.toHexString(next.unplayedColor)} " +
-                "shadow=${Integer.toHexString(next.shadowColor)} anim=${next.showToggleAnimation}",
-        )
         alpha = next.opacity.coerceIn(0.1f, 1f)
         // 纵向按配置对齐；横向恒居中（控制条 pill 包裹内容，不拉满宽度）。
         gravity = when (next.textAlignY) {
@@ -491,6 +480,7 @@ internal class LyricsOverlayView(
             "right" -> Gravity.END
             else -> Gravity.CENTER
         }
+        rowAlignX = next.textAlignX
         rebuildControls()
         render(current, animate = false, force = true)
     }
@@ -540,11 +530,6 @@ internal class LyricsOverlayView(
             return
         }
         renderedTexts = texts
-        android.util.Log.i(
-            TAG,
-            "render force=$force animate=$animate texts=${texts.size} " +
-                "line=${presentation.line.take(12)} upcoming=${presentation.upcoming.size}",
-        )
         rebuildLineViews(entries, animate)
         updatePlayPauseIconIfNeeded()
     }
@@ -593,7 +578,15 @@ internal class LyricsOverlayView(
                 )
                 setTextColor(if (entry.isCurrent) config.playedColor else config.unplayedColor)
                 setShadowLayer(2f, 0f, 1f, config.shadowColor)
-                gravity = rowGravity
+                // 滚动组（当前行 / 扩展行）强制左对齐：横向滚动布局宽度是超大
+                // 哨兵值（实测 1048576），系统「居中/右对齐」会把布局整体滚走
+                // （长文本被推出视口、短文本位置也不受控）；对齐由
+                // applyGroupScroll 的偏移统一实现。
+                gravity = if (entry.isCurrent || entry.isExtended) {
+                    Gravity.START
+                } else {
+                    rowGravity
+                }
                 maxLines = 1
                 setSingleLine(true)
                 isSelected = false
@@ -629,11 +622,6 @@ internal class LyricsOverlayView(
         val previousColumn = textColumn
         val newColumn = buildColumn(entries)
         val holderParams = contentHolder.layoutParams as? LinearLayout.LayoutParams
-        android.util.Log.i(
-            TAG,
-            "rebuild entries=${entries.size} animate=$animate prevChild=${previousColumn.childCount} " +
-                "holderW=${contentHolder.width} holderH=${holderParams?.height} viewH=$height",
-        )
 
         if (!animate || previousColumn.childCount == 0 || contentHolder.width <= 0) {
             holderParams?.height = LinearLayout.LayoutParams.WRAP_CONTENT
@@ -647,13 +635,11 @@ internal class LyricsOverlayView(
             )
             textColumn = newColumn
             currentLineView?.let { bindCurrentLine(it) }
-            logColumnState(newColumn, "direct")
             return
         }
 
         val oldHeight = previousColumn.height
         val newHeight = measureColumnHeight(newColumn)
-        android.util.Log.i(TAG, "roll oldH=$oldHeight newH=$newHeight")
         // 过渡期间视口固定为新内容高度：旧块高出部分裁掉，窗口高度不抖。
         holderParams?.height = newHeight
         newColumn.translationY = newHeight.toFloat()
@@ -693,29 +679,7 @@ internal class LyricsOverlayView(
             .alpha(1f)
             .setDuration(ROLL_DURATION_MS)
             .setInterpolator(EASE_DECELERATE)
-            .withEndAction { logColumnState(newColumn, "roll-in-end") }
             .start()
-        logColumnState(newColumn, "roll-in-start")
-        logColumnState(previousColumn, "roll-out-start")
-    }
-
-    /** 调试：打印列内各行状态（文本长度 / 颜色 / alpha / 位移 / 尺寸）。 */
-    private fun logColumnState(column: LinearLayout, label: String) {
-        column.post {
-            val info = StringBuilder()
-            for (i in 0 until column.childCount) {
-                val view = column.getChildAt(i) as TextView
-                info.append(" [#$i len=${view.text?.length}")
-                info.append(" color=${Integer.toHexString(view.currentTextColor)}")
-                info.append(" a=${view.alpha} ty=${view.translationY}")
-                info.append(" w=${view.width} h=${view.height} size=${view.textSize}")
-                info.append(" scrollX=${view.scrollX} vis=${view.visibility}]")
-            }
-            android.util.Log.i(
-                TAG,
-                "$label colH=${column.height} rootAlpha=$alpha parent=${column.parent != null}$info",
-            )
-        }
     }
 
     /** 结束未完成的滚入滚出：旧块直接移除、视口回到跟随内容。 */
@@ -757,30 +721,46 @@ internal class LyricsOverlayView(
     }
 
     /**
-     * 把滚动组按主行算出的目标偏移应用：每行按自身溢出裁剪——翻译 /
-     * 罗马音跟主行一起滚、超出窗口的部分一起被裁掉（消失）。
+     * 把滚动组按主行算出的目标偏移应用：
+     * - 文本未超宽：按配置对齐摆位（滚动组强制左对齐，这里用偏移实现）；
+     * - 文本超宽：左缘起滚，主行偏移由进度驱动，扩展行按自身溢出裁剪——
+     *   翻译 / 罗马音跟主行一起滚、超出窗口的部分一起被裁掉（消失）。
+     *
+     * `scrollX` 语义：内容随正值左移（`canvas.translate(-scrollX)`），因此
+     * 「未超宽行右移 [alignedShift] 做对齐」写作 `-alignedShift`。
      */
-    private fun applyGroupScroll(offset: Float) {
+    private fun applyGroupScroll(groupScroll: Float) {
         for (view in scrollGroup) {
-            val overflow = textOverflowOf(view)
-            val x = offset.coerceIn(0f, overflow).toInt()
-            if (overflow > 20000f || x > 20000 || offset > 20000f) {
-                android.util.Log.i(
-                    TAG,
-                    "scrollBig offset=$offset overflow=$overflow x=$x " +
-                        "w=${view.width} lw=${view.layout?.getLineWidth(0)} " +
-                        "lines=${view.layout?.lineCount} len=${view.text?.length}",
-                )
+            val textWidth = textWidthOf(view)
+            val viewWidth = view.width.toFloat()
+            val overflow = (textWidth - viewWidth).coerceAtLeast(0f)
+            val alignedShift = if (overflow > 0f) {
+                0f
+            } else {
+                when (rowAlignX) {
+                    "left" -> 0f
+                    "right" -> (viewWidth - textWidth).coerceAtLeast(0f)
+                    else -> ((viewWidth - textWidth) / 2f).coerceAtLeast(0f)
+                }
             }
+            val scroll = groupScroll.coerceIn(0f, overflow)
+            val x = (scroll - alignedShift).toInt()
             if (view.scrollX != x) view.scrollTo(x, 0)
         }
     }
 
+    /** 行文本实际宽度（未布局为 0）。 */
+    private fun textWidthOf(view: TextView): Float {
+        val layout = view.layout ?: return 0f
+        if (layout.lineCount <= 0) return 0f
+        val width = layout.getLineWidth(0)
+        return if (width.isFinite()) width else 0f
+    }
+
     /** 行文本超出视图宽的部分（未布局 / 无溢出为 0）。 */
     private fun textOverflowOf(view: TextView): Float {
-        val layout = view.layout ?: return 0f
-        if (layout.lineCount <= 0 || view.width <= 0) return 0f
-        return (layout.getLineWidth(0) - view.width).coerceAtLeast(0f)
+        if (view.width <= 0) return 0f
+        return (textWidthOf(view) - view.width).coerceAtLeast(0f)
     }
 
     private fun updatePlayPauseIconIfNeeded() {
@@ -977,8 +957,5 @@ internal class LyricsOverlayView(
     private companion object {
         /** 行内容滚入滚出时长（M3 强调缓动 decelerate 段）。 */
         const val ROLL_DURATION_MS = 240L
-
-        /** 调试日志 TAG（原生悬浮窗渲染状态）。 */
-        const val TAG = "MoliaLyrics"
     }
 }
