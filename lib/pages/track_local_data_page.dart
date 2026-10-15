@@ -2,9 +2,9 @@
 ///
 /// 为什么是一个页面（而不是「下载」弹层 + 「缓存」子页两个面）：
 /// 两档数据读的是同一批后端（音频目录 / 歌词 prefs / 封面 cache manager /
-/// 内存取链 / drift 下载记录），拆成两个入口必然出现两套口径——过去
-/// 「缓存页说命中、下载页说未下载」就是分面的直接后果。合并后一个页面同时
-/// 回答「本机有什么」（状态）与「占了多少、能清什么」（占用与动作）。
+/// 内存取链 / drift 下载记录），拆成两个入口必然出现两套口径（缓存面说命中、
+/// 下载面说没有）。合并后一个页面同时回答「本机有什么」（状态）与「占了多少、
+/// 能清什么」（占用与动作）。
 ///
 /// 分档口径（唯一出处 `TrackLocalDataService` / [LocalPartState]）：
 /// - **已下载**：持久副本，可分享、清缓存不影响；
@@ -152,8 +152,6 @@ class _TrackLocalDataPageState extends State<TrackLocalDataPage> {
     return qualities.isEmpty ? '' : qualities.first;
   }
 
-  // 动作：音频
-
   /// 下载 / 转存音频（缓存命中时由 `DownloadService` 直接拷贝，不触网）。
   Future<void> _downloadAudio() async {
     final downloads = _downloads;
@@ -281,8 +279,6 @@ class _TrackLocalDataPageState extends State<TrackLocalDataPage> {
     }
   }
 
-  // 动作：缓存清理
-
   Future<void> _clearCache(LocalCachePart part) async {
     final service = _service;
     if (service == null || _busy) return;
@@ -400,8 +396,6 @@ class _TrackLocalDataPageState extends State<TrackLocalDataPage> {
     );
   }
 
-  // 音频：音质选择 + 两档状态 + 动作。
-
   List<Widget> _buildAudioSection(
     AppLocalizations l10n,
     TrackLocalData? data,
@@ -431,9 +425,8 @@ class _TrackLocalDataPageState extends State<TrackLocalDataPage> {
                   : null,
               selected: quality == selected,
               enabled: !downloaded,
-              onTap: downloaded
-                  ? null
-                  : () => setState(() => _quality = quality),
+              onTap:
+                  downloaded ? null : () => setState(() => _quality = quality),
             ),
           SettingsInfoTile(
             key: const Key('localDataAudioStatus'),
@@ -481,10 +474,10 @@ class _TrackLocalDataPageState extends State<TrackLocalDataPage> {
               '${l10n.downloadProgressPercent(percent)}';
     }
     if (data.audioState == LocalPartState.cached) {
-      final quality = data.cachedQualities.isEmpty ||
-              data.cachedQualities.first == 'auto'
-          ? ''
-          : sourceQualityLabel(l10n, data.cachedQualities.first);
+      final quality =
+          data.cachedQualities.isEmpty || data.cachedQualities.first == 'auto'
+              ? ''
+              : sourceQualityLabel(l10n, data.cachedQualities.first);
       return [
         formatCacheBytes(data.audioCache.bytes),
         if (quality.isNotEmpty) quality,
@@ -562,8 +555,6 @@ class _TrackLocalDataPageState extends State<TrackLocalDataPage> {
     ];
   }
 
-  // 附加内容：歌词 / 封面两档状态 + 下载 / 转存。
-
   Widget _buildExtrasSection(AppLocalizations l10n, TrackLocalData? data) {
     final downloads = _downloads;
     final parts = [
@@ -593,8 +584,9 @@ class _TrackLocalDataPageState extends State<TrackLocalDataPage> {
             subtitle: switch (part.state) {
               LocalPartState.downloaded => l10n.downloadStatusDownloaded,
               LocalPartState.cached => l10n.localDataTransferHint,
-              LocalPartState.none =>
-                downloads == null ? l10n.downloadStatusNotDownloaded : l10n.downloadAction,
+              LocalPartState.none => downloads == null
+                  ? l10n.downloadStatusNotDownloaded
+                  : l10n.downloadAction,
             },
             onTap: part.state == LocalPartState.downloaded ||
                     downloads == null ||
@@ -605,8 +597,6 @@ class _TrackLocalDataPageState extends State<TrackLocalDataPage> {
       ],
     );
   }
-
-  // 缓存占用：四项占用 + 逐项清理 + 全部清理。
 
   Widget _buildCacheSection(AppLocalizations l10n, TrackLocalData? data) {
     return SettingsSectionCard(
@@ -621,9 +611,10 @@ class _TrackLocalDataPageState extends State<TrackLocalDataPage> {
                 ? l10n.cacheUsageComputing
                 : _cachePartSubtitle(l10n, part, data),
             trailing: M3EButton.text(
-              onPressed: data == null || _busy || !_cachePartHasCache(part, data)
-                  ? null
-                  : () => unawaited(_clearCache(part)),
+              onPressed:
+                  data == null || _busy || !_cachePartHasCache(part, data)
+                      ? null
+                      : () => unawaited(_clearCache(part)),
               child: Text(l10n.downloadPartRemove),
             ),
           ),
@@ -640,8 +631,9 @@ class _TrackLocalDataPageState extends State<TrackLocalDataPage> {
         Padding(
           padding: const EdgeInsets.only(top: kSettingsSectionSpacing / 2),
           child: M3EButton.tonal(
-            onPressed:
-                data == null || _busy || !data.hasAnyCache ? null : _clearAllCache,
+            onPressed: data == null || _busy || !data.hasAnyCache
+                ? null
+                : _clearAllCache,
             child: Text(l10n.trackCacheClearAll),
           ),
         ),

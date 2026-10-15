@@ -96,7 +96,9 @@ String trackLocalDataSummaryLabel(
               '${localPartStateLabel(l10n, data.artworkState)}',
       ];
       if (parts.isNotEmpty) return parts.join(' · ');
-      return localSource ? l10n.downloadFileMissing : l10n.downloadStatusNotDownloaded;
+      return localSource
+          ? l10n.downloadFileMissing
+          : l10n.downloadStatusNotDownloaded;
   }
 }
 
