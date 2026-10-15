@@ -38,7 +38,6 @@ class TxSearch {
 
     // 签名必须与实际发送的 JSON 字符串完全一致
     final bodyText = jsonEncode(body);
-    final sign = zzcSign(bodyText);
 
     bool invalid(dynamic response) {
       final service = moduleOf(response, _searchModule);
@@ -49,7 +48,7 @@ class TxSearch {
     return BuiltinSearchCall(
       platform: 'tx',
       method: BuiltinSearchMethod.post,
-      url: 'https://u.y.qq.com/cgi-bin/musics.fcg?sign=$sign',
+      url: signedMusicuUrl(bodyText),
       body: bodyText,
       headers: {'User-Agent': 'QQMusic 14090508(android 12)'},
       retryIf: (json) => json is! Map || json['code'] != 0,
@@ -107,12 +106,15 @@ class TxSearch {
     };
   }
 
-  /// musicu 签名 POST（搜索之外的模块共用；签名必须与发送体完全一致）。
+  /// musicu 签名 URL（签名必须与实际发送的 body 文本完全一致；各模块共用）。
+  static String signedMusicuUrl(String bodyText) =>
+      'https://u.y.qq.com/cgi-bin/musics.fcg?sign=${zzcSign(bodyText)}';
+
+  /// musicu 签名 POST（搜索之外的模块共用）。
   static Future<dynamic> musicuPost(Map<String, dynamic> body) {
     final bodyText = jsonEncode(body);
-    final sign = zzcSign(bodyText);
     return lxHttpPost(
-      'https://u.y.qq.com/cgi-bin/musics.fcg?sign=$sign',
+      signedMusicuUrl(bodyText),
       body: bodyText,
       headers: const {'User-Agent': 'QQMusic 14090508(android 12)'},
       retries: BuiltinTransport.defaultRetries,

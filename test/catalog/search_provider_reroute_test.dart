@@ -435,7 +435,7 @@ void main() {
     expect(source.searchCalls, 2);
   });
 
-  test('搜索失败：errorMessage 保持 Search failed 兼容格式', () async {
+  test('搜索失败：failure 归一化（kind/message），结果保留为空', () async {
     final source = _FakeMusicSource('kw')..searchError = StateError('boom');
     final registry = _FakeRegistry(
       {'kw': source},
@@ -447,9 +447,8 @@ void main() {
     provider.submitSearch('hello');
     await _waitUntil(() => !provider.isSearching);
 
-    expect(provider.errorMessage, contains('Search failed'));
-    expect(provider.errorMessage, contains('boom'));
     expect(provider.failure, isNotNull);
+    expect(provider.failure!.message, contains('boom'), reason: '归一化后的 message 保留原始说明');
     expect(provider.failure!.kind, FailureKind.unknown,
         reason: 'StateError 归一化为 unknown');
     expect(provider.failure!.retryable, isFalse);
@@ -704,6 +703,6 @@ void main() {
     provider.submitSearch('hello');
     await _waitUntil(() => !provider.isSearching);
     expect(provider.searchResults, isEmpty);
-    expect(provider.errorMessage, isNull);
+    expect(provider.failure, isNull);
   });
 }

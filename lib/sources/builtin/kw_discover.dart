@@ -4,6 +4,7 @@ import '../../domain/models/discover.dart';
 import '../raw_track.dart';
 import '../source_track.dart';
 import '../source_search_result.dart';
+import 'artist_utils.dart';
 import 'builtin_search.dart';
 import 'crypto_utils.dart';
 import 'discover_fetch.dart';
@@ -558,17 +559,8 @@ String formatSinger(String raw) => raw.replaceAll('&', '、');
 /// （歌单详情字段名为 `artistid`，两处兼容）。
 List<SourceArtistRef> artistRefsOf(dynamic rawItem) {
   if (rawItem is! Map) return const [];
-  final artist = formatSinger(decodeName(rawItem['artist']?.toString()));
-  final id = (rawItem['artistId'] ?? rawItem['artistid'])?.toString() ?? '';
-  final names = <String>[
-    for (final name in artist.split('、'))
-      if (name.trim().isNotEmpty) name.trim(),
-  ];
-  return [
-    for (var index = 0; index < names.length; index++)
-      SourceArtistRef(
-        name: names[index],
-        id: index == 0 && id.isNotEmpty ? id : null,
-      ),
-  ];
+  return artistRefsOfNameAndId(
+    formatSinger(decodeName(rawItem['artist']?.toString())),
+    (rawItem['artistId'] ?? rawItem['artistid'])?.toString() ?? '',
+  );
 }

@@ -21,6 +21,7 @@ import '../domain/models/track.dart';
 import '../l10n/app_localizations.dart';
 import '../providers/library_provider.dart';
 import '../providers/playback_provider.dart';
+import '../utils/duration_text.dart';
 import '../utils/responsive.dart';
 import '../widgets/add_to_library.dart';
 import '../widgets/app_network_image.dart';
@@ -298,7 +299,7 @@ class _ArtistPageState extends State<ArtistPage> {
           .where((name) => name.isNotEmpty)
           .join(', '),
       coverUrl: track.artwork?.uri.toString() ?? artist.avatarUrl,
-      trailingText: _formatDuration(track.duration),
+      trailingText: durationText(track.duration?.inMilliseconds),
       position: calculateCardPosition(index, _tracks.length),
       onTap: () => _playFrom(index),
     );
@@ -420,11 +421,4 @@ class _ArtistPageState extends State<ArtistPage> {
           color: theme.colorScheme.onSurfaceVariant,
         ),
       );
-
-  static String _formatDuration(Duration? duration) {
-    if (duration == null || duration <= Duration.zero) return '--:--';
-    final minutes = duration.inMinutes;
-    final seconds = (duration.inSeconds % 60).toString().padLeft(2, '0');
-    return '$minutes:$seconds';
-  }
 }

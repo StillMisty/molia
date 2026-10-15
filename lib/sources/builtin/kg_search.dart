@@ -3,6 +3,7 @@ import '../../domain/models/track.dart';
 import '../raw_track.dart';
 import '../source_search_result.dart';
 import '../source_track.dart';
+import 'artist_utils.dart';
 import 'builtin_search.dart';
 import 'builtin_search_runner.dart';
 import 'crypto_utils.dart';
@@ -118,18 +119,8 @@ class KgSearch {
   }
 
   /// 搜索条目的歌手引用（`Singers` 数组，名字 + 平台 id）。
-  static List<SourceArtistRef> artistRefsOf(dynamic singers) {
-    if (singers is! List) return const [];
-    final artists = <SourceArtistRef>[];
-    for (final singer in singers) {
-      if (singer is! Map) continue;
-      final name = decodeName(singer['name']?.toString());
-      if (name.isEmpty) continue;
-      final id = singer['id']?.toString();
-      artists.add(SourceArtistRef(name: name, id: (id?.isEmpty ?? true) ? null : id));
-    }
-    return artists;
-  }
+  static List<SourceArtistRef> artistRefsOf(dynamic singers) =>
+      artistRefsOfItems(singers);
 
   /// 记录一档酷狗音质（`sizeFormat(size)` + hash；[requireHash] 时缺 hash 跳过）。
   static void addKgQuality(

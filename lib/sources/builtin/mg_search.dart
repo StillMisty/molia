@@ -1,6 +1,7 @@
 import 'dart:convert';
 
 import '../raw_track.dart';
+import 'artist_utils.dart';
 import '../source_search_result.dart';
 import '../source_track.dart';
 import 'builtin_search.dart';
@@ -217,20 +218,8 @@ class MgSearch {
   }
 
   /// 歌手列表（`singerList` / `artists`）→ 歌手引用（名字 + 平台 id）。
-  static List<SourceArtistRef> artistRefsOf(dynamic singers) {
-    if (singers is! List) return const [];
-    final refs = <SourceArtistRef>[];
-    for (final singer in singers) {
-      if (singer is! Map) continue;
-      final name = (singer['name'] ?? '').toString();
-      if (name.isEmpty) continue;
-      final id = singer['id']?.toString();
-      refs.add(
-        SourceArtistRef(name: name, id: (id?.isEmpty ?? true) ? null : id),
-      );
-    }
-    return refs;
-  }
+  static List<SourceArtistRef> artistRefsOf(dynamic singers) =>
+      artistRefsOfItems(singers);
 
   /// 由已解析字段构建咪咕曲目（搜索 / 榜单 / 歌单共用同一 raw 约定）。
   static SourceTrack buildTrack({

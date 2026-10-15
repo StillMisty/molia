@@ -20,6 +20,7 @@ import 'builtin/kg_pic.dart';
 import 'builtin/kw_lyric.dart';
 import 'builtin/kw_pic.dart';
 import 'builtin/lyric_result.dart';
+import 'builtin/lyric_hit.dart';
 import 'builtin/lyric_search.dart';
 import 'builtin/mg_lyric.dart';
 import 'builtin/tx_lyric.dart';
@@ -272,10 +273,12 @@ class SourceManager extends ChangeNotifier {
       comment: BuiltinComments.isSupported(key),
       // 专辑详情同样只由内置实现提供（LX 脚本 / any-listen 无稳定专辑 id）。
       collection: BuiltinAlbums.isSupported(key),
-      // 歌手（搜索 + 详情/歌曲）：同上，只由内置实现提供。
-      artist: BuiltinArtists.isSupported(key),
-      // 按歌词搜歌：内置平台的歌词检索接口（脚本源无此约定）。
-      lyricSearch: BuiltinLyricSearch.isSupported(key),
+      // 歌手（搜索 + 详情/歌曲）与按歌词搜歌：只由内置实现提供，且与搜索
+      // 路由同门（[_isBuiltinSearchable]：脚本可取链才宣称可用——能力位与
+      // `searchArtists` / `searchLyrics` 的路由门必须一致，不允许 UI 显示
+      // 一个必然失败的入口）。
+      artist: BuiltinArtists.isSupported(key) && builtinSearchable,
+      lyricSearch: BuiltinLyricSearch.isSupported(key) && builtinSearchable,
     );
   }
 

@@ -8,6 +8,7 @@ import 'package:molia/sources/builtin/kw_lyric_search.dart';
 import 'package:molia/sources/builtin/lyric_search.dart';
 import 'package:molia/sources/builtin/mg_lyric_search.dart';
 import 'package:molia/sources/builtin/tx_lyric_search.dart';
+import 'package:molia/sources/builtin/tx_search.dart';
 import 'package:molia/sources/builtin/wy_lyric_search.dart';
 import 'package:molia/sources/builtin/wy_music_detail.dart';
 import 'package:molia/sources/raw_track.dart';
@@ -42,13 +43,12 @@ void main() {
 
   group('kg 酷狗', () {
     test('歌词搜索：MixSongID / 音质（含 Res 无损 24bit）/ Lyric 片段 / 封面', () {
-      final page = KgLyricSearch.parseSearch(
-        _fixture('kg.json'),
-        page: 1,
-        limit: 3,
+      final body = _fixture('kg.json') as Map;
+      final hits = KgLyricSearch.parseHits(
+        ((body['data'] as Map)['lists'] as List),
       );
-      expect(page.hits, isNotEmpty);
-      final first = page.hits.first;
+      expect(hits, isNotEmpty);
+      final first = hits.first;
       expect(first.snippet, contains('雨下整夜'));
       expect(first.track.title, isNotEmpty);
       expect(first.track.raw['songmid'], isNotEmpty);
@@ -61,33 +61,29 @@ void main() {
       // 歌手引用（歌手页入口）。
       expect(artistsFromRaw(first.track.raw).single.id, '7336700');
       expect(first.track.album, isEmpty, reason: '歌词搜索响应不含专辑名');
-      expect(page.total, 1000);
-      expect(page.hasMore, isTrue);
+      // 总数（1000）与分页由 runner 处理，见 fetch 链路测试。
+      expect((body['data'] as Map)['total'], 1000);
     });
   });
 
   group('tx QQ 音乐（search_type=7）', () {
     test('歌词搜索：条目与单曲搜索同构 + `lyric` 片段 + meta.sum', () {
-      final page = TxLyricSearch.parseSearch(
-        _fixture('tx.json'),
-        page: 1,
-        limit: 3,
-      );
-      expect(page.hits, isNotEmpty);
-      final first = page.hits.first;
+      final body = _fixture('tx.json') as Map;
+      final data =
+          (body['music.search.SearchCgiService'] as Map)['data'];
+      final hits = TxLyricSearch.parseHits(data);
+      expect(hits, isNotEmpty);
+      final first = hits.first;
       expect(first.track.title, '七里香');
       expect(first.snippet, contains('雨下整夜'));
       expect(first.track.raw['strMediaMid'], isNotEmpty);
       expect(first.track.qualities, isNotEmpty);
-      expect(page.total, 3);
-      expect(page.hasMore, isFalse, reason: '3 条结果一页取满');
+      // meta.sum=3（总数与分页由 runner 处理，见 fetch 链路测试）。
+      expect(TxSearch.totalOf(data), 3);
     });
 
-    test('响应结构不符：失败', () {
-      expect(
-        () => TxLyricSearch.parseSearch(const {'code': 0}, page: 1, limit: 3),
-        throwsA(isA<SourceFailure>()),
-      );
+    test('响应结构不符：命中为空', () {
+      expect(TxLyricSearch.parseHits(const {'code': 0}), isEmpty);
     });
   });
 
@@ -130,20 +126,19 @@ void main() {
 
   group('mg 咪咕（lyricSong=1）', () {
     test('歌词搜索：条目同构 + multiLyricStr 片段 + totalCount', () {
-      final page = MgLyricSearch.parseSearch(
-        _fixture('mg.json'),
-        page: 1,
-        limit: 3,
+      final body = _fixture('mg.json') as Map;
+      final hits = MgLyricSearch.parseHits(
+        ((body['lyricResultData'] as Map)['result'] as List),
       );
-      expect(page.hits, isNotEmpty);
-      final first = page.hits.first;
+      expect(hits, isNotEmpty);
+      final first = hits.first;
       expect(first.snippet, contains('雨下整夜'));
       expect(first.track.title, isNotEmpty);
       expect(first.track.raw['copyrightId'], isNotEmpty);
       expect(artistsFromRaw(first.track.raw).single.id, '337');
       expect(first.track.qualities, isNotEmpty);
-      expect(page.total, 80);
-      expect(page.hasMore, isTrue);
+      // totalCount=80（总数与分页由 runner 处理，见 fetch 链路测试）。
+      expect((body['lyricResultData'] as Map)['totalCount'], '80');
     });
   });
 

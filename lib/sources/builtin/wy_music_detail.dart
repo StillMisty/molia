@@ -1,5 +1,6 @@
 import '../raw_track.dart';
 import '../source_track.dart';
+import 'artist_utils.dart';
 import 'builtin_search.dart';
 import 'crypto_utils.dart';
 
@@ -211,18 +212,6 @@ class WyMusicDetail {
   /// 歌手列表（`ar` / `artists`）→ 歌手引用（名字 + 平台 id）。
   ///
   /// 旧版接口用 `artists` 键、搜索用 `ar`，结构相同；缺 id 时保留名字。
-  static List<SourceArtistRef> artistRefsOf(Object? artists) {
-    if (artists is! List) return const [];
-    final refs = <SourceArtistRef>[];
-    for (final artist in artists) {
-      if (artist is! Map) continue;
-      final name = (artist['name'] ?? '').toString();
-      if (name.isEmpty) continue;
-      final id = artist['id']?.toString();
-      refs.add(
-        SourceArtistRef(name: name, id: (id?.isEmpty ?? true) ? null : id),
-      );
-    }
-    return refs;
-  }
+  static List<SourceArtistRef> artistRefsOf(Object? artists) =>
+      artistRefsOfItems(artists);
 }

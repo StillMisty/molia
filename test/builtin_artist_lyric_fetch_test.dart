@@ -177,6 +177,20 @@ void main() {
       expect(adapter.requests, hasLength(1));
       expect(page.hits, isNotEmpty);
       expect(page.hits.first.snippet, contains('雨下整夜'));
+      expect(page.total, 1000, reason: 'runner 从 data.total 取总数');
+      expect(page.hasMore, isTrue);
+    });
+
+    test('kg：业务码异常 → 抛 SourceFailure（失败不静默空结果）', () async {
+      install((options) async =>
+          textResponse('{"status":0,"error_code":1,"data":null}'));
+
+      await expectLater(
+        KgLyricSearch.search('雨下整夜'),
+        throwsA(
+          isA<SourceFailure>().having((f) => f.retryable, 'retryable', isTrue),
+        ),
+      );
     });
 
     test('tx：musicu search_type=7 签名请求', () async {
@@ -190,6 +204,8 @@ void main() {
       final page = await TxLyricSearch.search('雨下整夜', limit: 3);
       expect(adapter.requests, hasLength(1));
       expect(page.hits.first.snippet, contains('雨下整夜'));
+      expect(page.total, 3);
+      expect(page.hasMore, isFalse, reason: '3 条结果一页取满');
     });
 
     test('wy：type=1006 搜索 + ids 补规范 raw（两请求）', () async {
@@ -222,6 +238,8 @@ void main() {
       expect(adapter.requests, hasLength(1));
       expect(page.hits, isNotEmpty);
       expect(page.hits.first.snippet, contains('雨下整夜'));
+      expect(page.total, 80);
+      expect(page.hasMore, isTrue);
     });
 
     test('BuiltinLyricSearch 调度：不支持的平台抛 unsupported', () async {

@@ -1,5 +1,8 @@
-import 'builtin_search.dart';
-import 'lyric_search.dart';
+import 'dart:convert';
+
+import 'builtin_search_runner.dart';
+import 'lyric_hit.dart';
+import 'lyric_search_runner.dart';
 import 'tx_search.dart';
 
 /// QQ 音乐「按歌词搜歌」（musicu `search_type=7`，与单曲搜索同模块）。
@@ -18,39 +21,51 @@ class TxLyricSearch {
     String keyword, {
     int page = 1,
     int limit = 30,
-  }) async {
-    final body = TxSearch.searchBody(
+  }) {
+    return runBuiltinLyricSearch(
+      _callFor(keyword, page, limit),
+      page: page,
+      limit: limit,
+    );
+  }
+
+  /// 平台变体面：签名 POST 体（消息块与搜索共构）/ 业务码判定 / 命中解析。
+  static BuiltinLyricSearchCall _callFor(
+    String keyword,
+    int page,
+    int limit,
+  ) {
+    final bodyText = jsonEncode(TxSearch.searchBody(
       keyword: keyword,
       page: page,
       limit: limit,
       searchType: _searchTypeLyric,
+    ));
+    return BuiltinLyricSearchCall(
+      platform: 'tx',
+      method: BuiltinSearchMethod.post,
+      url: TxSearch.signedMusicuUrl(bodyText),
+      body: bodyText,
+      headers: const {'User-Agent': 'QQMusic 14090508(android 12)'},
+      isInvalid: (response) => TxSearch.moduleOf(response, _searchModule) == null
+          ? true
+          : response['code'] != 0 ||
+              TxSearch.moduleOf(response, _searchModule)!['code'] != 0,
+      parseHits: (response) =>
+          parseHits(TxSearch.moduleOf(response, _searchModule)?['data']),
+      totalOf: (response) =>
+          TxSearch.totalOf(TxSearch.moduleOf(response, _searchModule)?['data']),
     );
-    final response = await TxSearch.musicuPost(body);
-    return parseSearch(response, page: page, limit: limit);
   }
 
-  /// 歌词搜索响应 → 结果页（供单测复用）。
-  static LyricSearchPage parseSearch(
-    dynamic response, {
-    required int page,
-    required int limit,
-  }) {
-    final service = TxSearch.moduleOf(response, _searchModule);
-    if (service == null ||
-        response is! Map ||
-        response['code'] != 0 ||
-        service['code'] != 0) {
-      throw builtinPlatformFailure('tx', '歌词搜索响应非法');
-    }
-    final data = service['data'];
+  /// 命中列表 → 命中项（供单测复用；结构不符返回空列表）。
+  static List<SourceLyricHit> parseHits(dynamic data) {
     final rawList = (data is Map &&
             data['body'] is Map &&
             (data['body'] as Map)['song'] is Map)
         ? ((data['body'] as Map)['song'] as Map)['list']
         : null;
-    if (rawList is! List) {
-      throw builtinPlatformFailure('tx', '歌词搜索响应非法');
-    }
+    if (rawList is! List) return const [];
     final hits = <SourceLyricHit>[];
     for (final raw in rawList) {
       final track = TxSearch.parseSongItem(raw);
@@ -58,20 +73,10 @@ class TxLyricSearch {
       final lyric = (raw is Map) ? raw['lyric']?.toString() ?? '' : '';
       hits.add(SourceLyricHit(
         track: track,
-        snippet: _normalize(lyric),
+        snippet: normalizeLyricSnippet(lyric),
       ));
     }
-    final total = TxSearch.totalOf(data);
-    return LyricSearchPage(
-      hits: hits,
-      total: total,
-      hasMore: total != null && total > 0 && page * limit < total,
-    );
-  }
-
-  static String? _normalize(String text) {
-    final decoded = text.replaceAll(RegExp(r'\s+'), ' ').trim();
-    return decoded.isEmpty ? null : decoded;
+    return hits;
   }
 
   static const String _searchModule = 'music.search.SearchCgiService';

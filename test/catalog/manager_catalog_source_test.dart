@@ -246,13 +246,15 @@ void main() {
       );
     });
 
-    test('searchArtists：内置平台未配脚本时歌手搜索同门被拒（详情能力仍在）', () async {
+    test('searchArtists / searchLyrics：内置平台未配脚本时能力位与搜索同门', () async {
       final manager = SourceManager();
       addTearDown(manager.dispose);
       final source = SourceManagerMusicSource('kw', manager);
-      // 能力位与专辑同一口径：歌手详情可浏览（不依赖脚本），搜索需可播放。
-      expect(source.capabilities.artist, isTrue);
-      expect(source.capabilities.lyricSearch, isTrue);
+      // 与 search 同一门（`_isBuiltinSearchable`：脚本可取链才宣称可用），
+      // 避免 UI 显示一个必然失败的入口。
+      expect(source.capabilities.search, isFalse);
+      expect(source.capabilities.artist, isFalse);
+      expect(source.capabilities.lyricSearch, isFalse);
 
       await expectLater(
         source.searchArtists(const SearchQuery(keyword: '周杰伦')),

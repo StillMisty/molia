@@ -1,7 +1,6 @@
 import '../source_search_result.dart';
-import 'builtin_search.dart';
-import 'builtin_transport.dart';
-import 'lyric_search.dart';
+import 'lyric_hit.dart';
+import 'lyric_search_runner.dart';
 import 'mg_search.dart';
 
 /// 咪咕音乐「按歌词搜歌」（jadeite `searchAll` + `searchSwitch.lyricSong=1`）。
@@ -32,44 +31,56 @@ class MgLyricSearch {
     String keyword, {
     int page = 1,
     int limit = 30,
-  }) async {
+  }) {
+    return runBuiltinLyricSearch(
+      _callFor(keyword, page, limit),
+      page: page,
+      limit: limit,
+    );
+  }
+
+  /// 平台变体面：签名 GET（与单曲搜索共用 [MgSearch.searchAllRequest]）/
+  /// 业务码判定 / 命中解析。
+  static BuiltinLyricSearchCall _callFor(
+    String keyword,
+    int page,
+    int limit,
+  ) {
     final request = MgSearch.searchAllRequest(
       text: keyword,
       page: page,
       limit: limit,
       searchSwitch: _lyricSwitch,
     );
-    final body = await lxHttpGet(
-      request.url,
+    return BuiltinLyricSearchCall(
+      platform: 'mg',
+      url: request.url,
       headers: request.headers,
-      retries: BuiltinTransport.defaultRetries,
+      isInvalid: (response) =>
+          response is! Map || response['code'] != '000000',
+      parseHits: (response) {
+        final lyricData = (response as Map)['lyricResultData'];
+        final rawList = (lyricData is Map) ? lyricData['result'] : null;
+        if (rawList is! List) return null;
+        return parseHits(rawList);
+      },
+      totalOf: (response) {
+        final lyricData = (response as Map)['lyricResultData'];
+        return parseSourceCount(
+          lyricData is Map ? lyricData['totalCount'] : null,
+        );
+      },
     );
-    return parseSearch(body, page: page, limit: limit);
   }
 
-  /// 歌词搜索响应 → 结果页（供单测复用）。
-  static LyricSearchPage parseSearch(
-    dynamic body, {
-    required int page,
-    required int limit,
-  }) {
-    final lyricData = (body is Map) ? body['lyricResultData'] : null;
-    final rawList = (lyricData is Map) ? lyricData['result'] : null;
-    if (rawList is! List) {
-      throw builtinPlatformFailure('mg', '歌词搜索响应非法');
-    }
+  /// 命中列表 → 命中项（供单测复用）。
+  static List<SourceLyricHit> parseHits(List<dynamic> rawList) {
     final hits = <SourceLyricHit>[];
     for (final raw in rawList) {
       final hit = parseItem(raw);
       if (hit != null) hits.add(hit);
     }
-    final total =
-        parseSourceCount(lyricData is Map ? lyricData['totalCount'] : null);
-    return LyricSearchPage(
-      hits: hits,
-      total: total,
-      hasMore: total != null && total > 0 && page * limit < total,
-    );
+    return hits;
   }
 
   /// 歌词搜索条目 → 命中项（供单测复用）。
@@ -86,7 +97,7 @@ class MgLyricSearch {
   /// 命中片段：优先 `multiLyricStr`（歌词段落），否则 `highlightLyricStrList`
   /// （命中词数组，用 `、` 连接）。
   static String? _snippetOf(Object? multiLyric, Object? highlights) {
-    final lyric = _normalize(multiLyric?.toString());
+    final lyric = normalizeLyricSnippet(multiLyric?.toString());
     if (lyric != null) return lyric;
     if (highlights is List) {
       final words = [
@@ -96,11 +107,5 @@ class MgLyricSearch {
       if (words.isNotEmpty) return words.join('、');
     }
     return null;
-  }
-
-  static String? _normalize(String? text) {
-    if (text == null) return null;
-    final decoded = text.replaceAll(RegExp(r'\s+'), ' ').trim();
-    return decoded.isEmpty ? null : decoded;
   }
 }

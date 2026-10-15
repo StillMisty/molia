@@ -2,10 +2,10 @@ import 'dart:convert';
 
 import '../source_search_result.dart';
 import 'builtin_search.dart';
-import 'crypto_utils.dart';
 import 'kw_discover.dart';
 import 'kw_search.dart';
-import 'lyric_search.dart';
+import 'lyric_hit.dart';
+import 'lyric_search_runner.dart';
 
 /// 酷我音乐「按歌词搜歌」（`r.s?stype=lyric`）。
 ///
@@ -76,9 +76,5 @@ class KwLyricSearch {
   }
 
   /// 歌词片段归一化：解码实体、把换行/多空格压成单空格；空串视为无片段。
-  static String? _normalize(String? text) {
-    final decoded =
-        decodeName(text).replaceAll(RegExp(r'\s+'), ' ').trim();
-    return decoded.isEmpty ? null : decoded;
-  }
+  static String? _normalize(String? text) => normalizeLyricSnippet(text);
 }

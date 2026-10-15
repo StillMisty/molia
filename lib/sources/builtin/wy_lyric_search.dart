@@ -3,7 +3,7 @@ import '../source_track.dart';
 import 'builtin_search.dart';
 import 'builtin_transport.dart';
 import 'crypto_utils.dart';
-import 'lyric_search.dart';
+import 'lyric_hit.dart';
 import 'wy_music_detail.dart';
 
 /// 网易云音乐「按歌词搜歌」（`api/search/get/web?type=1006`，免签名）。

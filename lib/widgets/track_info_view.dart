@@ -284,22 +284,6 @@ class _TrackInfoViewState extends State<TrackInfoView> {
                   title: l10n.trackInfoQualityAvailable,
                   subtitle: _availableQualitiesLabel(l10n, track),
                 ),
-                if ((track.album ?? '').isNotEmpty)
-                  albumSupported
-                      ? SettingsNavTile(
-                          key: const Key('trackInfoAlbumItem'),
-                          icon: Icons.album_rounded,
-                          title: l10n.trackInfoAlbum,
-                          subtitle:
-                              '${track.album!} · ${l10n.trackInfoAlbumOpen}',
-                          onTap: () =>
-                              unawaited(openTrackAlbum(context, track: track)),
-                        )
-                      : SettingsInfoTile(
-                          icon: Icons.album_rounded,
-                          title: l10n.trackInfoAlbum,
-                          subtitle: track.album!,
-                        ),
                 if (artistNames.isNotEmpty)
                   artistSupported
                       ? SettingsNavTile(
@@ -315,6 +299,22 @@ class _TrackInfoViewState extends State<TrackInfoView> {
                           icon: Icons.person_rounded,
                           title: l10n.trackInfoArtist,
                           subtitle: artistNames,
+                        ),
+                if ((track.album ?? '').isNotEmpty)
+                  albumSupported
+                      ? SettingsNavTile(
+                          key: const Key('trackInfoAlbumItem'),
+                          icon: Icons.album_rounded,
+                          title: l10n.trackInfoAlbum,
+                          subtitle:
+                              '${track.album!} · ${l10n.trackInfoAlbumOpen}',
+                          onTap: () =>
+                              unawaited(openTrackAlbum(context, track: track)),
+                        )
+                      : SettingsInfoTile(
+                          icon: Icons.album_rounded,
+                          title: l10n.trackInfoAlbum,
+                          subtitle: track.album!,
                         ),
                 SettingsNavTile(
                   key: const Key('trackInfoSourceItem'),

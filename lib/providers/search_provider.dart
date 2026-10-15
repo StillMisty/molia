@@ -35,7 +35,6 @@ class SearchProvider extends ChangeNotifier {
   String _searchQuery = '';
   bool _isSearching = false;
   Map<String, List<Map<String, dynamic>>> _searchResults = {};
-  String? _errorMessage;
   SourceFailure? _failure;
   List<Map<String, dynamic>> _filteredResultsCache = const [];
   bool _filteredResultsDirty = true;
@@ -54,7 +53,6 @@ class SearchProvider extends ChangeNotifier {
   List<ArtistSummary> _artistResults = const [];
   bool _artistSearching = false;
   SourceFailure? _artistFailure;
-  String? _artistErrorMessage;
 
   /// 歌手分页会话的关键词（pager 的 fetchPage 读取；换词/清空时重置）。
   String _artistPagerQuery = '';
@@ -64,7 +62,6 @@ class SearchProvider extends ChangeNotifier {
   Map<String, String> _lyricSnippets = const {};
   bool _lyricSearching = false;
   SourceFailure? _lyricFailure;
-  String? _lyricErrorMessage;
 
   /// 歌词分页会话的关键词（pager 的 fetchPage 读取；换词/清空时重置）。
   String _lyricPagerQuery = '';
@@ -135,13 +132,8 @@ class SearchProvider extends ChangeNotifier {
         SearchKind.lyric => _lyricSearching,
       };
 
-  String? get errorMessage => switch (_kind) {
-        SearchKind.song => _errorMessage,
-        SearchKind.artist => _artistErrorMessage,
-        SearchKind.lyric => _lyricErrorMessage,
-      };
-
-  /// 归一化失败对象（UI 兼容期仍消费 [errorMessage] 字符串）。
+  /// 归一化失败对象（UI 的唯一错误出口：标题走 l10n，详情用 message，
+  /// 不再暴露 `'Search failed: $e'` 这类原始异常字符串）。
   SourceFailure? get failure => switch (_kind) {
         SearchKind.song => _failure,
         SearchKind.artist => _artistFailure,
@@ -253,7 +245,6 @@ class SearchProvider extends ChangeNotifier {
     _resetArtistPagination();
     _artistResults = const [];
     _artistFailure = null;
-    _artistErrorMessage = null;
     _artistSearching = false;
   }
 
@@ -269,7 +260,6 @@ class SearchProvider extends ChangeNotifier {
     _lyricTracks = const [];
     _lyricSnippets = const {};
     _lyricFailure = null;
-    _lyricErrorMessage = null;
     _lyricSearching = false;
   }
 
@@ -301,7 +291,6 @@ class SearchProvider extends ChangeNotifier {
   void selectSource(String key) {
     if (key == _sourceKey) return;
     _sourceKey = key;
-    _errorMessage = null;
     _failure = null;
     _sourceTracks = const [];
     _searchResults = {};
@@ -389,7 +378,6 @@ class SearchProvider extends ChangeNotifier {
     _debounceTimer?.cancel();
 
     _searchQuery = query;
-    _errorMessage = null;
     _failure = null;
     _resetPagination();
     _clearArtistSession();
@@ -425,7 +413,6 @@ class SearchProvider extends ChangeNotifier {
       _searchQuery = '';
       _searchResults = {};
       _sourceTracks = const [];
-      _errorMessage = null;
       _failure = null;
       _isSearching = false;
       _searchRequestId++;
@@ -436,7 +423,6 @@ class SearchProvider extends ChangeNotifier {
 
     if (query != _searchQuery) {
       _searchQuery = query;
-      _errorMessage = null;
       _failure = null;
       _markFilteredResultsDirty();
       notifyListeners();
@@ -451,7 +437,6 @@ class SearchProvider extends ChangeNotifier {
     _searchQuery = '';
     _searchResults = {};
     _sourceTracks = const [];
-    _errorMessage = null;
     _failure = null;
     _isSearching = false;
     _searchRequestId++;
@@ -478,7 +463,6 @@ class SearchProvider extends ChangeNotifier {
     // 无可用音源：展示空态引导，不发起请求。
     if (_sourceKey.isEmpty) {
       _isSearching = false;
-      _errorMessage = null;
       _failure = null;
       _sourceTracks = const [];
       _searchResults = {};
@@ -490,7 +474,6 @@ class SearchProvider extends ChangeNotifier {
 
     _pagerQuery = query;
     _isSearching = true;
-    _errorMessage = null;
     _failure = null;
     _pager.reset();
     notifyListeners();
@@ -526,7 +509,6 @@ class SearchProvider extends ChangeNotifier {
     if (error != null) {
       _logger.fine('Search failed: $error');
       _failure = SourceFailure.from(error);
-      _errorMessage = 'Search failed: $error';
     } else {
       _sourceTracks = _pager.items;
       _searchResults = {
@@ -561,7 +543,6 @@ class SearchProvider extends ChangeNotifier {
     if (_sourceKey.isEmpty) {
       _artistSearching = false;
       _artistFailure = null;
-      _artistErrorMessage = null;
       _artistResults = const [];
       _resetArtistPagination();
       notifyListeners();
@@ -571,7 +552,6 @@ class SearchProvider extends ChangeNotifier {
     _artistPagerQuery = query;
     _artistSearching = true;
     _artistFailure = null;
-    _artistErrorMessage = null;
     _artistPager.reset();
     notifyListeners();
 
@@ -587,7 +567,6 @@ class SearchProvider extends ChangeNotifier {
     if (error != null) {
       _logger.fine('Artist search failed: $error');
       _artistFailure = SourceFailure.from(error);
-      _artistErrorMessage = 'Search failed: $error';
     } else {
       _artistResults = _artistPager.items;
     }
@@ -634,7 +613,6 @@ class SearchProvider extends ChangeNotifier {
     _lyricPagerQuery = query;
     _lyricSearching = true;
     _lyricFailure = null;
-    _lyricErrorMessage = null;
     _pendingLyricSnippets = {};
     _lyricPager.reset();
     notifyListeners();
@@ -651,7 +629,6 @@ class SearchProvider extends ChangeNotifier {
     if (error != null) {
       _logger.fine('Lyric search failed: $error');
       _lyricFailure = SourceFailure.from(error);
-      _lyricErrorMessage = 'Search failed: $error';
     } else {
       _lyricTracks = _lyricPager.items;
       _lyricSnippets = Map.unmodifiable(_pendingLyricSnippets);

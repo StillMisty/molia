@@ -6,7 +6,7 @@ import '../../domain/models/source.dart';
 import '../../domain/models/track.dart';
 import '../../domain/ports/music_source.dart';
 import '../../sources/builtin/artist_source.dart';
-import '../../sources/builtin/lyric_search.dart';
+import '../../sources/builtin/lyric_hit.dart';
 import '../../sources/source_manager.dart';
 import '../../sources/source_search_result.dart';
 import '../mapping/track_mapper.dart';

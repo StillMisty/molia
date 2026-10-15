@@ -69,7 +69,7 @@ class _SearchSectionState extends State<SearchSection> {
             : isLyricKind
                 ? lyricResults.length
                 : results.length;
-        final error = searchProvider.errorMessage;
+        final failure = searchProvider.failure;
         final kinds = searchProvider.supportedSearchKinds;
 
         return Column(
@@ -91,7 +91,7 @@ class _SearchSectionState extends State<SearchSection> {
                 child: M3EProgressIndicator.linear(),
               ),
 
-            if (error != null) _buildErrorView(l10n, searchProvider),
+            if (failure != null) _buildErrorView(l10n, searchProvider),
 
             Expanded(
               child: Scrollbar(
@@ -103,7 +103,7 @@ class _SearchSectionState extends State<SearchSection> {
                   slivers: [
                     if (itemCount == 0 &&
                         !searchProvider.isSearching &&
-                        error == null)
+                        failure == null)
                       SliverFillRemaining(
                         hasScrollBody: false,
                         child: _buildEmptyResultsView(l10n, searchProvider),
@@ -223,15 +223,18 @@ class _SearchSectionState extends State<SearchSection> {
               ),
             ],
           ),
-          Padding(
-            padding: const EdgeInsets.only(left: 28, right: 8),
-            child: Text(
-              searchProvider.errorMessage ?? '',
-              style: theme.textTheme.bodySmall?.copyWith(
-                color: theme.colorScheme.onSurfaceVariant,
+          if ((searchProvider.failure?.message ?? '').isNotEmpty)
+            Padding(
+              padding: const EdgeInsets.only(left: 28, right: 8),
+              child: Text(
+                // 归一化失败的 message（平台/边界给出的可读说明），
+                // 不是原始异常字符串（见 SearchProvider.failure 注释）。
+                searchProvider.failure!.message,
+                style: theme.textTheme.bodySmall?.copyWith(
+                  color: theme.colorScheme.onSurfaceVariant,
+                ),
               ),
             ),
-          ),
         ],
       ),
     );

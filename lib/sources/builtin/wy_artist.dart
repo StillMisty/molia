@@ -15,8 +15,9 @@ import 'wy_music_detail.dart';
 /// - 详情：`POST weapi/v1/artist/{id}`（`artist.briefDesc` 完整简介 / 别名 / 计数，
 ///   weapi 加密与歌单详情同一实现）；
 /// - 歌曲：`GET api/v1/artist/songs?id=&offset=&limit=&order=hot`（`more`/`total` 分页；
-///   旧版字段）→ 取 song id 后经 [WyMusicDetail.getList]（`weapi/v3/song/detail`）
-///   补成规范 raw（与歌单详情同一流程，音质字段完整）。
+///   免签名端点实测可用，比 weapi 版本少一层加密）→ 取 song id 后经
+///   [WyMusicDetail.getList]（`weapi/v3/song/detail`）补成规范 raw
+///   （与歌单详情同一流程，音质字段完整）。
 ///
 /// 开发环境已抓到真实响应，见 test/fixtures/artists/wy_*.json。
 class WyArtist {
