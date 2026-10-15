@@ -261,9 +261,21 @@ class DesktopLyricsSettingsPage extends StatelessWidget {
                 value: settings.desktopShowToggleAnimation,
                 onChanged: settings.setDesktopShowToggleAnimation,
               ),
+              SettingsSwitchTile(
+                icon: Icons.visibility_off_rounded,
+                title: l10n.lyricsDesktopHideOnPause,
+                subtitle: l10n.lyricsDesktopHideOnPauseSubtitle,
+                value: settings.desktopHideOnPause,
+                onChanged: settings.setDesktopHideOnPause,
+              ),
               SettingsChoiceRow<LyricsPauseBehavior>(
                 icon: Icons.pause_rounded,
                 title: l10n.lyricsDesktopPauseBehavior,
+                // 整窗隐藏时回退策略不生效：置灰并说明原因（值保留，关掉开关即恢复可点）。
+                subtitle: settings.desktopHideOnPause
+                    ? l10n.lyricsDesktopPauseFallbackOverridden
+                    : null,
+                enabled: !settings.desktopHideOnPause,
                 value: settings.desktopPauseBehavior,
                 options: [
                   (LyricsPauseBehavior.keep, l10n.lyricsBehaviorKeep),

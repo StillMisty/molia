@@ -2690,6 +2690,24 @@ abstract class AppLocalizations {
   /// **'When paused'**
   String get lyricsDesktopPauseBehavior;
 
+  /// No description provided for @lyricsDesktopHideOnPause.
+  ///
+  /// In en, this message translates to:
+  /// **'Hide when paused'**
+  String get lyricsDesktopHideOnPause;
+
+  /// No description provided for @lyricsDesktopHideOnPauseSubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Collapse the floating window while paused; it returns when playback resumes'**
+  String get lyricsDesktopHideOnPauseSubtitle;
+
+  /// No description provided for @lyricsDesktopPauseFallbackOverridden.
+  ///
+  /// In en, this message translates to:
+  /// **'The window is hidden while paused, so this fallback is inactive'**
+  String get lyricsDesktopPauseFallbackOverridden;
+
   /// No description provided for @lyricsDesktopNoLyrics.
   ///
   /// In en, this message translates to:

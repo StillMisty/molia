@@ -65,18 +65,25 @@ void main() {
     final settings = await desktopSettings();
     await settings.setDesktopFontSize(30);
 
+    // 播放态未知时不抢先建窗（暂停隐藏默认开）：首次投送把窗口带出来。
     await output.start(settings);
+    await output.apply(presentation());
     await pumpEventQueue();
     final methods = calls.map((call) => call.method).toList();
     expect(methods, contains('desktop.canDrawOverlays'));
     expect(methods, contains('desktop.show'));
-    expect(methods, contains('desktop.setConfig'));
     final showCall = calls.firstWhere((call) => call.method == 'desktop.show');
     expect((showCall.arguments as Map)['fontSize'], 30);
 
+    // 窗口已在：再次 start（设置变更触发）走 setConfig 更新。
+    calls.clear();
+    await output.start(settings);
+    await pumpEventQueue();
+    expect(calls.map((call) => call.method), contains('desktop.setConfig'));
+
     await output.apply(presentation());
     final updateCall =
-        calls.firstWhere((call) => call.method == 'desktop.update');
+        calls.lastWhere((call) => call.method == 'desktop.update');
     expect((updateCall.arguments as Map)['line'], 'A');
 
     // 控制条配色随配置下发（M3E pill 的容器 / 图标色）。
@@ -110,6 +117,8 @@ void main() {
     final channel = LyricsChannel();
     final output = DesktopLyricsOutput(channel: channel, supported: true);
     final settings = await desktopSettings();
+    // 本用例只看内容映射：关掉暂停隐藏，避免暂停即收起窗口。
+    await settings.setDesktopHideOnPause(false);
     await output.start(settings);
 
     await output.apply(LyricsPresentation(
@@ -176,6 +185,8 @@ void main() {
     final channel = LyricsChannel();
     final output = DesktopLyricsOutput(channel: channel, supported: true);
     final settings = await desktopSettings();
+    // 本用例只看内容映射：关掉暂停隐藏，避免暂停即收起窗口。
+    await settings.setDesktopHideOnPause(false);
     await settings.setDesktopPauseBehavior(LyricsPauseBehavior.title);
     await output.start(settings);
 
@@ -200,6 +211,8 @@ void main() {
     final channel = LyricsChannel();
     final output = DesktopLyricsOutput(channel: channel, supported: true);
     final settings = await desktopSettings();
+    // 本用例只看内容映射：关掉暂停隐藏，避免暂停即收起窗口。
+    await settings.setDesktopHideOnPause(false);
     await output.start(settings);
 
     Future<Map> lastUpdate() async {
@@ -249,6 +262,104 @@ void main() {
     await output.stop();
   });
 
+  test('暂停隐藏（默认开）：暂停只收起窗口、恢复重建并回投内容', () async {
+    final channel = LyricsChannel();
+    final output = DesktopLyricsOutput(channel: channel, supported: true);
+    final settings = await desktopSettings();
+    expect(settings.desktopHideOnPause, isTrue);
+
+    await output.start(settings);
+    await output.apply(presentation());
+    await pumpEventQueue();
+
+    // 暂停：窗口整体移除，不投送任何内容（区别于「清空」的空窗）。
+    calls.clear();
+    await output.apply(presentation(isPlaying: false));
+    await pumpEventQueue();
+    expect(calls.map((call) => call.method), ['desktop.hide']);
+
+    // 暂停期间的位置 tick 反复投送：已隐藏即幂等，不产生通道流量。
+    calls.clear();
+    await output.apply(presentation(isPlaying: false, line: 'B'));
+    await pumpEventQueue();
+    expect(calls, isEmpty);
+
+    // 恢复：重建窗口 + 首次内容一起下发（位置由原生持久化）。
+    calls.clear();
+    await output.apply(presentation(line: 'B'));
+    await pumpEventQueue();
+    expect(
+      calls.map((call) => call.method),
+      ['desktop.show', 'desktop.update'],
+    );
+    expect((calls.last.arguments as Map)['line'], 'B');
+
+    await output.stop();
+  });
+
+  test('暂停隐藏期间 start 不复活窗口', () async {
+    final channel = LyricsChannel();
+    final output = DesktopLyricsOutput(channel: channel, supported: true);
+    final settings = await desktopSettings();
+
+    await output.start(settings);
+    await output.apply(presentation(isPlaying: false));
+    await pumpEventQueue();
+    calls.clear();
+
+    // 暂停中改样式 / 回前台复查能力都会再走 start：不得重新显示窗口。
+    await output.start(settings);
+    await pumpEventQueue();
+    expect(calls.map((call) => call.method), isNot(contains('desktop.show')));
+
+    await output.stop();
+  });
+
+  test('关闭暂停隐藏：暂停仍按回退策略投送，不收起窗口', () async {
+    final channel = LyricsChannel();
+    final output = DesktopLyricsOutput(channel: channel, supported: true);
+    final settings = await desktopSettings();
+    await settings.setDesktopHideOnPause(false);
+    await settings.setDesktopPauseBehavior(LyricsPauseBehavior.title);
+
+    await output.start(settings);
+    await output.apply(presentation());
+    await pumpEventQueue();
+    calls.clear();
+
+    await output.apply(presentation(isPlaying: false));
+    await pumpEventQueue();
+    expect(
+      calls.map((call) => call.method),
+      isNot(contains('desktop.hide')),
+    );
+    expect((calls.last.arguments as Map)['line'], '歌名');
+
+    await output.stop();
+  });
+
+  test('清空后重新具备条件：窗口自愈重显（不依赖设置变更）', () async {
+    final channel = LyricsChannel();
+    final output = DesktopLyricsOutput(channel: channel, supported: true);
+    final settings = await desktopSettings();
+
+    await output.start(settings);
+    await output.apply(presentation());
+    await pumpEventQueue();
+    await output.clear(); // 无曲目 / 输出停用：窗口移除
+    await pumpEventQueue();
+
+    calls.clear();
+    await output.apply(presentation(line: 'B'));
+    await pumpEventQueue();
+    expect(
+      calls.map((call) => call.method),
+      ['desktop.show', 'desktop.update'],
+    );
+
+    await output.stop();
+  });
+
   test('跟随主题：配置下发解析后的 ColorScheme 颜色', () async {
     final scheme = ColorScheme.fromSeed(seedColor: const Color(0xFF3366FF));
     final channel = LyricsChannel();
@@ -260,6 +371,8 @@ void main() {
     final settings = await desktopSettings();
     await settings.setDesktopPlayedColorSource(LyricColorSource.primary);
     await output.start(settings);
+    // 窗口随首次投送建立（播放态未知时不抢先显示）。
+    await output.apply(presentation());
     await pumpEventQueue();
 
     final showCall = calls.firstWhere((call) => call.method == 'desktop.show');
