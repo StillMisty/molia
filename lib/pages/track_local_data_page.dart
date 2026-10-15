@@ -138,11 +138,14 @@ class _TrackLocalDataPageState extends State<TrackLocalDataPage> {
     return types;
   }
 
-  /// 当前选中音质：显式选择 → 命中缓存的音质 → 偏好音质 → 首个可用音质。
+  /// 当前选中音质：显式选择 → 已下载记录的音质 → 命中缓存的音质 →
+  /// 偏好音质 → 首个可用音质。
   String get _selectedQuality {
     final explicit = _quality;
     if (explicit != null && explicit.isNotEmpty) return explicit;
     final data = _data;
+    final downloadedQuality = data?.download?.quality ?? '';
+    if (downloadedQuality.isNotEmpty) return downloadedQuality;
     if (data != null && data.cachedQualities.isNotEmpty) {
       return data.cachedQualities.first;
     }
