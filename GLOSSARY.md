@@ -84,6 +84,7 @@
 
 ## 应用壳与导航
 
+- **Bootstrap stack（组合根 stack builder）** — `lib/app/bootstrap/**`：接线圈按子系统分组的 module（catalog / 本地数据 / 资料库 / playback / sync / AI / 歌词显示 / 桌面 / 更新 / Provider 树 / 首帧收尾），每个的 interface 是「依赖进、装好的子系统出」；初始化顺序与前向引用（媒体会话、歌词服务、同步引擎）关在 builder 内，`lib/main.dart` 只做顺序调用 + `runApp`（唯一 composition root）。
 - **Shell reselect（底栏重复点击）** — `lib/widgets/shell_reselect.dart::ShellReselectSignal`：
   壳层把「重复点击已选中的底栏 / 导航轨目的地」转交给页面的唯一通道（每个目的地
   一个实例，与 `PlayerMorphController` 同路由注入）。页面自订阅、自决定语义并自给

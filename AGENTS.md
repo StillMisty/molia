@@ -70,9 +70,9 @@ lib/
   playback/        # LocalPlaybackService（just_audio 后端）+ local_audio_handler（audio_service）
   providers/       # UI 状态：PlaybackProvider / SearchProvider / LibraryProvider / ThemeProvider…
   services/        # 歌词、歌词显示、省流、缓存、字体、设置、更新（检查/安装策略）…
-  app/             # app_shell.dart：应用壳（测试可直接挂载）
+  app/             # app_shell.dart：应用壳（测试可直接挂载）；bootstrap/：组合根 stack builders
   pages/ widgets/  # UI（M3E 组件 + material_ui 基础件）
-  main.dart        # 唯一 composition root
+  main.dart        # 唯一 composition root（薄壳：builder 顺序调用 + runApp）
 ```
 
 分层硬约束（`test/architecture/layering_test.dart` 扫描 import 强制，白名单已清空）：

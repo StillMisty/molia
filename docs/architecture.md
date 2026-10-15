@@ -42,8 +42,11 @@
 2. `lib/data/**`、`lib/sources/**`、`lib/playback/**` 禁止 providers/pages/widgets/main；
 3. `lib/providers/**` 禁止 import `lib/main.dart`；
 4. `lib/main.dart` 是唯一 composition root，不允许被其它 lib 文件 import；
-   应用壳（MyThemedApp / 导航栏 / 顶栏 / 迷你条）与全局 key 在
-   `lib/app/app_shell.dart`，测试可直接挂载；
+   接线圈按子系统拆在 `lib/app/bootstrap/**`（catalog / 本地数据 / 资料库 /
+   playback / sync / AI / 歌词显示 / 桌面 / 更新 / Provider 树 / 首帧收尾
+   各 stack builder：依赖进、装好的子系统出；初始化顺序与前向引用关在 builder
+   内，main() 只做顺序调用 + runApp）；应用壳（MyThemedApp / 导航栏 / 顶栏 /
+   迷你条）与全局 key 在 `lib/app/app_shell.dart`，测试可直接挂载；
 5. UI 禁止 import `lib/sources/**`（Wave 7 后白名单已清空，新增违规必须修复）。
 
 ## 2. 领域层
