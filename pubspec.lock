@@ -25,14 +25,6 @@ packages:
       url: "https://pub.flutter-io.cn"
     source: hosted
     version: "2.1.0"
-  animations:
-    dependency: "direct main"
-    description:
-      name: animations
-      sha256: "5ec868ffa78851e6f3f32e9377b780c7ae2087a5523d8b5e6df59bd8287ac5dd"
-      url: "https://pub.flutter-io.cn"
-    source: hosted
-    version: "3.0.0"
   archive:
     dependency: transitive
     description:

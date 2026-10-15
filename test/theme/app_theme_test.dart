@@ -1,3 +1,5 @@
+import 'package:cupertino_ui/cupertino_ui.dart'
+    show CupertinoPageTransitionsBuilder;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:molia/theme/animated_scheme.dart';
 import 'package:molia/theme/app_semantic_colors.dart';
@@ -58,6 +60,22 @@ void main() {
       expect(
         buildSystemUiOverlayStyle(dark).statusBarIconBrightness,
         Brightness.light,
+      );
+    });
+
+    test('Android 页面过渡保留预测返回 builder', () {
+      final data = buildAppThemeData(light);
+      // 跟手预览只由该 builder 插入的手势 detector 提供（换成普通 builder
+      // 会静默退化成「能返回、无预览」，实测见
+      // test/theme/predictive_back_page_transitions_test.dart）；
+      // cupertino builder 同理是 iOS 边缘返回手势的来源。
+      expect(
+        data.pageTransitionsTheme.builders[TargetPlatform.android],
+        isA<PredictiveBackPageTransitionsBuilder>(),
+      );
+      expect(
+        data.pageTransitionsTheme.builders[TargetPlatform.iOS],
+        isA<CupertinoPageTransitionsBuilder>(),
       );
     });
 

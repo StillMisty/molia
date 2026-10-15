@@ -37,9 +37,11 @@ import 'update_settings_page.dart';
 /// 打开设置弹层（顶栏入口与测试共用）。
 ///
 /// 小屏（底部弹层）：dismiss guard 是返回的唯一入口——先在弹层内部退子页
-/// （立即返回 false、不等待退栈动画，让预测返回预览与官方 Compose
-/// `settleToDismiss` 的「收起一级」语义一样立即回弹），子页退完后再允许
-/// 关闭；弹层宿主在 guard 存在时也参与预测返回预览。
+/// （立即返回 false、不等待退栈动画，对齐官方 Compose `settleToDismiss` 的
+/// 「收起一级」语义），子页退完后再允许关闭。这条链路上没有预测返回预览：
+/// guard 非空时 M3E 弹层宿主不接管手势（见包内
+/// `m3e_bottom_sheet_modal_host.dart`），内层子页也被排除在预测返回之外
+/// （见 `SettingsPage._innerTransitionTheme`）。
 /// 大屏（居中对话框）忽略 guard，返回由 [SettingsPage] 页内处理。
 Future<void> showSettingsSheet(BuildContext context) {
   final navigatorKey = GlobalKey<NavigatorState>();
@@ -65,9 +67,10 @@ Future<void> showSettingsSheet(BuildContext context) {
 ///
 /// 返回处理按宿主形态分叉：
 /// - 小屏（M3E 底部弹层）：弹层宿主的 dismiss guard（见 `showSettingsSheet`）
-///   负责「先在弹层内退子页、再关弹层」，预测返回手势保持预览（对齐 Compose
-///   `settleToDismiss` 的「收起一级」语义）；本页不再挂 PopScope，避免同一次
-///   返回被两处处理。
+///   负责「先在弹层内退子页、再关弹层」（对齐 Compose `settleToDismiss` 的
+///   「收起一级」语义）；这条链路没有预测返回预览——宿主在 guard 非空时拒绝
+///   接管手势，内层路由也被排除（见 `SettingsPage._innerTransitionTheme`）；
+///   本页不再挂 PopScope，避免同一次返回被两处处理。
 /// - 大屏（居中对话框）：没有宿主 guard，由 [NavigatorPopHandler] 转发系统
 ///   返回——先退子页，回到首屏后对话框正常关闭。
 class SettingsPage extends StatefulWidget {
@@ -104,6 +107,25 @@ class _SettingsPageState extends State<SettingsPage> {
     _sheetScrollController = M3EBottomSheet.scrollControllerOf(context);
   }
 
+  /// 内层 Navigator 的过渡主题：Android 换成不参与预测返回的 fade-forwards。
+  ///
+  /// 为什么内层路由不能走预测返回：框架的 `Route.isCurrent` 按各自 Navigator
+  /// 判定，根导航器开着弹层（对话框 / 底部弹层）时内层子页依旧是「current」，
+  /// 会抢走本该属于那个弹层的手势并把它退掉——一次手势退两级。内层页面继续走
+  /// 「普通返回 → 弹层 guard → 先退子页」这条既有链路；fade-forwards 与预测
+  /// 返回 builder 的非手势过渡视觉一致，观感不变。
+  ThemeData _innerTransitionTheme(BuildContext context) {
+    final base = Theme.of(context);
+    return base.copyWith(
+      pageTransitionsTheme: PageTransitionsTheme(
+        builders: <TargetPlatform, PageTransitionsBuilder>{
+          ...base.pageTransitionsTheme.builders,
+          TargetPlatform.android: const FadeForwardsPageTransitionsBuilder(),
+        },
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final navigator = Navigator(
@@ -115,12 +137,16 @@ class _SettingsPageState extends State<SettingsPage> {
         ),
       ),
     );
+    final themed = Theme(
+      data: _innerTransitionTheme(context),
+      child: navigator,
+    );
     if (!context.isLargeScreen) {
-      return navigator;
+      return themed;
     }
     return NavigatorPopHandler(
       onPopWithResult: (_) => _navigatorKey.currentState?.maybePop(),
-      child: navigator,
+      child: themed,
     );
   }
 }

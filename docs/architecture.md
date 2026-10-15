@@ -523,10 +523,19 @@
   子页，开关与生效子项并回首屏「播放」分区。音源管理页（`sources_page.dart`）
   与 any-listen 页同样使用这套设置行组件与分段卡片行距。系统返回先退子页、
   再关弹层：底部弹层由 `showAdaptiveModalPage(onDismissRequest:)` guard 读取
-  `SettingsPage.subPageOpen`（M3E 弹层宿主会给层内所有 PopScope 回调发 didPop=false
+  内部 Navigator 的 `canPop()`（M3E 弹层宿主会给层内所有 PopScope 回调发 didPop=false
   并请求关闭，必须由 guard 挡下）；对话框 / 独立挂载由 `NavigatorPopHandler` 承接。
   弹层内 dialog 挂在 root navigator（`M3EDialog.show` 语义），关闭须显式
   `rootNavigator: true`。
+- 页面过渡 / 预测返回：Android 侧 `PageTransitionsTheme` 必须保留
+  `PredictiveBackPageTransitionsBuilder`（`lib/theme/app_theme.dart`）——手势跟手预览
+  只由它插入的手势 detector 提供，换成普通 builder 会静默退化成「能返回、无预览」
+  （`WidgetsBinding._handleCommitBackGesture` 无观察者时走 `handlePopRoute`）。
+  由此根导航器上 push 的页面（二级页）都有预览；大屏二级页的侧边弹层与居中对话框
+  走 `showGeneralDialog` / `showDialog`，不参与页面过渡、无预览（大屏侧边弹层的
+  手势支持待补；弹层类表面由 M3E 包内宿主自实现）。嵌套 Navigator（设置弹层内层）
+  必须显式退出预测返回（`SettingsPage._innerTransitionTheme`）：框架的 `Route.isCurrent`
+  按各自 Navigator 判定，内层子页会抢走根导航器弹层的手势、一次手势退两级。
 - 图标：统一圆角风格 `Icons.*_rounded`（不用 `Icons.adaptive.*`，不混 `_outlined`/基础实心）；
   唯一例外 `library_music_outlined`（资料库未选中半对；音符图标已改用 `MoliaMark` 组件）。
   `test/architecture/icon_usage_test.dart` 扫描强制。**同一按钮的状态图标切换**统一走

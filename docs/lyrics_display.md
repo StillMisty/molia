@@ -164,9 +164,10 @@ Molia 当前只有在播放页内渲染的滚动歌词。桌面悬浮歌词、�
 - 样式预览卡片（Flutter 渲染，与悬浮窗语义一致）；
   这是未来桌面渲染端复用的第一块积木。
 - 返回行为：小屏弹层的 dismiss guard 是返回唯一入口——先在弹层内退子页，
-  子页退完再关弹层；预测返回手势保持预览（提交后 guard 拒绝则预览回弹，
-  对齐 Compose `settleToDismiss` 的「收起一级」语义，见包内
-  `m3e_bottom_sheet_modal_host.dart`）。
+  子页退完再关弹层（对齐 Compose `settleToDismiss` 的「收起一级」语义）。
+  这条链路没有预测返回预览：guard 非空时 M3E 弹层宿主拒绝接管手势
+  （`m3e_bottom_sheet_modal_host.dart`），内层子页也被排除在预测返回之外
+  （嵌套 Navigator 会抢根导航器弹层的手势，见 `docs/architecture.md` §6）。
 - 文案全部走 l10n（en/zh）；组件用 M3E（含圆角图标、色彩契约）。
 
 ### FR-7 平台能力抽象（预留桌面）

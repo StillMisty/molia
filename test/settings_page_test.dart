@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:material_3_expressive/material_3_expressive.dart';
@@ -603,7 +605,8 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('App Language'), findsOneWidget);
 
-    // 预测返回提交：guard 退子页（弹层保持打开、预览回弹由包负责）。
+    // 预测返回提交：无人接管手势 → 走普通返回 → guard 退子页
+    // （弹层保持打开；弹层本身没有跟手预览，见 SettingsPage 注释）。
     await sendBack(tester, 'startBackGesture', backArgs(0));
     await sendBack(tester, 'updateBackGestureProgress', backArgs(1));
     await tester.pump();
@@ -620,6 +623,69 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('Settings'), findsNothing);
     expect(find.text('Open settings'), findsOneWidget);
+  });
+
+  testWidgets('底部弹层：根导航器上方 dialog 打开时，返回手势不得退内层子页', (tester) async {
+    // 移动端视口 → showAdaptiveModalPage 走底部弹层分支。
+    tester.view.physicalSize = const Size(500, 1400);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(() {
+      tester.view.resetPhysicalSize();
+      tester.view.resetDevicePixelRatio();
+    });
+
+    await pumpApp(
+      tester,
+      Scaffold(
+        body: Builder(
+          builder: (context) => Center(
+            child: M3EButton.filled(
+              onPressed: () => showSettingsSheet(context),
+              child: const Text('Open settings'),
+            ),
+          ),
+        ),
+      ),
+    );
+
+    await tester.tap(find.text('Open settings'));
+    await tester.pumpAndSettle();
+
+    // 进入通用子页：内层 Navigator 的栈深为 1，其路由是内层导航器的 current。
+    final generalItem = find.byKey(const Key('settingsGeneralItem'));
+    await tester.scrollUntilVisible(
+      generalItem,
+      300,
+      scrollable: find.byType(Scrollable).first,
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(generalItem);
+    await tester.pumpAndSettle();
+    expect(find.text('App Language'), findsOneWidget);
+
+    // 根导航器上方再开一个 dialog（与 M3EDialog.show 同一条路径）。
+    unawaited(
+      M3EDialog.show<void>(
+        tester.element(find.text('App Language')),
+        dialog: M3EDialog(
+          title: 'Root dialog',
+          content: const Text('dialog body'),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('Root dialog'), findsOneWidget);
+
+    // 返回手势应只作用于最上层 dialog：内层子页虽然在内层导航器里是 current，
+    // 但已被排除在预测返回之外（否则一次手势退两级）。
+    await sendBack(tester, 'startBackGesture', backArgs(0));
+    await sendBack(tester, 'updateBackGestureProgress', backArgs(1));
+    await tester.pump();
+    await sendBack(tester, 'commitBackGesture');
+    await tester.pumpAndSettle();
+
+    expect(find.text('Root dialog'), findsNothing);
+    expect(find.text('App Language'), findsOneWidget);
   });
 
   testWidgets('首屏：歌词分区三条直达入口（能力就绪时全显示并进入子页）', (tester) async {

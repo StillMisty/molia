@@ -1,4 +1,3 @@
-import 'package:animations/animations.dart';
 import 'package:cupertino_ui/cupertino_ui.dart' show CupertinoPageTransitionsBuilder;
 import 'package:flutter/services.dart' show SystemUiOverlayStyle;
 import 'package:material_ui/material_ui.dart';
@@ -22,11 +21,13 @@ ThemeData buildAppThemeData(
     useMaterial3: true,
     fontFamily: fontFamily,
     appBarTheme: AppBarTheme(systemOverlayStyle: systemUiOverlayStyle),
+    // Android 页面过渡必须选框架的预测返回 builder：跟手预览只由它插入的
+    // 手势 detector 提供，没有观察者接管时 `WidgetsBinding` 会把返回手势
+    // 退化成普通返回（能出栈、全程无预览）。换成任何普通 builder
+    // （共享轴过渡这类纯动画 builder 同样如此）都会静默丢掉这套预览。
     pageTransitionsTheme: PageTransitionsTheme(
       builders: <TargetPlatform, PageTransitionsBuilder>{
-        TargetPlatform.android: SharedAxisPageTransitionsBuilder(
-          transitionType: SharedAxisTransitionType.horizontal,
-        ),
+        TargetPlatform.android: const PredictiveBackPageTransitionsBuilder(),
         TargetPlatform.iOS: const CupertinoPageTransitionsBuilder(),
       },
     ),

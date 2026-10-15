@@ -34,7 +34,6 @@ dependencies:
   material_color_utilities: ^0.13.0
   dynamic_color: ^2.1.0
   gal: ^2.3.3
-  animations: ^3.0.0
   connectivity_plus: ^7.3.2
   just_audio: ^0.10.6
   just_audio_media_kit: ^2.1.0
