@@ -295,6 +295,13 @@
   无 `.part`）命中时直接拷贝不触网；歌词经注入的 `LyricsService`（缓存 →
   原生取词 → 跨平台回退，与播放页同一链路）；封面经 `ArtworkCache.bytesOf`
   命中直读、未命中取图后 `putBytes` 回填；
+- **缓存 = 已下载**（issue #22）：完整音频缓存同样按「已下载」识别——信息页
+  下载行与下载弹层状态显示已下载（体积 · 音质 · 缓存副本），弹层主按钮在
+  缓存命中时变「下载到本地文件夹」（转存持久副本，不触网）；播放取链在下载
+  记录之后回退缓存（`localUriFor`：精确音质优先、未命中用其它已缓存音质）→
+  `file://` 离线可播；收藏页「本地歌曲」合集按播放历史 × 缓存目录前缀匹配
+  列出缓存行（保留原曲身份，删除 = 清缓存）。缓存可被 LRU / 用户清理移除，
+  状态与列表随 `CacheService.revision` 回退（不承诺持久可用）；
 - **落库**：drift `downloads` 表（schema v5，`filePath` 可空——记录可以只含
   歌词或只含封面；`publicUri` 存 Android 公共副本定位；`imported` 标记
   **本地导入**：就地引用用户文件、删除只移行）存原音源曲目键 +
@@ -319,8 +326,8 @@
   不出现在搜索 / 发现 / 渠道排序；本地曲目 `origin = localFile`，
   自动换源与「换源」入口都按来源跳过；
 - **本地副本优先取链**：组合根在 `LocalPlaybackBackend` 的 resolver 外层
-  装饰（`DownloadService.localUriFor`：命中下载记录且文件存在 → `file://`），
-  未命中回落 `CatalogService.resolve`，缓存策略不变；
+  装饰（`DownloadService.localUriFor`：下载记录 → 完整缓存 → `file://`），
+  未命中回落 `CatalogService.resolve`，取链缓存策略不变；
 - **离线播放**：封面走本地文件（`AppNetworkImage` / `ArtworkCache` 对
   `file://` 走 `FileImage`）；歌词由组合根的歌词加载器读
   `downloads/lyrics/`（翻译 `.t.lrc` 边车），且 `LyricsService` 对本地
@@ -332,7 +339,9 @@
   文件名模板 `{artist}`/`{title}`/`{album}` / 标签嵌入开关 /
   Android 公共目录发布开关）；
   下载弹层（`lib/widgets/download_sheet.dart`）：音质选择（命中缓存的音质
-  标「本地缓存」）+ 音频动作 + 歌词/封面单独下载 + 全部下载；
+  标「本地缓存」，并预选缓存音质）+ 状态（已下载 / 缓存副本 / 下载中 /
+  未下载）+ 音频动作 + 歌词/封面单独下载 + 全部下载（缓存命中且无下载记录时
+  按钮为「下载到本地文件夹」，即转存持久副本）；
   下载管理页（`lib/pages/downloads_manage_page.dart`，设置 › 数据与存储）：
   进行中任务 + 批量下载（当前队列 / 指定歌单，跳过已下载与本地曲目；
   **不做断点续传**：平台直链多为一次性签名地址）+ 文件维护（`.part` 清扫、

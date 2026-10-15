@@ -4851,6 +4851,42 @@ abstract class AppLocalizations {
   /// **'Delete the local copies? Audio, lyrics and cover files will be removed; imported local tracks are only removed from the list.'**
   String get downloadDeleteConfirmMixed;
 
+  /// No description provided for @downloadStatusCachedCopy.
+  ///
+  /// In en, this message translates to:
+  /// **'Cached copy'**
+  String get downloadStatusCachedCopy;
+
+  /// No description provided for @downloadToFolder.
+  ///
+  /// In en, this message translates to:
+  /// **'Save to downloads folder'**
+  String get downloadToFolder;
+
+  /// No description provided for @localSongsCachedTag.
+  ///
+  /// In en, this message translates to:
+  /// **'Cached'**
+  String get localSongsCachedTag;
+
+  /// No description provided for @localSongsCachedRemove.
+  ///
+  /// In en, this message translates to:
+  /// **'Clear cache'**
+  String get localSongsCachedRemove;
+
+  /// No description provided for @localSongsCachedRemoveConfirm.
+  ///
+  /// In en, this message translates to:
+  /// **'Clear this track\'s audio cache? Only the cached copy is removed; downloads and imported files are unaffected.'**
+  String get localSongsCachedRemoveConfirm;
+
+  /// No description provided for @localSongsMixedRemoveConfirm.
+  ///
+  /// In en, this message translates to:
+  /// **'Remove the selected items? Downloads delete files, imported items are only removed from the list, cached copies are cleared.'**
+  String get localSongsMixedRemoveConfirm;
+
   /// No description provided for @downloadShare.
   ///
   /// In en, this message translates to:

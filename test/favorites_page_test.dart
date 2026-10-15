@@ -15,6 +15,8 @@ import 'package:molia/providers/discover_provider.dart';
 import 'package:molia/providers/library_collections.dart';
 import 'package:molia/providers/library_provider.dart';
 import 'package:molia/providers/playback_provider.dart';
+import 'package:molia/services/cache_service.dart';
+import 'package:molia/services/cache_storage.dart';
 import 'package:molia/services/download/download_service.dart';
 import 'package:molia/utils/responsive.dart';
 import 'package:molia/widgets/app_search_bar.dart';
@@ -59,11 +61,93 @@ class _StubDownloadService extends DownloadService {
   List<DownloadedTrack> get downloads => List.unmodifiable(_seed);
 
   @override
+  DownloadedTrack? recordFor(String sourceKey, String songId) {
+    for (final song in _seed) {
+      if (song.originSourceKey == sourceKey && song.originSongId == songId) {
+        return song;
+      }
+    }
+    return null;
+  }
+
+  @override
   Future<void> delete(DownloadedTrack record) async {
     deleted.add(record);
     _seed = [for (final song in _seed) if (song.key != record.key) song];
     notifyListeners();
   }
+}
+
+/// 假缓存存储：音频缓存索引（缓存 = 已下载识别）与单曲清缓存记录。
+class _FakeCacheStorage implements CacheStorage {
+  _FakeCacheStorage({Map<String, int>? files}) : files = files ?? {};
+
+  /// 音频缓存文件名 → 字节数。
+  final Map<String, int> files;
+
+  /// 单曲清缓存的前缀调用（`audioCacheKeyPrefix`）。
+  final List<String> clearedPrefixes = [];
+
+  @override
+  Future<String?> audioCacheDir() async => '/cache/audio';
+
+  @override
+  Future<String?> artworkCacheDir() async => null;
+
+  @override
+  Future<int?> totalSpaceBytes() async => null;
+
+  @override
+  Future<CacheUsage> usage(String dirPath) async => CacheUsage.zero;
+
+  @override
+  Future<Map<String, int>> listFiles(String dirPath) async => Map.of(files);
+
+  @override
+  Future<CacheUsage> usageMatching(
+    String dirPath, {
+    required String prefix,
+  }) async =>
+      CacheUsage.zero;
+
+  @override
+  Future<CacheDeleteResult> deleteMatching(
+    String dirPath, {
+    required String prefix,
+    Duration protectAge = Duration.zero,
+  }) async {
+    clearedPrefixes.add(prefix);
+    var bytes = 0;
+    var count = 0;
+    files.removeWhere((name, size) {
+      if (!name.startsWith(prefix)) return false;
+      bytes += size;
+      count++;
+      return true;
+    });
+    return CacheDeleteResult(
+      deleted: CacheUsage(bytes: bytes, count: count),
+    );
+  }
+
+  @override
+  Future<void> clear(String dirPath) async => files.clear();
+
+  @override
+  Future<int> enforceAudioLimit(
+    String dirPath, {
+    required int maxBytes,
+    required Duration protectAge,
+  }) async =>
+      0;
+
+  @override
+  Future<int> sweepArtwork(
+    String dirPath, {
+    required int maxObjects,
+    required int staleDays,
+  }) async =>
+      0;
 }
 
 /// 本地歌曲记录：`imported` 决定删除语义（就地引用 / 下载副本）。
@@ -125,6 +209,7 @@ void main() {
     WidgetTester tester, {
     math.Random? shuffleRandom,
     DownloadService? downloads,
+    CacheService? cache,
     Size size = const Size(1200, 2400),
   }) async {
     tester.view.physicalSize = size;
@@ -141,6 +226,7 @@ void main() {
           ChangeNotifierProvider<LibraryProvider>.value(value: provider),
           if (downloads != null)
             ChangeNotifierProvider<DownloadService>.value(value: downloads),
+          if (cache != null) Provider<CacheService>.value(value: cache),
         ],
         child: MaterialApp(
           locale: const Locale('zh'),
@@ -1172,6 +1258,65 @@ void main() {
     expect(raw, isNotNull);
     final saved = jsonDecode(raw!) as Map<String, dynamic>;
     expect(saved[LibraryCollections.downloadsOrderKey], greaterThan(0));
+  });
+
+  testWidgets('本地歌曲：缓存曲目入列（原曲身份）且删除 = 清缓存', (tester) async {
+    await repository.addHistoryEntry(_history('1', playedAt: 2));
+    final cacheStorage = _FakeCacheStorage(files: {
+      CacheService.audioCacheKey(sourceKey: 'wy', songId: '1', quality: '320k'):
+          2048,
+    });
+    final cache = CacheService(storage: cacheStorage);
+    await pumpFavorites(tester, downloads: _StubDownloadService(), cache: cache);
+    await selectCollection(tester, '本地歌曲');
+    await tester.pump();
+
+    expect(headlines(tester), ['Song 1']);
+    expect(find.text('缓存'), findsOneWidget);
+
+    // 播放保留原曲身份（不是 local 音源）：解析时命中缓存直接 file://。
+    await tester.tap(find.text('Song 1'));
+    await tester.pumpAndSettle();
+    expect(backend.lastRequest!.tracks.single.id.sourceKey, 'wy');
+
+    // 左滑删除：确认文案是「清除缓存」，动作只清缓存、不动下载记录。
+    await tester.drag(find.text('Song 1'), const Offset(-260, 0));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byIcon(Icons.delete_rounded));
+    await tester.pumpAndSettle();
+    expect(find.text('清除缓存'), findsWidgets);
+    await tester.tap(find.text('删除'));
+    await tester.pumpAndSettle();
+
+    expect(cacheStorage.clearedPrefixes, [
+      CacheService.audioCacheKeyPrefix(sourceKey: 'wy', songId: '1'),
+    ]);
+    // 缓存索引已清：列表随缓存 revision 刷新为空。
+    expect(headlines(tester), isEmpty);
+  });
+
+  testWidgets('本地歌曲：已有下载记录的曲目不重复列缓存行', (tester) async {
+    await repository.addHistoryEntry(_history('1', playedAt: 2));
+    final downloads = _StubDownloadService(seed: [
+      const DownloadedTrack(
+        originSourceKey: 'wy',
+        originSongId: '1',
+        title: '下载的歌',
+        filePath: '/downloads/1.mp3',
+        downloadedAt: 1,
+      ),
+    ]);
+    final cacheStorage = _FakeCacheStorage(files: {
+      CacheService.audioCacheKey(sourceKey: 'wy', songId: '1', quality: '320k'):
+          2048,
+    });
+    final cache = CacheService(storage: cacheStorage);
+    await pumpFavorites(tester, downloads: downloads, cache: cache);
+    await selectCollection(tester, '本地歌曲');
+    await tester.pump();
+
+    expect(headlines(tester), ['下载的歌']);
+    expect(find.text('缓存'), findsNothing);
   });
 }
 

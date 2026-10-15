@@ -103,6 +103,20 @@ class IoCacheStorage implements CacheStorage {
   }
 
   @override
+  Future<Map<String, int>> listFiles(String dirPath) async {
+    final files = await _listFiles(dirPath);
+    final result = <String, int>{};
+    for (final file in files) {
+      try {
+        result[file.uri.pathSegments.last] = await file.length();
+      } catch (_) {
+        // 文件可能正被删除/替换：忽略单个文件错误。
+      }
+    }
+    return result;
+  }
+
+  @override
   Future<void> clear(String dirPath) async {
     final files = await _listFiles(dirPath);
     for (final file in files) {

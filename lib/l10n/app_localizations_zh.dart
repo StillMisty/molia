@@ -2559,6 +2559,25 @@ class AppLocalizationsZh extends AppLocalizations {
       '删除本地副本？音频、歌词与封面文件将一并删除；导入的本地歌曲只从列表移除。';
 
   @override
+  String get downloadStatusCachedCopy => '缓存副本';
+
+  @override
+  String get downloadToFolder => '下载到本地文件夹';
+
+  @override
+  String get localSongsCachedTag => '缓存';
+
+  @override
+  String get localSongsCachedRemove => '清除缓存';
+
+  @override
+  String get localSongsCachedRemoveConfirm => '清除这首歌的音频缓存？只移除缓存副本，不影响下载与导入的文件。';
+
+  @override
+  String get localSongsMixedRemoveConfirm =>
+      '删除所选内容？下载副本会删除文件，导入项只从列表移除，缓存副本会被清除。';
+
+  @override
   String get downloadShare => '分享导出';
 
   @override

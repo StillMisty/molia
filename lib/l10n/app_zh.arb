@@ -1122,6 +1122,12 @@
   "downloadDelete": "删除下载",
   "downloadDeleteConfirm": "删除本地副本？音频、歌词与封面文件将一并删除。",
   "downloadDeleteConfirmMixed": "删除本地副本？音频、歌词与封面文件将一并删除；导入的本地歌曲只从列表移除。",
+  "downloadStatusCachedCopy": "缓存副本",
+  "downloadToFolder": "下载到本地文件夹",
+  "localSongsCachedTag": "缓存",
+  "localSongsCachedRemove": "清除缓存",
+  "localSongsCachedRemoveConfirm": "清除这首歌的音频缓存？只移除缓存副本，不影响下载与导入的文件。",
+  "localSongsMixedRemoveConfirm": "删除所选内容？下载副本会删除文件，导入项只从列表移除，缓存副本会被清除。",
   "downloadShare": "分享导出",
   "downloadProgressPercent": "{percent}%",
   "@downloadProgressPercent": {

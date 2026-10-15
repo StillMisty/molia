@@ -2666,6 +2666,26 @@ class AppLocalizationsEn extends AppLocalizations {
       'Delete the local copies? Audio, lyrics and cover files will be removed; imported local tracks are only removed from the list.';
 
   @override
+  String get downloadStatusCachedCopy => 'Cached copy';
+
+  @override
+  String get downloadToFolder => 'Save to downloads folder';
+
+  @override
+  String get localSongsCachedTag => 'Cached';
+
+  @override
+  String get localSongsCachedRemove => 'Clear cache';
+
+  @override
+  String get localSongsCachedRemoveConfirm =>
+      'Clear this track\'s audio cache? Only the cached copy is removed; downloads and imported files are unaffected.';
+
+  @override
+  String get localSongsMixedRemoveConfirm =>
+      'Remove the selected items? Downloads delete files, imported items are only removed from the list, cached copies are cleared.';
+
+  @override
   String get downloadShare => 'Share / export';
 
   @override

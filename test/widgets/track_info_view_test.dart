@@ -79,6 +79,9 @@ class _FakeDownloadService extends DownloadService {
   int cancelCalls = 0;
   int deleteCalls = 0;
 
+  /// 完整缓存命中（按音质）：缓存 = 已下载识别用。
+  final Map<String, AudioCacheHit> audioCacheByQuality = {};
+
   @override
   bool get supported => downloadSupported;
 
@@ -87,6 +90,21 @@ class _FakeDownloadService extends DownloadService {
 
   @override
   DownloadProgress? progressForTrack(Track track) => progress;
+
+  @override
+  Future<AudioCacheHit?> audioCacheFor(
+    Track track, {
+    Iterable<String>? qualities,
+  }) async {
+    if (qualities == null) {
+      return audioCacheByQuality.isEmpty ? null : audioCacheByQuality.values.first;
+    }
+    for (final quality in qualities) {
+      final hit = audioCacheByQuality[quality];
+      if (hit != null) return hit;
+    }
+    return null;
+  }
 
   @override
   Future<void> download(
@@ -476,6 +494,30 @@ void main() {
 
     // 行仍在（显示状态），但不支持时无下载服务入口。
     expect(find.byKey(const Key('trackInfoDownloadItem')), findsOneWidget);
+  });
+
+  testWidgets('下载行：完整缓存命中显示已下载（体积 · 音质 · 缓存副本）', (tester) async {
+    downloadService.audioCacheByQuality['320k'] = const AudioCacheHit(
+      quality: '320k',
+      path: '/cache/audio/a.mp3',
+      sizeBytes: 3 * 1024 * 1024,
+    );
+    await pumpView(tester, track: _track(), downloads: downloadService);
+
+    expect(find.text('未下载'), findsNothing);
+    expect(find.text('3.0 MB · 320K · 缓存副本'), findsOneWidget);
+
+    // 弹层：状态与主按钮按「缓存 = 已下载」呈现，动作为转存到本地文件夹。
+    await tester.tap(find.byKey(const Key('trackInfoDownloadItem')));
+    await tester.pumpAndSettle();
+    expect(find.text('已下载'), findsOneWidget);
+    expect(find.text('本地缓存'), findsOneWidget);
+    expect(find.text('下载到本地文件夹'), findsNWidgets(2));
+    expect(find.text('全部下载'), findsNothing);
+
+    await tester.tap(find.byKey(const Key('downloadSheetStart')));
+    await tester.pump();
+    expect(downloadService.downloadCalls, 1);
   });
 
   testWidgets('本地曲目：来源显示「本地下载」，下载行显示文件缺失', (tester) async {

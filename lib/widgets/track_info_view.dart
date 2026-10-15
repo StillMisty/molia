@@ -71,6 +71,9 @@ class _TrackInfoViewState extends State<TrackInfoView> {
   TrackCacheUsage? _usage;
   bool _listeningRevision = false;
 
+  /// 当前曲目的完整音频缓存命中（缓存 = 已下载识别）；无缓存为 null。
+  AudioCacheHit? _audioCacheHit;
+
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
@@ -100,7 +103,9 @@ class _TrackInfoViewState extends State<TrackInfoView> {
 
   void _onCacheChanged() {
     if (!mounted) return;
-    unawaited(_loadUsage(_playback?.snapshot.current));
+    final track = _playback?.snapshot.current;
+    unawaited(_loadUsage(track));
+    unawaited(_loadAudioCache(track));
   }
 
   /// 切歌（含自动连播）时重载占用；封面补取回写（同 id、换封面）也重算。
@@ -111,7 +116,30 @@ class _TrackInfoViewState extends State<TrackInfoView> {
     _usageForTrack = track?.id;
     _usageArtwork = artwork;
     _usage = null;
-    if (track != null) unawaited(_loadUsage(track));
+    _audioCacheHit = null;
+    if (track != null) {
+      unawaited(_loadUsage(track));
+      unawaited(_loadAudioCache(track));
+    }
+  }
+
+  /// 完整音频缓存探测（缓存 = 已下载）：随曲目 / 缓存变更刷新状态行。
+  Future<void> _loadAudioCache(Track? track) async {
+    final downloads = context.read<DownloadService?>();
+    if (downloads == null || track == null) {
+      if (_audioCacheHit != null && mounted) {
+        setState(() => _audioCacheHit = null);
+      }
+      return;
+    }
+    try {
+      final hit = await downloads.audioCacheFor(track);
+      if (!mounted || _usageForTrack != track.id) return;
+      if (hit == _audioCacheHit) return;
+      setState(() => _audioCacheHit = hit);
+    } catch (_) {
+      // 探测失败按「未缓存」呈现。
+    }
   }
 
   Future<void> _loadUsage(Track? track) async {
@@ -329,7 +357,8 @@ class _TrackInfoViewState extends State<TrackInfoView> {
     );
   }
 
-  /// 下载行副标题：已下载（大小 · 音质）/ 下载中百分比 / 未下载。
+  /// 下载行副标题：已下载（大小 · 音质）/ 缓存命中（大小 · 音质 · 缓存副本）/
+  /// 下载中百分比 / 未下载。
   String _downloadSubtitle(
     AppLocalizations l10n,
     Track track,
@@ -351,6 +380,16 @@ class _TrackInfoViewState extends State<TrackInfoView> {
       return quality.isEmpty
           ? record.sizeLabel
           : '${record.sizeLabel} · $quality';
+    }
+    final cached = _audioCacheHit;
+    if (cached != null) {
+      final quality = cached.quality.isEmpty || cached.quality == 'auto'
+          ? ''
+          : sourceQualityLabel(l10n, cached.quality);
+      final size = formatCacheBytes(cached.sizeBytes);
+      return quality.isEmpty
+          ? '$size · ${l10n.downloadStatusCachedCopy}'
+          : '$size · $quality · ${l10n.downloadStatusCachedCopy}';
     }
     if (progress != null) {
       final percent = progress.percent;
