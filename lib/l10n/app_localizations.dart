@@ -299,7 +299,7 @@ abstract class AppLocalizations {
   /// No description provided for @settingsFollowArtworkSubtitle.
   ///
   /// In en, this message translates to:
-  /// **'Use album art colors while playing; falls back to base colors'**
+  /// **'Follow the current track\'s album art; falls back to base colors without artwork'**
   String get settingsFollowArtworkSubtitle;
 
   /// No description provided for @settingsAppFont.

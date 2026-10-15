@@ -33,7 +33,7 @@
   "settingsPureBlackSubtitle": "深色模式下表面纯黑（OLED 省电；可与取色叠加）",
   "settingsSeedColor": "自定义颜色",
   "settingsFollowArtwork": "播放时跟随封面",
-  "settingsFollowArtworkSubtitle": "播放有封面歌曲时用封面取色，无封面回退基础配色",
+  "settingsFollowArtworkSubtitle": "按当前曲目封面取色，无封面回退基础配色",
   "settingsAppFont": "应用字体",
   "fontSystemDefault": "系统默认",
   "fontPickerSearchHint": "搜索字体",

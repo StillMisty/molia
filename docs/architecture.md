@@ -461,8 +461,9 @@
 - 壳：`M3EMaterialApp(data: M3EThemeData.fromMaterial(themedData), theme: themedData, ...)`；
   `ThemeProvider` 是唯一主题源（`autoTheming/dynamicColoring` 关闭）。
 - 取色模型（唯一优先级，见 ADR-0001）：**基础配色**（壁纸 / 自定义，单选）+
-  **封面覆盖**（播放有封面的曲目时用封面 seed 覆盖基础配色，包括盖过莫奈；
-  无封面回退）+ **纯黑**（深色下覆盖 surface 系列，与来源正交可叠加）。
+  **封面覆盖**（当前曲目已有封面取色结果时用封面 seed 覆盖基础配色，包括
+  盖过莫奈；启动恢复态在首帧前用本地缓存预解析；无封面回退）+
+  **纯黑**（深色下覆盖 surface 系列，与来源正交可叠加）。
   解析：`封面 > 壁纸（可用时）> 自定义` → `applyPureBlackScheme`。
 - 主题出口：`lib/theme/app_theme.dart::buildAppThemeData(ColorScheme)` 是唯一 ThemeData 构建处，
   并注册语义色扩展 `AppSemanticColors`（success/warning，固定色调、随亮度派生）；

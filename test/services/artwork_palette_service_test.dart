@@ -1,4 +1,6 @@
 import 'dart:async';
+import 'dart:io';
+import 'dart:typed_data';
 import 'dart:ui' as ui;
 
 import 'package:flutter/foundation.dart' show SynchronousFuture;
@@ -36,6 +38,16 @@ class _SolidColorImageProvider extends ImageProvider<_SolidColorImageProvider> {
     );
     return recorder.endRecording().toImage(4, 4);
   }
+}
+
+/// 生成 8x8 纯色 PNG 字节：驱动「本地缓存字节」启动预解析路径。
+Future<Uint8List> _pngBytes(Color color) async {
+  final recorder = ui.PictureRecorder();
+  final canvas = Canvas(recorder);
+  canvas.drawRect(const Rect.fromLTWH(0, 0, 8, 8), Paint()..color = color);
+  final image = await recorder.endRecording().toImage(8, 8);
+  final data = await image.toByteData(format: ui.ImageByteFormat.png);
+  return data!.buffer.asUint8List();
 }
 
 void main() {
@@ -107,6 +119,77 @@ void main() {
       await tester.runAsync(() => service.load('b'));
       await tester.runAsync(() => service.load('c'));
       expect(service.cacheSize, 2);
+    });
+
+    testWidgets('启动预解析：命中本地缓存出方案，写入 LRU 后稳态 load 不再取图', (tester) async {
+      final bytes =
+          (await tester.runAsync(() => _pngBytes(const Color(0xFF00BB00))))!;
+      var providerCalls = 0;
+      var bytesCalls = 0;
+      final service = ArtworkPaletteService(
+        providerFor: (url) async {
+          providerCalls++;
+          return _SolidColorImageProvider(const Color(0xFFBB0000));
+        },
+        cachedBytesFor: (url) async {
+          bytesCalls++;
+          return bytes;
+        },
+      );
+
+      final palette = await tester
+          .runAsync(() => service.loadCached('https://example.com/a.jpg'));
+      expect(palette, isNotNull);
+      expect(palette!.light, buildColorScheme(palette.seed, Brightness.light));
+      expect(bytesCalls, 1);
+      expect(providerCalls, 0, reason: '本地命中不应走取图（网络）路径');
+
+      // LRU 已写入：同 URL 的稳态取色直接命中，不重复取图 / 读缓存字节。
+      final loaded = await tester
+          .runAsync(() => service.load('https://example.com/a.jpg'));
+      expect(identical(loaded, palette), isTrue);
+      expect(providerCalls, 0);
+      expect(bytesCalls, 1);
+    });
+
+    testWidgets('启动预解析：本地未命中返回 null，不发起取图', (tester) async {
+      var providerCalls = 0;
+      final service = ArtworkPaletteService(
+        providerFor: (url) async {
+          providerCalls++;
+          return _SolidColorImageProvider(const Color(0xFFBB0000));
+        },
+        cachedBytesFor: (url) async => null,
+      );
+
+      final palette = await tester
+          .runAsync(() => service.loadCached('https://example.com/miss.jpg'));
+      expect(palette, isNull);
+      expect(providerCalls, 0, reason: '启动预解析不能触网');
+      expect(service.cacheSize, 0);
+    });
+
+    testWidgets('启动预解析：file:// 封面走本地文件，不读网络缓存', (tester) async {
+      final dir = (await tester.runAsync(
+          () => Directory.systemTemp.createTemp('molia_palette_test')))!;
+      addTearDown(() => dir.deleteSync(recursive: true));
+      final file = File('${dir.path}/cover.png');
+      await tester.runAsync(() async {
+        await file.writeAsBytes(await _pngBytes(const Color(0xFF00BB00)));
+      });
+
+      var bytesCalls = 0;
+      final service = ArtworkPaletteService(
+        cachedBytesFor: (url) async {
+          bytesCalls++;
+          return null;
+        },
+      );
+
+      final palette =
+          await tester.runAsync(() => service.loadCached(file.uri.toString()));
+      expect(palette, isNotNull);
+      expect(bytesCalls, 0, reason: 'file:// 本身就是本地文件');
     });
   });
 

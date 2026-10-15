@@ -119,7 +119,12 @@ class ThemeProvider extends ChangeNotifier {
   ///
   /// `themeMode` 非 system 时用强制亮度覆盖平台亮度。
   void updateThemeFromSystem(BuildContext context) {
-    final platformBrightness = MediaQuery.platformBrightnessOf(context);
+    applyPlatformBrightness(MediaQuery.platformBrightnessOf(context));
+  }
+
+  /// 平台亮度入口（无 context）：`runApp` 前的首帧亮度与 AppShell 的回填
+  /// 共用同一条解析路径，系统深色模式下首帧即深色方案。
+  void applyPlatformBrightness(Brightness platformBrightness) {
     _applyColorScheme(
       _schemeForBrightness(_effectiveBrightness(platformBrightness)),
     );

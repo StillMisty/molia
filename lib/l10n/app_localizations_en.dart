@@ -117,7 +117,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get settingsFollowArtworkSubtitle =>
-      'Use album art colors while playing; falls back to base colors';
+      'Follow the current track\'s album art; falls back to base colors without artwork';
 
   @override
   String get settingsAppFont => 'App font';
