@@ -359,6 +359,9 @@
       }
     }
   },
+  "searchKindSongs": "Songs",
+  "searchKindArtists": "Artists",
+  "searchKindLyrics": "Lyrics",
   "searchLoadMore": "Load more",
   "searchLoadMoreWithTotal": "Load more ({total} tracks)",
   "@searchLoadMoreWithTotal": {
@@ -522,6 +525,16 @@
   },
   "albumEmpty": "No tracks in this album",
   "albumLoadFailed": "Failed to load album",
+  "artistEmpty": "No tracks for this artist",
+  "artistLoadFailed": "Failed to load artist",
+  "artistSongCount": "{count} songs",
+  "@artistSongCount": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
   "albumYear": "{year}",
   "@albumYear": {
     "placeholders": {
@@ -1226,6 +1239,7 @@
   "trackInfoChannel": "Channel",
   "trackInfoChannelUnknown": "Unknown channel",
   "trackInfoAlbum": "Album",
+  "trackInfoArtist": "Artist",
   "trackInfoDuration": "Duration",
   "trackInfoTrackId": "Track ID",
   "trackInfoIdCopied": "Track ID copied",
@@ -1255,6 +1269,7 @@
   "trackInfoLyricsSource": "Lyrics source",
   "trackInfoLyricsSourceNone": "No lyrics yet",
   "trackInfoAlbumOpen": "View album",
+  "trackInfoArtistOpen": "View artist",
   "trackInfoSourceUnknownId": "Unknown track ID",
   "sharePlatformPage": "Share platform page",
   "openPlatformPage": "Open platform page",

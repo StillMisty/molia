@@ -1,3 +1,4 @@
+import '../raw_track.dart';
 import '../source_search_result.dart';
 import '../source_track.dart';
 import 'builtin_search.dart';
@@ -79,12 +80,37 @@ class KwSearch {
       songId: songId,
       name: decodeName(rawItem['SONGNAME']?.toString()),
       artist: decodeName(rawItem['ARTIST']?.toString()).replaceAll('&', '、'),
+      artists: artistRefsOf(rawItem),
       album: decodeName(rawItem['ALBUM']?.toString()),
       albumId: decodeName(rawItem['ALBUMID']?.toString()),
       intervalSeconds: interval,
       types: parseNMinfo(nMinfo),
       img: null,
     );
+  }
+
+  /// 搜索条目的歌手引用：`ARTIST` 以 `&` 分隔，`allartistid` 与之同序
+  /// （缺失时 `ARTISTID` 兜底对应首位；酷我部分入口不返回 id）。
+  static List<SourceArtistRef> artistRefsOf(dynamic rawItem) {
+    if (rawItem is! Map) return const [];
+    final names = <String>[
+      for (final name in (rawItem['ARTIST']?.toString() ?? '').split('&'))
+        if (decodeName(name).isNotEmpty) decodeName(name),
+    ];
+    if (names.isEmpty) return const [];
+    final ids = <String>[
+      for (final id in (rawItem['allartistid'] ?? rawItem['ARTISTID'] ?? '')
+          .toString()
+          .split('&'))
+        if (id.trim().isNotEmpty) id.trim(),
+    ];
+    return [
+      for (var index = 0; index < names.length; index++)
+        SourceArtistRef(
+          name: names[index],
+          id: index < ids.length ? ids[index] : null,
+        ),
+    ];
   }
 
   /// 解析 `N_MINFO` 音质段（搜索 / 榜单 / 歌单详情共用）。
@@ -124,10 +150,13 @@ class KwSearch {
     required int intervalSeconds,
     required Map<String, Map<String, dynamic>> types,
     String? img,
+    List<SourceArtistRef>? artists,
   }) {
     final raw = <String, dynamic>{
       'name': name,
       'singer': artist,
+      if (artists != null && artists.isNotEmpty)
+        kRawArtistsField: [for (final item in artists) item.toJson()],
       'source': 'kw',
       'songmid': songId,
       'albumId': albumId,

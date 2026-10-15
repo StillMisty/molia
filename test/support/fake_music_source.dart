@@ -1,3 +1,4 @@
+import 'package:molia/domain/models/artist.dart';
 import 'package:molia/domain/models/catalog.dart';
 import 'package:molia/domain/models/comment.dart';
 import 'package:molia/domain/models/failure.dart';
@@ -29,6 +30,15 @@ class FakeMusicSource implements MusicSource {
   SearchQuery? lastQuery;
   Future<SearchResult<Track>> Function(SearchQuery query)? onSearch;
 
+  /// 歌手搜索回调；未设置时抛 unsupported（与真实适配器行为一致）。
+  Future<SearchResult<ArtistSummary>> Function(SearchQuery query)?
+      onSearchArtists;
+  int artistSearchCalls = 0;
+
+  /// 歌词搜索回调；未设置时抛 unsupported（与真实适配器行为一致）。
+  Future<SearchResult<LyricHit>> Function(SearchQuery query)? onSearchLyrics;
+  int lyricSearchCalls = 0;
+
   /// 评论取数回调（按 kind + page 返回）；未设置时抛 unsupported，
   /// 与真实适配器「无能力即 unsupported」的行为一致。
   Future<CommentPage> Function(CommentKind kind, int page, int limit)?
@@ -53,6 +63,40 @@ class FakeMusicSource implements MusicSource {
 
   @override
   Future<void> dispose() async {}
+
+  @override
+  Future<SearchResult<LyricHit>> searchLyrics(
+    SearchQuery query, {
+    CancelToken? cancel,
+  }) {
+    lyricSearchCalls++;
+    lastQuery = query;
+    final handler = onSearchLyrics;
+    if (handler == null) {
+      return Future.error(const SourceFailure(
+        kind: FailureKind.unsupported,
+        message: '不支持歌词搜索',
+      ));
+    }
+    return handler(query);
+  }
+
+  @override
+  Future<SearchResult<ArtistSummary>> searchArtists(
+    SearchQuery query, {
+    CancelToken? cancel,
+  }) {
+    artistSearchCalls++;
+    lastQuery = query;
+    final handler = onSearchArtists;
+    if (handler == null) {
+      return Future.error(const SourceFailure(
+        kind: FailureKind.unsupported,
+        message: '不支持歌手搜索',
+      ));
+    }
+    return handler(query);
+  }
 
   @override
   Future<SearchResult<Track>> search(

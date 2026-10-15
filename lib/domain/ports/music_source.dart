@@ -1,3 +1,4 @@
+import '../models/artist.dart';
 import '../models/catalog.dart';
 import '../models/comment.dart';
 import '../models/source.dart';
@@ -71,6 +72,22 @@ abstract interface class MusicSource {
 
   /// 不支持 search 时抛 `SourceFailure(kind: unsupported)`。
   Future<SearchResult<Track>> search(SearchQuery query, {CancelToken? cancel});
+
+  /// 歌手搜索（搜索页「歌手」分段）；仅 `capabilities.artist` 为 true 时调用。
+  ///
+  /// 无能力的音源抛 `SourceFailure(kind: unsupported)`
+  /// （与 [collection] / [comments] 同一约定）。
+  Future<SearchResult<ArtistSummary>> searchArtists(
+    SearchQuery query, {
+    CancelToken? cancel,
+  });
+
+  /// 按歌词搜歌（搜索页「歌词」分段）；仅 `capabilities.lyricSearch` 为 true
+  /// 时调用。无能力的音源抛 `SourceFailure(kind: unsupported)`。
+  Future<SearchResult<LyricHit>> searchLyrics(
+    SearchQuery query, {
+    CancelToken? cancel,
+  });
 
   /// 取本地可播流；仅 `capabilities.resolveUrl` 为 true 时调用。
   Future<PlayableStream> resolve(Track track, {AudioQuality? preferredQuality});

@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:typed_data';
 
+import '../../domain/models/failure.dart';
 import '../source_search_result.dart';
 import '../source_track.dart';
 import 'builtin_transport.dart';
@@ -127,6 +128,17 @@ Future<dynamic> lxHttpPost(
     retryIf: retryIf,
   );
 }
+
+/// 平台业务拒绝 / 缺少字段的统一失败（可重试：多为平台抖动或字段缺失）。
+///
+/// 专辑 / 歌手 / 歌词等内置平台接口共用同一口径；各模块的旧助手
+/// （`albumPlatformFailure` / `artistPlatformFailure`）保留名字并委托到这里。
+SourceFailure builtinPlatformFailure(String platform, String reason) =>
+    SourceFailure(
+      kind: FailureKind.unknown,
+      message: '$platform: $reason',
+      retryable: true,
+    );
 
 /// 从 `_types` 风格的数据构建音质列表。
 List<SourceQuality> buildQualities(Map<String, Map<String, dynamic>> types) {

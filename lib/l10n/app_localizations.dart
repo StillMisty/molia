@@ -1520,6 +1520,24 @@ abstract class AppLocalizations {
   /// **'No results found in “{source}”'**
   String searchNoResultsInSource(String source);
 
+  /// No description provided for @searchKindSongs.
+  ///
+  /// In en, this message translates to:
+  /// **'Songs'**
+  String get searchKindSongs;
+
+  /// No description provided for @searchKindArtists.
+  ///
+  /// In en, this message translates to:
+  /// **'Artists'**
+  String get searchKindArtists;
+
+  /// No description provided for @searchKindLyrics.
+  ///
+  /// In en, this message translates to:
+  /// **'Lyrics'**
+  String get searchKindLyrics;
+
   /// No description provided for @searchLoadMore.
   ///
   /// In en, this message translates to:
@@ -2119,6 +2137,24 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Failed to load album'**
   String get albumLoadFailed;
+
+  /// No description provided for @artistEmpty.
+  ///
+  /// In en, this message translates to:
+  /// **'No tracks for this artist'**
+  String get artistEmpty;
+
+  /// No description provided for @artistLoadFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Failed to load artist'**
+  String get artistLoadFailed;
+
+  /// No description provided for @artistSongCount.
+  ///
+  /// In en, this message translates to:
+  /// **'{count} songs'**
+  String artistSongCount(int count);
 
   /// No description provided for @albumYear.
   ///
@@ -4293,6 +4329,12 @@ abstract class AppLocalizations {
   /// **'Album'**
   String get trackInfoAlbum;
 
+  /// No description provided for @trackInfoArtist.
+  ///
+  /// In en, this message translates to:
+  /// **'Artist'**
+  String get trackInfoArtist;
+
   /// No description provided for @trackInfoDuration.
   ///
   /// In en, this message translates to:
@@ -4382,6 +4424,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'View album'**
   String get trackInfoAlbumOpen;
+
+  /// No description provided for @trackInfoArtistOpen.
+  ///
+  /// In en, this message translates to:
+  /// **'View artist'**
+  String get trackInfoArtistOpen;
 
   /// No description provided for @trackInfoSourceUnknownId.
   ///

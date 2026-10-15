@@ -125,6 +125,7 @@ class WySearch {
       songId: item['id']?.toString() ?? '',
       name: item['name']?.toString() ?? '',
       singer: singer,
+      artists: WyMusicDetail.artistRefsOf(item['ar']),
       albumName: albumName,
       albumId: albumId,
       img: cover,

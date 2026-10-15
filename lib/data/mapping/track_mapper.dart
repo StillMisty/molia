@@ -8,11 +8,21 @@ import '../../sources/source_track.dart';
 /// 取链/歌词/封面请求依赖平台字段（songmid/hash/copyrightId...）。
 
 /// `SourceTrack` → 领域 `Track`。
+///
+/// 歌手优先取 raw 的项目内部字段 [kRawArtistsField]（内置平台解析时增补，
+/// 名字 + 平台内 id，供歌手页跳转）；缺省（脚本源 / 旧数据）回退整串
+/// `SourceTrack.artist`（无 id，UI 不展示歌手入口）。
 Track trackFromSourceTrack(SourceTrack source) {
+  final sourceArtists = artistsFromRaw(source.raw);
   return Track(
     id: TrackId(source.sourceKey, _rawId(source)),
     title: source.title,
-    artists: [Artist(name: source.artist)],
+    artists: sourceArtists.isEmpty
+        ? [Artist(name: source.artist)]
+        : [
+            for (final artist in sourceArtists)
+              Artist(name: artist.name, id: artist.id),
+          ],
     album: source.album,
     duration: source.duration,
     artwork: _artworkFrom(source.coverUrl),

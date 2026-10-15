@@ -760,6 +760,15 @@ class AppLocalizationsZh extends AppLocalizations {
   }
 
   @override
+  String get searchKindSongs => '单曲';
+
+  @override
+  String get searchKindArtists => '歌手';
+
+  @override
+  String get searchKindLyrics => '歌词';
+
+  @override
   String get searchLoadMore => '加载更多';
 
   @override
@@ -1076,6 +1085,17 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get albumLoadFailed => '专辑加载失败';
+
+  @override
+  String get artistEmpty => '该歌手暂无歌曲';
+
+  @override
+  String get artistLoadFailed => '歌手加载失败';
+
+  @override
+  String artistSongCount(int count) {
+    return '$count 首歌曲';
+  }
 
   @override
   String albumYear(int year) {
@@ -2254,6 +2274,9 @@ class AppLocalizationsZh extends AppLocalizations {
   String get trackInfoAlbum => '专辑';
 
   @override
+  String get trackInfoArtist => '歌手';
+
+  @override
   String get trackInfoDuration => '时长';
 
   @override
@@ -2301,6 +2324,9 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get trackInfoAlbumOpen => '查看专辑';
+
+  @override
+  String get trackInfoArtistOpen => '查看歌手';
 
   @override
   String get trackInfoSourceUnknownId => '未知曲目 ID';

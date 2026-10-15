@@ -226,6 +226,49 @@ void main() {
     });
   });
 
+  group('SourceManagerMusicSource · 歌手 / 歌词', () {
+    test('searchArtists / searchLyrics：非内置源无能力 → unsupported', () async {
+      final manager = SourceManager();
+      addTearDown(manager.dispose);
+      final source = SourceManagerMusicSource('lx_custom', manager);
+      expect(source.capabilities.artist, isFalse);
+      expect(source.capabilities.lyricSearch, isFalse);
+
+      await expectLater(
+        source.searchArtists(const SearchQuery(keyword: 'x')),
+        throwsA(isA<SourceFailure>()
+            .having((f) => f.kind, 'kind', FailureKind.unsupported)),
+      );
+      await expectLater(
+        source.searchLyrics(const SearchQuery(keyword: 'x')),
+        throwsA(isA<SourceFailure>()
+            .having((f) => f.kind, 'kind', FailureKind.unsupported)),
+      );
+    });
+
+    test('searchArtists / searchLyrics：内置平台未配脚本时能力位与搜索同门', () async {
+      final manager = SourceManager();
+      addTearDown(manager.dispose);
+      final source = SourceManagerMusicSource('kw', manager);
+      // 与 search 同一门（`_isBuiltinSearchable`：脚本可取链才宣称可用），
+      // 避免 UI 显示一个必然失败的入口。
+      expect(source.capabilities.search, isFalse);
+      expect(source.capabilities.artist, isFalse);
+      expect(source.capabilities.lyricSearch, isFalse);
+
+      await expectLater(
+        source.searchArtists(const SearchQuery(keyword: '周杰伦')),
+        throwsA(isA<SourceFailure>()
+            .having((f) => f.kind, 'kind', FailureKind.unsupported)),
+      );
+      await expectLater(
+        source.searchLyrics(const SearchQuery(keyword: '雨下整夜')),
+        throwsA(isA<SourceFailure>()
+            .having((f) => f.kind, 'kind', FailureKind.unsupported)),
+      );
+    });
+  });
+
   group('SourceManagerMusicSource · search/resolve/lyrics/artwork', () {
     test('search：SourceTrack → Track 映射，hasMore/total 原样透传', () async {
       final manager = await configuredManager();

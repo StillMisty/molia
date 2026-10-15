@@ -1,8 +1,10 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:molia/data/catalog/album_service.dart';
+import 'package:molia/data/catalog/artist_service.dart';
 import 'package:molia/data/catalog/catalog_service.dart';
 import 'package:molia/data/downloads/downloads_repository.dart';
 import 'package:molia/domain/models/album.dart';
+import 'package:molia/domain/models/artist.dart';
 import 'package:molia/domain/models/download.dart';
 import 'package:molia/domain/models/playback.dart';
 import 'package:molia/domain/models/source.dart';
@@ -11,6 +13,7 @@ import 'package:molia/domain/ports/source_registry.dart';
 import 'package:molia/l10n/app_localizations.dart';
 import 'package:molia/managers/artwork_cache.dart';
 import 'package:molia/pages/album_page.dart';
+import 'package:molia/pages/artist_page.dart';
 import 'package:molia/pages/track_cache_page.dart';
 import 'package:molia/providers/lyrics_provider.dart';
 import 'package:molia/providers/playback_provider.dart';
@@ -111,10 +114,10 @@ class _FakeDownloadService extends DownloadService {
   }
 }
 
-Track _track({String? albumId}) => Track(
+Track _track({String? albumId, String? artistId}) => Track(
       id: const TrackId('kw', 'a'),
       title: 'Title a',
-      artists: const [Artist(name: 'Artist a')],
+      artists: [Artist(name: 'Artist a', id: artistId)],
       album: 'Album a',
       duration: const Duration(seconds: 245),
       origin: TrackOrigin.lx,
@@ -149,6 +152,7 @@ void main() {
     DownloadService? downloads,
     SourceRegistry? registry,
     AlbumService? albumService,
+    ArtistService? artistService,
   }) async {
     backend.emit(BackendSnapshot(
       current: track,
@@ -168,6 +172,8 @@ void main() {
           if (registry != null) Provider<SourceRegistry>.value(value: registry),
           if (albumService != null)
             Provider<AlbumService>.value(value: albumService),
+          if (artistService != null)
+            Provider<ArtistService>.value(value: artistService),
         ],
         child: MaterialApp(
           locale: const Locale('zh'),
@@ -269,9 +275,74 @@ void main() {
     expect(find.text('Album a'), findsOneWidget);
   });
 
+  testWidgets('歌手行：曲目带歌手 id 且渠道支持时改为可点，进入歌手页', (tester) async {
+    final registry = FakeSourceRegistry({
+      'kw': FakeMusicSource(
+        'kw',
+        capabilities: const SourceCapabilities(search: true, artist: true),
+      ),
+    });
+    final artistService = ArtistService(
+      fetch: (sourceKey, artistId, {required page, required limit}) async =>
+          const ArtistDetail(
+        id: '9527',
+        name: 'Artist a',
+        tracks: [
+          Track(id: TrackId('kw', 'a'), title: 'Title a', origin: TrackOrigin.lx),
+        ],
+      ),
+    );
+    await pumpView(
+      tester,
+      track: _track(artistId: '9527'),
+      registry: registry,
+      artistService: artistService,
+    );
+
+    expect(find.byKey(const Key('trackInfoArtistItem')), findsOneWidget);
+    expect(find.text('Artist a · 查看歌手'), findsOneWidget);
+
+    await tester.tap(find.byKey(const Key('trackInfoArtistItem')));
+    await tester.pumpAndSettle();
+    expect(find.byType(ArtistPage), findsOneWidget);
+    expect(find.text('Artist a'), findsWidgets);
+  });
+
+  testWidgets('歌手行：渠道不支持歌手能力时保持只读信息行', (tester) async {
+    final registry = FakeSourceRegistry({
+      'kw': FakeMusicSource(
+        'kw',
+        capabilities: const SourceCapabilities(search: true),
+      ),
+    });
+    await pumpView(
+      tester,
+      track: _track(artistId: '9527'),
+      registry: registry,
+    );
+
+    expect(find.byKey(const Key('trackInfoArtistItem')), findsNothing);
+    expect(find.text('Artist a'), findsOneWidget);
+  });
+
+  testWidgets('歌手行：曲目无歌手 id 时保持只读信息行', (tester) async {
+    final registry = FakeSourceRegistry({
+      'kw': FakeMusicSource(
+        'kw',
+        capabilities: const SourceCapabilities(search: true, artist: true),
+      ),
+    });
+    await pumpView(tester, track: _track(), registry: registry);
+
+    expect(find.byKey(const Key('trackInfoArtistItem')), findsNothing);
+    expect(find.text('Artist a'), findsOneWidget);
+  });
+
   testWidgets('来源行：打开分享弹层，复制曲目 ID', (tester) async {
     await pumpView(tester, track: _track());
 
+    await tester.ensureVisible(find.byKey(const Key('trackInfoSourceItem')));
+    await tester.pump();
     await tester.tap(find.byKey(const Key('trackInfoSourceItem')));
     await tester.pumpAndSettle();
     expect(find.text('曲目 ID'), findsOneWidget);

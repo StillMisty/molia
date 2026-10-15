@@ -14,7 +14,15 @@
 - **搜索**：结果页顶部可选择音源——
   - 内置平台（与 LX 一致，Dart 移植）：酷我 `kw`、酷狗 `kg`、QQ 音乐 `tx`、网易云 `wy`、咪咕 `mg`；
   - 脚本扩展搜索：声明了 `search` / `musicSearch` 的第三方音源；
-  - 搜索经 `CatalogService`（single-flight + LRU，5min TTL），分页由 `hasMore/total` 驱动。
+  - 搜索经 `CatalogService`（single-flight + LRU，5min TTL），分页由 `hasMore/total` 驱动；
+  - **结果类型分段**（内置平台按能力位显示）：**单曲 / 歌手 / 歌词**
+    （歌手条目进歌手页；歌词为按歌词搜歌，行副标题显示命中片段）；
+    脚本源只有单曲（无稳定的平台歌手 id 与歌词检索约定）。
+- **歌手页**（歌曲信息页「歌手」行 / 搜索结果行内歌手名 / 歌手条目进入）：
+  头像 / 简介 + 歌手歌曲分页 + 播放全部 / 加入列表，取数走 `ArtistService`
+  （10min 缓存）；
+  - 歌手 id 来自曲目 payload 的 `_artists`（内置平台解析时注入），与平台歌手接口同体系；
+  - 平台降级：kg 歌手搜索单页、tx 歌手歌曲单页约 60 首、mg 无歌手简介。
 - **发现**（资料页，底部「资料」）：
   - 顶部「搜索 / 热榜 / 歌单」三个可左右滑动的 tab；
   - 热榜与歌单页内可切换平台：网易云 `wy` / QQ `tx` / 酷狗 `kg` / 酷我 `kw` / 咪咕 `mg`，
@@ -47,7 +55,7 @@
 lib/sources/
   source_track.dart          # 统一曲目模型（raw 原样回传脚本）
   source_manager.dart        # 音源注册与调度（搜索 / 取链 / 歌词 / 封面 / 排序 / 激活）
-  builtin/                   # 内置平台搜索（kw/kg/tx/wy/mg）、原生取词/取图与加密工具
+  builtin/                   # 内置平台搜索 / 歌手 / 歌词检索（kw/kg/tx/wy/mg）、原生取词/取图与加密工具
     kg_lyric.dart kg_pic.dart    # 酷狗 KRC 取词 / get_res_privilege 取图
     kw_lyric.dart kw_pic.dart    # 酷我 LRCX 取词（H5 兜底）/ pic.web 取图
     mg_lyric.dart                # 咪咕 MRC（TEA）取词 / 资源封面
@@ -117,6 +125,10 @@ lib/playback/
 - `node tool/gen_search_fixtures.mjs`：重新抓取各平台真实响应，更新 `test/fixtures/*.json`。
 - `node tool/gen_album_fixtures.mjs`：重新抓取各平台真实专辑响应，更新
   `test/fixtures/albums/*.json`（曲目列表截断到 3 条控制体积）。
+- `node tool/gen_artist_fixtures.mjs`：重新抓取五平台歌手搜索 / 详情 / 歌曲响应，
+  更新 `test/fixtures/artists/*`（kw 的 wbd 响应存密文，测试里跑解密）。
+- `node tool/gen_lyric_search_fixtures.mjs`：重新抓取五平台歌词搜索响应，更新
+  `test/fixtures/lyric_search/*`（列表截断到 3 条；wy 另抓歌曲详情用于补规范 raw）。
 - 构建环境（WSL/Arch 参考）：
   - Linux 桌面：`sudo pacman -S --needed base-devel ninja cmake clang pkgconf gtk3 mesa-utils`
     - 本地播放依赖 libmpv：`sudo pacman -S --needed mpv`（media_kit 后端需要）
@@ -149,5 +161,8 @@ lib/playback/
 - any-listen 真实协议（WS IPC）尚未接入，当前为 HTTP 占位端点；
 - 脚本扩展搜索的返回格式为社区约定，字段兼容性尽力而为；
 - 部分平台直链需要 Referer/UA 头，当前由脚本自行处理；
+- 歌手 / 歌词检索为内置平台的非官方接口：tx 歌手歌曲无分页（约 60 首）、
+  kg 歌手搜索无总数、mg 歌手无简介、kw 歌词搜索为模糊匹配、mg 歌词排序偏翻唱
+  （按平台排序原样展示）；
 - Web 端不支持音源脚本（无本地 JS 引擎），界面已做降级；
 - iOS/Android 后台播放与通知/耳机键需真机验证。

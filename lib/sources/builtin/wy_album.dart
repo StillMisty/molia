@@ -107,6 +107,7 @@ class WyAlbum {
       songId: raw['id'],
       name: raw['name']?.toString() ?? '',
       singer: _joinSingers(raw['ar']),
+      artists: WyMusicDetail.artistRefsOf(raw['ar']),
       albumName: songAlbumName,
       albumId: songAlbumId,
       img: songCover,

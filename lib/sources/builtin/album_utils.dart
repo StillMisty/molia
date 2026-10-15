@@ -8,14 +8,11 @@
 library;
 
 import '../../domain/models/failure.dart';
+import 'builtin_search.dart';
 
 /// 平台业务拒绝 / 缺少字段的统一失败（可重试：多为平台抖动或字段缺失）。
 SourceFailure albumPlatformFailure(String platform, String reason) =>
-    SourceFailure(
-      kind: FailureKind.unknown,
-      message: '$platform: $reason',
-      retryable: true,
-    );
+    builtinPlatformFailure(platform, reason);
 
 /// 是否还有下一页：平台返回总数时按页码算；无总数（或总数为 0）视为结束。
 bool albumHasMore({required int page, required int limit, int? total}) =>

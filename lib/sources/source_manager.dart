@@ -11,6 +11,7 @@ import 'any_listen/any_listen_config.dart';
 import 'any_listen/any_listen_errors.dart';
 import 'any_listen/any_listen_source.dart';
 import 'builtin/album_source.dart';
+import 'builtin/artist_source.dart';
 import 'builtin/builtin_search.dart';
 import 'builtin/comment_source.dart';
 import 'builtin/discover_source.dart';
@@ -19,6 +20,8 @@ import 'builtin/kg_pic.dart';
 import 'builtin/kw_lyric.dart';
 import 'builtin/kw_pic.dart';
 import 'builtin/lyric_result.dart';
+import 'builtin/lyric_hit.dart';
+import 'builtin/lyric_search.dart';
 import 'builtin/mg_lyric.dart';
 import 'builtin/tx_lyric.dart';
 import 'builtin/wy_lyric.dart';
@@ -33,6 +36,7 @@ import 'source_search_result.dart';
 import 'source_track.dart';
 import '../data/cache/request_cache.dart';
 import '../domain/models/album.dart';
+import '../domain/models/artist.dart';
 import '../domain/models/comment.dart';
 import '../domain/models/failure.dart';
 import '../domain/models/source.dart';
@@ -269,6 +273,12 @@ class SourceManager extends ChangeNotifier {
       comment: BuiltinComments.isSupported(key),
       // 专辑详情同样只由内置实现提供（LX 脚本 / any-listen 无稳定专辑 id）。
       collection: BuiltinAlbums.isSupported(key),
+      // 歌手（搜索 + 详情/歌曲）与按歌词搜歌：只由内置实现提供，且与搜索
+      // 路由同门（[_isBuiltinSearchable]：脚本可取链才宣称可用——能力位与
+      // `searchArtists` / `searchLyrics` 的路由门必须一致，不允许 UI 显示
+      // 一个必然失败的入口）。
+      artist: BuiltinArtists.isSupported(key) && builtinSearchable,
+      lyricSearch: BuiltinLyricSearch.isSupported(key) && builtinSearchable,
     );
   }
 
@@ -678,6 +688,93 @@ class SourceManager extends ChangeNotifier {
       return await BuiltinAlbums.fetch(
         sourceKey,
         albumId,
+        page: page,
+        limit: limit,
+      );
+    } catch (e) {
+      throw SourceFailure.from(e);
+    }
+  }
+
+  /// 获取歌手详情 + 一页歌手歌曲（内置五平台；脚本扩展源 / any-listen 无歌手能力）。
+  ///
+  /// [artistId] 为平台内歌手 id（与曲目 payload 的歌手引用同体系；取自
+  /// `_artists` 字段）。失败统一归一化为 [SourceFailure]；分页与缓存由
+  /// data 层 `ArtistService` 承担。
+  Future<ArtistDetail> fetchArtist(
+    String sourceKey,
+    String artistId, {
+    int page = 1,
+    int limit = kArtistPageSize,
+  }) async {
+    if (!BuiltinArtists.isSupported(sourceKey)) {
+      throw SourceFailure(
+        kind: FailureKind.unsupported,
+        message: '音源 $sourceKey 不支持歌手',
+      );
+    }
+    try {
+      return await BuiltinArtists.fetch(
+        sourceKey,
+        artistId,
+        page: page,
+        limit: limit,
+      );
+    } catch (e) {
+      throw SourceFailure.from(e);
+    }
+  }
+
+  /// 歌手搜索（内置五平台；搜索页「歌手」类型）。
+  ///
+  /// 可搜索性与单曲搜索同门（[_isBuiltinSearchable]：脚本可取链才有歌手
+  /// 搜索入口）；失败归一化为 [SourceFailure]，不静默吞成空结果。
+  Future<ArtistSearchPage> searchArtists(
+    String sourceKey,
+    String keyword, {
+    int page = 1,
+    int limit = 30,
+  }) async {
+    if (!BuiltinSearch.isBuiltin(sourceKey) ||
+        !_isBuiltinSearchable(sourceKey)) {
+      throw SourceFailure(
+        kind: FailureKind.unsupported,
+        message: '音源 $sourceKey 不支持歌手搜索',
+      );
+    }
+    try {
+      return await BuiltinArtists.search(
+        sourceKey,
+        keyword,
+        page: page,
+        limit: limit,
+      );
+    } catch (e) {
+      throw SourceFailure.from(e);
+    }
+  }
+
+  /// 按歌词搜歌（内置五平台；脚本扩展源 / any-listen 无此能力）。
+  ///
+  /// 失败归一化为 [SourceFailure]；分页与缓存由 data 层（CatalogService）
+  /// 承担。平台差异（kw 模糊匹配 / mg 排序偏翻唱）见各 `*_lyric_search.dart`。
+  Future<LyricSearchPage> searchLyrics(
+    String sourceKey,
+    String keyword, {
+    int page = 1,
+    int limit = 30,
+  }) async {
+    if (!BuiltinSearch.isBuiltin(sourceKey) ||
+        !_isBuiltinSearchable(sourceKey)) {
+      throw SourceFailure(
+        kind: FailureKind.unsupported,
+        message: '音源 $sourceKey 不支持歌词搜索',
+      );
+    }
+    try {
+      return await BuiltinLyricSearch.searchWithMeta(
+        sourceKey,
+        keyword,
         page: page,
         limit: limit,
       );

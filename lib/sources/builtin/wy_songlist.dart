@@ -324,6 +324,7 @@ class WySongList {
         songId: item['id'],
         name: name,
         singer: singer,
+        artists: WyMusicDetail.artistRefsOf(item['ar']),
         albumName: albumName,
         albumId: albumId,
         img: img,

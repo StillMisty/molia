@@ -7,6 +7,7 @@ import 'package:molia/sources/builtin/kw_search.dart';
 import 'package:molia/sources/builtin/mg_search.dart';
 import 'package:molia/sources/builtin/tx_search.dart';
 import 'package:molia/sources/builtin/wy_search.dart';
+import 'package:molia/sources/raw_track.dart';
 import 'package:molia/sources/source_track.dart';
 
 /// 使用真实平台响应的快照（test/fixtures/*.json）验证解析移植的正确性。
@@ -23,6 +24,13 @@ void _assertCommon(SourceTrack track, String sourceKey) {
   }
   final picked = track.pickQuality('flac');
   expect(picked, isNotEmpty);
+
+  // 歌手引用（项目内部字段 `_artists`）：内置平台搜索注入名字 + 平台歌手 id
+  // （歌手页入口据此闭环，见 raw_track.dart 约定）。
+  final artists = artistsFromRaw(track.raw);
+  expect(artists, isNotEmpty, reason: '内置平台搜索应注入 _artists');
+  expect(artists.first.name, isNotEmpty);
+  expect(artists.first.id, isNotNull, reason: '歌手 id 与曲目 payload 同体系');
 }
 
 void main() {

@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:molia/data/cache/request_cache.dart';
 import 'package:molia/data/catalog/catalog_service.dart';
+import 'package:molia/domain/models/artist.dart';
 import 'package:molia/domain/models/catalog.dart';
 import 'package:molia/domain/models/comment.dart';
 import 'package:molia/domain/models/failure.dart';
@@ -26,8 +27,12 @@ class _FakeMusicSource implements MusicSource {
   final String key;
 
   int searchCalls = 0;
+  int artistSearchCalls = 0;
+  int lyricSearchCalls = 0;
   int resolveCalls = 0;
   Object? searchError;
+  Object? artistSearchError;
+  Object? lyricSearchError;
   Object? resolveError;
 
   @override
@@ -58,6 +63,44 @@ class _FakeMusicSource implements MusicSource {
       items: [_track(key, '${query.keyword}-p${query.page}')],
       hasMore: true,
       total: 42,
+    );
+  }
+
+  @override
+  Future<SearchResult<ArtistSummary>> searchArtists(
+    SearchQuery query, {
+    CancelToken? cancel,
+  }) async {
+    artistSearchCalls++;
+    if (artistSearchError != null) throw artistSearchError!;
+    return SearchResult(
+      items: [
+        ArtistSummary(id: '${query.keyword}-a${query.page}', name: '歌手 A'),
+      ],
+      hasMore: true,
+      total: 1,
+    );
+  }
+
+  @override
+  Future<SearchResult<LyricHit>> searchLyrics(
+    SearchQuery query, {
+    CancelToken? cancel,
+  }) async {
+    lyricSearchCalls++;
+    if (lyricSearchError != null) throw lyricSearchError!;
+    return SearchResult(
+      items: [
+        LyricHit(
+          track: _track(
+            key,
+            '${query.keyword}-l${query.page}',
+          ),
+          snippet: '命中歌词 ${query.keyword}',
+        ),
+      ],
+      hasMore: true,
+      total: 1,
     );
   }
 
@@ -393,6 +436,83 @@ void main() {
     final result = await service.search('kw', query);
     expect(result.items, isNotEmpty);
     expect(source.searchCalls, 2, reason: '失败不缓存，第二次重新搜索');
+  });
+
+  test('searchArtists：同 key 命中缓存；关键词 / 页各自独立；失败不缓存', () async {
+    final source = _FakeMusicSource('kw');
+    final registry = _FakeRegistry({'kw': source});
+    addTearDown(registry.dispose);
+    final service = CatalogService(registry: registry);
+    const query = SearchQuery(keyword: '周杰伦');
+
+    final first = await service.searchArtists('kw', query);
+    expect(first.items.single.name, '歌手 A');
+    await service.searchArtists('kw', query);
+    expect(source.artistSearchCalls, 1, reason: '同 key 命中缓存');
+
+    await service.searchArtists('kw', const SearchQuery(keyword: '周杰伦', page: 2));
+    await service.searchArtists('kw', const SearchQuery(keyword: '温岚'));
+    expect(source.artistSearchCalls, 3);
+
+    source.artistSearchError = StateError('boom');
+    await expectLater(
+      service.searchArtists('kw', const SearchQuery(keyword: '失败')),
+      throwsA(isA<SourceFailure>()),
+    );
+    source.artistSearchError = null;
+    await service.searchArtists('kw', const SearchQuery(keyword: '失败'));
+    expect(source.artistSearchCalls, 5, reason: '失败不缓存，重试重新搜索');
+  });
+
+  test('searchArtists：未知音源抛 StateError；缓存 key 带 artist 段', () async {
+    final registry = _FakeRegistry({});
+    addTearDown(registry.dispose);
+    final service = CatalogService(registry: registry);
+
+    await expectLater(
+      service.searchArtists('nope', const SearchQuery(keyword: 'x')),
+      throwsStateError,
+    );
+    expect(
+      CatalogService.artistSearchCacheKey(
+        'kw',
+        const SearchQuery(keyword: '周杰伦'),
+      ),
+      'search:kw:artist:周杰伦:1:30',
+    );
+    // 单曲搜索缓存不受影响（前缀失效仍覆盖两者，key 段不冲突）。
+    expect(
+      CatalogService.searchCacheKey('kw', const SearchQuery(keyword: '周杰伦')),
+      'search:kw:周杰伦:1:30',
+    );
+  });
+
+  test('searchLyrics：同 key 命中缓存；key 带 lyric 段；失败不缓存', () async {
+    final source = _FakeMusicSource('kw');
+    final registry = _FakeRegistry({'kw': source});
+    addTearDown(registry.dispose);
+    final service = CatalogService(registry: registry);
+    const query = SearchQuery(keyword: '雨下整夜');
+
+    final first = await service.searchLyrics('kw', query);
+    expect(first.items.single.snippet, contains('雨下整夜'));
+    expect(first.items.single.track.id.uri, 'kw:雨下整夜-l1');
+    await service.searchLyrics('kw', query);
+    expect(source.lyricSearchCalls, 1, reason: '同 key 命中缓存');
+
+    source.lyricSearchError = StateError('boom');
+    await expectLater(
+      service.searchLyrics('kw', const SearchQuery(keyword: '失败')),
+      throwsA(isA<SourceFailure>()),
+    );
+    source.lyricSearchError = null;
+    await service.searchLyrics('kw', const SearchQuery(keyword: '失败'));
+    expect(source.lyricSearchCalls, 3, reason: '失败不缓存，重试重新搜索');
+
+    expect(
+      CatalogService.lyricSearchCacheKey('kw', query),
+      'search:kw:lyric:雨下整夜:1:30',
+    );
   });
 
   test('resolve：未知音源抛 StateError', () async {

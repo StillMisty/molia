@@ -12,6 +12,7 @@ import 'package:provider/provider.dart';
 import '../domain/models/track.dart';
 import '../l10n/app_localizations.dart';
 import '../pages/album_page.dart';
+import '../pages/artist_page.dart';
 import '../pages/song_comments_page.dart';
 import '../pages/source_swap_page.dart';
 import '../providers/comments_provider.dart';
@@ -52,6 +53,37 @@ String? platformAlbumId(Track track) {
     default:
       return null;
   }
+}
+
+/// 曲目上可点进歌手页的歌手（带平台内 id 的首位）；不可点时返回 null。
+///
+/// id 来自内置平台解析注入的 raw `_artists` 字段（经 `track_mapper` 填进
+/// [Track.artists]）；脚本扩展源 / 旧数据没有 id → 歌手行保持只读。
+Artist? platformArtistOf(Track track) {
+  for (final artist in track.artists) {
+    if ((artist.id ?? '').isNotEmpty && artist.name.isNotEmpty) return artist;
+  }
+  return null;
+}
+
+/// 打开歌手页（能力位由调用方先行判定，这里只做守卫与打开）。
+///
+/// [artist] 为多歌手行中被点击的那一位；缺省取首位带 id 的歌手。
+Future<void> openTrackArtist(
+  BuildContext context, {
+  required Track track,
+  Artist? artist,
+}) {
+  final target = platformArtistOf(track);
+  final id = (artist?.id ?? '').isNotEmpty ? artist!.id! : target?.id;
+  final name = (artist?.id ?? '').isNotEmpty ? artist!.name : target?.name;
+  if (id == null || id.isEmpty) return Future.value();
+  return showArtistPage(
+    context,
+    track.id.sourceKey,
+    id,
+    fallbackName: name,
+  );
 }
 
 /// 打开专辑页（能力位由调用方先行判定，这里只做守卫与打开）。

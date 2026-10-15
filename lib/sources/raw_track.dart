@@ -119,6 +119,61 @@ Map<String, dynamic> withCanonicalId({
   return {...raw, field: id};
 }
 
+/// 项目内部歌手引用字段（与 `_types` / `_interval` 同约定：内置平台解析时
+/// 增补、LX 约定的 [raw] 字段只增不删；取链脚本不读取该字段）。
+///
+/// 值形如 `[{'name': '周杰伦', 'id': '336'}]`：名字与 `singer` 串同序，
+/// `id` 为平台内歌手 id（脚本源 / 平台未提供时缺省）。
+const String kRawArtistsField = '_artists';
+
+/// 音源曲目内的歌手引用（名字 + 平台内 id）。
+class SourceArtistRef {
+  final String name;
+
+  /// 平台内歌手 id；平台未提供时为 null（脚本源 / 部分入口）。
+  final String? id;
+
+  const SourceArtistRef({required this.name, this.id});
+
+  Map<String, dynamic> toJson() => {
+        'name': name,
+        if (id != null && id!.isNotEmpty) 'id': id,
+      };
+
+  factory SourceArtistRef.fromJson(Map<dynamic, dynamic> json) =>
+      SourceArtistRef(
+        name: json['name']?.toString() ?? '',
+        id: json['id']?.toString(),
+      );
+
+  @override
+  bool operator ==(Object other) =>
+      other is SourceArtistRef && other.name == name && other.id == id;
+
+  @override
+  int get hashCode => Object.hash(name, id);
+
+  @override
+  String toString() => id == null ? name : '$name($id)';
+}
+
+/// 从 raw 还原歌手引用（[kRawArtistsField]）。
+///
+/// 缺省 / 结构不符返回空列表：调用方回退 `SourceTrack.artist` 整串
+/// （脚本扩展源的搜索返回没有结构化歌手字段）。
+List<SourceArtistRef> artistsFromRaw(Map<String, dynamic> raw) {
+  final list = raw[kRawArtistsField];
+  if (list is! List) return const [];
+  final artists = <SourceArtistRef>[];
+  for (final item in list) {
+    if (item is! Map) continue;
+    final ref = SourceArtistRef.fromJson(item);
+    if (ref.name.isEmpty) continue;
+    artists.add(ref);
+  }
+  return artists;
+}
+
 /// 从 raw 还原音质列表（`qualitys` 数组 + `_qualitys` 映射，映射带 hash；
 /// 内置平台源的 `_types` 映射同样兼容）。按 type 去重保序，首次出现优先。
 List<SourceQuality> qualitiesFromRaw(Map<String, dynamic> raw) {
