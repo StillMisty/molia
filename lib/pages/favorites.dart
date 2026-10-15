@@ -20,12 +20,14 @@ import '../services/download/download_service.dart';
 import '../services/notification_service.dart';
 import '../utils/duration_text.dart';
 import '../utils/responsive.dart';
+import '../utils/scroll_to_top.dart';
 import '../widgets/add_to_library.dart';
 import '../widgets/add_to_playlist_sheet.dart' show showPlaylistNameDialog;
 import '../widgets/app_search_bar.dart';
 import '../widgets/icon_swap.dart';
 import '../widgets/local_audio_import.dart' show importLocalAudioFilesFlow;
 import '../widgets/lxmc_import.dart' show importLxmcFavoritesFlow;
+import '../widgets/shell_reselect.dart';
 import '../widgets/swipe_reveal_row.dart';
 import '../widgets/track_row.dart';
 
@@ -51,10 +53,14 @@ AppLocalizations _l10n(BuildContext context) =>
 /// - 本地歌曲（下载副本 + 导入的本地文件）来自 `DownloadService`：
 ///   下载副本删除会删文件，导入项只从列表移除。
 class FavoritesPage extends StatefulWidget {
-  const FavoritesPage({super.key, this.shuffleRandom});
+  const FavoritesPage({super.key, this.shuffleRandom, this.reselect});
 
   /// 随机播放起点随机源（测试注入种子；默认系统随机源）。
   final math.Random? shuffleRandom;
+
+  /// 壳层「重复点击底栏 / 导航轨收藏目的地」的请求通道：
+  /// 当前合集的列表回到顶部。
+  final ShellReselectSignal? reselect;
 
   @override
   State<FavoritesPage> createState() => _FavoritesPageState();
@@ -150,6 +156,7 @@ class _FavoritesPageState extends State<FavoritesPage> {
     _listController.addListener(_scheduleScrollSave);
     _historyScrollController.addListener(_scheduleScrollSave);
     _localSongsScrollController.addListener(_scheduleScrollSave);
+    widget.reselect?.addListener(_handleReselect);
     unawaited(_restoreState());
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
@@ -172,7 +179,17 @@ class _FavoritesPageState extends State<FavoritesPage> {
   }
 
   @override
+  void didUpdateWidget(covariant FavoritesPage oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.reselect != widget.reselect) {
+      oldWidget.reselect?.removeListener(_handleReselect);
+      widget.reselect?.addListener(_handleReselect);
+    }
+  }
+
+  @override
   void dispose() {
+    widget.reselect?.removeListener(_handleReselect);
     _cacheService?.revision.removeListener(_onCacheRevision);
     _selection.removeListener(_onSelectionChanged);
     _selection.dispose();
@@ -316,6 +333,15 @@ class _FavoritesPageState extends State<FavoritesPage> {
       return _localSongsScrollController;
     }
     return _listController;
+  }
+
+  /// 壳层重复点击「收藏」目的地：当前合集的列表回到顶部。
+  ///
+  /// 合集键在 build 里落定（[_activeCollectionKey]）；加载中 / 首帧为空 = 空操作。
+  void _handleReselect() {
+    final key = _activeCollectionKey;
+    if (key == null) return;
+    animateScrollToTop(_scrollControllerForKey(key));
   }
 
   /// 滚动位置节流落盘：首次滚动即写，之后每 500ms 至多一次。

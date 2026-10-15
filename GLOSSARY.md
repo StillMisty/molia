@@ -80,6 +80,15 @@
   目标槽位旧身份 p∈[0,0.4] 淡出、源槽位新身份 p∈[0.6,1] 淡入（无位移/叠影），
   移动卡全程插值；空闲期身份变化另有 180ms 原位交叉淡化。
 
+## 应用壳与导航
+
+- **Shell reselect（底栏重复点击）** — `lib/widgets/shell_reselect.dart::ShellReselectSignal`：
+  壳层把「重复点击已选中的底栏 / 导航轨目的地」转交给页面的唯一通道（每个目的地
+  一个实例，与 `PlayerMorphController` 同路由注入）。页面自订阅、自决定语义并自给
+  反馈：播放页 = 迷你 ⇄ 完整（现有 `_toggleExpand`，进入播放页的共享元素飞行期间
+  由壳层忽略），资料库 / 收藏 = 当前可见列表回到顶部
+  （`lib/utils/scroll_to_top.dart::animateScrollToTop`）。壳层不消费状态、不给触感。
+
 ## 色彩系统
 
 - **Color source model（取色模型）** — 全局主题的解析规则（ADR-0001）：
