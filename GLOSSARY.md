@@ -188,7 +188,10 @@
   （`BuiltinLyricSearch` 调度 + `SourceLyricHit{track, snippet}` / `LyricSearchPage`）
   + `{kw,kg,tx,wy,mg}_lyric_search.dart`（kw `stype=lyric` 模糊匹配 / kg `lyric_search` /
   tx `search_type=7` / wy `type=1006`（ids → `v3/song/detail` 补规范 raw）/
-  mg `searchAll` + `lyricSong=1`）；真实响应快照在 `test/fixtures/lyric_search/`
+  mg `searchAll` + `lyricSong=1`）；骨架复用搜索的请求 / 校验策略
+  （`builtin_search_runner.dart::BuiltinCall` + `sendBuiltinCall`，歌词侧 runner 见
+  `builtin/lyric_search_runner.dart`；kw 伪 JSON 容错与 wy ids → detail 保留自定义
+  流程）。真实响应快照在 `test/fixtures/lyric_search/`
   （抓取脚本 `tool/gen_lyric_search_fixtures.mjs`）。命中片段作为结果行副标题。
 - **Search kind（搜索类型）** — `lib/domain/models/catalog.dart::SearchKind`
   （`song` / `artist` / `lyric`）：搜索页分段（`M3ESegmentedButton`，按能力位显隐），
