@@ -95,6 +95,36 @@ class DownloadProgress {
   String toString() => 'DownloadProgress($receivedBytes/$totalBytes)';
 }
 
+/// 完整音频缓存命中（「缓存 = 已下载」识别与离线取链共用）。
+class AudioCacheHit {
+  const AudioCacheHit({
+    required this.quality,
+    required this.path,
+    required this.sizeBytes,
+  });
+
+  /// 命中缓存的音质（LX 标识；未知为 `auto`）。
+  final String quality;
+
+  /// 缓存文件绝对路径（完整、无 `.part`）。
+  final String path;
+
+  final int sizeBytes;
+
+  @override
+  bool operator ==(Object other) =>
+      other is AudioCacheHit &&
+      other.quality == quality &&
+      other.path == path &&
+      other.sizeBytes == sizeBytes;
+
+  @override
+  int get hashCode => Object.hash(quality, path, sizeBytes);
+
+  @override
+  String toString() => 'AudioCacheHit($quality, $path, $sizeBytes)';
+}
+
 /// 本地下载服务（`ChangeNotifier`：UI 用 `Selector` 订阅状态）。
 class DownloadService extends ChangeNotifier {
   DownloadService({
@@ -358,6 +388,38 @@ class DownloadService extends ChangeNotifier {
   /// 指定音质是否命中完整音频缓存（下载弹层的「本地缓存」标记）。
   Future<bool> audioCacheHit(Track track, String quality) async =>
       await _completeAudioCachePath(track, quality) != null;
+
+  /// 完整音频缓存命中（「缓存 = 已下载」识别）：按 [qualities]（缺省 =
+  /// 偏好音质 × 曲目可用音质）顺序探测，返回首个完整缓存（无 `.part`）。
+  ///
+  /// 与 [recordForTrack] 的区别：这里只认文件系统里的缓存副本，不产生下载
+  /// 记录；缓存可被 LRU / 清理移除，调用方必须允许状态回退。
+  Future<AudioCacheHit?> audioCacheFor(
+    Track track, {
+    Iterable<String>? qualities,
+  }) async {
+    if (track.id.sourceKey == kLocalSourceKey) return null;
+    for (final quality in qualities ?? _audioCacheQualityCandidates(track)) {
+      final path = await _completeAudioCachePath(track, quality);
+      if (path == null) continue;
+      final size = await _storage.fileSize(path);
+      if (size <= 0) continue;
+      return AudioCacheHit(quality: quality, path: path, sizeBytes: size);
+    }
+    return null;
+  }
+
+  /// 缓存探测的音质顺序：偏好音质在前，再按曲目可用音质去重保序。
+  List<String> _audioCacheQualityCandidates(Track track) {
+    final result = <String>[];
+    final preferred = _pickQuality(track);
+    if (preferred.isNotEmpty) result.add(preferred);
+    for (final quality in track.qualities) {
+      final type = quality.type;
+      if (type.isNotEmpty && !result.contains(type)) result.add(type);
+    }
+    return result;
+  }
 
   /// 缺省下载音质：偏好音质 × 曲目可用音质（下载弹层的预选项）。
   String defaultQualityFor(Track track) => _pickQuality(track);
@@ -772,17 +834,27 @@ class DownloadService extends ChangeNotifier {
     return (published, failed);
   }
 
-  /// 播放取链优先命中本地副本：原音源曲目已有下载且文件存在时返回 file URI。
+  /// 播放取链优先命中本地副本：下载记录 → 完整缓存（缓存 = 已下载）。
   ///
   /// 本地曲目（`sourceKey = local`）返回 null——由 `local` 音源自身解析；
-  /// 只有歌词 / 封面的分项记录（无音频）同样返回 null。
-  Future<Uri?> localUriFor(Track track) async {
+  /// 只有歌词 / 封面的分项记录（无音频）返回 null。[quality] 为本次播放
+  /// 实际选择的音质（精确命中优先，未命中回退其它已缓存音质），缓存命中时
+  /// 直接返回 `file://`，离线可播、不再取链。
+  Future<Uri?> localUriFor(Track track, {String? quality}) async {
     if (track.id.sourceKey == kLocalSourceKey) return null;
     final record = _records['${track.id.sourceKey}:${track.id.id}'];
     final path = record?.filePath;
-    if (record == null || path == null || path.isEmpty) return null;
-    if (!await _storage.fileExists(path)) return null;
-    return Uri.file(path);
+    if (path != null && path.isNotEmpty && await _storage.fileExists(path)) {
+      return Uri.file(path);
+    }
+    final cached = await audioCacheFor(
+      track,
+      qualities: <String>[
+        if (quality != null && quality.isNotEmpty) quality,
+        ..._audioCacheQualityCandidates(track),
+      ],
+    );
+    return cached == null ? null : Uri.file(cached.path);
   }
 
   /// 本地曲目的离线歌词（读 `downloads/lyrics/`，不触网）；无歌词返回 null。

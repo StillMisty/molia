@@ -89,6 +89,11 @@ abstract class CacheStorage {
   /// 统计目录占用；目录不存在时返回 [CacheUsage.zero]。
   Future<CacheUsage> usage(String dirPath);
 
+  /// 列举目录内的缓存文件（文件名 → 字节数）；目录不存在 / 不可读时返回空表。
+  ///
+  /// 一次目录枚举供「缓存曲目」列表按前缀匹配与状态探测复用（避免逐曲探测）。
+  Future<Map<String, int>> listFiles(String dirPath);
+
   /// 统计目录内文件名以 [prefix] 开头的文件（单曲占用展示用）。
   ///
   /// 目录不存在/不可读时返回 [CacheUsage.zero]。

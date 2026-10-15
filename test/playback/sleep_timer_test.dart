@@ -79,9 +79,11 @@ void main() {
     timer.startCountdown(const Duration(minutes: 1));
     expect(timer.value.mode, SleepTimerMode.countdown);
     expect(timer.value.remaining, const Duration(minutes: 1));
+    expect(timer.value.duration, const Duration(minutes: 1));
 
     await advance(tester, const Duration(seconds: 10));
     expect(timer.value.remaining, const Duration(seconds: 50));
+    expect(timer.value.duration, const Duration(minutes: 1));
 
     // 暂停：倒计时冻结（走真实时间也不掉）。
     backend.emit(_snapshot(
@@ -105,6 +107,7 @@ void main() {
     await advance(tester, const Duration(seconds: 50));
     expect(fired, 1);
     expect(timer.value.mode, SleepTimerMode.off);
+    expect(timer.value.duration, isNull);
     expect(backend.calls, contains('pause'));
   });
 
@@ -117,6 +120,7 @@ void main() {
     timer.cancel();
     expect(timer.value.mode, SleepTimerMode.off);
     expect(timer.value.remaining, isNull);
+    expect(timer.value.duration, isNull);
 
     await advance(tester, const Duration(minutes: 2));
     expect(fired, 0);
@@ -129,6 +133,7 @@ void main() {
 
     timer.startAfterCurrentTrack();
     expect(timer.value.mode, SleepTimerMode.afterCurrentTrack);
+    expect(timer.value.duration, isNull);
 
     // 播到曲末 → 后端装载下一首（进度通道先对齐到新曲目）。
     backend.emit(_snapshot(

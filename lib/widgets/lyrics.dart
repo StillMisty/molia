@@ -52,6 +52,9 @@ class _LyricsWidgetState extends State<LyricsWidget>
   /// 手动滚动后恢复自动跟随的延迟：太短会打断读词，太长像「不跟了」。
   static const Duration _userScrollResumeDelay = Duration(seconds: 3);
 
+  /// 目标行未布局时的重试上限：按帧重试，超过后放弃（行号再变化会重新触发）。
+  static const int _maxPendingScrollRetries = 8;
+
   /// 快捷操作栏：M3EFabMenu 浮动 FAB 的屏边距。
   static const double _quickActionsScreenOffset = 16;
 
@@ -62,6 +65,7 @@ class _LyricsWidgetState extends State<LyricsWidget>
   ///
   /// 顶栏（顶部渐隐带 + 圆点带）比底栏高，只按可见区域居中会让激活行
   /// 视觉偏下；上移一点后上下留白更平衡，也接近主流歌词页的中上排版。
+  /// 锚点作用于「主行文本块顶边」（整项还含翻译/罗马音，不参与锚定）。
   static const double _activeLineUpwardBias = 0.10;
 
   /// 歌词会话模块：会话真相的唯一来源（本组件只消费，不维护镜像字段）。
@@ -90,10 +94,19 @@ class _LyricsWidgetState extends State<LyricsWidget>
   bool _isCopyLyricsMode = false;
   PlayMode? _previousPlayMode;
   int _previousLineIndex = -1;
+
+  /// 行（整项）的 key：点行 seek 与命中判定用。
   final List<GlobalKey> _lineKeys = [];
+
+  /// 主行文本块的 key：自动滚动锚定用——整项还包含翻译/罗马音，按文本块
+  /// 锚定落点才不会被项高带偏。
+  final List<GlobalKey> _lineTextKeys = [];
+
+  /// 等待精确滚动的目标行（目标未布局时下一帧重试）。
   int? _pendingScrollIndex;
-  int? _lastFallbackIndexAttempted;
-  int _fallbackAttemptsForCurrentIndex = 0;
+
+  /// 未布局重试次数：目标行始终构建不出来时停止重试，避免每帧空转。
+  int _pendingScrollRetries = 0;
   int? _currentTrackDurationMs;
   bool _temporarilyIgnoreUserScroll = false;
   Timer? _userScrollSuppressionTimer;
@@ -267,21 +280,25 @@ class _LyricsWidgetState extends State<LyricsWidget>
       _syncLineKeys(state.lines.length);
       if (trackDurationMs != null) _currentTrackDurationMs = trackDurationMs;
       _pendingScrollIndex = null;
-      _lastFallbackIndexAttempted = null;
-      _fallbackAttemptsForCurrentIndex = 0;
+      _pendingScrollRetries = 0;
       _manualQuickActionsVisible = false;
     });
   }
 
   void _syncLineKeys(int targetLength) {
-    if (_lineKeys.length == targetLength) return;
-    if (_lineKeys.length < targetLength) {
-      final difference = targetLength - _lineKeys.length;
+    _resizeKeys(_lineKeys, targetLength);
+    _resizeKeys(_lineTextKeys, targetLength);
+  }
+
+  static void _resizeKeys(List<GlobalKey> keys, int targetLength) {
+    if (keys.length == targetLength) return;
+    if (keys.length < targetLength) {
+      final difference = targetLength - keys.length;
       for (int i = 0; i < difference; i++) {
-        _lineKeys.add(GlobalKey());
+        keys.add(GlobalKey());
       }
     } else {
-      _lineKeys.removeRange(targetLength, _lineKeys.length);
+      keys.removeRange(targetLength, keys.length);
     }
   }
 
@@ -382,7 +399,9 @@ class _LyricsWidgetState extends State<LyricsWidget>
 
   /// 激活行锚点：可见区域（去掉顶部渐隐带/底栏）的纵向中线，再整体上移
   /// `_activeLineUpwardBias` 个视口高度（顶栏比底栏高，居中会视觉偏下）。
-  double _computeEffectiveAlignment() {
+  ///
+  /// 只返回「视口比例」，落点由 `anchoredLineOffset` 换算为主行文本块顶边。
+  double _anchorFraction() {
     if (!_scrollController.hasClients) {
       return 0.5 - _activeLineUpwardBias;
     }
@@ -523,104 +542,54 @@ class _LyricsWidgetState extends State<LyricsWidget>
     );
   }
 
+  /// 滚到当前行：把主行文本块的顶边锚定在 [_anchorFraction] 处。
+  ///
+  /// 目标取「主行文本块」而非整项：长行换行 / 翻译·罗马音不再影响落点；
+  /// 目标尚未布局（远跳 / 首帧）时先按时间戳比例粗定位一次，下一帧重试。
   void _scrollToCurrentLine(int currentLineIndex) {
     if (!mounted ||
         !_autoScroll ||
         !_session.isSynced ||
         !_scrollController.hasClients ||
         currentLineIndex < 0 ||
-        currentLineIndex >= _lineKeys.length) {
+        currentLineIndex >= _lineTextKeys.length) {
       return;
     }
 
-    final key = _lineKeys[currentLineIndex];
-    final context = key.currentContext;
-    if (context == null) {
-      if (_lastFallbackIndexAttempted != currentLineIndex) {
-        _fallbackAttemptsForCurrentIndex = 0;
-      }
+    final position = _scrollController.position;
+    final renderObject =
+        _lineTextKeys[currentLineIndex].currentContext?.findRenderObject();
+    if (renderObject == null) {
+      // 目标行还没进入构建范围：粗定位把列表带过去，下一帧再精确滚动。
       _pendingScrollIndex = currentLineIndex;
-      _lastFallbackIndexAttempted = currentLineIndex;
-      _fallbackAttemptsForCurrentIndex++;
-
-      final position = _scrollController.position;
-      if (position.hasPixels &&
-          position.hasContentDimensions &&
-          position.viewportDimension > 0 &&
-          _session.lines.isNotEmpty) {
-        final line = _session.lines[currentLineIndex];
-        double ratio;
-        if (_currentTrackDurationMs != null &&
-            _currentTrackDurationMs! > 0 &&
-            line.timestamp.inMilliseconds >= 0) {
-          final double totalMs = _currentTrackDurationMs!.toDouble();
-          ratio = line.timestamp.inMilliseconds / totalMs;
-        } else if (_session.lines.length <= 1) {
-          ratio = 0.0;
-        } else {
-          ratio = currentLineIndex / (_session.lines.length - 1);
-        }
-
-        if (!ratio.isFinite) {
-          ratio = 0.0;
-        } else if (ratio < 0.0) {
-          ratio = 0.0;
-        } else if (ratio > 1.0) {
-          ratio = 1.0;
-        }
-
-        final double alignment = _computeEffectiveAlignment();
-        final double viewportDim = position.viewportDimension;
-        final double viewportHalf = viewportDim * 0.5;
-        double targetOffset =
-            (ratio * position.maxScrollExtent) - (viewportDim * alignment);
-
-        if (_fallbackAttemptsForCurrentIndex > 1) {
-          final double direction =
-              (targetOffset >= position.pixels) ? 1.0 : -1.0;
-          final double fallbackMagnitude =
-              (_fallbackAttemptsForCurrentIndex - 1).clamp(1, 4).toDouble();
-          final double extraOffset = viewportHalf * 0.6 * fallbackMagnitude;
-          targetOffset += direction * extraOffset;
-        }
-
-        final clampedTarget = clampScrollOffset(
-          target: targetOffset,
-          minScrollExtent: position.minScrollExtent,
-          maxScrollExtent: position.maxScrollExtent,
-        );
-
-        try {
-          if (shouldScrollTo(current: position.pixels, target: clampedTarget)) {
-            _scrollController.jumpTo(clampedTarget);
+      _jumpTowardLineByRatio(currentLineIndex);
+      if (_pendingScrollRetries < _maxPendingScrollRetries) {
+        _pendingScrollRetries++;
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted &&
+              _autoScroll &&
+              _pendingScrollIndex == currentLineIndex) {
+            _scrollToCurrentLine(currentLineIndex);
           }
-        } catch (_) {
-          // 跳转失败可忽略：下一帧会重试
-        }
+        });
       }
-
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (mounted && _autoScroll && _pendingScrollIndex == currentLineIndex) {
-          _scrollToCurrentLine(currentLineIndex);
-        }
-      });
       return;
     }
 
     _pendingScrollIndex = null;
-    _lastFallbackIndexAttempted = null;
-    _fallbackAttemptsForCurrentIndex = 0;
+    _pendingScrollRetries = 0;
 
     try {
-      final renderObject = context.findRenderObject();
-      if (renderObject == null) return;
-
       final viewport = RenderAbstractViewport.of(renderObject);
-      final double alignment = _computeEffectiveAlignment();
-      final reveal = viewport.getOffsetToReveal(renderObject, alignment);
-      final position = _scrollController.position;
+      // 顶边对齐视口顶边时的偏移；再减去锚点距离得到目标偏移。
+      final leadingOffset = viewport.getOffsetToReveal(renderObject, 0.0).offset;
+      final target = anchoredLineOffset(
+        leadingOffset: leadingOffset,
+        viewport: position.viewportDimension,
+        anchorFraction: _anchorFraction(),
+      );
       final clampedOffset = clampScrollOffset(
-        target: reveal.offset,
+        target: target,
         minScrollExtent: position.minScrollExtent,
         maxScrollExtent: position.maxScrollExtent,
       );
@@ -632,6 +601,39 @@ class _LyricsWidgetState extends State<LyricsWidget>
       );
     } catch (_) {
       // 滚动失败可忽略：下一 tick 会重试
+    }
+  }
+
+  /// 目标未布局时的粗定位：按时间戳（缺曲目时长时按行号）比例估算偏移并
+  /// 跳过去，让目标进入列表构建范围；精确滚动交给下一帧重试。
+  void _jumpTowardLineByRatio(int currentLineIndex) {
+    final position = _scrollController.position;
+    if (!position.hasPixels || !position.hasContentDimensions) return;
+    final lines = _session.lines;
+    if (lines.isEmpty || currentLineIndex >= lines.length) return;
+
+    double ratio;
+    final durationMs = _currentTrackDurationMs;
+    if (durationMs != null && durationMs > 0) {
+      ratio = lines[currentLineIndex].timestamp.inMilliseconds / durationMs;
+    } else if (lines.length <= 1) {
+      ratio = 0.0;
+    } else {
+      ratio = currentLineIndex / (lines.length - 1);
+    }
+    ratio = ratio.isFinite ? ratio.clamp(0.0, 1.0) : 0.0;
+
+    final target = clampScrollOffset(
+      target: ratio * position.maxScrollExtent -
+          _anchorFraction() * position.viewportDimension,
+      minScrollExtent: position.minScrollExtent,
+      maxScrollExtent: position.maxScrollExtent,
+    );
+    if (!shouldScrollTo(current: position.pixels, target: target)) return;
+    try {
+      _scrollController.jumpTo(target);
+    } catch (_) {
+      // 跳转失败可忽略：下一帧会重试
     }
   }
 
@@ -929,10 +931,13 @@ class _LyricsWidgetState extends State<LyricsWidget>
                     index < _session.translations.length ? _session.translations[index] : '';
                 final String lineRoma =
                     index < _session.romas.length ? _session.romas[index] : '';
-                final bool showTranslation =
+                // 扩展行只跟当前行（未同步歌词没有「当前行」概念，保持逐行）。
+                final bool showExtendedLines = !lyricsSynced || isCurrentLine;
+                final bool showTranslation = showExtendedLines &&
                     lyricsDisplaySettings.pageTranslationEnabled &&
-                        lineTranslation.isNotEmpty;
-                final bool showRoma = lyricsDisplaySettings.pageRomaEnabled &&
+                    lineTranslation.isNotEmpty;
+                final bool showRoma = showExtendedLines &&
+                    lyricsDisplaySettings.pageRomaEnabled &&
                     lineRoma.isNotEmpty;
                 // 逐字渲染：仅当前行 + 有词时间轴 + 非复制模式；
                 // 已唱/未唱用 primary/onSurface 双色，行级强调由词高亮表达。
@@ -1019,6 +1024,7 @@ class _LyricsWidgetState extends State<LyricsWidget>
                           children: [
                             if (useKaraoke)
                               KaraokeLyricText(
+                                key: _lineTextKeys[index],
                                 words: lineWords,
                                 position: playbackProvider.position,
                                 playedColor: theme.colorScheme.primary,
@@ -1027,26 +1033,20 @@ class _LyricsWidgetState extends State<LyricsWidget>
                             else
                               Text(
                                 line.text,
+                                key: _lineTextKeys[index],
                                 textAlign: TextAlign.left,
                               ),
                             // 翻译 / 罗马音：空文本不占位；顺序与
                             // LyricLineTracker 的扩展行拼接一致。
-                            if (showTranslation) ...[
-                              const SizedBox(height: 2),
-                              Text(
-                                lineTranslation,
-                                textAlign: TextAlign.left,
-                                style: extendedLineStyle,
-                              ),
-                            ],
-                            if (showRoma) ...[
-                              const SizedBox(height: 2),
-                              Text(
-                                lineRoma,
-                                textAlign: TextAlign.left,
-                                style: extendedLineStyle,
-                              ),
-                            ],
+                            // 只跟当前行：行切换时随主行动画收起 / 出现，
+                            // 跟着这一行一起滚动、一起消失。
+                            _buildExtendedLines(
+                              showTranslation: showTranslation,
+                              translation: lineTranslation,
+                              showRoma: showRoma,
+                              roma: lineRoma,
+                              style: extendedLineStyle,
+                            ),
                           ],
                         ),
                       ),
@@ -1143,6 +1143,63 @@ class _LyricsWidgetState extends State<LyricsWidget>
   int _getCurrentLineIndex(Duration currentPosition) {
     if (!_session.isSynced) return -1;
     return lyricLineIndexAt(_session.lines, currentPosition);
+  }
+
+  /// 翻译 / 罗马音块（挂在主行文本下方）。
+  ///
+  /// 通过 [AnimatedSwitcher] + `SizeTransition` 做「淡出 + 收起」：行不再是
+  /// 当前行时，扩展行随行样式动画（450ms）一起消失，而不是硬切、也不是
+  /// 留下占位；出现时同样从主行下方展开。
+  Widget _buildExtendedLines({
+    required bool showTranslation,
+    required String translation,
+    required bool showRoma,
+    required String roma,
+    required TextStyle style,
+  }) {
+    final bool visible = showTranslation || showRoma;
+    return AnimatedSwitcher(
+      duration: const Duration(milliseconds: 450),
+      switchInCurve: Curves.easeOutCubic,
+      switchOutCurve: Curves.easeInCubic,
+      layoutBuilder: (currentChild, previousChildren) => Stack(
+        alignment: Alignment.topLeft,
+        children: [
+          ...previousChildren,
+          if (currentChild != null) currentChild,
+        ],
+      ),
+      transitionBuilder: (child, animation) => SizeTransition(
+        sizeFactor: animation,
+        alignment: Alignment.topLeft,
+        child: FadeTransition(opacity: animation, child: child),
+      ),
+      child: !visible
+          ? const SizedBox.shrink(key: ValueKey<String>('lyricsExtendedNone'))
+          : Column(
+              key: const ValueKey<String>('lyricsExtendedLines'),
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                if (showTranslation) ...[
+                  const SizedBox(height: 2),
+                  Text(
+                    translation,
+                    textAlign: TextAlign.left,
+                    style: style,
+                  ),
+                ],
+                if (showRoma) ...[
+                  const SizedBox(height: 2),
+                  Text(
+                    roma,
+                    textAlign: TextAlign.left,
+                    style: style,
+                  ),
+                ],
+              ],
+            ),
+    );
   }
 
   void _toggleCopyLyricsMode() {

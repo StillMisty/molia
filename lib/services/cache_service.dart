@@ -250,6 +250,21 @@ class CacheService {
   /// 音频缓存目录（持久）；平台不可用（Web）返回 null。
   Future<String?> audioCacheDirPath() => _safeDir(_storage.audioCacheDir);
 
+  /// 音频缓存文件索引（文件名 → 字节数）；平台不可用 / 列举失败返回空表。
+  ///
+  /// 一次目录列举，供「缓存曲目」列表（`audioCacheKeyPrefix` 前缀匹配）与
+  /// 缓存命中探测复用；命中语义见 `DownloadService.audioCacheFor`。
+  Future<Map<String, int>> audioCacheIndex() async {
+    final dir = await _safeDir(_storage.audioCacheDir);
+    if (dir == null) return const {};
+    try {
+      return await _storage.listFiles(dir);
+    } catch (e) {
+      _logger.warning('音频缓存列举失败: $e');
+      return const {};
+    }
+  }
+
   /// 单曲音频缓存文件名前缀（`{sourceKey}_{songId}_`，同一替换规则）。
   ///
   /// 音质在文件名末尾，因此该前缀命中同一曲目的所有音质变体。

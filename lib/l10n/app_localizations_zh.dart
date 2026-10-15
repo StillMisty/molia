@@ -2585,6 +2585,25 @@ class AppLocalizationsZh extends AppLocalizations {
       '删除本地副本？音频、歌词与封面文件将一并删除；导入的本地歌曲只从列表移除。';
 
   @override
+  String get downloadStatusCachedCopy => '缓存副本';
+
+  @override
+  String get downloadToFolder => '下载到本地文件夹';
+
+  @override
+  String get localSongsCachedTag => '缓存';
+
+  @override
+  String get localSongsCachedRemove => '清除缓存';
+
+  @override
+  String get localSongsCachedRemoveConfirm => '清除这首歌的音频缓存？只移除缓存副本，不影响下载与导入的文件。';
+
+  @override
+  String get localSongsMixedRemoveConfirm =>
+      '删除所选内容？下载副本会删除文件，导入项只从列表移除，缓存副本会被清除。';
+
+  @override
   String get downloadShare => '分享导出';
 
   @override
@@ -2731,6 +2750,9 @@ class AppLocalizationsZh extends AppLocalizations {
   String get sleepTimerHint => '到点自动暂停播放';
 
   @override
+  String get sleepTimerCountdownSection => '倒计时';
+
+  @override
   String get sleepTimerOff => '未开启';
 
   @override
@@ -2742,12 +2764,26 @@ class AppLocalizationsZh extends AppLocalizations {
   String get sleepTimerAfterTrack => '播完当前歌曲后暂停';
 
   @override
-  String sleepTimerMinutes(int minutes) {
-    return '$minutes 分钟后暂停';
+  String sleepTimerMinutesShort(int minutes) {
+    return '$minutes 分钟';
   }
 
   @override
   String get sleepTimerCancel => '关闭定时';
+
+  @override
+  String sleepTimerArmedSnackbar(String time) {
+    return '已开启定时关闭 · $time 后暂停';
+  }
+
+  @override
+  String get sleepTimerArmedAfterTrack => '已开启定时关闭 · 播完当前歌曲后暂停';
+
+  @override
+  String get sleepTimerHourLabel => '小时';
+
+  @override
+  String get sleepTimerMinuteLabel => '分钟';
 
   @override
   String get sleepTimerCustom => '自定义时长…';
@@ -2756,10 +2792,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get sleepTimerCustomTitle => '自定义时长';
 
   @override
-  String get sleepTimerCustomHint => '分钟数（1–600）';
-
-  @override
-  String get sleepTimerCustomInvalid => '请输入 1–600 之间的整数';
+  String get sleepTimerCustomInvalid => '时长需在 1 分钟到 10 小时之间';
 
   @override
   String get sleepTimerCustomConfirm => '设定';

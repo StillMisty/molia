@@ -54,8 +54,8 @@ class _DownloadSheetState extends State<_DownloadSheet> {
   /// 当前选中的下载音质（缺省 = 服务端偏好音质 × 曲目可用音质）。
   String? _quality;
 
-  /// 音质 → 是否命中完整音频缓存（弹层打开时探测一次）。
-  final Map<String, bool> _cacheHits = {};
+  /// 音质 → 完整缓存命中（弹层打开时探测一次）：状态显示与预选共用。
+  final Map<String, AudioCacheHit> _cacheHits = {};
 
   @override
   void initState() {
@@ -67,15 +67,34 @@ class _DownloadSheetState extends State<_DownloadSheet> {
     final downloads = context.read<DownloadService?>();
     if (downloads == null) return;
     final qualities = _qualityOptions(widget.track);
-    final hits = <String, bool>{};
-    for (final quality in qualities) {
-      hits[quality] = await downloads.audioCacheHit(widget.track, quality);
+    final fallback = downloads.defaultQualityFor(widget.track);
+    final probes = <String>{
+      ...qualities,
+      if (fallback.isNotEmpty) fallback,
+    };
+    final hits = <String, AudioCacheHit>{};
+    for (final quality in probes) {
+      final hit =
+          await downloads.audioCacheFor(widget.track, qualities: [quality]);
+      if (hit != null) hits[quality] = hit;
     }
     if (!mounted) return;
     setState(() {
       _cacheHits
         ..clear()
         ..addAll(hits);
+      // 预选命中的缓存音质：默认音质未命中时改选缓存音质，转存不触网。
+      if (_quality == null && qualities.isNotEmpty) {
+        final selected = downloads.defaultQualityFor(widget.track);
+        if (!hits.containsKey(selected)) {
+          for (final quality in qualities) {
+            if (hits.containsKey(quality)) {
+              _quality = quality;
+              break;
+            }
+          }
+        }
+      }
     });
   }
 
@@ -107,6 +126,11 @@ class _DownloadSheetState extends State<_DownloadSheet> {
     final selectedQuality = _quality ??
         downloads?.defaultQualityFor(widget.track) ??
         (qualities.isEmpty ? '' : qualities.first);
+    // 缓存 = 已下载：选中音质命中完整缓存即按「已下载」呈现（无下载记录时
+    // 动作为从缓存转存到本地文件夹，不触网）。
+    final cachedHit = _cacheHits[selectedQuality];
+    final cachedOnly =
+        cachedHit != null && record?.hasAudio != true && progress == null;
 
     return SingleChildScrollView(
       child: Column(
@@ -132,7 +156,7 @@ class _DownloadSheetState extends State<_DownloadSheet> {
                                 : Icons.radio_button_unchecked_rounded,
                           ),
                           headline: sourceQualityLabel(l10n, quality),
-                          trailingText: _cacheHits[quality] == true
+                          trailingText: _cacheHits.containsKey(quality)
                               ? l10n.downloadQualityCached
                               : null,
                           selected: quality == selectedQuality,
@@ -143,17 +167,18 @@ class _DownloadSheetState extends State<_DownloadSheet> {
                         ),
                     SettingsInfoTile(
                       key: const Key('downloadSheetStatus'),
-                      icon: record?.hasAudio ?? false
+                      icon: (record?.hasAudio ?? false) || cachedHit != null
                           ? Icons.download_done_rounded
                           : progress != null
                               ? Icons.downloading_rounded
                               : Icons.download_rounded,
-                      title: record?.hasAudio ?? false
+                      title: (record?.hasAudio ?? false) || cachedHit != null
                           ? l10n.downloadStatusDownloaded
                           : progress != null
                               ? l10n.downloadStatusDownloading
                               : l10n.downloadStatusNotDownloaded,
-                      subtitle: _statusSubtitle(l10n, record, progress),
+                      subtitle:
+                          _statusSubtitle(l10n, record, progress, cachedHit),
                     ),
                     ..._buildAudioActions(
                       context,
@@ -162,6 +187,7 @@ class _DownloadSheetState extends State<_DownloadSheet> {
                       record,
                       progress,
                       selectedQuality,
+                      cachedOnly: cachedOnly,
                     ),
                   ],
                 ),
@@ -209,7 +235,8 @@ class _DownloadSheetState extends State<_DownloadSheet> {
                               includeCover: true,
                             ),
                           ),
-                  child: Text(l10n.downloadAll),
+                  child:
+                      Text(cachedOnly ? l10n.downloadToFolder : l10n.downloadAll),
                 ),
               ],
             ),
@@ -256,6 +283,7 @@ class _DownloadSheetState extends State<_DownloadSheet> {
     AppLocalizations l10n,
     DownloadedTrack? record,
     DownloadProgress? progress,
+    AudioCacheHit? cachedHit,
   ) {
     if (record != null && record.hasAudio) {
       final quality = record.quality.isEmpty
@@ -271,6 +299,15 @@ class _DownloadSheetState extends State<_DownloadSheet> {
           ? formatCacheBytes(progress.receivedBytes)
           : l10n.downloadProgressPercent(percent);
     }
+    if (cachedHit != null) {
+      final quality = cachedHit.quality.isEmpty || cachedHit.quality == 'auto'
+          ? ''
+          : sourceQualityLabel(l10n, cachedHit.quality);
+      final size = formatCacheBytes(cachedHit.sizeBytes);
+      return quality.isEmpty
+          ? '$size · ${l10n.downloadStatusCachedCopy}'
+          : '$size · $quality · ${l10n.downloadStatusCachedCopy}';
+    }
     if (widget.track.id.sourceKey == kLocalSourceKey) {
       return l10n.downloadFileMissing;
     }
@@ -284,8 +321,9 @@ class _DownloadSheetState extends State<_DownloadSheet> {
     DownloadService? downloads,
     DownloadedTrack? record,
     DownloadProgress? progress,
-    String selectedQuality,
-  ) {
+    String selectedQuality, {
+    required bool cachedOnly,
+  }) {
     final supported = downloads != null && downloads.supported;
     if (record != null && record.hasAudio) {
       return [
@@ -329,7 +367,7 @@ class _DownloadSheetState extends State<_DownloadSheet> {
       SettingsNavTile(
         key: const Key('downloadSheetStart'),
         icon: Icons.download_rounded,
-        title: l10n.downloadAction,
+        title: cachedOnly ? l10n.downloadToFolder : l10n.downloadAction,
         subtitle: '',
         onTap: !supported || _audioBusy
             ? null

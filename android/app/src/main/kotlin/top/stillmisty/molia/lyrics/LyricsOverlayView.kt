@@ -19,6 +19,7 @@ import android.view.MotionEvent
 import android.view.View
 import android.view.WindowManager
 import android.view.animation.PathInterpolator
+import android.widget.FrameLayout
 import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.TextView
@@ -158,12 +159,18 @@ private val EASE_ACCELERATE = PathInterpolator(0.3f, 0f, 0.8f, 0.15f)
  * - 有逐字时间轴时按词插值 playedColor；无逐字数据时整行 playedColor；
  * - 进度基准来自 Dart 侧下发的位置（跟随播放位置通道，≤4Hz），词内 / 行内
  *   用帧回调线性外推，每次收到新位置就重新对齐（暂停 / seek 直接落位）；
- * - 行宽超出视图时按「已唱边界」滚动（边界锚定在视图宽度的 2/3 处），
- *   不使用原生 marquee 循环滚动：暂停时滚动随进度一起停住。
+ * - 横向滚动按「已唱边界在整行中的比例」映射到溢出宽度：行首即动、行尾
+ *   正好滚到位、速度连续；真实文本宽没有超过视图宽时恒不滚动（不使用
+ *   原生 marquee：暂停时滚动随进度一起停住）；
+ * - 偏移经 [onGroupOffset] 交给宿主，翻译 / 罗马音与主行作为同一滚动组
+ *   同步移动、同步裁切。
  * 颜色用可变 color span 而不是自绘：更新颜色不触发重新排版。
  */
 @SuppressLint("ViewConstructor")
 internal class CurrentLineView(context: Context) : TextView(context) {
+
+    /** 组滚动回调：主行按进度算出的目标偏移交给宿主统一应用到滚动组。 */
+    var onGroupOffset: ((Float) -> Unit)? = null
 
     private var words: List<OverlayWord> = emptyList()
     private var spans: List<MutableColorSpan> = emptyList()
@@ -270,38 +277,56 @@ internal class CurrentLineView(context: Context) : TextView(context) {
         invalidate()
     }
 
-    /**
-     * 跟随进度的横向滚动：把「已唱边界」锚定在视图宽度的 2/3 处。
-     *
-     * 有逐字数据时边界取当前词内的插值位置；否则按行时间轴线性外推；
-     * 两者都没有（或文本未超宽）时保持不动。
-     */
     private fun applyScroll(estimatedMs: Long) {
-        val layout = layout ?: return
-        val viewWidth = width
-        if (viewWidth <= 0 || layout.width <= 0) return
-        val contentWidth = layout.width + compoundPaddingLeft + compoundPaddingRight
-        val maxScroll = (contentWidth - viewWidth).coerceAtLeast(0)
-        if (maxScroll == 0) {
-            if (scrollX != 0) scrollTo(0, 0)
-            return
-        }
-        val edge = playedEdgeX(layout, estimatedMs) ?: return
-        val anchor = viewWidth * ANCHOR_FRACTION
-        val target =
-            (edge + compoundPaddingLeft - anchor).coerceIn(0f, maxScroll.toFloat())
-        val targetInt = target.toInt()
-        if (targetInt != scrollX) scrollTo(targetInt, 0)
+        onGroupOffset?.invoke(groupScrollOffset(estimatedMs))
     }
 
-    private fun playedEdgeX(layout: Layout, estimatedMs: Long): Float? {
-        if (words.isEmpty()) {
-            if (lineStartMs < 0 || lineEndMs <= lineStartMs) return null
-            val progress =
-                ((estimatedMs - lineStartMs).toFloat() / (lineEndMs - lineStartMs))
-                    .coerceIn(0f, 1f)
-            return layout.width * progress
+    /**
+     * 目标组偏移：真实文本宽超出视图宽时，按「已唱比例」把文本滚到对应
+     * 位置——行首即动、行尾正好滚到位；没有超出视图时恒为 0。
+     */
+    private fun groupScrollOffset(estimatedMs: Long): Float {
+        val viewWidth = width.toFloat()
+        if (viewWidth <= 0f) return 0f
+        val textWidth = measuredTextWidth()
+        val overflow = textWidth - viewWidth
+        if (overflow <= 0f) return 0f
+        return (playedFraction(estimatedMs) * overflow).coerceIn(0f, overflow)
+    }
+
+    /** 单行真实文本宽：Layout 的行宽；未布局时退回 Paint 测量。 */
+    private fun measuredTextWidth(): Float {
+        val current = layout
+        if (current != null && current.lineCount > 0) {
+            return current.getLineWidth(0)
         }
+        val value = text?.toString() ?: return 0f
+        return paint.measureText(value)
+    }
+
+    /**
+     * 已唱比例（0..1）：有逐字词轴时取「已唱边界」在整行中的相对位置；
+     * 无词轴时按行时间轴线性外推；两者都没有时为 0。
+     */
+    private fun playedFraction(estimatedMs: Long): Float {
+        if (words.isEmpty()) {
+            if (lineStartMs < 0 || lineEndMs <= lineStartMs) return 0f
+            return ((estimatedMs - lineStartMs).toFloat() / (lineEndMs - lineStartMs))
+                .coerceIn(0f, 1f)
+        }
+        val current = layout ?: return 0f
+        val textLength = text?.length ?: 0
+        if (textLength <= 0) return 0f
+        val startX = current.getPrimaryHorizontal(0)
+        val endX = current.getPrimaryHorizontal(textLength)
+        val span = endX - startX
+        if (span <= 0f) return 0f
+        val edgeX = playedEdgeX(current, textLength, estimatedMs)
+        return ((edgeX - startX) / span).coerceIn(0f, 1f)
+    }
+
+    /** 已唱边界在 Layout 坐标系中的 x（逐字词轴，词内线性插值）。 */
+    private fun playedEdgeX(layout: Layout, textLength: Int, estimatedMs: Long): Float {
         var index = words.size
         var fraction = 0f
         for (i in words.indices) {
@@ -315,11 +340,11 @@ internal class CurrentLineView(context: Context) : TextView(context) {
             }
             break
         }
-        if (index >= words.size) return layout.width.toFloat()
+        if (index >= words.size) return layout.getPrimaryHorizontal(textLength)
         var charStart = 0
         for (i in 0 until index) charStart += words[i].text.length
-        val charEnd = (charStart + words[index].text.length).coerceAtMost(text.length)
-        val startX = layout.getPrimaryHorizontal(charStart.coerceAtMost(text.length))
+        val charEnd = (charStart + words[index].text.length).coerceAtMost(textLength)
+        val startX = layout.getPrimaryHorizontal(charStart.coerceAtMost(textLength))
         val endX = layout.getPrimaryHorizontal(charEnd)
         return startX + (endX - startX) * fraction
     }
@@ -345,9 +370,6 @@ internal class CurrentLineView(context: Context) : TextView(context) {
     }
 
     private companion object {
-        /** 已唱边界在视图中的锚定位置（视图宽度的比例）。 */
-        const val ANCHOR_FRACTION = 0.66f
-
         fun blend(from: Int, to: Int, fraction: Float): Int {
             val f = fraction.coerceIn(0f, 1f)
             val a = (Color.alpha(from) + (Color.alpha(to) - Color.alpha(from)) * f).toInt()
@@ -363,8 +385,10 @@ internal class CurrentLineView(context: Context) : TextView(context) {
  * 桌面歌词悬浮视图：拖动移动、点按呼出控制条、锁定后不可触摸（窗口级）。
  *
  * - 文本策略（暂停回退 / 无歌词回退 / 行数 / 翻译开关）由 Dart 侧决定；
- * - 当前行用 [CurrentLineView]（逐字渐染 + 跟随进度滚动），其余行整行着色；
- * - 内容变化只做增量重建（同结构更新不碰视图，避免打断滚动与动画）；
+ * - 当前行用 [CurrentLineView]（逐字渐染 + 跟随进度滚动），翻译 / 罗马音
+ *   与之同组同步滚动；其余行整行着色、超宽省略；
+ * - 行内容变化做「整块滚入滚出」过渡（旧块上移滚出、新块自下滚入）；
+ * - 同结构更新（逐字进度 / 播放态）不重建视图，不打断滚动与动画；
  * - 控制条是 M3E 观感的 pill（圆角容器 + 图标按钮 + 状态层），
  *   颜色由 Dart 侧解析后下发。
  */
@@ -388,7 +412,23 @@ internal class LyricsOverlayView(
     private var lastIsPlaying = false
     private var controlsVisible = false
 
-    private val textColumn = LinearLayout(context).apply {
+    /** 行内对齐（配置的横向对齐）；行自建后各自应用。 */
+    private var rowGravity = Gravity.START
+
+    /** 当前行的滚动组：主行 + 翻译 / 罗马音（宿主统一应用组偏移）。 */
+    private var scrollGroup = mutableListOf<TextView>()
+
+    /**
+     * 裁剪视口：内容列在其中做「滚入滚出」过渡，超出部分裁掉。
+     *
+     * 过渡期间视口高度固定为新内容高度（窗口高度不抖）；平时回
+     * WRAP_CONTENT 跟随内容。
+     */
+    private val contentHolder = FrameLayout(context).apply {
+        clipChildren = true
+        clipToPadding = false
+    }
+    private var textColumn = LinearLayout(context).apply {
         orientation = VERTICAL
     }
     private val controlBar = LinearLayout(context).apply {
@@ -410,7 +450,14 @@ internal class LyricsOverlayView(
         gravity = Gravity.CENTER
         val pad = dp(8)
         setPadding(pad, pad / 2, pad, pad / 2)
-        addView(textColumn, LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.WRAP_CONTENT))
+        contentHolder.addView(
+            textColumn,
+            FrameLayout.LayoutParams(
+                FrameLayout.LayoutParams.MATCH_PARENT,
+                FrameLayout.LayoutParams.WRAP_CONTENT,
+            ),
+        )
+        addView(contentHolder, LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.WRAP_CONTENT))
         // 控制条 pill 包裹内容并居中（宽度随按钮数量，不拉满窗口宽度）。
         addView(controlBar, LayoutParams(LayoutParams.WRAP_CONTENT, LayoutParams.WRAP_CONTENT))
         rebuildControls()
@@ -425,7 +472,7 @@ internal class LyricsOverlayView(
             "bottom" -> Gravity.BOTTOM
             else -> Gravity.CENTER
         } or Gravity.CENTER_HORIZONTAL
-        textColumn.gravity = when (next.textAlignX) {
+        rowGravity = when (next.textAlignX) {
             "left" -> Gravity.START
             "right" -> Gravity.END
             else -> Gravity.CENTER
@@ -503,15 +550,19 @@ internal class LyricsOverlayView(
         return entries
     }
 
-    private fun rebuildLineViews(entries: List<Entry>, animate: Boolean) {
-        textColumn.animate().cancel()
-        textColumn.removeAllViews()
+    /** 构建内容列：当前行挂滚动回调、扩展行并入滚动组；行宽撑满窗口。 */
+    private fun buildColumn(entries: List<Entry>): LinearLayout {
+        val column = LinearLayout(context).apply { orientation = VERTICAL }
         entryViews = mutableListOf()
         currentLineView = null
+        scrollGroup = mutableListOf()
         for (entry in entries) {
             val view: TextView =
                 if (entry.isCurrent) {
-                    CurrentLineView(context).also { currentLineView = it }
+                    CurrentLineView(context).also {
+                        it.onGroupOffset = ::applyGroupScroll
+                        currentLineView = it
+                    }
                 } else {
                     TextView(context)
                 }
@@ -523,53 +574,157 @@ internal class LyricsOverlayView(
                 )
                 setTextColor(if (entry.isCurrent) config.playedColor else config.unplayedColor)
                 setShadowLayer(2f, 0f, 1f, config.shadowColor)
-                gravity = textColumn.gravity
+                gravity = rowGravity
                 maxLines = 1
                 setSingleLine(true)
                 isSelected = false
                 isFocusable = false
                 isFocusableInTouchMode = false
-                if (entry.isCurrent) {
-                    // 当前行不做 marquee：横向滚动由播放进度驱动（CurrentLineView）。
+                if (entry.isCurrent || entry.isExtended) {
+                    // 滚动组不做省略号截断：超宽部分随组偏移进出窗口。
                     ellipsize = null
                 } else {
                     // 非当前行不做无限循环滚动：超宽截断省略。
                     ellipsize = TextUtils.TruncateAt.END
                 }
             }
-            textColumn.addView(view)
-            entryViews.add(view)
-        }
-        currentLineView?.let { line ->
-            line.bind(
-                current.words,
-                config.playedColor,
-                config.unplayedColor,
-                current.lineStartMs,
-                current.lineEndMs,
+            column.addView(
+                view,
+                LinearLayout.LayoutParams(
+                    LinearLayout.LayoutParams.MATCH_PARENT,
+                    LinearLayout.LayoutParams.WRAP_CONTENT,
+                ),
             )
-            line.syncPosition(current.positionMs, current.isPlaying)
+            entryViews.add(view)
+            if (entry.isCurrent || entry.isExtended) scrollGroup.add(view)
         }
-        if (animate && entryViews.isNotEmpty()) {
-            // 整块从下方轻微上浮 + 逐行错峰淡入（M3 强调缓动）。
-            textColumn.alpha = 0f
-            textColumn.translationY = dp(10).toFloat()
-            textColumn.animate().alpha(1f).translationY(0f)
-                .setDuration(200)
-                .setInterpolator(EASE_DECELERATE)
-                .start()
-            entryViews.forEachIndexed { index, view ->
-                view.alpha = 0f
-                view.animate().alpha(1f)
-                    .setStartDelay((index * 28).toLong())
-                    .setDuration(200)
-                    .setInterpolator(EASE_DECELERATE)
-                    .start()
+        return column
+    }
+
+    /**
+     * 行内容重建：动画关闭（或首次内容）直切；开启时「整块滚入滚出」——
+     * 旧块上移滚出、新块自下滚入，视口高度按新内容固定，窗口高度不抖。
+     */
+    private fun rebuildLineViews(entries: List<Entry>, animate: Boolean) {
+        finishPendingRoll()
+        val previousColumn = textColumn
+        val newColumn = buildColumn(entries)
+        val holderParams = contentHolder.layoutParams as? LinearLayout.LayoutParams
+
+        if (!animate || previousColumn.childCount == 0 || contentHolder.width <= 0) {
+            holderParams?.height = LinearLayout.LayoutParams.WRAP_CONTENT
+            contentHolder.removeAllViews()
+            contentHolder.addView(
+                newColumn,
+                FrameLayout.LayoutParams(
+                FrameLayout.LayoutParams.MATCH_PARENT,
+                FrameLayout.LayoutParams.WRAP_CONTENT,
+            ),
+            )
+            textColumn = newColumn
+            currentLineView?.let { bindCurrentLine(it) }
+            return
+        }
+
+        val oldHeight = previousColumn.height
+        val newHeight = measureColumnHeight(newColumn)
+        // 过渡期间视口固定为新内容高度：旧块高出部分裁掉，窗口高度不抖。
+        holderParams?.height = newHeight
+        newColumn.translationY = newHeight.toFloat()
+        newColumn.alpha = 0f
+        contentHolder.removeView(previousColumn)
+        contentHolder.addView(
+            newColumn,
+            FrameLayout.LayoutParams(
+                FrameLayout.LayoutParams.MATCH_PARENT,
+                FrameLayout.LayoutParams.WRAP_CONTENT,
+            ),
+        )
+        // 旧块留在视口里做滚出（结束动作里移除；被新块盖住也无妨）。
+        contentHolder.addView(
+            previousColumn,
+            FrameLayout.LayoutParams(
+                FrameLayout.LayoutParams.MATCH_PARENT,
+                FrameLayout.LayoutParams.WRAP_CONTENT,
+            ),
+        )
+        textColumn = newColumn
+        currentLineView?.let { bindCurrentLine(it) }
+
+        previousColumn.animate()
+            .translationY(-oldHeight.toFloat())
+            .alpha(0f)
+            .setDuration(ROLL_DURATION_MS)
+            .setInterpolator(EASE_DECELERATE)
+            .withEndAction {
+                if (previousColumn.parent === contentHolder) {
+                    contentHolder.removeView(previousColumn)
+                }
             }
-        } else {
-            textColumn.alpha = 1f
-            textColumn.translationY = 0f
+            .start()
+        newColumn.animate()
+            .translationY(0f)
+            .alpha(1f)
+            .setDuration(ROLL_DURATION_MS)
+            .setInterpolator(EASE_DECELERATE)
+            .start()
+    }
+
+    /** 结束未完成的滚入滚出：旧块直接移除、视口回到跟随内容。 */
+    private fun finishPendingRoll() {
+        for (i in contentHolder.childCount - 1 downTo 0) {
+            val child = contentHolder.getChildAt(i)
+            if (child !== textColumn) {
+                child.animate().cancel()
+                contentHolder.removeViewAt(i)
+            }
         }
+        textColumn.animate().cancel()
+        textColumn.translationY = 0f
+        textColumn.alpha = 1f
+        (contentHolder.layoutParams as? LinearLayout.LayoutParams)?.height =
+            LinearLayout.LayoutParams.WRAP_CONTENT
+    }
+
+    private fun bindCurrentLine(line: CurrentLineView) {
+        line.bind(
+            current.words,
+            config.playedColor,
+            config.unplayedColor,
+            current.lineStartMs,
+            current.lineEndMs,
+        )
+        line.syncPosition(current.positionMs, current.isPlaying)
+    }
+
+    /** 新列在视口宽度下的高度（滚入滚出的视口高度）。 */
+    private fun measureColumnHeight(column: LinearLayout): Int {
+        val width = if (contentHolder.width > 0) contentHolder.width else textColumn.width
+        if (width <= 0) return column.measuredHeight.coerceAtLeast(0)
+        column.measure(
+            MeasureSpec.makeMeasureSpec(width, MeasureSpec.EXACTLY),
+            MeasureSpec.makeMeasureSpec(0, MeasureSpec.UNSPECIFIED),
+        )
+        return column.measuredHeight
+    }
+
+    /**
+     * 把滚动组按主行算出的目标偏移应用：每行按自身溢出裁剪——翻译 /
+     * 罗马音跟主行一起滚、超出窗口的部分一起被裁掉（消失）。
+     */
+    private fun applyGroupScroll(offset: Float) {
+        for (view in scrollGroup) {
+            val overflow = textOverflowOf(view)
+            val x = offset.coerceIn(0f, overflow).toInt()
+            if (view.scrollX != x) view.scrollTo(x, 0)
+        }
+    }
+
+    /** 行文本超出视图宽的部分（未布局 / 无溢出为 0）。 */
+    private fun textOverflowOf(view: TextView): Float {
+        val layout = view.layout ?: return 0f
+        if (layout.lineCount <= 0 || view.width <= 0) return 0f
+        return (layout.getLineWidth(0) - view.width).coerceAtLeast(0f)
     }
 
     private fun updatePlayPauseIconIfNeeded() {
@@ -762,4 +917,9 @@ internal class LyricsOverlayView(
 
     private fun dp(value: Int): Int =
         (value * resources.displayMetrics.density).toInt()
+
+    private companion object {
+        /** 行内容滚入滚出时长（M3 强调缓动 decelerate 段）。 */
+        const val ROLL_DURATION_MS = 240L
+    }
 }

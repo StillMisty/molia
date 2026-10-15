@@ -1411,6 +1411,12 @@
   "downloadDelete": "Delete download",
   "downloadDeleteConfirm": "Delete the local copy? Audio, lyrics and cover files will be removed.",
   "downloadDeleteConfirmMixed": "Delete the local copies? Audio, lyrics and cover files will be removed; imported local tracks are only removed from the list.",
+  "downloadStatusCachedCopy": "Cached copy",
+  "downloadToFolder": "Save to downloads folder",
+  "localSongsCachedTag": "Cached",
+  "localSongsCachedRemove": "Clear cache",
+  "localSongsCachedRemoveConfirm": "Clear this track's audio cache? Only the cached copy is removed; downloads and imported files are unaffected.",
+  "localSongsMixedRemoveConfirm": "Remove the selected items? Downloads delete files, imported items are only removed from the list, cached copies are cleared.",
   "downloadShare": "Share / export",
   "downloadProgressPercent": "{percent}%",
   "@downloadProgressPercent": {
@@ -1532,6 +1538,7 @@
   "downloadsEmpty": "No downloaded tracks yet",
   "sleepTimerTitle": "Sleep timer",
   "sleepTimerHint": "Pauses playback when the timer ends",
+  "sleepTimerCountdownSection": "Countdown",
   "sleepTimerOff": "Off",
   "sleepTimerRemaining": "{time} left",
   "@sleepTimerRemaining": {
@@ -1542,8 +1549,8 @@
     }
   },
   "sleepTimerAfterTrack": "Pause after current track",
-  "sleepTimerMinutes": "Pause in {minutes} minutes",
-  "@sleepTimerMinutes": {
+  "sleepTimerMinutesShort": "{minutes} min",
+  "@sleepTimerMinutesShort": {
     "placeholders": {
       "minutes": {
         "type": "int"
@@ -1551,9 +1558,19 @@
     }
   },
   "sleepTimerCancel": "Turn off timer",
+  "sleepTimerArmedSnackbar": "Sleep timer on · pausing in {time}",
+  "@sleepTimerArmedSnackbar": {
+    "placeholders": {
+      "time": {
+        "type": "String"
+      }
+    }
+  },
+  "sleepTimerArmedAfterTrack": "Sleep timer on · pausing after this track",
+  "sleepTimerHourLabel": "Hours",
+  "sleepTimerMinuteLabel": "Minutes",
   "sleepTimerCustom": "Custom duration…",
   "sleepTimerCustomTitle": "Custom duration",
-  "sleepTimerCustomHint": "Minutes (1–600)",
-  "sleepTimerCustomInvalid": "Enter an integer between 1 and 600",
+  "sleepTimerCustomInvalid": "Duration must be between 1 minute and 10 hours",
   "sleepTimerCustomConfirm": "Set"
 }

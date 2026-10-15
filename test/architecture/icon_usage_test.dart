@@ -13,11 +13,13 @@ const Set<String> _outlinedPairAllowlist = {
   'library_music_outlined',
 };
 
-/// I2 例外：`IconSwap` 本身（配方所在处）与曲目行「缩略图 ⇄ 多选勾选」
-/// （不是按钮图标槽位切换，语义是封面被勾选态替换）。
+/// I2 例外：`IconSwap` 本身（配方所在处）、曲目行「缩略图 ⇄ 多选勾选」
+/// （不是按钮图标槽位切换，语义是封面被勾选态替换）、歌词页扩展行
+/// 「展开 ⇄ 收起」（不是按钮图标槽位切换，语义是翻译 / 罗马音随行淡出收起）。
 const Set<String> _animatedSwitcherAllowlist = {
   'lib/widgets/icon_swap.dart',
   'lib/widgets/track_row.dart',
+  'lib/widgets/lyrics.dart',
 };
 
 void main() {

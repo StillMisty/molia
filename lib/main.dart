@@ -260,10 +260,11 @@ void main() async {
   );
   playbackBackend = LocalPlaybackBackend(
     service: localPlayback,
-    // 取链外层装饰：优先命中本地下载副本（文件存在时直接 file://），
+    // 取链外层装饰：优先命中本地下载副本 / 完整音频缓存（直接 file://），
     // 未命中回落既有 CatalogService（single-flight + LRU + TTL 不变）。
     resolver: (track, quality) async {
-      final local = await downloadService.localUriFor(track);
+      final local =
+          await downloadService.localUriFor(track, quality: quality?.type);
       if (local != null) return PlayableStream(local);
       return catalogService.resolve(track, quality: quality);
     },

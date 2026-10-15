@@ -19,6 +19,9 @@ class MemoryCacheStorage implements CacheStorage {
   Future<CacheUsage> usage(String dirPath) async => CacheUsage.zero;
 
   @override
+  Future<Map<String, int>> listFiles(String dirPath) async => const {};
+
+  @override
   Future<CacheUsage> usageMatching(
     String dirPath, {
     required String prefix,

@@ -54,6 +54,7 @@ void main() {
     DownloadArtworkResolver? artwork,
     DownloadSettings? settings,
     DownloadsPublisher? publisher,
+    CacheService? cacheService,
   }) {
     final registry = FakeSourceRegistry({
       'kw': kwSource,
@@ -69,6 +70,7 @@ void main() {
       artworkResolver: artwork,
       settings: settings,
       publisher: publisher,
+      cacheService: cacheService,
       preferredQuality: () => '320k',
       clock: () => 1000,
     );
@@ -567,15 +569,7 @@ void main() {
     final dio = mockDio(
       (options) => bytesResponse([1, 2], headers: {'content-length': ['2']}),
     );
-    final service = DownloadService(
-      catalog: CatalogService(registry: FakeSourceRegistry({'kw': kwSource})),
-      repository: repository,
-      storage: storage,
-      dio: dio,
-      cacheService: cacheService,
-      preferredQuality: () => '320k',
-      clock: () => 1000,
-    );
+    final service = makeService(dio: dio, cacheService: cacheService);
     await service.init();
 
     final cacheName = CacheService.audioCacheKey(
@@ -594,6 +588,81 @@ void main() {
       [1, 2],
       reason: '回退网络下载',
     );
+  });
+
+  test('缓存 = 已下载：audioCacheFor 命中完整缓存（音质 / 体积），.part 不算', () async {
+    SharedPreferences.setMockInitialValues({});
+    final prefs = await SharedPreferences.getInstance();
+    final cacheStorage = _FakeCacheStorage(audioDir: '/cache/audio');
+    final cacheService = CacheService(storage: cacheStorage, prefs: prefs);
+    final service = makeService(cacheService: cacheService);
+    await service.init();
+
+    final track = makeTrack();
+    final name320 = CacheService.audioCacheKey(
+      sourceKey: 'kw',
+      songId: '1',
+      quality: '320k',
+    );
+    final name128 = CacheService.audioCacheKey(
+      sourceKey: 'kw',
+      songId: '1',
+      quality: '128k',
+    );
+
+    expect(await service.audioCacheFor(track), isNull);
+
+    // 只有 128k 完整缓存：探测顺序（偏好 320k 在前）回退到 128k。
+    storage.files['/cache/audio/$name128'] = [1, 2, 3];
+    final hit = await service.audioCacheFor(track);
+    expect(hit, isNotNull);
+    expect(hit!.quality, '128k');
+    expect(hit.path, '/cache/audio/$name128');
+    expect(hit.sizeBytes, 3);
+
+    // 320k 出现 .part 半成品：不视为命中，仍回退 128k。
+    storage.files['/cache/audio/$name320'] = [7, 7, 7, 7];
+    storage.files['/cache/audio/$name320.part'] = [7];
+    expect((await service.audioCacheFor(track))!.quality, '128k');
+
+    // 精确音质探测：只有 128k 命中。
+    expect(
+      await service.audioCacheFor(track, qualities: const ['320k']),
+      isNull,
+    );
+    expect(
+      (await service.audioCacheFor(track, qualities: const ['128k']))!.path,
+      '/cache/audio/$name128',
+    );
+  });
+
+  test('缓存 = 已下载：localUriFor 下载记录优先，其次完整缓存（离线可播）', () async {
+    SharedPreferences.setMockInitialValues({});
+    final prefs = await SharedPreferences.getInstance();
+    final cacheStorage = _FakeCacheStorage(audioDir: '/cache/audio');
+    final cacheService = CacheService(storage: cacheStorage, prefs: prefs);
+    final service = makeService(cacheService: cacheService);
+    await service.init();
+
+    final track = makeTrack();
+    expect(await service.localUriFor(track), isNull);
+
+    // 完整缓存：直接 file://（不触网、不要求下载记录）。
+    final cacheName = CacheService.audioCacheKey(
+      sourceKey: 'kw',
+      songId: '1',
+      quality: '320k',
+    );
+    storage.files['/cache/audio/$cacheName'] = [1, 2, 3];
+    final cachedUri = await service.localUriFor(track, quality: '320k');
+    expect(cachedUri!.isScheme('file'), isTrue);
+    expect(cachedUri.toFilePath(), '/cache/audio/$cacheName');
+
+    // 已有下载记录：记录优先于缓存。
+    await service.download(track, includeLyrics: false, includeCover: false);
+    final record = service.recordFor('kw', '1')!;
+    final downloadedUri = await service.localUriFor(track, quality: '320k');
+    expect(downloadedUri!.toFilePath(), record.filePath);
   });
 
   test('分项下载：先歌词 / 封面，再音频补齐且不丢分项', () async {
@@ -967,6 +1036,9 @@ class _FakeCacheStorage implements CacheStorage {
 
   final String? audioDir;
 
+  /// 目录列举结果（缓存索引测试注入）：文件名 → 字节数。
+  Map<String, int> files = const {};
+
   @override
   Future<String?> audioCacheDir() async => audioDir;
 
@@ -978,6 +1050,9 @@ class _FakeCacheStorage implements CacheStorage {
 
   @override
   Future<CacheUsage> usage(String dirPath) async => CacheUsage.zero;
+
+  @override
+  Future<Map<String, int>> listFiles(String dirPath) async => files;
 
   @override
   Future<CacheUsage> usageMatching(
