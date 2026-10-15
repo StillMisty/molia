@@ -97,11 +97,19 @@ void main() {
     expect(plain.lineEndMs, -1);
   });
 
-  test('首行之前返回空行（前奏）', () {
+  test('首行之前（前奏）：没有当前行，预览后续歌词', () {
     final result = track(const Duration(seconds: 1));
     expect(result.index, -1);
     expect(result.line, '');
-    expect(result.upcoming, isEmpty);
+    expect(result.upcoming, ['two', 'five', 'ten']);
+    expect(result.extended, isEmpty);
+
+    // 预览可占满 maxLines（没有当前行占位）；maxLines=1 时显示第一句。
+    expect(track(const Duration(seconds: 1), maxLines: 1).upcoming, ['two']);
+    expect(
+      track(const Duration(seconds: 1), maxLines: 2).upcoming,
+      ['two', 'five'],
+    );
   });
 
   test('正值偏移让歌词提前显示', () {

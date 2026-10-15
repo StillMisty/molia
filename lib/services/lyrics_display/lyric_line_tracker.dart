@@ -112,7 +112,12 @@ class LyricLineTracker {
     // 正值 = 歌词提前显示：有效进度向后平移后再查表。
     final effectivePosition = position + Duration(milliseconds: offsetMs);
     final index = lyricLineIndexAt(lines, effectivePosition);
-    if (index < 0) return const TrackedLine();
+    if (index < 0) {
+      // 前奏（还没到第一句）：没有当前行可显示，把最前面的若干句作为
+      // 「即将到来」下发——悬浮窗不至于整段空着，第一句开始后回到正常
+      // 当前行 + 后续行；此时没有当前行占用行位，预览可占满 maxLines。
+      return TrackedLine(upcoming: _introPreview(lines, maxLines));
+    }
 
     // 行时间轴：终点取下一行时间戳；最后一行回退到末词结束；非法值归一为未知。
     final words = lines[index].words;
@@ -165,6 +170,19 @@ class LyricLineTracker {
     final result = <String>[];
     for (var i = index + 1; i < lines.length && result.length < maxLines - 1; i++) {
       result.add(lines[i].text);
+    }
+    return result;
+  }
+
+  /// 前奏预览：位置还没到第一句时，展示最前面的 [maxLines] 句（没有当前行
+  /// 占用行位，因此可占满 [maxLines]）。
+  static List<String> _introPreview(List<LyricLine> lines, int maxLines) {
+    if (maxLines <= 0) return const [];
+    final result = <String>[];
+    for (final line in lines) {
+      if (line.text.isEmpty) continue;
+      result.add(line.text);
+      if (result.length >= maxLines) break;
     }
     return result;
   }

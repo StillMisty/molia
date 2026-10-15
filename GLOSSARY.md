@@ -163,7 +163,9 @@
   LX 脚本 / any-listen / local 一律 `SourceFailure(unsupported)`。
 - **Album entry（专辑入口）** — 歌曲信息页「专辑」行：payload 专辑 id
   （`platformAlbumId`：wy/kg/kw/mg `albumId`、tx `albumMid`）与能力位双判定为真时
-  变为可点行（副标题「查看专辑」），否则保持只读信息行。
+  变为可点行（副标题「查看专辑」），否则保持只读信息行。专辑页曲目行与搜索结果 /
+  歌手页同款（`TrackMenuTile`：行尾菜单收藏 / 加入列表），时长展示统一走
+  `utils/duration_text.dart`（未知时长不占行尾）。
 
 ## 歌手与歌词搜索
 
