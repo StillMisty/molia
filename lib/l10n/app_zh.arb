@@ -1249,6 +1249,7 @@
   "downloadsNoResume": "不做断点续传：平台直链多为一次性签名地址，失败后重下更可靠",
   "sleepTimerTitle": "定时关闭",
   "sleepTimerHint": "到点自动暂停播放",
+  "sleepTimerCountdownSection": "倒计时",
   "sleepTimerOff": "未开启",
   "sleepTimerRemaining": "剩余 {time}",
   "@sleepTimerRemaining": {
@@ -1259,8 +1260,8 @@
     }
   },
   "sleepTimerAfterTrack": "播完当前歌曲后暂停",
-  "sleepTimerMinutes": "{minutes} 分钟后暂停",
-  "@sleepTimerMinutes": {
+  "sleepTimerMinutesShort": "{minutes} 分钟",
+  "@sleepTimerMinutesShort": {
     "placeholders": {
       "minutes": {
         "type": "int"
@@ -1268,9 +1269,19 @@
     }
   },
   "sleepTimerCancel": "关闭定时",
+  "sleepTimerArmedSnackbar": "已开启定时关闭 · {time} 后暂停",
+  "@sleepTimerArmedSnackbar": {
+    "placeholders": {
+      "time": {
+        "type": "String"
+      }
+    }
+  },
+  "sleepTimerArmedAfterTrack": "已开启定时关闭 · 播完当前歌曲后暂停",
+  "sleepTimerHourLabel": "小时",
+  "sleepTimerMinuteLabel": "分钟",
   "sleepTimerCustom": "自定义时长…",
   "sleepTimerCustomTitle": "自定义时长",
-  "sleepTimerCustomHint": "分钟数（1–600）",
-  "sleepTimerCustomInvalid": "请输入 1–600 之间的整数",
+  "sleepTimerCustomInvalid": "时长需在 1 分钟到 10 小时之间",
   "sleepTimerCustomConfirm": "设定"
 }

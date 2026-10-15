@@ -26,7 +26,7 @@ enum SleepTimerMode {
 /// 不进任何聚合 `notifyListeners`（架构硬约束：高频数值不进聚合通知）。
 @immutable
 class SleepTimerState {
-  const SleepTimerState({required this.mode, this.remaining});
+  const SleepTimerState({required this.mode, this.remaining, this.duration});
 
   /// 未开启。
   static const SleepTimerState off = SleepTimerState(mode: SleepTimerMode.off);
@@ -36,19 +36,26 @@ class SleepTimerState {
   /// 剩余播放时长（仅倒计时模式非空；暂停期间冻结）。
   final Duration? remaining;
 
+  /// 武装时的启动时长（仅倒计时非空）：档位 chip 选中态用；取消 / 到点归零。
+  ///
+  /// 与每秒变化的 [remaining] 同通道发布，但只在武装 / 取消时改变。
+  final Duration? duration;
+
   bool get isActive => mode != SleepTimerMode.off;
 
   @override
   bool operator ==(Object other) =>
       other is SleepTimerState &&
       other.mode == mode &&
-      other.remaining == remaining;
+      other.remaining == remaining &&
+      other.duration == duration;
 
   @override
-  int get hashCode => Object.hash(mode, remaining);
+  int get hashCode => Object.hash(mode, remaining, duration);
 
   @override
-  String toString() => 'SleepTimerState(mode: $mode, remaining: $remaining)';
+  String toString() =>
+      'SleepTimerState(mode: $mode, remaining: $remaining, duration: $duration)';
 }
 
 /// 定时关闭控制器：只决定「什么时候暂停」，暂停动作经注入的 [onFire] 落地
@@ -99,6 +106,9 @@ class SleepTimerController implements ValueListenable<SleepTimerState> {
 
   SleepTimerMode _mode = SleepTimerMode.off;
   Duration? _remaining;
+
+  /// 武装时的启动时长（仅倒计时非空）；chip 选中态用。
+  Duration? _duration;
   Timer? _ticker;
   DateTime? _lastTickAt;
 
@@ -130,6 +140,7 @@ class SleepTimerController implements ValueListenable<SleepTimerState> {
     if (duration <= Duration.zero) return;
     _mode = SleepTimerMode.countdown;
     _armedTrackUri = null;
+    _duration = duration;
     _remaining = duration;
     _cancelTicker();
     _syncTicker();
@@ -142,6 +153,7 @@ class SleepTimerController implements ValueListenable<SleepTimerState> {
     if (uri == null) return;
     _mode = SleepTimerMode.afterCurrentTrack;
     _armedTrackUri = uri;
+    _duration = null;
     _remaining = null;
     _cancelTicker();
     _maxPosition = _position.value;
@@ -265,6 +277,7 @@ class SleepTimerController implements ValueListenable<SleepTimerState> {
   void _reset({required bool notify}) {
     _mode = SleepTimerMode.off;
     _remaining = null;
+    _duration = null;
     _armedTrackUri = null;
     _cancelTicker();
     if (notify) _publish();
@@ -273,5 +286,6 @@ class SleepTimerController implements ValueListenable<SleepTimerState> {
   void _publish() => _state.value = SleepTimerState(
         mode: _mode,
         remaining: _remaining,
+        duration: _duration,
       );
 }

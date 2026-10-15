@@ -2724,6 +2724,9 @@ class AppLocalizationsZh extends AppLocalizations {
   String get sleepTimerHint => '到点自动暂停播放';
 
   @override
+  String get sleepTimerCountdownSection => '倒计时';
+
+  @override
   String get sleepTimerOff => '未开启';
 
   @override
@@ -2735,12 +2738,26 @@ class AppLocalizationsZh extends AppLocalizations {
   String get sleepTimerAfterTrack => '播完当前歌曲后暂停';
 
   @override
-  String sleepTimerMinutes(int minutes) {
-    return '$minutes 分钟后暂停';
+  String sleepTimerMinutesShort(int minutes) {
+    return '$minutes 分钟';
   }
 
   @override
   String get sleepTimerCancel => '关闭定时';
+
+  @override
+  String sleepTimerArmedSnackbar(String time) {
+    return '已开启定时关闭 · $time 后暂停';
+  }
+
+  @override
+  String get sleepTimerArmedAfterTrack => '已开启定时关闭 · 播完当前歌曲后暂停';
+
+  @override
+  String get sleepTimerHourLabel => '小时';
+
+  @override
+  String get sleepTimerMinuteLabel => '分钟';
 
   @override
   String get sleepTimerCustom => '自定义时长…';
@@ -2749,10 +2766,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get sleepTimerCustomTitle => '自定义时长';
 
   @override
-  String get sleepTimerCustomHint => '分钟数（1–600）';
-
-  @override
-  String get sleepTimerCustomInvalid => '请输入 1–600 之间的整数';
+  String get sleepTimerCustomInvalid => '时长需在 1 分钟到 10 小时之间';
 
   @override
   String get sleepTimerCustomConfirm => '设定';

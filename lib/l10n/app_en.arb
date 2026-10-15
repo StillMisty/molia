@@ -1523,6 +1523,7 @@
   "downloadsEmpty": "No downloaded tracks yet",
   "sleepTimerTitle": "Sleep timer",
   "sleepTimerHint": "Pauses playback when the timer ends",
+  "sleepTimerCountdownSection": "Countdown",
   "sleepTimerOff": "Off",
   "sleepTimerRemaining": "{time} left",
   "@sleepTimerRemaining": {
@@ -1533,8 +1534,8 @@
     }
   },
   "sleepTimerAfterTrack": "Pause after current track",
-  "sleepTimerMinutes": "Pause in {minutes} minutes",
-  "@sleepTimerMinutes": {
+  "sleepTimerMinutesShort": "{minutes} min",
+  "@sleepTimerMinutesShort": {
     "placeholders": {
       "minutes": {
         "type": "int"
@@ -1542,9 +1543,19 @@
     }
   },
   "sleepTimerCancel": "Turn off timer",
+  "sleepTimerArmedSnackbar": "Sleep timer on · pausing in {time}",
+  "@sleepTimerArmedSnackbar": {
+    "placeholders": {
+      "time": {
+        "type": "String"
+      }
+    }
+  },
+  "sleepTimerArmedAfterTrack": "Sleep timer on · pausing after this track",
+  "sleepTimerHourLabel": "Hours",
+  "sleepTimerMinuteLabel": "Minutes",
   "sleepTimerCustom": "Custom duration…",
   "sleepTimerCustomTitle": "Custom duration",
-  "sleepTimerCustomHint": "Minutes (1–600)",
-  "sleepTimerCustomInvalid": "Enter an integer between 1 and 600",
+  "sleepTimerCustomInvalid": "Duration must be between 1 minute and 10 hours",
   "sleepTimerCustomConfirm": "Set"
 }

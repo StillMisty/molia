@@ -18,9 +18,11 @@ import 'package:molia/providers/sleep_timer.dart';
 import 'package:molia/services/cache_service.dart';
 import 'package:molia/services/cache_storage_stub.dart';
 import 'package:molia/services/download/download_service.dart';
+import 'package:molia/services/notification_service.dart';
 import 'package:molia/services/track_cache_service.dart';
 import 'package:molia/utils/lyrics_provider_label.dart';
 import 'package:molia/widgets/track_info_view.dart';
+import 'package:material_3_expressive/material_3_expressive.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -28,6 +30,25 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../support/fake_download_storage.dart';
 import '../support/fake_music_source.dart';
 import '../support/fakes.dart';
+
+/// 记录型提示服务：断言 Snackbar 文案与「取消」回调。
+class _RecordingNotificationService extends NotificationService {
+  _RecordingNotificationService()
+      : super(GlobalKey<ScaffoldMessengerState>());
+
+  final List<(String, String?, VoidCallback?)> snackbars = [];
+
+  @override
+  void showSnackBar(
+    String message, {
+    bool isError = false,
+    Duration duration = const Duration(seconds: 4),
+    String? actionLabel,
+    VoidCallback? onActionPressed,
+  }) {
+    snackbars.add((message, actionLabel, onActionPressed));
+  }
+}
 
 /// 可编排的单曲缓存假件：只覆盖页面消费的两个方法。
 class _FakeTrackCacheService extends TrackCacheService {
@@ -167,6 +188,7 @@ void main() {
     DownloadService? downloads,
     SourceRegistry? registry,
     AlbumService? albumService,
+    NotificationService? notifications,
   }) async {
     backend.emit(BackendSnapshot(
       current: track,
@@ -186,6 +208,8 @@ void main() {
           if (registry != null) Provider<SourceRegistry>.value(value: registry),
           if (albumService != null)
             Provider<AlbumService>.value(value: albumService),
+          if (notifications != null)
+            Provider<NotificationService>.value(value: notifications),
         ],
         child: MaterialApp(
           locale: const Locale('zh'),
@@ -390,7 +414,7 @@ void main() {
     expect(find.byKey(const Key('trackInfoSleepTimerItem')), findsOneWidget);
   });
 
-  testWidgets('定时关闭：档位设置与取消（行副标题随状态刷新）', (tester) async {
+  testWidgets('定时关闭：chip 档位设置与取消（行副标题随状态刷新）', (tester) async {
     tester.view.physicalSize = const Size(420, 900);
     tester.view.devicePixelRatio = 1.0;
     addTearDown(() {
@@ -404,23 +428,79 @@ void main() {
 
     await tester.tap(find.byKey(const Key('trackInfoSleepTimerItem')));
     await tester.pumpAndSettle();
-    expect(find.text('15 分钟后暂停'), findsOneWidget);
+    expect(find.text('倒计时'), findsOneWidget);
+    expect(find.text('15 分钟'), findsOneWidget);
 
-    await tester.tap(find.text('15 分钟后暂停'));
+    await tester.tap(find.byKey(const Key('sleepTimerPreset_15')));
     await tester.pumpAndSettle();
     expect(playback.sleepTimer.value.remaining, const Duration(minutes: 15));
     expect(find.text('剩余 15:00'), findsOneWidget);
 
-    // 再开弹层：显示关闭定时 + 当前状态（行副标题与弹层状态行同时可见）。
+    // 再开弹层：状态区显示剩余时间、当前档位有选中态，取消入口在卡片里。
     await tester.tap(find.byKey(const Key('trackInfoSleepTimerItem')));
     await tester.pumpAndSettle();
-    expect(find.text('关闭定时'), findsOneWidget);
-    expect(find.text('剩余 15:00'), findsNWidgets(2));
-    await tester.tap(find.text('关闭定时'));
+    expect(find.text('15:00'), findsOneWidget);
+    final selectedChip = tester.widget<M3EChip>(
+      find.byKey(const Key('sleepTimerPreset_15')),
+    );
+    expect(selectedChip.selected, isTrue);
+    await tester.tap(find.byKey(const Key('sleepTimerCancelButton')));
     await tester.pumpAndSettle();
 
     expect(playback.sleepTimer.value.mode, SleepTimerMode.off);
     expect(find.text('未开启'), findsOneWidget);
+  });
+
+  testWidgets('定时关闭：开启弹 Snackbar 反馈（取消可撤销），播完当前歌曲同样有反馈',
+      (tester) async {
+    final notifications = _RecordingNotificationService();
+    await pumpView(
+      tester,
+      track: _track(),
+      notifications: notifications,
+    );
+
+    await tester.tap(find.byKey(const Key('trackInfoSleepTimerItem')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('sleepTimerPreset_15')));
+    await tester.pumpAndSettle();
+
+    expect(playback.sleepTimer.value.duration, const Duration(minutes: 15));
+    expect(notifications.snackbars, hasLength(1));
+    expect(notifications.snackbars.single.$1, '已开启定时关闭 · 15:00 后暂停');
+    expect(notifications.snackbars.single.$2, '取消');
+
+    // Snackbar 的「取消」操作直接撤销定时。
+    notifications.snackbars.single.$3?.call();
+    expect(playback.sleepTimer.value.mode, SleepTimerMode.off);
+
+    // 播完当前歌曲：模式文案反馈。
+    await tester.tap(find.byKey(const Key('trackInfoSleepTimerItem')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('sleepTimerAfterTrackItem')));
+    await tester.pumpAndSettle();
+    expect(playback.sleepTimer.value.mode, SleepTimerMode.afterCurrentTrack);
+    expect(notifications.snackbars.last.$1, '已开启定时关闭 · 播完当前歌曲后暂停');
+  });
+
+  testWidgets('定时关闭：自定义时长走 M3E time picker（初始 30 分钟）', (tester) async {
+    await pumpView(
+      tester,
+      track: _track(),
+      notifications: _RecordingNotificationService(),
+    );
+
+    await tester.tap(find.byKey(const Key('trackInfoSleepTimerItem')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('sleepTimerCustomChip')));
+    await tester.pumpAndSettle();
+
+    // 时间选择器（24 小时制）：确认即按初始 0:30（30 分钟）武装。
+    expect(find.text('自定义时长'), findsWidgets);
+    await tester.tap(find.text('设定'));
+    await tester.pumpAndSettle();
+    expect(playback.sleepTimer.value.duration, const Duration(minutes: 30));
+    expect(playback.sleepTimer.value.mode, SleepTimerMode.countdown);
   });
 
   testWidgets('下载行：未下载 → 打开弹层 → 点下载触发下载动作', (tester) async {

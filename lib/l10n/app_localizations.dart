@@ -5139,6 +5139,12 @@ abstract class AppLocalizations {
   /// **'Pauses playback when the timer ends'**
   String get sleepTimerHint;
 
+  /// No description provided for @sleepTimerCountdownSection.
+  ///
+  /// In en, this message translates to:
+  /// **'Countdown'**
+  String get sleepTimerCountdownSection;
+
   /// No description provided for @sleepTimerOff.
   ///
   /// In en, this message translates to:
@@ -5157,17 +5163,41 @@ abstract class AppLocalizations {
   /// **'Pause after current track'**
   String get sleepTimerAfterTrack;
 
-  /// No description provided for @sleepTimerMinutes.
+  /// No description provided for @sleepTimerMinutesShort.
   ///
   /// In en, this message translates to:
-  /// **'Pause in {minutes} minutes'**
-  String sleepTimerMinutes(int minutes);
+  /// **'{minutes} min'**
+  String sleepTimerMinutesShort(int minutes);
 
   /// No description provided for @sleepTimerCancel.
   ///
   /// In en, this message translates to:
   /// **'Turn off timer'**
   String get sleepTimerCancel;
+
+  /// No description provided for @sleepTimerArmedSnackbar.
+  ///
+  /// In en, this message translates to:
+  /// **'Sleep timer on · pausing in {time}'**
+  String sleepTimerArmedSnackbar(String time);
+
+  /// No description provided for @sleepTimerArmedAfterTrack.
+  ///
+  /// In en, this message translates to:
+  /// **'Sleep timer on · pausing after this track'**
+  String get sleepTimerArmedAfterTrack;
+
+  /// No description provided for @sleepTimerHourLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Hours'**
+  String get sleepTimerHourLabel;
+
+  /// No description provided for @sleepTimerMinuteLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Minutes'**
+  String get sleepTimerMinuteLabel;
 
   /// No description provided for @sleepTimerCustom.
   ///
@@ -5181,16 +5211,10 @@ abstract class AppLocalizations {
   /// **'Custom duration'**
   String get sleepTimerCustomTitle;
 
-  /// No description provided for @sleepTimerCustomHint.
-  ///
-  /// In en, this message translates to:
-  /// **'Minutes (1–600)'**
-  String get sleepTimerCustomHint;
-
   /// No description provided for @sleepTimerCustomInvalid.
   ///
   /// In en, this message translates to:
-  /// **'Enter an integer between 1 and 600'**
+  /// **'Duration must be between 1 minute and 10 hours'**
   String get sleepTimerCustomInvalid;
 
   /// No description provided for @sleepTimerCustomConfirm.
