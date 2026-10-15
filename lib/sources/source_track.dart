@@ -33,10 +33,18 @@ class SourceTrack {
     required this.raw,
   });
 
-  String get id {
+  /// 平台内歌曲 id：raw 取键优先级 → 兜底 `标题-歌手`。
+  ///
+  /// 与领域 `TrackId.id`（`trackFromSourceTrack`）**同源**：缓存 key /
+  /// 下载记录 / 播放历史都按这个 id 对齐；[id] 只是它的全局唯一包装。
+  /// 两者必须成对看：这里少写一层包装，缓存文件名就会与所有读取路径错开。
+  String get songId {
     final key = rawIdOf(raw);
-    return '$sourceKey:${key.isNotEmpty ? key : '$title-$artist'}';
+    return key.isNotEmpty ? key : '$title-$artist';
   }
+
+  /// 全局唯一标识 `{sourceKey}:{songId}`（队列 / 播放会话 / 媒体会话用）。
+  String get id => '$sourceKey:$songId';
 
   /// 仅用于音源补图等原地更新：raw / 音质列表保持同一引用，
   /// 脚本 `musicUrl / lyric / pic` 回传数据不受影响。

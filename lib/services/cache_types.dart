@@ -17,6 +17,17 @@ enum CachePartition {
   artwork,
 }
 
+/// 音频缓存半成品：just_audio `LockCachingAudioSource` 边下载边写 `*.part`，
+/// 整个文件落盘后才原子改名成正式缓存名（同 `downloadPartSuffix` 约定）。
+const String audioCachePartSuffix = '.part';
+
+/// 字节预取半成品后缀（见 `audio_predownload_io.dart`）：与 just_audio 的
+/// [audioCachePartSuffix] 分开，避免两边清理互相误删正在写的文件。
+const String audioCachePredownloadSuffix = '.predl';
+
+/// MIME 边车后缀：just_audio 记录原始 Content-Type（`*.mime`），不是音频数据。
+const String audioCacheMimeSuffix = '.mime';
+
 /// 分区用量：字节数 + 条目数。
 class CacheUsage {
   const CacheUsage({required this.bytes, required this.count});
@@ -94,10 +105,14 @@ abstract class CacheStorage {
   /// 一次目录枚举供「缓存曲目」列表按前缀匹配与状态探测复用（避免逐曲探测）。
   Future<Map<String, int>> listFiles(String dirPath);
 
-  /// 统计目录内文件名以 [prefix] 开头的文件（单曲占用展示用）。
+  /// 删除目录内文件名满足 [test] 的文件，返回删除数量。
   ///
-  /// 目录不存在/不可读时返回 [CacheUsage.zero]。
-  Future<CacheUsage> usageMatching(String dirPath, {required String prefix});
+  /// 只用于「按文件名特征清扫」（如启动时清理中断残留的半成品）；
+  /// 按前缀删除走 [deleteMatching]。
+  Future<int> deleteWhere(
+    String dirPath, {
+    required bool Function(String fileName) test,
+  });
 
   /// 删除目录内文件名以 [prefix] 开头的文件，返回删除与跳过的数量。
   ///

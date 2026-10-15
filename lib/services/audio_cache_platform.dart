@@ -23,3 +23,12 @@ bool platformSupportsAudioCaching({
       target == TargetPlatform.iOS ||
       target == TargetPlatform.macOS;
 }
+
+/// 平台是否支持把直链字节**后台预取**进音频缓存目录（IO 平台都支持）。
+///
+/// 与 [platformSupportsAudioCaching] 是两件事：桌面 media_kit 后端不能
+/// 边播边缓存（播放侧受限），但可以另行下载字节写进同一个缓存目录——
+/// 播放仍走网络，写完（原子改名）后重播经 `DownloadService.localUriFor`
+/// 命中 `file://`，桌面同样能「听过就有缓存、重播离线」。
+/// Web 无持久文件系统，一律不写。
+bool platformSupportsAudioPrefetch({bool isWeb = kIsWeb}) => !isWeb;

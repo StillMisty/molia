@@ -104,11 +104,18 @@ class _FakeCacheStorage implements CacheStorage {
   Future<Map<String, int>> listFiles(String dirPath) async => Map.of(files);
 
   @override
-  Future<CacheUsage> usageMatching(
+  Future<int> deleteWhere(
     String dirPath, {
-    required String prefix,
-  }) async =>
-      CacheUsage.zero;
+    required bool Function(String fileName) test,
+  }) async {
+    var deleted = 0;
+    files.removeWhere((name, size) {
+      if (!test(name)) return false;
+      deleted++;
+      return true;
+    });
+    return deleted;
+  }
 
   @override
   Future<CacheDeleteResult> deleteMatching(

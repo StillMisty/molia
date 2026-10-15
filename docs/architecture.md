@@ -304,17 +304,26 @@
   失败 / 通道缺失一律 no-op 只记日志）；发布开关
   `DownloadSettings.publishToPublicDir`（默认开，仅 Android 显示），管理页
   提供「补发布到公共目录」回收旧记录；
-- **缓存优先**：所选音质的完整音频缓存（`CacheService.audioCacheKey` 同名且
-  无 `.part`）命中时直接拷贝不触网；歌词经注入的 `LyricsService`（缓存 →
+- **缓存优先**：所选音质的完整音频缓存（`CacheService.audioCacheKeyForTrack`
+  同名且无 `.part`）命中时直接拷贝不触网；歌词经注入的 `LyricsService`（缓存 →
   原生取词 → 跨平台回退，与播放页同一链路）；封面经 `ArtworkCache.bytesOf`
   命中直读、未命中取图后 `putBytes` 回填；
-- **缓存 = 已下载**（issue #22）：完整音频缓存同样按「已下载」识别——信息页
-  下载行与下载弹层状态显示已下载（体积 · 音质 · 缓存副本），弹层主按钮在
-  缓存命中时变「下载到本地文件夹」（转存持久副本，不触网）；播放取链在下载
-  记录之后回退缓存（`localUriFor`：精确音质优先、未命中用其它已缓存音质）→
-  `file://` 离线可播；收藏页「本地歌曲」合集按播放历史 × 缓存目录前缀匹配
-  列出缓存行（保留原曲身份，删除 = 清缓存）。缓存可被 LRU / 用户清理移除，
-  状态与列表随 `CacheService.revision` 回退（不承诺持久可用）；
+- **两档本地数据（ADR-0008）**：缓存（易失）与下载（持久）分开命名、合在一个
+  页面（`lib/pages/track_local_data_page.dart`）呈现。完整音频缓存按「已缓存」
+  识别——信息页「本地数据」行与页内状态（体积 · 音质 · 可离线使用），动作是
+  「转存到本地文件夹」（拷贝成持久副本，不触网）；播放取链在下载记录之后回退
+  缓存（`localUriFor`：精确音质优先、未命中用其它已缓存音质）→ `file://`
+  离线可播；收藏页「本地歌曲」合集按播放历史 × 缓存目录前缀匹配列出缓存行
+  （保留原曲身份，删除 = 清缓存）。缓存可被 LRU / 用户清理移除，状态与列表随
+  `CacheService.revision` 回退（不承诺持久可用）；
+- **音频缓存只认完整文件**：`CacheService.audioCacheIndex` /
+  `audioUsageForTrack` 排除半成品（`.part` / `.predl`）与 MIME 边车
+  （`.mime`）：占用展示、命中探测、「缓存曲目」列表同一口径；半成品单独统计
+  （页内「写入中」）。启动清扫中断残留半成品，旧命名（复合曲目 id 时代的
+  `{sourceKey}_{sourceKey}:{songId}_*`）文件一次性清理（prefs 版本键）；
+  缓存文件名唯一入口 `CacheService.audioCacheKeyForSource`（写入侧，
+  `SourceTrack.songId`）与 `audioCacheKeyForTrack`（读取侧，`TrackId.id`），
+  两侧必须同名（回归测试见 `test/services/track_local_data_service_test.dart`）；
 - **落库**：drift `downloads` 表（schema v5，`filePath` 可空——记录可以只含
   歌词或只含封面；`publicUri` 存 Android 公共副本定位；`imported` 标记
   **本地导入**：就地引用用户文件、删除只移行）存原音源曲目键 +
@@ -341,6 +350,12 @@
 - **本地副本优先取链**：组合根在 `LocalPlaybackBackend` 的 resolver 外层
   装饰（`DownloadService.localUriFor`：下载记录 → 完整缓存 → `file://`），
   未命中回落 `CatalogService.resolve`，取链缓存策略不变；
+- **缓存写入分平台**（ADR-0008）：移动端由 just_audio 的
+  `LockCachingAudioSource` 边播边写（`platformSupportsAudioCaching`）；桌面
+  media_kit 后端不能走 `StreamAudioSource`，改由 `PlayingTrackCacheWriter`
+  起播后后台下载当前曲目字节（`.predl` → 原子改名 → LRU，
+  `platformSupportsAudioPrefetch`），重播即命中 `file://`；两者互斥
+  （同一文件不双写），切歌 / 停止 / 销毁取消；省流生效时两侧都跳过；
 - **离线播放**：封面走本地文件（`AppNetworkImage` / `ArtworkCache` 对
   `file://` 走 `FileImage`）；歌词由组合根的歌词加载器读
   `downloads/lyrics/`（翻译 `.t.lrc` 边车），且 `LyricsService` 对本地
@@ -351,10 +366,11 @@
 - **设置与管理**：`DownloadSettings`（设备本地键，不登记同步：保存位置 /
   文件名模板 `{artist}`/`{title}`/`{album}` / 标签嵌入开关 /
   Android 公共目录发布开关）；
-  下载弹层（`lib/widgets/download_sheet.dart`）：音质选择（命中缓存的音质
-  标「本地缓存」，并预选缓存音质）+ 状态（已下载 / 缓存副本 / 下载中 /
-  未下载）+ 音频动作 + 歌词/封面单独下载 + 全部下载（缓存命中且无下载记录时
-  按钮为「下载到本地文件夹」，即转存持久副本）；
+  下载弹层已并入「本地数据」页（`lib/pages/track_local_data_page.dart`，信息页
+  唯一入口）：音质选择（命中缓存的音质标「已缓存」并预选）+ 音频两档状态
+  （已下载 / 已缓存 · 可离线使用 / 下载中 / 未下载）+ 动作（下载 / 转存到本地
+  文件夹 / 取消 / 分享导出 / 删除下载）+ 歌词/封面各自下载或转存 + 缓存占用
+  四项（音频 / 歌词 / 封面 / 取链）逐项清理与全部清理；
   下载管理页（`lib/pages/downloads_manage_page.dart`，设置 › 数据与存储）：
   进行中任务 + 批量下载（当前队列 / 指定歌单，跳过已下载与本地曲目；
   **不做断点续传**：平台直链多为一次性签名地址）+ 文件维护（`.part` 清扫、
@@ -522,12 +538,15 @@
 - 播放页操作按作用对象分三域（见 ADR-0007）：**歌词域**（会话 / 来源 / 展示 / 导出）
   在歌词页，操作收敛为底部左侧 `M3EFabMenu`（换歌词 / 复制模式 / 歌词选择·海报 /
   居中跟随；无歌词时 = 换歌词 + 歌词显示设置；无曲目隐藏）；**曲目域**
-  （身份 / 渠道 / 音质 / 缓存 / 下载 / 评论）在歌曲信息页，段落顺序 =
-  操作（评论 / 定时关闭 / 换源）→ 下载 → 信息（音质 / 可用音质 / 专辑 / 来源 /
-  歌词来源）→ 缓存；**播放域**（模式 / 收藏 / 定时）在播放器进度排 + 信息页。
+  （身份 / 渠道 / 音质 / 本地数据 / 评论）在歌曲信息页，段落顺序 =
+  操作（评论 / 定时关闭 / 换源）→ 本地数据（两档状态 / 下载转存 / 缓存清理）→
+  信息（音质 / 可用音质 / 专辑 / 来源 / 歌词来源）；**播放域**（模式 / 收藏 /
+  定时）在播放器进度排 + 信息页。
   曲目级操作的打开编排（能力位、守卫、换源页 tab）唯一实现在
-  `lib/widgets/track_actions.dart`；单曲缓存清理在 `lib/pages/track_cache_page.dart`
-  （逐项确认），缓存内容变更经 `CacheService.revision` 跨页刷新占用。
+  `lib/widgets/track_actions.dart`；单曲本地数据在
+  `lib/pages/track_local_data_page.dart`（读取唯走 `TrackLocalDataService`，
+  两档词表见 ADR-0008），缓存内容变更经 `CacheService.revision`、下载记录经
+  `DownloadService` 通知跨页刷新。
 - 列表行统一走 `lib/widgets/track_row.dart`（队列/收藏/历史/本地歌曲/发现/搜索结果共用）：形状按 M3E 列表规范
   （静止内 4dp、首末外侧 16dp；hover 12dp；press/选中 16dp），带 expressive spatial 弹簧
   morph；分段列表用 `cardList.gap`（2dp）行距、`itemExtent = TrackRow.extent + gap`，

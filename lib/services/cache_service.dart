@@ -4,10 +4,19 @@ import 'package:flutter/foundation.dart' show ValueNotifier;
 import 'package:logging/logging.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../domain/models/track.dart';
+import '../sources/source_track.dart';
 import 'cache_storage.dart';
 import 'lyrics_cache.dart';
 
-export 'cache_storage.dart' show CacheDeleteResult, CachePartition, CacheUsage;
+export 'cache_storage.dart'
+    show
+        CacheDeleteResult,
+        CachePartition,
+        CacheUsage,
+        audioCacheMimeSuffix,
+        audioCachePartSuffix,
+        audioCachePredownloadSuffix;
 
 /// 统一缓存门面：音频 / 歌词 / 封面三个分区的策略、统计与清理。
 ///
@@ -250,11 +259,32 @@ class CacheService {
   /// 音频缓存目录（持久）；平台不可用（Web）返回 null。
   Future<String?> audioCacheDirPath() => _safeDir(_storage.audioCacheDir);
 
-  /// 音频缓存文件索引（文件名 → 字节数）；平台不可用 / 列举失败返回空表。
+  /// 音频缓存索引（**只含完整可播放文件**：文件名 → 字节数）。
   ///
+  /// 半成品（[audioCachePartSuffix] / [audioCachePredownloadSuffix]）与 MIME
+  /// 边车（[audioCacheMimeSuffix]）不是可播放缓存，一律排除：占用展示、
+  /// 命中探测、「缓存曲目」列表共用同一口径，避免出现「缓存页说命中、
+  /// 播放 / 转存却拿不到文件」的两套答案。
   /// 一次目录列举，供「缓存曲目」列表（`audioCacheKeyPrefix` 前缀匹配）与
   /// 缓存命中探测复用；命中语义见 `DownloadService.audioCacheFor`。
   Future<Map<String, int>> audioCacheIndex() async {
+    final files = await _audioFiles();
+    return {
+      for (final entry in files.entries)
+        if (isCompleteAudioCacheFile(entry.key)) entry.key: entry.value,
+    };
+  }
+
+  /// 文件名是否为完整可播放的音频缓存。
+  static bool isCompleteAudioCacheFile(String name) {
+    final lower = name.toLowerCase();
+    return !lower.endsWith(audioCachePartSuffix) &&
+        !lower.endsWith(audioCachePredownloadSuffix) &&
+        !lower.endsWith(audioCacheMimeSuffix);
+  }
+
+  /// 音频缓存目录原始列举（含半成品 / 边车）；不可用 / 失败返回空表。
+  Future<Map<String, int>> _audioFiles() async {
     final dir = await _safeDir(_storage.audioCacheDir);
     if (dir == null) return const {};
     try {
@@ -280,25 +310,78 @@ class CacheService {
         : prefix;
   }
 
-  /// 单曲音频缓存占用（所有音质变体）。
+  /// 单曲音频缓存文件名（**写入侧唯一入口**）：由 `SourceTrack` 派生。
+  ///
+  /// `songId` 必须用 [SourceTrack.songId]（与 `TrackId.id` 同源）；用
+  /// `SourceTrack.id`（含 sourceKey 的复合 id）写出来的文件没有任何读取
+  /// 路径能匹配到，等于没缓存。
+  static String audioCacheKeyForSource(
+    SourceTrack track, {
+    String quality = '',
+  }) =>
+      audioCacheKey(
+        sourceKey: track.sourceKey,
+        songId: track.songId,
+        quality: quality,
+      );
+
+  /// 单曲音频缓存文件名（**读取侧唯一入口**）：由领域 `Track` 派生。
+  static String audioCacheKeyForTrack(Track track, {String quality = ''}) =>
+      audioCacheKey(
+        sourceKey: track.id.sourceKey,
+        songId: track.id.id,
+        quality: quality,
+      );
+
+  /// 单曲音频缓存前缀（命中该曲目所有音质变体）：由领域 `Track` 派生。
+  static String audioCacheKeyPrefixForTrack(Track track) => audioCacheKeyPrefix(
+        sourceKey: track.id.sourceKey,
+        songId: track.id.id,
+      );
+
+  /// 单曲音频缓存占用（所有音质变体；只认完整文件）。
   Future<CacheUsage> audioUsageForTrack({
     required String sourceKey,
     required String songId,
   }) async {
-    final dir = await _safeDir(_storage.audioCacheDir);
-    if (dir == null) return CacheUsage.zero;
-    try {
-      return await _storage.usageMatching(
-        dir,
-        prefix: audioCacheKeyPrefix(sourceKey: sourceKey, songId: songId),
-      );
-    } catch (e) {
-      _logger.warning('单曲音频缓存统计失败: $e');
-      return CacheUsage.zero;
-    }
+    final index = await audioCacheIndex();
+    return _usageMatching(
+      index,
+      audioCacheKeyPrefix(sourceKey: sourceKey, songId: songId),
+    );
   }
 
-  /// 清理单曲音频缓存（所有音质变体）。
+  /// 单曲音频缓存「写入中」占用（半成品 / 边车）。
+  ///
+  /// 只用于占用展示解释（「有占用、但还不能离线播放」）；命中判定不看它。
+  Future<CacheUsage> audioWritingUsageForTrack({
+    required String sourceKey,
+    required String songId,
+  }) async {
+    final files = await _audioFiles();
+    final partials = {
+      for (final entry in files.entries)
+        if (!isCompleteAudioCacheFile(entry.key)) entry.key: entry.value,
+    };
+    return _usageMatching(
+      partials,
+      audioCacheKeyPrefix(sourceKey: sourceKey, songId: songId),
+    );
+  }
+
+  /// 前缀匹配统计（文件名 → 字节数）。
+  static CacheUsage _usageMatching(Map<String, int> files, String prefix) {
+    var bytes = 0;
+    var count = 0;
+    for (final entry in files.entries) {
+      if (!entry.key.startsWith(prefix)) continue;
+      bytes += entry.value;
+      count++;
+    }
+    return CacheUsage(bytes: bytes, count: count);
+  }
+
+  /// 清理单曲音频缓存（所有音质变体，含半成品）。
   ///
   /// [protectAge] 内修改过的文件视为正在写入（边播边缓存）跳过，
   /// 结果里的 `skipped` 用于区分「本来没缓存」与「播放中暂不能删」。
@@ -327,6 +410,52 @@ class CacheService {
       _logger.warning('单曲音频缓存清理失败: $e');
       return const CacheDeleteResult();
     }
+  }
+
+  /// 启动清扫音频缓存半成品（`.part` / `.predl`）。
+  ///
+  /// 半成品的写法只存在于本进程（just_audio 边下载边写 / 字节预取）：
+  /// 重启后残留的不可能是活动下载，留着只会白占 LRU 额度。
+  /// `.mime` 是完整文件的边车，随完整文件一起处理，不在这里单独删。
+  Future<int> cleanupAudioPartials() async {
+    final dir = await _safeDir(_storage.audioCacheDir);
+    if (dir == null) return 0;
+    try {
+      final deleted = await _storage.deleteWhere(
+        dir,
+        test: (name) {
+          final lower = name.toLowerCase();
+          return lower.endsWith(audioCachePartSuffix) ||
+              lower.endsWith(audioCachePredownloadSuffix);
+        },
+      );
+      if (deleted > 0) {
+        _logger.info('清扫音频缓存半成品 $deleted 个');
+        notifyCacheChanged();
+      }
+      return deleted;
+    } catch (e) {
+      _logger.warning('音频缓存半成品清扫失败: $e');
+      return 0;
+    }
+  }
+
+  /// 音频缓存命名版本键：1（缺省）= 旧命名，2 = 当前命名。
+  static const String keyAudioNamingVersion = 'cache_audio_naming_version';
+  static const int audioNamingVersion = 2;
+
+  /// 一次性迁移：清理旧命名写入的音频缓存。
+  ///
+  /// 旧版本把 `SourceTrack.id`（`{sourceKey}:{songId}` 复合 id）当成 songId
+  /// 写文件名，结果文件名里带了重复的 sourceKey 且任何读取路径都匹配不到
+  /// —— 文件既不能被播放命中、也不能被转存，属纯垃圾，直接清空音频分区。
+  Future<void> migrateAudioCacheNamingIfNeeded() async {
+    final prefs = await _getPrefs();
+    final version = prefs?.getInt(keyAudioNamingVersion) ?? 1;
+    if (version >= audioNamingVersion) return;
+    await clear(CachePartition.audio);
+    await prefs?.setInt(keyAudioNamingVersion, audioNamingVersion);
+    _logger.info('音频缓存命名修复：旧命名缓存已清理');
   }
 
   /// 单曲歌词缓存占用。

@@ -597,6 +597,8 @@
   },
   "cacheUsageComputing": "Calculating…",
   "cachePolicyAudioEnabled": "Cache audio while playing",
+  "cachePolicyAudioScope": "Cache on play",
+  "cachePolicyAudioHint": "Written while playing on mobile; filled in by a background download on desktop. Cached tracks play offline and can be saved as downloads; the size limit and LRU eviction still apply.",
   "cachePolicyAudioMax": "Size limit",
   "cachePolicyLyricsTtl": "Keep lyrics for",
   "cachePolicyArtworkMax": "Max artwork objects",
@@ -1247,7 +1249,7 @@
   "trackInfoDuration": "Duration",
   "trackInfoTrackId": "Track ID",
   "trackInfoIdCopied": "Track ID copied",
-  "trackInfoCacheSection": "Cache",
+  "localDataTitle": "Local data",
   "trackInfoCacheResolve": "Resolved link cache",
   "trackInfoCacheNone": "Not cached",
   "trackInfoCacheEntries": "{count} entries",
@@ -1281,7 +1283,12 @@
   "downloadAndShare": "Download & share",
   "platformPageUnavailable": "This source has no platform page",
   "shareDownloading": "Downloading — sharing when done",
-  "trackCachePageTitle": "Track cache",
+  "localDataCacheSection": "Cache usage",
+  "localDataStateCached": "Cached",
+  "localDataOfflineAvailable": "Available offline",
+  "localDataTransferToFolder": "Save a copy to folder",
+  "localDataTransferHint": "Cached · transfers without network",
+  "localDataAudioPlatformHint": "Playback caching is off here; a cache copy is written in the background",
   "trackCacheClearAll": "Clear all",
   "trackCacheClearConfirm": "Clear \"{part}\"?",
   "@trackCacheClearConfirm": {
@@ -1303,6 +1310,14 @@
   },
   "clear": "Clear",
   "trackCacheEmpty": "Nothing cached for this track",
+  "trackCacheAudioWriting": "Audio writing {size}",
+  "@trackCacheAudioWriting": {
+    "placeholders": {
+      "size": {
+        "type": "String"
+      }
+    }
+  },
   "cacheAudioPlatformUnsupported": "Audio caching isn't available on this platform",
   "cacheAudioDisabled": "Audio caching is off",
   "downloadAudioSection": "Audio",
@@ -1406,7 +1421,6 @@
       }
     }
   },
-  "downloadSection": "Download",
   "downloadStatusNotDownloaded": "Not downloaded",
   "downloadStatusDownloading": "Downloading",
   "downloadStatusDownloaded": "Downloaded",
@@ -1415,8 +1429,6 @@
   "downloadDelete": "Delete download",
   "downloadDeleteConfirm": "Delete the local copy? Audio, lyrics and cover files will be removed.",
   "downloadDeleteConfirmMixed": "Delete the local copies? Audio, lyrics and cover files will be removed; imported local tracks are only removed from the list.",
-  "downloadStatusCachedCopy": "Cached copy",
-  "downloadToFolder": "Save to downloads folder",
   "localSongsCachedTag": "Cached",
   "localSongsCachedRemove": "Clear cache",
   "localSongsCachedRemoveConfirm": "Clear this track's audio cache? Only the cached copy is removed; downloads and imported files are unaffected.",

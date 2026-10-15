@@ -74,3 +74,11 @@
 - 新增 `lib/pages/track_cache_page.dart`（单曲缓存子页）与
   `lib/widgets/track_actions.dart`（曲目操作打开编排）；
 - `docs/architecture.md` 的评论 / 换源 / 下载 / 缓存 UI 段落同步更新。
+
+## 后续（ADR-0008，2026-10-15）
+
+本 ADR 的「曲目域」划分与「清理需确认」保留不变；其中「下载弹层 + 单曲缓存
+子页」两个面在 ADR-0008 中合并为**「本地数据」页**
+（`lib/pages/track_local_data_page.dart`），`TrackCacheService` 更名
+`TrackLocalDataService`，缓存命中不再显示「已下载」而是「已缓存」（可离线
+使用 / 转存）。上文的文件路径为决策当时的记录，不再回改。

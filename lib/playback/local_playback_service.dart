@@ -12,6 +12,7 @@ import '../sources/source_track.dart';
 import 'audio_cache_source.dart';
 import 'next_track_preloader.dart';
 import 'playback_order.dart';
+import 'playing_track_cache_writer.dart';
 import 'shuffle_order.dart';
 
 /// 将音源曲目解析为可播放 URL 的回调（由 SourceManager 提供）。
@@ -39,6 +40,13 @@ class LocalPlaybackService extends ChangeNotifier {
 
   /// 下一首预载器（组合根注入；null = 关闭预载）。
   final NextTrackPreloader? _nextTrackPreloader;
+
+  /// 当前曲目后台缓存写入（组合根注入；null = 关闭）。
+  ///
+  /// 只在播放侧没有写缓存时启用：桌面（media_kit 不能边播边缓存）或运行期
+  /// 后端拒绝 `StreamAudioSource` 后退到直接流播的会话。移动端正常路径由
+  /// `LockCachingAudioSource` 写同一文件，重复写会互相破坏。
+  final PlayingTrackCacheWriter? _cacheWriter;
 
   /// 已知平台后端不支持 StreamAudioSource（如桌面 media_kit）：
   /// 本会话内不再尝试边播边缓存，直接流播。
@@ -75,10 +83,12 @@ class LocalPlaybackService extends ChangeNotifier {
     String Function()? preferredQuality,
     math.Random? random,
     NextTrackPreloader? nextTrackPreloader,
+    PlayingTrackCacheWriter? audioCacheWriter,
   })  : _resolver = resolver,
         _cacheService = cacheService ?? CacheService.instance,
         _preferredQuality = preferredQuality,
         _nextTrackPreloader = nextTrackPreloader,
+        _cacheWriter = audioCacheWriter,
         _shuffleOrder = PlaybackShuffleOrder(random: random) {
     _playerStateSubscription = _player.playerStateStream.listen(_onPlayerState);
     _positionSubscription = _player.positionStream.listen((position) {
@@ -246,6 +256,8 @@ class LocalPlaybackService extends ChangeNotifier {
     if (index < 0 || index >= _queue.length) return;
     // 预取与边播边缓存不能双写同一缓存文件：起播前取消未完成的预取。
     _nextTrackPreloader?.cancelPending();
+    // 上一首的后台缓存写入（桌面）同理：切歌即停，避免与新曲目抢带宽。
+    _cacheWriter?.cancel();
     // 切到不同曲目时把「离开的当前曲目」压入播放顺序；显式回退不重复压栈。
     if (recordHistory && _currentTrack != null && _currentIndex != index) {
       _order.record(_currentIndex);
@@ -269,6 +281,15 @@ class LocalPlaybackService extends ChangeNotifier {
 
       await _setAudioSourceWithCache(Uri.parse(url), track, quality: quality);
       if (requestId != _playRequestId) return;
+
+      // 播放侧没有写缓存（平台不支持边播边缓存 / 后端拒绝后退到直接流播）：
+      // 由后台字节下载补上缓存——重播经 `localUriFor` 命中 file://。
+      if (!_platformSupportsAudioCaching || _audioCacheUnsupported) {
+        final writer = _cacheWriter;
+        if (writer != null) {
+          unawaited(writer.start(track, url: url, quality: quality));
+        }
+      }
 
       _duration = _player.duration ?? track.duration ?? Duration.zero;
       // 播放启动后立即返回：just_audio 的 play() Future 在「播完/暂停」才
@@ -318,9 +339,8 @@ class LocalPlaybackService extends ChangeNotifier {
         if (await cache.audioEnabled()) {
           final directory = await cache.audioCacheDirPath();
           if (directory != null) {
-            final fileName = CacheService.audioCacheKey(
-              sourceKey: track.sourceKey,
-              songId: track.id,
+            final fileName = CacheService.audioCacheKeyForSource(
+              track,
               quality: quality ?? '',
             );
             final source = createCachingAudioSource(
@@ -428,6 +448,7 @@ class LocalPlaybackService extends ChangeNotifier {
   Future<void> stop({bool clear = true}) async {
     _playRequestId++;
     _nextTrackPreloader?.cancelPending();
+    _cacheWriter?.cancel();
     try {
       await _player.stop();
     } catch (_) {}
@@ -540,6 +561,7 @@ class LocalPlaybackService extends ChangeNotifier {
     _notifyThrottle?.cancel();
     _playerStateSubscription?.cancel();
     _positionSubscription?.cancel();
+    _cacheWriter?.cancel();
     _player.dispose();
     super.dispose();
   }

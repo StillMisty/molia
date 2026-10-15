@@ -15,7 +15,8 @@ import '../../sources/source_track.dart';
 Track trackFromSourceTrack(SourceTrack source) {
   final sourceArtists = artistsFromRaw(source.raw);
   return Track(
-    id: TrackId(source.sourceKey, _rawId(source)),
+    // 与 `SourceTrack.songId` 同源（同一 getter，不是各写一份规则）。
+    id: TrackId(source.sourceKey, source.songId),
     title: source.title,
     artists: sourceArtists.isEmpty
         ? [Artist(name: source.artist)]
@@ -60,12 +61,6 @@ SourceTrack sourceTrackFromTrack(Track track) {
     // 原样回传（不重建 Map），保证取链时脚本收到原始字段。
     raw: track.payload,
   );
-}
-
-/// 与 `SourceTrack.id` 完全一致的平台内 id 提取规则（兜底为标题-歌手）。
-String _rawId(SourceTrack source) {
-  final key = rawIdOf(source.raw);
-  return key.isNotEmpty ? key : '${source.title}-${source.artist}';
 }
 
 Artwork? _artworkFrom(String? coverUrl) {

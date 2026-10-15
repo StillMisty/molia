@@ -2,10 +2,19 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
+import 'package:molia/domain/models/track.dart';
 import 'package:molia/services/cache_service.dart';
 import 'package:molia/services/cache_storage_io.dart';
 import 'package:molia/services/cache_storage_stub.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+
+/// 领域曲目（读取侧 key 用）。
+Track _track(String sourceKey, String id) => Track(
+      id: TrackId(sourceKey, id),
+      title: 'Title $id',
+      origin: TrackOrigin.lx,
+      payload: const {},
+    );
 
 /// 固定设备容量的存储假件：容量可控，其余委托真实 IO 实现（指向临时目录）。
 class _FixedSpaceStorage extends IoCacheStorage {
@@ -414,6 +423,71 @@ void main() {
           );
         }
       }
+    });
+
+    test('索引 / 占用只认完整文件：半成品与边车不计入', () async {
+      final audioDir = '${tempRoot.path}/audio_cache';
+      final complete = CacheService.audioCacheKey(
+          sourceKey: 'kw', songId: '9', quality: '320k');
+      await writeFile(audioDir, complete, 400);
+      await writeFile(audioDir, '$complete$audioCachePartSuffix', 900);
+      await writeFile(audioDir, '$complete$audioCacheMimeSuffix', 7);
+      await writeFile(
+        audioDir,
+        'kw_9_flac$audioCachePredownloadSuffix',
+        500,
+      );
+
+      expect(await service.audioCacheIndex(), {complete: 400});
+      expect(
+        await service.audioUsageForTrack(sourceKey: 'kw', songId: '9'),
+        const CacheUsage(bytes: 400, count: 1),
+      );
+      expect(
+        await service.audioWritingUsageForTrack(sourceKey: 'kw', songId: '9'),
+        const CacheUsage(bytes: 1407, count: 3),
+      );
+    });
+
+    test('启动清扫半成品：删 .part / .predl，保留完整文件与 .mime 边车', () async {
+      final audioDir = '${tempRoot.path}/audio_cache';
+      final complete = CacheService.audioCacheKey(
+          sourceKey: 'kw', songId: '9', quality: '320k');
+      await writeFile(audioDir, complete, 400);
+      await writeFile(audioDir, '$complete$audioCachePartSuffix', 900);
+      await writeFile(audioDir, '$complete$audioCacheMimeSuffix', 7);
+      await writeFile(audioDir, 'kw_9_flac$audioCachePredownloadSuffix', 500);
+
+      expect(await service.cleanupAudioPartials(), 2);
+      final remaining = Directory(audioDir)
+          .listSync()
+          .whereType<File>()
+          .map((file) => file.uri.pathSegments.last)
+          .toList()
+        ..sort();
+      expect(remaining, [complete, '$complete$audioCacheMimeSuffix']..sort());
+    });
+
+    test('旧命名一次性清理：迁移只执行一次，标记落 prefs', () async {
+      final audioDir = '${tempRoot.path}/audio_cache';
+      // 旧命名：songId 用了复合 id（`kw:9`），文件名带重复 sourceKey。
+      final legacy = CacheService.audioCacheKey(
+          sourceKey: 'kw', songId: 'kw:9', quality: '320k');
+      await writeFile(audioDir, legacy, 100);
+
+      await service.migrateAudioCacheNamingIfNeeded();
+      expect(File('$audioDir/$legacy').existsSync(), isFalse);
+      expect(
+        prefs.getInt(CacheService.keyAudioNamingVersion),
+        CacheService.audioNamingVersion,
+      );
+
+      // 已是当前版本：不再清（用户新写入的缓存不受影响）。
+      final fresh = CacheService.audioCacheKeyForTrack(
+          _track('kw', '9'), quality: '320k');
+      await writeFile(audioDir, fresh, 200);
+      await service.migrateAudioCacheNamingIfNeeded();
+      expect(File('$audioDir/$fresh').existsSync(), isTrue);
     });
   });
 

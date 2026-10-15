@@ -22,7 +22,7 @@ abstract interface class AudioPredownloader {
 /// 跳过的情形（都返回 null，静默）：
 /// - 直链非法（非 http/https）或 `.m3u8`（缓存源不接管的分片流）；
 /// - 策略不允许（`allowed`，组合根按省流生效判定）；
-/// - 平台不支持边播边缓存（Web/桌面：播放不走缓存源，预取只会白占磁盘）；
+/// - 平台不支持写缓存目录（Web；见 [platformSupportsAudioPrefetch]）；
 /// - 音频缓存被用户关闭 / 缓存目录不可用 / 目标文件已存在。
 ///
 /// 下载完成（且真的开始过下载）后触发一次 LRU 淘汰。
@@ -54,16 +54,15 @@ class CacheAudioPredownloader implements AudioPredownloader {
     }
     if (uri.path.toLowerCase().endsWith('.m3u8')) return null;
     if (!(_allowed?.call() ?? true)) return null;
-    if (!(_platformSupported?.call() ?? _platformSupportsAudioCaching)) {
+    if (!(_platformSupported?.call() ?? _platformSupportsAudioPrefetch)) {
       return null;
     }
     if (!await _cache.audioEnabled()) return null;
     final directory = await _cache.audioCacheDirPath();
     if (directory == null) return null;
 
-    final fileName = CacheService.audioCacheKey(
-      sourceKey: track.sourceKey,
-      songId: track.id,
+    final fileName = CacheService.audioCacheKeyForSource(
+      track,
       quality: quality ?? '',
     );
     final task = _starter(
@@ -76,7 +75,8 @@ class CacheAudioPredownloader implements AudioPredownloader {
     return task;
   }
 
-  /// 与 `LocalPlaybackService` 同一平台判定（唯一实现见
-  /// [platformSupportsAudioCaching]）。
-  static bool get _platformSupportsAudioCaching => platformSupportsAudioCaching();
+  /// 与 [platformSupportsAudioPrefetch] 同一判定（唯一实现在
+  /// `audio_cache_platform.dart`）。
+  static bool get _platformSupportsAudioPrefetch =>
+      platformSupportsAudioPrefetch();
 }

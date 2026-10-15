@@ -1000,14 +1000,11 @@ class DownloadService extends ChangeNotifier {
     if (cache == null) return null;
     final dir = await cache.audioCacheDirPath();
     if (dir == null) return null;
-    final name = CacheService.audioCacheKey(
-      sourceKey: track.id.sourceKey,
-      songId: track.id.id,
-      quality: quality,
-    );
+    final name = CacheService.audioCacheKeyForTrack(track, quality: quality);
     final path = p.join(dir, name);
     if (!await _storage.fileExists(path)) return null;
-    if (await _storage.fileExists('$path$downloadPartSuffix')) return null;
+    // 半成品（`.part`）说明完整文件还没落成，不算命中。
+    if (await _storage.fileExists('$path$audioCachePartSuffix')) return null;
     return path;
   }
 

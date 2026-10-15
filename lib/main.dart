@@ -47,6 +47,7 @@ import 'playback/desktop_audio_init.dart';
 import 'playback/local_audio_handler.dart';
 import 'playback/local_playback_service.dart';
 import 'playback/next_track_preloader.dart';
+import 'playback/playing_track_cache_writer.dart';
 import 'providers/comments_provider.dart';
 import 'providers/library_provider.dart';
 import 'providers/local_database_provider.dart';
@@ -65,7 +66,7 @@ import 'services/app_logging.dart';
 import 'services/artwork_palette_service.dart';
 import 'services/app_branding_service.dart';
 import 'services/cache_service.dart';
-import 'services/track_cache_service.dart';
+import 'services/track_local_data_service.dart';
 import 'managers/artwork_cache.dart';
 import 'services/data_saver_service.dart';
 import 'services/download/download_service.dart';
@@ -244,6 +245,15 @@ void main() async {
   // 服务的解析回调 late 绑定到 backend；resolver 走 CatalogService.resolve
   // （single-flight + LRU + 10min TTL），重播/循环播放命中缓存。
   late final LocalPlaybackBackend playbackBackend;
+  // 音频缓存字节写入器：两处复用同一实例——
+  // 1) 下一首字节预取（`NextTrackPreloader`，起播后预热下一首）；
+  // 2) 当前曲目后台缓存（`PlayingTrackCacheWriter`，桌面等播放侧不写缓存的
+  //    平台由它补齐缓存，重播经 `localUriFor` 命中 file://）。
+  // 省流实际生效（移动数据 + 已开启）时两边都跳过，只预热直链。
+  final audioCacheWriter = CacheAudioPredownloader(
+    cacheService: CacheService.instance,
+    allowed: () => !dataSaver.active,
+  );
   final localPlayback = LocalPlaybackService(
     // 由服务按实际选择的音质调用解析器（同一音质也用于音频缓存键）。
     // 省流上限只在 preferredQuality 一处压低：resolve 缓存键包含真实音质
@@ -252,17 +262,16 @@ void main() async {
         dataSaver.effectiveQuality(sourceManager.preferredQuality),
     resolver: (track, {String? quality}) =>
         playbackBackend.resolveLegacyUrl(track, quality: quality),
-    // 下一首预载：起播后预热直链（命中取链缓存）+ 音频字节预取到缓存；
-    // 省流实际生效（移动数据 + 已开启）时只预热直链，不预下载。
+    // 下一首预载：起播后预热直链（命中取链缓存）+ 音频字节预取到缓存。
     nextTrackPreloader: NextTrackPreloader(
       resolver: (track, {String? quality}) =>
           playbackBackend.resolveLegacyUrl(track, quality: quality),
       preferredQuality: () =>
           dataSaver.effectiveQuality(sourceManager.preferredQuality),
-      predownloader: CacheAudioPredownloader(
-        cacheService: CacheService.instance,
-        allowed: () => !dataSaver.active,
-      ),
+      predownloader: audioCacheWriter,
+    ),
+    audioCacheWriter: PlayingTrackCacheWriter(
+      predownloader: audioCacheWriter,
     ),
   );
   playbackBackend = LocalPlaybackBackend(
@@ -277,6 +286,16 @@ void main() async {
     },
   );
   final playbackFacade = DefaultPlaybackFacade(backend: playbackBackend);
+
+  // 音频缓存启动维护（不阻断首帧）：旧命名文件一次性清理 + 中断残留的
+  // 半成品（`.part` / `.predl`）清扫——半成品只可能由本进程写出，
+  // 重启后残留的一定是中断产物。
+  unawaited(
+    () async {
+      await CacheService.instance.migrateAudioCacheNamingIfNeeded();
+      await CacheService.instance.cleanupAudioPartials();
+    }(),
+  );
 
   // 本地播放服务在 main 中创建：系统媒体会话（audio_service）需在 runApp
   // 之前初始化，并复用同一个 LocalPlaybackService 实例。
@@ -755,15 +774,17 @@ void main() async {
         ChangeNotifierProvider.value(value: lyricsDisplay),
         // 统一缓存门面（音频/歌词/封面）：设置页缓存管理读写策略与用量。
         Provider<CacheService>.value(value: CacheService.instance),
-        // 单曲缓存门面（音频/歌词/封面/取链）：播放页「歌曲信息」页消费。
-        Provider<TrackCacheService>(
-          create: (_) => TrackCacheService(
+        // 单曲本地数据门面（下载记录 + 音频/歌词/封面/取链缓存）：
+        // 播放页「本地数据」行与其子页消费（两档词表的唯一读取口）。
+        Provider<TrackLocalDataService>(
+          create: (_) => TrackLocalDataService(
             cacheService: CacheService.instance,
             artworkCache: ArtworkCache.instance,
             catalogService: catalogService,
+            downloadService: downloadService,
           ),
         ),
-        // 本地下载：歌曲信息页「下载」行与「已下载」列表共用同一状态源。
+        // 本地下载：信息页「本地数据」页与「已下载」列表共用同一状态源。
         // 与缓存门面是两套东西：清缓存不触碰 downloads/，删下载是独立动作。
         ChangeNotifierProvider.value(value: downloadService),
         // 下载设置：保存位置 / 文件名格式 / 标签嵌入（设置页读写）。
