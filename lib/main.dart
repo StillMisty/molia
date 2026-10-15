@@ -278,6 +278,16 @@ void main() async {
   );
   final playbackFacade = DefaultPlaybackFacade(backend: playbackBackend);
 
+  // 音频缓存启动维护（不阻断首帧）：旧命名文件一次性清理 + 中断残留的
+  // 半成品（`.part` / `.predl`）清扫——半成品只可能由本进程写出，
+  // 重启后残留的一定是中断产物。
+  unawaited(
+    () async {
+      await CacheService.instance.migrateAudioCacheNamingIfNeeded();
+      await CacheService.instance.cleanupAudioPartials();
+    }(),
+  );
+
   // 本地播放服务在 main 中创建：系统媒体会话（audio_service）需在 runApp
   // 之前初始化，并复用同一个 LocalPlaybackService 实例。
   // 不支持 audio_service 的平台（Linux/Windows/Web）返回 null，自动降级。

@@ -18,7 +18,8 @@ String trackCachePartLabel(AppLocalizations l10n, TrackCachePart part) {
   };
 }
 
-/// 单项占用文案：未就绪「统计中」、命中「大小 · 条数」、未命中「无缓存」。
+/// 单项占用文案：未就绪「统计中」、命中「大小 · 条数」、未命中「无缓存」；
+/// 音频分项额外区分「命中」与「写入中（半成品，还不能离线播放）」。
 String trackCacheUsageLabel(
   AppLocalizations l10n,
   TrackCachePart part,
@@ -33,17 +34,27 @@ String trackCacheUsageLabel(
         true,
       ),
   };
-  if (value.count <= 0) return l10n.trackInfoCacheNone;
-  if (isCountOnly) return l10n.trackInfoCacheEntries(value.count);
-  return l10n.cacheUsage(formatCacheBytes(value.bytes), value.count);
+  final writing = part == TrackCachePart.audio && usage.audioWriting.count > 0
+      ? l10n.trackCacheAudioWriting(
+          formatCacheBytes(usage.audioWriting.bytes),
+        )
+      : null;
+  if (value.count <= 0) return writing ?? l10n.trackInfoCacheNone;
+  final label = isCountOnly
+      ? l10n.trackInfoCacheEntries(value.count)
+      : l10n.cacheUsage(formatCacheBytes(value.bytes), value.count);
+  return writing == null ? label : '$label · $writing';
 }
 
-/// 四项汇总（歌曲信息页「缓存」行副标题）：命中项用 `名 大小` 拼接。
+/// 四项汇总（歌曲信息页「缓存」行副标题）：命中项用 `名 大小` 拼接；
+/// 只有音频半成品时说明「写入中」，不留空串。
 String trackCacheSummaryLabel(AppLocalizations l10n, TrackCacheUsage usage) {
   if (!usage.hasAny) return l10n.trackInfoCacheNone;
   final parts = <String>[
     if (usage.audio.count > 0)
       '${l10n.cachePartitionAudio} ${formatCacheBytes(usage.audio.bytes)}',
+    if (usage.audio.count <= 0 && usage.audioWriting.count > 0)
+      l10n.trackCacheAudioWriting(formatCacheBytes(usage.audioWriting.bytes)),
     if (usage.lyrics.count > 0)
       '${l10n.cachePartitionLyrics} ${formatCacheBytes(usage.lyrics.bytes)}',
     if (usage.artwork.count > 0)

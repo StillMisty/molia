@@ -61,9 +61,8 @@ class CacheAudioPredownloader implements AudioPredownloader {
     final directory = await _cache.audioCacheDirPath();
     if (directory == null) return null;
 
-    final fileName = CacheService.audioCacheKey(
-      sourceKey: track.sourceKey,
-      songId: track.id,
+    final fileName = CacheService.audioCacheKeyForSource(
+      track,
       quality: quality ?? '',
     );
     final task = _starter(

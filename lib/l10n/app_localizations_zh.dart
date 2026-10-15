@@ -2381,6 +2381,11 @@ class AppLocalizationsZh extends AppLocalizations {
   String get trackCacheEmpty => '这首歌没有缓存';
 
   @override
+  String trackCacheAudioWriting(String size) {
+    return '音频写入中 $size';
+  }
+
+  @override
   String get cacheAudioPlatformUnsupported => '当前平台不缓存音频';
 
   @override

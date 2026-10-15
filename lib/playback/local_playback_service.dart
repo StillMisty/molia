@@ -318,9 +318,8 @@ class LocalPlaybackService extends ChangeNotifier {
         if (await cache.audioEnabled()) {
           final directory = await cache.audioCacheDirPath();
           if (directory != null) {
-            final fileName = CacheService.audioCacheKey(
-              sourceKey: track.sourceKey,
-              songId: track.id,
+            final fileName = CacheService.audioCacheKeyForSource(
+              track,
               quality: quality ?? '',
             );
             final source = createCachingAudioSource(

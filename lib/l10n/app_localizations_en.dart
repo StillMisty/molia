@@ -2481,6 +2481,11 @@ class AppLocalizationsEn extends AppLocalizations {
   String get trackCacheEmpty => 'Nothing cached for this track';
 
   @override
+  String trackCacheAudioWriting(String size) {
+    return 'Audio writing $size';
+  }
+
+  @override
   String get cacheAudioPlatformUnsupported =>
       'Audio caching isn\'t available on this platform';
 

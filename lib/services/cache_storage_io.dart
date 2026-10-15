@@ -129,20 +129,22 @@ class IoCacheStorage implements CacheStorage {
   }
 
   @override
-  Future<CacheUsage> usageMatching(
+  Future<int> deleteWhere(
     String dirPath, {
-    required String prefix,
+    required bool Function(String fileName) test,
   }) async {
-    final matches = _matchFiles(await _listFiles(dirPath), prefix);
-    var bytes = 0;
-    for (final file in matches) {
+    final files = await _listFiles(dirPath);
+    var deleted = 0;
+    for (final file in files) {
+      if (!test(file.uri.pathSegments.last)) continue;
       try {
-        bytes += await file.length();
+        await file.delete();
+        deleted++;
       } catch (_) {
-        // 文件可能正被替换/删除：忽略单个文件错误。
+        // 忽略单个文件失败：占用/提示按实际删除结果计。
       }
     }
-    return CacheUsage(bytes: bytes, count: matches.length);
+    return deleted;
   }
 
   @override

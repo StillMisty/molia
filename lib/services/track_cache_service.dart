@@ -8,15 +8,18 @@ import 'cache_service.dart';
 /// 单曲缓存分项：音频文件 / 歌词 / 封面 / 取链结果。
 enum TrackCachePart { audio, lyrics, artwork, resolveUrl }
 
-/// 单曲缓存占用（四项）。
+/// 单曲缓存占用（四项 + 音频写入中）。
 ///
 /// 取链缓存是内存请求缓存（10min TTL），只有条目数没有字节意义。
+/// [audioWriting] 是音频缓存目录里的半成品 / 边车（占磁盘但不可播放），
+/// 单独成项，不并入 [audio]（可离线播放的口径）。
 class TrackCacheUsage {
   const TrackCacheUsage({
     this.audio = CacheUsage.zero,
     this.lyrics = CacheUsage.zero,
     this.artwork = CacheUsage.zero,
     this.resolveEntries = 0,
+    this.audioWriting = CacheUsage.zero,
   });
 
   final CacheUsage audio;
@@ -24,12 +27,16 @@ class TrackCacheUsage {
   final CacheUsage artwork;
   final int resolveEntries;
 
-  /// 是否任一有缓存（页面据此决定「全部清理」是否可用）。
+  /// 音频缓存写入中（`.part` / `.predl` / `.mime`）：有占用但还不能离线播放。
+  final CacheUsage audioWriting;
+
+  /// 是否任一有缓存或正在写入（页面据此决定「全部清理」是否可用）。
   bool get hasAny =>
       audio.count > 0 ||
       lyrics.count > 0 ||
       artwork.count > 0 ||
-      resolveEntries > 0;
+      resolveEntries > 0 ||
+      audioWriting.count > 0;
 
   @override
   bool operator ==(Object other) =>
@@ -37,14 +44,17 @@ class TrackCacheUsage {
       other.audio == audio &&
       other.lyrics == lyrics &&
       other.artwork == artwork &&
-      other.resolveEntries == resolveEntries;
+      other.resolveEntries == resolveEntries &&
+      other.audioWriting == audioWriting;
 
   @override
-  int get hashCode => Object.hash(audio, lyrics, artwork, resolveEntries);
+  int get hashCode =>
+      Object.hash(audio, lyrics, artwork, resolveEntries, audioWriting);
 
   @override
   String toString() => 'TrackCacheUsage(audio: $audio, lyrics: $lyrics, '
-      'artwork: $artwork, resolve: $resolveEntries)';
+      'artwork: $artwork, resolve: $resolveEntries, '
+      'audioWriting: $audioWriting)';
 }
 
 /// 单项清理结果。
@@ -91,6 +101,9 @@ class TrackCacheService {
   final CatalogService _catalogService;
 
   /// 四项占用（并行查询；单曲维度）。
+  ///
+  /// 音频「写入中」（半成品 / 边车）单独统计：它占磁盘但不是可播放缓存，
+  /// 展示上必须与命中口径分开（否则又会出现「缓存页说命中、播放拿不到」）。
   Future<TrackCacheUsage> usage(Track track) async {
     final results = await Future.wait([
       _cacheService.audioUsageForTrack(
@@ -99,12 +112,17 @@ class TrackCacheService {
       ),
       _cacheService.lyricsUsageForTrack(track.id.uri),
       _artworkUsage(track),
+      _cacheService.audioWritingUsageForTrack(
+        sourceKey: track.id.sourceKey,
+        songId: track.id.id,
+      ),
     ]);
     return TrackCacheUsage(
       audio: results[0],
       lyrics: results[1],
       artwork: results[2],
       resolveEntries: _catalogService.resolveCacheCountForTrack(track),
+      audioWriting: results[3],
     );
   }
 

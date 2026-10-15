@@ -1300,6 +1300,14 @@
   },
   "clear": "Clear",
   "trackCacheEmpty": "Nothing cached for this track",
+  "trackCacheAudioWriting": "Audio writing {size}",
+  "@trackCacheAudioWriting": {
+    "placeholders": {
+      "size": {
+        "type": "String"
+      }
+    }
+  },
   "cacheAudioPlatformUnsupported": "Audio caching isn't available on this platform",
   "cacheAudioDisabled": "Audio caching is off",
   "downloadAudioSection": "Audio",

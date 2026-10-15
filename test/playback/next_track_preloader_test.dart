@@ -63,11 +63,11 @@ class _FakeCacheStorage implements CacheStorage {
   Future<Map<String, int>> listFiles(String dirPath) async => const {};
 
   @override
-  Future<CacheUsage> usageMatching(
+  Future<int> deleteWhere(
     String dirPath, {
-    required String prefix,
+    required bool Function(String fileName) test,
   }) async =>
-      CacheUsage.zero;
+      0;
 
   @override
   Future<CacheDeleteResult> deleteMatching(
@@ -304,11 +304,7 @@ void main() {
         started.single,
         p.join(
           '/tmp/molia_audio',
-          CacheService.audioCacheKey(
-            sourceKey: 'wy',
-            songId: track.id,
-            quality: '320k',
-          ),
+          CacheService.audioCacheKeyForSource(track, quality: '320k'),
         ),
       );
 

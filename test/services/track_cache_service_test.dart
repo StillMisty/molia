@@ -2,6 +2,7 @@ import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:molia/data/catalog/catalog_service.dart';
+import 'package:molia/data/mapping/track_mapper.dart';
 import 'package:molia/domain/models/track.dart';
 import 'package:molia/domain/ports/music_source.dart';
 import 'package:molia/managers/artwork_cache.dart';
@@ -9,6 +10,7 @@ import 'package:molia/services/cache_service.dart';
 import 'package:molia/services/cache_storage_io.dart';
 import 'package:molia/services/cache_storage_stub.dart';
 import 'package:molia/services/track_cache_service.dart';
+import 'package:molia/sources/source_track.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../support/fake_music_source.dart';
@@ -207,6 +209,45 @@ void main() {
     // 清完后再查：四项全空。
     final usage = await service.usage(t);
     expect(usage.hasAny, isFalse);
+  });
+
+  test('音频缓存写入侧 key 与读取侧同源（复合曲目 id 回归）', () async {
+    // 播放侧只拿得到 SourceTrack；页面侧只有领域 Track。两边必须落在同一文件名上。
+    final source = SourceTrack(
+      sourceKey: 'kw',
+      origin: 'builtin',
+      title: 'Song',
+      artist: 'Singer',
+      album: 'Album',
+      qualities: const [SourceQuality(type: '320k')],
+      raw: const {'songmid': 'a'},
+    );
+    final t = trackFromSourceTrack(source);
+
+    final written = CacheService.audioCacheKeyForSource(source, quality: '320k');
+    await writeAudio(written, 1234);
+
+    expect(CacheService.audioCacheKeyForTrack(t, quality: '320k'), written);
+    expect(
+      (await service.usage(t)).audio,
+      const CacheUsage(bytes: 1234, count: 1),
+    );
+  });
+
+  test('音频半成品 / 边车不计入占用，写入中单独统计', () async {
+    final t = track();
+    final complete = CacheService.audioCacheKeyForTrack(t, quality: '320k');
+    await writeAudio(complete, 400);
+    await writeAudio('$complete$audioCachePartSuffix', 900);
+    await writeAudio('$complete$audioCacheMimeSuffix', 7);
+    final prefetch =
+        '${CacheService.audioCacheKeyForTrack(t, quality: 'flac')}'
+        '$audioCachePredownloadSuffix';
+    await writeAudio(prefetch, 500);
+
+    final usage = await service.usage(t);
+    expect(usage.audio, const CacheUsage(bytes: 400, count: 1));
+    expect(usage.audioWriting, const CacheUsage(bytes: 1407, count: 3));
   });
 
   test('无封面 / 无缓存：占用为零，清理不报错', () async {

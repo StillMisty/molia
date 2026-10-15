@@ -4527,6 +4527,12 @@ abstract class AppLocalizations {
   /// **'Nothing cached for this track'**
   String get trackCacheEmpty;
 
+  /// No description provided for @trackCacheAudioWriting.
+  ///
+  /// In en, this message translates to:
+  /// **'Audio writing {size}'**
+  String trackCacheAudioWriting(String size);
+
   /// No description provided for @cacheAudioPlatformUnsupported.
   ///
   /// In en, this message translates to:

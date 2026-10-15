@@ -1019,6 +1019,14 @@
   },
   "clear": "清理",
   "trackCacheEmpty": "这首歌没有缓存",
+  "trackCacheAudioWriting": "音频写入中 {size}",
+  "@trackCacheAudioWriting": {
+    "placeholders": {
+      "size": {
+        "type": "String"
+      }
+    }
+  },
   "cacheAudioPlatformUnsupported": "当前平台不缓存音频",
   "cacheAudioDisabled": "音频缓存已关闭",
   "downloadAudioSection": "音频",
