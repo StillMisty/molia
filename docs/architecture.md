@@ -84,6 +84,11 @@
   依赖装载前模式）；seek 落地前进度通道继续显示恢复进度（不闪回 0）；装载期间
   用户 seek 优先；生命周期 `paused` 强制落盘会话。旧「远程播放风格 Map 兼容层」
   （facade `compat*` / service `currentTrackMap` 等）已删除。
+  播放副作用的扇出（最后播放 / 播放上下文 / 桌面小组件 / 播放历史 / 会话落盘 /
+  预取 / 补封面 / 通知权限）唯一实现在 `lib/services/playback_observer.dart`
+  （Playback observer）：直连 facade 快照与 position 通道、由组合根挂接，不经
+  provider 的节流通知（避免合并窗口丢中间曲目副作用）；恢复态与睡眠定时仍属
+  `PlaybackProvider`。与 `PlayStatisticsService` / `ArtworkThemeSync` 同为观察者形态。
 - **Lyrics**：`LyricsProvider`（`lib/providers/lyrics_provider.dart`）是取词 → 缓存 →
   解析 → 预取的唯一实现，对外只暴露 `LyricsState`（idle/loading/ready/empty + isSynced，
   含按时间戳对齐的翻译 / 罗马音扩展行与逐字时间轴）。时间契约统一在
@@ -104,7 +109,7 @@
   只在当前行下方渲染翻译 / 罗马音（随行切换淡出 + 收起；未同步歌词无当前行概念，
   保持逐行），与输出侧（桌面歌词 / 通知 / 蓝牙）的翻译·罗马音开关互不影响，
   共用同一份对齐数据。
-- **封面补取**：曲目起播无封面时 `PlaybackProvider` 经注入 resolver
+- **封面补取**：曲目起播无封面时 `PlaybackObserver` 经注入 resolver
   （`SourceManager.fetchPic`：脚本 `pic` action → 内置原生取图；省流模式不发请求）
   取图，经 `PlaybackFacade.updateTrackArtwork` 原地回写队列曲目（新 `Track` 触发
   封面堆叠换图淡化、主题取色与系统媒体通知封面更新）。

@@ -32,6 +32,7 @@
   `previous` 语义；与队列顺序 `upcoming` 是两回事。
 - **Resolved next（下一首解析）** — `PlaybackSnapshot.next`：后端按当前模式解析的下一首
   （shuffle 在单曲内稳定，切歌/切模式重抽）；`upcoming` 只用于队列面板展示。
+- **Playback observer（播放观察者模块）** — `lib/services/playback_observer.dart`：播放副作用扇出的唯一实现（最后播放 / 播放上下文 / 桌面小组件 / 播放历史 / 会话落盘 / 封面预取与补取 / 通知权限），直连 facade 快照与进度通道（不经 provider 的节流通知），由组合根挂接；恢复态与睡眠定时仍属 `PlaybackProvider`（与 `PlayStatisticsService`、`ArtworkThemeSync` 同为观察者形态）。
 - **Sleep timer（定时关闭）** — `lib/providers/sleep_timer.dart`：歌曲信息页入口的
   「到点暂停」。两种模式：倒计时（**仅播放时计时**，暂停冻结，剩余时间按 `now()`
   差值累计）与「播完当前歌曲」（纯事件驱动，无定时器）。判定只读 **facade 原始
