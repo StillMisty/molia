@@ -570,6 +570,10 @@
   （静止内 4dp、首末外侧 16dp；hover 12dp；press/选中 16dp），带 expressive spatial 弹簧
   morph；分段列表用 `cardList.gap`（2dp）行距、`itemExtent = TrackRow.extent + gap`，
   列表一律懒构建（发现详情滚到底自动加载下一页）。不要改回 `M3EListItem`（原因见 pitfalls #20）。
+  收藏页四个合集共用一份列表脚手架 `lib/widgets/collection_track_list.dart`
+  （顺序列表 / 重排模式、空态与搜索空态、左滑动作形状），滚动位置簿记在
+  `lib/widgets/collection_scroll_bookkeeping.dart`（调度器可注入，脱离 widget 树可单测），
+  页内过滤 / 排序口径在 `lib/utils/collection_row_query.dart`。
 - 曲目行尾的 ⋮ 菜单统一走 `lib/widgets/track_actions_menu.dart`（发现详情 / 搜索结果 /
   AI 推歌共用）：锚点固定 standard 图标按钮 + tooltip，条目一律「leading 图标 + 文案」，
   收藏这类开关态用图标 + 文案表达（选中即关菜单，不留勾选态）。行本体（收藏 / 加入列表
