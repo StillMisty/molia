@@ -101,6 +101,12 @@ class CommentsProvider extends ChangeNotifier {
   /// 两个 tab 各持一个分页控制器（重开会话 / 切换 tab 互不影响）。
   final Map<CommentKind, PagedListController<Comment>> _controllers = {};
 
+  /// 各 tab 最近一次成功加载已知的评论总数。
+  ///
+  /// 控制器首屏失败会清空 total（它的既有契约）：这里兜住 tab 计数，
+  /// 刷新失败时「热门 (45)」不掉成「热门」。会话边界（open/close）清空。
+  final Map<CommentKind, int> _knownTotals = {};
+
   Track? _track;
   CommentKind _kind = CommentKind.hot;
 
@@ -113,7 +119,7 @@ class CommentsProvider extends ChangeNotifier {
   CommentsTabState get state => stateOf(_kind);
 
   CommentsTabState stateOf(CommentKind kind) =>
-      _project(_controllerOf(kind).state);
+      _project(kind, _controllerOf(kind).state);
 
   /// 当前曲目的渠道是否支持评论（无曲目时为 false）。
   bool get isSupported {
@@ -205,11 +211,12 @@ class CommentsProvider extends ChangeNotifier {
   }
 
   /// 控制器状态 → UI 稳定形状（失败归一化；`failed` 只在首屏失败时给出）。
-  CommentsTabState _project(PagedListState<Comment> state) {
+  CommentsTabState _project(CommentKind kind, PagedListState<Comment> state) {
     final error = state.error;
     return CommentsTabState(
       items: state.items,
-      total: state.total,
+      // 首屏失败会把 total 清空（控制器契约）：回退到上次已知值（tab 计数）。
+      total: state.total ?? _knownTotals[kind],
       page: state.page,
       hasMore: state.hasMore,
       isLoading: state.isLoading,
@@ -222,11 +229,24 @@ class CommentsProvider extends ChangeNotifier {
   PagedListController<Comment> _controllerOf(CommentKind kind) =>
       _controllers[kind]!;
 
-  void _onTabChanged() => notifyListeners();
+  void _onTabChanged() {
+    _rememberTotals();
+    notifyListeners();
+  }
+
+  /// 记住各 tab 最新已知的总数（控制器状态变化时调用）。
+  void _rememberTotals() {
+    for (final entry in _controllers.entries) {
+      final total = entry.value.state.total;
+      if (total != null) _knownTotals[entry.key] = total;
+    }
+  }
 
   void _resetTabs() {
     for (final controller in _controllers.values) {
       controller.reset();
     }
+    // 顺序：reset 的通知里可能读到另一个 tab 的旧状态，最后再清记忆。
+    _knownTotals.clear();
   }
 }
