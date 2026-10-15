@@ -1797,6 +1797,9 @@ class AppLocalizationsZh extends AppLocalizations {
   String get aiDjTestSucceeded => '连接成功';
 
   @override
+  String get aiDjTestSaved => '连接成功，配置已保存';
+
+  @override
   String get aiDjSaveConfig => '保存配置';
 
   @override
@@ -1923,11 +1926,11 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String aiDjCacheTtlDays(int days) {
-    return '保留 $days 天';
+    return '$days 天';
   }
 
   @override
-  String get aiDjCacheTtlForever => '永久保留';
+  String get aiDjCacheTtlForever => '永久';
 
   @override
   String get aiDjCacheTtlHint => '过期后不再作为续推来源，下一次续推自动生成新一批（不打断播放、不提示）。';

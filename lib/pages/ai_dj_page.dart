@@ -4,6 +4,9 @@
 /// 「推歌（电台）」是列表上的一个动作（播放全部即接管队列并自动续推）。
 /// 入口：发现页「今日推荐」区的「查看全部」+ 设置 › 内容 › AI 推歌。
 /// 模式状态机与播放协调在 [AiDjProvider]；本页只做展示与交互。
+///
+/// 版式：M3E 分区式（与收藏 / 队列页同一种形状语言）——分区标题 + 平铺
+/// 分段列表直接铺在页面表面，不再「卡片套卡片」。
 library;
 
 import 'dart:async';
@@ -21,6 +24,7 @@ import '../providers/playback_provider.dart';
 import '../services/notification_service.dart';
 import '../widgets/ai_dj_shared.dart';
 import '../widgets/ai_dj_track_tile.dart';
+import '../widgets/card_list_surface.dart';
 import '../widgets/icon_swap.dart';
 import '../widgets/track_row.dart';
 
@@ -32,6 +36,9 @@ class AiDjPage extends StatefulWidget {
 }
 
 class _AiDjPageState extends State<AiDjPage> {
+  /// 分区间距（分区标题之间）。
+  static const double _sectionGap = 24;
+
   late final AiDjProvider _provider;
   final TextEditingController _baseUrlController = TextEditingController();
   final TextEditingController _apiKeyController = TextEditingController();
@@ -93,17 +100,13 @@ class _AiDjPageState extends State<AiDjPage> {
           builder: (context, provider, _) => ListView(
             padding: const EdgeInsets.fromLTRB(16, 8, 16, 32),
             children: [
-              _statusCard(l10n, provider),
+              _statusSection(l10n, provider),
               if (provider.enabled) ...[
-                const SizedBox(height: 16),
-                _recommendationsCard(context, l10n, provider),
-                const SizedBox(height: 16),
-                _feedbackCard(l10n, provider),
-                const SizedBox(height: 16),
-                _upstreamCard(l10n),
+                ..._recommendationsSection(context, l10n, provider),
+                ..._feedbackSection(l10n, provider),
+                ..._upstreamSection(l10n),
               ],
-              const SizedBox(height: 16),
-              _configCard(l10n, provider),
+              ..._configSection(l10n, provider),
             ],
           ),
         ),
@@ -111,10 +114,39 @@ class _AiDjPageState extends State<AiDjPage> {
     );
   }
 
-  // ── 状态卡：功能开关 + 电台状态 + 会话统计 ──────────────────────────────
+  // ── 分区标题 ─────────────────────────────────────────────────────────
 
-  Widget _statusCard(AppLocalizations l10n, AiDjProvider provider) {
-    final scheme = Theme.of(context).colorScheme;
+  /// 分区标题行：标题 + 可选副标题（上次更新等）+ 可选行尾动作。
+  Widget _sectionHeader(String title, {String? caption, Widget? trailing}) {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    return Row(
+      children: [
+        Text(title, style: theme.textTheme.titleMedium),
+        if (caption != null) ...[
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              caption,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: theme.textTheme.labelMedium?.copyWith(
+                color: scheme.onSurfaceVariant,
+              ),
+            ),
+          ),
+        ] else
+          const Spacer(),
+        if (trailing != null) trailing,
+      ],
+    );
+  }
+
+  // ── 状态：功能开关 + 电台状态 + 会话统计 ────────────────────────────────
+
+  Widget _statusSection(AppLocalizations l10n, AiDjProvider provider) {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
     final statusText = switch (provider.status) {
       AiDjStatus.off =>
         provider.enabled ? l10n.aiDjStatusIdle : l10n.aiDjStatusOff,
@@ -122,27 +154,40 @@ class _AiDjPageState extends State<AiDjPage> {
       AiDjStatus.playing => l10n.aiDjStatusPlaying,
       AiDjStatus.error => l10n.aiDjStatusError,
     };
-    return M3ECard(
-      variant: M3ECardVariant.filled,
-      padding: const EdgeInsets.all(16),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        CardListSurface(
+          position: M3ECardPosition.single,
+          padding: const EdgeInsets.fromLTRB(16, 12, 8, 12),
+          // 开关行整体不可点：交互只走右侧 Switch，避免误触开启/关闭。
+          onPressed: null,
+          child: Row(
             children: [
               Expanded(
-                child: Text(
-                  l10n.aiDjToggle,
-                  style: Theme.of(context).textTheme.titleMedium,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(l10n.aiDjToggle,
+                        style: theme.textTheme.titleMedium),
+                    const SizedBox(height: 2),
+                    Text(
+                      l10n.aiDjToggleSubtitle,
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        color: scheme.onSurfaceVariant,
+                      ),
+                    ),
+                  ],
                 ),
               ),
+              const SizedBox(width: 8),
               Text(
                 statusText,
-                style: Theme.of(context).textTheme.labelMedium?.copyWith(
-                      color: scheme.onSurfaceVariant,
-                    ),
+                style: theme.textTheme.labelMedium?.copyWith(
+                  color: scheme.onSurfaceVariant,
+                ),
               ),
-              const SizedBox(width: 8),
+              const SizedBox(width: 4),
               M3ESwitch(
                 key: const Key('aiDjModeSwitch'),
                 value: provider.enabled,
@@ -151,57 +196,50 @@ class _AiDjPageState extends State<AiDjPage> {
               ),
             ],
           ),
-          const SizedBox(height: 4),
+        ),
+        if (provider.enabled && provider.queuedCount > 0) ...[
+          const SizedBox(height: 8),
           Text(
-            l10n.aiDjToggleSubtitle,
-            style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                  color: scheme.onSurfaceVariant,
-                ),
+            l10n.aiDjQueued(provider.queuedCount),
+            style: theme.textTheme.labelSmall?.copyWith(
+              color: scheme.onSurfaceVariant,
+            ),
           ),
-          if (provider.enabled && provider.queuedCount > 0) ...[
-            const SizedBox(height: 8),
-            Text(
-              l10n.aiDjQueued(provider.queuedCount),
-              style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                    color: scheme.onSurfaceVariant,
-                  ),
-            ),
-          ],
-          if (provider.lastError != null) ...[
-            const SizedBox(height: 12),
-            Row(
-              children: [
-                Icon(Icons.error_outline_rounded,
-                    size: 18, color: scheme.error),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: Text(
-                    aiDjFailureText(l10n, provider.lastError!),
-                    style: Theme.of(context).textTheme.bodySmall,
-                  ),
-                ),
-                TextButton(
-                  onPressed: provider.isBusy
-                      ? null
-                      : () => unawaited(provider.refreshRecommendations()),
-                  child: Text(l10n.aiDjRetry),
-                ),
-              ],
-            ),
-          ],
         ],
-      ),
+        if (provider.lastError != null) ...[
+          const SizedBox(height: 8),
+          Row(
+            children: [
+              Icon(Icons.error_outline_rounded, size: 18, color: scheme.error),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  aiDjFailureText(l10n, provider.lastError!),
+                  style: theme.textTheme.bodySmall,
+                ),
+              ),
+              TextButton(
+                onPressed: provider.isBusy
+                    ? null
+                    : () => unawaited(provider.refreshRecommendations()),
+                child: Text(l10n.aiDjRetry),
+              ),
+            ],
+          ),
+        ],
+      ],
     );
   }
 
-  // ── 今日推荐：主操作 + 推荐卡列表 + 未解析折叠 ─────────────────────────
+  // ── 今日推荐：主操作 + 平铺列表 + 未解析脚注 ────────────────────────────
 
-  Widget _recommendationsCard(
+  List<Widget> _recommendationsSection(
     BuildContext context,
     AppLocalizations l10n,
     AiDjProvider provider,
   ) {
-    final scheme = Theme.of(context).colorScheme;
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
     final list = provider.recommendations;
     final items = list?.items ?? const <ResolvedRecommendation>[];
     final currentUri = context.select<PlaybackProvider, String?>(
@@ -209,101 +247,85 @@ class _AiDjPageState extends State<AiDjPage> {
     );
     final busy = provider.isBusy;
 
-    return M3ECard(
-      variant: M3ECardVariant.filled,
-      padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+    return [
+      const SizedBox(height: _sectionGap),
+      _sectionHeader(
+        l10n.aiDjTodayTitle,
+        caption: list == null
+            ? null
+            : l10n.aiDjLastUpdated(aiDjUpdatedText(l10n, list.generatedAt)),
+        trailing: M3EIconButton(
+          key: const Key('aiDjRefreshBatchButton'),
+          variant: M3EIconButtonVariant.standard,
+          icon: const Icon(Icons.refresh_rounded),
+          tooltip: l10n.aiDjRefreshBatch,
+          onPressed:
+              busy ? null : () => unawaited(provider.refreshRecommendations()),
+        ),
+      ),
+      const SizedBox(height: 8),
+      Wrap(
+        spacing: 8,
+        runSpacing: 8,
         children: [
-          Row(
-            children: [
-              Expanded(
-                child: Text(
-                  l10n.aiDjTodayTitle,
-                  style: Theme.of(context).textTheme.titleMedium,
-                ),
-              ),
-              if (list != null)
-                Text(
-                  l10n.aiDjLastUpdated(aiDjUpdatedText(l10n, list.generatedAt)),
-                  style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                        color: scheme.onSurfaceVariant,
-                      ),
-                ),
-            ],
+          M3EButton.filled(
+            key: const Key('aiDjPlayAllButton'),
+            onPressed: busy || items.isEmpty
+                ? null
+                : () => unawaited(provider.startRadio()),
+            icon: const Icon(Icons.play_arrow_rounded),
+            label: Text(l10n.aiDjPlayAll),
           ),
-          const SizedBox(height: 12),
-          Wrap(
-            spacing: 8,
-            runSpacing: 8,
-            children: [
-              M3EButton.filled(
-                key: const Key('aiDjPlayAllButton'),
-                onPressed: busy || items.isEmpty
-                    ? null
-                    : () => unawaited(provider.startRadio()),
-                icon: const Icon(Icons.play_arrow_rounded),
-                label: Text(l10n.aiDjPlayAll),
-              ),
-              M3EButton.tonal(
-                key: const Key('aiDjEnqueueAllButton'),
-                onPressed: busy || items.isEmpty ? null : _enqueueAll,
-                icon: const Icon(Icons.playlist_add_rounded),
-                label: Text(l10n.aiDjEnqueueAll),
-              ),
-              M3EButton.text(
-                key: const Key('aiDjRefreshBatchButton'),
-                onPressed: busy ? null : () => unawaited(provider.refreshRecommendations()),
-                child: Text(l10n.aiDjRefreshBatch),
-              ),
-            ],
+          M3EButton.tonal(
+            key: const Key('aiDjEnqueueAllButton'),
+            onPressed: busy || items.isEmpty ? null : _enqueueAll,
+            icon: const Icon(Icons.playlist_add_rounded),
+            label: Text(l10n.aiDjEnqueueAll),
           ),
-          const SizedBox(height: 12),
-          if (provider.isBusy && list == null)
-            const Padding(
-              padding: EdgeInsets.symmetric(vertical: 24),
-              child: Center(child: M3ELoadingIndicator()),
-            )
-          else if (list == null || items.isEmpty)
-            _emptyRecommendations(l10n, provider)
-          else
-            for (var i = 0; i < items.length; i++) ...[
-              if (i > 0) SizedBox(height: TrackRow.gapOf(context)),
-              AiDjTrackTile(
-                index: i,
-                count: items.length,
-                item: items[i],
-                isCurrent: items[i].track.id.uri == currentUri,
-                inQueue: provider.isQueued(items[i].track.id.uri),
-                busy: provider.isBusy,
-                onPlay: () => unawaited(provider.playRecommendation(i)),
-                onReplace: () => unawaited(provider.replaceRecommendation(i)),
-                onNotInterested: () => unawaited(
-                  provider.markNotInterested(items[i].track.id.uri),
-                ),
-              ),
-            ],
-          if (list != null && list.unresolved.isNotEmpty) ...[
-            const SizedBox(height: 8),
-            Text(
-              l10n.aiDjUnresolved(list.unresolved.length),
-              style: Theme.of(context).textTheme.labelMedium?.copyWith(
-                    color: scheme.onSurfaceVariant,
-                  ),
-            ),
-            const SizedBox(height: 4),
-            for (final item in list.unresolved.take(10))
-              Text(
-                '· ${item.label}',
-                style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                      color: scheme.onSurfaceVariant,
-                    ),
-              ),
-          ],
-          const SizedBox(height: 8),
         ],
       ),
-    );
+      const SizedBox(height: 12),
+      if (provider.isBusy && list == null)
+        const Padding(
+          padding: EdgeInsets.symmetric(vertical: 24),
+          child: Center(child: M3ELoadingIndicator()),
+        )
+      else if (list == null || items.isEmpty)
+        _emptyRecommendations(l10n, provider)
+      else
+        for (var i = 0; i < items.length; i++) ...[
+          if (i > 0) SizedBox(height: TrackRow.gapOf(context)),
+          AiDjTrackTile(
+            index: i,
+            count: items.length,
+            item: items[i],
+            isCurrent: items[i].track.id.uri == currentUri,
+            busy: provider.isBusy,
+            onPlay: () => unawaited(provider.playRecommendation(i)),
+            onReplace: () => unawaited(provider.replaceRecommendation(i)),
+            onNotInterested: () => unawaited(
+              provider.markNotInterested(items[i].track.id.uri),
+            ),
+          ),
+        ],
+      if (list != null && list.unresolved.isNotEmpty) ...[
+        const SizedBox(height: 8),
+        Text(
+          l10n.aiDjUnresolved(list.unresolved.length),
+          style: theme.textTheme.labelMedium?.copyWith(
+            color: scheme.onSurfaceVariant,
+          ),
+        ),
+        const SizedBox(height: 4),
+        for (final item in list.unresolved.take(10))
+          Text(
+            '· ${item.label}',
+            style: theme.textTheme.bodySmall?.copyWith(
+              color: scheme.onSurfaceVariant,
+            ),
+          ),
+      ],
+    ];
   }
 
   /// 空列表：显式「生成推荐」（不自动消耗 token）。
@@ -311,26 +333,28 @@ class _AiDjPageState extends State<AiDjPage> {
     AppLocalizations l10n,
     AiDjProvider provider,
   ) {
-    final scheme = Theme.of(context).colorScheme;
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(
           l10n.aiDjEmptyList,
-          style: Theme.of(context).textTheme.titleSmall,
+          style: theme.textTheme.titleSmall,
         ),
         const SizedBox(height: 4),
         Text(
           l10n.aiDjEmptyListHint,
-          style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                color: scheme.onSurfaceVariant,
-              ),
+          style: theme.textTheme.bodySmall?.copyWith(
+            color: scheme.onSurfaceVariant,
+          ),
         ),
         const SizedBox(height: 12),
         M3EButton.tonal(
           key: const Key('aiDjGenerateButton'),
-          onPressed:
-              provider.isBusy ? null : () => unawaited(provider.refreshRecommendations()),
+          onPressed: provider.isBusy
+              ? null
+              : () => unawaited(provider.refreshRecommendations()),
           icon: const Icon(Icons.auto_awesome_rounded),
           label: Text(l10n.aiDjGenerate),
         ),
@@ -338,9 +362,9 @@ class _AiDjPageState extends State<AiDjPage> {
     );
   }
 
-  // ── 反馈面板：跳过 / 不感兴趣（可撤销） / 喜欢 ─────────────────────────
+  // ── 反馈：跳过 / 不感兴趣（可撤销） / 喜欢 ─────────────────────────────
 
-  Widget _feedbackCard(AppLocalizations l10n, AiDjProvider provider) {
+  List<Widget> _feedbackSection(AppLocalizations l10n, AiDjProvider provider) {
     final notInterested = provider.notInterestedItems;
     final manualLabels = {
       for (final item in notInterested) item.source.label,
@@ -351,112 +375,91 @@ class _AiDjPageState extends State<AiDjPage> {
     ];
     final liked = provider.likedLabels;
     if (notInterested.isEmpty && autoSkipped.isEmpty && liked.isEmpty) {
-      return const SizedBox.shrink();
+      return const [];
     }
-    return M3ECard(
-      variant: M3ECardVariant.filled,
-      padding: const EdgeInsets.all(16),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+    return [
+      const SizedBox(height: _sectionGap),
+      _sectionHeader(l10n.aiDjFeedbackTitle),
+      const SizedBox(height: 8),
+      Wrap(
+        spacing: 8,
+        runSpacing: 8,
         children: [
-          Text(
-            l10n.aiDjFeedbackTitle,
-            style: Theme.of(context).textTheme.titleMedium,
-          ),
-          const SizedBox(height: 8),
-          Wrap(
-            spacing: 8,
-            runSpacing: 8,
-            children: [
-              for (final item in notInterested)
-                M3EChip(
-                  key: Key('aiDjNotInterested_${item.track.id.uri}'),
-                  type: M3EChipType.input,
-                  label: '${l10n.aiDjNotInterested} · ${item.source.label}',
-                  onDeleted: () =>
-                      unawaited(provider.undoNotInterested(item.track.id.uri)),
-                  onPressed: () =>
-                      unawaited(provider.undoNotInterested(item.track.id.uri)),
-                ),
-              for (final label in autoSkipped.take(10))
-                M3EChip(
-                  type: M3EChipType.assist,
-                  label: '${l10n.aiDjFeedbackSkipped} · $label',
-                ),
-              for (final label in liked.take(10))
-                M3EChip(
-                  type: M3EChipType.assist,
-                  label: '${l10n.aiDjFeedbackLiked} · $label',
-                ),
-            ],
-          ),
+          for (final item in notInterested)
+            M3EChip(
+              key: Key('aiDjNotInterested_${item.track.id.uri}'),
+              type: M3EChipType.input,
+              label: '${l10n.aiDjNotInterested} · ${item.source.label}',
+              onDeleted: () =>
+                  unawaited(provider.undoNotInterested(item.track.id.uri)),
+              onPressed: () =>
+                  unawaited(provider.undoNotInterested(item.track.id.uri)),
+            ),
+          for (final label in autoSkipped.take(10))
+            M3EChip(
+              type: M3EChipType.assist,
+              label: '${l10n.aiDjFeedbackSkipped} · $label',
+            ),
+          for (final label in liked.take(10))
+            M3EChip(
+              type: M3EChipType.assist,
+              label: '${l10n.aiDjFeedbackLiked} · $label',
+            ),
         ],
       ),
-    );
+    ];
   }
 
   // ── 本次发送的数据（隐私透明） ─────────────────────────────────────────
 
-  Widget _upstreamCard(AppLocalizations l10n) {
-    final scheme = Theme.of(context).colorScheme;
+  List<Widget> _upstreamSection(AppLocalizations l10n) {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
     final summary = _upstream;
-    return M3ECard(
-      variant: M3ECardVariant.filled,
-      padding: const EdgeInsets.fromLTRB(16, 12, 8, 12),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Expanded(
-                child: Text(
-                  l10n.aiDjUpstreamTitle,
-                  style: Theme.of(context).textTheme.titleMedium,
-                ),
-              ),
-              M3EIconButton(
-                variant: M3EIconButtonVariant.standard,
-                icon: IconSwap<bool>(
-                  value: _showUpstream,
-                  builder: (context, showUpstream) => Icon(
-                    showUpstream
-                        ? Icons.expand_less_rounded
-                        : Icons.expand_more_rounded,
-                  ),
-                ),
-                tooltip: l10n.aiDjUpstreamTitle,
-                onPressed: _toggleUpstream,
-              ),
-            ],
+    return [
+      const SizedBox(height: _sectionGap),
+      _sectionHeader(
+        l10n.aiDjUpstreamTitle,
+        trailing: M3EIconButton(
+          variant: M3EIconButtonVariant.standard,
+          icon: IconSwap<bool>(
+            value: _showUpstream,
+            builder: (context, showUpstream) => Icon(
+              showUpstream
+                  ? Icons.expand_less_rounded
+                  : Icons.expand_more_rounded,
+            ),
           ),
-          if (_showUpstream) ...[
-            const SizedBox(height: 4),
-            if (_upstreamLoading)
-              const Padding(
-                padding: EdgeInsets.symmetric(vertical: 12),
-                child: M3ELoadingIndicator(),
-              )
-            else if (summary != null) ...[
-              Text(
-                l10n.aiDjUpstreamBody(
-                  summary.recentEvents,
-                  summary.topArtists,
-                  summary.exclusions,
-                ),
-                style: Theme.of(context).textTheme.bodySmall,
-              ),
-              const SizedBox(height: 4),
-              Text(
-                l10n.aiDjUpstreamHint,
-                style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                      color: scheme.onSurfaceVariant,
-                    ),
-              ),
-            ],
-          ],
-        ],
+          tooltip: l10n.aiDjUpstreamTitle,
+          onPressed: _toggleUpstream,
+        ),
       ),
-    );
+      if (_showUpstream) ...[
+        const SizedBox(height: 4),
+        if (_upstreamLoading)
+          const Padding(
+            padding: EdgeInsets.symmetric(vertical: 12),
+            child: M3ELoadingIndicator(),
+          )
+        else if (summary != null) ...[
+          Text(
+            l10n.aiDjUpstreamBody(
+              summary.recentEvents,
+              summary.topArtists,
+              summary.exclusions,
+            ),
+            style: theme.textTheme.bodySmall,
+          ),
+          const SizedBox(height: 4),
+          Text(
+            l10n.aiDjUpstreamHint,
+            style: theme.textTheme.labelSmall?.copyWith(
+              color: scheme.onSurfaceVariant,
+            ),
+          ),
+        ],
+      ],
+    ];
   }
 
   void _toggleUpstream() {
@@ -478,58 +481,46 @@ class _AiDjPageState extends State<AiDjPage> {
     });
   }
 
-  // ── 配置卡：折叠摘要 + 展开表单 + 缓存有效期 ───────────────────────────
+  // ── 配置：折叠摘要 + 展开表单 + 缓存有效期 ─────────────────────────────
 
-  Widget _configCard(AppLocalizations l10n, AiDjProvider provider) {
+  List<Widget> _configSection(AppLocalizations l10n, AiDjProvider provider) {
     final scheme = Theme.of(context).colorScheme;
-    return M3ECard(
-      variant: M3ECardVariant.filled,
-      padding: const EdgeInsets.all(16),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+    return [
+      const SizedBox(height: _sectionGap),
+      _sectionHeader(
+        l10n.aiDjConfigTitle,
+        trailing: !_editingConfig && provider.hasConfig
+            ? M3EButton.text(
+                key: const Key('aiDjManageConfigButton'),
+                onPressed: () => setState(() => _editingConfig = true),
+                child: Text(l10n.aiDjOpenSettings),
+              )
+            : null,
+      ),
+      const SizedBox(height: 8),
+      if (_editingConfig) _configForm(l10n) else _configSummary(l10n, provider),
+      const SizedBox(height: 12),
+      Divider(color: scheme.outlineVariant.withValues(alpha: 0.5)),
+      _cacheTtlRow(l10n, provider),
+      const SizedBox(height: 4),
+      Row(
         children: [
-          Row(
-            children: [
-              Expanded(
-                child: Text(
-                  l10n.aiDjConfigTitle,
-                  style: Theme.of(context).textTheme.titleMedium,
-                ),
-              ),
-              if (!_editingConfig && provider.hasConfig)
-                TextButton(
-                  key: const Key('aiDjManageConfigButton'),
-                  onPressed: () => setState(() => _editingConfig = true),
-                  child: Text(l10n.aiDjOpenSettings),
-                ),
-            ],
+          M3EButton.tonal(
+            key: const Key('aiDjTestConnectionButton'),
+            onPressed: _busy ? null : _testConnection,
+            icon: const Icon(Icons.wifi_tethering_rounded),
+            label: Text(l10n.aiDjTestConnection),
           ),
-          const SizedBox(height: 8),
-          if (_editingConfig) _configForm(l10n) else _configSummary(l10n, provider),
-          const SizedBox(height: 4),
-          Divider(color: scheme.outlineVariant.withValues(alpha: 0.5)),
-          _cacheTtlRow(l10n, provider),
-          const SizedBox(height: 4),
-          Row(
-            children: [
-              M3EButton.tonal(
-                key: const Key('aiDjTestConnectionButton'),
-                onPressed: _busy ? null : _testConnection,
-                icon: const Icon(Icons.wifi_tethering_rounded),
-                label: Text(l10n.aiDjTestConnection),
-              ),
-              if (!_editingConfig && provider.hasConfig) ...[
-                const SizedBox(width: 8),
-                M3EButton.text(
-                  onPressed: _busy ? null : _clearConfig,
-                  child: Text(l10n.aiDjClearConfig),
-                ),
-              ],
-            ],
-          ),
+          if (!_editingConfig && provider.hasConfig) ...[
+            const SizedBox(width: 8),
+            M3EButton.text(
+              onPressed: _busy ? null : _clearConfig,
+              child: Text(l10n.aiDjClearConfig),
+            ),
+          ],
         ],
       ),
-    );
+    ];
   }
 
   /// 推荐缓存有效期：只影响续推是否消费旧列表，不做过期提示。
@@ -764,7 +755,8 @@ class _AiDjPageState extends State<AiDjPage> {
   Future<void> _testConnection() async {
     final l10n = AppLocalizations.of(context)!;
     final provider = _provider;
-    final config = _editingConfig
+    final editing = _editingConfig;
+    final config = editing
         ? LlmConfig(
             baseUrl: _baseUrlController.text,
             apiKey: _apiKeyController.text,
@@ -779,7 +771,15 @@ class _AiDjPageState extends State<AiDjPage> {
     try {
       await provider.testConnection(config);
       if (!mounted) return;
-      _notify(l10n.aiDjTestSucceeded);
+      // 表单值测通即存：消除「测过了但忘记保存」的坑，配置以刚验证的那份为准。
+      if (editing) {
+        await provider.saveConfig(config);
+        if (!mounted) return;
+        setState(() => _editingConfig = false);
+        _notify(l10n.aiDjTestSaved);
+      } else {
+        _notify(l10n.aiDjTestSucceeded);
+      }
     } on SourceFailure catch (failure) {
       if (!mounted) return;
       _notify(aiDjFailureText(l10n, failure), error: true);
@@ -810,7 +810,6 @@ class _AiDjPageState extends State<AiDjPage> {
       notifications.showSuccessSnackBar(message);
     }
   }
-
 }
 
 /// Web 平台隐藏（CORS 与密钥安全）；其余平台可用。
