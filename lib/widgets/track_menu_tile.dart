@@ -20,6 +20,7 @@ class TrackMenuTile extends StatelessWidget {
     super.key,
     required this.title,
     required this.artist,
+    this.artists,
     this.coverUrl,
     this.trailingText,
     required this.position,
@@ -31,6 +32,10 @@ class TrackMenuTile extends StatelessWidget {
 
   final String title;
   final String artist;
+
+  /// 逐名可点的歌手（搜索结果行传入；空则退化为纯文本 [artist]）。
+  final List<TrackRowArtist>? artists;
+
   final String? coverUrl;
 
   /// 行尾元信息（时长）；未知传 null 不占位。
@@ -57,6 +62,7 @@ class TrackMenuTile extends StatelessWidget {
     return TrackRow(
       title: title,
       artist: artist,
+      artists: artists,
       coverUrl: coverUrl,
       trailingText: trailingText,
       position: position,

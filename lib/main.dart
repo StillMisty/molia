@@ -6,6 +6,7 @@ import 'package:provider/provider.dart';
 
 import 'app/app_shell.dart';
 import 'data/catalog/album_service.dart';
+import 'data/catalog/artist_service.dart';
 import 'data/catalog/catalog_service.dart';
 import 'data/catalog/comments_service.dart';
 import 'data/catalog/source_registry_impl.dart';
@@ -179,6 +180,13 @@ void main() async {
   final albumService = AlbumService(
     fetch: (sourceKey, albumId, {required page, required limit}) =>
         sourceManager.fetchAlbum(sourceKey, albumId,
+            page: page, limit: limit),
+  );
+  // 歌手：同一取数模式（key = artist:{source}:{artistId}:{page}）；
+  // 取数注入 SourceManager.fetchArtist。
+  final artistService = ArtistService(
+    fetch: (sourceKey, artistId, {required page, required limit}) =>
+        sourceManager.fetchArtist(sourceKey, artistId,
             page: page, limit: limit),
   );
 
@@ -649,6 +657,8 @@ void main() async {
         Provider<CatalogService>.value(value: catalogService),
         // 专辑页取数（缓存/错误边界在服务内；页面只消费领域 Album）。
         Provider<AlbumService>.value(value: albumService),
+        // 歌手页取数（同上，服务内收敛缓存与错误边界）。
+        Provider<ArtistService>.value(value: artistService),
         // 评论页状态：热门 / 最新分页 + 刷新（评论缓存走 CommentsService）。
         ChangeNotifierProvider(
           create: (_) => CommentsProvider(

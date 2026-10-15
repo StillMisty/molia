@@ -1,7 +1,26 @@
+import 'package:flutter/gestures.dart';
 import 'package:material_3_expressive/material_3_expressive.dart';
 import 'package:material_ui/material_ui.dart';
 import 'card_list_surface.dart';
 import 'library_cover.dart';
+
+/// 曲目行里的歌手链接（名字 + 点击回调；回调为空 = 纯文本）。
+///
+/// 搜索结果行传入逐名可点的歌手（内置平台曲目带平台内 id 时）；其它入口
+/// 只传整串 [TrackRow.artist]，两者互斥（[TrackRow.artists] 非空即优先）。
+class TrackRowArtist {
+  final String name;
+  final VoidCallback? onTap;
+
+  const TrackRowArtist({required this.name, this.onTap});
+
+  @override
+  bool operator ==(Object other) =>
+      other is TrackRowArtist && other.name == name && other.onTap == onTap;
+
+  @override
+  int get hashCode => Object.hash(name, onTap);
+}
 
 /// 固定行高的曲目行（队列 / 收藏 / 历史 / 发现详情 / 搜索结果共用）。
 ///
@@ -15,6 +34,7 @@ class TrackRow extends StatelessWidget {
     super.key,
     required this.title,
     this.artist = '',
+    this.artists,
     this.coverUrl,
     this.coverSize = 44,
     this.trailingText,
@@ -32,6 +52,11 @@ class TrackRow extends StatelessWidget {
 
   final String title;
   final String artist;
+
+  /// 逐名可点的歌手（搜索结果）：非空时副标题按链接渲染（[artist] 仍作为
+  /// 无障碍文案与回退）。仅当歌手带平台内 id（可进歌手页）时才需要。
+  final List<TrackRowArtist>? artists;
+
   final String? coverUrl;
   final double coverSize;
 
@@ -67,6 +92,7 @@ class TrackRow extends StatelessWidget {
         selected ? scheme.onSecondaryContainer : scheme.onSurface;
     final Color supportingColor =
         selected ? scheme.onSecondaryContainer : scheme.onSurfaceVariant;
+    final artistLinks = artists;
 
     return CardListSurface(
       position: position,
@@ -92,7 +118,15 @@ class TrackRow extends StatelessWidget {
                       overflow: TextOverflow.ellipsis,
                       style: type.bodyLarge.copyWith(color: contentColor),
                     ),
-                    if (artist.isNotEmpty)
+                    if (artistLinks != null && artistLinks.isNotEmpty)
+                      _ArtistLinks(
+                        artists: artistLinks,
+                        style: type.bodyMedium.copyWith(color: supportingColor),
+                        linkStyle: type.bodyMedium.copyWith(
+                          color: scheme.primary,
+                        ),
+                      )
+                    else if (artist.isNotEmpty)
                       Text(
                         artist,
                         maxLines: 1,
@@ -151,6 +185,72 @@ class TrackRow extends StatelessWidget {
               key: const ValueKey<String>('cover'),
               child: cover,
             ),
+    );
+  }
+}
+
+/// 逐名可点的歌手副标题：单行 `Text.rich` + 每个可点名字一个
+/// [TapGestureRecognizer]（点击不触发行本身的播放手势）。
+///
+/// 为什么是 StatefulWidget：识别器必须持有并释放（`dispose`），
+/// stateless 的 `Text.rich` 每次 build 新建识别器会泄漏。重建时先释放上一批
+/// 识别器——手势只在帧间事件循环里派发，build 期释放是安全的。
+class _ArtistLinks extends StatefulWidget {
+  const _ArtistLinks({
+    required this.artists,
+    required this.style,
+    required this.linkStyle,
+  });
+
+  final List<TrackRowArtist> artists;
+  final TextStyle style;
+  final TextStyle linkStyle;
+
+  @override
+  State<_ArtistLinks> createState() => _ArtistLinksState();
+}
+
+class _ArtistLinksState extends State<_ArtistLinks> {
+  final List<TapGestureRecognizer> _recognizers = <TapGestureRecognizer>[];
+
+  @override
+  void dispose() {
+    _releaseRecognizers();
+    super.dispose();
+  }
+
+  void _releaseRecognizers() {
+    for (final recognizer in _recognizers) {
+      recognizer.dispose();
+    }
+    _recognizers.clear();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    _releaseRecognizers();
+    final spans = <TextSpan>[];
+    for (var index = 0; index < widget.artists.length; index++) {
+      final artist = widget.artists[index];
+      if (index > 0) spans.add(TextSpan(text: '、', style: widget.style));
+      final onTap = artist.onTap;
+      if (onTap == null) {
+        spans.add(TextSpan(text: artist.name, style: widget.style));
+        continue;
+      }
+      final recognizer = TapGestureRecognizer()..onTap = onTap;
+      _recognizers.add(recognizer);
+      spans.add(TextSpan(
+        text: artist.name,
+        style: widget.linkStyle,
+        recognizer: recognizer,
+      ));
+    }
+    return Text.rich(
+      TextSpan(children: spans),
+      maxLines: 1,
+      overflow: TextOverflow.ellipsis,
+      style: widget.style,
     );
   }
 }

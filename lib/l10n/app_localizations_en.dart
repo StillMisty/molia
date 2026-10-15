@@ -1118,6 +1118,17 @@ class AppLocalizationsEn extends AppLocalizations {
   String get albumLoadFailed => 'Failed to load album';
 
   @override
+  String get artistEmpty => 'No tracks for this artist';
+
+  @override
+  String get artistLoadFailed => 'Failed to load artist';
+
+  @override
+  String artistSongCount(int count) {
+    return '$count songs';
+  }
+
+  @override
   String albumYear(int year) {
     return '$year';
   }
@@ -2350,6 +2361,9 @@ class AppLocalizationsEn extends AppLocalizations {
   String get trackInfoAlbum => 'Album';
 
   @override
+  String get trackInfoArtist => 'Artist';
+
+  @override
   String get trackInfoDuration => 'Duration';
 
   @override
@@ -2399,6 +2413,9 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get trackInfoAlbumOpen => 'View album';
+
+  @override
+  String get trackInfoArtistOpen => 'View artist';
 
   @override
   String get trackInfoSourceUnknownId => 'Unknown track ID';

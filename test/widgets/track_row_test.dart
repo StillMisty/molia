@@ -147,4 +147,45 @@ void main() {
         tester.getTopRight(find.textContaining('A very long track')).dx;
     expect(titleRight, trailingRect.left - 12);
   });
+
+  testWidgets('逐名可点的歌手：点击链接回调，不触发行播放；无回调的名字不可点',
+      (tester) async {
+    var rowTaps = 0;
+    final tapped = <String>[];
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: Center(
+            child: TrackRow(
+              title: 'Title',
+              artist: 'A、B',
+              artists: [
+                TrackRowArtist(name: 'A', onTap: () => tapped.add('A')),
+                const TrackRowArtist(name: 'B'),
+              ],
+              position: M3ECardPosition.single,
+              onTap: () => rowTaps++,
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tapOnText(find.textRange.ofSubstring('A'));
+    await tester.pump();
+    expect(tapped, ['A'], reason: '链接回调生效');
+    expect(rowTaps, 0, reason: '不触发行播放');
+
+    // 无回调的名字是纯文本：点击落到行本身（播放）。
+    await tester.tapOnText(find.textRange.ofSubstring('B'));
+    await tester.pump();
+    expect(tapped, ['A']);
+    expect(rowTaps, 1);
+  });
+
+  testWidgets('未传 artists：副标题保持整串纯文本', (tester) async {
+    await pumpRow(tester);
+    expect(find.text('Artist'), findsOneWidget);
+  });
 }

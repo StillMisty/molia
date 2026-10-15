@@ -151,6 +151,20 @@ class _TrackInfoViewState extends State<TrackInfoView> {
                 ?.capabilities
                 .collection ??
             false);
+    // 歌手行：曲目带歌手 id（raw `_artists`）且渠道能力位为真时可点。
+    final artistRef = track == null ? null : platformArtistOf(track);
+    final artistNames = track == null
+        ? ''
+        : track.artists
+            .map((artist) => artist.name)
+            .where((name) => name.isNotEmpty)
+            .join('、');
+    final artistSupported = artistRef != null &&
+        (sourceRegistry
+                ?.byKey(track!.id.sourceKey)
+                ?.capabilities
+                .artist ??
+            false);
     final lyricsProviderName = context.select<LyricsProvider, String?>(
       (provider) =>
           track != null && provider.state.trackId == track.id.uri
@@ -285,6 +299,22 @@ class _TrackInfoViewState extends State<TrackInfoView> {
                           icon: Icons.album_rounded,
                           title: l10n.trackInfoAlbum,
                           subtitle: track.album!,
+                        ),
+                if (artistNames.isNotEmpty)
+                  artistSupported
+                      ? SettingsNavTile(
+                          key: const Key('trackInfoArtistItem'),
+                          icon: Icons.person_rounded,
+                          title: l10n.trackInfoArtist,
+                          subtitle:
+                              '$artistNames · ${l10n.trackInfoArtistOpen}',
+                          onTap: () => unawaited(
+                              openTrackArtist(context, track: track)),
+                        )
+                      : SettingsInfoTile(
+                          icon: Icons.person_rounded,
+                          title: l10n.trackInfoArtist,
+                          subtitle: artistNames,
                         ),
                 SettingsNavTile(
                   key: const Key('trackInfoSourceItem'),

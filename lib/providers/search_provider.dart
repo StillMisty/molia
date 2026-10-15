@@ -7,6 +7,7 @@ import '../domain/models/catalog.dart' show SearchQuery;
 import '../domain/models/failure.dart';
 import '../domain/models/source.dart' as domain;
 import '../domain/ports/source_registry.dart';
+import '../sources/raw_track.dart';
 import '../sources/source_manager.dart' show SourceKind, SourceOption;
 import '../sources/source_track.dart';
 import 'paged_list_controller.dart';
@@ -390,14 +391,22 @@ class SearchProvider extends ChangeNotifier {
             {'url': track.coverUrl}
           ]
         : const <Map<String, String>>[];
+    // 歌手列表带平台内 id（raw `_artists`，内置平台解析时注入）：搜索结果行
+    // 据此把每个歌手名做成进歌手页的链接；缺 id（脚本源）时退化为纯文本。
+    final artists = artistsFromRaw(track.raw);
     return {
       'type': 'track',
       'id': track.id,
       'name': track.title,
       'images': images,
-      'artists': [
-        {'name': track.artist.isEmpty ? '未知歌手' : track.artist},
-      ],
+      'artists': artists.isEmpty
+          ? [
+              {'name': track.artist.isEmpty ? '未知歌手' : track.artist}
+            ]
+          : [
+              for (final artist in artists)
+                {'name': artist.name, 'id': artist.id},
+            ],
       'album': {
         'name': track.album,
         'images': images,

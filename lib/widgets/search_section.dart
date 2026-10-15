@@ -5,7 +5,9 @@ import 'package:material_3_expressive/material_3_expressive.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:provider/provider.dart';
 
+import '../domain/ports/source_registry.dart';
 import '../l10n/app_localizations.dart';
+import '../pages/artist_page.dart';
 import '../providers/library_provider.dart';
 import '../providers/search_provider.dart';
 import '../utils/duration_text.dart';
@@ -314,9 +316,22 @@ class _SearchResultTile extends StatelessWidget {
     final favorite = context.select<LibraryProvider?, bool>(
       (provider) => provider?.isFavoriteSearchItem(item) ?? false,
     );
+    // 歌手链接能力位（同一平台固定）：内置平台为真时逐个歌手名可点。
+    final sourceKey = item['source']?.toString() ?? '';
+    final artistTapsEnabled = sourceKey.isNotEmpty &&
+        context.select<SourceRegistry?, bool>(
+          (registry) =>
+              registry?.byKey(sourceKey)?.capabilities.artist ?? false,
+        );
+    final artistLinks = _artistLinksOf(
+      context,
+      item,
+      tapsEnabled: artistTapsEnabled,
+    );
     return TrackMenuTile(
       title: item['name']?.toString() ?? '',
       artist: _artistOf(item),
+      artists: artistLinks,
       coverUrl: _coverUrlOf(item),
       trailingText: durationText(_durationMsOf(item)),
       position: calculateCardPosition(index, count),
@@ -368,6 +383,46 @@ class _SearchResultTile extends StatelessWidget {
       if (name is String) return name;
     }
     return '';
+  }
+
+  /// 逐名可点的歌手链接：条目带平台内 id 且渠道能力位为真时返回；
+  /// 否则返回 null（[TrackRow] 退化为整串纯文本副标题）。
+  ///
+  /// [tapsEnabled] 由 build 里的能力位 select 传入（组件不认具体 provider 的
+  /// 惯例在此保持：链接的打开动作是页面级 API）。
+  List<TrackRowArtist>? _artistLinksOf(
+    BuildContext context,
+    Map<String, dynamic> item, {
+    required bool tapsEnabled,
+  }) {
+    final sourceKey = item['source']?.toString() ?? '';
+    if (!tapsEnabled || sourceKey.isEmpty) return null;
+    final raw = item['artists'];
+    if (raw is! List || raw.isEmpty) return null;
+    final links = <TrackRowArtist>[];
+    var hasId = false;
+    for (final entry in raw) {
+      if (entry is! Map) continue;
+      final name = entry['name']?.toString() ?? '';
+      if (name.isEmpty) continue;
+      final id = entry['id']?.toString() ?? '';
+      if (id.isNotEmpty) hasId = true;
+      links.add(TrackRowArtist(
+        name: name,
+        onTap: id.isEmpty
+            ? null
+            : () => unawaited(
+                  showArtistPage(
+                    context,
+                    sourceKey,
+                    id,
+                    fallbackName: name,
+                  ),
+                ),
+      ));
+    }
+    // 没有任何一位带 id 时保持整串纯文本（避免半可点半不可点的割裂行）。
+    return hasId ? links : null;
   }
 
   /// 封面地址：曲目图优先，其次专辑图（与旧的网格卡片同一取法）。
