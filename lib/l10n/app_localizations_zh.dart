@@ -2826,4 +2826,29 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get sleepTimerCustomConfirm => '设定';
+
+  @override
+  String get trayShowWindow => '显示主窗口';
+
+  @override
+  String get trayPrevious => '上一首';
+
+  @override
+  String get trayNext => '下一首';
+
+  @override
+  String get trayQuit => '退出';
+
+  @override
+  String get settingsDesktopSection => '桌面';
+
+  @override
+  String get settingsCloseToTray => '关闭时最小化到托盘';
+
+  @override
+  String get settingsCloseToTraySubtitle => '播放不中断；可从托盘图标重新打开或退出';
+
+  @override
+  String get settingsTrayLinuxHint =>
+      '托盘图标需要系统托盘支持：GNOME 需安装 AppIndicator 扩展；没有托盘宿主时，关闭将直接退出';
 }

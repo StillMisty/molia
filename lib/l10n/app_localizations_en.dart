@@ -2949,4 +2949,30 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get sleepTimerCustomConfirm => 'Set';
+
+  @override
+  String get trayShowWindow => 'Show window';
+
+  @override
+  String get trayPrevious => 'Previous track';
+
+  @override
+  String get trayNext => 'Next track';
+
+  @override
+  String get trayQuit => 'Quit';
+
+  @override
+  String get settingsDesktopSection => 'Desktop';
+
+  @override
+  String get settingsCloseToTray => 'Minimize to tray on close';
+
+  @override
+  String get settingsCloseToTraySubtitle =>
+      'Keep playing in the background; reopen or quit from the tray icon';
+
+  @override
+  String get settingsTrayLinuxHint =>
+      'The tray icon needs a system tray host; GNOME requires the AppIndicator extension. Without one, closing quits';
 }

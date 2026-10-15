@@ -9,6 +9,8 @@ import '../providers/nav_provider.dart';
 import '../services/app_branding_service.dart';
 import '../services/language_service.dart';
 import '../services/notification_service.dart';
+import '../services/window/app_tray.dart';
+import '../services/window/tray_settings.dart';
 import '../widgets/nav_destination_icons.dart';
 import '../widgets/settings/settings_reorderable_rows.dart';
 import '../widgets/settings/settings_tiles.dart';
@@ -59,6 +61,8 @@ class _GeneralSettingsPageState extends State<GeneralSettingsPage> {
     final l10n = AppLocalizations.of(context)!;
     // 测试等场景可能不提供 NavProvider：缺省时隐藏底部导航分组。
     final nav = context.watch<NavProvider?>();
+    // 托盘设置同理：缺省（或非桌面平台）时隐藏「桌面」分组。
+    final tray = context.watch<TraySettings?>();
 
     return Scaffold(
       appBar: M3EAppBar.top(
@@ -68,7 +72,7 @@ class _GeneralSettingsPageState extends State<GeneralSettingsPage> {
       body: ListView(
         padding: const EdgeInsets.all(kSettingsPadding),
         children: [
-          // 行序按改动频率：底部导航（常改）→ 语言 → 应用名称。
+          // 行序按改动频率：底部导航（常改）→ 语言 → 应用名称 → 桌面行为。
           if (nav != null) ...[
             SettingsSectionCard(
               title: l10n.settingsBottomNavTitle,
@@ -104,6 +108,29 @@ class _GeneralSettingsPageState extends State<GeneralSettingsPage> {
               ),
             ],
           ),
+          // 桌面托盘：仅 Linux/Windows 显示（其余平台 AppTray.isSupported
+          // 为 false，开关没有意义）。
+          if (AppTray.isSupported && tray != null) ...[
+            const SizedBox(height: kSettingsSectionSpacing),
+            SettingsSectionCard(
+              title: l10n.settingsDesktopSection,
+              // Linux 托盘图标依赖桌面面板：GNOME 需 AppIndicator 扩展，
+              // 否则图标不显示（只在 Linux 提醒，避免 Windows 用户困惑）。
+              footer: AppTray.isLinuxDesktop
+                  ? SettingsSectionHint(text: l10n.settingsTrayLinuxHint)
+                  : null,
+              children: [
+                SettingsSwitchTile(
+                  switchKey: const Key('settingsCloseToTraySwitch'),
+                  icon: Icons.desktop_windows_rounded,
+                  title: l10n.settingsCloseToTray,
+                  subtitle: l10n.settingsCloseToTraySubtitle,
+                  value: tray.closeToTray,
+                  onChanged: tray.setCloseToTray,
+                ),
+              ],
+            ),
+          ],
         ],
       ),
     );

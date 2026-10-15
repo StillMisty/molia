@@ -25,6 +25,8 @@ import 'package:molia/services/lyrics_display/lyrics_output.dart';
 import 'package:molia/services/lyrics_service.dart';
 import 'package:molia/services/notification_service.dart';
 import 'package:molia/services/play_statistics_service.dart';
+import 'package:molia/services/window/app_tray.dart';
+import 'package:molia/services/window/tray_settings.dart';
 import 'package:molia/sources/source_manager.dart';
 import 'package:molia/theme/scheme_builder.dart';
 import 'package:molia/widgets/card_list_surface.dart';
@@ -512,6 +514,39 @@ void main() {
     expect(handled, isTrue);
     expect(find.text('Theme mode'), findsOneWidget);
     expect(find.text('App Language'), findsNothing);
+  });
+
+  testWidgets('通用子页：桌面托盘开关切换并持久化（仅桌面端）', (tester) async {
+    // Linux/Windows 才有托盘实现：测试跑在 Linux VM 上 isSupported 为 true
+    // （与 WindowChrome 的既有约束一致，见 docs/pitfalls.md #30）；
+    // 其余平台直接通过。
+    if (!AppTray.isSupported) return;
+
+    final prefs = await SharedPreferences.getInstance();
+    final traySettings = TraySettings(prefs: prefs);
+    await traySettings.init();
+    addTearDown(traySettings.dispose);
+
+    await pumpSettingsPage(
+      tester,
+      extraProviders: [
+        ChangeNotifierProvider<TraySettings>.value(value: traySettings),
+      ],
+    );
+    await tester.tap(find.byKey(const Key('settingsGeneralItem')));
+    await tester.pumpAndSettle();
+
+    // 桌面分组：默认「关闭时最小化到托盘」为开。
+    expect(find.text('Desktop'), findsOneWidget);
+    final closeToTray = find.byKey(const Key('settingsCloseToTraySwitch'));
+    await tester.ensureVisible(closeToTray);
+    await tester.pumpAndSettle();
+    expect(traySettings.closeToTray, isTrue);
+
+    await tester.tap(closeToTray);
+    await tester.pumpAndSettle();
+    expect(traySettings.closeToTray, isFalse);
+    expect(prefs.getBool(TraySettings.keyCloseToTray), isFalse);
   });
 
   testWidgets('底部弹层 guard：子页打开时系统返回先退子页、不退弹层', (tester) async {

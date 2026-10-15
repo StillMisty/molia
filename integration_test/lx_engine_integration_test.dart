@@ -18,6 +18,7 @@ import 'package:molia/playback/playing_track_cache_writer.dart';
 import 'package:molia/providers/sources_provider.dart';
 import 'package:molia/data/downloads/downloads_publisher.dart';
 import 'package:molia/services/cache_service.dart';
+import 'package:molia/services/window/app_tray.dart';
 import 'package:molia/services/window/window_chrome.dart';
 import 'package:molia/sources/source_manager.dart';
 
@@ -366,6 +367,55 @@ void main() {
     await WindowChrome.ensureInitialized();
     final height = await WindowChrome.debugTitleBarHeight();
     expect(height, 0, reason: '隐藏标题栏后系统标题栏高度应为 0，实际 $height');
+
+    // 托盘「关闭时最小化」走的隐藏 / 显示往返：隐藏后不可见，显示后恢复。
+    await WindowChrome.hide();
+    expect(await WindowChrome.isVisible(), isFalse, reason: '隐藏后窗口不应可见');
+    await WindowChrome.show();
+    expect(await WindowChrome.isVisible(), isTrue, reason: '显示后窗口应恢复可见');
+  });
+
+  testWidgets('桌面托盘：创建 / 更新 / 销毁冒烟（无面板环境不得崩）', (tester) async {
+    // Linux/Windows 才有托盘实现；其余平台是空实现（isSupported=false），
+    // 本用例直接通过。
+    if (!AppTray.isSupported) return;
+
+    const labels = TrayMenuLabels(
+      showWindow: 'Show window',
+      play: 'Play',
+      pause: 'Pause',
+      previous: 'Previous track',
+      next: 'Next track',
+      addFavorite: 'Add to favorites',
+      removeFavorite: 'Remove from favorites',
+      quit: 'Quit',
+    );
+    // 环境可能没有 D-Bus / 系统面板（Xvfb）：创建失败由 AppTray 内部
+    // 降级，不抛异常；真实 Linux 应用内应能建出图标（资源来自 bundle）。
+    AppTray.init(
+      labels: labels,
+      onShowWindow: () {},
+      onTogglePlay: () {},
+      onPrevious: () {},
+      onNext: () {},
+      onToggleFavorite: () {},
+      onQuit: () {},
+    );
+    expect(AppTray.debugIsActive, isTrue, reason: '真实桌面应用内托盘图标应创建成功');
+    AppTray.setPlaybackState(hasTrack: true, isPlaying: true);
+    AppTray.setFavorite(true);
+    AppTray.setTooltip('Molia · Test - Artist');
+    AppTray.setLabels(labels);
+    AppTray.setPlaybackState(hasTrack: false, isPlaying: false);
+    AppTray.dispose();
+    expect(AppTray.debugIsActive, isFalse);
+    // 销毁后再调用不得抛异常（启动初始化失败 / 已销毁时的空操作语义）。
+    AppTray.setFavorite(true);
+    AppTray.setTooltip('Molia');
+    // 宿主探测：环境不同结果不同（无面板的 Xvfb 为 false 属预期），
+    // 只要求不抛异常且结果缓存稳定。
+    final hasHost = await AppTray.detectHost();
+    expect(await AppTray.detectHost(), hasHost, reason: '宿主探测结果应缓存');
   });
 
   // 公共下载目录（MediaStore）平台通道：真实设备上发布 → 删除闭环。

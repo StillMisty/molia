@@ -28,6 +28,8 @@ Linux/Windows 桌面端此前保留系统标题栏：窗口最小化/最大化/�
    （最小化 / 最大化-还原 / 关闭，关闭键 hover/按下走危险色）。
    不做设置开关（默认即最终形态）、不做 macOS（保留原生标题栏）、
    移动端与 Web 行为零变化（按钮整组不构建、拖动区/双击区纯透传）。
+   （2026-10-15 修订：关闭键行为见 ADR-0009「桌面托盘」——默认改为隐藏到
+   托盘，并由设备本地设置控制；chrome 本身规格不变。）
 4. **架构：UI 不得 import `window_manager`**。该包的 Dart 代码 import `dart:io`，
    被 UI 直接引用会让 `flutter build web` 直接失败；统一经
    `lib/services/window/` 条件导出（stub/io，与 `system_fonts_service.dart` 同一模式），
