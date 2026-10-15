@@ -33,7 +33,6 @@ class SearchProvider extends ChangeNotifier {
   StreamSubscription<void>? _registrySubscription;
 
   String _searchQuery = '';
-  bool _isSearching = false;
   Map<String, List<Map<String, dynamic>>> _searchResults = {};
   SourceFailure? _failure;
   List<Map<String, dynamic>> _filteredResultsCache = const [];
@@ -49,9 +48,8 @@ class SearchProvider extends ChangeNotifier {
   /// 当前搜索类型（搜索页「单曲 / 歌手」分段；默认单曲）。
   SearchKind _kind = SearchKind.song;
 
-  // 歌手类型会话：与单曲各自分页 / 错误 / 过期守卫（切类型才发起请求）。
+  // 歌手类型会话：与单曲各自分页 / 错误（切类型才发起请求）。
   List<ArtistSummary> _artistResults = const [];
-  bool _artistSearching = false;
   SourceFailure? _artistFailure;
 
   /// 歌手分页会话的关键词（pager 的 fetchPage 读取；换词/清空时重置）。
@@ -60,7 +58,6 @@ class SearchProvider extends ChangeNotifier {
   // 歌词类型会话：曲目（与单曲同构的播放 / 收藏路径）+ 命中歌词片段并行表。
   List<SourceTrack> _lyricTracks = const [];
   Map<String, String> _lyricSnippets = const {};
-  bool _lyricSearching = false;
   SourceFailure? _lyricFailure;
 
   /// 歌词分页会话的关键词（pager 的 fetchPage 读取；换词/清空时重置）。
@@ -78,9 +75,6 @@ class SearchProvider extends ChangeNotifier {
   late final PagedListController<SourceTrack> _pager;
   late final PagedListController<ArtistSummary> _artistPager;
   late final PagedListController<SourceTrack> _lyricPager;
-
-  // 单调递增的请求 id：丢弃过期搜索结果。
-  int _searchRequestId = 0;
 
   Timer? _debounceTimer;
   static const _debounceTime = Duration(milliseconds: 500);
@@ -126,10 +120,13 @@ class SearchProvider extends ChangeNotifier {
     ];
   }
 
+  /// 是否正在搜索当前类型（首屏加载中）。
+  ///
+  /// 直接读当前类型分页控制器的加载态（不再维护镜像 flag）。
   bool get isSearching => switch (_kind) {
-        SearchKind.song => _isSearching,
-        SearchKind.artist => _artistSearching,
-        SearchKind.lyric => _lyricSearching,
+        SearchKind.song => _pager.isLoading,
+        SearchKind.artist => _artistPager.isLoading,
+        SearchKind.lyric => _lyricPager.isLoading,
       };
 
   /// 归一化失败对象（UI 的唯一错误出口：标题走 l10n，详情用 message，
@@ -245,7 +242,6 @@ class SearchProvider extends ChangeNotifier {
     _resetArtistPagination();
     _artistResults = const [];
     _artistFailure = null;
-    _artistSearching = false;
   }
 
   void _resetLyricPagination() {
@@ -260,7 +256,6 @@ class SearchProvider extends ChangeNotifier {
     _lyricTracks = const [];
     _lyricSnippets = const {};
     _lyricFailure = null;
-    _lyricSearching = false;
   }
 
   /// 切换搜索类型：不支持的类型忽略；目标类型尚无结果时按当前关键词取首屏。
@@ -271,18 +266,18 @@ class SearchProvider extends ChangeNotifier {
     final query = _searchQuery.trim();
     if (query.isEmpty) return;
     if (kind == SearchKind.artist) {
-      if (_artistResults.isEmpty && !_artistSearching) {
+      if (_artistResults.isEmpty && !_artistPager.isLoading) {
         unawaited(_performArtistSearch(query));
       }
       return;
     }
     if (kind == SearchKind.lyric) {
-      if (_lyricTracks.isEmpty && !_lyricSearching) {
+      if (_lyricTracks.isEmpty && !_lyricPager.isLoading) {
         unawaited(_performLyricSearch(query));
       }
       return;
     }
-    if (_sourceTracks.isEmpty && !_isSearching) {
+    if (_sourceTracks.isEmpty && !_pager.isLoading) {
       unawaited(performSearch(query));
     }
   }
@@ -387,16 +382,14 @@ class SearchProvider extends ChangeNotifier {
     if (query.isEmpty) {
       _searchResults = {};
       _sourceTracks = const [];
-      _isSearching = false;
-      _searchRequestId++;
       _markFilteredResultsDirty();
       notifyListeners();
       return;
     }
 
-    final requestId = ++_searchRequestId;
+    // 防抖：只有最后一次输入会触发搜索；在途请求由 pager 的 reset 过期丢弃。
     _debounceTimer = Timer(_debounceTime, () {
-      performSearch(query, requestId: requestId);
+      performSearch(query);
     });
 
     notifyListeners();
@@ -414,8 +407,6 @@ class SearchProvider extends ChangeNotifier {
       _searchResults = {};
       _sourceTracks = const [];
       _failure = null;
-      _isSearching = false;
-      _searchRequestId++;
       _markFilteredResultsDirty();
       notifyListeners();
       return;
@@ -428,8 +419,7 @@ class SearchProvider extends ChangeNotifier {
       notifyListeners();
     }
 
-    final requestId = ++_searchRequestId;
-    performSearch(query, requestId: requestId);
+    performSearch(query);
   }
 
   void clearSearch() {
@@ -438,8 +428,6 @@ class SearchProvider extends ChangeNotifier {
     _searchResults = {};
     _sourceTracks = const [];
     _failure = null;
-    _isSearching = false;
-    _searchRequestId++;
     _resetPagination();
     _clearArtistSession();
     _clearLyricSession();
@@ -447,22 +435,19 @@ class SearchProvider extends ChangeNotifier {
     notifyListeners();
   }
 
-  Future<void> performSearch(String query, {int? requestId}) async {
+  Future<void> performSearch(String query) async {
     if (query.trim().isEmpty) return;
-    // 旧 debounce 回调（已有更新的请求）直接丢弃。
-    if (requestId != null && requestId != _searchRequestId) return;
 
     // 按当前类型分发：歌手 / 歌词走各自会话（单曲路径保持原语义）。
     if (_kind == SearchKind.artist) {
-      return _performArtistSearch(query, requestId: requestId);
+      return _performArtistSearch(query);
     }
     if (_kind == SearchKind.lyric) {
-      return _performLyricSearch(query, requestId: requestId);
+      return _performLyricSearch(query);
     }
 
     // 无可用音源：展示空态引导，不发起请求。
     if (_sourceKey.isEmpty) {
-      _isSearching = false;
       _failure = null;
       _sourceTracks = const [];
       _searchResults = {};
@@ -473,14 +458,12 @@ class SearchProvider extends ChangeNotifier {
     }
 
     _pagerQuery = query;
-    _isSearching = true;
     _failure = null;
     _pager.reset();
     notifyListeners();
 
     await _pager.loadFirstPage();
     _applyPagerState();
-    _isSearching = false;
     notifyListeners();
   }
 
@@ -535,13 +518,11 @@ class SearchProvider extends ChangeNotifier {
     );
   }
 
-  /// 歌手搜索首屏：独立错误态与过期守卫（失败保留已有结果）。
-  Future<void> _performArtistSearch(String query, {int? requestId}) async {
+  /// 歌手搜索首屏：独立错误态（失败保留已有结果）。
+  Future<void> _performArtistSearch(String query) async {
     if (query.trim().isEmpty) return;
-    if (requestId != null && requestId != _searchRequestId) return;
 
     if (_sourceKey.isEmpty) {
-      _artistSearching = false;
       _artistFailure = null;
       _artistResults = const [];
       _resetArtistPagination();
@@ -550,14 +531,12 @@ class SearchProvider extends ChangeNotifier {
     }
 
     _artistPagerQuery = query;
-    _artistSearching = true;
     _artistFailure = null;
     _artistPager.reset();
     notifyListeners();
 
     await _artistPager.loadFirstPage();
     _applyArtistPagerState();
-    _artistSearching = false;
     notifyListeners();
   }
 
@@ -599,10 +578,9 @@ class SearchProvider extends ChangeNotifier {
     );
   }
 
-  /// 歌词搜索首屏：独立错误态与过期守卫（失败保留已有结果）。
-  Future<void> _performLyricSearch(String query, {int? requestId}) async {
+  /// 歌词搜索首屏：独立错误态（失败保留已有结果）。
+  Future<void> _performLyricSearch(String query) async {
     if (query.trim().isEmpty) return;
-    if (requestId != null && requestId != _searchRequestId) return;
 
     if (_sourceKey.isEmpty) {
       _clearLyricSession();
@@ -611,7 +589,6 @@ class SearchProvider extends ChangeNotifier {
     }
 
     _lyricPagerQuery = query;
-    _lyricSearching = true;
     _lyricFailure = null;
     _pendingLyricSnippets = {};
     _lyricPager.reset();
@@ -619,7 +596,6 @@ class SearchProvider extends ChangeNotifier {
 
     await _lyricPager.loadFirstPage();
     _applyLyricPagerState();
-    _lyricSearching = false;
     notifyListeners();
   }
 
@@ -635,43 +611,27 @@ class SearchProvider extends ChangeNotifier {
     }
   }
 
-  /// 加载下一页音源搜索结果。
+  /// 加载下一页当前类型（触底 / 底部按钮）。
   ///
-  /// 过期守卫与跨页去重由 [PagedListController] 持有：换词/换音源时
-  /// `_resetPagination` 已使在途请求过期，旧响应不会覆盖新状态。
+  /// 「加载中 / 已到底 / 跨页去重」等守卫由 [PagedListController] 持有：
+  /// 换词 / 换音源时的 `_reset*Pagination` 已使在途请求过期，旧响应不会
+  /// 覆盖新状态。这里只判定会话是否可用（已选音源 + 当前会话有词）。
   Future<void> loadMore() async {
-    if (_kind == SearchKind.artist) {
-      if (_artistSearching ||
-          !_artistPager.hasMore ||
-          !hasSelectedSource ||
-          _artistPagerQuery.trim().isEmpty) {
-        return;
-      }
-      await _artistPager.loadMore();
-      _applyArtistPagerState();
-      notifyListeners();
-      return;
+    if (!hasSelectedSource) return;
+    switch (_kind) {
+      case SearchKind.song:
+        if (_pagerQuery.trim().isEmpty) return;
+        await _pager.loadMore();
+        _applyPagerState();
+      case SearchKind.artist:
+        if (_artistPagerQuery.trim().isEmpty) return;
+        await _artistPager.loadMore();
+        _applyArtistPagerState();
+      case SearchKind.lyric:
+        if (_lyricPagerQuery.trim().isEmpty) return;
+        await _lyricPager.loadMore();
+        _applyLyricPagerState();
     }
-    if (_kind == SearchKind.lyric) {
-      if (_lyricSearching ||
-          !_lyricPager.hasMore ||
-          !hasSelectedSource ||
-          _lyricPagerQuery.trim().isEmpty) {
-        return;
-      }
-      await _lyricPager.loadMore();
-      _applyLyricPagerState();
-      notifyListeners();
-      return;
-    }
-    if (_isSearching ||
-        !_pager.hasMore ||
-        !hasSelectedSource ||
-        _pagerQuery.trim().isEmpty) {
-      return;
-    }
-    await _pager.loadMore();
-    _applyPagerState();
     notifyListeners();
   }
 

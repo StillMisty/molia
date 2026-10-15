@@ -21,6 +21,7 @@ import '../domain/models/library.dart';
 import '../domain/models/track.dart';
 import '../l10n/app_localizations.dart';
 import '../providers/library_provider.dart';
+import '../providers/paged_list_controller.dart';
 import '../providers/playback_provider.dart';
 import '../utils/duration_text.dart';
 import '../utils/responsive.dart';
@@ -102,64 +103,41 @@ class ArtistPage extends StatefulWidget {
 }
 
 class _ArtistPageState extends State<ArtistPage> {
+  /// 歌手头部数据（随每页响应更新；由取数回调写入，控制器通知触发重建）。
   ArtistDetail? _artist;
 
-  /// 已加载曲目（分页追加；去重后按平台原始顺序）。
-  final List<Track> _tracks = <Track>[];
-
-  /// 已加载的页数（0 = 尚未加载成功）。
-  int _page = 0;
-
-  bool _loading = true;
-  bool _failed = false;
-
-  /// 最近一次失败（`notFound` 与一般加载失败是两种文案）。
-  Object? _error;
-  bool _loadingMore = false;
-  bool _loadMoreFailed = false;
-  bool _hasMore = false;
+  /// 分页状态机：首屏 / 加载更多 / 失败 / 在途守卫 / 跨页去重都在控制器内。
+  late final PagedListController<Track> _paged;
 
   final ScrollController _listController = ScrollController();
 
   @override
   void initState() {
     super.initState();
+    _paged = PagedListController<Track>(
+      // 平台分页边界会重复返回（忽略 page 时重复整表）：按 track id 跨页去重。
+      keyOf: (track) => track.id.uri,
+      fetchPage: _fetchPage,
+    );
     unawaited(_load());
   }
 
   @override
   void dispose() {
+    _paged.dispose();
     _listController.dispose();
     super.dispose();
   }
 
-  Future<void> _load() async {
-    setState(() {
-      _loading = true;
-      _failed = false;
-      _error = null;
-    });
-    try {
-      final artist = await widget.loader(1);
-      if (!mounted) return;
-      setState(() {
-        _artist = artist;
-        _tracks
-          ..clear()
-          ..addAll(artist.tracks);
-        _page = 1;
-        _loading = false;
-        _hasMore = artist.hasMore;
-      });
-    } catch (error) {
-      if (!mounted) return;
-      setState(() {
-        _error = error;
-        _failed = true;
-        _loading = false;
-      });
-    }
+  /// 取一页（缓存 / 错误边界在 `ArtistService`）；头部数据随响应更新。
+  Future<PagedResult<Track>> _fetchPage(int page) async {
+    final artist = await widget.loader(page);
+    _artist = artist;
+    return PagedResult(items: artist.tracks, hasMore: artist.hasMore);
   }
+
+  /// 重试 / 失败重试：重新取首屏（在途请求由控制器过期丢弃）。
+  Future<void> _load() => _paged.loadFirstPage();
 
   /// 触底 400px 内自动加载下一页（失败后不自动重试，保留按钮兜底）。
   bool _onScroll(ScrollNotification notification) {
@@ -172,53 +150,20 @@ class _ArtistPageState extends State<ArtistPage> {
   }
 
   void _maybeLoadMore() {
-    if (_loading || _loadingMore || _loadMoreFailed || !_hasMore) return;
-    unawaited(_loadMore());
-  }
-
-  Future<void> _loadMore() async {
-    if (_loadingMore || !_hasMore) return;
-    setState(() {
-      _loadingMore = true;
-      _loadMoreFailed = false;
-    });
-    try {
-      final next = await widget.loader(_page + 1);
-      if (!mounted) return;
-      // 去重后追加：平台忽略 page 时会重复返回整表，靠「无新增即结束」防死循环。
-      final known = <String>{for (final track in _tracks) track.id.uri};
-      final added = <Track>[
-        for (final track in next.tracks)
-          if (known.add(track.id.uri)) track,
-      ];
-      setState(() {
-        _page += 1;
-        _tracks.addAll(added);
-        _loadingMore = false;
-        _hasMore = next.hasMore && added.isNotEmpty;
-      });
-    } catch (_) {
-      if (!mounted) return;
-      setState(() {
-        _loadingMore = false;
-        _loadMoreFailed = true;
-      });
-    }
-  }
-
-  void _retryLoadMore() {
-    setState(() => _loadMoreFailed = false);
-    unawaited(_loadMore());
+    // 失败后不自动重试（底部保留重试按钮）；加载中 / 已到底由控制器守卫。
+    if (_paged.state.loadMoreFailed) return;
+    unawaited(_paged.loadMore());
   }
 
   /// 播放（[index] 为起始下标；队列上下文名为歌手名）。
   void _playFrom(int index) {
-    if (_tracks.isEmpty) return;
+    final tracks = _paged.state.items;
+    if (tracks.isEmpty) return;
     HapticFeedback.lightImpact();
     final name = _titleOf(_artist);
     unawaited(
       context.read<PlaybackProvider>().playDomainTracks(
-            List<Track>.of(_tracks),
+            List<Track>.of(tracks),
             index,
             contextName: name.isEmpty ? null : name,
           ),
@@ -227,14 +172,15 @@ class _ArtistPageState extends State<ArtistPage> {
 
   /// 「加入列表」：与收藏页 / 发现页共用同一流程（选择目标 → 写入 → 提示）。
   Future<void> _addToLibrary() async {
-    if (_tracks.isEmpty) return;
+    final tracks = _paged.state.items;
+    if (tracks.isEmpty) return;
     final library = context.read<LibraryProvider>();
     final addedAt = DateTime.now().millisecondsSinceEpoch;
     await addTracksToLibraryTarget(
       context,
       provider: library,
       tracks: [
-        for (final track in _tracks)
+        for (final track in tracks)
           PlaylistTrack.fromTrack(track, addedAt: addedAt),
       ],
     );
@@ -254,17 +200,26 @@ class _ArtistPageState extends State<ArtistPage> {
         title: Text(l10n.trackInfoArtist),
         automaticallyImplyLeading: true,
       ),
-      body: _buildBody(context, l10n),
+      body: ValueListenableBuilder<PagedListState<Track>>(
+        valueListenable: _paged,
+        // 分页状态是不可变值：整块 body 按最新快照重建。
+        builder: (context, state, _) => _buildBody(context, l10n, state),
+      ),
     );
   }
 
-  Widget _buildBody(BuildContext context, AppLocalizations l10n) {
-    if (_loading) {
+  Widget _buildBody(
+    BuildContext context,
+    AppLocalizations l10n,
+    PagedListState<Track> state,
+  ) {
+    if (state.isLoading) {
       return const Center(child: M3ELoadingIndicator());
     }
     final artist = _artist;
-    if (_failed || artist == null) {
-      final error = _error;
+    if (state.failed || artist == null) {
+      // `notFound` 与一般加载失败是两种文案（失败原因在控制器状态里）。
+      final error = state.error;
       final notFound =
           error is SourceFailure && error.kind == FailureKind.notFound;
       return Center(
@@ -284,7 +239,7 @@ class _ArtistPageState extends State<ArtistPage> {
         ),
       );
     }
-    if (_tracks.isEmpty) {
+    if (state.isEmpty) {
       return Center(
         child: Text(
           l10n.artistEmpty,
@@ -295,6 +250,7 @@ class _ArtistPageState extends State<ArtistPage> {
       );
     }
 
+    final tracks = state.items;
     final cardList = M3ETheme.of(context).listTheme.cardList;
     final horizontalPadding = context.horizontalPadding;
     return Scrollbar(
@@ -306,26 +262,29 @@ class _ArtistPageState extends State<ArtistPage> {
         child: CustomScrollView(
           controller: _listController,
           slivers: [
-            SliverToBoxAdapter(child: _buildHeader(context, l10n, artist)),
+            SliverToBoxAdapter(
+              child: _buildHeader(context, l10n, artist, tracks.length),
+            ),
             SliverPadding(
               padding: EdgeInsets.symmetric(horizontal: horizontalPadding),
               sliver: SliverFixedExtentList.builder(
                 // 行高 + 行距：固定 extent，长列表滚动条拖动一次定位。
                 itemExtent: TrackRow.extent + cardList.gap,
-                itemCount: _tracks.length,
+                itemCount: tracks.length,
                 itemBuilder: (context, index) {
-                  final isLast = index == _tracks.length - 1;
+                  final isLast = index == tracks.length - 1;
                   return Column(
                     children: [
-                      _buildTrackRow(context, index, artist),
+                      _buildTrackRow(context, index, artist, tracks),
                       if (!isLast) SizedBox(height: cardList.gap),
                     ],
                   );
                 },
               ),
             ),
-            if (_loadingMore || _loadMoreFailed)
-              SliverToBoxAdapter(child: _buildLoadMoreFooter(context, l10n)),
+            if (state.isLoadingMore || state.loadMoreFailed)
+              SliverToBoxAdapter(
+                  child: _buildLoadMoreFooter(context, l10n, state)),
             const SliverToBoxAdapter(child: SizedBox(height: 16)),
           ],
         ),
@@ -333,13 +292,18 @@ class _ArtistPageState extends State<ArtistPage> {
     );
   }
 
-  Widget _buildTrackRow(BuildContext context, int index, ArtistDetail artist) {
-    final track = _tracks[index];
+  Widget _buildTrackRow(
+    BuildContext context,
+    int index,
+    ArtistDetail artist,
+    List<Track> tracks,
+  ) {
+    final track = tracks[index];
     final l10n = _l10n(context);
     return _ArtistTrackRow(
       track: track,
       fallbackCoverUrl: artist.avatarUrl,
-      position: calculateCardPosition(index, _tracks.length),
+      position: calculateCardPosition(index, tracks.length),
       onTap: () => _playFrom(index),
       onToggleFavorite: () => unawaited(_toggleFavorite(context, track, l10n)),
       onAddToPlaylist: () => unawaited(_addTrackToPlaylist(context, track)),
@@ -379,14 +343,18 @@ class _ArtistPageState extends State<ArtistPage> {
   }
 
   /// 底部加载更多：加载中显示进度圈；失败给重试按钮（不自动重试）。
-  Widget _buildLoadMoreFooter(BuildContext context, AppLocalizations l10n) {
+  Widget _buildLoadMoreFooter(
+    BuildContext context,
+    AppLocalizations l10n,
+    PagedListState<Track> state,
+  ) {
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
       child: Center(
-        child: _loadMoreFailed
+        child: state.loadMoreFailed
             ? M3EButton.icon(
                 style: M3EButtonStyle.outlined,
-                onPressed: _retryLoadMore,
+                onPressed: () => unawaited(_paged.loadMore()),
                 icon: const Icon(Icons.refresh_rounded, size: 18),
                 label: Text(l10n.retry),
               )
@@ -399,7 +367,11 @@ class _ArtistPageState extends State<ArtistPage> {
   }
 
   Widget _buildHeader(
-      BuildContext context, AppLocalizations l10n, ArtistDetail artist) {
+    BuildContext context,
+    AppLocalizations l10n,
+    ArtistDetail artist,
+    int trackCount,
+  ) {
     final theme = Theme.of(context);
     final avatar = artist.avatarUrl;
     final description = artist.description.trim();
@@ -440,7 +412,7 @@ class _ArtistPageState extends State<ArtistPage> {
                     ),
                     const SizedBox(height: 6),
                     Text(
-                      l10n.artistSongCount(_tracks.length),
+                      l10n.artistSongCount(trackCount),
                       style: theme.textTheme.bodySmall?.copyWith(
                         color: theme.colorScheme.onSurfaceVariant,
                       ),

@@ -102,4 +102,115 @@ void main() {
     await first;
     expect(controller.items, ['fresh']);
   });
+
+  test('追加页去重后无新增：hasMore 推断为 false 并停止请求', () async {
+    var calls = 0;
+    final controller = PagedListController<String>(
+      // 平台忽略 page：每次都返回整表。
+      fetchPage: (page) async {
+        calls++;
+        return const PagedResult(items: ['a', 'b'], hasMore: true);
+      },
+      keyOf: (item) => item,
+    );
+    await controller.loadFirstPage();
+    expect(controller.hasMore, isTrue);
+
+    await controller.loadMore();
+    expect(calls, 2);
+    expect(controller.items, ['a', 'b'], reason: '整表重复返回，去重后无新增');
+    expect(controller.page, 2, reason: '页码按请求推进（与既有语义一致）');
+    expect(controller.hasMore, isFalse, reason: '无新增即到底');
+
+    await controller.loadMore();
+    expect(calls, 2, reason: '推断到底后不再请求');
+  });
+
+  test('状态值：一个值读全（首屏加载 → 追加失败）', () async {
+    final gate = Completer<void>();
+    final controller = PagedListController<String>(
+      fetchPage: (page) async {
+        if (page == 1) {
+          await gate.future;
+          return const PagedResult(items: ['a'], hasMore: true, total: 9);
+        }
+        throw StateError('boom');
+      },
+    );
+    final notifications = <PagedListState<String>>[];
+    controller.addListener(() => notifications.add(controller.state));
+
+    final first = controller.loadFirstPage();
+    expect(controller.state.isLoading, isTrue);
+    gate.complete();
+    await first;
+
+    final loaded = controller.state;
+    expect(loaded.items, ['a']);
+    expect(loaded.page, 1);
+    expect(loaded.total, 9);
+    expect(loaded.hasMore, isTrue);
+    expect(loaded.isLoading, isFalse);
+    expect(loaded.isEmpty, isFalse);
+    expect(loaded.error, isNull);
+
+    await controller.loadMore();
+    final failed = controller.state;
+    expect(failed.loadMoreFailed, isTrue);
+    expect(failed.failed, isFalse, reason: '追加失败不进入首屏错误态');
+    expect(failed.items, ['a'], reason: '保留已加载项');
+    expect(failed.page, 1);
+    expect(failed.error, isA<StateError>());
+    // 每个状态值变化各通知一次（成功路径不额外发布中间态）。
+    expect(
+      [
+        for (final state in notifications)
+          (state.isLoading, state.isLoadingMore)
+      ],
+      [(true, false), (false, false), (false, true), (false, false)],
+    );
+  });
+
+  test('首屏失败：状态值清空（items/total/page），hasMore 复位可重试', () async {
+    var fail = false;
+    final controller = PagedListController<String>(
+      fetchPage: (_) async {
+        if (fail) throw StateError('boom');
+        return const PagedResult(items: ['a'], hasMore: true, total: 9);
+      },
+    );
+    await controller.loadFirstPage();
+    fail = true;
+    await controller.loadFirstPage(); // 刷新失败：清空并标记失败
+
+    final failed = controller.state;
+    expect(failed.failed, isTrue);
+    expect(failed.items, isEmpty);
+    expect(failed.total, isNull);
+    expect(failed.page, 0, reason: '回到「尚未加载成功」');
+    expect(failed.hasMore, isTrue, reason: '失败可重试');
+    expect(failed.error, isA<StateError>());
+  });
+
+  test('dispose 使在途请求过期：销毁后不再发布状态', () async {
+    final gate = Completer<void>();
+    final controller = PagedListController<String>(
+      fetchPage: (_) async {
+        await gate.future;
+        return const PagedResult(items: ['late'], hasMore: false);
+      },
+    );
+    var notifications = 0;
+    controller.addListener(() => notifications++);
+
+    final pending = controller.loadFirstPage();
+    expect(notifications, 1, reason: '进入加载态');
+
+    controller.dispose();
+    gate.complete();
+    // ChangeNotifier 禁止 dispose 后通知：过期响应必须被丢弃而不是回写。
+    await pending;
+    expect(notifications, 1);
+    expect(controller.items, isEmpty);
+  });
 }

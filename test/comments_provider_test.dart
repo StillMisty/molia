@@ -165,6 +165,54 @@ void main() {
     expect(provider.stateOf(CommentKind.hot).items, hasLength(20));
   });
 
+  test('刷新失败：保留上次已知的总数（tab 计数不闪没）', () async {
+    var fail = false;
+    build(onComments: (kind, page, limit) async {
+      if (fail) {
+        throw const SourceFailure(kind: FailureKind.network, message: 'down');
+      }
+      return pageOf(kind, page);
+    });
+    await provider.open(track);
+    expect(provider.stateOf(CommentKind.hot).total, 45);
+
+    fail = true;
+    await provider.refresh();
+    final failed = provider.stateOf(CommentKind.hot);
+    expect(failed.failed, isTrue);
+    expect(failed.items, isEmpty);
+    expect(failed.page, 0);
+    expect(failed.total, 45, reason: '首屏失败清空 total，计数回退到上次已知值');
+  });
+
+  test('换曲目（换会话）：不沿用上一会话的总数', () async {
+    var fail = false;
+    build(onComments: (kind, page, limit) async {
+      if (fail) {
+        throw const SourceFailure(kind: FailureKind.network, message: 'down');
+      }
+      return pageOf(kind, page);
+    });
+    await provider.open(track);
+    expect(provider.stateOf(CommentKind.hot).total, 45);
+
+    // 换到另一首歌（缓存按曲目隔离）：首屏失败不得沿用上一会话的计数。
+    fail = true;
+    await provider.open(
+      Track(
+        id: const TrackId('wy', '186017'),
+        title: '另一首',
+        origin: TrackOrigin.builtin,
+      ),
+    );
+    expect(provider.stateOf(CommentKind.hot).failed, isTrue);
+    expect(
+      provider.stateOf(CommentKind.hot).total,
+      isNull,
+      reason: '会话边界清空记忆的计数',
+    );
+  });
+
   test('渠道无评论能力：supports=false，open 不发请求', () async {
     build(caps: unsupportedCaps);
     expect(provider.supports(track), isFalse);

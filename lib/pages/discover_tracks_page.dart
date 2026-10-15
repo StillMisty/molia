@@ -8,6 +8,7 @@ import 'package:provider/provider.dart';
 import '../domain/models/discover.dart';
 import '../l10n/app_localizations.dart';
 import '../providers/discover_provider.dart';
+import '../providers/paged_list_controller.dart';
 import '../utils/responsive.dart';
 import '../widgets/app_network_image.dart';
 import '../widgets/discover_actions.dart';
@@ -53,19 +54,11 @@ class DiscoverTracksPage extends StatefulWidget {
 }
 
 class _DiscoverTracksPageState extends State<DiscoverTracksPage> {
+  /// 最近一次响应的头部信息（由取数回调写入，控制器通知触发重建）。
   DiscoverDetail? _detail;
 
-  /// 已加载曲目（分页追加；去重后按平台原始顺序）。
-  final List<DiscoverTrack> _tracks = <DiscoverTrack>[];
-
-  /// 已加载的页数（0 = 尚未加载成功）。
-  int _page = 0;
-
-  bool _loading = true;
-  bool _failed = false;
-  bool _loadingMore = false;
-  bool _loadMoreFailed = false;
-  bool _hasMore = false;
+  /// 分页状态机：首屏 / 加载更多 / 失败 / 在途守卫 / 跨页去重都在控制器内。
+  late final PagedListController<DiscoverTrack> _paged;
 
   /// 曲目区滚动控制器（常显滚动条，支持手拖定位）。
   final ScrollController _listController = ScrollController();
@@ -73,48 +66,41 @@ class _DiscoverTracksPageState extends State<DiscoverTracksPage> {
   @override
   void initState() {
     super.initState();
-    _load();
+    _paged = PagedListController<DiscoverTrack>(
+      // 平台分页边界会重复返回（忽略 page 时重复整表）：按曲目 key 跨页去重。
+      keyOf: (track) => track.key,
+      fetchPage: _fetchPage,
+    );
+    unawaited(_load());
   }
 
   @override
   void dispose() {
+    _paged.dispose();
     _listController.dispose();
     super.dispose();
   }
 
-  Future<void> _load() async {
-    setState(() {
-      _loading = true;
-      _failed = false;
-    });
-    try {
-      final detail = await widget.loader(1);
-      if (!mounted) return;
-      setState(() {
-        _detail = detail;
-        _tracks
-          ..clear()
-          ..addAll(detail.tracks);
-        _page = 1;
-        _loading = false;
-        _hasMore = _hasMoreAfter(_tracks.length);
-      });
-    } catch (_) {
-      if (!mounted) return;
-      setState(() {
-        _failed = true;
-        _loading = false;
-      });
-    }
+  /// 取一页曲目。
+  ///
+  /// 「还有下一页」以平台曲目总数（`info.trackCount`）为准：无总数信息
+  /// （榜单 / 部分平台）即单页加载。`loaded` = 本次请求前已累计的条数 +
+  /// 本页条数（取数发生在控制器追加之前），达到总数即结束；平台忽略 page
+  /// 重复返回整表时，控制器按「本页去重后无新增」兜底停住（防死循环）。
+  Future<PagedResult<DiscoverTrack>> _fetchPage(int page) async {
+    final detail = await widget.loader(page);
+    _detail = detail;
+    final total = detail.info.trackCount;
+    final loaded = _paged.state.items.length + detail.tracks.length;
+    return PagedResult(
+      items: detail.tracks,
+      hasMore: total > 0 && loaded < total,
+      total: total,
+    );
   }
 
-  /// 是否可能还有下一页：以平台曲目总数（`info.trackCount`）为准。
-  /// 无总数信息（榜单 / 部分平台）或已取满即结束。
-  bool _hasMoreAfter(int loaded) {
-    final int total = _detail?.info.trackCount ?? 0;
-    if (total <= 0) return false;
-    return loaded < total;
-  }
+  /// 首屏 / 失败重试（在途请求由控制器过期丢弃）。
+  Future<void> _load() => _paged.loadFirstPage();
 
   /// 触底 400px 内自动加载下一页（失败后不自动重试，保留按钮兜底）。
   bool _onScroll(ScrollNotification notification) {
@@ -127,51 +113,18 @@ class _DiscoverTracksPageState extends State<DiscoverTracksPage> {
   }
 
   void _maybeLoadMore() {
-    if (_loading || _loadingMore || _loadMoreFailed || !_hasMore) return;
-    unawaited(_loadMore());
-  }
-
-  Future<void> _loadMore() async {
-    if (_loadingMore || !_hasMore) return;
-    setState(() {
-      _loadingMore = true;
-      _loadMoreFailed = false;
-    });
-    try {
-      final next = await widget.loader(_page + 1);
-      if (!mounted) return;
-      // 去重后追加：平台忽略 page 时会重复返回整表，靠「无新增即结束」防死循环。
-      final known = <String>{for (final track in _tracks) track.key};
-      final added = <DiscoverTrack>[
-        for (final track in next.tracks)
-          if (known.add(track.key)) track,
-      ];
-      setState(() {
-        _page += 1;
-        _tracks.addAll(added);
-        _loadingMore = false;
-        _hasMore = added.isNotEmpty && _hasMoreAfter(_tracks.length);
-      });
-    } catch (_) {
-      if (!mounted) return;
-      setState(() {
-        _loadingMore = false;
-        _loadMoreFailed = true;
-      });
-    }
-  }
-
-  void _retryLoadMore() {
-    setState(() => _loadMoreFailed = false);
-    unawaited(_loadMore());
+    // 失败后不自动重试（底部保留重试按钮）；加载中 / 已到底由控制器守卫。
+    if (_paged.state.loadMoreFailed) return;
+    unawaited(_paged.loadMore());
   }
 
   void _playFrom(int index) {
-    if (_tracks.isEmpty) return;
+    final tracks = _paged.state.items;
+    if (tracks.isEmpty) return;
     HapticFeedback.lightImpact();
     final info = _detail?.info;
     context.read<DiscoverProvider>().playTracks(
-          _tracks,
+          tracks,
           index,
           contextName: (info != null && info.name.isNotEmpty)
               ? info.name
@@ -182,9 +135,10 @@ class _DiscoverTracksPageState extends State<DiscoverTracksPage> {
   /// 把当前歌单导入本地列表（同名列表复用）。
   Future<void> _importPlaylist() async {
     final detail = _detail;
+    final tracks = _paged.state.items;
     if (detail == null) return;
     final l10n = _l10n(context);
-    if (_tracks.isEmpty) {
+    if (tracks.isEmpty) {
       M3ESnackbar.show(context, message: l10n.playlistImportEmpty);
       return;
     }
@@ -192,7 +146,7 @@ class _DiscoverTracksPageState extends State<DiscoverTracksPage> {
       final result = await context.read<DiscoverProvider>().importDetailToLibrary(
             DiscoverDetail(
               info: detail.info,
-              tracks: List<DiscoverTrack>.of(_tracks),
+              tracks: List<DiscoverTrack>.of(tracks),
             ),
             fallbackName: widget.title,
           );
@@ -211,32 +165,35 @@ class _DiscoverTracksPageState extends State<DiscoverTracksPage> {
 
   @override
   Widget build(BuildContext context) {
-    final detail = _detail;
-    return Scaffold(
-      appBar: M3EAppBar.top(
-        title: Text(widget.title, overflow: TextOverflow.ellipsis),
-        automaticallyImplyLeading: true,
-        actions: [
-          if (widget.importable && detail != null && _tracks.isNotEmpty)
-            M3EIconButton(
-              variant: M3EIconButtonVariant.standard,
-              tooltip: _l10n(context).playlistImportToMine,
-              icon: const Icon(Icons.download_rounded),
-              onPressed: _importPlaylist,
-            ),
-        ],
+    return ValueListenableBuilder<PagedListState<DiscoverTrack>>(
+      valueListenable: _paged,
+      // 分页状态是不可变值：整页（含 AppBar 导入动作）按最新快照重建。
+      builder: (context, state, _) => Scaffold(
+        appBar: M3EAppBar.top(
+          title: Text(widget.title, overflow: TextOverflow.ellipsis),
+          automaticallyImplyLeading: true,
+          actions: [
+            if (widget.importable && _detail != null && state.items.isNotEmpty)
+              M3EIconButton(
+                variant: M3EIconButtonVariant.standard,
+                tooltip: _l10n(context).playlistImportToMine,
+                icon: const Icon(Icons.download_rounded),
+                onPressed: _importPlaylist,
+              ),
+          ],
+        ),
+        body: _buildBody(context, state),
       ),
-      body: _buildBody(context),
     );
   }
 
-  Widget _buildBody(BuildContext context) {
+  Widget _buildBody(BuildContext context, PagedListState<DiscoverTrack> state) {
     final l10n = _l10n(context);
-    if (_loading) {
+    if (state.isLoading) {
       return const Center(child: M3ELoadingIndicator());
     }
     final detail = _detail;
-    if (_failed || detail == null) {
+    if (state.failed || detail == null) {
       return Center(
         child: Column(
           mainAxisSize: MainAxisSize.min,
@@ -247,14 +204,15 @@ class _DiscoverTracksPageState extends State<DiscoverTracksPage> {
             ),
             const SizedBox(height: 12),
             M3EButton.filled(
-              onPressed: _load,
+              onPressed: () => unawaited(_load()),
               child: Text(l10n.discoverRetry),
             ),
           ],
         ),
       );
     }
-    if (_tracks.isEmpty) {
+    final tracks = state.items;
+    if (state.isEmpty) {
       return Center(
         child: Text(
           l10n.discoverNoContent,
@@ -275,20 +233,22 @@ class _DiscoverTracksPageState extends State<DiscoverTracksPage> {
         child: CustomScrollView(
           controller: _listController,
           slivers: [
-            SliverToBoxAdapter(child: _buildHeader(context, detail)),
+            SliverToBoxAdapter(
+              child: _buildHeader(context, detail, tracks.length),
+            ),
             SliverPadding(
               padding: EdgeInsets.symmetric(horizontal: horizontalPadding),
               sliver: SliverFixedExtentList.builder(
                 // 行高 + 行距：固定 extent，长歌单滚动条拖动一次定位。
                 itemExtent: TrackRow.extent + cardList.gap,
-                itemCount: _tracks.length,
+                itemCount: tracks.length,
                 itemBuilder: (context, index) {
-                  final isLast = index == _tracks.length - 1;
+                  final isLast = index == tracks.length - 1;
                   return Column(
                     children: [
                       DiscoverTrackTile(
-                        track: _tracks[index],
-                        position: calculateCardPosition(index, _tracks.length),
+                        track: tracks[index],
+                        position: calculateCardPosition(index, tracks.length),
                         onTap: () => _playFrom(index),
                       ),
                       if (!isLast) SizedBox(height: cardList.gap),
@@ -297,8 +257,9 @@ class _DiscoverTracksPageState extends State<DiscoverTracksPage> {
                 },
               ),
             ),
-            if (_loadingMore || _loadMoreFailed)
-              SliverToBoxAdapter(child: _buildLoadMoreFooter(context, l10n)),
+            if (state.isLoadingMore || state.loadMoreFailed)
+              SliverToBoxAdapter(
+                  child: _buildLoadMoreFooter(context, l10n, state)),
             const SliverToBoxAdapter(child: SizedBox(height: 16)),
           ],
         ),
@@ -307,14 +268,18 @@ class _DiscoverTracksPageState extends State<DiscoverTracksPage> {
   }
 
   /// 底部加载更多：加载中显示进度圈；失败给重试按钮（不自动重试）。
-  Widget _buildLoadMoreFooter(BuildContext context, AppLocalizations l10n) {
+  Widget _buildLoadMoreFooter(
+    BuildContext context,
+    AppLocalizations l10n,
+    PagedListState<DiscoverTrack> state,
+  ) {
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
       child: Center(
-        child: _loadMoreFailed
+        child: state.loadMoreFailed
             ? M3EButton.icon(
                 style: M3EButtonStyle.outlined,
-                onPressed: _retryLoadMore,
+                onPressed: () => unawaited(_paged.loadMore()),
                 icon: const Icon(Icons.refresh_rounded, size: 18),
                 label: Text(l10n.retry),
               )
@@ -326,13 +291,17 @@ class _DiscoverTracksPageState extends State<DiscoverTracksPage> {
     );
   }
 
-  Widget _buildHeader(BuildContext context, DiscoverDetail detail) {
+  Widget _buildHeader(
+    BuildContext context,
+    DiscoverDetail detail,
+    int loadedCount,
+  ) {
     final l10n = _l10n(context);
     final theme = Theme.of(context);
     final info = detail.info;
     final cover = info.coverUrl ?? widget.coverUrl;
     // 分页加载中显示平台总数；无总数（榜单）时退回已加载数量。
-    final int trackCount = info.trackCount > 0 ? info.trackCount : _tracks.length;
+    final int trackCount = info.trackCount > 0 ? info.trackCount : loadedCount;
     final subtitleParts = <String>[
       if (info.author.isNotEmpty) l10n.discoverPlaylistAuthor(info.author),
       if (info.playCount > 0) l10n.discoverPlayCount(info.playCountText),
