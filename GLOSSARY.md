@@ -7,6 +7,7 @@
 - **Raw track（平台 raw 曲目）** — `SourceTrack.raw` / `Track.payload` 承载的平台原始对象（LX `musicInfo` 约定：songmid / hash / copyrightId / qualitys ...）。取链 / 歌词 / 封面请求必须原样回传；只允许「只增不删」地补齐规范 id 字段。
 - **Raw track module（raw 约定模块）** — `lib/sources/raw_track.dart`：平台 raw 的 id 取键（`rawIdOf` / `platformRawIdOf`）、规范字段补齐（`withCanonicalId`）与音质解析（`qualitiesFromRaw`）的唯一实现。`SourceTrack.id`、`TrackId`、收藏 / 列表 `songId`、`.lxmc` 导入与发现曲目映射共用它。
 - **Canonical id field（规范 id 字段）** — 各平台取链脚本读取的 id 键：wy / tx / kw → `songmid`，kg → `hash`，mg → `copyrightId`。`.lxmc` 导入的 raw 缺少该字段时由 raw track module 补齐。
+- **Artist ref（歌手引用）** — raw 的项目内部字段 `_artists`（`[{'name','id'}]`，与 `_types` / `_interval` 同约定：内置平台解析时增补、LX 字段只增不删）：平台内歌手 id 与曲目 payload 同体系（kw `ARTISTID` / kg `Singers[].id` / tx `singer[].mid` / wy `ar[].id` / mg `singerList[].id`）。唯一读取入口 `raw_track.dart::artistsFromRaw`，由 `track_mapper` 填进 `Track.artists[].id`；UI 只读 `Track.artists`（不读 payload），据此把歌手名做成歌手页链接。脚本扩展源 / 旧数据没有该字段 → 歌手入口按只读降级。
 - **Platform id（平台 id）** — 不带平台前缀的单曲标识；[`SourceTrack.id`] 为其加上 `sourceKey:` 前缀。`rawIdOf`（通用优先级）与 `platformRawIdOf`（`.lxmc` 导出的平台优先顺序）是它的两个取键入口。
 - **Builtin transport（内置传输模块）** — `lib/sources/builtin/builtin_transport.dart`：五个平台搜索/发现共用的 HTTP 入口（客户端可注入、统一请求头/超时、响应级重试 `retryIf`、JSON 解码与 `cached` 结果缓存）。`BuiltinSearch.transport` 是唯一实例，测试注入 `MockClient` 即可覆盖 fetch 路径；重试预算统一为 `BuiltinTransport.defaultRetries`，结果缓存统一为 `defaultCacheTtl`（5 分钟，single-flight + LRU + TTL），发现适配器不再各自持有静态 `RequestCache`。
 - **Builtin search runner（内置检索 runner）** — `lib/sources/builtin/builtin_search_runner.dart`：五个平台搜索的执行骨架（`runBuiltinSearch`）与策略的唯一实现——重试预算、分页推断、失败归一；平台变体面（请求方式/URL/body、响应级重试判定、业务码判定、列表路径与解析）收进 `BuiltinSearchCall`，各平台文件只剩字面量与 parser。结果语义分界：**平台返回空** = 正常结果（tracks 空、failure 空）；**业务拒绝 / 传输失败** = `SourceSearchResult.failed`（`SourceSearchResult.failure`，不抛异常，UI 收口前只读 tracks）。内置平台「可搜索」判定唯一来源：`SourceManager._isBuiltinSearchable`（channels 候选 / 能力位 / 搜索路由共用）。
@@ -163,6 +164,38 @@
 - **Album entry（专辑入口）** — 歌曲信息页「专辑」行：payload 专辑 id
   （`platformAlbumId`：wy/kg/kw/mg `albumId`、tx `albumMid`）与能力位双判定为真时
   变为可点行（副标题「查看专辑」），否则保持只读信息行。
+
+## 歌手与歌词搜索
+
+- **Artist page（歌手页）** — `lib/pages/artist_page.dart`（头部头像 / 名字 / 简介 +
+  播放全部 / 加入列表 + 触底分页），入口：歌曲信息页「歌手」行、搜索结果行内歌手名、
+  搜索「歌手」类型条目；取数走 **Artist service（歌手服务）**
+  `lib/data/catalog/artist_service.dart`（single-flight + LRU + TTL 10min，
+  key `artist:{source}:{id}:{page}:{limit}`，注入 `SourceManager.fetchArtist`）。
+- **Builtin artists（内置歌手取数）** — `lib/sources/builtin/artist_source.dart`
+  （`BuiltinArtists` 调度）+ `{kw,kg,tx,wy,mg}_artist.dart`：五平台歌手搜索与
+  「详情 + 歌曲」的唯一实现（解析直接产出领域 `ArtistSummary` / `ArtistDetail`）；
+  真实响应快照在 `test/fixtures/artists/`（抓取脚本 `tool/gen_artist_fixtures.mjs`）。
+  平台降级口径：kg 歌手搜索无总数（单页 10 条）、tx 歌手歌曲 `begin` 无效（单页约 60 首，
+  `hasMore=false`）、mg 歌手详情无简介（`description` 空串）。
+- **Artist capability（歌手能力位）** — `SourceCapabilities.artist`：歌手搜索 +
+  歌手详情统一切换；内置五平台为真（由 `BuiltinArtists.isSupported`
+  派生），脚本源 / any-listen 为 false → 搜索分段与歌手行入口自动降级为只读。
+- **Lyric search（按歌词搜歌）** — `lib/sources/builtin/lyric_search.dart`
+  （`BuiltinLyricSearch` 调度 + `SourceLyricHit{track, snippet}` / `LyricSearchPage`）
+  + `{kw,kg,tx,wy,mg}_lyric_search.dart`（kw `stype=lyric` 模糊匹配 / kg `lyric_search` /
+  tx `search_type=7` / wy `type=1006`（ids → `v3/song/detail` 补规范 raw）/
+  mg `searchAll` + `lyricSong=1`）；真实响应快照在 `test/fixtures/lyric_search/`
+  （抓取脚本 `tool/gen_lyric_search_fixtures.mjs`）。命中片段作为结果行副标题。
+- **Search kind（搜索类型）** — `lib/domain/models/catalog.dart::SearchKind`
+  （`song` / `artist` / `lyric`）：搜索页分段（`M3ESegmentedButton`，按能力位显隐），
+  `SearchProvider` 为每种类型维护独立会话（分页 / 错误 / 过期守卫；切类型才请求，
+  换词清空非激活类型，换源能力不足回退单曲）。端口 `MusicSource.searchArtists` /
+  `searchLyrics` 经 `CatalogService`（缓存 key `search:{source}:artist|lyric:...`，
+  与单曲共用 5min 缓存实例）路由。
+- **Builtin platform failure（内置平台失败助手）** — `builtin_search.dart::builtinPlatformFailure`：
+  专辑 / 歌手 / 歌词等内置接口「业务拒绝 / 字段缺失」的统一失败（`unknown` + 可重试），
+  各模块旧助手（`albumPlatformFailure` / `artistPlatformFailure`）委托同一实现。
 
 ## 资料库
 

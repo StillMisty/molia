@@ -58,8 +58,10 @@
   - `Comment` / `CommentPage`（评论正文 / 时间 / IP 归属 / 点赞 / 引用 / 楼中楼，
     `CommentKind` 区分热门与最新）；
   - `Album`（专辑 id / 名称 / 歌手 / 封面 / 年份 / 曲目列表 / 分页）；
+  - `ArtistSummary` / `ArtistDetail`（歌手搜索条目 / 歌手页数据：头像、简介、曲目、分页）；
+  - `LyricHit`（按歌词搜歌命中：领域 `Track` + 命中片段）；`SearchKind`（song / artist / lyric）；
   - `SourceDescriptor` / `SourceCapabilities`。
-- **端口**：`MusicSource`（search/resolve/lyrics/artwork/comments/collection）、`SourceRegistry`
+- **端口**：`MusicSource`（search/resolve/lyrics/artwork/comments/collection/searchArtists/searchLyrics）、`SourceRegistry`
   （descriptors/byKey/forTrack/setOrder/changes）、`PlaybackBackend`（state ValueListenable +
   load/play/pause/seek/next/previous/setMode/stop）、`PlaybackFacade`（snapshot + position +
   控制方法）、`UiMessenger`（showMessage/showFailure）、`StateListenable<T>`。
@@ -68,7 +70,9 @@
 
 - **Catalog**：`SourceManagerMusicSource` 包装 `SourceManager` 按 key 分发；
   `SourceRegistryImpl` 构建 `SourceDescriptor`（排序转发 `lx_source_order`）；
-  `CatalogService` 提供 `search`（缓存 5min）与 `resolve`（缓存 10min，key=`url:{source}:{md5(canonical payload)}:{quality}`，
+  `CatalogService` 提供 `search`（缓存 5min）、`searchArtists` / `searchLyrics`
+  （同一 5min 缓存实例，key=`search:{source}:artist|lyric:{keyword}:{page}:{limit}`，
+  前缀失效与单曲搜索共用）与 `resolve`（缓存 10min，key=`url:{source}:{md5(canonical payload)}:{quality}`，
   失败不缓存，可 `invalidatePrefix`），并把异常归一化为 `SourceFailure`。
 - **Playback**：`LocalPlaybackBackend` 组合 `LocalPlaybackService`（值变才发快照；
   播放顺序栈 `PlaybackOrder` 记录实际播放过的下标，供 `previous` 与快照 `history`）；
@@ -212,6 +216,15 @@
   → `SourceSearchResult.failed`（`SourceSearchResult.failure`，不抛异常；UI 收口前
   只读 `tracks`）。内置平台「可搜索」的判定唯一来源是
   `SourceManager._isBuiltinSearchable`（channels 候选、能力位与搜索路由共用）。
+- **内置歌手 / 歌词检索**：歌手（`builtin/artist_source.dart` + `*_artist.dart`）与
+  按歌词搜歌（`builtin/lyric_search.dart` + `*_lyric_search.dart`）与专辑同构——
+  平台适配器只留 URL / 签名与 parser，解析直接产出领域模型；失败语义为
+  **业务拒绝抛 `SourceFailure`**（`builtinPlatformFailure`，与 `SourceSearchResult.failed`
+  的「静默空结果」区分），在 `SourceManager` / data 层边界归一化。
+  歌手 id 与曲目 payload 同体系：解析时把 `_artists`（项目内部字段）写进 raw，
+  `track_mapper` 填 `Track.artists[].id`，UI 只读领域模型即可跳歌手页。
+  平台降级（写进各实现注释）：kg 歌手搜索无分页、tx 歌手歌曲单页、
+  mg 歌手详情无简介、kw 歌词搜索为模糊匹配、mg 歌词排序偏翻唱。
 - **资料库写入**：`LibraryProvider` 是收藏 / 历史 / 列表写入的唯一入口。收藏唯一
   入口 `toggleFavoriteTrack(Track)`（播放页经它写入，不再直连 `LibraryRepository`）；
   批量操作按 `PlaylistTrack` 规范形状（`PlaylistTrack.fromHistoryEntry` 负责历史转换）；
@@ -364,7 +377,7 @@
 | 播放进度 | ≤4Hz | `PlaybackProvider.position`（ValueListenable） | `ValueListenableBuilder`（进度条/歌词行） |
 | 定时关闭剩余 | 1Hz（仅倒计时且播放中） | `PlaybackProvider.sleepTimer`（ValueListenable） | `ValueListenableBuilder`（歌曲信息页/弹层） |
 | 曲目/播放/队列/模式 | 事件级 | facade 快照（值变才发） | `Selector`（不可变对象/record） |
-| 搜索结果/分页 | 交互级 | `SearchProvider`（分页状态机 `PagedListController`） | 局部 select |
+| 搜索结果/分页 | 交互级 | `SearchProvider`（按 `SearchKind` 三会话，各自分页状态机 `PagedListController`） | 局部 select |
 | 音源列表/顺序 | 事件级 | `SourceRegistry.changes` | 选择器/管理页 |
 
 硬性规则：高频数值禁止进聚合 `notifyListeners`；`select` 禁止返回 `Map`/`List` 引用；
