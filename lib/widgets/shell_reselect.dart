@@ -9,8 +9,11 @@ import 'package:flutter/foundation.dart';
 
 /// 一次「重复点击已选中目的地」的请求通道。
 ///
-/// 用一次性通知而不是可观察状态：订阅方只做动作、不读值；
-/// 壳层也不做任何反馈（触感由页面自己的动作给出，避免一次点击两次震动）。
+/// 用一次性通知而不是可观察状态：订阅方只做动作、不读值。
+///
+/// 触感归属：重复点击的轻震由壳层统一给出（见 `app_shell.dart`
+/// `_onDestinationSelected`），页面侧对这些请求的响应**不再自带触感** ——
+/// 一次点击只震一次；页面自己的其它入口（迷你条点按等）仍各自负反馈。
 class ShellReselectSignal extends ChangeNotifier {
   /// 触发一次重复点击（订阅方自行决定响应；无可响应时保持空操作）。
   void trigger() => notifyListeners();

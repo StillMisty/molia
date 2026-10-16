@@ -1,9 +1,9 @@
 import 'dart:math' as math;
 
-import 'package:flutter/services.dart';
 import 'package:material_3_expressive/material_3_expressive.dart';
 import 'package:material_ui/material_ui.dart';
 
+import '../../services/haptics.dart';
 import '../../utils/color_hex.dart';
 import '../../utils/responsive.dart';
 import '../card_list_surface.dart';
@@ -224,7 +224,7 @@ class SettingsNavTile extends StatelessWidget {
       onPressed: onTap == null
           ? null
           : () {
-              HapticFeedback.lightImpact();
+              HapticsService.lightImpact();
               onTap!();
             },
       child: _SettingsRowContent(
@@ -290,7 +290,7 @@ class SettingsSwitchTile extends StatelessWidget {
       semanticLabel: title,
       onPressed: enabled
           ? () {
-              HapticFeedback.lightImpact();
+              HapticsService.lightImpact();
               onChanged(!value);
             }
           : null,
@@ -310,7 +310,7 @@ class SettingsSwitchTile extends StatelessWidget {
                 value: value,
                 onChanged: enabled
                     ? (bool newValue) {
-                        HapticFeedback.lightImpact();
+                        HapticsService.lightImpact();
                         onChanged(newValue);
                       }
                     : null,
@@ -390,7 +390,7 @@ class SettingsValueTile extends StatelessWidget {
       padding: kSettingsRowPadding,
       semanticLabel: '$title, $value',
       onPressed: () {
-        HapticFeedback.lightImpact();
+        HapticsService.lightImpact();
         onTap();
       },
       child: _SettingsRowContent(
@@ -701,7 +701,7 @@ class SettingsColorValueTile extends StatelessWidget {
       padding: kSettingsRowPadding,
       semanticLabel: '$title, $hex',
       onPressed: () {
-        HapticFeedback.lightImpact();
+        HapticsService.lightImpact();
         onTap();
       },
       child: _SettingsRowContent(

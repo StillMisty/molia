@@ -5,7 +5,6 @@ import 'dart:ui' show lerpDouble;
 import 'package:flutter/foundation.dart' show ValueListenable;
 import 'package:material_3_expressive/material_3_expressive.dart';
 import 'package:material_ui/material_ui.dart';
-import 'package:flutter/services.dart';
 import 'package:motor/motor.dart';
 import 'package:provider/provider.dart';
 
@@ -16,6 +15,7 @@ import '../providers/library_provider.dart';
 import '../providers/playback_provider.dart';
 import '../models/play_mode.dart';
 import '../services/data_saver_service.dart';
+import '../services/haptics.dart';
 import '../utils/responsive.dart';
 import 'app_network_image.dart';
 import 'cover_appearance.dart';
@@ -529,7 +529,7 @@ class _PlayerState extends State<Player> with TickerProviderStateMixin {
           Expanded(child: _buildSeekSlider(context, playbackProvider)),
           const SizedBox(width: 4),
           _buildModeButton(context, mode, () {
-            HapticFeedback.lightImpact();
+            HapticsService.lightImpact();
             playbackProvider.togglePlayMode();
           }),
         ],
@@ -886,7 +886,7 @@ class _PlayerState extends State<Player> with TickerProviderStateMixin {
           size: size,
           visualSize: visualSize,
           onPressed: () {
-            HapticFeedback.lightImpact();
+            HapticsService.lightImpact();
             playback.skipToPrevious();
           },
         ),
@@ -903,7 +903,7 @@ class _PlayerState extends State<Player> with TickerProviderStateMixin {
           size: size,
           visualSize: visualSize,
           onPressed: () {
-            HapticFeedback.lightImpact();
+            HapticsService.lightImpact();
             playback.skipToNext();
           },
         ),
@@ -947,7 +947,7 @@ class _PlayerState extends State<Player> with TickerProviderStateMixin {
         ),
       ),
       onPressed: () {
-        HapticFeedback.lightImpact();
+        HapticsService.lightImpact();
         playback.togglePlayPause();
       },
     );
@@ -1074,7 +1074,7 @@ class _FavoriteButton extends StatelessWidget {
       ),
       tooltip: favorite ? l10n.favoriteRemove : l10n.favoriteAdd,
       onPressed: () async {
-        HapticFeedback.lightImpact();
+        HapticsService.lightImpact();
         await library.toggleFavoriteTrack(track);
       },
     );

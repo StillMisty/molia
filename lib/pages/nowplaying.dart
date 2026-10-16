@@ -1,8 +1,8 @@
 import 'dart:math';
 
 import 'package:material_ui/material_ui.dart';
-import 'package:flutter/services.dart';
 import 'package:motor/motor.dart';
+import 'package:molia/services/haptics.dart';
 import 'package:molia/utils/responsive.dart';
 import 'package:molia/widgets/player.dart';
 import 'package:molia/widgets/queue.dart';
@@ -114,16 +114,22 @@ class _NowPlayingState extends State<NowPlaying>
   /// 不用落定状态（[_isMini]）判定：弹簧有容差拖尾，「落定回调」晚于视觉
   /// 落定约 0.35s，滚动到一半连点/到顶快速再拉会打进过期目标。
   void _toggleExpand() {
-    HapticFeedback.lightImpact();
+    HapticsService.lightImpact();
+    _animateToggleExpand();
+  }
+
+  /// 切换动作本体（不含触感）：本次点击的轻震由调用方负责。
+  void _animateToggleExpand() {
     _expandController.animateTo(_expandController.value >= 0.5 ? 0.0 : 1.0);
   }
 
   /// 壳层重复点击「播放」目的地：与迷你条点击 / 圆点点击 / 到顶下拉同一入口。
   ///
   /// 大屏没有迷你态（播放器始终完整），忽略请求。
+  /// 触感由壳层对重复点击统一给出（见 [ShellReselectSignal]），此处不再补一次。
   void _handleReselect() {
     if (_isLargeScreen) return;
-    _toggleExpand();
+    _animateToggleExpand();
   }
 
   /// 展开进度跨过阈值即同步迷你态（视觉落定口径，不等弹簧容差拖尾）。
@@ -163,7 +169,7 @@ class _NowPlayingState extends State<NowPlaying>
     final double upVelocity = -(details.primaryVelocity ?? 0);
     // 位置 + 速度投影：快速甩动即使行程短也按方向吸附。
     final double projected = _expandController.value + upVelocity / 1800;
-    HapticFeedback.lightImpact();
+    HapticsService.lightImpact();
     final bool expand = projected >= 0.5;
     final double extent = _expandDragExtent;
     _expandController.animateTo(

@@ -7,6 +7,7 @@ import '../l10n/app_localizations.dart';
 import '../models/lyric_line.dart';
 import '../models/poster_lyric_line.dart';
 import '../providers/playback_provider.dart';
+import '../services/haptics.dart';
 import '../services/notification_service.dart';
 import '../theme/app_semantic_colors.dart';
 import '../utils/responsive.dart';
@@ -82,7 +83,7 @@ class _LyricsSelectionPageState extends State<LyricsSelectionPage> {
       lyricLineIndexAt(_lyricLines, currentPosition);
 
   void _deselectAllLines() {
-    HapticFeedback.lightImpact();
+    HapticsService.lightImpact();
     setState(() {
       _selectedIndices.clear();
     });
@@ -91,7 +92,7 @@ class _LyricsSelectionPageState extends State<LyricsSelectionPage> {
   void _toggleLineSelection(int index) {
     if (index < 0 || index >= _lyricLines.length) return;
 
-    HapticFeedback.selectionClick();
+    HapticsService.selectionClick();
     setState(() {
       if (!_selectedIndices.remove(index)) _selectedIndices.add(index);
     });
@@ -132,7 +133,7 @@ class _LyricsSelectionPageState extends State<LyricsSelectionPage> {
   bool _hasSelectedLyrics() => _selectedIndices.isNotEmpty;
 
   Future<void> _copySelectedLyrics() async {
-    HapticFeedback.lightImpact();
+    HapticsService.lightImpact();
     final l10n = AppLocalizations.of(context)!;
     final selectedLyrics = _getSelectedLyrics();
     if (selectedLyrics.isEmpty) {
@@ -153,7 +154,7 @@ class _LyricsSelectionPageState extends State<LyricsSelectionPage> {
   }
 
   Future<void> _shareAsPoster() async {
-    HapticFeedback.lightImpact();
+    HapticsService.lightImpact();
     final l10n = AppLocalizations.of(context)!;
     final selectedLyrics = _getSelectedLyrics();
     if (selectedLyrics.isEmpty) {

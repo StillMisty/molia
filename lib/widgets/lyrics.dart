@@ -4,7 +4,6 @@ import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:material_3_expressive/material_3_expressive.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:flutter/rendering.dart';
-import 'package:flutter/services.dart';
 import 'package:motor/motor.dart';
 import 'package:provider/provider.dart';
 
@@ -18,6 +17,7 @@ import '../pages/lyrics_display/lyrics_content_settings_page.dart';
 import '../pages/source_swap_page.dart';
 import '../providers/lyrics_provider.dart';
 import '../providers/playback_provider.dart';
+import '../services/haptics.dart';
 import '../services/lyrics_display/lyrics_display_settings.dart';
 import '../services/notification_service.dart';
 import '../utils/responsive.dart';
@@ -448,7 +448,7 @@ class _LyricsWidgetState extends State<LyricsWidget>
 
   /// 居中/恢复跟随：开启自动跟随并立即滚回当前行。
   void _centerCurrentLine() {
-    HapticFeedback.lightImpact();
+    HapticsService.lightImpact();
     if (!mounted) return;
     _enableAutoScrollWithSuppression();
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -498,7 +498,7 @@ class _LyricsWidgetState extends State<LyricsWidget>
             ? l10n.lyricsCopyModeExit
             : l10n.lyricsCopyModeAction,
         onPressed: () {
-          HapticFeedback.lightImpact();
+          HapticsService.lightImpact();
           _toggleCopyLyricsMode();
         },
       ),
@@ -951,7 +951,7 @@ class _LyricsWidgetState extends State<LyricsWidget>
                 return GestureDetector(
                   key: _lineKeys[index],
                   onTap: () {
-                    HapticFeedback.lightImpact();
+                    HapticsService.lightImpact();
                     if (!mounted) return;
 
                     final tappedTimestamp = _session.lines[index].timestamp;

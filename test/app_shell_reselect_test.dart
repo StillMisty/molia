@@ -1,3 +1,4 @@
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:molia/app/app_shell.dart';
 import 'package:molia/domain/models/playback.dart';
@@ -26,7 +27,8 @@ import 'support/fakes.dart';
 /// 壳层底栏重复点击的路由测试：挂载真实应用壳（`MyApp`）。
 ///
 /// 覆盖：播放页已选中时重复点击 = 迷你 ⇄ 完整；其他目的地重复点击 = 走页面
-/// 自己的响应（不动播放器）；进入播放页的飞行期间重复点击被忽略。
+/// 自己的响应（不动播放器）；进入播放页的飞行期间重复点击被忽略；
+/// 重复点击的轻震由壳层统一给出（每次点击恰一次，飞行期间不给）。
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
@@ -161,6 +163,25 @@ void main() {
     await tester.pump(const Duration(milliseconds: 900));
   }
 
+  /// 记录平台通道上的震动请求（值即 `HapticFeedbackType` 字符串）。
+  List<String> recordVibrations(WidgetTester tester) {
+    final vibrations = <String>[];
+    tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+      SystemChannels.platform,
+      (call) async {
+        if (call.method == 'HapticFeedback.vibrate') {
+          vibrations.add(call.arguments as String? ?? '');
+        }
+        return null;
+      },
+    );
+    addTearDown(() {
+      tester.binding.defaultBinaryMessenger
+          .setMockMethodCallHandler(SystemChannels.platform, null);
+    });
+    return vibrations;
+  }
+
   double playerHeight(WidgetTester tester) =>
       tester.getSize(find.byType(Player)).height;
 
@@ -201,6 +222,57 @@ void main() {
     await settleTransition(tester);
     expect(selectedNavIndex(tester), navIndexOf(ShellDestination.favorites));
     expect(playerHeight(tester), greaterThan(300));
+  });
+
+  testWidgets('底栏重复点击已激活目的地：每次点击恰一次轻震', (tester) async {
+    final vibrations = recordVibrations(tester);
+    await pumpShell(tester);
+
+    // 切到收藏（切页本身也震一次，与本用例无关）。
+    await tapBottomDestination(tester, ShellDestination.favorites);
+    await settleTransition(tester);
+    vibrations.clear();
+
+    // 收藏页已激活：重复点击 = 列表回顶，恰一次轻震。
+    await tapBottomDestination(tester, ShellDestination.favorites);
+    await settleTransition(tester);
+    expect(
+      vibrations,
+      ['HapticFeedbackType.lightImpact'],
+      reason: '重复点击应恰给一次轻震',
+    );
+
+    // 播放页已激活：重复点击 = 迷你 ⇄ 完整；页面侧不再自带触感，仍只震一次。
+    await tapBottomDestination(tester, ShellDestination.nowPlaying);
+    await settleTransition(tester);
+    vibrations.clear();
+    expect(playerHeight(tester), greaterThan(300), reason: '切回播放页仍完整');
+    await tapBottomDestination(tester, ShellDestination.nowPlaying);
+    await settleTransition(tester);
+    expect(playerHeight(tester), lessThan(100), reason: '重复点击应收起为迷你条');
+    expect(
+      vibrations,
+      ['HapticFeedbackType.lightImpact'],
+      reason: '折叠切换不应双震',
+    );
+
+    // 再点一次展开，回收藏后验证飞行期间：被忽略的点击不震动
+    // （展开态才有顶栏 ⇄ 页面的锚点，迷你态进入播放页本来就没有飞行）。
+    await tapBottomDestination(tester, ShellDestination.nowPlaying);
+    await settleTransition(tester);
+    expect(playerHeight(tester), greaterThan(300), reason: '再点应展开');
+    await tapBottomDestination(tester, ShellDestination.favorites);
+    await settleTransition(tester);
+    vibrations.clear();
+    await tapBottomDestination(tester, ShellDestination.nowPlaying);
+    await tester.pump(const Duration(milliseconds: 60));
+    await tapBottomDestination(tester, ShellDestination.nowPlaying);
+    await settleTransition(tester);
+    expect(
+      vibrations,
+      ['HapticFeedbackType.lightImpact'],
+      reason: '只有「进入播放页」那一次震动，飞行期间的重复点击被忽略',
+    );
   });
 
   testWidgets('进入播放页的飞行期间重复点击：忽略', (tester) async {

@@ -14,6 +14,7 @@ import '../providers/sync_provider.dart';
 import '../providers/theme_provider.dart';
 import '../providers/update_provider.dart';
 import '../services/data_saver_service.dart';
+import '../services/haptics.dart';
 import '../services/lyrics_display/lyrics_output.dart';
 import '../services/source_swap/source_swap_settings.dart';
 import '../theme/scheme_builder.dart';
@@ -657,6 +658,19 @@ class _SettingsHomeViewState extends State<_SettingsHomeView>
     return SettingsSectionCard(
       title: l10n.settingsGeneralAndDataTitle,
       children: [
+        // 震动反馈（设备本地键，不随同步）：关掉后全应用触感一起静音，
+        // 就地开关排在入口行之前。
+        ValueListenableBuilder<bool>(
+          valueListenable: HapticsService.enabledNotifier,
+          builder: (context, hapticsEnabled, _) => SettingsSwitchTile(
+            switchKey: const Key('settingsHapticsSwitch'),
+            icon: Icons.vibration_rounded,
+            title: l10n.settingsHapticsTitle,
+            subtitle: l10n.settingsHapticsSubtitle,
+            value: hapticsEnabled,
+            onChanged: HapticsService.setEnabled,
+          ),
+        ),
         SettingsNavTile(
           key: const Key('settingsGeneralItem'),
           icon: Icons.tune_rounded,

@@ -15,7 +15,6 @@ library;
 
 import 'dart:async';
 
-import 'package:flutter/services.dart';
 import 'package:material_3_expressive/material_3_expressive.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:provider/provider.dart';
@@ -29,6 +28,7 @@ import '../services/audio_cache_platform.dart';
 import '../services/cache_service.dart';
 import '../services/data_saver_service.dart';
 import '../services/download/download_service.dart';
+import '../services/haptics.dart';
 import '../services/notification_service.dart';
 import '../services/track_local_data_service.dart';
 import '../utils/download_failure_label.dart';
@@ -210,7 +210,7 @@ class _TrackLocalDataPageState extends State<TrackLocalDataPage> {
     required String done,
   }) async {
     final l10n = AppLocalizations.of(context)!;
-    HapticFeedback.lightImpact();
+    HapticsService.lightImpact();
     setState(() => _busy = true);
     try {
       await action();
@@ -229,7 +229,7 @@ class _TrackLocalDataPageState extends State<TrackLocalDataPage> {
 
   /// 取消进行中的下载。
   void _cancelDownload() {
-    HapticFeedback.lightImpact();
+    HapticsService.lightImpact();
     _downloads?.cancelTrack(widget.track);
   }
 
@@ -260,7 +260,7 @@ class _TrackLocalDataPageState extends State<TrackLocalDataPage> {
       ),
     );
     if (confirmed != true || !mounted) return;
-    HapticFeedback.lightImpact();
+    HapticsService.lightImpact();
     setState(() => _busy = true);
     try {
       await downloads.delete(record);
@@ -304,7 +304,7 @@ class _TrackLocalDataPageState extends State<TrackLocalDataPage> {
       ),
     );
     if (confirmed != true || !mounted) return;
-    HapticFeedback.lightImpact();
+    HapticsService.lightImpact();
     setState(() => _busy = true);
     try {
       final result = await service.clear(widget.track, part);
@@ -338,7 +338,7 @@ class _TrackLocalDataPageState extends State<TrackLocalDataPage> {
       ),
     );
     if (confirmed != true || !mounted) return;
-    HapticFeedback.lightImpact();
+    HapticsService.lightImpact();
     setState(() => _busy = true);
     try {
       for (final part in _cacheParts) {

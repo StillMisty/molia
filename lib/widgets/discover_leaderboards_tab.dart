@@ -1,4 +1,3 @@
-import 'package:flutter/services.dart';
 import 'package:material_3_expressive/material_3_expressive.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:provider/provider.dart';
@@ -7,6 +6,7 @@ import '../domain/models/discover.dart';
 import '../l10n/app_localizations.dart';
 import '../pages/discover_tracks_page.dart';
 import '../providers/discover_provider.dart';
+import '../services/haptics.dart';
 
 AppLocalizations _l10n(BuildContext context) =>
     AppLocalizations.of(context) ?? lookupAppLocalizations(const Locale('zh'));
@@ -42,7 +42,7 @@ class _DiscoverLeaderboardsTabState extends State<DiscoverLeaderboardsTab>
   }
 
   void _openBoard(DiscoverLeaderboard board) {
-    HapticFeedback.lightImpact();
+    HapticsService.lightImpact();
     final provider = context.read<DiscoverProvider>();
     Navigator.of(context).push(
       MaterialPageRoute<void>(

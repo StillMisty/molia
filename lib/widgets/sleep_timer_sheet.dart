@@ -1,6 +1,5 @@
 import 'dart:async';
 
-import 'package:flutter/services.dart';
 import 'package:material_3_expressive/material_3_expressive.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:provider/provider.dart';
@@ -8,6 +7,7 @@ import 'package:provider/provider.dart';
 import '../l10n/app_localizations.dart';
 import '../providers/playback_provider.dart';
 import '../providers/sleep_timer.dart';
+import '../services/haptics.dart';
 import '../services/notification_service.dart';
 import '../utils/responsive.dart';
 
@@ -96,7 +96,7 @@ class _SleepTimerSheet extends StatelessWidget {
                 enabled: canArmAfterTrack,
                 onTap: canArmAfterTrack
                     ? () {
-                        HapticFeedback.lightImpact();
+                        HapticsService.lightImpact();
                         timer.startAfterCurrentTrack();
                         _showArmedFeedback(
                           context,
@@ -184,7 +184,7 @@ class _SleepTimerSheet extends StatelessWidget {
               icon: const Icon(Icons.timer_off_rounded),
               tooltip: l10n.sleepTimerCancel,
               onPressed: () {
-                HapticFeedback.lightImpact();
+                HapticsService.lightImpact();
                 timer.cancel();
               },
             ),
@@ -241,7 +241,7 @@ class _SleepTimerSheet extends StatelessWidget {
     SleepTimerController timer,
     Duration duration,
   ) {
-    HapticFeedback.lightImpact();
+    HapticsService.lightImpact();
     timer.startCountdown(duration);
     _showArmedFeedback(
       context,

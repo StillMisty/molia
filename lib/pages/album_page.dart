@@ -10,7 +10,6 @@ library;
 import 'dart:async';
 import 'dart:math' as math;
 
-import 'package:flutter/services.dart';
 import 'package:material_3_expressive/material_3_expressive.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:provider/provider.dart';
@@ -24,6 +23,7 @@ import '../models/play_mode.dart';
 import '../providers/library_provider.dart';
 import '../providers/paged_list_controller.dart';
 import '../providers/playback_provider.dart';
+import '../services/haptics.dart';
 import '../utils/responsive.dart';
 import '../widgets/add_to_library.dart';
 import '../widgets/app_network_image.dart';
@@ -129,7 +129,7 @@ class _AlbumPageState extends State<AlbumPage> {
   void _playFrom(int index) {
     final tracks = _paged.state.items;
     if (tracks.isEmpty) return;
-    HapticFeedback.lightImpact();
+    HapticsService.lightImpact();
     final name = _titleOf(_album);
     unawaited(
       context.read<PlaybackProvider>().playDomainTracks(
@@ -145,7 +145,7 @@ class _AlbumPageState extends State<AlbumPage> {
   Future<void> _playShuffled() async {
     final tracks = _paged.state.items;
     if (tracks.isEmpty) return;
-    HapticFeedback.lightImpact();
+    HapticsService.lightImpact();
     final name = _titleOf(_album);
     final playback = context.read<PlaybackProvider>();
     await playback.setPlayMode(PlayMode.shuffle);
