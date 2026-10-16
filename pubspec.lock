@@ -736,10 +736,10 @@ packages:
     dependency: "direct main"
     description:
       name: material_3_expressive
-      sha256: "34dc1f23ab47d6cd3f1b3627b8e8533652564fddb229e6c908d9790076781c5e"
+      sha256: "091a6d4bd157983e4a525dd89f60290ca80f98d17e44303a24b0d7393d92d93e"
       url: "https://pub.flutter-io.cn"
     source: hosted
-    version: "1.1.6"
+    version: "1.1.7"
   material_color_utilities:
     dependency: "direct main"
     description:
@@ -760,10 +760,10 @@ packages:
     dependency: "direct main"
     description:
       name: material_ui
-      sha256: "98ab9eda579ecae623e4b376c603035c5def78ce706f735f30bd632af5814695"
+      sha256: "27ea1af251a79728ee63068417f2ab469d294931a9bb8366ba8b85b0ef839060"
       url: "https://pub.flutter-io.cn"
     source: hosted
-    version: "1.6.0"
+    version: "1.7.0"
   media_kit:
     dependency: transitive
     description:

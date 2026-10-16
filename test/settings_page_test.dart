@@ -640,8 +640,8 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('App Language'), findsOneWidget);
 
-    // 预测返回提交：无人接管手势 → 走普通返回 → guard 退子页
-    // （弹层保持打开；弹层本身没有跟手预览，见 SettingsPage 注释）。
+    // 预测返回提交：弹层宿主接管手势 → 提交后走 guard → 退子页
+    // （guard 返回 false → 弹层保持打开、预览回弹）。
     await sendBack(tester, 'startBackGesture', backArgs(0));
     await sendBack(tester, 'updateBackGestureProgress', backArgs(1));
     await tester.pump();
@@ -658,6 +658,93 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('Settings'), findsNothing);
     expect(find.text('Open settings'), findsOneWidget);
+  });
+
+  /// 弹层预测返回预览的横向缩放：M3E 弹层宿主把 backProgress 映射进包裹弹层的
+  /// 内层 `Transform`（`m3e_bottom_sheet_frame_build.dart`）。
+  ///
+  /// 没有预览层时按静止值 1 处理：宿主放弃手势（1.1.6 及以下 guard 非空）时它
+  /// 根本不插这层 Transform，这样失败点就落在「有没有跟进手势」而不是 finder 空手。
+  double sheetBackScaleX(WidgetTester tester) {
+    final preview = find
+        .ancestor(
+          of: find.byType(SettingsPage),
+          matching: find.byType(Transform),
+        )
+        .evaluate();
+    if (preview.isEmpty) {
+      return 1.0;
+    }
+    return (preview.first.widget as Transform).transform.storage[0];
+  }
+
+  testWidgets('底部弹层：guard 非空时宿主仍接管手势（跟手预览 + 拒绝后回弹）', (tester) async {
+    // 移动端视口 → showAdaptiveModalPage 走底部弹层分支。
+    tester.view.physicalSize = const Size(500, 1400);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(() {
+      tester.view.resetPhysicalSize();
+      tester.view.resetDevicePixelRatio();
+    });
+
+    await pumpApp(
+      tester,
+      Scaffold(
+        body: Builder(
+          builder: (context) => Center(
+            child: M3EButton.filled(
+              onPressed: () => showSettingsSheet(context),
+              child: const Text('Open settings'),
+            ),
+          ),
+        ),
+      ),
+    );
+
+    await tester.tap(find.text('Open settings'));
+    await tester.pumpAndSettle();
+
+    // 子页打开 → 内部 Navigator 可弹栈 → dismiss guard 非空（先退子页才允许关）。
+    final generalItem = find.byKey(const Key('settingsGeneralItem'));
+    await tester.scrollUntilVisible(
+      generalItem,
+      300,
+      scrollable: find.byType(Scrollable).first,
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(generalItem);
+    await tester.pumpAndSettle();
+    expect(find.text('App Language'), findsOneWidget);
+
+    final scale = sheetBackScaleX(tester);
+    expect(scale, 1.0, reason: '静止时预览缩放为 1');
+
+    final sheetWidth = tester.getSize(find.byType(SettingsPage)).width;
+    final shrinkX = M3ETheme.of(tester.element(find.byType(SettingsPage)))
+        .bottomSheetTheme
+        .predictiveBackShrinkX;
+
+    // 1.1.7 起 guard 非空不再让宿主放弃手势：跟手预览照常（回归 1.1.6 的
+    // 「guard → 无人接管 → 普通返回、全程无预览」）。
+    await sendBack(tester, 'startBackGesture', backArgs(0));
+    await sendBack(tester, 'updateBackGestureProgress', backArgs(0.6));
+    await tester.pump();
+    expect(
+      sheetBackScaleX(tester),
+      closeTo(1 - shrinkX * 0.6 / sheetWidth, 0.001),
+      reason: 'guard 非空时弹层也必须跟进手势，否则这条链路没有预览',
+    );
+
+    // 提交：guard 退掉子页（返回 false，弹层不关）→ 预览回弹到静止。
+    await sendBack(tester, 'commitBackGesture');
+    await tester.pumpAndSettle();
+    expect(find.text('App Language'), findsNothing);
+    expect(find.text('Settings'), findsOneWidget);
+    expect(
+      sheetBackScaleX(tester),
+      1.0,
+      reason: 'guard 拒绝关闭后预览必须回弹，不能停在缩小的中间态',
+    );
   });
 
   testWidgets('底部弹层：根导航器上方 dialog 打开时，返回手势不得退内层子页', (tester) async {
@@ -712,7 +799,8 @@ void main() {
     expect(find.text('Root dialog'), findsOneWidget);
 
     // 返回手势应只作用于最上层 dialog：内层子页虽然在内层导航器里是 current，
-    // 但已被排除在预测返回之外（否则一次手势退两级）。
+    // 但已被排除在预测返回之外（框架会把手势派发给每个返回 true 的观察者，
+    // 不排除的话内层子页会自己退一级，dialog 反而留着）。
     await sendBack(tester, 'startBackGesture', backArgs(0));
     await sendBack(tester, 'updateBackGestureProgress', backArgs(1));
     await tester.pump();

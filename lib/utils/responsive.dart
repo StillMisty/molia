@@ -463,6 +463,8 @@ class ResponsiveNavigation {
   /// [onDismissRequest] 仅对底部弹层（compact/medium 宽）生效：系统返回 /
   /// 蒙层点击 / 下滑关闭前先询问，返回 false 保持弹层打开（用于弹层内部
   /// 导航先退子页）；中心对话框（large 宽）无对应 guard，由内容侧 PopScope 处理。
+  /// guard 不影响预测返回预览：M3E 弹层宿主（≥1.1.7）在 guard 非空时照样接管
+  /// 手势，提交后按 guard 结果决定关闭还是回弹。
   static Future<T?> showAdaptiveModalPage<T>({
     required BuildContext context,
     required Widget child,
