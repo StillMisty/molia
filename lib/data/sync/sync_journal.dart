@@ -44,6 +44,44 @@ class SyncJournalLimits {
       (oldestAt > 0 && nowMs - oldestAt > maxAge.inMilliseconds);
 }
 
+/// 引擎侧消费的增量日志接口（生产 = [SyncJournalRepository]）。
+///
+/// 引擎只需要「读窗口 / 裁剪 / 记录快照覆盖」，追加由写入点负责
+/// （见 [SyncJournalRepository.append] 的同事务约定）。
+abstract interface class SyncJournalStore {
+  /// 当前头部 seq（0 = 尚无条目）。
+  Future<int> headSeq();
+
+  /// 已裁剪到的位置（窗口起点 = 返回值 + 1）。
+  Future<int> baseSeq();
+
+  /// 最近构建的全量快照覆盖到的位置（-1 = 尚未构建）。
+  Future<int> snapshotSeq();
+
+  Future<SyncJournalStats> stats();
+
+  /// 读取窗口条目（`seq > since`，按 seq 升序）。
+  Future<List<SyncJournalEntry>> window({int since = -1, int limit = 0});
+
+  /// 窗口的近似字节量（`seq > since` 的部分）。
+  Future<int> windowBytes({int since = -1});
+
+  /// 标记「全量快照已构建到 [seq]」。
+  Future<void> markSnapshotBuilt(int seq);
+
+  /// 按对端 ack 与硬上限裁剪窗口，返回新的 [baseSeq]。
+  ///
+  /// [coverage] 是**已发布**的全量快照覆盖位置（各传输成功推送的最小值）：
+  /// 正常路径不会裁到它之后（否则落后 / 新加入的对端无法 bootstrap）；
+  /// 窗口超过硬上限时把覆盖推进到头部并保留最新的、仍在上限内的条目，
+  /// 更旧的对端降级 bootstrap。
+  Future<int> compact({
+    required int minAck,
+    required int coverage,
+    int? nowMs,
+  });
+}
+
 /// 一条待追加的本地变更（`seq` 由日志分配）。
 typedef SyncJournalChange = ({SyncCategory category, SyncRecord record});
 
@@ -75,7 +113,7 @@ class SyncJournalStats {
   int get windowEntries => math.max(0, headSeq - baseSeq);
 }
 
-class SyncJournalRepository {
+class SyncJournalRepository implements SyncJournalStore {
   SyncJournalRepository({
     required MoliaDatabase Function() databaseProvider,
     this.limits = const SyncJournalLimits(),
@@ -135,15 +173,19 @@ class SyncJournalRepository {
   }
 
   /// 当前头部 seq（0 = 尚无条目）。
+  @override
   Future<int> headSeq() => _headSeq(_db);
 
   /// 已裁剪到的位置（窗口起点 = 返回值 + 1）。
+  @override
   Future<int> baseSeq() async => (await stats()).baseSeq;
 
   /// 最近构建的全量快照覆盖到的位置（-1 = 尚未构建）。
+  @override
   Future<int> snapshotSeq() async => (await stats()).snapshotSeq;
 
   /// 窗口观测值（条数 / 体积 / 最旧时间 / 头部与裁剪位置）。
+  @override
   Future<SyncJournalStats> stats() async {
     final db = _db;
     return db.transaction(() async {
@@ -167,6 +209,7 @@ class SyncJournalRepository {
   }
 
   /// 读取窗口条目（`seq > since`，按 seq 升序；[limit] > 0 时截断）。
+  @override
   Future<List<SyncJournalEntry>> window({int since = -1, int limit = 0}) async {
     final db = _db;
     final query = db.select(db.syncJournal)
@@ -181,6 +224,7 @@ class SyncJournalRepository {
   }
 
   /// 窗口的近似字节量（`seq > since` 的部分；对端落后字节用）。
+  @override
   Future<int> windowBytes({int since = -1}) async {
     final db = _db;
     final row = await db.customSelect('''
@@ -191,6 +235,7 @@ class SyncJournalRepository {
   }
 
   /// 标记「全量快照已构建到 [seq]」：compact 的裁剪不会超过该位置。
+  @override
   Future<void> markSnapshotBuilt(int seq) async {
     final db = _db;
     await db.transaction(() async {
@@ -202,10 +247,16 @@ class SyncJournalRepository {
 
   /// compact：按对端 ack 与硬上限裁剪窗口，返回新的 [baseSeq]。
   ///
-  /// 正常路径裁剪到 `min(minAck, snapshotSeq)`（都不超过当前头部）；
-  /// 窗口超过硬上限时把快照覆盖推进到当前头部并整体裁剪——落后对端
-  /// 降级为 bootstrap（见类文档）。
-  Future<int> compact({required int minAck, int? nowMs}) async {
+  /// 正常路径裁剪到 `min(minAck, coverage, head)`——既不裁掉任何对端还没
+  /// ack 的条目，也不裁掉**已发布**的全量快照尚未覆盖的位置；窗口超过硬
+  /// 上限（时间 / 体积 / 条数）时把快照覆盖推进到当前头部并只保留最新的、
+  /// 仍在上限内的条目——更旧的对端降级为 bootstrap（见类文档）。
+  @override
+  Future<int> compact({
+    required int minAck,
+    required int coverage,
+    int? nowMs,
+  }) async {
     final db = _db;
     final now = nowMs ?? _clock();
     return db.transaction(() async {
@@ -226,13 +277,14 @@ class SyncJournalRepository {
         oldestAt: oldestAt,
         nowMs: now,
       )) {
-        // 硬上限：快照覆盖推进到头部（引擎随后构建并发布该快照），
-        // 窗口整体裁剪；没跟上的对端下次拉取时走 bootstrap。
-        await _writeState(db, baseSeq: head, snapshotSeq: head);
-        await _trim(db, head);
-        return head;
+        // 硬上限：快照覆盖推进到头部（引擎随后构建并推送新快照），保留最新
+        // 的、仍在上限内的条目；更旧的对端下次拉取时走 bootstrap。
+        final keepFrom = await _newestWithinLimits(db, state.baseSeq, head, now);
+        await _writeState(db, baseSeq: keepFrom, snapshotSeq: head);
+        await _trim(db, keepFrom);
+        return keepFrom;
       }
-      final covered = state.snapshotSeq < 0 ? 0 : state.snapshotSeq;
+      final covered = coverage < 0 ? 0 : coverage;
       final target = math.max(
         state.baseSeq,
         math.min(math.min(minAck, head), covered),
@@ -243,6 +295,39 @@ class SyncJournalRepository {
       }
       return target;
     });
+  }
+
+  /// 硬上限裁剪的保留起点：从最新往回累计，直到超过任一条数 / 体积 / 时间
+  /// 上限；返回新的 baseSeq（保留条目里最小 seq - 1；一条都保留不了时为头部）。
+  Future<int> _newestWithinLimits(
+    DatabaseConnectionUser executor,
+    int baseSeq,
+    int head,
+    int nowMs,
+  ) async {
+    final rows = await executor.customSelect('''
+      SELECT seq, at, LENGTH("key") + COALESCE(LENGTH(data), 0) + 96 AS b
+      FROM sync_journal WHERE seq > ? ORDER BY seq DESC
+    ''', variables: [Variable<int>(baseSeq)]).get();
+    var entries = 0;
+    var bytes = 0;
+    var keepFrom = -1;
+    for (final row in rows) {
+      final seq = (row.data['seq'] as num?)?.toInt() ?? 0;
+      final at = (row.data['at'] as num?)?.toInt() ?? 0;
+      final size = (row.data['b'] as num?)?.toInt() ?? 0;
+      final tooOld = at > 0 && nowMs - at > limits.maxAge.inMilliseconds;
+      if (tooOld ||
+          entries + 1 > limits.maxEntries ||
+          bytes + size > limits.maxBytes) {
+        break;
+      }
+      entries++;
+      bytes += size;
+      keepFrom = seq;
+    }
+    if (keepFrom < 0) return head;
+    return keepFrom - 1;
   }
 
   Future<int> _headSeq(DatabaseConnectionUser executor) async {

@@ -9,6 +9,7 @@ import '../../domain/models/device_sync.dart';
 import '../../domain/ports/sync_known_store.dart';
 import '../../domain/ports/sync_transport.dart';
 import 'sync_adapter.dart';
+import 'sync_journal.dart';
 import 'sync_known_store.dart';
 import 'sync_passphrase.dart';
 import 'sync_scheduler.dart';
@@ -37,6 +38,7 @@ class SyncEngine extends ChangeNotifier implements SyncSchedulerHost {
     required Map<String, SyncTransport> transports,
     required SyncStampIssuer stamps,
     SyncKnownStore? known,
+    SyncJournalStore? journal,
     DateTime Function()? clock,
     Duration inboundWindow = const Duration(milliseconds: 1500),
   })  : _state = state,
@@ -44,6 +46,7 @@ class SyncEngine extends ChangeNotifier implements SyncSchedulerHost {
         _transports = transports,
         _stamps = stamps,
         _known = known ?? InMemorySyncKnownStore(),
+        _journal = journal,
         _inboundWindow = inboundWindow,
         _clock = clock ?? DateTime.now {
     for (final transport in transports.values) {
@@ -66,6 +69,10 @@ class SyncEngine extends ChangeNotifier implements SyncSchedulerHost {
   /// 已知版本登记（变更集判定）；未注入时退化为进程内登记。
   final SyncKnownStore _known;
 
+  /// 增量日志（可选）：注入后日常轮次只外发**变更**（增量窗口），对端按游标
+  /// 拉取；未注入时始终外发全量快照（仍正确，只是不增量）。
+  final SyncJournalStore? _journal;
+
   /// 入站合流窗口：窗口内到达的多个对端推送合并成一轮。
   final Duration _inboundWindow;
 
@@ -84,6 +91,7 @@ class SyncEngine extends ChangeNotifier implements SyncSchedulerHost {
   /// 同步进行中收到的同步请求（手动点击 / 入站推送）：合并成一次排队，
   /// 当前轮结束后立刻补跑，请求不会被丢弃。
   SyncTrigger? _pendingTrigger;
+  bool _pendingAntiEntropy = false;
 
   SyncRoundReport? _lastReport;
   SyncEnvelope? _lastEnvelope;
@@ -91,8 +99,10 @@ class SyncEngine extends ChangeNotifier implements SyncSchedulerHost {
   /// 上轮本地视图指纹（用于区分「本机没有变化」与「有变更需要外发」）。
   String? _localFingerprint;
 
-  /// 每传输最近一次成功推送的快照内容指纹：与待推送内容一致时跳过
-  /// 加密 + 上传（本机未变不推）。
+  /// 每传输最近一次成功推送的增量窗口（`窗口边界 + ack` 指纹）。
+  final Map<String, String> _lastPushedDeltaKey = {};
+
+  /// 每传输最近一次成功推送的快照内容指纹（未注入日志时的「本机未变不推」）。
   final Map<String, String> _lastPushedSnapshotId = {};
 
   SyncStateStore get state => _state;
@@ -242,15 +252,18 @@ class SyncEngine extends ChangeNotifier implements SyncSchedulerHost {
   /// 跑一轮同步。返回**最终**一轮的报告（若期间收到排队请求，会连续跑完）。
   ///
   /// [onlyCategories] 非空时只处理这些类别（蜂窝小类别策略；适配器的本地
-  /// 变化登记照常进行，不受影响）。
+  /// 变化登记照常进行，不受影响）。[antiEntropy] 允许全量兜底（周期性比对
+  /// `snapshotId` 修复静默分歧；充电 / Wi-Fi / 前台的唤醒才置位）。
   Future<SyncRoundReport?> syncNow({
     SyncTrigger trigger = SyncTrigger.timer,
     bool push = true,
+    bool antiEntropy = false,
     Set<SyncCategory>? onlyCategories,
   }) async {
     if (_syncing) {
       // 排队一次：手动点击与入站推送都不该被静默丢弃。
       _pendingTrigger = _mergeTrigger(_pendingTrigger, trigger);
+      _pendingAntiEntropy = _pendingAntiEntropy || antiEntropy;
       return _lastReport;
     }
     if (!_initialized) await init();
@@ -261,6 +274,7 @@ class SyncEngine extends ChangeNotifier implements SyncSchedulerHost {
     _syncing = true;
     notifyListeners();
     var nextTrigger = trigger;
+    var nextAntiEntropy = antiEntropy;
     var nextCategories = onlyCategories;
     SyncRoundReport? report;
     try {
@@ -268,12 +282,16 @@ class SyncEngine extends ChangeNotifier implements SyncSchedulerHost {
         report = await _runRound(
           nextTrigger,
           push: push,
+          antiEntropy: nextAntiEntropy,
           onlyCategories: nextCategories,
         );
         final pending = _pendingTrigger;
         _pendingTrigger = null;
+        final pendingAntiEntropy = _pendingAntiEntropy;
+        _pendingAntiEntropy = false;
         if (pending == null) break;
         nextTrigger = pending;
+        nextAntiEntropy = pendingAntiEntropy;
         // 补跑轮沿用排队时的类别范围（同一策略下不应切换范围）。
         nextCategories = onlyCategories;
       }
@@ -293,11 +311,13 @@ class SyncEngine extends ChangeNotifier implements SyncSchedulerHost {
   Future<SyncRunOutcome> runSyncRound({
     required SyncTrigger trigger,
     required bool push,
+    required bool antiEntropy,
     Set<SyncCategory>? onlyCategories,
   }) async {
     final report = await syncNow(
       trigger: trigger,
       push: push,
+      antiEntropy: antiEntropy,
       onlyCategories: onlyCategories,
     );
     // 入站轮 / 未设置口令等中止轮不外发：待发标记保留给下一轮。
@@ -317,6 +337,7 @@ class SyncEngine extends ChangeNotifier implements SyncSchedulerHost {
     SyncTrigger trigger, {
     required bool push,
     Set<SyncCategory>? onlyCategories,
+    bool antiEntropy = false,
   }) async {
     final startedAt = _nowMs();
     var report = SyncRoundReport(
@@ -333,6 +354,11 @@ class SyncEngine extends ChangeNotifier implements SyncSchedulerHost {
       await _ensureTransportsRunning();
       // 本轮推送失败的对端（名册重建时据此保留失败状态）。
       _peersFailedThisRound.clear();
+
+      // 日志头部在收集本地视图**之前**读取：本轮快照覆盖到的位置不会漏掉
+      // 随后发生的写入（写入的 seq 必然大于它，走下一份增量）。
+      final journal = _journal;
+      final journalHead = journal == null ? 0 : await journal.headSeq();
 
       final categories = onlyCategories ?? _state.enabledCategories;
       final local = await _collect(categories);
@@ -359,78 +385,98 @@ class SyncEngine extends ChangeNotifier implements SyncSchedulerHost {
             enabled: _state.enabledTransports.contains(kind),
           ),
       };
-      final pulledEntries = <(String, SyncEnvelope)>[];
-      // 入站轮只消费收到的快照：不主动拉取任何对端。
-      final inboundOnly = trigger == SyncTrigger.incoming;
-      // 本轮是否有「拉取动作成功」（远端可达；零快照也算，见 SyncPullResult）。
-      var pullContact = false;
+      // 传输运行状态先落进报告：入站轮不拉取，但「开关开着但没在工作」同样
+      // 要可见，且「本轮有没有可用传输」的判定不依赖拉取动作。
       for (final entry in _transports.entries) {
         final accumulator = accumulators[entry.key]!;
-        final transport = entry.value;
-        if (!_state.enabledTransports.contains(entry.key)) {
-          continue;
-        }
+        if (!accumulator.enabled) continue;
         accumulator
-          ..running = transport.isRunning
-          ..unavailableReason = transport.unavailableReason;
-        if (!transport.isRunning) {
-          // 启动类失败（端口占用 / 权限 / 未配置）进入本轮错误面：
-          // 「开关开着但没在工作」必须在状态与日志里看得见。
+          ..running = entry.value.isRunning
+          ..unavailableReason = entry.value.unavailableReason;
+        if (!entry.value.isRunning) {
           accumulator.error = SyncIssue(
-            code: transport.unavailableReason ?? SyncIssueCode.startFailed,
-            detail: transport.unavailableDetail,
+            code: entry.value.unavailableReason ?? SyncIssueCode.startFailed,
+            detail: entry.value.unavailableDetail,
           );
-          continue;
-        }
-        if (inboundOnly) continue;
-
-        final watch = Stopwatch()..start();
-        SyncPullResult result;
-        try {
-          result = await transport.pull();
-        } catch (e) {
-          result = SyncPullResult(
-            failedPeers: 1,
-            error: SyncIssue(code: SyncIssueCode.pullFailed, detail: '$e'),
-          );
-        }
-        watch.stop();
-        accumulator
-          ..pulled += result.envelopes.length
-          ..peersSeen += result.peersSeen
-          ..skippedUnchanged += result.skippedUnchanged
-          ..failedPulls += result.failedPeers
-          ..bytesIn += result.bytesIn
-          ..durationMs += watch.elapsedMilliseconds
-          ..error ??= result.error;
-        pullContact = pullContact || result.contacted;
-        for (final envelope in result.envelopes) {
-          pulledEntries.add((entry.key, envelope));
         }
       }
+      final pulledEntries = <(String, SyncEnvelope)>[];
+      // 远端记录（已按本机游标过滤）：合并与报告都用它。
+      final remoteRecords = <SyncCategory, List<SyncRecord>>{};
+      // 主动请求的全量快照（anti-entropy / 窗口缺口兜底）带来的记录绕过
+      // 「登记未变不交付」的变更集优化：快照是权威全量视图，本机可能有登记
+      // 看不到的静默分歧（被篡改 / 直接改库），必须交给适配器按自身状态判定
+      // （适配器幂等；这类全量拉取本身有节流，不会每轮发生）。
+      final forcedDelivery = <SyncKnownKey>{};
+      // 入站轮只消费收到的快照：不主动拉取任何对端。
+      final inboundOnly = trigger == SyncTrigger.incoming;
+      var pullContact = false;
 
-      var applied = 0;
-      var applyFailures = 0;
-      var inboundRestored = false;
+      // anti-entropy：对端内容指纹与本机不一致、且本机没有它的新条目时，
+      // 主动取一次全量快照修复静默分歧（LWW 只保证「有新数据时收敛」）。
+      final fullFor = antiEntropy
+          ? _antiEntropyPeers(local, categories)
+          : const <String>{};
+      if (!inboundOnly) {
+        pullContact = await _pullInto(
+          accumulators,
+          SyncPullRequest(cursors: _cursors(), fullPeers: fullFor),
+          pulledEntries,
+        );
+      }
+
       final inboundSnapshot = List<SyncEnvelope>.of(_inbound);
       _inbound.clear();
       for (final envelope in inboundSnapshot) {
         pulledEntries.add(('', envelope));
       }
 
-      // 吸收远端版本（含未获胜者）：超前戳让本机下一次写入必胜，因此必须在
-      // 合并之外对收到的全部记录生效。
-      for (final entry in pulledEntries) {
-        for (final list in entry.$2.records.values) {
-          for (final record in list) {
-            _stamps.observe(record.version);
-          }
-        }
+      // 处理载荷：推进游标 / 学习对端 ack / 收集远端记录 / 识别窗口缺口。
+      var fullPeers = _consumePayloads(
+        pulledEntries,
+        remoteRecords,
+        forcedDelivery,
+        requestedFull: fullFor,
+        antiEntropy: antiEntropy,
+        local: local,
+        categories: categories,
+      );
+      if (!inboundOnly && fullPeers.isNotEmpty) {
+        // 窗口缺口（条目已被对端裁剪）或指纹不一致：同一轮内立刻改取全量
+        // 快照（幂等；最多两遍，避免无限往返）。
+        final secondEntries = <(String, SyncEnvelope)>[];
+        final contacted = await _pullInto(
+          accumulators,
+          SyncPullRequest(cursors: _cursors(), fullPeers: fullPeers),
+          secondEntries,
+        );
+        pullContact = pullContact || contacted;
+        pulledEntries.addAll(secondEntries);
+        fullPeers = _consumePayloads(
+          secondEntries,
+          remoteRecords,
+          forcedDelivery,
+          requestedFull: fullPeers,
+          antiEntropy: false,
+          local: local,
+          categories: categories,
+        );
       }
+
+      var applied = 0;
+      var applyFailures = 0;
+      var inboundRestored = false;
 
       try {
         final merged = mergeEnvelopesByCategory(
-          [_envelopeFrom(local), ...pulledEntries.map((entry) => entry.$2)],
+          [
+            _envelopeFrom(local),
+            SyncEnvelope(
+              deviceId: _state.deviceId,
+              producedAt: startedAt,
+              records: remoteRecords,
+            ),
+          ],
           categories: categories,
         );
 
@@ -442,8 +488,9 @@ class SyncEngine extends ChangeNotifier implements SyncSchedulerHost {
             final winners = merged[category];
             if (winners == null || winners.isEmpty) continue;
             for (final record in winners.values) {
-              if (known[(category: category, key: record.key)] ==
-                  record.version) {
+              final key = (category: category, key: record.key);
+              if (!forcedDelivery.contains(key) &&
+                  known[key] == record.version) {
                 continue;
               }
               subset.putIfAbsent(category, () => []).add(record);
@@ -488,6 +535,27 @@ class SyncEngine extends ChangeNotifier implements SyncSchedulerHost {
 
       await _state.save();
 
+      // compact：按对端 ack 与已发布快照覆盖裁剪日志窗口（注入日志时）。
+      // 覆盖位置只统计**需要发布快照文件**的传输：局域网对端按需拉取实时
+      // 快照，没有发布延迟；WebDAV 的文件是异步读取的，必须覆盖窗口起点。
+      var journalSnapshot = -1;
+      var journalBase = 0;
+      if (journal != null) {
+        final now = _nowMs();
+        await journal.compact(
+          minAck: _minPeerAck(now) ?? 0,
+          coverage: _publishedSnapshotSeq(journalHead),
+          nowMs: now,
+        );
+        journalSnapshot = await journal.snapshotSeq();
+        journalBase = await journal.baseSeq();
+        if (journalSnapshot < 0) {
+          // 首次构建全量快照：内容覆盖到本轮头部（引擎随后按需发布）。
+          await journal.markSnapshotBuilt(journalHead);
+          journalSnapshot = journalHead;
+        }
+      }
+
       // 推送合并后的本地视图（重新收集，包含刚应用的远端记录）。
       final refreshed = await _collect(categories);
       // 指纹以「本轮最终视图」为准：应用远端记录带来的变化不算本机变更，
@@ -499,8 +567,24 @@ class SyncEngine extends ChangeNotifier implements SyncSchedulerHost {
       );
       // 内容指纹按实际外发的记录集（裁剪墓碑后）计算：对端探测应答 / 本机
       // 「未变不推」都拿它与自己缓存的值比较。
-      final outgoing = pruned.withSnapshotId(_fingerprint(pruned.records));
+      final outgoing = SyncEnvelope(
+        deviceId: pruned.deviceId,
+        deviceName: pruned.deviceName,
+        producedAt: pruned.producedAt,
+        records: pruned.records,
+        journalHead: journalHead,
+        baseSeq: journalBase,
+        acks: _acks(),
+        // 本载荷覆盖的类别（蜂窝小类别轮只含小类别）：anti-entropy 按它
+        // 只在双方共享的类别上比对指纹。
+        categories: [for (final category in categories) category.name],
+      ).withSnapshotId(_fingerprint(pruned.records));
       _lastEnvelope = outgoing;
+
+      // 增量窗口：只带变更（对端按自己的游标过滤应用）。窗口为空但 ack
+      // 有推进时也要外发：对端据此 compact 自己的日志。
+      final delta = journal == null ? null : await _buildDelta(journal, outgoing);
+      final acksKey = _acksKey(outgoing.acks);
 
       var succeededPushes = 0;
       if (push) {
@@ -511,41 +595,84 @@ class SyncEngine extends ChangeNotifier implements SyncSchedulerHost {
               !_state.enabledTransports.contains(entry.key)) {
             continue;
           }
-          // 本机内容与上次成功推送一致：跳过加密 + 上传（对端仍可主动拉取）。
-          if (outgoing.snapshotId.isNotEmpty &&
-              _lastPushedSnapshotId[entry.key] == outgoing.snapshotId) {
-            continue;
+          // 1) 全量快照：首次引导 / 日志超硬上限重写时发布；未注入日志时
+          //    始终外发全量（旧行为）。内容未变则跳过加密 + 上传。
+          final publishedSeq = _state.snapshotPushSeq(entry.key);
+          final needsSnapshot = journal == null ||
+              (journalSnapshot >= 0 && publishedSeq < journalSnapshot);
+          final snapshotUnchanged = outgoing.snapshotId.isNotEmpty &&
+              _lastPushedSnapshotId[entry.key] == outgoing.snapshotId;
+          if (needsSnapshot && !snapshotUnchanged) {
+            final watch = Stopwatch()..start();
+            SyncPushResult result;
+            try {
+              result = await transport.push(outgoing);
+            } catch (e) {
+              result = SyncPushResult(
+                failedPeers: 1,
+                error: SyncIssue(code: SyncIssueCode.pushFailed, detail: '$e'),
+              );
+            }
+            watch.stop();
+            accumulator
+              ..pushed += result.succeededPeers
+              ..failedPushes += result.failedPeers
+              ..bytesOut += result.bytesOut
+              ..durationMs += watch.elapsedMilliseconds
+              ..error ??= result.error;
+            succeededPushes += result.succeededPeers;
+            // 只在「确实有对端收下且没有失败」时记住：零对端（局域网无人
+            // 在线）不算推送成功，否则对端上线后会被误判为「已推过」。
+            if (result.failedPeers == 0 && result.succeededPeers > 0) {
+              _lastPushedSnapshotId[entry.key] = outgoing.snapshotId;
+              if (journalSnapshot >= 0) {
+                await _state.setSnapshotPushSeq(entry.key, journalSnapshot);
+              }
+            } else {
+              _lastPushedSnapshotId.remove(entry.key);
+            }
+            for (final id in result.succeededIds) {
+              _touchPeer(id, entry.key, pushOk: true);
+            }
+            for (final id in result.failedIds) {
+              _touchPeer(id, entry.key, pushOk: false);
+            }
           }
-          final watch = Stopwatch()..start();
-          SyncPushResult result;
-          try {
-            result = await transport.push(outgoing);
-          } catch (e) {
-            result = SyncPushResult(
-              failedPeers: 1,
-              error: SyncIssue(code: SyncIssueCode.pushFailed, detail: '$e'),
-            );
-          }
-          watch.stop();
-          accumulator
-            ..pushed += result.succeededPeers
-            ..failedPushes += result.failedPeers
-            ..bytesOut += result.bytesOut
-            ..durationMs += watch.elapsedMilliseconds
-            ..error ??= result.error;
-          succeededPushes += result.succeededPeers;
-          // 只在「确实有对端收下且没有失败」时记住指纹：零对端（局域网无人
-          // 在线）不算推送成功，否则对端上线后会被误判为「已推过」。
-          if (result.failedPeers == 0 && result.succeededPeers > 0) {
-            _lastPushedSnapshotId[entry.key] = outgoing.snapshotId;
-          } else {
-            _lastPushedSnapshotId.remove(entry.key);
-          }
-          for (final id in result.succeededIds) {
-            _touchPeer(id, entry.key, pushOk: true);
-          }
-          for (final id in result.failedIds) {
-            _touchPeer(id, entry.key, pushOk: false);
+          // 2) 增量窗口：内容或 ack 有变化才推（对端未变不传、不解密）。
+          if (delta != null) {
+            final deltaKey = '${delta.windowStart}:${delta.windowEnd}:$acksKey';
+            if (_lastPushedDeltaKey[entry.key] == deltaKey) continue;
+            final watch = Stopwatch()..start();
+            SyncPushResult result;
+            try {
+              result = await transport.push(delta);
+            } catch (e) {
+              result = SyncPushResult(
+                failedPeers: 1,
+                error: SyncIssue(code: SyncIssueCode.pushFailed, detail: '$e'),
+              );
+            }
+            watch.stop();
+            accumulator
+              ..pushed += result.succeededPeers
+              ..failedPushes += result.failedPeers
+              ..bytesOut += result.bytesOut
+              ..durationMs += watch.elapsedMilliseconds
+              ..error ??= result.error;
+            succeededPushes += result.succeededPeers;
+            // 只在「确实有对端收下且没有失败」时记住指纹：零对端（局域网无人
+            // 在线）不算推送成功，否则对端上线后会被误判为「已推过」。
+            if (result.failedPeers == 0 && result.succeededPeers > 0) {
+              _lastPushedDeltaKey[entry.key] = deltaKey;
+            } else {
+              _lastPushedDeltaKey.remove(entry.key);
+            }
+            for (final id in result.succeededIds) {
+              _touchPeer(id, entry.key, pushOk: true);
+            }
+            for (final id in result.failedIds) {
+              _touchPeer(id, entry.key, pushOk: false);
+            }
           }
         }
       }
@@ -568,13 +695,11 @@ class SyncEngine extends ChangeNotifier implements SyncSchedulerHost {
       );
       final anyTransport =
           transportReports.any((item) => item.enabled && item.running);
-      final remoteRecords = pulledEntries.fold<int>(
-        0,
-        (sum, entry) => sum + entry.$2.recordCount,
-      );
+      final remoteCount = remoteRecords.values
+          .fold<int>(0, (sum, list) => sum + list.length);
       final contact = peersSeen > 0 ||
           applied > 0 ||
-          remoteRecords > 0 ||
+          remoteCount > 0 ||
           failedCount + applyFailures > 0;
       final outcome = _resolveOutcome(
         anyTransport: anyTransport,
@@ -613,8 +738,8 @@ class SyncEngine extends ChangeNotifier implements SyncSchedulerHost {
         applied: applied,
         applyFailures: applyFailures,
         transports: transportReports,
-        peers: _roster(pulledEntries),
-        remoteRecords: remoteRecords,
+        peers: await _roster(),
+        remoteRecords: remoteCount,
         error: error,
       );
       _logger.fine(() => '同步一轮完成：$report');
@@ -644,6 +769,299 @@ class SyncEngine extends ChangeNotifier implements SyncSchedulerHost {
       notifyListeners();
     }
     return report;
+  }
+
+  /// 逐传输拉取一次并把载荷追加到 [out]；返回是否接触到了远端。
+  Future<bool> _pullInto(
+    Map<String, _TransportAccumulator> accumulators,
+    SyncPullRequest request,
+    List<(String, SyncEnvelope)> out,
+  ) async {
+    var contact = false;
+    for (final entry in _transports.entries) {
+      final accumulator = accumulators[entry.key]!;
+      final transport = entry.value;
+      if (!_state.enabledTransports.contains(entry.key)) continue;
+      accumulator
+        ..running = transport.isRunning
+        ..unavailableReason = transport.unavailableReason;
+      if (!transport.isRunning) {
+        // 启动类失败（端口占用 / 权限 / 未配置）进入本轮错误面：
+        // 「开关开着但没在工作」必须在状态与日志里看得见。
+        accumulator.error ??= SyncIssue(
+          code: transport.unavailableReason ?? SyncIssueCode.startFailed,
+          detail: transport.unavailableDetail,
+        );
+        continue;
+      }
+      final watch = Stopwatch()..start();
+      SyncPullResult result;
+      try {
+        result = await transport.pull(request);
+      } catch (e) {
+        result = SyncPullResult(
+          failedPeers: 1,
+          error: SyncIssue(code: SyncIssueCode.pullFailed, detail: '$e'),
+        );
+      }
+      watch.stop();
+      accumulator
+        ..pulled += result.envelopes.length
+        ..peersSeen += result.peersSeen
+        ..skippedUnchanged += result.skippedUnchanged
+        ..failedPulls += result.failedPeers
+        ..bytesIn += result.bytesIn
+        ..durationMs += watch.elapsedMilliseconds
+        ..error ??= result.error;
+      contact = contact || result.contacted;
+      for (final envelope in result.envelopes) {
+        out.add((entry.key, envelope));
+      }
+    }
+    return contact;
+  }
+
+  /// 处理收到的载荷：推进本机游标 / 学习对端 ack / 收集远端记录 / 识别缺口。
+  ///
+  /// 返回需要**全量兜底**的对端 id（窗口缺口，或 anti-entropy 发现指纹不一致
+  /// 且本机没有它的新条目）；调用方在同一轮内再取一次它们的全量快照。
+  Set<String> _consumePayloads(
+    List<(String, SyncEnvelope)> payloads,
+    Map<SyncCategory, List<SyncRecord>> remoteRecords,
+    Set<SyncKnownKey> forcedDelivery, {
+    required Set<String> requestedFull,
+    required bool antiEntropy,
+    required Map<SyncCategory, List<SyncRecord>> local,
+    required Set<SyncCategory> categories,
+  }) {
+    final fullPeers = <String>{};
+    final now = _nowMs();
+    for (final (kind, envelope) in payloads) {
+      final peerId = envelope.deviceId;
+      if (peerId.isEmpty) continue;
+      final existing = _peerOf(peerId);
+      // 吸收远端版本（含未获胜者与被跳过的载荷）：超前戳让本机下一次写入必胜。
+      for (final list in envelope.payloadRecords.values) {
+        for (final record in list) {
+          _stamps.observe(record.version);
+        }
+      }
+
+      var cursor = existing.cursorSeq;
+      var ackedSeq = existing.ackedSeq;
+      var fullPulledAt = existing.fullPulledAt;
+      var gap = false;
+      if (envelope.isDelta) {
+        if (cursor < envelope.baseSeq) {
+          // 窗口缺口：本机游标之前的条目已被对端裁剪，窗口不完整。
+          gap = true;
+          fullPeers.add(peerId);
+        } else {
+          for (final entry in envelope.journal ?? const <SyncJournalEntry>[]) {
+            if (entry.seq <= cursor) continue;
+            remoteRecords.putIfAbsent(entry.category, () => []).add(entry.record);
+          }
+          if (envelope.windowEnd > cursor) cursor = envelope.windowEnd;
+        }
+      } else {
+        // 全量快照：记录集整体应用，游标推进到快照覆盖的位置。
+        final force = requestedFull.contains(peerId);
+        for (final entry in envelope.records.entries) {
+          if (entry.value.isEmpty) continue;
+          remoteRecords.putIfAbsent(entry.key, () => []).addAll(entry.value);
+          if (force) {
+            for (final record in entry.value) {
+              forcedDelivery.add((category: entry.key, key: record.key));
+            }
+          }
+        }
+        if (envelope.journalHead > cursor) cursor = envelope.journalHead;
+        fullPulledAt = now;
+      }
+      if (!gap) {
+        // 对端载荷里的 ack 回执：它已消费本机 journal 到该位置（用于 compact）。
+        final ack = envelope.acks[_state.deviceId];
+        if (ack != null && ack > ackedSeq) ackedSeq = ack;
+        // anti-entropy：对端内容指纹与本机不一致，而它的日志又没有本机缺的
+        // 条目（游标已到头部）——静默分歧，取一次全量快照兜底；同一对端按
+        // 节流间隔不频繁重拉（分歧仍会被修复）。
+        if (antiEntropy &&
+            envelope.snapshotId.isNotEmpty &&
+            cursor >= envelope.journalHead &&
+            now - fullPulledAt >= antiEntropyIntervalMs &&
+            _fingerprintDiffers(
+              peerSnapshotId: envelope.snapshotId,
+              peerCategories: envelope.categories,
+              local: local,
+              categories: categories,
+            )) {
+          fullPeers.add(peerId);
+        }
+      }
+
+      _peersById[peerId] = existing.copyWith(
+        name: envelope.deviceName.isNotEmpty ? envelope.deviceName : null,
+        transport: kind.isNotEmpty ? kind : null,
+        lastSeenAt: now,
+        lastPullAt: now,
+        // 成功拉取 = 接触成功：清掉上一次的失败；本轮推送失败的对端保留状态。
+        lastError: _peersFailedThisRound.contains(peerId)
+            ? existing.lastError
+            : null,
+        clearLastError: !_peersFailedThisRound.contains(peerId),
+        cursorSeq: cursor,
+        ackedSeq: ackedSeq,
+        headSeq: envelope.journalHead,
+        snapshotId:
+            envelope.snapshotId.isNotEmpty ? envelope.snapshotId : null,
+        categories: envelope.categories.isNotEmpty ? envelope.categories : null,
+        fullPulledAt: fullPulledAt > 0 ? fullPulledAt : null,
+        clockSkewMs: envelope.producedAt > 0 ? envelope.producedAt - now : null,
+      );
+    }
+    return fullPeers;
+  }
+
+  /// 本机游标（对端 id → 已消费位置）；拉取请求按它只取变更。
+  Map<String, int> _cursors() => {
+        for (final peer in _allPeers()) peer.deviceId: peer.cursorSeq,
+      };
+
+  /// 本机已消费各对端 journal 的位置（随载荷外发，对端据此 compact）。
+  Map<String, int> _acks() {
+    final acks = <String, int>{};
+    for (final peer in _allPeers()) {
+      if (peer.cursorSeq >= 0) acks[peer.deviceId] = peer.cursorSeq;
+    }
+    return acks;
+  }
+
+  static String _acksKey(Map<String, int> acks) {
+    final entries = acks.entries.toList()
+      ..sort((a, b) => a.key.compareTo(b.key));
+    return entries.map((entry) => '${entry.key}=${entry.value}').join(',');
+  }
+
+  /// anti-entropy 全量兜底的节流间隔（同一对端不频繁重拉；分歧仍会被修复）。
+  static const int antiEntropyIntervalMs = 10 * 60 * 1000;
+
+  /// 对端指纹与本机视图是否真的不一致（类别感知）。
+  ///
+  /// [peerCategories] 是对端本轮覆盖的类别：本机按**同一类别集合**、同一
+  /// 裁剪口径（墓碑保留期）计算指纹——类别开关不同的设备不会被误判为分歧；
+  /// 对端覆盖了本机没有的类别时无法比较（返回 false，不做兜底）。
+  bool _fingerprintDiffers({
+    required String peerSnapshotId,
+    required List<String> peerCategories,
+    required Map<SyncCategory, List<SyncRecord>> local,
+    required Set<SyncCategory> categories,
+  }) {
+    final peerSet = <SyncCategory>{
+      for (final name in peerCategories)
+        if (SyncCategory.tryParse(name) case final category?) category,
+    };
+    if (peerSet.isEmpty) {
+      // 对端未声明类别（测试注入的载荷）：按本机类别集合比较。
+      peerSet.addAll(categories);
+    }
+    if (!categories.containsAll(peerSet)) return false;
+    final pruned = _envelopeFrom(local).pruneTombstones(
+      now: _nowMs(),
+      tombstoneRetentionMs: tombstoneRetentionMs,
+    );
+    final subset = <SyncCategory, List<SyncRecord>>{
+      for (final entry in pruned.records.entries)
+        if (peerSet.contains(entry.key)) entry.key: entry.value,
+    };
+    return _fingerprint(subset) != peerSnapshotId;
+  }
+
+  /// anti-entropy 的全量兜底名单：指纹不一致、且距上次兜底超过节流间隔。
+  Set<String> _antiEntropyPeers(
+    Map<SyncCategory, List<SyncRecord>> local,
+    Set<SyncCategory> categories,
+  ) {
+    final now = _nowMs();
+    return {
+      for (final peer in _allPeers())
+        if (peer.snapshotId.isNotEmpty &&
+            now - peer.fullPulledAt >= antiEntropyIntervalMs &&
+            _fingerprintDiffers(
+              peerSnapshotId: peer.snapshotId,
+              peerCategories: peer.categories,
+              local: local,
+              categories: categories,
+            ))
+          peer.deviceId,
+    };
+  }
+
+  /// 各对端 ack 的最小值（compact 的裁剪边界）；null = 没有对端 ack 过。
+  ///
+  /// 失联设备（超过 [SyncPeerState.lostThresholdMs] 无接触）不参与：它们的
+  /// 位置由硬上限与 bootstrap 兜底，不该让日志无界增长。
+  int? _minPeerAck(int nowMs) {
+    int? minAck;
+    for (final peer in _allPeers()) {
+      if (peer.ackedSeq < 0) continue;
+      if (peer.isLostAt(nowMs)) continue;
+      if (minAck == null || peer.ackedSeq < minAck) minAck = peer.ackedSeq;
+    }
+    return minAck;
+  }
+
+  /// 已发布的全量快照覆盖位置（各传输成功推送的最小值）。
+  ///
+  /// 局域网对端按需拉取实时快照（`snapshotProvider` 返回本轮快照），没有发布
+  /// 延迟，不参与下限；WebDAV 的文件是异步读取的，必须覆盖窗口起点，否则
+  /// 落后 / 新加入的对端无法 bootstrap。
+  int _publishedSnapshotSeq(int journalHead) {
+    var coverage = journalHead;
+    for (final kind in _state.enabledTransports) {
+      if (kind == SyncTransportKind.lan) continue;
+      final published = _state.snapshotPushSeq(kind);
+      coverage = published < 0 ? 0 : (published < coverage ? published : coverage);
+    }
+    return coverage;
+  }
+
+  /// 构建增量窗口载荷（当前保留的窗口条目；空窗口但 ack 有推进时也返回）。
+  Future<SyncEnvelope?> _buildDelta(
+    SyncJournalStore journal,
+    SyncEnvelope outgoing,
+  ) async {
+    final entries = await journal.window(since: outgoing.baseSeq);
+    return SyncEnvelope(
+      deviceId: outgoing.deviceId,
+      deviceName: outgoing.deviceName,
+      producedAt: outgoing.producedAt,
+      snapshotId: outgoing.snapshotId,
+      journalHead: outgoing.journalHead,
+      baseSeq: outgoing.baseSeq,
+      windowStart: entries.isEmpty ? 0 : entries.first.seq,
+      windowEnd: entries.isEmpty ? 0 : entries.last.seq,
+      journal: entries,
+      acks: outgoing.acks,
+      categories: outgoing.categories,
+    );
+  }
+
+  /// 从名册取对端（内存视图优先，其次落库状态）。
+  SyncPeerState _peerOf(String deviceId) {
+    final existing = _peersById[deviceId];
+    if (existing != null) return existing;
+    for (final peer in _state.peers) {
+      if (peer.deviceId == deviceId) return peer;
+    }
+    return SyncPeerState(deviceId: deviceId);
+  }
+
+  /// 名册合并视图（内存观测优先；含落库状态里的对端）。
+  Iterable<SyncPeerState> _allPeers() {
+    for (final peer in _state.peers) {
+      _peersById.putIfAbsent(peer.deviceId, () => peer);
+    }
+    return _peersById.values;
   }
 
   /// 全失败兜底原因：带上全不可达的传输（UI 据此给对应出路——手动地址是
@@ -700,6 +1118,9 @@ class SyncEngine extends ChangeNotifier implements SyncSchedulerHost {
   /// 本轮推送失败过的对端：名册重建时据此保留失败状态（成功接触显式清除）。
   final Set<String> _peersFailedThisRound = {};
 
+  /// 内存名册（本轮观测优先；落库状态在 [_allPeers] 里合并进来）。
+  final Map<String, SyncPeerState> _peersById = {};
+
   /// 记录/更新名册项（引擎只在这里写名册，落库由 [SyncStateStore.recordRound]）。
   void _touchPeer(
     String deviceId,
@@ -727,37 +1148,28 @@ class SyncEngine extends ChangeNotifier implements SyncSchedulerHost {
     );
   }
 
-  /// 本轮名册快照（拉取得到的对端 + 推送接触过的对端）。
-  final Map<String, SyncPeerState> _peersById = {};
-
-  List<SyncPeerState> _roster(List<(String, SyncEnvelope)> pulledEntries) {
-    // 先吸收既有名册，再用本轮观测覆盖。
-    for (final peer in _state.peers) {
-      _peersById.putIfAbsent(peer.deviceId, () => peer);
-    }
-    final now = _nowMs();
-    for (final (kind, envelope) in pulledEntries) {
-      if (envelope.deviceId.isEmpty) continue;
-      final existing = _peersById[envelope.deviceId] ??
-          SyncPeerState(deviceId: envelope.deviceId);
-      _peersById[envelope.deviceId] = SyncPeerState(
-        deviceId: envelope.deviceId,
-        name: envelope.deviceName.isNotEmpty ? envelope.deviceName : existing.name,
-        transport: kind.isNotEmpty ? kind : existing.transport,
-        lastSeenAt: now,
-        lastPullAt: now,
-        lastPushAt: existing.lastPushAt,
-        // 成功拉取 = 接触成功：清掉上一次的失败；本轮推送失败的对端保留状态。
-        lastError: _peersFailedThisRound.contains(envelope.deviceId)
-            ? existing.lastError
-            : null,
-        clockSkewMs: envelope.producedAt > 0
-            ? envelope.producedAt - now
-            : existing.clockSkewMs,
-      );
+  /// 本轮名册快照：内存观测 + 落库状态，并计算每对端的落后条数 / 字节。
+  ///
+  /// 落后 = 本机 journal 头部 − 对端已 ack 的位置（对端没跟上的变更量）；
+  /// 未 ack 过 / 已失联的对端没有可靠观测，不计算（名册按失联阈值另行标记）。
+  Future<List<SyncPeerState>> _roster() async {
+    final journal = _journal;
+    final head = journal == null ? 0 : await journal.headSeq();
+    final merged = <SyncPeerState>[];
+    for (final peer in _allPeers()) {
+      if (peer.ackedSeq < 0 || head <= peer.ackedSeq) {
+        merged.add(peer.copyWith(clearBehind: true));
+        continue;
+      }
+      final behind = head - peer.ackedSeq;
+      var behindBytes = peer.behindBytes;
+      if (journal != null) {
+        behindBytes = await journal.windowBytes(since: peer.ackedSeq);
+      }
+      merged.add(peer.copyWith(behindBy: behind, behindBytes: behindBytes));
     }
     // 内存名册与落库侧共用同一套排序 / 淘汰（落库侧还会再裁一次）。
-    final recent = trimPeers(_peersById.values, SyncStateStore.peerLimit);
+    final recent = trimPeers(merged, SyncStateStore.peerLimit);
     _peersById
       ..clear()
       ..addEntries(recent.map((peer) => MapEntry(peer.deviceId, peer)));

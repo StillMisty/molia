@@ -2529,6 +2529,11 @@ class AppLocalizationsEn extends AppLocalizations {
       'Failed to upload the snapshot to WebDAV';
 
   @override
+  String syncIssueDeleteRemoteFailed(String peer) {
+    return 'Failed to delete the remote files of $peer';
+  }
+
+  @override
   String get syncIssueInternal => 'Internal sync error';
 
   @override

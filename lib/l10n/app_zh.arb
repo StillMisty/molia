@@ -1014,6 +1014,10 @@
     }
   },
   "syncIssueWebdavUploadFailed": "WebDAV 快照上传失败",
+  "syncIssueDeleteRemoteFailed": "清理对端 {peer} 的远端文件失败",
+  "@syncIssueDeleteRemoteFailed": {
+    "placeholders": { "peer": { "type": "String" } }
+  },
   "syncIssueInternal": "同步内部错误",
   "syncActionGrantPermission": "授予权限",
   "syncActionConfigure": "去配置",

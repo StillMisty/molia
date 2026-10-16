@@ -321,6 +321,12 @@ class SyncEnvelope {
   /// 我已消费各对端 journal 的位置（对端 id → seq）：对端据此裁剪日志。
   final Map<String, int> acks;
 
+  /// 本载荷记录集覆盖的类别（发送方本轮启用的类别；蜂窝小类别轮只含小类别）。
+  ///
+  /// anti-entropy 只在双方共享的类别上比对 [snapshotId]——类别开关不同的
+  /// 设备不会被误判为「内容不一致」。
+  final List<String> categories;
+
   const SyncEnvelope({
     required this.deviceId,
     this.deviceName = '',
@@ -334,6 +340,7 @@ class SyncEnvelope {
     this.windowEnd = 0,
     this.journal,
     this.acks = const {},
+    this.categories = const [],
   });
 
   /// 本载荷是否为增量窗口（null journal = 全量快照）。
@@ -364,6 +371,7 @@ class SyncEnvelope {
         windowEnd: windowEnd,
         journal: journal,
         acks: acks,
+        categories: categories,
       );
 
   Iterable<SyncRecord> recordsOf(SyncCategory category) =>
@@ -401,6 +409,7 @@ class SyncEnvelope {
       journalHead: journalHead,
       baseSeq: baseSeq,
       acks: acks,
+      categories: categories,
     );
   }
 
@@ -419,6 +428,7 @@ class SyncEnvelope {
         },
         if (acks.isNotEmpty)
           'acks': {for (final entry in acks.entries) entry.key: entry.value},
+        if (categories.isNotEmpty) 'categories': categories,
         'records': {
           for (final entry in records.entries)
             if (entry.value.isNotEmpty)
@@ -481,6 +491,8 @@ class SyncEnvelope {
       windowEnd: (raw['windowEnd'] as num?)?.toInt() ?? 0,
       journal: journal,
       acks: acks,
+      categories:
+          (raw['categories'] as List?)?.whereType<String>().toList() ?? const [],
     );
   }
 }
@@ -957,7 +969,8 @@ class SyncPeerState {
     this.ackedSeq = -1,
     this.headSeq = 0,
     this.snapshotId = '',
-    this.fullPulledSnapshotId = '',
+    this.categories = const [],
+    this.fullPulledAt = 0,
   });
 
   /// 失联阈值：超过这段时间没有任何接触的对端在名册里标记「已失联」
@@ -1003,9 +1016,11 @@ class SyncPeerState {
   /// 该对端最近一次自报的全量视图指纹（anti-entropy 比对用）。
   final String snapshotId;
 
-  /// 最近一次为该对端做过全量兜底时它的指纹：与 [snapshotId] 相同则不再重复
-  /// 全量拉取（避免「结构性不一致」每轮重拉）。
-  final String fullPulledSnapshotId;
+  /// 该对端自报的启用类别（anti-entropy 只在双方共享的类别上比对指纹）。
+  final List<String> categories;
+
+  /// 最近一次为该对端做全量兜底的时间（节流：同一对端不频繁重拉）。
+  final int fullPulledAt;
 
   /// 是否已失联（超过 [lostThresholdMs] 无接触；无接触时间视为未知，不标记）。
   bool isLostAt(int nowMs) =>
@@ -1027,7 +1042,8 @@ class SyncPeerState {
     int? ackedSeq,
     int? headSeq,
     String? snapshotId,
-    String? fullPulledSnapshotId,
+    List<String>? categories,
+    int? fullPulledAt,
   }) =>
       SyncPeerState(
         deviceId: deviceId,
@@ -1044,7 +1060,8 @@ class SyncPeerState {
         ackedSeq: ackedSeq ?? this.ackedSeq,
         headSeq: headSeq ?? this.headSeq,
         snapshotId: snapshotId ?? this.snapshotId,
-        fullPulledSnapshotId: fullPulledSnapshotId ?? this.fullPulledSnapshotId,
+        categories: categories ?? this.categories,
+        fullPulledAt: fullPulledAt ?? this.fullPulledAt,
       );
 
   Map<String, dynamic> toJson() => {
@@ -1062,8 +1079,8 @@ class SyncPeerState {
         if (ackedSeq >= 0) 'ackedSeq': ackedSeq,
         if (headSeq > 0) 'headSeq': headSeq,
         if (snapshotId.isNotEmpty) 'snapshotId': snapshotId,
-        if (fullPulledSnapshotId.isNotEmpty)
-          'fullPulledSnapshotId': fullPulledSnapshotId,
+        if (categories.isNotEmpty) 'categories': categories,
+        if (fullPulledAt > 0) 'fullPulledAt': fullPulledAt,
       };
 
   static SyncPeerState? fromJson(Object? raw) {
@@ -1085,7 +1102,9 @@ class SyncPeerState {
       ackedSeq: (raw['ackedSeq'] as num?)?.toInt() ?? -1,
       headSeq: (raw['headSeq'] as num?)?.toInt() ?? 0,
       snapshotId: raw['snapshotId'] as String? ?? '',
-      fullPulledSnapshotId: raw['fullPulledSnapshotId'] as String? ?? '',
+      categories:
+          (raw['categories'] as List?)?.whereType<String>().toList() ?? const [],
+      fullPulledAt: (raw['fullPulledAt'] as num?)?.toInt() ?? 0,
     );
   }
 }

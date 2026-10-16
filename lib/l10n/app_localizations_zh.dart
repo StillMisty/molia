@@ -2427,6 +2427,11 @@ class AppLocalizationsZh extends AppLocalizations {
   String get syncIssueWebdavUploadFailed => 'WebDAV 快照上传失败';
 
   @override
+  String syncIssueDeleteRemoteFailed(String peer) {
+    return '清理对端 $peer 的远端文件失败';
+  }
+
+  @override
   String get syncIssueInternal => '同步内部错误';
 
   @override

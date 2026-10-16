@@ -88,37 +88,36 @@ void main() {
     expect(await journal.windowBytes(since: 1), doubled - single);
   });
 
-  test('compact 边界：只裁到 min(minAck, 快照覆盖)，未 ack 的条目保留', () async {
+  test('compact 边界：只裁到 min(minAck, 已发布快照覆盖)，未 ack 的条目保留', () async {
     await journal.append(db, [change('a', 1), change('b', 2), change('c', 3), change('d', 4)]);
-    // 快照覆盖到 4：允许裁到 4；对端只 ack 到 2。
+    // 已发布快照覆盖到 4：允许裁到 4；对端只 ack 到 2。
     await journal.markSnapshotBuilt(4);
 
-    expect(await journal.compact(minAck: 2), 2);
+    expect(await journal.compact(minAck: 2, coverage: 4), 2);
     expect(await journal.baseSeq(), 2);
     expect([for (final entry in await journal.window()) entry.seq], [3, 4]);
 
     // 对端推进到 3：再裁一格，仍是「未 ack 的不动」。
-    expect(await journal.compact(minAck: 3), 3);
+    expect(await journal.compact(minAck: 3, coverage: 4), 3);
     expect([for (final entry in await journal.window()) entry.seq], [4]);
     // 已裁到快照覆盖位置：ack 再大也不会裁掉快照未覆盖的部分。
-    expect(await journal.compact(minAck: 4), 4);
+    expect(await journal.compact(minAck: 4, coverage: 4), 4);
     expect(await journal.window(), isEmpty);
     expect(await journal.headSeq(), 4);
   });
 
-  test('compact：快照尚未覆盖的位置不裁（保证新对端能 bootstrap）', () async {
+  test('compact：已发布快照尚未覆盖的位置不裁（保证新对端能 bootstrap）', () async {
     await journal.append(db, [change('a', 1), change('b', 2)]);
-    // 尚未构建过全量快照（snapshotSeq = -1）：即使对端都 ack 了也不裁。
+    // 还没有任何已发布的全量快照（coverage = -1）：即使对端都 ack 了也不裁。
     expect(await journal.snapshotSeq(), -1);
-    expect(await journal.compact(minAck: 2), 0);
+    expect(await journal.compact(minAck: 2, coverage: -1), 0);
     expect([for (final entry in await journal.window()) entry.seq], [1, 2]);
 
-    await journal.markSnapshotBuilt(1);
-    expect(await journal.compact(minAck: 2), 1);
+    expect(await journal.compact(minAck: 2, coverage: 1), 1);
     expect([for (final entry in await journal.window()) entry.seq], [2]);
   });
 
-  test('compact：超过条数硬上限时快照覆盖推进到头部并整体裁剪', () async {
+  test('compact：超过条数硬上限时快照覆盖推进到头部，只保留最新条目', () async {
     final capped = SyncJournalRepository(
       databaseProvider: () => db,
       clock: () => 1000,
@@ -131,15 +130,16 @@ void main() {
       change('d', 4),
     ]);
 
-    final base = await capped.compact(minAck: 0, nowMs: 1000);
+    final base = await capped.compact(minAck: 0, coverage: -1, nowMs: 1000);
 
-    expect(base, 4);
-    expect(await capped.baseSeq(), 4);
+    // 保留最新 3 条（seq 2..4），最旧的一条裁剪；快照覆盖推进到头部。
+    expect(base, 1);
+    expect(await capped.baseSeq(), 1);
     expect(await capped.snapshotSeq(), 4);
-    expect(await capped.window(), isEmpty);
+    expect([for (final entry in await capped.window()) entry.seq], [2, 3, 4]);
   });
 
-  test('compact：超过时间硬上限时同样整体裁剪（落后对端降级 bootstrap）', () async {
+  test('compact：超过时间硬上限时裁掉过期条目（落后对端降级 bootstrap）', () async {
     final aged = SyncJournalRepository(
       databaseProvider: () => db,
       clock: () => 1000,
@@ -148,10 +148,15 @@ void main() {
     await aged.append(db, [change('a', 1)]);
 
     expect(
-      await aged.compact(minAck: 0, nowMs: 1000 + 2 * 60 * 60 * 1000),
+      await aged.compact(
+        minAck: 0,
+        coverage: -1,
+        nowMs: 1000 + 2 * 60 * 60 * 1000,
+      ),
       1,
     );
     expect(await aged.window(), isEmpty);
+    expect(await aged.snapshotSeq(), 1);
   });
 
   test('快照覆盖只前进：markSnapshotBuilt 不接受回退', () async {

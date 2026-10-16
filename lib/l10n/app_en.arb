@@ -1362,6 +1362,10 @@
     }
   },
   "syncIssueWebdavUploadFailed": "Failed to upload the snapshot to WebDAV",
+  "syncIssueDeleteRemoteFailed": "Failed to delete the remote files of {peer}",
+  "@syncIssueDeleteRemoteFailed": {
+    "placeholders": { "peer": { "type": "String" } }
+  },
   "syncIssueInternal": "Internal sync error",
   "syncActionGrantPermission": "Grant permission",
   "syncActionConfigure": "Configure",

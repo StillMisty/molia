@@ -362,6 +362,9 @@ class RecordingSyncSchedulerHost implements SyncSchedulerHost {
   /// 下一轮报告失败（验证待发标记保留）。
   bool failNext = false;
 
+  /// 最近一轮的 anti-entropy 开关（验证环境策略）。
+  bool lastAntiEntropy = false;
+
   @override
   bool get syncEnabled => enabled;
 
@@ -369,9 +372,11 @@ class RecordingSyncSchedulerHost implements SyncSchedulerHost {
   Future<SyncRunOutcome> runSyncRound({
     required SyncTrigger trigger,
     required bool push,
+    required bool antiEntropy,
     Set<SyncCategory>? onlyCategories,
   }) async {
     rounds.add((trigger: trigger, push: push, categories: onlyCategories));
+    lastAntiEntropy = antiEntropy;
     final failed = failNext;
     failNext = false;
     return SyncRunOutcome(

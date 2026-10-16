@@ -137,7 +137,8 @@ void main() {
       behindBy: 4,
       behindBytes: 512,
       snapshotId: 'hash-b',
-      fullPulledSnapshotId: 'hash-b',
+      categories: ['settings', 'history'],
+      fullPulledAt: 900,
       lastSeenAt: 1000,
     );
 
@@ -148,7 +149,8 @@ void main() {
     expect(parsed.behindBy, 4);
     expect(parsed.behindBytes, 512);
     expect(parsed.snapshotId, 'hash-b');
-    expect(parsed.fullPulledSnapshotId, 'hash-b');
+    expect(parsed.categories, ['settings', 'history']);
+    expect(parsed.fullPulledAt, 900);
 
     expect(parsed.isLostAt(1000 + SyncPeerState.lostThresholdMs), isFalse);
     expect(parsed.isLostAt(1001 + SyncPeerState.lostThresholdMs), isTrue);

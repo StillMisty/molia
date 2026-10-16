@@ -250,6 +250,11 @@ class SyncStateStore {
   /// 每传输最近一次成功接触对端的轮次时间（UI「最后成功于」；0 = 尚未成功过）。
   final Map<String, int> _transportLastSuccess = {};
 
+  /// 各传输最近成功发布的全量快照覆盖位置（kind → seq；-1 = 尚未发布）。
+  ///
+  /// 日志裁剪不会越过**已发布**的快照覆盖：落后 / 新加入的对端要能 bootstrap。
+  final Map<String, int> _snapshotPushSeq = {};
+
   /// 设备名册（deviceId → 最近一次接触的观测值）。
   final Map<String, SyncPeerState> _peers = {};
 
@@ -288,6 +293,15 @@ class SyncStateStore {
 
   /// 传输最近一次成功接触对端的时间（0 = 尚未成功过）。
   int transportLastSuccessAt(String kind) => _transportLastSuccess[kind] ?? 0;
+
+  /// 传输最近成功发布的全量快照覆盖位置（-1 = 尚未发布）。
+  int snapshotPushSeq(String kind) => _snapshotPushSeq[kind] ?? -1;
+
+  Future<void> setSnapshotPushSeq(String kind, int seq) async {
+    if (_snapshotPushSeq[kind] == seq) return;
+    _snapshotPushSeq[kind] = seq;
+    await save();
+  }
 
   int nowMs() => _clock();
 
@@ -565,6 +579,7 @@ class SyncStateStore {
         'lastSyncAt': _lastSyncAt,
         if (_transportLastSuccess.isNotEmpty)
           'transportLastSuccess': _transportLastSuccess,
+        if (_snapshotPushSeq.isNotEmpty) 'snapshotPush': _snapshotPushSeq,
         'log': [for (final entry in _log) entry.toJson()],
         'activity': [for (final entry in _activity) entry.toJson()],
         'peers': [for (final peer in _peers.values) peer.toJson()],
@@ -653,6 +668,14 @@ class SyncStateStore {
       for (final entry in transportLastSuccess.entries) {
         final at = entry.value;
         if (at is num) _transportLastSuccess[entry.key.toString()] = at.toInt();
+      }
+    }
+    _snapshotPushSeq.clear();
+    final snapshotPush = json['snapshotPush'];
+    if (snapshotPush is Map) {
+      for (final entry in snapshotPush.entries) {
+        final seq = entry.value;
+        if (seq is num) _snapshotPushSeq[entry.key.toString()] = seq.toInt();
       }
     }
     _log.clear();

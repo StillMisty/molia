@@ -11,10 +11,12 @@ import 'sync_state_store.dart';
 abstract interface class SyncSchedulerHost {
   bool get syncEnabled;
 
-  /// 跑一轮；[onlyCategories] 非空时只处理这些类别（蜂窝小类别策略）。
+  /// 跑一轮；[onlyCategories] 非空时只处理这些类别（蜂窝小类别策略）；
+  /// [antiEntropy] 允许全量兜底（周期性指纹比对修复静默分歧）。
   Future<SyncRunOutcome> runSyncRound({
     required SyncTrigger trigger,
     required bool push,
+    required bool antiEntropy,
     Set<SyncCategory>? onlyCategories,
   });
 }
@@ -261,12 +263,15 @@ class SyncScheduler {
     return true;
   }
 
-  /// anti-entropy：空闲唤醒在无本地变更时仍探测 / 拉取。
+  /// anti-entropy：空闲唤醒在无本地变更时仍探测 / 拉取，并允许全量兜底
+  /// （比对 `snapshotId` 修复静默分歧）。
   ///
-  /// 条件是非蜂窝网络（Wi-Fi / 以太网 / 桌面）：移动端蜂窝下才按
-  /// 「无本地变更零流量」处理（省电与省流）。桌面电量探针不可用（未知）
-  /// 等价于外部供电，不会因此被当成低电量而关掉校验。
-  bool get _antiEntropyAllowed => !_onCellular && !powerSaveActive;
+  /// 条件：非蜂窝（Wi-Fi / 以太网 / 桌面）+ 未处于省电等级，且（充电中或
+  /// 前台可见）——移动端蜂窝下按「无本地变更零流量」处理（省电与省流），
+  /// 后台不可见时不主动做全量校验。桌面电量探针不可用（未知）等价于外部
+  /// 供电，不会因此被关掉。
+  bool get _antiEntropyAllowed =>
+      !_onCellular && !powerSaveActive && (_charging || _visible);
 
   SyncLevel _evaluate() {
     if (powerSaveActive) return SyncLevel.powerSave;
@@ -379,6 +384,8 @@ class SyncScheduler {
       return await _host.runSyncRound(
         trigger: trigger,
         push: push,
+        // 手动轮总是允许全量兜底（用户显式要求）；自动轮按环境策略。
+        antiEntropy: trigger == SyncTrigger.manual || _antiEntropyAllowed,
         onlyCategories: cellularRestricted ? smallCategories : null,
       );
     } catch (e) {

@@ -4587,6 +4587,12 @@ abstract class AppLocalizations {
   /// **'Failed to upload the snapshot to WebDAV'**
   String get syncIssueWebdavUploadFailed;
 
+  /// No description provided for @syncIssueDeleteRemoteFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Failed to delete the remote files of {peer}'**
+  String syncIssueDeleteRemoteFailed(String peer);
+
   /// No description provided for @syncIssueInternal.
   ///
   /// In en, this message translates to:
