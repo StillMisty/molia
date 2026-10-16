@@ -157,6 +157,10 @@ class LanSyncTransport implements SyncTransport {
   @override
   bool get isRunning => _running;
 
+  /// 局域网端点按需给出实时快照（[snapshotProvider]），没有发布延迟。
+  @override
+  bool get servesLiveSnapshot => true;
+
   @override
   String? get unavailableReason =>
       _running ? null : _unavailableReason;

@@ -94,6 +94,10 @@ class WebDavSyncTransport implements SyncTransport {
   @override
   bool get isRunning => _running;
 
+  /// 快照是远端文件（异步读取）：日志裁剪必须留在已发布的覆盖内。
+  @override
+  bool get servesLiveSnapshot => false;
+
   @override
   String? get unavailableReason =>
       _configProvider().isConfigured ? null : SyncUnavailableReason.notConfigured;

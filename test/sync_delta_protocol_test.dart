@@ -326,6 +326,44 @@ void main() {
     expect(await a.journal.snapshotSeq(), await a.journal.headSeq());
   });
 
+  test('已本地忽略的对端不钉住日志窗口（minAck 跳过它）', () async {
+    final a = await network.addDevice(
+      'devA',
+      deviceLimits: const SyncJournalLimits(maxEntries: 2),
+    );
+    final b = await network.addDevice('devB');
+    await a.engine.syncNow();
+    await b.engine.syncNow();
+    // B 只 ack 到 0；随后 A 忽略 B（不再合并它的载荷）。
+    a.state.recordRound(SyncRoundReport(
+      trigger: SyncTrigger.timer,
+      startedAt: 0,
+      finishedAt: 1,
+      outcome: SyncOutcome.ok,
+      peers: [
+        SyncPeerState(
+          deviceId: 'devB',
+          lastSeenAt: a.state.nowMs(),
+          cursorSeq: 0,
+          ackedSeq: 0,
+        ),
+      ],
+    ));
+    await a.engine.setPeerIgnored('devB', true);
+    network.devices.remove('devB');
+
+    // 三次变更超过条数上限：被忽略对端的旧 ack 不参与 minAck → 正常裁剪。
+    await a.setSetting('theme_mode', 'dark');
+    await a.engine.syncNow();
+    await a.setSetting('theme_mode', 'light');
+    await a.engine.syncNow();
+    await a.setSetting('theme_mode', 'system');
+    await a.engine.syncNow();
+
+    expect(await a.journal.baseSeq(), greaterThan(0));
+    expect(await a.journal.snapshotSeq(), await a.journal.headSeq());
+  });
+
   test('名册：超过失联阈值的对端标记「已失联」（只提示，不自动清理）', () {
     final now = DateTime.now().millisecondsSinceEpoch;
     final peer = SyncPeerState(

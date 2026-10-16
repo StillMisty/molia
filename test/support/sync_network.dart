@@ -214,6 +214,10 @@ class NetworkTransport implements SyncTransport {
   @override
   bool get isRunning => _running;
 
+  /// 测试网络模拟局域网直连（按需实时快照）。
+  @override
+  bool get servesLiveSnapshot => true;
+
   @override
   String? get unavailableReason => null;
 

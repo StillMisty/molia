@@ -121,6 +121,13 @@ abstract interface class SyncTransport {
 
   bool get isRunning;
 
+  /// 对端是否按需拉取**实时**全量快照（局域网直连 = true：端点随时给出当前
+  /// 视图，没有发布延迟；WebDAV = false：快照文件是异步读取的）。
+  ///
+  /// 引擎据此决定日志裁剪的下限：只有「需要发布快照文件」的传输才把已发布
+  /// 覆盖计入（否则落后 / 新加入的对端无法 bootstrap）。
+  bool get servesLiveSnapshot;
+
   /// 传输当前不可用的原因码（null = 可用）。
   ///
   /// 机器可读码（[SyncUnavailableReason] 的 `not_configured` /

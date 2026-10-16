@@ -154,6 +154,10 @@ class FakeSyncTransport implements SyncTransport {
   @override
   bool get isRunning => _running;
 
+  /// 假传输模拟局域网（按需实时快照）。
+  @override
+  bool get servesLiveSnapshot => true;
+
   @override
   Future<void> start() async {
     _running = true;

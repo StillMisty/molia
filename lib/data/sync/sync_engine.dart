@@ -1154,27 +1154,30 @@ class SyncEngine extends ChangeNotifier implements SyncSchedulerHost {
 
   /// 各对端 ack 的最小值（compact 的裁剪边界）；null = 没有对端 ack 过。
   ///
-  /// 失联设备（超过 [SyncPeerState.lostThresholdMs] 无接触）不参与：它们的
-  /// 位置由硬上限与 bootstrap 兜底，不该让日志无界增长。
+  /// 失联设备（超过 [SyncPeerState.lostThresholdMs] 无接触）与**已本地忽略**
+  /// 的设备不参与：它们的位置由硬上限与 bootstrap 兜底，不该让日志无界增长
+  /// （也不该钉住窗口）。
   int? _minPeerAck(int nowMs) {
     int? minAck;
     for (final peer in _allPeers()) {
       if (peer.ackedSeq < 0) continue;
       if (peer.isLostAt(nowMs)) continue;
+      if (_state.isPeerIgnored(peer.deviceId)) continue;
       if (minAck == null || peer.ackedSeq < minAck) minAck = peer.ackedSeq;
     }
     return minAck;
   }
 
-  /// 已发布的全量快照覆盖位置（各传输成功推送的最小值）。
+  /// 已发布的全量快照覆盖位置（需要发布快照文件的传输成功推送的最小值）。
   ///
-  /// 局域网对端按需拉取实时快照（`snapshotProvider` 返回本轮快照），没有发布
-  /// 延迟，不参与下限；WebDAV 的文件是异步读取的，必须覆盖窗口起点，否则
+  /// 按需给出实时快照的传输（[SyncTransport.servesLiveSnapshot]，如局域网）
+  /// 没有发布延迟，不参与下限；其余（WebDAV）的覆盖必须够到窗口起点，否则
   /// 落后 / 新加入的对端无法 bootstrap。
   int _publishedSnapshotSeq(int journalHead) {
     var coverage = journalHead;
     for (final kind in _state.enabledTransports) {
-      if (kind == SyncTransportKind.lan) continue;
+      final transport = _transports[kind];
+      if (transport == null || transport.servesLiveSnapshot) continue;
       final published = _state.snapshotPushSeq(kind);
       coverage = published < 0 ? 0 : (published < coverage ? published : coverage);
     }
