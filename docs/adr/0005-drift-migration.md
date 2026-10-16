@@ -61,12 +61,12 @@
    Top 曲目 / 来源分布 / 已听曲目名）与两表 JOIN（列表+曲目数、导出列表曲目）、
    `rowid` 淘汰语句保留原 SQL 文本（`customSelect` + `Variable` / `customUpdate` /
    `customStatement`），口径常量（`PlayStatisticsLimits` 等）仍是唯一来源。
-8. **未来 schema 变更走 `make-migrations`**：改表 → 提 `schemaVersion` →
-   `dart run build_runner build` + `dart run drift_dev make-migrations`，在
-   `drift_schemas/molia/` 留 schema 快照、按需在 `test/drift/molia/` 生成迁移
-   测试，用 `stepByStep` 写增量迁移并保留数据。单版本时 `make-migrations`
-   只写快照，不生成 steps / 测试文件（当前基线
-   `drift_schemas/molia/drift_schema_v1.json`）。
+8. **schema 变更走 `make-migrations`**：改表 → 提 `schemaVersion` →
+   `dart run build_runner build` + `dart run drift_dev make-migrations`，生成
+   `drift_schemas/molia/` 的 schema 快照与 `lib/data/molia_database.steps.dart`，
+   用 `stepByStep` 写增量迁移并保留数据；迁移测试在
+   `test/drift/molia/migration_test.dart`（空库 schema 校验 + 带数据升级）。
+   当前迁移链：`v1` 基线 → `v2` 新增 `sync_known`（同步已知版本登记）。
 
 ## 后果
 

@@ -1,8 +1,9 @@
 /// 本地数据库（drift）：最近播放上下文（play_contexts）+ 资料库
-/// （播放历史 / 用户列表 / 删除墓碑）+ 听歌统计（play_events）+ 本地下载。
+/// （播放历史 / 用户列表 / 删除墓碑 / 同步已知版本）+ 听歌统计（play_events）
+/// + 本地下载。
 ///
-/// fresh 基线：`schemaVersion = 1` 一次性建出全部表；结构变更必须写增量
-/// 迁移、保留数据（见 docs/adr/0005-drift-migration.md）。
+/// `schemaVersion = 2`（v1 → v2 增量迁移新增 `sync_known`，保留既有数据）；
+/// 后续结构变更同样必须写增量迁移、保留数据（见 docs/adr/0005-drift-migration.md）。
 ///
 /// 只 import drift / drift_flutter / path_provider：Web 编译安全
 /// （`NativeDatabase` 仅测试内存库使用，见 test/support/memory_database.dart）。
@@ -14,6 +15,7 @@ import 'package:logging/logging.dart';
 import 'package:path_provider/path_provider.dart';
 
 import '../domain/models/device_sync.dart';
+import 'molia_database.steps.dart';
 
 part 'molia_database.g.dart';
 
@@ -133,6 +135,26 @@ class SyncTombstones extends Table {
   Set<Column> get primaryKey => {category, key};
 }
 
+/// 同步已知版本登记：`category + key` → 引擎最后一次交给适配器的胜者版本。
+///
+/// 引擎合并后只把版本与该登记不同的胜者交给适配器（变更集应用），因此
+/// 一轮的 apply 与日志计数 ∝ 本轮变更量，不随库大小增长。适配器内部的新旧
+/// 判定保留作兜底（登记缺失的首轮仍正确跳过）。主键形状与
+/// `sync_tombstones` 一致：不同类别的同名键互不影响。
+class SyncKnown extends Table {
+  @override
+  String get tableName => 'sync_known';
+
+  TextColumn get category => text()();
+  TextColumn get key => text()();
+  IntColumn get versionPhysical => integer()();
+  IntColumn get versionCounter => integer().withDefault(const Constant(0))();
+  TextColumn get deviceId => text().withDefault(const Constant(''))();
+
+  @override
+  Set<Column> get primaryKey => {category, key};
+}
+
 /// 本地下载（持久副本，不参与缓存 LRU 淘汰）。
 ///
 /// 行内保存曲目自包含快照（元数据 + 原音源 raw 取链参数），供「本地歌曲」
@@ -231,6 +253,7 @@ const String moliaDatabaseFileName = 'molia_database';
   Playlists,
   PlaylistTracks,
   SyncTombstones,
+  SyncKnown,
   PlayEvents,
   Downloads,
 ])
@@ -259,18 +282,22 @@ class MoliaDatabase extends _$MoliaDatabase {
     }
   }
 
-  /// 当前 schema 版本（fresh 基线：`1` 一次性建出全部表）。
+  /// 当前 schema 版本：`1` 建出基线全部表，`2` 新增 `sync_known`。
   ///
   /// 结构变更必须写增量迁移：提版本号 → `dart run drift_dev make-migrations`
   /// 生成 schema 快照 → 用 `stepByStep` 写迁移并保留数据（见 ADR-0005）。
   @override
-  int get schemaVersion => 1;
+  int get schemaVersion => 2;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
         onCreate: (m) => m.createAll(),
-        // 结构变更时在 onUpgrade 接入 stepByStep 增量迁移（见 ADR-0005）；
-        // 未提供迁移时 drift 默认在版本不一致时抛错——响亮失败，不静默兼容。
+        onUpgrade: stepByStep(
+          from1To2: (m, schema) async {
+            // v1 → v2：新增同步已知版本登记表；既有表与数据原样保留。
+            await m.createTable(schema.syncKnown);
+          },
+        ),
         beforeOpen: (details) async {
           // SQLite 外键默认关闭，这里显式开启（列表删除级联依赖它）。
           await customStatement('PRAGMA foreign_keys = ON');

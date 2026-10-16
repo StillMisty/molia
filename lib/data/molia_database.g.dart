@@ -2360,6 +2360,323 @@ class SyncTombstonesCompanion extends UpdateCompanion<SyncTombstone> {
   }
 }
 
+class $SyncKnownTable extends SyncKnown
+    with TableInfo<$SyncKnownTable, SyncKnownData> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $SyncKnownTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _categoryMeta =
+      const VerificationMeta('category');
+  @override
+  late final GeneratedColumn<String> category = GeneratedColumn<String>(
+      'category', aliasedName, false,
+      type: DriftSqlType.string, requiredDuringInsert: true);
+  static const VerificationMeta _keyMeta = const VerificationMeta('key');
+  @override
+  late final GeneratedColumn<String> key = GeneratedColumn<String>(
+      'key', aliasedName, false,
+      type: DriftSqlType.string, requiredDuringInsert: true);
+  static const VerificationMeta _versionPhysicalMeta =
+      const VerificationMeta('versionPhysical');
+  @override
+  late final GeneratedColumn<int> versionPhysical = GeneratedColumn<int>(
+      'versionPhysical', aliasedName, false,
+      type: DriftSqlType.int, requiredDuringInsert: true);
+  static const VerificationMeta _versionCounterMeta =
+      const VerificationMeta('versionCounter');
+  @override
+  late final GeneratedColumn<int> versionCounter = GeneratedColumn<int>(
+      'versionCounter', aliasedName, false,
+      type: DriftSqlType.int,
+      requiredDuringInsert: false,
+      defaultValue: const Constant(0));
+  static const VerificationMeta _deviceIdMeta =
+      const VerificationMeta('deviceId');
+  @override
+  late final GeneratedColumn<String> deviceId = GeneratedColumn<String>(
+      'deviceId', aliasedName, false,
+      type: DriftSqlType.string,
+      requiredDuringInsert: false,
+      defaultValue: const Constant(''));
+  @override
+  List<GeneratedColumn> get $columns =>
+      [category, key, versionPhysical, versionCounter, deviceId];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'sync_known';
+  @override
+  VerificationContext validateIntegrity(Insertable<SyncKnownData> instance,
+      {bool isInserting = false}) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('category')) {
+      context.handle(_categoryMeta,
+          category.isAcceptableOrUnknown(data['category']!, _categoryMeta));
+    } else if (isInserting) {
+      context.missing(_categoryMeta);
+    }
+    if (data.containsKey('key')) {
+      context.handle(
+          _keyMeta, key.isAcceptableOrUnknown(data['key']!, _keyMeta));
+    } else if (isInserting) {
+      context.missing(_keyMeta);
+    }
+    if (data.containsKey('versionPhysical')) {
+      context.handle(
+          _versionPhysicalMeta,
+          versionPhysical.isAcceptableOrUnknown(
+              data['versionPhysical']!, _versionPhysicalMeta));
+    } else if (isInserting) {
+      context.missing(_versionPhysicalMeta);
+    }
+    if (data.containsKey('versionCounter')) {
+      context.handle(
+          _versionCounterMeta,
+          versionCounter.isAcceptableOrUnknown(
+              data['versionCounter']!, _versionCounterMeta));
+    }
+    if (data.containsKey('deviceId')) {
+      context.handle(_deviceIdMeta,
+          deviceId.isAcceptableOrUnknown(data['deviceId']!, _deviceIdMeta));
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {category, key};
+  @override
+  SyncKnownData map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return SyncKnownData(
+      category: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}category'])!,
+      key: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}key'])!,
+      versionPhysical: attachedDatabase.typeMapping
+          .read(DriftSqlType.int, data['${effectivePrefix}versionPhysical'])!,
+      versionCounter: attachedDatabase.typeMapping
+          .read(DriftSqlType.int, data['${effectivePrefix}versionCounter'])!,
+      deviceId: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}deviceId'])!,
+    );
+  }
+
+  @override
+  $SyncKnownTable createAlias(String alias) {
+    return $SyncKnownTable(attachedDatabase, alias);
+  }
+}
+
+class SyncKnownData extends DataClass implements Insertable<SyncKnownData> {
+  final String category;
+  final String key;
+  final int versionPhysical;
+  final int versionCounter;
+  final String deviceId;
+  const SyncKnownData(
+      {required this.category,
+      required this.key,
+      required this.versionPhysical,
+      required this.versionCounter,
+      required this.deviceId});
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['category'] = Variable<String>(category);
+    map['key'] = Variable<String>(key);
+    map['versionPhysical'] = Variable<int>(versionPhysical);
+    map['versionCounter'] = Variable<int>(versionCounter);
+    map['deviceId'] = Variable<String>(deviceId);
+    return map;
+  }
+
+  SyncKnownCompanion toCompanion(bool nullToAbsent) {
+    return SyncKnownCompanion(
+      category: Value(category),
+      key: Value(key),
+      versionPhysical: Value(versionPhysical),
+      versionCounter: Value(versionCounter),
+      deviceId: Value(deviceId),
+    );
+  }
+
+  factory SyncKnownData.fromJson(Map<String, dynamic> json,
+      {ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return SyncKnownData(
+      category: serializer.fromJson<String>(json['category']),
+      key: serializer.fromJson<String>(json['key']),
+      versionPhysical: serializer.fromJson<int>(json['versionPhysical']),
+      versionCounter: serializer.fromJson<int>(json['versionCounter']),
+      deviceId: serializer.fromJson<String>(json['deviceId']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'category': serializer.toJson<String>(category),
+      'key': serializer.toJson<String>(key),
+      'versionPhysical': serializer.toJson<int>(versionPhysical),
+      'versionCounter': serializer.toJson<int>(versionCounter),
+      'deviceId': serializer.toJson<String>(deviceId),
+    };
+  }
+
+  SyncKnownData copyWith(
+          {String? category,
+          String? key,
+          int? versionPhysical,
+          int? versionCounter,
+          String? deviceId}) =>
+      SyncKnownData(
+        category: category ?? this.category,
+        key: key ?? this.key,
+        versionPhysical: versionPhysical ?? this.versionPhysical,
+        versionCounter: versionCounter ?? this.versionCounter,
+        deviceId: deviceId ?? this.deviceId,
+      );
+  SyncKnownData copyWithCompanion(SyncKnownCompanion data) {
+    return SyncKnownData(
+      category: data.category.present ? data.category.value : this.category,
+      key: data.key.present ? data.key.value : this.key,
+      versionPhysical: data.versionPhysical.present
+          ? data.versionPhysical.value
+          : this.versionPhysical,
+      versionCounter: data.versionCounter.present
+          ? data.versionCounter.value
+          : this.versionCounter,
+      deviceId: data.deviceId.present ? data.deviceId.value : this.deviceId,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('SyncKnownData(')
+          ..write('category: $category, ')
+          ..write('key: $key, ')
+          ..write('versionPhysical: $versionPhysical, ')
+          ..write('versionCounter: $versionCounter, ')
+          ..write('deviceId: $deviceId')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode =>
+      Object.hash(category, key, versionPhysical, versionCounter, deviceId);
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is SyncKnownData &&
+          other.category == this.category &&
+          other.key == this.key &&
+          other.versionPhysical == this.versionPhysical &&
+          other.versionCounter == this.versionCounter &&
+          other.deviceId == this.deviceId);
+}
+
+class SyncKnownCompanion extends UpdateCompanion<SyncKnownData> {
+  final Value<String> category;
+  final Value<String> key;
+  final Value<int> versionPhysical;
+  final Value<int> versionCounter;
+  final Value<String> deviceId;
+  final Value<int> rowid;
+  const SyncKnownCompanion({
+    this.category = const Value.absent(),
+    this.key = const Value.absent(),
+    this.versionPhysical = const Value.absent(),
+    this.versionCounter = const Value.absent(),
+    this.deviceId = const Value.absent(),
+    this.rowid = const Value.absent(),
+  });
+  SyncKnownCompanion.insert({
+    required String category,
+    required String key,
+    required int versionPhysical,
+    this.versionCounter = const Value.absent(),
+    this.deviceId = const Value.absent(),
+    this.rowid = const Value.absent(),
+  })  : category = Value(category),
+        key = Value(key),
+        versionPhysical = Value(versionPhysical);
+  static Insertable<SyncKnownData> custom({
+    Expression<String>? category,
+    Expression<String>? key,
+    Expression<int>? versionPhysical,
+    Expression<int>? versionCounter,
+    Expression<String>? deviceId,
+    Expression<int>? rowid,
+  }) {
+    return RawValuesInsertable({
+      if (category != null) 'category': category,
+      if (key != null) 'key': key,
+      if (versionPhysical != null) 'versionPhysical': versionPhysical,
+      if (versionCounter != null) 'versionCounter': versionCounter,
+      if (deviceId != null) 'deviceId': deviceId,
+      if (rowid != null) 'rowid': rowid,
+    });
+  }
+
+  SyncKnownCompanion copyWith(
+      {Value<String>? category,
+      Value<String>? key,
+      Value<int>? versionPhysical,
+      Value<int>? versionCounter,
+      Value<String>? deviceId,
+      Value<int>? rowid}) {
+    return SyncKnownCompanion(
+      category: category ?? this.category,
+      key: key ?? this.key,
+      versionPhysical: versionPhysical ?? this.versionPhysical,
+      versionCounter: versionCounter ?? this.versionCounter,
+      deviceId: deviceId ?? this.deviceId,
+      rowid: rowid ?? this.rowid,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (category.present) {
+      map['category'] = Variable<String>(category.value);
+    }
+    if (key.present) {
+      map['key'] = Variable<String>(key.value);
+    }
+    if (versionPhysical.present) {
+      map['versionPhysical'] = Variable<int>(versionPhysical.value);
+    }
+    if (versionCounter.present) {
+      map['versionCounter'] = Variable<int>(versionCounter.value);
+    }
+    if (deviceId.present) {
+      map['deviceId'] = Variable<String>(deviceId.value);
+    }
+    if (rowid.present) {
+      map['rowid'] = Variable<int>(rowid.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('SyncKnownCompanion(')
+          ..write('category: $category, ')
+          ..write('key: $key, ')
+          ..write('versionPhysical: $versionPhysical, ')
+          ..write('versionCounter: $versionCounter, ')
+          ..write('deviceId: $deviceId, ')
+          ..write('rowid: $rowid')
+          ..write(')'))
+        .toString();
+  }
+}
+
 class $PlayEventsTable extends PlayEvents
     with TableInfo<$PlayEventsTable, PlayEventRow> {
   @override
@@ -3987,6 +4304,7 @@ abstract class _$MoliaDatabase extends GeneratedDatabase {
   late final $PlaylistsTable playlists = $PlaylistsTable(this);
   late final $PlaylistTracksTable playlistTracks = $PlaylistTracksTable(this);
   late final $SyncTombstonesTable syncTombstones = $SyncTombstonesTable(this);
+  late final $SyncKnownTable syncKnown = $SyncKnownTable(this);
   late final $PlayEventsTable playEvents = $PlayEventsTable(this);
   late final $DownloadsTable downloads = $DownloadsTable(this);
   late final Index idxPlayContextsLastPlayedAt = Index(
@@ -4017,6 +4335,7 @@ abstract class _$MoliaDatabase extends GeneratedDatabase {
         playlists,
         playlistTracks,
         syncTombstones,
+        syncKnown,
         playEvents,
         downloads,
         idxPlayContextsLastPlayedAt,
@@ -5214,6 +5533,185 @@ typedef $$SyncTombstonesTableProcessedTableManager = ProcessedTableManager<
     ),
     SyncTombstone,
     PrefetchHooks Function()>;
+typedef $$SyncKnownTableCreateCompanionBuilder = SyncKnownCompanion Function({
+  required String category,
+  required String key,
+  required int versionPhysical,
+  Value<int> versionCounter,
+  Value<String> deviceId,
+  Value<int> rowid,
+});
+typedef $$SyncKnownTableUpdateCompanionBuilder = SyncKnownCompanion Function({
+  Value<String> category,
+  Value<String> key,
+  Value<int> versionPhysical,
+  Value<int> versionCounter,
+  Value<String> deviceId,
+  Value<int> rowid,
+});
+
+class $$SyncKnownTableFilterComposer
+    extends Composer<_$MoliaDatabase, $SyncKnownTable> {
+  $$SyncKnownTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<String> get category => $composableBuilder(
+      column: $table.category, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get key => $composableBuilder(
+      column: $table.key, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<int> get versionPhysical => $composableBuilder(
+      column: $table.versionPhysical,
+      builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<int> get versionCounter => $composableBuilder(
+      column: $table.versionCounter,
+      builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get deviceId => $composableBuilder(
+      column: $table.deviceId, builder: (column) => ColumnFilters(column));
+}
+
+class $$SyncKnownTableOrderingComposer
+    extends Composer<_$MoliaDatabase, $SyncKnownTable> {
+  $$SyncKnownTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<String> get category => $composableBuilder(
+      column: $table.category, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get key => $composableBuilder(
+      column: $table.key, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<int> get versionPhysical => $composableBuilder(
+      column: $table.versionPhysical,
+      builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<int> get versionCounter => $composableBuilder(
+      column: $table.versionCounter,
+      builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get deviceId => $composableBuilder(
+      column: $table.deviceId, builder: (column) => ColumnOrderings(column));
+}
+
+class $$SyncKnownTableAnnotationComposer
+    extends Composer<_$MoliaDatabase, $SyncKnownTable> {
+  $$SyncKnownTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<String> get category =>
+      $composableBuilder(column: $table.category, builder: (column) => column);
+
+  GeneratedColumn<String> get key =>
+      $composableBuilder(column: $table.key, builder: (column) => column);
+
+  GeneratedColumn<int> get versionPhysical => $composableBuilder(
+      column: $table.versionPhysical, builder: (column) => column);
+
+  GeneratedColumn<int> get versionCounter => $composableBuilder(
+      column: $table.versionCounter, builder: (column) => column);
+
+  GeneratedColumn<String> get deviceId =>
+      $composableBuilder(column: $table.deviceId, builder: (column) => column);
+}
+
+class $$SyncKnownTableTableManager extends RootTableManager<
+    _$MoliaDatabase,
+    $SyncKnownTable,
+    SyncKnownData,
+    $$SyncKnownTableFilterComposer,
+    $$SyncKnownTableOrderingComposer,
+    $$SyncKnownTableAnnotationComposer,
+    $$SyncKnownTableCreateCompanionBuilder,
+    $$SyncKnownTableUpdateCompanionBuilder,
+    (
+      SyncKnownData,
+      BaseReferences<_$MoliaDatabase, $SyncKnownTable, SyncKnownData>
+    ),
+    SyncKnownData,
+    PrefetchHooks Function()> {
+  $$SyncKnownTableTableManager(_$MoliaDatabase db, $SyncKnownTable table)
+      : super(TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$SyncKnownTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$SyncKnownTableOrderingComposer($db: db, $table: table),
+          createComputedFieldComposer: () =>
+              $$SyncKnownTableAnnotationComposer($db: db, $table: table),
+          updateCompanionCallback: ({
+            Value<String> category = const Value.absent(),
+            Value<String> key = const Value.absent(),
+            Value<int> versionPhysical = const Value.absent(),
+            Value<int> versionCounter = const Value.absent(),
+            Value<String> deviceId = const Value.absent(),
+            Value<int> rowid = const Value.absent(),
+          }) =>
+              SyncKnownCompanion(
+            category: category,
+            key: key,
+            versionPhysical: versionPhysical,
+            versionCounter: versionCounter,
+            deviceId: deviceId,
+            rowid: rowid,
+          ),
+          createCompanionCallback: ({
+            required String category,
+            required String key,
+            required int versionPhysical,
+            Value<int> versionCounter = const Value.absent(),
+            Value<String> deviceId = const Value.absent(),
+            Value<int> rowid = const Value.absent(),
+          }) =>
+              SyncKnownCompanion.insert(
+            category: category,
+            key: key,
+            versionPhysical: versionPhysical,
+            versionCounter: versionCounter,
+            deviceId: deviceId,
+            rowid: rowid,
+          ),
+          withReferenceMapper: (p0) => p0
+              .map((e) => (
+                    e.readTable<$SyncKnownTable, SyncKnownData>(table),
+                    BaseReferences<_$MoliaDatabase, $SyncKnownTable,
+                        SyncKnownData>(db, table, e)
+                  ))
+              .toList(),
+          prefetchHooksCallback: null,
+        ));
+}
+
+typedef $$SyncKnownTableProcessedTableManager = ProcessedTableManager<
+    _$MoliaDatabase,
+    $SyncKnownTable,
+    SyncKnownData,
+    $$SyncKnownTableFilterComposer,
+    $$SyncKnownTableOrderingComposer,
+    $$SyncKnownTableAnnotationComposer,
+    $$SyncKnownTableCreateCompanionBuilder,
+    $$SyncKnownTableUpdateCompanionBuilder,
+    (
+      SyncKnownData,
+      BaseReferences<_$MoliaDatabase, $SyncKnownTable, SyncKnownData>
+    ),
+    SyncKnownData,
+    PrefetchHooks Function()>;
 typedef $$PlayEventsTableCreateCompanionBuilder = PlayEventsCompanion Function({
   Value<int> id,
   required String sourceKey,
@@ -5952,6 +6450,8 @@ class $MoliaDatabaseManager {
       $$PlaylistTracksTableTableManager(_db, _db.playlistTracks);
   $$SyncTombstonesTableTableManager get syncTombstones =>
       $$SyncTombstonesTableTableManager(_db, _db.syncTombstones);
+  $$SyncKnownTableTableManager get syncKnown =>
+      $$SyncKnownTableTableManager(_db, _db.syncKnown);
   $$PlayEventsTableTableManager get playEvents =>
       $$PlayEventsTableTableManager(_db, _db.playEvents);
   $$DownloadsTableTableManager get downloads =>

@@ -49,6 +49,7 @@ void main() {
         'playlist_tracks',
         'playlists',
         'sqlite_sequence',
+        'sync_known',
         'sync_tombstones',
       ],
     );
@@ -119,6 +120,13 @@ void main() {
         'addedAt|INTEGER|1|null|0',
         'sortOrder|INTEGER|1|0|0',
         'versionPhysical|INTEGER|1|0|0',
+        'versionCounter|INTEGER|1|0|0',
+        "deviceId|TEXT|1|''|0",
+      ],
+      'sync_known': [
+        'category|TEXT|1|null|1',
+        'key|TEXT|1|null|2',
+        'versionPhysical|INTEGER|1|null|0',
         'versionCounter|INTEGER|1|0|0',
         "deviceId|TEXT|1|''|0",
       ],
