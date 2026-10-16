@@ -57,7 +57,9 @@ Android 调试（模拟器 / 热重载 / 截图）走 `tool/agent/*.sh`，用法
 
 ```bash
 dart run build_runner build               # 重新生成 lib/data/molia_database.g.dart（提交生成物）
-# schema 变更不写迁移：改表 + 提 schemaVersion，升级时整库重建（ADR-0005）
+# v1–v5 测试版库打开即整库重建（数据不保留）；v6 起改表结构必须写迁移：
+#   提 schemaVersion 后跑 `dart run drift_dev make-migrations`（schema 快照 +
+#   迁移测试），用 stepByStep 写增量迁移并保留数据（ADR-0005 修订）
 ```
 
 ## 架构地图

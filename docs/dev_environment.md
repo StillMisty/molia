@@ -14,8 +14,10 @@
 - 本地数据库（最近播放 / 资料库 / 听歌统计）走 drift：原生 SQLite 由
   `sqlite3` 的 Dart build hooks 提供（`flutter test` / 构建时自动生成，无需
   `sqlite3_flutter_libs`）；缺 `xdg-user-dirs` 时 `molia_database.dart` 会回退到
-  应用支持目录。改表结构后重跑 `build_runner`；不做迁移，升级即重建
-  （ADR-0005）。
+  应用支持目录。v1–v5 测试版库打开即整库重建（数据不保留）；**v6 起改表结构
+  必须写迁移**：提 `schemaVersion` 后跑 `build_runner` +
+  `drift_dev make-migrations`（快照 / 迁移测试）并用 `stepByStep` 保留数据
+  （ADR-0005 修订）。
 - **集成测试默认 headless**：`tool/agent/test.sh linux` 无条件套 `xvfb-run -a`
   （并强制 `GDK_BACKEND=x11`、去掉 `WAYLAND_DISPLAY`——只改 DISPLAY 挡不住 GTK 走 WSLg
   Wayland，窗口照样弹）；要肉眼观察加 `--window`。等价裸命令

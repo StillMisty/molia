@@ -3,10 +3,11 @@ import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:molia/data/molia_database.dart';
 
-/// schema 变更 = 整库重建：旧版本号的库被打开时 drop 全部实体再 createAll，
-/// 旧数据不保留（决策与代价见 ADR-0005 修订）。
+/// 迁移基线：v1–v5 测试版库打开即整库重建（drop 全部实体 + createAll，
+/// 旧数据不保留）；v6 起恢复增量迁移承诺，缺迁移步骤必须显式抛错
+/// （决策与代价见 ADR-0005 修订）。
 void main() {
-  /// 预置一个「旧版库」：user_version = 5，且带一张旧形状的表与一行数据。
+  /// 预置一个「测试版旧库」：user_version = 5，且带一张旧形状的表与一行数据。
   NativeDatabase oldVersionDatabase() => NativeDatabase.memory(
         setup: (raw) async {
           raw.execute('PRAGMA user_version = 5;');
@@ -30,7 +31,7 @@ void main() {
         },
       );
 
-  test('旧版本库打开即整库重建：旧数据清空、新 schema 可读写', () async {
+  test('测试版旧库（v5）打开即整库重建：旧数据清空、新 schema 可读写', () async {
     final db = MoliaDatabase(oldVersionDatabase());
     addTearDown(db.close);
 
@@ -93,11 +94,11 @@ void main() {
     );
   });
 
-  test('降级打开同样重建（版本不同即重建，不崩）', () async {
+  test('降级打开同样整库重建（版本不同即重建，不崩）', () async {
     final db = MoliaDatabase(
       NativeDatabase.memory(
         setup: (raw) async {
-          // 一个「未来版本」的库：打开时同样触发重建（onUpgrade 接收降级）。
+          // 一个「未来版本」的库：打开时 to < from，走整库重建分支。
           raw.execute('PRAGMA user_version = 99;');
           raw.execute('''
             CREATE TABLE playlists (
@@ -121,10 +122,34 @@ void main() {
     expect(columns, contains('versionPhysical'));
   });
 
+  test('v6 起缺迁移步骤：版本前进必须抛错，不静默重建', () async {
+    // 子类把 schemaVersion 抬到 7，模拟「改了表但没写迁移」的开发错误：
+    // 打开 v6 库时 onUpgrade(6 → 7) 必须抛 StateError。
+    final db = _FutureVersionDatabase(
+      NativeDatabase.memory(
+        setup: (raw) async => raw.execute('PRAGMA user_version = 6;'),
+      ),
+    );
+    addTearDown(db.close);
+
+    await expectLater(
+      db.select(db.playlists).get(),
+      throwsA(isA<StateError>()),
+    );
+  });
+
   test('外键 pragma 在打开后开启（beforeOpen 契约不变）', () async {
     final db = MoliaDatabase(NativeDatabase.memory());
     addTearDown(db.close);
     final pragma = await db.customSelect('PRAGMA foreign_keys').getSingle();
     expect(pragma.data.values.single, 1);
   });
+}
+
+/// 只抬高 schemaVersion 的测试替身：模拟未接入迁移的下一次结构变更。
+class _FutureVersionDatabase extends MoliaDatabase {
+  _FutureVersionDatabase(super.e);
+
+  @override
+  int get schemaVersion => 7;
 }

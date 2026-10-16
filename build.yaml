@@ -1,13 +1,17 @@
-# drift 代码生成配置。
+# drift 代码生成与迁移工具配置。
 #
 # case_from_dart_to_sql: preserve —— 表/列 SQL 名沿用 Dart getter 的
 # camelCase（drift 默认会转 snake_case）；SQL 文本 / JSON 键（同步、备份）
 # 与本文件里的手写 SQL 都按 camelCase 对齐。
 #
-# 不做 schema 快照 / 迁移代码生成：结构变更 = 整库重建（见 ADR-0005 修订）。
+# databases: 自 v6 基线（清空测试版历史后的新起点）起，schema 快照与
+# `make-migrations` 用于支撑**增量迁移**：v6 之后改表结构必须写迁移、
+# 保留数据（ADR-0005 修订）。v1–v5 测试版库仍走打开即重建。
 targets:
   $default:
     builders:
       drift_dev:
         options:
           case_from_dart_to_sql: preserve
+          databases:
+            molia: lib/data/molia_database.dart
