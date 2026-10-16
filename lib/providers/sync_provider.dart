@@ -225,6 +225,19 @@ class SyncProvider extends ChangeNotifier {
     }
   }
 
+  /// 启动后首轮（音源仓库就绪后调用）：受等级策略约束（省电 / 移动数据暂停
+  /// 时不跑；移动数据下只同步小类别）。
+  Future<void> startupSync() async {
+    final scheduler = _scheduler;
+    if (scheduler != null) {
+      await scheduler.syncStartup();
+      return;
+    }
+    if (_engine.state.enabled) {
+      await _engine.syncNow(trigger: SyncTrigger.startup);
+    }
+  }
+
   /// 数据变更通知（资料库 / 统计 / 音源配置的 changes 事件）。
   ///
   /// 活跃等级去抖 3–5s 后跑一轮；空闲 / 后台 / 省电等级只标记待外发，

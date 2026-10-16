@@ -1,3 +1,6 @@
+import 'dart:async';
+
+import 'package:fake_async/fake_async.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:molia/data/library_repository.dart';
 import 'package:molia/data/settings/settings_keys.dart';
@@ -7,10 +10,12 @@ import 'package:molia/data/sync/adapters/prefs_sync_adapter.dart';
 import 'package:molia/data/sync/sync_adapter.dart';
 import 'package:molia/data/sync/sync_engine.dart';
 import 'package:molia/data/sync/sync_known_store.dart';
+import 'package:molia/data/sync/sync_scheduler.dart';
 import 'package:molia/data/sync/sync_state_store.dart';
 import 'package:molia/domain/models/device_sync.dart';
 import 'package:molia/domain/models/library.dart';
 import 'package:molia/domain/ports/sync_known_store.dart';
+import 'package:molia/services/battery_probe.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'support/memory_database.dart';
@@ -197,8 +202,7 @@ void main() {
     expect(prefs.getString('theme_mode'), 'light');
   });
 
-  test('墓碑清理联动：旧墓碑重放不重新落地（登记保留、复活不撤销）', () async {
-    final db = openMemoryDatabase();
+  test('墓碑清理联动：旧墓碑重放不重新落地（登记保留、复活不撤销）', () async {    final db = openMemoryDatabase();
     addTearDown(db.close);
     final repository = LibraryRepository(
       databaseProvider: () => db,
@@ -242,6 +246,53 @@ void main() {
 
     expect(report!.applied, 0);
     expect((await repository.listHistory()).map((e) => e.songId), contains('s1'));
+  });
+
+  test('空闲等级端到端：不拉取 / 不推送 / 不落地 / 0 字节', () {
+    fakeAsync((async) {
+      // 引擎与调度器共用 fake_async 时钟。
+      DateTime clock() => DateTime.fromMillisecondsSinceEpoch(
+            async.elapsed.inMilliseconds,
+          );
+      final sync = SyncEngine(
+        state: state,
+        stamps: state.stampIssuer,
+        adapters: [adapter],
+        transports: {'lan': transport},
+        clock: clock,
+      );
+      addTearDown(sync.dispose);
+      final scheduler = SyncScheduler(
+        host: sync,
+        state: state,
+        cellularProbe: () async => false,
+        batteryProbe: () async => BatterySnapshot.unknown,
+        isPlaying: () => false,
+        clock: clock,
+      );
+      addTearDown(scheduler.dispose);
+      unawaited(scheduler.start());
+      async.flushMicrotasks();
+
+      // 交互窗口过后进入空闲；整个空闲期（10 + 20 分钟两次唤醒）不做任何
+      // 网络动作：无轮次 = 无广播、无拉取、无推送、无落地。
+      async.elapse(const Duration(minutes: 2));
+      expect(scheduler.level, SyncLevel.idle);
+      async.elapse(const Duration(minutes: 30));
+
+      expect(transport.pullCount, 0);
+      expect(transport.pushed, isEmpty);
+      expect(adapter.applyCalls, 0);
+      expect(sync.lastReport, isNull);
+      // 两次空闲唤醒（10 → 20 分钟）各翻倍一次退避，但没有发任何轮次。
+      expect(scheduler.idleBackoff, const Duration(minutes: 40));
+
+      // 本地变更：活跃去抖后跑一轮（拉取 + 推送各一次）。
+      scheduler.notifyLocalChange();
+      async.elapse(const Duration(seconds: 5));
+      expect(transport.pullCount, 1);
+      expect(transport.pushed, hasLength(1));
+    });
   });
 }
 

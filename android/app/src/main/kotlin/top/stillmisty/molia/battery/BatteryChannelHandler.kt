@@ -6,6 +6,7 @@ import android.content.IntentFilter
 import android.os.BatteryManager
 import android.os.PowerManager
 import io.flutter.plugin.common.BinaryMessenger
+import io.flutter.plugin.common.MethodCall
 import io.flutter.plugin.common.MethodChannel
 
 /**

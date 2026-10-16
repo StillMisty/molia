@@ -205,6 +205,12 @@ class SyncScheduler {
     await _run(SyncTrigger.manual, push: true);
   }
 
+  /// 启动后首轮（受省电与蜂窝暂停策略约束）。
+  Future<void> syncStartup() async {
+    if (!_canRunAutomatically) return;
+    await _run(SyncTrigger.startup, push: true);
+  }
+
   void dispose() {
     _disposed = true;
     _debounceTimer?.cancel();

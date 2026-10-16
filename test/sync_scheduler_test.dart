@@ -164,6 +164,11 @@ void main() {
       async.elapse(const Duration(hours: 3));
       expect(env.host.rounds, isEmpty);
 
+      // 启动后首轮同样被省电等级拦住。
+      unawaited(env.scheduler.syncStartup());
+      async.flushMicrotasks();
+      expect(env.host.rounds, isEmpty);
+
       // 手动同步不受省电限制。
       unawaited(env.scheduler.syncNow());
       async.flushMicrotasks();
