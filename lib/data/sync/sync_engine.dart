@@ -200,23 +200,28 @@ class SyncEngine extends ChangeNotifier {
     if (!_initialized) await init();
     if (!_state.enabled) return _lastReport;
 
-    // 同步进行中到达的请求会被排队：这里循环跑到队列空为止，保证「点一次
-    // 必有一次」；多个入站推送也只合并成额外一轮。
+    // 同步进行中到达的请求会被排队：整段（含补跑）持有 `_syncing`，保证同一时刻
+    // 只有一条轮次在跑；点一次必有一次，多个入站推送也只合并成额外一轮。
+    _syncing = true;
+    notifyListeners();
     var nextTrigger = trigger;
     SyncRoundReport? report;
-    while (true) {
-      report = await _runRound(nextTrigger, push: push);
-      final pending = _pendingTrigger;
-      _pendingTrigger = null;
-      if (pending == null) break;
-      nextTrigger = pending;
+    try {
+      while (true) {
+        report = await _runRound(nextTrigger, push: push);
+        final pending = _pendingTrigger;
+        _pendingTrigger = null;
+        if (pending == null) break;
+        nextTrigger = pending;
+      }
+    } finally {
+      _syncing = false;
+      notifyListeners();
     }
     return report;
   }
 
   Future<SyncRoundReport> _runRound(SyncTrigger trigger, {required bool push}) async {
-    _syncing = true;
-    notifyListeners();
     final startedAt = _nowMs();
     var report = SyncRoundReport(
       trigger: trigger,
@@ -428,7 +433,6 @@ class SyncEngine extends ChangeNotifier {
         error: '$e',
       );
     } finally {
-      _syncing = false;
       _lastReport = report;
       _state.recordRound(report);
       await _state.save();
