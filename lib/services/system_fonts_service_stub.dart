@@ -9,5 +9,13 @@ class SystemFontsService {
 
   static List<String> parseFcListOutput(String output) => const <String>[];
 
+  static List<({String name, String file})> parseWindowsFontRegistryOutput(
+    String output,
+  ) =>
+      const [];
+
+  static List<String> parseWindowsFontRegistryName(String valueName) =>
+      const <String>[];
+
   static void debugResetCache() {}
 }

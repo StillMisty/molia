@@ -62,6 +62,87 @@ DejaVu Sans Mono:style=Book
     });
   });
 
+  group('SystemFontsService.parseWindowsFontRegistryOutput', () {
+    // 真实 `reg query` 输出形状：4 空格列宽的「值名 / REG_SZ / 文件」。
+    const output = r'''
+HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Fonts
+    (Default)    REG_SZ    (value not set)
+    Arial (TrueType)    REG_SZ    arial.ttf
+    Arial Bold (TrueType)    REG_SZ    arialbd.ttf
+    Cambria & Cambria Math (TrueType)    REG_SZ    cambria.ttc
+    Microsoft YaHei & Microsoft YaHei UI (TrueType)    REG_SZ    msyh.ttc
+    Noto Sans CJK JP (OpenType)    REG_SZ    C:\Program Files\Fonts\NotoSansCJKjp.otf
+    Source Han Sans (Type 1)    REG_SZ    sourcehan.pfb
+''';
+
+    test('保留 sfnt 条目（相对 / 绝对路径原样），跳过 (Default) 与非 sfnt', () {
+      final entries = SystemFontsService.parseWindowsFontRegistryOutput(output);
+      expect(entries.map((entry) => entry.file).toList(), [
+        'arial.ttf',
+        'arialbd.ttf',
+        'cambria.ttc',
+        'msyh.ttc',
+        r'C:\Program Files\Fonts\NotoSansCJKjp.otf',
+      ]);
+      expect(entries.first.name, 'Arial (TrueType)');
+      expect(entries.last.name, 'Noto Sans CJK JP (OpenType)');
+    });
+
+    test('空输出 / 只有键名头时返回空列表', () {
+      expect(SystemFontsService.parseWindowsFontRegistryOutput(''), isEmpty);
+      expect(
+        SystemFontsService.parseWindowsFontRegistryOutput(
+          r'HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Fonts'
+          '\n',
+        ),
+        isEmpty,
+      );
+    });
+  });
+
+  group('SystemFontsService.parseWindowsFontRegistryName', () {
+    test('去掉结尾的类型后缀（TrueType / OpenType / 集合 / Type 1）', () {
+      expect(
+        SystemFontsService.parseWindowsFontRegistryName('Arial Bold (TrueType)'),
+        ['Arial Bold'],
+      );
+      expect(
+        SystemFontsService.parseWindowsFontRegistryName('思源黑体 (OpenType)'),
+        ['思源黑体'],
+      );
+      expect(
+        SystemFontsService.parseWindowsFontRegistryName(
+          'Some Font (TrueType Collection)',
+        ),
+        ['Some Font'],
+      );
+      expect(
+        SystemFontsService.parseWindowsFontRegistryName('Old Face (Type 1)'),
+        ['Old Face'],
+      );
+    });
+
+    test('& 拆 TTC 多家族', () {
+      expect(
+        SystemFontsService.parseWindowsFontRegistryName(
+          'Microsoft YaHei & Microsoft YaHei UI (TrueType)',
+        ),
+        ['Microsoft YaHei', 'Microsoft YaHei UI'],
+      );
+    });
+
+    test('无后缀名保留原样；只剩后缀返回空', () {
+      expect(
+        SystemFontsService.parseWindowsFontRegistryName('Bahnschrift'),
+        ['Bahnschrift'],
+      );
+      expect(
+        SystemFontsService.parseWindowsFontRegistryName('(TrueType)'),
+        isEmpty,
+      );
+    });
+  });
+
   group('SystemFontsService.listFamilies（真实环境守卫）', () {
     test('Linux 且有 fc-list 时能枚举到字体（否则跳过）', () async {
       if (!Platform.isLinux) return;
@@ -74,6 +155,19 @@ DejaVu Sans Mono:style=Book
       expect(families, equals(List<String>.of(families)..sort(
             (a, b) => a.toLowerCase().compareTo(b.toLowerCase()),
           )));
+    });
+
+    test('Windows 能枚举到字体（其它平台跳过）', () async {
+      if (!Platform.isWindows) return;
+
+      SystemFontsService.debugResetCache();
+      final families = await SystemFontsService.listFamilies();
+      expect(families, isNotEmpty);
+      expect(families, equals(List<String>.of(families)..sort(
+            (a, b) => a.toLowerCase().compareTo(b.toLowerCase()),
+          )));
+      // 文件解析取的是真家族名：注册表值名里的样式后缀不应出现在列表里。
+      expect(families.where((name) => name.endsWith(' (TrueType)')), isEmpty);
     });
   });
 }

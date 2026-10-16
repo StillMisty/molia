@@ -47,7 +47,9 @@
     会报「Error waiting for a debug connection」；要肉眼观察用 `test.sh linux --window`。
 12. **不内置字体资产**：界面与海报统一使用设备字体，用户可在设置中切换「应用字体」
     （枚举实现见 `lib/services/system_fonts_service*.dart`：Android 解析系统
-    `fonts.xml`、iOS 走 `UIFont.familyNames` 通道、Linux 调 `fc-list`），海报页可
+    `fonts.xml`、iOS 走 `UIFont.familyNames` 通道、Linux 调 `fc-list`、Windows
+    扫系统/用户字体目录 + 注册表后解析字体 `name` 表取家族名——注册表值名带样式
+    后缀（`Arial Bold`），不能直接当家族名），海报页可
     独立覆盖（`PosterFontStore`）。不要再向 `pubspec.yaml` 的 `fonts:` 或
     `assets/fonts/` 添加字体，保持包体精简。
 13. **发布体积**：新增资产前先评估体积；不要内置 CJK 字体（系统字体 + 用户安装）。
