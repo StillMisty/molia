@@ -47,12 +47,15 @@
     会报「Error waiting for a debug connection」；要肉眼观察用 `test.sh linux --window`。
 12. **不内置字体资产**：界面与海报统一使用设备字体，用户可在设置中切换「应用字体」
     （枚举实现见 `lib/services/system_fonts_service*.dart`：Android 解析系统
-    `fonts.xml`、iOS 走 `UIFont.familyNames` 通道、Linux 调 `fc-list`），海报页可
+    `fonts.xml`、iOS 走 `UIFont.familyNames` 通道、Linux 调 `fc-list`、Windows
+    扫系统/用户字体目录 + 注册表后解析字体 `name` 表取家族名——注册表值名带样式
+    后缀（`Arial Bold`），不能直接当家族名），海报页可
     独立覆盖（`PosterFontStore`）。不要再向 `pubspec.yaml` 的 `fonts:` 或
     `assets/fonts/` 添加字体，保持包体精简。
 13. **发布体积**：新增资产前先评估体积；不要内置 CJK 字体（系统字体 + 用户安装）。
     Android 启动图标自 2026-10 起为手绘矢量（`drawable/ic_launcher_foreground.xml`，
-    维护方式见 `icons_launcher.yaml` 头注释），该工具现在只生成 iOS 图标；
+    维护方式见 `icons_launcher.yaml` 头注释），该工具现在只生成 iOS 与 Windows 图标
+    （Windows 的 `app_icon.ico` 同时是 exe/任务栏/安装器/快捷方式图标，不要手改）；
     `minSdk=37` 下传统 mipmap 密度图无意义，已全部移除，不要用工具再生成。
 14. **省流模式的网络检测**：Android 8+ 后台不广播网络变化，`_MyThemedAppState` 在
     `resumed` 时调 `DataSaverService.refreshConnectivity()`，不要删除；Web 的
@@ -235,3 +238,24 @@
     另：**模拟器不需要该 entitlement，真机才需要**——模拟器上的广播「看起来正常」
     不能作为验收证据；entitlements 文件与启用步骤见 `ios/Runner/Runner.entitlements`
     注释（获批前不要把 `CODE_SIGN_ENTITLEMENTS` 接上去，会让签名失败）。
+38. **Linux 桌面集成是打包资产，不是运行期代码**：`.desktop` 与 hicolor 图标在
+    `linux/packaging/`（`release.yml` 的 linux job 拷进 tarball，用户解压后跑
+    `install.sh` 装到 `~/.local/share`）。`.desktop` 文件名必须与
+    `linux/CMakeLists.txt` 的 `APPLICATION_ID` 一致（Wayland 靠 app_id ↔ 文件名
+    匹配 dock 图标），`Icon=` 必须与 hicolor 文件名一致；不要手改那批 PNG，
+    再生成命令见 `linux/packaging/README.md`；X11 的运行期窗口图标走
+    `assets/icons/app_icon.png`（`WindowChrome` 调 window_manager 的 `setIcon`，
+    与 hicolor 集合同源），Wayland 下该调用无效也不报错。契约由
+    `test/packaging/linux_desktop_test.dart` 守住。
+
+39. **桌面歌词位置样本不能按到达时刻重设基准**：位置样本经 Dart（≤4Hz）→ 通道 →
+    原生主线程到达，投递延迟随宿主负载波动；旧实现每次采样都 `base = 样本;
+    baseTime = now`，把这段抖动 1:1 变成可见回跳（忽快忽慢）。现在由
+    `LyricClock` 承担时基：先按 `positionAtEpochMs`（Dart 侧「该位置生效的墙上
+    时刻」，两端同设备壁钟相减即延迟，夹取上限防时钟调整）外推，再按相位误差
+    分档收敛（≤100ms 10% / 100–300ms 20% / >300ms 落位）。两条不要改回去：
+    ① 时基必须由宿主 `LyricsOverlayView` 持有（切行重建 `CurrentLineView` 不重锚）；
+    ② 暂停 / seek / 换曲才允许硬落位；③ 暂停时**不做**延迟补偿（位置不推进，
+    外推会把暂停样本凭空推后一个传输延迟，实测 188ms）。诊断：
+    `adb shell setprop log.tag.MoliaLyrics DEBUG`（默认级别静默）后看
+    `err=/transit=/snap=/frames=` 打点（`frames=0` 说明帧循环没跑）。

@@ -51,6 +51,22 @@ class WindowChrome {
     );
     await windowManager.show();
     await windowManager.focus();
+    await _applyLinuxWindowIcon();
+  }
+
+  /// Linux 运行期窗口图标（X11 的 WM_HINTS；Wayland 没有窗口图标协议，
+  /// dock 图标靠随包安装的 .desktop，见 `linux/packaging/README.md`）。
+  ///
+  /// window_manager 的 Dart 侧把参数前缀到 `data/flutter_assets/`（发布包与
+  /// 调试 bundle 都存在该路径）；插件文档标着 windows 专用，但 Linux 实现
+  /// 走 `gtk_window_set_icon_from_file`，此处按实现使用。
+  static Future<void> _applyLinuxWindowIcon() async {
+    if (!Platform.isLinux) return;
+    try {
+      await windowManager.setIcon('assets/icons/app_icon.png');
+    } catch (_) {
+      // 图标失败不影响窗口本身：忽略（Wayland / 资产缺失时不致命）。
+    }
   }
 
   static Future<void> minimize() async {

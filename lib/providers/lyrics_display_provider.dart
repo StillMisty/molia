@@ -66,6 +66,11 @@ class LyricsDisplayProvider extends ChangeNotifier {
   final Map<String, LyricsPresentation> _applied = {};
 
   Duration _position = Duration.zero;
+
+  /// [_position] 值生效（被接收）的墙上时刻：随位置通道一起更新，投送时
+  /// 作为 `positionAtEpochMs` 下发，供输出端补偿传输延迟。
+  DateTime? _positionStamp;
+
   Track? _currentTrack;
   bool _isPlaying = false;
   LyricsState _lyricsState = LyricsState.idle;
@@ -137,6 +142,7 @@ class LyricsDisplayProvider extends ChangeNotifier {
   void updatePosition(Duration position) {
     if (_disposed || position == _position) return;
     _position = position;
+    _positionStamp = DateTime.now();
     _dispatch();
   }
 
@@ -179,6 +185,23 @@ class LyricsDisplayProvider extends ChangeNotifier {
                 settings.desktopMaxLines,
           )
         : const TrackedLine();
+    final scrollFollowsSinging =
+        settings.desktopScrollMode == DesktopScrollMode.followSinging;
+    var lineStartMs = tracked.lineStartMs;
+    var lineEndMs = tracked.lineEndMs;
+    if (!scrollFollowsSinging) {
+      // 匀速滚动：跨度取「首词开始 → 末词结束」（有逐字数据时），
+      // 否则沿用行时间轴；词轴缺失 / 非法时回落到行时间轴。
+      final words = tracked.words;
+      if (words != null && words.isNotEmpty) {
+        final start = words.first.start.inMilliseconds;
+        final end = words.last.end.inMilliseconds;
+        if (end > start) {
+          lineStartMs = start;
+          lineEndMs = end;
+        }
+      }
+    }
     return LyricsPresentation(
       trackId: track.id.uri,
       title: track.title,
@@ -190,8 +213,11 @@ class LyricsDisplayProvider extends ChangeNotifier {
       words: tracked.words,
       // 与行跟踪同一有效位置（叠加歌词偏移），逐字渐染与之对齐。
       positionMs: _position.inMilliseconds + settings.offsetMs,
-      lineStartMs: tracked.lineStartMs,
-      lineEndMs: tracked.lineEndMs,
+      positionAtEpochMs:
+          (_positionStamp ?? DateTime.now()).millisecondsSinceEpoch,
+      scrollFollowsSinging: scrollFollowsSinging,
+      lineStartMs: lineStartMs,
+      lineEndMs: lineEndMs,
     );
   }
 

@@ -229,6 +229,10 @@ jobs:
           stage="dist/molia-$v-linux-x64"
           mkdir -p "$stage"
           cp -a build/linux/x64/release/bundle/. "$stage"/
+          # 桌面集成资产（.desktop + hicolor 图标 + 安装脚本，布局同 XDG；
+          # 维护说明见 linux/packaging/README.md）。
+          cp -a linux/packaging/share "$stage"/share
+          install -m 0755 linux/packaging/install.sh linux/packaging/uninstall.sh "$stage"/
           tar -czf "dist/molia-$v-linux-x64.tar.gz" -C dist "molia-$v-linux-x64"
           rm -rf "$stage"
       - uses: actions/upload-artifact@v7

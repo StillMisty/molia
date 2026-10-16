@@ -1424,6 +1424,18 @@ class AppLocalizationsZh extends AppLocalizations {
   String get lyricsDesktopAnimation => '行切换动画';
 
   @override
+  String get lyricsDesktopScrollMode => '长行滚动';
+
+  @override
+  String get lyricsDesktopScrollModeSubtitle => '跟随演唱：文本跟着高亮走；匀速：整行速度恒定';
+
+  @override
+  String get lyricsDesktopScrollFollow => '跟随演唱';
+
+  @override
+  String get lyricsDesktopScrollConstant => '匀速滚动';
+
+  @override
   String get lyricsDesktopBehaviorSection => '行为与控制条';
 
   @override

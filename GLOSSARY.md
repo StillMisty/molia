@@ -145,7 +145,13 @@
 - **Word timing（逐字时间轴）** — `lib/models/lyric_line.dart`：`LyricLine.words`
   （`LyricWord`：绝对起止 + 文本）由 `lxlyric` 的 `<相对ms,时长ms>` 解析并对齐主行；
   歌词页当前行用 `KaraokeLyricText` 词级高亮（已唱 primary / 未唱 onSurface，
-  采样间线性补间），桌面歌词 / 通知 / 蓝牙输出仍按行。
+  采样间线性补间），桌面歌词同样按词渐染（原生 span），通知 / 蓝牙输出按行。
+- **Desktop lyric clock（桌面歌词位置时钟）** — `android/.../lyrics/LyricClock.kt`：
+  位置样本只做纠偏——先按 `positionAtEpochMs`（Dart 侧「该位置生效的墙上时刻」）
+  补偿传输延迟，再按误差分档收敛（≤100ms 10% / 100–300ms 20% / >300ms 落位）；
+  逐帧推进与位移跟随（`LyricSpring` 临界阻尼）由宿主 `LyricsOverlayView` 的帧循环
+  统一负责，时基不随行视图重建。映射方式由 Dart 决定（`desktop.scrollMode`：
+  跟随演唱 / 匀速），原生只执行。
 - **Lyrics matching（歌词匹配）** — `lib/services/lyrics/lyrics_match.dart`：
   名字搜索候选按时长 ±5s、归一化歌名、歌手包含与版本词（live/伴奏/翻唱…）挑选；
   全部不匹配时回退首个候选（保持旧行为下限）。判定实现与换源共用

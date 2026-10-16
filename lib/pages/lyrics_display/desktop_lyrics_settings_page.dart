@@ -263,6 +263,24 @@ class DesktopLyricsSettingsPage extends StatelessWidget {
                 value: settings.desktopShowToggleAnimation,
                 onChanged: settings.setDesktopShowToggleAnimation,
               ),
+              SettingsChoiceRow<DesktopScrollMode>(
+                key: const Key('desktopScrollModeRow'),
+                icon: Icons.keyboard_double_arrow_right_rounded,
+                title: l10n.lyricsDesktopScrollMode,
+                subtitle: l10n.lyricsDesktopScrollModeSubtitle,
+                value: settings.desktopScrollMode,
+                options: [
+                  (
+                    DesktopScrollMode.followSinging,
+                    l10n.lyricsDesktopScrollFollow,
+                  ),
+                  (
+                    DesktopScrollMode.constant,
+                    l10n.lyricsDesktopScrollConstant,
+                  ),
+                ],
+                onChanged: settings.setDesktopScrollMode,
+              ),
               SettingsSwitchTile(
                 icon: Icons.visibility_off_rounded,
                 title: l10n.lyricsDesktopHideOnPause,

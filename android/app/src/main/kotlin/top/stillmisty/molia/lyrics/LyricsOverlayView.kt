@@ -13,6 +13,7 @@ import android.text.Spanned
 import android.text.TextPaint
 import android.text.TextUtils
 import android.text.style.CharacterStyle
+import android.util.Log
 import android.util.TypedValue
 import android.view.Gravity
 import android.view.MotionEvent
@@ -113,7 +114,12 @@ internal data class OverlayPresentation(
     val hasLyrics: Boolean = false,
     /** 本次投送时的有效播放位置（已叠加偏移）。 */
     val positionMs: Long = 0L,
-    /** 当前行时间轴（-1 = 未知）：无逐字数据时横向滚动按行进度线性外推。 */
+    /** [positionMs] 生效的墙上时刻（毫秒；0 = 未知）：延迟补偿用。 */
+    val positionAtEpochMs: Long = 0L,
+    /** 横向滚动映射：true = 跟随已唱边界（逐字）；false = 按行跨度线性匀速。 */
+    val scrollFollowsSinging: Boolean = true,
+    /** 横向滚动的线性映射跨度（-1 = 未知）：无逐字数据时是行时间轴，
+     *  匀速模式下 Dart 侧已换成「首词开始 → 末词结束」。 */
     val lineStartMs: Long = -1L,
     val lineEndMs: Long = -1L,
     /** 当前行的逐字时间轴（null = 无逐字数据，按整行着色）。 */
@@ -141,6 +147,9 @@ internal data class OverlayPresentation(
                 isPlaying = map["isPlaying"] as? Boolean ?: false,
                 hasLyrics = map["hasLyrics"] as? Boolean ?: false,
                 positionMs = (map["positionMs"] as? Number)?.toLong() ?: 0L,
+                positionAtEpochMs =
+                    (map["positionAtEpochMs"] as? Number)?.toLong() ?: 0L,
+                scrollFollowsSinging = map["scrollFollowsSinging"] as? Boolean ?: true,
                 lineStartMs = (map["lineStartMs"] as? Number)?.toLong() ?: -1L,
                 lineEndMs = (map["lineEndMs"] as? Number)?.toLong() ?: -1L,
                 words = words,
@@ -154,23 +163,22 @@ private val EASE_DECELERATE = PathInterpolator(0.05f, 0.7f, 0.1f, 1f)
 private val EASE_ACCELERATE = PathInterpolator(0.3f, 0f, 0.8f, 0.15f)
 
 /**
- * 当前行视图：逐字渐染 + 跟随进度的横向滚动。
+ * 当前行视图：逐字渐染 + 横向滚动目标计算。
  *
  * - 有逐字时间轴时按词插值 playedColor；无逐字数据时整行 playedColor；
- * - 进度基准来自 Dart 侧下发的位置（跟随播放位置通道，≤4Hz），词内 / 行内
- *   用帧回调线性外推，每次收到新位置就重新对齐（暂停 / seek 直接落位）；
+ * - 位置时基不在这里：由宿主 [LyricsOverlayView] 持有 [LyricClock]，每帧
+ *   把已纠偏的位置传进来（[applyAt]）。切行重建视图不会打断时基；
  * - 横向滚动按「已唱边界在整行中的比例」映射到溢出宽度：行首即动、行尾
- *   正好滚到位、速度连续；真实文本宽没有超过视图宽时恒不滚动（不使用
- *   原生 marquee：暂停时滚动随进度一起停住）；
- * - 偏移经 [onGroupOffset] 交给宿主，翻译 / 罗马音与主行作为同一滚动组
- *   同步移动、同步裁切。
- * 颜色用可变 color span 而不是自绘：更新颜色不触发重新排版。
+ *   正好滚到位；匀速模式改按 [lineStartMs]/[lineEndMs] 线性映射。真实文本
+ *   宽没有超过视图宽时恒不滚动；
+ * - 词边界 x 坐标按 Layout 缓存（每帧只剩一次查询 + 插值），颜色用可变
+ *   color span 而不是自绘：更新颜色不触发重新排版。
  */
 @SuppressLint("ViewConstructor")
 internal class CurrentLineView(context: Context) : TextView(context) {
 
-    /** 组滚动回调：主行按进度算出的目标偏移交给宿主统一应用到滚动组。 */
-    var onGroupOffset: ((Float) -> Unit)? = null
+    /** 尺寸 / Layout 变化回调：宿主据此补一帧（偏移与裁剪都依赖视图宽）。 */
+    var onLayoutChanged: (() -> Unit)? = null
 
     private var words: List<OverlayWord> = emptyList()
     private var spans: List<MutableColorSpan> = emptyList()
@@ -178,18 +186,11 @@ internal class CurrentLineView(context: Context) : TextView(context) {
     private var unplayedColor = 0xB3FFFFFF.toInt()
     private var lineStartMs = -1L
     private var lineEndMs = -1L
-    private var basePositionMs = 0L
-    private var baseUptimeMs = 0L
-    private var playing = false
-    private var tickScheduled = false
+    private var scrollFollowsSinging = true
 
-    private val tick = Runnable {
-        tickScheduled = false
-        val estimated = estimateMs()
-        applyColors(estimated)
-        applyScroll(estimated)
-        if (shouldKeepTicking(estimated)) scheduleTick()
-    }
+    /** 词边界 x 缓存：`words[i]` 起点 + 末尾哨兵，长度 = words.size + 1。 */
+    private var wordEdges: FloatArray? = null
+    private var wordEdgesLayout: Layout? = null
 
     /** 绑定/更新词轴、行时间轴与配色；词轴变化时重建 span。 */
     fun bind(
@@ -198,51 +199,42 @@ internal class CurrentLineView(context: Context) : TextView(context) {
         unplayedColor: Int,
         lineStartMs: Long,
         lineEndMs: Long,
+        scrollFollowsSinging: Boolean,
     ) {
         this.playedColor = playedColor
         this.unplayedColor = unplayedColor
         this.lineStartMs = lineStartMs
         this.lineEndMs = lineEndMs
+        this.scrollFollowsSinging = scrollFollowsSinging
         val next = words ?: emptyList()
         if (next != this.words) {
             this.words = next
             rebuildSpans()
         }
-        val estimated = estimateMs()
-        applyColors(estimated)
-        applyScroll(estimated)
     }
 
-    /** 对齐到新的播放位置与播放态（每次收到投送都会调用）。 */
-    fun syncPosition(positionMs: Long, isPlaying: Boolean) {
-        basePositionMs = positionMs
-        baseUptimeMs = SystemClock.elapsedRealtime()
-        playing = isPlaying
-        val estimated = estimateMs()
-        applyColors(estimated)
-        applyScroll(estimated)
-        if (shouldKeepTicking(estimated)) scheduleTick()
+    /** 按位置着色，并返回当前帧的滚动目标偏移（像素）。 */
+    fun applyAt(positionMs: Long): Float {
+        applyColors(positionMs)
+        return targetOffset(positionMs)
+    }
+
+    /** 该行是否还需要继续逐帧刷新（行内还有随时间变化的内容）。 */
+    fun keepTicking(positionMs: Long): Boolean {
+        val end = max(lineEndMs, words.lastOrNull()?.endMs ?: -1L)
+        if (end <= 0 || positionMs >= end) return false
+        // 无逐字数据且文本不超宽时，行内没有任何随时间变化的内容（不排帧）。
+        return words.isNotEmpty() || measuredTextWidth() > width
     }
 
     override fun onSizeChanged(w: Int, h: Int, oldw: Int, oldh: Int) {
         super.onSizeChanged(w, h, oldw, oldh)
-        // 首次布局 / 宽度变化后补一次滚动（bind 时布局可能还没完成）。
-        post { applyScroll(estimateMs()) }
-    }
-
-    private fun estimateMs(): Long {
-        if (!playing) return basePositionMs
-        val elapsed = SystemClock.elapsedRealtime() - baseUptimeMs
-        return basePositionMs + max(0L, elapsed)
-    }
-
-    private fun shouldKeepTicking(estimatedMs: Long): Boolean {
-        if (!playing) return false
-        val end = max(lineEndMs, words.lastOrNull()?.endMs ?: -1L)
-        return end > 0 && estimatedMs < end
+        // 首次布局 / 宽度变化后补一帧（bind 时布局可能还没完成）。
+        onLayoutChanged?.invoke()
     }
 
     private fun rebuildSpans() {
+        wordEdges = null
         if (words.isEmpty()) {
             spans = emptyList()
             return
@@ -277,21 +269,17 @@ internal class CurrentLineView(context: Context) : TextView(context) {
         invalidate()
     }
 
-    private fun applyScroll(estimatedMs: Long) {
-        onGroupOffset?.invoke(groupScrollOffset(estimatedMs))
-    }
-
     /**
-     * 目标组偏移：真实文本宽超出视图宽时，按「已唱比例」把文本滚到对应
+     * 目标偏移：真实文本宽超出视图宽时，按「已唱比例」把文本滚到对应
      * 位置——行首即动、行尾正好滚到位；没有超出视图时恒为 0。
      */
-    private fun groupScrollOffset(estimatedMs: Long): Float {
+    private fun targetOffset(positionMs: Long): Float {
         val viewWidth = width.toFloat()
         if (viewWidth <= 0f) return 0f
         val textWidth = measuredTextWidth()
         val overflow = textWidth - viewWidth
         if (overflow <= 0f) return 0f
-        return (playedFraction(estimatedMs) * overflow).coerceIn(0f, overflow)
+        return (playedFraction(positionMs) * overflow).coerceIn(0f, overflow)
     }
 
     /** 单行真实文本宽：Layout 的行宽；未布局时退回 Paint 测量。 */
@@ -305,61 +293,63 @@ internal class CurrentLineView(context: Context) : TextView(context) {
     }
 
     /**
-     * 已唱比例（0..1）：有逐字词轴时取「已唱边界」在整行中的相对位置；
-     * 无词轴时按行时间轴线性外推；两者都没有时为 0。
+     * 已唱比例（0..1）：
+     * - 跟随演唱（默认）：有词轴时取「已唱边界」在整行中的相对位置；
+     * - 匀速：按 [lineStartMs]/[lineEndMs] 线性推进（无词轴时恒按此口径）；
+     * - 两者都缺（无词轴且无行时间轴）时为 0，不滚动。
      */
-    private fun playedFraction(estimatedMs: Long): Float {
-        if (words.isEmpty()) {
+    private fun playedFraction(positionMs: Long): Float {
+        if (!scrollFollowsSinging || words.isEmpty()) {
             if (lineStartMs < 0 || lineEndMs <= lineStartMs) return 0f
-            return ((estimatedMs - lineStartMs).toFloat() / (lineEndMs - lineStartMs))
+            return ((positionMs - lineStartMs).toFloat() / (lineEndMs - lineStartMs))
                 .coerceIn(0f, 1f)
         }
-        val current = layout ?: return 0f
-        val textLength = text?.length ?: 0
-        if (textLength <= 0) return 0f
-        val startX = current.getPrimaryHorizontal(0)
-        val endX = current.getPrimaryHorizontal(textLength)
-        val span = endX - startX
+        val edges = wordEdgeX() ?: return 0f
+        val span = edges[edges.size - 1] - edges[0]
         if (span <= 0f) return 0f
-        val edgeX = playedEdgeX(current, textLength, estimatedMs)
-        return ((edgeX - startX) / span).coerceIn(0f, 1f)
+        val edgeX = playedEdgeX(edges, positionMs)
+        return ((edgeX - edges[0]) / span).coerceIn(0f, 1f)
     }
 
     /** 已唱边界在 Layout 坐标系中的 x（逐字词轴，词内线性插值）。 */
-    private fun playedEdgeX(layout: Layout, textLength: Int, estimatedMs: Long): Float {
-        var index = words.size
-        var fraction = 0f
+    private fun playedEdgeX(edges: FloatArray, positionMs: Long): Float {
         for (i in words.indices) {
             val word = words[i]
-            if (estimatedMs >= word.endMs) continue
-            index = i
-            fraction = if (estimatedMs <= word.startMs || word.endMs <= word.startMs) {
+            if (positionMs >= word.endMs) continue
+            val fraction = if (positionMs <= word.startMs || word.endMs <= word.startMs) {
                 0f
             } else {
-                (estimatedMs - word.startMs).toFloat() / (word.endMs - word.startMs)
+                (positionMs - word.startMs).toFloat() / (word.endMs - word.startMs)
             }
-            break
+            return edges[i] + (edges[i + 1] - edges[i]) * fraction
         }
-        if (index >= words.size) return layout.getPrimaryHorizontal(textLength)
-        var charStart = 0
-        for (i in 0 until index) charStart += words[i].text.length
-        val charEnd = (charStart + words[index].text.length).coerceAtMost(textLength)
-        val startX = layout.getPrimaryHorizontal(charStart.coerceAtMost(textLength))
-        val endX = layout.getPrimaryHorizontal(charEnd)
-        return startX + (endX - startX) * fraction
+        return edges[edges.size - 1]
     }
 
-    private fun scheduleTick() {
-        if (!tickScheduled) {
-            tickScheduled = true
-            postOnAnimation(tick)
+    /**
+     * 词边界 x（按 Layout 缓存）：词轴或排版变化才重算，逐帧只做一次查表。
+     *
+     * 未布局时返回 null（宿主下一帧会再补）；词长拼接与整行文本一致由
+     * Dart 侧保证，这里仍夹取到文本长度防御异常数据。
+     */
+    private fun wordEdgeX(): FloatArray? {
+        val current = layout ?: return null
+        if (current.lineCount <= 0) return null
+        val cached = wordEdges
+        if (cached != null && wordEdgesLayout === current && cached.size == words.size + 1) {
+            return cached
         }
-    }
-
-    override fun onDetachedFromWindow() {
-        removeCallbacks(tick)
-        tickScheduled = false
-        super.onDetachedFromWindow()
+        val length = text?.length ?: 0
+        val edges = FloatArray(words.size + 1)
+        var charIndex = 0
+        edges[0] = current.getPrimaryHorizontal(0)
+        for (i in words.indices) {
+            charIndex = (charIndex + words[i].text.length).coerceAtMost(length)
+            edges[i + 1] = current.getPrimaryHorizontal(charIndex)
+        }
+        wordEdges = edges
+        wordEdgesLayout = current
+        return edges
     }
 
     /** 可变前景色 span：只改颜色不触发排版。 */
@@ -385,8 +375,11 @@ internal class CurrentLineView(context: Context) : TextView(context) {
  * 桌面歌词悬浮视图：拖动移动、点按呼出控制条、锁定后不可触摸（窗口级）。
  *
  * - 文本策略（暂停回退 / 无歌词回退 / 行数 / 翻译开关）由 Dart 侧决定；
- * - 当前行用 [CurrentLineView]（逐字渐染 + 跟随进度滚动），翻译 / 罗马音
- *   与之同组同步滚动；其余行整行着色、超宽省略；
+ * - 当前行用 [CurrentLineView]（逐字渐染 + 横向滚动），翻译 / 罗马音与之同组
+ *   同步滚动；其余行整行着色、超宽省略；
+ * - 位置时基由宿主统一持有（[LyricClock]）：样本只做纠偏（含传输延迟补偿），
+ *   逐帧推进 + 位移跟随（[LyricSpring]）在帧循环里完成——切行重建视图不重锚，
+ *   暂停 / seek 直接落位；
  * - 行内容变化做「整块滚入滚出」过渡（旧块上移滚出、新块自下滚入）；
  * - 同结构更新（逐字进度 / 播放态）不重建视图，不打断滚动与动画；
  * - 控制条是 M3E 观感的 pill（圆角容器 + 图标按钮 + 状态层），
@@ -420,6 +413,25 @@ internal class LyricsOverlayView(
 
     /** 当前行的滚动组：主行 + 翻译 / 罗马音（宿主统一应用组偏移）。 */
     private var scrollGroup = mutableListOf<TextView>()
+
+    /**
+     * 播放位置时钟：宿主持有（不随行视图重建）——切行不打断时基。
+     * 每次投送只做一次样本纠偏，逐帧推进在 [frame] 里完成。
+     */
+    private val clock = LyricClock()
+
+    /** 滚动位移的临界阻尼跟随：目标每帧可动，输出速度连续。 */
+    private val spring = LyricSpring()
+
+    private var frameScheduled = false
+
+    private val frame = object : Runnable {
+        override fun run() {
+            frameScheduled = false
+            applyFrame(advance = true)
+            if (shouldKeepFrames()) scheduleFrame()
+        }
+    }
 
     /**
      * 裁剪视口：内容列在其中做「滚入滚出」过渡，超出部分裁掉。
@@ -497,11 +509,120 @@ internal class LyricsOverlayView(
     fun setFrozen(value: Boolean) {
         if (frozen == value) return
         frozen = value
-        if (!value) {
-            pending?.let {
-                pending = null
-                render(it, animate = false, force = true)
-            }
+        if (value) {
+            // 冻结关（freezeOnScreenOff=false）保持原行为：息屏照常重绘。
+            if (config.freezeOnScreenOff) stopFrames()
+            return
+        }
+        val next = pending
+        if (next != null) {
+            pending = null
+            render(next, animate = false, force = true)
+            return
+        }
+        syncClock()
+        applyFrame(advance = false)
+        if (shouldKeepFrames()) scheduleFrame()
+    }
+
+    override fun onDetachedFromWindow() {
+        stopFrames()
+        super.onDetachedFromWindow()
+    }
+
+    // --- 帧循环（时钟推进 + 位移跟随 + 着色） ---
+
+    /** 是否处于冻结态（息屏 + 冻结开）：冻结期间不排帧、不重绘。 */
+    private val isFrozen: Boolean
+        get() = frozen && config.freezeOnScreenOff
+
+    private fun scheduleFrame() {
+        if (frameScheduled || isFrozen) return
+        frameScheduled = true
+        postOnAnimation(frame)
+    }
+
+    private fun stopFrames() {
+        removeCallbacks(frame)
+        frameScheduled = false
+    }
+
+    /**
+     * 一帧：推进时钟 → 行视图着色并给出目标偏移 → 弹簧跟随 → 应用组位移。
+     *
+     * [advance] 为 false 时用当前时钟值直接落位（bind / 尺寸变化 / 暂停），
+     * 不做推进也不做过渡——这些时刻本来就不该有惯性。
+     */
+    private fun applyFrame(advance: Boolean) {
+        if (isFrozen) return
+        val now = SystemClock.elapsedRealtime()
+        val positionMs = if (advance) clock.advance(now) else clock.currentMs
+        val line = currentLineView
+        if (line == null) {
+            spring.snap(0f, now)
+            applyGroupScroll(0f)
+            return
+        }
+        val target = line.applyAt(positionMs)
+        val offset = if (advance) spring.advance(target, now) else spring.snap(target, now)
+        applyGroupScroll(offset)
+    }
+
+    /** 还要不要继续排帧：逐字刷新未结束，或位移尚未收敛。 */
+    private fun shouldKeepFrames(): Boolean {
+        if (isFrozen) return false
+        if (!spring.settled) return true
+        if (!current.isPlaying) return false
+        return currentLineView?.keepTicking(clock.currentMs) ?: false
+    }
+
+    /**
+     * 把最新投送对齐进时钟：硬同步（首次 / 暂停 / seek 等不连续）由时钟判定，
+     * 连续播放只留相位误差交给逐帧纠偏。
+     *
+     * 诊断：`adb shell setprop log.tag.MoliaLyrics DEBUG` 后，相位误差超过
+     * [CLOCK_LOG_ERROR_MS] 或发生硬同步时会打点（默认级别下静默）。
+     */
+    private fun syncClock() {
+        val transit = transitMsOf(current.positionAtEpochMs)
+        val snapped = clock.sync(
+            sampleMs = current.positionMs,
+            transitMs = transit,
+            isPlaying = current.isPlaying,
+            nowUptimeMs = SystemClock.elapsedRealtime(),
+        )
+        if ((snapped || abs(clock.lastErrorMs) >= CLOCK_LOG_ERROR_MS) &&
+            Log.isLoggable(CLOCK_LOG_TAG, Log.DEBUG)
+        ) {
+            Log.d(
+                CLOCK_LOG_TAG,
+                "err=${clock.lastErrorMs}ms transit=${transit}ms snap=$snapped " +
+                    "frames=${clock.framesSinceSample} dt=${clock.lastStepMs}ms " +
+                    "sample=${current.positionMs} estimated=${clock.currentMs}",
+            )
+        }
+        clock.resetStepStats()
+    }
+
+    /**
+     * 样本延迟：Dart 侧「该位置生效的墙上时刻」到此刻的毫秒差。
+     *
+     * 两端同设备壁钟，直接相减即可；夹取上限防御时钟调整 / 异常数据。
+     * 补偿后固定延迟不再进入时基，剩下的抖动由 [LyricClock] 低通。
+     */
+    private fun transitMsOf(positionAtEpochMs: Long): Long {
+        if (positionAtEpochMs <= 0L) return 0L
+        val transit = System.currentTimeMillis() - positionAtEpochMs
+        return transit.coerceIn(0L, MAX_TRANSIT_MS)
+    }
+
+    /** 投送到达后的收尾：对齐时钟；该动就排帧，否则落位一次。 */
+    private fun afterPresentation() {
+        syncClock()
+        if (shouldKeepFrames()) {
+            scheduleFrame()
+        } else {
+            applyFrame(advance = false)
         }
     }
 
@@ -523,10 +644,11 @@ internal class LyricsOverlayView(
                     config.unplayedColor,
                     presentation.lineStartMs,
                     presentation.lineEndMs,
+                    presentation.scrollFollowsSinging,
                 )
-                line.syncPosition(presentation.positionMs, presentation.isPlaying)
             }
             updatePlayPauseIconIfNeeded()
+            afterPresentation()
             return
         }
         renderedTexts = texts
@@ -564,7 +686,7 @@ internal class LyricsOverlayView(
             val view: TextView =
                 if (entry.isCurrent) {
                     CurrentLineView(context).also {
-                        it.onGroupOffset = ::applyGroupScroll
+                        it.onLayoutChanged = ::onLineLayoutChanged
                         currentLineView = it
                     }
                 } else {
@@ -705,8 +827,18 @@ internal class LyricsOverlayView(
             config.unplayedColor,
             current.lineStartMs,
             current.lineEndMs,
+            current.scrollFollowsSinging,
         )
-        line.syncPosition(current.positionMs, current.isPlaying)
+        // 切行是新内容：时钟继续走（不重锚），位移直接落位不做过渡。
+        syncClock()
+        applyFrame(advance = false)
+        if (shouldKeepFrames()) scheduleFrame()
+    }
+
+    /** 行视图尺寸 / Layout 变化：偏移与裁剪都依赖视图宽，补一帧。 */
+    private fun onLineLayoutChanged() {
+        applyFrame(advance = false)
+        if (shouldKeepFrames()) scheduleFrame()
     }
 
     /** 新列在视口宽度下的高度（滚入滚出的视口高度）。 */
@@ -726,10 +858,11 @@ internal class LyricsOverlayView(
      * - 文本超宽：左缘起滚，主行偏移由进度驱动，扩展行按自身溢出裁剪——
      *   翻译 / 罗马音跟主行一起滚、超出窗口的部分一起被裁掉（消失）。
      *
-     * `scrollX` 语义：内容随正值左移（`canvas.translate(-scrollX)`），因此
-     * 「未超宽行右移 [alignedShift] 做对齐」写作 `-alignedShift`。
+     * 用 `translationX`（float）而不是 `scrollTo`（int）：慢速行（长行 / 高刷屏）
+     * 的位移常常不足 1px/帧，整像素滚动会退化成台阶；父级 contentHolder 已
+     * `clipChildren`，浮点位移的裁切行为与滚动一致。
      */
-    private fun applyGroupScroll(groupScroll: Float) {
+    private fun applyGroupScroll(groupOffset: Float) {
         for (view in scrollGroup) {
             val textWidth = textWidthOf(view)
             val viewWidth = view.width.toFloat()
@@ -743,9 +876,9 @@ internal class LyricsOverlayView(
                     else -> ((viewWidth - textWidth) / 2f).coerceAtLeast(0f)
                 }
             }
-            val scroll = groupScroll.coerceIn(0f, overflow)
-            val x = (scroll - alignedShift).toInt()
-            if (view.scrollX != x) view.scrollTo(x, 0)
+            val scroll = groupOffset.coerceIn(0f, overflow)
+            val x = scroll - alignedShift
+            if (view.translationX != x) view.translationX = x
         }
     }
 
@@ -755,12 +888,6 @@ internal class LyricsOverlayView(
         if (layout.lineCount <= 0) return 0f
         val width = layout.getLineWidth(0)
         return if (width.isFinite()) width else 0f
-    }
-
-    /** 行文本超出视图宽的部分（未布局 / 无溢出为 0）。 */
-    private fun textOverflowOf(view: TextView): Float {
-        if (view.width <= 0) return 0f
-        return (textWidthOf(view) - view.width).coerceAtLeast(0f)
     }
 
     private fun updatePlayPauseIconIfNeeded() {
@@ -957,5 +1084,14 @@ internal class LyricsOverlayView(
     private companion object {
         /** 行内容滚入滚出时长（M3 强调缓动 decelerate 段）。 */
         const val ROLL_DURATION_MS = 240L
+
+        /** 样本延迟夹取上限（毫秒）：防御墙上时钟被调整 / 异常数据。 */
+        const val MAX_TRANSIT_MS = 1000L
+
+        /** 诊断日志标签（`adb shell setprop log.tag.MoliaLyrics DEBUG` 开启）。 */
+        const val CLOCK_LOG_TAG = "MoliaLyrics"
+
+        /** 相位误差超过该值才打诊断日志（避免 4Hz 刷屏）。 */
+        const val CLOCK_LOG_ERROR_MS = 60L
     }
 }

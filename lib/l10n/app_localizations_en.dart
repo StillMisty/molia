@@ -1477,6 +1477,19 @@ class AppLocalizationsEn extends AppLocalizations {
   String get lyricsDesktopAnimation => 'Line transition animation';
 
   @override
+  String get lyricsDesktopScrollMode => 'Long line scrolling';
+
+  @override
+  String get lyricsDesktopScrollModeSubtitle =>
+      'Follow singing: the text moves with the highlight; Constant: steady speed across the line';
+
+  @override
+  String get lyricsDesktopScrollFollow => 'Follow singing';
+
+  @override
+  String get lyricsDesktopScrollConstant => 'Constant speed';
+
+  @override
   String get lyricsDesktopBehaviorSection => 'Behavior & controls';
 
   @override
