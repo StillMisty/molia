@@ -85,10 +85,16 @@ class SyncProvider extends ChangeNotifier {
   /// 此时不下结论，调用方按「稍后」处理，等后续轮次给出结果。
   Future<bool?> contactManualPeer(String host) async {
     final startedAt = _engine.state.nowMs();
+    final previous = _engine.lastReport;
     await syncNow(manual: true);
     final report = _engine.lastReport;
-    // 拿到的报告早于本次调用 = 请求被排队，本轮还没跑完。
-    if (report == null || report.finishedAt < startedAt) return null;
+    // 本轮没有真正跑：请求被排队时引擎原样返回上一轮报告（同一对象），
+    // 轮次开始早于本次调用也同样不是本轮结果——两种情况都不下结论。
+    if (report == null ||
+        identical(report, previous) ||
+        report.startedAt < startedAt) {
+      return null;
+    }
     ManualPeer? entry;
     for (final peer in manualPeers) {
       if (peer.host == host) {

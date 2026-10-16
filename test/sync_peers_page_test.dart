@@ -238,6 +238,9 @@ void main() {
   });
 
   testWidgets('同步在途时保存设备：不误报未接触，提示稍后接触', (tester) async {
+    // 先完成一轮，留下历史报告（排队路径拿到的正是这份旧报告）。
+    await provider.syncNow(manual: true);
+
     final gate = Completer<void>();
     transport.onPull = () => gate.future;
     final inFlight = provider.syncNow(manual: true);
