@@ -175,6 +175,31 @@ void main() {
     expect(tracksA.map((t) => t.songId), containsAll(['remote-1', 'local-added']));
   });
 
+  test('换源更新版本：列表替换后的曲目可同步到对端', () async {
+    final playlistId = await repoA.createPlaylist('歌单');
+    await repoA.addTrackToPlaylist(playlistId, track('t1'));
+    final before = (await repoA.syncExportPlaylistTracks()).single.version;
+
+    clock = 2000;
+    await repoA.replacePlaylistTrack(
+      playlistId,
+      (sourceKey: 'wy', songId: 't1'),
+      track('t1', source: 'kw'),
+    );
+    final after = (await repoA.syncExportPlaylistTracks()).single.version;
+    expect(
+      after.isNewerThan(before),
+      isTrue,
+      reason: '换源是本地修改：版本必须前进（否则永不传播）',
+    );
+
+    final result = await adapterB.apply(await adapterA.collect());
+    expect(result.applied, greaterThanOrEqualTo(1));
+    final inB = await repoB.findPlaylistByName('歌单');
+    final tracksB = await repoB.listPlaylistTracks(inB!.id);
+    expect(tracksB.single.sourceKey, 'kw');
+  });
+
   test('本地下载曲目（local）不同步：曲目与墓碑都过滤', () async {
     final playlistId = await repoA.createPlaylist('混合');
     await repoA.addTrackToPlaylist(playlistId, track('t1'));

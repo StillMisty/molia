@@ -155,6 +155,12 @@
   > `playedAt <= deletedAt` → 删除生效；`playedAt > deletedAt` → 复活并撤墓碑。
   > 已知残余：晚于删除的播放若其版本仍小于墓碑版本（未同步过就播放的设备），
   > 只在本地复活、不会把删除顶回全组（与首版同级，见「后果」）。
+  >
+  > 两处「必要扩大」的说明：①版本列落到了 **4 张行表**（`playlists` /
+  > `playlist_tracks` / `play_history` / `play_events`，issue 只点名
+  > `sync_tombstones`）——内容时间要退出胜负判定，行级版本就必须落库且跨轮
+  > 稳定，只在墓碑表加列做不到；②统计的 `closeStaleEvents` 对整批遗留事件取
+  > **一个**版本戳（各行 `syncKey` 不同，LWW 只在同键间比较，同批同戳无害）。
 
 ### 3. 移动端平台准入与发现
 

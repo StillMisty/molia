@@ -173,6 +173,37 @@ void main() {
     expect(await repoB.listHistory(), isEmpty);
   });
 
+  test('换源更新版本：历史替换后的条目可同步到对端', () async {
+    await repoA.addHistoryEntry(entry('s1', playedAt: 1000, title: '旧标题'));
+    final before = (await repoA.syncExportHistory()).single.version;
+
+    nowA = 2000;
+    await repoA.replaceHistoryEntry(
+      (sourceKey: 'wy', songId: 's1'),
+      PlayHistoryEntry(
+        sourceKey: 'kw',
+        songId: 's1',
+        title: '换源标题',
+        artist: 'Artist',
+        album: 'Album',
+        raw: const {'id': 'kw-s1'},
+        playedAt: 1000,
+      ),
+    );
+    final after = (await repoA.syncExportHistory()).single.version;
+    expect(
+      after.isNewerThan(before),
+      isTrue,
+      reason: '换源是本地修改：版本必须前进（否则永不传播）',
+    );
+
+    final result = await adapterB.apply(await adapterA.collect());
+    expect(result.applied, 1);
+    final listB = await repoB.listHistory();
+    expect(listB.single.sourceKey, 'kw');
+    expect(listB.single.title, '换源标题');
+  });
+
   test('历史键编解码', () {
     final key = SyncRecordKeys.history('wy', 'mid:1');
     final parsed = SyncRecordKeys.parseHistory(key)!;

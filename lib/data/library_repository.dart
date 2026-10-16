@@ -225,12 +225,14 @@ class LibraryRepository implements LibraryStore, LibrarySyncStore {
   ///
   /// 旧键不存在返回 false；目标键行已存在时先删（历史唯一键语义），
   /// 保留旧行的 `playedAt`——换源不改变「何时听的」。
+  /// 换源是一次本地修改：版本三列经发号器取新值，改动才能同步到对端。
   @override
   Future<bool> replaceHistoryEntry(
     TrackKey oldKey,
     PlayHistoryEntry replacement,
   ) async {
     final db = _db;
+    final version = _nextVersion();
     var updated = 0;
     await db.transaction(() async {
       final sameKey = replacement.sourceKey == oldKey.sourceKey &&
@@ -255,6 +257,9 @@ class LibraryRepository implements LibraryStore, LibrarySyncStore {
         coverUrl: Value(replacement.coverUrl),
         durationMs: Value(replacement.durationMs),
         raw: Value(jsonEncode(replacement.raw)),
+        versionPhysical: Value(version.physical),
+        versionCounter: Value(version.counter),
+        deviceId: Value(version.deviceId),
       ));
     });
     if (updated > 0) _notifyChanged(const LibraryChange.history());
@@ -664,6 +669,7 @@ class LibraryRepository implements LibraryStore, LibrarySyncStore {
   /// 再把旧行更新为新曲目数据（`playlistId` 以参数为准，忽略
   /// [replacement] 内的值）。[favoriteChange] 语义同
   /// [removeTracksFromPlaylist]：收藏列表内换源只做局部刷新。
+  /// 换源是一次本地修改：版本三列经发号器取新值，改动才能同步到对端。
   @override
   Future<bool> replacePlaylistTrack(
     int playlistId,
@@ -672,6 +678,7 @@ class LibraryRepository implements LibraryStore, LibrarySyncStore {
     bool favoriteChange = false,
   }) async {
     final db = _db;
+    final version = _nextVersion();
     var updated = 0;
     await db.transaction(() async {
       final sameKey = replacement.sourceKey == oldKey.sourceKey &&
@@ -698,6 +705,9 @@ class LibraryRepository implements LibraryStore, LibrarySyncStore {
         coverUrl: Value(replacement.coverUrl),
         durationMs: Value(replacement.durationMs),
         raw: Value(jsonEncode(replacement.raw)),
+        versionPhysical: Value(version.physical),
+        versionCounter: Value(version.counter),
+        deviceId: Value(version.deviceId),
       ));
     });
     if (updated > 0) {

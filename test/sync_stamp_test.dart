@@ -1,6 +1,12 @@
+import 'dart:convert';
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:logging/logging.dart';
 import 'package:molia/data/library_repository.dart';
+import 'package:molia/data/settings/settings_keys.dart';
+import 'package:molia/data/settings/settings_registry.dart';
+import 'package:molia/data/sync/adapters/prefs_sync_adapter.dart';
+import 'package:molia/data/sync/sync_engine.dart';
 import 'package:molia/data/sync/sync_stamp.dart';
 import 'package:molia/data/sync/sync_state_store.dart';
 import 'package:molia/domain/models/device_sync.dart';
@@ -232,6 +238,129 @@ void main() {
       expect(rebuilt.settingStamps['theme_mode']?.hash, 'h');
       expect(rebuilt.settingStamps['theme_mode']?.version, version);
       expect(rebuilt.stampIssuer.baseline.physical, version.physical);
+    });
+
+    test('已导入备份的最大戳参与发号器初始化（导入即吸收）', () async {
+      SharedPreferences.setMockInitialValues({});
+      final prefs = await SharedPreferences.getInstance();
+      final secrets = MemorySyncSecretStore();
+      final state = SyncStateStore(
+        preferences: prefs,
+        secrets: secrets,
+        clock: () => 1000,
+        deviceId: 'devA',
+      );
+      await state.init();
+      final engine = SyncEngine(
+        state: state,
+        stamps: state.stampIssuer,
+        adapters: [
+          PrefsSyncAdapter(
+            state: state,
+            settings: SettingsRegistry(
+              keys: const [kThemeMode],
+              preferences: prefs,
+              secrets: secrets,
+            ),
+          ),
+        ],
+        transports: const {},
+      );
+      addTearDown(engine.dispose);
+      await engine.init();
+
+      const backupVersion =
+          SyncVersion(physical: 999999, counter: 4, deviceId: 'devB');
+      final backup = jsonEncode({
+        'kind': 'molia_backup',
+        'v': 1,
+        'producedAt': 1,
+        'envelope': {
+          'v': SyncEnvelope.protocolVersion,
+          'deviceId': 'devB',
+          'producedAt': 1,
+          'records': {
+            'settings': [
+              {
+                'key': 'theme_mode',
+                'version': backupVersion.toJson(),
+                'data': {'v': 'dark'},
+              },
+            ],
+          },
+        },
+      });
+      await engine.importBackupJson(backup);
+
+      // 备份里的最大戳被发号器吸收：本机下一次写入严格更大。
+      expect(
+        state.stampIssuer.next().isNewerThan(backupVersion),
+        isTrue,
+      );
+    });
+
+    test('history 删除 vs 播放：时钟偏移下仍按真实时间判定', () async {
+      final db = openMemoryDatabase();
+      addTearDown(db.close);
+      var clock = 100000; // 本机时钟快 1 年（版本戳超前）
+      final repo = LibraryRepository(
+        databaseProvider: () => db,
+        clock: () => clock,
+        stamps: testStampIssuer(clock: () => clock, deviceId: 'devA'),
+      );
+      addTearDown(repo.dispose);
+
+      // 播放（真实时间 1000）→ 删除（真实时间 5000）：本机删除生效。
+      await repo.addHistoryEntry(PlayHistoryEntry(
+        sourceKey: 'wy',
+        songId: 's1',
+        title: 'Song',
+        playedAt: 1000,
+      ));
+      clock = 5000; // 版本戳仍被超前基线抬着；内容时间是真实的删除时刻
+      await repo.deleteHistoryEntry('wy', 's1');
+      expect(await repo.listHistory(), isEmpty);
+
+      // 对端陈旧墓碑（版本并不更新）带着「更晚的删除时间」到达也不能复活：
+      final stale = await repo.syncApplyHistory(
+        entries: [
+          PlayHistorySyncRecord(
+            sourceKey: 'wy',
+            songId: 's1',
+            title: 'Song',
+            artist: '',
+            album: '',
+            coverUrl: null,
+            durationMs: null,
+            raw: '{}',
+            playedAt: 4000,
+            version: const SyncVersion(physical: 100, deviceId: 'devB'),
+          ),
+        ],
+      );
+      // 本地在实际删除时间 5000 之后没有播放：不插入旧播放。
+      expect(stale.applied, 0);
+      expect(await repo.listHistory(), isEmpty);
+
+      // 反向：真实时间晚于删除的播放可以复活（删除 vs 播放只看内容时间）。
+      final later = await repo.syncApplyHistory(
+        entries: [
+          PlayHistorySyncRecord(
+            sourceKey: 'wy',
+            songId: 's1',
+            title: 'Song',
+            artist: '',
+            album: '',
+            coverUrl: null,
+            durationMs: null,
+            raw: '{}',
+            playedAt: 6000,
+            version: const SyncVersion(physical: 200, deviceId: 'devB'),
+          ),
+        ],
+      );
+      expect(later.applied, 1);
+      expect((await repo.listHistory()).single.playedAt, 6000);
     });
   });
 }

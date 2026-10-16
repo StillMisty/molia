@@ -51,12 +51,13 @@ class ScriptSyncAdapter implements SyncAdapter {
     final currentIds = [for (final script in scripts) script.id];
     final knownIds = _state.knownScriptIds;
 
-    // 本机删除检测：上轮还在、本轮消失且尚无墓碑 → 记删除墓碑。
+    // 本机删除检测：上轮还在、本轮消失 → **一律取新戳**。复用旧墓碑会让这次
+    // 本地删除输给陈旧的远端墓碑（发号器已吸收观测值，新戳必然更大）。
     for (final id in knownIds) {
       if (currentIds.contains(id)) continue;
-      _state.scriptTombstones.putIfAbsent(
+      _state.putScriptTombstone(
         id,
-        () => SyncStamp(version: _state.stampIssuer.next()),
+        SyncStamp(version: _state.stampIssuer.next()),
       );
       _state.removeScriptStamp(id);
     }
@@ -144,20 +145,25 @@ class ScriptSyncAdapter implements SyncAdapter {
 
       if (record.deleted) {
         final existing = _scriptOf(record.key);
-        final existingVersion =
+        final scriptVersion =
             _state.scriptStamps[record.key]?.version ?? SyncVersion.zero;
-        if (existing != null && record.version.isNewerThan(existingVersion)) {
+        if (existing != null && record.version.isNewerThan(scriptVersion)) {
           await _repository.remove(record.key);
+          _state.removeScriptStamp(record.key);
           changed = true;
           applied++;
         } else {
           skipped++;
         }
-        _state.putScriptTombstone(
-          record.key,
-          SyncStamp(version: record.version),
-        );
-        _state.removeScriptStamp(record.key);
+        // 墓碑只在确实更新时覆盖：陈旧远端删除不顶掉本地较新的删除。
+        final localTombstone = _state.scriptTombstones[record.key];
+        if (localTombstone == null ||
+            record.version.isNewerThan(localTombstone.version)) {
+          _state.putScriptTombstone(
+            record.key,
+            SyncStamp(version: record.version),
+          );
+        }
         continue;
       }
 
@@ -182,6 +188,13 @@ class ScriptSyncAdapter implements SyncAdapter {
         skipped++;
         continue;
       }
+      final tombstone = _state.scriptTombstones[info.id];
+      if (tombstone != null && !record.version.isNewerThan(tombstone.version)) {
+        // 比本地墓碑旧（或同版本）的脚本不落地：导入旧备份 / 陈旧对端都不能
+        // 复活本机已删除的脚本。
+        skipped++;
+        continue;
+      }
       await _repository.add(info);
       changed = true;
       applied++;
@@ -189,8 +202,7 @@ class ScriptSyncAdapter implements SyncAdapter {
         info.id,
         SyncStamp(hash: _contentHash(info), version: record.version),
       );
-      final tombstone = _state.scriptTombstones[info.id];
-      if (tombstone != null && record.version.isNewerThan(tombstone.version)) {
+      if (tombstone != null) {
         _state.removeScriptTombstone(info.id);
       }
     }
