@@ -104,6 +104,15 @@ class LanSyncTransport implements SyncTransport {
   final Map<String, String> _peerSnapshotIds = {};
   final Logger _logger = Logger('molia.sync.lan');
 
+  int _broadcastCount = 0;
+  int _snapshotGetCount = 0;
+
+  /// 广播探测发送次数（测试断言「空闲轮不广播」用；广播只在 `pull` 内发出）。
+  int get broadcastCount => _broadcastCount;
+
+  /// 快照 GET 次数（测试断言「未变跳过」用）。
+  int get snapshotGetCount => _snapshotGetCount;
+
   RawDatagramSocket? _udp;
   HttpServer? _http;
   bool _running = false;
@@ -362,6 +371,7 @@ class LanSyncTransport implements SyncTransport {
     if (_probeTargets.isEmpty) {
       try {
         socket.send(probe, InternetAddress('255.255.255.255'), _udpPort);
+        _broadcastCount++;
         _broadcastUnavailable = false;
       } catch (_) {
         // 广播被系统策略拒绝时不影响单播对端（如测试注入目标 / 手动地址簿）；
@@ -459,6 +469,7 @@ class LanSyncTransport implements SyncTransport {
   }
 
   Future<Uint8List?> _fetchSnapshot(_Peer peer) async {
+    _snapshotGetCount++;
     final client = HttpClient()..connectionTimeout = _requestTimeout;
     try {
       final request = await client

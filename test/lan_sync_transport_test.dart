@@ -136,15 +136,22 @@ void main() {
     final first = await transportB.pull();
     expect(first.envelopes, hasLength(1));
     expect(first.skippedUnchanged, 0);
+    // 第一次拉到快照 = 一次 GET（本用例用单播目标，不涉及广播）。
+    expect(transportB.snapshotGetCount, 1);
+    expect(transportB.broadcastCount, 0);
 
     // 探测应答的内容指纹与上次拉到的一致：不 GET、不解密、不传字节。
     final decryptionsBefore = codec.decryptions;
+    final derivationsBefore = codec.pbkdf2Derivations;
     final second = await transportB.pull();
     expect(second.envelopes, isEmpty);
     expect(second.skippedUnchanged, 1);
     expect(second.bytesIn, 0);
     expect(codec.decryptions, decryptionsBefore,
         reason: '未变跳过：没有解密动作');
+    expect(codec.pbkdf2Derivations, derivationsBefore,
+        reason: '未变跳过：没有密钥派生');
+    expect(transportB.snapshotGetCount, 1, reason: '未变跳过：没有 GET');
 
     // 对端内容变化（新指纹）：重新拉取。
     envA = envelope('devA', value: 'dark').withSnapshotId('hash-2');

@@ -50,11 +50,15 @@ void main() {
     adapter = RecordingSyncAdapter();
   });
 
-  SyncEnvelope remoteEnvelope(List<SyncRecord> records) => SyncEnvelope(
+  SyncEnvelope remoteEnvelope(
+    List<SyncRecord> records, {
+    SyncCategory category = SyncCategory.settings,
+  }) =>
+      SyncEnvelope(
         deviceId: 'devB',
         deviceName: 'B',
         producedAt: 5000,
-        records: {SyncCategory.settings: records},
+        records: {category: records},
       );
 
   SyncRecord setting(String key, int physical) => SyncRecord(
@@ -203,7 +207,7 @@ void main() {
     expect(prefs.getString('theme_mode'), 'light');
   });
 
-  test('墓碑清理联动：旧墓碑重放不重新落地（登记保留、复活不撤销）', () async {
+  test('墓碑登记保留：同版本旧墓碑重放不重新交付、不重新落地', () async {
     final db = openMemoryDatabase();
     addTearDown(db.close);
     final repository = LibraryRepository(
@@ -212,10 +216,13 @@ void main() {
       stamps: state.stampIssuer,
     );
     addTearDown(repository.dispose);
+    final recorder = RecordingAdapter(
+      HistorySyncAdapter(repository: repository),
+    );
     final sync = SyncEngine(
       state: state,
       stamps: state.stampIssuer,
-      adapters: [HistorySyncAdapter(repository: repository)],
+      adapters: [recorder],
       transports: {'lan': transport},
       known: SyncKnownRepository(databaseProvider: () => db),
     );
@@ -227,10 +234,25 @@ void main() {
       version: const SyncVersion(physical: 2000, deviceId: 'devB'),
       deletedAt: 2000,
     );
-    transport.available.add(remoteEnvelope([tombstone]));
-    await sync.syncNow();
 
-    // 本地复活（播放晚于删除：真实时间判定）→ 墓碑被清理。
+    // 首轮：墓碑落地（登记 = 墓碑版本）。
+    transport.available.add(
+      remoteEnvelope([tombstone], category: SyncCategory.history),
+    );
+    await sync.syncNow();
+    expect(recorder.delivered, hasLength(1));
+    expect(recorder.delivered.single.single.deleted, isTrue);
+
+    // 对端重放同一条旧墓碑：登记一致 → 不交付（登记不因墓碑清理删除）。
+    recorder.reset();
+    transport.available
+      ..clear()
+      ..add(remoteEnvelope([tombstone], category: SyncCategory.history));
+    final replay = await sync.syncNow();
+    expect(recorder.delivered, isEmpty);
+    expect(replay!.applied, 0);
+
+    // 本地复活（播放晚于删除：真实时间判定）→ 墓碑被清理、本地行取新版本。
     await repository.addHistoryEntry(PlayHistoryEntry(
       sourceKey: 'wy',
       songId: 's1',
@@ -240,12 +262,17 @@ void main() {
     ));
     expect(await repository.syncExportTombstones(['history']), isEmpty);
 
-    // 对端重放同一条旧墓碑：登记保留（不因墓碑清理删除），复活的行不被撤销。
+    // 对端再次重放旧墓碑：本地胜者是新版本的**行**（不是墓碑），交付给
+    // 适配器后按真实时间判定为「不需要落地」，复活的行不被撤销。
+    recorder.reset();
     transport.available
       ..clear()
-      ..add(remoteEnvelope([tombstone]));
+      ..add(remoteEnvelope([tombstone], category: SyncCategory.history));
     final report = await sync.syncNow();
 
+    expect(recorder.delivered, hasLength(1));
+    expect(recorder.delivered.single.single.deleted, isFalse,
+        reason: '交付的是本地复活的行，不是旧墓碑');
     expect(report!.applied, 0);
     expect(
       (await repository.listHistory()).map((e) => e.songId),
@@ -280,8 +307,12 @@ void main() {
       unawaited(scheduler.start());
       async.flushMicrotasks();
 
+      // 远端有可拉内容（若真跑轮次就会拉取 / 落地）：空闲期仍然零动作。
+      transport.available.add(remoteEnvelope([setting('key-remote', 9000)]));
+      transport.peersSeenOverride = 1;
+
       // 交互窗口过后进入空闲；整个空闲期（10 + 20 分钟两次唤醒）不做任何
-      // 网络动作：无轮次 = 无广播、无拉取、无推送、无落地。
+      // 网络动作：无轮次 = 无广播、无拉取、无推送、无落地、0 字节。
       async.elapse(const Duration(minutes: 2));
       expect(scheduler.level, SyncLevel.idle);
       async.elapse(const Duration(minutes: 30));
@@ -293,11 +324,13 @@ void main() {
       // 两次空闲唤醒（10 → 20 分钟）各翻倍一次退避，但没有发任何轮次。
       expect(scheduler.idleBackoff, const Duration(minutes: 40));
 
-      // 本地变更：活跃去抖后跑一轮（拉取 + 推送各一次）。
+      // 本地变更：活跃去抖后跑一轮（拉取 + 推送各一次），此时才落地远端记录。
       scheduler.notifyLocalChange();
       async.elapse(const Duration(seconds: 5));
       expect(transport.pullCount, 1);
       expect(transport.pushed, hasLength(1));
+      expect(adapter.applyCalls, 1);
+      expect(adapter.lastKeys, ['key-remote']);
     });
   });
 
@@ -373,5 +406,34 @@ class RecordingSyncAdapter implements SyncAdapter {
     lastRecordCount = all.length;
     lastKeys = [for (final record in all) record.key];
     return SyncApplyOutcome(applied: all.length);
+  }
+}
+
+/// 记录交付内容并转发给真实适配器（钉「交付了什么」用）。
+class RecordingAdapter implements SyncAdapter {
+  RecordingAdapter(this.inner);
+
+  final SyncAdapter inner;
+
+  /// 每次 apply 的交付记录（扁平化）。
+  final List<List<SyncRecord>> delivered = [];
+
+  void reset() => delivered.clear();
+
+  @override
+  Set<SyncCategory> get categories => inner.categories;
+
+  @override
+  bool get ready => inner.ready;
+
+  @override
+  Future<Map<SyncCategory, List<SyncRecord>>> collect() => inner.collect();
+
+  @override
+  Future<SyncApplyOutcome> apply(
+    Map<SyncCategory, List<SyncRecord>> records,
+  ) {
+    delivered.add([for (final list in records.values) ...list]);
+    return inner.apply(records);
   }
 }
