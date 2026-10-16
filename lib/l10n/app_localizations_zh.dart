@@ -2257,6 +2257,11 @@ class AppLocalizationsZh extends AppLocalizations {
   }
 
   @override
+  String syncPeerBehindBytes(int count, String size) {
+    return '落后 $count 项（约 $size）';
+  }
+
+  @override
   String syncPeerClockSkew(int minutes) {
     return '时钟差 $minutes 分钟';
   }

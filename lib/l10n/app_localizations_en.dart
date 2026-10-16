@@ -2345,6 +2345,11 @@ class AppLocalizationsEn extends AppLocalizations {
   }
 
   @override
+  String syncPeerBehindBytes(int count, String size) {
+    return '$count behind (~$size)';
+  }
+
+  @override
   String syncPeerClockSkew(int minutes) {
     return 'clock off by $minutes min';
   }

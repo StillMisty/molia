@@ -922,6 +922,10 @@
   "syncPeerLastSync": "最后同步 {time}",
   "syncPeerNever": "尚未接触",
   "syncPeerBehind": "落后 {count} 项",
+  "syncPeerBehindBytes": "落后 {count} 项（约 {size}）",
+  "@syncPeerBehindBytes": {
+    "placeholders": { "count": { "type": "int" }, "size": { "type": "String" } }
+  },
   "syncPeerClockSkew": "时钟差 {minutes} 分钟",
   "syncPeerLastError": "最近失败：{error}",
   "syncDiagnosticTitle": "诊断",

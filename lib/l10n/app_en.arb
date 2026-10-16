@@ -1235,6 +1235,10 @@
   },
   "syncPeerNever": "Not reached yet",
   "syncPeerBehind": "{count} behind",
+  "syncPeerBehindBytes": "{count} behind (~{size})",
+  "@syncPeerBehindBytes": {
+    "placeholders": { "count": { "type": "int" }, "size": { "type": "String" } }
+  },
   "@syncPeerBehind": {
     "placeholders": {
       "count": {

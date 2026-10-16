@@ -4287,6 +4287,12 @@ abstract class AppLocalizations {
   /// **'{count} behind'**
   String syncPeerBehind(int count);
 
+  /// No description provided for @syncPeerBehindBytes.
+  ///
+  /// In en, this message translates to:
+  /// **'{count} behind (~{size})'**
+  String syncPeerBehindBytes(int count, String size);
+
   /// No description provided for @syncPeerClockSkew.
   ///
   /// In en, this message translates to:

@@ -319,7 +319,12 @@ class SyncPeersPage extends StatelessWidget {
         l10n.syncPeerNever,
       if (peer.isLostAt(now)) l10n.syncPeerLost,
       if (peer.behindBy != null && peer.behindBy! > 0)
-        l10n.syncPeerBehind(peer.behindBy!),
+        peer.behindBytes != null && peer.behindBytes! > 0
+            ? l10n.syncPeerBehindBytes(
+                peer.behindBy!,
+                syncBytesText(peer.behindBytes!),
+              )
+            : l10n.syncPeerBehind(peer.behindBy!),
       if (peer.clockSkewMs != null && peer.clockSkewMs!.abs() > 60 * 1000)
         l10n.syncPeerClockSkew((peer.clockSkewMs!.abs() / 60000).round()),
       if (peer.lastError != null)
