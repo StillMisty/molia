@@ -293,28 +293,9 @@ class SyncEngine extends ChangeNotifier {
         pulledEntries.add(('', envelope));
       }
 
-      // 协议版本闸门：v1（或未知版本）对端不合并——v1 设备不理解新戳语义，
-      // 静默合并会破坏收敛。拒绝计入失败并把原因写进名册（复用失败原因机制）。
-      final accepted = <(String, SyncEnvelope)>[];
-      final rejectedIds = <String>{};
-      for (final entry in pulledEntries) {
-        final envelope = entry.$2;
-        if (envelope.isSupported) {
-          accepted.add(entry);
-          continue;
-        }
-        rejectedIds.add(envelope.deviceId);
-        final accumulator = accumulators[entry.$1];
-        if (accumulator != null) accumulator.rejectedPeers += 1;
-        _touchPeer(envelope.deviceId, entry.$1, protocolTooOld: true);
-        _logger.warning(
-          '对端 ${envelope.deviceId} 协议版本 v${envelope.version} 过旧，本轮拒绝合并',
-        );
-      }
-
       // 吸收远端版本（含未获胜者）：超前戳让本机下一次写入必胜，因此必须在
       // 合并之外对收到的全部记录生效。
-      for (final entry in accepted) {
+      for (final entry in pulledEntries) {
         for (final list in entry.$2.records.values) {
           for (final record in list) {
             _stamps.observe(record.version);
@@ -322,16 +303,9 @@ class SyncEngine extends ChangeNotifier {
         }
       }
 
-      // 入站快照里被拒绝的部分不再放回队列（否则每轮重放）；只有可合并的
-      // 才在应用失败时重试。
-      final inboundRestore = [
-        for (final envelope in inboundSnapshot)
-          if (envelope.isSupported) envelope,
-      ];
-
       try {
         final merged = mergeEnvelopesByCategory(
-          [_envelopeFrom(local), ...accepted.map((entry) => entry.$2)],
+          [_envelopeFrom(local), ...pulledEntries.map((entry) => entry.$2)],
           categories: categories,
         );
 
@@ -356,13 +330,13 @@ class SyncEngine extends ChangeNotifier {
         }
       } catch (e) {
         // 入站快照是对端花网络推过来的：本轮失败不能丢，放回队列下轮消费。
-        _inbound.insertAll(0, inboundRestore);
+        _inbound.insertAll(0, inboundSnapshot);
         inboundRestored = true;
         rethrow;
       }
 
       if (applyFailures > 0 && !inboundRestored) {
-        _inbound.insertAll(0, inboundRestore);
+        _inbound.insertAll(0, inboundSnapshot);
         inboundRestored = true;
       }
 
@@ -418,12 +392,7 @@ class SyncEngine extends ChangeNotifier {
       ];
       final failedCount = transportReports.fold<int>(
         0,
-        (sum, item) =>
-            sum + item.failedPulls + item.failedPushes + item.rejectedPeers,
-      );
-      final rejectedCount = transportReports.fold<int>(
-        0,
-        (sum, item) => sum + item.rejectedPeers,
+        (sum, item) => sum + item.failedPulls + item.failedPushes,
       );
       final peersSeen = transportReports.fold<int>(
         0,
@@ -451,16 +420,11 @@ class SyncEngine extends ChangeNotifier {
           .firstWhere((value) => value != null && value.isNotEmpty,
               orElse: () => null);
       final applyError = applyFailures > 0 ? '应用失败 $applyFailures 次' : null;
-      final protocolError = rejectedCount > 0
-          ? '$rejectedCount 台对端同步协议版本过旧，请升级后重试'
-          : null;
       final error = switch (outcome) {
-        SyncOutcome.failed => _joinErrors(transportError, applyError) ??
-            _joinErrors(protocolError, null) ??
-            '所有对端均不可达',
-        SyncOutcome.partial =>
-          _joinErrors(_joinErrors(transportError, applyError), protocolError),
-        _ => protocolError,
+        SyncOutcome.failed =>
+          transportError ?? applyError ?? '所有对端均不可达',
+        SyncOutcome.partial => _joinErrors(transportError, applyError),
+        _ => null,
       };
 
       report = SyncRoundReport(
@@ -471,7 +435,7 @@ class SyncEngine extends ChangeNotifier {
         applied: applied,
         applyFailures: applyFailures,
         transports: transportReports,
-        peers: _roster(pulledEntries, rejectedIds),
+        peers: _roster(pulledEntries),
         remoteRecords: remoteRecords,
         error: error,
       );
@@ -534,19 +498,10 @@ class SyncEngine extends ChangeNotifier {
     String deviceId,
     String kind, {
     bool pushOk = false,
-    bool protocolTooOld = false,
   }) {
     if (deviceId.isEmpty) return;
     final existing = _peersById[deviceId] ?? SyncPeerState(deviceId: deviceId);
     final now = _nowMs();
-    if (protocolTooOld) {
-      _peersById[deviceId] = existing.copyWith(
-        transport: kind,
-        lastSeenAt: now,
-        lastError: SyncPeerIssue.protocolTooOld,
-      );
-      return;
-    }
     _peersById[deviceId] = pushOk
         ? existing.copyWith(
             transport: kind,
@@ -564,10 +519,7 @@ class SyncEngine extends ChangeNotifier {
   /// 本轮名册快照（拉取得到的对端 + 推送接触过的对端）。
   final Map<String, SyncPeerState> _peersById = {};
 
-  List<SyncPeerState> _roster(
-    List<(String, SyncEnvelope)> pulledEntries,
-    Set<String> rejectedIds,
-  ) {
+  List<SyncPeerState> _roster(List<(String, SyncEnvelope)> pulledEntries) {
     // 先吸收既有名册，再用本轮观测覆盖。
     for (final peer in _state.peers) {
       _peersById.putIfAbsent(peer.deviceId, () => peer);
@@ -577,20 +529,14 @@ class SyncEngine extends ChangeNotifier {
       if (envelope.deviceId.isEmpty) continue;
       final existing = _peersById[envelope.deviceId] ??
           SyncPeerState(deviceId: envelope.deviceId);
-      final rejected = rejectedIds.contains(envelope.deviceId);
       _peersById[envelope.deviceId] = SyncPeerState(
         deviceId: envelope.deviceId,
         name: envelope.deviceName.isNotEmpty ? envelope.deviceName : existing.name,
         transport: kind.isNotEmpty ? kind : existing.transport,
         lastSeenAt: now,
-        lastPullAt: rejected ? existing.lastPullAt : now,
+        lastPullAt: now,
         lastPushAt: existing.lastPushAt,
-        // 版本过旧是明确状态；升级后（本轮可合并）自动清除旧提示。
-        lastError: rejected
-            ? SyncPeerIssue.protocolTooOld
-            : (existing.lastError == SyncPeerIssue.protocolTooOld
-                ? null
-                : existing.lastError),
+        lastError: existing.lastError,
         clockSkewMs: envelope.producedAt > 0
             ? envelope.producedAt - now
             : existing.clockSkewMs,
@@ -648,12 +594,6 @@ class SyncEngine extends ChangeNotifier {
     }
     final envelope = SyncEnvelope.fromJson(decoded['envelope']);
     if (envelope == null) throw const FormatException('备份内容无效');
-    if (!envelope.isSupported) {
-      // 历史备份不兼容（v1 的戳语义与 v2 不同，合并会破坏收敛）。
-      throw FormatException(
-        '备份文件协议版本 v${envelope.version} 过旧，请用当前版本重新导出备份',
-      );
-    }
     // 导入备份的戳同样要吸收：否则恢复的旧备份会与库内新数据打架。
     for (final list in envelope.records.values) {
       for (final record in list) {
@@ -805,7 +745,6 @@ class _TransportAccumulator {
   int pushed = 0;
   int skippedUnchanged = 0;
   int peersSeen = 0;
-  int rejectedPeers = 0;
   int failedPulls = 0;
   int failedPushes = 0;
   int bytesIn = 0;
@@ -821,7 +760,6 @@ class _TransportAccumulator {
         pushed: pushed,
         skippedUnchanged: skippedUnchanged,
         peersSeen: peersSeen,
-        rejectedPeers: rejectedPeers,
         failedPulls: failedPulls,
         failedPushes: failedPushes,
         bytesIn: bytesIn,

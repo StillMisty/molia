@@ -6,6 +6,7 @@ import 'package:molia/data/settings/settings_registry.dart';
 import 'package:molia/data/sync/adapters/prefs_sync_adapter.dart';
 import 'package:molia/data/sync/sync_engine.dart';
 import 'package:molia/data/sync/sync_state_store.dart';
+import 'package:molia/domain/models/device_sync.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'support/sync_test_support.dart';
@@ -52,17 +53,13 @@ void main() {
 
   tearDown(() => engine.dispose());
 
-  /// 一份 v2 备份文件（外层 v1 是备份文件格式版本，内层 envelope 是协议 v2）。
-  String backupJson({
-    required Map<String, Object?> records,
-    int envelopeVersion = 2,
-  }) =>
-      jsonEncode({
+  /// 一份备份文件（外层 v 是备份文件格式版本，内层 envelope 是协议快照）。
+  String backupJson({required Map<String, Object?> records}) => jsonEncode({
         'kind': 'molia_backup',
         'v': 1,
         'producedAt': 1,
         'envelope': {
-          'v': envelopeVersion,
+          'v': SyncEnvelope.protocolVersion,
           'deviceId': 'devB',
           'producedAt': 1,
           'records': records,
@@ -139,27 +136,21 @@ void main() {
     expect(prefs.getString('theme_mode'), 'dark');
   });
 
-  test('导入：v1 备份（协议旧版）拒绝，不静默合并', () async {
-    final oldBackup = backupJson(
-      envelopeVersion: 1,
-      records: {
-        'settings': [
-          {
-            'key': 'theme_mode',
-            'updatedAt': 9000,
-            'updatedBy': 'devB',
-            'data': {'v': 'light'},
-          },
-        ],
-      },
-    );
+  test('导入：结构不对的备份拒绝，不静默合并', () async {
+    // 内层 envelope 缺 deviceId：不是有效的 Molia 快照。
+    final malformed = jsonEncode({
+      'kind': 'molia_backup',
+      'v': 1,
+      'producedAt': 1,
+      'envelope': {'producedAt': 1, 'records': const {}},
+    });
     await expectLater(
-      () => engine.importBackupJson(oldBackup),
+      () => engine.importBackupJson(malformed),
       throwsA(
         isA<FormatException>().having(
           (e) => e.message,
           'message',
-          contains('过旧'),
+          contains('无效'),
         ),
       ),
     );

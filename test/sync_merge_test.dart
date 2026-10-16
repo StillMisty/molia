@@ -163,7 +163,6 @@ void main() {
     expect(envelope.toJson()['v'], SyncEnvelope.protocolVersion);
     final decoded = SyncEnvelope.fromJson(envelope.toJson())!;
     expect(decoded.deviceId, 'dev');
-    expect(decoded.isSupported, isTrue);
     expect(decoded.recordsOf(SyncCategory.sources).length, 2);
     final tombstone = decoded
         .recordsOf(SyncCategory.sources)
@@ -191,20 +190,6 @@ void main() {
     final parsed = tolerant.recordsOf(SyncCategory.settings).single;
     expect(parsed.key, 'ok');
     expect(parsed.version, const SyncVersion(physical: 2, counter: 3, deviceId: 'x'));
-  });
-
-  test('协议版本判定：v1 / 缺省 v 视为不支持，v2 支持', () {
-    SyncEnvelope parse(Object? versionField) => SyncEnvelope.fromJson({
-          'deviceId': 'dev',
-          if (versionField != null) 'v': versionField,
-          'producedAt': 1,
-          'records': const {},
-        })!;
-
-    expect(parse(1).isSupported, isFalse);
-    expect(parse(null).isSupported, isFalse); // 缺省按 v1 处理
-    expect(parse(2).isSupported, isTrue);
-    expect(parse(3).isSupported, isFalse);
   });
 
   test('SyncVersion 排序：physical → counter → deviceId', () {

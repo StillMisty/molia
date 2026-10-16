@@ -358,8 +358,8 @@
 
 - **Sync envelope（同步快照）** — `lib/domain/models/device_sync.dart`：
   一次交换的完整视图（设备身份 + 各类别记录）；全量合并模型，设备间互换快照后
-  逐键取新，无增量/版本向量（见 ADR-0003）。协议版本 v2（v1 对端与 v1 备份
-  都被拒绝，见 「协议版本闸门」）。
+  逐键取新，无增量/版本向量（见 ADR-0003）。协议自始为 v2：快照的 `v` 字段
+  自描述格式，当前没有按版本号的分支 / 协商 / 降级。
 - **Sync record（同步记录）** — 快照最小单元：`key + version + data`；`version`
   是 `SyncVersion` 三元组，删除表示为 `deleted` 墓碑记录（墓碑另带真实删除
   时间 `deletedAt`），墓碑参与 LWW 并保留 90 天后裁剪（按 `deletedAt` 计时）。
@@ -374,10 +374,10 @@
   `savedAt` / `importedAt` 与墓碑的真实删除时间是内容语义，进记录 `data`、
   **永不参与胜负判定**；历史「删除 vs 播放」由库内按真实时间比较
   （`playedAt <= deletedAt` → 删除生效，否则复活并撤墓碑，见 ADR-0003 v2 §2）。
-- **Protocol v2（协议版本闸门）** — `SyncEnvelope.protocolVersion = 2`：解析到
-  v1 / 未知版本的快照**不合并**，本轮计为失败并在传输明细（`rejectedPeers`）、
-  报告错误行与名册（`SyncPeerIssue.protocolTooOld` → UI「对方版本过旧，请升级」）
-  里显式可见；`importBackupJson` 对旧协议备份抛 `FormatException`。
+- **Protocol v2（协议版本）** — `SyncEnvelope.protocolVersion = 2`：线上格式
+  自始为 v2，快照 JSON 的 `v` 字段随 envelope 读写（自描述 / 将来能力协商的
+  锚点）；**没有版本闸门、协商或降级**，对端快照直接合并。备份导入只做结构
+  校验（不是 Molia 备份 / 内层 envelope 无效才抛 `FormatException`）。
 - **Sync category（同步类别）** — 可开关的数据类别：`playlists` /
   `playlistTracks` / `sources` / `settings` / `credentials` / `statistics` /
   `history` / `session`；关闭的类别既不推送也不应用（本机仍持续登记本地变化）。

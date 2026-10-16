@@ -223,14 +223,13 @@ class SyncRecord {
 
 /// 一次同步快照：设备身份 + 各类别记录。
 class SyncEnvelope {
-  /// 协议版本（v2：记录版本三元组 + 内容时间分离；v1 对端不兼容）。
+  /// 线上协议版本（快照 JSON 的 `v` 字段值）。
   static const int protocolVersion = 2;
 
-  /// 快照自报的协议版本（`v` 字段）；缺省 = 1（首版一定写 `v: 1`）。
+  /// 快照的协议版本（`v` 字段）；缺省按 [protocolVersion] 处理。
   ///
-  /// 解析到非 [protocolVersion] 的版本时，引擎**拒绝合并**并在报告/名册里
-  /// 给「对方版本过旧，请升级」状态——v1 对端不理解新戳语义，静默合并会
-  /// 破坏收敛（见 ADR-0003 v2 §1）。
+  /// 目前只有 v2 一种线上格式，没有按版本分支的行为；字段保留是为了让
+  /// 快照自描述、便于将来做能力协商（见 ADR-0003 v2 §1）。
   final int version;
 
   final String deviceId;
@@ -245,9 +244,6 @@ class SyncEnvelope {
     this.version = protocolVersion,
     this.records = const {},
   });
-
-  /// 本快照是否可参与合并（协议版本一致）。
-  bool get isSupported => version == protocolVersion;
 
   Iterable<SyncRecord> recordsOf(SyncCategory category) =>
       records[category] ?? const [];
@@ -501,7 +497,6 @@ class SyncTransportReport {
     this.pushed = 0,
     this.skippedUnchanged = 0,
     this.peersSeen = 0,
-    this.rejectedPeers = 0,
     this.failedPulls = 0,
     this.failedPushes = 0,
     this.bytesIn = 0,
@@ -531,9 +526,6 @@ class SyncTransportReport {
   /// 本轮探测到 / 列出的对端数（含未变与失败者）。
   final int peersSeen;
 
-  /// 协议版本过旧（v1 / 未知）被拒绝合并的对端数（不静默合并）。
-  final int rejectedPeers;
-
   final int failedPulls;
   final int failedPushes;
   final int bytesIn;
@@ -551,7 +543,6 @@ class SyncTransportReport {
         'pushed': pushed,
         if (skippedUnchanged > 0) 'skippedUnchanged': skippedUnchanged,
         'peersSeen': peersSeen,
-        if (rejectedPeers > 0) 'rejectedPeers': rejectedPeers,
         'failedPulls': failedPulls,
         'failedPushes': failedPushes,
         'bytesIn': bytesIn,
@@ -572,7 +563,6 @@ class SyncTransportReport {
       pushed: intOf('pushed'),
       skippedUnchanged: intOf('skippedUnchanged'),
       peersSeen: intOf('peersSeen'),
-      rejectedPeers: intOf('rejectedPeers'),
       failedPulls: intOf('failedPulls'),
       failedPushes: intOf('failedPushes'),
       bytesIn: intOf('bytesIn'),
@@ -581,12 +571,6 @@ class SyncTransportReport {
       error: raw['error'] is String ? raw['error'] as String : null,
     );
   }
-}
-
-/// 名册条目里的机器可读失败原因码（UI 映射文案；不直接展示原始码）。
-abstract final class SyncPeerIssue {
-  /// 对端协议版本过旧（v1）：已拒绝合并，提示「请升级」。
-  static const String protocolTooOld = 'protocol_too_old';
 }
 
 /// 名册里的一台对端（最近一次接触的观测值；持久化在同步状态里）。
@@ -717,10 +701,7 @@ class SyncRoundReport {
   int get durationMs => finishedAt - startedAt;
 
   int get failedCount =>
-      transports.fold(
-        0,
-        (sum, t) => sum + t.failedPulls + t.failedPushes + t.rejectedPeers,
-      ) +
+      transports.fold(0, (sum, t) => sum + t.failedPulls + t.failedPushes) +
       applyFailures;
 
   int get peersSeen => transports.fold(0, (sum, t) => sum + t.peersSeen);

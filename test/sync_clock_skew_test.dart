@@ -133,7 +133,6 @@ void main() {
     // 2) A 跑一轮拿到快照（没有对端也能产出推送视图）。
     await engineA.syncNow();
     final envA = engineA.lastEnvelope!;
-    expect(envA.isSupported, isTrue);
 
     // 3) B 拉取 A 的快照：吸收超前戳 + 落地歌单。
     transportB.available.add(envA);

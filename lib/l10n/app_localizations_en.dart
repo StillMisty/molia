@@ -2298,10 +2298,6 @@ class AppLocalizationsEn extends AppLocalizations {
   }
 
   @override
-  String get syncPeerProtocolTooOld =>
-      'The other device is out of date — please upgrade it';
-
-  @override
   String get syncDiagnosticTitle => 'Diagnostics';
 
   @override

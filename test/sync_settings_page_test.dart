@@ -173,25 +173,6 @@ void main() {
     expect(find.textContaining('Last synced'), findsOneWidget);
   });
 
-  testWidgets('名册：v1 对端显示「对方版本过旧，请升级」', (tester) async {
-    await provider.setEnabled(true);
-    transport.available.add(SyncEnvelope(
-      deviceId: 'devOld',
-      deviceName: 'Old Device',
-      producedAt: 1,
-      version: 1,
-      records: const {},
-    ));
-    await provider.syncNow(manual: true);
-    await pumpPage(tester);
-
-    await tester.tap(find.byKey(const Key('settingsSyncPeersItem')));
-    await tester.pumpAndSettle();
-
-    expect(find.text('Old Device'), findsOneWidget);
-    expect(find.textContaining('out of date'), findsOneWidget);
-  });
-
   testWidgets('诊断行存在且可复制（不含密钥）', (tester) async {
     await provider.setEnabled(true);
     await pumpPage(tester);

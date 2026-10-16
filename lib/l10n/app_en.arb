@@ -1215,7 +1215,6 @@
       }
     }
   },
-  "syncPeerProtocolTooOld": "The other device is out of date — please upgrade it",
   "syncDiagnosticTitle": "Diagnostics",
   "syncDiagnosticCopy": "Copy diagnostics",
   "syncDiagnosticSubtitle": "Recent sync rounds (no passphrase, no keys)",
