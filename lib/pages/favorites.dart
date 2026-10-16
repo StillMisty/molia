@@ -2156,37 +2156,29 @@ class _CollectionPickerSheetState extends State<_CollectionPickerSheet> {
                 Expanded(
                   child: Text(widget.title, style: theme.textTheme.titleMedium),
                 ),
-                // 两个工具动作收成一个 icon-only 动作组，语义与悬浮提示走
-                // tooltip + semanticLabel；图标沿用标题行的中性色。
-                M3EButtonGroup(
-                  type: M3EButtonGroupType.standard,
-                  style: M3EButtonStyle.text,
-                  decoration: M3EButtonDecoration(
-                    foregroundColor: WidgetStatePropertyAll<Color>(
-                      M3ETheme.of(context).colorScheme.onSurfaceVariant,
-                    ),
+                // 这是两个工具动作（新建 / 导入）。docs/architecture.md §6 的
+                // 目标是收成 icon-only 动作组，但当前依赖版本
+                // （material_3_expressive 1.1.7）里 M3EButton 仅当 icon 与
+                // label 同时非空才渲染内容，icon-only 动作会退化成空白按钮
+                // （上游修复需 ≥ 1.1.8，尚未发布）；在依赖升级前保持两颗标准
+                // 图标键：可见、可点，纯图标语义走 tooltip，key 保留稳定定位。
+                M3EIconButton(
+                  key: const Key('favoritesCreatePlaylist'),
+                  variant: M3EIconButtonVariant.standard,
+                  size: M3EIconButtonSize.sm,
+                  tooltip: l10n.playlistCreate,
+                  icon: const Icon(Icons.add_rounded),
+                  onPressed: _createPlaylist,
+                ),
+                M3EIconButton(
+                  key: const Key('favoritesImportCollection'),
+                  variant: M3EIconButtonVariant.standard,
+                  size: M3EIconButtonSize.sm,
+                  tooltip: l10n.libraryImportFavorites,
+                  icon: const Icon(Icons.library_add_rounded),
+                  onPressed: () => Navigator.of(context).pop(
+                    const _PickerOutcome.importRequested(),
                   ),
-                  actions: [
-                    M3EButtonGroupAction(
-                      icon: const Icon(Icons.add_rounded),
-                      tooltip: l10n.playlistCreate,
-                      semanticLabel: l10n.playlistCreate,
-                    ),
-                    M3EButtonGroupAction(
-                      icon: const Icon(Icons.library_add_rounded),
-                      tooltip: l10n.libraryImportFavorites,
-                      semanticLabel: l10n.libraryImportFavorites,
-                    ),
-                  ],
-                  onSelectedIndexChanged: (index) {
-                    if (index == 0) {
-                      _createPlaylist();
-                    } else if (index == 1) {
-                      Navigator.of(context).pop(
-                        const _PickerOutcome.importRequested(),
-                      );
-                    }
-                  },
                 ),
               ],
             ),

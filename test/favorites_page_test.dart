@@ -305,6 +305,21 @@ void main() {
         ),
       );
 
+  /// 弹层标题行的工具动作（新建 `Icons.add_rounded` / 导入
+  /// `Icons.library_add_rounded`）。
+  ///
+  /// 不按 key 定位：这两个动作按 docs/architecture.md §6 的口径要收成
+  /// icon-only 动作组（组内动作没有 key，且组会额外构建一份不可见的测量副本），
+  /// 故按图标 + `hitTestable()` 过滤出真实按钮（同 ai_dj_page_test /
+  /// any_listen_page_test）；同一 finder 对当前的标准图标键实现也成立，
+  /// 且断言的是「图标真的渲染出来」，依赖升级后无需再改。
+  Finder pickerAction(IconData icon) => find
+      .descendant(
+        of: find.byType(M3EBottomSheetSurface),
+        matching: find.byIcon(icon),
+      )
+      .hitTestable();
+
   /// 弹层内合集行的显示顺序（合集行；新建 / 导入是标题行按钮）。
   List<String> pickerHeadlines(WidgetTester tester) => tester
       .widgetList<M3EListItem>(
@@ -571,8 +586,8 @@ void main() {
     await openCollectionPicker(tester);
 
     // 标题行两个小按钮（新建 / 导入），列表里不再有动作行。
-    expect(find.byKey(const Key('favoritesCreatePlaylist')), findsOneWidget);
-    expect(find.byKey(const Key('favoritesImportCollection')), findsOneWidget);
+    expect(pickerAction(Icons.add_rounded), findsOneWidget);
+    expect(pickerAction(Icons.library_add_rounded), findsOneWidget);
 
     final current = tester.widget<M3EListItem>(pickerRow('我的收藏'));
     expect(current.selected, isTrue, reason: '当前合集用 M3E 选中态');
@@ -605,8 +620,8 @@ void main() {
     ]) {
       expect(pickerRow(name), findsOneWidget, reason: name);
     }
-    expect(find.byKey(const Key('favoritesCreatePlaylist')), findsOneWidget);
-    expect(find.byKey(const Key('favoritesImportCollection')), findsOneWidget);
+    expect(pickerAction(Icons.add_rounded), findsOneWidget);
+    expect(pickerAction(Icons.library_add_rounded), findsOneWidget);
   });
 
   testWidgets('合集弹层：拖动把手自定义顺序并持久化', (tester) async {
@@ -654,7 +669,7 @@ void main() {
     await pumpFavorites(tester);
 
     await openCollectionPicker(tester);
-    await tester.tap(find.byKey(const Key('favoritesCreatePlaylist')));
+    await tester.tap(pickerAction(Icons.add_rounded));
     await tester.pumpAndSettle();
 
     // 命名对话框：输入名称并创建。
@@ -819,7 +834,7 @@ void main() {
     await pumpFavorites(tester);
 
     await openCollectionPicker(tester);
-    await tester.tap(find.byKey(const Key('favoritesImportCollection')));
+    await tester.tap(pickerAction(Icons.library_add_rounded));
     await tester.pumpAndSettle();
 
     // 测试环境无 DiscoverProvider → 仅文件导入选项；链接导入在生产环境可见。
@@ -862,7 +877,7 @@ void main() {
     await tester.pumpAndSettle();
 
     await openCollectionPicker(tester);
-    await tester.tap(find.byKey(const Key('favoritesImportCollection')));
+    await tester.tap(pickerAction(Icons.library_add_rounded));
     await tester.pumpAndSettle();
     expect(find.text('从歌单链接导入'), findsOneWidget);
     await tester.tap(find.text('从歌单链接导入'));
