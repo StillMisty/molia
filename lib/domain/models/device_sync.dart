@@ -84,6 +84,73 @@ abstract final class SyncRecordKeys {
   }
 }
 
+/// 记录版本戳（HLC-lite 三元组，见 ADR-0003 v2 §2）。
+///
+/// - [physical]：`max(本地物理时间, 已观测最大值)`。**不是**「最后修改的墙上
+///   时间」——超前对端会把全组基线抬高，因此它可能大于本机时钟；
+/// - [counter]：同一 `physical` 内的递增序号（同毫秒 / 时钟回拨），发号器保证
+///   本机 `next()` 严格单调；
+/// - [deviceId]：`(physical, counter)` 相等时按字典序决平局，保证确定性收敛；
+///   空串表示未知来源（零值戳）。
+///
+/// 内容时间（`playedAt` / `endedAt` / `savedAt` / `importedAt` / 墓碑的真实
+/// 删除时间）**不进版本戳**：它们是展示与语义字段，永不参与胜负判定。
+class SyncVersion implements Comparable<SyncVersion> {
+  const SyncVersion({
+    required this.physical,
+    this.counter = 0,
+    this.deviceId = '',
+  });
+
+  /// 零值戳：未修改 / 未登记的默认版本（输给任何真实写入）。
+  static const SyncVersion zero = SyncVersion(physical: 0);
+
+  final int physical;
+  final int counter;
+  final String deviceId;
+
+  /// [this] 是否严格新于 [other]（`(physical, counter, deviceId)` 字典序）。
+  bool isNewerThan(SyncVersion other) => compareTo(other) > 0;
+
+  @override
+  int compareTo(SyncVersion other) {
+    if (physical != other.physical) return physical.compareTo(other.physical);
+    if (counter != other.counter) return counter.compareTo(other.counter);
+    return deviceId.compareTo(other.deviceId);
+  }
+
+  Map<String, Object?> toJson() => {
+        'physical': physical,
+        'counter': counter,
+        if (deviceId.isNotEmpty) 'deviceId': deviceId,
+      };
+
+  /// 宽容解析：缺 physical 返回 null（解析方按 [zero] 兜底）。
+  static SyncVersion? fromJson(Object? raw) {
+    if (raw is! Map) return null;
+    final physical = raw['physical'];
+    if (physical is! num) return null;
+    return SyncVersion(
+      physical: physical.toInt(),
+      counter: (raw['counter'] as num?)?.toInt() ?? 0,
+      deviceId: raw['deviceId'] is String ? raw['deviceId'] as String : '',
+    );
+  }
+
+  @override
+  bool operator ==(Object other) =>
+      other is SyncVersion &&
+      other.physical == physical &&
+      other.counter == counter &&
+      other.deviceId == deviceId;
+
+  @override
+  int get hashCode => Object.hash(physical, counter, deviceId);
+
+  @override
+  String toString() => 'SyncVersion($physical/$counter@$deviceId)';
+}
+
 /// 一条同步记录。删除 = `deleted` 为 true 的墓碑（`data` 为 null）。
 class SyncRecord {
   final String key;
