@@ -11,7 +11,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import 'support/sync_test_support.dart';
 
-/// 完整快照备份测试：导出内容与凭证排除、导入合并与幂等、坏文件与旧版本拒绝。
+/// 完整快照备份测试：导出内容与凭证排除、导入合并与幂等、坏文件与结构校验拒绝。
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 

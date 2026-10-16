@@ -15,6 +15,7 @@ import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../domain/models/device_sync.dart';
+import '../../domain/ports/sync_transport.dart';
 import '../settings/settings_secret_store.dart';
 import 'sync_stamp.dart';
 
@@ -201,7 +202,7 @@ class SyncStateStore {
   final Map<SyncCategory, bool> _categories = {
     for (final category in SyncCategory.values) category: true,
   };
-  final Set<String> _enabledTransports = {'lan'};
+  final Set<String> _enabledTransports = {SyncTransportKind.lan};
   WebDavConfig _webdav = const WebDavConfig();
 
   /// 手动添加的对端地址（局域网发现失败时的兜底）。

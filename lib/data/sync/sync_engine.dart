@@ -59,7 +59,7 @@ class SyncEngine extends ChangeNotifier {
   bool _initialized = false;
 
   /// 同步进行中收到的同步请求（手动点击 / 入站推送）：合并成一次排队，
-  /// 当前轮结束后立刻补跑，不再静默丢弃。
+  /// 当前轮结束后立刻补跑，请求不会被丢弃。
   SyncTrigger? _pendingTrigger;
 
   SyncRoundReport? _lastReport;
@@ -210,7 +210,7 @@ class SyncEngine extends ChangeNotifier {
     bool push = true,
   }) async {
     if (_syncing) {
-      // 排队一次：手动点击与入站推送都不该被静默丢弃（旧实现直接返回旧报告）。
+      // 排队一次：手动点击与入站推送都不该被静默丢弃。
       _pendingTrigger = _mergeTrigger(_pendingTrigger, trigger);
       return _lastReport;
     }

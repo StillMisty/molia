@@ -23,6 +23,7 @@ import '../../data/sync/transport/lan_sync_transport.dart';
 import '../../data/sync/transport/local_network_permission.dart';
 import '../../data/sync/transport/webdav_sync_transport.dart';
 import '../../domain/models/device_sync.dart';
+import '../../domain/ports/sync_transport.dart';
 import '../../providers/playback_provider.dart';
 import '../../providers/sync_provider.dart';
 import '../../services/playback_session_store.dart';
@@ -62,7 +63,7 @@ Future<SyncStack> buildSyncStack({
   final prefsSyncAdapter = PrefsSyncAdapter(
     state: syncState,
     settings: catalog.settings,
-    // 应用远端设置后：注册表按键触发模块自绑的重载钩子（不再手写清单）。
+    // 应用远端设置后：注册表按键触发模块自绑的重载钩子。
     onApplied: catalog.settings.reloadKeys,
   );
   final statisticsSyncAdapter =
@@ -118,7 +119,10 @@ Future<SyncStack> buildSyncStack({
       statisticsSyncAdapter,
       sessionSyncAdapter,
     ],
-    transports: {'lan': lanSyncTransport, 'webdav': webdavSyncTransport},
+    transports: {
+      SyncTransportKind.lan: lanSyncTransport,
+      SyncTransportKind.webdav: webdavSyncTransport,
+    },
     // 引擎与各仓库共用同一个发号器（唯一）与同一时钟源。
     stamps: syncState.stampIssuer,
     clock: () => DateTime.fromMillisecondsSinceEpoch(syncState.nowMs()),

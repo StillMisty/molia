@@ -175,7 +175,7 @@ void main() {
     expect(keys, hasLength(1));
     expect(keys.single.data!['sourceKey'], 'wy');
 
-    // 对端收到 local 事件也忽略（防御：旧版本或异常数据）。
+    // 对端收到 local 事件也忽略（防御：异常或外来数据）。
     final result = await adapterB.apply({
       SyncCategory.statistics: [
         SyncRecord(

@@ -228,7 +228,7 @@ void main() {
       [SyncRecordKeys.history('wy', 's1')],
     );
 
-    // 对端收到 local 条目 / 墓碑也忽略（防御：旧版本或异常数据）。
+    // 对端收到 local 条目 / 墓碑也忽略（防御：异常或外来数据）。
     final result = await adapterB.apply({
       SyncCategory.history: [
         SyncRecord(

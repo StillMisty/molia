@@ -24,8 +24,8 @@ import 'sync_peers_page.dart';
 /// 页面只做口令的生成、复制、重置与加入，不做逐设备审批。
 ///
 /// 可观察性约定：结论行给「五态 + 时间 + 本轮变更量」，日志给「触发原因 +
-/// 本轮做了什么」；不再出现「跳过 N 项」这类全库规模计数（它随数据量增长，
-/// 对用户没有意义）。失败行点开给出下一步动作。
+/// 本轮做了什么」；计数一律是本轮变更量（不随数据量增长）。失败行点开给出
+/// 下一步动作。
 class SyncSettingsPage extends StatelessWidget {
   const SyncSettingsPage({super.key});
 

@@ -19,8 +19,8 @@ import '../sync_crypto.dart';
 /// - HTTP `GET  /molia-sync/v1/snapshot`：返回本机加密快照；
 /// - HTTP `POST /molia-sync/v1/snapshot`：接收对端加密快照。
 ///
-/// 信任模型：数据用同步口令派生密钥加密，能解密者即已授权；HTTP 层不再
-/// 鉴权（快照是密文，无法解密者拿不到内容）。
+/// 信任模型：数据用同步口令派生密钥加密，能解密者即已授权；HTTP 层不做
+/// 额外鉴权（快照是密文，无法解密者拿不到内容）。
 ///
 /// 发现失败（AP 隔离 / 多网段 / 防火墙 / VPN）时用 [manualPeersProvider]
 /// 提供的手动地址簿做单播探测；权限被拒（Android 17 起局域网默认阻断）时
