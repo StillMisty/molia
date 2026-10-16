@@ -2235,6 +2235,11 @@ class AppLocalizationsZh extends AppLocalizations {
   String get syncPeersSubtitleEmpty => '尚无其它设备';
 
   @override
+  String syncPeersSubtitleWithLost(int count, int lost) {
+    return '本机 + $count 台对端（$lost 台已失联）';
+  }
+
+  @override
   String get syncPeersHint =>
       '在其它设备输入同一口令即可加入。若长期发现不到设备，检查局域网传输是否可用（权限 / 网络隔离），或改用 WebDAV。';
 

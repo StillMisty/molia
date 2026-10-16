@@ -2323,6 +2323,11 @@ class AppLocalizationsEn extends AppLocalizations {
   String get syncPeersSubtitleEmpty => 'No other device yet';
 
   @override
+  String syncPeersSubtitleWithLost(int count, int lost) {
+    return 'This device + $count peers ($lost lost)';
+  }
+
+  @override
   String get syncPeersHint =>
       'Enter the same passphrase on another device to join. If no device is ever discovered, check whether LAN sync can run (permission / network isolation) or switch to WebDAV.';
 

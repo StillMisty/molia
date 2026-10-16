@@ -331,7 +331,11 @@ class SyncSettingsPage extends StatelessWidget {
 
   static String _peersSubtitle(SyncProvider provider, AppLocalizations l10n) {
     final count = provider.peers.length;
-    return count == 0 ? l10n.syncPeersSubtitleEmpty : l10n.syncPeersSubtitle(count);
+    if (count == 0) return l10n.syncPeersSubtitleEmpty;
+    final lost = provider.lostPeers.length;
+    return lost == 0
+        ? l10n.syncPeersSubtitle(count)
+        : l10n.syncPeersSubtitleWithLost(count, lost);
   }
 
   /// 传输副文案：基础说明 + 当前状态（含启动失败原因）+ 最后成功时间。

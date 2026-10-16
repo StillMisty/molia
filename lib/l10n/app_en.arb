@@ -1216,6 +1216,10 @@
     }
   },
   "syncPeersSubtitleEmpty": "No other device yet",
+  "syncPeersSubtitleWithLost": "This device + {count} peers ({lost} lost)",
+  "@syncPeersSubtitleWithLost": {
+    "placeholders": { "count": { "type": "int" }, "lost": { "type": "int" } }
+  },
   "syncPeersHint": "Enter the same passphrase on another device to join. If no device is ever discovered, check whether LAN sync can run (permission / network isolation) or switch to WebDAV.",
   "syncPeerThisDevice": "This device · {id}",
   "@syncPeerThisDevice": {

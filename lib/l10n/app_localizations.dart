@@ -4257,6 +4257,12 @@ abstract class AppLocalizations {
   /// **'No other device yet'**
   String get syncPeersSubtitleEmpty;
 
+  /// No description provided for @syncPeersSubtitleWithLost.
+  ///
+  /// In en, this message translates to:
+  /// **'This device + {count} peers ({lost} lost)'**
+  String syncPeersSubtitleWithLost(int count, int lost);
+
   /// No description provided for @syncPeersHint.
   ///
   /// In en, this message translates to:
