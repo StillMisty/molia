@@ -47,12 +47,15 @@
     会报「Error waiting for a debug connection」；要肉眼观察用 `test.sh linux --window`。
 12. **不内置字体资产**：界面与海报统一使用设备字体，用户可在设置中切换「应用字体」
     （枚举实现见 `lib/services/system_fonts_service*.dart`：Android 解析系统
-    `fonts.xml`、iOS 走 `UIFont.familyNames` 通道、Linux 调 `fc-list`），海报页可
+    `fonts.xml`、iOS 走 `UIFont.familyNames` 通道、Linux 调 `fc-list`、Windows
+    扫系统/用户字体目录 + 注册表后解析字体 `name` 表取家族名——注册表值名带样式
+    后缀（`Arial Bold`），不能直接当家族名），海报页可
     独立覆盖（`PosterFontStore`）。不要再向 `pubspec.yaml` 的 `fonts:` 或
     `assets/fonts/` 添加字体，保持包体精简。
 13. **发布体积**：新增资产前先评估体积；不要内置 CJK 字体（系统字体 + 用户安装）。
     Android 启动图标自 2026-10 起为手绘矢量（`drawable/ic_launcher_foreground.xml`，
-    维护方式见 `icons_launcher.yaml` 头注释），该工具现在只生成 iOS 图标；
+    维护方式见 `icons_launcher.yaml` 头注释），该工具现在只生成 iOS 与 Windows 图标
+    （Windows 的 `app_icon.ico` 同时是 exe/任务栏/安装器/快捷方式图标，不要手改）；
     `minSdk=37` 下传统 mipmap 密度图无意义，已全部移除，不要用工具再生成。
 14. **省流模式的网络检测**：Android 8+ 后台不广播网络变化，`_MyThemedAppState` 在
     `resumed` 时调 `DataSaverService.refreshConnectivity()`，不要删除；Web 的
@@ -217,3 +220,12 @@
     属预期，`AppTray` 会静默降级（只记日志），不要据此判定托盘实现坏了；
     组合根的关闭策略经 `AppTray.detectHost()` 判定宿主，无宿主时自动退回
     「关闭即退出」，不会把窗口藏成没有找回入口的状态。
+36. **Linux 桌面集成是打包资产，不是运行期代码**：`.desktop` 与 hicolor 图标在
+    `linux/packaging/`（`release.yml` 的 linux job 拷进 tarball，用户解压后跑
+    `install.sh` 装到 `~/.local/share`）。`.desktop` 文件名必须与
+    `linux/CMakeLists.txt` 的 `APPLICATION_ID` 一致（Wayland 靠 app_id ↔ 文件名
+    匹配 dock 图标），`Icon=` 必须与 hicolor 文件名一致；不要手改那批 PNG，
+    再生成命令见 `linux/packaging/README.md`；X11 的运行期窗口图标走
+    `assets/icons/app_icon.png`（`WindowChrome` 调 window_manager 的 `setIcon`，
+    与 hicolor 集合同源），Wayland 下该调用无效也不报错。契约由
+    `test/packaging/linux_desktop_test.dart` 守住。

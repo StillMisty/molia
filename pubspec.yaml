@@ -70,6 +70,7 @@ flutter:
 
   assets:
     - assets/icons/adaptive_icon_monochrome.png
+    - assets/icons/app_icon.png
     - assets/icons/molia_logo.png
     - assets/icons/molia_logo_outline.png
     - assets/icons/tray_icon.png

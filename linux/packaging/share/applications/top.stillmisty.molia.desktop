@@ -1,0 +1,11 @@
+[Desktop Entry]
+Type=Application
+Name=Molia
+Name[zh_CN]=茉咏
+Comment=Multi-source music player
+Comment[zh_CN]=多音源本地音乐播放器
+Exec=molia
+Icon=top.stillmisty.molia
+Terminal=false
+Categories=AudioVideo;Audio;Player;
+StartupWMClass=top.stillmisty.molia

@@ -1,6 +1,6 @@
 # dart run icons_launcher:create
 #
-# 注意：Android 图标已改为手绘矢量资源，本工具不再生成 Android 图标（platforms.android.enable: false）。
+# 注意：Android 图标已改为手绘矢量资源，本工具不生成 Android 图标（platforms.android.enable: false）。
 # 品牌更新时 Android 侧维护方式：
 #   1. 源图：assets/icons/molia_icon_full_bleed.svg
 #      （2048×2048：纯色底 #124537 + 外层 group 变换 + 7 条 path 的 mark）
@@ -12,6 +12,11 @@
 #
 # iOS 侧三张源图均为 1024×1024 不透明 RGB：主图带 alpha 时工具会自动移除；
 # tinted 图按原样使用（无去饱和选项），因此该源图必须自身保持灰度。
+#
+# Windows 侧从 Android 的 1024 全彩图重采样出 16..256 的 app_icon.ico：
+# 该 ico 同时是 exe 资源（Runner.rc 的 IDI_APP_ICON，决定窗口/任务栏/Alt-Tab）
+# 与 Inno 安装器图标（windows/installer/molia.iss 的 SetupIconFile）与快捷方式图标，
+# 换品牌图时四个位置一次生效。
 icons_launcher:
   platforms:
     android:
@@ -21,3 +26,6 @@ icons_launcher:
       image_path: "assets/icons/image_path_ios.png"
       dark_path: "assets/icons/image_path_ios_dark_transparent.png"
       tinted_path: "assets/icons/image_path_ios_tinted_grayscale.png"
+    windows:
+      enable: true
+      image_path: "assets/icons/image_path_android.png"
