@@ -1,8 +1,11 @@
+import 'package:audio_service/audio_service.dart';
+import 'package:flutter/widgets.dart' show Locale;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:molia/managers/artwork_cache.dart';
 import 'package:molia/models/play_mode.dart';
 import 'package:molia/playback/local_audio_handler.dart';
 import 'package:molia/playback/local_playback_service.dart';
+import 'package:molia/services/language_service.dart';
 import 'package:molia/sources/source_track.dart';
 
 SourceTrack _track({String? coverUrl}) => SourceTrack(
@@ -21,27 +24,34 @@ SourceTrack _track({String? coverUrl}) => SourceTrack(
 class _FakeService extends LocalPlaybackService {
   _FakeService()
       : super(
-          resolver: (track, {String? quality}) async => 'http://127.0.0.1/a.wav',
+          resolver: (track, {String? quality}) async =>
+              'http://127.0.0.1/a.wav',
         );
 
-  bool hasTrackValue = false;
+  bool playingValue = false;
+  SourceTrack? trackValue;
   int skipToNextCalls = 0;
   int skipToPreviousCalls = 0;
+  int stopCalls = 0;
+  PlayMode modeValue = PlayMode.sequential;
+
+  /// 控制动作调用台账（断言调用与顺序）。
+  final List<String> calls = [];
 
   @override
-  bool get hasTrack => hasTrackValue;
+  bool get hasTrack => trackValue != null;
 
   @override
-  bool get isPlaying => false;
+  bool get isPlaying => playingValue;
 
   @override
   bool get isLoading => false;
 
   @override
-  PlayMode get mode => PlayMode.sequential;
+  PlayMode get mode => modeValue;
 
   @override
-  SourceTrack? get currentSourceTrack => null;
+  SourceTrack? get currentSourceTrack => trackValue;
 
   @override
   Duration get position => Duration.zero;
@@ -50,10 +60,17 @@ class _FakeService extends LocalPlaybackService {
   Duration get duration => Duration.zero;
 
   @override
-  List<SourceTrack> get queueTracks => const [];
+  List<SourceTrack> get queueTracks =>
+      trackValue == null ? const [] : [trackValue!];
 
   @override
-  int get currentIndex => -1;
+  int get currentIndex => trackValue == null ? -1 : 0;
+
+  /// 模拟 App 内切换播放模式（后端 → 服务 → 快照链路）。
+  void emitMode(PlayMode mode) {
+    modeValue = mode;
+    notifyListeners();
+  }
 
   @override
   Future<void> skipToNext() async {
@@ -63,6 +80,29 @@ class _FakeService extends LocalPlaybackService {
   @override
   Future<void> skipToPrevious() async {
     skipToPreviousCalls++;
+  }
+
+  @override
+  Future<void> toggle() async {
+    calls.add('toggle');
+    playingValue = !playingValue;
+    notifyListeners();
+  }
+
+  @override
+  Future<void> toggleMode() async {
+    calls.add('toggleMode');
+    modeValue = PlayMode.values[(modeValue.index + 1) % PlayMode.values.length];
+    notifyListeners();
+  }
+
+  @override
+  Future<void> stop({bool clear = true}) async {
+    stopCalls++;
+    calls.add('stop');
+    playingValue = false;
+    if (clear) trackValue = null;
+    notifyListeners();
   }
 }
 
@@ -184,7 +224,7 @@ void main() {
     });
 
     test('服务已有真实曲目：走正常切歌，不触发回落', () async {
-      final service = _FakeService()..hasTrackValue = true;
+      final service = _FakeService()..trackValue = _track();
       addTearDown(service.dispose);
       var restoredCalls = 0;
       final handler = LocalAudioHandler(
@@ -196,6 +236,111 @@ void main() {
 
       expect(service.skipToNextCalls, 1);
       expect(restoredCalls, 0);
+    });
+  });
+
+  group('播放顺序动作（通知自定义动作）', () {
+    setUp(() {
+      // 文案走 l10n：固定界面语言让标签可精确断言。
+      LanguageService.localeNotifier.value = const Locale('zh');
+    });
+    tearDown(() {
+      LanguageService.localeNotifier.value = null;
+    });
+
+    MediaControl? playModeControl(LocalAudioHandler handler) {
+      for (final control in handler.playbackState.value.controls) {
+        if (control.customAction?.name == playModeActionId) return control;
+      }
+      return null;
+    }
+
+    test('通知动作：上一首/播放暂停/下一首/播放顺序/停止，紧凑视图仍指前三', () {
+      final service = _FakeService()
+        ..trackValue = _track()
+        ..playingValue = true;
+      addTearDown(service.dispose);
+      final handler = LocalAudioHandler(service);
+
+      final state = handler.playbackState.value;
+      expect(
+        state.controls.map((control) => control.action),
+        [
+          MediaAction.skipToPrevious,
+          MediaAction.pause,
+          MediaAction.skipToNext,
+          MediaAction.custom,
+          MediaAction.stop,
+        ],
+      );
+      // 紧凑视图（通知收起态 / 锁屏）保持「上一首 / 播放暂停 / 下一首」。
+      expect(state.androidCompactActionIndices, const [0, 1, 2]);
+    });
+
+    test('图标与文案反映当前模式（顺序 / 单曲循环 / 随机）', () {
+      final service = _FakeService()..trackValue = _track();
+      addTearDown(service.dispose);
+      final handler = LocalAudioHandler(service);
+
+      const expected = {
+        PlayMode.sequential: ('顺序播放', 'drawable/audio_service_repeat_all'),
+        PlayMode.singleRepeat: ('单曲循环', 'drawable/audio_service_repeat_one'),
+        PlayMode.shuffle: ('随机播放', 'drawable/audio_service_shuffle'),
+      };
+      for (final entry in expected.entries) {
+        // App 内切模式（后端 → 服务）与通知动作读同一份模式。
+        service.emitMode(entry.key);
+        final control = playModeControl(handler);
+        expect(control, isNotNull, reason: '缺播放顺序动作: ${entry.key}');
+        expect(control!.label, entry.value.$1, reason: '${entry.key} 文案');
+        expect(control.androidIcon, entry.value.$2, reason: '${entry.key} 图标');
+      }
+    });
+
+    test('点按动作：循环模式（与 App 内同一顺序）并立即落盘会话', () async {
+      final service = _FakeService()..trackValue = _track();
+      addTearDown(service.dispose);
+      var persisted = 0;
+      final handler = LocalAudioHandler(service)
+        ..attachSessionPersister(() async => persisted++);
+
+      await handler.customAction(playModeActionId);
+      // PlayMode.values = 单曲循环 / 顺序 / 随机：与 PlaybackProvider 一致。
+      expect(service.calls, ['toggleMode']);
+      expect(service.modeValue, PlayMode.shuffle);
+      expect(playModeControl(handler)!.label, '随机播放');
+      expect(persisted, 1, reason: '模式是会话的一部分，改后立即落盘');
+
+      await handler.customAction(playModeActionId);
+      expect(service.modeValue, PlayMode.singleRepeat);
+      expect(playModeControl(handler)!.label, '单曲循环');
+
+      // 其它自定义动作透传，不影响播放模式。
+      await handler.customAction('lx.other');
+      expect(service.calls, ['toggleMode', 'toggleMode']);
+      expect(persisted, 2);
+    });
+
+    test('暂停 / 停止：动作返回前落盘会话（停止先落盘再清空队列）', () async {
+      final service = _FakeService()
+        ..trackValue = _track()
+        ..playingValue = true;
+      addTearDown(service.dispose);
+      final log = <String>[];
+      final handler = LocalAudioHandler(service)
+        ..attachSessionPersister(() async => log.add('persist'));
+
+      await handler.pause();
+      expect(service.calls, ['toggle']);
+      expect(service.playingValue, isFalse);
+      expect(log, ['persist']);
+
+      // 停止清空服务队列：必须在清空**之前**落盘，否则会话无从恢复。
+      service.calls.clear();
+      await handler.stop();
+      expect(service.calls, ['stop']);
+      expect(log, ['persist', 'persist']);
+      expect(handler.playbackState.value.controls, isEmpty);
     });
   });
 }
