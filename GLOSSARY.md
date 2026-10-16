@@ -361,8 +361,8 @@
   逐键取新，无增量/版本向量（见 ADR-0003）。协议版本 v2（v1 对端与 v1 备份
   都被拒绝，见 「协议版本闸门」）。
 - **Sync record（同步记录）** — 快照最小单元：`key + version + data`；`version`
-  是三元组 版本戳 `SyncVersion`，删除表示为 `deleted` 墓碑记录（墓碑另带真实删除时间
-  `deletedAt`），墓碑参与 LWW 并保留 90 天后裁剪（按 `deletedAt` 计时）。
+  是 `SyncVersion` 三元组，删除表示为 `deleted` 墓碑记录（墓碑另带真实删除
+  时间 `deletedAt`），墓碑参与 LWW 并保留 90 天后裁剪（按 `deletedAt` 计时）。
 - **SyncVersion（记录版本戳）** — `(versionPhysical, versionCounter, deviceId)`：
   物理分量 = `max(本地物理时间, 已观测最大值)`，同物理值内 `counter` 递增，
   相等按 `deviceId` 字典序；胜负判定的唯一依据（「内容时间分离」）。
