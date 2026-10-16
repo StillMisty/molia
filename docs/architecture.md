@@ -544,11 +544,19 @@
   `PredictiveBackPageTransitionsBuilder`（`lib/theme/app_theme.dart`）——手势跟手预览
   只由它插入的手势 detector 提供，换成普通 builder 会静默退化成「能返回、无预览」
   （`WidgetsBinding._handleCommitBackGesture` 无观察者时走 `handlePopRoute`）。
-  由此根导航器上 push 的页面（二级页）都有预览；大屏二级页的侧边弹层与居中对话框
-  走 `showGeneralDialog` / `showDialog`，不参与页面过渡、无预览（大屏侧边弹层的
-  手势支持待补；弹层类表面由 M3E 包内宿主自实现）。嵌套 Navigator（设置弹层内层）
-  必须显式退出预测返回（`SettingsPage._innerTransitionTheme`）：框架的 `Route.isCurrent`
-  按各自 Navigator 判定，内层子页会抢走根导航器弹层的手势、一次手势退两级。
+  由此根导航器上 push 的页面（二级页）都有预览。M3E 的弹层类表面（底部弹层）由包内
+  宿主自实现预览：宿主自己当手势观察者，guard（`onDismissRequest`）非空时也接管
+  （material_3_expressive ≥ 1.1.7），提交后交给 guard 裁决——guard 拒绝则预览回弹、
+  表面留在原位；1.1.6 及以下宿主在 guard 非空时直接放弃手势，那条链路会静默退化成
+  「无预览」的普通返回，故依赖下限 1.1.7（原因见 `pubspec.yaml` 注释）。本仓库大屏的
+  侧边弹层（`showGeneralDialog`）与居中对话框（`showDialog`）不是 M3E 组件、不参与
+  页面过渡、无预览（侧边弹层的手势支持待补）。嵌套 Navigator（设置弹层内层）必须
+  显式退出预测返回（`SettingsPage._innerTransitionTheme`）：框架把一次手势派发给
+  **所有**返回 true 的观察者，而 `Route.isCurrent` 只看各自 Navigator——根导航器上
+  开着弹层时内层子页也是「current」，会与最上层表面各自接管：实测为手势退掉内层
+  子页、最上层对话框反而留下（两条路由都退时更是一次手势退两级）。这是框架侧行为，
+  1.1.7 的弹层修复不覆盖它，故内层仍强制 fade-forwards（护栏见
+  `test/settings_page_test.dart` 的「根导航器上方 dialog」用例）。
 - 图标：统一圆角风格 `Icons.*_rounded`（不用 `Icons.adaptive.*`，不混 `_outlined`/基础实心）；
   唯一例外 `library_music_outlined`（资料库未选中半对；音符图标已改用 `MoliaMark` 组件）。
   `test/architecture/icon_usage_test.dart` 扫描强制。**同一按钮的状态图标切换**统一走
