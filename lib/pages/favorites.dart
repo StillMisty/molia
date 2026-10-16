@@ -2156,26 +2156,37 @@ class _CollectionPickerSheetState extends State<_CollectionPickerSheet> {
                 Expanded(
                   child: Text(widget.title, style: theme.textTheme.titleMedium),
                 ),
-                // 这是两个工具动作（新建 / 导入）。M3EButtonGroup 在 1.1.6
-                // 只渲染「图标 + 文案」都有的动作（icon-only / 纯文案动作会
-                // 渲染成空按钮），所以这里保持两个标准图标键。
-                M3EIconButton(
-                  key: const Key('favoritesCreatePlaylist'),
-                  variant: M3EIconButtonVariant.standard,
-                  size: M3EIconButtonSize.sm,
-                  tooltip: l10n.playlistCreate,
-                  icon: const Icon(Icons.add_rounded),
-                  onPressed: _createPlaylist,
-                ),
-                M3EIconButton(
-                  key: const Key('favoritesImportCollection'),
-                  variant: M3EIconButtonVariant.standard,
-                  size: M3EIconButtonSize.sm,
-                  tooltip: l10n.libraryImportFavorites,
-                  icon: const Icon(Icons.library_add_rounded),
-                  onPressed: () => Navigator.of(context).pop(
-                    const _PickerOutcome.importRequested(),
+                // 两个工具动作收成一个 icon-only 动作组，语义与悬浮提示走
+                // tooltip + semanticLabel；图标沿用标题行的中性色。
+                M3EButtonGroup(
+                  type: M3EButtonGroupType.standard,
+                  style: M3EButtonStyle.text,
+                  decoration: M3EButtonDecoration(
+                    foregroundColor: WidgetStatePropertyAll<Color>(
+                      M3ETheme.of(context).colorScheme.onSurfaceVariant,
+                    ),
                   ),
+                  actions: [
+                    M3EButtonGroupAction(
+                      icon: const Icon(Icons.add_rounded),
+                      tooltip: l10n.playlistCreate,
+                      semanticLabel: l10n.playlistCreate,
+                    ),
+                    M3EButtonGroupAction(
+                      icon: const Icon(Icons.library_add_rounded),
+                      tooltip: l10n.libraryImportFavorites,
+                      semanticLabel: l10n.libraryImportFavorites,
+                    ),
+                  ],
+                  onSelectedIndexChanged: (index) {
+                    if (index == 0) {
+                      _createPlaylist();
+                    } else if (index == 1) {
+                      Navigator.of(context).pop(
+                        const _PickerOutcome.importRequested(),
+                      );
+                    }
+                  },
                 ),
               ],
             ),
