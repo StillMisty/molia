@@ -5,6 +5,7 @@ import 'package:molia/data/play_statistics_repository.dart';
 import 'package:molia/data/sync/adapters/statistics_sync_adapter.dart';
 import 'package:molia/domain/models/device_sync.dart';
 import 'package:molia/domain/models/play_statistics.dart';
+import 'support/sync_test_support.dart';
 
 import 'support/memory_database.dart';
 
@@ -50,13 +51,13 @@ void main() {
     dbB = openMemoryDatabase();
     repoA = PlayStatisticsRepository(
       databaseProvider: () => dbA,
-      deviceIdProvider: () => 'devA',
       clock: () => clockA,
+      stamps: testStampIssuer(clock: () => clockA, deviceId: 'devA'),
     );
     repoB = PlayStatisticsRepository(
       databaseProvider: () => dbB,
-      deviceIdProvider: () => 'devB',
       clock: () => clockB,
+      stamps: testStampIssuer(clock: () => clockB, deviceId: 'devB'),
     );
     adapterA = StatisticsSyncAdapter(repository: repoA);
     adapterB = StatisticsSyncAdapter(repository: repoB);

@@ -33,27 +33,20 @@ class PlayStatisticsRepository {
   /// [databaseProvider] 仅测试注入（in-memory drift 库）；生产走
   /// [MoliaDatabase.instance]。
   ///
-  /// [deviceIdProvider] 供跨设备统计合并标注事件来源设备（缺省为空串，
-  /// 同步未启用时无影响）；[clock] 提供内容时间（`endedAt`）；[stampIssuer]
-  /// 是版本戳唯一发号器（内容时间与版本戳刻意分开，见 ADR-0003 v2 §2）。
+  /// [stamps] 是版本戳唯一发号器（必填：组合根注入同一实例；事件来源设备
+  /// `originDeviceId` 也取自这里，保证与版本三元组一致）；[clock] 提供内容
+  /// 时间（`endedAt`）——两者刻意分开（内容时间分离，见 ADR-0003 v2 §2）。
   PlayStatisticsRepository({
     MoliaDatabase Function()? databaseProvider,
-    String Function()? deviceIdProvider,
     int Function()? clock,
-    SyncStampIssuer? stampIssuer,
+    required SyncStampIssuer stamps,
   })  : _databaseProvider = databaseProvider ?? (() => MoliaDatabase.instance),
-        _deviceIdProvider = deviceIdProvider ?? (() => ''),
         _clock = clock ?? (() => DateTime.now().millisecondsSinceEpoch),
-        _injectedStamps = stampIssuer {
-    _stamps = _injectedStamps ??
-        SyncStampIssuer(clock: _clock, deviceId: _deviceIdProvider);
-  }
+        _stamps = stamps;
 
   final MoliaDatabase Function() _databaseProvider;
-  final String Function() _deviceIdProvider;
   final int Function() _clock;
-  final SyncStampIssuer? _injectedStamps;
-  late final SyncStampIssuer _stamps;
+  final SyncStampIssuer _stamps;
   final Random _random = Random.secure();
   final StreamController<void> _changes = StreamController<void>.broadcast();
 
@@ -119,7 +112,7 @@ class PlayStatisticsRepository {
           maxPositionMs: const Value(0),
           endReason: const Value(null),
           syncKey: Value(_newSyncKey()),
-          originDeviceId: Value(_deviceIdProvider()),
+          originDeviceId: Value(_stamps.deviceId),
         ));
   }
 
@@ -560,11 +553,7 @@ class PlayStatisticsRepository {
                 versionCounter: Value(version.counter),
               ));
           applied++;
-        } else if (version.isNewerThan(SyncVersion(
-          physical: existing.versionPhysical,
-          counter: existing.versionCounter,
-          deviceId: existing.originDeviceId,
-        ))) {
+        } else if (version.isNewerThan(existing.syncVersion)) {
           await (db.update(db.playEvents)
                 ..where((t) => t.id.equals(existing.id)))
               .write(PlayEventsCompanion(

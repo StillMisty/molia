@@ -41,6 +41,7 @@ void main() {
     transport = FakeSyncTransport();
     engine = SyncEngine(
       state: state,
+      stamps: state.stampIssuer,
       adapters: [
         PrefsSyncAdapter(
           state: state,
@@ -256,6 +257,7 @@ void main() {
     final adapter = _FlakyAdapter();
     final failingEngine = SyncEngine(
       state: failingState,
+      stamps: failingState.stampIssuer,
       adapters: [adapter],
       transports: {'lan': failingTransport},
     );

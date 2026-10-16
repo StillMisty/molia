@@ -37,6 +37,7 @@ void main() {
     transport = FakeSyncTransport();
     engine = SyncEngine(
       state: state,
+      stamps: state.stampIssuer,
       adapters: [
         PrefsSyncAdapter(
           state: state,

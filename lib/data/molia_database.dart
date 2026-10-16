@@ -14,6 +14,8 @@ import 'package:drift_flutter/drift_flutter.dart';
 import 'package:logging/logging.dart';
 import 'package:path_provider/path_provider.dart';
 
+import '../domain/models/device_sync.dart';
+
 part 'molia_database.g.dart';
 
 final _logger = Logger('molia.molia_database');
@@ -354,7 +356,8 @@ class MoliaDatabase extends _$MoliaDatabase {
   /// 批量插入或替换播放上下文；字段缺失的行跳过并记一条警告。
   Future<void> batchInsertOrReplacePlayContexts(
     List<Map<String, dynamic>> contexts,
-  ) async {   if (contexts.isEmpty) return;
+  ) async {
+    if (contexts.isEmpty) return;
     final rows = <PlayContextsCompanion>[];
     for (final context in contexts) {
       if (context['contextUri'] != null &&
@@ -379,4 +382,53 @@ class MoliaDatabase extends _$MoliaDatabase {
           mode: InsertMode.insertOrReplace,
         ));
   }
+}
+
+// 行内版本三列（`versionPhysical` / `versionCounter` / `deviceId`）的集中转换：
+// 同步适配器与仓库都用这里读版本，避免各处手拼三元组（统计事件用
+// `originDeviceId` 兼作设备列——事件产生设备就是版本设备）。
+
+/// 列表头的版本三元组。
+extension PlaylistSyncVersionX on Playlist {
+  SyncVersion get syncVersion => SyncVersion(
+        physical: versionPhysical,
+        counter: versionCounter,
+        deviceId: deviceId,
+      );
+}
+
+/// 列表曲目的版本三元组。
+extension PlaylistTrackSyncVersionX on PlaylistTrackRow {
+  SyncVersion get syncVersion => SyncVersion(
+        physical: versionPhysical,
+        counter: versionCounter,
+        deviceId: deviceId,
+      );
+}
+
+/// 播放历史的版本三元组（`playedAt` 是内容时间，不在其中）。
+extension PlayHistorySyncVersionX on PlayHistoryData {
+  SyncVersion get syncVersion => SyncVersion(
+        physical: versionPhysical,
+        counter: versionCounter,
+        deviceId: deviceId,
+      );
+}
+
+/// 墓碑的版本三元组（`deletedAt` 是内容时间，不在其中）。
+extension SyncTombstoneSyncVersionX on SyncTombstone {
+  SyncVersion get syncVersion => SyncVersion(
+        physical: versionPhysical,
+        counter: versionCounter,
+        deviceId: deviceId,
+      );
+}
+
+/// 统计事件的版本三元组（`endedAt` / `startedAt` 是内容时间）。
+extension PlayEventSyncVersionX on PlayEventRow {
+  SyncVersion get syncVersion => SyncVersion(
+        physical: versionPhysical,
+        counter: versionCounter,
+        deviceId: originDeviceId,
+      );
 }

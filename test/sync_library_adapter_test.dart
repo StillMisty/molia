@@ -4,6 +4,7 @@ import 'package:molia/data/molia_database.dart';
 import 'package:molia/data/sync/adapters/playlist_sync_adapter.dart';
 import 'package:molia/domain/models/device_sync.dart';
 import 'package:molia/domain/models/library.dart';
+import 'support/sync_test_support.dart';
 
 import 'support/memory_database.dart';
 
@@ -36,13 +37,13 @@ void main() {
     dbB = openMemoryDatabase();
     repoA = LibraryRepository(
       databaseProvider: () => dbA,
-      deviceIdProvider: () => 'devA',
       clock: () => clock,
+      stamps: testStampIssuer(clock: () => clock, deviceId: 'devA'),
     );
     repoB = LibraryRepository(
       databaseProvider: () => dbB,
-      deviceIdProvider: () => 'devB',
       clock: () => clock,
+      stamps: testStampIssuer(clock: () => clock, deviceId: 'devB'),
     );
     adapterA = PlaylistSyncAdapter(repository: repoA);
     adapterB = PlaylistSyncAdapter(repository: repoB);

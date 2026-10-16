@@ -6,6 +6,7 @@ import 'package:molia/data/molia_database.dart';
 import 'package:molia/data/play_statistics_repository.dart';
 import 'package:molia/domain/models/play_statistics.dart';
 import 'package:molia/providers/play_statistics_provider.dart';
+import 'support/sync_test_support.dart';
 
 import 'support/memory_database.dart';
 
@@ -41,7 +42,10 @@ void main() {
 
   setUp(() async {
     db = openMemoryDatabase();
-    repository = PlayStatisticsRepository(databaseProvider: () => db);
+    repository = PlayStatisticsRepository(
+      databaseProvider: () => db,
+      stamps: testStampIssuer(),
+    );
     provider = PlayStatisticsProvider(repository: repository);
   });
 

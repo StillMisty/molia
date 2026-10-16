@@ -220,8 +220,7 @@ class SyncStateStore {
   SyncStamp? _sessionStamp;
 
   /// 版本戳发号器基线（`sync_state_v1` 的 `stampSeq`）：重启后不倒退。
-  int _stampPhysical = 0;
-  int _stampCounter = 0;
+  SyncVersion _stampBaseline = SyncVersion.zero;
 
   /// 本机所有同步戳的唯一发号器（见 [SyncStampIssuer]）。
   ///
@@ -230,10 +229,10 @@ class SyncStateStore {
   late final SyncStampIssuer stampIssuer = SyncStampIssuer(
     clock: _clock,
     deviceId: () => _deviceId,
-    onAdvanced: (value) {
-      _stampPhysical = value.physical;
-      _stampCounter = value.counter;
-    },
+    onAdvanced: (value) => _stampBaseline = SyncVersion(
+      physical: value.physical,
+      counter: value.counter,
+    ),
   );
 
   int _lastSyncAt = 0;
@@ -306,9 +305,7 @@ class SyncStateStore {
     // 发号器基线 = max(持久化基线, 当前时钟)：重启（含时钟回拨）不倒退。
     // 「全库最大戳」由组合根在仓库就绪后经 seed() 补入（见 LibraryRepository
     // .maxVersion）。
-    stampIssuer.seed(
-      SyncVersion(physical: _stampPhysical, counter: _stampCounter),
-    );
+    stampIssuer.seed(_stampBaseline);
     _initialized = true;
   }
 
@@ -485,7 +482,7 @@ class SyncStateStore {
         if (_manualPeers.isNotEmpty)
           'manualPeers': [for (final peer in _manualPeers) peer.toJson()],
         if (_lanHttpPort > 0) 'lanHttpPort': _lanHttpPort,
-        'stampSeq': {'p': _stampPhysical, 'c': _stampCounter},
+        'stampSeq': _stampBaseline.toJson(),
         'settings': {
           for (final entry in _settingStamps.entries)
             entry.key: entry.value.toJson(),
@@ -539,8 +536,15 @@ class SyncStateStore {
 
     final stampSeq = json['stampSeq'];
     if (stampSeq is Map) {
-      _stampPhysical = (stampSeq['p'] as num?)?.toInt() ?? 0;
-      _stampCounter = (stampSeq['c'] as num?)?.toInt() ?? 0;
+      final baseline = SyncVersion.fromJson(stampSeq) ??
+          // 兼容早期 `{'p','c'}` 形状（当前写 SyncVersion.toJson）。
+          (stampSeq['p'] is num
+              ? SyncVersion(
+                  physical: (stampSeq['p'] as num).toInt(),
+                  counter: (stampSeq['c'] as num?)?.toInt() ?? 0,
+                )
+              : null);
+      if (baseline != null) _stampBaseline = baseline;
     }
 
     _settingStamps.clear();

@@ -43,6 +43,7 @@ void main() {
     );
     engine = SyncEngine(
       state: state,
+      stamps: state.stampIssuer,
       adapters: [
         PrefsSyncAdapter(state: state, settings: registry),
       ],

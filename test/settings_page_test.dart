@@ -34,6 +34,7 @@ import 'package:molia/widgets/card_list_surface.dart';
 
 import 'support/fakes.dart';
 import 'package:molia/data/settings/settings_keys.dart';
+import 'support/sync_test_support.dart';
 
 import 'support/settings_test_support.dart';
 
@@ -79,6 +80,7 @@ void main() {
     playStatisticsService = PlayStatisticsService(
       repository: PlayStatisticsRepository(
         databaseProvider: () => throw StateError('测试不访问数据库'),
+        stamps: testStampIssuer(),
       ),
       settings: testSettingsRegistry(
         preferences: await SharedPreferences.getInstance(),

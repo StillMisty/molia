@@ -174,8 +174,8 @@ void main() {
       var dbClock = 500000;
       final repo = LibraryRepository(
         databaseProvider: () => db,
-        deviceIdProvider: () => 'devA',
         clock: () => dbClock,
+        stamps: testStampIssuer(clock: () => dbClock, deviceId: 'devA'),
       );
       addTearDown(repo.dispose);
       await repo.addHistoryEntry(PlayHistoryEntry(

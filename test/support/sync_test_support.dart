@@ -1,8 +1,19 @@
 import 'dart:async';
 
 import 'package:molia/data/settings/settings_secret_store.dart';
+import 'package:molia/data/sync/sync_stamp.dart';
 import 'package:molia/domain/models/device_sync.dart';
 import 'package:molia/domain/ports/sync_transport.dart';
+
+/// 测试用发号器（固定/可注入时钟 + 设备 id）：给不关心同步语义的仓库测试用。
+SyncStampIssuer testStampIssuer({
+  int Function()? clock,
+  String deviceId = '',
+}) =>
+    SyncStampIssuer(
+      clock: clock ?? () => DateTime.now().millisecondsSinceEpoch,
+      deviceId: () => deviceId,
+    );
 
 /// 测试用内存密钥存储（替代 flutter_secure_storage）。
 class MemorySyncSecretStore implements SettingsSecretStore {

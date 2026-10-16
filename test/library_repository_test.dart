@@ -7,6 +7,7 @@ import 'package:molia/data/library_repository.dart';
 import 'package:molia/data/lxmc_decoder.dart';
 import 'package:molia/data/molia_database.dart';
 import 'package:molia/domain/models/library.dart';
+import 'support/sync_test_support.dart';
 
 import 'support/memory_database.dart';
 
@@ -49,7 +50,10 @@ void main() {
 
   setUp(() async {
     db = openMemoryDatabase();
-    repository = LibraryRepository(databaseProvider: () => db);
+    repository = LibraryRepository(
+      databaseProvider: () => db,
+      stamps: testStampIssuer(),
+    );
   });
 
   tearDown(() async {

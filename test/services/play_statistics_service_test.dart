@@ -6,6 +6,7 @@ import 'package:molia/domain/models/failure.dart';
 import 'package:molia/domain/models/playback.dart';
 import 'package:molia/domain/models/track.dart';
 import 'package:molia/services/play_statistics_service.dart';
+import '../support/sync_test_support.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../support/memory_database.dart';
@@ -59,7 +60,10 @@ void main() {
   setUp(() async {
     SharedPreferences.setMockInitialValues({});
     db = openMemoryDatabase();
-    repository = PlayStatisticsRepository(databaseProvider: () => db);
+    repository = PlayStatisticsRepository(
+      databaseProvider: () => db,
+      stamps: testStampIssuer(),
+    );
     now = DateTime(2026, 1, 1, 12);
     service = PlayStatisticsService(
       repository: repository,

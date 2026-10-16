@@ -39,9 +39,8 @@ Future<LibraryStack> buildLibraryStack({
   // 资料库页经 LibraryProvider 读取（内存缓存）。版本戳与内容时间分开注入
   // （发号器唯一、时钟管内容时间；见 ADR-0003 v2 §2）。
   final libraryRepository = LibraryRepository(
-    deviceIdProvider: () => syncState.deviceId,
     clock: () => syncState.nowMs(),
-    stampIssuer: syncState.stampIssuer,
+    stamps: syncState.stampIssuer,
   );
   // 发号器基线 ≧ 全库最大戳：即使状态存储没来得及落盘（进程被杀）或时钟回拨，
   // 重启后的新写入也不会输给库内已有记录。
@@ -52,9 +51,8 @@ Future<LibraryStack> buildLibraryStack({
   // 快照 / 进度经 [wirePlayStatistics] 接线；上次进程被杀遗留的进行中事件
   // 启动即收尾为 interrupted。
   final playStatisticsRepository = PlayStatisticsRepository(
-    deviceIdProvider: () => syncState.deviceId,
     clock: () => syncState.nowMs(),
-    stampIssuer: syncState.stampIssuer,
+    stamps: syncState.stampIssuer,
   );
   final playStatisticsService = PlayStatisticsService(
     repository: playStatisticsRepository,

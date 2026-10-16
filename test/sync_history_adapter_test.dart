@@ -1,9 +1,11 @@
+import 'package:drift/drift.dart' show Value;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:molia/data/library_repository.dart';
 import 'package:molia/data/molia_database.dart';
 import 'package:molia/data/sync/adapters/history_sync_adapter.dart';
 import 'package:molia/domain/models/device_sync.dart';
 import 'package:molia/domain/models/library.dart';
+import 'support/sync_test_support.dart';
 
 import 'support/memory_database.dart';
 
@@ -43,13 +45,13 @@ void main() {
     dbB = openMemoryDatabase();
     repoA = LibraryRepository(
       databaseProvider: () => dbA,
-      deviceIdProvider: () => 'devA',
       clock: () => nowA,
+      stamps: testStampIssuer(clock: () => nowA, deviceId: 'devA'),
     );
     repoB = LibraryRepository(
       databaseProvider: () => dbB,
-      deviceIdProvider: () => 'devB',
       clock: () => nowB,
+      stamps: testStampIssuer(clock: () => nowB, deviceId: 'devB'),
     );
     adapterA = HistorySyncAdapter(repository: repoA);
     adapterB = HistorySyncAdapter(repository: repoB);
@@ -146,7 +148,7 @@ void main() {
 
   test('时钟超前设备的删除压制随后的播放（内容时间的残余代价）', () async {
     // B 的时钟快 1 年：删除时间 = B 的墙上时钟（超前），
-    // A 随后的播放（真实时间）仍被压制——与首版同级，不因基线吸收放大。
+    // A 随后的播放（真实时间）仍被压制——删除 vs 播放只看内容时间。
     nowB = 100000;
     await repoA.addHistoryEntry(entry('s1', playedAt: 1000));
     await adapterB.apply(await adapterA.collect());
@@ -217,5 +219,126 @@ void main() {
     });
     expect(result.applied, 0);
     expect(await repoB.listHistory(), isEmpty);
+  });
+
+  group('墓碑的删除 vs 播放按实际生效的删除时间判定', () {
+    /// 直接落库：本地墓碑与/或本地播放行（模拟历史遗留状态）。
+    Future<void> seedTombstone({
+      required SyncVersion version,
+      required int deletedAt,
+    }) async {
+      await dbB.into(dbB.syncTombstones).insert(SyncTombstonesCompanion.insert(
+            category: 'history',
+            key: SyncRecordKeys.history('wy', 's1'),
+            versionPhysical: version.physical,
+            versionCounter: Value(version.counter),
+            deviceId: Value(version.deviceId),
+            deletedAt: Value(deletedAt),
+          ));
+    }
+
+    Future<void> seedRow({
+      required int playedAt,
+      required SyncVersion version,
+    }) async {
+      await dbB.into(dbB.playHistory).insert(PlayHistoryCompanion.insert(
+            sourceKey: 'wy',
+            songId: 's1',
+            title: '本地行',
+            playedAt: playedAt,
+            versionPhysical: Value(version.physical),
+            versionCounter: Value(version.counter),
+            deviceId: Value(version.deviceId),
+          ));
+    }
+
+    test('入站墓碑版本更旧（未被采用）：不按它的删除时间删行，也不撤本地墓碑', () async {
+      await seedTombstone(
+        version: const SyncVersion(physical: 9000, deviceId: 'devB'),
+        deletedAt: 9000,
+      );
+      await seedRow(
+        playedAt: 10000,
+        version: const SyncVersion(physical: 8000, deviceId: 'devB'),
+      );
+
+      // 入站墓碑版本 1000（更旧）但删除时间 12000（更晚）：不应被采用。
+      final result = await adapterB.apply({
+        SyncCategory.history: [
+          SyncRecord.tombstone(
+            key: SyncRecordKeys.history('wy', 's1'),
+            version: const SyncVersion(physical: 1000, deviceId: 'devA'),
+            deletedAt: 12000,
+          ),
+        ],
+      });
+
+      expect(result.applied, 0, reason: '不按旧墓碑的删除时间误删');
+      expect(
+        (await repoB.listHistory()).map((e) => e.songId),
+        contains('s1'),
+        reason: '本地行保留',
+      );
+      final tombstones = await repoB.syncExportTombstones(['history']);
+      expect(tombstones, hasLength(1), reason: '比入站更新的本地墓碑不被撤下');
+      expect(tombstones.single.version.physical, 9000);
+      expect(tombstones.single.deletedAt, 9000);
+    });
+
+    test('入站墓碑版本更新（被采用）：按它自己的删除时间删行并覆盖本地墓碑', () async {
+      await seedTombstone(
+        version: const SyncVersion(physical: 1000, deviceId: 'devB'),
+        deletedAt: 1000,
+      );
+      await seedRow(
+        playedAt: 5000,
+        version: const SyncVersion(physical: 7000, deviceId: 'devB'),
+      );
+
+      final result = await adapterB.apply({
+        SyncCategory.history: [
+          SyncRecord.tombstone(
+            key: SyncRecordKeys.history('wy', 's1'),
+            version: const SyncVersion(physical: 9000, deviceId: 'devA'),
+            deletedAt: 6000,
+          ),
+        ],
+      });
+
+      expect(result.applied, 1);
+      expect(await repoB.listHistory(), isEmpty);
+      final tombstones = await repoB.syncExportTombstones(['history']);
+      expect(tombstones.single.version.physical, 9000);
+      expect(tombstones.single.deletedAt, 6000);
+    });
+
+    test('旧备份的播放记录晚于删除时间：本机复活但不顶掉更新的本地墓碑', () async {
+      await seedTombstone(
+        version: const SyncVersion(physical: 9000, deviceId: 'devB'),
+        deletedAt: 9000,
+      );
+
+      // 入站条目版本 1000（更旧）playedAt 12000（晚于删除）。
+      final result = await adapterB.apply({
+        SyncCategory.history: [
+          SyncRecord(
+            key: SyncRecordKeys.history('wy', 's1'),
+            version: const SyncVersion(physical: 1000, deviceId: 'devA'),
+            data: const {
+              'sourceKey': 'wy',
+              'songId': 's1',
+              'title': '旧备份',
+              'playedAt': 12000,
+            },
+          ),
+        ],
+      });
+
+      expect(result.applied, 1, reason: '播放晚于删除：本机复活');
+      expect((await repoB.listHistory()).map((e) => e.songId), contains('s1'));
+      final tombstones = await repoB.syncExportTombstones(['history']);
+      expect(tombstones, hasLength(1), reason: '更新的本地墓碑保留');
+      expect(tombstones.single.version.physical, 9000);
+    });
   });
 }

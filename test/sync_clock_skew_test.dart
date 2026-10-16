@@ -10,11 +10,10 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'support/memory_database.dart';
 import 'support/sync_test_support.dart';
 
-/// 双实例集成（#28 的核心证据）：**A 的时钟快 365 天，B 之后的编辑仍被 A 采纳**。
+/// 双实例集成：**A 的时钟快 365 天，B 之后的编辑仍被 A 采纳**。
 ///
-/// 首版实现（版本戳 = 设备墙上时钟）这条用例必然失败：B 的戳永远小于 A 的
-/// 超前戳，A 会把自己的旧值当成「更新」而丢弃 B 的编辑。v2 的 HLC-lite 让 B
-/// 在拉取 A 的快照时吸收 A 的超前戳，下一次写入严格大于它，于是全组收敛。
+/// HLC-lite 的收敛路径：B 拉取 A 的快照时吸收 A 的超前戳，下一次写入的版本
+/// 严格大于它（同物理值内 counter+1），因此 A 再拉取时会采纳 B 的编辑。
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
@@ -75,15 +74,13 @@ void main() {
 
     repoA = LibraryRepository(
       databaseProvider: () => dbA,
-      deviceIdProvider: () => stateA.deviceId,
       clock: () => stateA.nowMs(),
-      stampIssuer: stateA.stampIssuer,
+      stamps: stateA.stampIssuer,
     );
     repoB = LibraryRepository(
       databaseProvider: () => dbB,
-      deviceIdProvider: () => stateB.deviceId,
       clock: () => stateB.nowMs(),
-      stampIssuer: stateB.stampIssuer,
+      stamps: stateB.stampIssuer,
     );
     // 发号器基线 ≧ 全库最大戳（组合根的接线在测试里显式复现）。
     stateA.stampIssuer.seed(await repoA.maxVersion());
@@ -160,7 +157,7 @@ void main() {
       reason: '同物理值内 counter 递增 → 严格更大',
     );
     expect(bVersion.isNewerThan(aVersion), isTrue);
-    // 若按「B 的墙上时钟」发戳，B 的编辑会输给 A（这条用例在首版必失败）。
+    // B 的版本不是它自己的墙上时钟：物理分量已被 A 的超前戳抬高。
     expect(
       bVersion.physical,
       greaterThan(DateTime.now().millisecondsSinceEpoch),

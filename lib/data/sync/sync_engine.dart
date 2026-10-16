@@ -26,15 +26,13 @@ class SyncEngine extends ChangeNotifier {
     required SyncStateStore state,
     required List<SyncAdapter> adapters,
     required Map<String, SyncTransport> transports,
+    required SyncStampIssuer stamps,
     DateTime Function()? clock,
-    SyncStampIssuer? stamps,
   })  : _state = state,
         _adapters = adapters,
         _transports = transports,
-        _clock = clock ?? DateTime.now,
-        _injectedStamps = stamps {
-    _stamps = _injectedStamps ??
-        SyncStampIssuer(clock: _nowMs, deviceId: () => _state.deviceId);
+        _stamps = stamps,
+        _clock = clock ?? DateTime.now {
     for (final transport in transports.values) {
       _incomingSubscriptions.add(transport.incoming.listen(
         (envelope) => unawaited(onIncomingEnvelope(envelope)),
@@ -48,9 +46,10 @@ class SyncEngine extends ChangeNotifier {
   final SyncStateStore _state;
   final List<SyncAdapter> _adapters;
   final Map<String, SyncTransport> _transports;
+
+  /// 版本戳发号器（必填：唯一实例由组合根注入，避免各自建号发出重复版本）。
+  final SyncStampIssuer _stamps;
   final DateTime Function() _clock;
-  final SyncStampIssuer? _injectedStamps;
-  late final SyncStampIssuer _stamps;
   final List<SyncEnvelope> _inbound = [];
   final List<StreamSubscription<SyncEnvelope>> _incomingSubscriptions = [];
   final Logger _logger = Logger('molia.sync');
