@@ -108,10 +108,6 @@ class SyncScheduler {
   bool get cellularRestricted =>
       _onCellular && _state.cellularPolicy == SyncCellularPolicy.auto;
 
-  /// 是否处于「零定时唤醒」等级（后台 / 省电）。
-  bool get zeroTimerLevel =>
-      _level == SyncLevel.background || _level == SyncLevel.powerSave;
-
   /// 是否还有未外发的本地变更。
   bool get dirty => _dirty;
 

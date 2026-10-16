@@ -47,10 +47,6 @@ class BatteryChannelHandler(
         )
     }
 
-    fun dispose() {
-        channel.setMethodCallHandler(null)
-    }
-
     companion object {
         const val CHANNEL_NAME = "top.stillmisty.molia/battery"
     }

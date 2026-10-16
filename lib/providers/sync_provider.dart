@@ -36,9 +36,6 @@ class SyncProvider extends ChangeNotifier {
 
   SyncEngine get engine => _engine;
 
-  /// 同步调度器（未注入时为 null：UI 只做手动同步）。
-  SyncScheduler? get scheduler => _scheduler;
-
   bool get enabled => _engine.state.enabled;
   bool get syncing => _busy || _engine.syncing;
   String get deviceId => _engine.state.deviceId;
@@ -276,9 +273,6 @@ class SyncProvider extends ChangeNotifier {
   /// 省电等级是否生效（低电量未充电或系统省电模式）。
   bool get powerSaveActive => _scheduler?.powerSaveActive ?? false;
 
-  /// 蜂窝策略是否正在限制类别范围（只同步小类别）。
-  bool get cellularRestricted => _scheduler?.cellularRestricted ?? false;
-
   /// 蜂窝网络下的自动同步策略。
   SyncCellularPolicy get cellularPolicy => _engine.state.cellularPolicy;
 
@@ -286,10 +280,6 @@ class SyncProvider extends ChangeNotifier {
     await _engine.state.setCellularPolicy(value);
     notifyListeners();
   }
-
-  /// 重新探测电量与网络类型（设置页进入 / 前台恢复时刷新观测面）。
-  Future<void> refreshEnvironment() async =>
-      _scheduler?.refreshEnvironment();
 
   @override
   void dispose() {

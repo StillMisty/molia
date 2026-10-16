@@ -20,8 +20,6 @@ class BatterySnapshot {
   final bool powerSave;
 
   static const BatterySnapshot unknown = BatterySnapshot();
-
-  bool get known => level >= 0 || charging || powerSave;
 }
 
 /// 电池探针：经平台通道读电量 / 充电状态 / 系统省电模式。
