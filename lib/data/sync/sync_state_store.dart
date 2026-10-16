@@ -369,26 +369,8 @@ class SyncStateStore {
   /// 添加手动对端（同一 host 覆盖：地址簿以地址为身份，学到的信息合并保留）。
   ///
   /// 返回 false 表示该地址已存在（本次按用户输入更新名称与端口）。
-  Future<bool> addManualPeer(ManualPeer peer) async {
-    final host = peer.host.trim();
-    if (host.isEmpty) return false;
-    final name = peer.name.trim();
-    final index = _manualPeers.indexWhere((entry) => entry.host == host);
-    if (index >= 0) {
-      final merged = _manualPeers[index].mergeLearned(
-        httpPort: peer.httpPort > 0 ? peer.httpPort : null,
-        deviceId: peer.deviceId.isNotEmpty ? peer.deviceId : null,
-      );
-      // 用户再次提交同一地址是显式改名；学到路径（learnManualPeer）不覆盖命名。
-      _manualPeers[index] =
-          name.isNotEmpty ? merged.copyWith(name: name) : merged;
-      await save();
-      return false;
-    }
-    _manualPeers.add(peer.copyWith(host: host));
-    await save();
-    return true;
-  }
+  Future<bool> addManualPeer(ManualPeer peer) =>
+      _upsertManualPeer(peer, overwriteName: true);
 
   /// 移除手动对端（按地址；仅移除地址簿条目，不影响已发现的对端）。
   Future<void> removeManualPeer(String host) async {
@@ -400,19 +382,38 @@ class SyncStateStore {
   ///
   /// 学到的对端名只在条目尚未命名时填入：手动条目优先保留用户命名。
   Future<void> learnManualPeer(ManualPeer learned) async {
-    final host = learned.host.trim();
-    if (host.isEmpty) return;
+    await _upsertManualPeer(learned, overwriteName: false);
+  }
+
+  /// 地址簿写入的唯一入口：按 host 查找合并（重复地址不新增条目）。
+  ///
+  /// [overwriteName] 是命名策略开关：用户提交同一地址是显式改名，学习路径
+  /// 不覆盖已有命名（对端广播的设备名只填空名）。返回 false = 地址已存在。
+  Future<bool> _upsertManualPeer(
+    ManualPeer peer, {
+    required bool overwriteName,
+  }) async {
+    final host = peer.host.trim();
+    if (host.isEmpty) return false;
     final index = _manualPeers.indexWhere((entry) => entry.host == host);
-    if (index < 0) {
-      _manualPeers.add(learned.copyWith(host: host));
-    } else {
-      _manualPeers[index] = _manualPeers[index].mergeLearned(
-        httpPort: learned.httpPort > 0 ? learned.httpPort : null,
-        deviceId: learned.deviceId.isNotEmpty ? learned.deviceId : null,
-        name: learned.name.isNotEmpty ? learned.name : null,
+    if (index >= 0) {
+      final name = peer.name.trim();
+      var merged = _manualPeers[index].mergeLearned(
+        httpPort: peer.httpPort > 0 ? peer.httpPort : null,
+        deviceId: peer.deviceId.isNotEmpty ? peer.deviceId : null,
+        // 学习路径才把对端名填进空名；用户提交走下面的显式改名。
+        name: !overwriteName && peer.name.isNotEmpty ? peer.name : null,
       );
+      if (overwriteName && name.isNotEmpty) {
+        merged = merged.copyWith(name: name);
+      }
+      _manualPeers[index] = merged;
+      await save();
+      return false;
     }
+    _manualPeers.add(peer.copyWith(host: host));
     await save();
+    return true;
   }
 
   Future<void> setLanHttpPort(int port) async {
