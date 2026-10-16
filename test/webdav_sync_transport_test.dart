@@ -245,6 +245,104 @@ void main() {
     expect(server.files.keys, contains('devA.snapshot.msync'));
   });
 
+  test('增量日志文件可被对端拉到并解密：游标决定应用范围', () async {
+    final a = transport('devA');
+    final b = transport('devB');
+    addTearDown(() async {
+      await a.stop();
+      await b.stop();
+    });
+    await a.start();
+    await b.start();
+
+    SyncJournalEntry entry(int seq, String value) => SyncJournalEntry(
+          seq: seq,
+          category: SyncCategory.settings,
+          record: SyncRecord(
+            key: 'theme_mode',
+            version: SyncVersion(physical: 10 + seq, deviceId: 'devA'),
+            data: {'v': value},
+          ),
+        );
+    SyncEnvelope delta(List<SyncJournalEntry> entries) => SyncEnvelope(
+          deviceId: 'devA',
+          deviceName: '设备A',
+          producedAt: 1,
+          snapshotId: 'hash-${entries.last.seq}',
+          journalHead: entries.last.seq,
+          baseSeq: 0,
+          windowStart: entries.first.seq,
+          windowEnd: entries.last.seq,
+          journal: entries,
+        );
+
+    // 日常路径：只重写增量日志文件。
+    await a.push(delta([entry(1, 'dark')]));
+    expect(server.files.keys, contains('devA.journal.msync'));
+
+    // 首次拉取（游标 -1）：拿到窗口里的条目（解密 + 窗口游标正确）。
+    final first = await b.pull();
+    expect(first.envelopes, hasLength(1));
+    final payload = first.envelopes.single;
+    expect(payload.isDelta, isTrue);
+    expect(payload.journal!.single.seq, 1);
+    expect(payload.journal!.single.record.data, {'v': 'dark'});
+
+    // 游标已到窗口末尾 + 文件版本未变：跳过 GET。
+    final skipped = await b.pull(const SyncPullRequest(cursors: {'devA': 1}));
+    expect(skipped.envelopes, isEmpty);
+    expect(skipped.skippedUnchanged, 1);
+
+    // 窗口推进：重新拉到（引擎按游标只应用 seq > 游标 的条目）。
+    await a.push(delta([entry(1, 'dark'), entry(2, 'light')]));
+    final second = await b.pull(const SyncPullRequest(cursors: {'devA': 1}));
+    expect(second.envelopes.single.journal, hasLength(2));
+    expect(second.envelopes.single.windowEnd, 2);
+  });
+
+  test('游标落后于窗口起点：改读全量快照做 bootstrap', () async {
+    final a = transport('devA');
+    final b = transport('devB');
+    addTearDown(() async {
+      await a.stop();
+      await b.stop();
+    });
+    await a.start();
+    await b.start();
+
+    // 快照文件（覆盖到 seq 5）+ 窗口起点已推进到 4 的日志文件。
+    await a.push(envelope('devA', value: 'full').withSnapshotId('hash-full'));
+    await a.push(SyncEnvelope(
+      deviceId: 'devA',
+      producedAt: 1,
+      snapshotId: 'hash-full',
+      journalHead: 6,
+      baseSeq: 4,
+      windowStart: 5,
+      windowEnd: 6,
+      journal: [
+        SyncJournalEntry(
+          seq: 5,
+          category: SyncCategory.settings,
+          record: SyncRecord(
+            key: 'theme_mode',
+            version: const SyncVersion(physical: 20, deviceId: 'devA'),
+            data: const {'v': 'newer'},
+          ),
+        ),
+      ],
+    ));
+
+    // 本机游标 1 < 窗口起点（baseSeq 4）：窗口不完整 → 用全量快照兜底。
+    final pulled = await b.pull(const SyncPullRequest(cursors: {'devA': 1}));
+    expect(pulled.envelopes, hasLength(1));
+    expect(pulled.envelopes.single.isDelta, isFalse);
+    expect(
+      pulled.envelopes.single.recordsOf(SyncCategory.settings).single.data,
+      {'v': 'full'},
+    );
+  });
+
   test('幽灵 / 旧版文件不参与合并；载荷身份不符的文件跳过', () async {
     // 非本协议命名的残留（幽灵设备遗留）与身份不符的日志文件。
     server.files['ghost.msync'] = codec.encrypt(envelope('ghost'), passphrase);

@@ -169,6 +169,8 @@ class WebDavSyncTransport implements SyncTransport {
     var skipped = 0;
     var bytesIn = 0;
     SyncIssue? firstError;
+    // 真实对端（载荷身份与文件名一致 / 解密失败的）；幽灵文件不计入。
+    final seenDevices = <String>{};
     // 按设备归并两类文件：优先读增量日志；游标落后于窗口起点（或引擎显式
     // 要求全量）时改读全量快照做 bootstrap。
     final devices = _groupFiles(files);
@@ -188,6 +190,7 @@ class WebDavSyncTransport implements SyncTransport {
           cached == file.version &&
           upToDate) {
         skipped++;
+        seenDevices.add(device);
         continue;
       }
       var bytes = await _getFile(config, file.name);
@@ -206,17 +209,19 @@ class WebDavSyncTransport implements SyncTransport {
       } on SyncCryptoException {
         // 口令不同或文件损坏：跳过（不记版本，下轮重试）。
         failed++;
+        seenDevices.add(device);
         firstError ??= SyncIssue(
           code: SyncIssueCode.webdavDecryptFailed,
           args: {'peer': file.name},
         );
         continue;
       }
-      // 幽灵 / 被改名文件：载荷身份与文件名不符，不参与合并。
+      // 幽灵 / 被改名文件：载荷身份与文件名不符，不参与合并（也不算对端）。
       if (envelope.deviceId != device) {
         _logger.warning('远端文件 ${file.name} 的身份不符（载荷 ${envelope.deviceId}），跳过');
         continue;
       }
+      seenDevices.add(device);
       if (file.version.isNotEmpty) _fileVersions[file.name] = file.version;
       _peerHeads[device] = envelope.journalHead;
       // 增量窗口的起点超出本机游标（条目已被对端裁剪）：改读全量快照。
@@ -247,7 +252,7 @@ class WebDavSyncTransport implements SyncTransport {
     }
     return SyncPullResult(
       envelopes: envelopes,
-      peersSeen: devices.length,
+      peersSeen: seenDevices.length,
       skippedUnchanged: skipped,
       failedPeers: failed,
       bytesIn: bytesIn,
@@ -393,14 +398,19 @@ class WebDavSyncTransport implements SyncTransport {
       await _collectBodyBytes(response) ?? const <int>[],
       allowMalformed: true,
     );
-    final own = '$deviceId$snapshotSuffix';
+    final ownJournal = '$deviceId$journalSuffix';
+    final ownSnapshot = '$deviceId$snapshotSuffix';
     final files = <_RemoteFile>[];
     for (final entry in _parsePropfind(body)) {
       final segments =
           entry.name.split('/').where((segment) => segment.isNotEmpty).toList();
       if (segments.isEmpty) continue;
       final name = segments.last;
-      if (name == own || !name.endsWith(snapshotSuffix)) continue;
+      // 两类文件都要列出（日常变更只重写增量日志，快照按需重写）。
+      if (name == ownJournal || name == ownSnapshot) continue;
+      if (!name.endsWith(journalSuffix) && !name.endsWith(snapshotSuffix)) {
+        continue;
+      }
       if (files.any((file) => file.name == name)) continue;
       files.add(_RemoteFile(name: name, version: entry.version));
     }
