@@ -1,9 +1,9 @@
 /// 本地数据库（drift）：最近播放上下文（play_contexts）+ 资料库
-/// （播放历史 / 用户列表 / 删除墓碑）+ 听歌统计（play_events）。
+/// （播放历史 / 用户列表 / 删除墓碑）+ 听歌统计（play_events）+ 本地下载。
 ///
-/// fresh 基线：schemaVersion = 1 直接建出全部表，不迁移 sqflite 历史库的
-/// 数据（设计取舍与后果见 docs/adr/0005-drift-migration.md）；
-/// v2 新增 `downloads` 表（本地下载持久副本）。
+/// fresh 基线：建库一次建出全部表；结构变更 = **整库重建**（升级即清空本地
+/// 数据，不做增量迁移），设计取舍与代价见 docs/adr/0005-drift-migration.md
+/// 与其修订章节。
 ///
 /// 只 import drift / drift_flutter / path_provider：Web 编译安全
 /// （`NativeDatabase` 仅测试内存库使用，见 test/support/memory_database.dart）。
@@ -13,8 +13,6 @@ import 'package:drift/drift.dart';
 import 'package:drift_flutter/drift_flutter.dart';
 import 'package:logging/logging.dart';
 import 'package:path_provider/path_provider.dart';
-
-import 'molia_database.steps.dart';
 
 part 'molia_database.g.dart';
 
@@ -260,83 +258,35 @@ class MoliaDatabase extends _$MoliaDatabase {
     }
   }
 
-  /// fresh 基线：v1 直接建出全部表，不写任何历史数据迁移。
-  ///
-  /// v2：新增 `downloads` 表（本地下载持久副本）。
-  /// v3：`downloads.filePath` 改可空（下载记录可只含歌词 / 封面）。
-  /// v4：`downloads.publicUri` 新增（Android 公共 Downloads 副本定位）。
-  /// v5：`downloads.imported` 新增（本地导入：就地引用用户文件，删除只移行）。
-  /// v6：同步版本戳改三元组（`versionPhysical` / `versionCounter` / `deviceId`），
-  ///     `sync_tombstones` 增加真实删除时间 `deletedAt`（内容时间分离，见
-  ///     ADR-0003 v2 §2）。旧同步数据不迁移：版本列回默认值（兼容代价见
-  ///     ADR-0003 v2「后果」）。
+  /// 当前 schema 版本。结构变更 = **整库重建**（drop all + createAll，本地数据
+  /// 不保留）；决策与代价见 ADR-0005 修订（2026-10-17）。
   @override
   int get schemaVersion => 6;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
         onCreate: (m) => m.createAll(),
-        // 增量迁移走 make-migrations 生成的版本化 schema（steps 文件）：
-        // createTable 不含索引声明，索引需单独创建。
-        onUpgrade: stepByStep(
-          from1To2: (m, schema) async {
-            await m.createTable(schema.downloads);
-            await m.createIndex(schema.idxDownloadsDownloadedAt);
-          },
-          from2To3: (m, schema) async {
-            // 仅 filePath 由 NOT NULL 改为可空：重建表并原样搬运数据。
-            await m.alterTable(TableMigration(schema.downloads));
-          },
-          from3To4: (m, schema) async {
-            // 仅新增可空列：ADD COLUMN，既有行原样保留（publicUri 为 null）。
-            await m.addColumn(schema.downloads, schema.downloads.publicUri);
-          },
-          from4To5: (m, schema) async {
-            // 仅新增带默认值的布尔列：ADD COLUMN，既有行 imported=0（下载）。
-            await m.addColumn(schema.downloads, schema.downloads.imported);
-          },
-          from5To6: (m, schema) async {
-            // 同步版本戳改三元组：内容列原样保留，旧版本列（updatedAt/updatedBy）
-            // 不迁移（回默认 0/''——ADR-0003 v2 §1「不兼容历史数据」）。
-            // 新列必须在 newColumns 里声明，否则 alterTable 会试图从旧表复制。
-            await m.alterTable(TableMigration(
-              schema.playlists,
-              newColumns: [
-                schema.playlists.versionPhysical,
-                schema.playlists.versionCounter,
-                schema.playlists.deviceId,
-              ],
-            ));
-            await m.alterTable(TableMigration(
-              schema.playlistTracks,
-              newColumns: [
-                schema.playlistTracks.versionPhysical,
-                schema.playlistTracks.versionCounter,
-                schema.playlistTracks.deviceId,
-              ],
-            ));
-            await m.alterTable(TableMigration(
-              schema.playHistory,
-              newColumns: [
-                schema.playHistory.versionPhysical,
-                schema.playHistory.versionCounter,
-                schema.playHistory.deviceId,
-              ],
-            ));
-            // 统计事件：只新增带默认值的版本列（ADD COLUMN，既有行回 0）。
-            await m.addColumn(schema.playEvents, schema.playEvents.versionPhysical);
-            await m.addColumn(schema.playEvents, schema.playEvents.versionCounter);
-            // 墓碑是 90 天缓存性质的数据且版本列没有默认值：重建空表
-            // （保留旧墓碑也没有正确的版本，等于不可用）。
-            await m.deleteTable('sync_tombstones');
-            await m.createTable(schema.syncTombstones);
-          },
-        ),
+        // drift 的 onUpgrade 同时接收升级与降级（版本不同即触发）：
+        // 两个方向都是整库重建。
+        onUpgrade: _rebuild,
         beforeOpen: (details) async {
           // SQLite 外键默认关闭，这里显式开启（列表删除级联依赖它）。
           await customStatement('PRAGMA foreign_keys = ON');
         },
       );
+
+  /// 结构变更不迁移：drop 掉全部 schema 实体再重建。
+  ///
+  /// `Migrator.drop()` 生成 `DROP <kind> IF EXISTS`（表 / 索引 / 触发器 / 视图；
+  /// 不认识的实体直接跳过），所以逐个 drop 幂等、顺序无关；`createAll()` 会
+  /// 重建表 + 索引。迁移在 `beforeOpen` 之前执行，此时外键约束尚未开启，
+  /// 互有引用的表可以按任意顺序 drop。
+  static Future<void> _rebuild(Migrator m, int from, int to) async {
+    for (final entity in m.database.allSchemaEntities) {
+      await m.drop(entity);
+    }
+    await m.createAll();
+  }
 
   @override
   Future<void> close() async {
