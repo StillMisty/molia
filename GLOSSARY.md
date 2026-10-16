@@ -364,9 +364,26 @@
 
 - **Sync envelope（同步快照）** — `lib/domain/models/device_sync.dart`：
   一次交换的完整视图（设备身份 + 各类别记录）；全量合并模型，设备间互换快照后
-  逐键取新，无增量/版本向量（见 ADR-0003）。
-- **Sync record（同步记录）** — 快照最小单元：`key + updatedAt + updatedBy +
-  data`；删除表示为 `deleted` 墓碑记录，墓碑参与 LWW 并保留 90 天后裁剪。
+  逐键取新，无增量/版本向量（见 ADR-0003）。协议自始为 v2：快照的 `v` 字段
+  自描述格式，当前没有按版本号的分支 / 协商 / 降级。
+- **Sync record（同步记录）** — 快照最小单元：`key + version + data`；`version`
+  是 `SyncVersion` 三元组，删除表示为 `deleted` 墓碑记录（墓碑另带真实删除
+  时间 `deletedAt`），墓碑参与 LWW 并保留 90 天后裁剪（按 `deletedAt` 计时）。
+- **SyncVersion（记录版本戳）** — `(versionPhysical, versionCounter, deviceId)`：
+  物理分量 = `max(本地物理时间, 已观测最大值)`，同物理值内 `counter` 递增，
+  相等按 `deviceId` 字典序；胜负判定的唯一依据（「内容时间分离」）。
+- **SyncStampIssuer（版本戳发号器）** — `lib/data/sync/sync_stamp.dart`：
+  本机所有同步戳的唯一来源，`next()` 严格单调、`observe()` 吸收远端超前戳
+  （记 warning）、`seed()` 接受初始化基线；基线持久化在 `sync_state_v1` 的
+  `stampSeq`，初始化 = `max(持久化基线, 当前时钟, 全库最大戳)`，重启不倒退。
+- **Content time separation（内容时间分离）** — `playedAt` / `endedAt` /
+  `savedAt` / `importedAt` 与墓碑的真实删除时间是内容语义，进记录 `data`、
+  **永不参与胜负判定**；历史「删除 vs 播放」由库内按真实时间比较
+  （`playedAt <= deletedAt` → 删除生效，否则复活并撤墓碑，见 ADR-0003 v2 §2）。
+- **Protocol v2（协议版本）** — `SyncEnvelope.protocolVersion = 2`：线上格式
+  自始为 v2，快照 JSON 的 `v` 字段随 envelope 读写（自描述 / 将来能力协商的
+  锚点）；**没有版本闸门、协商或降级**，对端快照直接合并。备份导入只做结构
+  校验（不是 Molia 备份 / 内层 envelope 无效才抛 `FormatException`）。
 - **Sync category（同步类别）** — 可开关的数据类别：`playlists` /
   `playlistTracks` / `sources` / `settings` / `credentials` / `statistics` /
   `history` / `session`；关闭的类别既不推送也不应用（本机仍持续登记本地变化）。
@@ -378,8 +395,9 @@
 - **Backup（完整备份）** — `SyncEngine.exportBackupJson` / `importBackupJson`：
   与同步共用 envelope 与适配器的本地文件备份/合并恢复；不需要启用同步；
   凭证类默认排除。
-- **LWW stamp（逐键时间戳）** — `(updatedAt, updatedBy)`：时间大者胜，
-  相同时按设备 id 字典序决平局（确定性收敛）；时间戳是设备墙上时钟。
+- **LWW stamp（逐键版本戳）** — 版本戳 `SyncVersion` 三元组：物理分量大者胜，相同时
+  `counter` 大者胜，再同按设备 id 字典序决平局（确定性收敛）；物理分量是
+  HLC-lite 的 `max(本地墙上时钟, 已观测最大值)`，不再是「最后的墙上时间」。
 - **Sync passphrase（同步口令）** — 信任根：PBKDF2 派生 AES-256-GCM 密钥，
   能解密快照的设备即已授权；生成/归一化在 `sync_passphrase.dart`，加密帧在
   `sync_crypto.dart`；重置口令 = 撤销全部设备。
@@ -390,11 +408,13 @@
 - **Sync adapter（同步适配器）** — 类别到本地存储的读写桥
   （`lib/data/sync/adapters/**`）：收集本地记录 / 应用合并结果，写入必须幂等；
   设置类用「登记哈希」（`SyncStamp`）做变化检测，不改造散落的写入方。
-- **Sync tombstone（删除墓碑）** — 列表 / 曲目 / 脚本的删除不保留原行，
-  由 `sync_tombstones` 表或同步状态中的登记项承担「删除也取新」的合并语义。
+- **Sync tombstone（删除墓碑）** — 列表 / 曲目 / 脚本 / 历史的删除不保留原行，
+  由 `sync_tombstones` 表或同步状态中的登记项承担「删除也取新」的合并语义；
+  表内版本三列 + 真实删除时间 `deletedAt`（历史删除 vs 播放的判据）。
 - **Setting stamps（设置登记哈希）** — `SyncStateStore.settingStamps` 维护的
-  `key → (值哈希, 时间戳, 设备)`：本地值 vs 登记哈希判定本地修改，
-  应用远端后同步更新，保证重复应用幂等（见 `docs/adr/0003` §6 修订）。
+  `key → (值哈希, SyncVersion)`：本地值 vs 登记哈希判定本地修改，变化时向
+  `SyncStampIssuer` 取号，应用远端后同步更新，保证重复应用幂等
+  （见 `docs/adr/0003` §6 修订）。
 - **Settings key（登记键）** — `lib/data/settings/settings_key.dart`：一个设置键的
   全部事实（名字 / 默认值 / 同步类别 / 存放盒）；只有有「第二消费者」的键才登记
   （同步、备份、应用远端后的重载、整表驱动的测试），设备本地键留在各自模块。
@@ -402,8 +422,52 @@
   登记键的唯一家（读 / 写 / 同步往返 / 重载钩子）；组合根注入唯一实例，模块在
   构造时把 reload 钩子绑到自己的键，应用远端值后按变化的键触发；键名字面量只有
   一份（`settings_keys.dart`），由 `test/architecture/settings_keys_test.dart` 强制。
-- **Sync report / log（同步结果 / 日志）** — 一轮同步的拉取 / 应用 / 跳过计数
-  与错误（`SyncReport`、`SyncLogEntry`），设置页只读展示，不拦截合并。
+- **Sync round report（一轮同步报告）** — `SyncRoundReport`：一轮的**可观察**产物。
+  五态结论 `ok / noChanges / noPeers / partial / failed`（「没发现对端」与
+  「没有变化」必须分开）+ 每传输明细
+  （拉取 / 推送 / 失败数 / 字节 / 耗时 / 不可用原因）+ 每对端名册 + 本轮落地
+  变更量（不是全库规模）。
+- **Sync peer roster（同步名册）** — `SyncPeerState`：每台对端的最近接触观测
+  （名称 / 传输 / 最后拉取·推送 / 时钟偏移 / 落后条数 / 最近失败），持久化在
+  `sync_state_v1`，UI 在「已配对设备」子页呈现；「落后条数」由增量协议填充。
+- **Sync transport status（传输状态）** — `SyncTransport.unavailableReason`
+  （`not_configured` / `start_failed` / `permission_denied`）：传输启动失败、
+  未配置或缺权限时必须显式可见，不能只留在日志里（开关显示「已打开」而实际
+  没有监听是排查事故的主要来源）。
+- **Local network permission（局域网权限门）** —
+  `transport/local_network_permission.dart`：Android 17 / API 37 起局域网访问
+  默认阻断，LAN 传输启动前先过门；**权限被拒时手动对端地址同样无效**
+  （网关级阻断），只能授权或转 WebDAV。申请 / 查询 / 跳系统设置可注入，单测不触发平台通道。
+- **Manual peer（手动对端）** — `ManualPeer{host, probePort?, httpPort, deviceId,
+  name}`：**发现失败**（AP 隔离 / 多网段 / 防火墙 / VPN）时的兜底，与广播发现
+  合并进同一名册；首次单播探测后认领 `deviceId` 与端点端口并回写，学到端口后
+  不再依赖广播。本机端点端口持久化（`lanHttpPort`），否则对端记不住本机。
+- **Sync report / log（同步结果 / 日志）** — `SyncLogEntry`：触发原因 +
+  五态结论 + 本轮变更量 + 失败数与错误；设置页只读展示，不拦截合并。
+  计数一律是本轮变更量（不随数据量增长）。
+- **Sync known versions（已知版本登记）** — `sync_known` 表 +
+  `SyncKnownStore`：引擎合并后只把版本与该登记不同的胜者交给适配器（交付成功
+  才登记，本地视图以内存播种为基线），因此空闲轮 0 次 apply、落地量与日志计数
+  ∝ 本轮变更量；登记不随墓碑清理删除（清理后同版本的旧记录不重新判为新记录）。
+- **Transport gating（传输门控）** — 内容未变不传：快照带
+  `snapshotId`（记录集规范化哈希，与 `producedAt` 的「时间变」分开），局域网
+  探测应答携带它、WebDAV 用 `getetag` / `getlastmodified`，未变跳过
+  GET + 解密 + 合并；本机内容指纹与上次成功推送一致时跳过加密 + 上传。
+- **Key derivation cache（密钥派生缓存）** — `SyncCodec`：PBKDF2(口令, 应用级
+  固定盐) 得根密钥并按口令会话内缓存一次，帧密钥 = HKDF(根密钥, 随机帧盐)；
+  帧仍携带盐与迭代数，版本 1 帧（PBKDF2 直接派生）可解密。
+- **Sync level（同步等级）** — `SyncScheduler` 的四个等级：**活跃**（可见 +
+  最近交互 / 正在播放，变更去抖 4s）/ **空闲**（退避 10→20→40→60 分钟封顶；
+  蜂窝下无本地变更不广播、不发 PROPFIND，非蜂窝网络唤醒照常探测与拉取）/
+  **后台**（零定时唤醒，退后台尽力推、回前台拉）/ **省电**（低电量未充电或
+  系统省电模式：暂停自动，仅手动）。移动数据下默认只同步小类别
+  （设置 / 音源 / 凭证 / 歌单与曲目 / 会话），可切换为「暂停自动同步」。
+- **Battery probe（电池探针）** — `lib/services/battery_probe.dart`：经平台通道
+  （Android `BatteryChannelHandler` / iOS `AppDelegate`）读电量 / 充电 / 系统
+  省电模式；桌面未实现按「未知」处理（不触发省电等级），调度器注入探针。
+- **Sync activity summary（同步活动汇总）** — `SyncActivitySummary`：近 24 小时
+  的触发轮数 / 有效传输轮数 / 流量，同步页运行状态行与等级 · 网络 · 省电一起
+  展示；窗口基于状态存储保留的最近日志条目。
 
 ## 缓存
 - **Local data（本地数据）** — 单曲在本机的东西，分两档：**已缓存**（易失副本：边播边缓存 / 后台下载 / 取词 / 取图产生，可离线播放，会被 LRU / TTL / 清理回收）与**已下载**（持久副本：`downloads/` + drift 记录，可分享、清缓存不影响），两档都没有就是「未下载」。两档都不是的那首曲目在信息页与页内统一显示「未下载」。唯一读取口 `lib/services/track_local_data_service.dart`（`TrackLocalData`），词表唯一出处 `LocalPartState`；**禁止** 页面或模块另写「算不算有」的判据（见 ADR-0008）。

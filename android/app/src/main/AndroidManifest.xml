@@ -21,6 +21,11 @@
     <!-- 应用内更新：下载 APK 后交给系统安装器（首次需用户在系统里允许未知来源） -->
     <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES"/>
 
+    <!-- 跨设备同步（局域网直连）：Android 17 / API 37 起局域网访问默认阻断，
+         访问局域网设备（含 UDP 单播与广播、对外 TCP 连接）需要该运行时权限；
+         未授予时 Dart socket 直接抛 SocketException（见 ADR-0003 v2 §3）。 -->
+    <uses-permission android:name="android.permission.ACCESS_LOCAL_NETWORK"/>
+
     <application
         android:name=".MoliaApplication"
         android:label="@string/app_name"

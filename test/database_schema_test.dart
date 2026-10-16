@@ -1,12 +1,11 @@
-/// 本地库 schema 平移核对：drift 建表结果与迁移前手写 SQL 逐字一致。
+/// 本地库 schema 回归钉子：drift 声明与建表结果逐字核对。
 ///
-/// 基线是迁移前 `lib/data/database_helper.dart` 的建表语句：表集合、列名与
-/// 顺序、类型、NOT NULL、默认值、主键序、UNIQUE、外键级联、索引文本都在
-/// 本测试里钉死；任一字段声明或 drift DSL 被改动即红。
+/// 表集合、列名与顺序、类型、NOT NULL、默认值、主键序、UNIQUE、外键级联、
+/// 索引文本都在本测试里钉死；任一字段声明或 drift DSL 被改动即红。
 ///
 /// 唯一归一化：`INTEGER PRIMARY KEY`（rowid 别名）插入 NULL 时会自动分配
-/// rowid，旧手写 schema 的 PRAGMA 元数据报 notnull=0，drift 生成的 DDL 显式
-/// 写 NOT NULL——行为一致，只差元数据，比较前统一按 0 处理。
+/// rowid，PRAGMA 元数据报 notnull=0，而 drift 生成的 DDL 显式写 NOT NULL——
+/// 行为一致，只差元数据，比较前统一按 0 处理。
 library;
 
 import 'package:drift/drift.dart';
@@ -36,7 +35,7 @@ void main() {
     expect(pragma.single.values.single, 1);
   });
 
-  test('表集合与旧 schema 一致', () async {
+  test('表集合完整', () async {
     final rows = await rowsOf(
       "SELECT name FROM sqlite_master WHERE type = 'table' ORDER BY name",
     );
@@ -50,6 +49,9 @@ void main() {
         'playlist_tracks',
         'playlists',
         'sqlite_sequence',
+        'sync_journal',
+        'sync_journal_state',
+        'sync_known',
         'sync_tombstones',
       ],
     );
@@ -93,14 +95,18 @@ void main() {
         'durationMs|INTEGER|0|null|0',
         "raw|TEXT|1|'{}'|0",
         'playedAt|INTEGER|1|null|0',
+        'versionPhysical|INTEGER|1|0|0',
+        'versionCounter|INTEGER|1|0|0',
+        "deviceId|TEXT|1|''|0",
       ],
       'playlists': [
         'id|INTEGER|0|null|1',
         'name|TEXT|1|null|0',
         'createdAt|INTEGER|1|null|0',
         'syncId|TEXT|0|null|0',
-        'updatedAt|INTEGER|1|0|0',
-        "updatedBy|TEXT|1|''|0",
+        'versionPhysical|INTEGER|1|0|0',
+        'versionCounter|INTEGER|1|0|0',
+        "deviceId|TEXT|1|''|0",
       ],
       'playlist_tracks': [
         'id|INTEGER|0|null|1',
@@ -115,14 +121,40 @@ void main() {
         "raw|TEXT|1|'{}'|0",
         'addedAt|INTEGER|1|null|0',
         'sortOrder|INTEGER|1|0|0',
-        'updatedAt|INTEGER|1|0|0',
-        "updatedBy|TEXT|1|''|0",
+        'versionPhysical|INTEGER|1|0|0',
+        'versionCounter|INTEGER|1|0|0',
+        "deviceId|TEXT|1|''|0",
+      ],
+      'sync_known': [
+        'category|TEXT|1|null|1',
+        'key|TEXT|1|null|2',
+        'versionPhysical|INTEGER|1|null|0',
+        'versionCounter|INTEGER|1|0|0',
+        "deviceId|TEXT|1|''|0",
+      ],
+      'sync_journal': [
+        'seq|INTEGER|0|null|1',
+        'category|TEXT|1|null|0',
+        'key|TEXT|1|null|0',
+        'versionPhysical|INTEGER|1|null|0',
+        'versionCounter|INTEGER|1|0|0',
+        "deviceId|TEXT|1|''|0",
+        'deleted|INTEGER|1|0|0',
+        'data|TEXT|0|null|0',
+        'at|INTEGER|1|null|0',
+      ],
+      'sync_journal_state': [
+        'id|INTEGER|0|null|1',
+        'baseSeq|INTEGER|1|0|0',
+        'snapshotSeq|INTEGER|1|-1|0',
       ],
       'sync_tombstones': [
         'category|TEXT|1|null|1',
         'key|TEXT|1|null|2',
-        'updatedAt|INTEGER|1|null|0',
-        "updatedBy|TEXT|1|''|0",
+        'versionPhysical|INTEGER|1|null|0',
+        'versionCounter|INTEGER|1|0|0',
+        "deviceId|TEXT|1|''|0",
+        'deletedAt|INTEGER|1|0|0',
       ],
       'play_events': [
         'id|INTEGER|0|null|1',
@@ -141,6 +173,8 @@ void main() {
         'endReason|TEXT|0|null|0',
         'syncKey|TEXT|0|null|0',
         "originDeviceId|TEXT|1|''|0",
+        'versionPhysical|INTEGER|1|0|0',
+        'versionCounter|INTEGER|1|0|0',
       ],
     };
 
@@ -149,7 +183,7 @@ void main() {
       expect(
         [for (final row in rows) columnSnapshot(row)],
         entry.value,
-        reason: '表 ${entry.key} 的列定义与旧 schema 不一致',
+        reason: '表 ${entry.key} 的列定义与 schema 声明不一致',
       );
     }
   });
@@ -179,11 +213,13 @@ void main() {
             'ON play_events (sourceKey, songId)',
         'idx_play_events_syncKey': 'CREATE UNIQUE INDEX idx_play_events_syncKey '
             'ON play_events (syncKey) WHERE syncKey IS NOT NULL',
+        'idx_sync_journal_at':
+            'CREATE INDEX idx_sync_journal_at ON sync_journal (at)',
       },
     );
   });
 
-  test('列表曲目外键级联与旧 schema 一致', () async {
+  test('列表曲目外键级联', () async {
     final fk = await rowsOf('PRAGMA foreign_key_list(playlist_tracks)');
     expect(
       fk.map((row) => [

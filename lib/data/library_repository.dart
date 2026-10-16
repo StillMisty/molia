@@ -20,6 +20,8 @@ import '../domain/ports/library_store.dart';
 import '../domain/ports/library_sync_store.dart';
 import 'lxmc_decoder.dart';
 import 'molia_database.dart';
+import 'sync/sync_journal.dart';
+import 'sync/sync_stamp.dart';
 
 /// 默认收藏列表的保留行名：实现内部细节（UI 显示走本地化文案，调用方
 /// 判定收藏用 [PlaylistInfo.isFavorites]）。
@@ -29,19 +31,28 @@ class LibraryRepository implements LibraryStore, LibrarySyncStore {
   /// [databaseProvider] 仅测试注入（in-memory drift 库）；生产走
   /// [MoliaDatabase.instance]。
   ///
-  /// [deviceIdProvider] / [clock] 供跨设备同步打写入时间戳与来源设备；
-  /// 缺省（测试、同步未启用）时设备为空串，时间戳仍按当前时钟写入。
+  /// [stamps] 是版本戳唯一发号器（必填：组合根注入同一实例；漏注入会各自
+  /// 建号、可能发出重复版本）；[clock] 供内容时间（`createdAt` / `addedAt` /
+  /// `playedAt` / 墓碑的真实删除时间）——两者刻意分开（内容时间分离，
+  /// 见 ADR-0003 v2 §2）。
+  ///
+  /// [journal] 是增量日志（可选）：本机写入在**同一个 drift 事务**里追加
+  /// 日志条目，对端按游标只拉变更；应用远端记录（`syncApply*`）不追加
+  /// （远端变更由来源设备广播，本机不做二次转发）。
   LibraryRepository({
     MoliaDatabase Function()? databaseProvider,
-    String Function()? deviceIdProvider,
     int Function()? clock,
+    required SyncStampIssuer stamps,
+    SyncJournalRepository? journal,
   })  : _databaseProvider = databaseProvider ?? (() => MoliaDatabase.instance),
-        _deviceIdProvider = deviceIdProvider ?? (() => ''),
-        _clock = clock ?? (() => DateTime.now().millisecondsSinceEpoch);
+        _clock = clock ?? (() => DateTime.now().millisecondsSinceEpoch),
+        _stamps = stamps,
+        _journal = journal;
 
   final MoliaDatabase Function() _databaseProvider;
-  final String Function() _deviceIdProvider;
   final int Function() _clock;
+  final SyncStampIssuer _stamps;
+  final SyncJournalRepository? _journal;
   final Random _random = Random.secure();
   final StreamController<LibraryChange> _changes =
       StreamController<LibraryChange>.broadcast();
@@ -59,7 +70,13 @@ class LibraryRepository implements LibraryStore, LibrarySyncStore {
 
   int _nowMs() => _clock();
 
-  String _deviceId() => _deviceIdProvider();
+  SyncVersion _nextVersion() => _stamps.next();
+
+  /// 全库最大同步戳：供 `SyncStampIssuer` 首次初始化（基线 ≥ 全库最大戳）。
+  Future<SyncVersion> maxVersion() async {
+    final max = await _db.maxSyncVersion();
+    return SyncVersion(physical: max.physical, counter: max.counter);
+  }
 
   /// 收藏列表用固定 syncId；其余列表按随机 128bit 生成（跨设备稳定，
   /// 自增 id 只在本机有效）。
@@ -78,18 +95,179 @@ class LibraryRepository implements LibraryStore, LibrarySyncStore {
     DatabaseConnectionUser executor,
     String category,
     String key, {
-    required int updatedAt,
-    required String updatedBy,
+    required SyncVersion version,
+    required int deletedAt,
+    bool journal = true,
   }) async {
     await executor.into(_db.syncTombstones).insert(
           SyncTombstonesCompanion.insert(
             category: category,
             key: key,
-            updatedAt: updatedAt,
-            updatedBy: Value(updatedBy),
+            versionPhysical: version.physical,
+            versionCounter: Value(version.counter),
+            deviceId: Value(version.deviceId),
+            deletedAt: Value(deletedAt),
           ),
           mode: InsertMode.insertOrReplace,
         );
+    if (journal) {
+      await _appendJournal(
+        executor,
+        category,
+        SyncRecord.tombstone(key: key, version: version, deletedAt: deletedAt),
+      );
+    }
+  }
+
+  // 增量日志：本机写入在同一事务内追加（对端只拉变更；见 ADR-0003 v2 §5）。
+  // 记录形状与 `syncExport*` 完全一致——同一版本在日志与全量快照里的载荷
+  // 必须相同，否则对端按 LWW 应用后会得到不同的内容。
+
+  /// 追加一条本机变更（未注入日志时为空操作；executor 必须是数据写入的事务）。
+  Future<void> _appendJournal(
+    DatabaseConnectionUser executor,
+    String category,
+    SyncRecord record,
+  ) async {
+    final journal = _journal;
+    if (journal == null) return;
+    final parsed = SyncCategory.tryParse(category);
+    if (parsed == null) return;
+    await journal.append(executor, [(category: parsed, record: record)]);
+  }
+
+  SyncRecord _historySyncRecord({
+    required String sourceKey,
+    required String songId,
+    required String title,
+    required String artist,
+    required String album,
+    required String? coverUrl,
+    required int? durationMs,
+    required String raw,
+    required int playedAt,
+    required SyncVersion version,
+  }) =>
+      SyncRecord(
+        key: SyncRecordKeys.history(sourceKey, songId),
+        version: version,
+        data: PlayHistorySyncRecord(
+          sourceKey: sourceKey,
+          songId: songId,
+          title: title,
+          artist: artist,
+          album: album,
+          coverUrl: coverUrl,
+          durationMs: durationMs,
+          raw: raw,
+          playedAt: playedAt,
+          version: version,
+        ).toJson(),
+      );
+
+  SyncRecord _playlistSyncRecord({
+    required String syncId,
+    required String name,
+    required int createdAt,
+    required SyncVersion version,
+  }) =>
+      SyncRecord(
+        key: syncId,
+        version: version,
+        data: PlaylistSyncRecord(
+          syncId: syncId,
+          name: name,
+          createdAt: createdAt,
+          version: version,
+        ).toJson(),
+      );
+
+  SyncRecord _trackSyncRecord({
+    required String playlistSyncId,
+    required PlaylistTrackRow row,
+  }) =>
+      _trackRecord(
+        playlistSyncId: playlistSyncId,
+        sourceKey: row.sourceKey,
+        songId: row.songId,
+        title: row.title,
+        artist: row.artist,
+        album: row.album,
+        coverUrl: row.coverUrl,
+        durationMs: row.durationMs,
+        raw: row.raw,
+        addedAt: row.addedAt,
+        sortOrder: row.sortOrder,
+        version: row.syncVersion,
+      );
+
+  SyncRecord _trackRecord({
+    required String playlistSyncId,
+    required String sourceKey,
+    required String songId,
+    required String title,
+    required String artist,
+    required String album,
+    required String? coverUrl,
+    required int? durationMs,
+    required String raw,
+    required int addedAt,
+    required int sortOrder,
+    required SyncVersion version,
+  }) =>
+      SyncRecord(
+        key: SyncRecordKeys.playlistTrack(playlistSyncId, sourceKey, songId),
+        version: version,
+        data: PlaylistTrackSyncRecord(
+          playlistSyncId: playlistSyncId,
+          sourceKey: sourceKey,
+          songId: songId,
+          title: title,
+          artist: artist,
+          album: album,
+          coverUrl: coverUrl,
+          durationMs: durationMs,
+          raw: raw,
+          addedAt: addedAt,
+          sortOrder: sortOrder,
+          version: version,
+        ).toJson(),
+      );
+
+  /// 列表的 syncId（缺失时就地补齐并**追加日志**：对端才知道这个列表）。
+  ///
+  /// 返回空串 = 列表不存在（调用方跳过）。补齐是本地写入，与数据写入同事务。
+  Future<String> _ensurePlaylistSyncId(
+    DatabaseConnectionUser executor,
+    int playlistId,
+  ) async {
+    final row = await (executor.select(_db.playlists)
+          ..where((t) => t.id.equals(playlistId))
+          ..limit(1))
+        .getSingleOrNull();
+    if (row == null) return '';
+    final existing = row.syncId;
+    if (existing != null && existing.isNotEmpty) return existing;
+    final syncId = _newSyncId(row.name);
+    final version = _nextVersion();
+    await (executor.update(_db.playlists)..where((t) => t.id.equals(playlistId)))
+        .write(PlaylistsCompanion(
+      syncId: Value(syncId),
+      versionPhysical: Value(version.physical),
+      versionCounter: Value(version.counter),
+      deviceId: Value(version.deviceId),
+    ));
+    await _appendJournal(
+      executor,
+      SyncCategory.playlists.name,
+      _playlistSyncRecord(
+        syncId: syncId,
+        name: row.name,
+        createdAt: row.createdAt,
+        version: version,
+      ),
+    );
+    return syncId;
   }
 
   Future<String?> _playlistSyncIdById(
@@ -108,26 +286,51 @@ class LibraryRepository implements LibraryStore, LibrarySyncStore {
   }
 
   /// 写入/更新时间播放记录（唯一键 `(sourceKey, songId)`），并裁剪到上限。
+  ///
+  /// `playedAt` 是内容时间（上层给的聆听时刻）；版本戳由发号器现取。
   @override
   Future<void> addHistoryEntry(PlayHistoryEntry entry) async {
     final db = _db;
-    await db.into(db.playHistory).insert(
-          PlayHistoryCompanion.insert(
-            sourceKey: entry.sourceKey,
-            songId: entry.songId,
-            title: entry.title,
-            artist: Value(entry.artist),
-            album: Value(entry.album),
-            coverUrl: Value(entry.coverUrl),
-            durationMs: Value(entry.durationMs),
-            raw: Value(jsonEncode(entry.raw)),
-            playedAt: entry.playedAt,
-          ),
-          mode: InsertMode.insertOrReplace,
-        );
-    // 重新播放让条目复活：清除该曲目的历史删除墓碑。
-    await _clearHistoryTombstone(db, entry.sourceKey, entry.songId);
-    await _trimHistory(db);
+    final version = _nextVersion();
+    final raw = jsonEncode(entry.raw);
+    await db.transaction(() async {
+      await db.into(db.playHistory).insert(
+            PlayHistoryCompanion.insert(
+              sourceKey: entry.sourceKey,
+              songId: entry.songId,
+              title: entry.title,
+              artist: Value(entry.artist),
+              album: Value(entry.album),
+              coverUrl: Value(entry.coverUrl),
+              durationMs: Value(entry.durationMs),
+              raw: Value(raw),
+              playedAt: entry.playedAt,
+              versionPhysical: Value(version.physical),
+              versionCounter: Value(version.counter),
+              deviceId: Value(version.deviceId),
+            ),
+            mode: InsertMode.insertOrReplace,
+          );
+      // 重新播放让条目复活：清除该曲目的历史删除墓碑。
+      await _clearHistoryTombstone(db, entry.sourceKey, entry.songId);
+      await _appendJournal(
+        db,
+        SyncCategory.history.name,
+        _historySyncRecord(
+          sourceKey: entry.sourceKey,
+          songId: entry.songId,
+          title: entry.title,
+          artist: entry.artist,
+          album: entry.album,
+          coverUrl: entry.coverUrl,
+          durationMs: entry.durationMs,
+          raw: raw,
+          playedAt: entry.playedAt,
+          version: version,
+        ),
+      );
+      await _trimHistory(db);
+    });
     _notifyChanged(const LibraryChange.history());
   }
 
@@ -159,19 +362,21 @@ class LibraryRepository implements LibraryStore, LibrarySyncStore {
   @override
   Future<void> deleteHistoryEntry(String sourceKey, String songId) async {
     final db = _db;
-    final removed = await (db.delete(db.playHistory)
-          ..where((t) =>
-              t.sourceKey.equals(sourceKey) & t.songId.equals(songId)))
-        .go();
-    if (removed > 0) {
-      await _recordTombstone(
-        db,
-        SyncCategory.history.name,
-        SyncRecordKeys.history(sourceKey, songId),
-        updatedAt: _nowMs(),
-        updatedBy: _deviceId(),
-      );
-    }
+    await db.transaction(() async {
+      final removed = await (db.delete(db.playHistory)
+            ..where((t) =>
+                t.sourceKey.equals(sourceKey) & t.songId.equals(songId)))
+          .go();
+      if (removed > 0) {
+        await _recordTombstone(
+          db,
+          SyncCategory.history.name,
+          SyncRecordKeys.history(sourceKey, songId),
+          version: _nextVersion(),
+          deletedAt: _nowMs(),
+        );
+      }
+    });
     _notifyChanged(const LibraryChange.history());
   }
 
@@ -182,8 +387,6 @@ class LibraryRepository implements LibraryStore, LibrarySyncStore {
     final db = _db;
     var removed = 0;
     await db.transaction(() async {
-      final now = _nowMs();
-      final deviceId = _deviceId();
       for (final key in keys) {
         final count = await (db.delete(db.playHistory)
               ..where((t) =>
@@ -196,8 +399,8 @@ class LibraryRepository implements LibraryStore, LibrarySyncStore {
             db,
             SyncCategory.history.name,
             SyncRecordKeys.history(key.sourceKey, key.songId),
-            updatedAt: now,
-            updatedBy: deviceId,
+            version: _nextVersion(),
+            deletedAt: _nowMs(),
           );
         }
       }
@@ -210,12 +413,15 @@ class LibraryRepository implements LibraryStore, LibrarySyncStore {
   ///
   /// 旧键不存在返回 false；目标键行已存在时先删（历史唯一键语义），
   /// 保留旧行的 `playedAt`——换源不改变「何时听的」。
+  /// 换源是一次本地修改：版本三列经发号器取新值，改动才能同步到对端。
   @override
   Future<bool> replaceHistoryEntry(
     TrackKey oldKey,
     PlayHistoryEntry replacement,
   ) async {
     final db = _db;
+    final version = _nextVersion();
+    final raw = jsonEncode(replacement.raw);
     var updated = 0;
     await db.transaction(() async {
       final sameKey = replacement.sourceKey == oldKey.sourceKey &&
@@ -239,8 +445,29 @@ class LibraryRepository implements LibraryStore, LibrarySyncStore {
         album: Value(replacement.album),
         coverUrl: Value(replacement.coverUrl),
         durationMs: Value(replacement.durationMs),
-        raw: Value(jsonEncode(replacement.raw)),
+        raw: Value(raw),
+        versionPhysical: Value(version.physical),
+        versionCounter: Value(version.counter),
+        deviceId: Value(version.deviceId),
       ));
+      if (updated > 0) {
+        await _appendJournal(
+          db,
+          SyncCategory.history.name,
+          _historySyncRecord(
+            sourceKey: replacement.sourceKey,
+            songId: replacement.songId,
+            title: replacement.title,
+            artist: replacement.artist,
+            album: replacement.album,
+            coverUrl: replacement.coverUrl,
+            durationMs: replacement.durationMs,
+            raw: raw,
+            playedAt: replacement.playedAt,
+            version: version,
+          ),
+        );
+      }
     });
     if (updated > 0) _notifyChanged(const LibraryChange.history());
     return updated > 0;
@@ -253,28 +480,53 @@ class LibraryRepository implements LibraryStore, LibrarySyncStore {
   Future<int> addHistoryEntries(List<PlayHistoryEntry> entries) async {
     if (entries.isEmpty) return 0;
     final db = _db;
-    await db.batch((batch) => batch.insertAll(
-          db.playHistory,
-          [
-            for (final entry in entries)
-              PlayHistoryCompanion.insert(
-                sourceKey: entry.sourceKey,
-                songId: entry.songId,
-                title: entry.title,
-                artist: Value(entry.artist),
-                album: Value(entry.album),
-                coverUrl: Value(entry.coverUrl),
-                durationMs: Value(entry.durationMs),
-                raw: Value(jsonEncode(entry.raw)),
-                playedAt: entry.playedAt,
-              ),
-          ],
-          mode: InsertMode.insertOrReplace,
-        ));
+    final rows = <PlayHistoryCompanion>[];
+    final journalChanges = <SyncJournalChange>[];
     for (final entry in entries) {
-      await _clearHistoryTombstone(db, entry.sourceKey, entry.songId);
+      final version = _nextVersion();
+      final raw = jsonEncode(entry.raw);
+      rows.add(PlayHistoryCompanion.insert(
+        sourceKey: entry.sourceKey,
+        songId: entry.songId,
+        title: entry.title,
+        artist: Value(entry.artist),
+        album: Value(entry.album),
+        coverUrl: Value(entry.coverUrl),
+        durationMs: Value(entry.durationMs),
+        raw: Value(raw),
+        playedAt: entry.playedAt,
+        versionPhysical: Value(version.physical),
+        versionCounter: Value(version.counter),
+        deviceId: Value(version.deviceId),
+      ));
+      journalChanges.add((
+        category: SyncCategory.history,
+        record: _historySyncRecord(
+          sourceKey: entry.sourceKey,
+          songId: entry.songId,
+          title: entry.title,
+          artist: entry.artist,
+          album: entry.album,
+          coverUrl: entry.coverUrl,
+          durationMs: entry.durationMs,
+          raw: raw,
+          playedAt: entry.playedAt,
+          version: version,
+        ),
+      ));
     }
-    await _trimHistory(db);
+    await db.transaction(() async {
+      await db.batch((batch) => batch.insertAll(
+            db.playHistory,
+            rows,
+            mode: InsertMode.insertOrReplace,
+          ));
+      for (final entry in entries) {
+        await _clearHistoryTombstone(db, entry.sourceKey, entry.songId);
+      }
+      if (_journal != null) await _journal.append(db, journalChanges);
+      await _trimHistory(db);
+    });
     _notifyChanged(const LibraryChange.history());
     return entries.length;
   }
@@ -286,15 +538,13 @@ class LibraryRepository implements LibraryStore, LibrarySyncStore {
       final rows = await db.select(db.playHistory).get();
       if (rows.isEmpty) return;
       await db.delete(db.playHistory).go();
-      final now = _nowMs();
-      final deviceId = _deviceId();
       for (final row in rows) {
         await _recordTombstone(
           db,
           SyncCategory.history.name,
           SyncRecordKeys.history(row.sourceKey, row.songId),
-          updatedAt: now,
-          updatedBy: deviceId,
+          version: _nextVersion(),
+          deletedAt: _nowMs(),
         );
       }
     });
@@ -317,15 +567,31 @@ class LibraryRepository implements LibraryStore, LibrarySyncStore {
   Future<int> createPlaylist(String name) async {
     final db = _db;
     final now = _nowMs();
-    final id = await db.into(db.playlists).insert(
-          PlaylistsCompanion.insert(
-            name: name,
-            createdAt: now,
-            syncId: Value(_newSyncId(name)),
-            updatedAt: Value(now),
-            updatedBy: Value(_deviceId()),
-          ),
-        );
+    final version = _nextVersion();
+    final syncId = _newSyncId(name);
+    late final int id;
+    await db.transaction(() async {
+      id = await db.into(db.playlists).insert(
+            PlaylistsCompanion.insert(
+              name: name,
+              createdAt: now,
+              syncId: Value(syncId),
+              versionPhysical: Value(version.physical),
+              versionCounter: Value(version.counter),
+              deviceId: Value(version.deviceId),
+            ),
+          );
+      await _appendJournal(
+        db,
+        SyncCategory.playlists.name,
+        _playlistSyncRecord(
+          syncId: syncId,
+          name: name,
+          createdAt: now,
+          version: version,
+        ),
+      );
+    });
     _notifyChanged(const LibraryChange.playlists());
     return id;
   }
@@ -369,12 +635,36 @@ class LibraryRepository implements LibraryStore, LibrarySyncStore {
   @override
   Future<void> renamePlaylist(int id, String name) async {
     final db = _db;
-    await (db.update(db.playlists)..where((t) => t.id.equals(id)))
-        .write(PlaylistsCompanion(
-      name: Value(name),
-      updatedAt: Value(_nowMs()),
-      updatedBy: Value(_deviceId()),
-    ));
+    await db.transaction(() async {
+      // 版本在补 syncId **之后**取：补 syncId 本身会为同一个键写一条日志，
+      // 若重命名用更早的版本号，对端按 LWW 会一直保留旧名（同键两条日志
+      // 必须版本递增）。
+      final syncId = await _ensurePlaylistSyncId(db, id);
+      final version = _nextVersion();
+      final updated = await (db.update(db.playlists)..where((t) => t.id.equals(id)))
+          .write(PlaylistsCompanion(
+        name: Value(name),
+        versionPhysical: Value(version.physical),
+        versionCounter: Value(version.counter),
+        deviceId: Value(version.deviceId),
+      ));
+      if (updated > 0 && syncId.isNotEmpty) {
+        final row = await (db.select(db.playlists)
+              ..where((t) => t.id.equals(id))
+              ..limit(1))
+            .getSingle();
+        await _appendJournal(
+          db,
+          SyncCategory.playlists.name,
+          _playlistSyncRecord(
+            syncId: syncId,
+            name: row.name,
+            createdAt: row.createdAt,
+            version: version,
+          ),
+        );
+      }
+    });
     _notifyChanged(const LibraryChange.playlists());
   }
 
@@ -392,8 +682,8 @@ class LibraryRepository implements LibraryStore, LibrarySyncStore {
           db,
           SyncCategory.playlists.name,
           syncId,
-          updatedAt: _nowMs(),
-          updatedBy: _deviceId(),
+          version: _nextVersion(),
+          deletedAt: _nowMs(),
         );
       }
     });
@@ -437,24 +727,47 @@ class LibraryRepository implements LibraryStore, LibrarySyncStore {
 
     final nextOrder = await _nextSortOrder(db, playlistId);
 
-    await db.into(db.playlistTracks).insert(
-          PlaylistTracksCompanion.insert(
-            playlistId: playlistId,
-            sourceKey: track.sourceKey,
-            songId: track.songId,
-            title: track.title,
-            artist: Value(track.artist),
-            album: Value(track.album),
-            coverUrl: Value(track.coverUrl),
-            durationMs: Value(track.durationMs),
-            raw: Value(jsonEncode(track.raw)),
-            addedAt: track.addedAt,
-            sortOrder: Value(nextOrder),
-            updatedAt: Value(_nowMs()),
-            updatedBy: Value(_deviceId()),
-          ),
-          mode: InsertMode.insertOrIgnore,
-        );
+    final version = _nextVersion();
+    var inserted = 0;
+    await db.transaction(() async {
+      inserted = await db.into(db.playlistTracks).insert(
+            PlaylistTracksCompanion.insert(
+              playlistId: playlistId,
+              sourceKey: track.sourceKey,
+              songId: track.songId,
+              title: track.title,
+              artist: Value(track.artist),
+              album: Value(track.album),
+              coverUrl: Value(track.coverUrl),
+              durationMs: Value(track.durationMs),
+              raw: Value(jsonEncode(track.raw)),
+              addedAt: track.addedAt,
+              sortOrder: Value(nextOrder),
+              versionPhysical: Value(version.physical),
+              versionCounter: Value(version.counter),
+              deviceId: Value(version.deviceId),
+            ),
+            mode: InsertMode.insertOrIgnore,
+          );
+      if (inserted > 0) {
+        final syncId = await _ensurePlaylistSyncId(db, playlistId);
+        if (syncId.isNotEmpty) {
+          final row = await (db.select(db.playlistTracks)
+                ..where((t) =>
+                    t.playlistId.equals(playlistId) &
+                    t.sourceKey.equals(track.sourceKey) &
+                    t.songId.equals(track.songId))
+                ..limit(1))
+              .getSingle();
+          await _appendJournal(
+            db,
+            SyncCategory.playlistTracks.name,
+            _trackSyncRecord(playlistSyncId: syncId, row: row),
+          );
+        }
+      }
+    });
+    if (inserted == 0) return false;
     _notifyChanged(favoriteChange
         ? const LibraryChange.favorites()
         : LibraryChange.playlistTracks(playlistId));
@@ -479,23 +792,28 @@ class LibraryRepository implements LibraryStore, LibrarySyncStore {
     bool favoriteChange = false,
   }) async {
     final db = _db;
-    final removed = await (db.delete(db.playlistTracks)
-          ..where((t) =>
-              t.playlistId.equals(playlistId) &
-              t.sourceKey.equals(sourceKey) &
-              t.songId.equals(songId)))
-        .go();
-    if (removed > 0) {
-      final syncId = await _playlistSyncIdById(db, playlistId);
-      if (syncId != null && syncId.isNotEmpty) {
-        await _recordTombstone(
-          db,
-          SyncCategory.playlistTracks.name,
-          SyncRecordKeys.playlistTrack(syncId, sourceKey, songId),
-          updatedAt: _nowMs(),
-          updatedBy: _deviceId(),
-        );
+    var removed = 0;
+    await db.transaction(() async {
+      removed = await (db.delete(db.playlistTracks)
+            ..where((t) =>
+                t.playlistId.equals(playlistId) &
+                t.sourceKey.equals(sourceKey) &
+                t.songId.equals(songId)))
+          .go();
+      if (removed > 0) {
+        final syncId = await _playlistSyncIdById(db, playlistId);
+        if (syncId != null && syncId.isNotEmpty) {
+          await _recordTombstone(
+            db,
+            SyncCategory.playlistTracks.name,
+            SyncRecordKeys.playlistTrack(syncId, sourceKey, songId),
+            version: _nextVersion(),
+            deletedAt: _nowMs(),
+          );
+        }
       }
+    });
+    if (removed > 0) {
       _notifyChanged(favoriteChange
           ? const LibraryChange.favorites()
           : LibraryChange.playlistTracks(playlistId));
@@ -518,8 +836,6 @@ class LibraryRepository implements LibraryStore, LibrarySyncStore {
     var removed = 0;
     await db.transaction(() async {
       final syncId = await _playlistSyncIdById(db, playlistId);
-      final now = _nowMs();
-      final deviceId = _deviceId();
       for (final key in keys) {
         final count = await (db.delete(db.playlistTracks)
               ..where((t) =>
@@ -533,8 +849,8 @@ class LibraryRepository implements LibraryStore, LibrarySyncStore {
             db,
             SyncCategory.playlistTracks.name,
             SyncRecordKeys.playlistTrack(syncId, key.sourceKey, key.songId),
-            updatedAt: now,
-            updatedBy: deviceId,
+            version: _nextVersion(),
+            deletedAt: _nowMs(),
           );
         }
       }
@@ -571,12 +887,13 @@ class LibraryRepository implements LibraryStore, LibrarySyncStore {
     };
     var nextOrder = await _nextSortOrder(db, playlistId);
     var added = 0;
-    final now = _nowMs();
-    final deviceId = _deviceId();
     final rows = <PlaylistTracksCompanion>[];
+    final pending = <({PlaylistTrack track, SyncVersion version, int sortOrder})>[];
     for (final track in tracks) {
       final key = '${track.sourceKey}:${track.songId}';
       if (!known.add(key)) continue;
+      final version = _nextVersion();
+      final order = nextOrder++;
       rows.add(PlaylistTracksCompanion.insert(
         playlistId: playlistId,
         sourceKey: track.sourceKey,
@@ -588,18 +905,45 @@ class LibraryRepository implements LibraryStore, LibrarySyncStore {
         durationMs: Value(track.durationMs),
         raw: Value(jsonEncode(track.raw)),
         addedAt: track.addedAt,
-        sortOrder: Value(nextOrder++),
-        updatedAt: Value(now),
-        updatedBy: Value(deviceId),
+        sortOrder: Value(order),
+        versionPhysical: Value(version.physical),
+        versionCounter: Value(version.counter),
+        deviceId: Value(version.deviceId),
       ));
+      pending.add((track: track, version: version, sortOrder: order));
       added++;
     }
     if (added > 0) {
-      await db.batch((batch) => batch.insertAll(
-            db.playlistTracks,
-            rows,
-            mode: InsertMode.insertOrIgnore,
-          ));
+      await db.transaction(() async {
+        await db.batch((batch) => batch.insertAll(
+              db.playlistTracks,
+              rows,
+              mode: InsertMode.insertOrIgnore,
+            ));
+        final syncId = await _ensurePlaylistSyncId(db, playlistId);
+        if (syncId.isNotEmpty && _journal != null) {
+          await _journal.append(db, [
+            for (final item in pending)
+              (
+                category: SyncCategory.playlistTracks,
+                record: _trackRecord(
+                  playlistSyncId: syncId,
+                  sourceKey: item.track.sourceKey,
+                  songId: item.track.songId,
+                  title: item.track.title,
+                  artist: item.track.artist,
+                  album: item.track.album,
+                  coverUrl: item.track.coverUrl,
+                  durationMs: item.track.durationMs,
+                  raw: jsonEncode(item.track.raw),
+                  addedAt: item.track.addedAt,
+                  sortOrder: item.sortOrder,
+                  version: item.version,
+                ),
+              ),
+          ]);
+        }
+      });
       _notifyChanged(favoriteChange
           ? const LibraryChange.favorites()
           : LibraryChange.playlistTracks(playlistId));
@@ -615,12 +959,13 @@ class LibraryRepository implements LibraryStore, LibrarySyncStore {
   ) async {
     if (ordered.isEmpty) return;
     final db = _db;
-    final now = _nowMs();
-    final deviceId = _deviceId();
     await db.transaction(() async {
+      final syncId = await _ensurePlaylistSyncId(db, playlistId);
+      final changes = <SyncJournalChange>[];
       for (var index = 0; index < ordered.length; index++) {
         final key = ordered[index];
-        await (db.update(db.playlistTracks)
+        final version = _nextVersion();
+        final updated = await (db.update(db.playlistTracks)
               ..where((t) =>
                   t.playlistId.equals(playlistId) &
                   t.sourceKey.equals(key.sourceKey) &
@@ -628,9 +973,26 @@ class LibraryRepository implements LibraryStore, LibrarySyncStore {
                   t.sortOrder.equals(index).not()))
             .write(PlaylistTracksCompanion(
           sortOrder: Value(index),
-          updatedAt: Value(now),
-          updatedBy: Value(deviceId),
+          versionPhysical: Value(version.physical),
+          versionCounter: Value(version.counter),
+          deviceId: Value(version.deviceId),
         ));
+        if (updated > 0 && syncId.isNotEmpty) {
+          final row = await (db.select(db.playlistTracks)
+                ..where((t) =>
+                    t.playlistId.equals(playlistId) &
+                    t.sourceKey.equals(key.sourceKey) &
+                    t.songId.equals(key.songId))
+                ..limit(1))
+              .getSingle();
+          changes.add((
+            category: SyncCategory.playlistTracks,
+            record: _trackSyncRecord(playlistSyncId: syncId, row: row),
+          ));
+        }
+      }
+      if (changes.isNotEmpty && _journal != null) {
+        await _journal.append(db, changes);
       }
     });
     _notifyChanged(LibraryChange.playlistTracks(playlistId));
@@ -642,6 +1004,7 @@ class LibraryRepository implements LibraryStore, LibrarySyncStore {
   /// 再把旧行更新为新曲目数据（`playlistId` 以参数为准，忽略
   /// [replacement] 内的值）。[favoriteChange] 语义同
   /// [removeTracksFromPlaylist]：收藏列表内换源只做局部刷新。
+  /// 换源是一次本地修改：版本三列经发号器取新值，改动才能同步到对端。
   @override
   Future<bool> replacePlaylistTrack(
     int playlistId,
@@ -650,6 +1013,8 @@ class LibraryRepository implements LibraryStore, LibrarySyncStore {
     bool favoriteChange = false,
   }) async {
     final db = _db;
+    final version = _nextVersion();
+    final raw = jsonEncode(replacement.raw);
     var updated = 0;
     await db.transaction(() async {
       final sameKey = replacement.sourceKey == oldKey.sourceKey &&
@@ -675,8 +1040,28 @@ class LibraryRepository implements LibraryStore, LibrarySyncStore {
         album: Value(replacement.album),
         coverUrl: Value(replacement.coverUrl),
         durationMs: Value(replacement.durationMs),
-        raw: Value(jsonEncode(replacement.raw)),
+        raw: Value(raw),
+        versionPhysical: Value(version.physical),
+        versionCounter: Value(version.counter),
+        deviceId: Value(version.deviceId),
       ));
+      if (updated > 0) {
+        final syncId = await _ensurePlaylistSyncId(db, playlistId);
+        if (syncId.isNotEmpty) {
+          final row = await (db.select(db.playlistTracks)
+                ..where((t) =>
+                    t.playlistId.equals(playlistId) &
+                    t.sourceKey.equals(replacement.sourceKey) &
+                    t.songId.equals(replacement.songId))
+                ..limit(1))
+              .getSingle();
+          await _appendJournal(
+            db,
+            SyncCategory.playlistTracks.name,
+            _trackSyncRecord(playlistSyncId: syncId, row: row),
+          );
+        }
+      }
     });
     if (updated > 0) {
       _notifyChanged(favoriteChange
@@ -794,14 +1179,13 @@ class LibraryRepository implements LibraryStore, LibrarySyncStore {
     var nextOrder = await _nextSortOrder(db, playlistId);
 
     final addedAt = DateTime.now().millisecondsSinceEpoch;
-    final updatedAt = _nowMs();
-    final updatedBy = _deviceId();
     var imported = 0;
     final rows = <PlaylistTracksCompanion>[];
     for (final track in decoded.tracks) {
       final key = '${track.sourceKey}:${track.songId}';
       if (knownKeys.contains(key)) continue;
       knownKeys.add(key);
+      final version = _nextVersion();
       rows.add(PlaylistTracksCompanion.insert(
         playlistId: playlistId,
         sourceKey: track.sourceKey,
@@ -814,8 +1198,9 @@ class LibraryRepository implements LibraryStore, LibrarySyncStore {
         raw: Value(jsonEncode(track.raw)),
         addedAt: addedAt,
         sortOrder: Value(nextOrder++),
-        updatedAt: Value(updatedAt),
-        updatedBy: Value(updatedBy),
+        versionPhysical: Value(version.physical),
+        versionCounter: Value(version.counter),
+        deviceId: Value(version.deviceId),
       ));
       imported++;
     }
@@ -856,9 +1241,11 @@ class LibraryRepository implements LibraryStore, LibrarySyncStore {
 
   // 跨设备同步（data/sync 适配器消费）
   //
-  // 契约：导出只读本机视图并补齐缺失的 syncId；应用端逐行按
-  // `(updatedAt, updatedBy)` 取新，写入沿用远端时间戳（幂等，不制造新的
-  // 本地变更），删除经墓碑表表达；旧行（v5 前）在导出/应用前一次性补齐。
+  // 契约：导出只读本机视图并补齐缺失的 syncId；应用端逐行按版本三元组
+  // `(versionPhysical, versionCounter, deviceId)` 取新，写入沿用远端版本
+  // （幂等，不制造新的本地变更），删除经墓碑表表达；历史「删除 vs 播放」用
+  // 真实时间（playedAt vs 墓碑 deletedAt）判定。旧行（v6 前）版本回默认 0，
+  // 在导出/应用前一次性补齐 syncId。
 
   /// 导出列表头（类型化记录；列名不出实现）。
   @override
@@ -872,8 +1259,7 @@ class LibraryRepository implements LibraryStore, LibrarySyncStore {
           syncId: row.syncId ?? '',
           name: row.name,
           createdAt: row.createdAt,
-          updatedAt: row.updatedAt,
-          updatedBy: row.updatedBy,
+          version: row.syncVersion,
         ),
     ];
   }
@@ -887,7 +1273,7 @@ class LibraryRepository implements LibraryStore, LibrarySyncStore {
     final rows = await db.customSelect('''
       SELECT p.syncId AS playlistSyncId, t.sourceKey, t.songId, t.title,
              t.artist, t.album, t.coverUrl, t.durationMs, t.raw, t.addedAt,
-             t.sortOrder, t.updatedAt, t.updatedBy
+             t.sortOrder, t.versionPhysical, t.versionCounter, t.deviceId
       FROM playlist_tracks t
       JOIN playlists p ON p.id = t.playlistId
       WHERE p.syncId IS NOT NULL
@@ -906,8 +1292,11 @@ class LibraryRepository implements LibraryStore, LibrarySyncStore {
           raw: row.data['raw'] as String? ?? '{}',
           addedAt: (row.data['addedAt'] as num?)?.toInt() ?? 0,
           sortOrder: (row.data['sortOrder'] as num?)?.toInt() ?? 0,
-          updatedAt: (row.data['updatedAt'] as num?)?.toInt() ?? 0,
-          updatedBy: row.data['updatedBy'] as String? ?? '',
+          version: SyncVersion(
+            physical: (row.data['versionPhysical'] as num?)?.toInt() ?? 0,
+            counter: (row.data['versionCounter'] as num?)?.toInt() ?? 0,
+            deviceId: row.data['deviceId'] as String? ?? '',
+          ),
         ),
     ];
   }
@@ -928,13 +1317,76 @@ class LibraryRepository implements LibraryStore, LibrarySyncStore {
         SyncTombstoneRecord(
           category: row.category,
           key: row.key,
-          updatedAt: row.updatedAt,
-          updatedBy: row.updatedBy,
+          version: row.syncVersion,
+          deletedAt: row.deletedAt,
         ),
     ];
   }
 
-  /// 导出播放历史（唯一键 `(sourceKey, songId)`；时间戳 = playedAt）。
+  /// 类别级廉价指纹：`COUNT(*)` + 最大版本（物理分量与计数合并比较，含该
+  /// 类别墓碑）。
+  ///
+  /// 版本用 `MAX(versionPhysical * 1000000 + versionCounter)` 表达：同一毫秒
+  /// 内的多次写入只有 `versionCounter` 变化（时钟回拨 / 吸收超前戳时物理
+  /// 分量也会持平），单看 `MAX(versionPhysical)` 会漏掉这类变更。计数器
+  /// 每毫秒远小于 100 万，乘法不会溢出 64 位。
+  ///
+  /// 列表头另计入「syncId 为空（NULL 或空串）」的行数：导出会就地补齐缺失的
+  /// syncId（判据同此），补齐后指纹变化会触发一次重读（之后稳定），跳过导出
+  /// 也不会让待补 syncId 的列表永远读不到。
+  @override
+  Future<Map<SyncCategory, String>> syncFingerprints(
+    Iterable<SyncCategory> categories,
+  ) async {
+    final db = _db;
+    const versionExpr = 'versionPhysical * 1000000 + versionCounter';
+    Future<String> tableFingerprint(String table) async {
+      final row = await db
+          .customSelect(
+              'SELECT COUNT(*) AS n, MAX($versionExpr) AS m FROM $table')
+          .getSingle();
+      return '${row.data['n']}:${row.data['m'] ?? 0}';
+    }
+
+    Future<String> playlistFingerprint() async {
+      final row = await db.customSelect(
+        'SELECT COUNT(*) AS n, MAX($versionExpr) AS m, '
+        "SUM(CASE WHEN syncId IS NULL OR syncId = '' THEN 1 ELSE 0 END) AS x "
+        'FROM playlists',
+      ).getSingle();
+      return '${row.data['n']}:${row.data['m'] ?? 0}:${row.data['x'] ?? 0}';
+    }
+
+    Future<String> tombstoneFingerprint(String category) async {
+      final row = await db.customSelect(
+        'SELECT COUNT(*) AS n, MAX($versionExpr) AS m '
+        'FROM sync_tombstones WHERE category = ?',
+        variables: [Variable<String>(category)],
+      ).getSingle();
+      return '${row.data['n']}:${row.data['m'] ?? 0}';
+    }
+
+    final result = <SyncCategory, String>{};
+    for (final category in categories) {
+      switch (category) {
+        case SyncCategory.playlists:
+          result[category] = 'p${await playlistFingerprint()}'
+              '|t${await tombstoneFingerprint(category.name)}';
+        case SyncCategory.playlistTracks:
+          result[category] =
+              'p${await tableFingerprint('playlist_tracks')}'
+                  '|t${await tombstoneFingerprint(category.name)}';
+        case SyncCategory.history:
+          result[category] = 'p${await tableFingerprint('play_history')}'
+              '|t${await tombstoneFingerprint(category.name)}';
+        default:
+          break;
+      }
+    }
+    return result;
+  }
+
+  /// 导出播放历史（唯一键 `(sourceKey, songId)`；`playedAt` 是内容时间）。
   @override
   Future<List<PlayHistorySyncRecord>> syncExportHistory() async {
     final db = _db;
@@ -953,11 +1405,13 @@ class LibraryRepository implements LibraryStore, LibrarySyncStore {
           durationMs: row.durationMs,
           raw: row.raw,
           playedAt: row.playedAt,
+          version: row.syncVersion,
         ),
     ];
   }
 
-  /// 应用远端播放历史：逐条按 playedAt 取新，删除经墓碑（同键复活时清墓碑）。
+  /// 应用远端播放历史：版本三元组取新；删除 vs 播放按**真实时间**判定
+  /// （本机 `playedAt <= 墓碑 deletedAt` → 删除生效；晚于删除的播放复活条目）。
   ///
   /// 结束统一裁剪到 [historyLimit]；裁剪不产生墓碑（上限淘汰不是用户删除）。
   @override
@@ -968,111 +1422,94 @@ class LibraryRepository implements LibraryStore, LibrarySyncStore {
     if (entries.isEmpty && tombstones.isEmpty) {
       return (applied: 0, skipped: 0);
     }
-    final entryRows = [for (final entry in entries) entry.toJson()];
-    final tombstoneRows = [for (final record in tombstones) record.toJson()];
     final db = _db;
     var applied = 0;
     var skipped = 0;
     await db.transaction(() async {
       final category = SyncCategory.history.name;
-      for (final row in tombstoneRows) {
-        if ((row['category'] as String? ?? '') != category) {
+
+      for (final tombstone in tombstones) {
+        final parsed = SyncRecordKeys.parseHistory(tombstone.key);
+        if (tombstone.category != category || parsed == null) {
           skipped++;
           continue;
         }
-        final parsed = SyncRecordKeys.parseHistory(row['key'] as String? ?? '');
-        final updatedAt = (row['updatedAt'] as num?)?.toInt();
-        if (parsed == null || updatedAt == null) {
-          skipped++;
-          continue;
-        }
-        final updatedBy = row['updatedBy'] as String? ?? '';
-        final existingTombstone = await (db.select(db.syncTombstones)
-              ..where((t) =>
-                  t.category.equals(category) &
-                  t.key.equals(row['key'] as String))
-              ..limit(1))
-            .getSingleOrNull();
-        if (existingTombstone == null ||
-            _isNewer(
-              updatedAt,
-              updatedBy,
-              (
-                updatedAt: existingTombstone.updatedAt,
-                updatedBy: existingTombstone.updatedBy,
-              ),
-            )) {
+        final existing = await _tombstoneRow(db, category, tombstone.key);
+        final adopted =
+            existing == null || tombstone.version.isNewerThan(existing.syncVersion);
+        if (adopted) {
           await _recordTombstone(
             db,
             category,
-            row['key'] as String,
-            updatedAt: updatedAt,
-            updatedBy: updatedBy,
+            tombstone.key,
+            version: tombstone.version,
+            deletedAt: tombstone.deletedAt,
+            // 应用远端记录不追加日志：变更由来源设备广播（本机不二次转发）。
+            journal: false,
           );
         }
-        final local = await (db.select(db.playHistory)
-              ..where((t) =>
-                  t.sourceKey.equals(parsed.sourceKey) &
-                  t.songId.equals(parsed.songId))
-              ..limit(1))
-            .getSingleOrNull();
-        if (local != null &&
-            _isNewer(
-              updatedAt,
-              updatedBy,
-              (updatedAt: local.playedAt, updatedBy: ''),
-            )) {
-          await (db.delete(db.playHistory)
-                ..where((t) =>
-                    t.sourceKey.equals(parsed.sourceKey) &
-                    t.songId.equals(parsed.songId)))
-              .go();
+        // 删除 vs 播放按**实际生效**（被 LWW 采用）的墓碑时间判定：
+        // 入站墓碑比库内旧时不采用，也就不能用它的删除时间删行。
+        final effectiveDeletedAt =
+            adopted ? tombstone.deletedAt : existing.deletedAt;
+        final local = await _historyRow(db, parsed.sourceKey, parsed.songId);
+        if (local != null && local.playedAt <= effectiveDeletedAt) {
+          // 删除晚于本地最后播放（真实时间）：删除生效。
+          await _deleteHistoryRow(db, parsed.sourceKey, parsed.songId);
           applied++;
+        } else if (local != null) {
+          // 播放晚于删除（真实时间）：条目复活；只有被采用的墓碑才撤下，
+          // 比入站更新的本地墓碑原样保留。
+          if (adopted) {
+            await _clearHistoryTombstone(db, parsed.sourceKey, parsed.songId);
+          }
+          skipped++;
         } else {
           skipped++;
         }
       }
 
-      for (final row in entryRows) {
-        final sourceKey = row['sourceKey'] as String? ?? '';
-        final songId = row['songId'] as String? ?? '';
-        final playedAt = (row['playedAt'] as num?)?.toInt();
-        if (sourceKey.isEmpty || songId.isEmpty || playedAt == null) {
+      for (final entry in entries) {
+        final sourceKey = entry.sourceKey;
+        final songId = entry.songId;
+        if (sourceKey.isEmpty || songId.isEmpty) {
           skipped++;
           continue;
         }
         final key = SyncRecordKeys.history(sourceKey, songId);
-        final tombstone = await (db.select(db.syncTombstones)
-              ..where((t) => t.category.equals(category) & t.key.equals(key))
-              ..limit(1))
-            .getSingleOrNull();
+        final tombstone = await _tombstoneRow(db, category, key);
         if (tombstone != null) {
-          if (playedAt <= tombstone.updatedAt) {
+          if (entry.playedAt <= tombstone.deletedAt) {
             skipped++;
             continue;
           }
-          // 晚于删除的播放记录复活该曲目。
-          await (db.delete(db.syncTombstones)
-                ..where((t) => t.category.equals(category) & t.key.equals(key)))
-              .go();
+          // 晚于删除的播放记录复活该曲目；只有本条播放确实比墓碑新时才撤下
+          // 墓碑（导入旧备份不会顶掉更新的本地删除）。
+          if (entry.version.isNewerThan(tombstone.syncVersion)) {
+            await _clearHistoryTombstone(db, sourceKey, songId);
+          }
         }
-        final local = await (db.select(db.playHistory)
-              ..where((t) =>
-                  t.sourceKey.equals(sourceKey) & t.songId.equals(songId))
-              ..limit(1))
-            .getSingleOrNull();
-        if (local == null || playedAt > local.playedAt) {
+        final local = await _historyRow(db, sourceKey, songId);
+        // 同版本也应用：全量快照是权威视图，可能修掉被直接改写的本地行；
+        // 内容一致则跳过（重复交付幂等，不产生写入）。
+        if (local == null ||
+            entry.version.isNewerThan(local.syncVersion) ||
+            (!entry.version.isOlderThan(local.syncVersion) &&
+                !_historyMatches(local, entry))) {
           await db.into(db.playHistory).insert(
                 PlayHistoryCompanion.insert(
                   sourceKey: sourceKey,
                   songId: songId,
-                  title: row['title'] as String? ?? '',
-                  artist: Value(row['artist'] as String? ?? ''),
-                  album: Value(row['album'] as String? ?? ''),
-                  coverUrl: Value(row['coverUrl'] as String?),
-                  durationMs: Value((row['durationMs'] as num?)?.toInt()),
-                  raw: Value(row['raw'] as String? ?? '{}'),
-                  playedAt: playedAt,
+                  title: entry.title,
+                  artist: Value(entry.artist),
+                  album: Value(entry.album),
+                  coverUrl: Value(entry.coverUrl),
+                  durationMs: Value(entry.durationMs),
+                  raw: Value(entry.raw),
+                  playedAt: entry.playedAt,
+                  versionPhysical: Value(entry.version.physical),
+                  versionCounter: Value(entry.version.counter),
+                  deviceId: Value(entry.version.deviceId),
                 ),
                 mode: InsertMode.insertOrReplace,
               );
@@ -1087,6 +1524,37 @@ class LibraryRepository implements LibraryStore, LibrarySyncStore {
     return (applied: applied, skipped: skipped);
   }
 
+  /// 单条播放历史行（删除 vs 播放判定用）。
+  Future<PlayHistoryData?> _historyRow(
+    DatabaseConnectionUser executor,
+    String sourceKey,
+    String songId,
+  ) =>
+      (executor.select(_db.playHistory)
+            ..where((t) => t.sourceKey.equals(sourceKey) & t.songId.equals(songId))
+            ..limit(1))
+          .getSingleOrNull();
+
+  Future<void> _deleteHistoryRow(
+    DatabaseConnectionUser executor,
+    String sourceKey,
+    String songId,
+  ) =>
+      (executor.delete(_db.playHistory)
+            ..where((t) => t.sourceKey.equals(sourceKey) & t.songId.equals(songId)))
+          .go();
+
+  Future<SyncTombstone?> _tombstoneRow(
+    DatabaseConnectionUser executor,
+    String category,
+    String key,
+  ) =>
+      (executor.select(_db.syncTombstones)
+            ..where((t) => t.category.equals(category) & t.key.equals(key))
+            ..limit(1))
+          .getSingleOrNull();
+
+
   /// 应用远端合并结果（列表 + 曲目 + 墓碑）。
   ///
   /// 单事务执行，成功落地后广播一次 [LibraryImportChange]（历史/列表/
@@ -1100,9 +1568,6 @@ class LibraryRepository implements LibraryStore, LibrarySyncStore {
     if (playlists.isEmpty && tracks.isEmpty && tombstones.isEmpty) {
       return (applied: 0, skipped: 0);
     }
-    final playlistRows = [for (final record in playlists) record.toJson()];
-    final trackRows = [for (final record in tracks) record.toJson()];
-    final tombstoneRows = [for (final record in tombstones) record.toJson()];
     final db = _db;
     var applied = 0;
     var skipped = 0;
@@ -1110,47 +1575,30 @@ class LibraryRepository implements LibraryStore, LibrarySyncStore {
       await _ensurePlaylistSyncIds(db);
 
       // 1) 墓碑先行：删除本地旧行并保留墓碑供后续轮次继续传播。
-      for (final row in tombstoneRows) {
-        final category = row['category'] as String? ?? '';
-        final key = row['key'] as String? ?? '';
-        final updatedAt = (row['updatedAt'] as num?)?.toInt();
-        if (key.isEmpty || updatedAt == null) {
+      for (final tombstone in tombstones) {
+        final category = tombstone.category;
+        final key = tombstone.key;
+        if (key.isEmpty) {
           skipped++;
           continue;
         }
-        final updatedBy = row['updatedBy'] as String? ?? '';
-        final existing = await (db.select(db.syncTombstones)
-              ..where((t) => t.category.equals(category) & t.key.equals(key))
-              ..limit(1))
-            .getSingleOrNull();
+        final existing = await _tombstoneRow(db, category, key);
         if (existing == null ||
-            _isNewer(
-              updatedAt,
-              updatedBy,
-              (
-                updatedAt: existing.updatedAt,
-                updatedBy: existing.updatedBy,
-              ),
-            )) {
-          await db.into(db.syncTombstones).insert(
-                SyncTombstonesCompanion.insert(
-                  category: category,
-                  key: key,
-                  updatedAt: updatedAt,
-                  updatedBy: Value(updatedBy),
-                ),
-                mode: InsertMode.insertOrReplace,
-              );
+            tombstone.version.isNewerThan(existing.syncVersion)) {
+          await _recordTombstone(
+            db,
+            category,
+            key,
+            version: tombstone.version,
+            deletedAt: tombstone.deletedAt,
+            // 应用远端记录不追加日志（变更由来源设备广播）。
+            journal: false,
+          );
         }
 
         if (category == SyncCategory.playlists.name) {
           final local = await _playlistRowBySyncId(db, key);
-          if (local != null &&
-              _isNewer(
-                updatedAt,
-                updatedBy,
-                (updatedAt: local.updatedAt, updatedBy: local.updatedBy),
-              )) {
+          if (local != null && tombstone.version.isNewerThan(local.version)) {
             await (db.delete(db.playlistTracks)
                   ..where((t) => t.playlistId.equals(local.id)))
                 .go();
@@ -1177,14 +1625,7 @@ class LibraryRepository implements LibraryStore, LibrarySyncStore {
                   ..limit(1))
                 .getSingleOrNull();
             if (trackRow != null &&
-                _isNewer(
-                  updatedAt,
-                  updatedBy,
-                  (
-                    updatedAt: trackRow.updatedAt,
-                    updatedBy: trackRow.updatedBy,
-                  ),
-                )) {
+                tombstone.version.isNewerThan(trackRow.syncVersion)) {
               await (db.delete(db.playlistTracks)
                     ..where((t) =>
                         t.playlistId.equals(playlist.id) &
@@ -1203,12 +1644,9 @@ class LibraryRepository implements LibraryStore, LibrarySyncStore {
 
       // 2) 列表头（新列表按远端 syncId 落库；本地同名不受影响）。
       final localIds = <String, int>{};
-      for (final row in playlistRows) {
-        final syncId = row['syncId'] as String? ?? '';
-        final name = row['name'] as String? ?? '';
-        final updatedAt = (row['updatedAt'] as num?)?.toInt() ?? 0;
-        final updatedBy = row['updatedBy'] as String? ?? '';
-        final createdAt = (row['createdAt'] as num?)?.toInt() ?? updatedAt;
+      for (final record in playlists) {
+        final syncId = record.syncId;
+        final name = record.name;
         if (syncId.isEmpty || name.isEmpty) {
           skipped++;
           continue;
@@ -1218,27 +1656,30 @@ class LibraryRepository implements LibraryStore, LibrarySyncStore {
           final id = await db.into(db.playlists).insert(
                 PlaylistsCompanion.insert(
                   name: name,
-                  createdAt: createdAt,
+                  createdAt: record.createdAt,
                   syncId: Value(syncId),
-                  updatedAt: Value(updatedAt),
-                  updatedBy: Value(updatedBy),
+                  versionPhysical: Value(record.version.physical),
+                  versionCounter: Value(record.version.counter),
+                  deviceId: Value(record.version.deviceId),
                 ),
               );
           localIds[syncId] = id;
           applied++;
         } else {
           localIds[syncId] = local.id;
-          if (_isNewer(
-            updatedAt,
-            updatedBy,
-            (updatedAt: local.updatedAt, updatedBy: local.updatedBy),
-          )) {
+          // 同版本也应用（修复被直接改写的本地行）；内容一致则跳过。
+          final localRow = await _playlistRowById(db, local.id);
+          if (record.version.isNewerThan(local.version) ||
+              (!record.version.isOlderThan(local.version) &&
+                  (localRow == null ||
+                      !_playlistMatches(localRow, syncId, record)))) {
             await (db.update(db.playlists)
                   ..where((t) => t.id.equals(local.id)))
                 .write(PlaylistsCompanion(
               name: Value(name),
-              updatedAt: Value(updatedAt),
-              updatedBy: Value(updatedBy),
+              versionPhysical: Value(record.version.physical),
+              versionCounter: Value(record.version.counter),
+              deviceId: Value(record.version.deviceId),
             ));
             applied++;
           } else {
@@ -1247,13 +1688,11 @@ class LibraryRepository implements LibraryStore, LibrarySyncStore {
         }
       }
 
-      // 3) 曲目（所属列表不存在则跳过；新行沿用远端时间戳）。
-      for (final row in trackRows) {
-        final playlistSyncId = row['playlistSyncId'] as String? ?? '';
-        final sourceKey = row['sourceKey'] as String? ?? '';
-        final songId = row['songId'] as String? ?? '';
-        final updatedAt = (row['updatedAt'] as num?)?.toInt() ?? 0;
-        final updatedBy = row['updatedBy'] as String? ?? '';
+      // 3) 曲目（所属列表不存在则跳过；新行沿用远端版本）。
+      for (final record in tracks) {
+        final playlistSyncId = record.playlistSyncId;
+        final sourceKey = record.sourceKey;
+        final songId = record.songId;
         if (playlistSyncId.isEmpty || sourceKey.isEmpty || songId.isEmpty) {
           skipped++;
           continue;
@@ -1281,39 +1720,39 @@ class LibraryRepository implements LibraryStore, LibrarySyncStore {
                   playlistId: playlistId,
                   sourceKey: sourceKey,
                   songId: songId,
-                  title: row['title'] as String? ?? '',
-                  artist: Value(row['artist'] as String? ?? ''),
-                  album: Value(row['album'] as String? ?? ''),
-                  coverUrl: Value(row['coverUrl'] as String?),
-                  durationMs: Value((row['durationMs'] as num?)?.toInt()),
-                  raw: Value(row['raw'] as String? ?? '{}'),
-                  addedAt: (row['addedAt'] as num?)?.toInt() ?? updatedAt,
-                  sortOrder: Value((row['sortOrder'] as num?)?.toInt() ?? 0),
-                  updatedAt: Value(updatedAt),
-                  updatedBy: Value(updatedBy),
+                  title: record.title,
+                  artist: Value(record.artist),
+                  album: Value(record.album),
+                  coverUrl: Value(record.coverUrl),
+                  durationMs: Value(record.durationMs),
+                  raw: Value(record.raw),
+                  addedAt: record.addedAt,
+                  sortOrder: Value(record.sortOrder),
+                  versionPhysical: Value(record.version.physical),
+                  versionCounter: Value(record.version.counter),
+                  deviceId: Value(record.version.deviceId),
                 ),
               );
           applied++;
-        } else if (_isNewer(
-          updatedAt,
-          updatedBy,
-          (updatedAt: existing.updatedAt, updatedBy: existing.updatedBy),
-        )) {
+        } else if (record.version.isNewerThan(existing.syncVersion) ||
+            (!record.version.isOlderThan(existing.syncVersion) &&
+                !_trackMatches(existing, record))) {
           await (db.update(db.playlistTracks)
                 ..where((t) =>
                     t.playlistId.equals(playlistId) &
                     t.sourceKey.equals(sourceKey) &
                     t.songId.equals(songId)))
               .write(PlaylistTracksCompanion(
-            title: Value(row['title'] as String? ?? ''),
-            artist: Value(row['artist'] as String? ?? ''),
-            album: Value(row['album'] as String? ?? ''),
-            coverUrl: Value(row['coverUrl'] as String?),
-            durationMs: Value((row['durationMs'] as num?)?.toInt()),
-            raw: Value(row['raw'] as String? ?? '{}'),
-            sortOrder: Value((row['sortOrder'] as num?)?.toInt() ?? 0),
-            updatedAt: Value(updatedAt),
-            updatedBy: Value(updatedBy),
+            title: Value(record.title),
+            artist: Value(record.artist),
+            album: Value(record.album),
+            coverUrl: Value(record.coverUrl),
+            durationMs: Value(record.durationMs),
+            raw: Value(record.raw),
+            sortOrder: Value(record.sortOrder),
+            versionPhysical: Value(record.version.physical),
+            versionCounter: Value(record.version.counter),
+            deviceId: Value(record.version.deviceId),
           ));
           applied++;
         } else {
@@ -1324,6 +1763,49 @@ class LibraryRepository implements LibraryStore, LibrarySyncStore {
     if (applied > 0) _notifyChanged(const LibraryChange.import());
     return (applied: applied, skipped: skipped);
   }
+
+  // 同版本内容比较：全量快照是权威视图，同版本但内容不同（被直接改写 /
+  // 直接改库）要修回去；内容一致则跳过，保证重复交付幂等。
+
+  static bool _historyMatches(PlayHistoryData row, PlayHistorySyncRecord entry) =>
+      row.title == entry.title &&
+      row.artist == entry.artist &&
+      row.album == entry.album &&
+      row.coverUrl == entry.coverUrl &&
+      row.durationMs == entry.durationMs &&
+      row.raw == entry.raw &&
+      row.playedAt == entry.playedAt;
+
+  static bool _playlistMatches(
+    Playlist row,
+    String syncId,
+    PlaylistSyncRecord record,
+  ) =>
+      row.name == record.name &&
+      row.createdAt == record.createdAt &&
+      (row.syncId ?? '') == syncId;
+
+  static bool _trackMatches(
+    PlaylistTrackRow row,
+    PlaylistTrackSyncRecord record,
+  ) =>
+      row.title == record.title &&
+      row.artist == record.artist &&
+      row.album == record.album &&
+      row.coverUrl == record.coverUrl &&
+      row.durationMs == record.durationMs &&
+      row.raw == record.raw &&
+      row.addedAt == record.addedAt &&
+      row.sortOrder == record.sortOrder;
+
+  Future<Playlist?> _playlistRowById(
+    DatabaseConnectionUser executor,
+    int id,
+  ) =>
+      (executor.select(_db.playlists)
+            ..where((t) => t.id.equals(id))
+            ..limit(1))
+          .getSingleOrNull();
 
   /// 补齐 v5 前旧行的 syncId（收藏固定值；其余随机生成，只补一次）。
   Future<void> _ensurePlaylistSyncIds(DatabaseConnectionUser executor) async {
@@ -1337,7 +1819,7 @@ class LibraryRepository implements LibraryStore, LibrarySyncStore {
     }
   }
 
-  Future<({int id, int updatedAt, String updatedBy})?> _playlistRowBySyncId(
+  Future<({int id, SyncVersion version})?> _playlistRowBySyncId(
     DatabaseConnectionUser executor,
     String syncId,
   ) async {
@@ -1346,17 +1828,7 @@ class LibraryRepository implements LibraryStore, LibrarySyncStore {
           ..limit(1))
         .getSingleOrNull();
     if (row == null) return null;
-    return (id: row.id, updatedAt: row.updatedAt, updatedBy: row.updatedBy);
-  }
-
-  /// 远端戳是否严格新于本地戳（[updatedAt] 相同用设备 id 决平局）。
-  static bool _isNewer(
-    int updatedAt,
-    String updatedBy,
-    ({int updatedAt, String updatedBy}) local,
-  ) {
-    if (updatedAt != local.updatedAt) return updatedAt > local.updatedAt;
-    return updatedBy.compareTo(local.updatedBy) > 0;
+    return (id: row.id, version: row.syncVersion);
   }
 
   PlayHistoryEntry _historyFromRow(PlayHistoryData row) => PlayHistoryEntry(

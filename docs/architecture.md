@@ -202,24 +202,57 @@
   首次开启隐私确认、Web 隐藏；定位与边界见 ADR-0002。
 - **跨设备数据同步（可选，默认关闭）**：同步歌单 / 收藏 / 音源脚本与配置 /
   跟人走的设置 / 听歌统计 / 播放历史 / 上次播放会话 / AI DJ 与凭证。信任模型是
-  **同步口令即信任根**（加入即完全互信，无逐项审批），快照以 PBKDF2 +
-  AES-256-GCM 整体加密（帧与信任边界见 ADR-0003）。引擎
-  （`lib/data/sync/sync_engine.dart`）一轮 = 各 `SyncAdapter` 收集本地视图 →
-  `SyncTransport` 拉取远端快照 → 逐键 LWW 合并（`(updatedAt, updatedBy)`，
-  删除为墓碑）→ 适配器写回 → 推送合并视图；全量合并模型天然幂等，推送裁剪
-  90 天前墓碑；入站推送触发的轮次不再推送（防两端乒乓）。传输有两个实现、
-  可分别开关：局域网直连（UDP 探测 + 内置 HTTP 快照端点）与用户自备 WebDAV
-  （`<remoteDir>/<deviceId>.msync` 密文文件，PROPFIND/GET/PUT/MKCOL）。
-  资料库 schema（drift，fresh 基线）含 `playlists.syncId` / 行级
-  `updatedAt+updatedBy` / `sync_tombstones` / `play_events.syncKey`；
-  设置同步用「登记哈希」做变化检测，
-  不改造散落的 SharedPreferences 写入方。播放历史删除（含清空）传播墓碑；
-  上次播放会话按 `savedAt` 时间戳单向推进（本地停止不回传删除），应用后经
+  **同步口令即信任根**（加入即完全互信，无逐项审批），快照整体加密：根密钥 =
+  PBKDF2(口令) 会话内一次派生（按口令缓存），帧密钥 = HKDF(根密钥, 随机帧盐)，
+  AES-256-GCM 认证（帧结构保留盐与迭代数，版本 1 帧仍可解密；帧与信任边界见
+  ADR-0003）。引擎（`lib/data/sync/sync_engine.dart`）一轮 = 各 `SyncAdapter`
+  收集本地视图（按类别廉价指纹缓存：指纹未变不读行）→ `SyncTransport` 拉取
+  变化对端（WebDAV 按 `getetag` / 局域网按探测应答的 `snapshotId` 跳过未变
+  文件）→ 逐键 LWW 合并（版本三元组
+  `(versionPhysical, versionCounter, deviceId)`，删除为墓碑）→ 只把版本变化的
+  胜者交给适配器（`sync_known` 登记表：交付成功才登记，空闲轮 0 次 apply）→
+  内容未变不推送（与上次成功推送的指纹比对）；版本戳由唯一发号器
+  `SyncStampIssuer`（`sync_stamp.dart`，HLC-lite：吸收远端超前戳、同毫秒
+  counter 递增、基线持久化 + 重启不倒退）发放，内容时间（playedAt / endedAt /
+  savedAt / importedAt / 墓碑删除时间）**不参与胜负判定**（见 ADR-0003 v2 §2）。
+  协议自始为 v2（快照里的 `v` 字段用于自描述与将来能力协商）：对端快照直接
+  合并，备份只做结构性校验（不是 Molia 备份 / 结构无效才拒绝），都没有按版本号
+  的分支。全量合并模型天然幂等，推送裁剪 90 天前墓碑（按真实删除时间）；入站
+  推送在 1–2s 窗口内合流成一轮，入站轮只消费收到的快照（不拉取、不推送，防
+  两端乒乓与 N 台平方级放大）。一轮的产物是可观察的 `SyncRoundReport`：五态
+  结论（`ok / noChanges / noPeers / partial / failed`）+ 每传输明细（含未变跳过
+  数）+ 每对端名册 + 本轮变更量；设置页据此呈现结论行、运行状态（近 24 小时
+  触发 / 有效传输轮数与流量、当前同步等级 · 网络类型 · 是否省电）、已配对设备
+  子页与变更语义日志，失败行给重试入口，「复制诊断信息」导出运行状态。触发
+  策略统一在 `SyncScheduler`（`sync_scheduler.dart`）：**活跃**（可见 + 最近
+  交互 / 正在播放，变更去抖 4s）/ **空闲**（退避 10→20→40→60 分钟封顶；
+  蜂窝下无本地变更不广播、不发 PROPFIND，非蜂窝（Wi-Fi / 以太网 / 桌面）
+  唤醒照常探测与拉取）/**后台**（零定时唤醒，退后台尽力推、回前台拉）/
+  **省电**（低电量未充电或系统省电模式
+  暂停自动，仅手动）；电量经平台通道读取（Android `BatteryChannelHandler` /
+  iOS `AppDelegate`），移动数据下默认只同步小类别
+  （设置 / 音源 / 凭证 / 歌单与曲目 / 会话），可在
+  同步页切换为「暂停自动同步」。传输有两个
+  实现、可分别开关：局域网直连（UDP 探测 + 内置 HTTP 快照端点）与用户自备
+  WebDAV（`<remoteDir>/<deviceId>.msync` 密文文件，PROPFIND/GET/PUT/MKCOL）。
+  局域网在移动端有平台准入：Android 17 / API 37 起必须声明并运行时申请
+  `ACCESS_LOCAL_NETWORK`（未授予时状态 `permission_denied`，UI 给授权入口），
+  iOS 广播发现需向 Apple 申请 multicast entitlement（未获批时降级手动地址 /
+  WebDAV）；发现失败可用手动对端地址簿兜底（单播探测后认领 deviceId 与端点
+  端口），本机端点端口持久化避免对端记不住本机。
+  资料库 schema（drift，`schemaVersion = 2`）含 `playlists.syncId` / 行级
+  `versionPhysical + versionCounter + deviceId` / `sync_tombstones`（版本三列 +
+  真实删除时间）/ `sync_known`（已知版本登记）/ `play_events`（syncKey +
+  版本列，`originDeviceId` 兼作设备列）；设置同步用「登记哈希」做变化检测，
+  不改造散落的 SharedPreferences 写入方。播放历史删除（含清空）传播墓碑，
+  「删除 vs 播放」按真实时间判定；上次播放会话按 `savedAt` 内容时间变化取新戳
+  （本地停止不回传删除），应用后经
   `PlaybackProvider.reloadRestoredSessionFromStore` 重载恢复态。**完整备份**
   （数据与存储页导出/导入）复用同一 envelope（`exportBackupJson` /
-  `importBackupJson`），凭证类默认排除。组合根在启动 / 数据变更去抖 /
-  每 10 分钟 / 回前台触发；同步后的定向重载经 `PrefsSyncAdapter.onApplied`
-  接线。设置入口 `settings_page.dart` → `sync_settings_page.dart`，Web 隐藏。
+  `importBackupJson`；协议旧版备份拒绝导入），凭证类默认排除。数据变更经
+  调度器进入触发链，生命周期回调由 `main.dart` 的 `AppLifecycleListener` 转发；
+  同步后的定向重载经 `PrefsSyncAdapter.onApplied` 接线。设置入口
+  `settings_page.dart` → `sync_settings_page.dart`，Web 隐藏。
 - **渠道选择**：`DiscoverProvider.channelKey` 是渠道状态的唯一持有者；渠道变化经
   注入的 `onChannelChanged`（组合根）同步搜索源（可搜索渠道才跟随），资料页只
   处理「渠道被停用」的 UI 回退，不再在两个 provider 之间仲裁同步。

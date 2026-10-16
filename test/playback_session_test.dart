@@ -87,6 +87,27 @@ void main() {
     expect(loaded.tracks[0].payload['songmid'], 'mid_a');
   });
 
+  test('落盘回调：save 通知（标记会话待外发），saveRaw 不通知', () async {
+    var saved = 0;
+    final store = PlaybackSessionStore()..onSaved = () => saved++;
+
+    await store.save(PlaybackSession(
+      tracks: [_track('a')],
+      index: 0,
+      position: Duration.zero,
+      mode: PlayMode.sequential,
+    ));
+    expect(saved, 1);
+
+    // 同步适配器应用远端会话走 saveRaw：不应回传待发标记。
+    await store.saveRaw(const {
+      'tracks': <Object?>[],
+      'index': 0,
+      'savedAt': 1,
+    });
+    expect(saved, 1);
+  });
+
   test('冷启动恢复：展示上次曲目/封面/进度，可继续播放并 seek 回进度', () async {
     final store = PlaybackSessionStore();
     await store.save(PlaybackSession(

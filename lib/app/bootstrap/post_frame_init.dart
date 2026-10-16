@@ -26,8 +26,9 @@ void initAfterFirstFrame({
   unawaited(update.provider.maybeAutoCheck());
 
   // 启动后初始化音源（加载已导入的 LX 音源脚本）；随后发起首轮同步
-  // （音源仓库就绪后脚本适配器才能工作）。
+  // （音源仓库就绪后脚本适配器才能工作）。首轮同样受调度器等级约束：
+  // 省电 / 移动数据暂停时不跑，移动数据下只同步小类别。
   catalog.sourceManager.init().then((_) {
-    if (syncProvider.enabled) unawaited(syncProvider.syncNow());
+    unawaited(syncProvider.startupSync());
   });
 }

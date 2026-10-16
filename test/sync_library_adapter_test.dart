@@ -4,6 +4,7 @@ import 'package:molia/data/molia_database.dart';
 import 'package:molia/data/sync/adapters/playlist_sync_adapter.dart';
 import 'package:molia/domain/models/device_sync.dart';
 import 'package:molia/domain/models/library.dart';
+import 'support/sync_test_support.dart';
 
 import 'support/memory_database.dart';
 
@@ -36,13 +37,13 @@ void main() {
     dbB = openMemoryDatabase();
     repoA = LibraryRepository(
       databaseProvider: () => dbA,
-      deviceIdProvider: () => 'devA',
       clock: () => clock,
+      stamps: testStampIssuer(clock: () => clock, deviceId: 'devA'),
     );
     repoB = LibraryRepository(
       databaseProvider: () => dbB,
-      deviceIdProvider: () => 'devB',
       clock: () => clock,
+      stamps: testStampIssuer(clock: () => clock, deviceId: 'devB'),
     );
     adapterA = PlaylistSyncAdapter(repository: repoA);
     adapterB = PlaylistSyncAdapter(repository: repoB);
@@ -121,14 +122,12 @@ void main() {
         SyncCategory.playlists: [
           SyncRecord(
             key: currentRow.syncId,
-            updatedAt: 1,
-            updatedBy: 'devC',
+            version: const SyncVersion(physical: 1, deviceId: 'devC'),
             data: PlaylistSyncRecord(
               syncId: currentRow.syncId,
               name: '旧名字',
               createdAt: 1,
-              updatedAt: 1,
-              updatedBy: 'devC',
+              version: const SyncVersion(physical: 1, deviceId: 'devC'),
             ).toJson(),
           ),
         ],
@@ -176,6 +175,31 @@ void main() {
     expect(tracksA.map((t) => t.songId), containsAll(['remote-1', 'local-added']));
   });
 
+  test('换源更新版本：列表替换后的曲目可同步到对端', () async {
+    final playlistId = await repoA.createPlaylist('歌单');
+    await repoA.addTrackToPlaylist(playlistId, track('t1'));
+    final before = (await repoA.syncExportPlaylistTracks()).single.version;
+
+    clock = 2000;
+    await repoA.replacePlaylistTrack(
+      playlistId,
+      (sourceKey: 'wy', songId: 't1'),
+      track('t1', source: 'kw'),
+    );
+    final after = (await repoA.syncExportPlaylistTracks()).single.version;
+    expect(
+      after.isNewerThan(before),
+      isTrue,
+      reason: '换源是本地修改：版本必须前进（否则永不传播）',
+    );
+
+    final result = await adapterB.apply(await adapterA.collect());
+    expect(result.applied, greaterThanOrEqualTo(1));
+    final inB = await repoB.findPlaylistByName('歌单');
+    final tracksB = await repoB.listPlaylistTracks(inB!.id);
+    expect(tracksB.single.sourceKey, 'kw');
+  });
+
   test('本地下载曲目（local）不同步：曲目与墓碑都过滤', () async {
     final playlistId = await repoA.createPlaylist('混合');
     await repoA.addTrackToPlaylist(playlistId, track('t1'));
@@ -194,25 +218,47 @@ void main() {
     );
     expect(trackRecords.where((record) => record.deleted), isEmpty);
 
-    // 对端收到 local 曲目也忽略（防御：旧版本或异常数据）。
+    // 对端收到 local 曲目也忽略（防御：异常或外来数据）。
     final result = await adapterB.apply({
       SyncCategory.playlistTracks: [
         SyncRecord(
           key: SyncRecordKeys.playlistTrack('sync-1', 'local', 'wy:9'),
-          updatedAt: 3000,
-          updatedBy: 'devA',
+          version: const SyncVersion(physical: 3000, deviceId: 'devA'),
           data: const {
             'playlistSyncId': 'sync-1',
             'sourceKey': 'local',
             'songId': 'wy:9',
             'title': '本地下载',
-            'updatedAt': 3000,
-            'updatedBy': 'devA',
           },
         ),
       ],
     });
     expect(result.applied, 0);
     expect(await repoB.findPlaylistByName('混合'), isNull);
+  });
+
+  test('collect 门控：指纹未变复用上轮记录，不读行', () async {
+    final counting = CountingLibrarySyncStore(repoA);
+    final adapter = PlaylistSyncAdapter(repository: counting);
+    await repoA.toggleFavorite(sourceKey: 'wy', songId: 'fav-1', title: 'F');
+
+    final first = await adapter.collect();
+    expect(first[SyncCategory.playlists], isNotEmpty);
+    expect(counting.exportCalls, greaterThan(0));
+    final readsAfterFirst = counting.exportCalls;
+
+    // 无写入：指纹未变，第二次 collect 直接复用缓存（不读行）。
+    final second = await adapter.collect();
+    expect(identical(first, second), isTrue);
+    expect(counting.exportCalls, readsAfterFirst);
+    expect(counting.fingerprintCalls, 2);
+
+    // 本地写入推进版本 → 指纹变化 → 重新读行。
+    clock = 5000;
+    await repoA.createPlaylist('新列表');
+    final third = await adapter.collect();
+    expect(counting.exportCalls, greaterThan(readsAfterFirst));
+    expect(third[SyncCategory.playlists]!.length,
+        greaterThan(first[SyncCategory.playlists]!.length));
   });
 }

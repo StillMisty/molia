@@ -44,6 +44,9 @@ typedef PlaybackStack = ({
   PlaybackObserver observer,
   PlaybackProvider playbackProvider,
   LocalAudioHandler? audioHandler,
+
+  /// 实时会话存储（同步栈据此标记「会话待外发」）。
+  PlaybackSessionStore sessionStore,
 });
 
 /// 装配本地播放链路、播放 provider 与系统媒体会话。
@@ -143,5 +146,6 @@ Future<PlaybackStack> buildPlaybackStack({
     observer: playbackObserver,
     playbackProvider: playbackProvider,
     audioHandler: audioHandler,
+    sessionStore: sessionStore,
   );
 }

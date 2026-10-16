@@ -2124,14 +2124,119 @@ class AppLocalizationsEn extends AppLocalizations {
   String get syncNever => 'Never synced';
 
   @override
-  String syncLastResultOk(String time, int applied) {
-    return 'Last sync $time · $applied applied';
+  String get syncOutcomeOk => 'Synced';
+
+  @override
+  String get syncOutcomeNoChanges => 'No changes';
+
+  @override
+  String get syncOutcomeNoPeers => 'No peer found';
+
+  @override
+  String get syncOutcomePartial => 'Partly failed';
+
+  @override
+  String get syncOutcomeFailed => 'Sync failed';
+
+  @override
+  String get syncTriggerStartup => 'startup';
+
+  @override
+  String get syncTriggerDebounce => 'data change';
+
+  @override
+  String get syncTriggerTimer => 'scheduled';
+
+  @override
+  String get syncTriggerIncoming => 'peer push';
+
+  @override
+  String get syncTriggerResume => 'resumed';
+
+  @override
+  String get syncTriggerPause => 'before background';
+
+  @override
+  String get syncTriggerManual => 'manual';
+
+  @override
+  String get syncActivitySection => 'Activity';
+
+  @override
+  String get syncActivityTitle => 'Last 24 hours';
+
+  @override
+  String syncActivityRounds(int rounds, int effective, String bytes) {
+    return '$rounds rounds, $effective with transfer, $bytes traffic';
   }
 
   @override
-  String syncLastResultFail(String error) {
-    return 'Last sync failed: $error';
+  String syncActivityEnvironment(
+      String level, String network, String powerSave) {
+    return '$level · $network · $powerSave';
   }
+
+  @override
+  String get syncLevelActive => 'active';
+
+  @override
+  String get syncLevelIdle => 'idle';
+
+  @override
+  String get syncLevelBackground => 'background';
+
+  @override
+  String get syncLevelPowerSave => 'power save';
+
+  @override
+  String get syncLevelUnknown => 'not running';
+
+  @override
+  String get syncNetworkCellular => 'cellular';
+
+  @override
+  String get syncNetworkOther => 'Wi-Fi / other';
+
+  @override
+  String get syncPowerSaveOn => 'power save on';
+
+  @override
+  String get syncPowerSaveOff => 'power save off';
+
+  @override
+  String get syncCellularPauseTitle => 'Pause automatic sync on cellular';
+
+  @override
+  String get syncCellularPauseSubtitle =>
+      'When off, cellular syncs only small categories (settings, playlists, session); statistics and history wait for Wi-Fi';
+
+  @override
+  String syncAppliedItems(int applied) {
+    return '$applied applied';
+  }
+
+  @override
+  String syncPeerCount(int count) {
+    return '$count peers';
+  }
+
+  @override
+  String syncFailedCount(int count) {
+    return '$count failures';
+  }
+
+  @override
+  String syncBytes(String inbound, String outbound) {
+    return '↓$inbound ↑$outbound';
+  }
+
+  @override
+  String syncLastSyncAt(String time) {
+    return 'Last $time';
+  }
+
+  @override
+  String get syncRetry => 'Retry';
 
   @override
   String get syncContentSection => 'What to sync';
@@ -2191,19 +2296,207 @@ class AppLocalizationsEn extends AppLocalizations {
   String get syncWebdavNotConfigured => 'Not configured';
 
   @override
+  String get syncTransportRunning => 'running';
+
+  @override
+  String get syncTransportStopped => 'stopped';
+
+  @override
+  String get syncTransportDisabled => 'turned off';
+
+  @override
+  String get syncTransportNotConfigured => 'not configured';
+
+  @override
+  String get syncTransportStartFailed => 'failed to start';
+
+  @override
   String get syncLogSection => 'Sync log';
 
   @override
   String get syncLogEmpty => 'No records yet';
 
   @override
-  String syncLogApplied(int applied, int skipped) {
-    return '$applied applied, $skipped skipped';
+  String syncLogFailed(String error) {
+    return 'Failed: $error';
   }
 
   @override
-  String syncLogFailed(String error) {
-    return 'Failed: $error';
+  String get syncPeersTitle => 'Paired devices';
+
+  @override
+  String get syncPeersSection => 'Devices';
+
+  @override
+  String syncPeersSubtitle(int count) {
+    return 'This device + $count peers';
+  }
+
+  @override
+  String get syncPeersSubtitleEmpty => 'No other device yet';
+
+  @override
+  String syncPeersSubtitleWithLost(int count, int lost) {
+    return 'This device + $count peers ($lost lost)';
+  }
+
+  @override
+  String get syncPeersHint =>
+      'Enter the same passphrase on another device to join. If no device is ever discovered, check whether LAN sync can run (permission / network isolation) or switch to WebDAV.';
+
+  @override
+  String syncPeerThisDevice(String id) {
+    return 'This device · $id';
+  }
+
+  @override
+  String syncPeerLastSync(String time) {
+    return 'Last synced $time';
+  }
+
+  @override
+  String get syncPeerNever => 'Not reached yet';
+
+  @override
+  String syncPeerBehind(int count) {
+    return '$count behind';
+  }
+
+  @override
+  String syncPeerBehindBytes(int count, String size) {
+    return '$count behind (~$size)';
+  }
+
+  @override
+  String syncPeerClockSkew(int minutes) {
+    return 'clock off by $minutes min';
+  }
+
+  @override
+  String syncPeerLastError(String error) {
+    return 'Last error: $error';
+  }
+
+  @override
+  String get syncDiagnosticTitle => 'Diagnostics';
+
+  @override
+  String get syncDiagnosticCopy => 'Copy diagnostics';
+
+  @override
+  String get syncDiagnosticSubtitle =>
+      'Recent sync rounds (no passphrase, no keys)';
+
+  @override
+  String get syncDiagnosticHint =>
+      'Paste it when reporting an issue — it contains no credentials and no data.';
+
+  @override
+  String get syncDiagnosticCopied => 'Diagnostics copied';
+
+  @override
+  String get syncTransportPermissionDenied => 'LAN permission missing';
+
+  @override
+  String get syncLanPermissionTitle => 'Grant LAN permission';
+
+  @override
+  String get syncLanPermissionSubtitle =>
+      'Android 17+ needs the nearby-devices permission to reach other devices';
+
+  @override
+  String get syncLanPermissionDenied =>
+      'Permission not granted: LAN sync is unavailable (manual addresses cannot work around it). Switch to WebDAV instead.';
+
+  @override
+  String get syncOpenSystemSettings => 'Open settings';
+
+  @override
+  String get syncPeerAdd => 'Add device';
+
+  @override
+  String get syncPeerAddSubtitle => 'Enter a peer address when discovery fails';
+
+  @override
+  String get syncPeerAddTitle => 'Add device';
+
+  @override
+  String get syncPeerHostLabel => 'Address';
+
+  @override
+  String get syncPeerHostHint => 'e.g. 192.168.1.23';
+
+  @override
+  String get syncPeerNameLabel => 'Name (optional)';
+
+  @override
+  String get syncPeerHostInvalid => 'Address cannot be empty';
+
+  @override
+  String get syncPeerDelete => 'Remove device';
+
+  @override
+  String get syncPeerDeleteConfirm =>
+      'This device will no longer connect to that address (other devices are unaffected).';
+
+  @override
+  String get syncPeerManual => 'added manually';
+
+  @override
+  String get syncPeerLost => 'lost';
+
+  @override
+  String get syncPeerLostHint =>
+      'No contact for over 180 days (reinstalled or retired). You can ignore it locally or explicitly clean up its remote files — nothing is deleted automatically.';
+
+  @override
+  String get syncPeerIgnore => 'Ignore this device locally';
+
+  @override
+  String get syncPeerUnignore => 'Stop ignoring locally';
+
+  @override
+  String get syncPeerIgnoreHint =>
+      'No longer pull or merge its payloads (this device only)';
+
+  @override
+  String get syncPeerIgnoredHint =>
+      'Ignored locally: its payloads are no longer pulled or merged.';
+
+  @override
+  String get syncPeerCleanupRemote => 'Clean up remote files';
+
+  @override
+  String get syncPeerCleanupRemoteHint =>
+      'Delete its journal and snapshot files on WebDAV';
+
+  @override
+  String get syncPeerCleanupRemoteConfirm =>
+      'Deletes this device\'s journal and snapshot files on WebDAV. Local data is untouched and the files are not recreated automatically (only when the peer is online again). LAN connections have no remote storage.';
+
+  @override
+  String get syncPeerCleanupRemoteDone => 'Remote files cleaned up';
+
+  @override
+  String get syncPeerCleanupRemoteNone => 'No remote files to clean up';
+
+  @override
+  String syncPeerCleanupRemoteFailed(Object error) {
+    return 'Cleanup failed: $error';
+  }
+
+  @override
+  String get syncPeerNotContacted =>
+      'not reached yet — tap this device row after the peer is online';
+
+  @override
+  String syncPeerAddress(String host) {
+    return 'Address $host';
+  }
+
+  @override
+  String syncPeerDeviceId(String id) {
+    return 'Device $id';
   }
 
   @override
@@ -2222,6 +2515,176 @@ class AppLocalizationsEn extends AppLocalizations {
   @override
   String get syncGeneratedHint =>
       'Passphrase generated; enter it on other devices to join';
+
+  @override
+  String get syncIssueDialogTitle => 'Sync issue';
+
+  @override
+  String get syncIssueUnknown =>
+      'Unknown reason — retry first; if it keeps failing, copy diagnostics';
+
+  @override
+  String get syncIssueNotConfigured => 'Sync transport is not configured';
+
+  @override
+  String get syncIssueStartFailed => 'Transport failed to start';
+
+  @override
+  String get syncIssuePermissionDenied =>
+      'LAN permission missing (Android 17+ needs the nearby-devices permission)';
+
+  @override
+  String get syncIssueNoPassphrase => 'No sync passphrase set';
+
+  @override
+  String get syncIssueAllPeersUnreachable => 'All peers are unreachable';
+
+  @override
+  String get syncIssuePullFailed => 'Failed to pull remote snapshots';
+
+  @override
+  String get syncIssuePushFailed => 'Failed to push local changes';
+
+  @override
+  String syncIssueApplyFailed(int count) {
+    return 'Failed to apply remote data $count time(s)';
+  }
+
+  @override
+  String syncIssuePeerReadFailed(String peer) {
+    return '$peer: failed to read snapshot';
+  }
+
+  @override
+  String syncIssuePeerDecryptFailed(String peer) {
+    return '$peer: passphrase mismatch or corrupted data';
+  }
+
+  @override
+  String syncIssuePeerPushFailed(String peer) {
+    return '$peer: push failed';
+  }
+
+  @override
+  String get syncIssueBroadcastUnavailable =>
+      'Broadcast failed (blocked by network policy)';
+
+  @override
+  String get syncIssueDiscoverySilent =>
+      'No device answered during discovery (the network may be isolated)';
+
+  @override
+  String get syncIssueWebdavDirFailed =>
+      'Failed to prepare the WebDAV directory';
+
+  @override
+  String get syncIssueWebdavListFailed => 'Failed to list the WebDAV directory';
+
+  @override
+  String syncIssueWebdavReadFailed(String peer) {
+    return '$peer: failed to read snapshot';
+  }
+
+  @override
+  String syncIssueWebdavDecryptFailed(String peer) {
+    return '$peer: passphrase mismatch or corrupted data';
+  }
+
+  @override
+  String get syncIssueWebdavUploadFailed =>
+      'Failed to upload the snapshot to WebDAV';
+
+  @override
+  String syncIssueDeleteRemoteFailed(String peer) {
+    return 'Failed to delete the remote files of $peer';
+  }
+
+  @override
+  String get syncIssueInternal => 'Internal sync error';
+
+  @override
+  String get syncActionGrantPermission => 'Grant permission';
+
+  @override
+  String get syncActionConfigure => 'Configure';
+
+  @override
+  String get syncActionConfigurePassphrase => 'Set passphrase';
+
+  @override
+  String get syncActionAddManualPeer => 'Add manual address';
+
+  @override
+  String get syncActionUseWebdav => 'Use WebDAV';
+
+  @override
+  String get syncWebdavEnabled => 'WebDAV enabled';
+
+  @override
+  String get syncConfigureOnSettingsPage =>
+      'Set the passphrase on the sync settings page';
+
+  @override
+  String get syncPeerUnknown => 'Unknown device';
+
+  @override
+  String get syncPeerDeviceIdCopied => 'Full device ID copied';
+
+  @override
+  String get syncPeerHostFormatInvalid =>
+      'Invalid address (use an IP, IPv6 or hostname, without a port)';
+
+  @override
+  String get syncPeerPortInvalid => 'Port must be 1–65535';
+
+  @override
+  String get syncPeerAdded => 'Device added';
+
+  @override
+  String get syncPeerUpdated => 'Device updated';
+
+  @override
+  String get syncPeerUnreachable =>
+      'Not reached yet — check that the peer is online on the same network, or use WebDAV';
+
+  @override
+  String get syncPeerProbePortLabel => 'Probe port';
+
+  @override
+  String syncPeerProbePortHint(int port) {
+    return 'Default $port';
+  }
+
+  @override
+  String get syncPeerAlreadyAdded =>
+      'Already in the list — name and port updated';
+
+  @override
+  String get syncPeerContactQueued => 'Device saved — contact will follow';
+
+  @override
+  String get syncPeerContacting => 'Contacting…';
+
+  @override
+  String get syncLanPermissionPermanentSubtitle =>
+      'Permission permanently denied — enable nearby-devices in system settings';
+
+  @override
+  String get syncTransportNeverSucceeded => 'No successful contact yet';
+
+  @override
+  String syncTransportLastSuccessAt(String time) {
+    return 'Last success $time';
+  }
+
+  @override
+  String syncLogViewAll(int count) {
+    return 'View all logs ($count)';
+  }
+
+  @override
+  String get syncLogHint =>
+      'Results of recent sync rounds; tap a failed row for the reason and next steps';
 
   @override
   String get settingsUpdateTitle => 'About & updates';

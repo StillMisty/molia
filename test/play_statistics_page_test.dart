@@ -9,6 +9,7 @@ import 'package:molia/domain/models/play_statistics.dart';
 import 'package:molia/l10n/app_localizations.dart';
 import 'package:molia/pages/play_statistics_page.dart';
 import 'package:molia/providers/play_statistics_provider.dart';
+import 'support/sync_test_support.dart';
 
 /// 听歌统计页冒烟测试：有数据渲染、空态与窄屏无溢出。
 ///
@@ -157,7 +158,10 @@ class _FakeStatisticsRepository extends PlayStatisticsRepository {
     this.dailyData = const [],
     this.byWeekdayHourData = const [],
     this.sourcesData = const [],
-  }) : super(databaseProvider: _unusedDatabase);
+  }) : super(
+          databaseProvider: _unusedDatabase,
+          stamps: testStampIssuer(),
+        );
 
   static MoliaDatabase _unusedDatabase() =>
       throw StateError('测试不访问数据库');

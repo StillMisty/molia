@@ -6,32 +6,33 @@ import '../../../domain/models/device_sync.dart';
 import '../../settings/settings_key.dart';
 import '../../settings/settings_registry.dart';
 import '../sync_adapter.dart';
+import '../sync_journal.dart';
 import '../sync_state_store.dart';
 
 /// 设置 / 音源配置 / 凭证适配器（键规格与读写都在 [SettingsRegistry]）。
 ///
 /// 变化检测用「登记哈希」：每次 collect 对比当前值与上轮登记的哈希，不同则视为
-/// 本地修改（打当前时间戳 + 本设备 id）；应用远端后同步更新登记，保证重复应用
+/// 本地修改（向唯一发号器取版本戳）；应用远端后同步更新登记，保证重复应用
 /// 幂等。类别开关由引擎过滤，本适配器始终登记全部键（关闭期间也持续跟踪本地
 /// 变化，重新开启后可直接参与合并）。
 class PrefsSyncAdapter implements SyncAdapter {
   PrefsSyncAdapter({
     required SyncStateStore state,
     required SettingsRegistry settings,
-    required String Function() deviceId,
-    required int Function() now,
+    SyncJournalRepository? journal,
     this.onApplied,
   })  : _state = state,
         _settings = settings,
-        _byName = {for (final key in settings.keys) key.name: key},
-        _deviceId = deviceId,
-        _now = now;
+        _journal = journal,
+        _byName = {for (final key in settings.keys) key.name: key};
 
   final SyncStateStore _state;
   final SettingsRegistry _settings;
+
+  /// 增量日志（可选）：登记哈希发现本地修改时追加，对端按游标只拉变更。
+  /// 首次登记（进程首次见到该键）不算变更——初始视图由全量快照覆盖。
+  final SyncJournalRepository? _journal;
   final Map<String, SettingsKey<Object?>> _byName;
-  final String Function() _deviceId;
-  final int Function() _now;
 
   /// 应用远端设置后回调（组合根接线：注册表按键触发 reload 钩子）。
   final Future<void> Function(Set<String> keys)? onApplied;
@@ -45,41 +46,73 @@ class PrefsSyncAdapter implements SyncAdapter {
   bool get ready => true;
 
   @override
-  Future<Map<SyncCategory, List<SyncRecord>>> collect() async {
+  Future<Map<SyncCategory, List<SyncRecord>>> collect({bool fresh = false}) async {
     final records = <SyncCategory, List<SyncRecord>>{};
-    final now = _now();
-    final deviceId = _deviceId();
+    final changes = <SyncJournalChange>[];
     for (final key in _settings.keys) {
       final value = await _settings.readRaw(key);
-      final hash = _hash(value);
-      final stamp = _state.settingStamps[key.name];
-      final SyncRecord record;
-      if (stamp == null || stamp.hash != hash) {
-        final isDefault = _canonical(value) == _canonical(key.defaultValue);
-        final first = stamp == null;
-        final updatedAt = first && isDefault ? 0 : now;
-        final updatedBy = first && isDefault ? '' : deviceId;
-        _state.putSettingStamp(
-          key.name,
-          SyncStamp(hash: hash, updatedAt: updatedAt, updatedBy: updatedBy),
-        );
-        record = SyncRecord(
-          key: key.name,
-          updatedAt: updatedAt,
-          updatedBy: updatedBy,
-          data: {'v': value},
-        );
-      } else {
-        record = SyncRecord(
-          key: key.name,
-          updatedAt: stamp.updatedAt,
-          updatedBy: stamp.updatedBy,
-          data: {'v': value},
-        );
+      final resolved = _resolve(key, value);
+      if (resolved.changed) {
+        changes.add((category: key.category, record: resolved.record));
       }
-      records.putIfAbsent(key.category, () => []).add(record);
+      records.putIfAbsent(key.category, () => []).add(resolved.record);
+    }
+    final journal = _journal;
+    if (journal != null && changes.isNotEmpty) {
+      await journal.appendAll(changes);
     }
     return records;
+  }
+
+  /// 本机写入设置键（组合根在注册表的写入钩子上接线）：**立即**取版本 /
+  /// 登记 / 追加日志，不依赖下一轮的登记哈希检测——写入后进程被杀也不会
+  /// 丢掉这次变更。
+  Future<void> noteKeyWritten(SettingsKey<Object?> key) async {
+    final value = await _settings.readRaw(key);
+    final resolved = _resolve(key, value);
+    if (!resolved.changed) return;
+    final journal = _journal;
+    if (journal != null) {
+      await journal.appendAll([
+        (category: key.category, record: resolved.record),
+      ]);
+    }
+  }
+
+  /// 单个键的当前记录 + 是否发生了**本机修改**（登记哈希变化）。
+  ///
+  /// 首次登记（进程首次见到该键）不算变更：初始视图由全量快照覆盖；
+  /// 首次登记且仍是默认值时用零值戳（输给任何真实写入，避免把「默认」
+  /// 当成本机修改推向全组）。
+  ({SyncRecord record, bool changed}) _resolve(
+    SettingsKey<Object?> key,
+    Object? value,
+  ) {
+    final hash = _hash(value);
+    final stamp = _state.settingStamps[key.name];
+    if (stamp != null && stamp.hash == hash) {
+      return (
+        record: SyncRecord(
+          key: key.name,
+          version: stamp.version,
+          data: {'v': value},
+        ),
+        changed: false,
+      );
+    }
+    final isDefault = _canonical(value) == _canonical(key.defaultValue);
+    final first = stamp == null;
+    final version =
+        first && isDefault ? SyncVersion.zero : _state.stampIssuer.next();
+    _state.putSettingStamp(key.name, SyncStamp(hash: hash, version: version));
+    return (
+      record: SyncRecord(
+        key: key.name,
+        version: version,
+        data: {'v': value},
+      ),
+      changed: !first,
+    );
   }
 
   @override
@@ -96,25 +129,28 @@ class PrefsSyncAdapter implements SyncAdapter {
           skipped++;
           continue;
         }
-        final stamp = _state.settingStamps[record.key];
-        if (stamp != null &&
-            !record.isNewerThan(SyncRecord(
-              key: record.key,
-              updatedAt: stamp.updatedAt,
-              updatedBy: stamp.updatedBy,
-            ))) {
-          skipped++;
-          continue;
-        }
         final value = record.data?['v'];
-        await _settings.writeRaw(key, value);
+        final stamp = _state.settingStamps[record.key];
+        if (stamp != null) {
+          if (stamp.version.isNewerThan(record.version)) {
+            skipped++;
+            continue;
+          }
+          // 同版本（只会来自全量快照的强制交付）：比较**当前值**与登记——
+          // 一致则幂等跳过；不一致说明值被直接改写，用权威视图修回去。
+          if (stamp.version == record.version) {
+            final current = await _settings.readRaw(key);
+            if (stamp.hash == _hash(current)) {
+              skipped++;
+              continue;
+            }
+          }
+        }
+        // 远端值：不触发本机写入钩子（不标记待发、不追加日志）。
+        await _settings.writeRaw(key, value, remote: true);
         _state.putSettingStamp(
           record.key,
-          SyncStamp(
-            hash: _hash(value),
-            updatedAt: record.updatedAt,
-            updatedBy: record.updatedBy,
-          ),
+          SyncStamp(hash: _hash(value), version: record.version),
         );
         changed.add(record.key);
         applied++;

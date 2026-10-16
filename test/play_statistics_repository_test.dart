@@ -5,6 +5,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:molia/data/molia_database.dart';
 import 'package:molia/data/play_statistics_repository.dart';
 import 'package:molia/domain/models/play_statistics.dart';
+import 'support/sync_test_support.dart';
 
 import 'support/memory_database.dart';
 
@@ -48,7 +49,10 @@ void main() {
 
   setUp(() async {
     db = openMemoryDatabase();
-    repository = PlayStatisticsRepository(databaseProvider: () => db);
+    repository = PlayStatisticsRepository(
+      databaseProvider: () => db,
+      stamps: testStampIssuer(),
+    );
   });
 
   tearDown(() async {
@@ -529,5 +533,28 @@ void main() {
       final row = (await tableRows(db, 'play_events')).single;
       expect(row['listenedMs'], 1000);
     });
+  });
+
+  test('同步指纹：进行中事件不变，收尾后推进', () async {
+    final id = await repository.startEvent(
+      sourceKey: 'wy',
+      songId: '1',
+      title: '曲目',
+      startedAt: 1000,
+    );
+    final started = await repository.syncFingerprint();
+
+    // 进行中事件不导出：进度更新不影响指纹。
+    await repository.touchEvent(id, listenedMs: 5000, maxPositionMs: 5000);
+    expect(await repository.syncFingerprint(), started);
+
+    await repository.finishEvent(
+      id,
+      reason: PlayEventEndReason.completed,
+      listenedMs: 6000,
+      maxPositionMs: 6000,
+      endedAt: 2000,
+    );
+    expect(await repository.syncFingerprint(), isNot(started));
   });
 }

@@ -5,7 +5,9 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:molia/data/mapping/track_mapper.dart';
 import 'package:molia/domain/models/catalog.dart';
 import 'package:molia/domain/models/comment.dart';
+import 'package:molia/domain/models/device_sync.dart';
 import 'package:molia/domain/models/failure.dart';
+import 'package:molia/domain/models/library.dart';
 import 'package:molia/domain/models/playback.dart';
 import 'package:molia/domain/models/source.dart';
 import 'package:molia/domain/models/track.dart';
@@ -32,6 +34,32 @@ Track _track({
 }
 
 void main() {
+  group('LibraryChange → 同步类别', () {
+    test('历史 / 列表 / 曲目 / 收藏 / 导入各自映射到受影响的类别', () {
+      expect(LibraryChange.history().syncCategories, {SyncCategory.history});
+      expect(
+        LibraryChange.playlists().syncCategories,
+        {SyncCategory.playlists},
+      );
+      expect(
+        LibraryChange.playlistTracks(7).syncCategories,
+        {SyncCategory.playlists, SyncCategory.playlistTracks},
+      );
+      expect(
+        LibraryChange.favorites().syncCategories,
+        {SyncCategory.playlists, SyncCategory.playlistTracks},
+      );
+      expect(
+        LibraryChange.import().syncCategories,
+        {
+          SyncCategory.history,
+          SyncCategory.playlists,
+          SyncCategory.playlistTracks,
+        },
+      );
+    });
+  });
+
   group('Track / TrackId', () {
     test('TrackId.uri 与旧 SourceTrack.id 约定一致', () {
       expect(const TrackId('kw', 'abc123').uri, 'kw:abc123');

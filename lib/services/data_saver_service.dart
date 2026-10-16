@@ -93,7 +93,7 @@ class DataSaverService extends ChangeNotifier {
       final changes = _cellularChanges ??
           Connectivity()
               .onConnectivityChanged
-              .map(_resultsAreCellular);
+              .map(resultsAreCellular);
       _subscription = changes.listen(
         (value) {
           _detectionAvailable = true;
@@ -200,13 +200,18 @@ class DataSaverService extends ChangeNotifier {
   }
 
   Future<bool> _probeCellular() async =>
-      _resultsAreCellular(await Connectivity().checkConnectivity());
+      resultsAreCellular(await probeConnectivity());
+
+  /// 当前网络类型探测（connectivity_plus 的薄封装；失败向上抛，由调用方
+  /// 决定降级）。
+  static Future<List<ConnectivityResult>> probeConnectivity() =>
+      Connectivity().checkConnectivity();
 
   /// 是否为蜂窝网络：结果含 mobile，且不同时存在 wifi / ethernet。
   ///
   /// Android 在同时开启移动数据与 Wi-Fi 时只返回 wifi；仍显式排除
   /// wifi/ethernet 以覆盖多结果返回与桌面平台的行为差异。
-  static bool _resultsAreCellular(List<ConnectivityResult> results) {
+  static bool resultsAreCellular(List<ConnectivityResult> results) {
     return results.contains(ConnectivityResult.mobile) &&
         !results.contains(ConnectivityResult.wifi) &&
         !results.contains(ConnectivityResult.ethernet);

@@ -10,6 +10,7 @@ import 'package:molia/domain/models/track.dart';
 import 'package:molia/providers/library_provider.dart';
 import 'package:molia/providers/playback_provider.dart';
 import 'package:molia/sources/source_track.dart';
+import 'support/sync_test_support.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'support/fakes.dart';
@@ -55,7 +56,10 @@ void main() {
   setUp(() async {
     SharedPreferences.setMockInitialValues({});
     db = openMemoryDatabase();
-    repository = LibraryRepository(databaseProvider: () => db);
+    repository = LibraryRepository(
+      databaseProvider: () => db,
+      stamps: testStampIssuer(),
+    );
     backend = FakePlaybackBackend();
     playback = buildTestPlaybackProvider(
       backend: backend,

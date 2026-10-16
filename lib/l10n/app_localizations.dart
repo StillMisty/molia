@@ -3896,17 +3896,204 @@ abstract class AppLocalizations {
   /// **'Never synced'**
   String get syncNever;
 
-  /// No description provided for @syncLastResultOk.
+  /// No description provided for @syncOutcomeOk.
   ///
   /// In en, this message translates to:
-  /// **'Last sync {time} · {applied} applied'**
-  String syncLastResultOk(String time, int applied);
+  /// **'Synced'**
+  String get syncOutcomeOk;
 
-  /// No description provided for @syncLastResultFail.
+  /// No description provided for @syncOutcomeNoChanges.
   ///
   /// In en, this message translates to:
-  /// **'Last sync failed: {error}'**
-  String syncLastResultFail(String error);
+  /// **'No changes'**
+  String get syncOutcomeNoChanges;
+
+  /// No description provided for @syncOutcomeNoPeers.
+  ///
+  /// In en, this message translates to:
+  /// **'No peer found'**
+  String get syncOutcomeNoPeers;
+
+  /// No description provided for @syncOutcomePartial.
+  ///
+  /// In en, this message translates to:
+  /// **'Partly failed'**
+  String get syncOutcomePartial;
+
+  /// No description provided for @syncOutcomeFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Sync failed'**
+  String get syncOutcomeFailed;
+
+  /// No description provided for @syncTriggerStartup.
+  ///
+  /// In en, this message translates to:
+  /// **'startup'**
+  String get syncTriggerStartup;
+
+  /// No description provided for @syncTriggerDebounce.
+  ///
+  /// In en, this message translates to:
+  /// **'data change'**
+  String get syncTriggerDebounce;
+
+  /// No description provided for @syncTriggerTimer.
+  ///
+  /// In en, this message translates to:
+  /// **'scheduled'**
+  String get syncTriggerTimer;
+
+  /// No description provided for @syncTriggerIncoming.
+  ///
+  /// In en, this message translates to:
+  /// **'peer push'**
+  String get syncTriggerIncoming;
+
+  /// No description provided for @syncTriggerResume.
+  ///
+  /// In en, this message translates to:
+  /// **'resumed'**
+  String get syncTriggerResume;
+
+  /// No description provided for @syncTriggerPause.
+  ///
+  /// In en, this message translates to:
+  /// **'before background'**
+  String get syncTriggerPause;
+
+  /// No description provided for @syncTriggerManual.
+  ///
+  /// In en, this message translates to:
+  /// **'manual'**
+  String get syncTriggerManual;
+
+  /// No description provided for @syncActivitySection.
+  ///
+  /// In en, this message translates to:
+  /// **'Activity'**
+  String get syncActivitySection;
+
+  /// No description provided for @syncActivityTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Last 24 hours'**
+  String get syncActivityTitle;
+
+  /// No description provided for @syncActivityRounds.
+  ///
+  /// In en, this message translates to:
+  /// **'{rounds} rounds, {effective} with transfer, {bytes} traffic'**
+  String syncActivityRounds(int rounds, int effective, String bytes);
+
+  /// No description provided for @syncActivityEnvironment.
+  ///
+  /// In en, this message translates to:
+  /// **'{level} · {network} · {powerSave}'**
+  String syncActivityEnvironment(
+      String level, String network, String powerSave);
+
+  /// No description provided for @syncLevelActive.
+  ///
+  /// In en, this message translates to:
+  /// **'active'**
+  String get syncLevelActive;
+
+  /// No description provided for @syncLevelIdle.
+  ///
+  /// In en, this message translates to:
+  /// **'idle'**
+  String get syncLevelIdle;
+
+  /// No description provided for @syncLevelBackground.
+  ///
+  /// In en, this message translates to:
+  /// **'background'**
+  String get syncLevelBackground;
+
+  /// No description provided for @syncLevelPowerSave.
+  ///
+  /// In en, this message translates to:
+  /// **'power save'**
+  String get syncLevelPowerSave;
+
+  /// No description provided for @syncLevelUnknown.
+  ///
+  /// In en, this message translates to:
+  /// **'not running'**
+  String get syncLevelUnknown;
+
+  /// No description provided for @syncNetworkCellular.
+  ///
+  /// In en, this message translates to:
+  /// **'cellular'**
+  String get syncNetworkCellular;
+
+  /// No description provided for @syncNetworkOther.
+  ///
+  /// In en, this message translates to:
+  /// **'Wi-Fi / other'**
+  String get syncNetworkOther;
+
+  /// No description provided for @syncPowerSaveOn.
+  ///
+  /// In en, this message translates to:
+  /// **'power save on'**
+  String get syncPowerSaveOn;
+
+  /// No description provided for @syncPowerSaveOff.
+  ///
+  /// In en, this message translates to:
+  /// **'power save off'**
+  String get syncPowerSaveOff;
+
+  /// No description provided for @syncCellularPauseTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Pause automatic sync on cellular'**
+  String get syncCellularPauseTitle;
+
+  /// No description provided for @syncCellularPauseSubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'When off, cellular syncs only small categories (settings, playlists, session); statistics and history wait for Wi-Fi'**
+  String get syncCellularPauseSubtitle;
+
+  /// No description provided for @syncAppliedItems.
+  ///
+  /// In en, this message translates to:
+  /// **'{applied} applied'**
+  String syncAppliedItems(int applied);
+
+  /// No description provided for @syncPeerCount.
+  ///
+  /// In en, this message translates to:
+  /// **'{count} peers'**
+  String syncPeerCount(int count);
+
+  /// No description provided for @syncFailedCount.
+  ///
+  /// In en, this message translates to:
+  /// **'{count} failures'**
+  String syncFailedCount(int count);
+
+  /// No description provided for @syncBytes.
+  ///
+  /// In en, this message translates to:
+  /// **'↓{inbound} ↑{outbound}'**
+  String syncBytes(String inbound, String outbound);
+
+  /// No description provided for @syncLastSyncAt.
+  ///
+  /// In en, this message translates to:
+  /// **'Last {time}'**
+  String syncLastSyncAt(String time);
+
+  /// No description provided for @syncRetry.
+  ///
+  /// In en, this message translates to:
+  /// **'Retry'**
+  String get syncRetry;
 
   /// No description provided for @syncContentSection.
   ///
@@ -4022,6 +4209,36 @@ abstract class AppLocalizations {
   /// **'Not configured'**
   String get syncWebdavNotConfigured;
 
+  /// No description provided for @syncTransportRunning.
+  ///
+  /// In en, this message translates to:
+  /// **'running'**
+  String get syncTransportRunning;
+
+  /// No description provided for @syncTransportStopped.
+  ///
+  /// In en, this message translates to:
+  /// **'stopped'**
+  String get syncTransportStopped;
+
+  /// No description provided for @syncTransportDisabled.
+  ///
+  /// In en, this message translates to:
+  /// **'turned off'**
+  String get syncTransportDisabled;
+
+  /// No description provided for @syncTransportNotConfigured.
+  ///
+  /// In en, this message translates to:
+  /// **'not configured'**
+  String get syncTransportNotConfigured;
+
+  /// No description provided for @syncTransportStartFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'failed to start'**
+  String get syncTransportStartFailed;
+
   /// No description provided for @syncLogSection.
   ///
   /// In en, this message translates to:
@@ -4034,17 +4251,299 @@ abstract class AppLocalizations {
   /// **'No records yet'**
   String get syncLogEmpty;
 
-  /// No description provided for @syncLogApplied.
-  ///
-  /// In en, this message translates to:
-  /// **'{applied} applied, {skipped} skipped'**
-  String syncLogApplied(int applied, int skipped);
-
   /// No description provided for @syncLogFailed.
   ///
   /// In en, this message translates to:
   /// **'Failed: {error}'**
   String syncLogFailed(String error);
+
+  /// No description provided for @syncPeersTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Paired devices'**
+  String get syncPeersTitle;
+
+  /// No description provided for @syncPeersSection.
+  ///
+  /// In en, this message translates to:
+  /// **'Devices'**
+  String get syncPeersSection;
+
+  /// No description provided for @syncPeersSubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'This device + {count} peers'**
+  String syncPeersSubtitle(int count);
+
+  /// No description provided for @syncPeersSubtitleEmpty.
+  ///
+  /// In en, this message translates to:
+  /// **'No other device yet'**
+  String get syncPeersSubtitleEmpty;
+
+  /// No description provided for @syncPeersSubtitleWithLost.
+  ///
+  /// In en, this message translates to:
+  /// **'This device + {count} peers ({lost} lost)'**
+  String syncPeersSubtitleWithLost(int count, int lost);
+
+  /// No description provided for @syncPeersHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Enter the same passphrase on another device to join. If no device is ever discovered, check whether LAN sync can run (permission / network isolation) or switch to WebDAV.'**
+  String get syncPeersHint;
+
+  /// No description provided for @syncPeerThisDevice.
+  ///
+  /// In en, this message translates to:
+  /// **'This device · {id}'**
+  String syncPeerThisDevice(String id);
+
+  /// No description provided for @syncPeerLastSync.
+  ///
+  /// In en, this message translates to:
+  /// **'Last synced {time}'**
+  String syncPeerLastSync(String time);
+
+  /// No description provided for @syncPeerNever.
+  ///
+  /// In en, this message translates to:
+  /// **'Not reached yet'**
+  String get syncPeerNever;
+
+  /// No description provided for @syncPeerBehind.
+  ///
+  /// In en, this message translates to:
+  /// **'{count} behind'**
+  String syncPeerBehind(int count);
+
+  /// No description provided for @syncPeerBehindBytes.
+  ///
+  /// In en, this message translates to:
+  /// **'{count} behind (~{size})'**
+  String syncPeerBehindBytes(int count, String size);
+
+  /// No description provided for @syncPeerClockSkew.
+  ///
+  /// In en, this message translates to:
+  /// **'clock off by {minutes} min'**
+  String syncPeerClockSkew(int minutes);
+
+  /// No description provided for @syncPeerLastError.
+  ///
+  /// In en, this message translates to:
+  /// **'Last error: {error}'**
+  String syncPeerLastError(String error);
+
+  /// No description provided for @syncDiagnosticTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Diagnostics'**
+  String get syncDiagnosticTitle;
+
+  /// No description provided for @syncDiagnosticCopy.
+  ///
+  /// In en, this message translates to:
+  /// **'Copy diagnostics'**
+  String get syncDiagnosticCopy;
+
+  /// No description provided for @syncDiagnosticSubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Recent sync rounds (no passphrase, no keys)'**
+  String get syncDiagnosticSubtitle;
+
+  /// No description provided for @syncDiagnosticHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Paste it when reporting an issue — it contains no credentials and no data.'**
+  String get syncDiagnosticHint;
+
+  /// No description provided for @syncDiagnosticCopied.
+  ///
+  /// In en, this message translates to:
+  /// **'Diagnostics copied'**
+  String get syncDiagnosticCopied;
+
+  /// No description provided for @syncTransportPermissionDenied.
+  ///
+  /// In en, this message translates to:
+  /// **'LAN permission missing'**
+  String get syncTransportPermissionDenied;
+
+  /// No description provided for @syncLanPermissionTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Grant LAN permission'**
+  String get syncLanPermissionTitle;
+
+  /// No description provided for @syncLanPermissionSubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Android 17+ needs the nearby-devices permission to reach other devices'**
+  String get syncLanPermissionSubtitle;
+
+  /// No description provided for @syncLanPermissionDenied.
+  ///
+  /// In en, this message translates to:
+  /// **'Permission not granted: LAN sync is unavailable (manual addresses cannot work around it). Switch to WebDAV instead.'**
+  String get syncLanPermissionDenied;
+
+  /// No description provided for @syncOpenSystemSettings.
+  ///
+  /// In en, this message translates to:
+  /// **'Open settings'**
+  String get syncOpenSystemSettings;
+
+  /// No description provided for @syncPeerAdd.
+  ///
+  /// In en, this message translates to:
+  /// **'Add device'**
+  String get syncPeerAdd;
+
+  /// No description provided for @syncPeerAddSubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Enter a peer address when discovery fails'**
+  String get syncPeerAddSubtitle;
+
+  /// No description provided for @syncPeerAddTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Add device'**
+  String get syncPeerAddTitle;
+
+  /// No description provided for @syncPeerHostLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Address'**
+  String get syncPeerHostLabel;
+
+  /// No description provided for @syncPeerHostHint.
+  ///
+  /// In en, this message translates to:
+  /// **'e.g. 192.168.1.23'**
+  String get syncPeerHostHint;
+
+  /// No description provided for @syncPeerNameLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Name (optional)'**
+  String get syncPeerNameLabel;
+
+  /// No description provided for @syncPeerHostInvalid.
+  ///
+  /// In en, this message translates to:
+  /// **'Address cannot be empty'**
+  String get syncPeerHostInvalid;
+
+  /// No description provided for @syncPeerDelete.
+  ///
+  /// In en, this message translates to:
+  /// **'Remove device'**
+  String get syncPeerDelete;
+
+  /// No description provided for @syncPeerDeleteConfirm.
+  ///
+  /// In en, this message translates to:
+  /// **'This device will no longer connect to that address (other devices are unaffected).'**
+  String get syncPeerDeleteConfirm;
+
+  /// No description provided for @syncPeerManual.
+  ///
+  /// In en, this message translates to:
+  /// **'added manually'**
+  String get syncPeerManual;
+
+  /// No description provided for @syncPeerLost.
+  ///
+  /// In en, this message translates to:
+  /// **'lost'**
+  String get syncPeerLost;
+
+  /// No description provided for @syncPeerLostHint.
+  ///
+  /// In en, this message translates to:
+  /// **'No contact for over 180 days (reinstalled or retired). You can ignore it locally or explicitly clean up its remote files — nothing is deleted automatically.'**
+  String get syncPeerLostHint;
+
+  /// No description provided for @syncPeerIgnore.
+  ///
+  /// In en, this message translates to:
+  /// **'Ignore this device locally'**
+  String get syncPeerIgnore;
+
+  /// No description provided for @syncPeerUnignore.
+  ///
+  /// In en, this message translates to:
+  /// **'Stop ignoring locally'**
+  String get syncPeerUnignore;
+
+  /// No description provided for @syncPeerIgnoreHint.
+  ///
+  /// In en, this message translates to:
+  /// **'No longer pull or merge its payloads (this device only)'**
+  String get syncPeerIgnoreHint;
+
+  /// No description provided for @syncPeerIgnoredHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Ignored locally: its payloads are no longer pulled or merged.'**
+  String get syncPeerIgnoredHint;
+
+  /// No description provided for @syncPeerCleanupRemote.
+  ///
+  /// In en, this message translates to:
+  /// **'Clean up remote files'**
+  String get syncPeerCleanupRemote;
+
+  /// No description provided for @syncPeerCleanupRemoteHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Delete its journal and snapshot files on WebDAV'**
+  String get syncPeerCleanupRemoteHint;
+
+  /// No description provided for @syncPeerCleanupRemoteConfirm.
+  ///
+  /// In en, this message translates to:
+  /// **'Deletes this device\'s journal and snapshot files on WebDAV. Local data is untouched and the files are not recreated automatically (only when the peer is online again). LAN connections have no remote storage.'**
+  String get syncPeerCleanupRemoteConfirm;
+
+  /// No description provided for @syncPeerCleanupRemoteDone.
+  ///
+  /// In en, this message translates to:
+  /// **'Remote files cleaned up'**
+  String get syncPeerCleanupRemoteDone;
+
+  /// No description provided for @syncPeerCleanupRemoteNone.
+  ///
+  /// In en, this message translates to:
+  /// **'No remote files to clean up'**
+  String get syncPeerCleanupRemoteNone;
+
+  /// No description provided for @syncPeerCleanupRemoteFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Cleanup failed: {error}'**
+  String syncPeerCleanupRemoteFailed(Object error);
+
+  /// No description provided for @syncPeerNotContacted.
+  ///
+  /// In en, this message translates to:
+  /// **'not reached yet — tap this device row after the peer is online'**
+  String get syncPeerNotContacted;
+
+  /// No description provided for @syncPeerAddress.
+  ///
+  /// In en, this message translates to:
+  /// **'Address {host}'**
+  String syncPeerAddress(String host);
+
+  /// No description provided for @syncPeerDeviceId.
+  ///
+  /// In en, this message translates to:
+  /// **'Device {id}'**
+  String syncPeerDeviceId(String id);
 
   /// No description provided for @syncDeviceNameDialogTitle.
   ///
@@ -4075,6 +4574,282 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Passphrase generated; enter it on other devices to join'**
   String get syncGeneratedHint;
+
+  /// No description provided for @syncIssueDialogTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Sync issue'**
+  String get syncIssueDialogTitle;
+
+  /// No description provided for @syncIssueUnknown.
+  ///
+  /// In en, this message translates to:
+  /// **'Unknown reason — retry first; if it keeps failing, copy diagnostics'**
+  String get syncIssueUnknown;
+
+  /// No description provided for @syncIssueNotConfigured.
+  ///
+  /// In en, this message translates to:
+  /// **'Sync transport is not configured'**
+  String get syncIssueNotConfigured;
+
+  /// No description provided for @syncIssueStartFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Transport failed to start'**
+  String get syncIssueStartFailed;
+
+  /// No description provided for @syncIssuePermissionDenied.
+  ///
+  /// In en, this message translates to:
+  /// **'LAN permission missing (Android 17+ needs the nearby-devices permission)'**
+  String get syncIssuePermissionDenied;
+
+  /// No description provided for @syncIssueNoPassphrase.
+  ///
+  /// In en, this message translates to:
+  /// **'No sync passphrase set'**
+  String get syncIssueNoPassphrase;
+
+  /// No description provided for @syncIssueAllPeersUnreachable.
+  ///
+  /// In en, this message translates to:
+  /// **'All peers are unreachable'**
+  String get syncIssueAllPeersUnreachable;
+
+  /// No description provided for @syncIssuePullFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Failed to pull remote snapshots'**
+  String get syncIssuePullFailed;
+
+  /// No description provided for @syncIssuePushFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Failed to push local changes'**
+  String get syncIssuePushFailed;
+
+  /// No description provided for @syncIssueApplyFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Failed to apply remote data {count} time(s)'**
+  String syncIssueApplyFailed(int count);
+
+  /// No description provided for @syncIssuePeerReadFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'{peer}: failed to read snapshot'**
+  String syncIssuePeerReadFailed(String peer);
+
+  /// No description provided for @syncIssuePeerDecryptFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'{peer}: passphrase mismatch or corrupted data'**
+  String syncIssuePeerDecryptFailed(String peer);
+
+  /// No description provided for @syncIssuePeerPushFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'{peer}: push failed'**
+  String syncIssuePeerPushFailed(String peer);
+
+  /// No description provided for @syncIssueBroadcastUnavailable.
+  ///
+  /// In en, this message translates to:
+  /// **'Broadcast failed (blocked by network policy)'**
+  String get syncIssueBroadcastUnavailable;
+
+  /// No description provided for @syncIssueDiscoverySilent.
+  ///
+  /// In en, this message translates to:
+  /// **'No device answered during discovery (the network may be isolated)'**
+  String get syncIssueDiscoverySilent;
+
+  /// No description provided for @syncIssueWebdavDirFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Failed to prepare the WebDAV directory'**
+  String get syncIssueWebdavDirFailed;
+
+  /// No description provided for @syncIssueWebdavListFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Failed to list the WebDAV directory'**
+  String get syncIssueWebdavListFailed;
+
+  /// No description provided for @syncIssueWebdavReadFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'{peer}: failed to read snapshot'**
+  String syncIssueWebdavReadFailed(String peer);
+
+  /// No description provided for @syncIssueWebdavDecryptFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'{peer}: passphrase mismatch or corrupted data'**
+  String syncIssueWebdavDecryptFailed(String peer);
+
+  /// No description provided for @syncIssueWebdavUploadFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Failed to upload the snapshot to WebDAV'**
+  String get syncIssueWebdavUploadFailed;
+
+  /// No description provided for @syncIssueDeleteRemoteFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Failed to delete the remote files of {peer}'**
+  String syncIssueDeleteRemoteFailed(String peer);
+
+  /// No description provided for @syncIssueInternal.
+  ///
+  /// In en, this message translates to:
+  /// **'Internal sync error'**
+  String get syncIssueInternal;
+
+  /// No description provided for @syncActionGrantPermission.
+  ///
+  /// In en, this message translates to:
+  /// **'Grant permission'**
+  String get syncActionGrantPermission;
+
+  /// No description provided for @syncActionConfigure.
+  ///
+  /// In en, this message translates to:
+  /// **'Configure'**
+  String get syncActionConfigure;
+
+  /// No description provided for @syncActionConfigurePassphrase.
+  ///
+  /// In en, this message translates to:
+  /// **'Set passphrase'**
+  String get syncActionConfigurePassphrase;
+
+  /// No description provided for @syncActionAddManualPeer.
+  ///
+  /// In en, this message translates to:
+  /// **'Add manual address'**
+  String get syncActionAddManualPeer;
+
+  /// No description provided for @syncActionUseWebdav.
+  ///
+  /// In en, this message translates to:
+  /// **'Use WebDAV'**
+  String get syncActionUseWebdav;
+
+  /// No description provided for @syncWebdavEnabled.
+  ///
+  /// In en, this message translates to:
+  /// **'WebDAV enabled'**
+  String get syncWebdavEnabled;
+
+  /// No description provided for @syncConfigureOnSettingsPage.
+  ///
+  /// In en, this message translates to:
+  /// **'Set the passphrase on the sync settings page'**
+  String get syncConfigureOnSettingsPage;
+
+  /// No description provided for @syncPeerUnknown.
+  ///
+  /// In en, this message translates to:
+  /// **'Unknown device'**
+  String get syncPeerUnknown;
+
+  /// No description provided for @syncPeerDeviceIdCopied.
+  ///
+  /// In en, this message translates to:
+  /// **'Full device ID copied'**
+  String get syncPeerDeviceIdCopied;
+
+  /// No description provided for @syncPeerHostFormatInvalid.
+  ///
+  /// In en, this message translates to:
+  /// **'Invalid address (use an IP, IPv6 or hostname, without a port)'**
+  String get syncPeerHostFormatInvalid;
+
+  /// No description provided for @syncPeerPortInvalid.
+  ///
+  /// In en, this message translates to:
+  /// **'Port must be 1–65535'**
+  String get syncPeerPortInvalid;
+
+  /// No description provided for @syncPeerAdded.
+  ///
+  /// In en, this message translates to:
+  /// **'Device added'**
+  String get syncPeerAdded;
+
+  /// No description provided for @syncPeerUpdated.
+  ///
+  /// In en, this message translates to:
+  /// **'Device updated'**
+  String get syncPeerUpdated;
+
+  /// No description provided for @syncPeerUnreachable.
+  ///
+  /// In en, this message translates to:
+  /// **'Not reached yet — check that the peer is online on the same network, or use WebDAV'**
+  String get syncPeerUnreachable;
+
+  /// No description provided for @syncPeerProbePortLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Probe port'**
+  String get syncPeerProbePortLabel;
+
+  /// No description provided for @syncPeerProbePortHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Default {port}'**
+  String syncPeerProbePortHint(int port);
+
+  /// No description provided for @syncPeerAlreadyAdded.
+  ///
+  /// In en, this message translates to:
+  /// **'Already in the list — name and port updated'**
+  String get syncPeerAlreadyAdded;
+
+  /// No description provided for @syncPeerContactQueued.
+  ///
+  /// In en, this message translates to:
+  /// **'Device saved — contact will follow'**
+  String get syncPeerContactQueued;
+
+  /// No description provided for @syncPeerContacting.
+  ///
+  /// In en, this message translates to:
+  /// **'Contacting…'**
+  String get syncPeerContacting;
+
+  /// No description provided for @syncLanPermissionPermanentSubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Permission permanently denied — enable nearby-devices in system settings'**
+  String get syncLanPermissionPermanentSubtitle;
+
+  /// No description provided for @syncTransportNeverSucceeded.
+  ///
+  /// In en, this message translates to:
+  /// **'No successful contact yet'**
+  String get syncTransportNeverSucceeded;
+
+  /// No description provided for @syncTransportLastSuccessAt.
+  ///
+  /// In en, this message translates to:
+  /// **'Last success {time}'**
+  String syncTransportLastSuccessAt(String time);
+
+  /// No description provided for @syncLogViewAll.
+  ///
+  /// In en, this message translates to:
+  /// **'View all logs ({count})'**
+  String syncLogViewAll(int count);
+
+  /// No description provided for @syncLogHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Results of recent sync rounds; tap a failed row for the reason and next steps'**
+  String get syncLogHint;
 
   /// No description provided for @settingsUpdateTitle.
   ///

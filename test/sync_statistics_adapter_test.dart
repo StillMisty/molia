@@ -5,6 +5,7 @@ import 'package:molia/data/play_statistics_repository.dart';
 import 'package:molia/data/sync/adapters/statistics_sync_adapter.dart';
 import 'package:molia/domain/models/device_sync.dart';
 import 'package:molia/domain/models/play_statistics.dart';
+import 'support/sync_test_support.dart';
 
 import 'support/memory_database.dart';
 
@@ -16,6 +17,8 @@ void main() {
   late PlayStatisticsRepository repoB;
   late StatisticsSyncAdapter adapterA;
   late StatisticsSyncAdapter adapterB;
+  var clockA = 1000;
+  var clockB = 1000;
 
   Future<int> play(
     PlayStatisticsRepository repo, {
@@ -42,15 +45,19 @@ void main() {
   }
 
   setUp(() async {
+    clockA = 1000;
+    clockB = 1000;
     dbA = openMemoryDatabase();
     dbB = openMemoryDatabase();
     repoA = PlayStatisticsRepository(
       databaseProvider: () => dbA,
-      deviceIdProvider: () => 'devA',
+      clock: () => clockA,
+      stamps: testStampIssuer(clock: () => clockA, deviceId: 'devA'),
     );
     repoB = PlayStatisticsRepository(
       databaseProvider: () => dbB,
-      deviceIdProvider: () => 'devB',
+      clock: () => clockB,
+      stamps: testStampIssuer(clock: () => clockB, deviceId: 'devB'),
     );
     adapterA = StatisticsSyncAdapter(repository: repoA);
     adapterB = StatisticsSyncAdapter(repository: repoB);
@@ -168,13 +175,12 @@ void main() {
     expect(keys, hasLength(1));
     expect(keys.single.data!['sourceKey'], 'wy');
 
-    // 对端收到 local 事件也忽略（防御：旧版本或异常数据）。
+    // 对端收到 local 事件也忽略（防御：异常或外来数据）。
     final result = await adapterB.apply({
       SyncCategory.statistics: [
         SyncRecord(
           key: 'legacy_local_key',
-          updatedAt: 61000,
-          updatedBy: 'devA',
+          version: const SyncVersion(physical: 61000, deviceId: 'devA'),
           data: const {
             'sourceKey': 'local',
             'songId': 'wy:9',

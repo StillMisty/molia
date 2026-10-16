@@ -8,7 +8,9 @@ library;
 import 'dart:async';
 
 import '../../data/library_repository.dart';
+import '../../data/molia_database.dart';
 import '../../data/play_statistics_repository.dart';
+import '../../data/sync/sync_journal.dart';
 import '../../data/sync/sync_state_store.dart';
 import '../../providers/local_database_provider.dart';
 import '../../providers/playback_provider.dart';
@@ -20,6 +22,7 @@ import 'catalog_stack.dart';
 /// 资料库栈产物（构造顺序见 [buildLibraryStack]）。
 typedef LibraryStack = ({
   SyncStateStore syncState,
+  SyncJournalRepository syncJournal,
   LibraryRepository libraryRepository,
   PlayStatisticsRepository playStatisticsRepository,
   PlayStatisticsService playStatisticsService,
@@ -35,17 +38,32 @@ Future<LibraryStack> buildLibraryStack({
   // 跨设备同步状态提前初始化：资料库/统计的写路径需要设备 id 打同步戳。
   final syncState = SyncStateStore();
   await syncState.init();
-  // 资料库仓库：播放历史 / 我的列表 / 收藏；播放开始时由播放观察者写历史，
-  // 资料库页经 LibraryProvider 读取（内存缓存）。
-  final libraryRepository = LibraryRepository(
-    deviceIdProvider: () => syncState.deviceId,
+  // 增量日志：资料库 / 统计的本机写入在**同一个 drift 事务**里追加
+  // （对端按游标只拉变更；见 ADR-0003 v2 §5）。
+  final syncJournal = SyncJournalRepository(
+    databaseProvider: () => MoliaDatabase.instance,
+    clock: () => syncState.nowMs(),
   );
+  // 资料库仓库：播放历史 / 我的列表 / 收藏；播放开始时由播放观察者写历史，
+  // 资料库页经 LibraryProvider 读取（内存缓存）。版本戳与内容时间分开注入
+  // （发号器唯一、时钟管内容时间；见 ADR-0003 v2 §2）。
+  final libraryRepository = LibraryRepository(
+    clock: () => syncState.nowMs(),
+    stamps: syncState.stampIssuer,
+    journal: syncJournal,
+  );
+  // 发号器基线 ≧ 全库最大戳：即使状态存储没来得及落盘（进程被杀）或时钟回拨，
+  // 重启后的新写入也不会输给库内已有记录。
+  final dbMaxVersion = await libraryRepository.maxVersion();
+  syncState.stampIssuer.seed(dbMaxVersion);
   // 听歌统计：事件级采集（play_events）与查询；与「最近播放」（play_history，
   // 500 条上限）是两套数据。采集是纯观察者（服务不持有 provider），
   // 快照 / 进度经 [wirePlayStatistics] 接线；上次进程被杀遗留的进行中事件
   // 启动即收尾为 interrupted。
   final playStatisticsRepository = PlayStatisticsRepository(
-    deviceIdProvider: () => syncState.deviceId,
+    clock: () => syncState.nowMs(),
+    stamps: syncState.stampIssuer,
+    journal: syncJournal,
   );
   final playStatisticsService = PlayStatisticsService(
     repository: playStatisticsRepository,
@@ -67,6 +85,7 @@ Future<LibraryStack> buildLibraryStack({
 
   return (
     syncState: syncState,
+    syncJournal: syncJournal,
     libraryRepository: libraryRepository,
     playStatisticsRepository: playStatisticsRepository,
     playStatisticsService: playStatisticsService,

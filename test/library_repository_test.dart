@@ -6,7 +6,9 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:molia/data/library_repository.dart';
 import 'package:molia/data/lxmc_decoder.dart';
 import 'package:molia/data/molia_database.dart';
+import 'package:molia/domain/models/device_sync.dart';
 import 'package:molia/domain/models/library.dart';
+import 'support/sync_test_support.dart';
 
 import 'support/memory_database.dart';
 
@@ -49,7 +51,10 @@ void main() {
 
   setUp(() async {
     db = openMemoryDatabase();
-    repository = LibraryRepository(databaseProvider: () => db);
+    repository = LibraryRepository(
+      databaseProvider: () => db,
+      stamps: testStampIssuer(),
+    );
   });
 
   tearDown(() async {
@@ -541,5 +546,56 @@ void main() {
     // 广播是同步投递，等待微任务队列清空
     await Future<void>.delayed(Duration.zero);
     expect(events, hasLength(2));
+  });
+
+  test('同步指纹：写入推进指纹，syncId 补齐后指纹变化', () async {
+    final categories = [
+      SyncCategory.playlists,
+      SyncCategory.playlistTracks,
+      SyncCategory.history,
+    ];
+    final empty = await repository.syncFingerprints(categories);
+    expect(empty.keys, containsAll(categories));
+
+    await repository.createPlaylist('L');
+    final afterCreate = await repository.syncFingerprints(categories);
+    expect(afterCreate[SyncCategory.playlists],
+        isNot(empty[SyncCategory.playlists]));
+
+    await repository.addHistoryEntry(history('1'));
+    final afterHistory = await repository.syncFingerprints(categories);
+    expect(afterHistory[SyncCategory.history],
+        isNot(afterCreate[SyncCategory.history]));
+
+    // 缺 syncId 的行计入指纹：导出补齐后指纹随之变化（不会被缓存跳过）。
+    await db.into(db.playlists).insert(
+          PlaylistsCompanion.insert(name: '无 syncId', createdAt: 1),
+        );
+    final withNull = await repository.syncFingerprints(categories);
+    expect(withNull[SyncCategory.playlists],
+        isNot(afterHistory[SyncCategory.playlists]));
+    await repository.syncExportPlaylists();
+    final backfilled = await repository.syncFingerprints(categories);
+    expect(backfilled[SyncCategory.playlists],
+        isNot(withNull[SyncCategory.playlists]));
+  });
+
+  test('同步指纹：同一物理值内 counter 变化也算变化', () async {
+    // 固定时钟：两次写入共享物理分量，只有 versionCounter 推进。
+    final fixed = LibraryRepository(
+      databaseProvider: () => db,
+      clock: () => 1000,
+      stamps: testStampIssuer(clock: () => 1000, deviceId: 'devA'),
+    );
+    addTearDown(fixed.dispose);
+    final playlistId = await fixed.createPlaylist('L');
+    final first =
+        (await fixed.syncFingerprints([SyncCategory.playlists]))[
+            SyncCategory.playlists];
+    await fixed.renamePlaylist(playlistId, 'L2');
+    final second =
+        (await fixed.syncFingerprints([SyncCategory.playlists]))[
+            SyncCategory.playlists];
+    expect(second, isNot(first));
   });
 }

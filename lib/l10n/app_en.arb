@@ -1078,25 +1078,103 @@
   "syncSyncNow": "Sync now",
   "syncSyncing": "Syncing…",
   "syncNever": "Never synced",
-  "syncLastResultOk": "Last sync {time} · {applied} applied",
-  "@syncLastResultOk": {
+  "syncOutcomeOk": "Synced",
+  "syncOutcomeNoChanges": "No changes",
+  "syncOutcomeNoPeers": "No peer found",
+  "syncOutcomePartial": "Partly failed",
+  "syncOutcomeFailed": "Sync failed",
+  "syncTriggerStartup": "startup",
+  "syncTriggerDebounce": "data change",
+  "syncTriggerTimer": "scheduled",
+  "syncTriggerIncoming": "peer push",
+  "syncTriggerResume": "resumed",
+  "syncTriggerPause": "before background",
+  "syncTriggerManual": "manual",
+  "syncActivitySection": "Activity",
+  "syncActivityTitle": "Last 24 hours",
+  "syncActivityRounds": "{rounds} rounds, {effective} with transfer, {bytes} traffic",
+  "@syncActivityRounds": {
     "placeholders": {
-      "time": {
+      "rounds": {
+        "type": "int"
+      },
+      "effective": {
+        "type": "int"
+      },
+      "bytes": {
+        "type": "String"
+      }
+    }
+  },
+  "syncActivityEnvironment": "{level} · {network} · {powerSave}",
+  "@syncActivityEnvironment": {
+    "placeholders": {
+      "level": {
         "type": "String"
       },
+      "network": {
+        "type": "String"
+      },
+      "powerSave": {
+        "type": "String"
+      }
+    }
+  },
+  "syncLevelActive": "active",
+  "syncLevelIdle": "idle",
+  "syncLevelBackground": "background",
+  "syncLevelPowerSave": "power save",
+  "syncLevelUnknown": "not running",
+  "syncNetworkCellular": "cellular",
+  "syncNetworkOther": "Wi-Fi / other",
+  "syncPowerSaveOn": "power save on",
+  "syncPowerSaveOff": "power save off",
+  "syncCellularPauseTitle": "Pause automatic sync on cellular",
+  "syncCellularPauseSubtitle": "When off, cellular syncs only small categories (settings, playlists, session); statistics and history wait for Wi-Fi",
+  "syncAppliedItems": "{applied} applied",
+  "@syncAppliedItems": {
+    "placeholders": {
       "applied": {
         "type": "int"
       }
     }
   },
-  "syncLastResultFail": "Last sync failed: {error}",
-  "@syncLastResultFail": {
+  "syncPeerCount": "{count} peers",
+  "@syncPeerCount": {
     "placeholders": {
-      "error": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "syncFailedCount": "{count} failures",
+  "@syncFailedCount": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "syncBytes": "↓{inbound} ↑{outbound}",
+  "@syncBytes": {
+    "placeholders": {
+      "inbound": {
+        "type": "String"
+      },
+      "outbound": {
         "type": "String"
       }
     }
   },
+  "syncLastSyncAt": "Last {time}",
+  "@syncLastSyncAt": {
+    "placeholders": {
+      "time": {
+        "type": "String"
+      }
+    }
+  },
+  "syncRetry": "Retry",
   "syncContentSection": "What to sync",
   "syncCategoryPlaylists": "Playlists & favorites",
   "syncCategorySources": "Sources (scripts & config)",
@@ -1116,23 +1194,127 @@
   "syncWebdavPassword": "Password",
   "syncWebdavRemoteDir": "Remote directory",
   "syncWebdavNotConfigured": "Not configured",
+  "syncTransportRunning": "running",
+  "syncTransportStopped": "stopped",
+  "syncTransportDisabled": "turned off",
+  "syncTransportNotConfigured": "not configured",
+  "syncTransportStartFailed": "failed to start",
   "syncLogSection": "Sync log",
   "syncLogEmpty": "No records yet",
-  "syncLogApplied": "{applied} applied, {skipped} skipped",
-  "@syncLogApplied": {
-    "placeholders": {
-      "applied": {
-        "type": "int"
-      },
-      "skipped": {
-        "type": "int"
-      }
-    }
-  },
   "syncLogFailed": "Failed: {error}",
   "@syncLogFailed": {
     "placeholders": {
       "error": {
+        "type": "String"
+      }
+    }
+  },
+  "syncPeersTitle": "Paired devices",
+  "syncPeersSection": "Devices",
+  "syncPeersSubtitle": "This device + {count} peers",
+  "@syncPeersSubtitle": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "syncPeersSubtitleEmpty": "No other device yet",
+  "syncPeersSubtitleWithLost": "This device + {count} peers ({lost} lost)",
+  "@syncPeersSubtitleWithLost": {
+    "placeholders": { "count": { "type": "int" }, "lost": { "type": "int" } }
+  },
+  "syncPeersHint": "Enter the same passphrase on another device to join. If no device is ever discovered, check whether LAN sync can run (permission / network isolation) or switch to WebDAV.",
+  "syncPeerThisDevice": "This device · {id}",
+  "@syncPeerThisDevice": {
+    "placeholders": {
+      "id": {
+        "type": "String"
+      }
+    }
+  },
+  "syncPeerLastSync": "Last synced {time}",
+  "@syncPeerLastSync": {
+    "placeholders": {
+      "time": {
+        "type": "String"
+      }
+    }
+  },
+  "syncPeerNever": "Not reached yet",
+  "syncPeerBehind": "{count} behind",
+  "syncPeerBehindBytes": "{count} behind (~{size})",
+  "@syncPeerBehindBytes": {
+    "placeholders": { "count": { "type": "int" }, "size": { "type": "String" } }
+  },
+  "@syncPeerBehind": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "syncPeerClockSkew": "clock off by {minutes} min",
+  "@syncPeerClockSkew": {
+    "placeholders": {
+      "minutes": {
+        "type": "int"
+      }
+    }
+  },
+  "syncPeerLastError": "Last error: {error}",
+  "@syncPeerLastError": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "syncDiagnosticTitle": "Diagnostics",
+  "syncDiagnosticCopy": "Copy diagnostics",
+  "syncDiagnosticSubtitle": "Recent sync rounds (no passphrase, no keys)",
+  "syncDiagnosticHint": "Paste it when reporting an issue — it contains no credentials and no data.",
+  "syncDiagnosticCopied": "Diagnostics copied",
+  "syncTransportPermissionDenied": "LAN permission missing",
+  "syncLanPermissionTitle": "Grant LAN permission",
+  "syncLanPermissionSubtitle": "Android 17+ needs the nearby-devices permission to reach other devices",
+  "syncLanPermissionDenied": "Permission not granted: LAN sync is unavailable (manual addresses cannot work around it). Switch to WebDAV instead.",
+  "syncOpenSystemSettings": "Open settings",
+  "syncPeerAdd": "Add device",
+  "syncPeerAddSubtitle": "Enter a peer address when discovery fails",
+  "syncPeerAddTitle": "Add device",
+  "syncPeerHostLabel": "Address",
+  "syncPeerHostHint": "e.g. 192.168.1.23",
+  "syncPeerNameLabel": "Name (optional)",
+  "syncPeerHostInvalid": "Address cannot be empty",
+  "syncPeerDelete": "Remove device",
+  "syncPeerDeleteConfirm": "This device will no longer connect to that address (other devices are unaffected).",
+  "syncPeerManual": "added manually",
+  "syncPeerLost": "lost",
+  "syncPeerLostHint": "No contact for over 180 days (reinstalled or retired). You can ignore it locally or explicitly clean up its remote files — nothing is deleted automatically.",
+  "syncPeerIgnore": "Ignore this device locally",
+  "syncPeerUnignore": "Stop ignoring locally",
+  "syncPeerIgnoreHint": "No longer pull or merge its payloads (this device only)",
+  "syncPeerIgnoredHint": "Ignored locally: its payloads are no longer pulled or merged.",
+  "syncPeerCleanupRemote": "Clean up remote files",
+  "syncPeerCleanupRemoteHint": "Delete its journal and snapshot files on WebDAV",
+  "syncPeerCleanupRemoteConfirm": "Deletes this device's journal and snapshot files on WebDAV. Local data is untouched and the files are not recreated automatically (only when the peer is online again). LAN connections have no remote storage.",
+  "syncPeerCleanupRemoteDone": "Remote files cleaned up",
+  "syncPeerCleanupRemoteNone": "No remote files to clean up",
+  "syncPeerCleanupRemoteFailed": "Cleanup failed: {error}",
+  "syncPeerNotContacted": "not reached yet — tap this device row after the peer is online",
+  "syncPeerAddress": "Address {host}",
+  "@syncPeerAddress": {
+    "placeholders": {
+      "host": {
+        "type": "String"
+      }
+    }
+  },
+  "syncPeerDeviceId": "Device {id}",
+  "@syncPeerDeviceId": {
+    "placeholders": {
+      "id": {
         "type": "String"
       }
     }
@@ -1142,6 +1324,118 @@
   "syncDeviceNameEmpty": "Name cannot be empty",
   "syncCategorySubtitle": "Turning it off stops pushing and applying this data on this device",
   "syncGeneratedHint": "Passphrase generated; enter it on other devices to join",
+  "syncIssueDialogTitle": "Sync issue",
+  "syncIssueUnknown": "Unknown reason — retry first; if it keeps failing, copy diagnostics",
+  "syncIssueNotConfigured": "Sync transport is not configured",
+  "syncIssueStartFailed": "Transport failed to start",
+  "syncIssuePermissionDenied": "LAN permission missing (Android 17+ needs the nearby-devices permission)",
+  "syncIssueNoPassphrase": "No sync passphrase set",
+  "syncIssueAllPeersUnreachable": "All peers are unreachable",
+  "syncIssuePullFailed": "Failed to pull remote snapshots",
+  "syncIssuePushFailed": "Failed to push local changes",
+  "syncIssueApplyFailed": "Failed to apply remote data {count} time(s)",
+  "@syncIssueApplyFailed": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "syncIssuePeerReadFailed": "{peer}: failed to read snapshot",
+  "@syncIssuePeerReadFailed": {
+    "placeholders": {
+      "peer": {
+        "type": "String"
+      }
+    }
+  },
+  "syncIssuePeerDecryptFailed": "{peer}: passphrase mismatch or corrupted data",
+  "@syncIssuePeerDecryptFailed": {
+    "placeholders": {
+      "peer": {
+        "type": "String"
+      }
+    }
+  },
+  "syncIssuePeerPushFailed": "{peer}: push failed",
+  "@syncIssuePeerPushFailed": {
+    "placeholders": {
+      "peer": {
+        "type": "String"
+      }
+    }
+  },
+  "syncIssueBroadcastUnavailable": "Broadcast failed (blocked by network policy)",
+  "syncIssueDiscoverySilent": "No device answered during discovery (the network may be isolated)",
+  "syncIssueWebdavDirFailed": "Failed to prepare the WebDAV directory",
+  "syncIssueWebdavListFailed": "Failed to list the WebDAV directory",
+  "syncIssueWebdavReadFailed": "{peer}: failed to read snapshot",
+  "@syncIssueWebdavReadFailed": {
+    "placeholders": {
+      "peer": {
+        "type": "String"
+      }
+    }
+  },
+  "syncIssueWebdavDecryptFailed": "{peer}: passphrase mismatch or corrupted data",
+  "@syncIssueWebdavDecryptFailed": {
+    "placeholders": {
+      "peer": {
+        "type": "String"
+      }
+    }
+  },
+  "syncIssueWebdavUploadFailed": "Failed to upload the snapshot to WebDAV",
+  "syncIssueDeleteRemoteFailed": "Failed to delete the remote files of {peer}",
+  "@syncIssueDeleteRemoteFailed": {
+    "placeholders": { "peer": { "type": "String" } }
+  },
+  "syncIssueInternal": "Internal sync error",
+  "syncActionGrantPermission": "Grant permission",
+  "syncActionConfigure": "Configure",
+  "syncActionConfigurePassphrase": "Set passphrase",
+  "syncActionAddManualPeer": "Add manual address",
+  "syncActionUseWebdav": "Use WebDAV",
+  "syncWebdavEnabled": "WebDAV enabled",
+  "syncConfigureOnSettingsPage": "Set the passphrase on the sync settings page",
+  "syncPeerUnknown": "Unknown device",
+  "syncPeerDeviceIdCopied": "Full device ID copied",
+  "syncPeerHostFormatInvalid": "Invalid address (use an IP, IPv6 or hostname, without a port)",
+  "syncPeerPortInvalid": "Port must be 1–65535",
+  "syncPeerAdded": "Device added",
+  "syncPeerUpdated": "Device updated",
+  "syncPeerUnreachable": "Not reached yet — check that the peer is online on the same network, or use WebDAV",
+  "syncPeerProbePortLabel": "Probe port",
+  "syncPeerProbePortHint": "Default {port}",
+  "@syncPeerProbePortHint": {
+    "placeholders": {
+      "port": {
+        "type": "int"
+      }
+    }
+  },
+  "syncPeerAlreadyAdded": "Already in the list — name and port updated",
+  "syncPeerContactQueued": "Device saved — contact will follow",
+  "syncPeerContacting": "Contacting…",
+  "syncLanPermissionPermanentSubtitle": "Permission permanently denied — enable nearby-devices in system settings",
+  "syncTransportNeverSucceeded": "No successful contact yet",
+  "syncTransportLastSuccessAt": "Last success {time}",
+  "@syncTransportLastSuccessAt": {
+    "placeholders": {
+      "time": {
+        "type": "String"
+      }
+    }
+  },
+  "syncLogViewAll": "View all logs ({count})",
+  "@syncLogViewAll": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "syncLogHint": "Results of recent sync rounds; tap a failed row for the reason and next steps",
   "settingsUpdateTitle": "About & updates",
   "settingsUpdateSubtitle": "Current version {version}",
   "settingsUpdateAvailable": "Update available: {version}",

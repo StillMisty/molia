@@ -24,23 +24,36 @@ import 'dart:math';
 import 'package:crypto/crypto.dart';
 import 'package:drift/drift.dart';
 
+import '../domain/models/device_sync.dart';
 import '../domain/models/play_statistics.dart';
 import 'molia_database.dart';
+import 'sync/sync_journal.dart';
+import 'sync/sync_stamp.dart';
 
 class PlayStatisticsRepository {
   /// [databaseProvider] 仅测试注入（in-memory drift 库）；生产走
   /// [MoliaDatabase.instance]。
   ///
-  /// [deviceIdProvider] 供跨设备统计合并标注事件来源设备（缺省为空串，
-  /// 同步未启用时无影响）。
+  /// [stamps] 是版本戳唯一发号器（必填：组合根注入同一实例；事件来源设备
+  /// `originDeviceId` 也取自这里，保证与版本三元组一致）；[clock] 提供内容
+  /// 时间（`endedAt`）——两者刻意分开（内容时间分离，见 ADR-0003 v2 §2）。
   PlayStatisticsRepository({
     MoliaDatabase Function()? databaseProvider,
-    String Function()? deviceIdProvider,
+    int Function()? clock,
+    required SyncStampIssuer stamps,
+    SyncJournalRepository? journal,
   })  : _databaseProvider = databaseProvider ?? (() => MoliaDatabase.instance),
-        _deviceIdProvider = deviceIdProvider ?? (() => '');
+        _clock = clock ?? (() => DateTime.now().millisecondsSinceEpoch),
+        _stamps = stamps,
+        _journal = journal;
 
   final MoliaDatabase Function() _databaseProvider;
-  final String Function() _deviceIdProvider;
+  final int Function() _clock;
+  final SyncStampIssuer _stamps;
+
+  /// 增量日志（可选）：本机收尾事件在同一事务里追加；进行中事件不导出
+  /// （远端无法继续更新进度），因此开始播放与进度落盘不追加。
+  final SyncJournalRepository? _journal;
   final Random _random = Random.secure();
   final StreamController<void> _changes = StreamController<void>.broadcast();
 
@@ -48,6 +61,8 @@ class PlayStatisticsRepository {
   Stream<void> get changes => _changes.stream;
 
   MoliaDatabase get _db => _databaseProvider();
+
+  SyncVersion _nextVersion() => _stamps.next();
 
   void _notifyChanged() {
     if (!_changes.isClosed) _changes.add(null);
@@ -104,7 +119,7 @@ class PlayStatisticsRepository {
           maxPositionMs: const Value(0),
           endReason: const Value(null),
           syncKey: Value(_newSyncKey()),
-          originDeviceId: Value(_deviceIdProvider()),
+          originDeviceId: Value(_stamps.deviceId),
         ));
   }
 
@@ -123,6 +138,9 @@ class PlayStatisticsRepository {
   }
 
   /// 收尾一次播放事件（写入最终进度 + 结束原因）。
+  ///
+  /// `endedAt` 是内容时间（何时结束），版本戳由发号器现取：跨设备
+  /// 「同键晚收尾覆盖」按版本判定，而不是拿 `endedAt` 当时间戳。
   Future<void> finishEvent(
     int id, {
     required PlayEventEndReason reason,
@@ -130,30 +148,102 @@ class PlayStatisticsRepository {
     required int maxPositionMs,
     int? endedAt,
   }) async {
-    await (_db.update(_db.playEvents)..where((t) => t.id.equals(id)))
-        .write(PlayEventsCompanion(
-      endedAt: Value(endedAt ?? DateTime.now().millisecondsSinceEpoch),
-      listenedMs: Value(listenedMs),
-      maxPositionMs: Value(maxPositionMs),
-      endReason: Value(reason.storageValue),
-    ));
+    final version = _nextVersion();
+    await _db.transaction(() async {
+      await (_db.update(_db.playEvents)..where((t) => t.id.equals(id)))
+          .write(PlayEventsCompanion(
+        endedAt: Value(endedAt ?? _clock()),
+        listenedMs: Value(listenedMs),
+        maxPositionMs: Value(maxPositionMs),
+        endReason: Value(reason.storageValue),
+        versionPhysical: Value(version.physical),
+        versionCounter: Value(version.counter),
+      ));
+      await _appendEventJournal(_db, id);
+    });
     _notifyChanged();
   }
 
   /// 收尾进程被杀等外部中断遗留的进行中事件。
   ///
   /// `endedAt` 取 `startedAt + listenedMs`（最后落盘进度，确定性可测）。
-  /// 返回收尾行数。
+  /// 返回收尾行数。版本戳整批取一个（各行键不同，LWW 只在同键间比较）。
   Future<int> closeStaleEvents() async {
-    final closed = await _db.customUpdate(
-      'UPDATE play_events SET endedAt = startedAt + listenedMs, endReason = ? '
-      'WHERE endedAt IS NULL',
-      variables: [Variable.withString(PlayEventEndReason.interrupted.storageValue)],
-      updates: {_db.playEvents},
-    );
+    final version = _nextVersion();
+    var closed = 0;
+    await _db.transaction(() async {
+      // 先取遗留行 id：收尾后要按行追加增量日志（内容变化必须可同步）。
+      final staleIds = [
+        for (final row in await (_db.select(_db.playEvents)
+              ..where((t) => t.endedAt.isNull()))
+            .get())
+          row.id,
+      ];
+      if (staleIds.isEmpty) return;
+      closed = await _db.customUpdate(
+        'UPDATE play_events SET endedAt = startedAt + listenedMs, endReason = ?, '
+        'versionPhysical = ?, versionCounter = ? WHERE endedAt IS NULL',
+        variables: [
+          Variable.withString(PlayEventEndReason.interrupted.storageValue),
+          Variable.withInt(version.physical),
+          Variable.withInt(version.counter),
+        ],
+        updates: {_db.playEvents},
+      );
+      if (_journal != null) {
+        final changes = <SyncJournalChange>[];
+        for (final id in staleIds) {
+          final change = await _eventJournalChange(_db, id);
+          if (change != null) changes.add(change);
+        }
+        if (changes.isNotEmpty) await _journal.append(_db, changes);
+      }
+    });
     if (closed > 0) _notifyChanged();
     return closed;
   }
+
+  /// 已收尾事件 → 增量日志条目（形状与 `syncExportEvents` 一致：除 `id`
+  /// 外的全部列，版本 = 三个版本列 / `originDeviceId`）。
+  ///
+  /// 返回 null = 事件不存在 / 未收尾 / 缺去重键（不该被同步的行）。
+  Future<SyncJournalChange?> _eventJournalChange(
+    DatabaseConnectionUser executor,
+    int id,
+  ) async {
+    final row = await (executor.select(_db.playEvents)
+          ..where((t) => t.id.equals(id))
+          ..limit(1))
+        .getSingleOrNull();
+    if (row == null || row.endedAt == null) return null;
+    final syncKey = row.syncKey;
+    if (syncKey == null || syncKey.isEmpty) return null;
+    final data = row.toJson()..remove('id');
+    return (
+      category: SyncCategory.statistics,
+      record: SyncRecord(
+        key: syncKey,
+        version: row.syncVersion,
+        data: data,
+      ),
+    );
+  }
+
+  /// 收尾事件后追加日志（与写入同事务；未注入日志时为空操作）。
+  Future<void> _appendEventJournal(DatabaseConnectionUser executor, int id) async {
+    final journal = _journal;
+    if (journal == null) return;
+    final change = await _eventJournalChange(executor, id);
+    if (change == null) return;
+    await journal.append(executor, [change]);
+  }
+
+  /// 同版本内容比较（全量快照修复被直接改写的行；内容一致则跳过）。
+  static bool _eventMatches(PlayEventRow row, Map<String, Object?> event) =>
+      row.endedAt == (event['endedAt'] as num?)?.toInt() &&
+      row.listenedMs == ((event['listenedMs'] as num?)?.toInt() ?? 0) &&
+      row.maxPositionMs == ((event['maxPositionMs'] as num?)?.toInt() ?? 0) &&
+      row.endReason == event['endReason'] as String?;
 
   /// 清空全部统计事件（不可撤销）。
   Future<void> clearAll() async {
@@ -483,8 +573,27 @@ class PlayStatisticsRepository {
     return result;
   }
 
-  /// 同步应用：按 `syncKey` 去重合并；同键已存在且远端 `endedAt` 更新时
-  /// 覆盖进度（进程被杀后由启动收尾补完的事件会晚于首次同步）。
+  /// 同步导出的廉价指纹：已收尾事件的行数 + 最大版本 + 缺 `syncKey` 的行数。
+  ///
+  /// 版本用 `MAX(versionPhysical * 1000000 + versionCounter)` 表达：同一毫秒
+  /// 内的多次写入只有计数分量变化，单看物理分量会漏掉。
+  /// 缺键行数参与指纹的原因：导出会就地回填 `syncKey`，回填后指纹变化触发
+  /// 一次重读；跳过导出也不会让缺键行永远读不到（回填是应用远端去重的前提）。
+  Future<String> syncFingerprint() async {
+    final row = await _db.customSelect(
+      'SELECT COUNT(*) AS n, '
+      'MAX(versionPhysical * 1000000 + versionCounter) AS m, '
+      'SUM(CASE WHEN syncKey IS NULL OR syncKey = \'\' THEN 1 ELSE 0 END) AS x '
+      'FROM play_events WHERE endedAt IS NOT NULL',
+    ).getSingle();
+    return '${row.data['n']}:${row.data['m'] ?? 0}:${row.data['x'] ?? 0}';
+  }
+
+  /// 同步应用：按 `syncKey` 去重合并；同键已存在且远端**版本更新**时覆盖
+  /// 进度（进程被杀后由启动收尾补完的事件会晚于首次同步）。
+  ///
+  /// `endedAt` 是内容时间，不参与胜负判定：版本 = `versionPhysical +
+  /// versionCounter + originDeviceId`（见 ADR-0003 v2 §2）。
   Future<({int applied, int skipped})> syncApplyEvents(
     List<Map<String, Object?>> events,
   ) async {
@@ -500,6 +609,11 @@ class PlayStatisticsRepository {
           skipped++;
           continue;
         }
+        final version = SyncVersion(
+          physical: (event['versionPhysical'] as num?)?.toInt() ?? 0,
+          counter: (event['versionCounter'] as num?)?.toInt() ?? 0,
+          deviceId: event['originDeviceId'] as String? ?? '',
+        );
         final existing = await (db.select(db.playEvents)
               ..where((t) => t.syncKey.equals(syncKey))
               ..limit(1))
@@ -521,11 +635,15 @@ class PlayStatisticsRepository {
                     Value((event['maxPositionMs'] as num?)?.toInt() ?? 0),
                 endReason: Value(event['endReason'] as String?),
                 syncKey: Value(syncKey),
-                originDeviceId:
-                    Value(event['originDeviceId'] as String? ?? ''),
+                originDeviceId: Value(version.deviceId),
+                versionPhysical: Value(version.physical),
+                versionCounter: Value(version.counter),
               ));
           applied++;
-        } else if (endedAt > (existing.endedAt ?? 0)) {
+        } else if (version.isNewerThan(existing.syncVersion) ||
+            (!version.isOlderThan(existing.syncVersion) &&
+                !_eventMatches(existing, event))) {
+          // 同版本也应用（修复被直接改写的本地事件行）；内容一致则跳过。
           await (db.update(db.playEvents)
                 ..where((t) => t.id.equals(existing.id)))
               .write(PlayEventsCompanion(
@@ -534,6 +652,8 @@ class PlayStatisticsRepository {
             maxPositionMs:
                 Value((event['maxPositionMs'] as num?)?.toInt() ?? 0),
             endReason: Value(event['endReason'] as String?),
+            versionPhysical: Value(version.physical),
+            versionCounter: Value(version.counter),
           ));
           applied++;
         } else {

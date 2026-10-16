@@ -109,6 +109,9 @@ class PlaybackSessionStore {
   })  : _preferences = preferences,
         _clock = clock ?? DateTime.now;
 
+  /// 会话落盘回调（组合根在同步栈建好后接线：标记「会话待外发」）。
+  void Function()? onSaved;
+
   final SharedPreferences? _preferences;
   final DateTime Function() _clock;
 
@@ -134,27 +137,30 @@ class PlaybackSessionStore {
       _logger.warning('保存播放会话失败: $e');
       return Future<void>.value();
     }
-    return _enqueueWrite((sp) => sp.setString(_key, encoded));
+    return _enqueueWrite((sp) => sp.setString(_key, encoded), notify: true);
   }
 
   /// 串行化写请求（按调用顺序执行；[pendingWrite] 因此可直接 await）。
   Future<void> _enqueueWrite(
-    Future<void> Function(SharedPreferences preferences) write,
-  ) {
+    Future<void> Function(SharedPreferences preferences) write, {
+    bool notify = false,
+  }) {
     final pending = _pendingWrite;
     final next = pending == null
-        ? _runWrite(write)
-        : pending.then((_) => _runWrite(write));
+        ? _runWrite(write, notify: notify)
+        : pending.then((_) => _runWrite(write, notify: notify));
     _pendingWrite = next;
     return next;
   }
 
   Future<void> _runWrite(
-    Future<void> Function(SharedPreferences preferences) write,
-  ) async {
+    Future<void> Function(SharedPreferences preferences) write, {
+    bool notify = false,
+  }) async {
     try {
       final sp = _preferences ?? await SharedPreferences.getInstance();
       await write(sp);
+      if (notify) onSaved?.call();
     } catch (e) {
       _logger.warning('写入播放会话失败: $e');
     }
@@ -186,6 +192,8 @@ class PlaybackSessionStore {
   }
 
   /// 原样写入 JSON（跨设备同步应用远端会话用；内容须自包含 savedAt）。
+  ///
+  /// 不经 [onSaved]：写入方是同步适配器自己，回传待发标记只会多跑一轮。
   Future<void> saveRaw(Map<String, dynamic> raw) {
     return _enqueueWrite((sp) => sp.setString(_key, jsonEncode(raw)));
   }

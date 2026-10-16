@@ -1,17 +1,19 @@
 // dart format width=80
-// ignore_for_file: unused_local_variable, unused_import
 import 'package:drift/drift.dart';
 import 'package:drift_dev/api/migrations_native.dart';
-import 'package:molia/data/molia_database.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'generated/schema.dart';
+import 'package:molia/data/molia_database.dart';
 
+import 'generated/schema.dart';
 import 'generated/schema_v1.dart' as v1;
 import 'generated/schema_v2.dart' as v2;
 import 'generated/schema_v3.dart' as v3;
-import 'generated/schema_v4.dart' as v4;
-import 'generated/schema_v5.dart' as v5;
 
+/// 增量迁移链：v1 → v2 新增 `sync_known`，v2 → v3 新增增量日志
+/// （`sync_journal` + `sync_journal_state`），每一步都保留既有数据。
+///
+/// 简单用例验证「空库迁移后的 schema 与声明一致」；数据用例验证「带数据升级
+/// 后数据仍在、新表可用」（ADR-0005：增量迁移必须保留数据）。
 void main() {
   driftRuntimeOptions.dontWarnAboutMultipleDatabases = true;
   late SchemaVerifier verifier;
@@ -21,9 +23,6 @@ void main() {
   });
 
   group('simple database migrations', () {
-    // These simple tests verify all possible schema updates with a simple (no
-    // data) migration. This is a quick way to ensure that written database
-    // migrations properly alter the schema.
     const versions = GeneratedHelper.versions;
     for (final (i, fromVersion) in versions.indexed) {
       group('from $fromVersion', () {
@@ -39,72 +38,73 @@ void main() {
     }
   });
 
-  // 迁移不破坏既有数据：v1 → v2 只新增 downloads 表，其余表逐行保留。
   test('migration from v1 to v2 does not corrupt data', () async {
     final oldPlayContextsData = [
       const v1.PlayContextsData(
-        contextUri: 'lx:测试歌单',
-        contextType: 'lx',
-        contextName: '测试歌单',
-        imageUrl: 'https://example.com/a.jpg',
-        lastPlayedAt: 100,
+        contextUri: 'molia://context/album-1',
+        contextType: 'album',
+        contextName: '测试专辑',
+        lastPlayedAt: 1000,
       ),
     ];
     final expectedNewPlayContextsData = [
       const v2.PlayContextsData(
-        contextUri: 'lx:测试歌单',
-        contextType: 'lx',
-        contextName: '测试歌单',
-        imageUrl: 'https://example.com/a.jpg',
-        lastPlayedAt: 100,
+        contextUri: 'molia://context/album-1',
+        contextType: 'album',
+        contextName: '测试专辑',
+        lastPlayedAt: 1000,
       ),
     ];
 
     final oldPlayHistoryData = [
       const v1.PlayHistoryData(
-        sourceKey: 'wy',
-        songId: '1',
-        title: '历史',
-        artist: '歌手',
-        album: '专辑',
-        coverUrl: 'https://example.com/h.jpg',
-        durationMs: 200000,
-        raw: '{"songmid":"1"}',
-        playedAt: 200,
+        sourceKey: 'kuwo',
+        songId: 'song-1',
+        title: '测试歌曲',
+        artist: '测试歌手',
+        album: '测试专辑',
+        raw: '{}',
+        playedAt: 900,
+        versionPhysical: 900,
+        versionCounter: 0,
+        deviceId: 'devA',
       ),
     ];
     final expectedNewPlayHistoryData = [
       const v2.PlayHistoryData(
-        sourceKey: 'wy',
-        songId: '1',
-        title: '历史',
-        artist: '歌手',
-        album: '专辑',
-        coverUrl: 'https://example.com/h.jpg',
-        durationMs: 200000,
-        raw: '{"songmid":"1"}',
-        playedAt: 200,
+        sourceKey: 'kuwo',
+        songId: 'song-1',
+        title: '测试歌曲',
+        artist: '测试歌手',
+        album: '测试专辑',
+        raw: '{}',
+        playedAt: 900,
+        versionPhysical: 900,
+        versionCounter: 0,
+        deviceId: 'devA',
       ),
     ];
 
     final oldPlaylistsData = [
       const v1.PlaylistsData(
         id: 1,
-        name: '列表',
-        createdAt: 300,
-        syncId: 'sync-1',
-        updatedAt: 300,
-        updatedBy: 'device-a',
+        name: '我的收藏',
+        createdAt: 100,
+        syncId: '__favorites__',
+        versionPhysical: 200,
+        versionCounter: 0,
+        deviceId: 'devA',
       ),
     ];
     final expectedNewPlaylistsData = [
       const v2.PlaylistsData(
         id: 1,
-        name: '列表',
-        createdAt: 300,
-        syncId: 'sync-1',
-        updatedAt: 300,
-        updatedBy: 'device-a',
+        name: '我的收藏',
+        createdAt: 100,
+        syncId: '__favorites__',
+        versionPhysical: 200,
+        versionCounter: 0,
+        deviceId: 'devA',
       ),
     ];
 
@@ -112,94 +112,125 @@ void main() {
       const v1.PlaylistTracksData(
         id: 1,
         playlistId: 1,
-        sourceKey: 'wy',
-        songId: '1',
-        title: '列表曲目',
-        artist: '歌手',
-        album: '专辑',
-        coverUrl: null,
-        durationMs: 200000,
-        raw: '{"songmid":"1"}',
-        addedAt: 300,
+        sourceKey: 'kuwo',
+        songId: 'song-1',
+        title: '测试歌曲',
+        artist: '测试歌手',
+        album: '测试专辑',
+        raw: '{}',
+        addedAt: 150,
         sortOrder: 0,
-        updatedAt: 300,
-        updatedBy: 'device-a',
+        versionPhysical: 150,
+        versionCounter: 0,
+        deviceId: 'devA',
       ),
     ];
     final expectedNewPlaylistTracksData = [
       const v2.PlaylistTracksData(
         id: 1,
         playlistId: 1,
-        sourceKey: 'wy',
-        songId: '1',
-        title: '列表曲目',
-        artist: '歌手',
-        album: '专辑',
-        coverUrl: null,
-        durationMs: 200000,
-        raw: '{"songmid":"1"}',
-        addedAt: 300,
+        sourceKey: 'kuwo',
+        songId: 'song-1',
+        title: '测试歌曲',
+        artist: '测试歌手',
+        album: '测试专辑',
+        raw: '{}',
+        addedAt: 150,
         sortOrder: 0,
-        updatedAt: 300,
-        updatedBy: 'device-a',
+        versionPhysical: 150,
+        versionCounter: 0,
+        deviceId: 'devA',
       ),
     ];
 
     final oldSyncTombstonesData = [
       const v1.SyncTombstonesData(
         category: 'history',
-        key: 'wy:2',
-        updatedAt: 400,
-        updatedBy: 'device-a',
+        key: 'kuwo\u0001song-2',
+        versionPhysical: 300,
+        versionCounter: 0,
+        deviceId: 'devA',
+        deletedAt: 290,
       ),
     ];
     final expectedNewSyncTombstonesData = [
       const v2.SyncTombstonesData(
         category: 'history',
-        key: 'wy:2',
-        updatedAt: 400,
-        updatedBy: 'device-a',
+        key: 'kuwo\u0001song-2',
+        versionPhysical: 300,
+        versionCounter: 0,
+        deviceId: 'devA',
+        deletedAt: 290,
       ),
     ];
 
     final oldPlayEventsData = [
       const v1.PlayEventsData(
         id: 1,
-        sourceKey: 'wy',
-        songId: '1',
-        title: '事件',
-        artist: '歌手',
-        album: '专辑',
-        coverUrl: null,
-        durationMs: 200000,
+        sourceKey: 'kuwo',
+        songId: 'song-1',
+        title: '测试歌曲',
+        artist: '测试歌手',
+        album: '测试专辑',
         raw: '{}',
-        startedAt: 500,
-        endedAt: 600,
+        startedAt: 800,
+        endedAt: 900,
         listenedMs: 100000,
         maxPositionMs: 100000,
-        endReason: 'completed',
-        syncKey: 'key-1',
-        originDeviceId: 'device-a',
+        syncKey: 'event-1',
+        originDeviceId: 'devA',
+        versionPhysical: 900,
+        versionCounter: 0,
       ),
     ];
     final expectedNewPlayEventsData = [
       const v2.PlayEventsData(
         id: 1,
-        sourceKey: 'wy',
-        songId: '1',
-        title: '事件',
-        artist: '歌手',
-        album: '专辑',
-        coverUrl: null,
-        durationMs: 200000,
+        sourceKey: 'kuwo',
+        songId: 'song-1',
+        title: '测试歌曲',
+        artist: '测试歌手',
+        album: '测试专辑',
         raw: '{}',
-        startedAt: 500,
-        endedAt: 600,
+        startedAt: 800,
+        endedAt: 900,
         listenedMs: 100000,
         maxPositionMs: 100000,
-        endReason: 'completed',
-        syncKey: 'key-1',
-        originDeviceId: 'device-a',
+        syncKey: 'event-1',
+        originDeviceId: 'devA',
+        versionPhysical: 900,
+        versionCounter: 0,
+      ),
+    ];
+
+    final oldDownloadsData = [
+      const v1.DownloadsData(
+        id: 1,
+        originSourceKey: 'kuwo',
+        originSongId: 'song-1',
+        title: '测试歌曲',
+        artist: '测试歌手',
+        album: '测试专辑',
+        raw: '{}',
+        quality: '320k',
+        sizeBytes: 1024,
+        imported: 0,
+        downloadedAt: 700,
+      ),
+    ];
+    final expectedNewDownloadsData = [
+      const v2.DownloadsData(
+        id: 1,
+        originSourceKey: 'kuwo',
+        originSongId: 'song-1',
+        title: '测试歌曲',
+        artist: '测试歌手',
+        album: '测试专辑',
+        raw: '{}',
+        quality: '320k',
+        sizeBytes: 1024,
+        imported: 0,
+        downloadedAt: 700,
       ),
     ];
 
@@ -216,6 +247,7 @@ void main() {
         batch.insertAll(oldDb.playlistTracks, oldPlaylistTracksData);
         batch.insertAll(oldDb.syncTombstones, oldSyncTombstonesData);
         batch.insertAll(oldDb.playEvents, oldPlayEventsData);
+        batch.insertAll(oldDb.downloads, oldDownloadsData);
       },
       validateItems: (newDb) async {
         expect(expectedNewPlayContextsData,
@@ -230,32 +262,97 @@ void main() {
             await newDb.select(newDb.syncTombstones).get());
         expect(expectedNewPlayEventsData,
             await newDb.select(newDb.playEvents).get());
-        // v2 新增表：迁移后存在且为空。
-        expect(await newDb.select(newDb.downloads).get(), isEmpty);
+        expect(expectedNewDownloadsData,
+            await newDb.select(newDb.downloads).get());
+        // 新表升级后立即可用（读写走同一套列声明）。
+        await newDb.into(newDb.syncKnown).insert(
+              const v2.SyncKnownData(
+                category: 'history',
+                key: 'kuwo\u0001song-1',
+                versionPhysical: 900,
+                versionCounter: 0,
+                deviceId: 'devA',
+              ),
+            );
+        final known = await newDb.select(newDb.syncKnown).getSingle();
+        expect(known.category, 'history');
+        expect(known.key, 'kuwo\u0001song-1');
+        expect(known.versionPhysical, 900);
+        expect(known.versionCounter, 0);
+        expect(known.deviceId, 'devA');
       },
     );
   });
 
-  // 迁移不破坏既有数据：v2 → v3 只把 downloads.filePath 改为可空，
-  // 已有下载记录（含音频路径）逐行保留。
-  test('migration from v2 to v3 keeps download records', () async {
-    const oldDownloadsData = [
-      v2.DownloadsData(
+  test('migration from v2 to v3 does not corrupt data', () async {
+    final oldPlayHistoryData = [
+      const v2.PlayHistoryData(
+        sourceKey: 'kuwo',
+        songId: 'song-1',
+        title: '测试歌曲',
+        artist: '测试歌手',
+        album: '测试专辑',
+        raw: '{}',
+        playedAt: 900,
+        versionPhysical: 900,
+        versionCounter: 0,
+        deviceId: 'devA',
+      ),
+    ];
+    final expectedNewPlayHistoryData = [
+      const v3.PlayHistoryData(
+        sourceKey: 'kuwo',
+        songId: 'song-1',
+        title: '测试歌曲',
+        artist: '测试歌手',
+        album: '测试专辑',
+        raw: '{}',
+        playedAt: 900,
+        versionPhysical: 900,
+        versionCounter: 0,
+        deviceId: 'devA',
+      ),
+    ];
+
+    final oldSyncKnownData = [
+      const v2.SyncKnownData(
+        category: 'history',
+        key: 'kuwo\u0001song-1',
+        versionPhysical: 900,
+        versionCounter: 0,
+        deviceId: 'devA',
+      ),
+    ];
+    final expectedNewSyncKnownData = [
+      const v3.SyncKnownData(
+        category: 'history',
+        key: 'kuwo\u0001song-1',
+        versionPhysical: 900,
+        versionCounter: 0,
+        deviceId: 'devA',
+      ),
+    ];
+
+    final oldPlaylistsData = [
+      const v2.PlaylistsData(
         id: 1,
-        originSourceKey: 'kw',
-        originSongId: 'a',
-        title: 'Title a',
-        artist: 'Artist a',
-        album: 'Album a',
-        coverUrl: 'https://example.com/a.jpg',
-        durationMs: 245000,
-        raw: '{"id":"a"}',
-        quality: '320k',
-        filePath: '/downloads/Artist a - Title a.mp3',
-        sizeBytes: 3 * 1024 * 1024,
-        lyricPath: '/downloads/lyrics/Artist a - Title a.lrc',
-        coverPath: '/downloads/covers/Artist a - Title a.jpg',
-        downloadedAt: 1000,
+        name: '我的收藏',
+        createdAt: 100,
+        syncId: '__favorites__',
+        versionPhysical: 200,
+        versionCounter: 0,
+        deviceId: 'devA',
+      ),
+    ];
+    final expectedNewPlaylistsData = [
+      const v3.PlaylistsData(
+        id: 1,
+        name: '我的收藏',
+        createdAt: 100,
+        syncId: '__favorites__',
+        versionPhysical: 200,
+        versionCounter: 0,
+        deviceId: 'devA',
       ),
     ];
 
@@ -266,131 +363,44 @@ void main() {
       createNew: v3.DatabaseAtV3.new,
       openTestedDatabase: MoliaDatabase.new,
       createItems: (batch, oldDb) {
-        batch.insertAll(oldDb.downloads, oldDownloadsData);
+        batch.insertAll(oldDb.playHistory, oldPlayHistoryData);
+        batch.insertAll(oldDb.syncKnown, oldSyncKnownData);
+        batch.insertAll(oldDb.playlists, oldPlaylistsData);
       },
       validateItems: (newDb) async {
-        final rows = await newDb.select(newDb.downloads).get();
-        expect(rows, hasLength(1));
-        expect(rows.single.filePath, '/downloads/Artist a - Title a.mp3');
-        expect(rows.single.lyricPath, '/downloads/lyrics/Artist a - Title a.lrc');
-        expect(rows.single.coverPath, '/downloads/covers/Artist a - Title a.jpg');
-        expect(rows.single.quality, '320k');
-      },
-    );
-  });
+        expect(expectedNewPlayHistoryData,
+            await newDb.select(newDb.playHistory).get());
+        expect(expectedNewSyncKnownData,
+            await newDb.select(newDb.syncKnown).get());
+        expect(expectedNewPlaylistsData,
+            await newDb.select(newDb.playlists).get());
+        // 新表升级后立即可用（读写走同一套列声明）。
+        await newDb.into(newDb.syncJournal).insert(
+              const v3.SyncJournalData(
+                seq: 1,
+                category: 'history',
+                key: 'kuwo\u0001song-1',
+                versionPhysical: 900,
+                versionCounter: 0,
+                deviceId: 'devA',
+                deleted: 0,
+                at: 901,
+              ),
+            );
+        final entry = await newDb.select(newDb.syncJournal).getSingle();
+        expect(entry.seq, 1);
+        expect(entry.category, 'history');
+        expect(entry.key, 'kuwo\u0001song-1');
+        expect(entry.deleted, 0);
+        expect(entry.data, null);
 
-  // 迁移不破坏既有数据：v3 → v4 只新增可空列 publicUri，
-  // 既有下载记录（含音频 / 歌词 / 封面路径）逐行保留，publicUri 为 null。
-  test('migration from v3 to v4 keeps download records', () async {
-    const oldDownloadsData = [
-      v3.DownloadsData(
-        id: 1,
-        originSourceKey: 'kw',
-        originSongId: 'a',
-        title: 'Title a',
-        artist: 'Artist a',
-        album: 'Album a',
-        coverUrl: 'https://example.com/a.jpg',
-        durationMs: 245000,
-        raw: '{"id":"a"}',
-        quality: '320k',
-        filePath: '/downloads/Artist a - Title a.mp3',
-        sizeBytes: 3 * 1024 * 1024,
-        lyricPath: '/downloads/lyrics/Artist a - Title a.lrc',
-        coverPath: '/downloads/covers/Artist a - Title a.jpg',
-        downloadedAt: 1000,
-      ),
-      // 分项记录（只有歌词、无音频）：v3 起 filePath 可空，迁移后保持 null。
-      v3.DownloadsData(
-        id: 2,
-        originSourceKey: 'tx',
-        originSongId: 'b',
-        title: 'Title b',
-        artist: 'Artist b',
-        album: '',
-        coverUrl: null,
-        durationMs: null,
-        raw: '{}',
-        quality: '',
-        filePath: null,
-        sizeBytes: 0,
-        lyricPath: '/downloads/lyrics/Artist b - Title b.lrc',
-        coverPath: null,
-        downloadedAt: 2000,
-      ),
-    ];
-
-    await verifier.testWithDataIntegrity(
-      oldVersion: 3,
-      newVersion: 4,
-      createOld: v3.DatabaseAtV3.new,
-      createNew: v4.DatabaseAtV4.new,
-      openTestedDatabase: MoliaDatabase.new,
-      createItems: (batch, oldDb) {
-        batch.insertAll(oldDb.downloads, oldDownloadsData);
-      },
-      validateItems: (newDb) async {
-        final rows = await newDb.select(newDb.downloads).get()
-          ..sort((a, b) => a.id.compareTo(b.id));
-        expect(rows, hasLength(2));
-        expect(rows.first.filePath, '/downloads/Artist a - Title a.mp3');
-        expect(rows.first.lyricPath, '/downloads/lyrics/Artist a - Title a.lrc');
-        expect(rows.first.coverPath, '/downloads/covers/Artist a - Title a.jpg');
-        expect(rows.first.quality, '320k');
-        expect(rows.first.publicUri, null, reason: 'v4 新列默认 null');
-        expect(rows.last.filePath, null);
-        expect(rows.last.lyricPath, '/downloads/lyrics/Artist b - Title b.lrc');
-        expect(rows.last.publicUri, null);
-      },
-    );
-  });
-
-  // 迁移不破坏既有数据：v4 → v5 只新增 `imported` 列，既有行保持原值。
-  test('migration from v4 to v5 keeps download records', () async {
-    const oldDownloadsData = [
-      v4.DownloadsData(
-        id: 1,
-        originSourceKey: 'kw',
-        originSongId: 'a',
-        title: 'Title a',
-        artist: 'Artist a',
-        album: '',
-        coverUrl: null,
-        durationMs: null,
-        raw: '{}',
-        quality: '320k',
-        filePath: '/downloads/Artist a - Title a.mp3',
-        sizeBytes: 1024,
-        lyricPath: null,
-        coverPath: null,
-        publicUri: 'content://media/external/downloads/1',
-        downloadedAt: 1000,
-      ),
-    ];
-
-    await verifier.testWithDataIntegrity(
-      oldVersion: 4,
-      newVersion: 5,
-      createOld: v4.DatabaseAtV4.new,
-      createNew: v5.DatabaseAtV5.new,
-      openTestedDatabase: MoliaDatabase.new,
-      createItems: (batch, oldDb) {
-        batch.insertAll(oldDb.downloads, oldDownloadsData);
-      },
-      validateItems: (newDb) async {
-        final rows = await newDb.select(newDb.downloads).get();
-        expect(rows, hasLength(1));
-        expect(rows.first.filePath, '/downloads/Artist a - Title a.mp3');
-        expect(
-          rows.first.publicUri,
-          'content://media/external/downloads/1',
-          reason: '既有列不丢',
-        );
-        expect(
-          rows.first.imported,
-          0,
-          reason: 'v5 新列默认 0（下载）；生成 schema 的布尔列是 int',
-        );
+        await newDb.into(newDb.syncJournalState).insert(
+              const v3.SyncJournalStateData(id: 0, baseSeq: 0, snapshotSeq: -1),
+            );
+        final journalState =
+            await newDb.select(newDb.syncJournalState).getSingle();
+        expect(journalState.baseSeq, 0);
+        expect(journalState.snapshotSeq, -1);
       },
     );
   });

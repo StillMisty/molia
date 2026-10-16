@@ -4,7 +4,8 @@ import '../../domain/models/device_sync.dart';
 ///
 /// 约定：
 /// - [collect] 允许做「变化检测」副作用（登记设置键哈希、补脚本墓碑），
-///   同一轮内先 collect 后 apply；
+///   同一轮内先 collect 后 apply；行表类适配器按端口提供的廉价指纹缓存
+///   上轮记录（指纹未变不读行），并在自己落地了远端记录时让缓存失效；
 /// - [apply] 只处理自己认识的键，遇到未知记录计入 skipped，不抛异常；
 /// - 写入必须幂等：重复应用同一份合并结果不得产生新的本地变更；
 /// - 引擎只把启用类别的记录交给适配器（关闭期间 collect 仍持续登记本地
@@ -15,7 +16,11 @@ abstract interface class SyncAdapter {
   /// 本轮是否可工作（如音源仓库尚未初始化时跳过，避免误判删除）。
   bool get ready;
 
-  Future<Map<SyncCategory, List<SyncRecord>>> collect();
+  /// 导出本机视图。
+  ///
+  /// [fresh] 为 true 时绕过「廉价指纹缓存」重新读行：anti-entropy 的全量校验
+  /// 必须看到真实内容（行被直接改写时指纹（行数 + 最大版本）不会变化）。
+  Future<Map<SyncCategory, List<SyncRecord>>> collect({bool fresh = false});
 
   Future<SyncApplyOutcome> apply(Map<SyncCategory, List<SyncRecord>> records);
 }
@@ -33,4 +38,13 @@ class SyncApplyOutcome {
         applied: applied + other.applied,
         skipped: skipped + other.skipped,
       );
+}
+
+/// 类别指纹的组合键（按类别枚举序拼接，与 Map 迭代顺序无关）。
+///
+/// 适配器用它作为「上轮记录缓存」的键：指纹未变直接复用缓存，不读行。
+String syncFingerprintKey(Map<SyncCategory, String> fingerprints) {
+  final entries = fingerprints.entries.toList()
+    ..sort((a, b) => a.key.index.compareTo(b.key.index));
+  return entries.map((entry) => '${entry.key.name}=${entry.value}').join(';');
 }

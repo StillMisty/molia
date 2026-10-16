@@ -271,6 +271,7 @@ class SettingsSwitchTile extends StatelessWidget {
     required this.onChanged,
     this.enabled = true,
     this.trailing,
+    this.subtitleColor,
   });
 
   final Key? switchKey;
@@ -281,6 +282,9 @@ class SettingsSwitchTile extends StatelessWidget {
   final ValueChanged<bool> onChanged;
   final bool enabled;
   final Widget? trailing;
+
+  /// 副标题颜色覆盖（状态色增强；null = 默认次要文本色）。
+  final Color? subtitleColor;
 
   @override
   Widget build(BuildContext context) {
@@ -303,7 +307,11 @@ class SettingsSwitchTile extends StatelessWidget {
               SettingsTileIcon(icon: icon, isDestructive: false),
               const SizedBox(width: 12),
               Expanded(
-                child: SettingsTileLabel(title: title, subtitle: subtitle),
+                child: SettingsTileLabel(
+                  title: title,
+                  subtitle: subtitle,
+                  subtitleColor: subtitleColor,
+                ),
               ),
               M3ESwitch(
                 key: switchKey,
@@ -838,11 +846,15 @@ class SettingsTileLabel extends StatelessWidget {
     required this.title,
     required this.subtitle,
     this.isDestructive = false,
+    this.subtitleColor,
   });
 
   final String title;
   final String subtitle;
   final bool isDestructive;
+
+  /// 副标题颜色覆盖（状态色增强；null = 默认次要文本色）。
+  final Color? subtitleColor;
 
   @override
   Widget build(BuildContext context) {
@@ -867,7 +879,7 @@ class SettingsTileLabel extends StatelessWidget {
             maxLines: 2,
             overflow: TextOverflow.ellipsis,
             style: m3e.typeScale.bodySmall.copyWith(
-              color: m3e.colorScheme.onSurfaceVariant,
+              color: subtitleColor ?? m3e.colorScheme.onSurfaceVariant,
             ),
           ),
       ],

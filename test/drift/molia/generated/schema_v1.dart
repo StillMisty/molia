@@ -343,6 +343,24 @@ class PlayHistory extends Table with TableInfo<PlayHistory, PlayHistoryData> {
       type: DriftSqlType.int,
       requiredDuringInsert: true,
       $customConstraints: 'NOT NULL');
+  late final GeneratedColumn<int> versionPhysical = GeneratedColumn<int>(
+      'versionPhysical', aliasedName, false,
+      type: DriftSqlType.int,
+      requiredDuringInsert: false,
+      $customConstraints: 'NOT NULL DEFAULT 0',
+      defaultValue: const CustomExpression('0'));
+  late final GeneratedColumn<int> versionCounter = GeneratedColumn<int>(
+      'versionCounter', aliasedName, false,
+      type: DriftSqlType.int,
+      requiredDuringInsert: false,
+      $customConstraints: 'NOT NULL DEFAULT 0',
+      defaultValue: const CustomExpression('0'));
+  late final GeneratedColumn<String> deviceId = GeneratedColumn<String>(
+      'deviceId', aliasedName, false,
+      type: DriftSqlType.string,
+      requiredDuringInsert: false,
+      $customConstraints: 'NOT NULL DEFAULT \'\'',
+      defaultValue: const CustomExpression('\'\''));
   @override
   List<GeneratedColumn> get $columns => [
         sourceKey,
@@ -353,7 +371,10 @@ class PlayHistory extends Table with TableInfo<PlayHistory, PlayHistoryData> {
         coverUrl,
         durationMs,
         raw,
-        playedAt
+        playedAt,
+        versionPhysical,
+        versionCounter,
+        deviceId
       ];
   @override
   String get aliasedName => _alias ?? actualTableName;
@@ -388,6 +409,12 @@ class PlayHistory extends Table with TableInfo<PlayHistory, PlayHistoryData> {
           .read(DriftSqlType.string, data['${effectivePrefix}raw'])!,
       playedAt: attachedDatabase.typeMapping
           .read(DriftSqlType.int, data['${effectivePrefix}playedAt'])!,
+      versionPhysical: attachedDatabase.typeMapping
+          .read(DriftSqlType.int, data['${effectivePrefix}versionPhysical'])!,
+      versionCounter: attachedDatabase.typeMapping
+          .read(DriftSqlType.int, data['${effectivePrefix}versionCounter'])!,
+      deviceId: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}deviceId'])!,
     );
   }
 
@@ -412,6 +439,9 @@ class PlayHistoryData extends DataClass implements Insertable<PlayHistoryData> {
   final int? durationMs;
   final String raw;
   final int playedAt;
+  final int versionPhysical;
+  final int versionCounter;
+  final String deviceId;
   const PlayHistoryData(
       {required this.sourceKey,
       required this.songId,
@@ -421,7 +451,10 @@ class PlayHistoryData extends DataClass implements Insertable<PlayHistoryData> {
       this.coverUrl,
       this.durationMs,
       required this.raw,
-      required this.playedAt});
+      required this.playedAt,
+      required this.versionPhysical,
+      required this.versionCounter,
+      required this.deviceId});
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
     final map = <String, Expression>{};
@@ -438,6 +471,9 @@ class PlayHistoryData extends DataClass implements Insertable<PlayHistoryData> {
     }
     map['raw'] = Variable<String>(raw);
     map['playedAt'] = Variable<int>(playedAt);
+    map['versionPhysical'] = Variable<int>(versionPhysical);
+    map['versionCounter'] = Variable<int>(versionCounter);
+    map['deviceId'] = Variable<String>(deviceId);
     return map;
   }
 
@@ -456,6 +492,9 @@ class PlayHistoryData extends DataClass implements Insertable<PlayHistoryData> {
           : Value(durationMs),
       raw: Value(raw),
       playedAt: Value(playedAt),
+      versionPhysical: Value(versionPhysical),
+      versionCounter: Value(versionCounter),
+      deviceId: Value(deviceId),
     );
   }
 
@@ -472,6 +511,9 @@ class PlayHistoryData extends DataClass implements Insertable<PlayHistoryData> {
       durationMs: serializer.fromJson<int?>(json['durationMs']),
       raw: serializer.fromJson<String>(json['raw']),
       playedAt: serializer.fromJson<int>(json['playedAt']),
+      versionPhysical: serializer.fromJson<int>(json['versionPhysical']),
+      versionCounter: serializer.fromJson<int>(json['versionCounter']),
+      deviceId: serializer.fromJson<String>(json['deviceId']),
     );
   }
   @override
@@ -487,6 +529,9 @@ class PlayHistoryData extends DataClass implements Insertable<PlayHistoryData> {
       'durationMs': serializer.toJson<int?>(durationMs),
       'raw': serializer.toJson<String>(raw),
       'playedAt': serializer.toJson<int>(playedAt),
+      'versionPhysical': serializer.toJson<int>(versionPhysical),
+      'versionCounter': serializer.toJson<int>(versionCounter),
+      'deviceId': serializer.toJson<String>(deviceId),
     };
   }
 
@@ -499,7 +544,10 @@ class PlayHistoryData extends DataClass implements Insertable<PlayHistoryData> {
           Value<String?> coverUrl = const Value.absent(),
           Value<int?> durationMs = const Value.absent(),
           String? raw,
-          int? playedAt}) =>
+          int? playedAt,
+          int? versionPhysical,
+          int? versionCounter,
+          String? deviceId}) =>
       PlayHistoryData(
         sourceKey: sourceKey ?? this.sourceKey,
         songId: songId ?? this.songId,
@@ -510,6 +558,9 @@ class PlayHistoryData extends DataClass implements Insertable<PlayHistoryData> {
         durationMs: durationMs.present ? durationMs.value : this.durationMs,
         raw: raw ?? this.raw,
         playedAt: playedAt ?? this.playedAt,
+        versionPhysical: versionPhysical ?? this.versionPhysical,
+        versionCounter: versionCounter ?? this.versionCounter,
+        deviceId: deviceId ?? this.deviceId,
       );
   PlayHistoryData copyWithCompanion(PlayHistoryCompanion data) {
     return PlayHistoryData(
@@ -523,6 +574,13 @@ class PlayHistoryData extends DataClass implements Insertable<PlayHistoryData> {
           data.durationMs.present ? data.durationMs.value : this.durationMs,
       raw: data.raw.present ? data.raw.value : this.raw,
       playedAt: data.playedAt.present ? data.playedAt.value : this.playedAt,
+      versionPhysical: data.versionPhysical.present
+          ? data.versionPhysical.value
+          : this.versionPhysical,
+      versionCounter: data.versionCounter.present
+          ? data.versionCounter.value
+          : this.versionCounter,
+      deviceId: data.deviceId.present ? data.deviceId.value : this.deviceId,
     );
   }
 
@@ -537,14 +595,28 @@ class PlayHistoryData extends DataClass implements Insertable<PlayHistoryData> {
           ..write('coverUrl: $coverUrl, ')
           ..write('durationMs: $durationMs, ')
           ..write('raw: $raw, ')
-          ..write('playedAt: $playedAt')
+          ..write('playedAt: $playedAt, ')
+          ..write('versionPhysical: $versionPhysical, ')
+          ..write('versionCounter: $versionCounter, ')
+          ..write('deviceId: $deviceId')
           ..write(')'))
         .toString();
   }
 
   @override
-  int get hashCode => Object.hash(sourceKey, songId, title, artist, album,
-      coverUrl, durationMs, raw, playedAt);
+  int get hashCode => Object.hash(
+      sourceKey,
+      songId,
+      title,
+      artist,
+      album,
+      coverUrl,
+      durationMs,
+      raw,
+      playedAt,
+      versionPhysical,
+      versionCounter,
+      deviceId);
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
@@ -557,7 +629,10 @@ class PlayHistoryData extends DataClass implements Insertable<PlayHistoryData> {
           other.coverUrl == this.coverUrl &&
           other.durationMs == this.durationMs &&
           other.raw == this.raw &&
-          other.playedAt == this.playedAt);
+          other.playedAt == this.playedAt &&
+          other.versionPhysical == this.versionPhysical &&
+          other.versionCounter == this.versionCounter &&
+          other.deviceId == this.deviceId);
 }
 
 class PlayHistoryCompanion extends UpdateCompanion<PlayHistoryData> {
@@ -570,6 +645,9 @@ class PlayHistoryCompanion extends UpdateCompanion<PlayHistoryData> {
   final Value<int?> durationMs;
   final Value<String> raw;
   final Value<int> playedAt;
+  final Value<int> versionPhysical;
+  final Value<int> versionCounter;
+  final Value<String> deviceId;
   final Value<int> rowid;
   const PlayHistoryCompanion({
     this.sourceKey = const Value.absent(),
@@ -581,6 +659,9 @@ class PlayHistoryCompanion extends UpdateCompanion<PlayHistoryData> {
     this.durationMs = const Value.absent(),
     this.raw = const Value.absent(),
     this.playedAt = const Value.absent(),
+    this.versionPhysical = const Value.absent(),
+    this.versionCounter = const Value.absent(),
+    this.deviceId = const Value.absent(),
     this.rowid = const Value.absent(),
   });
   PlayHistoryCompanion.insert({
@@ -593,6 +674,9 @@ class PlayHistoryCompanion extends UpdateCompanion<PlayHistoryData> {
     this.durationMs = const Value.absent(),
     this.raw = const Value.absent(),
     required int playedAt,
+    this.versionPhysical = const Value.absent(),
+    this.versionCounter = const Value.absent(),
+    this.deviceId = const Value.absent(),
     this.rowid = const Value.absent(),
   })  : sourceKey = Value(sourceKey),
         songId = Value(songId),
@@ -608,6 +692,9 @@ class PlayHistoryCompanion extends UpdateCompanion<PlayHistoryData> {
     Expression<int>? durationMs,
     Expression<String>? raw,
     Expression<int>? playedAt,
+    Expression<int>? versionPhysical,
+    Expression<int>? versionCounter,
+    Expression<String>? deviceId,
     Expression<int>? rowid,
   }) {
     return RawValuesInsertable({
@@ -620,6 +707,9 @@ class PlayHistoryCompanion extends UpdateCompanion<PlayHistoryData> {
       if (durationMs != null) 'durationMs': durationMs,
       if (raw != null) 'raw': raw,
       if (playedAt != null) 'playedAt': playedAt,
+      if (versionPhysical != null) 'versionPhysical': versionPhysical,
+      if (versionCounter != null) 'versionCounter': versionCounter,
+      if (deviceId != null) 'deviceId': deviceId,
       if (rowid != null) 'rowid': rowid,
     });
   }
@@ -634,6 +724,9 @@ class PlayHistoryCompanion extends UpdateCompanion<PlayHistoryData> {
       Value<int?>? durationMs,
       Value<String>? raw,
       Value<int>? playedAt,
+      Value<int>? versionPhysical,
+      Value<int>? versionCounter,
+      Value<String>? deviceId,
       Value<int>? rowid}) {
     return PlayHistoryCompanion(
       sourceKey: sourceKey ?? this.sourceKey,
@@ -645,6 +738,9 @@ class PlayHistoryCompanion extends UpdateCompanion<PlayHistoryData> {
       durationMs: durationMs ?? this.durationMs,
       raw: raw ?? this.raw,
       playedAt: playedAt ?? this.playedAt,
+      versionPhysical: versionPhysical ?? this.versionPhysical,
+      versionCounter: versionCounter ?? this.versionCounter,
+      deviceId: deviceId ?? this.deviceId,
       rowid: rowid ?? this.rowid,
     );
   }
@@ -679,6 +775,15 @@ class PlayHistoryCompanion extends UpdateCompanion<PlayHistoryData> {
     if (playedAt.present) {
       map['playedAt'] = Variable<int>(playedAt.value);
     }
+    if (versionPhysical.present) {
+      map['versionPhysical'] = Variable<int>(versionPhysical.value);
+    }
+    if (versionCounter.present) {
+      map['versionCounter'] = Variable<int>(versionCounter.value);
+    }
+    if (deviceId.present) {
+      map['deviceId'] = Variable<String>(deviceId.value);
+    }
     if (rowid.present) {
       map['rowid'] = Variable<int>(rowid.value);
     }
@@ -697,6 +802,9 @@ class PlayHistoryCompanion extends UpdateCompanion<PlayHistoryData> {
           ..write('durationMs: $durationMs, ')
           ..write('raw: $raw, ')
           ..write('playedAt: $playedAt, ')
+          ..write('versionPhysical: $versionPhysical, ')
+          ..write('versionCounter: $versionCounter, ')
+          ..write('deviceId: $deviceId, ')
           ..write('rowid: $rowid')
           ..write(')'))
         .toString();
@@ -729,21 +837,27 @@ class Playlists extends Table with TableInfo<Playlists, PlaylistsData> {
       type: DriftSqlType.string,
       requiredDuringInsert: false,
       $customConstraints: 'NULL');
-  late final GeneratedColumn<int> updatedAt = GeneratedColumn<int>(
-      'updatedAt', aliasedName, false,
+  late final GeneratedColumn<int> versionPhysical = GeneratedColumn<int>(
+      'versionPhysical', aliasedName, false,
       type: DriftSqlType.int,
       requiredDuringInsert: false,
       $customConstraints: 'NOT NULL DEFAULT 0',
       defaultValue: const CustomExpression('0'));
-  late final GeneratedColumn<String> updatedBy = GeneratedColumn<String>(
-      'updatedBy', aliasedName, false,
+  late final GeneratedColumn<int> versionCounter = GeneratedColumn<int>(
+      'versionCounter', aliasedName, false,
+      type: DriftSqlType.int,
+      requiredDuringInsert: false,
+      $customConstraints: 'NOT NULL DEFAULT 0',
+      defaultValue: const CustomExpression('0'));
+  late final GeneratedColumn<String> deviceId = GeneratedColumn<String>(
+      'deviceId', aliasedName, false,
       type: DriftSqlType.string,
       requiredDuringInsert: false,
       $customConstraints: 'NOT NULL DEFAULT \'\'',
       defaultValue: const CustomExpression('\'\''));
   @override
   List<GeneratedColumn> get $columns =>
-      [id, name, createdAt, syncId, updatedAt, updatedBy];
+      [id, name, createdAt, syncId, versionPhysical, versionCounter, deviceId];
   @override
   String get aliasedName => _alias ?? actualTableName;
   @override
@@ -763,10 +877,12 @@ class Playlists extends Table with TableInfo<Playlists, PlaylistsData> {
           .read(DriftSqlType.int, data['${effectivePrefix}createdAt'])!,
       syncId: attachedDatabase.typeMapping
           .read(DriftSqlType.string, data['${effectivePrefix}syncId']),
-      updatedAt: attachedDatabase.typeMapping
-          .read(DriftSqlType.int, data['${effectivePrefix}updatedAt'])!,
-      updatedBy: attachedDatabase.typeMapping
-          .read(DriftSqlType.string, data['${effectivePrefix}updatedBy'])!,
+      versionPhysical: attachedDatabase.typeMapping
+          .read(DriftSqlType.int, data['${effectivePrefix}versionPhysical'])!,
+      versionCounter: attachedDatabase.typeMapping
+          .read(DriftSqlType.int, data['${effectivePrefix}versionCounter'])!,
+      deviceId: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}deviceId'])!,
     );
   }
 
@@ -784,15 +900,17 @@ class PlaylistsData extends DataClass implements Insertable<PlaylistsData> {
   final String name;
   final int createdAt;
   final String? syncId;
-  final int updatedAt;
-  final String updatedBy;
+  final int versionPhysical;
+  final int versionCounter;
+  final String deviceId;
   const PlaylistsData(
       {required this.id,
       required this.name,
       required this.createdAt,
       this.syncId,
-      required this.updatedAt,
-      required this.updatedBy});
+      required this.versionPhysical,
+      required this.versionCounter,
+      required this.deviceId});
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
     final map = <String, Expression>{};
@@ -802,8 +920,9 @@ class PlaylistsData extends DataClass implements Insertable<PlaylistsData> {
     if (!nullToAbsent || syncId != null) {
       map['syncId'] = Variable<String>(syncId);
     }
-    map['updatedAt'] = Variable<int>(updatedAt);
-    map['updatedBy'] = Variable<String>(updatedBy);
+    map['versionPhysical'] = Variable<int>(versionPhysical);
+    map['versionCounter'] = Variable<int>(versionCounter);
+    map['deviceId'] = Variable<String>(deviceId);
     return map;
   }
 
@@ -814,8 +933,9 @@ class PlaylistsData extends DataClass implements Insertable<PlaylistsData> {
       createdAt: Value(createdAt),
       syncId:
           syncId == null && nullToAbsent ? const Value.absent() : Value(syncId),
-      updatedAt: Value(updatedAt),
-      updatedBy: Value(updatedBy),
+      versionPhysical: Value(versionPhysical),
+      versionCounter: Value(versionCounter),
+      deviceId: Value(deviceId),
     );
   }
 
@@ -827,8 +947,9 @@ class PlaylistsData extends DataClass implements Insertable<PlaylistsData> {
       name: serializer.fromJson<String>(json['name']),
       createdAt: serializer.fromJson<int>(json['createdAt']),
       syncId: serializer.fromJson<String?>(json['syncId']),
-      updatedAt: serializer.fromJson<int>(json['updatedAt']),
-      updatedBy: serializer.fromJson<String>(json['updatedBy']),
+      versionPhysical: serializer.fromJson<int>(json['versionPhysical']),
+      versionCounter: serializer.fromJson<int>(json['versionCounter']),
+      deviceId: serializer.fromJson<String>(json['deviceId']),
     );
   }
   @override
@@ -839,8 +960,9 @@ class PlaylistsData extends DataClass implements Insertable<PlaylistsData> {
       'name': serializer.toJson<String>(name),
       'createdAt': serializer.toJson<int>(createdAt),
       'syncId': serializer.toJson<String?>(syncId),
-      'updatedAt': serializer.toJson<int>(updatedAt),
-      'updatedBy': serializer.toJson<String>(updatedBy),
+      'versionPhysical': serializer.toJson<int>(versionPhysical),
+      'versionCounter': serializer.toJson<int>(versionCounter),
+      'deviceId': serializer.toJson<String>(deviceId),
     };
   }
 
@@ -849,15 +971,17 @@ class PlaylistsData extends DataClass implements Insertable<PlaylistsData> {
           String? name,
           int? createdAt,
           Value<String?> syncId = const Value.absent(),
-          int? updatedAt,
-          String? updatedBy}) =>
+          int? versionPhysical,
+          int? versionCounter,
+          String? deviceId}) =>
       PlaylistsData(
         id: id ?? this.id,
         name: name ?? this.name,
         createdAt: createdAt ?? this.createdAt,
         syncId: syncId.present ? syncId.value : this.syncId,
-        updatedAt: updatedAt ?? this.updatedAt,
-        updatedBy: updatedBy ?? this.updatedBy,
+        versionPhysical: versionPhysical ?? this.versionPhysical,
+        versionCounter: versionCounter ?? this.versionCounter,
+        deviceId: deviceId ?? this.deviceId,
       );
   PlaylistsData copyWithCompanion(PlaylistsCompanion data) {
     return PlaylistsData(
@@ -865,8 +989,13 @@ class PlaylistsData extends DataClass implements Insertable<PlaylistsData> {
       name: data.name.present ? data.name.value : this.name,
       createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
       syncId: data.syncId.present ? data.syncId.value : this.syncId,
-      updatedAt: data.updatedAt.present ? data.updatedAt.value : this.updatedAt,
-      updatedBy: data.updatedBy.present ? data.updatedBy.value : this.updatedBy,
+      versionPhysical: data.versionPhysical.present
+          ? data.versionPhysical.value
+          : this.versionPhysical,
+      versionCounter: data.versionCounter.present
+          ? data.versionCounter.value
+          : this.versionCounter,
+      deviceId: data.deviceId.present ? data.deviceId.value : this.deviceId,
     );
   }
 
@@ -877,15 +1006,16 @@ class PlaylistsData extends DataClass implements Insertable<PlaylistsData> {
           ..write('name: $name, ')
           ..write('createdAt: $createdAt, ')
           ..write('syncId: $syncId, ')
-          ..write('updatedAt: $updatedAt, ')
-          ..write('updatedBy: $updatedBy')
+          ..write('versionPhysical: $versionPhysical, ')
+          ..write('versionCounter: $versionCounter, ')
+          ..write('deviceId: $deviceId')
           ..write(')'))
         .toString();
   }
 
   @override
-  int get hashCode =>
-      Object.hash(id, name, createdAt, syncId, updatedAt, updatedBy);
+  int get hashCode => Object.hash(
+      id, name, createdAt, syncId, versionPhysical, versionCounter, deviceId);
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
@@ -894,8 +1024,9 @@ class PlaylistsData extends DataClass implements Insertable<PlaylistsData> {
           other.name == this.name &&
           other.createdAt == this.createdAt &&
           other.syncId == this.syncId &&
-          other.updatedAt == this.updatedAt &&
-          other.updatedBy == this.updatedBy);
+          other.versionPhysical == this.versionPhysical &&
+          other.versionCounter == this.versionCounter &&
+          other.deviceId == this.deviceId);
 }
 
 class PlaylistsCompanion extends UpdateCompanion<PlaylistsData> {
@@ -903,23 +1034,26 @@ class PlaylistsCompanion extends UpdateCompanion<PlaylistsData> {
   final Value<String> name;
   final Value<int> createdAt;
   final Value<String?> syncId;
-  final Value<int> updatedAt;
-  final Value<String> updatedBy;
+  final Value<int> versionPhysical;
+  final Value<int> versionCounter;
+  final Value<String> deviceId;
   const PlaylistsCompanion({
     this.id = const Value.absent(),
     this.name = const Value.absent(),
     this.createdAt = const Value.absent(),
     this.syncId = const Value.absent(),
-    this.updatedAt = const Value.absent(),
-    this.updatedBy = const Value.absent(),
+    this.versionPhysical = const Value.absent(),
+    this.versionCounter = const Value.absent(),
+    this.deviceId = const Value.absent(),
   });
   PlaylistsCompanion.insert({
     this.id = const Value.absent(),
     required String name,
     required int createdAt,
     this.syncId = const Value.absent(),
-    this.updatedAt = const Value.absent(),
-    this.updatedBy = const Value.absent(),
+    this.versionPhysical = const Value.absent(),
+    this.versionCounter = const Value.absent(),
+    this.deviceId = const Value.absent(),
   })  : name = Value(name),
         createdAt = Value(createdAt);
   static Insertable<PlaylistsData> custom({
@@ -927,16 +1061,18 @@ class PlaylistsCompanion extends UpdateCompanion<PlaylistsData> {
     Expression<String>? name,
     Expression<int>? createdAt,
     Expression<String>? syncId,
-    Expression<int>? updatedAt,
-    Expression<String>? updatedBy,
+    Expression<int>? versionPhysical,
+    Expression<int>? versionCounter,
+    Expression<String>? deviceId,
   }) {
     return RawValuesInsertable({
       if (id != null) 'id': id,
       if (name != null) 'name': name,
       if (createdAt != null) 'createdAt': createdAt,
       if (syncId != null) 'syncId': syncId,
-      if (updatedAt != null) 'updatedAt': updatedAt,
-      if (updatedBy != null) 'updatedBy': updatedBy,
+      if (versionPhysical != null) 'versionPhysical': versionPhysical,
+      if (versionCounter != null) 'versionCounter': versionCounter,
+      if (deviceId != null) 'deviceId': deviceId,
     });
   }
 
@@ -945,15 +1081,17 @@ class PlaylistsCompanion extends UpdateCompanion<PlaylistsData> {
       Value<String>? name,
       Value<int>? createdAt,
       Value<String?>? syncId,
-      Value<int>? updatedAt,
-      Value<String>? updatedBy}) {
+      Value<int>? versionPhysical,
+      Value<int>? versionCounter,
+      Value<String>? deviceId}) {
     return PlaylistsCompanion(
       id: id ?? this.id,
       name: name ?? this.name,
       createdAt: createdAt ?? this.createdAt,
       syncId: syncId ?? this.syncId,
-      updatedAt: updatedAt ?? this.updatedAt,
-      updatedBy: updatedBy ?? this.updatedBy,
+      versionPhysical: versionPhysical ?? this.versionPhysical,
+      versionCounter: versionCounter ?? this.versionCounter,
+      deviceId: deviceId ?? this.deviceId,
     );
   }
 
@@ -972,11 +1110,14 @@ class PlaylistsCompanion extends UpdateCompanion<PlaylistsData> {
     if (syncId.present) {
       map['syncId'] = Variable<String>(syncId.value);
     }
-    if (updatedAt.present) {
-      map['updatedAt'] = Variable<int>(updatedAt.value);
+    if (versionPhysical.present) {
+      map['versionPhysical'] = Variable<int>(versionPhysical.value);
     }
-    if (updatedBy.present) {
-      map['updatedBy'] = Variable<String>(updatedBy.value);
+    if (versionCounter.present) {
+      map['versionCounter'] = Variable<int>(versionCounter.value);
+    }
+    if (deviceId.present) {
+      map['deviceId'] = Variable<String>(deviceId.value);
     }
     return map;
   }
@@ -988,8 +1129,9 @@ class PlaylistsCompanion extends UpdateCompanion<PlaylistsData> {
           ..write('name: $name, ')
           ..write('createdAt: $createdAt, ')
           ..write('syncId: $syncId, ')
-          ..write('updatedAt: $updatedAt, ')
-          ..write('updatedBy: $updatedBy')
+          ..write('versionPhysical: $versionPhysical, ')
+          ..write('versionCounter: $versionCounter, ')
+          ..write('deviceId: $deviceId')
           ..write(')'))
         .toString();
   }
@@ -1066,14 +1208,20 @@ class PlaylistTracks extends Table
       requiredDuringInsert: false,
       $customConstraints: 'NOT NULL DEFAULT 0',
       defaultValue: const CustomExpression('0'));
-  late final GeneratedColumn<int> updatedAt = GeneratedColumn<int>(
-      'updatedAt', aliasedName, false,
+  late final GeneratedColumn<int> versionPhysical = GeneratedColumn<int>(
+      'versionPhysical', aliasedName, false,
       type: DriftSqlType.int,
       requiredDuringInsert: false,
       $customConstraints: 'NOT NULL DEFAULT 0',
       defaultValue: const CustomExpression('0'));
-  late final GeneratedColumn<String> updatedBy = GeneratedColumn<String>(
-      'updatedBy', aliasedName, false,
+  late final GeneratedColumn<int> versionCounter = GeneratedColumn<int>(
+      'versionCounter', aliasedName, false,
+      type: DriftSqlType.int,
+      requiredDuringInsert: false,
+      $customConstraints: 'NOT NULL DEFAULT 0',
+      defaultValue: const CustomExpression('0'));
+  late final GeneratedColumn<String> deviceId = GeneratedColumn<String>(
+      'deviceId', aliasedName, false,
       type: DriftSqlType.string,
       requiredDuringInsert: false,
       $customConstraints: 'NOT NULL DEFAULT \'\'',
@@ -1092,8 +1240,9 @@ class PlaylistTracks extends Table
         raw,
         addedAt,
         sortOrder,
-        updatedAt,
-        updatedBy
+        versionPhysical,
+        versionCounter,
+        deviceId
       ];
   @override
   String get aliasedName => _alias ?? actualTableName;
@@ -1134,10 +1283,12 @@ class PlaylistTracks extends Table
           .read(DriftSqlType.int, data['${effectivePrefix}addedAt'])!,
       sortOrder: attachedDatabase.typeMapping
           .read(DriftSqlType.int, data['${effectivePrefix}sortOrder'])!,
-      updatedAt: attachedDatabase.typeMapping
-          .read(DriftSqlType.int, data['${effectivePrefix}updatedAt'])!,
-      updatedBy: attachedDatabase.typeMapping
-          .read(DriftSqlType.string, data['${effectivePrefix}updatedBy'])!,
+      versionPhysical: attachedDatabase.typeMapping
+          .read(DriftSqlType.int, data['${effectivePrefix}versionPhysical'])!,
+      versionCounter: attachedDatabase.typeMapping
+          .read(DriftSqlType.int, data['${effectivePrefix}versionCounter'])!,
+      deviceId: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}deviceId'])!,
     );
   }
 
@@ -1169,8 +1320,9 @@ class PlaylistTracksData extends DataClass
   final String raw;
   final int addedAt;
   final int sortOrder;
-  final int updatedAt;
-  final String updatedBy;
+  final int versionPhysical;
+  final int versionCounter;
+  final String deviceId;
   const PlaylistTracksData(
       {required this.id,
       required this.playlistId,
@@ -1184,8 +1336,9 @@ class PlaylistTracksData extends DataClass
       required this.raw,
       required this.addedAt,
       required this.sortOrder,
-      required this.updatedAt,
-      required this.updatedBy});
+      required this.versionPhysical,
+      required this.versionCounter,
+      required this.deviceId});
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
     final map = <String, Expression>{};
@@ -1205,8 +1358,9 @@ class PlaylistTracksData extends DataClass
     map['raw'] = Variable<String>(raw);
     map['addedAt'] = Variable<int>(addedAt);
     map['sortOrder'] = Variable<int>(sortOrder);
-    map['updatedAt'] = Variable<int>(updatedAt);
-    map['updatedBy'] = Variable<String>(updatedBy);
+    map['versionPhysical'] = Variable<int>(versionPhysical);
+    map['versionCounter'] = Variable<int>(versionCounter);
+    map['deviceId'] = Variable<String>(deviceId);
     return map;
   }
 
@@ -1228,8 +1382,9 @@ class PlaylistTracksData extends DataClass
       raw: Value(raw),
       addedAt: Value(addedAt),
       sortOrder: Value(sortOrder),
-      updatedAt: Value(updatedAt),
-      updatedBy: Value(updatedBy),
+      versionPhysical: Value(versionPhysical),
+      versionCounter: Value(versionCounter),
+      deviceId: Value(deviceId),
     );
   }
 
@@ -1249,8 +1404,9 @@ class PlaylistTracksData extends DataClass
       raw: serializer.fromJson<String>(json['raw']),
       addedAt: serializer.fromJson<int>(json['addedAt']),
       sortOrder: serializer.fromJson<int>(json['sortOrder']),
-      updatedAt: serializer.fromJson<int>(json['updatedAt']),
-      updatedBy: serializer.fromJson<String>(json['updatedBy']),
+      versionPhysical: serializer.fromJson<int>(json['versionPhysical']),
+      versionCounter: serializer.fromJson<int>(json['versionCounter']),
+      deviceId: serializer.fromJson<String>(json['deviceId']),
     );
   }
   @override
@@ -1269,8 +1425,9 @@ class PlaylistTracksData extends DataClass
       'raw': serializer.toJson<String>(raw),
       'addedAt': serializer.toJson<int>(addedAt),
       'sortOrder': serializer.toJson<int>(sortOrder),
-      'updatedAt': serializer.toJson<int>(updatedAt),
-      'updatedBy': serializer.toJson<String>(updatedBy),
+      'versionPhysical': serializer.toJson<int>(versionPhysical),
+      'versionCounter': serializer.toJson<int>(versionCounter),
+      'deviceId': serializer.toJson<String>(deviceId),
     };
   }
 
@@ -1287,8 +1444,9 @@ class PlaylistTracksData extends DataClass
           String? raw,
           int? addedAt,
           int? sortOrder,
-          int? updatedAt,
-          String? updatedBy}) =>
+          int? versionPhysical,
+          int? versionCounter,
+          String? deviceId}) =>
       PlaylistTracksData(
         id: id ?? this.id,
         playlistId: playlistId ?? this.playlistId,
@@ -1302,8 +1460,9 @@ class PlaylistTracksData extends DataClass
         raw: raw ?? this.raw,
         addedAt: addedAt ?? this.addedAt,
         sortOrder: sortOrder ?? this.sortOrder,
-        updatedAt: updatedAt ?? this.updatedAt,
-        updatedBy: updatedBy ?? this.updatedBy,
+        versionPhysical: versionPhysical ?? this.versionPhysical,
+        versionCounter: versionCounter ?? this.versionCounter,
+        deviceId: deviceId ?? this.deviceId,
       );
   PlaylistTracksData copyWithCompanion(PlaylistTracksCompanion data) {
     return PlaylistTracksData(
@@ -1321,8 +1480,13 @@ class PlaylistTracksData extends DataClass
       raw: data.raw.present ? data.raw.value : this.raw,
       addedAt: data.addedAt.present ? data.addedAt.value : this.addedAt,
       sortOrder: data.sortOrder.present ? data.sortOrder.value : this.sortOrder,
-      updatedAt: data.updatedAt.present ? data.updatedAt.value : this.updatedAt,
-      updatedBy: data.updatedBy.present ? data.updatedBy.value : this.updatedBy,
+      versionPhysical: data.versionPhysical.present
+          ? data.versionPhysical.value
+          : this.versionPhysical,
+      versionCounter: data.versionCounter.present
+          ? data.versionCounter.value
+          : this.versionCounter,
+      deviceId: data.deviceId.present ? data.deviceId.value : this.deviceId,
     );
   }
 
@@ -1341,8 +1505,9 @@ class PlaylistTracksData extends DataClass
           ..write('raw: $raw, ')
           ..write('addedAt: $addedAt, ')
           ..write('sortOrder: $sortOrder, ')
-          ..write('updatedAt: $updatedAt, ')
-          ..write('updatedBy: $updatedBy')
+          ..write('versionPhysical: $versionPhysical, ')
+          ..write('versionCounter: $versionCounter, ')
+          ..write('deviceId: $deviceId')
           ..write(')'))
         .toString();
   }
@@ -1361,8 +1526,9 @@ class PlaylistTracksData extends DataClass
       raw,
       addedAt,
       sortOrder,
-      updatedAt,
-      updatedBy);
+      versionPhysical,
+      versionCounter,
+      deviceId);
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
@@ -1379,8 +1545,9 @@ class PlaylistTracksData extends DataClass
           other.raw == this.raw &&
           other.addedAt == this.addedAt &&
           other.sortOrder == this.sortOrder &&
-          other.updatedAt == this.updatedAt &&
-          other.updatedBy == this.updatedBy);
+          other.versionPhysical == this.versionPhysical &&
+          other.versionCounter == this.versionCounter &&
+          other.deviceId == this.deviceId);
 }
 
 class PlaylistTracksCompanion extends UpdateCompanion<PlaylistTracksData> {
@@ -1396,8 +1563,9 @@ class PlaylistTracksCompanion extends UpdateCompanion<PlaylistTracksData> {
   final Value<String> raw;
   final Value<int> addedAt;
   final Value<int> sortOrder;
-  final Value<int> updatedAt;
-  final Value<String> updatedBy;
+  final Value<int> versionPhysical;
+  final Value<int> versionCounter;
+  final Value<String> deviceId;
   const PlaylistTracksCompanion({
     this.id = const Value.absent(),
     this.playlistId = const Value.absent(),
@@ -1411,8 +1579,9 @@ class PlaylistTracksCompanion extends UpdateCompanion<PlaylistTracksData> {
     this.raw = const Value.absent(),
     this.addedAt = const Value.absent(),
     this.sortOrder = const Value.absent(),
-    this.updatedAt = const Value.absent(),
-    this.updatedBy = const Value.absent(),
+    this.versionPhysical = const Value.absent(),
+    this.versionCounter = const Value.absent(),
+    this.deviceId = const Value.absent(),
   });
   PlaylistTracksCompanion.insert({
     this.id = const Value.absent(),
@@ -1427,8 +1596,9 @@ class PlaylistTracksCompanion extends UpdateCompanion<PlaylistTracksData> {
     this.raw = const Value.absent(),
     required int addedAt,
     this.sortOrder = const Value.absent(),
-    this.updatedAt = const Value.absent(),
-    this.updatedBy = const Value.absent(),
+    this.versionPhysical = const Value.absent(),
+    this.versionCounter = const Value.absent(),
+    this.deviceId = const Value.absent(),
   })  : playlistId = Value(playlistId),
         sourceKey = Value(sourceKey),
         songId = Value(songId),
@@ -1447,8 +1617,9 @@ class PlaylistTracksCompanion extends UpdateCompanion<PlaylistTracksData> {
     Expression<String>? raw,
     Expression<int>? addedAt,
     Expression<int>? sortOrder,
-    Expression<int>? updatedAt,
-    Expression<String>? updatedBy,
+    Expression<int>? versionPhysical,
+    Expression<int>? versionCounter,
+    Expression<String>? deviceId,
   }) {
     return RawValuesInsertable({
       if (id != null) 'id': id,
@@ -1463,8 +1634,9 @@ class PlaylistTracksCompanion extends UpdateCompanion<PlaylistTracksData> {
       if (raw != null) 'raw': raw,
       if (addedAt != null) 'addedAt': addedAt,
       if (sortOrder != null) 'sortOrder': sortOrder,
-      if (updatedAt != null) 'updatedAt': updatedAt,
-      if (updatedBy != null) 'updatedBy': updatedBy,
+      if (versionPhysical != null) 'versionPhysical': versionPhysical,
+      if (versionCounter != null) 'versionCounter': versionCounter,
+      if (deviceId != null) 'deviceId': deviceId,
     });
   }
 
@@ -1481,8 +1653,9 @@ class PlaylistTracksCompanion extends UpdateCompanion<PlaylistTracksData> {
       Value<String>? raw,
       Value<int>? addedAt,
       Value<int>? sortOrder,
-      Value<int>? updatedAt,
-      Value<String>? updatedBy}) {
+      Value<int>? versionPhysical,
+      Value<int>? versionCounter,
+      Value<String>? deviceId}) {
     return PlaylistTracksCompanion(
       id: id ?? this.id,
       playlistId: playlistId ?? this.playlistId,
@@ -1496,8 +1669,9 @@ class PlaylistTracksCompanion extends UpdateCompanion<PlaylistTracksData> {
       raw: raw ?? this.raw,
       addedAt: addedAt ?? this.addedAt,
       sortOrder: sortOrder ?? this.sortOrder,
-      updatedAt: updatedAt ?? this.updatedAt,
-      updatedBy: updatedBy ?? this.updatedBy,
+      versionPhysical: versionPhysical ?? this.versionPhysical,
+      versionCounter: versionCounter ?? this.versionCounter,
+      deviceId: deviceId ?? this.deviceId,
     );
   }
 
@@ -1540,11 +1714,14 @@ class PlaylistTracksCompanion extends UpdateCompanion<PlaylistTracksData> {
     if (sortOrder.present) {
       map['sortOrder'] = Variable<int>(sortOrder.value);
     }
-    if (updatedAt.present) {
-      map['updatedAt'] = Variable<int>(updatedAt.value);
+    if (versionPhysical.present) {
+      map['versionPhysical'] = Variable<int>(versionPhysical.value);
     }
-    if (updatedBy.present) {
-      map['updatedBy'] = Variable<String>(updatedBy.value);
+    if (versionCounter.present) {
+      map['versionCounter'] = Variable<int>(versionCounter.value);
+    }
+    if (deviceId.present) {
+      map['deviceId'] = Variable<String>(deviceId.value);
     }
     return map;
   }
@@ -1564,8 +1741,9 @@ class PlaylistTracksCompanion extends UpdateCompanion<PlaylistTracksData> {
           ..write('raw: $raw, ')
           ..write('addedAt: $addedAt, ')
           ..write('sortOrder: $sortOrder, ')
-          ..write('updatedAt: $updatedAt, ')
-          ..write('updatedBy: $updatedBy')
+          ..write('versionPhysical: $versionPhysical, ')
+          ..write('versionCounter: $versionCounter, ')
+          ..write('deviceId: $deviceId')
           ..write(')'))
         .toString();
   }
@@ -1587,19 +1765,32 @@ class SyncTombstones extends Table
       type: DriftSqlType.string,
       requiredDuringInsert: true,
       $customConstraints: 'NOT NULL');
-  late final GeneratedColumn<int> updatedAt = GeneratedColumn<int>(
-      'updatedAt', aliasedName, false,
+  late final GeneratedColumn<int> versionPhysical = GeneratedColumn<int>(
+      'versionPhysical', aliasedName, false,
       type: DriftSqlType.int,
       requiredDuringInsert: true,
       $customConstraints: 'NOT NULL');
-  late final GeneratedColumn<String> updatedBy = GeneratedColumn<String>(
-      'updatedBy', aliasedName, false,
+  late final GeneratedColumn<int> versionCounter = GeneratedColumn<int>(
+      'versionCounter', aliasedName, false,
+      type: DriftSqlType.int,
+      requiredDuringInsert: false,
+      $customConstraints: 'NOT NULL DEFAULT 0',
+      defaultValue: const CustomExpression('0'));
+  late final GeneratedColumn<String> deviceId = GeneratedColumn<String>(
+      'deviceId', aliasedName, false,
       type: DriftSqlType.string,
       requiredDuringInsert: false,
       $customConstraints: 'NOT NULL DEFAULT \'\'',
       defaultValue: const CustomExpression('\'\''));
+  late final GeneratedColumn<int> deletedAt = GeneratedColumn<int>(
+      'deletedAt', aliasedName, false,
+      type: DriftSqlType.int,
+      requiredDuringInsert: false,
+      $customConstraints: 'NOT NULL DEFAULT 0',
+      defaultValue: const CustomExpression('0'));
   @override
-  List<GeneratedColumn> get $columns => [category, key, updatedAt, updatedBy];
+  List<GeneratedColumn> get $columns =>
+      [category, key, versionPhysical, versionCounter, deviceId, deletedAt];
   @override
   String get aliasedName => _alias ?? actualTableName;
   @override
@@ -1615,10 +1806,14 @@ class SyncTombstones extends Table
           .read(DriftSqlType.string, data['${effectivePrefix}category'])!,
       key: attachedDatabase.typeMapping
           .read(DriftSqlType.string, data['${effectivePrefix}key'])!,
-      updatedAt: attachedDatabase.typeMapping
-          .read(DriftSqlType.int, data['${effectivePrefix}updatedAt'])!,
-      updatedBy: attachedDatabase.typeMapping
-          .read(DriftSqlType.string, data['${effectivePrefix}updatedBy'])!,
+      versionPhysical: attachedDatabase.typeMapping
+          .read(DriftSqlType.int, data['${effectivePrefix}versionPhysical'])!,
+      versionCounter: attachedDatabase.typeMapping
+          .read(DriftSqlType.int, data['${effectivePrefix}versionCounter'])!,
+      deviceId: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}deviceId'])!,
+      deletedAt: attachedDatabase.typeMapping
+          .read(DriftSqlType.int, data['${effectivePrefix}deletedAt'])!,
     );
   }
 
@@ -1637,20 +1832,26 @@ class SyncTombstonesData extends DataClass
     implements Insertable<SyncTombstonesData> {
   final String category;
   final String key;
-  final int updatedAt;
-  final String updatedBy;
+  final int versionPhysical;
+  final int versionCounter;
+  final String deviceId;
+  final int deletedAt;
   const SyncTombstonesData(
       {required this.category,
       required this.key,
-      required this.updatedAt,
-      required this.updatedBy});
+      required this.versionPhysical,
+      required this.versionCounter,
+      required this.deviceId,
+      required this.deletedAt});
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
     final map = <String, Expression>{};
     map['category'] = Variable<String>(category);
     map['key'] = Variable<String>(key);
-    map['updatedAt'] = Variable<int>(updatedAt);
-    map['updatedBy'] = Variable<String>(updatedBy);
+    map['versionPhysical'] = Variable<int>(versionPhysical);
+    map['versionCounter'] = Variable<int>(versionCounter);
+    map['deviceId'] = Variable<String>(deviceId);
+    map['deletedAt'] = Variable<int>(deletedAt);
     return map;
   }
 
@@ -1658,8 +1859,10 @@ class SyncTombstonesData extends DataClass
     return SyncTombstonesCompanion(
       category: Value(category),
       key: Value(key),
-      updatedAt: Value(updatedAt),
-      updatedBy: Value(updatedBy),
+      versionPhysical: Value(versionPhysical),
+      versionCounter: Value(versionCounter),
+      deviceId: Value(deviceId),
+      deletedAt: Value(deletedAt),
     );
   }
 
@@ -1669,8 +1872,10 @@ class SyncTombstonesData extends DataClass
     return SyncTombstonesData(
       category: serializer.fromJson<String>(json['category']),
       key: serializer.fromJson<String>(json['key']),
-      updatedAt: serializer.fromJson<int>(json['updatedAt']),
-      updatedBy: serializer.fromJson<String>(json['updatedBy']),
+      versionPhysical: serializer.fromJson<int>(json['versionPhysical']),
+      versionCounter: serializer.fromJson<int>(json['versionCounter']),
+      deviceId: serializer.fromJson<String>(json['deviceId']),
+      deletedAt: serializer.fromJson<int>(json['deletedAt']),
     );
   }
   @override
@@ -1679,25 +1884,40 @@ class SyncTombstonesData extends DataClass
     return <String, dynamic>{
       'category': serializer.toJson<String>(category),
       'key': serializer.toJson<String>(key),
-      'updatedAt': serializer.toJson<int>(updatedAt),
-      'updatedBy': serializer.toJson<String>(updatedBy),
+      'versionPhysical': serializer.toJson<int>(versionPhysical),
+      'versionCounter': serializer.toJson<int>(versionCounter),
+      'deviceId': serializer.toJson<String>(deviceId),
+      'deletedAt': serializer.toJson<int>(deletedAt),
     };
   }
 
   SyncTombstonesData copyWith(
-          {String? category, String? key, int? updatedAt, String? updatedBy}) =>
+          {String? category,
+          String? key,
+          int? versionPhysical,
+          int? versionCounter,
+          String? deviceId,
+          int? deletedAt}) =>
       SyncTombstonesData(
         category: category ?? this.category,
         key: key ?? this.key,
-        updatedAt: updatedAt ?? this.updatedAt,
-        updatedBy: updatedBy ?? this.updatedBy,
+        versionPhysical: versionPhysical ?? this.versionPhysical,
+        versionCounter: versionCounter ?? this.versionCounter,
+        deviceId: deviceId ?? this.deviceId,
+        deletedAt: deletedAt ?? this.deletedAt,
       );
   SyncTombstonesData copyWithCompanion(SyncTombstonesCompanion data) {
     return SyncTombstonesData(
       category: data.category.present ? data.category.value : this.category,
       key: data.key.present ? data.key.value : this.key,
-      updatedAt: data.updatedAt.present ? data.updatedAt.value : this.updatedAt,
-      updatedBy: data.updatedBy.present ? data.updatedBy.value : this.updatedBy,
+      versionPhysical: data.versionPhysical.present
+          ? data.versionPhysical.value
+          : this.versionPhysical,
+      versionCounter: data.versionCounter.present
+          ? data.versionCounter.value
+          : this.versionCounter,
+      deviceId: data.deviceId.present ? data.deviceId.value : this.deviceId,
+      deletedAt: data.deletedAt.present ? data.deletedAt.value : this.deletedAt,
     );
   }
 
@@ -1706,58 +1926,73 @@ class SyncTombstonesData extends DataClass
     return (StringBuffer('SyncTombstonesData(')
           ..write('category: $category, ')
           ..write('key: $key, ')
-          ..write('updatedAt: $updatedAt, ')
-          ..write('updatedBy: $updatedBy')
+          ..write('versionPhysical: $versionPhysical, ')
+          ..write('versionCounter: $versionCounter, ')
+          ..write('deviceId: $deviceId, ')
+          ..write('deletedAt: $deletedAt')
           ..write(')'))
         .toString();
   }
 
   @override
-  int get hashCode => Object.hash(category, key, updatedAt, updatedBy);
+  int get hashCode => Object.hash(
+      category, key, versionPhysical, versionCounter, deviceId, deletedAt);
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
       (other is SyncTombstonesData &&
           other.category == this.category &&
           other.key == this.key &&
-          other.updatedAt == this.updatedAt &&
-          other.updatedBy == this.updatedBy);
+          other.versionPhysical == this.versionPhysical &&
+          other.versionCounter == this.versionCounter &&
+          other.deviceId == this.deviceId &&
+          other.deletedAt == this.deletedAt);
 }
 
 class SyncTombstonesCompanion extends UpdateCompanion<SyncTombstonesData> {
   final Value<String> category;
   final Value<String> key;
-  final Value<int> updatedAt;
-  final Value<String> updatedBy;
+  final Value<int> versionPhysical;
+  final Value<int> versionCounter;
+  final Value<String> deviceId;
+  final Value<int> deletedAt;
   final Value<int> rowid;
   const SyncTombstonesCompanion({
     this.category = const Value.absent(),
     this.key = const Value.absent(),
-    this.updatedAt = const Value.absent(),
-    this.updatedBy = const Value.absent(),
+    this.versionPhysical = const Value.absent(),
+    this.versionCounter = const Value.absent(),
+    this.deviceId = const Value.absent(),
+    this.deletedAt = const Value.absent(),
     this.rowid = const Value.absent(),
   });
   SyncTombstonesCompanion.insert({
     required String category,
     required String key,
-    required int updatedAt,
-    this.updatedBy = const Value.absent(),
+    required int versionPhysical,
+    this.versionCounter = const Value.absent(),
+    this.deviceId = const Value.absent(),
+    this.deletedAt = const Value.absent(),
     this.rowid = const Value.absent(),
   })  : category = Value(category),
         key = Value(key),
-        updatedAt = Value(updatedAt);
+        versionPhysical = Value(versionPhysical);
   static Insertable<SyncTombstonesData> custom({
     Expression<String>? category,
     Expression<String>? key,
-    Expression<int>? updatedAt,
-    Expression<String>? updatedBy,
+    Expression<int>? versionPhysical,
+    Expression<int>? versionCounter,
+    Expression<String>? deviceId,
+    Expression<int>? deletedAt,
     Expression<int>? rowid,
   }) {
     return RawValuesInsertable({
       if (category != null) 'category': category,
       if (key != null) 'key': key,
-      if (updatedAt != null) 'updatedAt': updatedAt,
-      if (updatedBy != null) 'updatedBy': updatedBy,
+      if (versionPhysical != null) 'versionPhysical': versionPhysical,
+      if (versionCounter != null) 'versionCounter': versionCounter,
+      if (deviceId != null) 'deviceId': deviceId,
+      if (deletedAt != null) 'deletedAt': deletedAt,
       if (rowid != null) 'rowid': rowid,
     });
   }
@@ -1765,14 +2000,18 @@ class SyncTombstonesCompanion extends UpdateCompanion<SyncTombstonesData> {
   SyncTombstonesCompanion copyWith(
       {Value<String>? category,
       Value<String>? key,
-      Value<int>? updatedAt,
-      Value<String>? updatedBy,
+      Value<int>? versionPhysical,
+      Value<int>? versionCounter,
+      Value<String>? deviceId,
+      Value<int>? deletedAt,
       Value<int>? rowid}) {
     return SyncTombstonesCompanion(
       category: category ?? this.category,
       key: key ?? this.key,
-      updatedAt: updatedAt ?? this.updatedAt,
-      updatedBy: updatedBy ?? this.updatedBy,
+      versionPhysical: versionPhysical ?? this.versionPhysical,
+      versionCounter: versionCounter ?? this.versionCounter,
+      deviceId: deviceId ?? this.deviceId,
+      deletedAt: deletedAt ?? this.deletedAt,
       rowid: rowid ?? this.rowid,
     );
   }
@@ -1786,11 +2025,17 @@ class SyncTombstonesCompanion extends UpdateCompanion<SyncTombstonesData> {
     if (key.present) {
       map['key'] = Variable<String>(key.value);
     }
-    if (updatedAt.present) {
-      map['updatedAt'] = Variable<int>(updatedAt.value);
+    if (versionPhysical.present) {
+      map['versionPhysical'] = Variable<int>(versionPhysical.value);
     }
-    if (updatedBy.present) {
-      map['updatedBy'] = Variable<String>(updatedBy.value);
+    if (versionCounter.present) {
+      map['versionCounter'] = Variable<int>(versionCounter.value);
+    }
+    if (deviceId.present) {
+      map['deviceId'] = Variable<String>(deviceId.value);
+    }
+    if (deletedAt.present) {
+      map['deletedAt'] = Variable<int>(deletedAt.value);
     }
     if (rowid.present) {
       map['rowid'] = Variable<int>(rowid.value);
@@ -1803,8 +2048,10 @@ class SyncTombstonesCompanion extends UpdateCompanion<SyncTombstonesData> {
     return (StringBuffer('SyncTombstonesCompanion(')
           ..write('category: $category, ')
           ..write('key: $key, ')
-          ..write('updatedAt: $updatedAt, ')
-          ..write('updatedBy: $updatedBy, ')
+          ..write('versionPhysical: $versionPhysical, ')
+          ..write('versionCounter: $versionCounter, ')
+          ..write('deviceId: $deviceId, ')
+          ..write('deletedAt: $deletedAt, ')
           ..write('rowid: $rowid')
           ..write(')'))
         .toString();
@@ -1904,6 +2151,18 @@ class PlayEvents extends Table with TableInfo<PlayEvents, PlayEventsData> {
       requiredDuringInsert: false,
       $customConstraints: 'NOT NULL DEFAULT \'\'',
       defaultValue: const CustomExpression('\'\''));
+  late final GeneratedColumn<int> versionPhysical = GeneratedColumn<int>(
+      'versionPhysical', aliasedName, false,
+      type: DriftSqlType.int,
+      requiredDuringInsert: false,
+      $customConstraints: 'NOT NULL DEFAULT 0',
+      defaultValue: const CustomExpression('0'));
+  late final GeneratedColumn<int> versionCounter = GeneratedColumn<int>(
+      'versionCounter', aliasedName, false,
+      type: DriftSqlType.int,
+      requiredDuringInsert: false,
+      $customConstraints: 'NOT NULL DEFAULT 0',
+      defaultValue: const CustomExpression('0'));
   @override
   List<GeneratedColumn> get $columns => [
         id,
@@ -1921,7 +2180,9 @@ class PlayEvents extends Table with TableInfo<PlayEvents, PlayEventsData> {
         maxPositionMs,
         endReason,
         syncKey,
-        originDeviceId
+        originDeviceId,
+        versionPhysical,
+        versionCounter
       ];
   @override
   String get aliasedName => _alias ?? actualTableName;
@@ -1966,6 +2227,10 @@ class PlayEvents extends Table with TableInfo<PlayEvents, PlayEventsData> {
           .read(DriftSqlType.string, data['${effectivePrefix}syncKey']),
       originDeviceId: attachedDatabase.typeMapping
           .read(DriftSqlType.string, data['${effectivePrefix}originDeviceId'])!,
+      versionPhysical: attachedDatabase.typeMapping
+          .read(DriftSqlType.int, data['${effectivePrefix}versionPhysical'])!,
+      versionCounter: attachedDatabase.typeMapping
+          .read(DriftSqlType.int, data['${effectivePrefix}versionCounter'])!,
     );
   }
 
@@ -1995,6 +2260,8 @@ class PlayEventsData extends DataClass implements Insertable<PlayEventsData> {
   final String? endReason;
   final String? syncKey;
   final String originDeviceId;
+  final int versionPhysical;
+  final int versionCounter;
   const PlayEventsData(
       {required this.id,
       required this.sourceKey,
@@ -2011,7 +2278,9 @@ class PlayEventsData extends DataClass implements Insertable<PlayEventsData> {
       required this.maxPositionMs,
       this.endReason,
       this.syncKey,
-      required this.originDeviceId});
+      required this.originDeviceId,
+      required this.versionPhysical,
+      required this.versionCounter});
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
     final map = <String, Expression>{};
@@ -2041,6 +2310,8 @@ class PlayEventsData extends DataClass implements Insertable<PlayEventsData> {
       map['syncKey'] = Variable<String>(syncKey);
     }
     map['originDeviceId'] = Variable<String>(originDeviceId);
+    map['versionPhysical'] = Variable<int>(versionPhysical);
+    map['versionCounter'] = Variable<int>(versionCounter);
     return map;
   }
 
@@ -2072,6 +2343,8 @@ class PlayEventsData extends DataClass implements Insertable<PlayEventsData> {
           ? const Value.absent()
           : Value(syncKey),
       originDeviceId: Value(originDeviceId),
+      versionPhysical: Value(versionPhysical),
+      versionCounter: Value(versionCounter),
     );
   }
 
@@ -2095,6 +2368,8 @@ class PlayEventsData extends DataClass implements Insertable<PlayEventsData> {
       endReason: serializer.fromJson<String?>(json['endReason']),
       syncKey: serializer.fromJson<String?>(json['syncKey']),
       originDeviceId: serializer.fromJson<String>(json['originDeviceId']),
+      versionPhysical: serializer.fromJson<int>(json['versionPhysical']),
+      versionCounter: serializer.fromJson<int>(json['versionCounter']),
     );
   }
   @override
@@ -2117,6 +2392,8 @@ class PlayEventsData extends DataClass implements Insertable<PlayEventsData> {
       'endReason': serializer.toJson<String?>(endReason),
       'syncKey': serializer.toJson<String?>(syncKey),
       'originDeviceId': serializer.toJson<String>(originDeviceId),
+      'versionPhysical': serializer.toJson<int>(versionPhysical),
+      'versionCounter': serializer.toJson<int>(versionCounter),
     };
   }
 
@@ -2136,7 +2413,9 @@ class PlayEventsData extends DataClass implements Insertable<PlayEventsData> {
           int? maxPositionMs,
           Value<String?> endReason = const Value.absent(),
           Value<String?> syncKey = const Value.absent(),
-          String? originDeviceId}) =>
+          String? originDeviceId,
+          int? versionPhysical,
+          int? versionCounter}) =>
       PlayEventsData(
         id: id ?? this.id,
         sourceKey: sourceKey ?? this.sourceKey,
@@ -2154,6 +2433,8 @@ class PlayEventsData extends DataClass implements Insertable<PlayEventsData> {
         endReason: endReason.present ? endReason.value : this.endReason,
         syncKey: syncKey.present ? syncKey.value : this.syncKey,
         originDeviceId: originDeviceId ?? this.originDeviceId,
+        versionPhysical: versionPhysical ?? this.versionPhysical,
+        versionCounter: versionCounter ?? this.versionCounter,
       );
   PlayEventsData copyWithCompanion(PlayEventsCompanion data) {
     return PlayEventsData(
@@ -2179,6 +2460,12 @@ class PlayEventsData extends DataClass implements Insertable<PlayEventsData> {
       originDeviceId: data.originDeviceId.present
           ? data.originDeviceId.value
           : this.originDeviceId,
+      versionPhysical: data.versionPhysical.present
+          ? data.versionPhysical.value
+          : this.versionPhysical,
+      versionCounter: data.versionCounter.present
+          ? data.versionCounter.value
+          : this.versionCounter,
     );
   }
 
@@ -2200,7 +2487,9 @@ class PlayEventsData extends DataClass implements Insertable<PlayEventsData> {
           ..write('maxPositionMs: $maxPositionMs, ')
           ..write('endReason: $endReason, ')
           ..write('syncKey: $syncKey, ')
-          ..write('originDeviceId: $originDeviceId')
+          ..write('originDeviceId: $originDeviceId, ')
+          ..write('versionPhysical: $versionPhysical, ')
+          ..write('versionCounter: $versionCounter')
           ..write(')'))
         .toString();
   }
@@ -2222,7 +2511,9 @@ class PlayEventsData extends DataClass implements Insertable<PlayEventsData> {
       maxPositionMs,
       endReason,
       syncKey,
-      originDeviceId);
+      originDeviceId,
+      versionPhysical,
+      versionCounter);
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
@@ -2242,7 +2533,9 @@ class PlayEventsData extends DataClass implements Insertable<PlayEventsData> {
           other.maxPositionMs == this.maxPositionMs &&
           other.endReason == this.endReason &&
           other.syncKey == this.syncKey &&
-          other.originDeviceId == this.originDeviceId);
+          other.originDeviceId == this.originDeviceId &&
+          other.versionPhysical == this.versionPhysical &&
+          other.versionCounter == this.versionCounter);
 }
 
 class PlayEventsCompanion extends UpdateCompanion<PlayEventsData> {
@@ -2262,6 +2555,8 @@ class PlayEventsCompanion extends UpdateCompanion<PlayEventsData> {
   final Value<String?> endReason;
   final Value<String?> syncKey;
   final Value<String> originDeviceId;
+  final Value<int> versionPhysical;
+  final Value<int> versionCounter;
   const PlayEventsCompanion({
     this.id = const Value.absent(),
     this.sourceKey = const Value.absent(),
@@ -2279,6 +2574,8 @@ class PlayEventsCompanion extends UpdateCompanion<PlayEventsData> {
     this.endReason = const Value.absent(),
     this.syncKey = const Value.absent(),
     this.originDeviceId = const Value.absent(),
+    this.versionPhysical = const Value.absent(),
+    this.versionCounter = const Value.absent(),
   });
   PlayEventsCompanion.insert({
     this.id = const Value.absent(),
@@ -2297,6 +2594,8 @@ class PlayEventsCompanion extends UpdateCompanion<PlayEventsData> {
     this.endReason = const Value.absent(),
     this.syncKey = const Value.absent(),
     this.originDeviceId = const Value.absent(),
+    this.versionPhysical = const Value.absent(),
+    this.versionCounter = const Value.absent(),
   })  : sourceKey = Value(sourceKey),
         songId = Value(songId),
         startedAt = Value(startedAt);
@@ -2317,6 +2616,8 @@ class PlayEventsCompanion extends UpdateCompanion<PlayEventsData> {
     Expression<String>? endReason,
     Expression<String>? syncKey,
     Expression<String>? originDeviceId,
+    Expression<int>? versionPhysical,
+    Expression<int>? versionCounter,
   }) {
     return RawValuesInsertable({
       if (id != null) 'id': id,
@@ -2335,6 +2636,8 @@ class PlayEventsCompanion extends UpdateCompanion<PlayEventsData> {
       if (endReason != null) 'endReason': endReason,
       if (syncKey != null) 'syncKey': syncKey,
       if (originDeviceId != null) 'originDeviceId': originDeviceId,
+      if (versionPhysical != null) 'versionPhysical': versionPhysical,
+      if (versionCounter != null) 'versionCounter': versionCounter,
     });
   }
 
@@ -2354,7 +2657,9 @@ class PlayEventsCompanion extends UpdateCompanion<PlayEventsData> {
       Value<int>? maxPositionMs,
       Value<String?>? endReason,
       Value<String?>? syncKey,
-      Value<String>? originDeviceId}) {
+      Value<String>? originDeviceId,
+      Value<int>? versionPhysical,
+      Value<int>? versionCounter}) {
     return PlayEventsCompanion(
       id: id ?? this.id,
       sourceKey: sourceKey ?? this.sourceKey,
@@ -2372,6 +2677,8 @@ class PlayEventsCompanion extends UpdateCompanion<PlayEventsData> {
       endReason: endReason ?? this.endReason,
       syncKey: syncKey ?? this.syncKey,
       originDeviceId: originDeviceId ?? this.originDeviceId,
+      versionPhysical: versionPhysical ?? this.versionPhysical,
+      versionCounter: versionCounter ?? this.versionCounter,
     );
   }
 
@@ -2426,6 +2733,12 @@ class PlayEventsCompanion extends UpdateCompanion<PlayEventsData> {
     if (originDeviceId.present) {
       map['originDeviceId'] = Variable<String>(originDeviceId.value);
     }
+    if (versionPhysical.present) {
+      map['versionPhysical'] = Variable<int>(versionPhysical.value);
+    }
+    if (versionCounter.present) {
+      map['versionCounter'] = Variable<int>(versionCounter.value);
+    }
     return map;
   }
 
@@ -2447,7 +2760,694 @@ class PlayEventsCompanion extends UpdateCompanion<PlayEventsData> {
           ..write('maxPositionMs: $maxPositionMs, ')
           ..write('endReason: $endReason, ')
           ..write('syncKey: $syncKey, ')
-          ..write('originDeviceId: $originDeviceId')
+          ..write('originDeviceId: $originDeviceId, ')
+          ..write('versionPhysical: $versionPhysical, ')
+          ..write('versionCounter: $versionCounter')
+          ..write(')'))
+        .toString();
+  }
+}
+
+class Downloads extends Table with TableInfo<Downloads, DownloadsData> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  Downloads(this.attachedDatabase, [this._alias]);
+  late final GeneratedColumn<int> id = GeneratedColumn<int>(
+      'id', aliasedName, false,
+      hasAutoIncrement: true,
+      type: DriftSqlType.int,
+      requiredDuringInsert: false,
+      $customConstraints: 'NOT NULL PRIMARY KEY AUTOINCREMENT');
+  late final GeneratedColumn<String> originSourceKey = GeneratedColumn<String>(
+      'originSourceKey', aliasedName, false,
+      type: DriftSqlType.string,
+      requiredDuringInsert: true,
+      $customConstraints: 'NOT NULL');
+  late final GeneratedColumn<String> originSongId = GeneratedColumn<String>(
+      'originSongId', aliasedName, false,
+      type: DriftSqlType.string,
+      requiredDuringInsert: true,
+      $customConstraints: 'NOT NULL');
+  late final GeneratedColumn<String> title = GeneratedColumn<String>(
+      'title', aliasedName, false,
+      type: DriftSqlType.string,
+      requiredDuringInsert: true,
+      $customConstraints: 'NOT NULL');
+  late final GeneratedColumn<String> artist = GeneratedColumn<String>(
+      'artist', aliasedName, false,
+      type: DriftSqlType.string,
+      requiredDuringInsert: false,
+      $customConstraints: 'NOT NULL DEFAULT \'\'',
+      defaultValue: const CustomExpression('\'\''));
+  late final GeneratedColumn<String> album = GeneratedColumn<String>(
+      'album', aliasedName, false,
+      type: DriftSqlType.string,
+      requiredDuringInsert: false,
+      $customConstraints: 'NOT NULL DEFAULT \'\'',
+      defaultValue: const CustomExpression('\'\''));
+  late final GeneratedColumn<String> coverUrl = GeneratedColumn<String>(
+      'coverUrl', aliasedName, true,
+      type: DriftSqlType.string,
+      requiredDuringInsert: false,
+      $customConstraints: 'NULL');
+  late final GeneratedColumn<int> durationMs = GeneratedColumn<int>(
+      'durationMs', aliasedName, true,
+      type: DriftSqlType.int,
+      requiredDuringInsert: false,
+      $customConstraints: 'NULL');
+  late final GeneratedColumn<String> raw = GeneratedColumn<String>(
+      'raw', aliasedName, false,
+      type: DriftSqlType.string,
+      requiredDuringInsert: false,
+      $customConstraints: 'NOT NULL DEFAULT \'{}\'',
+      defaultValue: const CustomExpression('\'{}\''));
+  late final GeneratedColumn<String> quality = GeneratedColumn<String>(
+      'quality', aliasedName, false,
+      type: DriftSqlType.string,
+      requiredDuringInsert: false,
+      $customConstraints: 'NOT NULL DEFAULT \'\'',
+      defaultValue: const CustomExpression('\'\''));
+  late final GeneratedColumn<String> filePath = GeneratedColumn<String>(
+      'filePath', aliasedName, true,
+      type: DriftSqlType.string,
+      requiredDuringInsert: false,
+      $customConstraints: 'NULL');
+  late final GeneratedColumn<int> sizeBytes = GeneratedColumn<int>(
+      'sizeBytes', aliasedName, false,
+      type: DriftSqlType.int,
+      requiredDuringInsert: false,
+      $customConstraints: 'NOT NULL DEFAULT 0',
+      defaultValue: const CustomExpression('0'));
+  late final GeneratedColumn<String> lyricPath = GeneratedColumn<String>(
+      'lyricPath', aliasedName, true,
+      type: DriftSqlType.string,
+      requiredDuringInsert: false,
+      $customConstraints: 'NULL');
+  late final GeneratedColumn<String> coverPath = GeneratedColumn<String>(
+      'coverPath', aliasedName, true,
+      type: DriftSqlType.string,
+      requiredDuringInsert: false,
+      $customConstraints: 'NULL');
+  late final GeneratedColumn<String> publicUri = GeneratedColumn<String>(
+      'publicUri', aliasedName, true,
+      type: DriftSqlType.string,
+      requiredDuringInsert: false,
+      $customConstraints: 'NULL');
+  late final GeneratedColumn<int> imported = GeneratedColumn<int>(
+      'imported', aliasedName, false,
+      type: DriftSqlType.int,
+      requiredDuringInsert: false,
+      $customConstraints: 'NOT NULL DEFAULT 0 CHECK (imported IN (0, 1))',
+      defaultValue: const CustomExpression('0'));
+  late final GeneratedColumn<int> downloadedAt = GeneratedColumn<int>(
+      'downloadedAt', aliasedName, false,
+      type: DriftSqlType.int,
+      requiredDuringInsert: true,
+      $customConstraints: 'NOT NULL');
+  @override
+  List<GeneratedColumn> get $columns => [
+        id,
+        originSourceKey,
+        originSongId,
+        title,
+        artist,
+        album,
+        coverUrl,
+        durationMs,
+        raw,
+        quality,
+        filePath,
+        sizeBytes,
+        lyricPath,
+        coverPath,
+        publicUri,
+        imported,
+        downloadedAt
+      ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'downloads';
+  @override
+  Set<GeneratedColumn> get $primaryKey => {id};
+  @override
+  List<Set<GeneratedColumn>> get uniqueKeys => [
+        {originSourceKey, originSongId},
+      ];
+  @override
+  DownloadsData map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return DownloadsData(
+      id: attachedDatabase.typeMapping
+          .read(DriftSqlType.int, data['${effectivePrefix}id'])!,
+      originSourceKey: attachedDatabase.typeMapping.read(
+          DriftSqlType.string, data['${effectivePrefix}originSourceKey'])!,
+      originSongId: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}originSongId'])!,
+      title: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}title'])!,
+      artist: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}artist'])!,
+      album: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}album'])!,
+      coverUrl: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}coverUrl']),
+      durationMs: attachedDatabase.typeMapping
+          .read(DriftSqlType.int, data['${effectivePrefix}durationMs']),
+      raw: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}raw'])!,
+      quality: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}quality'])!,
+      filePath: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}filePath']),
+      sizeBytes: attachedDatabase.typeMapping
+          .read(DriftSqlType.int, data['${effectivePrefix}sizeBytes'])!,
+      lyricPath: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}lyricPath']),
+      coverPath: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}coverPath']),
+      publicUri: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}publicUri']),
+      imported: attachedDatabase.typeMapping
+          .read(DriftSqlType.int, data['${effectivePrefix}imported'])!,
+      downloadedAt: attachedDatabase.typeMapping
+          .read(DriftSqlType.int, data['${effectivePrefix}downloadedAt'])!,
+    );
+  }
+
+  @override
+  Downloads createAlias(String alias) {
+    return Downloads(attachedDatabase, alias);
+  }
+
+  @override
+  List<String> get customConstraints =>
+      const ['UNIQUE(originSourceKey, originSongId)'];
+  @override
+  bool get dontWriteConstraints => true;
+}
+
+class DownloadsData extends DataClass implements Insertable<DownloadsData> {
+  final int id;
+  final String originSourceKey;
+  final String originSongId;
+  final String title;
+  final String artist;
+  final String album;
+  final String? coverUrl;
+  final int? durationMs;
+  final String raw;
+  final String quality;
+  final String? filePath;
+  final int sizeBytes;
+  final String? lyricPath;
+  final String? coverPath;
+  final String? publicUri;
+  final int imported;
+  final int downloadedAt;
+  const DownloadsData(
+      {required this.id,
+      required this.originSourceKey,
+      required this.originSongId,
+      required this.title,
+      required this.artist,
+      required this.album,
+      this.coverUrl,
+      this.durationMs,
+      required this.raw,
+      required this.quality,
+      this.filePath,
+      required this.sizeBytes,
+      this.lyricPath,
+      this.coverPath,
+      this.publicUri,
+      required this.imported,
+      required this.downloadedAt});
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['id'] = Variable<int>(id);
+    map['originSourceKey'] = Variable<String>(originSourceKey);
+    map['originSongId'] = Variable<String>(originSongId);
+    map['title'] = Variable<String>(title);
+    map['artist'] = Variable<String>(artist);
+    map['album'] = Variable<String>(album);
+    if (!nullToAbsent || coverUrl != null) {
+      map['coverUrl'] = Variable<String>(coverUrl);
+    }
+    if (!nullToAbsent || durationMs != null) {
+      map['durationMs'] = Variable<int>(durationMs);
+    }
+    map['raw'] = Variable<String>(raw);
+    map['quality'] = Variable<String>(quality);
+    if (!nullToAbsent || filePath != null) {
+      map['filePath'] = Variable<String>(filePath);
+    }
+    map['sizeBytes'] = Variable<int>(sizeBytes);
+    if (!nullToAbsent || lyricPath != null) {
+      map['lyricPath'] = Variable<String>(lyricPath);
+    }
+    if (!nullToAbsent || coverPath != null) {
+      map['coverPath'] = Variable<String>(coverPath);
+    }
+    if (!nullToAbsent || publicUri != null) {
+      map['publicUri'] = Variable<String>(publicUri);
+    }
+    map['imported'] = Variable<int>(imported);
+    map['downloadedAt'] = Variable<int>(downloadedAt);
+    return map;
+  }
+
+  DownloadsCompanion toCompanion(bool nullToAbsent) {
+    return DownloadsCompanion(
+      id: Value(id),
+      originSourceKey: Value(originSourceKey),
+      originSongId: Value(originSongId),
+      title: Value(title),
+      artist: Value(artist),
+      album: Value(album),
+      coverUrl: coverUrl == null && nullToAbsent
+          ? const Value.absent()
+          : Value(coverUrl),
+      durationMs: durationMs == null && nullToAbsent
+          ? const Value.absent()
+          : Value(durationMs),
+      raw: Value(raw),
+      quality: Value(quality),
+      filePath: filePath == null && nullToAbsent
+          ? const Value.absent()
+          : Value(filePath),
+      sizeBytes: Value(sizeBytes),
+      lyricPath: lyricPath == null && nullToAbsent
+          ? const Value.absent()
+          : Value(lyricPath),
+      coverPath: coverPath == null && nullToAbsent
+          ? const Value.absent()
+          : Value(coverPath),
+      publicUri: publicUri == null && nullToAbsent
+          ? const Value.absent()
+          : Value(publicUri),
+      imported: Value(imported),
+      downloadedAt: Value(downloadedAt),
+    );
+  }
+
+  factory DownloadsData.fromJson(Map<String, dynamic> json,
+      {ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return DownloadsData(
+      id: serializer.fromJson<int>(json['id']),
+      originSourceKey: serializer.fromJson<String>(json['originSourceKey']),
+      originSongId: serializer.fromJson<String>(json['originSongId']),
+      title: serializer.fromJson<String>(json['title']),
+      artist: serializer.fromJson<String>(json['artist']),
+      album: serializer.fromJson<String>(json['album']),
+      coverUrl: serializer.fromJson<String?>(json['coverUrl']),
+      durationMs: serializer.fromJson<int?>(json['durationMs']),
+      raw: serializer.fromJson<String>(json['raw']),
+      quality: serializer.fromJson<String>(json['quality']),
+      filePath: serializer.fromJson<String?>(json['filePath']),
+      sizeBytes: serializer.fromJson<int>(json['sizeBytes']),
+      lyricPath: serializer.fromJson<String?>(json['lyricPath']),
+      coverPath: serializer.fromJson<String?>(json['coverPath']),
+      publicUri: serializer.fromJson<String?>(json['publicUri']),
+      imported: serializer.fromJson<int>(json['imported']),
+      downloadedAt: serializer.fromJson<int>(json['downloadedAt']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'id': serializer.toJson<int>(id),
+      'originSourceKey': serializer.toJson<String>(originSourceKey),
+      'originSongId': serializer.toJson<String>(originSongId),
+      'title': serializer.toJson<String>(title),
+      'artist': serializer.toJson<String>(artist),
+      'album': serializer.toJson<String>(album),
+      'coverUrl': serializer.toJson<String?>(coverUrl),
+      'durationMs': serializer.toJson<int?>(durationMs),
+      'raw': serializer.toJson<String>(raw),
+      'quality': serializer.toJson<String>(quality),
+      'filePath': serializer.toJson<String?>(filePath),
+      'sizeBytes': serializer.toJson<int>(sizeBytes),
+      'lyricPath': serializer.toJson<String?>(lyricPath),
+      'coverPath': serializer.toJson<String?>(coverPath),
+      'publicUri': serializer.toJson<String?>(publicUri),
+      'imported': serializer.toJson<int>(imported),
+      'downloadedAt': serializer.toJson<int>(downloadedAt),
+    };
+  }
+
+  DownloadsData copyWith(
+          {int? id,
+          String? originSourceKey,
+          String? originSongId,
+          String? title,
+          String? artist,
+          String? album,
+          Value<String?> coverUrl = const Value.absent(),
+          Value<int?> durationMs = const Value.absent(),
+          String? raw,
+          String? quality,
+          Value<String?> filePath = const Value.absent(),
+          int? sizeBytes,
+          Value<String?> lyricPath = const Value.absent(),
+          Value<String?> coverPath = const Value.absent(),
+          Value<String?> publicUri = const Value.absent(),
+          int? imported,
+          int? downloadedAt}) =>
+      DownloadsData(
+        id: id ?? this.id,
+        originSourceKey: originSourceKey ?? this.originSourceKey,
+        originSongId: originSongId ?? this.originSongId,
+        title: title ?? this.title,
+        artist: artist ?? this.artist,
+        album: album ?? this.album,
+        coverUrl: coverUrl.present ? coverUrl.value : this.coverUrl,
+        durationMs: durationMs.present ? durationMs.value : this.durationMs,
+        raw: raw ?? this.raw,
+        quality: quality ?? this.quality,
+        filePath: filePath.present ? filePath.value : this.filePath,
+        sizeBytes: sizeBytes ?? this.sizeBytes,
+        lyricPath: lyricPath.present ? lyricPath.value : this.lyricPath,
+        coverPath: coverPath.present ? coverPath.value : this.coverPath,
+        publicUri: publicUri.present ? publicUri.value : this.publicUri,
+        imported: imported ?? this.imported,
+        downloadedAt: downloadedAt ?? this.downloadedAt,
+      );
+  DownloadsData copyWithCompanion(DownloadsCompanion data) {
+    return DownloadsData(
+      id: data.id.present ? data.id.value : this.id,
+      originSourceKey: data.originSourceKey.present
+          ? data.originSourceKey.value
+          : this.originSourceKey,
+      originSongId: data.originSongId.present
+          ? data.originSongId.value
+          : this.originSongId,
+      title: data.title.present ? data.title.value : this.title,
+      artist: data.artist.present ? data.artist.value : this.artist,
+      album: data.album.present ? data.album.value : this.album,
+      coverUrl: data.coverUrl.present ? data.coverUrl.value : this.coverUrl,
+      durationMs:
+          data.durationMs.present ? data.durationMs.value : this.durationMs,
+      raw: data.raw.present ? data.raw.value : this.raw,
+      quality: data.quality.present ? data.quality.value : this.quality,
+      filePath: data.filePath.present ? data.filePath.value : this.filePath,
+      sizeBytes: data.sizeBytes.present ? data.sizeBytes.value : this.sizeBytes,
+      lyricPath: data.lyricPath.present ? data.lyricPath.value : this.lyricPath,
+      coverPath: data.coverPath.present ? data.coverPath.value : this.coverPath,
+      publicUri: data.publicUri.present ? data.publicUri.value : this.publicUri,
+      imported: data.imported.present ? data.imported.value : this.imported,
+      downloadedAt: data.downloadedAt.present
+          ? data.downloadedAt.value
+          : this.downloadedAt,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('DownloadsData(')
+          ..write('id: $id, ')
+          ..write('originSourceKey: $originSourceKey, ')
+          ..write('originSongId: $originSongId, ')
+          ..write('title: $title, ')
+          ..write('artist: $artist, ')
+          ..write('album: $album, ')
+          ..write('coverUrl: $coverUrl, ')
+          ..write('durationMs: $durationMs, ')
+          ..write('raw: $raw, ')
+          ..write('quality: $quality, ')
+          ..write('filePath: $filePath, ')
+          ..write('sizeBytes: $sizeBytes, ')
+          ..write('lyricPath: $lyricPath, ')
+          ..write('coverPath: $coverPath, ')
+          ..write('publicUri: $publicUri, ')
+          ..write('imported: $imported, ')
+          ..write('downloadedAt: $downloadedAt')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(
+      id,
+      originSourceKey,
+      originSongId,
+      title,
+      artist,
+      album,
+      coverUrl,
+      durationMs,
+      raw,
+      quality,
+      filePath,
+      sizeBytes,
+      lyricPath,
+      coverPath,
+      publicUri,
+      imported,
+      downloadedAt);
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is DownloadsData &&
+          other.id == this.id &&
+          other.originSourceKey == this.originSourceKey &&
+          other.originSongId == this.originSongId &&
+          other.title == this.title &&
+          other.artist == this.artist &&
+          other.album == this.album &&
+          other.coverUrl == this.coverUrl &&
+          other.durationMs == this.durationMs &&
+          other.raw == this.raw &&
+          other.quality == this.quality &&
+          other.filePath == this.filePath &&
+          other.sizeBytes == this.sizeBytes &&
+          other.lyricPath == this.lyricPath &&
+          other.coverPath == this.coverPath &&
+          other.publicUri == this.publicUri &&
+          other.imported == this.imported &&
+          other.downloadedAt == this.downloadedAt);
+}
+
+class DownloadsCompanion extends UpdateCompanion<DownloadsData> {
+  final Value<int> id;
+  final Value<String> originSourceKey;
+  final Value<String> originSongId;
+  final Value<String> title;
+  final Value<String> artist;
+  final Value<String> album;
+  final Value<String?> coverUrl;
+  final Value<int?> durationMs;
+  final Value<String> raw;
+  final Value<String> quality;
+  final Value<String?> filePath;
+  final Value<int> sizeBytes;
+  final Value<String?> lyricPath;
+  final Value<String?> coverPath;
+  final Value<String?> publicUri;
+  final Value<int> imported;
+  final Value<int> downloadedAt;
+  const DownloadsCompanion({
+    this.id = const Value.absent(),
+    this.originSourceKey = const Value.absent(),
+    this.originSongId = const Value.absent(),
+    this.title = const Value.absent(),
+    this.artist = const Value.absent(),
+    this.album = const Value.absent(),
+    this.coverUrl = const Value.absent(),
+    this.durationMs = const Value.absent(),
+    this.raw = const Value.absent(),
+    this.quality = const Value.absent(),
+    this.filePath = const Value.absent(),
+    this.sizeBytes = const Value.absent(),
+    this.lyricPath = const Value.absent(),
+    this.coverPath = const Value.absent(),
+    this.publicUri = const Value.absent(),
+    this.imported = const Value.absent(),
+    this.downloadedAt = const Value.absent(),
+  });
+  DownloadsCompanion.insert({
+    this.id = const Value.absent(),
+    required String originSourceKey,
+    required String originSongId,
+    required String title,
+    this.artist = const Value.absent(),
+    this.album = const Value.absent(),
+    this.coverUrl = const Value.absent(),
+    this.durationMs = const Value.absent(),
+    this.raw = const Value.absent(),
+    this.quality = const Value.absent(),
+    this.filePath = const Value.absent(),
+    this.sizeBytes = const Value.absent(),
+    this.lyricPath = const Value.absent(),
+    this.coverPath = const Value.absent(),
+    this.publicUri = const Value.absent(),
+    this.imported = const Value.absent(),
+    required int downloadedAt,
+  })  : originSourceKey = Value(originSourceKey),
+        originSongId = Value(originSongId),
+        title = Value(title),
+        downloadedAt = Value(downloadedAt);
+  static Insertable<DownloadsData> custom({
+    Expression<int>? id,
+    Expression<String>? originSourceKey,
+    Expression<String>? originSongId,
+    Expression<String>? title,
+    Expression<String>? artist,
+    Expression<String>? album,
+    Expression<String>? coverUrl,
+    Expression<int>? durationMs,
+    Expression<String>? raw,
+    Expression<String>? quality,
+    Expression<String>? filePath,
+    Expression<int>? sizeBytes,
+    Expression<String>? lyricPath,
+    Expression<String>? coverPath,
+    Expression<String>? publicUri,
+    Expression<int>? imported,
+    Expression<int>? downloadedAt,
+  }) {
+    return RawValuesInsertable({
+      if (id != null) 'id': id,
+      if (originSourceKey != null) 'originSourceKey': originSourceKey,
+      if (originSongId != null) 'originSongId': originSongId,
+      if (title != null) 'title': title,
+      if (artist != null) 'artist': artist,
+      if (album != null) 'album': album,
+      if (coverUrl != null) 'coverUrl': coverUrl,
+      if (durationMs != null) 'durationMs': durationMs,
+      if (raw != null) 'raw': raw,
+      if (quality != null) 'quality': quality,
+      if (filePath != null) 'filePath': filePath,
+      if (sizeBytes != null) 'sizeBytes': sizeBytes,
+      if (lyricPath != null) 'lyricPath': lyricPath,
+      if (coverPath != null) 'coverPath': coverPath,
+      if (publicUri != null) 'publicUri': publicUri,
+      if (imported != null) 'imported': imported,
+      if (downloadedAt != null) 'downloadedAt': downloadedAt,
+    });
+  }
+
+  DownloadsCompanion copyWith(
+      {Value<int>? id,
+      Value<String>? originSourceKey,
+      Value<String>? originSongId,
+      Value<String>? title,
+      Value<String>? artist,
+      Value<String>? album,
+      Value<String?>? coverUrl,
+      Value<int?>? durationMs,
+      Value<String>? raw,
+      Value<String>? quality,
+      Value<String?>? filePath,
+      Value<int>? sizeBytes,
+      Value<String?>? lyricPath,
+      Value<String?>? coverPath,
+      Value<String?>? publicUri,
+      Value<int>? imported,
+      Value<int>? downloadedAt}) {
+    return DownloadsCompanion(
+      id: id ?? this.id,
+      originSourceKey: originSourceKey ?? this.originSourceKey,
+      originSongId: originSongId ?? this.originSongId,
+      title: title ?? this.title,
+      artist: artist ?? this.artist,
+      album: album ?? this.album,
+      coverUrl: coverUrl ?? this.coverUrl,
+      durationMs: durationMs ?? this.durationMs,
+      raw: raw ?? this.raw,
+      quality: quality ?? this.quality,
+      filePath: filePath ?? this.filePath,
+      sizeBytes: sizeBytes ?? this.sizeBytes,
+      lyricPath: lyricPath ?? this.lyricPath,
+      coverPath: coverPath ?? this.coverPath,
+      publicUri: publicUri ?? this.publicUri,
+      imported: imported ?? this.imported,
+      downloadedAt: downloadedAt ?? this.downloadedAt,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (id.present) {
+      map['id'] = Variable<int>(id.value);
+    }
+    if (originSourceKey.present) {
+      map['originSourceKey'] = Variable<String>(originSourceKey.value);
+    }
+    if (originSongId.present) {
+      map['originSongId'] = Variable<String>(originSongId.value);
+    }
+    if (title.present) {
+      map['title'] = Variable<String>(title.value);
+    }
+    if (artist.present) {
+      map['artist'] = Variable<String>(artist.value);
+    }
+    if (album.present) {
+      map['album'] = Variable<String>(album.value);
+    }
+    if (coverUrl.present) {
+      map['coverUrl'] = Variable<String>(coverUrl.value);
+    }
+    if (durationMs.present) {
+      map['durationMs'] = Variable<int>(durationMs.value);
+    }
+    if (raw.present) {
+      map['raw'] = Variable<String>(raw.value);
+    }
+    if (quality.present) {
+      map['quality'] = Variable<String>(quality.value);
+    }
+    if (filePath.present) {
+      map['filePath'] = Variable<String>(filePath.value);
+    }
+    if (sizeBytes.present) {
+      map['sizeBytes'] = Variable<int>(sizeBytes.value);
+    }
+    if (lyricPath.present) {
+      map['lyricPath'] = Variable<String>(lyricPath.value);
+    }
+    if (coverPath.present) {
+      map['coverPath'] = Variable<String>(coverPath.value);
+    }
+    if (publicUri.present) {
+      map['publicUri'] = Variable<String>(publicUri.value);
+    }
+    if (imported.present) {
+      map['imported'] = Variable<int>(imported.value);
+    }
+    if (downloadedAt.present) {
+      map['downloadedAt'] = Variable<int>(downloadedAt.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('DownloadsCompanion(')
+          ..write('id: $id, ')
+          ..write('originSourceKey: $originSourceKey, ')
+          ..write('originSongId: $originSongId, ')
+          ..write('title: $title, ')
+          ..write('artist: $artist, ')
+          ..write('album: $album, ')
+          ..write('coverUrl: $coverUrl, ')
+          ..write('durationMs: $durationMs, ')
+          ..write('raw: $raw, ')
+          ..write('quality: $quality, ')
+          ..write('filePath: $filePath, ')
+          ..write('sizeBytes: $sizeBytes, ')
+          ..write('lyricPath: $lyricPath, ')
+          ..write('coverPath: $coverPath, ')
+          ..write('publicUri: $publicUri, ')
+          ..write('imported: $imported, ')
+          ..write('downloadedAt: $downloadedAt')
           ..write(')'))
         .toString();
   }
@@ -2461,6 +3461,7 @@ class DatabaseAtV1 extends GeneratedDatabase {
   late final PlaylistTracks playlistTracks = PlaylistTracks(this);
   late final SyncTombstones syncTombstones = SyncTombstones(this);
   late final PlayEvents playEvents = PlayEvents(this);
+  late final Downloads downloads = Downloads(this);
   late final Index idxPlayContextsLastPlayedAt = Index(
       'idx_play_contexts_lastPlayedAt',
       'CREATE INDEX idx_play_contexts_lastPlayedAt ON play_contexts (lastPlayedAt)');
@@ -2476,6 +3477,9 @@ class DatabaseAtV1 extends GeneratedDatabase {
       'CREATE INDEX idx_play_events_track ON play_events (sourceKey, songId)');
   late final Index idxPlayEventsSyncKey = Index('idx_play_events_syncKey',
       'CREATE UNIQUE INDEX idx_play_events_syncKey ON play_events (syncKey) WHERE syncKey IS NOT NULL');
+  late final Index idxDownloadsDownloadedAt = Index(
+      'idx_downloads_downloadedAt',
+      'CREATE INDEX idx_downloads_downloadedAt ON downloads (downloadedAt)');
   @override
   Iterable<TableInfo<Table, Object?>> get allTables =>
       allSchemaEntities.whereType<TableInfo<Table, Object?>>();
@@ -2487,13 +3491,15 @@ class DatabaseAtV1 extends GeneratedDatabase {
         playlistTracks,
         syncTombstones,
         playEvents,
+        downloads,
         idxPlayContextsLastPlayedAt,
         idxPlayHistoryPlayedAt,
         idxPlaylistsSyncId,
         idxPlaylistTracksOrder,
         idxPlayEventsStartedAt,
         idxPlayEventsTrack,
-        idxPlayEventsSyncKey
+        idxPlayEventsSyncKey,
+        idxDownloadsDownloadedAt
       ];
   @override
   StreamQueryUpdateRules get streamUpdateRules => const StreamQueryUpdateRules(

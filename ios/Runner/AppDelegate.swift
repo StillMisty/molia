@@ -21,6 +21,27 @@ import UIKit
           result(FlutterMethodNotImplemented)
         }
       }
+
+      // 电池状态：同步调度器的省电等级判定。
+      let batteryChannel = FlutterMethodChannel(
+        name: "top.stillmisty.molia/battery",
+        binaryMessenger: controller.binaryMessenger)
+      batteryChannel.setMethodCallHandler { call, result in
+        if call.method == "snapshot" {
+          UIDevice.current.isBatteryMonitoringEnabled = true
+          let level = UIDevice.current.batteryLevel
+          let state = UIDevice.current.batteryState
+          let charging = state == .charging || state == .full
+          let payload: [String: Any] = [
+            "level": level < 0 ? -1 : Int((level * 100).rounded()),
+            "charging": charging,
+            "powerSave": ProcessInfo.processInfo.isLowPowerModeEnabled,
+          ]
+          result(payload)
+        } else {
+          result(FlutterMethodNotImplemented)
+        }
+      }
     }
 
     return super.application(application, didFinishLaunchingWithOptions: launchOptions)

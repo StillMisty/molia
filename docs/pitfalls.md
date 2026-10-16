@@ -220,7 +220,25 @@
     属预期，`AppTray` 会静默降级（只记日志），不要据此判定托盘实现坏了；
     组合根的关闭策略经 `AppTray.detectHost()` 判定宿主，无宿主时自动退回
     「关闭即退出」，不会把窗口藏成没有找回入口的状态。
-36. **Linux 桌面集成是打包资产，不是运行期代码**：`.desktop` 与 hicolor 图标在
+36. **Android 17（API 37）局域网默认阻断，且「手动填 IP」救不了权限**：
+    `targetSdk 37` 起访问局域网（UDP 单播·组播·广播的收发、对局域网地址的
+    TCP 连接）需要运行时权限 `ACCESS_LOCAL_NETWORK`，未授予时 Dart socket
+    直接抛 `SocketException`，而且**网关级阻断**——手动填对端 IP:端口同样失败。
+    因此：权限被拒时只能引导授权（`Permission.accessLocalNetwork`）或改用
+    WebDAV；「手动对端地址」只解决发现失败（AP 隔离 / 多网段 / 防火墙 / VPN）。
+    manifest 已声明该权限；LAN 传输启动前经 `LocalNetworkPermission` 过门，
+    被拒时状态记为 `permission_denied`（UI 给「授予权限」入口 + 去系统设置），
+    不再出现「开关打开但什么都没在跑」。Android 16 上该限制是 opt-in，
+    所以「模拟器/老系统能跑」不能作为验收证据。
+37. **iOS 的广播发现需要单独向 Apple 申请的 multicast entitlement**：
+    `com.apple.developer.networking.multicast` 覆盖「发送 / 接收 IP 组播与广播」，
+    必须申请获批（Multicast Networking Entitlement Request）；`Info.plist` 的
+    `NSLocalNetworkUsageDescription` 只负责隐私提示，不解决广播权限。
+    未获批 / 未接线时的正确姿态是**降级**（手动对端地址 / WebDAV），不是崩或死等。
+    另：**模拟器不需要该 entitlement，真机才需要**——模拟器上的广播「看起来正常」
+    不能作为验收证据；entitlements 文件与启用步骤见 `ios/Runner/Runner.entitlements`
+    注释（获批前不要把 `CODE_SIGN_ENTITLEMENTS` 接上去，会让签名失败）。
+38. **Linux 桌面集成是打包资产，不是运行期代码**：`.desktop` 与 hicolor 图标在
     `linux/packaging/`（`release.yml` 的 linux job 拷进 tarball，用户解压后跑
     `install.sh` 装到 `~/.local/share`）。`.desktop` 文件名必须与
     `linux/CMakeLists.txt` 的 `APPLICATION_ID` 一致（Wayland 靠 app_id ↔ 文件名
@@ -230,7 +248,7 @@
     与 hicolor 集合同源），Wayland 下该调用无效也不报错。契约由
     `test/packaging/linux_desktop_test.dart` 守住。
 
-37. **桌面歌词位置样本不能按到达时刻重设基准**：位置样本经 Dart（≤4Hz）→ 通道 →
+39. **桌面歌词位置样本不能按到达时刻重设基准**：位置样本经 Dart（≤4Hz）→ 通道 →
     原生主线程到达，投递延迟随宿主负载波动；旧实现每次采样都 `base = 样本;
     baseTime = now`，把这段抖动 1:1 变成可见回跳（忽快忽慢）。现在由
     `LyricClock` 承担时基：先按 `positionAtEpochMs`（Dart 侧「该位置生效的墙上

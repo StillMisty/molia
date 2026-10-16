@@ -2035,14 +2035,119 @@ class AppLocalizationsZh extends AppLocalizations {
   String get syncNever => '尚未同步';
 
   @override
-  String syncLastResultOk(String time, int applied) {
-    return '上次同步 $time · 应用 $applied 项';
+  String get syncOutcomeOk => '同步完成';
+
+  @override
+  String get syncOutcomeNoChanges => '无变化';
+
+  @override
+  String get syncOutcomeNoPeers => '未发现对端';
+
+  @override
+  String get syncOutcomePartial => '部分失败';
+
+  @override
+  String get syncOutcomeFailed => '同步失败';
+
+  @override
+  String get syncTriggerStartup => '启动';
+
+  @override
+  String get syncTriggerDebounce => '数据变更';
+
+  @override
+  String get syncTriggerTimer => '定时';
+
+  @override
+  String get syncTriggerIncoming => '对端推送';
+
+  @override
+  String get syncTriggerResume => '回前台';
+
+  @override
+  String get syncTriggerPause => '退后台前';
+
+  @override
+  String get syncTriggerManual => '手动';
+
+  @override
+  String get syncActivitySection => '运行状态';
+
+  @override
+  String get syncActivityTitle => '近 24 小时';
+
+  @override
+  String syncActivityRounds(int rounds, int effective, String bytes) {
+    return '触发 $rounds 轮，其中有效传输 $effective 轮，流量 $bytes';
   }
 
   @override
-  String syncLastResultFail(String error) {
-    return '上次同步失败：$error';
+  String syncActivityEnvironment(
+      String level, String network, String powerSave) {
+    return '$level · $network · $powerSave';
   }
+
+  @override
+  String get syncLevelActive => '活跃';
+
+  @override
+  String get syncLevelIdle => '空闲';
+
+  @override
+  String get syncLevelBackground => '后台';
+
+  @override
+  String get syncLevelPowerSave => '省电';
+
+  @override
+  String get syncLevelUnknown => '未运行';
+
+  @override
+  String get syncNetworkCellular => '移动数据';
+
+  @override
+  String get syncNetworkOther => 'Wi-Fi / 其它';
+
+  @override
+  String get syncPowerSaveOn => '省电模式';
+
+  @override
+  String get syncPowerSaveOff => '非省电';
+
+  @override
+  String get syncCellularPauseTitle => '移动数据下暂停自动同步';
+
+  @override
+  String get syncCellularPauseSubtitle =>
+      '关闭时移动数据下只同步设置 / 歌单 / 会话等小类别，统计与历史留到 Wi-Fi';
+
+  @override
+  String syncAppliedItems(int applied) {
+    return '应用 $applied 项';
+  }
+
+  @override
+  String syncPeerCount(int count) {
+    return '$count 个对端';
+  }
+
+  @override
+  String syncFailedCount(int count) {
+    return '$count 项失败';
+  }
+
+  @override
+  String syncBytes(String inbound, String outbound) {
+    return '↓$inbound ↑$outbound';
+  }
+
+  @override
+  String syncLastSyncAt(String time) {
+    return '上次 $time';
+  }
+
+  @override
+  String get syncRetry => '重试';
 
   @override
   String get syncContentSection => '同步内容';
@@ -2102,19 +2207,198 @@ class AppLocalizationsZh extends AppLocalizations {
   String get syncWebdavNotConfigured => '未配置';
 
   @override
+  String get syncTransportRunning => '运行中';
+
+  @override
+  String get syncTransportStopped => '未运行';
+
+  @override
+  String get syncTransportDisabled => '已关闭';
+
+  @override
+  String get syncTransportNotConfigured => '未配置';
+
+  @override
+  String get syncTransportStartFailed => '启动失败';
+
+  @override
   String get syncLogSection => '同步日志';
 
   @override
   String get syncLogEmpty => '暂无记录';
 
   @override
-  String syncLogApplied(int applied, int skipped) {
-    return '应用 $applied 项、跳过 $skipped 项';
+  String syncLogFailed(String error) {
+    return '失败：$error';
   }
 
   @override
-  String syncLogFailed(String error) {
-    return '失败：$error';
+  String get syncPeersTitle => '已配对设备';
+
+  @override
+  String get syncPeersSection => '设备';
+
+  @override
+  String syncPeersSubtitle(int count) {
+    return '本机 + $count 台对端';
+  }
+
+  @override
+  String get syncPeersSubtitleEmpty => '尚无其它设备';
+
+  @override
+  String syncPeersSubtitleWithLost(int count, int lost) {
+    return '本机 + $count 台对端（$lost 台已失联）';
+  }
+
+  @override
+  String get syncPeersHint =>
+      '在其它设备输入同一口令即可加入。若长期发现不到设备，检查局域网传输是否可用（权限 / 网络隔离），或改用 WebDAV。';
+
+  @override
+  String syncPeerThisDevice(String id) {
+    return '本机 · $id';
+  }
+
+  @override
+  String syncPeerLastSync(String time) {
+    return '最后同步 $time';
+  }
+
+  @override
+  String get syncPeerNever => '尚未接触';
+
+  @override
+  String syncPeerBehind(int count) {
+    return '落后 $count 项';
+  }
+
+  @override
+  String syncPeerBehindBytes(int count, String size) {
+    return '落后 $count 项（约 $size）';
+  }
+
+  @override
+  String syncPeerClockSkew(int minutes) {
+    return '时钟差 $minutes 分钟';
+  }
+
+  @override
+  String syncPeerLastError(String error) {
+    return '最近失败：$error';
+  }
+
+  @override
+  String get syncDiagnosticTitle => '诊断';
+
+  @override
+  String get syncDiagnosticCopy => '复制诊断信息';
+
+  @override
+  String get syncDiagnosticSubtitle => '最近几轮同步状态（不含口令与密钥）';
+
+  @override
+  String get syncDiagnosticHint => '排查问题时把它贴给维护者即可，不含任何凭证或数据内容。';
+
+  @override
+  String get syncDiagnosticCopied => '诊断信息已复制';
+
+  @override
+  String get syncTransportPermissionDenied => '缺少局域网权限';
+
+  @override
+  String get syncLanPermissionTitle => '授予局域网权限';
+
+  @override
+  String get syncLanPermissionSubtitle => 'Android 17 起访问局域网设备需要「附近设备」权限';
+
+  @override
+  String get syncLanPermissionDenied => '未获得权限：局域网同步不可用（手动填地址同样无效），可改用 WebDAV';
+
+  @override
+  String get syncOpenSystemSettings => '去系统设置';
+
+  @override
+  String get syncPeerAdd => '添加设备';
+
+  @override
+  String get syncPeerAddSubtitle => '发现不到设备时，手动填对端地址';
+
+  @override
+  String get syncPeerAddTitle => '添加设备';
+
+  @override
+  String get syncPeerHostLabel => '地址';
+
+  @override
+  String get syncPeerHostHint => '例如 192.168.1.23';
+
+  @override
+  String get syncPeerNameLabel => '名称（可选）';
+
+  @override
+  String get syncPeerHostInvalid => '地址不能为空';
+
+  @override
+  String get syncPeerDelete => '删除设备';
+
+  @override
+  String get syncPeerDeleteConfirm => '删除后本机不再主动连接该地址（不影响其它设备的同步）。';
+
+  @override
+  String get syncPeerManual => '手动添加';
+
+  @override
+  String get syncPeerLost => '已失联';
+
+  @override
+  String get syncPeerLostHint =>
+      '该设备超过 180 天没有接触（可能已重装或不再使用）。可以本地忽略它，或显式清理它的远端文件；本机不会自动删除。';
+
+  @override
+  String get syncPeerIgnore => '本地忽略该设备';
+
+  @override
+  String get syncPeerUnignore => '取消本地忽略';
+
+  @override
+  String get syncPeerIgnoreHint => '不再拉取 / 合并该设备的载荷（只影响本机）';
+
+  @override
+  String get syncPeerIgnoredHint => '已本地忽略：不再拉取 / 合并它的载荷。';
+
+  @override
+  String get syncPeerCleanupRemote => '清理远端文件';
+
+  @override
+  String get syncPeerCleanupRemoteHint => '删除该设备在 WebDAV 上的日志与快照文件';
+
+  @override
+  String get syncPeerCleanupRemoteConfirm =>
+      '将删除该设备在 WebDAV 上的日志与快照文件。本机数据不受影响，文件也不会自动重建（对端重新在线后才会再写入）。局域网直连没有远端存储，无需清理。';
+
+  @override
+  String get syncPeerCleanupRemoteDone => '已清理远端文件';
+
+  @override
+  String get syncPeerCleanupRemoteNone => '没有可清理的远端文件';
+
+  @override
+  String syncPeerCleanupRemoteFailed(Object error) {
+    return '清理失败：$error';
+  }
+
+  @override
+  String get syncPeerNotContacted => '尚未接触，对端在线后点本行再同步一次';
+
+  @override
+  String syncPeerAddress(String host) {
+    return '地址 $host';
+  }
+
+  @override
+  String syncPeerDeviceId(String id) {
+    return '设备 $id';
   }
 
   @override
@@ -2131,6 +2415,164 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get syncGeneratedHint => '已生成同步口令，在其它设备输入同一口令即可加入';
+
+  @override
+  String get syncIssueDialogTitle => '同步问题';
+
+  @override
+  String get syncIssueUnknown => '未知原因；可先重试，持续失败请复制诊断信息排查';
+
+  @override
+  String get syncIssueNotConfigured => '同步传输尚未配置';
+
+  @override
+  String get syncIssueStartFailed => '传输启动失败';
+
+  @override
+  String get syncIssuePermissionDenied => '缺少局域网权限（Android 17 起需「附近设备」权限）';
+
+  @override
+  String get syncIssueNoPassphrase => '尚未设置同步口令';
+
+  @override
+  String get syncIssueAllPeersUnreachable => '所有对端均不可达';
+
+  @override
+  String get syncIssuePullFailed => '拉取远端快照失败';
+
+  @override
+  String get syncIssuePushFailed => '推送本地变更失败';
+
+  @override
+  String syncIssueApplyFailed(int count) {
+    return '应用远端数据失败 $count 次';
+  }
+
+  @override
+  String syncIssuePeerReadFailed(String peer) {
+    return '$peer：读取快照失败';
+  }
+
+  @override
+  String syncIssuePeerDecryptFailed(String peer) {
+    return '$peer：口令不一致或数据损坏';
+  }
+
+  @override
+  String syncIssuePeerPushFailed(String peer) {
+    return '$peer：推送失败';
+  }
+
+  @override
+  String get syncIssueBroadcastUnavailable => '广播发送失败（被网络策略拦截）';
+
+  @override
+  String get syncIssueDiscoverySilent => '探测窗口内没有设备应答（可能被网络隔离）';
+
+  @override
+  String get syncIssueWebdavDirFailed => 'WebDAV 目录准备失败';
+
+  @override
+  String get syncIssueWebdavListFailed => 'WebDAV 目录列表失败';
+
+  @override
+  String syncIssueWebdavReadFailed(String peer) {
+    return '$peer：读取快照失败';
+  }
+
+  @override
+  String syncIssueWebdavDecryptFailed(String peer) {
+    return '$peer：口令不一致或数据损坏';
+  }
+
+  @override
+  String get syncIssueWebdavUploadFailed => 'WebDAV 快照上传失败';
+
+  @override
+  String syncIssueDeleteRemoteFailed(String peer) {
+    return '清理对端 $peer 的远端文件失败';
+  }
+
+  @override
+  String get syncIssueInternal => '同步内部错误';
+
+  @override
+  String get syncActionGrantPermission => '授予权限';
+
+  @override
+  String get syncActionConfigure => '去配置';
+
+  @override
+  String get syncActionConfigurePassphrase => '去设置口令';
+
+  @override
+  String get syncActionAddManualPeer => '添加手动地址';
+
+  @override
+  String get syncActionUseWebdav => '改用 WebDAV';
+
+  @override
+  String get syncWebdavEnabled => '已启用 WebDAV';
+
+  @override
+  String get syncConfigureOnSettingsPage => '请在同步设置页设置口令';
+
+  @override
+  String get syncPeerUnknown => '未知设备';
+
+  @override
+  String get syncPeerDeviceIdCopied => '已复制完整设备 id';
+
+  @override
+  String get syncPeerHostFormatInvalid => '地址格式不正确（支持 IP、IPv6 或域名，不含端口）';
+
+  @override
+  String get syncPeerPortInvalid => '端口需为 1–65535';
+
+  @override
+  String get syncPeerAdded => '已添加设备';
+
+  @override
+  String get syncPeerUpdated => '设备已更新';
+
+  @override
+  String get syncPeerUnreachable => '暂未接触成功：确认对端在线且在同一网络，或改用 WebDAV';
+
+  @override
+  String get syncPeerProbePortLabel => '探测端口';
+
+  @override
+  String syncPeerProbePortHint(int port) {
+    return '默认 $port';
+  }
+
+  @override
+  String get syncPeerAlreadyAdded => '该地址已在列表中，已更新名称与端口';
+
+  @override
+  String get syncPeerContactQueued => '设备已保存，稍后自动接触';
+
+  @override
+  String get syncPeerContacting => '正在接触…';
+
+  @override
+  String get syncLanPermissionPermanentSubtitle => '权限已被永久拒绝，请到系统设置开启「附近设备」权限';
+
+  @override
+  String get syncTransportNeverSucceeded => '尚无成功记录';
+
+  @override
+  String syncTransportLastSuccessAt(String time) {
+    return '最后成功 $time';
+  }
+
+  @override
+  String syncLogViewAll(int count) {
+    return '查看全部日志（$count 条）';
+  }
+
+  @override
+  String get syncLogHint => '最近几轮同步结果；失败行可点开查看原因与下一步';
 
   @override
   String get settingsUpdateTitle => '关于与更新';

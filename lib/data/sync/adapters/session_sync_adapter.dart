@@ -2,32 +2,39 @@ import '../../../domain/models/device_sync.dart';
 import '../../../domain/models/download.dart' show kLocalSourceKey;
 import '../../../services/playback_session_store.dart';
 import '../sync_adapter.dart';
+import '../sync_journal.dart';
 import '../sync_state_store.dart';
 
 /// 上次播放会话适配器：把「上次播放的队列 + 下标 + 进度 + 模式」带到其它设备
 /// （换设备接着听的轻量版，非实时控制）。
 ///
-/// - 记录键固定 [SyncRecordKeys.sessionKey]，时间戳 = 会话写入时间
-///   （`PlaybackSessionStore.savedAtKey`；正在播放的设备持续刷新，天然抢占）；
+/// - 记录键固定 [SyncRecordKeys.sessionKey]；`savedAt`（会话写入时间）是内容
+///   时间，版本戳在内容变化时向发号器现取；正在播放的设备持续刷新从而抢占；
 /// - **本地清空不回传删除**：会话是「最近活动」的指针，停止播放只影响本机；
-///   远端更新的会话（时间戳更大）到达时仍会重新填充；
-/// - 应用后经 [onChanged] 让播放器重载恢复态（仅在没有真实播放时生效）。
+///   远端更新的会话（版本更大）到达时仍会重新填充；
 /// - 应用后经 [onChanged] 让播放器重载恢复态（仅在没有真实播放时生效）。
 class SessionSyncAdapter implements SyncAdapter {
   SessionSyncAdapter({
     required PlaybackSessionStore store,
     required SyncStateStore state,
-    required String Function() deviceId,
+    SyncJournalRepository? journal,
     Future<void> Function()? onChanged,
   })  : _store = store,
         _state = state,
-        _deviceId = deviceId,
+        _journal = journal,
         _onChanged = onChanged;
 
   final PlaybackSessionStore _store;
   final SyncStateStore _state;
-  final String Function() _deviceId;
+
+  /// 增量日志（可选）：`savedAt` 变化（会话内容变化）时追加；首次登记
+  /// 不算变更（初始视图由全量快照覆盖）。
+  final SyncJournalRepository? _journal;
   final Future<void> Function()? _onChanged;
+
+  /// 写入点即时追加的合并窗口（见 [noteLocalSave]）。
+  static const int immediateWindowMs = 60 * 1000;
+  int _lastImmediateAppendAt = 0;
 
   @override
   Set<SyncCategory> get categories => const {SyncCategory.session};
@@ -36,7 +43,7 @@ class SessionSyncAdapter implements SyncAdapter {
   bool get ready => true;
 
   @override
-  Future<Map<SyncCategory, List<SyncRecord>>> collect() async {
+  Future<Map<SyncCategory, List<SyncRecord>>> collect({bool fresh = false}) async {
     final loaded = await _store.loadRaw();
     // 本地下载曲目不同步：文件是设备本机的持久副本，其它设备无法播放。
     final raw = loaded == null ? null : _withoutLocalTracks(loaded);
@@ -47,9 +54,9 @@ class SessionSyncAdapter implements SyncAdapter {
     final stamp = _state.sessionStamp;
     if (raw == null) {
       // 本地会话被清空（停止播放）：不回传删除；保持登记不变，
-      // 远端时间戳更大的会话仍可在后续轮次重新填充。
+      // 远端版本更大的会话仍可在后续轮次重新填充。
       if (stamp == null) {
-        _state.setSessionStamp(const SyncStamp(updatedAt: 0));
+        _state.setSessionStamp(const SyncStamp());
       }
       return const {};
     }
@@ -59,14 +66,25 @@ class SessionSyncAdapter implements SyncAdapter {
     final hash = '$savedAt';
     final SyncStamp effective;
     if (stamp == null || stamp.hash != hash) {
-      // 功能上线前的存量会话没有 savedAt：按时间戳 0 登记（让新会话胜出），
+      // 功能上线前的存量会话没有 savedAt：零值戳（让新会话胜出），
       // 下次保存带来 savedAt 后自然参与 LWW。
-      effective = SyncStamp(
-        hash: hash,
-        updatedAt: savedAt > 0 ? savedAt : 0,
-        updatedBy: savedAt > 0 ? _deviceId() : '',
-      );
+      final version = savedAt > 0 ? _state.stampIssuer.next() : SyncVersion.zero;
+      effective = SyncStamp(hash: hash, version: version);
       _state.setSessionStamp(effective);
+      // 首次登记不是变更（初始视图由全量快照覆盖）；真实变化追加日志。
+      final journal = _journal;
+      if (journal != null && stamp != null) {
+        await journal.appendAll([
+          (
+            category: SyncCategory.session,
+            record: SyncRecord(
+              key: SyncRecordKeys.sessionKey,
+              version: effective.version,
+              data: raw,
+            ),
+          ),
+        ]);
+      }
     } else {
       effective = stamp;
     }
@@ -74,12 +92,53 @@ class SessionSyncAdapter implements SyncAdapter {
       SyncCategory.session: [
         SyncRecord(
           key: SyncRecordKeys.sessionKey,
-          updatedAt: effective.updatedAt,
-          updatedBy: effective.updatedBy,
+          version: effective.version,
           data: raw,
         ),
       ],
     };
+  }
+
+  /// 本机保存会话（组合根在会话存储的保存回调上接线）：**立即**登记并追加
+  /// 日志，写入后进程被杀也不丢这次变更。
+  ///
+  /// 合并窗口内的高频进度保存只登记一次：会话载荷是整份队列（体积远大于其它
+  /// 类别），每次保存都追加会把日志硬上限撑爆；窗口外的变更由下一轮统一登记
+  /// （哈希检测），两者互为兜底。
+  Future<void> noteLocalSave() async {
+    final now = _state.nowMs();
+    if (_lastImmediateAppendAt > 0 &&
+        now - _lastImmediateAppendAt < immediateWindowMs) {
+      return;
+    }
+    final loaded = await _store.loadRaw();
+    final raw = loaded == null ? null : _withoutLocalTracks(loaded);
+    if (loaded != null && raw == null) return;
+    final stamp = _state.sessionStamp;
+    if (raw == null) {
+      if (stamp == null) _state.setSessionStamp(const SyncStamp());
+      return;
+    }
+    final savedAt =
+        (raw[PlaybackSessionStore.savedAtKey] as num?)?.toInt() ?? 0;
+    final hash = '$savedAt';
+    if (stamp != null && stamp.hash == hash) return;
+    final version = savedAt > 0 ? _state.stampIssuer.next() : SyncVersion.zero;
+    _state.setSessionStamp(SyncStamp(hash: hash, version: version));
+    _lastImmediateAppendAt = now;
+    final journal = _journal;
+    if (journal != null && stamp != null) {
+      await journal.appendAll([
+        (
+          category: SyncCategory.session,
+          record: SyncRecord(
+            key: SyncRecordKeys.sessionKey,
+            version: version,
+            data: raw,
+          ),
+        ),
+      ]);
+    }
   }
 
   @override
@@ -96,35 +155,37 @@ class SessionSyncAdapter implements SyncAdapter {
     }
     if (record == null) return SyncApplyOutcome.none;
 
+    final data = record.data;
+    final savedAt =
+        (data?[PlaybackSessionStore.savedAtKey] as num?)?.toInt() ?? 0;
     final stamp = _state.sessionStamp;
-    if (stamp != null &&
-        !record.isNewerThan(SyncRecord(
-          key: record.key,
-          updatedAt: stamp.updatedAt,
-          updatedBy: stamp.updatedBy,
-        ))) {
-      return const SyncApplyOutcome(applied: 0, skipped: 1);
+    if (stamp != null) {
+      if (stamp.version.isNewerThan(record.version)) {
+        return const SyncApplyOutcome(applied: 0, skipped: 1);
+      }
+      // 同版本（只会来自全量快照的强制交付）：比较**当前会话**与登记——
+      // 一致则幂等跳过；不一致（本地会话被直改）用权威视图修回去。
+      if (stamp.version == record.version) {
+        final current = await _store.loadRaw();
+        final currentSavedAt =
+            (current?[PlaybackSessionStore.savedAtKey] as num?)?.toInt() ?? 0;
+        if (stamp.hash == '$currentSavedAt') {
+          return const SyncApplyOutcome(applied: 0, skipped: 1);
+        }
+      }
     }
 
     if (record.deleted) {
       await _store.clear();
-      _state.setSessionStamp(SyncStamp(
-        hash: '',
-        updatedAt: record.updatedAt,
-        updatedBy: record.updatedBy,
-      ));
+      _state.setSessionStamp(SyncStamp(version: record.version));
     } else {
-      final data = record.data;
       if (data == null || data.isEmpty) {
         return const SyncApplyOutcome(applied: 0, skipped: 1);
       }
       await _store.saveRaw(data.map((k, v) => MapEntry(k.toString(), v)));
-      final savedAt =
-          (data[PlaybackSessionStore.savedAtKey] as num?)?.toInt() ?? 0;
       _state.setSessionStamp(SyncStamp(
         hash: '$savedAt',
-        updatedAt: record.updatedAt,
-        updatedBy: record.updatedBy,
+        version: record.version,
       ));
     }
     final changed = _onChanged;

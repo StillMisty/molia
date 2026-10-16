@@ -15,6 +15,7 @@ import 'package:molia/domain/ports/source_registry.dart';
 import 'package:molia/services/ai/ai_recommendation_service.dart';
 import 'package:molia/services/ai/llm_client.dart';
 import 'package:molia/services/ai/taste_profile_builder.dart';
+import '../support/sync_test_support.dart';
 
 import '../support/memory_database.dart';
 
@@ -163,7 +164,10 @@ void main() {
 
   setUp(() async {
     db = openMemoryDatabase();
-    statistics = PlayStatisticsRepository(databaseProvider: () => db);
+    statistics = PlayStatisticsRepository(
+      databaseProvider: () => db,
+      stamps: testStampIssuer(),
+    );
     llm = _FakeLlm('{}');
     service = buildService(const []);
   });

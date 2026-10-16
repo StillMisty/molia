@@ -831,8 +831,65 @@
   "syncSyncNow": "立即同步",
   "syncSyncing": "同步中…",
   "syncNever": "尚未同步",
-  "syncLastResultOk": "上次同步 {time} · 应用 {applied} 项",
-  "syncLastResultFail": "上次同步失败：{error}",
+  "syncOutcomeOk": "同步完成",
+  "syncOutcomeNoChanges": "无变化",
+  "syncOutcomeNoPeers": "未发现对端",
+  "syncOutcomePartial": "部分失败",
+  "syncOutcomeFailed": "同步失败",
+  "syncTriggerStartup": "启动",
+  "syncTriggerDebounce": "数据变更",
+  "syncTriggerTimer": "定时",
+  "syncTriggerIncoming": "对端推送",
+  "syncTriggerResume": "回前台",
+  "syncTriggerPause": "退后台前",
+  "syncTriggerManual": "手动",
+  "syncActivitySection": "运行状态",
+  "syncActivityTitle": "近 24 小时",
+  "syncActivityRounds": "触发 {rounds} 轮，其中有效传输 {effective} 轮，流量 {bytes}",
+  "@syncActivityRounds": {
+    "placeholders": {
+      "rounds": {
+        "type": "int"
+      },
+      "effective": {
+        "type": "int"
+      },
+      "bytes": {
+        "type": "String"
+      }
+    }
+  },
+  "syncActivityEnvironment": "{level} · {network} · {powerSave}",
+  "@syncActivityEnvironment": {
+    "placeholders": {
+      "level": {
+        "type": "String"
+      },
+      "network": {
+        "type": "String"
+      },
+      "powerSave": {
+        "type": "String"
+      }
+    }
+  },
+  "syncLevelActive": "活跃",
+  "syncLevelIdle": "空闲",
+  "syncLevelBackground": "后台",
+  "syncLevelPowerSave": "省电",
+  "syncLevelUnknown": "未运行",
+  "syncNetworkCellular": "移动数据",
+  "syncNetworkOther": "Wi-Fi / 其它",
+  "syncPowerSaveOn": "省电模式",
+  "syncPowerSaveOff": "非省电",
+  "syncCellularPauseTitle": "移动数据下暂停自动同步",
+  "syncCellularPauseSubtitle": "关闭时移动数据下只同步设置 / 歌单 / 会话等小类别，统计与历史留到 Wi-Fi",
+  "syncAppliedItems": "应用 {applied} 项",
+  "syncPeerCount": "{count} 个对端",
+  "syncFailedCount": "{count} 项失败",
+  "syncBytes": "↓{inbound} ↑{outbound}",
+  "syncLastSyncAt": "上次 {time}",
+  "syncRetry": "重试",
   "syncContentSection": "同步内容",
   "syncCategoryPlaylists": "歌单与收藏",
   "syncCategorySources": "音源（脚本与配置）",
@@ -852,15 +909,185 @@
   "syncWebdavPassword": "密码",
   "syncWebdavRemoteDir": "远端目录",
   "syncWebdavNotConfigured": "未配置",
+  "syncTransportRunning": "运行中",
+  "syncTransportStopped": "未运行",
+  "syncTransportDisabled": "已关闭",
+  "syncTransportNotConfigured": "未配置",
+  "syncTransportStartFailed": "启动失败",
   "syncLogSection": "同步日志",
   "syncLogEmpty": "暂无记录",
-  "syncLogApplied": "应用 {applied} 项、跳过 {skipped} 项",
   "syncLogFailed": "失败：{error}",
+  "syncPeersTitle": "已配对设备",
+  "syncPeersSection": "设备",
+  "syncPeersSubtitle": "本机 + {count} 台对端",
+  "syncPeersSubtitleEmpty": "尚无其它设备",
+  "syncPeersSubtitleWithLost": "本机 + {count} 台对端（{lost} 台已失联）",
+  "@syncPeersSubtitleWithLost": {
+    "placeholders": { "count": { "type": "int" }, "lost": { "type": "int" } }
+  },
+  "syncPeersHint": "在其它设备输入同一口令即可加入。若长期发现不到设备，检查局域网传输是否可用（权限 / 网络隔离），或改用 WebDAV。",
+  "syncPeerThisDevice": "本机 · {id}",
+  "syncPeerLastSync": "最后同步 {time}",
+  "syncPeerNever": "尚未接触",
+  "syncPeerBehind": "落后 {count} 项",
+  "syncPeerBehindBytes": "落后 {count} 项（约 {size}）",
+  "@syncPeerBehindBytes": {
+    "placeholders": { "count": { "type": "int" }, "size": { "type": "String" } }
+  },
+  "syncPeerClockSkew": "时钟差 {minutes} 分钟",
+  "syncPeerLastError": "最近失败：{error}",
+  "syncDiagnosticTitle": "诊断",
+  "syncDiagnosticCopy": "复制诊断信息",
+  "syncDiagnosticSubtitle": "最近几轮同步状态（不含口令与密钥）",
+  "syncDiagnosticHint": "排查问题时把它贴给维护者即可，不含任何凭证或数据内容。",
+  "syncDiagnosticCopied": "诊断信息已复制",
+  "syncTransportPermissionDenied": "缺少局域网权限",
+  "syncLanPermissionTitle": "授予局域网权限",
+  "syncLanPermissionSubtitle": "Android 17 起访问局域网设备需要「附近设备」权限",
+  "syncLanPermissionDenied": "未获得权限：局域网同步不可用（手动填地址同样无效），可改用 WebDAV",
+  "syncOpenSystemSettings": "去系统设置",
+  "syncPeerAdd": "添加设备",
+  "syncPeerAddSubtitle": "发现不到设备时，手动填对端地址",
+  "syncPeerAddTitle": "添加设备",
+  "syncPeerHostLabel": "地址",
+  "syncPeerHostHint": "例如 192.168.1.23",
+  "syncPeerNameLabel": "名称（可选）",
+  "syncPeerHostInvalid": "地址不能为空",
+  "syncPeerDelete": "删除设备",
+  "syncPeerDeleteConfirm": "删除后本机不再主动连接该地址（不影响其它设备的同步）。",
+  "syncPeerManual": "手动添加",
+  "syncPeerLost": "已失联",
+  "syncPeerLostHint": "该设备超过 180 天没有接触（可能已重装或不再使用）。可以本地忽略它，或显式清理它的远端文件；本机不会自动删除。",
+  "syncPeerIgnore": "本地忽略该设备",
+  "syncPeerUnignore": "取消本地忽略",
+  "syncPeerIgnoreHint": "不再拉取 / 合并该设备的载荷（只影响本机）",
+  "syncPeerIgnoredHint": "已本地忽略：不再拉取 / 合并它的载荷。",
+  "syncPeerCleanupRemote": "清理远端文件",
+  "syncPeerCleanupRemoteHint": "删除该设备在 WebDAV 上的日志与快照文件",
+  "syncPeerCleanupRemoteConfirm": "将删除该设备在 WebDAV 上的日志与快照文件。本机数据不受影响，文件也不会自动重建（对端重新在线后才会再写入）。局域网直连没有远端存储，无需清理。",
+  "syncPeerCleanupRemoteDone": "已清理远端文件",
+  "syncPeerCleanupRemoteNone": "没有可清理的远端文件",
+  "syncPeerCleanupRemoteFailed": "清理失败：{error}",
+  "syncPeerNotContacted": "尚未接触，对端在线后点本行再同步一次",
+  "syncPeerAddress": "地址 {host}",
+  "syncPeerDeviceId": "设备 {id}",
   "syncDeviceNameDialogTitle": "设备名称",
   "syncRenameHint": "其它设备上显示的名称",
   "syncDeviceNameEmpty": "名称不能为空",
   "syncCategorySubtitle": "关闭后本机不推送也不应用该类数据",
   "syncGeneratedHint": "已生成同步口令，在其它设备输入同一口令即可加入",
+  "syncIssueDialogTitle": "同步问题",
+  "syncIssueUnknown": "未知原因；可先重试，持续失败请复制诊断信息排查",
+  "syncIssueNotConfigured": "同步传输尚未配置",
+  "syncIssueStartFailed": "传输启动失败",
+  "syncIssuePermissionDenied": "缺少局域网权限（Android 17 起需「附近设备」权限）",
+  "syncIssueNoPassphrase": "尚未设置同步口令",
+  "syncIssueAllPeersUnreachable": "所有对端均不可达",
+  "syncIssuePullFailed": "拉取远端快照失败",
+  "syncIssuePushFailed": "推送本地变更失败",
+  "syncIssueApplyFailed": "应用远端数据失败 {count} 次",
+  "@syncIssueApplyFailed": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "syncIssuePeerReadFailed": "{peer}：读取快照失败",
+  "@syncIssuePeerReadFailed": {
+    "placeholders": {
+      "peer": {
+        "type": "String"
+      }
+    }
+  },
+  "syncIssuePeerDecryptFailed": "{peer}：口令不一致或数据损坏",
+  "@syncIssuePeerDecryptFailed": {
+    "placeholders": {
+      "peer": {
+        "type": "String"
+      }
+    }
+  },
+  "syncIssuePeerPushFailed": "{peer}：推送失败",
+  "@syncIssuePeerPushFailed": {
+    "placeholders": {
+      "peer": {
+        "type": "String"
+      }
+    }
+  },
+  "syncIssueBroadcastUnavailable": "广播发送失败（被网络策略拦截）",
+  "syncIssueDiscoverySilent": "探测窗口内没有设备应答（可能被网络隔离）",
+  "syncIssueWebdavDirFailed": "WebDAV 目录准备失败",
+  "syncIssueWebdavListFailed": "WebDAV 目录列表失败",
+  "syncIssueWebdavReadFailed": "{peer}：读取快照失败",
+  "@syncIssueWebdavReadFailed": {
+    "placeholders": {
+      "peer": {
+        "type": "String"
+      }
+    }
+  },
+  "syncIssueWebdavDecryptFailed": "{peer}：口令不一致或数据损坏",
+  "@syncIssueWebdavDecryptFailed": {
+    "placeholders": {
+      "peer": {
+        "type": "String"
+      }
+    }
+  },
+  "syncIssueWebdavUploadFailed": "WebDAV 快照上传失败",
+  "syncIssueDeleteRemoteFailed": "清理对端 {peer} 的远端文件失败",
+  "@syncIssueDeleteRemoteFailed": {
+    "placeholders": { "peer": { "type": "String" } }
+  },
+  "syncIssueInternal": "同步内部错误",
+  "syncActionGrantPermission": "授予权限",
+  "syncActionConfigure": "去配置",
+  "syncActionConfigurePassphrase": "去设置口令",
+  "syncActionAddManualPeer": "添加手动地址",
+  "syncActionUseWebdav": "改用 WebDAV",
+  "syncWebdavEnabled": "已启用 WebDAV",
+  "syncConfigureOnSettingsPage": "请在同步设置页设置口令",
+  "syncPeerUnknown": "未知设备",
+  "syncPeerDeviceIdCopied": "已复制完整设备 id",
+  "syncPeerHostFormatInvalid": "地址格式不正确（支持 IP、IPv6 或域名，不含端口）",
+  "syncPeerPortInvalid": "端口需为 1–65535",
+  "syncPeerAdded": "已添加设备",
+  "syncPeerUpdated": "设备已更新",
+  "syncPeerUnreachable": "暂未接触成功：确认对端在线且在同一网络，或改用 WebDAV",
+  "syncPeerProbePortLabel": "探测端口",
+  "syncPeerProbePortHint": "默认 {port}",
+  "@syncPeerProbePortHint": {
+    "placeholders": {
+      "port": {
+        "type": "int"
+      }
+    }
+  },
+  "syncPeerAlreadyAdded": "该地址已在列表中，已更新名称与端口",
+  "syncPeerContactQueued": "设备已保存，稍后自动接触",
+  "syncPeerContacting": "正在接触…",
+  "syncLanPermissionPermanentSubtitle": "权限已被永久拒绝，请到系统设置开启「附近设备」权限",
+  "syncTransportNeverSucceeded": "尚无成功记录",
+  "syncTransportLastSuccessAt": "最后成功 {time}",
+  "@syncTransportLastSuccessAt": {
+    "placeholders": {
+      "time": {
+        "type": "String"
+      }
+    }
+  },
+  "syncLogViewAll": "查看全部日志（{count} 条）",
+  "@syncLogViewAll": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "syncLogHint": "最近几轮同步结果；失败行可点开查看原因与下一步",
   "settingsUpdateTitle": "关于与更新",
   "settingsUpdateSubtitle": "当前版本 {version}",
   "settingsUpdateAvailable": "可更新至 {version}",

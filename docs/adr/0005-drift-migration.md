@@ -61,19 +61,19 @@
    Top 曲目 / 来源分布 / 已听曲目名）与两表 JOIN（列表+曲目数、导出列表曲目）、
    `rowid` 淘汰语句保留原 SQL 文本（`customSelect` + `Variable` / `customUpdate` /
    `customStatement`），口径常量（`PlayStatisticsLimits` 等）仍是唯一来源。
-8. **未来 schema 变更走 `make-migrations`**：改表 → 提 `schemaVersion` →
-   `dart run build_runner build` + `dart run drift_dev make-migrations`，在
-   `drift_schemas/molia/` 留下快照、在 `test/drift/molia/` 生成迁移测试，用
-   `stepByStep` 写增量迁移。当前 v1 快照
-   （`drift_schemas/molia/drift_schema_v1.json`）已作为基线提交；单版本时
-   `make-migrations` 只写快照，不生成 steps/测试文件。
+8. **schema 变更走 `make-migrations`**：改表 → 提 `schemaVersion` →
+   `dart run build_runner build` + `dart run drift_dev make-migrations`，生成
+   `drift_schemas/molia/` 的 schema 快照与 `lib/data/molia_database.steps.dart`，
+   用 `stepByStep` 写增量迁移并保留数据；迁移测试在
+   `test/drift/molia/migration_test.dart`（空库 schema 校验 + 带数据升级）。
+   当前迁移链：`v1` 基线 → `v2` 新增 `sync_known`（同步已知版本登记）
+   → `v3` 新增增量日志（`sync_journal` + `sync_journal_state`）。
 
 ## 后果
 
-- **升级到本版本后旧数据不可见**：最近播放 / 播放历史 / 歌单 / 听歌统计从空开始
-  （这是 fresh 基线的既定取舍）；旧库文件保留在原目录，回退旧版本仍可读；
-- 生成物是源码的一部分：`lib/data/molia_database.g.dart`、`drift_schemas/` 必须
-  提交；改数据库类后要重跑 `build_runner`，改表结构后要重跑 `make-migrations`；
+- 生成物是源码的一部分：`lib/data/molia_database.g.dart` 与 `drift_schemas/`
+  下的 schema 快照必须提交；改数据库类/表结构后要重跑 `build_runner` +
+  `make-migrations` 并写增量迁移；
 - 测试统一用 `MoliaDatabase(NativeDatabase.memory())`
   （`test/support/memory_database.dart`）；`flutter test` 会经 sqlite3 的 build
   hook 在场生成原生库，不再有 `sqfliteFfiInit()`；
@@ -82,5 +82,5 @@
   `await _db` 改为同步 getter；
 - `sqflite` 仍作为 `flutter_cache_manager` 的传递依赖存在（封面缓存元数据，
   与本地库无关），不再被项目直接依赖；
-- 同步 / 备份的数据格式不变（列名与 JSON 键保持 camelCase），旧版本导出的 JSON
-  仍可导入。
+- 同步 / 备份的 JSON 键与列名一致（camelCase）。
+
