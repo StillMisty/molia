@@ -177,6 +177,13 @@ class SyncPeersPage extends StatelessWidget {
             child: Text(l10n.syncPeerDelete),
           ),
           M3EButton.text(
+            onPressed: () {
+              navigator.pop();
+              unawaited(provider.syncNow(manual: true));
+            },
+            child: Text(l10n.syncSyncNow),
+          ),
+          M3EButton.text(
             onPressed: () => navigator.pop(),
             child: Text(l10n.cancelButton),
           ),
