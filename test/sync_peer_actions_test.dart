@@ -117,4 +117,15 @@ void main() {
     expect(again.removed, isFalse);
     expect(again.error, isNull);
   });
+
+  test('清理远端文件失败：如实上报 delete_remote_failed（不吞成「没有可清理」）', () async {
+    transport.deleteRemoteThrows = true;
+    final result = await engine.cleanupRemote('ghost');
+
+    expect(result.removed, isFalse);
+    expect(result.error?.code, SyncIssueCode.deleteRemoteFailed);
+    expect(result.error?.args['peer'], 'ghost');
+    // 原始异常只进 detail（UI 不展示）。
+    expect(result.error?.detail, contains('清理失败（测试注入）'));
+  });
 }

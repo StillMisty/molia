@@ -328,13 +328,17 @@ class WebDavSyncTransport implements SyncTransport {
 
   /// 显式清理某台对端的远端文件（用户动作；**不做自动删除**）。
   ///
-  /// 删除该设备的日志 / 快照文件（含其它命名的残留）。
+  /// 删除该设备的日志 / 快照文件（含其它命名的残留）。服务端拒绝或网络故障
+  /// 会抛 [WebDavHttpException] / 原异常：由引擎转成 `delete_remote_failed`
+  /// 失败原因（UI 不能把 403 / 500 显示成「没有可清理的文件」）。
+  /// 404（本来就没有这份文件）不算失败。
   @override
   Future<bool> deleteRemote(String deviceId) async {
     if (!_running) return false;
     final config = _configProvider();
     if (!config.isConfigured) return false;
     var removed = false;
+    String? failure;
     for (final name in [
       '$deviceId$journalSuffix',
       '$deviceId$snapshotSuffix',
@@ -349,12 +353,15 @@ class WebDavSyncTransport implements SyncTransport {
         if (response.httpStatus >= 200 && response.httpStatus < 300) {
           removed = true;
           _fileVersions.remove(name);
+        } else if (response.httpStatus != 404) {
+          failure ??= 'DELETE $name 失败: ${response.httpStatus}';
         }
-        // 404 = 本来就没有这份文件：不算失败。
       } catch (e) {
         _logger.warning('WebDAV 清理远端文件失败（$name）', e);
+        failure ??= 'DELETE $name 异常: $e';
       }
     }
+    if (failure != null) throw WebDavHttpException(failure);
     return removed;
   }
 

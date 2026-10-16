@@ -197,11 +197,17 @@ class FakeSyncTransport implements SyncTransport {
 
   /// deleteRemote 的结果（默认 false：没有可清理的远端文件）。
   bool deleteRemoteResult = false;
+
+  /// deleteRemote 抛错（模拟服务端拒绝 / 网络故障）。
+  bool deleteRemoteThrows = false;
   final List<String> deletedRemotes = [];
 
   @override
   Future<bool> deleteRemote(String deviceId) async {
     deletedRemotes.add(deviceId);
+    if (deleteRemoteThrows) {
+      throw StateError('清理失败（测试注入）');
+    }
     return deleteRemoteResult;
   }
 

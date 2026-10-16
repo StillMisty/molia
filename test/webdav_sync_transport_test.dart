@@ -403,6 +403,20 @@ void main() {
     expect(await a.deleteRemote('devA'), isFalse);
   });
 
+  test('清理远端文件失败：如实抛错（不显示成「没有可清理的文件」）', () async {
+    server.deleteStatus = 500;
+    final a = transport('devA');
+    addTearDown(() => a.stop());
+    await a.start();
+    server.files['ghost.snapshot.msync'] =
+        codec.encrypt(envelope('ghost'), passphrase);
+
+    await expectLater(
+      a.deleteRemote('ghost'),
+      throwsA(isA<WebDavHttpException>()),
+    );
+  });
+
   test('服务端不返回版本：照常拉取（不跳过）', () async {
     server.includeVersion = false;
     final a = transport('devA');
@@ -442,6 +456,9 @@ class FakeWebDavServer {
 
   /// 是否在 PROPFIND 中返回 `getetag`（false = 模拟不提供版本的服务端）。
   bool includeVersion = true;
+
+  /// DELETE 的状态码（默认 204 / 404 由文件是否存在决定）。
+  int? deleteStatus;
   String? expectedAuth;
 
   String get baseUrl => 'http://127.0.0.1:${server.port}/dav';
@@ -494,6 +511,10 @@ class FakeWebDavServer {
           etags[name] = '"${++_etagSeq}"';
         case 'DELETE':
           final name = request.uri.path.split('/').last;
+          if (deleteStatus != null) {
+            request.response.statusCode = deleteStatus!;
+            break;
+          }
           if (files.remove(name) != null) {
             etags.remove(name);
             request.response.statusCode = 204;
