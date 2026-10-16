@@ -61,6 +61,8 @@ void main() {
         ),
       ],
       transports: {'lan': transport},
+      // 与状态存储同一时钟源（观测面的窗口过滤依赖时间戳一致）。
+      clock: () => DateTime.fromMillisecondsSinceEpoch(state.nowMs()),
     );
     provider = SyncProvider(engine: engine);
     await provider.init();
@@ -141,6 +143,36 @@ void main() {
     await tester.pumpAndSettle();
     expect(provider.lastSyncAt, greaterThan(0));
     expect(find.text('Sync log'), findsOneWidget);
+  });
+
+  testWidgets('运行状态：近 24 小时汇总与环境行', (tester) async {
+    await provider.setEnabled(true);
+    // 手动一轮：日志里出现一条无对端轮次（0 字节、0 落地）。
+    await provider.syncNow(manual: true);
+    await pumpPage(tester);
+
+    expect(find.text('Activity'), findsOneWidget);
+    expect(find.text('Last 24 hours'), findsOneWidget);
+    expect(
+      find.textContaining('1 rounds, 0 with transfer'),
+      findsOneWidget,
+    );
+    // 环境行：未注入调度器 → 等级「未运行」；非移动数据；非省电。
+    expect(
+      find.textContaining('not running · Wi-Fi / other · power save off'),
+      findsOneWidget,
+    );
+  });
+
+  testWidgets('移动数据暂停开关写入策略', (tester) async {
+    await provider.setEnabled(true);
+    await pumpPage(tester);
+
+    expect(provider.cellularPolicy, SyncCellularPolicy.auto);
+    await tester.tap(find.byKey(const Key('settingsSyncCellularPauseSwitch')));
+    await tester.pumpAndSettle();
+
+    expect(provider.cellularPolicy, SyncCellularPolicy.pause);
   });
 
   testWidgets('结论行给五态：没有对端显示「未发现对端」而不是「同步完成」', (tester) async {

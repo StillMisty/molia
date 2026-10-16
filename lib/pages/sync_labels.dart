@@ -60,6 +60,19 @@ String _stringArg(SyncIssue issue, String key, {required String fallback}) {
   return fallback;
 }
 
+/// 同步等级文案（观测面：当前等级）。
+String syncLevelText(AppLocalizations l10n, SyncLevel? level) => switch (level) {
+      null => l10n.syncLevelUnknown,
+      SyncLevel.active => l10n.syncLevelActive,
+      SyncLevel.idle => l10n.syncLevelIdle,
+      SyncLevel.background => l10n.syncLevelBackground,
+      SyncLevel.powerSave => l10n.syncLevelPowerSave,
+    };
+
+/// 网络类型文案（观测面：是否移动数据）。
+String syncNetworkText(AppLocalizations l10n, {required bool onCellular}) =>
+    onCellular ? l10n.syncNetworkCellular : l10n.syncNetworkOther;
+
 int _intArg(SyncIssue issue, String key) {
   final value = issue.args[key];
   return value is num ? value.toInt() : 0;

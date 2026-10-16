@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/foundation.dart';
 
+import '../data/sync/sync_activity.dart';
 import '../data/sync/sync_engine.dart';
 import '../data/sync/sync_passphrase.dart';
 import '../data/sync/sync_scheduler.dart';
@@ -241,6 +242,19 @@ class SyncProvider extends ChangeNotifier {
 
   /// 当前同步等级（未注入调度器时为 null）。
   SyncLevel? get syncLevel => _scheduler?.level;
+
+  /// 近 24 小时活动汇总（基于保留的最近日志条目）。
+  SyncActivitySummary get activity24h =>
+      SyncActivitySummary.fromLog(log, nowMs: _engine.state.nowMs());
+
+  /// 当前是否在移动数据上（观测面展示用）。
+  bool get onCellular => _scheduler?.onCellular ?? false;
+
+  /// 省电等级是否生效（低电量未充电或系统省电模式）。
+  bool get powerSaveActive => _scheduler?.powerSaveActive ?? false;
+
+  /// 蜂窝策略是否正在限制类别范围（只同步小类别）。
+  bool get cellularRestricted => _scheduler?.cellularRestricted ?? false;
 
   /// 蜂窝网络下的自动同步策略。
   SyncCellularPolicy get cellularPolicy => _engine.state.cellularPolicy;

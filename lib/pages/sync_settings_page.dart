@@ -112,6 +112,27 @@ class SyncSettingsPage extends StatelessWidget {
           if (provider.enabled) ...[
             const SizedBox(height: kSettingsSectionSpacing),
             SettingsSectionCard(
+              title: l10n.syncActivitySection,
+              children: [
+                SettingsInfoTile(
+                  key: const Key('settingsSyncActivityItem'),
+                  icon: Icons.insights_rounded,
+                  title: l10n.syncActivityTitle,
+                  subtitle: _activitySubtitle(provider, l10n),
+                ),
+                SettingsSwitchTile(
+                  switchKey: const Key('settingsSyncCellularPauseSwitch'),
+                  icon: Icons.signal_cellular_off_rounded,
+                  title: l10n.syncCellularPauseTitle,
+                  subtitle: l10n.syncCellularPauseSubtitle,
+                  value: provider.cellularPolicy == SyncCellularPolicy.pause,
+                  onChanged: (value) => unawaited(provider.setCellularPolicy(
+                      value ? SyncCellularPolicy.pause : SyncCellularPolicy.auto)),
+                ),
+              ],
+            ),
+            const SizedBox(height: kSettingsSectionSpacing),
+            SettingsSectionCard(
               title: l10n.syncContentSection,
               children: [
                 for (final entry in _categoryOrder.entries)
@@ -289,6 +310,23 @@ class SyncSettingsPage extends StatelessWidget {
     final at = provider.lastSyncAt;
     if (at == 0) return l10n.syncNever;
     return l10n.syncLastSyncAt(syncTimeText(at));
+  }
+
+  /// 观测面：近 24 小时活动（触发 / 有效传输 / 流量）+ 当前环境
+  /// （同步等级 · 网络类型 · 是否省电）。
+  static String _activitySubtitle(SyncProvider provider, AppLocalizations l10n) {
+    final summary = provider.activity24h;
+    final activity = l10n.syncActivityRounds(
+      summary.rounds,
+      summary.effectiveRounds,
+      syncBytesText(summary.bytes),
+    );
+    final environment = l10n.syncActivityEnvironment(
+      syncLevelText(l10n, provider.syncLevel),
+      syncNetworkText(l10n, onCellular: provider.onCellular),
+      provider.powerSaveActive ? l10n.syncPowerSaveOn : l10n.syncPowerSaveOff,
+    );
+    return '$activity\n$environment';
   }
 
   static String _peersSubtitle(SyncProvider provider, AppLocalizations l10n) {

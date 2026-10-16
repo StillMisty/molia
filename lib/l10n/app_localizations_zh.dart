@@ -2059,6 +2059,57 @@ class AppLocalizationsZh extends AppLocalizations {
   String get syncTriggerManual => '手动';
 
   @override
+  String get syncActivitySection => '运行状态';
+
+  @override
+  String get syncActivityTitle => '近 24 小时';
+
+  @override
+  String syncActivityRounds(int rounds, int effective, String bytes) {
+    return '触发 $rounds 轮，其中有效传输 $effective 轮，流量 $bytes';
+  }
+
+  @override
+  String syncActivityEnvironment(
+      String level, String network, String powerSave) {
+    return '$level · $network · $powerSave';
+  }
+
+  @override
+  String get syncLevelActive => '活跃';
+
+  @override
+  String get syncLevelIdle => '空闲';
+
+  @override
+  String get syncLevelBackground => '后台';
+
+  @override
+  String get syncLevelPowerSave => '省电';
+
+  @override
+  String get syncLevelUnknown => '未运行';
+
+  @override
+  String get syncNetworkCellular => '移动数据';
+
+  @override
+  String get syncNetworkOther => 'Wi-Fi / 其它';
+
+  @override
+  String get syncPowerSaveOn => '省电模式';
+
+  @override
+  String get syncPowerSaveOff => '非省电';
+
+  @override
+  String get syncCellularPauseTitle => '移动数据下暂停自动同步';
+
+  @override
+  String get syncCellularPauseSubtitle =>
+      '关闭时移动数据下只同步设置 / 歌单 / 会话等小类别，统计与历史留到 Wi-Fi';
+
+  @override
   String syncAppliedItems(int applied) {
     return '应用 $applied 项';
   }

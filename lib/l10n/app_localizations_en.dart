@@ -2147,6 +2147,57 @@ class AppLocalizationsEn extends AppLocalizations {
   String get syncTriggerManual => 'manual';
 
   @override
+  String get syncActivitySection => 'Activity';
+
+  @override
+  String get syncActivityTitle => 'Last 24 hours';
+
+  @override
+  String syncActivityRounds(int rounds, int effective, String bytes) {
+    return '$rounds rounds, $effective with transfer, $bytes traffic';
+  }
+
+  @override
+  String syncActivityEnvironment(
+      String level, String network, String powerSave) {
+    return '$level · $network · $powerSave';
+  }
+
+  @override
+  String get syncLevelActive => 'active';
+
+  @override
+  String get syncLevelIdle => 'idle';
+
+  @override
+  String get syncLevelBackground => 'background';
+
+  @override
+  String get syncLevelPowerSave => 'power save';
+
+  @override
+  String get syncLevelUnknown => 'not running';
+
+  @override
+  String get syncNetworkCellular => 'cellular';
+
+  @override
+  String get syncNetworkOther => 'Wi-Fi / other';
+
+  @override
+  String get syncPowerSaveOn => 'power save on';
+
+  @override
+  String get syncPowerSaveOff => 'power save off';
+
+  @override
+  String get syncCellularPauseTitle => 'Pause automatic sync on cellular';
+
+  @override
+  String get syncCellularPauseSubtitle =>
+      'When off, cellular syncs only small categories (settings, playlists, session); statistics and history wait for Wi-Fi';
+
+  @override
   String syncAppliedItems(int applied) {
     return '$applied applied';
   }

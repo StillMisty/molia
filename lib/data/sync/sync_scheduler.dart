@@ -7,18 +7,6 @@ import '../../services/battery_probe.dart';
 import '../../services/data_saver_service.dart';
 import 'sync_state_store.dart';
 
-/// 同步等级（ADR-0003 v2 §4）：什么时候跑同步是可测策略，不是散落的定时器。
-///
-/// - [active]：界面可见且（正在播放 / 最近有交互 / 刚有数据变更）——变更去抖
-///   3–5s 后跑一轮，只探测或拉「变化」对端（传输门控负责）；
-/// - [idle]：前台但无交互——退避 10→20→40→60 分钟封顶；**无本地变更不广播、
-///   不发 PROPFIND**（空闲唤醒只为外发本地变更，或充电 + Wi-Fi 的 anti-entropy
-///   全量校验）；
-/// - [background]：锁屏 / 退后台——**零定时唤醒**；`onAppHidden` 尽力推一次、
-///   `onAppVisible` 拉一次；
-/// - [powerSave]：低电量未充电或系统省电模式——暂停自动同步，仅手动触发。
-enum SyncLevel { active, idle, background, powerSave }
-
 /// 调度器驱动一轮同步的宿主（生产 = `SyncEngine`；单测注入假实现）。
 abstract interface class SyncSchedulerHost {
   bool get syncEnabled;

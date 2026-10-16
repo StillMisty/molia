@@ -3944,6 +3944,97 @@ abstract class AppLocalizations {
   /// **'manual'**
   String get syncTriggerManual;
 
+  /// No description provided for @syncActivitySection.
+  ///
+  /// In en, this message translates to:
+  /// **'Activity'**
+  String get syncActivitySection;
+
+  /// No description provided for @syncActivityTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Last 24 hours'**
+  String get syncActivityTitle;
+
+  /// No description provided for @syncActivityRounds.
+  ///
+  /// In en, this message translates to:
+  /// **'{rounds} rounds, {effective} with transfer, {bytes} traffic'**
+  String syncActivityRounds(int rounds, int effective, String bytes);
+
+  /// No description provided for @syncActivityEnvironment.
+  ///
+  /// In en, this message translates to:
+  /// **'{level} · {network} · {powerSave}'**
+  String syncActivityEnvironment(
+      String level, String network, String powerSave);
+
+  /// No description provided for @syncLevelActive.
+  ///
+  /// In en, this message translates to:
+  /// **'active'**
+  String get syncLevelActive;
+
+  /// No description provided for @syncLevelIdle.
+  ///
+  /// In en, this message translates to:
+  /// **'idle'**
+  String get syncLevelIdle;
+
+  /// No description provided for @syncLevelBackground.
+  ///
+  /// In en, this message translates to:
+  /// **'background'**
+  String get syncLevelBackground;
+
+  /// No description provided for @syncLevelPowerSave.
+  ///
+  /// In en, this message translates to:
+  /// **'power save'**
+  String get syncLevelPowerSave;
+
+  /// No description provided for @syncLevelUnknown.
+  ///
+  /// In en, this message translates to:
+  /// **'not running'**
+  String get syncLevelUnknown;
+
+  /// No description provided for @syncNetworkCellular.
+  ///
+  /// In en, this message translates to:
+  /// **'cellular'**
+  String get syncNetworkCellular;
+
+  /// No description provided for @syncNetworkOther.
+  ///
+  /// In en, this message translates to:
+  /// **'Wi-Fi / other'**
+  String get syncNetworkOther;
+
+  /// No description provided for @syncPowerSaveOn.
+  ///
+  /// In en, this message translates to:
+  /// **'power save on'**
+  String get syncPowerSaveOn;
+
+  /// No description provided for @syncPowerSaveOff.
+  ///
+  /// In en, this message translates to:
+  /// **'power save off'**
+  String get syncPowerSaveOff;
+
+  /// No description provided for @syncCellularPauseTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Pause automatic sync on cellular'**
+  String get syncCellularPauseTitle;
+
+  /// No description provided for @syncCellularPauseSubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'When off, cellular syncs only small categories (settings, playlists, session); statistics and history wait for Wi-Fi'**
+  String get syncCellularPauseSubtitle;
+
   /// No description provided for @syncAppliedItems.
   ///
   /// In en, this message translates to:

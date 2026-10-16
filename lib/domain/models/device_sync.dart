@@ -499,6 +499,18 @@ enum SyncTrigger {
   }
 }
 
+/// 同步等级（ADR-0003 v2 §4）：什么时候跑同步是可测策略，不是散落的定时器。
+///
+/// - [active]：界面可见且（正在播放 / 最近有交互 / 刚有数据变更）——变更去抖
+///   3–5s 后跑一轮，只探测或拉「变化」对端（传输门控负责）；
+/// - [idle]：前台但无交互——退避 10→20→40→60 分钟封顶；**无本地变更不广播、
+///   不发 PROPFIND**（空闲唤醒只为外发本地变更，或充电 + Wi-Fi 的 anti-entropy
+///   全量校验）；
+/// - [background]：锁屏 / 退后台——**零定时唤醒**；`onAppHidden` 尽力推一次、
+///   `onAppVisible` 拉一次；
+/// - [powerSave]：低电量未充电或系统省电模式——暂停自动同步，仅手动触发。
+enum SyncLevel { active, idle, background, powerSave }
+
 /// 蜂窝网络下的自动同步策略（与省流模式联动；用户可在同步设置页切换）。
 enum SyncCellularPolicy {
   /// 只同步小类别（设置 / 歌单 / 会话等）：统计与历史等大类别留到 Wi-Fi。

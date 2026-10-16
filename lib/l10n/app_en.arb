@@ -1086,6 +1086,47 @@
   "syncTriggerResume": "resumed",
   "syncTriggerPause": "before background",
   "syncTriggerManual": "manual",
+  "syncActivitySection": "Activity",
+  "syncActivityTitle": "Last 24 hours",
+  "syncActivityRounds": "{rounds} rounds, {effective} with transfer, {bytes} traffic",
+  "@syncActivityRounds": {
+    "placeholders": {
+      "rounds": {
+        "type": "int"
+      },
+      "effective": {
+        "type": "int"
+      },
+      "bytes": {
+        "type": "String"
+      }
+    }
+  },
+  "syncActivityEnvironment": "{level} · {network} · {powerSave}",
+  "@syncActivityEnvironment": {
+    "placeholders": {
+      "level": {
+        "type": "String"
+      },
+      "network": {
+        "type": "String"
+      },
+      "powerSave": {
+        "type": "String"
+      }
+    }
+  },
+  "syncLevelActive": "active",
+  "syncLevelIdle": "idle",
+  "syncLevelBackground": "background",
+  "syncLevelPowerSave": "power save",
+  "syncLevelUnknown": "not running",
+  "syncNetworkCellular": "cellular",
+  "syncNetworkOther": "Wi-Fi / other",
+  "syncPowerSaveOn": "power save on",
+  "syncPowerSaveOff": "power save off",
+  "syncCellularPauseTitle": "Pause automatic sync on cellular",
+  "syncCellularPauseSubtitle": "When off, cellular syncs only small categories (settings, playlists, session); statistics and history wait for Wi-Fi",
   "syncAppliedItems": "{applied} applied",
   "@syncAppliedItems": {
     "placeholders": {

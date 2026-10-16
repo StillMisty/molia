@@ -839,6 +839,47 @@
   "syncTriggerResume": "回前台",
   "syncTriggerPause": "退后台前",
   "syncTriggerManual": "手动",
+  "syncActivitySection": "运行状态",
+  "syncActivityTitle": "近 24 小时",
+  "syncActivityRounds": "触发 {rounds} 轮，其中有效传输 {effective} 轮，流量 {bytes}",
+  "@syncActivityRounds": {
+    "placeholders": {
+      "rounds": {
+        "type": "int"
+      },
+      "effective": {
+        "type": "int"
+      },
+      "bytes": {
+        "type": "String"
+      }
+    }
+  },
+  "syncActivityEnvironment": "{level} · {network} · {powerSave}",
+  "@syncActivityEnvironment": {
+    "placeholders": {
+      "level": {
+        "type": "String"
+      },
+      "network": {
+        "type": "String"
+      },
+      "powerSave": {
+        "type": "String"
+      }
+    }
+  },
+  "syncLevelActive": "活跃",
+  "syncLevelIdle": "空闲",
+  "syncLevelBackground": "后台",
+  "syncLevelPowerSave": "省电",
+  "syncLevelUnknown": "未运行",
+  "syncNetworkCellular": "移动数据",
+  "syncNetworkOther": "Wi-Fi / 其它",
+  "syncPowerSaveOn": "省电模式",
+  "syncPowerSaveOff": "非省电",
+  "syncCellularPauseTitle": "移动数据下暂停自动同步",
+  "syncCellularPauseSubtitle": "关闭时移动数据下只同步设置 / 歌单 / 会话等小类别，统计与历史留到 Wi-Fi",
   "syncAppliedItems": "应用 {applied} 项",
   "syncPeerCount": "{count} 个对端",
   "syncFailedCount": "{count} 项失败",
