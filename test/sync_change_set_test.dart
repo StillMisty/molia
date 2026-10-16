@@ -391,7 +391,8 @@ class RecordingSyncAdapter implements SyncAdapter {
   bool get ready => true;
 
   @override
-  Future<Map<SyncCategory, List<SyncRecord>>> collect() async => const {};
+  Future<Map<SyncCategory, List<SyncRecord>>> collect({bool fresh = false}) async =>
+      const {};
 
   @override
   Future<SyncApplyOutcome> apply(
@@ -427,7 +428,8 @@ class RecordingAdapter implements SyncAdapter {
   bool get ready => inner.ready;
 
   @override
-  Future<Map<SyncCategory, List<SyncRecord>>> collect() => inner.collect();
+  Future<Map<SyncCategory, List<SyncRecord>>> collect({bool fresh = false}) =>
+      inner.collect(fresh: fresh);
 
   @override
   Future<SyncApplyOutcome> apply(

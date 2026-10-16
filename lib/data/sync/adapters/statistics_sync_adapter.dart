@@ -29,10 +29,10 @@ class StatisticsSyncAdapter implements SyncAdapter {
   bool get ready => true;
 
   @override
-  Future<Map<SyncCategory, List<SyncRecord>>> collect() async {
+  Future<Map<SyncCategory, List<SyncRecord>>> collect({bool fresh = false}) async {
     final key = await _repository.syncFingerprint();
     final cached = _cached;
-    if (cached != null && _cacheKey == key) return cached;
+    if (!fresh && cached != null && _cacheKey == key) return cached;
     final records = await _readRecords();
     _cacheKey = key;
     _cached = records;

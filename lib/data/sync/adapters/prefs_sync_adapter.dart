@@ -46,7 +46,7 @@ class PrefsSyncAdapter implements SyncAdapter {
   bool get ready => true;
 
   @override
-  Future<Map<SyncCategory, List<SyncRecord>>> collect() async {
+  Future<Map<SyncCategory, List<SyncRecord>>> collect({bool fresh = false}) async {
     final records = <SyncCategory, List<SyncRecord>>{};
     final changes = <SyncJournalChange>[];
     for (final key in _settings.keys) {
@@ -106,12 +106,23 @@ class PrefsSyncAdapter implements SyncAdapter {
           skipped++;
           continue;
         }
-        final stamp = _state.settingStamps[record.key];
-        if (stamp != null && !record.version.isNewerThan(stamp.version)) {
-          skipped++;
-          continue;
-        }
         final value = record.data?['v'];
+        final stamp = _state.settingStamps[record.key];
+        if (stamp != null) {
+          if (stamp.version.isNewerThan(record.version)) {
+            skipped++;
+            continue;
+          }
+          // 同版本（只会来自全量快照的强制交付）：比较**当前值**与登记——
+          // 一致则幂等跳过；不一致说明值被直接改写，用权威视图修回去。
+          if (stamp.version == record.version) {
+            final current = await _settings.readRaw(key);
+            if (stamp.hash == _hash(current)) {
+              skipped++;
+              continue;
+            }
+          }
+        }
         await _settings.writeRaw(key, value);
         _state.putSettingStamp(
           record.key,

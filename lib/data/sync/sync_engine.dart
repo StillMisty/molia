@@ -455,7 +455,8 @@ class SyncEngine extends ChangeNotifier implements SyncSchedulerHost {
       final journalHead = journal == null ? 0 : await journal.headSeq();
 
       final categories = onlyCategories ?? _state.enabledCategories;
-      final local = await _collect(categories);
+      // anti-entropy 轮重新读行（廉价指纹看不到「行被直接改写」）。
+      final local = await _collect(categories, fresh: antiEntropy);
       final fingerprint = _fingerprint(local);
       final localChanged = _localFingerprint == null || fingerprint != _localFingerprint;
 
@@ -568,9 +569,21 @@ class SyncEngine extends ChangeNotifier implements SyncSchedulerHost {
       var inboundRestored = false;
 
       try {
+        // 强制交付的键：合并时剔除本地同版本记录，让权威视图胜出
+        // （同版本但内容不一致 = 本地被直接改写，不能按「先出现者胜」保留）。
+        final localForMerge = <SyncCategory, List<SyncRecord>>{};
+        for (final entry in local.entries) {
+          final kept = [
+            for (final record in entry.value)
+              if (!forcedDelivery
+                  .contains((category: entry.key, key: record.key)))
+                record,
+          ];
+          if (kept.isNotEmpty) localForMerge[entry.key] = kept;
+        }
         final merged = mergeEnvelopesByCategory(
           [
-            _envelopeFrom(local),
+            _envelopeFrom(localForMerge),
             SyncEnvelope(
               deviceId: _state.deviceId,
               producedAt: startedAt,
@@ -1414,12 +1427,13 @@ class SyncEngine extends ChangeNotifier implements SyncSchedulerHost {
   }
 
   Future<Map<SyncCategory, List<SyncRecord>>> _collect(
-    Set<SyncCategory> categories,
-  ) async {
+    Set<SyncCategory> categories, {
+    bool fresh = false,
+  }) async {
     final result = <SyncCategory, List<SyncRecord>>{};
     for (final adapter in _adapters) {
       if (!adapter.ready) continue;
-      final collected = await adapter.collect();
+      final collected = await adapter.collect(fresh: fresh);
       for (final entry in collected.entries) {
         if (!categories.contains(entry.key)) continue;
         if (entry.value.isEmpty) continue;

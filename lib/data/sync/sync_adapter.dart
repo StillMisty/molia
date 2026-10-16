@@ -16,7 +16,11 @@ abstract interface class SyncAdapter {
   /// 本轮是否可工作（如音源仓库尚未初始化时跳过，避免误判删除）。
   bool get ready;
 
-  Future<Map<SyncCategory, List<SyncRecord>>> collect();
+  /// 导出本机视图。
+  ///
+  /// [fresh] 为 true 时绕过「廉价指纹缓存」重新读行：anti-entropy 的全量校验
+  /// 必须看到真实内容（行被直接改写时指纹（行数 + 最大版本）不会变化）。
+  Future<Map<SyncCategory, List<SyncRecord>>> collect({bool fresh = false});
 
   Future<SyncApplyOutcome> apply(Map<SyncCategory, List<SyncRecord>> records);
 }

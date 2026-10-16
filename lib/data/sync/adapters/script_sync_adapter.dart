@@ -52,7 +52,7 @@ class ScriptSyncAdapter implements SyncAdapter {
   bool get ready => _ready();
 
   @override
-  Future<Map<SyncCategory, List<SyncRecord>>> collect() async {
+  Future<Map<SyncCategory, List<SyncRecord>>> collect({bool fresh = false}) async {
     if (!ready) return const {};
     final scripts = _repository.scripts;
     final currentIds = [for (final script in scripts) script.id];
@@ -161,12 +161,20 @@ class ScriptSyncAdapter implements SyncAdapter {
 
       if (record.key == SyncRecordKeys.activeScriptKey) {
         final stamp = _state.activeScriptStamp;
-        if (stamp != null && !record.version.isNewerThan(stamp.version)) {
-          skipped++;
-          continue;
-        }
         final rawId = record.data?['id'];
         final target = rawId is String && rawId.isNotEmpty ? rawId : null;
+        if (stamp != null) {
+          if (stamp.version.isNewerThan(record.version)) {
+            skipped++;
+            continue;
+          }
+          // 同版本：指针一致 → 幂等跳过；不一致 → 修回去（全量快照权威）。
+          if (stamp.version == record.version &&
+              stamp.hash == (target ?? '')) {
+            skipped++;
+            continue;
+          }
+        }
         if ((_repository.activeId ?? '') != (target ?? '')) {
           // 目标脚本可能在本轮稍后落地（同批记录顺序不保证）；
           // 全部应用完成后由 [onScriptsChanged] 按仓库现状统一刷新。
@@ -222,9 +230,21 @@ class ScriptSyncAdapter implements SyncAdapter {
         continue;
       }
       final stamp = _state.scriptStamps[info.id];
-      if (stamp != null && !record.version.isNewerThan(stamp.version)) {
-        skipped++;
-        continue;
+      final hash = _contentHash(info);
+      if (stamp != null) {
+        if (stamp.version.isNewerThan(record.version)) {
+          skipped++;
+          continue;
+        }
+        // 同版本（只会来自全量快照的强制交付）：比较**当前脚本**与登记——
+        // 一致则幂等跳过；不一致（脚本被直接改写）用权威视图修回去。
+        if (stamp.version == record.version) {
+          final current = _scriptOf(info.id);
+          if (current != null && stamp.hash == _contentHash(current)) {
+            skipped++;
+            continue;
+          }
+        }
       }
       final tombstone = _state.scriptTombstones[info.id];
       if (tombstone != null && !record.version.isNewerThan(tombstone.version)) {
@@ -238,7 +258,7 @@ class ScriptSyncAdapter implements SyncAdapter {
       applied++;
       _state.putScriptStamp(
         info.id,
-        SyncStamp(hash: _contentHash(info), version: record.version),
+        SyncStamp(hash: hash, version: record.version),
       );
       if (tombstone != null) {
         _state.removeScriptTombstone(info.id);

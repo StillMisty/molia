@@ -39,7 +39,7 @@ class SessionSyncAdapter implements SyncAdapter {
   bool get ready => true;
 
   @override
-  Future<Map<SyncCategory, List<SyncRecord>>> collect() async {
+  Future<Map<SyncCategory, List<SyncRecord>>> collect({bool fresh = false}) async {
     final loaded = await _store.loadRaw();
     // 本地下载曲目不同步：文件是设备本机的持久副本，其它设备无法播放。
     final raw = loaded == null ? null : _withoutLocalTracks(loaded);
@@ -109,22 +109,34 @@ class SessionSyncAdapter implements SyncAdapter {
     }
     if (record == null) return SyncApplyOutcome.none;
 
+    final data = record.data;
+    final savedAt =
+        (data?[PlaybackSessionStore.savedAtKey] as num?)?.toInt() ?? 0;
     final stamp = _state.sessionStamp;
-    if (stamp != null && !record.version.isNewerThan(stamp.version)) {
-      return const SyncApplyOutcome(applied: 0, skipped: 1);
+    if (stamp != null) {
+      if (stamp.version.isNewerThan(record.version)) {
+        return const SyncApplyOutcome(applied: 0, skipped: 1);
+      }
+      // 同版本（只会来自全量快照的强制交付）：比较**当前会话**与登记——
+      // 一致则幂等跳过；不一致（本地会话被直改）用权威视图修回去。
+      if (stamp.version == record.version) {
+        final current = await _store.loadRaw();
+        final currentSavedAt =
+            (current?[PlaybackSessionStore.savedAtKey] as num?)?.toInt() ?? 0;
+        if (stamp.hash == '$currentSavedAt') {
+          return const SyncApplyOutcome(applied: 0, skipped: 1);
+        }
+      }
     }
 
     if (record.deleted) {
       await _store.clear();
       _state.setSessionStamp(SyncStamp(version: record.version));
     } else {
-      final data = record.data;
       if (data == null || data.isEmpty) {
         return const SyncApplyOutcome(applied: 0, skipped: 1);
       }
       await _store.saveRaw(data.map((k, v) => MapEntry(k.toString(), v)));
-      final savedAt =
-          (data[PlaybackSessionStore.savedAtKey] as num?)?.toInt() ?? 0;
       _state.setSessionStamp(SyncStamp(
         hash: '$savedAt',
         version: record.version,

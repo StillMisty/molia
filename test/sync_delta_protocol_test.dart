@@ -1,5 +1,7 @@
+import 'package:drift/drift.dart' show Value;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:molia/data/sync/sync_journal.dart';
+import 'package:molia/data/molia_database.dart';
 import 'package:molia/domain/models/device_sync.dart';
 import 'package:molia/domain/models/library.dart';
 
@@ -254,6 +256,34 @@ void main() {
     await b.engine.syncNow();
     expect(b.prefs.getString('theme_mode'), 'dark');
     expect(await b.library.listHistory(), hasLength(1));
+  });
+
+  test('anti-entropy：直改内容（版本不变）也能修回远端值', () async {
+    var now = DateTime.now().millisecondsSinceEpoch;
+    int clock() => now;
+    final a = await network.addDevice('devA', clock: clock);
+    final b = await network.addDevice('devB', clock: clock);
+    await a.library.addHistoryEntry(const PlayHistoryEntry(
+      sourceKey: 'kuwo',
+      songId: 'song-1',
+      title: '远端标题',
+      playedAt: 10,
+    ));
+    await a.engine.syncNow();
+    await b.engine.syncNow();
+    expect((await b.library.listHistory()).single.title, '远端标题');
+
+    // 直改标题（版本三列不动）：LWW 判不出差异，只有全量兜底能修。
+    await (b.db.update(b.db.playHistory)
+          ..where((t) => t.songId.equals('song-1')))
+        .write(const PlayHistoryCompanion(title: Value('被篡改的标题')));
+
+    now += 11 * 60 * 1000;
+    network.resetCounters();
+    await b.engine.syncNow(antiEntropy: true);
+
+    expect(network.bootstrapServed, greaterThan(0));
+    expect((await b.library.listHistory()).single.title, '远端标题');
   });
 
   test('失联设备不拖住日志裁剪：compact 的 minAck 跳过失联对端', () async {

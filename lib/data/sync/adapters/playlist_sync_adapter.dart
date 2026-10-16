@@ -33,12 +33,12 @@ class PlaylistSyncAdapter implements SyncAdapter {
   bool get ready => true;
 
   @override
-  Future<Map<SyncCategory, List<SyncRecord>>> collect() async {
+  Future<Map<SyncCategory, List<SyncRecord>>> collect({bool fresh = false}) async {
     final key = syncFingerprintKey(
       await _repository.syncFingerprints(categories),
     );
     final cached = _cached;
-    if (cached != null && _cacheKey == key) return cached;
+    if (!fresh && cached != null && _cacheKey == key) return cached;
     final records = await _readRecords();
     _cacheKey = key;
     _cached = records;

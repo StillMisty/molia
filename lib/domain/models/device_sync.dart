@@ -115,6 +115,9 @@ class SyncVersion implements Comparable<SyncVersion> {
   /// [this] 是否严格新于 [other]（`(physical, counter, deviceId)` 字典序）。
   bool isNewerThan(SyncVersion other) => compareTo(other) > 0;
 
+  /// [this] 是否严格旧于 [other]。
+  bool isOlderThan(SyncVersion other) => compareTo(other) < 0;
+
   @override
   int compareTo(SyncVersion other) {
     if (physical != other.physical) return physical.compareTo(other.physical);

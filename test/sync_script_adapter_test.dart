@@ -45,6 +45,46 @@ void main() {
     adapter = ScriptSyncAdapter(repository: repository, state: state);
   });
 
+  test('同版本但内容不同：修回远端脚本（全量快照的强制交付）', () async {
+    await repository.add(script('a'));
+    final version = SyncVersion(physical: 9000, deviceId: 'devB');
+    final remote = SyncRecord(
+      key: 'a',
+      version: version,
+      data: script('a').toJson(),
+    );
+
+    // 首次应用：登记版本 = 远端版本。
+    await adapter.apply({
+      SyncCategory.sources: [remote],
+    });
+    expect(state.scriptStamps['a']!.version, version);
+
+    // 脚本被直接改写（登记哈希与版本都没变）→ 同版本重放要修回去。
+    await repository.add(LxScriptInfo(
+      id: 'a',
+      name: '被改写',
+      description: '',
+      version: '9.9.9',
+      author: '',
+      homepage: '',
+      script: '/* @name 被改写 */',
+      importedAt: 500,
+    ));
+    final repaired = await adapter.apply({
+      SyncCategory.sources: [remote],
+    });
+    expect(repaired.applied, 1);
+    expect(repository.scripts.single.name, '源 a');
+
+    // 内容一致时重复应用仍然幂等。
+    final again = await adapter.apply({
+      SyncCategory.sources: [remote],
+    });
+    expect(again.applied, 0);
+    expect(again.skipped, 1);
+  });
+
   test('本地删除一律取新戳：删除能外传，且不被陈旧远端脚本复活', () async {
     await repository.add(script('lx-a'));
     final collected = await adapter.collect();

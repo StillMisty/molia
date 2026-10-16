@@ -193,7 +193,8 @@ class RecordingAdapter implements SyncAdapter {
   bool get ready => true;
 
   @override
-  Future<Map<SyncCategory, List<SyncRecord>>> collect() async => const {};
+  Future<Map<SyncCategory, List<SyncRecord>>> collect({bool fresh = false}) async =>
+      const {};
 
   @override
   Future<SyncApplyOutcome> apply(

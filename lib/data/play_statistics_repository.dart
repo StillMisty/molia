@@ -238,6 +238,13 @@ class PlayStatisticsRepository {
     await journal.append(executor, [change]);
   }
 
+  /// 同版本内容比较（全量快照修复被直接改写的行；内容一致则跳过）。
+  static bool _eventMatches(PlayEventRow row, Map<String, Object?> event) =>
+      row.endedAt == (event['endedAt'] as num?)?.toInt() &&
+      row.listenedMs == ((event['listenedMs'] as num?)?.toInt() ?? 0) &&
+      row.maxPositionMs == ((event['maxPositionMs'] as num?)?.toInt() ?? 0) &&
+      row.endReason == event['endReason'] as String?;
+
   /// 清空全部统计事件（不可撤销）。
   Future<void> clearAll() async {
     await _db.delete(_db.playEvents).go();
@@ -633,7 +640,10 @@ class PlayStatisticsRepository {
                 versionCounter: Value(version.counter),
               ));
           applied++;
-        } else if (version.isNewerThan(existing.syncVersion)) {
+        } else if (version.isNewerThan(existing.syncVersion) ||
+            (!version.isOlderThan(existing.syncVersion) &&
+                !_eventMatches(existing, event))) {
+          // 同版本也应用（修复被直接改写的本地事件行）；内容一致则跳过。
           await (db.update(db.playEvents)
                 ..where((t) => t.id.equals(existing.id)))
               .write(PlayEventsCompanion(

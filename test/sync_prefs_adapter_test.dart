@@ -84,6 +84,40 @@ void main() {
     expect(after.data, {'v': 'light'});
   });
 
+  test('同版本但值不同：修回远端值（全量快照的强制交付）', () async {
+    await adapter.collect(); // 登记默认值
+    final stamp = state.settingStamps['theme_mode']!;
+    final version = SyncVersion(physical: 9000, deviceId: 'devB');
+    // 先应用一次远端值（登记版本 = 远端版本）。
+    await adapter.apply({
+      SyncCategory.settings: [
+        SyncRecord(key: 'theme_mode', version: version, data: {'v': 'dark'}),
+      ],
+    });
+    expect(prefs.getString('theme_mode'), 'dark');
+    expect(state.settingStamps['theme_mode']!.version, version);
+
+    // 值被直接改写（版本与登记都没变）→ 同版本重放要能修回去。
+    await prefs.setString('theme_mode', 'tampered');
+    final repaired = await adapter.apply({
+      SyncCategory.settings: [
+        SyncRecord(key: 'theme_mode', version: version, data: {'v': 'dark'}),
+      ],
+    });
+    expect(repaired.applied, 1);
+    expect(prefs.getString('theme_mode'), 'dark');
+
+    // 内容一致时重复应用仍然幂等（不产生写入）。
+    final again = await adapter.apply({
+      SyncCategory.settings: [
+        SyncRecord(key: 'theme_mode', version: version, data: {'v': 'dark'}),
+      ],
+    });
+    expect(again.applied, 0);
+    expect(again.skipped, 1);
+    expect(stamp.version, isNot(version));
+  });
+
   test('应用远端更新：写回 Prefs 并更新登记（重复应用幂等）', () async {
     await adapter.collect(); // 登记默认值
     final remote = SyncRecord(

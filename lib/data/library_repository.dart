@@ -1490,7 +1490,12 @@ class LibraryRepository implements LibraryStore, LibrarySyncStore {
           }
         }
         final local = await _historyRow(db, sourceKey, songId);
-        if (local == null || entry.version.isNewerThan(local.syncVersion)) {
+        // 同版本也应用：全量快照是权威视图，可能修掉被直接改写的本地行；
+        // 内容一致则跳过（重复交付幂等，不产生写入）。
+        if (local == null ||
+            entry.version.isNewerThan(local.syncVersion) ||
+            (!entry.version.isOlderThan(local.syncVersion) &&
+                !_historyMatches(local, entry))) {
           await db.into(db.playHistory).insert(
                 PlayHistoryCompanion.insert(
                   sourceKey: sourceKey,
@@ -1662,7 +1667,12 @@ class LibraryRepository implements LibraryStore, LibrarySyncStore {
           applied++;
         } else {
           localIds[syncId] = local.id;
-          if (record.version.isNewerThan(local.version)) {
+          // 同版本也应用（修复被直接改写的本地行）；内容一致则跳过。
+          final localRow = await _playlistRowById(db, local.id);
+          if (record.version.isNewerThan(local.version) ||
+              (!record.version.isOlderThan(local.version) &&
+                  (localRow == null ||
+                      !_playlistMatches(localRow, syncId, record)))) {
             await (db.update(db.playlists)
                   ..where((t) => t.id.equals(local.id)))
                 .write(PlaylistsCompanion(
@@ -1724,7 +1734,9 @@ class LibraryRepository implements LibraryStore, LibrarySyncStore {
                 ),
               );
           applied++;
-        } else if (record.version.isNewerThan(existing.syncVersion)) {
+        } else if (record.version.isNewerThan(existing.syncVersion) ||
+            (!record.version.isOlderThan(existing.syncVersion) &&
+                !_trackMatches(existing, record))) {
           await (db.update(db.playlistTracks)
                 ..where((t) =>
                     t.playlistId.equals(playlistId) &
@@ -1751,6 +1763,49 @@ class LibraryRepository implements LibraryStore, LibrarySyncStore {
     if (applied > 0) _notifyChanged(const LibraryChange.import());
     return (applied: applied, skipped: skipped);
   }
+
+  // 同版本内容比较：全量快照是权威视图，同版本但内容不同（被直接改写 /
+  // 直接改库）要修回去；内容一致则跳过，保证重复交付幂等。
+
+  static bool _historyMatches(PlayHistoryData row, PlayHistorySyncRecord entry) =>
+      row.title == entry.title &&
+      row.artist == entry.artist &&
+      row.album == entry.album &&
+      row.coverUrl == entry.coverUrl &&
+      row.durationMs == entry.durationMs &&
+      row.raw == entry.raw &&
+      row.playedAt == entry.playedAt;
+
+  static bool _playlistMatches(
+    Playlist row,
+    String syncId,
+    PlaylistSyncRecord record,
+  ) =>
+      row.name == record.name &&
+      row.createdAt == record.createdAt &&
+      (row.syncId ?? '') == syncId;
+
+  static bool _trackMatches(
+    PlaylistTrackRow row,
+    PlaylistTrackSyncRecord record,
+  ) =>
+      row.title == record.title &&
+      row.artist == record.artist &&
+      row.album == record.album &&
+      row.coverUrl == record.coverUrl &&
+      row.durationMs == record.durationMs &&
+      row.raw == record.raw &&
+      row.addedAt == record.addedAt &&
+      row.sortOrder == record.sortOrder;
+
+  Future<Playlist?> _playlistRowById(
+    DatabaseConnectionUser executor,
+    int id,
+  ) =>
+      (executor.select(_db.playlists)
+            ..where((t) => t.id.equals(id))
+            ..limit(1))
+          .getSingleOrNull();
 
   /// 补齐 v5 前旧行的 syncId（收藏固定值；其余随机生成，只补一次）。
   Future<void> _ensurePlaylistSyncIds(DatabaseConnectionUser executor) async {
