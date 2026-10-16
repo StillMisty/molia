@@ -34,14 +34,16 @@ class SyncCryptoException implements Exception {
 /// 不降低离线猜口令成本（帧盐本来就随密文公开），而接收方一轮内 N 份快照
 /// 只做一次 PBKDF2。
 ///
-/// 帧版本 1 = 旧式 `PBKDF2(口令, 帧盐)` 直接派生，仍可解密（与既有快照 /
-/// 未升级对端互通）；版本 2 = 上述两级派生。加密只产出版本 2。
+/// 帧版本决定密钥派生路径（帧布局与解密语义不变）：
+/// - 版本 1：`PBKDF2(口令, 帧盐)` 直接派生——v0.1.0-beta.7 及更早版本产出的
+///   帧格式，保留解密；
+/// - 版本 2：上述两级派生；加密只产出版本 2。
 class SyncCodec {
   SyncCodec({this.iterations = 120000});
 
   static const String _magic = 'MOLIASYNC';
 
-  /// 帧版本 1：PBKDF2 直接派生（解密兼容）。
+  /// 帧版本 1：`PBKDF2(口令, 帧盐)` 直接派生（已发布帧格式，保留解密）。
   static const int _versionPbkdf2 = 1;
 
   /// 帧版本 2：根密钥（PBKDF2 缓存）+ HKDF 帧密钥。

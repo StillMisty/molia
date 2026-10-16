@@ -71,7 +71,7 @@ class SyncScheduler {
     _lastInteractionAt = _nowMs();
   }
 
-  /// 蜂窝网络下只同步的小类别：设置 / 音源 / 凭证 / 歌单 / 会话；
+  /// 蜂窝网络下只同步的小类别：设置 / 音源 / 凭证 / 歌单与曲目 / 会话；
   /// 统计与历史等大类别留到 Wi-Fi。
   static const Set<SyncCategory> smallCategories = {
     SyncCategory.settings,
