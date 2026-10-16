@@ -2632,6 +2632,13 @@ class AppLocalizationsEn extends AppLocalizations {
       'Also copy finished downloads into the system Downloads folder (Android public storage) so file managers and other players can see them; playback still uses the in-app copy';
 
   @override
+  String get downloadNotifications => 'Download notifications';
+
+  @override
+  String get downloadNotificationsSubtitle =>
+      'Show download progress in the notification shade and keep downloads running in the background (Android foreground service)';
+
+  @override
   String get downloadLocationInfo => 'Download folder';
 
   @override

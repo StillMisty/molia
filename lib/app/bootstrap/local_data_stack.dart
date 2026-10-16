@@ -11,6 +11,7 @@ library;
 
 import 'dart:async';
 
+import '../../data/downloads/download_notifications.dart';
 import '../../data/downloads/download_storage.dart';
 import '../../data/downloads/downloads_publisher.dart';
 import '../../data/downloads/downloads_repository.dart';
@@ -96,6 +97,7 @@ Future<LocalDataStack> buildLocalDataStack({
     artworkCache: ArtworkCache.instance,
     settings: downloadSettings,
     publisher: createDownloadsPublisher(),
+    notifications: createDownloadNotifications(),
     lyricsResolver: (track) => _resolveDownloadLyrics(lyricsService, track),
     artworkResolver: (track) =>
         sourceManager.fetchPic(sourceTrackFromTrack(track)),

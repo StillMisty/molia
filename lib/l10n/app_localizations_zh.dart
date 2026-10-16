@@ -2525,6 +2525,13 @@ class AppLocalizationsZh extends AppLocalizations {
       '下载完成后额外拷贝一份到系统「下载」目录（Android 公共目录），文件管理器与其它播放器可见；播放仍用应用内的副本';
 
   @override
+  String get downloadNotifications => '下载通知';
+
+  @override
+  String get downloadNotificationsSubtitle =>
+      '下载时在通知栏显示进度，并由前台服务让下载在后台继续（Android）；需要通知权限';
+
+  @override
   String get downloadLocationInfo => '下载目录';
 
   @override

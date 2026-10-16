@@ -1353,6 +1353,8 @@
   "downloadEmbedTagsSubtitle": "Write tags into the audio file (MP3 / FLAC) so other players can read them; sidecar files remain when writing fails",
   "downloadPublishToPublicDir": "Publish to system Downloads",
   "downloadPublishToPublicDirSubtitle": "Also copy finished downloads into the system Downloads folder (Android public storage) so file managers and other players can see them; playback still uses the in-app copy",
+  "downloadNotifications": "Download notifications",
+  "downloadNotificationsSubtitle": "Show download progress in the notification shade and keep downloads running in the background (Android foreground service)",
   "downloadLocationInfo": "Download folder",
   "downloadLocationUnsupported": "Downloading is not supported on this platform",
   "save": "Save",

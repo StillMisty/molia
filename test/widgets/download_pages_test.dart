@@ -12,6 +12,7 @@ import 'package:material_ui/material_ui.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../support/fake_download_notifications.dart';
 import '../support/fake_download_storage.dart';
 import '../support/fake_downloads_publisher.dart';
 import '../support/fake_music_source.dart';
@@ -39,6 +40,7 @@ void main() {
       settings: settings,
       // Android 语义（发布器支持）：设置页 / 管理页显示公共目录条目。
       publisher: FakeDownloadsPublisher(),
+      notifications: FakeDownloadNotifications(),
     );
     await downloads.init();
     backend = FakePlaybackBackend();
@@ -87,6 +89,10 @@ void main() {
     // 发布器支持（Android）：公共目录发布开关可见，默认开。
     expect(find.byKey(const Key('downloadPublishPublicSwitch')), findsOneWidget);
     expect(find.text('发布到公共下载目录'), findsOneWidget);
+    // 通知支持（Android）：下载通知开关可见，默认开。
+    expect(
+        find.byKey(const Key('downloadNotificationsSwitch')), findsOneWidget);
+    expect(find.text('下载通知'), findsOneWidget);
 
     // 关闭标签嵌入：持久化。
     await tester.tap(find.byKey(const Key('downloadEmbedTagsSwitch')));
@@ -97,6 +103,11 @@ void main() {
     await tester.tap(find.byKey(const Key('downloadPublishPublicSwitch')));
     await tester.pumpAndSettle();
     expect(settings.publishToPublicDir, isFalse);
+
+    // 关闭下载通知：持久化。
+    await tester.tap(find.byKey(const Key('downloadNotificationsSwitch')));
+    await tester.pumpAndSettle();
+    expect(settings.notifications, isFalse);
   });
 
   testWidgets('下载设置页：发布器不支持（桌面 / Web）时隐藏公共目录开关',
@@ -109,6 +120,7 @@ void main() {
       storage: FakeDownloadStorage(),
       settings: settings,
       publisher: FakeDownloadsPublisher(supported: false),
+      notifications: FakeDownloadNotifications(supported: false),
     );
     await desktop.init();
     addTearDown(desktop.dispose);
@@ -134,6 +146,7 @@ void main() {
     await tester.pump(const Duration(milliseconds: 50));
 
     expect(find.byKey(const Key('downloadPublishPublicSwitch')), findsNothing);
+    expect(find.byKey(const Key('downloadNotificationsSwitch')), findsNothing);
   });
 
   testWidgets('下载设置页：文件名模板弹层实时预览并可保存', (tester) async {
