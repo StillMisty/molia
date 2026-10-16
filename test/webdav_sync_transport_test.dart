@@ -117,6 +117,31 @@ void main() {
     expect(server.mkcolCount, greaterThan(0));
     expect(server.files, contains('devA.msync'));
   });
+
+  test('目录准备失败：计为失败对端并带原因（不被判成「没发现对端」）', () async {
+    server.mkcolStatus = 500;
+    final a = transport('devA');
+    addTearDown(() => a.stop());
+    await a.start();
+
+    final result = await a.pull();
+    // 目录都没准备好 = 一个对端都没接触上：必须计数，否则引擎侧
+    // failedPeers=0 会把整轮判成 noPeers 并吞掉错误。
+    expect(result.failedPeers, 1);
+    expect(result.error?.code, SyncIssueCode.webdavDirFailed);
+    expect(result.error?.detail, isNotNull);
+  });
+
+  test('目录列表失败：计为失败对端并带原因', () async {
+    server.propfindStatus = 500;
+    final a = transport('devA');
+    addTearDown(() => a.stop());
+    await a.start();
+
+    final result = await a.pull();
+    expect(result.failedPeers, 1);
+    expect(result.error?.code, SyncIssueCode.webdavListFailed);
+  });
 }
 
 /// 最小 WebDAV 假服务：MKCOL / PROPFIND / PUT / GET + 可选 Basic 鉴权。
@@ -127,6 +152,10 @@ class FakeWebDavServer {
   int propfindCount = 0;
   int putCount = 0;
   int getCount = 0;
+
+  /// 覆盖 MKCOL / PROPFIND 的状态码（默认成功路径）。
+  int mkcolStatus = 201;
+  int propfindStatus = 207;
   String? expectedAuth;
 
   String get baseUrl => 'http://127.0.0.1:${server.port}/dav';
@@ -148,10 +177,11 @@ class FakeWebDavServer {
       switch (request.method) {
         case 'MKCOL':
           mkcolCount++;
-          request.response.statusCode = 201;
+          request.response.statusCode = mkcolStatus;
         case 'PROPFIND':
           propfindCount++;
-          request.response.statusCode = 207;
+          request.response.statusCode = propfindStatus;
+          if (propfindStatus >= 400) break;
           final prefix = request.uri.path.endsWith('/')
               ? request.uri.path
               : '${request.uri.path}/';

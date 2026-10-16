@@ -12,8 +12,11 @@ import 'package:molia/data/settings/settings_registry.dart';
 import 'package:molia/data/sync/adapters/prefs_sync_adapter.dart';
 import 'package:molia/data/sync/sync_engine.dart';
 import 'package:molia/data/sync/sync_state_store.dart';
+import 'package:molia/data/sync/transport/local_network_permission.dart';
 import 'package:molia/domain/models/device_sync.dart';
+import 'package:molia/domain/ports/sync_transport.dart';
 import 'package:molia/l10n/app_localizations.dart';
+import 'package:molia/pages/sync_log_page.dart';
 import 'package:molia/pages/sync_settings_page.dart';
 import 'package:molia/providers/sync_provider.dart';
 import 'package:molia/services/language_service.dart';
@@ -30,12 +33,17 @@ void main() {
   late FakeSyncTransport transport;
   late SyncEngine engine;
   late SyncProvider provider;
+  var nowMs = 7000;
 
   setUp(() async {
     SharedPreferences.setMockInitialValues({});
     final prefs = await SharedPreferences.getInstance();
     final secrets = MemorySyncSecretStore();
-    state = SyncStateStore(preferences: prefs, secrets: secrets);
+    state = SyncStateStore(
+      preferences: prefs,
+      secrets: secrets,
+      clock: () => nowMs++,
+    );
     await state.init();
     transport = FakeSyncTransport();
     engine = SyncEngine(
@@ -145,7 +153,7 @@ void main() {
 
     expect(provider.lastOutcome, SyncOutcome.noPeers);
     expect(find.text('No peer found'), findsWidgets);
-    // 旧的「跳过 N 项」（全库计数）不再出现在任何文案里。
+    // 「跳过 N 项」这类全库计数不出现在任何文案里。
     expect(find.textContaining('skipped'), findsNothing);
   });
 
@@ -236,5 +244,73 @@ void main() {
       find.byKey(const Key('settingsSyncPeer-192.168.1.23')),
       findsOneWidget,
     );
+  });
+
+  testWidgets('局域网权限被永久拒绝：动作是「去系统设置」', (tester) async {
+    await provider.setEnabled(true);
+    transport.unavailableReason = SyncUnavailableReason.permissionDenied;
+    var opened = 0;
+    final permission = LocalNetworkPermission(
+      needsPermission: true,
+      request: () async => LocalNetworkPermissionStatus.permanentlyDenied,
+      check: () async => LocalNetworkPermissionStatus.permanentlyDenied,
+      openSettings: () async => opened++,
+    );
+    await permission.refresh();
+    provider.dispose();
+    provider = SyncProvider(engine: engine, lanPermission: permission);
+    await provider.init();
+    await pumpPage(tester);
+
+    expect(
+      find.byKey(const Key('settingsSyncLanPermissionItem')),
+      findsOneWidget,
+    );
+    // 系统不再弹窗：不给「授予权限」，直接指去系统设置。
+    expect(find.text('Open settings'), findsOneWidget);
+    expect(find.text('Grant LAN permission'), findsNothing);
+    await tester.tap(find.byKey(const Key('settingsSyncLanPermissionItem')));
+    await tester.pumpAndSettle();
+    expect(opened, 1);
+  });
+
+  testWidgets('局域网权限可再申请：动作是「授予权限」', (tester) async {
+    await provider.setEnabled(true);
+    transport.unavailableReason = SyncUnavailableReason.permissionDenied;
+    var requested = 0;
+    final permission = LocalNetworkPermission(
+      needsPermission: true,
+      request: () async {
+        requested++;
+        return LocalNetworkPermissionStatus.granted;
+      },
+      check: () async => LocalNetworkPermissionStatus.denied,
+    );
+    provider.dispose();
+    provider = SyncProvider(engine: engine, lanPermission: permission);
+    await provider.init();
+    await pumpPage(tester);
+
+    expect(find.text('Grant LAN permission'), findsOneWidget);
+    await tester.tap(find.byKey(const Key('settingsSyncLanPermissionItem')));
+    await tester.pumpAndSettle();
+    expect(requested, 1);
+  });
+
+  testWidgets('日志超过 6 行：首屏留 6 行 + 入口进完整日志子页', (tester) async {
+    await provider.setEnabled(true);
+    for (var i = 0; i < 7; i++) {
+      await provider.syncNow(manual: true);
+    }
+    await pumpPage(tester);
+
+    expect(find.byKey(const Key('settingsSyncLogMoreItem')), findsOneWidget);
+    expect(find.text('View all logs (7)'), findsOneWidget);
+    // 首屏只渲染 6 行（第 7 行在子页）。
+    expect(find.byType(SyncLogRow), findsNWidgets(6));
+
+    await tester.tap(find.byKey(const Key('settingsSyncLogMoreItem')));
+    await tester.pumpAndSettle();
+    expect(find.byType(SyncLogRow), findsNWidgets(7));
   });
 }

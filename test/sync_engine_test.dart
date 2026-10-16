@@ -89,7 +89,7 @@ void main() {
     expect(report.applied, 1);
     expect(prefs.getString('theme_mode'), 'dark');
 
-    // 日志：触发原因 + 结论 + 变更量（不再有「跳过」这类全库计数）。
+    // 日志：触发原因 + 结论 + 本轮变更量。
     expect(state.log.first.applied, 1);
     expect(state.log.first.outcome, SyncOutcome.ok);
     expect(state.log.first.trigger, SyncTrigger.manual);
@@ -115,7 +115,7 @@ void main() {
     expect(state.peers.single.deviceId, 'devB');
   });
 
-  test('没有对端：结论是 noPeers（不再显示成「同步成功」）', () async {
+  test('没有对端：结论是 noPeers，与「同步完成」区分', () async {
     final report = await engine.syncNow();
 
     expect(report!.outcome, SyncOutcome.noPeers);
@@ -159,6 +159,54 @@ void main() {
     expect(state.log.first.outcome, SyncOutcome.failed);
   });
 
+  test('拉取成功但推送全败且无落地：结论是 partial 而不是 failed', () async {
+    // 拉到一个空快照：探测到对端、拉取成功，但没有可落地的记录。
+    transport.available.add(SyncEnvelope(
+      deviceId: 'devB',
+      deviceName: 'B',
+      producedAt: 5000,
+      records: const {},
+    ));
+    transport.pushFailures = 1;
+    final report = await engine.syncNow();
+
+    // 有成功面（拉取）就不是「所有对端都联系不上」；报 push_failed 让用户知道
+    // 哪一步坏了。
+    expect(report!.outcome, SyncOutcome.partial);
+    expect(report.error?.code, SyncIssueCode.pushFailed);
+    expect(state.log.first.outcome, SyncOutcome.partial);
+  });
+
+  test('noPeers 不吞传输级错误：广播 / 目录失败仍可见', () async {
+    // 传输报告了错误但没有失败对端计数（如 WebDAV 目录准备失败）。
+    transport.pullError = const SyncIssue(code: SyncIssueCode.webdavDirFailed);
+    final report = await engine.syncNow();
+
+    expect(report!.outcome, SyncOutcome.noPeers);
+    expect(report.error?.code, SyncIssueCode.webdavDirFailed);
+    expect(state.log.first.error?.code, SyncIssueCode.webdavDirFailed);
+  });
+
+  test('名册 lastError：失败保留，成功接触才清除', () async {
+    // 第一轮：推送失败 → 名册记 push_failed。
+    transport.pushFailures = 1;
+    transport.pushFailedIds = ['devB'];
+    await engine.syncNow();
+    expect(state.peers.single.lastError?.code, SyncIssueCode.pushFailed);
+
+    // 第二轮：没有接触（无拉取、推送无失败 id）→ 失败状态保留。
+    transport.pushFailures = 0;
+    transport.pushFailedIds = const [];
+    final quiet = await engine.syncNow();
+    expect(quiet!.outcome, SyncOutcome.noPeers);
+    expect(state.peers.single.lastError?.code, SyncIssueCode.pushFailed);
+
+    // 第三轮：成功拉到该对端 → 接触成功，失败清除。
+    transport.available.add(remoteTheme('dark'));
+    await engine.syncNow();
+    expect(state.peers.single.lastError, isNull);
+  });
+
   test('传输异常不冒泡，报告里可见', () async {
     transport.peersSeenOverride = 1;
     transport.throwOnPull = true;
@@ -187,7 +235,7 @@ void main() {
     );
   });
 
-  test('对端入站快照触发同步，且入站轮次不再推送（防乒乓）', () async {
+  test('对端入站快照触发同步，且入站轮次不推送（防乒乓）', () async {
     await engine.onIncomingEnvelope(remoteTheme('light'));
 
     expect(prefs.getString('theme_mode'), 'light');

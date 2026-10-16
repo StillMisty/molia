@@ -79,6 +79,42 @@ void main() {
       await permission.openSystemSettings();
       expect(opened, 1);
     });
+
+    test('未申请：按「允许」处理，不误报权限问题', () async {
+      final permission = LocalNetworkPermission(needsPermission: true);
+      expect(permission.status, LocalNetworkPermissionStatus.notRequested);
+      expect(permission.granted, isTrue);
+      expect(permission.permanentlyDenied, isFalse);
+    });
+
+    test('永久拒绝：ensure 不再请求，UI 动作是去系统设置', () async {
+      var requested = 0;
+      final permission = LocalNetworkPermission(
+        needsPermission: true,
+        request: () async {
+          requested++;
+          return LocalNetworkPermissionStatus.denied;
+        },
+        check: () async => LocalNetworkPermissionStatus.permanentlyDenied,
+      );
+
+      expect(await permission.refresh(), isFalse);
+      expect(permission.permanentlyDenied, isTrue);
+      // 系统不再弹窗：连用户显式请求也不发（只能去系统设置）。
+      expect(await permission.ensure(retry: true), isFalse);
+      expect(requested, 0);
+      expect(permission.granted, isFalse);
+    });
+
+    test('被拒（可再问）与永久拒绝分开', () async {
+      final permission = LocalNetworkPermission(
+        needsPermission: true,
+        request: () async => LocalNetworkPermissionStatus.denied,
+      );
+      expect(await permission.ensure(), isFalse);
+      expect(permission.permanentlyDenied, isFalse);
+      expect(permission.status, LocalNetworkPermissionStatus.denied);
+    });
   });
 
   group('地址簿持久化', () {

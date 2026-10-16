@@ -62,6 +62,15 @@ class FakeSyncTransport implements SyncTransport {
   int pullFailures = 0;
   int pushFailures = 0;
 
+  /// pull 报告的原因（不伴随失败计数：验证传输级错误不被吞）。
+  SyncIssue? pullError;
+
+  /// push 失败时报告的对端 id（走名册失败路径）。
+  List<String> pushFailedIds = const [];
+
+  /// pull 前执行的钩子（模拟传输侧学到手动对端身份等）。
+  Future<void> Function()? onPull;
+
   /// pull 抛异常（模拟传输层崩溃）。
   bool throwOnPull = false;
 
@@ -80,14 +89,17 @@ class FakeSyncTransport implements SyncTransport {
 
   @override
   Future<SyncPullResult> pull() async {
+    await onPull?.call();
     if (throwOnPull) throw StateError('拉取失败（测试注入）');
     return SyncPullResult(
       envelopes: List.of(available),
       peersSeen: peersSeenOverride ?? available.length,
       failedPeers: pullFailures,
-      error: pullFailures > 0
-          ? const SyncIssue(code: SyncIssueCode.pullFailed, detail: '拉取失败（测试注入）')
-          : null,
+      error: pullError ??
+          (pullFailures > 0
+              ? const SyncIssue(
+                  code: SyncIssueCode.pullFailed, detail: '拉取失败（测试注入）')
+              : null),
     );
   }
 
@@ -97,6 +109,7 @@ class FakeSyncTransport implements SyncTransport {
     if (pushFailures > 0) {
       return SyncPushResult(
         failedPeers: pushFailures,
+        failedIds: pushFailedIds,
         error: const SyncIssue(
             code: SyncIssueCode.pushFailed, detail: '推送失败（测试注入）'),
       );

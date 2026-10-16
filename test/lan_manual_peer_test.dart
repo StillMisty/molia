@@ -41,7 +41,47 @@ void main() {
 
     expect(transport.isRunning, isFalse);
     expect(transport.unavailableReason, SyncUnavailableReason.permissionDenied);
-    expect((await transport.pull()).error, isNotNull);
+    final result = await transport.pull();
+    // 传输级错误带原因码与启动细节（细节只进日志 / 诊断）。
+    expect(result.error?.code, SyncIssueCode.permissionDenied);
+    expect(result.error?.detail, isNotNull);
+    expect(transport.unavailableDetail, isNotNull);
+  });
+
+  test('此前发现过、本轮零应答：给出 discoverySilent（提示网络隔离）', () async {
+    final transportA = LanSyncTransport(
+      deviceId: 'devA',
+      deviceName: () => '设备A',
+      codec: codec,
+      passphraseProvider: () async => passphrase,
+      snapshotProvider: () async => envelope('devA'),
+      udpPort: 47867,
+    );
+    final transportB = LanSyncTransport(
+      deviceId: 'devB',
+      deviceName: () => '设备B',
+      codec: codec,
+      passphraseProvider: () async => passphrase,
+      snapshotProvider: () async => envelope('devB'),
+      probeTargets: const [(host: '127.0.0.1', port: 47867)],
+      probeWindow: const Duration(milliseconds: 150),
+      udpPort: 47868,
+    );
+    addTearDown(() async {
+      await transportA.stop();
+      await transportB.stop();
+    });
+    await transportA.start();
+    await transportB.start();
+
+    // 第一轮：发现 A，此后 B 记得「曾经成功发现过」。
+    expect((await transportB.pull()).peersSeen, 1);
+
+    // A 下线：零应答但此前成功过 → 明确提示（手动地址 / WebDAV 是出路）。
+    await transportA.stop();
+    final silent = await transportB.pull();
+    expect(silent.peersSeen, 0);
+    expect(silent.error?.code, SyncIssueCode.discoverySilent);
   });
 
   test('手动对端：单播探测认领 deviceId 与端点端口', () async {
