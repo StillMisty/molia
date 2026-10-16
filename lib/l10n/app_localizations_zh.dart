@@ -2427,6 +2427,9 @@ class AppLocalizationsZh extends AppLocalizations {
   String get syncIssueWebdavUploadFailed => 'WebDAV 快照上传失败';
 
   @override
+  String get syncIssueInternal => '同步内部错误';
+
+  @override
   String get syncActionGrantPermission => '授予权限';
 
   @override

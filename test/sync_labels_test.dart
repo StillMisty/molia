@@ -56,31 +56,16 @@ void main() {
   });
 
   test('每个原因码都有专属文案（不是 unknown 兜底）', () {
-    final zh = lookupAppLocalizations(const Locale('zh'));
-    const codes = [
-      SyncIssueCode.notConfigured,
-      SyncIssueCode.startFailed,
-      SyncIssueCode.permissionDenied,
-      SyncIssueCode.noPassphrase,
-      SyncIssueCode.allPeersUnreachable,
-      SyncIssueCode.pullFailed,
-      SyncIssueCode.pushFailed,
-      SyncIssueCode.applyFailed,
-      SyncIssueCode.peerReadFailed,
-      SyncIssueCode.peerDecryptFailed,
-      SyncIssueCode.peerPushFailed,
-      SyncIssueCode.broadcastUnavailable,
-      SyncIssueCode.discoverySilent,
-      SyncIssueCode.webdavDirFailed,
-      SyncIssueCode.webdavListFailed,
-      SyncIssueCode.webdavReadFailed,
-      SyncIssueCode.webdavDecryptFailed,
-      SyncIssueCode.webdavUploadFailed,
-    ];
-    for (final code in codes) {
-      final text = syncIssueText(zh, SyncIssue(code: code));
-      expect(text, isNotEmpty, reason: code);
-      expect(text, isNot(zh.syncIssueUnknown), reason: code);
+    // 迭代 SyncIssueCode.all：新增原因码忘记补文案时这里会红。
+    for (final locale in const [Locale('zh'), Locale('en')]) {
+      final l10n = lookupAppLocalizations(locale);
+      for (final code in SyncIssueCode.all) {
+        final text = syncIssueText(l10n, SyncIssue(code: code));
+        expect(text, isNotEmpty, reason: '$locale/$code');
+        if (code != SyncIssueCode.unknown) {
+          expect(text, isNot(l10n.syncIssueUnknown), reason: '$locale/$code');
+        }
+      }
     }
   });
 

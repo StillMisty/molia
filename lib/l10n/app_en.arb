@@ -1362,6 +1362,7 @@
     }
   },
   "syncIssueWebdavUploadFailed": "Failed to upload the snapshot to WebDAV",
+  "syncIssueInternal": "Internal sync error",
   "syncActionGrantPermission": "Grant permission",
   "syncActionConfigure": "Configure",
   "syncActionConfigurePassphrase": "Set passphrase",

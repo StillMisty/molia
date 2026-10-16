@@ -2529,6 +2529,9 @@ class AppLocalizationsEn extends AppLocalizations {
       'Failed to upload the snapshot to WebDAV';
 
   @override
+  String get syncIssueInternal => 'Internal sync error';
+
+  @override
   String get syncActionGrantPermission => 'Grant permission';
 
   @override

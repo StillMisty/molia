@@ -4587,6 +4587,12 @@ abstract class AppLocalizations {
   /// **'Failed to upload the snapshot to WebDAV'**
   String get syncIssueWebdavUploadFailed;
 
+  /// No description provided for @syncIssueInternal.
+  ///
+  /// In en, this message translates to:
+  /// **'Internal sync error'**
+  String get syncIssueInternal;
+
   /// No description provided for @syncActionGrantPermission.
   ///
   /// In en, this message translates to:

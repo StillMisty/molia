@@ -666,6 +666,31 @@ abstract final class SyncIssueCode {
 
   /// 未知原因（非结构化错误 / 持久化中无法识别的形状）。
   static const String unknown = 'unknown';
+
+  /// 全部原因码（文案完备性护栏：新增码必须补专属文案并登记到这里，
+  /// 测试按此迭代断言「每码有专属文案」）。
+  static const List<String> all = [
+    notConfigured,
+    startFailed,
+    permissionDenied,
+    noPassphrase,
+    allPeersUnreachable,
+    pullFailed,
+    pushFailed,
+    applyFailed,
+    peerReadFailed,
+    peerDecryptFailed,
+    peerPushFailed,
+    broadcastUnavailable,
+    discoverySilent,
+    webdavDirFailed,
+    webdavListFailed,
+    webdavReadFailed,
+    webdavDecryptFailed,
+    webdavUploadFailed,
+    internal,
+    unknown,
+  ];
 }
 
 /// 单个传输在一轮中的明细。

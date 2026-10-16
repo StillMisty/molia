@@ -1014,6 +1014,7 @@
     }
   },
   "syncIssueWebdavUploadFailed": "WebDAV 快照上传失败",
+  "syncIssueInternal": "同步内部错误",
   "syncActionGrantPermission": "授予权限",
   "syncActionConfigure": "去配置",
   "syncActionConfigurePassphrase": "去设置口令",

@@ -29,6 +29,7 @@ String syncIssueText(AppLocalizations l10n, SyncIssue issue) {
     SyncIssueCode.webdavReadFailed => l10n.syncIssueWebdavReadFailed(peer),
     SyncIssueCode.webdavDecryptFailed => l10n.syncIssueWebdavDecryptFailed(peer),
     SyncIssueCode.webdavUploadFailed => l10n.syncIssueWebdavUploadFailed,
+    SyncIssueCode.internal => l10n.syncIssueInternal,
     _ => l10n.syncIssueUnknown,
   };
 }
