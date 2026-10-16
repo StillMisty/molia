@@ -13,11 +13,14 @@ import '../sync_crypto.dart';
 
 /// 局域网直连传输：UDP 广播（+ 手动地址簿单播）发现 + 各设备内置 HTTP 快照端点。
 ///
-/// 协议（明文层只有设备名与端口，数据全部加密）：
-/// - UDP `molia-sync.probe` JSON：`{m, v, deviceId, name, port, reply}`；
-///   收到非回复探测时向来源单播应答（携带自己的 HTTP 端口）；
+/// 协议（明文层只有设备名 / 端口 / 内容指纹，数据全部加密）：
+/// - UDP `molia-sync.probe` JSON：`{m, v, deviceId, name, port, reply, snapshotId}`；
+///   收到非回复探测时向来源单播应答（携带自己的 HTTP 端口与内容指纹）；
 /// - HTTP `GET  /molia-sync/v1/snapshot`：返回本机加密快照；
 /// - HTTP `POST /molia-sync/v1/snapshot`：接收对端加密快照。
+///
+/// 探测应答里的 `snapshotId`（记录集规范化哈希）与本机缓存的「上次拉到的
+/// 对端指纹」一致时跳过 GET：内容没变就不传、不解密、不合并。
 ///
 /// 信任模型：数据用同步口令派生密钥加密，能解密者即已授权；HTTP 层不做
 /// 额外鉴权（快照是密文，无法解密者拿不到内容）。
@@ -32,6 +35,7 @@ class LanSyncTransport implements SyncTransport {
     required SyncCodec codec,
     required Future<String?> Function() passphraseProvider,
     required Future<SyncEnvelope> Function() snapshotProvider,
+    String Function()? snapshotIdProvider,
     List<({String host, int port})>? probeTargets,
     List<ManualPeer> Function()? manualPeersProvider,
     void Function(ManualPeer learned)? onPeerResolved,
@@ -45,6 +49,7 @@ class LanSyncTransport implements SyncTransport {
         _codec = codec,
         _passphraseProvider = passphraseProvider,
         _snapshotProvider = snapshotProvider,
+        _snapshotIdProvider = snapshotIdProvider,
         _probeTargets = probeTargets ?? const [],
         _manualPeersProvider = manualPeersProvider,
         _onPeerResolved = onPeerResolved,
@@ -66,6 +71,9 @@ class LanSyncTransport implements SyncTransport {
   final SyncCodec _codec;
   final Future<String?> Function() _passphraseProvider;
   final Future<SyncEnvelope> Function() _snapshotProvider;
+
+  /// 本机最近一轮快照的内容指纹（探测应答携带；空 = 尚未产出快照）。
+  final String Function()? _snapshotIdProvider;
 
   /// 测试注入：向指定地址单播探测（空 = 仅广播，生产路径）。
   final List<({String host, int port})> _probeTargets;
@@ -90,6 +98,10 @@ class LanSyncTransport implements SyncTransport {
   final StreamController<SyncEnvelope> _incoming =
       StreamController<SyncEnvelope>.broadcast();
   final List<_Peer> _peers = [];
+
+  /// 上次成功拉到的各对端内容指纹（`deviceId` / 主机 → `snapshotId`）：
+  /// 探测应答一致时跳过 GET。进程内缓存，重启后首轮重新拉一次。
+  final Map<String, String> _peerSnapshotIds = {};
   final Logger _logger = Logger('molia.sync.lan');
 
   RawDatagramSocket? _udp;
@@ -212,9 +224,17 @@ class LanSyncTransport implements SyncTransport {
     final peers = await _discoverPeers();
     final envelopes = <SyncEnvelope>[];
     var failed = 0;
+    var skipped = 0;
     var bytesIn = 0;
     SyncIssue? firstError;
     for (final peer in peers) {
+      // 探测应答的内容指纹与本机上次拉到的对端指纹一致：内容没变，
+      // 跳过 GET + 解密 + 合并（对端清单为空时不可能命中）。
+      final cached = _peerSnapshotIds[peer.key];
+      if (peer.snapshotId.isNotEmpty && cached == peer.snapshotId) {
+        skipped++;
+        continue;
+      }
       final bytes = await _fetchSnapshot(peer);
       if (bytes == null) {
         failed++;
@@ -226,7 +246,14 @@ class LanSyncTransport implements SyncTransport {
       }
       bytesIn += bytes.length;
       try {
-        envelopes.add(_codec.decrypt(bytes, passphrase));
+        final envelope = _codec.decrypt(bytes, passphrase);
+        envelopes.add(envelope);
+        final fingerprint = envelope.snapshotId.isNotEmpty
+            ? envelope.snapshotId
+            : peer.snapshotId;
+        if (fingerprint.isNotEmpty) {
+          _peerSnapshotIds[peer.key] = fingerprint;
+        }
       } on SyncCryptoException {
         // 对端口令不同 / 数据损坏：跳过该对端，不影响其他设备。
         failed++;
@@ -239,6 +266,7 @@ class LanSyncTransport implements SyncTransport {
     return SyncPullResult(
       envelopes: envelopes,
       peersSeen: peers.length,
+      skippedUnchanged: skipped,
       failedPeers: failed,
       bytesIn: bytesIn,
       error: firstError ?? _discoveryIssue(peers),
@@ -321,6 +349,8 @@ class LanSyncTransport implements SyncTransport {
       'name': _deviceName(),
       'port': _httpPort,
       'reply': false,
+      if (_snapshotIdProvider?.call().isNotEmpty ?? false)
+        'snapshotId': _snapshotIdProvider!.call(),
     }));
     if (_probeTargets.isEmpty) {
       try {
@@ -376,12 +406,15 @@ class LanSyncTransport implements SyncTransport {
         host: datagram.address.address,
         port: port.toInt(),
         name: message['name'] is String ? message['name'] as String : '',
+        snapshotId:
+            message['snapshotId'] is String ? message['snapshotId'] as String : '',
       );
       _rememberPeer(peer);
       _resolveManualPeer(peer);
       return;
     }
-    // 应答探测：单播回来源地址。
+    // 应答探测：单播回来源地址（携带本机端口与内容指纹）。
+    final ownSnapshotId = _snapshotIdProvider?.call() ?? '';
     final reply = utf8.encode(jsonEncode({
       'm': 'molia-sync.probe',
       'v': 1,
@@ -389,6 +422,7 @@ class LanSyncTransport implements SyncTransport {
       'name': _deviceName(),
       'port': _httpPort,
       'reply': true,
+      if (ownSnapshotId.isNotEmpty) 'snapshotId': ownSnapshotId,
     }));
     try {
       socket.send(reply, datagram.address, datagram.port);
@@ -517,11 +551,15 @@ class _Peer {
   final int port;
   final String name;
 
+  /// 对端探测应答携带的内容指纹（空 = 对端未提供 / 尚未产出快照）。
+  final String snapshotId;
+
   const _Peer({
     required this.deviceId,
     required this.host,
     required this.port,
     required this.name,
+    this.snapshotId = '',
   });
 
   /// 去重键：认领到设备 id 后按 id，未认领（手动地址首轮）按主机。

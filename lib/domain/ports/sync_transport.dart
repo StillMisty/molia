@@ -9,6 +9,7 @@ class SyncPullResult {
   const SyncPullResult({
     this.envelopes = const [],
     this.peersSeen = 0,
+    this.skippedUnchanged = 0,
     this.failedPeers = 0,
     this.bytesIn = 0,
     this.error,
@@ -18,6 +19,10 @@ class SyncPullResult {
 
   /// 探测到 / 列出的对端数（含未变而跳过、解密失败的）。
   final int peersSeen;
+
+  /// 远端内容未变而跳过拉取的对端数（局域网按探测应答的 `snapshotId`，
+  /// WebDAV 按文件 `getetag` / `getlastmodified`）。
+  final int skippedUnchanged;
 
   /// 拉取或解密失败的对端数。
   final int failedPeers;

@@ -24,7 +24,9 @@ class WebDavHttpException implements Exception {
 /// 用户自备 WebDAV 的传输：每台设备上传一份加密快照，读取其余设备快照。
 ///
 /// - 文件布局：`<baseUrl>/<remoteDir>/<deviceId>.msync`（二进制密文）；
-/// - 目录不存在时 MKCOL 自动创建；列表用 PROPFIND（Depth: 1）；
+/// - 目录不存在时 MKCOL 自动创建；列表用 PROPFIND（Depth: 1）并请求
+///   `getetag` / `getlastmodified`：文件版本与上次拉到的一致时跳过
+///   GET + 解密 + 合并；
 /// - 数据在离开设备前已用同步口令加密，服务端只见密文；
 /// - 失败容忍与局域网一致：单个文件读取/解密失败只跳过该文件。
 class WebDavSyncTransport implements SyncTransport {
@@ -60,6 +62,10 @@ class WebDavSyncTransport implements SyncTransport {
   Dio? _dio;
   bool _running = false;
   final Set<String> _ensuredDirs = {};
+
+  /// 上次成功拉到的各远端文件版本（`etag` 优先，缺省 `lastmodified`）：
+  /// 与 PROPFIND 结果一致时跳过 GET + 解密。进程内缓存。
+  final Map<String, String> _fileVersions = {};
   final Logger _logger = Logger('molia.sync.webdav');
 
   @override
@@ -123,9 +129,9 @@ class WebDavSyncTransport implements SyncTransport {
         error: SyncIssue(code: SyncIssueCode.webdavDirFailed, detail: '$e'),
       );
     }
-    final List<String>? names;
+    final List<_RemoteFile>? files;
     try {
-      names = await _listSnapshotFiles(config);
+      files = await _listSnapshotFiles(config);
     } catch (e) {
       _logger.warning('WebDAV 目录列表失败', e);
       return SyncPullResult(
@@ -133,40 +139,49 @@ class WebDavSyncTransport implements SyncTransport {
         error: SyncIssue(code: SyncIssueCode.webdavListFailed, detail: '$e'),
       );
     }
-    if (names == null) {
+    if (files == null) {
       return const SyncPullResult(
         failedPeers: 1,
         error: SyncIssue(code: SyncIssueCode.webdavListFailed),
       );
     }
     var failed = 0;
+    var skipped = 0;
     var bytesIn = 0;
     SyncIssue? firstError;
-    for (final name in names) {
-      final bytes = await _getFile(config, name);
+    for (final file in files) {
+      // 文件版本未变：跳过 GET + 解密 + 合并（服务端未给版本时照常拉取）。
+      final cached = _fileVersions[file.name];
+      if (file.version.isNotEmpty && cached == file.version) {
+        skipped++;
+        continue;
+      }
+      final bytes = await _getFile(config, file.name);
       if (bytes == null) {
         failed++;
         firstError ??= SyncIssue(
           code: SyncIssueCode.webdavReadFailed,
-          args: {'peer': name},
+          args: {'peer': file.name},
         );
         continue;
       }
       bytesIn += bytes.length;
       try {
         envelopes.add(_codec.decrypt(bytes, passphrase));
+        if (file.version.isNotEmpty) _fileVersions[file.name] = file.version;
       } on SyncCryptoException {
-        // 口令不同或文件损坏：跳过。
+        // 口令不同或文件损坏：跳过（不记版本，下轮重试）。
         failed++;
         firstError ??= SyncIssue(
           code: SyncIssueCode.webdavDecryptFailed,
-          args: {'peer': name},
+          args: {'peer': file.name},
         );
       }
     }
     return SyncPullResult(
       envelopes: envelopes,
-      peersSeen: names.length,
+      peersSeen: files.length,
+      skippedUnchanged: skipped,
       failedPeers: failed,
       bytesIn: bytesIn,
       error: firstError,
@@ -223,8 +238,9 @@ class WebDavSyncTransport implements SyncTransport {
     throw WebDavHttpException('MKCOL 失败: ${response.httpStatus}');
   }
 
-  /// 列出远端快照文件；服务端返回错误状态码时返回 null（由调用方计为失败）。
-  Future<List<String>?> _listSnapshotFiles(WebDavConfig config) async {
+  /// 列出远端快照文件（含 `getetag` / `getlastmodified` 版本）；
+  /// 服务端返回错误状态码时返回 null（由调用方计为失败）。
+  Future<List<_RemoteFile>?> _listSnapshotFiles(WebDavConfig config) async {
     final response = await _send(
       'PROPFIND',
       _dirUri(config),
@@ -234,28 +250,71 @@ class WebDavSyncTransport implements SyncTransport {
         'Content-Type': 'application/xml; charset=utf-8',
       },
       body: '<?xml version="1.0" encoding="utf-8"?>'
-          '<d:propfind xmlns:d="DAV:"><d:prop><d:resourcetype/></d:prop>'
-          '</d:propfind>',
+          '<d:propfind xmlns:d="DAV:"><d:prop><d:resourcetype/>'
+          '<d:getetag/><d:getlastmodified/></d:prop></d:propfind>',
     );
     if (response.httpStatus >= 400) return null;
     final body = utf8.decode(
       await _collectBodyBytes(response) ?? const <int>[],
       allowMalformed: true,
     );
-    final hrefPattern =
-        RegExp(r'<[^>]*href[^>]*>([^<]+)</[^>]*href>', caseSensitive: false);
     final own = '$deviceId$snapshotSuffix';
-    final names = <String>[];
-    for (final match in hrefPattern.allMatches(body)) {
-      final raw = Uri.decodeComponent(match.group(1)!.trim());
+    final files = <_RemoteFile>[];
+    for (final entry in _parsePropfind(body)) {
       final segments =
-          raw.split('/').where((segment) => segment.isNotEmpty).toList();
+          entry.name.split('/').where((segment) => segment.isNotEmpty).toList();
       if (segments.isEmpty) continue;
       final name = segments.last;
       if (name == own || !name.endsWith(snapshotSuffix)) continue;
-      if (!names.contains(name)) names.add(name);
+      if (files.any((file) => file.name == name)) continue;
+      files.add(_RemoteFile(name: name, version: entry.version));
     }
-    return names;
+    return files;
+  }
+
+  /// 解析 multistatus 响应：逐 `<response>` 块取 `href` 与版本
+  /// （`getetag` 优先，缺省 `getlastmodified`；两者都没有时版本为空）。
+  ///
+  /// 服务端响应缺少成对 `<response>` 标签时退回「只按 href 列出」的宽松解析。
+  static List<({String name, String version})> _parsePropfind(String body) {
+    final hrefPattern = RegExp(
+      r'<(?:\w+:)?href(?:\s[^>]*)?>([^<]+)</(?:\w+:)?href>',
+      caseSensitive: false,
+    );
+    final blockPattern = RegExp(
+      r'<(?:\w+:)?response(?:\s[^>]*)?>(.*?)</(?:\w+:)?response>',
+      caseSensitive: false,
+      dotAll: true,
+    );
+    final etagPattern = RegExp(
+      r'<(?:\w+:)?getetag(?:\s[^>]*)?>([^<]*)</(?:\w+:)?getetag>',
+      caseSensitive: false,
+    );
+    final modifiedPattern = RegExp(
+      r'<(?:\w+:)?getlastmodified(?:\s[^>]*)?>([^<]*)</(?:\w+:)?getlastmodified>',
+      caseSensitive: false,
+    );
+    final entries = <({String name, String version})>[];
+    for (final block in blockPattern.allMatches(body)) {
+      final text = block.group(1) ?? '';
+      final href = hrefPattern.firstMatch(text)?.group(1);
+      if (href == null) continue;
+      final etag = etagPattern.firstMatch(text)?.group(1)?.trim() ?? '';
+      final modified = modifiedPattern.firstMatch(text)?.group(1)?.trim() ?? '';
+      entries.add((
+        name: Uri.decodeComponent(href.trim()),
+        version: etag.isNotEmpty ? etag : modified,
+      ));
+    }
+    if (entries.isEmpty) {
+      for (final match in hrefPattern.allMatches(body)) {
+        entries.add((
+          name: Uri.decodeComponent(match.group(1)!.trim()),
+          version: '',
+        ));
+      }
+    }
+    return entries;
   }
 
   Future<Uint8List?> _getFile(WebDavConfig config, String name) async {
@@ -343,4 +402,14 @@ class WebDavSyncTransport implements SyncTransport {
     final dir = _dirUri(config);
     return dir.replace(path: '${dir.path}$name');
   }
+}
+
+/// 远端快照文件的列表项：名称 + 版本令牌（`etag` 优先，缺省 `lastmodified`）。
+class _RemoteFile {
+  const _RemoteFile({required this.name, required this.version});
+
+  final String name;
+
+  /// 版本令牌（空 = 服务端未提供，无法跳过拉取）。
+  final String version;
 }

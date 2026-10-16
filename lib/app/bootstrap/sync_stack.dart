@@ -96,6 +96,8 @@ Future<SyncStack> buildSyncStack({
           deviceName: syncState.deviceName,
           producedAt: syncState.nowMs(),
         ),
+    // 探测应答携带最近一轮快照的内容指纹：对端据此跳过未变的 GET。
+    snapshotIdProvider: () => engineRef?.lastEnvelope?.snapshotId ?? '',
     permissionGate: () => lanPermission.ensure(),
     manualPeersProvider: () => syncState.manualPeers,
     onPeerResolved: (learned) => unawaited(syncState.learnManualPeer(learned)),

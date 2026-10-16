@@ -68,6 +68,10 @@ class SyncEngine extends ChangeNotifier {
   /// 上轮本地视图指纹（用于区分「本机没有变化」与「有变更需要外发」）。
   String? _localFingerprint;
 
+  /// 每传输最近一次成功推送的快照内容指纹：与待推送内容一致时跳过
+  /// 加密 + 上传（本机未变不推）。
+  final Map<String, String> _lastPushedSnapshotId = {};
+
   SyncStateStore get state => _state;
   bool get syncing => _syncing;
   bool get initialized => _initialized;
@@ -302,6 +306,7 @@ class SyncEngine extends ChangeNotifier {
         accumulator
           ..pulled += result.envelopes.length
           ..peersSeen += result.peersSeen
+          ..skippedUnchanged += result.skippedUnchanged
           ..failedPulls += result.failedPeers
           ..bytesIn += result.bytesIn
           ..durationMs += watch.elapsedMilliseconds
@@ -374,10 +379,13 @@ class SyncEngine extends ChangeNotifier {
       // 指纹以「本轮最终视图」为准：应用远端记录带来的变化不算本机变更，
       // 否则下一轮永远判成「有变化」（结论就永远不是「无变化」）。
       _localFingerprint = _fingerprint(refreshed);
-      final outgoing = _envelopeFrom(refreshed).pruneTombstones(
+      final pruned = _envelopeFrom(refreshed).pruneTombstones(
         now: _nowMs(),
         tombstoneRetentionMs: tombstoneRetentionMs,
       );
+      // 内容指纹按实际外发的记录集（裁剪墓碑后）计算：对端探测应答 / 本机
+      // 「未变不推」都拿它与自己缓存的值比较。
+      final outgoing = pruned.withSnapshotId(_fingerprint(pruned.records));
       _lastEnvelope = outgoing;
 
       var succeededPushes = 0;
@@ -387,6 +395,11 @@ class SyncEngine extends ChangeNotifier {
           final transport = entry.value;
           if (!transport.isRunning ||
               !_state.enabledTransports.contains(entry.key)) {
+            continue;
+          }
+          // 本机内容与上次成功推送一致：跳过加密 + 上传（对端仍可主动拉取）。
+          if (outgoing.snapshotId.isNotEmpty &&
+              _lastPushedSnapshotId[entry.key] == outgoing.snapshotId) {
             continue;
           }
           final watch = Stopwatch()..start();
@@ -407,6 +420,13 @@ class SyncEngine extends ChangeNotifier {
             ..durationMs += watch.elapsedMilliseconds
             ..error ??= result.error;
           succeededPushes += result.succeededPeers;
+          // 只在「确实有对端收下且没有失败」时记住指纹：零对端（局域网无人
+          // 在线）不算推送成功，否则对端上线后会被误判为「已推过」。
+          if (result.failedPeers == 0 && result.succeededPeers > 0) {
+            _lastPushedSnapshotId[entry.key] = outgoing.snapshotId;
+          } else {
+            _lastPushedSnapshotId.remove(entry.key);
+          }
           for (final id in result.succeededIds) {
             _touchPeer(id, entry.key, pushOk: true);
           }

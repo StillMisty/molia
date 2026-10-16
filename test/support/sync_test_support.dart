@@ -58,6 +58,9 @@ class FakeSyncTransport implements SyncTransport {
   /// 覆盖 pull 报告的探测对端数（null = 用 [available] 长度）。
   int? peersSeenOverride;
 
+  /// pull 报告的「内容未变而跳过」对端数。
+  int pullSkippedUnchanged = 0;
+
   /// pull / push 报告的失败数（用于构造部分失败与全失败）。
   int pullFailures = 0;
   int pushFailures = 0;
@@ -94,6 +97,7 @@ class FakeSyncTransport implements SyncTransport {
     return SyncPullResult(
       envelopes: List.of(available),
       peersSeen: peersSeenOverride ?? available.length,
+      skippedUnchanged: pullSkippedUnchanged,
       failedPeers: pullFailures,
       error: pullError ??
           (pullFailures > 0

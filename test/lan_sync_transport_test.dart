@@ -101,6 +101,57 @@ void main() {
     expect((await transportC.pull()).envelopes, isEmpty);
   });
 
+  test('对端 snapshotId 未变：跳过 GET 并计入 skippedUnchanged', () async {
+    var envA = envelope('devA', value: 'light').withSnapshotId('hash-1');
+    var ownSnapshotId = 'hash-1';
+    final transportA = LanSyncTransport(
+      deviceId: 'devA',
+      deviceName: () => '设备A',
+      codec: codec,
+      passphraseProvider: () async => passphrase,
+      snapshotProvider: () async => envA,
+      snapshotIdProvider: () => ownSnapshotId,
+      udpPort: 47896,
+    );
+    final transportB = LanSyncTransport(
+      deviceId: 'devB',
+      deviceName: () => '设备B',
+      codec: codec,
+      passphraseProvider: () async => passphrase,
+      snapshotProvider: () async => envelope('devB'),
+      probeTargets: const [(host: '127.0.0.1', port: 47896)],
+      probeWindow: const Duration(milliseconds: 250),
+      udpPort: 47897,
+    );
+    addTearDown(() async {
+      await transportA.stop();
+      await transportB.stop();
+    });
+    await transportA.start();
+    await transportB.start();
+
+    final first = await transportB.pull();
+    expect(first.envelopes, hasLength(1));
+    expect(first.skippedUnchanged, 0);
+
+    // 探测应答的内容指纹与上次拉到的一致：不 GET、不解密、不传字节。
+    final second = await transportB.pull();
+    expect(second.envelopes, isEmpty);
+    expect(second.skippedUnchanged, 1);
+    expect(second.bytesIn, 0);
+
+    // 对端内容变化（新指纹）：重新拉取。
+    envA = envelope('devA', value: 'dark').withSnapshotId('hash-2');
+    ownSnapshotId = 'hash-2';
+    final third = await transportB.pull();
+    expect(third.envelopes, hasLength(1));
+    expect(third.skippedUnchanged, 0);
+    expect(
+      third.envelopes.single.recordsOf(SyncCategory.settings).single.data,
+      {'v': 'dark'},
+    );
+  });
+
   test('未启动时 pull/push 为空操作；start/stop 幂等', () async {
     final transport = LanSyncTransport(
       deviceId: 'devX',

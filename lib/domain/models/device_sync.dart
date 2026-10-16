@@ -235,15 +235,31 @@ class SyncEnvelope {
   final String deviceId;
   final String deviceName;
   final int producedAt;
+
+  /// 记录集的规范化哈希（内容指纹）：与 [producedAt]（时间）分开表达
+  /// 「内容变」与「时间变」。对端探测应答携带它，一致则跳过拉取。
+  final String snapshotId;
+
   final Map<SyncCategory, List<SyncRecord>> records;
 
   const SyncEnvelope({
     required this.deviceId,
     this.deviceName = '',
     required this.producedAt,
+    this.snapshotId = '',
     this.version = protocolVersion,
     this.records = const {},
   });
+
+  /// 复制并替换内容指纹（引擎在裁剪墓碑后按最终记录集计算）。
+  SyncEnvelope withSnapshotId(String snapshotId) => SyncEnvelope(
+        deviceId: deviceId,
+        deviceName: deviceName,
+        producedAt: producedAt,
+        snapshotId: snapshotId,
+        version: version,
+        records: records,
+      );
 
   Iterable<SyncRecord> recordsOf(SyncCategory category) =>
       records[category] ?? const [];
@@ -274,6 +290,7 @@ class SyncEnvelope {
       deviceId: deviceId,
       deviceName: deviceName,
       producedAt: producedAt,
+      snapshotId: snapshotId,
       version: version,
       records: pruned,
     );
@@ -284,6 +301,7 @@ class SyncEnvelope {
         'deviceId': deviceId,
         'deviceName': deviceName,
         'producedAt': producedAt,
+        if (snapshotId.isNotEmpty) 'snapshotId': snapshotId,
         'records': {
           for (final entry in records.entries)
             if (entry.value.isNotEmpty)
@@ -317,6 +335,8 @@ class SyncEnvelope {
       producedAt: raw['producedAt'] is num
           ? (raw['producedAt'] as num).toInt()
           : 0,
+      snapshotId:
+          raw['snapshotId'] is String ? raw['snapshotId'] as String : '',
       version: (raw['v'] as num?)?.toInt() ?? protocolVersion,
       records: records,
     );

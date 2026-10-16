@@ -142,11 +142,77 @@ void main() {
     expect(result.failedPeers, 1);
     expect(result.error?.code, SyncIssueCode.webdavListFailed);
   });
+
+  test('文件 etag 未变：跳过 GET 并计入 skippedUnchanged', () async {
+    final a = transport('devA');
+    final b = transport('devB');
+    addTearDown(() async {
+      await a.stop();
+      await b.stop();
+    });
+    await a.start();
+    await b.start();
+    await a.push(envelope('devA', value: 'light'));
+
+    final first = await b.pull();
+    expect(first.envelopes, hasLength(1));
+    expect(first.skippedUnchanged, 0);
+    final getsAfterFirst = server.getCount;
+
+    // 远端文件未动：第二轮不 GET、不解密、不合并。
+    final second = await b.pull();
+    expect(second.envelopes, isEmpty);
+    expect(second.skippedUnchanged, 1);
+    expect(second.bytesIn, 0);
+    expect(server.getCount, getsAfterFirst);
+  });
+
+  test('文件 etag 变化后重新拉取', () async {
+    final a = transport('devA');
+    final b = transport('devB');
+    addTearDown(() async {
+      await a.stop();
+      await b.stop();
+    });
+    await a.start();
+    await b.start();
+    await a.push(envelope('devA', value: 'light'));
+    expect((await b.pull()).envelopes, hasLength(1));
+
+    await a.push(envelope('devA', value: 'dark'));
+    final changed = await b.pull();
+    expect(changed.envelopes, hasLength(1));
+    expect(changed.envelopes.single.recordsOf(SyncCategory.settings).single.data,
+        {'v': 'dark'});
+    expect(changed.skippedUnchanged, 0);
+  });
+
+  test('服务端不返回版本：照常拉取（不跳过）', () async {
+    server.includeVersion = false;
+    final a = transport('devA');
+    final b = transport('devB');
+    addTearDown(() async {
+      await a.stop();
+      await b.stop();
+    });
+    await a.start();
+    await b.start();
+    await a.push(envelope('devA'));
+
+    expect((await b.pull()).envelopes, hasLength(1));
+    final again = await b.pull();
+    expect(again.envelopes, hasLength(1));
+    expect(again.skippedUnchanged, 0);
+  });
 }
 
 /// 最小 WebDAV 假服务：MKCOL / PROPFIND / PUT / GET + 可选 Basic 鉴权。
 class FakeWebDavServer {
   final Map<String, List<int>> files = {};
+
+  /// 每个文件的版本令牌（PUT 时递增；PROPFIND 返回 `getetag`）。
+  final Map<String, String> etags = {};
+  int _etagSeq = 0;
   late HttpServer server;
   int mkcolCount = 0;
   int propfindCount = 0;
@@ -156,6 +222,9 @@ class FakeWebDavServer {
   /// 覆盖 MKCOL / PROPFIND 的状态码（默认成功路径）。
   int mkcolStatus = 201;
   int propfindStatus = 207;
+
+  /// 是否在 PROPFIND 中返回 `getetag`（false = 模拟不提供版本的服务端）。
+  bool includeVersion = true;
   String? expectedAuth;
 
   String get baseUrl => 'http://127.0.0.1:${server.port}/dav';
@@ -187,7 +256,10 @@ class FakeWebDavServer {
               : '${request.uri.path}/';
           final body = files.keys
               .map((name) =>
-                  '<d:response><d:href>$prefix$name</d:href></d:response>')
+                  '<d:response><d:href>$prefix$name</d:href>'
+                  '${includeVersion ? '<d:propstat><d:prop><d:getetag>'
+                      '${etags[name] ?? ''}</d:getetag></d:prop></d:propstat>' : ''}'
+                  '</d:response>')
               .join();
           request.response.write(
               '<?xml version="1.0" encoding="utf-8"?>'
@@ -198,7 +270,9 @@ class FakeWebDavServer {
           await for (final chunk in request) {
             builder.add(chunk);
           }
-          files[request.uri.path.split('/').last] = builder.toBytes();
+          final name = request.uri.path.split('/').last;
+          files[name] = builder.toBytes();
+          etags[name] = '"${++_etagSeq}"';
           request.response.statusCode = 201;
         case 'GET':
           getCount++;

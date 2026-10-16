@@ -279,10 +279,36 @@ void main() {
     final second = engine.syncNow(trigger: SyncTrigger.manual);
     await Future.wait([first, second]);
 
-    expect(transport.pushed, hasLength(2));
     expect(state.log, hasLength(2));
     // 补跑的那轮用排队时记录的触发原因（手动）。
     expect(state.log.first.trigger, SyncTrigger.manual);
+    // 内容未变：只有首轮真正推送（本机未变不推）。
+    expect(transport.pushed, hasLength(1));
+  });
+
+  test('本机未变不推：内容指纹未变时第二轮跳过加密与上传', () async {
+    transport.available.add(remoteTheme('dark'));
+    await engine.syncNow();
+    expect(transport.pushed, hasLength(1));
+    final snapshotId = engine.lastEnvelope?.snapshotId ?? '';
+    expect(snapshotId, isNotEmpty);
+    expect(transport.pushed.single.snapshotId, snapshotId);
+
+    // 对端仍在线但没有新内容：本地视图不变 → 不再推送。
+    transport.peersSeenOverride = 1;
+    final second = await engine.syncNow();
+
+    expect(second!.outcome, SyncOutcome.noChanges);
+    expect(transport.pushed, hasLength(1));
+    expect(second.transports.single.bytesOut, 0);
+  });
+
+  test('传输未变跳过计数进入报告（skippedUnchanged）', () async {
+    transport.peersSeenOverride = 1;
+    transport.pullSkippedUnchanged = 2;
+    final report = await engine.syncNow();
+
+    expect(report!.transports.single.skippedUnchanged, 2);
   });
 
   test('名册跨重启恢复', () async {
