@@ -24,8 +24,8 @@ class SyncPullResult {
 
   final int bytesIn;
 
-  /// 最近一次失败的技术细节（诊断用）。
-  final String? error;
+  /// 最近一次失败的原因（无失败为 null）；技术细节在 [SyncIssue.detail]。
+  final SyncIssue? error;
 
   static const SyncPullResult none = SyncPullResult();
 }
@@ -49,7 +49,9 @@ class SyncPushResult {
   final List<String> succeededIds;
   final List<String> failedIds;
   final int bytesOut;
-  final String? error;
+
+  /// 最近一次失败的原因（无失败为 null）；技术细节在 [SyncIssue.detail]。
+  final SyncIssue? error;
 
   static const SyncPushResult none = SyncPushResult();
 }
@@ -73,9 +75,15 @@ abstract interface class SyncTransport {
 
   /// 传输当前不可用的原因码（null = 可用）。
   ///
-  /// 机器可读码（如 `not_configured` / `start_failed`），由 UI 映射文案；
+  /// 机器可读码（[SyncUnavailableReason] 的 `not_configured` /
+  /// `start_failed` / `permission_denied`），由 UI 映射文案；
   /// 行为上不改变任何逻辑，只用于把「开关开着但根本没在工作」呈现出来。
   String? get unavailableReason;
+
+  /// 不可用原因的技术细节（诊断用；null = 无细节）。
+  ///
+  /// 原始异常 / 错误串只进日志与诊断导出，UI 展示的是原因码映射文案。
+  String? get unavailableDetail;
 
   /// 拉取当前可获得的远端快照（解密失败的对端跳过并计数）。
   Future<SyncPullResult> pull();
@@ -88,13 +96,21 @@ abstract interface class SyncTransport {
 }
 
 /// 传输不可用原因码（[SyncTransport.unavailableReason]）。
+///
+/// 与 [SyncIssueCode] 同名常量同值：传输状态与一轮失败共用一套文案映射。
 abstract final class SyncUnavailableReason {
   /// 已启用但缺少必要配置（如 WebDAV 未填服务器地址）。
-  static const String notConfigured = 'not_configured';
+  static const String notConfigured = SyncIssueCode.notConfigured;
 
   /// 启动失败（端口占用、权限不足等）。
-  static const String startFailed = 'start_failed';
+  static const String startFailed = SyncIssueCode.startFailed;
 
   /// 局域网访问权限未授予（Android 17 起局域网默认阻断；手动地址也无效）。
-  static const String permissionDenied = 'permission_denied';
+  static const String permissionDenied = SyncIssueCode.permissionDenied;
+}
+
+/// 传输标识（持久化配置键 / 报告 kind / UI 开关共用）。
+abstract final class SyncTransportKind {
+  static const String lan = 'lan';
+  static const String webdav = 'webdav';
 }

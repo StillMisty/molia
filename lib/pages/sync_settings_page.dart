@@ -2,18 +2,20 @@ import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter/services.dart';
-import 'package:intl/intl.dart';
 import 'package:material_3_expressive/material_3_expressive.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:provider/provider.dart';
 
-import '../data/sync/sync_state_store.dart';
 import '../domain/models/device_sync.dart';
 import '../domain/ports/sync_transport.dart';
 import '../l10n/app_localizations.dart';
 import '../providers/sync_provider.dart';
-import '../widgets/card_list_surface.dart';
+import '../theme/app_semantic_colors.dart';
+import '../utils/sync_format.dart';
 import '../widgets/settings/settings_tiles.dart';
+import 'sync_dialogs.dart';
+import 'sync_labels.dart';
+import 'sync_log_page.dart';
 import 'sync_peers_page.dart';
 
 /// 跨设备同步设置页：口令 / 内容类别 / 传输方式 / 状态与日志。
@@ -31,6 +33,9 @@ class SyncSettingsPage extends StatelessWidget {
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context)!;
     final provider = context.watch<SyncProvider>();
+    final lanState = _transportState(context, provider, l10n, SyncTransportKind.lan);
+    final webdavState =
+        _transportState(context, provider, l10n, SyncTransportKind.webdav);
     return Scaffold(
       appBar: M3EAppBar.top(
         title: Text(l10n.settingsSyncTitle),
@@ -67,8 +72,8 @@ class SyncSettingsPage extends StatelessWidget {
               if (provider.enabled) ...[
                 SettingsInfoTile(
                   key: const Key('settingsSyncStatusItem'),
-                  icon: _outcomeIcon(provider.lastOutcome),
-                  title: _outcomeText(l10n, provider.lastOutcome),
+                  icon: syncOutcomeIcon(provider.lastOutcome),
+                  title: syncOutcomeText(l10n, provider.lastOutcome),
                   subtitle: _statusDetail(provider, l10n),
                 ),
                 SettingsNavTile(
@@ -129,19 +134,22 @@ class SyncSettingsPage extends StatelessWidget {
                   switchKey: const Key('settingsSyncLanSwitch'),
                   icon: Icons.wifi_rounded,
                   title: l10n.syncLanTitle,
-                  subtitle: _transportSubtitle(provider, l10n, 'lan'),
-                  value: provider.enabledTransports.contains('lan'),
+                  subtitle: lanState.text,
+                  subtitleColor: lanState.color,
+                  value: provider.enabledTransports.contains(SyncTransportKind.lan),
                   onChanged: (value) => unawaited(
-                      provider.setTransportEnabled('lan', value)),
+                      provider.setTransportEnabled(SyncTransportKind.lan, value)),
                 ),
                 SettingsSwitchTile(
                   switchKey: const Key('settingsSyncWebdavSwitch'),
                   icon: Icons.cloud_rounded,
                   title: l10n.syncWebdavTitle,
-                  subtitle: _transportSubtitle(provider, l10n, 'webdav'),
-                  value: provider.enabledTransports.contains('webdav'),
-                  onChanged: (value) => unawaited(
-                      provider.setTransportEnabled('webdav', value)),
+                  subtitle: webdavState.text,
+                  subtitleColor: webdavState.color,
+                  value:
+                      provider.enabledTransports.contains(SyncTransportKind.webdav),
+                  onChanged: (value) => unawaited(provider.setTransportEnabled(
+                      SyncTransportKind.webdav, value)),
                 ),
                 SettingsNavTile(
                   key: const Key('settingsSyncWebdavConfigItem'),
@@ -150,17 +158,24 @@ class SyncSettingsPage extends StatelessWidget {
                   subtitle: provider.webdav.isConfigured
                       ? provider.webdav.baseUrl
                       : l10n.syncWebdavNotConfigured,
-                  onTap: () => _showWebdavDialog(context, provider, l10n),
+                  onTap: () => unawaited(showWebdavConfigDialog(context, provider, l10n)),
                 ),
                 // 权限被拒时给可行动入口（手动地址救不了权限，只能授权或转 WebDAV）。
                 if (_needsLanPermission(provider))
                   SettingsNavTile(
                     key: const Key('settingsSyncLanPermissionItem'),
-                    icon: Icons.lock_open_rounded,
-                    title: l10n.syncLanPermissionTitle,
-                    subtitle: l10n.syncLanPermissionSubtitle,
-                    onTap: () =>
-                        unawaited(_requestLanPermission(context, provider, l10n)),
+                    icon: provider.lanPermissionPermanentlyDenied
+                        ? Icons.settings_rounded
+                        : Icons.lock_open_rounded,
+                    title: provider.lanPermissionPermanentlyDenied
+                        ? l10n.syncOpenSystemSettings
+                        : l10n.syncLanPermissionTitle,
+                    subtitle: provider.lanPermissionPermanentlyDenied
+                        ? l10n.syncLanPermissionPermanentSubtitle
+                        : l10n.syncLanPermissionSubtitle,
+                    onTap: () => unawaited(provider.lanPermissionPermanentlyDenied
+                        ? provider.openSystemSettings()
+                        : _requestLanPermission(context, provider, l10n)),
                   ),
               ],
             ),
@@ -244,31 +259,11 @@ class SyncSettingsPage extends StatelessWidget {
 
   // ---- 状态文案 ----
 
-  static String _outcomeText(AppLocalizations l10n, SyncOutcome? outcome) =>
-      switch (outcome) {
-        null => l10n.syncNever,
-        SyncOutcome.ok => l10n.syncOutcomeOk,
-        SyncOutcome.noChanges => l10n.syncOutcomeNoChanges,
-        SyncOutcome.noPeers => l10n.syncOutcomeNoPeers,
-        SyncOutcome.partial => l10n.syncOutcomePartial,
-        SyncOutcome.failed => l10n.syncOutcomeFailed,
-      };
-
-  /// 结论行图标：五态各有形状，颜色只作增强（不靠颜色单独编码状态）。
-  static IconData _outcomeIcon(SyncOutcome? outcome) => switch (outcome) {
-        null => Icons.sync_problem_rounded,
-        SyncOutcome.ok => Icons.check_circle_rounded,
-        SyncOutcome.noChanges => Icons.check_circle_outline_rounded,
-        SyncOutcome.noPeers => Icons.wifi_tethering_off_rounded,
-        SyncOutcome.partial => Icons.error_outline_rounded,
-        SyncOutcome.failed => Icons.error_rounded,
-      };
-
   static String _statusDetail(SyncProvider provider, AppLocalizations l10n) {
     final report = provider.lastReport;
     if (report == null) return l10n.syncNever;
     final parts = <String>[
-      _time(report.finishedAt),
+      syncTimeText(report.finishedAt),
       ..._roundParts(l10n, report),
     ];
     return parts.join(' · ');
@@ -280,9 +275,12 @@ class SyncSettingsPage extends StatelessWidget {
       if (report.peersSeen > 0) l10n.syncPeerCount(report.peersSeen),
       if (report.failedCount > 0) l10n.syncFailedCount(report.failedCount),
       if (report.bytesIn + report.bytesOut > 0)
-        l10n.syncBytes(_formatBytes(report.bytesIn), _formatBytes(report.bytesOut)),
-      if (report.error != null && report.error!.isNotEmpty)
-        l10n.syncLogFailed(report.error!),
+        l10n.syncBytes(
+          syncBytesText(report.bytesIn),
+          syncBytesText(report.bytesOut),
+        ),
+      if (report.error != null)
+        l10n.syncLogFailed(syncIssueText(l10n, report.error!)),
     ];
   }
 
@@ -290,7 +288,7 @@ class SyncSettingsPage extends StatelessWidget {
     if (provider.syncing) return l10n.syncSyncing;
     final at = provider.lastSyncAt;
     if (at == 0) return l10n.syncNever;
-    return l10n.syncLastSyncAt(_time(at));
+    return l10n.syncLastSyncAt(syncTimeText(at));
   }
 
   static String _peersSubtitle(SyncProvider provider, AppLocalizations l10n) {
@@ -298,29 +296,47 @@ class SyncSettingsPage extends StatelessWidget {
     return count == 0 ? l10n.syncPeersSubtitleEmpty : l10n.syncPeersSubtitle(count);
   }
 
-  /// 传输副标题：基础说明 + 当前状态（开关开着但没在工作时必须看得出来）。
-  static String _transportSubtitle(
+  /// 传输副文案：基础说明 + 当前状态（含启动失败原因）+ 最后成功时间。
+  ///
+  /// 状态色只作增强：不可用 / 启动失败走 warning，运行中且有成功记录走 success。
+  static ({String text, Color? color}) _transportState(
+    BuildContext context,
     SyncProvider provider,
     AppLocalizations l10n,
     String kind,
   ) {
     final status = provider.transportStatus(kind);
     final base =
-        kind == 'lan' ? l10n.syncLanSubtitle : l10n.syncWebdavSubtitle;
+        kind == SyncTransportKind.lan ? l10n.syncLanSubtitle : l10n.syncWebdavSubtitle;
+    if (status == null) return (text: base, color: null);
+    final semantic = AppSemanticColors.of(context);
+    final lastSuccess = provider.transportLastSuccessAt(kind);
     final state = switch (status.unavailableReason) {
       SyncUnavailableReason.notConfigured => l10n.syncTransportNotConfigured,
-      SyncUnavailableReason.startFailed => l10n.syncTransportStartFailed,
+      // 启动类失败展示原因码映射文案（原始细节在诊断信息里，不上界面）。
+      SyncUnavailableReason.startFailed => status.error != null
+          ? syncIssueText(l10n, status.error!)
+          : l10n.syncTransportStartFailed,
       SyncUnavailableReason.permissionDenied => l10n.syncTransportPermissionDenied,
       _ => status.running ? l10n.syncTransportRunning : l10n.syncTransportStopped,
     };
-    return '$base · $state';
+    final lastText = lastSuccess == 0
+        ? l10n.syncTransportNeverSucceeded
+        : l10n.syncTransportLastSuccessAt(syncTimeText(lastSuccess));
+    final available = status.running && status.unavailableReason == null;
+    return (
+      text: '$base · $state · $lastText',
+      color: available
+          ? (lastSuccess > 0 ? semantic.success : null)
+          : semantic.warning,
+    );
   }
 
   /// 局域网因缺少权限而不可用（Android 17+：手动地址也无效，只能授权或转 WebDAV）。
   static bool _needsLanPermission(SyncProvider provider) =>
       provider.lanPermissionNeeded &&
-      provider.enabledTransports.contains('lan') &&
-      provider.transportStatus('lan').unavailableReason ==
+      provider.enabledTransports.contains(SyncTransportKind.lan) &&
+      provider.transportStatus(SyncTransportKind.lan)?.unavailableReason ==
           SyncUnavailableReason.permissionDenied;
 
   /// 用户显式申请权限；仍被拒时给「去系统设置」的下一步动作。
@@ -342,18 +358,9 @@ class SyncSettingsPage extends StatelessWidget {
     );
   }
 
-  static String _time(int at) =>
-      DateFormat('MM-dd HH:mm').format(DateTime.fromMillisecondsSinceEpoch(at));
-
-  /// 字节数的紧凑展示（KB/MB 千位制；同步快照常用量级）。
-  static String _formatBytes(int bytes) {
-    if (bytes < 1024) return '${bytes}B';
-    if (bytes < 1024 * 1024) return '${(bytes / 1024).toStringAsFixed(1)}KB';
-    return '${(bytes / (1024 * 1024)).toStringAsFixed(1)}MB';
-  }
-
   // ---- 日志 ----
 
+  /// 首屏只留最近 6 行；更多历史进子页，失败行可点开看下一步动作。
   List<Widget> _logRows(
     BuildContext context,
     SyncProvider provider,
@@ -371,47 +378,29 @@ class SyncSettingsPage extends StatelessWidget {
     }
     return [
       for (final entry in entries)
-        _SyncLogRow(
+        SyncLogRow(
           key: Key('settingsSyncLog-${entry.at}'),
           entry: entry,
-          onTap: entry.outcome == SyncOutcome.failed
-              ? () => _showFailureDialog(context, provider, entry, l10n)
+          onTap: syncLogEntryActionable(entry)
+              ? () => unawaited(showSyncIssueDialog(
+                    context,
+                    provider: provider,
+                    issue: entry.error,
+                    l10n: l10n,
+                    onConfigurePassphrase: () =>
+                        _showPassphraseDialog(context, provider, l10n),
+                  ))
               : null,
         ),
-    ];
-  }
-
-  /// 失败行的下一步动作：不是死胡同——给出原因与重试入口。
-  Future<void> _showFailureDialog(
-    BuildContext context,
-    SyncProvider provider,
-    SyncLogEntry entry,
-    AppLocalizations l10n,
-  ) async {
-    final navigator = Navigator.of(context, rootNavigator: true);
-    await M3EDialog.show<void>(
-      context,
-      dialog: M3EDialog(
-        title: l10n.syncOutcomeFailed,
-        content: SizedBox(
-          width: settingsDialogWidth(context),
-          child: Text(entry.error ?? l10n.syncLogEmpty),
+      if (provider.log.length > 6)
+        SettingsNavTile(
+          key: const Key('settingsSyncLogMoreItem'),
+          icon: Icons.list_alt_rounded,
+          title: l10n.syncLogViewAll(provider.log.length),
+          subtitle: l10n.syncLogHint,
+          onTap: () => unawaited(openSettingsSubPage(context, const SyncLogPage())),
         ),
-        actions: [
-          M3EButton.text(
-            onPressed: () => navigator.pop(),
-            child: Text(l10n.cancelButton),
-          ),
-          M3EButton.filled(
-            onPressed: () {
-              navigator.pop();
-              unawaited(provider.syncNow(manual: true));
-            },
-            child: Text(l10n.syncRetry),
-          ),
-        ],
-      ),
-    );
+    ];
   }
 
   /// 复制诊断信息：只含运行状态与计数（无口令 / 无密钥 / 无快照内容）。
@@ -421,19 +410,27 @@ class SyncSettingsPage extends StatelessWidget {
     AppLocalizations l10n,
   ) async {
     final report = provider.lastReport;
+    // 传输状态与原始失败细节（`detail`）只进诊断导出，界面上不展示。
+    final transports = <Map<String, Object?>>[];
+    for (final kind in const [
+      SyncTransportKind.lan,
+      SyncTransportKind.webdav,
+    ]) {
+      final status = provider.transportStatus(kind);
+      transports.add({
+        'kind': kind,
+        'enabled': provider.enabledTransports.contains(kind),
+        'running': status?.running ?? false,
+        'unavailableReason': status?.unavailableReason,
+        'lastSuccessAt': provider.transportLastSuccessAt(kind),
+        if (status?.error != null) 'error': status!.error!.toJson(),
+      });
+    }
     final payload = const JsonEncoder.withIndent('  ').convert({
       'deviceId': provider.deviceId,
       'deviceName': provider.deviceName,
       'enabled': provider.enabled,
-      'transports': [
-        for (final kind in ['lan', 'webdav'])
-          {
-            'kind': kind,
-            'enabled': provider.enabledTransports.contains(kind),
-            'running': provider.transportStatus(kind).running,
-            'unavailableReason': provider.transportStatus(kind).unavailableReason,
-          },
-      ],
+      'transports': transports,
       'categories': {
         for (final entry in provider.categories.entries)
           entry.key.name: entry.value,
@@ -445,7 +442,7 @@ class SyncSettingsPage extends StatelessWidget {
           'durationMs': report.durationMs,
           'applied': report.applied,
           'remoteRecords': report.remoteRecords,
-          if (report.error != null) 'error': report.error,
+          if (report.error != null) 'error': report.error!.toJson(),
           'transports': [for (final item in report.transports) item.toJson()],
         },
       'peers': [for (final peer in provider.peers) peer.toJson()],
@@ -651,177 +648,5 @@ class SyncSettingsPage extends StatelessWidget {
     );
     controller.dispose();
   }
-
-  Future<void> _showWebdavDialog(
-    BuildContext context,
-    SyncProvider provider,
-    AppLocalizations l10n,
-  ) async {
-    final password = await provider.readWebdavPassword() ?? '';
-    if (!context.mounted) return;
-    final config = provider.webdav;
-    final server = TextEditingController(text: config.baseUrl);
-    final username = TextEditingController(text: config.username);
-    final passwordController = TextEditingController(text: password);
-    final remoteDir = TextEditingController(text: config.remoteDir);
-    final navigator = Navigator.of(context, rootNavigator: true);
-
-    await M3EDialog.show<void>(
-      context,
-      dialog: M3EDialog(
-        title: l10n.syncWebdavConfigTitle,
-        content: SizedBox(
-          width: settingsDialogWidth(context),
-          child: SingleChildScrollView(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                M3ETextField(
-                  controller: server,
-                  label: l10n.syncWebdavServer,
-                  placeholder: 'https://dav.example.com/dav',
-                  leading: const Icon(Icons.link_rounded),
-                ),
-                const SizedBox(height: 12),
-                M3ETextField(
-                  controller: username,
-                  label: l10n.syncWebdavUsername,
-                  leading: const Icon(Icons.person_rounded),
-                ),
-                const SizedBox(height: 12),
-                M3ETextField(
-                  controller: passwordController,
-                  label: l10n.syncWebdavPassword,
-                  obscureText: true,
-                  leading: const Icon(Icons.key_rounded),
-                ),
-                const SizedBox(height: 12),
-                M3ETextField(
-                  controller: remoteDir,
-                  label: l10n.syncWebdavRemoteDir,
-                  leading: const Icon(Icons.folder_rounded),
-                ),
-              ],
-            ),
-          ),
-        ),
-        actions: [
-          M3EButton.text(
-            onPressed: () => navigator.pop(),
-            child: Text(l10n.cancelButton),
-          ),
-          M3EButton.filled(
-            onPressed: () async {
-              await provider.setWebdavConfig(WebDavConfig(
-                baseUrl: server.text.trim(),
-                username: username.text.trim(),
-                remoteDir: remoteDir.text.trim().isEmpty
-                    ? 'molia-sync'
-                    : remoteDir.text.trim(),
-              ));
-              await provider.setWebdavPassword(passwordController.text);
-              navigator.pop();
-            },
-            child: Text(l10n.syncSave),
-          ),
-        ],
-      ),
-    );
-    server.dispose();
-    username.dispose();
-    passwordController.dispose();
-    remoteDir.dispose();
-  }
 }
 
-/// 日志行：结论 + 触发原因 + 本轮变更量（失败行可点开看重试入口）。
-class _SyncLogRow extends StatelessWidget {
-  const _SyncLogRow({super.key, required this.entry, this.onTap});
-
-  final SyncLogEntry entry;
-  final VoidCallback? onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    final l10n = AppLocalizations.of(context)!;
-    final scheme = M3ETheme.of(context).colorScheme;
-    final m3e = M3ETheme.of(context);
-    final message = switch (entry.outcome) {
-      SyncOutcome.ok => l10n.syncOutcomeOk,
-      SyncOutcome.noChanges => l10n.syncOutcomeNoChanges,
-      SyncOutcome.noPeers => l10n.syncOutcomeNoPeers,
-      SyncOutcome.partial => l10n.syncOutcomePartial,
-      SyncOutcome.failed => l10n.syncOutcomeFailed,
-    };
-    final trigger = switch (entry.trigger) {
-      SyncTrigger.startup => l10n.syncTriggerStartup,
-      SyncTrigger.debounce => l10n.syncTriggerDebounce,
-      SyncTrigger.timer => l10n.syncTriggerTimer,
-      SyncTrigger.incoming => l10n.syncTriggerIncoming,
-      SyncTrigger.resume => l10n.syncTriggerResume,
-      SyncTrigger.manual => l10n.syncTriggerManual,
-    };
-    final detail = <String>[
-      if (entry.applied > 0) l10n.syncAppliedItems(entry.applied),
-      if (entry.peersSeen > 0) l10n.syncPeerCount(entry.peersSeen),
-      if (entry.failed > 0) l10n.syncFailedCount(entry.failed),
-      if (entry.bytesIn + entry.bytesOut > 0)
-        l10n.syncBytes(
-          SyncSettingsPage._formatBytes(entry.bytesIn),
-          SyncSettingsPage._formatBytes(entry.bytesOut),
-        ),
-      if (entry.error != null && entry.error!.isNotEmpty)
-        l10n.syncLogFailed(entry.error!),
-    ].join(' · ');
-
-    return CardListSurface(
-      position: SettingsRowPosition.of(context),
-      padding: kSettingsRowPadding,
-      semanticLabel: '$message, $detail',
-      onPressed: onTap,
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Padding(
-            padding: const EdgeInsets.only(top: 2),
-            child: Icon(
-              SyncSettingsPage._outcomeIcon(entry.outcome),
-              size: 18,
-              color: entry.outcome == SyncOutcome.failed
-                  ? scheme.error
-                  : m3e.colorScheme.onSurfaceVariant,
-            ),
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Text(
-                  '${SyncSettingsPage._time(entry.at)} · $trigger · $message',
-                  style: m3e.typeScale.bodyMedium,
-                ),
-                if (detail.isNotEmpty)
-                  Text(
-                    detail,
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                    style: m3e.typeScale.bodySmall.copyWith(
-                      color: m3e.colorScheme.onSurfaceVariant,
-                    ),
-                  ),
-              ],
-            ),
-          ),
-          if (onTap != null)
-            Icon(
-              Icons.chevron_right_rounded,
-              size: 20,
-              color: m3e.colorScheme.onSurfaceVariant,
-            ),
-        ],
-      ),
-    );
-  }
-}

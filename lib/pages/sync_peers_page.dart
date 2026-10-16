@@ -1,14 +1,20 @@
 import 'dart:async';
 
-import 'package:intl/intl.dart';
+import 'package:flutter/services.dart';
 import 'package:material_3_expressive/material_3_expressive.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:provider/provider.dart';
 
 import '../domain/models/device_sync.dart';
+import '../domain/ports/sync_transport.dart';
 import '../l10n/app_localizations.dart';
 import '../providers/sync_provider.dart';
+import '../theme/app_semantic_colors.dart';
+import '../utils/device_id.dart';
+import '../utils/peer_address.dart';
+import '../utils/sync_format.dart';
 import '../widgets/settings/settings_tiles.dart';
+import 'sync_labels.dart';
 
 /// 已配对设备（同步名册）：本机 + 每台对端的最近接触情况 + 手动地址簿。
 ///
@@ -44,10 +50,14 @@ class SyncPeersPage extends StatelessWidget {
             title: l10n.syncPeersSection,
             footer: SettingsSectionHint(text: l10n.syncPeersHint),
             children: [
-              SettingsInfoTile(
+              // 本机行可点：复制完整设备 id（排查 / 填写对端地址时要用）。
+              SettingsNavTile(
+                key: const Key('settingsSyncPeerSelfItem'),
                 icon: Icons.phone_android_rounded,
                 title: provider.deviceName,
-                subtitle: l10n.syncPeerThisDevice(_shortId(provider.deviceId)),
+                subtitle:
+                    l10n.syncPeerThisDevice(shortDeviceId(provider.deviceId)),
+                onTap: () => _copyDeviceId(context, provider, l10n),
               ),
               for (final peer in provider.peers)
                 _peerRow(context, provider, l10n, peer, manualByDevice[peer.deviceId]),
@@ -87,7 +97,8 @@ class SyncPeersPage extends StatelessWidget {
     SyncPeerState peer,
     ManualPeer? manual,
   ) {
-    final title = peer.name.isEmpty ? _shortId(peer.deviceId) : peer.name;
+    final title =
+        peer.name.isEmpty ? shortDeviceId(peer.deviceId) : peer.name;
     if (manual == null) {
       return SettingsInfoTile(
         key: Key('settingsSyncPeer-${peer.deviceId}'),
@@ -112,6 +123,18 @@ class SyncPeersPage extends StatelessWidget {
     );
   }
 
+  /// 复制完整设备 id（对端填地址 / 报问题时要用；行内展示的是短号）。
+  Future<void> _copyDeviceId(
+    BuildContext context,
+    SyncProvider provider,
+    AppLocalizations l10n,
+  ) async {
+    await Clipboard.setData(ClipboardData(text: provider.deviceId));
+    if (!context.mounted) return;
+    ScaffoldMessenger.of(context)
+        .showSnackBar(SnackBar(content: Text(l10n.syncPeerDeviceIdCopied)));
+  }
+
   /// 手动对端详情：地址 / 端点 / 设备 id + 删除（二次确认）。
   Future<void> _showPeerDialog(
     BuildContext context,
@@ -134,9 +157,9 @@ class SyncPeersPage extends StatelessWidget {
             children: [
               Text(l10n.syncPeerAddress(host)),
               if (peer != null && peer.deviceId.isNotEmpty)
-                Text(l10n.syncPeerDeviceId(_shortId(peer.deviceId))),
+                Text(l10n.syncPeerDeviceId(shortDeviceId(peer.deviceId))),
               if (peer != null && peer.lastPullAt > 0)
-                Text(l10n.syncPeerLastSync(_time(peer.lastPullAt))),
+                Text(l10n.syncPeerLastSync(syncTimeText(peer.lastPullAt))),
               const SizedBox(height: 12),
               Text(
                 l10n.syncPeerDeleteConfirm,
@@ -162,64 +185,17 @@ class SyncPeersPage extends StatelessWidget {
     );
   }
 
-  /// 添加设备：地址必填（IP / 主机名），名称可选；添加后立刻跑一轮，
-  /// 用户马上能看到「接触成功 / 不可达」而不是等下一次定时同步。
+  /// 添加设备：地址 + 探测端口 + 可选名称；提交后立即尝试接触，
+  /// 接触成功才关闭弹层（失败在弹层内给文案，用户可改地址重试）。
   Future<void> _showAddDialog(
     BuildContext context,
     SyncProvider provider,
     AppLocalizations l10n,
   ) async {
-    final host = TextEditingController();
-    final name = TextEditingController();
-    final navigator = Navigator.of(context, rootNavigator: true);
     await M3EDialog.show<void>(
       context,
-      dialog: M3EDialog(
-        title: l10n.syncPeerAddTitle,
-        content: SizedBox(
-          width: settingsDialogWidth(context),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              M3ETextField(
-                controller: host,
-                label: l10n.syncPeerHostLabel,
-                placeholder: l10n.syncPeerHostHint,
-                leading: const Icon(Icons.lan_rounded),
-              ),
-              const SizedBox(height: 12),
-              M3ETextField(
-                controller: name,
-                label: l10n.syncPeerNameLabel,
-                leading: const Icon(Icons.edit_rounded),
-              ),
-            ],
-          ),
-        ),
-        actions: [
-          M3EButton.text(
-            onPressed: () => navigator.pop(),
-            child: Text(l10n.cancelButton),
-          ),
-          M3EButton.filled(
-            onPressed: () async {
-              final value = host.text.trim();
-              if (value.isEmpty) {
-                ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(content: Text(l10n.syncPeerHostInvalid)));
-                return;
-              }
-              navigator.pop();
-              await provider.addManualPeer(value, name: name.text);
-              await provider.syncNow(manual: true);
-            },
-            child: Text(l10n.syncSave),
-          ),
-        ],
-      ),
+      dialog: _AddPeerDialog(provider: provider, l10n: l10n),
     );
-    host.dispose();
-    name.dispose();
   }
 
   /// 对端副标题：传输 + 最后同步 + 落后/时钟偏移/最近失败（有什么说什么）。
@@ -227,7 +203,7 @@ class SyncPeersPage extends StatelessWidget {
     final parts = <String>[
       if (peer.transport.isNotEmpty) _transportLabel(l10n, peer.transport),
       if (peer.lastPullAt > 0 || peer.lastPushAt > 0)
-        l10n.syncPeerLastSync(_time(peer.lastPullAt > peer.lastPushAt
+        l10n.syncPeerLastSync(syncTimeText(peer.lastPullAt > peer.lastPushAt
             ? peer.lastPullAt
             : peer.lastPushAt))
       else
@@ -236,22 +212,178 @@ class SyncPeersPage extends StatelessWidget {
         l10n.syncPeerBehind(peer.behindBy!),
       if (peer.clockSkewMs != null && peer.clockSkewMs!.abs() > 60 * 1000)
         l10n.syncPeerClockSkew((peer.clockSkewMs!.abs() / 60000).round()),
-      if (peer.lastError != null && peer.lastError!.isNotEmpty)
-        l10n.syncPeerLastError(peer.lastError!),
+      if (peer.lastError != null)
+        l10n.syncPeerLastError(syncIssueText(l10n, peer.lastError!)),
     ];
     return parts.join(' · ');
   }
 
   static String _transportLabel(AppLocalizations l10n, String kind) =>
       switch (kind) {
-        'lan' => l10n.syncLanTitle,
-        'webdav' => l10n.syncWebdavTitle,
+        SyncTransportKind.lan => l10n.syncLanTitle,
+        SyncTransportKind.webdav => l10n.syncWebdavTitle,
         _ => kind,
       };
+}
 
-  static String _time(int at) =>
-      DateFormat('MM-dd HH:mm').format(DateTime.fromMillisecondsSinceEpoch(at));
+/// 添加设备弹层：校验地址 / 端口，提交后立即接触；失败留在弹层内。
+class _AddPeerDialog extends StatefulWidget {
+  const _AddPeerDialog({required this.provider, required this.l10n});
 
-  static String _shortId(String deviceId) =>
-      deviceId.length <= 6 ? deviceId : deviceId.substring(deviceId.length - 6);
+  final SyncProvider provider;
+  final AppLocalizations l10n;
+
+  @override
+  State<_AddPeerDialog> createState() => _AddPeerDialogState();
+}
+
+class _AddPeerDialogState extends State<_AddPeerDialog> {
+  final _host = TextEditingController();
+  final _port =
+      TextEditingController(text: '${ManualPeer.defaultProbePort}');
+  final _name = TextEditingController();
+  String? _hostError;
+  String? _portError;
+  String? _contactError;
+  bool _duplicate = false;
+  bool _busy = false;
+
+  @override
+  void dispose() {
+    _host.dispose();
+    _port.dispose();
+    _name.dispose();
+    super.dispose();
+  }
+
+  Future<void> _submit() async {
+    final l10n = widget.l10n;
+    final host = _host.text.trim();
+    final port = parseProbePort(_port.text);
+    if (host.isEmpty) {
+      setState(() => _hostError = l10n.syncPeerHostInvalid);
+      return;
+    }
+    if (!isValidPeerHost(host)) {
+      setState(() => _hostError = l10n.syncPeerHostFormatInvalid);
+      return;
+    }
+    if (port == null) {
+      setState(() => _portError = l10n.syncPeerPortInvalid);
+      return;
+    }
+
+    setState(() {
+      _hostError = null;
+      _portError = null;
+      _contactError = null;
+      _busy = true;
+    });
+    final added = await widget.provider.addManualPeer(
+      host,
+      name: _name.text,
+      probePort: port,
+    );
+    final contacted = await widget.provider.contactManualPeer(host);
+    if (!mounted) return;
+    if (contacted) {
+      Navigator.of(context, rootNavigator: true).pop();
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text(l10n.syncPeerAdded)));
+      return;
+    }
+    setState(() {
+      _busy = false;
+      _duplicate = !added;
+      _contactError = l10n.syncPeerUnreachable;
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final l10n = widget.l10n;
+    final navigator = Navigator.of(context, rootNavigator: true);
+    final semantic = AppSemanticColors.of(context);
+    return M3EDialog(
+      title: l10n.syncPeerAddTitle,
+      content: SizedBox(
+        width: settingsDialogWidth(context),
+        child: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              M3ETextField(
+                controller: _host,
+                label: l10n.syncPeerHostLabel,
+                placeholder: l10n.syncPeerHostHint,
+                leading: const Icon(Icons.lan_rounded),
+                errorText: _hostError,
+                enabled: !_busy,
+              ),
+              const SizedBox(height: 12),
+              M3ETextField(
+                controller: _port,
+                label: l10n.syncPeerProbePortLabel,
+                placeholder:
+                    l10n.syncPeerProbePortHint(ManualPeer.defaultProbePort),
+                leading: const Icon(Icons.settings_ethernet_rounded),
+                errorText: _portError,
+                enabled: !_busy,
+                keyboardType: TextInputType.number,
+                inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+              ),
+              const SizedBox(height: 12),
+              M3ETextField(
+                controller: _name,
+                label: l10n.syncPeerNameLabel,
+                leading: const Icon(Icons.edit_rounded),
+                enabled: !_busy,
+              ),
+              if (_duplicate) ...[
+                const SizedBox(height: 8),
+                Text(
+                  l10n.syncPeerAlreadyAdded,
+                  style: Theme.of(context).textTheme.bodySmall,
+                ),
+              ],
+              if (_contactError != null) ...[
+                const SizedBox(height: 12),
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Icon(
+                      Icons.warning_amber_rounded,
+                      size: 18,
+                      color: semantic.warning,
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        _contactError!,
+                        style: Theme.of(context)
+                            .textTheme
+                            .bodySmall
+                            ?.copyWith(color: semantic.warning),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ],
+          ),
+        ),
+      ),
+      actions: [
+        M3EButton.text(
+          onPressed: _busy ? null : () => navigator.pop(),
+          child: Text(l10n.cancelButton),
+        ),
+        M3EButton.filled(
+          onPressed: _busy ? null : () => unawaited(_submit()),
+          child: Text(_busy ? l10n.syncPeerContacting : l10n.syncSave),
+        ),
+      ],
+    );
+  }
 }

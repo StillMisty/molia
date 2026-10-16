@@ -23,7 +23,7 @@ void main() {
         needsPermission: false,
         request: () async {
           requested++;
-          return false;
+          return LocalNetworkPermissionStatus.denied;
         },
       );
 
@@ -38,7 +38,7 @@ void main() {
         needsPermission: true,
         request: () async {
           requested++;
-          return false;
+          return LocalNetworkPermissionStatus.denied;
         },
       );
 
@@ -52,10 +52,13 @@ void main() {
 
     test('授予后 granted 为真，refresh 可重新查询', () async {
       var granted = false;
+      LocalNetworkPermissionStatus statusOf() => granted
+          ? LocalNetworkPermissionStatus.granted
+          : LocalNetworkPermissionStatus.denied;
       final permission = LocalNetworkPermission(
         needsPermission: true,
-        request: () async => granted,
-        check: () async => granted,
+        request: () async => statusOf(),
+        check: () async => statusOf(),
       );
 
       granted = true;
@@ -96,7 +99,8 @@ void main() {
       await state.addManualPeer(const ManualPeer(host: '192.168.1.23', name: '书房'));
       expect(state.manualPeers.single.name, '书房');
 
-      // 首次接触学到 deviceId 与端点端口（同名地址合并，不新增条目）。
+      // 首次接触学到 deviceId 与端点端口（同名地址合并，不新增条目）；
+      // 对端广播的设备名不覆盖用户命名。
       await state.learnManualPeer(state.manualPeers.single.mergeLearned(
         deviceId: 'devB',
         httpPort: 41000,
@@ -105,7 +109,16 @@ void main() {
       expect(state.manualPeers, hasLength(1));
       expect(state.manualPeers.single.deviceId, 'devB');
       expect(state.manualPeers.single.httpPort, 41000);
-      expect(state.manualPeers.single.name, '设备B');
+      expect(state.manualPeers.single.name, '书房', reason: '用户命名优先');
+
+      // 未命名条目才吸收学到的名称。
+      await state.addManualPeer(const ManualPeer(host: '10.0.0.9'));
+      await state.learnManualPeer(
+          const ManualPeer(host: '10.0.0.9', name: '设备C'));
+      expect(
+        state.manualPeers.firstWhere((p) => p.host == '10.0.0.9').name,
+        '设备C',
+      );
 
       // 本机端点端口持久化（对端要记住本机）。
       await state.setLanHttpPort(42000);
@@ -113,10 +126,15 @@ void main() {
       final reloaded =
           SyncStateStore(preferences: prefs, secrets: MemorySyncSecretStore());
       await reloaded.init();
-      expect(reloaded.manualPeers.single.deviceId, 'devB');
+      expect(reloaded.manualPeers, hasLength(2));
+      expect(
+        reloaded.manualPeers.firstWhere((p) => p.host == '192.168.1.23').deviceId,
+        'devB',
+      );
       expect(reloaded.lanHttpPort, 42000);
 
       await reloaded.removeManualPeer('192.168.1.23');
+      await reloaded.removeManualPeer('10.0.0.9');
       expect(reloaded.manualPeers, isEmpty);
     });
 

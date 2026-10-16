@@ -2397,6 +2397,162 @@ class AppLocalizationsEn extends AppLocalizations {
       'Passphrase generated; enter it on other devices to join';
 
   @override
+  String get syncIssueDialogTitle => 'Sync issue';
+
+  @override
+  String get syncIssueUnknown =>
+      'Unknown reason — retry first; if it keeps failing, copy diagnostics';
+
+  @override
+  String get syncIssueNotConfigured => 'Sync transport is not configured';
+
+  @override
+  String get syncIssueStartFailed => 'Transport failed to start';
+
+  @override
+  String get syncIssuePermissionDenied =>
+      'LAN permission missing (Android 17+ needs the nearby-devices permission)';
+
+  @override
+  String get syncIssueNoPassphrase => 'No sync passphrase set';
+
+  @override
+  String get syncIssueAllPeersUnreachable => 'All peers are unreachable';
+
+  @override
+  String get syncIssuePullFailed => 'Failed to pull remote snapshots';
+
+  @override
+  String get syncIssuePushFailed => 'Failed to push local changes';
+
+  @override
+  String syncIssueApplyFailed(int count) {
+    return 'Failed to apply remote data $count time(s)';
+  }
+
+  @override
+  String syncIssuePeerReadFailed(String peer) {
+    return '$peer: failed to read snapshot';
+  }
+
+  @override
+  String syncIssuePeerDecryptFailed(String peer) {
+    return '$peer: passphrase mismatch or corrupted data';
+  }
+
+  @override
+  String syncIssuePeerPushFailed(String peer) {
+    return '$peer: push failed';
+  }
+
+  @override
+  String get syncIssueBroadcastUnavailable =>
+      'Broadcast failed (blocked by network policy)';
+
+  @override
+  String get syncIssueDiscoverySilent =>
+      'No device answered during discovery (the network may be isolated)';
+
+  @override
+  String get syncIssueWebdavDirFailed =>
+      'Failed to prepare the WebDAV directory';
+
+  @override
+  String get syncIssueWebdavListFailed => 'Failed to list the WebDAV directory';
+
+  @override
+  String syncIssueWebdavReadFailed(String peer) {
+    return '$peer: failed to read snapshot';
+  }
+
+  @override
+  String syncIssueWebdavDecryptFailed(String peer) {
+    return '$peer: passphrase mismatch or corrupted data';
+  }
+
+  @override
+  String get syncIssueWebdavUploadFailed =>
+      'Failed to upload the snapshot to WebDAV';
+
+  @override
+  String get syncActionGrantPermission => 'Grant permission';
+
+  @override
+  String get syncActionConfigure => 'Configure';
+
+  @override
+  String get syncActionConfigurePassphrase => 'Set passphrase';
+
+  @override
+  String get syncActionAddManualPeer => 'Add manual address';
+
+  @override
+  String get syncActionUseWebdav => 'Use WebDAV';
+
+  @override
+  String get syncWebdavEnabled => 'WebDAV enabled';
+
+  @override
+  String get syncConfigureOnSettingsPage =>
+      'Set the passphrase on the sync settings page';
+
+  @override
+  String get syncPeerUnknown => 'Unknown device';
+
+  @override
+  String get syncPeerDeviceIdCopied => 'Full device ID copied';
+
+  @override
+  String get syncPeerHostFormatInvalid =>
+      'Invalid address (use an IP, IPv6 or hostname, without a port)';
+
+  @override
+  String get syncPeerPortInvalid => 'Port must be 1–65535';
+
+  @override
+  String get syncPeerAdded => 'Device added';
+
+  @override
+  String get syncPeerUnreachable =>
+      'Not reached yet — check that the peer is online on the same network, or use WebDAV';
+
+  @override
+  String get syncPeerProbePortLabel => 'Probe port';
+
+  @override
+  String syncPeerProbePortHint(int port) {
+    return 'Default $port';
+  }
+
+  @override
+  String get syncPeerAlreadyAdded =>
+      'Already in the list — name and port updated';
+
+  @override
+  String get syncPeerContacting => 'Contacting…';
+
+  @override
+  String get syncLanPermissionPermanentSubtitle =>
+      'Permission permanently denied — enable nearby-devices in system settings';
+
+  @override
+  String get syncTransportNeverSucceeded => 'No successful contact yet';
+
+  @override
+  String syncTransportLastSuccessAt(String time) {
+    return 'Last success $time';
+  }
+
+  @override
+  String syncLogViewAll(int count) {
+    return 'View all logs ($count)';
+  }
+
+  @override
+  String get syncLogHint =>
+      'Results of recent sync rounds; tap a failed row for the reason and next steps';
+
+  @override
   String get settingsUpdateTitle => 'About & updates';
 
   @override

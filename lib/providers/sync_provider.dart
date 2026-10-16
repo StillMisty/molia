@@ -7,6 +7,7 @@ import '../data/sync/sync_passphrase.dart';
 import '../data/sync/sync_state_store.dart';
 import '../data/sync/transport/local_network_permission.dart';
 import '../domain/models/device_sync.dart';
+import '../domain/ports/sync_transport.dart';
 
 /// 跨设备同步的 UI 门面：引擎状态 + 口令管理 + 手动同步 + 变更去抖触发。
 ///
@@ -46,26 +47,65 @@ class SyncProvider extends ChangeNotifier {
   List<ManualPeer> get manualPeers => _engine.state.manualPeers;
 
   /// 添加手动对端（非空地址；UI 已做格式校验，这里再兜一层）。
-  Future<void> addManualPeer(String host, {String name = ''}) async {
+  ///
+  /// 返回 false 表示该地址已存在（UI 据此提示「已更新」）。
+  Future<bool> addManualPeer(
+    String host, {
+    String name = '',
+    int probePort = 0,
+  }) async {
     final trimmed = host.trim();
-    if (trimmed.isEmpty) return;
-    await _engine.addManualPeer(ManualPeer(host: trimmed, name: name.trim()));
+    if (trimmed.isEmpty) return false;
+    return _engine.addManualPeer(ManualPeer(
+      host: trimmed,
+      name: name.trim(),
+      probePort: probePort,
+    ));
   }
 
   /// 移除手动对端。
   Future<void> removeManualPeer(String host) =>
       _engine.removeManualPeer(host);
 
+  /// 立刻跑一轮并判断该手动地址是否接触成功。
+  ///
+  /// 判据：地址簿条目在本轮学到了设备身份，且名册里该设备是本轮接触的
+  /// （`lastSeenAt` 不早于本轮开始）——只有本轮真正握手过才算成功。
+  Future<bool> contactManualPeer(String host) async {
+    final startedAt = _engine.state.nowMs();
+    await syncNow(manual: true);
+    final report = _engine.lastReport;
+    if (report == null) return false;
+    ManualPeer? entry;
+    for (final peer in manualPeers) {
+      if (peer.host == host) {
+        entry = peer;
+        break;
+      }
+    }
+    final deviceId = entry?.deviceId ?? '';
+    if (deviceId.isEmpty) return false;
+    return report.peers.any(
+      (peer) => peer.deviceId == deviceId && peer.lastSeenAt >= startedAt,
+    );
+  }
+
   /// 局域网权限门（Android 17+ 需要；其它平台恒为允许）。
   bool get lanPermissionNeeded => _lanPermission?.needsPermission ?? false;
-  bool get lanPermissionGranted => _lanPermission?.granted ?? true;
+
+  /// 权限被永久拒绝（系统不再弹窗）：UI 的动作是「去系统设置」。
+  bool get lanPermissionPermanentlyDenied =>
+      _lanPermission?.permanentlyDenied ?? false;
 
   /// 显式申请局域网权限（用户点「授予权限」）；授予后重启局域网传输。
+  ///
+  /// 先 `refresh` 再申请：用户可能刚在系统设置里开过权限，缓存状态会过时。
   Future<bool> requestLanPermission() async {
     final permission = _lanPermission;
     if (permission == null) return true;
-    final granted = await permission.ensure(retry: true);
-    if (granted) await _engine.setTransportEnabled('lan', true);
+    if (!await permission.refresh()) await permission.ensure(retry: true);
+    final granted = permission.granted;
+    if (granted) await _engine.setTransportEnabled(SyncTransportKind.lan, true);
     notifyListeners();
     return granted;
   }
@@ -81,9 +121,13 @@ class SyncProvider extends ChangeNotifier {
   /// 最近一轮的结论（UI 状态用语）。
   SyncOutcome? get lastOutcome => _engine.lastReport?.outcome;
 
-  /// 传输状态（开关开着但不可用时给出原因）。
-  SyncTransportStatus transportStatus(String kind) =>
+  /// 传输状态（开关开着但不可用时给出原因）；未知 kind 返回 null。
+  SyncTransportReport? transportStatus(String kind) =>
       _engine.transportStatus(kind);
+
+  /// 传输最近一次成功接触对端的时间（0 = 尚未成功过）。
+  int transportLastSuccessAt(String kind) =>
+      _engine.state.transportLastSuccessAt(kind);
 
   /// 完整同步口令（显示与复制用；调用方负责提示妥善保管）。
   String? get passphrase => _passphrase;

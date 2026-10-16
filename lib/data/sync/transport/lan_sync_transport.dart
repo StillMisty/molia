@@ -8,6 +8,7 @@ import 'package:logging/logging.dart';
 
 import '../../../domain/models/device_sync.dart';
 import '../../../domain/ports/sync_transport.dart';
+import '../../../utils/device_id.dart';
 import '../sync_crypto.dart';
 
 /// 局域网直连传输：UDP 广播（+ 手动地址簿单播）发现 + 各设备内置 HTTP 快照端点。
@@ -54,7 +55,7 @@ class LanSyncTransport implements SyncTransport {
         _probeWindow = probeWindow,
         _requestTimeout = requestTimeout;
 
-  static const int defaultUdpPort = 47825;
+  static const int defaultUdpPort = ManualPeer.defaultProbePort;
   static const String snapshotPath = '/molia-sync/v1/snapshot';
 
   /// 快照体积上限（含大量统计事件时留足余量；超出视为异常数据丢弃）。
@@ -102,8 +103,12 @@ class LanSyncTransport implements SyncTransport {
   /// 广播发送失败（网络策略 / 缺少广播 entitlement）。
   bool _broadcastUnavailable = false;
 
+  /// 本进程内曾成功发现过对端：用于区分「一直没对端」与「零应答」——
+  /// 后者更可能是网络隔离（AP 隔离 / VPN / 防火墙）而不是没人在线。
+  bool _everDiscoveredPeer = false;
+
   @override
-  String get kind => 'lan';
+  String get kind => SyncTransportKind.lan;
 
   @override
   bool get isRunning => _running;
@@ -111,6 +116,9 @@ class LanSyncTransport implements SyncTransport {
   @override
   String? get unavailableReason =>
       _running ? null : _unavailableReason;
+
+  @override
+  String? get unavailableDetail => _running ? null : _startError;
 
   @override
   Stream<SyncEnvelope> get incoming => _incoming.stream;
@@ -186,22 +194,34 @@ class LanSyncTransport implements SyncTransport {
 
   @override
   Future<SyncPullResult> pull() async {
-    if (!_running) return SyncPullResult(error: _startError);
+    if (!_running) {
+      return SyncPullResult(
+        error: SyncIssue(
+          code: _unavailableReason ?? SyncIssueCode.startFailed,
+          detail: _startError,
+        ),
+      );
+    }
     final passphrase = await _passphraseProvider();
     if (passphrase == null || passphrase.trim().isEmpty) {
-      return const SyncPullResult(error: '未设置同步口令');
+      return const SyncPullResult(
+        error: SyncIssue(code: SyncIssueCode.noPassphrase),
+      );
     }
 
     final peers = await _discoverPeers();
     final envelopes = <SyncEnvelope>[];
     var failed = 0;
     var bytesIn = 0;
-    String? firstError;
+    SyncIssue? firstError;
     for (final peer in peers) {
       final bytes = await _fetchSnapshot(peer);
       if (bytes == null) {
         failed++;
-        firstError ??= '${peer.label}：读取快照失败';
+        firstError ??= SyncIssue(
+          code: SyncIssueCode.peerReadFailed,
+          args: {'peer': peer.label},
+        );
         continue;
       }
       bytesIn += bytes.length;
@@ -210,7 +230,10 @@ class LanSyncTransport implements SyncTransport {
       } on SyncCryptoException {
         // 对端口令不同 / 数据损坏：跳过该对端，不影响其他设备。
         failed++;
-        firstError ??= '${peer.label}：口令不一致或数据损坏';
+        firstError ??= SyncIssue(
+          code: SyncIssueCode.peerDecryptFailed,
+          args: {'peer': peer.label},
+        );
       }
     }
     return SyncPullResult(
@@ -218,11 +241,24 @@ class LanSyncTransport implements SyncTransport {
       peersSeen: peers.length,
       failedPeers: failed,
       bytesIn: bytesIn,
-      error: firstError ??
-          (peers.isEmpty && _broadcastUnavailable
-              ? '广播发送失败；发现不到设备时可手动添加对端地址'
-              : null),
+      error: firstError ?? _discoveryIssue(peers),
     );
+  }
+
+  /// 未发现任何对端时的原因（有对端则为 null）。
+  ///
+  /// 广播发送失败优先；其次是「此前成功发现过、本轮零应答」——后者通常是
+  /// 网络隔离（AP 隔离 / VPN / 防火墙），提示手动地址与 WebDAV 出路。
+  SyncIssue? _discoveryIssue(List<_Peer> peers) {
+    if (peers.isNotEmpty) return null;
+    if (_broadcastUnavailable) {
+      return const SyncIssue(code: SyncIssueCode.broadcastUnavailable);
+    }
+    final manual = _manualPeersProvider?.call() ?? const <ManualPeer>[];
+    if (_everDiscoveredPeer && manual.isEmpty) {
+      return const SyncIssue(code: SyncIssueCode.discoverySilent);
+    }
+    return null;
   }
 
   @override
@@ -230,18 +266,23 @@ class LanSyncTransport implements SyncTransport {
     if (!_running) return SyncPushResult.none;
     final passphrase = await _passphraseProvider();
     if (passphrase == null || passphrase.trim().isEmpty) {
-      return const SyncPushResult(error: '未设置同步口令');
+      return const SyncPushResult(
+        error: SyncIssue(code: SyncIssueCode.noPassphrase),
+      );
     }
     final payload = _codec.encrypt(envelope, passphrase);
     final succeededIds = <String>[];
     final failedIds = <String>[];
-    String? firstError;
+    SyncIssue? firstError;
     for (final peer in List.of(_peers)) {
       if (await _postSnapshot(peer, payload)) {
         succeededIds.add(peer.deviceId);
       } else {
         failedIds.add(peer.deviceId);
-        firstError ??= '${peer.label}：推送失败';
+        firstError ??= SyncIssue(
+          code: SyncIssueCode.peerPushFailed,
+          args: {'peer': peer.label},
+        );
       }
     }
     return SyncPushResult(
@@ -329,6 +370,7 @@ class LanSyncTransport implements SyncTransport {
     if (port is! num) return;
 
     if (message['reply'] == true) {
+      _everDiscoveredPeer = true;
       final peer = _Peer(
         deviceId: peerId,
         host: datagram.address.address,
@@ -485,12 +527,10 @@ class _Peer {
   /// 去重键：认领到设备 id 后按 id，未认领（手动地址首轮）按主机。
   String get key => deviceId.isNotEmpty ? deviceId : 'host:$host';
 
-  /// 日志 / 错误文案用的人类可读标识（设备名 > 设备 id 前 6 位 > 主机）。
+  /// 日志 / 错误文案用的人类可读标识（设备名 > 设备 id 短号 > 主机）。
   String get label {
     if (name.isNotEmpty) return name;
-    if (deviceId.isNotEmpty) {
-      return deviceId.length > 6 ? deviceId.substring(0, 6) : deviceId;
-    }
+    if (deviceId.isNotEmpty) return shortDeviceId(deviceId);
     return host;
   }
 }

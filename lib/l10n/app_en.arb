@@ -1258,6 +1258,111 @@
   "syncDeviceNameEmpty": "Name cannot be empty",
   "syncCategorySubtitle": "Turning it off stops pushing and applying this data on this device",
   "syncGeneratedHint": "Passphrase generated; enter it on other devices to join",
+  "syncIssueDialogTitle": "Sync issue",
+  "syncIssueUnknown": "Unknown reason — retry first; if it keeps failing, copy diagnostics",
+  "syncIssueNotConfigured": "Sync transport is not configured",
+  "syncIssueStartFailed": "Transport failed to start",
+  "syncIssuePermissionDenied": "LAN permission missing (Android 17+ needs the nearby-devices permission)",
+  "syncIssueNoPassphrase": "No sync passphrase set",
+  "syncIssueAllPeersUnreachable": "All peers are unreachable",
+  "syncIssuePullFailed": "Failed to pull remote snapshots",
+  "syncIssuePushFailed": "Failed to push local changes",
+  "syncIssueApplyFailed": "Failed to apply remote data {count} time(s)",
+  "@syncIssueApplyFailed": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "syncIssuePeerReadFailed": "{peer}: failed to read snapshot",
+  "@syncIssuePeerReadFailed": {
+    "placeholders": {
+      "peer": {
+        "type": "String"
+      }
+    }
+  },
+  "syncIssuePeerDecryptFailed": "{peer}: passphrase mismatch or corrupted data",
+  "@syncIssuePeerDecryptFailed": {
+    "placeholders": {
+      "peer": {
+        "type": "String"
+      }
+    }
+  },
+  "syncIssuePeerPushFailed": "{peer}: push failed",
+  "@syncIssuePeerPushFailed": {
+    "placeholders": {
+      "peer": {
+        "type": "String"
+      }
+    }
+  },
+  "syncIssueBroadcastUnavailable": "Broadcast failed (blocked by network policy)",
+  "syncIssueDiscoverySilent": "No device answered during discovery (the network may be isolated)",
+  "syncIssueWebdavDirFailed": "Failed to prepare the WebDAV directory",
+  "syncIssueWebdavListFailed": "Failed to list the WebDAV directory",
+  "syncIssueWebdavReadFailed": "{peer}: failed to read snapshot",
+  "@syncIssueWebdavReadFailed": {
+    "placeholders": {
+      "peer": {
+        "type": "String"
+      }
+    }
+  },
+  "syncIssueWebdavDecryptFailed": "{peer}: passphrase mismatch or corrupted data",
+  "@syncIssueWebdavDecryptFailed": {
+    "placeholders": {
+      "peer": {
+        "type": "String"
+      }
+    }
+  },
+  "syncIssueWebdavUploadFailed": "Failed to upload the snapshot to WebDAV",
+  "syncActionGrantPermission": "Grant permission",
+  "syncActionConfigure": "Configure",
+  "syncActionConfigurePassphrase": "Set passphrase",
+  "syncActionAddManualPeer": "Add manual address",
+  "syncActionUseWebdav": "Use WebDAV",
+  "syncWebdavEnabled": "WebDAV enabled",
+  "syncConfigureOnSettingsPage": "Set the passphrase on the sync settings page",
+  "syncPeerUnknown": "Unknown device",
+  "syncPeerDeviceIdCopied": "Full device ID copied",
+  "syncPeerHostFormatInvalid": "Invalid address (use an IP, IPv6 or hostname, without a port)",
+  "syncPeerPortInvalid": "Port must be 1–65535",
+  "syncPeerAdded": "Device added",
+  "syncPeerUnreachable": "Not reached yet — check that the peer is online on the same network, or use WebDAV",
+  "syncPeerProbePortLabel": "Probe port",
+  "syncPeerProbePortHint": "Default {port}",
+  "@syncPeerProbePortHint": {
+    "placeholders": {
+      "port": {
+        "type": "int"
+      }
+    }
+  },
+  "syncPeerAlreadyAdded": "Already in the list — name and port updated",
+  "syncPeerContacting": "Contacting…",
+  "syncLanPermissionPermanentSubtitle": "Permission permanently denied — enable nearby-devices in system settings",
+  "syncTransportNeverSucceeded": "No successful contact yet",
+  "syncTransportLastSuccessAt": "Last success {time}",
+  "@syncTransportLastSuccessAt": {
+    "placeholders": {
+      "time": {
+        "type": "String"
+      }
+    }
+  },
+  "syncLogViewAll": "View all logs ({count})",
+  "@syncLogViewAll": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "syncLogHint": "Results of recent sync rounds; tap a failed row for the reason and next steps",
   "settingsUpdateTitle": "About & updates",
   "settingsUpdateSubtitle": "Current version {version}",
   "settingsUpdateAvailable": "Update available: {version}",

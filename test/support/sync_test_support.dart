@@ -46,6 +46,9 @@ class FakeSyncTransport implements SyncTransport {
   @override
   String? unavailableReason;
 
+  @override
+  String? unavailableDetail;
+
   bool _running = false;
   final List<SyncEnvelope> available = [];
   final List<SyncEnvelope> pushed = [];
@@ -82,7 +85,9 @@ class FakeSyncTransport implements SyncTransport {
       envelopes: List.of(available),
       peersSeen: peersSeenOverride ?? available.length,
       failedPeers: pullFailures,
-      error: pullFailures > 0 ? '拉取失败（测试注入）' : null,
+      error: pullFailures > 0
+          ? const SyncIssue(code: SyncIssueCode.pullFailed, detail: '拉取失败（测试注入）')
+          : null,
     );
   }
 
@@ -90,7 +95,11 @@ class FakeSyncTransport implements SyncTransport {
   Future<SyncPushResult> push(SyncEnvelope envelope) async {
     pushed.add(envelope);
     if (pushFailures > 0) {
-      return SyncPushResult(failedPeers: pushFailures, error: '推送失败（测试注入）');
+      return SyncPushResult(
+        failedPeers: pushFailures,
+        error: const SyncIssue(
+            code: SyncIssueCode.pushFailed, detail: '推送失败（测试注入）'),
+      );
     }
     return const SyncPushResult(succeededPeers: 1);
   }

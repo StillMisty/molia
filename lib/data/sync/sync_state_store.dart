@@ -124,11 +124,11 @@ class SyncLogEntry {
   final int bytesIn;
   final int bytesOut;
 
-  /// 本轮参与的传输标识。
+  /// 本轮启用的传输标识。
   final List<String> transports;
 
-  /// 失败原因（用户可读的粗粒度描述；细节在传输明细里）。
-  final String? error;
+  /// 失败原因（类型化；技术细节在 [SyncIssue.detail]，UI 不展示原文）。
+  final SyncIssue? error;
 
   Map<String, dynamic> toJson() => {
         'at': at,
@@ -141,7 +141,7 @@ class SyncLogEntry {
         if (bytesIn > 0) 'bytesIn': bytesIn,
         if (bytesOut > 0) 'bytesOut': bytesOut,
         if (transports.isNotEmpty) 'transports': transports,
-        if (error != null && error!.isNotEmpty) 'error': error,
+        if (error != null) 'error': error!.toJson(),
       };
 
   static SyncLogEntry? fromJson(Object? raw) {
@@ -160,7 +160,7 @@ class SyncLogEntry {
       bytesOut: (raw['bytesOut'] as num?)?.toInt() ?? 0,
       transports:
           (raw['transports'] as List?)?.whereType<String>().toList() ?? const [],
-      error: raw['error'] is String ? raw['error'] as String : null,
+      error: SyncIssue.fromJson(raw['error']),
     );
   }
 }
@@ -236,6 +236,9 @@ class SyncStateStore {
   int _lastSyncAt = 0;
   final List<SyncLogEntry> _log = [];
 
+  /// 每传输最近一次成功接触对端的轮次时间（UI「最后成功于」；0 = 尚未成功过）。
+  final Map<String, int> _transportLastSuccess = {};
+
   /// 设备名册（deviceId → 最近一次接触的观测值）。
   final Map<String, SyncPeerState> _peers = {};
 
@@ -263,11 +266,11 @@ class SyncStateStore {
   List<SyncLogEntry> get log => List.unmodifiable(_log);
 
   /// 名册（按最近接触时间倒序；本机不在其中）。
-  List<SyncPeerState> get peers {
-    final list = _peers.values.toList()
-      ..sort((a, b) => b.lastSeenAt.compareTo(a.lastSeenAt));
-    return List.unmodifiable(list);
-  }
+  List<SyncPeerState> get peers =>
+      List.unmodifiable(trimPeers(_peers.values, peerLimit));
+
+  /// 传输最近一次成功接触对端的时间（0 = 尚未成功过）。
+  int transportLastSuccessAt(String kind) => _transportLastSuccess[kind] ?? 0;
 
   int nowMs() => _clock();
 
@@ -351,20 +354,27 @@ class SyncStateStore {
   }
 
   /// 添加手动对端（同一 host 覆盖：地址簿以地址为身份，学到的信息合并保留）。
-  Future<void> addManualPeer(ManualPeer peer) async {
+  ///
+  /// 返回 false 表示该地址已存在（本次按用户输入更新名称与端口）。
+  Future<bool> addManualPeer(ManualPeer peer) async {
     final host = peer.host.trim();
-    if (host.isEmpty) return;
+    if (host.isEmpty) return false;
+    final name = peer.name.trim();
     final index = _manualPeers.indexWhere((entry) => entry.host == host);
     if (index >= 0) {
-      _manualPeers[index] = _manualPeers[index].mergeLearned(
+      final merged = _manualPeers[index].mergeLearned(
         httpPort: peer.httpPort > 0 ? peer.httpPort : null,
         deviceId: peer.deviceId.isNotEmpty ? peer.deviceId : null,
-        name: peer.name.isNotEmpty ? peer.name : null,
       );
-    } else {
-      _manualPeers.add(peer.copyWith(host: host));
+      // 用户再次提交同一地址是显式改名；学到路径（learnManualPeer）不覆盖命名。
+      _manualPeers[index] =
+          name.isNotEmpty ? merged.copyWith(name: name) : merged;
+      await save();
+      return false;
     }
+    _manualPeers.add(peer.copyWith(host: host));
     await save();
+    return true;
   }
 
   /// 移除手动对端（按地址；仅移除地址簿条目，不影响已发现的对端）。
@@ -374,7 +384,23 @@ class SyncStateStore {
   }
 
   /// 回写首次接触学到的信息（deviceId / 端口 / 名称）。
-  Future<void> learnManualPeer(ManualPeer learned) => addManualPeer(learned);
+  ///
+  /// 学到的对端名只在条目尚未命名时填入：手动条目优先保留用户命名。
+  Future<void> learnManualPeer(ManualPeer learned) async {
+    final host = learned.host.trim();
+    if (host.isEmpty) return;
+    final index = _manualPeers.indexWhere((entry) => entry.host == host);
+    if (index < 0) {
+      _manualPeers.add(learned.copyWith(host: host));
+    } else {
+      _manualPeers[index] = _manualPeers[index].mergeLearned(
+        httpPort: learned.httpPort > 0 ? learned.httpPort : null,
+        deviceId: learned.deviceId.isNotEmpty ? learned.deviceId : null,
+        name: learned.name.isNotEmpty ? learned.name : null,
+      );
+    }
+    await save();
+  }
 
   Future<void> setLanHttpPort(int port) async {
     if (port <= 0 || port == _lanHttpPort) return;
@@ -434,8 +460,9 @@ class SyncStateStore {
         failed: report.failedCount,
         bytesIn: report.bytesIn,
         bytesOut: report.bytesOut,
+        // 本轮启用的传输（未启用的传输不参与本轮）。
         transports: report.transports
-            .where((t) => t.running || t.unavailableReason == null)
+            .where((t) => t.enabled)
             .map((t) => t.kind)
             .toList(),
         error: report.error,
@@ -444,18 +471,18 @@ class SyncStateStore {
     while (_log.length > logLimit) {
       _log.removeLast();
     }
+    for (final transport in report.transports) {
+      if (transport.enabled && transport.succeeded) {
+        _transportLastSuccess[transport.kind] = report.finishedAt;
+      }
+    }
     for (final peer in report.peers) {
       _peers[peer.deviceId] = peer;
     }
-    if (_peers.length > peerLimit) {
-      final recent = _peers.values.toList()
-        ..sort((a, b) => b.lastSeenAt.compareTo(a.lastSeenAt));
-      _peers
-        ..clear()
-        ..addEntries(
-          recent.take(peerLimit).map((peer) => MapEntry(peer.deviceId, peer)),
-        );
-    }
+    final recent = trimPeers(_peers.values, peerLimit);
+    _peers
+      ..clear()
+      ..addEntries(recent.map((peer) => MapEntry(peer.deviceId, peer)));
   }
 
   Future<void> save() async {
@@ -498,6 +525,8 @@ class SyncStateStore {
           'activeScript': _activeScriptStamp!.toJson(),
         if (_sessionStamp != null) 'sessionStamp': _sessionStamp!.toJson(),
         'lastSyncAt': _lastSyncAt,
+        if (_transportLastSuccess.isNotEmpty)
+          'transportLastSuccess': _transportLastSuccess,
         'log': [for (final entry in _log) entry.toJson()],
         'peers': [for (final peer in _peers.values) peer.toJson()],
       };
@@ -578,6 +607,14 @@ class SyncStateStore {
     _lastSyncAt = json['lastSyncAt'] is num
         ? (json['lastSyncAt'] as num).toInt()
         : 0;
+    _transportLastSuccess.clear();
+    final transportLastSuccess = json['transportLastSuccess'];
+    if (transportLastSuccess is Map) {
+      for (final entry in transportLastSuccess.entries) {
+        final at = entry.value;
+        if (at is num) _transportLastSuccess[entry.key.toString()] = at.toInt();
+      }
+    }
     _log.clear();
     final log = json['log'];
     if (log is List) {

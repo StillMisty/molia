@@ -317,7 +317,7 @@ class SyncEnvelope {
       producedAt: raw['producedAt'] is num
           ? (raw['producedAt'] as num).toInt()
           : 0,
-      version: (raw['v'] as num?)?.toInt() ?? 1,
+      version: (raw['v'] as num?)?.toInt() ?? protocolVersion,
       records: records,
     );
   }
@@ -357,6 +357,15 @@ Map<SyncCategory, Map<String, SyncRecord>> mergeEnvelopesByCategory(
   return merged;
 }
 
+/// 名册按最近接触时间倒序并截断到 [limit]（排序 / 淘汰的唯一实现，
+/// 引擎内存名册与状态库落盘共用）。
+List<SyncPeerState> trimPeers(Iterable<SyncPeerState> peers, int limit) {
+  final recent = peers.toList()
+    ..sort((a, b) => b.lastSeenAt.compareTo(a.lastSeenAt));
+  if (recent.length <= limit) return recent;
+  return recent.sublist(0, limit);
+}
+
 /// 手动添加的对端地址（局域网发现不可用时的兜底：AP 隔离 / 多网段 / 防火墙）。
 ///
 /// 只存用户输入的 `host` 与可选名称；`httpPort` 与 `deviceId` 在首次接触后
@@ -370,6 +379,9 @@ class ManualPeer {
     this.deviceId = '',
     this.name = '',
   });
+
+  /// 默认 UDP 探测端口（局域网传输的默认端口；`probePort` 为 0 时同此值）。
+  static const int defaultProbePort = 47825;
 
   final String host;
 
@@ -400,13 +412,18 @@ class ManualPeer {
       );
 
   /// 回写学到的新观测（只覆盖已知字段，避免把已有信息抹成空）。
+  ///
+  /// [name] 只在条目尚未命名时填入：手动条目优先保留用户命名，
+  /// 对端广播的设备名不覆盖用户输入。
   ManualPeer mergeLearned({int? httpPort, String? deviceId, String? name}) =>
       ManualPeer(
         host: host,
         probePort: probePort,
         httpPort: httpPort ?? this.httpPort,
         deviceId: (deviceId != null && deviceId.isNotEmpty) ? deviceId : this.deviceId,
-        name: (name != null && name.isNotEmpty) ? name : this.name,
+        name: this.name.isNotEmpty
+            ? this.name
+            : (name != null && name.isNotEmpty ? name : ''),
       );
 
   Map<String, dynamic> toJson() => {
@@ -461,8 +478,8 @@ enum SyncTrigger {
 
 /// 一轮同步的结论（五态）。
 ///
-/// 区分「没发现对端」与「没有变化」是这套模型的核心：旧实现里两者都显示成
-/// 「同步成功」，用户无法自查。判定规则见 `SyncEngine._resolveOutcome`。
+/// 区分「没发现对端」与「没有变化」是这套模型的核心：两者都显示成
+/// 「同步成功」时用户无法自查。判定规则见 `SyncEngine._resolveOutcome`。
 enum SyncOutcome {
   /// 有对端可通信，且完成了数据流转（或有本地变更外发）。
   ok,
@@ -487,11 +504,125 @@ enum SyncOutcome {
   }
 }
 
+/// 同步失败原因（机器可读）：UI 按 [code] 映射本地化文案，[args] 给文案参数
+/// （次数 / 对端名等）。
+///
+/// [detail] 是原始异常 / 技术细节，**只进 Logger 与「复制诊断信息」导出**，
+/// UI 不展示原文（英文界面与不可读的 `$e` 都从这里隔离）。
+class SyncIssue {
+  const SyncIssue({required this.code, this.args = const {}, this.detail});
+
+  /// 原因码（[SyncIssueCode]）。
+  final String code;
+
+  /// 文案参数（数值 / 名称；UI 映射时按 key 读取）。
+  final Map<String, Object?> args;
+
+  /// 原始技术细节（诊断用；UI 不展示）。
+  final String? detail;
+
+  Map<String, Object?> toJson() => {
+        'code': code,
+        if (args.isNotEmpty) 'args': args,
+        if (detail != null && detail!.isNotEmpty) 'detail': detail,
+      };
+
+  /// 宽容解析：字符串按「未知原因 + 细节」处理（非结构化的持久化错误）。
+  static SyncIssue? fromJson(Object? raw) {
+    if (raw is String) {
+      return raw.isEmpty
+          ? null
+          : SyncIssue(code: SyncIssueCode.unknown, detail: raw);
+    }
+    if (raw is! Map) return null;
+    final code = raw['code'];
+    if (code is! String || code.isEmpty) return null;
+    final args = raw['args'];
+    return SyncIssue(
+      code: code,
+      args: args is Map
+          ? args.map((key, value) => MapEntry(key.toString(), value))
+          : const {},
+      detail: raw['detail'] is String ? raw['detail'] as String : null,
+    );
+  }
+
+  @override
+  String toString() => 'SyncIssue($code${detail == null ? '' : ', $detail'})';
+}
+
+/// 同步失败原因码（[SyncIssue.code]）。
+///
+/// `not_configured` / `start_failed` / `permission_denied` 与传输状态
+/// （[SyncUnavailableReason]）同值：传输不可用与一轮失败共用一套文案映射。
+abstract final class SyncIssueCode {
+  /// 传输缺少必要配置（WebDAV 未填服务器地址）。
+  static const String notConfigured = 'not_configured';
+
+  /// 传输启动失败（端口占用、权限不足等）。
+  static const String startFailed = 'start_failed';
+
+  /// 局域网访问权限未授予（Android 17 起局域网默认阻断；手动地址同样无效）。
+  static const String permissionDenied = 'permission_denied';
+
+  /// 未设置同步口令。
+  static const String noPassphrase = 'no_passphrase';
+
+  /// 所有对端均不可达。
+  static const String allPeersUnreachable = 'all_peers_unreachable';
+
+  /// 传输 pull 抛异常（网络栈故障等）。
+  static const String pullFailed = 'pull_failed';
+
+  /// 传输 push 抛异常。
+  static const String pushFailed = 'push_failed';
+
+  /// 应用远端记录失败（args：`count` = 次数）。
+  static const String applyFailed = 'apply_failed';
+
+  /// 读取某个对端的快照失败（args：`peer` = 对端标识）。
+  static const String peerReadFailed = 'peer_read_failed';
+
+  /// 某个对端的快照解密失败 / 数据损坏（args：`peer`）。
+  static const String peerDecryptFailed = 'peer_decrypt_failed';
+
+  /// 推送某个对端失败（args：`peer`）。
+  static const String peerPushFailed = 'peer_push_failed';
+
+  /// 广播发送失败（网络策略 / 缺少广播 entitlement）。
+  static const String broadcastUnavailable = 'broadcast_unavailable';
+
+  /// 探测窗口内零应答（此前成功发现过设备，可能被网络隔离）。
+  static const String discoverySilent = 'discovery_silent';
+
+  /// WebDAV 目录准备失败（MKCOL）。
+  static const String webdavDirFailed = 'webdav_dir_failed';
+
+  /// WebDAV 目录列表失败（PROPFIND）。
+  static const String webdavListFailed = 'webdav_list_failed';
+
+  /// WebDAV 快照文件读取失败（args：`peer`）。
+  static const String webdavReadFailed = 'webdav_read_failed';
+
+  /// WebDAV 快照文件解密失败 / 数据损坏（args：`peer`）。
+  static const String webdavDecryptFailed = 'webdav_decrypt_failed';
+
+  /// WebDAV 快照上传失败。
+  static const String webdavUploadFailed = 'webdav_upload_failed';
+
+  /// 引擎内部异常（args 无；detail 带原始异常）。
+  static const String internal = 'internal';
+
+  /// 未知原因（非结构化错误 / 持久化中无法识别的形状）。
+  static const String unknown = 'unknown';
+}
+
 /// 单个传输在一轮中的明细。
 class SyncTransportReport {
   const SyncTransportReport({
     required this.kind,
     required this.running,
+    this.enabled = false,
     this.unavailableReason,
     this.pulled = 0,
     this.pushed = 0,
@@ -508,10 +639,14 @@ class SyncTransportReport {
   /// 传输标识（`lan` / `webdav`）。
   final String kind;
 
+  /// 本轮该传输是否启用（未启用的传输不参与本轮，只出现在诊断信息里）。
+  final bool enabled;
+
   /// 本轮开始时传输是否在运行。
   final bool running;
 
-  /// 不可用原因码（`not_configured` / `start_failed`）；null = 可用。
+  /// 不可用原因码（`not_configured` / `start_failed` / `permission_denied`）；
+  /// null = 可用。
   final String? unavailableReason;
 
   /// 成功接收并解密的远端快照数。
@@ -532,11 +667,20 @@ class SyncTransportReport {
   final int bytesOut;
   final int durationMs;
 
-  /// 最近一次失败的技术细节（仅诊断用，不直接展示给用户）。
-  final String? error;
+  /// 本轮的失败原因（无失败为 null）；技术细节在 [SyncIssue.detail]。
+  final SyncIssue? error;
+
+  /// 本轮是否成功接触过对端（探测到对端、拉取或推送成功，且没有失败）。
+  ///
+  /// 名册「最后成功于」据此更新；探测到对端但无变化也算一次成功接触。
+  bool get succeeded =>
+      failedPulls == 0 &&
+      failedPushes == 0 &&
+      (peersSeen > 0 || pulled > 0 || pushed > 0);
 
   Map<String, Object?> toJson() => {
         'kind': kind,
+        'enabled': enabled,
         'running': running,
         if (unavailableReason != null) 'unavailableReason': unavailableReason,
         'pulled': pulled,
@@ -548,7 +692,7 @@ class SyncTransportReport {
         'bytesIn': bytesIn,
         'bytesOut': bytesOut,
         'durationMs': durationMs,
-        if (error != null && error!.isNotEmpty) 'error': error,
+        if (error != null) 'error': error!.toJson(),
       };
 
   static SyncTransportReport fromJson(Object? raw) {
@@ -556,6 +700,7 @@ class SyncTransportReport {
     int intOf(String key) => (raw[key] as num?)?.toInt() ?? 0;
     return SyncTransportReport(
       kind: raw['kind'] as String? ?? '',
+      enabled: raw['enabled'] == true,
       running: raw['running'] == true,
       unavailableReason:
           raw['unavailableReason'] is String ? raw['unavailableReason'] as String : null,
@@ -568,7 +713,7 @@ class SyncTransportReport {
       bytesIn: intOf('bytesIn'),
       bytesOut: intOf('bytesOut'),
       durationMs: intOf('durationMs'),
-      error: raw['error'] is String ? raw['error'] as String : null,
+      error: SyncIssue.fromJson(raw['error']),
     );
   }
 }
@@ -600,7 +745,8 @@ class SyncPeerState {
   /// 最近一次成功推送的时间。
   final int lastPushAt;
 
-  final String? lastError;
+  /// 最近一次接触的失败原因；成功接触时清除（见 `SyncEngine._roster`）。
+  final SyncIssue? lastError;
 
   /// 落后条数（增量协议提供；null = 未知，见增量协议任务）。
   final int? behindBy;
@@ -614,7 +760,7 @@ class SyncPeerState {
     int? lastSeenAt,
     int? lastPullAt,
     int? lastPushAt,
-    String? lastError,
+    SyncIssue? lastError,
     bool clearLastError = false,
     int? behindBy,
     int? clockSkewMs,
@@ -638,7 +784,7 @@ class SyncPeerState {
         if (lastSeenAt > 0) 'lastSeenAt': lastSeenAt,
         if (lastPullAt > 0) 'lastPullAt': lastPullAt,
         if (lastPushAt > 0) 'lastPushAt': lastPushAt,
-        if (lastError != null && lastError!.isNotEmpty) 'lastError': lastError,
+        if (lastError != null) 'lastError': lastError!.toJson(),
         if (behindBy != null) 'behindBy': behindBy,
         if (clockSkewMs != null) 'clockSkewMs': clockSkewMs,
       };
@@ -654,7 +800,7 @@ class SyncPeerState {
       lastSeenAt: (raw['lastSeenAt'] as num?)?.toInt() ?? 0,
       lastPullAt: (raw['lastPullAt'] as num?)?.toInt() ?? 0,
       lastPushAt: (raw['lastPushAt'] as num?)?.toInt() ?? 0,
-      lastError: raw['lastError'] is String ? raw['lastError'] as String : null,
+      lastError: SyncIssue.fromJson(raw['lastError']),
       behindBy: (raw['behindBy'] as num?)?.toInt(),
       clockSkewMs: (raw['clockSkewMs'] as num?)?.toInt(),
     );
@@ -696,7 +842,8 @@ class SyncRoundReport {
   /// 本轮收到的远端记录数（未去重前）。
   final int remoteRecords;
 
-  final String? error;
+  /// 本轮的失败原因（无失败为 null）；技术细节在 [SyncIssue.detail]。
+  final SyncIssue? error;
 
   int get durationMs => finishedAt - startedAt;
 
@@ -713,7 +860,8 @@ class SyncRoundReport {
   @override
   String toString() =>
       'SyncRoundReport(${trigger.name}/${outcome.name}, applied=$applied, '
-      'peers=$peersSeen, failed=$failedCount)';
+      'peers=$peersSeen, failed=$failedCount'
+      '${error == null ? '' : ', error=${error!.code}'})';
 }
 
 /// 列表头同步记录（自增 id 不出本机；`syncId` 跨设备稳定，收藏为固定常量）。

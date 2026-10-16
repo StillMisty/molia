@@ -4370,6 +4370,258 @@ abstract class AppLocalizations {
   /// **'Passphrase generated; enter it on other devices to join'**
   String get syncGeneratedHint;
 
+  /// No description provided for @syncIssueDialogTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Sync issue'**
+  String get syncIssueDialogTitle;
+
+  /// No description provided for @syncIssueUnknown.
+  ///
+  /// In en, this message translates to:
+  /// **'Unknown reason — retry first; if it keeps failing, copy diagnostics'**
+  String get syncIssueUnknown;
+
+  /// No description provided for @syncIssueNotConfigured.
+  ///
+  /// In en, this message translates to:
+  /// **'Sync transport is not configured'**
+  String get syncIssueNotConfigured;
+
+  /// No description provided for @syncIssueStartFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Transport failed to start'**
+  String get syncIssueStartFailed;
+
+  /// No description provided for @syncIssuePermissionDenied.
+  ///
+  /// In en, this message translates to:
+  /// **'LAN permission missing (Android 17+ needs the nearby-devices permission)'**
+  String get syncIssuePermissionDenied;
+
+  /// No description provided for @syncIssueNoPassphrase.
+  ///
+  /// In en, this message translates to:
+  /// **'No sync passphrase set'**
+  String get syncIssueNoPassphrase;
+
+  /// No description provided for @syncIssueAllPeersUnreachable.
+  ///
+  /// In en, this message translates to:
+  /// **'All peers are unreachable'**
+  String get syncIssueAllPeersUnreachable;
+
+  /// No description provided for @syncIssuePullFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Failed to pull remote snapshots'**
+  String get syncIssuePullFailed;
+
+  /// No description provided for @syncIssuePushFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Failed to push local changes'**
+  String get syncIssuePushFailed;
+
+  /// No description provided for @syncIssueApplyFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Failed to apply remote data {count} time(s)'**
+  String syncIssueApplyFailed(int count);
+
+  /// No description provided for @syncIssuePeerReadFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'{peer}: failed to read snapshot'**
+  String syncIssuePeerReadFailed(String peer);
+
+  /// No description provided for @syncIssuePeerDecryptFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'{peer}: passphrase mismatch or corrupted data'**
+  String syncIssuePeerDecryptFailed(String peer);
+
+  /// No description provided for @syncIssuePeerPushFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'{peer}: push failed'**
+  String syncIssuePeerPushFailed(String peer);
+
+  /// No description provided for @syncIssueBroadcastUnavailable.
+  ///
+  /// In en, this message translates to:
+  /// **'Broadcast failed (blocked by network policy)'**
+  String get syncIssueBroadcastUnavailable;
+
+  /// No description provided for @syncIssueDiscoverySilent.
+  ///
+  /// In en, this message translates to:
+  /// **'No device answered during discovery (the network may be isolated)'**
+  String get syncIssueDiscoverySilent;
+
+  /// No description provided for @syncIssueWebdavDirFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Failed to prepare the WebDAV directory'**
+  String get syncIssueWebdavDirFailed;
+
+  /// No description provided for @syncIssueWebdavListFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Failed to list the WebDAV directory'**
+  String get syncIssueWebdavListFailed;
+
+  /// No description provided for @syncIssueWebdavReadFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'{peer}: failed to read snapshot'**
+  String syncIssueWebdavReadFailed(String peer);
+
+  /// No description provided for @syncIssueWebdavDecryptFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'{peer}: passphrase mismatch or corrupted data'**
+  String syncIssueWebdavDecryptFailed(String peer);
+
+  /// No description provided for @syncIssueWebdavUploadFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Failed to upload the snapshot to WebDAV'**
+  String get syncIssueWebdavUploadFailed;
+
+  /// No description provided for @syncActionGrantPermission.
+  ///
+  /// In en, this message translates to:
+  /// **'Grant permission'**
+  String get syncActionGrantPermission;
+
+  /// No description provided for @syncActionConfigure.
+  ///
+  /// In en, this message translates to:
+  /// **'Configure'**
+  String get syncActionConfigure;
+
+  /// No description provided for @syncActionConfigurePassphrase.
+  ///
+  /// In en, this message translates to:
+  /// **'Set passphrase'**
+  String get syncActionConfigurePassphrase;
+
+  /// No description provided for @syncActionAddManualPeer.
+  ///
+  /// In en, this message translates to:
+  /// **'Add manual address'**
+  String get syncActionAddManualPeer;
+
+  /// No description provided for @syncActionUseWebdav.
+  ///
+  /// In en, this message translates to:
+  /// **'Use WebDAV'**
+  String get syncActionUseWebdav;
+
+  /// No description provided for @syncWebdavEnabled.
+  ///
+  /// In en, this message translates to:
+  /// **'WebDAV enabled'**
+  String get syncWebdavEnabled;
+
+  /// No description provided for @syncConfigureOnSettingsPage.
+  ///
+  /// In en, this message translates to:
+  /// **'Set the passphrase on the sync settings page'**
+  String get syncConfigureOnSettingsPage;
+
+  /// No description provided for @syncPeerUnknown.
+  ///
+  /// In en, this message translates to:
+  /// **'Unknown device'**
+  String get syncPeerUnknown;
+
+  /// No description provided for @syncPeerDeviceIdCopied.
+  ///
+  /// In en, this message translates to:
+  /// **'Full device ID copied'**
+  String get syncPeerDeviceIdCopied;
+
+  /// No description provided for @syncPeerHostFormatInvalid.
+  ///
+  /// In en, this message translates to:
+  /// **'Invalid address (use an IP, IPv6 or hostname, without a port)'**
+  String get syncPeerHostFormatInvalid;
+
+  /// No description provided for @syncPeerPortInvalid.
+  ///
+  /// In en, this message translates to:
+  /// **'Port must be 1–65535'**
+  String get syncPeerPortInvalid;
+
+  /// No description provided for @syncPeerAdded.
+  ///
+  /// In en, this message translates to:
+  /// **'Device added'**
+  String get syncPeerAdded;
+
+  /// No description provided for @syncPeerUnreachable.
+  ///
+  /// In en, this message translates to:
+  /// **'Not reached yet — check that the peer is online on the same network, or use WebDAV'**
+  String get syncPeerUnreachable;
+
+  /// No description provided for @syncPeerProbePortLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Probe port'**
+  String get syncPeerProbePortLabel;
+
+  /// No description provided for @syncPeerProbePortHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Default {port}'**
+  String syncPeerProbePortHint(int port);
+
+  /// No description provided for @syncPeerAlreadyAdded.
+  ///
+  /// In en, this message translates to:
+  /// **'Already in the list — name and port updated'**
+  String get syncPeerAlreadyAdded;
+
+  /// No description provided for @syncPeerContacting.
+  ///
+  /// In en, this message translates to:
+  /// **'Contacting…'**
+  String get syncPeerContacting;
+
+  /// No description provided for @syncLanPermissionPermanentSubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Permission permanently denied — enable nearby-devices in system settings'**
+  String get syncLanPermissionPermanentSubtitle;
+
+  /// No description provided for @syncTransportNeverSucceeded.
+  ///
+  /// In en, this message translates to:
+  /// **'No successful contact yet'**
+  String get syncTransportNeverSucceeded;
+
+  /// No description provided for @syncTransportLastSuccessAt.
+  ///
+  /// In en, this message translates to:
+  /// **'Last success {time}'**
+  String syncTransportLastSuccessAt(String time);
+
+  /// No description provided for @syncLogViewAll.
+  ///
+  /// In en, this message translates to:
+  /// **'View all logs ({count})'**
+  String syncLogViewAll(int count);
+
+  /// No description provided for @syncLogHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Results of recent sync rounds; tap a failed row for the reason and next steps'**
+  String get syncLogHint;
+
   /// No description provided for @settingsUpdateTitle.
   ///
   /// In en, this message translates to:

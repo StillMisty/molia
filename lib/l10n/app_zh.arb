@@ -910,6 +910,111 @@
   "syncDeviceNameEmpty": "名称不能为空",
   "syncCategorySubtitle": "关闭后本机不推送也不应用该类数据",
   "syncGeneratedHint": "已生成同步口令，在其它设备输入同一口令即可加入",
+  "syncIssueDialogTitle": "同步问题",
+  "syncIssueUnknown": "未知原因；可先重试，持续失败请复制诊断信息排查",
+  "syncIssueNotConfigured": "同步传输尚未配置",
+  "syncIssueStartFailed": "传输启动失败",
+  "syncIssuePermissionDenied": "缺少局域网权限（Android 17 起需「附近设备」权限）",
+  "syncIssueNoPassphrase": "尚未设置同步口令",
+  "syncIssueAllPeersUnreachable": "所有对端均不可达",
+  "syncIssuePullFailed": "拉取远端快照失败",
+  "syncIssuePushFailed": "推送本地变更失败",
+  "syncIssueApplyFailed": "应用远端数据失败 {count} 次",
+  "@syncIssueApplyFailed": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "syncIssuePeerReadFailed": "{peer}：读取快照失败",
+  "@syncIssuePeerReadFailed": {
+    "placeholders": {
+      "peer": {
+        "type": "String"
+      }
+    }
+  },
+  "syncIssuePeerDecryptFailed": "{peer}：口令不一致或数据损坏",
+  "@syncIssuePeerDecryptFailed": {
+    "placeholders": {
+      "peer": {
+        "type": "String"
+      }
+    }
+  },
+  "syncIssuePeerPushFailed": "{peer}：推送失败",
+  "@syncIssuePeerPushFailed": {
+    "placeholders": {
+      "peer": {
+        "type": "String"
+      }
+    }
+  },
+  "syncIssueBroadcastUnavailable": "广播发送失败（被网络策略拦截）",
+  "syncIssueDiscoverySilent": "探测窗口内没有设备应答（可能被网络隔离）",
+  "syncIssueWebdavDirFailed": "WebDAV 目录准备失败",
+  "syncIssueWebdavListFailed": "WebDAV 目录列表失败",
+  "syncIssueWebdavReadFailed": "{peer}：读取快照失败",
+  "@syncIssueWebdavReadFailed": {
+    "placeholders": {
+      "peer": {
+        "type": "String"
+      }
+    }
+  },
+  "syncIssueWebdavDecryptFailed": "{peer}：口令不一致或数据损坏",
+  "@syncIssueWebdavDecryptFailed": {
+    "placeholders": {
+      "peer": {
+        "type": "String"
+      }
+    }
+  },
+  "syncIssueWebdavUploadFailed": "WebDAV 快照上传失败",
+  "syncActionGrantPermission": "授予权限",
+  "syncActionConfigure": "去配置",
+  "syncActionConfigurePassphrase": "去设置口令",
+  "syncActionAddManualPeer": "添加手动地址",
+  "syncActionUseWebdav": "改用 WebDAV",
+  "syncWebdavEnabled": "已启用 WebDAV",
+  "syncConfigureOnSettingsPage": "请在同步设置页设置口令",
+  "syncPeerUnknown": "未知设备",
+  "syncPeerDeviceIdCopied": "已复制完整设备 id",
+  "syncPeerHostFormatInvalid": "地址格式不正确（支持 IP、IPv6 或域名，不含端口）",
+  "syncPeerPortInvalid": "端口需为 1–65535",
+  "syncPeerAdded": "已添加设备",
+  "syncPeerUnreachable": "暂未接触成功：确认对端在线且在同一网络，或改用 WebDAV",
+  "syncPeerProbePortLabel": "探测端口",
+  "syncPeerProbePortHint": "默认 {port}",
+  "@syncPeerProbePortHint": {
+    "placeholders": {
+      "port": {
+        "type": "int"
+      }
+    }
+  },
+  "syncPeerAlreadyAdded": "该地址已在列表中，已更新名称与端口",
+  "syncPeerContacting": "正在接触…",
+  "syncLanPermissionPermanentSubtitle": "权限已被永久拒绝，请到系统设置开启「附近设备」权限",
+  "syncTransportNeverSucceeded": "尚无成功记录",
+  "syncTransportLastSuccessAt": "最后成功 {time}",
+  "@syncTransportLastSuccessAt": {
+    "placeholders": {
+      "time": {
+        "type": "String"
+      }
+    }
+  },
+  "syncLogViewAll": "查看全部日志（{count} 条）",
+  "@syncLogViewAll": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "syncLogHint": "最近几轮同步结果；失败行可点开查看原因与下一步",
   "settingsUpdateTitle": "关于与更新",
   "settingsUpdateSubtitle": "当前版本 {version}",
   "settingsUpdateAvailable": "可更新至 {version}",

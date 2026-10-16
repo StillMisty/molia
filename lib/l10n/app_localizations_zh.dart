@@ -2301,6 +2301,150 @@ class AppLocalizationsZh extends AppLocalizations {
   String get syncGeneratedHint => '已生成同步口令，在其它设备输入同一口令即可加入';
 
   @override
+  String get syncIssueDialogTitle => '同步问题';
+
+  @override
+  String get syncIssueUnknown => '未知原因；可先重试，持续失败请复制诊断信息排查';
+
+  @override
+  String get syncIssueNotConfigured => '同步传输尚未配置';
+
+  @override
+  String get syncIssueStartFailed => '传输启动失败';
+
+  @override
+  String get syncIssuePermissionDenied => '缺少局域网权限（Android 17 起需「附近设备」权限）';
+
+  @override
+  String get syncIssueNoPassphrase => '尚未设置同步口令';
+
+  @override
+  String get syncIssueAllPeersUnreachable => '所有对端均不可达';
+
+  @override
+  String get syncIssuePullFailed => '拉取远端快照失败';
+
+  @override
+  String get syncIssuePushFailed => '推送本地变更失败';
+
+  @override
+  String syncIssueApplyFailed(int count) {
+    return '应用远端数据失败 $count 次';
+  }
+
+  @override
+  String syncIssuePeerReadFailed(String peer) {
+    return '$peer：读取快照失败';
+  }
+
+  @override
+  String syncIssuePeerDecryptFailed(String peer) {
+    return '$peer：口令不一致或数据损坏';
+  }
+
+  @override
+  String syncIssuePeerPushFailed(String peer) {
+    return '$peer：推送失败';
+  }
+
+  @override
+  String get syncIssueBroadcastUnavailable => '广播发送失败（被网络策略拦截）';
+
+  @override
+  String get syncIssueDiscoverySilent => '探测窗口内没有设备应答（可能被网络隔离）';
+
+  @override
+  String get syncIssueWebdavDirFailed => 'WebDAV 目录准备失败';
+
+  @override
+  String get syncIssueWebdavListFailed => 'WebDAV 目录列表失败';
+
+  @override
+  String syncIssueWebdavReadFailed(String peer) {
+    return '$peer：读取快照失败';
+  }
+
+  @override
+  String syncIssueWebdavDecryptFailed(String peer) {
+    return '$peer：口令不一致或数据损坏';
+  }
+
+  @override
+  String get syncIssueWebdavUploadFailed => 'WebDAV 快照上传失败';
+
+  @override
+  String get syncActionGrantPermission => '授予权限';
+
+  @override
+  String get syncActionConfigure => '去配置';
+
+  @override
+  String get syncActionConfigurePassphrase => '去设置口令';
+
+  @override
+  String get syncActionAddManualPeer => '添加手动地址';
+
+  @override
+  String get syncActionUseWebdav => '改用 WebDAV';
+
+  @override
+  String get syncWebdavEnabled => '已启用 WebDAV';
+
+  @override
+  String get syncConfigureOnSettingsPage => '请在同步设置页设置口令';
+
+  @override
+  String get syncPeerUnknown => '未知设备';
+
+  @override
+  String get syncPeerDeviceIdCopied => '已复制完整设备 id';
+
+  @override
+  String get syncPeerHostFormatInvalid => '地址格式不正确（支持 IP、IPv6 或域名，不含端口）';
+
+  @override
+  String get syncPeerPortInvalid => '端口需为 1–65535';
+
+  @override
+  String get syncPeerAdded => '已添加设备';
+
+  @override
+  String get syncPeerUnreachable => '暂未接触成功：确认对端在线且在同一网络，或改用 WebDAV';
+
+  @override
+  String get syncPeerProbePortLabel => '探测端口';
+
+  @override
+  String syncPeerProbePortHint(int port) {
+    return '默认 $port';
+  }
+
+  @override
+  String get syncPeerAlreadyAdded => '该地址已在列表中，已更新名称与端口';
+
+  @override
+  String get syncPeerContacting => '正在接触…';
+
+  @override
+  String get syncLanPermissionPermanentSubtitle => '权限已被永久拒绝，请到系统设置开启「附近设备」权限';
+
+  @override
+  String get syncTransportNeverSucceeded => '尚无成功记录';
+
+  @override
+  String syncTransportLastSuccessAt(String time) {
+    return '最后成功 $time';
+  }
+
+  @override
+  String syncLogViewAll(int count) {
+    return '查看全部日志（$count 条）';
+  }
+
+  @override
+  String get syncLogHint => '最近几轮同步结果；失败行可点开查看原因与下一步';
+
+  @override
   String get settingsUpdateTitle => '关于与更新';
 
   @override

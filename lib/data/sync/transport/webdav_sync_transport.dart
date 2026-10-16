@@ -63,7 +63,7 @@ class WebDavSyncTransport implements SyncTransport {
   final Logger _logger = Logger('molia.sync.webdav');
 
   @override
-  String get kind => 'webdav';
+  String get kind => SyncTransportKind.webdav;
 
   @override
   bool get isRunning => _running;
@@ -71,6 +71,10 @@ class WebDavSyncTransport implements SyncTransport {
   @override
   String? get unavailableReason =>
       _configProvider().isConfigured ? null : SyncUnavailableReason.notConfigured;
+
+  /// 未配置没有额外技术细节（原因码已说明一切）。
+  @override
+  String? get unavailableDetail => null;
 
   @override
   Stream<SyncEnvelope> get incoming => _incoming.stream;
@@ -99,7 +103,11 @@ class WebDavSyncTransport implements SyncTransport {
         passphrase == null ||
         passphrase.trim().isEmpty) {
       return SyncPullResult(
-        error: config.isConfigured ? '未设置同步口令' : '未配置 WebDAV',
+        error: SyncIssue(
+          code: config.isConfigured
+              ? SyncIssueCode.noPassphrase
+              : SyncIssueCode.notConfigured,
+        ),
       );
     }
 
@@ -108,17 +116,40 @@ class WebDavSyncTransport implements SyncTransport {
       await _ensureDir(config);
     } catch (e) {
       _logger.warning('WebDAV 目录准备失败', e);
-      return SyncPullResult(error: '$e');
+      // 目录准备失败计入失败对端：否则「没有任何文件」会被判成「没发现对端」，
+      // 启动类故障在状态面上不可见。
+      return SyncPullResult(
+        failedPeers: 1,
+        error: SyncIssue(code: SyncIssueCode.webdavDirFailed, detail: '$e'),
+      );
     }
-    final names = await _listSnapshotFiles(config);
+    final List<String>? names;
+    try {
+      names = await _listSnapshotFiles(config);
+    } catch (e) {
+      _logger.warning('WebDAV 目录列表失败', e);
+      return SyncPullResult(
+        failedPeers: 1,
+        error: SyncIssue(code: SyncIssueCode.webdavListFailed, detail: '$e'),
+      );
+    }
+    if (names == null) {
+      return const SyncPullResult(
+        failedPeers: 1,
+        error: SyncIssue(code: SyncIssueCode.webdavListFailed),
+      );
+    }
     var failed = 0;
     var bytesIn = 0;
-    String? firstError;
+    SyncIssue? firstError;
     for (final name in names) {
       final bytes = await _getFile(config, name);
       if (bytes == null) {
         failed++;
-        firstError ??= '$name：读取失败';
+        firstError ??= SyncIssue(
+          code: SyncIssueCode.webdavReadFailed,
+          args: {'peer': name},
+        );
         continue;
       }
       bytesIn += bytes.length;
@@ -127,7 +158,10 @@ class WebDavSyncTransport implements SyncTransport {
       } on SyncCryptoException {
         // 口令不同或文件损坏：跳过。
         failed++;
-        firstError ??= '$name：口令不一致或数据损坏';
+        firstError ??= SyncIssue(
+          code: SyncIssueCode.webdavDecryptFailed,
+          args: {'peer': name},
+        );
       }
     }
     return SyncPullResult(
@@ -148,7 +182,11 @@ class WebDavSyncTransport implements SyncTransport {
         passphrase == null ||
         passphrase.trim().isEmpty) {
       return SyncPushResult(
-        error: config.isConfigured ? '未设置同步口令' : '未配置 WebDAV',
+        error: SyncIssue(
+          code: config.isConfigured
+              ? SyncIssueCode.noPassphrase
+              : SyncIssueCode.notConfigured,
+        ),
       );
     }
     try {
@@ -158,7 +196,10 @@ class WebDavSyncTransport implements SyncTransport {
       return SyncPushResult(succeededPeers: 1, bytesOut: payload.length);
     } catch (e) {
       _logger.warning('WebDAV 快照上传失败', e);
-      return SyncPushResult(failedPeers: 1, error: '$e');
+      return SyncPushResult(
+        failedPeers: 1,
+        error: SyncIssue(code: SyncIssueCode.webdavUploadFailed, detail: '$e'),
+      );
     }
   }
 
@@ -182,7 +223,8 @@ class WebDavSyncTransport implements SyncTransport {
     throw WebDavHttpException('MKCOL 失败: ${response.httpStatus}');
   }
 
-  Future<List<String>> _listSnapshotFiles(WebDavConfig config) async {
+  /// 列出远端快照文件；服务端返回错误状态码时返回 null（由调用方计为失败）。
+  Future<List<String>?> _listSnapshotFiles(WebDavConfig config) async {
     final response = await _send(
       'PROPFIND',
       _dirUri(config),
@@ -195,7 +237,7 @@ class WebDavSyncTransport implements SyncTransport {
           '<d:propfind xmlns:d="DAV:"><d:prop><d:resourcetype/></d:prop>'
           '</d:propfind>',
     );
-    if (response.httpStatus >= 400) return const [];
+    if (response.httpStatus >= 400) return null;
     final body = utf8.decode(
       await _collectBodyBytes(response) ?? const <int>[],
       allowMalformed: true,

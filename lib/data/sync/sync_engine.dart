@@ -15,11 +15,12 @@ import 'sync_state_store.dart';
 /// 同步引擎：一轮 = 收集本地视图 → 拉取远端快照 → 逐键合并 → 写回本地 →
 /// 推送合并后视图 → 记录可观察的一轮结果（[SyncRoundReport]）。
 ///
-/// 可观察性契约（与旧实现的关键差别）：
+/// 可观察性契约：
 /// - 报告区分五态：`noPeers`（一个对端都没发现）与 `noChanges`（对端可达但
-///   没有变化）必须能分开——旧实现里两者都显示「同步成功」；
+///   没有变化）必须能分开，用户才能自查「同步到底做了什么」；
 /// - 计数是**本轮变更量**（落地记录数 / 传输字节 / 失败个数），不是全库规模；
-/// - 每传输与每对端都有独立结果，单点失败不再被吞掉；
+/// - 每传输与每对端都有独立结果，单点失败不会被吞掉；
+/// - 失败原因是机器可读的 [SyncIssue]，UI 映射文案，原始细节只进日志与诊断；
 /// - 入站快照在本轮失败时放回队列（对端花网络推来的数据不能丢）。
 class SyncEngine extends ChangeNotifier {
   SyncEngine({
@@ -77,16 +78,23 @@ class SyncEngine extends ChangeNotifier {
   /// 最近一轮推送/构建的快照（局域网端点直接返回给对端 GET）。
   SyncEnvelope? get lastEnvelope => _lastEnvelope;
 
-  /// 传输当前状态（UI 呈现「开关开着但没在工作」）。
-  SyncTransportStatus transportStatus(String kind) {
+  /// 传输当前状态（UI 呈现「开关开着但没在工作」）；未知 kind 返回 null。
+  ///
+  /// 与一轮报告同一类型：计数为零、`error` 为启动类失败原因（含诊断细节），
+  /// 避免「状态视图」与「报告」两套字段各自漂移。
+  SyncTransportReport? transportStatus(String kind) {
     final transport = _transports[kind];
-    if (transport == null) {
-      return const SyncTransportStatus(kind: '', running: false);
-    }
-    return SyncTransportStatus(
+    if (transport == null) return null;
+    final running = transport.isRunning;
+    final reason = transport.unavailableReason;
+    return SyncTransportReport(
       kind: kind,
-      running: transport.isRunning,
-      unavailableReason: transport.unavailableReason,
+      enabled: _state.enabledTransports.contains(kind),
+      running: running,
+      unavailableReason: reason,
+      error: running || reason == null
+          ? null
+          : SyncIssue(code: reason, detail: transport.unavailableDetail),
     );
   }
 
@@ -142,9 +150,12 @@ class SyncEngine extends ChangeNotifier {
   // 权限被拒时它同样无效——那是网关级阻断，只能授权或转 WebDAV。
 
   /// 添加手动对端（地址 + 可选名称）；重复地址按地址合并。
-  Future<void> addManualPeer(ManualPeer peer) async {
-    await _state.addManualPeer(peer);
+  ///
+  /// 返回 false 表示该地址已存在（UI 据此提示「已更新」而不是「已添加」）。
+  Future<bool> addManualPeer(ManualPeer peer) async {
+    final added = await _state.addManualPeer(peer);
     notifyListeners();
+    return added;
   }
 
   /// 移除手动对端（只删地址簿条目，已发现的名册不受影响）。
@@ -238,9 +249,11 @@ class SyncEngine extends ChangeNotifier {
     try {
       final passphrase = await _state.readPassphrase();
       if (passphrase == null || passphrase.trim().isEmpty) {
-        throw StateError('未设置同步口令');
+        throw const _RoundAbort(SyncIssue(code: SyncIssueCode.noPassphrase));
       }
       await _ensureTransportsRunning();
+      // 本轮推送失败的对端（名册重建时据此保留失败状态）。
+      _peersFailedThisRound.clear();
 
       final categories = _state.enabledCategories;
       final local = await _collect(categories);
@@ -249,7 +262,11 @@ class SyncEngine extends ChangeNotifier {
 
       // 拉取：逐传输计时 + 逐对端计数。
       final accumulators = <String, _TransportAccumulator>{
-        for (final kind in _transports.keys) kind: _TransportAccumulator(kind),
+        for (final kind in _transports.keys)
+          kind: _TransportAccumulator(
+            kind,
+            enabled: _state.enabledTransports.contains(kind),
+          ),
       };
       final pulledEntries = <(String, SyncEnvelope)>[];
       for (final entry in _transports.entries) {
@@ -261,14 +278,25 @@ class SyncEngine extends ChangeNotifier {
         accumulator
           ..running = transport.isRunning
           ..unavailableReason = transport.unavailableReason;
-        if (!transport.isRunning) continue;
+        if (!transport.isRunning) {
+          // 启动类失败（端口占用 / 权限 / 未配置）进入本轮错误面：
+          // 「开关开着但没在工作」必须在状态与日志里看得见。
+          accumulator.error = SyncIssue(
+            code: transport.unavailableReason ?? SyncIssueCode.startFailed,
+            detail: transport.unavailableDetail,
+          );
+          continue;
+        }
 
         final watch = Stopwatch()..start();
         SyncPullResult result;
         try {
           result = await transport.pull();
         } catch (e) {
-          result = SyncPullResult(failedPeers: 1, error: '$e');
+          result = SyncPullResult(
+            failedPeers: 1,
+            error: SyncIssue(code: SyncIssueCode.pullFailed, detail: '$e'),
+          );
         }
         watch.stop();
         accumulator
@@ -366,7 +394,10 @@ class SyncEngine extends ChangeNotifier {
           try {
             result = await transport.push(outgoing);
           } catch (e) {
-            result = SyncPushResult(failedPeers: 1, error: '$e');
+            result = SyncPushResult(
+              failedPeers: 1,
+              error: SyncIssue(code: SyncIssueCode.pushFailed, detail: '$e'),
+            );
           }
           watch.stop();
           accumulator
@@ -397,7 +428,12 @@ class SyncEngine extends ChangeNotifier {
         0,
         (sum, item) => sum + item.peersSeen,
       );
-      final anyTransport = transportReports.any((item) => item.running);
+      final succeededPulls = transportReports.fold<int>(
+        0,
+        (sum, item) => sum + item.pulled,
+      );
+      final anyTransport =
+          transportReports.any((item) => item.enabled && item.running);
       final remoteRecords = pulledEntries.fold<int>(
         0,
         (sum, entry) => sum + entry.$2.recordCount,
@@ -410,19 +446,27 @@ class SyncEngine extends ChangeNotifier {
         anyTransport: anyTransport,
         contact: contact,
         failed: failedCount + applyFailures,
+        succeededPulls: succeededPulls,
         succeededPushes: succeededPushes,
         applied: applied,
         localChanged: localChanged,
       );
       final transportError = transportReports
           .map((item) => item.error)
-          .firstWhere((value) => value != null && value.isNotEmpty,
-              orElse: () => null);
-      final applyError = applyFailures > 0 ? '应用失败 $applyFailures 次' : null;
+          .firstWhere((value) => value != null, orElse: () => null);
+      final applyError = applyFailures > 0
+          ? SyncIssue(
+              code: SyncIssueCode.applyFailed,
+              args: {'count': applyFailures},
+            )
+          : null;
       final error = switch (outcome) {
-        SyncOutcome.failed =>
-          transportError ?? applyError ?? '所有对端均不可达',
-        SyncOutcome.partial => _joinErrors(transportError, applyError),
+        SyncOutcome.failed => transportError ??
+            applyError ??
+            const SyncIssue(code: SyncIssueCode.allPeersUnreachable),
+        SyncOutcome.partial => transportError ?? applyError,
+        // noPeers 不吞传输级错误：广播失败 / 零应答 / 目录准备失败要能看见。
+        SyncOutcome.noPeers => transportError,
         _ => null,
       };
 
@@ -439,6 +483,16 @@ class SyncEngine extends ChangeNotifier {
         error: error,
       );
       _logger.fine(() => '同步一轮完成：$report');
+    } on _RoundAbort catch (abort) {
+      // 用户可行动的明确状态（未设置口令）：不按内部异常处理。
+      _logger.warning('同步一轮未完成：${abort.issue}');
+      report = SyncRoundReport(
+        trigger: trigger,
+        startedAt: startedAt,
+        finishedAt: _nowMs(),
+        outcome: SyncOutcome.failed,
+        error: abort.issue,
+      );
     } catch (e, stackTrace) {
       _logger.warning('同步一轮失败', e, stackTrace);
       report = SyncRoundReport(
@@ -446,7 +500,7 @@ class SyncEngine extends ChangeNotifier {
         startedAt: startedAt,
         finishedAt: _nowMs(),
         outcome: SyncOutcome.failed,
-        error: '$e',
+        error: SyncIssue(code: SyncIssueCode.internal, detail: '$e'),
       );
     } finally {
       _lastReport = report;
@@ -463,6 +517,7 @@ class SyncEngine extends ChangeNotifier {
     required bool anyTransport,
     required bool contact,
     required int failed,
+    required int succeededPulls,
     required int succeededPushes,
     required int applied,
     required bool localChanged,
@@ -472,16 +527,12 @@ class SyncEngine extends ChangeNotifier {
       if (!localChanged && applied == 0) return SyncOutcome.noChanges;
       return SyncOutcome.ok;
     }
-    if (succeededPushes == 0 && applied == 0) return SyncOutcome.failed;
+    // 有失败：拉取 / 推送 / 落地任一面成功过就是部分失败；全都没有才是整轮
+    // 失败（拉取成功但推送全败仍有成功面，不是「所有对端都联系不上」）。
+    if (succeededPulls == 0 && succeededPushes == 0 && applied == 0) {
+      return SyncOutcome.failed;
+    }
     return SyncOutcome.partial;
-  }
-
-  static String? _joinErrors(String? first, String? second) {
-    final parts = [
-      if (first != null && first.isNotEmpty) first,
-      if (second != null && second.isNotEmpty) second,
-    ];
-    return parts.isEmpty ? null : parts.join('；');
   }
 
   static SyncTrigger _mergeTrigger(SyncTrigger? existing, SyncTrigger incoming) {
@@ -492,6 +543,9 @@ class SyncEngine extends ChangeNotifier {
     return existing;
   }
 
+  /// 本轮推送失败过的对端：名册重建时据此保留失败状态（成功接触显式清除）。
+  final Set<String> _peersFailedThisRound = {};
+
   /// 记录/更新名册项（引擎只在这里写名册，落库由 [SyncStateStore.recordRound]）。
   void _touchPeer(
     String deviceId,
@@ -501,18 +555,22 @@ class SyncEngine extends ChangeNotifier {
     if (deviceId.isEmpty) return;
     final existing = _peersById[deviceId] ?? SyncPeerState(deviceId: deviceId);
     final now = _nowMs();
-    _peersById[deviceId] = pushOk
-        ? existing.copyWith(
-            transport: kind,
-            lastSeenAt: now,
-            lastPushAt: now,
-            clearLastError: true,
-          )
-        : existing.copyWith(
-            transport: kind,
-            lastSeenAt: now,
-            lastError: '推送失败',
-          );
+    if (pushOk) {
+      _peersFailedThisRound.remove(deviceId);
+      _peersById[deviceId] = existing.copyWith(
+        transport: kind,
+        lastSeenAt: now,
+        lastPushAt: now,
+        clearLastError: true,
+      );
+      return;
+    }
+    _peersFailedThisRound.add(deviceId);
+    _peersById[deviceId] = existing.copyWith(
+      transport: kind,
+      lastSeenAt: now,
+      lastError: const SyncIssue(code: SyncIssueCode.pushFailed),
+    );
   }
 
   /// 本轮名册快照（拉取得到的对端 + 推送接触过的对端）。
@@ -535,25 +593,21 @@ class SyncEngine extends ChangeNotifier {
         lastSeenAt: now,
         lastPullAt: now,
         lastPushAt: existing.lastPushAt,
-        lastError: existing.lastError,
+        // 成功拉取 = 接触成功：清掉上一次的失败；本轮推送失败的对端保留状态。
+        lastError: _peersFailedThisRound.contains(envelope.deviceId)
+            ? existing.lastError
+            : null,
         clockSkewMs: envelope.producedAt > 0
             ? envelope.producedAt - now
             : existing.clockSkewMs,
       );
     }
-    // 内存名册同样按最近接触时间有界（落库侧也会裁剪）。
-    if (_peersById.length > SyncStateStore.peerLimit) {
-      final recent = _peersById.values.toList()
-        ..sort((a, b) => b.lastSeenAt.compareTo(a.lastSeenAt));
-      _peersById
-        ..clear()
-        ..addEntries(
-          recent
-              .take(SyncStateStore.peerLimit)
-              .map((peer) => MapEntry(peer.deviceId, peer)),
-        );
-    }
-    return List.unmodifiable(_peersById.values);
+    // 内存名册与落库侧共用同一套排序 / 淘汰（落库侧还会再裁一次）。
+    final recent = trimPeers(_peersById.values, SyncStateStore.peerLimit);
+    _peersById
+      ..clear()
+      ..addEntries(recent.map((peer) => MapEntry(peer.deviceId, peer)));
+    return recent;
   }
 
   // 完整快照备份（导出/导入）：与同步共用 envelope 与适配器，
@@ -720,24 +774,12 @@ class SyncEngine extends ChangeNotifier {
   }
 }
 
-/// 传输状态快照（UI 呈现用：开关开着但不可用时要有明确原因）。
-class SyncTransportStatus {
-  const SyncTransportStatus({
-    required this.kind,
-    required this.running,
-    this.unavailableReason,
-  });
-
-  final String kind;
-  final bool running;
-  final String? unavailableReason;
-}
-
 /// 一轮内可变的传输累计器（构造报告时转成不可变的 [SyncTransportReport]）。
 class _TransportAccumulator {
-  _TransportAccumulator(this.kind);
+  _TransportAccumulator(this.kind, {required this.enabled});
 
   final String kind;
+  final bool enabled;
   bool running = false;
   String? unavailableReason;
   int pulled = 0;
@@ -749,10 +791,11 @@ class _TransportAccumulator {
   int bytesIn = 0;
   int bytesOut = 0;
   int durationMs = 0;
-  String? error;
+  SyncIssue? error;
 
   SyncTransportReport build() => SyncTransportReport(
         kind: kind,
+        enabled: enabled,
         running: running,
         unavailableReason: unavailableReason,
         pulled: pulled,
@@ -766,4 +809,14 @@ class _TransportAccumulator {
         durationMs: durationMs,
         error: error,
       );
+}
+
+/// 一轮中止（用户可行动的明确状态，如未设置口令）：携带类型化原因。
+class _RoundAbort implements Exception {
+  const _RoundAbort(this.issue);
+
+  final SyncIssue issue;
+
+  @override
+  String toString() => 'SyncRoundAbort(${issue.code})';
 }

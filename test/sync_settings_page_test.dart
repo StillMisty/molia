@@ -1,3 +1,6 @@
+import 'dart:convert';
+
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:material_3_expressive/material_3_expressive.dart';
 import 'package:material_ui/material_ui.dart';
@@ -180,6 +183,38 @@ void main() {
 
     expect(find.byKey(const Key('settingsSyncDiagnosticItem')), findsOneWidget);
     expect(find.text('Copy diagnostics'), findsOneWidget);
+  });
+
+  testWidgets('诊断导出：含原因码与原始细节（detail），不含口令', (tester) async {
+    await provider.setEnabled(true);
+    // 拉取抛异常 → 日志与最近一轮都带 pull_failed + 原始 `$e`。
+    transport.throwOnPull = true;
+    await provider.syncNow(manual: true);
+
+    final clipboard = <String>[];
+    tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+      SystemChannels.platform,
+      (call) async {
+        if (call.method == 'Clipboard.setData') {
+          clipboard.add((call.arguments as Map)['text'] as String);
+        }
+        return null;
+      },
+    );
+    addTearDown(() => tester.binding.defaultBinaryMessenger
+        .setMockMethodCallHandler(SystemChannels.platform, null));
+
+    await pumpPage(tester);
+    await tester.tap(find.byKey(const Key('settingsSyncDiagnosticItem')));
+    await tester.pumpAndSettle();
+
+    final payload = jsonDecode(clipboard.single) as Map<String, dynamic>;
+    final lastRound = payload['lastRound'] as Map<String, dynamic>;
+    final error = lastRound['error'] as Map<String, dynamic>;
+    expect(error['code'], SyncIssueCode.pullFailed);
+    // 原始细节只进诊断导出，不上界面（界面断言见「传输异常」用例）。
+    expect(error['detail'], contains('拉取失败'));
+    expect(clipboard.single, isNot(contains(provider.passphrase!)));
   });
 
   testWidgets('添加设备：写入地址簿并立即跑一轮', (tester) async {

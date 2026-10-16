@@ -13,8 +13,7 @@ import 'support/sync_test_support.dart';
 /// 引擎测试：一轮同步的拉取 → 合并 → 应用 → 推送 → **报告与日志**。
 ///
 /// 可观察性契约是主要覆盖对象：五态判定（尤其是「没发现对端」与「没有变化」
-/// 必须分开）、设备名册、入站快照不丢、进行中的请求排队补跑，以及协议 v2
-/// 对 v1 对端的拒绝（不静默合并）。
+/// 必须分开）、设备名册、入站快照不丢、进行中的请求排队补跑。
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
@@ -168,7 +167,8 @@ void main() {
     // 拉取抛异常被传输边界吸收：本轮记为「部分失败」，原因进报告与日志，
     // 不冒泡给调用方（否则一次网络抖动就会打断调用链）。
     expect(report!.outcome, SyncOutcome.partial);
-    expect(report.error, contains('拉取失败'));
+    expect(report.error?.code, SyncIssueCode.pullFailed);
+    expect(report.error?.detail, contains('拉取失败'));
     expect(state.log.first.outcome, SyncOutcome.partial);
   });
 
@@ -202,7 +202,7 @@ void main() {
     final report = await engine.syncNow();
 
     expect(report!.outcome, SyncOutcome.failed);
-    expect(report.error, contains('同步口令'));
+    expect(report.error?.code, SyncIssueCode.noPassphrase);
     expect(state.log.first.outcome, SyncOutcome.failed);
     expect(prefs.getString('theme_mode'), isNull);
   });
@@ -270,7 +270,8 @@ void main() {
     // 收到数据但一条都没落地：本轮算失败（错误里带应用失败次数）。
     expect(failingState.log.first.outcome, SyncOutcome.failed);
     expect(failingState.log.first.failed, 1);
-    expect(failingState.log.first.error, contains('应用失败'));
+    expect(failingState.log.first.error?.code, SyncIssueCode.applyFailed);
+    expect(failingState.log.first.error?.args['count'], 1);
 
     // 下一轮消费队列里的入站快照（否则对端推来的数据就永久丢了）。
     await failingEngine.syncNow();
