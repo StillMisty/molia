@@ -359,13 +359,13 @@
 - **Sync envelope（同步快照）** — `lib/domain/models/device_sync.dart`：
   一次交换的完整视图（设备身份 + 各类别记录）；全量合并模型，设备间互换快照后
   逐键取新，无增量/版本向量（见 ADR-0003）。协议版本 v2（v1 对端与 v1 备份
-  都被拒绝，见 [Protocol v2]）。
+  都被拒绝，见 「协议版本闸门」）。
 - **Sync record（同步记录）** — 快照最小单元：`key + version + data`；`version`
-  是三元组 [SyncVersion]，删除表示为 `deleted` 墓碑记录（墓碑另带真实删除时间
+  是三元组 版本戳 `SyncVersion`，删除表示为 `deleted` 墓碑记录（墓碑另带真实删除时间
   `deletedAt`），墓碑参与 LWW 并保留 90 天后裁剪（按 `deletedAt` 计时）。
 - **SyncVersion（记录版本戳）** — `(versionPhysical, versionCounter, deviceId)`：
   物理分量 = `max(本地物理时间, 已观测最大值)`，同物理值内 `counter` 递增，
-  相等按 `deviceId` 字典序；胜负判定的唯一依据（[Content time separation]）。
+  相等按 `deviceId` 字典序；胜负判定的唯一依据（「内容时间分离」）。
 - **SyncStampIssuer（版本戳发号器）** — `lib/data/sync/sync_stamp.dart`：
   本机所有同步戳的唯一来源，`next()` 严格单调、`observe()` 吸收远端超前戳
   （记 warning）、`seed()` 接受初始化基线；基线持久化在 `sync_state_v1` 的
@@ -389,7 +389,7 @@
 - **Backup（完整备份）** — `SyncEngine.exportBackupJson` / `importBackupJson`：
   与同步共用 envelope 与适配器的本地文件备份/合并恢复；不需要启用同步；
   凭证类默认排除。
-- **LWW stamp（逐键版本戳）** — [SyncVersion] 三元组：物理分量大者胜，相同时
+- **LWW stamp（逐键版本戳）** — 版本戳 `SyncVersion` 三元组：物理分量大者胜，相同时
   `counter` 大者胜，再同按设备 id 字典序决平局（确定性收敛）；物理分量是
   HLC-lite 的 `max(本地墙上时钟, 已观测最大值)`，不再是「最后的墙上时间」。
 - **Sync passphrase（同步口令）** — 信任根：PBKDF2 派生 AES-256-GCM 密钥，
@@ -407,7 +407,7 @@
   表内版本三列 + 真实删除时间 `deletedAt`（历史删除 vs 播放的判据）。
 - **Setting stamps（设置登记哈希）** — `SyncStateStore.settingStamps` 维护的
   `key → (值哈希, SyncVersion)`：本地值 vs 登记哈希判定本地修改，变化时向
-  [SyncStampIssuer] 取号，应用远端后同步更新，保证重复应用幂等
+  `SyncStampIssuer` 取号，应用远端后同步更新，保证重复应用幂等
   （见 `docs/adr/0003` §6 修订）。
 - **Settings key（登记键）** — `lib/data/settings/settings_key.dart`：一个设置键的
   全部事实（名字 / 默认值 / 同步类别 / 存放盒）；只有有「第二消费者」的键才登记
