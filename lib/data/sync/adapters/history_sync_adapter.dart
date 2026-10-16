@@ -19,6 +19,10 @@ class HistorySyncAdapter implements SyncAdapter {
 
   final LibrarySyncStore _repository;
 
+  /// 上轮记录缓存：键 = 类别指纹（`COUNT(*) + MAX(versionPhysical)` 聚合）。
+  String? _cacheKey;
+  Map<SyncCategory, List<SyncRecord>>? _cached;
+
   @override
   Set<SyncCategory> get categories => const {SyncCategory.history};
 
@@ -27,6 +31,18 @@ class HistorySyncAdapter implements SyncAdapter {
 
   @override
   Future<Map<SyncCategory, List<SyncRecord>>> collect() async {
+    final key = syncFingerprintKey(
+      await _repository.syncFingerprints(categories),
+    );
+    final cached = _cached;
+    if (cached != null && _cacheKey == key) return cached;
+    final records = await _readRecords();
+    _cacheKey = key;
+    _cached = records;
+    return records;
+  }
+
+  Future<Map<SyncCategory, List<SyncRecord>>> _readRecords() async {
     final records = <SyncRecord>[];
     for (final entry in await _repository.syncExportHistory()) {
       if (entry.sourceKey.isEmpty || entry.songId.isEmpty) continue;
@@ -84,6 +100,11 @@ class HistorySyncAdapter implements SyncAdapter {
       entries: entries,
       tombstones: tombstones,
     );
+    // 落地了远端记录：远端版本可能小于本机最大值，缓存显式失效。
+    if (result.applied > 0) {
+      _cacheKey = null;
+      _cached = null;
+    }
     return SyncApplyOutcome(applied: result.applied, skipped: result.skipped);
   }
 }

@@ -18,6 +18,10 @@ class StatisticsSyncAdapter implements SyncAdapter {
 
   final PlayStatisticsRepository _repository;
 
+  /// 上轮记录缓存：键 = 已收尾事件的廉价指纹。
+  String? _cacheKey;
+  Map<SyncCategory, List<SyncRecord>>? _cached;
+
   @override
   Set<SyncCategory> get categories => const {SyncCategory.statistics};
 
@@ -26,6 +30,16 @@ class StatisticsSyncAdapter implements SyncAdapter {
 
   @override
   Future<Map<SyncCategory, List<SyncRecord>>> collect() async {
+    final key = await _repository.syncFingerprint();
+    final cached = _cached;
+    if (cached != null && _cacheKey == key) return cached;
+    final records = await _readRecords();
+    _cacheKey = key;
+    _cached = records;
+    return records;
+  }
+
+  Future<Map<SyncCategory, List<SyncRecord>>> _readRecords() async {
     final events = await _repository.syncExportEvents();
     return {
       SyncCategory.statistics: [
@@ -75,6 +89,11 @@ class StatisticsSyncAdapter implements SyncAdapter {
       });
     }
     final result = await _repository.syncApplyEvents(events);
+    // 落地了远端事件：远端版本可能小于本机最大值，缓存显式失效。
+    if (result.applied > 0) {
+      _cacheKey = null;
+      _cached = null;
+    }
     return SyncApplyOutcome(
       applied: result.applied,
       skipped: result.skipped + skipped,

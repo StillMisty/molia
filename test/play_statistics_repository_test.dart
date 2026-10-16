@@ -534,4 +534,27 @@ void main() {
       expect(row['listenedMs'], 1000);
     });
   });
+
+  test('同步指纹：进行中事件不变，收尾后推进', () async {
+    final id = await repository.startEvent(
+      sourceKey: 'wy',
+      songId: '1',
+      title: '曲目',
+      startedAt: 1000,
+    );
+    final started = await repository.syncFingerprint();
+
+    // 进行中事件不导出：进度更新不影响指纹。
+    await repository.touchEvent(id, listenedMs: 5000, maxPositionMs: 5000);
+    expect(await repository.syncFingerprint(), started);
+
+    await repository.finishEvent(
+      id,
+      reason: PlayEventEndReason.completed,
+      listenedMs: 6000,
+      maxPositionMs: 6000,
+      endedAt: 2000,
+    );
+    expect(await repository.syncFingerprint(), isNot(started));
+  });
 }

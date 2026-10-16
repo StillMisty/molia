@@ -18,6 +18,11 @@ class PlaylistSyncAdapter implements SyncAdapter {
 
   final LibrarySyncStore _repository;
 
+  /// 上轮记录缓存：键 = 类别指纹（`COUNT(*) + MAX(versionPhysical)` 聚合）。
+  /// 指纹未变时直接复用，不读行。
+  String? _cacheKey;
+  Map<SyncCategory, List<SyncRecord>>? _cached;
+
   @override
   Set<SyncCategory> get categories => const {
         SyncCategory.playlists,
@@ -29,6 +34,18 @@ class PlaylistSyncAdapter implements SyncAdapter {
 
   @override
   Future<Map<SyncCategory, List<SyncRecord>>> collect() async {
+    final key = syncFingerprintKey(
+      await _repository.syncFingerprints(categories),
+    );
+    final cached = _cached;
+    if (cached != null && _cacheKey == key) return cached;
+    final records = await _readRecords();
+    _cacheKey = key;
+    _cached = records;
+    return records;
+  }
+
+  Future<Map<SyncCategory, List<SyncRecord>>> _readRecords() async {
     final playlists = <SyncRecord>[];
     for (final playlist in await _repository.syncExportPlaylists()) {
       if (playlist.syncId.isEmpty) continue;
@@ -124,7 +141,15 @@ class PlaylistSyncAdapter implements SyncAdapter {
       tracks: tracks,
       tombstones: tombstones,
     );
+    // 落地了远端记录：指纹的 MAX(versionPhysical) 不一定变化（远端版本可能
+    // 小于本机最大值），缓存必须显式失效。
+    if (result.applied > 0) _invalidateCache();
     return SyncApplyOutcome(applied: result.applied, skipped: result.skipped);
+  }
+
+  void _invalidateCache() {
+    _cacheKey = null;
+    _cached = null;
   }
 
   static List<SyncRecord> _tombstonesFor(

@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:molia/data/settings/settings_secret_store.dart';
 import 'package:molia/data/sync/sync_stamp.dart';
 import 'package:molia/domain/models/device_sync.dart';
+import 'package:molia/domain/ports/library_sync_store.dart';
 import 'package:molia/domain/ports/sync_transport.dart';
 
 /// 测试用发号器（固定/可注入时钟 + 设备 id）：给不关心同步语义的仓库测试用。
@@ -33,8 +34,69 @@ class MemorySyncSecretStore implements SettingsSecretStore {
   }
 }
 
-/// 测试用内存传输：可注入远端快照、失败计数与不可用原因，并记录推送内容。
-///
+/// 资料库同步面的计数包装：统计导出调用次数（验证指纹门控不读行）。
+class CountingLibrarySyncStore implements LibrarySyncStore {
+  CountingLibrarySyncStore(this.delegate);
+
+  final LibrarySyncStore delegate;
+  int exportCalls = 0;
+  int fingerprintCalls = 0;
+
+  @override
+  Future<List<PlaylistSyncRecord>> syncExportPlaylists() {
+    exportCalls++;
+    return delegate.syncExportPlaylists();
+  }
+
+  @override
+  Future<List<PlaylistTrackSyncRecord>> syncExportPlaylistTracks() {
+    exportCalls++;
+    return delegate.syncExportPlaylistTracks();
+  }
+
+  @override
+  Future<List<PlayHistorySyncRecord>> syncExportHistory() {
+    exportCalls++;
+    return delegate.syncExportHistory();
+  }
+
+  @override
+  Future<List<SyncTombstoneRecord>> syncExportTombstones(
+    Iterable<String> categories,
+  ) {
+    exportCalls++;
+    return delegate.syncExportTombstones(categories);
+  }
+
+  @override
+  Future<Map<SyncCategory, String>> syncFingerprints(
+    Iterable<SyncCategory> categories,
+  ) {
+    fingerprintCalls++;
+    return delegate.syncFingerprints(categories);
+  }
+
+  @override
+  Future<({int applied, int skipped})> syncApplyLibrary({
+    List<PlaylistSyncRecord> playlists = const [],
+    List<PlaylistTrackSyncRecord> tracks = const [],
+    List<SyncTombstoneRecord> tombstones = const [],
+  }) =>
+      delegate.syncApplyLibrary(
+        playlists: playlists,
+        tracks: tracks,
+        tombstones: tombstones,
+      );
+
+  @override
+  Future<({int applied, int skipped})> syncApplyHistory({
+    List<PlayHistorySyncRecord> entries = const [],
+    List<SyncTombstoneRecord> tombstones = const [],
+  }) =>
+      delegate.syncApplyHistory(entries: entries, tombstones: tombstones);
+}
+
+/// 测试用内存传输：可注入远端快照、失败计数与不可用原因，并记录推送内容。///
 /// 默认把「可用快照数」当作本轮探测到的对端数（有快照 = 见过一个对端），
 /// 需要构造「探测到对端但没拿到数据」时用 [peersSeenOverride]。
 class FakeSyncTransport implements SyncTransport {

@@ -236,4 +236,29 @@ void main() {
     expect(result.applied, 0);
     expect(await repoB.findPlaylistByName('混合'), isNull);
   });
+
+  test('collect 门控：指纹未变复用上轮记录，不读行', () async {
+    final counting = CountingLibrarySyncStore(repoA);
+    final adapter = PlaylistSyncAdapter(repository: counting);
+    await repoA.toggleFavorite(sourceKey: 'wy', songId: 'fav-1', title: 'F');
+
+    final first = await adapter.collect();
+    expect(first[SyncCategory.playlists], isNotEmpty);
+    expect(counting.exportCalls, greaterThan(0));
+    final readsAfterFirst = counting.exportCalls;
+
+    // 无写入：指纹未变，第二次 collect 直接复用缓存（不读行）。
+    final second = await adapter.collect();
+    expect(identical(first, second), isTrue);
+    expect(counting.exportCalls, readsAfterFirst);
+    expect(counting.fingerprintCalls, 2);
+
+    // 本地写入推进版本 → 指纹变化 → 重新读行。
+    clock = 5000;
+    await repoA.createPlaylist('新列表');
+    final third = await adapter.collect();
+    expect(counting.exportCalls, greaterThan(readsAfterFirst));
+    expect(third[SyncCategory.playlists]!.length,
+        greaterThan(first[SyncCategory.playlists]!.length));
+  });
 }

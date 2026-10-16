@@ -471,8 +471,7 @@ class PlayStatisticsRepository {
   ///
   /// 进行中事件不导出（远端无法继续更新进度，收尾后自然进入下一轮）；
   /// v5 前的旧行无去重键，按内容哈希一次性回填并落库。
-  Future<List<Map<String, Object?>>> syncExportEvents() async {
-    final db = _db;
+  Future<List<Map<String, Object?>>> syncExportEvents() async {    final db = _db;
     // 导出行直接复用列名映射（远端按列名取值；不要改成类型化行）。
     final rows = await db
         .customSelect('SELECT * FROM play_events WHERE endedAt IS NOT NULL')
@@ -500,6 +499,22 @@ class PlayStatisticsRepository {
       });
     }
     return result;
+  }
+
+  /// 同步导出的廉价指纹：已收尾事件的行数 + 最大版本 + 缺 `syncKey` 的行数。
+  ///
+  /// 版本用 `MAX(versionPhysical * 1000000 + versionCounter)` 表达：同一毫秒
+  /// 内的多次写入只有计数分量变化，单看物理分量会漏掉。
+  /// 缺键行数参与指纹的原因：导出会就地回填 `syncKey`，回填后指纹变化触发
+  /// 一次重读；跳过导出也不会让缺键行永远读不到（回填是应用远端去重的前提）。
+  Future<String> syncFingerprint() async {
+    final row = await _db.customSelect(
+      'SELECT COUNT(*) AS n, '
+      'MAX(versionPhysical * 1000000 + versionCounter) AS m, '
+      'SUM(CASE WHEN syncKey IS NULL OR syncKey = \'\' THEN 1 ELSE 0 END) AS x '
+      'FROM play_events WHERE endedAt IS NOT NULL',
+    ).getSingle();
+    return '${row.data['n']}:${row.data['m'] ?? 0}:${row.data['x'] ?? 0}';
   }
 
   /// 同步应用：按 `syncKey` 去重合并；同键已存在且远端**版本更新**时覆盖

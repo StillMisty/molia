@@ -372,4 +372,26 @@ void main() {
       expect(tombstones.single.version.physical, 9000);
     });
   });
+
+  test('collect 门控：指纹未变复用上轮记录，不读行', () async {
+    final counting = CountingLibrarySyncStore(repoA);
+    final adapter = HistorySyncAdapter(repository: counting);
+    await repoA.addHistoryEntry(entry('s1', playedAt: 1000));
+
+    final first = await adapter.collect();
+    expect(first[SyncCategory.history], hasLength(1));
+    final readsAfterFirst = counting.exportCalls;
+    expect(readsAfterFirst, greaterThan(0));
+
+    final second = await adapter.collect();
+    expect(identical(first, second), isTrue);
+    expect(counting.exportCalls, readsAfterFirst);
+
+    // 新播放推进版本 → 指纹变化 → 重新读行。
+    nowA = 5000;
+    await repoA.addHistoryEntry(entry('s2', playedAt: 5000));
+    final third = await adapter.collect();
+    expect(counting.exportCalls, greaterThan(readsAfterFirst));
+    expect(third[SyncCategory.history], hasLength(2));
+  });
 }

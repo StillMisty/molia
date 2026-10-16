@@ -970,6 +970,68 @@ class LibraryRepository implements LibraryStore, LibrarySyncStore {
     ];
   }
 
+  /// 类别级廉价指纹：`COUNT(*)` + 最大版本（物理分量与计数合并比较，含该
+  /// 类别墓碑）。
+  ///
+  /// 版本用 `MAX(versionPhysical * 1000000 + versionCounter)` 表达：同一毫秒
+  /// 内的多次写入只有 `versionCounter` 变化（时钟回拨 / 吸收超前戳时物理
+  /// 分量也会持平），单看 `MAX(versionPhysical)` 会漏掉这类变更。计数器
+  /// 每毫秒远小于 100 万，乘法不会溢出 64 位。
+  ///
+  /// 列表头另计入「syncId 为空」的行数：导出会就地补齐缺失的 syncId，
+  /// 补齐后指纹变化会触发一次重读（之后稳定），跳过导出也不会让待补
+  /// syncId 的列表永远读不到。
+  @override
+  Future<Map<SyncCategory, String>> syncFingerprints(
+    Iterable<SyncCategory> categories,
+  ) async {
+    final db = _db;
+    const versionExpr = 'versionPhysical * 1000000 + versionCounter';
+    Future<String> tableFingerprint(String table) async {
+      final row = await db
+          .customSelect(
+              'SELECT COUNT(*) AS n, MAX($versionExpr) AS m FROM $table')
+          .getSingle();
+      return '${row.data['n']}:${row.data['m'] ?? 0}';
+    }
+
+    Future<String> playlistFingerprint() async {
+      final row = await db.customSelect(
+        'SELECT COUNT(*) AS n, MAX($versionExpr) AS m, '
+        'SUM(CASE WHEN syncId IS NULL THEN 1 ELSE 0 END) AS x FROM playlists',
+      ).getSingle();
+      return '${row.data['n']}:${row.data['m'] ?? 0}:${row.data['x'] ?? 0}';
+    }
+
+    Future<String> tombstoneFingerprint(String category) async {
+      final row = await db.customSelect(
+        'SELECT COUNT(*) AS n, MAX($versionExpr) AS m '
+        'FROM sync_tombstones WHERE category = ?',
+        variables: [Variable<String>(category)],
+      ).getSingle();
+      return '${row.data['n']}:${row.data['m'] ?? 0}';
+    }
+
+    final result = <SyncCategory, String>{};
+    for (final category in categories) {
+      switch (category) {
+        case SyncCategory.playlists:
+          result[category] = 'p${await playlistFingerprint()}'
+              '|t${await tombstoneFingerprint(category.name)}';
+        case SyncCategory.playlistTracks:
+          result[category] =
+              'p${await tableFingerprint('playlist_tracks')}'
+                  '|t${await tombstoneFingerprint(category.name)}';
+        case SyncCategory.history:
+          result[category] = 'p${await tableFingerprint('play_history')}'
+              '|t${await tombstoneFingerprint(category.name)}';
+        default:
+          break;
+      }
+    }
+    return result;
+  }
+
   /// 导出播放历史（唯一键 `(sourceKey, songId)`；`playedAt` 是内容时间）。
   @override
   Future<List<PlayHistorySyncRecord>> syncExportHistory() async {
