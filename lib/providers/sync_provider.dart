@@ -245,11 +245,19 @@ class SyncProvider extends ChangeNotifier {
     }
   }
 
-  /// 数据变更通知（资料库 / 统计 / 音源配置的 changes 事件）。
+  /// 数据变更通知（资料库 / 统计 / 音源 / 设置与凭证 / 会话）。
   ///
   /// 活跃等级去抖 3–5s 后跑一轮；空闲 / 后台 / 省电等级只标记待外发，
-  /// 等下次唤醒或回前台（无本地变更不广播、不发 PROPFIND）。
-  void notifyLocalChange() => _scheduler?.notifyLocalChange();
+  /// 等下次唤醒或回前台。高频写入（会话进度）用 `immediate: false`：
+  /// 只标记、不排即时轮次。
+  void notifyLocalChange({
+    Set<SyncCategory>? categories,
+    bool immediate = true,
+  }) =>
+      _scheduler?.notifyLocalChange(
+        categories: categories,
+        immediate: immediate,
+      );
 
   /// 用户交互（界面操作）。
   void notifyInteraction() => _scheduler?.notifyInteraction();

@@ -4,6 +4,7 @@
 /// **不持久化播放直链**（直链有时效）；播放时用 [raw] 按需重新取链。
 library;
 
+import 'device_sync.dart';
 import 'track.dart';
 
 /// 曲目在列表/播放历史中的唯一键（`sourceKey` + `songId`）。
@@ -201,6 +202,23 @@ final class LibraryPlaylistTracksChange extends LibraryChange {
 
 final class LibraryFavoritesChange extends LibraryChange {
   const LibraryFavoritesChange();
+}
+
+/// 资料库变更 → 受影响的同步类别（组合根据此标记待外发；蜂窝小类别轮
+/// 只外发部分类别，标记按类别维护）。
+extension LibraryChangeSyncCategories on LibraryChange {
+  Set<SyncCategory> get syncCategories => switch (this) {
+        LibraryHistoryChange() => const {SyncCategory.history},
+        LibraryPlaylistsChange() => const {SyncCategory.playlists},
+        LibraryPlaylistTracksChange() ||
+        LibraryFavoritesChange() =>
+          const {SyncCategory.playlists, SyncCategory.playlistTracks},
+        LibraryImportChange() => const {
+            SyncCategory.history,
+            SyncCategory.playlists,
+            SyncCategory.playlistTracks,
+          },
+      };
 }
 
 final class LibraryImportChange extends LibraryChange {

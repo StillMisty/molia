@@ -29,6 +29,10 @@ class SettingsRegistry {
   /// 登记键总表（顺序即同步收集顺序）。
   final List<SettingsKey<Object?>> keys;
 
+  /// 写入回调（组合根在同步栈建好后接线：把「这个键属于哪个同步类别」转成
+  /// 待外发标记）。在同步栈之前构造，因此留作可后置赋值。
+  void Function(SettingsKey<Object?> key)? onWrite;
+
   final SharedPreferences? _preferencesOverride;
   final SettingsSecretStore _secrets;
 
@@ -89,6 +93,11 @@ class SettingsRegistry {
   /// 远端值可能来自旧版本设备，按 kind 宽容转换；转换失败与 `null` 一样删除
   /// 键（回到默认值），保证重复应用幂等。secure 盒只接受字符串。
   Future<void> writeRaw(SettingsKey<Object?> key, Object? value) async {
+    await _writeRaw(key, value);
+    onWrite?.call(key);
+  }
+
+  Future<void> _writeRaw(SettingsKey<Object?> key, Object? value) async {
     if (key.store == SettingsValueStore.secure) {
       if (value == null || (value is String && value.isEmpty)) {
         await _secrets.delete(key.name);

@@ -117,7 +117,7 @@ void main() async {
   final sync = await buildSyncStack(
     catalog: catalog,
     library: library,
-    playback: playback.playbackProvider,
+    playback: playback,
     dataSaver: local.dataSaver,
   );
   // ⑪ 应用内更新（渠道 / 自动检查 / 下载安装；退出走统一路径）。
@@ -151,7 +151,10 @@ void main() async {
         update: update,
         notifications: notifications,
       ),
-      child: const MyThemedApp(),
+      child: MyThemedApp(
+        // 用户交互 → 同步调度器续期活跃窗口（最近交互判定）。
+        onUserInteraction: sync.provider.notifyInteraction,
+      ),
     ),
   );
 

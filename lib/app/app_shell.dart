@@ -1140,7 +1140,10 @@ final GlobalKey<ScaffoldMessengerState> scaffoldMessengerKey =
 final GlobalKey appRootKey = GlobalKey(debugLabel: 'appRoot');
 
 class MyThemedApp extends StatefulWidget {
-  const MyThemedApp({super.key});
+  const MyThemedApp({super.key, this.onUserInteraction});
+
+  /// 用户交互回调（组合根接同步调度器：续期「最近交互」的活跃窗口）。
+  final VoidCallback? onUserInteraction;
 
   @override
   State<MyThemedApp> createState() => _MyThemedAppState();
@@ -1302,7 +1305,14 @@ class _MyThemedAppState extends State<MyThemedApp> with WidgetsBindingObserver {
                       value: systemUiOverlayStyle,
                       child: MediaQuery(
                         data: mediaData,
-                        child: themedChild,
+                        // 用户交互（含弹层 / 菜单，都在 Navigator 之内）→
+                        // 同步调度器续期「最近交互」窗口；只观察不拦截。
+                        child: Listener(
+                          behavior: HitTestBehavior.translucent,
+                          onPointerDown: (_) =>
+                              widget.onUserInteraction?.call(),
+                          child: themedChild,
+                        ),
                       ),
                     );
                   },

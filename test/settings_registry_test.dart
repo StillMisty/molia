@@ -132,4 +132,23 @@ void main() {
       throwsA(isA<AssertionError>()),
     );
   });
+
+  test('写入回调：每次写入（含删除与安全盒）都通知，带上键', () async {
+    final written = <String>[];
+    final secrets = _MemorySecrets();
+    final registry = build(secrets: secrets)
+      ..onWrite = (key) => written.add(key.name);
+
+    await registry.write(kThemeMode, 'dark');
+    await registry.clear(kSeedColor);
+    await registry.write(kAiDjApiKey, 'sk-1');
+    await registry.writeRaw(kThemeMode, null);
+
+    expect(written, [
+      kThemeMode.name,
+      kSeedColor.name,
+      kAiDjApiKey.name,
+      kThemeMode.name,
+    ]);
+  });
 }

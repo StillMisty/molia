@@ -29,13 +29,14 @@ import '../../data/sync/transport/lan_sync_transport.dart';
 import '../../data/sync/transport/local_network_permission.dart';
 import '../../data/sync/transport/webdav_sync_transport.dart';
 import '../../domain/models/device_sync.dart';
+import '../../domain/models/library.dart';
 import '../../domain/ports/sync_transport.dart';
-import '../../providers/playback_provider.dart';
 import '../../providers/sync_provider.dart';
 import '../../services/data_saver_service.dart';
 import '../../services/playback_session_store.dart';
 import 'catalog_stack.dart';
 import 'library_stack.dart';
+import 'playback_stack.dart';
 
 /// 同步栈产物（构造顺序见 [buildSyncStack]）。
 typedef SyncStack = ({
@@ -49,7 +50,7 @@ typedef SyncStack = ({
 Future<SyncStack> buildSyncStack({
   required CatalogStack catalog,
   required LibraryStack library,
-  required PlaybackProvider playback,
+  required PlaybackStack playback,
   required DataSaverService dataSaver,
 }) async {
   final sourceManager = catalog.sourceManager;
@@ -83,7 +84,7 @@ Future<SyncStack> buildSyncStack({
     // 会话适配器用独立的会话存储实例（与播放栈的实时会话落盘互不影响）。
     store: PlaybackSessionStore(),
     state: syncState,
-    onChanged: playback.reloadRestoredSessionFromStore,
+    onChanged: playback.playbackProvider.reloadRestoredSessionFromStore,
   );
 
   // 引擎与局域网传输互为依赖：传输的快照提供者要读引擎最近一轮快照。
@@ -148,7 +149,7 @@ Future<SyncStack> buildSyncStack({
     state: syncState,
     // 蜂窝判定走真实探针（connectivity_plus）：省流服务的 onCellular 只是
     // 缓存值，Wi-Fi 启动后切蜂窝不会反映到它上面。
-    isPlaying: () => playback.snapshot.isPlaying,
+    isPlaying: () => playback.playbackProvider.snapshot.isPlaying,
   );
   final syncProvider = SyncProvider(
     engine: syncEngine,
@@ -166,13 +167,32 @@ Future<SyncStack> buildSyncStack({
     debugPrint('[Molia] 同步初始化失败（继续启动）: $e');
   }
 
-  // 数据变更 → 调度器（活跃等级去抖 3–5s、空闲等级标记待外发）；
-  // 播放状态、前后台与手动同步由 [SyncScheduler] 统一决策。
-  library.libraryRepository.changes
-      .listen((_) => scheduler.notifyLocalChange());
-  library.playStatisticsRepository.changes
-      .listen((_) => scheduler.notifyLocalChange());
-  sourceManager.addListener(scheduler.notifyLocalChange);
+  // 数据变更 → 调度器（活跃等级去抖 3–5s、空闲等级标记待外发）；所有启用
+  // 类别的本地写入都要置待发标记：资料库 / 统计 / 音源 / 设置与凭证 / 会话。
+  library.libraryRepository.changes.listen(
+    (change) => syncProvider.notifyLocalChange(
+      categories: change.syncCategories,
+    ),
+  );
+  library.playStatisticsRepository.changes.listen(
+    (_) => syncProvider.notifyLocalChange(
+      categories: const {SyncCategory.statistics},
+    ),
+  );
+  sourceManager.addListener(
+    () => syncProvider.notifyLocalChange(
+      categories: const {SyncCategory.sources},
+    ),
+  );
+  // 设置 / 凭证写入（SettingsRegistry 是登记键的唯一写入口）。
+  catalog.settings.onWrite = (key) =>
+      syncProvider.notifyLocalChange(categories: {key.category});
+  // 播放会话：高频进度落盘，只标记待发、不触发即时轮次（下次自然唤醒 /
+  // 回前台 / 退后台时外发）。
+  playback.sessionStore.onSaved = () => syncProvider.notifyLocalChange(
+        categories: const {SyncCategory.session},
+        immediate: false,
+      );
   // 网络类型变化（connectivity_plus）→ 立即重估环境：Wi-Fi 与蜂窝之间切换
   // 后，小类别限制 / 「移动数据下暂停」不再等下一次唤醒。
   dataSaver.addListener(() => unawaited(scheduler.refreshEnvironment()));
