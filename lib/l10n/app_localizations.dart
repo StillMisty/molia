@@ -3932,6 +3932,12 @@ abstract class AppLocalizations {
   /// **'resumed'**
   String get syncTriggerResume;
 
+  /// No description provided for @syncTriggerPause.
+  ///
+  /// In en, this message translates to:
+  /// **'before background'**
+  String get syncTriggerPause;
+
   /// No description provided for @syncTriggerManual.
   ///
   /// In en, this message translates to:

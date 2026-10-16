@@ -837,6 +837,7 @@
   "syncTriggerTimer": "定时",
   "syncTriggerIncoming": "对端推送",
   "syncTriggerResume": "回前台",
+  "syncTriggerPause": "退后台前",
   "syncTriggerManual": "手动",
   "syncAppliedItems": "应用 {applied} 项",
   "syncPeerCount": "{count} 个对端",

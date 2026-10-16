@@ -1084,6 +1084,7 @@
   "syncTriggerTimer": "scheduled",
   "syncTriggerIncoming": "peer push",
   "syncTriggerResume": "resumed",
+  "syncTriggerPause": "before background",
   "syncTriggerManual": "manual",
   "syncAppliedItems": "{applied} applied",
   "@syncAppliedItems": {

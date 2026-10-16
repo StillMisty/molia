@@ -2141,6 +2141,9 @@ class AppLocalizationsEn extends AppLocalizations {
   String get syncTriggerResume => 'resumed';
 
   @override
+  String get syncTriggerPause => 'before background';
+
+  @override
   String get syncTriggerManual => 'manual';
 
   @override

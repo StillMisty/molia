@@ -485,6 +485,9 @@ enum SyncTrigger {
   /// 回前台补一轮。
   resume,
 
+  /// 退后台前的尽力推送。
+  pause,
+
   /// 用户手动。
   manual;
 
@@ -493,6 +496,22 @@ enum SyncTrigger {
       if (value.name == name) return value;
     }
     return SyncTrigger.timer;
+  }
+}
+
+/// 蜂窝网络下的自动同步策略（与省流模式联动；用户可在同步设置页切换）。
+enum SyncCellularPolicy {
+  /// 只同步小类别（设置 / 歌单 / 会话等）：统计与历史等大类别留到 Wi-Fi。
+  auto,
+
+  /// 移动数据下暂停自动同步（仅手动触发）。
+  pause;
+
+  static SyncCellularPolicy parse(String? name) {
+    for (final value in SyncCellularPolicy.values) {
+      if (value.name == name) return value;
+    }
+    return SyncCellularPolicy.auto;
   }
 }
 

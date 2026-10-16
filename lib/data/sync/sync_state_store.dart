@@ -205,6 +205,9 @@ class SyncStateStore {
   final Set<String> _enabledTransports = {SyncTransportKind.lan};
   WebDavConfig _webdav = const WebDavConfig();
 
+  /// 蜂窝网络下的自动同步策略（默认只同步小类别）。
+  SyncCellularPolicy _cellularPolicy = SyncCellularPolicy.auto;
+
   /// 手动添加的对端地址（局域网发现失败时的兜底）。
   final List<ManualPeer> _manualPeers = [];
 
@@ -252,6 +255,9 @@ class SyncStateStore {
 
   /// 手动对端地址簿（去重后不可变）。
   List<ManualPeer> get manualPeers => List.unmodifiable(_manualPeers);
+
+  /// 蜂窝网络下的自动同步策略。
+  SyncCellularPolicy get cellularPolicy => _cellularPolicy;
 
   /// 本机局域网快照端点端口（0 = 尚未绑定过；绑定后持久化，对端才能记住）。
   int get lanHttpPort => _lanHttpPort;
@@ -351,6 +357,12 @@ class SyncStateStore {
 
   Future<void> setWebdavConfig(WebDavConfig config) async {
     _webdav = config;
+    await save();
+  }
+
+  Future<void> setCellularPolicy(SyncCellularPolicy value) async {
+    if (_cellularPolicy == value) return;
+    _cellularPolicy = value;
     await save();
   }
 
@@ -505,6 +517,7 @@ class SyncStateStore {
         },
         'transports': _enabledTransports.toList(),
         'webdav': _webdav.toJson(),
+        'cellularPolicy': _cellularPolicy.name,
         if (_manualPeers.isNotEmpty)
           'manualPeers': [for (final peer in _manualPeers) peer.toJson()],
         if (_lanHttpPort > 0) 'lanHttpPort': _lanHttpPort,
@@ -551,6 +564,7 @@ class SyncStateStore {
         ..addAll(transports.whereType<String>());
     }
     _webdav = WebDavConfig.fromJson(json['webdav']);
+    _cellularPolicy = SyncCellularPolicy.parse(json['cellularPolicy'] as String?);
 
     _manualPeers.clear();
     final manualPeers = json['manualPeers'];

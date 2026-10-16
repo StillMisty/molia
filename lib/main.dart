@@ -118,17 +118,21 @@ void main() async {
     catalog: catalog,
     library: library,
     playback: playback.playbackProvider,
+    dataSaver: local.dataSaver,
   );
   // ⑪ 应用内更新（渠道 / 自动检查 / 下载安装；退出走统一路径）。
   final update = await buildUpdateStack(quitApp: desktop.quitApp);
 
-  // 前台恢复：补一轮同步；并复查更新安装权限——从「安装未知应用」系统
-  // 授权页返回后要把按钮从「去授权」切回「立即安装」。
+  // 前台恢复：拉一次（有本地变更时一并推送）并复查更新安装权限——从
+  // 「安装未知应用」系统授权页返回后要把按钮从「去授权」切回「立即安装」；
+  // 退后台 / 锁屏：同步调度器取消全部定时器并尽力推一次。
   AppLifecycleListener(
     onResume: () {
-      sync.provider.scheduleSync(delay: const Duration(seconds: 3));
+      sync.provider.onAppResumed();
       unawaited(update.provider.handleAppResumed());
     },
+    onPause: sync.provider.onAppHidden,
+    onHide: sync.provider.onAppHidden,
   );
 
   runApp(

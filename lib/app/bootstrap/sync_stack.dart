@@ -1,10 +1,13 @@
 /// 跨设备同步栈：同步状态 → 六个数据适配器 → 局域网 / WebDAV 传输 →
-/// SyncEngine → SyncProvider，以及运行期的同步触发器。
+/// SyncEngine → SyncScheduler / SyncProvider，以及运行期的同步触发。
 ///
 /// 引擎与局域网传输互为依赖（传输要引擎最近一轮快照，引擎要传输列表）。
 /// 原组合根用 `late final syncEngine` 自引用；这里把「快照提供者」写在同一个
 /// builder 内、引擎建好后立刻接线（详见 [buildSyncStack] 注释），
 /// 不存在跨 builder 回填。
+///
+/// 触发策略（何时跑、跑什么范围）统一在 [SyncScheduler]：本 builder 只把
+/// 数据变更、播放状态与探针接进去，不再有散落的定时器。
 library;
 
 import 'dart:async';
@@ -21,6 +24,7 @@ import '../../data/sync/adapters/statistics_sync_adapter.dart';
 import '../../data/sync/sync_crypto.dart';
 import '../../data/sync/sync_engine.dart';
 import '../../data/sync/sync_known_store.dart';
+import '../../data/sync/sync_scheduler.dart';
 import '../../data/sync/transport/lan_sync_transport.dart';
 import '../../data/sync/transport/local_network_permission.dart';
 import '../../data/sync/transport/webdav_sync_transport.dart';
@@ -28,6 +32,7 @@ import '../../domain/models/device_sync.dart';
 import '../../domain/ports/sync_transport.dart';
 import '../../providers/playback_provider.dart';
 import '../../providers/sync_provider.dart';
+import '../../services/data_saver_service.dart';
 import '../../services/playback_session_store.dart';
 import 'catalog_stack.dart';
 import 'library_stack.dart';
@@ -35,6 +40,7 @@ import 'library_stack.dart';
 /// 同步栈产物（构造顺序见 [buildSyncStack]）。
 typedef SyncStack = ({
   SyncEngine engine,
+  SyncScheduler scheduler,
   SyncProvider provider,
 });
 
@@ -44,6 +50,7 @@ Future<SyncStack> buildSyncStack({
   required CatalogStack catalog,
   required LibraryStack library,
   required PlaybackProvider playback,
+  required DataSaverService dataSaver,
 }) async {
   final sourceManager = catalog.sourceManager;
   final syncState = library.syncState;
@@ -136,8 +143,16 @@ Future<SyncStack> buildSyncStack({
     clock: () => DateTime.fromMillisecondsSinceEpoch(syncState.nowMs()),
   );
   engineRef = syncEngine;
+  final scheduler = SyncScheduler(
+    host: syncEngine,
+    state: syncState,
+    // 省流模式的网络判定复用：同一份 connectivity 状态（含前台恢复刷新）。
+    cellularProbe: () async => dataSaver.onCellular,
+    isPlaying: () => playback.snapshot.isPlaying,
+  );
   final syncProvider = SyncProvider(
     engine: syncEngine,
+    scheduler: scheduler,
     lanPermission: lanPermission,
   );
 
@@ -151,16 +166,14 @@ Future<SyncStack> buildSyncStack({
     debugPrint('[Molia] 同步初始化失败（继续启动）: $e');
   }
 
-  // 数据变更 → 去抖同步（资料库 / 统计 / 音源配置）；前台恢复补一轮
-  // （见 `main.dart` 的 AppLifecycleListener）；运行期间每 10 分钟一轮
-  // （局域网对端在线时也能收敛）。
-  library.libraryRepository.changes.listen((_) => syncProvider.scheduleSync());
+  // 数据变更 → 调度器（活跃等级去抖 3–5s、空闲等级标记待外发）；
+  // 播放状态、前后台与手动同步由 [SyncScheduler] 统一决策。
+  library.libraryRepository.changes
+      .listen((_) => scheduler.notifyLocalChange());
   library.playStatisticsRepository.changes
-      .listen((_) => syncProvider.scheduleSync());
-  sourceManager.addListener(syncProvider.scheduleSync);
-  Timer.periodic(const Duration(minutes: 10), (_) {
-    if (syncProvider.enabled) unawaited(syncProvider.syncNow());
-  });
+      .listen((_) => scheduler.notifyLocalChange());
+  sourceManager.addListener(scheduler.notifyLocalChange);
+  await scheduler.start();
 
-  return (engine: syncEngine, provider: syncProvider);
+  return (engine: syncEngine, scheduler: scheduler, provider: syncProvider);
 }

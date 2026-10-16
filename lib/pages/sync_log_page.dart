@@ -88,6 +88,7 @@ class SyncLogRow extends StatelessWidget {
       SyncTrigger.timer => l10n.syncTriggerTimer,
       SyncTrigger.incoming => l10n.syncTriggerIncoming,
       SyncTrigger.resume => l10n.syncTriggerResume,
+      SyncTrigger.pause => l10n.syncTriggerPause,
       SyncTrigger.manual => l10n.syncTriggerManual,
     };
     final detail = <String>[

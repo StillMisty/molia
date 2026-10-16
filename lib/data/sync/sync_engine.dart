@@ -11,6 +11,7 @@ import '../../domain/ports/sync_transport.dart';
 import 'sync_adapter.dart';
 import 'sync_known_store.dart';
 import 'sync_passphrase.dart';
+import 'sync_scheduler.dart';
 import 'sync_stamp.dart';
 import 'sync_state_store.dart';
 
@@ -29,7 +30,7 @@ import 'sync_state_store.dart';
 /// - 每传输与每对端都有独立结果，单点失败不会被吞掉；
 /// - 失败原因是机器可读的 [SyncIssue]，UI 映射文案，原始细节只进日志与诊断；
 /// - 入站快照在本轮失败时放回队列（对端花网络推来的数据不能丢）。
-class SyncEngine extends ChangeNotifier {
+class SyncEngine extends ChangeNotifier implements SyncSchedulerHost {
   SyncEngine({
     required SyncStateStore state,
     required List<SyncAdapter> adapters,
@@ -239,9 +240,13 @@ class SyncEngine extends ChangeNotifier {
   }
 
   /// 跑一轮同步。返回**最终**一轮的报告（若期间收到排队请求，会连续跑完）。
+  ///
+  /// [onlyCategories] 非空时只处理这些类别（蜂窝小类别策略；适配器的本地
+  /// 变化登记照常进行，不受影响）。
   Future<SyncRoundReport?> syncNow({
     SyncTrigger trigger = SyncTrigger.timer,
     bool push = true,
+    Set<SyncCategory>? onlyCategories,
   }) async {
     if (_syncing) {
       // 排队一次：手动点击与入站推送都不该被静默丢弃。
@@ -256,14 +261,21 @@ class SyncEngine extends ChangeNotifier {
     _syncing = true;
     notifyListeners();
     var nextTrigger = trigger;
+    var nextCategories = onlyCategories;
     SyncRoundReport? report;
     try {
       while (true) {
-        report = await _runRound(nextTrigger, push: push);
+        report = await _runRound(
+          nextTrigger,
+          push: push,
+          onlyCategories: nextCategories,
+        );
         final pending = _pendingTrigger;
         _pendingTrigger = null;
         if (pending == null) break;
         nextTrigger = pending;
+        // 补跑轮沿用排队时的类别范围（同一策略下不应切换范围）。
+        nextCategories = onlyCategories;
       }
     } finally {
       _syncing = false;
@@ -272,7 +284,24 @@ class SyncEngine extends ChangeNotifier {
     return report;
   }
 
-  Future<SyncRoundReport> _runRound(SyncTrigger trigger, {required bool push}) async {
+  /// 调度器宿主接口：跑一轮（[SyncScheduler] 注入的驱动面）。
+  @override
+  bool get syncEnabled => _state.enabled;
+
+  @override
+  Future<void> runSyncRound({
+    required SyncTrigger trigger,
+    required bool push,
+    Set<SyncCategory>? onlyCategories,
+  }) async {
+    await syncNow(trigger: trigger, push: push, onlyCategories: onlyCategories);
+  }
+
+  Future<SyncRoundReport> _runRound(
+    SyncTrigger trigger, {
+    required bool push,
+    Set<SyncCategory>? onlyCategories,
+  }) async {
     final startedAt = _nowMs();
     var report = SyncRoundReport(
       trigger: trigger,
@@ -289,7 +318,7 @@ class SyncEngine extends ChangeNotifier {
       // 本轮推送失败的对端（名册重建时据此保留失败状态）。
       _peersFailedThisRound.clear();
 
-      final categories = _state.enabledCategories;
+      final categories = onlyCategories ?? _state.enabledCategories;
       final local = await _collect(categories);
       final fingerprint = _fingerprint(local);
       final localChanged = _localFingerprint == null || fingerprint != _localFingerprint;

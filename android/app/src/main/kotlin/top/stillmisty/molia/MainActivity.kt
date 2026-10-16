@@ -25,6 +25,7 @@ class MainActivity: AudioServiceActivity() {
 
     private var methodChannel: MethodChannel? = null
     private var lyricsChannel: top.stillmisty.molia.lyrics.LyricsChannelHandler? = null
+    private var batteryChannel: top.stillmisty.molia.battery.BatteryChannelHandler? = null
 
     /// 通知权限请求的挂起结果（Android 13+）：权限回调后一次性完成。
     private var notificationPermissionResult: MethodChannel.Result? = null
@@ -175,6 +176,12 @@ class MainActivity: AudioServiceActivity() {
             context = this,
             messenger = flutterEngine.dartExecutor.binaryMessenger,
             openPermissionActivity = { intent -> startActivity(intent) },
+        )
+
+        // 电池状态通道：同步调度器的省电等级判定。
+        batteryChannel = top.stillmisty.molia.battery.BatteryChannelHandler(
+            messenger = flutterEngine.dartExecutor.binaryMessenger,
+            context = this,
         )
 
         // 通知权限通道：请求时机由 Dart 侧业务决定；被永久拒绝时给设置深链。

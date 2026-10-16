@@ -4,31 +4,39 @@ import 'package:flutter/foundation.dart';
 
 import '../data/sync/sync_engine.dart';
 import '../data/sync/sync_passphrase.dart';
+import '../data/sync/sync_scheduler.dart';
 import '../data/sync/sync_state_store.dart';
 import '../data/sync/transport/local_network_permission.dart';
 import '../domain/models/device_sync.dart';
 import '../domain/ports/sync_transport.dart';
 
-/// 跨设备同步的 UI 门面：引擎状态 + 口令管理 + 手动同步 + 变更去抖触发。
+/// 跨设备同步的 UI 门面：引擎状态 + 口令管理 + 手动同步 + 触发策略转发。
 ///
 /// 口令即信任根：显示/复制/重置都在这里管理；UI 不直接接触引擎。
+/// 「什么时候自动同步」由 [SyncScheduler] 决定，本类只做转发（不再自带
+/// 去抖定时器）。
 class SyncProvider extends ChangeNotifier {
   SyncProvider({
     required SyncEngine engine,
+    SyncScheduler? scheduler,
     LocalNetworkPermission? lanPermission,
   })  : _engine = engine,
+        _scheduler = scheduler,
         _lanPermission = lanPermission {
     _engine.addListener(notifyListeners);
   }
 
   final SyncEngine _engine;
+  final SyncScheduler? _scheduler;
   final LocalNetworkPermission? _lanPermission;
 
   String? _passphrase;
   bool _busy = false;
-  Timer? _debounce;
 
   SyncEngine get engine => _engine;
+
+  /// 同步调度器（未注入时为 null：UI 只做手动同步）。
+  SyncScheduler? get scheduler => _scheduler;
 
   bool get enabled => _engine.state.enabled;
   bool get syncing => _busy || _engine.syncing;
@@ -200,7 +208,13 @@ class SyncProvider extends ChangeNotifier {
     notifyListeners();
     try {
       // 引擎自带排队：进行中的轮次结束后会补跑，这里不做早退（否则
-      // 连点两次只有一次生效且无提示）。
+      // 连点两次只有一次生效且无提示）。手动触发经调度器（不受省电 /
+      // 蜂窝暂停策略限制）；未注入调度器时直接走引擎。
+      final scheduler = _scheduler;
+      if (manual && scheduler != null) {
+        await scheduler.syncNow();
+        return _engine.lastReport;
+      }
       return await _engine.syncNow(
         trigger: manual ? SyncTrigger.manual : SyncTrigger.timer,
       );
@@ -210,18 +224,39 @@ class SyncProvider extends ChangeNotifier {
     }
   }
 
-  /// 数据变更后的去抖触发（资料库/统计变更等高频事件共用）。
-  void scheduleSync({Duration delay = const Duration(seconds: 20)}) {
-    if (!enabled) return;
-    _debounce?.cancel();
-    _debounce = Timer(delay, () => unawaited(_debouncedSync()));
+  /// 数据变更通知（资料库 / 统计 / 音源配置的 changes 事件）。
+  ///
+  /// 活跃等级去抖 3–5s 后跑一轮；空闲 / 后台 / 省电等级只标记待外发，
+  /// 等下次唤醒或回前台（无本地变更不广播、不发 PROPFIND）。
+  void notifyLocalChange() => _scheduler?.notifyLocalChange();
+
+  /// 用户交互（界面操作）。
+  void notifyInteraction() => _scheduler?.notifyInteraction();
+
+  /// 回到前台：拉一次（有本地变更时一并推送）。
+  void onAppResumed() => _scheduler?.onAppVisible();
+
+  /// 退后台 / 锁屏：零定时唤醒，有本地变更时尽力推一次。
+  void onAppHidden() => _scheduler?.onAppHidden();
+
+  /// 当前同步等级（未注入调度器时为 null）。
+  SyncLevel? get syncLevel => _scheduler?.level;
+
+  /// 蜂窝网络下的自动同步策略。
+  SyncCellularPolicy get cellularPolicy => _engine.state.cellularPolicy;
+
+  Future<void> setCellularPolicy(SyncCellularPolicy value) async {
+    await _engine.state.setCellularPolicy(value);
+    notifyListeners();
   }
 
-  Future<void> _debouncedSync() => _engine.syncNow(trigger: SyncTrigger.debounce);
+  /// 重新探测电量与网络类型（设置页进入 / 前台恢复时刷新观测面）。
+  Future<void> refreshEnvironment() async =>
+      _scheduler?.refreshEnvironment();
 
   @override
   void dispose() {
-    _debounce?.cancel();
+    _scheduler?.dispose();
     _engine.removeListener(notifyListeners);
     super.dispose();
   }
