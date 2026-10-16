@@ -331,6 +331,8 @@ void main() {
     expect(second!.outcome, SyncOutcome.noChanges);
     expect(transport.pushed, hasLength(1));
     expect(second.transports.single.bytesOut, 0);
+    expect(second.transports.single.bytesIn, 0);
+    expect(second.applied, 0);
   });
 
   test('传输未变跳过计数进入报告（skippedUnchanged）', () async {

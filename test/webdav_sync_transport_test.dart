@@ -160,11 +160,14 @@ void main() {
     final getsAfterFirst = server.getCount;
 
     // 远端文件未动：第二轮不 GET、不解密、不合并。
+    final decryptionsBefore = codec.decryptions;
     final second = await b.pull();
     expect(second.envelopes, isEmpty);
     expect(second.skippedUnchanged, 1);
     expect(second.bytesIn, 0);
     expect(server.getCount, getsAfterFirst);
+    expect(codec.decryptions, decryptionsBefore,
+        reason: 'etag 未变：没有解密动作');
   });
 
   test('文件 etag 变化后重新拉取', () async {

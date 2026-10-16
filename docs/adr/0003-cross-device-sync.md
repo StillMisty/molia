@@ -188,10 +188,24 @@
 - **不承诺移动端后台常驻同步**：后台定时在 Doze / 挂起下不可靠，
   产品语义是「前台与充电时收敛」。
 
+  > **2026-10-17 实现登记**：`SyncScheduler`（`lib/data/sync/sync_scheduler.dart`）
+  > 是唯一的触发策略对象，注入 clock / 蜂窝探针 / 电量探针 / 播放状态；
+  > 组合根只接线（数据变更 → `notifyLocalChange`，生命周期 → `onAppVisible` /
+  > `onAppHidden`，手动 → `syncNow`），没有散落的定时器。具体取值：
+  > 活跃去抖 4s、交互窗口 1 分钟（窗口过后自动降级为空闲）；空闲退避
+  > 10 分钟起步翻倍封顶 60 分钟，唤醒时无本地变更且不允许 anti-entropy 就
+  > 只翻倍退避（不广播、不发 PROPFIND）；anti-entropy = 充电且非蜂窝；
+  > 省电 = 系统省电模式或电量 ≤ 20% 且未充电；蜂窝「小类别」= 设置 / 音源 /
+  > 凭证 / 歌单与曲目 / 会话（统计与历史留到 Wi-Fi），策略值
+  > `SyncCellularPolicy.auto | pause` 持久化在 `sync_state_v1`，同步页可切换。
+  > 电量经平台通道读取（Android `BatteryChannelHandler`、iOS `AppDelegate`；
+  > 桌面未实现按「未知」处理）——`battery_plus` 与 `connectivity_plus` 的
+  > dbus 约束互斥（upower ^0.7 vs nm ^0.8），依赖解析不可行。
+
 ### 5. 多设备（N≥3）
 
 - **入站合流**：多个对端的推送在 1–2s 窗口内合并成一轮（否则一次本地变更在
-  N 台间放大成 O(N²) 轮完整合并）；
+  N 台间放大成 O(N²) 轮完整合并）；入站轮只消费收到的快照，不主动拉取对端；
 - **对端变化感知**：局域网探测应答携带 `snapshotId`、WebDAV 用
   `getetag/getlastmodified`，未变不拉；
 - **滞后设备策略**：增量日志按 `min(对端 ack)` 裁剪但设硬上限（时间 + 体积），
@@ -200,12 +214,23 @@
 - **anti-entropy**：周期性比对 `snapshotId`，不一致才全量兜底（LWW 只保证
   「有新数据时收敛」，不保证发现静默分歧）。
 
+  > **2026-10-17 实现登记**：合流窗口 1.5s（`SyncEngine.inboundWindow`），
+  > 入站轮不拉取也不推送；`snapshotId` 是外发记录集（裁剪墓碑后）的规范化
+  > 哈希，随快照 JSON 的 `snapshotId` 字段与 UDP 探测应答携带，进程内按
+  > `deviceId` 缓存上次拉到的值；WebDAV 的版本令牌进程内按文件名缓存。
+  > 增量日志与失联设备策略仍待 #30。
+
 ### 6. 观测面（已完成，见 #26）
 
 - 一轮的产物是 `SyncRoundReport`：五态 `ok / noChanges / noPeers / partial /
   failed` + 每传输明细 + 每对端名册 + **本轮变更量**（不随库大小增长）；
 - 日志语义 = 本轮变更；「跳过 N 项」删除；
 - 失败行必须给下一步动作；「复制诊断信息」导出运行状态（无密钥）。
+
+  > **2026-10-17 实现登记**：同步页「运行状态」行展示近 24 小时触发轮数 /
+  > 有效传输轮数（有字节流转或有落地）/ 流量，以及当前同步等级 · 网络类型 ·
+  > 是否省电（`SyncActivitySummary` + `SyncScheduler` 观测值）；窗口基于状态
+  > 存储保留的最近日志条目。每传输明细新增 `skippedUnchanged`（未变跳过数）。
 
 ### 后果（v2）
 

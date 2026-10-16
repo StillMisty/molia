@@ -27,7 +27,8 @@ class SyncKnownRepository implements SyncKnownStore {
 
   @override
   Future<Map<SyncKnownKey, SyncVersion>> knownVersions() async {
-    final rows = await _databaseProvider().select(_databaseProvider().syncKnown).get();
+    final db = _databaseProvider();
+    final rows = await db.select(db.syncKnown).get();
     final result = <SyncKnownKey, SyncVersion>{};
     for (final row in rows) {
       final category = SyncCategory.tryParse(row.category);

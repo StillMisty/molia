@@ -135,10 +135,13 @@ void main() {
     expect(first.skippedUnchanged, 0);
 
     // 探测应答的内容指纹与上次拉到的一致：不 GET、不解密、不传字节。
+    final decryptionsBefore = codec.decryptions;
     final second = await transportB.pull();
     expect(second.envelopes, isEmpty);
     expect(second.skippedUnchanged, 1);
     expect(second.bytesIn, 0);
+    expect(codec.decryptions, decryptionsBefore,
+        reason: '未变跳过：没有解密动作');
 
     // 对端内容变化（新指纹）：重新拉取。
     envA = envelope('devA', value: 'dark').withSnapshotId('hash-2');

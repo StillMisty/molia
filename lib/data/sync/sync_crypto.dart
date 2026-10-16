@@ -70,10 +70,15 @@ class SyncCodec {
   static const int _maxCachedRoots = 4;
   final Map<String, ({int iterations, Uint8List key})> _rootKeys = {};
   int _pbkdf2Derivations = 0;
+  int _decryptions = 0;
 
   /// 本实例执行的 PBKDF2 派生次数（断言会话内缓存生效用）。
   @visibleForTesting
   int get pbkdf2Derivations => _pbkdf2Derivations;
+
+  /// 本实例执行的解密次数（断言「未变不拉」时没有解密用）。
+  @visibleForTesting
+  int get decryptions => _decryptions;
 
   /// 加密快照（帧版本 2）。
   Uint8List encrypt(SyncEnvelope envelope, String passphrase) {
@@ -97,6 +102,7 @@ class SyncCodec {
 
   /// 解密快照；任何帧/口令/认证失败统一抛 [SyncCryptoException]。
   SyncEnvelope decrypt(Uint8List bytes, String passphrase) {
+    _decryptions++;
     final key = SyncPassphrase.normalize(passphrase);
     if (key.isEmpty) throw const SyncCryptoException('同步口令为空');
     if (bytes.length <= _headerLength) {

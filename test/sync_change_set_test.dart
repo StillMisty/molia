@@ -1,12 +1,15 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:molia/data/library_repository.dart';
 import 'package:molia/data/settings/settings_keys.dart';
 import 'package:molia/data/settings/settings_registry.dart';
+import 'package:molia/data/sync/adapters/history_sync_adapter.dart';
 import 'package:molia/data/sync/adapters/prefs_sync_adapter.dart';
 import 'package:molia/data/sync/sync_adapter.dart';
 import 'package:molia/data/sync/sync_engine.dart';
 import 'package:molia/data/sync/sync_known_store.dart';
 import 'package:molia/data/sync/sync_state_store.dart';
 import 'package:molia/domain/models/device_sync.dart';
+import 'package:molia/domain/models/library.dart';
 import 'package:molia/domain/ports/sync_known_store.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -153,8 +156,7 @@ void main() {
     expect(adapter.applyCalls, 0);
   });
 
-  test('真实适配器（设置）：远端胜者只交付一次，重复轮不重复应用', () async {
-    final prefsAdapter = PrefsSyncAdapter(
+  test('真实适配器（设置）：远端胜者只交付一次，重复轮不重复应用', () async {    final prefsAdapter = PrefsSyncAdapter(
       state: state,
       settings: SettingsRegistry(
         keys: const [kThemeMode],
@@ -193,6 +195,53 @@ void main() {
       ]));
     await sync.syncNow();
     expect(prefs.getString('theme_mode'), 'light');
+  });
+
+  test('墓碑清理联动：旧墓碑重放不重新落地（登记保留、复活不撤销）', () async {
+    final db = openMemoryDatabase();
+    addTearDown(db.close);
+    final repository = LibraryRepository(
+      databaseProvider: () => db,
+      clock: () => state.nowMs(),
+      stamps: state.stampIssuer,
+    );
+    addTearDown(repository.dispose);
+    final sync = SyncEngine(
+      state: state,
+      stamps: state.stampIssuer,
+      adapters: [HistorySyncAdapter(repository: repository)],
+      transports: {'lan': transport},
+      known: SyncKnownRepository(databaseProvider: () => db),
+    );
+    addTearDown(sync.dispose);
+
+    final key = SyncRecordKeys.history('wy', 's1');
+    final tombstone = SyncRecord.tombstone(
+      key: key,
+      version: const SyncVersion(physical: 2000, deviceId: 'devB'),
+      deletedAt: 2000,
+    );
+    transport.available.add(remoteEnvelope([tombstone]));
+    await sync.syncNow();
+
+    // 本地复活（播放晚于删除：真实时间判定）→ 墓碑被清理。
+    await repository.addHistoryEntry(PlayHistoryEntry(
+      sourceKey: 'wy',
+      songId: 's1',
+      title: 'Song',
+      raw: const {},
+      playedAt: 3000,
+    ));
+    expect(await repository.syncExportTombstones(['history']), isEmpty);
+
+    // 对端重放同一条旧墓碑：登记保留（不因墓碑清理删除），复活的行不被撤销。
+    transport.available
+      ..clear()
+      ..add(remoteEnvelope([tombstone]));
+    final report = await sync.syncNow();
+
+    expect(report!.applied, 0);
+    expect((await repository.listHistory()).map((e) => e.songId), contains('s1'));
   });
 }
 
