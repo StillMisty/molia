@@ -129,6 +129,12 @@ Future<PlaybackStack> buildPlaybackStack({
   final factory = mediaSessionFactory;
   if (service != null && factory != null) {
     audioHandler = await factory(service, playbackProvider);
+    // 系统控制（通知 / 锁屏 / 耳机键）直接落到播放服务：把暂停 / 停止 /
+    // 切播放顺序的会话落盘接到 provider（handler 由注入的工厂创建，回调随后
+    // 回填），保证控制动作返回时会话已在本地、重开应用可恢复暂停态。
+    audioHandler?.attachSessionPersister(
+      playbackProvider.flushPlaybackSession,
+    );
   }
 
   return (

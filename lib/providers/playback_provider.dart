@@ -542,6 +542,11 @@ class PlaybackProvider extends ChangeNotifier {
       _restoredSession = session.copyWith(mode: mode);
       _publishRestoredSnapshot();
       unawaited(_sessionStore.save(_restoredSession!));
+    } else {
+      // 真实播放：模式是会话的一部分，立即落盘并等它写完
+      //（重开应用恢复的是改后的模式）。
+      _observer?.flushSession();
+      await _sessionStore.pendingWrite;
     }
     _notifyCategory('track');
   }
@@ -665,11 +670,15 @@ class PlaybackProvider extends ChangeNotifier {
     _maybeRecoverFromPlaybackError();
   }
 
-  /// 立即把当前播放会话写入本地（进入后台/生命周期 paused 时调用）。
+  /// 立即把当前播放会话写入本地（进入后台 / 生命周期 paused / 系统控制暂停时调用）。
   ///
-  /// 会话进度平时由 [PlaybackObserver] 按 1s 节流保存；暂停/后台时强制落盘，
-  /// 被系统杀进程时最多丢约 1s 进度。
-  void flushPlaybackSession() => _observer?.flushSession();
+  /// 返回的 Future 在会话落盘后结束：系统媒体控制（通知暂停 / 停止 / 切播放
+  /// 顺序）await 它，保证控制动作返回时会话已在本地——进程随后被系统回收，
+  /// 重开应用仍能恢复上一首 / 队列 / 模式 / 进度。
+  Future<void> flushPlaybackSession() async {
+    _observer?.flushSession();
+    await _sessionStore.pendingWrite;
+  }
 
   /// 冷启动加载上次播放会话：无真实曲目时进入恢复态。
   ///

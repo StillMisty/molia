@@ -1,7 +1,11 @@
 import 'package:audio_service/audio_service.dart';
 import 'package:flutter/foundation.dart';
+import 'package:flutter/widgets.dart' show WidgetsBinding;
 
+import '../l10n/app_localizations.dart';
 import '../managers/artwork_cache.dart';
+import '../models/play_mode.dart';
+import '../services/language_service.dart';
 import '../services/lyrics_display/media_lyric_composer.dart';
 import '../sources/source_track.dart';
 import 'local_playback_service.dart';
@@ -18,6 +22,35 @@ bool get isSystemMediaSessionSupported {
   return defaultTargetPlatform == TargetPlatform.android ||
       defaultTargetPlatform == TargetPlatform.iOS ||
       defaultTargetPlatform == TargetPlatform.macOS;
+}
+
+/// 播放顺序动作的 id：通知动作里循环切换「顺序 / 单曲循环 / 随机」。
+///
+/// Android 通知上的自定义动作必须带 drawable 图标（audio_service 按字符串
+/// `getIdentifier` 取资源，release 的 shrinkResources 靠 `keep.xml` 的
+/// `@drawable/audio_service_*` 保留），因此三个模式各配一个矢量图标。
+const String playModeActionId = 'lx.playMode';
+
+/// 播放模式 → 通知动作图标（Android drawable 资源名）。
+const Map<PlayMode, String> playModeActionIcons = {
+  PlayMode.sequential: 'drawable/audio_service_repeat_all',
+  PlayMode.singleRepeat: 'drawable/audio_service_repeat_one',
+  PlayMode.shuffle: 'drawable/audio_service_shuffle',
+};
+
+/// 当前界面语言的 l10n（通知动作文案）。
+///
+/// 与托盘菜单同一解析口径：用户选择优先、否则跟随系统，不支持的 locale
+/// 回退首个支持语言（`lookupAppLocalizations` 对不支持的语言会抛错）。
+AppLocalizations _currentLocalizations() {
+  final effective = LanguageService.localeNotifier.value ??
+      WidgetsBinding.instance.platformDispatcher.locale;
+  final resolved = LanguageService.supportedLocales.any(
+    (supported) => supported.languageCode == effective.languageCode,
+  )
+      ? effective
+      : LanguageService.supportedLocales.first;
+  return lookupAppLocalizations(resolved);
 }
 
 /// 初始化系统媒体会话（后台播放 + 通知栏/锁屏/耳机键）。
@@ -90,6 +123,8 @@ class LocalAudioHandler extends BaseAudioHandler with SeekHandler {
         _onRestoredSkipToNext = onRestoredSkipToNext,
         _onRestoredSkipToPrevious = onRestoredSkipToPrevious {
     _service.addListener(_syncFromService);
+    // 界面语言切换后通知动作文案（播放顺序）跟随。
+    LanguageService.localeNotifier.addListener(_onLocaleChanged);
     _syncFromService(force: true);
   }
 
@@ -102,15 +137,31 @@ class LocalAudioHandler extends BaseAudioHandler with SeekHandler {
   ///
   /// 恢复态通常没有通知本体，但耳机 / 系统媒体键仍可能到达 handler；
   /// 回落给 PlaybackProvider 用保存的会话立即恢复播放，补齐控制链一致性。
-  /// 组合根接线（handler 先于 provider 创建，用可变槽位后接）。
+  /// 组合根经 `mediaSessionFactory` 在 handler 创建时直接注入。
   final Future<void> Function()? _onRestoredSkipToNext;
   final Future<void> Function()? _onRestoredSkipToPrevious;
+
+  /// 会话落盘入口（组合根在 handler 建好后回填 `provider.flushPlaybackSession`）。
+  ///
+  /// 通知 / 锁屏 / 耳机键的暂停与停止直接调用 [LocalPlaybackService]，不经过
+  /// provider 的命令路径：控制动作返回前显式落盘，而不是等中间快照被间接
+  /// 观察到——进程随后被系统回收时，「重开应用恢复上一首 / 队列 / 模式 / 进度」
+  /// 才是确定的（见 `playback_stack.dart` 的接线）。
+  Future<void> Function()? _persistSession;
+
+  Future<void>? _persistingSession;
+
+  /// 绑定会话落盘（组合根调用；见 [_persistSession]）。
+  void attachSessionPersister(Future<void> Function() persistSession) {
+    _persistSession = persistSession;
+  }
 
   // 上次广播的状态，用于去重：位置每 400ms 都会变化，但系统媒体会话只需要
   // 在曲目切换 / 播放状态变化 / 明显跳转（seek）时收到 setState。
   String? _lastTrackId;
   bool? _lastPlaying;
   bool? _lastLoading;
+  PlayMode? _lastMode;
   Duration _lastPosition = Duration.zero;
 
   /// 上次广播的封面 URL（音源补图回写队列后需刷新通知/锁屏封面）。
@@ -151,13 +202,51 @@ class LocalAudioHandler extends BaseAudioHandler with SeekHandler {
       await _service.toggle();
     }
     _syncFromService(force: true);
+    // 暂停即落盘（幂等）：暂停后进程随时可能被系统回收，重开应用要能恢复
+    // 上一首 / 队列 / 模式 / 进度（isPlaying=false）。
+    await _persistSessionState();
   }
 
   @override
   Future<void> stop() async {
+    // 停止会清空服务队列（快照随后变空、再也取不到会话）：先落盘再停。
+    await _persistSessionState();
     await _service.stop();
     _syncFromService(force: true);
   }
+
+  /// 通知动作「播放顺序」：按 App 内同一顺序循环 顺序 → 单曲循环 → 随机。
+  @override
+  Future<dynamic> customAction(
+    String name, [
+    Map<String, dynamic>? extras,
+  ]) async {
+    if (name != playModeActionId) return super.customAction(name, extras);
+    await _service.toggleMode();
+    _syncFromService(force: true);
+    // 模式是会话的一部分：系统控制改模式后同样立即落盘。
+    await _persistSessionState();
+    return null;
+  }
+
+  /// 落盘当前会话（失败不影响控制链：会话由观察者按节流继续维护）。
+  ///
+  /// 串行化：连续动作（暂停 → 改模式）按顺序落盘，最后写入的是最新状态；
+  /// 链上吞掉失败，一次写失败不会让后续落盘被跳过。
+  Future<void> _persistSessionState() {
+    final persist = _persistSession;
+    if (persist == null) return Future<void>.value();
+    final next = (_persistingSession ?? Future<void>.value())
+        .then((_) => persist())
+        .catchError((Object e) {
+      debugPrint('[Molia] 系统控制路径落盘播放会话失败: $e');
+    });
+    _persistingSession = next;
+    return next;
+  }
+
+  /// 界面语言切换：重建通知动作文案（播放顺序）。
+  void _onLocaleChanged() => _syncFromService(force: true);
 
   @override
   Future<void> skipToNext() async {
@@ -199,11 +288,14 @@ class LocalAudioHandler extends BaseAudioHandler with SeekHandler {
     final trackId = track?.id;
     final playing = _service.isPlaying;
     final loading = _service.isLoading;
+    final mode = _service.mode;
     final position = _service.position;
 
     final trackChanged = trackId != _lastTrackId;
     final playingChanged = playing != _lastPlaying;
     final loadingChanged = loading != _lastLoading;
+    // 模式变化要重发通知动作：图标/文案反映当前模式（App 内切换同样到达这里）。
+    final modeChanged = mode != _lastMode;
     final artworkUrl = track?.coverUrl;
     final artworkChanged = artworkUrl != _lastArtworkUrl;
     final seeked =
@@ -212,6 +304,7 @@ class LocalAudioHandler extends BaseAudioHandler with SeekHandler {
         !trackChanged &&
         !playingChanged &&
         !loadingChanged &&
+        !modeChanged &&
         !seeked &&
         !artworkChanged) {
       return;
@@ -219,6 +312,7 @@ class LocalAudioHandler extends BaseAudioHandler with SeekHandler {
     _lastTrackId = trackId;
     _lastPlaying = playing;
     _lastLoading = loading;
+    _lastMode = mode;
     _lastPosition = position;
     _lastArtworkUrl = artworkUrl;
 
@@ -243,8 +337,10 @@ class LocalAudioHandler extends BaseAudioHandler with SeekHandler {
         MediaControl.skipToPrevious,
         if (playing) MediaControl.pause else MediaControl.play,
         MediaControl.skipToNext,
+        _playModeControl(mode),
         MediaControl.stop,
       ],
+      // 紧凑视图（Android 通知收起态 / 锁屏）仍是「上一首 / 播放暂停 / 下一首」。
       systemActions: _systemActions,
       androidCompactActionIndices: const [0, 1, 2],
       processingState:
@@ -258,6 +354,20 @@ class LocalAudioHandler extends BaseAudioHandler with SeekHandler {
           ? _service.currentIndex
           : null,
     ));
+  }
+
+  /// 播放顺序动作：图标与文案反映**当前**模式（点按循环到下一个模式）。
+  MediaControl _playModeControl(PlayMode mode) {
+    final l10n = _currentLocalizations();
+    return MediaControl.custom(
+      name: playModeActionId,
+      label: switch (mode) {
+        PlayMode.sequential => l10n.playModeSequential,
+        PlayMode.singleRepeat => l10n.playModeSingleRepeat,
+        PlayMode.shuffle => l10n.playModeShuffle,
+      },
+      androidIcon: playModeActionIcons[mode]!,
+    );
   }
 
   MediaItem _toMediaItem(SourceTrack track, {bool isCurrent = false}) {

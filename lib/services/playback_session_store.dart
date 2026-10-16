@@ -114,14 +114,49 @@ class PlaybackSessionStore {
 
   final Logger _logger = Logger('molia.playback_session_store');
 
-  Future<void> save(PlaybackSession session) async {
+  /// 最近一次写请求（保存 / 原样写入 / 清除）的完成时机。
+  ///
+  /// 写请求按调用顺序串行落盘：后一个不会先于前一个写入，`clear()` 也不会
+  /// 被在途的位置保存在之后「复活」。系统控制路径（通知暂停 / 停止）await 它，
+  /// 保证暂停态在控制动作返回前已写回本地——进程随后被回收也能恢复。
+  /// 无写请求时为已完成的 Future。
+  Future<void> get pendingWrite => _pendingWrite ?? Future<void>.value();
+  Future<void>? _pendingWrite;
+
+  Future<void> save(PlaybackSession session) {
+    // 立即序列化：会话对象持有队列列表，写请求排队期间状态可能已被替换。
+    final String encoded;
     try {
-      final sp = _preferences ?? await SharedPreferences.getInstance();
       final json = session.toJson();
       json[savedAtKey] = _clock().millisecondsSinceEpoch;
-      await sp.setString(_key, jsonEncode(json));
+      encoded = jsonEncode(json);
     } catch (e) {
       _logger.warning('保存播放会话失败: $e');
+      return Future<void>.value();
+    }
+    return _enqueueWrite((sp) => sp.setString(_key, encoded));
+  }
+
+  /// 串行化写请求（按调用顺序执行；[pendingWrite] 因此可直接 await）。
+  Future<void> _enqueueWrite(
+    Future<void> Function(SharedPreferences preferences) write,
+  ) {
+    final pending = _pendingWrite;
+    final next = pending == null
+        ? _runWrite(write)
+        : pending.then((_) => _runWrite(write));
+    _pendingWrite = next;
+    return next;
+  }
+
+  Future<void> _runWrite(
+    Future<void> Function(SharedPreferences preferences) write,
+  ) async {
+    try {
+      final sp = _preferences ?? await SharedPreferences.getInstance();
+      await write(sp);
+    } catch (e) {
+      _logger.warning('写入播放会话失败: $e');
     }
   }
 
@@ -151,22 +186,12 @@ class PlaybackSessionStore {
   }
 
   /// 原样写入 JSON（跨设备同步应用远端会话用；内容须自包含 savedAt）。
-  Future<void> saveRaw(Map<String, dynamic> raw) async {
-    try {
-      final sp = _preferences ?? await SharedPreferences.getInstance();
-      await sp.setString(_key, jsonEncode(raw));
-    } catch (e) {
-      _logger.warning('保存播放会话失败: $e');
-    }
+  Future<void> saveRaw(Map<String, dynamic> raw) {
+    return _enqueueWrite((sp) => sp.setString(_key, jsonEncode(raw)));
   }
 
-  Future<void> clear() async {
-    try {
-      final sp = _preferences ?? await SharedPreferences.getInstance();
-      await sp.remove(_key);
-    } catch (e) {
-      _logger.warning('清除播放会话失败: $e');
-    }
+  Future<void> clear() {
+    return _enqueueWrite((sp) => sp.remove(_key));
   }
 }
 
