@@ -109,8 +109,17 @@ Future<SyncStack> buildSyncStack({
           deviceName: syncState.deviceName,
           producedAt: syncState.nowMs(),
         ),
-    // 探测应答携带最近一轮快照的内容指纹：对端据此跳过未变的 GET。
+    // 增量端点：按请求方游标返回变更窗口（游标落后于窗口起点时回全量快照）。
+    journalProvider: (since) async =>
+        engineRef?.serveJournal(since: since) ??
+        SyncEnvelope(
+          deviceId: syncState.deviceId,
+          deviceName: syncState.deviceName,
+          producedAt: syncState.nowMs(),
+        ),
+    // 探测应答携带最近一轮快照的内容指纹与日志头部：对端据此跳过未变的 GET。
     snapshotIdProvider: () => engineRef?.lastEnvelope?.snapshotId ?? '',
+    journalHeadProvider: () => engineRef?.lastEnvelope?.journalHead ?? 0,
     permissionGate: () => lanPermission.ensure(),
     manualPeersProvider: () => syncState.manualPeers,
     onPeerResolved: (learned) => unawaited(syncState.learnManualPeer(learned)),

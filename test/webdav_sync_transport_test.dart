@@ -6,6 +6,7 @@ import 'package:molia/data/sync/sync_crypto.dart';
 import 'package:molia/data/sync/sync_state_store.dart';
 import 'package:molia/data/sync/transport/webdav_sync_transport.dart';
 import 'package:molia/domain/models/device_sync.dart';
+import 'package:molia/domain/ports/sync_transport.dart';
 
 /// WebDAV 传输测试：对本地假 DAV 服务完成推送 / 列表 / 拉取 / 鉴权。
 void main() {
@@ -66,7 +67,7 @@ void main() {
     await b.start();
 
     await a.push(envelope('devA', value: 'light'));
-    expect(server.files.keys, contains('devA.msync'));
+    expect(server.files.keys, contains('devA.snapshot.msync'));
 
     await b.push(envelope('devB', value: 'dark'));
     final pulled = (await b.pull()).envelopes;
@@ -115,7 +116,7 @@ void main() {
     await a.start();
     await a.push(envelope('devA'));
     expect(server.mkcolCount, greaterThan(0));
-    expect(server.files, contains('devA.msync'));
+    expect(server.files, contains('devA.snapshot.msync'));
   });
 
   test('目录准备失败：计为失败对端并带原因（不被判成「没发现对端」）', () async {
@@ -178,9 +179,11 @@ void main() {
     expect(first.skippedUnchanged, 0);
     final getsAfterFirst = server.getCount;
 
-    // 远端文件未动：第二轮不 GET、不解密、不合并。
+    // 远端文件未动 + 本机游标已到上次读到的头部：第二轮不 GET、不解密、不合并。
     final decryptionsBefore = codec.decryptions;
-    final second = await b.pull();
+    final second = await b.pull(
+      const SyncPullRequest(cursors: {'devA': 0}),
+    );
     expect(second.envelopes, isEmpty);
     expect(second.skippedUnchanged, 1);
     expect(second.bytesIn, 0);
@@ -207,6 +210,75 @@ void main() {
     expect(changed.envelopes.single.recordsOf(SyncCategory.settings).single.data,
         {'v': 'dark'});
     expect(changed.skippedUnchanged, 0);
+  });
+
+  test('增量窗口与全量快照分开文件：日常只重写增量', () async {
+    final a = transport('devA');
+    addTearDown(() => a.stop());
+    await a.start();
+
+    await a.push(SyncEnvelope(
+      deviceId: 'devA',
+      producedAt: 1,
+      journalHead: 3,
+      baseSeq: 0,
+      windowStart: 3,
+      windowEnd: 3,
+      journal: [
+        SyncJournalEntry(
+          seq: 3,
+          category: SyncCategory.settings,
+          record: SyncRecord(
+            key: 'theme_mode',
+            version: const SyncVersion(physical: 10, deviceId: 'devA'),
+            data: const {'v': 'dark'},
+          ),
+        ),
+      ],
+    ));
+    expect(server.files.keys, contains('devA.journal.msync'));
+    expect(server.files.keys, isNot(contains('devA.snapshot.msync')));
+
+    await a.push(envelope('devA'));
+    expect(server.files.keys, contains('devA.snapshot.msync'));
+  });
+
+  test('幽灵 / 旧版文件不参与合并；载荷身份不符的文件跳过', () async {
+    // 旧版单文件命名（幽灵设备遗留）与身份不符的日志文件。
+    server.files['ghost.msync'] = codec.encrypt(envelope('ghost'), passphrase);
+    server.files['fake.journal.msync'] =
+        codec.encrypt(envelope('someone-else'), passphrase);
+    final a = transport('devA');
+    final b = transport('devB');
+    addTearDown(() async {
+      await a.stop();
+      await b.stop();
+    });
+    await a.start();
+    await b.start();
+    await a.push(envelope('devA', value: 'light'));
+
+    final pulled = await b.pull();
+    expect(pulled.envelopes, hasLength(1));
+    expect(pulled.envelopes.single.deviceId, 'devA');
+    expect(pulled.peersSeen, 1, reason: '幽灵文件不算对端');
+    expect(pulled.failedPeers, 0);
+  });
+
+  test('显式清理远端文件：删除该设备的日志 / 快照 / 旧版文件', () async {
+    final a = transport('devA');
+    addTearDown(() => a.stop());
+    await a.start();
+    await a.push(envelope('devA'));
+    server.files['devA.journal.msync'] = server.files['devA.snapshot.msync']!;
+    server.files['devA.msync'] = server.files['devA.snapshot.msync']!;
+
+    expect(await a.deleteRemote('devA'), isTrue);
+    expect(server.files.keys, isNot(contains('devA.snapshot.msync')));
+    expect(server.files.keys, isNot(contains('devA.journal.msync')));
+    expect(server.files.keys, isNot(contains('devA.msync')));
+    // 没有文件可删时不算失败。
+    expect(await a.deleteRemote('devA'), isFalse);
   });
 
   test('服务端不返回版本：照常拉取（不跳过）', () async {
@@ -298,6 +370,14 @@ class FakeWebDavServer {
           final name = request.uri.path.split('/').last;
           files[name] = builder.toBytes();
           etags[name] = '"${++_etagSeq}"';
+        case 'DELETE':
+          final name = request.uri.path.split('/').last;
+          if (files.remove(name) != null) {
+            etags.remove(name);
+            request.response.statusCode = 204;
+          } else {
+            request.response.statusCode = 404;
+          }
         case 'GET':
           getCount++;
           final data = files[request.uri.path.split('/').last];

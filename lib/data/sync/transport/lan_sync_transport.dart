@@ -11,19 +11,25 @@ import '../../../domain/ports/sync_transport.dart';
 import '../../../utils/device_id.dart';
 import '../sync_crypto.dart';
 
-/// 局域网直连传输：UDP 广播（+ 手动地址簿单播）发现 + 各设备内置 HTTP 快照端点。
+/// 局域网直连传输：UDP 广播（+ 手动地址簿单播）发现 + 各设备内置 HTTP 端点。
 ///
-/// 协议（明文层只有设备名 / 端口 / 内容指纹，数据全部加密）：
-/// - UDP `molia-sync.probe` JSON：`{m, v, deviceId, name, port, reply, snapshotId}`；
-///   收到非回复探测时向来源单播应答（携带自己的 HTTP 端口与内容指纹）；
-/// - HTTP `GET  /molia-sync/v1/snapshot`：返回本机加密快照；
-/// - HTTP `POST /molia-sync/v1/snapshot`：接收对端加密快照。
+/// 协议（明文层只有设备名 / 端口 / 内容指纹与日志头部，数据全部加密）：
+/// - UDP `molia-sync.probe` JSON：`{m, v, deviceId, name, port, reply,
+///   snapshotId, journalHead}`；收到非回复探测时向来源单播应答（携带自己的
+///   HTTP 端口、内容指纹与日志头部）；
+/// - HTTP `GET  /molia-sync/v1/journal?since=<游标>`：返回该游标之后的**增量
+///   窗口**；游标落后于窗口起点（条目已被裁剪）时返回全量快照（bootstrap）；
+/// - HTTP `POST /molia-sync/v1/journal`：接收对端的增量窗口；
+/// - HTTP `GET  /molia-sync/v1/snapshot`：返回本机全量快照（anti-entropy
+///   兜底 / 未注入增量提供者时的兼容路径）；
+/// - HTTP `POST /molia-sync/v1/snapshot`：接收对端全量快照。
 ///
-/// 探测应答里的 `snapshotId`（记录集规范化哈希）与本机缓存的「上次拉到的
-/// 对端指纹」一致时跳过 GET：内容没变就不传、不解密、不合并。
+/// 跳过拉取的判据：探测应答里的 `snapshotId` 与本机缓存的「上次拉到的对端
+/// 指纹」一致，且本机游标已到对端日志头部（没有还没消费的条目）——内容没变
+/// 就不传、不解密、不合并。
 ///
 /// 信任模型：数据用同步口令派生密钥加密，能解密者即已授权；HTTP 层不做
-/// 额外鉴权（快照是密文，无法解密者拿不到内容）。
+/// 额外鉴权（载荷是密文，无法解密者拿不到内容）。
 ///
 /// 发现失败（AP 隔离 / 多网段 / 防火墙 / VPN）时用 [manualPeersProvider]
 /// 提供的手动地址簿做单播探测；权限被拒（Android 17 起局域网默认阻断）时
@@ -35,7 +41,9 @@ class LanSyncTransport implements SyncTransport {
     required SyncCodec codec,
     required Future<String?> Function() passphraseProvider,
     required Future<SyncEnvelope> Function() snapshotProvider,
+    Future<SyncEnvelope> Function(int since)? journalProvider,
     String Function()? snapshotIdProvider,
+    int Function()? journalHeadProvider,
     List<({String host, int port})>? probeTargets,
     List<ManualPeer> Function()? manualPeersProvider,
     void Function(ManualPeer learned)? onPeerResolved,
@@ -49,7 +57,9 @@ class LanSyncTransport implements SyncTransport {
         _codec = codec,
         _passphraseProvider = passphraseProvider,
         _snapshotProvider = snapshotProvider,
+        _journalProvider = journalProvider,
         _snapshotIdProvider = snapshotIdProvider,
+        _journalHeadProvider = journalHeadProvider,
         _probeTargets = probeTargets ?? const [],
         _manualPeersProvider = manualPeersProvider,
         _onPeerResolved = onPeerResolved,
@@ -62,6 +72,7 @@ class LanSyncTransport implements SyncTransport {
 
   static const int defaultUdpPort = ManualPeer.defaultProbePort;
   static const String snapshotPath = '/molia-sync/v1/snapshot';
+  static const String journalPath = '/molia-sync/v1/journal';
 
   /// 快照体积上限（含大量统计事件时留足余量；超出视为异常数据丢弃）。
   static const int maxSnapshotBytes = 32 * 1024 * 1024;
@@ -72,8 +83,15 @@ class LanSyncTransport implements SyncTransport {
   final Future<String?> Function() _passphraseProvider;
   final Future<SyncEnvelope> Function() _snapshotProvider;
 
+  /// 增量窗口提供者：`since` = 请求方游标；返回该游标之后的窗口，或游标
+  /// 落后于窗口起点时的全量快照。未注入时只服务全量快照。
+  final Future<SyncEnvelope> Function(int since)? _journalProvider;
+
   /// 本机最近一轮快照的内容指纹（探测应答携带；空 = 尚未产出快照）。
   final String Function()? _snapshotIdProvider;
+
+  /// 本机 journal 头部（探测应答携带；对端据此判断「有没有还没消费的条目」）。
+  final int Function()? _journalHeadProvider;
 
   /// 测试注入：向指定地址单播探测（空 = 仅广播，生产路径）。
   final List<({String host, int port})> _probeTargets;
@@ -241,14 +259,22 @@ class LanSyncTransport implements SyncTransport {
     var bytesIn = 0;
     SyncIssue? firstError;
     for (final peer in peers) {
-      // 探测应答的内容指纹与本机上次拉到的对端指纹一致：内容没变，
-      // 跳过 GET + 解密 + 合并（对端清单为空时不可能命中）。
+      final cursor = request.cursorFor(peer.deviceId);
+      final needsFull = request.fullPeers.contains(peer.deviceId);
+      // 内容指纹与本机上次拉到的一致、且本机游标已到对端日志头部：
+      // 没有还没消费的条目，跳过 GET + 解密 + 合并（对端清单为空时不可能命中）。
       final cached = _peerSnapshotIds[peer.key];
-      if (peer.snapshotId.isNotEmpty && cached == peer.snapshotId) {
+      final upToDate = peer.journalHead == null || cursor >= peer.journalHead!;
+      if (!needsFull &&
+          peer.snapshotId.isNotEmpty &&
+          cached == peer.snapshotId &&
+          upToDate) {
         skipped++;
         continue;
       }
-      final bytes = await _fetchSnapshot(peer);
+      final bytes = needsFull
+          ? await _fetchSnapshot(peer)
+          : await _fetchJournal(peer, cursor);
       if (bytes == null) {
         failed++;
         firstError ??= SyncIssue(
@@ -315,11 +341,12 @@ class LanSyncTransport implements SyncTransport {
       );
     }
     final payload = _codec.encrypt(envelope, passphrase);
+    final path = envelope.isDelta ? journalPath : snapshotPath;
     final succeededIds = <String>[];
     final failedIds = <String>[];
     SyncIssue? firstError;
     for (final peer in List.of(_peers)) {
-      if (await _postSnapshot(peer, payload)) {
+      if (await _postSnapshot(peer, payload, path)) {
         succeededIds.add(peer.deviceId);
       } else {
         failedIds.add(peer.deviceId);
@@ -371,6 +398,8 @@ class LanSyncTransport implements SyncTransport {
       'reply': false,
       if (_snapshotIdProvider?.call().isNotEmpty ?? false)
         'snapshotId': _snapshotIdProvider!.call(),
+      if (_journalHeadProvider != null)
+        'journalHead': _journalHeadProvider.call(),
     }));
     if (_probeTargets.isEmpty) {
       try {
@@ -429,12 +458,15 @@ class LanSyncTransport implements SyncTransport {
         name: message['name'] is String ? message['name'] as String : '',
         snapshotId:
             message['snapshotId'] is String ? message['snapshotId'] as String : '',
+        journalHead: message['journalHead'] is num
+            ? (message['journalHead'] as num).toInt()
+            : null,
       );
       _rememberPeer(peer);
       _resolveManualPeer(peer);
       return;
     }
-    // 应答探测：单播回来源地址（携带本机端口与内容指纹）。
+    // 应答探测：单播回来源地址（携带本机端口、内容指纹与日志头部）。
     final ownSnapshotId = _snapshotIdProvider?.call() ?? '';
     final reply = utf8.encode(jsonEncode({
       'm': 'molia-sync.probe',
@@ -444,6 +476,8 @@ class LanSyncTransport implements SyncTransport {
       'port': _httpPort,
       'reply': true,
       if (ownSnapshotId.isNotEmpty) 'snapshotId': ownSnapshotId,
+      if (_journalHeadProvider != null)
+        'journalHead': _journalHeadProvider.call(),
     }));
     try {
       socket.send(reply, datagram.address, datagram.port);
@@ -472,12 +506,21 @@ class LanSyncTransport implements SyncTransport {
     }
   }
 
-  Future<Uint8List?> _fetchSnapshot(_Peer peer) async {
+  Future<Uint8List?> _fetchSnapshot(_Peer peer) => _getPayload(peer, snapshotPath);
+
+  /// 拉取增量窗口（带本机游标；对端在游标落后于窗口起点时回全量快照）。
+  ///
+  /// 协议固定走增量端点：对端未注入增量提供者时它自己回全量快照
+  /// （[journalProvider] 是**服务端**能力，不影响请求路径）。
+  Future<Uint8List?> _fetchJournal(_Peer peer, int since) =>
+      _getPayload(peer, '$journalPath?since=$since');
+
+  Future<Uint8List?> _getPayload(_Peer peer, String path) async {
     _snapshotGetCount++;
     final client = HttpClient()..connectionTimeout = _requestTimeout;
     try {
       final request = await client
-          .getUrl(Uri.parse('http://${peer.host}:${peer.port}$snapshotPath'))
+          .getUrl(Uri.parse('http://${peer.host}:${peer.port}$path'))
           .timeout(_requestTimeout);
       final response = await request.close().timeout(_requestTimeout);
       if (response.statusCode != HttpStatus.ok) return null;
@@ -489,11 +532,11 @@ class LanSyncTransport implements SyncTransport {
     }
   }
 
-  Future<bool> _postSnapshot(_Peer peer, Uint8List payload) async {
+  Future<bool> _postSnapshot(_Peer peer, Uint8List payload, String path) async {
     final client = HttpClient()..connectionTimeout = _requestTimeout;
     try {
       final request = await client
-          .postUrl(Uri.parse('http://${peer.host}:${peer.port}$snapshotPath'))
+          .postUrl(Uri.parse('http://${peer.host}:${peer.port}$path'))
           .timeout(_requestTimeout);
       request.headers.contentType = ContentType.binary;
       request.add(payload);
@@ -510,14 +553,17 @@ class LanSyncTransport implements SyncTransport {
 
   Future<void> _onHttpRequest(HttpRequest request) async {
     try {
-      if (request.uri.path != snapshotPath) {
+      final path = request.uri.path;
+      if (path != snapshotPath && path != journalPath) {
         request.response.statusCode = HttpStatus.notFound;
       } else if (request.method == 'GET') {
         final passphrase = await _passphraseProvider();
         if (passphrase == null || passphrase.trim().isEmpty) {
           request.response.statusCode = HttpStatus.serviceUnavailable;
         } else {
-          final envelope = await _snapshotProvider();
+          final envelope = path == journalPath
+              ? await _journalFor(request.uri.queryParameters['since'])
+              : await _snapshotProvider();
           final payload = _codec.encrypt(envelope, passphrase);
           request.response.headers.contentType = ContentType.binary;
           request.response.add(payload);
@@ -557,6 +603,14 @@ class LanSyncTransport implements SyncTransport {
     }
   }
 
+  /// 增量端点的服务端语义：请求游标之后的窗口；未注入提供者时回全量快照。
+  Future<SyncEnvelope> _journalFor(String? sinceParam) async {
+    final provider = _journalProvider;
+    if (provider == null) return _snapshotProvider();
+    final since = int.tryParse(sinceParam ?? '') ?? SyncPullRequest.noCursor;
+    return provider(since);
+  }
+
   Future<Uint8List?> _readBody(Stream<List<int>> stream) async {
     final builder = BytesBuilder(copy: false);
     await for (final chunk in stream) {
@@ -576,12 +630,16 @@ class _Peer {
   /// 对端探测应答携带的内容指纹（空 = 对端未提供 / 尚未产出快照）。
   final String snapshotId;
 
+  /// 对端探测应答携带的 journal 头部（null = 对端未提供：按指纹判「未变」）。
+  final int? journalHead;
+
   const _Peer({
     required this.deviceId,
     required this.host,
     required this.port,
     required this.name,
     this.snapshotId = '',
+    this.journalHead,
   });
 
   /// 去重键：认领到设备 id 后按 id，未认领（手动地址首轮）按主机。

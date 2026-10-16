@@ -179,31 +179,18 @@ class SyncDevice {
       _keys.firstWhere((key) => key.name == name);
 
   /// 服务端语义：按请求游标返回增量窗口或全量快照（bootstrap）。
+  ///
+  /// 走引擎的 [SyncEngine.serveJournal]（与局域网端点同一实现）；显式要求
+  /// 全量时直接给最近一轮的全量快照。
   Future<SyncEnvelope> serve({required int since, required bool full}) async {
-    final snapshot = engine.lastEnvelope ??
-        SyncEnvelope(
-          deviceId: id,
-          producedAt: state.nowMs(),
-        );
     final baseSeq = await journal.baseSeq();
     if (full || since < baseSeq) {
       network.bootstrapServed++;
-      return snapshot;
+      return engine.lastEnvelope ??
+          SyncEnvelope(deviceId: id, producedAt: state.nowMs());
     }
     network.deltaServed++;
-    final entries = await journal.window(since: since);
-    return SyncEnvelope(
-      deviceId: id,
-      deviceName: state.deviceName,
-      producedAt: state.nowMs(),
-      snapshotId: snapshot.snapshotId,
-      journalHead: await journal.headSeq(),
-      baseSeq: baseSeq,
-      windowStart: entries.isEmpty ? 0 : entries.first.seq,
-      windowEnd: entries.isEmpty ? 0 : entries.last.seq,
-      journal: entries,
-      acks: snapshot.acks,
-    );
+    return engine.serveJournal(since: since);
   }
 
   Future<void> receive(SyncEnvelope envelope) async {

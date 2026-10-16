@@ -2,6 +2,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:molia/data/sync/sync_crypto.dart';
 import 'package:molia/data/sync/transport/lan_sync_transport.dart';
 import 'package:molia/domain/models/device_sync.dart';
+import 'package:molia/domain/ports/sync_transport.dart';
 
 /// 局域网直连传输测试：回环上的探测、拉取、推送与口令不匹配跳过。
 void main() {
@@ -163,6 +164,88 @@ void main() {
       third.envelopes.single.recordsOf(SyncCategory.settings).single.data,
       {'v': 'dark'},
     );
+  });
+
+  test('增量端点：按游标返回窗口，游标落后时回全量快照', () async {
+    // 服务端语义由 journalProvider 决定（生产 = SyncEngine.serveJournal）。
+    final serveCalls = <int>[];
+    Future<SyncEnvelope> serve(int since) async {
+      serveCalls.add(since);
+      if (since < 0) {
+        // 游标落后于窗口起点：bootstrap 全量快照。
+        return envelope('devA', value: 'full').withSnapshotId('hash-full');
+      }
+      return SyncEnvelope(
+        deviceId: 'devA',
+        deviceName: '设备A',
+        producedAt: 1,
+        snapshotId: 'hash-full',
+        journalHead: 3,
+        baseSeq: 0,
+        windowStart: 3,
+        windowEnd: 3,
+        journal: [
+          SyncJournalEntry(
+            seq: 3,
+            category: SyncCategory.settings,
+            record: SyncRecord(
+              key: 'theme_mode',
+              version: const SyncVersion(physical: 10, deviceId: 'devA'),
+              data: const {'v': 'delta'},
+            ),
+          ),
+        ],
+      );
+    }
+
+    final transportA = LanSyncTransport(
+      deviceId: 'devA',
+      deviceName: () => '设备A',
+      codec: codec,
+      passphraseProvider: () async => passphrase,
+      snapshotProvider: () async => envelope('devA', value: 'full'),
+      journalProvider: serve,
+      snapshotIdProvider: () => 'hash-full',
+      journalHeadProvider: () => 3,
+      udpPort: 47898,
+    );
+    final transportB = LanSyncTransport(
+      deviceId: 'devB',
+      deviceName: () => '设备B',
+      codec: codec,
+      passphraseProvider: () async => passphrase,
+      snapshotProvider: () async => envelope('devB'),
+      probeTargets: const [(host: '127.0.0.1', port: 47898)],
+      probeWindow: const Duration(milliseconds: 250),
+      udpPort: 47899,
+    );
+    addTearDown(() async {
+      await transportA.stop();
+      await transportB.stop();
+    });
+    await transportA.start();
+    await transportB.start();
+
+    // 游标 -1（未消费）：对端回全量快照。
+    final bootstrap = await transportB.pull();
+    expect(bootstrap.envelopes.single.isDelta, isFalse);
+
+    // 游标 0：对端回增量窗口（只带 seq > 0 的条目）。
+    final delta = await transportB.pull(
+      const SyncPullRequest(cursors: {'devA': 0}),
+    );
+    expect(serveCalls, contains(0), reason: '增量端点按游标请求');
+    final payload = delta.envelopes.single;
+    expect(payload.isDelta, isTrue);
+    expect(payload.journal, hasLength(1));
+    expect(payload.journal!.single.record.data, {'v': 'delta'});
+
+    // 游标已到对端头部 + 指纹未变：跳过 GET。
+    final skipped = await transportB.pull(
+      const SyncPullRequest(cursors: {'devA': 3}),
+    );
+    expect(skipped.envelopes, isEmpty);
+    expect(skipped.skippedUnchanged, 1);
   });
 
   test('未启动时 pull/push 为空操作；start/stop 幂等', () async {

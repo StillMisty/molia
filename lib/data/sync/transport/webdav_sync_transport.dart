@@ -21,12 +21,18 @@ class WebDavHttpException implements Exception {
   String toString() => 'WebDavHttpException($message)';
 }
 
-/// 用户自备 WebDAV 的传输：每台设备上传一份加密快照，读取其余设备快照。
+/// 用户自备 WebDAV 的传输：每台设备上传自己的**增量日志**与**全量快照**，
+/// 读取其余设备的文件。
 ///
-/// - 文件布局：`<baseUrl>/<remoteDir>/<deviceId>.msync`（二进制密文）；
+/// - 文件布局（都在 `<baseUrl>/<remoteDir>/` 下）：
+///   - `<deviceId>.journal.msync`：增量窗口（每次变更后重写，体积 ∝ 变更量）；
+///   - `<deviceId>.snapshot.msync`：全量快照（**按需重写**：首次引导 /
+///     日志超硬上限时发布，对端落后超出日志窗口时读它做 bootstrap）；
 /// - 目录不存在时 MKCOL 自动创建；列表用 PROPFIND（Depth: 1）并请求
-///   `getetag` / `getlastmodified`：文件版本与上次拉到的一致时跳过
-///   GET + 解密 + 合并；
+///   `getetag` / `getlastmodified`：文件版本与上次拉到的一致且本机游标已到
+///   上次读到位置时跳过 GET + 解密 + 合并；
+/// - 非本协议文件名（旧版 `<deviceId>.msync`、被改名 / 拷贝的幽灵文件）不参与
+///   合并；解密后的载荷 `deviceId` 与文件名不符时同样跳过；
 /// - 数据在离开设备前已用同步口令加密，服务端只见密文；
 /// - 失败容忍与局域网一致：单个文件读取/解密失败只跳过该文件。
 class WebDavSyncTransport implements SyncTransport {
@@ -46,7 +52,12 @@ class WebDavSyncTransport implements SyncTransport {
         _ownsDio = dio == null,
         _requestTimeout = requestTimeout;
 
-  static const String snapshotSuffix = '.msync';
+  /// 全量快照文件后缀（按需重写：首次引导 / 日志超硬上限时发布）。
+  static const String snapshotSuffix = '.snapshot.msync';
+
+  /// 增量窗口文件后缀（每次变更后重写，体积 ∝ 变更量）。
+  static const String journalSuffix = '.journal.msync';
+
   static const int maxSnapshotBytes = 32 * 1024 * 1024;
 
   final String deviceId;
@@ -66,6 +77,10 @@ class WebDavSyncTransport implements SyncTransport {
   /// 上次成功拉到的各远端文件版本（`etag` 优先，缺省 `lastmodified`）：
   /// 与 PROPFIND 结果一致时跳过 GET + 解密。进程内缓存。
   final Map<String, String> _fileVersions = {};
+
+  /// 上次从各设备载荷里读到的 journal 头部：文件版本未变但本机游标落后于
+  /// 它时仍需重读（上一轮落地失败的条目要能重试）。
+  final Map<String, int> _peerHeads = {};
   final Logger _logger = Logger('molia.sync.webdav');
 
   @override
@@ -149,14 +164,28 @@ class WebDavSyncTransport implements SyncTransport {
     var skipped = 0;
     var bytesIn = 0;
     SyncIssue? firstError;
-    for (final file in files) {
-      // 文件版本未变：跳过 GET + 解密 + 合并（服务端未给版本时照常拉取）。
+    // 按设备归并两类文件：优先读增量日志；游标落后于窗口起点（或引擎显式
+    // 要求全量）时改读全量快照做 bootstrap。
+    final devices = _groupFiles(files);
+    for (final entry in devices.entries) {
+      final device = entry.key;
+      final journalFile = entry.value.journal;
+      final snapshotFile = entry.value.snapshot;
+      final cursor = request.cursorFor(device);
+      final forceFull = request.fullPeers.contains(device);
+      var file = forceFull || journalFile == null ? snapshotFile : journalFile;
+      if (file == null) continue;
+      // 文件版本未变且本机游标已到上次读到的头部：跳过 GET + 解密 + 合并。
       final cached = _fileVersions[file.name];
-      if (file.version.isNotEmpty && cached == file.version) {
+      final upToDate = cursor >= (_peerHeads[device] ?? SyncPullRequest.noCursor);
+      if (!forceFull &&
+          file.version.isNotEmpty &&
+          cached == file.version &&
+          upToDate) {
         skipped++;
         continue;
       }
-      final bytes = await _getFile(config, file.name);
+      var bytes = await _getFile(config, file.name);
       if (bytes == null) {
         failed++;
         firstError ??= SyncIssue(
@@ -166,9 +195,9 @@ class WebDavSyncTransport implements SyncTransport {
         continue;
       }
       bytesIn += bytes.length;
+      SyncEnvelope envelope;
       try {
-        envelopes.add(_codec.decrypt(bytes, passphrase));
-        if (file.version.isNotEmpty) _fileVersions[file.name] = file.version;
+        envelope = _codec.decrypt(bytes, passphrase);
       } on SyncCryptoException {
         // 口令不同或文件损坏：跳过（不记版本，下轮重试）。
         failed++;
@@ -176,11 +205,44 @@ class WebDavSyncTransport implements SyncTransport {
           code: SyncIssueCode.webdavDecryptFailed,
           args: {'peer': file.name},
         );
+        continue;
       }
+      // 幽灵 / 被改名文件：载荷身份与文件名不符，不参与合并。
+      if (envelope.deviceId != device) {
+        _logger.warning('远端文件 ${file.name} 的身份不符（载荷 ${envelope.deviceId}），跳过');
+        continue;
+      }
+      if (file.version.isNotEmpty) _fileVersions[file.name] = file.version;
+      _peerHeads[device] = envelope.journalHead;
+      // 增量窗口的起点超出本机游标（条目已被对端裁剪）：改读全量快照。
+      if (!forceFull &&
+          envelope.isDelta &&
+          cursor < envelope.baseSeq &&
+          snapshotFile != null &&
+          snapshotFile.name != file.name) {
+        final fallback = await _getFile(config, snapshotFile.name);
+        if (fallback != null) {
+          try {
+            final full = _codec.decrypt(fallback, passphrase);
+            if (full.deviceId == device) {
+              bytesIn += fallback.length;
+              if (snapshotFile.version.isNotEmpty) {
+                _fileVersions[snapshotFile.name] = snapshotFile.version;
+              }
+              _peerHeads[device] = full.journalHead;
+              envelopes.add(full);
+              continue;
+            }
+          } on SyncCryptoException {
+            // 快照文件不可用：保留增量窗口（引擎会标记缺口并在下轮重试）。
+          }
+        }
+      }
+      envelopes.add(envelope);
     }
     return SyncPullResult(
       envelopes: envelopes,
-      peersSeen: files.length,
+      peersSeen: devices.length,
       skippedUnchanged: skipped,
       failedPeers: failed,
       bytesIn: bytesIn,
@@ -189,6 +251,33 @@ class WebDavSyncTransport implements SyncTransport {
       contacted: true,
       error: firstError,
     );
+  }
+
+  /// 把远端文件按设备归并（非本协议文件名忽略：旧版 / 幽灵文件不参与合并）。
+  Map<String, ({_RemoteFile? journal, _RemoteFile? snapshot})> _groupFiles(
+    List<_RemoteFile> files,
+  ) {
+    final grouped = <String, ({_RemoteFile? journal, _RemoteFile? snapshot})>{};
+    for (final file in files) {
+      final String device;
+      final bool isJournal;
+      if (file.name.endsWith(journalSuffix)) {
+        device = file.name.substring(0, file.name.length - journalSuffix.length);
+        isJournal = true;
+      } else if (file.name.endsWith(snapshotSuffix)) {
+        device = file.name.substring(0, file.name.length - snapshotSuffix.length);
+        isJournal = false;
+      } else {
+        continue;
+      }
+      if (device.isEmpty || device == deviceId) continue;
+      final existing = grouped[device] ??
+          (journal: null, snapshot: null) as ({_RemoteFile? journal, _RemoteFile? snapshot});
+      grouped[device] = isJournal
+          ? (journal: file, snapshot: existing.snapshot)
+          : (journal: existing.journal, snapshot: file);
+    }
+    return grouped;
   }
 
   @override
@@ -210,7 +299,12 @@ class WebDavSyncTransport implements SyncTransport {
     try {
       await _ensureDir(config);
       final payload = _codec.encrypt(envelope, passphrase);
-      await _putFile(config, '$deviceId$snapshotSuffix', payload);
+      // 增量窗口与全量快照分开文件：日常只重写增量（体积 ∝ 变更量），
+      // 全量快照按需发布（首次引导 / 日志超硬上限）。
+      final name = envelope.isDelta
+          ? '$deviceId$journalSuffix'
+          : '$deviceId$snapshotSuffix';
+      await _putFile(config, name, payload);
       return SyncPushResult(succeededPeers: 1, bytesOut: payload.length);
     } catch (e) {
       _logger.warning('WebDAV 快照上传失败', e);
@@ -222,8 +316,36 @@ class WebDavSyncTransport implements SyncTransport {
   }
 
   /// 显式清理某台对端的远端文件（用户动作；**不做自动删除**）。
+  ///
+  /// 删除该设备的日志 / 快照文件（含旧版单文件命名的残留）。
   @override
-  Future<bool> deleteRemote(String deviceId) async => false;
+  Future<bool> deleteRemote(String deviceId) async {
+    if (!_running) return false;
+    final config = _configProvider();
+    if (!config.isConfigured) return false;
+    var removed = false;
+    for (final name in [
+      '$deviceId$journalSuffix',
+      '$deviceId$snapshotSuffix',
+      '$deviceId.msync',
+    ]) {
+      try {
+        final response = await _send(
+          'DELETE',
+          _fileUri(config, name),
+          headers: await _authHeaders(config),
+        );
+        if (response.httpStatus >= 200 && response.httpStatus < 300) {
+          removed = true;
+          _fileVersions.remove(name);
+        }
+        // 404 = 本来就没有这份文件：不算失败。
+      } catch (e) {
+        _logger.warning('WebDAV 清理远端文件失败（$name）', e);
+      }
+    }
+    return removed;
+  }
 
   Future<void> _ensureDir(WebDavConfig config) async {
     final dir = _dirUri(config);

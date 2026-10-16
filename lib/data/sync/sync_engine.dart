@@ -115,8 +115,37 @@ class SyncEngine extends ChangeNotifier implements SyncSchedulerHost {
   /// 最近一轮推送/构建的快照（局域网端点直接返回给对端 GET）。
   SyncEnvelope? get lastEnvelope => _lastEnvelope;
 
+  /// 服务端语义（局域网增量端点 / WebDAV 日志文件）：按请求方游标返回
+  /// 增量窗口；游标落后于窗口起点（条目已被裁剪）时返回全量快照（bootstrap）。
+  Future<SyncEnvelope> serveJournal({required int since}) async {
+    final snapshot = _lastEnvelope ??
+        SyncEnvelope(
+          deviceId: _state.deviceId,
+          deviceName: _state.deviceName,
+          producedAt: _nowMs(),
+          categories: [for (final c in _state.enabledCategories) c.name],
+        );
+    final journal = _journal;
+    if (journal == null) return snapshot;
+    final baseSeq = await journal.baseSeq();
+    if (since < baseSeq) return snapshot;
+    final entries = await journal.window(since: since);
+    return SyncEnvelope(
+      deviceId: _state.deviceId,
+      deviceName: _state.deviceName,
+      producedAt: _nowMs(),
+      snapshotId: snapshot.snapshotId,
+      journalHead: await journal.headSeq(),
+      baseSeq: baseSeq,
+      windowStart: entries.isEmpty ? 0 : entries.first.seq,
+      windowEnd: entries.isEmpty ? 0 : entries.last.seq,
+      journal: entries,
+      acks: snapshot.acks,
+      categories: snapshot.categories,
+    );
+  }
+
   /// 传输当前状态（UI 呈现「开关开着但没在工作」）；未知 kind 返回 null。
-  ///
   /// 与一轮报告同一类型：计数为零、`error` 为启动类失败原因（含诊断细节），
   /// 避免「状态视图」与「报告」两套字段各自漂移。
   SyncTransportReport? transportStatus(String kind) {
