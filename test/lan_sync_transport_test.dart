@@ -98,7 +98,10 @@ void main() {
     await transportA.start();
     await transportC.start();
 
-    expect((await transportC.pull()).envelopes, isEmpty);
+    final mismatched = await transportC.pull();
+    expect(mismatched.envelopes, isEmpty);
+    // 唯一对端解密失败 = 不可达：不算接触成功。
+    expect(mismatched.contacted, isFalse);
   });
 
   test('对端 snapshotId 未变：跳过 GET 并计入 skippedUnchanged', () async {

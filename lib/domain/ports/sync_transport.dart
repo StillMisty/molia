@@ -12,6 +12,7 @@ class SyncPullResult {
     this.skippedUnchanged = 0,
     this.failedPeers = 0,
     this.bytesIn = 0,
+    this.contacted = false,
     this.error,
   });
 
@@ -28,6 +29,12 @@ class SyncPullResult {
   final int failedPeers;
 
   final int bytesIn;
+
+  /// 本轮是否接触到了远端（WebDAV 目录可读、局域网有对端可达）。
+  ///
+  /// 零快照也算接触：目录可读说明远端可达，用于把「远端可达但还没有数据」
+  /// 与「所有对端都不可达」分开（后者才是整轮失败）。
+  final bool contacted;
 
   /// 最近一次失败的原因（无失败为 null）；技术细节在 [SyncIssue.detail]。
   final SyncIssue? error;

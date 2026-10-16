@@ -130,6 +130,25 @@ void main() {
     expect(result.failedPeers, 1);
     expect(result.error?.code, SyncIssueCode.webdavDirFailed);
     expect(result.error?.detail, isNotNull);
+    expect(result.contacted, isFalse);
+  });
+
+  test('目录可读但零快照：接触成功（首台设备 PUT 失败仍是部分失败）', () async {
+    server.putStatus = 500;
+    final a = transport('devA');
+    addTearDown(() => a.stop());
+    await a.start();
+
+    // 目录可读、还没有其他设备的快照：远端可达，零快照也算接触。
+    final pulled = await a.pull();
+    expect(pulled.envelopes, isEmpty);
+    expect(pulled.peersSeen, 0);
+    expect(pulled.contacted, isTrue);
+
+    // 首台设备的写入失败：推送失败有原因，但接触面是成功的。
+    final pushed = await a.push(envelope('devA'));
+    expect(pushed.failedPeers, 1);
+    expect(pushed.error?.code, SyncIssueCode.webdavUploadFailed);
   });
 
   test('目录列表失败：计为失败对端并带原因', () async {
@@ -222,9 +241,10 @@ class FakeWebDavServer {
   int putCount = 0;
   int getCount = 0;
 
-  /// 覆盖 MKCOL / PROPFIND 的状态码（默认成功路径）。
+  /// 覆盖 MKCOL / PROPFIND / PUT 的状态码（默认成功路径）。
   int mkcolStatus = 201;
   int propfindStatus = 207;
+  int putStatus = 201;
 
   /// 是否在 PROPFIND 中返回 `getetag`（false = 模拟不提供版本的服务端）。
   bool includeVersion = true;
@@ -273,10 +293,11 @@ class FakeWebDavServer {
           await for (final chunk in request) {
             builder.add(chunk);
           }
+          request.response.statusCode = putStatus;
+          if (putStatus >= 400) break;
           final name = request.uri.path.split('/').last;
           files[name] = builder.toBytes();
           etags[name] = '"${++_etagSeq}"';
-          request.response.statusCode = 201;
         case 'GET':
           getCount++;
           final data = files[request.uri.path.split('/').last];

@@ -273,6 +273,9 @@ class LanSyncTransport implements SyncTransport {
       skippedUnchanged: skipped,
       failedPeers: failed,
       bytesIn: bytesIn,
+      // 至少一个对端可达（拉到或未变跳过）才算接触成功；探测到但全部
+      // 读取 / 解密失败仍是「所有对端都不可达」。
+      contacted: peers.length > failed,
       error: firstError ?? _discoveryIssue(peers),
     );
   }

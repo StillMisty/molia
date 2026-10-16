@@ -184,6 +184,9 @@ class WebDavSyncTransport implements SyncTransport {
       skippedUnchanged: skipped,
       failedPeers: failed,
       bytesIn: bytesIn,
+      // 目录可读 = 远端可达：零快照也算接触成功（首台设备的推送失败
+      // 因此是部分失败而不是「所有对端都不可达」）。
+      contacted: true,
       error: firstError,
     );
   }

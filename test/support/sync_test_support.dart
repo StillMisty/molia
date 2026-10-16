@@ -123,6 +123,9 @@ class FakeSyncTransport implements SyncTransport {
   /// pull 报告的「内容未变而跳过」对端数。
   int pullSkippedUnchanged = 0;
 
+  /// pull 报告的「接触成功」（远端可达；零快照也算，如 WebDAV 目录可读）。
+  bool pullContacted = false;
+
   /// pull / push 报告的失败数（用于构造部分失败与全失败）。
   int pullFailures = 0;
   int pushFailures = 0;
@@ -165,6 +168,7 @@ class FakeSyncTransport implements SyncTransport {
       peersSeen: peersSeenOverride ?? available.length,
       skippedUnchanged: pullSkippedUnchanged,
       failedPeers: pullFailures,
+      contacted: pullContacted,
       error: pullError ??
           (pullFailures > 0
               ? const SyncIssue(

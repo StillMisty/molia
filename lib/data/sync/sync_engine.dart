@@ -346,6 +346,8 @@ class SyncEngine extends ChangeNotifier implements SyncSchedulerHost {
       final pulledEntries = <(String, SyncEnvelope)>[];
       // 入站轮只消费收到的快照：不主动拉取任何对端。
       final inboundOnly = trigger == SyncTrigger.incoming;
+      // 本轮是否有「拉取动作成功」（远端可达；零快照也算，见 SyncPullResult）。
+      var pullContact = false;
       for (final entry in _transports.entries) {
         final accumulator = accumulators[entry.key]!;
         final transport = entry.value;
@@ -385,6 +387,7 @@ class SyncEngine extends ChangeNotifier implements SyncSchedulerHost {
           ..bytesIn += result.bytesIn
           ..durationMs += watch.elapsedMilliseconds
           ..error ??= result.error;
+        pullContact = pullContact || result.contacted;
         for (final envelope in result.envelopes) {
           pulledEntries.add((entry.key, envelope));
         }
@@ -560,6 +563,7 @@ class SyncEngine extends ChangeNotifier implements SyncSchedulerHost {
       final outcome = _resolveOutcome(
         anyTransport: anyTransport,
         contact: contact,
+        pullContact: pullContact,
         failed: failedCount + applyFailures,
         succeededPulls: succeededPulls,
         succeededPushes: succeededPushes,
@@ -646,6 +650,7 @@ class SyncEngine extends ChangeNotifier implements SyncSchedulerHost {
   static SyncOutcome _resolveOutcome({
     required bool anyTransport,
     required bool contact,
+    required bool pullContact,
     required int failed,
     required int succeededPulls,
     required int succeededPushes,
@@ -657,9 +662,12 @@ class SyncEngine extends ChangeNotifier implements SyncSchedulerHost {
       if (!localChanged && applied == 0) return SyncOutcome.noChanges;
       return SyncOutcome.ok;
     }
-    // 有失败：拉取 / 推送 / 落地任一面成功过就是部分失败；全都没有才是整轮
-    // 失败（拉取成功但推送全败仍有成功面，不是「所有对端都联系不上」）。
-    if (succeededPulls == 0 && succeededPushes == 0 && applied == 0) {
+    // 有失败：拉取动作成功（远端可达，零快照也算）/ 推送成功 / 有落地任一面
+    // 成功过就是部分失败；全都没有才是整轮失败（有已知对端但全不可达）。
+    if (succeededPulls == 0 &&
+        succeededPushes == 0 &&
+        applied == 0 &&
+        !pullContact) {
       return SyncOutcome.failed;
     }
     return SyncOutcome.partial;

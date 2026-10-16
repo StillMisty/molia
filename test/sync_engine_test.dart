@@ -179,14 +179,40 @@ void main() {
     expect(state.log.first.outcome, SyncOutcome.partial);
   });
 
-  test('noPeers 不吞传输级错误：广播 / 目录失败仍可见', () async {
-    // 传输报告了错误但没有失败对端计数（如 WebDAV 目录准备失败）。
-    transport.pullError = const SyncIssue(code: SyncIssueCode.webdavDirFailed);
+  test('noPeers 不吞传输级错误：广播失败仍可见', () async {
+    // 传输报告了错误但没有失败对端计数（如局域网广播被网络策略拒绝）。
+    transport.pullError =
+        const SyncIssue(code: SyncIssueCode.broadcastUnavailable);
     final report = await engine.syncNow();
 
     expect(report!.outcome, SyncOutcome.noPeers);
+    expect(report.error?.code, SyncIssueCode.broadcastUnavailable);
+    expect(state.log.first.error?.code, SyncIssueCode.broadcastUnavailable);
+  });
+
+  test('WebDAV 目录准备失败：结论是 failed 并带原因', () async {
+    // 目录没准备好 = 一个对端都没接触上（failedPeers=1），推送同样失败：
+    // 真实语义是整轮失败，不是「没发现对端」。
+    transport.pullFailures = 1;
+    transport.pullError = const SyncIssue(code: SyncIssueCode.webdavDirFailed);
+    transport.pushFailures = 1;
+    final report = await engine.syncNow();
+
+    expect(report!.outcome, SyncOutcome.failed);
     expect(report.error?.code, SyncIssueCode.webdavDirFailed);
     expect(state.log.first.error?.code, SyncIssueCode.webdavDirFailed);
+  });
+
+  test('拉取动作成功（零快照）+ 推送全败：结论是 partial', () async {
+    // WebDAV 首台设备：目录可读、还没有其他设备的快照，PUT 失败。
+    // 远端可达是成功面，不能判成「所有对端都不可达」。
+    transport.pullContacted = true;
+    transport.pushFailures = 1;
+    final report = await engine.syncNow();
+
+    expect(report!.outcome, SyncOutcome.partial);
+    expect(report.error?.code, SyncIssueCode.pushFailed);
+    expect(state.log.first.outcome, SyncOutcome.partial);
   });
 
   test('名册 lastError：失败保留，成功接触才清除', () async {
