@@ -54,7 +54,8 @@
     `assets/fonts/` 添加字体，保持包体精简。
 13. **发布体积**：新增资产前先评估体积；不要内置 CJK 字体（系统字体 + 用户安装）。
     Android 启动图标自 2026-10 起为手绘矢量（`drawable/ic_launcher_foreground.xml`，
-    维护方式见 `icons_launcher.yaml` 头注释），该工具现在只生成 iOS 图标；
+    维护方式见 `icons_launcher.yaml` 头注释），该工具现在只生成 iOS 与 Windows 图标
+    （Windows 的 `app_icon.ico` 同时是 exe/任务栏/安装器/快捷方式图标，不要手改）；
     `minSdk=37` 下传统 mipmap 密度图无意义，已全部移除，不要用工具再生成。
 14. **省流模式的网络检测**：Android 8+ 后台不广播网络变化，`_MyThemedAppState` 在
     `resumed` 时调 `DataSaverService.refreshConnectivity()`，不要删除；Web 的
