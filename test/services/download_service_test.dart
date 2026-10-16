@@ -6,6 +6,7 @@ import 'package:dio/dio.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:molia/data/catalog/catalog_service.dart';
+import 'package:molia/data/downloads/download_notifications.dart';
 import 'package:molia/data/downloads/downloads_repository.dart';
 import 'package:molia/data/molia_database.dart';
 import 'package:molia/domain/models/download.dart';
@@ -17,6 +18,7 @@ import 'package:molia/data/downloads/downloads_publisher.dart';
 import 'package:molia/services/download/download_service.dart';
 import 'package:molia/services/download/download_settings.dart';
 
+import '../support/fake_download_notifications.dart';
 import '../support/fake_download_storage.dart';
 import '../support/fake_downloads_publisher.dart';
 import '../support/fake_music_source.dart';
@@ -54,7 +56,9 @@ void main() {
     DownloadArtworkResolver? artwork,
     DownloadSettings? settings,
     DownloadsPublisher? publisher,
+    DownloadNotifications? notifications,
     CacheService? cacheService,
+    int Function()? clock,
   }) {
     final registry = FakeSourceRegistry({
       'kw': kwSource,
@@ -70,9 +74,10 @@ void main() {
       artworkResolver: artwork,
       settings: settings,
       publisher: publisher,
+      notifications: notifications,
       cacheService: cacheService,
       preferredQuality: () => '320k',
-      clock: () => 1000,
+      clock: clock ?? () => 1000,
     );
   }
 
@@ -839,6 +844,210 @@ void main() {
     await controller.close();
     await download;
     expect(service.activeTasks, isEmpty);
+  });
+
+  test('系统通知：单任务 start → 进度 update（节流）→ stop', () async {
+    final controller = StreamController<Uint8List>();
+    var now = 1000;
+    final dio = mockDio(
+      (options) => ResponseBody(
+        controller.stream,
+        200,
+        headers: {
+          'content-length': ['131072']
+        },
+      ),
+    );
+    final notifications = FakeDownloadNotifications();
+    final service = makeService(
+      dio: dio,
+      notifications: notifications,
+      clock: () => now,
+    );
+    await service.init();
+
+    final track = makeTrack();
+    final download = service.download(track);
+    await Future<void>.delayed(Duration.zero);
+    expect(notifications.methods, ['start']);
+    expect(notifications.events.single.id, 'track:kw:1');
+    expect(notifications.events.single.title, '测试歌曲');
+    expect(notifications.events.single.subtitle, '歌手');
+
+    Future<List<(int?, int?)>> updatePayloads() async => [
+          for (final event in notifications.events)
+            if (event.method == 'update') (event.progress, event.max),
+        ];
+
+    /// 等 UI 进度推进到 [received]：通知推送在同一处、先于 UI 进度发出。
+    Future<void> waitForProgress(int received) async {
+      final reached = Completer<void>();
+      void listener() {
+        final progress = service.progressForTrack(track);
+        if (progress != null &&
+            progress.receivedBytes >= received &&
+            !reached.isCompleted) {
+          reached.complete();
+        }
+      }
+
+      service.addListener(listener);
+      listener();
+      await reached.future;
+      service.removeListener(listener);
+    }
+
+    // 首个分片无条件推送。
+    controller.add(Uint8List(32 * 1024));
+    await waitForProgress(32 * 1024);
+    expect(await updatePayloads(), [(32 * 1024, 131072)]);
+    // 500ms 窗口内不再推送。
+    controller.add(Uint8List(32 * 1024));
+    await waitForProgress(64 * 1024);
+    expect(await updatePayloads(), [(32 * 1024, 131072)]);
+    // 窗口过后推送新进度。
+    now += 600;
+    controller.add(Uint8List(32 * 1024));
+    await waitForProgress(96 * 1024);
+    expect(await updatePayloads(), [
+      (32 * 1024, 131072),
+      (96 * 1024, 131072),
+    ]);
+    // 已到最后一个分片：节流不再拦住收尾进度。
+    controller.add(Uint8List(32 * 1024));
+    await waitForProgress(131072);
+    expect(await updatePayloads(), [
+      (32 * 1024, 131072),
+      (96 * 1024, 131072),
+      (131072, 131072),
+    ]);
+
+    await controller.close();
+    await download;
+    expect(notifications.methods.last, 'stop');
+    expect(notifications.events.last.id, 'track:kw:1');
+  });
+
+  test('系统通知：失败与取消同样收尾移除（不残留通知）', () async {
+    final failed = FakeDownloadNotifications();
+    final failingService = makeService(
+      dio: mockDio((options) => textResponse('err', statusCode: 500)),
+      notifications: failed,
+    );
+    await failingService.init();
+    await expectLater(
+      failingService.download(makeTrack()),
+      throwsA(isA<SourceFailure>()),
+    );
+    expect(failed.methods, ['start', 'stop']);
+
+    // 取消：dio 卡在流里，取消后走 cancelled 路径，通知同样收尾。
+    final gate = Completer<void>();
+    Stream<Uint8List> slowStream() async* {
+      yield Uint8List(100);
+      await gate.future;
+      yield Uint8List(100);
+    }
+
+    final cancelled = FakeDownloadNotifications();
+    final service = makeService(
+      dio: mockDio(
+        (options) => ResponseBody(
+          slowStream(),
+          200,
+          headers: {
+            'content-length': ['1000']
+          },
+        ),
+      ),
+      notifications: cancelled,
+    );
+    await service.init();
+    final track = makeTrack();
+    final future = service.download(track);
+    final expectation = expectLater(
+      future,
+      throwsA(predicate(
+        (e) => e is SourceFailure && e.kind == FailureKind.cancelled,
+      )),
+    );
+    await Future<void>.delayed(Duration.zero);
+    service.cancelTrack(track);
+    gate.complete();
+    await expectation;
+    expect(cancelled.methods, ['start', 'stop']);
+  });
+
+  test('系统通知：开关关闭 / 平台不支持时不发通知', () async {
+    final dio = mockDio(
+      (options) => bytesResponse([
+        1,
+        2
+      ], headers: {
+        'content-length': ['2']
+      }),
+    );
+    SharedPreferences.setMockInitialValues({});
+    final settings = DownloadSettings();
+    await settings.init();
+    await settings.setNotifications(false);
+    final disabled = FakeDownloadNotifications();
+    final offService = makeService(
+      dio: dio,
+      notifications: disabled,
+      settings: settings,
+    );
+    await offService.init();
+    expect(offService.notificationsSupported, isTrue);
+    await offService.download(makeTrack());
+    expect(disabled.events, isEmpty);
+
+    final unsupported = FakeDownloadNotifications(supported: false);
+    final desktopService = makeService(
+      dio: dio,
+      notifications: unsupported,
+    );
+    await desktopService.init();
+    expect(desktopService.notificationsSupported, isFalse);
+    await desktopService.download(makeTrack(sourceKey: 'tx', songId: '2'));
+    expect(unsupported.events, isEmpty);
+  });
+
+  test('系统通知：批量共享一条「N/N」通知，批内单任务通知被抑制', () async {
+    final dio = mockDio(
+      (options) => bytesResponse([
+        1,
+        2
+      ], headers: {
+        'content-length': ['2']
+      }),
+    );
+    final notifications = FakeDownloadNotifications();
+    final service = makeService(dio: dio, notifications: notifications);
+    await service.init();
+
+    // 列表第一首先下过：批量里被跳过，但序号仍占位。
+    await service.download(makeTrack());
+    notifications.events.clear();
+
+    final (done, failed) = await service.downloadBatch([
+      makeTrack(),
+      makeTrack(sourceKey: 'tx', songId: '2', title: '第二首'),
+    ]);
+    expect((done, failed), (1, 0));
+    // 只有尝试下载的第二首起通知，序号从 2 起（「第 2/2 首」）。
+    expect(notifications.events.first.method, 'start');
+    expect(notifications.events.first.id, 'batch');
+    expect(notifications.events.first.title, '第二首');
+    expect(notifications.events.first.index, 2);
+    expect(notifications.events.first.total, 2);
+    expect(notifications.events.last.method, 'stop');
+    expect(notifications.events.last.id, 'batch');
+    expect(
+      notifications.events.where((event) => event.id.startsWith('track:')),
+      isEmpty,
+      reason: '批内不另发单任务通知',
+    );
   });
 
   test('迁移旧位置：文件搬到新根并更新记录，旧文件删除', () async {

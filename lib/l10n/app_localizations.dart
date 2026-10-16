@@ -4791,6 +4791,18 @@ abstract class AppLocalizations {
   /// **'Also copy finished downloads into the system Downloads folder (Android public storage) so file managers and other players can see them; playback still uses the in-app copy'**
   String get downloadPublishToPublicDirSubtitle;
 
+  /// No description provided for @downloadNotifications.
+  ///
+  /// In en, this message translates to:
+  /// **'Download notifications'**
+  String get downloadNotifications;
+
+  /// No description provided for @downloadNotificationsSubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Show download progress in the notification shade and keep downloads running in the background (Android foreground service)'**
+  String get downloadNotificationsSubtitle;
+
   /// No description provided for @downloadLocationInfo.
   ///
   /// In en, this message translates to:

@@ -232,6 +232,51 @@ class MainActivity: AudioServiceActivity() {
             }
         }
 
+        // 下载通知通道（Android 前台服务）：任务生命周期 start / update / stop。
+        // 原生只做通知与前台服务启停，失败一律 no-op（Dart 侧还会再吞一层异常并
+        // 只记日志）；未授予通知权限时降级为无通知，下载本身不受影响。
+        MethodChannel(
+            flutterEngine.dartExecutor.binaryMessenger,
+            DownloadNotifications.CHANNEL
+        ).setMethodCallHandler { call, result ->
+            try {
+                when (call.method) {
+                    "start" -> DownloadNotifications.start(
+                        context = this,
+                        id = call.argument<String>("id").orEmpty(),
+                        title = call.argument<String>("title").orEmpty(),
+                        subtitle = call.argument<String>("subtitle").orEmpty(),
+                        index = call.argument<Int>("index"),
+                        total = call.argument<Int>("total"),
+                        progress = call.argument<Int>("progress"),
+                        max = call.argument<Int>("max"),
+                    )
+                    "update" -> DownloadNotifications.update(
+                        context = this,
+                        id = call.argument<String>("id").orEmpty(),
+                        title = call.argument<String>("title"),
+                        subtitle = call.argument<String>("subtitle"),
+                        index = call.argument<Int>("index"),
+                        total = call.argument<Int>("total"),
+                        progress = call.argument<Int>("progress"),
+                        max = call.argument<Int>("max"),
+                    )
+                    "stop" -> DownloadNotifications.stop(
+                        this,
+                        call.argument<String>("id").orEmpty(),
+                    )
+                    else -> {
+                        result.notImplemented()
+                        return@setMethodCallHandler
+                    }
+                }
+                result.success(null)
+            } catch (e: Exception) {
+                android.util.Log.w("MoliaDownloadNotify", "下载通知调用失败: ${call.method}", e)
+                result.error("DOWNLOAD_NOTIFICATION_ERROR", e.message, null)
+            }
+        }
+
         // 应用内更新通道：安装下载好的 APK 与「安装未知应用」授权状态。
         // 下载目录（Dart 侧 getTemporaryDirectory()/updates）与
         // res/xml/file_paths.xml 的 cache-path 对齐，FileProvider 才能把

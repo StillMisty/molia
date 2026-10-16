@@ -1,4 +1,5 @@
-/// 下载设置（设备本地项：保存位置 / 文件名格式 / 标签嵌入 / 公共目录发布）。
+/// 下载设置（设备本地项：保存位置 / 文件名格式 / 标签嵌入 / 公共目录发布 /
+/// 下载通知）。
 ///
 /// 为什么**不登记**进 `SettingsRegistry`：保存位置是设备相关路径、文件名
 /// 模板是设备偏好、公共目录发布是 Android 平台能力，跨设备同步过去只会
@@ -27,6 +28,7 @@ class DownloadSettings extends ChangeNotifier {
   static const String keyFilenameTemplate = 'download_filename_template';
   static const String keyEmbedTags = 'download_embed_tags';
   static const String keyPublishToPublicDir = 'download_publish_public_dir';
+  static const String keyNotifications = 'download_notifications';
 
   SharedPreferences? _prefs;
 
@@ -40,10 +42,14 @@ class DownloadSettings extends ChangeNotifier {
   /// 发布公共 Downloads 副本（仅 Android 生效；默认开）。
   bool _publishToPublicDir = true;
 
+  /// 下载进度通知（仅 Android 生效：前台服务 + 通知栏进度；默认开）。
+  bool _notifications = true;
+
   String get saveDir => _saveDir;
   String get filenameTemplate => _filenameTemplate;
   bool get embedTags => _embedTags;
   bool get publishToPublicDir => _publishToPublicDir;
+  bool get notifications => _notifications;
 
   /// 绑定 prefs 并加载已保存值（组合根 / 测试调用一次）。
   Future<void> init() async {
@@ -54,6 +60,7 @@ class DownloadSettings extends ChangeNotifier {
         prefs?.getString(keyFilenameTemplate) ?? kDefaultFilenameTemplate;
     _embedTags = prefs?.getBool(keyEmbedTags) ?? true;
     _publishToPublicDir = prefs?.getBool(keyPublishToPublicDir) ?? true;
+    _notifications = prefs?.getBool(keyNotifications) ?? true;
     notifyListeners();
   }
 
@@ -85,6 +92,14 @@ class DownloadSettings extends ChangeNotifier {
     if (value == _publishToPublicDir) return;
     _publishToPublicDir = value;
     await _prefs?.setBool(keyPublishToPublicDir, value);
+    notifyListeners();
+  }
+
+  /// 下载进度通知开关（只影响之后的下载；进行中的任务保持原状）。
+  Future<void> setNotifications(bool value) async {
+    if (value == _notifications) return;
+    _notifications = value;
+    await _prefs?.setBool(keyNotifications, value);
     notifyListeners();
   }
 

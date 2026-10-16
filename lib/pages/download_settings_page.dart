@@ -1,4 +1,4 @@
-/// 下载设置子页：保存位置 / 文件名格式 / 标签嵌入。
+/// 下载设置子页：保存位置 / 文件名格式 / 标签嵌入 / 下载通知。
 ///
 /// 从设置 › 数据与存储进入（与缓存管理同组）。保存位置在桌面可自选目录
 /// （移动端固定在应用目录：Android 公共目录走 MediaStore，见 #17）。
@@ -15,6 +15,7 @@ import 'package:provider/provider.dart';
 import '../l10n/app_localizations.dart';
 import '../services/download/download_service.dart';
 import '../services/download/download_settings.dart';
+import '../services/notification_permission.dart';
 import '../services/notification_service.dart';
 import '../widgets/settings/settings_tiles.dart';
 
@@ -88,6 +89,22 @@ class DownloadSettingsPage extends StatelessWidget {
                   value: settings.publishToPublicDir,
                   onChanged: (value) =>
                       unawaited(settings.setPublishToPublicDir(value)),
+                ),
+              // 下载通知只在 Android 有语义（前台服务 + 通知栏进度）；
+              // 打开时顺手补一次通知权限请求（用户主动动作，不打扰）。
+              if (downloads?.notificationsSupported ?? false)
+                SettingsSwitchTile(
+                  switchKey: const Key('downloadNotificationsSwitch'),
+                  icon: Icons.notifications_active_rounded,
+                  title: l10n.downloadNotifications,
+                  subtitle: l10n.downloadNotificationsSubtitle,
+                  value: settings.notifications,
+                  onChanged: (value) {
+                    unawaited(settings.setNotifications(value));
+                    if (value) {
+                      unawaited(NotificationPermission.ensureRequested());
+                    }
+                  },
                 ),
             ],
           ),

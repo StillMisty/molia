@@ -1,4 +1,10 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">茉咏</string>
+
+    <!-- 下载通知（Dart 侧只传曲目名 / 歌手 / 批量位置 / 进度，文案在这里组装） -->
+    <string name="download_notification_channel_name">下载</string>
+    <string name="download_notification_channel_description">离线歌曲的下载进度</string>
+    <string name="download_notification_downloading">正在下载…</string>
+    <string name="download_notification_batch_title">批量下载 %1$d/%2$d</string>
 </resources>
