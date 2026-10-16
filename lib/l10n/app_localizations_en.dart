@@ -2567,6 +2567,9 @@ class AppLocalizationsEn extends AppLocalizations {
   String get syncPeerAdded => 'Device added';
 
   @override
+  String get syncPeerUpdated => 'Device updated';
+
+  @override
   String get syncPeerUnreachable =>
       'Not reached yet — check that the peer is online on the same network, or use WebDAV';
 
@@ -2581,6 +2584,9 @@ class AppLocalizationsEn extends AppLocalizations {
   @override
   String get syncPeerAlreadyAdded =>
       'Already in the list — name and port updated';
+
+  @override
+  String get syncPeerContactQueued => 'Device saved — contact will follow';
 
   @override
   String get syncPeerContacting => 'Contacting…';

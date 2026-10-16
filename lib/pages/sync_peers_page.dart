@@ -301,10 +301,17 @@ class _AddPeerDialogState extends State<_AddPeerDialog> {
     );
     final contacted = await widget.provider.contactManualPeer(host);
     if (!mounted) return;
-    if (contacted) {
+    // 接触成功 / 本轮被排队（结果未知）都关闭弹层：地址已入簿，只有失败
+    // 才留在弹层里让用户改地址。重复地址在成功路径也给「已更新」提示。
+    final message = switch (contacted) {
+      null => l10n.syncPeerContactQueued,
+      true => added ? l10n.syncPeerAdded : l10n.syncPeerUpdated,
+      false => null,
+    };
+    if (message != null) {
       Navigator.of(context, rootNavigator: true).pop();
       ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text(l10n.syncPeerAdded)));
+          .showSnackBar(SnackBar(content: Text(message)));
       return;
     }
     setState(() {

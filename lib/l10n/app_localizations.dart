@@ -4659,6 +4659,12 @@ abstract class AppLocalizations {
   /// **'Device added'**
   String get syncPeerAdded;
 
+  /// No description provided for @syncPeerUpdated.
+  ///
+  /// In en, this message translates to:
+  /// **'Device updated'**
+  String get syncPeerUpdated;
+
   /// No description provided for @syncPeerUnreachable.
   ///
   /// In en, this message translates to:
@@ -4682,6 +4688,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Already in the list — name and port updated'**
   String get syncPeerAlreadyAdded;
+
+  /// No description provided for @syncPeerContactQueued.
+  ///
+  /// In en, this message translates to:
+  /// **'Device saved — contact will follow'**
+  String get syncPeerContactQueued;
 
   /// No description provided for @syncPeerContacting.
   ///

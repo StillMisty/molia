@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:material_3_expressive/material_3_expressive.dart';
@@ -206,6 +208,54 @@ void main() {
       findsOneWidget,
     );
     expect(provider.manualPeers, hasLength(1));
+  });
+
+  testWidgets('重复地址且接触成功：提示已更新而不是已添加', (tester) async {
+    transport.onPull = () async {
+      await state.learnManualPeer(const ManualPeer(
+        host: '192.168.1.23',
+        deviceId: 'devB',
+        httpPort: 40000,
+      ));
+    };
+    transport.available.add(SyncEnvelope(
+      deviceId: 'devB',
+      deviceName: 'Device B',
+      producedAt: 5000,
+      records: const {},
+    ));
+    await provider.addManualPeer('192.168.1.23', name: '书房');
+    await pumpPage(tester);
+    await openAddDialog(tester);
+
+    await tester.enterText(fieldAt(0), '192.168.1.23');
+    await tester.tap(find.text('Save'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Device updated'), findsOneWidget);
+    expect(find.text('Device added'), findsNothing);
+    expect(provider.manualPeers, hasLength(1));
+  });
+
+  testWidgets('同步在途时保存设备：不误报未接触，提示稍后接触', (tester) async {
+    final gate = Completer<void>();
+    transport.onPull = () => gate.future;
+    final inFlight = provider.syncNow(manual: true);
+    await pumpPage(tester);
+    await openAddDialog(tester);
+
+    await tester.enterText(fieldAt(0), '192.168.1.23');
+    await tester.tap(find.text('Save'));
+    await tester.pumpAndSettle();
+
+    // 本轮被排队、结果未知：不判「未接触成功」，也不把弹层留在原地。
+    expect(find.text('Device saved — contact will follow'), findsOneWidget);
+    expect(find.textContaining('Not reached yet — check'), findsNothing);
+    expect(find.text('Save'), findsNothing);
+
+    gate.complete();
+    await inFlight;
+    await tester.pumpAndSettle();
   });
 
   testWidgets('名册展示优先用户命名，对端自报名仅兜底', (tester) async {

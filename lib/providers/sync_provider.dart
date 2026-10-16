@@ -80,11 +80,15 @@ class SyncProvider extends ChangeNotifier {
   ///
   /// 判据：地址簿条目在本轮学到了设备身份，且名册里该设备是本轮接触的
   /// （`lastSeenAt` 不早于本轮开始）——只有本轮真正握手过才算成功。
-  Future<bool> contactManualPeer(String host) async {
+  ///
+  /// 返回 null = 本轮没有真正跑（进行中的轮次把请求排队 / 同步未启用）：
+  /// 此时不下结论，调用方按「稍后」处理，等后续轮次给出结果。
+  Future<bool?> contactManualPeer(String host) async {
     final startedAt = _engine.state.nowMs();
     await syncNow(manual: true);
     final report = _engine.lastReport;
-    if (report == null) return false;
+    // 拿到的报告早于本次调用 = 请求被排队，本轮还没跑完。
+    if (report == null || report.finishedAt < startedAt) return null;
     ManualPeer? entry;
     for (final peer in manualPeers) {
       if (peer.host == host) {

@@ -1026,6 +1026,7 @@
   "syncPeerHostFormatInvalid": "地址格式不正确（支持 IP、IPv6 或域名，不含端口）",
   "syncPeerPortInvalid": "端口需为 1–65535",
   "syncPeerAdded": "已添加设备",
+  "syncPeerUpdated": "设备已更新",
   "syncPeerUnreachable": "暂未接触成功：确认对端在线且在同一网络，或改用 WebDAV",
   "syncPeerProbePortLabel": "探测端口",
   "syncPeerProbePortHint": "默认 {port}",
@@ -1037,6 +1038,7 @@
     }
   },
   "syncPeerAlreadyAdded": "该地址已在列表中，已更新名称与端口",
+  "syncPeerContactQueued": "设备已保存，稍后自动接触",
   "syncPeerContacting": "正在接触…",
   "syncLanPermissionPermanentSubtitle": "权限已被永久拒绝，请到系统设置开启「附近设备」权限",
   "syncTransportNeverSucceeded": "尚无成功记录",

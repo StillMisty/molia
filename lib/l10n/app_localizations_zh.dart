@@ -2463,6 +2463,9 @@ class AppLocalizationsZh extends AppLocalizations {
   String get syncPeerAdded => '已添加设备';
 
   @override
+  String get syncPeerUpdated => '设备已更新';
+
+  @override
   String get syncPeerUnreachable => '暂未接触成功：确认对端在线且在同一网络，或改用 WebDAV';
 
   @override
@@ -2475,6 +2478,9 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get syncPeerAlreadyAdded => '该地址已在列表中，已更新名称与端口';
+
+  @override
+  String get syncPeerContactQueued => '设备已保存，稍后自动接触';
 
   @override
   String get syncPeerContacting => '正在接触…';

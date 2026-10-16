@@ -1374,6 +1374,7 @@
   "syncPeerHostFormatInvalid": "Invalid address (use an IP, IPv6 or hostname, without a port)",
   "syncPeerPortInvalid": "Port must be 1–65535",
   "syncPeerAdded": "Device added",
+  "syncPeerUpdated": "Device updated",
   "syncPeerUnreachable": "Not reached yet — check that the peer is online on the same network, or use WebDAV",
   "syncPeerProbePortLabel": "Probe port",
   "syncPeerProbePortHint": "Default {port}",
@@ -1385,6 +1386,7 @@
     }
   },
   "syncPeerAlreadyAdded": "Already in the list — name and port updated",
+  "syncPeerContactQueued": "Device saved — contact will follow",
   "syncPeerContacting": "Contacting…",
   "syncLanPermissionPermanentSubtitle": "Permission permanently denied — enable nearby-devices in system settings",
   "syncTransportNeverSucceeded": "No successful contact yet",
