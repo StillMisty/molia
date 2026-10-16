@@ -246,7 +246,7 @@ void main() {
   });
 
   test('幽灵 / 旧版文件不参与合并；载荷身份不符的文件跳过', () async {
-    // 旧版单文件命名（幽灵设备遗留）与身份不符的日志文件。
+    // 非本协议命名的残留（幽灵设备遗留）与身份不符的日志文件。
     server.files['ghost.msync'] = codec.encrypt(envelope('ghost'), passphrase);
     server.files['fake.journal.msync'] =
         codec.encrypt(envelope('someone-else'), passphrase);
@@ -289,7 +289,7 @@ void main() {
     expect(pulled.peersSeen, 1, reason: '忽略的设备不算对端');
   });
 
-  test('显式清理远端文件：删除该设备的日志 / 快照 / 旧版文件', () async {
+  test('显式清理远端文件：删除该设备的日志 / 快照 / 其它命名残留', () async {
     final a = transport('devA');
     addTearDown(() => a.stop());
     await a.start();

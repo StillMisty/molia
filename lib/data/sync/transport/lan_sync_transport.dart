@@ -21,7 +21,7 @@ import '../sync_crypto.dart';
 ///   窗口**；游标落后于窗口起点（条目已被裁剪）时返回全量快照（bootstrap）；
 /// - HTTP `POST /molia-sync/v1/journal`：接收对端的增量窗口；
 /// - HTTP `GET  /molia-sync/v1/snapshot`：返回本机全量快照（anti-entropy
-///   兜底 / 未注入增量提供者时的兼容路径）；
+///   兜底；未注入增量提供者时增量端点也回它）；
 /// - HTTP `POST /molia-sync/v1/snapshot`：接收对端全量快照。
 ///
 /// 跳过拉取的判据：探测应答里的 `snapshotId` 与本机缓存的「上次拉到的对端

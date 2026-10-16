@@ -31,8 +31,8 @@ class WebDavHttpException implements Exception {
 /// - 目录不存在时 MKCOL 自动创建；列表用 PROPFIND（Depth: 1）并请求
 ///   `getetag` / `getlastmodified`：文件版本与上次拉到的一致且本机游标已到
 ///   上次读到位置时跳过 GET + 解密 + 合并；
-/// - 非本协议文件名（旧版 `<deviceId>.msync`、被改名 / 拷贝的幽灵文件）不参与
-///   合并；解密后的载荷 `deviceId` 与文件名不符时同样跳过；
+/// - 非本协议文件名（其它命名的残留、被改名 / 拷贝的幽灵文件）不参与合并；
+///   解密后的载荷 `deviceId` 与文件名不符时同样跳过；
 /// - 数据在离开设备前已用同步口令加密，服务端只见密文；
 /// - 失败容忍与局域网一致：单个文件读取/解密失败只跳过该文件。
 class WebDavSyncTransport implements SyncTransport {
@@ -258,7 +258,7 @@ class WebDavSyncTransport implements SyncTransport {
     );
   }
 
-  /// 把远端文件按设备归并（非本协议文件名忽略：旧版 / 幽灵文件不参与合并）。
+  /// 把远端文件按设备归并（非本协议文件名忽略：幽灵文件不参与合并）。
   Map<String, ({_RemoteFile? journal, _RemoteFile? snapshot})> _groupFiles(
     List<_RemoteFile> files,
   ) {
@@ -323,7 +323,7 @@ class WebDavSyncTransport implements SyncTransport {
 
   /// 显式清理某台对端的远端文件（用户动作；**不做自动删除**）。
   ///
-  /// 删除该设备的日志 / 快照文件（含旧版单文件命名的残留）。
+  /// 删除该设备的日志 / 快照文件（含其它命名的残留）。
   @override
   Future<bool> deleteRemote(String deviceId) async {
     if (!_running) return false;
