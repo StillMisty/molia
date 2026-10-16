@@ -66,7 +66,7 @@ class SessionSyncAdapter implements SyncAdapter {
     final hash = '$savedAt';
     final SyncStamp effective;
     if (stamp == null || stamp.hash != hash) {
-      // 功能上线前的存量会话没有 savedAt：零值戳（让新会话胜出），
+      // 没有 savedAt 的存量会话：零值戳（让新会话胜出），
       // 下次保存带来 savedAt 后自然参与 LWW。
       final version = savedAt > 0 ? _state.stampIssuer.next() : SyncVersion.zero;
       effective = SyncStamp(hash: hash, version: version);

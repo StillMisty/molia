@@ -43,7 +43,7 @@ class PlayContexts extends Table {
 /// 播放历史（上限 500，重复播放按唯一键更新时间）。
 ///
 /// `playedAt` 是内容时间（何时听的），**不参与**跨设备胜负判定；版本是
-/// `versionPhysical + versionCounter + deviceId` 三元组（v6 起）。
+/// `versionPhysical + versionCounter + deviceId` 三元组。
 @TableIndex(name: 'idx_play_history_playedAt', columns: {#playedAt})
 class PlayHistory extends Table {
   @override
@@ -212,11 +212,11 @@ class SyncJournalStates extends Table {
 /// 歌词/封面路径指向 `downloads/lyrics|covers/` 下的长期文件（Phase 2），
 /// 删除下载时一并删除；「清理缓存」永不触碰这些文件。
 ///
-/// `publicUri`（v4）是 Android 公共 Downloads 副本的 content URI：应用目录里的
+/// `publicUri` 是 Android 公共 Downloads 副本的 content URI：应用目录里的
 /// 文件仍是唯一播放取链目标，公共副本只让用户在文件管理器里可见，删除下载时
 /// 经平台通道一并回收。
 ///
-/// `imported`（v5）= 本地导入（就地引用用户自己文件）：`originSourceKey = 'local'`、
+/// `imported` = 本地导入（就地引用用户自己文件）：`originSourceKey = 'local'`、
 /// `originSongId` = 文件绝对路径；删除记录只移除行，不删原文件。
 @DataClassName('DownloadRow')
 @TableIndex(name: 'idx_downloads_downloadedAt', columns: {#downloadedAt})

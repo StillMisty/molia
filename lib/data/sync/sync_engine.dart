@@ -719,7 +719,7 @@ class SyncEngine extends ChangeNotifier implements SyncSchedulerHost {
             continue;
           }
           // 1) 全量快照：首次引导 / 日志超硬上限重写时发布；未注入日志时
-          //    始终外发全量（旧行为）。内容未变则跳过加密 + 上传。
+          //    始终外发全量。内容未变则跳过加密 + 上传。
           final publishedSeq = _state.snapshotPushSeq(entry.key);
           final needsSnapshot = journal == null ||
               (journalSnapshot >= 0 && publishedSeq < journalSnapshot);

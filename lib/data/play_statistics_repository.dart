@@ -541,7 +541,7 @@ class PlayStatisticsRepository {
   /// 同步导出：全部已收尾事件。
   ///
   /// 进行中事件不导出（远端无法继续更新进度，收尾后自然进入下一轮）；
-  /// v5 前的旧行无去重键，按内容哈希一次性回填并落库。
+  /// 无去重键的存量行按内容哈希一次性回填并落库。
   Future<List<Map<String, Object?>>> syncExportEvents() async {
     final db = _db;
     // 导出行直接复用列名映射（远端按列名取值；不要改成类型化行）。
@@ -674,7 +674,7 @@ class PlayStatisticsRepository {
     return buffer.toString();
   }
 
-  /// 存量事件（v5 前）的确定性去重键：同一条事件在任何设备上哈希一致。
+  /// 存量事件的确定性去重键：同一条事件在任何设备上哈希一致。
   static String _legacySyncKey(Map<String, Object?> row) {
     final content = [
       row['sourceKey'],

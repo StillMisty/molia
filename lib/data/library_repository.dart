@@ -1244,7 +1244,7 @@ class LibraryRepository implements LibraryStore, LibrarySyncStore {
   // 契约：导出只读本机视图并补齐缺失的 syncId；应用端逐行按版本三元组
   // `(versionPhysical, versionCounter, deviceId)` 取新，写入沿用远端版本
   // （幂等，不制造新的本地变更），删除经墓碑表表达；历史「删除 vs 播放」用
-  // 真实时间（playedAt vs 墓碑 deletedAt）判定。旧行（v6 前）版本回默认 0，
+  // 真实时间（playedAt vs 墓碑 deletedAt）判定。缺 syncId 的行版本为默认 0，
   // 在导出/应用前一次性补齐 syncId。
 
   /// 导出列表头（类型化记录；列名不出实现）。
@@ -1807,7 +1807,7 @@ class LibraryRepository implements LibraryStore, LibrarySyncStore {
             ..limit(1))
           .getSingleOrNull();
 
-  /// 补齐 v5 前旧行的 syncId（收藏固定值；其余随机生成，只补一次）。
+  /// 补齐缺失 syncId 的行（收藏固定值；其余随机生成，只补一次）。
   Future<void> _ensurePlaylistSyncIds(DatabaseConnectionUser executor) async {
     final rows = await (executor.select(_db.playlists)
           ..where((t) => t.syncId.isNull() | t.syncId.equals('')))
