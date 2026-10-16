@@ -591,17 +591,19 @@
   两条动作 + 领域接线）见 `lib/widgets/track_menu_tile.dart`，发现详情与搜索结果共用，
   领域状态由调用方 `select` 后传入；收藏域的行适配（歌手页 / 专辑页 / 收藏页 / 搜索行）
   统一走 `lib/widgets/favorite_track_tile.dart`。
-- 按钮选型（按作用对象与意图，已按 M3E 1.1.6 实测校正）：
-  - 同一批对象的 2–3 个平级动作（图标 + 文案）→ `M3EButtonGroup`
-    （`standard` 间距、组级统一 `tonal`；命令式动作把 `selectedIndex` 恒留空、
-    回调里直接分发，避免留下选中态）；
+- 按钮选型（按作用对象与意图，已按 M3E 实测校正）：
+  - 同一批对象的 2–3 个平级动作 → `M3EButtonGroup`（`standard` 间距；命令式动作
+    组级统一 `tonal`，把 `selectedIndex` 恒留空、回调里直接分发，避免留下选中态）。
+    图标 + 文案是常态；只给图标（如合集弹层标题行的新建 / 导入）或只给文案都可，
+    icon-only 动作按方形静止宽渲染（sm 40×40），语义与悬浮提示走
+    `tooltip` + `semanticLabel`——纯图标动作需要中性色时用 `style: text` +
+    组级 `decoration.foregroundColor`（`material_3_expressive ≥ 1.1.8`）；
   - 「主操作 + 变体 / 次要出口」→ `M3ESplitButton`（播放全部 ▾ 随机播放全部·加入列表、
     下载并安装 ▾ 打开发布页、复制 ▾ 复制全部）；纯文本样式不支持（包内断言
     `style != text`）；「随机播放全部」先 `setPlayMode(shuffle)` 再装载队列、
     起点在可见列表内随机（与收藏页同一约定）；
-  - **组内每个动作必须同时给 `icon` 和 `label`**：1.1.6 的 `M3EButton` 只在两者都
-    非空时渲染 icon+label 布局，icon-only / 纯文案动作会渲染成空按钮（组会构建一份
-    不可见测量副本，测试用 `find.text(...).hitTestable()` 或自定义 finder 定位真实动作）；
+  - 组内动作没有 key，且组会构建一份不可见测量副本：测试用
+    `find.byIcon(...).hitTestable()`（或自定义 finder）定位真实动作；
   - 对话框 action 区保持「text 取消 + filled 确认」两颗独立按钮：弹窗宽度放不下
     带图标的分组，且主次层级要保住；
   - 紧凑位置（行内重试、状态卡内取消）用 `M3EIconButton`（语义交给 tooltip）；

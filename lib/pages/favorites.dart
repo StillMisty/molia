@@ -2156,9 +2156,12 @@ class _CollectionPickerSheetState extends State<_CollectionPickerSheet> {
                 Expanded(
                   child: Text(widget.title, style: theme.textTheme.titleMedium),
                 ),
-                // 这是两个工具动作（新建 / 导入）。M3EButtonGroup 在 1.1.6
-                // 只渲染「图标 + 文案」都有的动作（icon-only / 纯文案动作会
-                // 渲染成空按钮），所以这里保持两个标准图标键。
+                // 这是两个工具动作（新建 / 导入）。docs/architecture.md §6 的
+                // 目标是收成 icon-only 动作组，但当前依赖版本
+                // （material_3_expressive 1.1.7）里 M3EButton 仅当 icon 与
+                // label 同时非空才渲染内容，icon-only 动作会退化成空白按钮
+                // （上游修复需 ≥ 1.1.8，尚未发布）；在依赖升级前保持两颗标准
+                // 图标键：可见、可点，纯图标语义走 tooltip，key 保留稳定定位。
                 M3EIconButton(
                   key: const Key('favoritesCreatePlaylist'),
                   variant: M3EIconButtonVariant.standard,
