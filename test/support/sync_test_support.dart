@@ -22,18 +22,34 @@ class MemorySyncSecretStore implements SettingsSecretStore {
   }
 }
 
-/// 测试用内存传输：可注入远端快照、记录推送内容并提供入站流。
+/// 测试用内存传输：可注入远端快照、失败计数与不可用原因，并记录推送内容。
+///
+/// 默认把「可用快照数」当作本轮探测到的对端数（有快照 = 见过一个对端），
+/// 需要构造「探测到对端但没拿到数据」时用 [peersSeenOverride]。
 class FakeSyncTransport implements SyncTransport {
-  FakeSyncTransport({this.kind = 'lan'});
+  FakeSyncTransport({this.kind = 'lan', this.unavailableReason});
 
   @override
   final String kind;
+
+  @override
+  String? unavailableReason;
 
   bool _running = false;
   final List<SyncEnvelope> available = [];
   final List<SyncEnvelope> pushed = [];
   final StreamController<SyncEnvelope> _incoming =
       StreamController<SyncEnvelope>.broadcast();
+
+  /// 覆盖 pull 报告的探测对端数（null = 用 [available] 长度）。
+  int? peersSeenOverride;
+
+  /// pull / push 报告的失败数（用于构造部分失败与全失败）。
+  int pullFailures = 0;
+  int pushFailures = 0;
+
+  /// pull 抛异常（模拟传输层崩溃）。
+  bool throwOnPull = false;
 
   @override
   bool get isRunning => _running;
@@ -49,13 +65,28 @@ class FakeSyncTransport implements SyncTransport {
   }
 
   @override
-  Future<List<SyncEnvelope>> pull() async => List.of(available);
+  Future<SyncPullResult> pull() async {
+    if (throwOnPull) throw StateError('拉取失败（测试注入）');
+    return SyncPullResult(
+      envelopes: List.of(available),
+      peersSeen: peersSeenOverride ?? available.length,
+      failedPeers: pullFailures,
+      error: pullFailures > 0 ? '拉取失败（测试注入）' : null,
+    );
+  }
 
   @override
-  Future<void> push(SyncEnvelope envelope) async {
+  Future<SyncPushResult> push(SyncEnvelope envelope) async {
     pushed.add(envelope);
+    if (pushFailures > 0) {
+      return SyncPushResult(failedPeers: pushFailures, error: '推送失败（测试注入）');
+    }
+    return const SyncPushResult(succeededPeers: 1);
   }
 
   @override
   Stream<SyncEnvelope> get incoming => _incoming.stream;
+
+  /// 模拟对端主动推送。
+  void emitIncoming(SyncEnvelope envelope) => _incoming.add(envelope);
 }

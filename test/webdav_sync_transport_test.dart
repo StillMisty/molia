@@ -70,11 +70,11 @@ void main() {
     expect(server.files.keys, contains('devA.msync'));
 
     await b.push(envelope('devB', value: 'dark'));
-    final pulled = await b.pull();
+    final pulled = (await b.pull()).envelopes;
     expect(pulled, hasLength(1));
     expect(pulled.single.deviceId, 'devA');
 
-    final pulledByA = await a.pull();
+    final pulledByA = (await a.pull()).envelopes;
     expect(pulledByA, hasLength(1));
     expect(pulledByA.single.deviceId, 'devB');
   });
@@ -91,7 +91,7 @@ void main() {
     await c.start();
     await a.push(envelope('devA'));
 
-    expect(await c.pull(), isEmpty);
+    expect((await c.pull()).envelopes, isEmpty);
   });
 
   test('未配置 / 未启动时为空操作', () async {
@@ -102,12 +102,12 @@ void main() {
       configProvider: () => const WebDavConfig(),
       passwordProvider: () async => '',
     );
-    expect(await unconfigured.pull(), isEmpty);
+    expect((await unconfigured.pull()).envelopes, isEmpty);
     await unconfigured.start();
     await unconfigured.push(envelope('devX'));
     expect(server.files, isEmpty);
     await unconfigured.stop();
-    expect(await unconfigured.pull(), isEmpty);
+    expect((await unconfigured.pull()).envelopes, isEmpty);
   });
 
   test('404 目录时 MKCOL 自动创建', () async {

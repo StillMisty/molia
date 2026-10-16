@@ -2023,14 +2023,65 @@ class AppLocalizationsZh extends AppLocalizations {
   String get syncNever => '尚未同步';
 
   @override
-  String syncLastResultOk(String time, int applied) {
-    return '上次同步 $time · 应用 $applied 项';
+  String get syncOutcomeOk => '同步完成';
+
+  @override
+  String get syncOutcomeNoChanges => '无变化';
+
+  @override
+  String get syncOutcomeNoPeers => '未发现对端';
+
+  @override
+  String get syncOutcomePartial => '部分失败';
+
+  @override
+  String get syncOutcomeFailed => '同步失败';
+
+  @override
+  String get syncTriggerStartup => '启动';
+
+  @override
+  String get syncTriggerDebounce => '数据变更';
+
+  @override
+  String get syncTriggerTimer => '定时';
+
+  @override
+  String get syncTriggerIncoming => '对端推送';
+
+  @override
+  String get syncTriggerResume => '回前台';
+
+  @override
+  String get syncTriggerManual => '手动';
+
+  @override
+  String syncAppliedItems(int applied) {
+    return '应用 $applied 项';
   }
 
   @override
-  String syncLastResultFail(String error) {
-    return '上次同步失败：$error';
+  String syncPeerCount(int count) {
+    return '$count 个对端';
   }
+
+  @override
+  String syncFailedCount(int count) {
+    return '$count 项失败';
+  }
+
+  @override
+  String syncBytes(String inbound, String outbound) {
+    return '↓$inbound ↑$outbound';
+  }
+
+  @override
+  String syncLastSyncAt(String time) {
+    return '上次 $time';
+  }
+
+  @override
+  String get syncRetry => '重试';
 
   @override
   String get syncContentSection => '同步内容';
@@ -2090,20 +2141,88 @@ class AppLocalizationsZh extends AppLocalizations {
   String get syncWebdavNotConfigured => '未配置';
 
   @override
+  String get syncTransportRunning => '运行中';
+
+  @override
+  String get syncTransportStopped => '未运行';
+
+  @override
+  String get syncTransportNotConfigured => '未配置';
+
+  @override
+  String get syncTransportStartFailed => '启动失败';
+
+  @override
   String get syncLogSection => '同步日志';
 
   @override
   String get syncLogEmpty => '暂无记录';
 
   @override
-  String syncLogApplied(int applied, int skipped) {
-    return '应用 $applied 项、跳过 $skipped 项';
-  }
-
-  @override
   String syncLogFailed(String error) {
     return '失败：$error';
   }
+
+  @override
+  String get syncPeersTitle => '已配对设备';
+
+  @override
+  String get syncPeersSection => '设备';
+
+  @override
+  String syncPeersSubtitle(int count) {
+    return '本机 + $count 台对端';
+  }
+
+  @override
+  String get syncPeersSubtitleEmpty => '尚无其它设备';
+
+  @override
+  String get syncPeersHint =>
+      '在其它设备输入同一口令即可加入。若长期发现不到设备，检查局域网传输是否可用（权限 / 网络隔离），或改用 WebDAV。';
+
+  @override
+  String syncPeerThisDevice(String id) {
+    return '本机 · $id';
+  }
+
+  @override
+  String syncPeerLastSync(String time) {
+    return '最后同步 $time';
+  }
+
+  @override
+  String get syncPeerNever => '尚未接触';
+
+  @override
+  String syncPeerBehind(int count) {
+    return '落后 $count 项';
+  }
+
+  @override
+  String syncPeerClockSkew(int minutes) {
+    return '时钟差 $minutes 分钟';
+  }
+
+  @override
+  String syncPeerLastError(String error) {
+    return '最近失败：$error';
+  }
+
+  @override
+  String get syncDiagnosticTitle => '诊断';
+
+  @override
+  String get syncDiagnosticCopy => '复制诊断信息';
+
+  @override
+  String get syncDiagnosticSubtitle => '最近几轮同步状态（不含口令与密钥）';
+
+  @override
+  String get syncDiagnosticHint => '排查问题时把它贴给维护者即可，不含任何凭证或数据内容。';
+
+  @override
+  String get syncDiagnosticCopied => '诊断信息已复制';
 
   @override
   String get syncDeviceNameDialogTitle => '设备名称';

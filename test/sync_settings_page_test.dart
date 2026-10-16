@@ -131,4 +131,56 @@ void main() {
     expect(provider.lastSyncAt, greaterThan(0));
     expect(find.text('Sync log'), findsOneWidget);
   });
+
+  testWidgets('结论行给五态：没有对端显示「未发现对端」而不是「同步完成」', (tester) async {
+    await provider.setEnabled(true);
+    await pumpPage(tester);
+
+    // 传输开着但没有任何对端 → noPeers。
+    expect(find.byKey(const Key('settingsSyncStatusItem')), findsOneWidget);
+    await tester.tap(find.byKey(const Key('settingsSyncNowItem')));
+    await tester.pumpAndSettle();
+
+    expect(provider.lastOutcome, SyncOutcome.noPeers);
+    expect(find.text('No peer found'), findsWidgets);
+    // 旧的「跳过 N 项」（全库计数）不再出现在任何文案里。
+    expect(find.textContaining('skipped'), findsNothing);
+  });
+
+  testWidgets('名册子页：对端行有名称与最后同步时间', (tester) async {
+    await provider.setEnabled(true);
+    transport.available.add(SyncEnvelope(
+      deviceId: 'devB',
+      deviceName: 'Device B',
+      producedAt: 9000,
+      records: {
+        SyncCategory.settings: [
+          SyncRecord(
+            key: 'theme_mode',
+            updatedAt: 9000,
+            updatedBy: 'devB',
+            data: {'v': 'dark'},
+          ),
+        ],
+      },
+    ));
+    await provider.syncNow(manual: true);
+    await pumpPage(tester);
+
+    await tester.tap(find.byKey(const Key('settingsSyncPeersItem')));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Paired devices'), findsWidgets);
+    expect(find.byKey(const Key('settingsSyncPeer-devB')), findsOneWidget);
+    expect(find.text('Device B'), findsOneWidget);
+    expect(find.textContaining('Last synced'), findsOneWidget);
+  });
+
+  testWidgets('诊断行存在且可复制（不含密钥）', (tester) async {
+    await provider.setEnabled(true);
+    await pumpPage(tester);
+
+    expect(find.byKey(const Key('settingsSyncDiagnosticItem')), findsOneWidget);
+    expect(find.text('Copy diagnostics'), findsOneWidget);
+  });
 }

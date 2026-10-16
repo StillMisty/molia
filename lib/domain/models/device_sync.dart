@@ -273,47 +273,289 @@ Map<SyncCategory, Map<String, SyncRecord>> mergeEnvelopesByCategory(
   return merged;
 }
 
-/// 一次同步轮次的结果（日志与 UI 状态用）。
-class SyncReport {
-  final bool ok;
+/// 一轮同步的触发原因（报告与日志用；用户可从日志看出「为什么现在同步」）。
+enum SyncTrigger {
+  /// 启动后首轮。
+  startup,
 
-  /// 收到的远端快照数（含空快照 / 解密失败的计入 `failedPulls`）。
-  final int pulled;
+  /// 数据变更去抖。
+  debounce,
 
-  final int failedPulls;
+  /// 周期定时。
+  timer,
 
-  /// 实际落地的记录数（本地不存在或远端更新）。
-  final int applied;
+  /// 对端入站推送。
+  incoming,
 
-  /// 未采纳的记录数（本地已是更新版本）。
-  final int skipped;
+  /// 回前台补一轮。
+  resume,
 
-  final String? error;
+  /// 用户手动。
+  manual;
 
-  const SyncReport({
-    required this.ok,
+  static SyncTrigger parse(String? name) {
+    for (final value in SyncTrigger.values) {
+      if (value.name == name) return value;
+    }
+    return SyncTrigger.timer;
+  }
+}
+
+/// 一轮同步的结论（五态）。
+///
+/// 区分「没发现对端」与「没有变化」是这套模型的核心：旧实现里两者都显示成
+/// 「同步成功」，用户无法自查。判定规则见 `SyncEngine._resolveOutcome`。
+enum SyncOutcome {
+  /// 有对端可通信，且完成了数据流转（或有本地变更外发）。
+  ok,
+
+  /// 对端可达，但本机与对端都没有变化。
+  noChanges,
+
+  /// 没有任何对端可通信（未发现 / 未配置 / 传输不可用）。
+  noPeers,
+
+  /// 有失败也有成功（部分对端 / 部分传输）。
+  partial,
+
+  /// 整轮失败：无口令、异常，或所有对端都联系不上。
+  failed;
+
+  static SyncOutcome parse(String? name) {
+    for (final value in SyncOutcome.values) {
+      if (value.name == name) return value;
+    }
+    return SyncOutcome.ok;
+  }
+}
+
+/// 单个传输在一轮中的明细。
+class SyncTransportReport {
+  const SyncTransportReport({
+    required this.kind,
+    required this.running,
+    this.unavailableReason,
     this.pulled = 0,
+    this.pushed = 0,
+    this.skippedUnchanged = 0,
+    this.peersSeen = 0,
     this.failedPulls = 0,
-    this.applied = 0,
-    this.skipped = 0,
+    this.failedPushes = 0,
+    this.bytesIn = 0,
+    this.bytesOut = 0,
+    this.durationMs = 0,
     this.error,
   });
 
-  static const SyncReport idle = SyncReport(ok: true);
+  /// 传输标识（`lan` / `webdav`）。
+  final String kind;
 
-  SyncReport copyWith({int? pulled, int? failedPulls, int? applied, int? skipped}) =>
-      SyncReport(
-        ok: ok,
-        pulled: pulled ?? this.pulled,
-        failedPulls: failedPulls ?? this.failedPulls,
-        applied: applied ?? this.applied,
-        skipped: skipped ?? this.skipped,
-        error: error,
+  /// 本轮开始时传输是否在运行。
+  final bool running;
+
+  /// 不可用原因码（`not_configured` / `start_failed`）；null = 可用。
+  final String? unavailableReason;
+
+  /// 成功接收并解密的远端快照数。
+  final int pulled;
+
+  /// 成功推送的对端数。
+  final int pushed;
+
+  /// 远端未变化而跳过的对端数。
+  final int skippedUnchanged;
+
+  /// 本轮探测到 / 列出的对端数（含未变与失败者）。
+  final int peersSeen;
+
+  final int failedPulls;
+  final int failedPushes;
+  final int bytesIn;
+  final int bytesOut;
+  final int durationMs;
+
+  /// 最近一次失败的技术细节（仅诊断用，不直接展示给用户）。
+  final String? error;
+
+  Map<String, Object?> toJson() => {
+        'kind': kind,
+        'running': running,
+        if (unavailableReason != null) 'unavailableReason': unavailableReason,
+        'pulled': pulled,
+        'pushed': pushed,
+        if (skippedUnchanged > 0) 'skippedUnchanged': skippedUnchanged,
+        'peersSeen': peersSeen,
+        'failedPulls': failedPulls,
+        'failedPushes': failedPushes,
+        'bytesIn': bytesIn,
+        'bytesOut': bytesOut,
+        'durationMs': durationMs,
+        if (error != null && error!.isNotEmpty) 'error': error,
+      };
+
+  static SyncTransportReport fromJson(Object? raw) {
+    if (raw is! Map) return const SyncTransportReport(kind: '', running: false);
+    int intOf(String key) => (raw[key] as num?)?.toInt() ?? 0;
+    return SyncTransportReport(
+      kind: raw['kind'] as String? ?? '',
+      running: raw['running'] == true,
+      unavailableReason:
+          raw['unavailableReason'] is String ? raw['unavailableReason'] as String : null,
+      pulled: intOf('pulled'),
+      pushed: intOf('pushed'),
+      skippedUnchanged: intOf('skippedUnchanged'),
+      peersSeen: intOf('peersSeen'),
+      failedPulls: intOf('failedPulls'),
+      failedPushes: intOf('failedPushes'),
+      bytesIn: intOf('bytesIn'),
+      bytesOut: intOf('bytesOut'),
+      durationMs: intOf('durationMs'),
+      error: raw['error'] is String ? raw['error'] as String : null,
+    );
+  }
+}
+
+/// 名册里的一台对端（最近一次接触的观测值；持久化在同步状态里）。
+class SyncPeerState {
+  const SyncPeerState({
+    required this.deviceId,
+    this.name = '',
+    this.transport = '',
+    this.lastSeenAt = 0,
+    this.lastPullAt = 0,
+    this.lastPushAt = 0,
+    this.lastError,
+    this.behindBy,
+    this.clockSkewMs,
+  });
+
+  final String deviceId;
+  final String name;
+  final String transport;
+
+  /// 最近一次接触（拉取或推送尝试）的时间。
+  final int lastSeenAt;
+
+  /// 最近一次成功拉取该对端快照的时间。
+  final int lastPullAt;
+
+  /// 最近一次成功推送的时间。
+  final int lastPushAt;
+
+  final String? lastError;
+
+  /// 落后条数（增量协议提供；null = 未知，见增量协议任务）。
+  final int? behindBy;
+
+  /// 对端时钟偏移（对端自报 `producedAt` − 本机时间；正 = 偏快）。
+  final int? clockSkewMs;
+
+  SyncPeerState copyWith({
+    String? name,
+    String? transport,
+    int? lastSeenAt,
+    int? lastPullAt,
+    int? lastPushAt,
+    String? lastError,
+    bool clearLastError = false,
+    int? behindBy,
+    int? clockSkewMs,
+  }) =>
+      SyncPeerState(
+        deviceId: deviceId,
+        name: name ?? this.name,
+        transport: transport ?? this.transport,
+        lastSeenAt: lastSeenAt ?? this.lastSeenAt,
+        lastPullAt: lastPullAt ?? this.lastPullAt,
+        lastPushAt: lastPushAt ?? this.lastPushAt,
+        lastError: clearLastError ? null : (lastError ?? this.lastError),
+        behindBy: behindBy ?? this.behindBy,
+        clockSkewMs: clockSkewMs ?? this.clockSkewMs,
       );
+
+  Map<String, dynamic> toJson() => {
+        'deviceId': deviceId,
+        if (name.isNotEmpty) 'name': name,
+        if (transport.isNotEmpty) 'transport': transport,
+        if (lastSeenAt > 0) 'lastSeenAt': lastSeenAt,
+        if (lastPullAt > 0) 'lastPullAt': lastPullAt,
+        if (lastPushAt > 0) 'lastPushAt': lastPushAt,
+        if (lastError != null && lastError!.isNotEmpty) 'lastError': lastError,
+        if (behindBy != null) 'behindBy': behindBy,
+        if (clockSkewMs != null) 'clockSkewMs': clockSkewMs,
+      };
+
+  static SyncPeerState? fromJson(Object? raw) {
+    if (raw is! Map) return null;
+    final deviceId = raw['deviceId'];
+    if (deviceId is! String || deviceId.isEmpty) return null;
+    return SyncPeerState(
+      deviceId: deviceId,
+      name: raw['name'] as String? ?? '',
+      transport: raw['transport'] as String? ?? '',
+      lastSeenAt: (raw['lastSeenAt'] as num?)?.toInt() ?? 0,
+      lastPullAt: (raw['lastPullAt'] as num?)?.toInt() ?? 0,
+      lastPushAt: (raw['lastPushAt'] as num?)?.toInt() ?? 0,
+      lastError: raw['lastError'] is String ? raw['lastError'] as String : null,
+      behindBy: (raw['behindBy'] as num?)?.toInt(),
+      clockSkewMs: (raw['clockSkewMs'] as num?)?.toInt(),
+    );
+  }
+}
+
+/// 一轮同步的结果对象（UI 状态、日志与诊断导出共用）。
+class SyncRoundReport {
+  const SyncRoundReport({
+    required this.trigger,
+    required this.startedAt,
+    required this.finishedAt,
+    required this.outcome,
+    this.applied = 0,
+    this.applyFailures = 0,
+    this.transports = const [],
+    this.peers = const [],
+    this.remoteRecords = 0,
+    this.error,
+  });
+
+  final SyncTrigger trigger;
+  final int startedAt;
+  final int finishedAt;
+  final SyncOutcome outcome;
+
+  /// 本轮实际落地的记录数（变更量，不随库大小增长）。
+  final int applied;
+
+  /// 本轮写回本地失败的适配器次数（数据未落地，入站快照会重试）。
+  final int applyFailures;
+
+  /// 本轮参与（或本应参与）的传输明细。
+  final List<SyncTransportReport> transports;
+
+  /// 本轮接触过的对端（名册快照）。
+  final List<SyncPeerState> peers;
+
+  /// 本轮收到的远端记录数（未去重前）。
+  final int remoteRecords;
+
+  final String? error;
+
+  int get durationMs => finishedAt - startedAt;
+
+  int get failedCount =>
+      transports.fold(0, (sum, t) => sum + t.failedPulls + t.failedPushes) +
+      applyFailures;
+
+  int get peersSeen => transports.fold(0, (sum, t) => sum + t.peersSeen);
+
+  int get bytesIn => transports.fold(0, (sum, t) => sum + t.bytesIn);
+
+  int get bytesOut => transports.fold(0, (sum, t) => sum + t.bytesOut);
 
   @override
   String toString() =>
-      'SyncReport(ok=$ok, pulled=$pulled, applied=$applied, skipped=$skipped)';
+      'SyncRoundReport(${trigger.name}/${outcome.name}, applied=$applied, '
+      'peers=$peersSeen, failed=$failedCount)';
 }
 
 /// 列表头同步记录（自增 id 不出本机；`syncId` 跨设备稳定，收藏为固定常量）。

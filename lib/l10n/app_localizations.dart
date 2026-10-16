@@ -3872,17 +3872,107 @@ abstract class AppLocalizations {
   /// **'Never synced'**
   String get syncNever;
 
-  /// No description provided for @syncLastResultOk.
+  /// No description provided for @syncOutcomeOk.
   ///
   /// In en, this message translates to:
-  /// **'Last sync {time} · {applied} applied'**
-  String syncLastResultOk(String time, int applied);
+  /// **'Synced'**
+  String get syncOutcomeOk;
 
-  /// No description provided for @syncLastResultFail.
+  /// No description provided for @syncOutcomeNoChanges.
   ///
   /// In en, this message translates to:
-  /// **'Last sync failed: {error}'**
-  String syncLastResultFail(String error);
+  /// **'No changes'**
+  String get syncOutcomeNoChanges;
+
+  /// No description provided for @syncOutcomeNoPeers.
+  ///
+  /// In en, this message translates to:
+  /// **'No peer found'**
+  String get syncOutcomeNoPeers;
+
+  /// No description provided for @syncOutcomePartial.
+  ///
+  /// In en, this message translates to:
+  /// **'Partly failed'**
+  String get syncOutcomePartial;
+
+  /// No description provided for @syncOutcomeFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Sync failed'**
+  String get syncOutcomeFailed;
+
+  /// No description provided for @syncTriggerStartup.
+  ///
+  /// In en, this message translates to:
+  /// **'startup'**
+  String get syncTriggerStartup;
+
+  /// No description provided for @syncTriggerDebounce.
+  ///
+  /// In en, this message translates to:
+  /// **'data change'**
+  String get syncTriggerDebounce;
+
+  /// No description provided for @syncTriggerTimer.
+  ///
+  /// In en, this message translates to:
+  /// **'scheduled'**
+  String get syncTriggerTimer;
+
+  /// No description provided for @syncTriggerIncoming.
+  ///
+  /// In en, this message translates to:
+  /// **'peer push'**
+  String get syncTriggerIncoming;
+
+  /// No description provided for @syncTriggerResume.
+  ///
+  /// In en, this message translates to:
+  /// **'resumed'**
+  String get syncTriggerResume;
+
+  /// No description provided for @syncTriggerManual.
+  ///
+  /// In en, this message translates to:
+  /// **'manual'**
+  String get syncTriggerManual;
+
+  /// No description provided for @syncAppliedItems.
+  ///
+  /// In en, this message translates to:
+  /// **'{applied} applied'**
+  String syncAppliedItems(int applied);
+
+  /// No description provided for @syncPeerCount.
+  ///
+  /// In en, this message translates to:
+  /// **'{count} peers'**
+  String syncPeerCount(int count);
+
+  /// No description provided for @syncFailedCount.
+  ///
+  /// In en, this message translates to:
+  /// **'{count} failures'**
+  String syncFailedCount(int count);
+
+  /// No description provided for @syncBytes.
+  ///
+  /// In en, this message translates to:
+  /// **'↓{inbound} ↑{outbound}'**
+  String syncBytes(String inbound, String outbound);
+
+  /// No description provided for @syncLastSyncAt.
+  ///
+  /// In en, this message translates to:
+  /// **'Last {time}'**
+  String syncLastSyncAt(String time);
+
+  /// No description provided for @syncRetry.
+  ///
+  /// In en, this message translates to:
+  /// **'Retry'**
+  String get syncRetry;
 
   /// No description provided for @syncContentSection.
   ///
@@ -3998,6 +4088,30 @@ abstract class AppLocalizations {
   /// **'Not configured'**
   String get syncWebdavNotConfigured;
 
+  /// No description provided for @syncTransportRunning.
+  ///
+  /// In en, this message translates to:
+  /// **'running'**
+  String get syncTransportRunning;
+
+  /// No description provided for @syncTransportStopped.
+  ///
+  /// In en, this message translates to:
+  /// **'stopped'**
+  String get syncTransportStopped;
+
+  /// No description provided for @syncTransportNotConfigured.
+  ///
+  /// In en, this message translates to:
+  /// **'not configured'**
+  String get syncTransportNotConfigured;
+
+  /// No description provided for @syncTransportStartFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'failed to start'**
+  String get syncTransportStartFailed;
+
   /// No description provided for @syncLogSection.
   ///
   /// In en, this message translates to:
@@ -4010,17 +4124,107 @@ abstract class AppLocalizations {
   /// **'No records yet'**
   String get syncLogEmpty;
 
-  /// No description provided for @syncLogApplied.
-  ///
-  /// In en, this message translates to:
-  /// **'{applied} applied, {skipped} skipped'**
-  String syncLogApplied(int applied, int skipped);
-
   /// No description provided for @syncLogFailed.
   ///
   /// In en, this message translates to:
   /// **'Failed: {error}'**
   String syncLogFailed(String error);
+
+  /// No description provided for @syncPeersTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Paired devices'**
+  String get syncPeersTitle;
+
+  /// No description provided for @syncPeersSection.
+  ///
+  /// In en, this message translates to:
+  /// **'Devices'**
+  String get syncPeersSection;
+
+  /// No description provided for @syncPeersSubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'This device + {count} peers'**
+  String syncPeersSubtitle(int count);
+
+  /// No description provided for @syncPeersSubtitleEmpty.
+  ///
+  /// In en, this message translates to:
+  /// **'No other device yet'**
+  String get syncPeersSubtitleEmpty;
+
+  /// No description provided for @syncPeersHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Enter the same passphrase on another device to join. If no device is ever discovered, check whether LAN sync can run (permission / network isolation) or switch to WebDAV.'**
+  String get syncPeersHint;
+
+  /// No description provided for @syncPeerThisDevice.
+  ///
+  /// In en, this message translates to:
+  /// **'This device · {id}'**
+  String syncPeerThisDevice(String id);
+
+  /// No description provided for @syncPeerLastSync.
+  ///
+  /// In en, this message translates to:
+  /// **'Last synced {time}'**
+  String syncPeerLastSync(String time);
+
+  /// No description provided for @syncPeerNever.
+  ///
+  /// In en, this message translates to:
+  /// **'Not reached yet'**
+  String get syncPeerNever;
+
+  /// No description provided for @syncPeerBehind.
+  ///
+  /// In en, this message translates to:
+  /// **'{count} behind'**
+  String syncPeerBehind(int count);
+
+  /// No description provided for @syncPeerClockSkew.
+  ///
+  /// In en, this message translates to:
+  /// **'clock off by {minutes} min'**
+  String syncPeerClockSkew(int minutes);
+
+  /// No description provided for @syncPeerLastError.
+  ///
+  /// In en, this message translates to:
+  /// **'Last error: {error}'**
+  String syncPeerLastError(String error);
+
+  /// No description provided for @syncDiagnosticTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Diagnostics'**
+  String get syncDiagnosticTitle;
+
+  /// No description provided for @syncDiagnosticCopy.
+  ///
+  /// In en, this message translates to:
+  /// **'Copy diagnostics'**
+  String get syncDiagnosticCopy;
+
+  /// No description provided for @syncDiagnosticSubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Recent sync rounds (no passphrase, no keys)'**
+  String get syncDiagnosticSubtitle;
+
+  /// No description provided for @syncDiagnosticHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Paste it when reporting an issue — it contains no credentials and no data.'**
+  String get syncDiagnosticHint;
+
+  /// No description provided for @syncDiagnosticCopied.
+  ///
+  /// In en, this message translates to:
+  /// **'Diagnostics copied'**
+  String get syncDiagnosticCopied;
 
   /// No description provided for @syncDeviceNameDialogTitle.
   ///

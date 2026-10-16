@@ -54,7 +54,7 @@ void main() {
     await transportB.start();
     expect(transportA.isRunning, isTrue);
 
-    final pulled = await transportB.pull();
+    final pulled = (await transportB.pull()).envelopes;
     expect(pulled, hasLength(1));
     expect(pulled.single.deviceId, 'devA');
     expect(
@@ -99,7 +99,7 @@ void main() {
     await transportA.start();
     await transportC.start();
 
-    expect(await transportC.pull(), isEmpty);
+    expect((await transportC.pull()).envelopes, isEmpty);
   });
 
   test('未启动时 pull/push 为空操作；start/stop 幂等', () async {
@@ -111,7 +111,7 @@ void main() {
       snapshotProvider: () async => envelope('devX'),
       udpPort: 47895,
     );
-    expect(await transport.pull(), isEmpty);
+    expect((await transport.pull()).envelopes, isEmpty);
     await transport.push(envelope('devX'));
     await transport.start();
     await transport.start();

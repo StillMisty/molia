@@ -2111,14 +2111,65 @@ class AppLocalizationsEn extends AppLocalizations {
   String get syncNever => 'Never synced';
 
   @override
-  String syncLastResultOk(String time, int applied) {
-    return 'Last sync $time · $applied applied';
+  String get syncOutcomeOk => 'Synced';
+
+  @override
+  String get syncOutcomeNoChanges => 'No changes';
+
+  @override
+  String get syncOutcomeNoPeers => 'No peer found';
+
+  @override
+  String get syncOutcomePartial => 'Partly failed';
+
+  @override
+  String get syncOutcomeFailed => 'Sync failed';
+
+  @override
+  String get syncTriggerStartup => 'startup';
+
+  @override
+  String get syncTriggerDebounce => 'data change';
+
+  @override
+  String get syncTriggerTimer => 'scheduled';
+
+  @override
+  String get syncTriggerIncoming => 'peer push';
+
+  @override
+  String get syncTriggerResume => 'resumed';
+
+  @override
+  String get syncTriggerManual => 'manual';
+
+  @override
+  String syncAppliedItems(int applied) {
+    return '$applied applied';
   }
 
   @override
-  String syncLastResultFail(String error) {
-    return 'Last sync failed: $error';
+  String syncPeerCount(int count) {
+    return '$count peers';
   }
+
+  @override
+  String syncFailedCount(int count) {
+    return '$count failures';
+  }
+
+  @override
+  String syncBytes(String inbound, String outbound) {
+    return '↓$inbound ↑$outbound';
+  }
+
+  @override
+  String syncLastSyncAt(String time) {
+    return 'Last $time';
+  }
+
+  @override
+  String get syncRetry => 'Retry';
 
   @override
   String get syncContentSection => 'What to sync';
@@ -2178,20 +2229,90 @@ class AppLocalizationsEn extends AppLocalizations {
   String get syncWebdavNotConfigured => 'Not configured';
 
   @override
+  String get syncTransportRunning => 'running';
+
+  @override
+  String get syncTransportStopped => 'stopped';
+
+  @override
+  String get syncTransportNotConfigured => 'not configured';
+
+  @override
+  String get syncTransportStartFailed => 'failed to start';
+
+  @override
   String get syncLogSection => 'Sync log';
 
   @override
   String get syncLogEmpty => 'No records yet';
 
   @override
-  String syncLogApplied(int applied, int skipped) {
-    return '$applied applied, $skipped skipped';
-  }
-
-  @override
   String syncLogFailed(String error) {
     return 'Failed: $error';
   }
+
+  @override
+  String get syncPeersTitle => 'Paired devices';
+
+  @override
+  String get syncPeersSection => 'Devices';
+
+  @override
+  String syncPeersSubtitle(int count) {
+    return 'This device + $count peers';
+  }
+
+  @override
+  String get syncPeersSubtitleEmpty => 'No other device yet';
+
+  @override
+  String get syncPeersHint =>
+      'Enter the same passphrase on another device to join. If no device is ever discovered, check whether LAN sync can run (permission / network isolation) or switch to WebDAV.';
+
+  @override
+  String syncPeerThisDevice(String id) {
+    return 'This device · $id';
+  }
+
+  @override
+  String syncPeerLastSync(String time) {
+    return 'Last synced $time';
+  }
+
+  @override
+  String get syncPeerNever => 'Not reached yet';
+
+  @override
+  String syncPeerBehind(int count) {
+    return '$count behind';
+  }
+
+  @override
+  String syncPeerClockSkew(int minutes) {
+    return 'clock off by $minutes min';
+  }
+
+  @override
+  String syncPeerLastError(String error) {
+    return 'Last error: $error';
+  }
+
+  @override
+  String get syncDiagnosticTitle => 'Diagnostics';
+
+  @override
+  String get syncDiagnosticCopy => 'Copy diagnostics';
+
+  @override
+  String get syncDiagnosticSubtitle =>
+      'Recent sync rounds (no passphrase, no keys)';
+
+  @override
+  String get syncDiagnosticHint =>
+      'Paste it when reporting an issue — it contains no credentials and no data.';
+
+  @override
+  String get syncDiagnosticCopied => 'Diagnostics copied';
 
   @override
   String get syncDeviceNameDialogTitle => 'Device name';

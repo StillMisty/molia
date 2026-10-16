@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:dio/dio.dart';
+import 'package:logging/logging.dart';
 
 import '../../../domain/models/device_sync.dart';
 import '../../../domain/ports/sync_transport.dart';
@@ -59,12 +60,17 @@ class WebDavSyncTransport implements SyncTransport {
   Dio? _dio;
   bool _running = false;
   final Set<String> _ensuredDirs = {};
+  final Logger _logger = Logger('molia.sync.webdav');
 
   @override
   String get kind => 'webdav';
 
   @override
   bool get isRunning => _running;
+
+  @override
+  String? get unavailableReason =>
+      _configProvider().isConfigured ? null : SyncUnavailableReason.notConfigured;
 
   @override
   Stream<SyncEnvelope> get incoming => _incoming.stream;
@@ -85,50 +91,74 @@ class WebDavSyncTransport implements SyncTransport {
   }
 
   @override
-  Future<List<SyncEnvelope>> pull() async {
-    if (!_running) return const [];
+  Future<SyncPullResult> pull() async {
+    if (!_running) return SyncPullResult.none;
     final config = _configProvider();
     final passphrase = await _passphraseProvider();
     if (!config.isConfigured ||
         passphrase == null ||
         passphrase.trim().isEmpty) {
-      return const [];
+      return SyncPullResult(
+        error: config.isConfigured ? '未设置同步口令' : '未配置 WebDAV',
+      );
     }
 
-    final result = <SyncEnvelope>[];
+    final envelopes = <SyncEnvelope>[];
     try {
       await _ensureDir(config);
-    } catch (_) {
-      return const [];
+    } catch (e) {
+      _logger.warning('WebDAV 目录准备失败', e);
+      return SyncPullResult(error: '$e');
     }
-    for (final name in await _listSnapshotFiles(config)) {
+    final names = await _listSnapshotFiles(config);
+    var failed = 0;
+    var bytesIn = 0;
+    String? firstError;
+    for (final name in names) {
       final bytes = await _getFile(config, name);
-      if (bytes == null) continue;
+      if (bytes == null) {
+        failed++;
+        firstError ??= '$name：读取失败';
+        continue;
+      }
+      bytesIn += bytes.length;
       try {
-        result.add(_codec.decrypt(bytes, passphrase));
+        envelopes.add(_codec.decrypt(bytes, passphrase));
       } on SyncCryptoException {
         // 口令不同或文件损坏：跳过。
+        failed++;
+        firstError ??= '$name：口令不一致或数据损坏';
       }
     }
-    return result;
+    return SyncPullResult(
+      envelopes: envelopes,
+      peersSeen: names.length,
+      failedPeers: failed,
+      bytesIn: bytesIn,
+      error: firstError,
+    );
   }
 
   @override
-  Future<void> push(SyncEnvelope envelope) async {
-    if (!_running) return;
+  Future<SyncPushResult> push(SyncEnvelope envelope) async {
+    if (!_running) return SyncPushResult.none;
     final config = _configProvider();
     final passphrase = await _passphraseProvider();
     if (!config.isConfigured ||
         passphrase == null ||
         passphrase.trim().isEmpty) {
-      return;
+      return SyncPushResult(
+        error: config.isConfigured ? '未设置同步口令' : '未配置 WebDAV',
+      );
     }
     try {
       await _ensureDir(config);
-      await _putFile(config, '$deviceId$snapshotSuffix',
-          _codec.encrypt(envelope, passphrase));
-    } catch (_) {
-      // 上传失败留给下一轮重试。
+      final payload = _codec.encrypt(envelope, passphrase);
+      await _putFile(config, '$deviceId$snapshotSuffix', payload);
+      return SyncPushResult(succeededPeers: 1, bytesOut: payload.length);
+    } catch (e) {
+      _logger.warning('WebDAV 快照上传失败', e);
+      return SyncPushResult(failedPeers: 1, error: '$e');
     }
   }
 

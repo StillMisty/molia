@@ -89,33 +89,63 @@ class SyncStamp {
   }
 }
 
-/// 同步日志条目（设置页展示最近若干条；不含口令/密钥内容）。
+/// 同步日志条目（设置页展示与诊断导出用；不含口令/密钥内容）。
+///
+/// 语义是**本轮变更**而不是「全库计数」：`applied` 是本轮真正落地的记录数；
+/// 旧实现里的「跳过 M 项」被删除——那是「把全库胜者重放给适配器」的产物，
+/// 会随数据量无限增长，对用户没有任何意义。
 class SyncLogEntry {
-  final int at;
-  final bool ok;
-  final bool manual;
-  final int pulled;
-  final int applied;
-  final int skipped;
-  final String? error;
-
   const SyncLogEntry({
     required this.at,
-    required this.ok,
-    this.manual = false,
-    this.pulled = 0,
+    required this.trigger,
+    required this.outcome,
+    this.durationMs = 0,
     this.applied = 0,
-    this.skipped = 0,
+    this.peersSeen = 0,
+    this.failed = 0,
+    this.bytesIn = 0,
+    this.bytesOut = 0,
+    this.transports = const [],
     this.error,
   });
 
+  final int at;
+
+  /// 触发原因（用户能看出「为什么现在同步」）。
+  final SyncTrigger trigger;
+
+  final SyncOutcome outcome;
+  final int durationMs;
+
+  /// 本轮落地的记录数（变更量）。
+  final int applied;
+
+  /// 本轮接触到的对端数（0 = 未发现对端）。
+  final int peersSeen;
+
+  /// 失败计数（拉取 + 推送）。
+  final int failed;
+
+  final int bytesIn;
+  final int bytesOut;
+
+  /// 本轮参与的传输标识。
+  final List<String> transports;
+
+  /// 失败原因（用户可读的粗粒度描述；细节在传输明细里）。
+  final String? error;
+
   Map<String, dynamic> toJson() => {
         'at': at,
-        'ok': ok,
-        if (manual) 'manual': true,
-        'pulled': pulled,
-        'applied': applied,
-        'skipped': skipped,
+        'trigger': trigger.name,
+        'outcome': outcome.name,
+        if (durationMs > 0) 'durationMs': durationMs,
+        if (applied > 0) 'applied': applied,
+        if (peersSeen > 0) 'peersSeen': peersSeen,
+        if (failed > 0) 'failed': failed,
+        if (bytesIn > 0) 'bytesIn': bytesIn,
+        if (bytesOut > 0) 'bytesOut': bytesOut,
+        if (transports.isNotEmpty) 'transports': transports,
         if (error != null && error!.isNotEmpty) 'error': error,
       };
 
@@ -125,11 +155,16 @@ class SyncLogEntry {
     if (at is! num) return null;
     return SyncLogEntry(
       at: at.toInt(),
-      ok: raw['ok'] != false,
-      manual: raw['manual'] == true,
-      pulled: raw['pulled'] is num ? (raw['pulled'] as num).toInt() : 0,
-      applied: raw['applied'] is num ? (raw['applied'] as num).toInt() : 0,
-      skipped: raw['skipped'] is num ? (raw['skipped'] as num).toInt() : 0,
+      trigger: SyncTrigger.parse(raw['trigger'] as String?),
+      outcome: SyncOutcome.parse(raw['outcome'] as String?),
+      durationMs: (raw['durationMs'] as num?)?.toInt() ?? 0,
+      applied: (raw['applied'] as num?)?.toInt() ?? 0,
+      peersSeen: (raw['peersSeen'] as num?)?.toInt() ?? 0,
+      failed: (raw['failed'] as num?)?.toInt() ?? 0,
+      bytesIn: (raw['bytesIn'] as num?)?.toInt() ?? 0,
+      bytesOut: (raw['bytesOut'] as num?)?.toInt() ?? 0,
+      transports:
+          (raw['transports'] as List?)?.whereType<String>().toList() ?? const [],
       error: raw['error'] is String ? raw['error'] as String : null,
     );
   }
@@ -156,6 +191,9 @@ class SyncStateStore {
   /// 日志保留条数（设置页只展示最近几条）。
   static const int logLimit = 20;
 
+  /// 名册保留设备数（按最近接触时间淘汰；避免长期运行后无界增长）。
+  static const int peerLimit = 20;
+
   final SharedPreferences? _preferences;
   final SettingsSecretStore _secrets;
   final Random _random;
@@ -178,9 +216,10 @@ class SyncStateStore {
   SyncStamp? _sessionStamp;
 
   int _lastSyncAt = 0;
-  bool _lastSyncOk = true;
-  String? _lastSyncError;
   final List<SyncLogEntry> _log = [];
+
+  /// 设备名册（deviceId → 最近一次接触的观测值）。
+  final Map<String, SyncPeerState> _peers = {};
 
   String get deviceId => _deviceId;
   String get deviceName => _deviceName;
@@ -194,9 +233,14 @@ class SyncStateStore {
   SyncStamp? get activeScriptStamp => _activeScriptStamp;
   SyncStamp? get sessionStamp => _sessionStamp;
   int get lastSyncAt => _lastSyncAt;
-  bool get lastSyncOk => _lastSyncOk;
-  String? get lastSyncError => _lastSyncError;
   List<SyncLogEntry> get log => List.unmodifiable(_log);
+
+  /// 名册（按最近接触时间倒序；本机不在其中）。
+  List<SyncPeerState> get peers {
+    final list = _peers.values.toList()
+      ..sort((a, b) => b.lastSeenAt.compareTo(a.lastSeenAt));
+    return List.unmodifiable(list);
+  }
 
   int nowMs() => _clock();
 
@@ -301,31 +345,45 @@ class SyncStateStore {
     _sessionStamp = stamp;
   }
 
-  void recordSyncResult({
-    required bool ok,
-    required bool manual,
-    required int pulled,
-    required int applied,
-    required int skipped,
-    String? error,
-  }) {
-    _lastSyncAt = nowMs();
-    _lastSyncOk = ok;
-    _lastSyncError = error;
+  /// 记录一轮同步结果：日志条目（变更语义）+ 设备名册。
+  ///
+  /// 名册由引擎合并后传入（每条都是完整状态），这里只负责落库与按最近接触
+  /// 时间淘汰，避免长期运行后无界增长。
+  void recordRound(SyncRoundReport report) {
+    _lastSyncAt = report.finishedAt;
     _log.insert(
       0,
       SyncLogEntry(
-        at: _lastSyncAt,
-        ok: ok,
-        manual: manual,
-        pulled: pulled,
-        applied: applied,
-        skipped: skipped,
-        error: error,
+        at: report.finishedAt,
+        trigger: report.trigger,
+        outcome: report.outcome,
+        durationMs: report.durationMs,
+        applied: report.applied,
+        peersSeen: report.peersSeen,
+        failed: report.failedCount,
+        bytesIn: report.bytesIn,
+        bytesOut: report.bytesOut,
+        transports: report.transports
+            .where((t) => t.running || t.unavailableReason == null)
+            .map((t) => t.kind)
+            .toList(),
+        error: report.error,
       ),
     );
     while (_log.length > logLimit) {
       _log.removeLast();
+    }
+    for (final peer in report.peers) {
+      _peers[peer.deviceId] = peer;
+    }
+    if (_peers.length > peerLimit) {
+      final recent = _peers.values.toList()
+        ..sort((a, b) => b.lastSeenAt.compareTo(a.lastSeenAt));
+      _peers
+        ..clear()
+        ..addEntries(
+          recent.take(peerLimit).map((peer) => MapEntry(peer.deviceId, peer)),
+        );
     }
   }
 
@@ -361,9 +419,8 @@ class SyncStateStore {
           'activeScript': _activeScriptStamp!.toJson(),
         if (_sessionStamp != null) 'sessionStamp': _sessionStamp!.toJson(),
         'lastSyncAt': _lastSyncAt,
-        'lastSyncOk': _lastSyncOk,
-        if (_lastSyncError != null) 'lastSyncError': _lastSyncError,
         'log': [for (final entry in _log) entry.toJson()],
+        'peers': [for (final peer in _peers.values) peer.toJson()],
       };
 
   void _applyJson(Map<String, dynamic> json) {
@@ -411,15 +468,20 @@ class SyncStateStore {
     _lastSyncAt = json['lastSyncAt'] is num
         ? (json['lastSyncAt'] as num).toInt()
         : 0;
-    _lastSyncOk = json['lastSyncOk'] != false;
-    _lastSyncError =
-        json['lastSyncError'] is String ? json['lastSyncError'] as String : null;
     _log.clear();
     final log = json['log'];
     if (log is List) {
       for (final item in log) {
         final entry = SyncLogEntry.fromJson(item);
         if (entry != null && _log.length < logLimit) _log.add(entry);
+      }
+    }
+    _peers.clear();
+    final peers = json['peers'];
+    if (peers is List) {
+      for (final item in peers) {
+        final peer = SyncPeerState.fromJson(item);
+        if (peer != null && _peers.length < peerLimit) _peers[peer.deviceId] = peer;
       }
     }
   }

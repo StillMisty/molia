@@ -31,10 +31,20 @@ class SyncProvider extends ChangeNotifier {
   Set<String> get enabledTransports => _engine.state.enabledTransports;
   WebDavConfig get webdav => _engine.state.webdav;
   int get lastSyncAt => _engine.state.lastSyncAt;
-  bool get lastSyncOk => _engine.state.lastSyncOk;
-  String? get lastSyncError => _engine.state.lastSyncError;
   List<SyncLogEntry> get log => _engine.state.log;
-  SyncReport get lastReport => _engine.lastReport;
+
+  /// 设备名册（不含本机；按最近接触时间倒序）。
+  List<SyncPeerState> get peers => _engine.state.peers;
+
+  /// 最近一轮完整结果；null = 本次进程内还没跑过。
+  SyncRoundReport? get lastReport => _engine.lastReport;
+
+  /// 最近一轮的结论（UI 状态用语）。
+  SyncOutcome? get lastOutcome => _engine.lastReport?.outcome;
+
+  /// 传输状态（开关开着但不可用时给出原因）。
+  SyncTransportStatus transportStatus(String kind) =>
+      _engine.transportStatus(kind);
 
   /// 完整同步口令（显示与复制用；调用方负责提示妥善保管）。
   String? get passphrase => _passphrase;
@@ -102,12 +112,15 @@ class SyncProvider extends ChangeNotifier {
     return generated;
   }
 
-  Future<SyncReport> syncNow({bool manual = false}) async {
-    if (_busy) return _engine.lastReport;
+  Future<SyncRoundReport?> syncNow({bool manual = false}) async {
     _busy = true;
     notifyListeners();
     try {
-      return await _engine.syncNow(manual: manual);
+      // 引擎自带排队：进行中的轮次结束后会补跑，这里不做早退（否则
+      // 连点两次只有一次生效且无提示）。
+      return await _engine.syncNow(
+        trigger: manual ? SyncTrigger.manual : SyncTrigger.timer,
+      );
     } finally {
       _busy = false;
       notifyListeners();
@@ -118,8 +131,10 @@ class SyncProvider extends ChangeNotifier {
   void scheduleSync({Duration delay = const Duration(seconds: 20)}) {
     if (!enabled) return;
     _debounce?.cancel();
-    _debounce = Timer(delay, () => unawaited(syncNow()));
+    _debounce = Timer(delay, () => unawaited(_debouncedSync()));
   }
+
+  Future<void> _debouncedSync() => _engine.syncNow(trigger: SyncTrigger.debounce);
 
   @override
   void dispose() {

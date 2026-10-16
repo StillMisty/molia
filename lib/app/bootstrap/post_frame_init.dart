@@ -6,6 +6,7 @@ library;
 
 import 'dart:async';
 
+import '../../domain/models/device_sync.dart';
 import '../../providers/sync_provider.dart';
 import 'catalog_stack.dart';
 import 'desktop_stack.dart';
@@ -28,6 +29,8 @@ void initAfterFirstFrame({
   // 启动后初始化音源（加载已导入的 LX 音源脚本）；随后发起首轮同步
   // （音源仓库就绪后脚本适配器才能工作）。
   catalog.sourceManager.init().then((_) {
-    if (syncProvider.enabled) unawaited(syncProvider.syncNow());
+    if (syncProvider.enabled) {
+      unawaited(syncProvider.engine.syncNow(trigger: SyncTrigger.startup));
+    }
   });
 }

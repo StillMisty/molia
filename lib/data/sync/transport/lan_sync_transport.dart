@@ -4,6 +4,7 @@ import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:flutter/foundation.dart';
+import 'package:logging/logging.dart';
 
 import '../../../domain/models/device_sync.dart';
 import '../../../domain/ports/sync_transport.dart';
@@ -60,16 +61,24 @@ class LanSyncTransport implements SyncTransport {
   final StreamController<SyncEnvelope> _incoming =
       StreamController<SyncEnvelope>.broadcast();
   final List<_Peer> _peers = [];
+  final Logger _logger = Logger('molia.sync.lan');
 
   RawDatagramSocket? _udp;
   HttpServer? _http;
   bool _running = false;
+
+  /// 启动失败的技术细节（端口占用、权限不足等）；null = 未失败。
+  String? _startError;
 
   @override
   String get kind => 'lan';
 
   @override
   bool get isRunning => _running;
+
+  @override
+  String? get unavailableReason =>
+      _startError == null ? null : SyncUnavailableReason.startFailed;
 
   @override
   Stream<SyncEnvelope> get incoming => _incoming.stream;
@@ -79,17 +88,30 @@ class LanSyncTransport implements SyncTransport {
   @override
   Future<void> start() async {
     if (_running || kIsWeb) return;
-    _udp = await RawDatagramSocket.bind(
-      InternetAddress.anyIPv4,
-      _udpPort,
-      reuseAddress: true,
-    );
-    _udp!.broadcastEnabled = true;
-    _udp!.listen(_onDatagram);
+    try {
+      _udp = await RawDatagramSocket.bind(
+        InternetAddress.anyIPv4,
+        _udpPort,
+        reuseAddress: true,
+      );
+      _udp!.broadcastEnabled = true;
+      _udp!.listen(_onDatagram);
 
-    _http = await HttpServer.bind(InternetAddress.anyIPv4, 0);
-    _http!.listen(_onHttpRequest);
-    _running = true;
+      _http = await HttpServer.bind(InternetAddress.anyIPv4, 0);
+      _http!.listen(_onHttpRequest);
+      _running = true;
+      _startError = null;
+    } catch (e) {
+      // 启动失败不能静默：开关显示「已打开」而实际没有监听，是用户实测
+      // 「同步不生效」却查不出原因的主要来源。清掉半开资源并把原因留在
+      // [unavailableReason] 供 UI 呈现。
+      _startError = '$e';
+      _logger.warning('局域网传输启动失败', e);
+      _udp?.close();
+      _udp = null;
+      await _http?.close(force: true);
+      _http = null;
+    }
   }
 
   @override
@@ -103,34 +125,70 @@ class LanSyncTransport implements SyncTransport {
   }
 
   @override
-  Future<List<SyncEnvelope>> pull() async {
-    if (!_running) return const [];
+  Future<SyncPullResult> pull() async {
+    if (!_running) return SyncPullResult.none;
     final passphrase = await _passphraseProvider();
-    if (passphrase == null || passphrase.trim().isEmpty) return const [];
+    if (passphrase == null || passphrase.trim().isEmpty) {
+      return const SyncPullResult(error: '未设置同步口令');
+    }
 
     final peers = await _discoverPeers();
-    final result = <SyncEnvelope>[];
+    final envelopes = <SyncEnvelope>[];
+    var failed = 0;
+    var bytesIn = 0;
+    String? firstError;
     for (final peer in peers) {
       final bytes = await _fetchSnapshot(peer);
-      if (bytes == null) continue;
+      if (bytes == null) {
+        failed++;
+        firstError ??= '${peer.label}：读取快照失败';
+        continue;
+      }
+      bytesIn += bytes.length;
       try {
-        result.add(_codec.decrypt(bytes, passphrase));
+        envelopes.add(_codec.decrypt(bytes, passphrase));
       } on SyncCryptoException {
         // 对端口令不同 / 数据损坏：跳过该对端，不影响其他设备。
+        failed++;
+        firstError ??= '${peer.label}：口令不一致或数据损坏';
       }
     }
-    return result;
+    return SyncPullResult(
+      envelopes: envelopes,
+      peersSeen: peers.length,
+      failedPeers: failed,
+      bytesIn: bytesIn,
+      error: firstError,
+    );
   }
 
   @override
-  Future<void> push(SyncEnvelope envelope) async {
-    if (!_running) return;
+  Future<SyncPushResult> push(SyncEnvelope envelope) async {
+    if (!_running) return SyncPushResult.none;
     final passphrase = await _passphraseProvider();
-    if (passphrase == null || passphrase.trim().isEmpty) return;
-    final payload = _codec.encrypt(envelope, passphrase);
-    for (final peer in List.of(_peers)) {
-      await _postSnapshot(peer, payload);
+    if (passphrase == null || passphrase.trim().isEmpty) {
+      return const SyncPushResult(error: '未设置同步口令');
     }
+    final payload = _codec.encrypt(envelope, passphrase);
+    final succeededIds = <String>[];
+    final failedIds = <String>[];
+    String? firstError;
+    for (final peer in List.of(_peers)) {
+      if (await _postSnapshot(peer, payload)) {
+        succeededIds.add(peer.deviceId);
+      } else {
+        failedIds.add(peer.deviceId);
+        firstError ??= '${peer.label}：推送失败';
+      }
+    }
+    return SyncPushResult(
+      succeededPeers: succeededIds.length,
+      failedPeers: failedIds.length,
+      succeededIds: succeededIds,
+      failedIds: failedIds,
+      bytesOut: payload.length * succeededIds.length,
+      error: firstError,
+    );
   }
 
   /// 广播探测并收集应答（清空过期对端；仅保留本轮应答者）。
@@ -230,7 +288,7 @@ class LanSyncTransport implements SyncTransport {
     }
   }
 
-  Future<void> _postSnapshot(_Peer peer, Uint8List payload) async {
+  Future<bool> _postSnapshot(_Peer peer, Uint8List payload) async {
     final client = HttpClient()..connectionTimeout = _requestTimeout;
     try {
       final request = await client
@@ -240,8 +298,10 @@ class LanSyncTransport implements SyncTransport {
       request.add(payload);
       final response = await request.close().timeout(_requestTimeout);
       await response.drain<void>();
+      return response.statusCode == HttpStatus.ok;
     } catch (_) {
-      // 推送失败交由对端下一轮拉取兜底。
+      // 推送失败交由对端下一轮拉取兜底（失败计数上抛给报告）。
+      return false;
     } finally {
       client.close(force: true);
     }
@@ -318,4 +378,8 @@ class _Peer {
     required this.port,
     required this.name,
   });
+
+  /// 日志 / 错误文案用的人类可读标识（设备名优先，缺省用 id 前 6 位）。
+  String get label =>
+      name.isNotEmpty ? name : (deviceId.length > 6 ? deviceId.substring(0, 6) : deviceId);
 }
