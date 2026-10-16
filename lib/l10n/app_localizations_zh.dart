@@ -2225,6 +2225,67 @@ class AppLocalizationsZh extends AppLocalizations {
   String get syncDiagnosticCopied => '诊断信息已复制';
 
   @override
+  String get syncTransportPermissionDenied => '缺少局域网权限';
+
+  @override
+  String get syncLanPermissionTitle => '授予局域网权限';
+
+  @override
+  String get syncLanPermissionSubtitle => 'Android 17 起访问局域网设备需要「附近设备」权限';
+
+  @override
+  String get syncLanPermissionDenied => '未获得权限：局域网同步不可用（手动填地址同样无效），可改用 WebDAV';
+
+  @override
+  String get syncOpenSystemSettings => '去系统设置';
+
+  @override
+  String get syncPeerAdd => '添加设备';
+
+  @override
+  String get syncPeerAddSubtitle => '发现不到设备时，手动填对端地址';
+
+  @override
+  String get syncPeerAddTitle => '添加设备';
+
+  @override
+  String get syncPeerHostLabel => '地址';
+
+  @override
+  String get syncPeerHostHint => '例如 192.168.1.23';
+
+  @override
+  String get syncPeerNameLabel => '名称（可选）';
+
+  @override
+  String get syncPeerHostInvalid => '地址不能为空';
+
+  @override
+  String get syncPeerDelete => '删除设备';
+
+  @override
+  String get syncPeerDeleteConfirm => '删除后本机不再主动连接该地址（不影响其它设备的同步）。';
+
+  @override
+  String get syncPeerManual => '手动添加';
+
+  @override
+  String get syncPeerNotContacted => '尚未接触，对端在线后点本行再同步一次';
+
+  @override
+  String get syncPeerDetailTitle => '设备详情';
+
+  @override
+  String syncPeerAddress(String host) {
+    return '地址 $host';
+  }
+
+  @override
+  String syncPeerDeviceId(String id) {
+    return '设备 $id';
+  }
+
+  @override
   String get syncDeviceNameDialogTitle => '设备名称';
 
   @override

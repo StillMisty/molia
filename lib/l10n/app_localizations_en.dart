@@ -2315,6 +2315,71 @@ class AppLocalizationsEn extends AppLocalizations {
   String get syncDiagnosticCopied => 'Diagnostics copied';
 
   @override
+  String get syncTransportPermissionDenied => 'LAN permission missing';
+
+  @override
+  String get syncLanPermissionTitle => 'Grant LAN permission';
+
+  @override
+  String get syncLanPermissionSubtitle =>
+      'Android 17+ needs the nearby-devices permission to reach other devices';
+
+  @override
+  String get syncLanPermissionDenied =>
+      'Permission not granted: LAN sync is unavailable (manual addresses cannot work around it). Switch to WebDAV instead.';
+
+  @override
+  String get syncOpenSystemSettings => 'Open settings';
+
+  @override
+  String get syncPeerAdd => 'Add device';
+
+  @override
+  String get syncPeerAddSubtitle => 'Enter a peer address when discovery fails';
+
+  @override
+  String get syncPeerAddTitle => 'Add device';
+
+  @override
+  String get syncPeerHostLabel => 'Address';
+
+  @override
+  String get syncPeerHostHint => 'e.g. 192.168.1.23';
+
+  @override
+  String get syncPeerNameLabel => 'Name (optional)';
+
+  @override
+  String get syncPeerHostInvalid => 'Address cannot be empty';
+
+  @override
+  String get syncPeerDelete => 'Remove device';
+
+  @override
+  String get syncPeerDeleteConfirm =>
+      'This device will no longer connect to that address (other devices are unaffected).';
+
+  @override
+  String get syncPeerManual => 'added manually';
+
+  @override
+  String get syncPeerNotContacted =>
+      'not reached yet — tap this device row after the peer is online';
+
+  @override
+  String get syncPeerDetailTitle => 'Device details';
+
+  @override
+  String syncPeerAddress(String host) {
+    return 'Address $host';
+  }
+
+  @override
+  String syncPeerDeviceId(String id) {
+    return 'Device $id';
+  }
+
+  @override
   String get syncDeviceNameDialogTitle => 'Device name';
 
   @override

@@ -273,6 +273,80 @@ Map<SyncCategory, Map<String, SyncRecord>> mergeEnvelopesByCategory(
   return merged;
 }
 
+/// 手动添加的对端地址（局域网发现不可用时的兜底：AP 隔离 / 多网段 / 防火墙）。
+///
+/// 只存用户输入的 `host` 与可选名称；`httpPort` 与 `deviceId` 在首次接触后
+/// 由对端应答认领并回写——本机端口是动态的，对端记住本机才有意义
+/// （见 ADR-0003 v2 §3）。`probePort` 为 0 时用传输的标准 UDP 端口。
+class ManualPeer {
+  const ManualPeer({
+    required this.host,
+    this.probePort = 0,
+    this.httpPort = 0,
+    this.deviceId = '',
+    this.name = '',
+  });
+
+  final String host;
+
+  /// UDP 探测端口（0 = 用传输的标准端口）。
+  final int probePort;
+
+  /// 快照端点端口（0 = 尚未学到）。
+  final int httpPort;
+
+  /// 首次接触认领到的设备 id（'' = 尚未接触）。
+  final String deviceId;
+
+  final String name;
+
+  ManualPeer copyWith({
+    String? host,
+    int? probePort,
+    int? httpPort,
+    String? deviceId,
+    String? name,
+  }) =>
+      ManualPeer(
+        host: host ?? this.host,
+        probePort: probePort ?? this.probePort,
+        httpPort: httpPort ?? this.httpPort,
+        deviceId: deviceId ?? this.deviceId,
+        name: name ?? this.name,
+      );
+
+  /// 回写学到的新观测（只覆盖已知字段，避免把已有信息抹成空）。
+  ManualPeer mergeLearned({int? httpPort, String? deviceId, String? name}) =>
+      ManualPeer(
+        host: host,
+        probePort: probePort,
+        httpPort: httpPort ?? this.httpPort,
+        deviceId: (deviceId != null && deviceId.isNotEmpty) ? deviceId : this.deviceId,
+        name: (name != null && name.isNotEmpty) ? name : this.name,
+      );
+
+  Map<String, dynamic> toJson() => {
+        'host': host,
+        if (probePort > 0) 'probePort': probePort,
+        if (httpPort > 0) 'httpPort': httpPort,
+        if (deviceId.isNotEmpty) 'deviceId': deviceId,
+        if (name.isNotEmpty) 'name': name,
+      };
+
+  static ManualPeer? fromJson(Object? raw) {
+    if (raw is! Map) return null;
+    final host = raw['host'];
+    if (host is! String || host.trim().isEmpty) return null;
+    return ManualPeer(
+      host: host.trim(),
+      probePort: (raw['probePort'] as num?)?.toInt() ?? 0,
+      httpPort: (raw['httpPort'] as num?)?.toInt() ?? 0,
+      deviceId: raw['deviceId'] as String? ?? '',
+      name: raw['name'] as String? ?? '',
+    );
+  }
+}
+
 /// 一轮同步的触发原因（报告与日志用；用户可从日志看出「为什么现在同步」）。
 enum SyncTrigger {
   /// 启动后首轮。

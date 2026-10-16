@@ -132,6 +132,21 @@ class SyncEngine extends ChangeNotifier {
     notifyListeners();
   }
 
+  // 手动对端地址簿（局域网发现失败时的兜底：AP 隔离 / 多网段 / 防火墙）。
+  // 权限被拒时它同样无效——那是网关级阻断，只能授权或转 WebDAV。
+
+  /// 添加手动对端（地址 + 可选名称）；重复地址按地址合并。
+  Future<void> addManualPeer(ManualPeer peer) async {
+    await _state.addManualPeer(peer);
+    notifyListeners();
+  }
+
+  /// 移除手动对端（只删地址簿条目，已发现的名册不受影响）。
+  Future<void> removeManualPeer(String host) async {
+    await _state.removeManualPeer(host);
+    notifyListeners();
+  }
+
   Future<String?> readPassphrase() => _state.readPassphrase();
 
   /// 读取现有口令；不存在时生成并持久化（开启同步的入口）。

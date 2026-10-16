@@ -1220,6 +1220,39 @@
   "syncDiagnosticSubtitle": "Recent sync rounds (no passphrase, no keys)",
   "syncDiagnosticHint": "Paste it when reporting an issue — it contains no credentials and no data.",
   "syncDiagnosticCopied": "Diagnostics copied",
+  "syncTransportPermissionDenied": "LAN permission missing",
+  "syncLanPermissionTitle": "Grant LAN permission",
+  "syncLanPermissionSubtitle": "Android 17+ needs the nearby-devices permission to reach other devices",
+  "syncLanPermissionDenied": "Permission not granted: LAN sync is unavailable (manual addresses cannot work around it). Switch to WebDAV instead.",
+  "syncOpenSystemSettings": "Open settings",
+  "syncPeerAdd": "Add device",
+  "syncPeerAddSubtitle": "Enter a peer address when discovery fails",
+  "syncPeerAddTitle": "Add device",
+  "syncPeerHostLabel": "Address",
+  "syncPeerHostHint": "e.g. 192.168.1.23",
+  "syncPeerNameLabel": "Name (optional)",
+  "syncPeerHostInvalid": "Address cannot be empty",
+  "syncPeerDelete": "Remove device",
+  "syncPeerDeleteConfirm": "This device will no longer connect to that address (other devices are unaffected).",
+  "syncPeerManual": "added manually",
+  "syncPeerNotContacted": "not reached yet — tap this device row after the peer is online",
+  "syncPeerDetailTitle": "Device details",
+  "syncPeerAddress": "Address {host}",
+  "@syncPeerAddress": {
+    "placeholders": {
+      "host": {
+        "type": "String"
+      }
+    }
+  },
+  "syncPeerDeviceId": "Device {id}",
+  "@syncPeerDeviceId": {
+    "placeholders": {
+      "id": {
+        "type": "String"
+      }
+    }
+  },
   "syncDeviceNameDialogTitle": "Device name",
   "syncRenameHint": "Shown on other devices",
   "syncDeviceNameEmpty": "Name cannot be empty",

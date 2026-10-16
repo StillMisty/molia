@@ -94,4 +94,7 @@ abstract final class SyncUnavailableReason {
 
   /// 启动失败（端口占用、权限不足等）。
   static const String startFailed = 'start_failed';
+
+  /// 局域网访问权限未授予（Android 17 起局域网默认阻断；手动地址也无效）。
+  static const String permissionDenied = 'permission_denied';
 }

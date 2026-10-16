@@ -20,6 +20,7 @@ import '../../data/sync/adapters/statistics_sync_adapter.dart';
 import '../../data/sync/sync_crypto.dart';
 import '../../data/sync/sync_engine.dart';
 import '../../data/sync/transport/lan_sync_transport.dart';
+import '../../data/sync/transport/local_network_permission.dart';
 import '../../data/sync/transport/webdav_sync_transport.dart';
 import '../../domain/models/device_sync.dart';
 import '../../providers/playback_provider.dart';
@@ -84,6 +85,9 @@ Future<SyncStack> buildSyncStack({
   // 用「可空槽位 + 建完引擎立刻接线」把时序写在同一个 builder 内
   // （原组合根是 late final syncEngine 的自引用）。
   SyncEngine? engineRef;
+  // 局域网权限门（Android 17 起局域网默认阻断）：申请与状态都在这里，
+  // 传输启动前先过门；权限被拒时手动地址也无效（网关级阻断）。
+  final lanPermission = LocalNetworkPermission.production();
   final lanSyncTransport = LanSyncTransport(
     deviceId: syncState.deviceId,
     deviceName: () => syncState.deviceName,
@@ -96,6 +100,11 @@ Future<SyncStack> buildSyncStack({
           deviceName: syncState.deviceName,
           producedAt: DateTime.now().millisecondsSinceEpoch,
         ),
+    permissionGate: () => lanPermission.ensure(),
+    manualPeersProvider: () => syncState.manualPeers,
+    onPeerResolved: (learned) => unawaited(syncState.learnManualPeer(learned)),
+    httpPortProvider: () => syncState.lanHttpPort,
+    onHttpPortBound: (port) => unawaited(syncState.setLanHttpPort(port)),
   );
   final webdavSyncTransport = WebDavSyncTransport(
     deviceId: syncState.deviceId,
@@ -117,7 +126,10 @@ Future<SyncStack> buildSyncStack({
     transports: {'lan': lanSyncTransport, 'webdav': webdavSyncTransport},
   );
   engineRef = syncEngine;
-  final syncProvider = SyncProvider(engine: syncEngine);
+  final syncProvider = SyncProvider(
+    engine: syncEngine,
+    lanPermission: lanPermission,
+  );
 
   // 可选子系统（跨设备同步）初始化失败不允许阻断启动：runApp 之前任何
   // 未捕获异常都会让桌面端停在「窗口已显示但没有首帧」的黑窗状态。

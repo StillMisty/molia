@@ -152,6 +152,16 @@ class SyncSettingsPage extends StatelessWidget {
                       : l10n.syncWebdavNotConfigured,
                   onTap: () => _showWebdavDialog(context, provider, l10n),
                 ),
+                // 权限被拒时给可行动入口（手动地址救不了权限，只能授权或转 WebDAV）。
+                if (_needsLanPermission(provider))
+                  SettingsNavTile(
+                    key: const Key('settingsSyncLanPermissionItem'),
+                    icon: Icons.lock_open_rounded,
+                    title: l10n.syncLanPermissionTitle,
+                    subtitle: l10n.syncLanPermissionSubtitle,
+                    onTap: () =>
+                        unawaited(_requestLanPermission(context, provider, l10n)),
+                  ),
               ],
             ),
             const SizedBox(height: kSettingsSectionSpacing),
@@ -300,9 +310,36 @@ class SyncSettingsPage extends StatelessWidget {
     final state = switch (status.unavailableReason) {
       SyncUnavailableReason.notConfigured => l10n.syncTransportNotConfigured,
       SyncUnavailableReason.startFailed => l10n.syncTransportStartFailed,
+      SyncUnavailableReason.permissionDenied => l10n.syncTransportPermissionDenied,
       _ => status.running ? l10n.syncTransportRunning : l10n.syncTransportStopped,
     };
     return '$base · $state';
+  }
+
+  /// 局域网因缺少权限而不可用（Android 17+：手动地址也无效，只能授权或转 WebDAV）。
+  static bool _needsLanPermission(SyncProvider provider) =>
+      provider.lanPermissionNeeded &&
+      provider.enabledTransports.contains('lan') &&
+      provider.transportStatus('lan').unavailableReason ==
+          SyncUnavailableReason.permissionDenied;
+
+  /// 用户显式申请权限；仍被拒时给「去系统设置」的下一步动作。
+  static Future<void> _requestLanPermission(
+    BuildContext context,
+    SyncProvider provider,
+    AppLocalizations l10n,
+  ) async {
+    final granted = await provider.requestLanPermission();
+    if (granted || !context.mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(l10n.syncLanPermissionDenied),
+        action: SnackBarAction(
+          label: l10n.syncOpenSystemSettings,
+          onPressed: () => unawaited(provider.openSystemSettings()),
+        ),
+      ),
+    );
   }
 
   static String _time(int at) =>
@@ -370,7 +407,7 @@ class SyncSettingsPage extends StatelessWidget {
               navigator.pop();
               unawaited(provider.syncNow(manual: true));
             },
-            label: Text(l10n.syncRetry),
+            child: Text(l10n.syncRetry),
           ),
         ],
       ),
@@ -519,7 +556,7 @@ class SyncSettingsPage extends StatelessWidget {
               if (!context.mounted) return;
               await _showPassphraseDialog(context, provider, l10n);
             },
-            label: Text(l10n.syncPassphraseReset),
+            child: Text(l10n.syncPassphraseReset),
           ),
         ],
       ),
@@ -607,7 +644,7 @@ class SyncSettingsPage extends StatelessWidget {
               }
               navigator.pop();
             },
-            label: Text(saveLabel),
+            child: Text(saveLabel),
           ),
         ],
       ),
@@ -685,7 +722,7 @@ class SyncSettingsPage extends StatelessWidget {
               await provider.setWebdavPassword(passwordController.text);
               navigator.pop();
             },
-            label: Text(l10n.syncSave),
+            child: Text(l10n.syncSave),
           ),
         ],
       ),

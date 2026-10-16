@@ -183,4 +183,25 @@ void main() {
     expect(find.byKey(const Key('settingsSyncDiagnosticItem')), findsOneWidget);
     expect(find.text('Copy diagnostics'), findsOneWidget);
   });
+
+  testWidgets('添加设备：写入地址簿并立即跑一轮', (tester) async {
+    await provider.setEnabled(true);
+    await pumpPage(tester);
+
+    await tester.tap(find.byKey(const Key('settingsSyncPeersItem')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('settingsSyncAddPeerItem')));
+    await tester.pumpAndSettle();
+
+    await tester.enterText(find.byType(EditableText).first, '192.168.1.23');
+    await tester.tap(find.text('Save'));
+    await tester.pumpAndSettle();
+
+    expect(provider.manualPeers.single.host, '192.168.1.23');
+    // 尚未接触的对端在名册页可见（点开可删除）。
+    expect(
+      find.byKey(const Key('settingsSyncPeer-192.168.1.23')),
+      findsOneWidget,
+    );
+  });
 }

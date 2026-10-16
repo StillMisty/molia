@@ -5,17 +5,23 @@ import 'package:flutter/foundation.dart';
 import '../data/sync/sync_engine.dart';
 import '../data/sync/sync_passphrase.dart';
 import '../data/sync/sync_state_store.dart';
+import '../data/sync/transport/local_network_permission.dart';
 import '../domain/models/device_sync.dart';
 
 /// 跨设备同步的 UI 门面：引擎状态 + 口令管理 + 手动同步 + 变更去抖触发。
 ///
 /// 口令即信任根：显示/复制/重置都在这里管理；UI 不直接接触引擎。
 class SyncProvider extends ChangeNotifier {
-  SyncProvider({required SyncEngine engine}) : _engine = engine {
+  SyncProvider({
+    required SyncEngine engine,
+    LocalNetworkPermission? lanPermission,
+  })  : _engine = engine,
+        _lanPermission = lanPermission {
     _engine.addListener(notifyListeners);
   }
 
   final SyncEngine _engine;
+  final LocalNetworkPermission? _lanPermission;
 
   String? _passphrase;
   bool _busy = false;
@@ -35,6 +41,39 @@ class SyncProvider extends ChangeNotifier {
 
   /// 设备名册（不含本机；按最近接触时间倒序）。
   List<SyncPeerState> get peers => _engine.state.peers;
+
+  /// 手动对端地址簿（发现失败时的兜底）。
+  List<ManualPeer> get manualPeers => _engine.state.manualPeers;
+
+  /// 添加手动对端（非空地址；UI 已做格式校验，这里再兜一层）。
+  Future<void> addManualPeer(String host, {String name = ''}) async {
+    final trimmed = host.trim();
+    if (trimmed.isEmpty) return;
+    await _engine.addManualPeer(ManualPeer(host: trimmed, name: name.trim()));
+  }
+
+  /// 移除手动对端。
+  Future<void> removeManualPeer(String host) =>
+      _engine.removeManualPeer(host);
+
+  /// 局域网权限门（Android 17+ 需要；其它平台恒为允许）。
+  bool get lanPermissionNeeded => _lanPermission?.needsPermission ?? false;
+  bool get lanPermissionGranted => _lanPermission?.granted ?? true;
+
+  /// 显式申请局域网权限（用户点「授予权限」）；授予后重启局域网传输。
+  Future<bool> requestLanPermission() async {
+    final permission = _lanPermission;
+    if (permission == null) return true;
+    final granted = await permission.ensure(retry: true);
+    if (granted) await _engine.setTransportEnabled('lan', true);
+    notifyListeners();
+    return granted;
+  }
+
+  /// 跳系统设置（权限被永久拒绝时的唯一出路）。
+  Future<void> openSystemSettings() async {
+    await _lanPermission?.openSystemSettings();
+  }
 
   /// 最近一轮完整结果；null = 本次进程内还没跑过。
   SyncRoundReport? get lastReport => _engine.lastReport;

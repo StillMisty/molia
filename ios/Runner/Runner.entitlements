@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  局域网直连同步（广播发现）所需的多播 / 广播 entitlement。
+
+  为什么单独放在这里而不是直接写进工程：`com.apple.developer.networking.multicast`
+  需要向 Apple 申请（Multicast Networking Entitlement Request），在获批之前把
+  `CODE_SIGN_ENTITLEMENTS` 指到本文件会让签名失败（描述文件不支持该 entitlement）。
+  获批后的启用步骤（一次即可）：
+
+  1. Apple Developer → Certificates, Identifiers & Profiles → Identifiers →
+     目标 App ID → 勾选 "Multicast Networking"（它会写进 provisioning profile）；
+  2. Xcode → Runner target → Signing & Capabilities → "+ Capability" →
+     加入该 capability（或手写 `CODE_SIGN_ENTITLEMENTS = Runner/Runner.entitlements;`
+     到 Runner target 的 Debug/Release 配置）；
+  3. 重新下载 / 更新 provisioning profile，真机验证（模拟器不需要该 entitlement，
+     模拟器通过不代表真机可用）。
+
+  未获批时的行为（不需要改代码）：广播发现在真机上静默拿不到应答 → 同步状态显示
+  「未发现对端」，用户可改用手动对端地址或 WebDAV（见 ADR-0003 v2 §3）。
+-->
+<plist version="1.0">
+<dict>
+	<key>com.apple.developer.networking.multicast</key>
+	<true/>
+</dict>
+</plist>

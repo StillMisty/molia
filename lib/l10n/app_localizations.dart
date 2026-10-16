@@ -4226,6 +4226,120 @@ abstract class AppLocalizations {
   /// **'Diagnostics copied'**
   String get syncDiagnosticCopied;
 
+  /// No description provided for @syncTransportPermissionDenied.
+  ///
+  /// In en, this message translates to:
+  /// **'LAN permission missing'**
+  String get syncTransportPermissionDenied;
+
+  /// No description provided for @syncLanPermissionTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Grant LAN permission'**
+  String get syncLanPermissionTitle;
+
+  /// No description provided for @syncLanPermissionSubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Android 17+ needs the nearby-devices permission to reach other devices'**
+  String get syncLanPermissionSubtitle;
+
+  /// No description provided for @syncLanPermissionDenied.
+  ///
+  /// In en, this message translates to:
+  /// **'Permission not granted: LAN sync is unavailable (manual addresses cannot work around it). Switch to WebDAV instead.'**
+  String get syncLanPermissionDenied;
+
+  /// No description provided for @syncOpenSystemSettings.
+  ///
+  /// In en, this message translates to:
+  /// **'Open settings'**
+  String get syncOpenSystemSettings;
+
+  /// No description provided for @syncPeerAdd.
+  ///
+  /// In en, this message translates to:
+  /// **'Add device'**
+  String get syncPeerAdd;
+
+  /// No description provided for @syncPeerAddSubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Enter a peer address when discovery fails'**
+  String get syncPeerAddSubtitle;
+
+  /// No description provided for @syncPeerAddTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Add device'**
+  String get syncPeerAddTitle;
+
+  /// No description provided for @syncPeerHostLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Address'**
+  String get syncPeerHostLabel;
+
+  /// No description provided for @syncPeerHostHint.
+  ///
+  /// In en, this message translates to:
+  /// **'e.g. 192.168.1.23'**
+  String get syncPeerHostHint;
+
+  /// No description provided for @syncPeerNameLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Name (optional)'**
+  String get syncPeerNameLabel;
+
+  /// No description provided for @syncPeerHostInvalid.
+  ///
+  /// In en, this message translates to:
+  /// **'Address cannot be empty'**
+  String get syncPeerHostInvalid;
+
+  /// No description provided for @syncPeerDelete.
+  ///
+  /// In en, this message translates to:
+  /// **'Remove device'**
+  String get syncPeerDelete;
+
+  /// No description provided for @syncPeerDeleteConfirm.
+  ///
+  /// In en, this message translates to:
+  /// **'This device will no longer connect to that address (other devices are unaffected).'**
+  String get syncPeerDeleteConfirm;
+
+  /// No description provided for @syncPeerManual.
+  ///
+  /// In en, this message translates to:
+  /// **'added manually'**
+  String get syncPeerManual;
+
+  /// No description provided for @syncPeerNotContacted.
+  ///
+  /// In en, this message translates to:
+  /// **'not reached yet — tap this device row after the peer is online'**
+  String get syncPeerNotContacted;
+
+  /// No description provided for @syncPeerDetailTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Device details'**
+  String get syncPeerDetailTitle;
+
+  /// No description provided for @syncPeerAddress.
+  ///
+  /// In en, this message translates to:
+  /// **'Address {host}'**
+  String syncPeerAddress(String host);
+
+  /// No description provided for @syncPeerDeviceId.
+  ///
+  /// In en, this message translates to:
+  /// **'Device {id}'**
+  String syncPeerDeviceId(String id);
+
   /// No description provided for @syncDeviceNameDialogTitle.
   ///
   /// In en, this message translates to:

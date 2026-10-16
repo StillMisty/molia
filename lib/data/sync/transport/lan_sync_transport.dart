@@ -10,7 +10,7 @@ import '../../../domain/models/device_sync.dart';
 import '../../../domain/ports/sync_transport.dart';
 import '../sync_crypto.dart';
 
-/// 局域网直连传输：UDP 广播发现 + 各设备内置 HTTP 快照端点。
+/// 局域网直连传输：UDP 广播（+ 手动地址簿单播）发现 + 各设备内置 HTTP 快照端点。
 ///
 /// 协议（明文层只有设备名与端口，数据全部加密）：
 /// - UDP `molia-sync.probe` JSON：`{m, v, deviceId, name, port, reply}`；
@@ -20,6 +20,10 @@ import '../sync_crypto.dart';
 ///
 /// 信任模型：数据用同步口令派生密钥加密，能解密者即已授权；HTTP 层不再
 /// 鉴权（快照是密文，无法解密者拿不到内容）。
+///
+/// 发现失败（AP 隔离 / 多网段 / 防火墙 / VPN）时用 [manualPeersProvider]
+/// 提供的手动地址簿做单播探测；权限被拒（Android 17 起局域网默认阻断）时
+/// 传输不启动并把原因记为 `permission_denied`——**手动地址救不了权限**。
 class LanSyncTransport implements SyncTransport {
   LanSyncTransport({
     required this.deviceId,
@@ -28,6 +32,11 @@ class LanSyncTransport implements SyncTransport {
     required Future<String?> Function() passphraseProvider,
     required Future<SyncEnvelope> Function() snapshotProvider,
     List<({String host, int port})>? probeTargets,
+    List<ManualPeer> Function()? manualPeersProvider,
+    void Function(ManualPeer learned)? onPeerResolved,
+    int Function()? httpPortProvider,
+    void Function(int port)? onHttpPortBound,
+    Future<bool> Function()? permissionGate,
     int udpPort = defaultUdpPort,
     Duration probeWindow = const Duration(milliseconds: 1200),
     Duration requestTimeout = const Duration(seconds: 3),
@@ -36,6 +45,11 @@ class LanSyncTransport implements SyncTransport {
         _passphraseProvider = passphraseProvider,
         _snapshotProvider = snapshotProvider,
         _probeTargets = probeTargets ?? const [],
+        _manualPeersProvider = manualPeersProvider,
+        _onPeerResolved = onPeerResolved,
+        _httpPortProvider = httpPortProvider,
+        _onHttpPortBound = onHttpPortBound,
+        _permissionGate = permissionGate,
         _udpPort = udpPort,
         _probeWindow = probeWindow,
         _requestTimeout = requestTimeout;
@@ -54,6 +68,20 @@ class LanSyncTransport implements SyncTransport {
 
   /// 测试注入：向指定地址单播探测（空 = 仅广播，生产路径）。
   final List<({String host, int port})> _probeTargets;
+
+  /// 手动对端地址簿（发现失败时的兜底）。
+  final List<ManualPeer> Function()? _manualPeersProvider;
+
+  /// 首次接触学到 deviceId / httpPort / 名称后回写地址簿。
+  final void Function(ManualPeer learned)? _onPeerResolved;
+
+  /// 本机 HTTP 端口持久化：端口每次随机会让对端记不住本机。
+  final int Function()? _httpPortProvider;
+  final void Function(int port)? _onHttpPortBound;
+
+  /// 局域网权限门：返回 false 时传输不启动（原因 = permission_denied）。
+  final Future<bool> Function()? _permissionGate;
+
   final int _udpPort;
   final Duration _probeWindow;
   final Duration _requestTimeout;
@@ -69,6 +97,10 @@ class LanSyncTransport implements SyncTransport {
 
   /// 启动失败的技术细节（端口占用、权限不足等）；null = 未失败。
   String? _startError;
+  String? _unavailableReason;
+
+  /// 广播发送失败（网络策略 / 缺少广播 entitlement）。
+  bool _broadcastUnavailable = false;
 
   @override
   String get kind => 'lan';
@@ -78,7 +110,7 @@ class LanSyncTransport implements SyncTransport {
 
   @override
   String? get unavailableReason =>
-      _startError == null ? null : SyncUnavailableReason.startFailed;
+      _running ? null : _unavailableReason;
 
   @override
   Stream<SyncEnvelope> get incoming => _incoming.stream;
@@ -88,6 +120,17 @@ class LanSyncTransport implements SyncTransport {
   @override
   Future<void> start() async {
     if (_running || kIsWeb) return;
+
+    // 权限在前：Android 17 起局域网默认阻断，没有权限时绑定 / 收发包都会失败，
+    // 直接给用户可行动的状态（授权 或 转 WebDAV），不做无意义的尝试。
+    final gate = _permissionGate;
+    if (gate != null && !await gate()) {
+      _unavailableReason = SyncUnavailableReason.permissionDenied;
+      _startError = '局域网访问权限未授予';
+      _logger.warning('局域网权限未授予，传输不启动');
+      return;
+    }
+
     try {
       _udp = await RawDatagramSocket.bind(
         InternetAddress.anyIPv4,
@@ -97,21 +140,38 @@ class LanSyncTransport implements SyncTransport {
       _udp!.broadcastEnabled = true;
       _udp!.listen(_onDatagram);
 
-      _http = await HttpServer.bind(InternetAddress.anyIPv4, 0);
+      // 端口持久化：对端要记住本机才能主动连，随机端口等于每次都要重新发现。
+      final rememberedPort = _httpPortProvider?.call() ?? 0;
+      _http = await _bindHttp(rememberedPort);
       _http!.listen(_onHttpRequest);
       _running = true;
       _startError = null;
+      _unavailableReason = null;
+      if (_http!.port != rememberedPort) _onHttpPortBound?.call(_http!.port);
     } catch (e) {
       // 启动失败不能静默：开关显示「已打开」而实际没有监听，是用户实测
       // 「同步不生效」却查不出原因的主要来源。清掉半开资源并把原因留在
       // [unavailableReason] 供 UI 呈现。
       _startError = '$e';
+      _unavailableReason = SyncUnavailableReason.startFailed;
       _logger.warning('局域网传输启动失败', e);
       _udp?.close();
       _udp = null;
       await _http?.close(force: true);
       _http = null;
     }
+  }
+
+  /// 优先绑定记忆端口；被占用时退回随机端口（并把新端口回写持久化）。
+  Future<HttpServer> _bindHttp(int preferredPort) async {
+    if (preferredPort > 0) {
+      try {
+        return await HttpServer.bind(InternetAddress.anyIPv4, preferredPort);
+      } catch (_) {
+        // 端口被占用 / 无权限：退回随机端口。
+      }
+    }
+    return HttpServer.bind(InternetAddress.anyIPv4, 0);
   }
 
   @override
@@ -126,7 +186,7 @@ class LanSyncTransport implements SyncTransport {
 
   @override
   Future<SyncPullResult> pull() async {
-    if (!_running) return SyncPullResult.none;
+    if (!_running) return SyncPullResult(error: _startError);
     final passphrase = await _passphraseProvider();
     if (passphrase == null || passphrase.trim().isEmpty) {
       return const SyncPullResult(error: '未设置同步口令');
@@ -158,7 +218,10 @@ class LanSyncTransport implements SyncTransport {
       peersSeen: peers.length,
       failedPeers: failed,
       bytesIn: bytesIn,
-      error: firstError,
+      error: firstError ??
+          (peers.isEmpty && _broadcastUnavailable
+              ? '广播发送失败；发现不到设备时可手动添加对端地址'
+              : null),
     );
   }
 
@@ -191,11 +254,25 @@ class LanSyncTransport implements SyncTransport {
     );
   }
 
-  /// 广播探测并收集应答（清空过期对端；仅保留本轮应答者）。
+  /// 广播探测 + 地址簿单播探测，收集应答（清空过期对端；仅保留本轮应答者）。
   Future<List<_Peer>> _discoverPeers() async {
     _peers.clear();
     final socket = _udp;
     if (socket == null) return const [];
+    final manualPeers = _manualPeersProvider?.call() ?? const <ManualPeer>[];
+
+    // 地址簿里已学到端口的对端先入队：即使探测应答被网络策略吞掉也能直连
+    // （端口是学到的、不是猜的；连不上会被如实计为失败）。
+    for (final manual in manualPeers) {
+      if (manual.httpPort <= 0) continue;
+      _rememberPeer(_Peer(
+        deviceId: manual.deviceId,
+        host: manual.host,
+        port: manual.httpPort,
+        name: manual.name,
+      ));
+    }
+
     final probe = utf8.encode(jsonEncode({
       'm': 'molia-sync.probe',
       'v': 1,
@@ -207,16 +284,25 @@ class LanSyncTransport implements SyncTransport {
     if (_probeTargets.isEmpty) {
       try {
         socket.send(probe, InternetAddress('255.255.255.255'), _udpPort);
+        _broadcastUnavailable = false;
       } catch (_) {
-        // 广播被系统策略拒绝时不影响单播对端（如测试注入目标）。
+        // 广播被系统策略拒绝时不影响单播对端（如测试注入目标 / 手动地址簿）；
+        // 记下来给「未发现对端」时的提示用（iOS 缺 multicast entitlement 也会走到这里）。
+        _broadcastUnavailable = true;
       }
-    } else {
-      for (final target in _probeTargets) {
-        try {
-          socket.send(probe, InternetAddress(target.host), target.port);
-        } catch (_) {
-          // 个别目标不可达时跳过。
-        }
+    }
+    // 单播目标：测试注入 + 手动地址簿（探测端口缺省用本传输的 UDP 端口，
+    // 生产里所有设备同端口；测试 / 多实例场景可显式指定）。
+    final targets = <({String host, int port})>[
+      ..._probeTargets,
+      for (final manual in manualPeers)
+        (host: manual.host, port: manual.probePort > 0 ? manual.probePort : _udpPort),
+    ];
+    for (final target in targets) {
+      try {
+        socket.send(probe, InternetAddress(target.host), target.port);
+      } catch (_) {
+        // 个别目标不可达时跳过。
       }
     }
     await Future<void>.delayed(_probeWindow);
@@ -243,12 +329,14 @@ class LanSyncTransport implements SyncTransport {
     if (port is! num) return;
 
     if (message['reply'] == true) {
-      _rememberPeer(_Peer(
+      final peer = _Peer(
         deviceId: peerId,
         host: datagram.address.address,
         port: port.toInt(),
         name: message['name'] is String ? message['name'] as String : '',
-      ));
+      );
+      _rememberPeer(peer);
+      _resolveManualPeer(peer);
       return;
     }
     // 应答探测：单播回来源地址。
@@ -268,8 +356,23 @@ class LanSyncTransport implements SyncTransport {
   }
 
   void _rememberPeer(_Peer peer) {
-    _peers.removeWhere((existing) => existing.deviceId == peer.deviceId);
+    _peers.removeWhere((existing) => existing.key == peer.key);
     _peers.add(peer);
+  }
+
+  /// 手动条目首次接触（或地址 / 端口变化）后回写学到的信息。
+  void _resolveManualPeer(_Peer peer) {
+    final manualPeers = _manualPeersProvider?.call() ?? const <ManualPeer>[];
+    for (final entry in manualPeers) {
+      if (entry.host != peer.host) continue;
+      if (entry.deviceId == peer.deviceId && entry.httpPort == peer.port) return;
+      _onPeerResolved?.call(entry.mergeLearned(
+        httpPort: peer.port,
+        deviceId: peer.deviceId,
+        name: peer.name,
+      ));
+      return;
+    }
   }
 
   Future<Uint8List?> _fetchSnapshot(_Peer peer) async {
@@ -379,7 +482,15 @@ class _Peer {
     required this.name,
   });
 
-  /// 日志 / 错误文案用的人类可读标识（设备名优先，缺省用 id 前 6 位）。
-  String get label =>
-      name.isNotEmpty ? name : (deviceId.length > 6 ? deviceId.substring(0, 6) : deviceId);
+  /// 去重键：认领到设备 id 后按 id，未认领（手动地址首轮）按主机。
+  String get key => deviceId.isNotEmpty ? deviceId : 'host:$host';
+
+  /// 日志 / 错误文案用的人类可读标识（设备名 > 设备 id 前 6 位 > 主机）。
+  String get label {
+    if (name.isNotEmpty) return name;
+    if (deviceId.isNotEmpty) {
+      return deviceId.length > 6 ? deviceId.substring(0, 6) : deviceId;
+    }
+    return host;
+  }
 }

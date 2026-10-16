@@ -209,6 +209,12 @@ class SyncStateStore {
   final Set<String> _enabledTransports = {'lan'};
   WebDavConfig _webdav = const WebDavConfig();
 
+  /// 手动添加的对端地址（局域网发现失败时的兜底）。
+  final List<ManualPeer> _manualPeers = [];
+
+  /// 本机局域网快照端点端口（0 = 尚未绑定过）。
+  int _lanHttpPort = 0;
+
   final Map<String, SyncStamp> _settingStamps = {};
   final Map<String, SyncStamp> _scriptTombstones = {};
   final List<String> _knownScriptIds = [];
@@ -227,6 +233,12 @@ class SyncStateStore {
   Map<SyncCategory, bool> get categories => Map.unmodifiable(_categories);
   Set<String> get enabledTransports => Set.unmodifiable(_enabledTransports);
   WebDavConfig get webdav => _webdav;
+
+  /// 手动对端地址簿（去重后不可变）。
+  List<ManualPeer> get manualPeers => List.unmodifiable(_manualPeers);
+
+  /// 本机局域网快照端点端口（0 = 尚未绑定过；绑定后持久化，对端才能记住）。
+  int get lanHttpPort => _lanHttpPort;
   Map<String, SyncStamp> get settingStamps => _settingStamps;
   Map<String, SyncStamp> get scriptTombstones => _scriptTombstones;
   List<String> get knownScriptIds => List.unmodifiable(_knownScriptIds);
@@ -319,6 +331,38 @@ class SyncStateStore {
     await save();
   }
 
+  /// 添加手动对端（同一 host 覆盖：地址簿以地址为身份，学到的信息合并保留）。
+  Future<void> addManualPeer(ManualPeer peer) async {
+    final host = peer.host.trim();
+    if (host.isEmpty) return;
+    final index = _manualPeers.indexWhere((entry) => entry.host == host);
+    if (index >= 0) {
+      _manualPeers[index] = _manualPeers[index].mergeLearned(
+        httpPort: peer.httpPort > 0 ? peer.httpPort : null,
+        deviceId: peer.deviceId.isNotEmpty ? peer.deviceId : null,
+        name: peer.name.isNotEmpty ? peer.name : null,
+      );
+    } else {
+      _manualPeers.add(peer.copyWith(host: host));
+    }
+    await save();
+  }
+
+  /// 移除手动对端（按地址；仅移除地址簿条目，不影响已发现的对端）。
+  Future<void> removeManualPeer(String host) async {
+    _manualPeers.removeWhere((entry) => entry.host == host);
+    await save();
+  }
+
+  /// 回写首次接触学到的信息（deviceId / 端口 / 名称）。
+  Future<void> learnManualPeer(ManualPeer learned) => addManualPeer(learned);
+
+  Future<void> setLanHttpPort(int port) async {
+    if (port <= 0 || port == _lanHttpPort) return;
+    _lanHttpPort = port;
+    await save();
+  }
+
   void putSettingStamp(String key, SyncStamp stamp) {
     _settingStamps[key] = stamp;
   }
@@ -406,6 +450,9 @@ class SyncStateStore {
         },
         'transports': _enabledTransports.toList(),
         'webdav': _webdav.toJson(),
+        if (_manualPeers.isNotEmpty)
+          'manualPeers': [for (final peer in _manualPeers) peer.toJson()],
+        if (_lanHttpPort > 0) 'lanHttpPort': _lanHttpPort,
         'settings': {
           for (final entry in _settingStamps.entries)
             entry.key: entry.value.toJson(),
@@ -442,6 +489,16 @@ class SyncStateStore {
         ..addAll(transports.whereType<String>());
     }
     _webdav = WebDavConfig.fromJson(json['webdav']);
+
+    _manualPeers.clear();
+    final manualPeers = json['manualPeers'];
+    if (manualPeers is List) {
+      for (final item in manualPeers) {
+        final peer = ManualPeer.fromJson(item);
+        if (peer != null) _manualPeers.add(peer);
+      }
+    }
+    _lanHttpPort = (json['lanHttpPort'] as num?)?.toInt() ?? 0;
 
     _settingStamps.clear();
     final settings = json['settings'];
