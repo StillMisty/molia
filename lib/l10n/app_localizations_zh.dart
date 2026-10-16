@@ -2201,6 +2201,9 @@ class AppLocalizationsZh extends AppLocalizations {
   String get syncTransportStopped => '未运行';
 
   @override
+  String get syncTransportDisabled => '已关闭';
+
+  @override
   String get syncTransportNotConfigured => '未配置';
 
   @override

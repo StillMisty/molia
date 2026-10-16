@@ -1192,6 +1192,7 @@
   "syncWebdavNotConfigured": "Not configured",
   "syncTransportRunning": "running",
   "syncTransportStopped": "stopped",
+  "syncTransportDisabled": "turned off",
   "syncTransportNotConfigured": "not configured",
   "syncTransportStartFailed": "failed to start",
   "syncLogSection": "Sync log",

@@ -907,6 +907,7 @@
   "syncWebdavNotConfigured": "未配置",
   "syncTransportRunning": "运行中",
   "syncTransportStopped": "未运行",
+  "syncTransportDisabled": "已关闭",
   "syncTransportNotConfigured": "未配置",
   "syncTransportStartFailed": "启动失败",
   "syncLogSection": "同步日志",

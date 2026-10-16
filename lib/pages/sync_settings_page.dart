@@ -336,7 +336,9 @@ class SyncSettingsPage extends StatelessWidget {
 
   /// 传输副文案：基础说明 + 当前状态（含启动失败原因）+ 最后成功时间。
   ///
-  /// 状态色只作增强：不可用 / 启动失败走 warning，运行中且有成功记录走 success。
+  /// 用户主动关闭的传输先于状态判定：开关状态由 `enabled` 表达，关闭后不再
+  /// 显示「未配置 / 启动失败」这类残留原因。状态色只作增强：不可用 / 启动失败
+  /// 走 warning，运行中且有成功记录走 success。
   static ({String text, Color? color}) _transportState(
     BuildContext context,
     SyncProvider provider,
@@ -347,6 +349,9 @@ class SyncSettingsPage extends StatelessWidget {
     final base =
         kind == SyncTransportKind.lan ? l10n.syncLanSubtitle : l10n.syncWebdavSubtitle;
     if (status == null) return (text: base, color: null);
+    if (!status.enabled) {
+      return (text: '$base · ${l10n.syncTransportDisabled}', color: null);
+    }
     final semantic = AppSemanticColors.of(context);
     final lastSuccess = provider.transportLastSuccessAt(kind);
     final state = switch (status.unavailableReason) {

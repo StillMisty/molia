@@ -2289,6 +2289,9 @@ class AppLocalizationsEn extends AppLocalizations {
   String get syncTransportStopped => 'stopped';
 
   @override
+  String get syncTransportDisabled => 'turned off';
+
+  @override
   String get syncTransportNotConfigured => 'not configured';
 
   @override

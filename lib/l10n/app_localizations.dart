@@ -4197,6 +4197,12 @@ abstract class AppLocalizations {
   /// **'stopped'**
   String get syncTransportStopped;
 
+  /// No description provided for @syncTransportDisabled.
+  ///
+  /// In en, this message translates to:
+  /// **'turned off'**
+  String get syncTransportDisabled;
+
   /// No description provided for @syncTransportNotConfigured.
   ///
   /// In en, this message translates to:

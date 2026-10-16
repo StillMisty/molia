@@ -197,6 +197,10 @@ class LanSyncTransport implements SyncTransport {
   @override
   Future<void> stop() async {
     _running = false;
+    // 关闭后不残留上次的失败原因：状态面只表达「已关闭」，重新启用时由
+    // start 重新判定可用性。
+    _unavailableReason = null;
+    _startError = null;
     _peers.clear();
     _udp?.close();
     _udp = null;

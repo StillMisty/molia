@@ -48,6 +48,26 @@ void main() {
     expect(transport.unavailableDetail, isNotNull);
   });
 
+  test('stop 清掉启动失败原因：关闭后状态面不残留', () async {
+    final transport = LanSyncTransport(
+      deviceId: 'devA',
+      deviceName: () => 'A',
+      codec: codec,
+      passphraseProvider: () async => passphrase,
+      snapshotProvider: () async => envelope('devA'),
+      permissionGate: () async => false,
+      udpPort: 47862,
+    );
+
+    await transport.start();
+    expect(transport.unavailableReason, SyncUnavailableReason.permissionDenied);
+    expect(transport.unavailableDetail, isNotNull);
+
+    await transport.stop();
+    expect(transport.unavailableReason, isNull);
+    expect(transport.unavailableDetail, isNull);
+  });
+
   test('此前发现过、本轮零应答：给出 discoverySilent（提示网络隔离）', () async {
     final transportA = LanSyncTransport(
       deviceId: 'devA',

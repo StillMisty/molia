@@ -21,6 +21,7 @@ import 'package:molia/pages/sync_settings_page.dart';
 import 'package:molia/providers/sync_provider.dart';
 import 'package:molia/services/language_service.dart';
 import 'package:molia/theme/app_semantic_colors.dart';
+import 'package:molia/widgets/settings/settings_tiles.dart';
 
 import 'support/sync_test_support.dart';
 
@@ -387,6 +388,26 @@ void main() {
     expect(find.textContaining('Transport failed to start'), findsOneWidget);
     expect(find.textContaining('SocketException'), findsNothing);
     expect(find.textContaining('No successful contact yet'), findsWidgets);
+  });
+
+  testWidgets('传输关闭：副文案中性「已关闭」，不显示残留失败原因', (tester) async {
+    await provider.setEnabled(true);
+    transport.unavailableReason = SyncUnavailableReason.startFailed;
+    transport.unavailableDetail = 'SocketException: 端口占用';
+    await transport.stop();
+    await provider.setTransportEnabled(SyncTransportKind.lan, false);
+    await pumpPage(tester);
+
+    expect(find.textContaining('turned off'), findsWidgets);
+    expect(find.textContaining('Transport failed to start'), findsNothing);
+    // 中性色：关闭不是异常状态（不挂 warning）。
+    final tile = tester.widget<SettingsSwitchTile>(
+      find.ancestor(
+        of: find.byKey(const Key('settingsSyncLanSwitch')),
+        matching: find.byType(SettingsSwitchTile),
+      ),
+    );
+    expect(tile.subtitleColor, isNull);
   });
 
   testWidgets('传输副文案：成功接触后给「最后成功」与成功色', (tester) async {
