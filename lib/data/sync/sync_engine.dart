@@ -284,17 +284,33 @@ class SyncEngine extends ChangeNotifier implements SyncSchedulerHost {
     return report;
   }
 
-  /// 调度器宿主接口：跑一轮（[SyncScheduler] 注入的驱动面）。
+  /// 调度器宿主接口：跑一轮并回传**外发结果**（[SyncScheduler] 据此只清
+  /// 已外发类别的待发标记）。
   @override
   bool get syncEnabled => _state.enabled;
 
   @override
-  Future<void> runSyncRound({
+  Future<SyncRunOutcome> runSyncRound({
     required SyncTrigger trigger,
     required bool push,
     Set<SyncCategory>? onlyCategories,
   }) async {
-    await syncNow(trigger: trigger, push: push, onlyCategories: onlyCategories);
+    final report = await syncNow(
+      trigger: trigger,
+      push: push,
+      onlyCategories: onlyCategories,
+    );
+    // 入站轮 / 未设置口令等中止轮不外发：待发标记保留给下一轮。
+    if (report == null || !push) return SyncRunOutcome.none;
+    final enabled = _state.enabledCategories;
+    final categories = onlyCategories == null
+        ? enabled
+        : onlyCategories.intersection(enabled);
+    return SyncRunOutcome(
+      categories: categories,
+      delivered: report.outcome != SyncOutcome.failed &&
+          report.failedCount == 0,
+    );
   }
 
   Future<SyncRoundReport> _runRound(

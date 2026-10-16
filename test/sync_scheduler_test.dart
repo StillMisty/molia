@@ -242,6 +242,87 @@ void main() {
       env.scheduler.dispose();
     });
   });
+
+  test('蜂窝小类别轮只清已外发类别：历史 / 统计留到 Wi-Fi 轮', () {
+    fakeAsync((async) {
+      var cellular = true;
+      final host = RecordingSyncSchedulerHost();
+      final scheduler = SyncScheduler(
+        host: host,
+        state: state,
+        cellularProbe: () async => cellular,
+        batteryProbe: () async => BatterySnapshot.unknown,
+        clock: () => DateTime.fromMillisecondsSinceEpoch(
+          async.elapsed.inMilliseconds,
+        ),
+      );
+      addTearDown(scheduler.dispose);
+      unawaited(scheduler.start());
+      async.flushMicrotasks();
+
+      scheduler.notifyLocalChange();
+      async.elapse(const Duration(seconds: 5));
+      expect(host.rounds.single.categories, SyncScheduler.smallCategories);
+      // 小类别已外发；历史 / 统计仍未外发（等 Wi-Fi）。
+      expect(
+        scheduler.dirtyCategories,
+        {SyncCategory.statistics, SyncCategory.history},
+      );
+
+      // 切回 Wi-Fi：下一次去抖轮覆盖全部类别并清空待发标记。
+      cellular = false;
+      unawaited(scheduler.refreshEnvironment());
+      async.flushMicrotasks();
+      scheduler.notifyInteraction();
+      async.elapse(const Duration(seconds: 5));
+      expect(host.rounds, hasLength(2));
+      expect(host.rounds.last.categories, isNull);
+      expect(scheduler.dirtyCategories, isEmpty);
+    });
+  });
+
+  test('失败轮保留待发标记：下轮重试同一类别', () {
+    fakeAsync((async) {
+      final env = build(async);
+      unawaited(env.scheduler.start());
+      async.flushMicrotasks();
+
+      env.host.failNext = true;
+      env.scheduler.notifyLocalChange(categories: {SyncCategory.settings});
+      async.elapse(const Duration(seconds: 5));
+      expect(env.host.rounds, hasLength(1));
+      expect(env.scheduler.dirtyCategories, {SyncCategory.settings});
+
+      env.scheduler.notifyInteraction();
+      async.elapse(const Duration(seconds: 5));
+      expect(env.host.rounds, hasLength(2));
+      expect(env.scheduler.dirtyCategories, isEmpty);
+      env.scheduler.dispose();
+    });
+  });
+
+  test('低优先级变更只标记待发：不排去抖轮次，等下次自然唤醒', () {
+    fakeAsync((async) {
+      final env = build(async);
+      unawaited(env.scheduler.start());
+      async.flushMicrotasks();
+
+      env.scheduler.notifyLocalChange(
+        categories: {SyncCategory.session},
+        immediate: false,
+      );
+      async.elapse(const Duration(minutes: 5));
+      expect(env.host.rounds, isEmpty, reason: '高频写入不触发即时轮次');
+      expect(env.scheduler.dirtyCategories, {SyncCategory.session});
+
+      // 高优先级变更到来：去抖一轮覆盖全部启用类别。
+      env.scheduler.notifyLocalChange(categories: {SyncCategory.settings});
+      async.elapse(const Duration(seconds: 5));
+      expect(env.host.rounds, hasLength(1));
+      expect(env.scheduler.dirtyCategories, isEmpty);
+      env.scheduler.dispose();
+    });
+  });
 }
 
 /// 记录每轮请求的假宿主（不做任何真实同步）。
@@ -255,15 +336,24 @@ class RecordingSyncSchedulerHost implements SyncSchedulerHost {
 
   bool enabled = true;
 
+  /// 下一轮报告失败（验证待发标记保留）。
+  bool failNext = false;
+
   @override
   bool get syncEnabled => enabled;
 
   @override
-  Future<void> runSyncRound({
+  Future<SyncRunOutcome> runSyncRound({
     required SyncTrigger trigger,
     required bool push,
     Set<SyncCategory>? onlyCategories,
   }) async {
     rounds.add((trigger: trigger, push: push, categories: onlyCategories));
+    final failed = failNext;
+    failNext = false;
+    return SyncRunOutcome(
+      categories: onlyCategories ?? {for (final c in SyncCategory.values) c},
+      delivered: !failed,
+    );
   }
 }

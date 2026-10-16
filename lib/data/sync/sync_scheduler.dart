@@ -12,11 +12,25 @@ abstract interface class SyncSchedulerHost {
   bool get syncEnabled;
 
   /// 跑一轮；[onlyCategories] 非空时只处理这些类别（蜂窝小类别策略）。
-  Future<void> runSyncRound({
+  Future<SyncRunOutcome> runSyncRound({
     required SyncTrigger trigger,
     required bool push,
     Set<SyncCategory>? onlyCategories,
   });
+}
+
+/// 一轮同步的外发结果（调度器据此维护「待外发」标记）。
+class SyncRunOutcome {
+  const SyncRunOutcome({required this.categories, required this.delivered});
+
+  /// 本轮实际外发的类别（蜂窝小类别轮不含历史 / 统计）。
+  final Set<SyncCategory> categories;
+
+  /// 本轮是否无失败（失败时待发标记保留，下轮重试）。
+  final bool delivered;
+
+  static const SyncRunOutcome none =
+      SyncRunOutcome(categories: {}, delivered: false);
 }
 
 /// 同步调度器：按同步等级决定何时跑、跑什么范围。
@@ -82,7 +96,13 @@ class SyncScheduler {
 
   SyncLevel _level = SyncLevel.idle;
   bool _visible = true;
-  bool _dirty = false;
+
+  /// 待外发的类别（空 = 没有本地变更待发）。
+  final Set<SyncCategory> _dirtyCategories = {};
+
+  /// 其中「需要即时外发」的类别（高优先级变更；低优先级只标记不排轮次）。
+  final Set<SyncCategory> _immediateCategories = {};
+
   bool _onCellular = false;
   bool _batteryLow = false;
   bool _charging = false;
@@ -109,7 +129,10 @@ class SyncScheduler {
       _onCellular && _state.cellularPolicy == SyncCellularPolicy.auto;
 
   /// 是否还有未外发的本地变更。
-  bool get dirty => _dirty;
+  bool get dirty => _dirtyCategories.isNotEmpty;
+
+  /// 待外发的类别（观测与测试用）。
+  Set<SyncCategory> get dirtyCategories => Set.unmodifiable(_dirtyCategories);
 
   /// 是否存在调度器定时器（单测断言「后台零定时」用）。
   bool get hasPendingTimer =>
@@ -148,10 +171,21 @@ class SyncScheduler {
     _applyLevel(_evaluate());
   }
 
-  /// 数据变更（资料库 / 统计 / 音源配置的 changes 事件）。
-  void notifyLocalChange() {
+  /// 数据变更：标记待外发类别。
+  ///
+  /// [categories] 省略时标记全部启用类别；[immediate] 为 false 时只标记、
+  /// 不续期活跃窗口也不排去抖轮次（高频写入如播放会话进度用）。
+  void notifyLocalChange({
+    Set<SyncCategory>? categories,
+    bool immediate = true,
+  }) {
     if (_disposed) return;
-    _dirty = true;
+    final enabled = _state.enabledCategories;
+    final pending =
+        categories == null ? enabled : categories.intersection(enabled);
+    _dirtyCategories.addAll(pending);
+    if (!immediate) return;
+    _immediateCategories.addAll(pending);
     _lastInteractionAt = _nowMs();
     _applyLevel(_evaluate());
   }
@@ -178,9 +212,8 @@ class SyncScheduler {
     // 否则「离开 Wi-Fi 后仍按 Wi-Fi 判定」。
     await refreshEnvironment();
     if (_disposed || !_canRunAutomatically) return;
-    final push = _dirty;
-    _dirty = false;
-    await _run(SyncTrigger.resume, push: push);
+    final push = dirty;
+    await _runAndMark(SyncTrigger.resume, push: push);
   }
 
   /// 退后台 / 锁屏：取消全部定时器，有本地变更时尽力推一次。
@@ -189,22 +222,20 @@ class SyncScheduler {
     if (!_visible) return;
     _visible = false;
     _applyLevel(_evaluate());
-    if (!_canRunAutomatically || !_dirty) return;
-    _dirty = false;
-    unawaited(_run(SyncTrigger.pause, push: true));
+    if (!_canRunAutomatically || !dirty) return;
+    unawaited(_runAndMark(SyncTrigger.pause, push: true));
   }
 
   /// 手动触发（不受等级、省电与蜂窝暂停策略限制）。
   Future<void> syncNow() async {
     if (!_host.syncEnabled) return;
-    _dirty = false;
-    await _run(SyncTrigger.manual, push: true);
+    await _runAndMark(SyncTrigger.manual, push: true);
   }
 
   /// 启动后首轮（受省电与蜂窝暂停策略约束）。
   Future<void> syncStartup() async {
     if (!_canRunAutomatically) return;
-    await _run(SyncTrigger.startup, push: true);
+    await _runAndMark(SyncTrigger.startup, push: true);
   }
 
   void dispose() {
@@ -254,7 +285,9 @@ class SyncScheduler {
       case SyncLevel.active:
         // 交互窗口过后自动降级为空闲（否则等级只会在事件到达时重估）。
         _armActiveDemote();
-        if (_dirty && _canRunAutomatically) _armDebounce();
+        if (_immediateCategories.isNotEmpty && _canRunAutomatically) {
+          _armDebounce();
+        }
       case SyncLevel.idle:
         if (_canRunAutomatically) _armIdle();
       case SyncLevel.background:
@@ -277,8 +310,7 @@ class SyncScheduler {
     _debounceTimer = Timer(_activeDebounce, () {
       _debounceTimer = null;
       if (_level != SyncLevel.active || !_canRunAutomatically) return;
-      _dirty = false;
-      unawaited(_run(SyncTrigger.debounce, push: true));
+      unawaited(_runAndMark(SyncTrigger.debounce, push: true));
     });
   }
 
@@ -296,16 +328,15 @@ class SyncScheduler {
     // 「无本地变更不广播」都依赖当前环境。
     await refreshEnvironment();
     if (_disposed || _level != SyncLevel.idle) return;
-    if (!_dirty && !_antiEntropyAllowed) {
+    if (!dirty && !_antiEntropyAllowed) {
       // 无本地变更不广播、不发 PROPFIND：退避翻倍后继续等待。
       _growBackoff();
       _armIdle();
       return;
     }
-    _dirty = false;
     _backoff = _idleBackoffStart;
     _armIdle();
-    await _run(SyncTrigger.timer, push: true);
+    await _runAndMark(SyncTrigger.timer, push: true);
   }
 
   void _growBackoff() {
@@ -313,10 +344,33 @@ class SyncScheduler {
     _backoff = next > _idleBackoffMax ? _idleBackoffMax : next;
   }
 
-  Future<void> _run(SyncTrigger trigger, {required bool push}) async {
-    if (!_host.syncEnabled) return;
+  Future<void> _runAndMark(SyncTrigger trigger, {required bool push}) async {
+    final outcome = await _run(trigger, push: push);
+    if (_disposed) return;
+    _markDelivered(outcome);
+  }
+
+  /// 按本轮外发结果清待发标记：只清「本轮外发过」的类别。
+  ///
+  /// 蜂窝小类别轮不含历史 / 统计，这些类别的标记保留到 Wi-Fi 轮；失败轮
+  /// 整体保留（下轮重试）；类别被关闭时对应标记直接丢弃（不再外发）。
+  void _markDelivered(SyncRunOutcome outcome) {
+    final enabled = _state.enabledCategories;
+    _dirtyCategories.removeWhere((category) => !enabled.contains(category));
+    _immediateCategories
+        .removeWhere((category) => !enabled.contains(category));
+    if (!outcome.delivered) return;
+    _dirtyCategories.removeAll(outcome.categories);
+    _immediateCategories.removeAll(outcome.categories);
+  }
+
+  Future<SyncRunOutcome> _run(
+    SyncTrigger trigger, {
+    required bool push,
+  }) async {
+    if (!_host.syncEnabled) return SyncRunOutcome.none;
     try {
-      await _host.runSyncRound(
+      return await _host.runSyncRound(
         trigger: trigger,
         push: push,
         onlyCategories: cellularRestricted ? smallCategories : null,
@@ -324,6 +378,7 @@ class SyncScheduler {
     } catch (e) {
       // 一轮内部失败已由引擎计入报告；这里只兜异常不中断调度。
       _logger.warning('同步调度：一轮执行失败', e);
+      return SyncRunOutcome.none;
     }
   }
 
