@@ -14,8 +14,7 @@ import '../domain/ports/sync_transport.dart';
 /// 跨设备同步的 UI 门面：引擎状态 + 口令管理 + 手动同步 + 触发策略转发。
 ///
 /// 口令即信任根：显示/复制/重置都在这里管理；UI 不直接接触引擎。
-/// 「什么时候自动同步」由 [SyncScheduler] 决定，本类只做转发（不再自带
-/// 去抖定时器）。
+/// 「什么时候自动同步」由 [SyncScheduler] 决定，本类只做转发。
 class SyncProvider extends ChangeNotifier {
   SyncProvider({
     required SyncEngine engine,

@@ -7,7 +7,7 @@
 /// 不存在跨 builder 回填。
 ///
 /// 触发策略（何时跑、跑什么范围）统一在 [SyncScheduler]：本 builder 只把
-/// 数据变更、播放状态与探针接进去，不再有散落的定时器。
+/// 数据变更、播放状态与探针接进去。
 library;
 
 import 'dart:async';
@@ -160,11 +160,11 @@ Future<SyncStack> buildSyncStack({
     clock: () => DateTime.fromMillisecondsSinceEpoch(syncState.nowMs()),
   );
   engineRef = syncEngine;
+  // 蜂窝判定用调度器默认的真实探针（connectivity_plus）：省流服务的 onCellular
+  // 只是缓存值，Wi-Fi 启动后切蜂窝不会反映到它上面。
   final scheduler = SyncScheduler(
     host: syncEngine,
     state: syncState,
-    // 蜂窝判定走真实探针（connectivity_plus）：省流服务的 onCellular 只是
-    // 缓存值，Wi-Fi 启动后切蜂窝不会反映到它上面。
     isPlaying: () => playback.playbackProvider.snapshot.isPlaying,
   );
   final syncProvider = SyncProvider(

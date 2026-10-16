@@ -278,8 +278,6 @@ class SyncSettingsPage extends StatelessWidget {
   static String _credentialsTitle(AppLocalizations l10n) =>
       l10n.syncCategoryCredentials;
 
-  // ---- 状态文案 ----
-
   static String _statusDetail(SyncProvider provider, AppLocalizations l10n) {
     final report = provider.lastReport;
     if (report == null) return l10n.syncNever;
@@ -405,8 +403,6 @@ class SyncSettingsPage extends StatelessWidget {
     );
   }
 
-  // ---- 日志 ----
-
   /// 首屏只留最近 6 行；更多历史进子页，失败行可点开看下一步动作。
   List<Widget> _logRows(
     BuildContext context,
@@ -500,8 +496,6 @@ class SyncSettingsPage extends StatelessWidget {
     ScaffoldMessenger.of(context)
         .showSnackBar(SnackBar(content: Text(l10n.syncDiagnosticCopied)));
   }
-
-  // ---- 口令 / 名称 / 配置 ----
 
   Future<void> _toggleEnabled(
     BuildContext context,
