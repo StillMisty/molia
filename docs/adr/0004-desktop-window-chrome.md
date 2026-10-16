@@ -4,7 +4,8 @@
 - 日期：2026-10-13
 - 相关：`lib/services/window/window_chrome.dart`、`lib/services/window/window_chrome_io.dart`、
   `lib/services/window/window_chrome_stub.dart`、`lib/app/app_shell.dart`、`lib/main.dart`、
-  `integration_test/lx_engine_integration_test.dart`、`docs/pitfalls.md` #30
+  `integration_test/lx_engine_integration_test.dart`、`assets/icons/app_icon.png`、
+  `linux/packaging/`、`docs/pitfalls.md` #30 / #36
 
 ## 背景
 
@@ -40,6 +41,13 @@ Linux/Windows 桌面端此前保留系统标题栏：窗口最小化/最大化/�
      `windowManager.ensureInitialized()` → `waitUntilReadyToShow(
      WindowOptions(titleBarStyle: TitleBarStyle.hidden), show + focus)`，
      首帧渲染时标题栏已是隐藏态，不会闪一下系统标题栏；
+   - **Linux 窗口图标**（2026-10-16 修订）：`ensureInitialized` 末尾在 Linux 调
+     `windowManager.setIcon('assets/icons/app_icon.png')`（原生
+     `gtk_window_set_icon_from_file`，写 WM_HINTS 的 icon pixmap）——X11 会话
+     直接可见；Wayland 没有窗口图标协议，dock / 应用菜单按
+     `app_id ↔ .desktop 文件名` 匹配，靠随发布包安装的 `linux/packaging/`
+     （见 `docs/pitfalls.md` #36、`linux/packaging/README.md`）；
+     Windows 不收这条路径（exe 资源里的 IDI_APP_ICON 已经决定窗口/任务栏图标）；
    - 最大化状态由 `WindowListener`（maximize / unmaximize / restore）写入
      `ValueListenable<bool> maximized`，顶栏用它切换「最大化 ⇄ 还原」图标；
      `restore`（从最小化恢复）重新查询原生状态——最大化的窗口最小化后再恢复
@@ -87,7 +95,9 @@ Linux/Windows 桌面端此前保留系统标题栏：窗口最小化/最大化/�
   「隐藏标题栏后系统标题栏高度为 0」（`WindowChrome.isSupported` 守卫，
   Android 上直接通过）；
 - `flutter build web --release`：通过（stub 路径，UI 无 `dart:io` 泄漏）；
-- 运行时证据：Linux 真实应用 `getTitleBarHeight() == 0`。
+- 运行时证据：Linux 真实应用 `getTitleBarHeight() == 0`；
+- 运行时证据（窗口图标，2026-10-16）：Xvfb 里跑 release 包，窗口
+  `WM_HINTS` 出现 icon pixmap / mask（`setIcon` 的资产路径有效、GTK 已装载）。
 
 ## 未验证
 
@@ -100,3 +110,6 @@ Linux/Windows 桌面端此前保留系统标题栏：窗口最小化/最大化/�
   已用基线（`main`，无 window_manager）复现同一现象，与本次改动无关。
   该路径下 `getTitleBarHeight() == 0` 的结论来自调研阶段的独立验证，未在本次
   提交的自动化里覆盖；X11 用户的实际表现需在真机确认。
+- **Wayland dock 图标**（2026-10-16）：本机是 WSLg，只能验证 X11 的 WM_HINTS
+  与安装脚本落盘；GNOME/KDE Wayland 下「装 .desktop 后 dock / 应用菜单显示
+  品牌图标」需真实桌面会话复核。

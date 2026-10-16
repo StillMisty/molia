@@ -220,3 +220,12 @@
     属预期，`AppTray` 会静默降级（只记日志），不要据此判定托盘实现坏了；
     组合根的关闭策略经 `AppTray.detectHost()` 判定宿主，无宿主时自动退回
     「关闭即退出」，不会把窗口藏成没有找回入口的状态。
+36. **Linux 桌面集成是打包资产，不是运行期代码**：`.desktop` 与 hicolor 图标在
+    `linux/packaging/`（`release.yml` 的 linux job 拷进 tarball，用户解压后跑
+    `install.sh` 装到 `~/.local/share`）。`.desktop` 文件名必须与
+    `linux/CMakeLists.txt` 的 `APPLICATION_ID` 一致（Wayland 靠 app_id ↔ 文件名
+    匹配 dock 图标），`Icon=` 必须与 hicolor 文件名一致；不要手改那批 PNG，
+    再生成命令见 `linux/packaging/README.md`；X11 的运行期窗口图标走
+    `assets/icons/app_icon.png`（`WindowChrome` 调 window_manager 的 `setIcon`，
+    与 hicolor 集合同源），Wayland 下该调用无效也不报错。契约由
+    `test/packaging/linux_desktop_test.dart` 守住。
