@@ -142,6 +142,9 @@ class FakeSyncTransport implements SyncTransport {
   /// pull 前执行的钩子（模拟传输侧学到手动对端身份等）。
   Future<void> Function()? onPull;
 
+  /// 最近一次 pull 收到的请求（断言游标 / 全量兜底对端）。
+  SyncPullRequest? lastRequest;
+
   /// pull 抛异常（模拟传输层崩溃）。
   bool throwOnPull = false;
 
@@ -159,8 +162,9 @@ class FakeSyncTransport implements SyncTransport {
   }
 
   @override
-  Future<SyncPullResult> pull() async {
+  Future<SyncPullResult> pull([SyncPullRequest request = SyncPullRequest.none]) async {
     pullCount++;
+    lastRequest = request;
     await onPull?.call();
     if (throwOnPull) throw StateError('拉取失败（测试注入）');
     return SyncPullResult(
@@ -189,6 +193,16 @@ class FakeSyncTransport implements SyncTransport {
       );
     }
     return const SyncPushResult(succeededPeers: 1);
+  }
+
+  /// deleteRemote 的结果（默认 false：没有可清理的远端文件）。
+  bool deleteRemoteResult = false;
+  final List<String> deletedRemotes = [];
+
+  @override
+  Future<bool> deleteRemote(String deviceId) async {
+    deletedRemotes.add(deviceId);
+    return deleteRemoteResult;
   }
 
   @override

@@ -1,10 +1,13 @@
 /// 跨设备数据同步的纯领域模型：记录 / 快照 / 合并规则。
 ///
-/// 同步模型是「全量合并」：每台设备持有自己已知的完整视图（每条记录带
-/// 版本三元组 [SyncVersion]，删除用墓碑记录表达），设备间交换视图后逐键
-/// 取新，天然幂等、无需版本向量。信任模型：能解密同步口令者即已授权，
-/// 不做逐项审批（见 ADR-0003）。
+/// 同步模型是「全量合并 + 增量日志」：每台设备持有自己已知的完整视图（每条
+/// 记录带版本三元组 [SyncVersion]，删除用墓碑记录表达），设备间交换视图后逐键
+/// 取新；日常轮次只交换**变更**（[SyncJournalEntry] 组成的增量窗口），首次引导
+/// 与长期离线用全量快照兜底（见 [SyncEnvelope]）。信任模型：能解密同步口令者
+/// 即已授权，不做逐项审批（见 ADR-0003）。
 library;
+
+import 'dart:convert';
 
 /// 同步类别（设置页按类别开关；类别关闭时既不推送也不应用该类记录）。
 enum SyncCategory {
@@ -221,7 +224,62 @@ class SyncRecord {
   String toString() => 'SyncRecord($key, v=$version, d=$deleted)';
 }
 
-/// 一次同步快照：设备身份 + 各类别记录。
+/// 增量日志条目：一次本地变更在 journal 里的记录。
+///
+/// [seq] 是产生该条目的设备上单调递增的序号（**跨设备语义 = 对端游标**：
+/// 接收方只应用 `seq > 游标` 的条目）；[category] 与 [record] 就是该变更
+/// 的同步记录（键 / 版本三元组 / 墓碑 / 载荷），与全量快照里的记录同构。
+class SyncJournalEntry {
+  const SyncJournalEntry({
+    required this.seq,
+    required this.category,
+    required this.record,
+  });
+
+  final int seq;
+  final SyncCategory category;
+  final SyncRecord record;
+
+  /// 条目的近似字节量（compact 的体积硬上限用；不含传输 / 加密开销）。
+  int get byteSize =>
+      record.key.length +
+      (record.data == null ? 0 : jsonEncode(record.data).length) +
+      96;
+
+  Map<String, dynamic> toJson() => {
+        'seq': seq,
+        'category': category.name,
+        'record': record.toJson(),
+      };
+
+  /// 宽容解析：seq / category 非法返回 null（坏条目跳过）。
+  static SyncJournalEntry? fromJson(Object? raw) {
+    if (raw is! Map) return null;
+    final seq = raw['seq'];
+    if (seq is! num || seq.toInt() <= 0) return null;
+    final category = SyncCategory.tryParse(raw['category']?.toString());
+    if (category == null) return null;
+    final record = SyncRecord.fromJson(raw['record']);
+    if (record == null) return null;
+    return SyncJournalEntry(seq: seq.toInt(), category: category, record: record);
+  }
+
+  @override
+  String toString() => 'SyncJournalEntry($seq, ${category.name}, ${record.key})';
+}
+
+/// 一次同步快照：设备身份 + 各类别记录；也可以是只携带变更的**增量窗口**。
+///
+/// 载荷两种形态（同一线上类型，[journal] 是否为 null 区分）：
+/// - **全量快照**（`journal == null`）：完整记录集，用于首次引导（bootstrap）、
+///   anti-entropy 兜底与完整备份；[journalHead] 是快照覆盖到的 journal 位置，
+///   接收方应用后把游标推进到该位置；
+/// - **增量窗口**（`journal != null`，可为空列表）：只携带 `seq > 接收方游标`
+///   的条目；[windowStart] / [windowEnd] 是窗口边界，[baseSeq] 是发送方已
+///   裁剪到的位置——接收方游标小于 [baseSeq] 时必须改走 bootstrap。
+///
+/// [acks] 是「我已消费各对端 journal 到哪」的回执：对端据此 compact
+/// （`min(对端 ack)` 裁剪日志）。
 class SyncEnvelope {
   /// 线上协议版本（快照 JSON 的 `v` 字段值）。
   static const int protocolVersion = 2;
@@ -237,10 +295,31 @@ class SyncEnvelope {
   final int producedAt;
 
   /// 记录集的规范化哈希（内容指纹）：与 [producedAt]（时间）分开表达
-  /// 「内容变」与「时间变」。对端探测应答携带它，一致则跳过拉取。
+  /// 「内容变」与「时间变」。对端探测应答携带它，一致则跳过拉取；
+  /// anti-entropy 也用它比对「静默分歧」。
   final String snapshotId;
 
   final Map<SyncCategory, List<SyncRecord>> records;
+
+  /// 发送方 journal 头部 seq（0 = 尚无条目）：全量快照携带的是快照覆盖到的
+  /// 位置（应用后游标推进到这里），增量载荷携带的是发送方当前头部。
+  final int journalHead;
+
+  /// 发送方已裁剪到的位置（窗口起点 = [baseSeq] + 1）；接收方游标小于它
+  /// 时日志窗口已不完整，必须请求 bootstrap 全量快照。
+  final int baseSeq;
+
+  /// 增量窗口的第一个 seq（0 = 空窗口）。
+  final int windowStart;
+
+  /// 增量窗口的最后一个 seq（0 = 空窗口）。
+  final int windowEnd;
+
+  /// 增量条目；null = 本载荷是全量快照（见类文档）。
+  final List<SyncJournalEntry>? journal;
+
+  /// 我已消费各对端 journal 的位置（对端 id → seq）：对端据此裁剪日志。
+  final Map<String, int> acks;
 
   const SyncEnvelope({
     required this.deviceId,
@@ -249,7 +328,27 @@ class SyncEnvelope {
     this.snapshotId = '',
     this.version = protocolVersion,
     this.records = const {},
+    this.journalHead = 0,
+    this.baseSeq = 0,
+    this.windowStart = 0,
+    this.windowEnd = 0,
+    this.journal,
+    this.acks = const {},
   });
+
+  /// 本载荷是否为增量窗口（null journal = 全量快照）。
+  bool get isDelta => journal != null;
+
+  /// 载荷携带的记录（增量载荷从 [journal] 提取，全量快照用 [records]）。
+  Map<SyncCategory, List<SyncRecord>> get payloadRecords {
+    final entries = journal;
+    if (entries == null) return records;
+    final result = <SyncCategory, List<SyncRecord>>{};
+    for (final entry in entries) {
+      result.putIfAbsent(entry.category, () => []).add(entry.record);
+    }
+    return result;
+  }
 
   /// 复制并替换内容指纹（引擎在裁剪墓碑后按最终记录集计算）。
   SyncEnvelope withSnapshotId(String snapshotId) => SyncEnvelope(
@@ -259,6 +358,12 @@ class SyncEnvelope {
         snapshotId: snapshotId,
         version: version,
         records: records,
+        journalHead: journalHead,
+        baseSeq: baseSeq,
+        windowStart: windowStart,
+        windowEnd: windowEnd,
+        journal: journal,
+        acks: acks,
       );
 
   Iterable<SyncRecord> recordsOf(SyncCategory category) =>
@@ -293,6 +398,9 @@ class SyncEnvelope {
       snapshotId: snapshotId,
       version: version,
       records: pruned,
+      journalHead: journalHead,
+      baseSeq: baseSeq,
+      acks: acks,
     );
   }
 
@@ -302,6 +410,15 @@ class SyncEnvelope {
         'deviceName': deviceName,
         'producedAt': producedAt,
         if (snapshotId.isNotEmpty) 'snapshotId': snapshotId,
+        if (journalHead > 0) 'journalHead': journalHead,
+        if (baseSeq > 0) 'baseSeq': baseSeq,
+        if (journal != null) ...{
+          'windowStart': windowStart,
+          'windowEnd': windowEnd,
+          'journal': [for (final entry in journal!) entry.toJson()],
+        },
+        if (acks.isNotEmpty)
+          'acks': {for (final entry in acks.entries) entry.key: entry.value},
         'records': {
           for (final entry in records.entries)
             if (entry.value.isNotEmpty)
@@ -329,6 +446,25 @@ class SyncEnvelope {
         if (parsed.isNotEmpty) records[category] = parsed;
       }
     }
+    // `journal` 字段存在即增量载荷（空列表也是合法的空窗口）。
+    List<SyncJournalEntry>? journal;
+    final rawJournal = raw['journal'];
+    if (rawJournal is List) {
+      journal = <SyncJournalEntry>[
+        for (final item in rawJournal)
+          if (SyncJournalEntry.fromJson(item) case final entry?) entry,
+      ];
+    }
+    final acks = <String, int>{};
+    final rawAcks = raw['acks'];
+    if (rawAcks is Map) {
+      for (final entry in rawAcks.entries) {
+        final value = entry.value;
+        if (entry.key is String && value is num) {
+          acks[entry.key as String] = value.toInt();
+        }
+      }
+    }
     return SyncEnvelope(
       deviceId: deviceId,
       deviceName: raw['deviceName'] is String ? raw['deviceName'] as String : '',
@@ -339,6 +475,12 @@ class SyncEnvelope {
           raw['snapshotId'] is String ? raw['snapshotId'] as String : '',
       version: (raw['v'] as num?)?.toInt() ?? protocolVersion,
       records: records,
+      journalHead: (raw['journalHead'] as num?)?.toInt() ?? 0,
+      baseSeq: (raw['baseSeq'] as num?)?.toInt() ?? 0,
+      windowStart: (raw['windowStart'] as num?)?.toInt() ?? 0,
+      windowEnd: (raw['windowEnd'] as num?)?.toInt() ?? 0,
+      journal: journal,
+      acks: acks,
     );
   }
 }
@@ -664,6 +806,9 @@ abstract final class SyncIssueCode {
   /// 引擎内部异常（args 无；detail 带原始异常）。
   static const String internal = 'internal';
 
+  /// 显式清理对端远端文件失败（args：`peer` = 对端标识）。
+  static const String deleteRemoteFailed = 'delete_remote_failed';
+
   /// 未知原因（非结构化错误 / 持久化中无法识别的形状）。
   static const String unknown = 'unknown';
 
@@ -688,6 +833,7 @@ abstract final class SyncIssueCode {
     webdavReadFailed,
     webdavDecryptFailed,
     webdavUploadFailed,
+    deleteRemoteFailed,
     internal,
     unknown,
   ];
@@ -805,8 +951,18 @@ class SyncPeerState {
     this.lastPushAt = 0,
     this.lastError,
     this.behindBy,
+    this.behindBytes,
     this.clockSkewMs,
+    this.cursorSeq = -1,
+    this.ackedSeq = -1,
+    this.headSeq = 0,
+    this.snapshotId = '',
+    this.fullPulledSnapshotId = '',
   });
+
+  /// 失联阈值：超过这段时间没有任何接触的对端在名册里标记「已失联」
+  /// （只提示与提供处置动作，不做自动删除）。
+  static const int lostThresholdMs = 180 * 24 * 60 * 60 * 1000;
 
   final String deviceId;
   final String name;
@@ -824,11 +980,36 @@ class SyncPeerState {
   /// 最近一次接触的失败原因；成功接触时清除（见 `SyncEngine._roster`）。
   final SyncIssue? lastError;
 
-  /// 落后条数（增量协议提供；null = 未知，见增量协议任务）。
+  /// 对端落后本机 journal 的条数（本机头部 − 对端已 ack 的位置）；
+  /// null = 对端尚未 ack 过（无观测）。
   final int? behindBy;
+
+  /// 对端落后部分的近似字节量（与 [behindBy] 同源）。
+  final int? behindBytes;
 
   /// 对端时钟偏移（对端自报 `producedAt` − 本机时间；正 = 偏快）。
   final int? clockSkewMs;
+
+  /// 本机已消费该对端 journal 到的位置（游标）；-1 = 尚未消费过任何条目。
+  final int cursorSeq;
+
+  /// 该对端已确认消费本机 journal 到的位置（来自对端载荷的 ack）；
+  /// -1 = 未知（从未收到对端的 ack，视为可能落后任何位置）。
+  final int ackedSeq;
+
+  /// 该对端自报的 journal 头部 seq（0 = 尚无条目）。
+  final int headSeq;
+
+  /// 该对端最近一次自报的全量视图指纹（anti-entropy 比对用）。
+  final String snapshotId;
+
+  /// 最近一次为该对端做过全量兜底时它的指纹：与 [snapshotId] 相同则不再重复
+  /// 全量拉取（避免「结构性不一致」每轮重拉）。
+  final String fullPulledSnapshotId;
+
+  /// 是否已失联（超过 [lostThresholdMs] 无接触；无接触时间视为未知，不标记）。
+  bool isLostAt(int nowMs) =>
+      lastSeenAt > 0 && nowMs - lastSeenAt > lostThresholdMs;
 
   SyncPeerState copyWith({
     String? name,
@@ -839,7 +1020,14 @@ class SyncPeerState {
     SyncIssue? lastError,
     bool clearLastError = false,
     int? behindBy,
+    bool clearBehind = false,
+    int? behindBytes,
     int? clockSkewMs,
+    int? cursorSeq,
+    int? ackedSeq,
+    int? headSeq,
+    String? snapshotId,
+    String? fullPulledSnapshotId,
   }) =>
       SyncPeerState(
         deviceId: deviceId,
@@ -849,8 +1037,14 @@ class SyncPeerState {
         lastPullAt: lastPullAt ?? this.lastPullAt,
         lastPushAt: lastPushAt ?? this.lastPushAt,
         lastError: clearLastError ? null : (lastError ?? this.lastError),
-        behindBy: behindBy ?? this.behindBy,
+        behindBy: clearBehind ? null : (behindBy ?? this.behindBy),
+        behindBytes: clearBehind ? null : (behindBytes ?? this.behindBytes),
         clockSkewMs: clockSkewMs ?? this.clockSkewMs,
+        cursorSeq: cursorSeq ?? this.cursorSeq,
+        ackedSeq: ackedSeq ?? this.ackedSeq,
+        headSeq: headSeq ?? this.headSeq,
+        snapshotId: snapshotId ?? this.snapshotId,
+        fullPulledSnapshotId: fullPulledSnapshotId ?? this.fullPulledSnapshotId,
       );
 
   Map<String, dynamic> toJson() => {
@@ -862,7 +1056,14 @@ class SyncPeerState {
         if (lastPushAt > 0) 'lastPushAt': lastPushAt,
         if (lastError != null) 'lastError': lastError!.toJson(),
         if (behindBy != null) 'behindBy': behindBy,
+        if (behindBytes != null) 'behindBytes': behindBytes,
         if (clockSkewMs != null) 'clockSkewMs': clockSkewMs,
+        if (cursorSeq >= 0) 'cursorSeq': cursorSeq,
+        if (ackedSeq >= 0) 'ackedSeq': ackedSeq,
+        if (headSeq > 0) 'headSeq': headSeq,
+        if (snapshotId.isNotEmpty) 'snapshotId': snapshotId,
+        if (fullPulledSnapshotId.isNotEmpty)
+          'fullPulledSnapshotId': fullPulledSnapshotId,
       };
 
   static SyncPeerState? fromJson(Object? raw) {
@@ -878,7 +1079,13 @@ class SyncPeerState {
       lastPushAt: (raw['lastPushAt'] as num?)?.toInt() ?? 0,
       lastError: SyncIssue.fromJson(raw['lastError']),
       behindBy: (raw['behindBy'] as num?)?.toInt(),
+      behindBytes: (raw['behindBytes'] as num?)?.toInt(),
       clockSkewMs: (raw['clockSkewMs'] as num?)?.toInt(),
+      cursorSeq: (raw['cursorSeq'] as num?)?.toInt() ?? -1,
+      ackedSeq: (raw['ackedSeq'] as num?)?.toInt() ?? -1,
+      headSeq: (raw['headSeq'] as num?)?.toInt() ?? 0,
+      snapshotId: raw['snapshotId'] as String? ?? '',
+      fullPulledSnapshotId: raw['fullPulledSnapshotId'] as String? ?? '',
     );
   }
 }

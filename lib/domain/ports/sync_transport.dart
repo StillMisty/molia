@@ -1,10 +1,39 @@
 import '../models/device_sync.dart';
 
+/// 一次拉取的请求参数（增量协议：本机游标 + 需要全量兜底的对端）。
+///
+/// 传输实现按 [cursors] 请求「游标之后的增量窗口」（局域网带查询参数；
+/// WebDAV 本地过滤文件里的窗口），并在对端日志窗口已不含本机游标时改取
+/// bootstrap 全量快照；[fullPeers] 是引擎显式要求全量的对端（anti-entropy
+/// 发现指纹不一致，或上一轮发现窗口缺口）。
+class SyncPullRequest {
+  const SyncPullRequest({
+    this.cursors = const {},
+    this.fullPeers = const {},
+  });
+
+  /// 本机已消费各对端 journal 的位置（对端 id → seq）。
+  final Map<String, int> cursors;
+
+  /// 强制走全量快照的对端 id。
+  final Set<String> fullPeers;
+
+  /// 未记录过的对端：尚未消费任何条目。
+  static const int noCursor = -1;
+
+  static const SyncPullRequest none = SyncPullRequest();
+
+  int cursorFor(String deviceId) => cursors[deviceId] ?? noCursor;
+}
+
 /// 一次拉取的结果。
 ///
 /// 失败按宽容处理（不抛异常）：单个对端的网络 / 解密失败只计入 [failedPeers]，
 /// 其余对端的结果照常返回。[peersSeen] 是本轮实际探测到 / 列出的对端数——
 /// 「一个对端都没发现」与「没有变化」必须能被上层区分开。
+///
+/// [envelopes] 同时承载两种载荷：增量窗口（`isDelta`）与 bootstrap 全量快照；
+/// 引擎按载荷形态分别推进游标与合并。
 class SyncPullResult {
   const SyncPullResult({
     this.envelopes = const [],
@@ -97,11 +126,18 @@ abstract interface class SyncTransport {
   /// 原始异常 / 错误串只进日志与诊断导出，UI 展示的是原因码映射文案。
   String? get unavailableDetail;
 
-  /// 拉取当前可获得的远端快照（解密失败的对端跳过并计数）。
-  Future<SyncPullResult> pull();
+  /// 拉取当前可获得的远端载荷（增量窗口或 bootstrap 全量快照；
+  /// 解密失败的对端跳过并计数）。
+  Future<SyncPullResult> pull([SyncPullRequest request]);
 
-  /// 推送本地快照（对端后续轮次拉取可见）。
+  /// 推送本地载荷（增量窗口 / 需要发布的全量快照；对端后续轮次拉取可见）。
   Future<SyncPushResult> push(SyncEnvelope envelope);
+
+  /// 显式清理某个对端的远端文件（用户动作；**不做自动删除**）。
+  ///
+  /// 返回 false = 该传输没有可清理的远端文件（局域网直连无远端存储）或删除
+  /// 失败。局域网实现恒返回 false。
+  Future<bool> deleteRemote(String deviceId);
 
   /// 对端主动送来的快照（局域网 POST / WebDAV 无此通道时为广播流）。
   Stream<SyncEnvelope> get incoming;

@@ -101,7 +101,7 @@ class WebDavSyncTransport implements SyncTransport {
   }
 
   @override
-  Future<SyncPullResult> pull() async {
+  Future<SyncPullResult> pull([SyncPullRequest request = SyncPullRequest.none]) async {
     if (!_running) return SyncPullResult.none;
     final config = _configProvider();
     final passphrase = await _passphraseProvider();
@@ -220,6 +220,10 @@ class WebDavSyncTransport implements SyncTransport {
       );
     }
   }
+
+  /// 显式清理某台对端的远端文件（用户动作；**不做自动删除**）。
+  @override
+  Future<bool> deleteRemote(String deviceId) async => false;
 
   Future<void> _ensureDir(WebDavConfig config) async {
     final dir = _dirUri(config);

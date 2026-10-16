@@ -218,7 +218,7 @@ class LanSyncTransport implements SyncTransport {
   }
 
   @override
-  Future<SyncPullResult> pull() async {
+  Future<SyncPullResult> pull([SyncPullRequest request = SyncPullRequest.none]) async {
     if (!_running) {
       return SyncPullResult(
         error: SyncIssue(
@@ -338,6 +338,10 @@ class LanSyncTransport implements SyncTransport {
       error: firstError,
     );
   }
+
+  /// 局域网直连没有远端存储：显式清理远端文件对它不适用。
+  @override
+  Future<bool> deleteRemote(String deviceId) async => false;
 
   /// 广播探测 + 地址簿单播探测，收集应答（清空过期对端；仅保留本轮应答者）。
   Future<List<_Peer>> _discoverPeers() async {
