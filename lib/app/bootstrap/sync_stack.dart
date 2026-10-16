@@ -11,6 +11,7 @@ import 'dart:async';
 
 import 'package:flutter/foundation.dart';
 
+import '../../data/molia_database.dart';
 import '../../data/sync/adapters/history_sync_adapter.dart';
 import '../../data/sync/adapters/playlist_sync_adapter.dart';
 import '../../data/sync/adapters/prefs_sync_adapter.dart';
@@ -19,6 +20,7 @@ import '../../data/sync/adapters/session_sync_adapter.dart';
 import '../../data/sync/adapters/statistics_sync_adapter.dart';
 import '../../data/sync/sync_crypto.dart';
 import '../../data/sync/sync_engine.dart';
+import '../../data/sync/sync_known_store.dart';
 import '../../data/sync/transport/lan_sync_transport.dart';
 import '../../data/sync/transport/local_network_permission.dart';
 import '../../data/sync/transport/webdav_sync_transport.dart';
@@ -127,6 +129,10 @@ Future<SyncStack> buildSyncStack({
     },
     // 引擎与各仓库共用同一个发号器（唯一）与同一时钟源。
     stamps: syncState.stampIssuer,
+    // 变更集基线（sync_known）：跨重启只把版本变化的胜者交给适配器。
+    known: SyncKnownRepository(
+      databaseProvider: () => MoliaDatabase.instance,
+    ),
     clock: () => DateTime.fromMillisecondsSinceEpoch(syncState.nowMs()),
   );
   engineRef = syncEngine;

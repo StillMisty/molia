@@ -6,14 +6,21 @@ import 'package:flutter/foundation.dart';
 import 'package:logging/logging.dart';
 
 import '../../domain/models/device_sync.dart';
+import '../../domain/ports/sync_known_store.dart';
 import '../../domain/ports/sync_transport.dart';
 import 'sync_adapter.dart';
+import 'sync_known_store.dart';
 import 'sync_passphrase.dart';
 import 'sync_stamp.dart';
 import 'sync_state_store.dart';
 
 /// 同步引擎：一轮 = 收集本地视图 → 拉取远端快照 → 逐键合并 → 写回本地 →
 /// 推送合并后视图 → 记录可观察的一轮结果（[SyncRoundReport]）。
+///
+/// 成本模型：合并后只把**版本变化**的胜者交给适配器（[SyncKnownStore] 登记
+/// 上一轮交付的版本），因此一轮的落地量、日志计数与适配器内部查询
+/// ∝ 本轮变更量，不随库大小增长；空闲轮不拉取（传输门控）、不推送
+/// （内容指纹未变）、不落地（登记未变）。
 ///
 /// 可观察性契约：
 /// - 报告区分五态：`noPeers`（一个对端都没发现）与 `noChanges`（对端可达但
@@ -28,11 +35,15 @@ class SyncEngine extends ChangeNotifier {
     required List<SyncAdapter> adapters,
     required Map<String, SyncTransport> transports,
     required SyncStampIssuer stamps,
+    SyncKnownStore? known,
     DateTime Function()? clock,
+    Duration inboundWindow = const Duration(milliseconds: 1500),
   })  : _state = state,
         _adapters = adapters,
         _transports = transports,
         _stamps = stamps,
+        _known = known ?? InMemorySyncKnownStore(),
+        _inboundWindow = inboundWindow,
         _clock = clock ?? DateTime.now {
     for (final transport in transports.values) {
       _incomingSubscriptions.add(transport.incoming.listen(
@@ -50,10 +61,21 @@ class SyncEngine extends ChangeNotifier {
 
   /// 版本戳发号器（必填：唯一实例由组合根注入，避免各自建号发出重复版本）。
   final SyncStampIssuer _stamps;
+
+  /// 已知版本登记（变更集判定）；未注入时退化为进程内登记。
+  final SyncKnownStore _known;
+
+  /// 入站合流窗口：窗口内到达的多个对端推送合并成一轮。
+  final Duration _inboundWindow;
+
   final DateTime Function() _clock;
   final List<SyncEnvelope> _inbound = [];
   final List<StreamSubscription<SyncEnvelope>> _incomingSubscriptions = [];
   final Logger _logger = Logger('molia.sync');
+
+  /// 登记的内存视图（首次使用时加载一次，之后只写变化项）。
+  Map<SyncKnownKey, SyncVersion>? _knownVersions;
+  Timer? _inboundTimer;
 
   bool _syncing = false;
   bool _initialized = false;
@@ -103,6 +125,10 @@ class SyncEngine extends ChangeNotifier {
   }
 
   int _nowMs() => _clock().millisecondsSinceEpoch;
+
+  /// 登记的内存视图：首次使用时一次加载（之后由引擎维护）。
+  Future<Map<SyncKnownKey, SyncVersion>> _ensureKnown() async =>
+      _knownVersions ??= await _known.knownVersions();
 
   Future<void> init() async {
     if (_initialized) return;
@@ -193,19 +219,23 @@ class SyncEngine extends ChangeNotifier {
     return generated;
   }
 
-  /// 对端主动推送的快照：并入下一轮（未在同步中则立即触发一轮）。
+  /// 对端主动推送的快照：在合流窗口内合并成一轮。
   ///
-  /// 本轮不推送：推送方在自己的轮次里已拉取过本机视图，入站触发的轮次再推送
-  /// 会形成「A 推 B → B 推 A」的无限乒乓；需要外发的本地变更由常规触发
-  /// （启动 / 去抖 / 定时）承担。
+  /// 入站轮只消费收到的快照：不拉取全部对端（避免 N 台平方级放大）、不推送
+  /// （防止 A 推 B → B 推 A 的乒乓）；需要外发的本地变更由常规触发承担。
+  /// 窗口内的多次推送（含多个对端）只触发一轮。
   Future<void> onIncomingEnvelope(SyncEnvelope envelope) async {
     if (!_state.enabled) return;
     _inbound.add(envelope);
-    if (!_syncing) {
-      await syncNow(trigger: SyncTrigger.incoming, push: false);
-    } else {
+    if (_syncing) {
       _pendingTrigger = _mergeTrigger(_pendingTrigger, SyncTrigger.incoming);
+      return;
     }
+    _inboundTimer ??= Timer(_inboundWindow, () {
+      _inboundTimer = null;
+      if (_inbound.isEmpty) return;
+      unawaited(syncNow(trigger: SyncTrigger.incoming, push: false));
+    });
   }
 
   /// 跑一轮同步。返回**最终**一轮的报告（若期间收到排队请求，会连续跑完）。
@@ -264,6 +294,18 @@ class SyncEngine extends ChangeNotifier {
       final fingerprint = _fingerprint(local);
       final localChanged = _localFingerprint == null || fingerprint != _localFingerprint;
 
+      // 本地视图就是适配器当前状态：以本地版本播种登记（内存内，不落库），
+      // 空闲轮不向适配器交付任何记录；远端胜者版本更高时仍会交付。
+      final known = await _ensureKnown();
+      for (final entry in local.entries) {
+        for (final record in entry.value) {
+          known.putIfAbsent(
+            (category: entry.key, key: record.key),
+            () => record.version,
+          );
+        }
+      }
+
       // 拉取：逐传输计时 + 逐对端计数。
       final accumulators = <String, _TransportAccumulator>{
         for (final kind in _transports.keys)
@@ -273,6 +315,8 @@ class SyncEngine extends ChangeNotifier {
           ),
       };
       final pulledEntries = <(String, SyncEnvelope)>[];
+      // 入站轮只消费收到的快照：不主动拉取任何对端。
+      final inboundOnly = trigger == SyncTrigger.incoming;
       for (final entry in _transports.entries) {
         final accumulator = accumulators[entry.key]!;
         final transport = entry.value;
@@ -291,6 +335,7 @@ class SyncEngine extends ChangeNotifier {
           );
           continue;
         }
+        if (inboundOnly) continue;
 
         final watch = Stopwatch()..start();
         SyncPullResult result;
@@ -343,16 +388,37 @@ class SyncEngine extends ChangeNotifier {
 
         for (final adapter in _adapters) {
           if (!adapter.ready) continue;
+          // 只交付版本变化的胜者：登记一致的键不进入适配器（变更集应用）。
           final subset = <SyncCategory, List<SyncRecord>>{};
           for (final category in adapter.categories) {
             final winners = merged[category];
             if (winners == null || winners.isEmpty) continue;
-            subset[category] = winners.values.toList();
+            for (final record in winners.values) {
+              if (known[(category: category, key: record.key)] ==
+                  record.version) {
+                continue;
+              }
+              subset.putIfAbsent(category, () => []).add(record);
+            }
           }
           if (subset.isEmpty) continue;
           try {
             final outcome = await adapter.apply(subset);
             applied += outcome.applied;
+            // 交付成功才登记（含适配器跳过的项）：适配器对同一状态的判定
+            // 是确定的，重复交付只会重复消耗；登记落库后跨重启不再重放。
+            final delivered = <SyncKnownKey, SyncVersion>{};
+            for (final entry in subset.entries) {
+              for (final record in entry.value) {
+                final key = (category: entry.key, key: record.key);
+                if (known[key] == record.version) continue;
+                delivered[key] = record.version;
+              }
+            }
+            if (delivered.isNotEmpty) {
+              known.addAll(delivered);
+              await _known.putKnownVersions(delivered);
+            }
           } catch (e) {
             // 应用失败 = 对端推来的记录没有落地：计入本轮失败并把入站快照放回
             // 队列（下轮重试），不静默丢数据。
@@ -786,6 +852,8 @@ class SyncEngine extends ChangeNotifier {
 
   @override
   void dispose() {
+    _inboundTimer?.cancel();
+    _inboundTimer = null;
     for (final subscription in _incomingSubscriptions) {
       unawaited(subscription.cancel());
     }

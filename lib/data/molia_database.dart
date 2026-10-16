@@ -446,3 +446,12 @@ extension PlayEventSyncVersionX on PlayEventRow {
         deviceId: originDeviceId,
       );
 }
+
+/// 同步已知版本登记的版本三元组。
+extension SyncKnownSyncVersionX on SyncKnownData {
+  SyncVersion get syncVersion => SyncVersion(
+        physical: versionPhysical,
+        counter: versionCounter,
+        deviceId: deviceId,
+      );
+}

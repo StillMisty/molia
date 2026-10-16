@@ -127,6 +127,9 @@ class FakeSyncTransport implements SyncTransport {
   int pullFailures = 0;
   int pushFailures = 0;
 
+  /// pull 被调用的次数（验证入站轮不拉取）。
+  int pullCount = 0;
+
   /// pull 报告的原因（不伴随失败计数：验证传输级错误不被吞）。
   SyncIssue? pullError;
 
@@ -154,6 +157,7 @@ class FakeSyncTransport implements SyncTransport {
 
   @override
   Future<SyncPullResult> pull() async {
+    pullCount++;
     await onPull?.call();
     if (throwOnPull) throw StateError('拉取失败（测试注入）');
     return SyncPullResult(

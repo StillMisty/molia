@@ -52,6 +52,8 @@ void main() {
         ),
       ],
       transports: {'lan': transport},
+      // 入站合流窗口缩短：单测不用等默认的 1.5s。
+      inboundWindow: const Duration(milliseconds: 10),
     );
     await engine.init();
   });
@@ -237,11 +239,39 @@ void main() {
 
   test('对端入站快照触发同步，且入站轮次不推送（防乒乓）', () async {
     await engine.onIncomingEnvelope(remoteTheme('light'));
+    // 合流窗口结束后才跑入站轮。
+    await Future<void>.delayed(const Duration(milliseconds: 40));
 
     expect(prefs.getString('theme_mode'), 'light');
     expect(transport.pushed, isEmpty);
     expect(state.log.first.trigger, SyncTrigger.incoming);
     expect(state.log.first.outcome, SyncOutcome.ok);
+  });
+
+  test('入站合流：3 个对端先后推送只产生 1 轮', () async {
+    // 三个对端在窗口内先后推送。
+    await engine.onIncomingEnvelope(remoteTheme('light', deviceId: 'devB'));
+    await engine.onIncomingEnvelope(remoteTheme('dark', deviceId: 'devC'));
+    await engine.onIncomingEnvelope(remoteTheme('system', deviceId: 'devD'));
+    await Future<void>.delayed(const Duration(milliseconds: 40));
+
+    expect(state.log, hasLength(1));
+    expect(state.log.single.trigger, SyncTrigger.incoming);
+    // 入站轮不拉取（不主动联系任何对端）。
+    expect(transport.pullCount, 0);
+    // 三次推送都消费了：最后一次（版本最大）生效。
+    expect(prefs.getString('theme_mode'), 'system');
+  });
+
+  test('入站轮不推送、不拉取：只消费收到的快照', () async {
+    transport.peersSeenOverride = 1;
+    transport.available.add(remoteTheme('light'));
+    await engine.onIncomingEnvelope(remoteTheme('dark'));
+    await Future<void>.delayed(const Duration(milliseconds: 40));
+
+    expect(transport.pullCount, 0);
+    expect(transport.pushed, isEmpty);
+    expect(state.log, hasLength(1));
   });
 
   test('未设置口令：报告失败并写入日志', () async {
@@ -334,12 +364,14 @@ void main() {
       stamps: failingState.stampIssuer,
       adapters: [adapter],
       transports: {'lan': failingTransport},
+      inboundWindow: const Duration(milliseconds: 10),
     );
     addTearDown(failingEngine.dispose);
     await failingEngine.init();
 
     adapter.failNext = true;
     await failingEngine.onIncomingEnvelope(remoteTheme('light'));
+    await Future<void>.delayed(const Duration(milliseconds: 40));
     expect(adapter.appliedKeys, isEmpty);
     // 收到数据但一条都没落地：本轮算失败（错误里带应用失败次数）。
     expect(failingState.log.first.outcome, SyncOutcome.failed);
