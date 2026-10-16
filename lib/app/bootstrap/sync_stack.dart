@@ -66,6 +66,7 @@ Future<SyncStack> buildSyncStack({
   final scriptSyncAdapter = ScriptSyncAdapter(
     repository: sourceManager.repository,
     state: syncState,
+    journal: library.syncJournal,
     ready: () => sourceManager.initialized,
     reservedKeys: sourceCategoryKeys,
     onScriptsChanged: sourceManager.refreshScriptsFromStorage,
@@ -73,6 +74,7 @@ Future<SyncStack> buildSyncStack({
   final prefsSyncAdapter = PrefsSyncAdapter(
     state: syncState,
     settings: catalog.settings,
+    journal: library.syncJournal,
     // 应用远端设置后：注册表按键触发模块自绑的重载钩子。
     onApplied: catalog.settings.reloadKeys,
   );
@@ -84,6 +86,7 @@ Future<SyncStack> buildSyncStack({
     // 会话适配器用独立的会话存储实例（与播放栈的实时会话落盘互不影响）。
     store: PlaybackSessionStore(),
     state: syncState,
+    journal: library.syncJournal,
     onChanged: playback.playbackProvider.reloadRestoredSessionFromStore,
   );
 

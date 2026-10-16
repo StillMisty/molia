@@ -6,6 +6,7 @@ import '../../../domain/models/device_sync.dart';
 import '../../settings/settings_key.dart';
 import '../../settings/settings_registry.dart';
 import '../sync_adapter.dart';
+import '../sync_journal.dart';
 import '../sync_state_store.dart';
 
 /// 设置 / 音源配置 / 凭证适配器（键规格与读写都在 [SettingsRegistry]）。
@@ -18,13 +19,19 @@ class PrefsSyncAdapter implements SyncAdapter {
   PrefsSyncAdapter({
     required SyncStateStore state,
     required SettingsRegistry settings,
+    SyncJournalRepository? journal,
     this.onApplied,
   })  : _state = state,
         _settings = settings,
+        _journal = journal,
         _byName = {for (final key in settings.keys) key.name: key};
 
   final SyncStateStore _state;
   final SettingsRegistry _settings;
+
+  /// 增量日志（可选）：登记哈希发现本地修改时追加，对端按游标只拉变更。
+  /// 首次登记（进程首次见到该键）不算变更——初始视图由全量快照覆盖。
+  final SyncJournalRepository? _journal;
   final Map<String, SettingsKey<Object?>> _byName;
 
   /// 应用远端设置后回调（组合根接线：注册表按键触发 reload 钩子）。
@@ -41,6 +48,7 @@ class PrefsSyncAdapter implements SyncAdapter {
   @override
   Future<Map<SyncCategory, List<SyncRecord>>> collect() async {
     final records = <SyncCategory, List<SyncRecord>>{};
+    final changes = <SyncJournalChange>[];
     for (final key in _settings.keys) {
       final value = await _settings.readRaw(key);
       final hash = _hash(value);
@@ -54,14 +62,19 @@ class PrefsSyncAdapter implements SyncAdapter {
         final version = first && isDefault
             ? SyncVersion.zero
             : _state.stampIssuer.next();
-        _state.putSettingStamp(
-          key.name,
-          SyncStamp(hash: hash, version: version),
-        );
         record = SyncRecord(
           key: key.name,
           version: version,
           data: {'v': value},
+        );
+        // 首次登记不是变更（初始视图由全量快照覆盖）；其余登记哈希变化
+        // 就是一次本地修改，与登记更新同点追加日志。
+        if (!first) {
+          changes.add((category: key.category, record: record));
+        }
+        _state.putSettingStamp(
+          key.name,
+          SyncStamp(hash: hash, version: version),
         );
       } else {
         record = SyncRecord(
@@ -71,6 +84,10 @@ class PrefsSyncAdapter implements SyncAdapter {
         );
       }
       records.putIfAbsent(key.category, () => []).add(record);
+    }
+    final journal = _journal;
+    if (journal != null && changes.isNotEmpty) {
+      await journal.appendAll(changes);
     }
     return records;
   }

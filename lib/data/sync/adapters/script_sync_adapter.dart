@@ -6,6 +6,7 @@ import '../../../domain/models/device_sync.dart';
 import '../../../sources/lx/lx_script_info.dart';
 import '../../../sources/lx/lx_script_repository.dart';
 import '../sync_adapter.dart';
+import '../sync_journal.dart';
 import '../sync_state_store.dart';
 
 /// LX 音源脚本适配器（来源类别中除设置键以外的部分）。
@@ -21,17 +22,23 @@ class ScriptSyncAdapter implements SyncAdapter {
   ScriptSyncAdapter({
     required LxScriptRepository repository,
     required SyncStateStore state,
+    SyncJournalRepository? journal,
     bool Function()? ready,
     Set<String> reservedKeys = const {},
     Future<void> Function()? onScriptsChanged,
   })  : _repository = repository,
         _state = state,
+        _journal = journal,
         _ready = ready ?? (() => true),
         _reservedKeys = reservedKeys,
         _onScriptsChanged = onScriptsChanged;
 
   final LxScriptRepository _repository;
   final SyncStateStore _state;
+
+  /// 增量日志（可选）：内容哈希发现脚本变化、本机删除、激活脚本切换时
+  /// 追加；首次登记不算变更（初始视图由全量快照覆盖）。
+  final SyncJournalRepository? _journal;
   final bool Function() _ready;
 
   /// 来源类别中由 PrefsSyncAdapter 负责的键（脚本适配器跳过）。
@@ -50,26 +57,25 @@ class ScriptSyncAdapter implements SyncAdapter {
     final scripts = _repository.scripts;
     final currentIds = [for (final script in scripts) script.id];
     final knownIds = _state.knownScriptIds;
+    final changes = <SyncJournalChange>[];
 
     // 本机删除检测：上轮还在、本轮消失 → **一律取新戳**。复用旧墓碑会让这次
     // 本地删除输给陈旧的远端墓碑（发号器已吸收观测值，新戳必然更大）。
     for (final id in knownIds) {
       if (currentIds.contains(id)) continue;
-      _state.putScriptTombstone(
-        id,
-        SyncStamp(version: _state.stampIssuer.next()),
-      );
+      final version = _state.stampIssuer.next();
+      _state.putScriptTombstone(id, SyncStamp(version: version));
       _state.removeScriptStamp(id);
+      changes.add((
+        category: SyncCategory.sources,
+        record: SyncRecord.tombstone(key: id, version: version),
+      ));
     }
     _state.setKnownScriptIds(currentIds);
 
     final records = <SyncRecord>[
       for (final script in scripts)
-        SyncRecord(
-          key: script.id,
-          version: _scriptVersion(script),
-          data: script.toJson(),
-        ),
+        _scriptRecord(script, changes),
       for (final entry in _state.scriptTombstones.entries)
         SyncRecord.tombstone(
           key: entry.key,
@@ -89,6 +95,16 @@ class ScriptSyncAdapter implements SyncAdapter {
         version: seeded ? SyncVersion.zero : _state.stampIssuer.next(),
       );
       _state.setActiveScriptStamp(effective);
+      if (stamp != null) {
+        changes.add((
+          category: SyncCategory.sources,
+          record: SyncRecord(
+            key: SyncRecordKeys.activeScriptKey,
+            version: effective.version,
+            data: {'id': activeId.isEmpty ? null : activeId},
+          ),
+        ));
+      }
     } else {
       effective = stamp;
     }
@@ -97,17 +113,39 @@ class ScriptSyncAdapter implements SyncAdapter {
       version: effective.version,
       data: {'id': activeId.isEmpty ? null : activeId},
     ));
+    final journal = _journal;
+    if (journal != null && changes.isNotEmpty) {
+      await journal.appendAll(changes);
+    }
     return {SyncCategory.sources: records};
   }
 
-  /// 脚本的当前版本：内容哈希变化时取新戳并登记（“脚本被替换”＝本地修改）。
-  SyncVersion _scriptVersion(LxScriptInfo script) {
+  /// 脚本的当前版本：内容哈希变化时取新戳并登记（“脚本被替换”＝本地修改）；
+  /// 真实变化（非首次登记）追加日志。
+  SyncRecord _scriptRecord(
+    LxScriptInfo script,
+    List<SyncJournalChange> changes,
+  ) {
     final hash = _contentHash(script);
     final stamp = _state.scriptStamps[script.id];
-    if (stamp != null && stamp.hash == hash) return stamp.version;
+    if (stamp != null && stamp.hash == hash) {
+      return SyncRecord(
+        key: script.id,
+        version: stamp.version,
+        data: script.toJson(),
+      );
+    }
     final version = _state.stampIssuer.next();
     _state.putScriptStamp(script.id, SyncStamp(hash: hash, version: version));
-    return version;
+    final record = SyncRecord(
+      key: script.id,
+      version: version,
+      data: script.toJson(),
+    );
+    if (stamp != null) {
+      changes.add((category: SyncCategory.sources, record: record));
+    }
+    return record;
   }
 
   @override

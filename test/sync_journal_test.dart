@@ -1,4 +1,3 @@
-import 'package:drift/drift.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:molia/data/molia_database.dart';
 import 'package:molia/data/sync/sync_journal.dart';

@@ -2,6 +2,7 @@ import '../../../domain/models/device_sync.dart';
 import '../../../domain/models/download.dart' show kLocalSourceKey;
 import '../../../services/playback_session_store.dart';
 import '../sync_adapter.dart';
+import '../sync_journal.dart';
 import '../sync_state_store.dart';
 
 /// 上次播放会话适配器：把「上次播放的队列 + 下标 + 进度 + 模式」带到其它设备
@@ -16,13 +17,19 @@ class SessionSyncAdapter implements SyncAdapter {
   SessionSyncAdapter({
     required PlaybackSessionStore store,
     required SyncStateStore state,
+    SyncJournalRepository? journal,
     Future<void> Function()? onChanged,
   })  : _store = store,
         _state = state,
+        _journal = journal,
         _onChanged = onChanged;
 
   final PlaybackSessionStore _store;
   final SyncStateStore _state;
+
+  /// 增量日志（可选）：`savedAt` 变化（会话内容变化）时追加；首次登记
+  /// 不算变更（初始视图由全量快照覆盖）。
+  final SyncJournalRepository? _journal;
   final Future<void> Function()? _onChanged;
 
   @override
@@ -60,6 +67,20 @@ class SessionSyncAdapter implements SyncAdapter {
       final version = savedAt > 0 ? _state.stampIssuer.next() : SyncVersion.zero;
       effective = SyncStamp(hash: hash, version: version);
       _state.setSessionStamp(effective);
+      // 首次登记不是变更（初始视图由全量快照覆盖）；真实变化追加日志。
+      final journal = _journal;
+      if (journal != null && stamp != null) {
+        await journal.appendAll([
+          (
+            category: SyncCategory.session,
+            record: SyncRecord(
+              key: SyncRecordKeys.sessionKey,
+              version: effective.version,
+              data: raw,
+            ),
+          ),
+        ]);
+      }
     } else {
       effective = stamp;
     }

@@ -125,6 +125,15 @@ class SyncJournalRepository {
     return seqs;
   }
 
+  /// 追加本机变更（自开事务；供没有现成 executor 的写入点使用，如设置 /
+  /// 脚本 / 会话在各自的变化检测点追加）。
+  Future<List<int>> appendAll(Iterable<SyncJournalChange> changes) {
+    final list = changes.toList();
+    if (list.isEmpty) return Future.value(const []);
+    // 事务内 `_db` 自动走事务执行器（drift 的 zone 语义）。
+    return _db.transaction(() => append(_db, list));
+  }
+
   /// 当前头部 seq（0 = 尚无条目）。
   Future<int> headSeq() => _headSeq(_db);
 

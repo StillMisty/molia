@@ -27,6 +27,7 @@ import 'package:drift/drift.dart';
 import '../domain/models/device_sync.dart';
 import '../domain/models/play_statistics.dart';
 import 'molia_database.dart';
+import 'sync/sync_journal.dart';
 import 'sync/sync_stamp.dart';
 
 class PlayStatisticsRepository {
@@ -40,13 +41,19 @@ class PlayStatisticsRepository {
     MoliaDatabase Function()? databaseProvider,
     int Function()? clock,
     required SyncStampIssuer stamps,
+    SyncJournalRepository? journal,
   })  : _databaseProvider = databaseProvider ?? (() => MoliaDatabase.instance),
         _clock = clock ?? (() => DateTime.now().millisecondsSinceEpoch),
-        _stamps = stamps;
+        _stamps = stamps,
+        _journal = journal;
 
   final MoliaDatabase Function() _databaseProvider;
   final int Function() _clock;
   final SyncStampIssuer _stamps;
+
+  /// 增量日志（可选）：本机收尾事件在同一事务里追加；进行中事件不导出
+  /// （远端无法继续更新进度），因此开始播放与进度落盘不追加。
+  final SyncJournalRepository? _journal;
   final Random _random = Random.secure();
   final StreamController<void> _changes = StreamController<void>.broadcast();
 
@@ -142,15 +149,18 @@ class PlayStatisticsRepository {
     int? endedAt,
   }) async {
     final version = _nextVersion();
-    await (_db.update(_db.playEvents)..where((t) => t.id.equals(id)))
-        .write(PlayEventsCompanion(
-      endedAt: Value(endedAt ?? _clock()),
-      listenedMs: Value(listenedMs),
-      maxPositionMs: Value(maxPositionMs),
-      endReason: Value(reason.storageValue),
-      versionPhysical: Value(version.physical),
-      versionCounter: Value(version.counter),
-    ));
+    await _db.transaction(() async {
+      await (_db.update(_db.playEvents)..where((t) => t.id.equals(id)))
+          .write(PlayEventsCompanion(
+        endedAt: Value(endedAt ?? _clock()),
+        listenedMs: Value(listenedMs),
+        maxPositionMs: Value(maxPositionMs),
+        endReason: Value(reason.storageValue),
+        versionPhysical: Value(version.physical),
+        versionCounter: Value(version.counter),
+      ));
+      await _appendEventJournal(_db, id);
+    });
     _notifyChanged();
   }
 
@@ -160,18 +170,72 @@ class PlayStatisticsRepository {
   /// 返回收尾行数。版本戳整批取一个（各行键不同，LWW 只在同键间比较）。
   Future<int> closeStaleEvents() async {
     final version = _nextVersion();
-    final closed = await _db.customUpdate(
-      'UPDATE play_events SET endedAt = startedAt + listenedMs, endReason = ?, '
-      'versionPhysical = ?, versionCounter = ? WHERE endedAt IS NULL',
-      variables: [
-        Variable.withString(PlayEventEndReason.interrupted.storageValue),
-        Variable.withInt(version.physical),
-        Variable.withInt(version.counter),
-      ],
-      updates: {_db.playEvents},
-    );
+    var closed = 0;
+    await _db.transaction(() async {
+      // 先取遗留行 id：收尾后要按行追加增量日志（内容变化必须可同步）。
+      final staleIds = [
+        for (final row in await (_db.select(_db.playEvents)
+              ..where((t) => t.endedAt.isNull()))
+            .get())
+          row.id,
+      ];
+      if (staleIds.isEmpty) return;
+      closed = await _db.customUpdate(
+        'UPDATE play_events SET endedAt = startedAt + listenedMs, endReason = ?, '
+        'versionPhysical = ?, versionCounter = ? WHERE endedAt IS NULL',
+        variables: [
+          Variable.withString(PlayEventEndReason.interrupted.storageValue),
+          Variable.withInt(version.physical),
+          Variable.withInt(version.counter),
+        ],
+        updates: {_db.playEvents},
+      );
+      if (_journal != null) {
+        final changes = <SyncJournalChange>[];
+        for (final id in staleIds) {
+          final change = await _eventJournalChange(_db, id);
+          if (change != null) changes.add(change);
+        }
+        if (changes.isNotEmpty) await _journal.append(_db, changes);
+      }
+    });
     if (closed > 0) _notifyChanged();
     return closed;
+  }
+
+  /// 已收尾事件 → 增量日志条目（形状与 `syncExportEvents` 一致：除 `id`
+  /// 外的全部列，版本 = 三个版本列 / `originDeviceId`）。
+  ///
+  /// 返回 null = 事件不存在 / 未收尾 / 缺去重键（不该被同步的行）。
+  Future<SyncJournalChange?> _eventJournalChange(
+    DatabaseConnectionUser executor,
+    int id,
+  ) async {
+    final row = await (executor.select(_db.playEvents)
+          ..where((t) => t.id.equals(id))
+          ..limit(1))
+        .getSingleOrNull();
+    if (row == null || row.endedAt == null) return null;
+    final syncKey = row.syncKey;
+    if (syncKey == null || syncKey.isEmpty) return null;
+    final data = row.toJson()..remove('id');
+    return (
+      category: SyncCategory.statistics,
+      record: SyncRecord(
+        key: syncKey,
+        version: row.syncVersion,
+        data: data,
+      ),
+    );
+  }
+
+  /// 收尾事件后追加日志（与写入同事务；未注入日志时为空操作）。
+  Future<void> _appendEventJournal(DatabaseConnectionUser executor, int id) async {
+    final journal = _journal;
+    if (journal == null) return;
+    final change = await _eventJournalChange(executor, id);
+    if (change == null) return;
+    await journal.append(executor, [change]);
   }
 
   /// 清空全部统计事件（不可撤销）。
