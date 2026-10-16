@@ -41,4 +41,43 @@ void main() {
     expect(SyncCellularPolicy.parse('unknown'), SyncCellularPolicy.auto);
     expect(SyncCellularPolicy.parse(null), SyncCellularPolicy.auto);
   });
+
+  test('活动记录：每轮追加、跨实例保持、超上限截断', () async {
+    final store = await freshStore();
+    expect(store.activity, isEmpty);
+
+    for (var i = 0; i < 25; i++) {
+      store.recordRound(SyncRoundReport(
+        trigger: SyncTrigger.timer,
+        startedAt: 1000 + i,
+        finishedAt: 1000 + i,
+        outcome: SyncOutcome.ok,
+        applied: i,
+      ));
+    }
+    // 展示日志只留 20 条，活动记录保留全部 25 条（观测面窗口不截断）。
+    expect(store.log, hasLength(SyncStateStore.logLimit));
+    expect(store.activity, hasLength(25));
+    expect(store.activity.first.applied, 24);
+
+    await store.save();
+    final reloaded = await freshStore();
+    expect(reloaded.activity, hasLength(25));
+    expect(reloaded.activity.first.at, 1024);
+  });
+
+  test('活动记录：超过上限时丢弃最旧的', () async {
+    final store = await freshStore();
+    for (var i = 0; i < SyncStateStore.activityLimit + 5; i++) {
+      store.recordRound(SyncRoundReport(
+        trigger: SyncTrigger.timer,
+        startedAt: i,
+        finishedAt: i,
+        outcome: SyncOutcome.noChanges,
+      ));
+    }
+    expect(store.activity, hasLength(SyncStateStore.activityLimit));
+    expect(store.activity.first.at, SyncStateStore.activityLimit + 4);
+    expect(store.activity.last.at, 5);
+  });
 }

@@ -271,9 +271,12 @@ class SyncProvider extends ChangeNotifier {
   /// 当前同步等级（未注入调度器时为 null）。
   SyncLevel? get syncLevel => _scheduler?.level;
 
-  /// 近 24 小时活动汇总（基于保留的最近日志条目）。
+  /// 近 24 小时活动汇总（独立于展示日志的 20 条上限）。
   SyncActivitySummary get activity24h =>
-      SyncActivitySummary.fromLog(log, nowMs: _engine.state.nowMs());
+      SyncActivitySummary.fromEntries(
+        _engine.state.activity,
+        nowMs: _engine.state.nowMs(),
+      );
 
   /// 当前是否在移动数据上（观测面展示用）。
   bool get onCellular => _scheduler?.onCellular ?? false;

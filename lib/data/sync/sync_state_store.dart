@@ -17,6 +17,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../../domain/models/device_sync.dart';
 import '../../domain/ports/sync_transport.dart';
 import '../settings/settings_secret_store.dart';
+import 'sync_activity.dart';
 import 'sync_stamp.dart';
 
 /// WebDAV 传输配置（密码单独走安全存储，不在此结构内）。
@@ -187,6 +188,9 @@ class SyncStateStore {
   /// 日志保留条数（设置页只展示最近几条）。
   static const int logLimit = 20;
 
+  /// 活动记录保留条数（近 24 小时汇总用；展示日志的 20 条不足以支撑窗口）。
+  static const int activityLimit = 240;
+
   /// 名册保留设备数（按最近接触时间淘汰；避免长期运行后无界增长）。
   static const int peerLimit = 20;
 
@@ -240,6 +244,9 @@ class SyncStateStore {
   int _lastSyncAt = 0;
   final List<SyncLogEntry> _log = [];
 
+  /// 近 24 小时活动记录（新在前；展示日志之外单独保留，供观测面汇总）。
+  final List<SyncActivityEntry> _activity = [];
+
   /// 每传输最近一次成功接触对端的轮次时间（UI「最后成功于」；0 = 尚未成功过）。
   final Map<String, int> _transportLastSuccess = {};
 
@@ -271,6 +278,9 @@ class SyncStateStore {
   SyncStamp? get sessionStamp => _sessionStamp;
   int get lastSyncAt => _lastSyncAt;
   List<SyncLogEntry> get log => List.unmodifiable(_log);
+
+  /// 近 24 小时活动记录（新在前；上限 [activityLimit]）。
+  List<SyncActivityEntry> get activity => List.unmodifiable(_activity);
 
   /// 名册（按最近接触时间倒序；本机不在其中）。
   List<SyncPeerState> get peers =>
@@ -485,6 +495,19 @@ class SyncStateStore {
     while (_log.length > logLimit) {
       _log.removeLast();
     }
+    // 活动记录：观测面的「近 24 小时」不受展示保留量截断。
+    _activity.insert(
+      0,
+      SyncActivityEntry(
+        at: report.finishedAt,
+        bytesIn: report.bytesIn,
+        bytesOut: report.bytesOut,
+        applied: report.applied,
+      ),
+    );
+    while (_activity.length > activityLimit) {
+      _activity.removeLast();
+    }
     for (final transport in report.transports) {
       if (transport.enabled && transport.succeeded) {
         _transportLastSuccess[transport.kind] = report.finishedAt;
@@ -543,6 +566,7 @@ class SyncStateStore {
         if (_transportLastSuccess.isNotEmpty)
           'transportLastSuccess': _transportLastSuccess,
         'log': [for (final entry in _log) entry.toJson()],
+        'activity': [for (final entry in _activity) entry.toJson()],
         'peers': [for (final peer in _peers.values) peer.toJson()],
       };
 
@@ -637,6 +661,16 @@ class SyncStateStore {
       for (final item in log) {
         final entry = SyncLogEntry.fromJson(item);
         if (entry != null && _log.length < logLimit) _log.add(entry);
+      }
+    }
+    _activity.clear();
+    final activity = json['activity'];
+    if (activity is List) {
+      for (final item in activity) {
+        final entry = SyncActivityEntry.fromJson(item);
+        if (entry != null && _activity.length < activityLimit) {
+          _activity.add(entry);
+        }
       }
     }
     _peers.clear();
