@@ -233,9 +233,13 @@ class DesktopLyricsOutput implements InteractiveLyricsOutput {
       'isPlaying': p.isPlaying,
       'hasLyrics': p.hasLyrics,
       'positionMs': p.positionMs,
+      // 采样生效的墙上时刻：原生据此补偿通道传输延迟（主线程繁忙时投递变慢），
+      // 否则延迟抖动会直接变成可见的回跳。
+      'positionAtEpochMs': p.positionAtEpochMs,
       // 回退行（歌名 / 清空）没有逐字时间轴，也没有行时间轴（不滚动）。
       'lineStartMs': replacedLine ? -1 : p.lineStartMs,
       'lineEndMs': replacedLine ? -1 : p.lineEndMs,
+      'scrollFollowsSinging': p.scrollFollowsSinging,
       'words': replacedLine ? null : _wordsMap(p.words),
     };
   }

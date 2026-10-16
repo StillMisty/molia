@@ -167,6 +167,51 @@ void main() {
     theme.dispose();
   });
 
+  test('匀速滚动模式：跨度取首词到末词，位置带生效时刻', () async {
+    SharedPreferences.setMockInitialValues({});
+    final settings = LyricsDisplaySettings();
+    await settings.setDesktopEnabled(true);
+    final output = _FakeOutput(LyricsOutputIds.desktop);
+    final provider = LyricsDisplayProvider(settings: settings, outputs: [output]);
+    await pumpEventQueue();
+
+    provider.syncPlayback(PlaybackSnapshot(current: track(), isPlaying: true));
+    provider.syncLyrics(LyricsState(
+      trackId: 'fake:1',
+      status: LyricsStatus.ready,
+      lines: const [
+        LyricLine(Duration.zero, 'A', words: [
+          LyricWord(
+            start: Duration(milliseconds: 100),
+            end: Duration(milliseconds: 600),
+            text: 'A',
+          ),
+        ]),
+        LyricLine(Duration(seconds: 5), 'B'),
+      ],
+    ));
+    await pumpEventQueue();
+
+    final before = DateTime.now().millisecondsSinceEpoch;
+    provider.updatePosition(const Duration(milliseconds: 300));
+    await pumpEventQueue();
+    final follows = output.applied.last;
+    expect(follows.positionAtEpochMs, greaterThanOrEqualTo(before),
+        reason: '位置生效时刻随投送下发（输出端据此补偿传输延迟）');
+    expect(follows.scrollFollowsSinging, isTrue);
+    expect(follows.lineStartMs, 0);
+    expect(follows.lineEndMs, 5000, reason: '跟随演唱用行时间轴（下一行时间戳）');
+
+    await settings.setDesktopScrollMode(DesktopScrollMode.constant);
+    await pumpEventQueue();
+    final constant = output.applied.last;
+    expect(constant.scrollFollowsSinging, isFalse);
+    expect(constant.lineStartMs, 100, reason: '匀速用「首词开始 → 末词结束」跨度');
+    expect(constant.lineEndMs, 600);
+
+    provider.dispose();
+  });
+
   test('能力查询返回输出自身能力', () async {
     SharedPreferences.setMockInitialValues({});
     final settings = LyricsDisplaySettings();

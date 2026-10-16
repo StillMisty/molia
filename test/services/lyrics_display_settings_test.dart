@@ -25,6 +25,8 @@ void main() {
     expect(s.desktopFontSize, 22);
     // 默认暂停即整窗隐藏（恢复播放再显示）。
     expect(s.desktopHideOnPause, isTrue);
+    // 默认跟随演唱（长行横向滚动的历史行为）。
+    expect(s.desktopScrollMode, DesktopScrollMode.followSinging);
     // 默认直接跟随应用主题角色：当前行主色 / 其余行次要文本色 / 描边表面色。
     expect(s.desktopPlayedColorSource, LyricColorSource.primary);
     expect(s.desktopUnplayedColorSource, LyricColorSource.onSurfaceVariant);
@@ -63,6 +65,7 @@ void main() {
     await source.setDesktopPauseBehavior(LyricsPauseBehavior.clear);
     await source.setDesktopNoLyricsBehavior(DesktopNoLyricsBehavior.hide);
     await source.setDesktopShowToggleAnimation(false);
+    await source.setDesktopScrollMode(DesktopScrollMode.constant);
     await source.setDesktopControlVisible(DesktopControlKeys.next, false);
     await source.setNotificationEnabled(true);
     await source.setNotificationTarget(LyricsMetadataTarget.artist);
@@ -109,6 +112,7 @@ void main() {
     expect(restored.desktopPauseBehavior, LyricsPauseBehavior.clear);
     expect(restored.desktopNoLyricsBehavior, DesktopNoLyricsBehavior.hide);
     expect(restored.desktopShowToggleAnimation, isFalse);
+    expect(restored.desktopScrollMode, DesktopScrollMode.constant);
     expect(restored.desktopControls[DesktopControlKeys.next], isFalse);
     expect(restored.notificationEnabled, isTrue);
     expect(restored.notificationTarget, LyricsMetadataTarget.artist);
@@ -146,6 +150,9 @@ void main() {
     // 旧数据没有 desktop.hideOnPause：回落默认（暂停即整窗隐藏）。
     expect(s.desktopHideOnPause,
         LyricsDisplaySettings.defaultDesktopHideOnPause);
+    // 旧数据没有 desktop.scrollMode：回落默认（跟随演唱）。
+    expect(s.desktopScrollMode,
+        LyricsDisplaySettings.defaultDesktopScrollMode);
   });
 
   test('旧配置兼容：singleLine=true 一次性映射为显示行数 1', () async {

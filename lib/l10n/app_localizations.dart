@@ -2756,6 +2756,30 @@ abstract class AppLocalizations {
   /// **'Line transition animation'**
   String get lyricsDesktopAnimation;
 
+  /// No description provided for @lyricsDesktopScrollMode.
+  ///
+  /// In en, this message translates to:
+  /// **'Long line scrolling'**
+  String get lyricsDesktopScrollMode;
+
+  /// No description provided for @lyricsDesktopScrollModeSubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Follow singing: the text moves with the highlight; Constant: steady speed across the line'**
+  String get lyricsDesktopScrollModeSubtitle;
+
+  /// No description provided for @lyricsDesktopScrollFollow.
+  ///
+  /// In en, this message translates to:
+  /// **'Follow singing'**
+  String get lyricsDesktopScrollFollow;
+
+  /// No description provided for @lyricsDesktopScrollConstant.
+  ///
+  /// In en, this message translates to:
+  /// **'Constant speed'**
+  String get lyricsDesktopScrollConstant;
+
   /// No description provided for @lyricsDesktopBehaviorSection.
   ///
   /// In en, this message translates to:

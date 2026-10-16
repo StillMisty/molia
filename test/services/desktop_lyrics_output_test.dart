@@ -128,6 +128,8 @@ void main() {
       isPlaying: true,
       hasLyrics: true,
       positionMs: 1500,
+      positionAtEpochMs: 1700000000000,
+      scrollFollowsSinging: false,
       lineStartMs: 1000,
       lineEndMs: 3000,
       words: const [
@@ -147,6 +149,9 @@ void main() {
     final update = calls.lastWhere((call) => call.method == 'desktop.update');
     final map = update.arguments as Map;
     expect(map['positionMs'], 1500);
+    expect(map['positionAtEpochMs'], 1700000000000,
+        reason: '位置生效时刻要下发：原生据此补偿通道传输延迟');
+    expect(map['scrollFollowsSinging'], isFalse);
     expect(map['lineStartMs'], 1000);
     expect(map['lineEndMs'], 3000);
     final words = map['words'] as List;
