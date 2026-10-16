@@ -167,17 +167,24 @@ class SyncScheduler {
     _applyLevel(_evaluate());
   }
 
-  /// 回到前台：拉一次（有本地变更时一并推送）。
+  /// 回到前台：重新探测环境并拉一次（有本地变更时一并推送）。
   void onAppVisible() {
     if (_disposed) return;
     _visible = true;
     // 用户回到前台视为最近交互：等级先按活跃处理，交互窗口过后自动降级。
     _lastInteractionAt = _nowMs();
     _applyLevel(_evaluate());
-    if (!_canRunAutomatically) return;
+    unawaited(_resumeAfterRefresh());
+  }
+
+  Future<void> _resumeAfterRefresh() async {
+    // Android 在后台不再广播网络变化：回前台必须重新探测电量与网络类型，
+    // 否则「离开 Wi-Fi 后仍按 Wi-Fi 判定」。
+    await refreshEnvironment();
+    if (_disposed || !_canRunAutomatically) return;
     final push = _dirty;
     _dirty = false;
-    unawaited(_run(SyncTrigger.resume, push: push));
+    await _run(SyncTrigger.resume, push: push);
   }
 
   /// 退后台 / 锁屏：取消全部定时器，有本地变更时尽力推一次。
@@ -278,17 +285,25 @@ class SyncScheduler {
     _idleTimer = Timer(_backoff, () {
       _idleTimer = null;
       if (_level != SyncLevel.idle) return;
-      if (!_dirty && !_antiEntropyAllowed) {
-        // 无本地变更不广播、不发 PROPFIND：退避翻倍后继续等待。
-        _growBackoff();
-        _armIdle();
-        return;
-      }
-      _dirty = false;
-      unawaited(_run(SyncTrigger.timer, push: true));
-      _backoff = _idleBackoffStart;
-      _armIdle();
+      unawaited(_onIdleWake());
     });
+  }
+
+  Future<void> _onIdleWake() async {
+    // 定时唤醒时重新探测电量 / 网络：anti-entropy（充电 + Wi-Fi）与
+    // 「无本地变更不广播」都依赖当前环境。
+    await refreshEnvironment();
+    if (_disposed || _level != SyncLevel.idle) return;
+    if (!_dirty && !_antiEntropyAllowed) {
+      // 无本地变更不广播、不发 PROPFIND：退避翻倍后继续等待。
+      _growBackoff();
+      _armIdle();
+      return;
+    }
+    _dirty = false;
+    _backoff = _idleBackoffStart;
+    _armIdle();
+    await _run(SyncTrigger.timer, push: true);
   }
 
   void _growBackoff() {

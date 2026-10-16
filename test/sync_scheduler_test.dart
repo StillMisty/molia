@@ -117,6 +117,38 @@ void main() {
     });
   });
 
+  test('空闲唤醒重新探测环境：插上电源后允许 anti-entropy', () {
+    fakeAsync((async) {
+      var battery = const BatterySnapshot(level: 50);
+      final host = RecordingSyncSchedulerHost();
+      final scheduler = SyncScheduler(
+        host: host,
+        state: state,
+        cellularProbe: () async => false,
+        batteryProbe: () async => battery,
+        clock: () => DateTime.fromMillisecondsSinceEpoch(
+          async.elapsed.inMilliseconds,
+        ),
+      );
+      unawaited(scheduler.start());
+      async.flushMicrotasks();
+      async.elapse(const Duration(minutes: 2));
+      expect(scheduler.level, SyncLevel.idle);
+
+      // 未充电：唤醒只翻倍退避，不发轮次。
+      async.elapse(const Duration(minutes: 10));
+      expect(host.rounds, isEmpty);
+      expect(scheduler.idleBackoff, const Duration(minutes: 20));
+
+      // 插上电源：下一次唤醒探测到充电 + Wi-Fi → anti-entropy 跑一轮。
+      battery = const BatterySnapshot(level: 50, charging: true);
+      async.elapse(const Duration(minutes: 20));
+      expect(host.rounds, hasLength(1));
+      expect(host.rounds.single.trigger, SyncTrigger.timer);
+      scheduler.dispose();
+    });
+  });
+
   test('省电等级：低电量未充电暂停自动，仅手点可用', () {
     fakeAsync((async) {
       final env = build(
