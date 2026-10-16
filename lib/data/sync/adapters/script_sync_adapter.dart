@@ -148,6 +148,53 @@ class ScriptSyncAdapter implements SyncAdapter {
     return record;
   }
 
+  /// 本机写入脚本（导入 / 更新，组合根在 SourceManager 的写入钩子上接线）：
+  /// **立即**取版本 / 登记 / 追加日志——新导入的脚本没有历史登记，若只靠
+  /// 下一轮的哈希检测会被当成「首次登记」而不外发。
+  Future<void> noteScriptWritten(String id) async {
+    if (!ready) return;
+    final script = _scriptOf(id);
+    if (script == null) return;
+    final hash = _contentHash(script);
+    final stamp = _state.scriptStamps[id];
+    if (stamp != null && stamp.hash == hash) return;
+    final version = _state.stampIssuer.next();
+    _state.putScriptStamp(id, SyncStamp(hash: hash, version: version));
+    _state.removeScriptTombstone(id);
+    _state.setKnownScriptIds([for (final s in _repository.scripts) s.id]);
+    final journal = _journal;
+    if (journal != null) {
+      await journal.appendAll([
+        (
+          category: SyncCategory.sources,
+          record: SyncRecord(
+            key: id,
+            version: version,
+            data: script.toJson(),
+          ),
+        ),
+      ]);
+    }
+  }
+
+  /// 本机删除脚本：**立即**取新戳写墓碑并追加日志（不依赖下一轮检测）。
+  Future<void> noteScriptRemoved(String id) async {
+    if (!ready) return;
+    final version = _state.stampIssuer.next();
+    _state.putScriptTombstone(id, SyncStamp(version: version));
+    _state.removeScriptStamp(id);
+    _state.setKnownScriptIds([for (final s in _repository.scripts) s.id]);
+    final journal = _journal;
+    if (journal != null) {
+      await journal.appendAll([
+        (
+          category: SyncCategory.sources,
+          record: SyncRecord.tombstone(key: id, version: version),
+        ),
+      ]);
+    }
+  }
+
   @override
   Future<SyncApplyOutcome> apply(
     Map<SyncCategory, List<SyncRecord>> records,

@@ -379,6 +379,13 @@ class SourceManager extends ChangeNotifier {
   Future<void> setChannelEnabled(String key, bool enabled) =>
       _preferences.setChannelEnabled(key, enabled);
 
+  /// 本机脚本写入钩子（组合根接线：同步层立即登记并追加增量日志）。
+  ///
+  /// 只在**本机**导入 / 更新 / 删除脚本时触发；应用远端脚本走仓库层，
+  /// 不经过这些方法。
+  void Function(String id)? onScriptWritten;
+  void Function(String id)? onScriptRemoved;
+
   /// 清空自定义渠道顺序，恢复「脚本音源在前、内置平台在后」的默认排序。
   Future<void> resetChannelOrder() => _preferences.resetChannelOrder();
 
@@ -405,6 +412,7 @@ class SourceManager extends ChangeNotifier {
       throw const FormatException('无法解析音源脚本：缺少以 /** @name ... */ 开头的元信息');
     }
     await repository.add(info);
+    onScriptWritten?.call(info.id);
     notifyListeners();
     if (activate || repository.activeScript == null) {
       await this.activate(info.id);
@@ -446,6 +454,7 @@ class SourceManager extends ChangeNotifier {
 
   Future<void> removeScript(String id) async {
     await repository.remove(id);
+    onScriptRemoved?.call(id);
     if (repository.activeId == null) {
       await _engine.dispose();
       _activeSources = {};
@@ -813,6 +822,7 @@ class SourceManager extends ChangeNotifier {
     _scriptById(id);
     final result = check ?? await checkScriptUpdate(id);
     final replaced = await repository.replace(id, result.latestScript);
+    onScriptWritten?.call(id);
     if (repository.activeId == id && !kIsWeb) {
       await activate(id);
     } else {

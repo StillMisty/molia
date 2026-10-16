@@ -92,9 +92,16 @@ class SettingsRegistry {
   ///
   /// 远端值可能来自旧版本设备，按 kind 宽容转换；转换失败与 `null` 一样删除
   /// 键（回到默认值），保证重复应用幂等。secure 盒只接受字符串。
-  Future<void> writeRaw(SettingsKey<Object?> key, Object? value) async {
+  ///
+  /// [remote] 为 true（同步适配器应用远端值）时不触发 [onWrite]：本机写入
+  /// 钩子只标记**本地**变更（远端值不算本地修改，也不该再追加日志）。
+  Future<void> writeRaw(
+    SettingsKey<Object?> key,
+    Object? value, {
+    bool remote = false,
+  }) async {
     await _writeRaw(key, value);
-    onWrite?.call(key);
+    if (!remote) onWrite?.call(key);
   }
 
   Future<void> _writeRaw(SettingsKey<Object?> key, Object? value) async {

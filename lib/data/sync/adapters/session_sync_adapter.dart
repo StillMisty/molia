@@ -32,6 +32,10 @@ class SessionSyncAdapter implements SyncAdapter {
   final SyncJournalRepository? _journal;
   final Future<void> Function()? _onChanged;
 
+  /// 写入点即时追加的合并窗口（见 [noteLocalSave]）。
+  static const int immediateWindowMs = 60 * 1000;
+  int _lastImmediateAppendAt = 0;
+
   @override
   Set<SyncCategory> get categories => const {SyncCategory.session};
 
@@ -93,6 +97,48 @@ class SessionSyncAdapter implements SyncAdapter {
         ),
       ],
     };
+  }
+
+  /// 本机保存会话（组合根在会话存储的保存回调上接线）：**立即**登记并追加
+  /// 日志，写入后进程被杀也不丢这次变更。
+  ///
+  /// 合并窗口内的高频进度保存只登记一次：会话载荷是整份队列（体积远大于其它
+  /// 类别），每次保存都追加会把日志硬上限撑爆；窗口外的变更由下一轮统一登记
+  /// （哈希检测），两者互为兜底。
+  Future<void> noteLocalSave() async {
+    final now = _state.nowMs();
+    if (_lastImmediateAppendAt > 0 &&
+        now - _lastImmediateAppendAt < immediateWindowMs) {
+      return;
+    }
+    final loaded = await _store.loadRaw();
+    final raw = loaded == null ? null : _withoutLocalTracks(loaded);
+    if (loaded != null && raw == null) return;
+    final stamp = _state.sessionStamp;
+    if (raw == null) {
+      if (stamp == null) _state.setSessionStamp(const SyncStamp());
+      return;
+    }
+    final savedAt =
+        (raw[PlaybackSessionStore.savedAtKey] as num?)?.toInt() ?? 0;
+    final hash = '$savedAt';
+    if (stamp != null && stamp.hash == hash) return;
+    final version = savedAt > 0 ? _state.stampIssuer.next() : SyncVersion.zero;
+    _state.setSessionStamp(SyncStamp(hash: hash, version: version));
+    _lastImmediateAppendAt = now;
+    final journal = _journal;
+    if (journal != null && stamp != null) {
+      await journal.appendAll([
+        (
+          category: SyncCategory.session,
+          record: SyncRecord(
+            key: SyncRecordKeys.sessionKey,
+            version: version,
+            data: raw,
+          ),
+        ),
+      ]);
+    }
   }
 
   @override

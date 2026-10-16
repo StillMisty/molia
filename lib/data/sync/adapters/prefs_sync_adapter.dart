@@ -51,45 +51,68 @@ class PrefsSyncAdapter implements SyncAdapter {
     final changes = <SyncJournalChange>[];
     for (final key in _settings.keys) {
       final value = await _settings.readRaw(key);
-      final hash = _hash(value);
-      final stamp = _state.settingStamps[key.name];
-      final SyncRecord record;
-      if (stamp == null || stamp.hash != hash) {
-        final isDefault = _canonical(value) == _canonical(key.defaultValue);
-        final first = stamp == null;
-        // 首次登记且仍是默认值：零值戳（输给任何真实写入，避免把「默认」
-        // 当成本机修改推向全组）。
-        final version = first && isDefault
-            ? SyncVersion.zero
-            : _state.stampIssuer.next();
-        record = SyncRecord(
-          key: key.name,
-          version: version,
-          data: {'v': value},
-        );
-        // 首次登记不是变更（初始视图由全量快照覆盖）；其余登记哈希变化
-        // 就是一次本地修改，与登记更新同点追加日志。
-        if (!first) {
-          changes.add((category: key.category, record: record));
-        }
-        _state.putSettingStamp(
-          key.name,
-          SyncStamp(hash: hash, version: version),
-        );
-      } else {
-        record = SyncRecord(
-          key: key.name,
-          version: stamp.version,
-          data: {'v': value},
-        );
+      final resolved = _resolve(key, value);
+      if (resolved.changed) {
+        changes.add((category: key.category, record: resolved.record));
       }
-      records.putIfAbsent(key.category, () => []).add(record);
+      records.putIfAbsent(key.category, () => []).add(resolved.record);
     }
     final journal = _journal;
     if (journal != null && changes.isNotEmpty) {
       await journal.appendAll(changes);
     }
     return records;
+  }
+
+  /// 本机写入设置键（组合根在注册表的写入钩子上接线）：**立即**取版本 /
+  /// 登记 / 追加日志，不依赖下一轮的登记哈希检测——写入后进程被杀也不会
+  /// 丢掉这次变更。
+  Future<void> noteKeyWritten(SettingsKey<Object?> key) async {
+    final value = await _settings.readRaw(key);
+    final resolved = _resolve(key, value);
+    if (!resolved.changed) return;
+    final journal = _journal;
+    if (journal != null) {
+      await journal.appendAll([
+        (category: key.category, record: resolved.record),
+      ]);
+    }
+  }
+
+  /// 单个键的当前记录 + 是否发生了**本机修改**（登记哈希变化）。
+  ///
+  /// 首次登记（进程首次见到该键）不算变更：初始视图由全量快照覆盖；
+  /// 首次登记且仍是默认值时用零值戳（输给任何真实写入，避免把「默认」
+  /// 当成本机修改推向全组）。
+  ({SyncRecord record, bool changed}) _resolve(
+    SettingsKey<Object?> key,
+    Object? value,
+  ) {
+    final hash = _hash(value);
+    final stamp = _state.settingStamps[key.name];
+    if (stamp != null && stamp.hash == hash) {
+      return (
+        record: SyncRecord(
+          key: key.name,
+          version: stamp.version,
+          data: {'v': value},
+        ),
+        changed: false,
+      );
+    }
+    final isDefault = _canonical(value) == _canonical(key.defaultValue);
+    final first = stamp == null;
+    final version =
+        first && isDefault ? SyncVersion.zero : _state.stampIssuer.next();
+    _state.putSettingStamp(key.name, SyncStamp(hash: hash, version: version));
+    return (
+      record: SyncRecord(
+        key: key.name,
+        version: version,
+        data: {'v': value},
+      ),
+      changed: !first,
+    );
   }
 
   @override
@@ -123,7 +146,8 @@ class PrefsSyncAdapter implements SyncAdapter {
             }
           }
         }
-        await _settings.writeRaw(key, value);
+        // 远端值：不触发本机写入钩子（不标记待发、不追加日志）。
+        await _settings.writeRaw(key, value, remote: true);
         _state.putSettingStamp(
           record.key,
           SyncStamp(hash: _hash(value), version: record.version),

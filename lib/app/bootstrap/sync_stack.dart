@@ -200,15 +200,27 @@ Future<SyncStack> buildSyncStack({
       categories: const {SyncCategory.sources},
     ),
   );
-  // 设置 / 凭证写入（SettingsRegistry 是登记键的唯一写入口）。
-  catalog.settings.onWrite = (key) =>
-      syncProvider.notifyLocalChange(categories: {key.category});
+  // 设置 / 凭证写入（SettingsRegistry 是登记键的唯一写入口）：标记待发 +
+  // 写入点即时追加增量日志（不依赖下一轮的登记哈希检测）。
+  catalog.settings.onWrite = (key) {
+    syncProvider.notifyLocalChange(categories: {key.category});
+    unawaited(prefsSyncAdapter.noteKeyWritten(key));
+  };
+  // 脚本写入（导入 / 更新 / 删除）：即时取版本并追加日志（新导入的脚本没有
+  // 历史登记，只靠下一轮检测会被当成「首次登记」而不外发）。
+  sourceManager.onScriptWritten =
+      (id) => unawaited(scriptSyncAdapter.noteScriptWritten(id));
+  sourceManager.onScriptRemoved =
+      (id) => unawaited(scriptSyncAdapter.noteScriptRemoved(id));
   // 播放会话：高频进度落盘，只标记待发、不触发即时轮次（下次自然唤醒 /
   // 回前台 / 退后台时外发）。
-  playback.sessionStore.onSaved = () => syncProvider.notifyLocalChange(
-        categories: const {SyncCategory.session},
-        immediate: false,
-      );
+  playback.sessionStore.onSaved = () {
+    syncProvider.notifyLocalChange(
+      categories: const {SyncCategory.session},
+      immediate: false,
+    );
+    unawaited(sessionSyncAdapter.noteLocalSave());
+  };
   // 网络类型变化（connectivity_plus）→ 立即重估环境：Wi-Fi 与蜂窝之间切换
   // 后，小类别限制 / 「移动数据下暂停」不再等下一次唤醒。
   dataSaver.addListener(() => unawaited(scheduler.refreshEnvironment()));
