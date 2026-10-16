@@ -142,6 +142,36 @@ void main() {
     expect(trackEntries.last.record.deleted, isTrue);
   });
 
+  test('重命名老列表（缺 syncId）：补 syncId 与重命名两条日志版本递增', () async {
+    // 造一条没有 syncId 的存量列表（同步上线前创建）。
+    await db.into(db.playlists).insert(PlaylistsCompanion.insert(
+          name: '老列表',
+          createdAt: 1,
+        ));
+    final id = (await db.select(db.playlists).getSingle()).id;
+
+    await library.renamePlaylist(id, '新名字');
+
+    final window = await journal.window();
+    final playlistEntries = window
+        .where((entry) => entry.category == SyncCategory.playlists)
+        .toList();
+    // 补 syncId（旧名） + 重命名（新名）：同键两条，版本必须递增。
+    expect(playlistEntries, hasLength(2));
+    expect(
+      playlistEntries.first.record.version.isNewerThan(
+        playlistEntries.last.record.version,
+      ),
+      isFalse,
+      reason: '后写的重命名日志版本必须更大（否则对端 LWW 保留旧名）',
+    );
+    expect(playlistEntries.last.record.data?['name'], '新名字');
+    // 导出的当前视图与最后一条日志一致。
+    final exported = (await library.syncExportPlaylists()).single;
+    expect(exported.name, '新名字');
+    expect(exported.version, playlistEntries.last.record.version);
+  });
+
   test('统计：收尾事件产生 1 条日志；开始播放与进度落盘不产生', () async {
     final id = await statistics.startEvent(
       sourceKey: 'kuwo',

@@ -635,9 +635,12 @@ class LibraryRepository implements LibraryStore, LibrarySyncStore {
   @override
   Future<void> renamePlaylist(int id, String name) async {
     final db = _db;
-    final version = _nextVersion();
     await db.transaction(() async {
+      // 版本在补 syncId **之后**取：补 syncId 本身会为同一个键写一条日志，
+      // 若重命名用更早的版本号，对端按 LWW 会一直保留旧名（同键两条日志
+      // 必须版本递增）。
       final syncId = await _ensurePlaylistSyncId(db, id);
+      final version = _nextVersion();
       final updated = await (db.update(db.playlists)..where((t) => t.id.equals(id)))
           .write(PlaylistsCompanion(
         name: Value(name),
