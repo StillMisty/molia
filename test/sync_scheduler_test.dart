@@ -71,9 +71,9 @@ void main() {
     });
   });
 
-  test('空闲等级：无本地变更不广播、不发 PROPFIND，退避 10→20→40→60 封顶', () {
+  test('空闲等级（蜂窝）：无本地变更不广播、不发 PROPFIND，退避 10→20→40→60 封顶', () {
     fakeAsync((async) {
-      final env = build(async);
+      final env = build(async, cellular: true);
       unawaited(env.scheduler.start());
       async.flushMicrotasks();
 
@@ -83,7 +83,7 @@ void main() {
       expect(env.scheduler.idleBackoff, const Duration(minutes: 10));
 
       async.elapse(const Duration(minutes: 10));
-      expect(env.host.rounds, isEmpty, reason: '无本地变更不广播');
+      expect(env.host.rounds, isEmpty, reason: '蜂窝 + 无本地变更不广播');
       expect(env.scheduler.idleBackoff, const Duration(minutes: 20));
 
       async.elapse(const Duration(minutes: 20));
@@ -94,6 +94,29 @@ void main() {
       expect(env.scheduler.idleBackoff, const Duration(minutes: 60),
           reason: '退避封顶 60 分钟');
       expect(env.host.rounds, isEmpty);
+      env.scheduler.dispose();
+    });
+  });
+
+  test('空闲等级（非蜂窝 / 桌面）：无本地变更也周期性探测与拉取', () {
+    fakeAsync((async) {
+      // 电量未知 = 桌面（外部供电等价）；非蜂窝网络。
+      final env = build(async, battery: BatterySnapshot.unknown);
+      unawaited(env.scheduler.start());
+      async.flushMicrotasks();
+      async.elapse(const Duration(minutes: 2));
+      expect(env.scheduler.level, SyncLevel.idle);
+      expect(env.scheduler.powerSaveActive, isFalse);
+
+      async.elapse(const Duration(minutes: 10));
+      expect(env.host.rounds, hasLength(1));
+      expect(env.host.rounds.single.trigger, SyncTrigger.timer);
+      expect(env.host.rounds.single.push, isTrue);
+      expect(env.host.rounds.single.categories, isNull);
+
+      // 周期继续（退避回到起点后再来一轮），远端变化在空闲期也能收敛。
+      async.elapse(const Duration(minutes: 10));
+      expect(env.host.rounds, hasLength(2));
       env.scheduler.dispose();
     });
   });
@@ -117,35 +140,35 @@ void main() {
     });
   });
 
-  test('空闲唤醒重新探测环境：插上电源后允许 anti-entropy', () {
+  test('空闲唤醒重新探测环境：切到蜂窝后不再无变更拉取', () {
     fakeAsync((async) {
-      var battery = const BatterySnapshot(level: 50);
+      var cellular = false;
       final host = RecordingSyncSchedulerHost();
       final scheduler = SyncScheduler(
         host: host,
         state: state,
-        cellularProbe: () async => false,
-        batteryProbe: () async => battery,
+        cellularProbe: () async => cellular,
+        batteryProbe: () async => BatterySnapshot.unknown,
         clock: () => DateTime.fromMillisecondsSinceEpoch(
           async.elapsed.inMilliseconds,
         ),
       );
+      addTearDown(scheduler.dispose);
       unawaited(scheduler.start());
       async.flushMicrotasks();
       async.elapse(const Duration(minutes: 2));
       expect(scheduler.level, SyncLevel.idle);
 
-      // 未充电：唤醒只翻倍退避，不发轮次。
+      // 非蜂窝：唤醒即校验（跑一轮，退避回起点）。
       async.elapse(const Duration(minutes: 10));
-      expect(host.rounds, isEmpty);
-      expect(scheduler.idleBackoff, const Duration(minutes: 20));
-
-      // 插上电源：下一次唤醒探测到充电 + Wi-Fi → anti-entropy 跑一轮。
-      battery = const BatterySnapshot(level: 50, charging: true);
-      async.elapse(const Duration(minutes: 20));
       expect(host.rounds, hasLength(1));
-      expect(host.rounds.single.trigger, SyncTrigger.timer);
-      scheduler.dispose();
+      expect(scheduler.idleBackoff, const Duration(minutes: 10));
+
+      // 切到移动数据：下一次唤醒探测到蜂窝 → 无本地变更不发轮次，退避翻倍。
+      cellular = true;
+      async.elapse(const Duration(minutes: 10));
+      expect(host.rounds, hasLength(1));
+      expect(scheduler.idleBackoff, const Duration(minutes: 20));
     });
   });
 

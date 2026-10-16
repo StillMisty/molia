@@ -37,8 +37,9 @@ class SyncRunOutcome {
 ///
 /// 时钟、网络类型、电量探针与播放状态全部注入（单测不碰平台通道）：
 /// - 活跃等级由「可见 + 最近交互 / 正在播放」判定，变更去抖 3–5s；
-/// - 空闲等级的退避每次翻倍到上限；无本地变更且不允许 anti-entropy 时
-///   唤醒后不做任何网络动作；
+/// - 空闲等级的退避每次翻倍到上限；**非蜂窝网络**（Wi-Fi / 以太网 / 桌面）
+///   的唤醒即使没有本地变更也照常探测 / 拉取（对端变化在退避周期内收敛），
+///   移动端蜂窝下才按「无本地变更零流量」处理；
 /// - 后台等级不创建任何定时器；
 /// - 省电等级（低电量未充电 / 系统省电模式）与「移动数据下暂停」策略下
 ///   自动同步整体暂停，手动同步不受限制。
@@ -154,12 +155,14 @@ class SyncScheduler {
     try {
       final battery = await _batteryProbe();
       _batteryLow = battery.level >= 0 && battery.level <= _lowBatteryPercent;
-      _charging = battery.charging;
+      // 电量未知（桌面无电池 / 探测失败）按外部供电等价处理：不参与低电量
+      // 判定，也不把桌面当成「未充电」。
+      _charging = battery.charging || battery.level < 0;
       _systemPowerSave = battery.powerSave;
     } catch (e) {
-      _logger.fine(() => '电量探测失败（按未知处理）: $e');
+      _logger.fine(() => '电量探测失败（按外部供电处理）: $e');
       _batteryLow = false;
-      _charging = false;
+      _charging = true;
       _systemPowerSave = false;
     }
     try {
@@ -258,9 +261,12 @@ class SyncScheduler {
     return true;
   }
 
-  /// 充电 + Wi-Fi（非蜂窝）时允许 anti-entropy 全量校验。
-  bool get _antiEntropyAllowed =>
-      _charging && !_onCellular && !powerSaveActive;
+  /// anti-entropy：空闲唤醒在无本地变更时仍探测 / 拉取。
+  ///
+  /// 条件是非蜂窝网络（Wi-Fi / 以太网 / 桌面）：移动端蜂窝下才按
+  /// 「无本地变更零流量」处理（省电与省流）。桌面电量探针不可用（未知）
+  /// 等价于外部供电，不会因此被当成低电量而关掉校验。
+  bool get _antiEntropyAllowed => !_onCellular && !powerSaveActive;
 
   SyncLevel _evaluate() {
     if (powerSaveActive) return SyncLevel.powerSave;
@@ -324,12 +330,12 @@ class SyncScheduler {
   }
 
   Future<void> _onIdleWake() async {
-    // 定时唤醒时重新探测电量 / 网络：anti-entropy（充电 + Wi-Fi）与
-    // 「无本地变更不广播」都依赖当前环境。
+    // 定时唤醒时重新探测电量 / 网络：anti-entropy 与「蜂窝下无变更零流量」
+    // 都依赖当前环境。
     await refreshEnvironment();
     if (_disposed || _level != SyncLevel.idle) return;
     if (!dirty && !_antiEntropyAllowed) {
-      // 无本地变更不广播、不发 PROPFIND：退避翻倍后继续等待。
+      // 蜂窝 + 无本地变更不广播、不发 PROPFIND：退避翻倍后继续等待。
       _growBackoff();
       _armIdle();
       return;

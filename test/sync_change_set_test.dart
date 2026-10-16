@@ -253,7 +253,7 @@ void main() {
     );
   });
 
-  test('空闲等级端到端：不拉取 / 不推送 / 不落地 / 0 字节', () {
+  test('空闲等级端到端（蜂窝）：不拉取 / 不推送 / 不落地 / 0 字节', () {
     fakeAsync((async) {
       // 引擎与调度器共用 fake_async 时钟。
       DateTime clock() => DateTime.fromMillisecondsSinceEpoch(
@@ -270,7 +270,8 @@ void main() {
       final scheduler = SyncScheduler(
         host: sync,
         state: state,
-        cellularProbe: () async => false,
+        // 移动数据：空闲唤醒在无本地变更时零流量。
+        cellularProbe: () async => true,
         batteryProbe: () async => BatterySnapshot.unknown,
         isPlaying: () => false,
         clock: clock,
@@ -297,6 +298,42 @@ void main() {
       async.elapse(const Duration(seconds: 5));
       expect(transport.pullCount, 1);
       expect(transport.pushed, hasLength(1));
+    });
+  });
+
+  test('空闲等级端到端（非蜂窝）：无本地变更也周期性拉取', () {
+    fakeAsync((async) {
+      DateTime clock() => DateTime.fromMillisecondsSinceEpoch(
+            async.elapsed.inMilliseconds,
+          );
+      final sync = SyncEngine(
+        state: state,
+        stamps: state.stampIssuer,
+        adapters: [adapter],
+        transports: {'lan': transport},
+        clock: clock,
+      );
+      addTearDown(sync.dispose);
+      final scheduler = SyncScheduler(
+        host: sync,
+        state: state,
+        cellularProbe: () async => false,
+        batteryProbe: () async => BatterySnapshot.unknown,
+        isPlaying: () => false,
+        clock: clock,
+      );
+      addTearDown(scheduler.dispose);
+      unawaited(scheduler.start());
+      async.flushMicrotasks();
+
+      async.elapse(const Duration(minutes: 2));
+      expect(scheduler.level, SyncLevel.idle);
+      async.elapse(const Duration(minutes: 10));
+
+      // 桌面 / Wi-Fi：空闲唤醒照常探测与拉取（远端变化在退避周期内收敛）。
+      expect(transport.pullCount, 1);
+      expect(adapter.applyCalls, 0);
+      expect(sync.lastReport?.outcome, SyncOutcome.noPeers);
     });
   });
 }

@@ -146,8 +146,8 @@ Future<SyncStack> buildSyncStack({
   final scheduler = SyncScheduler(
     host: syncEngine,
     state: syncState,
-    // 省流模式的网络判定复用：同一份 connectivity 状态（含前台恢复刷新）。
-    cellularProbe: () async => dataSaver.onCellular,
+    // 蜂窝判定走真实探针（connectivity_plus）：省流服务的 onCellular 只是
+    // 缓存值，Wi-Fi 启动后切蜂窝不会反映到它上面。
     isPlaying: () => playback.snapshot.isPlaying,
   );
   final syncProvider = SyncProvider(
@@ -173,6 +173,9 @@ Future<SyncStack> buildSyncStack({
   library.playStatisticsRepository.changes
       .listen((_) => scheduler.notifyLocalChange());
   sourceManager.addListener(scheduler.notifyLocalChange);
+  // 网络类型变化（connectivity_plus）→ 立即重估环境：Wi-Fi 与蜂窝之间切换
+  // 后，小类别限制 / 「移动数据下暂停」不再等下一次唤醒。
+  dataSaver.addListener(() => unawaited(scheduler.refreshEnvironment()));
   await scheduler.start();
 
   return (engine: syncEngine, scheduler: scheduler, provider: syncProvider);
