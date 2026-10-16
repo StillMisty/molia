@@ -147,6 +147,12 @@ void main() {
       expect(state.manualPeers.single.httpPort, 41000);
       expect(state.manualPeers.single.name, '书房', reason: '用户命名优先');
 
+      // 用户再次提交同一地址 = 显式改名。
+      await state.addManualPeer(
+          const ManualPeer(host: '192.168.1.23', name: '新名字'));
+      expect(state.manualPeers.single.name, '新名字');
+      expect(state.manualPeers.single.deviceId, 'devB');
+
       // 未命名条目才吸收学到的名称。
       await state.addManualPeer(const ManualPeer(host: '10.0.0.9'));
       await state.learnManualPeer(

@@ -20,6 +20,7 @@ import 'package:molia/pages/sync_log_page.dart';
 import 'package:molia/pages/sync_settings_page.dart';
 import 'package:molia/providers/sync_provider.dart';
 import 'package:molia/services/language_service.dart';
+import 'package:molia/theme/app_semantic_colors.dart';
 
 import 'support/sync_test_support.dart';
 
@@ -312,5 +313,60 @@ void main() {
     await tester.tap(find.byKey(const Key('settingsSyncLogMoreItem')));
     await tester.pumpAndSettle();
     expect(find.byType(SyncLogRow), findsNWidgets(7));
+  });
+
+  testWidgets('失败行按原因给可点动作：手动地址 / WebDAV / 重试', (tester) async {
+    await provider.setEnabled(true);
+    transport.pullError =
+        const SyncIssue(code: SyncIssueCode.discoverySilent);
+    await provider.syncNow(manual: true);
+    await pumpPage(tester);
+
+    // 零应答但此前成功过：日志行可点开下一步动作。
+    expect(find.byType(SyncLogRow), findsOneWidget);
+    expect(find.textContaining('No device answered'), findsWidgets);
+    await tester.tap(find.byType(SyncLogRow));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Add manual address'), findsOneWidget);
+    expect(find.text('Use WebDAV'), findsOneWidget);
+    expect(find.text('Retry'), findsOneWidget);
+
+    // 「添加手动地址」直达名册页（不是死胡同）。
+    await tester.tap(find.text('Add manual address'));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('settingsSyncAddPeerItem')), findsOneWidget);
+  });
+
+  testWidgets('传输副文案：启动失败给原因文案（原始细节不上界面）', (tester) async {
+    await provider.setEnabled(true);
+    transport.unavailableReason = SyncUnavailableReason.startFailed;
+    transport.unavailableDetail = 'SocketException: 端口占用';
+    await transport.stop();
+    await pumpPage(tester);
+
+    expect(find.textContaining('Transport failed to start'), findsOneWidget);
+    expect(find.textContaining('SocketException'), findsNothing);
+    expect(find.textContaining('No successful contact yet'), findsWidgets);
+  });
+
+  testWidgets('传输副文案：成功接触后给「最后成功」与成功色', (tester) async {
+    await provider.setEnabled(true);
+    transport.available.add(SyncEnvelope(
+      deviceId: 'devB',
+      deviceName: 'Device B',
+      producedAt: 5000,
+      records: const {},
+    ));
+    await provider.syncNow(manual: true);
+    await pumpPage(tester);
+
+    final finder = find.textContaining('Last success');
+    expect(finder, findsOneWidget);
+    final text = tester.widget<Text>(finder);
+    expect(
+      text.style?.color,
+      AppSemanticColors.of(tester.element(finder)).success,
+    );
   });
 }
