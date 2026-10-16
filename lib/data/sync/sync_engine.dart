@@ -526,10 +526,14 @@ class SyncEngine extends ChangeNotifier implements SyncSchedulerHost {
       }
 
       // 处理载荷：推进游标 / 学习对端 ack / 收集远端记录 / 识别窗口缺口。
+      // 待提交的游标（应用成功后才落进名册 / ack）：apply 失败时不推进，
+      // 下轮按原游标重取，避免「未落地的变更被永久跳过」。
+      final pendingCursors = <String, int>{};
       var fullPeers = _consumePayloads(
         pulledEntries,
         remoteRecords,
         forcedDelivery,
+        pendingCursors,
         requestedFull: fullFor,
         antiEntropy: antiEntropy,
         local: local,
@@ -550,6 +554,7 @@ class SyncEngine extends ChangeNotifier implements SyncSchedulerHost {
           secondEntries,
           remoteRecords,
           forcedDelivery,
+          pendingCursors,
           requestedFull: fullPeers,
           antiEntropy: false,
           local: local,
@@ -625,6 +630,16 @@ class SyncEngine extends ChangeNotifier implements SyncSchedulerHost {
       if (applyFailures > 0 && !inboundRestored) {
         _inbound.insertAll(0, inboundSnapshot);
         inboundRestored = true;
+      }
+
+      // 游标只在**全部落地成功**后提交：失败轮不推进也不 ack（对端据此不会
+      // 裁掉未落地的条目），下一轮按原游标重取（幂等）。
+      if (applyFailures == 0) {
+        for (final entry in pendingCursors.entries) {
+          final peer = _peersById[entry.key];
+          if (peer == null) continue;
+          _peersById[entry.key] = peer.copyWith(cursorSeq: entry.value);
+        }
       }
 
       await _state.save();
@@ -922,7 +937,8 @@ class SyncEngine extends ChangeNotifier implements SyncSchedulerHost {
   Set<String> _consumePayloads(
     List<(String, SyncEnvelope)> payloads,
     Map<SyncCategory, List<SyncRecord>> remoteRecords,
-    Set<SyncKnownKey> forcedDelivery, {
+    Set<SyncKnownKey> forcedDelivery,
+    Map<String, int> pendingCursors, {
     required Set<String> requestedFull,
     required bool antiEntropy,
     required Map<SyncCategory, List<SyncRecord>> local,
@@ -941,9 +957,15 @@ class SyncEngine extends ChangeNotifier implements SyncSchedulerHost {
         }
       }
 
-      var cursor = existing.cursorSeq;
+      // 本轮已从同一对端接受过载荷时用待提交游标：同一轮里「拉取 + 入站推送」
+      // 两份载荷不能各自从旧游标重新判缺口（会误判成缺口而重复全量拉取）。
+      final pending = pendingCursors[peerId];
+      final cursor = pending != null && pending > existing.cursorSeq
+          ? pending
+          : existing.cursorSeq;
       var ackedSeq = existing.ackedSeq;
       var fullPulledAt = existing.fullPulledAt;
+      var nextCursor = cursor;
       var gap = false;
       if (envelope.isDelta) {
         if (cursor < envelope.baseSeq) {
@@ -951,11 +973,28 @@ class SyncEngine extends ChangeNotifier implements SyncSchedulerHost {
           gap = true;
           fullPeers.add(peerId);
         } else {
-          for (final entry in envelope.journal ?? const <SyncJournalEntry>[]) {
+          // 只接受**连续**覆盖本机游标之后的条目：解析层丢掉的坏条目 / 未知
+          // 类别会造成空洞，此时不能把游标推到 windowEnd（会永久跳过它们）。
+          final entries = [...(envelope.journal ?? const <SyncJournalEntry>[])]
+            ..sort((a, b) => a.seq.compareTo(b.seq));
+          var expected = cursor + 1;
+          var hole = false;
+          for (final entry in entries) {
             if (entry.seq <= cursor) continue;
+            if (entry.seq != expected) {
+              hole = true;
+              break;
+            }
+            expected = entry.seq + 1;
             remoteRecords.putIfAbsent(entry.category, () => []).add(entry.record);
           }
-          if (envelope.windowEnd > cursor) cursor = envelope.windowEnd;
+          if (hole || (envelope.windowEnd > cursor && expected - 1 < envelope.windowEnd)) {
+            // 窗口内不连续：标缺口改走 bootstrap（已接受的条目照常应用，
+            // 游标只推进到已接受的最大 seq）。
+            gap = true;
+            fullPeers.add(peerId);
+          }
+          if (expected - 1 > nextCursor) nextCursor = expected - 1;
         }
       } else {
         // 全量快照：记录集整体应用，游标推进到快照覆盖的位置。
@@ -969,8 +1008,14 @@ class SyncEngine extends ChangeNotifier implements SyncSchedulerHost {
             }
           }
         }
-        if (envelope.journalHead > cursor) cursor = envelope.journalHead;
+        if (envelope.journalHead > nextCursor) nextCursor = envelope.journalHead;
         fullPulledAt = now;
+      }
+      if (nextCursor > cursor) {
+        final previous = pendingCursors[peerId];
+        pendingCursors[peerId] = previous == null || nextCursor > previous
+            ? nextCursor
+            : previous;
       }
       if (!gap) {
         // 对端载荷里的 ack 回执：它已消费本机 journal 到该位置（用于 compact）。
@@ -1003,9 +1048,7 @@ class SyncEngine extends ChangeNotifier implements SyncSchedulerHost {
             ? existing.lastError
             : null,
         clearLastError: !_peersFailedThisRound.contains(peerId),
-        cursorSeq: cursor,
         ackedSeq: ackedSeq,
-        headSeq: envelope.journalHead,
         snapshotId:
             envelope.snapshotId.isNotEmpty ? envelope.snapshotId : null,
         categories: envelope.categories.isNotEmpty ? envelope.categories : null,
