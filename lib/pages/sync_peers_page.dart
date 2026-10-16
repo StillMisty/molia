@@ -102,7 +102,12 @@ class SyncPeersPage extends StatelessWidget {
       key: Key('settingsSyncPeer-${peer.deviceId}'),
       icon: manual == null ? Icons.sync_alt_rounded : Icons.link_rounded,
       title: title,
-      subtitle: _peerSubtitle(l10n, peer, manual),
+      subtitle: _peerSubtitle(
+        l10n,
+        peer,
+        manual,
+        nowMs: provider.engine.state.nowMs(),
+      ),
       onTap: () => _showPeerDialog(
         context,
         provider,
@@ -302,12 +307,15 @@ class SyncPeersPage extends StatelessWidget {
 
   /// 对端副标题：传输 + 最后同步 + 失联/忽略/落后/时钟偏移/最近失败
   /// （有什么说什么）。
+  ///
+  /// [nowMs] 由调用方注入（与名册的 `isLostAt` 判定同一时钟源），
+  /// 不在渲染里直接读墙上时间。
   static String _peerSubtitle(
     AppLocalizations l10n,
     SyncPeerState peer,
-    ManualPeer? manual,
-  ) {
-    final now = DateTime.now().millisecondsSinceEpoch;
+    ManualPeer? manual, {
+    required int nowMs,
+  }) {
     final parts = <String>[
       if (manual != null) l10n.syncPeerManual,
       if (peer.transport.isNotEmpty) _transportLabel(l10n, peer.transport),
@@ -317,7 +325,7 @@ class SyncPeersPage extends StatelessWidget {
             : peer.lastPushAt))
       else
         l10n.syncPeerNever,
-      if (peer.isLostAt(now)) l10n.syncPeerLost,
+      if (peer.isLostAt(nowMs)) l10n.syncPeerLost,
       if (peer.behindBy != null && peer.behindBy! > 0)
         peer.behindBytes != null && peer.behindBytes! > 0
             ? l10n.syncPeerBehindBytes(

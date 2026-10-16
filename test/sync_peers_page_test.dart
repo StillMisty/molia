@@ -31,6 +31,7 @@ void main() {
   late FakeSyncTransport transport;
   late SyncEngine engine;
   late SyncProvider provider;
+  var now = 1000;
 
   setUp(() async {
     SharedPreferences.setMockInitialValues({});
@@ -39,7 +40,7 @@ void main() {
     state = SyncStateStore(
       preferences: prefs,
       secrets: secrets,
-      clock: () => DateTime.now().millisecondsSinceEpoch,
+      clock: () => now,
     );
     await state.init();
     await state.setEnabled(true);
@@ -150,7 +151,8 @@ void main() {
   });
 
   testWidgets('失联设备：名册标记 + 忽略 / 清理远端文件动作', (tester) async {
-    final now = DateTime.now().millisecondsSinceEpoch;
+    // 注入时钟：失联阈值 = 180 天（与 lostPeers 判定同一时钟源）。
+    now = DateTime.now().millisecondsSinceEpoch;
     seedPeer('ghost', lastSeenAt: now - SyncPeerState.lostThresholdMs - 1000);
     await pumpPage(tester);
     expect(find.textContaining('lost'), findsOneWidget);
