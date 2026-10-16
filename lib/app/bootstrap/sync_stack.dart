@@ -2,9 +2,8 @@
 /// SyncEngine → SyncScheduler / SyncProvider，以及运行期的同步触发。
 ///
 /// 引擎与局域网传输互为依赖（传输要引擎最近一轮快照，引擎要传输列表）。
-/// 原组合根用 `late final syncEngine` 自引用；这里把「快照提供者」写在同一个
-/// builder 内、引擎建好后立刻接线（详见 [buildSyncStack] 注释），
-/// 不存在跨 builder 回填。
+/// 把「快照提供者」写在同一个 builder 内、引擎建好后立刻接线
+/// （详见 [buildSyncStack] 注释），不存在跨 builder 回填。
 ///
 /// 触发策略（何时跑、跑什么范围）统一在 [SyncScheduler]：本 builder 只把
 /// 数据变更、播放状态与探针接进去。
@@ -91,8 +90,7 @@ Future<SyncStack> buildSyncStack({
   );
 
   // 引擎与局域网传输互为依赖：传输的快照提供者要读引擎最近一轮快照。
-  // 用「可空槽位 + 建完引擎立刻接线」把时序写在同一个 builder 内
-  // （原组合根是 late final syncEngine 的自引用）。
+  // 用「可空槽位 + 建完引擎立刻接线」把时序写在同一个 builder 内。
   SyncEngine? engineRef;
   // 局域网权限门（Android 17 起局域网默认阻断）：申请与状态都在这里，
   // 传输启动前先过门；权限被拒时手动地址也无效（网关级阻断）。

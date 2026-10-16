@@ -28,8 +28,8 @@ class PlayContexts extends Table {
   @override
   String get tableName => 'play_contexts';
 
-  // SQLite 的列级/表级 TEXT PRIMARY KEY 都不隐含 NOT NULL，这里保持与旧
-  // schema 相同的约束（写入方始终提供非空 URI，但约束不额外收紧）。
+  // SQLite 的列级/表级 TEXT PRIMARY KEY 都不隐含 NOT NULL，这里用 nullable
+  // （写入方始终提供非空 URI，约束不额外收紧）。
   TextColumn get contextUri => text().nullable()();
   TextColumn get contextType => text()();
   TextColumn get contextName => text()();
@@ -209,7 +209,7 @@ class SyncJournalStates extends Table {
 /// `originSourceKey`/`originSongId` 是**原音源**的曲目键（本地副本删除后
 /// 用户仍可回到在线音源播放），唯一约束保证一首原曲只下载一份。
 ///
-/// 歌词/封面路径指向 `downloads/lyrics|covers/` 下的长期文件（Phase 2），
+/// 歌词/封面路径指向 `downloads/lyrics|covers/` 下的长期文件，
 /// 删除下载时一并删除；「清理缓存」永不触碰这些文件。
 ///
 /// `publicUri` 是 Android 公共 Downloads 副本的 content URI：应用目录里的

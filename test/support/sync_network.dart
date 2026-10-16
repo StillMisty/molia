@@ -186,8 +186,6 @@ class SyncDevice {
     final baseSeq = await journal.baseSeq();
     if (full || since < baseSeq) {
       network.bootstrapServed++;
-      // ignore: avoid_print
-      print('SERVE full id=$id since=$since base=$baseSeq');
       return engine.serveSnapshot();
     }
     network.deltaServed++;

@@ -134,7 +134,7 @@ void main() {
     expect(report!.failedCount, 0);
   });
 
-  test('入站轮发现窗口缺口：本轮内定向补 bootstrap（不再整包丢弃）', () async {
+  test('入站轮发现窗口缺口：本轮内定向补 bootstrap', () async {
     final sync = engine();
     addTearDown(sync.dispose);
     await sync.syncNow();
