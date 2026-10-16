@@ -539,9 +539,10 @@ class SyncEngine extends ChangeNotifier implements SyncSchedulerHost {
         local: local,
         categories: categories,
       );
-      if (!inboundOnly && fullPeers.isNotEmpty) {
-        // 窗口缺口（条目已被对端裁剪）或指纹不一致：同一轮内立刻改取全量
-        // 快照（幂等；最多两遍，避免无限往返）。
+      if (fullPeers.isNotEmpty) {
+        // 窗口缺口（条目已被对端裁剪 / 载荷不完整）或指纹不一致：同一轮内
+        // 立刻改取全量快照（幂等；最多两遍，避免无限往返）。入站轮同样补：
+        // 只对被推来「不完整窗口」的对端做定向 bootstrap，不是全量广播。
         final secondEntries = <(String, SyncEnvelope)>[];
         final contacted = await _pullInto(
           accumulators,

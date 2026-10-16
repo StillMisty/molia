@@ -84,6 +84,8 @@ void main() {
         stamps: state.stampIssuer,
         adapters: [adapter],
         transports: {'lan': transport},
+        // 入站合流窗口缩短：单测不用等默认的 1.5s。
+        inboundWindow: const Duration(milliseconds: 10),
       );
 
   test('应用失败：游标不推进、ack 不前进，下一轮重取同一批条目', () async {
@@ -130,6 +132,27 @@ void main() {
     expect(adapter.lastKeys, ['k1']);
     expect(state.peers.single.cursorSeq, lessThan(3));
     expect(report!.failedCount, 0);
+  });
+
+  test('入站轮发现窗口缺口：本轮内定向补 bootstrap（不再整包丢弃）', () async {
+    final sync = engine();
+    addTearDown(sync.dispose);
+    await sync.syncNow();
+    await bootstrapPeer(sync);
+
+    final pullsBefore = transport.pullCount;
+    // 对端主动推来一个起点超本机游标的增量窗口（条目已被对端裁剪）。
+    await sync.onIncomingEnvelope(delta(
+      entries: [entry(5, 'k5')],
+      baseSeq: 4,
+      windowStart: 5,
+      windowEnd: 5,
+    ));
+    await Future<void>.delayed(const Duration(milliseconds: 40));
+
+    // 入站轮不再只消费：发现缺口后本轮内发起全量兜底（带 fullPeers）。
+    expect(transport.pullCount, pullsBefore + 1);
+    expect(transport.lastRequest?.fullPeers, contains('devB'));
   });
 
   test('窗口起点超出本机游标：不应用该窗口，本轮改取全量快照', () async {
