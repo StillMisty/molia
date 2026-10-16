@@ -363,6 +363,13 @@ void main() {
     expect(find.text('Add manual address'), findsOneWidget);
     expect(find.text('Use WebDAV'), findsOneWidget);
     expect(find.text('Retry'), findsOneWidget);
+    // 对话框约定：action 区只有「取消 + filled 确认」两颗，其余在内容区。
+    expect(
+      find.byWidgetPredicate(
+        (widget) => widget is M3EButton && widget.style == M3EButtonStyle.filled,
+      ),
+      findsOneWidget,
+    );
 
     // 「添加手动地址」直达名册页（不是死胡同）。
     await tester.tap(find.text('Add manual address'));

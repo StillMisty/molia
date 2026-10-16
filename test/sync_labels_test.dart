@@ -4,6 +4,7 @@ import 'dart:ui' show Locale;
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:molia/domain/models/device_sync.dart';
+import 'package:molia/domain/ports/sync_transport.dart';
 import 'package:molia/l10n/app_localizations.dart';
 import 'package:molia/pages/sync_dialogs.dart';
 import 'package:molia/pages/sync_labels.dart';
@@ -88,9 +89,10 @@ void main() {
       syncIssueActions(const SyncIssue(code: SyncIssueCode.permissionDenied)),
       contains(SyncIssueAction.useWebdav),
     );
+    // 未设口令：主推荐是「配置口令」，重试必败所以不出现。
     expect(
       syncIssueActions(const SyncIssue(code: SyncIssueCode.noPassphrase)),
-      contains(SyncIssueAction.configurePassphrase),
+      [SyncIssueAction.configurePassphrase],
     );
     expect(
       syncIssueActions(const SyncIssue(code: SyncIssueCode.discoverySilent)),
@@ -102,6 +104,28 @@ void main() {
       contains(SyncIssueAction.retry),
     );
     expect(syncIssueActions(null), contains(SyncIssueAction.retry));
+  });
+
+  test('全不可达按传输分流：WebDAV 不给手动地址，局域网给', () {
+    final webdav = syncIssueActions(const SyncIssue(
+      code: SyncIssueCode.allPeersUnreachable,
+      args: {'transport': SyncTransportKind.webdav},
+    ));
+    expect(webdav, contains(SyncIssueAction.configureWebdav));
+    expect(webdav, isNot(contains(SyncIssueAction.addManualPeer)));
+
+    final lan = syncIssueActions(const SyncIssue(
+      code: SyncIssueCode.allPeersUnreachable,
+      args: {'transport': SyncTransportKind.lan},
+    ));
+    expect(lan, contains(SyncIssueAction.addManualPeer));
+
+    // 传输缺失（旧日志条目）按局域网处理：至少给出手动地址这条路。
+    expect(
+      syncIssueActions(
+          const SyncIssue(code: SyncIssueCode.allPeersUnreachable)),
+      contains(SyncIssueAction.addManualPeer),
+    );
   });
 
   test('syncIssue* / syncAction* 键在 zh 中齐全（en 为模板）', () {

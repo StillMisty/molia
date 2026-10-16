@@ -105,15 +105,15 @@ enum SyncIssueAction {
 }
 
 /// 按失败原因给动作，不留死胡同；未知原因至少给「重试」。
+///
+/// 列表最后一项是主推荐（弹层的 filled 确认按钮），其余收进内容区。
 List<SyncIssueAction> syncIssueActions(SyncIssue? issue) => switch (issue?.code) {
       SyncIssueCode.permissionDenied => const [
           SyncIssueAction.useWebdav,
           SyncIssueAction.grantPermission,
         ],
-      SyncIssueCode.noPassphrase => const [
-          SyncIssueAction.configurePassphrase,
-          SyncIssueAction.retry,
-        ],
+      // 未设口令时重试必败：只给「配置口令」，不给重试。
+      SyncIssueCode.noPassphrase => const [SyncIssueAction.configurePassphrase],
       SyncIssueCode.notConfigured ||
       SyncIssueCode.webdavDirFailed ||
       SyncIssueCode.webdavListFailed ||
@@ -121,6 +121,7 @@ List<SyncIssueAction> syncIssueActions(SyncIssue? issue) => switch (issue?.code)
       SyncIssueCode.webdavDecryptFailed ||
       SyncIssueCode.webdavUploadFailed =>
         const [SyncIssueAction.configureWebdav, SyncIssueAction.retry],
+      SyncIssueCode.allPeersUnreachable => _allPeersUnreachableActions(issue),
       // 局域网发现 / 读取失败：手动地址与 WebDAV 是两条真实出路（权限被拒
       // 时手动地址无效，那种情况由 permissionDenied 分支覆盖）。
       SyncIssueCode.startFailed ||
@@ -128,8 +129,7 @@ List<SyncIssueAction> syncIssueActions(SyncIssue? issue) => switch (issue?.code)
       SyncIssueCode.discoverySilent ||
       SyncIssueCode.peerReadFailed ||
       SyncIssueCode.peerDecryptFailed ||
-      SyncIssueCode.peerPushFailed ||
-      SyncIssueCode.allPeersUnreachable =>
+      SyncIssueCode.peerPushFailed =>
         const [
           SyncIssueAction.addManualPeer,
           SyncIssueAction.useWebdav,
@@ -138,7 +138,21 @@ List<SyncIssueAction> syncIssueActions(SyncIssue? issue) => switch (issue?.code)
       _ => const [SyncIssueAction.retry],
     };
 
+/// 全不可达的出路按传输分流：手动地址是局域网概念，WebDAV 全失败只给
+/// 配置与重试（传输由引擎写进 [SyncIssue.args]；缺失时按局域网处理）。
+List<SyncIssueAction> _allPeersUnreachableActions(SyncIssue? issue) =>
+    issue?.args['transport'] == SyncTransportKind.webdav
+        ? const [SyncIssueAction.configureWebdav, SyncIssueAction.retry]
+        : const [
+            SyncIssueAction.addManualPeer,
+            SyncIssueAction.useWebdav,
+            SyncIssueAction.retry,
+          ];
+
 /// 失败详情弹层：原因文案 + 按原因给动作（重试 / 去授权 / 去配置）。
+///
+/// 对话框 action 区保持「text 取消 + filled 主推荐」两颗：其余动作收进
+/// 内容区（按钮列表），不把 action 区挤成按钮墙。
 ///
 /// [onConfigurePassphrase] 由设置页注入（口令弹层在设置页）；日志子页缺省时
 /// 走 SnackBar 指引，不留下无出口的按钮。
@@ -151,14 +165,35 @@ Future<void> showSyncIssueDialog(
 }) async {
   final navigator = Navigator.of(context, rootNavigator: true);
   final actions = syncIssueActions(issue);
+  final primary = actions.last;
+  final secondary = actions.sublist(0, actions.length - 1);
   await M3EDialog.show<void>(
     context,
     dialog: M3EDialog(
       title: l10n.syncIssueDialogTitle,
       content: SizedBox(
         width: settingsDialogWidth(context),
-        child: Text(
-          issue == null ? l10n.syncIssueUnknown : syncIssueText(l10n, issue),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              issue == null ? l10n.syncIssueUnknown : syncIssueText(l10n, issue),
+            ),
+            if (secondary.isNotEmpty) const SizedBox(height: 8),
+            for (final action in secondary)
+              Align(
+                alignment: Alignment.centerLeft,
+                child: _actionButton(
+                  context,
+                  provider: provider,
+                  l10n: l10n,
+                  action: action,
+                  primary: false,
+                  onConfigurePassphrase: onConfigurePassphrase,
+                ),
+              ),
+          ],
         ),
       ),
       actions: [
@@ -166,15 +201,14 @@ Future<void> showSyncIssueDialog(
           onPressed: () => navigator.pop(),
           child: Text(l10n.cancelButton),
         ),
-        for (var i = 0; i < actions.length; i++)
-          _actionButton(
-            context,
-            provider: provider,
-            l10n: l10n,
-            action: actions[i],
-            primary: i == actions.length - 1,
-            onConfigurePassphrase: onConfigurePassphrase,
-          ),
+        _actionButton(
+          context,
+          provider: provider,
+          l10n: l10n,
+          action: primary,
+          primary: true,
+          onConfigurePassphrase: onConfigurePassphrase,
+        ),
       ],
     ),
   );

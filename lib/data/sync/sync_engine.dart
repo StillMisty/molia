@@ -578,7 +578,7 @@ class SyncEngine extends ChangeNotifier implements SyncSchedulerHost {
       final error = switch (outcome) {
         SyncOutcome.failed => transportError ??
             applyError ??
-            const SyncIssue(code: SyncIssueCode.allPeersUnreachable),
+            _allPeersUnreachable(transportReports),
         SyncOutcome.partial => transportError ?? applyError,
         // noPeers 不吞传输级错误：广播失败 / 零应答 / 目录准备失败要能看见。
         SyncOutcome.noPeers => transportError,
@@ -624,6 +624,21 @@ class SyncEngine extends ChangeNotifier implements SyncSchedulerHost {
       notifyListeners();
     }
     return report;
+  }
+
+  /// 全失败兜底原因：带上全不可达的传输（UI 据此给对应出路——手动地址是
+  /// 局域网概念，WebDAV 全失败只给配置与重试）。
+  static SyncIssue _allPeersUnreachable(List<SyncTransportReport> reports) {
+    final failedKinds = {
+      for (final item in reports)
+        if (item.failedPulls + item.failedPushes > 0) item.kind,
+    };
+    return SyncIssue(
+      code: SyncIssueCode.allPeersUnreachable,
+      args: failedKinds.length == 1
+          ? {'transport': failedKinds.single}
+          : const {},
+    );
   }
 
   /// 五态判定（优先级：没有可用传输 / 没联系上任何对端 → 全失败 →
