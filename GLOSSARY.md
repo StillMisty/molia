@@ -366,7 +366,9 @@
   `history` / `session`；关闭的类别既不推送也不应用（本机仍持续登记本地变化）。
 - **Playback session record（会话记录）** — `session` 类别的单例记录：会话 JSON
   （队列/下标/进度/模式）+ `savedAt` 时间戳；正在播放的设备持续刷新从而抢占，
-  本地停止播放不回传删除（换设备接着听的轻量实现）。
+  本地停止播放不回传删除（换设备接着听的轻量实现）。系统控制路径（通知暂停 /
+  停止 / 切播放顺序）显式 await 落盘（`PlaybackSessionStore.pendingWrite` 串行化，
+  停止先落盘再清空队列），冷启动恢复不自动起播。
 - **Backup（完整备份）** — `SyncEngine.exportBackupJson` / `importBackupJson`：
   与同步共用 envelope 与适配器的本地文件备份/合并恢复；不需要启用同步；
   凭证类默认排除。
