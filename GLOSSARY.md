@@ -405,8 +405,17 @@
   （名称 / 传输 / 最后拉取·推送 / 时钟偏移 / 落后条数），持久化在 `sync_state_v1`，
   UI 在「已配对设备」子页呈现；「落后条数」由增量协议填充。
 - **Sync transport status（传输状态）** — `SyncTransport.unavailableReason`
-  （`not_configured` / `start_failed`）：传输启动失败或未配置时必须显式可见，
-  不能只留在日志里（开关显示「已打开」而实际没有监听是排查事故的主要来源）。
+  （`not_configured` / `start_failed` / `permission_denied`）：传输启动失败、
+  未配置或缺权限时必须显式可见，不能只留在日志里（开关显示「已打开」而实际
+  没有监听是排查事故的主要来源）。
+- **Local network permission（局域网权限门）** —
+  `transport/local_network_permission.dart`：Android 17 / API 37 起局域网访问
+  默认阻断，LAN 传输启动前先过门；**权限被拒时手动对端地址同样无效**
+  （网关级阻断），只能授权或转 WebDAV。申请 / 查询 / 跳系统设置可注入，单测不触发平台通道。
+- **Manual peer（手动对端）** — `ManualPeer{host, probePort?, httpPort, deviceId,
+  name}`：**发现失败**（AP 隔离 / 多网段 / 防火墙 / VPN）时的兜底，与广播发现
+  合并进同一名册；首次单播探测后认领 `deviceId` 与端点端口并回写，学到端口后
+  不再依赖广播。本机端点端口持久化（`lanHttpPort`），否则对端记不住本机。
 - **Sync report / log（同步结果 / 日志）** — `SyncLogEntry`：触发原因 +
   五态结论 + 本轮变更量 + 失败数与错误；设置页只读展示，不拦截合并。
   **不再有「跳过 N 项」**——那是「把全库胜者重放给适配器」的产物，会随数据量

@@ -214,6 +214,11 @@
   「复制诊断信息」导出运行状态。传输有两个实现、
   可分别开关：局域网直连（UDP 探测 + 内置 HTTP 快照端点）与用户自备 WebDAV
   （`<remoteDir>/<deviceId>.msync` 密文文件，PROPFIND/GET/PUT/MKCOL）。
+  局域网在移动端有平台准入：Android 17 / API 37 起必须声明并运行时申请
+  `ACCESS_LOCAL_NETWORK`（未授予时状态 `permission_denied`，UI 给授权入口），
+  iOS 广播发现需向 Apple 申请 multicast entitlement（未获批时降级手动地址 /
+  WebDAV）；发现失败可用手动对端地址簿兜底（单播探测后认领 deviceId 与端点
+  端口），本机端点端口持久化避免对端记不住本机。
   资料库 schema（drift，fresh 基线）含 `playlists.syncId` / 行级
   `updatedAt+updatedBy` / `sync_tombstones` / `play_events.syncKey`；
   设置同步用「登记哈希」做变化检测，
