@@ -8,7 +8,7 @@ String syncTimeText(int millisecondsSinceEpoch) =>
     DateFormat('MM-dd HH:mm')
         .format(DateTime.fromMillisecondsSinceEpoch(millisecondsSinceEpoch));
 
-/// 字节数的紧凑展示（KB/MB 千位制；同步快照常用量级）。
+/// 字节数的紧凑展示（KB/MB 按 1024 进位；同步快照常用量级）。
 String syncBytesText(int bytes) {
   if (bytes < 1024) return '${bytes}B';
   if (bytes < 1024 * 1024) return '${(bytes / 1024).toStringAsFixed(1)}KB';
