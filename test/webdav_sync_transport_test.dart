@@ -343,7 +343,7 @@ void main() {
     );
   });
 
-  test('幽灵 / 旧版文件不参与合并；载荷身份不符的文件跳过', () async {
+  test('幽灵文件不参与合并；载荷身份不符的文件跳过', () async {
     // 非本协议命名的残留（幽灵设备遗留）与身份不符的日志文件。
     server.files['ghost.msync'] = codec.encrypt(envelope('ghost'), passphrase);
     server.files['fake.journal.msync'] =

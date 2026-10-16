@@ -12,8 +12,8 @@ import 'generated/schema_v3.dart' as v3;
 /// 增量迁移链：v1 → v2 新增 `sync_known`，v2 → v3 新增增量日志
 /// （`sync_journal` + `sync_journal_state`），每一步都保留既有数据。
 ///
-/// 简单用例验证「空库迁移后的 schema 与声明一致」；数据用例验证「旧库带
-/// 数据升级后数据仍在、新表可用」（ADR-0005：增量迁移必须保留数据）。
+/// 简单用例验证「空库迁移后的 schema 与声明一致」；数据用例验证「带数据升级
+/// 后数据仍在、新表可用」（ADR-0005：增量迁移必须保留数据）。
 void main() {
   driftRuntimeOptions.dontWarnAboutMultipleDatabases = true;
   late SchemaVerifier verifier;
