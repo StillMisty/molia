@@ -232,6 +232,46 @@ void main() {
     expect(network.bootstrapServed, 0);
   });
 
+  test('失联设备不拖住日志裁剪：compact 的 minAck 跳过失联对端', () async {
+    final a = await network.addDevice(
+      'devA',
+      deviceLimits: const SyncJournalLimits(maxEntries: 2),
+    );
+    final ghost = await network.addDevice('devGhost');
+    await a.engine.syncNow();
+    await ghost.engine.syncNow();
+    // ghost 只 ack 到 0；随后离线（不再参与网络）。
+    network.devices.remove('devGhost');
+    final ancient = DateTime.now().millisecondsSinceEpoch -
+        SyncPeerState.lostThresholdMs -
+        1000;
+    a.state.recordRound(SyncRoundReport(
+      trigger: SyncTrigger.timer,
+      startedAt: 0,
+      finishedAt: 1,
+      outcome: SyncOutcome.ok,
+      peers: [
+        SyncPeerState(
+          deviceId: 'devGhost',
+          lastSeenAt: ancient,
+          cursorSeq: 0,
+          ackedSeq: 0,
+        ),
+      ],
+    ));
+
+    // 三次变更超过条数上限：失联设备的旧 ack 不参与 minAck → 正常裁剪。
+    await a.setSetting('theme_mode', 'dark');
+    await a.engine.syncNow();
+    await a.setSetting('theme_mode', 'light');
+    await a.engine.syncNow();
+    await a.setSetting('theme_mode', 'system');
+    await a.engine.syncNow();
+
+    expect(await a.journal.baseSeq(), greaterThan(0));
+    expect(await a.journal.snapshotSeq(), await a.journal.headSeq());
+  });
+
   test('名册：超过失联阈值的对端标记「已失联」（只提示，不自动清理）', () {
     final now = DateTime.now().millisecondsSinceEpoch;
     final peer = SyncPeerState(

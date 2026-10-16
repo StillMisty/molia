@@ -42,12 +42,14 @@ class WebDavSyncTransport implements SyncTransport {
     required Future<String?> Function() passphraseProvider,
     required WebDavConfig Function() configProvider,
     required Future<String?> Function() passwordProvider,
+    bool Function(String deviceId)? ignoredPeersProvider,
     Dio? dio,
     Duration requestTimeout = const Duration(seconds: 15),
   })  : _codec = codec,
         _passphraseProvider = passphraseProvider,
         _configProvider = configProvider,
         _passwordProvider = passwordProvider,
+        _ignoredPeersProvider = ignoredPeersProvider,
         _dio = dio,
         _ownsDio = dio == null,
         _requestTimeout = requestTimeout;
@@ -65,6 +67,9 @@ class WebDavSyncTransport implements SyncTransport {
   final Future<String?> Function() _passphraseProvider;
   final WebDavConfig Function() _configProvider;
   final Future<String?> Function() _passwordProvider;
+
+  /// 本地忽略的设备（不读它们的远端文件）。
+  final bool Function(String deviceId)? _ignoredPeersProvider;
   final bool _ownsDio;
   final Duration _requestTimeout;
   final StreamController<SyncEnvelope> _incoming =
@@ -271,6 +276,7 @@ class WebDavSyncTransport implements SyncTransport {
         continue;
       }
       if (device.isEmpty || device == deviceId) continue;
+      if (_ignoredPeersProvider?.call(device) ?? false) continue;
       final existing = grouped[device] ??
           (journal: null, snapshot: null) as ({_RemoteFile? journal, _RemoteFile? snapshot});
       grouped[device] = isJournal

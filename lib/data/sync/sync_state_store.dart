@@ -255,6 +255,9 @@ class SyncStateStore {
   /// 日志裁剪不会越过**已发布**的快照覆盖：落后 / 新加入的对端要能 bootstrap。
   final Map<String, int> _snapshotPushSeq = {};
 
+  /// 本地忽略的设备 id：不拉取、不合并它们的载荷（幽灵 / 已失联设备的处置）。
+  final Set<String> _ignoredPeers = {};
+
   /// 设备名册（deviceId → 最近一次接触的观测值）。
   final Map<String, SyncPeerState> _peers = {};
 
@@ -301,6 +304,18 @@ class SyncStateStore {
     if (_snapshotPushSeq[kind] == seq) return;
     _snapshotPushSeq[kind] = seq;
     await save();
+  }
+
+  /// 本地忽略的设备 id（不拉取、不合并它们的载荷）。
+  Set<String> get ignoredPeers => Set.unmodifiable(_ignoredPeers);
+
+  bool isPeerIgnored(String deviceId) => _ignoredPeers.contains(deviceId);
+
+  Future<void> setPeerIgnored(String deviceId, bool ignored) async {
+    final changed = ignored
+        ? _ignoredPeers.add(deviceId)
+        : _ignoredPeers.remove(deviceId);
+    if (changed) await save();
   }
 
   int nowMs() => _clock();
@@ -580,6 +595,7 @@ class SyncStateStore {
         if (_transportLastSuccess.isNotEmpty)
           'transportLastSuccess': _transportLastSuccess,
         if (_snapshotPushSeq.isNotEmpty) 'snapshotPush': _snapshotPushSeq,
+        if (_ignoredPeers.isNotEmpty) 'ignoredPeers': _ignoredPeers.toList(),
         'log': [for (final entry in _log) entry.toJson()],
         'activity': [for (final entry in _activity) entry.toJson()],
         'peers': [for (final peer in _peers.values) peer.toJson()],
@@ -678,6 +694,9 @@ class SyncStateStore {
         if (seq is num) _snapshotPushSeq[entry.key.toString()] = seq.toInt();
       }
     }
+    _ignoredPeers
+      ..clear()
+      ..addAll((json['ignoredPeers'] as List?)?.whereType<String>() ?? const []);
     _log.clear();
     final log = json['log'];
     if (log is List) {

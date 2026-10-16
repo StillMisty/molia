@@ -2420,6 +2420,49 @@ class AppLocalizationsEn extends AppLocalizations {
   String get syncPeerManual => 'added manually';
 
   @override
+  String get syncPeerLost => 'lost';
+
+  @override
+  String get syncPeerLostHint =>
+      'No contact for over 180 days (reinstalled or retired). You can ignore it locally or explicitly clean up its remote files — nothing is deleted automatically.';
+
+  @override
+  String get syncPeerIgnore => 'Ignore this device locally';
+
+  @override
+  String get syncPeerUnignore => 'Stop ignoring locally';
+
+  @override
+  String get syncPeerIgnoreHint =>
+      'No longer pull or merge its payloads (this device only)';
+
+  @override
+  String get syncPeerIgnoredHint =>
+      'Ignored locally: its payloads are no longer pulled or merged.';
+
+  @override
+  String get syncPeerCleanupRemote => 'Clean up remote files';
+
+  @override
+  String get syncPeerCleanupRemoteHint =>
+      'Delete its journal and snapshot files on WebDAV';
+
+  @override
+  String get syncPeerCleanupRemoteConfirm =>
+      'Deletes this device\'s journal and snapshot files on WebDAV. Local data is untouched and the files are not recreated automatically (only when the peer is online again). LAN connections have no remote storage.';
+
+  @override
+  String get syncPeerCleanupRemoteDone => 'Remote files cleaned up';
+
+  @override
+  String get syncPeerCleanupRemoteNone => 'No remote files to clean up';
+
+  @override
+  String syncPeerCleanupRemoteFailed(Object error) {
+    return 'Cleanup failed: $error';
+  }
+
+  @override
   String get syncPeerNotContacted =>
       'not reached yet — tap this device row after the peer is online';
 

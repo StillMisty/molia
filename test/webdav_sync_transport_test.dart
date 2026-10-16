@@ -43,6 +43,7 @@ void main() {
     String deviceId, {
     String password = 'secret',
     String? passphraseOverride,
+    bool ignored = false,
   }) =>
       WebDavSyncTransport(
         deviceId: deviceId,
@@ -53,6 +54,7 @@ void main() {
           username: 'user',
         ),
         passwordProvider: () async => password,
+        ignoredPeersProvider: (peerId) => ignored && peerId == deviceId,
         requestTimeout: const Duration(seconds: 5),
       );
 
@@ -263,6 +265,28 @@ void main() {
     expect(pulled.envelopes.single.deviceId, 'devA');
     expect(pulled.peersSeen, 1, reason: '幽灵文件不算对端');
     expect(pulled.failedPeers, 0);
+  });
+
+  test('本地忽略的设备：不读取它的远端文件（幽灵设备处置）', () async {
+    final a = transport('devA');
+    final ghost = transport('ghost', ignored: true);
+    addTearDown(() async {
+      await a.stop();
+      await ghost.stop();
+    });
+    await a.start();
+    await ghost.start();
+    await a.push(envelope('devA', value: 'light'));
+    // 幽灵设备的文件（旧 deviceId）留在远端。
+    server.files['ghost.snapshot.msync'] =
+        codec.encrypt(envelope('ghost'), passphrase);
+    server.files['ghost.journal.msync'] =
+        codec.encrypt(envelope('ghost'), passphrase);
+
+    final pulled = await ghost.pull();
+    expect(pulled.envelopes, hasLength(1));
+    expect(pulled.envelopes.single.deviceId, 'devA');
+    expect(pulled.peersSeen, 1, reason: '忽略的设备不算对端');
   });
 
   test('显式清理远端文件：删除该设备的日志 / 快照 / 旧版文件', () async {

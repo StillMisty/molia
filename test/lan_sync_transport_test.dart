@@ -248,6 +248,38 @@ void main() {
     expect(skipped.skippedUnchanged, 1);
   });
 
+  test('本地忽略的设备：不拉取它的载荷', () async {
+    final transportA = LanSyncTransport(
+      deviceId: 'devA',
+      deviceName: () => '设备A',
+      codec: codec,
+      passphraseProvider: () async => passphrase,
+      snapshotProvider: () async => envelope('devA'),
+      udpPort: 47903,
+    );
+    final transportB = LanSyncTransport(
+      deviceId: 'devB',
+      deviceName: () => '设备B',
+      codec: codec,
+      passphraseProvider: () async => passphrase,
+      snapshotProvider: () async => envelope('devB'),
+      probeTargets: const [(host: '127.0.0.1', port: 47903)],
+      probeWindow: const Duration(milliseconds: 250),
+      ignoredPeersProvider: (deviceId) => deviceId == 'devA',
+      udpPort: 47904,
+    );
+    addTearDown(() async {
+      await transportA.stop();
+      await transportB.stop();
+    });
+    await transportA.start();
+    await transportB.start();
+
+    final pulled = await transportB.pull();
+    expect(pulled.envelopes, isEmpty);
+    expect(pulled.peersSeen, 0, reason: '忽略的设备不参与本轮');
+  });
+
   test('未启动时 pull/push 为空操作；start/stop 幂等', () async {
     final transport = LanSyncTransport(
       deviceId: 'devX',

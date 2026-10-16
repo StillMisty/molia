@@ -234,6 +234,43 @@ class SyncEngine extends ChangeNotifier implements SyncSchedulerHost {
     notifyListeners();
   }
 
+  /// 本地忽略某台设备：不再拉取 / 合并它的载荷（幽灵 / 已失联设备的处置）。
+  ///
+  /// 只影响本机（对端不知道、其它设备不受影响）；远端文件不自动删除
+  /// （需要时用 [cleanupRemote] 显式清理）。
+  Future<void> setPeerIgnored(String deviceId, bool ignored) async {
+    if (deviceId.isEmpty) return;
+    await _state.setPeerIgnored(deviceId, ignored);
+    if (ignored) _peersById.remove(deviceId);
+    notifyListeners();
+  }
+
+  /// 显式清理某台设备的远端文件（用户动作；**不做自动删除**）。
+  ///
+  /// 返回每个传输的结果；没有可清理内容的传输返回 false（局域网直连无远端
+  /// 存储）。失败原因进日志与返回值，UI 据此提示。
+  Future<({bool removed, SyncIssue? error})> cleanupRemote(
+    String deviceId,
+  ) async {
+    if (deviceId.isEmpty) return (removed: false, error: null);
+    var removed = false;
+    SyncIssue? firstError;
+    for (final entry in _transports.entries) {
+      if (!_state.enabledTransports.contains(entry.key)) continue;
+      try {
+        if (await entry.value.deleteRemote(deviceId)) removed = true;
+      } catch (e) {
+        firstError ??= SyncIssue(
+          code: SyncIssueCode.deleteRemoteFailed,
+          args: {'peer': deviceId},
+          detail: '$e',
+        );
+        _logger.warning('清理远端文件失败（${entry.key}/$deviceId）', e);
+      }
+    }
+    return (removed: removed, error: firstError);
+  }
+
   Future<String?> readPassphrase() => _state.readPassphrase();
 
   /// 读取现有口令；不存在时生成并持久化（开启同步的入口）。

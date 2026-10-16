@@ -1,0 +1,120 @@
+import 'package:flutter_test/flutter_test.dart';
+import 'package:molia/data/settings/settings_keys.dart';
+import 'package:molia/data/settings/settings_registry.dart';
+import 'package:molia/data/sync/adapters/prefs_sync_adapter.dart';
+import 'package:molia/data/sync/sync_engine.dart';
+import 'package:molia/data/sync/sync_state_store.dart';
+import 'package:molia/domain/models/device_sync.dart';
+import 'package:molia/domain/ports/sync_transport.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+
+import 'support/sync_test_support.dart';
+
+/// 多设备名册处置：失联标记、本地忽略（只影响本机、跨重启保留）、
+/// 显式清理远端文件（不做自动删除）。
+void main() {
+  TestWidgetsFlutterBinding.ensureInitialized();
+
+  late SharedPreferences prefs;
+  late SyncStateStore state;
+  late FakeSyncTransport transport;
+  late SyncEngine engine;
+
+  setUp(() async {
+    SharedPreferences.setMockInitialValues({});
+    prefs = await SharedPreferences.getInstance();
+    final secrets = MemorySyncSecretStore();
+    state = SyncStateStore(
+      preferences: prefs,
+      secrets: secrets,
+      clock: () => DateTime.now().millisecondsSinceEpoch,
+    );
+    await state.init();
+    await state.setEnabled(true);
+    await state.writePassphrase('ABCD-EFGH-JKLM-NPQR-STUV-WXYZ-2345-6789');
+    transport = FakeSyncTransport();
+    engine = SyncEngine(
+      state: state,
+      stamps: state.stampIssuer,
+      adapters: [
+        PrefsSyncAdapter(
+          state: state,
+          settings: SettingsRegistry(
+            keys: const [kThemeMode],
+            preferences: prefs,
+            secrets: secrets,
+          ),
+        ),
+      ],
+      transports: {'lan': transport},
+    );
+    await engine.init();
+  });
+
+  tearDown(() async {
+    engine.dispose();
+  });
+
+  /// 往名册里注入一台设备（`lastSeenAt` 可控：失联阈值 = 180 天）。
+  void seedPeer(String deviceId, {required int lastSeenAt}) {
+    state.recordRound(SyncRoundReport(
+      trigger: SyncTrigger.timer,
+      startedAt: 0,
+      finishedAt: 1,
+      outcome: SyncOutcome.ok,
+      peers: [
+        SyncPeerState(
+          deviceId: deviceId,
+          name: deviceId,
+          transport: SyncTransportKind.lan,
+          lastSeenAt: lastSeenAt,
+          cursorSeq: 3,
+          ackedSeq: 3,
+        ),
+      ],
+    ));
+  }
+
+  test('失联判定：超过阈值标记，未超阈值不标记', () {
+    final now = DateTime.now().millisecondsSinceEpoch;
+    seedPeer('ghost', lastSeenAt: now - SyncPeerState.lostThresholdMs - 1000);
+    seedPeer('alive', lastSeenAt: now);
+
+    final peers = state.peers;
+    expect(peers.firstWhere((p) => p.deviceId == 'ghost').isLostAt(now), isTrue);
+    expect(peers.firstWhere((p) => p.deviceId == 'alive').isLostAt(now), isFalse);
+    // 名册不自动删除失联设备：处置动作由用户显式选择。
+    expect(peers, hasLength(2));
+  });
+
+  test('本地忽略：跨重启保留，只影响本机', () async {
+    expect(state.isPeerIgnored('ghost'), isFalse);
+    await engine.setPeerIgnored('ghost', true);
+    expect(state.isPeerIgnored('ghost'), isTrue);
+    await state.save();
+
+    // 重启后仍在忽略列表里（对端不知道，其它设备不受影响）。
+    final reloaded = SyncStateStore(preferences: prefs, secrets: MemorySyncSecretStore());
+    await reloaded.init();
+    expect(reloaded.isPeerIgnored('ghost'), isTrue);
+    expect(reloaded.isPeerIgnored('other'), isFalse);
+
+    await engine.setPeerIgnored('ghost', false);
+    expect(state.isPeerIgnored('ghost'), isFalse);
+  });
+
+  test('显式清理远端文件：调用各启用传输，返回结果不做自动删除', () async {
+    transport.deleteRemoteResult = true;
+    final result = await engine.cleanupRemote('ghost');
+
+    expect(result.removed, isTrue);
+    expect(result.error, isNull);
+    expect(transport.deletedRemotes, ['ghost']);
+
+    // 没有可清理内容（局域网直连 / 已清理过）：removed = false，不是错误。
+    transport.deleteRemoteResult = false;
+    final again = await engine.cleanupRemote('ghost');
+    expect(again.removed, isFalse);
+    expect(again.error, isNull);
+  });
+}

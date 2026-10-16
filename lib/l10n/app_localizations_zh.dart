@@ -2327,6 +2327,46 @@ class AppLocalizationsZh extends AppLocalizations {
   String get syncPeerManual => '手动添加';
 
   @override
+  String get syncPeerLost => '已失联';
+
+  @override
+  String get syncPeerLostHint =>
+      '该设备超过 180 天没有接触（可能已重装或不再使用）。可以本地忽略它，或显式清理它的远端文件；本机不会自动删除。';
+
+  @override
+  String get syncPeerIgnore => '本地忽略该设备';
+
+  @override
+  String get syncPeerUnignore => '取消本地忽略';
+
+  @override
+  String get syncPeerIgnoreHint => '不再拉取 / 合并该设备的载荷（只影响本机）';
+
+  @override
+  String get syncPeerIgnoredHint => '已本地忽略：不再拉取 / 合并它的载荷。';
+
+  @override
+  String get syncPeerCleanupRemote => '清理远端文件';
+
+  @override
+  String get syncPeerCleanupRemoteHint => '删除该设备在 WebDAV 上的日志与快照文件';
+
+  @override
+  String get syncPeerCleanupRemoteConfirm =>
+      '将删除该设备在 WebDAV 上的日志与快照文件。本机数据不受影响，文件也不会自动重建（对端重新在线后才会再写入）。局域网直连没有远端存储，无需清理。';
+
+  @override
+  String get syncPeerCleanupRemoteDone => '已清理远端文件';
+
+  @override
+  String get syncPeerCleanupRemoteNone => '没有可清理的远端文件';
+
+  @override
+  String syncPeerCleanupRemoteFailed(Object error) {
+    return '清理失败：$error';
+  }
+
+  @override
   String get syncPeerNotContacted => '尚未接触，对端在线后点本行再同步一次';
 
   @override

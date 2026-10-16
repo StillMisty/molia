@@ -98,24 +98,16 @@ class SyncPeersPage extends StatelessWidget {
     ManualPeer? manual,
   ) {
     final title = _displayName(peer, manual);
-    if (manual == null) {
-      return SettingsInfoTile(
-        key: Key('settingsSyncPeer-${peer.deviceId}'),
-        icon: Icons.sync_alt_rounded,
-        title: title,
-        subtitle: _peerSubtitle(l10n, peer),
-      );
-    }
     return SettingsNavTile(
       key: Key('settingsSyncPeer-${peer.deviceId}'),
-      icon: Icons.link_rounded,
+      icon: manual == null ? Icons.sync_alt_rounded : Icons.link_rounded,
       title: title,
-      subtitle: '${_peerSubtitle(l10n, peer)} · ${l10n.syncPeerManual}',
+      subtitle: _peerSubtitle(l10n, peer, manual),
       onTap: () => _showPeerDialog(
         context,
         provider,
         l10n,
-        host: manual.host,
+        host: manual?.host,
         title: title,
         peer: peer,
       ),
@@ -143,15 +135,21 @@ class SyncPeersPage extends StatelessWidget {
   }
 
   /// 手动对端详情：地址 / 端点 / 设备 id + 删除（二次确认）。
+  ///
+  /// 多设备处置动作也在这里：**本地忽略**（幽灵 / 已失联设备不再参与合并）
+  /// 与**显式清理远端文件**（不做自动删除）。
   Future<void> _showPeerDialog(
     BuildContext context,
     SyncProvider provider,
     AppLocalizations l10n, {
-    required String host,
+    String? host,
     required String title,
     SyncPeerState? peer,
   }) async {
     final navigator = Navigator.of(context, rootNavigator: true);
+    final deviceId = peer?.deviceId ?? '';
+    final ignored = deviceId.isNotEmpty && provider.isPeerIgnored(deviceId);
+    final lost = peer != null && peer.isLostAt(provider.engine.state.nowMs());
     await M3EDialog.show<void>(
       context,
       dialog: M3EDialog(
@@ -163,33 +161,122 @@ class SyncPeersPage extends StatelessWidget {
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(l10n.syncPeerAddress(host)),
+              if (host != null) Text(l10n.syncPeerAddress(host)),
               if (peer != null && peer.deviceId.isNotEmpty)
                 Text(l10n.syncPeerDeviceId(shortDeviceId(peer.deviceId))),
               if (peer != null && peer.lastPullAt > 0)
                 Text(l10n.syncPeerLastSync(syncTimeText(peer.lastPullAt))),
-              const SizedBox(height: 12),
-              Text(
-                l10n.syncPeerDeleteConfirm,
-                style: Theme.of(context).textTheme.bodySmall,
-              ),
+              if (lost)
+                Text(
+                  l10n.syncPeerLostHint,
+                  style: Theme.of(context)
+                      .textTheme
+                      .bodySmall
+                      ?.copyWith(color: AppSemanticColors.of(context).warning),
+                ),
+              if (ignored)
+                Text(
+                  l10n.syncPeerIgnoredHint,
+                  style: Theme.of(context).textTheme.bodySmall,
+                ),
+              if (host != null) ...[
+                const SizedBox(height: 12),
+                Text(
+                  l10n.syncPeerDeleteConfirm,
+                  style: Theme.of(context).textTheme.bodySmall,
+                ),
+              ],
+              if (deviceId.isNotEmpty) ...[
+                const SizedBox(height: 8),
+                SettingsNavTile(
+                  key: Key('settingsSyncPeerIgnore-$deviceId'),
+                  icon: ignored
+                      ? Icons.visibility_rounded
+                      : Icons.visibility_off_rounded,
+                  title: ignored ? l10n.syncPeerUnignore : l10n.syncPeerIgnore,
+                  subtitle: l10n.syncPeerIgnoreHint,
+                  onTap: () async {
+                    navigator.pop();
+                    await provider.setPeerIgnored(deviceId, !ignored);
+                  },
+                ),
+                SettingsNavTile(
+                  key: Key('settingsSyncPeerCleanup-$deviceId'),
+                  icon: Icons.delete_sweep_rounded,
+                  title: l10n.syncPeerCleanupRemote,
+                  subtitle: l10n.syncPeerCleanupRemoteHint,
+                  onTap: () async {
+                    navigator.pop();
+                    await _confirmCleanupRemote(
+                      context,
+                      provider,
+                      l10n,
+                      deviceId: deviceId,
+                    );
+                  },
+                ),
+              ],
             ],
           ),
         ),
         actions: [
-          M3EButton.text(
-            onPressed: () async {
-              navigator.pop();
-              await provider.removeManualPeer(host);
-            },
-            child: Text(l10n.syncPeerDelete),
-          ),
+          if (host != null)
+            M3EButton.text(
+              onPressed: () async {
+                navigator.pop();
+                await provider.removeManualPeer(host);
+              },
+              child: Text(l10n.syncPeerDelete),
+            ),
           M3EButton.text(
             onPressed: () {
               navigator.pop();
               unawaited(provider.syncNow(manual: true));
             },
             child: Text(l10n.syncSyncNow),
+          ),
+          M3EButton.text(
+            onPressed: () => navigator.pop(),
+            child: Text(l10n.cancelButton),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// 清理远端文件：二次确认后执行（不做自动删除）。
+  Future<void> _confirmCleanupRemote(
+    BuildContext context,
+    SyncProvider provider,
+    AppLocalizations l10n, {
+    required String deviceId,
+  }) async {
+    final navigator = Navigator.of(context, rootNavigator: true);
+    await M3EDialog.show<void>(
+      context,
+      dialog: M3EDialog(
+        title: l10n.syncPeerCleanupRemote,
+        content: SizedBox(
+          width: settingsDialogWidth(context),
+          child: Text(l10n.syncPeerCleanupRemoteConfirm),
+        ),
+        actions: [
+          M3EButton.text(
+            onPressed: () async {
+              navigator.pop();
+              final result = await provider.cleanupRemote(deviceId);
+              if (!context.mounted) return;
+              final message = result.error != null
+                  ? l10n.syncPeerCleanupRemoteFailed(
+                      syncIssueText(l10n, result.error!),
+                    )
+                  : result.removed
+                      ? l10n.syncPeerCleanupRemoteDone
+                      : l10n.syncPeerCleanupRemoteNone;
+              ScaffoldMessenger.of(context)
+                  .showSnackBar(SnackBar(content: Text(message)));
+            },
+            child: Text(l10n.delete),
           ),
           M3EButton.text(
             onPressed: () => navigator.pop(),
@@ -213,9 +300,16 @@ class SyncPeersPage extends StatelessWidget {
     );
   }
 
-  /// 对端副标题：传输 + 最后同步 + 落后/时钟偏移/最近失败（有什么说什么）。
-  static String _peerSubtitle(AppLocalizations l10n, SyncPeerState peer) {
+  /// 对端副标题：传输 + 最后同步 + 失联/忽略/落后/时钟偏移/最近失败
+  /// （有什么说什么）。
+  static String _peerSubtitle(
+    AppLocalizations l10n,
+    SyncPeerState peer,
+    ManualPeer? manual,
+  ) {
+    final now = DateTime.now().millisecondsSinceEpoch;
     final parts = <String>[
+      if (manual != null) l10n.syncPeerManual,
       if (peer.transport.isNotEmpty) _transportLabel(l10n, peer.transport),
       if (peer.lastPullAt > 0 || peer.lastPushAt > 0)
         l10n.syncPeerLastSync(syncTimeText(peer.lastPullAt > peer.lastPushAt
@@ -223,6 +317,7 @@ class SyncPeersPage extends StatelessWidget {
             : peer.lastPushAt))
       else
         l10n.syncPeerNever,
+      if (peer.isLostAt(now)) l10n.syncPeerLost,
       if (peer.behindBy != null && peer.behindBy! > 0)
         l10n.syncPeerBehind(peer.behindBy!),
       if (peer.clockSkewMs != null && peer.clockSkewMs!.abs() > 60 * 1000)

@@ -121,6 +121,7 @@ Future<SyncStack> buildSyncStack({
     snapshotIdProvider: () => engineRef?.lastEnvelope?.snapshotId ?? '',
     journalHeadProvider: () => engineRef?.lastEnvelope?.journalHead ?? 0,
     permissionGate: () => lanPermission.ensure(),
+    ignoredPeersProvider: syncState.isPeerIgnored,
     manualPeersProvider: () => syncState.manualPeers,
     onPeerResolved: (learned) => unawaited(syncState.learnManualPeer(learned)),
     httpPortProvider: () => syncState.lanHttpPort,
@@ -132,6 +133,7 @@ Future<SyncStack> buildSyncStack({
     passphraseProvider: syncState.readPassphrase,
     configProvider: () => syncState.webdav,
     passwordProvider: syncState.readWebdavPassword,
+    ignoredPeersProvider: syncState.isPeerIgnored,
   );
   final syncEngine = SyncEngine(
     state: syncState,

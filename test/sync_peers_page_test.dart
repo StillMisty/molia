@@ -13,6 +13,7 @@ import 'package:molia/data/sync/adapters/prefs_sync_adapter.dart';
 import 'package:molia/data/sync/sync_engine.dart';
 import 'package:molia/data/sync/sync_state_store.dart';
 import 'package:molia/domain/models/device_sync.dart';
+import 'package:molia/domain/ports/sync_transport.dart';
 import 'package:molia/l10n/app_localizations.dart';
 import 'package:molia/pages/sync_peers_page.dart';
 import 'package:molia/providers/sync_provider.dart';
@@ -38,7 +39,7 @@ void main() {
     state = SyncStateStore(
       preferences: prefs,
       secrets: secrets,
-      clock: () => 7000,
+      clock: () => DateTime.now().millisecondsSinceEpoch,
     );
     await state.init();
     await state.setEnabled(true);
@@ -93,6 +94,27 @@ void main() {
     await tester.pumpAndSettle();
   }
 
+  /// 往名册注入一台设备（`lastSeenAt` 可控；失联阈值 = 180 天）。
+  void seedPeer(String deviceId, {required int lastSeenAt}) {
+    state.recordRound(SyncRoundReport(
+      trigger: SyncTrigger.timer,
+      startedAt: 0,
+      finishedAt: 1,
+      outcome: SyncOutcome.ok,
+      peers: [
+        SyncPeerState(
+          deviceId: deviceId,
+          name: deviceId,
+          transport: SyncTransportKind.lan,
+          lastSeenAt: lastSeenAt,
+          cursorSeq: 3,
+          ackedSeq: 3,
+        ),
+      ],
+    ));
+    provider.notifyListeners();
+  }
+
   Future<void> openAddDialog(WidgetTester tester) async {
     await tester.tap(find.byKey(const Key('settingsSyncAddPeerItem')));
     await tester.pumpAndSettle();
@@ -125,6 +147,33 @@ void main() {
     await tester.pumpAndSettle();
     expect(clipboard.single, provider.deviceId);
     expect(find.text('Full device ID copied'), findsOneWidget);
+  });
+
+  testWidgets('失联设备：名册标记 + 忽略 / 清理远端文件动作', (tester) async {
+    final now = DateTime.now().millisecondsSinceEpoch;
+    seedPeer('ghost', lastSeenAt: now - SyncPeerState.lostThresholdMs - 1000);
+    await pumpPage(tester);
+    expect(find.textContaining('lost'), findsOneWidget);
+
+    // 打开详情：忽略该设备（只影响本机）。
+    await tester.tap(find.byKey(const Key('settingsSyncPeer-ghost')));
+    await tester.pumpAndSettle();
+    expect(find.textContaining('180 days'), findsOneWidget);
+    await tester.tap(find.byKey(const Key('settingsSyncPeerIgnore-ghost')));
+    await tester.pumpAndSettle();
+    expect(provider.isPeerIgnored('ghost'), isTrue);
+
+    // 再打开详情：清理远端文件（二次确认后调用传输）。
+    transport.deleteRemoteResult = true;
+    await tester.tap(find.byKey(const Key('settingsSyncPeer-ghost')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('settingsSyncPeerCleanup-ghost')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Delete'));
+    await tester.pumpAndSettle();
+
+    expect(transport.deletedRemotes, ['ghost']);
+    expect(find.text('Remote files cleaned up'), findsOneWidget);
   });
 
   testWidgets('添加设备：探测端口默认 47825，地址与端口校验在弹层内', (tester) async {

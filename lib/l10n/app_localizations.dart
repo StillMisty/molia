@@ -4419,6 +4419,78 @@ abstract class AppLocalizations {
   /// **'added manually'**
   String get syncPeerManual;
 
+  /// No description provided for @syncPeerLost.
+  ///
+  /// In en, this message translates to:
+  /// **'lost'**
+  String get syncPeerLost;
+
+  /// No description provided for @syncPeerLostHint.
+  ///
+  /// In en, this message translates to:
+  /// **'No contact for over 180 days (reinstalled or retired). You can ignore it locally or explicitly clean up its remote files — nothing is deleted automatically.'**
+  String get syncPeerLostHint;
+
+  /// No description provided for @syncPeerIgnore.
+  ///
+  /// In en, this message translates to:
+  /// **'Ignore this device locally'**
+  String get syncPeerIgnore;
+
+  /// No description provided for @syncPeerUnignore.
+  ///
+  /// In en, this message translates to:
+  /// **'Stop ignoring locally'**
+  String get syncPeerUnignore;
+
+  /// No description provided for @syncPeerIgnoreHint.
+  ///
+  /// In en, this message translates to:
+  /// **'No longer pull or merge its payloads (this device only)'**
+  String get syncPeerIgnoreHint;
+
+  /// No description provided for @syncPeerIgnoredHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Ignored locally: its payloads are no longer pulled or merged.'**
+  String get syncPeerIgnoredHint;
+
+  /// No description provided for @syncPeerCleanupRemote.
+  ///
+  /// In en, this message translates to:
+  /// **'Clean up remote files'**
+  String get syncPeerCleanupRemote;
+
+  /// No description provided for @syncPeerCleanupRemoteHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Delete its journal and snapshot files on WebDAV'**
+  String get syncPeerCleanupRemoteHint;
+
+  /// No description provided for @syncPeerCleanupRemoteConfirm.
+  ///
+  /// In en, this message translates to:
+  /// **'Deletes this device\'s journal and snapshot files on WebDAV. Local data is untouched and the files are not recreated automatically (only when the peer is online again). LAN connections have no remote storage.'**
+  String get syncPeerCleanupRemoteConfirm;
+
+  /// No description provided for @syncPeerCleanupRemoteDone.
+  ///
+  /// In en, this message translates to:
+  /// **'Remote files cleaned up'**
+  String get syncPeerCleanupRemoteDone;
+
+  /// No description provided for @syncPeerCleanupRemoteNone.
+  ///
+  /// In en, this message translates to:
+  /// **'No remote files to clean up'**
+  String get syncPeerCleanupRemoteNone;
+
+  /// No description provided for @syncPeerCleanupRemoteFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Cleanup failed: {error}'**
+  String syncPeerCleanupRemoteFailed(Object error);
+
   /// No description provided for @syncPeerNotContacted.
   ///
   /// In en, this message translates to:

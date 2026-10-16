@@ -73,6 +73,28 @@ class SyncProvider extends ChangeNotifier {
   Future<void> removeManualPeer(String host) =>
       _engine.removeManualPeer(host);
 
+  /// 本地忽略的设备（不拉取 / 不合并它们的载荷）。
+  Set<String> get ignoredPeers => _engine.state.ignoredPeers;
+
+  bool isPeerIgnored(String deviceId) => _engine.state.isPeerIgnored(deviceId);
+
+  /// 本地忽略 / 取消忽略某台设备（只影响本机）。
+  Future<void> setPeerIgnored(String deviceId, bool ignored) =>
+      _engine.setPeerIgnored(deviceId, ignored);
+
+  /// 显式清理某台设备的远端文件（不做自动删除）。
+  Future<({bool removed, SyncIssue? error})> cleanupRemote(String deviceId) =>
+      _engine.cleanupRemote(deviceId);
+
+  /// 名册里已失联的设备（超过失联阈值无接触；只提示与提供处置动作）。
+  List<SyncPeerState> get lostPeers {
+    final now = _engine.state.nowMs();
+    return [
+      for (final peer in peers)
+        if (peer.isLostAt(now)) peer,
+    ];
+  }
+
   /// 立刻跑一轮并判断该手动地址是否接触成功。
   ///
   /// 判据：地址簿条目在本轮学到了设备身份，且名册里该设备是本轮接触的
