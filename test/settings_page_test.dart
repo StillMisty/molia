@@ -19,6 +19,7 @@ import 'package:molia/providers/playback_provider.dart';
 import 'package:molia/providers/sources_provider.dart';
 import 'package:molia/providers/theme_provider.dart';
 import 'package:molia/services/data_saver_service.dart';
+import 'package:molia/services/haptics.dart';
 import 'package:molia/services/language_service.dart';
 import 'package:molia/services/lyrics_display/lyrics_display_settings.dart';
 import 'package:molia/services/lyrics_display/lyrics_output.dart';
@@ -208,6 +209,26 @@ void main() {
     expect(find.text('Setup'), findsNothing);
     expect(find.text('Tutorial'), findsNothing);
     expect(find.byIcon(Icons.email_rounded), findsNothing);
+  });
+
+  testWidgets('震动反馈：行在通用与数据分区，默认开，关闭后即时生效并持久化', (tester) async {
+    await pumpSettingsPage(tester);
+    addTearDown(() => HapticsService.setEnabled(HapticsService.defaultEnabled));
+
+    expect(find.text('Vibration feedback'), findsOneWidget);
+    expect(HapticsService.enabled, isTrue);
+
+    await tester.tap(find.byKey(const Key('settingsHapticsSwitch')));
+    await tester.pumpAndSettle();
+
+    expect(HapticsService.enabled, isFalse);
+    final prefs = await SharedPreferences.getInstance();
+    expect(prefs.getBool(HapticsService.keyEnabled), isFalse);
+
+    // 再点开：即时恢复（不需要重启应用）。
+    await tester.tap(find.byKey(const Key('settingsHapticsSwitch')));
+    await tester.pumpAndSettle();
+    expect(HapticsService.enabled, isTrue);
   });
 
   testWidgets('主题模式：行内分段选择深色后 provider 生效', (tester) async {

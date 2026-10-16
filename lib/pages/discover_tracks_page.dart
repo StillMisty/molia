@@ -1,7 +1,6 @@
 import 'dart:async';
 import 'dart:math' as math;
 
-import 'package:flutter/services.dart';
 import 'package:material_3_expressive/material_3_expressive.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:provider/provider.dart';
@@ -11,6 +10,7 @@ import '../l10n/app_localizations.dart';
 import '../models/play_mode.dart';
 import '../providers/discover_provider.dart';
 import '../providers/paged_list_controller.dart';
+import '../services/haptics.dart';
 import '../utils/responsive.dart';
 import '../widgets/app_network_image.dart';
 import '../widgets/discover_actions.dart';
@@ -126,7 +126,7 @@ class _DiscoverTracksPageState extends State<DiscoverTracksPage> {
   void _playFrom(int index) {
     final tracks = _paged.state.items;
     if (tracks.isEmpty) return;
-    HapticFeedback.lightImpact();
+    HapticsService.lightImpact();
     final info = _detail?.info;
     context.read<DiscoverProvider>().playTracks(
           tracks,
@@ -142,7 +142,7 @@ class _DiscoverTracksPageState extends State<DiscoverTracksPage> {
   Future<void> _playShuffled() async {
     final tracks = _paged.state.items;
     if (tracks.isEmpty) return;
-    HapticFeedback.lightImpact();
+    HapticsService.lightImpact();
     final info = _detail?.info;
     await context.read<DiscoverProvider>().playTracks(
           tracks,

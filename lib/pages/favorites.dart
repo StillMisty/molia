@@ -1,7 +1,6 @@
 import 'dart:async';
 import 'dart:math' as math;
 
-import 'package:flutter/services.dart';
 import 'package:material_3_expressive/material_3_expressive.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:provider/provider.dart';
@@ -17,6 +16,7 @@ import '../providers/lyrics_provider.dart';
 import '../pages/source_swap_page.dart';
 import '../services/cache_service.dart';
 import '../services/download/download_service.dart';
+import '../services/haptics.dart';
 import '../services/notification_service.dart';
 import '../utils/duration_text.dart';
 import '../utils/responsive.dart';
@@ -324,7 +324,7 @@ class _FavoritesPageState extends State<FavoritesPage> {
   }
 
   void _openSearch() {
-    HapticFeedback.lightImpact();
+    HapticsService.lightImpact();
     setState(() => _searching = true);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) _searchFocus.requestFocus();
@@ -341,12 +341,12 @@ class _FavoritesPageState extends State<FavoritesPage> {
   }
 
   void _enterSelection(int index) {
-    HapticFeedback.lightImpact();
+    HapticsService.lightImpact();
     _selection.select(index);
   }
 
   void _enterReorder() {
-    HapticFeedback.lightImpact();
+    HapticsService.lightImpact();
     _selection.clear();
     _searchFocus.unfocus();
     _searchController.clear();
@@ -517,7 +517,7 @@ class _FavoritesPageState extends State<FavoritesPage> {
   }
 
   Future<void> _playShuffled(List<PlaylistTrack> tracks, String name) {
-    HapticFeedback.lightImpact();
+    HapticsService.lightImpact();
     return context.read<LibraryProvider>().playPlaylistTracks(
           tracks,
           _randomStart(tracks.length),
@@ -531,7 +531,7 @@ class _FavoritesPageState extends State<FavoritesPage> {
       count <= 0 ? 0 : _shuffleRandom.nextInt(count);
 
   Future<void> _playFrom(List<PlaylistTrack> tracks, int index, String name) {
-    HapticFeedback.lightImpact();
+    HapticsService.lightImpact();
     return context.read<LibraryProvider>().playPlaylistTracks(
           tracks,
           index,
@@ -546,7 +546,7 @@ class _FavoritesPageState extends State<FavoritesPage> {
     String name, {
     PlayMode? mode,
   }) {
-    HapticFeedback.lightImpact();
+    HapticsService.lightImpact();
     return context.read<LibraryProvider>().playHistory(
           entries,
           index,
@@ -580,7 +580,7 @@ class _FavoritesPageState extends State<FavoritesPage> {
     String name, {
     PlayMode? mode,
   }) {
-    HapticFeedback.lightImpact();
+    HapticsService.lightImpact();
     final addedAt = DateTime.now().millisecondsSinceEpoch;
     return context.read<LibraryProvider>().playPlaylistTracks(
           [for (final song in songs) song.toPlaylistTrack(addedAt: addedAt)],
@@ -605,7 +605,7 @@ class _FavoritesPageState extends State<FavoritesPage> {
     final reordered = List<PlaylistTrack>.of(tracks);
     final moved = reordered.removeAt(from);
     reordered.insert(to, moved);
-    HapticFeedback.lightImpact();
+    HapticsService.lightImpact();
     await context
         .read<LibraryProvider>()
         .reorderPlaylistTracks(playlistId, reordered);
@@ -1185,7 +1185,7 @@ class _FavoritesPageState extends State<FavoritesPage> {
               child: InkWell(
                 borderRadius: BorderRadius.circular(12),
                 onTap: () {
-                  HapticFeedback.lightImpact();
+                  HapticsService.lightImpact();
                   _showCollectionPicker(l10n, playlists, favoritesId, selected);
                 },
                 child: Padding(
@@ -2133,7 +2133,7 @@ class _CollectionPickerSheetState extends State<_CollectionPickerSheet> {
       ),
     );
     if (confirmed != true) return;
-    HapticFeedback.lightImpact();
+    HapticsService.lightImpact();
     await widget.onDelete(entry.playlistId!);
     if (!mounted) return;
     setState(() => _entries.removeWhere((item) => item.key == entry.key));

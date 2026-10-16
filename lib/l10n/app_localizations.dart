@@ -560,6 +560,18 @@ abstract class AppLocalizations {
   /// **'General'**
   String get generalTitle;
 
+  /// No description provided for @settingsHapticsTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Vibration feedback'**
+  String get settingsHapticsTitle;
+
+  /// No description provided for @settingsHapticsSubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Light vibration on taps such as navigation and playback (on by default)'**
+  String get settingsHapticsSubtitle;
+
   /// No description provided for @settingsGeneralAndDataTitle.
   ///
   /// In en, this message translates to:

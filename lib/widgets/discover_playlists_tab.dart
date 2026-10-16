@@ -1,7 +1,6 @@
 import 'dart:async';
 
 import 'package:flutter/foundation.dart' show kIsWeb;
-import 'package:flutter/services.dart';
 import 'package:material_3_expressive/material_3_expressive.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:provider/provider.dart';
@@ -11,6 +10,7 @@ import '../l10n/app_localizations.dart';
 import '../pages/discover_tracks_page.dart';
 import '../providers/discover_provider.dart';
 import '../providers/paged_list_controller.dart';
+import '../services/haptics.dart';
 import 'app_search_bar.dart';
 import 'library_cover.dart';
 
@@ -166,7 +166,7 @@ class _DiscoverPlaylistsTabState extends State<DiscoverPlaylistsTab>
   }
 
   void _openPlaylist(DiscoverPlaylist playlist) {
-    HapticFeedback.lightImpact();
+    HapticsService.lightImpact();
     final provider = _provider;
     Navigator.of(context).push(
       MaterialPageRoute<void>(

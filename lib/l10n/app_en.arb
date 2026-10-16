@@ -98,6 +98,8 @@
   "playModeShuffle": "Shuffle",
   "playModeSingleRepeat": "Single repeat",
   "generalTitle": "General",
+  "settingsHapticsTitle": "Vibration feedback",
+  "settingsHapticsSubtitle": "Light vibration on taps such as navigation and playback (on by default)",
   "settingsGeneralAndDataTitle": "General & data",
   "settingsGeneralSubtitle": "Language, app name and bottom navigation",
   "dataManagementTitle": "Data & storage",

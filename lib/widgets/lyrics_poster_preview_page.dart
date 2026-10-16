@@ -6,6 +6,7 @@ import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import 'package:path_provider/path_provider.dart';
 import '../services/artwork_palette_service.dart';
+import '../services/haptics.dart';
 import '../services/notification_service.dart';
 import '../services/lyrics_poster_service.dart';
 import '../services/poster_color_store.dart';
@@ -134,7 +135,7 @@ class _LyricsPosterPreviewPageState extends State<LyricsPosterPreviewPage> {
 
   Future<void> _generatePoster() async {
     if (!mounted) return;
-    HapticFeedback.lightImpact();
+    HapticsService.lightImpact();
     final appScheme = Theme.of(context).colorScheme;
     final appName = AppLocalizations.of(context)?.appName ?? 'Molia';
     // 海报字体优先级：海报独立覆盖 > 应用字体（主题注入）> 系统默认；
@@ -231,7 +232,7 @@ class _LyricsPosterPreviewPageState extends State<LyricsPosterPreviewPage> {
   Future<void> _savePoster() async {
     if (_posterBytes == null || _isOperating) return;
 
-    HapticFeedback.mediumImpact();
+    HapticsService.mediumImpact();
     setState(() {
       _isOperating = true;
     });
@@ -262,7 +263,7 @@ class _LyricsPosterPreviewPageState extends State<LyricsPosterPreviewPage> {
   Future<void> _sharePoster() async {
     if (_tempFilePath == null || _isOperating) return;
 
-    HapticFeedback.mediumImpact();
+    HapticsService.mediumImpact();
     setState(() {
       _isOperating = true;
     });
@@ -293,7 +294,7 @@ class _LyricsPosterPreviewPageState extends State<LyricsPosterPreviewPage> {
     if (_colorSource == source || _isLoading || _isOperating) return;
     if (source == PosterColorSource.artwork && !_hasArtwork) return;
 
-    HapticFeedback.selectionClick();
+    HapticsService.selectionClick();
     setState(() {
       _colorSource = source;
     });
@@ -304,7 +305,7 @@ class _LyricsPosterPreviewPageState extends State<LyricsPosterPreviewPage> {
   /// 海报自定义色：任意取色（HSV + Hex），存入海报专属种子。
   Future<void> _pickPosterColor() async {
     if (_isLoading || _isOperating) return;
-    HapticFeedback.selectionClick();
+    HapticsService.selectionClick();
     final picked = await showAppColorPicker(
       context,
       initialColor: _customSeed,
@@ -322,7 +323,7 @@ class _LyricsPosterPreviewPageState extends State<LyricsPosterPreviewPage> {
   /// 选择海报字体：跟随应用字体 / 系统默认 / 设备已装字体。
   Future<void> _changePosterFont() async {
     if (_isLoading || _isOperating) return;
-    HapticFeedback.selectionClick();
+    HapticsService.selectionClick();
     final l10n = AppLocalizations.of(context)!;
     final choice = await showFontPickerSheet(
       context,
@@ -444,7 +445,7 @@ class _LyricsPosterPreviewPageState extends State<LyricsPosterPreviewPage> {
       canPop: !_isBusy,
       onPopInvokedWithResult: (didPop, result) {
         if (!didPop && _isBusy) {
-          HapticFeedback.mediumImpact();
+          HapticsService.mediumImpact();
         }
       },
       child: Scaffold(

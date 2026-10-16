@@ -256,6 +256,13 @@ class AppLocalizationsEn extends AppLocalizations {
   String get generalTitle => 'General';
 
   @override
+  String get settingsHapticsTitle => 'Vibration feedback';
+
+  @override
+  String get settingsHapticsSubtitle =>
+      'Light vibration on taps such as navigation and playback (on by default)';
+
+  @override
   String get settingsGeneralAndDataTitle => 'General & data';
 
   @override

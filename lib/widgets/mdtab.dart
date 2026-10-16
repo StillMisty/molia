@@ -1,6 +1,7 @@
-import 'package:flutter/services.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:motor/motor.dart';
+
+import '../services/haptics.dart';
 
 /// 歌词/队列切换：小圆点指示器（选中态拉伸），无图标/文字。
 ///
@@ -55,7 +56,7 @@ class _LyricsQueueDotsState extends State<LyricsQueueDots> {
       widget.onActiveTap?.call();
       return;
     }
-    HapticFeedback.lightImpact();
+    HapticsService.lightImpact();
     widget.pageController.animateToPage(
       index,
       duration: const Duration(milliseconds: 360),

@@ -24,6 +24,7 @@ import '../providers/playback_provider.dart';
 import '../providers/theme_provider.dart';
 import '../services/app_branding_service.dart';
 import '../services/data_saver_service.dart';
+import '../services/haptics.dart';
 import '../services/language_service.dart';
 import '../services/play_statistics_service.dart';
 import '../services/window/window_chrome.dart';
@@ -305,12 +306,16 @@ class _MyAppState extends State<MyApp>
     if (destination == ShellDestination.nowPlaying && _morphGeometry != null) {
       return;
     }
+    // 重复点击是一次真实的点按（列表回顶 / 播放器折叠都是肉眼可见的动作），
+    // 给一次轻震：壳层统一在此触发 —— 页面侧对重复点击的响应不再自带触感，
+    // 避免同一次点击两次震动（命中忽略分支时不震动）。
+    HapticsService.lightImpact();
     _reselect[destination]?.trigger();
   }
 
   void _selectDestination(ShellDestination destination) {
     if (destination == _selectedDestination) return;
-    HapticFeedback.lightImpact();
+    HapticsService.lightImpact();
     final leavingPlayer = _selectedDestination == ShellDestination.nowPlaying;
     final enteringPlayer = destination == ShellDestination.nowPlaying;
     setState(() {
@@ -403,7 +408,7 @@ class _MyAppState extends State<MyApp>
 
   /// 打开设置弹层（顶栏入口，三个目的地共用）；返回处理见 [showSettingsSheet]。
   void _openSettings(BuildContext context) {
-    HapticFeedback.lightImpact();
+    HapticsService.lightImpact();
     showSettingsSheet(context);
   }
 
@@ -860,7 +865,7 @@ class _BarPlayPauseButton extends StatelessWidget {
           ),
           onPressed: hasTrack
               ? () {
-                  HapticFeedback.lightImpact();
+                  HapticsService.lightImpact();
                   context.read<PlaybackProvider>().togglePlayPause();
                 }
               : null,
@@ -896,7 +901,7 @@ class _BarNextButton extends StatelessWidget {
           icon: const Icon(Icons.skip_next_rounded),
           onPressed: hasTrack
               ? () {
-                  HapticFeedback.lightImpact();
+                  HapticsService.lightImpact();
                   context.read<PlaybackProvider>().skipToNext();
                 }
               : null,
@@ -1150,6 +1155,8 @@ class _MyThemedAppState extends State<MyThemedApp> with WidgetsBindingObserver {
     // 自定义应用名称（顶栏回退文案）需要重建 MaterialApp.title。
     AppBrandingService.titleNotifier.addListener(_onBrandingChanged);
     AppBrandingService.load();
+    // 震动反馈开关（设备本地偏好）：载入后全应用触感立即按它判定。
+    HapticsService.load();
   }
 
   @override

@@ -77,6 +77,8 @@
   "playModeShuffle": "随机播放",
   "playModeSingleRepeat": "单曲循环",
   "generalTitle": "通用",
+  "settingsHapticsTitle": "震动反馈",
+  "settingsHapticsSubtitle": "点按导航、播放等操作时给出轻震动（默认开启）",
   "settingsGeneralAndDataTitle": "通用与数据",
   "settingsGeneralSubtitle": "语言、应用名称与底部导航",
   "dataManagementTitle": "数据与存储",

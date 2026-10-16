@@ -246,6 +246,12 @@ class AppLocalizationsZh extends AppLocalizations {
   String get generalTitle => '通用';
 
   @override
+  String get settingsHapticsTitle => '震动反馈';
+
+  @override
+  String get settingsHapticsSubtitle => '点按导航、播放等操作时给出轻震动（默认开启）';
+
+  @override
   String get settingsGeneralAndDataTitle => '通用与数据';
 
   @override

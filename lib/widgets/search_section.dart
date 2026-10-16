@@ -1,6 +1,5 @@
 import 'dart:async';
 
-import 'package:flutter/services.dart';
 import 'package:material_3_expressive/material_3_expressive.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:provider/provider.dart';
@@ -12,6 +11,7 @@ import '../l10n/app_localizations.dart';
 import '../pages/artist_page.dart';
 import '../providers/library_provider.dart';
 import '../providers/search_provider.dart';
+import '../services/haptics.dart';
 import '../utils/duration_text.dart';
 import '../utils/responsive.dart';
 import 'add_to_library.dart';
@@ -372,7 +372,7 @@ class _ArtistResultsList extends StatelessWidget {
             onTap: onItemTap == null
                 ? null
                 : () {
-                    HapticFeedback.lightImpact();
+                    HapticsService.lightImpact();
                     onItemTap!(artist);
                   },
           ),
@@ -469,7 +469,7 @@ class _SearchResultTile extends StatelessWidget {
       onTap: onTap == null
           ? null
           : () {
-              HapticFeedback.lightImpact();
+              HapticsService.lightImpact();
               onTap!();
             },
       favoriteOf: _favoriteOf,

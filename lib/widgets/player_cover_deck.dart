@@ -42,7 +42,6 @@ import 'dart:async';
 import 'dart:math';
 
 import 'package:flutter/gestures.dart' show DragStartBehavior;
-import 'package:flutter/services.dart';
 import 'package:material_3_expressive/material_3_expressive.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:motor/motor.dart';
@@ -51,6 +50,7 @@ import 'package:provider/provider.dart';
 import '../domain/models/playback.dart';
 import '../domain/models/track.dart';
 import '../providers/playback_provider.dart';
+import '../services/haptics.dart';
 import 'app_network_image.dart';
 import 'cover_appearance.dart';
 import 'molia_mark.dart';
@@ -446,7 +446,7 @@ class _PlayerCoverDeckState extends State<PlayerCoverDeck>
 
   @override
   void land({required double progressVelocity}) {
-    HapticFeedback.mediumImpact();
+    HapticsService.mediumImpact();
     // 从当前拖动进度继续走到落位；带上手势速度（进度域，画面 = |dx| / range）。
     _coverController.animateTo(1, withVelocity: progressVelocity);
   }
@@ -1297,7 +1297,7 @@ class _PlayerCoverDeckState extends State<PlayerCoverDeck>
           child: GestureDetector(
             behavior: HitTestBehavior.opaque,
             onTap: () {
-              HapticFeedback.lightImpact();
+              HapticsService.lightImpact();
               onTap();
             },
             child: card,
@@ -1453,7 +1453,7 @@ class _PlayerCoverDeckState extends State<PlayerCoverDeck>
           // 点击封面 = 播放/暂停；横向拖动由封面区手势宿主统一承接
           // （见 [_buildArtworkStack]：手势不能在拖动期间换型重建）。
           onTap: () {
-            HapticFeedback.lightImpact();
+            HapticsService.lightImpact();
             playback.togglePlayPause();
           },
           child: RepaintBoundary(
