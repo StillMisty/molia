@@ -24,23 +24,36 @@ import 'dart:math';
 import 'package:crypto/crypto.dart';
 import 'package:drift/drift.dart';
 
+import '../domain/models/device_sync.dart';
 import '../domain/models/play_statistics.dart';
 import 'molia_database.dart';
+import 'sync/sync_stamp.dart';
 
 class PlayStatisticsRepository {
   /// [databaseProvider] 仅测试注入（in-memory drift 库）；生产走
   /// [MoliaDatabase.instance]。
   ///
   /// [deviceIdProvider] 供跨设备统计合并标注事件来源设备（缺省为空串，
-  /// 同步未启用时无影响）。
+  /// 同步未启用时无影响）；[clock] 提供内容时间（`endedAt`）；[stampIssuer]
+  /// 是版本戳唯一发号器（内容时间与版本戳刻意分开，见 ADR-0003 v2 §2）。
   PlayStatisticsRepository({
     MoliaDatabase Function()? databaseProvider,
     String Function()? deviceIdProvider,
+    int Function()? clock,
+    SyncStampIssuer? stampIssuer,
   })  : _databaseProvider = databaseProvider ?? (() => MoliaDatabase.instance),
-        _deviceIdProvider = deviceIdProvider ?? (() => '');
+        _deviceIdProvider = deviceIdProvider ?? (() => ''),
+        _clock = clock ?? (() => DateTime.now().millisecondsSinceEpoch),
+        _injectedStamps = stampIssuer {
+    _stamps = _injectedStamps ??
+        SyncStampIssuer(clock: _clock, deviceId: _deviceIdProvider);
+  }
 
   final MoliaDatabase Function() _databaseProvider;
   final String Function() _deviceIdProvider;
+  final int Function() _clock;
+  final SyncStampIssuer? _injectedStamps;
+  late final SyncStampIssuer _stamps;
   final Random _random = Random.secure();
   final StreamController<void> _changes = StreamController<void>.broadcast();
 
@@ -48,6 +61,8 @@ class PlayStatisticsRepository {
   Stream<void> get changes => _changes.stream;
 
   MoliaDatabase get _db => _databaseProvider();
+
+  SyncVersion _nextVersion() => _stamps.next();
 
   void _notifyChanged() {
     if (!_changes.isClosed) _changes.add(null);
@@ -123,6 +138,9 @@ class PlayStatisticsRepository {
   }
 
   /// 收尾一次播放事件（写入最终进度 + 结束原因）。
+  ///
+  /// `endedAt` 是内容时间（何时结束），版本戳由发号器现取：跨设备
+  /// 「同键晚收尾覆盖」按版本判定，而不是拿 `endedAt` 当时间戳。
   Future<void> finishEvent(
     int id, {
     required PlayEventEndReason reason,
@@ -130,12 +148,15 @@ class PlayStatisticsRepository {
     required int maxPositionMs,
     int? endedAt,
   }) async {
+    final version = _nextVersion();
     await (_db.update(_db.playEvents)..where((t) => t.id.equals(id)))
         .write(PlayEventsCompanion(
-      endedAt: Value(endedAt ?? DateTime.now().millisecondsSinceEpoch),
+      endedAt: Value(endedAt ?? _clock()),
       listenedMs: Value(listenedMs),
       maxPositionMs: Value(maxPositionMs),
       endReason: Value(reason.storageValue),
+      versionPhysical: Value(version.physical),
+      versionCounter: Value(version.counter),
     ));
     _notifyChanged();
   }
@@ -143,12 +164,17 @@ class PlayStatisticsRepository {
   /// 收尾进程被杀等外部中断遗留的进行中事件。
   ///
   /// `endedAt` 取 `startedAt + listenedMs`（最后落盘进度，确定性可测）。
-  /// 返回收尾行数。
+  /// 返回收尾行数。版本戳整批取一个（各行键不同，LWW 只在同键间比较）。
   Future<int> closeStaleEvents() async {
+    final version = _nextVersion();
     final closed = await _db.customUpdate(
-      'UPDATE play_events SET endedAt = startedAt + listenedMs, endReason = ? '
-      'WHERE endedAt IS NULL',
-      variables: [Variable.withString(PlayEventEndReason.interrupted.storageValue)],
+      'UPDATE play_events SET endedAt = startedAt + listenedMs, endReason = ?, '
+      'versionPhysical = ?, versionCounter = ? WHERE endedAt IS NULL',
+      variables: [
+        Variable.withString(PlayEventEndReason.interrupted.storageValue),
+        Variable.withInt(version.physical),
+        Variable.withInt(version.counter),
+      ],
       updates: {_db.playEvents},
     );
     if (closed > 0) _notifyChanged();
@@ -483,8 +509,11 @@ class PlayStatisticsRepository {
     return result;
   }
 
-  /// 同步应用：按 `syncKey` 去重合并；同键已存在且远端 `endedAt` 更新时
-  /// 覆盖进度（进程被杀后由启动收尾补完的事件会晚于首次同步）。
+  /// 同步应用：按 `syncKey` 去重合并；同键已存在且远端**版本更新**时覆盖
+  /// 进度（进程被杀后由启动收尾补完的事件会晚于首次同步）。
+  ///
+  /// `endedAt` 是内容时间，不参与胜负判定：版本 = `versionPhysical +
+  /// versionCounter + originDeviceId`（见 ADR-0003 v2 §2）。
   Future<({int applied, int skipped})> syncApplyEvents(
     List<Map<String, Object?>> events,
   ) async {
@@ -500,6 +529,11 @@ class PlayStatisticsRepository {
           skipped++;
           continue;
         }
+        final version = SyncVersion(
+          physical: (event['versionPhysical'] as num?)?.toInt() ?? 0,
+          counter: (event['versionCounter'] as num?)?.toInt() ?? 0,
+          deviceId: event['originDeviceId'] as String? ?? '',
+        );
         final existing = await (db.select(db.playEvents)
               ..where((t) => t.syncKey.equals(syncKey))
               ..limit(1))
@@ -521,11 +555,16 @@ class PlayStatisticsRepository {
                     Value((event['maxPositionMs'] as num?)?.toInt() ?? 0),
                 endReason: Value(event['endReason'] as String?),
                 syncKey: Value(syncKey),
-                originDeviceId:
-                    Value(event['originDeviceId'] as String? ?? ''),
+                originDeviceId: Value(version.deviceId),
+                versionPhysical: Value(version.physical),
+                versionCounter: Value(version.counter),
               ));
           applied++;
-        } else if (endedAt > (existing.endedAt ?? 0)) {
+        } else if (version.isNewerThan(SyncVersion(
+          physical: existing.versionPhysical,
+          counter: existing.versionCounter,
+          deviceId: existing.originDeviceId,
+        ))) {
           await (db.update(db.playEvents)
                 ..where((t) => t.id.equals(existing.id)))
               .write(PlayEventsCompanion(
@@ -534,6 +573,8 @@ class PlayStatisticsRepository {
             maxPositionMs:
                 Value((event['maxPositionMs'] as num?)?.toInt() ?? 0),
             endReason: Value(event['endReason'] as String?),
+            versionPhysical: Value(version.physical),
+            versionCounter: Value(version.counter),
           ));
           applied++;
         } else {

@@ -121,14 +121,12 @@ void main() {
         SyncCategory.playlists: [
           SyncRecord(
             key: currentRow.syncId,
-            updatedAt: 1,
-            updatedBy: 'devC',
+            version: const SyncVersion(physical: 1, deviceId: 'devC'),
             data: PlaylistSyncRecord(
               syncId: currentRow.syncId,
               name: '旧名字',
               createdAt: 1,
-              updatedAt: 1,
-              updatedBy: 'devC',
+              version: const SyncVersion(physical: 1, deviceId: 'devC'),
             ).toJson(),
           ),
         ],
@@ -199,15 +197,12 @@ void main() {
       SyncCategory.playlistTracks: [
         SyncRecord(
           key: SyncRecordKeys.playlistTrack('sync-1', 'local', 'wy:9'),
-          updatedAt: 3000,
-          updatedBy: 'devA',
+          version: const SyncVersion(physical: 3000, deviceId: 'devA'),
           data: const {
             'playlistSyncId': 'sync-1',
             'sourceKey': 'local',
             'songId': 'wy:9',
             'title': '本地下载',
-            'updatedAt': 3000,
-            'updatedBy': 'devA',
           },
         ),
       ],

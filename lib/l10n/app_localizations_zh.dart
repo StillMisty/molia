@@ -2210,6 +2210,9 @@ class AppLocalizationsZh extends AppLocalizations {
   }
 
   @override
+  String get syncPeerProtocolTooOld => '对方版本过旧，请升级';
+
+  @override
   String get syncDiagnosticTitle => '诊断';
 
   @override

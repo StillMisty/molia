@@ -4196,6 +4196,12 @@ abstract class AppLocalizations {
   /// **'Last error: {error}'**
   String syncPeerLastError(String error);
 
+  /// No description provided for @syncPeerProtocolTooOld.
+  ///
+  /// In en, this message translates to:
+  /// **'The other device is out of date — please upgrade it'**
+  String get syncPeerProtocolTooOld;
+
   /// No description provided for @syncDiagnosticTitle.
   ///
   /// In en, this message translates to:

@@ -13,7 +13,8 @@ import 'support/sync_test_support.dart';
 /// 引擎测试：一轮同步的拉取 → 合并 → 应用 → 推送 → **报告与日志**。
 ///
 /// 可观察性契约是主要覆盖对象：五态判定（尤其是「没发现对端」与「没有变化」
-/// 必须分开）、设备名册、入站快照不丢、进行中的请求排队补跑。
+/// 必须分开）、设备名册、入站快照不丢、进行中的请求排队补跑，以及协议 v2
+/// 对 v1 对端的拒绝（不静默合并）。
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
@@ -29,7 +30,11 @@ void main() {
     SharedPreferences.setMockInitialValues({});
     prefs = await SharedPreferences.getInstance();
     secrets = MemorySyncSecretStore();
-    state = SyncStateStore(preferences: prefs, secrets: secrets);
+    state = SyncStateStore(
+      preferences: prefs,
+      secrets: secrets,
+      clock: () => 7000,
+    );
     await state.init();
     await state.writePassphrase('ABCD-EFGH-JKLM-NPQR-STUV-WXYZ-2345-6789');
     await state.setEnabled(true);
@@ -44,8 +49,6 @@ void main() {
             preferences: prefs,
             secrets: secrets,
           ),
-          deviceId: () => state.deviceId,
-          now: () => 7000,
         ),
       ],
       transports: {'lan': transport},
@@ -55,16 +58,37 @@ void main() {
 
   tearDown(() => engine.dispose());
 
-  SyncEnvelope remoteTheme(String value, {int at = 5000}) => SyncEnvelope(
-        deviceId: 'devB',
-        deviceName: 'B',
+  SyncEnvelope remoteTheme(
+    String value, {
+    int at = 5000,
+    String deviceId = 'devB',
+    String deviceName = 'B',
+  }) =>
+      SyncEnvelope(
+        deviceId: deviceId,
+        deviceName: deviceName,
         producedAt: at,
         records: {
           SyncCategory.settings: [
             SyncRecord(
               key: 'theme_mode',
-              updatedAt: at,
-              updatedBy: 'devB',
+              version: SyncVersion(physical: at, deviceId: deviceId),
+              data: {'v': value},
+            ),
+          ],
+        },
+      );
+
+  SyncEnvelope oldRemoteTheme(String value, {int at = 999999}) => SyncEnvelope(
+        deviceId: 'devOld',
+        deviceName: '旧设备',
+        producedAt: at,
+        version: 1,
+        records: {
+          SyncCategory.settings: [
+            SyncRecord(
+              key: 'theme_mode',
+              version: SyncVersion(physical: at, deviceId: 'devOld'),
               data: {'v': value},
             ),
           ],
@@ -93,6 +117,9 @@ void main() {
         .recordsOf(SyncCategory.settings)
         .firstWhere((r) => r.key == 'theme_mode');
     expect(pushedTheme.data, {'v': 'dark'});
+    expect(pushedTheme.version.physical, 5000);
+    expect(pushedTheme.version.deviceId, 'devB');
+    expect(transport.pushed.single.version, SyncEnvelope.protocolVersion);
     expect(engine.lastEnvelope, isNotNull);
 
     // 名册：从对端快照吸收身份与时钟偏移。
@@ -102,6 +129,43 @@ void main() {
     expect(report.peers.single.transport, 'lan');
     expect(report.peers.single.lastPullAt, greaterThan(0));
     expect(state.peers.single.deviceId, 'devB');
+  });
+
+  test('v1 对端：拒绝合并 + 名册/报告给「版本过旧」状态', () async {
+    transport.available.add(oldRemoteTheme('dark'));
+    final report = await engine.syncNow(trigger: SyncTrigger.manual);
+
+    // 不静默合并：对端是 v1，本机保持原值。
+    expect(prefs.getString('theme_mode'), isNull);
+    expect(report!.applied, 0);
+    expect(report.outcome, SyncOutcome.partial);
+    expect(report.error, contains('版本过旧'));
+    final transportReport = report.transports.single;
+    expect(transportReport.rejectedPeers, 1);
+    expect(transportReport.pulled, 1);
+    // 名册：对端可见且带机器可读原因码（UI 映射为「请升级」）。
+    final peer = report.peers.single;
+    expect(peer.deviceId, 'devOld');
+    expect(peer.lastError, SyncPeerIssue.protocolTooOld);
+    expect(state.peers.single.lastError, SyncPeerIssue.protocolTooOld);
+    // 拒绝计入失败（日志可见），不是「成功」。
+    expect(state.log.first.failed, 1);
+    expect(state.log.first.outcome, SyncOutcome.partial);
+  });
+
+  test('v1 对端升级为 v2 后：状态自动清除，恢复合并', () async {
+    transport.available.add(oldRemoteTheme('dark'));
+    await engine.syncNow(trigger: SyncTrigger.manual);
+    expect(state.peers.single.lastError, SyncPeerIssue.protocolTooOld);
+
+    transport.available
+      ..clear()
+      ..add(remoteTheme('dark', deviceId: 'devOld', deviceName: '旧设备'));
+    final report = await engine.syncNow(trigger: SyncTrigger.manual);
+
+    expect(prefs.getString('theme_mode'), 'dark');
+    expect(report!.applied, 1);
+    expect(report.peers.single.lastError, isNull);
   });
 
   test('没有对端：结论是 noPeers（不再显示成「同步成功」）', () async {

@@ -11,6 +11,7 @@ import 'generated/schema_v2.dart' as v2;
 import 'generated/schema_v3.dart' as v3;
 import 'generated/schema_v4.dart' as v4;
 import 'generated/schema_v5.dart' as v5;
+import 'generated/schema_v6.dart' as v6;
 
 void main() {
   driftRuntimeOptions.dontWarnAboutMultipleDatabases = true;
@@ -391,6 +392,123 @@ void main() {
           0,
           reason: 'v5 新列默认 0（下载）；生成 schema 的布尔列是 int',
         );
+      },
+    );
+  });
+
+  // 迁移不破坏既有数据：v5 → v6 只把同步版本戳改三元组——
+  // 内容列（名字 / 曲目 / playedAt / 事件）逐行保留，旧版本列不迁移、
+  // 新列回默认值；墓碑表按「不兼容历史数据」重建为空。
+  test('migration from v5 to v6 keeps content and resets sync stamps', () async {
+    const oldPlaylistsData = [
+      v5.PlaylistsData(
+        id: 1,
+        name: '通勤歌单',
+        createdAt: 300,
+        syncId: 'sync-1',
+        updatedAt: 900,
+        updatedBy: 'device-a',
+      ),
+    ];
+    const oldPlaylistTracksData = [
+      v5.PlaylistTracksData(
+        id: 1,
+        playlistId: 1,
+        sourceKey: 'wy',
+        songId: '1',
+        title: '曲目',
+        artist: '歌手',
+        album: '专辑',
+        coverUrl: null,
+        durationMs: 200000,
+        raw: '{"songmid":"1"}',
+        addedAt: 300,
+        sortOrder: 0,
+        updatedAt: 900,
+        updatedBy: 'device-a',
+      ),
+    ];
+    const oldPlayHistoryData = [
+      v5.PlayHistoryData(
+        sourceKey: 'wy',
+        songId: '1',
+        title: '历史',
+        artist: '歌手',
+        album: '专辑',
+        coverUrl: null,
+        durationMs: 200000,
+        raw: '{"songmid":"1"}',
+        playedAt: 200,
+      ),
+    ];
+    const oldSyncTombstonesData = [
+      v5.SyncTombstonesData(
+        category: 'history',
+        key: 'wy:2',
+        updatedAt: 400,
+        updatedBy: 'device-a',
+      ),
+    ];
+    const oldPlayEventsData = [
+      v5.PlayEventsData(
+        id: 1,
+        sourceKey: 'wy',
+        songId: '1',
+        title: '事件',
+        artist: '歌手',
+        album: '专辑',
+        coverUrl: null,
+        durationMs: 200000,
+        raw: '{}',
+        startedAt: 500,
+        endedAt: 600,
+        listenedMs: 100000,
+        maxPositionMs: 100000,
+        endReason: 'completed',
+        syncKey: 'key-1',
+        originDeviceId: 'device-a',
+      ),
+    ];
+
+    await verifier.testWithDataIntegrity(
+      oldVersion: 5,
+      newVersion: 6,
+      createOld: v5.DatabaseAtV5.new,
+      createNew: v6.DatabaseAtV6.new,
+      openTestedDatabase: MoliaDatabase.new,
+      createItems: (batch, oldDb) {
+        batch.insertAll(oldDb.playlists, oldPlaylistsData);
+        batch.insertAll(oldDb.playlistTracks, oldPlaylistTracksData);
+        batch.insertAll(oldDb.playHistory, oldPlayHistoryData);
+        batch.insertAll(oldDb.syncTombstones, oldSyncTombstonesData);
+        batch.insertAll(oldDb.playEvents, oldPlayEventsData);
+      },
+      validateItems: (newDb) async {
+        final playlists = await newDb.select(newDb.playlists).get();
+        expect(playlists, hasLength(1));
+        expect(playlists.single.name, '通勤歌单', reason: '内容列不丢');
+        expect(playlists.single.syncId, 'sync-1');
+        expect(playlists.single.versionPhysical, 0, reason: '旧版本列不迁移');
+        expect(playlists.single.versionCounter, 0);
+        expect(playlists.single.deviceId, '');
+
+        final tracks = await newDb.select(newDb.playlistTracks).get();
+        expect(tracks, hasLength(1));
+        expect(tracks.single.title, '曲目');
+        expect(tracks.single.versionPhysical, 0);
+
+        final history = await newDb.select(newDb.playHistory).get();
+        expect(history, hasLength(1));
+        expect(history.single.playedAt, 200, reason: '内容时间保留');
+        expect(history.single.versionPhysical, 0);
+
+        // 墓碑不迁移（fresh 语义：旧墓碑没有正确的版本戳）。
+        expect(await newDb.select(newDb.syncTombstones).get(), isEmpty);
+
+        final events = await newDb.select(newDb.playEvents).get();
+        expect(events, hasLength(1));
+        expect(events.single.syncKey, 'key-1');
+        expect(events.single.versionPhysical, 0);
       },
     );
   });

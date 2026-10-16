@@ -18,8 +18,7 @@ void main() {
           SyncCategory.settings: [
             SyncRecord(
               key: 'theme_mode',
-              updatedAt: 10,
-              updatedBy: deviceId,
+              version: SyncVersion(physical: 10, deviceId: deviceId),
               data: {'v': value},
             ),
           ],

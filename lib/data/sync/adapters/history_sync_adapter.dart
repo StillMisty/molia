@@ -5,7 +5,9 @@ import '../sync_adapter.dart';
 
 /// 播放历史适配器（`play_history`）。
 ///
-/// 合并键 = 平台 + 曲目 id（与表唯一键同构），时间戳 = `playedAt`；
+/// 合并键 = 平台 + 曲目 id（与表唯一键同构）；版本 = 发号器给的三元组，
+/// `playedAt`（何时听的）是内容时间、**不参与胜负判定**；删除墓碑另带真实
+/// 删除时间（`deletedAt`），「删除 vs 播放」由库内按真实时间判定。
 /// 用户删除（单条 / 批量 / 清空）写墓碑，上限淘汰不写墓碑。
 /// 只依赖同步面端口（[LibrarySyncStore]），不接触列名与行结构。
 ///
@@ -32,7 +34,7 @@ class HistorySyncAdapter implements SyncAdapter {
       if (entry.sourceKey == kLocalSourceKey) continue;
       records.add(SyncRecord(
         key: SyncRecordKeys.history(entry.sourceKey, entry.songId),
-        updatedAt: entry.playedAt,
+        version: entry.version,
         data: entry.toJson(),
       ));
     }
@@ -44,8 +46,8 @@ class HistorySyncAdapter implements SyncAdapter {
       if (parsed != null && parsed.sourceKey == kLocalSourceKey) continue;
       records.add(SyncRecord.tombstone(
         key: tombstone.key,
-        updatedAt: tombstone.updatedAt,
-        updatedBy: tombstone.updatedBy,
+        version: tombstone.version,
+        deletedAt: tombstone.deletedAt,
       ));
     }
     return {SyncCategory.history: records};
@@ -65,12 +67,13 @@ class HistorySyncAdapter implements SyncAdapter {
         tombstones.add(SyncTombstoneRecord(
           category: SyncCategory.history.name,
           key: record.key,
-          updatedAt: record.updatedAt,
-          updatedBy: record.updatedBy,
+          version: record.version,
+          deletedAt: record.deletedAt,
         ));
       } else {
         final entry = PlayHistorySyncRecord.fromJson(
           record.data ?? const <String, Object?>{},
+          version: record.version,
         );
         if (entry.sourceKey == kLocalSourceKey) continue;
         entries.add(entry);

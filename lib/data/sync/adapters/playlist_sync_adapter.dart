@@ -6,7 +6,8 @@ import '../sync_adapter.dart';
 /// 歌单 / 收藏 / 列表曲目适配器：只依赖同步面端口（[LibrarySyncStore]）。
 ///
 /// 合并键：列表 = `syncId`（收藏固定常量，其余为随机 UUID，跨设备稳定）；
-/// 曲目 = `syncId + sourceKey + songId` 复合键；删除经 `sync_tombstones`。
+/// 曲目 = `syncId + sourceKey + songId` 复合键；胜负按记录版本三元组，
+/// 删除经 `sync_tombstones`（`createdAt` / `addedAt` 是内容时间）。
 /// 记录的形状由类型化 record 承担，适配器不接触列名。
 ///
 /// 本地下载曲目（`sourceKey = local`）不同步：文件是设备本机的持久副本，
@@ -33,8 +34,7 @@ class PlaylistSyncAdapter implements SyncAdapter {
       if (playlist.syncId.isEmpty) continue;
       playlists.add(SyncRecord(
         key: playlist.syncId,
-        updatedAt: playlist.updatedAt,
-        updatedBy: playlist.updatedBy,
+        version: playlist.version,
         data: playlist.toJson(),
       ));
     }
@@ -54,8 +54,7 @@ class PlaylistSyncAdapter implements SyncAdapter {
           track.sourceKey,
           track.songId,
         ),
-        updatedAt: track.updatedAt,
-        updatedBy: track.updatedBy,
+        version: track.version,
         data: track.toJson(),
       ));
     }
@@ -70,8 +69,8 @@ class PlaylistSyncAdapter implements SyncAdapter {
       if (parsed != null && parsed.sourceKey == kLocalSourceKey) continue;
       tombstones.add(SyncRecord.tombstone(
         key: tombstone.key,
-        updatedAt: tombstone.updatedAt,
-        updatedBy: tombstone.updatedBy,
+        version: tombstone.version,
+        deletedAt: tombstone.deletedAt,
       ));
     }
 
@@ -98,12 +97,13 @@ class PlaylistSyncAdapter implements SyncAdapter {
           tombstones.add(SyncTombstoneRecord(
             category: entry.key.name,
             key: record.key,
-            updatedAt: record.updatedAt,
-            updatedBy: record.updatedBy,
+            version: record.version,
+            deletedAt: record.deletedAt,
           ));
         } else if (entry.key == SyncCategory.playlistTracks) {
           final track = PlaylistTrackSyncRecord.fromJson(
             record.data ?? const <String, Object?>{},
+            version: record.version,
           );
           // 本地下载曲目不同步：对端没有本机文件。
           if (track.sourceKey == kLocalSourceKey) continue;
@@ -111,6 +111,7 @@ class PlaylistSyncAdapter implements SyncAdapter {
         } else {
           playlists.add(PlaylistSyncRecord.fromJson(
             record.data ?? const <String, Object?>{},
+            version: record.version,
           ));
         }
       }

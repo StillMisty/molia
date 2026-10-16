@@ -36,6 +36,7 @@ void main() {
       preferences: prefs,
       secrets: secrets,
       clock: () => now,
+      deviceId: 'devA',
     );
     await state.init();
     registry = SettingsRegistry(
@@ -43,27 +44,21 @@ void main() {
       preferences: prefs,
       secrets: secrets,
     );
-    adapter = PrefsSyncAdapter(
-      state: state,
-      settings: registry,
-      deviceId: () => 'devA',
-      now: () => now,
-    );
+    adapter = PrefsSyncAdapter(state: state, settings: registry);
   });
 
-  test('首次登记：默认值时间戳 0、已改过的键用当前时间', () async {
+  test('首次登记：默认值零值戳、已改过的键用当前发号', () async {
     await prefs.setString('theme_mode', 'dark');
     final collected = await adapter.collect();
     final settings = collected[SyncCategory.settings]!;
     final theme = settings.firstWhere((r) => r.key == 'theme_mode');
-    expect(theme.updatedAt, 1000);
-    expect(theme.updatedBy, 'devA');
+    expect(theme.version.physical, 1000);
+    expect(theme.version.deviceId, 'devA');
     expect(theme.data, {'v': 'dark'});
-    // 未改过、取默认值的键：时间戳 0、无修改者。
+    // 未改过、取默认值的键：零值戳、无修改者。
     final untouched =
         settings.firstWhere((r) => r.key == 'play_statistics_enabled');
-    expect(untouched.updatedAt, 0);
-    expect(untouched.updatedBy, '');
+    expect(untouched.version, SyncVersion.zero);
     expect(untouched.data, {'v': true});
 
     expect(collected[SyncCategory.sources]!.single.key, 'lx_default_quality');
@@ -73,19 +68,19 @@ void main() {
     );
   });
 
-  test('本地修改检测：值变化后重新打戳', () async {
+  test('本地修改检测：值变化后重新取戳', () async {
     final first = await adapter.collect();
     final before = first[SyncCategory.settings]!
         .firstWhere((r) => r.key == 'theme_mode');
-    expect(before.updatedAt, 0);
+    expect(before.version, SyncVersion.zero);
 
     now = 5000;
     await prefs.setString('theme_mode', 'light');
     final second = await adapter.collect();
     final after = second[SyncCategory.settings]!
         .firstWhere((r) => r.key == 'theme_mode');
-    expect(after.updatedAt, 5000);
-    expect(after.updatedBy, 'devA');
+    expect(after.version.physical, 5000);
+    expect(after.version.deviceId, 'devA');
     expect(after.data, {'v': 'light'});
   });
 
@@ -93,8 +88,7 @@ void main() {
     await adapter.collect(); // 登记默认值
     final remote = SyncRecord(
       key: 'theme_mode',
-      updatedAt: 9000,
-      updatedBy: 'devB',
+      version: const SyncVersion(physical: 9000, deviceId: 'devB'),
       data: {'v': 'dark'},
     );
     final applied = await adapter.apply({
@@ -113,17 +107,16 @@ void main() {
     final collected = await adapter.collect();
     final record = collected[SyncCategory.settings]!
         .firstWhere((r) => r.key == 'theme_mode');
-    expect(record.updatedAt, 9000);
-    expect(record.updatedBy, 'devB');
+    expect(record.version.physical, 9000);
+    expect(record.version.deviceId, 'devB');
   });
 
   test('旧记录被跳过：本地更新者胜出', () async {
     await prefs.setString('theme_mode', 'dark');
-    await adapter.collect(); // t=1000 devA
+    await adapter.collect(); // 1000/devA
     final stale = SyncRecord(
       key: 'theme_mode',
-      updatedAt: 500,
-      updatedBy: 'devB',
+      version: const SyncVersion(physical: 500, deviceId: 'devB'),
       data: {'v': 'light'},
     );
     final result = await adapter.apply({
@@ -133,20 +126,37 @@ void main() {
     expect(prefs.getString('theme_mode'), 'dark');
   });
 
+  test('同毫秒竞争：counter 大的远端写胜出', () async {
+    await prefs.setString('theme_mode', 'dark');
+    await adapter.collect(); // 1000/0@devA
+    final sameMs = SyncRecord(
+      key: 'theme_mode',
+      version: const SyncVersion(
+        physical: 1000,
+        counter: 1,
+        deviceId: 'devB',
+      ),
+      data: {'v': 'light'},
+    );
+    final result = await adapter.apply({
+      SyncCategory.settings: [sameMs],
+    });
+    expect(result.applied, 1);
+    expect(prefs.getString('theme_mode'), 'light');
+  });
+
   test('安全存储键：远端写入与读取（ai key 组）', () async {
     await adapter.collect();
     final result = await adapter.apply({
       SyncCategory.credentials: [
         SyncRecord(
           key: 'ai_dj_base_url',
-          updatedAt: 100,
-          updatedBy: 'devB',
+          version: const SyncVersion(physical: 100, deviceId: 'devB'),
           data: {'v': 'https://api.example.com'},
         ),
         SyncRecord(
           key: 'ai_dj_api_key',
-          updatedAt: 100,
-          updatedBy: 'devB',
+          version: const SyncVersion(physical: 100, deviceId: 'devB'),
           data: {'v': 'sk-test'},
         ),
       ],
@@ -172,8 +182,6 @@ void main() {
     final notifying = PrefsSyncAdapter(
       state: state,
       settings: registry,
-      deviceId: () => 'devA',
-      now: () => now,
       onApplied: (keys) async => changedKeys.addAll(keys),
     );
     await notifying.collect();
@@ -181,14 +189,12 @@ void main() {
       SyncCategory.settings: [
         SyncRecord(
           key: 'theme_mode',
-          updatedAt: 100,
-          updatedBy: 'devB',
+          version: const SyncVersion(physical: 100, deviceId: 'devB'),
           data: {'v': 'dark'},
         ),
         SyncRecord(
           key: 'play_statistics_enabled',
-          updatedAt: 0,
-          updatedBy: '',
+          version: SyncVersion.zero,
           data: {'v': true},
         ),
       ],
@@ -204,16 +210,13 @@ void main() {
         preferences: prefs,
         secrets: secrets,
       ),
-      deviceId: () => 'devA',
-      now: () => now,
     );
     await listAdapter.collect();
     await listAdapter.apply({
       SyncCategory.settings: [
         const SyncRecord(
           key: 'shell_nav_order',
-          updatedAt: 100,
-          updatedBy: 'devB',
+          version: SyncVersion(physical: 100, deviceId: 'devB'),
           data: {
             'v': ['c', 'a', 'b'],
           },

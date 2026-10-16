@@ -1,24 +1,28 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:molia/domain/models/device_sync.dart';
 
-/// 合并规则测试：逐键 LWW、平局定序、墓碑、类别过滤、墓碑裁剪。
+/// 合并规则测试：逐键 LWW（版本三元组）、平局定序、墓碑、类别过滤、
+/// 墓碑裁剪（按真实删除时间）、协议版本判定。
 void main() {
   SyncRecord record(
     String key, {
     required int at,
+    int counter = 0,
     String by = '',
     Object? value,
     bool deleted = false,
+    int? deletedAt,
   }) =>
       SyncRecord(
         key: key,
-        updatedAt: at,
-        updatedBy: by,
+        version: SyncVersion(physical: at, counter: counter, deviceId: by),
         deleted: deleted,
-        data: deleted ? null : {'v': value},
+        data: deleted
+            ? (deletedAt == null ? null : {'deletedAt': deletedAt})
+            : {'v': value},
       );
 
-  test('逐键取新：updatedAt 大者胜', () {
+  test('逐键取新：版本物理分量大者胜', () {
     final merged = mergeRecords([
       record('k', at: 100, value: 'local'),
       record('k', at: 200, value: 'remote'),
@@ -26,7 +30,21 @@ void main() {
     expect(merged['k']!.data, {'v': 'remote'});
   });
 
-  test('时间相同时按设备 id 字典序定序（确定性）', () {
+  test('同毫秒：counter 大者胜，不因同毫秒竞争丢后写', () {
+    final merged = mergeRecords([
+      record('k', at: 100, counter: 0, by: 'devA', value: 'first'),
+      record('k', at: 100, counter: 1, by: 'devA', value: 'second'),
+    ]);
+    expect(merged['k']!.data, {'v': 'second'});
+    // 顺序无关（确定性）。
+    final reversed = mergeRecords([
+      record('k', at: 100, counter: 1, by: 'devA', value: 'second'),
+      record('k', at: 100, counter: 0, by: 'devA', value: 'first'),
+    ]);
+    expect(reversed['k']!.data, {'v': 'second'});
+  });
+
+  test('版本相等时按设备 id 字典序定序（确定性）', () {
     final merged = mergeRecords([
       record('k', at: 100, by: 'aaa', value: 'a'),
       record('k', at: 100, by: 'bbb', value: 'b'),
@@ -85,15 +103,15 @@ void main() {
     expect(onlySettings[SyncCategory.settings]!.length, 1);
   });
 
-  test('墓碑裁剪：保留期内保留、超期丢弃（仅推送侧）', () {
+  test('墓碑裁剪：保留期内保留、超期丢弃（按真实删除时间）', () {
     const retention = 1000;
     final envelope = SyncEnvelope(
       deviceId: 'a',
       producedAt: 0,
       records: {
         SyncCategory.playlists: [
-          record('fresh', at: 9500, deleted: true),
-          record('stale', at: 100, deleted: true),
+          record('fresh', at: 9500, deleted: true, deletedAt: 9500),
+          record('stale', at: 100, deleted: true, deletedAt: 100),
           record('alive', at: 100),
         ],
       },
@@ -107,6 +125,25 @@ void main() {
     expect(keys, isNot(contains('stale')));
   });
 
+  test('墓碑裁剪用真实删除时间：版本物理分量被超前戳抬高也不影响淘汰', () {
+    const retention = 1000;
+    final envelope = SyncEnvelope(
+      deviceId: 'a',
+      producedAt: 0,
+      records: {
+        SyncCategory.history: [
+          // 版本 = 未来（吸收超前戳的结果），真实删除时间已超保留期。
+          record('old', at: 999999, deleted: true, deletedAt: 100),
+        ],
+      },
+    );
+    final pruned = envelope.pruneTombstones(
+      now: 10000,
+      tombstoneRetentionMs: retention,
+    );
+    expect(pruned.recordsOf(SyncCategory.history), isEmpty);
+  });
+
   test('快照 JSON 往返 + 坏记录宽容解析', () {
     final envelope = SyncEnvelope(
       deviceId: 'dev',
@@ -115,13 +152,24 @@ void main() {
       records: {
         SyncCategory.sources: [
           record('lx_a', at: 5),
-          SyncRecord.tombstone(key: 'lx_b', updatedAt: 6, updatedBy: 'dev'),
+          SyncRecord.tombstone(
+            key: 'lx_b',
+            version: const SyncVersion(physical: 6, deviceId: 'dev'),
+            deletedAt: 6,
+          ),
         ],
       },
     );
+    expect(envelope.toJson()['v'], SyncEnvelope.protocolVersion);
     final decoded = SyncEnvelope.fromJson(envelope.toJson())!;
     expect(decoded.deviceId, 'dev');
+    expect(decoded.isSupported, isTrue);
     expect(decoded.recordsOf(SyncCategory.sources).length, 2);
+    final tombstone = decoded
+        .recordsOf(SyncCategory.sources)
+        .firstWhere((record) => record.key == 'lx_b');
+    expect(tombstone.deletedAt, 6);
+    expect(tombstone.version.deviceId, 'dev');
 
     final tolerant = SyncEnvelope.fromJson({
       'deviceId': 'dev',
@@ -129,14 +177,42 @@ void main() {
       'records': {
         'settings': [
           {'updatedAt': 1}, // 缺 key → 跳过
-          {'key': 'ok', 'updatedAt': 2, 'data': {'v': true}},
+          {
+            'key': 'ok',
+            'version': {'physical': 2, 'counter': 3, 'deviceId': 'x'},
+            'data': {'v': true},
+          },
         ],
         'unknown_category': [
-          {'key': 'x', 'updatedAt': 1},
+          {'key': 'x', 'version': {'physical': 1}},
         ],
       },
     })!;
-    expect(tolerant.recordsOf(SyncCategory.settings).single.key, 'ok');
+    final parsed = tolerant.recordsOf(SyncCategory.settings).single;
+    expect(parsed.key, 'ok');
+    expect(parsed.version, const SyncVersion(physical: 2, counter: 3, deviceId: 'x'));
+  });
+
+  test('协议版本判定：v1 / 缺省 v 视为不支持，v2 支持', () {
+    SyncEnvelope parse(Object? versionField) => SyncEnvelope.fromJson({
+          'deviceId': 'dev',
+          if (versionField != null) 'v': versionField,
+          'producedAt': 1,
+          'records': const {},
+        })!;
+
+    expect(parse(1).isSupported, isFalse);
+    expect(parse(null).isSupported, isFalse); // 缺省按 v1 处理
+    expect(parse(2).isSupported, isTrue);
+    expect(parse(3).isSupported, isFalse);
+  });
+
+  test('SyncVersion 排序：physical → counter → deviceId', () {
+    const base = SyncVersion(physical: 100, counter: 1, deviceId: 'a');
+    expect(base.isNewerThan(const SyncVersion(physical: 99, counter: 9, deviceId: 'z')), isTrue);
+    expect(base.isNewerThan(const SyncVersion(physical: 100, counter: 0, deviceId: 'z')), isTrue);
+    expect(base.isNewerThan(const SyncVersion(physical: 100, counter: 1, deviceId: 'b')), isFalse);
+    expect(base.isNewerThan(base), isFalse);
   });
 
   test('列表曲目复合键编解码', () {

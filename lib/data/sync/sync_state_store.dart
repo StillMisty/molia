@@ -16,6 +16,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../domain/models/device_sync.dart';
 import '../settings/settings_secret_store.dart';
+import 'sync_stamp.dart';
 
 /// WebDAV 传输配置（密码单独走安全存储，不在此结构内）。
 class WebDavConfig {
@@ -58,33 +59,29 @@ class WebDavConfig {
   }
 }
 
-/// 记录级时间戳登记项（设置键哈希 / 脚本墓碑 / 激活脚本指针共用）。
+/// 记录级版本登记项（设置键哈希 / 脚本指针 / 会话 / 脚本墓碑共用）。
+///
+/// [version] 是发号器给的版本三元组；[hash] 是内容指纹（设置键 / 脚本 /
+/// 会话用，判定本地是否变化），不需要时为空串。
 class SyncStamp {
   /// 值哈希（设置键用；脚本指针不需要，为空串）。
   final String hash;
-  final int updatedAt;
-  final String updatedBy;
+  final SyncVersion version;
 
-  const SyncStamp({
-    this.hash = '',
-    required this.updatedAt,
-    this.updatedBy = '',
-  });
+  const SyncStamp({this.hash = '', this.version = SyncVersion.zero});
 
   Map<String, dynamic> toJson() => {
         if (hash.isNotEmpty) 'h': hash,
-        't': updatedAt,
-        if (updatedBy.isNotEmpty) 'd': updatedBy,
+        'v': version.toJson(),
       };
 
   static SyncStamp? fromJson(Object? raw) {
     if (raw is! Map) return null;
-    final t = raw['t'];
-    if (t is! num) return null;
+    final version = SyncVersion.fromJson(raw['v']);
+    if (version == null) return null;
     return SyncStamp(
       hash: raw['h'] is String ? raw['h'] as String : '',
-      updatedAt: t.toInt(),
-      updatedBy: raw['d'] is String ? raw['d'] as String : '',
+      version: version,
     );
   }
 }
@@ -217,9 +214,27 @@ class SyncStateStore {
 
   final Map<String, SyncStamp> _settingStamps = {};
   final Map<String, SyncStamp> _scriptTombstones = {};
+  final Map<String, SyncStamp> _scriptStamps = {};
   final List<String> _knownScriptIds = [];
   SyncStamp? _activeScriptStamp;
   SyncStamp? _sessionStamp;
+
+  /// 版本戳发号器基线（`sync_state_v1` 的 `stampSeq`）：重启后不倒退。
+  int _stampPhysical = 0;
+  int _stampCounter = 0;
+
+  /// 本机所有同步戳的唯一发号器（见 [SyncStampIssuer]）。
+  ///
+  /// 基线经 `onAdvanced` 写回本状态并在 [save] 落盘；初始化时用
+  /// `max(持久化基线, 当前时钟, 全库最大戳)` 通过 [SyncStampIssuer.seed] 恢复。
+  late final SyncStampIssuer stampIssuer = SyncStampIssuer(
+    clock: _clock,
+    deviceId: () => _deviceId,
+    onAdvanced: (value) {
+      _stampPhysical = value.physical;
+      _stampCounter = value.counter;
+    },
+  );
 
   int _lastSyncAt = 0;
   final List<SyncLogEntry> _log = [];
@@ -241,6 +256,9 @@ class SyncStateStore {
   int get lanHttpPort => _lanHttpPort;
   Map<String, SyncStamp> get settingStamps => _settingStamps;
   Map<String, SyncStamp> get scriptTombstones => _scriptTombstones;
+
+  /// 脚本 id → 内容哈希 + 版本（本地变化检测；脚本文件本身不带版本）。
+  Map<String, SyncStamp> get scriptStamps => _scriptStamps;
   List<String> get knownScriptIds => List.unmodifiable(_knownScriptIds);
   SyncStamp? get activeScriptStamp => _activeScriptStamp;
   SyncStamp? get sessionStamp => _sessionStamp;
@@ -285,6 +303,12 @@ class SyncStateStore {
       _deviceName = _defaultDeviceName();
       await save();
     }
+    // 发号器基线 = max(持久化基线, 当前时钟)：重启（含时钟回拨）不倒退。
+    // 「全库最大戳」由组合根在仓库就绪后经 seed() 补入（见 LibraryRepository
+    // .maxVersion）。
+    stampIssuer.seed(
+      SyncVersion(physical: _stampPhysical, counter: _stampCounter),
+    );
     _initialized = true;
   }
 
@@ -371,6 +395,14 @@ class SyncStateStore {
     _scriptTombstones[id] = stamp;
   }
 
+  void putScriptStamp(String id, SyncStamp stamp) {
+    _scriptStamps[id] = stamp;
+  }
+
+  void removeScriptStamp(String id) {
+    _scriptStamps.remove(id);
+  }
+
   void removeScriptTombstone(String id) {
     _scriptTombstones.remove(id);
   }
@@ -441,7 +473,7 @@ class SyncStateStore {
   }
 
   Map<String, dynamic> _toJson() => {
-        'v': 1,
+        'v': 2,
         'deviceId': _deviceId,
         'deviceName': _deviceName,
         'enabled': _enabled,
@@ -453,12 +485,17 @@ class SyncStateStore {
         if (_manualPeers.isNotEmpty)
           'manualPeers': [for (final peer in _manualPeers) peer.toJson()],
         if (_lanHttpPort > 0) 'lanHttpPort': _lanHttpPort,
+        'stampSeq': {'p': _stampPhysical, 'c': _stampCounter},
         'settings': {
           for (final entry in _settingStamps.entries)
             entry.key: entry.value.toJson(),
         },
         'scriptTombstones': {
           for (final entry in _scriptTombstones.entries)
+            entry.key: entry.value.toJson(),
+        },
+        'scriptStamps': {
+          for (final entry in _scriptStamps.entries)
             entry.key: entry.value.toJson(),
         },
         'knownScripts': _knownScriptIds,
@@ -500,6 +537,12 @@ class SyncStateStore {
     }
     _lanHttpPort = (json['lanHttpPort'] as num?)?.toInt() ?? 0;
 
+    final stampSeq = json['stampSeq'];
+    if (stampSeq is Map) {
+      _stampPhysical = (stampSeq['p'] as num?)?.toInt() ?? 0;
+      _stampCounter = (stampSeq['c'] as num?)?.toInt() ?? 0;
+    }
+
     _settingStamps.clear();
     final settings = json['settings'];
     if (settings is Map) {
@@ -514,6 +557,14 @@ class SyncStateStore {
       for (final entry in tombstones.entries) {
         final stamp = SyncStamp.fromJson(entry.value);
         if (stamp != null) _scriptTombstones[entry.key.toString()] = stamp;
+      }
+    }
+    _scriptStamps.clear();
+    final scriptStamps = json['scriptStamps'];
+    if (scriptStamps is Map) {
+      for (final entry in scriptStamps.entries) {
+        final stamp = SyncStamp.fromJson(entry.value);
+        if (stamp != null) _scriptStamps[entry.key.toString()] = stamp;
       }
     }
     _knownScriptIds

@@ -55,8 +55,6 @@ Future<SyncStack> buildSyncStack({
   final scriptSyncAdapter = ScriptSyncAdapter(
     repository: sourceManager.repository,
     state: syncState,
-    deviceId: () => syncState.deviceId,
-    now: () => DateTime.now().millisecondsSinceEpoch,
     ready: () => sourceManager.initialized,
     reservedKeys: sourceCategoryKeys,
     onScriptsChanged: sourceManager.refreshScriptsFromStorage,
@@ -64,8 +62,6 @@ Future<SyncStack> buildSyncStack({
   final prefsSyncAdapter = PrefsSyncAdapter(
     state: syncState,
     settings: catalog.settings,
-    deviceId: () => syncState.deviceId,
-    now: () => DateTime.now().millisecondsSinceEpoch,
     // 应用远端设置后：注册表按键触发模块自绑的重载钩子（不再手写清单）。
     onApplied: catalog.settings.reloadKeys,
   );
@@ -77,7 +73,6 @@ Future<SyncStack> buildSyncStack({
     // 会话适配器用独立的会话存储实例（与播放栈的实时会话落盘互不影响）。
     store: PlaybackSessionStore(),
     state: syncState,
-    deviceId: () => syncState.deviceId,
     onChanged: playback.reloadRestoredSessionFromStore,
   );
 
@@ -98,7 +93,7 @@ Future<SyncStack> buildSyncStack({
         SyncEnvelope(
           deviceId: syncState.deviceId,
           deviceName: syncState.deviceName,
-          producedAt: DateTime.now().millisecondsSinceEpoch,
+          producedAt: syncState.nowMs(),
         ),
     permissionGate: () => lanPermission.ensure(),
     manualPeersProvider: () => syncState.manualPeers,
@@ -124,6 +119,9 @@ Future<SyncStack> buildSyncStack({
       sessionSyncAdapter,
     ],
     transports: {'lan': lanSyncTransport, 'webdav': webdavSyncTransport},
+    // 引擎与各仓库共用同一个发号器（唯一）与同一时钟源。
+    stamps: syncState.stampIssuer,
+    clock: () => DateTime.fromMillisecondsSinceEpoch(syncState.nowMs()),
   );
   engineRef = syncEngine;
   final syncProvider = SyncProvider(

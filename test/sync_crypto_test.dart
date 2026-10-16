@@ -18,22 +18,20 @@ void main() {
           SyncCategory.settings: [
             const SyncRecord(
               key: 'theme_mode',
-              updatedAt: 100,
-              updatedBy: 'dev-a',
+              version: SyncVersion(physical: 100, deviceId: 'dev-a'),
               data: {'v': 'dark'},
             ),
           ],
           SyncCategory.playlists: [
             const SyncRecord(
               key: '__favorites__',
-              updatedAt: 200,
-              updatedBy: 'dev-a',
+              version: SyncVersion(physical: 200, deviceId: 'dev-a'),
               data: {'name': '__favorites__'},
             ),
             SyncRecord.tombstone(
               key: 'gone',
-              updatedAt: 300,
-              updatedBy: 'dev-a',
+              version: const SyncVersion(physical: 300, deviceId: 'dev-a'),
+              deletedAt: 300,
             ),
           ],
         },

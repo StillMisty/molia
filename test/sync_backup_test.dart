@@ -10,7 +10,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import 'support/sync_test_support.dart';
 
-/// 完整快照备份测试：导出内容与凭证排除、导入合并与幂等、坏文件拒绝。
+/// 完整快照备份测试：导出内容与凭证排除、导入合并与幂等、坏文件与旧版本拒绝。
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
@@ -32,6 +32,7 @@ void main() {
       preferences: prefs,
       secrets: secrets,
       clock: () => now,
+      deviceId: 'devA',
     );
     await state.init();
     registry = SettingsRegistry(
@@ -42,12 +43,7 @@ void main() {
     engine = SyncEngine(
       state: state,
       adapters: [
-        PrefsSyncAdapter(
-          state: state,
-          settings: registry,
-          deviceId: () => 'devA',
-          now: () => now,
-        ),
+        PrefsSyncAdapter(state: state, settings: registry),
       ],
       transports: const {},
     );
@@ -55,6 +51,23 @@ void main() {
   });
 
   tearDown(() => engine.dispose());
+
+  /// 一份 v2 备份文件（外层 v1 是备份文件格式版本，内层 envelope 是协议 v2）。
+  String backupJson({
+    required Map<String, Object?> records,
+    int envelopeVersion = 2,
+  }) =>
+      jsonEncode({
+        'kind': 'molia_backup',
+        'v': 1,
+        'producedAt': 1,
+        'envelope': {
+          'v': envelopeVersion,
+          'deviceId': 'devB',
+          'producedAt': 1,
+          'records': records,
+        },
+      });
 
   test('导出：包含跟人走的设置，默认排除凭证', () async {
     await prefs.setString('theme_mode', 'dark');
@@ -66,6 +79,8 @@ void main() {
     expect(json, contains('dark'));
     expect(json, isNot(contains('ai_dj_api_key')));
     expect(json, isNot(contains('sk-secret')));
+    // 内层 envelope 是协议 v2（记录带版本对象）。
+    expect(jsonDecode(json)['envelope']['v'], 2);
   });
 
   test('导出：显式要求时凭证随快照进入（由调用方负责密文/保管）', () async {
@@ -77,33 +92,21 @@ void main() {
   });
 
   test('导入：与新备份逐键合并，凭证类别忽略；重复导入幂等', () async {
-    final backup = jsonEncode({
-      'kind': 'molia_backup',
-      'v': 1,
-      'producedAt': 1,
-      'envelope': {
-        'v': 1,
-        'deviceId': 'devB',
-        'producedAt': 1,
-        'records': {
-          'settings': [
-            {
-              'key': 'theme_mode',
-              'updatedAt': 9000,
-              'updatedBy': 'devB',
-              'data': {'v': 'light'},
-            },
-          ],
-          'credentials': [
-            {
-              'key': 'ai_dj_api_key',
-              'updatedAt': 9000,
-              'updatedBy': 'devB',
-              'data': {'v': 'sk-from-backup'},
-            },
-          ],
+    final backup = backupJson(records: {
+      'settings': [
+        {
+          'key': 'theme_mode',
+          'version': {'physical': 9000, 'counter': 0, 'deviceId': 'devB'},
+          'data': {'v': 'light'},
         },
-      },
+      ],
+      'credentials': [
+        {
+          'key': 'ai_dj_api_key',
+          'version': {'physical': 9000, 'counter': 0, 'deviceId': 'devB'},
+          'data': {'v': 'sk-from-backup'},
+        },
+      ],
     });
 
     final result = await engine.importBackupJson(backup);
@@ -119,31 +122,48 @@ void main() {
   test('导入：本地较新的改动不被旧备份覆盖', () async {
     now = 50000;
     await prefs.setString('theme_mode', 'dark');
-    // 先登记本地现状（本次改动时间戳 = 50000）。
+    // 先登记本地现状（本次改动版本 = 50000）。
     await engine.exportBackupJson();
 
-    final staleBackup = jsonEncode({
-      'kind': 'molia_backup',
-      'v': 1,
-      'producedAt': 1,
-      'envelope': {
-        'deviceId': 'devB',
-        'producedAt': 1,
-        'records': {
-          'settings': [
-            {
-              'key': 'theme_mode',
-              'updatedAt': 10000,
-              'updatedBy': 'devB',
-              'data': {'v': 'light'},
-            },
-          ],
+    final staleBackup = backupJson(records: {
+      'settings': [
+        {
+          'key': 'theme_mode',
+          'version': {'physical': 10000, 'counter': 0, 'deviceId': 'devB'},
+          'data': {'v': 'light'},
         },
-      },
+      ],
     });
     final result = await engine.importBackupJson(staleBackup);
     expect(result.applied, 0);
     expect(prefs.getString('theme_mode'), 'dark');
+  });
+
+  test('导入：v1 备份（协议旧版）拒绝，不静默合并', () async {
+    final oldBackup = backupJson(
+      envelopeVersion: 1,
+      records: {
+        'settings': [
+          {
+            'key': 'theme_mode',
+            'updatedAt': 9000,
+            'updatedBy': 'devB',
+            'data': {'v': 'light'},
+          },
+        ],
+      },
+    );
+    await expectLater(
+      () => engine.importBackupJson(oldBackup),
+      throwsA(
+        isA<FormatException>().having(
+          (e) => e.message,
+          'message',
+          contains('过旧'),
+        ),
+      ),
+    );
+    expect(prefs.getString('theme_mode'), isNull);
   });
 
   test('导入：非 JSON / 非 Molia 备份拒绝', () async {

@@ -16,6 +16,8 @@ void main() {
   late PlayStatisticsRepository repoB;
   late StatisticsSyncAdapter adapterA;
   late StatisticsSyncAdapter adapterB;
+  var clockA = 1000;
+  var clockB = 1000;
 
   Future<int> play(
     PlayStatisticsRepository repo, {
@@ -42,15 +44,19 @@ void main() {
   }
 
   setUp(() async {
+    clockA = 1000;
+    clockB = 1000;
     dbA = openMemoryDatabase();
     dbB = openMemoryDatabase();
     repoA = PlayStatisticsRepository(
       databaseProvider: () => dbA,
       deviceIdProvider: () => 'devA',
+      clock: () => clockA,
     );
     repoB = PlayStatisticsRepository(
       databaseProvider: () => dbB,
       deviceIdProvider: () => 'devB',
+      clock: () => clockB,
     );
     adapterA = StatisticsSyncAdapter(repository: repoA);
     adapterB = StatisticsSyncAdapter(repository: repoB);
@@ -173,8 +179,7 @@ void main() {
       SyncCategory.statistics: [
         SyncRecord(
           key: 'legacy_local_key',
-          updatedAt: 61000,
-          updatedBy: 'devA',
+          version: const SyncVersion(physical: 61000, deviceId: 'devA'),
           data: const {
             'sourceKey': 'local',
             'songId': 'wy:9',

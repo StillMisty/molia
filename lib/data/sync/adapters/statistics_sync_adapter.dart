@@ -5,9 +5,10 @@ import '../sync_adapter.dart';
 
 /// 听歌统计适配器：`play_events` 已收尾事件的逐条合并。
 ///
-/// append-only 语义：记录键 = `syncKey`（跨设备去重的唯一键），时间戳取
-/// `endedAt`（同键覆盖只可能来自「先同步了中途收尾的事件、之后才真正
-/// 收尾」的场景）。删除不参与同步。
+/// append-only 语义：记录键 = `syncKey`（跨设备去重的唯一键），版本 =
+/// 发号器给的三元组（收尾时取号）；`endedAt`（何时结束）是内容时间、
+/// **不参与胜负判定**——同键覆盖只可能来自「先同步了中途收尾的事件、
+/// 之后才真正收尾」的场景，按版本取新。删除不参与同步。
 ///
 /// 本地下载曲目（`sourceKey = local`）的事件不同步：文件是设备本机的持久
 /// 副本，其它设备无法复现该曲目；本机统计不受影响。
@@ -33,8 +34,11 @@ class StatisticsSyncAdapter implements SyncAdapter {
               ((event['syncKey'] as String?)?.isNotEmpty ?? false))
             SyncRecord(
               key: event['syncKey'] as String,
-              updatedAt: (event['endedAt'] as num?)?.toInt() ?? 0,
-              updatedBy: event['originDeviceId'] as String? ?? '',
+              version: SyncVersion(
+                physical: (event['versionPhysical'] as num?)?.toInt() ?? 0,
+                counter: (event['versionCounter'] as num?)?.toInt() ?? 0,
+                deviceId: event['originDeviceId'] as String? ?? '',
+              ),
               data: {
                 for (final entry in event.entries)
                   if (entry.key != 'id') entry.key: entry.value,
@@ -61,10 +65,13 @@ class StatisticsSyncAdapter implements SyncAdapter {
         skipped++;
         continue;
       }
+      // 版本以记录信封为准（data 里的版本列只用于自包含备份文件）。
       events.add({
         ...record.data!,
         'syncKey': record.key,
-        'endedAt': (record.data!['endedAt'] as num?)?.toInt() ?? record.updatedAt,
+        'versionPhysical': record.version.physical,
+        'versionCounter': record.version.counter,
+        'originDeviceId': record.version.deviceId,
       });
     }
     final result = await _repository.syncApplyEvents(events);

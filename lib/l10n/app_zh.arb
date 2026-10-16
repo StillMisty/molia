@@ -881,6 +881,7 @@
   "syncPeerBehind": "落后 {count} 项",
   "syncPeerClockSkew": "时钟差 {minutes} 分钟",
   "syncPeerLastError": "最近失败：{error}",
+  "syncPeerProtocolTooOld": "对方版本过旧，请升级",
   "syncDiagnosticTitle": "诊断",
   "syncDiagnosticCopy": "复制诊断信息",
   "syncDiagnosticSubtitle": "最近几轮同步状态（不含口令与密钥）",

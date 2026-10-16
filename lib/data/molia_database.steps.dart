@@ -1208,11 +1208,382 @@ i1.GeneratedColumn<int> _column_44(String aliasedName) =>
         type: i1.DriftSqlType.int,
         $customConstraints: 'NOT NULL DEFAULT 0 CHECK (imported IN (0, 1))',
         defaultValue: const i1.CustomExpression('0'));
+
+final class Schema6 extends i0.VersionedSchema {
+  Schema6({required super.database}) : super(version: 6);
+  @override
+  late final List<i1.DatabaseSchemaEntity> entities = [
+    playContexts,
+    playHistory,
+    playlists,
+    playlistTracks,
+    syncTombstones,
+    playEvents,
+    downloads,
+    idxPlayContextsLastPlayedAt,
+    idxPlayHistoryPlayedAt,
+    idxPlaylistsSyncId,
+    idxPlaylistTracksOrder,
+    idxPlayEventsStartedAt,
+    idxPlayEventsTrack,
+    idxPlayEventsSyncKey,
+    idxDownloadsDownloadedAt,
+  ];
+  late final Shape0 playContexts = Shape0(
+      source: i0.VersionedTable(
+        entityName: 'play_contexts',
+        withoutRowId: false,
+        isStrict: false,
+        tableConstraints: [
+          'PRIMARY KEY(contextUri)',
+        ],
+        columns: [
+          _column_0,
+          _column_1,
+          _column_2,
+          _column_3,
+          _column_4,
+        ],
+        attachedDatabase: database,
+      ),
+      alias: null);
+  late final Shape9 playHistory = Shape9(
+      source: i0.VersionedTable(
+        entityName: 'play_history',
+        withoutRowId: false,
+        isStrict: false,
+        tableConstraints: [
+          'UNIQUE(sourceKey, songId)',
+        ],
+        columns: [
+          _column_5,
+          _column_6,
+          _column_7,
+          _column_8,
+          _column_9,
+          _column_10,
+          _column_11,
+          _column_12,
+          _column_13,
+          _column_45,
+          _column_46,
+          _column_47,
+        ],
+        attachedDatabase: database,
+      ),
+      alias: null);
+  late final Shape10 playlists = Shape10(
+      source: i0.VersionedTable(
+        entityName: 'playlists',
+        withoutRowId: false,
+        isStrict: false,
+        tableConstraints: [],
+        columns: [
+          _column_14,
+          _column_15,
+          _column_16,
+          _column_17,
+          _column_45,
+          _column_46,
+          _column_47,
+        ],
+        attachedDatabase: database,
+      ),
+      alias: null);
+  late final Shape11 playlistTracks = Shape11(
+      source: i0.VersionedTable(
+        entityName: 'playlist_tracks',
+        withoutRowId: false,
+        isStrict: false,
+        tableConstraints: [
+          'UNIQUE(playlistId, sourceKey, songId)',
+          'FOREIGN KEY(playlistId)REFERENCES playlists(id)ON DELETE CASCADE',
+        ],
+        columns: [
+          _column_14,
+          _column_20,
+          _column_5,
+          _column_6,
+          _column_7,
+          _column_8,
+          _column_9,
+          _column_10,
+          _column_11,
+          _column_12,
+          _column_21,
+          _column_22,
+          _column_45,
+          _column_46,
+          _column_47,
+        ],
+        attachedDatabase: database,
+      ),
+      alias: null);
+  late final Shape12 syncTombstones = Shape12(
+      source: i0.VersionedTable(
+        entityName: 'sync_tombstones',
+        withoutRowId: false,
+        isStrict: false,
+        tableConstraints: [
+          'PRIMARY KEY(category, "key")',
+        ],
+        columns: [
+          _column_23,
+          _column_24,
+          _column_48,
+          _column_46,
+          _column_47,
+          _column_49,
+        ],
+        attachedDatabase: database,
+      ),
+      alias: null);
+  late final Shape13 playEvents = Shape13(
+      source: i0.VersionedTable(
+        entityName: 'play_events',
+        withoutRowId: false,
+        isStrict: false,
+        tableConstraints: [],
+        columns: [
+          _column_14,
+          _column_5,
+          _column_6,
+          _column_26,
+          _column_8,
+          _column_9,
+          _column_10,
+          _column_11,
+          _column_12,
+          _column_27,
+          _column_28,
+          _column_29,
+          _column_30,
+          _column_31,
+          _column_32,
+          _column_33,
+          _column_45,
+          _column_46,
+        ],
+        attachedDatabase: database,
+      ),
+      alias: null);
+  late final Shape8 downloads = Shape8(
+      source: i0.VersionedTable(
+        entityName: 'downloads',
+        withoutRowId: false,
+        isStrict: false,
+        tableConstraints: [
+          'UNIQUE(originSourceKey, originSongId)',
+        ],
+        columns: [
+          _column_14,
+          _column_34,
+          _column_35,
+          _column_7,
+          _column_8,
+          _column_9,
+          _column_10,
+          _column_11,
+          _column_12,
+          _column_36,
+          _column_42,
+          _column_38,
+          _column_39,
+          _column_40,
+          _column_43,
+          _column_44,
+          _column_41,
+        ],
+        attachedDatabase: database,
+      ),
+      alias: null);
+  final i1.Index idxPlayContextsLastPlayedAt = i1.Index(
+      'idx_play_contexts_lastPlayedAt',
+      'CREATE INDEX idx_play_contexts_lastPlayedAt ON play_contexts (lastPlayedAt)');
+  final i1.Index idxPlayHistoryPlayedAt = i1.Index('idx_play_history_playedAt',
+      'CREATE INDEX idx_play_history_playedAt ON play_history (playedAt)');
+  final i1.Index idxPlaylistsSyncId = i1.Index('idx_playlists_syncId',
+      'CREATE UNIQUE INDEX idx_playlists_syncId ON playlists (syncId) WHERE syncId IS NOT NULL');
+  final i1.Index idxPlaylistTracksOrder = i1.Index('idx_playlist_tracks_order',
+      'CREATE INDEX idx_playlist_tracks_order ON playlist_tracks (playlistId, sortOrder, addedAt)');
+  final i1.Index idxPlayEventsStartedAt = i1.Index('idx_play_events_startedAt',
+      'CREATE INDEX idx_play_events_startedAt ON play_events (startedAt)');
+  final i1.Index idxPlayEventsTrack = i1.Index('idx_play_events_track',
+      'CREATE INDEX idx_play_events_track ON play_events (sourceKey, songId)');
+  final i1.Index idxPlayEventsSyncKey = i1.Index('idx_play_events_syncKey',
+      'CREATE UNIQUE INDEX idx_play_events_syncKey ON play_events (syncKey) WHERE syncKey IS NOT NULL');
+  final i1.Index idxDownloadsDownloadedAt = i1.Index(
+      'idx_downloads_downloadedAt',
+      'CREATE INDEX idx_downloads_downloadedAt ON downloads (downloadedAt)');
+}
+
+class Shape9 extends i0.VersionedTable {
+  Shape9({required super.source, required super.alias}) : super.aliased();
+  i1.GeneratedColumn<String> get sourceKey =>
+      columnsByName['sourceKey']! as i1.GeneratedColumn<String>;
+  i1.GeneratedColumn<String> get songId =>
+      columnsByName['songId']! as i1.GeneratedColumn<String>;
+  i1.GeneratedColumn<String> get title =>
+      columnsByName['title']! as i1.GeneratedColumn<String>;
+  i1.GeneratedColumn<String> get artist =>
+      columnsByName['artist']! as i1.GeneratedColumn<String>;
+  i1.GeneratedColumn<String> get album =>
+      columnsByName['album']! as i1.GeneratedColumn<String>;
+  i1.GeneratedColumn<String> get coverUrl =>
+      columnsByName['coverUrl']! as i1.GeneratedColumn<String>;
+  i1.GeneratedColumn<int> get durationMs =>
+      columnsByName['durationMs']! as i1.GeneratedColumn<int>;
+  i1.GeneratedColumn<String> get raw =>
+      columnsByName['raw']! as i1.GeneratedColumn<String>;
+  i1.GeneratedColumn<int> get playedAt =>
+      columnsByName['playedAt']! as i1.GeneratedColumn<int>;
+  i1.GeneratedColumn<int> get versionPhysical =>
+      columnsByName['versionPhysical']! as i1.GeneratedColumn<int>;
+  i1.GeneratedColumn<int> get versionCounter =>
+      columnsByName['versionCounter']! as i1.GeneratedColumn<int>;
+  i1.GeneratedColumn<String> get deviceId =>
+      columnsByName['deviceId']! as i1.GeneratedColumn<String>;
+}
+
+i1.GeneratedColumn<int> _column_45(String aliasedName) =>
+    i1.GeneratedColumn<int>('versionPhysical', aliasedName, false,
+        type: i1.DriftSqlType.int,
+        $customConstraints: 'NOT NULL DEFAULT 0',
+        defaultValue: const i1.CustomExpression('0'));
+i1.GeneratedColumn<int> _column_46(String aliasedName) =>
+    i1.GeneratedColumn<int>('versionCounter', aliasedName, false,
+        type: i1.DriftSqlType.int,
+        $customConstraints: 'NOT NULL DEFAULT 0',
+        defaultValue: const i1.CustomExpression('0'));
+i1.GeneratedColumn<String> _column_47(String aliasedName) =>
+    i1.GeneratedColumn<String>('deviceId', aliasedName, false,
+        type: i1.DriftSqlType.string,
+        $customConstraints: 'NOT NULL DEFAULT \'\'',
+        defaultValue: const i1.CustomExpression('\'\''));
+
+class Shape10 extends i0.VersionedTable {
+  Shape10({required super.source, required super.alias}) : super.aliased();
+  i1.GeneratedColumn<int> get id =>
+      columnsByName['id']! as i1.GeneratedColumn<int>;
+  i1.GeneratedColumn<String> get name =>
+      columnsByName['name']! as i1.GeneratedColumn<String>;
+  i1.GeneratedColumn<int> get createdAt =>
+      columnsByName['createdAt']! as i1.GeneratedColumn<int>;
+  i1.GeneratedColumn<String> get syncId =>
+      columnsByName['syncId']! as i1.GeneratedColumn<String>;
+  i1.GeneratedColumn<int> get versionPhysical =>
+      columnsByName['versionPhysical']! as i1.GeneratedColumn<int>;
+  i1.GeneratedColumn<int> get versionCounter =>
+      columnsByName['versionCounter']! as i1.GeneratedColumn<int>;
+  i1.GeneratedColumn<String> get deviceId =>
+      columnsByName['deviceId']! as i1.GeneratedColumn<String>;
+}
+
+class Shape11 extends i0.VersionedTable {
+  Shape11({required super.source, required super.alias}) : super.aliased();
+  i1.GeneratedColumn<int> get id =>
+      columnsByName['id']! as i1.GeneratedColumn<int>;
+  i1.GeneratedColumn<int> get playlistId =>
+      columnsByName['playlistId']! as i1.GeneratedColumn<int>;
+  i1.GeneratedColumn<String> get sourceKey =>
+      columnsByName['sourceKey']! as i1.GeneratedColumn<String>;
+  i1.GeneratedColumn<String> get songId =>
+      columnsByName['songId']! as i1.GeneratedColumn<String>;
+  i1.GeneratedColumn<String> get title =>
+      columnsByName['title']! as i1.GeneratedColumn<String>;
+  i1.GeneratedColumn<String> get artist =>
+      columnsByName['artist']! as i1.GeneratedColumn<String>;
+  i1.GeneratedColumn<String> get album =>
+      columnsByName['album']! as i1.GeneratedColumn<String>;
+  i1.GeneratedColumn<String> get coverUrl =>
+      columnsByName['coverUrl']! as i1.GeneratedColumn<String>;
+  i1.GeneratedColumn<int> get durationMs =>
+      columnsByName['durationMs']! as i1.GeneratedColumn<int>;
+  i1.GeneratedColumn<String> get raw =>
+      columnsByName['raw']! as i1.GeneratedColumn<String>;
+  i1.GeneratedColumn<int> get addedAt =>
+      columnsByName['addedAt']! as i1.GeneratedColumn<int>;
+  i1.GeneratedColumn<int> get sortOrder =>
+      columnsByName['sortOrder']! as i1.GeneratedColumn<int>;
+  i1.GeneratedColumn<int> get versionPhysical =>
+      columnsByName['versionPhysical']! as i1.GeneratedColumn<int>;
+  i1.GeneratedColumn<int> get versionCounter =>
+      columnsByName['versionCounter']! as i1.GeneratedColumn<int>;
+  i1.GeneratedColumn<String> get deviceId =>
+      columnsByName['deviceId']! as i1.GeneratedColumn<String>;
+}
+
+class Shape12 extends i0.VersionedTable {
+  Shape12({required super.source, required super.alias}) : super.aliased();
+  i1.GeneratedColumn<String> get category =>
+      columnsByName['category']! as i1.GeneratedColumn<String>;
+  i1.GeneratedColumn<String> get key =>
+      columnsByName['key']! as i1.GeneratedColumn<String>;
+  i1.GeneratedColumn<int> get versionPhysical =>
+      columnsByName['versionPhysical']! as i1.GeneratedColumn<int>;
+  i1.GeneratedColumn<int> get versionCounter =>
+      columnsByName['versionCounter']! as i1.GeneratedColumn<int>;
+  i1.GeneratedColumn<String> get deviceId =>
+      columnsByName['deviceId']! as i1.GeneratedColumn<String>;
+  i1.GeneratedColumn<int> get deletedAt =>
+      columnsByName['deletedAt']! as i1.GeneratedColumn<int>;
+}
+
+i1.GeneratedColumn<int> _column_48(String aliasedName) =>
+    i1.GeneratedColumn<int>('versionPhysical', aliasedName, false,
+        type: i1.DriftSqlType.int, $customConstraints: 'NOT NULL');
+i1.GeneratedColumn<int> _column_49(String aliasedName) =>
+    i1.GeneratedColumn<int>('deletedAt', aliasedName, false,
+        type: i1.DriftSqlType.int,
+        $customConstraints: 'NOT NULL DEFAULT 0',
+        defaultValue: const i1.CustomExpression('0'));
+
+class Shape13 extends i0.VersionedTable {
+  Shape13({required super.source, required super.alias}) : super.aliased();
+  i1.GeneratedColumn<int> get id =>
+      columnsByName['id']! as i1.GeneratedColumn<int>;
+  i1.GeneratedColumn<String> get sourceKey =>
+      columnsByName['sourceKey']! as i1.GeneratedColumn<String>;
+  i1.GeneratedColumn<String> get songId =>
+      columnsByName['songId']! as i1.GeneratedColumn<String>;
+  i1.GeneratedColumn<String> get title =>
+      columnsByName['title']! as i1.GeneratedColumn<String>;
+  i1.GeneratedColumn<String> get artist =>
+      columnsByName['artist']! as i1.GeneratedColumn<String>;
+  i1.GeneratedColumn<String> get album =>
+      columnsByName['album']! as i1.GeneratedColumn<String>;
+  i1.GeneratedColumn<String> get coverUrl =>
+      columnsByName['coverUrl']! as i1.GeneratedColumn<String>;
+  i1.GeneratedColumn<int> get durationMs =>
+      columnsByName['durationMs']! as i1.GeneratedColumn<int>;
+  i1.GeneratedColumn<String> get raw =>
+      columnsByName['raw']! as i1.GeneratedColumn<String>;
+  i1.GeneratedColumn<int> get startedAt =>
+      columnsByName['startedAt']! as i1.GeneratedColumn<int>;
+  i1.GeneratedColumn<int> get endedAt =>
+      columnsByName['endedAt']! as i1.GeneratedColumn<int>;
+  i1.GeneratedColumn<int> get listenedMs =>
+      columnsByName['listenedMs']! as i1.GeneratedColumn<int>;
+  i1.GeneratedColumn<int> get maxPositionMs =>
+      columnsByName['maxPositionMs']! as i1.GeneratedColumn<int>;
+  i1.GeneratedColumn<String> get endReason =>
+      columnsByName['endReason']! as i1.GeneratedColumn<String>;
+  i1.GeneratedColumn<String> get syncKey =>
+      columnsByName['syncKey']! as i1.GeneratedColumn<String>;
+  i1.GeneratedColumn<String> get originDeviceId =>
+      columnsByName['originDeviceId']! as i1.GeneratedColumn<String>;
+  i1.GeneratedColumn<int> get versionPhysical =>
+      columnsByName['versionPhysical']! as i1.GeneratedColumn<int>;
+  i1.GeneratedColumn<int> get versionCounter =>
+      columnsByName['versionCounter']! as i1.GeneratedColumn<int>;
+}
+
 i0.MigrationStepWithVersion migrationSteps({
   required Future<void> Function(i1.Migrator m, Schema2 schema) from1To2,
   required Future<void> Function(i1.Migrator m, Schema3 schema) from2To3,
   required Future<void> Function(i1.Migrator m, Schema4 schema) from3To4,
   required Future<void> Function(i1.Migrator m, Schema5 schema) from4To5,
+  required Future<void> Function(i1.Migrator m, Schema6 schema) from5To6,
 }) {
   return (currentVersion, database) async {
     switch (currentVersion) {
@@ -1236,6 +1607,11 @@ i0.MigrationStepWithVersion migrationSteps({
         final migrator = i1.Migrator(database, schema);
         await from4To5(migrator, schema);
         return 5;
+      case 5:
+        final schema = Schema6(database: database);
+        final migrator = i1.Migrator(database, schema);
+        await from5To6(migrator, schema);
+        return 6;
       default:
         throw ArgumentError.value('Unknown migration from $currentVersion');
     }
@@ -1247,6 +1623,7 @@ i1.OnUpgrade stepByStep({
   required Future<void> Function(i1.Migrator m, Schema3 schema) from2To3,
   required Future<void> Function(i1.Migrator m, Schema4 schema) from3To4,
   required Future<void> Function(i1.Migrator m, Schema5 schema) from4To5,
+  required Future<void> Function(i1.Migrator m, Schema6 schema) from5To6,
 }) =>
     i0.VersionedSchema.stepByStepHelper(
         step: migrationSteps(
@@ -1254,4 +1631,5 @@ i1.OnUpgrade stepByStep({
       from2To3: from2To3,
       from3To4: from3To4,
       from4To5: from4To5,
+      from5To6: from5To6,
     ));

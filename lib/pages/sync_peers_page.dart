@@ -237,10 +237,17 @@ class SyncPeersPage extends StatelessWidget {
       if (peer.clockSkewMs != null && peer.clockSkewMs!.abs() > 60 * 1000)
         l10n.syncPeerClockSkew((peer.clockSkewMs!.abs() / 60000).round()),
       if (peer.lastError != null && peer.lastError!.isNotEmpty)
-        l10n.syncPeerLastError(peer.lastError!),
+        l10n.syncPeerLastError(_peerErrorLabel(l10n, peer.lastError!)),
     ];
     return parts.join(' · ');
   }
+
+  /// 失败原因码 → 文案（协议过旧是明确状态，不是原始技术串）。
+  static String _peerErrorLabel(AppLocalizations l10n, String code) =>
+      switch (code) {
+        SyncPeerIssue.protocolTooOld => l10n.syncPeerProtocolTooOld,
+        _ => code,
+      };
 
   static String _transportLabel(AppLocalizations l10n, String kind) =>
       switch (kind) {

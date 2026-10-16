@@ -1,7 +1,7 @@
 /// 跨设备数据同步的纯领域模型：记录 / 快照 / 合并规则。
 ///
 /// 同步模型是「全量合并」：每台设备持有自己已知的完整视图（每条记录带
-/// `updatedAt` + `updatedBy`，删除用墓碑记录表达），设备间交换视图后逐键
+/// 版本三元组 [SyncVersion]，删除用墓碑记录表达），设备间交换视图后逐键
 /// 取新，天然幂等、无需版本向量。信任模型：能解密同步口令者即已授权，
 /// 不做逐项审批（见 ADR-0003）。
 library;
@@ -156,41 +156,48 @@ class SyncRecord {
   final String key;
   final bool deleted;
 
-  /// 墙上时钟毫秒（设备本地时钟；时钟不可信时由 [updatedBy] 决平局）。
-  final int updatedAt;
+  /// 版本三元组（[SyncVersion]）：跨设备胜负判定的唯一依据。
+  final SyncVersion version;
 
-  /// 产生该记录的设备 id；空串表示未知来源。
-  final String updatedBy;
-
-  /// 类别载荷（JSON 友好；墓碑为 null）。
+  /// 类别载荷（JSON 友好；墓碑为 `{'deletedAt': ...}` 或 null）。
+  ///
+  /// 内容时间（`playedAt` / `endedAt` / `savedAt` / `importedAt`）都在这里，
+  /// **永不参与胜负判定**（见 ADR-0003 v2 §2）。
   final Map<String, Object?>? data;
 
   const SyncRecord({
     required this.key,
-    required this.updatedAt,
+    required this.version,
     this.deleted = false,
-    this.updatedBy = '',
     this.data,
   });
 
+  /// 墓碑记录；[deletedAt] 是真实删除时间（内容时间，删除 vs 播放的判据）。
   static SyncRecord tombstone({
     required String key,
-    required int updatedAt,
-    String updatedBy = '',
+    required SyncVersion version,
+    int? deletedAt,
   }) =>
-      SyncRecord(key: key, updatedAt: updatedAt, deleted: true, updatedBy: updatedBy);
+      SyncRecord(
+        key: key,
+        version: version,
+        deleted: true,
+        data: deletedAt == null ? null : {'deletedAt': deletedAt},
+      );
 
-  /// [this] 是否严格新于 [other]（`(updatedAt, updatedBy)` 字典序）。
-  bool isNewerThan(SyncRecord other) {
-    if (updatedAt != other.updatedAt) return updatedAt > other.updatedAt;
-    return updatedBy.compareTo(other.updatedBy) > 0;
+  /// 墓碑的真实删除时间；缺省（非历史类别 / 异常数据）回退到版本物理分量。
+  int get deletedAt {
+    final value = data?['deletedAt'];
+    return value is num ? value.toInt() : version.physical;
   }
+
+  /// [this] 是否严格新于 [other]（`(physical, counter, deviceId)` 字典序）。
+  bool isNewerThan(SyncRecord other) => version.isNewerThan(other.version);
 
   Map<String, dynamic> toJson() => {
         'key': key,
         if (deleted) 'deleted': true,
-        'updatedAt': updatedAt,
-        if (updatedBy.isNotEmpty) 'updatedBy': updatedBy,
+        'version': version.toJson(),
         if (data != null) 'data': data,
       };
 
@@ -198,14 +205,12 @@ class SyncRecord {
   static SyncRecord? fromJson(Object? raw) {
     if (raw is! Map) return null;
     final key = raw['key'];
-    final updatedAt = raw['updatedAt'];
-    if (key is! String || key.isEmpty || updatedAt is! num) return null;
+    if (key is! String || key.isEmpty) return null;
     final data = raw['data'];
     return SyncRecord(
       key: key,
       deleted: raw['deleted'] == true,
-      updatedAt: updatedAt.toInt(),
-      updatedBy: raw['updatedBy'] is String ? raw['updatedBy'] as String : '',
+      version: SyncVersion.fromJson(raw['version']) ?? SyncVersion.zero,
       data: data is Map
           ? data.map((k, v) => MapEntry(k.toString(), v as Object?))
           : null,
@@ -213,13 +218,20 @@ class SyncRecord {
   }
 
   @override
-  String toString() => 'SyncRecord($key, t=$updatedAt, d=$deleted)';
+  String toString() => 'SyncRecord($key, v=$version, d=$deleted)';
 }
 
 /// 一次同步快照：设备身份 + 各类别记录。
 class SyncEnvelope {
-  /// 协议版本（解析到未知版本的新字段时忽略而不失败）。
-  static const int protocolVersion = 1;
+  /// 协议版本（v2：记录版本三元组 + 内容时间分离；v1 对端不兼容）。
+  static const int protocolVersion = 2;
+
+  /// 快照自报的协议版本（`v` 字段）；缺省 = 1（首版一定写 `v: 1`）。
+  ///
+  /// 解析到非 [protocolVersion] 的版本时，引擎**拒绝合并**并在报告/名册里
+  /// 给「对方版本过旧，请升级」状态——v1 对端不理解新戳语义，静默合并会
+  /// 破坏收敛（见 ADR-0003 v2 §1）。
+  final int version;
 
   final String deviceId;
   final String deviceName;
@@ -230,8 +242,12 @@ class SyncEnvelope {
     required this.deviceId,
     this.deviceName = '',
     required this.producedAt,
+    this.version = protocolVersion,
     this.records = const {},
   });
+
+  /// 本快照是否可参与合并（协议版本一致）。
+  bool get isSupported => version == protocolVersion;
 
   Iterable<SyncRecord> recordsOf(SyncCategory category) =>
       records[category] ?? const [];
@@ -241,6 +257,9 @@ class SyncEnvelope {
 
   /// 生成推送用快照：丢弃 [tombstoneRetentionMs] 之前的墓碑
   /// （墓碑长期保留会撑大快照；保留期外复活风险由保留期覆盖）。
+  ///
+  /// 保留期以**真实删除时间**（[SyncRecord.deletedAt]）为准，不是版本物理
+  /// 分量：吸收超前戳会把版本抬到未来，用它算保留期会让墓碑永不淘汰。
   SyncEnvelope pruneTombstones({
     required int now,
     required int tombstoneRetentionMs,
@@ -250,7 +269,7 @@ class SyncEnvelope {
       final kept = [
         for (final record in entry.value)
           if (!(record.deleted &&
-              now - record.updatedAt > tombstoneRetentionMs))
+              now - record.deletedAt > tombstoneRetentionMs))
             record,
       ];
       if (kept.isNotEmpty) pruned[entry.key] = kept;
@@ -259,12 +278,13 @@ class SyncEnvelope {
       deviceId: deviceId,
       deviceName: deviceName,
       producedAt: producedAt,
+      version: version,
       records: pruned,
     );
   }
 
   Map<String, dynamic> toJson() => {
-        'v': protocolVersion,
+        'v': version,
         'deviceId': deviceId,
         'deviceName': deviceName,
         'producedAt': producedAt,
@@ -301,12 +321,13 @@ class SyncEnvelope {
       producedAt: raw['producedAt'] is num
           ? (raw['producedAt'] as num).toInt()
           : 0,
+      version: (raw['v'] as num?)?.toInt() ?? 1,
       records: records,
     );
   }
 }
 
-/// 逐键取新：同一 key 保留 `(updatedAt, updatedBy)` 最大者；元组相等时
+/// 逐键取新：同一 key 保留版本三元组最大者；版本相等时
 /// 保留先出现者（本地视图在前，保证确定性且避免同值抖动）。
 Map<String, SyncRecord> mergeRecords(Iterable<SyncRecord> records) {
   final winners = <String, SyncRecord>{};
@@ -480,6 +501,7 @@ class SyncTransportReport {
     this.pushed = 0,
     this.skippedUnchanged = 0,
     this.peersSeen = 0,
+    this.rejectedPeers = 0,
     this.failedPulls = 0,
     this.failedPushes = 0,
     this.bytesIn = 0,
@@ -509,6 +531,9 @@ class SyncTransportReport {
   /// 本轮探测到 / 列出的对端数（含未变与失败者）。
   final int peersSeen;
 
+  /// 协议版本过旧（v1 / 未知）被拒绝合并的对端数（不静默合并）。
+  final int rejectedPeers;
+
   final int failedPulls;
   final int failedPushes;
   final int bytesIn;
@@ -526,6 +551,7 @@ class SyncTransportReport {
         'pushed': pushed,
         if (skippedUnchanged > 0) 'skippedUnchanged': skippedUnchanged,
         'peersSeen': peersSeen,
+        if (rejectedPeers > 0) 'rejectedPeers': rejectedPeers,
         'failedPulls': failedPulls,
         'failedPushes': failedPushes,
         'bytesIn': bytesIn,
@@ -546,6 +572,7 @@ class SyncTransportReport {
       pushed: intOf('pushed'),
       skippedUnchanged: intOf('skippedUnchanged'),
       peersSeen: intOf('peersSeen'),
+      rejectedPeers: intOf('rejectedPeers'),
       failedPulls: intOf('failedPulls'),
       failedPushes: intOf('failedPushes'),
       bytesIn: intOf('bytesIn'),
@@ -554,6 +581,12 @@ class SyncTransportReport {
       error: raw['error'] is String ? raw['error'] as String : null,
     );
   }
+}
+
+/// 名册条目里的机器可读失败原因码（UI 映射文案；不直接展示原始码）。
+abstract final class SyncPeerIssue {
+  /// 对端协议版本过旧（v1）：已拒绝合并，提示「请升级」。
+  static const String protocolTooOld = 'protocol_too_old';
 }
 
 /// 名册里的一台对端（最近一次接触的观测值；持久化在同步状态里）。
@@ -684,7 +717,10 @@ class SyncRoundReport {
   int get durationMs => finishedAt - startedAt;
 
   int get failedCount =>
-      transports.fold(0, (sum, t) => sum + t.failedPulls + t.failedPushes) +
+      transports.fold(
+        0,
+        (sum, t) => sum + t.failedPulls + t.failedPushes + t.rejectedPeers,
+      ) +
       applyFailures;
 
   int get peersSeen => transports.fold(0, (sum, t) => sum + t.peersSeen);
@@ -702,38 +738,43 @@ class SyncRoundReport {
 /// 列表头同步记录（自增 id 不出本机；`syncId` 跨设备稳定，收藏为固定常量）。
 ///
 /// 与 `syncExportPlaylists` / `syncApplyLibrary` 的 JSON 形状一一对应；
-/// 列名 / 行结构只存在于资料库实现内部。
+/// 列名 / 行结构只存在于资料库实现内部。`createdAt` 是内容时间；
+/// [version] 是唯一的胜负判据。
 class PlaylistSyncRecord {
   const PlaylistSyncRecord({
     required this.syncId,
     required this.name,
     required this.createdAt,
-    required this.updatedAt,
-    required this.updatedBy,
+    required this.version,
   });
 
   final String syncId;
   final String name;
   final int createdAt;
-  final int updatedAt;
-  final String updatedBy;
+  final SyncVersion version;
 
   Map<String, Object?> toJson() => {
         'syncId': syncId,
         'name': name,
         'createdAt': createdAt,
-        'updatedAt': updatedAt,
-        'updatedBy': updatedBy,
+        'version': version.toJson(),
       };
 
   /// 宽容解析：缺失 / 类型不符按空值处理（由应用侧按需跳过并计数）。
-  static PlaylistSyncRecord fromJson(Map<String, Object?> data) =>
+  ///
+  /// [version] 以记录信封的版本为准（信封是权威；data 内的版本只用于
+  /// 自包含备份文件的解析）。
+  static PlaylistSyncRecord fromJson(
+    Map<String, Object?> data, {
+    SyncVersion? version,
+  }) =>
       PlaylistSyncRecord(
         syncId: data['syncId'] as String? ?? '',
         name: data['name'] as String? ?? '',
         createdAt: (data['createdAt'] as num?)?.toInt() ?? 0,
-        updatedAt: (data['updatedAt'] as num?)?.toInt() ?? 0,
-        updatedBy: data['updatedBy'] as String? ?? '',
+        version: version ??
+            SyncVersion.fromJson(data['version']) ??
+            SyncVersion.zero,
       );
 }
 
@@ -751,8 +792,7 @@ class PlaylistTrackSyncRecord {
     required this.raw,
     required this.addedAt,
     required this.sortOrder,
-    required this.updatedAt,
-    required this.updatedBy,
+    required this.version,
   });
 
   final String playlistSyncId;
@@ -768,8 +808,7 @@ class PlaylistTrackSyncRecord {
   final String raw;
   final int addedAt;
   final int sortOrder;
-  final int updatedAt;
-  final String updatedBy;
+  final SyncVersion version;
 
   Map<String, Object?> toJson() => {
         'playlistSyncId': playlistSyncId,
@@ -783,11 +822,13 @@ class PlaylistTrackSyncRecord {
         'raw': raw,
         'addedAt': addedAt,
         'sortOrder': sortOrder,
-        'updatedAt': updatedAt,
-        'updatedBy': updatedBy,
+        'version': version.toJson(),
       };
 
-  static PlaylistTrackSyncRecord fromJson(Map<String, Object?> data) =>
+  static PlaylistTrackSyncRecord fromJson(
+    Map<String, Object?> data, {
+    SyncVersion? version,
+  }) =>
       PlaylistTrackSyncRecord(
         playlistSyncId: data['playlistSyncId'] as String? ?? '',
         sourceKey: data['sourceKey'] as String? ?? '',
@@ -800,12 +841,13 @@ class PlaylistTrackSyncRecord {
         raw: data['raw'] as String? ?? '{}',
         addedAt: (data['addedAt'] as num?)?.toInt() ?? 0,
         sortOrder: (data['sortOrder'] as num?)?.toInt() ?? 0,
-        updatedAt: (data['updatedAt'] as num?)?.toInt() ?? 0,
-        updatedBy: data['updatedBy'] as String? ?? '',
+        version: version ??
+            SyncVersion.fromJson(data['version']) ??
+            SyncVersion.zero,
       );
 }
 
-/// 播放历史同步记录（时间戳 = `playedAt`）。
+/// 播放历史同步记录（`playedAt` 是内容时间，不参与胜负判定）。
 class PlayHistorySyncRecord {
   const PlayHistorySyncRecord({
     required this.sourceKey,
@@ -817,6 +859,7 @@ class PlayHistorySyncRecord {
     required this.durationMs,
     required this.raw,
     required this.playedAt,
+    required this.version,
   });
 
   final String sourceKey;
@@ -827,7 +870,10 @@ class PlayHistorySyncRecord {
   final String? coverUrl;
   final int? durationMs;
   final String raw;
+
+  /// 何时听的（内容时间；展示与删除 vs 播放的判据）。
   final int playedAt;
+  final SyncVersion version;
 
   Map<String, Object?> toJson() => {
         'sourceKey': sourceKey,
@@ -839,9 +885,13 @@ class PlayHistorySyncRecord {
         'durationMs': durationMs,
         'raw': raw,
         'playedAt': playedAt,
+        'version': version.toJson(),
       };
 
-  static PlayHistorySyncRecord fromJson(Map<String, Object?> data) =>
+  static PlayHistorySyncRecord fromJson(
+    Map<String, Object?> data, {
+    SyncVersion? version,
+  }) =>
       PlayHistorySyncRecord(
         sourceKey: data['sourceKey'] as String? ?? '',
         songId: data['songId'] as String? ?? '',
@@ -852,35 +902,49 @@ class PlayHistorySyncRecord {
         durationMs: (data['durationMs'] as num?)?.toInt(),
         raw: data['raw'] as String? ?? '{}',
         playedAt: (data['playedAt'] as num?)?.toInt() ?? 0,
+        version: version ??
+            SyncVersion.fromJson(data['version']) ??
+            SyncVersion.zero,
       );
 }
 
-/// 资料库墓碑记录（删除也取新：`category + key` + 时间戳）。
+/// 资料库墓碑记录（删除也取新：`category + key` + 版本三元组）。
+///
+/// [deletedAt] 是真实删除时间（内容时间）：历史「删除 vs 播放」用它判定，
+/// 其它类别只作诊断。**不**参与胜负判定。
 class SyncTombstoneRecord {
   const SyncTombstoneRecord({
     required this.category,
     required this.key,
-    required this.updatedAt,
-    required this.updatedBy,
+    required this.version,
+    required this.deletedAt,
   });
 
   final String category;
   final String key;
-  final int updatedAt;
-  final String updatedBy;
+  final SyncVersion version;
+  final int deletedAt;
 
   Map<String, Object?> toJson() => {
         'category': category,
         'key': key,
-        'updatedAt': updatedAt,
-        'updatedBy': updatedBy,
+        'version': version.toJson(),
+        'deletedAt': deletedAt,
       };
 
-  static SyncTombstoneRecord fromJson(Map<String, Object?> data) =>
+  static SyncTombstoneRecord fromJson(
+    Map<String, Object?> data, {
+    SyncVersion? version,
+  }) =>
       SyncTombstoneRecord(
         category: data['category'] as String? ?? '',
         key: data['key'] as String? ?? '',
-        updatedAt: (data['updatedAt'] as num?)?.toInt() ?? 0,
-        updatedBy: data['updatedBy'] as String? ?? '',
+        version: version ??
+            SyncVersion.fromJson(data['version']) ??
+            SyncVersion.zero,
+        deletedAt: (data['deletedAt'] as num?)?.toInt() ??
+            (data['version'] is Map
+                ? ((data['version'] as Map)['physical'] as num?)?.toInt() ?? 0
+                : 0),
       );
 }

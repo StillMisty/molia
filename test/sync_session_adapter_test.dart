@@ -9,7 +9,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import 'support/sync_test_support.dart';
 
-/// 上次播放会话适配器：写入时间戳登记、远端应用/删除、本地清空检出。
+/// 上次播放会话适配器：版本戳登记、远端应用/删除、本地清空检出。
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
@@ -46,49 +46,51 @@ void main() {
       preferences: prefs,
       secrets: MemorySyncSecretStore(),
       clock: () => now,
+      deviceId: 'devA',
     );
     await state.init();
-    store = PlaybackSessionStore(preferences: prefs, clock: () => DateTime.fromMillisecondsSinceEpoch(now));
+    store = PlaybackSessionStore(
+      preferences: prefs,
+      clock: () => DateTime.fromMillisecondsSinceEpoch(now),
+    );
     adapter = SessionSyncAdapter(
       store: store,
       state: state,
-      deviceId: () => 'devA',
       onChanged: () async => changedCount++,
     );
   });
 
-  test('本地会话导出：时间戳 = savedAt，数据含队列与进度', () async {
+  test('本地会话导出：savedAt 是内容时间，版本戳来自发号器', () async {
     await store.save(session());
     final collected = await adapter.collect();
     final record = collected[SyncCategory.session]!.single;
     expect(record.deleted, isFalse);
-    expect(record.updatedAt, 5000);
-    expect(record.updatedBy, 'devA');
+    expect(record.version.physical, 5000);
+    expect(record.version.deviceId, 'devA');
     expect(record.data!['savedAt'], 5000);
     expect(record.data!['positionMs'], 42000);
     expect(record.data!['mode'], 'shuffle');
     expect((record.data!['tracks'] as List), hasLength(1));
   });
 
-  test('本地写入刷新后重新打戳；未变化时保持原戳', () async {
+  test('本地写入刷新后重新取戳；未变化时保持原戳', () async {
     await store.save(session());
     await adapter.collect();
 
     now = 9000;
     await store.save(session(positionMs: 60000));
     final refreshed = await adapter.collect();
-    expect(refreshed[SyncCategory.session]!.single.updatedAt, 9000);
+    expect(refreshed[SyncCategory.session]!.single.version.physical, 9000);
 
     final stable = await adapter.collect();
-    expect(stable[SyncCategory.session]!.single.updatedAt, 9000);
+    expect(stable[SyncCategory.session]!.single.version.physical, 9000);
   });
 
   test('应用远端会话：写入存储、更新登记、触发回调；重复应用幂等', () async {
     await adapter.collect();
     final remote = SyncRecord(
       key: SyncRecordKeys.sessionKey,
-      updatedAt: 20000,
-      updatedBy: 'devB',
+      version: const SyncVersion(physical: 20000, deviceId: 'devB'),
       data: {
         'savedAt': 20000,
         'index': 0,
@@ -132,8 +134,7 @@ void main() {
 
     final stale = SyncRecord(
       key: SyncRecordKeys.sessionKey,
-      updatedAt: 10000,
-      updatedBy: 'devB',
+      version: const SyncVersion(physical: 10000, deviceId: 'devB'),
       data: {'savedAt': 10000, 'positionMs': 1},
     );
     final result = await adapter.apply({
@@ -156,8 +157,7 @@ void main() {
     // 与本地登记同戳的旧会话不会把已清空的会话填回来。
     final sameStamp = SyncRecord(
       key: SyncRecordKeys.sessionKey,
-      updatedAt: 5000,
-      updatedBy: 'devA',
+      version: const SyncVersion(physical: 5000, deviceId: 'devA'),
       data: {'savedAt': 5000, 'positionMs': 1},
     );
     final result = await adapter.apply({
@@ -175,8 +175,7 @@ void main() {
       SyncCategory.session: [
         SyncRecord.tombstone(
           key: SyncRecordKeys.sessionKey,
-          updatedAt: 60000,
-          updatedBy: 'devB',
+          version: const SyncVersion(physical: 60000, deviceId: 'devB'),
         ),
       ],
     });

@@ -39,6 +39,9 @@ class PlayContexts extends Table {
 }
 
 /// 播放历史（上限 500，重复播放按唯一键更新时间）。
+///
+/// `playedAt` 是内容时间（何时听的），**不参与**跨设备胜负判定；版本是
+/// `versionPhysical + versionCounter + deviceId` 三元组（v6 起）。
 @TableIndex(name: 'idx_play_history_playedAt', columns: {#playedAt})
 class PlayHistory extends Table {
   @override
@@ -53,13 +56,16 @@ class PlayHistory extends Table {
   IntColumn get durationMs => integer().nullable()();
   TextColumn get raw => text().withDefault(const Constant('{}'))();
   IntColumn get playedAt => integer()();
+  IntColumn get versionPhysical => integer().withDefault(const Constant(0))();
+  IntColumn get versionCounter => integer().withDefault(const Constant(0))();
+  TextColumn get deviceId => text().withDefault(const Constant(''))();
 
   @override
   List<String> get customConstraints => const ['UNIQUE (sourceKey, songId)'];
 }
 
-/// 用户列表。同步戳 `updatedAt` + `updatedBy` 决定跨设备合并时的逐行新旧；
-/// `syncId` 是跨设备稳定的列表标识（自增 id 只在本机有效）。
+/// 用户列表。同步版本 `versionPhysical + versionCounter + deviceId` 决定跨设备
+/// 合并时的逐行新旧；`syncId` 是跨设备稳定的列表标识（自增 id 只在本机有效）。
 @TableIndex.sql(
     'CREATE UNIQUE INDEX idx_playlists_syncId ON playlists (syncId) '
     'WHERE syncId IS NOT NULL')
@@ -71,8 +77,9 @@ class Playlists extends Table {
   TextColumn get name => text()();
   IntColumn get createdAt => integer()();
   TextColumn get syncId => text().nullable()();
-  IntColumn get updatedAt => integer().withDefault(const Constant(0))();
-  TextColumn get updatedBy => text().withDefault(const Constant(''))();
+  IntColumn get versionPhysical => integer().withDefault(const Constant(0))();
+  IntColumn get versionCounter => integer().withDefault(const Constant(0))();
+  TextColumn get deviceId => text().withDefault(const Constant(''))();
 }
 
 /// 列表曲目（列表内唯一约束保证导入/收藏幂等；列表删除级联删曲目）。
@@ -96,8 +103,9 @@ class PlaylistTracks extends Table {
   TextColumn get raw => text().withDefault(const Constant('{}'))();
   IntColumn get addedAt => integer()();
   IntColumn get sortOrder => integer().withDefault(const Constant(0))();
-  IntColumn get updatedAt => integer().withDefault(const Constant(0))();
-  TextColumn get updatedBy => text().withDefault(const Constant(''))();
+  IntColumn get versionPhysical => integer().withDefault(const Constant(0))();
+  IntColumn get versionCounter => integer().withDefault(const Constant(0))();
+  TextColumn get deviceId => text().withDefault(const Constant(''))();
 
   @override
   List<String> get customConstraints => const [
@@ -106,16 +114,21 @@ class PlaylistTracks extends Table {
       ];
 }
 
-/// 删除墓碑：本地删除（列表/曲目/脚本）不保留原行，墓碑承担「删除也取新」
+/// 删除墓碑：本地删除（列表/曲目/脚本/历史）不保留原行，墓碑承担「删除也取新」
 /// 的合并语义；category 取值见 SyncCategory.name。
+///
+/// 版本三列决定删除 vs 更新的胜负；`deletedAt` 是**真实删除时间**（内容时间）：
+/// 只用于历史「删除 vs 播放」的判定与墓碑保留期，不参与胜负判定。
 class SyncTombstones extends Table {
   @override
   String get tableName => 'sync_tombstones';
 
   TextColumn get category => text()();
   TextColumn get key => text()();
-  IntColumn get updatedAt => integer()();
-  TextColumn get updatedBy => text().withDefault(const Constant(''))();
+  IntColumn get versionPhysical => integer()();
+  IntColumn get versionCounter => integer().withDefault(const Constant(0))();
+  TextColumn get deviceId => text().withDefault(const Constant(''))();
+  IntColumn get deletedAt => integer().withDefault(const Constant(0))();
 
   @override
   Set<Column> get primaryKey => {category, key};
@@ -176,7 +189,9 @@ class Downloads extends Table {
 /// 元数据为播放时快照、自包含（`raw` 供统计页点播）；`endedAt` 为 null
 /// 表示进行中（进程被杀遗留的行由启动时 `closeStaleEvents()` 收尾）。
 /// `syncKey` 为跨设备去重键（新事件 UUID；存量行导出时回填哈希），
-/// `originDeviceId` 记录事件产生设备。
+/// `originDeviceId` 记录事件产生设备（同时充当版本三元组的 deviceId）。
+/// `endedAt` / `startedAt` 是内容时间；版本是 `versionPhysical +
+/// versionCounter + originDeviceId`，跨设备「晚收尾覆盖」按版本判定。
 @TableIndex(name: 'idx_play_events_startedAt', columns: {#startedAt})
 @TableIndex(name: 'idx_play_events_track', columns: {#sourceKey, #songId})
 @TableIndex.sql(
@@ -203,6 +218,8 @@ class PlayEvents extends Table {
   TextColumn get endReason => text().nullable()();
   TextColumn get syncKey => text().nullable()();
   TextColumn get originDeviceId => text().withDefault(const Constant(''))();
+  IntColumn get versionPhysical => integer().withDefault(const Constant(0))();
+  IntColumn get versionCounter => integer().withDefault(const Constant(0))();
 }
 
 /// 生产库文件名（drift_flutter 落在文档目录，回退逻辑见
@@ -249,8 +266,12 @@ class MoliaDatabase extends _$MoliaDatabase {
   /// v3：`downloads.filePath` 改可空（下载记录可只含歌词 / 封面）。
   /// v4：`downloads.publicUri` 新增（Android 公共 Downloads 副本定位）。
   /// v5：`downloads.imported` 新增（本地导入：就地引用用户文件，删除只移行）。
+  /// v6：同步版本戳改三元组（`versionPhysical` / `versionCounter` / `deviceId`），
+  ///     `sync_tombstones` 增加真实删除时间 `deletedAt`（内容时间分离，见
+  ///     ADR-0003 v2 §2）。旧同步数据不迁移：版本列回默认值（兼容代价见
+  ///     ADR-0003 v2「后果」）。
   @override
-  int get schemaVersion => 5;
+  int get schemaVersion => 6;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -274,6 +295,42 @@ class MoliaDatabase extends _$MoliaDatabase {
             // 仅新增带默认值的布尔列：ADD COLUMN，既有行 imported=0（下载）。
             await m.addColumn(schema.downloads, schema.downloads.imported);
           },
+          from5To6: (m, schema) async {
+            // 同步版本戳改三元组：内容列原样保留，旧版本列（updatedAt/updatedBy）
+            // 不迁移（回默认 0/''——ADR-0003 v2 §1「不兼容历史数据」）。
+            // 新列必须在 newColumns 里声明，否则 alterTable 会试图从旧表复制。
+            await m.alterTable(TableMigration(
+              schema.playlists,
+              newColumns: [
+                schema.playlists.versionPhysical,
+                schema.playlists.versionCounter,
+                schema.playlists.deviceId,
+              ],
+            ));
+            await m.alterTable(TableMigration(
+              schema.playlistTracks,
+              newColumns: [
+                schema.playlistTracks.versionPhysical,
+                schema.playlistTracks.versionCounter,
+                schema.playlistTracks.deviceId,
+              ],
+            ));
+            await m.alterTable(TableMigration(
+              schema.playHistory,
+              newColumns: [
+                schema.playHistory.versionPhysical,
+                schema.playHistory.versionCounter,
+                schema.playHistory.deviceId,
+              ],
+            ));
+            // 统计事件：只新增带默认值的版本列（ADD COLUMN，既有行回 0）。
+            await m.addColumn(schema.playEvents, schema.playEvents.versionPhysical);
+            await m.addColumn(schema.playEvents, schema.playEvents.versionCounter);
+            // 墓碑是 90 天缓存性质的数据且版本列没有默认值：重建空表
+            // （保留旧墓碑也没有正确的版本，等于不可用）。
+            await m.deleteTable('sync_tombstones');
+            await m.createTable(schema.syncTombstones);
+          },
         ),
         beforeOpen: (details) async {
           // SQLite 外键默认关闭，这里显式开启（列表删除级联依赖它）。
@@ -285,6 +342,32 @@ class MoliaDatabase extends _$MoliaDatabase {
   Future<void> close() async {
     if (identical(_instance, this)) _instance = null;
     await super.close();
+  }
+
+  /// 全库最大同步版本（物理分量 + 计数）：`SyncStampIssuer` 首次初始化的
+  /// 基线 ≧ 全库最大戳（ADR-0003 v2 §2）。deviceId 不参与「继续发号」判定。
+  ///
+  /// 扫描五张带版本列的表；一次性启动查询，结果集只有一行。
+  Future<({int physical, int counter})> maxSyncVersion() async {
+    final row = await customSelect('''
+      SELECT p, c FROM (
+        SELECT versionPhysical AS p, versionCounter AS c FROM playlists
+        UNION ALL
+        SELECT versionPhysical, versionCounter FROM playlist_tracks
+        UNION ALL
+        SELECT versionPhysical, versionCounter FROM play_history
+        UNION ALL
+        SELECT versionPhysical, versionCounter FROM sync_tombstones
+        UNION ALL
+        SELECT versionPhysical, versionCounter FROM play_events
+      )
+      ORDER BY p DESC, c DESC
+      LIMIT 1
+    ''').getSingleOrNull();
+    return (
+      physical: (row?.data['p'] as num?)?.toInt() ?? 0,
+      counter: (row?.data['c'] as num?)?.toInt() ?? 0,
+    );
   }
 
   /// 插入或更新播放上下文（主键冲突时整体替换）。
@@ -321,8 +404,7 @@ class MoliaDatabase extends _$MoliaDatabase {
   /// 批量插入或替换播放上下文；字段缺失的行跳过并记一条警告。
   Future<void> batchInsertOrReplacePlayContexts(
     List<Map<String, dynamic>> contexts,
-  ) async {
-    if (contexts.isEmpty) return;
+  ) async {   if (contexts.isEmpty) return;
     final rows = <PlayContextsCompanion>[];
     for (final context in contexts) {
       if (context['contextUri'] != null &&
