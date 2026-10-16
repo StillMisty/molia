@@ -73,9 +73,6 @@ class SyncProvider extends ChangeNotifier {
   Future<void> removeManualPeer(String host) =>
       _engine.removeManualPeer(host);
 
-  /// 本地忽略的设备（不拉取 / 不合并它们的载荷）。
-  Set<String> get ignoredPeers => _engine.state.ignoredPeers;
-
   bool isPeerIgnored(String deviceId) => _engine.state.isPeerIgnored(deviceId);
 
   /// 本地忽略 / 取消忽略某台设备（只影响本机）。

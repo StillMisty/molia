@@ -133,7 +133,6 @@ void main() {
       deviceId: 'devB',
       cursorSeq: 5,
       ackedSeq: 3,
-      headSeq: 8,
       behindBy: 4,
       behindBytes: 512,
       snapshotId: 'hash-b',
@@ -145,7 +144,6 @@ void main() {
     final parsed = SyncPeerState.fromJson(peer.toJson())!;
     expect(parsed.cursorSeq, 5);
     expect(parsed.ackedSeq, 3);
-    expect(parsed.headSeq, 8);
     expect(parsed.behindBy, 4);
     expect(parsed.behindBytes, 512);
     expect(parsed.snapshotId, 'hash-b');

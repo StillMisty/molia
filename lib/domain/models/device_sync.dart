@@ -7,8 +7,6 @@
 /// 即已授权，不做逐项审批（见 ADR-0003）。
 library;
 
-import 'dart:convert';
-
 /// 同步类别（设置页按类别开关；类别关闭时既不推送也不应用该类记录）。
 enum SyncCategory {
   /// 列表头（含收藏 `__favorites__`）。
@@ -242,12 +240,6 @@ class SyncJournalEntry {
   final int seq;
   final SyncCategory category;
   final SyncRecord record;
-
-  /// 条目的近似字节量（compact 的体积硬上限用；不含传输 / 加密开销）。
-  int get byteSize =>
-      record.key.length +
-      (record.data == null ? 0 : jsonEncode(record.data).length) +
-      96;
 
   Map<String, dynamic> toJson() => {
         'seq': seq,
@@ -970,7 +962,6 @@ class SyncPeerState {
     this.clockSkewMs,
     this.cursorSeq = -1,
     this.ackedSeq = -1,
-    this.headSeq = 0,
     this.snapshotId = '',
     this.categories = const [],
     this.fullPulledAt = 0,
@@ -1013,9 +1004,6 @@ class SyncPeerState {
   /// -1 = 未知（从未收到对端的 ack，视为可能落后任何位置）。
   final int ackedSeq;
 
-  /// 该对端自报的 journal 头部 seq（0 = 尚无条目）。
-  final int headSeq;
-
   /// 该对端最近一次自报的全量视图指纹（anti-entropy 比对用）。
   final String snapshotId;
 
@@ -1043,7 +1031,6 @@ class SyncPeerState {
     int? clockSkewMs,
     int? cursorSeq,
     int? ackedSeq,
-    int? headSeq,
     String? snapshotId,
     List<String>? categories,
     int? fullPulledAt,
@@ -1061,7 +1048,6 @@ class SyncPeerState {
         clockSkewMs: clockSkewMs ?? this.clockSkewMs,
         cursorSeq: cursorSeq ?? this.cursorSeq,
         ackedSeq: ackedSeq ?? this.ackedSeq,
-        headSeq: headSeq ?? this.headSeq,
         snapshotId: snapshotId ?? this.snapshotId,
         categories: categories ?? this.categories,
         fullPulledAt: fullPulledAt ?? this.fullPulledAt,
@@ -1080,7 +1066,6 @@ class SyncPeerState {
         if (clockSkewMs != null) 'clockSkewMs': clockSkewMs,
         if (cursorSeq >= 0) 'cursorSeq': cursorSeq,
         if (ackedSeq >= 0) 'ackedSeq': ackedSeq,
-        if (headSeq > 0) 'headSeq': headSeq,
         if (snapshotId.isNotEmpty) 'snapshotId': snapshotId,
         if (categories.isNotEmpty) 'categories': categories,
         if (fullPulledAt > 0) 'fullPulledAt': fullPulledAt,
@@ -1103,7 +1088,6 @@ class SyncPeerState {
       clockSkewMs: (raw['clockSkewMs'] as num?)?.toInt(),
       cursorSeq: (raw['cursorSeq'] as num?)?.toInt() ?? -1,
       ackedSeq: (raw['ackedSeq'] as num?)?.toInt() ?? -1,
-      headSeq: (raw['headSeq'] as num?)?.toInt() ?? 0,
       snapshotId: raw['snapshotId'] as String? ?? '',
       categories:
           (raw['categories'] as List?)?.whereType<String>().toList() ?? const [],

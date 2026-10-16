@@ -108,9 +108,6 @@ class SyncJournalStats {
   final int entries;
   final int bytes;
   final int oldestAt;
-
-  /// 窗口条数（`seq > baseSeq` 的部分）。
-  int get windowEntries => math.max(0, headSeq - baseSeq);
 }
 
 class SyncJournalRepository implements SyncJournalStore {
