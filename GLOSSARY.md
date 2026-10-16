@@ -396,8 +396,21 @@
   登记键的唯一家（读 / 写 / 同步往返 / 重载钩子）；组合根注入唯一实例，模块在
   构造时把 reload 钩子绑到自己的键，应用远端值后按变化的键触发；键名字面量只有
   一份（`settings_keys.dart`），由 `test/architecture/settings_keys_test.dart` 强制。
-- **Sync report / log（同步结果 / 日志）** — 一轮同步的拉取 / 应用 / 跳过计数
-  与错误（`SyncReport`、`SyncLogEntry`），设置页只读展示，不拦截合并。
+- **Sync round report（一轮同步报告）** — `SyncRoundReport`：一轮的**可观察**产物。
+  五态结论 `ok / noChanges / noPeers / partial / failed`（「没发现对端」与
+  「没有变化」必须分开；旧实现两者都显示成「同步成功」）+ 每传输明细
+  （拉取 / 推送 / 失败数 / 字节 / 耗时 / 不可用原因）+ 每对端名册 + 本轮落地
+  变更量（不是全库规模）。
+- **Sync peer roster（同步名册）** — `SyncPeerState`：每台对端的最近接触观测
+  （名称 / 传输 / 最后拉取·推送 / 时钟偏移 / 落后条数），持久化在 `sync_state_v1`，
+  UI 在「已配对设备」子页呈现；「落后条数」由增量协议填充。
+- **Sync transport status（传输状态）** — `SyncTransport.unavailableReason`
+  （`not_configured` / `start_failed`）：传输启动失败或未配置时必须显式可见，
+  不能只留在日志里（开关显示「已打开」而实际没有监听是排查事故的主要来源）。
+- **Sync report / log（同步结果 / 日志）** — `SyncLogEntry`：触发原因 +
+  五态结论 + 本轮变更量 + 失败数与错误；设置页只读展示，不拦截合并。
+  **不再有「跳过 N 项」**——那是「把全库胜者重放给适配器」的产物，会随数据量
+  无界增长且没有用户语义。
 
 ## 缓存
 - **Local data（本地数据）** — 单曲在本机的东西，分两档：**已缓存**（易失副本：边播边缓存 / 后台下载 / 取词 / 取图产生，可离线播放，会被 LRU / TTL / 清理回收）与**已下载**（持久副本：`downloads/` + drift 记录，可分享、清缓存不影响），两档都没有就是「未下载」。两档都不是的那首曲目在信息页与页内统一显示「未下载」。唯一读取口 `lib/services/track_local_data_service.dart`（`TrackLocalData`），词表唯一出处 `LocalPartState`；**禁止** 页面或模块另写「算不算有」的判据（见 ADR-0008）。

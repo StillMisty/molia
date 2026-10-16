@@ -207,7 +207,11 @@
   （`lib/data/sync/sync_engine.dart`）一轮 = 各 `SyncAdapter` 收集本地视图 →
   `SyncTransport` 拉取远端快照 → 逐键 LWW 合并（`(updatedAt, updatedBy)`，
   删除为墓碑）→ 适配器写回 → 推送合并视图；全量合并模型天然幂等，推送裁剪
-  90 天前墓碑；入站推送触发的轮次不再推送（防两端乒乓）。传输有两个实现、
+  90 天前墓碑；入站推送触发的轮次不再推送（防两端乒乓）。一轮的产物是可观察的
+  `SyncRoundReport`：五态结论（`ok / noChanges / noPeers / partial / failed`）+
+  每传输明细 + 每对端名册 + 本轮变更量；设置页据此呈现结论行、已配对设备子页与
+  变更语义日志（不再有会随数据量增长的「跳过 N 项」），失败行给重试入口，
+  「复制诊断信息」导出运行状态。传输有两个实现、
   可分别开关：局域网直连（UDP 探测 + 内置 HTTP 快照端点）与用户自备 WebDAV
   （`<remoteDir>/<deviceId>.msync` 密文文件，PROPFIND/GET/PUT/MKCOL）。
   资料库 schema（drift，fresh 基线）含 `playlists.syncId` / 行级
