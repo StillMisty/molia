@@ -87,6 +87,22 @@ void main() {
     expect(peers, hasLength(2));
   });
 
+  test('接触即更新最近接触：未变跳过（探测应答）的对端不误标失联', () async {
+    final ancient =
+        DateTime.now().millisecondsSinceEpoch - SyncPeerState.lostThresholdMs - 1000;
+    seedPeer('ghost', lastSeenAt: ancient);
+    expect(state.peers.single.isLostAt(state.nowMs()), isTrue);
+
+    // 本轮没有拉到任何内容（未变跳过 / 仅探测应答），但传输报告接触过它。
+    transport.seenIdsOverride = ['ghost'];
+    await engine.syncNow();
+
+    final peer = state.peers.single;
+    expect(peer.isLostAt(state.nowMs()), isFalse, reason: '接触即续期');
+    expect(peer.lastSeenAt, greaterThan(ancient));
+    expect(peer.lastPullAt, 0, reason: '没有数据流转，不算一次拉取');
+  });
+
   test('本地忽略：跨重启保留，只影响本机', () async {
     expect(state.isPeerIgnored('ghost'), isFalse);
     await engine.setPeerIgnored('ghost', true);

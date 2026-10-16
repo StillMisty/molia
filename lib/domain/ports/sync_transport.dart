@@ -42,6 +42,7 @@ class SyncPullResult {
     this.failedPeers = 0,
     this.bytesIn = 0,
     this.contacted = false,
+    this.seenIds = const [],
     this.error,
   });
 
@@ -58,6 +59,12 @@ class SyncPullResult {
   final int failedPeers;
 
   final int bytesIn;
+
+  /// 本轮**接触过**的对端 id（含未变跳过、读取失败者；不含幽灵 / 忽略设备）。
+  ///
+  /// 名册的「最近接触」据此更新：在线但长期没有内容变化的对端不该被误标
+  /// 失联。
+  final List<String> seenIds;
 
   /// 本轮是否接触到了远端（WebDAV 目录可读、局域网有对端可达）。
   ///

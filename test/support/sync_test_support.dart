@@ -126,6 +126,9 @@ class FakeSyncTransport implements SyncTransport {
   /// pull 报告的「接触成功」（远端可达；零快照也算，如 WebDAV 目录可读）。
   bool pullContacted = false;
 
+  /// pull 报告「接触过」的对端 id（null = 由 [available] 推导）。
+  List<String>? seenIdsOverride;
+
   /// pull / push 报告的失败数（用于构造部分失败与全失败）。
   int pullFailures = 0;
   int pushFailures = 0;
@@ -173,6 +176,11 @@ class FakeSyncTransport implements SyncTransport {
       skippedUnchanged: pullSkippedUnchanged,
       failedPeers: pullFailures,
       contacted: pullContacted,
+      seenIds: seenIdsOverride ??
+          [
+            for (final envelope in available)
+              if (envelope.deviceId.isNotEmpty) envelope.deviceId,
+          ],
       error: pullError ??
           (pullFailures > 0
               ? const SyncIssue(

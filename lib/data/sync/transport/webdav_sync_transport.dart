@@ -253,6 +253,7 @@ class WebDavSyncTransport implements SyncTransport {
     return SyncPullResult(
       envelopes: envelopes,
       peersSeen: seenDevices.length,
+      seenIds: seenDevices.toList(),
       skippedUnchanged: skipped,
       failedPeers: failed,
       bytesIn: bytesIn,

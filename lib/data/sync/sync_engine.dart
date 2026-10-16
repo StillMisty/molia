@@ -937,6 +937,11 @@ class SyncEngine extends ChangeNotifier implements SyncSchedulerHost {
         ..durationMs += watch.elapsedMilliseconds
         ..error ??= result.error;
       contact = contact || result.contacted;
+      // 任何接触（含未变跳过 / 探测应答）都更新「最近接触」：在线但长期
+      // 没有内容变化的对端不该被误标失联。
+      for (final id in result.seenIds) {
+        _touchPeer(id, entry.key, seen: true);
+      }
       for (final envelope in result.envelopes) {
         out.add((entry.key, envelope));
       }
@@ -1273,14 +1278,27 @@ class SyncEngine extends ChangeNotifier implements SyncSchedulerHost {
   final Map<String, SyncPeerState> _peersById = {};
 
   /// 记录/更新名册项（引擎只在这里写名册，落库由 [SyncStateStore.recordRound]）。
+  ///
+  /// [seen] = 只接触过（探测应答 / 未变跳过）：更新最近接触时间并清除失败，
+  /// 但不改「最后拉取」时间（没有数据流转）。
   void _touchPeer(
     String deviceId,
     String kind, {
     bool pushOk = false,
+    bool seen = false,
   }) {
     if (deviceId.isEmpty) return;
     final existing = _peersById[deviceId] ?? SyncPeerState(deviceId: deviceId);
     final now = _nowMs();
+    if (seen) {
+      _peersFailedThisRound.remove(deviceId);
+      _peersById[deviceId] = existing.copyWith(
+        transport: kind,
+        lastSeenAt: now,
+        clearLastError: true,
+      );
+      return;
+    }
     if (pushOk) {
       _peersFailedThisRound.remove(deviceId);
       _peersById[deviceId] = existing.copyWith(
