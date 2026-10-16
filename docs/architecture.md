@@ -92,6 +92,10 @@
   （Playback observer）：直连 facade 快照与 position 通道、由组合根挂接，不经
   provider 的节流通知（避免合并窗口丢中间曲目副作用）；恢复态与睡眠定时仍属
   `PlaybackProvider`。与 `PlayStatisticsService` / `ArtworkThemeSync` 同为观察者形态。
+- **音频焦点与定时关闭**：`AudioFocusGuard`（`lib/playback/audio_focus_guard.dart`，
+  其他应用出声 → 暂停，默认开；`androidWillPauseWhenDucked` 把 duck 升级为暂停语义）
+  由 `LocalPlaybackService` 持有；倒计时定时关闭改为**绝对 deadline**
+  （tick / 快照变化 / 回前台三路补触发），熄屏节流后首个回调立即补暂停。
 - **Lyrics**：`LyricsProvider`（`lib/providers/lyrics_provider.dart`）是取词 → 缓存 →
   解析 → 预取的唯一实现，对外只暴露 `LyricsState`（idle/loading/ready/empty + isSynced，
   含按时间戳对齐的翻译 / 罗马音扩展行与逐字时间轴）。时间契约统一在
@@ -373,6 +377,11 @@
   `file://` 走 `FileImage`）；歌词由组合根的歌词加载器读
   `downloads/lyrics/`（翻译 `.t.lrc` 边车），且 `LyricsService` 对本地
   曲目禁用网络回退（离线播放不触网）；
+- **下载通知（Android）**：`DownloadNotificationService`（`dataSync` 前台服务）+ 通道
+  `top.stillmisty.molia/download_notifications`，Dart 侧 seam
+  `lib/data/downloads/download_notifications*.dart`；进行中显示进度（批量共享
+  「N/N」），完成 / 失败 / 取消收尾；API 33+ 未授权通知 → 降级为无通知继续下载；
+  开关 `download_notifications`（设备本地键，默认开）。
 - **同步过滤**：歌单曲目 / 历史 / 统计 / 播放会话适配器都过滤
   `sourceKey = local` 的条目（含墓碑）——文件是设备本机持久副本，
   同步到其它设备不可播放；
@@ -608,6 +617,9 @@
     带图标的分组，且主次层级要保住；
   - 紧凑位置（行内重试、状态卡内取消）用 `M3EIconButton`（语义交给 tooltip）；
     纯图标按钮保留稳定 key，测试按 key 定位。
+- 触感：全应用唯一入口 `lib/services/haptics.dart`（设置 › 通用与数据 › 震动反馈，
+  默认开，设备本地键）；底栏重复点击的轻震由壳层给一次、页面不重复给
+  （原「壳层不给触感」的口径已反转）。
 - 已知保留（无法等价替换）：带 `bottom:` 槽的 AppBar（2 处）、`_showCenterDialog`、
   `ScaffoldMessenger` 兼容代码。
 

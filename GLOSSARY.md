@@ -35,11 +35,19 @@
   （shuffle 在单曲内稳定，切歌/切模式重抽）；`upcoming` 只用于队列面板展示。
 - **Playback observer（播放观察者模块）** — `lib/services/playback_observer.dart`：播放副作用扇出的唯一实现（最后播放 / 播放上下文 / 桌面小组件 / 播放历史 / 会话落盘 / 封面预取与补取 / 通知权限），直连 facade 快照与进度通道（不经 provider 的节流通知），由组合根挂接；恢复态与睡眠定时仍属 `PlaybackProvider`（与 `PlayStatisticsService`、`ArtworkThemeSync` 同为观察者形态）。
 - **Sleep timer（定时关闭）** — `lib/providers/sleep_timer.dart`：歌曲信息页入口的
-  「到点暂停」。两种模式：倒计时（**仅播放时计时**，暂停冻结，剩余时间按 `now()`
-  差值累计）与「播完当前歌曲」（纯事件驱动，无定时器）。判定只读 **facade 原始
+  「到点暂停」。两种模式：倒计时（**仅播放时计时**，暂停冻结；实现为**绝对
+  deadline** 而非相对累减——tick / 快照变化 / 回前台三路各自比较 `now >= deadline`，
+  熄屏节流或进程冻结后首个获得调度的回调立即补触发）与「播完当前歌曲」（纯事件驱动，
+  无定时器）。判定只读 **facade 原始
   通道**（真实播放），恢复态覆盖值不参与；到点动作经注入的 `onFire` 落地
   （组合根注入 `facade.pause`）。剩余时间每秒走 `ValueListenable`（不进聚合通知），
   不持久化，`stopLocalPlayback` 一并撤销。
+- **Audio focus guard（音频焦点守卫）** — `lib/playback/audio_focus_guard.dart`：
+  「其他应用出声 → 本应用暂停」的唯一实现（默认开）。会话开启
+  `androidWillPauseWhenDucked`（just_audio 对 `usage=media` 的 duck 既不压音量也不
+  暂停，必须声明成暂停语义）；中断 `begin == true`（含 duck / 永久丢失）→ 暂停，
+  暂停延后一个 microtask 以兼容 just_audio 的打断记账；恢复焦点不抢播（transient
+  的续播由 just_audio 负责）。桌面 / Web 无插件实现时 no-op。
 
 ## 播放页封面（cover deck）
 
@@ -91,7 +99,10 @@
   一个实例，与 `PlayerMorphController` 同路由注入）。页面自订阅、自决定语义并自给
   反馈：播放页 = 迷你 ⇄ 完整（现有 `_toggleExpand`，进入播放页的共享元素飞行期间
   由壳层忽略），资料库 / 收藏 = 当前可见列表回到顶部
-  （`lib/utils/scroll_to_top.dart::animateScrollToTop`）。壳层不消费状态、不给触感。
+  （`lib/utils/scroll_to_top.dart::animateScrollToTop`）。壳层不消费状态，但重复点击
+  命中时统一给一次轻震（`lib/services/haptics.dart`，可在设置里全局关闭）；页面不重复给触感。
+
+- **Haptics（触感模块）** — `lib/services/haptics.dart`：全应用触感唯一入口（lightImpact / mediumImpact / selectionClick），带设备本地开关（默认开；关闭后不触碰平台通道）。所有调用点经它；M3E 包内自带的触感（swipe action / 排序等）不在此覆盖范围。
 
 ## 色彩系统
 
@@ -400,3 +411,4 @@
 - **Collection scroll bookkeeping（合集滚动簿记）** — `lib/widgets/collection_scroll_bookkeeping.dart`：按合集键保存 / 恢复滚动位置的唯一实现（节流 ≤2 次/秒、切换合集各自只恢复一次、夹取到可滚动范围）；调度器（`CollectionScrollScheduler`）可注入，脱离 widget 树可单测。
 - **Local songs（本地歌曲合集）** — 收藏页的伪合集（`downloadsSentinel` ↔ `downloadsOrderKey`）：数据来自 `DownloadService.downloads`（下载副本 + 本地导入），不落列表表；仅在下载能力可用（`DownloadService.supported`）时出现在合集弹层，排序固定按下载 / 导入时间倒序。
 - **Local import（本地导入）** — `downloads` 表 `imported` 行 = **就地引用**用户自己的音频文件：`originSourceKey = 'local'`、`originSongId` = 文件绝对路径（同路径重复导入幂等），`filePath` 指向原文件；删除记录只移行、不删文件，补发布 / 旧位置迁移都跳过。写入唯一入口 `DownloadService.importLocalFiles`（标签解析见 `lib/data/downloads/audio_tag_reader.dart`：mp3 ID3v2 / flac Vorbis Comment，其余格式按文件名兜底）。
+- **Download notifications（下载通知模块）** — `lib/data/downloads/download_notifications*.dart`（平台 seam：IO=MethodChannel，其它平台 no-op，通道异常只记日志、绝不影响下载本身）+ Android `DownloadNotificationService`（`dataSync` 前台服务）：下载进行中在系统通知显示进度（批量共享一条「N/N」），完成 / 失败 / 取消收尾并移除；API 33+ 未授予通知权限时降级为「无通知但继续下载」；开关 `download_notifications`（设备本地键，默认开）。
