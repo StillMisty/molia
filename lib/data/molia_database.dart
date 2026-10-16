@@ -1,10 +1,8 @@
 /// 本地数据库（drift）：最近播放上下文（play_contexts）+ 资料库
 /// （播放历史 / 用户列表 / 删除墓碑）+ 听歌统计（play_events）+ 本地下载。
 ///
-/// 迁移基线：v1–v5 测试版库不迁移（打开即整库重建、数据不保留）；v6 是
-/// 清空测试版历史后的新起点（等同从 1 重新开始），**从 v6 起改表结构必须写
-/// 增量迁移、保留数据**——设计取舍见 docs/adr/0005-drift-migration.md 与其
-/// 修订章节。
+/// fresh 基线：`schemaVersion = 1` 一次性建出全部表；结构变更必须写增量
+/// 迁移、保留数据（见 docs/adr/0005-drift-migration.md）。
 ///
 /// 只 import drift / drift_flutter / path_provider：Web 编译安全
 /// （`NativeDatabase` 仅测试内存库使用，见 test/support/memory_database.dart）。
@@ -261,54 +259,23 @@ class MoliaDatabase extends _$MoliaDatabase {
     }
   }
 
-  /// 当前 schema 版本 = 清空测试版历史后的**新基线**（等同从 1 重新开始，
-  /// 但保持 6 以覆盖 v1–v5 测试版库：声明为 1 会让旧 v1 库被当成「版本一致」
-  /// 而跳过重建）。v6 起恢复增量迁移承诺：改表结构必须写迁移、保留数据
-  /// （ADR-0005 修订）。
+  /// 当前 schema 版本（fresh 基线：`1` 一次性建出全部表）。
+  ///
+  /// 结构变更必须写增量迁移：提版本号 → `dart run drift_dev make-migrations`
+  /// 生成 schema 快照 → 用 `stepByStep` 写迁移并保留数据（见 ADR-0005）。
   @override
-  int get schemaVersion => 6;
+  int get schemaVersion => 1;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
         onCreate: (m) => m.createAll(),
-        // drift 的 onUpgrade 同时接收升级与降级（版本不同即触发）。
-        onUpgrade: _onVersionChange,
+        // 结构变更时在 onUpgrade 接入 stepByStep 增量迁移（见 ADR-0005）；
+        // 未提供迁移时 drift 默认在版本不一致时抛错——响亮失败，不静默兼容。
         beforeOpen: (details) async {
           // SQLite 外键默认关闭，这里显式开启（列表删除级联依赖它）。
           await customStatement('PRAGMA foreign_keys = ON');
         },
       );
-
-  /// 版本变化时的分层策略：
-  ///
-  /// - `from < 6`：测试版存量库（v1–v5）一次性整库重建，数据不保留；
-  /// - 降级（`to < from`）：同样整库重建（drift 2.35.2 的 MigrationStrategy
-  ///   没有单独的 onDowngrade 回调，升降级都走这里）；
-  /// - `from >= 6 && to > from`：**必须**接入 stepByStep 增量迁移（ADR-0005）。
-  ///   缺迁移步骤是开发错误，直接抛错，绝不静默重建丢数据。
-  static Future<void> _onVersionChange(Migrator m, int from, int to) async {
-    if (from < 6 || to < from) {
-      await _rebuild(m);
-      return;
-    }
-    throw StateError(
-      '缺少 v$from → v$to 的增量迁移：v6 起改表结构必须接入 stepByStep '
-      '迁移并保留数据（见 ADR-0005 修订）。',
-    );
-  }
-
-  /// 整库重建：drop 掉全部 schema 实体再重建。
-  ///
-  /// `Migrator.drop()` 生成 `DROP <kind> IF EXISTS`（表 / 索引 / 触发器 / 视图；
-  /// 不认识的实体直接跳过），所以逐个 drop 幂等、顺序无关；`createAll()` 会
-  /// 重建表 + 索引。迁移在 `beforeOpen` 之前执行，此时外键约束尚未开启，
-  /// 互有引用的表可以按任意顺序 drop。
-  static Future<void> _rebuild(Migrator m) async {
-    for (final entity in m.database.allSchemaEntities) {
-      await m.drop(entity);
-    }
-    await m.createAll();
-  }
 
   @override
   Future<void> close() async {

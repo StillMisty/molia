@@ -418,13 +418,12 @@
   一份（`settings_keys.dart`），由 `test/architecture/settings_keys_test.dart` 强制。
 - **Sync round report（一轮同步报告）** — `SyncRoundReport`：一轮的**可观察**产物。
   五态结论 `ok / noChanges / noPeers / partial / failed`（「没发现对端」与
-  「没有变化」必须分开；旧实现两者都显示成「同步成功」）+ 每传输明细
+  「没有变化」必须分开）+ 每传输明细
   （拉取 / 推送 / 失败数 / 字节 / 耗时 / 不可用原因）+ 每对端名册 + 本轮落地
   变更量（不是全库规模）。
 - **Sync peer roster（同步名册）** — `SyncPeerState`：每台对端的最近接触观测
   （名称 / 传输 / 最后拉取·推送 / 时钟偏移 / 落后条数 / 最近失败），持久化在
-  `sync_state_v1`，UI 在「已配对设备」子页呈现；「落后条数」由增量协议填充，
-  失败原因码（如 `protocol_too_old`）由 UI 映射文案。
+  `sync_state_v1`，UI 在「已配对设备」子页呈现；「落后条数」由增量协议填充。
 - **Sync transport status（传输状态）** — `SyncTransport.unavailableReason`
   （`not_configured` / `start_failed` / `permission_denied`）：传输启动失败、
   未配置或缺权限时必须显式可见，不能只留在日志里（开关显示「已打开」而实际
