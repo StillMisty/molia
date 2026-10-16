@@ -28,6 +28,13 @@ enum DesktopTextAlignX { left, center, right }
 /// 桌面歌词文本垂直对齐。
 enum DesktopTextAlignY { top, center, bottom }
 
+/// 桌面歌词长行横向滚动的映射方式。
+///
+/// `followSinging` = 跟随已唱边界（文本被高亮拖着走，速度随演唱起伏）；
+/// `constant` = 按行跨度线性匀速（速度恒定，逐字高亮不受影响）。
+/// 逐字时间轴质量差的来源（词时长抖动）在匀速模式下不会传到滚动上。
+enum DesktopScrollMode { followSinging, constant }
+
 /// 桌面歌词颜色的取色来源。
 ///
 /// `custom` = 用户自定义色板；其余值取「跟随主题角色」——所用方案由
@@ -116,6 +123,10 @@ class LyricsDisplaySettings extends ChangeNotifier {
   static const int defaultDesktopMaxLines = 1;
   static const DesktopTextAlignX defaultDesktopTextAlignX = DesktopTextAlignX.center;
   static const DesktopTextAlignY defaultDesktopTextAlignY = DesktopTextAlignY.center;
+
+  /// 默认跟随演唱（与历史行为一致）；匀速作为可选项。
+  static const DesktopScrollMode defaultDesktopScrollMode =
+      DesktopScrollMode.followSinging;
   static const bool defaultDesktopLock = false;
   static const bool defaultDesktopFreezeOnScreenOff = true;
 
@@ -180,6 +191,7 @@ class LyricsDisplaySettings extends ChangeNotifier {
   int _desktopMaxLines = defaultDesktopMaxLines;
   DesktopTextAlignX _desktopTextAlignX = defaultDesktopTextAlignX;
   DesktopTextAlignY _desktopTextAlignY = defaultDesktopTextAlignY;
+  DesktopScrollMode _desktopScrollMode = defaultDesktopScrollMode;
   bool _desktopLock = defaultDesktopLock;
   bool _desktopFreezeOnScreenOff = defaultDesktopFreezeOnScreenOff;
   bool _desktopHideOnPause = defaultDesktopHideOnPause;
@@ -228,6 +240,7 @@ class LyricsDisplaySettings extends ChangeNotifier {
   int get desktopMaxLines => _desktopMaxLines;
   DesktopTextAlignX get desktopTextAlignX => _desktopTextAlignX;
   DesktopTextAlignY get desktopTextAlignY => _desktopTextAlignY;
+  DesktopScrollMode get desktopScrollMode => _desktopScrollMode;
   bool get desktopLock => _desktopLock;
   bool get desktopFreezeOnScreenOff => _desktopFreezeOnScreenOff;
   bool get desktopHideOnPause => _desktopHideOnPause;
@@ -392,6 +405,12 @@ class LyricsDisplaySettings extends ChangeNotifier {
     _commit();
   }
 
+  Future<void> setDesktopScrollMode(DesktopScrollMode value) async {
+    if (value == _desktopScrollMode) return;
+    _desktopScrollMode = value;
+    _commit();
+  }
+
   Future<void> setDesktopLock(bool value) async {
     if (value == _desktopLock) return;
     _desktopLock = value;
@@ -530,6 +549,7 @@ class LyricsDisplaySettings extends ChangeNotifier {
         'desktop.maxLines': _desktopMaxLines,
         'desktop.textAlignX': _desktopTextAlignX.name,
         'desktop.textAlignY': _desktopTextAlignY.name,
+        'desktop.scrollMode': _desktopScrollMode.name,
         'desktop.lock': _desktopLock,
         'desktop.freezeOnScreenOff': _desktopFreezeOnScreenOff,
         'desktop.hideOnPause': _desktopHideOnPause,
@@ -598,6 +618,8 @@ class LyricsDisplaySettings extends ChangeNotifier {
         json['desktop.textAlignX'], DesktopTextAlignX.values, _desktopTextAlignX);
     _desktopTextAlignY = _enumOf(
         json['desktop.textAlignY'], DesktopTextAlignY.values, _desktopTextAlignY);
+    _desktopScrollMode = _enumOf(json['desktop.scrollMode'],
+        DesktopScrollMode.values, _desktopScrollMode);
     _desktopLock = _boolOf(json['desktop.lock'], _desktopLock);
     _desktopFreezeOnScreenOff =
         _boolOf(json['desktop.freezeOnScreenOff'], _desktopFreezeOnScreenOff);

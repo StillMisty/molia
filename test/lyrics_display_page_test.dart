@@ -249,6 +249,32 @@ void main() {
     );
   });
 
+  testWidgets('桌面歌词页：长行滚动默认跟随演唱，切匀速即落盘', (tester) async {
+    useLargeViewport(tester);
+    await pumpApp(tester, const DesktopLyricsSettingsPage());
+
+    expect(settings.desktopScrollMode, DesktopScrollMode.followSinging);
+    final row = find.byKey(const Key('desktopScrollModeRow'));
+    await tester.scrollUntilVisible(
+      row,
+      200,
+      scrollable: find.byType(Scrollable).first,
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(
+      find.descendant(of: row, matching: find.text('Constant speed')),
+    );
+    await tester.pumpAndSettle();
+
+    expect(settings.desktopScrollMode, DesktopScrollMode.constant);
+    final prefs = await SharedPreferences.getInstance();
+    expect(
+      prefs.getString(kLyricsDisplaySettings.name),
+      contains('"desktop.scrollMode":"constant"'),
+    );
+  });
+
   testWidgets('系统媒体歌词页：通知格式分段切回「仅歌词」', (tester) async {
     useLargeViewport(tester);
     await pumpApp(tester, const SystemMediaLyricsSettingsPage());

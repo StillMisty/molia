@@ -35,7 +35,25 @@ class LyricsPresentation {
   /// 从而在播放中以位置通道的频率（≤4Hz）刷新悬浮窗。
   final int positionMs;
 
-  /// 当前行时间轴（毫秒；-1 = 未知）：桌面歌词「跟随进度」横向滚动的兜底。
+  /// [positionMs] 生效的墙上时刻（毫秒，同设备壁钟；0 = 未知）。
+  ///
+  /// 输出端据此补偿「采样 → 渲染」之间的传输延迟（主线程繁忙时通道投递会
+  /// 变慢）：`锚点 = positionMs + (now − positionAtEpochMs)`。不给这个字段
+  /// 时只能按到达时刻外推，延迟抖动会直接变成可见的回跳。
+  final int positionAtEpochMs;
+
+  /// 横向滚动的映射方式：true = 跟随已唱边界（逐字）；false = 按
+  /// [lineStartMs]/[lineEndMs] 线性匀速。
+  ///
+  /// 由配置（`desktop.scrollMode`）决定，Dart 侧算好跨度后下发；颜色渐染
+  /// 两种模式都仍走逐字时间轴，不受影响。
+  final bool scrollFollowsSinging;
+
+  /// 横向滚动的线性映射跨度（毫秒；-1 = 未知）。
+  ///
+  /// 无逐字数据时是当前行时间轴；匀速模式（[scrollFollowsSinging] 为 false）
+  /// 且该行有逐字数据时，Dart 侧换成「首词开始 → 末词结束」的演唱跨度，
+  /// 避免尾奏空档把文本拖走。
   final int lineStartMs;
   final int lineEndMs;
 
@@ -49,6 +67,8 @@ class LyricsPresentation {
     required this.hasLyrics,
     this.words,
     this.positionMs = 0,
+    this.positionAtEpochMs = 0,
+    this.scrollFollowsSinging = true,
     this.lineStartMs = -1,
     this.lineEndMs = -1,
   });
@@ -65,6 +85,8 @@ class LyricsPresentation {
       other.hasLyrics == hasLyrics &&
       listEquals(other.words, words) &&
       other.positionMs == positionMs &&
+      other.positionAtEpochMs == positionAtEpochMs &&
+      other.scrollFollowsSinging == scrollFollowsSinging &&
       other.lineStartMs == lineStartMs &&
       other.lineEndMs == lineEndMs;
 
@@ -79,6 +101,8 @@ class LyricsPresentation {
         hasLyrics,
         words == null ? null : Object.hashAll(words!),
         positionMs,
+        positionAtEpochMs,
+        scrollFollowsSinging,
         lineStartMs,
         lineEndMs,
       );

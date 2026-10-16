@@ -229,3 +229,15 @@
     `assets/icons/app_icon.png`（`WindowChrome` 调 window_manager 的 `setIcon`，
     与 hicolor 集合同源），Wayland 下该调用无效也不报错。契约由
     `test/packaging/linux_desktop_test.dart` 守住。
+
+37. **桌面歌词位置样本不能按到达时刻重设基准**：位置样本经 Dart（≤4Hz）→ 通道 →
+    原生主线程到达，投递延迟随宿主负载波动；旧实现每次采样都 `base = 样本;
+    baseTime = now`，把这段抖动 1:1 变成可见回跳（忽快忽慢）。现在由
+    `LyricClock` 承担时基：先按 `positionAtEpochMs`（Dart 侧「该位置生效的墙上
+    时刻」，两端同设备壁钟相减即延迟，夹取上限防时钟调整）外推，再按相位误差
+    分档收敛（≤100ms 10% / 100–300ms 20% / >300ms 落位）。两条不要改回去：
+    ① 时基必须由宿主 `LyricsOverlayView` 持有（切行重建 `CurrentLineView` 不重锚）；
+    ② 暂停 / seek / 换曲才允许硬落位；③ 暂停时**不做**延迟补偿（位置不推进，
+    外推会把暂停样本凭空推后一个传输延迟，实测 188ms）。诊断：
+    `adb shell setprop log.tag.MoliaLyrics DEBUG`（默认级别静默）后看
+    `err=/transit=/snap=/frames=` 打点（`frames=0` 说明帧循环没跑）。
