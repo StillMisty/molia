@@ -125,7 +125,7 @@ void main() {
   });
 
   test('存量事件（无 syncKey）导出时按内容哈希回填且跨库一致', () async {
-    // 模拟 v5 前旧行：直接插入不带 syncKey。
+    // 模拟没有 syncKey 的存量行：直接插入。
     for (final db in [dbA, dbB]) {
       await db.into(db.playEvents).insert(PlayEventsCompanion.insert(
             sourceKey: 'wy',

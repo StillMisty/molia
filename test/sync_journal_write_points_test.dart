@@ -143,7 +143,7 @@ void main() {
   });
 
   test('重命名老列表（缺 syncId）：补 syncId 与重命名两条日志版本递增', () async {
-    // 造一条没有 syncId 的存量列表（同步上线前创建）。
+    // 造一条没有 syncId 的存量列表。
     await db.into(db.playlists).insert(PlaylistsCompanion.insert(
           name: '老列表',
           createdAt: 1,

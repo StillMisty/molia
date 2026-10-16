@@ -150,7 +150,7 @@ void main() {
     ));
     await Future<void>.delayed(const Duration(milliseconds: 40));
 
-    // 入站轮不再只消费：发现缺口后本轮内发起全量兜底（带 fullPeers）。
+    // 入站轮发现缺口后本轮内也发起全量兜底（带 fullPeers）。
     expect(transport.pullCount, pullsBefore + 1);
     expect(transport.lastRequest?.fullPeers, contains('devB'));
   });

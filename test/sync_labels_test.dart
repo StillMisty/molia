@@ -110,7 +110,7 @@ void main() {
     ));
     expect(lan, contains(SyncIssueAction.addManualPeer));
 
-    // 传输缺失（旧日志条目）按局域网处理：至少给出手动地址这条路。
+    // 传输缺失（args 可能不带该参数）按局域网处理：至少给出手动地址这条路。
     expect(
       syncIssueActions(
           const SyncIssue(code: SyncIssueCode.allPeersUnreachable)),

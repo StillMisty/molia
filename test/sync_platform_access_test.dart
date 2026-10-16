@@ -6,7 +6,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import 'support/sync_test_support.dart';
 
-/// 平台准入（#27）：**权限门**与**地址簿持久化**。
+/// 平台准入：**权限门**与**地址簿持久化**。
 ///
 /// 真实 socket / HTTP 的用例在 `lan_manual_peer_test.dart`（本文件带
 /// `TestWidgetsFlutterBinding`，它会把 HttpClient 桩掉，HTTP 一律返回 400）。
