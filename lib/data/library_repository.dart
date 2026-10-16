@@ -978,9 +978,9 @@ class LibraryRepository implements LibraryStore, LibrarySyncStore {
   /// 分量也会持平），单看 `MAX(versionPhysical)` 会漏掉这类变更。计数器
   /// 每毫秒远小于 100 万，乘法不会溢出 64 位。
   ///
-  /// 列表头另计入「syncId 为空」的行数：导出会就地补齐缺失的 syncId，
-  /// 补齐后指纹变化会触发一次重读（之后稳定），跳过导出也不会让待补
-  /// syncId 的列表永远读不到。
+  /// 列表头另计入「syncId 为空（NULL 或空串）」的行数：导出会就地补齐缺失的
+  /// syncId（判据同此），补齐后指纹变化会触发一次重读（之后稳定），跳过导出
+  /// 也不会让待补 syncId 的列表永远读不到。
   @override
   Future<Map<SyncCategory, String>> syncFingerprints(
     Iterable<SyncCategory> categories,
@@ -998,7 +998,8 @@ class LibraryRepository implements LibraryStore, LibrarySyncStore {
     Future<String> playlistFingerprint() async {
       final row = await db.customSelect(
         'SELECT COUNT(*) AS n, MAX($versionExpr) AS m, '
-        'SUM(CASE WHEN syncId IS NULL THEN 1 ELSE 0 END) AS x FROM playlists',
+        "SUM(CASE WHEN syncId IS NULL OR syncId = '' THEN 1 ELSE 0 END) AS x "
+        'FROM playlists',
       ).getSingle();
       return '${row.data['n']}:${row.data['m'] ?? 0}:${row.data['x'] ?? 0}';
     }

@@ -161,7 +161,8 @@ void main() {
     expect(adapter.applyCalls, 0);
   });
 
-  test('真实适配器（设置）：远端胜者只交付一次，重复轮不重复应用', () async {    final prefsAdapter = PrefsSyncAdapter(
+  test('真实适配器（设置）：远端胜者只交付一次，重复轮不重复应用', () async {
+    final prefsAdapter = PrefsSyncAdapter(
       state: state,
       settings: SettingsRegistry(
         keys: const [kThemeMode],
@@ -202,7 +203,8 @@ void main() {
     expect(prefs.getString('theme_mode'), 'light');
   });
 
-  test('墓碑清理联动：旧墓碑重放不重新落地（登记保留、复活不撤销）', () async {    final db = openMemoryDatabase();
+  test('墓碑清理联动：旧墓碑重放不重新落地（登记保留、复活不撤销）', () async {
+    final db = openMemoryDatabase();
     addTearDown(db.close);
     final repository = LibraryRepository(
       databaseProvider: () => db,
@@ -245,7 +247,10 @@ void main() {
     final report = await sync.syncNow();
 
     expect(report!.applied, 0);
-    expect((await repository.listHistory()).map((e) => e.songId), contains('s1'));
+    expect(
+      (await repository.listHistory()).map((e) => e.songId),
+      contains('s1'),
+    );
   });
 
   test('空闲等级端到端：不拉取 / 不推送 / 不落地 / 0 字节', () {

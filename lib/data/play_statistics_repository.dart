@@ -471,7 +471,8 @@ class PlayStatisticsRepository {
   ///
   /// 进行中事件不导出（远端无法继续更新进度，收尾后自然进入下一轮）；
   /// v5 前的旧行无去重键，按内容哈希一次性回填并落库。
-  Future<List<Map<String, Object?>>> syncExportEvents() async {    final db = _db;
+  Future<List<Map<String, Object?>>> syncExportEvents() async {
+    final db = _db;
     // 导出行直接复用列名映射（远端按列名取值；不要改成类型化行）。
     final rows = await db
         .customSelect('SELECT * FROM play_events WHERE endedAt IS NOT NULL')
