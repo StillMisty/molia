@@ -11,6 +11,7 @@ import '../services/audio_cache_store.dart';
 import '../services/cache_service.dart';
 import '../sources/source_track.dart';
 import 'audio_cache_source.dart';
+import 'audio_focus_guard.dart';
 import 'next_track_preloader.dart';
 import 'playback_order.dart';
 import 'playing_track_cache_writer.dart';
@@ -53,6 +54,16 @@ class LocalPlaybackService extends ChangeNotifier {
   /// 本会话内不再尝试边播边缓存，直接流播。
   bool _audioCacheUnsupported = false;
 
+  /// 音频中断事件流（audio_session 的 `interruptionEventStream`）。
+  ///
+  /// 生产路径为 null：服务在 [_configureAudioSession] 里从 `AudioSession.instance`
+  /// 取（桌面 / Web 无插件实现时跳过，保持桌面端现状）；测试注入假流，
+  /// 不触碰插件通道即可验证「焦点丢失 → 暂停」接线。
+  final Stream<AudioInterruptionEvent>? _interruptionsOverride;
+
+  /// 音频焦点守卫（其他应用出声 → [pause]），[_configureAudioSession] 内装配。
+  AudioFocusGuard? _focusGuard;
+
   final List<SourceTrack> _queue = [];
   int _currentIndex = -1;
   SourceTrack? _currentTrack;
@@ -85,27 +96,46 @@ class LocalPlaybackService extends ChangeNotifier {
     math.Random? random,
     NextTrackPreloader? nextTrackPreloader,
     PlayingTrackCacheWriter? audioCacheWriter,
+    Stream<AudioInterruptionEvent>? audioInterruptions,
   })  : _resolver = resolver,
         _cacheService = cacheService ?? CacheService.instance,
         _preferredQuality = preferredQuality,
         _nextTrackPreloader = nextTrackPreloader,
         _cacheWriter = audioCacheWriter,
+        _interruptionsOverride = audioInterruptions,
         _shuffleOrder = PlaybackShuffleOrder(random: random) {
     _playerStateSubscription = _player.playerStateStream.listen(_onPlayerState);
     _positionSubscription = _player.positionStream.listen((position) {
       _position = position;
       _scheduleNotify();
     });
-    // 配置系统音频会话（音乐类型）：iOS 后台播放、Android 音频焦点/duck。
-    // 不阻塞构造；不支持的平台内部直接跳过。
+    // 配置系统音频会话（音乐类型）：iOS 后台播放、Android 音频焦点/duck，
+    // 并接入中断事件（其他应用出声 → 暂停）。不阻塞构造；不支持的平台内部跳过。
     unawaited(_configureAudioSession());
   }
 
-  /// 配置 audio_session（仅移动端/桌面原生支持平台）。
+  /// 音乐会话配置：在 [AudioSessionConfiguration.music] 上声明
+  /// 「被 duck 请求打断时按暂停处理」。
+  ///
+  /// 为什么不用默认的 `music()`（`androidWillPauseWhenDucked` 缺省 false）：
+  /// just_audio 对 `usage=media` 的 duck 事件没有任何处理（只有 `usage=game`
+  /// 压半音量），保持缺省会让导航提示 / 语音消息与音乐「叠着播」；声明后系统
+  /// 把其他应用的 may-duck 请求升级为 transient 满音量，本应用收到
+  /// LOSS_TRANSIENT → 暂停，焦点归还时由 just_audio 的中断续播记账接上。
+  static final AudioSessionConfiguration _sessionConfiguration =
+      const AudioSessionConfiguration.music()
+          .copyWith(androidWillPauseWhenDucked: true);
+
+  /// 配置 audio_session（仅移动端/桌面原生支持平台）+ 装配音频焦点守卫。
   ///
   /// Linux/Windows 没有 audio_session 插件实现，调用会抛 MissingPluginException，
-  /// 因此按平台跳过，保持桌面端现有行为。
+  /// 因此按平台跳过，保持桌面端现有行为（没有焦点事件，不因其他应用出声暂停）。
   Future<void> _configureAudioSession() async {
+    final injected = _interruptionsOverride;
+    if (injected != null) {
+      _attachFocusGuard(injected);
+      return;
+    }
     if (kIsWeb) return;
     if (defaultTargetPlatform != TargetPlatform.android &&
         defaultTargetPlatform != TargetPlatform.iOS &&
@@ -114,10 +144,16 @@ class LocalPlaybackService extends ChangeNotifier {
     }
     try {
       final session = await AudioSession.instance;
-      await session.configure(const AudioSessionConfiguration.music());
+      await session.configure(_sessionConfiguration);
+      _attachFocusGuard(session.interruptionEventStream);
     } catch (e) {
       debugPrint('[LocalPlayback] 音频会话配置失败: $e');
     }
+  }
+
+  /// 装配音频焦点守卫：其他应用夺走焦点时暂停（语义见 [AudioFocusGuard]）。
+  void _attachFocusGuard(Stream<AudioInterruptionEvent> interruptions) {
+    (_focusGuard ??= AudioFocusGuard(onFocusLoss: pause)).attach(interruptions);
   }
 
   bool get hasTrack => _currentTrack != null;
@@ -379,10 +415,21 @@ class LocalPlaybackService extends ChangeNotifier {
   /// 是否尝试边播边缓存：仅 Android / iOS / macOS（见 [platformSupportsAudioCaching]）。
   bool get _platformSupportsAudioCaching => platformSupportsAudioCaching();
 
-  Future<void> toggle() async {
+  /// 暂停播放（音频焦点被其他应用夺走等外部触发）。
+  ///
+  /// 与 [toggle] 的暂停分支同语义：无曲目 / 已暂停时无操作（幂等——中断事件
+  /// 可能连续到达，重复调用不叠加副作用）。
+  Future<void> pause() async {
     if (_currentTrack == null) return;
     if (_player.playing) {
       await _player.pause();
+    }
+  }
+
+  Future<void> toggle() async {
+    if (_currentTrack == null) return;
+    if (_player.playing) {
+      await pause();
     } else {
       if (_player.processingState == ProcessingState.completed) {
         await _player.seek(Duration.zero);
@@ -563,6 +610,8 @@ class LocalPlaybackService extends ChangeNotifier {
     _playerStateSubscription?.cancel();
     _positionSubscription?.cancel();
     _cacheWriter?.cancel();
+    final guard = _focusGuard;
+    if (guard != null) unawaited(guard.detach());
     _player.dispose();
     super.dispose();
   }

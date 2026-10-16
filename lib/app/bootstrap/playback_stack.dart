@@ -18,6 +18,7 @@ import '../../data/playback/default_playback_facade.dart';
 import '../../playback/local_audio_handler.dart';
 import '../../playback/local_playback_service.dart';
 import '../../providers/playback_provider.dart';
+import '../../providers/sleep_timer.dart';
 import '../../services/playback_observer.dart';
 import '../../services/playback_session_store.dart';
 import '../app_shell.dart';
@@ -113,6 +114,11 @@ Future<PlaybackStack> buildPlaybackStack({
     ),
   );
   playbackObserver.attach();
+
+  // 定时关闭补检：熄屏 / 后台时 Dart 定时器可能被节流或整段冻结，
+  // 回到前台时按绝对 deadline 补触发（语义见 `providers/sleep_timer.dart`）。
+  // 与 App 同生命周期，不单独释放。
+  SleepTimerLifecycleRecheck(playbackProvider.sleepTimer).attach();
 
   // 系统媒体会话（audio_service）必须在 runApp 之前初始化，并复用同一个
   // 本地播放服务实例；不支持 audio_service 的平台（Linux/Windows/Web）

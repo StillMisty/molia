@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/foundation.dart';
+import 'package:flutter/widgets.dart';
 import 'package:logging/logging.dart';
 
 import '../domain/models/playback.dart';
@@ -63,7 +64,7 @@ class SleepTimerState {
 ///
 /// 语义：
 /// - **倒计时**：仅播放时计时（暂停冻结、恢复继续）；剩余时间按 `now()`
-///   差值累计（进程被系统冻结/doze 不丢时间），每秒变化走 [state] 值通道；
+///   绝对时刻累计（进程被系统冻结/doze 不丢时间），每秒变化走 [state] 值通道；
 /// - **播完当前歌曲**：纯事件驱动、无定时器——曲目自然播完（切歌前位置已
 ///   到曲末）到点；手动切歌 / 自动换源替换跟随新曲目重新武装；单曲循环
 ///   没有曲目切换，用「位置从曲末回跳」兜底。
@@ -93,7 +94,7 @@ class SleepTimerController implements ValueListenable<SleepTimerState> {
   /// 单曲循环判定：位置从曲末回跳到小于该间隔视为重播。
   static const Duration _restartGap = Duration(seconds: 5);
 
-  /// 倒计时 tick 周期（剩余时间按 `now()` 差值累计，不依赖 tick 精度）。
+  /// 倒计时 tick 周期（tick 只负责刷新剩余时间，到点判定看绝对 deadline）。
   static const Duration _tickInterval = Duration(seconds: 1);
 
   final StateListenable<PlaybackSnapshot> _snapshot;
@@ -109,8 +110,16 @@ class SleepTimerController implements ValueListenable<SleepTimerState> {
 
   /// 武装时的启动时长（仅倒计时非空）；chip 选中态用。
   Duration? _duration;
+
+  /// 到点时刻（绝对时间；仅「倒计时 + 播放中」非空，暂停时折算回 [_remaining]）。
+  ///
+  /// 为什么是绝对时刻而不是「每次 tick 减一个周期」：熄屏 / 后台时系统会给
+  /// Dart 定时器合帧、节流，甚至整段冻结进程（Doze），tick 的**次数**不可信；
+  /// 只有「到点时刻 + 每个 tick 先比较」才保证任何一次获得调度的机会
+  /// （tick、快照事件、回到前台）都能立即补触发，最多晚到「下一次被调度」。
+  DateTime? _deadlineAt;
+
   Timer? _ticker;
-  DateTime? _lastTickAt;
 
   /// 武装的曲目 uri（播完当前歌曲模式）。
   String? _armedTrackUri;
@@ -142,6 +151,8 @@ class SleepTimerController implements ValueListenable<SleepTimerState> {
     _armedTrackUri = null;
     _duration = duration;
     _remaining = duration;
+    // 覆盖旧定时：旧 deadline 必须先失效，否则 _syncTicker 会按它立刻到点。
+    _deadlineAt = null;
     _cancelTicker();
     _syncTicker();
     _publish();
@@ -155,6 +166,7 @@ class SleepTimerController implements ValueListenable<SleepTimerState> {
     _armedTrackUri = uri;
     _duration = null;
     _remaining = null;
+    _deadlineAt = null;
     _cancelTicker();
     _maxPosition = _position.value;
     _publish();
@@ -230,39 +242,90 @@ class SleepTimerController implements ValueListenable<SleepTimerState> {
     return _maxPosition >= duration - _completionTolerance;
   }
 
-  /// 倒计时 ticker：只在播放中运行（暂停冻结，也不空转唤醒）。
+  /// 应用回到前台（生命周期 resumed）时的补检，由 [SleepTimerLifecycleRecheck]
+  /// 在组合根挂接。
+  ///
+  /// 熄屏 / 后台时 tick 可能被系统节流甚至整段冻结（Doze），回前台的第一件事
+  /// 就是按绝对 deadline 补触发，避免「亮屏才发现还在播」。
+  void recheckDeadline() {
+    if (_mode != SleepTimerMode.countdown) return;
+    _syncTicker();
+  }
+
+  /// 倒计时 ticker 同步：播放中（重新）武装绝对 deadline，非播放时冻结剩余。
+  ///
+  /// 每个触发源（tick、快照变化、[recheckDeadline]）都先做一次 deadline 判定，
+  /// tick 迟到 / 整段丢失因此都不影响到点时机。
   void _syncTicker() {
-    if (_mode != SleepTimerMode.countdown || !_snapshot.value.isPlaying) {
+    if (_mode != SleepTimerMode.countdown) {
       _cancelTicker();
       return;
     }
+    if (!_snapshot.value.isPlaying) {
+      // 暂停 / 停止：冻结剩余播放时长（暂停期间不计时）。
+      final expired = _freeze();
+      _cancelTicker();
+      if (expired) _fire();
+      return;
+    }
+    if (_deadlinePassed) {
+      // 已经越过 deadline（冻结期间到点后重新获得调度）：立即补触发。
+      _fire();
+      return;
+    }
     if (_ticker != null) return;
-    _lastTickAt = _now();
+    final remaining = _remaining;
+    if (remaining == null) return;
+    _deadlineAt = _now().add(remaining);
     _ticker = Timer.periodic(_tickInterval, (_) => _onTick());
+  }
+
+  /// 把绝对 deadline 折算成剩余播放时长（暂停冻结），并清除 deadline。
+  ///
+  /// 返回 true 表示播放期间 deadline 已经越过（冻结时才发现）——剩余时长已
+  /// 耗尽，调用方立即到点。
+  bool _freeze() {
+    final deadline = _deadlineAt;
+    if (deadline == null) return false;
+    _deadlineAt = null;
+    final left = deadline.difference(_now());
+    if (left <= Duration.zero) {
+      _remaining = Duration.zero;
+      return true;
+    }
+    _remaining = left;
+    // 冻结值精确到 now：暂停时刻落在两次 tick 之间时，剩余时间按真实差值走
+    // （旧值最多偏一个 tick）。
+    _publish();
+    return false;
+  }
+
+  /// deadline 是否已越过（未武装时为 false）。
+  bool get _deadlinePassed {
+    final deadline = _deadlineAt;
+    return deadline != null && !_now().isBefore(deadline);
   }
 
   void _cancelTicker() {
     _ticker?.cancel();
     _ticker = null;
-    _lastTickAt = null;
   }
 
   void _onTick() {
+    if (_mode != SleepTimerMode.countdown) return;
     if (!_snapshot.value.isPlaying) {
       _syncTicker();
       return;
     }
+    final deadline = _deadlineAt;
+    if (deadline == null) return;
     final now = _now();
-    final last = _lastTickAt;
-    _lastTickAt = now;
-    final remaining = _remaining;
-    if (last == null || remaining == null) return;
-    final next = remaining - now.difference(last);
-    if (next <= Duration.zero) {
+    if (!now.isBefore(deadline)) {
+      // tick 迟到（合帧 / 冻结后的首个回调）同样算到点：不等下一次 tick。
       _fire();
       return;
     }
-    _remaining = next;
+    _remaining = deadline.difference(now);
     _publish();
   }
 
@@ -279,6 +342,7 @@ class SleepTimerController implements ValueListenable<SleepTimerState> {
     _remaining = null;
     _duration = null;
     _armedTrackUri = null;
+    _deadlineAt = null;
     _cancelTicker();
     if (notify) _publish();
   }
@@ -288,4 +352,28 @@ class SleepTimerController implements ValueListenable<SleepTimerState> {
         remaining: _remaining,
         duration: _duration,
       );
+}
+
+/// 定时关闭 × 应用生命周期：回到前台时按绝对 deadline 补检定时关闭。
+///
+/// 为什么需要：熄屏 / 后台时系统可能把 Dart `Timer.periodic` 节流（定时器
+/// 合帧）甚至整段冻结进程（Doze），1Hz tick 不保证准时；只靠 tick 会出现
+/// 「到点没暂停」。回到前台补检一次，把「到点暂停」的迟到上限压到
+/// 「下一次获得调度」。
+class SleepTimerLifecycleRecheck {
+  SleepTimerLifecycleRecheck(this._timer);
+
+  final SleepTimerController _timer;
+  AppLifecycleListener? _listener;
+
+  /// 挂接（幂等；组合根在 provider 建好后调用一次，App 生命周期内有效）。
+  void attach() {
+    _listener ??= AppLifecycleListener(onResume: _timer.recheckDeadline);
+  }
+
+  /// 解挂（测试 / 非常规宿主用）。
+  void detach() {
+    _listener?.dispose();
+    _listener = null;
+  }
 }
