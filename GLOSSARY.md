@@ -358,9 +358,26 @@
 
 - **Sync envelope（同步快照）** — `lib/domain/models/device_sync.dart`：
   一次交换的完整视图（设备身份 + 各类别记录）；全量合并模型，设备间互换快照后
-  逐键取新，无增量/版本向量（见 ADR-0003）。
-- **Sync record（同步记录）** — 快照最小单元：`key + updatedAt + updatedBy +
-  data`；删除表示为 `deleted` 墓碑记录，墓碑参与 LWW 并保留 90 天后裁剪。
+  逐键取新，无增量/版本向量（见 ADR-0003）。协议版本 v2（v1 对端与 v1 备份
+  都被拒绝，见 [Protocol v2]）。
+- **Sync record（同步记录）** — 快照最小单元：`key + version + data`；`version`
+  是三元组 [SyncVersion]，删除表示为 `deleted` 墓碑记录（墓碑另带真实删除时间
+  `deletedAt`），墓碑参与 LWW 并保留 90 天后裁剪（按 `deletedAt` 计时）。
+- **SyncVersion（记录版本戳）** — `(versionPhysical, versionCounter, deviceId)`：
+  物理分量 = `max(本地物理时间, 已观测最大值)`，同物理值内 `counter` 递增，
+  相等按 `deviceId` 字典序；胜负判定的唯一依据（[Content time separation]）。
+- **SyncStampIssuer（版本戳发号器）** — `lib/data/sync/sync_stamp.dart`：
+  本机所有同步戳的唯一来源，`next()` 严格单调、`observe()` 吸收远端超前戳
+  （记 warning）、`seed()` 接受初始化基线；基线持久化在 `sync_state_v1` 的
+  `stampSeq`，初始化 = `max(持久化基线, 当前时钟, 全库最大戳)`，重启不倒退。
+- **Content time separation（内容时间分离）** — `playedAt` / `endedAt` /
+  `savedAt` / `importedAt` 与墓碑的真实删除时间是内容语义，进记录 `data`、
+  **永不参与胜负判定**；历史「删除 vs 播放」由库内按真实时间比较
+  （`playedAt <= deletedAt` → 删除生效，否则复活并撤墓碑，见 ADR-0003 v2 §2）。
+- **Protocol v2（协议版本闸门）** — `SyncEnvelope.protocolVersion = 2`：解析到
+  v1 / 未知版本的快照**不合并**，本轮计为失败并在传输明细（`rejectedPeers`）、
+  报告错误行与名册（`SyncPeerIssue.protocolTooOld` → UI「对方版本过旧，请升级」）
+  里显式可见；`importBackupJson` 对旧协议备份抛 `FormatException`。
 - **Sync category（同步类别）** — 可开关的数据类别：`playlists` /
   `playlistTracks` / `sources` / `settings` / `credentials` / `statistics` /
   `history` / `session`；关闭的类别既不推送也不应用（本机仍持续登记本地变化）。
@@ -372,8 +389,9 @@
 - **Backup（完整备份）** — `SyncEngine.exportBackupJson` / `importBackupJson`：
   与同步共用 envelope 与适配器的本地文件备份/合并恢复；不需要启用同步；
   凭证类默认排除。
-- **LWW stamp（逐键时间戳）** — `(updatedAt, updatedBy)`：时间大者胜，
-  相同时按设备 id 字典序决平局（确定性收敛）；时间戳是设备墙上时钟。
+- **LWW stamp（逐键版本戳）** — [SyncVersion] 三元组：物理分量大者胜，相同时
+  `counter` 大者胜，再同按设备 id 字典序决平局（确定性收敛）；物理分量是
+  HLC-lite 的 `max(本地墙上时钟, 已观测最大值)`，不再是「最后的墙上时间」。
 - **Sync passphrase（同步口令）** — 信任根：PBKDF2 派生 AES-256-GCM 密钥，
   能解密快照的设备即已授权；生成/归一化在 `sync_passphrase.dart`，加密帧在
   `sync_crypto.dart`；重置口令 = 撤销全部设备。
@@ -384,11 +402,13 @@
 - **Sync adapter（同步适配器）** — 类别到本地存储的读写桥
   （`lib/data/sync/adapters/**`）：收集本地记录 / 应用合并结果，写入必须幂等；
   设置类用「登记哈希」（`SyncStamp`）做变化检测，不改造散落的写入方。
-- **Sync tombstone（删除墓碑）** — 列表 / 曲目 / 脚本的删除不保留原行，
-  由 `sync_tombstones` 表或同步状态中的登记项承担「删除也取新」的合并语义。
+- **Sync tombstone（删除墓碑）** — 列表 / 曲目 / 脚本 / 历史的删除不保留原行，
+  由 `sync_tombstones` 表或同步状态中的登记项承担「删除也取新」的合并语义；
+  表内版本三列 + 真实删除时间 `deletedAt`（历史删除 vs 播放的判据）。
 - **Setting stamps（设置登记哈希）** — `SyncStateStore.settingStamps` 维护的
-  `key → (值哈希, 时间戳, 设备)`：本地值 vs 登记哈希判定本地修改，
-  应用远端后同步更新，保证重复应用幂等（见 `docs/adr/0003` §6 修订）。
+  `key → (值哈希, SyncVersion)`：本地值 vs 登记哈希判定本地修改，变化时向
+  [SyncStampIssuer] 取号，应用远端后同步更新，保证重复应用幂等
+  （见 `docs/adr/0003` §6 修订）。
 - **Settings key（登记键）** — `lib/data/settings/settings_key.dart`：一个设置键的
   全部事实（名字 / 默认值 / 同步类别 / 存放盒）；只有有「第二消费者」的键才登记
   （同步、备份、应用远端后的重载、整表驱动的测试），设备本地键留在各自模块。
@@ -402,8 +422,9 @@
   （拉取 / 推送 / 失败数 / 字节 / 耗时 / 不可用原因）+ 每对端名册 + 本轮落地
   变更量（不是全库规模）。
 - **Sync peer roster（同步名册）** — `SyncPeerState`：每台对端的最近接触观测
-  （名称 / 传输 / 最后拉取·推送 / 时钟偏移 / 落后条数），持久化在 `sync_state_v1`，
-  UI 在「已配对设备」子页呈现；「落后条数」由增量协议填充。
+  （名称 / 传输 / 最后拉取·推送 / 时钟偏移 / 落后条数 / 最近失败），持久化在
+  `sync_state_v1`，UI 在「已配对设备」子页呈现；「落后条数」由增量协议填充，
+  失败原因码（如 `protocol_too_old`）由 UI 映射文案。
 - **Sync transport status（传输状态）** — `SyncTransport.unavailableReason`
   （`not_configured` / `start_failed` / `permission_denied`）：传输启动失败、
   未配置或缺权限时必须显式可见，不能只留在日志里（开关显示「已打开」而实际

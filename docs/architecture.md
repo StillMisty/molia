@@ -205,30 +205,39 @@
   **同步口令即信任根**（加入即完全互信，无逐项审批），快照以 PBKDF2 +
   AES-256-GCM 整体加密（帧与信任边界见 ADR-0003）。引擎
   （`lib/data/sync/sync_engine.dart`）一轮 = 各 `SyncAdapter` 收集本地视图 →
-  `SyncTransport` 拉取远端快照 → 逐键 LWW 合并（`(updatedAt, updatedBy)`，
-  删除为墓碑）→ 适配器写回 → 推送合并视图；全量合并模型天然幂等，推送裁剪
-  90 天前墓碑；入站推送触发的轮次不再推送（防两端乒乓）。一轮的产物是可观察的
-  `SyncRoundReport`：五态结论（`ok / noChanges / noPeers / partial / failed`）+
-  每传输明细 + 每对端名册 + 本轮变更量；设置页据此呈现结论行、已配对设备子页与
-  变更语义日志（不再有会随数据量增长的「跳过 N 项」），失败行给重试入口，
-  「复制诊断信息」导出运行状态。传输有两个实现、
-  可分别开关：局域网直连（UDP 探测 + 内置 HTTP 快照端点）与用户自备 WebDAV
-  （`<remoteDir>/<deviceId>.msync` 密文文件，PROPFIND/GET/PUT/MKCOL）。
+  `SyncTransport` 拉取远端快照 → 逐键 LWW 合并（版本三元组
+  `(versionPhysical, versionCounter, deviceId)`，删除为墓碑）→ 适配器写回 →
+  推送合并视图；版本戳由唯一发号器 `SyncStampIssuer`（`sync_stamp.dart`，
+  HLC-lite：吸收远端超前戳、同毫秒 counter 递增、基线持久化 + 重启不倒退）
+  发放，内容时间（playedAt / endedAt / savedAt / importedAt / 墓碑删除时间）
+  **不参与胜负判定**（见 ADR-0003 v2 §2）。协议版本 v2：v1 / 未知版本的对端
+  与备份**拒绝合并**并在报告、传输明细（`rejectedPeers`）与名册
+  （「对方版本过旧，请升级」）里显式可见，不静默合并。全量合并模型天然幂等，
+  推送裁剪 90 天前墓碑（按真实删除时间）；入站推送触发的轮次不再推送（防两端
+  乒乓）。一轮的产物是可观察的 `SyncRoundReport`：五态结论（`ok / noChanges /
+  noPeers / partial / failed`）+ 每传输明细 + 每对端名册 + 本轮变更量；设置页
+  据此呈现结论行、已配对设备子页与变更语义日志（不再有会随数据量增长的
+  「跳过 N 项」），失败行给重试入口，「复制诊断信息」导出运行状态。传输有两个
+  实现、可分别开关：局域网直连（UDP 探测 + 内置 HTTP 快照端点）与用户自备
+  WebDAV（`<remoteDir>/<deviceId>.msync` 密文文件，PROPFIND/GET/PUT/MKCOL）。
   局域网在移动端有平台准入：Android 17 / API 37 起必须声明并运行时申请
   `ACCESS_LOCAL_NETWORK`（未授予时状态 `permission_denied`，UI 给授权入口），
   iOS 广播发现需向 Apple 申请 multicast entitlement（未获批时降级手动地址 /
   WebDAV）；发现失败可用手动对端地址簿兜底（单播探测后认领 deviceId 与端点
   端口），本机端点端口持久化避免对端记不住本机。
-  资料库 schema（drift，fresh 基线）含 `playlists.syncId` / 行级
-  `updatedAt+updatedBy` / `sync_tombstones` / `play_events.syncKey`；
+  资料库 schema（drift，fresh 基线，v6）含 `playlists.syncId` / 行级
+  `versionPhysical + versionCounter + deviceId` / `sync_tombstones`（版本三列 +
+  真实删除时间）/ `play_events`（syncKey + 版本列，`originDeviceId` 兼作设备列）；
   设置同步用「登记哈希」做变化检测，
-  不改造散落的 SharedPreferences 写入方。播放历史删除（含清空）传播墓碑；
-  上次播放会话按 `savedAt` 时间戳单向推进（本地停止不回传删除），应用后经
+  不改造散落的 SharedPreferences 写入方。播放历史删除（含清空）传播墓碑，
+  「删除 vs 播放」按真实时间判定；上次播放会话按 `savedAt` 内容时间变化取新戳
+  （本地停止不回传删除），应用后经
   `PlaybackProvider.reloadRestoredSessionFromStore` 重载恢复态。**完整备份**
   （数据与存储页导出/导入）复用同一 envelope（`exportBackupJson` /
-  `importBackupJson`），凭证类默认排除。组合根在启动 / 数据变更去抖 /
-  每 10 分钟 / 回前台触发；同步后的定向重载经 `PrefsSyncAdapter.onApplied`
-  接线。设置入口 `settings_page.dart` → `sync_settings_page.dart`，Web 隐藏。
+  `importBackupJson`；协议旧版备份拒绝导入），凭证类默认排除。组合根在启动 /
+  数据变更去抖 / 每 10 分钟 / 回前台触发；同步后的定向重载经
+  `PrefsSyncAdapter.onApplied` 接线。设置入口 `settings_page.dart` →
+  `sync_settings_page.dart`，Web 隐藏。
 - **渠道选择**：`DiscoverProvider.channelKey` 是渠道状态的唯一持有者；渠道变化经
   注入的 `onChannelChanged`（组合根）同步搜索源（可搜索渠道才跟随），资料页只
   处理「渠道被停用」的 UI 回退，不再在两个 provider 之间仲裁同步。
