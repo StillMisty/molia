@@ -259,3 +259,12 @@
     外推会把暂停样本凭空推后一个传输延迟，实测 188ms）。诊断：
     `adb shell setprop log.tag.MoliaLyrics DEBUG`（默认级别静默）后看
     `err=/transit=/snap=/frames=` 打点（`frames=0` 说明帧循环没跑）。
+40. **VS 18 的 MSVC 14.51 把 `<experimental/coroutine>` 的弃用断言升级为硬错误**：
+    `permission_handler` 的 Windows 实现（`permission_handler_windows`，基于
+    C++/WinRT 的 `/await` 旧头）在 VS 18 上直接编译失败（`error C2338 ...
+    STL1011`），本地 Linux 的 analyze/test 全绿也照样漏过——只有 release 流水线
+    的 Windows job 会暴露。修复：`windows/CMakeLists.txt` 在
+    `include(flutter/generated_plugins.cmake)` **之前**注入
+    `add_compile_definitions(_SILENCE_EXPERIMENTAL_COROUTINE_DEPRECATION_WARNINGS)`
+    （STL 官方消音宏；`add_compile_definitions` 只作用于其后 add_subdirectory 的
+    插件目标，对老工具链与 runner 无副作用）。
