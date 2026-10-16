@@ -1,9 +1,10 @@
 /// 本地数据库（drift）：最近播放上下文（play_contexts）+ 资料库
-/// （播放历史 / 用户列表 / 删除墓碑 / 同步已知版本）+ 听歌统计（play_events）
-/// + 本地下载。
+/// （播放历史 / 用户列表 / 删除墓碑 / 同步已知版本）+ 跨设备增量日志
+/// （sync_journal / sync_journal_state）+ 听歌统计（play_events）+ 本地下载。
 ///
-/// `schemaVersion = 2`（v1 → v2 增量迁移新增 `sync_known`，保留既有数据）；
-/// 后续结构变更同样必须写增量迁移、保留数据（见 docs/adr/0005-drift-migration.md）。
+/// `schemaVersion = 3`（v1 → v2 新增 `sync_known`，v2 → v3 新增增量日志，
+/// 均保留既有数据）；后续结构变更同样必须写增量迁移、保留数据
+/// （见 docs/adr/0005-drift-migration.md）。
 ///
 /// 只 import drift / drift_flutter / path_provider：Web 编译安全
 /// （`NativeDatabase` 仅测试内存库使用，见 test/support/memory_database.dart）。
@@ -155,6 +156,52 @@ class SyncKnown extends Table {
   Set<Column> get primaryKey => {category, key};
 }
 
+/// 增量日志：本机变更按 `seq` 单调追加（与数据写入同事务）。
+///
+/// 传输单元 = 变更：对端按自己的游标只拉 `seq > 游标` 的条目，日志按
+/// `min(对端 ack)` 与硬上限（时间 / 体积）裁剪；裁剪位置记在
+/// [SyncJournalStates]，落后超出窗口的对端改走 bootstrap 全量快照。
+/// `data` 是同步记录的 JSON 载荷（墓碑为 null 或 `{'deletedAt': ...}`）；
+/// 列名与 [SyncRecord] 字段一一对应。
+@TableIndex(name: 'idx_sync_journal_at', columns: {#at})
+class SyncJournal extends Table {
+  @override
+  String get tableName => 'sync_journal';
+
+  IntColumn get seq => integer()();
+  TextColumn get category => text()();
+  TextColumn get key => text()();
+  IntColumn get versionPhysical => integer()();
+  IntColumn get versionCounter => integer().withDefault(const Constant(0))();
+  TextColumn get deviceId => text().withDefault(const Constant(''))();
+  BoolColumn get deleted => boolean().withDefault(const Constant(false))();
+  TextColumn get data => text().nullable()();
+
+  /// 追加时间（时间硬上限的判据；与 seq 同序推进）。
+  IntColumn get at => integer()();
+
+  @override
+  Set<Column> get primaryKey => {seq};
+}
+
+/// 增量日志的窗口状态（单行，`id = 0`）。
+///
+/// - [baseSeq]：已裁剪到的位置（窗口起点 = baseSeq + 1）；与日志裁剪同事务
+///   更新，保证「窗口边界」不会与条目集合漂移（跨重启也一致）；
+/// - [snapshotSeq]：最近构建的全量快照覆盖到的 journal 位置（-1 = 尚未构建）；
+///   裁剪永远不超过它，保证落后 / 新加入的对端总能从全量快照 bootstrap。
+class SyncJournalStates extends Table {
+  @override
+  String get tableName => 'sync_journal_state';
+
+  IntColumn get id => integer()();
+  IntColumn get baseSeq => integer().withDefault(const Constant(0))();
+  IntColumn get snapshotSeq => integer().withDefault(const Constant(-1))();
+
+  @override
+  Set<Column> get primaryKey => {id};
+}
+
 /// 本地下载（持久副本，不参与缓存 LRU 淘汰）。
 ///
 /// 行内保存曲目自包含快照（元数据 + 原音源 raw 取链参数），供「本地歌曲」
@@ -254,6 +301,8 @@ const String moliaDatabaseFileName = 'molia_database';
   PlaylistTracks,
   SyncTombstones,
   SyncKnown,
+  SyncJournal,
+  SyncJournalStates,
   PlayEvents,
   Downloads,
 ])
@@ -282,12 +331,13 @@ class MoliaDatabase extends _$MoliaDatabase {
     }
   }
 
-  /// 当前 schema 版本：`1` 建出基线全部表，`2` 新增 `sync_known`。
+  /// 当前 schema 版本：`1` 建出基线全部表，`2` 新增 `sync_known`，
+  /// `3` 新增增量日志（`sync_journal` + `sync_journal_state`）。
   ///
   /// 结构变更必须写增量迁移：提版本号 → `dart run drift_dev make-migrations`
   /// 生成 schema 快照 → 用 `stepByStep` 写迁移并保留数据（见 ADR-0005）。
   @override
-  int get schemaVersion => 2;
+  int get schemaVersion => 3;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -296,6 +346,12 @@ class MoliaDatabase extends _$MoliaDatabase {
           from1To2: (m, schema) async {
             // v1 → v2：新增同步已知版本登记表；既有表与数据原样保留。
             await m.createTable(schema.syncKnown);
+          },
+          from2To3: (m, schema) async {
+            // v2 → v3：新增增量日志与窗口状态表；既有表与数据原样保留。
+            await m.createTable(schema.syncJournal);
+            await m.createTable(schema.syncJournalState);
+            await m.createIndex(schema.idxSyncJournalAt);
           },
         ),
         beforeOpen: (details) async {

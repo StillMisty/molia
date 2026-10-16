@@ -7,10 +7,12 @@ import 'package:molia/data/molia_database.dart';
 import 'generated/schema.dart';
 import 'generated/schema_v1.dart' as v1;
 import 'generated/schema_v2.dart' as v2;
+import 'generated/schema_v3.dart' as v3;
 
-/// v1 → v2 增量迁移：新增 `sync_known`（同步已知版本登记），既有数据原样保留。
+/// 增量迁移链：v1 → v2 新增 `sync_known`，v2 → v3 新增增量日志
+/// （`sync_journal` + `sync_journal_state`），每一步都保留既有数据。
 ///
-/// 简单用例验证「空库迁移后的 schema 与声明一致」；数据用例验证「v1 库带
+/// 简单用例验证「空库迁移后的 schema 与声明一致」；数据用例验证「旧库带
 /// 数据升级后数据仍在、新表可用」（ADR-0005：增量迁移必须保留数据）。
 void main() {
   driftRuntimeOptions.dontWarnAboutMultipleDatabases = true;
@@ -278,6 +280,127 @@ void main() {
         expect(known.versionPhysical, 900);
         expect(known.versionCounter, 0);
         expect(known.deviceId, 'devA');
+      },
+    );
+  });
+
+  test('migration from v2 to v3 does not corrupt data', () async {
+    final oldPlayHistoryData = [
+      const v2.PlayHistoryData(
+        sourceKey: 'kuwo',
+        songId: 'song-1',
+        title: '测试歌曲',
+        artist: '测试歌手',
+        album: '测试专辑',
+        raw: '{}',
+        playedAt: 900,
+        versionPhysical: 900,
+        versionCounter: 0,
+        deviceId: 'devA',
+      ),
+    ];
+    final expectedNewPlayHistoryData = [
+      const v3.PlayHistoryData(
+        sourceKey: 'kuwo',
+        songId: 'song-1',
+        title: '测试歌曲',
+        artist: '测试歌手',
+        album: '测试专辑',
+        raw: '{}',
+        playedAt: 900,
+        versionPhysical: 900,
+        versionCounter: 0,
+        deviceId: 'devA',
+      ),
+    ];
+
+    final oldSyncKnownData = [
+      const v2.SyncKnownData(
+        category: 'history',
+        key: 'kuwo\u0001song-1',
+        versionPhysical: 900,
+        versionCounter: 0,
+        deviceId: 'devA',
+      ),
+    ];
+    final expectedNewSyncKnownData = [
+      const v3.SyncKnownData(
+        category: 'history',
+        key: 'kuwo\u0001song-1',
+        versionPhysical: 900,
+        versionCounter: 0,
+        deviceId: 'devA',
+      ),
+    ];
+
+    final oldPlaylistsData = [
+      const v2.PlaylistsData(
+        id: 1,
+        name: '我的收藏',
+        createdAt: 100,
+        syncId: '__favorites__',
+        versionPhysical: 200,
+        versionCounter: 0,
+        deviceId: 'devA',
+      ),
+    ];
+    final expectedNewPlaylistsData = [
+      const v3.PlaylistsData(
+        id: 1,
+        name: '我的收藏',
+        createdAt: 100,
+        syncId: '__favorites__',
+        versionPhysical: 200,
+        versionCounter: 0,
+        deviceId: 'devA',
+      ),
+    ];
+
+    await verifier.testWithDataIntegrity(
+      oldVersion: 2,
+      newVersion: 3,
+      createOld: v2.DatabaseAtV2.new,
+      createNew: v3.DatabaseAtV3.new,
+      openTestedDatabase: MoliaDatabase.new,
+      createItems: (batch, oldDb) {
+        batch.insertAll(oldDb.playHistory, oldPlayHistoryData);
+        batch.insertAll(oldDb.syncKnown, oldSyncKnownData);
+        batch.insertAll(oldDb.playlists, oldPlaylistsData);
+      },
+      validateItems: (newDb) async {
+        expect(expectedNewPlayHistoryData,
+            await newDb.select(newDb.playHistory).get());
+        expect(expectedNewSyncKnownData,
+            await newDb.select(newDb.syncKnown).get());
+        expect(expectedNewPlaylistsData,
+            await newDb.select(newDb.playlists).get());
+        // 新表升级后立即可用（读写走同一套列声明）。
+        await newDb.into(newDb.syncJournal).insert(
+              const v3.SyncJournalData(
+                seq: 1,
+                category: 'history',
+                key: 'kuwo\u0001song-1',
+                versionPhysical: 900,
+                versionCounter: 0,
+                deviceId: 'devA',
+                deleted: 0,
+                at: 901,
+              ),
+            );
+        final entry = await newDb.select(newDb.syncJournal).getSingle();
+        expect(entry.seq, 1);
+        expect(entry.category, 'history');
+        expect(entry.key, 'kuwo\u0001song-1');
+        expect(entry.deleted, 0);
+        expect(entry.data, null);
+
+        await newDb.into(newDb.syncJournalState).insert(
+              const v3.SyncJournalStateData(id: 0, baseSeq: 0, snapshotSeq: -1),
+            );
+        final journalState =
+            await newDb.select(newDb.syncJournalState).getSingle();
+        expect(journalState.baseSeq, 0);
+        expect(journalState.snapshotSeq, -1);
       },
     );
   });

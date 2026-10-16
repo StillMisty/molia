@@ -66,7 +66,8 @@
    `drift_schemas/molia/` 的 schema 快照与 `lib/data/molia_database.steps.dart`，
    用 `stepByStep` 写增量迁移并保留数据；迁移测试在
    `test/drift/molia/migration_test.dart`（空库 schema 校验 + 带数据升级）。
-   当前迁移链：`v1` 基线 → `v2` 新增 `sync_known`（同步已知版本登记）。
+   当前迁移链：`v1` 基线 → `v2` 新增 `sync_known`（同步已知版本登记）
+   → `v3` 新增增量日志（`sync_journal` + `sync_journal_state`）。
 
 ## 后果
 

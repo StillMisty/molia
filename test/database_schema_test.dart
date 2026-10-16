@@ -49,6 +49,8 @@ void main() {
         'playlist_tracks',
         'playlists',
         'sqlite_sequence',
+        'sync_journal',
+        'sync_journal_state',
         'sync_known',
         'sync_tombstones',
       ],
@@ -130,6 +132,22 @@ void main() {
         'versionCounter|INTEGER|1|0|0',
         "deviceId|TEXT|1|''|0",
       ],
+      'sync_journal': [
+        'seq|INTEGER|0|null|1',
+        'category|TEXT|1|null|0',
+        'key|TEXT|1|null|0',
+        'versionPhysical|INTEGER|1|null|0',
+        'versionCounter|INTEGER|1|0|0',
+        "deviceId|TEXT|1|''|0",
+        'deleted|INTEGER|1|0|0',
+        'data|TEXT|0|null|0',
+        'at|INTEGER|1|null|0',
+      ],
+      'sync_journal_state': [
+        'id|INTEGER|0|null|1',
+        'baseSeq|INTEGER|1|0|0',
+        'snapshotSeq|INTEGER|1|-1|0',
+      ],
       'sync_tombstones': [
         'category|TEXT|1|null|1',
         'key|TEXT|1|null|2',
@@ -195,6 +213,8 @@ void main() {
             'ON play_events (sourceKey, songId)',
         'idx_play_events_syncKey': 'CREATE UNIQUE INDEX idx_play_events_syncKey '
             'ON play_events (syncKey) WHERE syncKey IS NOT NULL',
+        'idx_sync_journal_at':
+            'CREATE INDEX idx_sync_journal_at ON sync_journal (at)',
       },
     );
   });
