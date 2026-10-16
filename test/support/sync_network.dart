@@ -186,8 +186,7 @@ class SyncDevice {
     final baseSeq = await journal.baseSeq();
     if (full || since < baseSeq) {
       network.bootstrapServed++;
-      return engine.lastEnvelope ??
-          SyncEnvelope(deviceId: id, producedAt: state.nowMs());
+      return engine.serveSnapshot();
     }
     network.deltaServed++;
     return engine.serveJournal(since: since);

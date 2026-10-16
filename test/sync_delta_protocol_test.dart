@@ -232,6 +232,30 @@ void main() {
     expect(network.bootstrapServed, 0);
   });
 
+  test('首次引导：对端还没跑过轮次也能拿到完整快照（不是空快照）', () async {
+    final a = await network.addDevice('devA');
+    final b = await network.addDevice('devB');
+    // A 有数据但还没跑过轮次（快照按需就地构建）。
+    await a.library.addHistoryEntry(const PlayHistoryEntry(
+      sourceKey: 'kuwo',
+      songId: 'song-1',
+      title: '存量歌曲',
+      playedAt: 10,
+    ));
+
+    await b.engine.syncNow();
+    expect(await b.library.listHistory(), hasLength(1));
+    // 游标推进到 A 的日志头部（快照覆盖位置），后续只拉增量。
+    expect(peerOf(b, 'devA').cursorSeq, await a.journal.headSeq());
+
+    // A 之后的新变更照常以增量送达，且不会覆盖掉首次拿到的存量数据。
+    await a.setSetting('theme_mode', 'dark');
+    await a.engine.syncNow();
+    await b.engine.syncNow();
+    expect(b.prefs.getString('theme_mode'), 'dark');
+    expect(await b.library.listHistory(), hasLength(1));
+  });
+
   test('失联设备不拖住日志裁剪：compact 的 minAck 跳过失联对端', () async {
     final a = await network.addDevice(
       'devA',

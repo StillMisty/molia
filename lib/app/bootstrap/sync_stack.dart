@@ -102,8 +102,10 @@ Future<SyncStack> buildSyncStack({
     deviceName: () => syncState.deviceName,
     codec: syncCodec,
     passphraseProvider: syncState.readPassphrase,
+    // 全量快照：最近一轮的快照；本轮还没跑过时就地收集一份（避免对端
+    // 拿到空快照后游标推进到 0）。
     snapshotProvider: () async =>
-        engineRef?.lastEnvelope ??
+        engineRef?.serveSnapshot() ??
         SyncEnvelope(
           deviceId: syncState.deviceId,
           deviceName: syncState.deviceName,

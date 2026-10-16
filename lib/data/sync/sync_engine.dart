@@ -118,17 +118,12 @@ class SyncEngine extends ChangeNotifier implements SyncSchedulerHost {
   /// 服务端语义（局域网增量端点 / WebDAV 日志文件）：按请求方游标返回
   /// 增量窗口；游标落后于窗口起点（条目已被裁剪）时返回全量快照（bootstrap）。
   Future<SyncEnvelope> serveJournal({required int since}) async {
-    final snapshot = _lastEnvelope ??
-        SyncEnvelope(
-          deviceId: _state.deviceId,
-          deviceName: _state.deviceName,
-          producedAt: _nowMs(),
-          categories: [for (final c in _state.enabledCategories) c.name],
-        );
     final journal = _journal;
-    if (journal == null) return snapshot;
+    if (journal == null) return serveSnapshot();
     final baseSeq = await journal.baseSeq();
-    if (since < baseSeq) return snapshot;
+    if (since < baseSeq) return serveSnapshot();
+    final snapshot = _lastEnvelope ??
+        await _buildLiveSnapshot(categories: _state.enabledCategories);
     final entries = await journal.window(since: since);
     return SyncEnvelope(
       deviceId: _state.deviceId,
@@ -143,6 +138,39 @@ class SyncEngine extends ChangeNotifier implements SyncSchedulerHost {
       acks: snapshot.acks,
       categories: snapshot.categories,
     );
+  }
+
+  /// 全量快照（局域网 `GET /snapshot` 与 bootstrap 兜底）。
+  ///
+  /// 最近一轮的快照；本轮还没跑过（进程刚起 / 尚未启用）时就地收集一份——
+  /// 否则对端会拿到空快照并把游标推进到 0，之后只能靠 anti-entropy 修复。
+  Future<SyncEnvelope> serveSnapshot() async =>
+      _lastEnvelope ??
+      await _buildLiveSnapshot(categories: _state.enabledCategories);
+
+  /// 就地构建一份全量快照（先读日志头部再收集：快照覆盖位置不会漏掉随后
+  /// 发生的写入）。
+  Future<SyncEnvelope> _buildLiveSnapshot({
+    required Set<SyncCategory> categories,
+  }) async {
+    final journal = _journal;
+    final head = journal == null ? 0 : await journal.headSeq();
+    final base = journal == null ? 0 : await journal.baseSeq();
+    final records = await _collect(categories);
+    final pruned = _envelopeFrom(records).pruneTombstones(
+      now: _nowMs(),
+      tombstoneRetentionMs: tombstoneRetentionMs,
+    );
+    return SyncEnvelope(
+      deviceId: pruned.deviceId,
+      deviceName: pruned.deviceName,
+      producedAt: pruned.producedAt,
+      records: pruned.records,
+      journalHead: head,
+      baseSeq: base,
+      acks: _acks(),
+      categories: [for (final category in categories) category.name],
+    ).withSnapshotId(_fingerprint(pruned.records));
   }
 
   /// 传输当前状态（UI 呈现「开关开着但没在工作」）；未知 kind 返回 null。
