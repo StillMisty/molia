@@ -945,7 +945,6 @@
   "syncPeerDeleteConfirm": "删除后本机不再主动连接该地址（不影响其它设备的同步）。",
   "syncPeerManual": "手动添加",
   "syncPeerNotContacted": "尚未接触，对端在线后点本行再同步一次",
-  "syncPeerDetailTitle": "设备详情",
   "syncPeerAddress": "地址 {host}",
   "syncPeerDeviceId": "设备 {id}",
   "syncDeviceNameDialogTitle": "设备名称",

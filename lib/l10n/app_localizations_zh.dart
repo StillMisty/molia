@@ -2330,9 +2330,6 @@ class AppLocalizationsZh extends AppLocalizations {
   String get syncPeerNotContacted => '尚未接触，对端在线后点本行再同步一次';
 
   @override
-  String get syncPeerDetailTitle => '设备详情';
-
-  @override
   String syncPeerAddress(String host) {
     return '地址 $host';
   }

@@ -97,8 +97,7 @@ class SyncPeersPage extends StatelessWidget {
     SyncPeerState peer,
     ManualPeer? manual,
   ) {
-    final title =
-        peer.name.isEmpty ? shortDeviceId(peer.deviceId) : peer.name;
+    final title = _displayName(peer, manual);
     if (manual == null) {
       return SettingsInfoTile(
         key: Key('settingsSyncPeer-${peer.deviceId}'),
@@ -121,6 +120,14 @@ class SyncPeersPage extends StatelessWidget {
         peer: peer,
       ),
     );
+  }
+
+  /// 展示名：用户在地址簿里的命名优先（按 deviceId 匹配），对端自报的设备名
+  /// 仅兜底，都没有时用短设备 id。
+  static String _displayName(SyncPeerState peer, ManualPeer? manual) {
+    final userNamed = manual?.name.trim() ?? '';
+    if (userNamed.isNotEmpty) return userNamed;
+    return peer.name.isEmpty ? shortDeviceId(peer.deviceId) : peer.name;
   }
 
   /// 复制完整设备 id（对端填地址 / 报问题时要用；行内展示的是短号）。
@@ -148,7 +155,8 @@ class SyncPeersPage extends StatelessWidget {
     await M3EDialog.show<void>(
       context,
       dialog: M3EDialog(
-        title: l10n.syncPeerDetailTitle,
+        // 标题用展示名（用户命名优先）：与名册行保持同一称谓。
+        title: title,
         content: SizedBox(
           width: settingsDialogWidth(context),
           child: Column(

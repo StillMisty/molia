@@ -4425,12 +4425,6 @@ abstract class AppLocalizations {
   /// **'not reached yet — tap this device row after the peer is online'**
   String get syncPeerNotContacted;
 
-  /// No description provided for @syncPeerDetailTitle.
-  ///
-  /// In en, this message translates to:
-  /// **'Device details'**
-  String get syncPeerDetailTitle;
-
   /// No description provided for @syncPeerAddress.
   ///
   /// In en, this message translates to:

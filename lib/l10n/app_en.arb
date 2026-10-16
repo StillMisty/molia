@@ -1279,7 +1279,6 @@
   "syncPeerDeleteConfirm": "This device will no longer connect to that address (other devices are unaffected).",
   "syncPeerManual": "added manually",
   "syncPeerNotContacted": "not reached yet — tap this device row after the peer is online",
-  "syncPeerDetailTitle": "Device details",
   "syncPeerAddress": "Address {host}",
   "@syncPeerAddress": {
     "placeholders": {

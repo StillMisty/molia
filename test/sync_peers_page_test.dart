@@ -207,4 +207,38 @@ void main() {
     );
     expect(provider.manualPeers, hasLength(1));
   });
+
+  testWidgets('名册展示优先用户命名，对端自报名仅兜底', (tester) async {
+    await provider.addManualPeer('192.168.1.23', name: '书房');
+    await state.learnManualPeer(const ManualPeer(
+      host: '192.168.1.23',
+      deviceId: 'devB',
+      httpPort: 40000,
+    ));
+    transport.available.add(SyncEnvelope(
+      deviceId: 'devB',
+      deviceName: 'Device B',
+      producedAt: 5000,
+      records: const {},
+    ));
+    transport.available.add(SyncEnvelope(
+      deviceId: 'devC',
+      deviceName: 'Device C',
+      producedAt: 5000,
+      records: const {},
+    ));
+    await provider.syncNow(manual: true);
+
+    await pumpPage(tester);
+    // devB 在地址簿里有用户命名 → 用它；devC 无命名 → 用对端自报名。
+    expect(find.text('书房'), findsOneWidget);
+    expect(find.text('Device B'), findsNothing);
+    expect(find.text('Device C'), findsOneWidget);
+
+    // 详情弹层标题与名册行同一称谓。
+    await tester.tap(find.byKey(const Key('settingsSyncPeer-devB')));
+    await tester.pumpAndSettle();
+    expect(find.text('书房'), findsWidgets);
+    expect(find.text('Device B'), findsNothing);
+  });
 }

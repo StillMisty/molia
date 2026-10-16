@@ -2424,9 +2424,6 @@ class AppLocalizationsEn extends AppLocalizations {
       'not reached yet — tap this device row after the peer is online';
 
   @override
-  String get syncPeerDetailTitle => 'Device details';
-
-  @override
   String syncPeerAddress(String host) {
     return 'Address $host';
   }
