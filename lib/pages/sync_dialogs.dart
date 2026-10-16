@@ -114,7 +114,11 @@ List<SyncIssueAction> syncIssueActions(SyncIssue? issue) => switch (issue?.code)
         ],
       // 未设口令时重试必败：只给「配置口令」，不给重试。
       SyncIssueCode.noPassphrase => const [SyncIssueAction.configurePassphrase],
-      SyncIssueCode.notConfigured ||
+      // 未配置 WebDAV 时重试同样必败：主推荐是「去配置」，重试只作次要出口。
+      SyncIssueCode.notConfigured => const [
+          SyncIssueAction.retry,
+          SyncIssueAction.configureWebdav,
+        ],
       SyncIssueCode.webdavDirFailed ||
       SyncIssueCode.webdavListFailed ||
       SyncIssueCode.webdavReadFailed ||

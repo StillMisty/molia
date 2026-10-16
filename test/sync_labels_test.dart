@@ -83,6 +83,11 @@ void main() {
       syncIssueActions(const SyncIssue(code: SyncIssueCode.discoverySilent)),
       contains(SyncIssueAction.addManualPeer),
     );
+    // 未配置 WebDAV：主推荐是「去配置」（末位 = filled），重试只作次要出口。
+    expect(
+      syncIssueActions(const SyncIssue(code: SyncIssueCode.notConfigured)).last,
+      SyncIssueAction.configureWebdav,
+    );
     // 未知原因至少给「重试」。
     expect(
       syncIssueActions(const SyncIssue(code: 'not_a_code')),
