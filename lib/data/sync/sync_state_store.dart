@@ -253,6 +253,7 @@ class SyncStateStore {
   /// 各传输最近成功发布的全量快照覆盖位置（kind → seq；-1 = 尚未发布）。
   ///
   /// 日志裁剪不会越过**已发布**的快照覆盖：落后 / 新加入的对端要能 bootstrap。
+  /// 读写都只经发布台账（`publish_ledger.dart`，判据唯一处）。
   final Map<String, int> _snapshotPushSeq = {};
 
   /// 本地忽略的设备 id：不拉取、不合并它们的载荷（幽灵 / 已失联设备的处置）。
@@ -298,6 +299,9 @@ class SyncStateStore {
   int transportLastSuccessAt(String kind) => _transportLastSuccess[kind] ?? 0;
 
   /// 传输最近成功发布的全量快照覆盖位置（-1 = 尚未发布）。
+  ///
+  /// 判据（谁在什么条件下读它、失败时是否前移）在发布台账里；这里只是
+  /// `sync_state_v1` 的键值与形状。
   int snapshotPushSeq(String kind) => _snapshotPushSeq[kind] ?? -1;
 
   Future<void> setSnapshotPushSeq(String kind, int seq) async {
