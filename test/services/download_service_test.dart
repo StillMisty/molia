@@ -487,36 +487,6 @@ void main() {
     });
   });
 
-  test('文件名与扩展名工具函数', () {
-    expect(
-      DownloadService.baseNameFor(makeTrack(title: 'A/B:C*D?E"F<G>H|I')),
-      '歌手 - A_B_C_D_E_F_G_H_I',
-    );
-    expect(
-      DownloadService.baseNameFor(Track(
-        id: const TrackId('kw', '1'),
-        title: '  多   空格  ',
-        origin: TrackOrigin.builtin,
-      )),
-      '多 空格',
-    );
-    expect(DownloadService.sanitizeFileName('///'), '___');
-    expect(DownloadService.sanitizeFileName('   '), 'unknown');
-
-    expect(
-      DownloadService.extensionFor(Uri.parse('https://x/a.flac?q=1'), '320k'),
-      'flac',
-    );
-    expect(
-      DownloadService.extensionFor(Uri.parse('https://x/a'), 'flac'),
-      'flac',
-    );
-    expect(
-      DownloadService.extensionFor(Uri.parse('https://x/a.m3u8'), '128k'),
-      'mp3',
-    );
-  });
-
   test('指定音质下载：取链使用所选音质，记录写入所选音质', () async {
     final dio = mockDio(
       (options) => bytesResponse([1, 2], headers: {'content-length': ['2']}),

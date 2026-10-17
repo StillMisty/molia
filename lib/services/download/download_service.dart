@@ -52,6 +52,7 @@ import '../../managers/artwork_cache.dart';
 import '../../models/lyrics_result.dart';
 import '../../services/cache_service.dart';
 import '../../sources/source_track.dart' show pickQualityFor;
+import 'download_file_layout.dart';
 import 'download_settings.dart';
 
 /// 下载时取词结果（主歌词 + 可选翻译；罗马音/逐字不落盘）。
@@ -161,7 +162,8 @@ class DownloadService extends ChangeNotifier {
         _publisher = publisher ?? const NoopDownloadsPublisher(),
         _notifications = notifications ?? createDownloadNotifications(),
         _preferredQuality = preferredQuality,
-        _clock = clock ?? (() => DateTime.now().millisecondsSinceEpoch);
+        _clock = clock ?? (() => DateTime.now().millisecondsSinceEpoch),
+        _layout = DownloadFileLayout(storage: storage, settings: settings);
 
   final CatalogService _catalog;
   final DownloadsRepository _repository;
@@ -183,6 +185,10 @@ class DownloadService extends ChangeNotifier {
 
   final String Function()? _preferredQuality;
   final int Function() _clock;
+
+  /// 文件名 / 放置模块：命名、去重与 sidecar 路径约定的唯一实现（见
+  /// `download_file_layout.dart`）。
+  final DownloadFileLayout _layout;
 
   final Logger _logger = Logger('molia.download_service');
 
@@ -272,12 +278,8 @@ class DownloadService extends ChangeNotifier {
     final root = await _storage.downloadsRoot();
     if (root == null) return const [];
     final referenced = <String>{
-      for (final record in _records.values) ...[
-        if (record.filePath != null) record.filePath!,
-        if (record.lyricPath != null) record.lyricPath!,
-        if (record.translationLyricPath != null) record.translationLyricPath!,
-        if (record.coverPath != null) record.coverPath!,
-      ],
+      for (final record in _records.values)
+        ...DownloadFileLayout.referencedFiles(record),
     };
     try {
       final files = await _storage.listFiles(root);
@@ -531,10 +533,11 @@ class DownloadService extends ChangeNotifier {
       final cached = await _completeAudioCachePath(track, resolvedQuality);
       if (cached != null) {
         _logger.info('音频缓存命中，直接拷贝: $cached');
-        final extension = _extensionForQuality(resolvedQuality);
-        base = await _uniqueBaseName(root, _baseNameFor(track), extension);
-        filePath = p.join(root, '$base.$extension');
-        partPath = '$filePath$downloadPartSuffix';
+        final extension =
+            DownloadFileLayout.extensionForQuality(resolvedQuality);
+        base = await _audioBaseName(root, track, extension);
+        filePath = DownloadFileLayout.audioPath(root, base, extension);
+        partPath = DownloadFileLayout.partPath(filePath);
         await _storage.copyFile(cached, partPath);
         await _storage.rename(partPath, filePath);
         partPath = null;
@@ -555,10 +558,10 @@ class DownloadService extends ChangeNotifier {
             l10nKey: 'downloadUnsupported',
           );
         }
-        final extension = extensionFor(url, resolvedQuality);
-        base = await _uniqueBaseName(root, _baseNameFor(track), extension);
-        filePath = p.join(root, '$base.$extension');
-        partPath = '$filePath$downloadPartSuffix';
+        final extension = DownloadFileLayout.extensionFor(url, resolvedQuality);
+        base = await _audioBaseName(root, track, extension);
+        filePath = DownloadFileLayout.audioPath(root, base, extension);
+        partPath = DownloadFileLayout.partPath(filePath);
         final response = await _dio.get<ResponseBody>(
           url.toString(),
           options: Options(
@@ -598,13 +601,23 @@ class DownloadService extends ChangeNotifier {
       if (includeLyrics) {
         lyrics = await _resolveLyrics(track);
         if (lyrics != null) {
-          lyricPath = await _writeLyricsFile(root, base, lyrics);
+          lyricPath = await _layout.writeLyrics(
+            root,
+            base,
+            lyric: lyrics.lyric,
+            translation: lyrics.translation,
+          );
         }
       }
       if (includeCover) {
         cover = await _resolveCover(track);
         if (cover != null) {
-          coverPath = await _writeCoverFile(root, base, cover);
+          coverPath = await _layout.writeCover(
+            root: root,
+            base: base,
+            coverUrl: cover.url ?? '',
+            bytes: cover.bytes,
+          );
         }
       }
       _throwIfCancelled(cancelToken);
@@ -690,13 +703,21 @@ class DownloadService extends ChangeNotifier {
         l10nKey: 'downloadNoLyrics',
       );
     }
-    final base = await _partBaseName(
-      track,
-      existingPath: recordForTrack(track)?.lyricPath,
+    final existing = recordForTrack(track);
+    final base = await _layout.partBaseName(
+      root: root,
+      track: track,
+      audioPath: existing?.filePath,
+      existingPath: existing?.lyricPath,
       subdir: downloadsLyricsDirName,
       extension: 'lrc',
     );
-    final path = await _writeLyricsFile(root, base, lyrics);
+    final path = await _layout.writeLyrics(
+      root,
+      base,
+      lyric: lyrics.lyric,
+      translation: lyrics.translation,
+    );
     if (path == null) {
       throw const SourceFailure(
         kind: FailureKind.unknown,
@@ -721,14 +742,22 @@ class DownloadService extends ChangeNotifier {
         l10nKey: 'downloadNoArtwork',
       );
     }
-    final extension = _imageExtension(cover.url ?? '');
-    final base = await _partBaseName(
-      track,
-      existingPath: recordForTrack(track)?.coverPath,
+    final coverUrl = cover.url ?? '';
+    final existing = recordForTrack(track);
+    final base = await _layout.partBaseName(
+      root: root,
+      track: track,
+      audioPath: existing?.filePath,
+      existingPath: existing?.coverPath,
       subdir: downloadsCoversDirName,
-      extension: extension,
+      extension: DownloadFileLayout.coverExtension(coverUrl),
     );
-    final path = await _writeCoverFile(root, base, cover);
+    final path = await _layout.writeCover(
+      root: root,
+      base: base,
+      coverUrl: coverUrl,
+      bytes: cover.bytes,
+    );
     if (path == null) {
       throw const SourceFailure(
         kind: FailureKind.unknown,
@@ -759,16 +788,10 @@ class DownloadService extends ChangeNotifier {
     await _repository.delete(record.originSourceKey, record.originSongId);
     _records.remove(record.key);
     if (!record.imported) {
-      final audio = record.filePath;
-      if (audio != null) await _storage.deleteQuietly(audio);
-      final lyric = record.lyricPath;
-      if (lyric != null) {
-        await _storage.deleteQuietly(lyric);
-        final translation = record.translationLyricPath;
-        if (translation != null) await _storage.deleteQuietly(translation);
+      // 记录引用的文件集（音频 / 歌词 / 翻译边车 / 封面）：约定见放置模块。
+      for (final path in DownloadFileLayout.referencedFiles(record)) {
+        await _storage.deleteQuietly(path);
       }
-      final cover = record.coverPath;
-      if (cover != null) await _storage.deleteQuietly(cover);
       final publicUri = record.publicUri;
       if (publicUri != null && publicUri.isNotEmpty) {
         await _removePublicCopy(publicUri);
@@ -794,7 +817,8 @@ class DownloadService extends ChangeNotifier {
       // 后缀不带点（`audioExtensions` 约定）；标签解析要带点的原始后缀。
       final extension = p.extension(path).toLowerCase();
       final extensionName = extension.replaceFirst('.', '');
-      if (path.isEmpty || !audioExtensions.contains(extensionName)) {
+      if (path.isEmpty ||
+          !DownloadFileLayout.audioExtensions.contains(extensionName)) {
         skipped++;
         continue;
       }
@@ -1279,14 +1303,15 @@ class DownloadService extends ChangeNotifier {
     String? lyricPath,
     String? coverPath,
   }) async {
-    if (partPath != null) await _storage.deleteQuietly(partPath);
-    if (filePath != null) await _storage.deleteQuietly(filePath);
-    if (lyricPath != null) {
-      await _storage.deleteQuietly(lyricPath);
-      final translation = translationLyricPathOf(lyricPath);
-      if (translation != null) await _storage.deleteQuietly(translation);
+    final files = DownloadFileLayout.failedDownloadFiles(
+      partPath: partPath,
+      filePath: filePath,
+      lyricPath: lyricPath,
+      coverPath: coverPath,
+    );
+    for (final path in files) {
+      await _storage.deleteQuietly(path);
     }
-    if (coverPath != null) await _storage.deleteQuietly(coverPath);
   }
 
   String _pickQuality(Track track) {
@@ -1298,205 +1323,16 @@ class DownloadService extends ChangeNotifier {
     return pickQualityFor(types, preferred);
   }
 
-  /// 音频扩展名：缓存命中无法从 URL 推断时按音质映射（flac/wav/ape/其余 mp3）。
-  static String _extensionForQuality(String quality) {
-    switch (quality) {
-      case 'flac24bit':
-      case 'flac':
-        return 'flac';
-      case 'wav':
-        return 'wav';
-      case 'ape':
-        return 'ape';
-      default:
-        return 'mp3';
-    }
-  }
-
-  /// 唯一文件名基名：磁盘上已有同名音频（或记录占用）时追加 ` (2)`、` (3)`。
-  Future<String> _uniqueBaseName(
-    String root,
-    String desiredBase,
-    String extension,
-  ) async {
-    final used = <String>{
-      for (final record in _records.values)
-        if (record.filePath != null)
-          p.basenameWithoutExtension(record.filePath!).toLowerCase(),
-    };
-    var candidate = desiredBase;
-    var index = 2;
-    while (true) {
-      final lower = candidate.toLowerCase();
-      if (!used.contains(lower) &&
-          !await _storage.fileExists(
-            p.join(root, '$candidate.$extension'),
-          )) {
-        return candidate;
-      }
-      if (index > 999) {
-        return '$desiredBase (${DateTime.now().millisecondsSinceEpoch})';
-      }
-      candidate = '$desiredBase ($index)';
-      index++;
-    }
-  }
-
-  /// 分项文件基名：已有音频 → 跟随音频基名（同目录 sidecar 约定）；
-  /// 已有同分项文件 → 复用；否则按曲目名在目标子目录内查重。
-  Future<String> _partBaseName(
-    Track track, {
-    required String? existingPath,
-    required String subdir,
-    required String extension,
-  }) async {
-    final record = recordForTrack(track);
-    final audioPath = record?.filePath;
-    if (audioPath != null && audioPath.isNotEmpty) {
-      return p.basenameWithoutExtension(audioPath);
-    }
-    final existing = existingPath;
-    if (existing != null && existing.isNotEmpty) {
-      return p.basenameWithoutExtension(existing);
-    }
-    final root = await _requireRoot();
-    final desired = _baseNameFor(track);
-    var candidate = desired;
-    var index = 2;
-    while (await _storage.fileExists(
-      p.join(root, subdir, '$candidate.$extension'),
-    )) {
-      if (index > 999) {
-        return '$desired (${DateTime.now().millisecondsSinceEpoch})';
-      }
-      candidate = '$desired ($index)';
-      index++;
-    }
-    return candidate;
-  }
-
-  /// 写入歌词主文件 + 翻译边车；失败返回 null（best-effort）。
-  Future<String?> _writeLyricsFile(
-    String root,
-    String base,
-    DownloadLyrics lyrics,
-  ) async {
-    String? path;
-    try {
-      path = p.join(root, downloadsLyricsDirName, '$base.lrc');
-      await _storage.writeString(path, lyrics.lyric);
-      final translation = lyrics.translation;
-      if (translation != null && translation.trim().isNotEmpty) {
-        final translationPath = translationLyricPathOf(path);
-        if (translationPath != null) {
-          await _storage.writeString(translationPath, translation);
-        }
-      }
-      return path;
-    } catch (e) {
-      _logger.warning('下载歌词失败: $e');
-      if (path != null) {
-        await _storage.deleteQuietly(path);
-        final translationPath = translationLyricPathOf(path);
-        if (translationPath != null) {
-          await _storage.deleteQuietly(translationPath);
-        }
-      }
-      return null;
-    }
-  }
-
-  /// 写入封面文件；失败返回 null（best-effort）。
-  Future<String?> _writeCoverFile(
-    String root,
-    String base,
-    _ResolvedCover cover,
-  ) async {
-    String? path;
-    try {
-      path = p.join(
-        root,
-        downloadsCoversDirName,
-        '$base.${_imageExtension(cover.url ?? '')}',
+  /// 音频唯一基名：磁盘与下载记录双重查重（命名 / 放置模块）。
+  Future<String> _audioBaseName(String root, Track track, String extension) =>
+      _layout.uniqueBaseName(
+        root: root,
+        desiredBase: _layout.baseNameFor(track),
+        extension: extension,
+        reservedPaths: [
+          for (final record in _records.values) record.filePath,
+        ],
       );
-      await _storage.writeBytes(path, cover.bytes);
-      return path;
-    } catch (e) {
-      _logger.warning('下载封面失败: $e');
-      if (path != null) await _storage.deleteQuietly(path);
-      return null;
-    }
-  }
-
-  /// 文件名基名：按下载设置模板（默认 `{artist} - {title}`）生成并清洗。
-  String _baseNameFor(Track track) {
-    final template = _settings?.filenameTemplate ?? kDefaultFilenameTemplate;
-    final raw = DownloadSettings.applyTemplate(template, {
-      'artist': track.artistLabel,
-      'title': track.title,
-      'album': track.album ?? '',
-    });
-    return sanitizeFileName(raw);
-  }
-
-  /// `{歌手} - {歌名}`；无歌手只用歌名；非法字符替换、空白折叠、限长。
-  @visibleForTesting
-  static String baseNameFor(Track track) {
-    final artist = track.artistLabel;
-    final raw = artist.isEmpty ? track.title : '$artist - ${track.title}';
-    return sanitizeFileName(raw);
-  }
-
-  static final RegExp _illegalFileNameChars = RegExp(r'[\\/:*?"<>|\x00-\x1f]');
-  static final RegExp _whitespaceRun = RegExp(r'\s+');
-
-  /// 文件系统非法字符替换为 `_`，空白折叠，空名回退 `unknown`，限长 120。
-  @visibleForTesting
-  static String sanitizeFileName(String name) {
-    final replaced = name.replaceAll(_illegalFileNameChars, '_');
-    final collapsed = replaced.replaceAll(_whitespaceRun, ' ').trim();
-    if (collapsed.isEmpty) return 'unknown';
-    const maxLength = 120;
-    if (collapsed.length <= maxLength) return collapsed;
-    // 按 rune 截断，避免切断代理对。
-    return String.fromCharCodes(collapsed.runes.take(maxLength)).trim();
-  }
-
-  /// 可下载 / 可导入的音频后缀（小写、不含点）。
-  ///
-  /// 唯一来源：直链扩展名推断（[extensionFor]）与本地导入校验共用。
-  static const Set<String> audioExtensions = {
-    'mp3',
-    'flac',
-    'm4a',
-    'aac',
-    'ogg',
-    'oga',
-    'opus',
-    'wav',
-    'ape',
-    'wma',
-    'mka',
-    'mp4',
-  };
-
-  /// 扩展名：URL 路径里的音频后缀优先，否则按音质推断（默认 mp3）。
-  @visibleForTesting
-  static String extensionFor(Uri url, String quality) {
-    final ext = p.extension(url.path).toLowerCase().replaceFirst('.', '');
-    if (audioExtensions.contains(ext)) return ext == 'oga' ? 'ogg' : ext;
-    return _extensionForQuality(quality);
-  }
-
-  static String _imageExtension(String url) {
-    const imageExtensions = {'jpg', 'jpeg', 'png', 'webp', 'gif', 'bmp'};
-    final ext = p
-        .extension(Uri.tryParse(url)?.path ?? '')
-        .toLowerCase()
-        .replaceFirst('.', '');
-    if (imageExtensions.contains(ext)) return ext == 'jpeg' ? 'jpg' : ext;
-    return 'jpg';
-  }
 
   static String _mimeTypeForPath(String path) {
     final ext = p.extension(path).toLowerCase().replaceFirst('.', '');
