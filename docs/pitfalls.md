@@ -312,7 +312,7 @@
 45. **一次 Esc 会被多个作用域同时消费，`HardwareKeyboard` 的返回值裁决不了**：
     它的处理器**全部执行、返回值不短路**（SDK 原文：All registered handlers will be
     invoked in order regardless of their return value），壳层可配置快捷键（默认
-    Esc = 关队列面板）与页面级 / 弹层处理器（收藏页多选、音量弹层）会同时
+    Esc = 收起播放页的队列视图）与页面级 / 弹层处理器（收藏页多选、音量弹层）会同时
     收到同一次按键；同时焦点分发也不会因处理器返回 true 而跳过。裁决统一走
     `lib/services/escape_claims.dart`：页面级 / 弹层登记「此刻的 Esc 归我」，壳层
     命中 Esc 命令前先让位（返回 false）。新增 Esc 消费方时先登记，且登记判定必须

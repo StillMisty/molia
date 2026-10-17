@@ -51,8 +51,8 @@ class DesktopShortcuts extends StatefulWidget {
   /// 切目的地（默认 Ctrl+1/2/3）：切到第 index 个可见目的地（顺序 = 导航顺序）。
   final ValueChanged<int> onSelectDestinationIndex;
 
-  /// 关闭队列（默认 Esc）：队列已并入播放页右栏，落点 = 收起队列视图
-  /// （队列不可见 / 不在播放页时回调内部自行 no-op）。
+  /// 关闭队列（默认 Esc）：落点由壳层决定 —— 在播放页里把队列视图收成
+  /// 默认页，其它目的地 no-op（壳层看不到页内 tab，命令按目的地生效）。
   final VoidCallback onCloseQueuePanel;
 
   final Widget child;

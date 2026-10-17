@@ -163,6 +163,13 @@ class _GlobalSearchState extends State<GlobalSearch> {
       // expandOnFocus: false 同时把 expand margin 归零（包内在不启用加宽时
       // 直接返回 0，静止 / 聚焦两档都不再留白）。
       expandOnFocus: false,
+      // 条高收到 M3 最小触控 48（包内默认 minHeight 56 是页面内搜索的规格）：
+      // 显式覆盖条自身约束，落点与包内几何（焦点环半径等）都按它算，
+      // 不留「主题说 56、实际被外壳夹成 48」的两套口径。
+      constraints: BoxConstraints(
+        minHeight: M3ETheme.of(context).searchBarTheme.tapTargetSize,
+        maxWidth: double.infinity,
+      ),
       barShape: const WidgetStatePropertyAll<OutlinedBorder>(
         RoundedRectangleBorder(borderRadius: M3EShapes.radiusMedium),
       ),

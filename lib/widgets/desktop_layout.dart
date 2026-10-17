@@ -49,10 +49,9 @@ class DesktopLayout extends InheritedWidget {
 
   /// 解析时的实际栏宽（= M3E 导航轨折叠宽，默认 96）。
   ///
-  /// 不变量：桌面壳层侧栏恒为折叠档（`alwaysCollapse`），且队列面板已并入
-  /// 播放页右栏 —— 侧栏是这个壳层里唯一常驻吃宽度的栏，[contentWidth] 因此
-  /// 就是内容区可用宽。侧栏若将来支持展开，宽度来源要跟着换（而不是在这里
-  /// 加一个「估算值」）。
+  /// 不变量：桌面壳层侧栏恒为折叠档（`alwaysCollapse`）—— 侧栏是这个壳层里
+  /// 唯一常驻吃宽度的栏，[contentWidth] 因此就是内容区可用宽。侧栏若将来支持
+  /// 展开，宽度来源要跟着换（而不是在这里加一个「估算值」）。
   final double railWidth;
 
   /// 页面级桌面增强（窗口宽语义）：桌面平台 + 窗口宽 ≥ [Breakpoints.desktop]。

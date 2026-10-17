@@ -437,12 +437,6 @@ class AppLocalizationsEn extends AppLocalizations {
   String get languageSimplifiedChinese => '简体中文';
 
   @override
-  String get collapseTooltip => 'Collapse';
-
-  @override
-  String get expandTooltip => 'Expand';
-
-  @override
   String get noItemsFound => 'No items found';
 
   @override

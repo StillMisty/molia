@@ -366,7 +366,7 @@ class _MyAppState extends State<MyApp>
     });
     _tabTransition.forward(from: 0);
     if (enteringPlayer) {
-      _startMorph(toPage: true);
+      _startMorphToPage();
     } else if (leavingPlayer) {
       _startMorphBackToBar();
     } else {
@@ -385,27 +385,93 @@ class _MyAppState extends State<MyApp>
     _nowPlaying.showQueueTab();
   }
 
-  /// Esc 的壳层命令（可配置的「关闭队列」）：队列右面板已并入播放页右栏，
-  /// 落点 = 把队列视图收成播放页的默认页（歌词）。其它目的地没有队列视图
-  /// 可收，保持 no-op。
+  /// Esc 的壳层命令（可配置的「关闭队列」）：队列是播放页右栏的一栏，壳层
+  /// 看不到页内 tab，命令按目的地生效 —— 在播放页里把队列视图收成默认页
+  /// （停在其它栏时同样回默认页，等于「回默认页」）；其它目的地 no-op。
   void _closeQueuePanel() {
     if (_selectedDestination != ShellDestination.nowPlaying) return;
     _nowPlaying.showLyricsTab();
   }
 
-  /// 开始一次顶栏 ↔ 播放页飞行；锚点缺失（迷你态/首帧）时优雅跳过。
-  void _startMorph({required bool toPage}) {
+  /// 底栏 → 播放页的飞行：起点与终点分两帧抓。
+  ///
+  /// 起点（底栏封面）只在点击这一帧存在——底栏在播放页整条让位，重建后就
+  /// 没了；终点（页内封面）恰恰相反——让位使内容区高 +80，页内封面随垂直
+  /// 居中下移，重建前的矩形不是落点。因此本帧抓起点、先把两端封面收进飞行
+  /// 态（避免真身与副本同帧重影），帧末（让位后的布局已成立）抓终点再起飞：
+  /// 副本飞行终点就是真身的实际落点，交接帧零位移。
+  void _startMorphToPage() {
     _completeMorph();
-    final geometry = _morph.captureGeometry(toPage: toPage);
-    if (geometry == null) {
+    final barCover = _morph.rectOf(_morph.barCoverKey);
+    if (barCover == null) {
+      // 起点不在场（启动就落在播放页等）：跳过飞行，只对齐两端状态。
       _morph.setPageHeaderHidden(false);
-      _morph.setBarHeaderHidden(toPage);
+      _morph.setBarHeaderHidden(true);
       return;
     }
     _morph.setBarHeaderHidden(true);
-    if (toPage) _morph.setPageHeaderHidden(true);
+    _morph.setPageHeaderHidden(true);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      if (_selectedDestination != ShellDestination.nowPlaying) {
+        // 一帧之内又离开了播放页：这次进入被撤销，两端状态按「不在播放页」
+        // 对齐（两端真身都可见）。
+        _morph.setPageHeaderHidden(false);
+        _morph.setBarHeaderHidden(false);
+        return;
+      }
+      final pageCover = _morph.rectOf(_morph.pageCoverKey);
+      if (pageCover == null) {
+        // 终点不可用：不飞，页内封面直接亮出（顶栏/底栏这一端不在场，无重影）。
+        _morph.setPageHeaderHidden(false);
+        return;
+      }
+      _flyMorph(
+        PlayerMorphGeometry(
+          barCover: barCover,
+          pageCover: pageCover,
+          toPage: true,
+        ),
+      );
+    });
+  }
+
+  /// 播放页 → 底栏的飞行：底栏在播放页里整条让位，锚点要等它回到树里才有。
+  ///
+  /// 本帧先让底栏复位、并把两端封面收进飞行态（底栏封面出现时就是空位，
+  /// 下一帧副本从同一位置起飞，接得上）；帧末（底栏已完成布局）抓两端锚点、
+  /// 再下一帧起飞——代价是飞行比切页晚一帧（16ms），肉眼不可辨。
+  void _startMorphBackToBar() {
+    _morph.setBarHeaderHidden(true);
+    _morph.setPageHeaderHidden(false);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      if (_selectedDestination == ShellDestination.nowPlaying) {
+        // 一帧之内又回到播放页：这次离开被撤销，状态按「在播放页」对齐
+        // （底栏封面仍收起，与启动就落在播放页时同一口径）。
+        _morph.setBarHeaderHidden(true);
+        _morph.setPageHeaderHidden(false);
+        return;
+      }
+      _completeMorph();
+      final geometry = _morph.captureGeometry(toPage: false);
+      if (geometry == null) {
+        // 锚点缺失（迷你态/首帧）：跳过飞行，两端真身可见。
+        _morph.setPageHeaderHidden(false);
+        _morph.setBarHeaderHidden(false);
+        return;
+      }
+      _flyMorph(geometry);
+    });
+  }
+
+  /// 起飞：两端封面的显示状态 + Overlay 副本 + 弹簧。
+  ///
+  /// 封面 URL 与锚点在同一刻抓取：飞行期间不换图（副本承接的是起飞时那一张）。
+  void _flyMorph(PlayerMorphGeometry geometry) {
+    _morph.setBarHeaderHidden(true);
+    if (geometry.toPage) _morph.setPageHeaderHidden(true);
     _morphGeometry = geometry;
-    // 封面 URL 与锚点在同一刻抓取：飞行期间不换图（副本承接的是起飞时那一张）。
     final url = _coverUrlOf(context.read<PlaybackProvider>());
     final token = ++_morphToken;
     _morphEntry = OverlayEntry(
@@ -421,25 +487,6 @@ class _MyAppState extends State<MyApp>
     _morphAnimation.animateTo(1, from: 0, withVelocity: 0).whenComplete(() {
       if (!mounted || token != _morphToken) return;
       _completeMorph();
-    });
-  }
-
-  /// 离开播放页的飞行：底栏在播放页里整条让位，锚点要等它回到树里才有。
-  ///
-  /// 本帧先让底栏复位、并把两端封面提前收进飞行态（底栏封面出现时就是空位，
-  /// 下一帧副本从同一位置起飞，接得上）；帧末（底栏已完成布局）抓锚点、
-  /// 再下一帧起飞 —— 代价是飞行比切页晚一帧（16ms），肉眼不可辨。
-  void _startMorphBackToBar() {
-    _morph.setBarHeaderHidden(true);
-    _morph.setPageHeaderHidden(false);
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted) return;
-      if (_selectedDestination == ShellDestination.nowPlaying) {
-        // 一帧之内又回到播放页：这次离开被撤销，把底栏封面的显示还回去。
-        _morph.setBarHeaderHidden(false);
-        return;
-      }
-      _startMorph(toPage: false);
     });
   }
 

@@ -890,18 +890,6 @@ abstract class AppLocalizations {
   /// **'简体中文'**
   String get languageSimplifiedChinese;
 
-  /// No description provided for @collapseTooltip.
-  ///
-  /// In en, this message translates to:
-  /// **'Collapse'**
-  String get collapseTooltip;
-
-  /// No description provided for @expandTooltip.
-  ///
-  /// In en, this message translates to:
-  /// **'Expand'**
-  String get expandTooltip;
-
   /// No description provided for @noItemsFound.
   ///
   /// In en, this message translates to:

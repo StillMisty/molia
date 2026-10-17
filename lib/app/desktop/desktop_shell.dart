@@ -77,7 +77,7 @@ class DesktopShell extends StatelessWidget {
   /// （顺序 = `NavProvider.visibleDestinations`；越界时壳层回调自行忽略）。
   final ValueChanged<int> onSelectDestinationIndex;
 
-  /// 底栏队列按钮：跳播放页 + 让页内右栏切到队列 tab（队列已并入播放页）。
+  /// 底栏队列按钮：跳播放页 + 让页内右栏切到队列 tab。
   final VoidCallback onToggleQueue;
 
   /// Esc 的壳层命令（可配置的「关闭队列」）：队列并入播放页右栏后，
@@ -116,8 +116,7 @@ class DesktopShell extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             M3ENavigationRail(
-              // 恒折叠：无展开按钮、也不可展开（窄窗不再有「强制折叠」的
-              // 分流，窗口宽不影响侧栏形态）。
+              // 恒折叠：无展开按钮、也不可展开；窗口宽不影响侧栏形态。
               type: M3ENavigationRailType.alwaysCollapse,
               // 标签一律隐藏：折叠轨里图标是唯一常显信息，标签留给无障碍名
               // （项高随之走包内 shortItemHeight）。

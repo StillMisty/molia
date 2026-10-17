@@ -67,7 +67,7 @@ class DesktopNowPlayingBar extends StatelessWidget {
   /// 点击左区进入播放页。
   final VoidCallback onOpenPlayer;
 
-  /// 队列入口：跳播放页并让页内右栏切到队列 tab（队列已并入播放页）。
+  /// 队列入口：跳播放页并让页内右栏切到队列 tab。
   final VoidCallback onToggleQueue;
 
   @override
@@ -435,7 +435,7 @@ class _BarActions extends StatelessWidget {
           variant: M3EIconButtonVariant.standard,
           tooltip: l10n.playerBarQueue,
           icon: const Icon(Icons.queue_music_rounded),
-          // 「跳播放页 + 切队列 tab」在任何窗口宽下都成立：没有 disabled 态。
+          // 「跳播放页 + 切队列 tab」在任何窗口宽下都成立：按钮不置灰。
           onPressed: onToggleQueue,
         ),
         const SizedBox(width: 4),

@@ -418,12 +418,6 @@ class AppLocalizationsZh extends AppLocalizations {
   String get languageSimplifiedChinese => '简体中文';
 
   @override
-  String get collapseTooltip => '收起';
-
-  @override
-  String get expandTooltip => '展开';
-
-  @override
   String get noItemsFound => '未找到项目';
 
   @override

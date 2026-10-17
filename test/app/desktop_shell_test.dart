@@ -31,6 +31,7 @@ import 'package:molia/widgets/global_search.dart';
 import 'package:molia/widgets/molia_mark.dart';
 import 'package:molia/widgets/now_playing_controller.dart';
 import 'package:molia/widgets/player.dart';
+import 'package:molia/widgets/player_cover_deck.dart';
 import 'package:molia/widgets/player_morph.dart';
 import 'package:molia/widgets/track_row.dart';
 import 'package:provider/provider.dart';
@@ -192,8 +193,13 @@ void main() {
   }
 
   /// 走完一次切页过渡（含顶栏 ⇄ 播放页共享元素飞行约 0.4s）。
+  ///
+  /// 进入播放页的飞行延后一帧起跑（终点锚点要等落定布局，见
+  /// `app_shell.dart::_startMorphToPage`），再下一帧才是弹簧的第一个 tick，
+  /// 因此这里给两次长帧。
   Future<void> settleTransition(WidgetTester tester) async {
     await tester.pump();
+    await tester.pump(const Duration(milliseconds: 900));
     await tester.pump(const Duration(milliseconds: 900));
   }
 
@@ -301,7 +307,7 @@ void main() {
     await pumpShell(tester, desktopShell: true);
 
     final appBar = find.byType(AppBar);
-    // 当前页标题已删（顶栏不再承载导航语义）。
+    // 顶栏不含当前页标题（导航语义只在侧栏 / 底栏）。
     expect(
       find.descendant(of: appBar, matching: find.text(l10n.nowPlayingLabel)),
       findsNothing,
@@ -326,7 +332,7 @@ void main() {
     final rail = tester.widget<M3ENavigationRail>(find.byType(M3ENavigationRail));
     expect(rail.type, M3ENavigationRailType.alwaysCollapse);
     expect(rail.labelBehavior, M3ENavigationRailLabelBehavior.alwaysHide);
-    // 窄窗不再有「强制折叠」分流：变宽后形态不变。
+    // 窗口宽变化不影响侧栏形态。
     tester.view.physicalSize = const Size(900, 900);
     await settleTransition(tester);
     expect(
@@ -368,15 +374,91 @@ void main() {
     expect(EscapeClaims.any, isFalse, reason: '弹层登记随宿主卸载注销');
   });
 
+  /// 元素的真实屏上矩形（含祖先变换）：与共享元素锚点同一口径。
+  ///
+  /// 不能直接用 `tester.getRect`：它取布局盒宽高、忽略祖先 `Transform.scale`
+  /// （暂停态封面有持续 0.98 缩放），与飞行锚点（角点映射）不是同一把尺。
+  Rect renderedRect(WidgetTester tester, Finder finder) {
+    final box = tester.renderObject<RenderBox>(finder);
+    return Rect.fromPoints(
+      box.localToGlobal(Offset.zero),
+      box.localToGlobal(box.size.bottomRight(Offset.zero)),
+    );
+  }
+
+  testWidgets('封面飞行：进入方向副本末帧落点 == 落定后真身矩形（≤1dp）', (tester) async {
+    await pumpShell(tester, desktopShell: true);
+    // 先离开播放页：底栏在场，封面是进入方向的起点；也让页内封面先按
+    // 「有底栏」的布局量过一次（底栏让位后页面高 +80，真身封面会下移）。
+    await tapRailItem(tester, railItem(Icons.favorite_border_rounded));
+
+    await tester.tap(railPlayerItem());
+    // 逐帧跑到副本消失（落定帧交接）：记下最后一张副本的矩形与飞行锚点。
+    Rect? lastCopy;
+    Rect? flightTarget;
+    var seen = false;
+    for (var i = 0; i < 200; i++) {
+      await tester.pump(const Duration(milliseconds: 8));
+      final flight = find.byType(PlayerMorphFlight);
+      final copy = find.descendant(
+        of: flight,
+        matching: find.byType(CoverCard),
+      );
+      if (copy.evaluate().isEmpty) {
+        if (seen) break;
+        continue;
+      }
+      seen = true;
+      lastCopy = renderedRect(tester, copy);
+      flightTarget = tester.widget<PlayerMorphFlight>(flight).geometry.pageCover;
+    }
+    expect(lastCopy, isNotNull, reason: '前提：进入方向出现了飞行副本');
+    await settleTransition(tester);
+    expect(find.byType(PlayerMorphFlight), findsNothing, reason: '落定后副本已移除');
+
+    // 落定后真身封面（页内中心封面卡）的实际绘制矩形：与锚点同一口径——
+    // 卡片在播放态缩放的 `Transform.scale` 之内（暂停态 0.98），必须量到
+    // 变换之后，才能和飞行锚点 / 副本的矩形比。
+    final landedCard = find.descendant(
+      of: find.byKey(PlayerCoverDeck.centerCoverCardKey),
+      matching: find.byType(CoverCard),
+    );
+    expect(landedCard, findsOneWidget);
+    final landed = renderedRect(tester, landedCard);
+    // 飞行抓的终点锚点就是落定矩形（抓锚点这一环的根因断言）。
+    expect(
+      (flightTarget!.topLeft - landed.topLeft).distance,
+      lessThanOrEqualTo(1.0),
+      reason: '飞行终点锚点 $flightTarget 与落定真身 $landed 的左上角偏移',
+    );
+    // 副本末帧落在同一矩形上，交接瞬间零位移（用户可见的这一环）。
+    expect(
+      (lastCopy!.topLeft - landed.topLeft).distance,
+      lessThanOrEqualTo(1.0),
+      reason: '副本末帧 $lastCopy 与落定真身 $landed 的左上角偏移',
+    );
+    expect(
+      (lastCopy.size.width - landed.size.width).abs(),
+      lessThanOrEqualTo(1.0),
+      reason: '副本末帧 $lastCopy 与落定真身 $landed 的宽度差',
+    );
+    expect(
+      (lastCopy.size.height - landed.size.height).abs(),
+      lessThanOrEqualTo(1.0),
+      reason: '副本末帧 $lastCopy 与落定真身 $landed 的高度差',
+    );
+  });
+
   testWidgets('封面飞行：进入 / 离开播放页两端锚点都成立', (tester) async {
     await pumpShell(tester, desktopShell: true);
     // 先离开播放页：此时底栏在场，封面是进入方向的起点。
     await tapRailItem(tester, railItem(Icons.favorite_border_rounded));
     expect(playingBar(), findsOneWidget);
 
-    // 进入播放页：底栏本帧让位，飞行副本随即接管。
+    // 进入播放页：底栏本帧让位，帧末抓到落点锚点后副本再接管（延后一帧）。
     await tester.tap(railPlayerItem());
-    await tester.pump();
+    await tester.pump(); // 帧 1：底栏让位 + 页面按新布局落定
+    await tester.pump(); // 帧 2：副本挂载
     expect(find.byType(PlayerMorphFlight), findsOneWidget, reason: '进入方向有飞行副本');
     expect(playingBar(), findsNothing, reason: '底栏同时让位');
     await settleTransition(tester);
@@ -451,7 +533,7 @@ void main() {
           .widget<M3EIconButton>(find.byKey(DesktopNowPlayingBar.queueToggleKey))
           .onPressed,
       isNotNull,
-      reason: '队列入口没有 disabled 态',
+      reason: '队列入口在任何窗口宽下都可点',
     );
   });
 
@@ -514,7 +596,7 @@ void main() {
       reason: '搜索条左对齐内容左缘',
     );
 
-    // < 900：入口退化为图标按钮（不再挂搜索锚点，顶栏不会被挤坏）。
+    // < 900：入口退化为图标按钮（不挂搜索锚点，顶栏不会被挤坏）。
     tester.view.physicalSize = const Size(800, 900);
     await settleTransition(tester);
     expect(find.byKey(DesktopShell.searchEntryKey), findsOneWidget);
@@ -587,7 +669,7 @@ void main() {
       findsOneWidget,
     );
 
-    // 软件内快捷键整体关闭后提示消失（不再是可用快捷键）。
+    // 软件内快捷键整体关闭后提示消失（键位只在开着的分组里可用）。
     await ShortcutSettings.instance.setInAppEnabled(false);
     await tester.pump();
     expect(
@@ -639,13 +721,38 @@ void main() {
     await tester.pump();
     expect(harness.backend.calls.last, 'pause');
 
-    // Esc（可配置的「关闭队列」）：队列已并入播放页右栏，落点 = 切回
-    // 默认的歌词页（先手动切到队列 tab 才有可收的视图）。
+    // Esc（可配置的「关闭队列」）：落点 = 在播放页里把队列视图收成默认页
+    //（先手动切到队列 tab 才有可收的视图）。
     await tapPlayerTab(tester, Icons.queue_music_rounded);
     expect(playerTabIndex(tester), nowPlayingQueueTabIndex);
     await tester.sendKeyEvent(LogicalKeyboardKey.escape);
     await settleTransition(tester);
     expect(playerTabIndex(tester), nowPlayingLyricsTabIndex);
+  });
+
+  testWidgets('Esc 关队列：按目的地生效（播放页收成默认页，其它页 no-op）', (tester) async {
+    await pumpShell(tester, desktopShell: true);
+
+    // 播放页停在信息 tab：命令是「把队列视图收成默认页」，壳层看不到页内
+    // tab，因此在播放页里一律回默认页。
+    await tapPlayerTab(tester, Icons.info_rounded);
+    expect(playerTabIndex(tester), nowPlayingInfoTabIndex);
+    await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+    await settleTransition(tester);
+    expect(playerTabIndex(tester), nowPlayingLyricsTabIndex);
+
+    // 非播放页：no-op（不切目的地、不动页内 tab）。
+    await tapPlayerTab(tester, Icons.queue_music_rounded);
+    await tapRailItem(tester, railItem(Icons.favorite_border_rounded));
+    expect(playerTabIndex(tester), nowPlayingQueueTabIndex);
+    await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+    await settleTransition(tester);
+    expect(selectedRailIndex(tester), navIndexOf(ShellDestination.favorites));
+    expect(
+      playerTabIndex(tester),
+      nowPlayingQueueTabIndex,
+      reason: '非播放页按 Esc 不动页内队列视图',
+    );
   });
 
   testWidgets('Esc 裁决：音量弹层与队列视图同时在场时，一次 Esc 只关弹层',

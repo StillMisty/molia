@@ -158,8 +158,13 @@ void main() {
   }
 
   /// 走完一次切页过渡（含顶栏 ⇄ 播放页共享元素飞行约 0.4s）。
+  ///
+  /// 进入播放页的飞行延后一帧起跑（终点锚点要等落定布局，见
+  /// `app_shell.dart::_startMorphToPage`），再下一帧才是弹簧的第一个 tick，
+  /// 因此这里给两次长帧。
   Future<void> settleTransition(WidgetTester tester) async {
     await tester.pump();
+    await tester.pump(const Duration(milliseconds: 900));
     await tester.pump(const Duration(milliseconds: 900));
   }
 

@@ -107,13 +107,21 @@ void main() {
     );
   });
 
-  test('桌面列宽 480：扣掉两侧内容内边距后的堆叠仍落在列内', () {
+  test('桌面列宽 480：可用宽是紧约束，堆叠吃满而不越出列', () {
     const double column = 480;
+    const double available = column - 24 * 2;
     final metrics = coverDeckMetricsFor(
-      availableWidth: column - 24 * 2,
+      availableWidth: available,
       availableHeight: 646,
     );
-    expect(metrics.artDimension, closeTo(288, 0.5));
+    // 封面边长由「可用宽 ÷ 横向因子」定出（不是拿可用宽直接当边长），
+    // 因此堆叠横向正好吃满可用宽。
+    expect(
+      metrics.artDimension,
+      closeTo(available / coverDeckHorizontalFactor, 0.5),
+    );
+    expect(metrics.stackWidth, closeTo(available, 0.5));
+    // 不变量：堆叠（含邻位旋转包围盒与阴影）仍在列内。
     expect(metrics.stackWidth, lessThanOrEqualTo(column));
   });
 }
