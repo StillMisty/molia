@@ -23,6 +23,7 @@ import '../../services/lyrics_display/lyrics_display_settings.dart';
 import '../../services/lyrics_display/media_lyric_output.dart';
 import '../../services/system_wallpaper_service.dart';
 import '../../theme/scheme_builder.dart';
+import '../../utils/responsive.dart';
 import 'catalog_stack.dart';
 import 'lyrics_stack.dart';
 
@@ -133,27 +134,27 @@ Future<LyricsDisplayStack> buildLyricsDisplayStack({
   themeProvider.applyPlatformBrightness(
     WidgetsBinding.instance.platformDispatcher.platformBrightness,
   );
-  // 桌面系统壁纸（B-lite）先于封面注入：封面 seed 优先级更高，先注壁纸
-  // 保证封面预解析结果不会被壁纸盖回；拿不到壁纸（非 GNOME / 文件缺失 /
-  // 解码失败）保持 null，由 DynamicColorBuilder 的强调色兜底。
-  if (themeProvider.baseColorSource == ColorBaseSource.wallpaper) {
+  // 桌面系统壁纸（B-lite）：只探测桌面平台（移动端壁纸档 = 莫奈，探测无意义、
+  // warning 是噪音）；且无论当前是否壁纸档都解析一次——启动时是自定义档的
+  // 用户之后切回壁纸 / 同步推来 wallpaper 时 seed 已在位，不必重启，
+  // 冷启动与会话内切档行为一致。
+  // - 壁纸档：await 解析后注入，首帧即壁纸色（不回归）；
+  // - 自定义档：unawaited 后台解析，不增加启动延迟（服务内部吞异常，不抛）；
+  //   若晚于封面预解析完成才落地，[_schemeForBrightness] 封面优先，不会被盖回。
+  // 拿不到壁纸（非 GNOME / 文件缺失 / 解码失败）保持 null，由 DynamicColorBuilder
+  // 的强调色兜底。
+  if (isDesktopPlatform()) {
     final wallpaperSource = SystemWallpaperSource();
-    final wallpaperSeeds = await Future.wait([
-      _wallpaperSeed(
-        wallpaperSource,
-        artworkPaletteService,
-        Brightness.light,
-      ),
-      _wallpaperSeed(
-        wallpaperSource,
-        artworkPaletteService,
-        Brightness.dark,
-      ),
-    ]);
-    themeProvider.updateSystemWallpaperSeed(
-      wallpaperSeeds[0],
-      wallpaperSeeds[1],
-    );
+    final wallpaperSeeds =
+        _resolveWallpaperSeeds(wallpaperSource, artworkPaletteService);
+    if (themeProvider.baseColorSource == ColorBaseSource.wallpaper) {
+      final seeds = await wallpaperSeeds;
+      themeProvider.updateSystemWallpaperSeed(seeds.$1, seeds.$2);
+    } else {
+      unawaited(wallpaperSeeds.then(
+        (seeds) => themeProvider.updateSystemWallpaperSeed(seeds.$1, seeds.$2),
+      ));
+    }
   }
   if (themeProvider.followArtworkEnabled) {
     final startupArtwork = playback.snapshot.current?.artwork?.uri.toString();
@@ -173,6 +174,18 @@ Future<LyricsDisplayStack> buildLyricsDisplayStack({
     lyricsDisplaySettings: lyricsDisplaySettings,
     lyricsDisplay: lyricsDisplay,
   );
+}
+
+/// 浅 / 深壁纸 seed（并发解析；浅深同文件时经 LRU / 并发合并只读一次盘）。
+Future<(Color?, Color?)> _resolveWallpaperSeeds(
+  SystemWallpaperSource source,
+  ArtworkPaletteService paletteService,
+) async {
+  final seeds = await Future.wait([
+    _wallpaperSeed(source, paletteService, Brightness.light),
+    _wallpaperSeed(source, paletteService, Brightness.dark),
+  ]);
+  return (seeds[0], seeds[1]);
 }
 
 /// 亮度 → 壁纸文件路径 → 壁纸图 seed；无壁纸 / 读取 / 解码失败返回 null。
