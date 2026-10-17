@@ -5,7 +5,7 @@
 /// - `buildCatalogStack` / `buildLocalDataStack` / `buildLibraryStack`：
 ///   真实对象（只依赖 SharedPreferences mock，不触碰插件）；
 /// - `buildPlaybackStack`：注入假后端（`FakePlaybackBackend`）跳过 just_audio，
-///   注入 `mediaSessionFactory: null` 跳过 audio_service；
+///   注入 `mediaSessionFactory: null` 跳过系统媒体会话插件；
 /// - 真实插件依赖（WindowChrome / 托盘 / 媒体会话 / drift 库）不在本测试内，
 ///   由端到端集成测试覆盖（`tool/agent/test.sh`）。
 ///

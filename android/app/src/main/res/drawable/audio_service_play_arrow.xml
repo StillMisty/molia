@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- 媒体通知「播放」动作图标（覆盖 audio_service 插件的位图默认图）。
+<!-- 系统媒体会话自定义动作「播放」动作图标。
      通知动作图标须为白色单色；24dp 矢量保证任意密度清晰渲染。 -->
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
     android:width="24dp"

@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- 媒体通知「播放顺序 · 随机播放」动作图标（通知自定义动作按字符串引用，
+<!-- 系统媒体会话自定义动作「播放顺序 · 随机播放」动作图标（按字符串资源名引用，
      见 raw/keep.xml 的 @drawable/audio_service_*）。 -->
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
     android:width="24dp"

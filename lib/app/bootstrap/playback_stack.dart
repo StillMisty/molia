@@ -27,8 +27,9 @@ import 'library_stack.dart';
 import 'local_data_stack.dart';
 import 'local_playback_chain.dart';
 
-/// 系统媒体会话装配（audio_service 插件绑定）：真实本地播放服务链路与
-/// provider 都就绪后调用，恢复态切歌键直接落到 provider。
+/// 系统媒体会话装配（flutter_media_session / Linux MPRIS，见 ADR-0010）：
+/// 真实本地播放服务链路与 provider 都就绪后调用，恢复态切歌键直接落到
+/// provider。
 typedef MediaSessionFactory = Future<LocalAudioHandler?> Function(
   LocalPlaybackService service,
   PlaybackProvider provider,
@@ -123,10 +124,10 @@ Future<PlaybackStack> buildPlaybackStack({
   // 与 App 同生命周期，不单独释放。
   SleepTimerLifecycleRecheck(playbackProvider.sleepTimer).attach();
 
-  // 系统媒体会话（audio_service）必须在 runApp 之前初始化，并复用同一个
-  // 本地播放服务实例；不支持 audio_service 的平台（Linux/Windows/Web）
-  // 返回 null，自动降级。省流时通知/锁屏封面置空（artworkBlocked 在 main
-  // 注入的工厂里接线），避免 audio_service 为通知下载封面。
+  // 系统媒体会话必须在 runApp 之前初始化，并复用同一个本地播放服务实例；
+  // 平台不支持（Web）或初始化失败时工厂返回 null，自动降级为应用内播放。
+  // 省流时通知/锁屏封面置空（artworkBlocked 在 main 注入的工厂里接线），
+  // 不让平台为通知下载封面。
   LocalAudioHandler? audioHandler;
   final service = localPlaybackService;
   final factory = mediaSessionFactory;

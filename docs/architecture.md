@@ -143,22 +143,28 @@
   `fetchAlbum`（playlist / artist 仍 unsupported）。UI 为 `lib/pages/album_page.dart`
   （头部元信息 + 播放全部 + 加入列表 + `TrackRow` 分页列表），入口：歌曲信息页
   「专辑」行（payload 专辑 id + 能力位双判定，`platformAlbumId`；否则保持只读）。
-- **系统媒体会话**（Android/iOS/macOS）：`LocalAudioHandler` 把服务状态映射为
-  `MediaItem`/`PlaybackState`；通知/锁屏封面经 `MediaItem.artHeaders` 统一带
-  浏览器 UA + 平台 Referer，并复用 `ArtworkCache` 的共享 CacheManager
-  （audio_service 在 Dart 侧下载封面，网易 CDN 对默认 UA 返回 403）；
-  省流模式整体置空封面地址。恢复态（冷启动未起播）下切歌键回落给
-  `PlaybackProvider`（保存会话立即恢复播放）。`POST_NOTIFICATIONS` 不在启动时
-  请求——由 `lib/services/notification_permission.dart` 在「首次真正播放 /
-  首次开启歌词输出」时弹窗（每会话一次），被永久拒绝时
-  通知·锁屏设置页给系统设置深链；媒体会话初始化失败（平台支持但
-  `initSystemMediaSession` 返回 null）时歌词显示页给可见提示。
-  通知动作含自定义的**播放顺序**（循环模式：顺序 / 单曲 / 随机，图标与文案随当前
-  模式，App 内改模式双向一致；`MediaControl.custom('lx.playMode')`）；系统控制路径
-  （暂停 / 停止 / 切顺序）**显式 await 会话落盘**（`LocalAudioHandler` 的
-  `attachSessionPersister` + `PlaybackSessionStore.pendingWrite` 串行化；停止先落盘
-  再清空队列），保证「系统暂停 → 冷启动」能恢复上一首 + 队列 + 模式 + 进度且
-  不自动起播。
+- **系统媒体会话**（Android/iOS/macOS/Windows/Linux）：`LocalAudioHandler`
+  把服务状态映射为统一模型（`flutter_media_session` 的 `MediaMetadata` /
+  `PlaybackState` / `MediaAction`），后端可注入（见 ADR-0010）：
+  Android/iOS/macOS/Windows 走 `FlutterMediaSessionBackend`
+  （`FlutterMediaSessionPlatform`，不调用会主动请求通知权限的
+  `FlutterMediaSession().activate()`），Linux 走 `MprisMediaSessionBackend`
+  （`audio_service_mpris` 的 Dart 平台接口，D-Bus 不可用静默降级）。
+  封面经 `ArtworkCache.cachedFilePath` 带浏览器 UA + 平台 Referer 落到本地文件后
+  传本地地址（Android/iOS/macOS/Linux `file://`、Windows 裸路径；网易 CDN 对
+  默认 UA 返回 403），未命中先发远程 URL 兜底；省流模式整体置空封面地址且不下载。
+  恢复态（冷启动未起播）下切歌键回落给 `PlaybackProvider`（保存会话立即恢复
+  播放）。`POST_NOTIFICATIONS` 不在启动时请求——由
+  `lib/services/notification_permission.dart` 在「首次真正播放 / 首次开启歌词
+  输出」时弹窗（每会话一次），被永久拒绝时通知·锁屏设置页给系统设置深链；
+  媒体会话初始化失败（平台支持但 `initSystemMediaSession` 返回 null）时歌词显示
+  页给可见提示。通知动作含自定义的**播放顺序**（循环模式：顺序 / 单曲 / 随机，
+  图标与文案随当前模式，App 内改模式双向一致；`MediaAction.custom('lx.playMode')`，
+  Android drawable 名沿用 `audio_service_*`，`keep.xml` 防 shrinkResources 删除）；
+  系统控制路径（暂停 / 停止 / 切顺序 / seek）**显式 await 会话落盘**
+  （`LocalAudioHandler` 的 `attachSessionPersister` + `PlaybackSessionStore.pendingWrite`
+  串行化；停止先落盘再清空队列），保证「系统暂停 → 冷启动」能恢复上一首 + 队列 +
+  模式 + 进度且不自动起播。
 - **Cache**：`RequestCache`（single-flight + LRU 64 + TTL + 可注入时钟）。
 - **省流**：`DataSaverService`（services 层，默认关闭）持有「开启 + 音质上限 +
   封面省流」策略与 connectivity_plus 网络探测；仅在移动数据（`active`）时生效：
@@ -166,7 +172,7 @@
     压低音质（缓存键含音质，切换网络自然重解析）；
   - 封面：`ArtworkCache.networkImageBlocked` 网关让 `ArtworkCacheManager.getFileStream`
     只读本地缓存（未命中抛 `ArtworkNetworkBlockedException` → 占位图标），
-    并拦截播放预加载、audio_service 通知封面与桌面小组件封面地址；取色链路同样
+    并拦截播放预加载、系统媒体会话通知封面与桌面小组件封面地址；取色链路同样
     只读缓存——命中则照常取色，未命中保持现色（`ArtworkPaletteService` 吞掉异常）；
   - 探测失败保守按「未生效」；Android 回前台时由壳层 `refreshConnectivity()` 补一次检测。
 - **失败归一化**：`SourceFailure` 是跨层错误契约（`lib/domain/models/failure.dart`）。

@@ -25,6 +25,7 @@ import 'package:molia/services/playback_session_store.dart';
 import 'package:molia/sources/source_track.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../support/fake_media_session_backend.dart';
 import '../support/fakes.dart';
 
 SourceTrack _source(String id) => SourceTrack(
@@ -185,13 +186,14 @@ class _Harness {
       observer: observer,
       sessionStore: store,
     );
-    handler = LocalAudioHandler(service);
+    handler = LocalAudioHandler(service, backend: mediaBackend);
     // 与 `buildPlaybackStack` 同一接线：handler 建好后回填会话落盘。
     handler.attachSessionPersister(provider.flushPlaybackSession);
     observer.attach();
   }
 
   final _FakeService service = _FakeService();
+  final FakeMediaSessionBackend mediaBackend = FakeMediaSessionBackend();
   late final DefaultPlaybackFacade facade;
   late final PlaybackSessionStore store;
   late final PlaybackObserver observer;
@@ -199,8 +201,10 @@ class _Harness {
   late final LocalAudioHandler handler;
 
   void dispose() {
+    handler.dispose();
     provider.dispose();
     service.dispose();
+    mediaBackend.dispose();
   }
 }
 

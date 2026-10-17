@@ -87,8 +87,11 @@ Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{
 Source: "{#SourceDir}\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
 
 [Icons]
-Name: "{autoprograms}\{#AppName}"; Filename: "{app}\{#AppExeName}"
-Name: "{autodesktop}\{#AppName}"; Filename: "{app}\{#AppExeName}"; Tasks: desktopicon
+; AppUserModelID 必须与 windows/runner/main.cpp 的
+; SetCurrentProcessExplicitAppUserModelID 一致：Windows 用快捷方式的 AUMID
+; 把 SMTC 媒体浮层 / 通知归到本应用，缺失时显示为 "Unknown Application"。
+Name: "{autoprograms}\{#AppName}"; Filename: "{app}\{#AppExeName}"; AppUserModelID: "top.stillmisty.molia"
+Name: "{autodesktop}\{#AppName}"; Filename: "{app}\{#AppExeName}"; Tasks: desktopicon; AppUserModelID: "top.stillmisty.molia"
 
 [Run]
 ; 静默升级也走这里：应用内更新启动 setup 后自行退出，安装完由本行拉起新版。

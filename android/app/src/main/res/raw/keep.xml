@@ -1,12 +1,12 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
   release 构建启用了 shrinkResources：AAPT 只按「静态引用」判定资源存活，
-  下列资源仅在运行时按字符串查找（audio_service 的 getIdentifier、Dart 侧配置），
+  下列资源仅在运行时按字符串查找（媒体会话自定义动作的 drawable 名、Dart 侧配置），
   必须显式保留；否则它们会被当成无用资源删掉，导致媒体通知直接构建失败
-  （CustomAction 图标为 0 抛 IllegalArgumentException；见已知坑 34）。
+  （自定义动作图标为 0 时通知构建中止；见已知坑 34）。
 
   注意：这里是 AAPT 的保留清单，不是代码引用——新增「字符串引用」的资源
-  （如 androidNotificationIcon、自定义 MediaControl 图标）时都要同步加进来。
+  （如下载通知 small icon、播放顺序自定义动作图标）时都要同步加进来。
 -->
 <resources xmlns:tools="http://schemas.android.com/tools"
     tools:keep="@drawable/ic_notification,@drawable/audio_service_*" />

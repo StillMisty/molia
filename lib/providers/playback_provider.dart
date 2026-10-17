@@ -878,8 +878,8 @@ class PlaybackProvider extends ChangeNotifier {
     // 观察者由组合根创建、与 provider 同生命周期：这里一并拆线
     // （组合根不单独释放）。
     _observer?.dispose();
-    // 注意：facade / backend / LocalPlaybackService 由 main 创建并注入
-    // （audio_service 复用），此处不能 dispose，只解除监听。
+    // 注意：facade / backend / LocalPlaybackService 由组合根创建并注入
+    // （系统媒体会话复用同一实例），此处不能 dispose，只解除监听。
     _notifyThrottler.dispose();
     super.dispose();
   }

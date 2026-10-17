@@ -1,5 +1,6 @@
 #include <flutter/dart_project.h>
 #include <flutter/flutter_view_controller.h>
+#include <shobjidl.h>
 #include <windows.h>
 
 #include "flutter_window.h"
@@ -16,6 +17,11 @@ int APIENTRY wWinMain(_In_ HINSTANCE instance, _In_opt_ HINSTANCE prev,
   // Initialize COM, so that it is available for use in the library and/or
   // plugins.
   ::CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED);
+
+  // Windows 系统媒体浮层（SMTC）按 AppUserModelID 归档应用。必须在创建任何
+  // 窗口 / 初始化 SMTC 之前设置，且与安装器快捷方式的 AppUserModelID 一致；
+  // 否则媒体浮层显示为 "Unknown Application"，通知归属也会错乱。
+  ::SetCurrentProcessExplicitAppUserModelID(L"top.stillmisty.molia");
 
   flutter::DartProject project(L"data");
 

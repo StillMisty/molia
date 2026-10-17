@@ -6,6 +6,9 @@ import 'package:cached_network_image/cached_network_image.dart';
 // 测试直接用 flutter_cache_manager 的内存实现（传递依赖，不触网）。
 // ignore: depend_on_referenced_packages
 import 'package:flutter_cache_manager/flutter_cache_manager.dart';
+// CacheManager.getSingleFile 的 File 来自 package:file（传递依赖）。
+// ignore: depend_on_referenced_packages
+import 'package:file/file.dart' as pkg_file;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:molia/managers/artwork_cache.dart';
 import 'package:molia/services/cache_service.dart';
@@ -29,6 +32,31 @@ class _OfflineCacheManager extends CacheManager {
     Map<String, String>? headers,
     bool withProgress = false,
   }) async* {
+    throw Exception('offline');
+  }
+}
+
+/// 记录 getSingleFile 调用的内存 CacheManager（系统媒体会话封面本地化）。
+class _RecordingCacheManager extends CacheManager {
+  _RecordingCacheManager()
+      : super(Config(
+          'artwork_cache_test_recording',
+          repo: _MemoryRepo(),
+          fileSystem: MemoryCacheSystem(),
+          fileService: HttpFileService(),
+        ));
+
+  int singleFileCalls = 0;
+  Map<String, String>? lastHeaders;
+
+  @override
+  Future<pkg_file.File> getSingleFile(
+    String url, {
+    String? key,
+    Map<String, String>? headers,
+  }) async {
+    singleFileCalls++;
+    lastHeaders = headers;
     throw Exception('offline');
   }
 }
@@ -308,6 +336,56 @@ void main() {
       );
       expect(file.path, startsWith(artworkDir));
       expect(await file.exists(), isTrue);
+    });
+  });
+
+  group('系统媒体会话封面本地化（cachedFilePath）', () {
+    late _RecordingCacheManager manager;
+
+    setUp(() {
+      manager = _RecordingCacheManager();
+    });
+
+    tearDown(() => manager.dispose());
+
+    test('命中持久缓存：直接返回本地文件路径', () async {
+      final cache = ArtworkCache(
+        cacheService: cacheService,
+        managerOverride: manager,
+      );
+      const url = 'https://p1.music.126.net/media-cached.jpg';
+      final file = await manager.putFile(
+        url,
+        Uint8List.fromList([1, 2, 3]),
+        fileExtension: 'jpg',
+      );
+
+      expect(await cache.cachedFilePath(url), file.path);
+      expect(manager.singleFileCalls, 0);
+    });
+
+    test('未命中 + 下载：带浏览器 UA 请求头（修复 CDN 403）', () async {
+      final cache = ArtworkCache(
+        cacheService: cacheService,
+        managerOverride: manager,
+      );
+      const url = 'https://p1.music.126.net/media-miss.jpg';
+
+      expect(await cache.cachedFilePath(url), isNull);
+      expect(manager.singleFileCalls, 1);
+      expect(manager.lastHeaders?['User-Agent'], ArtworkCache.browserUserAgent);
+      expect(manager.lastHeaders?['Referer'], 'https://music.163.com/');
+    });
+
+    test('省流网关开启：未命中不触网（getSingleFile 不被调用）', () async {
+      final cache = ArtworkCache(
+        cacheService: cacheService,
+        managerOverride: manager,
+      )..networkImageBlocked = () => true;
+      const url = 'https://p1.music.126.net/media-blocked.jpg';
+
+      expect(await cache.cachedFilePath(url), isNull);
+      expect(manager.singleFileCalls, 0);
     });
   });
 

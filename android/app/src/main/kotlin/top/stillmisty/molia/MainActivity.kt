@@ -13,12 +13,12 @@ import androidx.appcompat.app.AppCompatDelegate
 import androidx.core.content.FileProvider
 import androidx.core.os.LocaleListCompat
 import androidx.core.view.WindowCompat
-import com.ryanheise.audioservice.AudioServiceActivity
+import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodChannel
 import java.io.File
 
-class MainActivity: AudioServiceActivity() {
+class MainActivity : FlutterActivity() {
     /// 公共 Downloads 里的应用子目录（与桌面 `~/Downloads/Molia`、iOS 文档
     /// 目录 `Molia/` 对齐；`Environment.DIRECTORY_DOWNLOADS` = "Download"）。
     private val publicDownloadsRelativePath = "${Environment.DIRECTORY_DOWNLOADS}/Molia"

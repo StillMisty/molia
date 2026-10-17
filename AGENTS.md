@@ -5,7 +5,7 @@
 - **音源**：LX Music 自定义源脚本（QuickJS 引擎 + 自愈监督）、内置平台搜索与发现
   （酷我/酷狗/QQ/网易云/咪咕，结果类型分段：单曲/歌手/歌词）、歌手页
   （头像/简介 + 歌手歌曲分页）、any-listen 接入（骨架）
-- **播放**：本地音频（just_audio；桌面 Windows/Linux 走 media_kit/libmpv）、队列/播放模式、定时关闭（倒计时 / 播完当前歌曲，歌曲信息页入口）、后台播放与系统媒体通知（audio_service）、桌面托盘（常驻图标 + 关闭到托盘 + 播放控制菜单）
+- **播放**：本地音频（just_audio；桌面 Windows/Linux 走 media_kit/libmpv）、队列/播放模式、定时关闭（倒计时 / 播完当前歌曲，歌曲信息页入口）、后台播放与系统媒体会话（flutter_media_session；Linux 走 MPRIS）、桌面托盘（常驻图标 + 关闭到托盘 + 播放控制菜单）
 - **歌词**：QQ/网易/LRCLIB 获取与显示、歌词行选择、歌词海报导出
 - **省流模式**（移动数据下压低取链音质、封面仅本地缓存）、**M3E（Material 3 Expressive）UI**
 - **AI 推歌（可选，默认关闭）**：用户自备 API Key 的 OpenAI-compatible LLM
@@ -68,7 +68,7 @@ lib/
   domain/          # 纯 Dart：models（Track/PlaybackSnapshot/SearchResult/SourceFailure…）+ ports
   data/            # 端口实现：db（MoliaDatabase，drift）/ catalog（CatalogService）/ playback（facade）/ cache / mapping / update（Release 清单与下载）
   sources/         # source_manager + builtin（五平台搜索/歌手/歌词/发现）/ lx（引擎）/ any_listen
-  playback/        # LocalPlaybackService（just_audio 后端）+ local_audio_handler（audio_service）
+  playback/        # LocalPlaybackService（just_audio 后端）+ local_audio_handler（媒体会话）
   providers/       # UI 状态：PlaybackProvider / SearchProvider / LibraryProvider / ThemeProvider…
   services/        # 歌词、歌词显示、省流、缓存、字体、设置、更新（检查/安装策略）…
   app/             # app_shell.dart：应用壳（测试可直接挂载）；bootstrap/：组合根 stack builders
