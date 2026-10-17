@@ -1,4 +1,4 @@
-; Molia Windows 安装器（Inno Setup 6）
+﻿; Molia Windows 安装器（Inno Setup 6）
 ;
 ; 由 .github/workflows/release.yml 的 windows job 调用：
 ;   ISCC.exe /DAppVersion=0.1.0-beta.1 /DVersionNum=0.1.0.123 \
@@ -34,7 +34,7 @@
   #define OutputDir "..\..\dist"
 #endif
 
-#define AppName "Molia"
+#define AppName "Molia 茉咏"
 #define AppPublisher "StillMisty"
 #define AppUrl "https://github.com/StillMisty/molia"
 #define AppExeName "molia.exe"
@@ -50,7 +50,9 @@ AppPublisherURL={#AppUrl}
 AppSupportURL={#AppUrl}/issues
 AppUpdatesURL={#AppUrl}/releases
 ; {autopf}：按用户安装 → %LOCALAPPDATA%\Programs；按机器安装 → C:\Program Files。
-DefaultDirName={autopf}\{#AppName}
+; 目录固定 ASCII "Molia"（不跟随中文显示名）：升级要落到同一目录，
+; 应用内更新（update_installer_io.dart）也按该目录找 unins000.exe。
+DefaultDirName={autopf}\Molia
 DefaultGroupName={#AppName}
 DisableProgramGroupPage=yes
 DisableDirPage=auto
@@ -67,9 +69,12 @@ SolidCompression=yes
 WizardStyle=modern
 ArchitecturesAllowed=x64compatible
 ArchitecturesInstallIn64BitMode=x64compatible
+VersionInfoCompany={#AppPublisher}
+VersionInfoDescription={#AppName} 安装程序
 VersionInfoVersion={#VersionNum}
 VersionInfoProductName={#AppName}
 VersionInfoProductVersion={#VersionNum}
+UninstallDisplayName={#AppName} {#AppVersion}
 CloseApplications=yes
 RestartApplications=no
 
