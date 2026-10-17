@@ -55,11 +55,6 @@ add_subdirectory("runner")
 
 # Generated plugin build rules, which manage building the plugins and adding
 # them to the application.
-#
-# permission_handler_windows 仍使用 C++/WinRT 的 <experimental/coroutine>（/await）；
-# VS 18 的 MSVC 14.51 起将其升级为硬错误（STL1011）。该宏是 STL 提供的官方
-# 消音开关，对更老的工具链无副作用（只影响其后 add_subdirectory 的插件目标）。
-add_compile_definitions(_SILENCE_EXPERIMENTAL_COROUTINE_DEPRECATION_WARNINGS)
 include(flutter/generated_plugins.cmake)
 
 

@@ -1,10 +1,10 @@
 import 'package:flutter/foundation.dart';
-import 'package:permission_handler/permission_handler.dart';
+import 'package:flutter/services.dart';
 
 /// 局域网权限状态：未申请 / 已授予 / 被拒（可再问）/ 永久拒绝。
 ///
 /// 「永久拒绝」与「被拒」必须分开：前者系统不再弹窗，唯一出路是
-/// `openAppSettings()`；后者还可以由用户显式再申请一次。
+/// 去系统设置；后者还可以由用户显式再申请一次。
 enum LocalNetworkPermissionStatus {
   /// 本会话尚未申请过。
   notRequested,
@@ -29,6 +29,9 @@ enum LocalNetworkPermissionStatus {
 /// - 一个会话内被拒后不自动重复弹窗（否则每轮同步都弹），
 ///   用户显式点「授予权限」时走 `ensure(retry: true)`；
 /// - 永久拒绝时 `ensure` 不再请求（系统不会弹窗），UI 直接给「去系统设置」；
+/// - 生产实现走 Android 自有通道（`top.stillmisty.molia/local_network`），
+///   不引入权限库：项目只需要这一个 Android 运行时权限，而 `permission_handler`
+///   的 Windows 实现会在注册时开启定位会话（上游 #1394）；
 /// - 申请 / 查询 / 跳系统设置都经构造注入，单测不触发平台通道。
 class LocalNetworkPermission {
   LocalNetworkPermission({
@@ -40,32 +43,45 @@ class LocalNetworkPermission {
         _check = check,
         _openSettings = openSettings;
 
+  /// 平台通道（Android 原生实现见 `LocalNetworkPermissionChannelHandler.kt`）。
+  static const MethodChannel _channel =
+      MethodChannel('top.stillmisty.molia/local_network');
+
   /// 生产实现：Android 走 `ACCESS_LOCAL_NETWORK`，Web 与桌面恒定允许。
   factory LocalNetworkPermission.production() {
     final needs = !kIsWeb && defaultTargetPlatform == TargetPlatform.android;
     return LocalNetworkPermission(
       needsPermission: needs,
-      request: () async =>
-          _statusOf(await Permission.accessLocalNetwork.request()),
-      check: () async =>
-          _statusOf(await Permission.accessLocalNetwork.status),
-      openSettings: () => openAppSettings(),
+      request: () async => _statusOf(
+        await _channel.invokeMethod<String>('requestPermission'),
+      ),
+      check: () async => _statusOf(
+        await _channel.invokeMethod<String>('permissionStatus'),
+      ),
+      openSettings: _openSystemSettings,
     );
   }
 
-  /// `permission_handler` 状态 → 本模块状态（`restricted` 等同永久拒绝：
-  /// 系统层面不允许申请）。
-  static LocalNetworkPermissionStatus _statusOf(PermissionStatus status) =>
+  /// 平台通道状态 → 本模块状态（`restricted` 等同永久拒绝：
+  /// 系统层面不允许申请；`limited` / `provisional` 视为已授予）。
+  static LocalNetworkPermissionStatus _statusOf(String? status) =>
       switch (status) {
-        PermissionStatus.granted ||
-        PermissionStatus.limited ||
-        PermissionStatus.provisional =>
+        'granted' || 'limited' || 'provisional' =>
           LocalNetworkPermissionStatus.granted,
-        PermissionStatus.permanentlyDenied ||
-        PermissionStatus.restricted =>
+        'permanentlyDenied' || 'restricted' =>
           LocalNetworkPermissionStatus.permanentlyDenied,
         _ => LocalNetworkPermissionStatus.denied,
       };
+
+  static Future<void> _openSystemSettings() async {
+    try {
+      await _channel.invokeMethod<bool>('openAppSettings');
+    } on PlatformException catch (e) {
+      debugPrint('[Molia] 打开应用设置失败: $e');
+    } on MissingPluginException catch (e) {
+      debugPrint('[Molia] 打开应用设置失败: $e');
+    }
+  }
 
   /// 本平台是否需要申请（false 时 [granted] 恒为 true）。
   final bool needsPermission;

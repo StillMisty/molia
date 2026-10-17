@@ -26,6 +26,8 @@ class MainActivity: AudioServiceActivity() {
     private var methodChannel: MethodChannel? = null
     private var lyricsChannel: top.stillmisty.molia.lyrics.LyricsChannelHandler? = null
     private var batteryChannel: top.stillmisty.molia.battery.BatteryChannelHandler? = null
+    private var lanPermissionChannel:
+        top.stillmisty.molia.sync.LocalNetworkPermissionChannelHandler? = null
 
     /// 通知权限请求的挂起结果（Android 13+）：权限回调后一次性完成。
     private var notificationPermissionResult: MethodChannel.Result? = null
@@ -182,6 +184,13 @@ class MainActivity: AudioServiceActivity() {
         batteryChannel = top.stillmisty.molia.battery.BatteryChannelHandler(
             messenger = flutterEngine.dartExecutor.binaryMessenger,
             context = this,
+        )
+
+        // 局域网权限通道：Android 17 起 ACCESS_LOCAL_NETWORK 需运行时申请。
+        lanPermissionChannel = top.stillmisty.molia.sync.LocalNetworkPermissionChannelHandler(
+            activity = this,
+            context = this,
+            messenger = flutterEngine.dartExecutor.binaryMessenger,
         )
 
         // 通知权限通道：请求时机由 Dart 侧业务决定；被永久拒绝时给设置深链。
@@ -447,6 +456,9 @@ class MainActivity: AudioServiceActivity() {
         grantResults: IntArray
     ) {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults)
+        if (lanPermissionChannel?.handlePermissionResult(requestCode) == true) {
+            return
+        }
         if (requestCode == 1002) {
             notificationPermissionResult?.success(notificationPermissionStatus())
             notificationPermissionResult = null
