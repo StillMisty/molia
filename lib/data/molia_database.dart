@@ -262,6 +262,7 @@ class Downloads extends Table {
 /// versionCounter + originDeviceId`，跨设备「晚收尾覆盖」按版本判定。
 @TableIndex(name: 'idx_play_events_startedAt', columns: {#startedAt})
 @TableIndex(name: 'idx_play_events_track', columns: {#sourceKey, #songId})
+@TableIndex(name: 'idx_play_events_endedAt', columns: {#endedAt})
 @TableIndex.sql(
     'CREATE UNIQUE INDEX idx_play_events_syncKey ON play_events (syncKey) '
     'WHERE syncKey IS NOT NULL')
@@ -346,12 +347,13 @@ class MoliaDatabase extends _$MoliaDatabase {
   }
 
   /// 当前 schema 版本：`1` 建出基线全部表，`2` 新增 `sync_known`，
-  /// `3` 新增增量日志（`sync_journal` + `sync_journal_state`）。
+  /// `3` 新增增量日志（`sync_journal` + `sync_journal_state`），
+  /// `4` 新增 `play_events(endedAt)` 索引（统计查询 / 同步指纹）。
   ///
   /// 结构变更必须写增量迁移：提版本号 → `dart run drift_dev make-migrations`
   /// 生成 schema 快照 → 用 `stepByStep` 写迁移并保留数据（见 ADR-0005）。
   @override
-  int get schemaVersion => 3;
+  int get schemaVersion => 4;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -366,6 +368,11 @@ class MoliaDatabase extends _$MoliaDatabase {
             await m.createTable(schema.syncJournal);
             await m.createTable(schema.syncJournalState);
             await m.createIndex(schema.idxSyncJournalAt);
+          },
+          from3To4: (m, schema) async {
+            // v3 → v4：新增 play_events(endedAt) 索引。统计页 / 同步指纹全部
+            // 按 `endedAt IS NOT NULL` 过滤，没索引就是全表扫描。
+            await m.createIndex(schema.idxPlayEventsEndedAt);
           },
         ),
         beforeOpen: (details) async {

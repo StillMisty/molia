@@ -4999,6 +4999,8 @@ abstract class _$MoliaDatabase extends GeneratedDatabase {
       'CREATE INDEX idx_play_events_startedAt ON play_events (startedAt)');
   late final Index idxPlayEventsTrack = Index('idx_play_events_track',
       'CREATE INDEX idx_play_events_track ON play_events (sourceKey, songId)');
+  late final Index idxPlayEventsEndedAt = Index('idx_play_events_endedAt',
+      'CREATE INDEX idx_play_events_endedAt ON play_events (endedAt)');
   late final Index idxPlayEventsSyncKey = Index('idx_play_events_syncKey',
       'CREATE UNIQUE INDEX idx_play_events_syncKey ON play_events (syncKey) WHERE syncKey IS NOT NULL');
   late final Index idxDownloadsDownloadedAt = Index(
@@ -5026,6 +5028,7 @@ abstract class _$MoliaDatabase extends GeneratedDatabase {
         idxSyncJournalAt,
         idxPlayEventsStartedAt,
         idxPlayEventsTrack,
+        idxPlayEventsEndedAt,
         idxPlayEventsSyncKey,
         idxDownloadsDownloadedAt
       ];

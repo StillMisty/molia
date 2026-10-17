@@ -209,6 +209,8 @@ void main() {
             'ON playlist_tracks (playlistId, sortOrder, addedAt)',
         'idx_play_events_startedAt':
             'CREATE INDEX idx_play_events_startedAt ON play_events (startedAt)',
+        'idx_play_events_endedAt':
+            'CREATE INDEX idx_play_events_endedAt ON play_events (endedAt)',
         'idx_play_events_track': 'CREATE INDEX idx_play_events_track '
             'ON play_events (sourceKey, songId)',
         'idx_play_events_syncKey': 'CREATE UNIQUE INDEX idx_play_events_syncKey '
