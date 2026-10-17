@@ -150,31 +150,42 @@ class TrackLocalDataService {
       );
 
   /// 完整读取（下载记录 + 四项缓存占用 + 命中音质）。
-  Future<TrackLocalData> load(Track track) async {
+  Future<TrackLocalData> load(Track track) async =>
+      (await loadMany([track]))[track.id.uri]!;
+
+  /// 批量读取：一次目录列举 + 并发封面统计服务多首曲目（本地歌曲合集等
+  /// 列表消费面用），与 [load] 同一判据、同一返回形状；key 为 `TrackId.uri`。
+  ///
+  /// 存储失败向上抛，由调用方决定失败呈现（列表页按无结果处理）。
+  Future<Map<String, TrackLocalData>> loadMany(List<Track> tracks) async {
+    if (tracks.isEmpty) return const {};
     final store = _cacheService.audioStore;
-    final results = await Future.wait([
-      store.index(),
-      store.usageForTrack(
-        sourceKey: track.id.sourceKey,
-        songId: track.id.id,
-      ),
-      store.writingUsageForTrack(
-        sourceKey: track.id.sourceKey,
-        songId: track.id.id,
-      ),
-      _cacheService.lyricsUsageForTrack(track.id.uri),
-      _artworkUsage(track),
+    final (index, partials) = await store.splitIndex();
+    final artworkUsages = await Future.wait([
+      for (final track in tracks) _artworkUsage(track),
     ]);
-    final index = results[0] as Map<String, int>;
-    return TrackLocalData(
-      download: _downloadService?.recordForTrack(track),
-      audioCache: results[1] as CacheUsage,
-      audioWriting: results[2] as CacheUsage,
-      lyricsCache: results[3] as CacheUsage,
-      artworkCache: results[4] as CacheUsage,
-      cachedQualities: AudioCacheStore.cachedQualitiesForTrack(track, index),
-      resolveEntries: _catalogService.resolveCacheCountForTrack(track),
-    );
+    final result = <String, TrackLocalData>{};
+    for (var i = 0; i < tracks.length; i++) {
+      final track = tracks[i];
+      result[track.id.uri] = TrackLocalData(
+        download: _downloadService?.recordForTrack(track),
+        audioCache: AudioCacheStore.usageForTrackInFiles(
+          index,
+          sourceKey: track.id.sourceKey,
+          songId: track.id.id,
+        ),
+        audioWriting: AudioCacheStore.usageForTrackInFiles(
+          partials,
+          sourceKey: track.id.sourceKey,
+          songId: track.id.id,
+        ),
+        lyricsCache: await _cacheService.lyricsUsageForTrack(track.id.uri),
+        artworkCache: artworkUsages[i],
+        cachedQualities: AudioCacheStore.cachedQualitiesForTrack(track, index),
+        resolveEntries: _catalogService.resolveCacheCountForTrack(track),
+      );
+    }
+    return result;
   }
 
   /// 清理单项缓存（音频跳过正在写入的文件，见

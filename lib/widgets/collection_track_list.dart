@@ -258,19 +258,12 @@ class CollectionSearchEmpty extends StatelessWidget {
 /// 缓存行保留原曲身份（`sourceKey` / `songId` / `raw`），播放走正常解析
 /// （命中缓存即 `file://` 离线播放）；删除是「清缓存」，不动下载记录。
 class CollectionLocalSong {
-  const CollectionLocalSong.download(this.record)
-      : history = null,
-        cachedSizeBytes = null;
+  const CollectionLocalSong.download(this.record) : history = null;
 
-  const CollectionLocalSong.cached(this.history,
-      {required this.cachedSizeBytes})
-      : record = null;
+  const CollectionLocalSong.cached(this.history) : record = null;
 
   final DownloadedTrack? record;
   final PlayHistoryEntry? history;
-
-  /// 缓存行展示用体积（多音质变体取最大）；下载行为 null。
-  final int? cachedSizeBytes;
 
   /// 是否缓存行（无下载 / 导入记录）。
   bool get isCached => record == null;

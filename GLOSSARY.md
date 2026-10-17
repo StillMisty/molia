@@ -50,6 +50,13 @@
   暂停延后一个 microtask 以兼容 just_audio 的打断记账；恢复焦点不抢播（transient
   的续播由 just_audio 负责）。桌面无插件实现时 no-op。
 
+- **Seek preview（进度预览模块）** — `lib/widgets/seek_preview.dart` +
+  `lib/widgets/seek_bar.dart`：进度拖动预览的唯一实现（拖动期显示本地值；
+  松手提交后保留显示直到 position 追上（容差 800ms）或 1.5s 兜底；新拖动 /
+  新提交作废旧落点；换曲按身份变化清理；时序常量不给宿主配置面）。
+  `SeekBar` 是它的渲染面（波浪 ⇄ 平直、气泡与侧时间文案），播放页与桌面
+  底栏只是宿主，seek 语义不再各持一份。
+
 ## 播放页封面（cover deck）
 
 - **Cover deck（封面堆叠）** — `lib/widgets/player_cover_deck.dart`：播放页封面区
@@ -111,7 +118,7 @@
 
 - **Desktop shell（桌面骨架）** — `lib/app/desktop/**`：仅 linux/windows/macOS 生效的壳层版式（顶栏瘦身 + 可展开侧栏 + 常驻底栏播放条 + 队列右面板），由 `lib/app/app_shell.dart` 按平台分流（`MyApp(desktopShell:)` 可强制，测试用）；移动骨架与共享逻辑（页面栈 / 共享元素飞行 / 重复点击通道）仍在 `app_shell.dart`，两套骨架同源。
 
-- **Now playing bar（底栏播放条）** — `lib/app/desktop/now_playing_bar.dart`：桌面常驻 80dp 播放条（左：封面/歌名/收藏，点击进播放页并复用封面飞行；中：传输 + 可拖波浪进度 + 时间；右：播放模式 / 音量弹层 / 队列开关）。进度拖动语义与播放页滑杆同源（两处实现，改语义必须同步）。
+- **Now playing bar（底栏播放条）** — `lib/app/desktop/now_playing_bar.dart`：桌面常驻 80dp 播放条（左：封面/歌名/收藏，点击进播放页并复用封面飞行；中：传输 + 可拖波浪进度 + 时间；右：播放模式 / 音量弹层 / 队列开关）。进度拖动语义与播放页共用 **Seek preview**，宿主只负责版式。
 
 - **Queue panel（队列右面板）** — `lib/app/desktop/queue_panel.dart`：桌面右侧 supporting pane（260–480 可拖，默认 360；窗口宽 <1200 不渲染），内容为 `QueueDisplay(includeCurrent: true)`（顶部「正在播放」行 + 接下来队列）；开合与宽度经 `shell_layout_prefs.dart` 设备本地记忆。
 
@@ -487,17 +494,19 @@
   展示；窗口基于状态存储保留的最近日志条目。
 
 ## 缓存
-- **Local data（本地数据）** — 单曲在本机的东西，分两档：**已缓存**（易失副本：边播边缓存 / 后台下载 / 取词 / 取图产生，可离线播放，会被 LRU / TTL / 清理回收）与**已下载**（持久副本：`downloads/` + drift 记录，可分享、清缓存不影响），两档都没有就是「未下载」。两档都不是的那首曲目在信息页与页内统一显示「未下载」。唯一读取口 `lib/services/track_local_data_service.dart`（`TrackLocalData`），词表唯一出处 `LocalPartState`；**禁止** 页面或模块另写「算不算有」的判据（见 ADR-0008）。
+- **Local data（本地数据）** — 单曲在本机的东西，分两档：**已缓存**（易失副本：边播边缓存 / 后台下载 / 取词 / 取图产生，可离线播放，会被 LRU / TTL / 清理回收）与**已下载**（持久副本：`downloads/` + drift 记录，可分享、清缓存不影响），两档都没有就是「未下载」。两档都不是的那首曲目在信息页与页内统一显示「未下载」。唯一读取口 `lib/services/track_local_data_service.dart`（单曲 `load` + 列表批量 `loadMany`，`TrackLocalData`），词表唯一出处 `LocalPartState`；**禁止** 页面或模块另写「算不算有」的判据（见 ADR-0008）。
 - **转存（Save a copy）** — 把已缓存的一档「固化」成持久下载：拷贝缓存内容到 `downloads/`（不触网）+ 落库，动作文案「转存到本地文件夹」。缓存命中时下载动作本身就是转存；转存后状态从「已缓存」变「已下载」。
-- **Audio cache store（音频缓存约定模块）** — `lib/services/audio_cache_store.dart`：音频缓存目录磁盘约定的唯一实现（写入 / 读取两侧 key 命名、完整文件判据、完整文件索引、命中路径、按曲目的已缓存音质、半成品清扫、旧命名迁移）。`CacheService` 的同名静态方法保留为薄委托（门面）；文件存在性由调用方注入（命中探测与其后的拷贝必须同一文件系统视图）。见 ADR-0008。
-- **音频缓存键** — 缓存文件名 `{sourceKey}_{songId}_{quality}`（Audio cache store 的 `keyForSource` / `keyForTrack`；`CacheService.audioCacheKeyForSource` / `…ForTrack` 是兼容门面）。`songId` 必须与 `TrackId.id` 同源（`SourceTrack.songId`，不带 `sourceKey:` 前缀）——写入侧与读取侧同名是硬约束，否则文件写了也没人找得到。
+- **Audio cache store（音频缓存约定模块）** — `lib/services/audio_cache_store.dart`：音频缓存目录磁盘约定的唯一实现（写入 / 读取两侧 key 命名、完整文件判据、完整文件索引、命中路径、按曲目的已缓存音质、半成品清扫、旧命名迁移）。`CacheService` 的实例方法（索引 / 占用 / 清理）是策略面的薄委托；键名与完整判据不再有第二处门面（测试同样只经本模块）。文件存在性由调用方注入（命中探测与其后的拷贝必须同一文件系统视图）。见 ADR-0008。
+- **音频缓存键** — 缓存文件名 `{sourceKey}_{songId}_{quality}`（Audio cache store 的 `keyForSource` / `keyForTrack`）。`songId` 必须与 `TrackId.id` 同源（`SourceTrack.songId`，不带 `sourceKey:` 前缀）——写入侧与读取侧同名是硬约束，否则文件写了也没人找得到。
 - **半成品（partial）** — 音频缓存目录里未落成的文件：just_audio 边下载边写 `*.part`、字节预取写 `*.predl`、MIME 边车 `*.mime`。它们占磁盘但不是可播放缓存：索引 / 占用 / 命中一律排除（判据在 Audio cache store），单独计为「写入中」，启动时清扫（写入者在本进程内，重启后残留必为孤儿）。
 - **Lyrics cache（歌词缓存模块）** — `lib/services/lyrics_cache.dart`：歌词键（`lyrics_cache_{trackId}`）、读写、用量与清理的唯一实现；TTL 策略属于 `CacheService`（取词时读取）。历史 `manual_lyrics_cache_*` 重复键只清不读。
 - **Artwork index（封面索引）** — flutter_cache_manager 的元数据存储；`CacheStorage` 直接删文件后，由 `ArtworkCache` 的 `_pruneMissingEntries` 同步清理失效条目（索引不指向缺失文件）。
 - **Paged list controller（分页列表状态机）** — `lib/providers/paged_list_controller.dart`：首屏 / 加载更多 / 失败态（首屏清空可重试 vs 追加保留）/ 过期响应丢弃（`reset` 与 `dispose` 都使在途请求过期）/ 跨页去重 / 「追加页去重后无新增即 `hasMore=false`」推断的唯一实现；状态以一个值发布（`PagedListState<T>`，一次请求只发终态），持有方提供 `fetchPage`（平台特有的「取满即结束 / 达到总数」判断留在取数回调）。消费面：`SearchProvider`（按 `SearchKind` 三会话）、评论热门 / 最新 tab、发现页歌单 tab 与曲目页、专辑页、歌手页——不再各自手写 flag 机。
 - **Library collections（合集策略模块）** — `lib/providers/library_collections.dart`：收藏 / 播放历史 / 本地歌曲 / 自建列表的哨兵（`unset` / `favoritesSentinel` / `historySentinel` / `downloadsSentinel`）、默认选择解析（`resolveSelection`，后两者仅显式选择进入）、顺序应用（`applyOrder`）与持久化（顺序 / 选择的唯一实现）；收藏页只保留 UI 状态。滚动位置见 Collection scroll bookkeeping。
+
+- **Collection selection（合集多选状态机）** — `lib/widgets/collection_selection.dart`：收藏页收藏 / 历史 / 本地歌曲共用的多选唯一实现（可见行下标选择集、Ctrl 切换、Shift 区间与锚点移动、全选三态、越界提取忽略、`clear` / `clearAnchor`）；页面只保留点播分支与动作实现，Esc 的可见性 / 焦点判定仍属页面（同源规则见 Escape claims）。
 - **Collection list（合集列表模块）** — `lib/widgets/collection_track_list.dart`：收藏页各合集共用的一份列表脚手架（Scrollbar 参数、`itemExtent = TrackRow.extent + gap`、懒构建、重排模式、空态 / 搜索空态、左滑动作形状与行外壳 `CollectionTrackRow`）；行内容由调用方 `itemBuilder` 提供，页内过滤 / 排序口径在 `lib/utils/collection_row_query.dart`（`collectionRowMatches` / `sortCollectionTracks`）。
 - **Collection scroll bookkeeping（合集滚动簿记）** — `lib/widgets/collection_scroll_bookkeeping.dart`：按合集键保存 / 恢复滚动位置的唯一实现（节流 ≤2 次/秒、切换合集各自只恢复一次、夹取到可滚动范围）；调度器（`CollectionScrollScheduler`）可注入，脱离 widget 树可单测。
-- **Local songs（本地歌曲合集）** — 收藏页的伪合集（`downloadsSentinel` ↔ `downloadsOrderKey`）：数据来自 `DownloadService.downloads`（下载副本 + 本地导入），不落列表表；仅在下载能力可用（`DownloadService.supported`）时出现在合集弹层，排序固定按下载 / 导入时间倒序。
+- **Local songs（本地歌曲合集）** — 收藏页的伪合集（`downloadsSentinel` ↔ `downloadsOrderKey`）：数据来自 `DownloadService.downloads`（下载副本 + 本地导入）与 `TrackLocalDataService.loadMany`（播放历史 × 完整音频缓存命中，批量一次列举），不落列表表；仅在下载能力可用（`DownloadService.supported`）时出现在合集弹层，排序固定按下载 / 导入时间倒序。
 - **Local import（本地导入）** — `downloads` 表 `imported` 行 = **就地引用**用户自己的音频文件：`originSourceKey = 'local'`、`originSongId` = 文件绝对路径（同路径重复导入幂等），`filePath` 指向原文件；删除记录只移行、不删文件，补发布 / 旧位置迁移都跳过。写入唯一入口 `DownloadService.importLocalFiles`（标签解析见 `lib/data/downloads/audio_tag_reader.dart`：mp3 ID3v2 / flac Vorbis Comment，其余格式按文件名兜底）。
 - **Download notifications（下载通知模块）** — `lib/data/downloads/download_notifications*.dart`（平台 seam：IO=MethodChannel，其它平台 no-op，通道异常只记日志、绝不影响下载本身）+ Android `DownloadNotificationService`（`dataSync` 前台服务）：下载进行中在系统通知显示进度（批量共享一条「N/N」），完成 / 失败 / 取消收尾并移除；API 33+ 未授予通知权限时降级为「无通知但继续下载」；开关 `download_notifications`（设备本地键，默认开）。

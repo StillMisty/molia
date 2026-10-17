@@ -20,6 +20,7 @@ import '../services/download/download_service.dart';
 import '../services/escape_claims.dart';
 import '../services/haptics.dart';
 import '../services/notification_service.dart';
+import '../services/track_local_data_service.dart';
 import '../utils/duration_text.dart';
 import '../utils/responsive.dart';
 import '../utils/collection_row_query.dart';
@@ -29,6 +30,7 @@ import '../widgets/add_to_playlist_sheet.dart' show showPlaylistNameDialog;
 import '../widgets/app_search_bar.dart';
 import '../widgets/collection_rail.dart';
 import '../widgets/collection_scroll_bookkeeping.dart';
+import '../widgets/collection_selection.dart';
 import '../widgets/collection_track_list.dart';
 import '../widgets/icon_swap.dart';
 import '../widgets/local_audio_import.dart' show importLocalAudioFilesFlow;
@@ -107,12 +109,8 @@ class _FavoritesPageState extends State<FavoritesPage> {
   /// 曲目列表滚动控制器（配合常显滚动条，支持直接拖动定位）。
   final ScrollController _listController = ScrollController();
 
-  /// 多选控制器（索引以当前合集的可见列表为准）。
-  final M3ESelectionController _selection = M3ESelectionController();
-
-  /// 桌面 Shift 范围选择的锚点：最近一次不带 Shift 的点击行（可见列表下标）。
-  /// 合集 / 搜索词 / 排序改变可见列表时清空——下标基准变了，旧锚点无意义。
-  int? _selectionAnchor;
+  /// 多选状态机（索引以当前合集的可见列表为准；收藏 / 历史 / 本地歌曲共用）。
+  final CollectionSelection _selection = CollectionSelection();
 
   /// 桌面 Esc 键处理器引用：[HardwareKeyboard] 注册 / 注销必须是同一闭包。
   late final bool Function(KeyEvent) _keyHandler = _handleKeyEvent;
@@ -156,8 +154,11 @@ class _FavoritesPageState extends State<FavoritesPage> {
   /// 恢复的选集是否已按首次加载的合集列表校准过（失效选集回退一次）。
   bool _restoredSelectionChecked = false;
 
-  /// 缓存服务（可能未注册）：缓存行识别与 revision 联动。
+  /// 缓存服务（可能未注册）：缓存 revision 联动（清缓存 / LRU 淘汰后重算缓存行）。
   CacheService? _cacheService;
+
+  /// 本地数据唯一读取口（可能未注册）：批量判定历史曲目的音频两档状态。
+  TrackLocalDataService? _localDataService;
 
   /// 本地歌曲的缓存行（播放历史 × 完整音频缓存命中；缓存 = 已下载）。
   List<CollectionLocalSong> _cachedSongRows = const [];
@@ -181,7 +182,7 @@ class _FavoritesPageState extends State<FavoritesPage> {
   /// 本地歌曲列表滚动控制器（与历史同理，独立于列表曲目）。
   final ScrollController _localSongsScrollController = ScrollController();
 
-  bool get _selecting => _selection.isSelectionMode;
+  bool get _selecting => _selection.isSelecting;
 
   @override
   void initState() {
@@ -214,10 +215,12 @@ class _FavoritesPageState extends State<FavoritesPage> {
     super.didChangeDependencies();
     // 缓存 revision：清缓存 / LRU 淘汰后重建缓存行（build 里按签名触发重算）。
     final cache = context.read<CacheService?>();
-    if (identical(cache, _cacheService)) return;
-    _cacheService?.revision.removeListener(_onCacheRevision);
-    _cacheService = cache;
-    cache?.revision.addListener(_onCacheRevision);
+    if (!identical(cache, _cacheService)) {
+      _cacheService?.revision.removeListener(_onCacheRevision);
+      _cacheService = cache;
+      cache?.revision.addListener(_onCacheRevision);
+    }
+    _localDataService = context.read<TrackLocalDataService?>();
   }
 
   @override
@@ -275,74 +278,43 @@ class _FavoritesPageState extends State<FavoritesPage> {
     );
   }
 
-  /// 升序列表里第一个 `>= prefix` 的下标（前缀区间起点）。
-  static int _lowerBound(List<String> sorted, String prefix) {
-    var low = 0;
-    var high = sorted.length;
-    while (low < high) {
-      final mid = (low + high) >> 1;
-      if (sorted[mid].compareTo(prefix) < 0) {
-        low = mid + 1;
-      } else {
-        high = mid;
-      }
-    }
-    return low;
-  }
-
   /// 缓存行重算触发：签名变化才重算（只在浏览本地歌曲合集时调用）。
   void _scheduleCachedSongRowsReload(
     LibraryProvider provider,
     DownloadService? downloads,
   ) {
-    final cache = _cacheService;
-    final signature = _cachedSongRowsInputSignature(provider, downloads, cache);
+    final signature =
+        _cachedSongRowsInputSignature(provider, downloads, _cacheService);
     if (_cachedSongRowsSignature == signature) return;
     _cachedSongRowsSignature = signature;
     _cachedSongRowsLoading = true;
     final token = ++_cachedSongRowsLoadToken;
-    unawaited(
-      _reloadCachedSongRows(provider, downloads, cache, signature, token),
-    );
+    unawaited(_reloadCachedSongRows(provider, downloads, signature, token));
   }
 
-  /// 重算缓存行：一次缓存目录列举 + 播放历史前缀匹配；命中任一已缓存音质
-  /// 即视为「已下载」，已有下载记录的曲目跳过（下载优先）。
+  /// 重算缓存行：历史曲目经唯一读取口批量取音频两档状态（一次目录列举）；
+  /// 只有「已缓存」进本地歌曲列表——已有音频下载的曲目由下载行承担
+  /// （下载优先）。
   Future<void> _reloadCachedSongRows(
     LibraryProvider provider,
     DownloadService? downloads,
-    CacheService? cache,
     int signature,
     int token,
   ) async {
     var rows = const <CollectionLocalSong>[];
+    final service = _localDataService;
     try {
-      if (cache != null && downloads != null && downloads.supported) {
-        final index = await cache.audioCacheIndex();
-        // 排序 + 二分定位前缀区间：同前缀的键在字典序上连续，二分到起点后
-        // 只扫描命中区间；逐对 startsWith 则是「每首历史 × 每个缓存文件」的
-        // 比较（1000 历史 × 3000 文件 ≈ 300 万次字符串比较）。
-        final sortedKeys = index.keys.toList()..sort();
+      if (service != null && downloads != null && downloads.supported) {
+        final entries = provider.history;
+        final tracks = [
+          for (final entry in entries) provider.trackFromHistoryEntry(entry),
+        ];
+        final data = await service.loadMany(tracks);
         final result = <CollectionLocalSong>[];
-        for (final entry in provider.history) {
-          final record = downloads.recordFor(entry.sourceKey, entry.songId);
-          if (record != null && record.hasAudio) continue;
-          final prefix = CacheService.audioCacheKeyPrefix(
-            sourceKey: entry.sourceKey,
-            songId: entry.songId,
-          );
-          int? size;
-          for (var i = _lowerBound(sortedKeys, prefix);
-              i < sortedKeys.length;
-              i++) {
-            final key = sortedKeys[i];
-            if (!key.startsWith(prefix)) break;
-            final fileSize = index[key]!;
-            // 同一曲目可能有多个音质变体：取最大（展示用）。
-            size = size == null || fileSize > size ? fileSize : size;
+        for (var i = 0; i < entries.length; i++) {
+          if (data[tracks[i].id.uri]?.audioState == LocalPartState.cached) {
+            result.add(CollectionLocalSong.cached(entries[i]));
           }
-          if (size == null) continue;
-          result.add(CollectionLocalSong.cached(entry, cachedSizeBytes: size));
         }
         rows = result;
       }
@@ -416,7 +388,7 @@ class _FavoritesPageState extends State<FavoritesPage> {
     _searchController.clear();
     if (!_searching) return;
     // 过滤条件清空后可见列表回到全量：Shift 范围选择的锚点下标失效。
-    _selectionAnchor = null;
+    _selection.clearAnchor();
     setState(() {
       _searching = false;
     });
@@ -459,40 +431,6 @@ class _FavoritesPageState extends State<FavoritesPage> {
     return true;
   }
 
-  /// 桌面修饰键多选手势：返回 true = 已按修饰键语义处理。
-  ///
-  /// Ctrl 点击切换该行（未在选择模式时 toggle 即选中该行，等价长按进入）；
-  /// Shift 点击选中锚点与当前行的可见闭区间，锚点为空 / 越界时退化为单选
-  /// 该行。锚点只在不带 Shift 的点击时移动：连续 Shift 点击只调整区间端点，
-  /// 与文件管理器的经典语义一致。
-  bool _applyModifiedSelection(
-    int index, {
-    required int itemCount,
-    required bool ctrl,
-    required bool shift,
-  }) {
-    if (shift) {
-      var anchor = _selectionAnchor;
-      if (anchor == null || anchor >= itemCount) {
-        anchor = index;
-        _selectionAnchor = index;
-      }
-      final start = math.min(anchor, index);
-      final end = math.max(anchor, index);
-      _selection.clear();
-      for (var i = start; i <= end; i++) {
-        _selection.select(i);
-      }
-      return true;
-    }
-    _selectionAnchor = index;
-    if (ctrl) {
-      _selection.toggle(index);
-      return true;
-    }
-    return false;
-  }
-
   /// 曲目行点击：桌面修饰键手势优先，其余保持既有语义（多选内切换 / 点播）。
   void _onTrackRowTap(
     _CollectionView view,
@@ -500,7 +438,7 @@ class _FavoritesPageState extends State<FavoritesPage> {
     bool ctrl = false,
     bool shift = false,
   }) {
-    if (_applyModifiedSelection(
+    if (_selection.applyModifiers(
       index,
       itemCount: view.visible.length,
       ctrl: ctrl,
@@ -522,7 +460,7 @@ class _FavoritesPageState extends State<FavoritesPage> {
     bool ctrl = false,
     bool shift = false,
   }) {
-    if (_applyModifiedSelection(
+    if (_selection.applyModifiers(
       index,
       itemCount: view.visibleHistory.length,
       ctrl: ctrl,
@@ -544,7 +482,7 @@ class _FavoritesPageState extends State<FavoritesPage> {
     bool ctrl = false,
     bool shift = false,
   }) {
-    if (_applyModifiedSelection(
+    if (_selection.applyModifiers(
       index,
       itemCount: view.visibleLocalSongs.length,
       ctrl: ctrl,
@@ -561,9 +499,8 @@ class _FavoritesPageState extends State<FavoritesPage> {
 
   void _enterReorder() {
     HapticsService.lightImpact();
+    // 排序会整体重排可见顺序：clear 一并让多选锚点失效。
     _selection.clear();
-    // 排序会整体重排可见顺序：多选锚点失效。
-    _selectionAnchor = null;
     _searchFocus.unfocus();
     _searchController.clear();
     setState(() {
@@ -725,9 +662,8 @@ class _FavoritesPageState extends State<FavoritesPage> {
       _searchController.clear();
     });
     unawaited(_collections.saveSelection(id));
+    // 切换合集后可见列表整体替换：clear 一并让多选锚点失效。
     _selection.clear();
-    // 切换合集后可见列表整体替换：Shift 范围选择的锚点失效。
-    _selectionAnchor = null;
   }
 
   void _onCollectionOrderChanged(List<String> keys) {
@@ -977,22 +913,14 @@ class _FavoritesPageState extends State<FavoritesPage> {
     }
   }
 
-  List<PlaylistTrack> _selectedTracks(_CollectionView view) => [
-        for (final index in _selection.selectedIndices)
-          if (index >= 0 && index < view.visible.length) view.visible[index],
-      ];
+  List<PlaylistTrack> _selectedTracks(_CollectionView view) =>
+      _selection.selectedFrom(view.visible);
 
-  List<PlayHistoryEntry> _selectedHistory(_CollectionView view) => [
-        for (final index in _selection.selectedIndices)
-          if (index >= 0 && index < view.visibleHistory.length)
-            view.visibleHistory[index],
-      ];
+  List<PlayHistoryEntry> _selectedHistory(_CollectionView view) =>
+      _selection.selectedFrom(view.visibleHistory);
 
-  List<CollectionLocalSong> _selectedLocalSongs(_CollectionView view) => [
-        for (final index in _selection.selectedIndices)
-          if (index >= 0 && index < view.visibleLocalSongs.length)
-            view.visibleLocalSongs[index],
-      ];
+  List<CollectionLocalSong> _selectedLocalSongs(_CollectionView view) =>
+      _selection.selectedFrom(view.visibleLocalSongs);
 
   Future<void> _favoriteSelected(_CollectionView view) async {
     final selected = _selectedTracks(view);
@@ -1571,8 +1499,8 @@ class _FavoritesPageState extends State<FavoritesPage> {
               _buildOverflowMenu(context, l10n, view),
           ],
           onChanged: (_) => setState(() {
-            // 过滤改变可见列表：多选锚点随搜索词失效。
-            _selectionAnchor = null;
+            // 过滤改变可见列表：多选锚点随搜索词失效（选择保留）。
+            _selection.clearAnchor();
           }),
         ),
       ),
@@ -1664,7 +1592,7 @@ class _FavoritesPageState extends State<FavoritesPage> {
           // 排序改变可见顺序：多选锚点失效。
           setState(() {
             _sort = value;
-            _selectionAnchor = null;
+            _selection.clearAnchor();
           });
         } else if (value == 'reorder') {
           _enterReorder();
@@ -2091,16 +2019,14 @@ class _FavoritesPageState extends State<FavoritesPage> {
   /// 清除缓存行：只清音频缓存文件（不动下载 / 导入记录）；正在播放写入中的
   /// 文件受缓存保护期跳过，清不掉时给出提示。
   Future<void> _clearCachedAudio(CollectionLocalSong song) async {
-    final cache = context.read<CacheService?>();
+    final service = context.read<TrackLocalDataService?>();
     final entry = song.history;
-    if (cache == null || entry == null) return;
+    if (service == null || entry == null) return;
     final messenger = context.read<NotificationService?>();
     final l10n = _l10n(context);
-    final result = await cache.clearAudioForTrack(
-      sourceKey: entry.sourceKey,
-      songId: entry.songId,
-    );
-    if (result.deleted.count > 0) return;
+    final track = context.read<LibraryProvider>().trackFromHistoryEntry(entry);
+    final result = await service.clear(track, LocalCachePart.audio);
+    if (result.cleared) return;
     final message = result.skipped > 0
         ? l10n.trackInfoCachePlaying
         : l10n.trackCacheEmpty;

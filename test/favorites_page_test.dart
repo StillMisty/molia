@@ -11,16 +11,20 @@ import 'package:molia/data/catalog/catalog_service.dart';
 import 'package:molia/data/downloads/downloads_repository.dart';
 import 'package:molia/domain/models/download.dart';
 import 'package:molia/domain/models/library.dart';
+import 'package:molia/domain/models/track.dart';
 import 'package:molia/l10n/app_localizations.dart';
+import 'package:molia/managers/artwork_cache.dart';
 import 'package:molia/models/play_mode.dart';
 import 'package:molia/pages/favorites.dart';
 import 'package:molia/providers/discover_provider.dart';
 import 'package:molia/providers/library_collections.dart';
 import 'package:molia/providers/library_provider.dart';
 import 'package:molia/providers/playback_provider.dart';
+import 'package:molia/services/audio_cache_store.dart';
 import 'package:molia/services/cache_service.dart';
 import 'package:molia/services/cache_storage.dart';
 import 'package:molia/services/download/download_service.dart';
+import 'package:molia/services/track_local_data_service.dart';
 import 'package:molia/utils/responsive.dart';
 import 'package:molia/widgets/app_search_bar.dart';
 import 'package:molia/widgets/collection_rail.dart';
@@ -39,6 +43,7 @@ import 'support/fake_download_storage.dart';
 import 'support/fake_library_repository.dart';
 import 'support/fake_music_source.dart';
 import 'support/fakes.dart';
+import 'support/memory_cache_storage.dart';
 
 /// 下载服务桩：验证收藏页「本地歌曲」合集的显隐、列表与删除动作。
 class _StubDownloadService extends DownloadService {
@@ -77,11 +82,21 @@ class _StubDownloadService extends DownloadService {
   }
 
   @override
+  DownloadedTrack? recordForTrack(Track track) =>
+      recordFor(track.id.sourceKey, track.id.id);
+
+  @override
   Future<void> delete(DownloadedTrack record) async {
     deleted.add(record);
     _seed = [for (final song in _seed) if (song.key != record.key) song];
     notifyListeners();
   }
+}
+
+/// 无封面缓存桩：封面占用在收藏页用例里恒为零（manager 不可用即零）。
+class _NoopArtworkCache extends ArtworkCache {
+  _NoopArtworkCache()
+      : super(cacheService: CacheService(storage: MemoryCacheStorage()));
 }
 
 /// 假缓存存储：音频缓存索引（缓存 = 已下载识别）与单曲清缓存记录。
@@ -91,7 +106,7 @@ class _FakeCacheStorage implements CacheStorage {
   /// 音频缓存文件名 → 字节数。
   final Map<String, int> files;
 
-  /// 单曲清缓存的前缀调用（`audioCacheKeyPrefix`）。
+  /// 单曲清缓存的前缀调用（`AudioCacheStore.keyPrefix`）。
   final List<String> clearedPrefixes = [];
 
   @override
@@ -241,7 +256,18 @@ void main() {
           ChangeNotifierProvider<LibraryProvider>.value(value: provider),
           if (downloads != null)
             ChangeNotifierProvider<DownloadService>.value(value: downloads),
-          if (cache != null) Provider<CacheService>.value(value: cache),
+          if (cache != null) ...[
+            Provider<CacheService>.value(value: cache),
+            Provider<TrackLocalDataService>.value(
+              value: TrackLocalDataService(
+                cacheService: cache,
+                artworkCache: _NoopArtworkCache(),
+                catalogService:
+                    CatalogService(registry: FakeSourceRegistry(const {})),
+                downloadService: downloads,
+              ),
+            ),
+          ],
         ],
         child: MaterialApp(
           locale: const Locale('zh'),
@@ -663,7 +689,7 @@ void main() {
   testWidgets('桌面宽屏：本地歌曲列表同样渲染表格列（缓存行带行尾标签仍对齐）', (tester) async {
     await repository.addHistoryEntry(_history('1', playedAt: 2));
     final cacheStorage = _FakeCacheStorage(files: {
-      CacheService.audioCacheKey(sourceKey: 'wy', songId: '1', quality: '320k'):
+      AudioCacheStore.key(sourceKey: 'wy', songId: '1', quality: '320k'):
           2048,
     });
     final cache = CacheService(storage: cacheStorage);
@@ -687,7 +713,7 @@ void main() {
   testWidgets('桌面宽屏大字号：缓存标签单行省略，不溢出固定槽', (tester) async {
     await repository.addHistoryEntry(_history('1', playedAt: 2));
     final cacheStorage = _FakeCacheStorage(files: {
-      CacheService.audioCacheKey(sourceKey: 'wy', songId: '1', quality: '320k'):
+      AudioCacheStore.key(sourceKey: 'wy', songId: '1', quality: '320k'):
           2048,
     });
     await pumpFavorites(
@@ -1583,7 +1609,7 @@ void main() {
   testWidgets('本地歌曲：缓存曲目入列（原曲身份）且删除 = 清缓存', (tester) async {
     await repository.addHistoryEntry(_history('1', playedAt: 2));
     final cacheStorage = _FakeCacheStorage(files: {
-      CacheService.audioCacheKey(sourceKey: 'wy', songId: '1', quality: '320k'):
+      AudioCacheStore.key(sourceKey: 'wy', songId: '1', quality: '320k'):
           2048,
     });
     final cache = CacheService(storage: cacheStorage);
@@ -1609,7 +1635,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(cacheStorage.clearedPrefixes, [
-      CacheService.audioCacheKeyPrefix(sourceKey: 'wy', songId: '1'),
+      AudioCacheStore.keyPrefix(sourceKey: 'wy', songId: '1'),
     ]);
     // 缓存索引已清：列表随缓存 revision 刷新为空。
     expect(headlines(tester), isEmpty);
@@ -1627,7 +1653,7 @@ void main() {
       ),
     ]);
     final cacheStorage = _FakeCacheStorage(files: {
-      CacheService.audioCacheKey(sourceKey: 'wy', songId: '1', quality: '320k'):
+      AudioCacheStore.key(sourceKey: 'wy', songId: '1', quality: '320k'):
           2048,
     });
     final cache = CacheService(storage: cacheStorage);

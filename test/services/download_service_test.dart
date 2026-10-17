@@ -12,6 +12,7 @@ import 'package:molia/data/molia_database.dart';
 import 'package:molia/domain/models/download.dart';
 import 'package:molia/domain/models/failure.dart';
 import 'package:molia/domain/models/track.dart';
+import 'package:molia/services/audio_cache_store.dart';
 import 'package:molia/services/cache_service.dart';
 import 'package:molia/services/cache_storage.dart';
 import 'package:molia/data/downloads/downloads_publisher.dart';
@@ -549,7 +550,7 @@ void main() {
     );
     await service.init();
 
-    final cacheName = CacheService.audioCacheKey(
+    final cacheName = AudioCacheStore.key(
       sourceKey: 'kw',
       songId: '1',
       quality: '320k',
@@ -577,7 +578,7 @@ void main() {
     final service = makeService(dio: dio, cacheService: cacheService);
     await service.init();
 
-    final cacheName = CacheService.audioCacheKey(
+    final cacheName = AudioCacheStore.key(
       sourceKey: 'kw',
       songId: '1',
       quality: '320k',
@@ -604,12 +605,12 @@ void main() {
     await service.init();
 
     final track = makeTrack();
-    final name320 = CacheService.audioCacheKey(
+    final name320 = AudioCacheStore.key(
       sourceKey: 'kw',
       songId: '1',
       quality: '320k',
     );
-    final name128 = CacheService.audioCacheKey(
+    final name128 = AudioCacheStore.key(
       sourceKey: 'kw',
       songId: '1',
       quality: '128k',
@@ -653,7 +654,7 @@ void main() {
     expect(await service.localUriFor(track), isNull);
 
     // 完整缓存：直接 file://（不触网、不要求下载记录）。
-    final cacheName = CacheService.audioCacheKey(
+    final cacheName = AudioCacheStore.key(
       sourceKey: 'kw',
       songId: '1',
       quality: '320k',
