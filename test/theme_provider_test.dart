@@ -19,7 +19,8 @@ void main() {
     // 从未配置过 → 新默认壁纸；测试环境无莫奈注入，配色回退种子色。
     expect(provider.baseColorSource, ColorBaseSource.wallpaper);
     expect(provider.followArtworkEnabled, isTrue);
-    expect(provider.monetAvailable, isFalse);
+    expect(provider.systemColorAvailable, isFalse);
+    expect(provider.systemBaseColorSource, SystemBaseColorSource.unavailable);
     expect(provider.pureBlackEnabled, isFalse);
     expect(provider.seedColor.toARGB32(), Colors.blue.toARGB32());
     expect(
@@ -202,7 +203,8 @@ void main() {
     final monetLight = buildColorScheme(Colors.pink, Brightness.light);
     final monetDark = buildColorScheme(Colors.pink, Brightness.dark);
     provider.updateMonetSchemes(monetLight, monetDark);
-    expect(provider.monetAvailable, isTrue);
+    expect(provider.systemColorAvailable, isTrue);
+    expect(provider.systemBaseColorSource, SystemBaseColorSource.accent);
     // 默认基础配色=壁纸：莫奈注入即生效。
     expect(provider.colorScheme, monetLight);
 
@@ -239,6 +241,79 @@ void main() {
 
     final prefs = await SharedPreferences.getInstance();
     expect(prefs.getString('color_base'), 'wallpaper');
+  });
+
+  test('桌面壁纸 seed 层：壁纸 > 强调色，封面 > 壁纸，自定义忽略两者', () async {
+    final provider = ThemeProvider();
+    await provider.preferencesReady;
+    expect(provider.systemBaseColorSource, SystemBaseColorSource.unavailable);
+
+    final monetLight = buildColorScheme(Colors.pink, Brightness.light);
+    final monetDark = buildColorScheme(Colors.pink, Brightness.dark);
+    provider.updateMonetSchemes(monetLight, monetDark);
+    expect(provider.systemColorAvailable, isTrue);
+    expect(provider.systemBaseColorSource, SystemBaseColorSource.accent);
+    expect(provider.colorScheme, monetLight);
+
+    // 壁纸 seed 按亮度各生效一张，压过强调色方案。
+    provider.updateSystemWallpaperSeed(Colors.green, Colors.teal);
+    expect(provider.systemBaseColorSource, SystemBaseColorSource.wallpaper);
+    expect(
+      provider.colorScheme,
+      buildColorScheme(Colors.green, Brightness.light),
+    );
+    await provider.setThemeMode(
+      ThemeMode.dark,
+      platformBrightness: Brightness.light,
+    );
+    expect(
+      provider.colorScheme,
+      buildColorScheme(Colors.teal, Brightness.dark),
+    );
+
+    // 封面 seed 压过壁纸；清除后回壁纸方案。
+    provider.applyArtworkSeed(Colors.amber);
+    expect(
+      provider.colorScheme,
+      buildColorScheme(Colors.amber, Brightness.dark),
+    );
+    provider.clearArtworkSeed();
+    expect(
+      provider.colorScheme,
+      buildColorScheme(Colors.teal, Brightness.dark),
+    );
+
+    // 自定义档忽略壁纸与强调色；期间记录的 seed 不丢，切回后生效。
+    await provider.setBaseColorSource(ColorBaseSource.custom);
+    provider.updateSystemWallpaperSeed(Colors.lime, Colors.lime);
+    expect(
+      provider.colorScheme,
+      buildColorScheme(Colors.blue, Brightness.dark),
+    );
+    await provider.setBaseColorSource(ColorBaseSource.wallpaper);
+    expect(
+      provider.colorScheme,
+      buildColorScheme(Colors.lime, Brightness.dark),
+    );
+  });
+
+  test('纯黑叠加壁纸 seed：surface 系列黑掉，取色仍来自壁纸', () async {
+    final provider = ThemeProvider();
+    await provider.preferencesReady;
+    await provider.setThemeMode(
+      ThemeMode.dark,
+      platformBrightness: Brightness.light,
+    );
+    await provider.setPureBlackEnabled(true);
+
+    provider.updateSystemWallpaperSeed(null, Colors.teal);
+    final scheme = provider.colorScheme;
+    expect(scheme.surface.toARGB32(), 0xFF000000);
+    expect(scheme.surfaceContainerHighest.toARGB32(), 0xFF000000);
+    expect(
+      scheme.primary,
+      buildColorScheme(Colors.teal, Brightness.dark).primary,
+    );
   });
 
   test('种子色持久化并在重启时加载', () async {

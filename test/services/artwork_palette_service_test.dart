@@ -191,6 +191,61 @@ void main() {
       expect(palette, isNotNull);
       expect(bytesCalls, 0, reason: 'file:// 本身就是本地文件');
     });
+
+    testWidgets('loadLocalFile：读盘字节出方案，同路径第二次只读一次盘', (tester) async {
+      final bytes =
+          (await tester.runAsync(() => _pngBytes(const Color(0xFF00BB00))))!;
+      var reads = 0;
+      final service = ArtworkPaletteService(
+        localFileBytesFor: (path) async {
+          reads++;
+          return bytes;
+        },
+      );
+
+      final first = await tester
+          .runAsync(() => service.loadLocalFile('/home/u/wallpaper.png'));
+      expect(first, isNotNull);
+      expect(first!.light, buildColorScheme(first.seed, Brightness.light));
+      expect(
+        first.seed.toARGB32(),
+        isNot(Colors.blue.toARGB32()),
+        reason: '绿色壁纸不应回落到默认种子色',
+      );
+      expect(reads, 1);
+
+      // 浅 / 深壁纸常是同一文件：第二次命中 LRU，不再读盘、不再解码。
+      final second = await tester
+          .runAsync(() => service.loadLocalFile('/home/u/wallpaper.png'));
+      expect(identical(second, first), isTrue);
+      expect(reads, 1);
+    });
+
+    testWidgets('loadLocalFile：读盘失败 / 空字节 / 解码失败返回 null，不抛错', (tester) async {
+      final failing = ArtworkPaletteService(
+        localFileBytesFor: (path) async => throw StateError('read failed'),
+      );
+      expect(
+        await tester.runAsync(() => failing.loadLocalFile('/denied.png')),
+        isNull,
+      );
+
+      final empty = ArtworkPaletteService(
+        localFileBytesFor: (path) async => Uint8List(0),
+      );
+      expect(
+        await tester.runAsync(() => empty.loadLocalFile('/empty.png')),
+        isNull,
+      );
+
+      final corrupt = ArtworkPaletteService(
+        localFileBytesFor: (path) async => Uint8List.fromList([1, 2, 3]),
+      );
+      expect(
+        await tester.runAsync(() => corrupt.loadLocalFile('/corrupt.png')),
+        isNull,
+      );
+    });
   });
 
   group('ArtworkThemeSync', () {

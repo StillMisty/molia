@@ -323,6 +323,49 @@ void main() {
     expect(prefs.getString('color_base'), 'custom');
   });
 
+  testWidgets('基础配色副标题三态：壁纸 / 强调色 / 都不可用；仅壁纸 seed 时壁纸段可点',
+      (tester) async {
+    await pumpSettingsPage(tester);
+
+    // 都不可用：说明文案 + 壁纸段禁用（既有行为）。
+    expect(find.text('Not supported on this platform'), findsOneWidget);
+
+    // 仅壁纸 seed（无强调色）：副标题显示真实来源，壁纸段可点。
+    themeProvider.updateSystemWallpaperSeed(Colors.green, Colors.teal);
+    await tester.pumpAndSettle();
+    expect(find.text('Source: system wallpaper'), findsOneWidget);
+
+    await themeProvider.setBaseColorSource(ColorBaseSource.custom);
+    await tester.pumpAndSettle();
+    await tester.tap(
+      optionOf(const Key('settingsBaseColorItem'), 'System wallpaper'),
+    );
+    await tester.pumpAndSettle();
+    expect(themeProvider.baseColorSource, ColorBaseSource.wallpaper);
+
+    // 只有强调色（壁纸 seed 清空）：副标题回到强调色口径，壁纸段仍可点。
+    themeProvider.updateSystemWallpaperSeed(null, null);
+    themeProvider.updateMonetSchemes(
+      buildColorScheme(Colors.pink, Brightness.light),
+      buildColorScheme(Colors.pink, Brightness.dark),
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('Source: system accent color'), findsOneWidget);
+
+    await themeProvider.setBaseColorSource(ColorBaseSource.custom);
+    await tester.pumpAndSettle();
+    await tester.tap(
+      optionOf(const Key('settingsBaseColorItem'), 'System wallpaper'),
+    );
+    await tester.pumpAndSettle();
+    expect(themeProvider.baseColorSource, ColorBaseSource.wallpaper);
+
+    // 强调色也清空：回到「都不可用」。
+    themeProvider.updateMonetSchemes(null, null);
+    await tester.pumpAndSettle();
+    expect(find.text('Not supported on this platform'), findsOneWidget);
+  }, variant: TargetPlatformVariant.only(TargetPlatform.linux));
+
   testWidgets('播放时跟随封面开关：切换后 provider 状态与持久化生效', (tester) async {
     await pumpSettingsPage(tester);
     expect(themeProvider.followArtworkEnabled, isTrue);
