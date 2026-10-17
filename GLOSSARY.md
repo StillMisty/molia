@@ -105,6 +105,8 @@
 
 - **Shortcut scopes（快捷键分组）** — `lib/services/shortcut_bindings.dart`：`ShortcutScope.inApp`（软件内，窗口聚焦时生效，`lib/app/desktop/desktop_shortcuts.dart` 用 `HardwareKeyboard` 处理器挂载）与 `ShortcutScope.global`（全局，系统级热键，`lib/services/global_hotkeys.dart` 经 `system_hotkeys` 注册）。两组都可开关（`kShortcutsEnabled` 默认开 / `kGlobalShortcutsEnabled` 默认关）、可自定义（`kShortcutBindings` / `kGlobalShortcutBindings` 存 JSON 覆盖，跟人走）；命令执行语义唯一实现在 `lib/services/shortcut_actions.dart`。
 
+- **Escape claims（Esc 占用登记）** — `lib/services/escape_claims.dart`：页面级 / 弹层把「此刻的 Esc 归我」提前告诉桌面壳层的唯一协议（`add` / `remove` / `any`；判定现算，隐藏页 / 已关弹层不残留占用，dispose 注销）。壳层 `desktop_shortcuts.dart` 命中 Esc 命令前查登记，有登记方即让位（返回 false、不消费事件）——`HardwareKeyboard` 处理器全部执行、返回值不短路，无法靠返回值裁决谁消费。**同源规则**：登记判定必须与登记方自己的按键处理器同一条件方法，否则出现「壳层让位但登记方不处理」的按键黑洞或双重消费；登记方自己接 Esc 时也不依赖焦点位置（音量弹层即此）。
+
 - **Haptics（触感模块）** — `lib/services/haptics.dart`：全应用触感唯一入口（lightImpact / mediumImpact / selectionClick），带设备本地开关（默认开；关闭后不触碰平台通道）。所有调用点经它；M3E 包内自带的触感（swipe action / 排序等）不在此覆盖范围。
 
 - **Desktop shell（桌面骨架）** — `lib/app/desktop/**`：仅 linux/windows/macOS 生效的壳层版式（顶栏瘦身 + 可展开侧栏 + 常驻底栏播放条 + 队列右面板），由 `lib/app/app_shell.dart` 按平台分流（`MyApp(desktopShell:)` 可强制，测试用）；移动骨架与共享逻辑（页面栈 / 共享元素飞行 / 重复点击通道）仍在 `app_shell.dart`，两套骨架同源。

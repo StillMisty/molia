@@ -8,7 +8,8 @@ library;
 import 'dart:async';
 
 import 'package:flutter/foundation.dart' show ValueListenable;
-import 'package:flutter/services.dart' show KeyDownEvent, LogicalKeyboardKey;
+import 'package:flutter/services.dart'
+    show HardwareKeyboard, KeyDownEvent, KeyEvent, LogicalKeyboardKey;
 import 'package:material_3_expressive/material_3_expressive.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:provider/provider.dart';
@@ -19,6 +20,7 @@ import '../../models/play_mode.dart';
 import '../../providers/library_provider.dart';
 import '../../providers/playback_provider.dart';
 import '../../services/app_branding_service.dart';
+import '../../services/escape_claims.dart';
 import '../../services/haptics.dart';
 import '../../utils/duration_text.dart';
 import '../../widgets/app_network_image.dart';
@@ -45,6 +47,9 @@ class DesktopNowPlayingBar extends StatelessWidget {
 
   /// 音量按钮的稳定 Key。
   static const Key volumeButtonKey = Key('desktopVolumeButton');
+
+  /// 音量弹层（滑杆 + 静音开关）的稳定 Key。
+  static const Key volumePanelKey = Key('desktopVolumePanel');
 
   /// 播放条固定高度（桌面骨架底栏档位）。
   static const double barHeight = 80;
@@ -636,7 +641,10 @@ class _VolumeButtonState extends State<_VolumeButton> {
           child: TapRegion(
             groupId: _tapGroup,
             onTapOutside: (_) => _controller.hide(),
-            child: _VolumePanel(onClose: _controller.hide),
+            child: _VolumePanel(
+              key: DesktopNowPlayingBar.volumePanelKey,
+              onClose: _controller.hide,
+            ),
           ),
         );
       },
@@ -665,12 +673,48 @@ class _VolumeButtonState extends State<_VolumeButton> {
 
 /// 音量面板：横向滑杆（~120dp）+ 静音开关。
 ///
-/// [Focus] 只用于接住 Esc：面板在 Overlay 里没有路由级快捷键上下文，
-/// 焦点沿焦点链上冒到这里关闭（滑杆自身获得焦点时也能冒上来）。
-class _VolumePanel extends StatelessWidget {
-  const _VolumePanel({required this.onClose});
+/// Esc 由自己的 [HardwareKeyboard] 处理器接住，与 [EscapeClaims] 登记同源
+/// （挂载 = 可见 = 占用，都不依赖焦点位置）。不用 [Focus.onKeyEvent]：焦点被
+/// Tab 移出弹层子树后按键不再冒泡到这里，而登记仍让壳层让位，Esc 会被完全
+/// 吞掉。[Focus] 只保留 autofocus，供滑杆的键盘操作。
+class _VolumePanel extends StatefulWidget {
+  const _VolumePanel({super.key, required this.onClose});
 
   final VoidCallback onClose;
+
+  @override
+  State<_VolumePanel> createState() => _VolumePanelState();
+}
+
+class _VolumePanelState extends State<_VolumePanel> {
+  /// 登记判定：本组件存在 = 面板可见（随 Overlay 挂载 / 卸载）。
+  late final bool Function() _escapeClaim = _claimEscape;
+
+  bool _claimEscape() => true;
+
+  /// HardwareKeyboard 处理器引用：注册 / 注销必须是同一闭包。
+  late final bool Function(KeyEvent) _keyHandler = _handleKeyEvent;
+
+  bool _handleKeyEvent(KeyEvent event) {
+    if (event is! KeyDownEvent) return false;
+    if (event.logicalKey != LogicalKeyboardKey.escape) return false;
+    widget.onClose();
+    return true;
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    EscapeClaims.add(_escapeClaim);
+    HardwareKeyboard.instance.addHandler(_keyHandler);
+  }
+
+  @override
+  void dispose() {
+    HardwareKeyboard.instance.removeHandler(_keyHandler);
+    EscapeClaims.remove(_escapeClaim);
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -681,14 +725,6 @@ class _VolumePanel extends StatelessWidget {
     final scheme = Theme.of(context).colorScheme;
     return Focus(
       autofocus: true,
-      onKeyEvent: (node, event) {
-        if (event is KeyDownEvent &&
-            event.logicalKey == LogicalKeyboardKey.escape) {
-          onClose();
-          return KeyEventResult.handled;
-        }
-        return KeyEventResult.ignored;
-      },
       child: Material(
         color: scheme.surfaceContainerHigh,
         elevation: 8,

@@ -309,3 +309,14 @@
     ⑤ 布局回调也会被「纯移动」触发：只认尺寸真的变了（`maybeAnchorIntoArea`），
     且拖动中一律不落位（`isDragging`）——否则每帧 `updateViewLayout` 后立刻被比例
     拽回原位，表现为「悬浮窗拖不动」。
+45. **一次 Esc 会被多个作用域同时消费，`HardwareKeyboard` 的返回值裁决不了**：
+    它的处理器**全部执行、返回值不短路**（SDK 原文：All registered handlers will be
+    invoked in order regardless of their return value），壳层可配置快捷键（默认
+    Esc = 关队列面板）与页面级 / 弹层处理器（收藏页多选、音量弹层）会同时
+    收到同一次按键；同时焦点分发也不会因处理器返回 true 而跳过。裁决统一走
+    `lib/services/escape_claims.dart`：页面级 / 弹层登记「此刻的 Esc 归我」，壳层
+    命中 Esc 命令前先让位（返回 false）。新增 Esc 消费方时先登记，且登记判定必须
+    与自己的按键处理器**同源**、现算（隐藏页 / 已关弹层不残留占用）；不要在各自的
+    处理器里「先到先得」，也不要用 `Focus.onKeyEvent` 接弹层 Esc——焦点被 Tab 移出
+    弹层后收不到按键，登记又让壳层让位，按键被完全吞掉。注意登记只对壳层让位——
+    两个非壳层消费方同时可见时（如收藏页多选 + 音量弹层）仍会各处理一次。
