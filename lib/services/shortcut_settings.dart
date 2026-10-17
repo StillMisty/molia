@@ -21,6 +21,49 @@ import 'global_hotkeys.dart';
 import 'shortcut_bindings.dart';
 import 'shortcuts.dart';
 
+/// [ShortcutSettings.setBinding] 被拒的原因（冲突单独成
+/// [ShortcutBindingConflict]：它要携带占用的动作）。
+enum ShortcutBindingRejection {
+  /// 动作不属于该分组（设置页只提交本组动作，正常路径不可达）。
+  unknownAction,
+
+  /// 全局组合缺少修饰键（系统级注册要求，见 `ShortcutCombo.isValidForScope`）。
+  missingModifier,
+
+  /// 主键不在平台可注册键集内（系统 API 限制，见
+  /// [ShortcutSettings.isComboSupported]）。
+  unsupportedKey,
+}
+
+/// [ShortcutSettings.setBinding] 的结果；页面只按分类做文案映射 / 互换引导，
+/// 不再重抄校验条件（新增规则只需在这里补一个变体）。
+sealed class ShortcutBindingResult {
+  const ShortcutBindingResult();
+}
+
+/// 写入成功。
+final class ShortcutBindingAccepted extends ShortcutBindingResult {
+  const ShortcutBindingAccepted();
+}
+
+/// 同组冲突被拒：[target] 已被 [other] 占用（设置页据此引导互换）。
+final class ShortcutBindingConflict extends ShortcutBindingResult {
+  const ShortcutBindingConflict(this.other, this.target);
+
+  /// 当前占用 [target] 的动作。
+  final ShortcutCommand other;
+
+  /// 被占用的目标组合（录制路径 = 录制值；回默认路径 = 该动作的默认组合）。
+  final ShortcutCombo target;
+}
+
+/// 其它原因被拒，见 [reason]。
+final class ShortcutBindingRejected extends ShortcutBindingResult {
+  const ShortcutBindingRejected(this.reason);
+
+  final ShortcutBindingRejection reason;
+}
+
 /// 两组快捷键的开关与绑定覆盖；单例，变更通知驱动 UI 与监听方。
 class ShortcutSettings extends ChangeNotifier {
   ShortcutSettings._();
@@ -115,31 +158,55 @@ class ShortcutSettings extends ChangeNotifier {
     await _write(kGlobalShortcutsEnabled, value);
   }
 
-  /// 覆盖某动作的绑定（[combo] 为 null = 回默认）。
+  /// 覆盖某动作的绑定（[combo] 为 null = 回默认），返回写入结果。
   ///
-  /// 校验：动作必须属于该分组；全局组合必须带修饰键（系统级注册要求）；
-  /// 同组内不得与其它动作重复（含未覆盖的默认项）。校验失败返回 false
-  /// 且不写入。
-  Future<bool> setBinding(
+  /// 校验（录制路径校验录制组合，回默认路径校验该动作的默认组合）：动作
+  /// 必须属于该分组；全局组合必须带修饰键（系统级注册要求）；组合必须在
+  /// 平台可注册键集内；同组内不得与其它动作的生效组合重复（含未覆盖的
+  /// 默认项）。被拒时不写入，原因由 [ShortcutBindingResult] 分类返回。
+  ///
+  /// **回默认为什么也要查冲突**：默认组合可能正被别的动作占着（用户曾
+  /// 互换过绑定），直接清覆盖会造出两行同键——查表先到者胜出，另一行
+  /// 静默失效。整组 [resetScope] 不受影响：回默认表内部天然无冲突。
+  ///
+  /// 「同组无重复」不变量由本方法单点保证（[swapBindings] 只做置换，
+  /// 见其文档注释）。
+  Future<ShortcutBindingResult> setBinding(
     ShortcutScope scope,
     ShortcutCommand command,
     ShortcutCombo? combo,
   ) async {
-    final defaults = ShortcutBindings.defaultsOf(scope);
-    if (!defaults.containsKey(command)) return false;
+    final defaultCombo = ShortcutBindings.defaultsOf(scope)[command];
+    if (defaultCombo == null) {
+      return const ShortcutBindingRejected(
+        ShortcutBindingRejection.unknownAction,
+      );
+    }
     final bindings = _bindingsOf(scope);
     if (combo != null) {
-      if (!combo.isValidForScope(scope)) return false;
-      if (!isComboSupported(scope, combo)) return false;
-      if (bindings.conflictWith(combo, exclude: command) != null) return false;
+      if (!combo.isValidForScope(scope)) {
+        return const ShortcutBindingRejected(
+          ShortcutBindingRejection.missingModifier,
+        );
+      }
+      if (!isComboSupported(scope, combo)) {
+        return const ShortcutBindingRejected(
+          ShortcutBindingRejection.unsupportedKey,
+        );
+      }
     }
+    // 回默认路径的目标组合取自默认表：天然满足分组校验与平台可注册键集
+    // （globalDefaults 有测试锁定），只需查占用。
+    final target = combo ?? defaultCombo;
+    final conflict = bindings.conflictWith(target, exclude: command);
+    if (conflict != null) return ShortcutBindingConflict(conflict, target);
     // 录到与默认相同的组合等于没有自定义：清掉覆盖，避免「回默认」按钮
     // 在值等于默认时仍然亮着。
-    final override = combo == defaults[command] ? null : combo;
+    final override = combo == defaultCombo ? null : combo;
     _setBindings(scope, bindings.withOverride(command, override));
     notifyListeners();
     await _persist(scope);
-    return true;
+    return const ShortcutBindingAccepted();
   }
 
   /// 互换两个动作的当前生效组合（设置页「冲突 → 替换」的落点）。
@@ -149,12 +216,13 @@ class ShortcutSettings extends ChangeNotifier {
   /// 两边的覆盖都按 [setBinding] 同一归一化规则写入（等于各自默认 → 清
   /// 覆盖，避免「回默认」按钮误亮），整组一次落盘。
   ///
-  /// **为什么互换不破坏「同组无重复」不变量**：互换前组内每个动作的生效
-  /// 组合唯一，记 `command → a`、`other → b`。互换只改这两项为
+  /// **为什么互换不破坏「同组无重复」不变量**：「同组无重复」由 [setBinding]
+  /// 单点保证（含回默认路径）；互换本身是纯置换——互换前组内每个动作的
+  /// 生效组合唯一，记 `command → a`、`other → b`。互换只改这两项为
   /// `command → b`、`other → a`，其余动作映射原样不动：a ≠ b 时新映射仍
-  /// 两两不同；a == b 只可能来自损坏的存储，此时互换是恒等变换，也不会
-  /// 新增重复。两组合都取自本分组当前的生效值（各自满足分组校验），互换
-  /// 只是移动它们，无需重新校验。
+  /// 两两不同；a == b（只可能来自损坏 / 手改的存储）时互换是恒等变换，
+  /// 也不会新增重复。两组合都取自本分组当前的生效值（各自满足分组校验），
+  /// 互换只是移动它们，无需重新校验。
   ///
   /// 边界：动作不属于该分组、`command == other` 一律拒绝（返回 false，
   /// 不写入）。
@@ -172,7 +240,8 @@ class ShortcutSettings extends ChangeNotifier {
     final commandCombo = bindings.comboFor(command);
     final otherCombo = bindings.comboFor(other);
     if (commandCombo == null || otherCombo == null) return false;
-    // 损坏存储可能让两组合相同（见文档注释）：恒等变换，不制造无意义写入。
+    // 存储损坏（历史版本 / 手改）可能让两组合相同（见文档注释）：
+    // 恒等变换，不制造无意义写入。
     if (commandCombo == otherCombo) return true;
     final next = bindings
         .withOverride(

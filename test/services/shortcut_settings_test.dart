@@ -59,13 +59,13 @@ void main() {
 
   test('setBinding：写入覆盖、序列化到设置，reload 读回', () async {
     const combo = ShortcutCombo(key: LogicalKeyboardKey.keyP, ctrl: true);
-    final accepted = await ShortcutSettings.instance.setBinding(
+    final result = await ShortcutSettings.instance.setBinding(
       ShortcutScope.inApp,
       ShortcutCommand.togglePlayPause,
       combo,
     );
 
-    expect(accepted, isTrue);
+    expect(result, isA<ShortcutBindingAccepted>());
     expect(
       ShortcutSettings.instance.inAppBindings
           .comboFor(ShortcutCommand.togglePlayPause),
@@ -93,7 +93,7 @@ void main() {
     );
   });
 
-  test('setBinding：全局缺修饰键 / 同组冲突 / 跨分组动作都拒绝且不写入', () async {
+  test('setBinding：缺修饰键 / 不支持键 / 同组冲突 / 跨分组动作都拒绝且不写入', () async {
     final settings = ShortcutSettings.instance;
 
     // 全局必须带修饰键：纯 Space 拒绝。
@@ -103,7 +103,28 @@ void main() {
         ShortcutCommand.togglePlayPause,
         const ShortcutCombo(key: LogicalKeyboardKey.space),
       ),
-      isFalse,
+      isA<ShortcutBindingRejected>().having(
+        (result) => result.reason,
+        'reason',
+        ShortcutBindingRejection.missingModifier,
+      ),
+    );
+    // 平台只收字母 / 数字 / F1–F12 / 空格：带修饰键的方向键也拒绝。
+    expect(
+      await settings.setBinding(
+        ShortcutScope.global,
+        ShortcutCommand.togglePlayPause,
+        const ShortcutCombo(
+          key: LogicalKeyboardKey.arrowLeft,
+          ctrl: true,
+          alt: true,
+        ),
+      ),
+      isA<ShortcutBindingRejected>().having(
+        (result) => result.reason,
+        'reason',
+        ShortcutBindingRejection.unsupportedKey,
+      ),
     );
     // 同组冲突：Space 已是软件内「播放 / 暂停」的默认键。
     expect(
@@ -112,7 +133,11 @@ void main() {
         ShortcutCommand.volumeUp,
         const ShortcutCombo(key: LogicalKeyboardKey.space),
       ),
-      isFalse,
+      isA<ShortcutBindingConflict>().having(
+        (result) => result.other,
+        'other',
+        ShortcutCommand.togglePlayPause,
+      ),
     );
     // 动作不属于该分组（全局表没有快进）：拒绝。
     expect(
@@ -121,7 +146,11 @@ void main() {
         ShortcutCommand.seekForward,
         const ShortcutCombo(key: LogicalKeyboardKey.keyF, ctrl: true),
       ),
-      isFalse,
+      isA<ShortcutBindingRejected>().having(
+        (result) => result.reason,
+        'reason',
+        ShortcutBindingRejection.unknownAction,
+      ),
     );
 
     // 全部拒绝：状态与存储都保持无覆盖。
@@ -129,6 +158,91 @@ void main() {
     expect(settings.globalBindings.encode(), '');
     expect(prefs.getString(kShortcutBindings.name), isNull);
     expect(prefs.getString(kGlobalShortcutBindings.name), isNull);
+  });
+
+  test('setBinding：回默认目标被占时拒绝（不造重复绑定）', () async {
+    final settings = ShortcutSettings.instance;
+    // 先制造「互换后」的交叉状态：Space ⇄ ↑ 已对调。
+    expect(
+      await settings.swapBindings(
+        ShortcutScope.inApp,
+        ShortcutCommand.togglePlayPause,
+        ShortcutCommand.volumeUp,
+      ),
+      isTrue,
+    );
+
+    // 任一侧回默认都会撞上另一侧：拒绝并指出占用者与目标组合。
+    expect(
+      await settings.setBinding(
+        ShortcutScope.inApp,
+        ShortcutCommand.togglePlayPause,
+        null,
+      ),
+      isA<ShortcutBindingConflict>()
+          .having((result) => result.other, 'other', ShortcutCommand.volumeUp)
+          .having(
+            (result) => result.target,
+            'target',
+            const ShortcutCombo(key: LogicalKeyboardKey.space),
+          ),
+    );
+    expect(
+      await settings.setBinding(
+        ShortcutScope.inApp,
+        ShortcutCommand.volumeUp,
+        null,
+      ),
+      isA<ShortcutBindingConflict>()
+          .having(
+            (result) => result.other,
+            'other',
+            ShortcutCommand.togglePlayPause,
+          )
+          .having(
+            (result) => result.target,
+            'target',
+            const ShortcutCombo(key: LogicalKeyboardKey.arrowUp),
+          ),
+    );
+
+    // 两次拒绝都不写入：仍是交叉状态，组内无重复。
+    expect(
+      settings.inAppBindings.comboFor(ShortcutCommand.togglePlayPause),
+      const ShortcutCombo(key: LogicalKeyboardKey.arrowUp),
+    );
+    expect(
+      settings.inAppBindings.comboFor(ShortcutCommand.volumeUp),
+      const ShortcutCombo(key: LogicalKeyboardKey.space),
+    );
+    final combos = settings.inAppBindings.effective.values.toList();
+    expect(combos.toSet().length, combos.length);
+  });
+
+  test('setBinding：回默认在默认组合空闲时清掉覆盖', () async {
+    final settings = ShortcutSettings.instance;
+    await settings.setBinding(
+      ShortcutScope.inApp,
+      ShortcutCommand.toggleMute,
+      const ShortcutCombo(key: LogicalKeyboardKey.keyJ),
+    );
+
+    expect(
+      await settings.setBinding(
+        ShortcutScope.inApp,
+        ShortcutCommand.toggleMute,
+        null,
+      ),
+      isA<ShortcutBindingAccepted>(),
+    );
+    expect(
+      settings.inAppBindings.isOverridden(ShortcutCommand.toggleMute),
+      isFalse,
+    );
+    expect(
+      settings.inAppBindings.comboFor(ShortcutCommand.toggleMute),
+      const ShortcutCombo(key: LogicalKeyboardKey.keyM),
+    );
   });
 
   test('swapBindings：互换生效组合、按默认归一化、一次落盘并可读回', () async {
