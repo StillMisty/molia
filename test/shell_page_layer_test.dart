@@ -69,7 +69,8 @@ void main() {
     // 回归：M3E 下拉菜单打开时会往当前路由加一条 LocalHistoryEntry
     // （系统返回先关菜单），ModalRoute.canPop 因此变真，AppBar 默认的
     // automaticallyImplyLeading 会在顶栏画出一个返回箭头。
-    final source = File('lib/app/app_shell.dart').readAsStringSync();
+    // 两套骨架的顶栏构造已收进 ShellChrome（唯一显式配置处）。
+    final source = File('lib/app/shell_chrome.dart').readAsStringSync();
     expect(
       source,
       contains('automaticallyImplyLeading: false'),
