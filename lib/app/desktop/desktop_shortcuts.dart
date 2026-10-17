@@ -128,6 +128,10 @@ class _DesktopShortcutsState extends State<DesktopShortcuts> {
         widget.onSelectDestinationIndex(2);
       case ShortcutCommand.closeQueuePanel:
         widget.onCloseQueuePanel();
+      case ShortcutCommand.showMainWindow:
+        // 全局分组专用（系统级热键把窗口拉到前台）；软件内绑定表里没有它，
+        // 走不到这里——穷尽 switch 需要一个分支，显式忽略。
+        break;
     }
   }
 

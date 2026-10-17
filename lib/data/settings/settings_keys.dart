@@ -73,6 +73,30 @@ const kShellHomeDestination = SettingsKey<String>(
   'nowPlaying',
   category: SyncCategory.settings,
 );
+/// 软件内快捷键总开关（窗口聚焦时生效；默认开）。
+const kShortcutsEnabled = SettingsKey<bool>(
+  'shortcuts_enabled',
+  true,
+  category: SyncCategory.settings,
+);
+/// 全局快捷键总开关（系统级热键，默认关：避免与系统/其它应用抢热键）。
+const kGlobalShortcutsEnabled = SettingsKey<bool>(
+  'global_shortcuts_enabled',
+  false,
+  category: SyncCategory.settings,
+);
+/// 软件内快捷键的自定义绑定（JSON：动作 → 组合；空串 = 全默认）。
+const kShortcutBindings = SettingsKey<String>(
+  'shortcut_bindings',
+  '',
+  category: SyncCategory.settings,
+);
+/// 全局快捷键的自定义绑定（同上）。
+const kGlobalShortcutBindings = SettingsKey<String>(
+  'global_shortcut_bindings',
+  '',
+  category: SyncCategory.settings,
+);
 const kDefaultPlayMode = SettingsKey<String>(
   'default_play_mode',
   'sequential',

@@ -48,6 +48,9 @@ enum ShortcutCommand {
 
   /// Esc：关闭队列右面板。
   closeQueuePanel,
+
+  /// 全局分组专用：显示主窗口（窗口失焦时把应用拉到前台）。
+  showMainWindow,
 }
 
 /// 键 + 修饰键 → 命令；未命中返回 null。
