@@ -138,10 +138,22 @@ class ArtworkCache {
   }
 
   /// 统一图片请求头：浏览器 UA + 平台 Referer。
+  ///
+  /// 按 URL 记忆化：列表滚动 / 重建时每张封面每次构建都会取一次
+  /// （`Uri.tryParse` + Map 分配），热点路径上不值得重复做。
+  static final Map<String, Map<String, String>> _headersCache = {};
+  static const int _headersCacheMax = 128;
+
   static Map<String, String> headersFor(String url) {
+    final cached = _headersCache[url];
+    if (cached != null) return cached;
     final headers = <String, String>{'User-Agent': browserUserAgent};
     final referer = refererFor(url);
     if (referer != null) headers['Referer'] = referer;
+    if (_headersCache.length >= _headersCacheMax) {
+      _headersCache.remove(_headersCache.keys.first);
+    }
+    _headersCache[url] = headers;
     return headers;
   }
 
