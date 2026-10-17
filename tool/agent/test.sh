@@ -106,7 +106,10 @@ run_one() { # platform
   local -a reporter=()
   [[ -t 1 ]] || reporter=(-r expanded) # 非 TTY（CI/子代理）逐行输出，便于日志检索
 
-  local -a cmd=(timeout --foreground "$timeout" "${prefix[@]}"
+  # 不用 --foreground：timeout 自建进程组，超时会连同 flutter test 的子进程
+  # （Linux 桌面测试 App）一起发信号。桌面 App 若活着会吊住 tee 管道，脚本
+  # 观察上就是「卡死」（见下方收尾兜底）。
+  local -a cmd=(timeout --signal=TERM --kill-after=15 "$timeout" "${prefix[@]}"
     flutter test "$test_file" -d "$device" "${reporter[@]}")
   (( no_pub )) && cmd+=(--no-pub)
   cmd+=("${extra_flags[@]}")
@@ -121,6 +124,13 @@ run_one() { # platform
   "${cmd[@]}" 2>&1 | tee "$log_file"
   rc=${PIPESTATUS[0]}
   set -e
+
+  # 收尾兜底：桌面测试 App 是 flutter test 的子进程，异常路径下可能没被带走；
+  # 它持有 stdout 会让 tee / 脚本一直不返回。正常退出时它也已走 tearDownAll
+  # 的 exit(0)，这里再补一刀是幂等的。
+  if [[ "$platform" == "linux" ]] && command -v pkill >/dev/null 2>&1; then
+    pkill -f "$PROJECT_DIR/build/linux/x64/debug/bundle/molia" >/dev/null 2>&1 || true
+  fi
 
   if ((rc == 124)); then
     log "墙钟超时（${timeout}s）被终止；Android 首次 Gradle/冷启动请加 --timeout"

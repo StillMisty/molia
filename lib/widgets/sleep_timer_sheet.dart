@@ -11,9 +11,6 @@ import '../services/haptics.dart';
 import '../services/notification_service.dart';
 import '../utils/responsive.dart';
 
-/// 常用档位（分钟）：与 LX Music 的定时关闭档位一致。
-const List<int> kSleepTimerPresetMinutes = [15, 30, 45, 60, 90, 120];
-
 /// 自定义时长范围（分钟）。
 const int kSleepTimerMinMinutes = 1;
 const int kSleepTimerMaxMinutes = 600;
@@ -50,8 +47,10 @@ Future<void> showSleepTimerSheet(BuildContext context) {
   );
 }
 
-/// 定时关闭弹层：状态区（剩余时间 + 取消）+ 档位 chips（含自定义时长）+
-/// 播完当前歌曲。开启后弹 Snackbar 反馈，自带「取消」操作。
+/// 定时关闭弹层：状态 + 自定义时长入口 + 播完当前歌曲 + 关闭定时。
+///
+/// 不再提供预设档位 chips：时长只经 [M3ETimePicker] 设置，弹层保持单一
+/// 决策路径，避免「档位选中态 / 自定义 / 播完当前歌曲」三块并列。
 class _SleepTimerSheet extends StatelessWidget {
   const _SleepTimerSheet({required this.playback});
 
@@ -72,42 +71,61 @@ class _SleepTimerSheet extends StatelessWidget {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            _buildStatusCard(context, l10n, timer, state),
-            const SizedBox(height: 20),
             Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 24),
+              padding: const EdgeInsets.fromLTRB(24, 8, 24, 12),
               child: Text(
-                l10n.sleepTimerCountdownSection,
-                style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                      color: Theme.of(context).colorScheme.onSurfaceVariant,
-                    ),
+                sleepTimerStatusLabel(l10n, state),
+                style: M3ETheme.of(context).typeScale.headlineSmall,
               ),
             ),
-            const SizedBox(height: 12),
-            _buildPresetChips(context, l10n, timer, state),
-            const SizedBox(height: 16),
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16),
-              child: M3EListItem(
-                key: const Key('sleepTimerAfterTrackItem'),
-                leading: const Icon(Icons.music_note_rounded),
-                headline: l10n.sleepTimerAfterTrack,
-                selected: state.mode == SleepTimerMode.afterCurrentTrack,
-                enabled: canArmAfterTrack,
-                onTap: canArmAfterTrack
-                    ? () {
-                        HapticsService.lightImpact();
-                        timer.startAfterCurrentTrack();
-                        _showArmedFeedback(
-                          context,
-                          timer,
-                          l10n.sleepTimerArmedAfterTrack,
-                        );
-                        Navigator.of(context).pop();
-                      }
-                    : null,
-              ),
+            M3EListItem(
+              key: const Key('sleepTimerCustomItem'),
+              leading: const Icon(Icons.schedule_rounded),
+              headline: l10n.sleepTimerCustom,
+              trailingText: state.mode == SleepTimerMode.countdown &&
+                      state.duration != null
+                  ? formatSleepTimerRemaining(state.duration!)
+                  : null,
+              selected: state.mode == SleepTimerMode.countdown,
+              onTap: () =>
+                  unawaited(_pickCustomDuration(context, timer, state)),
             ),
+            M3EListItem(
+              key: const Key('sleepTimerAfterTrackItem'),
+              leading: const Icon(Icons.music_note_rounded),
+              headline: l10n.sleepTimerAfterTrack,
+              selected: state.mode == SleepTimerMode.afterCurrentTrack,
+              enabled: canArmAfterTrack,
+              onTap: canArmAfterTrack
+                  ? () {
+                      HapticsService.lightImpact();
+                      timer.startAfterCurrentTrack();
+                      _showArmedFeedback(
+                        context,
+                        timer,
+                        l10n.sleepTimerArmedAfterTrack,
+                      );
+                      Navigator.of(context).pop();
+                    }
+                  : null,
+            ),
+            if (state.isActive)
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
+                child: SizedBox(
+                  width: double.infinity,
+                  child: M3EButton.outlined(
+                    key: const Key('sleepTimerCancelButton'),
+                    size: M3EButtonSize.md,
+                    onPressed: () {
+                      HapticsService.lightImpact();
+                      timer.cancel();
+                      Navigator.of(context).pop();
+                    },
+                    child: Text(l10n.sleepTimerCancel),
+                  ),
+                ),
+              ),
             const SizedBox(height: 8),
           ],
         ),
@@ -115,143 +133,7 @@ class _SleepTimerSheet extends StatelessWidget {
     );
   }
 
-  /// 状态区：未开启给说明；已开启给剩余时间 / 模式 + 「关闭定时」出口。
-  Widget _buildStatusCard(
-    BuildContext context,
-    AppLocalizations l10n,
-    SleepTimerController timer,
-    SleepTimerState state,
-  ) {
-    final theme = Theme.of(context);
-    final scheme = theme.colorScheme;
-    final active = state.isActive;
-    final countdown = state.mode == SleepTimerMode.countdown;
-    return Container(
-      margin: const EdgeInsets.fromLTRB(16, 8, 16, 0),
-      padding: const EdgeInsets.fromLTRB(16, 14, 8, 14),
-      decoration: BoxDecoration(
-        color: scheme.surfaceContainerHigh,
-        borderRadius: BorderRadius.circular(16),
-      ),
-      child: Row(
-        children: [
-          Icon(
-            Icons.bedtime_rounded,
-            color: active ? scheme.primary : scheme.onSurfaceVariant,
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: active && countdown
-                ? Row(
-                    crossAxisAlignment: CrossAxisAlignment.baseline,
-                    textBaseline: TextBaseline.alphabetic,
-                    children: [
-                      Text(
-                        formatSleepTimerRemaining(
-                            state.remaining ?? Duration.zero),
-                        style: theme.textTheme.headlineSmall?.copyWith(
-                          fontWeight: FontWeight.w700,
-                          color: scheme.primary,
-                        ),
-                      ),
-                      const SizedBox(width: 8),
-                      Flexible(
-                        child: Text(
-                          l10n.sleepTimerHint,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: theme.textTheme.bodySmall?.copyWith(
-                            color: scheme.onSurfaceVariant,
-                          ),
-                        ),
-                      ),
-                    ],
-                  )
-                : Text(
-                    active ? l10n.sleepTimerAfterTrack : l10n.sleepTimerHint,
-                    style: theme.textTheme.bodyLarge?.copyWith(
-                      color: scheme.onSurfaceVariant,
-                    ),
-                  ),
-          ),
-          if (active) ...[
-            const SizedBox(width: 8),
-            // 状态卡里只保留图标键：语义由 tooltip 承担，文本按钮会把
-            // 「剩余 12:34」这行挤断（窄屏最明显）。
-            M3EIconButton(
-              key: const Key('sleepTimerCancelButton'),
-              variant: M3EIconButtonVariant.standard,
-              icon: const Icon(Icons.timer_off_rounded),
-              tooltip: l10n.sleepTimerCancel,
-              onPressed: () {
-                HapticsService.lightImpact();
-                timer.cancel();
-              },
-            ),
-          ],
-        ],
-      ),
-    );
-  }
-
-  /// 档位 chips：常用档位 + 自定义时长（M3E time picker）；当前档位有选中态。
-  Widget _buildPresetChips(
-    BuildContext context,
-    AppLocalizations l10n,
-    SleepTimerController timer,
-    SleepTimerState state,
-  ) {
-    final armedMinutes =
-        state.mode == SleepTimerMode.countdown ? state.duration?.inMinutes : null;
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 16),
-      child: Wrap(
-        spacing: 8,
-        runSpacing: 8,
-        children: [
-          for (final minutes in kSleepTimerPresetMinutes)
-            M3EChip(
-              key: Key('sleepTimerPreset_$minutes'),
-              type: M3EChipType.filter,
-              label: l10n.sleepTimerMinutesShort(minutes),
-              selected: armedMinutes == minutes,
-              onPressed: () => _armCountdown(
-                context,
-                l10n,
-                timer,
-                Duration(minutes: minutes),
-              ),
-            ),
-          M3EChip(
-            key: const Key('sleepTimerCustomChip'),
-            label: l10n.sleepTimerCustom,
-            leading: const Icon(Icons.schedule_rounded, size: 18),
-            onPressed: () =>
-                unawaited(_pickCustomDuration(context, timer, state)),
-          ),
-        ],
-      ),
-    );
-  }
-
-  /// 开启倒计时 + 反馈 + 关闭弹层（列表 / chips 共用）。
-  void _armCountdown(
-    BuildContext context,
-    AppLocalizations l10n,
-    SleepTimerController timer,
-    Duration duration,
-  ) {
-    HapticsService.lightImpact();
-    timer.startCountdown(duration);
-    _showArmedFeedback(
-      context,
-      timer,
-      l10n.sleepTimerArmedSnackbar(formatSleepTimerRemaining(duration)),
-    );
-    Navigator.of(context).pop();
-  }
-
-  /// 自定义时长：M3E time picker（24 小时制 —— 小时 + 分钟即为时长）。
+  /// 自定义时长：M3ETimePicker（24 小时制 —— 小时 + 分钟即为时长）。
   ///
   /// 1–600 分钟之外不开启并提示一次（picker 本身不做范围限制）。
   Future<void> _pickCustomDuration(
@@ -283,6 +165,23 @@ class _SleepTimerSheet extends StatelessWidget {
       return;
     }
     _armCountdown(context, l10n, timer, Duration(minutes: minutes));
+  }
+
+  /// 开启倒计时 + 反馈 + 关闭弹层。
+  void _armCountdown(
+    BuildContext context,
+    AppLocalizations l10n,
+    SleepTimerController timer,
+    Duration duration,
+  ) {
+    HapticsService.lightImpact();
+    timer.startCountdown(duration);
+    _showArmedFeedback(
+      context,
+      timer,
+      l10n.sleepTimerArmedSnackbar(formatSleepTimerRemaining(duration)),
+    );
+    Navigator.of(context).pop();
   }
 
   /// 开启反馈：Snackbar（含「取消」操作，直接撤销定时）。

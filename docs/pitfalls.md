@@ -37,10 +37,11 @@
 10. **插件 JVM target 校验**：部分插件的 Java target(11) 与 Kotlin target(1.8) 不一致，
     AGP 9 默认按错误处理；已在 `android/gradle.properties` 设置
     `kotlin.jvm.target.validation.mode=warning`，不要删除。
-11. **集成测试挂起保护（仅桌面）**：桌面端 media_kit（libmpv）的原生事件循环会阻止测试进程
-    退出；`integration_test/lx_engine_integration_test.dart` 的 `tearDownAll` 有 2s 上报窗口后
-    `exit(0)` 的看门狗（只在 Linux/Windows 注册），不要删除、也不要推广到 Android——Android
-    走官方 teardown（stopApp/uninstall）能干净退出，注册看门狗反而会抢在卸载/回收之前退出进程。
+11. **集成测试挂起保护（仅桌面）**：桌面端 LX 引擎 isolate / 原生平台通道未完全回收时，
+    Flutter 测试进程会拒绝退出；`integration_test/lx_engine_integration_test.dart` 的
+    `tearDownAll` 有 2s 上报窗口后 `exit(0)` 的看门狗（只在 Linux/Windows 注册），不要删除、
+    也不要推广到 Android——Android 走官方 teardown（stopApp/uninstall）能干净退出，注册看门狗
+    反而会抢在卸载/回收之前退出进程。
     Android 若遇跑完不退出，是上游 adb teardown 无超时（flutter/flutter#187785 / #187984，
     3.47.6 已修 DDS 路径），先看 `tool/agent/test.sh` 的日志尾部再判断。
     另：Linux 集成测试默认套 `xvfb-run`（脚本无条件处理，WSLg 下也不会弹窗），否则无显示环境
@@ -182,19 +183,21 @@
     手工验证桌面端用 `flutter run -d linux` 或先 `flutter build linux --debug`
     再跑 bundle（`tool/agent/test.sh linux` 会自行重建，不影响它）。
 
-33. **无头 CI 跑桌面集成测试要给 libmpv 一个「按实时速率消费」的虚拟音频输出**：
-    runner 无声卡时 libmpv 有两种失败形态，症状都不是「没声音」而是**播放瞬间结束**——
-    (a) 打不开音频输出（`Could not open/initialize audio device`）；
-    (b) 输出能打开但不节流（如 ALSA 的 `type null` PCM）。
-    两者都会让媒体流立即进入 `ProcessingState.completed`，`LocalPlaybackService`
-    随即自动切歌：表现为断言拿到下一首（`Hello LX` vs `Second Song`）或
-    「等待超时: 播放未开始」（`isPlaying` 从未为 true）。
-    正确做法是 PulseAudio + null sink（按实时速率消费数据），见
-    `.github/workflows/integration.yml` 的「集成测试」步骤：
-    `pulseaudio -D --exit-idle-time=-1 --disable-shm` →
-    `pactl load-module module-null-sink` → `pactl set-default-sink`，
-    并在同一步 export `XDG_RUNTIME_DIR`（daemon 与客户端的 socket 都靠它）。
-    另：mock 音频时长要留足（现为 30s），别用 3s——慢 runner 上起播本身就要几秒。
+33. **桌面集成测试不再包含真实播放用例**：无头环境（Xvfb / CI runner）下
+    media_kit/libmpv 偶发卡在 `playTracks` 装载，且 `Future.timeout` 无法打断
+    （Dart isolate 被原生调用阻塞），会把整轮 CI / agent 测试吊死；失败后的
+    teardown 还会在 `_engine.dispose()` 上二次挂起。`integration_test/
+    lx_engine_integration_test.dart` 已删除播放与缓存写入用例，只保留引擎 /
+    设置页 / 窗口 / 托盘 / 下载目录链路。播放服务由
+    `test/playback/` 的单测与真机手动验证覆盖；若将来要恢复：
+    - mock 音频时长留足（曾用 30s），慢 runner 上起播本身就要几秒；
+    - Android/iOS 音频依赖模拟器设备，播放用例只能桌面跑；
+    - 无头 runner 要给 libmpv 一个「按实时速率消费」的虚拟音频输出：
+      PulseAudio + null sink（`pulseaudio -D --exit-idle-time=-1 --disable-shm`
+      → `pactl load-module module-null-sink` → `pactl set-default-sink`，并
+      export `XDG_RUNTIME_DIR`），否则 libmpv 打不开输出或不节流，症状都是
+      「播放瞬间结束」→ 断言拿到下一首或「播放未开始」；
+    - 装载与 teardown 都要有不可绕过的上限（或放到隔离进程/真机 job）。
 34. **release 的 `shrinkResources` 会删掉「字符串引用」的资源，媒体通知直接不出现**：
     release 开了 `minifyEnabled + shrinkResources`，AAPT 只按静态引用判定资源存活；
     `ic_notification`（Dart 侧 `androidNotificationIcon` 按字符串引用）与

@@ -28,6 +28,7 @@ class MainActivity: AudioServiceActivity() {
     private var batteryChannel: top.stillmisty.molia.battery.BatteryChannelHandler? = null
     private var lanPermissionChannel:
         top.stillmisty.molia.sync.LocalNetworkPermissionChannelHandler? = null
+    private var sleepTimerChannel: top.stillmisty.molia.sleep.SleepTimerChannelHandler? = null
 
     /// 通知权限请求的挂起结果（Android 13+）：权限回调后一次性完成。
     private var notificationPermissionResult: MethodChannel.Result? = null
@@ -193,6 +194,13 @@ class MainActivity: AudioServiceActivity() {
             messenger = flutterEngine.dartExecutor.binaryMessenger,
         )
 
+        // 定时关闭：原生 Handler 到点唤醒 Dart，补熄屏 / Doze 下 Dart timer
+        // 被冻结的缺口（真正的暂停仍由 Dart 控制器执行）。
+        sleepTimerChannel?.dispose()
+        sleepTimerChannel = top.stillmisty.molia.sleep.SleepTimerChannelHandler(
+            flutterEngine.dartExecutor.binaryMessenger
+        )
+
         // 通知权限通道：请求时机由 Dart 侧业务决定；被永久拒绝时给设置深链。
         MethodChannel(
             flutterEngine.dartExecutor.binaryMessenger,
@@ -321,6 +329,12 @@ class MainActivity: AudioServiceActivity() {
                 else -> result.notImplemented()
             }
         }
+    }
+
+    override fun cleanUpFlutterEngine(flutterEngine: FlutterEngine) {
+        sleepTimerChannel?.dispose()
+        sleepTimerChannel = null
+        super.cleanUpFlutterEngine(flutterEngine)
     }
 
     /// 把应用私有文件发布到公共 Downloads（MediaStore），返回 content URI；

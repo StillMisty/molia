@@ -1,14 +1,11 @@
 import 'dart:async';
-import 'dart:convert';
 
-import 'package:flutter/services.dart';
 import 'package:material_3_expressive/material_3_expressive.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:provider/provider.dart';
 
 import '../data/sync/sync_state_store.dart';
 import '../domain/models/device_sync.dart';
-import '../domain/ports/sync_transport.dart';
 import '../l10n/app_localizations.dart';
 import '../providers/sync_provider.dart';
 import '../theme/app_semantic_colors.dart';
@@ -19,10 +16,10 @@ import 'sync_device_page.dart';
 import 'sync_dialogs.dart';
 import 'sync_labels.dart';
 
-/// 同步日志与诊断子页：近 24 小时动态 + 当前环境 + 完整日志（20 条）+ 复制诊断。
+/// 同步日志子页：近 24 小时动态 + 当前环境 + 完整日志（20 条）。
 ///
 /// 观测面细节都在这里（首屏只留「最近一轮结论 + 时间」一句话）；失败行可
-/// 点开看下一步动作，未知原因也能拿到重试 / 诊断出口。
+/// 点开看下一步动作，未知原因也能拿到重试出口。
 class SyncLogPage extends StatelessWidget {
   const SyncLogPage({super.key});
 
@@ -80,20 +77,6 @@ class SyncLogPage extends StatelessWidget {
                   ),
             ],
           ),
-          const SizedBox(height: kSettingsSectionSpacing),
-          SettingsSectionCard(
-            title: l10n.syncDiagnosticTitle,
-            footer: SettingsSectionHint(text: l10n.syncDiagnosticHint),
-            children: [
-              SettingsNavTile(
-                key: const Key('settingsSyncDiagnosticItem'),
-                icon: Icons.content_copy_rounded,
-                title: l10n.syncDiagnosticCopy,
-                subtitle: l10n.syncDiagnosticSubtitle,
-                onTap: () => unawaited(_copyDiagnostics(context, provider, l10n)),
-              ),
-            ],
-          ),
         ],
       ),
     );
@@ -115,57 +98,6 @@ String _activitySubtitle(SyncProvider provider, AppLocalizations l10n) {
     provider.powerSaveActive ? l10n.syncPowerSaveOn : l10n.syncPowerSaveOff,
   );
   return '$activity\n$environment';
-}
-
-/// 复制诊断信息：只含运行状态与计数（无口令 / 无密钥 / 无快照内容）。
-Future<void> _copyDiagnostics(
-  BuildContext context,
-  SyncProvider provider,
-  AppLocalizations l10n,
-) async {
-  final report = provider.lastReport;
-  // 传输状态与原始失败细节（`detail`）只进诊断导出，界面上不展示。
-  final transports = <Map<String, Object?>>[];
-  for (final kind in const [
-    SyncTransportKind.lan,
-    SyncTransportKind.webdav,
-  ]) {
-    final status = provider.transportStatus(kind);
-    transports.add({
-      'kind': kind,
-      'enabled': provider.enabledTransports.contains(kind),
-      'running': status?.running ?? false,
-      'unavailableReason': status?.unavailableReason,
-      'lastSuccessAt': provider.transportLastSuccessAt(kind),
-      if (status?.error != null) 'error': status!.error!.toJson(),
-    });
-  }
-  final payload = const JsonEncoder.withIndent('  ').convert({
-    'deviceId': provider.deviceId,
-    'deviceName': provider.deviceName,
-    'enabled': provider.enabled,
-    'transports': transports,
-    'categories': {
-      for (final entry in provider.categories.entries)
-        entry.key.name: entry.value,
-    },
-    if (report != null)
-      'lastRound': {
-        'trigger': report.trigger.name,
-        'outcome': report.outcome.name,
-        'durationMs': report.durationMs,
-        'applied': report.applied,
-        'remoteRecords': report.remoteRecords,
-        if (report.error != null) 'error': report.error!.toJson(),
-        'transports': [for (final item in report.transports) item.toJson()],
-      },
-    'peers': [for (final peer in provider.peers) peer.toJson()],
-    'log': [for (final entry in provider.log.take(10)) entry.toJson()],
-  });
-  await Clipboard.setData(ClipboardData(text: payload));
-  if (!context.mounted) return;
-  ScaffoldMessenger.of(context)
-      .showSnackBar(SnackBar(content: Text(l10n.syncDiagnosticCopied)));
 }
 
 /// 日志行是否需要「下一步动作」（失败或有失败原因；成功行只是历史）。
@@ -204,7 +136,8 @@ class SyncLogRow extends StatelessWidget {
           syncBytesText(entry.bytesIn),
           syncBytesText(entry.bytesOut),
         ),
-      if (entry.error != null) l10n.syncLogFailed(syncIssueText(l10n, entry.error!)),
+      if (entry.error != null)
+        l10n.syncLogFailed(syncIssueText(l10n, entry.error!)),
     ].join(' · ');
     // 失败用错误色，部分失败用警告色；其余状态是中性信息（形状已区分状态）。
     final iconColor = switch (entry.outcome) {

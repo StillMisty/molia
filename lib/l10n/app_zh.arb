@@ -830,8 +830,6 @@
   "syncPassphraseJoinHint": "输入其它设备上显示的同步口令",
   "syncPassphraseInvalid": "口令无效（至少 16 位）",
   "syncSave": "保存",
-  "syncSyncNow": "立即同步",
-  "syncSyncing": "同步中…",
   "syncNever": "尚未同步",
   "syncStatusSyncedPeers": "已与 {count} 台设备同步",
   "@syncStatusSyncedPeers": {
@@ -956,7 +954,7 @@
   "syncTransportDisabled": "已关闭",
   "syncTransportNotConfigured": "未配置",
   "syncTransportStartFailed": "启动失败",
-  "syncLogTitle": "同步日志与诊断",
+  "syncLogTitle": "同步日志",
   "syncLogSection": "同步日志",
   "syncLogEmpty": "暂无记录",
   "syncLogFailed": "失败：{error}",
@@ -974,11 +972,6 @@
   },
   "syncPeerClockSkew": "时钟差 {minutes} 分钟",
   "syncPeerLastError": "最近失败：{error}",
-  "syncDiagnosticTitle": "诊断",
-  "syncDiagnosticCopy": "复制诊断信息",
-  "syncDiagnosticSubtitle": "最近几轮同步状态（不含口令与密钥）",
-  "syncDiagnosticHint": "排查问题时把它贴给维护者即可，不含任何凭证或数据内容。",
-  "syncDiagnosticCopied": "诊断信息已复制",
   "syncTransportPermissionDenied": "缺少局域网权限",
   "syncLanPermissionTitle": "授予局域网权限",
   "syncLanPermissionSubtitle": "Android 17 起访问局域网设备需要「附近设备」权限",
@@ -1006,7 +999,7 @@
   "syncPeerCleanupRemoteDone": "已清理远端文件",
   "syncPeerCleanupRemoteNone": "没有可清理的远端文件",
   "syncPeerCleanupRemoteFailed": "清理失败：{error}",
-  "syncPeerNotContacted": "尚未接触，对端在线后点本行再同步一次",
+  "syncPeerNotContacted": "尚未接触，对端在线后会自动接触",
   "syncPeerAddress": "地址 {host}",
   "syncPeerDeviceId": "设备 {id}",
   "syncDeviceNameDialogTitle": "设备名称",
@@ -1015,7 +1008,7 @@
   "syncCategorySubtitle": "关闭后本机不推送也不应用该类数据",
   "syncGeneratedHint": "已生成同步口令，在其它设备输入同一口令即可加入",
   "syncIssueDialogTitle": "同步问题",
-  "syncIssueUnknown": "未知原因；可先重试，持续失败请复制诊断信息排查",
+  "syncIssueUnknown": "未知原因；可先重试，持续失败可查看同步日志排查",
   "syncIssueNotConfigured": "同步传输尚未配置",
   "syncIssueStartFailed": "传输启动失败",
   "syncIssuePermissionDenied": "缺少局域网权限（Android 17 起需「附近设备」权限）",
@@ -1532,8 +1525,6 @@
   },
   "downloadsNoResume": "不做断点续传：平台直链多为一次性签名地址，失败后重下更可靠",
   "sleepTimerTitle": "定时关闭",
-  "sleepTimerHint": "到点自动暂停播放",
-  "sleepTimerCountdownSection": "倒计时",
   "sleepTimerOff": "未开启",
   "sleepTimerRemaining": "剩余 {time}",
   "@sleepTimerRemaining": {
@@ -1544,14 +1535,6 @@
     }
   },
   "sleepTimerAfterTrack": "播完当前歌曲后暂停",
-  "sleepTimerMinutesShort": "{minutes} 分钟",
-  "@sleepTimerMinutesShort": {
-    "placeholders": {
-      "minutes": {
-        "type": "int"
-      }
-    }
-  },
   "sleepTimerCancel": "关闭定时",
   "sleepTimerArmedSnackbar": "已开启定时关闭 · {time} 后暂停",
   "@sleepTimerArmedSnackbar": {

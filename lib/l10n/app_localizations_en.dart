@@ -2121,12 +2121,6 @@ class AppLocalizationsEn extends AppLocalizations {
   String get syncSave => 'Save';
 
   @override
-  String get syncSyncNow => 'Sync now';
-
-  @override
-  String get syncSyncing => 'Syncing…';
-
-  @override
   String get syncNever => 'Never synced';
 
   @override
@@ -2340,7 +2334,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get syncTransportStartFailed => 'failed to start';
 
   @override
-  String get syncLogTitle => 'Sync log & diagnostics';
+  String get syncLogTitle => 'Sync log';
 
   @override
   String get syncLogSection => 'Sync log';
@@ -2399,23 +2393,6 @@ class AppLocalizationsEn extends AppLocalizations {
   String syncPeerLastError(String error) {
     return 'Last error: $error';
   }
-
-  @override
-  String get syncDiagnosticTitle => 'Diagnostics';
-
-  @override
-  String get syncDiagnosticCopy => 'Copy diagnostics';
-
-  @override
-  String get syncDiagnosticSubtitle =>
-      'Recent sync rounds (no passphrase, no keys)';
-
-  @override
-  String get syncDiagnosticHint =>
-      'Paste it when reporting an issue — it contains no credentials and no data.';
-
-  @override
-  String get syncDiagnosticCopied => 'Diagnostics copied';
 
   @override
   String get syncTransportPermissionDenied => 'LAN permission missing';
@@ -2510,7 +2487,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get syncPeerNotContacted =>
-      'not reached yet — tap this device row after the peer is online';
+      'not reached yet — it retries automatically once the peer is online';
 
   @override
   String syncPeerAddress(String host) {
@@ -2544,7 +2521,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get syncIssueUnknown =>
-      'Unknown reason — retry first; if it keeps failing, copy diagnostics';
+      'Unknown reason — retry first; if it keeps failing, check the sync log';
 
   @override
   String get syncIssueNotConfigured => 'Sync transport is not configured';
@@ -3410,12 +3387,6 @@ class AppLocalizationsEn extends AppLocalizations {
   String get sleepTimerTitle => 'Sleep timer';
 
   @override
-  String get sleepTimerHint => 'Pauses playback when the timer ends';
-
-  @override
-  String get sleepTimerCountdownSection => 'Countdown';
-
-  @override
   String get sleepTimerOff => 'Off';
 
   @override
@@ -3425,11 +3396,6 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get sleepTimerAfterTrack => 'Pause after current track';
-
-  @override
-  String sleepTimerMinutesShort(int minutes) {
-    return '$minutes min';
-  }
 
   @override
   String get sleepTimerCancel => 'Turn off timer';

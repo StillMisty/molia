@@ -6,6 +6,7 @@ import 'package:logging/logging.dart';
 
 import '../domain/models/playback.dart';
 import '../domain/ports/state_listenable.dart';
+import '../services/sleep_timer_alarm.dart';
 
 final _logger = Logger('molia.sleep_timer');
 
@@ -77,10 +78,15 @@ class SleepTimerController implements ValueListenable<SleepTimerState> {
     required StateListenable<Duration> position,
     required Future<void> Function() onFire,
     DateTime Function() now = DateTime.now,
+    SleepTimerAlarm? alarm,
   })  : _snapshot = snapshot,
         _position = position,
         _onFire = onFire,
         _now = now {
+    // 原生定时器是熄屏 / Doze 的补触发通道；平台不支持时是 no-op，纯 Dart
+    // ticker 仍按原语义工作。
+    _alarm = alarm ?? createSleepTimerAlarm();
+    _alarm.onFired = _onNativeAlarm;
     _snapshot.addListener(_onSnapshot);
     _position.addListener(_onPosition);
     _lastKnownDuration = snapshot.value.duration;
@@ -101,6 +107,10 @@ class SleepTimerController implements ValueListenable<SleepTimerState> {
   final StateListenable<Duration> _position;
   final Future<void> Function() _onFire;
   final DateTime Function() _now;
+  late final SleepTimerAlarm _alarm;
+
+  /// 原生定时器代次：覆盖 / 取消时自增，旧回调直接丢弃。
+  int _alarmToken = 0;
 
   final ValueNotifier<SleepTimerState> _state =
       ValueNotifier<SleepTimerState>(SleepTimerState.off);
@@ -168,6 +178,7 @@ class SleepTimerController implements ValueListenable<SleepTimerState> {
     _remaining = null;
     _deadlineAt = null;
     _cancelTicker();
+    _cancelAlarm();
     _maxPosition = _position.value;
     _publish();
   }
@@ -182,6 +193,7 @@ class SleepTimerController implements ValueListenable<SleepTimerState> {
     _snapshot.removeListener(_onSnapshot);
     _position.removeListener(_onPosition);
     _cancelTicker();
+    _alarm.dispose();
     _state.dispose();
   }
 
@@ -259,12 +271,15 @@ class SleepTimerController implements ValueListenable<SleepTimerState> {
   void _syncTicker() {
     if (_mode != SleepTimerMode.countdown) {
       _cancelTicker();
+      _cancelAlarm();
       return;
     }
     if (!_snapshot.value.isPlaying) {
-      // 暂停 / 停止：冻结剩余播放时长（暂停期间不计时）。
+      // 暂停 / 停止：冻结剩余播放时长（暂停期间不计时），原生定时器一并撤销，
+      // 避免熄屏时原生到点误暂停。
       final expired = _freeze();
       _cancelTicker();
+      _cancelAlarm();
       if (expired) _fire();
       return;
     }
@@ -273,11 +288,47 @@ class SleepTimerController implements ValueListenable<SleepTimerState> {
       _fire();
       return;
     }
-    if (_ticker != null) return;
-    final remaining = _remaining;
-    if (remaining == null) return;
-    _deadlineAt = _now().add(remaining);
-    _ticker = Timer.periodic(_tickInterval, (_) => _onTick());
+    if (_ticker == null) {
+      final remaining = _remaining;
+      if (remaining == null) return;
+      _deadlineAt = _now().add(remaining);
+      _ticker = Timer.periodic(_tickInterval, (_) => _onTick());
+    }
+    // 即使 Dart ticker 已在跑，也重新 arm 原生定时器：通道重建 / 回前台 /
+    // 快照变化后都能恢复熄屏补触发。
+    _armAlarm();
+  }
+
+  /// 武装原生定时器（每次 arm 递增 token，旧回调自动失效）。
+  void _armAlarm() {
+    final deadline = _deadlineAt;
+    if (deadline == null) return;
+    final remaining = deadline.difference(_now());
+    if (remaining <= Duration.zero) {
+      _fire();
+      return;
+    }
+    _alarmToken++;
+    _alarm.arm(remaining, _alarmToken);
+  }
+
+  void _cancelAlarm() {
+    _alarmToken++;
+    _alarm.cancel();
+  }
+
+  /// 原生定时器到点：校验代次与 deadline，早到重排、到点暂停。
+  void _onNativeAlarm(int token) {
+    if (_mode != SleepTimerMode.countdown || token != _alarmToken) return;
+    if (!_snapshot.value.isPlaying) {
+      _syncTicker();
+      return;
+    }
+    if (!_deadlinePassed) {
+      _armAlarm();
+      return;
+    }
+    _fire();
   }
 
   /// 把绝对 deadline 折算成剩余播放时长（暂停冻结），并清除 deadline。
@@ -344,6 +395,7 @@ class SleepTimerController implements ValueListenable<SleepTimerState> {
     _armedTrackUri = null;
     _deadlineAt = null;
     _cancelTicker();
+    _cancelAlarm();
     if (notify) _publish();
   }
 

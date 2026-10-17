@@ -2032,12 +2032,6 @@ class AppLocalizationsZh extends AppLocalizations {
   String get syncSave => '保存';
 
   @override
-  String get syncSyncNow => '立即同步';
-
-  @override
-  String get syncSyncing => '同步中…';
-
-  @override
   String get syncNever => '尚未同步';
 
   @override
@@ -2251,7 +2245,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get syncTransportStartFailed => '启动失败';
 
   @override
-  String get syncLogTitle => '同步日志与诊断';
+  String get syncLogTitle => '同步日志';
 
   @override
   String get syncLogSection => '同步日志';
@@ -2309,21 +2303,6 @@ class AppLocalizationsZh extends AppLocalizations {
   String syncPeerLastError(String error) {
     return '最近失败：$error';
   }
-
-  @override
-  String get syncDiagnosticTitle => '诊断';
-
-  @override
-  String get syncDiagnosticCopy => '复制诊断信息';
-
-  @override
-  String get syncDiagnosticSubtitle => '最近几轮同步状态（不含口令与密钥）';
-
-  @override
-  String get syncDiagnosticHint => '排查问题时把它贴给维护者即可，不含任何凭证或数据内容。';
-
-  @override
-  String get syncDiagnosticCopied => '诊断信息已复制';
 
   @override
   String get syncTransportPermissionDenied => '缺少局域网权限';
@@ -2411,7 +2390,7 @@ class AppLocalizationsZh extends AppLocalizations {
   }
 
   @override
-  String get syncPeerNotContacted => '尚未接触，对端在线后点本行再同步一次';
+  String get syncPeerNotContacted => '尚未接触，对端在线后会自动接触';
 
   @override
   String syncPeerAddress(String host) {
@@ -2442,7 +2421,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get syncIssueDialogTitle => '同步问题';
 
   @override
-  String get syncIssueUnknown => '未知原因；可先重试，持续失败请复制诊断信息排查';
+  String get syncIssueUnknown => '未知原因；可先重试，持续失败可查看同步日志排查';
 
   @override
   String get syncIssueNotConfigured => '同步传输尚未配置';
@@ -3265,12 +3244,6 @@ class AppLocalizationsZh extends AppLocalizations {
   String get sleepTimerTitle => '定时关闭';
 
   @override
-  String get sleepTimerHint => '到点自动暂停播放';
-
-  @override
-  String get sleepTimerCountdownSection => '倒计时';
-
-  @override
   String get sleepTimerOff => '未开启';
 
   @override
@@ -3280,11 +3253,6 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get sleepTimerAfterTrack => '播完当前歌曲后暂停';
-
-  @override
-  String sleepTimerMinutesShort(int minutes) {
-    return '$minutes 分钟';
-  }
 
   @override
   String get sleepTimerCancel => '关闭定时';

@@ -11,42 +11,34 @@ import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 import 'package:provider/provider.dart';
 import 'package:molia/pages/sources_page.dart';
-import 'package:molia/playback/audio_predownloader.dart';
-import 'package:molia/playback/desktop_audio_init.dart';
-import 'package:molia/playback/local_playback_service.dart';
-import 'package:molia/playback/playing_track_cache_writer.dart';
 import 'package:molia/providers/sources_provider.dart';
 import 'package:molia/data/downloads/downloads_publisher.dart';
-import 'package:molia/services/cache_service.dart';
 import 'package:molia/services/window/app_tray.dart';
 import 'package:molia/services/window/window_chrome.dart';
 import 'package:molia/sources/source_manager.dart';
 
 /// 端到端集成测试：真实 App 运行时 + 真实 LX JS 引擎 + 本地 mock HTTP 服务。
 ///
-/// 走官方 `flutter test integration_test/...` 路径，同一份文件覆盖两类目标：
-/// - Linux 桌面：`tool/agent/test.sh linux`
-///   （等价 `flutter test integration_test/lx_engine_integration_test.dart -d linux`；
-///   播放用例需要 libmpv；默认跑在 Xvfb 上（无窗口），`--window` 才上真实显示）；
-/// - Android 模拟器：`tool/agent/test.sh android`（播放用例跳过，模拟器音频不可靠）。
+/// 走官方 `flutter test integration_test/...` 路径，覆盖：
+/// - LX 引擎导入 / 初始化 / 搜索 / 取链 / 歌词；
+/// - 设置页粘贴导入音源脚本；
+/// - 桌面窗口 chrome / 托盘冒烟；
+/// - 公共下载目录（仅 Android 真实发布，其余平台断言 unsupported）。
+///
+/// **不含真实播放用例**：Linux 无窗口环境（Xvfb）下 media_kit/libmpv 偶发卡死
+/// 装载且无法用 Future.timeout 打断（Dart isolate 被原生调用阻塞），会把整轮
+/// CI / agent 测试吊死。播放服务本身由单测与桌面手动验证覆盖。
 ///
 /// 不要拆成多个集成测试文件：桌面端逐文件重启 App 会互相踩（flutter#101031）。
 void main() {
   IntegrationTestWidgetsFlutterBinding.ensureInitialized();
-  // 播放用例仅桌面运行：Android/iOS 的 just_audio 后端依赖模拟器音频设备，
-  // 结果不可靠（见本文件播放用例内的跳过分支）。
-  final isDesktop =
-      Platform.isLinux || Platform.isWindows || Platform.isMacOS;
-  // Linux/Windows 上为 just_audio 注册 media_kit 后端
-  initDesktopAudioIfNeeded();
 
   late HttpServer server;
   late int port;
   late Uint8List wavBytes;
   late String script;
 
-  /// 缓存用例的曲目 id：每次运行唯一，避免重复跑集成测试时命中上次残留的
-  /// 缓存文件（那样「后台写入」用例会假通过）。
+  /// 脚本里第三首曲目的 id：每次运行唯一，供「取链 / 歌词」断言使用。
   final cacheTrackId = 'cache-${DateTime.now().millisecondsSinceEpoch}';
 
   setUpAll(() async {
@@ -59,9 +51,9 @@ void main() {
 
   tearDownAll(() async {
     await server.close(force: true);
-    // 桌面端 media_kit（libmpv）的全局原生事件循环会阻止测试进程退出，
-    // 导致 `flutter test integration_test/... -d linux` 挂起（CI/子代理卡死）。
-    // 测试结果已通过 VM service 上报，这里给出短暂上报窗口后强制退出。
+    // 桌面端 Flutter 测试进程在 LX isolate / 原生平台通道未完全回收时会拒绝
+    // 退出，导致 `flutter test integration_test/... -d linux` 挂起（CI/子代理
+    // 卡死）。测试结果已通过 VM service 上报，给出短暂上报窗口后强制退出。
     // Android 不注册：官方 teardown（stopApp/uninstall）能干净退出，注册反而会
     // 抢在卸载/回收之前退出进程（见 docs/pitfalls.md #11）。
     if (Platform.isLinux || Platform.isWindows) {
@@ -69,14 +61,42 @@ void main() {
     }
   });
 
+  /// 引擎调用统一上限：QuickJS isolate 偶发不响应时，把无声挂死变成
+  /// 带调用名的失败，方便定位是初始化、脚本导入还是取链。
+  Future<T> engineCall<T>(Future<T> future, String label) => future.timeout(
+        const Duration(seconds: 30),
+        onTimeout: () => fail('$label 超时（LX 引擎未响应）'),
+      );
+
   Future<SourceManager> freshManager() async {
-    final manager = SourceManager();
-    await manager.init();
-    for (final existing in manager.scripts.toList()) {
-      await manager.removeScript(existing.id);
+    // 上一个用例导入的脚本会留在应用支持目录的 `lx_sources.json`（桌面端
+    // tearDownAll 强退进程，测试内的 addTearDown 只 dispose，不 remove）。
+    // 若交给 SourceManager 逐个删除，会走到 `_engine.dispose()`；
+    // 引擎 isolate 状态不干净时这里可能永久等待（实测 30 分钟无输出）。
+    // 测试只关心「从空脚本列表开始」，直接删持久化文件，让 repository 从空
+    // 状态加载，绕开引擎销毁这条不可靠路径。
+    final support = await getApplicationSupportDirectory();
+    final lxScripts = File(p.join(support.path, 'lx_sources.json'));
+    if (await lxScripts.exists()) {
+      await lxScripts.delete();
     }
+    final lxScriptsTmp = File(p.join(support.path, 'lx_sources.json.tmp'));
+    if (await lxScriptsTmp.exists()) {
+      await lxScriptsTmp.delete();
+    }
+
+    final manager = SourceManager();
+    await engineCall(manager.init(), 'SourceManager.init');
     return manager;
   }
+
+  /// 有上限的 pumpAndSettle：默认 10 分钟对 agent / CI 等同挂死；30s 内
+  /// 仍不落定就抛可诊断的失败（带动画/定时器未收敛的原因通常会打印 pending）。
+  Future<void> settle(WidgetTester tester) => tester.pumpAndSettle(
+        const Duration(milliseconds: 100),
+        EnginePhase.sendSemanticsUpdate,
+        const Duration(seconds: 30),
+      );
 
   Future<void> waitFor(
     WidgetTester tester,
@@ -110,23 +130,23 @@ void main() {
     final scrollable = find.byType(Scrollable).first;
     for (var i = 0; i < 10 && target.evaluate().isEmpty; i++) {
       await tester.fling(scrollable, Offset(0, up ? 300 : -300), 1200);
-      await tester.pumpAndSettle();
+      await settle(tester);
     }
     if (target.evaluate().isEmpty) {
       fail('滚动后仍找不到目标: $target');
     }
     await tester.ensureVisible(target);
-    await tester.pumpAndSettle();
+    await settle(tester);
   }
 
   testWidgets('LX 引擎：导入 → 初始化 → 搜索 → 取链 → 歌词', (tester) async {
     final manager = await freshManager();
-    addTearDown(() async {
-      await manager.deactivate();
-      manager.dispose();
-    });
+    // 不在 teardown 里 await deactivate()：它会等 _engine.dispose()，引擎
+    // isolate 卡死时整轮集成测试会永久等待；进程最终由 tearDownAll 强退。
+    addTearDown(manager.dispose);
 
-    final info = await manager.importScript(script, activate: true);
+    final info = await engineCall(
+        manager.importScript(script, activate: true), 'importScript');
     expect(info.name, '集成测试音源');
     expect(manager.hasActiveSource, isTrue);
     expect(manager.activeSources['test'], isNotNull);
@@ -157,152 +177,11 @@ void main() {
     );
   });
 
-  testWidgets('本地播放：播放 mock 音频，进度推进，暂停/继续/停止', (tester) async {
-    if (!isDesktop) {
-      markTestSkipped('Android/iOS 音频依赖模拟器音频设备、结果不可靠：播放用例仅桌面运行');
-      return;
-    }
-    if (!desktopAudioAvailable) {
-      markTestSkipped(
-          'media_kit 不可用，跳过播放测试（Linux 需安装 mpv/libmpv）：${desktopAudioInitError ?? ''}');
-      return;
-    }
-    final manager = await freshManager();
-    addTearDown(() async {
-      await manager.deactivate();
-      manager.dispose();
-    });
-    await manager.importScript(script, activate: true);
-    final tracks = (await manager.searchWithMeta('test', 'hello')).tracks;
-
-    final player = LocalPlaybackService(
-      resolver: (track, {String? quality}) =>
-          manager.resolveUrl(track, requestedQuality: quality),
-    );
-    addTearDown(player.dispose);
-
-    await player.playTracks(tracks, 0, contextName: '集成测试');
-
-    await waitFor(
-      tester,
-      () => player.hasTrack && player.isPlaying,
-      reason: '播放未开始: ${player.lastError ?? ''}',
-    );
-
-    final track = player.currentSourceTrack!;
-    expect(track.title, 'Hello LX');
-    expect(player.isPlaying, isTrue);
-    expect(player.contextName, '集成测试');
-
-    await Future<void>.delayed(const Duration(seconds: 2));
-    await tester.pump();
-    expect(player.position, greaterThan(Duration.zero),
-        reason: '播放进度没有推进');
-
-    await player.toggle();
-    await waitFor(tester, () => !player.isPlaying, reason: '暂停未生效');
-    await player.toggle();
-    await waitFor(tester, () => player.isPlaying, reason: '继续播放未生效');
-
-    // 暂停后切歌：新曲目必须自动起播（不能停在暂停态）。
-    await player.toggle();
-    await waitFor(tester, () => !player.isPlaying, reason: '再次暂停未生效');
-    await player.skipToNext();
-    await waitFor(
-      tester,
-      () => player.currentSourceTrack?.title == 'Second Song',
-      reason: '下一首未生效',
-    );
-    await waitFor(
-      tester,
-      () => player.isPlaying,
-      reason: '暂停后切歌未自动播放',
-    );
-
-    await player.seek(const Duration(milliseconds: 500));
-    await tester.pump();
-    expect(player.position,
-        greaterThanOrEqualTo(const Duration(milliseconds: 400)));
-
-    await player.stop();
-    expect(player.hasTrack, isFalse);
-  });
-
-  testWidgets('桌面：播放过的曲目由后台字节下载补齐音频缓存（两档模型的基础）', (tester) async {
-    if (!isDesktop) {
-      markTestSkipped('Android/iOS 播放用例不可靠：后台缓存写入用例仅桌面运行');
-      return;
-    }
-    if (!desktopAudioAvailable) {
-      markTestSkipped(
-          'media_kit 不可用，跳过（Linux 需安装 mpv/libmpv）：${desktopAudioInitError ?? ''}');
-      return;
-    }
-    final manager = await freshManager();
-    addTearDown(() async {
-      await manager.deactivate();
-      manager.dispose();
-    });
-    await manager.importScript(script, activate: true);
-    final tracks = (await manager.searchWithMeta('test', 'hello')).tracks;
-    final cacheTrack = tracks.firstWhere((track) => track.title == 'Cache Me');
-
-    final cache = CacheService.instance;
-    final directory = await cache.audioCacheDirPath();
-    if (directory == null) {
-      markTestSkipped('当前平台没有音频缓存目录');
-      return;
-    }
-    // 写入侧 key（播放 / 预取的实际入口）。
-    final expected = CacheService.audioCacheKeyForSource(cacheTrack);
-    final expectedFile = File(p.join(directory, expected));
-    if (expectedFile.existsSync()) await expectedFile.delete();
-
-    final player = LocalPlaybackService(
-      resolver: (track, {String? quality}) =>
-          manager.resolveUrl(track, requestedQuality: quality),
-      audioCacheWriter: PlayingTrackCacheWriter(
-        predownloader: CacheAudioPredownloader(cacheService: cache),
-      ),
-    );
-    addTearDown(player.dispose);
-
-    await player.playTracks(
-      tracks,
-      tracks.indexOf(cacheTrack),
-      contextName: '集成测试-缓存',
-    );
-    await waitFor(tester, () => player.isPlaying, reason: '缓存用例播放未开始');
-
-    // 播放仍走网络；缓存由后台下载原子落位（先落位再断言，避免读到半成品）。
-    await waitFor(
-      tester,
-      () => expectedFile.existsSync(),
-      timeout: const Duration(seconds: 60),
-      reason: '后台缓存未落位: $expected',
-    );
-
-    // 读取侧（单曲占用 / 命中探测 / 转存）与写入侧同名：占用必须看见它。
-    final usage = await cache.audioUsageForTrack(
-      sourceKey: cacheTrack.sourceKey,
-      songId: cacheTrack.songId,
-    );
-    expect(
-      usage.count,
-      greaterThan(0),
-      reason: '写入侧文件名与读取侧不同名（读取侧看不到缓存）',
-    );
-    expect(usage.bytes, greaterThan(0));
-
-    await player.stop();
-  });
-
   testWidgets('设置页 UI：粘贴导入音源脚本并激活', (tester) async {
     final manager = await freshManager();
-    addTearDown(() async {
-      await manager.deactivate();
-      manager.dispose();
-    });
+    // 不在 teardown 里 await deactivate()：它会等 _engine.dispose()，引擎
+    // isolate 卡死时整轮集成测试会永久等待；进程最终由 tearDownAll 强退。
+    addTearDown(manager.dispose);
 
     await tester.pumpWidget(
       MultiProvider(
@@ -315,7 +194,7 @@ void main() {
         child: const MaterialApp(home: SourcesPage()),
       ),
     );
-    await tester.pumpAndSettle();
+    await settle(tester);
 
     expect(find.text('音源管理'), findsOneWidget);
     // 空态卡片可能落在首屏视口之外（布局随版本变化）：先滚动到可见。
@@ -326,10 +205,10 @@ void main() {
     // 粘贴导入（回滚到导入卡片，可能已在视口上方）
     await scrollTo(tester, find.text('粘贴脚本导入'), up: true);
     await tester.tap(find.text('粘贴脚本导入'));
-    await tester.pumpAndSettle();
+    await settle(tester);
     await tester.enterText(find.byType(M3ETextField), script);
     await tester.tap(find.text('导入'));
-    await tester.pumpAndSettle();
+    await settle(tester);
 
     // 免责声明
     expect(find.text('导入音源脚本'), findsOneWidget);
@@ -352,10 +231,10 @@ void main() {
     // 默认音质入口在设置 › 播放；这里验证 manager 的读写闭环，
     // UI 交互由 settings_page_test 覆盖。
     await manager.setPreferredQuality('128k');
-    await tester.pumpAndSettle();
+    await settle(tester);
     expect(manager.preferredQuality, '128k');
     await manager.setPreferredQuality('320k');
-    await tester.pumpAndSettle();
+    await settle(tester);
     expect(manager.preferredQuality, '320k');
   });
 
@@ -550,8 +429,8 @@ Uint8List _buildWav() {
   writeString('data');
   writeUint32(dataSize);
   for (var i = 0; i < samples; i++) {
-    final sample = 128 +
-        (32 * math.sin(2 * math.pi * 440 * i / sampleRate)).round();
+    final sample =
+        128 + (32 * math.sin(2 * math.pi * 440 * i / sampleRate)).round();
     builder.addByte(sample.clamp(0, 255));
   }
   return builder.toBytes();

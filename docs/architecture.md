@@ -94,8 +94,12 @@
   `PlaybackProvider`。与 `PlayStatisticsService` / `ArtworkThemeSync` 同为观察者形态。
 - **音频焦点与定时关闭**：`AudioFocusGuard`（`lib/playback/audio_focus_guard.dart`，
   其他应用出声 → 暂停，默认开；`androidWillPauseWhenDucked` 把 duck 升级为暂停语义）
-  由 `LocalPlaybackService` 持有；倒计时定时关闭改为**绝对 deadline**
-  （tick / 快照变化 / 回前台三路补触发），熄屏节流后首个回调立即补暂停。
+  由 `LocalPlaybackService` 持有；倒计时定时关闭为**绝对 deadline**
+  （tick / 快照变化 / 回前台三路补触发），并按平台挂 `SleepTimerAlarm`
+  （`lib/services/sleep_timer_alarm*.dart` → Android `SleepTimerChannelHandler` /
+  iOS `SleepTimerChannelHandler.swift`）：熄屏 / Doze 下 Dart timer 被节流或
+  冻结时，由原生定时器到点唤醒 Dart 执行暂停；原生不可用（Web / 桌面 / 测试）
+  自动退化为纯 Dart timer。
 - **Lyrics**：`LyricsProvider`（`lib/providers/lyrics_provider.dart`）是取词 → 缓存 →
   解析 → 预取的唯一实现，对外只暴露 `LyricsState`（idle/loading/ready/empty + isSynced，
   含按时间戳对齐的翻译 / 罗马音扩展行与逐字时间轴）。时间契约统一在
@@ -223,13 +227,14 @@
   结论（`ok / noChanges / noPeers / partial / failed`）+ 每传输明细（含未变跳过
   数）+ 每对端名册 + 本轮变更量；设置页据此呈现结论行、运行状态（近 24 小时
   触发 / 有效传输轮数与流量、当前同步等级 · 网络类型 · 是否省电）、已配对设备
-  子页与变更语义日志，失败行给重试入口，「复制诊断信息」导出运行状态。触发
+  子页与变更语义日志，失败行给重试入口；同步何时跑完全由调度器声明式决定，
+  首屏不提供「立即同步」主操作，也不导出诊断快照。触发
   策略统一在 `SyncScheduler`（`sync_scheduler.dart`）：**活跃**（可见 + 最近
   交互 / 正在播放，变更去抖 4s）/ **空闲**（退避 10→20→40→60 分钟封顶；
   蜂窝下无本地变更不广播、不发 PROPFIND，非蜂窝（Wi-Fi / 以太网 / 桌面）
   唤醒照常探测与拉取）/**后台**（零定时唤醒，退后台尽力推、回前台拉）/
   **省电**（低电量未充电或系统省电模式
-  暂停自动，仅手动）；电量经平台通道读取（Android `BatteryChannelHandler` /
+  暂停自动，只保留恢复动作的手动触发）；电量经平台通道读取（Android `BatteryChannelHandler` /
   iOS `AppDelegate`），移动数据下默认只同步小类别
   （设置 / 音源 / 凭证 / 歌单与曲目 / 会话），可在
   同步页切换为「暂停自动同步」。传输有两个
@@ -600,13 +605,18 @@
   表面留在原位；1.1.6 及以下宿主在 guard 非空时直接放弃手势，那条链路会静默退化成
   「无预览」的普通返回，故依赖下限 1.1.7（原因见 `pubspec.yaml` 注释）。本仓库大屏的
   侧边弹层（`showGeneralDialog`）与居中对话框（`showDialog`）不是 M3E 组件、不参与
-  页面过渡、无预览（侧边弹层的手势支持待补）。嵌套 Navigator（设置弹层内层）必须
-  显式退出预测返回（`SettingsPage._innerTransitionTheme`）：框架把一次手势派发给
-  **所有**返回 true 的观察者，而 `Route.isCurrent` 只看各自 Navigator——根导航器上
-  开着弹层时内层子页也是「current」，会与最上层表面各自接管：实测为手势退掉内层
-  子页、最上层对话框反而留下（两条路由都退时更是一次手势退两级）。这是框架侧行为，
-  1.1.7 的弹层修复不覆盖它，故内层仍强制 fade-forwards（护栏见
-  `test/settings_page_test.dart` 的「根导航器上方 dialog」用例）。
+  页面过渡、无预览（侧边弹层的手势支持待补）。嵌套 Navigator（设置弹层内层）由
+  `SettingsPage._SettingsPageTransitionsBuilder` 做**手势归属**判定：内层 Android
+  过渡保持 fade-forwards 并附一个预测返回 detector，只在
+  `内层路由 isCurrent && popGestureEnabled && 内层 Navigator 还能 pop &&
+  弹层路由仍是顶层` 时接管。框架会把一次手势派发给**所有**返回 true 的观察者，
+  不做归属判定就会和内层子页 / 最上层 dialog 各退一级。归属结果经
+  `SettingsSheetBackCoordinator` 传给弹层的动态 `M3EBottomSheetTheme`：
+  - 子页手势：弹层 `predictiveBackShrinkX/Y` 归 0，只显示与 push 一致的
+    FadeForwards 页面退场；提交只退子页，弹层保留（guard 读 coordinator 返回 false）。
+  - 首屏手势：弹层正常收缩，提交关闭设置。
+  护栏见 `test/settings_page_test.dart` 的「子页预测返回由页面接管」「根导航器上方
+  dialog」两组用例。
 - 图标：统一圆角风格 `Icons.*_rounded`（不用 `Icons.adaptive.*`，不混 `_outlined`/基础实心）；
   唯一例外 `library_music_outlined`（资料库未选中半对；音符图标已改用 `MoliaMark` 组件）。
   `test/architecture/icon_usage_test.dart` 扫描强制。**同一按钮的状态图标切换**统一走
@@ -669,8 +679,8 @@
 ```bash
 flutter analyze --no-pub                 # 0 error / 0 warning
 flutter test --no-pub                    # 含 domain/catalog/playback/layering/supervisor/update
-tool/agent/test.sh linux                 # 集成测试 3/3；桌面看门狗自动退出；默认 Xvfb 无窗口（--window 才弹窗）
-tool/agent/test.sh android               # 同一份集成测试跑模拟器（播放用例跳过，跑完自动卸载）
+tool/agent/test.sh linux                 # 集成测试（引擎/设置页/窗口/托盘；不含播放）；默认 Xvfb 无窗口
+tool/agent/test.sh android               # 同一份集成测试跑模拟器（跑完自动卸载）
 flutter build apk --debug
 flutter build apk --release --split-per-abi --split-debug-info=build/symbols --obfuscate \
   --extra-gen-snapshot-options=--strip   # 发布体积（APK 压缩打包见 android/app/build.gradle：~50%↓）

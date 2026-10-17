@@ -84,7 +84,8 @@ tool/agent/seed.sh android restore       # 用最近一次备份还原（第一�
 
 - 不需要先 `flutter build apk`：flutter test 自己构建 debug APK 并安装，跑完默认卸载
   （要保留安装态排查用 `--no-uninstall`）；失败时设备侧异常会被捕获并让退出码非零；
-- 引擎导入/搜索/取链/歌词与设置页 UI 全覆盖；**播放用例在 Android 跳过**
-  （模拟器音频不可靠，播放验证交给 Linux 桌面）；
+- 引擎导入/搜索/取链/歌词与设置页 UI 全覆盖；**不含真实播放用例**
+  （无头环境 libmpv 装载不可靠，见 `docs/pitfalls.md` #33；播放服务由单测与
+  真机手动验证覆盖）；
 - 默认墙钟超时 30min（首次 Gradle 构建），冷启动慢的机器可 `--timeout` 放宽；
 - 等价裸命令：`flutter test integration_test/lx_engine_integration_test.dart -d emulator-5554`。

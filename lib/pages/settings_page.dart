@@ -1,8 +1,9 @@
 import 'dart:async';
 
+import 'package:flutter/foundation.dart' show kIsWeb;
+import 'package:flutter/services.dart' show PredictiveBackEvent;
 import 'package:material_3_expressive/material_3_expressive.dart';
 import 'package:material_ui/material_ui.dart';
-import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:provider/provider.dart';
 
 import '../l10n/app_localizations.dart';
@@ -36,20 +37,28 @@ import 'update_settings_page.dart';
 
 /// 打开设置弹层（顶栏入口与测试共用）。
 ///
-/// 小屏（底部弹层）：dismiss guard 是返回的唯一入口——先在弹层内部退子页
-/// （立即返回 false、不等待退栈动画，对齐官方 Compose `settleToDismiss` 的
-/// 「收起一级」语义），子页退完后再允许关闭。guard 非空时弹层宿主照样接管
-/// 预测返回手势（material_3_expressive ≥ 1.1.7）：手势全程有跟手预览，提交后
-/// 由 guard 裁决——退掉子页（返回 false）则预览回弹、弹层留在原位；子页已退完
-/// 则放行关闭。内层子页本身不参与预测返回（见
-/// [SettingsPage._innerTransitionTheme]）。
+/// 小屏（底部弹层）：
+/// - 普通返回 / 下滑 / 遮罩点击走 dismiss guard：先在弹层内部退子页，子页
+///   退完后再允许关闭（对齐 Compose `settleToDismiss` 的「收起一级」语义）。
+/// - 预测返回按「手势归属」分叉：首屏手势由弹层宿主接管（跟手收缩，提交即
+///   关闭）；子页手势由内层路由接管（跟手播放 FadeForwards 页面退场，提交只
+///   退子页），此时弹层宿主的缩放置 0，不会出现「子页手势却是 sheet 收缩」。
+///   归属由 [SettingsSheetBackCoordinator] 在每次手势开始时判定。
 /// 大屏（居中对话框）忽略 guard，返回由 [SettingsPage] 页内处理。
 Future<void> showSettingsSheet(BuildContext context) {
   final navigatorKey = GlobalKey<NavigatorState>();
+  final backCoordinator = SettingsSheetBackCoordinator();
   return ResponsiveNavigation.showAdaptiveModalPage<void>(
     context: context,
     showCloseButton: false,
+    sheetThemeBuilder: (base) => _SettingsSheetTheme(base, backCoordinator),
     onDismissRequest: () async {
+      // 预测返回提交：由手势归属决定收谁。子页手势返回 false，内层路由
+      // 自己 pop；若这里也 pop 会一次手势退两级。
+      if (backCoordinator.predictiveBackActive) {
+        return backCoordinator.sheetShrinkOnPredictiveBack;
+      }
+      // 普通返回 / 下滑 / 遮罩：先退子页，再允许关弹层。
       final navigator = navigatorKey.currentState;
       if (navigator != null && navigator.canPop()) {
         unawaited(navigator.maybePop());
@@ -57,8 +66,26 @@ Future<void> showSettingsSheet(BuildContext context) {
       }
       return true;
     },
-    child: SettingsPage(navigatorKey: navigatorKey),
+    child: SettingsPage(
+      navigatorKey: navigatorKey,
+      backCoordinator: backCoordinator,
+    ),
   );
+}
+
+/// 设置弹层预测返回的手势归属。
+///
+/// 为什么需要：框架把同一次手势派发给**所有**返回 true 的观察者，而
+/// `Route.isCurrent` 只看自己那个 Navigator——弹层开着时，内层子页在它自己的
+/// Navigator 里依然是 current。若不做归属判定，M3E 弹层宿主（负责 sheet 收缩）
+/// 与内层子页（负责页面退场）会同时预览、提交时一次手势退两级。
+///
+/// [sheetShrinkOnPredictiveBack] 在每次手势开始时按「内层是否还能 pop」更新：
+/// 子页手势为 false（弹层缩放归零，只显示页面过渡）；首屏手势为 true（弹层
+/// 正常收缩）。标志保持到下一次手势开始，避免子页 pop 后弹层缩放突然跳变。
+class SettingsSheetBackCoordinator {
+  bool sheetShrinkOnPredictiveBack = true;
+  bool predictiveBackActive = false;
 }
 
 /// 设置弹层：内部 Navigator 承载首屏与子页（避免弹层叠弹层）。
@@ -67,21 +94,27 @@ Future<void> showSettingsSheet(BuildContext context) {
 /// 子页经 [openSettingsSubPage] 推入本 Navigator。
 ///
 /// 返回处理按宿主形态分叉：
-/// - 小屏（M3E 底部弹层）：弹层宿主的 dismiss guard（见 `showSettingsSheet`）
-///   负责「先在弹层内退子页、再关弹层」（对齐 Compose `settleToDismiss` 的
-///   「收起一级」语义）；弹层宿主自己接管预测返回手势（跟手预览 + guard 拒绝
-///   后回弹），内层路由被排除在外（见 [SettingsPage._innerTransitionTheme]）；
-///   本页不再挂 PopScope，避免同一次返回被两处处理。
+/// - 小屏（M3E 底部弹层）：普通返回走宿主 dismiss guard（见 `showSettingsSheet`）
+///   「先退子页、再关弹层」；预测返回由 [_SettingsPageTransitionsBuilder] 按
+///   手势归属分派——首屏归弹层宿主（收缩），子页归内层路由（页面过渡）。
+///   本页不挂 PopScope，避免同一次返回被两处处理。
 /// - 大屏（居中对话框）：没有宿主 guard，由 [NavigatorPopHandler] 转发系统
 ///   返回——先退子页，回到首屏后对话框正常关闭。
 class SettingsPage extends StatefulWidget {
-  const SettingsPage({super.key, this.navigatorKey});
+  const SettingsPage({
+    super.key,
+    this.navigatorKey,
+    SettingsSheetBackCoordinator? backCoordinator,
+  }) : _backCoordinator = backCoordinator;
 
   /// 弹层宿主与 dismiss guard 共享的内部导航 key。
   ///
   /// 小屏时宿主的 guard 需要读取内部 Navigator 的栈状态并退子页；缺省
   /// （如测试直接挂载）时内部自建 key。
   final GlobalKey<NavigatorState>? navigatorKey;
+
+  /// 弹层预测返回的手势归属（见 [showSettingsSheet]）；直接挂载时为 null。
+  final SettingsSheetBackCoordinator? _backCoordinator;
 
   @override
   State<SettingsPage> createState() => _SettingsPageState();
@@ -90,9 +123,14 @@ class SettingsPage extends StatefulWidget {
 class _SettingsPageState extends State<SettingsPage> {
   final GlobalKey<NavigatorState> _fallbackNavigatorKey =
       GlobalKey<NavigatorState>();
+  final SettingsSheetBackCoordinator _fallbackBackCoordinator =
+      SettingsSheetBackCoordinator();
 
   GlobalKey<NavigatorState> get _navigatorKey =>
       widget.navigatorKey ?? _fallbackNavigatorKey;
+
+  SettingsSheetBackCoordinator get _backCoordinator =>
+      widget._backCoordinator ?? _fallbackBackCoordinator;
 
   /// 弹层宿主下发的滚动控制器：首屏滚动视图必须显式挂它，才能保留
   /// 「列表滚到顶继续下滑 = 收缩/关闭弹层」的联动。
@@ -108,24 +146,27 @@ class _SettingsPageState extends State<SettingsPage> {
     _sheetScrollController = M3EBottomSheet.scrollControllerOf(context);
   }
 
-  /// 内层 Navigator 的过渡主题：Android 换成不参与预测返回的 fade-forwards。
+  /// 内层 Navigator 的过渡主题：正常过渡保持 fade-forwards，Android 额外
+  /// 插入按手势归属分派的预测返回 detector（见 [_SettingsPageTransitionsBuilder]）。
   ///
-  /// 为什么内层路由不能走预测返回：框架把同一次手势派发给**所有**返回 true 的
-  /// 观察者，而 `Route.isCurrent` 只看自己那个 Navigator——根导航器上开着弹层
-  /// （对话框 / 底部弹层）时，内层子页依旧是自己导航器的「current」，于是会和
-  /// 最上层表面各自接管：实测（`test/settings_page_test.dart` 的「根导航器上方
-  /// dialog」用例）是手势退掉内层子页、最上层对话框反而留下，两条路由都退时还会
-  /// 一次手势退两级。弹层的跟手预览由 M3E 弹层宿主自己实现
-  /// （`m3e_bottom_sheet_modal_host.dart`），不依赖内层路由过渡，所以把内层
-  /// 排除掉不会丢预览。内层页面继续走「普通返回 → 弹层 guard → 先退子页」这条
-  /// 既有链路；fade-forwards 与预测返回 builder 的非手势过渡视觉一致，观感不变。
-  ThemeData _innerTransitionTheme(BuildContext context) {
+  /// 为什么不能直接用框架的 `PredictiveBackPageTransitionsBuilder`：它的
+  /// detector 只看 `route.isCurrent`（内层 Navigator 自己的 current），根导航器
+  /// 开着 dialog / 弹层时仍会接管手势，和上层表面抢同一次返回。这里把
+  /// 「弹层路由是否仍是顶层」也纳入判定，并让首屏手势留给 M3E 弹层宿主。
+  ThemeData _innerTransitionTheme(
+    BuildContext context,
+    ModalRoute<dynamic>? sheetRoute,
+  ) {
     final base = Theme.of(context);
     return base.copyWith(
       pageTransitionsTheme: PageTransitionsTheme(
         builders: <TargetPlatform, PageTransitionsBuilder>{
           ...base.pageTransitionsTheme.builders,
-          TargetPlatform.android: const FadeForwardsPageTransitionsBuilder(),
+          TargetPlatform.android: _SettingsPageTransitionsBuilder(
+            backCoordinator: _backCoordinator,
+            navigatorKey: _navigatorKey,
+            sheetRoute: sheetRoute,
+          ),
         },
       ),
     );
@@ -133,6 +174,9 @@ class _SettingsPageState extends State<SettingsPage> {
 
   @override
   Widget build(BuildContext context) {
+    // 依赖弹层路由的 isCurrent：根导航器上再压 dialog 时，内层子页必须让出
+    // 预测返回（否则会退子页而 dialog 留下）。
+    final sheetRoute = ModalRoute.of(context);
     final navigator = Navigator(
       key: _navigatorKey,
       onGenerateRoute: (settings) => MaterialPageRoute<void>(
@@ -143,7 +187,7 @@ class _SettingsPageState extends State<SettingsPage> {
       ),
     );
     final themed = Theme(
-      data: _innerTransitionTheme(context),
+      data: _innerTransitionTheme(context, sheetRoute),
       child: navigator,
     );
     if (!context.isLargeScreen) {
@@ -154,6 +198,197 @@ class _SettingsPageState extends State<SettingsPage> {
       child: themed,
     );
   }
+}
+
+/// 内层路由的 Android 过渡：fade-forwards + 按归属分派的预测返回。
+class _SettingsPageTransitionsBuilder extends PageTransitionsBuilder {
+  const _SettingsPageTransitionsBuilder({
+    required this.backCoordinator,
+    required this.navigatorKey,
+    required this.sheetRoute,
+  });
+
+  final SettingsSheetBackCoordinator backCoordinator;
+  final GlobalKey<NavigatorState> navigatorKey;
+
+  /// 承载设置内容的弹层/对话框路由；根导航器上再压表面时 isCurrent 为 false。
+  final ModalRoute<dynamic>? sheetRoute;
+
+  @override
+  Duration get transitionDuration =>
+      const FadeForwardsPageTransitionsBuilder().transitionDuration;
+
+  @override
+  Widget buildTransitions<T>(
+    PageRoute<T> route,
+    BuildContext context,
+    Animation<double> animation,
+    Animation<double> secondaryAnimation,
+    Widget child,
+  ) {
+    return _SettingsPredictiveBackDetector(
+      route: route,
+      backCoordinator: backCoordinator,
+      navigatorKey: navigatorKey,
+      sheetRoute: sheetRoute,
+      child: FadeForwardsPageTransitionsBuilder().buildTransitions<T>(
+        route,
+        context,
+        animation,
+        secondaryAnimation,
+        child,
+      ),
+    );
+  }
+}
+
+/// 只服务设置内层路由的预测返回 detector。
+///
+/// 与框架 `PredictiveBackPageTransitionsBuilder` 的 detector 同构，但多两道闸：
+/// 1. 内层 Navigator 必须真的能 pop（首屏手势留给 M3E 弹层宿主做 sheet 收缩）；
+/// 2. 弹层/对话框路由必须仍是顶层（根导航器上再压 dialog 时让给 dialog）。
+class _SettingsPredictiveBackDetector extends StatefulWidget {
+  const _SettingsPredictiveBackDetector({
+    required this.route,
+    required this.backCoordinator,
+    required this.navigatorKey,
+    required this.sheetRoute,
+    required this.child,
+  });
+
+  final PageRoute<dynamic> route;
+  final SettingsSheetBackCoordinator backCoordinator;
+  final GlobalKey<NavigatorState> navigatorKey;
+  final ModalRoute<dynamic>? sheetRoute;
+  final Widget child;
+
+  @override
+  State<_SettingsPredictiveBackDetector> createState() =>
+      _SettingsPredictiveBackDetectorState();
+}
+
+class _SettingsPredictiveBackDetectorState
+    extends State<_SettingsPredictiveBackDetector> with WidgetsBindingObserver {
+  bool _handling = false;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  @override
+  bool handleStartBackGesture(PredictiveBackEvent backEvent) {
+    final canPop = widget.navigatorKey.currentState?.canPop() ?? false;
+    // 每次手势开始时固定归属：子页手势期间弹层缩放为 0；首屏手势保留原收缩。
+    // 值保持到下一次手势开始，避免子页 pop 后弹层缩放突然出现。
+    widget.backCoordinator.sheetShrinkOnPredictiveBack = !canPop;
+
+    if (backEvent.isButtonEvent ||
+        !widget.route.isCurrent ||
+        !widget.route.popGestureEnabled ||
+        !canPop ||
+        !(widget.sheetRoute?.isCurrent ?? true)) {
+      return false;
+    }
+
+    _handling = true;
+    widget.backCoordinator.predictiveBackActive = true;
+    widget.route.handleStartBackGesture(progress: 1 - backEvent.progress);
+    return true;
+  }
+
+  @override
+  void handleUpdateBackGestureProgress(PredictiveBackEvent backEvent) {
+    if (!_handling) return;
+    widget.route.handleUpdateBackGestureProgress(
+      progress: 1 - backEvent.progress,
+    );
+  }
+
+  @override
+  void handleCommitBackGesture() {
+    if (!_handling) return;
+    _handling = false;
+    widget.route.handleCommitBackGesture();
+    _finishGesture();
+  }
+
+  @override
+  void handleCancelBackGesture() {
+    if (!_handling) return;
+    _handling = false;
+    widget.route.handleCancelBackGesture();
+    _finishGesture();
+  }
+
+  /// 重置必须在整个提交事件分发之后：弹层宿主的 guard 可能比本 detector
+  /// 后收到提交（观察者注册顺序不保证），仍需读到本次手势的归属。
+  void _finishGesture() {
+    scheduleMicrotask(() {
+      widget.backCoordinator.predictiveBackActive = false;
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) => widget.child;
+}
+
+/// 动态调整弹层预测缩放：子页手势时宿主仍收到手势，但视觉上不缩放，
+/// 只展示内层路由的页面过渡；首屏手势恢复 M3E 的原生 sheet 收缩。
+class _SettingsSheetTheme extends M3EBottomSheetTheme {
+  _SettingsSheetTheme(M3EBottomSheetTheme base, this._backCoordinator)
+      : super(
+          maxWidth: base.maxWidth,
+          topCornerRadius: base.topCornerRadius,
+          handleWidth: base.handleWidth,
+          handleHeight: base.handleHeight,
+          handleCornerRadius: base.handleCornerRadius,
+          handleVerticalPadding: base.handleVerticalPadding,
+          handleOpacity: base.handleOpacity,
+          scrimOpacity: base.scrimOpacity,
+          dismissVelocity: base.dismissVelocity,
+          wideBreakpoint: base.wideBreakpoint,
+          compactTopMargin: base.compactTopMargin,
+          wideTopMargin: base.wideTopMargin,
+          wideSideMargin: base.wideSideMargin,
+          bottomCornerRadius: base.bottomCornerRadius,
+          modalElevation: base.modalElevation,
+          standardElevation: base.standardElevation,
+          initialHeightFraction: base.initialHeightFraction,
+          dismissThresholdFraction: base.dismissThresholdFraction,
+          handleCyclesToClose: base.handleCyclesToClose,
+          fullScreenHeaderHeight: base.fullScreenHeaderHeight,
+          enterSpring: base.enterSpring,
+          settleSpring: base.settleSpring,
+          layoutSpring: base.layoutSpring,
+          scrimSpring: base.scrimSpring,
+          predictiveBackShrinkX: base.predictiveBackShrinkX,
+          predictiveBackShrinkY: base.predictiveBackShrinkY,
+          adaptiveSideSheetBreakpoint: base.adaptiveSideSheetBreakpoint,
+          colors: base.colors,
+          dragHandle: base.dragHandle,
+        );
+
+  final SettingsSheetBackCoordinator _backCoordinator;
+
+  @override
+  double get predictiveBackShrinkX =>
+      _backCoordinator.sheetShrinkOnPredictiveBack
+          ? super.predictiveBackShrinkX
+          : 0;
+
+  @override
+  double get predictiveBackShrinkY =>
+      _backCoordinator.sheetShrinkOnPredictiveBack
+          ? super.predictiveBackShrinkY
+          : 0;
 }
 
 /// 设置首屏：分区卡片 + 弹层内部子页入口。
@@ -243,8 +478,8 @@ class _SettingsHomeViewState extends State<_SettingsHomeView>
                         variant: M3EIconButtonVariant.standard,
                         // 关闭的是承载设置的弹层/对话框本体：用 pop 绕过
                         // dismiss guard，子页打开时也整个关闭。
-                        onPressed: () => Navigator.of(context, rootNavigator: true)
-                            .pop(),
+                        onPressed: () =>
+                            Navigator.of(context, rootNavigator: true).pop(),
                         icon: const Icon(Icons.close_rounded),
                       ),
                     ],
@@ -350,7 +585,10 @@ class _SettingsHomeViewState extends State<_SettingsHomeView>
                   ),
                   value: baseColorSource,
                   options: [
-                    (ColorBaseSource.wallpaper, l10n.settingsBaseColorWallpaper),
+                    (
+                      ColorBaseSource.wallpaper,
+                      l10n.settingsBaseColorWallpaper
+                    ),
                     (ColorBaseSource.custom, l10n.settingsBaseColorCustom),
                   ],
                   // 平台无莫奈时壁纸项禁用（仍可显示为选中态，配色回退种子色）。
@@ -402,8 +640,7 @@ class _SettingsHomeViewState extends State<_SettingsHomeView>
                       color: m3e.colorScheme.onSurfaceVariant,
                     ),
                   ),
-                  onTap: () =>
-                      _showAppFontPicker(context, l10n, appFontFamily),
+                  onTap: () => _showAppFontPicker(context, l10n, appFontFamily),
                 ),
               ],
             );
@@ -453,8 +690,9 @@ class _SettingsHomeViewState extends State<_SettingsHomeView>
             title: l10n.settingsRestoreSessionTitle,
             subtitle: l10n.settingsRestoreSessionSubtitle,
             value: restoreSession,
-            onChanged: (value) =>
-                context.read<PlaybackProvider>().setRestoreSessionEnabled(value),
+            onChanged: (value) => context
+                .read<PlaybackProvider>()
+                .setRestoreSessionEnabled(value),
           ),
         ),
         // 音源默认音质：设置页唯一入口。

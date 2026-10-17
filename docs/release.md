@@ -9,7 +9,7 @@
 | 工作流 | 触发 | 做什么 |
 |---|---|---|
 | `ci.yml` | PR / push main / 手动 | `flutter analyze` + `flutter test` + `flutter build web`（UI 编译兜底） |
-| `integration.yml` | 每日 02:00（UTC+8）/ 手动 | Linux 端到端集成测试（真实引擎 + 本地 mock 服务 + libmpv 播放，xvfb） |
+| `integration.yml` | 每日 02:00（UTC+8）/ 手动 | Linux 端到端集成测试（真实引擎 + 本地 mock 服务；不含播放，见 `docs/pitfalls.md` #33；xvfb） |
 | `release.yml` | 推 `v*` tag | 矩阵构建 → 汇总产物 + sha256 + `latest.json` → GitHub Release →（稳定版）部署 Web |
 
 CI 的 Flutter 版本固定 `3.47.6`、JDK 26、Android NDK `30.0.16248370`，
