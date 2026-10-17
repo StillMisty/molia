@@ -309,8 +309,7 @@
     ⑤ 布局回调也会被「纯移动」触发：只认尺寸真的变了（`maybeAnchorIntoArea`），
     且拖动中一律不落位（`isDragging`）——否则每帧 `updateViewLayout` 后立刻被比例
     拽回原位，表现为「悬浮窗拖不动」。
-45. **一次 Esc 会被多个作用域同时消费，`HardwareKeyboard` 的返回值裁决不了**：
-    它的处理器**全部执行、返回值不短路**（SDK 原文：All registered handlers will be
+45. **一次 Esc 会被多个作用域同时消费，`HardwareKeyboard` 的返回值裁决不了**：    它的处理器**全部执行、返回值不短路**（SDK 原文：All registered handlers will be
     invoked in order regardless of their return value），壳层可配置快捷键（默认
     Esc = 关队列面板）与页面级 / 弹层处理器（收藏页多选、音量弹层）会同时
     收到同一次按键；同时焦点分发也不会因处理器返回 true 而跳过。裁决统一走
@@ -320,3 +319,18 @@
     处理器里「先到先得」，也不要用 `Focus.onKeyEvent` 接弹层 Esc——焦点被 Tab 移出
     弹层后收不到按键，登记又让壳层让位，按键被完全吞掉。注意登记只对壳层让位——
     两个非壳层消费方同时可见时（如收藏页多选 + 音量弹层）仍会各处理一次。
+46. **Windows 宿主保留端口块：UDP 绑定 errno 10013 不该被当成传输启动失败**：
+    WSL2 **mirrored 模式**下 Windows 宿主会把大段端口标记为系统保留（本机实测
+    44620–48715），Dart / Winsock 绑定这些端口抛
+    `SocketException ... errno = 10013`，而 `netsh excludedportrange show`
+    **看不到**这些块（上游 microsoft/WSL#40169）——排查时不要只在 netsh 里找。
+    处置：`LanSyncTransport` 的 UDP 绑定先试标准端口、失败只记警告并改绑系统
+    分配端口（对端按探测包里自报的 `udpPort` 单播回来），HTTP 端点能起来时
+    传输照常运行；只有 HTTP 也起不来才是 `start_failed`，UDP 不可用时给
+    `probe_port_unavailable` + 「添加设备」手动地址直连。端口被普通进程占用
+    抛的是 `errno = 10048`，症状 / 处置相同。
+    IPv6 相邻坑：Windows 防火墙要**单独放行 IPv6**（IPv4 规则不覆盖）；组播
+    源的地址必然是 link-local，必须带 zone 才能连（Dart 的 URI 用 `%25` 表达，
+    `InternetAddress` 对象自带 zone）——所以探测包交换 `addrs` 可路由候选地址，
+    不要拿观测到的源地址直接拼 HTTP；镜像模式下 WSL↔Windows 之间 IPv6 不通，
+    两端都在 WSL 或都在 Windows 才能按 IPv6 直连。

@@ -121,6 +121,13 @@ abstract interface class SyncTransport {
 
   bool get isRunning;
 
+  /// 本机发现端口（局域网 UDP 探测端口；0 = 没有发现通道 / 未运行）。
+  ///
+  /// 局域网端口可能被系统保留而改绑随机端口（见 `LanSyncTransport`），
+  /// 对端需要用**自报的实际端口**单播回来；WebDAV 无发现通道，恒为 0。
+  /// 供配对信息（`molia-pair`）与设置页展示。
+  int get discoveryPort => 0;
+
   /// 对端是否按需拉取**实时**全量快照（局域网直连 = true：端点随时给出当前
   /// 视图，没有发布延迟；WebDAV = false：快照文件是异步读取的）。
   ///

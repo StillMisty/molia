@@ -131,6 +131,7 @@ List<SyncIssueAction> syncIssueActions(SyncIssue? issue) => switch (issue?.code)
       // 时手动地址无效，那种情况由 permissionDenied 分支覆盖）。
       SyncIssueCode.startFailed ||
       SyncIssueCode.broadcastUnavailable ||
+      SyncIssueCode.probePortUnavailable ||
       SyncIssueCode.discoverySilent ||
       SyncIssueCode.peerReadFailed ||
       SyncIssueCode.peerDecryptFailed ||

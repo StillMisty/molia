@@ -1405,6 +1405,7 @@
     }
   },
   "syncIssueBroadcastUnavailable": "Broadcast failed (blocked by network policy)",
+  "syncIssueProbePortUnavailable": "Probe port unavailable (reserved or occupied by the system) — add peer addresses manually to discover devices",
   "syncIssueDiscoverySilent": "No device answered during discovery (the network may be isolated)",
   "syncIssueWebdavDirFailed": "Failed to prepare the WebDAV directory",
   "syncIssueWebdavListFailed": "Failed to list the WebDAV directory",

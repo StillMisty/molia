@@ -4725,6 +4725,12 @@ abstract class AppLocalizations {
   /// **'Broadcast failed (blocked by network policy)'**
   String get syncIssueBroadcastUnavailable;
 
+  /// No description provided for @syncIssueProbePortUnavailable.
+  ///
+  /// In en, this message translates to:
+  /// **'Probe port unavailable (reserved or occupied by the system) — add peer addresses manually to discover devices'**
+  String get syncIssueProbePortUnavailable;
+
   /// No description provided for @syncIssueDiscoverySilent.
   ///
   /// In en, this message translates to:

@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:molia/data/sync/sync_crypto.dart';
 import 'package:molia/data/sync/transport/lan_sync_transport.dart';
@@ -297,5 +299,258 @@ void main() {
     await transport.stop();
     await transport.stop();
     expect(transport.isRunning, isFalse);
+  });
+
+  // ---- 端口降级 / 双栈 / 候选地址交换（Windows 保留端口场景） ----
+
+  test('首选探测端口被占用：UDP 降级到系统分配端口，传输照常运行且双向可达', () async {
+    // 占位 socket 不设 SO_REUSEADDR：transport 的 reuseAddress 绑定会失败
+    // （模拟 Windows 保留端口块，errno 10013 / 10048）。
+    final occupant = await RawDatagramSocket.bind(
+      InternetAddress.anyIPv4,
+      47941,
+      reuseAddress: false,
+    );
+    addTearDown(occupant.close);
+
+    final transportA = LanSyncTransport(
+      deviceId: 'devA',
+      deviceName: () => '设备A',
+      codec: codec,
+      passphraseProvider: () async => passphrase,
+      snapshotProvider: () async => envelope('devA', value: 'light'),
+      probeTargets: const [(host: '127.0.0.1', port: 47942)],
+      probeWindow: const Duration(milliseconds: 250),
+      localAddressesProvider: () async => const [],
+      udpPort: 47941,
+    );
+    final transportB = LanSyncTransport(
+      deviceId: 'devB',
+      deviceName: () => '设备B',
+      codec: codec,
+      passphraseProvider: () async => passphrase,
+      snapshotProvider: () async => envelope('devB', value: 'dark'),
+      probeWindow: const Duration(milliseconds: 250),
+      localAddressesProvider: () async => const [],
+      udpPort: 47942,
+    );
+    addTearDown(() async {
+      await transportA.stop();
+      await transportB.stop();
+    });
+    await transportA.start();
+    await transportB.start();
+
+    expect(transportA.isRunning, isTrue);
+    expect(transportA.unavailableReason, isNull,
+        reason: 'HTTP 端点能起来就不算传输启动失败');
+    expect(transportA.discoveryPort, greaterThan(0));
+    expect(transportA.discoveryPort, isNot(47941), reason: '降级后不再用被占端口');
+
+    // A 主动探测 B：B 从非回复探测登记 A，A 从应答的地址候选 / 源地址拉到 B。
+    final fromB = await transportA.pull();
+    expect(fromB.envelopes.single.deviceId, 'devB');
+    // B 靠上一轮学到的探测端点单播 A，反向也能拉。
+    final fromA = await transportB.pull();
+    expect(fromA.envelopes.single.deviceId, 'devA');
+  });
+
+  test('UDP 两族都不可用：手动地址 HTTP 直连照常；无对端时报 probePortUnavailable', () async {
+    var serverHttpPort = 0;
+    final server = LanSyncTransport(
+      deviceId: 'devB',
+      deviceName: () => '设备B',
+      codec: codec,
+      passphraseProvider: () async => passphrase,
+      snapshotProvider: () async => envelope('devB', value: 'dark'),
+      onHttpPortBound: (port) => serverHttpPort = port,
+      localAddressesProvider: () async => const [],
+      udpPort: 47943,
+    );
+    addTearDown(server.stop);
+    await server.start();
+    expect(serverHttpPort, greaterThan(0));
+
+    // 模拟「两族绑定都失败」（Windows 保留端口块 / 网络栈受限）。
+    Future<RawDatagramSocket> unavailable(InternetAddress address, int port) =>
+        Future.error(const SocketException('模拟系统保留端口', osError: null));
+
+    final manual = <ManualPeer>[];
+    final client = LanSyncTransport(
+      deviceId: 'devA',
+      deviceName: () => '设备A',
+      codec: codec,
+      passphraseProvider: () async => passphrase,
+      snapshotProvider: () async => envelope('devA'),
+      udpBinder: unavailable,
+      manualPeersProvider: () => manual,
+      localAddressesProvider: () async => const [],
+      udpPort: 47944,
+    );
+    addTearDown(client.stop);
+    await client.start();
+
+    expect(client.isRunning, isTrue, reason: 'UDP 不可用不该让整个传输失败');
+    expect(client.unavailableReason, isNull);
+    expect(client.discoveryPort, 0, reason: '没有 UDP socket = 探测端口不可用');
+
+    // 没有可直连的对端：原因码是「探测端口不可用」而不是「启动失败」。
+    final empty = await client.pull();
+    expect(empty.peersSeen, 0);
+    expect(empty.error?.code, SyncIssueCode.probePortUnavailable);
+
+    // 地址簿里学到过 HTTP 端点的对端：不依赖 UDP 也能直连拉取。
+    manual.add(ManualPeer(host: '127.0.0.1', httpPort: serverHttpPort));
+    final pulled = await client.pull();
+    expect(pulled.peersSeen, 1);
+    expect(pulled.envelopes.single.deviceId, 'devB');
+  });
+
+  test('IPv6 单播探测（::1）：学习对端并拉取', () async {
+    final transportA = LanSyncTransport(
+      deviceId: 'devA',
+      deviceName: () => '设备A',
+      codec: codec,
+      passphraseProvider: () async => passphrase,
+      snapshotProvider: () async => envelope('devA', value: 'light'),
+      localAddressesProvider: () async => const [],
+      udpPort: 47945,
+    );
+    final transportB = LanSyncTransport(
+      deviceId: 'devB',
+      deviceName: () => '设备B',
+      codec: codec,
+      passphraseProvider: () async => passphrase,
+      snapshotProvider: () async => envelope('devB'),
+      probeTargets: const [(host: '::1', port: 47945)],
+      probeWindow: const Duration(milliseconds: 250),
+      localAddressesProvider: () async => const [],
+      udpPort: 47946,
+    );
+    addTearDown(() async {
+      await transportA.stop();
+      await transportB.stop();
+    });
+    await transportA.start();
+    await transportB.start();
+
+    final pulled = (await transportB.pull()).envelopes;
+    expect(pulled.single.deviceId, 'devA');
+    expect(
+      pulled.single.recordsOf(SyncCategory.settings).single.data,
+      {'v': 'light'},
+    );
+  });
+
+  test('手动 IPv6 对端：方括号写法归一 + HTTP 直连拉取', () async {
+    var serverHttpPort = 0;
+    final server = LanSyncTransport(
+      deviceId: 'devA',
+      deviceName: () => '设备A',
+      codec: codec,
+      passphraseProvider: () async => passphrase,
+      snapshotProvider: () async => envelope('devA', value: 'light'),
+      onHttpPortBound: (port) => serverHttpPort = port,
+      localAddressesProvider: () async => const [],
+      udpPort: 47947,
+    );
+    final client = LanSyncTransport(
+      deviceId: 'devB',
+      deviceName: () => '设备B',
+      codec: codec,
+      passphraseProvider: () async => passphrase,
+      snapshotProvider: () async => envelope('devB'),
+      manualPeersProvider: () => [
+        ManualPeer(
+          host: '[::1]',
+          probePort: 47947,
+          httpPort: serverHttpPort,
+        ),
+      ],
+      probeWindow: const Duration(milliseconds: 250),
+      localAddressesProvider: () async => const [],
+      udpPort: 47948,
+    );
+    addTearDown(() async {
+      await server.stop();
+      await client.stop();
+    });
+    await server.start();
+    await client.start();
+
+    final pulled = (await client.pull()).envelopes;
+    expect(pulled.single.deviceId, 'devA', reason: 'IPv6 主机的 URI 要加方括号');
+  });
+
+  test('非回复探测也登记对端：B 探测 A 后，A 反向也能发现并拉取 B', () async {
+    final transportA = LanSyncTransport(
+      deviceId: 'devA',
+      deviceName: () => '设备A',
+      codec: codec,
+      passphraseProvider: () async => passphrase,
+      snapshotProvider: () async => envelope('devA', value: 'light'),
+      probeWindow: const Duration(milliseconds: 250),
+      localAddressesProvider: () async => const [],
+      udpPort: 47949,
+    );
+    final transportB = LanSyncTransport(
+      deviceId: 'devB',
+      deviceName: () => '设备B',
+      codec: codec,
+      passphraseProvider: () async => passphrase,
+      snapshotProvider: () async => envelope('devB', value: 'dark'),
+      probeTargets: const [(host: '127.0.0.1', port: 47949)],
+      probeWindow: const Duration(milliseconds: 250),
+      localAddressesProvider: () async => const [],
+      udpPort: 47950,
+    );
+    addTearDown(() async {
+      await transportA.stop();
+      await transportB.stop();
+    });
+    await transportA.start();
+    await transportB.start();
+
+    // B 单向往 A 探测：B 学到 A 并拉到快照；A 没有配置任何探测目标。
+    expect((await transportB.pull()).envelopes.single.deviceId, 'devA');
+
+    // A 仅凭 B 的非回复探测（源地址 + 自报端口）就能反向单播并拉取：
+    // 「发送方也在线」不必等它先应答。
+    final reverse = await transportA.pull();
+    expect(reverse.envelopes.single.deviceId, 'devB');
+  });
+
+  test('候选地址优先尝试：不可达的候选回落到观测源地址', () async {
+    final transportA = LanSyncTransport(
+      deviceId: 'devA',
+      deviceName: () => '设备A',
+      codec: codec,
+      passphraseProvider: () async => passphrase,
+      snapshotProvider: () async => envelope('devA', value: 'light'),
+      // TEST-NET-3：保留给文档的地址，保证不可达。
+      localAddressesProvider: () async => const ['192.0.2.10'],
+      udpPort: 47951,
+    );
+    final transportB = LanSyncTransport(
+      deviceId: 'devB',
+      deviceName: () => '设备B',
+      codec: codec,
+      passphraseProvider: () async => passphrase,
+      snapshotProvider: () async => envelope('devB'),
+      probeTargets: const [(host: '127.0.0.1', port: 47951)],
+      probeWindow: const Duration(milliseconds: 250),
+      requestTimeout: const Duration(milliseconds: 150),
+      localAddressesProvider: () async => const [],
+      udpPort: 47952,
+    );
+    addTearDown(() async {
+      await transportA.stop();
+      await transportB.stop();
+    });
+    await transportA.start();
+    await transportB.start();
+
+    final pulled = (await transportB.pull()).envelopes;
+    expect(pulled.single.deviceId, 'devA');
   });
 }

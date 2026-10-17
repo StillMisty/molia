@@ -374,7 +374,7 @@ class _AddPeerDialogState extends State<_AddPeerDialog> {
 
   Future<void> _submit() async {
     final l10n = widget.l10n;
-    final host = _host.text.trim();
+    final host = normalizePeerHost(_host.text);
     final port = parseProbePort(_port.text);
     if (host.isEmpty) {
       setState(() => _hostError = l10n.syncPeerHostInvalid);

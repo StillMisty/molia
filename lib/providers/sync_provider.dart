@@ -10,6 +10,7 @@ import '../data/sync/sync_state_store.dart';
 import '../data/sync/transport/local_network_permission.dart';
 import '../domain/models/device_sync.dart';
 import '../domain/ports/sync_transport.dart';
+import '../utils/peer_address.dart';
 
 /// 跨设备同步的 UI 门面：引擎状态 + 口令管理 + 恢复动作触发 + 策略转发。
 ///
@@ -50,18 +51,25 @@ class SyncProvider extends ChangeNotifier {
   /// 手动对端地址簿（发现失败时的兜底）。
   List<ManualPeer> get manualPeers => _engine.state.manualPeers;
 
+  /// 本机局域网探测端口（0 = 未运行 / UDP 不可用；设置页展示与配对码用）。
+  int get lanProbePort => _engine.lanProbePort;
+
+  /// 本机局域网直连端点端口（持久化的 HTTP 端口；0 = 尚未绑定过）。
+  int get lanHttpPort => _engine.state.lanHttpPort;
+
   /// 添加手动对端（非空地址；UI 已做格式校验，这里再兜一层）。
   ///
-  /// 返回 false 表示该地址已存在（UI 据此提示「已更新」）。
+  /// 返回 false 表示该地址已存在（UI 据此提示「已更新」）。地址先归一
+  /// （去方括号 / 空白），同一地址的不同文本写法不会落成两条。
   Future<bool> addManualPeer(
     String host, {
     String name = '',
     int probePort = 0,
   }) async {
-    final trimmed = host.trim();
-    if (trimmed.isEmpty) return false;
+    final normalized = normalizePeerHost(host);
+    if (normalized.isEmpty) return false;
     return _engine.addManualPeer(ManualPeer(
-      host: trimmed,
+      host: normalized,
       name: name.trim(),
       probePort: probePort,
     ));

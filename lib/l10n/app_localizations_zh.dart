@@ -2506,6 +2506,10 @@ class AppLocalizationsZh extends AppLocalizations {
   String get syncIssueBroadcastUnavailable => '广播发送失败（被网络策略拦截）';
 
   @override
+  String get syncIssueProbePortUnavailable =>
+      '探测端口不可用（端口被系统保留或被占用），发现对端请用「添加设备」手动地址';
+
+  @override
   String get syncIssueDiscoverySilent => '探测窗口内没有设备应答（可能被网络隔离）';
 
   @override

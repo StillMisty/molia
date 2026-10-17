@@ -2608,6 +2608,10 @@ class AppLocalizationsEn extends AppLocalizations {
       'Broadcast failed (blocked by network policy)';
 
   @override
+  String get syncIssueProbePortUnavailable =>
+      'Probe port unavailable (reserved or occupied by the system) — add peer addresses manually to discover devices';
+
+  @override
   String get syncIssueDiscoverySilent =>
       'No device answered during discovery (the network may be isolated)';
 

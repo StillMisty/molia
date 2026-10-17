@@ -4,9 +4,23 @@
 /// 与「端口」拆开才能让探测端口有独立默认值与范围校验。
 library;
 
+/// 地址归一：去首尾空白与 IPv6 方括号（`[2409:8a55::1]` → `2409:8a55::1`）。
+///
+/// 输入侧允许方括号写法（用户从浏览器地址栏 / 对端界面复制过来），存储与
+/// 比较一律用归一形式，避免同一地址因文本写法差异被当成两个条目。
+String normalizePeerHost(String value) {
+  var host = value.trim();
+  if (host.length >= 2 && host.startsWith('[') && host.endsWith(']')) {
+    host = host.substring(1, host.length - 1).trim();
+  }
+  return host;
+}
+
 /// 地址是否可用（空串、残缺的 IPv4、带端口 / 协议的输入都不接受）。
+///
+/// IPv6 允许带方括号写法（先归一再校验）。
 bool isValidPeerHost(String value) {
-  final host = value.trim();
+  final host = normalizePeerHost(value);
   if (host.isEmpty) return false;
   // 纯数字与点：只可能是 IPv4，按 IPv4 严格校验（挡掉 `192.168.1` 这种残缺输入）。
   if (RegExp(r'^[0-9.]+$').hasMatch(host)) return _isValidIpv4(host);
