@@ -31,16 +31,13 @@ bool showTrackTableColumns(BuildContext context, {double? availableWidth}) {
 ///
 /// 与行内列的左缘对齐依赖三段留白，全部在下面按行的实际结构复刻：
 /// 行表面内边距 16dp、封面位 44dp + 12dp 间距、标题前间距 12dp、
-/// 行尾动作宽度预留。调用方负责与行列表相同的横向页边距。
+/// 行尾固定槽宽（`TrackRowColumns.trailingSlotWidth`）。调用方负责与行列表
+/// 相同的横向页边距。
 class TrackTableHeader extends StatelessWidget {
   const TrackTableHeader({super.key});
 
   /// 行内封面位（`TrackRow.coverSize` 默认值 44）+ 标题前间距 12。
   static const double _leadingWidth = 44 + 12;
-
-  /// 行尾动作（⋮ 菜单，`TrackActionsMenu` 的 `M3EIconButton` md）宽度预留：
-  /// 表头没有动作，但不留出这段宽度，三列会整体右移、与行内列错位。
-  static const double _trailingReserve = 56;
 
   /// 行表面（[CardListSurface]）默认的内边距：表头自身没有表面，
   /// 靠同样的内边距与行内容对齐。
@@ -48,6 +45,19 @@ class TrackTableHeader extends StatelessWidget {
     horizontal: 16,
     vertical: 6,
   );
+
+  /// 表头高度（钉住表头的 sliver 需要预声明 extent）：一行 `labelMedium`
+  /// 加上下内边距，随系统文字缩放同步放大（大字号下不裁切）。
+  static double extentOf(BuildContext context) {
+    final style = M3ETheme.of(context).typeScale.labelMedium;
+    final scaledSize =
+        MediaQuery.textScalerOf(context).scale(style.fontSize ?? 12);
+    // 段落行高按整像素结算：向上取整（容 1e-6 浮点尾差），避免 extent 比
+    // 实际高度少零点几像素、钉住时把行尾裁掉。
+    final lineHeight =
+        (scaledSize * (style.height ?? 1.2) - 1e-6).ceilToDouble();
+    return lineHeight + _surfacePadding.vertical;
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -76,7 +86,9 @@ class TrackTableHeader extends StatelessWidget {
             style,
           ),
           const SizedBox(width: 12),
-          const SizedBox(width: _trailingReserve),
+          // 行尾槽宽与行内同源：表头没有动作，但不留出这段宽度，三列会
+          // 整体右移、与行内列错位。
+          const SizedBox(width: TrackRowColumns.trailingSlotWidth),
         ],
       ),
     );

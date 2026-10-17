@@ -578,8 +578,9 @@
   行尾操作 `HoverReveal` 桌面 hover/focus 才显（触摸端恒显）、可点元素手型光标（M3E 自带）、
   收藏页桌面多选（Ctrl 点选 / Shift 范围 / Esc 退出，移动端长按语义不变）。
   内容版式：资料库渠道左栏（桌面 + 内容宽 ≥ 900 且渠道 ≥ 2，判定用 `LayoutBuilder`
-  内容宽而非窗口宽）、搜索结果宽屏表格列（`TrackRowColumns` / `TrackTableHeader`，
-  行高仍 72dp）、收藏页 master-detail 合集栏、设置弹层宽屏 880 + 首屏两列
+  内容宽而非窗口宽）、宽屏表格列（`TrackRowColumns` / `TrackTableHeader`；使用点：
+  搜索 / 收藏 / 发现，同样按 `LayoutBuilder` 内容宽 ≥ 900 判定，行高仍 72dp）、
+  收藏页 master-detail 合集栏、设置弹层宽屏 880 + 首屏两列
   （`showSettingsSheet` 显式 `maxWidth`，公共 modal 档保持 560）、二级页侧滑桌面档 720。
   启动首页由 `NavProvider.effectiveHomeDestination` 决定（设置 › 通用 › 启动时打开，
   默认播放页；存储首页被隐藏时按导航顺序兜底且**不改写存储**，避免同步回环）。

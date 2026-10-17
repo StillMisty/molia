@@ -218,6 +218,7 @@ class TrackMenuTile extends StatefulWidget {
     required this.artist,
     this.artists,
     this.coverUrl,
+    this.columns,
     this.trailingText,
     required this.position,
     required this.onTap,
@@ -233,6 +234,10 @@ class TrackMenuTile extends StatefulWidget {
   final List<TrackRowArtist>? artists;
 
   final String? coverUrl;
+
+  /// 宽屏表格列（桌面宽内容列表传入）：行内改表格布局，列宽与表头同源；
+  /// null = 单列布局（逐像素不变）。
+  final TrackRowColumns? columns;
 
   /// 行尾元信息（时长）；未知传 null 不占位。
   final String? trailingText;
@@ -267,6 +272,7 @@ class _TrackMenuTileState extends State<TrackMenuTile> {
       artist: widget.artist,
       artists: widget.artists,
       coverUrl: widget.coverUrl,
+      columns: widget.columns,
       trailingText: widget.trailingText,
       position: widget.position,
       onTap: widget.onTap,

@@ -243,6 +243,49 @@ void main() {
     expect(tester.getSize(find.byType(TrackRow)).height, TrackRow.extent);
   });
 
+  testWidgets('表格模式：行尾槽固定宽，列左缘不随行尾内容漂移', (tester) async {
+    Future<void> pump({Widget? trailing}) async {
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: Center(
+              child: SizedBox(
+                width: 700,
+                child: TrackRow(
+                  title: 'Title',
+                  columns: const TrackRowColumns(
+                    artist: 'Col Artist',
+                    album: 'Col Album',
+                    duration: '3:05',
+                  ),
+                  trailing: trailing,
+                  position: M3ECardPosition.single,
+                  onTap: () {},
+                ),
+              ),
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+    }
+
+    // 无行尾内容：列左缘已按固定槽宽让位。
+    await pump();
+    final without = tester.getTopLeft(find.text('Col Artist')).dx;
+
+    // 行尾放窄内容（缓存标签 / 拖动把手的形态）：列左缘不动。
+    await pump(trailing: const Icon(Icons.drag_handle_rounded, size: 20));
+    expect(tester.getTopLeft(find.text('Col Artist')).dx, without);
+
+    // 行尾内容贴槽右缘 = 行右缘 − 表面内边距 16。
+    final rowRight = tester.getTopRight(find.byType(TrackRow)).dx;
+    expect(
+      tester.getTopRight(find.byIcon(Icons.drag_handle_rounded)).dx,
+      rowRight - 16,
+    );
+  });
+
   testWidgets(
     '桌面：行内操作默认透明不可点，行 hover 后显现可点',
     (tester) async {
