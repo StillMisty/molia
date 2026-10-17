@@ -9,6 +9,7 @@ import '../providers/search_provider.dart';
 import '../providers/sources_provider.dart';
 import '../utils/responsive.dart';
 import '../utils/scroll_to_top.dart';
+import '../widgets/desktop_layout.dart';
 import '../widgets/discover_leaderboards_tab.dart';
 import '../widgets/discover_playlists_tab.dart';
 import '../widgets/library_channel_selector.dart';
@@ -184,17 +185,18 @@ class _LibraryState extends State<Library> {
     //
     // 判定用**可用内容宽度**（`LayoutBuilder` 的 maxWidth）而不是窗口宽：
     // 桌面骨架的侧栏（240）与队列面板（360）会吃掉窗口宽度，按窗口宽判定会在
-    // 内容区只剩 600 时仍挂竖栏（与搜索结果表格列同一口径）。两种入口共用
-    // 同一个 `showChannelRail` 判定，不会出现「竖栏与下拉框都不见」。
+    // 内容区只剩 600 时仍挂竖栏（与搜索结果表格列同一口径，判据见
+    // desktop_layout.dart 的 `channelRailAt`）。两种入口共用同一个
+    // `showChannelRail` 判定，不会出现「竖栏与下拉框都不见」。
+    final layout = DesktopLayout.of(context);
     return ResponsivePageContainer(
       pageType: ResponsivePageType.browse,
       alignment: Alignment.topCenter,
       child: LayoutBuilder(
         builder: (context, constraints) {
           final multiChannel = enabledChannels.length >= 2;
-          final showChannelRail = multiChannel &&
-              isDesktopPlatform() &&
-              constraints.maxWidth >= Breakpoints.desktop;
+          final showChannelRail =
+              multiChannel && layout.channelRailAt(constraints.maxWidth);
 
           final content = Column(
             children: [

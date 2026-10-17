@@ -14,6 +14,7 @@ import '../services/haptics.dart';
 import '../utils/duration_text.dart';
 import '../utils/responsive.dart';
 import 'artist_row.dart';
+import 'desktop_layout.dart';
 import 'track_actions_menu.dart';
 import 'track_menu_tile.dart';
 import 'track_row.dart';
@@ -56,8 +57,10 @@ class _SearchSectionState extends State<SearchSection> {
 
   @override
   Widget build(BuildContext context) {
-    // 表格列的判定要用**内容宽度**（桌面骨架的侧栏 / 队列面板会吃掉窗口
-    // 宽度，按窗口宽判定会在窄内容区给出固定列宽的行、把行撑溢出）。
+    // 表格列的判定用**内容宽度**（桌面骨架的侧栏 / 队列面板会吃掉窗口
+    // 宽度，按窗口宽判定会在窄内容区给出固定列宽的行、把行撑溢出）；
+    // 判据唯一在 DesktopLayout（见 desktop_layout.dart）。
+    final layout = DesktopLayout.of(context);
     return LayoutBuilder(
       builder: (context, constraints) => Consumer<SearchProvider>(
         builder: (context, searchProvider, child) {
@@ -80,10 +83,7 @@ class _SearchSectionState extends State<SearchSection> {
           // 歌词片段副标题），不给它们套表格。
           final tableColumns = !isArtistKind &&
               !isLyricKind &&
-              showTrackTableColumns(
-                context,
-                availableWidth: constraints.maxWidth,
-              );
+              layout.tableColumnsAt(constraints.maxWidth);
 
           return Column(
             children: [
@@ -477,7 +477,7 @@ class _SearchResultTile extends StatefulWidget {
   final int count;
   final VoidCallback? onTap;
 
-  /// 宽屏表格列（见 `showTrackTableColumns`）。
+  /// 宽屏表格列（见 `DesktopLayout.tableColumnsAt`）。
   final bool tableColumns;
 
   @override

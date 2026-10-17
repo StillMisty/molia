@@ -22,6 +22,7 @@ import '../utils/data_saver_subtitle.dart';
 import '../utils/responsive.dart';
 import '../utils/source_quality_label.dart';
 import '../widgets/app_color_picker.dart';
+import '../widgets/desktop_layout.dart';
 import '../widgets/font_picker_sheet.dart';
 import '../widgets/settings/settings_section_grid.dart';
 import '../widgets/settings/settings_tiles.dart';
@@ -53,7 +54,9 @@ Future<void> showSettingsSheet(BuildContext context) {
     showCloseButton: false,
     // 宽屏设置弹层单独加宽（首屏两列）：公共 modal 档保持 560，避免定时
     // 关闭 / 来源分享 / AI 推歌这些窄弹层跟着摊宽。
-    maxWidth: _useTwoColumnSections(context) ? _settingsSheetDesktopWidth : null,
+    maxWidth: DesktopLayout.of(context).masterDetail
+        ? _settingsSheetDesktopWidth
+        : null,
     sheetThemeBuilder: (base) => _SettingsSheetTheme(base, backCoordinator),
     onDismissRequest: () async {
       // 预测返回提交：由手势归属决定收谁。子页手势返回 false，内层路由
@@ -394,18 +397,12 @@ class _SettingsSheetTheme extends M3EBottomSheetTheme {
           : 0;
 }
 
-/// 设置首屏分区两列流式的启用条件：桌面平台（linux / windows / macOS）+
-/// 窗口宽 ≥ [Breakpoints.desktop]（900）。
-///
-/// 口径与收藏页 master-detail（`favorites.dart::_useCollectionRail`）一致：
-/// 平台判定走 `defaultTargetPlatform`（与壳层骨架分流同源），窗口宽走
-/// `context.isDesktop`。两列画布上限取弹层宽度（`modalWidth` 桌面档），
-/// 列宽不随窗口继续变宽；子页是长表单，保持单列。
 /// 宽屏设置弹层宽度（首屏两列画布上限；见 `showSettingsSheet`）。
+///
+/// 两列启用判据由壳层解析的 `DesktopLayout.masterDetail` 给出（与收藏页
+/// master-detail 同一处，见 desktop_layout.dart）；列宽不随窗口继续变宽，
+/// 子页是长表单保持单列。
 const double _settingsSheetDesktopWidth = 880;
-
-bool _useTwoColumnSections(BuildContext context) =>
-    isDesktopPlatform() && context.isDesktop;
 
 /// 设置首屏：分区卡片 + 弹层内部子页入口。
 class _SettingsHomeView extends StatefulWidget {
@@ -458,8 +455,9 @@ class _SettingsHomeViewState extends State<_SettingsHomeView>
     final lyricsDisplay = context.watch<LyricsDisplayProvider?>();
     final m3e = M3ETheme.of(context);
     // 两列流式需要比单列舒适行宽（`maxWidth`）更宽的画布：上限取设置弹层
-    // 宽度，两列各占约半宽；单列沿用 `maxWidth` 不变。
-    final twoColumn = _useTwoColumnSections(context);
+    // 宽度，两列各占约半宽；单列沿用 `maxWidth` 不变。判据由壳层解析的
+    // DesktopLayout 给出（与收藏页 master-detail 同一处）。
+    final twoColumn = DesktopLayout.of(context).masterDetail;
 
     return Container(
       padding: ResponsivePadding.horizontal(
