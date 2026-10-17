@@ -517,7 +517,7 @@ void main() {
   });
 
   group('恢复态切歌键回落', () {
-    test('服务无曲目（冷启动恢复态）：回落给注入的 provider 回调', () async {
+    test('服务无曲目（冷启动恢复态）：回落给注入的会话模块回调', () async {
       final service = _FakeService();
       addTearDown(service.dispose);
       var restoredNext = 0;

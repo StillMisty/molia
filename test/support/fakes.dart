@@ -1,6 +1,8 @@
 import 'package:flutter/foundation.dart';
 import 'package:molia/data/catalog/catalog_service.dart';
 import 'package:molia/data/playback/default_playback_facade.dart';
+import 'package:molia/data/settings/settings_keys.dart';
+import 'package:molia/data/settings/settings_registry.dart';
 import 'package:molia/domain/models/failure.dart';
 import 'package:molia/domain/models/playback.dart';
 import 'package:molia/domain/ports/library_store.dart';
@@ -9,6 +11,7 @@ import 'package:molia/domain/ports/playback_backend.dart';
 import 'package:molia/domain/ports/state_listenable.dart';
 import 'package:molia/domain/ports/ui_messenger.dart';
 import 'package:molia/models/play_mode.dart';
+import 'package:molia/playback/playback_session_coordinator.dart';
 import 'package:molia/providers/playback_provider.dart';
 import 'package:molia/services/playback_observer.dart';
 import 'package:molia/services/playback_session_store.dart';
@@ -188,30 +191,40 @@ class FakeMessenger implements UiMessenger {
 
 /// 用假后端组装 PlaybackProvider（不触碰真实播放服务/SharedPreferences）。
 ///
-/// 副作用观察者与组合根同构接线（先建观察者、provider 创建后挂接）；
-/// 会话落盘 / 历史 / 封面补取等经它生效。`provider.dispose` 会一并释放它。
+/// 副作用观察者与组合根同构接线（先建观察者、provider 创建后挂接）；历史 /
+/// 封面补取等经它生效，会话落盘由注入的会话协调者承担（恢复曲目展示接观察者）。
+/// `provider.dispose` 会一并释放它们。
 PlaybackProvider buildTestPlaybackProvider({
   FakePlaybackBackend? backend,
   CatalogService? catalogService,
   LibraryStore? libraryRepository,
   PlaybackSessionStore? sessionStore,
+  SettingsRegistry? settings,
   Future<String?> Function(Track track)? artworkResolver,
 }) {
   final b = backend ?? FakePlaybackBackend();
   final facade = DefaultPlaybackFacade(backend: b);
   final store = sessionStore ?? PlaybackSessionStore();
+  // 设置注册表一处实例：provider 的重载钩子与协调者的读取同源（组合根口径）。
+  final registry = settings ?? SettingsRegistry(keys: kAllSettingsKeys);
   final observer = PlaybackObserver(
     facade: facade,
-    sessionStore: store,
     libraryRepository: libraryRepository,
     artworkResolver: artworkResolver,
+  );
+  final session = PlaybackSessionCoordinator(
+    facade: facade,
+    store: store,
+    settings: registry,
+    onRestoredTrack: observer.showRestoredTrack,
   );
   final provider = PlaybackProvider(
     facade: facade,
     messenger: FakeMessenger(),
     catalogService: catalogService,
     observer: observer,
-    sessionStore: store,
+    sessionCoordinator: session,
+    settings: registry,
   );
   // 与组合根同构：provider 先订阅、观察者后挂接（facade 监听顺序一致）。
   observer.attach();

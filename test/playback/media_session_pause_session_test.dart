@@ -2,12 +2,14 @@
 ///
 /// 复现路径：系统控制暂停 → 冷启动；断言「存储」与「恢复」两端：
 /// - 暂停 / 停止 / 切播放顺序这些**直接落到 LocalPlaybackService** 的控制动作，
-///   返回时会话必须已经写回本地（`pendingWrite` 收口在 `flushPlaybackSession`）；
+///   返回时会话必须已经写回本地（`pendingWrite` 收口在会话协调者的
+///   `flushSession`）；
 /// - 冷启动（新 provider / 新后端，同一存储）恢复上一首 + 队列 + 模式 + 进度，
 ///   且 `isPlaying=false`（不自动起播）。
 ///
-/// 装配与组合根 `buildPlaybackStack` 同构：真实 facade / 观察者 / provider +
-/// 假服务（不触碰 just_audio），`LocalAudioHandler` 按组合根方式回填会话落盘。
+/// 装配与组合根 `buildPlaybackStack` 同构：真实 facade / 观察者 / 会话协调者 /
+/// provider + 假服务（不触碰 just_audio），`LocalAudioHandler` 按组合根方式
+/// 回填会话落盘。
 library;
 
 import 'package:flutter_test/flutter_test.dart';
@@ -19,6 +21,7 @@ import 'package:molia/domain/ports/music_source.dart' show PlayableStream;
 import 'package:molia/models/play_mode.dart';
 import 'package:molia/playback/local_audio_handler.dart';
 import 'package:molia/playback/local_playback_service.dart';
+import 'package:molia/playback/playback_session_coordinator.dart';
 import 'package:molia/providers/playback_provider.dart';
 import 'package:molia/services/playback_observer.dart';
 import 'package:molia/services/playback_session_store.dart';
@@ -176,16 +179,21 @@ class _Harness {
     );
     facade = DefaultPlaybackFacade(backend: backend);
     store = PlaybackSessionStore();
-    observer = PlaybackObserver(facade: facade, sessionStore: store);
+    observer = PlaybackObserver(facade: facade);
+    session = PlaybackSessionCoordinator(
+      facade: facade,
+      store: store,
+      onRestoredTrack: observer.showRestoredTrack,
+    );
     provider = PlaybackProvider(
       facade: facade,
       messenger: FakeMessenger(),
       observer: observer,
-      sessionStore: store,
+      sessionCoordinator: session,
     );
     handler = LocalAudioHandler(service, backend: mediaBackend);
     // 与 `buildPlaybackStack` 同一接线：handler 建好后回填会话落盘。
-    handler.attachSessionPersister(provider.flushPlaybackSession);
+    handler.attachSessionPersister(session.flushSession);
     observer.attach();
   }
 
@@ -194,6 +202,7 @@ class _Harness {
   late final DefaultPlaybackFacade facade;
   late final PlaybackSessionStore store;
   late final PlaybackObserver observer;
+  late final PlaybackSessionCoordinator session;
   late final PlaybackProvider provider;
   late final LocalAudioHandler handler;
 

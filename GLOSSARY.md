@@ -27,18 +27,28 @@
 
 - **Playback snapshot（播放快照）** — `lib/domain/models/playback.dart`：UI 播放状态的唯一形状
   （`current/previous/next/upNext/context/mode/isPlaying/...`）。`PlaybackProvider.snapshot`
-  是其唯一出口：真实播放来自 facade，冷启动恢复态由 `PlaybackSession` 构造覆盖快照；
-  历史兼容 map 形状已删除。
+  是其唯一出口：真实播放来自 facade，冷启动恢复态由 `PlaybackSessionCoordinator`
+  构造覆盖快照（唯一构造点）；历史兼容 map 形状已删除。
 - **Played order（播放顺序）** — `lib/playback/playback_order.dart`：实际播放过的队列下标栈
-  （最近在后、上限 100、`popPrevious` 供上一首消费）。驱动 `PlaybackSnapshot.history` 与
-  `previous` 语义；与队列顺序 `upcoming` 是两回事。
+  （最近在后、上限 100、`popPrevious` 供上一首消费）。驱动 `PlaybackSnapshot.previous`
+  语义（实际播放顺序最近一首 → 队列前一位）；与队列面板的 `upNext`（队列顺序）是两回事。
 - **Resolved next（下一首解析）** — `PlaybackSnapshot.next`：后端按当前模式解析的下一首
   （shuffle 在单曲内稳定，切歌/切模式重抽）；peek（展示）与 commit（执行）两个语义在
   服务内显式命名（`_peekNextIndex` / `_commitNextIndex`），轮末重洗只发生在 commit。
 - **Previous（上一首）** — `PlaybackSnapshot.previous`：可展示的上一首（播放顺序最近一首
   的非破坏性 peek → 队列前一位；无 / 与当前同 id 为 null，队首的「重播当前」不算）。
   封面左槽与切歌会话只读它，不再各自解析。
-- **Playback observer（播放观察者模块）** — `lib/services/playback_observer.dart`：播放副作用扇出的唯一实现（最后播放 / 播放上下文 / 桌面小组件 / 播放历史 / 会话落盘 / 封面预取与补取 / 通知权限），直连 facade 快照与进度通道（不经 provider 的节流通知），由组合根挂接；恢复态与睡眠定时仍属 `PlaybackProvider`（与 `PlayStatisticsService`、`ArtworkThemeSync` 同为观察者形态）。
+- **Playback session coordinator（播放会话模块）** — `lib/playback/playback_session_coordinator.dart`：
+  恢复态（冷启动未起播）与真实播放（live）之间的唯一交接点，也是
+  `PlaybackSessionStore` 的唯一写者。三阶段状态机 `idle → restored → live`（装载进恢复态，
+  facade 有当前曲目即接管为 live，停止播放 / 关闭恢复开关回 idle）；命令按阶段路由
+  （provider 不再分叉，只按路由结果决定通知），恢复态展示快照与进度覆盖值在这里构造。
+  落盘口径收在一处：整份会话（曲目切换 / 暂停 / `flushSession` 强制）、轻量进度键
+  （`savePosition`，1s 节流，满 1min 整份刷新）、`clear`，串行化由 store 的
+  `pendingWrite` 承担。系统媒体控制（暂停 / 停止 / 切顺序 / seek）与恢复态切歌键
+  经组合根接线进来（不再直连 provider）；「启动时恢复上次播放」开关的跨设备重载钩子
+  挂在 provider 上，协调者只回答「恢复态是否变化」（撤下 / 装载成功），UI 通知由调用方发。
+- **Playback observer（播放观察者模块）** — `lib/services/playback_observer.dart`：播放副作用扇出的唯一实现（最后播放 / 播放上下文 / 桌面小组件 / 播放历史 / 封面预取与补取 / 通知权限），直连 facade 快照通道（不经 provider 的节流通知），由组合根挂接；会话落盘与恢复态属 `PlaybackSessionCoordinator`，睡眠定时属 `PlaybackProvider`（与 `PlayStatisticsService`、`ArtworkThemeSync` 同为观察者形态）。
 - **Sleep timer（定时关闭）** — `lib/providers/sleep_timer.dart`：歌曲信息页入口的
   「到点暂停」。两种模式：倒计时（**仅播放时计时**，暂停冻结；实现为**绝对
   deadline** 而非相对累减——tick / 快照变化 / 回前台三路各自比较 `now >= deadline`，
@@ -79,8 +89,8 @@
   下）；顶栏↔播放页（`PlayerMorphFlight`）与迷你⇄完整（`player.dart` 页内）都是
   它的薄壳。锚点几何读取唯一实现 `player_morph.dart::anchorRectOf(key,
   {container})`（容器为空 = 全局坐标；含祖先缩放的两角映射）。
-- **Cover slot（封面槽位）** — 堆叠的三个位置：左 = 上一首（播放顺序最近一首
-  history 末位 → 队列前一位 → 空，排除与当前同 id，与后端 `skipToPrevious` 同源）、
+- **Cover slot（封面槽位）** — 堆叠的三个位置：左 = 上一首（实际播放顺序最近一首 →
+  队列前一位 → 空，排除与当前同 id，与后端 `skipToPrevious` 同源）、
   中 = 当前（拖动/提交等待期间为预览目标）、右 = `PlaybackSnapshot.next`；
   左右槽只要展示了身份即可点击切歌，为空时不渲染卡片。
 - **Swap session（切歌会话）** — `CoverSwapSession`：一次拖动/切歌从开始到落位的
@@ -281,6 +291,15 @@
   类型化同步记录出 / 入（`PlaylistSyncRecord` / `PlaylistTrackSyncRecord` /
   `PlayHistorySyncRecord` / `SyncTombstoneRecord`，定义在 `device_sync.dart`）；
   列名、行结构与墓碑表只在实现内部；同步适配器只依赖本端口。
+- **Library write engine（资料库写入网关）** — `lib/data/library_write_engine.dart`：
+  本地变更五步仪式（发号 → 写行 → journal 记录 → 墓碑 → 变更事件）的唯一实现；
+  意图方法（`addHistoryEntry` / `replacePlaylistTrack` / `deletePlaylist` /
+  `toggleFavorite` / `importPlaylistTracks`…）是 data 层内部 API，
+  `LibraryRepository` 的公开写方法只做委托，读路径与同步面仍在仓库。同步面
+  （应用远端记录）不走仪式：不发号、不追 journal、版本从远端取，只复用网关的
+  墓碑行形状、历史墓碑清除与 syncId 补齐原语。两处既有口径显式保留并在网关内
+  注明：导出前补 syncId 不发号（靠 `syncFingerprints` 的 syncId 计数条款补偿）、
+  导入路径不追 journal。
 - **Library change（资料库变更事件）** — sealed `LibraryChange`（history /
   playlists / playlistTracks(id) / favorites / import）：`changes` 广播的载荷，
   类型即失效范围；取代 `Stream<void>` + 事后回读 `lastChangeKind` /
@@ -418,8 +437,9 @@
 - **Playback session record（会话记录）** — `session` 类别的单例记录：会话 JSON
   （队列/下标/进度/模式）+ `savedAt` 时间戳；正在播放的设备持续刷新从而抢占，
   本地停止播放不回传删除（换设备接着听的轻量实现）。系统控制路径（通知暂停 /
-  停止 / 切播放顺序）显式 await 落盘（`PlaybackSessionStore.pendingWrite` 串行化，
-  停止先落盘再清空队列），冷启动恢复不自动起播。
+  停止 / 切播放顺序）显式 await 会话模块的强制落盘
+  （`PlaybackSessionCoordinator.flushSession` → `PlaybackSessionStore.pendingWrite`
+  串行化，停止先落盘再清空队列），冷启动恢复不自动起播。
 - **Backup（完整备份）** — `SyncEngine.exportBackupJson` / `importBackupJson`：
   与同步共用 envelope 与适配器的本地文件备份/合并恢复；不需要启用同步；
   凭证类默认排除。

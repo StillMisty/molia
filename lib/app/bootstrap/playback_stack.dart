@@ -1,13 +1,15 @@
 /// 播放栈：本地播放链路（just_audio，见 `local_playback_chain.dart`）→
-/// DefaultPlaybackFacade → PlaybackProvider，含播放副作用观察者与系统媒体会话。
+/// DefaultPlaybackFacade → PlaybackSessionCoordinator → PlaybackProvider，
+/// 含播放副作用观察者与系统媒体会话。
 ///
 /// **前向引用如何消失**：
 /// - 服务 ↔ 后端互为依赖（服务要解析直链、后端要控制服务）。原组合根用
 ///   `late final playbackBackend` 让服务解析回调提前引用后端；这里「取链」是
 ///   一条解析函数（`LocalPlaybackChain`），两个消费者都不引用对方实例。
-/// - 系统媒体会话在 provider 建好之后装配：恢复态切歌键回调直接落到 provider，
-///   原组合根的 `restoredControlsTarget` 可变槽位（先建 handler 再回填）消失。
-///   会话仍由注入的 [buildPlaybackStack] 参数构建，调用点仍在 `runApp` 之前。
+/// - 系统媒体会话在会话模块建好之后装配：恢复态切歌键与系统控制落盘都落到
+///   `PlaybackSessionCoordinator`，原组合根的 `restoredControlsTarget` 可变槽位
+///   （先建 handler 再回填）消失。会话仍由注入的 [buildPlaybackStack] 参数构建，
+///   调用点仍在 `runApp` 之前。
 library;
 
 import '../../domain/ports/playback_backend.dart';
@@ -17,6 +19,7 @@ import '../../data/mapping/track_mapper.dart';
 import '../../data/playback/default_playback_facade.dart';
 import '../../playback/local_audio_handler.dart';
 import '../../playback/local_playback_service.dart';
+import '../../playback/playback_session_coordinator.dart';
 import '../../providers/playback_provider.dart';
 import '../../providers/sleep_timer.dart';
 import '../../services/playback_observer.dart';
@@ -28,11 +31,11 @@ import 'local_data_stack.dart';
 import 'local_playback_chain.dart';
 
 /// 系统媒体会话装配（flutter_media_session / Linux MPRIS，见 ADR-0010）：
-/// 真实本地播放服务链路与 provider 都就绪后调用，恢复态切歌键直接落到
-/// provider。
+/// 真实本地播放服务链路与会话模块都就绪后调用；恢复态（冷启动未起播）的
+/// 切歌键落到会话模块，由它按阶段路由（恢复播放 / 转发 facade）。
 typedef MediaSessionFactory = Future<LocalAudioHandler?> Function(
   LocalPlaybackService service,
-  PlaybackProvider provider,
+  PlaybackSessionCoordinator session,
 );
 
 /// 播放栈产物（构造顺序见 [buildPlaybackStack]）。
@@ -83,13 +86,11 @@ Future<PlaybackStack> buildPlaybackStack({
   }
 
   // 播放观察者：快照副作用扇出（最后播放 / 播放上下文 / 桌面小组件 / 历史 /
-  // 会话落盘 / 封面预取与补取 / 通知权限）。先建观察者，provider 创建后再
-  // 挂接——facade 监听顺序保持「provider 先处理恢复态、观察者后写副作用」。
-  // 会话存储两处共用同一实例：恢复态读写在 provider，实时会话节流在观察者。
+  // 封面预取与补取 / 通知权限）。先建观察者，provider 创建后再挂接——
+  // facade 监听顺序保持「会话模块先做恢复态交接、provider/观察者后写副作用」。
   final sessionStore = PlaybackSessionStore();
   final playbackObserver = PlaybackObserver(
     facade: playbackFacade,
-    sessionStore: sessionStore,
     dataSaver: dataSaver,
     libraryRepository: library.libraryRepository,
     playContextWriter: library.localDatabaseProvider.insertOrUpdatePlayContext,
@@ -101,6 +102,15 @@ Future<PlaybackStack> buildPlaybackStack({
       return sourceManager.fetchPic(sourceTrackFromTrack(track));
     },
   );
+  // 播放会话模块：恢复态 ↔ live 交接 + 会话落盘唯一写者。组合根创建共享
+  // 存储（同步栈也用同一实例标记「会话待外发」）并注入；恢复曲目的「最后
+  // 播放」展示接观察者。
+  final sessionCoordinator = PlaybackSessionCoordinator(
+    facade: playbackFacade,
+    store: sessionStore,
+    settings: catalog.settings,
+    onRestoredTrack: playbackObserver.showRestoredTrack,
+  );
   final playbackProvider = PlaybackProvider(
     settings: catalog.settings,
     facade: playbackFacade,
@@ -109,7 +119,7 @@ Future<PlaybackStack> buildPlaybackStack({
     catalogService: catalog.catalogService,
     dataSaver: dataSaver,
     observer: playbackObserver,
-    sessionStore: sessionStore,
+    sessionCoordinator: sessionCoordinator,
     autoSwapSettings: library.sourceSwapSettings,
     autoSwapResolver: (track, {required excludeSourceKeys}) =>
         library.autoSourceSwapService.findMatch(
@@ -132,13 +142,11 @@ Future<PlaybackStack> buildPlaybackStack({
   final service = localPlaybackService;
   final factory = mediaSessionFactory;
   if (service != null && factory != null) {
-    audioHandler = await factory(service, playbackProvider);
+    audioHandler = await factory(service, sessionCoordinator);
     // 系统控制（通知 / 锁屏 / 耳机键）直接落到播放服务：把暂停 / 停止 /
-    // 切播放顺序的会话落盘接到 provider（handler 由注入的工厂创建，回调随后
+    // 切播放顺序的会话落盘接到会话模块（handler 由注入的工厂创建，回调随后
     // 回填），保证控制动作返回时会话已在本地、重开应用可恢复暂停态。
-    audioHandler?.attachSessionPersister(
-      playbackProvider.flushPlaybackSession,
-    );
+    audioHandler?.attachSessionPersister(sessionCoordinator.flushSession);
   }
 
   return (

@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:molia/data/settings/settings_keys.dart';
+import 'package:molia/data/settings/settings_registry.dart';
 import 'package:molia/domain/models/playback.dart';
 import 'package:molia/domain/models/track.dart';
 import 'package:molia/models/play_mode.dart';
@@ -281,6 +282,67 @@ void main() {
 
     final prefs = await SharedPreferences.getInstance();
     expect(prefs.getBool(kRestoreSessionEnabled.name), isFalse);
+  });
+
+  test('远端同步改「启动时恢复上次播放」：reload 撤下恢复态并通知 UI', () async {
+    await PlaybackSessionStore().save(PlaybackSession(
+      tracks: [_track('a')],
+      index: 0,
+      position: const Duration(seconds: 12),
+      mode: PlayMode.sequential,
+    ));
+
+    final settings = SettingsRegistry(keys: kAllSettingsKeys);
+    final provider = buildTestPlaybackProvider(settings: settings);
+    addTearDown(provider.dispose);
+    await provider.preferencesReady;
+    expect(provider.hasRestoredSession, isTrue);
+
+    var notifies = 0;
+    provider.addListener(() => notifies++);
+
+    // 远端同步应用关闭值（组合根经 `settings.reloadKeys` 触发重载钩子）。
+    await settings.write(kRestoreSessionEnabled, false);
+    await settings.reloadKeys([kRestoreSessionEnabled.name]);
+
+    expect(provider.restoreSessionEnabled, isFalse);
+    expect(provider.hasRestoredSession, isFalse);
+    expect(provider.hasTrack, isFalse);
+    // 通知经节流器派发（track 16ms / queue 300ms）。
+    await Future<void>.delayed(const Duration(milliseconds: 350));
+    expect(notifies, greaterThan(0), reason: '恢复态撤下后 UI 必须刷新');
+  });
+
+  test('远端同步改「启动时恢复上次播放」：reload 重新装载并通知 UI', () async {
+    SharedPreferences.setMockInitialValues({
+      kRestoreSessionEnabled.name: false,
+    });
+    await PlaybackSessionStore().save(PlaybackSession(
+      tracks: [_track('a')],
+      index: 0,
+      position: const Duration(seconds: 12),
+      mode: PlayMode.sequential,
+    ));
+
+    final settings = SettingsRegistry(keys: kAllSettingsKeys);
+    final provider = buildTestPlaybackProvider(settings: settings);
+    addTearDown(provider.dispose);
+    await provider.preferencesReady;
+    expect(provider.restoreSessionEnabled, isFalse);
+    expect(provider.hasRestoredSession, isFalse);
+
+    var notifies = 0;
+    provider.addListener(() => notifies++);
+
+    // 远端同步应用开启值：重新装载恢复态（会话数据仍在）。
+    await settings.write(kRestoreSessionEnabled, true);
+    await settings.reloadKeys([kRestoreSessionEnabled.name]);
+
+    expect(provider.restoreSessionEnabled, isTrue);
+    expect(provider.hasRestoredSession, isTrue);
+    expect(provider.snapshot.current?.title, 'Title a');
+    await Future<void>.delayed(const Duration(milliseconds: 350));
+    expect(notifies, greaterThan(0), reason: '重新装载恢复态后 UI 必须刷新');
   });
 
   test('恢复播放：seek 落地前进度不闪回 0（保持恢复进度）', () async {

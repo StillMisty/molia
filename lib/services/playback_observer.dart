@@ -1,8 +1,8 @@
 /// 播放观察者：承担播放快照的「写」与派生动作（副作用扇出的唯一实现）。
 ///
 /// 纯观察者（同 `PlayStatisticsService` 模式）：不触碰播放内核、不 import
-/// provider；组合根创建后经 [PlaybackObserver.attach] 订阅 facade 的快照 /
-/// 进度通道，任何页面与后台切歌都走同一条链路，单测可用假 facade / 假 store
+/// provider；组合根创建后经 [PlaybackObserver.attach] 订阅 facade 的快照通道，
+/// 任何页面与后台切歌都走同一条链路，单测可用假 facade / 假副作用入口
 /// 脚本化驱动。
 ///
 /// 承担的副作用（顺序与节流与从 PlaybackProvider 抽出前逐一对应）：
@@ -12,10 +12,11 @@
 /// - 封面预取（[ImagePreloadManager]）；
 /// - 播放历史（[LibraryStore]）；
 /// - 封面补取（artworkResolver → `facade.updateTrackArtwork`）；
-/// - 播放会话落盘（[_sessionSaveInterval] 节流 + 曲目切换/暂停强制）；
 /// - 首次真正出声请求通知权限。
 ///
-/// 恢复态、睡眠定时与失败恢复是 provider 的内存状态 / 播放逻辑，不在此处。
+/// 会话落盘（保存 / 进度 / 清除）不在这里，也没有第二处写者：它连同恢复态
+/// 交接一起收在 `PlaybackSessionCoordinator`（恢复态与睡眠定时属 provider /
+/// 会话模块的内存状态，同样不在此处）。
 library;
 
 import 'dart:async';
@@ -35,7 +36,6 @@ import '../domain/ports/playback_facade.dart';
 import '../managers/image_preload_manager.dart';
 import 'data_saver_service.dart';
 import 'notification_permission.dart';
-import 'playback_session_store.dart';
 
 final _logger = Logger('molia.playback_observer');
 
@@ -71,13 +71,12 @@ Future<void> _updateAndroidWidget(Map<String, Object?> payload) async {
 
 /// 播放快照副作用观察者：由组合根创建、挂接，与 provider 同生命周期。
 ///
-/// 对外接口刻意收窄：挂接 / 强制落盘 / 拆线 + 最后播放信息读取与恢复态展示
-/// 两条意图；所有写入细节（节流、去重、过期丢弃）留在实现内部。
+/// 对外接口刻意收窄：挂接 / 拆线 + 最后播放信息读取与恢复态展示两条意图；
+/// 所有写入细节（去重、过期丢弃）留在实现内部。
 class PlaybackObserver {
   PlaybackObserver({
     required PlaybackFacade facade,
     DataSaverService? dataSaver,
-    PlaybackSessionStore? sessionStore,
     LibraryStore? libraryRepository,
     PlayContextWriter? playContextWriter,
     PlaybackWidgetUpdater? widgetUpdater,
@@ -85,10 +84,8 @@ class PlaybackObserver {
     Future<String?> Function(Track track)? artworkResolver,
     GlobalKey<NavigatorState>? navigatorKey,
     Future<void> Function()? requestNotificationPermission,
-    DateTime Function()? clock,
   })  : _facade = facade,
         _dataSaver = dataSaver,
-        _sessionStore = sessionStore ?? PlaybackSessionStore(),
         _libraryRepository = libraryRepository,
         _playContextWriter = playContextWriter,
         _widgetUpdater = widgetUpdater ?? _updateAndroidWidget,
@@ -96,19 +93,9 @@ class PlaybackObserver {
         _artworkResolver = artworkResolver,
         _navigatorKey = navigatorKey,
         _requestNotificationPermission = requestNotificationPermission ??
-            NotificationPermission.ensureRequested,
-        _clock = clock ?? DateTime.now {
+            NotificationPermission.ensureRequested {
     _ready = _loadLastPlayedTrackInfo();
   }
-
-  /// 播放会话进度落盘节流：正常播放中最多每秒写一次
-  /// （被系统杀进程时最多丢 ~1s 进度；track 切换/暂停/后台强制写）。
-  static const Duration _sessionSaveInterval = Duration(seconds: 1);
-
-  /// 整份会话（含队列 JSON）的刷新上限：进度 tick 默认只写轻量进度键，
-  /// 但每满一分钟整份重写一次——`savedAt` 随之刷新，「正在播放的设备持续
-  /// 抢占」的跨设备同步语义保持不变，而整队列序列化从每秒一次降到每分钟一次。
-  static const Duration _sessionRefreshInterval = Duration(minutes: 1);
 
   static const String _lastPlayedImageKey = 'last_played_image_url';
   static const String _lastPlayedTrackNameKey = 'last_played_track_name';
@@ -116,9 +103,6 @@ class PlaybackObserver {
 
   final PlaybackFacade _facade;
   final DataSaverService? _dataSaver;
-
-  /// 播放会话持久化（与 provider 的恢复态读写共用同一实例）。
-  final PlaybackSessionStore _sessionStore;
 
   /// 资料库仓库（播放开始时写 play_history；失败仅日志）。
   final LibraryStore? _libraryRepository;
@@ -141,9 +125,6 @@ class PlaybackObserver {
   /// 首次真正出声请求通知权限（测试注入记录器）。
   final Future<void> Function() _requestNotificationPermission;
 
-  /// 会话落盘节流判定用的时钟（测试注入；其余时间戳沿用真实时钟）。
-  final DateTime Function() _clock;
-
   late final Future<void> _ready;
   bool _attached = false;
 
@@ -151,9 +132,6 @@ class PlaybackObserver {
   String? _lastPlayedImageUrl;
   String? _lastPlayedTrackName;
   String? _lastPlayedArtists;
-
-  DateTime _lastSessionSave = DateTime.fromMillisecondsSinceEpoch(0);
-  bool _wasPlaying = false;
 
   /// 已处理过的当前曲目（用于去重持久化 / 写库 / 预加载）。
   String? _processedTrackId;
@@ -171,12 +149,11 @@ class PlaybackObserver {
   String? get lastPlayedTrackName => _lastPlayedTrackName;
   String? get lastPlayedArtists => _lastPlayedArtists;
 
-  /// 挂接到 facade：订阅快照与进度通道，并立即处理一次当前快照
+  /// 挂接到 facade：订阅快照通道，并立即处理一次当前快照
   /// （接线前系统媒体会话可能已恢复曲目）。重复调用是空操作。
   void attach() {
     if (_attached) return;
     _attached = true;
-    _facade.position.addListener(_onPositionTick);
     _facade.snapshot.addListener(_onSnapshot);
     _onSnapshot();
   }
@@ -185,25 +162,20 @@ class PlaybackObserver {
   void dispose() {
     if (!_attached) return;
     _attached = false;
-    _facade.position.removeListener(_onPositionTick);
     _facade.snapshot.removeListener(_onSnapshot);
   }
 
   /// 冷启动恢复态：把恢复曲目信息作为「最后播放」展示（不落盘）。
   ///
-  /// 曲目并未真正起播，只在 UI 空态复用该信息；provider 装载恢复会话时调用。
+  /// 曲目并未真正起播，只在 UI 空态复用该信息；会话模块装载恢复会话时调用。
   void showRestoredTrack(Track track) {
     _lastPlayedTrackName = track.title;
     _lastPlayedArtists = track.artistLabel;
     _lastPlayedImageUrl = track.artwork?.uri.toString();
   }
 
-  /// 立即把当前播放会话写入本地（进入后台 / 生命周期 paused 时调用；
-  /// provider.flushPlaybackSession 转发到这里）。
-  void flushSession() => _maybeSavePlaybackSession(force: true);
-
   /// 曲目切换时：持久化最后播放信息、写入播放上下文（最近播放）、
-  /// 更新桌面小组件并触发封面预加载；同时维护「上次播放会话」。
+  /// 更新桌面小组件并触发封面预加载。
   void _onSnapshot() {
     final live = _facade.snapshot.value;
     final track = live.current;
@@ -220,11 +192,6 @@ class PlaybackObserver {
       if (track.artwork == null) {
         unawaited(_resolveMissingArtwork(track));
       }
-      _maybeSavePlaybackSession(force: true);
-    }
-    // 播放中→暂停/停止：强制保存一次进度（避免节流窗口内丢进度）。
-    if (_wasPlaying && !live.isPlaying) {
-      _maybeSavePlaybackSession(force: true);
     }
     // 首次真正出声时才请求通知权限（用户已经听到歌，权限弹窗有上下文；
     // 媒体通知依赖它才不会在部分 ROM 上被静默丢弃）。
@@ -232,58 +199,6 @@ class PlaybackObserver {
       _notificationPermissionAsked = true;
       unawaited(_requestNotificationPermission());
     }
-    _wasPlaying = live.isPlaying;
-  }
-
-  /// 高频进度 tick：写轻量进度键（必要时整份刷新，见 [_maybeSavePosition]）。
-  void _onPositionTick() {
-    _maybeSavePosition();
-  }
-
-  /// 仅需「队列 / 下标 / 进度」可写的判定（无曲目 / 空队列 / 非法下标跳过）。
-  bool _hasSavableSession(PlaybackSnapshot snapshot) =>
-      snapshot.current != null &&
-      snapshot.queue.isNotEmpty &&
-      snapshot.currentIndex >= 0;
-
-  /// 进度落盘：默认只写进度键；距上次整份落盘超过 [_sessionRefreshInterval]
-  /// 时改走整份（刷新 savedAt）。
-  void _maybeSavePosition() {
-    final snapshot = _facade.snapshot.value;
-    if (!_hasSavableSession(snapshot)) return;
-    final now = _clock();
-    final elapsed = now.difference(_lastSessionSave);
-    if (elapsed < _sessionSaveInterval) return;
-    if (elapsed >= _sessionRefreshInterval) {
-      _saveSession(snapshot, now);
-      return;
-    }
-    _lastSessionSave = now;
-    unawaited(
-        _sessionStore.savePosition(_facade.position.value.inMilliseconds));
-  }
-
-  /// 保存当前播放会话（节流；track 切换/暂停时强制）。
-  void _maybeSavePlaybackSession({bool force = false}) {
-    final snapshot = _facade.snapshot.value;
-    if (!_hasSavableSession(snapshot)) return;
-    final now = _clock();
-    if (!force && now.difference(_lastSessionSave) < _sessionSaveInterval) {
-      return;
-    }
-    _saveSession(snapshot, now);
-  }
-
-  /// 整份落盘：重写会话 JSON 并触发 `onSaved`（同步待外发标记）。
-  void _saveSession(PlaybackSnapshot snapshot, DateTime now) {
-    _lastSessionSave = now;
-    unawaited(_sessionStore.save(PlaybackSession(
-      tracks: snapshot.queue,
-      index: snapshot.currentIndex,
-      position: _facade.position.value,
-      mode: snapshot.mode,
-      context: snapshot.context,
-    )));
   }
 
   /// 播放开始时写入播放历史（元数据 + raw 取链参数；不写直链）。

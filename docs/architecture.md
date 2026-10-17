@@ -58,7 +58,7 @@
     `Track.payload` 承载源脚本原始对象（原 `SourceTrack.raw`），**只在 data/sources 传递、必须原样回传**；
   - `PlaybackSnapshot` / `BackendSnapshot` / `PlaybackRequest` / `PlaybackContext`；
     `PlaybackSnapshot.next` 是后端按当前模式解析出的下一首（shuffle 单曲内稳定），
-    `history` 是实际播放顺序（最近在后），`upcoming` 是队列顺序（非播放顺序）；
+    `previous` 是实际播放顺序最近一首（无则队列前一位），`upNext` 是队列顺序；
   - `SearchQuery` / `SearchResult<T>`；`SourceFailure(kind/l10nKey/retryable)`；
   - `Comment` / `CommentPage`（评论正文 / 时间 / IP 归属 / 点赞 / 引用 / 楼中楼，
     `CommentKind` 区分热门与最新）；
@@ -80,20 +80,27 @@
   前缀失效与单曲搜索共用）与 `resolve`（缓存 10min，key=`url:{source}:{md5(canonical payload)}:{quality}`，
   失败不缓存，可 `invalidatePrefix`），并把异常归一化为 `SourceFailure`。
 - **Playback**：`LocalPlaybackBackend` 组合 `LocalPlaybackService`（值变才发快照；
-  播放顺序栈 `PlaybackOrder` 记录实际播放过的下标，供 `previous` 与快照 `history`）；
+  播放顺序栈 `PlaybackOrder` 记录实际播放过的下标，供快照 `previous`）；
   `DefaultPlaybackFacade` 合并快照通知（`==` 去重）、把进度拆到独立 `position`
   `ValueNotifier`（≥250ms 去重、换曲/seek 直接对齐、**不进快照**）、错误归一化。
   `PlaybackProvider` 对外只暴露领域 `PlaybackSnapshot` + position 通道：
-  真实播放取 facade 快照；冷启动恢复态由会话构造覆盖快照（`isPlaying=false`，
-  history 为会话队列前缀）。恢复播放：会话模式先落到后端（shuffle 洗牌顺序
-  依赖装载前模式）；seek 落地前进度通道继续显示恢复进度（不闪回 0）；装载期间
-  用户 seek 优先；生命周期 `paused` 强制落盘会话。旧「远程播放风格 Map 兼容层」
+  真实播放取 facade 快照；冷启动恢复态由 `PlaybackSessionCoordinator`
+  （`lib/playback/`）构造覆盖快照（`isPlaying=false`，previous/upNext 为队列
+  下标近似）。恢复播放：会话模式先落到后端（shuffle 洗牌顺序依赖装载前模式）；
+  seek 落地前进度通道继续显示恢复进度（不闪回 0）；装载期间用户 seek 优先；
+  生命周期 `paused` 强制落盘会话。旧「远程播放风格 Map 兼容层」
   （facade `compat*` / service `currentTrackMap` 等）已删除。
-  播放副作用的扇出（最后播放 / 播放上下文 / 桌面小组件 / 播放历史 / 会话落盘 /
+  播放会话模块是**恢复态 ↔ live 的唯一交接点与 `PlaybackSessionStore` 的唯一
+  写者**：三阶段状态机 `idle / restored / live`，命令按阶段路由（provider 不再
+  分叉，只按路由结果决定通知类别）；恢复态快照与进度覆盖值在这里构造；落盘
+  口径（整份 / 轻量进度键 1s 节流 / 满 1min 整份刷新 / `clear` / 可 await 的
+  `flushSession`）随 `pendingWrite` 串行化收在一处。系统媒体控制与恢复态切歌键
+  由组合根接到会话模块（不再直连 provider）。
+  播放副作用的扇出（最后播放 / 播放上下文 / 桌面小组件 / 播放历史 /
   预取 / 补封面 / 通知权限）唯一实现在 `lib/services/playback_observer.dart`
-  （Playback observer）：直连 facade 快照与 position 通道、由组合根挂接，不经
-  provider 的节流通知（避免合并窗口丢中间曲目副作用）；恢复态与睡眠定时仍属
-  `PlaybackProvider`。与 `PlayStatisticsService` / `ArtworkThemeSync` 同为观察者形态。
+  （Playback observer）：直连 facade 快照通道、由组合根挂接，不经 provider 的
+  节流通知（避免合并窗口丢中间曲目副作用）；睡眠定时仍属 `PlaybackProvider`。
+  与 `PlayStatisticsService` / `ArtworkThemeSync` 同为观察者形态。
 - **音频焦点与定时关闭**：`AudioFocusGuard`（`lib/playback/audio_focus_guard.dart`，
   其他应用出声 → 暂停，默认开；`androidWillPauseWhenDucked` 把 duck 升级为暂停语义）
   由 `LocalPlaybackService` 持有；倒计时定时关闭为**绝对 deadline**
@@ -159,8 +166,9 @@
   封面经 `ArtworkCache.cachedFilePath` 带浏览器 UA + 平台 Referer 落到本地文件后
   传本地地址（Android/iOS/macOS/Linux `file://`、Windows 裸路径；网易 CDN 对
   默认 UA 返回 403），未命中先发远程 URL 兜底；省流模式整体置空封面地址且不下载。
-  恢复态（冷启动未起播）下切歌键回落给 `PlaybackProvider`（保存会话立即恢复
-  播放）。`POST_NOTIFICATIONS` 不在启动时请求——由
+  恢复态（冷启动未起播）下切歌键回落给 `PlaybackSessionCoordinator`
+  （按阶段从保存的会话恢复播放或转发真实播放）。
+  `POST_NOTIFICATIONS` 不在启动时请求——由
   `lib/services/notification_permission.dart` 在「首次真正播放 / 首次开启歌词
   输出」时弹窗（每会话一次），被永久拒绝时通知·锁屏设置页给系统设置深链；
   媒体会话初始化失败（平台支持但 `initSystemMediaSession` 返回 null）时歌词显示
@@ -168,7 +176,8 @@
   图标与文案随当前模式，App 内改模式双向一致；`MediaAction.custom('lx.playMode')`，
   Android drawable 名沿用 `audio_service_*`，`keep.xml` 防 shrinkResources 删除）；
   系统控制路径（暂停 / 停止 / 切顺序 / seek）**显式 await 会话落盘**
-  （`LocalAudioHandler` 的 `attachSessionPersister` + `PlaybackSessionStore.pendingWrite`
+  （`LocalAudioHandler` 的 `attachSessionPersister` +
+  `PlaybackSessionCoordinator.flushSession` → `PlaybackSessionStore.pendingWrite`
   串行化；停止先落盘再清空队列），保证「系统暂停 → 冷启动」能恢复上一首 + 队列 +
   模式 + 进度且不自动起播。
 - **Cache**：`RequestCache`（single-flight + LRU 64 + TTL + 可注入时钟）。
@@ -338,6 +347,11 @@
 （同步面）是两条 seam：同一个实现类（`lib/data/library_repository.dart`）
 兼两者，组合根分别注入。
 
+- **写入网关**：`lib/data/library_write_engine.dart` 拥有本地写入的五步仪式
+  （发号 → 写行 → journal 记录 → 墓碑 → 变更事件），仓库的公开写方法只做委托
+  ——漏步（漏号 / 漏日志 / 漏墓碑 / 漏通知）在结构上不再可能；同步面应用远端
+  记录不走仪式（版本由远端给、不发号、不追 journal），只复用网关的墓碑行形状
+  与 syncId 补齐原语；
 - **UI 面**：领域意图（历史 / 列表 / 曲目 / 收藏 / 导入）+ 类型化变更事件
   （`LibraryChange`，类型即失效范围）；`sortOrder`、墓碑、保留行名
   `__favorites__` 等存储形状不出实现（收藏是 `PlaylistInfo.isFavorites`）；
@@ -493,7 +507,7 @@
   飞行 / `CoverCard` 卡片 / `MorphCover` 副本内容 / 封面 URL·key 归一化）、
   `player_cover_swap.dart`（方向判定纯函数）；播放器只提供布局尺寸、顶栏共享飞行
   锚点与主题联动。
-- **三槽位模型**：左 = 上一首（播放顺序最近一首 history 末位 → 队列前一位 → 空，
+- **三槽位模型**：左 = 上一首（实际播放顺序最近一首 → 队列前一位 → 空，
   排除与当前同 id，与后端 `skipToPrevious` 同源）、中 = 当前（拖动/提交等待期间
   为预览目标）、右 = `PlaybackSnapshot.next`；左右槽只要展示了身份即可点击切歌。
 - **会话与宿主（时机 / 效果分离）**：会话只决定「什么时候」，宿主（deck State）决定
