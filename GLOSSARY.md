@@ -105,6 +105,16 @@
 
 - **Haptics（触感模块）** — `lib/services/haptics.dart`：全应用触感唯一入口（lightImpact / mediumImpact / selectionClick），带设备本地开关（默认开；关闭后不触碰平台通道）。所有调用点经它；M3E 包内自带的触感（swipe action / 排序等）不在此覆盖范围。
 
+- **Desktop shell（桌面骨架）** — `lib/app/desktop/**`：仅 linux/windows/macOS 生效的壳层版式（顶栏瘦身 + 可展开侧栏 + 常驻底栏播放条 + 队列右面板），由 `lib/app/app_shell.dart` 按平台分流（`MyApp(desktopShell:)` 可强制，测试用）；移动骨架与共享逻辑（页面栈 / 共享元素飞行 / 重复点击通道）仍在 `app_shell.dart`，两套骨架同源。
+
+- **Now playing bar（底栏播放条）** — `lib/app/desktop/now_playing_bar.dart`：桌面常驻 80dp 播放条（左：封面/歌名/收藏，点击进播放页并复用封面飞行；中：传输 + 可拖波浪进度 + 时间；右：播放模式 / 音量弹层 / 队列开关）。进度拖动语义与播放页滑杆同源（两处实现，改语义必须同步）。
+
+- **Queue panel（队列右面板）** — `lib/app/desktop/queue_panel.dart`：桌面右侧 supporting pane（260–480 可拖，默认 360；窗口宽 <1200 不渲染），内容为 `QueueDisplay(includeCurrent: true)`（顶部「正在播放」行 + 接下来队列）；开合与宽度经 `shell_layout_prefs.dart` 设备本地记忆。
+
+- **Startup page（启动首页）** — `kShellHomeDestination`（跟人走）+ `NavProvider.homeDestination` / `effectiveHomeDestination`：冷启动落在用户选定的目的地（设置 › 通用 › 启动时打开，默认播放页）。存储首页不可见时（跨设备同步推来的 hidden 列表）按导航顺序取第一个可见项兜底且**不改写存储**（避免同步回环）；本地隐藏「正在作为首页的目的地」被拒绝（锁定）。
+
+- **App volume（应用内音量）** — `PlaybackProvider.volume` / `muted` / `setVolume` / `toggleMute`（设备本地持久化，不随同步：音量是设备能力）→ `PlaybackFacade.setVolume` → `LocalPlaybackService`（just_audio；桌面 media_kit 同一播放器）。静音以「有效音量 0」下发；音量不进 `PlaybackSnapshot`（低频快照契约不动）。
+
 ## 色彩系统
 
 - **Color source model（取色模型）** — 全局主题的解析规则（ADR-0001）：

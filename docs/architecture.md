@@ -46,7 +46,9 @@
    playback / sync / AI / 歌词显示 / 桌面 / 更新 / Provider 树 / 首帧收尾
    各 stack builder：依赖进、装好的子系统出；初始化顺序与前向引用关在 builder
    内，main() 只做顺序调用 + runApp）；应用壳（MyThemedApp / 导航栏 / 顶栏 /
-   迷你条）与全局 key 在 `lib/app/app_shell.dart`，测试可直接挂载；
+   迷你条）与全局 key 在 `lib/app/app_shell.dart`，桌面骨架（顶栏 / 侧栏 /
+   常驻底栏播放条 / 队列右面板）在 `lib/app/desktop/**`，测试可直接挂载
+   （`MyApp(desktopShell: true/false)` 可强制骨架，默认按平台判定）；
 5. UI 禁止 import `lib/sources/**`（Wave 7 后白名单已清空，新增违规必须修复）。
 
 ## 2. 领域层
@@ -550,6 +552,17 @@
 
 - 壳：`M3EMaterialApp(data: M3EThemeData.fromMaterial(themedData), theme: themedData, ...)`；
   `ThemeProvider` 是唯一主题源（`autoTheming/dynamicColoring` 关闭）。
+- 桌面骨架（`lib/app/desktop/**`，仅 linux/windows/macOS；移动骨架逐像素不变）：
+  顶栏只留拖动区 + 页面标题 + 设置 + 窗口按钮（无播放控制、无进度线）；左侧
+  `M3ENavigationRail` 96⇄240 可展开（窗口宽 <1000 强制折叠、不改记忆值）；底部常驻
+  播放条 80dp（左：封面/歌名/收藏 · 中：上一首/播放/下一首 + 可拖波浪进度 + 时间 ·
+  右：播放模式/音量/队列）；队列右面板 260–480 可拖（<1200 不渲染）。侧栏展开、队列
+  开关与宽度是设备本地偏好（`lib/app/desktop/shell_layout_prefs.dart`）。播放页桌面
+  版式 = 左 420 固定 + 右「歌词 / 歌曲信息」分页（`NowPlaying(desktopLayout: true)`，
+  队列由右面板承载、无圆点手势）。启动首页由 `NavProvider.effectiveHomeDestination`
+  决定（设置 › 通用 › 启动时打开，默认播放页；存储首页被隐藏时按导航顺序兜底且**不改写
+  存储**，避免同步回环）。应用内音量（`PlaybackProvider.volume/muted`，设备本地持久化）
+  经 `PlaybackFacade.setVolume` 落到 just_audio（桌面 media_kit 同一播放器）。
 - 取色模型（唯一优先级，见 ADR-0001）：**基础配色**（壁纸 / 自定义，单选）+
   **封面覆盖**（当前曲目已有封面取色结果时用封面 seed 覆盖基础配色，包括
   盖过莫奈；启动恢复态在首帧前用本地缓存预解析；无封面回退）+
