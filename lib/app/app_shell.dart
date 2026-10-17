@@ -222,6 +222,10 @@ class _MyAppState extends State<MyApp>
   PlayerMorphGeometry? _morphGeometry;
   int _morphToken = 0;
 
+  /// 顶栏搜索「查看全部结果 / 窄窗搜索入口」的一次性意图：资料库页切到
+  /// 搜索 tab 并回顶（用户刚搜过，落点是搜索 tab 而不是上次停留的 tab）。
+  final ShellReselectSignal _showSearchRequest = ShellReselectSignal();
+
   /// 每个目的地一个「重复点击」意图通道：页面订阅后自行响应
   /// （播放页 = 迷你 ⇄ 完整；资料库 / 收藏 = 回到列表顶部），壳层不消费。
   final Map<ShellDestination, ShellReselectSignal> _reselect = {
@@ -248,6 +252,7 @@ class _MyAppState extends State<MyApp>
     ),
     ShellDestination.library: Library(
       reselect: _reselect[ShellDestination.library],
+      showSearchRequest: _showSearchRequest,
     ),
   };
 
@@ -303,6 +308,7 @@ class _MyAppState extends State<MyApp>
     for (final signal in _reselect.values) {
       signal.dispose();
     }
+    _showSearchRequest.dispose();
     super.dispose();
   }
 
@@ -436,10 +442,19 @@ class _MyAppState extends State<MyApp>
   /// [DesktopShell] 渲染搜索 pill / 图标的阈值同一个常量，口径不会漂移。
   void _focusGlobalSearch() {
     if (MediaQuery.sizeOf(context).width < DesktopShell.searchCompactWidth) {
-      _onDestinationSelected(ShellDestination.library);
+      _openLibrarySearch();
       return;
     }
     _globalSearch.focus();
+  }
+
+  /// 打开资料库搜索：发一次「显示搜索 tab」意图再切目的地。
+  ///
+  /// 资料库页三个 tab 共用一页，只切目的地会停在用户上次停留的 tab
+  /// （搜过却在看热榜时，点「查看全部结果」看不到结果）。
+  void _openLibrarySearch() {
+    _showSearchRequest.trigger();
+    _onDestinationSelected(ShellDestination.library);
   }
 
   /// 全局快捷键 Ctrl+1/2/3：切到第 [index] 个可见目的地；越界忽略。
@@ -505,9 +520,8 @@ class _MyAppState extends State<MyApp>
         // 歌手链接）与窄窗的搜索页都在那里，且共用同一个 SearchProvider 实例。
         // 两个回调分开传是因为触发语义不同（面板「查看全部结果」/ 窄窗图标），
         // 将来给图标换落点只改这一处。
-        onViewAllResults: () =>
-            _onDestinationSelected(ShellDestination.library),
-        onOpenSearch: () => _onDestinationSelected(ShellDestination.library),
+        onViewAllResults: _openLibrarySearch,
+        onOpenSearch: _openLibrarySearch,
         // 全局快捷键：Ctrl+F 与 Ctrl+1/2/3 的落点由壳层决定（宽窄窗分流、
         // 可见目的地顺序），DesktopShell 只负责在顶层监听按键。
         searchController: _globalSearch,

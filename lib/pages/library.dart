@@ -28,11 +28,17 @@ enum _LibraryTab { search, leaderboards, playlists }
 ///   无脚本时内置平台不可搜索）；
 /// - 个人内容（播放历史 / 我的列表 / 导入收藏）在收藏页。
 class Library extends StatefulWidget {
-  const Library({super.key, this.reselect});
+  const Library({super.key, this.reselect, this.showSearchRequest});
 
   /// 壳层「重复点击底栏 / 导航轨资料库目的地」的请求通道：
   /// 当前渲染 tab 的列表回到顶部。
   final ShellReselectSignal? reselect;
+
+  /// 壳层「顶栏全局搜索要看全部结果」的请求通道：切到搜索 tab 并回到顶部。
+  ///
+  /// 为什么需要：搜索结果与「热榜 / 歌单」是同一页的三个 tab，顶栏只切目的地
+  /// 时页面会停在用户上次停留的 tab（可能看不到刚搜的结果）。
+  final ShellReselectSignal? showSearchRequest;
 
   @override
   State<Library> createState() => _LibraryState();
@@ -56,6 +62,7 @@ class _LibraryState extends State<Library> {
   void initState() {
     super.initState();
     widget.reselect?.addListener(_handleReselect);
+    widget.showSearchRequest?.addListener(_handleShowSearchRequest);
   }
 
   @override
@@ -65,11 +72,24 @@ class _LibraryState extends State<Library> {
       oldWidget.reselect?.removeListener(_handleReselect);
       widget.reselect?.addListener(_handleReselect);
     }
+    if (oldWidget.showSearchRequest != widget.showSearchRequest) {
+      oldWidget.showSearchRequest?.removeListener(_handleShowSearchRequest);
+      widget.showSearchRequest?.addListener(_handleShowSearchRequest);
+    }
+  }
+
+  /// 顶栏搜索「查看全部结果」：切到搜索 tab（用户意图明确），并回到列表顶部。
+  void _handleShowSearchRequest() {
+    if (_tab != _LibraryTab.search) {
+      setState(() => _tab = _LibraryTab.search);
+    }
+    animateScrollToTop(_searchResultsController);
   }
 
   @override
   void dispose() {
     widget.reselect?.removeListener(_handleReselect);
+    widget.showSearchRequest?.removeListener(_handleShowSearchRequest);
     _searchResultsController.dispose();
     _leaderboardsController.dispose();
     _playlistsController.dispose();
@@ -158,73 +178,88 @@ class _LibraryState extends State<Library> {
     // 布局期写入（不触发重建）：重复点击回顶要滚「真正在渲染」的那个列表。
     _renderedTab = visibleTabs[selectedIndex];
 
-    // 桌面宽屏把渠道切换收进左侧竖栏（下拉框不再渲染，避免两套入口）；
-    // 移动 / 窄窗口保持顶部下拉框。口径 = 桌面平台 + 窗口宽 ≥ 900
-    // （`context.isDesktop` 即 browse 桌面断点），与搜索结果宽屏表格列同源。
-    final showChannelRail = isDesktopPlatform() && context.isDesktop;
-
-    final content = Column(
-      children: [
-        Padding(
-          padding: const EdgeInsets.fromLTRB(16, 8, 16, 4),
-          child: Row(
-            children: [
-              if (!showChannelRail)
-                LibraryChannelSelector(
-                  channels: sources.channels,
-                  selectedKey: discover.channelKey,
-                  onSelected: (key) => _selectChannel(key, enabledChannels),
-                ),
-              if (visibleTabs.length >= 2) ...[
-                if (!showChannelRail) const SizedBox(width: 12),
-                Expanded(
-                  child: M3ETabs(
-                    tabs: [for (final tab in visibleTabs) _tabSpec(l10n, tab)],
-                    selectedIndex: selectedIndex,
-                    onTabSelected: (index) =>
-                        setState(() => _tab = visibleTabs[index]),
-                  ),
-                ),
-              ] else
-                const Spacer(),
-            ],
-          ),
-        ),
-        Expanded(
-          child: visibleTabs.length >= 2
-              ? M3ETabsView(
-                  selectedIndex: selectedIndex,
-                  onTabSelected: (index) =>
-                      setState(() => _tab = visibleTabs[index]),
-                  children: [
-                    for (final tab in visibleTabs)
-                      KeyedSubtree(
-                        key: ValueKey(tab),
-                        child: _tabContent(tab),
-                      ),
-                  ],
-                )
-              : _tabContent(visibleTabs.first),
-        ),
-      ],
-    );
-
+    // 渠道入口的版式：桌面宽屏收进左侧 200dp 竖栏（顶部下拉框不再渲染，
+    // 避免两套入口）；其余情况用顶部下拉框；渠道只有 1 个时两者都不显示
+    // （改造前下拉框在单渠道下同样自隐）。
+    //
+    // 判定用**可用内容宽度**（`LayoutBuilder` 的 maxWidth）而不是窗口宽：
+    // 桌面骨架的侧栏（240）与队列面板（360）会吃掉窗口宽度，按窗口宽判定会在
+    // 内容区只剩 600 时仍挂竖栏（与搜索结果表格列同一口径）。两种入口共用
+    // 同一个 `showChannelRail` 判定，不会出现「竖栏与下拉框都不见」。
     return ResponsivePageContainer(
       pageType: ResponsivePageType.browse,
       alignment: Alignment.topCenter,
-      child: showChannelRail
-          ? Row(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                LibraryChannelRail(
-                  channels: sources.channels,
-                  selectedKey: discover.channelKey,
-                  onSelected: (key) => _selectChannel(key, enabledChannels),
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final multiChannel = enabledChannels.length >= 2;
+          final showChannelRail = multiChannel &&
+              isDesktopPlatform() &&
+              constraints.maxWidth >= Breakpoints.desktop;
+
+          final content = Column(
+            children: [
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 8, 16, 4),
+                child: Row(
+                  children: [
+                    if (multiChannel && !showChannelRail)
+                      LibraryChannelSelector(
+                        channels: sources.channels,
+                        selectedKey: discover.channelKey,
+                        onSelected: (key) =>
+                            _selectChannel(key, enabledChannels),
+                      ),
+                    if (visibleTabs.length >= 2) ...[
+                      if (multiChannel && !showChannelRail)
+                        const SizedBox(width: 12),
+                      Expanded(
+                        child: M3ETabs(
+                          tabs: [
+                            for (final tab in visibleTabs) _tabSpec(l10n, tab),
+                          ],
+                          selectedIndex: selectedIndex,
+                          onTabSelected: (index) =>
+                              setState(() => _tab = visibleTabs[index]),
+                        ),
+                      ),
+                    ] else
+                      const Spacer(),
+                  ],
                 ),
-                Expanded(child: content),
-              ],
-            )
-          : content,
+              ),
+              Expanded(
+                child: visibleTabs.length >= 2
+                    ? M3ETabsView(
+                        selectedIndex: selectedIndex,
+                        onTabSelected: (index) =>
+                            setState(() => _tab = visibleTabs[index]),
+                        children: [
+                          for (final tab in visibleTabs)
+                            KeyedSubtree(
+                              key: ValueKey(tab),
+                              child: _tabContent(tab),
+                            ),
+                        ],
+                      )
+                    : _tabContent(visibleTabs.first),
+              ),
+            ],
+          );
+
+          if (!showChannelRail) return content;
+          return Row(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              LibraryChannelRail(
+                channels: sources.channels,
+                selectedKey: discover.channelKey,
+                onSelected: (key) => _selectChannel(key, enabledChannels),
+              ),
+              Expanded(child: content),
+            ],
+          );
+        },
+      ),
     );
   }
 

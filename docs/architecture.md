@@ -553,15 +553,28 @@
 - 壳：`M3EMaterialApp(data: M3EThemeData.fromMaterial(themedData), theme: themedData, ...)`；
   `ThemeProvider` 是唯一主题源（`autoTheming/dynamicColoring` 关闭）。
 - 桌面骨架（`lib/app/desktop/**`，仅 linux/windows/macOS；移动骨架逐像素不变）：
-  顶栏只留拖动区 + 页面标题 + 设置 + 窗口按钮（无播放控制、无进度线）；左侧
-  `M3ENavigationRail` 96⇄240 可展开（窗口宽 <1000 强制折叠、不改记忆值）；底部常驻
-  播放条 80dp（左：封面/歌名/收藏 · 中：上一首/播放/下一首 + 可拖波浪进度 + 时间 ·
-  右：播放模式/音量/队列）；队列右面板 260–480 可拖（<1200 不渲染）。侧栏展开、队列
-  开关与宽度是设备本地偏好（`lib/app/desktop/shell_layout_prefs.dart`）。播放页桌面
-  版式 = 左 420 固定 + 右「歌词 / 歌曲信息」分页（`NowPlaying(desktopLayout: true)`，
-  队列由右面板承载、无圆点手势）。启动首页由 `NavProvider.effectiveHomeDestination`
-  决定（设置 › 通用 › 启动时打开，默认播放页；存储首页被隐藏时按导航顺序兜底且**不改写
-  存储**，避免同步回环）。应用内音量（`PlaybackProvider.volume/muted`，设备本地持久化）
+  顶栏 = 拖动区 + 页面标题 + **全局搜索**（`M3ESearchAnchor.bar` docked 结果面板，
+  与资料库共用同一 `SearchProvider`；窗口宽 <900 退化为图标，落资料库搜索页）+
+  设置 + 窗口按钮（无播放控制、无进度线；四键无 tooltip，只留 `semanticLabel`）；
+  左侧 `M3ENavigationRail` 96⇄240 可展开（窗口宽 <1000 强制折叠、不改记忆值）；底部常驻
+  播放条 80dp（左：封面/歌名/收藏 · 中：上一首/播放/暂停/下一首 + 可拖波浪进度 + 时间 ·
+  右：播放模式/音量（图标 + 弹出滑杆）/队列）；队列右面板 260–480 可拖（<1200 不渲染，
+  此时底栏队列按钮置灰）。侧栏展开、队列开关与宽度是设备本地偏好
+  （`lib/app/desktop/shell_layout_prefs.dart`）。播放页桌面版式 = 左 420 固定
+  （封面/标题/专辑/进度/传输控制）+ 右「歌词 / 歌曲信息」分页
+  （`NowPlaying(desktopLayout: true)`，队列由右面板承载、无圆点手势）。
+  桌面专属交互：全局快捷键（`lib/services/shortcuts.dart` 纯映射 +
+  `lib/app/desktop/desktop_shortcuts.dart` 用 `HardwareKeyboard` 处理器挂载——**不要**
+  换回顶层 `Focus.onKeyEvent`：焦点落到壳层 Focus 的祖先（route 作用域）后按键会整体
+  失效；输入框聚焦时全部让位）、曲目行右键 = 现有 ⋮ 菜单同一动作域、行尾操作
+  `HoverReveal` 桌面 hover/focus 才显（触摸端恒显）、可点元素手型光标（M3E 组件自带）。
+  内容版式：资料库渠道左栏（桌面 + 内容宽 ≥ 900 且渠道 ≥ 2，判定用 `LayoutBuilder`
+  内容宽而非窗口宽）、搜索结果宽屏表格列（`TrackRowColumns` / `TrackTableHeader`，
+  行高仍 72dp）、收藏页 master-detail 合集栏、设置弹层宽屏 880 + 首屏两列
+  （`showSettingsSheet` 显式 `maxWidth`，公共 modal 档保持 560）、二级页侧滑桌面档 720。
+  启动首页由 `NavProvider.effectiveHomeDestination` 决定（设置 › 通用 › 启动时打开，
+  默认播放页；存储首页被隐藏时按导航顺序兜底且**不改写存储**，避免同步回环）。
+  应用内音量（`PlaybackProvider.volume/muted`，设备本地持久化、落盘防抖 400ms）
   经 `PlaybackFacade.setVolume` 落到 just_audio（桌面 media_kit 同一播放器）。
 - 取色模型（唯一优先级，见 ADR-0001）：**基础配色**（壁纸 / 自定义，单选）+
   **封面覆盖**（当前曲目已有封面取色结果时用封面 seed 覆盖基础配色，包括

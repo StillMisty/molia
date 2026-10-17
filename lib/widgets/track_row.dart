@@ -300,7 +300,7 @@ class TrackRow extends StatelessWidget {
 /// [child]，与未包装逐像素一致。桌面平台默认透明并忽略指针，指针进入 /
 /// 键盘焦点落入时淡入（150ms `M3EMotion.short3` + emphasized 曲线——
 /// 透明度是 effects 档，走时长 + 曲线，不参与 spatial 弹簧；系统减弱动效
-/// 时跳变）。[alwaysVisibleWhen] 供调用方在选中 / 多选态下常显。
+/// 时跳变）。
 ///
 /// 悬停判定以**行**为单位：放在 [TrackRow] 里时读行广播的整行 hover /
 /// focus 状态（`_RowRevealScope`），⋮ 随整行悬停显现，不要求指针先精确
@@ -309,14 +309,10 @@ class HoverReveal extends StatefulWidget {
   const HoverReveal({
     super.key,
     required this.child,
-    this.alwaysVisibleWhen = false,
   });
 
   /// 被显现的内容（行内操作按钮等）；显隐不改变布局占位。
   final Widget child;
-
-  /// 常显开关（桌面下也始终显示）：选中 / 多选态由调用方决定。
-  final bool alwaysVisibleWhen;
 
   @override
   State<HoverReveal> createState() => _HoverRevealState();
@@ -339,10 +335,7 @@ class _HoverRevealState extends State<HoverReveal> {
   @override
   Widget build(BuildContext context) {
     if (!isDesktopPlatform()) return widget.child;
-    final bool visible = widget.alwaysVisibleWhen ||
-        _RowReveal.of(context) ||
-        _hovered ||
-        _focused;
+    final bool visible = _RowReveal.of(context) || _hovered || _focused;
     final bool reduceMotion =
         MediaQuery.maybeOf(context)?.disableAnimations ?? false;
     return MouseRegion(

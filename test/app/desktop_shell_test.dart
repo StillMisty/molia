@@ -476,4 +476,21 @@ void main() {
     expect(harness.backend.calls, isNot(contains('play')));
     expect(harness.backend.calls, isNot(contains('pause')));
   });
+
+  testWidgets('全局快捷键：焦点不在壳内（失焦到 route 作用域）仍生效', (tester) async {
+    // 回归：早期用顶层 Focus.onKeyEvent 时，焦点一旦落到壳层 Focus 的祖先
+    // （搜索回车后 unfocus / 点列表空白），Space 等按键就整体失效；现在走
+    // HardwareKeyboard 处理器，与焦点位置无关。
+    final harness = await pumpShell(tester, desktopShell: true);
+    FocusManager.instance.primaryFocus?.unfocus();
+    await tester.pump();
+
+    await tester.sendKeyEvent(LogicalKeyboardKey.space);
+    await tester.pump();
+    expect(
+      harness.backend.calls.where((call) => call == 'play' || call == 'pause'),
+      isNotEmpty,
+      reason: '失焦状态下 Space 仍应切播放态',
+    );
+  });
 }

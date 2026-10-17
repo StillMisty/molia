@@ -23,11 +23,16 @@ const double _volumeStep = 0.05;
 
 /// 全局快捷键挂载点：包住桌面骨架整棵树，在顶层拦截按键。
 ///
-/// 挂在壳层顶层而非各控件：事件从当前焦点沿焦点树冒泡，任何获得焦点的
-/// 壳内控件（按钮 / 列表 / 进度条）都是本节点的后代，未被子控件消费的按键
-/// 都会到达这里；更近的控件（聚焦的滑杆方向键、M3E 搜索锚点的 Space）先于
-/// 本节点处理，天然不冲突。
-class DesktopShortcuts extends StatelessWidget {
+/// **为什么用 [HardwareKeyboard] 处理器而不是顶层 `Focus.onKeyEvent`**：
+/// 焦点事件只沿「当前焦点 → 祖先链」分发；一旦焦点落到壳层 Focus 的**祖先**
+/// （route 的 FocusScope：列表点空白处 / 搜索回车后 `unfocus()` / 收藏页退出
+/// 搜索），壳层 Focus 就再也收不到按键，Space、←→、Ctrl+F 会整体失效。
+/// `HardwareKeyboard` 处理器在焦点分发之前统一收取按键，与焦点位置无关；
+/// 代价是「更近的控件优先」不再自动成立，因此这里显式让位：
+/// - 文本输入框聚焦时全部放行（Space / 方向键 / Esc 归文本编辑与输入法）；
+/// - 处理器返回 false 时不消费事件，继续走正常焦点分发（聚焦的按钮 / 滑杆
+///   仍能先响应自己的键）。
+class DesktopShortcuts extends StatefulWidget {
   const DesktopShortcuts({
     super.key,
     required this.onFocusSearch,
@@ -48,23 +53,29 @@ class DesktopShortcuts extends StatelessWidget {
   final Widget child;
 
   @override
-  Widget build(BuildContext context) {
-    return Focus(
-      // 壳层挂载即持有焦点：启动后（无其它焦点时）快捷键直接生效；
-      // 控件取得焦点后事件仍沿焦点树冒泡到本节点。
-      autofocus: true,
-      onKeyEvent: (node, event) => _handleKeyEvent(context, event),
-      child: child,
-    );
+  State<DesktopShortcuts> createState() => _DesktopShortcutsState();
+}
+
+class _DesktopShortcutsState extends State<DesktopShortcuts> {
+  @override
+  void initState() {
+    super.initState();
+    HardwareKeyboard.instance.addHandler(_handleKeyEvent);
   }
 
-  KeyEventResult _handleKeyEvent(BuildContext context, KeyEvent event) {
+  @override
+  void dispose() {
+    HardwareKeyboard.instance.removeHandler(_handleKeyEvent);
+    super.dispose();
+  }
+
+  bool _handleKeyEvent(KeyEvent event) {
     // 只认首次按下：KeyRepeatEvent 会让开关类命令（播放 / 静音 / 切页）连发，
     // 长按一个键变成反复开关。
-    if (event is! KeyDownEvent) return KeyEventResult.ignored;
+    if (event is! KeyDownEvent) return false;
     // 输入框聚焦时不拦截任何键（硬约定）：Space / ←→ / Esc 都要留给文本编辑
-    // 与输入法；事件虽会从输入框冒泡到这里，本节点必须让位。
-    if (_isTextInputFocused()) return KeyEventResult.ignored;
+    // 与输入法。
+    if (_isTextInputFocused()) return false;
     final keyboard = HardwareKeyboard.instance;
     final command = shortcutFor(
       event.logicalKey,
@@ -73,23 +84,22 @@ class DesktopShortcuts extends StatelessWidget {
       alt: keyboard.isAltPressed,
       meta: keyboard.isMetaPressed,
     );
-    if (command == null) return KeyEventResult.ignored;
-    _execute(context, command);
-    return KeyEventResult.handled;
+    if (command == null) return false;
+    _execute(command);
+    return true;
   }
 
   /// 当前焦点是否落在文本输入框内（搜索框 / 设置页输入框 / 重命名弹层等）。
   ///
-  /// [EditableText] 用内部 Focus 持有焦点，且不消费大多数按键（Space 是
-  /// 文本输入、方向键走文本编辑动作），事件会继续冒泡到本节点；从焦点
-  /// 上下文向上找 EditableText 祖先即可覆盖输入框内部所有子焦点节点。
+  /// [EditableText] 用内部 Focus 持有焦点；从焦点上下文向上找 EditableText
+  /// 祖先即可覆盖输入框内部所有子焦点节点。
   bool _isTextInputFocused() {
     final context = FocusManager.instance.primaryFocus?.context;
     if (context == null) return false;
     return context.findAncestorWidgetOfExactType<EditableText>() != null;
   }
 
-  void _execute(BuildContext context, ShortcutCommand command) {
+  void _execute(ShortcutCommand command) {
     final playback = context.read<PlaybackProvider>();
     switch (command) {
       case ShortcutCommand.togglePlayPause:
@@ -109,15 +119,15 @@ class DesktopShortcuts extends StatelessWidget {
       case ShortcutCommand.toggleMute:
         unawaited(playback.toggleMute());
       case ShortcutCommand.focusSearch:
-        onFocusSearch();
+        widget.onFocusSearch();
       case ShortcutCommand.selectDestination1:
-        onSelectDestinationIndex(0);
+        widget.onSelectDestinationIndex(0);
       case ShortcutCommand.selectDestination2:
-        onSelectDestinationIndex(1);
+        widget.onSelectDestinationIndex(1);
       case ShortcutCommand.selectDestination3:
-        onSelectDestinationIndex(2);
+        widget.onSelectDestinationIndex(2);
       case ShortcutCommand.closeQueuePanel:
-        onCloseQueuePanel();
+        widget.onCloseQueuePanel();
     }
   }
 
@@ -134,4 +144,7 @@ class DesktopShortcuts extends StatelessWidget {
     if (durationMs > 0 && targetMs > durationMs) targetMs = durationMs;
     await playback.seekToPosition(targetMs);
   }
+
+  @override
+  Widget build(BuildContext context) => widget.child;
 }

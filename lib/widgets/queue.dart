@@ -9,9 +9,9 @@ import '../domain/models/track.dart';
 import '../l10n/app_localizations.dart';
 import '../providers/library_provider.dart';
 import '../providers/playback_provider.dart';
+import '../utils/responsive.dart';
 import 'add_to_library.dart';
 import 'track_actions_menu.dart';
-import '../utils/responsive.dart';
 import 'track_row.dart';
 
 /// 封面地址：缺失 / 空串返回 null（行内不占位）。
