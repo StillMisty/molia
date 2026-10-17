@@ -619,17 +619,23 @@ class _ShellPageLayer extends StatelessWidget {
         );
         // 可见性门控：隐藏页面的组件放弃 provider 订阅（见 ShellPageVisibility），
         // TickerMode 只静音动画，挡不住 ChangeNotifier 触发的整页重建。
+        //
+        // 既非「当前页」也非「上一页」（切换过渡的另一端）时，页面整体
+        // Offstage：省掉整页 layout（Opacity(0) 只省 paint）。
         return ShellPageVisibility(
           visible: selected,
-          child: IgnorePointer(
-            ignoring: !selected,
-            child: TickerMode(
-              enabled: selected,
-              child: Opacity(
-                opacity: presentation.opacity,
-                child: Transform.scale(
-                  scale: presentation.scale,
-                  child: child,
+          child: Offstage(
+            offstage: !selected && !outgoing,
+            child: IgnorePointer(
+              ignoring: !selected,
+              child: TickerMode(
+                enabled: selected,
+                child: Opacity(
+                  opacity: presentation.opacity,
+                  child: Transform.scale(
+                    scale: presentation.scale,
+                    child: child,
+                  ),
                 ),
               ),
             ),
