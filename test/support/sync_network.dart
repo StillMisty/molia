@@ -24,6 +24,10 @@ import 'sync_test_support.dart';
 /// - 游标在窗口内（`since >= baseSeq`）→ 返回该游标之后的增量窗口；
 /// - 游标落后于窗口起点（或引擎显式要求全量）→ 返回全量快照（bootstrap）。
 ///
+/// 传输标识与能力位可假替（[addDevice] 的 `kind` / `servesLiveSnapshot`）：
+/// `kind = webdav` + `servesLiveSnapshot = false` 模拟「快照是异步读取的远端
+/// 文件」的传输，用来挑战日志裁剪的覆盖下限。
+///
 /// 加密 / 解密次数与传输字节数在 [SyncNetwork] 上统计：验收断言
 /// 「解密次数与字节数恒定，不随库大小变化」用它。
 class SyncNetwork {
@@ -68,6 +72,8 @@ class SyncNetwork {
     SyncJournalLimits? deviceLimits,
     List<SettingsKey<Object?>> keys = const [kThemeMode],
     int Function()? clock,
+    String kind = SyncTransportKind.lan,
+    bool servesLiveSnapshot = true,
   }) async {
     final db = openMemoryDatabase();
     final device = SyncDevice._(
@@ -77,6 +83,8 @@ class SyncNetwork {
       limits: deviceLimits ?? limits,
       keys: keys,
       clock: clock,
+      kind: kind,
+      servesLiveSnapshot: servesLiveSnapshot,
     );
     devices[id] = device;
     await device.init();
@@ -100,9 +108,13 @@ class SyncDevice {
     required this.db,
     required SyncJournalLimits limits,
     required List<SettingsKey<Object?>> keys,
+    required String kind,
+    required bool servesLiveSnapshot,
     int Function()? clock,
   })  : _limits = limits,
         _keys = keys,
+        _kind = kind,
+        _servesLiveSnapshot = servesLiveSnapshot,
         _clock = clock;
 
   final SyncNetwork network;
@@ -110,6 +122,8 @@ class SyncDevice {
   final MoliaDatabase db;
   final SyncJournalLimits _limits;
   final List<SettingsKey<Object?>> _keys;
+  final String _kind;
+  final bool _servesLiveSnapshot;
   final int Function()? _clock;
 
   late final SharedPreferences prefs;
@@ -158,11 +172,17 @@ class SyncDevice {
       journal: journal,
     );
     historyAdapter = HistorySyncAdapter(repository: library);
-    transport = NetworkTransport(this);
+    transport = NetworkTransport(
+      this,
+      kind: _kind,
+      servesLiveSnapshot: _servesLiveSnapshot,
+    );
+    // 传输默认开关只有局域网：其它标识的假传输要显式打开（与真实配置一致）。
+    await state.setTransportEnabled(transport.kind, true);
     engine = SyncEngine(
       state: state,
       adapters: [settingsAdapter, historyAdapter],
-      transports: {SyncTransportKind.lan: transport},
+      transports: {transport.kind: transport},
       stamps: state.stampIssuer,
       journal: journal,
       clock: () => DateTime.fromMillisecondsSinceEpoch(state.nowMs()),
@@ -199,22 +219,29 @@ class SyncDevice {
 
 /// 测试用传输：pull 按游标取各对端载荷，push 投递到对端入站流（真实加解密）。
 class NetworkTransport implements SyncTransport {
-  NetworkTransport(this.device);
+  NetworkTransport(
+    this.device, {
+    this.kind = SyncTransportKind.lan,
+    this.servesLiveSnapshot = true,
+  });
 
   final SyncDevice device;
+
+  /// 传输标识与能力位都可假替：`kind` 换传输（如 WebDAV），
+  /// `servesLiveSnapshot` = false 表示「快照是异步读取的远端文件」。
+  @override
+  final String kind;
+
   final StreamController<SyncEnvelope> _incoming =
       StreamController<SyncEnvelope>.broadcast();
   bool _running = false;
 
   @override
-  String get kind => SyncTransportKind.lan;
-
-  @override
   bool get isRunning => _running;
 
-  /// 测试网络模拟局域网直连（按需实时快照）。
+  /// 测试网络默认模拟局域网直连（按需实时快照）。
   @override
-  bool get servesLiveSnapshot => true;
+  bool servesLiveSnapshot;
 
   @override
   String? get unavailableReason => null;

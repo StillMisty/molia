@@ -4,6 +4,7 @@ import 'package:molia/data/sync/sync_journal.dart';
 import 'package:molia/data/molia_database.dart';
 import 'package:molia/domain/models/device_sync.dart';
 import 'package:molia/domain/models/library.dart';
+import 'package:molia/domain/ports/sync_transport.dart';
 
 import 'support/sync_network.dart';
 
@@ -362,6 +363,51 @@ void main() {
 
     expect(await a.journal.baseSeq(), greaterThan(0));
     expect(await a.journal.snapshotSeq(), await a.journal.headSeq());
+  });
+
+  test('不支持实时快照的传输：日志裁剪钉在已发布覆盖上（bootstrap 不丢）', () async {
+    // A 的传输按 WebDAV 语义（kind = webdav、servesLiveSnapshot = false）：
+    // 全量快照是异步读取的远端文件，日志窗口不能越过已发布覆盖——否则
+    // 游标落后 / 新加入的对端取到的快照不含窗口起点。
+    final a = await network.addDevice(
+      'devA',
+      kind: SyncTransportKind.webdav,
+      servesLiveSnapshot: false,
+      deviceLimits: const SyncJournalLimits(maxEntries: 2),
+    );
+    final b = await network.addDevice('devB');
+
+    // 首次接触：A 发布首份全量快照（首次构建即头部），B 按它引导。
+    await a.engine.syncNow();
+    await b.engine.syncNow();
+    await a.engine.syncNow();
+    final published = a.state.snapshotPushSeq(SyncTransportKind.webdav);
+    expect(published, await a.journal.snapshotSeq());
+
+    // 一次本地变更，B 拉到并回传 ack：A 的窗口里对端 ack 已到头部。
+    await a.setSetting('theme_mode', 'dark');
+    await a.engine.syncNow();
+    await b.engine.syncNow();
+    await a.engine.syncNow();
+    final head = await a.journal.headSeq();
+    expect(a.state.peers.single.ackedSeq, head);
+    expect(head, greaterThan(published));
+
+    // 对端 ack 到头部但快照覆盖没推进：裁剪停在已发布覆盖（对端按需给实时
+    // 快照的传输才允许裁到 ack）。
+    expect(await a.journal.baseSeq(), lessThanOrEqualTo(published));
+    expect(await a.journal.window(), isNotEmpty);
+
+    // 硬上限把快照覆盖推到头部 → 引擎重发快照文件 → 覆盖推进后裁剪跟上。
+    await a.setSetting('theme_mode', 'light');
+    await a.engine.syncNow();
+    await a.setSetting('theme_mode', 'system');
+    await a.engine.syncNow();
+
+    final republished = a.state.snapshotPushSeq(SyncTransportKind.webdav);
+    expect(republished, greaterThan(published));
+    expect(republished, await a.journal.snapshotSeq());
+    expect(await a.journal.baseSeq(), lessThanOrEqualTo(republished));
   });
 
   test('名册：超过失联阈值的对端标记「已失联」（只提示，不自动清理）', () {
