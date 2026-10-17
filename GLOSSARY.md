@@ -31,7 +31,7 @@
   构造覆盖快照（唯一构造点）；历史兼容 map 形状已删除。
 - **Played order（播放顺序）** — `lib/playback/playback_order.dart`：实际播放过的队列下标栈
   （最近在后、上限 100、`popPrevious` 供上一首消费）。驱动 `PlaybackSnapshot.previous`
-  语义（实际播放顺序最近一首 → 队列前一位）；与队列面板的 `upNext`（队列顺序）是两回事。
+  语义（实际播放顺序最近一首 → 队列前一位）；与播放页队列视图的 `upNext`（队列顺序）是两回事。
 - **Resolved next（下一首解析）** — `PlaybackSnapshot.next`：后端按当前模式解析的下一首
   （shuffle 在单曲内稳定，切歌/切模式重抽）；peek（展示）与 commit（执行）两个语义在
   服务内显式命名（`_peekNextIndex` / `_commitNextIndex`），轮末重洗只发生在 commit。
@@ -77,6 +77,10 @@
   （三槽位渲染、横滑手势、会话的效果宿主）的唯一实现；播放器只提供布局尺寸、
   顶栏共享飞行锚点与主题联动。会话状态机在 `player_cover_session.dart`，方向判定
   纯函数在 `player_cover_swap.dart`，卡片外观与飞行在 `cover_appearance.dart`。
+- **Cover deck metrics（封面堆叠尺寸预算）** — `lib/widgets/cover_deck_metrics.dart`：
+  可用宽高 → 封面边长与堆叠尺寸的纯函数（唯一口径，两轴因子具名），硬不变量
+  `stackWidth ≤ availableWidth` 且 `stackHeight ≤ availableHeight`；三套版式都走它，
+  不再各自手写「可用宽 − 96」与乘因子。
 - **Cover appearance（封面外观）** — `lib/widgets/cover_appearance.dart::CoverAppearance`：
   圆角 / 描边 / 阴影 / 回退图标的唯一实现，三个端点是命名值（`bar` / `mini` /
   `page`）；`CoverCard` 按外观渲染卡片（三端真身与飞行副本共用同一渲染），图片
@@ -130,15 +134,19 @@
 
 - **Haptics（触感模块）** — `lib/services/haptics.dart`：全应用触感唯一入口（lightImpact / mediumImpact / selectionClick），带设备本地开关（默认开；关闭后不触碰平台通道）。所有调用点经它；M3E 包内自带的触感（swipe action / 排序等）不在此覆盖范围。
 
-- **Desktop shell（桌面骨架）** — `lib/app/desktop/**`：仅 linux/windows/macOS 生效的壳层版式（顶栏瘦身 + 可展开侧栏 + 常驻底栏播放条 + 队列右面板），由 `lib/app/app_shell.dart` 按平台分流（`MyApp(desktopShell:)` 可强制，测试用）；移动骨架与共享逻辑（页面栈 / 共享元素飞行 / 重复点击通道）仍在 `app_shell.dart`，两套骨架同源。
+- **Desktop shell（桌面骨架）** — `lib/app/desktop/**`：仅 linux/windows/macOS 生效的壳层版式（顶栏工具条 + 恒折叠侧栏 + 常驻底栏播放条，播放页里整条让位），由 `lib/app/app_shell.dart` 按平台分流（`MyApp(desktopShell:)` 可强制，测试用）；移动骨架与共享逻辑（页面栈 / 共享元素飞行 / 重复点击通道 / `NowPlayingController`）仍在 `app_shell.dart`，两套骨架同源。
 
-- **Desktop layout（桌面布局解析）** — `lib/widgets/desktop_layout.dart::DesktopLayout`：「是不是桌面宽布局」的唯一解析处（壳层在 `build` 里解析一次并向下提供，页面 / 骨架只消费；独立挂载页面 / 弹层路由按当前 context 回退解析，与生产同一公式）。窗口宽语义是字段：`masterDetail`（收藏合集栏与设置首屏两列共用的页面级增强）、`searchCompact`（顶栏搜索形态）、`railForceCollapsed` / `queuePanelAvailable`（桌面骨架分级折叠）；内容宽语义是 `tableColumnsAt` / `channelRailAt`（内容区宽度只有渲染期才知道，由消费方量出传入，但阈值与平台判据只此一处）。900 / 1000 / 1200 等阈值与宽度来源的选择集中在这里，页面 / 骨架只消费。
+- **Desktop layout（桌面布局解析）** — `lib/widgets/desktop_layout.dart::DesktopLayout`：「是不是桌面宽布局」的唯一解析处（壳层在 `build` 里解析一次并向下提供，页面 / 骨架只消费；独立挂载页面 / 弹层路由按当前 context 回退解析，与生产同一公式）。全部判据都以窗口宽为来源：`masterDetail`（设置首屏两列的页面级增强）、`searchCompact`（顶栏搜索形态）、`contentWidth`（窗口宽 − 实际栏宽；侧栏恒折叠 ⇒ 它就是内容区可用宽）、`tableColumns` / `tableColumnsFor`（内容宽 ≥ 720 / 历史档 812）。900 / 720 / 812 等阈值与宽度来源的选择集中在这里，页面 / 骨架只消费。
 
-- **Shell chrome（壳层 chrome spec）** — `lib/app/shell_chrome.dart::ShellChrome`：两套骨架（移动 / 桌面）共用的导航与顶栏 spec（目的地 + 标签 + 选择 + 顶栏槽位）。目的地 → 图标 / 标签映射（`railDestinations` / `barDestinations`）、索引 → 目的地回调（`selectDestinationAt`）、顶栏构造（`appBar`：titleSpacing / 无返回键 / 拖动区包装 / 设置按钮 / 窗口控件）只此一份；骨架不合并——顶栏标题、侧栏类型与底栏形态仍由各自适配渲染。
+- **Shell chrome（壳层 chrome spec）** — `lib/app/shell_chrome.dart::ShellChrome`：两套骨架（移动 / 桌面）共用的导航与顶栏 spec（目的地 + 标签 + 选择 + 顶栏槽位）。目的地 → 图标 / 标签映射（`railDestinations` / `barDestinations`）、索引 → 目的地回调（`selectDestinationAt`）、顶栏构造（`appBar`：titleSpacing / 无返回键 / 拖动区包装 / 设置按钮 / 窗口控件）只此一份；骨架不合并——顶栏槽里的内容、侧栏类型与底栏形态仍由各自适配渲染。
 
-- **Now playing bar（底栏播放条）** — `lib/app/desktop/now_playing_bar.dart`：桌面常驻 80dp 播放条（左：封面/歌名/收藏，点击进播放页并复用封面飞行；中：传输 + 可拖波浪进度 + 时间；右：播放模式 / 音量弹层 / 队列开关）。进度拖动语义与播放页共用 **Seek preview**，宿主只负责版式。
+- **Now playing bar（底栏播放条）** — `lib/app/desktop/now_playing_bar.dart`：桌面 80dp 播放条（左：封面/歌名/收藏，点击进播放页并复用封面飞行；中：传输 + 可拖波浪进度 + 时间；右：播放模式 / 音量弹层 / 队列入口）。只在非播放页出现（播放页沉浸，整条让位）；队列入口 = 跳播放页 + 切队列 tab。进度拖动语义与播放页共用 **Seek preview**，宿主只负责版式。
 
-- **Queue panel（队列右面板）** — `lib/app/desktop/queue_panel.dart`：桌面右侧 supporting pane（260–480 可拖，默认 360；窗口宽 <1200 不渲染），内容为 `QueueDisplay(includeCurrent: true)`（顶部「正在播放」行 + 接下来队列）；开合与宽度经 `shell_layout_prefs.dart` 设备本地记忆。
+- **NowPlayingController（播放页 tab 请求通道）** — `lib/widgets/now_playing_controller.dart`：壳 → 播放页右栏的唯一请求通道（`showQueueTab` / `showLyricsTab` / `showInfoTab`，页序与默认页索引同源）。请求是动作不是状态：重复请求同一页也通知，页面自行判断是否已到位；底栏队列入口与 Esc 的「关闭队列」都经它落点，壳层不读播放页的界面状态。
+
+- **VolumeControl（音量入口组件）** — `lib/widgets/volume_control.dart`：音量图标按钮 + 弹出面板（静音开关 / 滑杆 / 百分比读数，面板夹取进宿主可绘制区）的唯一实现，底栏与播放页共用；锚点 key 由宿主给出，Esc 经 `EscapeClaims` 登记自收。
+
+- **TrackRowColumnSpec（表格列宽规范）** — `lib/widgets/track_row.dart`：宽屏表格的列宽与「有没有播放时间列」的唯一宽表（行与表头同源），`minContentWidth` 是本套列不溢出所需的最小内容宽（默认档 720 / 播放历史档 812，判定见 `DesktopLayout.tableColumnsFor`）。
 
 - **Startup page（启动首页）** — `kShellHomeDestination`（跟人走）+ `NavProvider.homeDestination` / `effectiveHomeDestination`：冷启动落在用户选定的目的地（设置 › 通用 › 启动时打开，默认播放页）。存储首页不可见时（跨设备同步推来的 hidden 列表）按导航顺序取第一个可见项兜底且**不改写存储**（避免同步回环）；本地隐藏「正在作为首页的目的地」被拒绝（锁定）。
 
@@ -564,7 +572,7 @@
 - **Library collections（合集策略模块）** — `lib/providers/library_collections.dart`：收藏 / 播放历史 / 本地歌曲 / 自建列表的哨兵（`unset` / `favoritesSentinel` / `historySentinel` / `downloadsSentinel`）、默认选择解析（`resolveSelection`，后两者仅显式选择进入）、顺序应用（`applyOrder`）与持久化（顺序 / 选择的唯一实现）；收藏页只保留 UI 状态。滚动位置见 Collection scroll bookkeeping。
 
 - **Collection selection（合集多选状态机）** — `lib/widgets/collection_selection.dart`：收藏页收藏 / 历史 / 本地歌曲共用的多选唯一实现（可见行下标选择集、Ctrl 切换、Shift 区间与锚点移动、全选三态、越界提取忽略、`clear` / `clearAnchor`）；页面只保留点播分支与动作实现，Esc 的可见性 / 焦点判定仍属页面（同源规则见 Escape claims）。
-- **Collection list（合集列表模块）** — `lib/widgets/collection_track_list.dart`：收藏页各合集共用的一份列表脚手架（Scrollbar 参数、`itemExtent = TrackRow.extent + gap`、懒构建、重排模式、空态 / 搜索空态、左滑动作形状与行外壳 `CollectionTrackRow`）；行内容由调用方 `itemBuilder` 提供，页内过滤 / 排序口径在 `lib/utils/collection_row_query.dart`（`collectionRowMatches` / `sortCollectionTracks`）。
+- **Collection list（合集列表模块）** — `lib/widgets/collection_track_list.dart`：收藏页各合集共用的一份列表脚手架（Scrollbar 参数、`itemExtent = TrackRow.extentOf(context, tableColumns: …) + gap`、懒构建、重排模式、空态 / 搜索空态、左滑动作形状与行外壳 `CollectionTrackRow`）；行内容由调用方 `itemBuilder` 提供，页内过滤 / 排序口径在 `lib/utils/collection_row_query.dart`（`collectionRowMatches` / `sortCollectionTracks`）。
 - **Collection scroll bookkeeping（合集滚动簿记）** — `lib/widgets/collection_scroll_bookkeeping.dart`：按合集键保存 / 恢复滚动位置的唯一实现（节流 ≤2 次/秒、切换合集各自只恢复一次、夹取到可滚动范围）；调度器（`CollectionScrollScheduler`）可注入，脱离 widget 树可单测。
 - **Local songs（本地歌曲合集）** — 收藏页的伪合集（`downloadsSentinel` ↔ `downloadsOrderKey`）：数据来自 `DownloadService.downloads`（下载副本 + 本地导入）与 `TrackLocalDataService.loadMany`（播放历史 × 完整音频缓存命中，批量一次列举），不落列表表；仅在下载能力可用（`DownloadService.supported`）时出现在合集弹层，排序固定按下载 / 导入时间倒序。
 - **Local import（本地导入）** — `downloads` 表 `imported` 行 = **就地引用**用户自己的音频文件：`originSourceKey = 'local'`、`originSongId` = 文件绝对路径（同路径重复导入幂等），`filePath` 指向原文件；删除记录只移行、不删文件，补发布 / 旧位置迁移都跳过。写入唯一入口 `DownloadService.importLocalFiles`（标签解析见 `lib/data/downloads/audio_tag_reader.dart`：mp3 ID3v2 / flac Vorbis Comment，其余格式按文件名兜底）。

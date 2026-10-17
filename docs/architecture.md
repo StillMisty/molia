@@ -46,8 +46,8 @@
    playback / sync / AI / 歌词显示 / 桌面 / 更新 / Provider 树 / 首帧收尾
    各 stack builder：依赖进、装好的子系统出；初始化顺序与前向引用关在 builder
    内，main() 只做顺序调用 + runApp）；应用壳（MyThemedApp / 导航栏 / 顶栏 /
-   迷你条）与全局 key 在 `lib/app/app_shell.dart`，桌面骨架（顶栏 / 侧栏 /
-   常驻底栏播放条 / 队列右面板）在 `lib/app/desktop/**`，测试可直接挂载
+   迷你条）与全局 key 在 `lib/app/app_shell.dart`，桌面骨架（顶栏工具条 /
+   恒折叠侧栏 / 常驻底栏播放条）在 `lib/app/desktop/**`，测试可直接挂载
    （`MyApp(desktopShell: true/false)` 可强制骨架，默认按平台判定）；
 5. UI 禁止 import `lib/sources/**`（Wave 7 后白名单已清空，新增违规必须修复）。
 
@@ -604,19 +604,24 @@
   两套骨架的导航 / 顶栏共享 spec 在 `lib/app/shell_chrome.dart`（目的地 → 图标 /
   标签映射、设置按钮、窗口控件、titleSpacing / 拖动区只一份；骨架各自适配渲染），
   布局阈值在 `lib/widgets/desktop_layout.dart`（壳层解析一次，页面 / 骨架只消费）。
-  顶栏 = 拖动区 + 页面标题 + **全局搜索**（`M3ESearchAnchor.bar` docked 结果面板，
-  与资料库共用同一 `SearchProvider`；`DesktopLayout.searchCompact`（窗口宽 <900）
-  退化为图标，落资料库搜索页）+
-  设置 + 窗口按钮（无播放控制、无进度线；四键无 tooltip，只留 `semanticLabel`）；
-  左侧 `M3ENavigationRail` 96⇄240 可展开（`railForceCollapsed`：窗口宽 <1000
-  强制折叠、不改记忆值）；底部常驻
-  播放条 80dp（左：封面/歌名/收藏 · 中：上一首/播放/暂停/下一首 + 可拖波浪进度 + 时间 ·
-  右：播放模式/音量（图标 + 弹出滑杆）/队列）；队列右面板 260–480 可拖
-  （`queuePanelAvailable`：<1200 不渲染，
-  此时底栏队列按钮置灰）。侧栏展开、队列开关与宽度是设备本地偏好
-  （`lib/app/desktop/shell_layout_prefs.dart`）。播放页桌面版式 = 左 420 固定
-  （封面/标题/专辑/进度/传输控制）+ 右「歌词 / 歌曲信息」分页
-  （`NowPlaying(desktopLayout: true)`，队列由右面板承载、无圆点手势）。
+  顶栏是纯工具条（无当前页标题、无播放控制、无进度线）：
+  **全局搜索**在最左，左缘对齐内容左缘（侧栏折叠宽 + 页面留白 − `titleSpacing`）——
+  `M3ESearchAnchor.bar` 收成 **320×48** 工具条（方角 12 / 1dp `outlineVariant`
+  描边 / 无阴影 / 不随聚焦变宽，右侧挂当前「聚焦搜索」绑定的键位提示）；
+  docked 结果面板与资料库共用同一 `SearchProvider`；
+  `DesktopLayout.searchCompact`（窗口宽 <900）退化为图标，落资料库搜索页；
+  搜索右侧的空白是拖动区（双击最大化，只有它包 `WindowDoubleTapMaximize`，
+  双击搜索 / 按钮不最大化）+ 设置 + 窗口按钮（四键无 tooltip，只留 `semanticLabel`）。
+  左侧 `M3ENavigationRail` **恒折叠** 96dp（`alwaysCollapse` + `alwaysHide`：
+  无展开按钮、标签只留给无障碍名，改窗口宽不改变形态）；底部播放条 80dp
+  只在非播放页出现（左：封面/歌名/收藏 · 中：上一首/播放/暂停/下一首 +
+  可拖波浪进度 + 时间 · 右：播放模式/音量（图标 + 弹出滑杆）/队列入口）：
+  播放页是沉浸主场，整条让位（瞬时，不做收起动画——进入方向的共享飞行以底栏
+  封面为起点，动画会把起点拖走）。队列不再是独立面板：底栏队列入口 =
+  跳播放页 + 切队列 tab（`NowPlayingController`），Esc 的可配置「关闭队列」
+  落点 = 把队列视图收成默认页。播放页桌面版式 = 左 **480** 固定
+  （封面/标题/专辑/进度/传输控制 + 音量）+ 右「队列 / 歌词 / 歌曲信息」三 tab
+  （icon-only、行高 48、默认歌词；`NowPlaying(desktopLayout: true)`，无圆点手势）。
   桌面专属交互：**快捷键分「软件内」与「全局」两组**（用户口径：都可关闭、可自定义）。
   绑定模型在 `lib/services/shortcut_bindings.dart`（动作 ↔ 组合、两组默认表、JSON 覆盖），
   开关与自定义持久化在 `lib/services/shortcut_settings.dart`（跟人走），设置入口
@@ -641,16 +646,16 @@
   壳层可配置命令**（用户把别的命令绑到 Esc 也一样让位）；登记方自己的按键处理器
   接 Esc（与登记同源、不依赖焦点位置；收藏页多选与音量弹层都是 `HardwareKeyboard`
   处理器）。
-  内容版式（阈值与宽度来源的选择唯一在 `DesktopLayout`）：资料库渠道左栏
-  （`channelRailAt`：桌面 + 内容宽 ≥ 900 且渠道 ≥ 2，判定用 `LayoutBuilder`
-  内容宽而非窗口宽）、宽屏表格列（`TrackRowColumns` / `TrackTableHeader`；
-  `tableColumnsAt`，使用点：
-  搜索 / 收藏 / 发现，同样按 `LayoutBuilder` 内容宽 ≥ 900 判定，行高仍 72dp；
-  发现页表头为 pinned sliver（封面头部滚走后列标题仍在），搜索 / 收藏页表头
-  固定在滚动区之上）、
-  收藏页 master-detail 合集栏与设置首屏两列（`masterDetail`：桌面 + 窗口宽 ≥ 900，
-  两页共用同一判据）、设置弹层宽屏 880 + 首屏两列
+  内容版式（阈值与宽度来源的选择唯一在 `DesktopLayout`，判据一律「窗口宽 /
+  窗口宽 − 侧栏折叠宽」，页面不再自己量宽）：宽屏表格列（`TrackRowColumns` /
+  `TrackTableHeader`；`tableColumns` / `tableColumnsFor`，阈值 = 内容宽 ≥ 720
+  （播放历史档 812），使用点：搜索 / 收藏 / 发现详情；行高两档走
+  `TrackRow.extentOf`（表格单行 56 / 列表双行 72）；发现页表头为 pinned sliver
+  （封面头部滚走后列标题仍在），搜索 / 收藏页表头固定在滚动区之上）、
+  设置首屏两列（`masterDetail`：桌面 + 窗口宽 ≥ 900）、设置弹层宽屏 880 +
+  首屏两列
   （`showSettingsSheet` 显式 `maxWidth`，公共 modal 档保持 560）、二级页侧滑桌面档 720。
+  页边距：桌面档与平板档同宽（24），内容区宽度由「窗口宽 − 侧栏折叠宽」表达。
   启动首页由 `NavProvider.effectiveHomeDestination` 决定（设置 › 通用 › 启动时打开，
   默认播放页；存储首页被隐藏时按导航顺序兜底且**不改写存储**，避免同步回环）。
   应用内音量（`PlaybackProvider.volume/muted`，设备本地持久化、落盘防抖 400ms）
@@ -750,7 +755,8 @@
   `DownloadService` 通知跨页刷新。
 - 列表行统一走 `lib/widgets/track_row.dart`（队列/收藏/历史/本地歌曲/发现/搜索结果共用）：形状按 M3E 列表规范
   （静止内 4dp、首末外侧 16dp；hover 12dp；press/选中 16dp），带 expressive spatial 弹簧
-  morph；分段列表用 `cardList.gap`（2dp）行距、`itemExtent = TrackRow.extent + gap`，
+  morph；分段列表用 `cardList.gap`（2dp）行距、
+  `itemExtent = TrackRow.extentOf(context, tableColumns: …) + gap`，
   列表一律懒构建（发现详情滚到底自动加载下一页）。不要改回 `M3EListItem`（原因见 pitfalls #20）。
   收藏页四个合集共用一份列表脚手架 `lib/widgets/collection_track_list.dart`
   （顺序列表 / 重排模式、空态与搜索空态、左滑动作形状），滚动位置簿记在

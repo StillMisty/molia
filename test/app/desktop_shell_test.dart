@@ -430,6 +430,13 @@ void main() {
     expect(selectedRailIndex(tester), navIndexOf(ShellDestination.nowPlaying));
     expect(playerTabIndex(tester), nowPlayingQueueTabIndex, reason: '落在队列 tab');
     expect(playingBar(), findsNothing, reason: '已进播放页（底栏让位）');
+
+    // 在播放页把 tab 切走，再回收藏点一次：重复请求同样生效（控制器每次都通知）。
+    await tapPlayerTab(tester, Icons.lyrics_rounded);
+    await tapRailItem(tester, railItem(Icons.favorite_border_rounded));
+    await tester.tap(find.byKey(DesktopNowPlayingBar.queueToggleKey));
+    await settleTransition(tester);
+    expect(playerTabIndex(tester), nowPlayingQueueTabIndex);
   });
 
   testWidgets('底栏队列入口：窄窗口也始终可用（不再置灰）', (tester) async {
