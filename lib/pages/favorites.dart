@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:math' as math;
 
+import 'package:flutter/services.dart';
 import 'package:material_3_expressive/material_3_expressive.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:provider/provider.dart';
@@ -97,6 +98,13 @@ class _FavoritesPageState extends State<FavoritesPage> {
   /// 多选控制器（索引以当前合集的可见列表为准）。
   final M3ESelectionController _selection = M3ESelectionController();
 
+  /// 桌面 Shift 范围选择的锚点：最近一次不带 Shift 的点击行（可见列表下标）。
+  /// 合集 / 搜索词 / 排序改变可见列表时清空——下标基准变了，旧锚点无意义。
+  int? _selectionAnchor;
+
+  /// 桌面 Esc 键处理器引用：[HardwareKeyboard] 注册 / 注销必须是同一闭包。
+  late final bool Function(KeyEvent) _keyHandler = _handleKeyEvent;
+
   int _selectedId = LibraryCollections.unset;
   CollectionTrackSort _sort = CollectionTrackSort.added;
 
@@ -163,6 +171,11 @@ class _FavoritesPageState extends State<FavoritesPage> {
   void initState() {
     super.initState();
     _selection.addListener(_onSelectionChanged);
+    // 桌面 Esc 退出多选：页面级键处理器。壳层全局快捷键只把 Esc 交给队列
+    // 面板（lib/app/desktop/desktop_shortcuts.dart），多选语义由本页补上。
+    if (isDesktopPlatform()) {
+      HardwareKeyboard.instance.addHandler(_keyHandler);
+    }
     _listController.addListener(_bookkeeping.saveFromScroll);
     _historyScrollController.addListener(_bookkeeping.saveFromScroll);
     _localSongsScrollController.addListener(_bookkeeping.saveFromScroll);
@@ -199,6 +212,9 @@ class _FavoritesPageState extends State<FavoritesPage> {
 
   @override
   void dispose() {
+    // 无条件注销（未注册时为空操作）：平台在测试里可能被覆盖，initState 与
+    // dispose 看到的平台未必一致，漏注销会把已释放的 State 留在键盘链上。
+    HardwareKeyboard.instance.removeHandler(_keyHandler);
     widget.reselect?.removeListener(_handleReselect);
     _cacheService?.revision.removeListener(_onCacheRevision);
     _selection.removeListener(_onSelectionChanged);
@@ -378,6 +394,8 @@ class _FavoritesPageState extends State<FavoritesPage> {
     _searchFocus.unfocus();
     _searchController.clear();
     if (!_searching) return;
+    // 过滤条件清空后可见列表回到全量：Shift 范围选择的锚点下标失效。
+    _selectionAnchor = null;
     setState(() {
       _searching = false;
     });
@@ -388,9 +406,133 @@ class _FavoritesPageState extends State<FavoritesPage> {
     _selection.select(index);
   }
 
+  /// 桌面 Esc：退出选择模式；未在选择模式时返回 false 放行
+  /// （关队列面板、关上层弹层等其它 Esc 作用域不受影响）。
+  bool _handleKeyEvent(KeyEvent event) {
+    if (event is! KeyDownEvent) return false;
+    if (event.logicalKey != LogicalKeyboardKey.escape) return false;
+    if (!_selecting) return false;
+    // 壳层页面常驻挂载：隐藏页不响应 Esc——按键属于用户当前看到的页面，
+    // 不该在别的页面上清掉看不见的多选（未挂壳层的单测按可见处理）。
+    if (context.getInheritedWidgetOfExactType<ShellPageVisibility>()?.visible ==
+        false) {
+      return false;
+    }
+    // 输入框聚焦时让位（仓库硬约定，与壳层全局快捷键一致）。
+    if (FocusManager.instance.primaryFocus?.context
+            ?.findAncestorWidgetOfExactType<EditableText>() !=
+        null) {
+      return false;
+    }
+    _selection.clear();
+    return true;
+  }
+
+  /// 桌面修饰键多选手势：返回 true = 已按修饰键语义处理。
+  ///
+  /// Ctrl 点击切换该行（未在选择模式时 toggle 即选中该行，等价长按进入）；
+  /// Shift 点击选中锚点与当前行的可见闭区间，锚点为空 / 越界时退化为单选
+  /// 该行。锚点只在不带 Shift 的点击时移动：连续 Shift 点击只调整区间端点，
+  /// 与文件管理器的经典语义一致。
+  bool _applyModifiedSelection(
+    int index, {
+    required int itemCount,
+    required bool ctrl,
+    required bool shift,
+  }) {
+    if (shift) {
+      var anchor = _selectionAnchor;
+      if (anchor == null || anchor >= itemCount) {
+        anchor = index;
+        _selectionAnchor = index;
+      }
+      final start = math.min(anchor, index);
+      final end = math.max(anchor, index);
+      _selection.clear();
+      for (var i = start; i <= end; i++) {
+        _selection.select(i);
+      }
+      return true;
+    }
+    _selectionAnchor = index;
+    if (ctrl) {
+      _selection.toggle(index);
+      return true;
+    }
+    return false;
+  }
+
+  /// 曲目行点击：桌面修饰键手势优先，其余保持既有语义（多选内切换 / 点播）。
+  void _onTrackRowTap(
+    _CollectionView view,
+    int index, {
+    bool ctrl = false,
+    bool shift = false,
+  }) {
+    if (_applyModifiedSelection(
+      index,
+      itemCount: view.visible.length,
+      ctrl: ctrl,
+      shift: shift,
+    )) {
+      return;
+    }
+    if (_selecting) {
+      _selection.toggle(index);
+    } else {
+      _playFrom(view.visible, index, view.displayName);
+    }
+  }
+
+  /// 历史行点击（修饰键语义同上；其余走历史点播）。
+  void _onHistoryRowTap(
+    _CollectionView view,
+    int index, {
+    bool ctrl = false,
+    bool shift = false,
+  }) {
+    if (_applyModifiedSelection(
+      index,
+      itemCount: view.visibleHistory.length,
+      ctrl: ctrl,
+      shift: shift,
+    )) {
+      return;
+    }
+    if (_selecting) {
+      _selection.toggle(index);
+    } else {
+      _playHistoryFrom(view.visibleHistory, index, view.displayName);
+    }
+  }
+
+  /// 本地歌曲行点击（修饰键语义同上；其余走本地点播）。
+  void _onLocalSongRowTap(
+    _CollectionView view,
+    int index, {
+    bool ctrl = false,
+    bool shift = false,
+  }) {
+    if (_applyModifiedSelection(
+      index,
+      itemCount: view.visibleLocalSongs.length,
+      ctrl: ctrl,
+      shift: shift,
+    )) {
+      return;
+    }
+    if (_selecting) {
+      _selection.toggle(index);
+    } else {
+      _playLocalSongsFrom(view.visibleLocalSongs, index, view.displayName);
+    }
+  }
+
   void _enterReorder() {
     HapticsService.lightImpact();
     _selection.clear();
+    // 排序会整体重排可见顺序：多选锚点失效。
+    _selectionAnchor = null;
     _searchFocus.unfocus();
     _searchController.clear();
     setState(() {
@@ -553,6 +695,8 @@ class _FavoritesPageState extends State<FavoritesPage> {
     });
     unawaited(_collections.saveSelection(id));
     _selection.clear();
+    // 切换合集后可见列表整体替换：Shift 范围选择的锚点失效。
+    _selectionAnchor = null;
   }
 
   void _onCollectionOrderChanged(List<String> keys) {
@@ -1395,7 +1539,10 @@ class _FavoritesPageState extends State<FavoritesPage> {
             if (view.hasItems && !view.isLocalSongs)
               _buildOverflowMenu(context, l10n, view),
           ],
-          onChanged: (_) => setState(() {}),
+          onChanged: (_) => setState(() {
+            // 过滤改变可见列表：多选锚点随搜索词失效。
+            _selectionAnchor = null;
+          }),
         ),
       ),
     );
@@ -1483,7 +1630,11 @@ class _FavoritesPageState extends State<FavoritesPage> {
       ),
       onSelected: (value) {
         if (value is CollectionTrackSort) {
-          setState(() => _sort = value);
+          // 排序改变可见顺序：多选锚点失效。
+          setState(() {
+            _sort = value;
+            _selectionAnchor = null;
+          });
         } else if (value == 'reorder') {
           _enterReorder();
         } else if (value == 'clearHistory') {
@@ -1725,15 +1876,11 @@ class _FavoritesPageState extends State<FavoritesPage> {
               color: Theme.of(context).colorScheme.onSurfaceVariant,
             )
           : null,
-      onTap: reorderActive
+      onTap: reorderActive ? null : () => _onTrackRowTap(view, index),
+      onTapWithModifiers: (reorderActive || !isDesktopPlatform())
           ? null
-          : () {
-              if (_selecting) {
-                _selection.toggle(index);
-              } else {
-                _playFrom(view.visible, index, view.displayName);
-              }
-            },
+          : (ctrl, shift) =>
+              _onTrackRowTap(view, index, ctrl: ctrl, shift: shift),
       onLongPress: reorderActive ? null : () => _enterSelection(index),
       swipeActions: (reorderActive || _selecting)
           ? null
@@ -1812,17 +1959,11 @@ class _FavoritesPageState extends State<FavoritesPage> {
       trailingText: durationText(entry.durationMs),
       position: calculateCardPosition(index, view.visibleHistory.length),
       selected: _selection.isSelected(index),
-      onTap: () {
-        if (_selecting) {
-          _selection.toggle(index);
-        } else {
-          _playHistoryFrom(
-            view.visibleHistory,
-            index,
-            view.displayName,
-          );
-        }
-      },
+      onTap: () => _onHistoryRowTap(view, index),
+      onTapWithModifiers: isDesktopPlatform()
+          ? (ctrl, shift) =>
+              _onHistoryRowTap(view, index, ctrl: ctrl, shift: shift)
+          : null,
       onLongPress: () => _enterSelection(index),
       swipeActions: _selecting
           ? null
@@ -1944,17 +2085,11 @@ class _FavoritesPageState extends State<FavoritesPage> {
           : null,
       position: calculateCardPosition(index, view.visibleLocalSongs.length),
       selected: _selection.isSelected(index),
-      onTap: () {
-        if (_selecting) {
-          _selection.toggle(index);
-        } else {
-          _playLocalSongsFrom(
-            view.visibleLocalSongs,
-            index,
-            view.displayName,
-          );
-        }
-      },
+      onTap: () => _onLocalSongRowTap(view, index),
+      onTapWithModifiers: isDesktopPlatform()
+          ? (ctrl, shift) =>
+              _onLocalSongRowTap(view, index, ctrl: ctrl, shift: shift)
+          : null,
       onLongPress: () => _enterSelection(index),
       swipeActions: _selecting
           ? null

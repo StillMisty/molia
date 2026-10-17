@@ -5,6 +5,7 @@ import 'dart:typed_data';
 
 import 'package:flutter/foundation.dart'
     show TargetPlatform, debugDefaultTargetPlatformOverride;
+import 'package:flutter/services.dart' show LogicalKeyboardKey;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:molia/data/catalog/catalog_service.dart';
 import 'package:molia/data/downloads/downloads_repository.dart';
@@ -580,6 +581,102 @@ void main() {
     expect(find.byIcon(Icons.expand_more_rounded), findsOneWidget);
     await selectCollection(tester, '我的收藏');
     expect(headlines(tester), ['Song B', 'Song A', 'Song C']);
+  }, variant: TargetPlatformVariant.only(TargetPlatform.linux));
+
+  // 桌面多选：Ctrl 点选切换、Shift 区间选择、Esc 退出。修饰键经真实按键
+  // 状态（HardwareKeyboard）注入，行点击时读取；移动端不注入这些回调。
+  testWidgets('桌面多选：Ctrl 点击两行 = 两行选中，不触发播放',
+      (tester) async {
+    await seedFavorites(tester);
+    await pumpFavorites(tester);
+
+    bool selectedOf(String title) => tester
+        .widget<TrackRow>(find.ancestor(
+          of: find.text(title),
+          matching: find.byType(TrackRow),
+        ))
+        .selected;
+
+    // Ctrl 按住点第一行：进入选择模式（等价长按）并选中该行。
+    await tester.sendKeyDownEvent(LogicalKeyboardKey.controlLeft);
+    await tester.tap(find.text('Song B'));
+    await tester.pumpAndSettle();
+    expect(selectedOf('Song B'), isTrue);
+    expect(selectedOf('Song A'), isFalse);
+
+    // 再 Ctrl 点第二行：追加选中（切换语义），两行都保持选中。
+    await tester.tap(find.text('Song A'));
+    await tester.pumpAndSettle();
+    await tester.sendKeyUpEvent(LogicalKeyboardKey.controlLeft);
+
+    expect(selectedOf('Song B'), isTrue);
+    expect(selectedOf('Song A'), isTrue);
+    expect(selectedOf('Song C'), isFalse);
+    expect(find.text('2'), findsOneWidget, reason: '选择栏计数 = 2');
+    expect(backend.lastRequest, isNull, reason: '修饰键点击不播放');
+  }, variant: TargetPlatformVariant.only(TargetPlatform.linux));
+
+  testWidgets('桌面多选：Shift 点击 = 锚点到当前行的区间选中', (tester) async {
+    await seedFavorites(tester);
+    // 第四首：让区间是「部分区间」而不是整表。
+    await provider.toggleFavorite(
+      sourceKey: 'wy',
+      songId: 'Song D',
+      title: 'Song D',
+      artist: 'Artist Song D',
+      raw: {'songId': 'Song D'},
+    );
+    await pumpFavorites(tester);
+
+    bool selectedOf(String title) => tester
+        .widget<TrackRow>(find.ancestor(
+          of: find.text(title),
+          matching: find.byType(TrackRow),
+        ))
+        .selected;
+
+    // 普通点击第 2 行（Song A）落锚点，同时照常点播。
+    await tester.tap(find.text('Song A'));
+    await tester.pumpAndSettle();
+    expect(backend.lastRequest!.startIndex, 1, reason: '普通点击仍是点播语义');
+
+    // Shift 点第 4 行（Song D）：选中 Song A 到 Song D 的可见区间。
+    await tester.sendKeyDownEvent(LogicalKeyboardKey.shiftLeft);
+    await tester.tap(find.text('Song D'));
+    await tester.pumpAndSettle();
+    await tester.sendKeyUpEvent(LogicalKeyboardKey.shiftLeft);
+
+    expect(selectedOf('Song B'), isFalse, reason: '区间外的行不选中');
+    expect(selectedOf('Song A'), isTrue);
+    expect(selectedOf('Song C'), isTrue);
+    expect(selectedOf('Song D'), isTrue);
+    expect(find.text('3'), findsOneWidget, reason: '选择栏计数 = 3');
+  }, variant: TargetPlatformVariant.only(TargetPlatform.linux));
+
+  testWidgets('桌面多选：Esc 退出选择模式（未在选择模式时无副作用）',
+      (tester) async {
+    await seedFavorites(tester);
+    await pumpFavorites(tester);
+
+    // 未在选择模式：Esc 不产生任何变化（放行给其它 Esc 作用域）。
+    await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+    await tester.pumpAndSettle();
+    expect(find.text('1'), findsNothing);
+    expect(find.byIcon(Icons.search_rounded), findsOneWidget);
+
+    // 长按进入选择模式 → Esc 退出。
+    await tester.longPress(find.text('Song A'));
+    await tester.pumpAndSettle();
+    expect(find.text('1'), findsOneWidget, reason: '长按选中该行');
+
+    await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+    await tester.pumpAndSettle();
+    expect(find.text('1'), findsNothing, reason: '选择栏已收起');
+    expect(
+      find.byIcon(Icons.search_rounded),
+      findsOneWidget,
+      reason: '回到常规标题行',
+    );
   }, variant: TargetPlatformVariant.only(TargetPlatform.linux));
 
   testWidgets('合集弹层：当前合集走 M3E selected 态，数量走 trailingText', (tester) async {

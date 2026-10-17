@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:flutter/gestures.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:molia/domain/models/track.dart';
 import 'package:molia/l10n/app_localizations.dart';
@@ -138,6 +139,35 @@ void main() {
     await tester.pumpAndSettle();
     expect(added, 1);
   });
+
+  testWidgets(
+    '桌面：⋮ hover 显现、右键打开同一份菜单（适配层不吞桌面增强）',
+    (tester) async {
+      await pumpTile(tester);
+
+      Finder revealOpacity() => find
+          .descendant(
+            of: find.byType(HoverReveal),
+            matching: find.byType(AnimatedOpacity),
+          )
+          .first;
+      expect(tester.widget<AnimatedOpacity>(revealOpacity()).opacity, 0);
+
+      final gesture = await tester.createGesture(kind: PointerDeviceKind.mouse);
+      await gesture.addPointer(location: Offset.zero);
+      addTearDown(gesture.removePointer);
+      await tester.pump();
+      await gesture.moveTo(tester.getCenter(find.byType(TrackRow)));
+      await tester.pumpAndSettle();
+      expect(tester.widget<AnimatedOpacity>(revealOpacity()).opacity, 1);
+
+      await tester.tap(find.byType(TrackRow), buttons: kSecondaryButton);
+      await tester.pumpAndSettle();
+      expect(find.text('收藏'), findsOneWidget);
+      expect(find.text('加入列表'), findsOneWidget);
+    },
+    variant: TargetPlatformVariant.only(TargetPlatform.linux),
+  );
 
   testWidgets('通用构造：artists 链接渲染与点击回调透传（搜索结果行契约）', (tester) async {
     var rowTaps = 0;

@@ -9,14 +9,13 @@ import '../domain/models/catalog.dart' show SearchKind;
 import '../domain/ports/source_registry.dart';
 import '../l10n/app_localizations.dart';
 import '../pages/artist_page.dart';
-import '../providers/library_provider.dart';
 import '../providers/search_provider.dart';
 import '../services/haptics.dart';
 import '../utils/duration_text.dart';
 import '../utils/responsive.dart';
-import 'add_to_library.dart';
 import 'artist_row.dart';
 import 'track_actions_menu.dart';
+import 'track_menu_tile.dart';
 import 'track_row.dart';
 import 'track_table_header.dart';
 
@@ -457,12 +456,12 @@ class _SearchResultsList extends StatelessWidget {
   }
 }
 
-/// 搜索结果行：点击播放；行尾 ⋮ 菜单收藏 / 加入列表（条目与 `TrackMenuTile`
-/// 同一规范）。
+/// 搜索结果行：点击播放；行尾 ⋮ 菜单收藏 / 加入列表（与 `TrackMenuTile` 共用
+/// [TrackRowActionsMenu]，条目 / 图标 / 语义与桌面 hover / 右键一致）。
 ///
 /// 行内容直接在 [TrackRow] 上构建（单列 / 表格两种版式共用），不走
-/// `FavoriteTrackTile` 适配层：行尾菜单要接桌面的 hover 显现与右键打开，
-/// 需要把 [TrackActionsMenuController] 传进菜单，而适配层不接这个参数。
+/// `FavoriteTrackTile` 适配层：表格列版式适配层不支持。行尾菜单用
+/// [TrackRowActionsMenu.searchItem]，收藏订阅与写入都在菜单内部。
 class _SearchResultTile extends StatefulWidget {
   const _SearchResultTile({
     super.key,
@@ -491,9 +490,6 @@ class _SearchResultTileState extends State<_SearchResultTile> {
 
   @override
   Widget build(BuildContext context) {
-    final l10n = _l10n(context);
-    // 收藏态每行一个 select 订阅（不能在列表 itemBuilder 里直接订阅）。
-    final favorite = _favoriteOf(context);
     final onTap = widget.onTap;
     final rowTap = onTap == null
         ? null
@@ -502,21 +498,14 @@ class _SearchResultTileState extends State<_SearchResultTile> {
             onTap();
           };
     if (widget.tableColumns) {
-      return _buildTableRow(context, l10n, favorite: favorite, rowTap: rowTap);
+      return _buildTableRow(rowTap: rowTap);
     }
-    return _buildSingleColumnRow(
-      context,
-      l10n,
-      favorite: favorite,
-      rowTap: rowTap,
-    );
+    return _buildSingleColumnRow(context, rowTap: rowTap);
   }
 
   /// 单列行（非宽屏 / 触摸端）：封面 + 标题 + 歌手 / 歌词片段副标题。
   Widget _buildSingleColumnRow(
-    BuildContext context,
-    AppLocalizations l10n, {
-    required bool favorite,
+    BuildContext context, {
     required VoidCallback? rowTap,
   }) {
     final item = widget.item;
@@ -541,17 +530,12 @@ class _SearchResultTileState extends State<_SearchResultTile> {
       position: calculateCardPosition(widget.index, widget.count),
       onTap: rowTap,
       onSecondaryTap: _menu.open,
-      trailing: _buildActionsMenu(context, l10n, favorite),
+      trailing: TrackRowActionsMenu.searchItem(item: item, controller: _menu),
     );
   }
 
   /// 宽屏表格行：标题 + 艺术家 / 专辑 / 时长三列（列宽与表头同源）。
-  Widget _buildTableRow(
-    BuildContext context,
-    AppLocalizations l10n, {
-    required bool favorite,
-    required VoidCallback? rowTap,
-  }) {
+  Widget _buildTableRow({required VoidCallback? rowTap}) {
     final item = widget.item;
     final artist = _artistDisplayOf(item);
     return TrackRow(
@@ -567,80 +551,7 @@ class _SearchResultTileState extends State<_SearchResultTile> {
       position: calculateCardPosition(widget.index, widget.count),
       onTap: rowTap,
       onSecondaryTap: _menu.open,
-      trailing: _buildActionsMenu(context, l10n, favorite),
-    );
-  }
-
-  /// 行尾 ⋮（单列 / 表格行共用）：收藏开关 + 加入列表。
-  ///
-  /// 桌面端套 [HoverReveal] 随整行悬停显现、行表面右键经 [_menu] 打开
-  /// 同一份菜单；触摸端 [HoverReveal] 原样显示（入口不藏）。
-  Widget _buildActionsMenu(
-    BuildContext context,
-    AppLocalizations l10n,
-    bool favorite,
-  ) {
-    return HoverReveal(
-      child: TrackActionsMenu(
-        controller: _menu,
-        tooltip: l10n.trackActionsTooltip,
-        entries: [
-          M3EMenuEntry(
-            label: favorite ? l10n.favoriteRemove : l10n.favoriteAdd,
-            leading: Icon(
-              favorite ? Icons.favorite_rounded : Icons.favorite_border_rounded,
-            ),
-            value: 'favorite',
-          ),
-          M3EMenuEntry(
-            label: l10n.addToPlaylist,
-            leading: const Icon(Icons.playlist_add_rounded),
-            value: 'add',
-          ),
-        ],
-        onSelected: (value) {
-          switch (value) {
-            case 'favorite':
-              unawaited(_toggleFavorite(context, l10n));
-            case 'add':
-              unawaited(_addToPlaylist(context));
-          }
-        },
-      ),
-    );
-  }
-
-  /// 本行收藏态（每行一个 `select` 订阅，不能在列表 itemBuilder 里直接订阅）。
-  bool _favoriteOf(BuildContext context) =>
-      context.select<LibraryProvider?, bool>(
-        (provider) => provider?.isFavoriteSearchItem(widget.item) ?? false,
-      );
-
-  /// 收藏 / 取消收藏：结果列表只需 snackbar 确认（菜单文案已表达当前状态）。
-  Future<void> _toggleFavorite(
-    BuildContext context,
-    AppLocalizations l10n,
-  ) async {
-    final library = context.read<LibraryProvider?>();
-    if (library == null) return;
-    final favorite = await library.toggleFavoriteSearchItem(widget.item);
-    if (favorite == null || !context.mounted) return;
-    M3ESnackbar.show(
-      context,
-      message: favorite ? l10n.favoriteAdd : l10n.favoriteRemove,
-    );
-  }
-
-  /// 加入列表：与收藏页 / 发现页共用同一目标选择与反馈流程。
-  Future<void> _addToPlaylist(BuildContext context) async {
-    final library = context.read<LibraryProvider?>();
-    if (library == null) return;
-    final track = library.playlistTrackFromSearchItem(widget.item);
-    if (track == null) return;
-    await addTracksToLibraryTarget(
-      context,
-      provider: library,
-      tracks: [track],
+      trailing: TrackRowActionsMenu.searchItem(item: item, controller: _menu),
     );
   }
 

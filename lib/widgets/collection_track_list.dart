@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:flutter/services.dart';
 import 'package:material_3_expressive/material_3_expressive.dart';
 import 'package:material_ui/material_ui.dart';
 
@@ -119,6 +120,7 @@ class CollectionTrackRow extends StatelessWidget {
     required this.position,
     this.selected = false,
     this.onTap,
+    this.onTapWithModifiers,
     this.onLongPress,
     this.swipeActions,
   });
@@ -138,6 +140,12 @@ class CollectionTrackRow extends StatelessWidget {
 
   final bool selected;
   final VoidCallback? onTap;
+
+  /// 桌面「带修饰键的点击」：Ctrl / Shift 在点击瞬间读取后交给调用方解释；
+  /// 非空时替代 [onTap]（普通点击同样从这里进，由调用方落回既有语义）。
+  /// 只有桌面平台注入（见收藏页），触摸端不注入、行为与 [onTap] 一致。
+  final void Function(bool ctrl, bool shift)? onTapWithModifiers;
+
   final VoidCallback? onLongPress;
 
   /// 左滑动作；null / 空 = 无左滑（多选与排序模式）。
@@ -145,6 +153,7 @@ class CollectionTrackRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final tapWithModifiers = onTapWithModifiers;
     final row = TrackRow(
       title: title,
       artist: artist,
@@ -153,7 +162,14 @@ class CollectionTrackRow extends StatelessWidget {
       trailing: trailing,
       selected: selected,
       position: position,
-      onTap: onTap,
+      // 修饰键在点击回调里读：行只在列表数据变化时重建，按下 Ctrl 本身
+      // 不会触发重建；build 时读会把「上一次构建」的按键状态固化到点击上。
+      onTap: tapWithModifiers == null
+          ? onTap
+          : () => tapWithModifiers(
+                HardwareKeyboard.instance.isControlPressed,
+                HardwareKeyboard.instance.isShiftPressed,
+              ),
       onLongPress: onLongPress,
     );
     final actions = swipeActions;

@@ -10,13 +10,13 @@ import 'track_row.dart';
 
 /// 曲目行（行尾 ⋮ 菜单：收藏 / 加入列表）的收藏域适配层。
 ///
-/// 与 [TrackMenuTile] 的分工：行渲染与菜单形状在 [TrackMenuTile]，本组件
-/// 只负责「行内容从哪来、收藏态怎么订阅」。歌手页 / 专辑页 / 搜索结果行
-/// 共用这一份实现：
+/// 与 [TrackMenuTile] 的分工：行渲染、菜单形状与桌面 hover / 右键增强都在
+/// [TrackMenuTile]，本组件只负责「行内容从哪来、收藏态怎么订阅」。歌手页 /
+/// 专辑页共用 [FavoriteTrackTile.track]：
 /// - [FavoriteTrackTile.track]：领域曲目（歌手页 / 专辑页），标题 / 歌手
 ///   标签（[Track.artistLabel]）/ 封面 / 时长全部取领域值；
-/// - 默认构造：搜索结果等 Map 域条目，行内容与收藏源由调用方注入
-///   （`favoriteOf` 里做 `context.select`）。
+/// - 默认构造：Map 域条目，行内容与收藏源由调用方注入（`favoriteOf` 里做
+///   `context.select`）；搜索结果行因表格列版式自建 [TrackRow]，不走本层。
 ///
 /// 收藏态一律在本组件 build 里 `select`（每行一个订阅）；不能挪到
 /// SliverList 的 itemBuilder 中直接 select（会整表重建并触发断言）。
