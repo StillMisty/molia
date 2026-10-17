@@ -2,7 +2,6 @@ import 'package:material_3_expressive/material_3_expressive.dart';
 import 'package:material_ui/material_ui.dart';
 
 import '../l10n/app_localizations.dart';
-import '../utils/responsive.dart';
 import 'track_row.dart';
 
 /// AppLocalizations 查找：测试等场景可能直接挂载本组件而不注册 delegate，
@@ -10,24 +9,12 @@ import 'track_row.dart';
 AppLocalizations _l10n(BuildContext context) =>
     AppLocalizations.of(context) ?? lookupAppLocalizations(const Locale('zh'));
 
-/// 宽屏表格列是否生效：桌面平台 + **可用内容宽度** ≥ [TrackRowColumns.minWidth]。
-///
-/// 列表（是否给行传 `columns`）与表头共用这一处判定——分开写两遍迟早
-/// 漂移成「有表头没列」或「有列没表头」。窄窗口 / 移动端保持单列行布局
-/// （逐像素不变）。
-///
-/// 用内容宽度而不是窗口宽度：桌面骨架里侧栏展开（240）与队列面板（360）
-/// 会吃掉窗口宽度，同样 1200 的窗口内容区可能只剩 600——按窗口判定会给出
-/// 固定列宽的行，直接把行撑溢出。调用方在列表处套 `LayoutBuilder` 传
-/// `availableWidth`；不传时回退窗口宽（独立挂载 / 测试）。
-bool showTrackTableColumns(BuildContext context, {double? availableWidth}) {
-  if (!isDesktopPlatform()) return false;
-  final width = availableWidth ?? MediaQuery.sizeOf(context).width;
-  return width >= TrackRowColumns.minWidth;
-}
-
 /// 宽屏表格列表头：艺术家 / 专辑 / 时长三列，列宽与行内 [TrackRowColumns]
 /// 同源（改列宽只改常量一处）。
+///
+/// 是否渲染由调用方按 `DesktopLayout.tableColumnsAt(内容宽)` 判定（判据唯一
+/// 在 desktop_layout.dart）；列表（是否给行传 `columns`）与表头必须共用同一
+/// 判定，否则迟早漂移成「有表头没列」或「有列没表头」。
 ///
 /// 与行内列的左缘对齐依赖三段留白，全部在下面按行的实际结构复刻：
 /// 行表面内边距 16dp、封面位 44dp + 12dp 间距、标题前间距 12dp、

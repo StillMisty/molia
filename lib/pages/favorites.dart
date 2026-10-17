@@ -32,6 +32,7 @@ import '../widgets/collection_rail.dart';
 import '../widgets/collection_scroll_bookkeeping.dart';
 import '../widgets/collection_selection.dart';
 import '../widgets/collection_track_list.dart';
+import '../widgets/desktop_layout.dart';
 import '../widgets/icon_swap.dart';
 import '../widgets/local_audio_import.dart' show importLocalAudioFilesFlow;
 import '../widgets/lxmc_import.dart' show importLxmcFavoritesFlow;
@@ -44,14 +45,6 @@ import '../widgets/track_table_header.dart';
 /// 此时回退到简体中文（与 lxmc_import / 其他页面同一约定）。
 AppLocalizations _l10n(BuildContext context) =>
     AppLocalizations.of(context) ?? lookupAppLocalizations(const Locale('zh'));
-
-/// 宽屏 master-detail（左合集栏 + 右曲目列表）的启用条件：桌面平台
-/// （linux / windows / macOS）+ 窗口宽 ≥ [Breakpoints.desktop]（900）。
-///
-/// 平台判定与壳层骨架的分流同源（`defaultTargetPlatform`，见 app_shell 的
-/// 桌面骨架判定）；移动 / 平板与窄窗口一行观感都不变（标题行弹层切换）。
-bool _useCollectionRail(BuildContext context) =>
-    isDesktopPlatform() && context.isDesktop;
 
 /// 行内表格三列：三处合集行（曲目 / 历史 / 本地歌曲）共用同一映射，
 /// 时长统一走 `durationText`。
@@ -1226,7 +1219,8 @@ class _FavoritesPageState extends State<FavoritesPage> {
 
     // 桌面宽屏 master-detail：左合集栏（与弹层同一份条目）+ 右曲目列表；
     // 其余情况（移动 / 平板 / 窄窗口）保持单栏，一行观感都不变。
-    final railLayout = _useCollectionRail(context);
+    // 判据由壳层解析的 DesktopLayout 给出（唯一阈值处，见 desktop_layout.dart）。
+    final railLayout = DesktopLayout.of(context).masterDetail;
     final railEntries = railLayout
         ? _collectionEntries(
             l10n,
@@ -1783,12 +1777,10 @@ class _FavoritesPageState extends State<FavoritesPage> {
     _CollectionView view, {
     required bool reorderActive,
   }) {
+    final layout = DesktopLayout.of(context);
     return LayoutBuilder(
       builder: (context, constraints) {
-        final tableColumns = showTrackTableColumns(
-          context,
-          availableWidth: constraints.maxWidth,
-        );
+        final tableColumns = layout.tableColumnsAt(constraints.maxWidth);
         final Widget body;
         if (view.isHistory) {
           body = _buildHistoryBody(

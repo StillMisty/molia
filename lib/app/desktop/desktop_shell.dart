@@ -19,48 +19,38 @@ import 'package:material_ui/material_ui.dart';
 import '../../l10n/app_localizations.dart';
 import '../../providers/nav_provider.dart';
 import '../../services/window/window_chrome.dart';
+import '../../widgets/desktop_layout.dart';
 import '../../widgets/global_search.dart';
-import '../../widgets/nav_destination_style.dart';
 import '../../widgets/player_morph.dart';
+import '../shell_chrome.dart';
 import 'desktop_shortcuts.dart';
 import 'now_playing_bar.dart';
 import 'queue_panel.dart';
 import 'shell_layout_prefs.dart';
-import 'window_controls.dart';
 
 /// 桌面骨架：顶栏 + 侧栏 + 页面栈 + 队列面板 + 底部播放条。
 ///
 /// 整棵树包在 [DesktopShortcuts] 里：全局快捷键在壳层顶层监听，播放动作走
 /// provider，其余（聚焦搜索 / 切目的地 / 关队列面板）走壳层回调。
+///
+/// 导航与顶栏的共享部分（目的地映射 / 标签 / 设置按钮 / 窗口控件 / 拖动区）
+/// 消费 [ShellChrome]，与移动骨架同一份 spec；布局阈值消费 [DesktopLayout]
+/// （壳层解析一次，见 `widgets/desktop_layout.dart`）。
 class DesktopShell extends StatefulWidget {
   const DesktopShell({
     super.key,
-    required this.selectedDestination,
-    required this.visibleDestinations,
-    required this.selectedIndex,
-    required this.labelFor,
+    required this.chrome,
     required this.pageStack,
     required this.morph,
-    required this.onDestinationSelected,
-    required this.onOpenSettings,
+    required this.searchController,
     required this.onViewAllResults,
     required this.onOpenSearch,
-    required this.searchController,
     required this.onFocusSearch,
     required this.onSelectDestinationIndex,
   });
 
-  /// 当前选中的目的地（顶栏标题）。
-  final ShellDestination selectedDestination;
-
-  /// 侧栏实际渲染的目的地（NavProvider 过滤隐藏项后的顺序）。
-  final List<ShellDestination> visibleDestinations;
-
-  /// [selectedDestination] 在 [visibleDestinations] 中的下标。
-  final int selectedIndex;
-
-  /// 目的地 → 本地化标签（与移动骨架共用壳层的唯一映射）。
-  final String Function(ShellDestination destination) labelFor;
+  /// 导航 / 顶栏 spec（与移动骨架共用，见 `shell_chrome.dart`）。
+  final ShellChrome chrome;
 
   /// 分层页面栈（页面实例与过渡动画由壳层持有）。
   final Widget pageStack;
@@ -68,11 +58,8 @@ class DesktopShell extends StatefulWidget {
   /// 顶栏 ↔ 播放页共享元素控制器（底部播放条封面锚点与隐藏状态）。
   final PlayerMorphController morph;
 
-  /// 目的地被点击 / 重复点击（与移动骨架同一条壳层回调）。
-  final ValueChanged<ShellDestination> onDestinationSelected;
-
-  /// 打开设置弹层。
-  final VoidCallback onOpenSettings;
+  /// 顶栏搜索的控制器（宽窗 pill 与面板共用；窄窗图标不挂它）。
+  final GlobalSearchController searchController;
 
   /// 顶栏搜索「查看全部结果」（或面板内回车）→ 切到资料库目的地
   /// （完整结果 / 分页 / 歌手链接都在那里，同一 `SearchProvider` 实例）。
@@ -82,10 +69,6 @@ class DesktopShell extends StatefulWidget {
   /// （当前 = 资料库目的地的搜索页，见 [_buildCompactTitleBar]）。
   final VoidCallback onOpenSearch;
 
-  /// 顶栏搜索的聚焦入口（壳层持有）：快捷键 Ctrl+F 的宽窗路径经它
-  /// 打开搜索面板（窄窗没有搜索 pill，见 [onFocusSearch]）。
-  final GlobalSearchController searchController;
-
   /// 全局快捷键 Ctrl+F：聚焦 / 打开全局搜索。宽窗聚焦顶栏搜索 pill；
   /// 窄窗顶栏搜索已退化为图标，落到与图标同一条路径（壳层按同一个
   /// 宽度阈值分流，回调只负责各自落点）。
@@ -94,17 +77,6 @@ class DesktopShell extends StatefulWidget {
   /// 全局快捷键 Ctrl+1/2/3：切到第 index 个可见目的地
   /// （顺序 = `NavProvider.visibleDestinations`；越界时壳层回调自行忽略）。
   final ValueChanged<int> onSelectDestinationIndex;
-
-  /// 窄窗口分级折叠阈值：宽 <1200 强制关队列面板、<1000 强制折叠侧栏。
-  ///
-  /// 只影响渲染，不改记忆值——窗口变宽后自动恢复用户设定。
-  static const double queueForceCloseWidth = 1200;
-  static const double railForceCollapseWidth = 1000;
-
-  /// 顶栏搜索退化为图标按钮的窗口宽阈值（= browse 桌面断点 900，
-  /// `Breakpoints.desktop`）：再窄中部放不下可用的搜索框，硬塞会把页面
-  /// 标题挤没。
-  static const double searchCompactWidth = 900;
 
   /// 顶栏搜索槽最大宽（含包内默认静止 margin 2×24 → 可见 pill ≈ 460dp）。
   static const double searchSlotMaxWidth = 508;
@@ -174,9 +146,9 @@ class _DesktopShellState extends State<DesktopShell> {
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context)!;
-    final double windowWidth = MediaQuery.sizeOf(context).width;
-    final bool railForcedCollapsed =
-        windowWidth < DesktopShell.railForceCollapseWidth;
+    final chrome = widget.chrome;
+    final layout = DesktopLayout.of(context);
+    final bool railForcedCollapsed = layout.railForceCollapsed;
     // 窄窗口下强制折叠且不提供展开入口（alwaysCollapse）：否则点了展开键
     // 也只能维持折叠，控件看起来是坏的；记忆值不动，变宽后按设定恢复。
     final M3ENavigationRailType railType = railForcedCollapsed
@@ -185,28 +157,13 @@ class _DesktopShellState extends State<DesktopShell> {
             ? M3ENavigationRailType.expanded
             : M3ENavigationRailType.collapsed);
     final bool queuePanelVisible =
-        _queuePanelOpen && windowWidth >= DesktopShell.queueForceCloseWidth;
-    final bool searchCompact = windowWidth < DesktopShell.searchCompactWidth;
+        _queuePanelOpen && layout.queuePanelAvailable;
 
-    final appBar = AppBar(
-      titleSpacing: 12,
-      // 壳层是根页面，永远不需要返回键（理由同移动骨架顶栏）。
-      automaticallyImplyLeading: false,
-      title: searchCompact
+    final appBar = chrome.appBar(
+      context: context,
+      title: layout.searchCompact
           ? _buildCompactTitleBar(l10n)
           : _buildWideTitleBar(l10n),
-      actions: [
-        M3EIconButton(
-          variant: M3EIconButtonVariant.standard,
-          onPressed: widget.onOpenSettings,
-          // 顶栏不做悬浮提示（窗口控件区一排按钮，tooltip 反而吵）；
-          // 无障碍语义仍保留（icon-only 按钮的可访问名）。
-          semanticLabel: l10n.settingsTitle,
-          icon: const Icon(Icons.settings_rounded),
-        ),
-        if (WindowChrome.isSupported) const WindowControls(),
-        const SizedBox(width: 8),
-      ],
     );
 
     return DesktopShortcuts(
@@ -215,12 +172,7 @@ class _DesktopShellState extends State<DesktopShell> {
       // 面板没开时 _setQueuePanelOpen(false) 自行 no-op。
       onCloseQueuePanel: () => _setQueuePanelOpen(false),
       child: Scaffold(
-        appBar: PreferredSize(
-          preferredSize: Size.fromHeight(
-            AppBar.preferredHeightFor(context, appBar.preferredSize),
-          ),
-          child: WindowDragArea(child: appBar),
-        ),
+        appBar: appBar,
         body: Row(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
@@ -232,20 +184,11 @@ class _DesktopShellState extends State<DesktopShell> {
               ),
               expandTooltip: l10n.expandTooltip,
               collapseTooltip: l10n.collapseTooltip,
-              selectedIndex: widget.selectedIndex,
-              onDestinationSelected: (index) => widget.onDestinationSelected(
-                widget.visibleDestinations[index],
-              ),
+              selectedIndex: chrome.selectedIndex,
+              onDestinationSelected: chrome.selectDestinationAt,
               sections: [
                 M3ENavigationRailSection(
-                  destinations: [
-                    for (final destination in widget.visibleDestinations)
-                      M3ENavigationRailDestination(
-                        icon: destination.outlinedIcon,
-                        selectedIcon: destination.filledIcon,
-                        label: widget.labelFor(destination),
-                      ),
-                  ],
+                  destinations: chrome.railDestinations(),
                 ),
               ],
             ),
@@ -264,9 +207,9 @@ class _DesktopShellState extends State<DesktopShell> {
           morph: widget.morph,
           // 按钮态跟实际渲染走（窄窗口被强制关闭时不高亮、且置灰）。
           queueOpen: queuePanelVisible,
-          queueAvailable: windowWidth >= DesktopShell.queueForceCloseWidth,
+          queueAvailable: layout.queuePanelAvailable,
           onOpenPlayer: () =>
-              widget.onDestinationSelected(ShellDestination.nowPlaying),
+              chrome.onDestinationSelected(ShellDestination.nowPlaying),
           onToggleQueue: () => _setQueuePanelOpen(!_queuePanelOpen),
         ),
       ),
@@ -343,7 +286,7 @@ class _DesktopShellState extends State<DesktopShell> {
   Widget _buildPageTitle(AppLocalizations l10n) {
     return WindowDoubleTapMaximize(
       child: Text(
-        widget.labelFor(widget.selectedDestination),
+        widget.chrome.labelFor(widget.chrome.selectedDestination),
         maxLines: 1,
         overflow: TextOverflow.ellipsis,
       ),

@@ -14,6 +14,7 @@ import '../services/haptics.dart';
 import '../utils/duration_text.dart';
 import '../utils/responsive.dart';
 import '../widgets/app_network_image.dart';
+import '../widgets/desktop_layout.dart';
 import '../widgets/discover_actions.dart';
 import '../widgets/track_row.dart';
 import '../widgets/track_table_header.dart';
@@ -248,12 +249,10 @@ class _DiscoverTracksPageState extends State<DiscoverTracksPage> {
     }
     final cardList = M3ETheme.of(context).listTheme.cardList;
     final horizontalPadding = context.horizontalPadding;
+    final layout = DesktopLayout.of(context);
     return LayoutBuilder(
       builder: (context, constraints) {
-        final tableColumns = showTrackTableColumns(
-          context,
-          availableWidth: constraints.maxWidth,
-        );
+        final tableColumns = layout.tableColumnsAt(constraints.maxWidth);
         return Scrollbar(
           controller: _listController,
           thumbVisibility: true,

@@ -44,8 +44,8 @@ class TrackRowColumns {
   /// 时长列文案（来自 `durationText`）。
   final String duration;
 
-  /// 表格列生效的最小窗口宽（与 browse 桌面断点同值，见
-  /// `showTrackTableColumns`）。
+  /// 表格列生效的最小内容宽（与 browse 桌面断点同值；判据见
+  /// `DesktopLayout.tableColumnsAt`）。
   static const double minWidth = 900;
 
   static const double artistWidth = 200;

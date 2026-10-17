@@ -34,15 +34,15 @@ import '../theme/app_theme.dart';
 import '../utils/responsive.dart';
 import '../widgets/app_network_image.dart';
 import '../widgets/cover_appearance.dart';
+import '../widgets/desktop_layout.dart';
 import '../widgets/global_search.dart';
 import '../widgets/icon_swap.dart';
-import '../widgets/nav_destination_style.dart';
 import '../widgets/playback_selectors.dart';
 import '../widgets/player_morph.dart';
 import '../widgets/shell_reselect.dart';
 import '../widgets/shell_page_visibility.dart';
 import 'desktop/desktop_shell.dart';
-import 'desktop/window_controls.dart';
+import 'shell_chrome.dart';
 
 /// 当前曲目的封面 URL（空串视同无封面）：顶栏真身与共享飞行副本同一份取值。
 String? _coverUrlOf(PlaybackProvider provider) =>
@@ -439,9 +439,10 @@ class _MyAppState extends State<MyApp>
   ///
   /// 宽窗聚焦顶栏搜索 pill（打开面板后输入框自动取得焦点）；窄窗顶栏搜索
   /// 已退化为图标，落到与图标同一条路径（资料库搜索页）。宽度判定与
-  /// [DesktopShell] 渲染搜索 pill / 图标的阈值同一个常量，口径不会漂移。
+  /// [DesktopShell] 渲染搜索 pill / 图标的判据同源（`DesktopLayout`，
+  /// 见 `widgets/desktop_layout.dart`），口径不会漂移。
   void _focusGlobalSearch() {
-    if (MediaQuery.sizeOf(context).width < DesktopShell.searchCompactWidth) {
+    if (DesktopLayout.resolve(context).searchCompact) {
       _openLibrarySearch();
       return;
     }
@@ -504,41 +505,48 @@ class _MyAppState extends State<MyApp>
             : visibleDestinations.first);
     final selectedIndex = visibleDestinations.indexOf(selectedDestination);
 
+    // 导航 / 顶栏 spec：两套骨架共用一份（目的地映射 / 标签 / 设置按钮 /
+    // 窗口控件 / 拖动区），骨架各自适配渲染（见 shell_chrome.dart）。
+    final chrome = ShellChrome(
+      destinations: visibleDestinations,
+      selectedDestination: selectedDestination,
+      selectedIndex: selectedIndex,
+      l10n: l10n,
+      onDestinationSelected: _onDestinationSelected,
+      onOpenSettings: () => _openSettings(context),
+    );
+
     // 桌面骨架：顶栏瘦身 + 可折叠侧栏 + 常驻底部播放条 + 队列右面板
     // （结构见 `desktop/desktop_shell.dart`）；移动 / 平板骨架保持原结构。
+    // 桌面布局值在这里解析一次（窗口宽 / 平台位），页面与骨架只消费
+    // （见 `widgets/desktop_layout.dart`）。
     if (_desktopShell) {
-      return DesktopShell(
-        selectedDestination: selectedDestination,
-        visibleDestinations: visibleDestinations,
-        selectedIndex: selectedIndex,
-        labelFor: (destination) => destination.label(l10n),
-        pageStack: _buildPageStack(),
-        morph: _morph,
-        onDestinationSelected: _onDestinationSelected,
-        onOpenSettings: () => _openSettings(context),
-        // 顶栏搜索的两个出口当前都落在资料库目的地：完整结果（分段 / 分页 /
-        // 歌手链接）与窄窗的搜索页都在那里，且共用同一个 SearchProvider 实例。
-        // 两个回调分开传是因为触发语义不同（面板「查看全部结果」/ 窄窗图标），
-        // 将来给图标换落点只改这一处。
-        onViewAllResults: _openLibrarySearch,
-        onOpenSearch: _openLibrarySearch,
-        // 全局快捷键：Ctrl+F 与 Ctrl+1/2/3 的落点由壳层决定（宽窄窗分流、
-        // 可见目的地顺序），DesktopShell 只负责在顶层监听按键。
-        searchController: _globalSearch,
-        onFocusSearch: _focusGlobalSearch,
-        onSelectDestinationIndex: _selectVisibleDestinationAt,
+      return DesktopLayout.scope(
+        context,
+        child: DesktopShell(
+          chrome: chrome,
+          pageStack: _buildPageStack(),
+          morph: _morph,
+          // 顶栏搜索的两个出口当前都落在资料库目的地：完整结果（分段 / 分页 /
+          // 歌手链接）与窄窗的搜索页都在那里，且共用同一个 SearchProvider 实例。
+          // 两个回调分开传是因为触发语义不同（面板「查看全部结果」/ 窄窗图标），
+          // 将来给图标换落点只改这一处。
+          onViewAllResults: _openLibrarySearch,
+          onOpenSearch: _openLibrarySearch,
+          // 全局快捷键：Ctrl+F 与 Ctrl+1/2/3 的落点由壳层决定（宽窄窗分流、
+          // 可见目的地顺序），DesktopShell 只负责在顶层监听按键。
+          searchController: _globalSearch,
+          onFocusSearch: _focusGlobalSearch,
+          onSelectDestinationIndex: _selectVisibleDestinationAt,
+        ),
       );
     }
 
-    // 顶栏整体是窗口拖动区（隐藏标题栏后唯一的拖动入口）：外层 PreferredSize
-    // 用 AppBar 自报高度（56 工具栏 + 10 波浪进度），总高度与改动前一致，
-    // 非桌面平台 WindowDragArea 是纯透传。
-    final appBar = AppBar(
-      titleSpacing: 12,
-      // 壳层是根页面，永远不需要返回键；且路由内的局部历史条目
-      // （如 M3E 下拉菜单打开时）会让 ModalRoute.canPop 变真，
-      // 默认的 automaticallyImplyLeading 会在此刻冒出返回箭头。
-      automaticallyImplyLeading: false,
+    // 顶栏由 ShellChrome 统一构造（titleSpacing / 无返回键 / 拖动区包装）：
+    // 整条顶栏是窗口拖动区（隐藏标题栏后唯一的拖动入口），高度走 AppBar
+    // 自报（56 工具栏 + 10 波浪进度），非桌面平台 WindowDragArea 是纯透传。
+    final appBar = chrome.appBar(
+      context: context,
       title: WindowDoubleTapMaximize(
         // 双击顶栏标题区（拖动区的非按钮部分）= 最大化 / 还原（桌面肌肉记忆）；
         // 按钮区不参与，避免双击按钮顺带改窗口状态。
@@ -557,14 +565,6 @@ class _MyAppState extends State<MyApp>
           _BarPlayPauseButton(reveal: _barReveal),
           _BarNextButton(reveal: _barReveal),
         ],
-        M3EIconButton(
-          variant: M3EIconButtonVariant.standard,
-          onPressed: () => _openSettings(context),
-          semanticLabel: l10n.settingsTitle,
-          icon: const Icon(Icons.settings_rounded),
-        ),
-        if (WindowChrome.isSupported) const WindowControls(),
-        const SizedBox(width: 8),
       ],
       bottom: PreferredSize(
         // 波浪进度条需要振幅空间（M3E 默认 wavyContainerHeight=10）；
@@ -574,62 +574,44 @@ class _MyAppState extends State<MyApp>
       ),
     );
 
-    return Scaffold(
-      appBar: PreferredSize(
-        preferredSize: Size.fromHeight(
-          AppBar.preferredHeightFor(context, appBar.preferredSize),
-        ),
-        child: WindowDragArea(child: appBar),
-      ),
-      body: Row(
-        children: [
-          if (isLargeScreen)
-            M3ENavigationRail(
-              // 固定 96dp 窄轨（alwaysCollapse）：无展开按钮、不可展开；
-              // 标签常显，替代 Material 侧 hover 才出现的 tooltip。
-              type: M3ENavigationRailType.alwaysCollapse,
-              selectedIndex: selectedIndex,
-              onDestinationSelected: (int index) =>
-                  _onDestinationSelected(visibleDestinations[index]),
-              sections: [
-                M3ENavigationRailSection(
-                  destinations: [
-                    for (final destination in visibleDestinations)
-                      M3ENavigationRailDestination(
-                        icon: destination.outlinedIcon,
-                        selectedIcon: destination.filledIcon,
-                        label: destination.label(l10n),
-                      ),
-                  ],
-                ),
-              ],
-            ),
-          Expanded(child: _buildPageStack()),
-        ],
-      ),
-      bottomNavigationBar: isLargeScreen
-          ? null
-          : SafeArea(
-              bottom: false,
-              child: M3ENavigationBar(
-                // iOS 使用紧凑高度（M3E 最小档 64）。
-                size: defaultTargetPlatform == TargetPlatform.iOS
-                    ? M3ENavBarSize.small
-                    : M3ENavBarSize.medium,
-                labelBehavior: M3ENavBarLabelBehavior.onlySelected,
+    return DesktopLayout.scope(
+      context,
+      child: Scaffold(
+        appBar: appBar,
+        body: Row(
+          children: [
+            if (isLargeScreen)
+              M3ENavigationRail(
+                // 固定 96dp 窄轨（alwaysCollapse）：无展开按钮、不可展开；
+                // 标签常显，替代 Material 侧 hover 才出现的 tooltip。
+                type: M3ENavigationRailType.alwaysCollapse,
                 selectedIndex: selectedIndex,
-                onDestinationSelected: (int index) =>
-                    _onDestinationSelected(visibleDestinations[index]),
-                destinations: [
-                  for (final destination in visibleDestinations)
-                    M3ENavigationBarDestination(
-                      icon: destination.outlinedIcon,
-                      selectedIcon: destination.filledIcon,
-                      label: destination.label(l10n),
-                    ),
+                onDestinationSelected: chrome.selectDestinationAt,
+                sections: [
+                  M3ENavigationRailSection(
+                    destinations: chrome.railDestinations(),
+                  ),
                 ],
               ),
-            ),
+            Expanded(child: _buildPageStack()),
+          ],
+        ),
+        bottomNavigationBar: isLargeScreen
+            ? null
+            : SafeArea(
+                bottom: false,
+                child: M3ENavigationBar(
+                  // iOS 使用紧凑高度（M3E 最小档 64）。
+                  size: defaultTargetPlatform == TargetPlatform.iOS
+                      ? M3ENavBarSize.small
+                      : M3ENavBarSize.medium,
+                  labelBehavior: M3ENavBarLabelBehavior.onlySelected,
+                  selectedIndex: selectedIndex,
+                  onDestinationSelected: chrome.selectDestinationAt,
+                  destinations: chrome.barDestinations(),
+                ),
+              ),
+      ),
     );
   }
 }
