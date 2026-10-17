@@ -3328,6 +3328,13 @@ class AppLocalizationsZh extends AppLocalizations {
   String get settingsCloseToTraySubtitle => '播放不中断；可从托盘图标重新打开或退出';
 
   @override
+  String get settingsRememberWindowBounds => '记住窗口位置与大小';
+
+  @override
+  String get settingsRememberWindowBoundsSubtitle =>
+      '下次启动时恢复上次的位置、大小与最大化状态（默认开启）';
+
+  @override
   String get settingsTrayLinuxHint =>
       '托盘图标需要系统托盘支持：GNOME 需安装 AppIndicator 扩展；没有托盘宿主时，关闭将直接退出';
 }

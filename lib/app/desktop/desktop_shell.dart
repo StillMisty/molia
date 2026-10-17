@@ -157,7 +157,9 @@ class _DesktopShellState extends State<DesktopShell> {
         M3EIconButton(
           variant: M3EIconButtonVariant.standard,
           onPressed: widget.onOpenSettings,
-          tooltip: l10n.settingsTitle,
+          // 顶栏不做悬浮提示（窗口控件区一排按钮，tooltip 反而吵）；
+          // 无障碍语义仍保留（icon-only 按钮的可访问名）。
+          semanticLabel: l10n.settingsTitle,
           icon: const Icon(Icons.settings_rounded),
         ),
         if (WindowChrome.isSupported) const WindowControls(),

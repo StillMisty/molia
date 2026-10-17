@@ -1909,5 +1909,7 @@
   "settingsDesktopSection": "Desktop",
   "settingsCloseToTray": "Minimize to tray on close",
   "settingsCloseToTraySubtitle": "Keep playing in the background; reopen or quit from the tray icon",
+  "settingsRememberWindowBounds": "Remember window position and size",
+  "settingsRememberWindowBoundsSubtitle": "Reopen at the last position, size and maximized state (on by default)",
   "settingsTrayLinuxHint": "The tray icon needs a system tray host; GNOME requires the AppIndicator extension. Without one, closing quits"
 }

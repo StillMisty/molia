@@ -521,7 +521,7 @@ class _MyAppState extends State<MyApp>
         M3EIconButton(
           variant: M3EIconButtonVariant.standard,
           onPressed: () => _openSettings(context),
-          tooltip: l10n.settingsTitle,
+          semanticLabel: l10n.settingsTitle,
           icon: const Icon(Icons.settings_rounded),
         ),
         if (WindowChrome.isSupported) const WindowControls(),

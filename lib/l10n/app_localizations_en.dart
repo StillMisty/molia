@@ -3473,6 +3473,14 @@ class AppLocalizationsEn extends AppLocalizations {
       'Keep playing in the background; reopen or quit from the tray icon';
 
   @override
+  String get settingsRememberWindowBounds =>
+      'Remember window position and size';
+
+  @override
+  String get settingsRememberWindowBoundsSubtitle =>
+      'Reopen at the last position, size and maximized state (on by default)';
+
+  @override
   String get settingsTrayLinuxHint =>
       'The tray icon needs a system tray host; GNOME requires the AppIndicator extension. Without one, closing quits';
 }

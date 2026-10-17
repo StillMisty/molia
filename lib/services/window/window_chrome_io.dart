@@ -3,7 +3,14 @@ import 'dart:io';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/widgets.dart';
+import 'package:logging/logging.dart';
+import 'package:screen_retriever/screen_retriever.dart';
 import 'package:window_manager/window_manager.dart';
+
+import 'single_instance.dart';
+import 'window_bounds.dart';
+import 'window_bounds_store.dart';
+import 'window_settings.dart';
 
 /// Linux / Windows 桌面：window_manager 实现。
 ///
@@ -14,8 +21,21 @@ class WindowChrome {
 
   static bool get isSupported => Platform.isLinux || Platform.isWindows;
 
+  static final Logger _logger = Logger('molia.window_chrome');
+
   static final ValueNotifier<bool> _maximized = ValueNotifier<bool>(false);
   static final _MaximizedStateListener _listener = _MaximizedStateListener();
+
+  /// 窗口几何持久化（设备本地键，键名只出现在 store 文件里）。
+  static final WindowBoundsStore _boundsStore = WindowBoundsStore();
+
+  /// 拖动/缩放落定后的落盘防抖：拖动过程中几何每帧都在变，实时落盘没有意义。
+  static const Duration _boundsSaveDebounce = Duration(milliseconds: 600);
+
+  static Timer? _boundsSaveTimer;
+
+  /// 启动恢复：显示后是否补 `maximize()`（见 [_restoreSavedGeometry]）。
+  static bool _restoreMaximized = false;
 
   /// 关闭请求策略（顶栏关闭键 / 系统关闭按钮）：由组合根注入
   /// （最小化到托盘 / 真正退出）。未注入时保持历史行为——直接退出。
@@ -55,9 +75,97 @@ class WindowChrome {
         minimumSize: Size(900, 600),
       ),
     );
+    // 显示前先摆好位置：show() 后再 setBounds 会肉眼可见地跳一下。
+    await _restoreSavedGeometry();
     await windowManager.show();
     await windowManager.focus();
+    if (_restoreMaximized) {
+      _restoreMaximized = false;
+      await windowManager.maximize();
+    }
     await _applyLinuxWindowIcon();
+  }
+
+  /// 恢复上次关闭时的窗口几何。
+  ///
+  /// 开关关闭 / 没有保存值 / 拿不到显示器列表时保持系统默认位置：
+  /// 拿不到显示器就无从校验，宁可用默认位置也不赌保存值可见。
+  ///
+  /// 最大化单独在 show() 之后补：`getBounds` 在最大化态返回最大化矩形，
+  /// 存进去会丢还原尺寸，因此恢复路径也分两步（先还原几何，再最大化）。
+  static Future<void> _restoreSavedGeometry() async {
+    _restoreMaximized = false;
+    if (!WindowSettings.rememberBounds) return;
+    try {
+      final saved = await _boundsStore.load();
+      if (saved == null) return;
+      final displays = await screenRetriever.getAllDisplays();
+      if (displays.isEmpty) return;
+      final visibleAreas = [
+        for (final display in displays) _visibleAreaOf(display),
+      ];
+      Rect primaryArea;
+      try {
+        primaryArea = _visibleAreaOf(await screenRetriever.getPrimaryDisplay());
+      } catch (_) {
+        // 主显示器查询失败（个别平台只实现枚举）：用列表首项居中兜底。
+        primaryArea = visibleAreas.first;
+      }
+      await windowManager.setBounds(
+        resolveRestoredBounds(
+          saved: saved.bounds,
+          displayVisibleAreas: visibleAreas,
+          primaryVisibleArea: primaryArea,
+        ),
+      );
+      _restoreMaximized = saved.maximized;
+    } catch (error) {
+      // 恢复失败不阻断启动：窗口按系统默认位置显示。
+      _logger.warning('窗口几何恢复失败：$error');
+    }
+  }
+
+  /// 显示器可见区（Dock / 任务栏之外的部分）；字段缺失时退回整屏矩形。
+  static Rect _visibleAreaOf(Display display) =>
+      (display.visiblePosition ?? Offset.zero) &
+      (display.visibleSize ?? display.size);
+
+  /// 拖动 / 缩放落定后延迟落盘；重复事件重置计时（防抖）。
+  static void _scheduleBoundsSave() {
+    if (!isSupported || !WindowSettings.rememberBounds) return;
+    _boundsSaveTimer?.cancel();
+    _boundsSaveTimer = Timer(_boundsSaveDebounce, () {
+      _boundsSaveTimer = null;
+      unawaited(_saveBoundsNow());
+    });
+  }
+
+  static Future<void> _saveBoundsNow() async {
+    try {
+      // 最大化态不覆盖 bounds（getBounds 返回最大化矩形，存了会丢还原尺寸）；
+      // 最大化标记由 maximize 事件即时保存。
+      if (await windowManager.isMaximized()) return;
+      await _boundsStore.saveBounds(await windowManager.getBounds());
+    } catch (error) {
+      _logger.warning('窗口几何保存失败：$error');
+    }
+  }
+
+  /// 最大化 ⇄ 还原标记：即时落盘（不防抖），并取消在途的几何保存，
+  /// 避免把最大化过程中的矩形写进 bounds。
+  static void _persistMaximized(bool maximized) {
+    if (!isSupported || !WindowSettings.rememberBounds) return;
+    _boundsSaveTimer?.cancel();
+    _boundsSaveTimer = null;
+    unawaited(_saveMaximizedNow(maximized));
+  }
+
+  static Future<void> _saveMaximizedNow(bool maximized) async {
+    try {
+      await _boundsStore.saveMaximized(maximized);
+    } catch (error) {
+      _logger.warning('窗口最大化状态保存失败：$error');
+    }
   }
 
   /// Linux 运行期窗口图标（X11 的 WM_HINTS；Wayland 没有窗口图标协议，
@@ -113,9 +221,11 @@ class WindowChrome {
   }
 
   /// 无视关闭策略真正退出（托盘「退出」/ 更新安装后的重启替换）：
-  /// 先解除关闭拦截再销毁窗口；退出前的落盘由调用方负责。
+  /// 先释放单实例锁、解除关闭拦截，再销毁窗口；退出前的落盘由调用方负责。
   static Future<void> quit() async {
     if (!isSupported) return;
+    // 正常退出路径顺带释放锁：下次启动能直接抢到（强杀残留由陈旧锁清理兜底）。
+    await SingleInstance.release();
     await windowManager.setPreventClose(false);
     await windowManager.destroy();
   }
@@ -135,13 +245,29 @@ class WindowChrome {
   }
 }
 
-/// 原生窗口状态 → [WindowChrome.maximized]；关闭请求 → 组合根策略。
+/// 原生窗口状态 → [WindowChrome.maximized]；几何变更 → 防抖落盘；
+/// 关闭请求 → 组合根策略。
 class _MaximizedStateListener extends WindowListener {
   @override
-  void onWindowMaximize() => WindowChrome._maximized.value = true;
+  void onWindowMaximize() {
+    WindowChrome._maximized.value = true;
+    // 最大化时 getBounds 是最大化矩形：只记标记，不覆盖还原尺寸。
+    WindowChrome._persistMaximized(true);
+  }
 
   @override
-  void onWindowUnmaximize() => WindowChrome._maximized.value = false;
+  void onWindowUnmaximize() {
+    WindowChrome._maximized.value = false;
+    WindowChrome._persistMaximized(false);
+    // 还原几何在事件后已生效，按正常保存路径重新记一次。
+    WindowChrome._scheduleBoundsSave();
+  }
+
+  @override
+  void onWindowMove() => WindowChrome._scheduleBoundsSave();
+
+  @override
+  void onWindowResize() => WindowChrome._scheduleBoundsSave();
 
   /// 关闭请求：`preventClose` 打开后原生关闭不会销毁窗口，这里把控制权交回
   /// Dart 策略；未注入策略（如集成测试直接调 ensureInitialized）时保持

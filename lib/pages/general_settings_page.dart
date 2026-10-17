@@ -12,6 +12,7 @@ import '../services/language_service.dart';
 import '../services/notification_service.dart';
 import '../services/window/app_tray.dart';
 import '../services/window/tray_settings.dart';
+import '../services/window/window_settings.dart';
 import '../widgets/nav_destination_icons.dart';
 import '../widgets/settings/settings_reorderable_rows.dart';
 import '../widgets/settings/settings_tiles.dart';
@@ -144,6 +145,19 @@ class _GeneralSettingsPageState extends State<GeneralSettingsPage> {
                   subtitle: l10n.settingsCloseToTraySubtitle,
                   value: tray.closeToTray,
                   onChanged: tray.setCloseToTray,
+                ),
+                // 记住窗口位置与大小（设备本地键，不随同步）：重启后窗口回到
+                // 上次的位置/尺寸（最大化状态一并恢复）。
+                ValueListenableBuilder<bool>(
+                  valueListenable: WindowSettings.rememberBoundsNotifier,
+                  builder: (context, rememberBounds, _) => SettingsSwitchTile(
+                    switchKey: const Key('settingsRememberWindowBoundsSwitch'),
+                    icon: Icons.window_rounded,
+                    title: l10n.settingsRememberWindowBounds,
+                    subtitle: l10n.settingsRememberWindowBoundsSubtitle,
+                    value: rememberBounds,
+                    onChanged: WindowSettings.setRememberBounds,
+                  ),
                 ),
               ],
             ),

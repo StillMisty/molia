@@ -29,6 +29,11 @@ PID_FILE="$RUN_DIR/flutter-run.pid"
 RUN_LOG="$RUN_DIR/flutter-run.log"
 RUN_DEVICE_FILE="$RUN_DIR/flutter-run.device" # app.sh 记录本次 flutter run 的设备
 
+# 单实例逃生口：本机开发实例在跑时，agent 启动的测试 / 热重载实例必须仍能
+# 起来（否则会被单实例逻辑当成第二实例直接退出）。只影响 agent 脚本拉起的
+# 进程，正常双击启动的应用不受影响。
+export MOLIA_SINGLE_INSTANCE_DISABLED=1
+
 log() { printf '[agent] %s\n' "$*" >&2; }
 die() { printf '[agent] ERROR: %s\n' "$*" >&2; exit 1; }
 

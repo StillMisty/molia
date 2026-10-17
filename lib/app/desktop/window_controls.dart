@@ -45,7 +45,7 @@ class WindowControls extends StatelessWidget {
         ),
         M3EIconButton(
           variant: M3EIconButtonVariant.standard,
-          tooltip: l10n.windowMinimize,
+          semanticLabel: l10n.windowMinimize,
           icon: const Icon(Icons.remove_rounded),
           onPressed: WindowChrome.minimize,
         ),
@@ -53,7 +53,7 @@ class WindowControls extends StatelessWidget {
           valueListenable: WindowChrome.maximized,
           builder: (context, maximized, _) => M3EIconButton(
             variant: M3EIconButtonVariant.standard,
-            tooltip: maximized ? l10n.windowRestore : l10n.windowMaximize,
+            semanticLabel: maximized ? l10n.windowRestore : l10n.windowMaximize,
             icon: IconSwap<bool>(
               value: maximized,
               builder: (context, maximized) => Icon(
@@ -98,7 +98,7 @@ class _WindowCloseButtonState extends State<WindowCloseButton> {
       onExit: (_) => setState(() => _hovered = false),
       child: M3EIconButton(
         variant: M3EIconButtonVariant.standard,
-        tooltip: l10n.windowClose,
+        semanticLabel: l10n.windowClose,
         decoration: _hovered
             ? M3EIconButtonDecoration(
                 overlayColor: WidgetStatePropertyAll<Color?>(

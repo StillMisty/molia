@@ -6214,6 +6214,18 @@ abstract class AppLocalizations {
   /// **'Keep playing in the background; reopen or quit from the tray icon'**
   String get settingsCloseToTraySubtitle;
 
+  /// No description provided for @settingsRememberWindowBounds.
+  ///
+  /// In en, this message translates to:
+  /// **'Remember window position and size'**
+  String get settingsRememberWindowBounds;
+
+  /// No description provided for @settingsRememberWindowBoundsSubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Reopen at the last position, size and maximized state (on by default)'**
+  String get settingsRememberWindowBoundsSubtitle;
+
   /// No description provided for @settingsTrayLinuxHint.
   ///
   /// In en, this message translates to:

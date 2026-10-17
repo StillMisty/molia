@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io' show exit;
 
 import 'package:material_ui/material_ui.dart';
 import 'package:provider/provider.dart';
@@ -22,7 +23,9 @@ import 'playback/local_audio_handler.dart';
 import 'providers/library_provider.dart';
 import 'services/app_logging.dart';
 import 'services/notification_service.dart';
+import 'services/window/single_instance.dart';
 import 'services/window/window_chrome.dart';
+import 'services/window/window_settings.dart';
 
 /// 唯一 composition root：只做「平台装配 + 按顺序调用各 stack builder +
 /// runApp + 首帧回调」，子系统内部接线见 `lib/app/bootstrap/**`。
@@ -45,6 +48,16 @@ void main() async {
 
   // 日志装配（package:logging 的 handler / level 只在这里和测试配置里设一次）
   initAppLogging();
+
+  // 窗口行为偏好（设备本地）：窗口几何的恢复/保存在建窗之前就要判定，
+  // 因此先 await 载入一次（读取失败保持默认开启）。
+  await WindowSettings.load();
+
+  // 强制单实例（桌面）：已有实例在跑 → 请它显示主窗口后立即退出；此刻
+  // 窗口还没创建，不会闪一下再消失。其余平台 / 抢锁异常按主实例继续。
+  if (await SingleInstance.acquire() == SingleInstanceRole.secondary) {
+    exit(0);
+  }
 
   // 桌面窗口 chrome（Linux/Windows）：隐藏原生标题栏，窗口按钮改由顶栏承担；
   // 其余平台是空操作（不触碰插件 API）。
