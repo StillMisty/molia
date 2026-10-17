@@ -830,7 +830,8 @@ class LibraryWriteEngine {
         coverUrl: coverUrl,
         durationMs: durationMs,
         raw: raw,
-        addedAt: DateTime.now().millisecondsSinceEpoch,
+        // 加入时间是内容时间，走注入时钟（与其余写入一致）。
+        addedAt: _nowMs(),
       ),
       favoriteChange: true,
     );
