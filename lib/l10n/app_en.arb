@@ -1932,6 +1932,24 @@
   "shortcutsRecording": "Press a new key… (Esc to cancel)",
   "shortcutsConflict": "Already used by “{action}”",
   "shortcutsGlobalNeedsModifier": "Global shortcuts must include Ctrl / Alt / Shift",
+  "shortcutsSwapDialogTitle": "Replace shortcut?",
+  "shortcutsSwapDialogMessage": "“{action}” already uses this combo. Replacing will swap the two bindings.",
+  "@shortcutsSwapDialogMessage": {
+    "placeholders": {
+      "action": {
+        "type": "String"
+      }
+    }
+  },
+  "shortcutsSwapConfirm": "Replace",
+  "shortcutsSwapDone": "Swapped bindings with “{action}”",
+  "@shortcutsSwapDone": {
+    "placeholders": {
+      "action": {
+        "type": "String"
+      }
+    }
+  },
   "shortcutActionPlayPause": "Play / pause",
   "shortcutActionSeekBackward": "Seek back 5s",
   "shortcutActionSeekForward": "Seek forward 5s",

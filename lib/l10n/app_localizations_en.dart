@@ -3531,6 +3531,22 @@ class AppLocalizationsEn extends AppLocalizations {
       'Global shortcuts must include Ctrl / Alt / Shift';
 
   @override
+  String get shortcutsSwapDialogTitle => 'Replace shortcut?';
+
+  @override
+  String shortcutsSwapDialogMessage(String action) {
+    return '“$action” already uses this combo. Replacing will swap the two bindings.';
+  }
+
+  @override
+  String get shortcutsSwapConfirm => 'Replace';
+
+  @override
+  String shortcutsSwapDone(String action) {
+    return 'Swapped bindings with “$action”';
+  }
+
+  @override
   String get shortcutActionPlayPause => 'Play / pause';
 
   @override

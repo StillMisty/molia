@@ -691,12 +691,12 @@ void main() {
     final harness = await pumpShell(tester, desktopShell: true);
 
     // 把「播放 / 暂停」从 Space 改绑到 Ctrl+P。
-    final accepted = await ShortcutSettings.instance.setBinding(
+    final result = await ShortcutSettings.instance.setBinding(
       ShortcutScope.inApp,
       ShortcutCommand.togglePlayPause,
       const ShortcutCombo(key: LogicalKeyboardKey.keyP, ctrl: true),
     );
-    expect(accepted, isTrue);
+    expect(result, isA<ShortcutBindingAccepted>());
     await tester.pump();
 
     // 新键生效：Ctrl+P 切播放态（假快照 isPlaying=false → play）。

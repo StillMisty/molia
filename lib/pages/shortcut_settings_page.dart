@@ -19,8 +19,11 @@ import '../widgets/settings/shortcut_recorder_tile.dart';
 /// 快捷键设置子页：软件内 / 全局两组的总开关与绑定自定义。
 ///
 /// 从设置 › 通用进入，在设置弹层内部导航（见 `settings_page.dart`）。
-/// 绑定校验（全局必须带修饰键、同组不重复）由 [ShortcutSettings.setBinding]
-/// 兜底；本页在拒绝时给出具体原因（缺修饰键 / 被哪个动作占用）。
+/// 绑定校验（全局必须带修饰键、同组不重复、回默认目标同样查占用）由
+/// [ShortcutSettings.setBinding] 兜底，拒绝原因由服务层分类
+/// （[ShortcutBindingResult]）；本页只做文案映射：缺修饰键 / 平台不支持走
+/// Snackbar，同组冲突走「确认后互换两者绑定」的引导弹层
+/// （[showShortcutSwapDialog]）。
 class ShortcutSettingsPage extends StatefulWidget {
   const ShortcutSettingsPage({super.key});
 
@@ -97,9 +100,12 @@ class _ShortcutSettingsPageState extends State<ShortcutSettingsPage> {
             combo: bindings.comboFor(command)!,
             overridden: bindings.isOverridden(command),
             resetKey: Key('shortcutReset_${scope.name}_${command.name}'),
-            onReset: () => unawaited(settings.setBinding(scope, command, null)),
+            // 回默认与录制共用提交管线：默认组合被别的动作占着（曾互换过
+            // 绑定）时同样弹互换确认，不直接清覆盖。
+            onReset: () =>
+                unawaited(_applyBinding(settings, scope, command, null)),
             onRecorded: (combo) =>
-                unawaited(_applyRecorded(settings, scope, command, combo)),
+                unawaited(_applyBinding(settings, scope, command, combo)),
           ),
         _ResetScopeTile(
           key: Key('shortcutResetAll_${scope.name}'),
@@ -133,35 +139,123 @@ class _ShortcutSettingsPageState extends State<ShortcutSettingsPage> {
     );
   }
 
-  /// 提交一次录制结果：校验失败时给出具体原因（组合已被哪个动作占用 /
-  /// 全局缺修饰键），成功则静默（行内文案即反馈）。
-  Future<void> _applyRecorded(
+  /// 提交一次绑定变更（录制新组合，或 [combo] 为 null 的单行回默认）。
+  ///
+  /// 成功静默（行内文案即反馈）；拒绝原因由服务层分类
+  /// （[ShortcutBindingResult]）：缺修饰键 / 平台不支持保持 Snackbar；
+  /// 同组冲突弹确认层，确认后互换两者绑定。
+  Future<void> _applyBinding(
     ShortcutSettings settings,
     ShortcutScope scope,
     ShortcutCommand command,
-    ShortcutCombo combo,
+    ShortcutCombo? combo,
   ) async {
+    final result = await settings.setBinding(scope, command, combo);
+    if (!mounted) return;
+    final l10n = AppLocalizations.of(context)!;
+    switch (result) {
+      case ShortcutBindingAccepted():
+        return;
+      case ShortcutBindingConflict(:final other, :final target):
+        await _offerSwap(settings, scope, command, other, target);
+      case ShortcutBindingRejected(reason: final reason):
+        _notifyRejection(l10n, reason);
+    }
+  }
+
+  /// 拒绝原因 → Snackbar 文案。
+  ///
+  /// 同组冲突不在这里（[_applyBinding] 分流到互换引导）；unknownAction
+  /// 从页面不可达——行集来自 `commandsOf`，真发生时静默即可（绑定未变）。
+  void _notifyRejection(
+    AppLocalizations l10n,
+    ShortcutBindingRejection reason,
+  ) {
+    switch (reason) {
+      case ShortcutBindingRejection.unsupportedKey:
+        // 平台只接受字母 / 数字 / F1–F12 / 空格（系统 API 限制）。
+        context.read<NotificationService?>()?.showSnackBar(
+              l10n.shortcutsGlobalUnsupportedKey,
+            );
+      case ShortcutBindingRejection.missingModifier:
+        context.read<NotificationService?>()?.showSnackBar(
+              l10n.shortcutsGlobalNeedsModifier,
+            );
+      case ShortcutBindingRejection.unknownAction:
+        return;
+    }
+  }
+
+  /// 冲突引导：说明替换将互换两者绑定，确认后执行互换并反馈结果。
+  ///
+  /// [target] 是本次想写入的组合。对话框存续期间设置可能被改写（如应用
+  /// 远端设置触发的 reload 同步回写），确认后先复核冲突仍成立——占用者
+  /// 仍是 [other] 且仍持有 [target]——再互换；不成立则不写入，按冲突
+  /// 兜底文案提示（绑定没有变化）。
+  Future<void> _offerSwap(
+    ShortcutSettings settings,
+    ShortcutScope scope,
+    ShortcutCommand command,
+    ShortcutCommand other,
+    ShortcutCombo target,
+  ) async {
+    final l10n = AppLocalizations.of(context)!;
+    final confirmed = await showShortcutSwapDialog(
+      context,
+      actionLabel: _actionLabel(l10n, other),
+    );
+    if (!confirmed || !mounted) return;
     final bindings = scope == ShortcutScope.inApp
         ? settings.inAppBindings
         : settings.globalBindings;
-    final accepted = await settings.setBinding(scope, command, combo);
-    if (accepted || !mounted) return;
-    final l10n = AppLocalizations.of(context)!;
-    // 与 setBinding 同一判定源：拒绝后状态未变，这里的快照仍然有效。
-    final conflict = combo.isValidForScope(scope)
-        ? bindings.conflictWith(combo, exclude: command)
-        : null;
-    final String message;
-    if (conflict != null) {
-      message = l10n.shortcutsConflict(_actionLabel(l10n, conflict));
-    } else if (!ShortcutSettings.isComboSupported(scope, combo)) {
-      // 平台只接受字母 / 数字 / F1–F12 / 空格（系统 API 限制）。
-      message = l10n.shortcutsGlobalUnsupportedKey;
-    } else {
-      message = l10n.shortcutsGlobalNeedsModifier;
+    if (bindings.conflictWith(target, exclude: command) != other) {
+      context.read<NotificationService?>()?.showSnackBar(
+            l10n.shortcutsConflict(_actionLabel(l10n, other)),
+          );
+      return;
     }
-    context.read<NotificationService?>()?.showSnackBar(message);
+    final swapped = await settings.swapBindings(scope, command, other);
+    if (!mounted) return;
+    context.read<NotificationService?>()?.showSnackBar(
+          swapped
+              ? l10n.shortcutsSwapDone(_actionLabel(l10n, other))
+              // 互换本不应失败（冲突方必属同组）；真失败时退回冲突提示，
+              // 至少让用户知道绑定没有变化。
+              : l10n.shortcutsConflict(_actionLabel(l10n, other)),
+        );
   }
+}
+
+/// 冲突替换确认层：说明该组合已被其它动作占用、替换将互换两者绑定；
+/// 返回 true = 用户确认替换（由调用方执行互换，见
+/// [ShortcutSettings.swapBindings]）。
+Future<bool> showShortcutSwapDialog(
+  BuildContext context, {
+  required String actionLabel,
+}) async {
+  final l10n = AppLocalizations.of(context)!;
+  final navigator = Navigator.of(context, rootNavigator: true);
+  final confirmed = await M3EDialog.show<bool>(
+    context,
+    dialog: M3EDialog(
+      title: l10n.shortcutsSwapDialogTitle,
+      content: SizedBox(
+        width: settingsDialogWidth(context),
+        child: Text(l10n.shortcutsSwapDialogMessage(actionLabel)),
+      ),
+      actions: [
+        M3EButton.text(
+          onPressed: () => navigator.pop(false),
+          child: Text(l10n.cancel),
+        ),
+        M3EButton.filled(
+          onPressed: () => navigator.pop(true),
+          child: Text(l10n.shortcutsSwapConfirm),
+        ),
+      ],
+    ),
+  );
+  return confirmed ?? false;
 }
 
 /// 组级「恢复默认」行：全默认时置灰（没有可恢复的覆盖）。

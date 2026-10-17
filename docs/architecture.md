@@ -566,7 +566,10 @@
   桌面专属交互：**快捷键分「软件内」与「全局」两组**（用户口径：都可关闭、可自定义）。
   绑定模型在 `lib/services/shortcut_bindings.dart`（动作 ↔ 组合、两组默认表、JSON 覆盖），
   开关与自定义持久化在 `lib/services/shortcut_settings.dart`（跟人走），设置入口
-  「设置 › 通用 › 快捷键」子页（录制交互见 `lib/widgets/settings/shortcut_recorder_tile.dart`）。
+  「设置 › 通用 › 快捷键」子页（录制交互见 `lib/widgets/settings/shortcut_recorder_tile.dart`；
+  录到已被占用的组合、或单行「回默认」撞上被占用的默认组合时弹确认层，确认后
+  互换两者的生效组合——`ShortcutSettings.swapBindings`；「同组无重复」由
+  `ShortcutSettings.setBinding` 单点保证）。
   软件内挂载点是 `lib/app/desktop/desktop_shortcuts.dart`（`HardwareKeyboard` 处理器——
   **不要**换回顶层 `Focus.onKeyEvent`：焦点落到壳层 Focus 的祖先（route 作用域）后按键会
   整体失效；输入框聚焦 / 录制中 / 总开关关闭时全部让位）；全局热键是

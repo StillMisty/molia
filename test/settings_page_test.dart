@@ -29,6 +29,9 @@ import 'package:molia/services/lyrics_display/lyrics_output.dart';
 import 'package:molia/services/lyrics_service.dart';
 import 'package:molia/services/notification_service.dart';
 import 'package:molia/services/play_statistics_service.dart';
+import 'package:molia/services/shortcut_bindings.dart';
+import 'package:molia/services/shortcut_settings.dart';
+import 'package:molia/services/shortcuts.dart';
 import 'package:molia/services/window/app_tray.dart';
 import 'package:molia/services/window/tray_settings.dart';
 import 'package:molia/sources/source_manager.dart';
@@ -621,6 +624,282 @@ void main() {
     // 组级恢复默认行两组都有（全默认时置灰，仍占位）。
     expect(find.byKey(const Key('shortcutResetAll_inApp')), findsOneWidget);
     expect(find.byKey(const Key('shortcutResetAll_global')), findsOneWidget);
+  }, variant: TargetPlatformVariant.only(TargetPlatform.linux));
+
+  testWidgets('通用子页：快捷键冲突弹确认层，替换后互换两者绑定', (tester) async {
+    // 快捷键状态是单例：接线登记表并保证从全默认开始，结束恢复默认。
+    final prefs = await SharedPreferences.getInstance();
+    ShortcutSettings.attachSettings(testSettingsRegistry(preferences: prefs));
+    await ShortcutSettings.load();
+    // 提示出口换成记录型（默认构造缺 hostContextKey，展示是空操作）。
+    final notifications = _RecordingNotificationService();
+    addTearDown(() async {
+      await ShortcutSettings.instance.resetScope(ShortcutScope.inApp);
+      await ShortcutSettings.instance.resetScope(ShortcutScope.global);
+    });
+
+    await pumpSettingsPage(
+      tester,
+      extraProviders: [
+        Provider<NotificationService>.value(value: notifications),
+        // 页面经 `context.watch<ShortcutSettings?>` 订阅；不接 provider 会走
+        // 单例回退（不订阅），互换后行内文案不会刷新。
+        ChangeNotifierProvider<ShortcutSettings>.value(
+          value: ShortcutSettings.instance,
+        ),
+      ],
+    );
+    await tester.tap(find.byKey(const Key('settingsGeneralItem')));
+    await tester.pumpAndSettle();
+    final entry = find.byKey(const Key('settingsShortcutsItem'));
+    await tester.ensureVisible(entry);
+    await tester.pumpAndSettle();
+    await tester.tap(entry);
+    await tester.pumpAndSettle();
+
+    // 给「音量 +」录 Space（已被「播放 / 暂停」占用）→ 弹替换确认层。
+    final row = find.byKey(const Key('shortcutRow_inApp_volumeUp'));
+    Future<void> recordSpace() async {
+      await tester.tap(row);
+      await tester.pump();
+      await tester.sendKeyEvent(LogicalKeyboardKey.space);
+      await tester.pumpAndSettle();
+    }
+
+    await recordSpace();
+    expect(find.text('Replace shortcut?'), findsOneWidget);
+    expect(
+      find.text(
+        '“Play / pause” already uses this combo. '
+        'Replacing will swap the two bindings.',
+      ),
+      findsOneWidget,
+    );
+
+    // 取消：绑定不动。
+    await tester.tap(find.text('Cancel'));
+    await tester.pumpAndSettle();
+    expect(
+      ShortcutSettings.instance.inAppBindings.comboFor(ShortcutCommand.volumeUp),
+      const ShortcutCombo(key: LogicalKeyboardKey.arrowUp),
+    );
+
+    // 再录一次并确认替换：「音量 +」← Space，「播放 / 暂停」← ↑。
+    await recordSpace();
+    await tester.tap(find.text('Replace'));
+    await tester.pumpAndSettle();
+
+    final bindings = ShortcutSettings.instance.inAppBindings;
+    expect(
+      bindings.comboFor(ShortcutCommand.volumeUp),
+      const ShortcutCombo(key: LogicalKeyboardKey.space),
+    );
+    expect(
+      bindings.comboFor(ShortcutCommand.togglePlayPause),
+      const ShortcutCombo(key: LogicalKeyboardKey.arrowUp),
+    );
+    // 页面订阅生效：互换后两行文案与「回默认」亮态随通知更新。
+    expect(
+      find.descendant(of: row, matching: find.text('Space')),
+      findsOneWidget,
+    );
+    final playRow = find.byKey(const Key('shortcutRow_inApp_togglePlayPause'));
+    expect(
+      find.descendant(of: playRow, matching: find.text('↑')),
+      findsOneWidget,
+    );
+    expect(
+        find.byKey(const Key('shortcutReset_inApp_volumeUp')), findsOneWidget);
+    expect(
+      find.byKey(const Key('shortcutReset_inApp_togglePlayPause')),
+      findsOneWidget,
+    );
+    // 落盘：存储读回互换后的绑定。
+    expect(
+      ShortcutBindings.decode(
+        ShortcutScope.inApp,
+        prefs.getString(kShortcutBindings.name),
+      ).comboFor(ShortcutCommand.togglePlayPause),
+      const ShortcutCombo(key: LogicalKeyboardKey.arrowUp),
+    );
+    // 成功反馈经提示出口给出（记录型服务断言文案）。
+    expect(
+      notifications.messages,
+      contains('Swapped bindings with “Play / pause”'),
+    );
+  }, variant: TargetPlatformVariant.only(TargetPlatform.linux));
+
+  testWidgets('通用子页：单行回默认撞车弹确认层，替换后互换且无重复', (tester) async {
+    // 快捷键状态是单例：接线登记表并保证从全默认开始，结束恢复默认。
+    final prefs = await SharedPreferences.getInstance();
+    ShortcutSettings.attachSettings(testSettingsRegistry(preferences: prefs));
+    await ShortcutSettings.load();
+    final notifications = _RecordingNotificationService();
+    addTearDown(() async {
+      await ShortcutSettings.instance.resetScope(ShortcutScope.inApp);
+      await ShortcutSettings.instance.resetScope(ShortcutScope.global);
+    });
+
+    await pumpSettingsPage(
+      tester,
+      extraProviders: [
+        Provider<NotificationService>.value(value: notifications),
+        // 页面经 `context.watch<ShortcutSettings?>` 订阅；本用例兼验订阅——
+        // 互换后行内文案与「回默认」亮态必须随通知刷新。
+        ChangeNotifierProvider<ShortcutSettings>.value(
+          value: ShortcutSettings.instance,
+        ),
+      ],
+    );
+    await tester.tap(find.byKey(const Key('settingsGeneralItem')));
+    await tester.pumpAndSettle();
+    final entry = find.byKey(const Key('settingsShortcutsItem'));
+    await tester.ensureVisible(entry);
+    await tester.pumpAndSettle();
+    await tester.tap(entry);
+    await tester.pumpAndSettle();
+
+    // 复现审查路径：全默认 → 「音量 +」录 Space → 确认替换（两行互换）。
+    final volumeRow = find.byKey(const Key('shortcutRow_inApp_volumeUp'));
+    await tester.tap(volumeRow);
+    await tester.pump();
+    await tester.sendKeyEvent(LogicalKeyboardKey.space);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Replace'));
+    await tester.pumpAndSettle();
+
+    // 互换后两行都被覆盖：「回默认」按钮亮起。
+    final volumeReset = find.byKey(const Key('shortcutReset_inApp_volumeUp'));
+    final playReset =
+        find.byKey(const Key('shortcutReset_inApp_togglePlayPause'));
+    expect(volumeReset, findsOneWidget);
+    expect(playReset, findsOneWidget);
+
+    // 点「音量 +」回默认（目标 = 默认 ↑，已被「播放 / 暂停」占着）：
+    // 弹互换确认层，而不是直接清覆盖造出两行同键。
+    await tester.tap(volumeReset);
+    await tester.pumpAndSettle();
+    expect(find.text('Replace shortcut?'), findsOneWidget);
+    expect(
+      find.text(
+        '“Play / pause” already uses this combo. '
+        'Replacing will swap the two bindings.',
+      ),
+      findsOneWidget,
+    );
+
+    // 取消：绑定不动。
+    await tester.tap(find.text('Cancel'));
+    await tester.pumpAndSettle();
+    expect(
+      ShortcutSettings.instance.inAppBindings.comboFor(ShortcutCommand.volumeUp),
+      const ShortcutCombo(key: LogicalKeyboardKey.space),
+    );
+
+    // 再点并确认：两行互换回默认（覆盖清空），组内无重复。
+    await tester.tap(volumeReset);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Replace'));
+    await tester.pumpAndSettle();
+
+    final bindings = ShortcutSettings.instance.inAppBindings;
+    expect(
+      bindings.comboFor(ShortcutCommand.volumeUp),
+      const ShortcutCombo(key: LogicalKeyboardKey.arrowUp),
+    );
+    expect(
+      bindings.comboFor(ShortcutCommand.togglePlayPause),
+      const ShortcutCombo(key: LogicalKeyboardKey.space),
+    );
+    final combos = bindings.effective.values.toList();
+    expect(combos.toSet().length, combos.length);
+    expect(bindings.encode(), '');
+    expect(prefs.getString(kShortcutBindings.name), '');
+
+    // 页面同步刷新：文案回默认、「回默认」按钮消失。
+    final playRow = find.byKey(const Key('shortcutRow_inApp_togglePlayPause'));
+    expect(
+      find.descendant(of: volumeRow, matching: find.text('↑')),
+      findsOneWidget,
+    );
+    expect(
+      find.descendant(of: playRow, matching: find.text('Space')),
+      findsOneWidget,
+    );
+    expect(volumeReset, findsNothing);
+    expect(playReset, findsNothing);
+    // 回默认这一次也给出互换成功反馈。
+    expect(
+      notifications.messages,
+      contains('Swapped bindings with “Play / pause”'),
+    );
+  }, variant: TargetPlatformVariant.only(TargetPlatform.linux));
+
+  testWidgets('通用子页：互换确认后复核冲突，前提失效则不写入', (tester) async {
+    // 快捷键状态是单例：接线登记表并保证从全默认开始，结束恢复默认。
+    final prefs = await SharedPreferences.getInstance();
+    ShortcutSettings.attachSettings(testSettingsRegistry(preferences: prefs));
+    await ShortcutSettings.load();
+    final notifications = _RecordingNotificationService();
+    addTearDown(() async {
+      await ShortcutSettings.instance.resetScope(ShortcutScope.inApp);
+      await ShortcutSettings.instance.resetScope(ShortcutScope.global);
+    });
+
+    await pumpSettingsPage(
+      tester,
+      extraProviders: [
+        Provider<NotificationService>.value(value: notifications),
+        ChangeNotifierProvider<ShortcutSettings>.value(
+          value: ShortcutSettings.instance,
+        ),
+      ],
+    );
+    await tester.tap(find.byKey(const Key('settingsGeneralItem')));
+    await tester.pumpAndSettle();
+    final entry = find.byKey(const Key('settingsShortcutsItem'));
+    await tester.ensureVisible(entry);
+    await tester.pumpAndSettle();
+    await tester.tap(entry);
+    await tester.pumpAndSettle();
+
+    // 交叉状态：「音量 +」= Space、「播放 / 暂停」= ↑。
+    await ShortcutSettings.instance.swapBindings(
+      ShortcutScope.inApp,
+      ShortcutCommand.togglePlayPause,
+      ShortcutCommand.volumeUp,
+    );
+    await tester.pumpAndSettle();
+
+    // 打开「音量 +」回默认的互换确认层。
+    final volumeReset = find.byKey(const Key('shortcutReset_inApp_volumeUp'));
+    await tester.tap(volumeReset);
+    await tester.pumpAndSettle();
+    expect(find.text('Replace shortcut?'), findsOneWidget);
+
+    // 对话框存续期间模拟应用远端设置：reload 同步回写绑定键，冲突前提消失。
+    await prefs.setString(kShortcutBindings.name, '');
+    await ShortcutSettings.reload();
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('Replace'));
+    await tester.pumpAndSettle();
+
+    // 复核不成立：不写入，按冲突兜底文案提示；绑定保持 reload 后的全默认。
+    final bindings = ShortcutSettings.instance.inAppBindings;
+    expect(bindings.encode(), '');
+    expect(
+      bindings.comboFor(ShortcutCommand.volumeUp),
+      const ShortcutCombo(key: LogicalKeyboardKey.arrowUp),
+    );
+    expect(
+      bindings.comboFor(ShortcutCommand.togglePlayPause),
+      const ShortcutCombo(key: LogicalKeyboardKey.space),
+    );
+    expect(
+      notifications.messages,
+      contains('Already used by “Play / pause”'),
+    );
   }, variant: TargetPlatformVariant.only(TargetPlatform.linux));
 
   testWidgets('通用子页：桌面托盘开关切换并持久化（仅桌面端）', (tester) async {
@@ -1252,4 +1531,23 @@ class _FakeMediaOutput implements LyricsOutput {
 
   @override
   Future<void> stop() async {}
+}
+
+/// 记录型提示服务：默认构造缺 hostContextKey（展示是空操作），
+/// 这里只收文案用于断言。
+class _RecordingNotificationService extends NotificationService {
+  _RecordingNotificationService() : super(GlobalKey<ScaffoldMessengerState>());
+
+  final List<String> messages = [];
+
+  @override
+  void showSnackBar(
+    String message, {
+    bool isError = false,
+    Duration duration = const Duration(seconds: 4),
+    String? actionLabel,
+    void Function()? onActionPressed,
+  }) {
+    messages.add(message);
+  }
 }
