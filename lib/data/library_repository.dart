@@ -99,24 +99,60 @@ class LibraryRepository implements LibraryStore, LibrarySyncStore {
     required int deletedAt,
     bool journal = true,
   }) async {
-    await executor.into(_db.syncTombstones).insert(
+    await _recordTombstones(
+      executor,
+      category,
+      [(key: key, version: version)],
+      deletedAt: deletedAt,
+      journal: journal,
+    );
+  }
+
+  /// 批量墓碑 + 一次日志追加（批量删除的写入路径）。
+  ///
+  /// 旧实现逐行 `_recordTombstone`：每行 1 次 INSERT + 1 次 journal.append
+  /// （后者又各自查一次 headSeq）——清 500 条历史 ≈ 2500 条语句。这里墓碑
+  /// 走 drift batch（一条消息），日志按批一次追加（headSeq 只查一次）。
+  Future<void> _recordTombstones(
+    DatabaseConnectionUser executor,
+    String category,
+    List<({String key, SyncVersion version})> entries, {
+    required int deletedAt,
+    bool journal = true,
+  }) async {
+    if (entries.isEmpty) return;
+    await executor.batch((batch) {
+      for (final entry in entries) {
+        batch.insert(
+          _db.syncTombstones,
           SyncTombstonesCompanion.insert(
             category: category,
-            key: key,
-            versionPhysical: version.physical,
-            versionCounter: Value(version.counter),
-            deviceId: Value(version.deviceId),
+            key: entry.key,
+            versionPhysical: entry.version.physical,
+            versionCounter: Value(entry.version.counter),
+            deviceId: Value(entry.version.deviceId),
             deletedAt: Value(deletedAt),
           ),
           mode: InsertMode.insertOrReplace,
         );
-    if (journal) {
-      await _appendJournal(
-        executor,
-        category,
-        SyncRecord.tombstone(key: key, version: version, deletedAt: deletedAt),
-      );
-    }
+      }
+    });
+    if (!journal) return;
+    final journalRepo = _journal;
+    if (journalRepo == null) return;
+    final parsed = SyncCategory.tryParse(category);
+    if (parsed == null) return;
+    await journalRepo.append(executor, [
+      for (final entry in entries)
+        (
+          category: parsed,
+          record: SyncRecord.tombstone(
+            key: entry.key,
+            version: entry.version,
+            deletedAt: deletedAt,
+          ),
+        ),
+    ]);
   }
 
   // 增量日志：本机写入在同一事务内追加（对端只拉变更；见 ADR-0003 v2 §5）。
@@ -387,6 +423,7 @@ class LibraryRepository implements LibraryStore, LibrarySyncStore {
     final db = _db;
     var removed = 0;
     await db.transaction(() async {
+      final tombstones = <({String key, SyncVersion version})>[];
       for (final key in keys) {
         final count = await (db.delete(db.playHistory)
               ..where((t) =>
@@ -395,15 +432,18 @@ class LibraryRepository implements LibraryStore, LibrarySyncStore {
             .go();
         removed += count;
         if (count > 0) {
-          await _recordTombstone(
-            db,
-            SyncCategory.history.name,
-            SyncRecordKeys.history(key.sourceKey, key.songId),
+          tombstones.add((
+            key: SyncRecordKeys.history(key.sourceKey, key.songId),
             version: _nextVersion(),
-            deletedAt: _nowMs(),
-          );
+          ));
         }
       }
+      await _recordTombstones(
+        db,
+        SyncCategory.history.name,
+        tombstones,
+        deletedAt: _nowMs(),
+      );
     });
     if (removed > 0) _notifyChanged(const LibraryChange.history());
     return removed;
@@ -538,15 +578,19 @@ class LibraryRepository implements LibraryStore, LibrarySyncStore {
       final rows = await db.select(db.playHistory).get();
       if (rows.isEmpty) return;
       await db.delete(db.playHistory).go();
-      for (final row in rows) {
-        await _recordTombstone(
-          db,
-          SyncCategory.history.name,
-          SyncRecordKeys.history(row.sourceKey, row.songId),
-          version: _nextVersion(),
-          deletedAt: _nowMs(),
-        );
-      }
+      final deletedAt = _nowMs();
+      await _recordTombstones(
+        db,
+        SyncCategory.history.name,
+        [
+          for (final row in rows)
+            (
+              key: SyncRecordKeys.history(row.sourceKey, row.songId),
+              version: _nextVersion(),
+            ),
+        ],
+        deletedAt: deletedAt,
+      );
     });
     _notifyChanged(const LibraryChange.history());
   }
@@ -836,6 +880,7 @@ class LibraryRepository implements LibraryStore, LibrarySyncStore {
     var removed = 0;
     await db.transaction(() async {
       final syncId = await _playlistSyncIdById(db, playlistId);
+      final tombstones = <({String key, SyncVersion version})>[];
       for (final key in keys) {
         final count = await (db.delete(db.playlistTracks)
               ..where((t) =>
@@ -845,15 +890,18 @@ class LibraryRepository implements LibraryStore, LibrarySyncStore {
             .go();
         removed += count;
         if (count > 0 && syncId != null && syncId.isNotEmpty) {
-          await _recordTombstone(
-            db,
-            SyncCategory.playlistTracks.name,
-            SyncRecordKeys.playlistTrack(syncId, key.sourceKey, key.songId),
+          tombstones.add((
+            key: SyncRecordKeys.playlistTrack(syncId, key.sourceKey, key.songId),
             version: _nextVersion(),
-            deletedAt: _nowMs(),
-          );
+          ));
         }
       }
+      await _recordTombstones(
+        db,
+        SyncCategory.playlistTracks.name,
+        tombstones,
+        deletedAt: _nowMs(),
+      );
     });
     if (removed > 0) {
       _notifyChanged(favoriteChange
@@ -952,6 +1000,10 @@ class LibraryRepository implements LibraryStore, LibrarySyncStore {
   }
 
   /// 按给定顺序重写 `sortOrder`（事务；仅更新仍存在于列表中的键）。
+  ///
+  /// 先整列表读一次、用 batch 提交 UPDATE：旧实现对每行「UPDATE + SELECT
+  /// 回读」（1000 首拖动一次 = 2000+ 语句）；重排只改 `sortOrder` 与版本三列，
+  /// 读到的行 + 新值即可构造增量日志记录，无需回读。
   @override
   Future<void> reorderPlaylistTracks(
     int playlistId,
@@ -961,35 +1013,58 @@ class LibraryRepository implements LibraryStore, LibrarySyncStore {
     final db = _db;
     await db.transaction(() async {
       final syncId = await _ensurePlaylistSyncId(db, playlistId);
+      final rows = await (db.select(db.playlistTracks)
+            ..where((t) => t.playlistId.equals(playlistId)))
+          .get();
+      final byKey = {
+        for (final row in rows) '${row.sourceKey}\u0001${row.songId}': row,
+      };
       final changes = <SyncJournalChange>[];
+      final updates = <({TrackKey key, int index, SyncVersion version})>[];
       for (var index = 0; index < ordered.length; index++) {
         final key = ordered[index];
+        final row = byKey['${key.sourceKey}\u0001${key.songId}'];
+        if (row == null || row.sortOrder == index) continue;
         final version = _nextVersion();
-        final updated = await (db.update(db.playlistTracks)
-              ..where((t) =>
-                  t.playlistId.equals(playlistId) &
-                  t.sourceKey.equals(key.sourceKey) &
-                  t.songId.equals(key.songId) &
-                  t.sortOrder.equals(index).not()))
-            .write(PlaylistTracksCompanion(
-          sortOrder: Value(index),
-          versionPhysical: Value(version.physical),
-          versionCounter: Value(version.counter),
-          deviceId: Value(version.deviceId),
-        ));
-        if (updated > 0 && syncId.isNotEmpty) {
-          final row = await (db.select(db.playlistTracks)
-                ..where((t) =>
-                    t.playlistId.equals(playlistId) &
-                    t.sourceKey.equals(key.sourceKey) &
-                    t.songId.equals(key.songId))
-                ..limit(1))
-              .getSingle();
+        updates.add((key: key, index: index, version: version));
+        if (syncId.isNotEmpty) {
           changes.add((
             category: SyncCategory.playlistTracks,
-            record: _trackSyncRecord(playlistSyncId: syncId, row: row),
+            record: _trackRecord(
+              playlistSyncId: syncId,
+              sourceKey: row.sourceKey,
+              songId: row.songId,
+              title: row.title,
+              artist: row.artist,
+              album: row.album,
+              coverUrl: row.coverUrl,
+              durationMs: row.durationMs,
+              raw: row.raw,
+              addedAt: row.addedAt,
+              sortOrder: index,
+              version: version,
+            ),
           ));
         }
+      }
+      if (updates.isNotEmpty) {
+        await db.batch((batch) {
+          for (final update in updates) {
+            batch.update(
+              db.playlistTracks,
+              PlaylistTracksCompanion(
+                sortOrder: Value(update.index),
+                versionPhysical: Value(update.version.physical),
+                versionCounter: Value(update.version.counter),
+                deviceId: Value(update.version.deviceId),
+              ),
+              where: (t) =>
+                  t.playlistId.equals(playlistId) &
+                  t.sourceKey.equals(update.key.sourceKey) &
+                  t.songId.equals(update.key.songId),
+            );
+          }
+        });
       }
       if (changes.isNotEmpty && _journal != null) {
         await _journal.append(db, changes);

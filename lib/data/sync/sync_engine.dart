@@ -690,6 +690,11 @@ class SyncEngine extends ChangeNotifier implements SyncSchedulerHost {
       );
       // 内容指纹按实际外发的记录集（裁剪墓碑后）计算：对端探测应答 / 本机
       // 「未变不推」都拿它与自己缓存的值比较。
+      //
+      // 裁剪只删过期墓碑：记录数不变即集合不变，直接复用上一行算过的指纹
+      // （_fingerprint 是逐条 jsonEncode 的 O(全库) 工作）。
+      final refreshedCount = _recordCount(refreshed);
+      final prunedCount = _recordCount(pruned.records);
       final outgoing = SyncEnvelope(
         deviceId: pruned.deviceId,
         deviceName: pruned.deviceName,
@@ -701,12 +706,26 @@ class SyncEngine extends ChangeNotifier implements SyncSchedulerHost {
         // 本载荷覆盖的类别（蜂窝小类别轮只含小类别）：anti-entropy 按它
         // 只在双方共享的类别上比对指纹。
         categories: [for (final category in categories) category.name],
-      ).withSnapshotId(_fingerprint(pruned.records));
+      ).withSnapshotId(prunedCount == refreshedCount
+          ? _localFingerprint!
+          : _fingerprint(pruned.records));
       _lastEnvelope = outgoing;
 
       // 增量窗口：只带变更（对端按自己的游标过滤应用）。窗口为空但 ack
       // 有推进时也要外发：对端据此 compact 自己的日志。
-      final delta = journal == null ? null : await _buildDelta(journal, outgoing);
+      //
+      // 惰性构建：窗口读取 + 逐条 jsonDecode 是 O(窗口条目) 的开销；
+      // 入站轮 / 没有可用传输的轮次根本用不到（此前无条件构建）。
+      SyncEnvelope? delta;
+      var deltaBuilt = false;
+      Future<SyncEnvelope?> buildDelta() async {
+        if (!deltaBuilt) {
+          deltaBuilt = true;
+          delta = journal == null ? null : await _buildDelta(journal, outgoing);
+        }
+        return delta;
+      }
+
       final acksKey = _acksKey(outgoing.acks);
 
       var succeededPushes = 0;
@@ -762,13 +781,15 @@ class SyncEngine extends ChangeNotifier implements SyncSchedulerHost {
             }
           }
           // 2) 增量窗口：内容或 ack 有变化才推（对端未变不传、不解密）。
-          if (delta != null) {
-            final deltaKey = '${delta.windowStart}:${delta.windowEnd}:$acksKey';
+          final deltaEnvelope = await buildDelta();
+          if (deltaEnvelope != null) {
+            final deltaKey =
+                '${deltaEnvelope.windowStart}:${deltaEnvelope.windowEnd}:$acksKey';
             if (_lastPushedDeltaKey[entry.key] == deltaKey) continue;
             final watch = Stopwatch()..start();
             SyncPushResult result;
             try {
-              result = await transport.push(delta);
+              result = await transport.push(deltaEnvelope);
             } catch (e) {
               result = SyncPushResult(
                 failedPeers: 1,
@@ -1464,12 +1485,19 @@ class SyncEngine extends ChangeNotifier implements SyncSchedulerHost {
     return result;
   }
 
+  static int _recordCount(Map<SyncCategory, List<SyncRecord>> records) {
+    var total = 0;
+    for (final list in records.values) {
+      total += list.length;
+    }
+    return total;
+  }
+
   /// 本地视图指纹：用于区分「本机没有变化」与「有变更需要外发」。
   ///
   /// 逐类别按键排序后哈希，与集合顺序无关；只在同一进程内比较（跨重启由
   /// 后续的增量协议以游标替代）。
-  static String _fingerprint(Map<SyncCategory, List<SyncRecord>> records) {
-    final buffer = StringBuffer();
+  static String _fingerprint(Map<SyncCategory, List<SyncRecord>> records) {    final buffer = StringBuffer();
     for (final category in SyncCategory.values) {
       final list = records[category];
       if (list == null || list.isEmpty) continue;
