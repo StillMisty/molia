@@ -315,7 +315,7 @@ void main() {
     await provider.setEnabled(true);
     await tester.pumpAndSettle();
 
-    // 行内不再有独立收藏按钮（收藏只出现在 ⋮ 菜单里）。
+    // 收藏入口在行尾 ⋮ 菜单，行内不设独立按钮。
     expect(find.byIcon(Icons.favorite_border_rounded), findsNothing);
 
     await tester.tap(find.byIcon(Icons.more_vert_rounded).first);

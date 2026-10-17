@@ -554,7 +554,7 @@ void main() {
     expect(exported, hasLength(1));
     expect(exported.single['songId'], '1');
     expect(exported.single['syncKey'], isNotEmpty);
-    // 缓存命中：同一列表实例（旧实现每次全表重读 + 逐行重建 Map）。
+    // 缓存命中复用同一列表实例。
     expect(identical(await repository.syncExportEvents(), exported), isTrue);
 
     // 增量：新事件收尾后缓存就地更新（含 syncKey / 版本列）。

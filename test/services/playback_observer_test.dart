@@ -120,7 +120,7 @@ void main() {
     facade = DefaultPlaybackFacade(backend: backend);
   });
 
-  testWidgets('切歌：各副作用发生且（同步发起的）顺序与旧实现一致', (tester) async {
+  testWidgets('切歌：各副作用发生且同步发起的顺序固定', (tester) async {
     final navigatorKey = GlobalKey<NavigatorState>();
     final observer = buildObserver(navigatorKey: navigatorKey);
     addTearDown(observer.dispose);
@@ -166,7 +166,7 @@ void main() {
     final prefs = await SharedPreferences.getInstance();
     expect(prefs.getString('last_played_track_name'), 'Title a');
 
-    // 顺序：context → widget → history → session 同步发起（与旧扇出一致），
+    // 顺序：context → widget → history → session 同步发起；
     // 通知权限在播放态判定后发起；预取在微任务中执行（跨 async gap 不用
     // context），落在最后。
     expect(

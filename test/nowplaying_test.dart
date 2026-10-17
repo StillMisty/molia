@@ -358,7 +358,7 @@ void main() {
       ],
     );
 
-    // 进度排不再有换源按钮（换源入口在歌词页 FAB menu / 信息页）。
+    // 换源入口在歌词页 FAB menu / 信息页；进度排内无换源按钮。
     expect(
       find.descendant(
         of: find.byType(Player),

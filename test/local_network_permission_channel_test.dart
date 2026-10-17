@@ -87,7 +87,7 @@ void main() {
     expect(opened, 1);
   });
 
-  test('非 Android 平台不触达通道（Windows 不再有定位插件）', () async {
+  test('非 Android 平台不触达通道（Windows 恒为允许）', () async {
     debugDefaultTargetPlatformOverride = TargetPlatform.windows;
     var calls = 0;
     messenger.setMockMethodCallHandler(channel, (call) async {

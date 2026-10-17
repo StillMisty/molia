@@ -153,7 +153,7 @@ void main() {
     expect(rows, findsAtLeastNWidgets(1));
     expect(rows.evaluate().length, lessThanOrEqualTo(9));
 
-    // 首屏不再有手动同步主操作。
+    // 首屏不提供手动同步主操作。
     expect(find.byKey(const Key('settingsSyncNowItem')), findsNothing);
 
     // 被下沉的键在首屏不可见：类别 / 蜂窝策略 / 动态 / 设备与口令 / 日志行。
@@ -265,7 +265,7 @@ void main() {
     }
     await pumpPage(tester);
 
-    // 首屏不再渲染日志行（入口副文案给最近一轮结论 + 时间）。
+    // 首屏不渲染日志行；入口副文案给最近一轮结论 + 时间。
     expect(find.byType(SyncLogRow), findsNothing);
     expect(find.text('Sync log'), findsOneWidget);
 
@@ -328,7 +328,7 @@ void main() {
     expect(find.text('Not configured'), findsOneWidget);
   });
 
-  testWidgets('日志子页不再提供诊断导出入口', (tester) async {
+  testWidgets('日志子页不提供诊断导出入口', (tester) async {
     await provider.setEnabled(true);
     await pumpPage(tester);
     expect(find.byKey(const Key('settingsSyncDiagnosticItem')), findsNothing);
@@ -379,7 +379,7 @@ void main() {
       find.byKey(const Key('settingsSyncLanPermissionItem')),
       findsOneWidget,
     );
-    // 系统不再弹窗：不给「授予权限」，直接指去系统设置。
+    // 永久拒绝时系统不弹窗：UI 不给「授予权限」，直接指去系统设置。
     expect(find.text('Open settings'), findsOneWidget);
     expect(find.text('Grant LAN permission'), findsNothing);
     await tester.tap(find.byKey(const Key('settingsSyncLanPermissionItem')));
@@ -417,7 +417,7 @@ void main() {
     await pumpPage(tester);
 
     await openSubPage(tester, 'settingsSyncLogItem');
-    // 零应答但此前成功过：日志行可点开下一步动作。
+    // 零应答（区别于从未发现）：日志行可点开下一步动作。
     expect(find.byType(SyncLogRow), findsOneWidget);
     expect(find.textContaining('No device answered'), findsWidgets);
     await tester.tap(find.byType(SyncLogRow));
@@ -450,7 +450,7 @@ void main() {
 
     expect(find.textContaining('failed to start'), findsOneWidget);
     expect(find.textContaining('SocketException'), findsNothing);
-    // 「最后成功」不再进首屏（诊断导出里有）。
+    // 「最后成功」不进首屏（诊断导出里有）。
     expect(find.textContaining('Last success'), findsNothing);
   });
 

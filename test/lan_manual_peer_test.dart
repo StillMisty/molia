@@ -94,10 +94,10 @@ void main() {
     await transportA.start();
     await transportB.start();
 
-    // 第一轮：发现 A，此后 B 记得「曾经成功发现过」。
+    // 第一轮：发现 A，B 记下「已成功发现过对端」。
     expect((await transportB.pull()).peersSeen, 1);
 
-    // A 下线：零应答但此前成功过 → 明确提示（手动地址 / WebDAV 是出路）。
+    // A 下线：零应答但此前已成功发现过 → 明确提示（手动地址 / WebDAV 是出路）。
     await transportA.stop();
     final silent = await transportB.pull();
     expect(silent.peersSeen, 0);

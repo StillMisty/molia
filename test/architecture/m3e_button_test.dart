@@ -7,8 +7,8 @@ import 'package:flutter_test/flutter_test.dart';
 /// `material_3_expressive` 1.1.7 的 `_buildButtonCore` 只在
 /// `icon != null && label != null` 时才布局 label，否则回退到 `child`
 /// （都没有就是 `SizedBox.shrink()`）。`M3EButton.filled(label: Text('保存'))`
-/// 因此在界面上是一个**看不见内容的按钮**——同步设置页的确认按钮曾整片沦陷，
-/// 用户只看到空白按钮，属于「功能其实在、但用户按不到」的静默故障。
+/// 这类只带 `label:`、缺 `icon:` 的写法则渲染成**看不见内容的按钮**——用户
+/// 只看到空白按钮，属于「功能其实在、但用户按不到」的静默故障。
 ///
 /// 规则：普通动作按钮一律用 `child:`；只有「图标 + 文案」形态（会走 selection /
 /// icon 布局）或选择态按钮才用 `label:`（此时必须同时有 `icon:`）。
