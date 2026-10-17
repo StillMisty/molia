@@ -163,9 +163,9 @@ class PlaylistTrack {
 /// 资料库变更事件：`LibraryStore.changes` 广播的载荷，类型即失效范围。
 ///
 /// 收藏切换只做局部刷新（避免列表闪动 / 滚动位置丢失），所以事件必须携带
-/// 「变了什么、变的是哪个列表」。旧实现是 `Stream<void>` + 事件后回读
-/// `lastChangeKind` / `lastChangePlaylistId` 侧信道：消费方在异步边界之后
-/// 读到的是「最近一次」而不是「本次」，并发写入下有歧义。
+/// 「变了什么、变的是哪个列表」——`Stream<void>` + 事后回读 `lastChangeKind`
+/// / `lastChangePlaylistId` 的侧信道里，消费方在异步边界之后读到的是「最近
+/// 一次」而不是「本次」，并发写入下有歧义。
 sealed class LibraryChange {
   const LibraryChange();
 

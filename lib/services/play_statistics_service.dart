@@ -44,7 +44,7 @@ class PlayStatisticsService {
   /// 正常前进的单次 tick 最大计入时长；更大的位置跳变视为 seek，不计入。
   static const Duration maxCountedDelta = Duration(seconds: 2);
 
-  /// 位置回到开头的判定线：`< restartThreshold` 且此前已播过
+  /// 位置回到开头的判定线：`< restartThreshold` 且已播到过
   /// [restartMinPosition] 以上，视为重播（含单曲循环的一遍）。
   static const Duration restartThreshold = Duration(seconds: 1);
   static const Duration restartMinPosition = Duration(seconds: 5);

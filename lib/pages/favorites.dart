@@ -271,9 +271,9 @@ class _FavoritesPageState extends State<FavoritesPage> {
     try {
       if (cache != null && downloads != null && downloads.supported) {
         final index = await cache.audioCacheIndex();
-        // 排序 + 二分定位前缀区间：旧实现对「每首历史 × 每个缓存文件」做
-        // startsWith（1000 历史 × 3000 文件 ≈ 300 万次字符串比较）；同前缀
-        // 的键在字典序上连续，二分到起点后只扫描命中区间。
+        // 排序 + 二分定位前缀区间：同前缀的键在字典序上连续，二分到起点后
+        // 只扫描命中区间；逐对 startsWith 则是「每首历史 × 每个缓存文件」的
+        // 比较（1000 历史 × 3000 文件 ≈ 300 万次字符串比较）。
         final sortedKeys = index.keys.toList()..sort();
         final result = <CollectionLocalSong>[];
         for (final entry in provider.history) {
@@ -413,7 +413,7 @@ class _FavoritesPageState extends State<FavoritesPage> {
 
   /// 合集弹层条目：收藏 / 播放历史 / 本地歌曲 / 各列表。按持久化顺序排列，
   /// 未记录的新列表按自然顺序（收藏 → 历史 → 本地歌曲 → 列表）追加在末尾；
-  /// 已删除列表的持久化键自动忽略；下载能力不可用时不出现本地歌曲。
+  /// 下载能力不可用时不出现本地歌曲。
   List<_CollectionEntry> _collectionEntries(
     AppLocalizations l10n,
     LibraryProvider provider,

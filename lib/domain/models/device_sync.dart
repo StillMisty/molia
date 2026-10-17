@@ -792,7 +792,7 @@ abstract final class SyncIssueCode {
   /// 广播发送失败（网络策略 / 缺少广播 entitlement）。
   static const String broadcastUnavailable = 'broadcast_unavailable';
 
-  /// 探测窗口内零应答（此前成功发现过设备，可能被网络隔离）。
+  /// 探测窗口内零应答（本进程发现过设备、本轮无响应，可能被网络隔离）。
   static const String discoverySilent = 'discovery_silent';
 
   /// WebDAV 目录准备失败（MKCOL）。

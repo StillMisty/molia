@@ -562,7 +562,7 @@ class _SearchResultTile extends StatelessWidget {
     return hasId ? links : null;
   }
 
-  /// 封面地址：曲目图优先，其次专辑图（与旧的网格卡片同一取法）。
+  /// 封面地址：曲目图优先，其次专辑图。
   String? _coverUrlOf(Map<String, dynamic> item) {
     final images = item['images'];
     if (images is List && images.isNotEmpty && images[0] is Map) {

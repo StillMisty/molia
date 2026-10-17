@@ -65,8 +65,6 @@ AudioTagInfo readAudioTags(
   return (title: title, artist: artist);
 }
 
-// ------------------------------------------------------------ MP3 / ID3v2
-
 AudioTagInfo _readMp3(Uint8List bytes, {required int fileSize}) {
   final tag = _readId3v2(bytes);
   final durationMs = _mp3DurationMs(
@@ -273,8 +271,6 @@ int _layer3FrameSize({
   return (samplesPerFrame ~/ 8) * bitrateBps ~/ sampleRate + padding;
 }
 
-// ------------------------------------------------------------ FLAC
-
 AudioTagInfo _readFlac(Uint8List bytes) {
   if (bytes.length < 4 ||
       bytes[0] != 0x66 || // 'f'
@@ -362,8 +358,6 @@ Map<String, String> _readVorbisComments(Uint8List bytes, int start, int end) {
   }
   return result;
 }
-
-// ------------------------------------------------------------ 小工具
 
 int _be32(Uint8List bytes, int offset) =>
     (bytes[offset] << 24) |

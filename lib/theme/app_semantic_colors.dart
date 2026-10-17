@@ -1,8 +1,8 @@
 import 'package:material_ui/material_ui.dart';
 
 /// 状态语义色扩展：ColorScheme 只定义 primary/secondary/tertiary/error
-/// 四族，成功/警告等状态此前散落为硬编码颜色（`Colors.green`、
-/// 随意的 `tertiaryContainer`），既不随亮度适配也无法统一。
+/// 四族，成功 / 警告等状态若各页硬编码（`Colors.green`、随意的
+/// `tertiaryContainer`），既不随亮度适配也无法统一。
 ///
 /// 这里用 M3 的方式从固定种子派生 success/warning 的前景 + 容器四件套，
 /// 注册到全局 ThemeData.extensions（见 `app_theme.dart`）；只继承当前

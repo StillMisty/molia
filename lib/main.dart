@@ -27,7 +27,7 @@ import 'services/window/window_chrome.dart';
 /// 唯一 composition root：只做「平台装配 + 按顺序调用各 stack builder +
 /// runApp + 首帧回调」，子系统内部接线见 `lib/app/bootstrap/**`。
 ///
-/// 拆成 stack builders 后不再有 `late` / 可变槽位 / 前向引用：
+/// 各 stack builder 内不引入 `late` / 可变槽位 / 前向引用：
 /// - 服务 ↔ 后端互为依赖 → 取链是共享解析函数（`local_playback_chain.dart`）；
 /// - 歌词服务 ↔ 下载服务互为依赖 → 歌词服务先建、离线歌词读取收在存储级
 ///   函数里（`local_data_stack.dart`）；
@@ -36,11 +36,10 @@ import 'services/window/window_chrome.dart';
 /// - SyncEngine ↔ 局域网传输 → 快照提供者在同一个 builder 内接线
 ///   （`sync_stack.dart`）。
 ///
-/// 初始化顺序与副作用时机与拆分前一致（`unawaited` 的启动维护、各模块
-/// `init()` 的 await、runApp 前的启动预解析、首帧回调）；唯一的顺序调整是
-/// 系统媒体会话从「下载/资料库初始化之前」移到「provider 建好之后」
-/// （恢复态切歌键要直接落到 provider，见 `playback_stack.dart`），
-/// 仍在 runApp 之前。
+/// 启动顺序（`unawaited` 的启动维护、各模块 `init()` 的 await、runApp 前的
+/// 启动预解析、首帧回调）即下方步骤的调用顺序；系统媒体会话在 provider
+/// 建好之后装配（恢复态切歌键要直接落到 provider，见
+/// `playback_stack.dart`），仍在 runApp 之前。
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 

@@ -563,7 +563,7 @@ class _MyAppState extends State<MyApp>
 /// 跳变（「飞过头再复位」）。出场微缩只在过渡进行中有意义——过渡走完时
 /// opacity 已是 0，此后按 1.0 参与布局与后续锚点抓取。
 ///
-/// 入场同理不做微缩（历史回归：入场缩放曾让副本落在缩放后的位置）。
+/// 入场同理不做微缩（缩放会让飞行副本落在缩放后的位置）。
 @visibleForTesting
 ({double opacity, double scale}) shellPageLayerPresentation({
   required bool selected,
@@ -805,7 +805,7 @@ class _BarHeaderTransition extends StatelessWidget {
               ),
             ),
             AnimatedOpacity(
-              // 出场 90ms（先走），入场保持 160ms（与旧观感一致）。
+              // 出场 90ms（先走），入场 160ms。
               duration: Duration(milliseconds: showTrack ? 90 : 160),
               curve: showTrack ? Curves.easeIn : Curves.easeOut,
               opacity: showTrack ? 0 : 1,

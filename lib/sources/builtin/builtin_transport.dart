@@ -47,9 +47,8 @@ class BuiltinTransport {
 
   /// 默认重试退避：`base × 2^(n-1)` 封顶 [_retryBackoffMax]，叠加 ±30% 抖动。
   ///
-  /// 此前重试是紧挨着连发的：平台限流（403/429）时立刻重发只会把限流打成
-  /// 更长的封禁，且弱网下同时挂多个在途请求。发现适配器的 [retryRequest]
-  /// 复用同一策略（同一测试钩子）。
+  /// 退避而非紧挨着连发：平台限流（403/429）时立刻重发只会把限流打成更长
+  /// 的封禁，且弱网下同时挂多个在途请求。
   static const Duration retryBackoffBase = Duration(milliseconds: 300);
   static const Duration _retryBackoffMax = Duration(seconds: 4);
   static final math.Random _backoffJitter = math.Random();
@@ -77,7 +76,7 @@ class BuiltinTransport {
 
   /// 缓存 + 重试的合并入口（发现适配器的唯一取数方式）。
   ///
-  /// 语义（与旧的 `cached(...)` 套 `retryRequest(...)` 完全一致）：
+  /// 语义：
   /// - [attempt] 返回 null = 本次尝试失败（平台业务码异常 / 结构不符），继续重试；
   /// - 抛异常直接向上传播（不吞错、不重试——异常不是「本次尝试失败」）；
   /// - 用尽 [maxTries] 抛 [StateError]（[message] 是调用方与上游约定的信号，

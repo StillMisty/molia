@@ -7,9 +7,9 @@ import '../data/http/app_dio.dart';
 import '../services/cache_service.dart';
 import 'audio_predownload_task.dart';
 
-/// 共享 Dio：预取请求每个任务一个 `CancelToken` 取消，不再每任务新建 /
-/// 关闭客户端（旧实现 `dio.close(force: true)` 取消会让下一条预取重建
-/// 连接池与 TLS 会话）。
+/// 共享 Dio：预取请求每个任务一个 `CancelToken` 取消，避免每任务新建 /
+/// 关闭客户端（`dio.close(force: true)` 取消会让下一条预取重建连接池与
+/// TLS 会话）。
 Dio? _sharedDio;
 Dio _dio() => _sharedDio ??= createAppDio();
 

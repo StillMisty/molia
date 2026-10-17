@@ -15,7 +15,7 @@ import '../domain/ports/sync_transport.dart';
 ///
 /// 口令即信任根：显示/复制/重置都在这里管理；UI 不直接接触引擎。
 /// 「什么时候自动同步」由 [SyncScheduler] 决定，本类只做转发；[syncNow]
-/// 只服务恢复动作（添加手动对端 / 失败重试），不再有首屏手动入口。
+/// 只服务恢复动作（添加手动对端 / 失败重试），首屏无手动同步入口。
 class SyncProvider extends ChangeNotifier {
   SyncProvider({
     required SyncEngine engine,

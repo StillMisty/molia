@@ -118,8 +118,8 @@ class LyricsDisplaySettings extends ChangeNotifier {
 
   /// 默认只显示当前行（单行）；用户可在「显示行数」里放宽到 1–5 行。
   ///
-  /// 历史配置兼容：旧版本的「仅显示当前行」开关（`desktop.singleLine`）已移除，
-  /// 读取到 true 时一次性映射为 `maxLines = 1`，之后再落盘就不再有该键。
+  /// 历史配置兼容：旧版「仅显示当前行」开关（`desktop.singleLine`）读到 true
+  /// 时一次性映射为 `maxLines = 1`，之后落盘不再写该键。
   static const int defaultDesktopMaxLines = 1;
   static const DesktopTextAlignX defaultDesktopTextAlignX = DesktopTextAlignX.center;
   static const DesktopTextAlignY defaultDesktopTextAlignY = DesktopTextAlignY.center;

@@ -37,8 +37,8 @@ List<T> filterRowsByQuery<T>(
 
 /// 按口径排序曲目（不改动入参，返回新列表）；默认口径保持传入顺序。
 ///
-/// 标题 / 歌手排序用「装饰排序」：`toLowerCase` 对每行只求一次，避免旧实现
-/// 在 comparator 里对同一行反复求值（n log n 次字符串分配）。
+/// 标题 / 歌手排序用「装饰排序」：`toLowerCase` 对每行只求一次，避免在
+/// comparator 里对同一行反复求值（n log n 次字符串分配）。
 List<PlaylistTrack> sortCollectionTracks(
   List<PlaylistTrack> tracks,
   CollectionTrackSort sort,

@@ -72,7 +72,7 @@ Future<LibraryStack> buildLibraryStack({
   // 播放失败同源重试仍失败时，经注入的 resolver 跨音源严格找回并替换。
   final sourceSwapSettings = SourceSwapSettings(settings: catalog.settings);
   // 统计服务 init / 换源偏好 init / 全库最大戳查询三者互不依赖：
-  // 并行执行，启动等待取最大值（此前是三次串行等待）。
+  // 并行执行，启动等待取最大值（串行等待会累加启动耗时）。
   final (_, _, dbMaxVersion) = await (
     playStatisticsService.init(),
     sourceSwapSettings.init(),

@@ -39,7 +39,7 @@ Future<DesktopStack> buildDesktopStack({
   required PlayStatisticsService playStatisticsService,
 }) async {
   // 托盘与关闭行为（设备本地偏好，不登记设置注册表）：关闭窗口时默认
-  // 最小化到托盘（播放不中断），可在设置 › 通用 › 桌面 改为直接退出。
+  // 最小化到托盘（播放不中断）；偏好可在设置 › 通用 › 桌面 切换为直接退出。
   final traySettings = TraySettings();
   await traySettings.init();
 

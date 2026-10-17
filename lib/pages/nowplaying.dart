@@ -263,7 +263,7 @@ class _NowPlayingState extends State<NowPlaying>
 
   /// 内容顶部渐隐过渡：列表/歌词滑到圆点带下面时淡出（不是硬切）。
   ///
-  /// 顶部渐变的 surface 覆盖层（旧实现是 ShaderMask + dstIn）：两者视觉等价
+  /// 顶部渐变的 surface 覆盖层（不是 ShaderMask + dstIn）：两者视觉等价
   /// （页面背景就是 `colorScheme.surface`，mask 的 alpha 与覆盖层不透明度互补），
   /// 但 ShaderMask 会给内容区整块建立 saveLayer —— 滚动歌词 / 队列时每帧都要
   /// 重新合成整块区域；覆盖层只是一次普通渐变绘制。

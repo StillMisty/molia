@@ -16,7 +16,7 @@ import '../widgets/settings/settings_tiles.dart';
 class SyncContentPage extends StatelessWidget {
   const SyncContentPage({super.key});
 
-  /// 展示顺序：常用数据在前，凭证与统计靠后（与旧首屏顺序一致）。
+  /// 展示顺序：常用数据在前，凭证与统计靠后。
   static const Map<SyncCategory, (IconData, String Function(AppLocalizations))>
       _categoryOrder = {
     SyncCategory.playlists: (Icons.queue_music_rounded, _playlistsTitle),

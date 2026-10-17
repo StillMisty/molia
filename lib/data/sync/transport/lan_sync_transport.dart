@@ -146,7 +146,7 @@ class LanSyncTransport implements SyncTransport {
   /// 广播发送失败（网络策略 / 缺少广播 entitlement）。
   bool _broadcastUnavailable = false;
 
-  /// 本进程内曾成功发现过对端：用于区分「一直没对端」与「零应答」——
+  /// 本进程内发现过对端：用于区分「一直没对端」与「零应答」——
   /// 后者更可能是网络隔离（AP 隔离 / VPN / 防火墙）而不是没人在线。
   bool _everDiscoveredPeer = false;
 
@@ -332,7 +332,7 @@ class LanSyncTransport implements SyncTransport {
 
   /// 未发现任何对端时的原因（有对端则为 null）。
   ///
-  /// 广播发送失败优先；其次是「此前成功发现过、本轮零应答」——后者通常是
+  /// 广播发送失败优先；其次是「发现过对端、本轮零应答」——后者通常是
   /// 网络隔离（AP 隔离 / VPN / 防火墙），提示手动地址与 WebDAV 出路。
   SyncIssue? _discoveryIssue(List<_Peer> peers) {
     if (peers.isNotEmpty) return null;

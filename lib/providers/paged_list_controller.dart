@@ -124,7 +124,7 @@ class PagedListState<T> {
 ///   忽略 page、每次都返回整表，靠这条推断停住（防死循环）；
 /// - 首屏失败清空列表并置 [PagedListState.failed]（可重试）；加载更多失败
 ///   保留已加载项并置 [PagedListState.loadMoreFailed]；
-/// - [dispose] 使在途请求过期：销毁后不再有状态回写与通知。
+/// - [dispose] 使在途请求过期：销毁后不写状态、不发通知。
 class PagedListController<T> extends ValueNotifier<PagedListState<T>> {
   PagedListController({
     required Future<PagedResult<T>> Function(int page) fetchPage,

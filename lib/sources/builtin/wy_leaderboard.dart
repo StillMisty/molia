@@ -7,7 +7,7 @@ import 'wy_music_detail.dart';
 /// 网易云排行榜（移植自 lx-music-mobile `wy/leaderboard.js`）。
 ///
 /// - 榜单表为 LX 内置静态列表（官方 `weapi/toplist` 接口需要登录态，
-///   LX 已改为静态表，见其 `getBoards` 注释）；
+///   LX 侧即硬编码该表，见其 `getBoards` 注释）；
 /// - `getTracks(bangid)`：weapi v3 歌单详情 → trackIds → 批量歌曲详情；
 /// - 结果缓存 5 分钟（统一走 `BuiltinSearch.transport.cached`）。
 class WyLeaderboard {

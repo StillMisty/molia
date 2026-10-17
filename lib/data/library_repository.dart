@@ -110,9 +110,9 @@ class LibraryRepository implements LibraryStore, LibrarySyncStore {
 
   /// 批量墓碑 + 一次日志追加（批量删除的写入路径）。
   ///
-  /// 旧实现逐行 `_recordTombstone`：每行 1 次 INSERT + 1 次 journal.append
-  /// （后者又各自查一次 headSeq）——清 500 条历史 ≈ 2500 条语句。这里墓碑
-  /// 走 drift batch（一条消息），日志按批一次追加（headSeq 只查一次）。
+  /// 墓碑走 drift batch（一条消息），日志按批一次追加（headSeq 只查一次）：
+  /// 逐行走 `_recordTombstone` 是每行 1 次 INSERT + 1 次 journal.append
+  /// （后者又各自查一次 headSeq）——清 500 条历史 ≈ 2500 条语句。
   Future<void> _recordTombstones(
     DatabaseConnectionUser executor,
     String category,
@@ -1001,9 +1001,9 @@ class LibraryRepository implements LibraryStore, LibrarySyncStore {
 
   /// 按给定顺序重写 `sortOrder`（事务；仅更新仍存在于列表中的键）。
   ///
-  /// 先整列表读一次、用 batch 提交 UPDATE：旧实现对每行「UPDATE + SELECT
-  /// 回读」（1000 首拖动一次 = 2000+ 语句）；重排只改 `sortOrder` 与版本三列，
-  /// 读到的行 + 新值即可构造增量日志记录，无需回读。
+  /// 先整列表读一次、用 batch 提交 UPDATE：重排只改 `sortOrder` 与版本三列，
+  /// 读到的行 + 新值即可构造增量日志记录，无需逐行「UPDATE + SELECT 回读」
+  /// （1000 首拖动一次 = 2000+ 语句）。
   @override
   Future<void> reorderPlaylistTracks(
     int playlistId,

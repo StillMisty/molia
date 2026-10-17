@@ -70,8 +70,6 @@ Future<bool> embedDownloadTags({
   }
 }
 
-// ---------------------------------------------------------------- MP3 / ID3v2.3
-
 /// 写入 ID3v2.3 标签并前置到音频数据之前（替换已有 ID3v2 标签）。
 Uint8List _writeId3v23(
   Uint8List file, {
@@ -183,8 +181,6 @@ Uint8List _syncSafe(int value) => Uint8List.fromList([
       (value >> 7) & 0x7F,
       value & 0x7F,
     ]);
-
-// ----------------------------------------------------------------- FLAC 标签
 
 /// 重写 FLAC 元数据块：替换 VORBIS_COMMENT（4）与 PICTURE（6），其余原样保留。
 Uint8List? _writeFlacComments(

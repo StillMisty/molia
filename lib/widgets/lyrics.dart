@@ -1358,7 +1358,7 @@ class _LyricsWidgetState extends State<LyricsWidget>
       notificationService.showSnackBar(l10n.lyricsSearchAppliedSuccess);
     } else {
       // 未返回歌词或用户取消：
-      // 恢复此前的自动滚动状态
+      // 恢复打开搜索前的自动滚动状态
       if (wasAutoScrollEnabled && !_autoScroll) {
         _enableAutoScrollWithSuppression();
         WidgetsBinding.instance.addPostFrameCallback((_) {

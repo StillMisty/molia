@@ -563,8 +563,7 @@ class PlayStatisticsRepository {
   /// 无去重键的存量行按内容哈希一次性回填并落库。
   ///
   /// 结果常驻内存（[id → 导出行]），写入点按 id 增量维护：
-  /// 一次播放收尾 = 更新一行；导出本身不再 O(库龄) 全表读 + 逐行建 Map
-  /// （旧实现每首歌收尾后的同步轮都要整表重读一遍）。
+  /// 一次播放收尾 = 更新一行；导出本身不随库龄增长（不做全表读 + 逐行建 Map）。
   Future<List<Map<String, Object?>>> syncExportEvents() async {
     final cached = _exportList;
     if (cached != null) return cached;
@@ -647,8 +646,8 @@ class PlayStatisticsRepository {
   /// 同步导出的廉价指纹（本进程内的导出变更计数）。
   ///
   /// 导出的内容只可能在几个写入点变化（收尾 / 应用远端 / 清理 / 裁剪），
-  /// 在写入点递增计数即可；旧实现每轮对已收尾事件做一次全表聚合
-  /// （COUNT + MAX + SUM，随库龄线性增长）。跨进程一致本就无需要求：
+  /// 在写入点递增计数即可；每轮对已收尾事件做全表聚合（COUNT + MAX + SUM）
+  /// 会随库龄线性增长。跨进程一致本就无需要求：
   /// 适配器的缓存不跨进程，重启后首次 collect 全量重读。
   Future<String> syncFingerprint() async => 'r$_syncRevision';
 

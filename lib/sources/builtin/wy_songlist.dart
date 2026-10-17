@@ -201,8 +201,8 @@ class WySongList {
   /// 歌单详情（支持链接 / ID / `id###token`；结果缓存 5 分钟）。
   ///
   /// 缓存拆两层：详情「壳」（含全部 trackIds、体积远小于逐首曲目对象）按
-  /// **页无关** key 缓存一次；曲目按页取。旧实现整体 key 带 page，翻一页就
-  /// 重新下载 + 解析整张歌单（万首歌单 = 每次翻页数 MB）。
+  /// **页无关** key 缓存一次；曲目按页取——整体 key 带 page 的话，翻一页
+  /// 就要重新下载 + 解析整张歌单（万首歌单 = 每次翻页数 MB）。
   static Future<DiscoverDetail> getListDetail(String rawId, int page) async {
     final shell = await BuiltinSearch.transport.cached(
       'wy:playlist-detail:$rawId',
@@ -210,7 +210,7 @@ class WySongList {
     );
     final all = shell.allTracks;
     if (all != null) {
-      // 平台已随详情返回整表曲目：翻页不会再发请求（保持旧行为）。
+      // 平台已随详情返回整表曲目：翻页直接用整表，无需再发请求。
       return DiscoverDetail(info: shell.info, tracks: all);
     }
     final rangeStart = (page - 1) * songPageLimit;

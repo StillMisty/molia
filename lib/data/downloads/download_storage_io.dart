@@ -13,8 +13,7 @@ import 'download_storage_types.dart';
 ///   回退 `~/Downloads`；macOS `~/Downloads`；Windows `%USERPROFILE%\Downloads`）——
 ///   用户在文件管理器里能直接找到下载的歌；
 /// - **iOS**：应用文档目录 `Molia/`（Files app 可见，需 Info.plist 开关）；
-/// - **Android**：应用支持目录 `downloads/`（公共 Downloads 走 MediaStore，
-///   见 issue #17）。
+/// - **Android**：应用支持目录 `downloads/`（公共 Downloads 走 MediaStore）。
 ///
 /// 目录结构（歌词 / 封面走子目录，公共目录不散落小文件）：
 /// - `<root>/`          音频文件

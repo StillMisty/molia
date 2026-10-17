@@ -31,8 +31,8 @@ abstract interface class DownloadStorage {
   /// 下载根目录绝对路径；目录不可用（无文件系统 / 解析失败）时返回 null。
   Future<String?> downloadsRoot();
 
-  /// 旧版下载根目录（应用支持目录 `downloads/`）：公共目录改造前的落点，
-  /// 供「迁移旧位置的下载」使用；与 [downloadsRoot] 相同或不存在时返回 null。
+  /// 旧版下载根目录（应用支持目录 `downloads/`）：供「迁移旧位置的下载」
+  /// 使用；与 [downloadsRoot] 相同或不存在时返回 null。
   Future<String?> legacyDownloadsRoot();
 
   /// 文件是否存在。

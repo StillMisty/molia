@@ -742,8 +742,8 @@ class SyncEngine extends ChangeNotifier implements SyncSchedulerHost {
       // 增量窗口：只带变更（对端按自己的游标过滤应用）。窗口为空但 ack
       // 有推进时也要外发：对端据此 compact 自己的日志。
       //
-      // 惰性构建：窗口读取 + 逐条 jsonDecode 是 O(窗口条目) 的开销；
-      // 入站轮 / 没有可用传输的轮次根本用不到（此前无条件构建）。
+      // 惰性构建：窗口读取 + 逐条 jsonDecode 是 O(窗口条目) 的开销，
+      // 入站轮 / 没有可用传输的轮次根本用不到，不预先构建。
       SyncEnvelope? delta;
       var deltaBuilt = false;
       Future<SyncEnvelope?> buildDelta() async {

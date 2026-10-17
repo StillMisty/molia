@@ -114,8 +114,8 @@ Future<String?> _artworkUriFromCache(String url) async {
 ///
 /// 这样 UI 侧的 `PlaybackProvider` 仍是唯一状态入口，本地播放公开 API 不变。
 ///
-/// 原 `audio_service` 的 `BaseAudioHandler` 继承已移除；这里保留类名与全部
-/// 公开方法，内部改为「控制器 + 可注入 [MediaSessionBackend]」。
+/// 不继承 `audio_service` 的 `BaseAudioHandler`，而用「控制器 + 可注入
+/// [MediaSessionBackend]」组合；类名与全部公开方法保持不变。
 class LocalAudioHandler {
   LocalAudioHandler(
     this._service, {
@@ -174,7 +174,7 @@ class LocalAudioHandler {
   /// 启动后端并订阅系统控制。
   ///
   /// 由 [initSystemMediaSession] 在 `runApp` 前调用；失败时向上抛，让组合根
-  /// 回退为「无媒体会话」（与旧 `AudioService.init` 语义一致）。
+  /// 回退为「无媒体会话」（应用内播放继续，仅无系统媒体控制与媒体键）。
   Future<void> activate() async {
     if (!_activated) {
       _activated = true;
@@ -561,7 +561,7 @@ class LocalAudioHandler {
 ///
 /// `flutter_media_session` 的 [MediaMetadata] 没有 `displaySubtitle` 字段；
 /// 歌词副标题覆盖（[LyricMetadataOverride.displaySubtitle]）在此忽略——
-/// 它原本只用于 Android 通知的副标题，标题 / 歌手 / 专辑覆盖不受影响。
+/// 它只用于 Android 通知的副标题，标题 / 歌手 / 专辑覆盖不受影响。
 @visibleForTesting
 MediaMetadata applyLyricMetadataOverride(
   MediaMetadata metadata,
