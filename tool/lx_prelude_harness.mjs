@@ -54,9 +54,19 @@ on(EVENT_NAMES.request, ({ source, action, info }) => {
           resolve({ raw: resp.raw, body: resp.body, third: body, sameObject: resp.body === body, statusCode: resp.statusCode })
         })
       })
+    case 'httpFollowProbe':
+      // 只为让 harness 检查宿主收到的 http payload（不投递 httpResult）
+      return new Promise((resolve, reject) => {
+        const options = { method: 'GET' }
+        if ('followMax' in info) options.follow_max = info.followMax
+        request('http://example.com/follow', options, (err, resp) => {
+          if (err) return reject(err)
+          resolve(resp.statusCode)
+        })
+      })
   }
 })
-send(EVENT_NAMES.inited, { openDevTools: false, sources: { kw: { name: '酷我音乐', type: 'music', actions: ['musicUrl', 'search', 'httpProbe'], qualitys: ['128k','320k','flac'] } } })
+send(EVENT_NAMES.inited, { openDevTools: false, sources: { kw: { name: '酷我音乐', type: 'music', actions: ['musicUrl', 'search', 'httpProbe', 'httpFollowProbe'], qualitys: ['128k','320k','flac'] } } })
 if (utils.crypto.md5('a') !== '0cc175b9c0f1b6a831c399e269772661') throw new Error('md5 bridge broken')
 if (utils.buffer.bufToString(utils.buffer.from('hello'), 'base64') !== 'aGVsbG8=') throw new Error('buffer bridge broken')
 console.log('script init done')
@@ -126,6 +136,30 @@ if (empty.third !== '' || empty.sameObject !== true) throw new Error('empty thir
 // 宿主显式给了 body 时优先用它（测试桩 / 未来宿主兼容路径）
 const explicit = await httpProbe('host-body', '{"ignored":true}', { from: 'host' });
 if (!explicit.body || explicit.body.from !== 'host') throw new Error('host-provided body not honored: ' + JSON.stringify(explicit));
+
+// —— follow_max：显式数值（含 0）原样透传，缺省 / 非数值为 null ——
+
+/// 发起一次 httpFollowProbe，返回宿主收到的 http 消息里的 followMax。
+async function followProbe(info) {
+  const reqId = 'follow_' + sent.filter((m) => m.type === 'http').length;
+  vm.runInContext(`__lxDeliver(${JSON.stringify({ type: 'invoke', reqId, payload: { source: 'kw', action: 'httpFollowProbe', info } })})`, sandbox);
+  await new Promise((r) => setImmediate(r));
+  const httpMsg = sent.filter((m) => m.type === 'http').pop();
+  if (!httpMsg) throw new Error('no http message for ' + reqId);
+  return httpMsg.data.followMax;
+}
+
+// 0 是「不跟随重定向」的有效取值，不能被 `|| null` 吞掉
+const followZero = await followProbe({ followMax: 0 });
+if (followZero !== 0) throw new Error('follow_max: 0 未透传: ' + JSON.stringify(followZero));
+const followThree = await followProbe({ followMax: 3 });
+if (followThree !== 3) throw new Error('follow_max: 3 未透传: ' + JSON.stringify(followThree));
+// 未声明 → null（宿主据此沿用默认策略）
+const followOmitted = await followProbe({});
+if (followOmitted !== null) throw new Error('未声明 follow_max 应为 null: ' + JSON.stringify(followOmitted));
+// 非数值 → null（只认显式数值）
+const followString = await followProbe({ followMax: '3' });
+if (followString !== null) throw new Error('非数值 follow_max 应为 null: ' + JSON.stringify(followString));
 
 console.log('PROTOCOL OK');
 console.log('log lines captured:', sent.filter(m => m.type === 'log').length);

@@ -93,7 +93,11 @@ lib/playback/
   （pointycastle + dart:io zlib），行为经 Node.js crypto 向量单测校验；
 - 宿主↔脚本：`globalThis.lx.on('request'|'inited'|'updateAlert')`、`lx.send(...)`、
   `lx.request(url, options, cb)`；支持 `request`（method/headers/body/form/formData/timeout/
-  follow_max、取消）；
+  follow_max、取消）；`follow_max` 为显式数值时**逐请求**生效——`0` = 不跟随重定向
+  （3xx 原样交给脚本，响应体照常可读）、`>0` = 最多跟随 N 跳（再遇 3xx 报请求错误）；
+  未声明时保持宿主默认（最多 5 跳）——LX 两端本身不一致（桌面版底层 needle 默认
+  `follow_max: 0` 不跟随、移动版底层 fetch 默认跟随，且都未把脚本声明的 `follow_max`
+  透传到请求层），没有可对齐的统一定义，故不声明时不改变存量脚本的取链结果；
 - 官方 action：`musicUrl` / `lyric` / `pic`（后两者通常仅 `local` 源）；社区扩展 action：
   `search` / `musicSearch`（非官方约定，本项目兼容）；
 - 安全边界：脚本是不可信代码，不暴露文件系统/平台通道，网络只走 `lx.request` 桥；

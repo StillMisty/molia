@@ -1,8 +1,10 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:molia/sources/lx/lx_engine.dart';
+import 'package:molia/sources/lx/lx_engine_native.dart' show lxRedirectPolicy;
 import 'package:molia/sources/lx/lx_engine_types.dart';
 import 'package:molia/sources/lx/lx_script_info.dart';
 
@@ -73,6 +75,41 @@ void main() {
       final data = await _probe(engine, action: 'text') as Map;
       expect(data['raw'], _textBody);
       expect(data['body'], _textBody);
+    }, skip: skip);
+
+    test('follow_max: 0 不跟随重定向：3xx 原样交给脚本', () async {
+      await engine.start(_scriptInfo(_probeScript(port)));
+
+      // /hop/1 回 302 → /hop/0，声明不跟随时脚本应收到 302 本身（含响应体）
+      final data = await _redirect(engine, hop: 1, followMax: 0) as Map;
+      expect(data['statusCode'], 302);
+      expect(data['raw'], '{"hop":1}', reason: '不跟随时 3xx 的响应体也必须可读');
+    }, skip: skip);
+
+    test('follow_max: 2 跟到第 2 跳：拿到链路终点的 200', () async {
+      await engine.start(_scriptInfo(_probeScript(port)));
+
+      // /hop/2 → /hop/1 → /hop/0（200）：恰好两跳，应跟到终点
+      final data = await _redirect(engine, hop: 2, followMax: 2) as Map;
+      expect(data['statusCode'], 200);
+      expect(data['raw'], '{"hop":0}');
+    }, skip: skip);
+
+    test('follow_max 是上限：超过声明跳数的重定向以请求错误结束', () async {
+      await engine.start(_scriptInfo(_probeScript(port)));
+
+      // 同一条 /hop/2 链声明 1 跳：跟完第 1 跳后仍是 3xx，必须报错而不是继续跟
+      final data = await _redirect(engine, hop: 2, followMax: 1) as Map;
+      expect(data['error'], isNotNull);
+      expect(data['statusCode'], isNull);
+    }, skip: skip);
+
+    test('未声明 follow_max：沿用宿主默认（跟随），不改变存量脚本行为', () async {
+      await engine.start(_scriptInfo(_probeScript(port)));
+
+      final data = await _redirect(engine, hop: 1, followMax: null) as Map;
+      expect(data['statusCode'], 200);
+      expect(data['raw'], '{"hop":0}');
     }, skip: skip);
 
     test('invoke 超时只失败该请求，不重启引擎', () async {
@@ -155,6 +192,31 @@ void main() {
       expect(engine.isRunning, isTrue);
     }, skip: skip);
   });
+
+  // follow_max → 重定向策略的纯映射：不依赖原生库，CI 上也能覆盖。
+  group('follow_max 重定向策略', () {
+    test('未声明 / 非数值：不覆盖宿主默认', () {
+      for (final raw in <Object?>[null, '2', double.nan]) {
+        final policy = lxRedirectPolicy(raw);
+        expect(policy.followRedirects, isNull, reason: 'raw=$raw');
+        expect(policy.maxRedirects, isNull, reason: 'raw=$raw');
+      }
+    });
+
+    test('0 / 负数：不跟随（3xx 交给脚本）', () {
+      for (final raw in <Object?>[0, -1]) {
+        final policy = lxRedirectPolicy(raw);
+        expect(policy.followRedirects, isFalse, reason: 'raw=$raw');
+        expect(policy.maxRedirects, 0, reason: 'raw=$raw');
+      }
+    });
+
+    test('正数：最多跟随 N 跳', () {
+      final policy = lxRedirectPolicy(3);
+      expect(policy.followRedirects, isTrue);
+      expect(policy.maxRedirects, 3);
+    });
+  });
 }
 
 const _jsonBody =
@@ -217,6 +279,19 @@ on(EVENT_NAMES.request, ({ source, action, info }) => {
       return Promise.resolve().then(() => Promise.resolve('micro-ok'))
     case 'timer':
       return new Promise((resolve) => { setTimeout(() => resolve('timer-ok'), 50) })
+    case 'redirect':
+      {
+        // keyword 里带 hop（剩余跳数）与 followMax（是否声明 follow_max）
+        const spec = JSON.parse(info.keyword)
+        const options = { method: 'GET' }
+        if (typeof spec.followMax === 'number') options.follow_max = spec.followMax
+        return new Promise((resolve) => {
+          request(base + '/hop/' + spec.hop, options, (err, resp) => {
+            if (err) return resolve({ error: String(err.message || err) })
+            resolve({ statusCode: resp.statusCode, raw: resp.raw })
+          })
+        })
+      }
     case 'spin':
       {
         const t = Date.now()
@@ -229,12 +304,25 @@ on(EVENT_NAMES.request, ({ source, action, info }) => {
 })
 console.log('probe script ready')
 send(EVENT_NAMES.inited, {
-  sources: { mock: { name: 'Mock', type: 'music', actions: ['musicUrl', 'probe', 'text', 'big', 'slow', 'hang', 'spin', 'micro', 'timer'], qualitys: ['128k'] } },
+  sources: { mock: { name: 'Mock', type: 'music', actions: ['musicUrl', 'probe', 'text', 'big', 'slow', 'hang', 'spin', 'micro', 'timer', 'redirect'], qualitys: ['128k'] } },
 })
 ''';
 
 Future<dynamic> _probe(LxEngine engine, {String action = 'probe'}) =>
     engine.search(source: 'mock', action: action, keyword: 'x');
+
+/// 请求本机 `/hop/<hop>` 重定向链：hop 为链路剩余跳数（0 是终点 200），
+/// followMax 为脚本声明值（null = 不声明，走宿主默认策略）。
+Future<dynamic> _redirect(
+  LxEngine engine, {
+  required int hop,
+  required int? followMax,
+}) =>
+    engine.search(
+      source: 'mock',
+      action: 'redirect',
+      keyword: jsonEncode({'hop': hop, 'followMax': followMax}),
+    );
 
 LxScriptInfo _scriptInfo(String script) => LxScriptInfo(
       id: 'mock-script',
@@ -252,6 +340,20 @@ Future<void> _handleRequest(HttpRequest request) async {
   if (path == '/slow') {
     await Future<void>.delayed(const Duration(milliseconds: 900));
     _write(request, '{"url":"http://cdn.example.com/slow.mp3"}');
+    return;
+  }
+  if (path.startsWith('/hop/')) {
+    final remaining = int.tryParse(path.substring('/hop/'.length)) ?? 0;
+    if (remaining > 0) {
+      // 3xx 故意带 body：校验「不跟随」时脚本仍能读到 3xx 的响应体
+      request.response
+        ..statusCode = HttpStatus.found
+        ..headers.set(HttpHeaders.locationHeader, '/hop/${remaining - 1}')
+        ..write('{"hop":$remaining}');
+      unawaited(request.response.close());
+      return;
+    }
+    _write(request, '{"hop":0}');
     return;
   }
   if (path == '/text') {
