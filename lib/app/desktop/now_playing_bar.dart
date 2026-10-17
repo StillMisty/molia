@@ -8,7 +8,8 @@ library;
 import 'dart:async';
 
 import 'package:flutter/foundation.dart' show ValueListenable;
-import 'package:flutter/services.dart' show KeyDownEvent, LogicalKeyboardKey;
+import 'package:flutter/services.dart'
+    show HardwareKeyboard, KeyDownEvent, KeyEvent, LogicalKeyboardKey;
 import 'package:material_3_expressive/material_3_expressive.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:provider/provider.dart';
@@ -672,10 +673,10 @@ class _VolumeButtonState extends State<_VolumeButton> {
 
 /// 音量面板：横向滑杆（~120dp）+ 静音开关。
 ///
-/// [Focus] 只用于接住 Esc：面板在 Overlay 里没有路由级快捷键上下文，
-/// 焦点沿焦点链上冒到这里关闭（滑杆自身获得焦点时也能冒上来）。
-/// 面板可见期间向 [EscapeClaims] 登记恒真占用：壳层 HardwareKeyboard 处理器
-/// 不短路，不登记的话同一次 Esc 会既关面板、又触发壳层的关队列面板命令。
+/// Esc 由自己的 [HardwareKeyboard] 处理器接住，与 [EscapeClaims] 登记同源
+/// （挂载 = 可见 = 占用，都不依赖焦点位置）。不用 [Focus.onKeyEvent]：焦点被
+/// Tab 移出弹层子树后按键不再冒泡到这里，而登记仍让壳层让位，Esc 会被完全
+/// 吞掉。[Focus] 只保留 autofocus，供滑杆的键盘操作。
 class _VolumePanel extends StatefulWidget {
   const _VolumePanel({super.key, required this.onClose});
 
@@ -691,14 +692,26 @@ class _VolumePanelState extends State<_VolumePanel> {
 
   bool _claimEscape() => true;
 
+  /// HardwareKeyboard 处理器引用：注册 / 注销必须是同一闭包。
+  late final bool Function(KeyEvent) _keyHandler = _handleKeyEvent;
+
+  bool _handleKeyEvent(KeyEvent event) {
+    if (event is! KeyDownEvent) return false;
+    if (event.logicalKey != LogicalKeyboardKey.escape) return false;
+    widget.onClose();
+    return true;
+  }
+
   @override
   void initState() {
     super.initState();
     EscapeClaims.add(_escapeClaim);
+    HardwareKeyboard.instance.addHandler(_keyHandler);
   }
 
   @override
   void dispose() {
+    HardwareKeyboard.instance.removeHandler(_keyHandler);
     EscapeClaims.remove(_escapeClaim);
     super.dispose();
   }
@@ -712,14 +725,6 @@ class _VolumePanelState extends State<_VolumePanel> {
     final scheme = Theme.of(context).colorScheme;
     return Focus(
       autofocus: true,
-      onKeyEvent: (node, event) {
-        if (event is KeyDownEvent &&
-            event.logicalKey == LogicalKeyboardKey.escape) {
-          widget.onClose();
-          return KeyEventResult.handled;
-        }
-        return KeyEventResult.ignored;
-      },
       child: Material(
         color: scheme.surfaceContainerHigh,
         elevation: 8,

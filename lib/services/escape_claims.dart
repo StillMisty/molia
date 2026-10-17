@@ -3,7 +3,8 @@
 /// **为什么需要**：`HardwareKeyboard` 的处理器**全部执行且返回值不短路**
 /// （SDK 原文：All registered handlers will be invoked in order regardless of
 /// their return value）。壳层可配置快捷键（`app/desktop/desktop_shortcuts.dart`）
-/// 与页面级处理器（如收藏页多选）会同时收到同一次 Esc，无法靠返回值裁决；
+/// 与页面级 / 弹层处理器（收藏页多选、音量弹层）会同时收到同一次 Esc，无法靠
+/// 返回值裁决；
 /// 壳层一旦执行 Esc 命中的命令（默认绑定「关闭队列面板」），同一次按键就被
 /// 两个作用域消费。登记表把「此刻的 Esc 归谁」提前告诉壳层：有登记方时壳层
 /// 让位（处理器返回 false、不执行命令），按键交给登记方处理。

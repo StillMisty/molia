@@ -194,6 +194,36 @@ void main() {
     await tester.pump(const Duration(milliseconds: 900));
   }
 
+  /// 焦点当前是否在音量弹层子树内。
+  bool focusInsideVolumePanel(WidgetTester tester) {
+    final focusContext = FocusManager.instance.primaryFocus?.context;
+    if (focusContext == null) return false;
+    final panel =
+        tester.element(find.byKey(DesktopNowPlayingBar.volumePanelKey));
+    if (identical(focusContext, panel)) return true;
+    var inside = false;
+    (focusContext as Element).visitAncestorElements((ancestor) {
+      if (identical(ancestor, panel)) {
+        inside = true;
+        return false;
+      }
+      return true;
+    });
+    return inside;
+  }
+
+  /// Tab 直到焦点离开音量弹层子树（面板仍可见但不再持有焦点）。
+  ///
+  /// 遍历顺序（面板根 → 滑杆 → 静音按钮 → 弹层外）随控件增删变化，按「离开
+  /// 为止」而不是固定次数，前提失效时由断言兜底。
+  Future<void> tabOutOfVolumePanel(WidgetTester tester) async {
+    for (var i = 0; i < 8 && focusInsideVolumePanel(tester); i++) {
+      await tester.sendKeyEvent(LogicalKeyboardKey.tab);
+      await tester.pump();
+    }
+    expect(focusInsideVolumePanel(tester), isFalse, reason: '前提：焦点已移出弹层');
+  }
+
   int selectedRailIndex(WidgetTester tester) => tester
       .widget<M3ENavigationRail>(find.byType(M3ENavigationRail))
       .selectedIndex;
@@ -520,7 +550,58 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.byKey(DesktopNowPlayingBar.volumePanelKey), findsOneWidget);
 
-    // 第一次 Esc：弹层（焦点作用域）优先关闭，队列面板保持打开。
+    // 第一次 Esc：弹层（占用登记）优先关闭，队列面板保持打开。
+    await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+    await tester.pumpAndSettle();
+    expect(find.byKey(DesktopNowPlayingBar.volumePanelKey), findsNothing);
+    expect(
+      find.byType(DesktopQueuePanel),
+      findsOneWidget,
+      reason: '弹层已消费 Esc，壳层命令不应同时生效',
+    );
+
+    // 第二次 Esc：弹层已关，壳层命令关队列面板。
+    await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+    await settleTransition(tester);
+    expect(find.byType(DesktopQueuePanel), findsNothing);
+  });
+
+  testWidgets('Esc 裁决：焦点移出音量弹层后 Esc 仍关闭弹层，不落入按键黑洞', (tester) async {
+    await pumpShell(tester, desktopShell: true);
+
+    await tester.tap(find.byKey(DesktopNowPlayingBar.volumeButtonKey));
+    await tester.pumpAndSettle();
+    expect(find.byKey(DesktopNowPlayingBar.volumePanelKey), findsOneWidget);
+    expect(focusInsideVolumePanel(tester), isTrue, reason: '前提：autofocus 落在弹层内');
+
+    // 面板可见但焦点被 Tab 移出弹层：Esc 必须仍由弹层消费——登记让壳层
+    // 让位后，若弹层不接按键就成了黑洞。
+    await tabOutOfVolumePanel(tester);
+
+    await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+    await tester.pumpAndSettle();
+    expect(
+      find.byKey(DesktopNowPlayingBar.volumePanelKey),
+      findsNothing,
+      reason: '焦点不在弹层内也要关闭（不是黑洞）',
+    );
+  });
+
+  testWidgets('Esc 裁决：焦点移出音量弹层后，一次 Esc 只关弹层、队列面板仍在', (tester) async {
+    await pumpShell(tester, desktopShell: true);
+
+    // 前提一：队列面板打开（Esc 的壳层命令是关面板）。
+    await tester.tap(find.byKey(DesktopNowPlayingBar.queueToggleKey));
+    await settleTransition(tester);
+    expect(find.byType(DesktopQueuePanel), findsOneWidget);
+
+    // 前提二：音量弹层打开，再把焦点 Tab 出弹层子树。
+    await tester.tap(find.byKey(DesktopNowPlayingBar.volumeButtonKey));
+    await tester.pumpAndSettle();
+    expect(find.byKey(DesktopNowPlayingBar.volumePanelKey), findsOneWidget);
+    await tabOutOfVolumePanel(tester);
+
+    // 第一次 Esc：弹层（占用登记）优先关闭，队列面板保持打开。
     await tester.sendKeyEvent(LogicalKeyboardKey.escape);
     await tester.pumpAndSettle();
     expect(find.byKey(DesktopNowPlayingBar.volumePanelKey), findsNothing);
