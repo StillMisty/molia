@@ -1411,9 +1411,6 @@ class AppLocalizationsEn extends AppLocalizations {
   String get lyricsDesktopAlign => 'Horizontal align';
 
   @override
-  String get lyricsDesktopAlignVertical => 'Vertical align';
-
-  @override
   String get lyricsDesktopAlignLeft => 'Left';
 
   @override
@@ -1421,12 +1418,6 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get lyricsDesktopAlignRight => 'Right';
-
-  @override
-  String get lyricsDesktopAlignTop => 'Top';
-
-  @override
-  String get lyricsDesktopAlignBottom => 'Bottom';
 
   @override
   String get lyricsDesktopColorPlayed => 'Current line color';

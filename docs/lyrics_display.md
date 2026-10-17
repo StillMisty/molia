@@ -82,7 +82,13 @@ Molia 当前只有在播放页内渲染的滚动歌词。桌面悬浮歌词、�
 **窗口与交互**
 
 - `TYPE_APPLICATION_OVERLAY` 悬浮窗；透明背景；不抢焦点（`NOT_FOCUSABLE` + `NOT_TOUCH_MODAL`）。
-- 拖动移动，位置以屏幕尺寸比例持久化（横竖屏换算、边缘吸附/夹取）。
+- 拖动移动；位置以「可用区比例」持久化（左缘 = 横向可移动范围比例、底缘 = 可用高比例），
+  拖动结束由原生直接保存。任何让窗口尺寸或可用区变化的时刻（内容行数、控制条弹出、
+  旋转 / 字号、`widthPercent`）都按比例重新落位并夹进可用区。
+  可用区 = 显示屏尺寸减 system bars / 刘海 insets（`currentWindowMetrics` + insets）：
+  `TYPE_APPLICATION_OVERLAY` 默认按同类 insets 收边（fitTypes），`LayoutParams.x/y`
+  从安全区左上角起算；用 edge-to-edge Activity 的 `displayMetrics`（≈整屏）会多算
+  状态栏高度，贴底摆放时窗口被导航栏裁掉。
 - 锁定模式：窗口 `FLAG_NOT_TOUCHABLE`（点击穿透）；解锁才可拖动 / 点按；
   锁定态控制条强制收起（点击穿透下按钮既不可点也不应可见）。
 - 点按弹出控制条（各项可配置显隐）：上一首、播放/暂停、下一首、翻译开关、锁定、关闭。
@@ -101,6 +107,10 @@ Molia 当前只有在播放页内渲染的滚动歌词。桌面悬浮歌词、�
   其后 `maxLines - 1` 行 upcoming 主文本；显示行数默认 1（只显示当前行，
   旧版「仅显示当前行」开关已并入该设置）。行宽撑满窗口，当前行与扩展行
   组成同一滚动组。
+- 水平对齐（`textAlignX`）：文本在窗口内的摆位（宽度 100% 时即屏幕上的水平位置）。
+  普通行（upcoming / 回退行）用系统 gravity，滚动组自身强制左对齐、由
+  `applyGroupScroll` 的位移统一实现（布局宽度是超大哨兵值，系统居中 / 右对齐
+  会把文本整体推出视口）。竖直位置由拖动决定，没有独立的垂直对齐档位。
 - 逐字变色：当前行有逐字时间轴（`LyricLine.words`）时按词渐染 `playedColor`
   （词内线性插值，与歌词页 `KaraokeLyricText` 同语义）；无逐字数据的行整行着色。
   进度来自 Dart 下发的有效播放位置（≤4Hz）。
@@ -118,6 +128,8 @@ Molia 当前只有在播放页内渲染的滚动歌词。桌面悬浮歌词、�
   滚动、超出窗口的部分一起被裁掉（不再省略号截断）；暂停冻结、seek 直接落位。
   位移用 `translationX`（float）应用，并经临界阻尼跟随（`LyricSpring`）平滑：
   目标速度连续、无阶跃，代价是几像素的常数滞后（高亮与文本同组位移，不脱节）。
+  符号约定：`translationX` 正 = 内容右移——未超宽时按 `textAlignX` 取正位移摆位，
+  超宽后由 0 递减到 −溢出（向左滚，行尾正好滚到位）。
 - 滚动映射可选（`desktop.scrollMode`）：
   - **跟随演唱**（默认）：已唱边界在整行中的相对位置 → 溢出宽度，文本被高亮
     拖着走，速度随演唱起伏；
@@ -278,8 +290,11 @@ abstract class LyricsOutput {
   `lyrics/LyricsOverlayView.kt`（自绘文本/动画/控制条/触摸）、
   `lyrics/LyricsChannelHandler.kt`（通道 + 权限 + A2DP + 屏幕状态）、
   `MainActivity.kt` 注册通道与 `onResume` 权限回读。
-- 位置持久化：原生 `SharedPreferences`（屏幕可用空间比例）；拖动结束由原生直接保存。
-- 布局方向变化：`OrientationEventListener` 重新夹取位置。
+- 位置持久化：原生 `SharedPreferences`（左缘 = 横向可移动范围比例、底缘 = 可用高比例；
+  键名 `x_fraction` / `bottom_fraction`）；拖动结束由原生直接保存。
+- 重新落位：内容尺寸变化、控制条弹出、旋转 / 字号变化都走布局回调与
+  `ComponentCallbacks.onConfigurationChanged`，按比例落位并夹进可用区；
+  底缘固定、向上生长（歌词是贴底字幕，不被导航栏裁掉，顶到屏幕上方回夹顶部）。
 
 ### 5.6 A2DP 监测
 
@@ -309,8 +324,7 @@ abstract class LyricsOutput {
 | `desktop.shadowColorSource` | enum | surface | 同上 | 桌面歌词 |
 | `desktop.widthPercent` | double | 100 | 40..100 | 桌面歌词 |
 | `desktop.maxLines` | int | 1 | 1..5（默认 1 = 只显示当前行） | 桌面歌词 |
-| `desktop.textAlignX` | enum | center | left/center/right | 桌面歌词 |
-| `desktop.textAlignY` | enum | center | top/center/bottom | 桌面歌词 |
+| `desktop.textAlignX` | enum | center | left/center/right（窗内文本水平摆位） | 桌面歌词 |
 | `desktop.scrollMode` | enum | followSinging | followSinging/constant（长行横向滚动映射） | 桌面歌词 |
 | `desktop.lock` | bool | false | | 桌面歌词 |
 | `desktop.freezeOnScreenOff` | bool | true | | 桌面歌词 |
@@ -319,7 +333,7 @@ abstract class LyricsOutput {
 | `desktop.noLyricsBehavior` | enum | title | title/hide | 桌面歌词 |
 | `desktop.showToggleAnimation` | bool | true | | 桌面歌词 |
 | `desktop.controls` | map | 全开 | playPause/previous/next/translation/lock/close → bool | 桌面歌词 |
-| `desktop.position`（原生） | — | 底部居中 | 窗口位置由原生侧按屏幕可用空间比例持久化；「重置位置」可恢复默认 | 桌面歌词 |
+| `desktop.position`（原生） | — | 底部居中（底缘 92%） | 左缘 = 横向可移动范围比例、底缘 = 可用高比例，始终夹在可用区内；「重置位置」恢复默认 | 桌面歌词 |
 | `notification.enabled` | bool | false | | 通知/锁屏 |
 | `notification.target` | enum | artist | subtitle/artist/title/album | 通知/锁屏 |
 | `notification.format` | enum | lyric | lyric/lyricTitle/titleLyric | 通知/锁屏 |
@@ -460,9 +474,9 @@ abstract class LyricsOutput {
 | `desktopLyric.textSize` | `desktop.fontSize` | LX 存 0.1 倍值；本项目存 sp 数值（Android 侧按 sp 解释） |
 | `desktopLyric.opacity` | `desktop.opacity` | |
 | `unplayColor/playedColor/shadowColor` | `desktop.unplayedColor/playedColor/shadowColor` | |
-| `desktopLyric.textPosition.x/y` | `desktop.textAlignX/textAlignY` | |
+| `desktopLyric.textPosition.x` | `desktop.textAlignX` | 窗内文本水平摆位（宽度 100% 时即屏幕水平位置） |
 | `desktopLyric.isShowToggleAnima` | `desktop.showToggleAnimation` | |
-| 视图位置（原生持久化） | — | 原生按屏幕比例保存；「重置位置」恢复默认 |
+| 视图位置（原生持久化） | — | 竖直位置由原生拖动持久化（可用区比例），LX 的 `textPosition.y` 无对应设置项 |
 | `desktopLyric.isAutoPause`（息屏） | `desktop.freezeOnScreenOff` | 冻结歌词更新，不暂停音频 |
 | 翻译 / 罗马音开关 | `translationEnabled` / `romaEnabled` | 本项目为输出侧共享项；歌词页另有独立开关 `page.*` |
 | —（LX 无） | `desktop.hideOnPause` / `pauseBehavior` / `noLyricsBehavior` | 本项目新增（暂停整窗隐藏 / 内容回退 / 无歌词回退） |
@@ -479,7 +493,7 @@ abstract class LyricsOutput {
 | 输出契约 | `lib/services/lyrics_display/lyrics_output.dart` | `LyricsOutput` / `InteractiveLyricsOutput` / `LyricsPresentation`（含 `positionAtEpochMs` 延迟补偿与 `scrollFollowsSinging`） |
 | 调度 | `lib/providers/lyrics_display_provider.dart` | 去重投送、自动取词、动作分发、能力查询、位置采样时刻与滚动跨度 |
 | 桌面歌词（Dart） | `lib/services/lyrics_display/desktop_lyrics_output.dart`、`lyrics_channel.dart` | 通道封装 + 窗口生命周期（暂停隐藏 / 恢复重显）+ 暂停与无歌词回退映射 |
-| 桌面歌词（原生） | `android/.../lyrics/LyricsChannelHandler.kt`、`LyricsOverlayController.kt`、`LyricsOverlayView.kt`、`LyricClock.kt`、`MainActivity.kt`、`AndroidManifest.xml` | 悬浮窗渲染（整行 + 逐字渐染 + 横向滚动）/ 位置时钟（`LyricClock` + `LyricSpring`）/拖动/锁定/M3E 控制条/息屏冻结/A2DP 监测；控制条图标在 `res/drawable/ic_lyrics_*` |
+| 桌面歌词（原生） | `android/.../lyrics/LyricsChannelHandler.kt`、`LyricsOverlayController.kt`、`LyricsOverlayView.kt`、`LyricClock.kt`、`MainActivity.kt`、`AndroidManifest.xml` | 悬浮窗渲染（整行 + 逐字渐染 + 横向滚动）/ 位置时钟（`LyricClock` + `LyricSpring`）/ 拖动与可用区比例持久（夹取 / 重新落位）/ 锁定 / M3E 控制条 / 息屏冻结 / A2DP 监测；控制条图标在 `res/drawable/ic_lyrics_*` |
 | 媒体元数据 | `lib/services/lyrics_display/media_lyric_composer.dart`、`media_lyric_output.dart`、`lib/playback/local_audio_handler.dart` | 通知/锁屏 + 蓝牙 profile 合成 → `MediaMetadata` 覆盖（`displaySubtitle` 无对应字段，忽略）；播放顺序动作图标在 `res/drawable/audio_service_*`（`res/raw/keep.xml` 防资源压缩，见已知坑 34） |
 | 设置页 | `lib/pages/settings_page.dart`、`lib/pages/lyrics_display/*` | 首屏三条直达入口（桌面歌词 / 歌词与输出 / 系统媒体歌词）；歌词页分组 + 输出共享分组 + 预览 + 权限引导；主题种子色与歌词颜色共用任意调色器 |
 | 颜色系统 | `lib/services/lyrics_display/lyric_color_resolver.dart`、`lib/theme/scheme_builder.dart`、`lib/services/artwork_palette_service.dart` | 跟随主题 / 跟随封面经同一解析函数与同一份封面色板；通用 HSV/Hex 任意取色 |
