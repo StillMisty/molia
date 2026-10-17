@@ -25,9 +25,6 @@ enum LyricsMetadataFormat { lyric, lyricTitle, titleLyric }
 /// 桌面歌词文本水平对齐。
 enum DesktopTextAlignX { left, center, right }
 
-/// 桌面歌词文本垂直对齐。
-enum DesktopTextAlignY { top, center, bottom }
-
 /// 桌面歌词长行横向滚动的映射方式。
 ///
 /// `followSinging` = 跟随已唱边界（文本被高亮拖着走，速度随演唱起伏）；
@@ -122,7 +119,6 @@ class LyricsDisplaySettings extends ChangeNotifier {
   /// 时一次性映射为 `maxLines = 1`，之后落盘不再写该键。
   static const int defaultDesktopMaxLines = 1;
   static const DesktopTextAlignX defaultDesktopTextAlignX = DesktopTextAlignX.center;
-  static const DesktopTextAlignY defaultDesktopTextAlignY = DesktopTextAlignY.center;
 
   /// 默认跟随演唱（与历史行为一致）；匀速作为可选项。
   static const DesktopScrollMode defaultDesktopScrollMode =
@@ -190,7 +186,6 @@ class LyricsDisplaySettings extends ChangeNotifier {
   double _desktopWidthPercent = defaultDesktopWidthPercent;
   int _desktopMaxLines = defaultDesktopMaxLines;
   DesktopTextAlignX _desktopTextAlignX = defaultDesktopTextAlignX;
-  DesktopTextAlignY _desktopTextAlignY = defaultDesktopTextAlignY;
   DesktopScrollMode _desktopScrollMode = defaultDesktopScrollMode;
   bool _desktopLock = defaultDesktopLock;
   bool _desktopFreezeOnScreenOff = defaultDesktopFreezeOnScreenOff;
@@ -239,7 +234,6 @@ class LyricsDisplaySettings extends ChangeNotifier {
   double get desktopWidthPercent => _desktopWidthPercent;
   int get desktopMaxLines => _desktopMaxLines;
   DesktopTextAlignX get desktopTextAlignX => _desktopTextAlignX;
-  DesktopTextAlignY get desktopTextAlignY => _desktopTextAlignY;
   DesktopScrollMode get desktopScrollMode => _desktopScrollMode;
   bool get desktopLock => _desktopLock;
   bool get desktopFreezeOnScreenOff => _desktopFreezeOnScreenOff;
@@ -399,12 +393,6 @@ class LyricsDisplaySettings extends ChangeNotifier {
     _commit();
   }
 
-  Future<void> setDesktopTextAlignY(DesktopTextAlignY value) async {
-    if (value == _desktopTextAlignY) return;
-    _desktopTextAlignY = value;
-    _commit();
-  }
-
   Future<void> setDesktopScrollMode(DesktopScrollMode value) async {
     if (value == _desktopScrollMode) return;
     _desktopScrollMode = value;
@@ -548,7 +536,6 @@ class LyricsDisplaySettings extends ChangeNotifier {
         'desktop.widthPercent': _desktopWidthPercent,
         'desktop.maxLines': _desktopMaxLines,
         'desktop.textAlignX': _desktopTextAlignX.name,
-        'desktop.textAlignY': _desktopTextAlignY.name,
         'desktop.scrollMode': _desktopScrollMode.name,
         'desktop.lock': _desktopLock,
         'desktop.freezeOnScreenOff': _desktopFreezeOnScreenOff,
@@ -616,8 +603,6 @@ class LyricsDisplaySettings extends ChangeNotifier {
             .clamp(maxLinesRange.first, maxLinesRange.last);
     _desktopTextAlignX = _enumOf(
         json['desktop.textAlignX'], DesktopTextAlignX.values, _desktopTextAlignX);
-    _desktopTextAlignY = _enumOf(
-        json['desktop.textAlignY'], DesktopTextAlignY.values, _desktopTextAlignY);
     _desktopScrollMode = _enumOf(json['desktop.scrollMode'],
         DesktopScrollMode.values, _desktopScrollMode);
     _desktopLock = _boolOf(json['desktop.lock'], _desktopLock);

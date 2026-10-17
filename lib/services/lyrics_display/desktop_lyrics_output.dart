@@ -172,7 +172,6 @@ class DesktopLyricsOutput implements InteractiveLyricsOutput {
       'widthPercent': s.desktopWidthPercent,
       'maxLines': s.desktopMaxLines,
       'textAlignX': s.desktopTextAlignX.name,
-      'textAlignY': s.desktopTextAlignY.name,
       'lock': s.desktopLock,
       'freezeOnScreenOff': s.desktopFreezeOnScreenOff,
       'showToggleAnimation': s.desktopShowToggleAnimation,

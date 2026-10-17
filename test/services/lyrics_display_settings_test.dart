@@ -58,7 +58,6 @@ void main() {
     await source.setDesktopWidthPercent(80);
     await source.setDesktopMaxLines(4);
     await source.setDesktopTextAlignX(DesktopTextAlignX.left);
-    await source.setDesktopTextAlignY(DesktopTextAlignY.bottom);
     await source.setDesktopLock(true);
     await source.setDesktopFreezeOnScreenOff(false);
     await source.setDesktopHideOnPause(false);
@@ -105,7 +104,6 @@ void main() {
     expect(restored.desktopWidthPercent, 80);
     expect(restored.desktopMaxLines, 4);
     expect(restored.desktopTextAlignX, DesktopTextAlignX.left);
-    expect(restored.desktopTextAlignY, DesktopTextAlignY.bottom);
     expect(restored.desktopLock, isTrue);
     expect(restored.desktopFreezeOnScreenOff, isFalse);
     expect(restored.desktopHideOnPause, isFalse);

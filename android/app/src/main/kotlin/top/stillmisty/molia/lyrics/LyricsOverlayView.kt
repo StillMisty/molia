@@ -4,6 +4,7 @@ import android.annotation.SuppressLint
 import android.content.Context
 import android.content.res.ColorStateList
 import android.graphics.Color
+import android.graphics.Point
 import android.graphics.drawable.GradientDrawable
 import android.graphics.drawable.RippleDrawable
 import android.os.SystemClock
@@ -39,7 +40,6 @@ internal data class OverlayConfig(
     val widthPercent: Float = 100f,
     val maxLines: Int = 1,
     val textAlignX: String = "center",
-    val textAlignY: String = "center",
     val lock: Boolean = false,
     val freezeOnScreenOff: Boolean = true,
     val showToggleAnimation: Boolean = true,
@@ -78,7 +78,6 @@ internal data class OverlayConfig(
                 widthPercent = (map["widthPercent"] as? Number)?.toFloat() ?: 100f,
                 maxLines = (map["maxLines"] as? Number)?.toInt() ?: 1,
                 textAlignX = map["textAlignX"] as? String ?: "center",
-                textAlignY = map["textAlignY"] as? String ?: "center",
                 lock = map["lock"] as? Boolean ?: false,
                 freezeOnScreenOff = map["freezeOnScreenOff"] as? Boolean ?: true,
                 showToggleAnimation = map["showToggleAnimation"] as? Boolean ?: true,
@@ -390,7 +389,9 @@ internal class LyricsOverlayView(
     context: Context,
     private val windowManager: WindowManager,
     private val layoutParams: WindowManager.LayoutParams,
-    private val onDragFinished: (xf: Float, yf: Float) -> Unit,
+    /** 可用区尺寸（窗口坐标系，见 [LyricsOverlayController.safeSize]）：拖动夹取用。 */
+    private val areaSize: () -> Point,
+    private val onDragFinished: () -> Unit,
     private val onAction: (String) -> Unit,
 ) : LinearLayout(context) {
 
@@ -407,7 +408,6 @@ internal class LyricsOverlayView(
 
     /** 行内对齐（配置的横向对齐）；普通行各自应用。 */
     private var rowGravity = Gravity.START
-
     /** 配置的横向对齐原始值（滚动组自行实现对齐，见 applyGroupScroll）。 */
     private var rowAlignX = "center"
 
@@ -481,12 +481,9 @@ internal class LyricsOverlayView(
     fun applyConfig(next: OverlayConfig) {
         config = next
         alpha = next.opacity.coerceIn(0.1f, 1f)
-        // 纵向按配置对齐；横向恒居中（控制条 pill 包裹内容，不拉满宽度）。
-        gravity = when (next.textAlignY) {
-            "top" -> Gravity.TOP
-            "bottom" -> Gravity.BOTTOM
-            else -> Gravity.CENTER
-        } or Gravity.CENTER_HORIZONTAL
+        // 根视图高度贴合内容，纵向 gravity 没有可对齐的富余空间；
+        // 横向居中只作用于控制条 pill（包裹内容，不拉满窗口宽度）。
+        gravity = Gravity.CENTER_HORIZONTAL
         rowGravity = when (next.textAlignX) {
             "left" -> Gravity.START
             "right" -> Gravity.END
@@ -854,13 +851,17 @@ internal class LyricsOverlayView(
 
     /**
      * 把滚动组按主行算出的目标偏移应用：
-     * - 文本未超宽：按配置对齐摆位（滚动组强制左对齐，这里用偏移实现）；
+     * - 文本未超宽：按配置对齐摆位（滚动组强制左对齐，这里用位移实现）；
      * - 文本超宽：左缘起滚，主行偏移由进度驱动，扩展行按自身溢出裁剪——
      *   翻译 / 罗马音跟主行一起滚、超出窗口的部分一起被裁掉（消失）。
      *
-     * 用 `translationX`（float）而不是 `scrollTo`（int）：慢速行（长行 / 高刷屏）
-     * 的位移常常不足 1px/帧，整像素滚动会退化成台阶；父级 contentHolder 已
-     * `clipChildren`，浮点位移的裁切行为与滚动一致。
+     * 位移用 `translationX`（float）：慢速行（长行 / 高刷屏）每帧位移常常不足
+     * 1px，整像素滚动会退化成台阶；父级 contentHolder 已 `clipChildren`，
+     * 浮点位移的裁切行为与滚动一致。
+     *
+     * 符号约定（勿对调）：`translationX` 正 = 内容右移——未超宽时按对齐摆位
+     * 取正位移（居中 / 右对齐向右摆，左对齐为 0），超宽后由 0 递减到负溢出
+     * （文本向左滚，行尾正好滚到位）。
      */
     private fun applyGroupScroll(groupOffset: Float) {
         for (view in scrollGroup) {
@@ -877,7 +878,7 @@ internal class LyricsOverlayView(
                 }
             }
             val scroll = groupOffset.coerceIn(0f, overflow)
-            val x = scroll - alignedShift
+            val x = alignedShift - scroll
             if (view.translationX != x) view.translationX = x
         }
     }
@@ -1013,7 +1014,10 @@ internal class LyricsOverlayView(
     private var startY = 0f
     private var startTouchX = 0
     private var startTouchY = 0
-    private var dragging = false
+
+    /** 拖动中：宿主据此暂停按比例落位，否则窗口每帧被拽回原位。 */
+    var isDragging = false
+        private set
 
     override fun onTouchEvent(event: MotionEvent): Boolean {
         if (config.lock) return false
@@ -1023,27 +1027,30 @@ internal class LyricsOverlayView(
                 startY = event.rawY
                 startTouchX = layoutParams.x
                 startTouchY = layoutParams.y
-                dragging = false
+                isDragging = false
                 return true
             }
             MotionEvent.ACTION_MOVE -> {
                 val dx = event.rawX - startX
                 val dy = event.rawY - startY
-                if (!dragging && (abs(dx) > dp(4) || abs(dy) > dp(4))) {
-                    dragging = true
+                if (!isDragging && (abs(dx) > dp(4) || abs(dy) > dp(4))) {
+                    isDragging = true
                     hideControlsImmediately()
                 }
-                if (dragging) {
-                    layoutParams.x = startTouchX + dx.toInt()
-                    layoutParams.y = startTouchY + dy.toInt()
-                    clampToScreen()
+                if (isDragging) {
+                    val area = areaSize()
+                    layoutParams.x = (startTouchX + dx.toInt())
+                        .coerceIn(0, max(0, area.x - width))
+                    layoutParams.y = (startTouchY + dy.toInt())
+                        .coerceIn(0, max(0, area.y - height))
                     windowManager.updateViewLayout(this, layoutParams)
                 }
                 return true
             }
             MotionEvent.ACTION_UP -> {
-                if (dragging) {
-                    onDragFinished(fractionX(), fractionY())
+                if (isDragging) {
+                    isDragging = false
+                    onDragFinished()
                 } else {
                     toggleControls()
                 }
@@ -1057,25 +1064,6 @@ internal class LyricsOverlayView(
     override fun performClick(): Boolean {
         super.performClick()
         return true
-    }
-
-    private fun clampToScreen(): Int {
-        val metrics = resources.displayMetrics
-        layoutParams.x = layoutParams.x.coerceIn(0, max(0, metrics.widthPixels - layoutParams.width))
-        layoutParams.y = layoutParams.y.coerceIn(0, max(0, metrics.heightPixels - height))
-        return 0
-    }
-
-    fun fractionX(): Float {
-        val metrics = resources.displayMetrics
-        val available = max(1, metrics.widthPixels - layoutParams.width)
-        return (layoutParams.x.toFloat() / available).coerceIn(0f, 1f)
-    }
-
-    fun fractionY(): Float {
-        val metrics = resources.displayMetrics
-        val available = max(1, metrics.heightPixels - max(1, height))
-        return (layoutParams.y.toFloat() / available).coerceIn(0f, 1f)
     }
 
     private fun dp(value: Int): Int =
