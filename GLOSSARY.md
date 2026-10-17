@@ -132,6 +132,10 @@
 
 - **Desktop shell（桌面骨架）** — `lib/app/desktop/**`：仅 linux/windows/macOS 生效的壳层版式（顶栏瘦身 + 可展开侧栏 + 常驻底栏播放条 + 队列右面板），由 `lib/app/app_shell.dart` 按平台分流（`MyApp(desktopShell:)` 可强制，测试用）；移动骨架与共享逻辑（页面栈 / 共享元素飞行 / 重复点击通道）仍在 `app_shell.dart`，两套骨架同源。
 
+- **Desktop layout（桌面布局解析）** — `lib/widgets/desktop_layout.dart::DesktopLayout`：「是不是桌面宽布局」的唯一解析处（壳层在 `build` 里解析一次并向下提供，页面 / 骨架只消费；独立挂载页面 / 弹层路由按当前 context 回退解析，与生产同一公式）。窗口宽语义是字段：`masterDetail`（收藏合集栏与设置首屏两列共用的页面级增强）、`searchCompact`（顶栏搜索形态）、`railForceCollapsed` / `queuePanelAvailable`（桌面骨架分级折叠）；内容宽语义是 `tableColumnsAt` / `channelRailAt`（内容区宽度只有渲染期才知道，由消费方量出传入，但阈值与平台判据只此一处）。900 / 1000 / 1200 等阈值与宽度来源的选择集中在这里，页面 / 骨架只消费。
+
+- **Shell chrome（壳层 chrome spec）** — `lib/app/shell_chrome.dart::ShellChrome`：两套骨架（移动 / 桌面）共用的导航与顶栏 spec（目的地 + 标签 + 选择 + 顶栏槽位）。目的地 → 图标 / 标签映射（`railDestinations` / `barDestinations`）、索引 → 目的地回调（`selectDestinationAt`）、顶栏构造（`appBar`：titleSpacing / 无返回键 / 拖动区包装 / 设置按钮 / 窗口控件）只此一份；骨架不合并——顶栏标题、侧栏类型与底栏形态仍由各自适配渲染。
+
 - **Now playing bar（底栏播放条）** — `lib/app/desktop/now_playing_bar.dart`：桌面常驻 80dp 播放条（左：封面/歌名/收藏，点击进播放页并复用封面飞行；中：传输 + 可拖波浪进度 + 时间；右：播放模式 / 音量弹层 / 队列开关）。进度拖动语义与播放页共用 **Seek preview**，宿主只负责版式。
 
 - **Queue panel（队列右面板）** — `lib/app/desktop/queue_panel.dart`：桌面右侧 supporting pane（260–480 可拖，默认 360；窗口宽 <1200 不渲染），内容为 `QueueDisplay(includeCurrent: true)`（顶部「正在播放」行 + 接下来队列）；开合与宽度经 `shell_layout_prefs.dart` 设备本地记忆。

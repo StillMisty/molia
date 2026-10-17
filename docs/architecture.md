@@ -584,12 +584,18 @@
 - 壳：`M3EMaterialApp(data: M3EThemeData.fromMaterial(themedData), theme: themedData, ...)`；
   `ThemeProvider` 是唯一主题源（`autoTheming/dynamicColoring` 关闭）。
 - 桌面骨架（`lib/app/desktop/**`，仅 linux/windows/macOS；移动骨架逐像素不变）：
+  两套骨架的导航 / 顶栏共享 spec 在 `lib/app/shell_chrome.dart`（目的地 → 图标 /
+  标签映射、设置按钮、窗口控件、titleSpacing / 拖动区只一份；骨架各自适配渲染），
+  布局阈值在 `lib/widgets/desktop_layout.dart`（壳层解析一次，页面 / 骨架只消费）。
   顶栏 = 拖动区 + 页面标题 + **全局搜索**（`M3ESearchAnchor.bar` docked 结果面板，
-  与资料库共用同一 `SearchProvider`；窗口宽 <900 退化为图标，落资料库搜索页）+
+  与资料库共用同一 `SearchProvider`；`DesktopLayout.searchCompact`（窗口宽 <900）
+  退化为图标，落资料库搜索页）+
   设置 + 窗口按钮（无播放控制、无进度线；四键无 tooltip，只留 `semanticLabel`）；
-  左侧 `M3ENavigationRail` 96⇄240 可展开（窗口宽 <1000 强制折叠、不改记忆值）；底部常驻
+  左侧 `M3ENavigationRail` 96⇄240 可展开（`railForceCollapsed`：窗口宽 <1000
+  强制折叠、不改记忆值）；底部常驻
   播放条 80dp（左：封面/歌名/收藏 · 中：上一首/播放/暂停/下一首 + 可拖波浪进度 + 时间 ·
-  右：播放模式/音量（图标 + 弹出滑杆）/队列）；队列右面板 260–480 可拖（<1200 不渲染，
+  右：播放模式/音量（图标 + 弹出滑杆）/队列）；队列右面板 260–480 可拖
+  （`queuePanelAvailable`：<1200 不渲染，
   此时底栏队列按钮置灰）。侧栏展开、队列开关与宽度是设备本地偏好
   （`lib/app/desktop/shell_layout_prefs.dart`）。播放页桌面版式 = 左 420 固定
   （封面/标题/专辑/进度/传输控制）+ 右「歌词 / 歌曲信息」分页
@@ -618,12 +624,15 @@
   壳层可配置命令**（用户把别的命令绑到 Esc 也一样让位）；登记方自己的按键处理器
   接 Esc（与登记同源、不依赖焦点位置；收藏页多选与音量弹层都是 `HardwareKeyboard`
   处理器）。
-  内容版式：资料库渠道左栏（桌面 + 内容宽 ≥ 900 且渠道 ≥ 2，判定用 `LayoutBuilder`
-  内容宽而非窗口宽）、宽屏表格列（`TrackRowColumns` / `TrackTableHeader`；使用点：
+  内容版式（阈值与宽度来源的选择唯一在 `DesktopLayout`）：资料库渠道左栏
+  （`channelRailAt`：桌面 + 内容宽 ≥ 900 且渠道 ≥ 2，判定用 `LayoutBuilder`
+  内容宽而非窗口宽）、宽屏表格列（`TrackRowColumns` / `TrackTableHeader`；
+  `tableColumnsAt`，使用点：
   搜索 / 收藏 / 发现，同样按 `LayoutBuilder` 内容宽 ≥ 900 判定，行高仍 72dp；
   发现页表头为 pinned sliver（封面头部滚走后列标题仍在），搜索 / 收藏页表头
   固定在滚动区之上）、
-  收藏页 master-detail 合集栏、设置弹层宽屏 880 + 首屏两列
+  收藏页 master-detail 合集栏与设置首屏两列（`masterDetail`：桌面 + 窗口宽 ≥ 900，
+  两页共用同一判据）、设置弹层宽屏 880 + 首屏两列
   （`showSettingsSheet` 显式 `maxWidth`，公共 modal 档保持 560）、二级页侧滑桌面档 720。
   启动首页由 `NavProvider.effectiveHomeDestination` 决定（设置 › 通用 › 启动时打开，
   默认播放页；存储首页被隐藏时按导航顺序兜底且**不改写存储**，避免同步回环）。
