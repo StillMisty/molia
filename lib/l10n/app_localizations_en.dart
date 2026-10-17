@@ -2078,10 +2078,16 @@ class AppLocalizationsEn extends AppLocalizations {
   String get syncDeviceNameTitle => 'Device name';
 
   @override
+  String get syncDevicePassphraseTitle => 'Device & passphrase';
+
+  @override
   String get syncPassphraseTitle => 'Sync passphrase';
 
   @override
   String get syncPassphraseNotSet => 'Not set';
+
+  @override
+  String get syncPassphraseSet => 'Passphrase set';
 
   @override
   String get syncPassphraseTrustHint =>
@@ -2122,6 +2128,29 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get syncNever => 'Never synced';
+
+  @override
+  String syncStatusSyncedPeers(int count) {
+    return 'Synced with $count devices';
+  }
+
+  @override
+  String get syncRelativeJustNow => 'just now';
+
+  @override
+  String syncRelativeMinutes(int count) {
+    return '$count min ago';
+  }
+
+  @override
+  String syncRelativeHours(int count) {
+    return '$count h ago';
+  }
+
+  @override
+  String syncRelativeDays(int count) {
+    return '$count d ago';
+  }
 
   @override
   String get syncOutcomeOk => 'Synced';
@@ -2204,6 +2233,9 @@ class AppLocalizationsEn extends AppLocalizations {
   String get syncPowerSaveOff => 'power save off';
 
   @override
+  String get syncCellularSection => 'Cellular';
+
+  @override
   String get syncCellularPauseTitle => 'Pause automatic sync on cellular';
 
   @override
@@ -2231,15 +2263,18 @@ class AppLocalizationsEn extends AppLocalizations {
   }
 
   @override
-  String syncLastSyncAt(String time) {
-    return 'Last $time';
-  }
-
-  @override
   String get syncRetry => 'Retry';
 
   @override
   String get syncContentSection => 'What to sync';
+
+  @override
+  String get syncContentAllOn => 'All categories';
+
+  @override
+  String syncContentOffCount(int count) {
+    return '$count turned off';
+  }
 
   @override
   String get syncCategoryPlaylists => 'Playlists & favorites';
@@ -2269,13 +2304,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get syncLanTitle => 'LAN direct';
 
   @override
-  String get syncLanSubtitle => 'Device-to-device on the same Wi-Fi, no server';
-
-  @override
   String get syncWebdavTitle => 'WebDAV / cloud';
-
-  @override
-  String get syncWebdavSubtitle => 'Sync across networks via your own WebDAV';
 
   @override
   String get syncWebdavConfigTitle => 'WebDAV settings';
@@ -2311,6 +2340,9 @@ class AppLocalizationsEn extends AppLocalizations {
   String get syncTransportStartFailed => 'failed to start';
 
   @override
+  String get syncLogTitle => 'Sync log & diagnostics';
+
+  @override
   String get syncLogSection => 'Sync log';
 
   @override
@@ -2328,17 +2360,8 @@ class AppLocalizationsEn extends AppLocalizations {
   String get syncPeersSection => 'Devices';
 
   @override
-  String syncPeersSubtitle(int count) {
-    return 'This device + $count peers';
-  }
-
-  @override
-  String get syncPeersSubtitleEmpty => 'No other device yet';
-
-  @override
-  String syncPeersSubtitleWithLost(int count, int lost) {
-    return 'This device + $count peers ($lost lost)';
-  }
+  String get syncPeersSummaryEmpty =>
+      'No device yet · LAN discovery is automatic';
 
   @override
   String get syncPeersHint =>
@@ -2668,19 +2691,6 @@ class AppLocalizationsEn extends AppLocalizations {
   @override
   String get syncLanPermissionPermanentSubtitle =>
       'Permission permanently denied — enable nearby-devices in system settings';
-
-  @override
-  String get syncTransportNeverSucceeded => 'No successful contact yet';
-
-  @override
-  String syncTransportLastSuccessAt(String time) {
-    return 'Last success $time';
-  }
-
-  @override
-  String syncLogViewAll(int count) {
-    return 'View all logs ($count)';
-  }
 
   @override
   String get syncLogHint =>

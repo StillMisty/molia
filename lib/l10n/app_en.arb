@@ -1064,8 +1064,10 @@
   "syncEnabledTitle": "Enable sync",
   "syncEnabledSubtitle": "Exchange data with devices that share your passphrase",
   "syncDeviceNameTitle": "Device name",
+  "syncDevicePassphraseTitle": "Device & passphrase",
   "syncPassphraseTitle": "Sync passphrase",
   "syncPassphraseNotSet": "Not set",
+  "syncPassphraseSet": "Passphrase set",
   "syncPassphraseTrustHint": "Passphrase is the trust root; every holder is fully trusted. Reset it if leaked.",
   "syncPassphraseCopy": "Copy passphrase",
   "syncPassphraseReset": "Reset passphrase",
@@ -1078,6 +1080,39 @@
   "syncSyncNow": "Sync now",
   "syncSyncing": "Syncing…",
   "syncNever": "Never synced",
+  "syncStatusSyncedPeers": "Synced with {count} devices",
+  "@syncStatusSyncedPeers": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "syncRelativeJustNow": "just now",
+  "syncRelativeMinutes": "{count} min ago",
+  "@syncRelativeMinutes": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "syncRelativeHours": "{count} h ago",
+  "@syncRelativeHours": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "syncRelativeDays": "{count} d ago",
+  "@syncRelativeDays": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
   "syncOutcomeOk": "Synced",
   "syncOutcomeNoChanges": "No changes",
   "syncOutcomeNoPeers": "No peer found",
@@ -1129,6 +1164,7 @@
   "syncNetworkOther": "Wi-Fi / other",
   "syncPowerSaveOn": "power save on",
   "syncPowerSaveOff": "power save off",
+  "syncCellularSection": "Cellular",
   "syncCellularPauseTitle": "Pause automatic sync on cellular",
   "syncCellularPauseSubtitle": "When off, cellular syncs only small categories (settings, playlists, session); statistics and history wait for Wi-Fi",
   "syncAppliedItems": "{applied} applied",
@@ -1166,16 +1202,17 @@
       }
     }
   },
-  "syncLastSyncAt": "Last {time}",
-  "@syncLastSyncAt": {
+  "syncRetry": "Retry",
+  "syncContentSection": "What to sync",
+  "syncContentAllOn": "All categories",
+  "syncContentOffCount": "{count} turned off",
+  "@syncContentOffCount": {
     "placeholders": {
-      "time": {
-        "type": "String"
+      "count": {
+        "type": "int"
       }
     }
   },
-  "syncRetry": "Retry",
-  "syncContentSection": "What to sync",
   "syncCategoryPlaylists": "Playlists & favorites",
   "syncCategorySources": "Sources (scripts & config)",
   "syncCategorySettings": "App settings",
@@ -1185,9 +1222,7 @@
   "syncCategoryCredentials": "AI DJ & credentials",
   "syncTransportSection": "Transport",
   "syncLanTitle": "LAN direct",
-  "syncLanSubtitle": "Device-to-device on the same Wi-Fi, no server",
   "syncWebdavTitle": "WebDAV / cloud",
-  "syncWebdavSubtitle": "Sync across networks via your own WebDAV",
   "syncWebdavConfigTitle": "WebDAV settings",
   "syncWebdavServer": "Server URL",
   "syncWebdavUsername": "Username",
@@ -1199,6 +1234,7 @@
   "syncTransportDisabled": "turned off",
   "syncTransportNotConfigured": "not configured",
   "syncTransportStartFailed": "failed to start",
+  "syncLogTitle": "Sync log & diagnostics",
   "syncLogSection": "Sync log",
   "syncLogEmpty": "No records yet",
   "syncLogFailed": "Failed: {error}",
@@ -1211,19 +1247,7 @@
   },
   "syncPeersTitle": "Paired devices",
   "syncPeersSection": "Devices",
-  "syncPeersSubtitle": "This device + {count} peers",
-  "@syncPeersSubtitle": {
-    "placeholders": {
-      "count": {
-        "type": "int"
-      }
-    }
-  },
-  "syncPeersSubtitleEmpty": "No other device yet",
-  "syncPeersSubtitleWithLost": "This device + {count} peers ({lost} lost)",
-  "@syncPeersSubtitleWithLost": {
-    "placeholders": { "count": { "type": "int" }, "lost": { "type": "int" } }
-  },
+  "syncPeersSummaryEmpty": "No device yet · LAN discovery is automatic",
   "syncPeersHint": "Enter the same passphrase on another device to join. If no device is ever discovered, check whether LAN sync can run (permission / network isolation) or switch to WebDAV.",
   "syncPeerThisDevice": "This device · {id}",
   "@syncPeerThisDevice": {
@@ -1418,23 +1442,6 @@
   "syncPeerContactQueued": "Device saved — contact will follow",
   "syncPeerContacting": "Contacting…",
   "syncLanPermissionPermanentSubtitle": "Permission permanently denied — enable nearby-devices in system settings",
-  "syncTransportNeverSucceeded": "No successful contact yet",
-  "syncTransportLastSuccessAt": "Last success {time}",
-  "@syncTransportLastSuccessAt": {
-    "placeholders": {
-      "time": {
-        "type": "String"
-      }
-    }
-  },
-  "syncLogViewAll": "View all logs ({count})",
-  "@syncLogViewAll": {
-    "placeholders": {
-      "count": {
-        "type": "int"
-      }
-    }
-  },
   "syncLogHint": "Results of recent sync rounds; tap a failed row for the reason and next steps",
   "settingsUpdateTitle": "About & updates",
   "settingsUpdateSubtitle": "Current version {version}",

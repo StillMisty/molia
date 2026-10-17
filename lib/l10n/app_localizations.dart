@@ -3812,6 +3812,12 @@ abstract class AppLocalizations {
   /// **'Device name'**
   String get syncDeviceNameTitle;
 
+  /// No description provided for @syncDevicePassphraseTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Device & passphrase'**
+  String get syncDevicePassphraseTitle;
+
   /// No description provided for @syncPassphraseTitle.
   ///
   /// In en, this message translates to:
@@ -3823,6 +3829,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Not set'**
   String get syncPassphraseNotSet;
+
+  /// No description provided for @syncPassphraseSet.
+  ///
+  /// In en, this message translates to:
+  /// **'Passphrase set'**
+  String get syncPassphraseSet;
 
   /// No description provided for @syncPassphraseTrustHint.
   ///
@@ -3895,6 +3907,36 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Never synced'**
   String get syncNever;
+
+  /// No description provided for @syncStatusSyncedPeers.
+  ///
+  /// In en, this message translates to:
+  /// **'Synced with {count} devices'**
+  String syncStatusSyncedPeers(int count);
+
+  /// No description provided for @syncRelativeJustNow.
+  ///
+  /// In en, this message translates to:
+  /// **'just now'**
+  String get syncRelativeJustNow;
+
+  /// No description provided for @syncRelativeMinutes.
+  ///
+  /// In en, this message translates to:
+  /// **'{count} min ago'**
+  String syncRelativeMinutes(int count);
+
+  /// No description provided for @syncRelativeHours.
+  ///
+  /// In en, this message translates to:
+  /// **'{count} h ago'**
+  String syncRelativeHours(int count);
+
+  /// No description provided for @syncRelativeDays.
+  ///
+  /// In en, this message translates to:
+  /// **'{count} d ago'**
+  String syncRelativeDays(int count);
 
   /// No description provided for @syncOutcomeOk.
   ///
@@ -4047,6 +4089,12 @@ abstract class AppLocalizations {
   /// **'power save off'**
   String get syncPowerSaveOff;
 
+  /// No description provided for @syncCellularSection.
+  ///
+  /// In en, this message translates to:
+  /// **'Cellular'**
+  String get syncCellularSection;
+
   /// No description provided for @syncCellularPauseTitle.
   ///
   /// In en, this message translates to:
@@ -4083,12 +4131,6 @@ abstract class AppLocalizations {
   /// **'↓{inbound} ↑{outbound}'**
   String syncBytes(String inbound, String outbound);
 
-  /// No description provided for @syncLastSyncAt.
-  ///
-  /// In en, this message translates to:
-  /// **'Last {time}'**
-  String syncLastSyncAt(String time);
-
   /// No description provided for @syncRetry.
   ///
   /// In en, this message translates to:
@@ -4100,6 +4142,18 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'What to sync'**
   String get syncContentSection;
+
+  /// No description provided for @syncContentAllOn.
+  ///
+  /// In en, this message translates to:
+  /// **'All categories'**
+  String get syncContentAllOn;
+
+  /// No description provided for @syncContentOffCount.
+  ///
+  /// In en, this message translates to:
+  /// **'{count} turned off'**
+  String syncContentOffCount(int count);
 
   /// No description provided for @syncCategoryPlaylists.
   ///
@@ -4155,23 +4209,11 @@ abstract class AppLocalizations {
   /// **'LAN direct'**
   String get syncLanTitle;
 
-  /// No description provided for @syncLanSubtitle.
-  ///
-  /// In en, this message translates to:
-  /// **'Device-to-device on the same Wi-Fi, no server'**
-  String get syncLanSubtitle;
-
   /// No description provided for @syncWebdavTitle.
   ///
   /// In en, this message translates to:
   /// **'WebDAV / cloud'**
   String get syncWebdavTitle;
-
-  /// No description provided for @syncWebdavSubtitle.
-  ///
-  /// In en, this message translates to:
-  /// **'Sync across networks via your own WebDAV'**
-  String get syncWebdavSubtitle;
 
   /// No description provided for @syncWebdavConfigTitle.
   ///
@@ -4239,6 +4281,12 @@ abstract class AppLocalizations {
   /// **'failed to start'**
   String get syncTransportStartFailed;
 
+  /// No description provided for @syncLogTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Sync log & diagnostics'**
+  String get syncLogTitle;
+
   /// No description provided for @syncLogSection.
   ///
   /// In en, this message translates to:
@@ -4269,23 +4317,11 @@ abstract class AppLocalizations {
   /// **'Devices'**
   String get syncPeersSection;
 
-  /// No description provided for @syncPeersSubtitle.
+  /// No description provided for @syncPeersSummaryEmpty.
   ///
   /// In en, this message translates to:
-  /// **'This device + {count} peers'**
-  String syncPeersSubtitle(int count);
-
-  /// No description provided for @syncPeersSubtitleEmpty.
-  ///
-  /// In en, this message translates to:
-  /// **'No other device yet'**
-  String get syncPeersSubtitleEmpty;
-
-  /// No description provided for @syncPeersSubtitleWithLost.
-  ///
-  /// In en, this message translates to:
-  /// **'This device + {count} peers ({lost} lost)'**
-  String syncPeersSubtitleWithLost(int count, int lost);
+  /// **'No device yet · LAN discovery is automatic'**
+  String get syncPeersSummaryEmpty;
 
   /// No description provided for @syncPeersHint.
   ///
@@ -4826,24 +4862,6 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Permission permanently denied — enable nearby-devices in system settings'**
   String get syncLanPermissionPermanentSubtitle;
-
-  /// No description provided for @syncTransportNeverSucceeded.
-  ///
-  /// In en, this message translates to:
-  /// **'No successful contact yet'**
-  String get syncTransportNeverSucceeded;
-
-  /// No description provided for @syncTransportLastSuccessAt.
-  ///
-  /// In en, this message translates to:
-  /// **'Last success {time}'**
-  String syncTransportLastSuccessAt(String time);
-
-  /// No description provided for @syncLogViewAll.
-  ///
-  /// In en, this message translates to:
-  /// **'View all logs ({count})'**
-  String syncLogViewAll(int count);
 
   /// No description provided for @syncLogHint.
   ///

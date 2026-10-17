@@ -1993,10 +1993,16 @@ class AppLocalizationsZh extends AppLocalizations {
   String get syncDeviceNameTitle => '设备名称';
 
   @override
+  String get syncDevicePassphraseTitle => '设备与口令';
+
+  @override
   String get syncPassphraseTitle => '同步口令';
 
   @override
   String get syncPassphraseNotSet => '未设置';
+
+  @override
+  String get syncPassphraseSet => '口令已设置';
 
   @override
   String get syncPassphraseTrustHint => '口令即信任根：持有者完全互信；怀疑泄露请重置。';
@@ -2033,6 +2039,29 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get syncNever => '尚未同步';
+
+  @override
+  String syncStatusSyncedPeers(int count) {
+    return '已与 $count 台设备同步';
+  }
+
+  @override
+  String get syncRelativeJustNow => '刚刚';
+
+  @override
+  String syncRelativeMinutes(int count) {
+    return '$count 分钟前';
+  }
+
+  @override
+  String syncRelativeHours(int count) {
+    return '$count 小时前';
+  }
+
+  @override
+  String syncRelativeDays(int count) {
+    return '$count 天前';
+  }
 
   @override
   String get syncOutcomeOk => '同步完成';
@@ -2115,6 +2144,9 @@ class AppLocalizationsZh extends AppLocalizations {
   String get syncPowerSaveOff => '非省电';
 
   @override
+  String get syncCellularSection => '移动数据';
+
+  @override
   String get syncCellularPauseTitle => '移动数据下暂停自动同步';
 
   @override
@@ -2142,15 +2174,18 @@ class AppLocalizationsZh extends AppLocalizations {
   }
 
   @override
-  String syncLastSyncAt(String time) {
-    return '上次 $time';
-  }
-
-  @override
   String get syncRetry => '重试';
 
   @override
   String get syncContentSection => '同步内容';
+
+  @override
+  String get syncContentAllOn => '全部类别';
+
+  @override
+  String syncContentOffCount(int count) {
+    return '已关闭 $count 项';
+  }
 
   @override
   String get syncCategoryPlaylists => '歌单与收藏';
@@ -2180,13 +2215,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get syncLanTitle => '局域网直连';
 
   @override
-  String get syncLanSubtitle => '同一 Wi-Fi 下设备直连，无需服务器';
-
-  @override
   String get syncWebdavTitle => 'WebDAV / 云盘';
-
-  @override
-  String get syncWebdavSubtitle => '经你自备的 WebDAV 跨网络同步';
 
   @override
   String get syncWebdavConfigTitle => 'WebDAV 配置';
@@ -2222,6 +2251,9 @@ class AppLocalizationsZh extends AppLocalizations {
   String get syncTransportStartFailed => '启动失败';
 
   @override
+  String get syncLogTitle => '同步日志与诊断';
+
+  @override
   String get syncLogSection => '同步日志';
 
   @override
@@ -2239,17 +2271,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get syncPeersSection => '设备';
 
   @override
-  String syncPeersSubtitle(int count) {
-    return '本机 + $count 台对端';
-  }
-
-  @override
-  String get syncPeersSubtitleEmpty => '尚无其它设备';
-
-  @override
-  String syncPeersSubtitleWithLost(int count, int lost) {
-    return '本机 + $count 台对端（$lost 台已失联）';
-  }
+  String get syncPeersSummaryEmpty => '暂无设备 · 局域网会自动发现';
 
   @override
   String get syncPeersHint =>
@@ -2557,19 +2579,6 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get syncLanPermissionPermanentSubtitle => '权限已被永久拒绝，请到系统设置开启「附近设备」权限';
-
-  @override
-  String get syncTransportNeverSucceeded => '尚无成功记录';
-
-  @override
-  String syncTransportLastSuccessAt(String time) {
-    return '最后成功 $time';
-  }
-
-  @override
-  String syncLogViewAll(int count) {
-    return '查看全部日志（$count 条）';
-  }
 
   @override
   String get syncLogHint => '最近几轮同步结果；失败行可点开查看原因与下一步';

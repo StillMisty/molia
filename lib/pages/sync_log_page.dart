@@ -1,21 +1,28 @@
 import 'dart:async';
+import 'dart:convert';
 
+import 'package:flutter/services.dart';
 import 'package:material_3_expressive/material_3_expressive.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:provider/provider.dart';
 
 import '../data/sync/sync_state_store.dart';
 import '../domain/models/device_sync.dart';
+import '../domain/ports/sync_transport.dart';
 import '../l10n/app_localizations.dart';
 import '../providers/sync_provider.dart';
 import '../theme/app_semantic_colors.dart';
 import '../utils/sync_format.dart';
 import '../widgets/card_list_surface.dart';
 import '../widgets/settings/settings_tiles.dart';
+import 'sync_device_page.dart';
 import 'sync_dialogs.dart';
 import 'sync_labels.dart';
 
-/// 完整同步日志子页（设置页首屏只留最近 6 行）。
+/// 同步日志与诊断子页：近 24 小时动态 + 当前环境 + 完整日志（20 条）+ 复制诊断。
+///
+/// 观测面细节都在这里（首屏只留「最近一轮结论 + 时间」一句话）；失败行可
+/// 点开看下一步动作，未知原因也能拿到重试 / 诊断出口。
 class SyncLogPage extends StatelessWidget {
   const SyncLogPage({super.key});
 
@@ -26,12 +33,24 @@ class SyncLogPage extends StatelessWidget {
     final entries = provider.log;
     return Scaffold(
       appBar: M3EAppBar.top(
-        title: Text(l10n.syncLogSection),
+        title: Text(l10n.syncLogTitle),
         automaticallyImplyLeading: true,
       ),
       body: ListView(
         padding: const EdgeInsets.all(kSettingsPadding),
         children: [
+          SettingsSectionCard(
+            title: l10n.syncActivitySection,
+            children: [
+              SettingsInfoTile(
+                key: const Key('settingsSyncActivityItem'),
+                icon: Icons.insights_rounded,
+                title: l10n.syncActivityTitle,
+                subtitle: _activitySubtitle(provider, l10n),
+              ),
+            ],
+          ),
+          const SizedBox(height: kSettingsSectionSpacing),
           SettingsSectionCard(
             title: l10n.syncLogSection,
             footer: SettingsSectionHint(text: l10n.syncLogHint),
@@ -53,15 +72,100 @@ class SyncLogPage extends StatelessWidget {
                               provider: provider,
                               issue: entry.error,
                               l10n: l10n,
+                              // 口令动作直达设备子页（口令弹层在那里）。
+                              onConfigurePassphrase: () => openSettingsSubPage(
+                                  context, const SyncDevicePage()),
                             ))
                         : null,
                   ),
+            ],
+          ),
+          const SizedBox(height: kSettingsSectionSpacing),
+          SettingsSectionCard(
+            title: l10n.syncDiagnosticTitle,
+            footer: SettingsSectionHint(text: l10n.syncDiagnosticHint),
+            children: [
+              SettingsNavTile(
+                key: const Key('settingsSyncDiagnosticItem'),
+                icon: Icons.content_copy_rounded,
+                title: l10n.syncDiagnosticCopy,
+                subtitle: l10n.syncDiagnosticSubtitle,
+                onTap: () => unawaited(_copyDiagnostics(context, provider, l10n)),
+              ),
             ],
           ),
         ],
       ),
     );
   }
+}
+
+/// 近 24 小时活动（触发 / 有效传输 / 流量）+ 当前环境
+/// （同步等级 · 网络类型 · 是否省电）。
+String _activitySubtitle(SyncProvider provider, AppLocalizations l10n) {
+  final summary = provider.activity24h;
+  final activity = l10n.syncActivityRounds(
+    summary.rounds,
+    summary.effectiveRounds,
+    syncBytesText(summary.bytes),
+  );
+  final environment = l10n.syncActivityEnvironment(
+    syncLevelText(l10n, provider.syncLevel),
+    syncNetworkText(l10n, onCellular: provider.onCellular),
+    provider.powerSaveActive ? l10n.syncPowerSaveOn : l10n.syncPowerSaveOff,
+  );
+  return '$activity\n$environment';
+}
+
+/// 复制诊断信息：只含运行状态与计数（无口令 / 无密钥 / 无快照内容）。
+Future<void> _copyDiagnostics(
+  BuildContext context,
+  SyncProvider provider,
+  AppLocalizations l10n,
+) async {
+  final report = provider.lastReport;
+  // 传输状态与原始失败细节（`detail`）只进诊断导出，界面上不展示。
+  final transports = <Map<String, Object?>>[];
+  for (final kind in const [
+    SyncTransportKind.lan,
+    SyncTransportKind.webdav,
+  ]) {
+    final status = provider.transportStatus(kind);
+    transports.add({
+      'kind': kind,
+      'enabled': provider.enabledTransports.contains(kind),
+      'running': status?.running ?? false,
+      'unavailableReason': status?.unavailableReason,
+      'lastSuccessAt': provider.transportLastSuccessAt(kind),
+      if (status?.error != null) 'error': status!.error!.toJson(),
+    });
+  }
+  final payload = const JsonEncoder.withIndent('  ').convert({
+    'deviceId': provider.deviceId,
+    'deviceName': provider.deviceName,
+    'enabled': provider.enabled,
+    'transports': transports,
+    'categories': {
+      for (final entry in provider.categories.entries)
+        entry.key.name: entry.value,
+    },
+    if (report != null)
+      'lastRound': {
+        'trigger': report.trigger.name,
+        'outcome': report.outcome.name,
+        'durationMs': report.durationMs,
+        'applied': report.applied,
+        'remoteRecords': report.remoteRecords,
+        if (report.error != null) 'error': report.error!.toJson(),
+        'transports': [for (final item in report.transports) item.toJson()],
+      },
+    'peers': [for (final peer in provider.peers) peer.toJson()],
+    'log': [for (final entry in provider.log.take(10)) entry.toJson()],
+  });
+  await Clipboard.setData(ClipboardData(text: payload));
+  if (!context.mounted) return;
+  ScaffoldMessenger.of(context)
+      .showSnackBar(SnackBar(content: Text(l10n.syncDiagnosticCopied)));
 }
 
 /// 日志行是否需要「下一步动作」（失败或有失败原因；成功行只是历史）。
