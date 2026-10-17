@@ -11,10 +11,12 @@ import '../models/play_mode.dart';
 import '../providers/discover_provider.dart';
 import '../providers/paged_list_controller.dart';
 import '../services/haptics.dart';
+import '../utils/duration_text.dart';
 import '../utils/responsive.dart';
 import '../widgets/app_network_image.dart';
 import '../widgets/discover_actions.dart';
 import '../widgets/track_row.dart';
+import '../widgets/track_table_header.dart';
 
 AppLocalizations _l10n(BuildContext context) =>
     AppLocalizations.of(context) ?? lookupAppLocalizations(const Locale('zh'));
@@ -246,46 +248,75 @@ class _DiscoverTracksPageState extends State<DiscoverTracksPage> {
     }
     final cardList = M3ETheme.of(context).listTheme.cardList;
     final horizontalPadding = context.horizontalPadding;
-    return Scrollbar(
-      controller: _listController,
-      thumbVisibility: true,
-      interactive: true,
-      child: NotificationListener<ScrollNotification>(
-        onNotification: _onScroll,
-        child: CustomScrollView(
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final tableColumns = showTrackTableColumns(
+          context,
+          availableWidth: constraints.maxWidth,
+        );
+        return Scrollbar(
           controller: _listController,
-          slivers: [
-            SliverToBoxAdapter(
-              child: _buildHeader(context, detail, tracks.length),
+          thumbVisibility: true,
+          interactive: true,
+          child: NotificationListener<ScrollNotification>(
+            onNotification: _onScroll,
+            child: CustomScrollView(
+              controller: _listController,
+              slivers: [
+                SliverToBoxAdapter(
+                  child: _buildHeader(context, detail, tracks.length),
+                ),
+                // 表头钉在滚动视口顶部（封面头部滚走后列标题仍在），与行内
+                // 列同宽同左缘；表面色遮挡滚过其下的行。
+                if (tableColumns)
+                  SliverPersistentHeader(
+                    pinned: true,
+                    delegate: _PinnedTableHeaderDelegate(
+                      extent: TrackTableHeader.extentOf(context),
+                      background: Theme.of(context).colorScheme.surface,
+                      horizontalPadding: horizontalPadding,
+                    ),
+                  ),
+                SliverPadding(
+                  padding: EdgeInsets.symmetric(horizontal: horizontalPadding),
+                  sliver: SliverFixedExtentList.builder(
+                    // 行高 + 行距：固定 extent，长歌单滚动条拖动一次定位。
+                    itemExtent: TrackRow.extent + cardList.gap,
+                    itemCount: tracks.length,
+                    itemBuilder: (context, index) {
+                      final isLast = index == tracks.length - 1;
+                      final track = tracks[index];
+                      return Column(
+                        children: [
+                          DiscoverTrackTile(
+                            track: track,
+                            position:
+                                calculateCardPosition(index, tracks.length),
+                            columns: tableColumns
+                                ? TrackRowColumns(
+                                    artist: track.artist,
+                                    album: track.album,
+                                    duration:
+                                        durationText(track.durationMs) ?? '',
+                                  )
+                                : null,
+                            onTap: () => _playFrom(index),
+                          ),
+                          if (!isLast) SizedBox(height: cardList.gap),
+                        ],
+                      );
+                    },
+                  ),
+                ),
+                if (state.isLoadingMore || state.loadMoreFailed)
+                  SliverToBoxAdapter(
+                      child: _buildLoadMoreFooter(context, l10n, state)),
+                const SliverToBoxAdapter(child: SizedBox(height: 16)),
+              ],
             ),
-            SliverPadding(
-              padding: EdgeInsets.symmetric(horizontal: horizontalPadding),
-              sliver: SliverFixedExtentList.builder(
-                // 行高 + 行距：固定 extent，长歌单滚动条拖动一次定位。
-                itemExtent: TrackRow.extent + cardList.gap,
-                itemCount: tracks.length,
-                itemBuilder: (context, index) {
-                  final isLast = index == tracks.length - 1;
-                  return Column(
-                    children: [
-                      DiscoverTrackTile(
-                        track: tracks[index],
-                        position: calculateCardPosition(index, tracks.length),
-                        onTap: () => _playFrom(index),
-                      ),
-                      if (!isLast) SizedBox(height: cardList.gap),
-                    ],
-                  );
-                },
-              ),
-            ),
-            if (state.isLoadingMore || state.loadMoreFailed)
-              SliverToBoxAdapter(
-                  child: _buildLoadMoreFooter(context, l10n, state)),
-            const SliverToBoxAdapter(child: SizedBox(height: 16)),
-          ],
-        ),
-      ),
+          ),
+        );
+      },
     );
   }
 
@@ -427,4 +458,50 @@ class _DiscoverTracksPageState extends State<DiscoverTracksPage> {
       ),
     );
   }
+}
+
+/// 钉住的表格表头（发现详情页）：列标题固定在滚动视口顶部，封面头部滚走
+/// 后行内列仍有标题可对照；[ColoredBox] 用页面表面色遮挡滚过其下的行。
+///
+/// extent 由 [TrackTableHeader.extentOf] 按主题 + 系统文字缩放算出，不写死
+/// 行高（大字号下不裁切）。子组件在 [build] 内按可比较的字段构造：
+/// widget 实例比较恒不相等，起不到去重作用。
+class _PinnedTableHeaderDelegate extends SliverPersistentHeaderDelegate {
+  const _PinnedTableHeaderDelegate({
+    required this.extent,
+    required this.background,
+    required this.horizontalPadding,
+  });
+
+  final double extent;
+  final Color background;
+
+  /// 列表横向页边距（与行列表同值）：表头列缘据此与行内列对齐。
+  final double horizontalPadding;
+
+  @override
+  double get minExtent => extent;
+
+  @override
+  double get maxExtent => extent;
+
+  @override
+  Widget build(
+    BuildContext context,
+    double shrinkOffset,
+    bool overlapsContent,
+  ) =>
+      ColoredBox(
+        color: background,
+        child: Padding(
+          padding: EdgeInsets.symmetric(horizontal: horizontalPadding),
+          child: const TrackTableHeader(),
+        ),
+      );
+
+  @override
+  bool shouldRebuild(covariant _PinnedTableHeaderDelegate oldDelegate) =>
+      oldDelegate.extent != extent ||
+      oldDelegate.background != background ||
+      oldDelegate.horizontalPadding != horizontalPadding;
 }

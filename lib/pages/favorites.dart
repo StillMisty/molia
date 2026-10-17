@@ -34,6 +34,8 @@ import '../widgets/local_audio_import.dart' show importLocalAudioFilesFlow;
 import '../widgets/lxmc_import.dart' show importLxmcFavoritesFlow;
 import '../widgets/shell_page_visibility.dart';
 import '../widgets/shell_reselect.dart';
+import '../widgets/track_row.dart';
+import '../widgets/track_table_header.dart';
 
 /// AppLocalizations 查找：测试等场景可能直接挂载本页而不注册 delegate，
 /// 此时回退到简体中文（与 lxmc_import / 其他页面同一约定）。
@@ -47,6 +49,15 @@ AppLocalizations _l10n(BuildContext context) =>
 /// 桌面骨架判定）；移动 / 平板与窄窗口一行观感都不变（标题行弹层切换）。
 bool _useCollectionRail(BuildContext context) =>
     isDesktopPlatform() && context.isDesktop;
+
+/// 行内表格三列：三处合集行（曲目 / 历史 / 本地歌曲）共用同一映射，
+/// 时长统一走 `durationText`。
+TrackRowColumns _rowColumns(String artist, String album, int? durationMs) =>
+    TrackRowColumns(
+      artist: artist,
+      album: album,
+      duration: durationText(durationMs) ?? '',
+    );
 
 /// 「收藏」页：默认收藏（♥）与已导入/自建列表、播放历史、本地歌曲的
 /// 统一管理入口。
@@ -1765,11 +1776,7 @@ class _FavoritesPageState extends State<FavoritesPage> {
     final m3e = M3ETheme.of(context);
     final selectionTheme = m3e.selectionTheme;
     final foreground = selectionTheme.contextualForeground(m3e.colorScheme);
-    final itemCount = view.isHistory
-        ? view.visibleHistory.length
-        : view.isLocalSongs
-            ? view.visibleLocalSongs.length
-            : view.visible.length;
+    final itemCount = view.visibleCount;
     final allSelected = _selection.allSelectedFor(itemCount) == true;
     return ColoredBox(
       color: selectionTheme.contextualBackground(m3e.colorScheme),
@@ -1828,30 +1835,67 @@ class _FavoritesPageState extends State<FavoritesPage> {
     _CollectionView view, {
     required bool reorderActive,
   }) {
-    if (view.isHistory) {
-      return _buildHistoryBody(context, l10n, provider, view);
-    }
-    if (view.isLocalSongs) {
-      return _buildLocalSongsBody(context, l10n, provider, view);
-    }
-    return CollectionTrackList<PlaylistTrack>(
-      controller: _scrollControllerForKey(view.collectionKey),
-      rows: view.visible,
-      keyOf: (track) => ValueKey<String>('${track.sourceKey}:${track.songId}'),
-      // 合集本身为空 → 合集空态；有内容但被搜索过滤掉 → 搜索空态。
-      empty: view.tracks.isEmpty
-          ? _buildEmptyState(context, l10n, view)
-          : CollectionSearchEmpty(message: l10n.favoritesSearchEmpty),
-      onReorder: reorderActive
-          ? (from, to) => unawaited(_reorderTracks(view, from, to))
-          : null,
-      itemBuilder: (context, track, index) => _buildTrackRow(
-        context,
-        l10n,
-        view,
-        index,
-        reorderActive: reorderActive,
-      ),
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final tableColumns = showTrackTableColumns(
+          context,
+          availableWidth: constraints.maxWidth,
+        );
+        final Widget body;
+        if (view.isHistory) {
+          body = _buildHistoryBody(
+            context,
+            l10n,
+            provider,
+            view,
+            tableColumns: tableColumns,
+          );
+        } else if (view.isLocalSongs) {
+          body = _buildLocalSongsBody(
+            context,
+            l10n,
+            provider,
+            view,
+            tableColumns: tableColumns,
+          );
+        } else {
+          body = CollectionTrackList<PlaylistTrack>(
+            controller: _scrollControllerForKey(view.collectionKey),
+            rows: view.visible,
+            keyOf: (track) =>
+                ValueKey<String>('${track.sourceKey}:${track.songId}'),
+            // 合集本身为空 → 合集空态；有内容但被搜索过滤掉 → 搜索空态。
+            empty: view.tracks.isEmpty
+                ? _buildEmptyState(context, l10n, view)
+                : CollectionSearchEmpty(message: l10n.favoritesSearchEmpty),
+            onReorder: reorderActive
+                ? (from, to) => unawaited(_reorderTracks(view, from, to))
+                : null,
+            itemBuilder: (context, track, index) => _buildTrackRow(
+              context,
+              l10n,
+              view,
+              index,
+              reorderActive: reorderActive,
+              tableColumns: tableColumns,
+            ),
+          );
+        }
+        // 表头固定在滚动区之上（与搜索页同一口径）：列标题不随列表滚走，
+        // 三列与行内列同宽同左缘。空列表（含被搜索过滤空）不给表头。
+        if (!tableColumns || view.visibleCount == 0) return body;
+        final horizontalPadding =
+            context.layoutType(ResponsivePageType.browse).horizontalPadding;
+        return Column(
+          children: [
+            Padding(
+              padding: EdgeInsets.symmetric(horizontal: horizontalPadding),
+              child: const TrackTableHeader(),
+            ),
+            Expanded(child: body),
+          ],
+        );
+      },
     );
   }
 
@@ -1861,12 +1905,16 @@ class _FavoritesPageState extends State<FavoritesPage> {
     _CollectionView view,
     int index, {
     required bool reorderActive,
+    required bool tableColumns,
   }) {
     final track = view.visible[index];
     return CollectionTrackRow(
       title: track.title,
       artist: track.artist,
       coverUrl: track.coverUrl,
+      columns: tableColumns
+          ? _rowColumns(track.artist, track.album, track.durationMs)
+          : null,
       trailingText: durationText(track.durationMs),
       position: calculateCardPosition(index, view.visible.length),
       selected: _selection.isSelected(index),
@@ -1928,8 +1976,9 @@ class _FavoritesPageState extends State<FavoritesPage> {
     BuildContext context,
     AppLocalizations l10n,
     LibraryProvider provider,
-    _CollectionView view,
-  ) {
+    _CollectionView view, {
+    required bool tableColumns,
+  }) {
     return CollectionTrackList<PlayHistoryEntry>(
       controller: _scrollControllerForKey(view.collectionKey),
       rows: view.visibleHistory,
@@ -1939,8 +1988,15 @@ class _FavoritesPageState extends State<FavoritesPage> {
       empty: provider.history.isNotEmpty
           ? CollectionSearchEmpty(message: l10n.favoritesSearchEmpty)
           : _buildEmptyState(context, l10n, view),
-      itemBuilder: (context, entry, index) =>
-          _buildHistoryRow(context, l10n, provider, view, entry, index),
+      itemBuilder: (context, entry, index) => _buildHistoryRow(
+        context,
+        l10n,
+        provider,
+        view,
+        entry,
+        index,
+        tableColumns: tableColumns,
+      ),
     );
   }
 
@@ -1950,12 +2006,16 @@ class _FavoritesPageState extends State<FavoritesPage> {
     LibraryProvider provider,
     _CollectionView view,
     PlayHistoryEntry entry,
-    int index,
-  ) {
+    int index, {
+    required bool tableColumns,
+  }) {
     return CollectionTrackRow(
       title: entry.title,
       artist: entry.artist,
       coverUrl: entry.coverUrl,
+      columns: tableColumns
+          ? _rowColumns(entry.artist, entry.album, entry.durationMs)
+          : null,
       trailingText: durationText(entry.durationMs),
       position: calculateCardPosition(index, view.visibleHistory.length),
       selected: _selection.isSelected(index),
@@ -2035,8 +2095,9 @@ class _FavoritesPageState extends State<FavoritesPage> {
     BuildContext context,
     AppLocalizations l10n,
     LibraryProvider provider,
-    _CollectionView view,
-  ) {
+    _CollectionView view, {
+    required bool tableColumns,
+  }) {
     final service = context.read<DownloadService?>();
     if (service == null) return _buildEmptyState(context, l10n, view);
     return CollectionTrackList<CollectionLocalSong>(
@@ -2055,6 +2116,7 @@ class _FavoritesPageState extends State<FavoritesPage> {
         service,
         song,
         index,
+        tableColumns: tableColumns,
       ),
     );
   }
@@ -2066,18 +2128,27 @@ class _FavoritesPageState extends State<FavoritesPage> {
     _CollectionView view,
     DownloadService service,
     CollectionLocalSong song,
-    int index,
-  ) {
+    int index, {
+    required bool tableColumns,
+  }) {
     final favorite = song.favoriteKey;
     final isFavorite = provider.isFavorite(favorite.sourceKey, favorite.songId);
     return CollectionTrackRow(
       title: song.title,
       artist: song.artist,
       coverUrl: song.artworkUri,
+      columns: tableColumns
+          ? _rowColumns(song.artist, song.album, song.durationMs)
+          : null,
       trailingText: durationText(song.durationMs),
+      // 行尾标签与 ⋮ 菜单共用 56dp 固定槽：大字号下必须单行省略，
+      // 否则换行会被 72dp 固定行高裁切。
       trailing: song.isCached
           ? Text(
               l10n.localSongsCachedTag,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              softWrap: false,
               style: Theme.of(context).textTheme.labelSmall?.copyWith(
                     color: Theme.of(context).colorScheme.onSurfaceVariant,
                   ),
@@ -2205,6 +2276,13 @@ class _CollectionView {
   final List<CollectionLocalSong> visibleLocalSongs;
 
   final bool hasItems;
+
+  /// 当前合集可见行数（表格表头只在有可见行时显示）。
+  int get visibleCount => isHistory
+      ? visibleHistory.length
+      : isLocalSongs
+          ? visibleLocalSongs.length
+          : visible.length;
 
   /// 当前合集的持久化键：收藏 / 历史 / 本地歌曲用固定键，自建列表按 id。
   ///

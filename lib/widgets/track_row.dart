@@ -35,13 +35,13 @@ class TrackRowColumns {
     this.duration = '',
   });
 
-  /// 艺术家列文案（空串 = 留空）。
+  /// 艺术家列文案。
   final String artist;
 
-  /// 专辑列文案（空串 = 留空）。
+  /// 专辑列文案。
   final String album;
 
-  /// 时长列文案（空串 = 留空）。
+  /// 时长列文案（来自 `durationText`）。
   final String duration;
 
   /// 表格列生效的最小窗口宽（与 browse 桌面断点同值，见
@@ -51,6 +51,11 @@ class TrackRowColumns {
   static const double artistWidth = 200;
   static const double albumWidth = 200;
   static const double durationWidth = 64;
+
+  /// 表格模式行尾动作槽宽（⋮ 菜单 / 缓存标签 / 拖动把手都落在槽内）：
+  /// 行与表头共用同一宽度，列左缘只由列宽决定，不随行尾内容漂移。
+  /// 取值 56 = `TrackActionsMenu` 锚点（`M3EIconButton` md）的宽度。
+  static const double trailingSlotWidth = 56;
 }
 
 /// 固定行高的曲目行（队列 / 收藏 / 历史 / 发现详情 / 搜索结果共用）。
@@ -209,6 +214,25 @@ class TrackRow extends StatelessWidget {
                   TrackRowColumns.durationWidth,
                   type.bodyMedium.copyWith(color: supportingColor),
                 ),
+                const SizedBox(width: 12),
+                // 行尾固定槽：行尾内容（⋮ 菜单 / 缓存标签 / 拖动把手）按
+                // 槽宽布局，列左缘不因内容有无、宽窄而左右移动；表头按同一
+                // 槽宽预留，两侧列缘恒对齐。
+                SizedBox(
+                  width: TrackRowColumns.trailingSlotWidth,
+                  child: trailing == null
+                      ? null
+                      : Align(
+                          alignment: Alignment.centerRight,
+                          child: IconTheme.merge(
+                            data: IconThemeData(
+                              color: supportingColor,
+                              size: 20,
+                            ),
+                            child: trailing!,
+                          ),
+                        ),
+                ),
               ],
               if (tableColumns == null && trailingText != null) ...[
                 const SizedBox(width: 12),
@@ -228,7 +252,7 @@ class TrackRow extends StatelessWidget {
                   ),
                 ),
               ],
-              if (trailing != null) ...[
+              if (tableColumns == null && trailing != null) ...[
                 const SizedBox(width: 12),
                 IconTheme.merge(
                   data: IconThemeData(color: supportingColor, size: 20),

@@ -7,6 +7,7 @@ import 'package:molia/providers/discover_provider.dart';
 import 'package:molia/providers/library_provider.dart';
 import 'package:molia/providers/playback_provider.dart';
 import 'package:molia/widgets/track_row.dart';
+import 'package:molia/widgets/track_table_header.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -65,10 +66,36 @@ void main() {
         ],
       );
 
+  /// 元数据齐全的详情（歌手 / 专辑 / 时长）：表格列断言用。
+  DiscoverDetail richDetail(int page) => DiscoverDetail(
+        info: const DiscoverPlaylist(id: 'x', name: '歌单', trackCount: 30),
+        tracks: [
+          for (var i = 0; i < 30; i++)
+            DiscoverTrack(
+              sourceKey: 'wy',
+              songId: '$page-$i',
+              title: 'P$page-$i',
+              artist: '歌手 $i',
+              album: '专辑 $i',
+              // 逐行不同时长：列断言不靠 findsNWidgets 计数。
+              durationMs: 185000 + i * 1000,
+            ),
+        ],
+      );
+
   Future<void> pumpPage(
     WidgetTester tester,
-    DiscoverTracksLoader loader,
-  ) async {
+    DiscoverTracksLoader loader, {
+    Size? size,
+  }) async {
+    if (size != null) {
+      tester.view.physicalSize = size;
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(() {
+        tester.view.resetPhysicalSize();
+        tester.view.resetDevicePixelRatio();
+      });
+    }
     await tester.pumpWidget(
       ChangeNotifierProvider<DiscoverProvider>.value(
         value: discover,
@@ -167,5 +194,81 @@ void main() {
     );
     await tester.pumpAndSettle();
     expect(calls, [1], reason: '无总数信息时不翻页');
+  });
+
+  testWidgets('桌面宽屏：曲目列表渲染表格表头 + 三列，列左缘与表头对齐', (tester) async {
+    await pumpPage(
+      tester,
+      (page) async => richDetail(page),
+      size: const Size(1200, 900),
+    );
+
+    expect(find.byType(TrackTableHeader), findsOneWidget);
+    expect(find.text('艺术家'), findsOneWidget);
+    expect(find.text('专辑'), findsOneWidget);
+    expect(find.text('时长'), findsOneWidget);
+
+    // 行内三列：歌手 / 专辑 / 时长（时长不再占行尾）。
+    expect(find.text('歌手 0'), findsOneWidget);
+    expect(find.text('专辑 0'), findsOneWidget);
+    expect(find.text('3:05'), findsOneWidget);
+
+    // 表头存在的意义就是与列对齐：三列左缘必须逐列相同。
+    expect(
+      tester.getTopLeft(find.text('歌手 0')).dx,
+      tester.getTopLeft(find.text('艺术家')).dx,
+    );
+    expect(
+      tester.getTopLeft(find.text('专辑 0')).dx,
+      tester.getTopLeft(find.text('专辑')).dx,
+    );
+    expect(
+      tester.getTopLeft(find.text('3:05')).dx,
+      tester.getTopLeft(find.text('时长')).dx,
+    );
+
+    // 表头钉住：滚过封面头部后停在视口顶部（不随列表滚走）。
+    await tester.drag(find.byType(CustomScrollView), const Offset(0, -800));
+    await tester.pumpAndSettle();
+    expect(find.text('歌手 0'), findsNothing, reason: '首行已滚出视口');
+    expect(find.byType(TrackTableHeader), findsOneWidget);
+    final viewportTop = tester.getTopLeft(find.byType(CustomScrollView)).dy;
+    final pinnedTop = tester.getTopLeft(find.byType(TrackTableHeader)).dy;
+    expect(pinnedTop, closeTo(viewportTop, 2), reason: '表头钉在视口顶部');
+
+    // 换一个滚动偏移：表头位置不动（非 pinned 时会继续上滚）。
+    await tester.drag(find.byType(CustomScrollView), const Offset(0, -300));
+    await tester.pumpAndSettle();
+    expect(
+      tester.getTopLeft(find.byType(TrackTableHeader)).dy,
+      closeTo(pinnedTop, 2),
+      reason: '继续滚动表头钉住不动',
+    );
+  }, variant: TargetPlatformVariant.only(TargetPlatform.linux));
+
+  testWidgets('桌面窄窗口（< 900）：不渲染表头，行保持单列', (tester) async {
+    await pumpPage(
+      tester,
+      (page) async => richDetail(page),
+      size: const Size(800, 2400),
+    );
+
+    expect(find.byType(TrackTableHeader), findsNothing);
+    expect(find.text('专辑'), findsNothing);
+    expect(find.text('专辑 0'), findsNothing, reason: '单列行不展示专辑');
+    expect(find.text('歌手 0'), findsOneWidget, reason: '副标题仍是歌手');
+  }, variant: TargetPlatformVariant.only(TargetPlatform.linux));
+
+  testWidgets('非桌面平台：宽窗口也不渲染表头（行保持单列）', (tester) async {
+    // 测试环境默认平台为 android：窗口够宽也不进表格模式。
+    await pumpPage(
+      tester,
+      (page) async => richDetail(page),
+      size: const Size(1200, 2400),
+    );
+
+    expect(find.byType(TrackTableHeader), findsNothing);
+    expect(find.text('专辑 0'), findsNothing);
+    expect(find.text('歌手 0'), findsOneWidget);
   });
 }

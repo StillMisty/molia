@@ -7,6 +7,7 @@ import '../providers/discover_provider.dart';
 import '../providers/library_provider.dart';
 import 'add_to_library.dart';
 import 'track_menu_tile.dart';
+import 'track_row.dart';
 
 /// 收藏 / 取消收藏：图标态本身即反馈，不弹提示。
 Future<void> toggleDiscoverFavorite(
@@ -43,11 +44,16 @@ class DiscoverTrackTile extends StatelessWidget {
 
   final VoidCallback onTap;
 
+  /// 宽屏表格列（桌面宽内容列表传入）：行内改表格布局，列宽与表头同源；
+  /// null = 单列布局（逐像素不变）。
+  final TrackRowColumns? columns;
+
   const DiscoverTrackTile({
     super.key,
     required this.track,
     required this.position,
     required this.onTap,
+    this.columns,
   });
 
   @override
@@ -59,6 +65,7 @@ class DiscoverTrackTile extends StatelessWidget {
       title: track.title,
       artist: track.artist,
       coverUrl: track.coverUrl,
+      columns: columns,
       position: position,
       onTap: onTap,
       favorite: favorite,

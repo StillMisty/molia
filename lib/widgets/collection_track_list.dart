@@ -115,6 +115,7 @@ class CollectionTrackRow extends StatelessWidget {
     required this.title,
     this.artist = '',
     this.coverUrl,
+    this.columns,
     this.trailingText,
     this.trailing,
     required this.position,
@@ -128,6 +129,10 @@ class CollectionTrackRow extends StatelessWidget {
   final String title;
   final String artist;
   final String? coverUrl;
+
+  /// 宽屏表格列（桌面宽内容列表传入）：行内改表格布局，列宽与表头同源；
+  /// null = 单列布局（逐像素不变）。
+  final TrackRowColumns? columns;
 
   /// 行尾元信息（时长等），未知时传 null 不占位。
   final String? trailingText;
@@ -158,6 +163,7 @@ class CollectionTrackRow extends StatelessWidget {
       title: title,
       artist: artist,
       coverUrl: coverUrl,
+      columns: columns,
       trailingText: trailingText,
       trailing: trailing,
       selected: selected,
@@ -278,6 +284,9 @@ class CollectionLocalSong {
   String get title => record?.title ?? history!.title;
 
   String get artist => record?.artist ?? history!.artist;
+
+  /// 专辑名：下载 / 导入副本取记录快照，缓存行沿用播放历史。
+  String get album => record?.album ?? history!.album;
 
   int? get durationMs =>
       record != null ? record!.durationMs : history!.durationMs;
