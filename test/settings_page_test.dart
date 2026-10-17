@@ -197,6 +197,8 @@ void main() {
     // 通用与数据：入口行同组。
     expect(find.text('General'), findsOneWidget);
     expect(find.text('Data & storage'), findsOneWidget);
+    // 震动反馈已移入通用子页：首屏不再直接显示。
+    expect(find.text('Vibration feedback'), findsNothing);
 
     // 子页内容不在首屏。
     expect(find.text('Bottom navigation'), findsNothing);
@@ -213,9 +215,13 @@ void main() {
     expect(find.byIcon(Icons.email_rounded), findsNothing);
   });
 
-  testWidgets('震动反馈：行在通用与数据分区，默认开，关闭后即时生效并持久化', (tester) async {
+  testWidgets('震动反馈：行在通用子页，默认开，关闭后即时生效并持久化', (tester) async {
     await pumpSettingsPage(tester);
     addTearDown(() => HapticsService.setEnabled(HapticsService.defaultEnabled));
+
+    // 入口在「通用与数据」，开关本体在通用子页。
+    await tester.tap(find.byKey(const Key('settingsGeneralItem')));
+    await tester.pumpAndSettle();
 
     expect(find.text('Vibration feedback'), findsOneWidget);
     expect(HapticsService.enabled, isTrue);
