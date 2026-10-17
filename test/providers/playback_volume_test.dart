@@ -66,19 +66,6 @@ void main() {
     expect(harness.backend.volumes.last, 0.7);
   });
 
-  test('adjustVolume 静音态自动解除静音并按步进生效', () async {
-    final harness = build();
-    await harness.provider.preferencesReady;
-    await harness.provider.setVolume(0.4);
-    await harness.provider.toggleMute();
-
-    await harness.provider.adjustVolume(0.1);
-
-    expect(harness.provider.muted, isFalse, reason: '调整即期望听见声音');
-    expect(harness.provider.volume, closeTo(0.5, 1e-9));
-    expect(harness.backend.volumes.last, closeTo(0.5, 1e-9));
-  });
-
   test('持久化往返：音量与静音在重建 provider 后恢复并下发', () async {
     final first = build();
     await first.provider.preferencesReady;
@@ -93,7 +80,24 @@ void main() {
     expect(second.backend.volumes, [0.0], reason: '恢复的静音态启动即压到 0');
   });
 
-  test('越界值收进 0..1（设置与步进调整同理）', () async {
+  test('音量落盘防抖：拖动中的值不逐帧写盘，停手后落定', () async {
+    final harness = build();
+    await harness.provider.preferencesReady;
+    await harness.provider.setVolume(0.4);
+
+    // 防抖窗口内：还没写盘（滑杆拖动每帧都会走到 setVolume）。
+    final duringDrag = build();
+    await duringDrag.provider.preferencesReady;
+    expect(duringDrag.provider.volume, 1.0, reason: '拖动中的中间值不立即落盘');
+
+    // 停手（防抖窗口过去）后：写入，下一次启动读到。
+    await Future<void>.delayed(const Duration(milliseconds: 500));
+    final afterDrag = build();
+    await afterDrag.provider.preferencesReady;
+    expect(afterDrag.provider.volume, closeTo(0.4, 1e-9));
+  });
+
+  test('越界值收进 0..1', () async {
     final harness = build();
     await harness.provider.preferencesReady;
 
@@ -103,10 +107,6 @@ void main() {
     await harness.provider.setVolume(-1);
     expect(harness.provider.volume, 0.0);
     expect(harness.backend.volumes.last, 0.0);
-
-    await harness.provider.adjustVolume(2);
-    expect(harness.provider.volume, 1.0);
-    expect(harness.backend.volumes.last, 1.0);
   });
 
   test('音量变化不进低频快照（快照契约不新增字段）', () async {

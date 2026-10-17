@@ -438,8 +438,13 @@ class _NowPlayingState extends State<NowPlaying>
         children: [
           SizedBox(
             width: _desktopPlayerColumnWidth,
-            // 大屏播放器布局：封面自适应 + 标题/进度，始终完整（无 expandAnimation）。
-            child: Player(isLargeScreen: true, morph: widget.morph),
+            // 大屏播放器布局：封面自适应 + 标题/作者/专辑 + 进度 + 传输控制
+            // （desktopLayout：专辑行与传输排在播放器列里，见 player.dart）。
+            child: Player(
+              isLargeScreen: true,
+              desktopLayout: true,
+              morph: widget.morph,
+            ),
           ),
           // 两栏分界：M3E 竖线（outlineVariant / 主题线宽），不手写 1px 线。
           const M3EDivider(axis: M3EDividerAxis.vertical),

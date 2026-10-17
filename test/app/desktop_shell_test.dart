@@ -245,17 +245,34 @@ void main() {
   });
 
   testWidgets('窄窗口分级折叠：阈值只影响渲染，变宽后恢复', (tester) async {
-    // 1100 < 1200：打开队列也不渲染面板（记忆值保留）。
+    // 1100 < 1200：队列入口置灰（点了也看不到面板，不留死控件）。
     await pumpShell(
       tester,
       desktopShell: true,
       size: const Size(1100, 900),
     );
-    await tester.tap(find.byKey(DesktopNowPlayingBar.queueToggleKey));
-    await settleTransition(tester);
+    expect(
+      tester
+          .widget<M3EIconButton>(
+            find.byKey(DesktopNowPlayingBar.queueToggleKey),
+          )
+          .onPressed,
+      isNull,
+      reason: '窄窗口下队列入口置灰',
+    );
     expect(find.byType(QueueDisplay), findsNothing);
 
-    // 变宽后恢复（阈值没有改写记忆值）。
+    // 变宽后入口可用：打开面板（阈值不改写记忆值，只是渲染被抑制）。
+    tester.view.physicalSize = const Size(1440, 900);
+    await settleTransition(tester);
+    await tester.tap(find.byKey(DesktopNowPlayingBar.queueToggleKey));
+    await settleTransition(tester);
+    expect(find.byType(QueueDisplay), findsOneWidget);
+
+    // 再变窄：面板重新被抑制；回到宽窗后按记忆值自动恢复。
+    tester.view.physicalSize = const Size(1100, 900);
+    await settleTransition(tester);
+    expect(find.byType(QueueDisplay), findsNothing);
     tester.view.physicalSize = const Size(1440, 900);
     await settleTransition(tester);
     expect(find.byType(QueueDisplay), findsOneWidget);

@@ -1,9 +1,13 @@
 import 'package:material_ui/material_ui.dart';
 
+import '../l10n/app_localizations.dart';
 import '../providers/nav_provider.dart';
 import 'molia_mark.dart';
 
-/// 壳层导航目的地图标：底栏 / 侧栏 / 设置页预览共用的唯一映射源。
+/// 壳层导航目的地的表现映射：图标 + 文案的**唯一映射源**。
+///
+/// 底栏 / 侧栏 / 设置页预览共用；文案走 [AppLocalizations]（en/zh），
+/// 避免各调用点各写一份 `switch`（改文案时漏改一处）。
 ///
 /// 按 M3 惯例成对使用「未选中空心、选中实心」：
 /// - 空心优先取圆角字形（如 `favorite_border_rounded`）；
@@ -11,6 +15,13 @@ import 'molia_mark.dart';
 /// - 资料库没有圆角空心字形，退用 `_outlined` 变体与实心成对；
 /// - 空心的 `_outlined` 只应出现在本文件的未选中半对中（架构测试兜底）。
 extension ShellDestinationIcons on ShellDestination {
+  /// 本地化标签（底栏 / 侧栏 / 设置页 / 顶栏标题共用）。
+  String label(AppLocalizations l10n) => switch (this) {
+        ShellDestination.nowPlaying => l10n.nowPlayingLabel,
+        ShellDestination.favorites => l10n.favoritesLabel,
+        ShellDestination.library => l10n.libraryLabel,
+      };
+
   /// 未选中（inactive）态图标。
   Widget get outlinedIcon => switch (this) {
         ShellDestination.nowPlaying => const MoliaMark(outlined: true),

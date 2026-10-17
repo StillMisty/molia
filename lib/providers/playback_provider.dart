@@ -580,35 +580,43 @@ class PlaybackProvider extends ChangeNotifier {
   bool get muted => _muted;
 
   /// 设置音量：clamp → 应用到播放后端（静音时只更新值、不解除静音）→
-  /// 持久化 → 通知。
+  /// 通知；落盘防抖（滑杆拖动每帧都会走到这里）。
   Future<void> setVolume(double value) async {
     final clamped = value.clamp(0.0, 1.0);
     if (clamped == _volume) return;
     _volume = clamped;
     await _applyEffectiveVolume();
-    await _persistVolumeState();
+    _scheduleVolumePersist();
     notifyListeners();
   }
 
   /// 静音开关：切换后把有效音量（静音 = 0）应用到后端 → 持久化 → 通知。
+  ///
+  /// 离散动作，立即落盘（并取消在途的防抖写入，避免旧值后到）。
   Future<void> toggleMute() async {
     _muted = !_muted;
     await _applyEffectiveVolume();
+    _volumePersistTimer?.cancel();
+    _volumePersistTimer = null;
     await _persistVolumeState();
     notifyListeners();
   }
 
-  /// 快捷键步进调整（±delta，clamp 0..1）：调整即期望听见声音，
-  /// 静音态自动解除。
-  Future<void> adjustVolume(double delta) async {
-    final next = (_volume + delta).clamp(0.0, 1.0);
-    if (!_muted && next == _volume) return;
-    _volume = next;
-    _muted = false;
-    await _applyEffectiveVolume();
-    await _persistVolumeState();
-    notifyListeners();
+  /// 音量落盘防抖：拖动滑杆时每帧都调 [setVolume]，逐帧写 SharedPreferences
+  /// 没有意义（也拖慢拖动）；停手后再写。进程在防抖窗口内被杀最多丢一次
+  /// 未落定的拖动值（与其它防抖写入同一取舍）。
+  void _scheduleVolumePersist() {
+    _volumePersistTimer?.cancel();
+    _volumePersistTimer = Timer(_volumePersistDebounce, () {
+      _volumePersistTimer = null;
+      unawaited(_persistVolumeState());
+    });
   }
+
+  /// 音量落盘防抖窗口（见 [_scheduleVolumePersist]）。
+  static const Duration _volumePersistDebounce = Duration(milliseconds: 400);
+
+  Timer? _volumePersistTimer;
 
   /// 有效音量：静音用 0 下发（跨平台最稳，不依赖后端的静音语义）。
   double get _effectiveVolume => _muted ? 0.0 : _volume;
@@ -955,6 +963,12 @@ class PlaybackProvider extends ChangeNotifier {
     sleepTimer.dispose();
     _sourceManager?.removeListener(_onSourceManagerChanged);
     _dataSaver?.removeListener(_onDataSaverChanged);
+    // 在途的音量防抖写入：取消定时器并尽力落一次，避免丢最后一次拖动值。
+    if (_volumePersistTimer != null) {
+      _volumePersistTimer!.cancel();
+      _volumePersistTimer = null;
+      unawaited(_persistVolumeState());
+    }
     // 观察者由组合根创建、与 provider 同生命周期：这里一并拆线
     // （组合根不单独释放）。
     _observer?.dispose();

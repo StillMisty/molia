@@ -46,6 +46,12 @@ class WindowBoundsStore {
     return (bounds: bounds, maximized: prefs?.getBool(keyMaximized) ?? false);
   }
 
+  /// 读取最大化标记（独立于几何：最大化期间不写几何，只有该标记可读）。
+  Future<bool> loadMaximized() async {
+    final prefs = await _prefsInstance();
+    return prefs?.getBool(keyMaximized) ?? false;
+  }
+
   /// 保存窗口矩形（正常态；最大化态不调用，见 `WindowChrome` 的保存路径）。
   Future<void> saveBounds(Rect bounds) async {
     final prefs = await _prefsInstance();

@@ -677,6 +677,8 @@
     icon-only 动作按方形静止宽渲染（sm 40×40），语义与悬浮提示走
     `tooltip` + `semanticLabel`——纯图标动作需要中性色时用 `style: text` +
     组级 `decoration.foregroundColor`（`material_3_expressive ≥ 1.1.8`）；
+    **例外：桌面顶栏**（设置 / 最小化 / 最大化 / 关闭）按用户要求不做悬浮
+    提示（一排窗口按钮弹提示反而吵），只留 `semanticLabel` 保无障碍；
   - 「主操作 + 变体 / 次要出口」→ `M3ESplitButton`（播放全部 ▾ 随机播放全部·加入列表、
     下载并安装 ▾ 打开发布页、复制 ▾ 复制全部）；纯文本样式不支持（包内断言
     `style != text`）；「随机播放全部」先 `setPlayMode(shuffle)` 再装载队列、

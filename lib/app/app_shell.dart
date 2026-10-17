@@ -35,7 +35,7 @@ import '../utils/responsive.dart';
 import '../widgets/app_network_image.dart';
 import '../widgets/cover_appearance.dart';
 import '../widgets/icon_swap.dart';
-import '../widgets/nav_destination_icons.dart';
+import '../widgets/nav_destination_style.dart';
 import '../widgets/playback_selectors.dart';
 import '../widgets/player_morph.dart';
 import '../widgets/shell_reselect.dart';
@@ -424,16 +424,6 @@ class _MyAppState extends State<MyApp>
     _removeMorphOverlay();
   }
 
-  String _destinationLabel(
-    AppLocalizations l10n,
-    ShellDestination destination,
-  ) =>
-      switch (destination) {
-        ShellDestination.nowPlaying => l10n.nowPlayingLabel,
-        ShellDestination.favorites => l10n.favoritesLabel,
-        ShellDestination.library => l10n.libraryLabel,
-      };
-
   /// 打开设置弹层（顶栏入口，三个目的地共用）；返回处理见 [showSettingsSheet]。
   void _openSettings(BuildContext context) {
     HapticsService.lightImpact();
@@ -484,7 +474,7 @@ class _MyAppState extends State<MyApp>
         selectedDestination: selectedDestination,
         visibleDestinations: visibleDestinations,
         selectedIndex: selectedIndex,
-        labelFor: (destination) => _destinationLabel(l10n, destination),
+        labelFor: (destination) => destination.label(l10n),
         pageStack: _buildPageStack(),
         morph: _morph,
         onDestinationSelected: _onDestinationSelected,
@@ -560,7 +550,7 @@ class _MyAppState extends State<MyApp>
                       M3ENavigationRailDestination(
                         icon: destination.outlinedIcon,
                         selectedIcon: destination.filledIcon,
-                        label: _destinationLabel(l10n, destination),
+                        label: destination.label(l10n),
                       ),
                   ],
                 ),
@@ -587,7 +577,7 @@ class _MyAppState extends State<MyApp>
                     M3ENavigationBarDestination(
                       icon: destination.outlinedIcon,
                       selectedIcon: destination.filledIcon,
-                      label: _destinationLabel(l10n, destination),
+                      label: destination.label(l10n),
                     ),
                 ],
               ),

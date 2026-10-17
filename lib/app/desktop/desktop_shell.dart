@@ -17,7 +17,7 @@ import 'package:material_ui/material_ui.dart';
 import '../../l10n/app_localizations.dart';
 import '../../providers/nav_provider.dart';
 import '../../services/window/window_chrome.dart';
-import '../../widgets/nav_destination_icons.dart';
+import '../../widgets/nav_destination_style.dart';
 import '../../widgets/player_morph.dart';
 import 'now_playing_bar.dart';
 import 'queue_panel.dart';
@@ -214,7 +214,9 @@ class _DesktopShellState extends State<DesktopShell> {
       bottomNavigationBar: DesktopNowPlayingBar(
         key: DesktopNowPlayingBar.shellKey,
         morph: widget.morph,
-        queueOpen: _queuePanelOpen,
+        // 按钮态跟实际渲染走（窄窗口被强制关闭时不高亮、且置灰）。
+        queueOpen: queuePanelVisible,
+        queueAvailable: windowWidth >= DesktopShell.queueForceCloseWidth,
         onOpenPlayer: () =>
             widget.onDestinationSelected(ShellDestination.nowPlaying),
         onToggleQueue: () => _setQueuePanelOpen(!_queuePanelOpen),

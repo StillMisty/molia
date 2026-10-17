@@ -83,17 +83,20 @@ class WindowChrome {
     await _applyLinuxWindowIcon();
   }
 
-  /// 恢复上次关闭时的窗口几何。
+  /// 恢复上次关闭时的窗口几何与最大化状态。
   ///
-  /// 开关关闭 / 没有保存值 / 拿不到显示器列表时保持系统默认位置：
-  /// 拿不到显示器就无从校验，宁可用默认位置也不赌保存值可见。
+  /// 开关关闭时什么都不恢复。几何与最大化**分开读**：最大化期间不写几何
+  /// （`getBounds` 在最大化态返回最大化矩形，存进去会丢还原尺寸），所以
+  /// 「首启就最大化 → 退出」这种会话只有标记可读，不能因为几何缺失就跳过
+  /// 最大化恢复。
   ///
-  /// 最大化单独在 show() 之后补：`getBounds` 在最大化态返回最大化矩形，
-  /// 存进去会丢还原尺寸，因此恢复路径也分两步（先还原几何，再最大化）。
+  /// 没有保存几何 / 拿不到显示器列表时保持系统默认位置：拿不到显示器就
+  /// 无从校验，宁可用默认位置也不赌保存值可见。
   static Future<void> _restoreSavedGeometry() async {
     _restoreMaximized = false;
     if (!WindowSettings.rememberBounds) return;
     try {
+      _restoreMaximized = await _boundsStore.loadMaximized();
       final saved = await _boundsStore.load();
       if (saved == null) return;
       final displays = await screenRetriever.getAllDisplays();
@@ -115,7 +118,6 @@ class WindowChrome {
           primaryVisibleArea: primaryArea,
         ),
       );
-      _restoreMaximized = saved.maximized;
     } catch (error) {
       // 恢复失败不阻断启动：窗口按系统默认位置显示。
       _logger.warning('窗口几何恢复失败：$error');

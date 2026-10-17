@@ -271,3 +271,18 @@
     `windows/CMakeLists.txt` 里为 `permission_handler_windows` 加的 MSVC
     `/await` 消音宏（`_SILENCE_EXPERIMENTAL_COROUTINE_DEPRECATION_WARNINGS`）
     也一并删除。若将来重新引入权限库，必须先在 Windows 上确认定位指示器不再常驻。
+41. **桌面窗口「先建不显」与强制单实例是配套的，动其中一条要看另一条**：
+    `WindowChrome.ensureInitialized()` 只建窗（隐藏标题栏 + 恢复几何）不 `show`，
+    窗口由 `main()` 的首帧回调 `WindowChrome.show()` 亮出（runApp 前的装配有几百 ms，
+    先显示会让用户盯空白窗），并挂 5s 超时兜底（装配异常时窗口也一定出现）。
+    强制单实例（`lib/services/window/single_instance*.dart`）在窗口创建**之前**抢锁，
+    第二实例连上主实例的 loopback 端口发 `show` 后 `exit(0)`——因此
+    `SingleInstance.isSupported` 必须与 `WindowChrome.isSupported` 同一平台面：
+    窗口能力缺失的平台（如 macOS 走 stub）上若仍拦第二实例，用户会「点了图标什么都不发生」。
+    开发/测试实例用 `MOLIA_SINGLE_INSTANCE_DISABLED=1` 放行（`tool/agent/_common.sh`
+    已默认导出），否则本机开着应用时 `flutter run` / 集成测试会被单实例逻辑静默退出。
+42. **窗口几何记忆里「最大化」与「几何」必须分开读写**：最大化期间
+    `getBounds()` 返回的是最大化矩形，写进 bounds 会丢掉还原尺寸，所以保存路径在
+    最大化态只写 `window_maximized` 标记、不写几何；相应地恢复路径也不能
+    「几何缺失就整体跳过」——「首次启动就最大化 → 退出」这类会话只有标记可读，
+    跳过就等于最大化状态永远恢复不了（`WindowBoundsStore.loadMaximized()` 独立读取）。

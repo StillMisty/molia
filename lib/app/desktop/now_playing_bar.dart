@@ -20,6 +20,7 @@ import '../../providers/library_provider.dart';
 import '../../providers/playback_provider.dart';
 import '../../services/app_branding_service.dart';
 import '../../services/haptics.dart';
+import '../../utils/duration_text.dart';
 import '../../widgets/app_network_image.dart';
 import '../../widgets/cover_appearance.dart';
 import '../../widgets/icon_swap.dart';
@@ -31,6 +32,7 @@ class DesktopNowPlayingBar extends StatelessWidget {
     super.key,
     required this.morph,
     required this.queueOpen,
+    required this.queueAvailable,
     required this.onOpenPlayer,
     required this.onToggleQueue,
   });
@@ -60,8 +62,13 @@ class DesktopNowPlayingBar extends StatelessWidget {
   /// 顶栏 ↔ 播放页共享元素控制器：封面锚点与「播放页激活时收起封面」。
   final PlayerMorphController morph;
 
-  /// 队列面板当前是否打开（决定队列按钮的选中态）。
+  /// 队列面板当前是否**实际渲染**（窄窗口下会被强制关闭；按钮态跟它走，
+  /// 否则会出现「按钮亮着但面板不存在」的死控件）。
   final bool queueOpen;
+
+  /// 当前窗口宽度是否允许队列面板（窄于阈值时按钮置灰，与侧栏的
+  /// `alwaysCollapse` 同一口径：不提供点了没反应的入口）。
+  final bool queueAvailable;
 
   /// 点击左区进入播放页。
   final VoidCallback onOpenPlayer;
@@ -88,6 +95,7 @@ class DesktopNowPlayingBar extends StatelessWidget {
             flex: 3,
             child: _BarActions(
               queueOpen: queueOpen,
+              queueAvailable: queueAvailable,
               onToggleQueue: onToggleQueue,
             ),
           ),
@@ -431,13 +439,6 @@ class _BarSeekSliderState extends State<_BarSeekSlider> {
         fontFeatures: const [FontFeature.tabularFigures()],
       );
 
-  static String _formatTime(int milliseconds) {
-    final duration = Duration(milliseconds: milliseconds);
-    final minutes = duration.inMinutes;
-    final seconds = (duration.inSeconds % 60).toString().padLeft(2, '0');
-    return '$minutes:$seconds';
-  }
-
   @override
   Widget build(BuildContext context) {
     // 外层 RepaintBoundary 是硬需求：`M3ESlider.wavy` 内部是 `repeat()` 的
@@ -484,7 +485,7 @@ class _BarSeekSliderState extends State<_BarSeekSlider> {
                       size: M3ESliderSize.xs,
                       trackThickness: 6,
                       enabled: enabled,
-                      label: _formatTime(valueMs.round()),
+                      label: durationText(valueMs.round()) ?? '0:00',
                       onChanged: onChanged,
                       onChangeEnd: onChangeEnd,
                     )
@@ -495,7 +496,7 @@ class _BarSeekSliderState extends State<_BarSeekSlider> {
                       size: M3ESliderSize.xs,
                       trackThickness: 6,
                       enabled: enabled,
-                      label: _formatTime(valueMs.round()),
+                      label: durationText(valueMs.round()) ?? '0:00',
                       onChanged: onChanged,
                       onChangeEnd: onChangeEnd,
                     );
@@ -506,7 +507,7 @@ class _BarSeekSliderState extends State<_BarSeekSlider> {
                   SizedBox(
                     width: 40,
                     child: Text(
-                      enabled ? _formatTime(valueMs.round()) : '--:--',
+                      enabled ? (durationText(valueMs.round()) ?? '0:00') : '--:--',
                       style: style,
                       maxLines: 1,
                     ),
@@ -515,7 +516,7 @@ class _BarSeekSliderState extends State<_BarSeekSlider> {
                   SizedBox(
                     width: 40,
                     child: Text(
-                      enabled ? _formatTime(durationMs) : '--:--',
+                      enabled ? (durationText(durationMs) ?? '--:--') : '--:--',
                       style: style,
                       maxLines: 1,
                       textAlign: TextAlign.end,
@@ -533,9 +534,14 @@ class _BarSeekSliderState extends State<_BarSeekSlider> {
 
 /// 右区：播放模式 + 音量 + 队列开关。
 class _BarActions extends StatelessWidget {
-  const _BarActions({required this.queueOpen, required this.onToggleQueue});
+  const _BarActions({
+    required this.queueOpen,
+    required this.queueAvailable,
+    required this.onToggleQueue,
+  });
 
   final bool queueOpen;
+  final bool queueAvailable;
   final VoidCallback onToggleQueue;
 
   @override
@@ -578,7 +584,8 @@ class _BarActions extends StatelessWidget {
               : M3EIconButtonVariant.standard,
           tooltip: l10n.playerBarQueue,
           icon: const Icon(Icons.queue_music_rounded),
-          onPressed: onToggleQueue,
+          // 窄窗口（面板被强制关闭）时置灰：点了也看不到面板。
+          onPressed: queueAvailable ? onToggleQueue : null,
         ),
         const SizedBox(width: 4),
       ],

@@ -50,6 +50,10 @@ class Player extends StatefulWidget {
   /// 迷你/完整两套布局由同一控制器驱动：容器高度连续插值、封面飞行共享。
   final Animation<double>? expandAnimation;
 
+  /// 桌面骨架播放页版式：标题块下补专辑行、进度排上方补传输控制
+  /// （移动/平板大屏版式不显示，纵向空间留给歌词）。
+  final bool desktopLayout;
+
   /// 迷你层被点击时请求展开（由宿主翻转 [expandAnimation]）。
   final VoidCallback? onToggleExpand;
 
@@ -59,6 +63,7 @@ class Player extends StatefulWidget {
     this.morph,
     this.expandAnimation,
     this.onToggleExpand,
+    this.desktopLayout = false,
   });
 
   @override
@@ -995,6 +1000,9 @@ class _PlayerState extends State<Player> with TickerProviderStateMixin {
         const double spacingBelowArt = 2.0;
         const double artExternalPaddingHorizontal = 48.0 * 2;
         const double artExternalPaddingVertical = 24.0 * 2;
+        // 桌面版式多出的专辑行 + 传输控制排（封面可用高度要扣掉，否则
+        // 矮窗口里进度排会被挤出可视区）。
+        final double desktopExtrasHeight = widget.desktopLayout ? 92.0 : 0.0;
 
         double artContentAvailableWidth =
             constraints.maxWidth - artExternalPaddingHorizontal;
@@ -1002,6 +1010,7 @@ class _PlayerState extends State<Player> with TickerProviderStateMixin {
             textSectionFixedHeight -
             seekSectionHeight -
             spacingBelowArt -
+            desktopExtrasHeight -
             artExternalPaddingVertical;
         artContentAvailableWidth = max(0, artContentAvailableWidth);
         artContentAvailableHeight = max(0, artContentAvailableHeight);
@@ -1033,11 +1042,96 @@ class _PlayerState extends State<Player> with TickerProviderStateMixin {
               padding: const EdgeInsets.symmetric(horizontal: 24),
               child: _buildTrackInfo(context, displayTrack, playbackProvider),
             ),
+            if (widget.desktopLayout) ...[
+              const SizedBox(height: 4),
+              _buildAlbumLine(context, displayTrack),
+              const SizedBox(height: 12),
+              _buildTransportRow(context, playbackProvider),
+            ],
             const SizedBox(height: spacingBelowArt),
             _buildSeekBar(context, playbackProvider),
           ],
         );
       },
+    );
+  }
+
+  /// 桌面骨架播放页：标题块下补一行专辑（移动/平板大屏版式不显示，
+  /// 那里纵向空间优先留给歌词）。
+  Widget _buildAlbumLine(BuildContext context, Track? displayTrack) {
+    final album = displayTrack?.album?.trim() ?? '';
+    if (album.isEmpty) return const SizedBox.shrink();
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 24),
+      child: Text(
+        album,
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+        style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+              color: Theme.of(context).colorScheme.onSurfaceVariant,
+            ),
+      ),
+    );
+  }
+
+  /// 桌面骨架播放页：进度排上方补传输控制（底栏也有，但播放页是「操作
+  /// 主场景」，与移动端把控制放在播放器里同一意图）。
+  Widget _buildTransportRow(
+    BuildContext context,
+    PlaybackProvider playbackProvider,
+  ) {
+    final (hasTrack, isPlaying) =
+        context.select<PlaybackProvider, (bool, bool)>(
+      (provider) => (provider.hasTrack, provider.isPlaying),
+    );
+    final l10n = _l10n(context);
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.center,
+      children: [
+        M3EIconButton(
+          variant: M3EIconButtonVariant.standard,
+          size: M3EIconButtonSize.md,
+          tooltip: l10n.previousTrackTooltip,
+          icon: const Icon(Icons.skip_previous_rounded),
+          onPressed: hasTrack
+              ? () {
+                  HapticsService.lightImpact();
+                  playbackProvider.skipToPrevious();
+                }
+              : null,
+        ),
+        const SizedBox(width: 12),
+        M3EIconButton(
+          variant: M3EIconButtonVariant.tonal,
+          size: M3EIconButtonSize.lg,
+          tooltip: isPlaying ? l10n.pause : l10n.play,
+          icon: IconSwap<bool>(
+            value: isPlaying,
+            builder: (context, isPlaying) => Icon(
+              isPlaying ? Icons.pause_rounded : Icons.play_arrow_rounded,
+            ),
+          ),
+          onPressed: hasTrack
+              ? () {
+                  HapticsService.lightImpact();
+                  playbackProvider.togglePlayPause();
+                }
+              : null,
+        ),
+        const SizedBox(width: 12),
+        M3EIconButton(
+          variant: M3EIconButtonVariant.standard,
+          size: M3EIconButtonSize.md,
+          tooltip: l10n.nextTrackTooltip,
+          icon: const Icon(Icons.skip_next_rounded),
+          onPressed: hasTrack
+              ? () {
+                  HapticsService.lightImpact();
+                  playbackProvider.skipToNext();
+                }
+              : null,
+        ),
+      ],
     );
   }
 }

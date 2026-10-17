@@ -13,7 +13,7 @@ import '../services/notification_service.dart';
 import '../services/window/app_tray.dart';
 import '../services/window/tray_settings.dart';
 import '../services/window/window_settings.dart';
-import '../widgets/nav_destination_icons.dart';
+import '../widgets/nav_destination_style.dart';
 import '../widgets/settings/settings_reorderable_rows.dart';
 import '../widgets/settings/settings_tiles.dart';
 
@@ -208,14 +208,6 @@ class _GeneralSettingsPageState extends State<GeneralSettingsPage> {
   }
 }
 
-/// 目的地的本地化名称（启动首页行与底部导航行共用）。
-String _destinationLabel(AppLocalizations l10n, ShellDestination destination) =>
-    switch (destination) {
-      ShellDestination.nowPlaying => l10n.nowPlayingLabel,
-      ShellDestination.favorites => l10n.favoritesLabel,
-      ShellDestination.library => l10n.libraryLabel,
-    };
-
 /// 启动首页：行内分段选择「打开应用时进入的页面」。
 ///
 /// 不可见的目的地不筛掉、只禁用：分段布局不随显隐变化（否则改一次显隐
@@ -240,13 +232,13 @@ class _StartupPageSettings extends StatelessWidget {
       subtitle: homeVisible
           ? l10n.settingsStartupPageSubtitle
           : l10n.settingsStartupPageHidden(
-              _destinationLabel(l10n, home),
-              _destinationLabel(l10n, nav.effectiveHomeDestination),
+              home.label(l10n),
+              nav.effectiveHomeDestination.label(l10n),
             ),
       value: home,
       options: [
         for (final destination in nav.order)
-          (destination, _destinationLabel(l10n, destination)),
+          (destination, destination.label(l10n)),
       ],
       // 隐藏项禁用（想选先显示）：禁用保持分段布局稳定。
       optionEnabled: nav.isVisible,
@@ -292,7 +284,7 @@ class _BottomNavSettings extends StatelessWidget {
     int index,
   ) {
     final scheme = Theme.of(context).colorScheme;
-    final label = _destinationLabel(l10n, destination);
+    final label = destination.label(l10n);
     // 启动首页锁定：置灰并要求先改首页；已是不可见的不一致态不禁用，
     // 否则用户无法把它重新打开（想关先改首页只在可见时成立）。
     final locked =
