@@ -224,8 +224,9 @@
     `targetSdk 37` 起访问局域网（UDP 单播·组播·广播的收发、对局域网地址的
     TCP 连接）需要运行时权限 `ACCESS_LOCAL_NETWORK`，未授予时 Dart socket
     直接抛 `SocketException`，而且**网关级阻断**——手动填对端 IP:端口同样失败。
-    因此：权限被拒时只能引导授权（`Permission.accessLocalNetwork`）或改用
-    WebDAV；「手动对端地址」只解决发现失败（AP 隔离 / 多网段 / 防火墙 / VPN）。
+    因此：权限被拒时只能引导授权（Android 自有 `top.stillmisty.molia/local_network`
+    通道）或改用 WebDAV；「手动对端地址」只解决发现失败（AP 隔离 / 多网段 /
+    防火墙 / VPN）。
     manifest 已声明该权限；LAN 传输启动前经 `LocalNetworkPermission` 过门，
     被拒时状态记为 `permission_denied`（UI 给「授予权限」入口 + 去系统设置），
     不再出现「开关打开但什么都没在跑」。Android 16 上该限制是 opt-in，
@@ -259,12 +260,12 @@
     外推会把暂停样本凭空推后一个传输延迟，实测 188ms）。诊断：
     `adb shell setprop log.tag.MoliaLyrics DEBUG`（默认级别静默）后看
     `err=/transit=/snap=/frames=` 打点（`frames=0` 说明帧循环没跑）。
-40. **VS 18 的 MSVC 14.51 把 `<experimental/coroutine>` 的弃用断言升级为硬错误**：
-    `permission_handler` 的 Windows 实现（`permission_handler_windows`，基于
-    C++/WinRT 的 `/await` 旧头）在 VS 18 上直接编译失败（`error C2338 ...
-    STL1011`），本地 Linux 的 analyze/test 全绿也照样漏过——只有 release 流水线
-    的 Windows job 会暴露。修复：`windows/CMakeLists.txt` 在
-    `include(flutter/generated_plugins.cmake)` **之前**注入
-    `add_compile_definitions(_SILENCE_EXPERIMENTAL_COROUTINE_DEPRECATION_WARNINGS)`
-    （STL 官方消音宏；`add_compile_definitions` 只作用于其后 add_subdirectory 的
-    插件目标，对老工具链与 runner 无副作用）。
+40. **不要只为单个运行时权限引入 `permission_handler`**：它的 Windows 实现
+    （`permission_handler_windows`）在插件注册时就创建 `Geolocator` 并订阅
+    `PositionChanged`（回调为空），Windows 因此把整个进程标记为「正在使用位置」——
+    即使应用从未申请位置权限（上游 #1394，修复 PR #1568 长期未合并）。Molia 只用它
+    申请 Android 17 的 `ACCESS_LOCAL_NETWORK`，现已改为自有通道
+    （`android/.../sync/LocalNetworkPermissionChannelHandler.kt`）。依赖移除后，
+    `windows/CMakeLists.txt` 里为 `permission_handler_windows` 加的 MSVC
+    `/await` 消音宏（`_SILENCE_EXPERIMENTAL_COROUTINE_DEPRECATION_WARNINGS`）
+    也一并删除。若将来重新引入权限库，必须先在 Windows 上确认定位指示器不再常驻。
