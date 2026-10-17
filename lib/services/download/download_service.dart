@@ -21,11 +21,18 @@
 ///   `CancelToken`，半成品清理后抛 `cancelled` 失败（UI 静默）；
 /// - 歌词/封面是 best-effort：失败不阻断音频下载，对应路径记为 null；
 /// - 同一原曲只保留一条记录（下载前查重，重名文件自动 `(2)`、`(3)` 递增）；
-/// - **系统通知**（Android）：音频下载任务经 [DownloadNotifications] 起一条
-///   前台服务（dataSync）进度通知，后台也能继续下载；批量下载整批共享一条
-///   「N/N」通知（批内单任务通知被抑制）。通知是纯附加面：通道缺失 / 权限未授予 /
-///   原生失败一律 no-op 只记日志，下载本身与既有语义完全不变；歌词/封面这类
-///   秒级分项动作不发通知（无进度可言，闪一下反而吵）。
+/// - **系统通知**（Android）：音频下载任务起一条前台服务（dataSync）进度通知，
+///   后台也能继续下载；批量下载整批共享一条「N/N」通知（批内单任务通知被
+///   抑制）。通知是纯附加面：通道缺失 / 权限未授予 / 原生失败一律 no-op 只记
+///   日志，下载本身与既有语义完全不变；歌词/封面这类秒级分项动作不发通知
+///   （无进度可言，闪一下反而吵）。
+///
+/// 本文件只做编排（下载一首 / 一批）；三个 module 各有一份唯一实现：
+/// - 命名 / 放置：`download_file_layout.dart`（模板 + sanitize + ` (2)` 去重 +
+///   sidecar 路径约定）；
+/// - 记录装配：`download_record_assembler.dart`（部分状态 → `DownloadedTrack`）；
+/// - 通知 presenter：`download_notification_presenter.dart`（id 分配 / 批量
+///   共享一条 / 系统频率节流 / 收尾不残留；端口由组合根注入）。
 library;
 
 import 'dart:async';
@@ -53,6 +60,7 @@ import '../../models/lyrics_result.dart';
 import '../../services/cache_service.dart';
 import '../../sources/source_track.dart' show pickQualityFor;
 import 'download_file_layout.dart';
+import 'download_notification_presenter.dart';
 import 'download_record_assembler.dart';
 import 'download_settings.dart';
 
@@ -161,11 +169,14 @@ class DownloadService extends ChangeNotifier {
         _artworkCache = artworkCache,
         _settings = settings,
         _publisher = publisher ?? const NoopDownloadsPublisher(),
-        _notifications = notifications ?? createDownloadNotifications(),
         _preferredQuality = preferredQuality,
-        _clock = clock ?? (() => DateTime.now().millisecondsSinceEpoch),
         _layout = DownloadFileLayout(storage: storage, settings: settings),
-        _assembler = DownloadRecordAssembler(clock: clock);
+        _assembler = DownloadRecordAssembler(clock: clock),
+        _notifications = DownloadNotificationPresenter(
+          notifications: notifications ?? createDownloadNotifications(),
+          settings: settings,
+          clock: clock,
+        );
 
   final CatalogService _catalog;
   final DownloadsRepository _repository;
@@ -181,12 +192,7 @@ class DownloadService extends ChangeNotifier {
   /// 未注入 / 非 Android 时为空实现，发布整体 no-op）。
   final DownloadsPublisher _publisher;
 
-  /// 系统下载通知端口（组合根注入 `createDownloadNotifications()`；
-  /// 未注入 / 非 Android 时为空实现，通知整体 no-op）。
-  final DownloadNotifications _notifications;
-
   final String Function()? _preferredQuality;
-  final int Function() _clock;
 
   /// 文件名 / 放置模块：命名、去重与 sidecar 路径约定的唯一实现（见
   /// `download_file_layout.dart`）。
@@ -195,6 +201,11 @@ class DownloadService extends ChangeNotifier {
   /// 记录装配模块：部分状态 → `DownloadedTrack` 的唯一装配点（见
   /// `download_record_assembler.dart`）。
   final DownloadRecordAssembler _assembler;
+
+  /// 通知 presenter 模块：id 分配、批量共享、系统频率节流与收尾不残留的
+  /// 唯一实现（见 `download_notification_presenter.dart`；端口由组合根注入
+  /// `createDownloadNotifications()`，未注入 / 非 Android 时整体 no-op）。
+  final DownloadNotificationPresenter _notifications;
 
   final Logger _logger = Logger('molia.download_service');
 
@@ -390,19 +401,18 @@ class DownloadService extends ChangeNotifier {
     var done = 0;
     var failed = 0;
     // 已有批量在进行（并发调用）时不抢占通知：服务端只有一个批量 id。
-    final batch = _notificationsOn && items.isNotEmpty && _batch == null
-        ? _BatchNotificationContext(total: items.length)
-        : null;
-    if (batch != null) _batch = batch;
+    final batch = _notifications.beginBatch(items.length);
     try {
       for (var index = 0; index < items.length; index++) {
         final track = items[index];
         if (recordForTrack(track)?.hasAudio ?? false) continue;
         if (track.id.sourceKey == kLocalSourceKey) continue;
-        if (batch != null) {
-          batch.index = index + 1;
-          batch.activeKey = '${track.id.sourceKey}:${track.id.id}';
-          _notifyBatchItem(batch, track);
+        if (batch) {
+          _notifications.enterBatch(
+            index: index + 1,
+            key: '${track.id.sourceKey}:${track.id.id}',
+            track: track,
+          );
         }
         try {
           await download(track);
@@ -414,10 +424,7 @@ class DownloadService extends ChangeNotifier {
         }
       }
     } finally {
-      if (batch != null) {
-        _stopBatchNotification();
-        _batch = null;
-      }
+      if (batch) _notifications.endBatch();
     }
     return (done, failed);
   }
@@ -513,7 +520,7 @@ class DownloadService extends ChangeNotifier {
     final cancelToken = CancelToken();
     _tokens[key] = cancelToken;
     notifyListeners();
-    _startTaskNotification(key, track);
+    _notifications.startTask(key, track);
 
     String? partPath;
     String? filePath;
@@ -672,7 +679,7 @@ class DownloadService extends ChangeNotifier {
       _tokens.remove(key);
       _activeTracks.remove(key);
       _lastProgressNotified.remove(key);
-      _stopTaskNotification(key);
+      _notifications.stopTask(key);
       notifyListeners();
     }
   }
@@ -1127,7 +1134,7 @@ class DownloadService extends ChangeNotifier {
   final Map<String, int> _lastProgressNotified = {};
 
   void _updateProgress(String key, int received, int? total) {
-    _updateNotificationProgress(key, received, total);
+    _notifications.reportProgress(key, received, total);
     final last = _lastProgressNotified[key] ?? 0;
     if (received - last < _progressNotifyStep &&
         (total == null || received < total)) {
@@ -1141,112 +1148,6 @@ class DownloadService extends ChangeNotifier {
     if (_active[key] == progress) return;
     _active[key] = progress;
     notifyListeners();
-  }
-
-  // 内部：系统下载通知（Android 前台服务）
-
-  /// 批量通知 id：整批共享一条「N/N」通知。
-  static const String _batchNotificationId = 'batch';
-
-  /// 通知进度节流间隔：系统对通知更新有频率限制（前台服务通知尤其），进度按
-  /// 「首个分片 / 距上次 ≥500ms / 已到最后一个分片」推送；UI 进度不受影响。
-  static const int _notificationIntervalMs = 500;
-
-  /// 通知最近推送时间（键 = 通知 id），只服务节流。
-  final Map<String, int> _notificationSentAt = {};
-
-  /// 已起过通知的 id：收尾只收自己起过的，中途关掉开关也不会残留。
-  final Set<String> _startedNotifications = {};
-
-  /// 批量通知上下文（null = 无批量在跑）。
-  _BatchNotificationContext? _batch;
-
-  bool get _notificationsOn =>
-      _notifications.supported && (_settings?.notifications ?? true);
-
-  /// 单任务通知 id：一条下载一条通知，收尾时按同一 id 移除。
-  static String _taskNotificationId(String key) => 'track:$key';
-
-  /// 起单任务通知（批量中的当前曲目由批量通知统一表达，避免 N 条通知连闪）。
-  void _startTaskNotification(String key, Track track) {
-    if (!_notificationsOn) return;
-    if (_batch?.activeKey == key) return;
-    final id = _taskNotificationId(key);
-    _notificationSentAt.remove(id);
-    _startedNotifications.add(id);
-    unawaited(_notifications.start(
-      id: id,
-      title: track.title,
-      subtitle: track.artistLabel,
-    ));
-  }
-
-  /// 收单任务通知（完成 / 失败 / 取消同一条路径：收尾并移除）。
-  ///
-  /// 不受「通知开关」影响：只收自己起过的，中途关掉开关也不残留。
-  void _stopTaskNotification(String key) {
-    if (_batch?.activeKey == key) return;
-    final id = _taskNotificationId(key);
-    _notificationSentAt.remove(id);
-    if (!_startedNotifications.remove(id)) return;
-    unawaited(_notifications.stop(id));
-  }
-
-  /// 批量通知进入下一首：[start] 建立通知，其余用 update 顺延序号与进度条。
-  void _notifyBatchItem(_BatchNotificationContext batch, Track track) {
-    final id = _batchNotificationId;
-    _notificationSentAt.remove(id);
-    _startedNotifications.add(id);
-    if (batch.started) {
-      unawaited(_notifications.update(
-        id: id,
-        title: track.title,
-        subtitle: track.artistLabel,
-        index: batch.index,
-        total: batch.total,
-        // max 传 0：新任务总大小未知，进度条回到不确定态。
-        progress: 0,
-        max: 0,
-      ));
-    } else {
-      unawaited(_notifications.start(
-        id: id,
-        title: track.title,
-        subtitle: track.artistLabel,
-        index: batch.index,
-        total: batch.total,
-      ));
-      batch.started = true;
-    }
-  }
-
-  /// 批量结束：移除批量通知（批内单任务通知本来就没起过）。
-  ///
-  /// 同 [_stopTaskNotification]：收尾不受「通知开关」影响。
-  void _stopBatchNotification() {
-    _notificationSentAt.remove(_batchNotificationId);
-    if (!_startedNotifications.remove(_batchNotificationId)) return;
-    unawaited(_notifications.stop(_batchNotificationId));
-  }
-
-  /// 进度 → 通知（单任务或批量：按「当前曲目是否属于批量」路由）。
-  void _updateNotificationProgress(String key, int received, int? total) {
-    if (!_notificationsOn) return;
-    final batch = _batch;
-    final inBatch = batch?.activeKey == key;
-    final id = inBatch ? _batchNotificationId : _taskNotificationId(key);
-    final now = _clock();
-    final last = _notificationSentAt[id];
-    final complete = total != null && total > 0 && received >= total;
-    if (last != null && !complete && now - last < _notificationIntervalMs) {
-      return;
-    }
-    _notificationSentAt[id] = now;
-    unawaited(_notifications.update(
-      id: id,
-      progress: received,
-      max: total,
-    ));
   }
 
   Future<void> _cleanupFailedDownload({
@@ -1316,23 +1217,6 @@ class DownloadService extends ChangeNotifier {
       _ => 'application/octet-stream',
     };
   }
-}
-
-/// 批量下载的通知上下文（整批共享一条「N/N」通知）。
-class _BatchNotificationContext {
-  _BatchNotificationContext({required this.total});
-
-  /// 入参曲目总数（跳过项也占位：序号 = 曲目在入参里的位置）。
-  final int total;
-
-  /// 当前曲目序号（从 1 起）。
-  int index = 0;
-
-  /// 当前曲目的原音源键（批内单任务通知按它抑制）。
-  String? activeKey;
-
-  /// 批量通知是否已建立（首条用 start，其余用 update 避免重复建通知）。
-  bool started = false;
 }
 
 /// 已解析的封面字节（下载链路内部使用）。
