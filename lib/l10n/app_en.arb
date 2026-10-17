@@ -1356,6 +1356,7 @@
   "syncPairingNeedsPassphrase": "Set a sync passphrase first",
   "syncPairingWarning": "This content contains your sync passphrase — sharing it authorizes the other device to read all synced data.",
   "syncPairingCopy": "Copy text",
+  "syncPairingInvalidCode": "Invalid pairing code (missing fields or unsupported version)",
   "syncPairingNoAddress": "The pairing code has no usable address (the other device may only have loopback addresses)",
   "syncPairingImported": "Pairing info imported",
   "syncPairingPassphraseConflictTitle": "Passphrase already set",
@@ -1371,6 +1372,17 @@
   "syncLocalAddressesEmpty": "Only loopback / link-local addresses were found; check the network connection.",
   "syncLocalProbePort": "Discovery port",
   "syncLocalProbePortUnavailable": "Unavailable — broadcast / multicast discovery is degraded; use manual addresses",
+  "syncLocalProbePortPerFamily": "{v4} (IPv4) / {v6} (IPv6)",
+  "@syncLocalProbePortPerFamily": {
+    "placeholders": {
+      "v4": {
+        "type": "String"
+      },
+      "v6": {
+        "type": "String"
+      }
+    }
+  },
   "syncLocalHttpPort": "Direct endpoint port",
   "syncLocalHttpPortUnavailable": "Not bound yet",
   "syncPeerAddress": "Address {host}",

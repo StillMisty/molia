@@ -4641,6 +4641,12 @@ abstract class AppLocalizations {
   /// **'Copy text'**
   String get syncPairingCopy;
 
+  /// No description provided for @syncPairingInvalidCode.
+  ///
+  /// In en, this message translates to:
+  /// **'Invalid pairing code (missing fields or unsupported version)'**
+  String get syncPairingInvalidCode;
+
   /// No description provided for @syncPairingNoAddress.
   ///
   /// In en, this message translates to:
@@ -4730,6 +4736,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Unavailable — broadcast / multicast discovery is degraded; use manual addresses'**
   String get syncLocalProbePortUnavailable;
+
+  /// No description provided for @syncLocalProbePortPerFamily.
+  ///
+  /// In en, this message translates to:
+  /// **'{v4} (IPv4) / {v6} (IPv6)'**
+  String syncLocalProbePortPerFamily(String v4, String v6);
 
   /// No description provided for @syncLocalHttpPort.
   ///

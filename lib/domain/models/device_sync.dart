@@ -583,17 +583,14 @@ class ManualPeer {
   /// 回写学到的新观测（只覆盖已知字段，避免把已有信息抹成空）。
   ///
   /// [name] 只在条目尚未命名时填入：手动条目优先保留用户命名，
-  /// 对端广播的设备名不覆盖用户输入。[probePort] 是**对端自报**的 UDP 探测
-  /// 端口（端口降级后对端不在标准端口上，记住它才能继续单播）。
-  ManualPeer mergeLearned({
-    int? probePort,
-    int? httpPort,
-    String? deviceId,
-    String? name,
-  }) =>
+  /// 对端广播的设备名不覆盖用户输入。UDP 探测端口**不参与学习**：
+  /// 对端的来源端口随 NAT / 独立降级 / 重启变化，写回会污染用户配置
+  /// （学到 [httpPort] 后直连不再依赖 UDP 探测）。
+  ManualPeer mergeLearned({int? httpPort, String? deviceId, String? name}) =>
       ManualPeer(
         host: host,
-        probePort: probePort ?? this.probePort,
+        // 保留条目自身的探测端口（不参与学习，见文档注释）。
+        probePort: probePort,
         httpPort: httpPort ?? this.httpPort,
         deviceId: (deviceId != null && deviceId.isNotEmpty) ? deviceId : this.deviceId,
         name: this.name.isNotEmpty

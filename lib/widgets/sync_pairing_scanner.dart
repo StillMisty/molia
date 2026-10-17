@@ -18,8 +18,7 @@ abstract final class SyncPairingScanner {
 
   static bool get isSupported {
     final platform = debugPlatformOverride ?? defaultTargetPlatform;
-    return !kIsWeb &&
-        (platform == TargetPlatform.android || platform == TargetPlatform.iOS);
+    return platform == TargetPlatform.android || platform == TargetPlatform.iOS;
   }
 }
 

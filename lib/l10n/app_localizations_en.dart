@@ -2556,6 +2556,10 @@ class AppLocalizationsEn extends AppLocalizations {
   String get syncPairingCopy => 'Copy text';
 
   @override
+  String get syncPairingInvalidCode =>
+      'Invalid pairing code (missing fields or unsupported version)';
+
+  @override
   String get syncPairingNoAddress =>
       'The pairing code has no usable address (the other device may only have loopback addresses)';
 
@@ -2606,6 +2610,11 @@ class AppLocalizationsEn extends AppLocalizations {
   @override
   String get syncLocalProbePortUnavailable =>
       'Unavailable — broadcast / multicast discovery is degraded; use manual addresses';
+
+  @override
+  String syncLocalProbePortPerFamily(String v4, String v6) {
+    return '$v4 (IPv4) / $v6 (IPv6)';
+  }
 
   @override
   String get syncLocalHttpPort => 'Direct endpoint port';

@@ -4,6 +4,22 @@
 /// 与「端口」拆开才能让探测端口有独立默认值与范围校验。
 library;
 
+import 'dart:io';
+
+/// 地址是否是可路由的 IP 字面量：回环、link-local、带 zone 与非字面量
+/// （域名等）都返回 false。
+///
+/// 「候选地址」三处共用这一判定：设置页地址列表 / 配对码
+/// （`LocalEndpointsService`）与局域网探测 `addrs`（传输）——候选地址要交给
+/// 对端做连接，回环只在同机有意义、link-local 需要 zone 且通常跨不了网段。
+bool isRoutablePeerAddress(String value) {
+  final host = normalizePeerHost(value);
+  if (host.isEmpty || host.contains('%')) return false;
+  final address = InternetAddress.tryParse(host);
+  if (address == null) return false;
+  return !address.isLoopback && !address.isLinkLocal;
+}
+
 /// 地址归一：去首尾空白与 IPv6 方括号（`[2409:8a55::1]` → `2409:8a55::1`）。
 ///
 /// 输入侧允许方括号写法（用户从浏览器地址栏 / 对端界面复制过来），存储与

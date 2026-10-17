@@ -259,11 +259,14 @@
   「设备与口令」「已配对设备」子页已并入（配对是「我把本机信息交给对方、
   把对方地址收进名册」的一件事，拆页只能让用户来回找）。**本机地址**
   （`LocalEndpointsService`：IPv4 + 全局 / ULA IPv6，排除回环 / link-local /
-  zone，私网优先排序）是地址列表、配对码与探测 `addrs` 候选的同一口径；
+  zone，私网优先排序；过滤判定 `isRoutablePeerAddress` 与服务 / 传输共用）
+  是地址列表、配对码与探测 `addrs` 候选的同一口径；
   **配对码**（`SyncPairingCode`，`molia-pair:1:<base64url(json)>`，含设备名 /
   设备 id / 口令 / 地址候选 `[[host, probePort], …]` / HTTP 端点端口）支持
   复制、二维码（`qr` 纯 Dart + CustomPaint 自绘）与移动端扫码
-  （`mobile_scanner`，权限由插件自管）；口令随码传递是刻意取舍——信任模型就是
+  （`mobile_scanner`，权限由插件自管）；候选地址的探测端口按其**地址族**取
+  （v4 / v6 可独立降级到不同端口，设置页端口行同值折叠、不同值按族列出），
+  口令随码传递是刻意取舍——信任模型就是
   口令即信任根，弹层明确警告「等同授权对方读取全部同步数据」。
   资料库 schema（drift，`schemaVersion = 2`）含 `playlists.syncId` / 行级
   `versionPhysical + versionCounter + deviceId` / `sync_tombstones`（版本三列 +

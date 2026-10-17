@@ -213,7 +213,7 @@ class NetworkTransport implements SyncTransport {
   bool get isRunning => _running;
 
   @override
-  int get discoveryPort => 0;
+  ({int v4, int v6}) get discoveryPorts => (v4: 0, v6: 0);
 
   /// 测试网络模拟局域网直连（按需实时快照）。
   @override

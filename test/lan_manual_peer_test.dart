@@ -139,6 +139,51 @@ void main() {
     expect(learned.last.httpPort, greaterThan(0));
   });
 
+  test('探测学到的来源端口不写回地址簿：用户填的 probePort 保持不变', () async {
+    final transportA = LanSyncTransport(
+      deviceId: 'devA',
+      deviceName: () => '设备A',
+      codec: codec,
+      passphraseProvider: () async => passphrase,
+      snapshotProvider: () async => envelope('devA'),
+      udpPort: 47869,
+    );
+    final learned = <ManualPeer>[];
+    final transportB = LanSyncTransport(
+      deviceId: 'devB',
+      deviceName: () => '设备B',
+      codec: codec,
+      passphraseProvider: () async => passphrase,
+      snapshotProvider: () async => envelope('devB'),
+      // 用户填的是标准端口（打不通）；实际接触经注入目标完成：应答的来源端口
+      // 是 A 的动态端口，不能覆盖用户填的 47825。
+      manualPeersProvider: () =>
+          const [ManualPeer(host: '127.0.0.1', probePort: 47825)],
+      probeTargets: const [(host: '127.0.0.1', port: 47869)],
+      onPeerResolved: learned.add,
+      probeWindow: const Duration(milliseconds: 250),
+      udpPort: 47870,
+    );
+    addTearDown(() async {
+      await transportA.stop();
+      await transportB.stop();
+    });
+    await transportA.start();
+    await transportB.start();
+
+    final pulled = (await transportB.pull()).envelopes;
+    expect(pulled.single.deviceId, 'devA');
+    expect(learned, isNotEmpty);
+    expect(learned.last.deviceId, 'devA');
+    expect(learned.last.httpPort, greaterThan(0));
+    expect(learned.last.httpPort, isNot(47869));
+    expect(
+      learned.last.probePort,
+      47825,
+      reason: '来源端口只用于本轮内存回发，不写回用户配置',
+    );
+  });
+
   test('地址簿学到端口后：没有广播应答也能直连', () async {
     final transportA = LanSyncTransport(
       deviceId: 'devA',

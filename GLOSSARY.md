@@ -466,12 +466,15 @@
 - **Pairing code（配对码）** — `lib/domain/models/sync_pairing.dart`：
   `molia-pair:1:<base64url(utf8(json))>`，字段短名 `n` 设备名 / `i` 设备 id /
   `p` 口令 / `a` 地址候选 `[[host, probePort], …]` / `h` HTTP 端点端口；
-  可复制、可出二维码（`qr` 纯 Dart 自绘）、移动端可扫（`mobile_scanner`）。
-  **口令随码传递 = 等同授权**（信任模型就是口令即信任根），分享弹层明确警告。
+  `probePort` 按候选地址的族取（v4 / v6 可独立降级到不同端口，拿错族的端口
+  打不通）。可复制、可出二维码（`qr` 纯 Dart 自绘）、移动端可扫
+  （`mobile_scanner`）。**口令随码传递 = 等同授权**（信任模型就是口令即信任
+  根），分享弹层明确警告。
 - **Local endpoints（本机地址列表）** — `local_endpoints_service.dart`：
-  枚举本机可路由地址（IPv4 + 全局 / ULA IPv6，排除回环 / link-local / zone，
-  私网优先排序）的唯一入口，设置页地址列表、配对码与局域网探测 `addrs` 候选
-  共用同一口径。
+  枚举本机可路由地址（排除回环 / link-local / zone）并私网优先排序；过滤
+  判定 `isRoutablePeerAddress`（`lib/utils/peer_address.dart`）与服务 / 传输
+  共用，传输侧经注入的 `hosts()` 复用同一枚举（未注入时按同一判定现算），
+  因此设置页地址列表、配对码与局域网探测 `addrs` 候选是同一口径。
 - **Sync transport status（传输状态）** — `SyncTransport.unavailableReason`
   （`not_configured` / `start_failed` / `permission_denied`）：传输启动失败、
   未配置或缺权限时必须显式可见，不能只留在日志里（开关显示「已打开」而实际

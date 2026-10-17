@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
@@ -344,8 +345,9 @@ void main() {
     expect(transportA.isRunning, isTrue);
     expect(transportA.unavailableReason, isNull,
         reason: 'HTTP 端点能起来就不算传输启动失败');
-    expect(transportA.discoveryPort, greaterThan(0));
-    expect(transportA.discoveryPort, isNot(47941), reason: '降级后不再用被占端口');
+    expect(transportA.discoveryPorts.v4, greaterThan(0));
+    expect(transportA.discoveryPorts.v4, isNot(47941),
+        reason: '降级后不再用被占端口');
 
     // A 主动探测 B：B 从非回复探测登记 A，A 从应答的地址候选 / 源地址拉到 B。
     final fromB = await transportA.pull();
@@ -392,7 +394,11 @@ void main() {
 
     expect(client.isRunning, isTrue, reason: 'UDP 不可用不该让整个传输失败');
     expect(client.unavailableReason, isNull);
-    expect(client.discoveryPort, 0, reason: '没有 UDP socket = 探测端口不可用');
+    expect(
+      client.discoveryPorts,
+      (v4: 0, v6: 0),
+      reason: '没有 UDP socket = 两族探测端口都不可用',
+    );
 
     // 没有可直连的对端：原因码是「探测端口不可用」而不是「启动失败」。
     final empty = await client.pull();
@@ -520,8 +526,77 @@ void main() {
     expect(reverse.envelopes.single.deviceId, 'devB');
   });
 
-  test('候选地址优先尝试：不可达的候选回落到观测源地址', () async {
-    final transportA = LanSyncTransport(
+  test('v6 独立降级：v4 仍绑首选端口，分族端口各自如实上报', () async {
+    final transport = LanSyncTransport(
+      deviceId: 'devA',
+      deviceName: () => '设备A',
+      codec: codec,
+      passphraseProvider: () async => passphrase,
+      snapshotProvider: () async => envelope('devA'),
+      // 模拟 IPv6 栈不可用（禁用 / 无 v6 地址）：只让 v6 绑定失败。
+      udpBinder: (address, port) {
+        if (address.type == InternetAddressType.IPv6) {
+          return Future.error(const SocketException('模拟 IPv6 不可用'));
+        }
+        return RawDatagramSocket.bind(address, port, reuseAddress: true);
+      },
+      udpPort: 47955,
+    );
+    addTearDown(transport.stop);
+    await transport.start();
+
+    expect(transport.isRunning, isTrue);
+    expect(transport.discoveryPorts.v4, 47955, reason: 'v4 照常绑首选端口');
+    expect(transport.discoveryPorts.v6, 0, reason: 'v6 独立降级不影响 v4');
+  });
+
+  test('注入的地址候选走统一可路由过滤：回环 / link-local / zone / 非字面量不进探测包', () async {
+    // 接收端只抓探测包（不实现 peer 协议）：直接看线上载荷里的 addrs。
+    final catcher = await RawDatagramSocket.bind(
+      InternetAddress.anyIPv4,
+      47953,
+      reuseAddress: false,
+    );
+    addTearDown(catcher.close);
+    final messages = <String>[];
+    catcher.listen((event) {
+      if (event != RawSocketEvent.read) return;
+      final datagram = catcher.receive();
+      if (datagram != null) messages.add(utf8.decode(datagram.data));
+    });
+
+    final transport = LanSyncTransport(
+      deviceId: 'devA',
+      deviceName: () => '设备A',
+      codec: codec,
+      passphraseProvider: () async => passphrase,
+      snapshotProvider: () async => envelope('devA'),
+      // 注入的 provider 不做过滤（真实的 LocalEndpointsService 会过滤）：
+      // 传输侧必须用同一判定再兜一遍。
+      localAddressesProvider: () async => const [
+        '127.0.0.1',
+        '169.254.10.1',
+        'fe80::1%eth0',
+        'not-an-ip',
+        '10.0.0.5',
+        '10.0.0.5',
+      ],
+      probeTargets: const [(host: '127.0.0.1', port: 47953)],
+      probeWindow: const Duration(milliseconds: 200),
+      udpPort: 47954,
+    );
+    addTearDown(transport.stop);
+    await transport.start();
+    await transport.pull();
+
+    expect(messages, isNotEmpty);
+    final probe = jsonDecode(messages.first) as Map<String, dynamic>;
+    expect(probe['m'], 'molia-sync.probe');
+    expect(probe['addrs'], ['10.0.0.5'],
+        reason: '可路由判定与去重对注入路径同样生效');
+  });
+
+  test('候选地址优先尝试：不可达的候选回落到观测源地址', () async {    final transportA = LanSyncTransport(
       deviceId: 'devA',
       deviceName: () => '设备A',
       codec: codec,

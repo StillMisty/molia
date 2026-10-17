@@ -163,6 +163,9 @@ class LanSyncTransport implements SyncTransport {
   /// 端口降级的对端不在标准端口上，广播 / 组播到不了它，只能单播；候选
   /// 地址（对端自报的可路由地址）在前、观测源地址兜底（v6 组播源是
   /// link-local，要带 zone 才能用）。
+  ///
+  /// 仅进程内存：观测到的来源端口随 NAT / 重启 / 独立降级变化，**绝不写回
+  /// 地址簿**（用户配置的探测端口保持原样）；进程重启后重新学习。
   final Map<String, List<({String host, int port})>> _probeEndpoints = {};
 
   /// 上次成功拉到的各对端内容指纹（`deviceId` / 主机 → `snapshotId`）：
@@ -208,11 +211,21 @@ class LanSyncTransport implements SyncTransport {
   @override
   bool get servesLiveSnapshot => true;
 
-  /// 本机实际绑定的 UDP 探测端口（0 = UDP 不可用）：端口降级后广播 / 组播
-  /// 到不了本机，对端要按这个端口单播（随探测包自报）。
+  /// 本机实际绑定的 UDP 探测端口（分族；0 = 该族不可用）：端口降级后
+  /// 广播 / 组播到不了本机，对端要按对应族的端口单播（随探测包自报）。
   @override
-  int get discoveryPort =>
-      _running ? (_udp4?.port ?? _udp6?.port ?? 0) : 0;
+  ({int v4, int v6}) get discoveryPorts => (
+        v4: _running ? (_udp4?.port ?? 0) : 0,
+        v6: _running ? (_udp6?.port ?? 0) : 0,
+      );
+
+  /// 探测包自报的单端口（协议只有一格）：取首选族（v4 优先，其次 v6）。
+  /// 分族端口走配对码；探测应答与后续单播都按**观测到的来源地址 / 端口**
+  /// 走，不依赖这个提示字段。
+  int get _advertisedUdpPort {
+    final ports = discoveryPorts;
+    return ports.v4 > 0 ? ports.v4 : ports.v6;
+  }
 
   @override
   String? get unavailableReason => _running ? null : _unavailableReason;
@@ -542,7 +555,7 @@ class LanSyncTransport implements SyncTransport {
       'deviceId': deviceId,
       'name': _deviceName(),
       'port': _httpPort,
-      'udpPort': discoveryPort,
+      'udpPort': _advertisedUdpPort,
       'reply': false,
       if (_ownAddresses.isNotEmpty) 'addrs': _ownAddresses,
       if (_snapshotIdProvider?.call().isNotEmpty ?? false)
@@ -695,7 +708,7 @@ class LanSyncTransport implements SyncTransport {
       'deviceId': deviceId,
       'name': _deviceName(),
       'port': _httpPort,
-      'udpPort': discoveryPort,
+      'udpPort': _advertisedUdpPort,
       'reply': true,
       if (_ownAddresses.isNotEmpty) 'addrs': _ownAddresses,
       if (ownSnapshotId.isNotEmpty) 'snapshotId': ownSnapshotId,
@@ -712,15 +725,16 @@ class LanSyncTransport implements SyncTransport {
   /// 观测到的源地址（v6 组播源的 link-local 带 `%zone`；HTTP 兜底时保留）。
   String _observedHost(InternetAddress address) => address.address.trim();
 
-  /// 解析对端自报的候选地址：只要 IP 字面量（非回环 / 非 link-local）、
-  /// 去重、上限 [maxAdvertisedAddresses]。
+  /// 解析对端自报的候选地址：只要可路由的 IP 字面量（回环 / link-local /
+  /// zone 由 [isRoutablePeerAddress] 统一排除）、去重、上限
+  /// [maxAdvertisedAddresses]。
   List<String> _parseCandidateAddresses(Object? raw) {
     if (raw is! List) return const [];
     final hosts = <String>[];
     for (final item in raw) {
       if (item is! String) continue;
       final host = normalizePeerHost(item);
-      if (!_isHttpCandidate(host)) continue;
+      if (!isRoutablePeerAddress(host)) continue;
       if (hosts.contains(host)) continue;
       hosts.add(host);
       if (hosts.length >= maxAdvertisedAddresses) break;
@@ -728,16 +742,10 @@ class LanSyncTransport implements SyncTransport {
     return hosts;
   }
 
-  bool _isHttpCandidate(String host) {
-    if (host.isEmpty || host.contains('%')) return false;
-    final address = InternetAddress.tryParse(host);
-    if (address == null) return false;
-    return !address.isLoopback && !address.isLinkLocal;
-  }
-
   /// 本机可路由地址（IP 字面量、非回环、非 link-local、去重、上限
   /// [maxAdvertisedAddresses]）：组合根注入的 [LocalEndpointsService]，
-  /// 未注入时按 [NetworkInterface.list] 现算。
+  /// 未注入时按 [NetworkInterface.list] 现算。可路由判定走
+  /// [isRoutablePeerAddress]（与服务侧同一口径，注入路径也兜一层）。
   Future<void> _refreshOwnAddresses() async {
     try {
       final provider = _localAddressesProvider;
@@ -758,20 +766,24 @@ class LanSyncTransport implements SyncTransport {
     for (final interface in interfaces) {
       for (final address in interface.addresses) {
         final host = address.address.trim();
-        if (host.isEmpty || address.isLoopback || address.isLinkLocal) continue;
-        if (address.type == InternetAddressType.IPv6 && host.contains('%')) {
-          continue;
-        }
+        if (!isRoutablePeerAddress(host)) continue;
         if (!hosts.contains(host)) hosts.add(host);
       }
     }
     return hosts;
   }
 
-  static List<String> _limitAddresses(Iterable<String> addresses) => [
-        for (final host in addresses)
-          if (host.isNotEmpty) host,
-      ].take(maxAdvertisedAddresses).toList();
+  static List<String> _limitAddresses(Iterable<String> addresses) {
+    final hosts = <String>[];
+    for (final raw in addresses) {
+      final host = normalizePeerHost(raw);
+      if (!isRoutablePeerAddress(host)) continue;
+      if (hosts.contains(host)) continue;
+      hosts.add(host);
+      if (hosts.length >= maxAdvertisedAddresses) break;
+    }
+    return hosts;
+  }
 
   /// 登记本轮发现的对端（同一 key 覆盖；上限防伪造探测灌爆）。
   ///
@@ -812,26 +824,24 @@ class LanSyncTransport implements SyncTransport {
     }
   }
 
-  /// 手动条目首次接触（或地址 / 端口变化）后回写学到的信息。
+  /// 手动条目首次接触（或地址 / 端点端口变化）后回写学到的信息。
   ///
   /// host 比较用归一形式（`[2409::1]` 与 `2409::1` / 大小写差异不该让
   /// 「已存在的手动条目」学不到设备身份）。
+  ///
+  /// **观测到的来源端口不写回**：来源端口是 UDP 包从对端哪个 socket 出来的
+  /// （NAT / 独立降级 / 对端重启都会变），写回会把用户配置的 47825 改成一个
+  /// 下次不一定存在的动态端口；学到 HTTP 端点端口后直连不再依赖 UDP 探测，
+  /// 单播探测端口保持用户配置 / 缺省值即可。
   void _resolveManualPeer(_Peer peer) {
     final manualPeers = _manualPeersProvider?.call() ?? const <ManualPeer>[];
     final peerHost = _normalizeHost(peer.host);
     for (final entry in manualPeers) {
       if (_normalizeHost(entry.host) != peerHost) continue;
-      final probePort =
-          peer.probePort > 0 && peer.probePort != entry.probePort
-              ? peer.probePort
-              : null;
-      if (entry.deviceId == peer.deviceId &&
-          entry.httpPort == peer.port &&
-          probePort == null) {
+      if (entry.deviceId == peer.deviceId && entry.httpPort == peer.port) {
         return;
       }
       _onPeerResolved?.call(entry.mergeLearned(
-        probePort: probePort,
         httpPort: peer.port,
         deviceId: peer.deviceId,
         name: peer.name,
@@ -1012,7 +1022,11 @@ class _Peer {
   /// 对端自报的可路由候选地址（`addrs`）。
   final List<String> addresses;
 
-  /// 对端自报的 UDP 探测端口（0 = 未提供；供下一次单播探测）。
+  /// 用于内存内单播探测的对端 UDP 端口（0 = 未知）。
+  ///
+  /// 填的是**本轮观测到的来源端口**（对端自报的 `udpPort` 只作兜底）：
+  /// 回发包按来源地址 + 端口走；只活在内存与 `_probeEndpoints` 里，
+  /// 不写回地址簿（来源端口随 NAT / 重启 / 独立降级变化）。
   final int probePort;
 
   const _Peer({

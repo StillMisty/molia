@@ -236,7 +236,7 @@ void main() {
 
   testWidgets('本机地址列表：可路由地址逐条展示，点按复制；端口行展示实际值', (tester) async {
     final clipboard = mockClipboard(tester);
-    transport.discoveryPortOverride = 47825;
+    transport.discoveryPortsOverride = (v4: 47825, v6: 47825);
     await state.setLanHttpPort(40000);
     await provider.setEnabled(true);
     await pumpPage(tester);
@@ -260,10 +260,36 @@ void main() {
 
     final probe = tester.widget<SettingsInfoTile>(
         find.byKey(const Key('settingsSyncProbePortItem')));
-    expect(probe.subtitle, '47825');
+    expect(probe.subtitle, '47825', reason: '两族同值只显示一个端口');
     final http = tester.widget<SettingsInfoTile>(
         find.byKey(const Key('settingsSyncHttpPortItem')));
     expect(http.subtitle, '40000');
+  });
+
+  testWidgets('探测端口分族展示：v6 独立降级后按族列出', (tester) async {
+    transport.discoveryPortsOverride = (v4: 47825, v6: 51234);
+    await provider.setEnabled(true);
+    await pumpPage(tester);
+
+    final probe = tester.widget<SettingsInfoTile>(
+        find.byKey(const Key('settingsSyncProbePortItem')));
+    expect(probe.subtitle, '47825 (IPv4) / 51234 (IPv6)');
+  });
+
+  testWidgets('配对码按地址族取探测端口：v6 候选带 v6 的端口', (tester) async {
+    transport.discoveryPortsOverride = (v4: 47825, v6: 51234);
+    await provider.setEnabled(true);
+    await pumpPage(tester);
+
+    final code = (await provider.pairingCode())!;
+    final byHost = {
+      for (final address in code.addresses) address.host: address.probePort,
+    };
+    expect(byHost['192.168.1.10'], 47825);
+    expect(byHost['2409:8a55::5'], 51234,
+        reason: 'v6 独立降级到 51234：不能拿 v4 的 47825');
+    // 分享弹层里的码文本同样是分族端口。
+    expect(code.encode(), contains('molia-pair:1:'));
   });
 
   testWidgets('本机设备 id：短号可读，点按复制完整 id', (tester) async {
@@ -384,6 +410,66 @@ void main() {
     expect(provider.manualPeers, isEmpty);
   });
 
+  testWidgets('接触失败：弹层不关闭，层内给出未接触成功提示', (tester) async {
+    await provider.setEnabled(true);
+    await pumpPage(tester);
+    await openAddDialog(tester);
+
+    await tester.enterText(fieldAt(0), '192.168.1.23');
+    await tester.tap(find.text('Save'));
+    await tester.pumpAndSettle();
+
+    // 地址已写入地址簿（用户不用重填），但弹层留在原地让用户改地址重试。
+    expect(provider.manualPeers.single.host, '192.168.1.23');
+    expect(find.textContaining('Not reached yet'), findsOneWidget);
+    expect(find.text('Save'), findsOneWidget);
+  });
+
+  testWidgets('重复地址：提示已更新而不是重复添加', (tester) async {
+    await provider.setEnabled(true);
+    await provider.addManualPeer('192.168.1.23', name: '书房');
+    await pumpPage(tester);
+    await openAddDialog(tester);
+
+    await tester.enterText(fieldAt(0), '192.168.1.23');
+    await tester.tap(find.text('Save'));
+    await tester.pumpAndSettle();
+
+    expect(
+      find.text('Already in the list — name and port updated'),
+      findsOneWidget,
+    );
+    expect(provider.manualPeers, hasLength(1));
+  });
+
+  testWidgets('重复地址且接触成功：提示已更新而不是已添加', (tester) async {
+    transport.onPull = () async {
+      await state.learnManualPeer(const ManualPeer(
+        host: '192.168.1.23',
+        deviceId: 'devB',
+        httpPort: 40000,
+      ));
+    };
+    transport.available.add(SyncEnvelope(
+      deviceId: 'devB',
+      deviceName: 'Device B',
+      producedAt: 5000,
+      records: const {},
+    ));
+    await provider.setEnabled(true);
+    await provider.addManualPeer('192.168.1.23', name: '书房');
+    await pumpPage(tester);
+    await openAddDialog(tester);
+
+    await tester.enterText(fieldAt(0), '192.168.1.23');
+    await tester.tap(find.text('Save'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Device updated'), findsOneWidget);
+    expect(find.text('Device added'), findsNothing);
+    expect(provider.manualPeers, hasLength(1));
+  });
+
   testWidgets('接触成功：关闭弹层并提示已添加', (tester) async {
     transport.onPull = () async {
       await state.learnManualPeer(const ManualPeer(
@@ -427,6 +513,19 @@ void main() {
         find.byKey(const Key('settingsSyncPairingScanButton')), findsNothing);
     await tester.tap(find.text('Cancel'));
     await tester.pumpAndSettle();
+  });
+
+  testWidgets('配对码前缀但内容损坏：报「配对码无效」并按码处理（不落成地址）', (tester) async {
+    await provider.setEnabled(true);
+    await pumpPage(tester);
+    await openAddDialog(tester);
+
+    await tester.enterText(fieldAt(0), 'molia-pair:1:not-base64!!');
+    await tester.tap(find.text('Save'));
+    await tester.pumpAndSettle();
+
+    expect(find.textContaining('Invalid pairing code'), findsOneWidget);
+    expect(provider.manualPeers, isEmpty);
   });
 
   testWidgets('配对码导入：地址逐个入簿并立即接触（无需手填端口）', (tester) async {
@@ -834,7 +933,7 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.textContaining('Probe port unavailable'), findsWidgets);
     expect(find.text('Add manual address'), findsOneWidget);
-    // 「添加手动地址」直接打开添加设备弹层（名册页已并入设置页）。
+    // 「添加手动地址」直接打开添加设备弹层（不跳页）。
     await tester.tap(find.text('Add manual address'));
     await tester.pumpAndSettle();
     expect(find.text('Add device'), findsWidgets);

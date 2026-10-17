@@ -58,11 +58,17 @@ class SyncProvider extends ChangeNotifier {
   /// 手动对端地址簿（发现失败时的兜底）。
   List<ManualPeer> get manualPeers => _engine.state.manualPeers;
 
-  /// 本机局域网探测端口（0 = 未运行 / UDP 不可用；设置页展示与配对码用）。
-  int get lanProbePort => _engine.lanProbePort;
+  /// 本机局域网探测端口（分族 v4 / v6；0 = 该族未运行 / 不可用）。
+  ///
+  /// 设置页展示与配对码用：两族可独立降级（端口降级 / 单族不可用），
+  /// 配对码里的每个候选地址按其地址族取对应端口。
+  ({int v4, int v6}) get lanDiscoveryPorts => _engine.lanDiscoveryPorts;
 
   /// 本机局域网直连端点端口（持久化的 HTTP 端口；0 = 尚未绑定过）。
   int get lanHttpPort => _engine.state.lanHttpPort;
+
+  /// 失效本机地址缓存（设置页进入时调用；网络切换后重进即可看到新地址）。
+  void refreshLocalEndpoints() => _endpoints.invalidate();
 
   /// 添加手动对端（非空地址；UI 已做格式校验，这里再兜一层）。
   ///
@@ -108,19 +114,24 @@ class SyncProvider extends ChangeNotifier {
 
   /// 组装本机配对信息（含口令）；未设置口令时返回 null。
   ///
-  /// 地址候选 = 可路由本机地址 + 本机探测端口；HTTP 端口来自持久化状态
+  /// 地址候选 = 可路由本机地址 + **按地址族对应的**探测端口（v4 / v6 可独立
+  /// 降级到不同端口，拿错族的端口对端打不通）；HTTP 端口来自持久化状态
   /// （对端拿到它就能纯 HTTP 直连，不依赖 UDP 发现）。
   Future<SyncPairingCode?> pairingCode() async {
     final passphrase = _passphrase;
     if (passphrase == null || passphrase.trim().isEmpty) return null;
-    final hosts = await _endpoints.hosts();
+    final endpoints = await _endpoints.list();
+    final ports = lanDiscoveryPorts;
     return SyncPairingCode(
       deviceName: deviceName,
       deviceId: deviceId,
       passphrase: passphrase,
       addresses: [
-        for (final host in hosts)
-          SyncPairingAddress(host: host, probePort: lanProbePort),
+        for (final endpoint in endpoints)
+          SyncPairingAddress(
+            host: endpoint.address,
+            probePort: endpoint.isIpv6 ? ports.v6 : ports.v4,
+          ),
       ],
       httpPort: lanHttpPort,
     );

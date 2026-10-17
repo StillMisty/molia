@@ -154,11 +154,11 @@ class FakeSyncTransport implements SyncTransport {
   @override
   bool get isRunning => _running;
 
-  /// 假传输模拟局域网，但测试不关心发现端口（可注入具体值验证展示）。
-  int discoveryPortOverride = 0;
+  /// 假传输模拟局域网，但测试不关心发现端口（可注入分族端口验证展示）。
+  ({int v4, int v6}) discoveryPortsOverride = (v4: 0, v6: 0);
 
   @override
-  int get discoveryPort => discoveryPortOverride;
+  ({int v4, int v6}) get discoveryPorts => discoveryPortsOverride;
 
   /// 假传输模拟局域网（按需实时快照）。
   @override

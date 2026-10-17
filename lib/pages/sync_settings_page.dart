@@ -17,14 +17,15 @@ import 'sync_content_page.dart';
 import 'sync_dialogs.dart';
 import 'sync_labels.dart';
 import 'sync_log_page.dart';
+import 'sync_pairing_dialogs.dart';
 
 /// 跨设备同步设置页：**一页闭环**的配对工作台。
 ///
 /// 信息架构：①开关 + 五态结论 ②本机（设备名 / 设备 id / 口令 / 地址列表 /
-/// 端口 / 配对信息）③设备（名册 + 添加设备）④传输（局域网 / WebDAV）
-/// ⑤同步内容入口 ⑥日志入口。原来的「设备与口令」「已配对设备」两个子页
-/// 已并入本页：配对是把本机信息交给对端、把对端地址收进名册的一件事，拆页
-/// 会让用户在两层页面之间来回找「我的地址 / 对方地址」。
+/// 端口 / 配对信息）③设备（名册内联 + 添加设备）④传输（局域网 / WebDAV）
+/// ⑤同步内容入口 ⑥日志入口。配对是「把本机信息交给对端、把对端地址收进
+/// 名册」的一件事，本机与设备信息同屏，配对码一次把双方需要的信息交出去。
+/// 子页只留「同步内容」与「同步日志」两个明细面。
 ///
 /// 信任模型：口令即信任根，持有口令的设备完全互信（ADR-0003）。同步何时跑
 /// 由调度器声明式决定，页面不提供「立即同步」这类手动主操作；口令与设备 id
@@ -44,17 +45,26 @@ class _SyncSettingsPageState extends State<SyncSettingsPage> {
   Object? _localInfoSignature;
 
   @override
+  void initState() {
+    super.initState();
+    // 进入设置页 = 本机地址缓存的真实失效点：网络切换后重进即可看到新地址。
+    context.read<SyncProvider>().refreshLocalEndpoints();
+  }
+
+  @override
   void didChangeDependencies() {
     super.didChangeDependencies();
     // provider 通知会触发 didChangeDependencies：只有影响配对码的输入
     // （口令 / 设备名 / 端口 / 开关）变化时才重新枚举地址与重组码。
     final provider = context.watch<SyncProvider>();
+    final ports = provider.lanDiscoveryPorts;
     final signature = Object.hash(
       provider.enabled,
       provider.passphrase,
       provider.deviceName,
       provider.deviceId,
-      provider.lanProbePort,
+      ports.v4,
+      ports.v6,
       provider.lanHttpPort,
     );
     if (_localInfoSignature == signature) return;
@@ -207,9 +217,7 @@ class _SyncSettingsPageState extends State<SyncSettingsPage> {
           key: const Key('settingsSyncProbePortItem'),
           icon: Icons.settings_ethernet_rounded,
           title: l10n.syncLocalProbePort,
-          subtitle: provider.lanProbePort > 0
-              ? '${provider.lanProbePort}'
-              : l10n.syncLocalProbePortUnavailable,
+          subtitle: _probePortSubtitle(l10n, provider.lanDiscoveryPorts),
         ),
         SettingsInfoTile(
           key: const Key('settingsSyncHttpPortItem'),
@@ -270,6 +278,7 @@ class _SyncSettingsPageState extends State<SyncSettingsPage> {
           ),
         // 未认领的候选地址：单个直接列（可点开看详情 / 删除）；多个折叠成
         // 一行——配对码一次可导 8 个地址，全展开会把名册撑成「尚未接触」墙。
+        // N=1 直列比「候选地址 1 个」更可读，是有意的：只有 N>1 才折叠。
         if (unclaimed.length == 1)
           _pendingManualRow(context, provider, l10n, unclaimed.single)
         else if (unclaimed.length > 1)
@@ -459,6 +468,22 @@ class _SyncSettingsPageState extends State<SyncSettingsPage> {
       nowMs: provider.engine.state.nowMs(),
       atMs: report.finishedAt,
     )}';
+  }
+
+  /// 探测端口副标题：两族同值折叠成一个数字；独立降级（端口不同 / 单族
+  /// 不可用）时按族列出，用户才能按族把地址 + 端口一起交给对端。
+  static String _probePortSubtitle(
+    AppLocalizations l10n,
+    ({int v4, int v6}) ports,
+  ) {
+    if (ports.v4 == 0 && ports.v6 == 0) {
+      return l10n.syncLocalProbePortUnavailable;
+    }
+    if (ports.v4 == ports.v6) return '${ports.v4}';
+    return l10n.syncLocalProbePortPerFamily(
+      ports.v4 > 0 ? '${ports.v4}' : '—',
+      ports.v6 > 0 ? '${ports.v6}' : '—',
+    );
   }
 
   /// 内容入口副文案：全开只说「全部类别」，否则给关闭项数。

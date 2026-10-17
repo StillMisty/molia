@@ -1,5 +1,7 @@
 import 'dart:io';
 
+import '../utils/peer_address.dart';
+
 /// 本机可路由网络端点（接口名 + IP 字面量）。
 class LocalEndpoint {
   const LocalEndpoint({required this.interfaceName, required this.address});
@@ -10,16 +12,22 @@ class LocalEndpoint {
   /// IP 字面量（IPv4 或全局 / ULA IPv6；不含 zone）。
   final String address;
 
+  /// 是否 IPv6：配对码按地址族取对应的探测端口（v4 / v6 可独立降级）。
+  bool get isIpv6 =>
+      InternetAddress.tryParse(address)?.type == InternetAddressType.IPv6;
+
   @override
   String toString() => '$address ($interfaceName)';
 }
 
-/// 枚举本机可路由地址的唯一入口：设置页地址列表、配对码与局域网探测的
-/// `addrs` 候选三处共用（口径一致才不会「界面显示的地址连不上」）。
+/// 枚举本机可路由地址的入口：设置页地址列表、配对码与局域网探测的 `addrs`
+/// 候选三处共用（口径一致才不会「界面显示的地址连不上」）。
 ///
-/// 过滤规则：非回环、非 link-local、非 `%zone` 形式、去重；排序：RFC1918
-/// 私网 IPv4 → 其它 IPv4 → ULA IPv6 → 全局 IPv6。结果缓存一次枚举
-/// （网络切换后由 [invalidate] 失效，下次读取重新枚举）。
+/// 过滤判定与传输侧共用 [isRoutablePeerAddress]（非回环、非 link-local、
+/// 非 `%zone`、IP 字面量），本类只负责枚举与去重 / 排序：RFC1918 私网 IPv4
+/// → 其它 IPv4 → ULA IPv6 → 全局 IPv6。结果按进程缓存一次枚举，
+/// [invalidate] 在设置页进入时（`SyncProvider.refreshLocalEndpoints`）
+/// 失效，网络切换后重进设置页即可看到新地址。
 ///
 /// [enumerate] 供测试注入假接口数据（`dart:io` 的真实枚举在 widget 测试里
 /// 依赖宿主网卡，不可断言）。
@@ -38,7 +46,7 @@ class LocalEndpointsService {
   Future<List<String>> hosts() async =>
       [for (final endpoint in await list()) endpoint.address];
 
-  /// 网络切换 / 配对码重取时失效缓存。
+  /// 失效缓存：真实失效点是设置页进入（见类注释），下次读取重新枚举。
   void invalidate() => _cached = null;
 
   static Future<List<LocalEndpoint>> _enumerateInterfaces() async {
@@ -60,8 +68,8 @@ class LocalEndpointsService {
     final seen = <String>{};
     final unique = <LocalEndpoint>[];
     for (final endpoint in raw) {
-      final address = endpoint.address.trim();
-      if (!_isRoutable(address)) continue;
+      final address = normalizePeerHost(endpoint.address);
+      if (!isRoutablePeerAddress(address)) continue;
       if (!seen.add(address)) continue;
       unique.add(LocalEndpoint(
         interfaceName: endpoint.interfaceName,
@@ -74,15 +82,6 @@ class LocalEndpointsService {
         (_rank(unique[i].address), i, unique[i]),
     ]..sort((a, b) => a.$1 != b.$1 ? a.$1.compareTo(b.$1) : a.$2.compareTo(b.$2));
     return List.unmodifiable([for (final entry in ranked) entry.$3]);
-  }
-
-  /// 地址是否是「本机界面地址、可给对端连接」：回环 / link-local / 带 zone /
-  /// 非 IP 字面量一律排除。
-  static bool _isRoutable(String address) {
-    if (address.isEmpty || address.contains('%')) return false;
-    final parsed = InternetAddress.tryParse(address);
-    if (parsed == null) return false;
-    return !parsed.isLoopback && !parsed.isLinkLocal;
   }
 
   /// 展示 / 尝试顺序：私网 IPv4（局域网最常见）在前，公网 IPv6 在后。

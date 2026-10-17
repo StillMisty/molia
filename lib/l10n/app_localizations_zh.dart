@@ -2454,6 +2454,9 @@ class AppLocalizationsZh extends AppLocalizations {
   String get syncPairingCopy => '复制文本';
 
   @override
+  String get syncPairingInvalidCode => '配对码无效（内容缺失或版本不符）';
+
+  @override
   String get syncPairingNoAddress => '配对码里没有可用地址（对端可能只有回环地址）';
 
   @override
@@ -2498,6 +2501,11 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get syncLocalProbePortUnavailable => '不可用（广播 / 组播探测已降级，请用手动地址直连）';
+
+  @override
+  String syncLocalProbePortPerFamily(String v4, String v6) {
+    return '$v4（IPv4）/ $v6（IPv6）';
+  }
 
   @override
   String get syncLocalHttpPort => '直连端点端口';

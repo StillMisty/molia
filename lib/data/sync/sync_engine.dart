@@ -205,12 +205,15 @@ class SyncEngine extends ChangeNotifier implements SyncSchedulerHost {
     );
   }
 
-  /// 局域网传输本机实际绑定的 UDP 探测端口（0 = 未运行 / UDP 不可用）。
+  /// 局域网传输本机实际绑定的 UDP 探测端口（分族；0 = 该族未运行 /
+  /// 不可用）。命名映射：传输层是 `SyncTransport.discoveryPorts`（传输不限
+  /// 局域网），引擎 / UI 层带 `lan` 前缀限定。
   ///
-  /// 白皮书（`molia-pair` 配对码）与设置页展示用：端口降级后对端要按这个
-  /// 端口单播，不能假设标准端口。
-  int get lanProbePort =>
-      _transports[SyncTransportKind.lan]?.discoveryPort ?? 0;
+  /// 配对码与设置页展示用：端口降级后对端要按对应的族取端口，不能假设
+  /// 标准端口或拿另一族的端口。
+  ({int v4, int v6}) get lanDiscoveryPorts =>
+      _transports[SyncTransportKind.lan]?.discoveryPorts ??
+      (v4: 0, v6: 0);
 
   int _nowMs() => _clock().millisecondsSinceEpoch;
 

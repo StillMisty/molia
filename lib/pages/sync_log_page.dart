@@ -68,7 +68,7 @@ class SyncLogPage extends StatelessWidget {
                               provider: provider,
                               issue: entry.error,
                               l10n: l10n,
-                              // 口令动作就在本页弹层（设备子页已并入设置页）。
+                              // 口令动作就在本页弹层。
                               onConfigurePassphrase: () =>
                                   showSyncPassphraseDialog(
                                       context, provider, l10n),
