@@ -2630,12 +2630,6 @@ abstract class AppLocalizations {
   /// **'Horizontal align'**
   String get lyricsDesktopAlign;
 
-  /// No description provided for @lyricsDesktopAlignVertical.
-  ///
-  /// In en, this message translates to:
-  /// **'Vertical align'**
-  String get lyricsDesktopAlignVertical;
-
   /// No description provided for @lyricsDesktopAlignLeft.
   ///
   /// In en, this message translates to:
@@ -2653,18 +2647,6 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Right'**
   String get lyricsDesktopAlignRight;
-
-  /// No description provided for @lyricsDesktopAlignTop.
-  ///
-  /// In en, this message translates to:
-  /// **'Top'**
-  String get lyricsDesktopAlignTop;
-
-  /// No description provided for @lyricsDesktopAlignBottom.
-  ///
-  /// In en, this message translates to:
-  /// **'Bottom'**
-  String get lyricsDesktopAlignBottom;
 
   /// No description provided for @lyricsDesktopColorPlayed.
   ///

@@ -1361,9 +1361,6 @@ class AppLocalizationsZh extends AppLocalizations {
   String get lyricsDesktopAlign => '水平对齐';
 
   @override
-  String get lyricsDesktopAlignVertical => '垂直对齐';
-
-  @override
   String get lyricsDesktopAlignLeft => '左';
 
   @override
@@ -1371,12 +1368,6 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get lyricsDesktopAlignRight => '右';
-
-  @override
-  String get lyricsDesktopAlignTop => '上';
-
-  @override
-  String get lyricsDesktopAlignBottom => '下';
 
   @override
   String get lyricsDesktopColorPlayed => '当前行颜色';

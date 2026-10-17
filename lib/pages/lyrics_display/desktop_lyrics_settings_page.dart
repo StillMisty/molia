@@ -158,22 +158,6 @@ class DesktopLyricsSettingsPage extends StatelessWidget {
                 },
                 onChanged: settings.setDesktopTextAlignX,
               ),
-              SettingsChoiceRow<DesktopTextAlignY>(
-                icon: Icons.vertical_align_center_rounded,
-                title: l10n.lyricsDesktopAlignVertical,
-                value: settings.desktopTextAlignY,
-                options: [
-                  (DesktopTextAlignY.top, l10n.lyricsDesktopAlignTop),
-                  (DesktopTextAlignY.center, l10n.lyricsDesktopAlignCenter),
-                  (DesktopTextAlignY.bottom, l10n.lyricsDesktopAlignBottom),
-                ],
-                icons: const {
-                  DesktopTextAlignY.top: Icons.vertical_align_top_rounded,
-                  DesktopTextAlignY.center: Icons.vertical_align_center_rounded,
-                  DesktopTextAlignY.bottom: Icons.vertical_align_bottom_rounded,
-                },
-                onChanged: settings.setDesktopTextAlignY,
-              ),
               // 取色来源：决定三行「跟随主题角色」用哪套方案（应用主题 /
               // 当前曲目封面）；自定义行不受影响。
               SettingsChoiceRow<SurfaceColorSource>(

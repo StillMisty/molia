@@ -271,3 +271,26 @@
     `windows/CMakeLists.txt` 里为 `permission_handler_windows` 加的 MSVC
     `/await` 消音宏（`_SILENCE_EXPERIMENTAL_COROUTINE_DEPRECATION_WARNINGS`）
     也一并删除。若将来重新引入权限库，必须先在 Windows 上确认定位指示器不再常驻。
+41. **桌面歌词滚动组的 `translationX` 符号**：滚动组（当前行 + 翻译 / 罗马音）强制
+    `Gravity.START`，对齐与横滚都在 `applyGroupScroll` 里用位移实现——`translationX`
+    正 = 内容右移，与 `scrollX`（正 = 内容左移）相反。符号写反时：居中 / 右对齐把整行
+    推到屏幕左外（首字被裁，短句如「我接着写」4 字会整句消失），长行滚动方向也反过来
+    （越唱越往右、行尾永远露不出来）。未超宽时对齐取正位移、超宽后由 0 递减到 −溢出，
+    两者共用 `x = alignedShift - scroll`；改动前先读 `docs/lyrics_display.md` §4 FR-3
+    的符号约定。
+42. **悬浮窗位置要按「可用区」算，不能用 `resources.displayMetrics`**：
+    `TYPE_APPLICATION_OVERLAY` 默认按 system bars / 刘海 insets 收边（fitTypes），
+    `LayoutParams.x/y` 是安全区左上角起的偏移；edge-to-edge Activity 的
+    `displayMetrics`（≈整屏，模拟器实测 2400 vs 悬浮窗实际可用 2274 + 63px 偏移）
+    把状态栏高度算进可用空间，贴底摆放时被导航栏裁掉。可用区取
+    `WindowManager.currentWindowMetrics` 减 `systemBars | displayCutout` insets，
+    位置相关的四件事都收在 `LyricsOverlayController`，别拆开：
+    ① 比例写读同一套公式（历史上写 `y/(H−h)`、读 `H*yf`，每次重建窗口整体下移 ~7%，
+    拖到底部后直接落到屏幕外）；② 纵向用**底缘**比例（窗口高度要等首次布局才有，
+    底缘换算不需要高度），高度变化时底缘固定、向上生长；
+    ③ 内容高度 / 可用区变化（行数、控制条弹出、旋转 / 字号）后按比例重新落位并夹取；
+    ④ 旧键 `y_fraction` 语义与底缘比例不同，改名 `bottom_fraction` 让旧值自然失效
+    （不迁移：旧值按老公式写，直接读会错得更偏）；
+    ⑤ 布局回调也会被「纯移动」触发：只认尺寸真的变了（`maybeAnchorIntoArea`），
+    且拖动中一律不落位（`isDragging`）——否则每帧 `updateViewLayout` 后立刻被比例
+    拽回原位，表现为「悬浮窗拖不动」。
