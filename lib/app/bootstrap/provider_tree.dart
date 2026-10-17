@@ -28,6 +28,7 @@ import '../../services/artwork_palette_service.dart';
 import '../../services/cache_service.dart';
 import '../../services/notification_service.dart';
 import '../../services/play_statistics_service.dart';
+import '../../services/shortcut_settings.dart';
 import '../../services/track_local_data_service.dart';
 import 'ai_stack.dart';
 import 'catalog_stack.dart';
@@ -167,6 +168,9 @@ List<SingleChildWidget> buildAppProviders({
     ChangeNotifierProvider.value(value: library.sourceSwapSettings),
     // 托盘行为（关闭时最小化到托盘）：设置页读写；关闭策略已在上方接线。
     ChangeNotifierProvider.value(value: desktop.traySettings),
+    // 快捷键设置：软件内 / 全局两组开关与绑定（设置页读写并订阅；桌面
+    // 快捷键处理器直读同一单例，不依赖本 provider）。
+    ChangeNotifierProvider.value(value: ShortcutSettings.instance),
     // 应用内更新：设置页读写（渠道 / 自动检查 / 下载安装）。
     ChangeNotifierProvider.value(value: update.provider),
   ];

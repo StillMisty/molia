@@ -23,7 +23,9 @@ import 'playback/desktop_audio_init.dart';
 import 'playback/local_audio_handler.dart';
 import 'providers/library_provider.dart';
 import 'services/app_logging.dart';
+import 'services/global_hotkeys.dart';
 import 'services/notification_service.dart';
+import 'services/shortcut_actions.dart';
 import 'services/system_fonts_service.dart';
 import 'services/window/single_instance.dart';
 import 'services/window/window_chrome.dart';
@@ -123,6 +125,14 @@ void main() async {
     repository: library.libraryRepository,
     playbackProvider: playback.playbackProvider,
   );
+  // 全局热键（系统级，默认关）：注册是启动期副作用、不依赖首帧，runApp 前
+  // 注册好让窗口一出现热键即可用（含冷启动恢复态）；命令执行器用刚建好的
+  // 播放 provider 接线——热键回调不依赖 widget 树。注册失败在层内降级，
+  // 不阻断启动（见 global_hotkeys.dart）。
+  GlobalHotkeys.bindActions(
+    ShortcutActions(playback: playback.playbackProvider),
+  );
+  await GlobalHotkeys.attach();
   // ⑤ 桌面壳（异步：prefs / 托盘落地）与 ⑥ AI 推歌 / ⑦ 歌词会话：
   // 三组互不依赖；桌面壳的异步初始化与后面两组同步装配并行推进
   // （不 await 完桌面壳再开始下一步）。

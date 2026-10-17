@@ -1,11 +1,12 @@
-/// 桌面全局快捷键的纯映射表（键 + 修饰键 → 命令）。
+/// 快捷键命令枚举，以及固定映射（键 + 修饰键 → 命令）的参考实现。
 ///
-/// 只做判定、不碰 UI 与 provider：桌面壳层的挂载组件
-/// （`lib/app/desktop/desktop_shortcuts.dart`）把物理按键翻译成入参、再执行
-/// 命令。判定与执行分离后，按键口径（哪些组合生效、哪些让位）可脱离
-/// widget 树单测，也只在映射表这一处维护。
+/// [ShortcutCommand] 是绑定模型与各执行端共享的枚举；运行时的按键判定走
+/// 可配置绑定表（`shortcut_settings.dart` 读 `shortcut_bindings.dart` 的
+/// 默认表 + 用户覆盖）。[shortcutFor] 是固定映射的参考实现（Shift / Alt /
+/// Meta 一律不命中），由 `test/services/shortcuts_test.dart` 锁定。
 library;
 
+import 'package:flutter/foundation.dart' show visibleForTesting;
 import 'package:flutter/services.dart' show LogicalKeyboardKey;
 
 /// 快捷键命令：映射表与执行端共享的枚举（执行端 switch 穷尽覆盖）。
@@ -56,8 +57,12 @@ enum ShortcutCommand {
 /// 键 + 修饰键 → 命令；未命中返回 null。
 ///
 /// Shift / Alt / Meta 一律不命中：这些组合被系统、输入法与文本编辑占用
-/// （Shift+方向键选文本、Alt+← 后退等），全局快捷键不与其争抢；Ctrl 之外
+/// （Shift+方向键选文本、Alt+← 后退等），固定映射不与其争抢；Ctrl 之外
 /// 的修饰键参与即视为「不是这条快捷键」。
+///
+/// 标注 [visibleForTesting]：生产路径已不再调用（见文件头），保留为固定口径
+/// 的测试目标（`test/services/shortcuts_test.dart`）。
+@visibleForTesting
 ShortcutCommand? shortcutFor(
   LogicalKeyboardKey key, {
   bool ctrl = false,

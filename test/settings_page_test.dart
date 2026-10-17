@@ -590,6 +590,39 @@ void main() {
     expect(find.text('App Language'), findsNothing);
   });
 
+  // 快捷键入口只在桌面平台显示（`flutter test` 的 defaultTargetPlatform 是
+  // android，需要 variant 钉住 linux，与其它桌面门控用例同口径）。
+  testWidgets('通用子页：快捷键入口打开绑定设置子页', (tester) async {
+    await pumpSettingsPage(tester);
+
+    await tester.tap(find.byKey(const Key('settingsGeneralItem')));
+    await tester.pumpAndSettle();
+
+    final entry = find.byKey(const Key('settingsShortcutsItem'));
+    await tester.ensureVisible(entry);
+    await tester.pumpAndSettle();
+    await tester.tap(entry);
+    await tester.pumpAndSettle();
+
+    // 子页：两组总开关 + 两组绑定行（软件内 / 全局默认表各取一条代表）。
+    expect(find.byKey(const Key('shortcutsEnabledSwitch')), findsOneWidget);
+    expect(
+      find.byKey(const Key('shortcutsGlobalEnabledSwitch')),
+      findsOneWidget,
+    );
+    expect(
+      find.byKey(const Key('shortcutRow_inApp_togglePlayPause')),
+      findsOneWidget,
+    );
+    expect(
+      find.byKey(const Key('shortcutRow_global_showMainWindow')),
+      findsOneWidget,
+    );
+    // 组级恢复默认行两组都有（全默认时置灰，仍占位）。
+    expect(find.byKey(const Key('shortcutResetAll_inApp')), findsOneWidget);
+    expect(find.byKey(const Key('shortcutResetAll_global')), findsOneWidget);
+  }, variant: TargetPlatformVariant.only(TargetPlatform.linux));
+
   testWidgets('通用子页：桌面托盘开关切换并持久化（仅桌面端）', (tester) async {
     // Linux/Windows 才有托盘实现：测试跑在 Linux VM 上 isSupported 为 true
     // （与 WindowChrome 的既有约束一致，见 docs/pitfalls.md #30）；

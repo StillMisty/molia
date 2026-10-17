@@ -16,6 +16,7 @@ import '../../domain/models/catalog.dart' show SearchQuery;
 import '../../domain/ports/source_registry.dart';
 import '../../services/app_branding_service.dart';
 import '../../services/language_service.dart';
+import '../../services/shortcut_settings.dart';
 import '../../sources/source_manager.dart';
 
 /// 目录栈产物（字段即子系统的对外面；构造顺序见 [buildCatalogStack]）。
@@ -37,12 +38,21 @@ CatalogStack buildCatalogStack() {
   // 设置注册表（登记键的唯一家）：读 / 写 / 同步往返 / 应用远端后的 reload
   // 钩子都走它；键的声明见 data/settings/settings_keys.dart。
   final settingsRegistry = SettingsRegistry(keys: kAllSettingsKeys);
-  // 全静态服务（语言 / 品牌名）：attach 注入注册表，reload 由组合根代绑。
+  // 全静态服务（语言 / 品牌名 / 快捷键）：attach 注入注册表，reload 由组合根代绑。
   LanguageService.attachSettings(settingsRegistry);
   AppBrandingService.attachSettings(settingsRegistry);
+  // 快捷键：attach 顺带触发一次异步载入；四个键任一被远端同步改写都整表重读
+  // （reload 幂等，重复绑定同一钩子只执行一次）。
+  ShortcutSettings.attachSettings(settingsRegistry);
   settingsRegistry.bindReload(
       kSelectedLanguage, LanguageService.reloadFromPreferences);
   settingsRegistry.bindReload(kAppDisplayTitle, AppBrandingService.load);
+  settingsRegistry.bindReload(kShortcutsEnabled, ShortcutSettings.reload);
+  settingsRegistry.bindReload(
+      kGlobalShortcutsEnabled, ShortcutSettings.reload);
+  settingsRegistry.bindReload(kShortcutBindings, ShortcutSettings.reload);
+  settingsRegistry.bindReload(
+      kGlobalShortcutBindings, ShortcutSettings.reload);
 
   final sourceManager = SourceManager(settings: settingsRegistry);
 

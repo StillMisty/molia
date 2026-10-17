@@ -21,6 +21,9 @@ import 'package:molia/providers/search_provider.dart';
 import 'package:molia/providers/sources_provider.dart';
 import 'package:molia/providers/theme_provider.dart';
 import 'package:molia/services/lyrics_display/lyrics_display_settings.dart';
+import 'package:molia/services/shortcut_bindings.dart';
+import 'package:molia/services/shortcut_settings.dart';
+import 'package:molia/services/shortcuts.dart';
 import 'package:molia/sources/source_manager.dart';
 import 'package:molia/widgets/cover_appearance.dart';
 import 'package:molia/widgets/global_search.dart';
@@ -48,8 +51,14 @@ void main() {
 
   late NavProvider nav;
 
-  setUp(() {
+  setUp(() async {
     SharedPreferences.setMockInitialValues({});
+    // 快捷键单例跨用例共享：每个用例前回到默认（内存态即可，本文件不测
+    // 持久化；组合覆盖与开关都可能被上一个用例改过）。
+    await ShortcutSettings.instance.setInAppEnabled(true);
+    await ShortcutSettings.instance.setGlobalEnabled(false);
+    await ShortcutSettings.instance.resetScope(ShortcutScope.inApp);
+    await ShortcutSettings.instance.resetScope(ShortcutScope.global);
   });
 
   /// 装配与组合根同源的 provider 树并挂载壳层（骨架同 `app_shell_reselect_test`；
@@ -492,5 +501,49 @@ void main() {
       isNotEmpty,
       reason: '失焦状态下 Space 仍应切播放态',
     );
+  });
+
+  testWidgets('软件内快捷键：总开关关闭后 Space 不再切播放态', (tester) async {
+    final harness = await pumpShell(tester, desktopShell: true);
+
+    // 默认开：Space 走播放命令（与既有用例同口径）。
+    await tester.sendKeyEvent(LogicalKeyboardKey.space);
+    await tester.pump();
+    expect(harness.backend.calls, contains('play'));
+
+    // 关闭总开关：处理器摘除，所有按键放行。
+    await ShortcutSettings.instance.setInAppEnabled(false);
+    await tester.pump();
+
+    final before = List<String>.of(harness.backend.calls);
+    await tester.sendKeyEvent(LogicalKeyboardKey.space);
+    await tester.pump();
+    expect(harness.backend.calls, before, reason: '关闭后按键完全放行');
+  });
+
+  testWidgets('软件内快捷键：改绑后新键生效、旧键失效', (tester) async {
+    final harness = await pumpShell(tester, desktopShell: true);
+
+    // 把「播放 / 暂停」从 Space 改绑到 Ctrl+P。
+    final accepted = await ShortcutSettings.instance.setBinding(
+      ShortcutScope.inApp,
+      ShortcutCommand.togglePlayPause,
+      const ShortcutCombo(key: LogicalKeyboardKey.keyP, ctrl: true),
+    );
+    expect(accepted, isTrue);
+    await tester.pump();
+
+    // 新键生效：Ctrl+P 切播放态（假快照 isPlaying=false → play）。
+    await tester.sendKeyDownEvent(LogicalKeyboardKey.controlLeft);
+    await tester.sendKeyEvent(LogicalKeyboardKey.keyP);
+    await tester.sendKeyUpEvent(LogicalKeyboardKey.controlLeft);
+    await tester.pump();
+    expect(harness.backend.calls, contains('play'));
+
+    // 旧键失效：Space 已不在绑定表里，不再触发播放命令。
+    final before = List<String>.of(harness.backend.calls);
+    await tester.sendKeyEvent(LogicalKeyboardKey.space);
+    await tester.pump();
+    expect(harness.backend.calls, before);
   });
 }

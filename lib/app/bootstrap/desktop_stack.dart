@@ -85,6 +85,13 @@ Future<DesktopStack> buildDesktopStack({
     AppTray.setTooltip(
       track == null ? brand : '$brand · ${_trackTooltip(track)}',
     );
+    // 任务栏 / 窗口列表标题：显示当前曲目（无曲目回退应用名）。与托盘
+    // tooltip 同一份文案来源，切歌 / 播放态变化都在这里一次同步。
+    unawaited(
+      WindowChrome.setTitle(
+        track == null ? brand : '${_trackTooltip(track)} · $brand',
+      ),
+    );
   }
 
   playback.addListener(syncTray);

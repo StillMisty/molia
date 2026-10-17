@@ -5,6 +5,7 @@
 list(APPEND FLUTTER_PLUGIN_LIST
   dynamic_color
   flutter_secure_storage_linux
+  hotkey_manager_linux
   media_kit_libs_linux
   quickjs_engine
   screen_retriever_linux

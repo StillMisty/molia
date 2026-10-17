@@ -212,6 +212,20 @@ class WindowChrome {
     await windowManager.hide();
   }
 
+  /// 设置窗口标题（任务栏 / 窗口列表 / Alt-Tab 显示）。
+  ///
+  /// 隐藏原生标题栏后 UI 里看不到标题，但系统仍以它标识窗口：显示当前曲目
+  /// 让用户在任务栏一眼认出「哪个窗口在放什么」。非桌面平台空操作。
+  static Future<void> setTitle(String title) async {
+    if (!isSupported || title.isEmpty) return;
+    try {
+      await windowManager.setTitle(title);
+    } catch (error) {
+      // 标题只是锦上添花：失败不影响任何功能。
+      _logger.fine('设置窗口标题失败：$error');
+    }
+  }
+
   /// 显示并聚焦窗口（首帧后 reveal / 托盘「显示主窗口」/ 单实例请求）。
   ///
   /// 幂等：重复调用只是再次 show + focus；恢复的最大化状态在这里补一次
