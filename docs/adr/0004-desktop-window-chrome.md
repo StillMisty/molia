@@ -106,10 +106,10 @@ Linux/Windows 桌面端此前保留系统标题栏：窗口最小化/最大化/�
 - **人工手感项**：拖动跟手程度、边缘缩放、隐藏标题栏后的窗口阴影/圆角、
   最小化/关闭的动画（双击最大化已实现，见上）。
 - **X11 路径**：`GDK_BACKEND=x11` 下在本机（WSLg 的 X11 显示）跑端到端集成测试
-  不稳定——播放用例在 libmpv 起播后卡死、后续用例 `did not complete`；
-  已用基线（`main`，无 window_manager）复现同一现象，与本次改动无关。
-  该路径下 `getTitleBarHeight() == 0` 的结论来自调研阶段的独立验证，未在本次
-  提交的自动化里覆盖；X11 用户的实际表现需在真机确认。
+  曾因播放用例在 libmpv 起播后卡死而不稳定；播放与缓存用例已从集成测试删除
+  （原因见 `docs/pitfalls.md` #33），窗口 chrome / 托盘用例继续在 Xvfb 下覆盖。
+  `getTitleBarHeight() == 0` 的结论来自调研阶段的独立验证；X11 用户的实际表现
+  需在真机确认。
 - **Wayland dock 图标**（2026-10-16）：本机是 WSLg，只能验证 X11 的 WM_HINTS
   与安装脚本落盘；GNOME/KDE Wayland 下「装 .desktop 后 dock / 应用菜单显示
   品牌图标」需真实桌面会话复核。

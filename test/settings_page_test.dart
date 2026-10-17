@@ -163,8 +163,8 @@ void main() {
     String method, [
     Map<String, dynamic>? args,
   ]) async {
-    final data = const StandardMethodCodec()
-        .encodeMethodCall(MethodCall(method, args));
+    final data =
+        const StandardMethodCodec().encodeMethodCall(MethodCall(method, args));
     await tester.binding.defaultBinaryMessenger.handlePlatformMessage(
       SystemChannels.backGesture.name,
       data,
@@ -377,11 +377,13 @@ void main() {
       if (ancestor.evaluate().isNotEmpty) {
         return tester.getSize(ancestor.first).height;
       }
-      return tester.getSize(
-        find
-            .descendant(of: target, matching: find.byType(CardListSurface))
-            .first,
-      ).height;
+      return tester
+          .getSize(
+            find
+                .descendant(of: target, matching: find.byType(CardListSurface))
+                .first,
+          )
+          .height;
     }
 
     // 修复前三种高度混杂（96 / 118 / 158dp）：带长副标题的标签行现在等高，
@@ -437,7 +439,8 @@ void main() {
     // 默认关闭：只有开关行，子项不出现。
     expect(find.byKey(const Key('settingsDataSaverSwitch')), findsOneWidget);
     expect(find.byKey(const Key('settingsDataSaverQualityItem')), findsNothing);
-    expect(find.byKey(const Key('settingsDataSaverCoversSwitch')), findsNothing);
+    expect(
+        find.byKey(const Key('settingsDataSaverCoversSwitch')), findsNothing);
 
     final switchFinder = find.byKey(const Key('settingsDataSaverSwitch'));
     await tester.ensureVisible(switchFinder);
@@ -707,7 +710,7 @@ void main() {
     return (preview.first.widget as Transform).transform.storage[0];
   }
 
-  testWidgets('底部弹层：guard 非空时宿主仍接管手势（跟手预览 + 拒绝后回弹）', (tester) async {
+  testWidgets('底部弹层：子页预测返回由页面接管（弹层不缩放，提交只退子页）', (tester) async {
     // 移动端视口 → showAdaptiveModalPage 走底部弹层分支。
     tester.view.physicalSize = const Size(500, 1400);
     tester.view.devicePixelRatio = 1.0;
@@ -733,7 +736,7 @@ void main() {
     await tester.tap(find.text('Open settings'));
     await tester.pumpAndSettle();
 
-    // 子页打开 → 内部 Navigator 可弹栈 → dismiss guard 非空（先退子页才允许关）。
+    // 子页打开 → 内部 Navigator 可弹栈。
     final generalItem = find.byKey(const Key('settingsGeneralItem'));
     await tester.scrollUntilVisible(
       generalItem,
@@ -744,27 +747,26 @@ void main() {
     await tester.tap(generalItem);
     await tester.pumpAndSettle();
     expect(find.text('App Language'), findsOneWidget);
+    expect(sheetBackScaleX(tester), 1.0, reason: '静止时预览缩放为 1');
 
-    final scale = sheetBackScaleX(tester);
-    expect(scale, 1.0, reason: '静止时预览缩放为 1');
-
-    final sheetWidth = tester.getSize(find.byType(SettingsPage)).width;
-    final shrinkX = M3ETheme.of(tester.element(find.byType(SettingsPage)))
-        .bottomSheetTheme
-        .predictiveBackShrinkX;
-
-    // 1.1.7 起 guard 非空不再让宿主放弃手势：跟手预览照常（回归 1.1.6 的
-    // 「guard → 无人接管 → 普通返回、全程无预览」）。
+    // 子页手势：弹层宿主仍收到事件，但缩放归零；内层路由按 FadeForwards 退场。
     await sendBack(tester, 'startBackGesture', backArgs(0));
     await sendBack(tester, 'updateBackGestureProgress', backArgs(0.6));
     await tester.pump();
     expect(
       sheetBackScaleX(tester),
-      closeTo(1 - shrinkX * 0.6 / sheetWidth, 0.001),
-      reason: 'guard 非空时弹层也必须跟进手势，否则这条链路没有预览',
+      1.0,
+      reason: '子页手势必须由页面过渡接管，不能再显示 sheet 收缩',
+    );
+    final subPageRoute =
+        ModalRoute.of(tester.element(find.text('App Language')))!;
+    expect(
+      subPageRoute.animation!.value,
+      closeTo(0.4, 0.001),
+      reason: '内层路由应跟手回退（1 - 手势进度）',
     );
 
-    // 提交：guard 退掉子页（返回 false，弹层不关）→ 预览回弹到静止。
+    // 提交：只退子页，弹层保持打开。
     await sendBack(tester, 'commitBackGesture');
     await tester.pumpAndSettle();
     expect(find.text('App Language'), findsNothing);
@@ -772,8 +774,53 @@ void main() {
     expect(
       sheetBackScaleX(tester),
       1.0,
-      reason: 'guard 拒绝关闭后预览必须回弹，不能停在缩小的中间态',
+      reason: '子页退栈不得把弹层一起缩走',
     );
+  });
+
+  testWidgets('底部弹层：首屏预测返回仍是 sheet 收缩，提交关闭设置', (tester) async {
+    tester.view.physicalSize = const Size(500, 1400);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(() {
+      tester.view.resetPhysicalSize();
+      tester.view.resetDevicePixelRatio();
+    });
+
+    await pumpApp(
+      tester,
+      Scaffold(
+        body: Builder(
+          builder: (context) => Center(
+            child: M3EButton.filled(
+              onPressed: () => showSettingsSheet(context),
+              child: const Text('Open settings'),
+            ),
+          ),
+        ),
+      ),
+    );
+
+    await tester.tap(find.text('Open settings'));
+    await tester.pumpAndSettle();
+
+    final sheetWidth = tester.getSize(find.byType(SettingsPage)).width;
+    final shrinkX = M3ETheme.of(tester.element(find.byType(SettingsPage)))
+        .bottomSheetTheme
+        .predictiveBackShrinkX;
+
+    await sendBack(tester, 'startBackGesture', backArgs(0));
+    await sendBack(tester, 'updateBackGestureProgress', backArgs(0.6));
+    await tester.pump();
+    expect(
+      sheetBackScaleX(tester),
+      closeTo(1 - shrinkX * 0.6 / sheetWidth, 0.001),
+      reason: '首屏手势保持 M3E 宿主的 sheet 收缩预览',
+    );
+
+    await sendBack(tester, 'commitBackGesture');
+    await tester.pumpAndSettle();
+    expect(find.text('Settings'), findsNothing);
+    expect(find.text('Open settings'), findsOneWidget);
   });
 
   testWidgets('底部弹层：根导航器上方 dialog 打开时，返回手势不得退内层子页', (tester) async {

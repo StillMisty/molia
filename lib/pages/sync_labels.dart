@@ -5,8 +5,8 @@ import '../l10n/app_localizations.dart';
 
 /// 同步观测面的文案映射（结论 / 失败原因 / 触发原因；设置页与子页共用）。
 ///
-/// [SyncIssue.detail]（原始异常 / 错误串）不参与展示：它只出现在日志与
-/// 「复制诊断信息」导出里；英文界面与不可读的 `$e` 都在这里被隔离。
+/// [SyncIssue.detail]（原始异常 / 错误串）不参与展示；英文界面与不可读的
+/// `$e` 都在这里被隔离，界面只给可行动的原因与下一步。
 String syncIssueText(AppLocalizations l10n, SyncIssue issue) {
   final peer = _stringArg(issue, 'peer', fallback: l10n.syncPeerUnknown);
   final count = _intArg(issue, 'count');

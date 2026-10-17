@@ -135,9 +135,10 @@ abstract interface class SyncTransport {
   /// 行为上不改变任何逻辑，只用于把「开关开着但根本没在工作」呈现出来。
   String? get unavailableReason;
 
-  /// 不可用原因的技术细节（诊断用；null = 无细节）。
+  /// 不可用原因的技术细节（排查用；null = 无细节）。
   ///
-  /// 原始异常 / 错误串只进日志与诊断导出，UI 展示的是原因码映射文案。
+  /// 原始异常 / 错误串只进 Logger 与日志子页的失败详情，UI 展示的是原因码
+  /// 映射文案。
   String? get unavailableDetail;
 
   /// 拉取当前可获得的远端载荷（增量窗口或 bootstrap 全量快照；

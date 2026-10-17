@@ -4,9 +4,32 @@ import 'package:molia/data/playback/default_playback_facade.dart';
 import 'package:molia/domain/models/playback.dart';
 import 'package:molia/domain/models/track.dart';
 import 'package:molia/providers/sleep_timer.dart';
+import 'package:molia/services/sleep_timer_alarm.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../support/fakes.dart';
+
+/// 记录 arm/cancel 的可注入假原生定时器。
+class _FakeSleepTimerAlarm implements SleepTimerAlarm {
+  SleepTimerFired? _onFired;
+  final List<(Duration, int)> arms = [];
+  int cancels = 0;
+  bool disposed = false;
+
+  @override
+  set onFired(SleepTimerFired? callback) => _onFired = callback;
+
+  @override
+  void arm(Duration delay, int token) => arms.add((delay, token));
+
+  @override
+  void cancel() => cancels++;
+
+  @override
+  void dispose() => disposed = true;
+
+  void fire(int token) => _onFired?.call(token);
+}
 
 Track _track(String id, {Duration duration = const Duration(seconds: 30)}) =>
     Track(
@@ -43,6 +66,7 @@ void main() {
   late SleepTimerController timer;
   late DateTime now;
   late int fired;
+  late _FakeSleepTimerAlarm alarm;
 
   setUp(() {
     SharedPreferences.setMockInitialValues({});
@@ -50,6 +74,7 @@ void main() {
     fired = 0;
     backend = FakePlaybackBackend();
     facade = DefaultPlaybackFacade(backend: backend);
+    alarm = _FakeSleepTimerAlarm();
     timer = SleepTimerController(
       snapshot: facade.snapshot,
       position: facade.position,
@@ -59,6 +84,7 @@ void main() {
         await facade.pause();
       },
       now: () => now,
+      alarm: alarm,
     );
   });
 
@@ -402,5 +428,80 @@ void main() {
     await advance(tester, const Duration(minutes: 1, seconds: 29));
     expect(fired, 1);
     expect(timer.value.mode, SleepTimerMode.off);
+  });
+
+  testWidgets('倒计时：原生定时器随播放/暂停武装与撤销（恢复后按剩余重排）', (tester) async {
+    final a = _track('a');
+    backend.emit(_snapshot(current: a, queue: [a], duration: a.duration!));
+
+    timer.startCountdown(const Duration(minutes: 1));
+    expect(alarm.arms, isNotEmpty);
+    expect(alarm.arms.last.$1, const Duration(minutes: 1));
+    final firstToken = alarm.arms.last.$2;
+    final armedBeforePause = alarm.arms.length;
+    await advance(tester, const Duration(seconds: 10));
+
+    // 暂停：撤销原生定时器（避免熄屏时原生到点误暂停）。
+    backend.emit(_snapshot(
+      current: a,
+      queue: [a],
+      duration: a.duration!,
+      isPlaying: false,
+      position: const Duration(seconds: 10),
+    ));
+    expect(alarm.cancels, greaterThan(0));
+    expect(alarm.arms.length, armedBeforePause);
+
+    // 恢复播放：按冻结后的剩余时长重排（token 变化，旧回调失效）。
+    backend.emit(_snapshot(
+      current: a,
+      queue: [a],
+      duration: a.duration!,
+      position: const Duration(seconds: 10),
+    ));
+    expect(alarm.arms.length, greaterThan(armedBeforePause));
+    expect(alarm.arms.last.$1, lessThanOrEqualTo(const Duration(seconds: 50)));
+    expect(alarm.arms.last.$2, isNot(firstToken));
+
+    timer.cancel();
+    expect(timer.value.mode, SleepTimerMode.off);
+  });
+
+  testWidgets('倒计时：原生回调到点暂停；过期 token 无效', (tester) async {
+    final a = _track('a');
+    backend.emit(_snapshot(current: a, queue: [a], duration: a.duration!));
+
+    timer.startCountdown(const Duration(minutes: 1));
+    final token = alarm.arms.last.$2;
+    // 时钟跨过 deadline 后原生回调：立即暂停并复位。
+    now = now.add(const Duration(minutes: 1));
+    alarm.fire(token);
+    await tester.pump();
+
+    expect(fired, 1);
+    expect(timer.value.mode, SleepTimerMode.off);
+
+    // 过期 token 在已复位状态下不再触发。
+    alarm.fire(token);
+    await tester.pump();
+    expect(fired, 1);
+  });
+
+  testWidgets('倒计时：原生回调早到（deadline 未到）重新武装，不提前暂停', (tester) async {
+    final a = _track('a');
+    backend.emit(_snapshot(current: a, queue: [a], duration: a.duration!));
+
+    timer.startCountdown(const Duration(minutes: 1));
+    final token = alarm.arms.last.$2;
+    final armsBefore = alarm.arms.length;
+
+    // 时钟未动，原生提前回调：不得暂停，按剩余时长重排。
+    alarm.fire(token);
+    expect(fired, 0);
+    expect(alarm.arms.length, greaterThan(armsBefore));
+    expect(timer.value.mode, SleepTimerMode.countdown);
+
+    // 收尾取消 ticker，避免挂起的 periodic timer 影响测试清理。
+    timer.cancel();
   });
 }

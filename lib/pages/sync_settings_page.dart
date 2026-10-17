@@ -17,12 +17,13 @@ import 'sync_labels.dart';
 import 'sync_log_page.dart';
 import 'sync_peers_page.dart';
 
-/// 跨设备同步设置页：首屏只留结论与主操作，细节下沉子页。
+/// 跨设备同步设置页：首屏只留结论与配置入口，细节下沉子页。
 ///
 /// 信任模型：口令即信任根，持有口令的设备完全互信（ADR-0003）。首屏信息
-/// 预算 ≤ 9 行：开关 / 立即同步 / 名册 / 内容 / 日志 / 传输 / 设备入口；
-/// 口令与设备名在「设备与口令」子页，类别与蜂窝策略在「同步内容」子页，
-/// 动态 / 日志 / 诊断在「同步日志与诊断」子页。
+/// 预算 ≤ 9 行：开关 / 名册 / 内容 / 日志 / 传输 / 设备入口；同步何时跑
+/// 由调度器声明式决定，页面不提供「立即同步」这类手动主操作。口令与设备名
+/// 在「设备与口令」子页，类别与蜂窝策略在「同步内容」子页，动态与日志在
+/// 「同步日志」子页。
 ///
 /// 状态行给「五态结论 + 相对时间」一句话，不堆本轮变更量（细节在日志页）。
 class SyncSettingsPage extends StatelessWidget {
@@ -62,20 +63,6 @@ class SyncSettingsPage extends StatelessWidget {
                     unawaited(_toggleEnabled(context, provider, value, l10n)),
               ),
               if (provider.enabled) ...[
-                // 主操作：全宽主按钮；同步在途禁用（引擎自带排队，避免连点）。
-                SizedBox(
-                  width: double.infinity,
-                  child: M3EButton.filled(
-                    key: const Key('settingsSyncNowItem'),
-                    size: M3EButtonSize.md,
-                    onPressed: provider.syncing
-                        ? null
-                        : () => unawaited(provider.syncNow(manual: true)),
-                    child: Text(provider.syncing
-                        ? l10n.syncSyncing
-                        : l10n.syncSyncNow),
-                  ),
-                ),
                 SettingsNavTile(
                   key: const Key('settingsSyncPeersItem'),
                   icon: Icons.group_rounded,
@@ -97,7 +84,8 @@ class SyncSettingsPage extends StatelessWidget {
                   icon: Icons.receipt_long_rounded,
                   title: l10n.syncLogTitle,
                   subtitle: _logSubtitle(provider, l10n),
-                  onTap: () => openSettingsSubPage(context, const SyncLogPage()),
+                  onTap: () =>
+                      openSettingsSubPage(context, const SyncLogPage()),
                 ),
               ],
             ],
@@ -115,8 +103,8 @@ class SyncSettingsPage extends StatelessWidget {
                   subtitleColor: lanState.color,
                   value: provider.enabledTransports
                       .contains(SyncTransportKind.lan),
-                  onChanged: (value) => unawaited(
-                      provider.setTransportEnabled(SyncTransportKind.lan, value)),
+                  onChanged: (value) => unawaited(provider.setTransportEnabled(
+                      SyncTransportKind.lan, value)),
                 ),
                 SettingsSwitchTile(
                   switchKey: const Key('settingsSyncWebdavSwitch'),
@@ -125,8 +113,8 @@ class SyncSettingsPage extends StatelessWidget {
                   subtitle: webdavState.text,
                   subtitleColor: webdavState.color,
                   value: webdavEnabled,
-                  onChanged: (value) => unawaited(provider
-                      .setTransportEnabled(SyncTransportKind.webdav, value)),
+                  onChanged: (value) => unawaited(provider.setTransportEnabled(
+                      SyncTransportKind.webdav, value)),
                 ),
                 // 配置入口只在 WebDAV 启用后才有意义（未启用时开关副文案已说明）。
                 if (webdavEnabled)
@@ -137,8 +125,8 @@ class SyncSettingsPage extends StatelessWidget {
                     subtitle: provider.webdav.isConfigured
                         ? provider.webdav.baseUrl
                         : l10n.syncWebdavNotConfigured,
-                    onTap: () =>
-                        unawaited(showWebdavConfigDialog(context, provider, l10n)),
+                    onTap: () => unawaited(
+                        showWebdavConfigDialog(context, provider, l10n)),
                   ),
                 // 权限被拒时给可行动入口（手动地址救不了权限，只能授权或转 WebDAV）。
                 if (_needsLanPermission(provider))
@@ -153,9 +141,10 @@ class SyncSettingsPage extends StatelessWidget {
                     subtitle: provider.lanPermissionPermanentlyDenied
                         ? l10n.syncLanPermissionPermanentSubtitle
                         : l10n.syncLanPermissionSubtitle,
-                    onTap: () => unawaited(provider.lanPermissionPermanentlyDenied
-                        ? provider.openSystemSettings()
-                        : _requestLanPermission(context, provider, l10n)),
+                    onTap: () => unawaited(
+                        provider.lanPermissionPermanentlyDenied
+                            ? provider.openSystemSettings()
+                            : _requestLanPermission(context, provider, l10n)),
                   ),
               ],
             ),
@@ -240,7 +229,7 @@ class SyncSettingsPage extends StatelessWidget {
   /// 用户主动关闭的传输先于状态判定：开关状态由 `enabled` 表达，关闭后不再
   /// 显示「未配置 / 启动失败」这类残留原因。状态色只作增强：不可用 / 启动失败
   /// 走 warning，运行中且有成功记录走 success。最后成功时间与原始失败细节
-  /// 不进首屏（诊断导出里有）。
+  /// 不进首屏（日志子页的失败行里有）。
   static ({String text, Color? color}) _transportState(
     BuildContext context,
     SyncProvider provider,
@@ -257,16 +246,20 @@ class SyncSettingsPage extends StatelessWidget {
     final semantic = AppSemanticColors.of(context);
     final state = switch (status.unavailableReason) {
       SyncUnavailableReason.notConfigured => l10n.syncTransportNotConfigured,
-      // 启动类失败只说「启动失败」；原因码细节在诊断信息里，不上界面。
+      // 启动类失败只说「启动失败」；原因码细节在日志子页的失败弹层里。
       SyncUnavailableReason.startFailed => l10n.syncTransportStartFailed,
-      SyncUnavailableReason.permissionDenied => l10n.syncTransportPermissionDenied,
-      _ => status.running ? l10n.syncTransportRunning : l10n.syncTransportStopped,
+      SyncUnavailableReason.permissionDenied =>
+        l10n.syncTransportPermissionDenied,
+      _ =>
+        status.running ? l10n.syncTransportRunning : l10n.syncTransportStopped,
     };
     final available = status.running && status.unavailableReason == null;
     return (
       text: state,
       color: available
-          ? (provider.transportLastSuccessAt(kind) > 0 ? semantic.success : null)
+          ? (provider.transportLastSuccessAt(kind) > 0
+              ? semantic.success
+              : null)
           : semantic.warning,
     );
   }

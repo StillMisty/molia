@@ -1077,8 +1077,6 @@
   "syncPassphraseJoinHint": "Enter the passphrase shown on another device",
   "syncPassphraseInvalid": "Invalid passphrase (at least 16 characters)",
   "syncSave": "Save",
-  "syncSyncNow": "Sync now",
-  "syncSyncing": "Syncing…",
   "syncNever": "Never synced",
   "syncStatusSyncedPeers": "Synced with {count} devices",
   "@syncStatusSyncedPeers": {
@@ -1234,7 +1232,7 @@
   "syncTransportDisabled": "turned off",
   "syncTransportNotConfigured": "not configured",
   "syncTransportStartFailed": "failed to start",
-  "syncLogTitle": "Sync log & diagnostics",
+  "syncLogTitle": "Sync log",
   "syncLogSection": "Sync log",
   "syncLogEmpty": "No records yet",
   "syncLogFailed": "Failed: {error}",
@@ -1294,11 +1292,6 @@
       }
     }
   },
-  "syncDiagnosticTitle": "Diagnostics",
-  "syncDiagnosticCopy": "Copy diagnostics",
-  "syncDiagnosticSubtitle": "Recent sync rounds (no passphrase, no keys)",
-  "syncDiagnosticHint": "Paste it when reporting an issue — it contains no credentials and no data.",
-  "syncDiagnosticCopied": "Diagnostics copied",
   "syncTransportPermissionDenied": "LAN permission missing",
   "syncLanPermissionTitle": "Grant LAN permission",
   "syncLanPermissionSubtitle": "Android 17+ needs the nearby-devices permission to reach other devices",
@@ -1326,7 +1319,7 @@
   "syncPeerCleanupRemoteDone": "Remote files cleaned up",
   "syncPeerCleanupRemoteNone": "No remote files to clean up",
   "syncPeerCleanupRemoteFailed": "Cleanup failed: {error}",
-  "syncPeerNotContacted": "not reached yet — tap this device row after the peer is online",
+  "syncPeerNotContacted": "not reached yet — it retries automatically once the peer is online",
   "syncPeerAddress": "Address {host}",
   "@syncPeerAddress": {
     "placeholders": {
@@ -1349,7 +1342,7 @@
   "syncCategorySubtitle": "Turning it off stops pushing and applying this data on this device",
   "syncGeneratedHint": "Passphrase generated; enter it on other devices to join",
   "syncIssueDialogTitle": "Sync issue",
-  "syncIssueUnknown": "Unknown reason — retry first; if it keeps failing, copy diagnostics",
+  "syncIssueUnknown": "Unknown reason — retry first; if it keeps failing, check the sync log",
   "syncIssueNotConfigured": "Sync transport is not configured",
   "syncIssueStartFailed": "Transport failed to start",
   "syncIssuePermissionDenied": "LAN permission missing (Android 17+ needs the nearby-devices permission)",
@@ -1866,8 +1859,6 @@
   "downloadsNoResume": "No resume support: platform links are usually one-time signed URLs; re-downloading is more reliable",
   "downloadsEmpty": "No downloaded tracks yet",
   "sleepTimerTitle": "Sleep timer",
-  "sleepTimerHint": "Pauses playback when the timer ends",
-  "sleepTimerCountdownSection": "Countdown",
   "sleepTimerOff": "Off",
   "sleepTimerRemaining": "{time} left",
   "@sleepTimerRemaining": {
@@ -1878,14 +1869,6 @@
     }
   },
   "sleepTimerAfterTrack": "Pause after current track",
-  "sleepTimerMinutesShort": "{minutes} min",
-  "@sleepTimerMinutesShort": {
-    "placeholders": {
-      "minutes": {
-        "type": "int"
-      }
-    }
-  },
   "sleepTimerCancel": "Turn off timer",
   "sleepTimerArmedSnackbar": "Sleep timer on · pausing in {time}",
   "@sleepTimerArmedSnackbar": {

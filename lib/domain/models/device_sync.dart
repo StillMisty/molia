@@ -707,7 +707,7 @@ enum SyncOutcome {
 /// 同步失败原因（机器可读）：UI 按 [code] 映射本地化文案，[args] 给文案参数
 /// （次数 / 对端名等）。
 ///
-/// [detail] 是原始异常 / 技术细节，**只进 Logger 与「复制诊断信息」导出**，
+/// [detail] 是原始异常 / 技术细节，**只进 Logger 与日志子页的失败详情**，
 /// UI 不展示原文（英文界面与不可读的 `$e` 都从这里隔离）。
 class SyncIssue {
   const SyncIssue({required this.code, this.args = const {}, this.detail});
@@ -1096,7 +1096,7 @@ class SyncPeerState {
   }
 }
 
-/// 一轮同步的结果对象（UI 状态、日志与诊断导出共用）。
+/// 一轮同步的结果对象（UI 状态与日志共用）。
 class SyncRoundReport {
   const SyncRoundReport({
     required this.trigger,

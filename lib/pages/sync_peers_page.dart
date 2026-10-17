@@ -18,8 +18,8 @@ import 'sync_labels.dart';
 
 /// 已配对设备（同步名册）：本机 + 每台对端的最近接触情况 + 手动地址簿。
 ///
-/// 为什么单独一页：名册条数随设备数增长，放在设置首屏会把主要动作
-/// （立即同步、传输开关）挤下去；这里只读为主，操作集中在行内弹层。
+/// 为什么单独一页：名册条数随设备数增长，放在设置首屏会把传输开关等
+/// 配置入口挤下去；这里只读为主，操作集中在行内弹层。
 /// 「添加设备」只对**发现失败**有意义——权限被拒时手动地址同样无效
 /// （Android 17 的局域网保护是网关级的，见 ADR-0003 v2 §3）。
 class SyncPeersPage extends StatelessWidget {
@@ -60,7 +60,8 @@ class SyncPeersPage extends StatelessWidget {
                 onTap: () => _copyDeviceId(context, provider, l10n),
               ),
               for (final peer in provider.peers)
-                _peerRow(context, provider, l10n, peer, manualByDevice[peer.deviceId]),
+                _peerRow(context, provider, l10n, peer,
+                    manualByDevice[peer.deviceId]),
               for (final entry in pendingManual)
                 SettingsNavTile(
                   key: Key('settingsSyncPeer-${entry.host}'),
@@ -234,13 +235,6 @@ class SyncPeersPage extends StatelessWidget {
               child: Text(l10n.syncPeerDelete),
             ),
           M3EButton.text(
-            onPressed: () {
-              navigator.pop();
-              unawaited(provider.syncNow(manual: true));
-            },
-            child: Text(l10n.syncSyncNow),
-          ),
-          M3EButton.text(
             onPressed: () => navigator.pop(),
             child: Text(l10n.cancelButton),
           ),
@@ -362,8 +356,7 @@ class _AddPeerDialog extends StatefulWidget {
 
 class _AddPeerDialogState extends State<_AddPeerDialog> {
   final _host = TextEditingController();
-  final _port =
-      TextEditingController(text: '${ManualPeer.defaultProbePort}');
+  final _port = TextEditingController(text: '${ManualPeer.defaultProbePort}');
   final _name = TextEditingController();
   String? _hostError;
   String? _portError;

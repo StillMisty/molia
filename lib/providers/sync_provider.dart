@@ -11,10 +11,11 @@ import '../data/sync/transport/local_network_permission.dart';
 import '../domain/models/device_sync.dart';
 import '../domain/ports/sync_transport.dart';
 
-/// 跨设备同步的 UI 门面：引擎状态 + 口令管理 + 手动同步 + 触发策略转发。
+/// 跨设备同步的 UI 门面：引擎状态 + 口令管理 + 恢复动作触发 + 策略转发。
 ///
 /// 口令即信任根：显示/复制/重置都在这里管理；UI 不直接接触引擎。
-/// 「什么时候自动同步」由 [SyncScheduler] 决定，本类只做转发。
+/// 「什么时候自动同步」由 [SyncScheduler] 决定，本类只做转发；[syncNow]
+/// 只服务恢复动作（添加手动对端 / 失败重试），不再有首屏手动入口。
 class SyncProvider extends ChangeNotifier {
   SyncProvider({
     required SyncEngine engine,
@@ -31,12 +32,10 @@ class SyncProvider extends ChangeNotifier {
   final LocalNetworkPermission? _lanPermission;
 
   String? _passphrase;
-  bool _busy = false;
 
   SyncEngine get engine => _engine;
 
   bool get enabled => _engine.state.enabled;
-  bool get syncing => _busy || _engine.syncing;
   String get deviceId => _engine.state.deviceId;
   String get deviceName => _engine.state.deviceName;
   Map<SyncCategory, bool> get categories => _engine.state.categories;
@@ -69,8 +68,7 @@ class SyncProvider extends ChangeNotifier {
   }
 
   /// 移除手动对端。
-  Future<void> removeManualPeer(String host) =>
-      _engine.removeManualPeer(host);
+  Future<void> removeManualPeer(String host) => _engine.removeManualPeer(host);
 
   bool isPeerIgnored(String deviceId) => _engine.state.isPeerIgnored(deviceId);
 
@@ -229,25 +227,20 @@ class SyncProvider extends ChangeNotifier {
     return generated;
   }
 
+  /// 跑一轮同步。
+  ///
+  /// 首屏不再暴露手动主操作；[manual] 只服务恢复动作（添加手动对端、
+  /// 日志失败弹层的重试）。引擎自带排队：进行中的轮次结束后会补跑。
   Future<SyncRoundReport?> syncNow({bool manual = false}) async {
-    _busy = true;
-    notifyListeners();
-    try {
-      // 引擎自带排队：进行中的轮次结束后会补跑，这里不做早退（否则
-      // 连点两次只有一次生效且无提示）。手动触发经调度器（不受省电 /
-      // 蜂窝暂停策略限制）；未注入调度器时直接走引擎。
-      final scheduler = _scheduler;
-      if (manual && scheduler != null) {
-        await scheduler.syncNow();
-        return _engine.lastReport;
-      }
-      return await _engine.syncNow(
-        trigger: manual ? SyncTrigger.manual : SyncTrigger.timer,
-      );
-    } finally {
-      _busy = false;
-      notifyListeners();
+    final scheduler = _scheduler;
+    if (manual && scheduler != null) {
+      // 手动触发经调度器（不受省电 / 蜂窝暂停策略限制）。
+      await scheduler.syncNow();
+      return _engine.lastReport;
     }
+    return await _engine.syncNow(
+      trigger: manual ? SyncTrigger.manual : SyncTrigger.timer,
+    );
   }
 
   /// 启动后首轮（音源仓库就绪后调用）：受等级策略约束（省电 / 移动数据暂停
@@ -290,8 +283,7 @@ class SyncProvider extends ChangeNotifier {
   SyncLevel? get syncLevel => _scheduler?.level;
 
   /// 近 24 小时活动汇总（独立于展示日志的 20 条上限）。
-  SyncActivitySummary get activity24h =>
-      SyncActivitySummary.fromEntries(
+  SyncActivitySummary get activity24h => SyncActivitySummary.fromEntries(
         _engine.state.activity,
         nowMs: _engine.state.nowMs(),
       );

@@ -3890,18 +3890,6 @@ abstract class AppLocalizations {
   /// **'Save'**
   String get syncSave;
 
-  /// No description provided for @syncSyncNow.
-  ///
-  /// In en, this message translates to:
-  /// **'Sync now'**
-  String get syncSyncNow;
-
-  /// No description provided for @syncSyncing.
-  ///
-  /// In en, this message translates to:
-  /// **'Syncing…'**
-  String get syncSyncing;
-
   /// No description provided for @syncNever.
   ///
   /// In en, this message translates to:
@@ -4284,7 +4272,7 @@ abstract class AppLocalizations {
   /// No description provided for @syncLogTitle.
   ///
   /// In en, this message translates to:
-  /// **'Sync log & diagnostics'**
+  /// **'Sync log'**
   String get syncLogTitle;
 
   /// No description provided for @syncLogSection.
@@ -4370,36 +4358,6 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Last error: {error}'**
   String syncPeerLastError(String error);
-
-  /// No description provided for @syncDiagnosticTitle.
-  ///
-  /// In en, this message translates to:
-  /// **'Diagnostics'**
-  String get syncDiagnosticTitle;
-
-  /// No description provided for @syncDiagnosticCopy.
-  ///
-  /// In en, this message translates to:
-  /// **'Copy diagnostics'**
-  String get syncDiagnosticCopy;
-
-  /// No description provided for @syncDiagnosticSubtitle.
-  ///
-  /// In en, this message translates to:
-  /// **'Recent sync rounds (no passphrase, no keys)'**
-  String get syncDiagnosticSubtitle;
-
-  /// No description provided for @syncDiagnosticHint.
-  ///
-  /// In en, this message translates to:
-  /// **'Paste it when reporting an issue — it contains no credentials and no data.'**
-  String get syncDiagnosticHint;
-
-  /// No description provided for @syncDiagnosticCopied.
-  ///
-  /// In en, this message translates to:
-  /// **'Diagnostics copied'**
-  String get syncDiagnosticCopied;
 
   /// No description provided for @syncTransportPermissionDenied.
   ///
@@ -4566,7 +4524,7 @@ abstract class AppLocalizations {
   /// No description provided for @syncPeerNotContacted.
   ///
   /// In en, this message translates to:
-  /// **'not reached yet — tap this device row after the peer is online'**
+  /// **'not reached yet — it retries automatically once the peer is online'**
   String get syncPeerNotContacted;
 
   /// No description provided for @syncPeerAddress.
@@ -4620,7 +4578,7 @@ abstract class AppLocalizations {
   /// No description provided for @syncIssueUnknown.
   ///
   /// In en, this message translates to:
-  /// **'Unknown reason — retry first; if it keeps failing, copy diagnostics'**
+  /// **'Unknown reason — retry first; if it keeps failing, check the sync log'**
   String get syncIssueUnknown;
 
   /// No description provided for @syncIssueNotConfigured.
@@ -6100,18 +6058,6 @@ abstract class AppLocalizations {
   /// **'Sleep timer'**
   String get sleepTimerTitle;
 
-  /// No description provided for @sleepTimerHint.
-  ///
-  /// In en, this message translates to:
-  /// **'Pauses playback when the timer ends'**
-  String get sleepTimerHint;
-
-  /// No description provided for @sleepTimerCountdownSection.
-  ///
-  /// In en, this message translates to:
-  /// **'Countdown'**
-  String get sleepTimerCountdownSection;
-
   /// No description provided for @sleepTimerOff.
   ///
   /// In en, this message translates to:
@@ -6129,12 +6075,6 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Pause after current track'**
   String get sleepTimerAfterTrack;
-
-  /// No description provided for @sleepTimerMinutesShort.
-  ///
-  /// In en, this message translates to:
-  /// **'{minutes} min'**
-  String sleepTimerMinutesShort(int minutes);
 
   /// No description provided for @sleepTimerCancel.
   ///

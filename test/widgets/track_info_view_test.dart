@@ -37,8 +37,7 @@ import '../support/fakes.dart';
 
 /// 记录型提示服务：断言 Snackbar 文案与「取消」回调。
 class _RecordingNotificationService extends NotificationService {
-  _RecordingNotificationService()
-      : super(GlobalKey<ScaffoldMessengerState>());
+  _RecordingNotificationService() : super(GlobalKey<ScaffoldMessengerState>());
 
   final List<(String, String?, VoidCallback?)> snackbars = [];
 
@@ -291,7 +290,8 @@ void main() {
         name: 'Album a',
         artist: 'Artist a',
         tracks: const [
-          Track(id: TrackId('kw', 'a'), title: 'Title a', origin: TrackOrigin.lx),
+          Track(
+              id: TrackId('kw', 'a'), title: 'Title a', origin: TrackOrigin.lx),
         ],
       ),
     );
@@ -350,7 +350,8 @@ void main() {
         id: '9527',
         name: 'Artist a',
         tracks: [
-          Track(id: TrackId('kw', 'a'), title: 'Title a', origin: TrackOrigin.lx),
+          Track(
+              id: TrackId('kw', 'a'), title: 'Title a', origin: TrackOrigin.lx),
         ],
       ),
     );
@@ -571,7 +572,7 @@ void main() {
     expect(find.byKey(const Key('trackInfoSleepTimerItem')), findsOneWidget);
   });
 
-  testWidgets('定时关闭：chip 档位设置与取消（行副标题随状态刷新）', (tester) async {
+  testWidgets('定时关闭：自定义时长设置与关闭（行副标题随状态刷新）', (tester) async {
     tester.view.physicalSize = const Size(420, 900);
     tester.view.devicePixelRatio = 1.0;
     addTearDown(() {
@@ -585,22 +586,26 @@ void main() {
 
     await tester.tap(find.byKey(const Key('trackInfoSleepTimerItem')));
     await tester.pumpAndSettle();
-    expect(find.text('倒计时'), findsOneWidget);
-    expect(find.text('15 分钟'), findsOneWidget);
+    // 无预设 chips，时长只经自定义入口设置。
+    expect(find.byKey(const Key('sleepTimerCustomItem')), findsOneWidget);
+    expect(find.byKey(const Key('sleepTimerPreset_15')), findsNothing);
 
-    await tester.tap(find.byKey(const Key('sleepTimerPreset_15')));
+    await tester.tap(find.byKey(const Key('sleepTimerCustomItem')));
     await tester.pumpAndSettle();
-    expect(playback.sleepTimer.value.remaining, const Duration(minutes: 15));
-    expect(find.text('剩余 15:00'), findsOneWidget);
+    expect(find.text('自定义时长'), findsWidgets);
+    await tester.tap(find.text('设定'));
+    await tester.pumpAndSettle();
+    expect(playback.sleepTimer.value.remaining, const Duration(minutes: 30));
+    expect(find.text('剩余 30:00'), findsOneWidget);
 
-    // 再开弹层：状态区显示剩余时间、当前档位有选中态，取消入口在卡片里。
+    // 再开弹层：状态区显示剩余时间、自定义行选中并带当前时长，取消入口在底部。
     await tester.tap(find.byKey(const Key('trackInfoSleepTimerItem')));
     await tester.pumpAndSettle();
-    expect(find.text('15:00'), findsOneWidget);
-    final selectedChip = tester.widget<M3EChip>(
-      find.byKey(const Key('sleepTimerPreset_15')),
+    expect(find.text('30:00'), findsOneWidget);
+    final customItem = tester.widget<M3EListItem>(
+      find.byKey(const Key('sleepTimerCustomItem')),
     );
-    expect(selectedChip.selected, isTrue);
+    expect(customItem.selected, isTrue);
     await tester.tap(find.byKey(const Key('sleepTimerCancelButton')));
     await tester.pumpAndSettle();
 
@@ -608,8 +613,7 @@ void main() {
     expect(find.text('未开启'), findsOneWidget);
   });
 
-  testWidgets('定时关闭：开启弹 Snackbar 反馈（取消可撤销），播完当前歌曲同样有反馈',
-      (tester) async {
+  testWidgets('定时关闭：开启弹 Snackbar 反馈（取消可撤销），播完当前歌曲同样有反馈', (tester) async {
     final notifications = _RecordingNotificationService();
     await pumpView(
       tester,
@@ -619,12 +623,14 @@ void main() {
 
     await tester.tap(find.byKey(const Key('trackInfoSleepTimerItem')));
     await tester.pumpAndSettle();
-    await tester.tap(find.byKey(const Key('sleepTimerPreset_15')));
+    await tester.tap(find.byKey(const Key('sleepTimerCustomItem')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('设定'));
     await tester.pumpAndSettle();
 
-    expect(playback.sleepTimer.value.duration, const Duration(minutes: 15));
+    expect(playback.sleepTimer.value.duration, const Duration(minutes: 30));
     expect(notifications.snackbars, hasLength(1));
-    expect(notifications.snackbars.single.$1, '已开启定时关闭 · 15:00 后暂停');
+    expect(notifications.snackbars.single.$1, '已开启定时关闭 · 30:00 后暂停');
     expect(notifications.snackbars.single.$2, '取消');
 
     // Snackbar 的「取消」操作直接撤销定时。
@@ -649,7 +655,7 @@ void main() {
 
     await tester.tap(find.byKey(const Key('trackInfoSleepTimerItem')));
     await tester.pumpAndSettle();
-    await tester.tap(find.byKey(const Key('sleepTimerCustomChip')));
+    await tester.tap(find.byKey(const Key('sleepTimerCustomItem')));
     await tester.pumpAndSettle();
 
     // 时间选择器（24 小时制）：确认即按初始 0:30（30 分钟）武装。

@@ -465,6 +465,9 @@ class ResponsiveNavigation {
   /// 导航先退子页）；中心对话框（large 宽）无对应 guard，由内容侧 PopScope 处理。
   /// guard 不影响预测返回预览：M3E 弹层宿主（≥1.1.7）在 guard 非空时照样接管
   /// 手势，提交后按 guard 结果决定关闭还是回弹。
+  ///
+  /// [sheetThemeBuilder] 只在 compact/medium 的底部弹层分支生效：调用方可基于
+  /// 解析后的主题返回带动态字段的子类（如按手势归属把预测缩放置 0）。
   static Future<T?> showAdaptiveModalPage<T>({
     required BuildContext context,
     required Widget child,
@@ -474,6 +477,7 @@ class ResponsiveNavigation {
     bool showDragHandle = true,
     bool barrierDismissible = true,
     Future<bool> Function()? onDismissRequest,
+    M3EBottomSheetTheme Function(M3EBottomSheetTheme)? sheetThemeBuilder,
     SecondaryPageMode largeScreenMode = SecondaryPageMode.centerDialog,
     AdaptiveModalContentLayout contentLayout =
         AdaptiveModalContentLayout.wrapContent,
@@ -489,6 +493,7 @@ class ResponsiveNavigation {
         showCloseButton: showCloseButton,
         showDragHandle: showDragHandle,
         onDismissRequest: onDismissRequest,
+        sheetThemeBuilder: sheetThemeBuilder,
         contentLayout: contentLayout,
         pageType: ResponsivePageType.modal,
       );
@@ -667,6 +672,7 @@ class ResponsiveNavigation {
     bool showCloseButton = true,
     bool showDragHandle = true,
     Future<bool> Function()? onDismissRequest,
+    M3EBottomSheetTheme Function(M3EBottomSheetTheme)? sheetThemeBuilder,
     AdaptiveModalContentLayout contentLayout =
         AdaptiveModalContentLayout.fillHeight,
   }) {
@@ -675,10 +681,11 @@ class ResponsiveNavigation {
     // modalMaxHeightFactor 是内容最高占屏比例；换算成 M3E 的顶部留白，
     // 保持该比例不变。
     final topMargin = screenHeight * (1 - spec.modalMaxHeightFactor);
-    final theme = M3ETheme.of(context).bottomSheetTheme.copyWith(
+    final baseTheme = M3ETheme.of(context).bottomSheetTheme.copyWith(
           compactTopMargin: topMargin,
           wideTopMargin: topMargin,
         );
+    final theme = sheetThemeBuilder?.call(baseTheme) ?? baseTheme;
     return M3EBottomSheet.show<T>(
       context,
       theme: theme,
