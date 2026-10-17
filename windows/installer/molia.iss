@@ -5,13 +5,15 @@
 ;            /DSourceDir=<staging> /DOutputDir=<dist> windows\installer\molia.iss
 ;
 ; 设计要点：
-; - **按用户安装**（PrivilegesRequired=lowest，装到 %LOCALAPPDATA%\Programs\Molia）：
+; - **默认按用户安装**（PrivilegesRequired=lowest → %LOCALAPPDATA%\Programs\Molia）：
 ;   不需要管理员权限，且安装目录可写 —— 应用内更新才能直接跑新版安装器；
+;   安装向导提供「为所有用户安装」选项（→ C:\Program Files\Molia，需管理员）；
+;   注意：选按机器安装后，应用内更新要 UAC 提权、不再静默；
 ; - **静默升级**：[Run] 段不带 skipifsilent，`/SILENT` 安装完成后自动重启应用，
 ;   应用内更新只需启动新版 setup.exe 后自行退出（见 ADR-0006）；
 ; - CloseApplications（Restart Manager）负责在安装时优雅关闭仍在运行的 molia，
 ;   RestartApplications 置 no：重启统一由 [Run] 段负责，避免重复启动；
-; - 卸载只删程序文件；用户数据（%APPDATA%\top.stillmisty.molia 与曲库）保留。
+; - 卸载只删程序文件；用户数据（%APPDATA%\top.stillmisty\molia 与曲库）保留。
 
 #ifndef AppVersion
   #define AppVersion "0.0.0"
@@ -47,12 +49,15 @@ AppPublisher={#AppPublisher}
 AppPublisherURL={#AppUrl}
 AppSupportURL={#AppUrl}/issues
 AppUpdatesURL={#AppUrl}/releases
-DefaultDirName={localappdata}\Programs\{#AppName}
+; {autopf}：按用户安装 → %LOCALAPPDATA%\Programs；按机器安装 → C:\Program Files。
+DefaultDirName={autopf}\{#AppName}
 DefaultGroupName={#AppName}
 DisableProgramGroupPage=yes
 DisableDirPage=auto
 AllowNoIcons=yes
 PrivilegesRequired=lowest
+; 允许在向导里切换「仅为我 / 为所有用户」安装（默认按用户，见上方设计要点）。
+PrivilegesRequiredOverridesAllowed=dialog
 OutputDir={#OutputDir}
 OutputBaseFilename=molia-{#AppVersion}-windows-x64-setup
 SetupIconFile=..\runner\resources\app_icon.ico

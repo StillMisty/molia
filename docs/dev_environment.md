@@ -13,8 +13,9 @@
   否则中文界面显示为方块。
 - 本地数据库（最近播放 / 资料库 / 听歌统计）走 drift：原生 SQLite 由
   `sqlite3` 的 Dart build hooks 提供（`flutter test` / 构建时自动生成，无需
-  `sqlite3_flutter_libs`）；缺 `xdg-user-dirs` 时 `molia_database.dart` 会回退到
-  应用支持目录。改表结构必须写增量迁移：提 `schemaVersion` 后跑 `build_runner` +
+  `sqlite3_flutter_libs`）；库文件在应用支持目录（Windows
+  `%APPDATA%\top.stillmisty\molia`、Linux `~/.local/share/top.stillmisty.molia`）。
+  改表结构必须写增量迁移：提 `schemaVersion` 后跑 `build_runner` +
   `drift_dev make-migrations`（schema 快照）并用 `stepByStep` 保留数据（ADR-0005）。
 - **集成测试默认 headless**：`tool/agent/test.sh linux` 无条件套 `xvfb-run -a`
   （并强制 `GDK_BACKEND=x11`、去掉 `WAYLAND_DISPLAY`——只改 DISPLAY 挡不住 GTK 走 WSLg
@@ -75,7 +76,7 @@ tool/agent/seed.sh android restore       # 用最近一次备份还原（第一�
   Linux 请先退出应用，且会改动 `~/.local/share/top.stillmisty.molia/` 下的真实数据。
 - 数据位置：Android `/data/data/top.stillmisty.molia/{app_flutter/molia_database.sqlite,
   shared_prefs/FlutterSharedPreferences.xml, files/lx_sources.json}`；
-  Linux `~/.local/share/top.stillmisty.molia/`（DB 优先 xdg 文档目录）。
+  Linux `~/.local/share/top.stillmisty.molia/`（DB 同处）。
 
 ### Android 集成测试
 

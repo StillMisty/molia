@@ -290,8 +290,7 @@ class PlayEvents extends Table {
   IntColumn get versionCounter => integer().withDefault(const Constant(0))();
 }
 
-/// 生产库文件名（drift_flutter 落在文档目录，回退逻辑见
-/// [_databaseDirectory]）。
+/// 生产库文件名（drift_flutter 落在应用支持目录，见 [_databaseDirectory]）。
 const String moliaDatabaseFileName = 'molia_database';
 
 @DriftDatabase(tables: [
@@ -321,13 +320,16 @@ class MoliaDatabase extends _$MoliaDatabase {
     );
   }
 
-  /// 数据库目录：文档目录不可用时回退应用支持目录（Linux 缺少
-  /// xdg-user-dirs 时没有文档目录），保证最近播放数据库可用。
+  /// 数据库目录：应用支持目录（Windows `%APPDATA%\top.stillmisty\molia`、
+  /// Linux `~/.local/share/top.stillmisty.molia`），与设置等用户数据同处。
+  ///
+  /// 不用文档目录：那是用户可见区域（Windows 的 `Documents`），还可能被
+  /// OneDrive 等同步工具接管——SQLite 文件被同步有损坏风险。
   static Future<Object> _databaseDirectory() async {
     try {
-      return await getApplicationDocumentsDirectory();
-    } on MissingPlatformDirectoryException {
       return await getApplicationSupportDirectory();
+    } on MissingPlatformDirectoryException {
+      return await getApplicationDocumentsDirectory();
     }
   }
 
