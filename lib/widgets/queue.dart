@@ -20,6 +20,7 @@ class QueueDisplay extends StatelessWidget {
     super.key,
     required this.controller,
     this.topPadding = 0,
+    this.includeCurrent = false,
   });
 
   /// 队列滚动控制器（滚动条与父页面「滑到顶下拉收起」共用）。
@@ -27,6 +28,11 @@ class QueueDisplay extends StatelessWidget {
 
   /// 内容顶部额外留白（播放页圆点过渡带）。
   final double topPadding;
+
+  /// 队列面板（桌面右栏）用：顶部补一行「正在播放」（当前曲目，高亮、不可点）。
+  ///
+  /// 播放页版面里当前曲目由播放器承载，保持 false 不重复展示。
+  final bool includeCurrent;
 
   @override
   Widget build(BuildContext context) {

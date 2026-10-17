@@ -22,7 +22,18 @@ class NowPlaying extends StatefulWidget {
   /// 壳层「重复点击底栏 / 导航轨播放目的地」的请求通道：迷你 ⇄ 完整切换。
   final ShellReselectSignal? reselect;
 
-  const NowPlaying({super.key, this.morph, this.reselect});
+  /// 桌面骨架专用版式：左「封面 + 控制」固定栏 + 右「歌词 / 歌曲信息」分页。
+  ///
+  /// 桌面没有迷你态与圆点手势（队列已由壳层右面板承载），此模式下
+  /// `reselect` 请求忽略；移动骨架（含平板宽屏）保持既有 PageView 版式。
+  final bool desktopLayout;
+
+  const NowPlaying({
+    super.key,
+    this.morph,
+    this.reselect,
+    this.desktopLayout = false,
+  });
 
   @override
   State<NowPlaying> createState() => _NowPlayingState();
