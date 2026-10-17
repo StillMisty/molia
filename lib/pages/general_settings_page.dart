@@ -79,7 +79,10 @@ class _GeneralSettingsPageState extends State<GeneralSettingsPage> {
             SettingsSectionCard(
               title: l10n.settingsBottomNavTitle,
               footer: SettingsSectionHint(text: l10n.settingsBottomNavHint),
-              children: [_BottomNavSettings(provider: nav)],
+              children: [
+                _StartupPageSettings(provider: nav),
+                _BottomNavSettings(provider: nav),
+              ],
             ),
             const SizedBox(height: kSettingsSectionSpacing),
           ],
@@ -191,6 +194,57 @@ class _GeneralSettingsPageState extends State<GeneralSettingsPage> {
   }
 }
 
+/// 目的地的本地化名称（启动首页行与底部导航行共用）。
+String _destinationLabel(AppLocalizations l10n, ShellDestination destination) =>
+    switch (destination) {
+      ShellDestination.nowPlaying => l10n.nowPlayingLabel,
+      ShellDestination.favorites => l10n.favoritesLabel,
+      ShellDestination.library => l10n.libraryLabel,
+    };
+
+/// 启动首页：行内分段选择「打开应用时进入的页面」。
+///
+/// 不可见的目的地不筛掉、只禁用：分段布局不随显隐变化（否则改一次显隐
+/// 选项就会跳位）。存储值可能因同步推来的隐藏当前不可见——此时副标题改用
+/// [AppLocalizations.settingsStartupPageHidden] 说明实际进入的兜底页。
+class _StartupPageSettings extends StatelessWidget {
+  const _StartupPageSettings({required this.provider});
+
+  final NavProvider provider;
+
+  @override
+  Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context)!;
+    final nav = provider;
+    final home = nav.homeDestination;
+    final homeVisible = nav.isVisible(home);
+
+    return SettingsChoiceRow<ShellDestination>(
+      key: const Key('settingsStartupPageItem'),
+      icon: Icons.rocket_launch_rounded,
+      title: l10n.settingsStartupPageTitle,
+      subtitle: homeVisible
+          ? l10n.settingsStartupPageSubtitle
+          : l10n.settingsStartupPageHidden(
+              _destinationLabel(l10n, home),
+              _destinationLabel(l10n, nav.effectiveHomeDestination),
+            ),
+      value: home,
+      options: [
+        for (final destination in nav.order)
+          (destination, _destinationLabel(l10n, destination)),
+      ],
+      // 隐藏项禁用（想选先显示）：禁用保持分段布局稳定。
+      optionEnabled: nav.isVisible,
+      onChanged: nav.setHomeDestination,
+      icons: {
+        for (final destination in ShellDestination.values)
+          destination: destination.settingsIcon,
+      },
+    );
+  }
+}
+
 /// 底部导航定制：拖拽排序 + 显示/隐藏（至少保留 1 个），即时生效并持久化。
 ///
 /// 行是标准设置开关行（[SettingsSwitchTile]）；拖拽手柄挂在行尾
@@ -224,18 +278,19 @@ class _BottomNavSettings extends StatelessWidget {
     int index,
   ) {
     final scheme = Theme.of(context).colorScheme;
-    final label = switch (destination) {
-      ShellDestination.nowPlaying => l10n.nowPlayingLabel,
-      ShellDestination.favorites => l10n.favoritesLabel,
-      ShellDestination.library => l10n.libraryLabel,
-    };
+    final label = _destinationLabel(l10n, destination);
+    // 启动首页锁定：置灰并要求先改首页；已是不可见的不一致态不禁用，
+    // 否则用户无法把它重新打开（想关先改首页只在可见时成立）。
+    final locked =
+        destination == nav.homeDestination && nav.isVisible(destination);
 
     return SettingsSwitchTile(
       // 图标用实心变体（与底栏/侧栏选中态一致，识别度更好）。
       icon: destination.settingsIcon,
       title: label,
-      subtitle: '',
+      subtitle: locked ? l10n.settingsBottomNavKeepHome : '',
       value: nav.isVisible(destination),
+      enabled: !locked,
       trailing: ReorderableDragStartListener(
         index: index,
         child: Icon(
@@ -244,6 +299,7 @@ class _BottomNavSettings extends StatelessWidget {
         ),
       ),
       onChanged: (bool value) async {
+        // 置灰后正常不可达；留作并发/同步改变状态时的兜底拒绝提示。
         final accepted = await nav.setVisible(destination, value);
         if (!accepted && context.mounted) {
           Provider.of<NotificationService>(context, listen: false)

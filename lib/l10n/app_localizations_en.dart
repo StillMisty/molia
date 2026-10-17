@@ -244,6 +244,21 @@ class AppLocalizationsEn extends AppLocalizations {
   String get settingsBottomNavKeepOne => 'Keep at least one tab visible';
 
   @override
+  String get settingsBottomNavKeepHome =>
+      'This page is the startup page — change “Startup page” first';
+
+  @override
+  String get settingsStartupPageTitle => 'Startup page';
+
+  @override
+  String get settingsStartupPageSubtitle => 'Page opened when the app starts';
+
+  @override
+  String settingsStartupPageHidden(String page, String effective) {
+    return '“$page” is hidden; the app opens “$effective” instead';
+  }
+
+  @override
   String get playModeSequential => 'Sequential';
 
   @override
@@ -913,6 +928,24 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get nextTrackTooltip => 'Next track';
+
+  @override
+  String get previousTrackTooltip => 'Previous track';
+
+  @override
+  String get playerBarVolume => 'Volume';
+
+  @override
+  String get playerBarMute => 'Mute';
+
+  @override
+  String get playerBarUnmute => 'Unmute';
+
+  @override
+  String get playerBarQueue => 'Queue';
+
+  @override
+  String get queuePanelNowPlaying => 'Now playing';
 
   @override
   String get windowMinimize => 'Minimize';

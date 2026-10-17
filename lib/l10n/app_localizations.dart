@@ -536,6 +536,30 @@ abstract class AppLocalizations {
   /// **'Keep at least one tab visible'**
   String get settingsBottomNavKeepOne;
 
+  /// No description provided for @settingsBottomNavKeepHome.
+  ///
+  /// In en, this message translates to:
+  /// **'This page is the startup page — change “Startup page” first'**
+  String get settingsBottomNavKeepHome;
+
+  /// No description provided for @settingsStartupPageTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Startup page'**
+  String get settingsStartupPageTitle;
+
+  /// No description provided for @settingsStartupPageSubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Page opened when the app starts'**
+  String get settingsStartupPageSubtitle;
+
+  /// No description provided for @settingsStartupPageHidden.
+  ///
+  /// In en, this message translates to:
+  /// **'“{page}” is hidden; the app opens “{effective}” instead'**
+  String settingsStartupPageHidden(String page, String effective);
+
   /// No description provided for @playModeSequential.
   ///
   /// In en, this message translates to:
@@ -1747,6 +1771,42 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Next track'**
   String get nextTrackTooltip;
+
+  /// No description provided for @previousTrackTooltip.
+  ///
+  /// In en, this message translates to:
+  /// **'Previous track'**
+  String get previousTrackTooltip;
+
+  /// No description provided for @playerBarVolume.
+  ///
+  /// In en, this message translates to:
+  /// **'Volume'**
+  String get playerBarVolume;
+
+  /// No description provided for @playerBarMute.
+  ///
+  /// In en, this message translates to:
+  /// **'Mute'**
+  String get playerBarMute;
+
+  /// No description provided for @playerBarUnmute.
+  ///
+  /// In en, this message translates to:
+  /// **'Unmute'**
+  String get playerBarUnmute;
+
+  /// No description provided for @playerBarQueue.
+  ///
+  /// In en, this message translates to:
+  /// **'Queue'**
+  String get playerBarQueue;
+
+  /// No description provided for @queuePanelNowPlaying.
+  ///
+  /// In en, this message translates to:
+  /// **'Now playing'**
+  String get queuePanelNowPlaying;
 
   /// No description provided for @windowMinimize.
   ///

@@ -124,8 +124,11 @@ Future<LyricsDisplayStack> buildLyricsDisplayStack({
   // 会话的当前封面已在本地缓存时取色——进入应用即封面色，不再先出基础
   // 配色（莫奈）再渐变；未命中不等待网络，回退上面的稳态链路（settleDelay
   // 后取色再过渡）。
-  // 主题偏好与播放偏好（恢复会话解析）互不依赖：并行等待。
-  await (themeProvider.preferencesReady, playback.preferencesReady).wait;
+  // 主题偏好 / 播放偏好（恢复会话解析）/ 导航偏好（启动首页）互不依赖：
+  // 并行等待——启动首页必须在首帧前就绪，否则会先亮默认页再跳。
+  await (themeProvider.preferencesReady, playback.preferencesReady,
+          navProvider.preferencesReady)
+      .wait;
   themeProvider.applyPlatformBrightness(
     WidgetsBinding.instance.platformDispatcher.platformBrightness,
   );

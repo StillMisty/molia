@@ -234,6 +234,20 @@ class AppLocalizationsZh extends AppLocalizations {
   String get settingsBottomNavKeepOne => '至少保留 1 个标签';
 
   @override
+  String get settingsBottomNavKeepHome => '该页正在作为启动首页，请先在「启动时打开」中更改';
+
+  @override
+  String get settingsStartupPageTitle => '启动时打开';
+
+  @override
+  String get settingsStartupPageSubtitle => '打开应用时默认进入的页面';
+
+  @override
+  String settingsStartupPageHidden(String page, String effective) {
+    return '「$page」已隐藏，启动时实际打开「$effective」';
+  }
+
+  @override
   String get playModeSequential => '顺序播放';
 
   @override
@@ -878,6 +892,24 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get nextTrackTooltip => '下一首';
+
+  @override
+  String get previousTrackTooltip => '上一首';
+
+  @override
+  String get playerBarVolume => '音量';
+
+  @override
+  String get playerBarMute => '静音';
+
+  @override
+  String get playerBarUnmute => '取消静音';
+
+  @override
+  String get playerBarQueue => '播放队列';
+
+  @override
+  String get queuePanelNowPlaying => '正在播放';
 
   @override
   String get windowMinimize => '最小化';

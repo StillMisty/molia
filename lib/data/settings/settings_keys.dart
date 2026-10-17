@@ -67,6 +67,12 @@ const kShellNavHidden = SettingsKey<List<String>>(
   <String>[],
   category: SyncCategory.settings,
 );
+/// 启动首页（跟人走，随设置同步）。值 = ShellDestination.name；非法值回退默认。
+const kShellHomeDestination = SettingsKey<String>(
+  'shell_home_destination',
+  'nowPlaying',
+  category: SyncCategory.settings,
+);
 const kDefaultPlayMode = SettingsKey<String>(
   'default_play_mode',
   'sequential',
@@ -176,6 +182,7 @@ const List<SettingsKey<Object?>> kAllSettingsKeys = [
   kSelectedLanguage,
   kShellNavOrder,
   kShellNavHidden,
+  kShellHomeDestination,
   kDefaultPlayMode,
   kRestoreSessionEnabled,
   kPlayStatisticsEnabled,

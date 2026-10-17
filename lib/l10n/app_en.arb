@@ -94,6 +94,20 @@
   "settingsBottomNavTitle": "Bottom navigation",
   "settingsBottomNavHint": "Drag to reorder; toggle to show or hide a tab (at least one stays visible)",
   "settingsBottomNavKeepOne": "Keep at least one tab visible",
+  "settingsBottomNavKeepHome": "This page is the startup page — change “Startup page” first",
+  "settingsStartupPageTitle": "Startup page",
+  "settingsStartupPageSubtitle": "Page opened when the app starts",
+  "settingsStartupPageHidden": "“{page}” is hidden; the app opens “{effective}” instead",
+  "@settingsStartupPageHidden": {
+    "placeholders": {
+      "page": {
+        "type": "String"
+      },
+      "effective": {
+        "type": "String"
+      }
+    }
+  },
   "playModeSequential": "Sequential",
   "playModeShuffle": "Shuffle",
   "playModeSingleRepeat": "Single repeat",
@@ -418,6 +432,12 @@
   "playAll": "Play all",
   "playAllShuffled": "Shuffle all",
   "nextTrackTooltip": "Next track",
+  "previousTrackTooltip": "Previous track",
+  "playerBarVolume": "Volume",
+  "playerBarMute": "Mute",
+  "playerBarUnmute": "Unmute",
+  "playerBarQueue": "Queue",
+  "queuePanelNowPlaying": "Now playing",
   "windowMinimize": "Minimize",
   "windowMaximize": "Maximize",
   "windowRestore": "Restore",

@@ -12,12 +12,13 @@ final logger = Logger('molia.nav_provider');
 /// 底栏渲染与选中映射，不移动 IndexedStack 子节点，页面状态天然保持。
 enum ShellDestination { nowPlaying, favorites, library }
 
-/// 底部导航定制：顺序 + 显示/隐藏，SharedPreferences 持久化。
+/// 底部导航定制：顺序 + 显示/隐藏 + 启动首页，SharedPreferences 持久化。
 class NavProvider extends ChangeNotifier {
   NavProvider({SettingsRegistry? settings})
       : _settings = settings ?? SettingsRegistry(keys: kAllSettingsKeys) {
     _settings.bindReload(kShellNavOrder, reloadFromPreferences);
     _settings.bindReload(kShellNavHidden, reloadFromPreferences);
+    _settings.bindReload(kShellHomeDestination, reloadFromPreferences);
     _preferencesReady = _loadPreferences();
   }
 
@@ -32,6 +33,10 @@ class NavProvider extends ChangeNotifier {
 
   List<ShellDestination> _order = List<ShellDestination>.of(defaultOrder);
   final Set<ShellDestination> _hidden = <ShellDestination>{};
+
+  /// 存储的启动首页；同步推来的 hidden 列表可能让它当前不可见（见
+  /// [effectiveHomeDestination]）。
+  ShellDestination _homeDestination = ShellDestination.nowPlaying;
 
   late final Future<void> _preferencesReady;
 
@@ -52,11 +57,32 @@ class NavProvider extends ChangeNotifier {
   bool isVisible(ShellDestination destination) =>
       !_hidden.contains(destination);
 
-  /// 切换显示/隐藏；隐藏最后一项时拒绝并返回 false。
+  /// 存储的启动首页（可能因同步隐藏而当前不可见）。
+  ShellDestination get homeDestination => _homeDestination;
+
+  /// 有效启动首页：存储值可见则用它；不可见时按 [order] 取第一个可见项。
+  /// 纯内存兜底，不写存储（同步应用期间写回会造成回环）。
+  ShellDestination get effectiveHomeDestination => isVisible(_homeDestination)
+      ? _homeDestination
+      : _order.firstWhere(isVisible, orElse: () => _order.first);
+
+  /// 设置启动首页：立即生效并持久化。
+  Future<void> setHomeDestination(ShellDestination destination) async {
+    // 重复选中同一项不触发写入：避免制造一次内容无变化的同步变更。
+    if (_homeDestination == destination) return;
+    _homeDestination = destination;
+    notifyListeners();
+    await _persist();
+  }
+
+  /// 切换显示/隐藏；隐藏启动首页或最后一项时拒绝并返回 false。
   Future<bool> setVisible(ShellDestination destination, bool visible) async {
     if (visible) {
       if (_hidden.remove(destination)) notifyListeners();
     } else {
+      // 启动首页锁定：想关先改首页。已隐藏的不一致态走上面的显示分支解除，
+      // 因此这里不会把「已被同步隐藏的首页」也堵死（给出路，避免死锁）。
+      if (destination == _homeDestination) return false;
       if (visibleDestinations.length <= 1) return false;
       if (_hidden.add(destination)) notifyListeners();
     }
@@ -106,6 +132,12 @@ class NavProvider extends ChangeNotifier {
           _hidden.remove(_order.first);
         }
       }
+      // 非法 / 旧版本值回退默认播放页（与键默认值一致）。
+      final homeName = await _settings.read(kShellHomeDestination);
+      _homeDestination = ShellDestination.values.firstWhere(
+        (destination) => destination.name == homeName,
+        orElse: () => ShellDestination.nowPlaying,
+      );
       notifyListeners();
     } catch (e) {
       logger.severe('加载底部导航偏好失败: $e');
@@ -122,6 +154,7 @@ class NavProvider extends ChangeNotifier {
         kShellNavHidden,
         _hidden.map((destination) => destination.name).toList(),
       );
+      await _settings.write(kShellHomeDestination, _homeDestination.name);
     } catch (e) {
       logger.severe('保存底部导航偏好失败: $e');
     }
