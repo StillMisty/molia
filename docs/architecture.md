@@ -365,9 +365,22 @@
 
 ### 本地下载（downloads）
 
-`lib/services/download/download_service.dart` 是单曲下载的唯一实现，
-组合根（`main.dart`）注入取链 / 取词 / 取图 / 缓存 / 设置与省流上限：
+`lib/services/download/download_service.dart` 是单曲下载的唯一编排实现
+（下载一首 / 一批），组合根（`main.dart`）注入取链 / 取词 / 取图 / 缓存 /
+设置与省流上限；命名 / 放置、记录装配与通知 presenter 是三个独立 module
+（见下）：
 
+- **模块拆分**：`DownloadService` 只做编排，三个 module 各有一份唯一实现——
+  `lib/services/download/download_file_layout.dart`（命名 / 放置：文件名模板 →
+  基名 → sanitize → 磁盘与记录双重查重的 ` (2)` 去重 → 音频 / `.part` /
+  `lyrics/` + `.t.lrc` 翻译边车 / `covers/` 路径约定与 sidecar 写入回滚 →
+  扩展名推断 → 记录引用文件集，删除 / 失败清理 / 孤儿判定共用）、
+  `lib/services/download/download_record_assembler.dart`（记录装配：部分状态 →
+  `DownloadedTrack` 16 字段的唯一装配点，五种形态各一个意图方法）、
+  `lib/services/download/download_notification_presenter.dart`（通知 presenter：
+  单任务 / 批量 id 分配、批量共享一条「N/N」、500ms 系统频率节流、收尾只收自己
+  起过的；端口 / 设置 / 时钟可注入）。命名不再有「测试双胞胎」，测试直接打生产
+  实现；
 - **目录与位置**：下载根目录按平台解析（`IoDownloadStorage`）——桌面 =
   系统下载目录下 `Molia/`（Linux 读 XDG `XDG_DOWNLOAD_DIR`，回退
   `~/Downloads`；Windows `%USERPROFILE%\Downloads`），iOS = 应用文档目录
@@ -448,7 +461,8 @@
   曲目禁用网络回退（离线播放不触网）；
 - **下载通知（Android）**：`DownloadNotificationService`（`dataSync` 前台服务）+ 通道
   `top.stillmisty.molia/download_notifications`，Dart 侧 seam
-  `lib/data/downloads/download_notifications*.dart`；进行中显示进度（批量共享
+  `lib/data/downloads/download_notifications*.dart`（生命周期编排在通知
+  presenter 模块）；进行中显示进度（批量共享
   「N/N」），完成 / 失败 / 取消收尾；API 33+ 未授权通知 → 降级为无通知继续下载；
   开关 `download_notifications`（设备本地键，默认开）。
 - **同步过滤**：歌单曲目 / 历史 / 统计 / 播放会话适配器都过滤
