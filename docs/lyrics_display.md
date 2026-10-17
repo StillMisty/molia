@@ -41,7 +41,7 @@ Molia 当前只有在播放页内渲染的滚动歌词。桌面悬浮歌词、�
 | 播放状态 | `PlaybackProvider.snapshot`（`PlaybackSnapshot`，低频通知） | 用于曲目变化、播放/暂停、seek 后重算。 |
 | 歌词会话 | `LyricsProvider`（`LyricsState`：`trackId/status/lines/isSynced/providerName`） | 新增翻译/罗马音字段；输出开启且曲目变化时由组合根触发 `load`（不再依赖播放页打开）。 |
 | 取词 | `LyricsService`：缓存 → 曲目原生（`SourceManager.fetchLyric`：脚本 / any-listen / 内置五平台）→ 名字搜索（netease/qq/kugou/kuwo/migu/lrclib，首个非空即返回） | 结构化返回（原文 + 翻译 + 罗马音 + 逐字），缓存兼容；v2 起平台原生优先。 |
-| 系统媒体会话 | `LocalAudioHandler`（audio_service，Android/iOS/macOS） | 增加元数据覆盖（歌词行），不改 `LocalPlaybackService`。 |
+| 系统媒体会话 | `LocalAudioHandler`（flutter_media_session / Linux MPRIS，Android/iOS/macOS/Windows/Linux） | 增加元数据覆盖（歌词行），不改 `LocalPlaybackService`；后端可注入（见 ADR-0010）。 |
 | 设置持久化 | `DataSaverService`（SharedPreferences + ChangeNotifier）为范本 | 新 `LyricsDisplaySettings` 同模式，单 JSON 键 + 版本号。 |
 | 分层约束 | `test/architecture/layering_test.dart` R1–R5 | 新代码放 `lib/services/`、`lib/providers/`，不新增违规。 |
 
@@ -480,7 +480,7 @@ abstract class LyricsOutput {
 | 调度 | `lib/providers/lyrics_display_provider.dart` | 去重投送、自动取词、动作分发、能力查询、位置采样时刻与滚动跨度 |
 | 桌面歌词（Dart） | `lib/services/lyrics_display/desktop_lyrics_output.dart`、`lyrics_channel.dart` | 通道封装 + 窗口生命周期（暂停隐藏 / 恢复重显）+ 暂停与无歌词回退映射 |
 | 桌面歌词（原生） | `android/.../lyrics/LyricsChannelHandler.kt`、`LyricsOverlayController.kt`、`LyricsOverlayView.kt`、`LyricClock.kt`、`MainActivity.kt`、`AndroidManifest.xml` | 悬浮窗渲染（整行 + 逐字渐染 + 横向滚动）/ 位置时钟（`LyricClock` + `LyricSpring`）/拖动/锁定/M3E 控制条/息屏冻结/A2DP 监测；控制条图标在 `res/drawable/ic_lyrics_*` |
-| 媒体元数据 | `lib/services/lyrics_display/media_lyric_composer.dart`、`media_lyric_output.dart`、`lib/playback/local_audio_handler.dart` | 通知/锁屏 + 蓝牙 profile 合成 → `MediaItem` 覆盖；通知动作图标在 `res/drawable/audio_service_*`（`res/raw/keep.xml` 防资源压缩，见已知坑 34） |
+| 媒体元数据 | `lib/services/lyrics_display/media_lyric_composer.dart`、`media_lyric_output.dart`、`lib/playback/local_audio_handler.dart` | 通知/锁屏 + 蓝牙 profile 合成 → `MediaMetadata` 覆盖（`displaySubtitle` 无对应字段，忽略）；播放顺序动作图标在 `res/drawable/audio_service_*`（`res/raw/keep.xml` 防资源压缩，见已知坑 34） |
 | 设置页 | `lib/pages/settings_page.dart`、`lib/pages/lyrics_display/*` | 首屏三条直达入口（桌面歌词 / 歌词与输出 / 系统媒体歌词）；歌词页分组 + 输出共享分组 + 预览 + 权限引导；主题种子色与歌词颜色共用任意调色器 |
 | 颜色系统 | `lib/services/lyrics_display/lyric_color_resolver.dart`、`lib/theme/scheme_builder.dart`、`lib/services/artwork_palette_service.dart` | 跟随主题 / 跟随封面经同一解析函数与同一份封面色板；通用 HSV/Hex 任意取色 |
 | 测试 | `test/lyric_line_tracker_test.dart`、`test/services/media_lyric_composer_test.dart`、`test/services/lyrics_display_settings_test.dart`、`test/services/lyrics_display_provider_test.dart`、`test/services/desktop_lyrics_output_test.dart`、`test/services/audio_route_monitor_test.dart`、`test/services/lyrics_cache_translation_test.dart`、`test/lyrics_provider_translation_test.dart` | 单一新 seam：`LyricsOutput` 假输出 |

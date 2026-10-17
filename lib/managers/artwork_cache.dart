@@ -275,6 +275,38 @@ class ArtworkCache {
     }
   }
 
+  /// 取得封面的本地文件路径（系统媒体会话封面用）。
+  ///
+  /// 先查持久缓存；未命中时用统一请求头（浏览器 UA + 平台 Referer）下载，
+  /// 修复网易云等 CDN 对 Dart / WinRT 默认 UA 的 403。**省流网关在这里同样
+  /// 生效**：`networkImageBlocked` 为 true 时只读本地缓存、绝不触网——
+  /// `getSingleFile` 走 `CacheManager.downloadFile`，绕过了
+  /// [ArtworkCacheManager.getFileStream] 的拦截，必须在此显式判断。
+  ///
+  /// 失败 / 平台不可用返回 null（调用方回退远程 URL 或空封面），不影响播放。
+  Future<String?> cachedFilePath(String url) async {
+    if (url.isEmpty) return null;
+    try {
+      final manager = await managerOrNull();
+      if (manager == null) return null;
+      final cached = await manager.getFileFromCache(url);
+      if (cached != null && await cached.file.exists()) {
+        return cached.file.path;
+      }
+      if (networkImageBlocked?.call() ?? false) return null;
+      final downloaded = await manager.getSingleFile(
+        url,
+        headers: headersFor(url),
+      );
+      if (!await downloaded.exists()) return null;
+      return downloaded.path;
+    } catch (e) {
+      // 省流拦截 / 网络失败 / 404 都按「没有本地封面」处理。
+      _logger.fine('系统媒体会话封面本地化失败: $e');
+      return null;
+    }
+  }
+
   /// 把已取得的封面字节写入持久缓存（下载取图后回填，后续命中缓存）。
   Future<void> putBytes(String url, Uint8List bytes) async {
     if (url.isEmpty || bytes.isEmpty) return;

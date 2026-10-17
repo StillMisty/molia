@@ -75,12 +75,13 @@
     格式 / 蓝牙门控都在 `LyricsDisplayProvider` 与输出映射层完成，原生只渲染与上报
     交互；新增输出实现 `LyricsOutput` 接口即可（桌面平台输出等 Flutter windowing
     进入 stable 后再接，见 `docs/lyrics_display.md` §11）。
-18. **audio_service 通知小图标必须指向真实存在的 drawable**：媒体通知 small icon 在
-    `local_audio_handler.dart` 显式指定 `drawable/ic_notification`（品牌矢量 + 16% inset）。
-    audio_service 默认值是 `mipmap/ic_launcher`，本项目已随传统密度图一起移除；通知
-    不支持自适应图标（`mipmap/launcher_icon`），资源 ID=0 时 `NotificationManager`
-    抛「Invalid notification (no valid small icon)」**直接崩溃进程**（首次播放即崩）。
-    换启动图标时同步维护该 drawable。
+18. **通知 small icon 必须指向真实存在的 drawable**：Android 通知不支持自适应图标
+    （`mipmap/launcher_icon`），资源 ID=0 时 `NotificationManager` 抛
+    「Invalid notification (no valid small icon)」**直接崩溃进程**。
+    下载通知在 `DownloadNotifications.kt` 显式引用 `drawable/ic_notification`
+    （品牌矢量 + 16% inset）；系统媒体会话（Media3 / `flutter_media_session`）
+    的 small icon 由插件内部提供，不依赖本仓库资源。
+    换启动图标时同步维护 `ic_notification`。
 19. **Impeller 下不要用 `Image.color` 着色**：GLES 后端（模拟器/部分真机）会给图片
     绘制矩形的四条边加 1px 半透明色线（Skia 无此问题，属引擎边缘采样伪影）。
     品牌图标统一走 `ColorFiltered` + `BlendMode.srcIn` 着色（见 `molia_mark.dart` /
@@ -195,18 +196,18 @@
     `pactl load-module module-null-sink` → `pactl set-default-sink`，
     并在同一步 export `XDG_RUNTIME_DIR`（daemon 与客户端的 socket 都靠它）。
     另：mock 音频时长要留足（现为 30s），别用 3s——慢 runner 上起播本身就要几秒。
-34. **release 的 `shrinkResources` 会删掉「字符串引用」的资源，媒体通知直接不出现**：
+34. **release 的 `shrinkResources` 会删掉「字符串引用」的资源，通知直接不出现**：
     release 开了 `minifyEnabled + shrinkResources`，AAPT 只按静态引用判定资源存活；
-    `ic_notification`（Dart 侧 `androidNotificationIcon` 按字符串引用）与
-    `audio_service_*` 七个动作图标（audio_service 运行时 `getIdentifier`）在代码里
-    看不到引用，发布包里会被整个删掉。后果不是「图标退化成默认」而是**通知完全发不出来**：
-    Android 13+ 构建「停止」CustomAction 时 icon id=0 →
-    `IllegalArgumentException: You must specify an icon resource id to build a CustomAction`
-    → 通知构建中途中止、媒体会话状态停更——真机表现为通知栏完全没有播放卡片，
-    而 debug 包（不压缩资源）一切正常，极易误判成 ROM（如 ColorOS）问题。
-    修复：`android/app/src/main/res/raw/keep.xml` 用 `tools:keep` 保留
-    `@drawable/ic_notification,@drawable/audio_service_*`；`release.yml` 加了产物校验。
-    今后新增任何「字符串引用」的资源（自定义 MediaControl 图标等）都要同步进 keep.xml。
+    `ic_notification`（下载通知按字符串配置）与 `audio_service_*` 播放顺序图标
+    （`flutter_media_session` 运行时 `getIdentifier`）在代码里看不到引用，发布包里
+    会被整个删掉。后果不是「图标退化成默认」而是**通知完全发不出来**：
+    Media3 / NotificationCompat 构建动作时 icon id=0 直接抛
+    `IllegalArgumentException` → 通知构建中止、媒体会话状态停更——真机表现为
+    通知栏没有播放卡片，而 debug 包（不压缩资源）一切正常，极易误判成 ROM
+    （如 ColorOS）问题。修复：`android/app/src/main/res/raw/keep.xml` 用
+    `tools:keep` 保留 `@drawable/ic_notification,@drawable/audio_service_*`；
+    `release.yml` 加了产物校验。
+    今后新增任何「字符串引用」的资源（自定义动作图标等）都要同步进 keep.xml。
 35. **托盘对象必须长期持有（nativeapi finalizer），且 Linux 必须显式设置菜单触发方式**：
     `tray_manager 0.8` 的 `TrayIcon` / `Menu` / `MenuItem` / `Image` 都挂 nativeapi
     的 finalizer，对象被 GC 时会释放原生句柄——托盘图标或菜单会从系统里

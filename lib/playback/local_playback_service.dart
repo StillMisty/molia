@@ -71,9 +71,8 @@ class LocalPlaybackService extends ChangeNotifier {
   PlayMode _mode = PlayMode.sequential;
 
   /// 队列内容版本号：任何队列变更（装载 / 追加 / 原地替换 / 补图 / 清空）
-  /// 自增。系统媒体会话用它做 O(1) 的「队列是否真的变了」判定——避免位置
-  /// tick 也把整份队列重发给平台（audio_service 每次 queue 变更都会全量
-  /// 序列化队列 + MethodChannel 传输）。
+  /// 自增。O(1) 的「队列是否真的变了」判定（位置 tick 不算变更）；
+  /// 系统媒体会话不再消费整份队列，保留给外部观察者与测试。
   int _queueRevision = 0;
   int get queueRevision => _queueRevision;
 

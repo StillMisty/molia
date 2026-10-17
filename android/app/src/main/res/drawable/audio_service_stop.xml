@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- 媒体通知「停止」动作图标（覆盖 audio_service 插件的位图默认图）。
+<!-- 系统媒体会话自定义动作「停止」动作图标。
      圆角方块：与 M3E 组件的圆角语言一致，避免插件默认图的生硬直角观感。 -->
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
     android:width="24dp"

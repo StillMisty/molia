@@ -6,7 +6,9 @@
     <!-- Add necessary permissions -->
     <uses-permission android:name="android.permission.INTERNET"/>
 
-    <!-- audio_service：后台播放前台服务与媒体通知（Android 13+ 通知权限） -->
+    <!-- 系统媒体会话（flutter_media_session / Media3）：后台播放前台服务与
+         媒体通知；POST_NOTIFICATIONS 由应用按业务时机（首次真正播放 /
+         首次开启歌词输出）请求，不在冷启动时弹窗。 -->
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE"/>
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK"/>
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
@@ -45,26 +47,6 @@
                 android:name="autoStoreLocales"
                 android:value="true"/>
         </service>
-
-        <!-- audio_service：后台播放前台服务与媒体按钮接收器 -->
-        <service
-            android:name="com.ryanheise.audioservice.AudioService"
-            android:foregroundServiceType="mediaPlayback"
-            android:exported="true"
-            tools:ignore="Instantiatable">
-            <intent-filter>
-                <action android:name="android.media.browse.MediaBrowserService" />
-            </intent-filter>
-        </service>
-
-        <receiver
-            android:name="com.ryanheise.audioservice.MediaButtonReceiver"
-            android:exported="true"
-            tools:ignore="Instantiatable">
-            <intent-filter>
-                <action android:name="android.intent.action.MEDIA_BUTTON" />
-            </intent-filter>
-        </receiver>
 
         <!-- 下载：进度通知 + 后台继续下载的 dataSync 前台服务（Dart 侧
              `lib/data/downloads/download_notifications*.dart` 驱动） -->

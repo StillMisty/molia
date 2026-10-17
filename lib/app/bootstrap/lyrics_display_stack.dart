@@ -75,7 +75,7 @@ Future<LyricsDisplayStack> buildLyricsDisplayStack({
         a2dpConnected: () => audioRouteMonitor.connected,
       ),
     ],
-    // 平台支持媒体会话但初始化失败（audio_service init 返回 null）：
+    // 平台支持媒体会话但初始化失败（initSystemMediaSession 返回 null）：
     // 歌词显示设置页据此给出可见提示，而不是静默隐藏输出分组。
     mediaSessionInitFailed:
         isSystemMediaSessionSupported && audioHandler == null,
