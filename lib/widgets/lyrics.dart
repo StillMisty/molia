@@ -923,7 +923,7 @@ class _LyricsWidgetState extends State<LyricsWidget>
                 final String lineRoma =
                     index < _session.romas.length ? _session.romas[index] : '';
                 // 扩展行逐行渲染：有数据且歌词页开关打开就显示，空文本不占位
-                // （与海报 / 选择页同语义；不再只跟当前行）。
+                // （与海报 / 选择页同语义）。
                 final bool showTranslation =
                     lyricsDisplaySettings.pageTranslationEnabled &&
                         lineTranslation.isNotEmpty;

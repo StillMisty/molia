@@ -119,7 +119,8 @@ internal data class OverlayPresentation(
     /** 横向滚动映射：true = 跟随已唱边界（逐字）；false = 按行跨度线性匀速。 */
     val scrollFollowsSinging: Boolean = true,
     /** 横向滚动的线性映射跨度（-1 = 未知）：无逐字数据时是行时间轴，
-     *  匀速模式下 Dart 侧已换成「首词开始 → 末词结束」。 */
+     *  匀速模式下 Dart 侧已换成「首词开始 → 末词结束」（终点越过切行
+     *  时刻时夹到行尾）；跟随演唱模式下作为提前收尾的兜底口径。 */
     val lineStartMs: Long = -1L,
     val lineEndMs: Long = -1L,
     /** 当前行的逐字时间轴（null = 无逐字数据，按整行着色）。 */
@@ -709,7 +710,7 @@ internal class LyricsOverlayView(
             val view: TextView =
                 if (entry.isCurrent) {
                     CurrentLineView(context).also {
-                        it.onLayoutChanged = ::onLineLayoutChanged
+                        it.onLayoutChanged = ::reapplyGroupScroll
                         currentLineView = it
                     }
                 } else {
@@ -755,12 +756,9 @@ internal class LyricsOverlayView(
             entryViews.add(view)
             if (entry.isCurrent || entry.isExtended) scrollGroup.add(view)
         }
-        // 整列布局完成后重算一次组偏移：LinearLayout 先布局主行，主行的
-        // onSizeChanged 会先算一次（此时翻译 / 罗马音行还没布局，宽度为 0，
-        // 其 x 会被写成 0 左缘）；列级回调在所有子视图布局之后触发，保证
-        // 同一帧绘制前滚动组都在正确位置（暂停时没有后续帧，必须在这里纠正）。
+        // 整列（含扩展行）布局完成后重排滚动组偏移，见 [reapplyGroupScroll]。
         column.addOnLayoutChangeListener { _, _, _, _, _, _, _, _, _ ->
-            onColumnLaidOut()
+            reapplyGroupScroll()
         }
         return column
     }
@@ -865,20 +863,15 @@ internal class LyricsOverlayView(
         if (shouldKeepFrames()) scheduleFrame()
     }
 
-    /** 行视图尺寸 / Layout 变化：偏移与裁剪都依赖视图宽，补一帧。 */
-    private fun onLineLayoutChanged() {
-        applyFrame(advance = false)
-        if (shouldKeepFrames()) scheduleFrame()
-    }
-
     /**
-     * 整列（含翻译 / 罗马音）布局完成：重算并落位组偏移。
+     * 重新落位滚动组：行视图 / 整列布局完成后调用。
      *
      * 不能只依赖主行 [CurrentLineView.onLayoutChanged]：一次布局中主行先于
-     * 扩展行完成，扩展行的宽度此时还是 0，x 会被算成 0；列级回调保证所有
-     * 滚动组成员拿到真实宽度后再摆位。
+     * 扩展行完成，扩展行的宽度此时还是 0，x 会被算成 0；列级回调在所有
+     * 滚动组成员拿到真实宽度后触发，保证同一帧绘制前摆位正确（暂停时没有
+     * 后续帧，必须在这里纠正）。
      */
-    private fun onColumnLaidOut() {
+    private fun reapplyGroupScroll() {
         applyFrame(advance = false)
         if (shouldKeepFrames()) scheduleFrame()
     }

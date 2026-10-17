@@ -387,5 +387,5 @@
     回调纠正**（暂停时没有帧循环）——表现为「切翻译时闪到左侧再恢复」。纠正
     挂在整列的 `addOnLayoutChangeListener`（ViewGroup 先 `onLayout()` 子视图、
     后回调），在同一帧绘制前用真实宽度重摆；`DesktopLyricsOutput.start` 同步
-    按配置去重（`controls` 是每次现取的 unmodifiable map，按键值比较），
-    任何设置变化都重建的老行为会放大这个闪动。
+    按配置去重（`controls` 是每次现取的 unmodifiable map，按键值比较）——
+    不去重时任何设置变化都会触发重建，会放大这个闪动。

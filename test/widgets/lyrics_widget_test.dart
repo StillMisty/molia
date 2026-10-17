@@ -367,8 +367,7 @@ void main() {
       ),
     );
 
-    // 偶数行（10 / 12 / 14）各自有翻译就渲染，不再只跟当前行；
-    // 奇数行无翻译不占位。
+    // 偶数行（10 / 12 / 14）各自有翻译就渲染；奇数行无翻译不占位。
     expect(find.text('译 10'), findsOneWidget);
     expect(find.text('译 12'), findsOneWidget);
     expect(find.text('译 14'), findsOneWidget);
