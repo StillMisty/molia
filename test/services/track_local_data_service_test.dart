@@ -161,6 +161,46 @@ void main() {
     expect(data.cachedQualities, ['320k', 'flac']);
   });
 
+  test('loadMany：一次列举批量出状态，半成品计入写入中不入缓存', () async {
+    final a = track();
+    final b = track(id: 'b');
+    await writeAudio(
+      CacheService.audioCacheKey(sourceKey: 'kw', songId: 'a', quality: '320k'),
+      100,
+    );
+    await writeAudio(
+      '${CacheService.audioCacheKey(sourceKey: 'kw', songId: 'a', quality: '320k')}'
+      '$audioCachePartSuffix',
+      50,
+    );
+
+    final data = await service.loadMany([a, b]);
+
+    expect(data['kw:a']!.audioState, LocalPartState.cached);
+    expect(data['kw:a']!.audioCache, const CacheUsage(bytes: 100, count: 1));
+    expect(data['kw:a']!.audioWriting.count, 1);
+    expect(data['kw:a']!.cachedQualities, ['320k']);
+    expect(data['kw:b']!.audioState, LocalPartState.none);
+  });
+
+  test('loadMany：下载记录附着为 downloaded 口径；空表不触存储', () async {
+    final a = track();
+    downloadService.record = DownloadedTrack(
+      originSourceKey: 'kw',
+      originSongId: 'a',
+      title: a.title,
+      artist: 'Artist',
+      album: '',
+      filePath: '/downloads/Title a.mp3',
+      downloadedAt: 1,
+    );
+
+    final data = await service.loadMany([a]);
+
+    expect(data['kw:a']!.audioState, LocalPartState.downloaded);
+    expect(await service.loadMany(const []), isEmpty);
+  });
+
   test('两档状态：无 → 已缓存 → 已下载（下载 > 缓存）', () async {
     final t = track();
     expect((await service.load(t)).audioState, LocalPartState.none);

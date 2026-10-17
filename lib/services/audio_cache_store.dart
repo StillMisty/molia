@@ -154,12 +154,21 @@ class AudioCacheStore {
   ///
   /// 一次目录列举，供「缓存曲目」列表（[keyPrefix] 前缀匹配）、单曲占用与
   /// [cachedQualitiesForTrack] 复用（避免逐曲探测）。
-  Future<Map<String, int>> index() async {
+  Future<Map<String, int>> index() async => (await splitIndex()).$1;
+
+  /// 一次目录列举，切分完整文件索引与半成品 / 边车索引。
+  ///
+  /// 批量读曲（[usageForTrackInFiles]）用：一次列举服务多曲，避免逐曲重列
+  /// 目录。
+  Future<(Map<String, int>, Map<String, int>)> splitIndex() async {
     final files = await this.files();
-    return {
-      for (final entry in files.entries)
-        if (isCompleteFileName(entry.key)) entry.key: entry.value,
-    };
+    final complete = <String, int>{};
+    final partials = <String, int>{};
+    for (final entry in files.entries) {
+      (isCompleteFileName(entry.key) ? complete : partials)[entry.key] =
+          entry.value;
+    }
+    return (complete, partials);
   }
 
   /// 单曲音频缓存占用（所有音质变体；只认完整文件）。
@@ -167,10 +176,19 @@ class AudioCacheStore {
     required String sourceKey,
     required String songId,
   }) async =>
-      _usageMatching(
+      usageForTrackInFiles(
         await index(),
-        keyPrefix(sourceKey: sourceKey, songId: songId),
+        sourceKey: sourceKey,
+        songId: songId,
       );
+
+  /// 从已列举的文件表统计单曲占用（批量读曲复用同一次列举）。
+  static CacheUsage usageForTrackInFiles(
+    Map<String, int> files, {
+    required String sourceKey,
+    required String songId,
+  }) =>
+      _usageMatching(files, keyPrefix(sourceKey: sourceKey, songId: songId));
 
   /// 单曲音频缓存「写入中」占用（半成品 / 边车）。
   ///
@@ -178,17 +196,12 @@ class AudioCacheStore {
   Future<CacheUsage> writingUsageForTrack({
     required String sourceKey,
     required String songId,
-  }) async {
-    final files = await this.files();
-    final partials = {
-      for (final entry in files.entries)
-        if (!isCompleteFileName(entry.key)) entry.key: entry.value,
-    };
-    return _usageMatching(
-      partials,
-      keyPrefix(sourceKey: sourceKey, songId: songId),
-    );
-  }
+  }) async =>
+      usageForTrackInFiles(
+        (await splitIndex()).$2,
+        sourceKey: sourceKey,
+        songId: songId,
+      );
 
   /// 前缀匹配统计（文件名 → 字节数）。
   static CacheUsage _usageMatching(Map<String, int> files, String prefix) {

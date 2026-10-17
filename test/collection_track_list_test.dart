@@ -463,14 +463,12 @@ void main() {
     test('缓存行：保留原曲身份，删除 = 清缓存（无下载记录）', () {
       final row = CollectionLocalSong.cached(
         history(coverUrl: 'https://cdn.example/cover.jpg'),
-        cachedSizeBytes: 2048,
       );
 
       expect(row.isCached, isTrue);
       expect(row.isImported, isFalse);
       expect(row.key, 'wy:1');
       expect(row.record, isNull);
-      expect(row.cachedSizeBytes, 2048);
       expect(row.artworkUri, 'https://cdn.example/cover.jpg');
       expect(row.favoriteKey, (sourceKey: 'wy', songId: '1'));
       final track = row.toPlaylistTrack(addedAt: 9);
@@ -488,10 +486,7 @@ void main() {
       );
       expect(CollectionLocalSong.download(download).durationMs, isNull);
       expect(
-        CollectionLocalSong.cached(
-          history(durationMs: null),
-          cachedSizeBytes: 1,
-        ).durationMs,
+        CollectionLocalSong.cached(history(durationMs: null)).durationMs,
         isNull,
       );
     });
