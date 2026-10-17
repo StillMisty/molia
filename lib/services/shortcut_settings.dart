@@ -142,6 +142,53 @@ class ShortcutSettings extends ChangeNotifier {
     return true;
   }
 
+  /// 互换两个动作的当前生效组合（设置页「冲突 → 替换」的落点）。
+  ///
+  /// 用户录到已被 [other] 占用的组合并确认替换后调用：[command] 拿到
+  /// [other] 原来的生效组合，[other] 退到 [command] 原来的生效组合。
+  /// 两边的覆盖都按 [setBinding] 同一归一化规则写入（等于各自默认 → 清
+  /// 覆盖，避免「回默认」按钮误亮），整组一次落盘。
+  ///
+  /// **为什么互换不破坏「同组无重复」不变量**：互换前组内每个动作的生效
+  /// 组合唯一，记 `command → a`、`other → b`。互换只改这两项为
+  /// `command → b`、`other → a`，其余动作映射原样不动：a ≠ b 时新映射仍
+  /// 两两不同；a == b 只可能来自损坏的存储，此时互换是恒等变换，也不会
+  /// 新增重复。两组合都取自本分组当前的生效值（各自满足分组校验），互换
+  /// 只是移动它们，无需重新校验。
+  ///
+  /// 边界：动作不属于该分组、`command == other` 一律拒绝（返回 false，
+  /// 不写入）。
+  Future<bool> swapBindings(
+    ShortcutScope scope,
+    ShortcutCommand command,
+    ShortcutCommand other,
+  ) async {
+    final defaults = ShortcutBindings.defaultsOf(scope);
+    if (command == other) return false;
+    if (!defaults.containsKey(command) || !defaults.containsKey(other)) {
+      return false;
+    }
+    final bindings = _bindingsOf(scope);
+    final commandCombo = bindings.comboFor(command);
+    final otherCombo = bindings.comboFor(other);
+    if (commandCombo == null || otherCombo == null) return false;
+    // 损坏存储可能让两组合相同（见文档注释）：恒等变换，不制造无意义写入。
+    if (commandCombo == otherCombo) return true;
+    final next = bindings
+        .withOverride(
+          command,
+          otherCombo == defaults[command] ? null : otherCombo,
+        )
+        .withOverride(
+          other,
+          commandCombo == defaults[other] ? null : commandCombo,
+        );
+    _setBindings(scope, next);
+    notifyListeners();
+    await _persist(scope);
+    return true;
+  }
+
   /// 该组合在系统级是否可注册（仅全局分组有意义）。
   ///
   /// `system_hotkeys` 只接受字母 / 数字 / F1–F12 / 空格（macOS 与 Windows 的

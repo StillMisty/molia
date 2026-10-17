@@ -3381,6 +3381,22 @@ class AppLocalizationsZh extends AppLocalizations {
   String get shortcutsGlobalNeedsModifier => '全局快捷键必须包含 Ctrl / Alt / Shift';
 
   @override
+  String get shortcutsSwapDialogTitle => '替换快捷键？';
+
+  @override
+  String shortcutsSwapDialogMessage(String action) {
+    return '「$action」已使用该组合，替换将互换两者的绑定。';
+  }
+
+  @override
+  String get shortcutsSwapConfirm => '替换';
+
+  @override
+  String shortcutsSwapDone(String action) {
+    return '已与「$action」互换绑定';
+  }
+
+  @override
   String get shortcutActionPlayPause => '播放 / 暂停';
 
   @override

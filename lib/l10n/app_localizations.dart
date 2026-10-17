@@ -6310,6 +6310,30 @@ abstract class AppLocalizations {
   /// **'Global shortcuts must include Ctrl / Alt / Shift'**
   String get shortcutsGlobalNeedsModifier;
 
+  /// No description provided for @shortcutsSwapDialogTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Replace shortcut?'**
+  String get shortcutsSwapDialogTitle;
+
+  /// No description provided for @shortcutsSwapDialogMessage.
+  ///
+  /// In en, this message translates to:
+  /// **'“{action}” already uses this combo. Replacing will swap the two bindings.'**
+  String shortcutsSwapDialogMessage(String action);
+
+  /// No description provided for @shortcutsSwapConfirm.
+  ///
+  /// In en, this message translates to:
+  /// **'Replace'**
+  String get shortcutsSwapConfirm;
+
+  /// No description provided for @shortcutsSwapDone.
+  ///
+  /// In en, this message translates to:
+  /// **'Swapped bindings with “{action}”'**
+  String shortcutsSwapDone(String action);
+
   /// No description provided for @shortcutActionPlayPause.
   ///
   /// In en, this message translates to:

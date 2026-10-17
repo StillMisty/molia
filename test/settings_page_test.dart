@@ -29,6 +29,9 @@ import 'package:molia/services/lyrics_display/lyrics_output.dart';
 import 'package:molia/services/lyrics_service.dart';
 import 'package:molia/services/notification_service.dart';
 import 'package:molia/services/play_statistics_service.dart';
+import 'package:molia/services/shortcut_bindings.dart';
+import 'package:molia/services/shortcut_settings.dart';
+import 'package:molia/services/shortcuts.dart';
 import 'package:molia/services/window/app_tray.dart';
 import 'package:molia/services/window/tray_settings.dart';
 import 'package:molia/sources/source_manager.dart';
@@ -621,6 +624,88 @@ void main() {
     // 组级恢复默认行两组都有（全默认时置灰，仍占位）。
     expect(find.byKey(const Key('shortcutResetAll_inApp')), findsOneWidget);
     expect(find.byKey(const Key('shortcutResetAll_global')), findsOneWidget);
+  }, variant: TargetPlatformVariant.only(TargetPlatform.linux));
+
+  testWidgets('通用子页：快捷键冲突弹确认层，替换后互换两者绑定', (tester) async {
+    // 快捷键状态是单例：接线登记表并保证从全默认开始，结束恢复默认。
+    final prefs = await SharedPreferences.getInstance();
+    ShortcutSettings.attachSettings(testSettingsRegistry(preferences: prefs));
+    await ShortcutSettings.load();
+    // 提示出口换成记录型（默认构造缺 hostContextKey，展示是空操作）。
+    final notifications = _RecordingNotificationService();
+    addTearDown(() async {
+      await ShortcutSettings.instance.resetScope(ShortcutScope.inApp);
+      await ShortcutSettings.instance.resetScope(ShortcutScope.global);
+    });
+
+    await pumpSettingsPage(
+      tester,
+      extraProviders: [
+        Provider<NotificationService>.value(value: notifications),
+      ],
+    );
+    await tester.tap(find.byKey(const Key('settingsGeneralItem')));
+    await tester.pumpAndSettle();
+    final entry = find.byKey(const Key('settingsShortcutsItem'));
+    await tester.ensureVisible(entry);
+    await tester.pumpAndSettle();
+    await tester.tap(entry);
+    await tester.pumpAndSettle();
+
+    // 给「音量 +」录 Space（已被「播放 / 暂停」占用）→ 弹替换确认层。
+    final row = find.byKey(const Key('shortcutRow_inApp_volumeUp'));
+    Future<void> recordSpace() async {
+      await tester.tap(row);
+      await tester.pump();
+      await tester.sendKeyEvent(LogicalKeyboardKey.space);
+      await tester.pumpAndSettle();
+    }
+
+    await recordSpace();
+    expect(find.text('Replace shortcut?'), findsOneWidget);
+    expect(
+      find.text(
+        '“Play / pause” already uses this combo. '
+        'Replacing will swap the two bindings.',
+      ),
+      findsOneWidget,
+    );
+
+    // 取消：绑定不动。
+    await tester.tap(find.text('Cancel'));
+    await tester.pumpAndSettle();
+    expect(
+      ShortcutSettings.instance.inAppBindings.comboFor(ShortcutCommand.volumeUp),
+      const ShortcutCombo(key: LogicalKeyboardKey.arrowUp),
+    );
+
+    // 再录一次并确认替换：「音量 +」← Space，「播放 / 暂停」← ↑。
+    await recordSpace();
+    await tester.tap(find.text('Replace'));
+    await tester.pumpAndSettle();
+
+    final bindings = ShortcutSettings.instance.inAppBindings;
+    expect(
+      bindings.comboFor(ShortcutCommand.volumeUp),
+      const ShortcutCombo(key: LogicalKeyboardKey.space),
+    );
+    expect(
+      bindings.comboFor(ShortcutCommand.togglePlayPause),
+      const ShortcutCombo(key: LogicalKeyboardKey.arrowUp),
+    );
+    // 落盘：存储读回互换后的绑定。
+    expect(
+      ShortcutBindings.decode(
+        ShortcutScope.inApp,
+        prefs.getString(kShortcutBindings.name),
+      ).comboFor(ShortcutCommand.togglePlayPause),
+      const ShortcutCombo(key: LogicalKeyboardKey.arrowUp),
+    );
+    // 成功反馈经提示出口给出（记录型服务断言文案）。
+    expect(
+      notifications.messages,
+      contains('Swapped bindings with “Play / pause”'),
+    );
   }, variant: TargetPlatformVariant.only(TargetPlatform.linux));
 
   testWidgets('通用子页：桌面托盘开关切换并持久化（仅桌面端）', (tester) async {
@@ -1252,4 +1337,23 @@ class _FakeMediaOutput implements LyricsOutput {
 
   @override
   Future<void> stop() async {}
+}
+
+/// 记录型提示服务：默认构造缺 hostContextKey（展示是空操作），
+/// 这里只收文案用于断言。
+class _RecordingNotificationService extends NotificationService {
+  _RecordingNotificationService() : super(GlobalKey<ScaffoldMessengerState>());
+
+  final List<String> messages = [];
+
+  @override
+  void showSnackBar(
+    String message, {
+    bool isError = false,
+    Duration duration = const Duration(seconds: 4),
+    String? actionLabel,
+    void Function()? onActionPressed,
+  }) {
+    messages.add(message);
+  }
 }

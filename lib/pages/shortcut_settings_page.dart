@@ -20,7 +20,8 @@ import '../widgets/settings/shortcut_recorder_tile.dart';
 ///
 /// 从设置 › 通用进入，在设置弹层内部导航（见 `settings_page.dart`）。
 /// 绑定校验（全局必须带修饰键、同组不重复）由 [ShortcutSettings.setBinding]
-/// 兜底；本页在拒绝时给出具体原因（缺修饰键 / 被哪个动作占用）。
+/// 兜底；本页在拒绝时给出具体原因：缺修饰键 / 平台不支持走 Snackbar，
+/// 同组冲突走「确认后互换两者绑定」的引导弹层（[showShortcutSwapDialog]）。
 class ShortcutSettingsPage extends StatefulWidget {
   const ShortcutSettingsPage({super.key});
 
@@ -133,8 +134,8 @@ class _ShortcutSettingsPageState extends State<ShortcutSettingsPage> {
     );
   }
 
-  /// 提交一次录制结果：校验失败时给出具体原因（组合已被哪个动作占用 /
-  /// 全局缺修饰键），成功则静默（行内文案即反馈）。
+  /// 提交一次录制结果：成功静默（行内文案即反馈）；非法组合（缺修饰键 /
+  /// 平台不支持）保持原有 Snackbar；同组冲突弹确认层，确认后互换两者绑定。
   Future<void> _applyRecorded(
     ShortcutSettings settings,
     ShortcutScope scope,
@@ -148,20 +149,78 @@ class _ShortcutSettingsPageState extends State<ShortcutSettingsPage> {
     if (accepted || !mounted) return;
     final l10n = AppLocalizations.of(context)!;
     // 与 setBinding 同一判定源：拒绝后状态未变，这里的快照仍然有效。
-    final conflict = combo.isValidForScope(scope)
+    // 先排除组合自身非法（缺修饰键 / 平台不支持）——这类拒绝没有冲突方，
+    // 剩下的拒绝原因才是同组冲突。
+    final conflict = combo.isValidForScope(scope) &&
+            ShortcutSettings.isComboSupported(scope, combo)
         ? bindings.conflictWith(combo, exclude: command)
         : null;
-    final String message;
     if (conflict != null) {
-      message = l10n.shortcutsConflict(_actionLabel(l10n, conflict));
-    } else if (!ShortcutSettings.isComboSupported(scope, combo)) {
-      // 平台只接受字母 / 数字 / F1–F12 / 空格（系统 API 限制）。
-      message = l10n.shortcutsGlobalUnsupportedKey;
-    } else {
-      message = l10n.shortcutsGlobalNeedsModifier;
+      await _offerSwap(settings, scope, command, conflict);
+      return;
     }
+    // 平台只接受字母 / 数字 / F1–F12 / 空格（系统 API 限制）。
+    final message = !ShortcutSettings.isComboSupported(scope, combo)
+        ? l10n.shortcutsGlobalUnsupportedKey
+        : l10n.shortcutsGlobalNeedsModifier;
     context.read<NotificationService?>()?.showSnackBar(message);
   }
+
+  /// 冲突引导：说明替换将互换两者绑定，确认后执行互换并反馈结果。
+  Future<void> _offerSwap(
+    ShortcutSettings settings,
+    ShortcutScope scope,
+    ShortcutCommand command,
+    ShortcutCommand other,
+  ) async {
+    final l10n = AppLocalizations.of(context)!;
+    final confirmed = await showShortcutSwapDialog(
+      context,
+      actionLabel: _actionLabel(l10n, other),
+    );
+    if (!confirmed || !mounted) return;
+    final swapped = await settings.swapBindings(scope, command, other);
+    if (!mounted) return;
+    context.read<NotificationService?>()?.showSnackBar(
+          swapped
+              ? l10n.shortcutsSwapDone(_actionLabel(l10n, other))
+              // 互换本不应失败（冲突方必属同组）；真失败时退回冲突提示，
+              // 至少让用户知道绑定没有变化。
+              : l10n.shortcutsConflict(_actionLabel(l10n, other)),
+        );
+  }
+}
+
+/// 冲突替换确认层：说明该组合已被其它动作占用、替换将互换两者绑定；
+/// 返回 true = 用户确认替换（由调用方执行互换，见
+/// [ShortcutSettings.swapBindings]）。
+Future<bool> showShortcutSwapDialog(
+  BuildContext context, {
+  required String actionLabel,
+}) async {
+  final l10n = AppLocalizations.of(context)!;
+  final navigator = Navigator.of(context, rootNavigator: true);
+  final confirmed = await M3EDialog.show<bool>(
+    context,
+    dialog: M3EDialog(
+      title: l10n.shortcutsSwapDialogTitle,
+      content: SizedBox(
+        width: settingsDialogWidth(context),
+        child: Text(l10n.shortcutsSwapDialogMessage(actionLabel)),
+      ),
+      actions: [
+        M3EButton.text(
+          onPressed: () => navigator.pop(false),
+          child: Text(l10n.cancel),
+        ),
+        M3EButton.filled(
+          onPressed: () => navigator.pop(true),
+          child: Text(l10n.shortcutsSwapConfirm),
+        ),
+      ],
+    ),
+  );
+  return confirmed ?? false;
 }
 
 /// 组级「恢复默认」行：全默认时置灰（没有可恢复的覆盖）。
