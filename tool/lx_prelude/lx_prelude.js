@@ -370,7 +370,11 @@
       body: options.body === undefined ? null : options.body,
       form: options.form || null,
       formData: options.formData || null,
-      followMax: options.follow_max || null,
+      // follow_max：脚本声明的重定向跟随上限（LX 桌面版对 needle 的同名选项）。
+      // 必须是显式数值才透传、且不能用 `|| null`：0 表示「不跟随」是有意义的取值，
+      // 用 `||` 会被吞成 null，脚本就失去了这个表达能力。缺省 / 非数值传 null，
+      // 由宿主决定默认策略（不声明就不改变宿主既有行为）。
+      followMax: typeof options.follow_max === 'number' ? options.follow_max : null,
     };
     __lxSendNative('http', payload);
     return function cancel() {

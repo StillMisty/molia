@@ -464,6 +464,33 @@ void _lxIsolateEntry(List<dynamic> args) {
   _LxIsolateHost(mainPort, config).run();
 }
 
+/// 脚本 `follow_max`（prelude 透传为 `followMax`）→ 逐请求重定向策略。
+///
+/// 返回 record 的字段为 null 表示「不覆盖」，继承 [createAppDio] 的全局默认。
+/// 为什么必须逐请求：脚本只能约束它自己发出的请求，而 [createAppDio] 还服务
+/// 更新检查 / 同步 / 平台接口等宿主调用点，重定向策略不能被音源脚本改写。
+///
+/// 语义对齐 LX 桌面版底层 HTTP 客户端 needle 的同名选项：
+/// - `0`（含负数）→ 不跟随，3xx 响应原样交给脚本。dio/dart:io 下必须用
+///   `followRedirects: false`：允许跟随 + `maxRedirects: 0` 会在首个 3xx 抛
+///   RedirectException（dart:io `_handleIncoming`），脚本反而看不到响应；
+/// - `>0` → 最多跟随 N 跳，第 N+1 个 3xx 以请求错误结束（与 dart:io 的
+///   maxRedirects、needle 的超限报错同语义）；
+/// - `null`（脚本未声明 / 非数值）→ 不覆盖，沿用宿主默认（最多 5 跳）。
+///
+/// 默认值为什么是「跟随」而不是 LX 桌面版的「不跟随」：LX 两端行为本身不一致
+/// （桌面版 needle 默认 follow_max=0 不跟随、移动版底层 fetch 默认跟随），且两端
+/// 都未把脚本声明的 follow_max 透传到请求层，没有可对齐的统一定义；保持宿主既有
+/// 行为，避免改变未声明 follow_max 的存量脚本的取链结果。
+({bool? followRedirects, int? maxRedirects}) lxRedirectPolicy(Object? followMax) {
+  if (followMax is! num || !followMax.isFinite) {
+    return (followRedirects: null, maxRedirects: null);
+  }
+  final value = followMax.toInt();
+  if (value <= 0) return (followRedirects: false, maxRedirects: 0);
+  return (followRedirects: true, maxRedirects: value);
+}
+
 class _LxIsolateHost {
   /// 任务泵的快/慢频率。
   ///
@@ -813,6 +840,8 @@ class _LxIsolateHost {
         body = jsonEncode(body);
       }
 
+      // follow_max 只约束本次请求：策略换算与默认值依据见 [lxRedirectPolicy]。
+      final redirect = lxRedirectPolicy(data['followMax']);
       final response = await _dio
           .requestUri<dynamic>(
             Uri.parse(url),
@@ -822,6 +851,8 @@ class _LxIsolateHost {
               method: (data['method']?.toString() ?? 'GET').toUpperCase(),
               headers: headers,
               responseType: ResponseType.stream,
+              followRedirects: redirect.followRedirects,
+              maxRedirects: redirect.maxRedirects,
             ),
           )
           .timeout(timeout);
