@@ -19,6 +19,7 @@ import '../../models/play_mode.dart';
 import '../../providers/library_provider.dart';
 import '../../providers/playback_provider.dart';
 import '../../services/app_branding_service.dart';
+import '../../services/escape_claims.dart';
 import '../../services/haptics.dart';
 import '../../utils/duration_text.dart';
 import '../../widgets/app_network_image.dart';
@@ -45,6 +46,9 @@ class DesktopNowPlayingBar extends StatelessWidget {
 
   /// 音量按钮的稳定 Key。
   static const Key volumeButtonKey = Key('desktopVolumeButton');
+
+  /// 音量弹层（滑杆 + 静音开关）的稳定 Key。
+  static const Key volumePanelKey = Key('desktopVolumePanel');
 
   /// 播放条固定高度（桌面骨架底栏档位）。
   static const double barHeight = 80;
@@ -636,7 +640,10 @@ class _VolumeButtonState extends State<_VolumeButton> {
           child: TapRegion(
             groupId: _tapGroup,
             onTapOutside: (_) => _controller.hide(),
-            child: _VolumePanel(onClose: _controller.hide),
+            child: _VolumePanel(
+              key: DesktopNowPlayingBar.volumePanelKey,
+              onClose: _controller.hide,
+            ),
           ),
         );
       },
@@ -667,10 +674,34 @@ class _VolumeButtonState extends State<_VolumeButton> {
 ///
 /// [Focus] 只用于接住 Esc：面板在 Overlay 里没有路由级快捷键上下文，
 /// 焦点沿焦点链上冒到这里关闭（滑杆自身获得焦点时也能冒上来）。
-class _VolumePanel extends StatelessWidget {
-  const _VolumePanel({required this.onClose});
+/// 面板可见期间向 [EscapeClaims] 登记恒真占用：壳层 HardwareKeyboard 处理器
+/// 不短路，不登记的话同一次 Esc 会既关面板、又触发壳层的关队列面板命令。
+class _VolumePanel extends StatefulWidget {
+  const _VolumePanel({super.key, required this.onClose});
 
   final VoidCallback onClose;
+
+  @override
+  State<_VolumePanel> createState() => _VolumePanelState();
+}
+
+class _VolumePanelState extends State<_VolumePanel> {
+  /// 登记判定：本组件存在 = 面板可见（随 Overlay 挂载 / 卸载）。
+  late final bool Function() _escapeClaim = _claimEscape;
+
+  bool _claimEscape() => true;
+
+  @override
+  void initState() {
+    super.initState();
+    EscapeClaims.add(_escapeClaim);
+  }
+
+  @override
+  void dispose() {
+    EscapeClaims.remove(_escapeClaim);
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -684,7 +715,7 @@ class _VolumePanel extends StatelessWidget {
       onKeyEvent: (node, event) {
         if (event is KeyDownEvent &&
             event.logicalKey == LogicalKeyboardKey.escape) {
-          onClose();
+          widget.onClose();
           return KeyEventResult.handled;
         }
         return KeyEventResult.ignored;

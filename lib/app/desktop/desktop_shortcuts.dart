@@ -15,6 +15,8 @@
 /// - 软件内快捷键总开关关闭：不注册处理器，所有按键放行；
 /// - 文本输入框聚焦时全部放行（Space / 方向键 / Esc 归文本编辑与输入法）；
 /// - 设置页正在录制新组合键时全部放行（否则录制 Space / ←→ 会先触发播放）；
+/// - Esc 有页面级 / 弹层占用登记（[EscapeClaims]）时放行：处理器不短路，
+///   否则同一次 Esc 会既执行壳层命令、又被页面消费（详见 escape_claims.dart）；
 /// - 处理器返回 false 时不消费事件，继续走正常焦点分发（聚焦的按钮 / 滑杆
 ///   仍能先响应自己的键）。
 library;
@@ -27,6 +29,7 @@ import 'package:logging/logging.dart';
 import 'package:provider/provider.dart';
 
 import '../../providers/playback_provider.dart';
+import '../../services/escape_claims.dart';
 import '../../services/shortcut_settings.dart';
 import '../../services/shortcut_actions.dart';
 import '../../services/shortcuts.dart';
@@ -102,6 +105,13 @@ class _DesktopShortcutsState extends State<DesktopShortcuts> {
     // 输入框聚焦时不拦截任何键（硬约定）：Space / ←→ / Esc 都要留给文本编辑
     // 与输入法。
     if (_isTextInputFocused()) return false;
+    // Esc 有页面级 / 弹层占用登记时让位：HardwareKeyboard 处理器不短路，
+    // 壳层命令与页面消费无法靠返回值裁决，同一次 Esc 会被两个作用域消费
+    //（详见 escape_claims.dart）。这里返回 false 而非 true——不消费事件，
+    // 登记方的处理器 / 焦点作用域（音量弹层）才能拿到按键。
+    if (event.logicalKey == LogicalKeyboardKey.escape && EscapeClaims.any) {
+      return false;
+    }
     final keyboard = HardwareKeyboard.instance;
     // 命中判定查当前生效绑定（覆盖优先、其次默认）：每次按键现取，设置页
     // 改绑 / 恢复默认立即生效，无需重建壳层。

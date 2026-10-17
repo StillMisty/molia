@@ -20,6 +20,7 @@ import 'package:molia/providers/playback_provider.dart';
 import 'package:molia/providers/search_provider.dart';
 import 'package:molia/providers/sources_provider.dart';
 import 'package:molia/providers/theme_provider.dart';
+import 'package:molia/services/escape_claims.dart';
 import 'package:molia/services/lyrics_display/lyrics_display_settings.dart';
 import 'package:molia/services/shortcut_bindings.dart';
 import 'package:molia/services/shortcut_settings.dart';
@@ -59,13 +60,17 @@ void main() {
     await ShortcutSettings.instance.setGlobalEnabled(false);
     await ShortcutSettings.instance.resetScope(ShortcutScope.inApp);
     await ShortcutSettings.instance.resetScope(ShortcutScope.global);
+    // Esc 占用登记同为跨用例共享的静态状态：清掉上一用例可能残留的登记
+    // （正常路径由页面 dispose 注销，这里兜底）。
+    EscapeClaims.reset();
   });
 
   /// 装配与组合根同源的 provider 树并挂载壳层（骨架同 `app_shell_reselect_test`；
   /// provider 在测试体内创建：偏好加载的 Future 必须在 fake-async 区内解析）。
   ///
   /// [searchSource] 非空时给搜索 provider 接上假音源（顶栏搜索用例预置结果），
-  /// [configureSearch] 在挂载前配置搜索状态（如先提交一次搜索）。
+  /// [configureSearch] 在挂载前配置搜索状态（如先提交一次搜索），
+  /// [seedLibrary] 在挂载前向假资料库写入数据（如预置收藏）。
   /// 返回假后端与 provider：快捷键用例据此断言后端收到的播放命令。
   Future<({FakePlaybackBackend backend, PlaybackProvider playback})> pumpShell(
     WidgetTester tester, {
@@ -73,6 +78,7 @@ void main() {
     Size size = const Size(1440, 900),
     FakeMusicSource? searchSource,
     void Function(SearchProvider search)? configureSearch,
+    Future<void> Function(FakeLibraryRepository repository)? seedLibrary,
   }) async {
     tester.view.physicalSize = size;
     tester.view.devicePixelRatio = 1.0;
@@ -90,6 +96,8 @@ void main() {
 
     final repository = FakeLibraryRepository();
     addTearDown(repository.dispose);
+    // 挂载前预置资料库数据（收藏等）：页面首帧即读，无需等变更流回载。
+    await seedLibrary?.call(repository);
     final backend = FakePlaybackBackend();
     final playback = buildTestPlaybackProvider(
       backend: backend,
@@ -446,6 +454,83 @@ void main() {
     await settleTransition(tester);
     expect(find.byType(DesktopQueuePanel), findsOneWidget);
 
+    await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+    await settleTransition(tester);
+    expect(find.byType(DesktopQueuePanel), findsNothing);
+  });
+
+  testWidgets('Esc 裁决：队列面板打开 + 收藏页多选时，一次 Esc 只清选择，再按才关面板',
+      (tester) async {
+    await pumpShell(
+      tester,
+      desktopShell: true,
+      seedLibrary: (repository) => repository.toggleFavorite(
+        sourceKey: 'wy',
+        songId: 'Song A',
+        title: 'Song A',
+        artist: 'Artist Song A',
+        raw: {'songId': 'Song A'},
+      ),
+    );
+
+    // 前提一：队列面板打开（Esc 的壳层命令是关面板）。
+    await tester.tap(find.byKey(DesktopNowPlayingBar.queueToggleKey));
+    await settleTransition(tester);
+    expect(find.byType(DesktopQueuePanel), findsOneWidget);
+
+    // 前提二：切到收藏页并长按一行进入多选。
+    await tester.tap(
+      find.descendant(
+        of: find.byType(M3ENavigationRail),
+        matching: find.text(l10n.favoritesLabel),
+      ),
+    );
+    await settleTransition(tester);
+    await tester.longPress(find.text('Song A'));
+    await tester.pumpAndSettle();
+    // 多选栏的稳定标志：全选按钮只在多选栏出现。
+    Finder selectionBar() => find.descendant(
+          of: find.byType(FavoritesPage),
+          matching: find.byIcon(Icons.select_all_rounded),
+        );
+    expect(selectionBar(), findsOneWidget, reason: '前提：多选生效');
+
+    // 第一次 Esc：页面级多选优先——只清选择，队列面板保持打开。
+    await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+    await settleTransition(tester);
+    expect(selectionBar(), findsNothing, reason: '第一次 Esc 清空选择');
+    expect(
+      find.byType(DesktopQueuePanel),
+      findsOneWidget,
+      reason: '第一次 Esc 不应同时触发壳层的关面板命令',
+    );
+
+    // 第二次 Esc：页面不再接管，壳层命令关面板。
+    await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+    await settleTransition(tester);
+    expect(find.byType(DesktopQueuePanel), findsNothing);
+  }, variant: TargetPlatformVariant.only(TargetPlatform.linux));
+
+  testWidgets('Esc 裁决：音量弹层与队列面板同时打开时，一次 Esc 只关弹层', (tester) async {
+    await pumpShell(tester, desktopShell: true);
+
+    await tester.tap(find.byKey(DesktopNowPlayingBar.queueToggleKey));
+    await settleTransition(tester);
+    await tester.tap(find.byKey(DesktopNowPlayingBar.volumeButtonKey));
+    await tester.pumpAndSettle();
+    expect(find.byKey(DesktopNowPlayingBar.volumePanelKey), findsOneWidget);
+
+    // 第一次 Esc：弹层（焦点作用域）优先关闭，队列面板保持打开。
+    await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+    await tester.pumpAndSettle();
+    expect(find.byKey(DesktopNowPlayingBar.volumePanelKey), findsNothing);
+    expect(
+      find.byType(DesktopQueuePanel),
+      findsOneWidget,
+      reason: '弹层已消费 Esc，壳层命令不应同时生效',
+    );
+
+    // 第二次 Esc：弹层已关，壳层命令关队列面板。
     await tester.sendKeyEvent(LogicalKeyboardKey.escape);
     await settleTransition(tester);
     expect(find.byType(DesktopQueuePanel), findsNothing);

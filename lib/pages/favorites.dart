@@ -17,6 +17,7 @@ import '../providers/lyrics_provider.dart';
 import '../pages/source_swap_page.dart';
 import '../services/cache_service.dart';
 import '../services/download/download_service.dart';
+import '../services/escape_claims.dart';
 import '../services/haptics.dart';
 import '../services/notification_service.dart';
 import '../utils/duration_text.dart';
@@ -105,6 +106,10 @@ class _FavoritesPageState extends State<FavoritesPage> {
   /// 桌面 Esc 键处理器引用：[HardwareKeyboard] 注册 / 注销必须是同一闭包。
   late final bool Function(KeyEvent) _keyHandler = _handleKeyEvent;
 
+  /// 登记给壳层的 Esc 占用判定：与 [_handleKeyEvent] 同源（[EscapeClaims]
+  /// 让壳层在页面接管 Esc 时让位，见 escape_claims.dart）。
+  late final bool Function() _escapeClaim = _canHandleEscape;
+
   int _selectedId = LibraryCollections.unset;
   CollectionTrackSort _sort = CollectionTrackSort.added;
 
@@ -172,9 +177,12 @@ class _FavoritesPageState extends State<FavoritesPage> {
     super.initState();
     _selection.addListener(_onSelectionChanged);
     // 桌面 Esc 退出多选：页面级键处理器。壳层全局快捷键只把 Esc 交给队列
-    // 面板（lib/app/desktop/desktop_shortcuts.dart），多选语义由本页补上。
+    // 面板（lib/app/desktop/desktop_shortcuts.dart），多选语义由本页补上；
+    // 同时登记 Esc 占用，壳层据此让位（HardwareKeyboard 处理器不短路，不登记
+    // 的话同一次 Esc 会既清选择又触发壳层命令）。
     if (isDesktopPlatform()) {
       HardwareKeyboard.instance.addHandler(_keyHandler);
+      EscapeClaims.add(_escapeClaim);
     }
     _listController.addListener(_bookkeeping.saveFromScroll);
     _historyScrollController.addListener(_bookkeeping.saveFromScroll);
@@ -213,7 +221,9 @@ class _FavoritesPageState extends State<FavoritesPage> {
   @override
   void dispose() {
     // 无条件注销（未注册时为空操作）：平台在测试里可能被覆盖，initState 与
-    // dispose 看到的平台未必一致，漏注销会把已释放的 State 留在键盘链上。
+    // dispose 看到的平台未必一致，漏注销会把已释放的 State 留在键盘链上
+    // （Esc 占用判定也会读到已释放的页面）。
+    EscapeClaims.remove(_escapeClaim);
     HardwareKeyboard.instance.removeHandler(_keyHandler);
     widget.reselect?.removeListener(_handleReselect);
     _cacheService?.revision.removeListener(_onCacheRevision);
@@ -406,11 +416,12 @@ class _FavoritesPageState extends State<FavoritesPage> {
     _selection.select(index);
   }
 
-  /// 桌面 Esc：退出选择模式；未在选择模式时返回 false 放行
-  /// （关队列面板、关上层弹层等其它 Esc 作用域不受影响）。
-  bool _handleKeyEvent(KeyEvent event) {
-    if (event is! KeyDownEvent) return false;
-    if (event.logicalKey != LogicalKeyboardKey.escape) return false;
+  /// 此刻 Esc 是否由本页接管：多选生效 + 页面可见 + 输入框未聚焦。
+  ///
+  /// [_handleKeyEvent]（页面级处理器）与登记给壳层的 [EscapeClaims] 占用
+  /// 判定共用本方法——两处判定必须同源，否则会出现「壳层让位但本页不处理」
+  /// 的按键黑洞，或壳层与页面双重消费。
+  bool _canHandleEscape() {
     if (!_selecting) return false;
     // 壳层页面常驻挂载：隐藏页不响应 Esc——按键属于用户当前看到的页面，
     // 不该在别的页面上清掉看不见的多选（未挂壳层的单测按可见处理）。
@@ -424,6 +435,15 @@ class _FavoritesPageState extends State<FavoritesPage> {
         null) {
       return false;
     }
+    return true;
+  }
+
+  /// 桌面 Esc：退出选择模式；此刻不接管时返回 false 放行
+  /// （关队列面板、关上层弹层等其它 Esc 作用域不受影响）。
+  bool _handleKeyEvent(KeyEvent event) {
+    if (event is! KeyDownEvent) return false;
+    if (event.logicalKey != LogicalKeyboardKey.escape) return false;
+    if (!_canHandleEscape()) return false;
     _selection.clear();
     return true;
   }

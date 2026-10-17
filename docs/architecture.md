@@ -577,6 +577,11 @@
   `lib/services/shortcut_actions.dart` 的命令执行器。曲目行右键 = 现有 ⋮ 菜单同一动作域、
   行尾操作 `HoverReveal` 桌面 hover/focus 才显（触摸端恒显）、可点元素手型光标（M3E 自带）、
   收藏页桌面多选（Ctrl 点选 / Shift 范围 / Esc 退出，移动端长按语义不变）。
+  Esc 裁决：`HardwareKeyboard` 处理器**全部执行、返回值不短路**（无法靠返回值
+  裁决谁消费），页面级 / 弹层经 `lib/services/escape_claims.dart` 登记「此刻的
+  Esc 归我」（判定现算，隐藏页 / 已关弹层不残留占用），壳层命中 Esc 命令前先让位
+  （返回 false，不阻断登记方的处理器与焦点分发）——**页面级 / 弹层 Esc 优先于
+  壳层可配置命令**（用户把别的命令绑到 Esc 也一样让位）；音量弹层靠登记 + 焦点分发接 Esc。
   内容版式：资料库渠道左栏（桌面 + 内容宽 ≥ 900 且渠道 ≥ 2，判定用 `LayoutBuilder`
   内容宽而非窗口宽）、搜索结果宽屏表格列（`TrackRowColumns` / `TrackTableHeader`，
   行高仍 72dp）、收藏页 master-detail 合集栏、设置弹层宽屏 880 + 首屏两列
