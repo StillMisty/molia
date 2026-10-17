@@ -431,6 +431,7 @@
   "sortDefaultOrder": "Default order",
   "tableColumnArtist": "Artist",
   "tableColumnAlbum": "Album",
+  "tableColumnPlayedAt": "Played at",
   "tableColumnDuration": "Duration",
   "viewAllResults": "View all results",
   "sortByTitle": "Title",
@@ -440,6 +441,14 @@
   "nextTrackTooltip": "Next track",
   "previousTrackTooltip": "Previous track",
   "playerBarVolume": "Volume",
+  "playerBarVolumePercent": "{percent}%",
+  "@playerBarVolumePercent": {
+    "placeholders": {
+      "percent": {
+        "type": "int"
+      }
+    }
+  },
   "playerBarMute": "Mute",
   "playerBarUnmute": "Unmute",
   "playerBarQueue": "Queue",
@@ -533,6 +542,8 @@
   "discoverRetry": "Retry",
   "discoverNoContent": "Nothing here yet",
   "discoverSearchEmpty": "No playlists found",
+  "discoverShowAll": "Show all",
+  "discoverShowLess": "Show less",
   "discoverPlaylistAuthor": "by {author}",
   "discoverAddToPlaylist": "Add to playlist",
   "discoverNoPlaylists": "No playlists yet. Favorite a song first to create one.",

@@ -20,6 +20,7 @@ import 'package:molia/sources/source_manager.dart';
 import 'package:molia/widgets/discover_playlists_tab.dart';
 import 'package:molia/widgets/library_channel_selector.dart';
 import 'package:molia/widgets/shell_reselect.dart';
+import 'package:material_3_expressive/material_3_expressive.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -170,7 +171,7 @@ void main() {
 
     expect(find.byType(LibraryChannelSelector), findsOneWidget);
     expect(find.text('网易音乐'), findsOneWidget); // 渠道下拉当前值
-    expect(find.text('热榜'), findsWidgets);
+    expect(find.text('热榜'), findsOneWidget); // 只有 tab 名，无同名分区标题
     expect(find.text('歌单'), findsOneWidget);
     expect(find.text('搜索'), findsNothing); // 无脚本时不可搜索 → 隐藏
 
@@ -224,6 +225,8 @@ void main() {
 
     expect(find.text('所有渠道都已停用，请在「音源管理」中启用渠道。'), findsOneWidget);
     expect(find.byType(LibraryChannelSelector), findsNothing);
+    // 空态的主行动：把人送到设置（渠道开关仍在「音源管理」子页）。
+    expect(find.widgetWithText(M3EButton, '设置'), findsOneWidget);
   });
 
   testWidgets('选中脚本扩展渠道：只保留搜索 tab；切回内置平台恢复', (tester) async {
@@ -232,7 +235,7 @@ void main() {
     search = buildSearch(const []);
     await pumpLibrary(tester);
 
-    expect(find.text('热榜'), findsWidgets); // 默认 wy（可发现）→ 热榜/歌单
+    expect(find.text('热榜'), findsOneWidget); // 默认 wy（可发现）→ 热榜/歌单
 
     await tester.tap(find.text('网易音乐'));
     await tester.pumpAndSettle();
@@ -252,7 +255,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(discover.channelKey, 'wy');
-    expect(find.text('热榜'), findsWidgets);
+    expect(find.text('热榜'), findsOneWidget);
   });
 
   testWidgets('搜索源跟随渠道：挂载时将搜索源同步到当前渠道', (tester) async {
@@ -286,34 +289,31 @@ void main() {
   });
 
   testWidgets(
-    '桌面宽屏：渠道收进左栏，顶部下拉框不再渲染',
+    '桌面宽窗 / 窄窗：渠道都走顶部下拉（无竖栏）且都能切换',
     (tester) async {
       search = buildSearch(const []);
       await pumpLibrary(tester);
 
-      expect(find.byType(LibraryChannelRail), findsOneWidget);
-      expect(find.byType(LibraryChannelSelector), findsNothing);
-      expect(find.text('网易音乐'), findsOneWidget, reason: '左栏列出全部启用渠道');
-
-      // 左栏点击 = 现有渠道选择路径（含组合根注入的搜索源跟随）。
-      await tester.tap(find.text('酷我音乐'));
+      // 渠道入口只有下拉框一处（不分窗口宽）。
+      expect(find.byType(LibraryChannelSelector), findsOneWidget);
+      await tester.tap(find.text('网易音乐'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('酷我音乐').last);
       await tester.pumpAndSettle();
       expect(discover.channelKey, 'kw');
+      expect(find.text('酷我音乐'), findsOneWidget);
+
+      // 窄窗同一入口，仍可切回。
+      await pumpLibrary(tester, width: 480);
+      expect(find.byType(LibraryChannelSelector), findsOneWidget);
+      await tester.tap(find.text('酷我音乐'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('网易音乐').last);
+      await tester.pumpAndSettle();
+      expect(discover.channelKey, 'wy');
     },
     // 平台覆盖走 variant：测试体结束后框架自己还原，满足 foundation 变量
     // 不变式（手工覆盖必须在测试体内复位）。
-    variant: TargetPlatformVariant.only(TargetPlatform.linux),
-  );
-
-  testWidgets(
-    '桌面窄窗口：回落顶部下拉框，无渠道左栏',
-    (tester) async {
-      search = buildSearch(const []);
-      await pumpLibrary(tester, width: 800);
-
-      expect(find.byType(LibraryChannelRail), findsNothing);
-      expect(find.byType(LibraryChannelSelector), findsOneWidget);
-    },
     variant: TargetPlatformVariant.only(TargetPlatform.linux),
   );
 }

@@ -306,20 +306,13 @@ class _DiscoverPlaylistsTabState extends State<DiscoverPlaylistsTab>
                       children: [
                         Padding(
                           padding: const EdgeInsets.symmetric(horizontal: 16),
-                          child: Row(
-                            children: [
-                              Icon(Icons.queue_music_rounded,
-                                  size: 20, color: theme.colorScheme.primary),
-                              const SizedBox(width: 8),
-                              Expanded(
-                                child: Text(
-                                  l10n.discoverPlaylists,
-                                  // 标题用正文色，强调色只给图标。
-                                  style: theme.textTheme.titleMedium
-                                      ?.copyWith(
-                                          color: theme.colorScheme.onSurface),
-                                ),
-                              ),
+                          child: AppSearchBar(
+                            controller: _searchController,
+                            focusNode: _searchFocusNode,
+                            hintText: l10n.discoverPlaylistSearchHint,
+                            // 「打开歌单」也是「给一个歌单」的入口，放在搜索
+                            // 行栏尾：入口跟随搜索行，不另占一行。
+                            trailing: [
                               M3EIconButton(
                                 variant: M3EIconButtonVariant.standard,
                                 tooltip: l10n.discoverOpenPlaylist,
@@ -327,15 +320,6 @@ class _DiscoverPlaylistsTabState extends State<DiscoverPlaylistsTab>
                                 onPressed: _openLinkDialog,
                               ),
                             ],
-                          ),
-                        ),
-                        const SizedBox(height: 8),
-                        Padding(
-                          padding: const EdgeInsets.symmetric(horizontal: 16),
-                          child: AppSearchBar(
-                            controller: _searchController,
-                            focusNode: _searchFocusNode,
-                            hintText: l10n.discoverPlaylistSearchHint,
                             onChanged: (value) {
                               // 提交式搜索：仅当清空（清除键或手动删空）时回到全部歌单。
                               if (value.trim().isEmpty) _clearSearch();
@@ -405,6 +389,40 @@ class _DiscoverPlaylistsTabState extends State<DiscoverPlaylistsTab>
     );
   }
 
+  /// 列表空态：图标 40 + 文案 + 能立刻脱困的主行动（清搜索 / 回「全部」标签）。
+  Widget _buildEmptyState(AppLocalizations l10n, ThemeData theme) {
+    final searching = _query.isNotEmpty;
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+      child: Column(
+        children: [
+          Icon(
+            searching ? Icons.search_off_rounded : Icons.queue_music_rounded,
+            size: 40,
+            color: theme.colorScheme.onSurfaceVariant,
+          ),
+          const SizedBox(height: 12),
+          Text(
+            searching ? l10n.discoverSearchEmpty : l10n.discoverNoContent,
+            textAlign: TextAlign.center,
+            style: theme.textTheme.bodyMedium?.copyWith(
+              color: theme.colorScheme.onSurfaceVariant,
+            ),
+          ),
+          if (searching || _selectedTag.isNotEmpty) ...[
+            const SizedBox(height: 16),
+            M3EButton.text(
+              onPressed: searching ? _clearSearch : () => _selectTag(''),
+              child: Text(
+                searching ? l10n.clearSearch : l10n.discoverAll,
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
   List<Widget> _buildPlaylistSlivers(
     AppLocalizations l10n,
     ThemeData theme,
@@ -451,17 +469,7 @@ class _DiscoverPlaylistsTabState extends State<DiscoverPlaylistsTab>
     }
     if (items.isEmpty) {
       return [
-        SliverToBoxAdapter(
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
-            child: Text(
-              _query.isEmpty ? l10n.discoverNoContent : l10n.discoverSearchEmpty,
-              style: theme.textTheme.bodyMedium?.copyWith(
-                color: theme.colorScheme.onSurfaceVariant,
-              ),
-            ),
-          ),
-        ),
+        SliverToBoxAdapter(child: _buildEmptyState(l10n, theme)),
       ];
     }
     return [

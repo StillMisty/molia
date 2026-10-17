@@ -927,6 +927,9 @@ class AppLocalizationsEn extends AppLocalizations {
   String get tableColumnAlbum => 'Album';
 
   @override
+  String get tableColumnPlayedAt => 'Played at';
+
+  @override
   String get tableColumnDuration => 'Duration';
 
   @override
@@ -952,6 +955,11 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get playerBarVolume => 'Volume';
+
+  @override
+  String playerBarVolumePercent(int percent) {
+    return '$percent%';
+  }
 
   @override
   String get playerBarMute => 'Mute';
@@ -1159,6 +1167,12 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get discoverSearchEmpty => 'No playlists found';
+
+  @override
+  String get discoverShowAll => 'Show all';
+
+  @override
+  String get discoverShowLess => 'Show less';
 
   @override
   String discoverPlaylistAuthor(String author) {

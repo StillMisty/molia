@@ -3,12 +3,11 @@ import 'package:material_ui/material_ui.dart';
 
 import '../domain/models/source_script.dart';
 import '../l10n/app_localizations.dart';
-import 'card_list_surface.dart';
 
 AppLocalizations _l10n(BuildContext context) =>
     AppLocalizations.of(context) ?? lookupAppLocalizations(const Locale('zh'));
 
-/// 启用渠道（顺序不变）；两个渠道切换组件共用同一过滤口径。
+/// 启用渠道（顺序不变）。
 List<SourceEntry> _enabledOf(List<SourceEntry> channels) {
   return [for (final entry in channels) if (entry.enabled) entry];
 }
@@ -61,86 +60,6 @@ class LibraryChannelSelector extends StatelessWidget {
         onSelectionChanged: (items) {
           if (items.isEmpty) return;
           onSelected(items.first.value);
-        },
-      ),
-    );
-  }
-}
-
-/// 发现页的桌面宽屏渠道左栏（内容区左侧固定 200dp）。
-///
-/// 与 [LibraryChannelSelector] 是同一渠道状态的两种形态：宽屏竖栏多一个
-/// 常驻的「当前在哪」上下文，窄窗口 / 移动端仍用顶部下拉框（页面二选一，
-/// 不出现两套切换入口）。
-///
-/// 每项用共享的 [CardListSurface]（M3E 列表卡片行 + 弹簧 shape morph）：
-/// 选中态与其余列表同源（`secondaryContainer` 底 + `onSecondaryContainer`
-/// 文字，见 `TrackRow` 的 selected 语义），不另造一套选中观感。
-class LibraryChannelRail extends StatelessWidget {
-  const LibraryChannelRail({
-    super.key,
-    required this.channels,
-    required this.selectedKey,
-    required this.onSelected,
-  });
-
-  /// 栏宽（内容区左侧固定宽度，含行内边距）。
-  static const double width = 200;
-
-  /// 行高：M3E 单行列表项最小高度（渠道名单行省略）。
-  static const double itemHeight = 56;
-
-  /// 全部渠道（含停用项；本组件只展示启用项）。
-  final List<SourceEntry> channels;
-
-  /// 当前选中的渠道 key。
-  final String selectedKey;
-
-  /// 选择渠道（不会回调停用项）。
-  final ValueChanged<String> onSelected;
-
-  @override
-  Widget build(BuildContext context) {
-    final entries = _enabledOf(channels);
-    final M3EThemeData m3e = M3ETheme.of(context);
-    final M3EColorScheme scheme = m3e.colorScheme;
-    final M3ETypeScale type = m3e.typeScale;
-    final double gap = m3e.listTheme.cardList.gap;
-
-    return SizedBox(
-      width: width,
-      child: ListView.builder(
-        // 右侧留白比左侧小：卡片行自身已有 16dp 内边距，与内容区拉开即可。
-        padding: const EdgeInsets.fromLTRB(16, 8, 8, 16),
-        itemCount: entries.length,
-        itemBuilder: (context, index) {
-          final entry = entries[index];
-          final selected = entry.key == selectedKey;
-          return Padding(
-            padding: EdgeInsets.only(bottom: gap),
-            child: CardListSurface(
-              position: calculateCardPosition(index, entries.length),
-              selected: selected,
-              onPressed: () => onSelected(entry.key),
-              semanticLabel: entry.name,
-              child: SizedBox(
-                height: itemHeight,
-                child: Align(
-                  alignment: Alignment.centerLeft,
-                  child: Text(
-                    entry.name,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: type.bodyLarge.copyWith(
-                      color: selected
-                          ? scheme.onSecondaryContainer
-                          : scheme.onSurface,
-                    ),
-                  ),
-                ),
-              ),
-            ),
-          );
         },
       ),
     );

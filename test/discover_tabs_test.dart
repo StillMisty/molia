@@ -1,8 +1,10 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:molia/domain/models/discover.dart';
 import 'package:molia/l10n/app_localizations.dart';
 import 'package:molia/providers/discover_provider.dart';
 import 'package:molia/providers/library_provider.dart';
 import 'package:molia/providers/playback_provider.dart';
+import 'package:molia/widgets/app_search_bar.dart';
 import 'package:molia/widgets/discover_leaderboards_tab.dart';
 import 'package:molia/widgets/discover_playlists_tab.dart';
 import 'package:material_3_expressive/material_3_expressive.dart';
@@ -13,6 +15,16 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'support/fake_discover_api.dart';
 import 'support/fake_library_repository.dart';
 import 'support/fakes.dart';
+
+/// 已渲染 chip 占了几行（按 chip 顶边 y 去重）：断言「默认最多两行」用。
+int _chipRows(WidgetTester tester) {
+  final chips = find.byType(M3EChip);
+  final rows = <double>{};
+  for (var i = 0; i < chips.evaluate().length; i++) {
+    rows.add(tester.getTopLeft(chips.at(i)).dy);
+  }
+  return rows.length;
+}
 
 /// 资料页发现 tab widget 测试（fake 数据源 + 内存仓库，避免真实网络/DB）。
 void main() {
@@ -54,8 +66,9 @@ void main() {
     await repository.dispose();
   });
 
-  Future<void> pumpTab(WidgetTester tester, Widget tab) async {
-    tester.view.physicalSize = const Size(1200, 2400);
+  Future<void> pumpTab(WidgetTester tester, Widget tab,
+      {double width = 1200}) async {
+    tester.view.physicalSize = Size(width, 2400);
     tester.view.devicePixelRatio = 1.0;
     addTearDown(() {
       tester.view.resetPhysicalSize();
@@ -87,13 +100,34 @@ void main() {
     await pumpTab(tester, const DiscoverPlaylistsTab());
 
     expect(find.text('网易音乐'), findsNothing); // tab 内无平台选择
-    expect(find.text('歌单'), findsOneWidget); // 区块标题
+    expect(find.text('歌单'), findsNothing); // tab 名即标题：分区标题不重复出现
     expect(find.text('测试歌单'), findsOneWidget); // 歌单卡片
     // 导入入口只在详情页（列表不提供直接导入）。
     expect(find.byIcon(Icons.download_rounded), findsNothing);
     expect(find.text('华语'), findsWidgets); // 热门标签
     expect(find.text('全部'), findsOneWidget);
     expect(wy.tagCalls, 1);
+  });
+
+  testWidgets('歌单 tab：「打开歌单」收进搜索行栏尾，仍可打开链接弹窗', (tester) async {
+    await pumpTab(tester, const DiscoverPlaylistsTab());
+
+    // 入口是搜索栏的尾部动作（不另占一行标题）。
+    expect(
+      find.descendant(
+        of: find.byType(AppSearchBar),
+        matching: find.byIcon(Icons.link_rounded),
+      ),
+      findsOneWidget,
+    );
+
+    await tester.tap(find.byIcon(Icons.link_rounded));
+    await tester.pumpAndSettle();
+
+    expect(find.text('打开歌单'), findsOneWidget); // 弹窗标题
+    await tester.tap(find.text('取消'));
+    await tester.pumpAndSettle();
+    expect(find.text('打开歌单'), findsNothing);
   });
 
   testWidgets('歌单 tab：点击卡片进入详情页并可播放', (tester) async {
@@ -168,15 +202,118 @@ void main() {
   testWidgets('热榜 tab：榜单 chips；点击进入榜单详情', (tester) async {
     await pumpTab(tester, const DiscoverLeaderboardsTab());
 
-    expect(find.text('热榜'), findsWidgets); // 区块标题
+    expect(find.text('热榜'), findsNothing); // tab 名即标题：分区标题不重复出现
     expect(find.text('热歌榜'), findsOneWidget);
+    // 一条榜单放得下两行 → 没有多余的展开入口。
+    expect(find.text('展开全部'), findsNothing);
 
     await tester.tap(find.text('热歌榜'));
     await tester.pumpAndSettle();
 
     expect(find.text('歌曲A'), findsOneWidget);
-    expect(find.byIcon(Icons.play_arrow_rounded), findsOneWidget); // 榜单详情同样只保留头部「播放全部」
+    expect(find.byIcon(Icons.play_arrow_rounded),
+        findsOneWidget); // 榜单详情同样只保留头部「播放全部」
     expect(wy.leaderboardCalls, greaterThan(0));
+  });
+
+  testWidgets('热榜 tab：30 条榜单默认最多两行，「展开全部」就地展开 / 收起', (tester) async {
+    final many = [
+      for (var i = 0; i < 30; i++)
+        DiscoverLeaderboard(id: 'b$i', name: '榜单 $i', bangid: '$i'),
+    ];
+    wy.leaderboards = many;
+    await pumpTab(tester, const DiscoverLeaderboardsTab());
+
+    // 折叠态：只构建两行内放得下的前缀，靠后的榜单不在树里（不是裁掉）。
+    expect(find.text('榜单 0'), findsOneWidget);
+    expect(find.text('榜单 29'), findsNothing);
+    expect(_chipRows(tester), lessThanOrEqualTo(2), reason: '默认最多两行');
+
+    final expand = find.text('展开全部');
+    expect(expand, findsOneWidget);
+    expect(
+      tester
+          .getSize(find.ancestor(of: expand, matching: find.byType(M3EButton)))
+          .height,
+      greaterThanOrEqualTo(48),
+      reason: '展开入口的点击目标不低于 M3 最小触控 48',
+    );
+
+    // 展开：全部榜单可见且不限行，入口变「收起」。
+    await tester.tap(expand);
+    await tester.pumpAndSettle();
+    expect(find.text('榜单 29'), findsOneWidget);
+    expect(find.text('展开全部'), findsNothing);
+    expect(_chipRows(tester), greaterThan(2));
+
+    // 收起：回到两行。
+    await tester.tap(find.text('收起'));
+    await tester.pumpAndSettle();
+    expect(find.text('榜单 29'), findsNothing);
+    expect(_chipRows(tester), lessThanOrEqualTo(2));
+
+    // 展开态换渠道：新渠道的榜单是另一批，回到折叠。
+    tx.leaderboards = many;
+    await tester.tap(find.text('展开全部'));
+    await tester.pumpAndSettle();
+    expect(_chipRows(tester), greaterThan(2));
+    discover.selectChannel('tx');
+    await tester.pumpAndSettle();
+    expect(find.text('展开全部'), findsOneWidget);
+    expect(_chipRows(tester), lessThanOrEqualTo(2));
+  });
+
+  testWidgets('热榜 tab：窄窗 + 长榜单名仍不超两行、不溢出', (tester) async {
+    wy.leaderboards = const [
+      DiscoverLeaderboard(id: 'b0', name: '飙升榜', bangid: '0'),
+      DiscoverLeaderboard(
+        id: 'b1',
+        name: '编辑推荐榜VOL.44 天才女子摇滚乐队boygenius',
+        bangid: '1',
+      ),
+      DiscoverLeaderboard(id: 'b2', name: '日本Oricon榜', bangid: '2'),
+      DiscoverLeaderboard(id: 'b3', name: '黑胶VIP爱听榜', bangid: '3'),
+      DiscoverLeaderboard(id: 'b4', name: 'LOOK直播歌曲榜', bangid: '4'),
+      DiscoverLeaderboard(id: 'b5', name: '中国新乡村音乐排行榜', bangid: '5'),
+    ];
+    await pumpTab(tester, const DiscoverLeaderboardsTab(), width: 420);
+
+    expect(_chipRows(tester), lessThanOrEqualTo(2), reason: '窄窗同样最多两行');
+    expect(find.text('展开全部'), findsOneWidget);
+
+    // 长度估计是上界：可见 chip 不会顶出 chip 云右缘。
+    final cloudRight = tester.getRect(find.byType(Wrap)).right;
+    final chips = find.byType(M3EChip);
+    for (var i = 0; i < chips.evaluate().length; i++) {
+      expect(
+        tester.getRect(chips.at(i)).right,
+        lessThanOrEqualTo(cloudRight + 0.5),
+        reason: '第 $i 个 chip 溢出 chip 云右缘',
+      );
+    }
+  });
+
+  testWidgets('歌单 tab：空态收敛为图标 40 + 文案 + 主行动', (tester) async {
+    wy.playlistsPerPage = 0;
+    await pumpTab(tester, const DiscoverPlaylistsTab());
+
+    expect(find.text('暂无内容'), findsOneWidget);
+    expect(find.byIcon(Icons.queue_music_rounded), findsOneWidget);
+    // 未加筛选时没有可执行的主行动。
+    expect(find.widgetWithText(M3EButton, '全部'), findsNothing);
+
+    // 标签筛选下空结果：主行动 = 回「全部」标签。
+    await tester.tap(find.text('华语'));
+    await tester.pumpAndSettle();
+    final action = find.widgetWithText(M3EButton, '全部');
+    expect(action, findsOneWidget);
+    await tester.tap(action);
+    await tester.pumpAndSettle();
+    expect(
+      tester.widget<M3EChip>(find.widgetWithText(M3EChip, '全部')).selected,
+      isTrue,
+      reason: '主行动把筛选清回「全部」',
+    );
   });
 
   testWidgets('歌单 tab：固定行高懒加载 + 触底自动加载下一页', (tester) async {

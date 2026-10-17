@@ -9,20 +9,20 @@ import '../providers/search_provider.dart';
 import '../providers/sources_provider.dart';
 import '../utils/responsive.dart';
 import '../utils/scroll_to_top.dart';
-import '../widgets/desktop_layout.dart';
 import '../widgets/discover_leaderboards_tab.dart';
 import '../widgets/discover_playlists_tab.dart';
 import '../widgets/library_channel_selector.dart';
 import '../widgets/library_search_tab.dart';
 import '../widgets/shell_page_visibility.dart';
 import '../widgets/shell_reselect.dart';
+import 'settings_page.dart';
 
 /// 发现页 tab 标识（可见性随当前渠道能力变化，不用下标表示）。
 enum _LibraryTab { search, leaderboards, playlists }
 
 /// 发现页（内置平台发现）：
-/// - 渠道切换 +「搜索 / 热榜 / 歌单」三个 tab：移动 / 窄窗口是顶部下拉框，
-///   桌面宽屏收进左侧竖栏（二选一，不出现两套入口）；
+/// - 渠道切换只有内容区顶部下拉框一处（任何窗口宽都可用），加「搜索 / 热榜 /
+///   歌单」三个 tab；
 /// - 渠道集合 = 可搜索源 + 内置发现平台并集（顺序/启停在「音源管理」页维护），
 ///   搜索、热榜、歌单全部跟随同一个渠道；
 /// - 渠道不支持某个 tab 时自动隐藏（脚本扩展源 / any-listen 无热榜/歌单；
@@ -179,88 +179,58 @@ class _LibraryState extends State<Library> {
     // 布局期写入（不触发重建）：重复点击回顶要滚「真正在渲染」的那个列表。
     _renderedTab = visibleTabs[selectedIndex];
 
-    // 渠道入口的版式：桌面宽屏收进左侧 200dp 竖栏（顶部下拉框不再渲染，
-    // 避免两套入口）；其余情况用顶部下拉框；渠道只有 1 个时两者都不显示
-    // （改造前下拉框在单渠道下同样自隐）。
-    //
-    // 判定用**可用内容宽度**（`LayoutBuilder` 的 maxWidth）而不是窗口宽：
-    // 桌面骨架的侧栏（240）与队列面板（360）会吃掉窗口宽度，按窗口宽判定会在
-    // 内容区只剩 600 时仍挂竖栏（与搜索结果表格列同一口径，判据见
-    // desktop_layout.dart 的 `channelRailAt`）。两种入口共用同一个
-    // `showChannelRail` 判定，不会出现「竖栏与下拉框都不见」。
-    final layout = DesktopLayout.of(context);
+    // 渠道入口只此一处（顶部下拉框）：任何窗口宽都可切换，避免两套入口与
+    // 两套选中观感。渠道只有 1 个时下拉框不渲染（没有可选的目标）。
+    final multiChannel = enabledChannels.length >= 2;
     return ResponsivePageContainer(
       pageType: ResponsivePageType.browse,
       alignment: Alignment.topCenter,
-      child: LayoutBuilder(
-        builder: (context, constraints) {
-          final multiChannel = enabledChannels.length >= 2;
-          final showChannelRail =
-              multiChannel && layout.channelRailAt(constraints.maxWidth);
-
-          final content = Column(
-            children: [
-              Padding(
-                padding: const EdgeInsets.fromLTRB(16, 8, 16, 4),
-                child: Row(
-                  children: [
-                    if (multiChannel && !showChannelRail)
-                      LibraryChannelSelector(
-                        channels: sources.channels,
-                        selectedKey: discover.channelKey,
-                        onSelected: (key) =>
-                            _selectChannel(key, enabledChannels),
-                      ),
-                    if (visibleTabs.length >= 2) ...[
-                      if (multiChannel && !showChannelRail)
-                        const SizedBox(width: 12),
-                      Expanded(
-                        child: M3ETabs(
-                          tabs: [
-                            for (final tab in visibleTabs) _tabSpec(l10n, tab),
-                          ],
-                          selectedIndex: selectedIndex,
-                          onTabSelected: (index) =>
-                              setState(() => _tab = visibleTabs[index]),
+      child: Column(
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 8, 16, 4),
+            child: Row(
+              children: [
+                if (multiChannel)
+                  LibraryChannelSelector(
+                    channels: sources.channels,
+                    selectedKey: discover.channelKey,
+                    onSelected: (key) => _selectChannel(key, enabledChannels),
+                  ),
+                if (visibleTabs.length >= 2) ...[
+                  if (multiChannel) const SizedBox(width: 12),
+                  Expanded(
+                    child: M3ETabs(
+                      tabs: [
+                        for (final tab in visibleTabs) _tabSpec(l10n, tab),
+                      ],
+                      selectedIndex: selectedIndex,
+                      onTabSelected: (index) =>
+                          setState(() => _tab = visibleTabs[index]),
+                    ),
+                  ),
+                ] else
+                  const Spacer(),
+              ],
+            ),
+          ),
+          Expanded(
+            child: visibleTabs.length >= 2
+                ? M3ETabsView(
+                    selectedIndex: selectedIndex,
+                    onTabSelected: (index) =>
+                        setState(() => _tab = visibleTabs[index]),
+                    children: [
+                      for (final tab in visibleTabs)
+                        KeyedSubtree(
+                          key: ValueKey(tab),
+                          child: _tabContent(tab),
                         ),
-                      ),
-                    ] else
-                      const Spacer(),
-                  ],
-                ),
-              ),
-              Expanded(
-                child: visibleTabs.length >= 2
-                    ? M3ETabsView(
-                        selectedIndex: selectedIndex,
-                        onTabSelected: (index) =>
-                            setState(() => _tab = visibleTabs[index]),
-                        children: [
-                          for (final tab in visibleTabs)
-                            KeyedSubtree(
-                              key: ValueKey(tab),
-                              child: _tabContent(tab),
-                            ),
-                        ],
-                      )
-                    : _tabContent(visibleTabs.first),
-              ),
-            ],
-          );
-
-          if (!showChannelRail) return content;
-          return Row(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              LibraryChannelRail(
-                channels: sources.channels,
-                selectedKey: discover.channelKey,
-                onSelected: (key) => _selectChannel(key, enabledChannels),
-              ),
-              Expanded(child: content),
-            ],
-          );
-        },
+                    ],
+                  )
+                : _tabContent(visibleTabs.first),
+          ),
+        ],
       ),
     );
   }
@@ -312,6 +282,9 @@ class _LibraryState extends State<Library> {
           ),
       };
 
+  /// 空态：图标 40 + 文案 + 主行动（把人送到设置里的「音源管理」）。
+  ///
+  /// 图标尺寸与间距走仓库统一的空态口径（不占满全屏，把视线留给文案与行动）。
   Widget _buildEmptyState(AppLocalizations l10n) {
     final theme = Theme.of(context);
     return Center(
@@ -322,16 +295,22 @@ class _LibraryState extends State<Library> {
           children: [
             Icon(
               Icons.source_rounded,
-              size: 56,
+              size: 40,
               color: theme.colorScheme.onSurfaceVariant,
             ),
-            const SizedBox(height: 16),
+            const SizedBox(height: 12),
             Text(
               l10n.libraryNoChannels,
               textAlign: TextAlign.center,
               style: theme.textTheme.bodyMedium?.copyWith(
                 color: theme.colorScheme.onSurfaceVariant,
               ),
+            ),
+            const SizedBox(height: 16),
+            // 空态只负责把人送到设置；渠道开关仍在「音源管理」子页维护。
+            M3EButton.text(
+              onPressed: () => showSettingsSheet(context),
+              child: Text(l10n.settingsTitle),
             ),
           ],
         ),

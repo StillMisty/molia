@@ -43,9 +43,9 @@ class FakeDiscoverSource implements DiscoverSource {
   );
 
   @override
-  List<DiscoverLeaderboard> get leaderboards => const [
-        DiscoverLeaderboard(id: 'wy__3778678', name: '热歌榜', bangid: '3778678'),
-      ];
+  List<DiscoverLeaderboard> leaderboards = const [
+    DiscoverLeaderboard(id: 'wy__3778678', name: '热歌榜', bangid: '3778678'),
+  ];
 
   Future<T> _guard<T>(T value) async {
     if (fail) throw StateError('mock failure');

@@ -1766,6 +1766,12 @@ abstract class AppLocalizations {
   /// **'Album'**
   String get tableColumnAlbum;
 
+  /// No description provided for @tableColumnPlayedAt.
+  ///
+  /// In en, this message translates to:
+  /// **'Played at'**
+  String get tableColumnPlayedAt;
+
   /// No description provided for @tableColumnDuration.
   ///
   /// In en, this message translates to:
@@ -1819,6 +1825,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Volume'**
   String get playerBarVolume;
+
+  /// No description provided for @playerBarVolumePercent.
+  ///
+  /// In en, this message translates to:
+  /// **'{percent}%'**
+  String playerBarVolumePercent(int percent);
 
   /// No description provided for @playerBarMute.
   ///
@@ -2209,6 +2221,18 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'No playlists found'**
   String get discoverSearchEmpty;
+
+  /// No description provided for @discoverShowAll.
+  ///
+  /// In en, this message translates to:
+  /// **'Show all'**
+  String get discoverShowAll;
+
+  /// No description provided for @discoverShowLess.
+  ///
+  /// In en, this message translates to:
+  /// **'Show less'**
+  String get discoverShowLess;
 
   /// No description provided for @discoverPlaylistAuthor.
   ///
