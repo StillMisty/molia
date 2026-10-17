@@ -457,7 +457,21 @@
   变更量（不是全库规模）。
 - **Sync peer roster（同步名册）** — `SyncPeerState`：每台对端的最近接触观测
   （名称 / 传输 / 最后拉取·推送 / 时钟偏移 / 落后条数 / 最近失败），持久化在
-  `sync_state_v1`，UI 在「已配对设备」子页呈现；「落后条数」由增量协议填充。
+  `sync_state_v1`，UI 在同步设置页的「设备」区呈现（名册内联 + 地址簿里尚未
+  进名册的条目；未认领的候选地址折叠为一行「候选地址 N 个」）；「落后条数」
+  由增量协议填充。
+- **Pairing workbench（配对工作台）** — `lib/pages/sync_settings_page.dart`：
+  同步设置页的一页闭环信息架构（开关与结论 / 本机 / 设备 / 传输 / 同步内容 /
+  日志）；本机与设备原本各占一个子页，配对流程要来回跳页，现已合并。
+- **Pairing code（配对码）** — `lib/domain/models/sync_pairing.dart`：
+  `molia-pair:1:<base64url(utf8(json))>`，字段短名 `n` 设备名 / `i` 设备 id /
+  `p` 口令 / `a` 地址候选 `[[host, probePort], …]` / `h` HTTP 端点端口；
+  可复制、可出二维码（`qr` 纯 Dart 自绘）、移动端可扫（`mobile_scanner`）。
+  **口令随码传递 = 等同授权**（信任模型就是口令即信任根），分享弹层明确警告。
+- **Local endpoints（本机地址列表）** — `local_endpoints_service.dart`：
+  枚举本机可路由地址（IPv4 + 全局 / ULA IPv6，排除回环 / link-local / zone，
+  私网优先排序）的唯一入口，设置页地址列表、配对码与局域网探测 `addrs` 候选
+  共用同一口径。
 - **Sync transport status（传输状态）** — `SyncTransport.unavailableReason`
   （`not_configured` / `start_failed` / `permission_denied`）：传输启动失败、
   未配置或缺权限时必须显式可见，不能只留在日志里（开关显示「已打开」而实际
@@ -470,6 +484,8 @@
   name}`：**发现失败**（AP 隔离 / 多网段 / 防火墙 / VPN）时的兜底，与广播发现
   合并进同一名册；首次单播探测后认领 `deviceId` 与端点端口并回写，学到端口后
   不再依赖广播。本机端点端口持久化（`lanHttpPort`），否则对端记不住本机。
+  配对码导入会预填 `deviceId` / 端点端口 / 探测端口（地址逐个入簿），因此
+  「尚未接触」的条目也能被按设备认领。
 - **Sync report / log（同步结果 / 日志）** — `SyncLogEntry`：触发原因 +
   五态结论 + 本轮变更量 + 失败数与错误；设置页只读展示，不拦截合并。
   计数一律是本轮变更量（不随数据量增长）。
