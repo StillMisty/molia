@@ -80,6 +80,9 @@ Future<LibraryStack> buildLibraryStack({
   ).wait;
   syncState.stampIssuer.seed(dbMaxVersion);
   unawaited(playStatisticsRepository.closeStaleEvents());
+  // 事件保留裁剪（行数 + 时长上限）：统计查询 / 同步导出与指纹都随库龄
+  // 线性变慢，超出上限的已收尾事件在启动维护时裁掉。
+  unawaited(playStatisticsRepository.pruneOldEvents());
   // 最近播放上下文（play_contexts）：提前创建，同一实例既进 Provider 树，
   // 也直接注入 PlaybackProvider / 播放观察者。
   final localDatabaseProvider = LocalDatabaseProvider();

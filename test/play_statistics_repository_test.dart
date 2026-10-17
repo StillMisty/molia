@@ -535,6 +535,85 @@ void main() {
     });
   });
 
+  test('导出缓存：增量维护（新收尾事件立即出现，重复导出不重读全表）', () async {
+    final first = await repository.startEvent(
+      sourceKey: 'wy',
+      songId: '1',
+      title: '曲目一',
+      startedAt: 1000,
+    );
+    // 缓存未加载时收尾：指纹推进，导出结果包含该行。
+    await repository.finishEvent(
+      first,
+      reason: PlayEventEndReason.completed,
+      listenedMs: 6000,
+      maxPositionMs: 6000,
+      endedAt: 2000,
+    );
+    final exported = await repository.syncExportEvents();
+    expect(exported, hasLength(1));
+    expect(exported.single['songId'], '1');
+    expect(exported.single['syncKey'], isNotEmpty);
+    // 缓存命中：同一列表实例（旧实现每次全表重读 + 逐行重建 Map）。
+    expect(identical(await repository.syncExportEvents(), exported), isTrue);
+
+    // 增量：新事件收尾后缓存就地更新（含 syncKey / 版本列）。
+    final second = await repository.startEvent(
+      sourceKey: 'kw',
+      songId: '2',
+      title: '曲目二',
+      startedAt: 3000,
+    );
+    await repository.finishEvent(
+      second,
+      reason: PlayEventEndReason.skipped,
+      listenedMs: 3000,
+      maxPositionMs: 3000,
+      endedAt: 4000,
+    );
+    final after = await repository.syncExportEvents();
+    expect(after, hasLength(2));
+    expect(after.map((row) => row['songId']), containsAll(['1', '2']));
+
+    // clearAll 后缓存失效：导出为空。
+    await repository.clearAll();
+    expect(await repository.syncExportEvents(), isEmpty);
+  });
+
+  test('保留策略：超出时长窗口与行数上限的已收尾事件被裁剪', () async {
+    final now = DateTime.now().millisecondsSinceEpoch;
+    final dayMs = const Duration(days: 1).inMilliseconds;
+    for (var i = 0; i < 5; i++) {
+      await insertEvent(
+        songId: 'old$i',
+        startedAt: now - 10 * dayMs + i * 1000,
+        endedAt: now - 10 * dayMs + i * 1000 + 1000,
+      );
+    }
+    // 窗口内的新事件（保留）。
+    await insertEvent(songId: 'new', startedAt: now - 1000, endedAt: now);
+
+    // 时长窗口：只留最近 5 天收尾的事件。
+    final removed = await repository.pruneOldEvents(
+      maxRows: 100,
+      retention: const Duration(days: 5),
+    );
+    expect(removed, 5);
+    final exported = await repository.syncExportEvents();
+    expect(exported.map((row) => row['songId']), ['new']);
+
+    // 行数上限：再插入两条并保留 1 行 → 只留最新（startedAt 最大）一条。
+    await insertEvent(songId: 'a', startedAt: now + 1000, endedAt: now + 2000);
+    await insertEvent(songId: 'b', startedAt: now + 3000, endedAt: now + 4000);
+    await repository.pruneOldEvents(
+      maxRows: 1,
+      retention: const Duration(days: 3650),
+    );
+    final trimmed = await repository.syncExportEvents();
+    expect(trimmed, hasLength(1));
+    expect(trimmed.single['songId'], 'b');
+  });
+
   test('同步指纹：进行中事件不变，收尾后推进', () async {
     final id = await repository.startEvent(
       sourceKey: 'wy',
