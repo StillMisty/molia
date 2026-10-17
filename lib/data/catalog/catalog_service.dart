@@ -131,9 +131,21 @@ class CatalogService {
       'url:${track.id.sourceKey}:${payloadDigestOf(track)}:';
 
   /// payload 稳定摘要（排序键 JSON → md5）。
-  static String payloadDigestOf(Track track) => crypto.md5
-      .convert(utf8.encode(_canonicalJson(track.payload)))
-      .toString();
+  ///
+  /// 记忆化：raw payload 按不变量「原样透传」（同一引用），同一曲目的重复
+  /// 取链 / 缓存占用查询（单曲清缓存、信息页）不再重复做递归排序 + 编码
+  /// + md5；Expando 弱引用不阻止 payload 回收。
+  static final Expando<String> _payloadDigests = Expando<String>();
+
+  static String payloadDigestOf(Track track) {
+    final payload = track.payload;
+    final cached = _payloadDigests[payload];
+    if (cached != null) return cached;
+    final digest =
+        crypto.md5.convert(utf8.encode(_canonicalJson(payload))).toString();
+    _payloadDigests[payload] = digest;
+    return digest;
+  }
 
   /// 使指定音源的取链缓存失效（预留：播放失败/403 时立即失效并重试）。
   void invalidateResolvePrefix(String sourceKey) =>

@@ -39,7 +39,11 @@ class UpdateManifestClient {
     final uri = _manifestUri(channel);
     final Response<dynamic> response;
     try {
-      response = await _dio.getUri<dynamic>(uri);
+      // 明确超时：清单是小文件，网络黑洞（DNS 失败 / 无响应）不能让检查
+      // 永久悬挂（app_dio 有意不设全局超时，由调用点负责）。
+      response = await _dio
+          .getUri<dynamic>(uri)
+          .timeout(const Duration(seconds: 20));
     } on DioException catch (e) {
       throw UpdateFailureException(
         UpdateFailureKind.network,

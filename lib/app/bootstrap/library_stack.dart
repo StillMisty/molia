@@ -54,8 +54,7 @@ Future<LibraryStack> buildLibraryStack({
   );
   // 发号器基线 ≧ 全库最大戳：即使状态存储没来得及落盘（进程被杀）或时钟回拨，
   // 重启后的新写入也不会输给库内已有记录。
-  final dbMaxVersion = await libraryRepository.maxVersion();
-  syncState.stampIssuer.seed(dbMaxVersion);
+  //
   // 听歌统计：事件级采集（play_events）与查询；与「最近播放」（play_history，
   // 500 条上限）是两套数据。采集是纯观察者（服务不持有 provider），
   // 快照 / 进度经 [wirePlayStatistics] 接线；上次进程被杀遗留的进行中事件
@@ -69,15 +68,21 @@ Future<LibraryStack> buildLibraryStack({
     repository: playStatisticsRepository,
     settings: catalog.settings,
   );
-  await playStatisticsService.init();
+  // 换源偏好（自动换源开关，默认开）与自动换源解析服务：
+  // 播放失败同源重试仍失败时，经注入的 resolver 跨音源严格找回并替换。
+  final sourceSwapSettings = SourceSwapSettings(settings: catalog.settings);
+  // 统计服务 init / 换源偏好 init / 全库最大戳查询三者互不依赖：
+  // 并行执行，启动等待取最大值（此前是三次串行等待）。
+  final (_, _, dbMaxVersion) = await (
+    playStatisticsService.init(),
+    sourceSwapSettings.init(),
+    libraryRepository.maxVersion(),
+  ).wait;
+  syncState.stampIssuer.seed(dbMaxVersion);
   unawaited(playStatisticsRepository.closeStaleEvents());
   // 最近播放上下文（play_contexts）：提前创建，同一实例既进 Provider 树，
   // 也直接注入 PlaybackProvider / 播放观察者。
   final localDatabaseProvider = LocalDatabaseProvider();
-  // 换源偏好（自动换源开关，默认开）与自动换源解析服务：
-  // 播放失败同源重试仍失败时，经注入的 resolver 跨音源严格找回并替换。
-  final sourceSwapSettings = SourceSwapSettings(settings: catalog.settings);
-  await sourceSwapSettings.init();
   final autoSourceSwapService = AutoSourceSwapService(
     catalog: catalog.catalogService,
     registry: catalog.sourceRegistry,

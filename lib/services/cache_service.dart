@@ -155,7 +155,7 @@ class CacheService {
   Future<void> setAudioMaxMb(int value) async {
     await _write(keyAudioMaxMb, value < 0 ? 0 : value);
     _notify(CachePartition.audio);
-    await enforceAudioLimit();
+    await enforceAudioLimit(force: true);
   }
 
   /// 歌词缓存 TTL（天，默认 30；0 = 永不过期）。
@@ -223,8 +223,26 @@ class CacheService {
     }
   }
 
+  /// 音频 LRU 淘汰的节流窗口：淘汰要列举整个缓存目录并逐文件 `stat`，
+  /// 每次起播 / 每次预取完成都跑一遍是 O(缓存文件数) 的串行 IO；窗口内的
+  /// 后续调用跳过（写入还在继续，下一次淘汰自然会覆盖）。
+  static const Duration audioEnforceMinInterval = Duration(minutes: 5);
+
+  DateTime _lastAudioEnforce = DateTime.fromMillisecondsSinceEpoch(0);
+  bool _audioEnforcing = false;
+
   /// 音频 LRU 淘汰（每次播放写入后 / 修改上限后调用）。
-  Future<int> enforceAudioLimit() async {
+  ///
+  /// [force] 用于「用户刚改了容量上限」这类必须立即生效的场景。
+  Future<int> enforceAudioLimit({bool force = false}) async {
+    if (_audioEnforcing) return 0;
+    final now = DateTime.now();
+    if (!force &&
+        now.difference(_lastAudioEnforce) < audioEnforceMinInterval) {
+      return 0;
+    }
+    _audioEnforcing = true;
+    _lastAudioEnforce = now;
     try {
       final maxMb = await audioMaxMb();
       if (maxMb <= 0) return 0; // 0 = 不限制
@@ -243,6 +261,8 @@ class CacheService {
     } catch (e) {
       _logger.warning('音频缓存淘汰失败: $e');
       return 0;
+    } finally {
+      _audioEnforcing = false;
     }
   }
 

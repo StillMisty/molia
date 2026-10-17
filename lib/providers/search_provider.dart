@@ -436,14 +436,17 @@ class SearchProvider extends ChangeNotifier {
   }
 
   Future<void> performSearch(String query) async {
-    if (query.trim().isEmpty) return;
+    // 归一化一次：搜索缓存 key 含关键词，带首尾空格的输入会命中不同条目
+    // 并重复请求（手机键盘自动补空格很常见）。
+    final keyword = query.trim();
+    if (keyword.isEmpty) return;
 
     // 按当前类型分发：歌手 / 歌词走各自会话（单曲路径保持原语义）。
     if (_kind == SearchKind.artist) {
-      return _performArtistSearch(query);
+      return _performArtistSearch(keyword);
     }
     if (_kind == SearchKind.lyric) {
-      return _performLyricSearch(query);
+      return _performLyricSearch(keyword);
     }
 
     // 无可用音源：展示空态引导，不发起请求。
@@ -457,7 +460,7 @@ class SearchProvider extends ChangeNotifier {
       return;
     }
 
-    _pagerQuery = query;
+    _pagerQuery = keyword;
     _failure = null;
     _pager.reset();
     notifyListeners();
@@ -520,7 +523,8 @@ class SearchProvider extends ChangeNotifier {
 
   /// 歌手搜索首屏：独立错误态（失败保留已有结果）。
   Future<void> _performArtistSearch(String query) async {
-    if (query.trim().isEmpty) return;
+    final keyword = query.trim();
+    if (keyword.isEmpty) return;
 
     if (_sourceKey.isEmpty) {
       _artistFailure = null;
@@ -530,7 +534,7 @@ class SearchProvider extends ChangeNotifier {
       return;
     }
 
-    _artistPagerQuery = query;
+    _artistPagerQuery = keyword;
     _artistFailure = null;
     _artistPager.reset();
     notifyListeners();
@@ -580,7 +584,8 @@ class SearchProvider extends ChangeNotifier {
 
   /// 歌词搜索首屏：独立错误态（失败保留已有结果）。
   Future<void> _performLyricSearch(String query) async {
-    if (query.trim().isEmpty) return;
+    final keyword = query.trim();
+    if (keyword.isEmpty) return;
 
     if (_sourceKey.isEmpty) {
       _clearLyricSession();
@@ -588,7 +593,7 @@ class SearchProvider extends ChangeNotifier {
       return;
     }
 
-    _lyricPagerQuery = query;
+    _lyricPagerQuery = keyword;
     _lyricFailure = null;
     _pendingLyricSnippets = {};
     _lyricPager.reset();

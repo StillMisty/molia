@@ -316,7 +316,19 @@ class MoliaDatabase extends _$MoliaDatabase {
   static QueryExecutor _open() {
     return driftDatabase(
       name: moliaDatabaseFileName,
-      native: DriftNativeOptions(databaseDirectory: _databaseDirectory),
+      native: DriftNativeOptions(
+        databaseDirectory: _databaseDirectory,
+        setup: (db) {
+          // WAL：读（资料库 / 统计查询）不再被写事务阻塞，写入吞吐也更稳；
+          // 文件级持久设置，重复执行无副作用。
+          db.execute('PRAGMA journal_mode = WAL');
+          // 本地单文件库：同步提交降为 NORMAL，进程崩溃窗口可接受，
+          // 避免每次写都 fsync 整个 WAL。
+          db.execute('PRAGMA synchronous = NORMAL');
+          // 并发写（同步引擎 / 播放写入 / 统计 touch）等锁的上限。
+          db.execute('PRAGMA busy_timeout = 5000');
+        },
+      ),
     );
   }
 

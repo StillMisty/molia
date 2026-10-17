@@ -86,21 +86,22 @@ void main() async {
     repository: library.libraryRepository,
     playbackProvider: playback.playbackProvider,
   );
-  // ⑤ 桌面壳（托盘偏好 + 统一退出路径 + 关闭策略 + 菜单状态同步）。
-  final desktop = await buildDesktopStack(
+  // ⑤ 桌面壳（异步：prefs / 托盘落地）与 ⑥ AI 推歌 / ⑦ 歌词会话：
+  // 三组互不依赖；桌面壳的异步初始化与后面两组同步装配并行推进
+  // （不 await 完桌面壳再开始下一步）。
+  final desktopFuture = buildDesktopStack(
     playback: playback.playbackProvider,
     libraryProvider: libraryProvider,
     playStatisticsService: library.playStatisticsService,
   );
-  // ⑥ AI 推歌（默认关闭，配置走安全存储）。
   final ai = buildAiStack(
     catalog: catalog,
     library: library,
     playback: playback.playbackProvider,
     libraryProvider: libraryProvider,
   );
-  // ⑦ 歌词会话（与播放页共享 LyricsService）。
   final lyrics = buildLyricsStack(local: local);
+  final desktop = await desktopFuture;
   // ⑧ 歌词显示与主题（含 runApp 前的启动预解析：首帧即封面色）。
   final display = await buildLyricsDisplayStack(
     catalog: catalog,
