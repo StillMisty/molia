@@ -282,7 +282,7 @@ class _LibraryState extends State<Library> {
           ),
       };
 
-  /// 空态：图标 40 + 文案 + 主行动（把人送到设置里的「音源管理」）。
+  /// 空态：图标 40 + 文案 + 主行动（打开设置首屏；渠道开关在「音源管理」里）。
   ///
   /// 图标尺寸与间距走仓库统一的空态口径（不占满全屏，把视线留给文案与行动）。
   Widget _buildEmptyState(AppLocalizations l10n) {
@@ -307,7 +307,7 @@ class _LibraryState extends State<Library> {
               ),
             ),
             const SizedBox(height: 16),
-            // 空态只负责把人送到设置；渠道开关仍在「音源管理」子页维护。
+            // 主行动只打开设置首屏：渠道开关在设置里的「音源管理」子页维护。
             M3EButton.text(
               onPressed: () => showSettingsSheet(context),
               child: Text(l10n.settingsTitle),

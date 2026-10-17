@@ -7,6 +7,7 @@ import '../l10n/app_localizations.dart';
 import '../pages/discover_tracks_page.dart';
 import '../providers/discover_provider.dart';
 import '../services/haptics.dart';
+import 'icon_swap.dart';
 import 'shell_page_visibility.dart';
 
 AppLocalizations _l10n(BuildContext context) =>
@@ -15,14 +16,11 @@ AppLocalizations _l10n(BuildContext context) =>
 /// 榜单 chip 云的列距 / 行距：装箱计算与 `Wrap` 渲染必须是同一个值。
 const double _chipGap = 8;
 
-/// 宽度估计的余量：估计取字符宽的上界，再留 1dp 吸收亚像素舍入，
-/// 保证「装箱能放下」在真身更宽时也不会失效。
+/// 装箱用的宽度余量：吸收亚像素舍入，避免估计刚好卡在行宽边界时被真身挤到
+/// 下一行。
 const double _chipWidthSlack = 1;
 
 /// 折叠态 chip 云可见的前缀长度（纯函数，只算宽度不建树）。
-///
-/// [widths] 是各 chip 宽度的**保守上界**（见 [_estimateChipWidth]）：真身只会
-/// 更窄，所以「放得下」的结论不会因实测宽度而失效。
 ///
 /// 为什么折叠时不渲染（而不是渲染后用 `ClipRect` 裁掉）：被裁掉的 chip 仍在
 /// 语义树与键盘焦点顺序里，会出现焦点落在看不见的 chip 上的可访问性问题。
@@ -52,7 +50,8 @@ int chipCloudVisibleCount({
 }
 
 /// chip 宽度的保守上界：真身 = 起始内边距 + 文字 + 末尾内边距
-/// （内边距取 [M3EChipTheme] 的 token，不另写字面量）。
+/// （内边距取 [M3EChipTheme] 的 token，不另写字面量），再留余量吸收亚像素
+/// 舍入——真身只会更窄，「放得下」的装箱结论不会因实测宽度而失效。
 double _estimateChipWidth({
   required String label,
   required M3EChipTheme chipTheme,
@@ -204,14 +203,13 @@ class _DiscoverLeaderboardsTabState extends State<DiscoverLeaderboardsTab>
           textDirection: textDirection,
         );
 
-    // 折叠态放得下的前缀（与当前是否展开无关）：真身宽度是保守上界，见
-    // [_estimateChipWidth]，所以「放得下」的结论不会因实测更宽而失效。
+    // 折叠态放得下的前缀：与当前是否展开无关。
     final collapsedCount = chipCloudVisibleCount(
       widths: [for (final board in boards) estimate(board.name)],
       availableWidth: availableWidth,
       gap: _chipGap,
     );
-    // 有折叠内容才有入口：全部放得下时不出现空入口。
+    // 折叠态是否有剩余（决定入口是否出现）。
     final hasOverflow = collapsedCount < boards.length;
     final visibleCount = _expanded ? boards.length : collapsedCount;
 
@@ -236,12 +234,17 @@ class _DiscoverLeaderboardsTabState extends State<DiscoverLeaderboardsTab>
         if (hasOverflow)
           M3EButton.icon(
             style: M3EButtonStyle.text,
-            icon: Icon(
-              _expanded
-                  ? Icons.unfold_less_rounded
-                  : Icons.unfold_more_rounded,
+            // 同一按钮槽位换图标，过渡走共享的 IconSwap 配方。
+            icon: IconSwap<bool>(
+              value: _expanded,
+              builder: (context, expanded) => Icon(
+                expanded
+                    ? Icons.unfold_less_rounded
+                    : Icons.unfold_more_rounded,
+              ),
             ),
-            label: Text(_expanded ? l10n.discoverShowLess : l10n.discoverShowAll),
+            label:
+                Text(_expanded ? l10n.discoverShowLess : l10n.discoverShowAll),
             onPressed: () => _toggleExpanded(
               context.read<DiscoverProvider>().channelKey,
             ),
