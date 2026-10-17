@@ -237,7 +237,7 @@ void main() {
     expect(find.text('Row Artist'), findsNothing);
     expect(find.text('Link A'), findsNothing);
 
-    // 表格档是单行：行高取 M3E 列表 token `minHeight`（56，不再是双行 72）。
+    // 表格档是单行：行高取 M3E 列表 token `minHeight`（56，与双行档 72 成对）。
     expect(
       tester.getSize(find.byType(TrackRow)).height,
       TrackRow.extentOf(

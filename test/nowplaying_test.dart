@@ -399,21 +399,21 @@ void main() {
     await tester.pump(const Duration(milliseconds: 600));
 
     final column = tester.getRect(find.byType(Player));
-    expect(column.width, 480, reason: '桌面播放器列宽（蓝图：420 → 480）');
+    expect(column.width, 480, reason: '桌面播放器列宽');
 
     // 预算口径：两侧各留一个内容内边距（24）→ 可用宽 432 → 封面边 ≈288。
     final centerRect =
         tester.getRect(find.byKey(PlayerCoverDeck.centerCoverCardKey));
     expect(centerRect.width, closeTo(288, 0.5), reason: '视觉几乎不变（≈300）');
 
-    // 布局口径：堆叠容器自身不许比列宽（旧口径 art = 列宽 − 96、堆叠再
-    // ×1.38 = 530 > 480，容器被父级夹小、内层 Stack 仍按 530 绘制）。
+    // 布局口径：堆叠容器自身不许比列宽（否则容器被父级夹小、内层 Stack
+    // 仍按未夹取的尺寸绘制）。
     final deck = tester.getRect(find.byKey(PlayerCoverDeck.stackKey));
     expect(deck.width, lessThanOrEqualTo(column.width));
     expect(deck.height, lessThanOrEqualTo(column.height));
 
     // 绘制口径：三张卡（含邻位旋转包围盒）必须落在列内，不压进侧栏 /
-    // 歌词列。旧口径下这里会各越界约 32dp。
+    // 歌词列。
     final painted = [
       find.byKey(PlayerCoverDeck.centerCoverCardKey),
       find.byKey(

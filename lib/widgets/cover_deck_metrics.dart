@@ -1,9 +1,8 @@
 /// 播放页封面堆叠的尺寸预算：纯函数（输入可用宽高，输出封面边长与堆叠尺寸）。
 ///
-/// 从 `lib/widgets/player.dart` 抽出：那里三处版式各自手写「art × 1.38」与
-/// 「可用宽 − 96」，横向预算里没有除回因子 —— 1280×800 下堆叠画出播放器列
-/// 约 32dp（压进侧栏与歌词列）。本模块成为唯一口径，并给出硬不变量：
-/// `stackWidth ≤ availableWidth` 且 `stackHeight ≤ availableHeight`。
+/// 唯一口径：堆叠的横向 / 纵向因子与「可用区 → 封面边长」的换算都只在这里，
+/// 硬不变量是 `stackWidth ≤ availableWidth` 且 `stackHeight ≤ availableHeight`
+/// （邻位封面的旋转包围盒与卡面阴影都算进横向因子）。
 library;
 
 import 'dart:math';

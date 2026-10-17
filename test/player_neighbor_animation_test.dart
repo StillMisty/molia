@@ -149,7 +149,7 @@ void main() {
   }
 
   /// 拖动距离：deck 的换场行程是封面边长的 0.6（`_coverSwapRange`），
-  /// 硬编码像素会随版式缩放漂移（封面越界修复后手机封面由 324 → 280）。
+  /// 硬编码像素会随版式缩放漂移。
   double dragFor(WidgetTester tester, double fraction) =>
       tester.getSize(find.byKey(PlayerCoverDeck.centerCoverCardKey)).width *
       0.6 *

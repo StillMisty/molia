@@ -5,9 +5,9 @@ import 'package:molia/widgets/cover_deck_metrics.dart';
 
 /// 封面堆叠尺寸预算：两轴同时约束 + 硬不变量（堆叠不越出可用区）。
 ///
-/// 回归背景：预算原先手写在 `player.dart` 里（`可用宽 − 96` 直接当封面边长，
-/// 堆叠再乘 1.38），1280×800 下堆叠需要 447 而列只有 420 —— 封面左右各越界
-/// 约 32dp，压进侧栏与歌词列。
+/// 不变量是两轴同时成立：`stackWidth ≤ availableWidth` 且
+/// `stackHeight ≤ availableHeight`——横向因子要含邻位封面的旋转包围盒与卡面
+/// 阴影，预算不能只按中心封面边长算。
 void main() {
   /// 真实版式的可用区三档 + 退化输入：宽高比从极扁到极窄。
   const cases = <(double, double)>[
@@ -107,13 +107,8 @@ void main() {
     );
   });
 
-  test('回归：桌面列宽 480 的旧口径（可用宽 − 96 当封面边长）必然越界', () {
+  test('桌面列宽 480：扣掉两侧内容内边距后的堆叠仍落在列内', () {
     const double column = 480;
-    // 旧口径：预算里没除横向因子。列宽 480 时 art = 384、堆叠 = 530 > 480。
-    const double legacyArt = column - 96;
-    expect(legacyArt * 1.38, greaterThan(column), reason: '前提：旧口径越界');
-
-    // 新口径：可用宽扣两侧内容内边距（24×2）后堆叠一定落在列内。
     final metrics = coverDeckMetricsFor(
       availableWidth: column - 24 * 2,
       availableHeight: 646,

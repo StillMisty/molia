@@ -1233,8 +1233,8 @@ class _FavoritesPageState extends State<FavoritesPage> {
       });
     }
 
-    // 合集切换只有标题行弹层一个入口（合集栏已退役）：条目不再额外解析
-    // 一份，弹层打开时按当下 provider 状态现算。
+    // 合集切换只有标题行弹层一个入口：条目不额外解析一份，弹层打开时按
+    // 当下 provider 状态现算。
     final listColumn = Column(
       children: [
         _selecting
@@ -2162,7 +2162,10 @@ class _FavoritesPageState extends State<FavoritesPage> {
               : view.isFavorites
                   ? l10n.favoritesEmpty
                   : l10n.playlistTracksEmpty,
-      // 本地歌曲空态：把导入入口摆在首屏（标题行按钮之外的第二入口）。
+      // 主行动只在「本页就能完成」时给：本地歌曲空态 = 导入入口（标题行按钮
+      // 之外的第二入口，同一动作）。收藏 / 历史 / 自建列表空态不给按钮——
+      // 收藏要先在别处收藏、历史要先有播放、自建列表要先在别处加入曲目，
+      // 页内没有对应动作可挂（挂「去发现」还得给本页新增跨目的地导航通道）。
       action: view.isLocalSongs
           ? M3EButton.icon(
               style: M3EButtonStyle.tonal,
@@ -2239,8 +2242,8 @@ class _CollectionView {
 
 /// 合集条目：收藏 / 播放历史 / 本地歌曲伪合集（哨兵 id）或一个自建列表。
 ///
-/// 只服务本页的合集弹层（合集栏退役后不再有第二个消费面）：顺序、图标、
-/// 数量与选中态由页面按持久化顺序 + 自然顺序统一解析。
+/// 只服务本页的合集弹层：顺序、图标、数量与选中态由页面按持久化顺序 +
+/// 自然顺序统一解析。
 class _CollectionEntry {
   const _CollectionEntry({
     required this.key,

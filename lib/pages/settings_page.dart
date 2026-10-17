@@ -399,9 +399,8 @@ class _SettingsSheetTheme extends M3EBottomSheetTheme {
 
 /// 宽屏设置弹层宽度（首屏两列画布上限；见 `showSettingsSheet`）。
 ///
-/// 两列启用判据由壳层解析的 `DesktopLayout.masterDetail` 给出（与收藏页
-/// master-detail 同一处，见 desktop_layout.dart）；列宽不随窗口继续变宽，
-/// 子页是长表单保持单列。
+/// 两列启用判据由壳层解析的 `DesktopLayout.masterDetail` 给出
+/// （见 desktop_layout.dart）；列宽不随窗口继续变宽，子页是长表单保持单列。
 const double _settingsSheetDesktopWidth = 880;
 
 /// 设置首屏：分区卡片 + 弹层内部子页入口。
@@ -456,7 +455,7 @@ class _SettingsHomeViewState extends State<_SettingsHomeView>
     final m3e = M3ETheme.of(context);
     // 两列流式需要比单列舒适行宽（`maxWidth`）更宽的画布：上限取设置弹层
     // 宽度，两列各占约半宽；单列沿用 `maxWidth` 不变。判据由壳层解析的
-    // DesktopLayout 给出（与收藏页 master-detail 同一处）。
+    // DesktopLayout 给出（`masterDetail` 的当前消费方只此一处）。
     final twoColumn = DesktopLayout.of(context).masterDetail;
 
     return Container(

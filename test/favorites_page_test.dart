@@ -554,7 +554,6 @@ void main() {
     expect(backend.lastRequest!.tracks, hasLength(3));
   });
 
-  // 合集栏已退役：桌面宽屏也从标题行弹层切换（唯一入口，不再有两套切换观感）。
   testWidgets('桌面宽屏：合集切换入口只有标题行弹层', (tester) async {
     await seedFavorites(tester);
     await importLove(tester);
@@ -768,7 +767,7 @@ void main() {
     expect(find.text('Artist 1'), findsOneWidget, reason: '副标题仍是歌手');
     expect(find.text('3:00'), findsNWidgets(3), reason: '时长仍在行尾');
 
-    // 816 − 96 = 720：进表格档（合集栏退役后没有页内常驻栏二次扣减）。
+    // 816 − 96 = 720：进表格档（页内没有常驻栏二次扣减）。
     await pumpFavorites(tester, size: const Size(816, 2400));
     expect(find.byType(TrackTableHeader), findsOneWidget);
     expect(find.text('Album 1'), findsOneWidget, reason: '行内展示专辑列');
