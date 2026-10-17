@@ -2103,9 +2103,6 @@ class AppLocalizationsEn extends AppLocalizations {
   String get syncGeneralSection => 'Sync';
 
   @override
-  String get syncTrustModelTitle => 'Trust model';
-
-  @override
   String get syncEnabledTitle => 'Enable sync';
 
   @override
@@ -2113,19 +2110,20 @@ class AppLocalizationsEn extends AppLocalizations {
       'Exchange data with devices that share your passphrase';
 
   @override
-  String get syncDeviceNameTitle => 'Device name';
+  String get syncLocalSection => 'This device';
 
   @override
-  String get syncDevicePassphraseTitle => 'Device & passphrase';
+  String get syncLocalSectionHint =>
+      'Peers need this information to reach this device; the addresses and ports travel inside the pairing code.';
+
+  @override
+  String get syncDeviceNameTitle => 'Device name';
 
   @override
   String get syncPassphraseTitle => 'Sync passphrase';
 
   @override
   String get syncPassphraseNotSet => 'Not set';
-
-  @override
-  String get syncPassphraseSet => 'Passphrase set';
 
   @override
   String get syncPassphraseTrustHint =>
@@ -2386,14 +2384,7 @@ class AppLocalizationsEn extends AppLocalizations {
   }
 
   @override
-  String get syncPeersTitle => 'Paired devices';
-
-  @override
   String get syncPeersSection => 'Devices';
-
-  @override
-  String get syncPeersSummaryEmpty =>
-      'No device yet · LAN discovery is automatic';
 
   @override
   String get syncPeersHint =>
@@ -2403,6 +2394,9 @@ class AppLocalizationsEn extends AppLocalizations {
   String syncPeerThisDevice(String id) {
     return 'This device · $id';
   }
+
+  @override
+  String get syncPeerThisDeviceTitle => 'This device ID';
 
   @override
   String syncPeerLastSync(String time) {
@@ -2453,7 +2447,8 @@ class AppLocalizationsEn extends AppLocalizations {
   String get syncPeerAdd => 'Add device';
 
   @override
-  String get syncPeerAddSubtitle => 'Enter a peer address when discovery fails';
+  String get syncPeerAddSubtitle =>
+      'Enter a peer address or paste a pairing code when discovery fails';
 
   @override
   String get syncPeerAddTitle => 'Add device';
@@ -2462,7 +2457,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get syncPeerHostLabel => 'Address';
 
   @override
-  String get syncPeerHostHint => 'e.g. 192.168.1.23';
+  String get syncPeerHostHint => 'e.g. 192.168.1.23, or a molia-pair code';
 
   @override
   String get syncPeerNameLabel => 'Name (optional)';
@@ -2526,6 +2521,97 @@ class AppLocalizationsEn extends AppLocalizations {
   @override
   String get syncPeerNotContacted =>
       'not reached yet — it retries automatically once the peer is online';
+
+  @override
+  String syncPeerCandidatesTitle(int count) {
+    return '$count candidate addresses';
+  }
+
+  @override
+  String get syncPeerCandidatesSubtitle =>
+      'not reached yet · tap to view or remove';
+
+  @override
+  String get syncPairingShareTitle => 'Share pairing info';
+
+  @override
+  String get syncPairingShareSubtitle =>
+      'Copy the pairing code (contains the passphrase)';
+
+  @override
+  String get syncPairingCopied =>
+      'Pairing info copied (contains the passphrase)';
+
+  @override
+  String get syncPairingShowQr => 'Show QR code';
+
+  @override
+  String get syncPairingNeedsPassphrase => 'Set a sync passphrase first';
+
+  @override
+  String get syncPairingWarning =>
+      'This content contains your sync passphrase — sharing it authorizes the other device to read all synced data.';
+
+  @override
+  String get syncPairingCopy => 'Copy text';
+
+  @override
+  String get syncPairingNoAddress =>
+      'The pairing code has no usable address (the other device may only have loopback addresses)';
+
+  @override
+  String get syncPairingImported => 'Pairing info imported';
+
+  @override
+  String get syncPairingPassphraseConflictTitle => 'Passphrase already set';
+
+  @override
+  String get syncPairingPassphraseConflictBody =>
+      'This device already has a different sync passphrase. Replace it (other devices will need the new passphrase), or import the addresses only.';
+
+  @override
+  String get syncPairingAddressOnly => 'Addresses only';
+
+  @override
+  String get syncPairingReplacePassphrase =>
+      'Replace passphrase (affects other devices)';
+
+  @override
+  String get syncPairingScanTitle => 'Scan pairing code';
+
+  @override
+  String get syncPairingCameraDenied =>
+      'Camera permission denied. Open system settings, or go back and paste the code instead.';
+
+  @override
+  String get syncPairingCameraUnavailable =>
+      'Camera unavailable on this device — paste the code instead.';
+
+  @override
+  String get syncPairingUsePaste => 'Paste instead';
+
+  @override
+  String get syncLocalAddressCopied => 'Address copied';
+
+  @override
+  String get syncLocalAddressesEmptyTitle => 'No routable address';
+
+  @override
+  String get syncLocalAddressesEmpty =>
+      'Only loopback / link-local addresses were found; check the network connection.';
+
+  @override
+  String get syncLocalProbePort => 'Discovery port';
+
+  @override
+  String get syncLocalProbePortUnavailable =>
+      'Unavailable — broadcast / multicast discovery is degraded; use manual addresses';
+
+  @override
+  String get syncLocalHttpPort => 'Direct endpoint port';
+
+  @override
+  String get syncLocalHttpPortUnavailable => 'Not bound yet';
 
   @override
   String syncPeerAddress(String host) {

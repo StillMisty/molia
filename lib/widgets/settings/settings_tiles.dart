@@ -1,5 +1,6 @@
 import 'dart:math' as math;
 
+import 'package:flutter/services.dart';
 import 'package:material_3_expressive/material_3_expressive.dart';
 import 'package:material_ui/material_ui.dart';
 
@@ -187,6 +188,77 @@ class _SettingsRowContent extends StatelessWidget {
         minHeight: token - kSettingsRowPadding.vertical,
       ),
       child: child,
+    );
+  }
+}
+
+/// 复制行：图标 + 标题/副标题 + M3E 复制按钮；点行或按钮都复制并轻反馈
+/// （SnackBar 文案由调用方给，内容语义各页不同）。
+///
+/// [trailing] 追加在复制按钮之前的附属动作（如配对信息的「显示二维码」）。
+/// 整行不可点时传 [enabled] = false（只读信息行用 [SettingsInfoTile]）。
+class SettingsCopyTile extends StatelessWidget {
+  const SettingsCopyTile({
+    super.key,
+    required this.icon,
+    required this.title,
+    required this.subtitle,
+    required this.copyText,
+    required this.copiedMessage,
+    this.trailing,
+    this.enabled = true,
+  });
+
+  final IconData icon;
+  final String title;
+  final String subtitle;
+
+  /// 复制到剪贴板的内容。
+  final String copyText;
+
+  /// 复制成功后的 SnackBar 文案。
+  final String copiedMessage;
+
+  final Widget? trailing;
+  final bool enabled;
+
+  void _copy(BuildContext context) {
+    HapticsService.lightImpact();
+    Clipboard.setData(ClipboardData(text: copyText));
+    ScaffoldMessenger.of(context)
+        .showSnackBar(SnackBar(content: Text(copiedMessage)));
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return CardListSurface(
+      position: SettingsRowPosition.of(context),
+      padding: kSettingsRowPadding,
+      semanticLabel: '$title, $subtitle',
+      onPressed: enabled ? () => _copy(context) : null,
+      child: _SettingsRowContent(
+        hasSubtitle: subtitle.isNotEmpty,
+        child: Row(
+          children: [
+            SettingsTileIcon(icon: icon, isDestructive: false),
+            const SizedBox(width: 12),
+            Expanded(
+              child: SettingsTileLabel(title: title, subtitle: subtitle),
+            ),
+            if (trailing != null) ...[
+              const SizedBox(width: kSettingsSmallSpacing),
+              trailing!,
+            ],
+            const SizedBox(width: kSettingsSmallSpacing),
+            M3EIconButton(
+              icon: const Icon(Icons.content_copy_rounded),
+              variant: M3EIconButtonVariant.tonal,
+              semanticLabel: copiedMessage,
+              onPressed: enabled ? () => _copy(context) : null,
+            ),
+          ],
+        ),
+      ),
     );
   }
 }

@@ -59,6 +59,9 @@
 	<string>需要保存海报图片到您的照片库。</string>
 	<key>NSLocalNetworkUsageDescription</key>
 	<string>与同一局域网内的其它设备同步歌单、音源与设置。</string>
+	<!-- 同步配对码扫码（mobile_scanner）：只在用户主动点扫码时打开相机。 -->
+	<key>NSCameraUsageDescription</key>
+	<string>扫码导入同步配对信息（Scan a QR code to import sync pairing info）。</string>
 	<!-- 下载目录（应用文档目录下 Molia/）在「文件」App 中可见 / 可拷贝。 -->
 	<key>UIFileSharingEnabled</key>
 	<true/>

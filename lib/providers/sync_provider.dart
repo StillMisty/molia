@@ -9,7 +9,9 @@ import '../data/sync/sync_scheduler.dart';
 import '../data/sync/sync_state_store.dart';
 import '../data/sync/transport/local_network_permission.dart';
 import '../domain/models/device_sync.dart';
+import '../domain/models/sync_pairing.dart';
 import '../domain/ports/sync_transport.dart';
+import '../services/local_endpoints_service.dart';
 import '../utils/peer_address.dart';
 
 /// 跨设备同步的 UI 门面：引擎状态 + 口令管理 + 恢复动作触发 + 策略转发。
@@ -22,15 +24,20 @@ class SyncProvider extends ChangeNotifier {
     required SyncEngine engine,
     SyncScheduler? scheduler,
     LocalNetworkPermission? lanPermission,
+    LocalEndpointsService? localEndpoints,
   })  : _engine = engine,
         _scheduler = scheduler,
-        _lanPermission = lanPermission {
+        _lanPermission = lanPermission,
+        _endpoints = localEndpoints ?? LocalEndpointsService() {
     _engine.addListener(notifyListeners);
   }
 
   final SyncEngine _engine;
   final SyncScheduler? _scheduler;
   final LocalNetworkPermission? _lanPermission;
+
+  /// 本机地址枚举（设置页列表 / 配对码 / 探测候选三处共用；内部有缓存）。
+  final LocalEndpointsService _endpoints;
 
   String? _passphrase;
 
@@ -60,11 +67,14 @@ class SyncProvider extends ChangeNotifier {
   /// 添加手动对端（非空地址；UI 已做格式校验，这里再兜一层）。
   ///
   /// 返回 false 表示该地址已存在（UI 据此提示「已更新」）。地址先归一
-  /// （去方括号 / 空白），同一地址的不同文本写法不会落成两条。
+  /// （去方括号 / 空白），同一地址的不同文本写法不会落成两条。配对码导入
+  /// 会一并带上设备身份与端点端口（[httpPort] / [deviceId]）。
   Future<bool> addManualPeer(
     String host, {
     String name = '',
     int probePort = 0,
+    int httpPort = 0,
+    String deviceId = '',
   }) async {
     final normalized = normalizePeerHost(host);
     if (normalized.isEmpty) return false;
@@ -72,8 +82,53 @@ class SyncProvider extends ChangeNotifier {
       host: normalized,
       name: name.trim(),
       probePort: probePort,
+      httpPort: httpPort,
+      deviceId: deviceId,
     ));
   }
+
+  /// 配对码里的地址逐个入簿，返回首个地址（供立即接触）。
+  ///
+  /// 一轮探测会覆盖全部地址簿条目，所以「立即接触」只需对首个地址做一次；
+  /// 无可用地址返回 null（调用方给「码里没有地址」的提示）。
+  Future<String?> importPairingAddresses(SyncPairingCode code) async {
+    String? primary;
+    for (final address in code.addresses) {
+      await addManualPeer(
+        address.host,
+        name: code.deviceName,
+        probePort: address.probePort,
+        httpPort: code.httpPort,
+        deviceId: code.deviceId,
+      );
+      primary ??= normalizePeerHost(address.host);
+    }
+    return primary;
+  }
+
+  /// 组装本机配对信息（含口令）；未设置口令时返回 null。
+  ///
+  /// 地址候选 = 可路由本机地址 + 本机探测端口；HTTP 端口来自持久化状态
+  /// （对端拿到它就能纯 HTTP 直连，不依赖 UDP 发现）。
+  Future<SyncPairingCode?> pairingCode() async {
+    final passphrase = _passphrase;
+    if (passphrase == null || passphrase.trim().isEmpty) return null;
+    final hosts = await _endpoints.hosts();
+    return SyncPairingCode(
+      deviceName: deviceName,
+      deviceId: deviceId,
+      passphrase: passphrase,
+      addresses: [
+        for (final host in hosts)
+          SyncPairingAddress(host: host, probePort: lanProbePort),
+      ],
+      httpPort: lanHttpPort,
+    );
+  }
+
+  /// 本机可路由地址（设置页地址列表展示用；服务内部缓存枚举结果）。
+  Future<List<LocalEndpoint>> localEndpoints() => _endpoints.list();
+
 
   /// 移除手动对端。
   Future<void> removeManualPeer(String host) => _engine.removeManualPeer(host);

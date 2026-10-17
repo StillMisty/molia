@@ -2019,28 +2019,25 @@ class AppLocalizationsZh extends AppLocalizations {
   String get syncGeneralSection => '同步';
 
   @override
-  String get syncTrustModelTitle => '信任模型';
-
-  @override
   String get syncEnabledTitle => '启用同步';
 
   @override
   String get syncEnabledSubtitle => '与持有同一口令的设备交换数据';
 
   @override
-  String get syncDeviceNameTitle => '设备名称';
+  String get syncLocalSection => '本机';
 
   @override
-  String get syncDevicePassphraseTitle => '设备与口令';
+  String get syncLocalSectionHint => '对端需要这些信息才能连上本机；地址与端口会随配对码一起分享。';
+
+  @override
+  String get syncDeviceNameTitle => '设备名称';
 
   @override
   String get syncPassphraseTitle => '同步口令';
 
   @override
   String get syncPassphraseNotSet => '未设置';
-
-  @override
-  String get syncPassphraseSet => '口令已设置';
 
   @override
   String get syncPassphraseTrustHint => '口令即信任根：持有者完全互信；怀疑泄露请重置。';
@@ -2297,13 +2294,7 @@ class AppLocalizationsZh extends AppLocalizations {
   }
 
   @override
-  String get syncPeersTitle => '已配对设备';
-
-  @override
   String get syncPeersSection => '设备';
-
-  @override
-  String get syncPeersSummaryEmpty => '暂无设备 · 局域网会自动发现';
 
   @override
   String get syncPeersHint =>
@@ -2313,6 +2304,9 @@ class AppLocalizationsZh extends AppLocalizations {
   String syncPeerThisDevice(String id) {
     return '本机 · $id';
   }
+
+  @override
+  String get syncPeerThisDeviceTitle => '本机设备 id';
 
   @override
   String syncPeerLastSync(String time) {
@@ -2361,7 +2355,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get syncPeerAdd => '添加设备';
 
   @override
-  String get syncPeerAddSubtitle => '发现不到设备时，手动填对端地址';
+  String get syncPeerAddSubtitle => '发现不到设备时，手动填对端地址或粘贴配对码';
 
   @override
   String get syncPeerAddTitle => '添加设备';
@@ -2370,7 +2364,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get syncPeerHostLabel => '地址';
 
   @override
-  String get syncPeerHostHint => '例如 192.168.1.23';
+  String get syncPeerHostHint => '例如 192.168.1.23，或 molia-pair 配对码';
 
   @override
   String get syncPeerNameLabel => '名称（可选）';
@@ -2429,6 +2423,87 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get syncPeerNotContacted => '尚未接触，对端在线后会自动接触';
+
+  @override
+  String syncPeerCandidatesTitle(int count) {
+    return '候选地址 $count 个';
+  }
+
+  @override
+  String get syncPeerCandidatesSubtitle => '尚未接触 · 点开可查看 / 删除';
+
+  @override
+  String get syncPairingShareTitle => '分享配对信息';
+
+  @override
+  String get syncPairingShareSubtitle => '复制配对码（含同步口令）';
+
+  @override
+  String get syncPairingCopied => '已复制配对信息（含口令）';
+
+  @override
+  String get syncPairingShowQr => '显示二维码';
+
+  @override
+  String get syncPairingNeedsPassphrase => '先设置同步口令';
+
+  @override
+  String get syncPairingWarning => '这段内容包含同步口令，等同授权对方读取全部同步数据。';
+
+  @override
+  String get syncPairingCopy => '复制文本';
+
+  @override
+  String get syncPairingNoAddress => '配对码里没有可用地址（对端可能只有回环地址）';
+
+  @override
+  String get syncPairingImported => '已导入配对信息';
+
+  @override
+  String get syncPairingPassphraseConflictTitle => '本机已有口令';
+
+  @override
+  String get syncPairingPassphraseConflictBody =>
+      '本机已有不同的同步口令。替换本机口令（会影响其它设备），还是只导入地址？';
+
+  @override
+  String get syncPairingAddressOnly => '仅导入地址';
+
+  @override
+  String get syncPairingReplacePassphrase => '替换本机口令（影响其它设备）';
+
+  @override
+  String get syncPairingScanTitle => '扫一扫配对码';
+
+  @override
+  String get syncPairingCameraDenied => '相机权限被拒。可去系统设置开启，或返回上一页改用粘贴。';
+
+  @override
+  String get syncPairingCameraUnavailable => '本机相机不可用，请改用粘贴配对码。';
+
+  @override
+  String get syncPairingUsePaste => '改用粘贴';
+
+  @override
+  String get syncLocalAddressCopied => '已复制地址';
+
+  @override
+  String get syncLocalAddressesEmptyTitle => '没有可路由地址';
+
+  @override
+  String get syncLocalAddressesEmpty => '只找到回环 / link-local 地址，请检查网络连接。';
+
+  @override
+  String get syncLocalProbePort => '探测端口';
+
+  @override
+  String get syncLocalProbePortUnavailable => '不可用（广播 / 组播探测已降级，请用手动地址直连）';
+
+  @override
+  String get syncLocalHttpPort => '直连端点端口';
+
+  @override
+  String get syncLocalHttpPortUnavailable => '尚未绑定';
 
   @override
   String syncPeerAddress(String host) {

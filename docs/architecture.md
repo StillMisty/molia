@@ -234,8 +234,8 @@
   两端乒乓与 N 台平方级放大）。一轮的产物是可观察的 `SyncRoundReport`：五态
   结论（`ok / noChanges / noPeers / partial / failed`）+ 每传输明细（含未变跳过
   数）+ 每对端名册 + 本轮变更量；设置页据此呈现结论行、运行状态（近 24 小时
-  触发 / 有效传输轮数与流量、当前同步等级 · 网络类型 · 是否省电）、已配对设备
-  子页与变更语义日志，失败行给重试入口；同步何时跑完全由调度器声明式决定，
+  触发 / 有效传输轮数与流量、当前同步等级 · 网络类型 · 是否省电）与变更语义
+  日志，失败行给重试入口；同步何时跑完全由调度器声明式决定，
   首屏不提供「立即同步」主操作，也不导出诊断快照。触发
   策略统一在 `SyncScheduler`（`sync_scheduler.dart`）：**活跃**（可见 + 最近
   交互 / 正在播放，变更去抖 4s）/ **空闲**（退避 10→20→40→60 分钟封顶；
@@ -252,7 +252,19 @@
   `ACCESS_LOCAL_NETWORK`（未授予时状态 `permission_denied`，UI 给授权入口），
   iOS 广播发现需向 Apple 申请 multicast entitlement（未获批时降级手动地址 /
   WebDAV）；发现失败可用手动对端地址簿兜底（单播探测后认领 deviceId 与端点
-  端口），本机端点端口持久化避免对端记不住本机。
+  端口），本机端点端口持久化避免对端记不住本机。**同步设置页是配对工作台
+  （一页闭环）**：开关与五态结论 / 本机（设备名、设备 id、口令、可路由地址
+  列表、探测端口与直连端点端口、分享配对信息）/ 设备（名册内联 + 未认领候选
+  折叠 + 添加设备）/ 传输（局域网与 WebDAV）/ 同步内容与日志入口；原来的
+  「设备与口令」「已配对设备」子页已并入（配对是「我把本机信息交给对方、
+  把对方地址收进名册」的一件事，拆页只能让用户来回找）。**本机地址**
+  （`LocalEndpointsService`：IPv4 + 全局 / ULA IPv6，排除回环 / link-local /
+  zone，私网优先排序）是地址列表、配对码与探测 `addrs` 候选的同一口径；
+  **配对码**（`SyncPairingCode`，`molia-pair:1:<base64url(json)>`，含设备名 /
+  设备 id / 口令 / 地址候选 `[[host, probePort], …]` / HTTP 端点端口）支持
+  复制、二维码（`qr` 纯 Dart + CustomPaint 自绘）与移动端扫码
+  （`mobile_scanner`，权限由插件自管）；口令随码传递是刻意取舍——信任模型就是
+  口令即信任根，弹层明确警告「等同授权对方读取全部同步数据」。
   资料库 schema（drift，`schemaVersion = 2`）含 `playlists.syncId` / 行级
   `versionPhysical + versionCounter + deviceId` / `sync_tombstones`（版本三列 +
   真实删除时间）/ `sync_known`（已知版本登记）/ `play_events`（syncKey +

@@ -28,6 +28,11 @@
          未授予时 Dart socket 直接抛 SocketException（见 ADR-0003 v2 §3）。 -->
     <uses-permission android:name="android.permission.ACCESS_LOCAL_NETWORK"/>
 
+    <!-- 同步配对码扫码（mobile_scanner）：相机权限由插件在首次扫码时申请；
+         相机不是必需硬件（无相机设备仍可粘贴配对码）。 -->
+    <uses-permission android:name="android.permission.CAMERA"/>
+    <uses-feature android:name="android.hardware.camera" android:required="false"/>
+
     <application
         android:name=".MoliaApplication"
         android:label="@string/app_name"
