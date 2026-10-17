@@ -1,14 +1,15 @@
 /// 顶栏全局搜索：M3E 搜索锚点（docked 视图）+ 就地结果面板。
 ///
 /// 与资料库页共用同一个 [SearchProvider]（不新建 provider）：关键词、分段、
-/// 结果与「查看全部结果」后的完整结果页天然同源。结果行点击复用
+/// 结果与「查看全部结果」后的完整结果链天然同源。结果行点击复用
 /// [SearchProvider.playItem]（与资料库搜索结果同一条播放路径：当前类型已加载
 /// 结果整体进队列、从该行开始、上下文名 = 音源显示名），不复制第二套播放语义。
 ///
-/// 面板形态：docked（`isFullScreen: false`）+ `shrinkWrap` —— 挂在搜索框正下方、
-/// 贴合内容高度，不遮满整屏；结果列表在面板内限高滚动，更长的列表交给资料库
-/// 目的地（「查看全部结果」回调由壳层给）。样式（pill / 高度 / margin）全部走
-/// 包内默认，宽度由壳层的搜索槽约束。
+/// 形态：顶栏工具条里的紧凑条（方角、描边、无阴影、不随聚焦变宽），
+/// 右侧挂 [ShortcutCommand.focusSearch] 的键位提示；面板仍是 docked
+/// （`isFullScreen: false`）+ `shrinkWrap` —— 挂在搜索框正下方、贴合内容高度，
+/// 不遮满整屏；结果列表在面板内限高滚动，更长的列表交给资料库目的地
+/// （「查看全部结果」回调由壳层给）。条宽 / 条高由壳层的搜索槽约束。
 library;
 
 import 'package:material_3_expressive/material_3_expressive.dart';
@@ -20,6 +21,9 @@ import '../domain/models/catalog.dart' show SearchKind;
 import '../l10n/app_localizations.dart';
 import '../providers/search_provider.dart';
 import '../services/haptics.dart';
+import '../services/shortcut_bindings.dart';
+import '../services/shortcut_settings.dart';
+import '../services/shortcuts.dart';
 import '../utils/duration_text.dart';
 import 'artist_row.dart';
 import 'track_row.dart';
@@ -145,6 +149,7 @@ class _GlobalSearchState extends State<GlobalSearch> {
   @override
   Widget build(BuildContext context) {
     final l10n = _l10n(context);
+    final scheme = Theme.of(context).colorScheme;
     return M3ESearchAnchor.bar(
       searchController: _controller,
       barHintText: l10n.searchHint,
@@ -152,6 +157,20 @@ class _GlobalSearchState extends State<GlobalSearch> {
       isFullScreen: false,
       // 面板高度贴合内容：默认 2/3 屏会在结果少时拖出一大片空白。
       shrinkWrap: true,
+      // 工具条形态只收「条」这一个面：包内默认是页面内的大 pill（stadium +
+      // 24dp 静止侧边留白 + 聚焦加宽 12dp）——顶栏是一个常驻工具位，不做
+      // 聚焦变形，方角 + 1dp 描边 + 无阴影与图标的「按钮堆」一致。
+      // expandOnFocus: false 同时把 expand margin 归零（包内在不启用加宽时
+      // 直接返回 0，静止 / 聚焦两档都不再留白）。
+      expandOnFocus: false,
+      barShape: const WidgetStatePropertyAll<OutlinedBorder>(
+        RoundedRectangleBorder(borderRadius: M3EShapes.radiusMedium),
+      ),
+      barSide: WidgetStatePropertyAll<BorderSide>(
+        BorderSide(color: scheme.outlineVariant, width: 1),
+      ),
+      barElevation: const WidgetStatePropertyAll<double>(M3EElevation.level0),
+      barTrailing: const [_SearchShortcutHint()],
       // 包内把 suggestions 的长度当作「结果数」做无障碍播报，而结果区实际由
       // viewBuilder 订阅 provider 自绘（异步结果到达不会重跑 suggestions）；
       // 这里只回填与结果数等长的占位 widget 保住播报计数，widget 本身不用。
@@ -163,6 +182,38 @@ class _GlobalSearchState extends State<GlobalSearch> {
       ),
       onChanged: _search.updateSearchQuery,
       onSubmitted: _submit,
+    );
+  }
+}
+
+/// 搜索条右侧的键位提示：当前生效的「聚焦搜索」绑定（默认 Ctrl + F）。
+///
+/// 内容现取 [ShortcutSettings]：设置页改绑后提示立刻跟着变，不留一个按不出来
+/// 的键位；软件内快捷键关掉时整个提示消失（它不再是可用的快捷键）。键名与
+/// 设置页同一套书写（[ShortcutCombo.label]），宽了按包内槽位退化省略。
+class _SearchShortcutHint extends StatelessWidget {
+  const _SearchShortcutHint();
+
+  @override
+  Widget build(BuildContext context) {
+    final settings = ShortcutSettings.instance;
+    return ListenableBuilder(
+      listenable: settings,
+      builder: (context, _) {
+        final combo = settings.inAppEnabled
+            ? settings.inAppBindings.comboFor(ShortcutCommand.focusSearch)
+            : null;
+        if (combo == null) return const SizedBox.shrink();
+        return Text(
+          combo.label(),
+          maxLines: 1,
+          softWrap: false,
+          overflow: TextOverflow.fade,
+          style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                color: Theme.of(context).colorScheme.onSurfaceVariant,
+              ),
+        );
+      },
     );
   }
 }

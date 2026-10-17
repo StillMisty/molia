@@ -3,7 +3,7 @@
 /// 顶层 [HardwareKeyboard] 处理器把物理按键按可配置的软件内绑定表
 /// （[ShortcutSettings.inAppBindings]，默认表见 `shortcut_bindings.dart`）
 /// 翻译成命令后执行：播放相关命令直接走 [PlaybackProvider]（与底栏 / 顶栏
-/// 按钮同一条链路），聚焦搜索 / 切目的地 / 关队列面板交给壳层回调——本组件
+/// 按钮同一条链路），聚焦搜索 / 切目的地 / 关队列交给壳层回调——本组件
 /// 不认识桌面布局，只管「按键 → 动作」。
 ///
 /// **为什么用 [HardwareKeyboard] 处理器而不是顶层 `Focus.onKeyEvent`**：
@@ -51,7 +51,8 @@ class DesktopShortcuts extends StatefulWidget {
   /// 切目的地（默认 Ctrl+1/2/3）：切到第 index 个可见目的地（顺序 = 导航顺序）。
   final ValueChanged<int> onSelectDestinationIndex;
 
-  /// 关闭队列面板（默认 Esc）：面板未打开时回调内部自行 no-op。
+  /// 关闭队列（默认 Esc）：队列已并入播放页右栏，落点 = 收起队列视图
+  /// （队列不可见 / 不在播放页时回调内部自行 no-op）。
   final VoidCallback onCloseQueuePanel;
 
   final Widget child;

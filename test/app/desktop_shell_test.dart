@@ -5,7 +5,6 @@ import 'package:material_ui/material_ui.dart';
 import 'package:molia/app/app_shell.dart';
 import 'package:molia/app/desktop/desktop_shell.dart';
 import 'package:molia/app/desktop/now_playing_bar.dart';
-import 'package:molia/app/desktop/queue_panel.dart';
 import 'package:molia/data/catalog/catalog_service.dart';
 import 'package:molia/domain/models/catalog.dart';
 import 'package:molia/domain/models/playback.dart';
@@ -25,11 +24,14 @@ import 'package:molia/services/lyrics_display/lyrics_display_settings.dart';
 import 'package:molia/services/shortcut_bindings.dart';
 import 'package:molia/services/shortcut_settings.dart';
 import 'package:molia/services/shortcuts.dart';
+import 'package:molia/services/window/window_chrome.dart';
 import 'package:molia/sources/source_manager.dart';
 import 'package:molia/widgets/cover_appearance.dart';
 import 'package:molia/widgets/global_search.dart';
+import 'package:molia/widgets/molia_mark.dart';
+import 'package:molia/widgets/now_playing_controller.dart';
 import 'package:molia/widgets/player.dart';
-import 'package:molia/widgets/queue.dart';
+import 'package:molia/widgets/player_morph.dart';
 import 'package:molia/widgets/track_row.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -40,11 +42,12 @@ import '../support/fakes.dart';
 
 /// 桌面骨架（`MyApp(desktopShell: true)`）的挂载测试。
 ///
-/// 覆盖骨架结构与两条不变量：桌面底栏 / 侧栏存在且顶栏瘦身（无播放控制、
-/// 无进度线）；队列面板开关；底栏左区进播放页；移动骨架不受影响；
-/// 窄窗口分级折叠（阈值只影响渲染、记忆值保留）；顶栏全局搜索（宽窗 pill /
-/// 窄窗图标、docked 结果面板、查看全部结果切资料库）；全局快捷键
-/// （Space 切播放态、Esc 关队列面板、输入框聚焦时让位）。
+/// 覆盖骨架结构与三条不变量：顶栏是纯工具条（无标题 / 无播放控制 / 无进度线，
+/// 搜索在最左、右侧空白拖动区）；侧栏恒折叠（无展开按钮）；底栏只在非播放页
+/// 出现（播放页沉浸）且封面飞行两端都成立。另有队列入口（跳播放页 + 切队列
+/// tab）、顶栏全局搜索（宽窗工具条 / 窄窗图标、docked 结果面板、查看全部结果
+/// 切资料库）、全局快捷键（Space 切播放态、Esc 收起队列视图、输入框聚焦时
+/// 让位）。
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
@@ -182,7 +185,7 @@ void main() {
       ),
     );
     await tester.pump();
-    // 首帧切歌入场动画（封面堆叠 460ms）+ 桌面布局偏好异步恢复。
+    // 首帧切歌入场动画（封面堆叠 460ms）。
     await tester.pump(const Duration(milliseconds: 600));
 
     return (backend: backend, playback: playback);
@@ -194,12 +197,43 @@ void main() {
     await tester.pump(const Duration(milliseconds: 900));
   }
 
+  /// 侧栏条目：标签恒隐藏（`alwaysHide`），只能按图标定位。
+  Finder railItem(IconData outlinedIcon) => find.descendant(
+        of: find.byType(M3ENavigationRail),
+        matching: find.byIcon(outlinedIcon),
+      );
+
+  /// 侧栏「正在播放」条目：图标是 [MoliaMark]（描边 / 实心是一对）。
+  Finder railPlayerItem() => find.descendant(
+        of: find.byType(M3ENavigationRail),
+        matching: find.byType(MoliaMark),
+      );
+
+  /// 点侧栏条目并走完过渡。
+  Future<void> tapRailItem(WidgetTester tester, Finder item) async {
+    await tester.tap(item);
+    await settleTransition(tester);
+  }
+
+  /// 播放页右栏的 tab 行（icon-only 三 tab：队列 / 歌词 / 信息）。
+  Finder playerTabs() => find.byType(M3ETabs);
+
+  int playerTabIndex(WidgetTester tester) =>
+      tester.widget<M3ETabs>(playerTabs()).selectedIndex;
+
+  Future<void> tapPlayerTab(WidgetTester tester, IconData icon) async {
+    await tester.tap(find.descendant(of: playerTabs(), matching: find.byIcon(icon)));
+    await settleTransition(tester);
+  }
+
+  /// 底栏当前是否在场。
+  Finder playingBar() => find.byKey(DesktopNowPlayingBar.shellKey);
+
   /// 焦点当前是否在音量弹层子树内。
-  bool focusInsideVolumePanel(WidgetTester tester) {
+  bool focusInsideVolumePanel(WidgetTester tester, Key panelKey) {
     final focusContext = FocusManager.instance.primaryFocus?.context;
     if (focusContext == null) return false;
-    final panel =
-        tester.element(find.byKey(DesktopNowPlayingBar.volumePanelKey));
+    final panel = tester.element(find.byKey(panelKey));
     if (identical(focusContext, panel)) return true;
     var inside = false;
     (focusContext as Element).visitAncestorElements((ancestor) {
@@ -216,12 +250,16 @@ void main() {
   ///
   /// 遍历顺序（面板根 → 滑杆 → 静音按钮 → 弹层外）随控件增删变化，按「离开
   /// 为止」而不是固定次数，前提失效时由断言兜底。
-  Future<void> tabOutOfVolumePanel(WidgetTester tester) async {
-    for (var i = 0; i < 8 && focusInsideVolumePanel(tester); i++) {
+  Future<void> tabOutOfVolumePanel(WidgetTester tester, Key panelKey) async {
+    for (var i = 0; i < 8 && focusInsideVolumePanel(tester, panelKey); i++) {
       await tester.sendKeyEvent(LogicalKeyboardKey.tab);
       await tester.pump();
     }
-    expect(focusInsideVolumePanel(tester), isFalse, reason: '前提：焦点已移出弹层');
+    expect(
+      focusInsideVolumePanel(tester, panelKey),
+      isFalse,
+      reason: '前提：焦点已移出弹层',
+    );
   }
 
   int selectedRailIndex(WidgetTester tester) => tester
@@ -259,15 +297,16 @@ void main() {
     );
   }
 
-  testWidgets('桌面骨架：底栏 / 侧栏存在，顶栏无播放控制与进度线', (tester) async {
+  testWidgets('顶栏：纯工具条（无标题 / 无播放控制 / 无进度线）', (tester) async {
     await pumpShell(tester, desktopShell: true);
 
-    expect(find.byKey(DesktopNowPlayingBar.shellKey), findsOneWidget);
-    expect(find.byType(M3ENavigationRail), findsOneWidget);
-    expect(find.byType(M3ENavigationBar), findsNothing);
-
-    // 顶栏瘦身：播放 / 下一首按钮与进度线只在移动骨架的顶栏里出现。
     final appBar = find.byType(AppBar);
+    // 当前页标题已删（顶栏不再承载导航语义）。
+    expect(
+      find.descendant(of: appBar, matching: find.text(l10n.nowPlayingLabel)),
+      findsNothing,
+    );
+    // 播放 / 下一首按钮与进度线只在移动骨架的顶栏里出现。
     expect(
       find.descendant(
         of: appBar,
@@ -279,18 +318,91 @@ void main() {
       find.descendant(of: appBar, matching: find.byType(M3EProgressIndicator)),
       findsNothing,
     );
-    // 顶栏标题 = 当前目的地。
+  });
+
+  testWidgets('侧栏：恒折叠、标签隐藏、无展开入口', (tester) async {
+    await pumpShell(tester, desktopShell: true);
+
+    final rail = tester.widget<M3ENavigationRail>(find.byType(M3ENavigationRail));
+    expect(rail.type, M3ENavigationRailType.alwaysCollapse);
+    expect(rail.labelBehavior, M3ENavigationRailLabelBehavior.alwaysHide);
+    // 窄窗不再有「强制折叠」分流：变宽后形态不变。
+    tester.view.physicalSize = const Size(900, 900);
+    await settleTransition(tester);
     expect(
-      find.descendant(of: appBar, matching: find.text(l10n.nowPlayingLabel)),
+      tester.widget<M3ENavigationRail>(find.byType(M3ENavigationRail)).type,
+      M3ENavigationRailType.alwaysCollapse,
+    );
+    tester.view.physicalSize = const Size(1440, 900);
+    await settleTransition(tester);
+    expect(
+      tester.widget<M3ENavigationRail>(find.byType(M3ENavigationRail)).type,
+      M3ENavigationRailType.alwaysCollapse,
+    );
+    expect(find.byType(M3ENavigationBar), findsNothing);
+  });
+
+  testWidgets('播放页沉浸：进播放页整条底栏让位，离开恢复', (tester) async {
+    await pumpShell(tester, desktopShell: true);
+    // 启动首页默认是播放页：整条底栏不在场。
+    expect(playingBar(), findsNothing, reason: '播放页里底栏让位');
+
+    await tapRailItem(tester, railItem(Icons.favorite_border_rounded));
+    expect(playingBar(), findsOneWidget, reason: '离开播放页底栏恢复');
+
+    await tapRailItem(tester, railPlayerItem());
+    expect(playingBar(), findsNothing, reason: '回到播放页再次让位');
+  });
+
+  testWidgets('底栏让位：开着的音量弹层随底栏一起收起（不留悬空浮层）', (tester) async {
+    await pumpShell(tester, desktopShell: true);
+    await tapRailItem(tester, railItem(Icons.favorite_border_rounded));
+    await tester.tap(find.byKey(DesktopNowPlayingBar.volumeButtonKey));
+    await tester.pumpAndSettle();
+    expect(find.byKey(DesktopNowPlayingBar.volumePanelKey), findsOneWidget);
+
+    // 进播放页：整条底栏让位，弹层（OverlayPortal 的子级）必须一起消失，
+    // 且不留 Esc 占用登记（否则按键会被一个不存在的面板吃掉）。
+    await tapRailItem(tester, railPlayerItem());
+    expect(find.byKey(DesktopNowPlayingBar.volumePanelKey), findsNothing);
+    expect(EscapeClaims.any, isFalse, reason: '弹层登记随宿主卸载注销');
+  });
+
+  testWidgets('封面飞行：进入 / 离开播放页两端锚点都成立', (tester) async {
+    await pumpShell(tester, desktopShell: true);
+    // 先离开播放页：此时底栏在场，封面是进入方向的起点。
+    await tapRailItem(tester, railItem(Icons.favorite_border_rounded));
+    expect(playingBar(), findsOneWidget);
+
+    // 进入播放页：底栏本帧让位，飞行副本随即接管。
+    await tester.tap(railPlayerItem());
+    await tester.pump();
+    expect(find.byType(PlayerMorphFlight), findsOneWidget, reason: '进入方向有飞行副本');
+    expect(playingBar(), findsNothing, reason: '底栏同时让位');
+    await settleTransition(tester);
+    expect(find.byType(PlayerMorphFlight), findsNothing, reason: '落定后副本移除');
+
+    // 离开播放页：底栏复位（封面先收进飞行态），下一帧抓到终点锚点后起飞。
+    await tester.tap(railItem(Icons.favorite_border_rounded));
+    await tester.pump(); // 帧 1：底栏复位
+    await tester.pump(); // 帧 2：副本挂载
+    expect(find.byType(PlayerMorphFlight), findsOneWidget, reason: '离开方向有飞行副本');
+    await settleTransition(tester);
+    expect(find.byType(PlayerMorphFlight), findsNothing, reason: '落定后副本清理干净');
+    expect(
+      find.descendant(of: playingBar(), matching: find.byType(CoverCard)),
       findsOneWidget,
+      reason: '底栏封面真身回位（占位不跳）',
     );
   });
 
   testWidgets('底栏进度条：拖动提交 seek', (tester) async {
     final harness = await pumpShell(tester, desktopShell: true);
+    // 底栏只在非播放页出现：先切到收藏页再操作（启动首页是播放页）。
+    await tapRailItem(tester, railItem(Icons.favorite_border_rounded));
 
     final slider = find.descendant(
-      of: find.byKey(DesktopNowPlayingBar.shellKey),
+      of: playingBar(),
       matching: find.byType(M3ESlider),
     );
     final rect = tester.getRect(slider);
@@ -306,31 +418,41 @@ void main() {
     await tester.pump(const Duration(milliseconds: 1600));
   });
 
-  testWidgets('队列面板：底栏开关打开 / 关闭', (tester) async {
+  testWidgets('底栏队列入口：跳播放页 + 切到队列 tab', (tester) async {
     await pumpShell(tester, desktopShell: true);
-    expect(find.byType(QueueDisplay), findsNothing);
+    await tapRailItem(tester, railItem(Icons.favorite_border_rounded));
+    expect(playerTabIndex(tester), nowPlayingLyricsTabIndex, reason: '默认歌词页');
+    expect(selectedRailIndex(tester), navIndexOf(ShellDestination.favorites));
 
     await tester.tap(find.byKey(DesktopNowPlayingBar.queueToggleKey));
     await settleTransition(tester);
-    expect(find.byType(DesktopQueuePanel), findsOneWidget);
-    expect(find.byType(QueueDisplay), findsOneWidget);
 
-    await tester.tap(find.byKey(DesktopNowPlayingBar.queueToggleKey));
-    await settleTransition(tester);
-    expect(find.byType(QueueDisplay), findsNothing);
+    expect(selectedRailIndex(tester), navIndexOf(ShellDestination.nowPlaying));
+    expect(playerTabIndex(tester), nowPlayingQueueTabIndex, reason: '落在队列 tab');
+    expect(playingBar(), findsNothing, reason: '已进播放页（底栏让位）');
+  });
+
+  testWidgets('底栏队列入口：窄窗口也始终可用（不再置灰）', (tester) async {
+    await pumpShell(
+      tester,
+      desktopShell: true,
+      size: const Size(900, 900),
+    );
+    await tapRailItem(tester, railItem(Icons.favorite_border_rounded));
+    expect(
+      tester
+          .widget<M3EIconButton>(find.byKey(DesktopNowPlayingBar.queueToggleKey))
+          .onPressed,
+      isNotNull,
+      reason: '队列入口没有 disabled 态',
+    );
   });
 
   testWidgets('底栏左区点击：切回播放页', (tester) async {
     await pumpShell(tester, desktopShell: true);
 
     // 先离开播放页（点侧栏「收藏」）：播放页层保持挂载但不可命中。
-    await tester.tap(
-      find.descendant(
-        of: find.byType(M3ENavigationRail),
-        matching: find.text(l10n.favoritesLabel),
-      ),
-    );
-    await settleTransition(tester);
+    await tapRailItem(tester, railItem(Icons.favorite_border_rounded));
     expect(selectedRailIndex(tester), navIndexOf(ShellDestination.favorites));
     expect(
       find.byType(Player).hitTestable(),
@@ -340,10 +462,7 @@ void main() {
 
     // 点底栏封面（左区手势的一部分）→ 选中目的地回到播放页。
     await tester.tap(
-      find.descendant(
-        of: find.byKey(DesktopNowPlayingBar.shellKey),
-        matching: find.byType(CoverCard),
-      ),
+      find.descendant(of: playingBar(), matching: find.byType(CoverCard)),
     );
     await settleTransition(tester);
     expect(selectedRailIndex(tester), navIndexOf(ShellDestination.nowPlaying));
@@ -357,60 +476,12 @@ void main() {
       size: const Size(420, 900),
     );
 
-    expect(find.byKey(DesktopNowPlayingBar.shellKey), findsNothing);
+    expect(playingBar(), findsNothing);
     expect(find.byType(M3ENavigationBar), findsOneWidget);
     expect(find.byType(M3ENavigationRail), findsNothing);
   });
 
-  testWidgets('窄窗口分级折叠：阈值只影响渲染，变宽后恢复', (tester) async {
-    // 1100 < 1200：队列入口置灰（点了也看不到面板，不留死控件）。
-    await pumpShell(
-      tester,
-      desktopShell: true,
-      size: const Size(1100, 900),
-    );
-    expect(
-      tester
-          .widget<M3EIconButton>(
-            find.byKey(DesktopNowPlayingBar.queueToggleKey),
-          )
-          .onPressed,
-      isNull,
-      reason: '窄窗口下队列入口置灰',
-    );
-    expect(find.byType(QueueDisplay), findsNothing);
-
-    // 变宽后入口可用：打开面板（阈值不改写记忆值，只是渲染被抑制）。
-    tester.view.physicalSize = const Size(1440, 900);
-    await settleTransition(tester);
-    await tester.tap(find.byKey(DesktopNowPlayingBar.queueToggleKey));
-    await settleTransition(tester);
-    expect(find.byType(QueueDisplay), findsOneWidget);
-
-    // 再变窄：面板重新被抑制；回到宽窗后按记忆值自动恢复。
-    tester.view.physicalSize = const Size(1100, 900);
-    await settleTransition(tester);
-    expect(find.byType(QueueDisplay), findsNothing);
-    tester.view.physicalSize = const Size(1440, 900);
-    await settleTransition(tester);
-    expect(find.byType(QueueDisplay), findsOneWidget);
-
-    // 侧栏：900 宽强制折叠（无展开入口），1440 宽恢复用户设定（展开）。
-    tester.view.physicalSize = const Size(900, 900);
-    await settleTransition(tester);
-    expect(
-      tester.widget<M3ENavigationRail>(find.byType(M3ENavigationRail)).type,
-      M3ENavigationRailType.alwaysCollapse,
-    );
-    tester.view.physicalSize = const Size(1440, 900);
-    await settleTransition(tester);
-    expect(
-      tester.widget<M3ENavigationRail>(find.byType(M3ENavigationRail)).type,
-      M3ENavigationRailType.expanded,
-    );
-  });
-
-  testWidgets('顶栏搜索入口：宽窗是搜索 pill，窄窗退化为图标按钮', (tester) async {
+  testWidgets('顶栏搜索：宽窗是 320×48 工具条，左上对齐内容左缘', (tester) async {
     await pumpShell(tester, desktopShell: true);
 
     expect(find.byKey(DesktopShell.searchEntryKey), findsOneWidget);
@@ -422,7 +493,18 @@ void main() {
     expect(
       find.byType(M3ESearchAnchor),
       findsOneWidget,
-      reason: '宽窗搜索入口是 M3E 搜索 pill',
+      reason: '宽窗搜索入口是 M3E 搜索条',
+    );
+    expect(
+      tester.getSize(find.byKey(DesktopShell.searchEntryKey)),
+      const Size(320, 48),
+      reason: '搜索槽 320×48（M3 最小触控 48）',
+    );
+    // 左缘 = 侧栏折叠宽 96 + 页面留白 24（AppBar 的 titleSpacing 已在槽位里补偿）。
+    expect(
+      tester.getRect(find.byKey(DesktopShell.searchEntryKey)).left,
+      96 + 24,
+      reason: '搜索条左对齐内容左缘',
     );
 
     // < 900：入口退化为图标按钮（不再挂搜索锚点，顶栏不会被挤坏）。
@@ -436,6 +518,33 @@ void main() {
         matching: find.byIcon(Icons.search_rounded),
       ),
       findsOneWidget,
+    );
+  });
+
+  testWidgets('顶栏拖动区：在搜索右侧，且不包住搜索入口', (tester) async {
+    await pumpShell(tester, desktopShell: true);
+
+    final dragArea = find.byKey(DesktopShell.titleDragAreaKey);
+    expect(dragArea, findsOneWidget);
+    expect(
+      tester.widget<WindowDoubleTapMaximize>(dragArea).onDoubleTap,
+      isNull,
+      reason: '缺省即窗口最大化 / 还原',
+    );
+    expect(
+      tester.getRect(dragArea).left,
+      greaterThanOrEqualTo(
+        tester.getRect(find.byKey(DesktopShell.searchEntryKey)).right,
+      ),
+      reason: '拖动区在搜索右侧',
+    );
+    expect(
+      find.ancestor(
+        of: find.byKey(DesktopShell.searchEntryKey),
+        matching: dragArea,
+      ),
+      findsNothing,
+      reason: '双击按钮不最大化：搜索入口不在拖动区里',
     );
   });
 
@@ -459,6 +568,31 @@ void main() {
     expect(find.text(l10n.viewAllResults), findsOneWidget);
   });
 
+  testWidgets('顶栏搜索：键位提示跟随生效绑定', (tester) async {
+    await pumpShell(tester, desktopShell: true);
+
+    // 默认绑定 Ctrl+F（设置页同一套书写）挂在搜索条右侧。
+    expect(
+      find.descendant(
+        of: find.byKey(DesktopShell.searchEntryKey),
+        matching: find.text('Ctrl + F'),
+      ),
+      findsOneWidget,
+    );
+
+    // 软件内快捷键整体关闭后提示消失（不再是可用快捷键）。
+    await ShortcutSettings.instance.setInAppEnabled(false);
+    await tester.pump();
+    expect(
+      find.descendant(
+        of: find.byKey(DesktopShell.searchEntryKey),
+        matching: find.text('Ctrl + F'),
+      ),
+      findsNothing,
+    );
+    await ShortcutSettings.instance.setInAppEnabled(true);
+  });
+
   testWidgets('顶栏搜索：「查看全部结果」收起面板并切到资料库目的地', (tester) async {
     await pumpSearchShell(tester);
     await tester.tap(find.byKey(DesktopShell.searchEntryKey));
@@ -475,7 +609,7 @@ void main() {
     );
   });
 
-  testWidgets('全局快捷键：Space 切播放态、Esc 关队列面板', (tester) async {
+  testWidgets('全局快捷键：Space 切播放态、Esc 收起队列视图', (tester) async {
     final harness = await pumpShell(tester, desktopShell: true);
 
     // 先按 Space：此刻没有其它焦点，顶层 Focus 持有焦点 → 播放
@@ -498,143 +632,97 @@ void main() {
     await tester.pump();
     expect(harness.backend.calls.last, 'pause');
 
-    // Esc：关队列面板（先点底栏开关打开；Esc 不在按钮的键位表里，
-    // 会冒泡到顶层 Focus）。
-    await tester.tap(find.byKey(DesktopNowPlayingBar.queueToggleKey));
-    await settleTransition(tester);
-    expect(find.byType(DesktopQueuePanel), findsOneWidget);
-
+    // Esc（可配置的「关闭队列」）：队列已并入播放页右栏，落点 = 切回
+    // 默认的歌词页（先手动切到队列 tab 才有可收的视图）。
+    await tapPlayerTab(tester, Icons.queue_music_rounded);
+    expect(playerTabIndex(tester), nowPlayingQueueTabIndex);
     await tester.sendKeyEvent(LogicalKeyboardKey.escape);
     await settleTransition(tester);
-    expect(find.byType(DesktopQueuePanel), findsNothing);
+    expect(playerTabIndex(tester), nowPlayingLyricsTabIndex);
   });
 
-  testWidgets('Esc 裁决：队列面板打开 + 收藏页多选时，一次 Esc 只清选择，再按才关面板',
+  testWidgets('Esc 裁决：音量弹层与队列视图同时在场时，一次 Esc 只关弹层',
       (tester) async {
-    await pumpShell(
-      tester,
-      desktopShell: true,
-      seedLibrary: (repository) => repository.toggleFavorite(
-        sourceKey: 'wy',
-        songId: 'Song A',
-        title: 'Song A',
-        artist: 'Artist Song A',
-        raw: {'songId': 'Song A'},
-      ),
-    );
-
-    // 前提一：队列面板打开（Esc 的壳层命令是关面板）。
-    await tester.tap(find.byKey(DesktopNowPlayingBar.queueToggleKey));
-    await settleTransition(tester);
-    expect(find.byType(DesktopQueuePanel), findsOneWidget);
-
-    // 前提二：切到收藏页并长按一行进入多选。
-    await tester.tap(
-      find.descendant(
-        of: find.byType(M3ENavigationRail),
-        matching: find.text(l10n.favoritesLabel),
-      ),
-    );
-    await settleTransition(tester);
-    await tester.longPress(find.text('Song A'));
-    await tester.pumpAndSettle();
-    // 多选栏的稳定标志：全选按钮只在多选栏出现。
-    Finder selectionBar() => find.descendant(
-          of: find.byType(FavoritesPage),
-          matching: find.byIcon(Icons.select_all_rounded),
-        );
-    expect(selectionBar(), findsOneWidget, reason: '前提：多选生效');
-
-    // 第一次 Esc：页面级多选优先——只清选择，队列面板保持打开。
-    await tester.sendKeyEvent(LogicalKeyboardKey.escape);
-    await settleTransition(tester);
-    expect(selectionBar(), findsNothing, reason: '第一次 Esc 清空选择');
-    expect(
-      find.byType(DesktopQueuePanel),
-      findsOneWidget,
-      reason: '第一次 Esc 不应同时触发壳层的关面板命令',
-    );
-
-    // 第二次 Esc：页面不再接管，壳层命令关面板。
-    await tester.sendKeyEvent(LogicalKeyboardKey.escape);
-    await settleTransition(tester);
-    expect(find.byType(DesktopQueuePanel), findsNothing);
-  }, variant: TargetPlatformVariant.only(TargetPlatform.linux));
-
-  testWidgets('Esc 裁决：音量弹层与队列面板同时打开时，一次 Esc 只关弹层', (tester) async {
     await pumpShell(tester, desktopShell: true);
+    // 前提一：播放页停在队列 tab（Esc 的壳层命令是收起队列视图）。
+    await tapPlayerTab(tester, Icons.queue_music_rounded);
+    expect(playerTabIndex(tester), nowPlayingQueueTabIndex);
 
-    await tester.tap(find.byKey(DesktopNowPlayingBar.queueToggleKey));
-    await settleTransition(tester);
-    await tester.tap(find.byKey(DesktopNowPlayingBar.volumeButtonKey));
+    // 前提二：播放页的音量弹层打开（占用登记的 Esc 消费方）。
+    await tester.tap(find.byKey(Player.volumeButtonKey));
     await tester.pumpAndSettle();
-    expect(find.byKey(DesktopNowPlayingBar.volumePanelKey), findsOneWidget);
+    expect(find.byKey(Player.volumePanelKey), findsOneWidget);
 
-    // 第一次 Esc：弹层（占用登记）优先关闭，队列面板保持打开。
+    // 第一次 Esc：弹层优先——队列视图保持不动。
     await tester.sendKeyEvent(LogicalKeyboardKey.escape);
     await tester.pumpAndSettle();
-    expect(find.byKey(DesktopNowPlayingBar.volumePanelKey), findsNothing);
+    expect(find.byKey(Player.volumePanelKey), findsNothing);
     expect(
-      find.byType(DesktopQueuePanel),
-      findsOneWidget,
-      reason: '弹层已消费 Esc，壳层命令不应同时生效',
+      playerTabIndex(tester),
+      nowPlayingQueueTabIndex,
+      reason: '第一次 Esc 不应同时触发壳层的收队列命令',
     );
 
-    // 第二次 Esc：弹层已关，壳层命令关队列面板。
+    // 第二次 Esc：弹层已关，壳层命令收起队列视图。
     await tester.sendKeyEvent(LogicalKeyboardKey.escape);
     await settleTransition(tester);
-    expect(find.byType(DesktopQueuePanel), findsNothing);
+    expect(playerTabIndex(tester), nowPlayingLyricsTabIndex);
   });
 
-  testWidgets('Esc 裁决：焦点移出音量弹层后 Esc 仍关闭弹层，不落入按键黑洞', (tester) async {
+  testWidgets('Esc 裁决：焦点移出音量弹层后 Esc 仍关闭弹层，不落入按键黑洞',
+      (tester) async {
     await pumpShell(tester, desktopShell: true);
 
-    await tester.tap(find.byKey(DesktopNowPlayingBar.volumeButtonKey));
+    await tester.tap(find.byKey(Player.volumeButtonKey));
     await tester.pumpAndSettle();
-    expect(find.byKey(DesktopNowPlayingBar.volumePanelKey), findsOneWidget);
-    expect(focusInsideVolumePanel(tester), isTrue, reason: '前提：autofocus 落在弹层内');
+    expect(find.byKey(Player.volumePanelKey), findsOneWidget);
+    expect(
+      focusInsideVolumePanel(tester, Player.volumePanelKey),
+      isTrue,
+      reason: '前提：autofocus 落在弹层内',
+    );
 
     // 面板可见但焦点被 Tab 移出弹层：Esc 必须仍由弹层消费——登记让壳层
     // 让位后，若弹层不接按键就成了黑洞。
-    await tabOutOfVolumePanel(tester);
+    await tabOutOfVolumePanel(tester, Player.volumePanelKey);
 
     await tester.sendKeyEvent(LogicalKeyboardKey.escape);
     await tester.pumpAndSettle();
     expect(
-      find.byKey(DesktopNowPlayingBar.volumePanelKey),
+      find.byKey(Player.volumePanelKey),
       findsNothing,
       reason: '焦点不在弹层内也要关闭（不是黑洞）',
     );
   });
 
-  testWidgets('Esc 裁决：焦点移出音量弹层后，一次 Esc 只关弹层、队列面板仍在', (tester) async {
+  testWidgets('Esc 裁决：焦点移出音量弹层后，一次 Esc 只关弹层、队列视图仍在',
+      (tester) async {
     await pumpShell(tester, desktopShell: true);
 
-    // 前提一：队列面板打开（Esc 的壳层命令是关面板）。
-    await tester.tap(find.byKey(DesktopNowPlayingBar.queueToggleKey));
-    await settleTransition(tester);
-    expect(find.byType(DesktopQueuePanel), findsOneWidget);
+    // 前提一：播放页停在队列 tab（Esc 的壳层命令是收起队列视图）。
+    await tapPlayerTab(tester, Icons.queue_music_rounded);
+    expect(playerTabIndex(tester), nowPlayingQueueTabIndex);
 
     // 前提二：音量弹层打开，再把焦点 Tab 出弹层子树。
-    await tester.tap(find.byKey(DesktopNowPlayingBar.volumeButtonKey));
+    await tester.tap(find.byKey(Player.volumeButtonKey));
     await tester.pumpAndSettle();
-    expect(find.byKey(DesktopNowPlayingBar.volumePanelKey), findsOneWidget);
-    await tabOutOfVolumePanel(tester);
+    expect(find.byKey(Player.volumePanelKey), findsOneWidget);
+    await tabOutOfVolumePanel(tester, Player.volumePanelKey);
 
-    // 第一次 Esc：弹层（占用登记）优先关闭，队列面板保持打开。
+    // 第一次 Esc：弹层（占用登记）优先关闭，队列视图保持不动。
     await tester.sendKeyEvent(LogicalKeyboardKey.escape);
     await tester.pumpAndSettle();
-    expect(find.byKey(DesktopNowPlayingBar.volumePanelKey), findsNothing);
+    expect(find.byKey(Player.volumePanelKey), findsNothing);
     expect(
-      find.byType(DesktopQueuePanel),
-      findsOneWidget,
+      playerTabIndex(tester),
+      nowPlayingQueueTabIndex,
       reason: '弹层已消费 Esc，壳层命令不应同时生效',
     );
 
-    // 第二次 Esc：弹层已关，壳层命令关队列面板。
+    // 第二次 Esc：弹层已关，壳层命令收起队列视图。
     await tester.sendKeyEvent(LogicalKeyboardKey.escape);
     await settleTransition(tester);
-    expect(find.byType(DesktopQueuePanel), findsNothing);
+    expect(playerTabIndex(tester), nowPlayingLyricsTabIndex);
   });
 
   testWidgets('全局快捷键：输入框聚焦时 Space 不触发播放', (tester) async {
@@ -643,13 +731,7 @@ void main() {
     // 切到收藏页并打开搜索行：收藏页的搜索框是壳层内真实的 EditableText
     //（Space 不是它的键位，事件会冒泡到顶层 Focus），聚焦由 _openSearch
     // 的帧末 requestFocus 完成。
-    await tester.tap(
-      find.descendant(
-        of: find.byType(M3ENavigationRail),
-        matching: find.text(l10n.favoritesLabel),
-      ),
-    );
-    await settleTransition(tester);
+    await tapRailItem(tester, railItem(Icons.favorite_border_rounded));
     await tester.tap(
       find.descendant(
         of: find.byType(FavoritesPage),

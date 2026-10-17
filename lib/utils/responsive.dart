@@ -148,11 +148,14 @@ extension ResponsiveExtension on BuildContext {
   }
 
   ResponsiveLayoutSpec layoutType(ResponsivePageType type) {
+    // 桌面档与平板档同宽：桌面骨架的内容区已经由侧栏（96）与「窗口宽 −
+    // 栏宽」的表格判据拉开层次，页边距再叠一层更宽的留白只会压缩表格档
+    // 的可用宽（`DesktopLayout.tableColumns` 的阈值按 24 留）。
     final padding = responsive<double>(
       compact: 12,
       mobile: 16,
       tablet: 24,
-      desktop: 32,
+      desktop: 24,
     );
 
     switch (type) {

@@ -37,6 +37,7 @@ import '../widgets/cover_appearance.dart';
 import '../widgets/desktop_layout.dart';
 import '../widgets/global_search.dart';
 import '../widgets/icon_swap.dart';
+import '../widgets/now_playing_controller.dart';
 import '../widgets/playback_selectors.dart';
 import '../widgets/player_morph.dart';
 import '../widgets/shell_reselect.dart';
@@ -237,14 +238,21 @@ class _MyAppState extends State<MyApp>
   /// DesktopShell 里，控制器由壳层持有后下传；窄窗没有 pill，不被附着。
   final GlobalSearchController _globalSearch = GlobalSearchController();
 
+  /// 播放页右栏的 tab 切换请求通道（底栏队列按钮 / Esc 的「关闭队列」）。
+  ///
+  /// 壳层不读播放页的界面状态（tab 由页面自己持有），只能表达一次意图；
+  /// 页面侧消费时机见 `widgets/now_playing_controller.dart`。
+  final NowPlayingController _nowPlaying = NowPlayingController();
+
   /// 页面实例固定（key 稳定），顺序/显隐只影响底栏映射与分层透明度，
   /// 页面状态（滚动/搜索词等）天然保持。
   late final Map<ShellDestination, Widget> _pages = {
     ShellDestination.nowPlaying: NowPlaying(
       morph: _morph,
       reselect: _reselect[ShellDestination.nowPlaying],
-      // 桌面骨架的播放页换成「封面 + 控制 / 歌词 + 信息」版式（无迷你态，
-      // 队列由壳层右面板承载）；移动 / 平板骨架保持 PageView 版式。
+      controller: _nowPlaying,
+      // 桌面骨架的播放页换成「封面 + 控制 / 队列·歌词·信息」版式（无迷你态）；
+      // 移动 / 平板骨架保持 PageView 版式。
       desktopLayout: _desktopShell,
     ),
     ShellDestination.favorites: FavoritesPage(
@@ -305,6 +313,7 @@ class _MyAppState extends State<MyApp>
     _morphEntry?.remove();
     _morphEntry = null;
     _morph.dispose();
+    _nowPlaying.dispose();
     for (final signal in _reselect.values) {
       signal.dispose();
     }
@@ -359,12 +368,29 @@ class _MyAppState extends State<MyApp>
     if (enteringPlayer) {
       _startMorph(toPage: true);
     } else if (leavingPlayer) {
-      _startMorph(toPage: false);
+      _startMorphBackToBar();
     } else {
       // 两端都不是播放页：不涉及共享元素，确保两端真身可见。
       _morph.setPageHeaderHidden(false);
       _morph.setBarHeaderHidden(false);
     }
+  }
+
+  /// 底栏队列按钮：跳播放页 + 让页内右栏切到队列 tab。
+  ///
+  /// 跳页走 [_selectDestination]（已在播放页时它自己 no-op），请求照发——
+  /// 「看队列」在播放页里同样成立（控制器不看界面状态，重复请求也生效）。
+  void _openQueue() {
+    _selectDestination(ShellDestination.nowPlaying);
+    _nowPlaying.showQueueTab();
+  }
+
+  /// Esc 的壳层命令（可配置的「关闭队列」）：队列右面板已并入播放页右栏，
+  /// 落点 = 把队列视图收成播放页的默认页（歌词）。其它目的地没有队列视图
+  /// 可收，保持 no-op。
+  void _closeQueuePanel() {
+    if (_selectedDestination != ShellDestination.nowPlaying) return;
+    _nowPlaying.showLyricsTab();
   }
 
   /// 开始一次顶栏 ↔ 播放页飞行；锚点缺失（迷你态/首帧）时优雅跳过。
@@ -395,6 +421,25 @@ class _MyAppState extends State<MyApp>
     _morphAnimation.animateTo(1, from: 0, withVelocity: 0).whenComplete(() {
       if (!mounted || token != _morphToken) return;
       _completeMorph();
+    });
+  }
+
+  /// 离开播放页的飞行：底栏在播放页里整条让位，锚点要等它回到树里才有。
+  ///
+  /// 本帧先让底栏复位、并把两端封面提前收进飞行态（底栏封面出现时就是空位，
+  /// 下一帧副本从同一位置起飞，接得上）；帧末（底栏已完成布局）抓锚点、
+  /// 再下一帧起飞 —— 代价是飞行比切页晚一帧（16ms），肉眼不可辨。
+  void _startMorphBackToBar() {
+    _morph.setBarHeaderHidden(true);
+    _morph.setPageHeaderHidden(false);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      if (_selectedDestination == ShellDestination.nowPlaying) {
+        // 一帧之内又回到播放页：这次离开被撤销，把底栏封面的显示还回去。
+        _morph.setBarHeaderHidden(false);
+        return;
+      }
+      _startMorph(toPage: false);
     });
   }
 
@@ -516,7 +561,7 @@ class _MyAppState extends State<MyApp>
       onOpenSettings: () => _openSettings(context),
     );
 
-    // 桌面骨架：顶栏瘦身 + 可折叠侧栏 + 常驻底部播放条 + 队列右面板
+    // 桌面骨架：顶栏瘦身 + 恒折叠侧栏 + 页面栈（底栏播放条在非播放页出现）
     // （结构见 `desktop/desktop_shell.dart`）；移动 / 平板骨架保持原结构。
     // 桌面布局值在这里解析一次（窗口宽 / 平台位），页面与骨架只消费
     // （见 `widgets/desktop_layout.dart`）。
@@ -538,6 +583,10 @@ class _MyAppState extends State<MyApp>
           searchController: _globalSearch,
           onFocusSearch: _focusGlobalSearch,
           onSelectDestinationIndex: _selectVisibleDestinationAt,
+          // 队列入口（底栏按钮）与 Esc 的「关闭队列」都要落回播放页右栏，
+          // 由壳层持有控制器后分发。
+          onToggleQueue: _openQueue,
+          onCloseQueuePanel: _closeQueuePanel,
         ),
       );
     }

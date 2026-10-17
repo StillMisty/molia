@@ -2,7 +2,10 @@
 ///
 /// 左：封面 + 歌名/作者 + 收藏（点击进播放页，封面与播放页共享元素飞行）；
 /// 中：上一首 / 播放暂停 / 下一首 + 可拖波浪进度 + 时间；
-/// 右：播放模式 + 音量（图标 + 弹出滑杆）+ 队列开关。
+/// 右：播放模式 + 音量（图标 + 弹出滑杆）+ 队列。
+///
+/// 只在非播放页出现：播放页是沉浸主场，整条由壳层让位（见
+/// `app/desktop/desktop_shell.dart` 的 `bottomNavigationBar`）。
 library;
 
 import 'package:material_3_expressive/material_3_expressive.dart';
@@ -29,8 +32,6 @@ class DesktopNowPlayingBar extends StatelessWidget {
   const DesktopNowPlayingBar({
     super.key,
     required this.morph,
-    required this.queueOpen,
-    required this.queueAvailable,
     required this.onOpenPlayer,
     required this.onToggleQueue,
   });
@@ -38,7 +39,7 @@ class DesktopNowPlayingBar extends StatelessWidget {
   /// 稳定 Key：测试定位整条播放条（桌面骨架存在性）。
   static const Key shellKey = Key('desktopNowPlayingBar');
 
-  /// 队列开关按钮的稳定 Key。
+  /// 队列入口按钮的稳定 Key。
   static const Key queueToggleKey = Key('desktopQueueToggle');
 
   /// 音量按钮的稳定 Key。
@@ -63,18 +64,10 @@ class DesktopNowPlayingBar extends StatelessWidget {
   /// 顶栏 ↔ 播放页共享元素控制器：封面锚点与「播放页激活时收起封面」。
   final PlayerMorphController morph;
 
-  /// 队列面板当前是否**实际渲染**（窄窗口下会被强制关闭；按钮态跟它走，
-  /// 否则会出现「按钮亮着但面板不存在」的死控件）。
-  final bool queueOpen;
-
-  /// 当前窗口宽度是否允许队列面板（窄于阈值时按钮置灰，与侧栏的
-  /// `alwaysCollapse` 同一口径：不提供点了没反应的入口）。
-  final bool queueAvailable;
-
   /// 点击左区进入播放页。
   final VoidCallback onOpenPlayer;
 
-  /// 切换队列面板。
+  /// 队列入口：跳播放页并让页内右栏切到队列 tab（队列已并入播放页）。
   final VoidCallback onToggleQueue;
 
   @override
@@ -94,11 +87,7 @@ class DesktopNowPlayingBar extends StatelessWidget {
           const Expanded(flex: 4, child: _BarControls()),
           Expanded(
             flex: 3,
-            child: _BarActions(
-              queueOpen: queueOpen,
-              queueAvailable: queueAvailable,
-              onToggleQueue: onToggleQueue,
-            ),
+            child: _BarActions(onToggleQueue: onToggleQueue),
           ),
         ],
       ),
@@ -400,16 +389,10 @@ class _BarSeekSliderState extends State<_BarSeekSlider> {
   }
 }
 
-/// 右区：播放模式 + 音量 + 队列开关。
+/// 右区：播放模式 + 音量 + 队列入口。
 class _BarActions extends StatelessWidget {
-  const _BarActions({
-    required this.queueOpen,
-    required this.queueAvailable,
-    required this.onToggleQueue,
-  });
+  const _BarActions({required this.onToggleQueue});
 
-  final bool queueOpen;
-  final bool queueAvailable;
   final VoidCallback onToggleQueue;
 
   @override
@@ -449,14 +432,11 @@ class _BarActions extends StatelessWidget {
         ),
         M3EIconButton(
           key: DesktopNowPlayingBar.queueToggleKey,
-          // 面板打开时用 tonal 变体表达选中态（一屏内唯一的「已展开」信号）。
-          variant: queueOpen
-              ? M3EIconButtonVariant.tonal
-              : M3EIconButtonVariant.standard,
+          variant: M3EIconButtonVariant.standard,
           tooltip: l10n.playerBarQueue,
           icon: const Icon(Icons.queue_music_rounded),
-          // 窄窗口（面板被强制关闭）时置灰：点了也看不到面板。
-          onPressed: queueAvailable ? onToggleQueue : null,
+          // 「跳播放页 + 切队列 tab」在任何窗口宽下都成立：没有 disabled 态。
+          onPressed: onToggleQueue,
         ),
         const SizedBox(width: 4),
       ],
