@@ -6259,7 +6259,7 @@ abstract class AppLocalizations {
   /// No description provided for @shortcutsGlobalLinuxHint.
   ///
   /// In en, this message translates to:
-  /// **'System-wide hotkeys need X11 on Linux; Wayland sessions cannot register them'**
+  /// **'On Linux these go through the desktop portal (GlobalShortcuts); minimal desktops may not support it and will report a failure'**
   String get shortcutsGlobalLinuxHint;
 
   /// No description provided for @shortcutsEnabledSwitch.

@@ -6,18 +6,24 @@
 /// 另一套挂载点（`lib/app/desktop/desktop_shortcuts.dart`，只在窗口聚焦时
 /// 生效），两组互不感知。
 ///
-/// 平台面：Linux / Windows / macOS 有 hotkey_manager 实现；Linux 走 X11
-/// grab（keybinder），Wayland 会话没有全局热键协议——插件对 grab 失败也
-/// 回成功，本层按会话类型兜底写 [GlobalHotkeys.lastError]（见
-/// [_isWaylandSession]）。其余平台整体空操作。
+/// 平台面（`system_hotkeys`）：macOS 走 `RegisterEventHotKey`、Windows 走
+/// `RegisterHotKey`、Linux 走 `org.freedesktop.portal.GlobalShortcuts`
+/// 桌面门户（**纯 Dart + D-Bus，无原生构建依赖，X11 / Wayland 同样可用**）。
+/// 注册结果逐条回报（conflict / unsupported / declined），本层把非成功结果
+/// 记进 [GlobalHotkeys.lastError] 供设置页提示；其余平台整体空操作。
+///
+/// 为什么不用 hotkey_manager：它的 Linux 实现硬链接 keybinder-3.0（构建期
+/// 需要 dev 包、运行期需要 .so，缺失直接起不来），且只在 X11 下生效；门户
+/// 方案零系统依赖，且在 Wayland 下是唯一正路。
 library;
 
 import 'dart:async';
 import 'dart:io' show Platform;
 
 import 'package:flutter/foundation.dart';
-import 'package:flutter/services.dart' show LogicalKeyboardKey;
-import 'package:hotkey_manager/hotkey_manager.dart';
+import 'package:flutter/services.dart'
+    show LogicalKeyboardKey, PhysicalKeyboardKey;
+import 'package:system_hotkeys/system_hotkeys.dart';
 import 'package:logging/logging.dart';
 
 import 'shortcut_actions.dart';
@@ -30,6 +36,8 @@ final _logger = Logger('molia.global_hotkeys');
 /// 一条系统热键的注册参数（纯数据）：hotkey_manager `HotKey` 的字段映射，
 /// 单测只断言它、不触达平台插件。
 typedef HotKeySpec = ({
+  /// 注册身份（系统侧按它回报按下事件）：用命令名，稳定且可读。
+  String id,
   int keyId,
   bool ctrl,
   bool alt,
@@ -42,7 +50,8 @@ typedef HotKeySpec = ({
 /// `keyId` 是 `LogicalKeyboardKey.keyId`：注册端经
 /// `LogicalKeyboardKey.findKeyByKeyId` 还原成键（hotkey_manager 的 `HotKey`
 /// 直接接受逻辑键，物理键码由插件内部按平台换算）。
-HotKeySpec hotKeySpecFor(ShortcutCombo combo) => (
+HotKeySpec hotKeySpecFor(ShortcutCommand command, ShortcutCombo combo) => (
+      id: command.name,
       keyId: combo.key.keyId,
       ctrl: combo.ctrl,
       alt: combo.alt,
@@ -50,7 +59,69 @@ HotKeySpec hotKeySpecFor(ShortcutCombo combo) => (
       meta: combo.meta,
     );
 
-/// 系统热键注册器（seam）：生产实现包 hotkey_manager 的平台调用，
+/// 逻辑键 → 物理键（USB HID usage 口径）：全局热键按**物理位置**注册
+/// （布局无关——Dvorak 用户按的仍是同一个键位），`system_hotkeys` 的平台
+/// 编码（HID / Windows VK / macOS 虚拟键）也是物理口径。
+///
+/// 只覆盖可绑定的键集（字母 / 数字 / 方向 / 空格 / 功能键与常见符号）；
+/// 映射不到返回 null，注册端据此报错（进 [GlobalHotkeys.lastError]）。
+PhysicalKeyboardKey? physicalKeyFor(LogicalKeyboardKey key) {
+  final id = key.keyId;
+  // 字母：逻辑 id 是 ASCII 小写（0x61..0x7A）→ HID 0x04..0x1D。
+  if (id >= 0x61 && id <= 0x7A) {
+    return PhysicalKeyboardKey.findKeyByCode(_hidUsage(0x04 + (id - 0x61)));
+  }
+  // 数字：逻辑 id 是 ASCII（0x30..0x39）→ HID 0x1E..0x27（1 起、0 收尾）。
+  if (id >= 0x30 && id <= 0x39) {
+    final digit = id - 0x30;
+    return PhysicalKeyboardKey.findKeyByCode(
+      _hidUsage(digit == 0 ? 0x27 : 0x1E + digit - 1),
+    );
+  }
+  final usage = _physicalUsageByKey[key];
+  return usage == null ? null : PhysicalKeyboardKey.findKeyByCode(_hidUsage(usage));
+}
+
+/// HID usage → `PhysicalKeyboardKey` 的查找码：Flutter 的
+/// `findKeyByCode` 按**完整 id**（USB HID 页前缀 0x0007 + usage）索引，
+/// 只传 usage 会查不到（表里的常量都是 `0x0007xxxx`）。
+int _hidUsage(int usage) => 0x00070000 | usage;
+
+/// 非字母数字键的 USB HID usage（USB HID Usage Tables §10 Keyboard/Keypad）。
+final Map<LogicalKeyboardKey, int> _physicalUsageByKey = {
+  LogicalKeyboardKey.space: 0x2C,
+  LogicalKeyboardKey.escape: 0x29,
+  LogicalKeyboardKey.enter: 0x28,
+  LogicalKeyboardKey.arrowRight: 0x4F,
+  LogicalKeyboardKey.arrowLeft: 0x50,
+  LogicalKeyboardKey.arrowDown: 0x51,
+  LogicalKeyboardKey.arrowUp: 0x52,
+  LogicalKeyboardKey.f1: 0x3A,
+  LogicalKeyboardKey.f2: 0x3B,
+  LogicalKeyboardKey.f3: 0x3C,
+  LogicalKeyboardKey.f4: 0x3D,
+  LogicalKeyboardKey.f5: 0x3E,
+  LogicalKeyboardKey.f6: 0x3F,
+  LogicalKeyboardKey.f7: 0x40,
+  LogicalKeyboardKey.f8: 0x41,
+  LogicalKeyboardKey.f9: 0x42,
+  LogicalKeyboardKey.f10: 0x43,
+  LogicalKeyboardKey.f11: 0x44,
+  LogicalKeyboardKey.f12: 0x45,
+  LogicalKeyboardKey.minus: 0x2D,
+  LogicalKeyboardKey.equal: 0x2E,
+  LogicalKeyboardKey.bracketLeft: 0x2F,
+  LogicalKeyboardKey.bracketRight: 0x30,
+  LogicalKeyboardKey.backslash: 0x31,
+  LogicalKeyboardKey.semicolon: 0x33,
+  LogicalKeyboardKey.quote: 0x34,
+  LogicalKeyboardKey.backquote: 0x35,
+  LogicalKeyboardKey.comma: 0x36,
+  LogicalKeyboardKey.period: 0x37,
+  LogicalKeyboardKey.slash: 0x38,
+};
+
+/// 系统热键注册器（seam）：生产实现包 system_hotkeys 的平台调用，
 /// 测试注入假实现，避免在单测里触达平台通道。
 abstract interface class GlobalHotkeyRegistrar {
   /// 注册一条系统级热键；[onPressed] 在用户按下（不含长按重复）时触发。
@@ -71,33 +142,60 @@ abstract interface class GlobalHotkeySettings implements Listenable {
   ShortcutBindings get globalBindings;
 }
 
-/// hotkey_manager 生产实现：scope 固定 system（窗口失焦也生效）。
-class _HotkeyManagerRegistrar implements GlobalHotkeyRegistrar {
-  const _HotkeyManagerRegistrar();
+/// `system_hotkeys` 生产实现：按「命令名 = 注册 id」逐条绑定，按下事件经
+/// [SystemHotkeys.events] 流回到本层的回调表（插件不提供逐条回调）。
+class _SystemHotkeysRegistrar implements GlobalHotkeyRegistrar {
+  _SystemHotkeysRegistrar() {
+    _eventSubscription = SystemHotkeys.events.listen((event) {
+      _callbacks[event.id]?.call();
+    });
+  }
+
+  final Map<String, VoidCallback> _callbacks = {};
+  StreamSubscription<HotKeyEvent>? _eventSubscription;
 
   @override
-  Future<void> register(HotKeySpec spec, VoidCallback onPressed) {
-    final key = LogicalKeyboardKey.findKeyByKeyId(spec.keyId);
-    if (key == null) {
+  Future<void> register(HotKeySpec spec, VoidCallback onPressed) async {
+    // 全局热键用**物理键**：布局无关（Dvorak 用户按的仍是同一个物理位置），
+    // 与 system_hotkeys 的平台编码（USB HID / VK）口径一致。
+    final logical = LogicalKeyboardKey.findKeyByKeyId(spec.keyId);
+    final physical = logical == null ? null : physicalKeyFor(logical);
+    if (physical == null) {
       throw ArgumentError.value(spec.keyId, 'spec.keyId', '未知按键');
     }
-    return hotKeyManager.register(
+    final id = spec.id;
+    _callbacks[id] = onPressed;
+    final result = await SystemHotkeys.register(
+      id,
       HotKey(
-        key: key,
-        modifiers: [
+        key: physical,
+        modifiers: {
           if (spec.ctrl) HotKeyModifier.control,
           if (spec.alt) HotKeyModifier.alt,
           if (spec.shift) HotKeyModifier.shift,
           if (spec.meta) HotKeyModifier.meta,
-        ],
-        scope: HotKeyScope.system,
+        },
       ),
-      keyDownHandler: (_) => onPressed(),
+      description: id,
     );
+    if (result != HotKeyResult.bound) {
+      _callbacks.remove(id);
+      throw StateError('系统未接受该组合（${result.name}）');
+    }
   }
 
   @override
-  Future<void> unregisterAll() => hotKeyManager.unregisterAll();
+  Future<void> unregisterAll() async {
+    _callbacks.clear();
+    await SystemHotkeys.unregisterAll();
+  }
+
+  /// 测试收尾 / 进程退出：释放事件订阅（生产只在应用生命周期内存在一次）。
+  void dispose() {
+    unawaited(_eventSubscription?.cancel());
+    _eventSubscription = null;
+    _callbacks.clear();
+  }
 }
 
 /// [GlobalHotkeySettings] 的生产实现：薄适配 `ShortcutSettings` 单例。
@@ -165,7 +263,7 @@ class GlobalHotkeys {
     _attached = true;
     final settings = settingsOverride ?? const _ShortcutSettingsView();
     _settings = settings;
-    _registrar = registrarOverride ?? const _HotkeyManagerRegistrar();
+    _registrar = registrarOverride ?? _SystemHotkeysRegistrar();
     settings.addListener(_onSettingsChanged);
     _scheduleSync();
     await _syncChain;
@@ -215,7 +313,7 @@ class GlobalHotkeys {
       }
       try {
         await registrar.register(
-          hotKeySpecFor(combo),
+          hotKeySpecFor(entry.key, combo),
           () => _dispatch(entry.key),
         );
         registered++;
@@ -224,7 +322,6 @@ class GlobalHotkeys {
         _logger.warning('注册全局热键失败（${combo.label()}）：$error');
       }
     }
-    // 全部调用都「成功」也可能是 Wayland 上的假成功（见 [_isWaylandSession]）。
     _lastError = lastFailure ?? _waylandHint;
     if (_lastError == null && registered > 0) {
       _logger.info('已注册 $registered 条全局热键');
@@ -250,24 +347,8 @@ class GlobalHotkeys {
     }));
   }
 
-  /// Wayland 会话的提示文案；非 Linux / X11 会话为 null。
-  static String? get _waylandHint =>
-      _isWaylandSession ? 'Wayland 会话不支持系统级热键（Linux 走 X11 grab）' : null;
-
-  /// Linux 是否运行在 Wayland 会话。
-  ///
-  /// keybinder 的 X11 grab 在 Wayland 下不生效，而 hotkey_manager 的 Linux
-  /// 实现忽略 `keybinder_bind` 的失败结果（方法通道照常回成功）——异常兜底
-  /// 接不到，只能按会话类型识别并写进 [lastError] 供设置页提示。
-  /// 不阻止注册：XWayland 下部分场景仍可能生效，将来插件换后端也自然可用。
-  static bool get _isWaylandSession {
-    if (!Platform.isLinux) return false;
-    final sessionType = Platform.environment['XDG_SESSION_TYPE'];
-    if (sessionType == 'wayland') return true;
-    // XDG_SESSION_TYPE 缺失时（部分最小会话 / 终端启动）用 WAYLAND_DISPLAY 兜底。
-    return sessionType == null &&
-        Platform.environment['WAYLAND_DISPLAY'] != null;
-  }
+  /// 注册结果里的失败提示（Linux 门户不可用时的额外说明）。
+  static String? get _waylandHint => null;
 
   /// 等待在途的设置变更同步完成（测试用：通知回调是同步的，实际同步在
   /// [_syncChain] 异步链上）。

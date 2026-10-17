@@ -1916,7 +1916,7 @@
   "shortcutsInAppHint": "Active while the window is focused; tap a binding to re-record it",
   "shortcutsGlobalSection": "Global shortcuts",
   "shortcutsGlobalHint": "System-wide hotkeys that work while unfocused; must include Ctrl / Alt / Shift",
-  "shortcutsGlobalLinuxHint": "System-wide hotkeys need X11 on Linux; Wayland sessions cannot register them",
+  "shortcutsGlobalLinuxHint": "On Linux these go through the desktop portal (GlobalShortcuts); minimal desktops may not support it and will report a failure",
   "shortcutsEnabledSwitch": "Enable in-app shortcuts",
   "shortcutsGlobalEnabledSwitch": "Enable global shortcuts",
   "shortcutsResetAll": "Reset to defaults",

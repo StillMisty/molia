@@ -1572,7 +1572,7 @@
   "shortcutsInAppHint": "窗口聚焦时生效；点击按键可重新录制",
   "shortcutsGlobalSection": "全局快捷键",
   "shortcutsGlobalHint": "系统级热键，窗口失焦也生效；必须包含 Ctrl / Alt / Shift",
-  "shortcutsGlobalLinuxHint": "Linux 上系统级热键依赖 X11；Wayland 会话下无法注册（桌面环境限制）",
+  "shortcutsGlobalLinuxHint": "Linux 通过桌面门户（xdg-desktop-portal 的 GlobalShortcuts）注册；精简桌面环境可能不支持，届时会提示注册失败",
   "shortcutsEnabledSwitch": "启用软件内快捷键",
   "shortcutsGlobalEnabledSwitch": "启用全局快捷键",
   "shortcutsResetAll": "恢复默认",

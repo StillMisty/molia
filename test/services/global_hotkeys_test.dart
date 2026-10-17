@@ -19,6 +19,7 @@ void main() {
   test('组合 → 注册参数：主键与修饰键一一映射，默认表全部可还原', () {
     expect(
       hotKeySpecFor(
+        ShortcutCommand.togglePlayPause,
         const ShortcutCombo(
           key: LogicalKeyboardKey.space,
           ctrl: true,
@@ -26,6 +27,7 @@ void main() {
         ),
       ),
       (
+        id: ShortcutCommand.togglePlayPause.name,
         keyId: LogicalKeyboardKey.space.keyId,
         ctrl: true,
         alt: true,
@@ -35,7 +37,7 @@ void main() {
     );
 
     for (final entry in ShortcutBindings.globalDefaults.entries) {
-      final spec = hotKeySpecFor(entry.value);
+      final spec = hotKeySpecFor(entry.key, entry.value);
       expect(
         LogicalKeyboardKey.findKeyByKeyId(spec.keyId),
         entry.value.key,
@@ -46,6 +48,38 @@ void main() {
       expect(spec.shift, entry.value.shift, reason: entry.key.name);
       expect(spec.meta, entry.value.meta, reason: entry.key.name);
     }
+  });
+
+  test('逻辑键 → 物理键（USB HID）：默认表全部可映射，未知键返回 null', () {
+    // 全局热键按物理位置注册：字母 / 数字 / 方向 / 空格等都必须能映射到
+    // USB HID usage，否则注册端会直接报错（进 lastError）。
+    for (final entry in ShortcutBindings.globalDefaults.entries) {
+      expect(
+        physicalKeyFor(entry.value.key),
+        isNotNull,
+        reason: '${entry.key.name} 的默认组合应可映射到物理键',
+      );
+    }
+    expect(
+      physicalKeyFor(LogicalKeyboardKey.keyA)!.usbHidUsage,
+      0x00070004,
+      reason: '字母 A = HID 0x04',
+    );
+    expect(
+      physicalKeyFor(LogicalKeyboardKey.digit1)!.usbHidUsage,
+      0x0007001E,
+      reason: '数字 1 = HID 0x1E',
+    );
+    expect(
+      physicalKeyFor(LogicalKeyboardKey.digit0)!.usbHidUsage,
+      0x00070027,
+      reason: '数字 0 排在 9 之后 = HID 0x27',
+    );
+    expect(
+      physicalKeyFor(LogicalKeyboardKey.arrowLeft)!.usbHidUsage,
+      0x00070050,
+    );
+    expect(physicalKeyFor(LogicalKeyboardKey.f13), isNull, reason: '未收录的键');
   });
 
   test('开关关闭：只注销、不发注册请求', () async {

@@ -3350,7 +3350,7 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get shortcutsGlobalLinuxHint =>
-      'Linux 上系统级热键依赖 X11；Wayland 会话下无法注册（桌面环境限制）';
+      'Linux 通过桌面门户（xdg-desktop-portal 的 GlobalShortcuts）注册；精简桌面环境可能不支持，届时会提示注册失败';
 
   @override
   String get shortcutsEnabledSwitch => '启用软件内快捷键';

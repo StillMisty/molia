@@ -3498,7 +3498,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get shortcutsGlobalLinuxHint =>
-      'System-wide hotkeys need X11 on Linux; Wayland sessions cannot register them';
+      'On Linux these go through the desktop portal (GlobalShortcuts); minimal desktops may not support it and will report a failure';
 
   @override
   String get shortcutsEnabledSwitch => 'Enable in-app shortcuts';

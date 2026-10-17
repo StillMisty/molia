@@ -62,10 +62,12 @@ dependencies:
   dio: ^5.11.1
   package_info_plus: ^10.2.2
   tray_manager: ^0.8.0
-  # 全局热键（系统级，窗口失焦也生效）：仅桌面三平台有实现；Linux 走 X11
-  # grab（构建需系统 keybinder-3.0 开发包），Wayland 会话没有全局热键协议、
-  # 注册不生效（降级提示见 lib/services/global_hotkeys.dart）。
-  hotkey_manager: ^0.2.3
+  system_hotkeys: ^0.2.0
+  # 全局热键（系统级，窗口失焦也生效）：桌面三平台走系统注册 API
+  # （Windows RegisterHotKey / macOS RegisterEventHotKey / Linux
+  # org.freedesktop.portal.GlobalShortcuts 桌面门户）。Linux 实现是纯 Dart +
+  # D-Bus（无 keybinder 之类原生依赖，X11 / Wayland 通用）；精简桌面（无
+  # xdg-desktop-portal 后端）注册会失败，由 GlobalHotkeys 降级记录。
 dev_dependencies:
   flutter_test:
     sdk: flutter
