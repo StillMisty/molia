@@ -1,9 +1,8 @@
-import 'package:flutter/foundation.dart'
-    show TargetPlatform, defaultTargetPlatform;
 import 'package:material_3_expressive/material_3_expressive.dart';
 import 'package:material_ui/material_ui.dart';
 
 import '../l10n/app_localizations.dart';
+import '../utils/responsive.dart';
 import 'track_row.dart';
 
 /// AppLocalizations 查找：测试等场景可能直接挂载本组件而不注册 delegate，
@@ -22,19 +21,10 @@ AppLocalizations _l10n(BuildContext context) =>
 /// 固定列宽的行，直接把行撑溢出。调用方在列表处套 `LayoutBuilder` 传
 /// `availableWidth`；不传时回退窗口宽（独立挂载 / 测试）。
 bool showTrackTableColumns(BuildContext context, {double? availableWidth}) {
-  if (!_isDesktopPlatform()) return false;
+  if (!isDesktopPlatform()) return false;
   final width = availableWidth ?? MediaQuery.sizeOf(context).width;
   return width >= TrackRowColumns.minWidth;
 }
-
-/// 桌面平台（Linux / Windows / macOS）：与桌面骨架同一口径。
-bool _isDesktopPlatform() => switch (defaultTargetPlatform) {
-      TargetPlatform.linux ||
-      TargetPlatform.windows ||
-      TargetPlatform.macOS =>
-        true,
-      _ => false,
-    };
 
 /// 宽屏表格列表头：艺术家 / 专辑 / 时长三列，列宽与行内 [TrackRowColumns]
 /// 同源（改列宽只改常量一处）。

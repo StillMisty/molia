@@ -1,5 +1,7 @@
 import 'dart:math' as math;
 
+import 'package:flutter/foundation.dart'
+    show TargetPlatform, defaultTargetPlatform;
 import 'package:material_3_expressive/material_3_expressive.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:motor/motor.dart';
@@ -19,6 +21,19 @@ abstract class Breakpoints {
   /// 桌面/超宽屏幕
   static const double desktop = 900;
 }
+
+/// 桌面平台（Linux / Windows / macOS）：桌面骨架与桌面专属交互的统一判定。
+///
+/// 与壳层骨架分流（`MyApp.desktopShell`）互补：生产路径两者一致；测试里可用
+/// 开关强制骨架，页面内的桌面增强（渠道栏 / 表格列 / hover 显现 / 右键菜单）
+/// 仍按平台判定——它们只在桌面骨架里渲染，无需再逐层传开关。
+bool isDesktopPlatform() => switch (defaultTargetPlatform) {
+      TargetPlatform.linux ||
+      TargetPlatform.windows ||
+      TargetPlatform.macOS =>
+        true,
+      _ => false,
+    };
 
 /// 设备类型枚举
 enum DeviceType {

@@ -1,11 +1,32 @@
+import 'dart:async';
+
 import 'package:material_3_expressive/material_3_expressive.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:provider/provider.dart';
 
+import '../domain/models/library.dart';
 import '../domain/models/track.dart';
 import '../l10n/app_localizations.dart';
+import '../providers/library_provider.dart';
 import '../providers/playback_provider.dart';
+import 'add_to_library.dart';
+import 'track_actions_menu.dart';
+import '../utils/responsive.dart';
 import 'track_row.dart';
+
+/// 封面地址：缺失 / 空串返回 null（行内不占位）。
+String? _coverUrlOf(Track track) {
+  final url = track.artwork?.uri.toString();
+  return url == null || url.isEmpty ? null : url;
+}
+
+/// 时长文案（`m:ss`）；未知按 0 处理（队列行固定行尾口径）。
+String _formatDuration(Duration? duration) {
+  final value = duration ?? Duration.zero;
+  final minutes = value.inMinutes;
+  final seconds = (value.inSeconds % 60).toString().padLeft(2, '0');
+  return '$minutes:$seconds';
+}
 
 /// 播放队列：只列出当前曲目之后的「接下来」。
 ///
@@ -126,14 +147,10 @@ class QueueDisplay extends StatelessWidget {
                   final isLast = index == currentQueue.length - 1;
                   return Column(
                     children: [
-                      TrackRow(
-                        title: track.title,
-                        artist: track.artistLabel,
-                        coverUrl: _coverUrlOf(track),
-                        coverSize: 40,
+                      _QueueTrackRow(
+                        track: track,
                         position:
                             calculateCardPosition(index, currentQueue.length),
-                        trailingText: _formatDuration(track.duration),
                         onTap: () {
                           // 本地音源曲目：交给本地播放队列（恢复态自动续播）。
                           playbackProvider
@@ -179,16 +196,120 @@ class QueueDisplay extends StatelessWidget {
       ),
     );
   }
+}
 
-  static String? _coverUrlOf(Track track) {
-    final url = track.artwork?.uri.toString();
-    return url == null || url.isEmpty ? null : url;
+/// 队列「接下来」行：行内容 + 桌面的行尾 ⋮ 菜单（收藏开关 / 加入列表，
+/// 与搜索结果行同一份动作域）。
+///
+/// 桌面端 ⋮ 随整行 hover / 焦点显现（[HoverReveal]），行表面右键打开同一
+/// 份菜单；触摸端维持现状（不加 ⋮，行内容逐像素不变）。
+///
+/// 为什么是 StatefulWidget：行要持有 [TrackActionsMenuController]——它必须
+/// 跟行同生命周期（建在 itemBuilder 里每次重建都会注册一份新回调）。
+class _QueueTrackRow extends StatefulWidget {
+  const _QueueTrackRow({
+    required this.track,
+    required this.position,
+    required this.onTap,
+  });
+
+  final Track track;
+  final M3ECardPosition position;
+  final VoidCallback onTap;
+
+  @override
+  State<_QueueTrackRow> createState() => _QueueTrackRowState();
+}
+
+class _QueueTrackRowState extends State<_QueueTrackRow> {
+  /// 行尾 ⋮ 的外部打开句柄（行表面右键 → 同一份菜单）。
+  final TrackActionsMenuController _menu = TrackActionsMenuController();
+
+  @override
+  Widget build(BuildContext context) {
+    final track = widget.track;
+    final desktop = isDesktopPlatform();
+    return TrackRow(
+      title: track.title,
+      artist: track.artistLabel,
+      coverUrl: _coverUrlOf(track),
+      coverSize: 40,
+      position: widget.position,
+      trailingText: _formatDuration(track.duration),
+      onTap: widget.onTap,
+      onSecondaryTap: desktop ? _menu.open : null,
+      trailing: desktop
+          ? HoverReveal(
+              child: _buildActionsMenu(context, AppLocalizations.of(context)!),
+            )
+          : null,
+    );
   }
 
-  String _formatDuration(Duration? duration) {
-    final value = duration ?? Duration.zero;
-    final minutes = value.inMinutes;
-    final seconds = (value.inSeconds % 60).toString().padLeft(2, '0');
-    return '$minutes:$seconds';
+  /// 行尾 ⋮ 菜单：收藏态每行一个 `select` 订阅（不能在 itemBuilder 里
+  /// 直接订阅，会整表重建）；收藏 / 加入列表走与搜索行同一套领域入口。
+  Widget _buildActionsMenu(BuildContext context, AppLocalizations l10n) {
+    final track = widget.track;
+    final favorite = context.select<LibraryProvider?, bool>(
+      (provider) =>
+          provider?.isFavorite(track.id.sourceKey, track.id.id) ?? false,
+    );
+    return TrackActionsMenu(
+      controller: _menu,
+      tooltip: l10n.trackActionsTooltip,
+      entries: [
+        M3EMenuEntry(
+          label: favorite ? l10n.favoriteRemove : l10n.favoriteAdd,
+          leading: Icon(
+            favorite ? Icons.favorite_rounded : Icons.favorite_border_rounded,
+          ),
+          value: 'favorite',
+        ),
+        M3EMenuEntry(
+          label: l10n.addToPlaylist,
+          leading: const Icon(Icons.playlist_add_rounded),
+          value: 'add',
+        ),
+      ],
+      onSelected: (value) {
+        switch (value) {
+          case 'favorite':
+            unawaited(_toggleFavorite(context, l10n));
+          case 'add':
+            unawaited(_addToPlaylist(context));
+        }
+      },
+    );
+  }
+
+  /// 收藏 / 取消收藏：菜单文案已表达状态，反馈只留 snackbar 确认。
+  Future<void> _toggleFavorite(
+    BuildContext context,
+    AppLocalizations l10n,
+  ) async {
+    final library = context.read<LibraryProvider?>();
+    if (library == null) return;
+    final favorite = await library.toggleFavoriteTrack(widget.track);
+    if (!context.mounted) return;
+    M3ESnackbar.show(
+      context,
+      message: favorite ? l10n.favoriteAdd : l10n.favoriteRemove,
+    );
+  }
+
+  /// 加入列表：与收藏页 / 搜索行共用同一目标选择与反馈流程。
+  Future<void> _addToPlaylist(BuildContext context) async {
+    final library = context.read<LibraryProvider?>();
+    if (library == null) return;
+    await addTracksToLibraryTarget(
+      context,
+      provider: library,
+      tracks: [
+        PlaylistTrack.fromTrack(
+          widget.track,
+          addedAt: DateTime.now().millisecondsSinceEpoch,
+        ),
+      ],
+    );
   }
 }

@@ -1,5 +1,3 @@
-import 'package:flutter/foundation.dart'
-    show TargetPlatform, defaultTargetPlatform;
 import 'package:material_3_expressive/material_3_expressive.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:provider/provider.dart';
@@ -20,16 +18,6 @@ import '../widgets/shell_reselect.dart';
 
 /// 发现页 tab 标识（可见性随当前渠道能力变化，不用下标表示）。
 enum _LibraryTab { search, leaderboards, playlists }
-
-/// 桌面平台（Linux / Windows / macOS）：与桌面骨架、宽屏表格列
-/// （`showTrackTableColumns`）同一口径。
-bool _isDesktopPlatform() => switch (defaultTargetPlatform) {
-      TargetPlatform.linux ||
-      TargetPlatform.windows ||
-      TargetPlatform.macOS =>
-        true,
-      _ => false,
-    };
 
 /// 发现页（内置平台发现）：
 /// - 渠道切换 +「搜索 / 热榜 / 歌单」三个 tab：移动 / 窄窗口是顶部下拉框，
@@ -173,7 +161,7 @@ class _LibraryState extends State<Library> {
     // 桌面宽屏把渠道切换收进左侧竖栏（下拉框不再渲染，避免两套入口）；
     // 移动 / 窄窗口保持顶部下拉框。口径 = 桌面平台 + 窗口宽 ≥ 900
     // （`context.isDesktop` 即 browse 桌面断点），与搜索结果宽屏表格列同源。
-    final showChannelRail = _isDesktopPlatform() && context.isDesktop;
+    final showChannelRail = isDesktopPlatform() && context.isDesktop;
 
     final content = Column(
       children: [

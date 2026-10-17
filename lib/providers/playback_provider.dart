@@ -602,6 +602,22 @@ class PlaybackProvider extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// 相对调整音量（键盘快捷键 ±5%）：clamp 0..1；**静音态下调整即解除静音**
+  /// ——用户按音量键就是期望听见声音，只改值不解除会让按键看起来失灵。
+  ///
+  /// 与 [setVolume] 的差别：setVolume 是滑杆绝对赋值、静音期间只改值不解除；
+  /// 两者落盘共用同一条防抖路径（连按音量键不逐次写盘）。
+  Future<void> adjustVolume(double delta) async {
+    final clamped = (_volume + delta).clamp(0.0, 1.0);
+    // 无变化且未静音：不动后端、不通知（到达边界后继续按是纯空转）。
+    if (clamped == _volume && !_muted) return;
+    _volume = clamped;
+    _muted = false;
+    await _applyEffectiveVolume();
+    _scheduleVolumePersist();
+    notifyListeners();
+  }
+
   /// 音量落盘防抖：拖动滑杆时每帧都调 [setVolume]，逐帧写 SharedPreferences
   /// 没有意义（也拖慢拖动）；停手后再写。进程在防抖窗口内被杀最多丢一次
   /// 未落定的拖动值（与其它防抖写入同一取舍）。

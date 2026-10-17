@@ -31,13 +31,43 @@ AppLocalizations _l10n(BuildContext context) =>
 
 /// 顶栏搜索入口（pill）+ 就地结果面板。
 class GlobalSearch extends StatefulWidget {
-  const GlobalSearch({super.key, required this.onViewAllResults});
+  const GlobalSearch({
+    super.key,
+    required this.onViewAllResults,
+    this.controller,
+  });
 
   /// 「查看全部结果」（或面板内回车）→ 关闭面板并切到资料库目的地。
   final VoidCallback onViewAllResults;
 
+  /// 壳层聚焦入口（可选）：桌面快捷键 Ctrl+F 经它打开面板并聚焦输入框。
+  final GlobalSearchController? controller;
+
   @override
   State<GlobalSearch> createState() => _GlobalSearchState();
+}
+
+/// 全局搜索的壳层聚焦入口：把「打开 / 聚焦搜索」暴露给壳层（Ctrl+F）。
+///
+/// 只持有当前挂载的 [M3ESearchController] 引用——宽窗顶栏才挂搜索 pill；
+/// 窄窗顶栏搜索退化为图标（壳层落到搜索页），此时未被附着，[focus] 是 no-op。
+class GlobalSearchController {
+  M3ESearchController? _search;
+
+  /// 打开搜索面板（打开动画落定后包内让输入框取得焦点）；未挂载（窄窗
+  /// 没有搜索 pill）或面板已打开时 no-op——已打开时输入框本就持有焦点，
+  /// 包内也没有「重新聚焦已打开面板」的入口。
+  void focus() {
+    final search = _search;
+    if (search == null || !search.isAttached || search.isOpen) return;
+    search.openView();
+  }
+
+  void _attach(M3ESearchController search) => _search = search;
+
+  void _detach(M3ESearchController search) {
+    if (_search == search) _search = null;
+  }
 }
 
 class _GlobalSearchState extends State<GlobalSearch> {
@@ -50,6 +80,7 @@ class _GlobalSearchState extends State<GlobalSearch> {
   @override
   void initState() {
     super.initState();
+    widget.controller?._attach(_controller);
     // provider → pill 单向同步（provider 是搜索状态的唯一源）：在资料库页
     // 改词 / 清空后顶栏 pill 不能残留旧关键词，否则重新打开面板会出现
     // 「框里有词、结果区却为空」的自相矛盾状态。
@@ -58,7 +89,17 @@ class _GlobalSearchState extends State<GlobalSearch> {
   }
 
   @override
+  void didUpdateWidget(covariant GlobalSearch oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.controller != widget.controller) {
+      oldWidget.controller?._detach(_controller);
+      widget.controller?._attach(_controller);
+    }
+  }
+
+  @override
   void dispose() {
+    widget.controller?._detach(_controller);
     _search.removeListener(_syncFromProvider);
     _controller.dispose();
     super.dispose();

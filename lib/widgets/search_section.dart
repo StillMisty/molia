@@ -16,7 +16,6 @@ import '../utils/duration_text.dart';
 import '../utils/responsive.dart';
 import 'add_to_library.dart';
 import 'artist_row.dart';
-import 'favorite_track_tile.dart';
 import 'track_actions_menu.dart';
 import 'track_row.dart';
 import 'track_table_header.dart';
@@ -28,9 +27,9 @@ AppLocalizations _l10n(BuildContext context) =>
 
 /// 搜索结果区：类型分段（单曲 / 歌手 / 歌词）+ 各类型的结果列表与音源分页。
 ///
-/// 结果行与发现详情页共用 [FavoriteTrackTile]（点击播放；行尾菜单收藏 / 加入
-/// 列表），歌手类型用 [ArtistRow]（点击进歌手页）；分段按渠道能力位显隐
-/// （脚本源只有单曲）。
+/// 结果行是收藏页同形的 [TrackRow]（点击播放；行尾 ⋮ 菜单收藏 / 加入列表，
+/// 与 `TrackMenuTile` 同一份动作域），歌手类型用 [ArtistRow]（点击进歌手页）；
+/// 分段按渠道能力位显隐（脚本源只有单曲）。
 class SearchSection extends StatefulWidget {
   const SearchSection({super.key, this.controller});
 
@@ -458,9 +457,13 @@ class _SearchResultsList extends StatelessWidget {
   }
 }
 
-/// 搜索结果行（[FavoriteTrackTile] 的搜索域适配层）：
-/// 点击播放；行尾菜单收藏 / 加入列表（菜单形状与发现详情页一致）。
-class _SearchResultTile extends StatelessWidget {
+/// 搜索结果行：点击播放；行尾 ⋮ 菜单收藏 / 加入列表（条目与 `TrackMenuTile`
+/// 同一规范）。
+///
+/// 行内容直接在 [TrackRow] 上构建（单列 / 表格两种版式共用），不走
+/// `FavoriteTrackTile` 适配层：行尾菜单要接桌面的 hover 显现与右键打开，
+/// 需要把 [TrackActionsMenuController] 传进菜单，而适配层不接这个参数。
+class _SearchResultTile extends StatefulWidget {
   const _SearchResultTile({
     super.key,
     required this.item,
@@ -479,10 +482,44 @@ class _SearchResultTile extends StatelessWidget {
   final bool tableColumns;
 
   @override
+  State<_SearchResultTile> createState() => _SearchResultTileState();
+}
+
+class _SearchResultTileState extends State<_SearchResultTile> {
+  /// 行尾 ⋮ 的外部打开句柄（桌面右键 → 同一份菜单）。
+  final TrackActionsMenuController _menu = TrackActionsMenuController();
+
+  @override
   Widget build(BuildContext context) {
     final l10n = _l10n(context);
-    if (tableColumns) return _buildTableRow(context, l10n);
+    // 收藏态每行一个 select 订阅（不能在列表 itemBuilder 里直接订阅）。
+    final favorite = _favoriteOf(context);
+    final onTap = widget.onTap;
+    final rowTap = onTap == null
+        ? null
+        : () {
+            HapticsService.lightImpact();
+            onTap();
+          };
+    if (widget.tableColumns) {
+      return _buildTableRow(context, l10n, favorite: favorite, rowTap: rowTap);
+    }
+    return _buildSingleColumnRow(
+      context,
+      l10n,
+      favorite: favorite,
+      rowTap: rowTap,
+    );
+  }
 
+  /// 单列行（非宽屏 / 触摸端）：封面 + 标题 + 歌手 / 歌词片段副标题。
+  Widget _buildSingleColumnRow(
+    BuildContext context,
+    AppLocalizations l10n, {
+    required bool favorite,
+    required VoidCallback? rowTap,
+  }) {
+    final item = widget.item;
     // 歌手链接能力位（同一平台固定）：内置平台为真时逐个歌手名可点。
     final sourceKey = item['source']?.toString() ?? '';
     final artistTapsEnabled = sourceKey.isNotEmpty &&
@@ -495,32 +532,27 @@ class _SearchResultTile extends StatelessWidget {
     final artistLinks = snippet.isEmpty
         ? _artistLinksOf(context, item, tapsEnabled: artistTapsEnabled)
         : null;
-    return FavoriteTrackTile(
+    return TrackRow(
       title: item['name']?.toString() ?? '',
       artist: snippet.isEmpty ? _artistOf(item) : snippet,
       artists: artistLinks,
       coverUrl: _coverUrlOf(item),
       trailingText: durationText(_durationMsOf(item)),
-      position: calculateCardPosition(index, count),
-      onTap: onTap == null
-          ? null
-          : () {
-              HapticsService.lightImpact();
-              onTap!();
-            },
-      favoriteOf: _favoriteOf,
-      onToggleFavorite: () => unawaited(_toggleFavorite(context, l10n)),
-      onAddToPlaylist: () => unawaited(_addToPlaylist(context)),
+      position: calculateCardPosition(widget.index, widget.count),
+      onTap: rowTap,
+      onSecondaryTap: _menu.open,
+      trailing: _buildActionsMenu(context, l10n, favorite),
     );
   }
 
   /// 宽屏表格行：标题 + 艺术家 / 专辑 / 时长三列（列宽与表头同源）。
-  ///
-  /// 表格模式不经 [FavoriteTrackTile]（该适配层不接受列参数，行内容形状
-  /// 也不同），行尾菜单按 `TrackMenuTile` 的同一规范在这里构建：条目与
-  /// 图标一致（收藏开关 + 加入列表），收藏态订阅同 [_favoriteOf]。
-  Widget _buildTableRow(BuildContext context, AppLocalizations l10n) {
-    final favorite = _favoriteOf(context);
+  Widget _buildTableRow(
+    BuildContext context,
+    AppLocalizations l10n, {
+    required bool favorite,
+    required VoidCallback? rowTap,
+  }) {
+    final item = widget.item;
     final artist = _artistDisplayOf(item);
     return TrackRow(
       title: item['name']?.toString() ?? '',
@@ -532,14 +564,25 @@ class _SearchResultTile extends StatelessWidget {
         album: _albumNameOf(item),
         duration: durationText(_durationMsOf(item)) ?? '',
       ),
-      position: calculateCardPosition(index, count),
-      onTap: onTap == null
-          ? null
-          : () {
-              HapticsService.lightImpact();
-              onTap!();
-            },
-      trailing: TrackActionsMenu(
+      position: calculateCardPosition(widget.index, widget.count),
+      onTap: rowTap,
+      onSecondaryTap: _menu.open,
+      trailing: _buildActionsMenu(context, l10n, favorite),
+    );
+  }
+
+  /// 行尾 ⋮（单列 / 表格行共用）：收藏开关 + 加入列表。
+  ///
+  /// 桌面端套 [HoverReveal] 随整行悬停显现、行表面右键经 [_menu] 打开
+  /// 同一份菜单；触摸端 [HoverReveal] 原样显示（入口不藏）。
+  Widget _buildActionsMenu(
+    BuildContext context,
+    AppLocalizations l10n,
+    bool favorite,
+  ) {
+    return HoverReveal(
+      child: TrackActionsMenu(
+        controller: _menu,
         tooltip: l10n.trackActionsTooltip,
         entries: [
           M3EMenuEntry(
@@ -570,7 +613,7 @@ class _SearchResultTile extends StatelessWidget {
   /// 本行收藏态（每行一个 `select` 订阅，不能在列表 itemBuilder 里直接订阅）。
   bool _favoriteOf(BuildContext context) =>
       context.select<LibraryProvider?, bool>(
-        (provider) => provider?.isFavoriteSearchItem(item) ?? false,
+        (provider) => provider?.isFavoriteSearchItem(widget.item) ?? false,
       );
 
   /// 收藏 / 取消收藏：结果列表只需 snackbar 确认（菜单文案已表达当前状态）。
@@ -580,7 +623,7 @@ class _SearchResultTile extends StatelessWidget {
   ) async {
     final library = context.read<LibraryProvider?>();
     if (library == null) return;
-    final favorite = await library.toggleFavoriteSearchItem(item);
+    final favorite = await library.toggleFavoriteSearchItem(widget.item);
     if (favorite == null || !context.mounted) return;
     M3ESnackbar.show(
       context,
@@ -592,7 +635,7 @@ class _SearchResultTile extends StatelessWidget {
   Future<void> _addToPlaylist(BuildContext context) async {
     final library = context.read<LibraryProvider?>();
     if (library == null) return;
-    final track = library.playlistTrackFromSearchItem(item);
+    final track = library.playlistTrackFromSearchItem(widget.item);
     if (track == null) return;
     await addTracksToLibraryTarget(
       context,

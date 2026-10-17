@@ -1,3 +1,4 @@
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:material_3_expressive/material_3_expressive.dart';
 import 'package:material_ui/material_ui.dart';
@@ -10,6 +11,7 @@ import 'package:molia/domain/models/catalog.dart';
 import 'package:molia/domain/models/playback.dart';
 import 'package:molia/domain/models/track.dart';
 import 'package:molia/l10n/app_localizations.dart';
+import 'package:molia/pages/favorites.dart';
 import 'package:molia/providers/discover_provider.dart';
 import 'package:molia/providers/library_provider.dart';
 import 'package:molia/providers/lyrics_provider.dart';
@@ -37,7 +39,8 @@ import '../support/fakes.dart';
 /// 覆盖骨架结构与两条不变量：桌面底栏 / 侧栏存在且顶栏瘦身（无播放控制、
 /// 无进度线）；队列面板开关；底栏左区进播放页；移动骨架不受影响；
 /// 窄窗口分级折叠（阈值只影响渲染、记忆值保留）；顶栏全局搜索（宽窗 pill /
-/// 窄窗图标、docked 结果面板、查看全部结果切资料库）。
+/// 窄窗图标、docked 结果面板、查看全部结果切资料库）；全局快捷键
+/// （Space 切播放态、Esc 关队列面板、输入框聚焦时让位）。
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
@@ -54,7 +57,8 @@ void main() {
   ///
   /// [searchSource] 非空时给搜索 provider 接上假音源（顶栏搜索用例预置结果），
   /// [configureSearch] 在挂载前配置搜索状态（如先提交一次搜索）。
-  Future<void> pumpShell(
+  /// 返回假后端与 provider：快捷键用例据此断言后端收到的播放命令。
+  Future<({FakePlaybackBackend backend, PlaybackProvider playback})> pumpShell(
     WidgetTester tester, {
     required bool desktopShell,
     Size size = const Size(1440, 900),
@@ -163,6 +167,8 @@ void main() {
     await tester.pump();
     // 首帧切歌入场动画（封面堆叠 460ms）+ 桌面布局偏好异步恢复。
     await tester.pump(const Duration(milliseconds: 600));
+
+    return (backend: backend, playback: playback);
   }
 
   /// 走完一次切页过渡（含顶栏 ⇄ 播放页共享元素飞行约 0.4s）。
@@ -400,5 +406,74 @@ void main() {
       findsNothing,
       reason: '面板应已收起（跳转前先关搜索视图）',
     );
+  });
+
+  testWidgets('全局快捷键：Space 切播放态、Esc 关队列面板', (tester) async {
+    final harness = await pumpShell(tester, desktopShell: true);
+
+    // 先按 Space：此刻没有其它焦点，顶层 Focus 持有焦点 → 播放
+    //（假快照 isPlaying=false，toggle 走 play）。放在点按之前：点按会让
+    // M3E 按钮取得焦点，Space 会被按钮自己的 ActivateIntent 消费。
+    await tester.sendKeyEvent(LogicalKeyboardKey.space);
+    await tester.pump();
+    expect(harness.backend.calls, contains('play'));
+
+    // 播放中再按 → 暂停。
+    harness.backend.emit(BackendSnapshot(
+      current: harness.playback.snapshot.current,
+      queue: const [],
+      currentIndex: 0,
+      isPlaying: true,
+      duration: const Duration(seconds: 30),
+    ));
+    await tester.pump();
+    await tester.sendKeyEvent(LogicalKeyboardKey.space);
+    await tester.pump();
+    expect(harness.backend.calls.last, 'pause');
+
+    // Esc：关队列面板（先点底栏开关打开；Esc 不在按钮的键位表里，
+    // 会冒泡到顶层 Focus）。
+    await tester.tap(find.byKey(DesktopNowPlayingBar.queueToggleKey));
+    await settleTransition(tester);
+    expect(find.byType(DesktopQueuePanel), findsOneWidget);
+
+    await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+    await settleTransition(tester);
+    expect(find.byType(DesktopQueuePanel), findsNothing);
+  });
+
+  testWidgets('全局快捷键：输入框聚焦时 Space 不触发播放', (tester) async {
+    final harness = await pumpShell(tester, desktopShell: true);
+
+    // 切到收藏页并打开搜索行：收藏页的搜索框是壳层内真实的 EditableText
+    //（Space 不是它的键位，事件会冒泡到顶层 Focus），聚焦由 _openSearch
+    // 的帧末 requestFocus 完成。
+    await tester.tap(
+      find.descendant(
+        of: find.byType(M3ENavigationRail),
+        matching: find.text(l10n.favoritesLabel),
+      ),
+    );
+    await settleTransition(tester);
+    await tester.tap(
+      find.descendant(
+        of: find.byType(FavoritesPage),
+        matching: find.byIcon(Icons.search_rounded),
+      ),
+    );
+    await tester.pump();
+    await tester.pump();
+    expect(
+      FocusManager.instance.primaryFocus?.context
+              ?.findAncestorWidgetOfExactType<EditableText>() !=
+          null,
+      isTrue,
+      reason: '前提：焦点确实落在输入框内',
+    );
+
+    await tester.sendKeyEvent(LogicalKeyboardKey.space);
+    await tester.pump();
+    expect(harness.backend.calls, isNot(contains('play')));
+    expect(harness.backend.calls, isNot(contains('pause')));
   });
 }

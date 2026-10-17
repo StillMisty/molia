@@ -1,3 +1,4 @@
+import 'package:flutter/gestures.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:molia/domain/models/playback.dart';
 import 'package:molia/domain/models/track.dart';
@@ -327,4 +328,42 @@ void main() {
 
     await drainThrottle(tester);
   });
+
+  testWidgets(
+    '桌面：队列行 hover 显现 ⋮，右键打开同一份菜单',
+    (tester) async {
+      final backend = FakePlaybackBackend();
+      final playback = buildTestPlaybackProvider(backend: backend);
+      addTearDown(playback.dispose);
+
+      backend.emit(upcomingSnapshot([_track('a'), _track('b')]));
+      await pumpQueue(tester, playback);
+
+      // 桌面：行尾 ⋮ 默认透明（目标值 0），行 hover 后显现。
+      Finder revealOpacity() => find
+          .descendant(
+            of: find.byType(HoverReveal),
+            matching: find.byType(AnimatedOpacity),
+          )
+          .first;
+      expect(tester.widget<AnimatedOpacity>(revealOpacity()).opacity, 0);
+
+      final gesture = await tester.createGesture(kind: PointerDeviceKind.mouse);
+      await gesture.addPointer(location: Offset.zero);
+      addTearDown(gesture.removePointer);
+      await tester.pump();
+      await gesture.moveTo(tester.getCenter(find.byType(TrackRow).first));
+      await tester.pumpAndSettle();
+      expect(tester.widget<AnimatedOpacity>(revealOpacity()).opacity, 1);
+
+      // 右键行表面：打开与 ⋮ 锚点完全相同的那份菜单（收藏 / 加入列表）。
+      await tester.tap(find.byType(TrackRow).first, buttons: kSecondaryButton);
+      await tester.pumpAndSettle();
+      expect(find.text('收藏'), findsOneWidget);
+      expect(find.text('加入列表'), findsOneWidget);
+
+      await drainThrottle(tester);
+    },
+    variant: TargetPlatformVariant.only(TargetPlatform.linux),
+  );
 }

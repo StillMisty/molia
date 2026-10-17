@@ -1,3 +1,4 @@
+import 'package:flutter/gestures.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:molia/data/catalog/catalog_service.dart';
 import 'package:molia/domain/models/catalog.dart';
@@ -256,6 +257,49 @@ void main() {
 
       expect(find.byType(TrackTableHeader), findsNothing);
       expect(find.text('Artist a'), findsOneWidget);
+    },
+    variant: TargetPlatformVariant.only(TargetPlatform.linux),
+  );
+
+  testWidgets(
+    '桌面：结果行 hover 显现 ⋮，右键打开同一份菜单（表格 / 单列都接）',
+    (tester) async {
+      await pumpSection(tester);
+      await runSearch(tester);
+      expect(find.byType(TrackTableHeader), findsOneWidget, reason: '宽屏走表格行');
+
+      Finder revealOpacity() => find
+          .descendant(
+            of: find.byType(HoverReveal),
+            matching: find.byType(AnimatedOpacity),
+          )
+          .first;
+      expect(tester.widget<AnimatedOpacity>(revealOpacity()).opacity, 0);
+
+      // 悬停整行 → ⋮ 显现。
+      final gesture = await tester.createGesture(kind: PointerDeviceKind.mouse);
+      await gesture.addPointer(location: Offset.zero);
+      addTearDown(gesture.removePointer);
+      await tester.pump();
+      await gesture.moveTo(tester.getCenter(find.byType(TrackRow).first));
+      await tester.pumpAndSettle();
+      expect(tester.widget<AnimatedOpacity>(revealOpacity()).opacity, 1);
+
+      // 右键行表面 → 与 ⋮ 锚点同一份菜单；收起后再验单列版式。
+      await tester.tap(find.byType(TrackRow).first, buttons: kSecondaryButton);
+      await tester.pumpAndSettle();
+      expect(find.text('收藏'), findsOneWidget);
+      expect(find.text('加入列表'), findsOneWidget);
+      await tester.tapAt(const Offset(8, 8));
+      await tester.pumpAndSettle();
+
+      await pumpSection(tester, width: 800);
+      expect(find.byType(TrackTableHeader), findsNothing, reason: '窄屏走单列行');
+      await tester.tap(find.byType(TrackRow).first, buttons: kSecondaryButton);
+      await tester.pumpAndSettle();
+      expect(find.text('收藏'), findsOneWidget);
+      await tester.tapAt(const Offset(8, 8));
+      await tester.pumpAndSettle();
     },
     variant: TargetPlatformVariant.only(TargetPlatform.linux),
   );

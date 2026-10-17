@@ -66,6 +66,63 @@ void main() {
     expect(harness.backend.volumes.last, 0.7);
   });
 
+  test('adjustVolume 步进并下发，clamp 到 0..1', () async {
+    final harness = build();
+    await harness.provider.preferencesReady;
+
+    await harness.provider.adjustVolume(-0.05);
+    expect(harness.provider.volume, closeTo(0.95, 1e-9));
+    expect(harness.backend.volumes.last, closeTo(0.95, 1e-9));
+
+    await harness.provider.setVolume(0.02);
+    await harness.provider.adjustVolume(-0.05);
+    expect(harness.provider.volume, 0.0, reason: '下限 clamp');
+    expect(harness.backend.volumes.last, 0.0);
+
+    final dispatched = harness.backend.volumes.length;
+    await harness.provider.adjustVolume(-0.05);
+    expect(
+      harness.backend.volumes.length,
+      dispatched,
+      reason: '已到底：继续按是空转，不重复下发',
+    );
+
+    await harness.provider.setVolume(0.98);
+    await harness.provider.adjustVolume(0.05);
+    expect(harness.provider.volume, 1.0, reason: '上限 clamp');
+    expect(harness.backend.volumes.last, 1.0);
+  });
+
+  test('静音态下 adjustVolume 解除静音并生效', () async {
+    final harness = build();
+    await harness.provider.preferencesReady;
+    await harness.provider.setVolume(0.4);
+    await harness.provider.toggleMute();
+    expect(harness.provider.muted, isTrue);
+    expect(harness.backend.volumes.last, 0.0);
+
+    await harness.provider.adjustVolume(-0.05);
+    expect(harness.provider.muted, isFalse, reason: '用户调音量即期望听见声音');
+    expect(harness.provider.volume, closeTo(0.35, 1e-9));
+    expect(harness.backend.volumes.last, closeTo(0.35, 1e-9));
+  });
+
+  test('adjustVolume 走防抖落盘：连按不逐次写盘，停手后落定', () async {
+    final harness = build();
+    await harness.provider.preferencesReady;
+    await harness.provider.adjustVolume(-0.05);
+    await harness.provider.adjustVolume(-0.05);
+
+    final duringDebounce = build();
+    await duringDebounce.provider.preferencesReady;
+    expect(duringDebounce.provider.volume, 1.0, reason: '防抖窗口内不写盘');
+
+    await Future<void>.delayed(const Duration(milliseconds: 500));
+    final afterDebounce = build();
+    await afterDebounce.provider.preferencesReady;
+    expect(afterDebounce.provider.volume, closeTo(0.9, 1e-9));
+  });
+
   test('持久化往返：音量与静音在重建 provider 后恢复并下发', () async {
     final first = build();
     await first.provider.preferencesReady;

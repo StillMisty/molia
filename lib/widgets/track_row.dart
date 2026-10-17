@@ -1,6 +1,8 @@
 import 'package:flutter/gestures.dart';
 import 'package:material_3_expressive/material_3_expressive.dart';
 import 'package:material_ui/material_ui.dart';
+
+import '../utils/responsive.dart';
 import 'card_list_surface.dart';
 import 'library_cover.dart';
 
@@ -74,6 +76,7 @@ class TrackRow extends StatelessWidget {
     this.position = M3ECardPosition.single,
     this.onTap,
     this.onLongPress,
+    this.onSecondaryTap,
   });
 
   /// 固定行高：可直接作为 `itemExtent` / `SliverFixedExtentList` 的高度
@@ -114,6 +117,11 @@ class TrackRow extends StatelessWidget {
   final VoidCallback? onTap;
   final VoidCallback? onLongPress;
 
+  /// 行表面右键回调（桌面平台生效）：打开行尾 ⋮ 的**同一份**菜单
+  /// （锚点仍是那个按钮，见 `TrackActionsMenuController`）。
+  /// 触摸平台 / null 时无手势，行为与不传时逐像素一致。
+  final VoidCallback? onSecondaryTap;
+
   /// 分段列表的相邻行距（M3E 列表卡片 token）。
   /// 列表 itemExtent 用 `TrackRow.extent + TrackRow.gapOf(context)`。
   static double gapOf(BuildContext context) =>
@@ -131,7 +139,7 @@ class TrackRow extends StatelessWidget {
     final artistLinks = artists;
     final tableColumns = columns;
 
-    return CardListSurface(
+    Widget surface = CardListSurface(
       position: position,
       selected: selected,
       onPressed: onTap,
@@ -232,6 +240,21 @@ class TrackRow extends StatelessWidget {
         ),
       ),
     );
+
+    if (!isDesktopPlatform()) return surface;
+    // 桌面：右键 = 行尾 ⋮ 的同一份菜单。外挂一个只声明 onSecondaryTap 的
+    // GestureDetector：主键 / 长按仍归 CardListSurface（M3ECard 的 InkWell
+    // 不声明次级手势），两边在竞技场里各认各的按钮，互不抢手势。
+    if (onSecondaryTap != null) {
+      surface = GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onSecondaryTap: onSecondaryTap,
+        child: surface,
+      );
+    }
+    // 行级 hover / focus 广播给 HoverReveal：行内 ⋮ 随**整行**悬停显现，
+    // 而不是要求指针先精确移到按钮所在的小角落。
+    return _RowRevealScope(child: surface);
   }
 
   /// 表格列单元格：固定列宽 + 单行省略（列宽是行与表头共用的常量）。
@@ -269,6 +292,130 @@ class TrackRow extends StatelessWidget {
             ),
     );
   }
+}
+
+/// 行内操作（⋮ 菜单等）的 hover / 键盘 focus 显现包装。
+///
+/// 触摸端没有 hover 概念，隐藏入口等于把功能藏没：非桌面平台直接返回
+/// [child]，与未包装逐像素一致。桌面平台默认透明并忽略指针，指针进入 /
+/// 键盘焦点落入时淡入（150ms `M3EMotion.short3` + emphasized 曲线——
+/// 透明度是 effects 档，走时长 + 曲线，不参与 spatial 弹簧；系统减弱动效
+/// 时跳变）。[alwaysVisibleWhen] 供调用方在选中 / 多选态下常显。
+///
+/// 悬停判定以**行**为单位：放在 [TrackRow] 里时读行广播的整行 hover /
+/// focus 状态（`_RowRevealScope`），⋮ 随整行悬停显现，不要求指针先精确
+/// 移到按钮所在的小角落；不在行内使用时退化为包装自身的悬停 / 焦点。
+class HoverReveal extends StatefulWidget {
+  const HoverReveal({
+    super.key,
+    required this.child,
+    this.alwaysVisibleWhen = false,
+  });
+
+  /// 被显现的内容（行内操作按钮等）；显隐不改变布局占位。
+  final Widget child;
+
+  /// 常显开关（桌面下也始终显示）：选中 / 多选态由调用方决定。
+  final bool alwaysVisibleWhen;
+
+  @override
+  State<HoverReveal> createState() => _HoverRevealState();
+}
+
+class _HoverRevealState extends State<HoverReveal> {
+  bool _hovered = false;
+  bool _focused = false;
+
+  void _setHovered(bool value) {
+    if (_hovered == value) return;
+    setState(() => _hovered = value);
+  }
+
+  void _setFocused(bool value) {
+    if (_focused == value) return;
+    setState(() => _focused = value);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (!isDesktopPlatform()) return widget.child;
+    final bool visible = widget.alwaysVisibleWhen ||
+        _RowReveal.of(context) ||
+        _hovered ||
+        _focused;
+    final bool reduceMotion =
+        MediaQuery.maybeOf(context)?.disableAnimations ?? false;
+    return MouseRegion(
+      onEnter: (_) => _setHovered(true),
+      onExit: (_) => _setHovered(false),
+      // canRequestFocus: false 只用来观察子树焦点（FocusNode.hasFocus 对
+      // 后代焦点同样为真），本身不占键盘 Tab 顺序。
+      child: Focus(
+        canRequestFocus: false,
+        onFocusChange: _setFocused,
+        child: AnimatedOpacity(
+          opacity: visible ? 1 : 0,
+          duration: reduceMotion ? Duration.zero : M3EMotion.short3,
+          curve: M3EMotion.emphasizedDecelerate,
+          // 透明（不可见）的内容不应截走指针：隐藏时点击穿透到行表面
+          // （播放 / 右键），显现后才轮到按钮自己。
+          child: IgnorePointer(ignoring: !visible, child: widget.child),
+        ),
+      ),
+    );
+  }
+}
+
+/// 行级 hover / 焦点广播（[TrackRow] 在桌面平台注入）：[HoverReveal] 据此
+/// 跟随整行显现。用 InheritedWidget 而不是把状态透传参数层层下传——⋮ 在
+/// 行的 `trailing` 槽里，中间隔着通用行布局，参数化会把两者焊死。
+class _RowRevealScope extends StatefulWidget {
+  const _RowRevealScope({required this.child});
+
+  final Widget child;
+
+  @override
+  State<_RowRevealScope> createState() => _RowRevealScopeState();
+}
+
+class _RowRevealScopeState extends State<_RowRevealScope> {
+  bool _revealed = false;
+
+  void _setRevealed(bool value) {
+    if (_revealed == value) return;
+    setState(() => _revealed = value);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return MouseRegion(
+      onEnter: (_) => _setRevealed(true),
+      onExit: (_) => _setRevealed(false),
+      // 键盘焦点同样显现行内操作：Tab 到行（或行内按钮）时 ⋮ 应可见。
+      child: Focus(
+        canRequestFocus: false,
+        onFocusChange: _setRevealed,
+        child: _RowReveal(revealed: _revealed, child: widget.child),
+      ),
+    );
+  }
+}
+
+class _RowReveal extends InheritedWidget {
+  const _RowReveal({required this.revealed, required super.child});
+
+  final bool revealed;
+
+  /// 读取最近的整行显现状态；不在 [TrackRow] 内时返回 false。
+  static bool of(BuildContext context) =>
+      context
+          .dependOnInheritedWidgetOfExactType<_RowReveal>()
+          ?.revealed ??
+      false;
+
+  @override
+  bool updateShouldNotify(_RowReveal oldWidget) =>
+      oldWidget.revealed != revealed;
 }
 
 /// 逐名可点的歌手副标题：单行 `Text.rich` + 每个可点名字一个

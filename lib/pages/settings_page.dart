@@ -1,7 +1,5 @@
 import 'dart:async';
 
-import 'package:flutter/foundation.dart'
-    show TargetPlatform, defaultTargetPlatform;
 import 'package:flutter/services.dart' show PredictiveBackEvent;
 import 'package:material_3_expressive/material_3_expressive.dart';
 import 'package:material_ui/material_ui.dart';
@@ -406,12 +404,8 @@ class _SettingsSheetTheme extends M3EBottomSheetTheme {
 /// 宽屏设置弹层宽度（首屏两列画布上限；见 `showSettingsSheet`）。
 const double _settingsSheetDesktopWidth = 880;
 
-bool _useTwoColumnSections(BuildContext context) {
-  final desktop = defaultTargetPlatform == TargetPlatform.linux ||
-      defaultTargetPlatform == TargetPlatform.windows ||
-      defaultTargetPlatform == TargetPlatform.macOS;
-  return desktop && context.isDesktop;
-}
+bool _useTwoColumnSections(BuildContext context) =>
+    isDesktopPlatform() && context.isDesktop;
 
 /// 设置首屏：分区卡片 + 弹层内部子页入口。
 class _SettingsHomeView extends StatefulWidget {

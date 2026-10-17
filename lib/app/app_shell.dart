@@ -34,6 +34,7 @@ import '../theme/app_theme.dart';
 import '../utils/responsive.dart';
 import '../widgets/app_network_image.dart';
 import '../widgets/cover_appearance.dart';
+import '../widgets/global_search.dart';
 import '../widgets/icon_swap.dart';
 import '../widgets/nav_destination_style.dart';
 import '../widgets/playback_selectors.dart';
@@ -228,6 +229,10 @@ class _MyAppState extends State<MyApp>
       destination: ShellReselectSignal(),
   };
 
+  /// 顶栏全局搜索的聚焦入口（Ctrl+F 宽窗路径）：搜索 pill 挂在
+  /// DesktopShell 里，控制器由壳层持有后下传；窄窗没有 pill，不被附着。
+  final GlobalSearchController _globalSearch = GlobalSearchController();
+
   /// 页面实例固定（key 稳定），顺序/显隐只影响底栏映射与分层透明度，
   /// 页面状态（滚动/搜索词等）天然保持。
   late final Map<ShellDestination, Widget> _pages = {
@@ -248,14 +253,8 @@ class _MyAppState extends State<MyApp>
 
   /// 是否挂载桌面骨架：Linux / Windows / macOS 为真；[MyApp.desktopShell]
   /// 非空时以它为准（测试强制走另一侧骨架）。
-  bool get _desktopShell => widget.desktopShell ??
-      switch (defaultTargetPlatform) {
-        TargetPlatform.linux ||
-        TargetPlatform.windows ||
-        TargetPlatform.macOS =>
-          true,
-        _ => false,
-      };
+  bool get _desktopShell =>
+      widget.desktopShell ?? isDesktopPlatform();
 
   /// 当前选中的目的地（与底栏顺序解耦；初值 = 导航偏好的启动首页）。
   late ShellDestination _selectedDestination;
@@ -430,6 +429,29 @@ class _MyAppState extends State<MyApp>
     showSettingsSheet(context);
   }
 
+  /// 全局快捷键 Ctrl+F：聚焦 / 打开全局搜索。
+  ///
+  /// 宽窗聚焦顶栏搜索 pill（打开面板后输入框自动取得焦点）；窄窗顶栏搜索
+  /// 已退化为图标，落到与图标同一条路径（资料库搜索页）。宽度判定与
+  /// [DesktopShell] 渲染搜索 pill / 图标的阈值同一个常量，口径不会漂移。
+  void _focusGlobalSearch() {
+    if (MediaQuery.sizeOf(context).width < DesktopShell.searchCompactWidth) {
+      _onDestinationSelected(ShellDestination.library);
+      return;
+    }
+    _globalSearch.focus();
+  }
+
+  /// 全局快捷键 Ctrl+1/2/3：切到第 [index] 个可见目的地；越界忽略。
+  ///
+  /// 已选中项不触发重复点击语义（回顶 / 折叠播放器）：快捷键是「切页」，
+  /// 不是「再点一次」。
+  void _selectVisibleDestinationAt(int index) {
+    final visible = context.read<NavProvider>().visibleDestinations;
+    if (index < 0 || index >= visible.length) return;
+    _selectDestination(visible[index]);
+  }
+
   /// 页面分层：选中页在最上层淡入，上一页快速淡出（fade-through）。
   Widget _buildPageStack() {
     final ordered = <ShellDestination>[
@@ -486,6 +508,11 @@ class _MyAppState extends State<MyApp>
         onViewAllResults: () =>
             _onDestinationSelected(ShellDestination.library),
         onOpenSearch: () => _onDestinationSelected(ShellDestination.library),
+        // 全局快捷键：Ctrl+F 与 Ctrl+1/2/3 的落点由壳层决定（宽窄窗分流、
+        // 可见目的地顺序），DesktopShell 只负责在顶层监听按键。
+        searchController: _globalSearch,
+        onFocusSearch: _focusGlobalSearch,
+        onSelectDestinationIndex: _selectVisibleDestinationAt,
       );
     }
 

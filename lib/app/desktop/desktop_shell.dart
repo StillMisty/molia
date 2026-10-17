@@ -22,12 +22,16 @@ import '../../services/window/window_chrome.dart';
 import '../../widgets/global_search.dart';
 import '../../widgets/nav_destination_style.dart';
 import '../../widgets/player_morph.dart';
+import 'desktop_shortcuts.dart';
 import 'now_playing_bar.dart';
 import 'queue_panel.dart';
 import 'shell_layout_prefs.dart';
 import 'window_controls.dart';
 
 /// 桌面骨架：顶栏 + 侧栏 + 页面栈 + 队列面板 + 底部播放条。
+///
+/// 整棵树包在 [DesktopShortcuts] 里：全局快捷键在壳层顶层监听，播放动作走
+/// provider，其余（聚焦搜索 / 切目的地 / 关队列面板）走壳层回调。
 class DesktopShell extends StatefulWidget {
   const DesktopShell({
     super.key,
@@ -41,6 +45,9 @@ class DesktopShell extends StatefulWidget {
     required this.onOpenSettings,
     required this.onViewAllResults,
     required this.onOpenSearch,
+    required this.searchController,
+    required this.onFocusSearch,
+    required this.onSelectDestinationIndex,
   });
 
   /// 当前选中的目的地（顶栏标题）。
@@ -74,6 +81,19 @@ class DesktopShell extends StatefulWidget {
   /// 窄窗口搜索入口（图标态）→ 打开搜索：由壳层决定落点
   /// （当前 = 资料库目的地的搜索页，见 [_buildCompactTitleBar]）。
   final VoidCallback onOpenSearch;
+
+  /// 顶栏搜索的聚焦入口（壳层持有）：快捷键 Ctrl+F 的宽窗路径经它
+  /// 打开搜索面板（窄窗没有搜索 pill，见 [onFocusSearch]）。
+  final GlobalSearchController searchController;
+
+  /// 全局快捷键 Ctrl+F：聚焦 / 打开全局搜索。宽窗聚焦顶栏搜索 pill；
+  /// 窄窗顶栏搜索已退化为图标，落到与图标同一条路径（壳层按同一个
+  /// 宽度阈值分流，回调只负责各自落点）。
+  final VoidCallback onFocusSearch;
+
+  /// 全局快捷键 Ctrl+1/2/3：切到第 index 个可见目的地
+  /// （顺序 = `NavProvider.visibleDestinations`；越界时壳层回调自行忽略）。
+  final ValueChanged<int> onSelectDestinationIndex;
 
   /// 窄窗口分级折叠阈值：宽 <1200 强制关队列面板、<1000 强制折叠侧栏。
   ///
@@ -189,59 +209,66 @@ class _DesktopShellState extends State<DesktopShell> {
       ],
     );
 
-    return Scaffold(
-      appBar: PreferredSize(
-        preferredSize: Size.fromHeight(
-          AppBar.preferredHeightFor(context, appBar.preferredSize),
-        ),
-        child: WindowDragArea(child: appBar),
-      ),
-      body: Row(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          M3ENavigationRail(
-            type: railType,
-            expandedWidth: DesktopShell.railExpandedWidth,
-            onTypeChanged: (type) => _setRailExpanded(
-              type == M3ENavigationRailType.expanded,
-            ),
-            expandTooltip: l10n.expandTooltip,
-            collapseTooltip: l10n.collapseTooltip,
-            selectedIndex: widget.selectedIndex,
-            onDestinationSelected: (index) =>
-                widget.onDestinationSelected(widget.visibleDestinations[index]),
-            sections: [
-              M3ENavigationRailSection(
-                destinations: [
-                  for (final destination in widget.visibleDestinations)
-                    M3ENavigationRailDestination(
-                      icon: destination.outlinedIcon,
-                      selectedIcon: destination.filledIcon,
-                      label: widget.labelFor(destination),
-                    ),
-                ],
-              ),
-            ],
+    return DesktopShortcuts(
+      onFocusSearch: widget.onFocusSearch,
+      onSelectDestinationIndex: widget.onSelectDestinationIndex,
+      // 面板没开时 _setQueuePanelOpen(false) 自行 no-op。
+      onCloseQueuePanel: () => _setQueuePanelOpen(false),
+      child: Scaffold(
+        appBar: PreferredSize(
+          preferredSize: Size.fromHeight(
+            AppBar.preferredHeightFor(context, appBar.preferredSize),
           ),
-          Expanded(child: widget.pageStack),
-          if (queuePanelVisible)
-            DesktopQueuePanel(
-              width: _queuePanelWidth,
-              onWidthChanged: _handleQueueWidthChanged,
-              onWidthChangeEnd: _persistQueuePanelWidth,
-              onClose: () => _setQueuePanelOpen(false),
+          child: WindowDragArea(child: appBar),
+        ),
+        body: Row(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            M3ENavigationRail(
+              type: railType,
+              expandedWidth: DesktopShell.railExpandedWidth,
+              onTypeChanged: (type) => _setRailExpanded(
+                type == M3ENavigationRailType.expanded,
+              ),
+              expandTooltip: l10n.expandTooltip,
+              collapseTooltip: l10n.collapseTooltip,
+              selectedIndex: widget.selectedIndex,
+              onDestinationSelected: (index) => widget.onDestinationSelected(
+                widget.visibleDestinations[index],
+              ),
+              sections: [
+                M3ENavigationRailSection(
+                  destinations: [
+                    for (final destination in widget.visibleDestinations)
+                      M3ENavigationRailDestination(
+                        icon: destination.outlinedIcon,
+                        selectedIcon: destination.filledIcon,
+                        label: widget.labelFor(destination),
+                      ),
+                  ],
+                ),
+              ],
             ),
-        ],
-      ),
-      bottomNavigationBar: DesktopNowPlayingBar(
-        key: DesktopNowPlayingBar.shellKey,
-        morph: widget.morph,
-        // 按钮态跟实际渲染走（窄窗口被强制关闭时不高亮、且置灰）。
-        queueOpen: queuePanelVisible,
-        queueAvailable: windowWidth >= DesktopShell.queueForceCloseWidth,
-        onOpenPlayer: () =>
-            widget.onDestinationSelected(ShellDestination.nowPlaying),
-        onToggleQueue: () => _setQueuePanelOpen(!_queuePanelOpen),
+            Expanded(child: widget.pageStack),
+            if (queuePanelVisible)
+              DesktopQueuePanel(
+                width: _queuePanelWidth,
+                onWidthChanged: _handleQueueWidthChanged,
+                onWidthChangeEnd: _persistQueuePanelWidth,
+                onClose: () => _setQueuePanelOpen(false),
+              ),
+          ],
+        ),
+        bottomNavigationBar: DesktopNowPlayingBar(
+          key: DesktopNowPlayingBar.shellKey,
+          morph: widget.morph,
+          // 按钮态跟实际渲染走（窄窗口被强制关闭时不高亮、且置灰）。
+          queueOpen: queuePanelVisible,
+          queueAvailable: windowWidth >= DesktopShell.queueForceCloseWidth,
+          onOpenPlayer: () =>
+              widget.onDestinationSelected(ShellDestination.nowPlaying),
+          onToggleQueue: () => _setQueuePanelOpen(!_queuePanelOpen),
+        ),
       ),
     );
   }
@@ -274,6 +301,7 @@ class _DesktopShellState extends State<DesktopShell> {
               width: slotWidth,
               child: GlobalSearch(
                 key: DesktopShell.searchEntryKey,
+                controller: widget.searchController,
                 onViewAllResults: widget.onViewAllResults,
               ),
             ),

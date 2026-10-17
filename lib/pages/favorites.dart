@@ -1,8 +1,6 @@
 import 'dart:async';
 import 'dart:math' as math;
 
-import 'package:flutter/foundation.dart'
-    show TargetPlatform, defaultTargetPlatform;
 import 'package:material_3_expressive/material_3_expressive.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:provider/provider.dart';
@@ -46,12 +44,8 @@ AppLocalizations _l10n(BuildContext context) =>
 ///
 /// 平台判定与壳层骨架的分流同源（`defaultTargetPlatform`，见 app_shell 的
 /// 桌面骨架判定）；移动 / 平板与窄窗口一行观感都不变（标题行弹层切换）。
-bool _useCollectionRail(BuildContext context) {
-  final desktop = defaultTargetPlatform == TargetPlatform.linux ||
-      defaultTargetPlatform == TargetPlatform.windows ||
-      defaultTargetPlatform == TargetPlatform.macOS;
-  return desktop && context.isDesktop;
-}
+bool _useCollectionRail(BuildContext context) =>
+    isDesktopPlatform() && context.isDesktop;
 
 /// 「收藏」页：默认收藏（♥）与已导入/自建列表、播放历史、本地歌曲的
 /// 统一管理入口。

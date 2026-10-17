@@ -7,8 +7,6 @@ library;
 import 'dart:async';
 
 import 'package:file_picker/file_picker.dart';
-import 'package:flutter/foundation.dart'
-    show TargetPlatform, defaultTargetPlatform;
 import 'package:material_3_expressive/material_3_expressive.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:provider/provider.dart';
@@ -18,14 +16,11 @@ import '../services/download/download_service.dart';
 import '../services/download/download_settings.dart';
 import '../services/notification_permission.dart';
 import '../services/notification_service.dart';
+import '../utils/responsive.dart';
 import '../widgets/settings/settings_tiles.dart';
 
 /// 桌面平台支持自选保存目录（dart:io 路径语义；移动端 SAF/沙箱另论）。
-bool get _supportsCustomSaveDir {
-  return defaultTargetPlatform == TargetPlatform.linux ||
-      defaultTargetPlatform == TargetPlatform.windows ||
-      defaultTargetPlatform == TargetPlatform.macOS;
-}
+bool get _supportsCustomSaveDir => isDesktopPlatform();
 
 class DownloadSettingsPage extends StatelessWidget {
   const DownloadSettingsPage({super.key});
