@@ -7,6 +7,7 @@ import 'package:provider/provider.dart';
 import '../l10n/app_localizations.dart';
 import '../providers/nav_provider.dart';
 import '../services/app_branding_service.dart';
+import '../services/haptics.dart';
 import '../services/language_service.dart';
 import '../services/notification_service.dart';
 import '../services/window/app_tray.dart';
@@ -15,7 +16,7 @@ import '../widgets/nav_destination_icons.dart';
 import '../widgets/settings/settings_reorderable_rows.dart';
 import '../widgets/settings/settings_tiles.dart';
 
-/// 通用设置子页：底部导航、语言与应用名称（按改动频率排序）。
+/// 通用设置子页：底部导航、语言、应用名称与震动反馈（按改动频率排序）。
 ///
 /// 从设置首屏「通用与数据」进入，在设置弹层内部导航（见 `settings_page.dart`）。
 class GeneralSettingsPage extends StatefulWidget {
@@ -72,7 +73,8 @@ class _GeneralSettingsPageState extends State<GeneralSettingsPage> {
       body: ListView(
         padding: const EdgeInsets.all(kSettingsPadding),
         children: [
-          // 行序按改动频率：底部导航（常改）→ 语言 → 应用名称 → 桌面行为。
+          // 行序按改动频率：底部导航（常改）→ 震动反馈 → 语言 → 应用名称
+          // → 桌面行为。
           if (nav != null) ...[
             SettingsSectionCard(
               title: l10n.settingsBottomNavTitle,
@@ -83,6 +85,18 @@ class _GeneralSettingsPageState extends State<GeneralSettingsPage> {
           ],
           SettingsSectionCard(
             children: [
+              // 震动反馈（设备本地键，不随同步）：关掉后全应用触感一起静音。
+              ValueListenableBuilder<bool>(
+                valueListenable: HapticsService.enabledNotifier,
+                builder: (context, hapticsEnabled, _) => SettingsSwitchTile(
+                  switchKey: const Key('settingsHapticsSwitch'),
+                  icon: Icons.vibration_rounded,
+                  title: l10n.settingsHapticsTitle,
+                  subtitle: l10n.settingsHapticsSubtitle,
+                  value: hapticsEnabled,
+                  onChanged: HapticsService.setEnabled,
+                ),
+              ),
               SettingsChoiceRow<String>(
                 key: const Key('settingsLanguageItem'),
                 icon: Icons.language_rounded,
