@@ -198,6 +198,7 @@ class MainActivity : FlutterActivity() {
         // 被冻结的缺口（真正的暂停仍由 Dart 控制器执行）。
         sleepTimerChannel?.dispose()
         sleepTimerChannel = top.stillmisty.molia.sleep.SleepTimerChannelHandler(
+            applicationContext,
             flutterEngine.dartExecutor.binaryMessenger
         )
 
