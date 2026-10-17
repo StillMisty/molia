@@ -30,6 +30,7 @@ import '../widgets/add_to_playlist_sheet.dart' show showPlaylistNameDialog;
 import '../widgets/app_search_bar.dart';
 import '../widgets/collection_rail.dart';
 import '../widgets/collection_scroll_bookkeeping.dart';
+import '../widgets/collection_selection.dart';
 import '../widgets/collection_track_list.dart';
 import '../widgets/icon_swap.dart';
 import '../widgets/local_audio_import.dart' show importLocalAudioFilesFlow;
@@ -108,12 +109,8 @@ class _FavoritesPageState extends State<FavoritesPage> {
   /// 曲目列表滚动控制器（配合常显滚动条，支持直接拖动定位）。
   final ScrollController _listController = ScrollController();
 
-  /// 多选控制器（索引以当前合集的可见列表为准）。
-  final M3ESelectionController _selection = M3ESelectionController();
-
-  /// 桌面 Shift 范围选择的锚点：最近一次不带 Shift 的点击行（可见列表下标）。
-  /// 合集 / 搜索词 / 排序改变可见列表时清空——下标基准变了，旧锚点无意义。
-  int? _selectionAnchor;
+  /// 多选状态机（索引以当前合集的可见列表为准；收藏 / 历史 / 本地歌曲共用）。
+  final CollectionSelection _selection = CollectionSelection();
 
   /// 桌面 Esc 键处理器引用：[HardwareKeyboard] 注册 / 注销必须是同一闭包。
   late final bool Function(KeyEvent) _keyHandler = _handleKeyEvent;
@@ -185,7 +182,7 @@ class _FavoritesPageState extends State<FavoritesPage> {
   /// 本地歌曲列表滚动控制器（与历史同理，独立于列表曲目）。
   final ScrollController _localSongsScrollController = ScrollController();
 
-  bool get _selecting => _selection.isSelectionMode;
+  bool get _selecting => _selection.isSelecting;
 
   @override
   void initState() {
@@ -391,7 +388,7 @@ class _FavoritesPageState extends State<FavoritesPage> {
     _searchController.clear();
     if (!_searching) return;
     // 过滤条件清空后可见列表回到全量：Shift 范围选择的锚点下标失效。
-    _selectionAnchor = null;
+    _selection.clearAnchor();
     setState(() {
       _searching = false;
     });
@@ -434,40 +431,6 @@ class _FavoritesPageState extends State<FavoritesPage> {
     return true;
   }
 
-  /// 桌面修饰键多选手势：返回 true = 已按修饰键语义处理。
-  ///
-  /// Ctrl 点击切换该行（未在选择模式时 toggle 即选中该行，等价长按进入）；
-  /// Shift 点击选中锚点与当前行的可见闭区间，锚点为空 / 越界时退化为单选
-  /// 该行。锚点只在不带 Shift 的点击时移动：连续 Shift 点击只调整区间端点，
-  /// 与文件管理器的经典语义一致。
-  bool _applyModifiedSelection(
-    int index, {
-    required int itemCount,
-    required bool ctrl,
-    required bool shift,
-  }) {
-    if (shift) {
-      var anchor = _selectionAnchor;
-      if (anchor == null || anchor >= itemCount) {
-        anchor = index;
-        _selectionAnchor = index;
-      }
-      final start = math.min(anchor, index);
-      final end = math.max(anchor, index);
-      _selection.clear();
-      for (var i = start; i <= end; i++) {
-        _selection.select(i);
-      }
-      return true;
-    }
-    _selectionAnchor = index;
-    if (ctrl) {
-      _selection.toggle(index);
-      return true;
-    }
-    return false;
-  }
-
   /// 曲目行点击：桌面修饰键手势优先，其余保持既有语义（多选内切换 / 点播）。
   void _onTrackRowTap(
     _CollectionView view,
@@ -475,7 +438,7 @@ class _FavoritesPageState extends State<FavoritesPage> {
     bool ctrl = false,
     bool shift = false,
   }) {
-    if (_applyModifiedSelection(
+    if (_selection.applyModifiers(
       index,
       itemCount: view.visible.length,
       ctrl: ctrl,
@@ -497,7 +460,7 @@ class _FavoritesPageState extends State<FavoritesPage> {
     bool ctrl = false,
     bool shift = false,
   }) {
-    if (_applyModifiedSelection(
+    if (_selection.applyModifiers(
       index,
       itemCount: view.visibleHistory.length,
       ctrl: ctrl,
@@ -519,7 +482,7 @@ class _FavoritesPageState extends State<FavoritesPage> {
     bool ctrl = false,
     bool shift = false,
   }) {
-    if (_applyModifiedSelection(
+    if (_selection.applyModifiers(
       index,
       itemCount: view.visibleLocalSongs.length,
       ctrl: ctrl,
@@ -536,9 +499,8 @@ class _FavoritesPageState extends State<FavoritesPage> {
 
   void _enterReorder() {
     HapticsService.lightImpact();
+    // 排序会整体重排可见顺序：clear 一并让多选锚点失效。
     _selection.clear();
-    // 排序会整体重排可见顺序：多选锚点失效。
-    _selectionAnchor = null;
     _searchFocus.unfocus();
     _searchController.clear();
     setState(() {
@@ -700,9 +662,8 @@ class _FavoritesPageState extends State<FavoritesPage> {
       _searchController.clear();
     });
     unawaited(_collections.saveSelection(id));
+    // 切换合集后可见列表整体替换：clear 一并让多选锚点失效。
     _selection.clear();
-    // 切换合集后可见列表整体替换：Shift 范围选择的锚点失效。
-    _selectionAnchor = null;
   }
 
   void _onCollectionOrderChanged(List<String> keys) {
@@ -952,22 +913,14 @@ class _FavoritesPageState extends State<FavoritesPage> {
     }
   }
 
-  List<PlaylistTrack> _selectedTracks(_CollectionView view) => [
-        for (final index in _selection.selectedIndices)
-          if (index >= 0 && index < view.visible.length) view.visible[index],
-      ];
+  List<PlaylistTrack> _selectedTracks(_CollectionView view) =>
+      _selection.selectedFrom(view.visible);
 
-  List<PlayHistoryEntry> _selectedHistory(_CollectionView view) => [
-        for (final index in _selection.selectedIndices)
-          if (index >= 0 && index < view.visibleHistory.length)
-            view.visibleHistory[index],
-      ];
+  List<PlayHistoryEntry> _selectedHistory(_CollectionView view) =>
+      _selection.selectedFrom(view.visibleHistory);
 
-  List<CollectionLocalSong> _selectedLocalSongs(_CollectionView view) => [
-        for (final index in _selection.selectedIndices)
-          if (index >= 0 && index < view.visibleLocalSongs.length)
-            view.visibleLocalSongs[index],
-      ];
+  List<CollectionLocalSong> _selectedLocalSongs(_CollectionView view) =>
+      _selection.selectedFrom(view.visibleLocalSongs);
 
   Future<void> _favoriteSelected(_CollectionView view) async {
     final selected = _selectedTracks(view);
@@ -1546,8 +1499,8 @@ class _FavoritesPageState extends State<FavoritesPage> {
               _buildOverflowMenu(context, l10n, view),
           ],
           onChanged: (_) => setState(() {
-            // 过滤改变可见列表：多选锚点随搜索词失效。
-            _selectionAnchor = null;
+            // 过滤改变可见列表：多选锚点随搜索词失效（选择保留）。
+            _selection.clearAnchor();
           }),
         ),
       ),
@@ -1639,7 +1592,7 @@ class _FavoritesPageState extends State<FavoritesPage> {
           // 排序改变可见顺序：多选锚点失效。
           setState(() {
             _sort = value;
-            _selectionAnchor = null;
+            _selection.clearAnchor();
           });
         } else if (value == 'reorder') {
           _enterReorder();
