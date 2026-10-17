@@ -546,7 +546,7 @@ class _SettingsHomeViewState extends State<_SettingsHomeView>
               ThemeMode mode,
               ColorBaseSource base,
               bool followArtwork,
-              bool monetAvailable,
+              SystemBaseColorSource systemColorSource,
               bool pureBlack,
               Color seed,
               String? appFont,
@@ -555,7 +555,7 @@ class _SettingsHomeViewState extends State<_SettingsHomeView>
             mode: provider.themeMode,
             base: provider.baseColorSource,
             followArtwork: provider.followArtworkEnabled,
-            monetAvailable: provider.monetAvailable,
+            systemColorSource: provider.systemBaseColorSource,
             pureBlack: provider.pureBlackEnabled,
             seed: provider.seedColor,
             appFont: provider.appFontFamily,
@@ -565,7 +565,7 @@ class _SettingsHomeViewState extends State<_SettingsHomeView>
               mode: themeMode,
               base: baseColorSource,
               followArtwork: followArtworkEnabled,
-              monetAvailable: monetAvailable,
+              systemColorSource: systemColorSource,
               pureBlack: pureBlackEnabled,
               seed: seedColor,
               appFont: appFontFamily,
@@ -601,7 +601,7 @@ class _SettingsHomeViewState extends State<_SettingsHomeView>
                   subtitle: _baseColorSubtitle(
                     l10n,
                     baseColorSource,
-                    monetAvailable: monetAvailable,
+                    systemColorSource: systemColorSource,
                     seedColor: seedColor,
                   ),
                   value: baseColorSource,
@@ -612,9 +612,11 @@ class _SettingsHomeViewState extends State<_SettingsHomeView>
                     ),
                     (ColorBaseSource.custom, l10n.settingsBaseColorCustom),
                   ],
-                  // 平台无莫奈时壁纸项禁用（仍可显示为选中态，配色回退种子色）。
+                  // 壁纸图 / 强调色都不可用时壁纸项禁用
+                  //（仍可显示为选中态，配色回退种子色）。
                   optionEnabled: (source) =>
-                      source != ColorBaseSource.wallpaper || monetAvailable,
+                      source != ColorBaseSource.wallpaper ||
+                      systemColorSource != SystemBaseColorSource.unavailable,
                   onChanged: (source) =>
                       context.read<ThemeProvider>().setBaseColorSource(source),
                 ),
@@ -972,19 +974,21 @@ class _SettingsHomeViewState extends State<_SettingsHomeView>
     return l10n.settingsUpdateSubtitle(provider.currentVersionLabel);
   }
 
-  /// 基础配色副标题：壁纸（平台不支持时说明）或当前自定义色 hex。
+  /// 基础配色副标题：壁纸档三态（壁纸 / 强调色 / 都不可用）或当前自定义色 hex。
   String _baseColorSubtitle(
     AppLocalizations l10n,
     ColorBaseSource source, {
-    required bool monetAvailable,
+    required SystemBaseColorSource systemColorSource,
     required Color seedColor,
   }) {
     if (source != ColorBaseSource.wallpaper) {
       return colorHexLabel(seedColor.toARGB32());
     }
-    return monetAvailable
-        ? l10n.settingsBaseColorWallpaper
-        : l10n.settingsMonetUnavailable;
+    return switch (systemColorSource) {
+      SystemBaseColorSource.wallpaper => l10n.settingsBaseColorWallpaperActive,
+      SystemBaseColorSource.accent => l10n.settingsBaseColorAccentActive,
+      SystemBaseColorSource.unavailable => l10n.settingsMonetUnavailable,
+    };
   }
 
   /// 主题色：直接打开任意取色器（HSV + Hex）。

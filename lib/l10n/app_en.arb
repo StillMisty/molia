@@ -50,6 +50,8 @@
   "settingsBaseColorWallpaper": "System wallpaper",
   "settingsBaseColorCustom": "Custom color",
   "settingsMonetUnavailable": "Not supported on this platform",
+  "settingsBaseColorWallpaperActive": "Source: system wallpaper",
+  "settingsBaseColorAccentActive": "Source: system accent color",
   "settingsPureBlack": "Pure black background",
   "settingsPureBlackSubtitle": "Use pure black surfaces in dark mode (OLED)",
   "settingsSeedColor": "Custom color",

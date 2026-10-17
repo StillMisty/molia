@@ -10,18 +10,35 @@ import '../theme/scheme_builder.dart';
 
 final logger = Logger('molia.theme_provider');
 
+/// 「基础配色 = 壁纸」档实际生效的来源（设置页副标题 / 选项可用性用）。
+///
+/// 三态互斥用单个枚举表达，避免两个布尔出现自相矛盾的组合。
+enum SystemBaseColorSource {
+  /// 壁纸图 seed 可用（桌面：真实系统壁纸取色）。
+  wallpaper,
+
+  /// 壁纸图不可用：回退系统强调色（`dynamic_color` 提供的莫奈方案）。
+  accent,
+
+  /// 壁纸图与强调色都不可用：配色回退自定义种子色。
+  unavailable,
+}
+
 /// 应用主题唯一来源：主题模式 + 系统亮度 + 基础配色 + 封面覆盖 + 纯黑。
 ///
 /// 取色模型（两层 + 一个正交修饰，行为完全可预知）：
 ///
-/// 1. **基础配色** [baseColorSource]：壁纸（莫奈）或自定义种子色，二选一；
+/// 1. **基础配色** [baseColorSource]：壁纸或自定义种子色，二选一；壁纸档
+///    桌面优先真实壁纸图 seed，其次系统强调色（移动端即莫奈），都不可用时
+///    回退自定义种子色；
 /// 2. **封面覆盖** [followArtworkEnabled]：开启且有封面取色结果时，用封面
-///    seed 覆盖基础配色（包括覆盖莫奈）；无封面回退基础配色；
+///    seed 覆盖基础配色（包括覆盖壁纸）；无封面回退基础配色；
 /// 3. **纯黑背景** [pureBlackEnabled]：深色模式下覆盖 surface 系列，
 ///    与取色来源正交可叠加。
 ///
 /// 解析顺序（唯一）：
-/// `封面 seed > 壁纸（基础=壁纸且平台可用）> 自定义 seed`，再叠加纯黑。
+/// `封面 seed > 壁纸图 seed（桌面，基础=壁纸）> 强调色方案（基础=壁纸且可用）
+/// > 自定义 seed`，再叠加纯黑。
 ///
 /// 持久化键（登记进设置注册表，跟人走）：
 /// - `theme_mode`：`system` / `light` / `dark`；
@@ -46,8 +63,9 @@ class ThemeProvider extends ChangeNotifier {
 
   ThemeMode _themeMode = ThemeMode.system;
 
-  /// 基础配色默认壁纸（Monet）：平台不支持时 [updateMonetSchemes] 不会注入
-  /// 方案，[_schemeForBrightness] 自然回退自定义种子色。
+  /// 基础配色默认壁纸：桌面用真实壁纸图 seed（[updateSystemWallpaperSeed]）、
+  /// 平台强调色（[updateMonetSchemes]）兜底；两者都没有时
+  /// [_schemeForBrightness] 自然回退自定义种子色。
   ColorBaseSource _baseColorSource = ColorBaseSource.wallpaper;
   bool _followArtworkEnabled = true;
   bool _pureBlackEnabled = false;
@@ -56,10 +74,15 @@ class ThemeProvider extends ChangeNotifier {
   /// 全局应用字体族名（设备已装字体）；null 表示系统默认字体。
   String? _appFontFamily;
 
-  /// 系统莫奈配色，由宿主（DynamicColorBuilder）经 [updateMonetSchemes]
+  /// 系统强调色方案，由宿主（`DynamicColorBuilder`）经 [updateMonetSchemes]
   /// 注入；平台不支持时为 null。
   ColorScheme? _monetLightScheme;
   ColorScheme? _monetDarkScheme;
+
+  /// 桌面壁纸图 seed（浅 / 深各一张），由组合根经 [updateSystemWallpaperSeed]
+  /// 注入；拿不到壁纸文件 / 解码失败时为 null。
+  Color? _wallpaperLightSeed;
+  Color? _wallpaperDarkSeed;
 
   /// 最近一次封面取色的种子色：封面覆盖层的数据源，与主题输出解耦
   /// （即使当前未跟随封面，也保留以便桌面歌词 / 海报按需解析）。
@@ -91,9 +114,23 @@ class ThemeProvider extends ChangeNotifier {
 
   bool get pureBlackEnabled => _pureBlackEnabled;
 
-  /// 平台是否提供莫奈配色（Android 12+ 支持时非 null）。
-  bool get monetAvailable =>
-      _monetLightScheme != null || _monetDarkScheme != null;
+  /// 「壁纸」档是否可用（壁纸图 seed 或系统强调色任一存在）。
+  ///
+  /// 桌面壁纸图优先，强调色是桌面（拿不到壁纸）/ 移动端（Android 12+ 莫奈）
+  /// 的兜底；两者都不可用时配色回退自定义种子色。
+  bool get systemColorAvailable =>
+      systemBaseColorSource != SystemBaseColorSource.unavailable;
+
+  /// 「壁纸」档当前实际生效的来源（三态：壁纸图 / 强调色 / 都不可用）。
+  SystemBaseColorSource get systemBaseColorSource {
+    if (_wallpaperLightSeed != null || _wallpaperDarkSeed != null) {
+      return SystemBaseColorSource.wallpaper;
+    }
+    if (_monetLightScheme != null || _monetDarkScheme != null) {
+      return SystemBaseColorSource.accent;
+    }
+    return SystemBaseColorSource.unavailable;
+  }
 
   Color get seedColor => _seedColor;
 
@@ -180,13 +217,31 @@ class ThemeProvider extends ChangeNotifier {
     await _persist(() => _settings.write(kPureBlackEnabled, enabled));
   }
 
-  /// 宿主注入系统莫奈配色；平台不支持时传 null。
+  /// 宿主注入系统强调色方案（`DynamicColorBuilder` 的莫奈）；不支持时传 null。
   ///
   /// 未选壁纸基础配色时只记录备用，不触发重算；配色实际变化时才应用。
   void updateMonetSchemes(ColorScheme? light, ColorScheme? dark) {
     if (_monetLightScheme == light && _monetDarkScheme == dark) return;
     _monetLightScheme = light;
     _monetDarkScheme = dark;
+    if (_baseColorSource != ColorBaseSource.wallpaper) return;
+    _applyColorScheme(
+      _schemeForBrightness(_colorScheme.brightness),
+      forceNotify: true,
+    );
+  }
+
+  /// 注入桌面壁纸图 seed（浅 / 深各一张；无可用壁纸传 null）。
+  ///
+  /// 镜像 [updateMonetSchemes]：非壁纸档只记录备用、不触发重算；壁纸 seed
+  /// 优先于强调色方案（见 [_schemeForBrightness]）。
+  void updateSystemWallpaperSeed(Color? light, Color? dark) {
+    if (_wallpaperLightSeed?.toARGB32() == light?.toARGB32() &&
+        _wallpaperDarkSeed?.toARGB32() == dark?.toARGB32()) {
+      return;
+    }
+    _wallpaperLightSeed = light;
+    _wallpaperDarkSeed = dark;
     if (_baseColorSource != ColorBaseSource.wallpaper) return;
     _applyColorScheme(
       _schemeForBrightness(_colorScheme.brightness),
@@ -252,20 +307,25 @@ class ThemeProvider extends ChangeNotifier {
     };
   }
 
-  /// 目标亮度的配色优先级：封面 seed > 壁纸（基础=壁纸且可用）> 自定义 seed；
-  /// 纯黑背景在深色模式下覆盖 surface 系列。
+  /// 目标亮度的配色优先级：封面 seed > 壁纸图 seed（桌面）> 强调色方案 >
+  /// 自定义 seed；纯黑背景在深色模式下覆盖 surface 系列。
   ColorScheme _schemeForBrightness(Brightness brightness) {
     final ColorScheme scheme;
     final artworkSeed = _artworkSeed;
     if (_followArtworkEnabled && artworkSeed != null) {
       scheme = buildColorScheme(artworkSeed, brightness);
+    } else if (_baseColorSource == ColorBaseSource.wallpaper) {
+      final wallpaperSeed = brightness == Brightness.dark
+          ? _wallpaperDarkSeed
+          : _wallpaperLightSeed;
+      final monet = brightness == Brightness.dark
+          ? _monetDarkScheme
+          : _monetLightScheme;
+      scheme = wallpaperSeed != null
+          ? buildColorScheme(wallpaperSeed, brightness)
+          : (monet ?? buildColorScheme(_seedColor, brightness));
     } else {
-      final monet = _baseColorSource == ColorBaseSource.wallpaper
-          ? (brightness == Brightness.dark
-              ? _monetDarkScheme
-              : _monetLightScheme)
-          : null;
-      scheme = monet ?? buildColorScheme(_seedColor, brightness);
+      scheme = buildColorScheme(_seedColor, brightness);
     }
     return _pureBlackEnabled ? applyPureBlackScheme(scheme) : scheme;
   }

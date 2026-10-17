@@ -24,7 +24,7 @@ const kThemeMode = SettingsKey<String>(
   'system',
   category: SyncCategory.settings,
 );
-/// 基础配色：默认壁纸（Monet，平台支持时），不可用时回退自定义种子色。
+/// 基础配色：默认壁纸（桌面优先壁纸图取色，其次系统强调色；都不可用时回退自定义种子色）。
 const kColorBase = SettingsKey<String>(
   'color_base',
   'wallpaper',

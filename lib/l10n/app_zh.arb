@@ -29,6 +29,8 @@
   "settingsBaseColorWallpaper": "系统壁纸（莫奈）",
   "settingsBaseColorCustom": "自定义颜色",
   "settingsMonetUnavailable": "当前平台不支持",
+  "settingsBaseColorWallpaperActive": "当前来源：系统壁纸",
+  "settingsBaseColorAccentActive": "当前来源：系统强调色",
   "settingsPureBlack": "纯黑背景",
   "settingsPureBlackSubtitle": "深色模式下表面纯黑（OLED 省电；可与取色叠加）",
   "settingsSeedColor": "自定义颜色",

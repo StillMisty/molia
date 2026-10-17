@@ -272,6 +272,18 @@ abstract class AppLocalizations {
   /// **'Not supported on this platform'**
   String get settingsMonetUnavailable;
 
+  /// No description provided for @settingsBaseColorWallpaperActive.
+  ///
+  /// In en, this message translates to:
+  /// **'Source: system wallpaper'**
+  String get settingsBaseColorWallpaperActive;
+
+  /// No description provided for @settingsBaseColorAccentActive.
+  ///
+  /// In en, this message translates to:
+  /// **'Source: system accent color'**
+  String get settingsBaseColorAccentActive;
+
   /// No description provided for @settingsPureBlack.
   ///
   /// In en, this message translates to:

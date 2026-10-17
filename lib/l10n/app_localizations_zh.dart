@@ -102,6 +102,12 @@ class AppLocalizationsZh extends AppLocalizations {
   String get settingsMonetUnavailable => '当前平台不支持';
 
   @override
+  String get settingsBaseColorWallpaperActive => '当前来源：系统壁纸';
+
+  @override
+  String get settingsBaseColorAccentActive => '当前来源：系统强调色';
+
+  @override
   String get settingsPureBlack => '纯黑背景';
 
   @override

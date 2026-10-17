@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:collection';
+import 'dart:io';
 import 'dart:typed_data';
 import 'dart:ui' as ui;
 
@@ -11,7 +12,7 @@ import '../managers/artwork_cache.dart';
 import '../theme/scheme_builder.dart';
 import '../utils/local_image_provider.dart';
 
-/// 单张封面的取色结果：种子色 + 双亮度方案（一次提取，多处复用）。
+/// 单张图像的取色结果：种子色 + 双亮度方案（一次提取，多处复用）。
 class ArtworkPalette {
   const ArtworkPalette({
     required this.seed,
@@ -26,7 +27,7 @@ class ArtworkPalette {
         dark: buildColorScheme(seed, Brightness.dark),
       );
 
-  /// 封面提取出的种子色。
+  /// 图像（封面 / 系统壁纸）提取出的种子色。
   final Color seed;
 
   /// 浅色方案。
@@ -39,16 +40,17 @@ class ArtworkPalette {
       brightness == Brightness.dark ? dark : light;
 }
 
-/// 封面取色服务：像素 → 种子色 → 双亮度 ColorScheme，带 LRU 缓存。
+/// 图像取色服务：像素 → 种子色 → 双亮度 ColorScheme，带 LRU 缓存。
 ///
-/// 统一取色口径：全局主题「跟随封面」、桌面歌词「跟随封面」、海报「跟随
-/// 封面」全部查本服务，禁止任何模块自行提取像素。
+/// 统一取色口径：全局主题「跟随封面 / 系统壁纸」、桌面歌词「跟随封面」、
+/// 海报「跟随封面」全部查本服务，禁止任何模块自行提取像素。
 ///
-/// - 走共享封面缓存（`artworkImageProvider`）：与封面显示同一份磁盘缓存与
-///   请求头，不二次下载；不加缩放参数，命中显示路径的同一条目；
+/// - 封面走共享封面缓存（`artworkImageProvider`）：与封面显示同一份磁盘缓存
+///   与请求头，不二次下载；不加缩放参数，命中显示路径的同一条目；
+/// - 系统壁纸走 [loadLocalFile]（读盘字节 → 同一缩略解码路径，不解码全图）；
 /// - 省流模式（`ArtworkCache` 网关只读本地缓存）下未命中会抛错：这里吞掉
 ///   并返回 null，调用方保持现色（不回退、不闪变）；
-/// - 同 URL 并发请求合并为一次提取；LRU 上限 8 条；
+/// - 同 URL / 同路径并发请求合并为一次提取；LRU 上限 8 条；
 /// - 启动预解析 [loadCached] 只吃本地已有封面（不触网），由组合根在
 ///   `runApp` 前调用，让首帧直接是封面色。
 class ArtworkPaletteService {
@@ -58,9 +60,12 @@ class ArtworkPaletteService {
         artworkImageProvider,
     Future<Uint8List?> Function(String url) cachedBytesFor =
         _cachedBytesFromStore,
+    Future<Uint8List?> Function(String path) localFileBytesFor =
+        _localFileBytesFromDisk,
   })  : _maxCacheEntries = maxCacheEntries,
         _providerFor = providerFor,
-        _cachedBytesFor = cachedBytesFor;
+        _cachedBytesFor = cachedBytesFor,
+        _localFileBytesFor = localFileBytesFor;
 
   static const int _quantizeColorCount = 128;
 
@@ -71,6 +76,13 @@ class ArtworkPaletteService {
   static Future<Uint8List?> _cachedBytesFromStore(String url) =>
       ArtworkCache.instance.bytesOf(url);
 
+  /// 默认本地文件读取（系统壁纸：路径 → 字节；不存在 / 不可读返回 null）。
+  static Future<Uint8List?> _localFileBytesFromDisk(String path) async {
+    final file = File(path);
+    if (!await file.exists()) return null;
+    return file.readAsBytes();
+  }
+
   final int _maxCacheEntries;
 
   /// 封面取图入口（默认共享封面缓存；测试注入纯色图）。
@@ -78,6 +90,9 @@ class ArtworkPaletteService {
 
   /// 本地缓存字节读取入口（启动预解析用；测试注入固定字节）。
   final Future<Uint8List?> Function(String url) _cachedBytesFor;
+
+  /// 本地文件字节读取入口（系统壁纸用；测试注入固定字节）。
+  final Future<Uint8List?> Function(String path) _localFileBytesFor;
   final LinkedHashMap<String, ArtworkPalette> _cache =
       LinkedHashMap<String, ArtworkPalette>();
   final Map<String, Future<ArtworkPalette?>> _inFlight = {};
@@ -88,6 +103,14 @@ class ArtworkPaletteService {
   /// 读取（或提取）封面方案；失败返回 null（调用方保持现色）。
   Future<ArtworkPalette?> load(String url) =>
       _resolve(url, () => _extract(url));
+
+  /// 本地图像文件取色（桌面系统壁纸）：读盘 → 缩略解码 → seed。
+  ///
+  /// 与封面共用同一 LRU / 并发合并：同一路径（浅 / 深壁纸常为同一文件）
+  /// 第二次请求命中缓存，只读一次盘、只解码一次；读取 / 解码失败返回 null
+  /// （调用方回退系统强调色）。
+  Future<ArtworkPalette?> loadLocalFile(String path) =>
+      _resolve(path, () => _extractLocalFile(path));
 
   /// 启动预解析：只吃本地已有封面（磁盘缓存 / 本地文件），未命中立即返回
   /// null，不发任何网络请求。
@@ -138,7 +161,7 @@ class ArtworkPaletteService {
     }
   }
 
-  /// 本地缓存字节 → 方案（启动预解析路径：不取图、不触网）。
+  /// 本地字节 → 方案（封面缓存预解析 / 系统壁纸共用：不取图、不触网）。
   Future<ArtworkPalette?> _extractFromBytes(String url, Uint8List bytes) async {
     try {
       // 取色只需色调：按采样边长缩略解码，避免整图解码开销。
@@ -149,8 +172,21 @@ class ArtworkPaletteService {
       final frame = await codec.getNextFrame();
       return await _paletteFromPixels(url, await _samplePixels(frame.image));
     } catch (e) {
-      // 缓存文件损坏 / 解码失败：返回 null，调用方回退稳态链路。
-      _logger.warning('封面缓存取色失败（保持现色）: $e');
+      // 缓存文件 / 壁纸文件损坏、解码失败：返回 null，调用方回退稳态链路。
+      _logger.warning('图像取色失败（保持现色）: $e');
+      return null;
+    }
+  }
+
+  /// 本地文件路径 → 字节 → 方案（系统壁纸取色；与封面共用缩略解码）。
+  Future<ArtworkPalette?> _extractLocalFile(String path) async {
+    try {
+      final bytes = await _localFileBytesFor(path);
+      if (bytes == null || bytes.isEmpty) return null;
+      return await _extractFromBytes(path, bytes);
+    } catch (e) {
+      // 数据源读取失败（权限 / 文件消失）：返回 null，调用方回退强调色。
+      _logger.warning('本地图像读取失败（保持现色）: $e');
       return null;
     }
   }

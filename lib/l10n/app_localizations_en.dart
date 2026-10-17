@@ -103,6 +103,12 @@ class AppLocalizationsEn extends AppLocalizations {
   String get settingsMonetUnavailable => 'Not supported on this platform';
 
   @override
+  String get settingsBaseColorWallpaperActive => 'Source: system wallpaper';
+
+  @override
+  String get settingsBaseColorAccentActive => 'Source: system accent color';
+
+  @override
   String get settingsPureBlack => 'Pure black background';
 
   @override
