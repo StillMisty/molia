@@ -24,16 +24,82 @@ class TrackRowArtist {
   int get hashCode => Object.hash(name, onTap);
 }
 
-/// 宽屏表格列（仅桌面宽屏列表传入；null = 现有单列布局，逐像素不变）。
+/// 宽屏表格的列宽规范（行与表头共用的唯一宽表）。
 ///
-/// 三列文案的空串 = 该列留空（不显示占位符）；列宽是表头
-/// （`track_table_header.dart`）与行内共用的常量，两侧必须同源。
+/// 为什么单独一层：列宽与「有没有播放时间列」必须行列两端同源——表头
+/// （`track_table_header.dart`）只接收本对象，两处各写一套宽表迟早错位。
+/// 列的有无是**整套表格**的决定（[timeWidth] = 0 即不显示），不是逐行的：
+/// 单行的空文案只让该格留空，否则同一表内行与行、行与表头都会左右错位。
+class TrackRowColumnSpec {
+  const TrackRowColumnSpec({
+    this.titleMaxWidth = 480,
+    this.artistWidth = 200,
+    this.albumWidth = 200,
+    this.timeWidth = 0,
+    this.durationWidth = 64,
+    this.minContentWidth = TrackRowColumns.minWidth,
+  });
+
+  /// 标题列宽度上限：超宽内容区里标题不再无限拉长，右侧固定列仍贴行右缘
+  /// （表头列缘因此不用跟着重算）。
+  final double titleMaxWidth;
+
+  /// 艺术家列宽。
+  final double artistWidth;
+
+  /// 专辑列宽。
+  final double albumWidth;
+
+  /// 播放时间列宽；0 = 整套表格不显示该列（搜索结果 / 发现详情 / 收藏 /
+  /// 本地歌曲都没有这列）。
+  final double timeWidth;
+
+  /// 时长列宽。
+  final double durationWidth;
+
+  /// 本套列不把行撑溢出所需的最小内容宽（内容宽 = 窗口宽 − 实际栏宽，判据见
+  /// `DesktopLayout.tableColumnsFor`）：固定列 + 行内网格（封面位与各处列
+  /// 间距）+ 行表面内边距 + 页面横向留白（桌面档 32×2）。
+  /// 默认一档算得 44 + 5×12 + (200+200+64+56) + 32 + 64 = 720；历史档多
+  /// 一格算得 44 + 6×12 + (180+180+120+64+56) + 32 + 64 = 812（两处都有
+  /// 测试钉住：改列宽必须同步本值，否则阈值处就横向溢出）。
+  final double minContentWidth;
+
+  /// 整套表格是否显示播放时间列（仅播放历史为真）。
+  bool get hasTimeColumn => timeWidth > 0;
+
+  /// 默认一档（搜索结果 / 发现详情 / 收藏 / 本地歌曲）：歌手 / 专辑 200、
+  /// 时长 64，无播放时间列（收藏的蓝图列宽与本档同值）。
+  static const TrackRowColumnSpec standard = TrackRowColumnSpec();
+
+  /// 播放历史：多一列「播放时间」，歌手 / 专辑相应收窄，标题上限同步下调
+  /// （列宽总和按内容宽 1136 实测留得下）；固定列多一格，最小内容宽相应
+  /// 抬高，否则 720–812 的内容区里表头 / 行会横向溢出。
+  static const TrackRowColumnSpec history = TrackRowColumnSpec(
+    titleMaxWidth: 400,
+    artistWidth: 180,
+    albumWidth: 180,
+    timeWidth: 120,
+    minContentWidth: 812,
+  );
+}
+
+/// 宽屏表格一行的列内容（仅宽屏表格列表传入；null = 现有单列布局）。
+///
+/// 列宽与列构成走 [spec]（与表头同一份）；四个文案的空串 = 该格留空
+/// （不显示占位符）。「这一列有没有」是 [spec] 的整套决定，不看单行文案：
+/// 单行空值若让列消失，同一表内行与行、行与表头都会左右错位。
 class TrackRowColumns {
   const TrackRowColumns({
+    this.spec = TrackRowColumnSpec.standard,
     this.artist = '',
     this.album = '',
+    this.time = '',
     this.duration = '',
   });
+
+  /// 列宽规范（行与表头必须传同一份）。
+  final TrackRowColumnSpec spec;
 
   /// 艺术家列文案。
   final String artist;
@@ -41,16 +107,16 @@ class TrackRowColumns {
   /// 专辑列文案。
   final String album;
 
+  /// 播放时间列文案（播放历史；[TrackRowColumnSpec.hasTimeColumn] 为假时
+  /// 不渲染该列）。
+  final String time;
+
   /// 时长列文案（来自 `durationText`）。
   final String duration;
 
-  /// 表格列生效的最小内容宽（与 browse 桌面断点同值；判据见
-  /// `DesktopLayout.tableColumnsAt`）。
-  static const double minWidth = 900;
-
-  static const double artistWidth = 200;
-  static const double albumWidth = 200;
-  static const double durationWidth = 64;
+  /// 默认一档规范 [TrackRowColumnSpec.standard] 生效的最小内容宽（内容宽 =
+  /// 窗口宽 − 实际栏宽；判据见 `DesktopLayout.tableColumnsFor`）。
+  static const double minWidth = 720;
 
   /// 表格模式行尾动作槽宽（⋮ 菜单 / 缓存标签 / 拖动把手都落在槽内）：
   /// 行与表头共用同一宽度，列左缘只由列宽决定，不随行尾内容漂移。
@@ -60,8 +126,10 @@ class TrackRowColumns {
 
 /// 固定行高的曲目行（队列 / 收藏 / 历史 / 发现详情 / 搜索结果共用）。
 ///
-/// 行高固定为 [extent]（标题/歌手都单行省略），列表可以传 `itemExtent`
-/// 预取高度（分段列表再加 [gapOf] 行距），滚动条拇指尺寸与拖动定位精确。
+/// 行高只有两档，取 M3E 列表 token（见 [extentOf]）：表格档单行 56（标题 +
+/// 独立列）、非表格档双行 72（标题 + 副标题），标题 / 列文案都单行省略；
+/// 列表据此传 `itemExtent` 预取高度（分段列表再加 [gapOf] 行距），滚动条
+/// 拇指尺寸与拖动定位精确。
 ///
 /// 表面用共享的 [CardListSurface]（M3E 列表规范 + 弹簧 shape morph）；
 /// 为什么不用 `M3EListItem` / `M3EListRowSurface` 见 docs/pitfalls.md #20。
@@ -72,7 +140,7 @@ class TrackRow extends StatelessWidget {
     this.artist = '',
     this.artists,
     this.coverUrl,
-    this.coverSize = 44,
+    this.coverSize = defaultCoverSize,
     this.columns,
     this.trailingText,
     this.trailing,
@@ -84,9 +152,25 @@ class TrackRow extends StatelessWidget {
     this.onSecondaryTap,
   });
 
-  /// 固定行高：可直接作为 `itemExtent` / `SliverFixedExtentList` 的高度
-  /// （分段列表需再加 [gapOf] 行距）。
+  /// 非表格（双行：标题 + 副标题）行高；等于 M3E 列表 token
+  /// `M3EListItemTheme.twoLineHeight` 的默认值（测试钉住两者同值）。
+  ///
+  /// 为什么保留常量：队列 / 专辑 / 歌手等**没有表格档**的列表直接拿它当
+  /// `itemExtent`（它们恒为双行，没有两档可取）；带表格档的列表一律走
+  /// [extentOf]（token 同源 + 按档取高）。
   static const double extent = 72;
+
+  /// 固定行高（M3E 列表 token）：表格档是单行（标题 + 独立列）取
+  /// `minHeight`（56），非表格档是双行（标题 + 副标题）取 `twoLineHeight`
+  /// （72）。列表 `itemExtent` 用 `extentOf(context, ...) + gapOf(context)`。
+  static double extentOf(BuildContext context, {required bool tableColumns}) {
+    final M3EListItemTheme item = M3ETheme.of(context).listTheme.item;
+    return tableColumns ? item.minHeight : item.twoLineHeight;
+  }
+
+  /// 行内封面默认边长（行内封面位 = 本值 + 列表 token 的槽间距）：
+  /// 表头（`track_table_header.dart`）按同一常量复刻留白结构。
+  static const double defaultCoverSize = 44;
 
   final String title;
   final String artist;
@@ -98,9 +182,10 @@ class TrackRow extends StatelessWidget {
   final String? coverUrl;
   final double coverSize;
 
-  /// 宽屏表格列：非空时行内改为「封面+标题 / 艺术家 / 专辑 / 时长 / 行尾」
-  /// 的表格布局，标题格只显示标题（副标题与逐名歌手链接让位给独立列）；
-  /// null = 单列布局（[artist] / [artists] / [trailingText] 的既有行为）。
+  /// 宽屏表格列：非空时行内改为「封面+标题 / 艺术家 / 专辑 /（播放时间）/
+  /// 时长 / 行尾」的表格布局，标题格只显示标题（副标题与逐名歌手链接让位
+  /// 给独立列）；null = 单列布局（[artist] / [artists] / [trailingText]
+  /// 的既有行为）。
   final TrackRowColumns? columns;
 
   /// 行尾元信息（时长/计数），未知时传 null 不占位。
@@ -128,7 +213,7 @@ class TrackRow extends StatelessWidget {
   final VoidCallback? onSecondaryTap;
 
   /// 分段列表的相邻行距（M3E 列表卡片 token）。
-  /// 列表 itemExtent 用 `TrackRow.extent + TrackRow.gapOf(context)`。
+  /// 列表 itemExtent 用 `TrackRow.extentOf(context, ...) + TrackRow.gapOf(context)`。
   static double gapOf(BuildContext context) =>
       M3ETheme.of(context).listTheme.cardList.gap;
 
@@ -137,6 +222,10 @@ class TrackRow extends StatelessWidget {
     final M3EThemeData m3e = M3ETheme.of(context);
     final M3EColorScheme scheme = m3e.colorScheme;
     final M3ETypeScale type = m3e.typeScale;
+    // 行内网格与表头同源：槽间距与表面内边距都取 M3E 列表 token（默认
+    // 12 / 16），`track_table_header.dart` 用同一批值复刻留白结构。
+    final M3EListItemTheme itemTheme = m3e.listTheme.item;
+    final double gap = itemTheme.gap;
     final Color contentColor =
         selected ? scheme.onSecondaryContainer : scheme.onSurface;
     final Color supportingColor =
@@ -150,13 +239,14 @@ class TrackRow extends StatelessWidget {
       onPressed: onTap,
       onLongPress: onLongPress,
       semanticLabel: artist.isEmpty ? title : '$title, $artist',
+      padding: EdgeInsets.symmetric(horizontal: itemTheme.horizontalPadding),
       child: SizedBox(
-        height: extent,
+        height: TrackRow.extentOf(context, tableColumns: tableColumns != null),
         child: LayoutBuilder(
           builder: (context, constraints) => Row(
             children: [
               _buildLeading(context, scheme),
-              const SizedBox(width: 12),
+              SizedBox(width: gap),
               Expanded(
                 child: tableColumns == null
                     ? Column(
@@ -188,33 +278,53 @@ class TrackRow extends StatelessWidget {
                             ),
                         ],
                       )
-                    : Text(
-                        title,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: type.bodyLarge.copyWith(color: contentColor),
+                    // 标题列上限（[TrackRowColumnSpec.titleMaxWidth]）：
+                    // Align 先把 Expanded 的紧约束放松，ConstrainedBox 的上限
+                    // 才真正生效（直接套在 Expanded 里会被紧约束顶回满宽）。
+                    // 标题格仍占满剩余宽度，右侧固定列（含表头）列缘不动。
+                    : Align(
+                        alignment: Alignment.centerLeft,
+                        child: ConstrainedBox(
+                          constraints: BoxConstraints(
+                            maxWidth: tableColumns.spec.titleMaxWidth,
+                          ),
+                          child: Text(
+                            title,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: type.bodyLarge.copyWith(color: contentColor),
+                          ),
+                        ),
                       ),
               ),
               if (tableColumns != null) ...[
-                const SizedBox(width: 12),
+                SizedBox(width: gap),
                 _buildColumn(
                   tableColumns.artist,
-                  TrackRowColumns.artistWidth,
+                  tableColumns.spec.artistWidth,
                   type.bodyMedium.copyWith(color: supportingColor),
                 ),
-                const SizedBox(width: 12),
+                SizedBox(width: gap),
                 _buildColumn(
                   tableColumns.album,
-                  TrackRowColumns.albumWidth,
+                  tableColumns.spec.albumWidth,
                   type.bodyMedium.copyWith(color: supportingColor),
                 ),
-                const SizedBox(width: 12),
+                if (tableColumns.spec.hasTimeColumn) ...[
+                  SizedBox(width: gap),
+                  _buildColumn(
+                    tableColumns.time,
+                    tableColumns.spec.timeWidth,
+                    type.bodyMedium.copyWith(color: supportingColor),
+                  ),
+                ],
+                SizedBox(width: gap),
                 _buildColumn(
                   tableColumns.duration,
-                  TrackRowColumns.durationWidth,
+                  tableColumns.spec.durationWidth,
                   type.bodyMedium.copyWith(color: supportingColor),
                 ),
-                const SizedBox(width: 12),
+                SizedBox(width: gap),
                 // 行尾固定槽：行尾内容（⋮ 菜单 / 缓存标签 / 拖动把手）按
                 // 槽宽布局，列左缘不因内容有无、宽窄而左右移动；表头按同一
                 // 槽宽预留，两侧列缘恒对齐。
@@ -235,7 +345,7 @@ class TrackRow extends StatelessWidget {
                 ),
               ],
               if (tableColumns == null && trailingText != null) ...[
-                const SizedBox(width: 12),
+                SizedBox(width: gap),
                 // 行尾元信息贴行右缘：普通 Text 取自身宽度（不用 Flexible：
                 // loose Flexible 会与标题列平分剩余宽度，时长只有 28dp 却
                 // 占走一半、右侧留白）。封顶半行宽 + 省略：窄屏/超长元信息
@@ -253,7 +363,7 @@ class TrackRow extends StatelessWidget {
                 ),
               ],
               if (tableColumns == null && trailing != null) ...[
-                const SizedBox(width: 12),
+                SizedBox(width: gap),
                 IconTheme.merge(
                   data: IconThemeData(color: supportingColor, size: 20),
                   child: trailing!,
@@ -281,7 +391,8 @@ class TrackRow extends StatelessWidget {
     return _RowRevealScope(child: surface);
   }
 
-  /// 表格列单元格：固定列宽 + 单行省略（列宽是行与表头共用的常量）。
+  /// 表格列单元格：固定列宽 + 单行省略（列宽来自 [TrackRowColumns.spec]，
+  /// 与表头同源）。
   ///
   /// 空串照常渲染空 [Text]：列位置由列宽占住，不因缺值左右移动。
   Widget _buildColumn(String text, double width, TextStyle style) {
@@ -425,9 +536,7 @@ class _RowReveal extends InheritedWidget {
 
   /// 读取最近的整行显现状态；不在 [TrackRow] 内时返回 false。
   static bool of(BuildContext context) =>
-      context
-          .dependOnInheritedWidgetOfExactType<_RowReveal>()
-          ?.revealed ??
+      context.dependOnInheritedWidgetOfExactType<_RowReveal>()?.revealed ??
       false;
 
   @override

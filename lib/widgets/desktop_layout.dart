@@ -1,3 +1,4 @@
+import 'package:material_3_expressive/material_3_expressive.dart';
 import 'package:material_ui/material_ui.dart';
 
 import '../utils/responsive.dart';
@@ -11,6 +12,9 @@ DesktopLayout _resolveLayout(BuildContext context, {Widget? child}) =>
     DesktopLayout(
       isDesktopPlatform: isDesktopPlatform(),
       windowWidth: MediaQuery.sizeOf(context).width,
+      // 实际栏宽 = M3E 导航轨的折叠宽（壳层侧栏恒为折叠档；主题改值这里
+      // 跟着变，不写死数值）。
+      railWidth: M3ETheme.of(context).navigationRailTheme.collapsedWidth,
       child: child ?? const SizedBox.shrink(),
     );
 
@@ -20,12 +24,12 @@ DesktopLayout _resolveLayout(BuildContext context, {Widget? child}) =>
 /// 表格列 / 桌面骨架里各自推导，阈值与宽度来源（屏幕宽 / 内容宽 / 窗口宽）
 /// 的漂移没有任何机制能发现。本类把两类语义分开表达：
 ///
-/// - 窗口宽语义是字段（[masterDetail] / [searchCompact] /
-///   [railForceCollapsed] / [queuePanelAvailable]）：壳层在 `build` 里解析
-///   一次并向下提供；
-/// - 内容宽语义是 `*At(contentWidth)` 方法：内容区宽度只有渲染期才知道
-///   （桌面侧栏 / 队列面板 / 页内合集栏都会吃掉宽度），由消费方量出后传入，
-///   但「用内容宽 + 哪个阈值 + 平台判据」只此一处。
+/// - 窗口宽语义是字段与派生 getter（[masterDetail] / [searchCompact] /
+///   [railForceCollapsed] / [queuePanelAvailable] / [contentWidth] /
+///   [tableColumns] / [tableColumnsFor]）：壳层在 `build` 里解析一次并向下
+///   提供；
+/// - 内容宽语义是 `*At(contentWidth)` 方法：内容区宽度由消费方量出后传入，
+///   但「用哪个阈值 + 平台判据」只此一处。
 ///
 /// 无壳层（独立挂载页面 / 弹层路由 / 测试）时 [of] 按当前 context 回退解析，
 /// 与壳层生产路径同一公式。
@@ -34,6 +38,7 @@ class DesktopLayout extends InheritedWidget {
     super.key,
     required this.isDesktopPlatform,
     required this.windowWidth,
+    required this.railWidth,
     required super.child,
   });
 
@@ -46,6 +51,10 @@ class DesktopLayout extends InheritedWidget {
 
   /// 解析时的窗口宽（屏幕宽语义）。
   final double windowWidth;
+
+  /// 解析时的实际栏宽（= M3E 导航轨折叠宽，默认 96）：桌面壳层里唯一
+  /// 常驻吃宽度的栏；批量瘦身后队列面板与页内合集栏都不再占宽。
+  final double railWidth;
 
   /// 页面级桌面增强（窗口宽语义）：桌面平台 + 窗口宽 ≥ [Breakpoints.desktop]。
   ///
@@ -68,13 +77,30 @@ class DesktopLayout extends InheritedWidget {
   /// 队列面板是否可渲染（窗口宽 ≥ [queueForceCloseWidth]）。
   bool get queuePanelAvailable => windowWidth >= queueForceCloseWidth;
 
-  /// 宽屏表格列（内容宽语义）：桌面平台 + 内容宽 ≥
-  /// [TrackRowColumns.minWidth]。
+  /// 内容宽（窗口宽语义）：窗口宽 − 实际栏宽。
+  double get contentWidth => windowWidth - railWidth;
+
+  /// 宽屏表格列（窗口宽语义）：桌面平台 + [contentWidth] ≥
+  /// [TrackRowColumnSpec.minContentWidth]（默认一档规范 = 搜索 / 发现）。
   ///
-  /// 为什么按内容宽：桌面骨架的侧栏与队列面板会吃掉窗口宽度，同样 1200 的
-  /// 窗口内容区可能只剩 600——按窗口宽判定会给出固定列宽的行、把行撑溢出。
-  bool tableColumnsAt(double contentWidth) =>
-      isDesktopPlatform && contentWidth >= TrackRowColumns.minWidth;
+  /// 为什么按窗口宽 − 栏宽而不是量出的内容宽：判据只随窗口与栏宽变，不随
+  /// 页面结构变 —— 量出的内容宽在带页内栏 / 面板的页面里会被二次扣减，
+  /// 同一窗口宽在不同页面得出不同结论。
+  bool get tableColumns => tableColumnsFor(TrackRowColumnSpec.standard);
+
+  /// 宽屏表格列（窗口宽语义，按规范）：列多的一套（播放历史）需要更宽的
+  /// 内容区才不溢出，阈值跟着 [spec] 走。
+  bool tableColumnsFor(TrackRowColumnSpec spec) =>
+      tableColumnsAt(contentWidth, minContentWidth: spec.minContentWidth);
+
+  /// 宽屏表格列（内容宽语义）：桌面平台 + 内容宽 ≥ [minContentWidth]。
+  ///
+  /// 输入 = 内容宽，由调用方量出。页面自带常驻栏 / 面板时量出的内容宽会被
+  /// 二次扣减、判据随页面结构漂移，此时应改用 [tableColumns] /
+  /// [tableColumnsFor]（窗口宽 − 实际栏宽）。
+  bool tableColumnsAt(double contentWidth, {double? minContentWidth}) =>
+      isDesktopPlatform &&
+      contentWidth >= (minContentWidth ?? TrackRowColumns.minWidth);
 
   /// 资料库渠道竖栏（内容宽语义）：桌面平台 + 内容宽 ≥ [Breakpoints.desktop]。
   ///
@@ -104,5 +130,6 @@ class DesktopLayout extends InheritedWidget {
   @override
   bool updateShouldNotify(DesktopLayout oldWidget) =>
       isDesktopPlatform != oldWidget.isDesktopPlatform ||
-      windowWidth != oldWidget.windowWidth;
+      windowWidth != oldWidget.windowWidth ||
+      railWidth != oldWidget.railWidth;
 }

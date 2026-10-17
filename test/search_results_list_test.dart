@@ -219,6 +219,19 @@ void main() {
       expect(find.text('Album'), findsNWidgets(3));
       expect(find.text('3:05'), findsNWidgets(3));
 
+      // 表格档单行行高（M3E minHeight 56）：行高与列表 itemExtent 同源。
+      final rowContext = tester.element(find.byType(TrackRow).first);
+      expect(tester.getSize(find.byType(TrackRow).first).height, 56);
+      expect(
+        tester
+            .widget<SliverFixedExtentList>(
+              find.byType(SliverFixedExtentList),
+            )
+            .itemExtent,
+        TrackRow.extentOf(rowContext, tableColumns: true) +
+            TrackRow.gapOf(rowContext),
+      );
+
       // 表头存在的意义就是与列对齐：三列左缘必须逐列相同。
       expect(
         tester.getTopLeft(find.text('Artist a')).dx,
@@ -250,13 +263,26 @@ void main() {
   });
 
   testWidgets(
-    '桌面窄窗口（< 900）：不渲染表头',
+    '桌面窄窗口（内容宽 < 720）：不渲染表头，行高回落双行档',
     (tester) async {
       await pumpSection(tester, width: 800);
       await runSearch(tester);
 
       expect(find.byType(TrackTableHeader), findsNothing);
       expect(find.text('Artist a'), findsOneWidget);
+
+      // 非表格档：双行行高（M3E twoLineHeight 72），itemExtent 同源。
+      final rowContext = tester.element(find.byType(TrackRow).first);
+      expect(tester.getSize(find.byType(TrackRow).first).height, 72);
+      expect(
+        tester
+            .widget<SliverFixedExtentList>(
+              find.byType(SliverFixedExtentList),
+            )
+            .itemExtent,
+        TrackRow.extentOf(rowContext, tableColumns: false) +
+            TrackRow.gapOf(rowContext),
+      );
     },
     variant: TargetPlatformVariant.only(TargetPlatform.linux),
   );

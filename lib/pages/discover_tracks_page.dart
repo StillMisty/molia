@@ -30,7 +30,7 @@ typedef DiscoverTracksLoader = Future<DiscoverDetail> Function(int page);
 /// - 头部：封面、名称、作者 / 播放量 / 曲目数、简介；
 /// - 曲目：播放全部 / 单曲播放 / 收藏 / 加入列表。
 ///
-/// 性能：曲目列表懒构建 + 固定行高（[TrackRow.extent] + 行距），
+/// 性能：曲目列表懒构建 + 固定行高（`TrackRow.extentOf` + 行距），
 /// 滚动接近底部时自动加载下一页（无限滚动）；平台忽略分页或已到尾部时
 /// 自动停止，失败保留底部重试按钮（不自动重试）。
 ///
@@ -134,9 +134,8 @@ class _DiscoverTracksPageState extends State<DiscoverTracksPage> {
     context.read<DiscoverProvider>().playTracks(
           tracks,
           index,
-          contextName: (info != null && info.name.isNotEmpty)
-              ? info.name
-              : widget.title,
+          contextName:
+              (info != null && info.name.isNotEmpty) ? info.name : widget.title,
         );
   }
 
@@ -150,9 +149,8 @@ class _DiscoverTracksPageState extends State<DiscoverTracksPage> {
     await context.read<DiscoverProvider>().playTracks(
           tracks,
           _shuffleRandom.nextInt(tracks.length),
-          contextName: (info != null && info.name.isNotEmpty)
-              ? info.name
-              : widget.title,
+          contextName:
+              (info != null && info.name.isNotEmpty) ? info.name : widget.title,
           mode: PlayMode.shuffle,
         );
   }
@@ -168,13 +166,14 @@ class _DiscoverTracksPageState extends State<DiscoverTracksPage> {
       return;
     }
     try {
-      final result = await context.read<DiscoverProvider>().importDetailToLibrary(
-            DiscoverDetail(
-              info: detail.info,
-              tracks: List<DiscoverTrack>.of(tracks),
-            ),
-            fallbackName: widget.title,
-          );
+      final result =
+          await context.read<DiscoverProvider>().importDetailToLibrary(
+                DiscoverDetail(
+                  info: detail.info,
+                  tracks: List<DiscoverTrack>.of(tracks),
+                ),
+                fallbackName: widget.title,
+              );
       if (!mounted) return;
       M3ESnackbar.show(
         context,
@@ -249,73 +248,72 @@ class _DiscoverTracksPageState extends State<DiscoverTracksPage> {
     }
     final cardList = M3ETheme.of(context).listTheme.cardList;
     final horizontalPadding = context.horizontalPadding;
-    final layout = DesktopLayout.of(context);
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        final tableColumns = layout.tableColumnsAt(constraints.maxWidth);
-        return Scrollbar(
+    // 表格列判定用窗口宽 − 实际栏宽（判据唯一在 DesktopLayout）；行高按档
+    // 取 M3E 列表 token（表格单行 56 / 非表格双行 72）。
+    final tableColumns = DesktopLayout.of(context).tableColumns;
+    return Scrollbar(
+      controller: _listController,
+      thumbVisibility: true,
+      interactive: true,
+      child: NotificationListener<ScrollNotification>(
+        onNotification: _onScroll,
+        child: CustomScrollView(
           controller: _listController,
-          thumbVisibility: true,
-          interactive: true,
-          child: NotificationListener<ScrollNotification>(
-            onNotification: _onScroll,
-            child: CustomScrollView(
-              controller: _listController,
-              slivers: [
-                SliverToBoxAdapter(
-                  child: _buildHeader(context, detail, tracks.length),
-                ),
-                // 表头钉在滚动视口顶部（封面头部滚走后列标题仍在），与行内
-                // 列同宽同左缘；表面色遮挡滚过其下的行。
-                if (tableColumns)
-                  SliverPersistentHeader(
-                    pinned: true,
-                    delegate: _PinnedTableHeaderDelegate(
-                      extent: TrackTableHeader.extentOf(context),
-                      background: Theme.of(context).colorScheme.surface,
-                      horizontalPadding: horizontalPadding,
-                    ),
-                  ),
-                SliverPadding(
-                  padding: EdgeInsets.symmetric(horizontal: horizontalPadding),
-                  sliver: SliverFixedExtentList.builder(
-                    // 行高 + 行距：固定 extent，长歌单滚动条拖动一次定位。
-                    itemExtent: TrackRow.extent + cardList.gap,
-                    itemCount: tracks.length,
-                    itemBuilder: (context, index) {
-                      final isLast = index == tracks.length - 1;
-                      final track = tracks[index];
-                      return Column(
-                        children: [
-                          DiscoverTrackTile(
-                            track: track,
-                            position:
-                                calculateCardPosition(index, tracks.length),
-                            columns: tableColumns
-                                ? TrackRowColumns(
-                                    artist: track.artist,
-                                    album: track.album,
-                                    duration:
-                                        durationText(track.durationMs) ?? '',
-                                  )
-                                : null,
-                            onTap: () => _playFrom(index),
-                          ),
-                          if (!isLast) SizedBox(height: cardList.gap),
-                        ],
-                      );
-                    },
-                  ),
-                ),
-                if (state.isLoadingMore || state.loadMoreFailed)
-                  SliverToBoxAdapter(
-                      child: _buildLoadMoreFooter(context, l10n, state)),
-                const SliverToBoxAdapter(child: SizedBox(height: 16)),
-              ],
+          slivers: [
+            SliverToBoxAdapter(
+              child: _buildHeader(context, detail, tracks.length),
             ),
-          ),
-        );
-      },
+            // 表头钉在滚动视口顶部（封面头部滚走后列标题仍在），与行内
+            // 列同宽同左缘；表面色遮挡滚过其下的行。
+            if (tableColumns)
+              SliverPersistentHeader(
+                pinned: true,
+                delegate: _PinnedTableHeaderDelegate(
+                  extent: TrackTableHeader.extentOf(context),
+                  background: Theme.of(context).colorScheme.surface,
+                  horizontalPadding: horizontalPadding,
+                ),
+              ),
+            SliverPadding(
+              padding: EdgeInsets.symmetric(horizontal: horizontalPadding),
+              sliver: SliverFixedExtentList.builder(
+                // 行高 + 行距：固定 extent，长歌单滚动条拖动一次定位。
+                itemExtent: TrackRow.extentOf(
+                      context,
+                      tableColumns: tableColumns,
+                    ) +
+                    cardList.gap,
+                itemCount: tracks.length,
+                itemBuilder: (context, index) {
+                  final isLast = index == tracks.length - 1;
+                  final track = tracks[index];
+                  return Column(
+                    children: [
+                      DiscoverTrackTile(
+                        track: track,
+                        position: calculateCardPosition(index, tracks.length),
+                        columns: tableColumns
+                            ? TrackRowColumns(
+                                artist: track.artist,
+                                album: track.album,
+                                duration: durationText(track.durationMs) ?? '',
+                              )
+                            : null,
+                        onTap: () => _playFrom(index),
+                      ),
+                      if (!isLast) SizedBox(height: cardList.gap),
+                    ],
+                  );
+                },
+              ),
+            ),
+            if (state.isLoadingMore || state.loadMoreFailed)
+              SliverToBoxAdapter(
+                  child: _buildLoadMoreFooter(context, l10n, state)),
+            const SliverToBoxAdapter(child: SizedBox(height: 16)),
+          ],
+        ),
+      ),
     );
   }
 

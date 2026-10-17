@@ -119,8 +119,7 @@ void main() {
     expect(TrackRow.gapOf(tester.element(find.byType(TrackRow))), 2);
   });
 
-  testWidgets('行尾元信息贴行右缘（回归：Flexible 曾与标题平分剩余宽度）',
-      (tester) async {
+  testWidgets('行尾元信息贴行右缘（回归：Flexible 曾与标题平分剩余宽度）', (tester) async {
     await tester.pumpWidget(
       MaterialApp(
         home: Scaffold(
@@ -152,8 +151,7 @@ void main() {
     expect(titleRight, trailingRect.left - 12);
   });
 
-  testWidgets('逐名可点的歌手：点击链接回调，不触发行播放；无回调的名字不可点',
-      (tester) async {
+  testWidgets('逐名可点的歌手：点击链接回调，不触发行播放；无回调的名字不可点', (tester) async {
     var rowTaps = 0;
     final tapped = <String>[];
     await tester.pumpWidget(
@@ -193,7 +191,7 @@ void main() {
     expect(find.text('Artist'), findsOneWidget);
   });
 
-  testWidgets('宽屏表格列：三列按常量列宽渲染，副标题与歌手链接让位', (tester) async {
+  testWidgets('宽屏表格列：三列按规范列宽渲染，副标题与歌手链接让位', (tester) async {
     await tester.pumpWidget(
       MaterialApp(
         home: Scaffold(
@@ -218,29 +216,148 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    // 三列文本各自出现（列宽与表头共用的常量，见 track_table_header.dart）。
+    // 三列文本各自出现（列宽来自行与表头共用的规范，见 track_table_header.dart）。
     expect(find.text('Col Artist'), findsOneWidget);
     expect(find.text('Col Album'), findsOneWidget);
     expect(find.text('3:05'), findsOneWidget);
     expect(
       tester.getSize(find.text('Col Artist')).width,
-      TrackRowColumns.artistWidth,
+      TrackRowColumnSpec.standard.artistWidth,
     );
     expect(
       tester.getSize(find.text('Col Album')).width,
-      TrackRowColumns.albumWidth,
+      TrackRowColumnSpec.standard.albumWidth,
     );
     expect(
       tester.getSize(find.text('3:05')).width,
-      TrackRowColumns.durationWidth,
+      TrackRowColumnSpec.standard.durationWidth,
     );
 
     // 标题格只显示标题：副标题与逐名歌手链接不再渲染（让位给独立列）。
     expect(find.text('Row Artist'), findsNothing);
     expect(find.text('Link A'), findsNothing);
 
-    // 密度不变：表格模式不改变固定行高。
+    // 表格档是单行：行高取 M3E 列表 token `minHeight`（56，不再是双行 72）。
+    expect(
+      tester.getSize(find.byType(TrackRow)).height,
+      TrackRow.extentOf(
+        tester.element(find.byType(TrackRow)),
+        tableColumns: true,
+      ),
+    );
+    expect(tester.getSize(find.byType(TrackRow)).height, 56, reason: '单行档');
+  });
+
+  testWidgets('行高两档取 M3E 列表 token：表格 56 / 非表格 72', (tester) async {
+    await pumpRow(tester);
+    final context = tester.element(find.byType(TrackRow));
+
+    expect(TrackRow.extentOf(context, tableColumns: true), 56);
+    expect(TrackRow.extentOf(context, tableColumns: false), 72);
+    expect(
+      TrackRow.extentOf(context, tableColumns: true),
+      M3ETheme.of(context).listTheme.item.minHeight,
+    );
+    expect(
+      TrackRow.extentOf(context, tableColumns: false),
+      M3ETheme.of(context).listTheme.item.twoLineHeight,
+    );
+
+    // 常量为「无表格档」列表保留：值必须与双行 token 同值（防两处漂移）。
+    expect(TrackRow.extent, 72);
+    expect(TrackRow.extent, M3EListItemTheme.defaults.twoLineHeight);
+
+    // 实际渲染高度：非表格行 = 双行 token。
     expect(tester.getSize(find.byType(TrackRow)).height, TrackRow.extent);
+  });
+
+  testWidgets('表格模式：标题列宽度受规范上限约束，右侧列缘不动', (tester) async {
+    Future<void> pump(String title) async {
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: Center(
+              child: SizedBox(
+                width: 1200,
+                child: TrackRow(
+                  // 长到一定超出上限，短到不触发上限。
+                  title: title,
+                  columns: const TrackRowColumns(
+                    artist: 'Col Artist',
+                    album: 'Col Album',
+                    duration: '3:05',
+                  ),
+                  position: M3ECardPosition.single,
+                  onTap: () {},
+                ),
+              ),
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+    }
+
+    final cap = TrackRowColumnSpec.standard.titleMaxWidth;
+    final longTitle = 'T' * 400;
+    await pump(longTitle);
+    final longRect = tester.getRect(find.text(longTitle));
+    expect(longRect.width, lessThanOrEqualTo(cap), reason: '标题不超过规范上限');
+
+    // 上限不挤动右侧固定列：标题格仍吃满剩余宽度（表头列缘因此不用重算）。
+    final artistX = tester.getTopLeft(find.text('Col Artist')).dx;
+    await pump('短标题');
+    expect(tester.getTopLeft(find.text('Col Artist')).dx, artistX);
+  });
+
+  testWidgets('播放时间列：规范开启时才渲染，列宽取规范', (tester) async {
+    Future<void> pump(TrackRowColumnSpec spec) async {
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: Center(
+              child: TrackRow(
+                title: 'Title',
+                columns: TrackRowColumns(
+                  spec: spec,
+                  artist: 'Col Artist',
+                  album: 'Col Album',
+                  time: '10-18 21:03',
+                  duration: '3:05',
+                ),
+                position: M3ECardPosition.single,
+                onTap: () {},
+              ),
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+    }
+
+    // 默认档没有这一列：时间文案不渲染，时长列宽不变。
+    await pump(TrackRowColumnSpec.standard);
+    expect(find.text('10-18 21:03'), findsNothing);
+    expect(
+      tester.getSize(find.text('3:05')).width,
+      TrackRowColumnSpec.standard.durationWidth,
+    );
+
+    // 历史档：时间在专辑与时长之间，列宽取规范。
+    await pump(TrackRowColumnSpec.history);
+    expect(find.text('10-18 21:03'), findsOneWidget);
+    expect(
+      tester.getSize(find.text('10-18 21:03')).width,
+      TrackRowColumnSpec.history.timeWidth,
+    );
+    expect(
+      tester.getTopLeft(find.text('10-18 21:03')).dx,
+      greaterThan(tester.getTopLeft(find.text('Col Album')).dx),
+    );
+    expect(
+      tester.getTopLeft(find.text('10-18 21:03')).dx,
+      lessThan(tester.getTopLeft(find.text('3:05')).dx),
+    );
   });
 
   testWidgets('表格模式：行尾槽固定宽，列左缘不随行尾内容漂移', (tester) async {
@@ -438,4 +555,57 @@ void main() {
     },
     variant: TargetPlatformVariant.only(TargetPlatform.linux),
   );
+
+  group('列规范', () {
+    const specs = [TrackRowColumnSpec.standard, TrackRowColumnSpec.history];
+
+    test('预设列宽对蓝图：默认一档 200/200/64，历史档 180/180/120/64', () {
+      const standard = TrackRowColumnSpec.standard;
+      expect(standard.titleMaxWidth, 480);
+      expect(standard.artistWidth, 200);
+      expect(standard.albumWidth, 200);
+      expect(standard.durationWidth, 64);
+      expect(standard.hasTimeColumn, isFalse);
+      expect(standard.minContentWidth, TrackRowColumns.minWidth);
+
+      const history = TrackRowColumnSpec.history;
+      expect(history.titleMaxWidth, 400);
+      expect(history.artistWidth, 180);
+      expect(history.albumWidth, 180);
+      expect(history.timeWidth, 120);
+      expect(history.durationWidth, 64);
+      expect(history.hasTimeColumn, isTrue);
+    });
+
+    test('唯一阈值：默认一档的规范最小值就是 TrackRowColumns.minWidth', () {
+      expect(TrackRowColumns.minWidth, 720);
+      expect(TrackRowColumnSpec.standard.minContentWidth, 720);
+      expect(TrackRow.defaultCoverSize, 44);
+      expect(TrackRowColumns.trailingSlotWidth, 56);
+    });
+
+    test('最小内容宽容得下自己的固定列（阈值处不横向溢出）', () {
+      const item = M3EListItemTheme.defaults;
+      for (final spec in specs) {
+        // 封面之后的槽位：标题 / 歌手 / 专辑 /（时间）/ 时长 / 行尾。
+        final cells = spec.hasTimeColumn ? 6.0 : 5.0;
+        final columns = spec.artistWidth +
+            spec.albumWidth +
+            spec.durationWidth +
+            (spec.hasTimeColumn ? spec.timeWidth : 0) +
+            TrackRowColumns.trailingSlotWidth;
+        // 行内网格：封面位 + 每个槽前的列间距（表头同源复刻）。
+        final grid = TrackRow.defaultCoverSize + cells * item.gap;
+        // 判定输入是「内容宽」：行表面内边距 + 桌面页横向留白（32×2，见
+        // responsive.dart 的 browse 档）也在内容宽里。
+        expect(
+          spec.minContentWidth,
+          greaterThanOrEqualTo(
+            grid + columns + item.horizontalPadding * 2 + 32 * 2,
+          ),
+          reason: '阈值低于固定列需求时，表格在阈值处就会溢出',
+        );
+      }
+    });
+  });
 }

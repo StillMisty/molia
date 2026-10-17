@@ -246,7 +246,7 @@ void main() {
     );
   }, variant: TargetPlatformVariant.only(TargetPlatform.linux));
 
-  testWidgets('桌面窄窗口（< 900）：不渲染表头，行保持单列', (tester) async {
+  testWidgets('桌面窄窗口（内容宽 < 720）：不渲染表头，行保持单列', (tester) async {
     await pumpPage(
       tester,
       (page) async => richDetail(page),
@@ -257,6 +257,25 @@ void main() {
     expect(find.text('专辑'), findsNothing);
     expect(find.text('专辑 0'), findsNothing, reason: '单列行不展示专辑');
     expect(find.text('歌手 0'), findsOneWidget, reason: '副标题仍是歌手');
+  }, variant: TargetPlatformVariant.only(TargetPlatform.linux));
+
+  testWidgets('桌面宽屏：行高与列表 itemExtent 同源（表格档 56）', (tester) async {
+    await pumpPage(
+      tester,
+      (page) async => richDetail(page),
+      size: const Size(1200, 900),
+    );
+
+    final rowContext = tester.element(find.byType(TrackRow).first);
+    expect(tester.getSize(find.byType(TrackRow).first).height, 56);
+    expect(
+      tester
+          .widget<SliverFixedExtentList>(find.byType(SliverFixedExtentList))
+          .itemExtent,
+      TrackRow.extentOf(rowContext, tableColumns: true) +
+          TrackRow.gapOf(rowContext),
+      reason: '行高 + 卡片行距（列表自带行距补白）',
+    );
   }, variant: TargetPlatformVariant.only(TargetPlatform.linux));
 
   testWidgets('非桌面平台：宽窗口也不渲染表头（行保持单列）', (tester) async {
