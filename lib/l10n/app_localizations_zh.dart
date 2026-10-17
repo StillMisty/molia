@@ -879,6 +879,18 @@ class AppLocalizationsZh extends AppLocalizations {
   String get sortDefaultOrder => '默认顺序';
 
   @override
+  String get tableColumnArtist => '艺术家';
+
+  @override
+  String get tableColumnAlbum => '专辑';
+
+  @override
+  String get tableColumnDuration => '时长';
+
+  @override
+  String get viewAllResults => '查看全部结果';
+
+  @override
   String get sortByTitle => '按标题';
 
   @override

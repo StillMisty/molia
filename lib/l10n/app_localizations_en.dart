@@ -915,6 +915,18 @@ class AppLocalizationsEn extends AppLocalizations {
   String get sortDefaultOrder => 'Default order';
 
   @override
+  String get tableColumnArtist => 'Artist';
+
+  @override
+  String get tableColumnAlbum => 'Album';
+
+  @override
+  String get tableColumnDuration => 'Duration';
+
+  @override
+  String get viewAllResults => 'View all results';
+
+  @override
   String get sortByTitle => 'Title';
 
   @override

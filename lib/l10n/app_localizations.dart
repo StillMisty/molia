@@ -1742,6 +1742,30 @@ abstract class AppLocalizations {
   /// **'Default order'**
   String get sortDefaultOrder;
 
+  /// No description provided for @tableColumnArtist.
+  ///
+  /// In en, this message translates to:
+  /// **'Artist'**
+  String get tableColumnArtist;
+
+  /// No description provided for @tableColumnAlbum.
+  ///
+  /// In en, this message translates to:
+  /// **'Album'**
+  String get tableColumnAlbum;
+
+  /// No description provided for @tableColumnDuration.
+  ///
+  /// In en, this message translates to:
+  /// **'Duration'**
+  String get tableColumnDuration;
+
+  /// No description provided for @viewAllResults.
+  ///
+  /// In en, this message translates to:
+  /// **'View all results'**
+  String get viewAllResults;
+
   /// No description provided for @sortByTitle.
   ///
   /// In en, this message translates to:
