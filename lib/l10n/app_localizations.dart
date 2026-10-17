@@ -4701,6 +4701,12 @@ abstract class AppLocalizations {
   /// **'Camera unavailable on this device — paste the code instead.'**
   String get syncPairingCameraUnavailable;
 
+  /// No description provided for @syncPairingModelUnavailable.
+  ///
+  /// In en, this message translates to:
+  /// **'The scanner needs to download its recognition model first (requires access to Google services)'**
+  String get syncPairingModelUnavailable;
+
   /// No description provided for @syncPairingUsePaste.
   ///
   /// In en, this message translates to:

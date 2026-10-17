@@ -88,6 +88,18 @@ void main() {
     engine.dispose();
   });
 
+  /// 扫码入口可用性：默认不可用（widget 测试不触达平台通道；探测的 2s
+  /// 超时计时器会让「widget 树已销毁但定时器未走完」断言失败）。
+  /// 具体用例（平台 × GMS 矩阵）在测试内按需覆盖。
+  setUp(() {
+    SyncPairingScanner.debugAvailabilityOverride = () async => false;
+  });
+
+  tearDown(() {
+    SyncPairingScanner.debugAvailabilityOverride = null;
+    SyncPairingScanner.debugPlatformOverride = null;
+  });
+
   Future<void> pumpPage(WidgetTester tester) async {
     tester.view.physicalSize = const Size(1200, 2400);
     tester.view.devicePixelRatio = 1.0;
@@ -496,23 +508,43 @@ void main() {
     expect(find.byKey(const Key('settingsSyncPeer-devB')), findsOneWidget);
   });
 
-  testWidgets('添加设备弹层：Android / iOS 构建扫码入口，桌面只给粘贴', (tester) async {
-    SyncPairingScanner.debugPlatformOverride = TargetPlatform.android;
-    addTearDown(() => SyncPairingScanner.debugPlatformOverride = null);
+  testWidgets('添加设备弹层：扫码入口 = 平台 × GMS（无 GMS / 桌面隐藏，只给粘贴）', (tester) async {
+    addTearDown(() {
+      SyncPairingScanner.debugPlatformOverride = null;
+      SyncPairingScanner.debugAvailabilityOverride = null;
+    });
+    Future<void> openAndCheck({required bool expected}) async {
+      await openAddDialog(tester);
+      expect(
+        find.byKey(const Key('settingsSyncPairingScanButton')),
+        expected ? findsOneWidget : findsNothing,
+        reason: '平台=${SyncPairingScanner.debugPlatformOverride} '
+            '可用=${SyncPairingScanner.debugAvailabilityOverride != null}',
+      );
+      await tester.tap(find.text('Cancel'));
+      await tester.pumpAndSettle();
+    }
+
     await provider.setEnabled(true);
     await pumpPage(tester);
-    await openAddDialog(tester);
-    expect(
-        find.byKey(const Key('settingsSyncPairingScanButton')), findsOneWidget);
-    await tester.tap(find.text('Cancel'));
-    await tester.pumpAndSettle();
 
+    // Android + GMS：显示。
+    SyncPairingScanner.debugPlatformOverride = TargetPlatform.android;
+    SyncPairingScanner.debugAvailabilityOverride = () async => true;
+    await openAndCheck(expected: true);
+
+    // Android 无 GMS（AOSP / 无 Play 服务）：隐藏入口，不给死胡同。
+    SyncPairingScanner.debugAvailabilityOverride = () async => false;
+    await openAndCheck(expected: false);
+
+    // iOS：系统 Vision，不依赖 GMS，恒显示。
+    SyncPairingScanner.debugPlatformOverride = TargetPlatform.iOS;
+    SyncPairingScanner.debugAvailabilityOverride = null;
+    await openAndCheck(expected: true);
+
+    // Linux：平台不支持，隐藏。
     SyncPairingScanner.debugPlatformOverride = TargetPlatform.linux;
-    await openAddDialog(tester);
-    expect(
-        find.byKey(const Key('settingsSyncPairingScanButton')), findsNothing);
-    await tester.tap(find.text('Cancel'));
-    await tester.pumpAndSettle();
+    await openAndCheck(expected: false);
   });
 
   testWidgets('配对码前缀但内容损坏：报「配对码无效」并按码处理（不落成地址）', (tester) async {

@@ -264,7 +264,9 @@
   **配对码**（`SyncPairingCode`，`molia-pair:1:<base64url(json)>`，含设备名 /
   设备 id / 口令 / 地址候选 `[[host, probePort], …]` / HTTP 端点端口）支持
   复制、二维码（`qr` 纯 Dart + CustomPaint 自绘）与移动端扫码
-  （`mobile_scanner`，权限由插件自管）；候选地址的探测端口按其**地址族**取
+  （`mobile_scanner`，权限由插件自管；入口 = Android/iOS 平台 × GMS 可用性
+  ——Android 走 unbundled ML Kit，无 GMS 隐藏入口，模型下载失败给「改用
+  粘贴」）；候选地址的探测端口按其**地址族**取
   （v4 / v6 可独立降级到不同端口，设置页端口行同值折叠、不同值按族列出），
   口令随码传递是刻意取舍——信任模型就是
   口令即信任根，弹层明确警告「等同授权对方读取全部同步数据」。

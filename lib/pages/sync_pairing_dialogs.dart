@@ -375,6 +375,24 @@ class _SyncAddPeerDialogState extends State<SyncAddPeerDialog> {
   bool _duplicate = false;
   bool _busy = false;
 
+  /// 扫码入口可用性（平台 × GMS，见 [SyncPairingScanner.isAvailable]）。
+  ///
+  /// 探测中与不可用都不构建按钮：不做 loading 占位（闪动比没有按钮更糟），
+  /// 也不给「无 GMS 设备」留一个点开才知道不可用的死胡同入口。
+  bool _scanAvailable = false;
+
+  @override
+  void initState() {
+    super.initState();
+    unawaited(_probeScanAvailability());
+  }
+
+  Future<void> _probeScanAvailability() async {
+    final available = await SyncPairingScanner.isAvailable();
+    if (!mounted || available == _scanAvailable) return;
+    setState(() => _scanAvailable = available);
+  }
+
   @override
   void dispose() {
     _host.dispose();
@@ -579,7 +597,7 @@ class _SyncAddPeerDialogState extends State<SyncAddPeerDialog> {
                 label: l10n.syncPeerHostLabel,
                 placeholder: l10n.syncPeerHostHint,
                 leading: const Icon(Icons.lan_rounded),
-                trailing: SyncPairingScanner.isSupported
+                trailing: _scanAvailable
                     ? M3EIconButton(
                         key: const Key('settingsSyncPairingScanButton'),
                         icon: const Icon(Icons.qr_code_scanner_rounded),

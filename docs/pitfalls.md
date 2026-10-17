@@ -352,3 +352,25 @@
     ③ 接触成功后名册出现设备行，点开可看端点端口 / 设备 id / 删除；④ 配对码
     里带多个地址时，未认领的条目在名册折叠成一行「候选地址 N 个」，点开可
     逐个查看与删除——「尚未接触」只是还没碰上，对端上线后会自动重试。
+48. **扫码走 unbundled ML Kit：无 GMS 隐藏入口，模型下载失败给「改用粘贴」**：
+    `mobile_scanner` 在 Android 上按 `android/gradle.properties` 的
+    `dev.steenbakker.mobile_scanner.useUnbundled=true` 选
+    `com.google.android.gms:play-services-mlkit-barcode-scanning:18.3.1`
+    （AAR 0.5MB），而不是 bundled 的
+    `com.google.mlkit:barcode-scanning:17.3.0`（AAR 9.9MB，arm64 `.so` 4.72MB）
+    ——扫码只是可选的配对入口，不值得让所有安装包变胖；iOS 不受影响（darwin
+    实现走系统 Vision/AVFoundation）。代价与处置：
+    - **无 GMS 设备**（AOSP / 部分国产 ROM）不显示扫码入口：
+      `PlayServicesAvailability` 经自有通道 `top.stillmisty.molia/play_services`
+      （原生 `GoogleApiAvailability.isGooglePlayServicesAvailable == SUCCESS`）
+      门控；探测中与不可用都不构建按钮（不给死胡同、也不做 loading 占位）。
+      false **不缓存**（用户会话中装了 Play 服务，重开弹层应出现入口），
+      true 会话内缓存；
+    - **有 GMS 但模型首次下载失败**（无网络 / 访问不了 Google 服务）：扫码页
+      按 `scanErrorKind` 识别为 `modelUnavailable`，给「重试 / 改用粘贴」；
+    - 排查「没有扫码按钮」先查 GMS，再查平台判定（`SyncPairingScanner`）；
+      改回 bundled 只需删掉那行 gradle 属性（包体 +9.4MB 量级）。
+    另：`PlayServicesChannelHandler` 用的 `play-services-base` 由
+    `play-services-mlkit-barcode-scanning` 传递带入；若某天 Gradle 解析不到
+    `GoogleApiAvailability`，在 `android/app/build.gradle*` 显式补
+    `implementation("com.google.android.gms:play-services-base:18.0.1")`。

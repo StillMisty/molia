@@ -468,8 +468,10 @@
   `p` 口令 / `a` 地址候选 `[[host, probePort], …]` / `h` HTTP 端点端口；
   `probePort` 按候选地址的族取（v4 / v6 可独立降级到不同端口，拿错族的端口
   打不通）。可复制、可出二维码（`qr` 纯 Dart 自绘）、移动端可扫
-  （`mobile_scanner`）。**口令随码传递 = 等同授权**（信任模型就是口令即信任
-  根），分享弹层明确警告。
+  （`mobile_scanner`）；扫码入口 = Android / iOS × GMS 可用性——Android 走
+  **unbundled** ML Kit（模型由 Play 服务按需下载，无 GMS 不显示入口），
+  模型下载失败给「重试 / 改用粘贴」。**口令随码传递 = 等同授权**（信任模型
+  就是口令即信任根），分享弹层明确警告。
 - **Local endpoints（本机地址列表）** — `local_endpoints_service.dart`：
   枚举本机可路由地址（排除回环 / link-local / zone）并私网优先排序；过滤
   判定 `isRoutablePeerAddress`（`lib/utils/peer_address.dart`）与服务 / 传输

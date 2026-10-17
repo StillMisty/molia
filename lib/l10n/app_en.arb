@@ -1366,6 +1366,7 @@
   "syncPairingScanTitle": "Scan pairing code",
   "syncPairingCameraDenied": "Camera permission denied. Open system settings, or go back and paste the code instead.",
   "syncPairingCameraUnavailable": "Camera unavailable on this device — paste the code instead.",
+  "syncPairingModelUnavailable": "The scanner needs to download its recognition model first (requires access to Google services)",
   "syncPairingUsePaste": "Paste instead",
   "syncLocalAddressCopied": "Address copied",
   "syncLocalAddressesEmptyTitle": "No routable address",

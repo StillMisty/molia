@@ -2592,6 +2592,10 @@ class AppLocalizationsEn extends AppLocalizations {
       'Camera unavailable on this device — paste the code instead.';
 
   @override
+  String get syncPairingModelUnavailable =>
+      'The scanner needs to download its recognition model first (requires access to Google services)';
+
+  @override
   String get syncPairingUsePaste => 'Paste instead';
 
   @override

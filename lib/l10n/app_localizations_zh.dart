@@ -2485,6 +2485,9 @@ class AppLocalizationsZh extends AppLocalizations {
   String get syncPairingCameraUnavailable => '本机相机不可用，请改用粘贴配对码。';
 
   @override
+  String get syncPairingModelUnavailable => '首次扫码需要下载识别模型（需可访问 Google 服务）';
+
+  @override
   String get syncPairingUsePaste => '改用粘贴';
 
   @override

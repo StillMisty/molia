@@ -1029,6 +1029,7 @@
   "syncPairingScanTitle": "扫一扫配对码",
   "syncPairingCameraDenied": "相机权限被拒。可去系统设置开启，或返回上一页改用粘贴。",
   "syncPairingCameraUnavailable": "本机相机不可用，请改用粘贴配对码。",
+  "syncPairingModelUnavailable": "首次扫码需要下载识别模型（需可访问 Google 服务）",
   "syncPairingUsePaste": "改用粘贴",
   "syncLocalAddressCopied": "已复制地址",
   "syncLocalAddressesEmptyTitle": "没有可路由地址",
