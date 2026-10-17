@@ -1,8 +1,16 @@
 import 'package:cupertino_ui/cupertino_ui.dart' show CupertinoPageTransitionsBuilder;
+import 'package:flutter/foundation.dart' show TargetPlatform, defaultTargetPlatform;
 import 'package:flutter/services.dart' show SystemUiOverlayStyle;
 import 'package:material_ui/material_ui.dart';
 
 import 'app_semantic_colors.dart';
+
+/// Windows 未自定义字体时的默认族与回退栈（详见 [buildAppThemeData]）。
+const String _windowsDefaultFontFamily = 'Microsoft YaHei UI';
+const List<String> _windowsDefaultFontFallback = <String>[
+  'Microsoft YaHei',
+  'Segoe UI',
+];
 
 /// 应用 ThemeData 的唯一构建入口：`ThemeProvider` 只产出 ColorScheme，
 /// 其余组件默认值/语义扩展在这里集中展开，避免 main.dart 与各页面
@@ -11,15 +19,26 @@ import 'app_semantic_colors.dart';
 /// 只做与配色契约相关的全局配置；具体组件的颜色覆写应优先靠 M3E 默认值。
 /// [fontFamily] 为设备字体族名（设置页「应用字体」），null 时用系统默认字体；
 /// 未覆盖的字形（如 CJK）由引擎逐字回退系统字体。
+/// [platform] 仅用于测试注入（默认 [defaultTargetPlatform]）。
 ThemeData buildAppThemeData(
   ColorScheme scheme, {
   SystemUiOverlayStyle? systemUiOverlayStyle,
   String? fontFamily,
+  TargetPlatform? platform,
 }) {
+  // Windows 未自定义字体时显式给「微软雅黑」字体栈：引擎默认从 Segoe UI
+  // 起手（Material 的 Redmond 排版），中文经回退链拿到的不是系统 UI 字体
+  // （微软雅黑），与系统其它窗口观感不一致（用户反馈）。自定义字体优先，
+  // 其它平台保持引擎默认（其回退链已是系统 UI 字体）。
+  final effectivePlatform = platform ?? defaultTargetPlatform;
+  final useWindowsDefault =
+      fontFamily == null && effectivePlatform == TargetPlatform.windows;
   return ThemeData(
     colorScheme: scheme,
     useMaterial3: true,
-    fontFamily: fontFamily,
+    fontFamily: fontFamily ??
+        (useWindowsDefault ? _windowsDefaultFontFamily : null),
+    fontFamilyFallback: useWindowsDefault ? _windowsDefaultFontFallback : null,
     appBarTheme: AppBarTheme(systemOverlayStyle: systemUiOverlayStyle),
     // Android 页面过渡必须选框架的预测返回 builder：跟手预览只由它插入的
     // 手势 detector 提供，没有观察者接管时 `WidgetsBinding` 会把返回手势

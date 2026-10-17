@@ -93,6 +93,37 @@ void main() {
         isNot('Noto Sans CJK SC'),
       );
     });
+
+    test('Windows 未自定义字体时注入微软雅黑字体栈', () {
+      final data = buildAppThemeData(light, platform: TargetPlatform.windows);
+      expect(data.textTheme.bodyMedium?.fontFamily, 'Microsoft YaHei UI');
+      expect(
+        data.textTheme.bodyMedium?.fontFamilyFallback,
+        contains('Microsoft YaHei'),
+      );
+      // M3E 侧同步（typeScale 从 ThemeData.textTheme 映射）。
+      expect(
+        M3EThemeData.fromMaterial(data).typeScale.bodyMedium.fontFamily,
+        'Microsoft YaHei UI',
+      );
+
+      // 自定义字体优先：注入平台默认时不覆盖用户选择。
+      final custom = buildAppThemeData(
+        light,
+        fontFamily: 'Noto Sans CJK SC',
+        platform: TargetPlatform.windows,
+      );
+      expect(custom.textTheme.bodyMedium?.fontFamily, 'Noto Sans CJK SC');
+
+      // 其它平台保持引擎默认（不注入雅黑）。
+      expect(
+        buildAppThemeData(light, platform: TargetPlatform.linux)
+            .textTheme
+            .bodyMedium
+            ?.fontFamily,
+        isNot('Microsoft YaHei UI'),
+      );
+    });
   });
 
   group('AnimatedSchemeBuilder', () {
