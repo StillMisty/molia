@@ -820,6 +820,7 @@
   "syncDevicePassphraseTitle": "设备与口令",
   "syncPassphraseTitle": "同步口令",
   "syncPassphraseNotSet": "未设置",
+  "syncPassphraseSet": "口令已设置",
   "syncPassphraseTrustHint": "口令即信任根：持有者完全互信；怀疑泄露请重置。",
   "syncPassphraseCopy": "复制口令",
   "syncPassphraseReset": "重置口令",
@@ -832,6 +833,39 @@
   "syncSyncNow": "立即同步",
   "syncSyncing": "同步中…",
   "syncNever": "尚未同步",
+  "syncStatusSyncedPeers": "已与 {count} 台设备同步",
+  "@syncStatusSyncedPeers": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "syncRelativeJustNow": "刚刚",
+  "syncRelativeMinutes": "{count} 分钟前",
+  "@syncRelativeMinutes": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "syncRelativeHours": "{count} 小时前",
+  "@syncRelativeHours": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "syncRelativeDays": "{count} 天前",
+  "@syncRelativeDays": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
   "syncOutcomeOk": "同步完成",
   "syncOutcomeNoChanges": "无变化",
   "syncOutcomeNoPeers": "未发现对端",
@@ -890,9 +924,17 @@
   "syncPeerCount": "{count} 个对端",
   "syncFailedCount": "{count} 项失败",
   "syncBytes": "↓{inbound} ↑{outbound}",
-  "syncLastSyncAt": "上次 {time}",
   "syncRetry": "重试",
   "syncContentSection": "同步内容",
+  "syncContentAllOn": "全部类别",
+  "syncContentOffCount": "已关闭 {count} 项",
+  "@syncContentOffCount": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
   "syncCategoryPlaylists": "歌单与收藏",
   "syncCategorySources": "音源（脚本与配置）",
   "syncCategorySettings": "应用设置",
@@ -902,9 +944,7 @@
   "syncCategoryCredentials": "AI DJ 与凭证",
   "syncTransportSection": "传输方式",
   "syncLanTitle": "局域网直连",
-  "syncLanSubtitle": "同一 Wi-Fi 下设备直连，无需服务器",
   "syncWebdavTitle": "WebDAV / 云盘",
-  "syncWebdavSubtitle": "经你自备的 WebDAV 跨网络同步",
   "syncWebdavConfigTitle": "WebDAV 配置",
   "syncWebdavServer": "服务器地址",
   "syncWebdavUsername": "用户名",
@@ -916,17 +956,13 @@
   "syncTransportDisabled": "已关闭",
   "syncTransportNotConfigured": "未配置",
   "syncTransportStartFailed": "启动失败",
+  "syncLogTitle": "同步日志与诊断",
   "syncLogSection": "同步日志",
   "syncLogEmpty": "暂无记录",
   "syncLogFailed": "失败：{error}",
   "syncPeersTitle": "已配对设备",
   "syncPeersSection": "设备",
-  "syncPeersSubtitle": "本机 + {count} 台对端",
-  "syncPeersSubtitleEmpty": "尚无其它设备",
-  "syncPeersSubtitleWithLost": "本机 + {count} 台对端（{lost} 台已失联）",
-  "@syncPeersSubtitleWithLost": {
-    "placeholders": { "count": { "type": "int" }, "lost": { "type": "int" } }
-  },
+  "syncPeersSummaryEmpty": "暂无设备 · 局域网会自动发现",
   "syncPeersHint": "在其它设备输入同一口令即可加入。若长期发现不到设备，检查局域网传输是否可用（权限 / 网络隔离），或改用 WebDAV。",
   "syncPeerThisDevice": "本机 · {id}",
   "syncPeerLastSync": "最后同步 {time}",
@@ -1072,23 +1108,6 @@
   "syncPeerContactQueued": "设备已保存，稍后自动接触",
   "syncPeerContacting": "正在接触…",
   "syncLanPermissionPermanentSubtitle": "权限已被永久拒绝，请到系统设置开启「附近设备」权限",
-  "syncTransportNeverSucceeded": "尚无成功记录",
-  "syncTransportLastSuccessAt": "最后成功 {time}",
-  "@syncTransportLastSuccessAt": {
-    "placeholders": {
-      "time": {
-        "type": "String"
-      }
-    }
-  },
-  "syncLogViewAll": "查看全部日志（{count} 条）",
-  "@syncLogViewAll": {
-    "placeholders": {
-      "count": {
-        "type": "int"
-      }
-    }
-  },
   "syncLogHint": "最近几轮同步结果；失败行可点开查看原因与下一步",
   "settingsUpdateTitle": "关于与更新",
   "settingsUpdateSubtitle": "当前版本 {version}",

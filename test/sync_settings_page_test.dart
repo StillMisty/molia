@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter/services.dart';
@@ -16,6 +17,8 @@ import 'package:molia/data/sync/transport/local_network_permission.dart';
 import 'package:molia/domain/models/device_sync.dart';
 import 'package:molia/domain/ports/sync_transport.dart';
 import 'package:molia/l10n/app_localizations.dart';
+import 'package:molia/pages/sync_content_page.dart';
+import 'package:molia/pages/sync_device_page.dart';
 import 'package:molia/pages/sync_log_page.dart';
 import 'package:molia/pages/sync_settings_page.dart';
 import 'package:molia/providers/sync_provider.dart';
@@ -25,7 +28,7 @@ import 'package:molia/widgets/settings/settings_tiles.dart';
 
 import 'support/sync_test_support.dart';
 
-/// 同步设置页冒烟：开关生成口令、类别分区、传输开关与日志区。
+/// 同步设置页信息架构：首屏只留结论与主操作（≤ 9 行），明细下沉子页。
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
@@ -99,15 +102,32 @@ void main() {
     await tester.pumpAndSettle();
   }
 
-  testWidgets('默认关闭：显示总开关，隐藏类别与传输分区', (tester) async {
+  /// 从首屏进入子页。
+  Future<void> openSubPage(WidgetTester tester, String key) async {
+    await tester.tap(find.byKey(Key(key)));
+    await tester.pumpAndSettle();
+  }
+
+  /// 首屏总开关行（副文案 = 一句话状态）。
+  SettingsSwitchTile syncSwitchTile(WidgetTester tester) =>
+      tester.widget<SettingsSwitchTile>(
+        find.ancestor(
+          of: find.byKey(const Key('settingsSyncSwitch')),
+          matching: find.byType(SettingsSwitchTile),
+        ),
+      );
+
+  testWidgets('默认关闭：只留总开关与一句说明，隐藏其余分区', (tester) async {
     await pumpPage(tester);
     expect(find.text('Cross-device sync'), findsOneWidget);
     expect(find.byKey(const Key('settingsSyncSwitch')), findsOneWidget);
     expect(find.text('What to sync'), findsNothing);
     expect(find.text('Transport'), findsNothing);
+    // 设备与口令入口也在启用后才出现（口令未生成时没有可做的事）。
+    expect(find.byKey(const Key('settingsSyncAdvancedItem')), findsNothing);
   });
 
-  testWidgets('开启同步：生成口令弹窗，确认后显示类别与传输分区', (tester) async {
+  testWidgets('开启同步：生成口令弹窗，确认后首屏出现内容 / 传输 / 设备入口', (tester) async {
     await pumpPage(tester);
     await tester.tap(find.byKey(const Key('settingsSyncSwitch')));
     await tester.pumpAndSettle();
@@ -122,37 +142,137 @@ void main() {
     expect(provider.passphrase, isNotNull);
     expect(find.text('What to sync'), findsOneWidget);
     expect(find.text('Transport'), findsOneWidget);
+    expect(find.byKey(const Key('settingsSyncContentItem')), findsOneWidget);
+    expect(find.byKey(const Key('settingsSyncAdvancedItem')), findsOneWidget);
+  });
+
+  testWidgets('首屏行数预算：启用后设置行 ≤ 9，明细全部下沉子页', (tester) async {
+    await provider.setEnabled(true);
+    await pumpPage(tester);
+
+    final rows = find.byWidgetPredicate((widget) =>
+        widget is SettingsSwitchTile ||
+        widget is SettingsNavTile ||
+        widget is SettingsInfoTile);
+    expect(rows, findsAtLeastNWidgets(1));
+    expect(rows.evaluate().length, lessThanOrEqualTo(9));
+
+    // 被下沉的键在首屏不可见：类别 / 蜂窝策略 / 动态 / 诊断 / 设备与口令 / 日志行。
     expect(
-      find.byKey(const Key('settingsSyncCategory-playlists')),
-      findsOneWidget,
+        find.byKey(const Key('settingsSyncCategory-playlists')), findsNothing);
+    expect(
+        find.byKey(const Key('settingsSyncCellularPauseSwitch')), findsNothing);
+    expect(find.byKey(const Key('settingsSyncActivityItem')), findsNothing);
+    expect(find.byKey(const Key('settingsSyncDiagnosticItem')), findsNothing);
+    expect(find.byKey(const Key('settingsSyncDeviceNameItem')), findsNothing);
+    expect(find.byKey(const Key('settingsSyncPassphraseItem')), findsNothing);
+    expect(find.byKey(const Key('settingsSyncJoinItem')), findsNothing);
+    expect(find.byType(SyncLogRow), findsNothing);
+  });
+
+  testWidgets('状态副文案：未同步说「尚未同步」；跑完一轮给结论与相对时间', (tester) async {
+    await provider.setEnabled(true);
+    await pumpPage(tester);
+    expect(syncSwitchTile(tester).subtitle, 'Never synced');
+
+    // 手动一轮：无对端 → 结论「No peer found」+ 相对时间「just now」。
+    await tester.tap(find.byKey(const Key('settingsSyncNowItem')));
+    await tester.pumpAndSettle();
+    final subtitle = syncSwitchTile(tester).subtitle;
+    expect(subtitle, contains('No peer found'));
+    expect(subtitle, contains('just now'));
+    // 「跳过 N 项」这类全库计数不出现在任何文案里。
+    expect(find.textContaining('skipped'), findsNothing);
+  });
+
+  testWidgets('立即同步按钮：同步在途禁用，结束后恢复可点', (tester) async {
+    await provider.setEnabled(true);
+    final gate = Completer<void>();
+    transport.onPull = () => gate.future;
+    await pumpPage(tester);
+
+    await tester.tap(find.byKey(const Key('settingsSyncNowItem')));
+    await tester.pump();
+    expect(
+      tester
+          .widget<M3EButton>(find.byKey(const Key('settingsSyncNowItem')))
+          .onPressed,
+      isNull,
+    );
+    expect(find.text('Syncing…'), findsOneWidget);
+
+    gate.complete();
+    await tester.pumpAndSettle();
+    expect(
+      tester
+          .widget<M3EButton>(find.byKey(const Key('settingsSyncNowItem')))
+          .onPressed,
+      isNotNull,
     );
   });
 
-  testWidgets('关闭单个类别写入状态；立即同步记录日志', (tester) async {
+  testWidgets('同步内容子页：类别开关可切、蜂窝暂停在页内，首屏副文案跟随', (tester) async {
     await provider.setEnabled(true);
     await pumpPage(tester);
+    expect(find.text('All categories'), findsOneWidget);
+
+    await openSubPage(tester, 'settingsSyncContentItem');
+    expect(find.byType(SyncContentPage), findsOneWidget);
 
     await tester.tap(find.byKey(const Key('settingsSyncCategory-statistics')));
     await tester.pumpAndSettle();
     expect(provider.categories[SyncCategory.statistics], isFalse);
 
-    await tester.tap(find.byKey(const Key('settingsSyncLanSwitch')));
+    expect(provider.cellularPolicy, SyncCellularPolicy.auto);
+    await tester.tap(find.byKey(const Key('settingsSyncCellularPauseSwitch')));
     await tester.pumpAndSettle();
-    expect(provider.enabledTransports.contains('lan'), isFalse);
+    expect(provider.cellularPolicy, SyncCellularPolicy.pause);
 
-    await tester.tap(find.byKey(const Key('settingsSyncNowItem')));
+    // 返回首屏：内容入口副文案给「已关闭 1 项」。
+    await tester.tap(find.byType(BackButtonIcon));
     await tester.pumpAndSettle();
-    expect(provider.lastSyncAt, greaterThan(0));
-    expect(find.text('Sync log'), findsOneWidget);
+    expect(find.text('1 turned off'), findsOneWidget);
   });
 
-  testWidgets('运行状态：近 24 小时汇总与环境行', (tester) async {
+  testWidgets('设备与口令子页：改名 / 口令 / 加入口令入口，口令行可查看完整口令', (tester) async {
+    await provider.setEnabled(true);
+    await pumpPage(tester);
+    // 首屏结论：设备名 · 口令已设置。
+    final advanced = tester
+        .widget<SettingsNavTile>(find.byKey(const Key('settingsSyncAdvancedItem')));
+    expect(advanced.subtitle, '${provider.deviceName} · Passphrase set');
+
+    await openSubPage(tester, 'settingsSyncAdvancedItem');
+    expect(find.byType(SyncDevicePage), findsOneWidget);
+    expect(find.text('Trust model'), findsOneWidget);
+    expect(find.byKey(const Key('settingsSyncDeviceNameItem')), findsOneWidget);
+    expect(find.byKey(const Key('settingsSyncPassphraseItem')), findsOneWidget);
+    expect(find.byKey(const Key('settingsSyncJoinItem')), findsOneWidget);
+
+    // 口令行点开显示完整口令（可复制）。
+    await tester.tap(find.byKey(const Key('settingsSyncPassphraseItem')));
+    await tester.pumpAndSettle();
+    expect(find.text(provider.passphrase!), findsOneWidget);
+    await tester.tap(find.text('Cancel'));
+    await tester.pumpAndSettle();
+
+    // 改名入口打开弹窗并保存。
+    await tester.tap(find.byKey(const Key('settingsSyncDeviceNameItem')));
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byType(EditableText).first, '书房');
+    await tester.tap(find.text('Save'));
+    await tester.pumpAndSettle();
+    expect(provider.deviceName, '书房');
+  });
+
+  testWidgets('日志与诊断子页：24h 动态行与环境行', (tester) async {
     await provider.setEnabled(true);
     // 手动一轮：日志里出现一条无对端轮次（0 字节、0 落地）。
     await provider.syncNow(manual: true);
     await pumpPage(tester);
+    expect(find.byKey(const Key('settingsSyncActivityItem')), findsNothing);
 
-    expect(find.text('Activity'), findsOneWidget);
+    await openSubPage(tester, 'settingsSyncLogItem');
     expect(find.text('Last 24 hours'), findsOneWidget);
     expect(
       find.textContaining('1 rounds, 0 with transfer'),
@@ -165,30 +285,33 @@ void main() {
     );
   });
 
-  testWidgets('移动数据暂停开关写入策略', (tester) async {
+  testWidgets('日志子页：完整日志（超过 6 条不截断），首屏只给结论入口', (tester) async {
     await provider.setEnabled(true);
+    for (var i = 0; i < 7; i++) {
+      await provider.syncNow(manual: true);
+    }
     await pumpPage(tester);
 
-    expect(provider.cellularPolicy, SyncCellularPolicy.auto);
-    await tester.tap(find.byKey(const Key('settingsSyncCellularPauseSwitch')));
-    await tester.pumpAndSettle();
+    // 首屏不再渲染日志行（入口副文案给最近一轮结论 + 时间）。
+    expect(find.byType(SyncLogRow), findsNothing);
+    expect(find.text('Sync log & diagnostics'), findsOneWidget);
 
-    expect(provider.cellularPolicy, SyncCellularPolicy.pause);
+    await openSubPage(tester, 'settingsSyncLogItem');
+    expect(find.byType(SyncLogRow), findsNWidgets(7));
   });
 
-  testWidgets('结论行给五态：没有对端显示「未发现对端」而不是「同步完成」', (tester) async {
+  testWidgets('日志入口副文案：无记录说「暂无记录」，有记录给最近结论', (tester) async {
     await provider.setEnabled(true);
     await pumpPage(tester);
+    expect(find.text('No records yet'), findsOneWidget);
 
-    // 传输开着但没有任何对端 → noPeers。
-    expect(find.byKey(const Key('settingsSyncStatusItem')), findsOneWidget);
-    await tester.tap(find.byKey(const Key('settingsSyncNowItem')));
+    await provider.syncNow(manual: true);
     await tester.pumpAndSettle();
-
-    expect(provider.lastOutcome, SyncOutcome.noPeers);
-    expect(find.text('No peer found'), findsWidgets);
-    // 「跳过 N 项」这类全库计数不出现在任何文案里。
-    expect(find.textContaining('skipped'), findsNothing);
+    expect(find.text('No records yet'), findsNothing);
+    final logTile =
+        tester.widget<SettingsNavTile>(find.byKey(const Key('settingsSyncLogItem')));
+    expect(logTile.subtitle, contains('No peer found'));
+    expect(logTile.subtitle, contains('just now'));
   });
 
   testWidgets('名册子页：对端行有名称与最后同步时间', (tester) async {
@@ -210,19 +333,33 @@ void main() {
     await provider.syncNow(manual: true);
     await pumpPage(tester);
 
-    await tester.tap(find.byKey(const Key('settingsSyncPeersItem')));
-    await tester.pumpAndSettle();
+    // 首屏结论：对端数 + 最后同步时间。
+    expect(find.textContaining('1 peers · '), findsOneWidget);
 
+    await openSubPage(tester, 'settingsSyncPeersItem');
     expect(find.text('Paired devices'), findsWidgets);
     expect(find.byKey(const Key('settingsSyncPeer-devB')), findsOneWidget);
     expect(find.text('Device B'), findsOneWidget);
     expect(find.textContaining('Last synced'), findsOneWidget);
   });
 
-  testWidgets('诊断行存在且可复制（不含密钥）', (tester) async {
+  testWidgets('WebDAV 启用后才出现配置入口，副文案给地址 / 未配置', (tester) async {
     await provider.setEnabled(true);
     await pumpPage(tester);
+    expect(find.byKey(const Key('settingsSyncWebdavConfigItem')), findsNothing);
 
+    await tester.tap(find.byKey(const Key('settingsSyncWebdavSwitch')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('settingsSyncWebdavConfigItem')), findsOneWidget);
+    expect(find.text('Not configured'), findsOneWidget);
+  });
+
+  testWidgets('诊断行在日志子页且可复制（不含密钥）', (tester) async {
+    await provider.setEnabled(true);
+    await pumpPage(tester);
+    expect(find.byKey(const Key('settingsSyncDiagnosticItem')), findsNothing);
+
+    await openSubPage(tester, 'settingsSyncLogItem');
     expect(find.byKey(const Key('settingsSyncDiagnosticItem')), findsOneWidget);
     expect(find.text('Copy diagnostics'), findsOneWidget);
   });
@@ -247,6 +384,7 @@ void main() {
         .setMockMethodCallHandler(SystemChannels.platform, null));
 
     await pumpPage(tester);
+    await openSubPage(tester, 'settingsSyncLogItem');
     await tester.tap(find.byKey(const Key('settingsSyncDiagnosticItem')));
     await tester.pumpAndSettle();
 
@@ -263,8 +401,7 @@ void main() {
     await provider.setEnabled(true);
     await pumpPage(tester);
 
-    await tester.tap(find.byKey(const Key('settingsSyncPeersItem')));
-    await tester.pumpAndSettle();
+    await openSubPage(tester, 'settingsSyncPeersItem');
     await tester.tap(find.byKey(const Key('settingsSyncAddPeerItem')));
     await tester.pumpAndSettle();
 
@@ -331,23 +468,6 @@ void main() {
     expect(requested, 1);
   });
 
-  testWidgets('日志超过 6 行：首屏留 6 行 + 入口进完整日志子页', (tester) async {
-    await provider.setEnabled(true);
-    for (var i = 0; i < 7; i++) {
-      await provider.syncNow(manual: true);
-    }
-    await pumpPage(tester);
-
-    expect(find.byKey(const Key('settingsSyncLogMoreItem')), findsOneWidget);
-    expect(find.text('View all logs (7)'), findsOneWidget);
-    // 首屏只渲染 6 行（第 7 行在子页）。
-    expect(find.byType(SyncLogRow), findsNWidgets(6));
-
-    await tester.tap(find.byKey(const Key('settingsSyncLogMoreItem')));
-    await tester.pumpAndSettle();
-    expect(find.byType(SyncLogRow), findsNWidgets(7));
-  });
-
   testWidgets('失败行按原因给可点动作：手动地址 / WebDAV / 重试', (tester) async {
     await provider.setEnabled(true);
     transport.pullError =
@@ -355,6 +475,7 @@ void main() {
     await provider.syncNow(manual: true);
     await pumpPage(tester);
 
+    await openSubPage(tester, 'settingsSyncLogItem');
     // 零应答但此前成功过：日志行可点开下一步动作。
     expect(find.byType(SyncLogRow), findsOneWidget);
     expect(find.textContaining('No device answered'), findsWidgets);
@@ -378,16 +499,17 @@ void main() {
     expect(find.byKey(const Key('settingsSyncAddPeerItem')), findsOneWidget);
   });
 
-  testWidgets('传输副文案：启动失败给原因文案（原始细节不上界面）', (tester) async {
+  testWidgets('传输副文案：启动失败只说状态词（原始细节不上界面）', (tester) async {
     await provider.setEnabled(true);
     transport.unavailableReason = SyncUnavailableReason.startFailed;
     transport.unavailableDetail = 'SocketException: 端口占用';
     await transport.stop();
     await pumpPage(tester);
 
-    expect(find.textContaining('Transport failed to start'), findsOneWidget);
+    expect(find.textContaining('failed to start'), findsOneWidget);
     expect(find.textContaining('SocketException'), findsNothing);
-    expect(find.textContaining('No successful contact yet'), findsWidgets);
+    // 「最后成功」不再进首屏（诊断导出里有）。
+    expect(find.textContaining('Last success'), findsNothing);
   });
 
   testWidgets('传输关闭：副文案中性「已关闭」，不显示残留失败原因', (tester) async {
@@ -398,8 +520,8 @@ void main() {
     await provider.setTransportEnabled(SyncTransportKind.lan, false);
     await pumpPage(tester);
 
-    expect(find.textContaining('turned off'), findsWidgets);
-    expect(find.textContaining('Transport failed to start'), findsNothing);
+    expect(find.text('turned off'), findsOneWidget);
+    expect(find.textContaining('failed to start'), findsNothing);
     // 中性色：关闭不是异常状态（不挂 warning）。
     final tile = tester.widget<SettingsSwitchTile>(
       find.ancestor(
@@ -410,7 +532,7 @@ void main() {
     expect(tile.subtitleColor, isNull);
   });
 
-  testWidgets('传输副文案：成功接触后给「最后成功」与成功色', (tester) async {
+  testWidgets('传输副文案：成功接触后状态词仍是「运行中」，颜色走成功色', (tester) async {
     await provider.setEnabled(true);
     transport.available.add(SyncEnvelope(
       deviceId: 'devB',
@@ -421,11 +543,13 @@ void main() {
     await provider.syncNow(manual: true);
     await pumpPage(tester);
 
-    final finder = find.textContaining('Last success');
-    expect(finder, findsOneWidget);
-    final text = tester.widget<Text>(finder);
+    final finder = find.byKey(const Key('settingsSyncLanSwitch'));
+    final tile = tester.widget<SettingsSwitchTile>(
+      find.ancestor(of: finder, matching: find.byType(SettingsSwitchTile)),
+    );
+    expect(tile.subtitle, 'running');
     expect(
-      text.style?.color,
+      tile.subtitleColor,
       AppSemanticColors.of(tester.element(finder)).success,
     );
   });

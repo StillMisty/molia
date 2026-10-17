@@ -75,6 +75,31 @@ String syncLevelText(AppLocalizations l10n, SyncLevel? level) => switch (level) 
 String syncNetworkText(AppLocalizations l10n, {required bool onCellular}) =>
     onCellular ? l10n.syncNetworkCellular : l10n.syncNetworkOther;
 
+/// 时间戳 → 相对时间（首屏结论行用：一句话里只给「多久以前」，
+/// 绝对时刻留给日志与名册；窗口越久粒度越粗）。
+///
+/// 时间戳可能略快于本机时钟（戳模型允许超前），差值取负时按「刚刚」处理。
+String syncRelativeTimeText(
+  AppLocalizations l10n, {
+  required int nowMs,
+  required int atMs,
+}) {
+  final elapsed = nowMs - atMs;
+  if (elapsed < const Duration(minutes: 1).inMilliseconds) {
+    return l10n.syncRelativeJustNow;
+  }
+  if (elapsed < const Duration(hours: 1).inMilliseconds) {
+    return l10n.syncRelativeMinutes(
+        elapsed ~/ const Duration(minutes: 1).inMilliseconds);
+  }
+  if (elapsed < const Duration(days: 1).inMilliseconds) {
+    return l10n.syncRelativeHours(
+        elapsed ~/ const Duration(hours: 1).inMilliseconds);
+  }
+  return l10n.syncRelativeDays(
+      elapsed ~/ const Duration(days: 1).inMilliseconds);
+}
+
 int _intArg(SyncIssue issue, String key) {
   final value = issue.args[key];
   return value is num ? value.toInt() : 0;
