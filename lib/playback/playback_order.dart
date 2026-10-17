@@ -5,7 +5,8 @@ import '../sources/source_track.dart';
 /// 与队列本身解耦：只持有下标，[tracksOf] 按需还原曲目。语义由
 /// `LocalPlaybackService` 消费：
 /// - [record]：切换到不同曲目时压入「离开的」下标；栈深上限 [maxEntries]；
-/// - [popPrevious]：previous 消费最近一首；空栈返回 null（调用方回退到队列前一位）；
+/// - [peekPrevious] / [popPrevious]：快照展示读最近一首（不弹出）；执行切歌
+///   弹出消费；空栈返回 null（调用方回退到队列前一位）；
 /// - [clear]：新队列 / 停止播放时清空。
 class PlaybackOrder {
   PlaybackOrder({this.maxEntries = 100});
@@ -22,6 +23,9 @@ class PlaybackOrder {
       _indices.removeAt(0);
     }
   }
+
+  /// 已播放顺序的最近一首（不弹出）；空栈返回 null（调用方回退到队列前一位）。
+  int? peekPrevious() => _indices.isEmpty ? null : _indices.last;
 
   int? popPrevious() => _indices.isEmpty ? null : _indices.removeLast();
 

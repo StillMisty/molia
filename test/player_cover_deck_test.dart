@@ -48,7 +48,7 @@ void main() {
 
   tearDown(() => playback.dispose());
 
-  /// 模拟后端切到指定曲目：next/upcoming/history 与队列保持一致。
+  /// 模拟后端切到指定曲目：next / previous 与队列保持一致。
   void emitFor(String id) {
     final index = order.indexWhere((track) => track.id.id == id);
     backend.emit(BackendSnapshot(
@@ -56,8 +56,7 @@ void main() {
       queue: order,
       currentIndex: index,
       next: index + 1 < order.length ? order[index + 1] : null,
-      upcoming: index + 1 < order.length ? order.sublist(index + 1) : const [],
-      history: index > 0 ? order.sublist(0, index) : const [],
+      previous: index > 0 ? order[index - 1] : null,
       isPlaying: true,
       position: const Duration(seconds: 5),
       duration: const Duration(seconds: 30),
@@ -120,11 +119,11 @@ void main() {
   }
 
   testWidgets('队列点选：进场封面按队列下标方向从对应一侧滑入', (tester) async {
-    // 队列 [A,B,C,D]，当前 C（history 末位 B、next D 都已缓存为提示）。
+    // 队列 [A,B,C,D]，当前 C（previous B、next D 都已缓存为提示）。
     emitFor('c');
     await pumpPlayer(tester);
 
-    // 直接点选队首 A：新快照 next=B 与 history 都命中不了提示，
+    // 直接点选队首 A：新快照 next=B 与 previous 都命中不了提示，
     // 只能靠队列下标判定方向（防止退化为「一律向前」）。
     emitFor('a');
     final offset = await sampleIncomingOffset(tester);

@@ -73,15 +73,13 @@ class BackendSnapshot {
   /// 按当前模式解析出的下一首（shuffle 时由后端随机决定，界面预览用）。
   final Track? next;
 
-  /// 队列中当前曲目之后的曲目（队列面板展示用，非播放顺序）。
-  final List<Track> upcoming;
+  /// 可展示的上一首：实际播放顺序最近一首 → 队列前一位；无 / 与当前曲目
+  /// 同 id 为 null（队首的「重播当前」不算上一首）。
+  final Track? previous;
 
   /// 实际播放顺序中当前曲目之后的曲目（shuffle 为洗牌排列的剩余；
   /// 队列面板「接下来」展示用）。
   final List<Track> upNext;
-
-  /// 已播放顺序（最近一首在后）；previous 语义的依据。
-  final List<Track> history;
 
   final bool isPlaying;
   final bool isLoading;
@@ -96,9 +94,8 @@ class BackendSnapshot {
     this.queue = const [],
     this.currentIndex = -1,
     this.next,
-    this.upcoming = const [],
+    this.previous,
     this.upNext = const [],
-    this.history = const [],
     this.isPlaying = false,
     this.isLoading = false,
     this.position = Duration.zero,
@@ -117,9 +114,8 @@ class BackendSnapshot {
       deepEquals(other.queue, queue) &&
       other.currentIndex == currentIndex &&
       other.next == next &&
-      deepEquals(other.upcoming, upcoming) &&
+      other.previous == previous &&
       deepEquals(other.upNext, upNext) &&
-      deepEquals(other.history, history) &&
       other.isPlaying == isPlaying &&
       other.isLoading == isLoading &&
       other.position == position &&
@@ -134,9 +130,8 @@ class BackendSnapshot {
         deepHash(queue),
         currentIndex,
         next,
-        deepHash(upcoming),
+        previous,
         deepHash(upNext),
-        deepHash(history),
         isPlaying,
         isLoading,
         position,
@@ -160,15 +155,13 @@ class PlaybackSnapshot {
   /// 按当前模式解析出的下一首（界面「下一首封面」预览用）。
   final Track? next;
 
-  /// 队列中当前曲目之后的曲目（队列面板展示用，非播放顺序）。
-  final List<Track> upcoming;
+  /// 可展示的上一首：实际播放顺序最近一首 → 队列前一位；无 / 与当前曲目
+  /// 同 id 为 null（恢复态为会话队列下标回退的近似）。
+  final Track? previous;
 
   /// 实际播放顺序中当前曲目之后的曲目（shuffle 为洗牌排列的剩余；
   /// 队列面板「接下来」展示用）。
   final List<Track> upNext;
-
-  /// 已播放顺序（最近一首在后）；恢复态为会话队列的前缀近似。
-  final List<Track> history;
 
   final bool isPlaying;
   final bool isLoading;
@@ -183,9 +176,8 @@ class PlaybackSnapshot {
     this.queue = const [],
     this.currentIndex = -1,
     this.next,
-    this.upcoming = const [],
+    this.previous,
     this.upNext = const [],
-    this.history = const [],
     this.isPlaying = false,
     this.isLoading = false,
     this.duration = Duration.zero,
@@ -204,9 +196,8 @@ class PlaybackSnapshot {
       deepEquals(other.queue, queue) &&
       other.currentIndex == currentIndex &&
       other.next == next &&
-      deepEquals(other.upcoming, upcoming) &&
+      other.previous == previous &&
       deepEquals(other.upNext, upNext) &&
-      deepEquals(other.history, history) &&
       other.isPlaying == isPlaying &&
       other.isLoading == isLoading &&
       other.duration == duration &&
@@ -221,9 +212,8 @@ class PlaybackSnapshot {
         deepHash(queue),
         currentIndex,
         next,
-        deepHash(upcoming),
+        previous,
         deepHash(upNext),
-        deepHash(history),
         isPlaying,
         isLoading,
         duration,

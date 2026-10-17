@@ -24,7 +24,7 @@
 /// - 空闲期槽位身份变化（加歌/删歌/开关随机/next 变空）：180ms 原位交叉
 ///   淡化（旧淡出、新淡入，变空则淡出为空），会话激活期间由会话窗口负责；
 /// - 中心封面同 id、封面 URL 更新（音源补图）：250ms 交叉淡化换图；
-/// - 左槽「上一首」= 播放顺序最近一首（history 末位）→ 队列前一位 → 空
+/// - 左槽「上一首」= 快照 previous（播放顺序最近一首）→ 队列前一位 → 空
 ///   （排除与当前同 id），与后端 `skipToPrevious` 及拖动预览同源。
 ///
 /// 切歌检测与空闲缓存由播放快照监听驱动：deck 把快照喂给
@@ -1056,7 +1056,7 @@ class _PlayerCoverDeckState extends State<PlayerCoverDeck>
                     sourceFade: dir == -1 ? sourceFade : 1.0,
                     identityFade: identityFade,
                     placeholderUrl: currentImageUrl,
-                    // 左槽点击 = 上一首：只要展示了身份（history 末位或
+                    // 左槽点击 = 上一首：只要展示了身份（快照 previous 或
                     // 队列前一位，与后端 skipToPrevious 的回退、拖动预览
                     // 同源）就可点；左槽为空时不渲染卡片，自然不可点。
                     onTap: playbackProvider.hasTrack

@@ -73,13 +73,12 @@ void main() {
   Future<void> drainThrottle(WidgetTester tester) =>
       tester.pump(const Duration(milliseconds: 400));
 
-  BackendSnapshot upcomingSnapshot(List<Track> queue, {int index = 0}) =>
+  BackendSnapshot queueSnapshot(List<Track> queue, {int index = 0}) =>
       BackendSnapshot(
         current: queue[index],
         queue: queue,
         currentIndex: index,
         next: index + 1 < queue.length ? queue[index + 1] : null,
-        upcoming: queue.sublist(index + 1),
         upNext: queue.sublist(index + 1),
         isPlaying: true,
         position: Duration.zero,
@@ -96,7 +95,6 @@ void main() {
       queue: [_track('a'), _track('b')],
       currentIndex: 0,
       next: _track('b'),
-      upcoming: [_track('b')],
       upNext: [_track('b')],
       isPlaying: true,
       position: Duration.zero,
@@ -127,7 +125,6 @@ void main() {
       queue: [_track('a'), _track('b')],
       currentIndex: 0,
       next: _track('b'),
-      upcoming: [_track('b')],
       upNext: [_track('b')],
       isPlaying: true,
       position: Duration.zero,
@@ -161,7 +158,7 @@ void main() {
     addTearDown(playback.dispose);
 
     // 最后一首：upNext 为空但当前曲目存在。
-    backend.emit(upcomingSnapshot([_track('a')]));
+    backend.emit(queueSnapshot([_track('a')]));
     await pumpQueue(tester, playback, includeCurrent: true);
 
     expect(find.text('正在播放'), findsOneWidget);
@@ -183,7 +180,6 @@ void main() {
       queue: [_track('a'), _track('b')],
       currentIndex: 0,
       next: _track('b'),
-      upcoming: [_track('b')],
       upNext: [_track('b')],
       isPlaying: true,
       position: Duration.zero,
@@ -245,7 +241,6 @@ void main() {
       currentIndex: 0,
       next: d,
       // 队列顺序（b、c、d）与实际洗牌顺序（d、c、b）不同。
-      upcoming: [b, c, d],
       upNext: [d, c, b],
       isPlaying: true,
       position: Duration.zero,
@@ -269,7 +264,7 @@ void main() {
     addTearDown(playback.dispose);
 
     final queue = [for (var i = 0; i < 300; i++) _track('$i')];
-    backend.emit(upcomingSnapshot(queue));
+    backend.emit(queueSnapshot(queue));
     await pumpQueue(tester, playback);
 
     final rows = tester.widgetList<TrackRow>(find.byType(TrackRow)).toList();
@@ -303,7 +298,7 @@ void main() {
     addTearDown(playback.dispose);
 
     final queue = [for (var i = 0; i < 60; i++) _track('$i')];
-    backend.emit(upcomingSnapshot(queue));
+    backend.emit(queueSnapshot(queue));
     final controller = await pumpQueue(tester, playback);
     // 等通知节流计时器与滚动条首帧绘制（拇指命中区依赖已计算的 metrics）。
     await drainThrottle(tester);
@@ -336,7 +331,7 @@ void main() {
       final playback = buildTestPlaybackProvider(backend: backend);
       addTearDown(playback.dispose);
 
-      backend.emit(upcomingSnapshot([_track('a'), _track('b')]));
+      backend.emit(queueSnapshot([_track('a'), _track('b')]));
       await pumpQueue(tester, playback);
 
       // 桌面：行尾 ⋮ 默认透明（目标值 0），行 hover 后显现。

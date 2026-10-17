@@ -846,10 +846,10 @@ class PlaybackProvider extends ChangeNotifier {
       next: session.index + 1 < session.tracks.length
           ? session.tracks[session.index + 1]
           : null,
-      upcoming: List.unmodifiable(session.tracks.sublist(session.index + 1)),
-      // 恢复态没有洗牌顺序可还原：upNext 按队列顺序近似（与 upcoming 同源）。
+      // 恢复态没有播放顺序栈：previous 按队列下标回退近似。
+      previous: session.index > 0 ? session.tracks[session.index - 1] : null,
+      // 恢复态没有洗牌顺序可还原：upNext 按队列顺序近似。
       upNext: List.unmodifiable(session.tracks.sublist(session.index + 1)),
-      history: List.unmodifiable(session.tracks.sublist(0, session.index)),
       isPlaying: false,
       isLoading: false,
       duration: current.duration ?? Duration.zero,

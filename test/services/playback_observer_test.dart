@@ -42,7 +42,7 @@ void main() {
     Duration position = Duration.zero,
     PlaybackContext? context,
   }) {
-    // 与真实后端一致：next/upcoming/upNext/history 由队列与下标派生。
+    // 与真实后端一致：next / previous / upNext 由队列与下标派生。
     final tracks = queue ?? [if (current != null) current];
     final index = current == null
         ? -1
@@ -52,9 +52,8 @@ void main() {
       queue: tracks,
       currentIndex: index,
       next: index >= 0 && index + 1 < tracks.length ? tracks[index + 1] : null,
-      upcoming: index >= 0 ? tracks.sublist(index + 1) : const [],
+      previous: index > 0 ? tracks[index - 1] : null,
       upNext: index >= 0 ? tracks.sublist(index + 1) : const [],
-      history: index > 0 ? tracks.sublist(0, index) : const [],
       isPlaying: playing,
       position: position,
       duration: current?.duration ?? Duration.zero,

@@ -174,12 +174,22 @@ class LocalPlaybackService extends ChangeNotifier {
   /// 按当前模式解析出的下一首（界面预览；shuffle 为排列中的下一首，
   /// 本轮末尾为空——自动播完/手动切歌时才重洗新一轮）。
   SourceTrack? get nextSourceTrack {
-    final index = _nextIndexForDisplay();
+    final index = _peekNextIndex();
     return index < 0 ? null : _queue[index];
   }
 
-  /// 已播放顺序（最近在后）。
-  List<SourceTrack> get historyTracks => _order.tracksOf(_queue);
+  /// 可展示的上一首：播放顺序最近一首（非破坏性 peek）→ 队列前一位；
+  /// 无 / 与当前曲目同 id 为 null（队首的「重播当前」不当作上一首）。
+  SourceTrack? get previousSourceTrack {
+    if (_currentIndex < 0 || _currentIndex >= _queue.length) return null;
+    final index =
+        _order.peekPrevious() ?? (_currentIndex > 0 ? _currentIndex - 1 : -1);
+    if (index < 0 || index >= _queue.length) return null;
+    final target = _queue[index];
+    final current = _queue[_currentIndex];
+    if (target.id == current.id) return null;
+    return target;
+  }
 
   /// 实际播放顺序中当前曲目之后的曲目（队列页「接下来」展示用）：
   /// 顺序模式 = 队列下一位起；shuffle = 本轮洗牌排列的剩余。
@@ -470,7 +480,7 @@ class LocalPlaybackService extends ChangeNotifier {
   Future<void> skipToNext() async {
     // 手动切歌与界面预览同源：shuffle 走洗牌排列的下一首（本轮末尾自动
     // 重洗新一轮）；单曲循环下手动切歌走队列下一位（只有自动播完才重播）。
-    final index = _nextIndex(auto: false);
+    final index = _commitNextIndex(auto: false);
     if (index < 0) {
       await _player.pause();
       await _player.seek(Duration.zero);
@@ -535,18 +545,18 @@ class LocalPlaybackService extends ChangeNotifier {
 
   /// 界面预览用的下一首下标：shuffle 读排列中的下一首（不重洗，稳定），
   /// 本轮末尾返回 -1（真正切歌时才会重洗新一轮）；其余模式同手动切歌。
-  int _nextIndexForDisplay() {
+  int _peekNextIndex() {
     if (_queue.isEmpty || _currentIndex < 0) return -1;
     if (_mode == PlayMode.shuffle) {
       if (_queue.length <= 1) return _currentIndex;
       _ensureShuffleOrder();
       return _shuffleOrder.peekNext(_currentIndex) ?? -1;
     }
-    return _nextIndex(auto: false);
+    return _commitNextIndex(auto: false);
   }
 
-  /// 下一首下标（自动播完 / 手动切歌共用）：shuffle 走排列，轮末重洗。
-  int _nextIndex({required bool auto}) {
+  /// 执行用的下一首下标（自动播完 / 手动切歌共用）：shuffle 走排列，轮末重洗。
+  int _commitNextIndex({required bool auto}) {
     if (_queue.isEmpty) return -1;
     if (_mode == PlayMode.singleRepeat && auto) {
       return _currentIndex;
@@ -590,7 +600,7 @@ class LocalPlaybackService extends ChangeNotifier {
         await _player.seek(Duration.zero);
         _resumeCurrentTrack();
       } else {
-        final index = _nextIndex(auto: true);
+        final index = _commitNextIndex(auto: true);
         if (index >= 0 && index != _currentIndex) {
           await _playIndex(index);
         } else {

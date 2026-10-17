@@ -44,7 +44,7 @@ void main() {
 
   tearDown(() => playback.dispose());
 
-  /// 模拟后端切到指定曲目：next/upcoming/history 与队列保持一致。
+  /// 模拟后端切到指定曲目：next / previous 与队列保持一致。
   void emitFor(String id) {
     final index = order.indexWhere((track) => track.id.id == id);
     backend.emit(BackendSnapshot(
@@ -52,8 +52,7 @@ void main() {
       queue: order,
       currentIndex: index,
       next: index + 1 < order.length ? order[index + 1] : null,
-      upcoming: index + 1 < order.length ? order.sublist(index + 1) : const [],
-      history: index > 0 ? order.sublist(0, index) : const [],
+      previous: index > 0 ? order[index - 1] : null,
       isPlaying: true,
       position: const Duration(seconds: 5),
       duration: const Duration(seconds: 30),
@@ -268,8 +267,7 @@ void main() {
       queue: [a, b],
       currentIndex: 1,
       next: null,
-      upcoming: const [],
-      history: [a],
+      previous: a,
       isPlaying: true,
       position: const Duration(seconds: 5),
       duration: const Duration(seconds: 30),

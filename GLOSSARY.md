@@ -26,14 +26,18 @@
 ## 播放
 
 - **Playback snapshot（播放快照）** — `lib/domain/models/playback.dart`：UI 播放状态的唯一形状
-  （`current/next/upcoming/history/context/mode/isPlaying/...`）。`PlaybackProvider.snapshot`
+  （`current/previous/next/upNext/context/mode/isPlaying/...`）。`PlaybackProvider.snapshot`
   是其唯一出口：真实播放来自 facade，冷启动恢复态由 `PlaybackSession` 构造覆盖快照；
   历史兼容 map 形状已删除。
 - **Played order（播放顺序）** — `lib/playback/playback_order.dart`：实际播放过的队列下标栈
   （最近在后、上限 100、`popPrevious` 供上一首消费）。驱动 `PlaybackSnapshot.history` 与
   `previous` 语义；与队列顺序 `upcoming` 是两回事。
 - **Resolved next（下一首解析）** — `PlaybackSnapshot.next`：后端按当前模式解析的下一首
-  （shuffle 在单曲内稳定，切歌/切模式重抽）；`upcoming` 只用于队列面板展示。
+  （shuffle 在单曲内稳定，切歌/切模式重抽）；peek（展示）与 commit（执行）两个语义在
+  服务内显式命名（`_peekNextIndex` / `_commitNextIndex`），轮末重洗只发生在 commit。
+- **Previous（上一首）** — `PlaybackSnapshot.previous`：可展示的上一首（播放顺序最近一首
+  的非破坏性 peek → 队列前一位；无 / 与当前同 id 为 null，队首的「重播当前」不算）。
+  封面左槽与切歌会话只读它，不再各自解析。
 - **Playback observer（播放观察者模块）** — `lib/services/playback_observer.dart`：播放副作用扇出的唯一实现（最后播放 / 播放上下文 / 桌面小组件 / 播放历史 / 会话落盘 / 封面预取与补取 / 通知权限），直连 facade 快照与进度通道（不经 provider 的节流通知），由组合根挂接；恢复态与睡眠定时仍属 `PlaybackProvider`（与 `PlayStatisticsService`、`ArtworkThemeSync` 同为观察者形态）。
 - **Sleep timer（定时关闭）** — `lib/providers/sleep_timer.dart`：歌曲信息页入口的
   「到点暂停」。两种模式：倒计时（**仅播放时计时**，暂停冻结；实现为**绝对

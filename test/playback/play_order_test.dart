@@ -122,6 +122,19 @@ void main() {
     expect(order.isEmpty, isTrue);
   });
 
+  test('peekPrevious 只读栈顶（快照展示用，不消耗播放顺序）', () {
+    final order = PlaybackOrder();
+
+    expect(order.peekPrevious(), isNull);
+
+    order.record(0);
+    order.record(2);
+    expect(order.peekPrevious(), 2);
+    expect(order.peekPrevious(), 2);
+    expect(order.popPrevious(), 2);
+    expect(order.peekPrevious(), 0);
+  });
+
   test('栈深上限：超出后丢弃最早记录', () {
     final order = PlaybackOrder(maxEntries: 3);
     for (var i = 0; i < 5; i++) {
