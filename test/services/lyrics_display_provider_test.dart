@@ -209,6 +209,29 @@ void main() {
     expect(constant.lineStartMs, 100, reason: '匀速用「首词开始 → 末词结束」跨度');
     expect(constant.lineEndMs, 600);
 
+    // 脏词轴：末词越过切行时刻（9s > 下一行 5s）时，匀速跨度夹到行尾——
+    // 否则切行时还没滚完，行尾永远看不到。
+    provider.syncLyrics(LyricsState(
+      trackId: 'fake:1',
+      status: LyricsStatus.ready,
+      lines: const [
+        LyricLine(Duration.zero, 'A', words: [
+          LyricWord(
+            start: Duration(milliseconds: 100),
+            end: Duration(milliseconds: 9000),
+            text: 'A',
+          ),
+        ]),
+        LyricLine(Duration(seconds: 5), 'B'),
+      ],
+    ));
+    await pumpEventQueue();
+    final clamped = output.applied.last;
+    expect(clamped.scrollFollowsSinging, isFalse);
+    expect(clamped.lineStartMs, 100);
+    expect(clamped.lineEndMs, 5000,
+        reason: '末词越过切行时刻：匀速跨度夹到行时间轴终点');
+
     provider.dispose();
   });
 

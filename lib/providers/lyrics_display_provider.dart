@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:math' as math;
 
 import 'package:flutter/foundation.dart';
 
@@ -192,13 +193,17 @@ class LyricsDisplayProvider extends ChangeNotifier {
     if (!scrollFollowsSinging) {
       // 匀速滚动：跨度取「首词开始 → 末词结束」（有逐字数据时），
       // 否则沿用行时间轴；词轴缺失 / 非法时回落到行时间轴。
+      // 末词越过切行时刻（脏词轴）时把终点夹到行尾：否则切行时还没滚完，
+      // 行尾永远看不到（原生侧同口径的兜底见 `CurrentLineView.playedFraction`）。
       final words = tracked.words;
       if (words != null && words.isNotEmpty) {
         final start = words.first.start.inMilliseconds;
         final end = words.last.end.inMilliseconds;
         if (end > start) {
           lineStartMs = start;
-          lineEndMs = end;
+          lineEndMs = tracked.lineEndMs > start
+              ? math.min(end, tracked.lineEndMs)
+              : end;
         }
       }
     }

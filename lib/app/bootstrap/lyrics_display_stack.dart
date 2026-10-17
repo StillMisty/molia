@@ -97,7 +97,13 @@ Future<LyricsDisplayStack> buildLyricsDisplayStack({
     },
   );
   // 状态接线：播放快照 / 进度 / 歌词状态 → 调度；冷启动恢复态也走同一路径。
-  playback.addListener(() => lyricsDisplay.syncPlayback(playback.snapshot));
+  // 快照变化时同时补一次当前位置：冷启动恢复 / 暂停中 seek / 切曲可能让
+  // 位置值在订阅建立前就位（ValueListenable 不补发），只靠进度通道路由会
+  // 停在旧行（桌面歌词表现为冷启动显示第 0 行）。
+  playback.addListener(() {
+    lyricsDisplay.syncPlayback(playback.snapshot);
+    lyricsDisplay.updatePosition(playback.currentPosition);
+  });
   playback.position.addListener(
     () => lyricsDisplay.updatePosition(playback.currentPosition),
   );
@@ -105,6 +111,7 @@ Future<LyricsDisplayStack> buildLyricsDisplayStack({
     () => lyricsDisplay.syncLyrics(lyricsProvider.state),
   );
   lyricsDisplay.syncPlayback(playback.snapshot);
+  lyricsDisplay.updatePosition(playback.currentPosition);
 
   // 下一首歌词预载接线：紧跟歌词显示接线之后、取色接线之前
   // （与原组合根同一顺序：显示 → 预载 → 取色 → 启动预解析）。

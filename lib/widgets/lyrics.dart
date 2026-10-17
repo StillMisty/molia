@@ -922,13 +922,12 @@ class _LyricsWidgetState extends State<LyricsWidget>
                     index < _session.translations.length ? _session.translations[index] : '';
                 final String lineRoma =
                     index < _session.romas.length ? _session.romas[index] : '';
-                // 扩展行只跟当前行（未同步歌词没有「当前行」概念，保持逐行）。
-                final bool showExtendedLines = !lyricsSynced || isCurrentLine;
-                final bool showTranslation = showExtendedLines &&
+                // 扩展行逐行渲染：有数据且歌词页开关打开就显示，空文本不占位
+                // （与海报 / 选择页同语义）。
+                final bool showTranslation =
                     lyricsDisplaySettings.pageTranslationEnabled &&
-                    lineTranslation.isNotEmpty;
-                final bool showRoma = showExtendedLines &&
-                    lyricsDisplaySettings.pageRomaEnabled &&
+                        lineTranslation.isNotEmpty;
+                final bool showRoma = lyricsDisplaySettings.pageRomaEnabled &&
                     lineRoma.isNotEmpty;
                 // 逐字渲染：仅当前行 + 有词时间轴 + 非复制模式；
                 // 已唱/未唱用 primary/onSurface 双色，行级强调由词高亮表达。
@@ -1024,9 +1023,8 @@ class _LyricsWidgetState extends State<LyricsWidget>
                                 textAlign: TextAlign.left,
                               ),
                             // 翻译 / 罗马音：空文本不占位；顺序与
-                            // LyricLineTracker 的扩展行拼接一致。
-                            // 只跟当前行：行切换时随主行动画收起 / 出现，
-                            // 跟着这一行一起滚动、一起消失。
+                            // LyricLineTracker 的扩展行拼接一致。逐行渲染，
+                            // 与主行一起滚动；歌词页开关切换时展开 / 收起。
                             _buildExtendedLines(
                               showTranslation: showTranslation,
                               translation: lineTranslation,
@@ -1132,11 +1130,11 @@ class _LyricsWidgetState extends State<LyricsWidget>
     return lyricLineIndexAt(_session.lines, currentPosition);
   }
 
-  /// 翻译 / 罗马音块（挂在主行文本下方）。
+  /// 翻译 / 罗马音块（挂在主行文本下方，逐行渲染）。
   ///
-  /// 通过 [AnimatedSwitcher] + `SizeTransition` 做「淡出 + 收起」：行不再是
-  /// 当前行时，扩展行随行样式动画（450ms）一起消失，而不是硬切、也不是
-  /// 留下占位；出现时同样从主行下方展开。
+  /// 通过 [AnimatedSwitcher] + `SizeTransition` 做「淡出 + 收起」：歌词页
+  /// 开关切换（翻译 / 罗马音开或关）时扩展行从主行下方展开 / 收起，
+  /// 而不是硬切、也不是留下占位。
   Widget _buildExtendedLines({
     required bool showTranslation,
     required String translation,
