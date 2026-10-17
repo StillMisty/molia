@@ -28,6 +28,7 @@ import android.widget.TextView
 import androidx.annotation.DrawableRes
 import top.stillmisty.molia.R
 import kotlin.math.abs
+import kotlin.math.ceil
 import kotlin.math.max
 import kotlin.math.min
 
@@ -104,6 +105,18 @@ internal data class OverlayConfig(
 /** 逐字时间轴里的一个词（绝对毫秒）。 */
 internal data class OverlayWord(val text: String, val startMs: Long, val endMs: Long)
 
+/**
+ * 滚动组行宽：文本宽 + 余量（取整 / 阴影）。
+ *
+ * 横滚靠 `translationX` 位移整行，行视图必须比文本宽略大，位移后行尾才
+ * 不会被行视图自身的边界裁掉；视口裁切由宿主的裁剪盒负责。
+ */
+private fun scrollingRowWidth(paint: TextPaint, text: String): Int =
+    (ceil(paint.measureText(text)).toInt() + SCROLL_ROW_WIDTH_SLACK).coerceAtLeast(1)
+
+/** 滚动组行宽余量（像素）：取整误差 + 阴影扩散。 */
+private const val SCROLL_ROW_WIDTH_SLACK = 4
+
 /** 一次投送的行数据（Dart 侧策略结果）。 */
 internal data class OverlayPresentation(
     val title: String = "",
@@ -172,14 +185,14 @@ private val EASE_ACCELERATE = PathInterpolator(0.3f, 0f, 0.8f, 0.15f)
  * - 横向滚动按「已唱边界在整行中的比例」映射到溢出宽度：行首即动、行尾
  *   正好滚到位；匀速模式改按 [lineStartMs]/[lineEndMs] 线性映射。行时间轴
  *   可用时再取行时间轴进度兜底（提前 [SCROLL_END_LEAD_MS] 收尾），保证
- *   切行前行尾已经完整露出；真实文本宽没有超过视图宽时恒不滚动；
+ *   切行前行尾已经完整露出；真实文本宽没有超过视口宽时恒不滚动；
  * - 词边界 x 坐标按 Layout 缓存（每帧只剩一次查询 + 插值），颜色用可变
  *   color span 而不是自绘：更新颜色不触发重新排版。
  */
 @SuppressLint("ViewConstructor")
 internal class CurrentLineView(context: Context) : TextView(context) {
 
-    /** 尺寸 / Layout 变化回调：宿主据此补一帧（偏移与裁剪都依赖视图宽）。 */
+    /** 尺寸 / Layout 变化回调：宿主据此补一帧（偏移与裁剪都依赖行宽 / 视口宽）。 */
     var onLayoutChanged: (() -> Unit)? = null
 
     private var words: List<OverlayWord> = emptyList()
@@ -226,7 +239,7 @@ internal class CurrentLineView(context: Context) : TextView(context) {
         val end = max(lineEndMs, words.lastOrNull()?.endMs ?: -1L)
         if (end <= 0 || positionMs >= end) return false
         // 无逐字数据且文本不超宽时，行内没有任何随时间变化的内容（不排帧）。
-        return words.isNotEmpty() || measuredTextWidth() > width
+        return words.isNotEmpty() || measuredTextWidth() > viewportWidth()
     }
 
     override fun onSizeChanged(w: Int, h: Int, oldw: Int, oldh: Int) {
@@ -252,6 +265,21 @@ internal class CurrentLineView(context: Context) : TextView(context) {
         }
         spans = nextSpans
         text = builder
+        syncPreferredWidth()
+    }
+
+    /**
+     * 行宽贴合文本宽：横滚靠 `translationX` 位移整行，若行视图只有视口宽，
+     * 位移后行尾会被行视图自身的边界裁掉（永远露不出来）；视口裁切由宿主
+     * 的裁剪盒负责，行视图必须覆盖整段文本。
+     */
+    private fun syncPreferredWidth() {
+        val lp = layoutParams as? LinearLayout.LayoutParams ?: return
+        val desired = scrollingRowWidth(paint, text?.toString().orEmpty())
+        if (lp.width != desired) {
+            lp.width = desired
+            requestLayout()
+        }
     }
 
     private fun applyColors(positionMs: Long) {
@@ -272,16 +300,27 @@ internal class CurrentLineView(context: Context) : TextView(context) {
     }
 
     /**
-     * 目标偏移：真实文本宽超出视图宽时，按「已唱比例」把文本滚到对应
-     * 位置——行首即动、行尾正好滚到位；没有超出视图时恒为 0。
+     * 目标偏移：真实文本宽超出视口宽时，按「已唱比例」把文本滚到对应
+     * 位置——行首即动、行尾正好滚到位；没有超出视口时恒为 0。
      */
     private fun targetOffset(positionMs: Long): Float {
-        val viewWidth = width.toFloat()
-        if (viewWidth <= 0f) return 0f
+        val viewport = viewportWidth()
+        if (viewport <= 0f) return 0f
         val textWidth = measuredTextWidth()
-        val overflow = textWidth - viewWidth
+        val overflow = textWidth - viewport
         if (overflow <= 0f) return 0f
         return (playedFraction(positionMs) * overflow).coerceIn(0f, overflow)
+    }
+
+    /**
+     * 滚动视口宽：父级内容列（即裁剪盒内宽）；未挂载时退回自身宽。
+     *
+     * 不能用自己的 `width`：行视图宽贴合文本宽（见 [syncPreferredWidth]），
+     * 用它当视口会让所有行都被判成「不超宽」而不滚动。
+     */
+    private fun viewportWidth(): Float {
+        val parentWidth = (parent as? View)?.width ?: 0
+        return (if (parentWidth > 0) parentWidth else width).toFloat()
     }
 
     /** 单行真实文本宽：Layout 的行宽；未布局时退回 Paint 测量。 */
@@ -700,13 +739,14 @@ internal class LyricsOverlayView(
         return entries
     }
 
-    /** 构建内容列：当前行挂滚动回调、扩展行并入滚动组；行宽撑满窗口。 */
+    /** 构建内容列：当前行挂滚动回调、扩展行并入滚动组；滚动行宽取文本宽，其余撑满窗口。 */
     private fun buildColumn(entries: List<Entry>): LinearLayout {
         val column = LinearLayout(context).apply { orientation = VERTICAL }
         entryViews = mutableListOf()
         currentLineView = null
         scrollGroup = mutableListOf()
         for (entry in entries) {
+            val isScrolling = entry.isCurrent || entry.isExtended
             val view: TextView =
                 if (entry.isCurrent) {
                     CurrentLineView(context).also {
@@ -728,17 +768,13 @@ internal class LyricsOverlayView(
                 // 哨兵值（实测 1048576），系统「居中/右对齐」会把布局整体滚走
                 // （长文本被推出视口、短文本位置也不受控）；对齐由
                 // applyGroupScroll 的偏移统一实现。
-                gravity = if (entry.isCurrent || entry.isExtended) {
-                    Gravity.START
-                } else {
-                    rowGravity
-                }
+                gravity = if (isScrolling) Gravity.START else rowGravity
                 maxLines = 1
                 setSingleLine(true)
                 isSelected = false
                 isFocusable = false
                 isFocusableInTouchMode = false
-                if (entry.isCurrent || entry.isExtended) {
+                if (isScrolling) {
                     // 滚动组不做省略号截断：超宽部分随组偏移进出窗口。
                     ellipsize = null
                 } else {
@@ -749,12 +785,17 @@ internal class LyricsOverlayView(
             column.addView(
                 view,
                 LinearLayout.LayoutParams(
-                    LinearLayout.LayoutParams.MATCH_PARENT,
+                    // 滚动组行宽取文本宽：位移后行尾不被行视图自身边界裁掉。
+                    if (isScrolling) {
+                        scrollingRowWidth(view.paint, entry.text)
+                    } else {
+                        LinearLayout.LayoutParams.MATCH_PARENT
+                    },
                     LinearLayout.LayoutParams.WRAP_CONTENT,
                 ),
             )
             entryViews.add(view)
-            if (entry.isCurrent || entry.isExtended) scrollGroup.add(view)
+            if (isScrolling) scrollGroup.add(view)
         }
         // 整列（含扩展行）布局完成后重排滚动组偏移，见 [reapplyGroupScroll]。
         column.addOnLayoutChangeListener { _, _, _, _, _, _, _, _, _ ->
@@ -889,30 +930,32 @@ internal class LyricsOverlayView(
 
     /**
      * 把滚动组按主行算出的目标偏移应用：
-     * - 文本未超宽：按配置对齐摆位（滚动组强制左对齐，这里用位移实现）；
+     * - 文本未超宽：按配置在视口内对齐摆位（滚动组强制左对齐，这里用位移实现）；
      * - 文本超宽：左缘起滚，主行偏移由进度驱动，扩展行按自身溢出裁剪——
-     *   翻译 / 罗马音跟主行一起滚、超出窗口的部分一起被裁掉（消失）。
+     *   翻译 / 罗马音跟主行一起滚、超出视口的部分一起被裁掉（消失）。
      *
      * 位移用 `translationX`（float）：慢速行（长行 / 高刷屏）每帧位移常常不足
-     * 1px，整像素滚动会退化成台阶；父级 contentHolder 已 `clipChildren`，
-     * 浮点位移的裁切行为与滚动一致。
+     * 1px，整像素滚动会退化成台阶。行视图宽度取文本宽（见 [scrollingRowWidth]），
+     * 位移不会把行尾裁在行视图自身边界内；浮点位移的裁切由 contentHolder 承担，
+     * 与滚动一致。
      *
      * 符号约定（勿对调）：`translationX` 正 = 内容右移——未超宽时按对齐摆位
      * 取正位移（居中 / 右对齐向右摆，左对齐为 0），超宽后由 0 递减到负溢出
      * （文本向左滚，行尾正好滚到位）。
      */
     private fun applyGroupScroll(groupOffset: Float) {
+        val viewport = viewportWidth()
+        if (viewport <= 0f) return
         for (view in scrollGroup) {
             val textWidth = textWidthOf(view)
-            val viewWidth = view.width.toFloat()
-            val overflow = (textWidth - viewWidth).coerceAtLeast(0f)
+            val overflow = (textWidth - viewport).coerceAtLeast(0f)
             val alignedShift = if (overflow > 0f) {
                 0f
             } else {
                 when (rowAlignX) {
                     "left" -> 0f
-                    "right" -> (viewWidth - textWidth).coerceAtLeast(0f)
-                    else -> ((viewWidth - textWidth) / 2f).coerceAtLeast(0f)
+                    "right" -> (viewport - textWidth).coerceAtLeast(0f)
+                    else -> ((viewport - textWidth) / 2f).coerceAtLeast(0f)
                 }
             }
             val scroll = groupOffset.coerceIn(0f, overflow)
@@ -920,6 +963,10 @@ internal class LyricsOverlayView(
             if (view.translationX != x) view.translationX = x
         }
     }
+
+    /** 滚动视口宽：裁剪盒（contentHolder）的内宽。 */
+    private fun viewportWidth(): Float =
+        (if (contentHolder.width > 0) contentHolder.width else width).toFloat()
 
     /** 行文本实际宽度（未布局为 0）。 */
     private fun textWidthOf(view: TextView): Float {
