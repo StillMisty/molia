@@ -112,11 +112,13 @@ void main() async {
     local: local,
     library: library,
     messenger: AppUiMessenger(notifications),
-    mediaSessionFactory: (service, provider) => initSystemMediaSession(
+    mediaSessionFactory: (service, session) => initSystemMediaSession(
       service,
       artworkBlocked: () => local.dataSaver.blockNetworkArtwork,
-      onRestoredSkipToNext: provider.skipToNext,
-      onRestoredSkipToPrevious: provider.skipToPrevious,
+      // 恢复态（冷启动未起播）切歌键落到会话模块：它按阶段决定是恢复播放
+      // 还是转发给真实播放。
+      onRestoredSkipToNext: () => session.skipToNext(),
+      onRestoredSkipToPrevious: () => session.skipToPrevious(),
     ),
   );
   _markStartup('播放栈（含媒体会话）', startup);

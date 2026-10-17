@@ -15,6 +15,7 @@ import '../domain/ports/playback_facade.dart';
 import '../domain/ports/state_listenable.dart';
 import '../domain/ports/ui_messenger.dart';
 import '../models/play_mode.dart';
+import '../playback/playback_session_coordinator.dart';
 import '../services/data_saver_service.dart';
 import '../services/playback_observer.dart';
 import '../services/playback_session_store.dart';
@@ -56,50 +57,10 @@ class _StateValueListenable<T> implements ValueListenable<T> {
       _source.removeListener(listener);
 }
 
-/// 进度通道：真实播放时转发 facade position；恢复态（冷启动未加载）
-/// 显示上次保存的进度，直到用户恢复播放后交还底层。
-class _PositionChannel implements ValueListenable<Duration> {
-  _PositionChannel(this._source) {
-    _source.addListener(_relay);
-  }
-
-  final ValueListenable<Duration> _source;
-  final List<VoidCallback> _listeners = [];
-  Duration? _restored;
-
-  @override
-  Duration get value => _restored ?? _source.value;
-
-  /// 进入/更新恢复态（null 表示退出，交还底层）。
-  void setRestored(Duration? position) {
-    _restored = position;
-    _notify();
-  }
-
-  void _relay() {
-    if (_restored != null) return;
-    _notify();
-  }
-
-  void _notify() {
-    for (final listener in List<VoidCallback>.of(_listeners)) {
-      listener();
-    }
-  }
-
-  @override
-  void addListener(VoidCallback listener) => _listeners.add(listener);
-
-  @override
-  void removeListener(VoidCallback listener) => _listeners.remove(listener);
-
-  void dispose() => _source.removeListener(_relay);
-}
-
 /// UI 播放状态唯一入口：包装 [PlaybackFacade]。
 ///
 /// 对外只暴露领域 [PlaybackSnapshot]（真实播放来自 facade；冷启动恢复态
-/// 由会话构造展示快照）与高频 position 通道。
+/// 由 [PlaybackSessionCoordinator] 构造覆盖快照）与高频 position 通道。
 /// 所有播放均走本地音源。
 ///
 /// 职责边界（docs/architecture.md §2.1）：
@@ -108,10 +69,11 @@ class _PositionChannel implements ValueListenable<Duration> {
 /// - 应用内音量 / 静音是设备本地状态：不进 [PlaybackSnapshot]（快照 `==`
 ///   契约与低频语义不能动、音量也不是播放事件），变化直接 `notifyListeners`
 ///   且不新增节流类别；
-/// - 只保留命令 / 队列 / 模式 / 恢复态 / 失败恢复：持久化 / 写库 / 桌面
-///   小组件 / 封面预取与补取 / 历史 / 会话落盘等副作用由 [PlaybackObserver]
-///   承担（组合根创建并挂接），本类只转发 [flushPlaybackSession] 与
-///   最后播放信息读取。
+/// - 只保留命令 / 队列 / 模式 / 失败恢复：命令一律转给
+///   [PlaybackSessionCoordinator]（恢复态与 live 的交接、恢复态快照构造与会话
+///   落盘都在那里，本类不再持有恢复态分支）；持久化 / 写库 / 桌面小组件 /
+///   封面预取与补取 / 历史等副作用由 [PlaybackObserver] 承担（组合根创建并
+///   挂接），本类只转发 [flushPlaybackSession] 与最后播放信息读取。
 class PlaybackProvider extends ChangeNotifier {
   final PlaybackFacade _facade;
   final SettingsRegistry _settings;
@@ -137,34 +99,22 @@ class PlaybackProvider extends ChangeNotifier {
   // 通知节流器 - 减少不必要的 UI 重建
   late final CategorizedNotifyThrottler _notifyThrottler;
 
+  /// 播放会话模块（组合根创建并注入；未注入时按默认存储 / 设置自建）：
+  /// 恢复态 ↔ live 交接、恢复态快照构造、会话落盘唯一写者都在它里面。
+  late final PlaybackSessionCoordinator _session;
+
   /// 高频进度通道（真实播放转发 facade.position；恢复态显示上次进度）。
-  late final _PositionChannel _positionChannel;
+  ///
+  /// 恢复态覆盖值由 [_session] 持有，这里只做领域 → Flutter 形态适配，
+  /// 同一实例稳定持有。
+  late final ValueListenable<Duration> _positionChannel;
 
   /// 定时关闭（歌曲信息页入口）：只决定「什么时候暂停」，暂停动作走
   /// `facade.pause`；状态经 [SleepTimerController] 的 ValueListenable 暴露。
   late final SleepTimerController sleepTimer;
 
-  /// 上次播放会话持久化（冷启动恢复封面/标题/进度，点播放重新取链）。
-  final PlaybackSessionStore _sessionStore;
-  PlaybackSession? _restoredSession;
-
   /// 应用内音量持久化（设备本地键，见 [PlaybackVolumeStore]）。
   final PlaybackVolumeStore _volumeStore;
-
-  /// 恢复态展示快照：`snapshot` getter 的覆盖值（无真实播放时生效）。
-  PlaybackSnapshot? _restoredSnapshot;
-  Duration _restoredPosition = Duration.zero;
-
-  /// 恢复播放进行中（playTracks/seek 未完成）：此时撤下恢复态快照但
-  /// 保留进度通道的恢复进度，避免进度条闪回 0。
-  bool _resumeRestoring = false;
-
-  /// 恢复装载期间用户主动 seek 的目标：恢复流程末尾以用户目标为准，
-  /// 否则用户的拖动/点歌词行会被「跳回保存进度」覆盖。
-  Duration? _resumeSeekTarget;
-
-  /// 已处理过的当前曲目（用于去重撤下恢复态）。
-  String? _processedTrackId;
 
   /// 已展示过的播放错误（避免同一错误反复弹提示）。
   String? _lastShownError;
@@ -183,9 +133,6 @@ class PlaybackProvider extends ChangeNotifier {
   /// 默认播放模式（设置页配置；启动时无曲目即应用为初始模式）。
   PlayMode _defaultPlayMode = PlayMode.sequential;
 
-  /// 启动时是否恢复上次播放（曲目 / 队列 / 进度）；设置页开关，默认开。
-  bool _restoreSessionEnabled = kRestoreSessionEnabled.defaultValue;
-
   /// 应用内音量（0..1，不含静音状态）；设备本地持久化，不随账号同步。
   double _volume = PlaybackVolumeStore.defaultVolume;
 
@@ -201,7 +148,7 @@ class PlaybackProvider extends ChangeNotifier {
     CatalogService? catalogService,
     DataSaverService? dataSaver,
     PlaybackObserver? observer,
-    PlaybackSessionStore? sessionStore,
+    PlaybackSessionCoordinator? sessionCoordinator,
     PlaybackVolumeStore? volumeStore,
     SourceSwapSettings? autoSwapSettings,
     AutoSourceSwapResolver? autoSwapResolver,
@@ -215,11 +162,17 @@ class PlaybackProvider extends ChangeNotifier {
         _autoSwapSettings = autoSwapSettings,
         _autoSwapResolver = autoSwapResolver,
         _settings = settings ?? SettingsRegistry(keys: kAllSettingsKeys),
-        _sessionStore = sessionStore ?? PlaybackSessionStore(),
         _volumeStore = volumeStore ?? PlaybackVolumeStore() {
+    // 会话模块：组合根注入（与系统媒体会话 / 同步栈共用同一实例）；
+    // 未注入时自建（测试直建 provider 的路径），恢复曲目展示经观察者接线。
+    _session = sessionCoordinator ??
+        PlaybackSessionCoordinator(
+          facade: facade,
+          store: PlaybackSessionStore(),
+          settings: _settings,
+          onRestoredTrack: _observer?.showRestoredTrack,
+        );
     _settings.bindReload(kDefaultPlayMode, reloadDefaultPlayMode);
-    _settings.bindReload(
-        kRestoreSessionEnabled, reloadRestoreSessionPreference);
     _notifyThrottler = CategorizedNotifyThrottler(
       notifyCallback: super.notifyListeners,
       categoryIntervals: {
@@ -228,8 +181,7 @@ class PlaybackProvider extends ChangeNotifier {
       },
       defaultInterval: const Duration(milliseconds: 50),
     );
-    _positionChannel =
-        _PositionChannel(_StateValueListenable<Duration>(_facade.position));
+    _positionChannel = _StateValueListenable<Duration>(_session.position);
     // 定时关闭：判定用 facade 原始通道（恢复态覆盖值不是真实播放进度）。
     sleepTimer = SleepTimerController(
       snapshot: _facade.snapshot,
@@ -238,7 +190,7 @@ class PlaybackProvider extends ChangeNotifier {
     );
     _facade.snapshot.addListener(_onFacadeSnapshot);
     // position 走独立 ValueListenable 通道（_positionChannel）：进度 tick
-    // 只重建进度条/歌词行，不触发整 Provider 重建（节流落盘在观察者里）。
+    // 只重建进度条/歌词行，不触发整 Provider 重建（节流落盘在会话模块里）。
     _sourceManager?.addListener(_onSourceManagerChanged);
     _dataSaver?.addListener(_onDataSaverChanged);
     _preferencesReady = () async {
@@ -252,12 +204,10 @@ class PlaybackProvider extends ChangeNotifier {
   }
 
   /// UI 状态唯一入口：真实播放取 facade 快照；冷启动恢复态取会话快照。
-  PlaybackSnapshot get snapshot => _restoredSnapshot ?? _facade.snapshot.value;
+  PlaybackSnapshot get snapshot => _session.resolve(_facade.snapshot.value);
 
   /// 是否有可恢复的上次播放会话（无真实曲目时才生效）。
-  bool get hasRestoredSession =>
-      _restoredSession?.current != null &&
-      _facade.snapshot.value.current == null;
+  bool get hasRestoredSession => _session.hasRestoredSession;
 
   /// 高频进度通道：订阅它做进度条/歌词行更新，避免整 Provider 重建。
   ValueListenable<Duration> get position => _positionChannel;
@@ -265,7 +215,7 @@ class PlaybackProvider extends ChangeNotifier {
   /// 同步读取当前进度（回调/一次性读取路径用；不建立订阅）。
   ///
   /// 真实播放与快照同源；恢复态为上次保存的进度。
-  Duration get currentPosition => _positionChannel.value;
+  Duration get currentPosition => _session.position.value;
 
   PlayMode get currentMode => snapshot.mode;
 
@@ -374,28 +324,10 @@ class PlaybackProvider extends ChangeNotifier {
 
   /// 换源：把队列中 [oldTrack] 原地替换为 [newTrack]，返回是否命中。
   ///
-  /// 真实队列经 facade 替换（按 id 全量命中；命中当前曲目会重新取链
-  /// 从头播放）；冷启动恢复态（facade 队列为空）替换保存的会话队列并落盘。
+  /// 真实队列经 facade 替换；冷启动恢复态替换保存的会话队列并落盘。
   /// 未命中不算失败：库内换源与队列跟随解耦（曲目可能不在当前队列）。
   Future<bool> replaceQueueTrack(Track oldTrack, Track newTrack) async {
-    final uri = oldTrack.id.uri;
-    var hit = false;
-    if (_facade.snapshot.value.queue.any((track) => track.id.uri == uri)) {
-      await _facade.replaceQueueTrack(uri, newTrack);
-      hit = true;
-    }
-    final session = _restoredSession;
-    if (session != null && session.tracks.any((track) => track.id.uri == uri)) {
-      _restoredSession = session.copyWith(
-        tracks: [
-          for (final track in session.tracks)
-            track.id.uri == uri ? newTrack : track,
-        ],
-      );
-      _publishRestoredSnapshot();
-      unawaited(_sessionStore.save(_restoredSession!));
-      hit = true;
-    }
+    final hit = await _session.replaceTrack(oldTrack, newTrack);
     if (hit) {
       _notifyCategory('track');
       _notifyCategory('queue');
@@ -407,164 +339,58 @@ class PlaybackProvider extends ChangeNotifier {
   ///
   /// 恢复态下 facade 队列为空：命中会话队列则从该曲目恢复播放。
   Future<void> playLocalQueueItemById(String trackId) async {
-    final queue = _facade.snapshot.value.queue;
-    final index = queue.indexWhere((track) => track.id.uri == trackId);
-    if (index < 0) {
-      final session = _restoredSession;
-      if (session != null) {
-        final restoredIndex =
-            session.tracks.indexWhere((track) => track.id.uri == trackId);
-        if (restoredIndex >= 0) {
-          await resumeRestoredSession(startIndex: restoredIndex);
-        }
-      }
-      return;
-    }
-    await _facade.playQueueIndex(index);
-    _notifyCategory('track');
+    _notifyRouted(await _session.playQueueItemById(trackId));
   }
 
   /// 停止本地播放并清空状态（同时丢弃恢复会话，避免下次启动又出现）。
   Future<void> stopLocalPlayback() async {
-    await _facade.stop();
+    await _session.stopPlayback();
     // 主动停止 = 本次会话结束：定时关闭一并撤销（不留下无播放可暂停的定时）。
     sleepTimer.cancel();
-    _clearRestoredSession();
-    unawaited(_sessionStore.clear());
     _notifyCategory('track');
     _notifyCategory('queue');
   }
 
   Future<void> togglePlayPause() async {
-    // 恢复态：点播放 = 用上次队列/下标重新取链，并跳回保存的进度。
-    if (_facade.snapshot.value.current == null &&
-        _restoredSession?.current != null) {
-      await resumeRestoredSession();
-      return;
-    }
-    await _facade.toggle();
-    _notifyCategory('track');
+    // 恢复态：点播放 = 用上次队列/下标重新取链，并跳回保存的进度（协调者路由）。
+    _notifyRouted(await _session.togglePlayPause());
   }
 
   /// 恢复上次播放：以保存的队列/下标重新加载，再 seek 回保存的进度。
   ///
-  /// [startIndex] 指定从队列中另一首开始（恢复态点队列条目）：此时不 seek
-  /// 回保存进度（那是另一首曲目的进度）。直链不持久化（会过期），这里走
-  /// 正常取链路径；失败时保留恢复态可重试。
+  /// [startIndex] 指定从队列中另一首开始（恢复态点队列条目）。直链不持久化
+  /// （会过期），这里走正常取链路径；失败时保留恢复态可重试。
   Future<void> resumeRestoredSession({int? startIndex}) async {
-    final session = _restoredSession;
-    // 已有恢复流程在跑：忽略重复触发（装载中后端会推送曲目，后续操作走
-    // 真实播放路径，不会再次进入本方法）。
-    if (session == null || session.current == null || _resumeRestoring) return;
-    final index =
-        (startIndex ?? session.index).clamp(0, session.tracks.length - 1);
-    final seekBack = index == session.index ? _restoredPosition : Duration.zero;
-    // 装载期间保持显示恢复进度：后端装载会把进度通道对齐到 0，
-    // 若立刻交还底层，进度条会先闪回首部再跳到恢复进度。
-    _resumeRestoring = true;
-    try {
-      // 会话模式先落地：shuffle 需要在装载队列前生效（决定洗牌顺序）；
-      // 也保证实际播放模式与恢复态 UI 显示的一致。
-      await _facade.setMode(session.mode);
-      await _facade.playTracks(PlaybackRequest(
-        tracks: session.tracks,
-        startIndex: index,
-        context: session.context,
-      ));
-      // 装载期间用户主动 seek（拖进度条/点歌词行）优先于保存进度。
-      final targetSeek = _resumeSeekTarget ?? seekBack;
-      if (targetSeek > Duration.zero) {
-        await _facade.seek(targetSeek);
-      }
-      _clearRestoredSession();
-      // 立刻把恢复进度写回会话：装载时的强制保存记的是 0，
-      // 若在节流窗口内被杀进程，下次冷启动会从 0 开始。
-      _observer?.flushSession();
-      _notifyCategory('track');
-      _notifyCategory('queue');
-    } catch (e) {
-      _logger.severe('恢复上次播放失败', e);
-      // 已被真实播放接管（恢复快照已撤下）：交还进度通道，
-      // 避免一直停在旧的恢复进度。
-      if (_restoredSession == null) {
-        _clearRestoredSession();
-      }
-    } finally {
-      _resumeRestoring = false;
-      _resumeSeekTarget = null;
-    }
+    _notifyRouted(await _session.resume(startIndex: startIndex));
   }
 
   Future<void> seekToPosition(int positionMs) async {
-    // 恢复装载期间的 seek：记下用户目标，恢复流程末尾以它为准
-    // （否则用户的拖动/点歌词行会被恢复流程的「跳回保存进度」覆盖）。
-    if (_resumeRestoring) {
-      _resumeSeekTarget = Duration(milliseconds: positionMs);
-    }
-    // 恢复态：只更新保存的进度（点播放时再落到真实播放器上）。
-    if (_facade.snapshot.value.current == null && _restoredSession != null) {
-      final durationMs =
-          _restoredSession!.current?.duration?.inMilliseconds ?? 0;
-      final clamped = durationMs > 0
-          ? positionMs.clamp(0, durationMs)
-          : (positionMs < 0 ? 0 : positionMs);
-      _restoredPosition = Duration(milliseconds: clamped);
-      _restoredSession =
-          _restoredSession!.copyWith(position: _restoredPosition);
-      _positionChannel.setRestored(_restoredPosition);
-      _publishRestoredSnapshot();
-      unawaited(_sessionStore.save(_restoredSession!));
-      _notifyCategory('track');
-      return;
-    }
-    await _facade.seek(Duration(milliseconds: positionMs));
+    // 恢复装载期间的 seek / 恢复态只更新保存进度 / live 转发都由协调者路由。
+    await _session.seekToPosition(Duration(milliseconds: positionMs));
     _notifyCategory('track');
   }
 
   Future<void> skipToNext() async {
-    if (_facade.snapshot.value.current == null &&
-        _restoredSession?.current != null) {
-      // 恢复态切歌 = 从新下标立即恢复播放（与点队列条目同一契约）；
-      // 语义上「切歌」包含起播，只移动下标会与队列条目点击不一致。
-      final session = _restoredSession!;
-      final next = session.index + 1;
-      if (next >= session.tracks.length) return;
-      await resumeRestoredSession(startIndex: next);
-      return;
-    }
-    await _facade.next();
-    _notifyCategory('track');
+    _notifyRouted(await _session.skipToNext());
   }
 
   Future<void> skipToPrevious() async {
-    if (_facade.snapshot.value.current == null &&
-        _restoredSession?.current != null) {
-      final session = _restoredSession!;
-      final previous = session.index - 1;
-      if (previous < 0) return;
-      await resumeRestoredSession(startIndex: previous);
-      return;
-    }
-    await _facade.previous();
+    _notifyRouted(await _session.skipToPrevious());
+  }
+
+  Future<void> setPlayMode(PlayMode mode) async {
+    await _session.setPlayMode(mode);
     _notifyCategory('track');
   }
 
-  // 恢复态（冷启动未真正播放）下 UI 读的是恢复快照，必须同步更新恢复会话
-  // 并持久化，否则模式按钮看起来「点不动」；恢复播放时会把该模式带给后端。
-  Future<void> setPlayMode(PlayMode mode) async {
-    await _facade.setMode(mode);
-    final session = _restoredSession;
-    if (session != null) {
-      _restoredSession = session.copyWith(mode: mode);
-      _publishRestoredSnapshot();
-      unawaited(_sessionStore.save(_restoredSession!));
-    } else {
-      // 真实播放：模式是会话的一部分，立即落盘并等它写完
-      //（重开应用恢复的是改后的模式）。
-      _observer?.flushSession();
-      await _sessionStore.pendingWrite;
-    }
+  /// 按命令路由结果通知 UI：恢复态曲目与队列都可能变（两条通道），
+  /// live 只有曲目 / 播放态变化，空操作不必通知。
+  void _notifyRouted(PlaybackCommandRoute route) {
+    if (route == PlaybackCommandRoute.none) return;
     _notifyCategory('track');
+    if (route == PlaybackCommandRoute.restored) {
+      _notifyCategory('queue');
+    }
   }
 
   Future<void> togglePlayMode() async {
@@ -703,45 +529,25 @@ class PlaybackProvider extends ChangeNotifier {
   }
 
   /// 启动时恢复上次播放（设置页开关，默认开）。
-  bool get restoreSessionEnabled => _restoreSessionEnabled;
+  bool get restoreSessionEnabled => _session.restoreSessionEnabled;
 
   /// 设置「启动时恢复上次播放」。
   ///
   /// 关闭时立即撤下尚未开始播放的恢复态（真实播放不受影响）；会话仍
   /// 持续落盘，重新开启后冷启动可再次恢复。
   Future<void> setRestoreSessionEnabled(bool value) async {
-    if (_restoreSessionEnabled != value) {
-      _applyRestoreSessionEnabled(value);
-    }
-    try {
-      await _settings.write(kRestoreSessionEnabled, value);
-    } catch (e) {
-      _logger.severe('保存启动恢复开关失败', e);
+    if (await _session.setRestoreSessionEnabled(value)) {
+      _notifyCategory('track');
+      _notifyCategory('queue');
     }
   }
 
   /// 重新读取启动恢复开关（跨设备同步应用远端设置后由组合根调用）。
-  Future<void> reloadRestoreSessionPreference() async {
-    final enabled = await _settings.read(kRestoreSessionEnabled);
-    if (_restoreSessionEnabled == enabled) return;
-    _applyRestoreSessionEnabled(enabled);
-    if (enabled) await _loadPlaybackSession();
-  }
+  Future<void> reloadRestoreSessionPreference() =>
+      _session.reloadRestoreSessionPreference();
 
-  /// 开关状态落地：关闭且无真实播放时撤下恢复态。
-  void _applyRestoreSessionEnabled(bool enabled) {
-    _restoreSessionEnabled = enabled;
-    if (enabled) return;
-    if (_facade.snapshot.value.current != null || _restoredSession == null) {
-      return;
-    }
-    _clearRestoredSession();
-    _notifyCategory('track');
-    _notifyCategory('queue');
-  }
-
-  /// facade 低频快照变化：撤下恢复态 / 处理失败并通知 UI（曲目/队列）；
-  /// 副作用扇出在 [PlaybackObserver] 的同源监听里。
+  /// facade 低频快照变化：处理失败并通知 UI（曲目/队列）；副作用扇出在
+  /// [PlaybackObserver] 的同源监听里，恢复态交接在 [PlaybackSessionCoordinator]。
   void _onFacadeSnapshot() {
     _handlePlaybackSnapshot();
     _notifyCategory('track');
@@ -757,57 +563,31 @@ class PlaybackProvider extends ChangeNotifier {
     _notifyCategory('default');
   }
 
-  /// 曲目切换时：维护恢复态撤下；失败提示与恢复见 [_maybeShowPlaybackError]
+  /// 曲目切换时：失败提示与恢复见 [_maybeShowPlaybackError]
   /// / [_maybeRecoverFromPlaybackError]。写入类副作用（最后播放 / 播放上下文 /
-  /// 小组件 / 历史 / 会话落盘 / 预取 / 补封面）在 [PlaybackObserver]。
+  /// 小组件 / 历史 / 会话落盘 / 预取 / 补封面）在 [PlaybackObserver]，恢复态
+  /// 撤下与 live 交接在会话协调者。
   void _handlePlaybackSnapshot() {
-    final trackId = _facade.snapshot.value.current?.id.uri;
-    if (trackId == null) {
-      _processedTrackId = null;
-    } else if (trackId != _processedTrackId) {
-      _processedTrackId = trackId;
-      // 真实播放接管：撤下冷启动恢复态。恢复播放的 seek 尚未落地时，
-      // 继续沿用恢复进度显示（见 _resumeRestoring），避免进度条闪回 0。
-      _clearRestoredSession(keepPosition: _resumeRestoring);
-    }
     _maybeShowPlaybackError();
     _maybeRecoverFromPlaybackError();
   }
 
-  /// 立即把当前播放会话写入本地（进入后台 / 生命周期 paused / 系统控制暂停时调用）。
+  /// 强制把当前播放会话写入本地（进入后台 / 生命周期 paused / 系统控制暂停时调用）。
   ///
   /// 返回的 Future 在会话落盘后结束：系统媒体控制（通知暂停 / 停止 / 切播放
   /// 顺序）await 它，保证控制动作返回时会话已在本地——进程随后被系统回收，
   /// 重开应用仍能恢复上一首 / 队列 / 模式 / 进度。
-  Future<void> flushPlaybackSession() async {
-    _observer?.flushSession();
-    await _sessionStore.pendingWrite;
-  }
+  Future<void> flushPlaybackSession() => _session.flushSession();
 
   /// 冷启动加载上次播放会话：无真实曲目时进入恢复态。
   ///
   /// 开关关闭（设置 › 播放 › 启动时恢复上次播放）或已有真实播放
   /// （如系统媒体会话恢复）时不装载；同步应用远端会话同样受开关约束。
+  /// 判据与装载细节都在协调者（本方法只负责加载后的 UI 通知）。
   Future<void> _loadPlaybackSession() async {
-    try {
-      _restoreSessionEnabled = await _settings.read(kRestoreSessionEnabled);
-      if (!_restoreSessionEnabled) return;
-      final session = await _sessionStore.load();
-      if (session == null || session.current == null) return;
-      // 已有真实播放（如系统媒体会话恢复）时不覆盖。
-      if (_facade.snapshot.value.current != null) return;
-      _restoredSession = session;
-      _restoredPosition = session.position;
-      _positionChannel.setRestored(session.position);
-      final current = session.current!;
-      // 恢复曲目并未真正起播，只把信息交给观察者作为「最后播放」展示。
-      _observer?.showRestoredTrack(current);
-      _publishRestoredSnapshot();
-      _logger.fine('已恢复上次播放会话: ${current.title} @${session.position.inSeconds}s');
+    if (await _session.load()) {
       _notifyCategory('track');
       _notifyCategory('queue');
-    } catch (e) {
-      _logger.severe('恢复上次播放会话失败', e);
     }
   }
 
@@ -816,58 +596,10 @@ class PlaybackProvider extends ChangeNotifier {
   /// 远端删除会话时同步撤下本地恢复态；正在播放的设备不受影响
   /// （真实播放不会被恢复态覆盖）。
   Future<void> reloadRestoredSessionFromStore() async {
-    if (_facade.snapshot.value.current != null || _resumeRestoring) return;
-    final session = await _sessionStore.load();
-    if (session == null || session.current == null) {
-      final hadRestored = _restoredSession != null;
-      _clearRestoredSession();
-      if (hadRestored) {
-        _notifyCategory('track');
-        _notifyCategory('queue');
-      }
-      return;
+    if (await _session.reloadFromStore()) {
+      _notifyCategory('track');
+      _notifyCategory('queue');
     }
-    await _loadPlaybackSession();
-  }
-
-  /// 用会话构造恢复态展示快照：当前/队列/下标/模式齐备，isPlaying=false；
-  /// 历史用会话队列前缀近似。
-  void _publishRestoredSnapshot() {
-    final session = _restoredSession;
-    final current = session?.current;
-    if (session == null || current == null) {
-      _restoredSnapshot = null;
-      return;
-    }
-    _restoredSnapshot = PlaybackSnapshot(
-      current: current,
-      queue: List.unmodifiable(session.tracks),
-      currentIndex: session.index,
-      next: session.index + 1 < session.tracks.length
-          ? session.tracks[session.index + 1]
-          : null,
-      // 恢复态没有播放顺序栈：previous 按队列下标回退近似。
-      previous: session.index > 0 ? session.tracks[session.index - 1] : null,
-      // 恢复态没有洗牌顺序可还原：upNext 按队列顺序近似。
-      upNext: List.unmodifiable(session.tracks.sublist(session.index + 1)),
-      isPlaying: false,
-      isLoading: false,
-      duration: current.duration ?? Duration.zero,
-      mode: session.mode,
-      context: session.context,
-    );
-  }
-
-  /// 撤下恢复态：真实播放接管或停止播放时调用。
-  ///
-  /// [keepPosition] 为 true 时保留进度通道的恢复进度（恢复播放的 seek
-  /// 尚未落地），调用方负责在 seek 完成后再次调用本方法交还进度通道。
-  void _clearRestoredSession({bool keepPosition = false}) {
-    _restoredSession = null;
-    _restoredSnapshot = null;
-    if (keepPosition) return;
-    _restoredPosition = Duration.zero;
-    _positionChannel.setRestored(null);
   }
 
   /// 播放失败恢复：按 sourceKey 失效取链缓存，自动重试一次；
@@ -975,7 +707,6 @@ class PlaybackProvider extends ChangeNotifier {
   @override
   void dispose() {
     _facade.snapshot.removeListener(_onFacadeSnapshot);
-    _positionChannel.dispose();
     sleepTimer.dispose();
     _sourceManager?.removeListener(_onSourceManagerChanged);
     _dataSaver?.removeListener(_onDataSaverChanged);
@@ -985,8 +716,9 @@ class PlaybackProvider extends ChangeNotifier {
       _volumePersistTimer = null;
       unawaited(_persistVolumeState());
     }
-    // 观察者由组合根创建、与 provider 同生命周期：这里一并拆线
+    // 会话协调者与观察者由组合根创建、与 provider 同生命周期：这里一并拆线
     // （组合根不单独释放）。
+    _session.dispose();
     _observer?.dispose();
     // 注意：facade / backend / LocalPlaybackService 由组合根创建并注入
     // （系统媒体会话复用同一实例），此处不能 dispose，只解除监听。

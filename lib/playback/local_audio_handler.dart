@@ -149,12 +149,13 @@ class LocalAudioHandler {
   /// 恢复态（冷启动未起播、服务无曲目）切歌键的回落目标。
   ///
   /// 恢复态通常没有通知本体，但耳机 / 系统媒体键仍可能到达 handler；
-  /// 回落给 PlaybackProvider 用保存的会话立即恢复播放，补齐控制链一致性。
-  /// 组合根经 `mediaSessionFactory` 在 handler 创建时直接注入。
+  /// 回落给 `PlaybackSessionCoordinator`（组合根在工厂里注入），由它按阶段
+  /// 决定是从保存的会话恢复播放还是转发真实播放，补齐控制链一致性。
   final Future<void> Function()? _onRestoredSkipToNext;
   final Future<void> Function()? _onRestoredSkipToPrevious;
 
-  /// 会话落盘入口（组合根在 handler 建好后回填 `provider.flushPlaybackSession`）。
+  /// 会话落盘入口（组合根在 handler 建好后回填
+  /// `PlaybackSessionCoordinator.flushSession`）。
   ///
   /// 系统控制动作返回前显式落盘，而不是等中间快照被间接观察到——进程随后
   /// 被系统回收时，「重开应用恢复上一首 / 队列 / 模式 / 进度」才是确定的
@@ -290,7 +291,8 @@ class LocalAudioHandler {
   void _onLocaleChanged() => _syncFromService(force: true);
 
   Future<void> skipToNext() async {
-    // 恢复态（无真实曲目）：回落给注入的 provider 回调（保存会话立即恢复播放）。
+    // 恢复态（无真实曲目）：回落给注入的会话模块（保存会话立即恢复播放，
+    // 或按阶段转发真实播放）。
     if (!_service.hasTrack) {
       await _onRestoredSkipToNext?.call();
       _syncFromService(force: true);
