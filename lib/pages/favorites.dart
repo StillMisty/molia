@@ -227,6 +227,21 @@ class _FavoritesPageState extends State<FavoritesPage> {
     );
   }
 
+  /// 升序列表里第一个 `>= prefix` 的下标（前缀区间起点）。
+  static int _lowerBound(List<String> sorted, String prefix) {
+    var low = 0;
+    var high = sorted.length;
+    while (low < high) {
+      final mid = (low + high) >> 1;
+      if (sorted[mid].compareTo(prefix) < 0) {
+        low = mid + 1;
+      } else {
+        high = mid;
+      }
+    }
+    return low;
+  }
+
   /// 缓存行重算触发：签名变化才重算（只在浏览本地歌曲合集时调用）。
   void _scheduleCachedSongRowsReload(
     LibraryProvider provider,
@@ -256,6 +271,10 @@ class _FavoritesPageState extends State<FavoritesPage> {
     try {
       if (cache != null && downloads != null && downloads.supported) {
         final index = await cache.audioCacheIndex();
+        // 排序 + 二分定位前缀区间：旧实现对「每首历史 × 每个缓存文件」做
+        // startsWith（1000 历史 × 3000 文件 ≈ 300 万次字符串比较）；同前缀
+        // 的键在字典序上连续，二分到起点后只扫描命中区间。
+        final sortedKeys = index.keys.toList()..sort();
         final result = <CollectionLocalSong>[];
         for (final entry in provider.history) {
           final record = downloads.recordFor(entry.sourceKey, entry.songId);
@@ -265,10 +284,14 @@ class _FavoritesPageState extends State<FavoritesPage> {
             songId: entry.songId,
           );
           int? size;
-          for (final file in index.entries) {
-            if (!file.key.startsWith(prefix)) continue;
+          for (var i = _lowerBound(sortedKeys, prefix);
+              i < sortedKeys.length;
+              i++) {
+            final key = sortedKeys[i];
+            if (!key.startsWith(prefix)) break;
+            final fileSize = index[key]!;
             // 同一曲目可能有多个音质变体：取最大（展示用）。
-            size = size == null || file.value > size ? file.value : size;
+            size = size == null || fileSize > size ? fileSize : size;
           }
           if (size == null) continue;
           result.add(CollectionLocalSong.cached(entry, cachedSizeBytes: size));
