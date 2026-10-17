@@ -51,8 +51,6 @@ class LibraryProvider extends ChangeNotifier {
   bool _disposed = false;
   Future<void>? _pendingReload;
 
-
-
   /// 收藏状态版本（单调递增）：收藏相关订阅方（收藏按钮 / 发现页）据此做
   /// O(1) 的失效判定，不必对每次历史写入都重建。
   int _favoritesRevision = 0;
