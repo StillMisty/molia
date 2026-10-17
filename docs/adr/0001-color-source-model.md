@@ -28,7 +28,9 @@
    > 真实壁纸图取色：`SystemWallpaperSource` 探测壁纸文件（Linux gsettings、
    > Windows TranscodedWallpaper）、`ArtworkPaletteService.loadLocalFile` 取
    > seed，优先级变为壁纸图 seed > 系统强调色方案 > 自定义种子色；其它桌面
-   > （KDE / XFCE）与拿不到壁纸时仍走强调色兜底；壁纸变更重启后生效（不监听）。
+   > （KDE / XFCE）、拿不到壁纸、以及 Flutter 图片解码不支持的格式
+   > （GNOME 42+ 默认壁纸即 `.jxl`）都静默回退强调色；壁纸变更重启后生效
+   > （不监听）。
 2. 封面覆盖（开关，默认开）：当前曲目有封面取色结果时用封面 seed 覆盖基础配色
    （包括盖过莫奈）；无封面时清除并回退基础配色；取色失败保持现色；
    > **2026-10-15 修订**：冷启动恢复态在 `runApp` 前用本地已有封面预解析 seed
