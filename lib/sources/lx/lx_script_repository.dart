@@ -30,7 +30,6 @@ class LxScriptRepository {
   }
 
   Future<void> init() async {
-    if (kIsWeb) return;
     try {
       final dir = await getApplicationSupportDirectory();
       final file = File('${dir.path}/$_fileName');

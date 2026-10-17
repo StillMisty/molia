@@ -47,9 +47,9 @@ class LocalNetworkPermission {
   static const MethodChannel _channel =
       MethodChannel('top.stillmisty.molia/local_network');
 
-  /// 生产实现：Android 走 `ACCESS_LOCAL_NETWORK`，Web 与桌面恒定允许。
+  /// 生产实现：Android 走 `ACCESS_LOCAL_NETWORK`，桌面恒定允许。
   factory LocalNetworkPermission.production() {
-    final needs = !kIsWeb && defaultTargetPlatform == TargetPlatform.android;
+    final needs = defaultTargetPlatform == TargetPlatform.android;
     return LocalNetworkPermission(
       needsPermission: needs,
       request: () async => _statusOf(

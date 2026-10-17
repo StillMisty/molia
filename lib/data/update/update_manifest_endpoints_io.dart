@@ -1,7 +1,7 @@
 import '../../domain/models/app_release.dart';
 import 'update_repository.dart';
 
-/// 原生端默认清单地址。
+/// 默认更新清单地址。
 ///
 /// - 稳定版：`releases/latest/download/...`（GitHub 的 latest 排除 prerelease）；
 /// - 测试版：发布流水线维护的滚动标签 `beta`。

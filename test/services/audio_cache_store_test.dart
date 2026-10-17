@@ -5,7 +5,7 @@ import 'package:molia/data/mapping/track_mapper.dart';
 import 'package:molia/domain/models/track.dart';
 import 'package:molia/services/audio_cache_store.dart';
 import 'package:molia/services/cache_storage_io.dart';
-import 'package:molia/services/cache_storage_stub.dart';
+import '../support/memory_cache_storage.dart';
 import 'package:molia/services/cache_types.dart';
 import 'package:molia/sources/source_track.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -13,7 +13,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 /// 音频缓存目录约定：命名 / 完整性 / 索引 / 命中 / 清扫 / 迁移。
 ///
 /// 只经 [AudioCacheStore] 的接口断言；文件系统用临时目录的真实 IO 实现
-/// （Web 不可用场景用空实现），命中探测注入真实的存在性判断。
+/// （无文件系统场景用空实现），命中探测注入真实的存在性判断。
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
@@ -218,18 +218,18 @@ void main() {
       );
     });
 
-    test('目录不可用（Web）：空表与 zero', () async {
-      final web = AudioCacheStore(storage: MemoryCacheStorage());
-      expect(await web.directoryPath(), isNull);
-      expect(await web.files(), isEmpty);
-      expect(await web.index(), isEmpty);
+    test('目录不可用（无文件系统）：空表与 zero', () async {
+      final noFs = AudioCacheStore(storage: MemoryCacheStorage());
+      expect(await noFs.directoryPath(), isNull);
+      expect(await noFs.files(), isEmpty);
+      expect(await noFs.index(), isEmpty);
       expect(
-        await web.usageForTrack(sourceKey: 'kw', songId: 'a'),
+        await noFs.usageForTrack(sourceKey: 'kw', songId: 'a'),
         CacheUsage.zero,
       );
-      expect(await web.cleanupPartials(), 0);
+      expect(await noFs.cleanupPartials(), 0);
       expect(
-        await web.clearForTrack(sourceKey: 'kw', songId: 'a'),
+        await noFs.clearForTrack(sourceKey: 'kw', songId: 'a'),
         const CacheDeleteResult(),
       );
     });
@@ -295,11 +295,11 @@ void main() {
       ]);
     });
 
-    test('目录不可用（Web）：一律不命中', () async {
-      final web = AudioCacheStore(storage: MemoryCacheStorage());
+    test('目录不可用（无文件系统）：一律不命中', () async {
+      final noFs = AudioCacheStore(storage: MemoryCacheStorage());
       final t = track(qualities: const [AudioQuality(type: '320k')]);
       expect(
-        await web.hitPathForTrack(t, quality: '320k', fileExists: fileExists),
+        await noFs.hitPathForTrack(t, quality: '320k', fileExists: fileExists),
         isNull,
       );
     });
@@ -425,12 +425,12 @@ void main() {
       expect(await file.exists(), isFalse);
     });
 
-    test('目录不可用（Web）：不崩，仍标记版本', () async {
-      final web = AudioCacheStore(
+    test('目录不可用（无文件系统）：不崩，仍标记版本', () async {
+      final noFs = AudioCacheStore(
         storage: MemoryCacheStorage(),
         preferences: () async => prefs,
       );
-      expect(await web.migrateNamingIfNeeded(), isTrue);
+      expect(await noFs.migrateNamingIfNeeded(), isTrue);
       expect(
         prefs.getInt(AudioCacheStore.keyNamingVersion),
         AudioCacheStore.namingVersion,

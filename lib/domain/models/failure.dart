@@ -21,7 +21,7 @@ enum FailureKind {
 ///
 /// 纯 Dart 实现（不依赖 Flutter / HTTP 包）：`from` 通过类型名与字符串特征
 /// 归一化常见错误，避免领域层 import `lib/sources/**`（layering 硬规则）与
-/// `dart:io`（Web 构建兼容）。已知映射：
+/// `dart:io`（`SocketException` / `HttpException` 只按类型名识别）。已知映射：
 /// - `LxEngineException` → scriptError
 /// - `TimeoutException` → timeout
 /// - `SocketException` / `ClientException` / `HttpException` → network

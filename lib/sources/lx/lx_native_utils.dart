@@ -5,7 +5,7 @@ import 'dart:typed_data';
 import 'package:crypto/crypto.dart' as crypto;
 import 'package:pointycastle/export.dart';
 
-import 'lx_zlib_stub.dart' if (dart.library.io) 'lx_zlib_io.dart' as zlib_impl;
+import 'lx_zlib_io.dart' as zlib_impl;
 
 /// 绑定给 LX 脚本的同步工具函数实现。
 ///

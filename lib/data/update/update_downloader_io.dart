@@ -8,7 +8,7 @@ import 'package:path_provider/path_provider.dart';
 import '../../domain/models/app_release.dart';
 import '../http/app_dio.dart';
 
-/// 更新产物下载器（原生实现）：流式写盘 + 进度回调 + sha256 强制校验。
+/// 更新产物下载器：流式写盘 + 进度回调 + sha256 强制校验。
 ///
 /// 设计要点：
 /// - 走 dio 的 `ResponseType.stream`：APK/压缩包几十 MB，不整块进内存；

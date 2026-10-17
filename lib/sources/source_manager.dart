@@ -132,7 +132,7 @@ class SourceManager extends ChangeNotifier {
 
   /// 当前音源是否可用（激活了脚本且引擎就绪）。
   bool get hasActiveSource =>
-      !kIsWeb && _engine.isRunning && _activeSources.isNotEmpty;
+      _engine.isRunning && _activeSources.isNotEmpty;
 
   /// any-listen 适配器（搜索 / 取链 / 歌词 / 封面 / 连接测试）。
   AnyListenSource get anyListenSource => _anyListenSource;
@@ -319,7 +319,7 @@ class SourceManager extends ChangeNotifier {
     notifyListeners();
 
     final activeId = repository.activeId;
-    if (activeId != null && !kIsWeb) {
+    if (activeId != null) {
       try {
         await activate(activeId);
       } catch (_) {
@@ -823,7 +823,7 @@ class SourceManager extends ChangeNotifier {
     final result = check ?? await checkScriptUpdate(id);
     final replaced = await repository.replace(id, result.latestScript);
     onScriptWritten?.call(id);
-    if (repository.activeId == id && !kIsWeb) {
+    if (repository.activeId == id) {
       await activate(id);
     } else {
       notifyListeners();

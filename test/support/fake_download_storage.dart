@@ -7,7 +7,7 @@ import 'package:molia/data/downloads/download_storage.dart';
 class FakeDownloadStorage implements DownloadStorage {
   FakeDownloadStorage({this.root = '/downloads', this.available = true});
 
-  /// [downloadsRoot] 返回值；[available] 为 false 时返回 null（Web 语义）。
+  /// [downloadsRoot] 返回值；[available] 为 false 时返回 null（存储不可用语义）。
   String? root;
   bool available;
 

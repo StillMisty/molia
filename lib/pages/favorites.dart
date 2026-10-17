@@ -413,7 +413,7 @@ class _FavoritesPageState extends State<FavoritesPage> {
 
   /// 合集弹层条目：收藏 / 播放历史 / 本地歌曲 / 各列表。按持久化顺序排列，
   /// 未记录的新列表按自然顺序（收藏 → 历史 → 本地歌曲 → 列表）追加在末尾；
-  /// 已删除列表的持久化键自动忽略；下载能力不可用（Web）时不出现本地歌曲。
+  /// 已删除列表的持久化键自动忽略；下载能力不可用时不出现本地歌曲。
   List<_CollectionEntry> _collectionEntries(
     AppLocalizations l10n,
     LibraryProvider provider,

@@ -128,7 +128,7 @@ void main() {
       expect(service.pauseCalls, 1);
     });
 
-    test('未注入中断流时构造不抛（桌面/Web 无插件实现路径）', () async {
+    test('未注入中断流时构造不抛（无插件实现路径）', () async {
       final service = LocalPlaybackService(
         resolver: (track, {String? quality}) async => 'http://127.0.0.1/a.wav',
       );

@@ -233,19 +233,11 @@ void main() {
     expect(provider.failure, isNull);
   });
 
-  test('Web：主操作退化为刷新页面，渠道收敛为稳定版', () async {
-    service.platform = const UpdatePlatformInfo(platform: 'web', arch: 'any');
-    preferences.channel = UpdateChannel.beta;
+  test('iOS：不支持应用内安装', () async {
+    service.platform = const UpdatePlatformInfo(platform: 'ios', arch: 'arm64');
     final provider = buildProvider();
     await provider.init();
     expect(provider.supportsInAppInstall, isFalse);
-    expect(provider.channelSelectable, isFalse);
-    expect(provider.effectiveChannel, UpdateChannel.stable);
-
-    await provider.check();
-    expect(service.lastCheckChannel, UpdateChannel.stable);
-    await provider.downloadAndInstall();
-    expect(service.reloadCalls, 1);
   });
 
   test('切换渠道：旧结果作废回到 idle', () async {

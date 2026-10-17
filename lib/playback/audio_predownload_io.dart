@@ -13,7 +13,7 @@ import 'audio_predownload_task.dart';
 Dio? _sharedDio;
 Dio _dio() => _sharedDio ??= createAppDio();
 
-/// 启动预取；平台不支持 / 目标已缓存时返回 null。
+/// 启动预取；目标已缓存时返回 null。
 AudioPredownloadTask? startAudioPredownload({
   required Uri uri,
   required String targetPath,

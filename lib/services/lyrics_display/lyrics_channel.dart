@@ -34,7 +34,7 @@ class LyricsChannel {
 
   /// 歌词输出当前只在 Android 落地（桌面平台等官方多窗口 API 稳定后接）。
   static bool get isSupportedPlatform =>
-      !kIsWeb && defaultTargetPlatform == TargetPlatform.android;
+      defaultTargetPlatform == TargetPlatform.android;
 
   Future<void> _onNativeCall(MethodCall call) async {
     final raw = call.arguments;

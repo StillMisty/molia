@@ -1,5 +1,4 @@
-/// 更新安装策略的共享类型（原生与 Web 两份实现共用，见
-/// `update_installer.dart` 的条件导入）。
+/// 更新安装策略的共享类型（实现见 `update_installer_io.dart`）。
 library;
 
 /// 安装结果：调用方据此决定提示文案与退出时机。
@@ -16,7 +15,7 @@ enum InstallOutcome {
   /// 安装目录不可写（系统包管理器安装 / 权限不足），只能手动下载覆盖。
   notWritable,
 
-  /// 当前平台不支持应用内安装（iOS / Web）。
+  /// 当前平台不支持应用内安装（iOS）。
   unsupported,
 
   /// 安装或替换失败。
@@ -27,7 +26,7 @@ enum InstallOutcome {
 class UpdatePlatformInfo {
   const UpdatePlatformInfo({required this.platform, required this.arch});
 
-  /// android / windows / linux / web / ios / macos。
+  /// android / windows / linux / ios / macos。
   final String platform;
 
   /// arm64 / armv7 / x86_64 / x64 / any。

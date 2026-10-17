@@ -21,7 +21,7 @@ library;
 import 'dart:async';
 
 import 'package:flutter/foundation.dart'
-    show TargetPlatform, defaultTargetPlatform, kIsWeb;
+    show TargetPlatform, defaultTargetPlatform;
 import 'package:flutter/services.dart' show MethodChannel;
 import 'package:flutter/widgets.dart' show GlobalKey, NavigatorState;
 import 'package:logging/logging.dart';
@@ -58,9 +58,9 @@ typedef PlayContextWriter = Future<void> Function({
 typedef PlaybackWidgetUpdater = Future<void> Function(
     Map<String, Object?> payload);
 
-/// 默认小组件更新：非 Android / Web 是空操作，失败静默（不影响播放主流程）。
+/// 默认小组件更新：非 Android 是空操作，失败静默（不影响播放主流程）。
 Future<void> _updateAndroidWidget(Map<String, Object?> payload) async {
-  if (kIsWeb || defaultTargetPlatform != TargetPlatform.android) return;
+  if (defaultTargetPlatform != TargetPlatform.android) return;
   try {
     await const MethodChannel('top.stillmisty.molia/widget')
         .invokeMethod<void>('updateWidget', payload);

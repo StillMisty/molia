@@ -6,7 +6,8 @@ import 'package:flutter_media_session/flutter_media_session.dart';
 
 import 'media_session_backend.dart';
 
-/// Linux 的 MPRIS 后端工厂（由条件导入选择）。
+/// Linux 的 MPRIS 后端工厂（由 `media_session_backend_factory.dart` 在 Linux
+/// 分支调用）。
 MediaSessionBackend? createMprisMediaSessionBackend() =>
     MprisMediaSessionBackend();
 

@@ -28,7 +28,7 @@ class NotificationPermission {
   static bool _requestedThisSession = false;
 
   static bool get _isAndroid =>
-      !kIsWeb && defaultTargetPlatform == TargetPlatform.android;
+      defaultTargetPlatform == TargetPlatform.android;
 
   /// 查询当前状态（不弹窗）。
   static Future<NotificationPermissionStatus> status() async {

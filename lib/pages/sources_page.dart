@@ -70,14 +70,6 @@ class _SourcesPageState extends State<SourcesPage> {
       ),
       body: Consumer<SourcesProvider>(
         builder: (context, provider, _) {
-          if (kIsWeb) {
-            return Center(
-              child: Padding(
-                padding: const EdgeInsets.all(24),
-                child: Text(l10n.sourcesWebUnsupported),
-              ),
-            );
-          }
           if (!provider.initialized) {
             return const Center(child: M3ELoadingIndicator());
           }

@@ -444,7 +444,7 @@ void main() {
       expect(service.downloads, hasLength(1));
     });
 
-    test('存储不可用（Web）：全部跳过', () async {
+    test('存储不可用（无文件系统）：全部跳过', () async {
       storage.available = false;
       final service = makeService();
       await service.init();

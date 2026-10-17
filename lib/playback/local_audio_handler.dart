@@ -18,10 +18,8 @@ import 'media_session_backend_factory.dart';
 /// 当前平台是否具备系统级媒体会话实现。
 ///
 /// - Android / iOS / macOS / Windows：`flutter_media_session` 原生实现；
-/// - Linux：`audio_service_mpris`（D-Bus 不可用时静默降级）；
-/// - Web：本地播放不可用，不激活媒体会话。
+/// - Linux：`audio_service_mpris`（D-Bus 不可用时静默降级）。
 bool get isSystemMediaSessionSupported {
-  if (kIsWeb) return false;
   return switch (defaultTargetPlatform) {
     TargetPlatform.android ||
     TargetPlatform.iOS ||

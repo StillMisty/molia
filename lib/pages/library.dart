@@ -1,4 +1,3 @@
-import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:material_3_expressive/material_3_expressive.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:provider/provider.dart';
@@ -89,16 +88,6 @@ class _LibraryState extends State<Library> {
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context)!;
-    // Web 不支持音源，仅保留搜索（无渠道选择）。
-    if (kIsWeb) {
-      _renderedTab = _LibraryTab.search;
-      return ResponsivePageContainer(
-        pageType: ResponsivePageType.browse,
-        alignment: Alignment.topCenter,
-        child: LibrarySearchTab(controller: _searchResultsController),
-      );
-    }
-
     // 可见性门控：资料页在壳层常驻，隐藏时放弃订阅（见 ShellPageVisibility）。
     final visible = ShellPageVisibility.maybeVisibleOf(context) ?? true;
     final sources = visible

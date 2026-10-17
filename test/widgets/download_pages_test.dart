@@ -110,9 +110,9 @@ void main() {
     expect(settings.notifications, isFalse);
   });
 
-  testWidgets('下载设置页：发布器不支持（桌面 / Web）时隐藏公共目录开关',
+  testWidgets('下载设置页：发布器不支持（非 Android）时隐藏公共目录开关',
       (tester) async {
-    final desktop = DownloadService(
+    final nonAndroid = DownloadService(
       catalog: CatalogService(registry: FakeSourceRegistry(const {})),
       repository: DownloadsRepository(
         databaseProvider: () => throw UnimplementedError(),
@@ -122,13 +122,13 @@ void main() {
       publisher: FakeDownloadsPublisher(supported: false),
       notifications: FakeDownloadNotifications(supported: false),
     );
-    await desktop.init();
-    addTearDown(desktop.dispose);
+    await nonAndroid.init();
+    addTearDown(nonAndroid.dispose);
     await tester.pumpWidget(
       MultiProvider(
         providers: [
           ChangeNotifierProvider<DownloadSettings>.value(value: settings),
-          ChangeNotifierProvider<DownloadService>.value(value: desktop),
+          ChangeNotifierProvider<DownloadService>.value(value: nonAndroid),
           ChangeNotifierProvider<PlaybackProvider>.value(value: playback),
         ],
         child: MaterialApp(

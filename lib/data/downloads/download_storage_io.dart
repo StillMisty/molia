@@ -264,6 +264,6 @@ class IoDownloadStorage implements DownloadStorage {
   }
 }
 
-/// 工厂：`download_storage.dart` 的条件导入入口。
+/// 工厂：`download_storage.dart` 的唯一入口。
 DownloadStorage createDownloadStorage({String? Function()? customRoot}) =>
     IoDownloadStorage(customRoot: customRoot);

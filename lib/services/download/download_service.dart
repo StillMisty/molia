@@ -199,7 +199,8 @@ class DownloadService extends ChangeNotifier {
   bool _supported = false;
   bool _initialized = false;
 
-  /// 下载目录是否可用（Web 为 false，UI 隐藏下载入口）。
+  /// 下载目录是否可用（无文件系统 / 目录解析失败时为 false，UI 隐藏下载
+  /// 入口）。
   bool get supported => _supported;
 
   /// 是否支持发布公共 Downloads 副本（仅 Android；UI 据此显隐发布设置 /
@@ -468,7 +469,7 @@ class DownloadService extends ChangeNotifier {
   Future<void> init() async {
     try {
       _supported = await _storage.downloadsRoot() != null;
-      // Web（存储不可用）不触碰数据库：本机下载整体关闭。
+      // 存储不可用时不触碰数据库：本机下载整体关闭。
       if (_supported) {
         final records = await _repository.listAll();
         _records = {for (final record in records) record.key: record};
@@ -783,7 +784,7 @@ class DownloadService extends ChangeNotifier {
   /// `audio_tag_reader.dart`），其余格式按 `歌手 - 歌名` 文件名兜底。
   ///
   /// 返回 `(导入数, 跳过数)`：路径为空 / 文件不存在 / 非音频后缀 /
-  /// 存储不可用（Web）计入跳过。
+  /// 存储不可用计入跳过。
   Future<(int, int)> importLocalFiles(Iterable<String> paths) async {
     var imported = 0;
     var skipped = 0;

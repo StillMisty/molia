@@ -1,6 +1,6 @@
 import 'dart:math';
 
-/// 同步口令的生成与归一化（纯 Dart：Web 构建也能编译；加密实现见 sync_crypto）。
+/// 同步口令的生成与归一化（纯 Dart，不依赖 `dart:io`；加密实现见 sync_crypto）。
 ///
 /// 口令即信任根：能解密快照的设备视为已授权（ADR-0003）。
 abstract final class SyncPassphrase {

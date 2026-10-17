@@ -44,7 +44,7 @@ Future<LxmcImportResult?> importLxmcFavoritesFlow(BuildContext context) async {
   final file = files.first;
   final Uint8List bytes;
   try {
-    // file_picker 13 的 PlatformFile 统一提供 readAsBytes（含 Web）。
+    // file_picker 13 的 PlatformFile 统一提供 readAsBytes（不依赖本地路径）。
     bytes = await file.readAsBytes();
   } catch (e) {
     if (messengerContext.mounted) {

@@ -11,7 +11,6 @@ library;
 
 import 'dart:async';
 
-import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:material_3_expressive/material_3_expressive.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:provider/provider.dart';
@@ -822,6 +821,3 @@ class _AiDjPageState extends State<AiDjPage> {
     }
   }
 }
-
-/// Web 平台隐藏（CORS 与密钥安全）；其余平台可用。
-bool get aiDjSupportedPlatform => !kIsWeb;

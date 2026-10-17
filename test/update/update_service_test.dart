@@ -52,7 +52,6 @@ class _FakeInstaller implements UpdateInstaller {
 
   final String? preferredKind;
   int permissionOpens = 0;
-  int reloads = 0;
 
   @override
   Future<UpdatePlatformInfo> platformInfo() async =>
@@ -63,9 +62,6 @@ class _FakeInstaller implements UpdateInstaller {
 
   @override
   Future<void> openInstallPermissionSettings() async => permissionOpens++;
-
-  @override
-  Future<void> reloadPage() async => reloads++;
 
   @override
   Future<String?> preferredArchiveKind() async => preferredKind;
@@ -185,13 +181,12 @@ void main() {
     );
   });
 
-  test('平台转发：安装 / 权限 / 刷新都落到安装策略层', () async {
+  test('平台转发：安装 / 权限都落到安装策略层', () async {
     final installer = _FakeInstaller();
     final service = buildService(_FakeClient(), _FakeDownloader(), installer);
 
     expect(await service.canInstallPackages(), isTrue);
     await service.openInstallPermissionSettings();
-    await service.reloadPage();
     expect(
       await service.install(
         archivePath: '/tmp/molia-setup.exe',
@@ -200,6 +195,5 @@ void main() {
       InstallOutcome.restartPending,
     );
     expect(installer.permissionOpens, 1);
-    expect(installer.reloads, 1);
   });
 }

@@ -7,7 +7,7 @@ library;
 
 import 'package:dynamic_color/dynamic_color.dart';
 import 'package:flutter/foundation.dart'
-    show defaultTargetPlatform, kIsWeb, visibleForTesting;
+    show defaultTargetPlatform, visibleForTesting;
 import 'package:flutter/services.dart';
 import 'package:material_3_expressive/material_3_expressive.dart';
 import 'package:material_ui/material_ui.dart';
@@ -1299,18 +1299,16 @@ class _MyThemedAppState extends State<MyThemedApp> with WidgetsBindingObserver {
                   // targetSdk 37（Android 15+ 强制 edge-to-edge）下保持系统栏透明、
                   // 内容绘制到系统栏下方，与 settings_page.dart 的 edgeToEdge 行为一致。
                   drawUnderSystemBars: true,
-                  // appBuilder 只做系统栏 AnnotatedRegion + Web 字号缩放：
+                  // appBuilder 只做系统栏 AnnotatedRegion：
                   // M3E 内部已用 M3ETheme 包裹 child，MaterialApp 的 Theme 又
                   // 位于 builder 之上（见 material_ui app.dart _materialBuilder），
                   // 此处不重复包 Theme。
                   appBuilder: (context, child) {
                     final themedChild = child ?? const SizedBox.shrink();
                     final baseMediaQuery = MediaQuery.of(context);
-                    final double textScaleMultiplier = kIsWeb ? 1.12 : 1.0;
                     final baseScale = baseMediaQuery.textScaler.scale(1.0);
                     final mediaData = baseMediaQuery.copyWith(
-                      textScaler:
-                          TextScaler.linear(baseScale * textScaleMultiplier),
+                      textScaler: TextScaler.linear(baseScale),
                     );
 
                     return AnnotatedRegion<SystemUiOverlayStyle>(

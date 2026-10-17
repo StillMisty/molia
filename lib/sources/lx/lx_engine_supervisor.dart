@@ -50,8 +50,6 @@ enum LxEngineState {
 ///   同样进入 [LxEngineState.failed] 并记录 [failureReason]；
 /// - 每次状态迁移通过 [onStateChanged] 同步通知（SourceManager 借此在重启
 ///   成功后刷新 `activeSources`，修复“引擎死了源列表还在”）。
-///
-/// Web 占位实现（stub）下不进入状态机：invoke 直接透传失败，避免无意义的重启循环。
 class LxEngineSupervisor {
   LxEngineSupervisor({
     LxEngine Function()? engineFactory,
@@ -227,9 +225,6 @@ class LxEngineSupervisor {
 
   /// invoke 统一入口：确保 ready → 执行 → 崩溃检测/触发重启。
   Future<T> _guard<T>(Future<T> Function() action) async {
-    // Web stub：没有 isolate 可自愈，直接透传失败。
-    if (kIsWeb) return action();
-
     if (_state == LxEngineState.ready && !_engine.isRunning) {
       _handleCrash(); // isolate 已退出但尚无 invoke 失败：立即进入重启
     }
@@ -276,7 +271,7 @@ class LxEngineSupervisor {
 
   /// 检测到崩溃：进入 [LxEngineState.restarting] 并启动退避重启循环。
   void _handleCrash() {
-    if (_disposed || kIsWeb) return;
+    if (_disposed) return;
     if (_state == LxEngineState.restarting || _state == LxEngineState.failed) {
       return; // 已在重启/已停用：避免并发重复触发
     }

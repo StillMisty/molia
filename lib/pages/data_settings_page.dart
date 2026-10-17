@@ -1,6 +1,5 @@
 import 'dart:async';
 
-import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:material_3_expressive/material_3_expressive.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:provider/provider.dart';
@@ -116,15 +115,12 @@ class DataSettingsPage extends StatelessWidget {
                 subtitle: l10n.importDataSubtitle,
                 onTap: () => _showImportDialog(context, l10n, syncProvider),
               ),
-              // LX Music 收藏夹（.lxmc）导入：Web 无 gzip/文件系统，隐藏入口。
-              if (!kIsWeb) ...[
-                SettingsNavTile(
-                  icon: Icons.favorite_border_rounded,
-                  title: l10n.libraryImportFavorites,
-                  subtitle: l10n.libraryImportFavoritesSubtitle,
-                  onTap: () => importLxmcFavoritesFlow(context),
-                ),
-              ],
+              SettingsNavTile(
+                icon: Icons.favorite_border_rounded,
+                title: l10n.libraryImportFavorites,
+                subtitle: l10n.libraryImportFavoritesSubtitle,
+                onTap: () => importLxmcFavoritesFlow(context),
+              ),
             ],
           ),
         ],

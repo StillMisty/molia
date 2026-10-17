@@ -1,6 +1,5 @@
 import 'dart:async';
 
-import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:material_3_expressive/material_3_expressive.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:provider/provider.dart';
@@ -65,7 +64,6 @@ class _DiscoverPlaylistsTabState extends State<DiscoverPlaylistsTab>
       fetchPage: _fetchPlaylistPage,
       keyOf: (playlist) => playlist.id,
     );
-    if (kIsWeb) return;
     WidgetsBinding.instance.addPostFrameCallback((_) => _ensureSourceLoaded());
   }
 
@@ -274,7 +272,6 @@ class _DiscoverPlaylistsTabState extends State<DiscoverPlaylistsTab>
   @override
   Widget build(BuildContext context) {
     super.build(context);
-    if (kIsWeb) return const SizedBox.shrink();
     // 可见性门控：隐藏的常驻 tab 不订阅（见 ShellPageVisibility）。
     final provider = ShellPageVisibility.maybeVisibleOf(context) ?? true
         ? context.watch<DiscoverProvider>()

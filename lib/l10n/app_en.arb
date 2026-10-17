@@ -215,7 +215,6 @@
   "anyListenSave": "Save",
   "anyListenTest": "Test connection",
   "anyListenSaveFailed": "Save failed: cannot write local storage",
-  "sourcesWebUnsupported": "LX source scripts are not supported on web (a local JS engine is required).",
   "sourcesNoneActive": "No source enabled",
   "sourcesActiveSource": "Active source: {name} {version}",
   "@sourcesActiveSource": {
@@ -1462,7 +1461,6 @@
   "updateCancelDownload": "Cancel",
   "updateInstallingHint": "Handed to the installer — follow the system prompts.",
   "updateIosHint": "iOS updates come from the App Store; in-app install is not available.",
-  "updateReloadNow": "Reload now",
   "updateGrantInstallPermission": "Grant permission",
   "updateInstallNow": "Install now",
   "updateDownloadAndInstall": "Download and install",
@@ -1622,7 +1620,6 @@
       }
     }
   },
-  "cacheAudioPlatformUnsupported": "Audio caching isn't available on this platform",
   "cacheAudioDisabled": "Audio caching is off",
   "downloadAudioSection": "Audio",
   "downloadQualityLabel": "Quality",

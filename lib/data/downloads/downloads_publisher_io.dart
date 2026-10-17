@@ -52,6 +52,6 @@ class MethodChannelDownloadsPublisher implements DownloadsPublisher {
   }
 }
 
-/// 工厂：`downloads_publisher.dart` 的条件导入入口。
+/// 工厂：`downloads_publisher.dart` 的唯一入口。
 DownloadsPublisher createDownloadsPublisher() =>
     MethodChannelDownloadsPublisher();

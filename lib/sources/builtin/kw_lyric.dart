@@ -5,7 +5,7 @@ import 'builtin_search.dart';
 import 'builtin_transport.dart';
 import 'crypto_utils.dart';
 import 'lyric_result.dart';
-import 'zlib_stub.dart' if (dart.library.io) 'zlib_io.dart' as zlib_impl;
+import 'zlib_io.dart' as zlib_impl;
 
 /// 酷我歌词获取（移植自 lx-music-mobile `kw/lyric.js` + `kw/decodeLyric.js`
 /// + `kw/util.js` 的 lrcTools）。

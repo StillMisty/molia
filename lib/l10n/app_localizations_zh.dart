@@ -562,9 +562,6 @@ class AppLocalizationsZh extends AppLocalizations {
   String get anyListenSaveFailed => '保存失败：无法写入本地存储';
 
   @override
-  String get sourcesWebUnsupported => 'Web 端暂不支持 LX 音源脚本（需要本地 JS 引擎）。';
-
-  @override
   String get sourcesNoneActive => '未启用音源';
 
   @override
@@ -2653,9 +2650,6 @@ class AppLocalizationsZh extends AppLocalizations {
   String get updateIosHint => 'iOS 通过 App Store 更新，应用内不提供安装。';
 
   @override
-  String get updateReloadNow => '立即刷新';
-
-  @override
   String get updateGrantInstallPermission => '去授权';
 
   @override
@@ -2875,9 +2869,6 @@ class AppLocalizationsZh extends AppLocalizations {
   String trackCacheAudioWriting(String size) {
     return '音频写入中 $size';
   }
-
-  @override
-  String get cacheAudioPlatformUnsupported => '当前平台不缓存音频';
 
   @override
   String get cacheAudioDisabled => '音频缓存已关闭';

@@ -1,11 +1,10 @@
-/// `.lxmc` 收藏夹解码入口：IO 平台（gzip + JSON），Web 返回不支持。
+/// `.lxmc` 收藏夹解码入口：gzip + JSON，见 `lxmc_decoder_io.dart`。
 library;
 
 import 'dart:typed_data';
 
 import 'lxmc_decoder_models.dart';
-import 'lxmc_decoder_stub.dart'
-    if (dart.library.io) 'lxmc_decoder_io.dart' as impl;
+import 'lxmc_decoder_io.dart' as impl;
 
 export 'lxmc_decoder_models.dart';
 

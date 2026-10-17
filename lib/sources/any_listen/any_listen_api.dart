@@ -11,9 +11,8 @@
 /// 而歌曲搜索 / 取链 / 歌词 / 封面在官方实现中走 **WebSocket IPC**（加密消息），
 /// 对应 action 依次为 `musicSearch` / `getMusicUrl` / `getMusicLyric` /
 /// `getMusicPic`（见上游 `ipc.d.ts` / `resource_ipc.d.ts` / `music_ipc.d.ts`）。
-/// 本骨架受「不引入 dart:io WebSocket、保证 Web 编译安全」约束，暂以 HTTP
-/// 占位端点实现，响应字段按上游类型 MusicInfoOnline / MusicUrlInfo /
-/// MusicLyricInfo 的形状解析。接入真实服务器时只需替换本类（含
+/// 本骨架只做 HTTP 端点，暂以占位端点实现，响应字段按上游类型 MusicInfoOnline /
+/// MusicUrlInfo / MusicLyricInfo 的形状解析。接入真实服务器时只需替换本类（含
 /// [AnyListenEndpoints] 与响应解码），`AnyListenSource` 的解析逻辑可据此校正。
 library;
 

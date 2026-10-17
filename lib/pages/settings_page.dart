@@ -1,6 +1,5 @@
 import 'dart:async';
 
-import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/services.dart' show PredictiveBackEvent;
 import 'package:material_3_expressive/material_3_expressive.dart';
 import 'package:material_ui/material_ui.dart';
@@ -830,7 +829,8 @@ class _SettingsHomeViewState extends State<_SettingsHomeView>
               ),
           ],
         ),
-        // 全部输出都不支持（Web / 桌面等）：给一句解释，而不是静默只剩一条入口。
+        // 桌面歌词与系统媒体两路输出都不可用：给一句解释，而不是静默只剩一条
+        // 入口。
         if (!desktopSupported && !mediaSupported)
           _lyricsSectionHint(context, l10n.lyricsDisplayUnsupported),
         // 平台支持但媒体会话初始化失败（音频服务 init 返回 null）：
@@ -869,17 +869,16 @@ class _SettingsHomeViewState extends State<_SettingsHomeView>
           ),
         ),
         // AI 推歌：配置与开启入口（模式生效后推荐流出在发现页）。
-        if (!kIsWeb)
-          SettingsNavTile(
-            key: const Key('settingsAiDjItem'),
-            icon: Icons.auto_awesome_rounded,
-            title: l10n.aiDjTitle,
-            subtitle: l10n.aiDjSettingsSubtitle,
-            onTap: () => openSettingsSubPage(
-              context,
-              const AiDjPage(),
-            ),
+        SettingsNavTile(
+          key: const Key('settingsAiDjItem'),
+          icon: Icons.auto_awesome_rounded,
+          title: l10n.aiDjTitle,
+          subtitle: l10n.aiDjSettingsSubtitle,
+          onTap: () => openSettingsSubPage(
+            context,
+            const AiDjPage(),
           ),
+        ),
       ],
     );
   }
@@ -891,7 +890,7 @@ class _SettingsHomeViewState extends State<_SettingsHomeView>
     required SyncProvider? syncProvider,
     required UpdateProvider? updateProvider,
   }) {
-    final showSync = syncProvider != null && !kIsWeb;
+    final showSync = syncProvider != null;
     return SettingsSectionCard(
       title: l10n.settingsGeneralAndDataTitle,
       children: [

@@ -1,8 +1,8 @@
 /// 统一缓存子系统的公共类型（分区 / 用量 / 存储抽象）。
 ///
-/// 独立成文件，避免 `CacheService` 与平台存储实现（`cache_storage_io.dart`
-/// / `cache_storage_stub.dart`）之间形成循环依赖；同时保证 Web 编译时
-/// 不引入 `dart:io`。
+/// 独立成文件，避免 `CacheService` 与 `dart:io` 存储实现
+/// （`cache_storage_io.dart`）之间形成循环依赖，`dart:io` 也不会泄漏到
+/// 策略层。
 library;
 
 /// 缓存分区：音频 / 歌词 / 封面。
@@ -82,8 +82,8 @@ class CacheDeleteResult {
 
 /// 分区存储抽象：策略/统计逻辑（[CacheService]）与平台文件操作解耦。
 ///
-/// IO 实现走 `path_provider` + `dart:io`（[IoCacheStorage]）；Web 无持久
-/// 文件系统，使用空实现（[MemoryCacheStorage]）。
+/// IO 实现走 `path_provider` + `dart:io`（`cache_storage_io.dart`）；
+/// 目录解析失败时各方法返回 null / 空结果，调用方按「不可用」处理。
 abstract class CacheStorage {
   /// 音频持久缓存目录；平台不可用时返回 null。
   Future<String?> audioCacheDir();

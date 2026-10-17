@@ -3,7 +3,7 @@
 /// Dart `Timer` 在熄屏 / Doze / 后台挂起时可能被节流或整段冻结；倒计时的
 /// 绝对 deadline 逻辑再正确，没有一次回调也无法到点暂停。Android / iOS 原生
 /// 侧各挂一个定时器，到点经平台通道把 token 回传给 Dart，控制器再执行既有的
-/// `_fire()`。平台不提供实现（Web / 桌面 / 测试）时 [NoopSleepTimerAlarm]
+/// `_fire()`。平台不提供实现（桌面 / 测试）时 [NoopSleepTimerAlarm]
 /// 保持纯 Dart timer 行为。
 library;
 
@@ -29,7 +29,7 @@ abstract interface class SleepTimerAlarm {
   void dispose();
 }
 
-/// 空实现：Web / 桌面 / 单测（没有原生实现时仍由 Dart timer 驱动）。
+/// 空实现：桌面 / 单测（没有原生实现时仍由 Dart timer 驱动）。
 class NoopSleepTimerAlarm implements SleepTimerAlarm {
   const NoopSleepTimerAlarm();
 

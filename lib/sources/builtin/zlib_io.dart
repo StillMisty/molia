@@ -1,7 +1,7 @@
 import 'dart:io';
 import 'dart:typed_data';
 
-/// 原生平台 zlib 实现（builtin 平台取词解码用；Web 见 stub）。
+/// zlib 实现（builtin 平台取词解码用）。
 
 /// 标准 zlib inflate（完整流）。
 List<int> zlibInflate(List<int> data) => zlib.decode(data);

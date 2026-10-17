@@ -48,7 +48,7 @@ void main() async {
   initAppLogging();
 
   // 桌面窗口 chrome（Linux/Windows）：隐藏原生标题栏，窗口按钮改由顶栏承担；
-  // 其余平台是空操作（Web/移动端走 stub，不触碰插件 API）。
+  // 其余平台是空操作（不触碰插件 API）。
   // 放在 runApp 之前：首帧渲染时标题栏已是隐藏态，不会闪一下系统标题栏。
   await WindowChrome.ensureInitialized();
 

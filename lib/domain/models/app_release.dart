@@ -32,7 +32,7 @@ class ReleaseAsset {
     this.sha256,
   });
 
-  /// android / windows / linux / web / ios。
+  /// android / windows / linux / ios / macos。
   final String platform;
 
   /// arm64 / armv7 / x86_64 / x64 / any。
@@ -152,7 +152,7 @@ enum UpdateFailureKind {
   /// 清单格式非法 / 渠道不符。
   manifestInvalid,
 
-  /// 当前平台没有适配产物（含 iOS/Web 不支持应用内安装）。
+  /// 当前平台没有适配产物（含 iOS 不支持应用内安装）。
   unsupported,
 
   /// 下载产物 sha256 校验失败（文件已删除）。

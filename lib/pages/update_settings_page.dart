@@ -15,7 +15,7 @@ import '../widgets/settings/settings_tiles.dart';
 /// 「关于与更新」子页：渠道 / 自动检查 / 检查更新 / 新版本下载安装 / 高级 / 关于。
 ///
 /// 从设置首屏「通用与数据」进入（入口副标题显示当前版本或可更新版本）。
-/// 平台差异（Android 系统安装器 / 桌面替换重启 / Web 刷新 / iOS 不支持）
+/// 平台差异（Android 系统安装器 / 桌面替换重启 / iOS 不支持）
 /// 全部由 [UpdateProvider] 与安装策略层消化，这里只按状态渲染。
 class UpdateSettingsPage extends StatelessWidget {
   const UpdateSettingsPage({super.key});
@@ -69,9 +69,7 @@ class _UpdateSection extends StatelessWidget {
     return SettingsSectionCard(
       title: l10n.updateSettingsSection,
       children: [
-        // Web 的 Pages 只部署稳定版清单，渠道选择只对原生端有意义。
-        if (provider.channelSelectable)
-          SettingsChoiceRow<UpdateChannel>(
+        SettingsChoiceRow<UpdateChannel>(
             key: const Key('settingsUpdateChannelItem'),
             icon: Icons.alt_route_rounded,
             title: l10n.updateChannelTitle,
@@ -319,14 +317,6 @@ class _ReleaseActions extends StatelessWidget {
         status == UpdateStatus.installing ||
         platform == 'ios') {
       return null;
-    }
-    if (platform == 'web') {
-      return (
-        key: const Key('settingsUpdateReloadButton'),
-        icon: Icons.refresh_rounded,
-        label: l10n.updateReloadNow,
-        onPressed: () => unawaited(provider.reloadPage()),
-      );
     }
     if (permissionMissing) {
       return (

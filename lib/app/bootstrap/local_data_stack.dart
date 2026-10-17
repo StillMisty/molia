@@ -85,7 +85,8 @@ Future<LocalDataStack> buildLocalDataStack({
   );
 
   // 本地下载：持久副本 + 离线歌词/封面 + 音频标签嵌入。
-  // 存储不可用（Web）时 supported=false，UI 隐藏下载入口；初始化失败不阻断
+  // 存储不可用（无文件系统 / 目录解析失败）时 supported=false，UI 隐藏下载
+  // 入口；初始化失败不阻断
   // 启动（init 内部已吞错）。下载时的取词/取图**缓存优先**：歌词与播放页
   // 共用同一个 LyricsService（缓存 → 原生 → 跨平台回退），封面经 ArtworkCache
   // 命中直读、未命中取图后回填；音频命中完整缓存时直接拷贝，不触网。

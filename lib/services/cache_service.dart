@@ -30,8 +30,8 @@ export 'cache_storage.dart'
 ///   - 音频上限：setter 立即执行 [enforceAudioLimit]；
 ///   - 歌词 TTL：取词时读取；
 ///   - 封面上限/过期：setter 通知监听者（`ArtworkCache`）立即 sweep；
-/// - **平台文件操作**走 [CacheStorage]（Web 为空实现），策略逻辑与
-///   `dart:io` 解耦；
+/// - **平台文件操作**走 [CacheStorage]（`dart:io` 只在实现层），策略逻辑与
+///   文件系统解耦；
 /// - **音频缓存磁盘约定**（文件名 / 完整判据 / 索引 / 命中 / 清扫 / 迁移）
 ///   唯一实现在 [AudioCacheStore]：本服务只做策略与通知，避免写入侧与读取侧
 ///   再次分叉（见 ADR-0008）。
@@ -78,7 +78,7 @@ class CacheService {
 
   static const bool defaultAudioEnabled = true;
 
-  /// 容量不可知（Web / 桌面 / 查询失败）时的音频上限回退值（MB）。
+  /// 容量不可知（设备容量通道不可用 / 查询失败）时的音频上限回退值（MB）。
   static const int defaultAudioMaxMb = 1024;
 
   /// 建议上限 = 设备总容量 ÷ 该除数（128GB 设备 ≈ 1GB）。
@@ -289,7 +289,7 @@ class CacheService {
     }
   }
 
-  /// 音频缓存目录（持久）；平台不可用（Web）返回 null。
+  /// 音频缓存目录（持久）；目录不可用返回 null。
   Future<String?> audioCacheDirPath() => _audioStore.directoryPath();
 
   /// 音频缓存索引（**只含完整可播放文件**：文件名 → 字节数）。
@@ -403,7 +403,7 @@ class CacheService {
     notifyCacheChanged();
   }
 
-  /// 封面缓存目录（持久）；平台不可用（Web）返回 null。
+  /// 封面缓存目录（持久）；目录不可用返回 null。
   Future<String?> artworkCacheDirPath() => _safeDir(_storage.artworkCacheDir);
 
   /// 生成音频缓存文件名：`sourceKey_songId_quality`（quality 未知用 auto）；
@@ -472,7 +472,7 @@ class CacheService {
     try {
       return await resolve();
     } catch (e) {
-      // 平台通道缺失（测试/Web）或目录解析失败：按不可用处理。
+      // 平台通道缺失（测试 / 独立服务）或目录解析失败：按不可用处理。
       return null;
     }
   }

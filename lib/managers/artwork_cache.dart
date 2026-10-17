@@ -25,7 +25,8 @@ import 'artwork_cache_fs.dart';
 ///   的 sweep 执行（manager 的 repo 内部淘汰查询已置空，避免创建时固化
 ///   的配置与运行期策略打架）；监听策略变更立即 sweep，图片加载完成后
 ///   按 5 分钟节流再 sweep，控制单次会话内的增长；
-/// - **Web**：无持久文件系统，使用 flutter_cache_manager 的内存实现。
+/// - **无持久目录时**：目录解析失败（权限 / 平台异常）回退
+///   flutter_cache_manager 默认的临时目录 FileSystem（`IOFileSystem`）。
 class ArtworkCache {
   ArtworkCache({
     CacheService? cacheService,

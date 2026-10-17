@@ -585,10 +585,6 @@ class AppLocalizationsEn extends AppLocalizations {
   String get anyListenSaveFailed => 'Save failed: cannot write local storage';
 
   @override
-  String get sourcesWebUnsupported =>
-      'LX source scripts are not supported on web (a local JS engine is required).';
-
-  @override
   String get sourcesNoneActive => 'No source enabled';
 
   @override
@@ -2768,9 +2764,6 @@ class AppLocalizationsEn extends AppLocalizations {
       'iOS updates come from the App Store; in-app install is not available.';
 
   @override
-  String get updateReloadNow => 'Reload now';
-
-  @override
   String get updateGrantInstallPermission => 'Grant permission';
 
   @override
@@ -3000,10 +2993,6 @@ class AppLocalizationsEn extends AppLocalizations {
   String trackCacheAudioWriting(String size) {
     return 'Audio writing $size';
   }
-
-  @override
-  String get cacheAudioPlatformUnsupported =>
-      'Audio caching isn\'t available on this platform';
 
   @override
   String get cacheAudioDisabled => 'Audio caching is off';

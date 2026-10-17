@@ -735,7 +735,7 @@ class SyncStateStore {
   }
 
   String _defaultDeviceName() {
-    final platform = kIsWeb ? 'Web' : defaultTargetPlatform.name;
+    final platform = defaultTargetPlatform.name;
     final short = _deviceId.length >= 4 ? _deviceId.substring(0, 4) : _deviceId;
     return '$platform-$short';
   }

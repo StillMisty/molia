@@ -161,7 +161,7 @@ List<SingleChildWidget> buildAppProviders({
     Provider<NotificationService>.value(value: notifications),
     // 省流模式：设置页读写开关/音质上限；取链与封面网关已在上方接线。
     ChangeNotifierProvider.value(value: local.dataSaver),
-    // 跨设备数据同步：设置页读写；Web 不展示入口。
+    // 跨设备数据同步：设置页读写。
     ChangeNotifierProvider.value(value: sync.provider),
     // 换源偏好（自动换源开关）：设置页读写；播放链路已在上方接线。
     ChangeNotifierProvider.value(value: library.sourceSwapSettings),

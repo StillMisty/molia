@@ -1,7 +1,7 @@
 import 'dart:convert';
 import 'dart:typed_data';
 
-import 'zlib_stub.dart' if (dart.library.io) 'zlib_io.dart' as zlib_impl;
+import 'zlib_io.dart' as zlib_impl;
 
 /// 腾讯 QRC 歌词解密（由 lx-music-mobile `tx/qrcDecode.js` 1:1 移植）。
 ///

@@ -1178,12 +1178,6 @@ abstract class AppLocalizations {
   /// **'Save failed: cannot write local storage'**
   String get anyListenSaveFailed;
 
-  /// No description provided for @sourcesWebUnsupported.
-  ///
-  /// In en, this message translates to:
-  /// **'LX source scripts are not supported on web (a local JS engine is required).'**
-  String get sourcesWebUnsupported;
-
   /// No description provided for @sourcesNoneActive.
   ///
   /// In en, this message translates to:
@@ -4983,12 +4977,6 @@ abstract class AppLocalizations {
   /// **'iOS updates come from the App Store; in-app install is not available.'**
   String get updateIosHint;
 
-  /// No description provided for @updateReloadNow.
-  ///
-  /// In en, this message translates to:
-  /// **'Reload now'**
-  String get updateReloadNow;
-
   /// No description provided for @updateGrantInstallPermission.
   ///
   /// In en, this message translates to:
@@ -5403,12 +5391,6 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Audio writing {size}'**
   String trackCacheAudioWriting(String size);
-
-  /// No description provided for @cacheAudioPlatformUnsupported.
-  ///
-  /// In en, this message translates to:
-  /// **'Audio caching isn\'t available on this platform'**
-  String get cacheAudioPlatformUnsupported;
 
   /// No description provided for @cacheAudioDisabled.
   ///

@@ -1,8 +1,8 @@
 /// 下载存储的公共类型与目录约定。
 ///
-/// 独立成文件，避免工厂（`download_storage.dart`）与平台实现
-/// （`download_storage_io.dart` / `download_storage_stub.dart`）循环依赖，
-/// 同时保证 Web 编译不引入 `dart:io`。
+/// 独立成文件：工厂（`download_storage.dart`）与 `dart:io` 实现
+/// （`download_storage_io.dart`）各自只依赖本文件的类型，`dart:io` 不会
+/// 泄漏给调用方。
 library;
 
 import 'dart:typed_data';
@@ -24,11 +24,11 @@ const String downloadPartSuffix = '.part';
 
 /// 下载文件存储抽象：下载服务与平台文件操作解耦。
 ///
-/// IO 实现（`IoDownloadStorage`）走 `path_provider` + `dart:io`；
-/// Web 无持久文件系统，使用空实现（`MemoryDownloadStorage`），
-/// `downloadsRoot()` 返回 null，UI 据此隐藏下载入口。
+/// 实现（`IoDownloadStorage`）走 `path_provider` + `dart:io`；
+/// 目录不可解析（无文件系统 / 权限失败）时 `downloadsRoot()` 返回 null，
+/// UI 据此隐藏下载入口。
 abstract interface class DownloadStorage {
-  /// 下载根目录绝对路径；平台不可用（Web）时返回 null。
+  /// 下载根目录绝对路径；目录不可用（无文件系统 / 解析失败）时返回 null。
   Future<String?> downloadsRoot();
 
   /// 旧版下载根目录（应用支持目录 `downloads/`）：公共目录改造前的落点，

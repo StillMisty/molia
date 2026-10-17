@@ -1,4 +1,4 @@
-/// LX 引擎通用类型（Web 与原生共用，不依赖 dart:io / quickjs_engine）。
+/// LX 引擎通用类型（不依赖 `dart:io` / quickjs_engine，引擎抽象与测试假件共用）。
 library;
 
 class LxEngineException implements Exception {

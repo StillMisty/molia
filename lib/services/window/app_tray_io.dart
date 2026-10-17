@@ -8,7 +8,7 @@ import 'tray_menu_labels.dart';
 
 /// Linux / Windows 桌面托盘：tray_manager（nativeapi 后端）实现。
 ///
-/// 全仓只有本文件 import `tray_manager`（条件导出入口见 `app_tray.dart`）。
+/// 全仓只有本文件 import `tray_manager`（入口见 `app_tray.dart`）。
 ///
 /// nativeapi 的包装对象（TrayIcon / Menu / MenuItem / Image）都挂 finalizer，
 /// 对象被 GC 时会释放原生句柄——托盘图标与菜单会从系统里消失。因此本类把

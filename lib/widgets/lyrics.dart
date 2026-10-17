@@ -1,6 +1,5 @@
 import 'dart:async';
 
-import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:material_3_expressive/material_3_expressive.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:flutter/rendering.dart';
@@ -899,7 +898,6 @@ class _LyricsWidgetState extends State<LyricsWidget>
                 final bool isWideLyricLayout = context
                     .layoutType(ResponsivePageType.detail)
                     .preferTwoPane;
-                final bool isWeb = kIsWeb;
                 final line = _session.lines[index];
                 final bool lyricsSynced = _session.isSynced;
                 final bool isCurrentLine =
@@ -918,9 +916,8 @@ class _LyricsWidgetState extends State<LyricsWidget>
                 } else {
                   baseTextColor = theme.colorScheme.onSurface;
                 }
-                final double lyricFontSize = isWideLyricLayout
-                    ? (isWeb ? 30.0 : 24.0)
-                    : (isWeb ? 36.0 : 22.0);
+                final double lyricFontSize =
+                    isWideLyricLayout ? 24.0 : 22.0;
                 final String lineTranslation =
                     index < _session.translations.length ? _session.translations[index] : '';
                 final String lineRoma =
@@ -988,10 +985,7 @@ class _LyricsWidgetState extends State<LyricsWidget>
                     duration: const Duration(milliseconds: 450),
                     curve: Curves.easeOutCubic,
                     padding: EdgeInsets.symmetric(
-                      // Web端行间距增大30%
-                      vertical: isWeb
-                          ? (isCurrentLine ? 15.6 : 10.4)
-                          : (isCurrentLine ? 12.0 : 8.0),
+                      vertical: isCurrentLine ? 12.0 : 8.0,
                       horizontal: isWideLyricLayout ? 24.0 : 40.0,
                     ),
                     child: AnimatedDefaultTextStyle(
@@ -1003,8 +997,7 @@ class _LyricsWidgetState extends State<LyricsWidget>
                             ? FontWeight.w700
                             : FontWeight.w600,
                         color: baseTextColor,
-                        // Web端文字行高增大30%
-                        height: isWeb ? 1.43 : 1.1,
+                        height: 1.1,
                       ),
                       child: AnimatedOpacity(
                         duration: const Duration(milliseconds: 450),

@@ -493,10 +493,8 @@ class _TrackLocalDataPageState extends State<TrackLocalDataPage> {
       return l10n.downloadFileMissing;
     }
     if (!platformSupportsAudioCaching()) {
-      // 桌面 / Web：播放侧不写缓存（桌面另有后台字节下载，见设置页说明）。
-      return platformSupportsAudioPrefetch()
-          ? l10n.localDataAudioPlatformHint
-          : l10n.cacheAudioPlatformUnsupported;
+      // 桌面：播放侧不写缓存（另有后台字节下载，见设置页说明）。
+      return l10n.localDataAudioPlatformHint;
     }
     if (!_audioEnabled) return l10n.cacheAudioDisabled;
     return l10n.downloadStatusNotDownloaded;
@@ -661,9 +659,6 @@ class _TrackLocalDataPageState extends State<TrackLocalDataPage> {
   ) {
     final label = trackCacheUsageLabel(l10n, part, data);
     if (part != LocalCachePart.audio) return label;
-    if (!platformSupportsAudioCaching() && !platformSupportsAudioPrefetch()) {
-      return l10n.cacheAudioPlatformUnsupported;
-    }
     if (!_audioEnabled) return l10n.cacheAudioDisabled;
     return label;
   }

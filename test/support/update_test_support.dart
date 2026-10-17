@@ -24,7 +24,6 @@ class FakeUpdateService implements UpdateService {
 
   /// 非空时 check 会等待该 Completer（测试「检查中」界面态用）。
   Completer<void>? checkGate;
-  int reloadCalls = 0;
   int openPermissionCalls = 0;
   int installCalls = 0;
 
@@ -102,11 +101,6 @@ class FakeUpdateService implements UpdateService {
   @override
   Future<void> openInstallPermissionSettings() async {
     openPermissionCalls++;
-  }
-
-  @override
-  Future<void> reloadPage() async {
-    reloadCalls++;
   }
 }
 

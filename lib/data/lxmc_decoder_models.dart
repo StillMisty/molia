@@ -1,4 +1,4 @@
-/// `.lxmc`（LX Music 收藏夹导出）解码结果模型（纯 Dart，供条件实现共用）。
+/// `.lxmc`（LX Music 收藏夹导出）解码结果模型（纯 Dart）。
 library;
 
 /// 解码后的单首曲目（尚未落库，playlistId / addedAt / sortOrder 由仓库补齐）。

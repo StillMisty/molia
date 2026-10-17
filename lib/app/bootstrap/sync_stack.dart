@@ -45,7 +45,7 @@ typedef SyncStack = ({
 });
 
 /// 装配跨设备数据同步（ADR-0003）：口令即信任根，加入同步的设备完全互信
-/// （含音源脚本与凭证），因此不逐项审批；Web 端不提供入口。
+/// （含音源脚本与凭证），因此不逐项审批。
 Future<SyncStack> buildSyncStack({
   required CatalogStack catalog,
   required LibraryStack library,

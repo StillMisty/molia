@@ -88,6 +88,6 @@ class MethodChannelDownloadNotifications implements DownloadNotifications {
   }
 }
 
-/// 工厂：`download_notifications.dart` 的条件导入入口。
+/// 工厂：`download_notifications.dart` 的唯一入口。
 DownloadNotifications createDownloadNotifications() =>
     MethodChannelDownloadNotifications();

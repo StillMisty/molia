@@ -99,7 +99,4 @@ class UpdateService {
 
   Future<void> openInstallPermissionSettings() =>
       _installer.openInstallPermissionSettings();
-
-  /// Web 的「刷新以更新」；原生端空操作。
-  Future<void> reloadPage() => _installer.reloadPage();
 }

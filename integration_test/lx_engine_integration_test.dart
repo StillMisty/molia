@@ -255,8 +255,7 @@ void main() {
   });
 
   testWidgets('桌面托盘：创建 / 更新 / 销毁冒烟（无面板环境不得崩）', (tester) async {
-    // Linux/Windows 才有托盘实现；其余平台是空实现（isSupported=false），
-    // 本用例直接通过。
+    // Linux/Windows 才有托盘实现；其余平台 isSupported=false，本用例直接通过。
     if (!AppTray.isSupported) return;
 
     const labels = TrayMenuLabels(

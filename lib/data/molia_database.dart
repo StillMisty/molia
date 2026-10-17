@@ -6,7 +6,7 @@
 /// 均保留既有数据）；后续结构变更同样必须写增量迁移、保留数据
 /// （见 docs/adr/0005-drift-migration.md）。
 ///
-/// 只 import drift / drift_flutter / path_provider：Web 编译安全
+/// 只 import drift / drift_flutter / path_provider：`dart:io` 不进入数据层
 /// （`NativeDatabase` 仅测试内存库使用，见 test/support/memory_database.dart）。
 library;
 

@@ -36,7 +36,7 @@ void main() {
     expect(calls, isEmpty);
   });
 
-  test('不支持的平台（桌面 / Web）：不触碰通道', () async {
+  test('不支持的平台（桌面）：不触碰通道', () async {
     final notifications = MethodChannelDownloadNotifications(supported: false);
     expect(notifications.supported, isFalse);
     await notifications.start(id: 'batch', title: '歌名', index: 1, total: 3);

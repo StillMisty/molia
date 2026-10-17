@@ -1,8 +1,8 @@
 /// 下载通知端口的公共类型。
 ///
-/// 独立成文件，避免工厂（`download_notifications.dart`）与平台实现
-/// （`download_notifications_io.dart` / `download_notifications_stub.dart`）
-/// 循环依赖，同时保证 Web 编译不引入 `dart:io` / MethodChannel
+/// 独立成文件：工厂（`download_notifications.dart`）与实现
+/// （`download_notifications_io.dart`）各自只依赖本文件的类型，
+/// `dart:io` / MethodChannel 不会泄漏给调用方
 /// （与 `downloads_publisher_types.dart` 同构）。
 library;
 
@@ -18,7 +18,7 @@ library;
 /// 字符串，也不经 `AppLocalizations`（服务层拿不到界面语言）。
 ///
 /// **失败一律 best-effort**：实现吞掉所有平台异常（只记日志），绝不抛给调用方；
-/// 无原生实现（Web / 桌面 / 测试）时 [supported] 为 false，全部方法 no-op。
+/// 无原生实现（桌面 / iOS / 测试）时 [supported] 为 false，全部方法 no-op。
 abstract interface class DownloadNotifications {
   /// 当前平台是否支持系统下载通知（仅 Android；UI 据此显隐设置开关）。
   bool get supported;
@@ -55,7 +55,7 @@ abstract interface class DownloadNotifications {
   Future<void> stop(String id);
 }
 
-/// 空实现：Web / 桌面 / iOS / 单测（通知能力整体关闭）。
+/// 空实现：桌面 / iOS / 单测（通知能力整体关闭）。
 class NoopDownloadNotifications implements DownloadNotifications {
   const NoopDownloadNotifications();
 

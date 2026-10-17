@@ -7,7 +7,7 @@ import 'package:flutter_cache_manager/flutter_cache_manager.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:molia/managers/artwork_cache.dart';
 import 'package:molia/services/cache_service.dart';
-import 'package:molia/services/cache_storage_stub.dart';
+import '../support/memory_cache_storage.dart';
 import 'package:molia/widgets/app_network_image.dart';
 import 'package:molia/widgets/molia_mark.dart';
 import 'package:material_ui/material_ui.dart';

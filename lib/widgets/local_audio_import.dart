@@ -15,7 +15,7 @@ AppLocalizations _l10n(BuildContext context) =>
 /// （就地引用：不复制、不移动）→ SnackBar 反馈。
 ///
 /// 与 `.lxmc` 导入（`lxmc_import.dart`）同一形态：文件选择与反馈在 UI 层，
-/// 标签解析 / 落库在服务层（可单测）。下载能力不可用（Web）时入口本身不出现，
+/// 标签解析 / 落库在服务层（可单测）。下载能力不可用时入口本身不出现，
 /// 这里再兜一层防御。
 Future<void> importLocalAudioFilesFlow(BuildContext context) async {
   final l10n = _l10n(context);
@@ -38,7 +38,7 @@ Future<void> importLocalAudioFilesFlow(BuildContext context) async {
     }
     return;
   }
-  // 平台可能不给路径（Web / 部分内容来源）：计入跳过，不算失败。
+  // 平台可能不给路径（部分内容来源只给字节）：计入跳过，不算失败。
   final paths = [
     for (final file in files)
       if ((file.path ?? '').trim().isNotEmpty) file.path!.trim(),

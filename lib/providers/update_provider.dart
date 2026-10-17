@@ -122,16 +122,6 @@ class UpdateProvider extends ChangeNotifier {
 
   bool get autoCheckEnabled => _preferences.autoCheckEnabled;
 
-  /// 当前平台是否支持切换测试渠道（Web 的 Pages 只部署稳定版清单）。
-  ///
-  /// 由运行时的平台信息判定（`_platform` 只有在 Web 构建里才会是 web），
-  /// 不用编译期常量，便于测试注入平台。
-  bool get channelSelectable => _platform?.platform != 'web';
-
-  /// 生效渠道：Web 收敛为稳定版，原生端用用户选择。
-  UpdateChannel get effectiveChannel =>
-      channelSelectable ? _preferences.channel : UpdateChannel.stable;
-
   UpdateChannel get channel => _preferences.channel;
 
   String get manifestUrlOverride => _preferences.manifestUrlOverride;
@@ -151,10 +141,10 @@ class UpdateProvider extends ChangeNotifier {
           _status == UpdateStatus.downloading ||
           _status == UpdateStatus.downloaded);
 
-  /// 当前平台是否支持应用内安装（Web 走刷新页面；iOS 走 App Store）。
+  /// 当前平台是否支持应用内安装（iOS 走 App Store）。
   bool get supportsInAppInstall {
     final platform = _platform?.platform;
-    return platform != null && platform != 'web' && platform != 'ios';
+    return platform != null && platform != 'ios';
   }
 
   /// 是否已有「与当前清单一致」的下载包（授权后可直接重试安装）。
@@ -193,7 +183,7 @@ class UpdateProvider extends ChangeNotifier {
     _setStatus(UpdateStatus.checking);
     try {
       final result = await _service.check(
-        channel: effectiveChannel,
+        channel: _preferences.channel,
         currentVersion: _currentVersion,
         currentBuild: _currentBuild,
       );
@@ -238,12 +228,9 @@ class UpdateProvider extends ChangeNotifier {
     }
   }
 
-  /// 下载并安装（Web 端退化为刷新页面）。
+  /// 下载并安装。
   Future<void> downloadAndInstall() async {
-    if (!supportsInAppInstall) {
-      await reloadPage();
-      return;
-    }
+    if (!supportsInAppInstall) return;
     if (_release == null || _platform == null) return;
     if (_status == UpdateStatus.downloading) return;
 
@@ -383,9 +370,6 @@ class UpdateProvider extends ChangeNotifier {
       );
     }
   }
-
-  /// Web 的「刷新以更新」。
-  Future<void> reloadPage() => _service.reloadPage();
 
   Future<void> setAutoCheckEnabled(bool value) async {
     if (_preferences.autoCheckEnabled == value) return;

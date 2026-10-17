@@ -2,7 +2,7 @@ import 'dart:convert';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:molia/services/cache_service.dart';
-import 'package:molia/services/cache_storage_stub.dart';
+import '../support/memory_cache_storage.dart';
 import 'package:molia/services/lyrics/lyric_provider.dart';
 import 'package:molia/services/lyrics_service.dart';
 import 'package:shared_preferences/shared_preferences.dart';

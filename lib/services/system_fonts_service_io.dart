@@ -17,7 +17,7 @@ import 'sfnt_families.dart';
 /// - Windows：扫描系统 / 用户字体目录并合并注册表
 ///   （`…\CurrentVersion\Fonts` 的 HKLM + HKCU，覆盖自定义安装目录），
 ///   家族名从字体文件 `name` 表解析（与 DirectWrite 家族名同源）；
-/// - Web/其它：空列表（浏览器无法枚举本地字体），调用方回退「系统默认」。
+/// - 其它平台：空列表（没有枚举实现），调用方回退「系统默认」。
 ///
 /// 结果在进程内缓存；字体安装变化后由 [debugResetCache] 或重启刷新。
 class SystemFontsService {

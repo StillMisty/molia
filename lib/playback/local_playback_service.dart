@@ -57,7 +57,7 @@ class LocalPlaybackService extends ChangeNotifier {
   /// 音频中断事件流（audio_session 的 `interruptionEventStream`）。
   ///
   /// 生产路径为 null：服务在 [_configureAudioSession] 里从 `AudioSession.instance`
-  /// 取（桌面 / Web 无插件实现时跳过，保持桌面端现状）；测试注入假流，
+  /// 取（桌面无插件实现时跳过，保持桌面端现状）；测试注入假流，
   /// 不触碰插件通道即可验证「焦点丢失 → 暂停」接线。
   final Stream<AudioInterruptionEvent>? _interruptionsOverride;
 
@@ -142,7 +142,6 @@ class LocalPlaybackService extends ChangeNotifier {
       _attachFocusGuard(injected);
       return;
     }
-    if (kIsWeb) return;
     if (defaultTargetPlatform != TargetPlatform.android &&
         defaultTargetPlatform != TargetPlatform.iOS &&
         defaultTargetPlatform != TargetPlatform.macOS) {

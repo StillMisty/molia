@@ -7,7 +7,8 @@ library;
 import 'dart:async';
 
 import 'package:file_picker/file_picker.dart';
-import 'package:flutter/foundation.dart' show TargetPlatform, defaultTargetPlatform, kIsWeb;
+import 'package:flutter/foundation.dart'
+    show TargetPlatform, defaultTargetPlatform;
 import 'package:material_3_expressive/material_3_expressive.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:provider/provider.dart';
@@ -21,7 +22,6 @@ import '../widgets/settings/settings_tiles.dart';
 
 /// 桌面平台支持自选保存目录（dart:io 路径语义；移动端 SAF/沙箱另论）。
 bool get _supportsCustomSaveDir {
-  if (kIsWeb) return false;
   return defaultTargetPlatform == TargetPlatform.linux ||
       defaultTargetPlatform == TargetPlatform.windows ||
       defaultTargetPlatform == TargetPlatform.macOS;

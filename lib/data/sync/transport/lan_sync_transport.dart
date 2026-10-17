@@ -3,7 +3,6 @@ import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
 
-import 'package:flutter/foundation.dart';
 import 'package:logging/logging.dart';
 
 import '../../../domain/models/device_sync.dart';
@@ -175,7 +174,7 @@ class LanSyncTransport implements SyncTransport {
 
   @override
   Future<void> start() async {
-    if (_running || kIsWeb) return;
+    if (_running) return;
 
     // 权限在前：Android 17 起局域网默认阻断，没有权限时绑定 / 收发包都会失败，
     // 直接给用户可行动的状态（授权 或 转 WebDAV），不做无意义的尝试。

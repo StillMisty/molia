@@ -180,7 +180,6 @@
   "anyListenSave": "保存",
   "anyListenTest": "连接测试",
   "anyListenSaveFailed": "保存失败：无法写入本地存储",
-  "sourcesWebUnsupported": "Web 端暂不支持 LX 音源脚本（需要本地 JS 引擎）。",
   "sourcesNoneActive": "未启用音源",
   "sourcesActiveSource": "当前音源：{name} {version}",
   "sourcesActivating": "正在激活…",
@@ -1128,7 +1127,6 @@
   "updateCancelDownload": "取消下载",
   "updateInstallingHint": "已交给安装程序，按系统提示完成即可。",
   "updateIosHint": "iOS 通过 App Store 更新，应用内不提供安装。",
-  "updateReloadNow": "立即刷新",
   "updateGrantInstallPermission": "去授权",
   "updateInstallNow": "立即安装",
   "updateDownloadAndInstall": "下载并安装",
@@ -1288,7 +1286,6 @@
       }
     }
   },
-  "cacheAudioPlatformUnsupported": "当前平台不缓存音频",
   "cacheAudioDisabled": "音频缓存已关闭",
   "downloadAudioSection": "音频",
   "downloadQualityLabel": "音质",

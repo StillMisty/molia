@@ -302,5 +302,5 @@ class _FileEntry {
   final int size;
 }
 
-/// 工厂：`cache_storage.dart` 的条件导入入口。
+/// 工厂：`cache_storage.dart` 的唯一入口。
 CacheStorage createCacheStorage() => IoCacheStorage();

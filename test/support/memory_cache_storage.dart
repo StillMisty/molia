@@ -1,10 +1,10 @@
-import 'cache_types.dart';
+import 'package:molia/services/cache_types.dart';
 
-/// Web 平台缓存存储：无持久文件系统。
+/// 内存缓存存储：模拟「没有可写文件系统」的平台环境（文件系统不可用 / 权限缺失）。
 ///
-/// 音频分区在 Web 本就不启用（`LockCachingAudioSource` 依赖文件系统），
-/// 封面缓存由 flutter_cache_manager 的 `MemoryCacheSystem` 承载（随页面
-/// 生命周期）。这里统一返回空结果，保证 `CacheService` 在 Web 可用。
+/// 音频分区在无文件系统时不启用，封面缓存由 flutter_cache_manager 的
+/// `MemoryCacheSystem` 承载（随页面生命周期）。这里统一返回空结果，
+/// 供 `CacheService` 一族的降级路径单测使用。
 class MemoryCacheStorage implements CacheStorage {
   @override
   Future<String?> audioCacheDir() async => null;
@@ -55,6 +55,3 @@ class MemoryCacheStorage implements CacheStorage {
   }) async =>
       0;
 }
-
-/// 工厂：`cache_storage.dart` 的条件导入入口。
-CacheStorage createCacheStorage() => MemoryCacheStorage();

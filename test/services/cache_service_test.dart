@@ -5,7 +5,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:molia/domain/models/track.dart';
 import 'package:molia/services/cache_service.dart';
 import 'package:molia/services/cache_storage_io.dart';
-import 'package:molia/services/cache_storage_stub.dart';
+import '../support/memory_cache_storage.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 /// 领域曲目（读取侧 key 用）。
@@ -367,7 +367,7 @@ void main() {
       expect(File('${tempRoot.path}/audio_cache/$idle').existsSync(), isFalse);
     });
 
-    test('无缓存 / 无目录（Web stub）：zero 与空结果', () async {
+    test('无缓存 / 无目录（无文件系统）：zero 与空结果', () async {
       expect(
         await service.audioUsageForTrack(sourceKey: 'kw', songId: 'missing'),
         CacheUsage.zero,
@@ -377,16 +377,16 @@ void main() {
         const CacheDeleteResult(),
       );
 
-      final webLike = CacheService(
+      final noFs = CacheService(
         prefs: prefs,
         storage: MemoryCacheStorage(),
       );
       expect(
-        await webLike.audioUsageForTrack(sourceKey: 'kw', songId: 'x'),
+        await noFs.audioUsageForTrack(sourceKey: 'kw', songId: 'x'),
         CacheUsage.zero,
       );
       expect(
-        (await webLike.clearAudioForTrack(sourceKey: 'kw', songId: 'x'))
+        (await noFs.clearAudioForTrack(sourceKey: 'kw', songId: 'x'))
             .deleted,
         CacheUsage.zero,
       );

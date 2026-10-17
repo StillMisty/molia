@@ -173,7 +173,7 @@ void main() {
   });
 }
 
-/// 制造一次传输层异常（不引入 dart:io，兼容 Web 测试环境）。
+/// 制造一次传输层异常（只伪造 toString，不引入 dart:io）。
 class SocketExceptionStub implements Exception {
   const SocketExceptionStub();
 

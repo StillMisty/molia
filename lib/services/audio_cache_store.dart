@@ -11,8 +11,8 @@
 ///
 /// 与 `CacheService` 的分工：本模块只承接磁盘约定，**策略面**（音频开关、
 /// 容量上限、`protectAge`、revision 通知、分区用量与清理、封面 / 歌词）留在
-/// `CacheService`。平台文件操作走 [CacheStorage] seam（Web 为空实现），
-/// 因此模块可注入假件单测。
+/// `CacheService`。平台文件操作走 [CacheStorage] seam（`dart:io` 只在实现
+/// 层），因此模块可注入假件单测。
 library;
 
 import 'package:logging/logging.dart';
@@ -38,7 +38,7 @@ class AudioCacheStore {
   })  : _storage = storage,
         _preferences = preferences ?? _platformPreferences;
 
-  /// 目录解析 / 列举 / 删除的平台实现（Web 为空实现）。
+  /// 目录解析 / 列举 / 删除的平台实现；目录不可用时返回 null / 空表。
   final CacheStorage _storage;
 
   /// 迁移版本标记的读取口；prefs 不可用时返回 null。
@@ -135,7 +135,7 @@ class AudioCacheStore {
 
   // 目录与索引
 
-  /// 音频缓存目录（持久）；平台不可用（Web）返回 null。
+  /// 音频缓存目录（持久）；目录不可用返回 null。
   Future<String?> directoryPath() => _safeDir(_storage.audioCacheDir);
 
   /// 音频缓存目录原始列举（含半成品 / 边车）；不可用 / 失败返回空表。
@@ -317,7 +317,7 @@ class AudioCacheStore {
     return true;
   }
 
-  /// 目录解析失败（平台通道缺失 / 测试 stub）按不可用处理。
+  /// 目录解析失败（平台通道缺失 / 测试假件）按不可用处理。
   Future<String?> _safeDir(Future<String?> Function() resolve) async {
     try {
       return await resolve();

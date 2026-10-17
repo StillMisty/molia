@@ -19,7 +19,7 @@ import 'package:molia/providers/lyrics_provider.dart';
 import 'package:molia/providers/playback_provider.dart';
 import 'package:molia/providers/sleep_timer.dart';
 import 'package:molia/services/cache_service.dart';
-import 'package:molia/services/cache_storage_stub.dart';
+import '../support/memory_cache_storage.dart';
 import 'package:molia/services/download/download_service.dart';
 import 'package:molia/services/notification_service.dart';
 import 'package:molia/services/track_local_data_service.dart';
@@ -739,7 +739,7 @@ void main() {
     expect(find.byKey(const Key('localDataDownloadAudio')), findsOneWidget);
   });
 
-  testWidgets('本地数据行：平台不支持（Web/存储不可用）时入口禁用', (tester) async {
+  testWidgets('本地数据行：存储不可用（无文件系统）时入口禁用', (tester) async {
     downloadService.downloadSupported = false;
     await pumpView(tester, track: _track(), downloads: downloadService);
 

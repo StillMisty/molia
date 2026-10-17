@@ -1277,7 +1277,7 @@ void main() {
     expect(find.text('还没有本地歌曲'), findsOneWidget);
   });
 
-  testWidgets('本地歌曲：未注入下载服务（Web / 不支持）时合集与入口隐藏', (tester) async {
+  testWidgets('本地歌曲：未注入下载服务（能力不可用）时合集与入口隐藏', (tester) async {
     await pumpFavorites(tester);
 
     await openCollectionPicker(tester);

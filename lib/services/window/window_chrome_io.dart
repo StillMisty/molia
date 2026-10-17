@@ -7,8 +7,8 @@ import 'package:window_manager/window_manager.dart';
 
 /// Linux / Windows 桌面：window_manager 实现。
 ///
-/// 仅当 [isSupported] 为真时调用插件；其它 io 平台（Android / iOS / macOS）
-/// 与 stub 等价，避免调用未注册的插件方法（MissingPluginException）。
+/// 插件方法只在 [isSupported] 为真时调用：其余平台（Android / iOS / macOS）
+/// 没有注册插件实现，触达插件 API 会撞 MissingPluginException。
 class WindowChrome {
   WindowChrome._();
 

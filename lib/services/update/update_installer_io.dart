@@ -7,7 +7,7 @@ import 'package:path/path.dart' as p;
 
 import 'update_installer_types.dart';
 
-/// 原生平台的更新安装策略。
+/// 更新安装策略（各平台分支见类文档）。
 ///
 /// - **Android**：下载好的 APK 经 MethodChannel 交给系统安装器
 ///   （Manifest 已声明 FileProvider 与 REQUEST_INSTALL_PACKAGES）；未授予
@@ -61,9 +61,6 @@ class UpdateInstaller {
     if (!Platform.isAndroid) return;
     await _safeInvoke<void>('openInstallPermissionSettings');
   }
-
-  /// Web 的「刷新以更新」；原生端无需刷新页面，空操作。
-  Future<void> reloadPage() async {}
 
   /// 本机安装形态偏好的产物类别（清单里可能有多种分发形态）。
   ///

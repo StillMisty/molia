@@ -16,8 +16,8 @@ class AudioPredownloadTask {
   void cancel() => _onCancel();
 }
 
-/// 启动一次音频预取（平台实现）；
-/// 平台不支持 / 目标文件已存在完整缓存时返回 null。
+/// 启动一次音频预取；
+/// 目标文件已存在完整缓存时返回 null。
 typedef AudioPredownloadStarter = AudioPredownloadTask? Function({
   required Uri uri,
   required String targetPath,
