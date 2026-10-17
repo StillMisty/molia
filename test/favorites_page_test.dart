@@ -225,6 +225,7 @@ void main() {
     CacheService? cache,
     Size size = const Size(1200, 2400),
     ShellReselectSignal? reselect,
+    TextScaler? textScaler,
   }) async {
     tester.view.physicalSize = size;
     tester.view.devicePixelRatio = 1.0;
@@ -249,11 +250,20 @@ void main() {
             ...GlobalMaterialLocalizations.delegates,
           ],
           supportedLocales: const [Locale('zh')],
-          home: Scaffold(
-            body: FavoritesPage(
-              shuffleRandom: shuffleRandom,
-              reselect: reselect,
-            ),
+          home: Builder(
+            builder: (context) {
+              final Widget page = Scaffold(
+                body: FavoritesPage(
+                  shuffleRandom: shuffleRandom,
+                  reselect: reselect,
+                ),
+              );
+              if (textScaler == null) return page;
+              return MediaQuery(
+                data: MediaQuery.of(context).copyWith(textScaler: textScaler),
+                child: page,
+              );
+            },
           ),
         ),
       ),
@@ -672,6 +682,38 @@ void main() {
     final downloadRow = tester.getTopLeft(find.text('歌手')).dx;
     expect(cachedRow, downloadRow, reason: '行尾标签不挤动列左缘');
     expect(cachedRow, tester.getTopLeft(find.text('艺术家')).dx);
+  }, variant: TargetPlatformVariant.only(TargetPlatform.linux));
+
+  testWidgets('桌面宽屏大字号：缓存标签单行省略，不溢出固定槽', (tester) async {
+    await repository.addHistoryEntry(_history('1', playedAt: 2));
+    final cacheStorage = _FakeCacheStorage(files: {
+      CacheService.audioCacheKey(sourceKey: 'wy', songId: '1', quality: '320k'):
+          2048,
+    });
+    await pumpFavorites(
+      tester,
+      downloads: _StubDownloadService(seed: [_localSong('2')]),
+      cache: CacheService(storage: cacheStorage),
+      textScaler: const TextScaler.linear(3),
+    );
+    await selectRailCollection(tester, '本地歌曲');
+    await tester.pump();
+
+    expect(tester.takeException(), isNull, reason: '大字号不溢出');
+    final tag = tester.widget<Text>(find.text('缓存'));
+    expect(tag.maxLines, 1);
+    expect(tag.softWrap, isFalse);
+    expect(tag.overflow, TextOverflow.ellipsis);
+    // 单行渲染（不换行撑满 72dp 行高）；宽度被 56dp 固定槽约束。
+    expect(
+      tester.getSize(find.text('缓存')).height,
+      lessThan(TrackRow.extent),
+      reason: '标签单行渲染',
+    );
+    expect(
+      tester.getSize(find.text('缓存')).width,
+      lessThanOrEqualTo(TrackRowColumns.trailingSlotWidth),
+    );
   }, variant: TargetPlatformVariant.only(TargetPlatform.linux));
 
   testWidgets('桌面宽窗口 + 合集栏（内容宽 < 900）：不渲染表头', (tester) async {

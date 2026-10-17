@@ -35,13 +35,13 @@ class TrackRowColumns {
     this.duration = '',
   });
 
-  /// 艺术家列文案（空串 = 留空）。
+  /// 艺术家列文案。
   final String artist;
 
-  /// 专辑列文案（空串 = 留空）。
+  /// 专辑列文案。
   final String album;
 
-  /// 时长列文案（空串 = 留空）。
+  /// 时长列文案（来自 `durationText`）。
   final String duration;
 
   /// 表格列生效的最小窗口宽（与 browse 桌面断点同值，见

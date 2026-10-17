@@ -227,15 +227,22 @@ void main() {
       tester.getTopLeft(find.text('时长')).dx,
     );
 
-    // 表头钉住：滚过封面头部后仍在视口顶部（不随列表滚走）。
+    // 表头钉住：滚过封面头部后停在视口顶部（不随列表滚走）。
     await tester.drag(find.byType(CustomScrollView), const Offset(0, -800));
     await tester.pumpAndSettle();
     expect(find.text('歌手 0'), findsNothing, reason: '首行已滚出视口');
     expect(find.byType(TrackTableHeader), findsOneWidget);
+    final viewportTop = tester.getTopLeft(find.byType(CustomScrollView)).dy;
+    final pinnedTop = tester.getTopLeft(find.byType(TrackTableHeader)).dy;
+    expect(pinnedTop, closeTo(viewportTop, 2), reason: '表头钉在视口顶部');
+
+    // 换一个滚动偏移：表头位置不动（非 pinned 时会继续上滚）。
+    await tester.drag(find.byType(CustomScrollView), const Offset(0, -300));
+    await tester.pumpAndSettle();
     expect(
       tester.getTopLeft(find.byType(TrackTableHeader)).dy,
-      lessThan(200),
-      reason: '表头钉在视口顶部',
+      closeTo(pinnedTop, 2),
+      reason: '继续滚动表头钉住不动',
     );
   }, variant: TargetPlatformVariant.only(TargetPlatform.linux));
 

@@ -50,6 +50,15 @@ AppLocalizations _l10n(BuildContext context) =>
 bool _useCollectionRail(BuildContext context) =>
     isDesktopPlatform() && context.isDesktop;
 
+/// 行内表格三列：三处合集行（曲目 / 历史 / 本地歌曲）共用同一映射，
+/// 时长统一走 `durationText`。
+TrackRowColumns _rowColumns(String artist, String album, int? durationMs) =>
+    TrackRowColumns(
+      artist: artist,
+      album: album,
+      duration: durationText(durationMs) ?? '',
+    );
+
 /// 「收藏」页：默认收藏（♥）与已导入/自建列表、播放历史、本地歌曲的
 /// 统一管理入口。
 ///
@@ -1767,11 +1776,7 @@ class _FavoritesPageState extends State<FavoritesPage> {
     final m3e = M3ETheme.of(context);
     final selectionTheme = m3e.selectionTheme;
     final foreground = selectionTheme.contextualForeground(m3e.colorScheme);
-    final itemCount = view.isHistory
-        ? view.visibleHistory.length
-        : view.isLocalSongs
-            ? view.visibleLocalSongs.length
-            : view.visible.length;
+    final itemCount = view.visibleCount;
     final allSelected = _selection.allSelectedFor(itemCount) == true;
     return ColoredBox(
       color: selectionTheme.contextualBackground(m3e.colorScheme),
@@ -1830,8 +1835,6 @@ class _FavoritesPageState extends State<FavoritesPage> {
     _CollectionView view, {
     required bool reorderActive,
   }) {
-    // 表格列判定用列表实际内容宽：桌面 master-detail 的合集栏（240）已经
-    // 吃掉窗口宽度，按窗口宽判定会在窄内容区给出固定列宽的行、把行撑溢出。
     return LayoutBuilder(
       builder: (context, constraints) {
         final tableColumns = showTrackTableColumns(
@@ -1910,12 +1913,7 @@ class _FavoritesPageState extends State<FavoritesPage> {
       artist: track.artist,
       coverUrl: track.coverUrl,
       columns: tableColumns
-          ? TrackRowColumns(
-              artist: track.artist,
-              album: track.album,
-              // 时长缺失 / 非法返回 null：列留空（与搜索页同一语义）。
-              duration: durationText(track.durationMs) ?? '',
-            )
+          ? _rowColumns(track.artist, track.album, track.durationMs)
           : null,
       trailingText: durationText(track.durationMs),
       position: calculateCardPosition(index, view.visible.length),
@@ -2016,11 +2014,7 @@ class _FavoritesPageState extends State<FavoritesPage> {
       artist: entry.artist,
       coverUrl: entry.coverUrl,
       columns: tableColumns
-          ? TrackRowColumns(
-              artist: entry.artist,
-              album: entry.album,
-              duration: durationText(entry.durationMs) ?? '',
-            )
+          ? _rowColumns(entry.artist, entry.album, entry.durationMs)
           : null,
       trailingText: durationText(entry.durationMs),
       position: calculateCardPosition(index, view.visibleHistory.length),
@@ -2144,16 +2138,17 @@ class _FavoritesPageState extends State<FavoritesPage> {
       artist: song.artist,
       coverUrl: song.artworkUri,
       columns: tableColumns
-          ? TrackRowColumns(
-              artist: song.artist,
-              album: song.album,
-              duration: durationText(song.durationMs) ?? '',
-            )
+          ? _rowColumns(song.artist, song.album, song.durationMs)
           : null,
       trailingText: durationText(song.durationMs),
+      // 行尾标签与 ⋮ 菜单共用 56dp 固定槽：大字号下必须单行省略，
+      // 否则换行会被 72dp 固定行高裁切。
       trailing: song.isCached
           ? Text(
               l10n.localSongsCachedTag,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              softWrap: false,
               style: Theme.of(context).textTheme.labelSmall?.copyWith(
                     color: Theme.of(context).colorScheme.onSurfaceVariant,
                   ),

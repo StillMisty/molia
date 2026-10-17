@@ -248,8 +248,6 @@ class _DiscoverTracksPageState extends State<DiscoverTracksPage> {
     }
     final cardList = M3ETheme.of(context).listTheme.cardList;
     final horizontalPadding = context.horizontalPadding;
-    // 表格列判定用列表实际内容宽：桌面壳层侧栏 / 队列面板会吃掉窗口宽度，
-    // 按窗口宽判定会在窄内容区给出固定列宽的行、把行撑溢出。
     return LayoutBuilder(
       builder: (context, constraints) {
         final tableColumns = showTrackTableColumns(
@@ -276,11 +274,7 @@ class _DiscoverTracksPageState extends State<DiscoverTracksPage> {
                     delegate: _PinnedTableHeaderDelegate(
                       extent: TrackTableHeader.extentOf(context),
                       background: Theme.of(context).colorScheme.surface,
-                      child: Padding(
-                        padding:
-                            EdgeInsets.symmetric(horizontal: horizontalPadding),
-                        child: const TrackTableHeader(),
-                      ),
+                      horizontalPadding: horizontalPadding,
                     ),
                   ),
                 SliverPadding(
@@ -302,8 +296,6 @@ class _DiscoverTracksPageState extends State<DiscoverTracksPage> {
                                 ? TrackRowColumns(
                                     artist: track.artist,
                                     album: track.album,
-                                    // 时长缺失 / 非法返回 null：列留空
-                                    //（与搜索页同一语义）。
                                     duration:
                                         durationText(track.durationMs) ?? '',
                                   )
@@ -472,17 +464,20 @@ class _DiscoverTracksPageState extends State<DiscoverTracksPage> {
 /// 后行内列仍有标题可对照；[ColoredBox] 用页面表面色遮挡滚过其下的行。
 ///
 /// extent 由 [TrackTableHeader.extentOf] 按主题 + 系统文字缩放算出，不写死
-/// 行高（大字号下不裁切）。
+/// 行高（大字号下不裁切）。子组件在 [build] 内按可比较的字段构造：
+/// widget 实例比较恒不相等，起不到去重作用。
 class _PinnedTableHeaderDelegate extends SliverPersistentHeaderDelegate {
   const _PinnedTableHeaderDelegate({
-    required this.child,
     required this.extent,
     required this.background,
+    required this.horizontalPadding,
   });
 
-  final Widget child;
   final double extent;
   final Color background;
+
+  /// 列表横向页边距（与行列表同值）：表头列缘据此与行内列对齐。
+  final double horizontalPadding;
 
   @override
   double get minExtent => extent;
@@ -496,11 +491,17 @@ class _PinnedTableHeaderDelegate extends SliverPersistentHeaderDelegate {
     double shrinkOffset,
     bool overlapsContent,
   ) =>
-      ColoredBox(color: background, child: child);
+      ColoredBox(
+        color: background,
+        child: Padding(
+          padding: EdgeInsets.symmetric(horizontal: horizontalPadding),
+          child: const TrackTableHeader(),
+        ),
+      );
 
   @override
   bool shouldRebuild(covariant _PinnedTableHeaderDelegate oldDelegate) =>
       oldDelegate.extent != extent ||
       oldDelegate.background != background ||
-      oldDelegate.child != child;
+      oldDelegate.horizontalPadding != horizontalPadding;
 }
