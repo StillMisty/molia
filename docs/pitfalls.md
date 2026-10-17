@@ -374,3 +374,18 @@
     `play-services-mlkit-barcode-scanning` 传递带入；若某天 Gradle 解析不到
     `GoogleApiAvailability`，在 `android/app/build.gradle*` 显式补
     `implementation("com.google.android.gms:play-services-base:18.0.1")`。
+49. **桌面歌词：横滚必须在切行前收尾，重建后要等整列布局完成再摆位**：
+    两个同源缺陷都来自「滚动只看词轴、摆位只看主行」：
+    ① 词轴越界（末词时间晚于下一行时间戳）时进度永远到不了 1，或末词恰好
+    在切行时刻收尾——切行时行尾还没露出来，表现为「长歌词滚动被截断」。
+    `CurrentLineView.playedFraction` 因此取 `max(词轴进度, 行时间轴进度)`：
+    行时间轴口径提前 300ms 收尾（夹进行长的 1/3），保证切行前行尾完整露出、
+    留出可读时间；匀速模式的跨度也在 Dart 侧夹到 tracker 的行尾
+    （`LyricsDisplayProvider._buildPresentation`）。
+    ② 重建（换行 / 翻译开关）后主行的 `onSizeChanged` 先于扩展行布局触发：
+    翻译 / 罗马音此时宽度还是 0，组偏移把它算到左缘（x=0），而**没有后续
+    回调纠正**（暂停时没有帧循环）——表现为「切翻译时闪到左侧再恢复」。纠正
+    挂在整列的 `addOnLayoutChangeListener`（ViewGroup 先 `onLayout()` 子视图、
+    后回调），在同一帧绘制前用真实宽度重摆；`DesktopLyricsOutput.start` 同步
+    按配置去重（`controls` 是每次现取的 unmodifiable map，按键值比较），
+    任何设置变化都重建的老行为会放大这个闪动。

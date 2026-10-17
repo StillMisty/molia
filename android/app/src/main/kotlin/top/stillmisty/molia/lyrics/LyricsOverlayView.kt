@@ -29,6 +29,7 @@ import androidx.annotation.DrawableRes
 import top.stillmisty.molia.R
 import kotlin.math.abs
 import kotlin.math.max
+import kotlin.math.min
 
 /** 悬浮窗配置快照（由 Dart 侧下发；策略已在 Dart 侧应用）。 */
 internal data class OverlayConfig(
@@ -168,8 +169,9 @@ private val EASE_ACCELERATE = PathInterpolator(0.3f, 0f, 0.8f, 0.15f)
  * - 位置时基不在这里：由宿主 [LyricsOverlayView] 持有 [LyricClock]，每帧
  *   把已纠偏的位置传进来（[applyAt]）。切行重建视图不会打断时基；
  * - 横向滚动按「已唱边界在整行中的比例」映射到溢出宽度：行首即动、行尾
- *   正好滚到位；匀速模式改按 [lineStartMs]/[lineEndMs] 线性映射。真实文本
- *   宽没有超过视图宽时恒不滚动；
+ *   正好滚到位；匀速模式改按 [lineStartMs]/[lineEndMs] 线性映射。行时间轴
+ *   可用时再取行时间轴进度兜底（提前 [SCROLL_END_LEAD_MS] 收尾），保证
+ *   切行前行尾已经完整露出；真实文本宽没有超过视图宽时恒不滚动；
  * - 词边界 x 坐标按 Layout 缓存（每帧只剩一次查询 + 插值），颜色用可变
  *   color span 而不是自绘：更新颜色不触发重新排版。
  */
@@ -292,22 +294,43 @@ internal class CurrentLineView(context: Context) : TextView(context) {
     }
 
     /**
-     * 已唱比例（0..1）：
+     * 滚动进度（0..1）：词轴口径与行时间轴口径取较大值，保证「切行前必滚完」：
      * - 跟随演唱（默认）：有词轴时取「已唱边界」在整行中的相对位置；
-     * - 匀速：按 [lineStartMs]/[lineEndMs] 线性推进（无词轴时恒按此口径）；
+     * - 行时间轴兜底：按 [lineStartMs]/[lineEndMs] 线性推进，并提前
+     *   [SCROLL_END_LEAD_MS] 到达 1——词轴越界（末词晚于切行时刻）或恰好
+     *   卡在切行时刻收尾时，行尾也能在切行前完整露出、留出可读时间；
      * - 两者都缺（无词轴且无行时间轴）时为 0，不滚动。
      */
     private fun playedFraction(positionMs: Long): Float {
-        if (!scrollFollowsSinging || words.isEmpty()) {
-            if (lineStartMs < 0 || lineEndMs <= lineStartMs) return 0f
-            return ((positionMs - lineStartMs).toFloat() / (lineEndMs - lineStartMs))
-                .coerceIn(0f, 1f)
+        val sung = if (scrollFollowsSinging && words.isNotEmpty()) {
+            sungFraction(positionMs)
+        } else {
+            null
         }
-        val edges = wordEdgeX() ?: return 0f
+        val paced = pacedFraction(positionMs)
+        return max(sung ?: 0f, paced ?: 0f)
+    }
+
+    /** 词轴口径的已完成比例；词轴还没布局时返回 null（下一帧再补）。 */
+    private fun sungFraction(positionMs: Long): Float? {
+        val edges = wordEdgeX() ?: return null
         val span = edges[edges.size - 1] - edges[0]
-        if (span <= 0f) return 0f
+        if (span <= 0f) return null
         val edgeX = playedEdgeX(edges, positionMs)
         return ((edgeX - edges[0]) / span).coerceIn(0f, 1f)
+    }
+
+    /**
+     * 行时间轴口径的进度；跨度提前 [SCROLL_END_LEAD_MS] 结束（夹到行长的
+     * 三分之一内），保证行尾在切行前可见。无有效行时间轴时返回 null。
+     */
+    private fun pacedFraction(positionMs: Long): Float? {
+        if (lineStartMs < 0 || lineEndMs <= lineStartMs) return null
+        val span = lineEndMs - lineStartMs
+        val lead = min(SCROLL_END_LEAD_MS, span / 3)
+        val denominator = max(1L, span - lead)
+        return ((positionMs - lineStartMs).toFloat() / denominator)
+            .coerceIn(0f, 1f)
     }
 
     /** 已唱边界在 Layout 坐标系中的 x（逐字词轴，词内线性插值）。 */
@@ -359,6 +382,9 @@ internal class CurrentLineView(context: Context) : TextView(context) {
     }
 
     private companion object {
+        /** 横向滚动提前收尾量（毫秒）：行时间轴兜底在切行前给行尾留可读时间。 */
+        const val SCROLL_END_LEAD_MS = 300L
+
         fun blend(from: Int, to: Int, fraction: Float): Int {
             val f = fraction.coerceIn(0f, 1f)
             val a = (Color.alpha(from) + (Color.alpha(to) - Color.alpha(from)) * f).toInt()
@@ -729,6 +755,13 @@ internal class LyricsOverlayView(
             entryViews.add(view)
             if (entry.isCurrent || entry.isExtended) scrollGroup.add(view)
         }
+        // 整列布局完成后重算一次组偏移：LinearLayout 先布局主行，主行的
+        // onSizeChanged 会先算一次（此时翻译 / 罗马音行还没布局，宽度为 0，
+        // 其 x 会被写成 0 左缘）；列级回调在所有子视图布局之后触发，保证
+        // 同一帧绘制前滚动组都在正确位置（暂停时没有后续帧，必须在这里纠正）。
+        column.addOnLayoutChangeListener { _, _, _, _, _, _, _, _, _ ->
+            onColumnLaidOut()
+        }
         return column
     }
 
@@ -834,6 +867,18 @@ internal class LyricsOverlayView(
 
     /** 行视图尺寸 / Layout 变化：偏移与裁剪都依赖视图宽，补一帧。 */
     private fun onLineLayoutChanged() {
+        applyFrame(advance = false)
+        if (shouldKeepFrames()) scheduleFrame()
+    }
+
+    /**
+     * 整列（含翻译 / 罗马音）布局完成：重算并落位组偏移。
+     *
+     * 不能只依赖主行 [CurrentLineView.onLayoutChanged]：一次布局中主行先于
+     * 扩展行完成，扩展行的宽度此时还是 0，x 会被算成 0；列级回调保证所有
+     * 滚动组成员拿到真实宽度后再摆位。
+     */
+    private fun onColumnLaidOut() {
         applyFrame(advance = false)
         if (shouldKeepFrames()) scheduleFrame()
     }
