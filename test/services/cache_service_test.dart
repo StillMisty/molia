@@ -3,6 +3,7 @@ import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:molia/domain/models/track.dart';
+import 'package:molia/services/audio_cache_store.dart';
 import 'package:molia/services/cache_service.dart';
 import 'package:molia/services/cache_storage_io.dart';
 import '../support/memory_cache_storage.dart';
@@ -308,14 +309,14 @@ void main() {
   group('单曲缓存（音频 / 歌词）', () {
     test('按曲目前缀统计与清理：命中所有音质变体，不误伤其它曲目', () async {
       final audioDir = '${tempRoot.path}/audio_cache';
-      final sameTrack320 = CacheService.audioCacheKey(
+      final sameTrack320 = AudioCacheStore.key(
           sourceKey: 'wy', songId: '123', quality: '320k');
-      final sameTrackFlac = CacheService.audioCacheKey(
+      final sameTrackFlac = AudioCacheStore.key(
           sourceKey: 'wy', songId: '123', quality: 'flac');
-      final otherTrack = CacheService.audioCacheKey(
+      final otherTrack = AudioCacheStore.key(
           sourceKey: 'wy', songId: '1234', quality: '320k');
       // 特殊字符走哈希后缀路径：前缀匹配同样成立。
-      final specialKey = CacheService.audioCacheKey(
+      final specialKey = AudioCacheStore.key(
           sourceKey: 'lx', songId: 'lx:abc/1', quality: '128k');
       await writeFile(audioDir, sameTrack320, 100);
       await writeFile(audioDir, sameTrackFlac, 200);
@@ -350,9 +351,9 @@ void main() {
         storage: storage,
         audioProtectAge: const Duration(hours: 1),
       );
-      final writing = CacheService.audioCacheKey(
+      final writing = AudioCacheStore.key(
           sourceKey: 'kg', songId: '7', quality: '320k');
-      final idle = CacheService.audioCacheKey(
+      final idle = AudioCacheStore.key(
           sourceKey: 'kg', songId: '7', quality: '128k');
       await writeFile('${tempRoot.path}/audio_cache', writing, 100,
           age: Duration.zero);
@@ -411,13 +412,13 @@ void main() {
       );
     });
 
-    test('audioCacheKeyPrefix 与 audioCacheKey 同源（文件名以它开头）', () {
+    test('AudioCacheStore.keyPrefix 与 key 同源（文件名以它开头）', () {
       for (final songId in ['123', 'lx:abc/1']) {
-        final prefix = CacheService.audioCacheKeyPrefix(
+        final prefix = AudioCacheStore.keyPrefix(
             sourceKey: 'lx', songId: songId);
         for (final quality in ['auto', '320k', 'flac24bit']) {
           expect(
-            CacheService.audioCacheKey(
+            AudioCacheStore.key(
                 sourceKey: 'lx', songId: songId, quality: quality),
             startsWith(prefix),
           );
@@ -427,7 +428,7 @@ void main() {
 
     test('索引 / 占用只认完整文件：半成品与边车不计入', () async {
       final audioDir = '${tempRoot.path}/audio_cache';
-      final complete = CacheService.audioCacheKey(
+      final complete = AudioCacheStore.key(
           sourceKey: 'kw', songId: '9', quality: '320k');
       await writeFile(audioDir, complete, 400);
       await writeFile(audioDir, '$complete$audioCachePartSuffix', 900);
@@ -451,7 +452,7 @@ void main() {
 
     test('启动清扫半成品：删 .part / .predl，保留完整文件与 .mime 边车', () async {
       final audioDir = '${tempRoot.path}/audio_cache';
-      final complete = CacheService.audioCacheKey(
+      final complete = AudioCacheStore.key(
           sourceKey: 'kw', songId: '9', quality: '320k');
       await writeFile(audioDir, complete, 400);
       await writeFile(audioDir, '$complete$audioCachePartSuffix', 900);
@@ -471,7 +472,7 @@ void main() {
     test('旧命名一次性清理：迁移只执行一次，标记落 prefs', () async {
       final audioDir = '${tempRoot.path}/audio_cache';
       // 旧命名：songId 用了复合 id（`kw:9`），文件名带重复 sourceKey。
-      final legacy = CacheService.audioCacheKey(
+      final legacy = AudioCacheStore.key(
           sourceKey: 'kw', songId: 'kw:9', quality: '320k');
       await writeFile(audioDir, legacy, 100);
 
@@ -483,7 +484,7 @@ void main() {
       );
 
       // 已是当前版本：不再清（用户新写入的缓存不受影响）。
-      final fresh = CacheService.audioCacheKeyForTrack(
+      final fresh = AudioCacheStore.keyForTrack(
           _track('kw', '9'), quality: '320k');
       await writeFile(audioDir, fresh, 200);
       await service.migrateAudioCacheNamingIfNeeded();
@@ -491,9 +492,9 @@ void main() {
     });
   });
 
-  group('audioCacheKey', () {
+  group('AudioCacheStore.key', () {
     test('默认 quality=auto，特殊字符替换且带哈希后缀', () {
-      final key = CacheService.audioCacheKey(
+      final key = AudioCacheStore.key(
         sourceKey: 'lx',
         songId: 'lx:abc/1',
       );
@@ -502,24 +503,24 @@ void main() {
       expect(key.contains('/'), isFalse);
 
       expect(
-        CacheService.audioCacheKey(sourceKey: 'wy', songId: '123'),
+        AudioCacheStore.key(sourceKey: 'wy', songId: '123'),
         'wy_123_auto',
       );
       expect(
-        CacheService.audioCacheKey(
+        AudioCacheStore.key(
             sourceKey: 'wy', songId: '123', quality: '320k'),
         'wy_123_320k',
       );
       expect(
-        CacheService.audioCacheKey(
+        AudioCacheStore.key(
             sourceKey: 'wy', songId: '123', quality: '  '),
         'wy_123_auto',
       );
     });
 
     test('不同原始 key 不会因替换字符而碰撞', () {
-      final a = CacheService.audioCacheKey(sourceKey: 's', songId: 'a:b');
-      final b = CacheService.audioCacheKey(sourceKey: 's', songId: 'a_b');
+      final a = AudioCacheStore.key(sourceKey: 's', songId: 'a:b');
+      final b = AudioCacheStore.key(sourceKey: 's', songId: 'a_b');
       expect(a, isNot(b));
     });
   });

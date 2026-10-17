@@ -4,8 +4,6 @@ import 'package:flutter/foundation.dart' show ValueNotifier;
 import 'package:logging/logging.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-import '../domain/models/track.dart';
-import '../sources/source_track.dart';
 import 'audio_cache_store.dart';
 import 'cache_storage.dart';
 import 'lyrics_cache.dart';
@@ -297,37 +295,6 @@ class CacheService {
   /// 完整判据与列举口径见 [AudioCacheStore.index]。
   Future<Map<String, int>> audioCacheIndex() => _audioStore.index();
 
-  /// 文件名是否为完整可播放的音频缓存
-  /// （口径见 [AudioCacheStore.isCompleteFileName]）。
-  static bool isCompleteAudioCacheFile(String name) =>
-      AudioCacheStore.isCompleteFileName(name);
-
-  /// 单曲音频缓存文件名前缀（`{sourceKey}_{songId}_`，同一替换规则）；
-  /// 见 [AudioCacheStore.keyPrefix]。
-  static String audioCacheKeyPrefix({
-    required String sourceKey,
-    required String songId,
-  }) =>
-      AudioCacheStore.keyPrefix(sourceKey: sourceKey, songId: songId);
-
-  /// 单曲音频缓存文件名（**写入侧唯一入口**）：由 `SourceTrack` 派生；
-  /// 见 [AudioCacheStore.keyForSource]。
-  static String audioCacheKeyForSource(
-    SourceTrack track, {
-    String quality = '',
-  }) =>
-      AudioCacheStore.keyForSource(track, quality: quality);
-
-  /// 单曲音频缓存文件名（**读取侧唯一入口**）：由领域 `Track` 派生；
-  /// 见 [AudioCacheStore.keyForTrack]。
-  static String audioCacheKeyForTrack(Track track, {String quality = ''}) =>
-      AudioCacheStore.keyForTrack(track, quality: quality);
-
-  /// 单曲音频缓存前缀（命中该曲目所有音质变体）：由领域 `Track` 派生；
-  /// 见 [AudioCacheStore.keyPrefixForTrack]。
-  static String audioCacheKeyPrefixForTrack(Track track) =>
-      AudioCacheStore.keyPrefixForTrack(track);
-
   /// 单曲音频缓存占用（所有音质变体；只认完整文件）。
   Future<CacheUsage> audioUsageForTrack({
     required String sourceKey,
@@ -405,19 +372,6 @@ class CacheService {
 
   /// 封面缓存目录（持久）；目录不可用返回 null。
   Future<String?> artworkCacheDirPath() => _safeDir(_storage.artworkCacheDir);
-
-  /// 生成音频缓存文件名：`sourceKey_songId_quality`（quality 未知用 auto）；
-  /// 替换规则 / 哈希后缀 / 截断见 [AudioCacheStore.key]。
-  static String audioCacheKey({
-    required String sourceKey,
-    required String songId,
-    String quality = 'auto',
-  }) =>
-      AudioCacheStore.key(
-        sourceKey: sourceKey,
-        songId: songId,
-        quality: quality,
-      );
 
   // 策略变更监听（ArtworkCache 用）。
 

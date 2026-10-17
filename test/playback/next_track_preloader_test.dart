@@ -5,6 +5,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:molia/playback/audio_predownload.dart';
 import 'package:molia/playback/audio_predownloader.dart';
 import 'package:molia/playback/next_track_preloader.dart';
+import 'package:molia/services/audio_cache_store.dart';
 import 'package:molia/services/cache_service.dart';
 import 'package:molia/services/cache_types.dart';
 import 'package:molia/sources/source_track.dart';
@@ -304,7 +305,7 @@ void main() {
         started.single,
         p.join(
           '/tmp/molia_audio',
-          CacheService.audioCacheKeyForSource(track, quality: '320k'),
+          AudioCacheStore.keyForSource(track, quality: '320k'),
         ),
       );
 

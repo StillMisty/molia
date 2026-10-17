@@ -8,6 +8,7 @@ import 'package:molia/domain/models/download.dart';
 import 'package:molia/domain/models/track.dart';
 import 'package:molia/domain/ports/music_source.dart';
 import 'package:molia/managers/artwork_cache.dart';
+import 'package:molia/services/audio_cache_store.dart';
 import 'package:molia/services/cache_service.dart';
 import 'package:molia/services/cache_storage_io.dart';
 import '../support/memory_cache_storage.dart';
@@ -137,11 +138,11 @@ void main() {
   test('load：下载记录 + 四项占用一次读出（音频多音质合并）', () async {
     final t = track();
     await writeAudio(
-      CacheService.audioCacheKey(sourceKey: 'kw', songId: 'a', quality: '320k'),
+      AudioCacheStore.key(sourceKey: 'kw', songId: 'a', quality: '320k'),
       100,
     );
     await writeAudio(
-      CacheService.audioCacheKey(sourceKey: 'kw', songId: 'a', quality: 'flac'),
+      AudioCacheStore.key(sourceKey: 'kw', songId: 'a', quality: 'flac'),
       200,
     );
     await prefs.setString(
@@ -165,11 +166,11 @@ void main() {
     final a = track();
     final b = track(id: 'b');
     await writeAudio(
-      CacheService.audioCacheKey(sourceKey: 'kw', songId: 'a', quality: '320k'),
+      AudioCacheStore.key(sourceKey: 'kw', songId: 'a', quality: '320k'),
       100,
     );
     await writeAudio(
-      '${CacheService.audioCacheKey(sourceKey: 'kw', songId: 'a', quality: '320k')}'
+      '${AudioCacheStore.key(sourceKey: 'kw', songId: 'a', quality: '320k')}'
       '$audioCachePartSuffix',
       50,
     );
@@ -206,7 +207,7 @@ void main() {
     expect((await service.load(t)).audioState, LocalPartState.none);
 
     await writeAudio(
-      CacheService.audioCacheKey(sourceKey: 'kw', songId: 'a', quality: '320k'),
+      AudioCacheStore.key(sourceKey: 'kw', songId: 'a', quality: '320k'),
       100,
     );
     expect((await service.load(t)).audioState, LocalPartState.cached);
@@ -274,8 +275,8 @@ void main() {
 
   test('clear audio：删除全部音质变体并返回释放量', () async {
     final t = track();
-    final key320 = CacheService.audioCacheKeyForTrack(t, quality: '320k');
-    final keyFlac = CacheService.audioCacheKeyForTrack(t, quality: 'flac');
+    final key320 = AudioCacheStore.keyForTrack(t, quality: '320k');
+    final keyFlac = AudioCacheStore.keyForTrack(t, quality: 'flac');
     await writeAudio(key320, 100);
     await writeAudio(keyFlac, 200);
 
@@ -304,7 +305,7 @@ void main() {
     );
     final t = track();
     await writeAudio(
-      CacheService.audioCacheKeyForTrack(t, quality: '320k'),
+      AudioCacheStore.keyForTrack(t, quality: '320k'),
       100,
     );
 
@@ -365,10 +366,10 @@ void main() {
     final t = trackFromSourceTrack(sourceTrack);
 
     final written =
-        CacheService.audioCacheKeyForSource(sourceTrack, quality: '320k');
+        AudioCacheStore.keyForSource(sourceTrack, quality: '320k');
     await writeAudio(written, 1234);
 
-    expect(CacheService.audioCacheKeyForTrack(t, quality: '320k'), written);
+    expect(AudioCacheStore.keyForTrack(t, quality: '320k'), written);
     final data = await service.load(t);
     expect(data.audioCache, const CacheUsage(bytes: 1234, count: 1));
     expect(data.audioState, LocalPartState.cached);
@@ -376,12 +377,12 @@ void main() {
 
   test('音频半成品 / 边车不计入占用，写入中单独统计', () async {
     final t = track();
-    final complete = CacheService.audioCacheKeyForTrack(t, quality: '320k');
+    final complete = AudioCacheStore.keyForTrack(t, quality: '320k');
     await writeAudio(complete, 400);
     await writeAudio('$complete$audioCachePartSuffix', 900);
     await writeAudio('$complete$audioCacheMimeSuffix', 7);
     final prefetch =
-        '${CacheService.audioCacheKeyForTrack(t, quality: 'flac')}'
+        '${AudioCacheStore.keyForTrack(t, quality: 'flac')}'
         '$audioCachePredownloadSuffix';
     await writeAudio(prefetch, 500);
 
