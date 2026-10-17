@@ -3331,6 +3331,90 @@ class AppLocalizationsZh extends AppLocalizations {
   String get settingsCloseToTraySubtitle => '播放不中断；可从托盘图标重新打开或退出';
 
   @override
+  String get settingsShortcutsTitle => '快捷键';
+
+  @override
+  String get settingsShortcutsSubtitle => '软件内与全局快捷键的开关与自定义';
+
+  @override
+  String get shortcutsInAppSection => '软件内快捷键';
+
+  @override
+  String get shortcutsInAppHint => '窗口聚焦时生效；点击按键可重新录制';
+
+  @override
+  String get shortcutsGlobalSection => '全局快捷键';
+
+  @override
+  String get shortcutsGlobalHint => '系统级热键，窗口失焦也生效；必须包含 Ctrl / Alt / Shift';
+
+  @override
+  String get shortcutsGlobalLinuxHint =>
+      'Linux 上系统级热键依赖 X11；Wayland 会话下无法注册（桌面环境限制）';
+
+  @override
+  String get shortcutsEnabledSwitch => '启用软件内快捷键';
+
+  @override
+  String get shortcutsGlobalEnabledSwitch => '启用全局快捷键';
+
+  @override
+  String get shortcutsResetAll => '恢复默认';
+
+  @override
+  String get shortcutsRecording => '按下新按键…（Esc 取消）';
+
+  @override
+  String shortcutsConflict(Object action) {
+    return '已被「$action」占用';
+  }
+
+  @override
+  String get shortcutsGlobalNeedsModifier => '全局快捷键必须包含 Ctrl / Alt / Shift';
+
+  @override
+  String get shortcutActionPlayPause => '播放 / 暂停';
+
+  @override
+  String get shortcutActionSeekBackward => '快退 5 秒';
+
+  @override
+  String get shortcutActionSeekForward => '快进 5 秒';
+
+  @override
+  String get shortcutActionPrevious => '上一首';
+
+  @override
+  String get shortcutActionNext => '下一首';
+
+  @override
+  String get shortcutActionVolumeUp => '音量 +';
+
+  @override
+  String get shortcutActionVolumeDown => '音量 −';
+
+  @override
+  String get shortcutActionMute => '静音开关';
+
+  @override
+  String get shortcutActionSearch => '聚焦搜索';
+
+  @override
+  String get shortcutActionDestination1 => '切到第 1 个页面';
+
+  @override
+  String get shortcutActionDestination2 => '切到第 2 个页面';
+
+  @override
+  String get shortcutActionDestination3 => '切到第 3 个页面';
+
+  @override
+  String get shortcutActionCloseQueue => '关闭队列面板';
+
+  @override
+  String get shortcutActionShowWindow => '显示主窗口';
+
+  @override
   String get settingsRememberWindowBounds => '记住窗口位置与大小';
 
   @override

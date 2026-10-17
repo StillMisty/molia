@@ -3476,6 +3476,94 @@ class AppLocalizationsEn extends AppLocalizations {
       'Keep playing in the background; reopen or quit from the tray icon';
 
   @override
+  String get settingsShortcutsTitle => 'Shortcuts';
+
+  @override
+  String get settingsShortcutsSubtitle =>
+      'Enable and customize in-app and global shortcuts';
+
+  @override
+  String get shortcutsInAppSection => 'In-app shortcuts';
+
+  @override
+  String get shortcutsInAppHint =>
+      'Active while the window is focused; tap a binding to re-record it';
+
+  @override
+  String get shortcutsGlobalSection => 'Global shortcuts';
+
+  @override
+  String get shortcutsGlobalHint =>
+      'System-wide hotkeys that work while unfocused; must include Ctrl / Alt / Shift';
+
+  @override
+  String get shortcutsGlobalLinuxHint =>
+      'System-wide hotkeys need X11 on Linux; Wayland sessions cannot register them';
+
+  @override
+  String get shortcutsEnabledSwitch => 'Enable in-app shortcuts';
+
+  @override
+  String get shortcutsGlobalEnabledSwitch => 'Enable global shortcuts';
+
+  @override
+  String get shortcutsResetAll => 'Reset to defaults';
+
+  @override
+  String get shortcutsRecording => 'Press a new key… (Esc to cancel)';
+
+  @override
+  String shortcutsConflict(Object action) {
+    return 'Already used by “$action”';
+  }
+
+  @override
+  String get shortcutsGlobalNeedsModifier =>
+      'Global shortcuts must include Ctrl / Alt / Shift';
+
+  @override
+  String get shortcutActionPlayPause => 'Play / pause';
+
+  @override
+  String get shortcutActionSeekBackward => 'Seek back 5s';
+
+  @override
+  String get shortcutActionSeekForward => 'Seek forward 5s';
+
+  @override
+  String get shortcutActionPrevious => 'Previous track';
+
+  @override
+  String get shortcutActionNext => 'Next track';
+
+  @override
+  String get shortcutActionVolumeUp => 'Volume up';
+
+  @override
+  String get shortcutActionVolumeDown => 'Volume down';
+
+  @override
+  String get shortcutActionMute => 'Mute toggle';
+
+  @override
+  String get shortcutActionSearch => 'Focus search';
+
+  @override
+  String get shortcutActionDestination1 => 'Go to page 1';
+
+  @override
+  String get shortcutActionDestination2 => 'Go to page 2';
+
+  @override
+  String get shortcutActionDestination3 => 'Go to page 3';
+
+  @override
+  String get shortcutActionCloseQueue => 'Close queue panel';
+
+  @override
+  String get shortcutActionShowWindow => 'Show main window';
+
+  @override
   String get settingsRememberWindowBounds =>
       'Remember window position and size';
 

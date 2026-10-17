@@ -6220,6 +6220,168 @@ abstract class AppLocalizations {
   /// **'Keep playing in the background; reopen or quit from the tray icon'**
   String get settingsCloseToTraySubtitle;
 
+  /// No description provided for @settingsShortcutsTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Shortcuts'**
+  String get settingsShortcutsTitle;
+
+  /// No description provided for @settingsShortcutsSubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Enable and customize in-app and global shortcuts'**
+  String get settingsShortcutsSubtitle;
+
+  /// No description provided for @shortcutsInAppSection.
+  ///
+  /// In en, this message translates to:
+  /// **'In-app shortcuts'**
+  String get shortcutsInAppSection;
+
+  /// No description provided for @shortcutsInAppHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Active while the window is focused; tap a binding to re-record it'**
+  String get shortcutsInAppHint;
+
+  /// No description provided for @shortcutsGlobalSection.
+  ///
+  /// In en, this message translates to:
+  /// **'Global shortcuts'**
+  String get shortcutsGlobalSection;
+
+  /// No description provided for @shortcutsGlobalHint.
+  ///
+  /// In en, this message translates to:
+  /// **'System-wide hotkeys that work while unfocused; must include Ctrl / Alt / Shift'**
+  String get shortcutsGlobalHint;
+
+  /// No description provided for @shortcutsGlobalLinuxHint.
+  ///
+  /// In en, this message translates to:
+  /// **'System-wide hotkeys need X11 on Linux; Wayland sessions cannot register them'**
+  String get shortcutsGlobalLinuxHint;
+
+  /// No description provided for @shortcutsEnabledSwitch.
+  ///
+  /// In en, this message translates to:
+  /// **'Enable in-app shortcuts'**
+  String get shortcutsEnabledSwitch;
+
+  /// No description provided for @shortcutsGlobalEnabledSwitch.
+  ///
+  /// In en, this message translates to:
+  /// **'Enable global shortcuts'**
+  String get shortcutsGlobalEnabledSwitch;
+
+  /// No description provided for @shortcutsResetAll.
+  ///
+  /// In en, this message translates to:
+  /// **'Reset to defaults'**
+  String get shortcutsResetAll;
+
+  /// No description provided for @shortcutsRecording.
+  ///
+  /// In en, this message translates to:
+  /// **'Press a new key… (Esc to cancel)'**
+  String get shortcutsRecording;
+
+  /// No description provided for @shortcutsConflict.
+  ///
+  /// In en, this message translates to:
+  /// **'Already used by “{action}”'**
+  String shortcutsConflict(Object action);
+
+  /// No description provided for @shortcutsGlobalNeedsModifier.
+  ///
+  /// In en, this message translates to:
+  /// **'Global shortcuts must include Ctrl / Alt / Shift'**
+  String get shortcutsGlobalNeedsModifier;
+
+  /// No description provided for @shortcutActionPlayPause.
+  ///
+  /// In en, this message translates to:
+  /// **'Play / pause'**
+  String get shortcutActionPlayPause;
+
+  /// No description provided for @shortcutActionSeekBackward.
+  ///
+  /// In en, this message translates to:
+  /// **'Seek back 5s'**
+  String get shortcutActionSeekBackward;
+
+  /// No description provided for @shortcutActionSeekForward.
+  ///
+  /// In en, this message translates to:
+  /// **'Seek forward 5s'**
+  String get shortcutActionSeekForward;
+
+  /// No description provided for @shortcutActionPrevious.
+  ///
+  /// In en, this message translates to:
+  /// **'Previous track'**
+  String get shortcutActionPrevious;
+
+  /// No description provided for @shortcutActionNext.
+  ///
+  /// In en, this message translates to:
+  /// **'Next track'**
+  String get shortcutActionNext;
+
+  /// No description provided for @shortcutActionVolumeUp.
+  ///
+  /// In en, this message translates to:
+  /// **'Volume up'**
+  String get shortcutActionVolumeUp;
+
+  /// No description provided for @shortcutActionVolumeDown.
+  ///
+  /// In en, this message translates to:
+  /// **'Volume down'**
+  String get shortcutActionVolumeDown;
+
+  /// No description provided for @shortcutActionMute.
+  ///
+  /// In en, this message translates to:
+  /// **'Mute toggle'**
+  String get shortcutActionMute;
+
+  /// No description provided for @shortcutActionSearch.
+  ///
+  /// In en, this message translates to:
+  /// **'Focus search'**
+  String get shortcutActionSearch;
+
+  /// No description provided for @shortcutActionDestination1.
+  ///
+  /// In en, this message translates to:
+  /// **'Go to page 1'**
+  String get shortcutActionDestination1;
+
+  /// No description provided for @shortcutActionDestination2.
+  ///
+  /// In en, this message translates to:
+  /// **'Go to page 2'**
+  String get shortcutActionDestination2;
+
+  /// No description provided for @shortcutActionDestination3.
+  ///
+  /// In en, this message translates to:
+  /// **'Go to page 3'**
+  String get shortcutActionDestination3;
+
+  /// No description provided for @shortcutActionCloseQueue.
+  ///
+  /// In en, this message translates to:
+  /// **'Close queue panel'**
+  String get shortcutActionCloseQueue;
+
+  /// No description provided for @shortcutActionShowWindow.
+  ///
+  /// In en, this message translates to:
+  /// **'Show main window'**
+  String get shortcutActionShowWindow;
+
   /// No description provided for @settingsRememberWindowBounds.
   ///
   /// In en, this message translates to:
