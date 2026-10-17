@@ -30,6 +30,7 @@ import '../widgets/collection_track_list.dart';
 import '../widgets/icon_swap.dart';
 import '../widgets/local_audio_import.dart' show importLocalAudioFilesFlow;
 import '../widgets/lxmc_import.dart' show importLxmcFavoritesFlow;
+import '../widgets/shell_page_visibility.dart';
 import '../widgets/shell_reselect.dart';
 
 /// AppLocalizations 查找：测试等场景可能直接挂载本页而不注册 delegate，
@@ -87,6 +88,14 @@ class _FavoritesPageState extends State<FavoritesPage> {
 
   int _selectedId = LibraryCollections.unset;
   CollectionTrackSort _sort = CollectionTrackSort.added;
+
+  /// 排序结果记忆化：键 = 源列表身份 + 排序口径。
+  ///
+  /// 排序是 O(n log n) 且与搜索词无关（过滤保序），每次按键/每次通知都重排
+  /// 纯属浪费；搜索只对这份已排序列表做一次 O(n) 过滤。
+  List<PlaylistTrack>? _sortedCache;
+  List<PlaylistTrack>? _sortedCacheSource;
+  CollectionTrackSort? _sortedCacheSort;
 
   /// 搜索栏是否展开（不展开时完全不占行高）。
   bool _searching = false;
@@ -935,7 +944,12 @@ class _FavoritesPageState extends State<FavoritesPage> {
 
   @override
   Widget build(BuildContext context) {
-    final provider = context.watch<LibraryProvider>();
+    // 可见性门控：本页在壳层中常驻挂载，隐藏时放弃 provider 订阅，
+    // 否则每次播放历史写入（每首歌一次）都会让整页 build 并重跑
+    // 过滤 / 排序（见 ShellPageVisibility）。
+    final provider = ShellPageVisibility.maybeVisibleOf(context) ?? true
+        ? context.watch<LibraryProvider>()
+        : context.read<LibraryProvider>();
     final l10n = _l10n(context);
     final playlists = provider.playlists;
     final favoritesId = LibraryCollections.favoritesPlaylistId(playlists);
@@ -1123,13 +1137,17 @@ class _FavoritesPageState extends State<FavoritesPage> {
   }
 
   List<PlaylistTrack> _filterAndSort(List<PlaylistTrack> tracks) {
-    return sortCollectionTracks(
-      filterRowsByQuery(
-        tracks,
-        query: _searchController.text,
-        fields: (track) => (title: track.title, artist: track.artist),
-      ),
-      _sort,
+    // 排序与搜索词无关（过滤保序）：源列表 / 口径不变时复用上一次排序结果，
+    // 每次按键只对已排序列表做一次 O(n) 过滤。
+    if (!identical(tracks, _sortedCacheSource) || _sort != _sortedCacheSort) {
+      _sortedCache = sortCollectionTracks(tracks, _sort);
+      _sortedCacheSource = tracks;
+      _sortedCacheSort = _sort;
+    }
+    return filterRowsByQuery(
+      _sortedCache!,
+      query: _searchController.text,
+      fields: (track) => (title: track.title, artist: track.artist),
     );
   }
 

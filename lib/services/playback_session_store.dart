@@ -95,9 +95,20 @@ class PlaybackSession {
   }
 }
 
-/// SharedPreferences 持久化（单键 JSON；解析失败静默丢弃）。
+/// SharedPreferences 持久化（会话键 + 轻量进度键；解析失败静默丢弃）。
+///
+/// 为什么拆两个键：会话 JSON 含整份队列（每首都有 raw payload，大队列下是
+/// 数百 KB ~ MB 级），而播放进度每秒都在推进。若进度 tick 也整份重写，等于
+/// 播放期间每秒做一次全队列 `jsonEncode` + prefs 整文件写入（UI isolate）。
+/// 因此：
+/// - 会话键 [save] 只在内容变化（切歌 / 队列 / 模式 / 上下文）时重写；
+/// - 进度键 [savePosition] 是 int，按秒刷新；
+/// - [load] / [loadRaw] 读取时把两个键合并成完整会话，对上层透明。
 class PlaybackSessionStore {
   static const String _key = 'playback_session_v1';
+
+  /// 高频进度键（毫秒 int）：与 [_key] 分离的轻量写入面。
+  static const String _positionKey = 'playback_session_position_v1';
 
   /// 写入时间戳键（跨设备同步用它判断会话新旧；旧数据缺省按 0 处理）。
   static const String savedAtKey = 'savedAt';
@@ -137,7 +148,18 @@ class PlaybackSessionStore {
       _logger.warning('保存播放会话失败: $e');
       return Future<void>.value();
     }
-    return _enqueueWrite((sp) => sp.setString(_key, encoded), notify: true);
+    return _enqueueWrite((sp) async {
+      await sp.setString(_key, encoded);
+      await sp.setInt(_positionKey, session.position.inMilliseconds);
+    }, notify: true);
+  }
+
+  /// 只刷新播放进度（位置 tick 的高频路径）。
+  ///
+  /// 不重写会话 JSON、不触发 [onSaved]（进度不是内容变更，不应让同步
+  /// 每轮都把整份队列当成新版本）。
+  Future<void> savePosition(int positionMs) {
+    return _enqueueWrite((sp) => sp.setInt(_positionKey, positionMs));
   }
 
   /// 串行化写请求（按调用顺序执行；[pendingWrite] 因此可直接 await）。
@@ -176,7 +198,7 @@ class PlaybackSessionStore {
     }
   }
 
-  /// 原始 JSON（含 [savedAtKey]）；无记录或损坏返回 null。
+  /// 原始 JSON（含 [savedAtKey]；进度以轻量进度键为准）：无记录或损坏返回 null。
   Future<Map<String, dynamic>?> loadRaw() async {
     try {
       final sp = _preferences ?? await SharedPreferences.getInstance();
@@ -184,7 +206,11 @@ class PlaybackSessionStore {
       if (raw == null || raw.isEmpty) return null;
       final json = jsonDecode(raw);
       if (json is! Map) return null;
-      return json.cast<String, dynamic>();
+      final map = json.cast<String, dynamic>();
+      // 进度键是更高频的事实来源；旧数据/远端写入没有进度键时沿用会话内值。
+      final positionMs = sp.getInt(_positionKey);
+      if (positionMs != null) map['positionMs'] = positionMs;
+      return map;
     } catch (e) {
       _logger.warning('加载播放会话失败: $e');
       return null;
@@ -195,11 +221,18 @@ class PlaybackSessionStore {
   ///
   /// 不经 [onSaved]：写入方是同步适配器自己，回传待发标记只会多跑一轮。
   Future<void> saveRaw(Map<String, dynamic> raw) {
-    return _enqueueWrite((sp) => sp.setString(_key, jsonEncode(raw)));
+    final positionMs = (raw['positionMs'] as num?)?.toInt();
+    return _enqueueWrite((sp) async {
+      await sp.setString(_key, jsonEncode(raw));
+      if (positionMs != null) await sp.setInt(_positionKey, positionMs);
+    });
   }
 
   Future<void> clear() {
-    return _enqueueWrite((sp) => sp.remove(_key));
+    return _enqueueWrite((sp) async {
+      await sp.remove(_key);
+      await sp.remove(_positionKey);
+    });
   }
 }
 

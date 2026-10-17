@@ -36,26 +36,47 @@ List<T> filterRowsByQuery<T>(
 }
 
 /// 按口径排序曲目（不改动入参，返回新列表）；默认口径保持传入顺序。
+///
+/// 标题 / 歌手排序用「装饰排序」：`toLowerCase` 对每行只求一次，避免旧实现
+/// 在 comparator 里对同一行反复求值（n log n 次字符串分配）。
 List<PlaylistTrack> sortCollectionTracks(
   List<PlaylistTrack> tracks,
   CollectionTrackSort sort,
 ) {
-  final result = List<PlaylistTrack>.of(tracks);
   switch (sort) {
     case CollectionTrackSort.added:
-      break;
+      return List<PlaylistTrack>.of(tracks);
     case CollectionTrackSort.title:
-      result.sort(
-          (a, b) => a.title.toLowerCase().compareTo(b.title.toLowerCase()));
+      return _sortedBy(tracks, (track) => track.title);
     case CollectionTrackSort.artist:
-      result.sort((a, b) {
-        final byArtist =
-            a.artist.toLowerCase().compareTo(b.artist.toLowerCase());
-        if (byArtist != 0) return byArtist;
-        return a.title.toLowerCase().compareTo(b.title.toLowerCase());
-      });
+      return _sortedBy(
+        tracks,
+        (track) => track.artist,
+        tieBreak: (track) => track.title,
+      );
   }
-  return result;
+}
+
+/// 装饰排序：主键（小写）升序，同主键按次键（小写）升序。
+List<PlaylistTrack> _sortedBy(
+  List<PlaylistTrack> tracks,
+  String Function(PlaylistTrack) key, {
+  String Function(PlaylistTrack)? tieBreak,
+}) {
+  final decorated = [
+    for (final track in tracks)
+      (
+        key: key(track).toLowerCase(),
+        tie: (tieBreak?.call(track) ?? '').toLowerCase(),
+        track: track,
+      ),
+  ];
+  decorated.sort((a, b) {
+    final byKey = a.key.compareTo(b.key);
+    if (byKey != 0) return byKey;
+    return a.tie.compareTo(b.tie);
+  });
+  return [for (final entry in decorated) entry.track];
 }
 
 bool _matches(({String title, String artist}) row, String query) =>

@@ -14,6 +14,7 @@ import '../widgets/discover_leaderboards_tab.dart';
 import '../widgets/discover_playlists_tab.dart';
 import '../widgets/library_channel_selector.dart';
 import '../widgets/library_search_tab.dart';
+import '../widgets/shell_page_visibility.dart';
 import '../widgets/shell_reselect.dart';
 
 /// 发现页 tab 标识（可见性随当前渠道能力变化，不用下标表示）。
@@ -98,9 +99,17 @@ class _LibraryState extends State<Library> {
       );
     }
 
-    final sources = context.watch<SourcesProvider>();
-    final discover = context.watch<DiscoverProvider>();
-    final search = context.watch<SearchProvider>();
+    // 可见性门控：资料页在壳层常驻，隐藏时放弃订阅（见 ShellPageVisibility）。
+    final visible = ShellPageVisibility.maybeVisibleOf(context) ?? true;
+    final sources = visible
+        ? context.watch<SourcesProvider>()
+        : context.read<SourcesProvider>();
+    final discover = visible
+        ? context.watch<DiscoverProvider>()
+        : context.read<DiscoverProvider>();
+    final search = visible
+        ? context.watch<SearchProvider>()
+        : context.read<SearchProvider>();
 
     // 仅启用项可被选中/展示；停用项保留在「音源管理」页以便再次启用。
     final enabledChannels = [

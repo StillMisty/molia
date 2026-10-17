@@ -105,6 +105,11 @@ class PlaybackObserver {
   /// （被系统杀进程时最多丢 ~1s 进度；track 切换/暂停/后台强制写）。
   static const Duration _sessionSaveInterval = Duration(seconds: 1);
 
+  /// 整份会话（含队列 JSON）的刷新上限：进度 tick 默认只写轻量进度键，
+  /// 但每满一分钟整份重写一次——`savedAt` 随之刷新，「正在播放的设备持续
+  /// 抢占」的跨设备同步语义保持不变，而整队列序列化从每秒一次降到每分钟一次。
+  static const Duration _sessionRefreshInterval = Duration(minutes: 1);
+
   static const String _lastPlayedImageKey = 'last_played_image_url';
   static const String _lastPlayedTrackNameKey = 'last_played_track_name';
   static const String _lastPlayedArtistsKey = 'last_played_artists';
@@ -230,24 +235,47 @@ class PlaybackObserver {
     _wasPlaying = live.isPlaying;
   }
 
-  /// 高频进度 tick：节流保存会话进度。
+  /// 高频进度 tick：写轻量进度键（必要时整份刷新，见 [_maybeSavePosition]）。
   void _onPositionTick() {
-    _maybeSavePlaybackSession();
+    _maybeSavePosition();
+  }
+
+  /// 仅需「队列 / 下标 / 进度」可写的判定（无曲目 / 空队列 / 非法下标跳过）。
+  bool _hasSavableSession(PlaybackSnapshot snapshot) =>
+      snapshot.current != null &&
+      snapshot.queue.isNotEmpty &&
+      snapshot.currentIndex >= 0;
+
+  /// 进度落盘：默认只写进度键；距上次整份落盘超过 [_sessionRefreshInterval]
+  /// 时改走整份（刷新 savedAt）。
+  void _maybeSavePosition() {
+    final snapshot = _facade.snapshot.value;
+    if (!_hasSavableSession(snapshot)) return;
+    final now = _clock();
+    final elapsed = now.difference(_lastSessionSave);
+    if (elapsed < _sessionSaveInterval) return;
+    if (elapsed >= _sessionRefreshInterval) {
+      _saveSession(snapshot, now);
+      return;
+    }
+    _lastSessionSave = now;
+    unawaited(
+        _sessionStore.savePosition(_facade.position.value.inMilliseconds));
   }
 
   /// 保存当前播放会话（节流；track 切换/暂停时强制）。
   void _maybeSavePlaybackSession({bool force = false}) {
     final snapshot = _facade.snapshot.value;
-    final current = snapshot.current;
-    if (current == null ||
-        snapshot.queue.isEmpty ||
-        snapshot.currentIndex < 0) {
-      return;
-    }
+    if (!_hasSavableSession(snapshot)) return;
     final now = _clock();
     if (!force && now.difference(_lastSessionSave) < _sessionSaveInterval) {
       return;
     }
+    _saveSession(snapshot, now);
+  }
+
+  /// 整份落盘：重写会话 JSON 并触发 `onSaved`（同步待外发标记）。
+  void _saveSession(PlaybackSnapshot snapshot, DateTime now) {
     _lastSessionSave = now;
     unawaited(_sessionStore.save(PlaybackSession(
       tracks: snapshot.queue,

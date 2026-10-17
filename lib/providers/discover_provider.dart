@@ -39,11 +39,28 @@ class DiscoverProvider extends ChangeNotifier {
         _library = libraryProvider,
         _sources = sources ?? BuiltinDiscover.sources,
         _onChannelChanged = onChannelChanged {
-    // 收藏状态/我的列表变化时转发通知，让发现页的收藏按钮保持响应。
+    // 收藏状态 / 我的列表变化时转发通知，让发现页的收藏按钮与「加入列表」
+    // 弹层保持响应。历史写入（每首歌一次）不转发——发现页对历史无依赖，
+    // 无脑转发会让整页（含全部 tab 与 AI 推荐卡片）随每次切歌重建。
+    _lastFavoritesRevision = _library.favoritesRevision;
+    _lastPlaylistsRevision = _library.playlistsRevision;
     _library.addListener(_onLibraryChanged);
   }
 
-  void _onLibraryChanged() => notifyListeners();
+  void _onLibraryChanged() {
+    final favorites = _library.favoritesRevision;
+    final playlists = _library.playlistsRevision;
+    if (favorites == _lastFavoritesRevision &&
+        playlists == _lastPlaylistsRevision) {
+      return;
+    }
+    _lastFavoritesRevision = favorites;
+    _lastPlaylistsRevision = playlists;
+    notifyListeners();
+  }
+
+  int _lastFavoritesRevision = 0;
+  int _lastPlaylistsRevision = 0;
 
   final PlaybackProvider _playback;
   final LibraryProvider _library;

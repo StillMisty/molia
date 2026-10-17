@@ -51,6 +51,17 @@ class LibraryProvider extends ChangeNotifier {
   bool _disposed = false;
   Future<void>? _pendingReload;
 
+
+
+  /// 收藏状态版本（单调递增）：收藏相关订阅方（收藏按钮 / 发现页）据此做
+  /// O(1) 的失效判定，不必对每次历史写入都重建。
+  int _favoritesRevision = 0;
+  int get favoritesRevision => _favoritesRevision;
+
+  /// 列表集合 / 计数版本（`customPlaylists` 的失效判定）。
+  int _playlistsRevision = 0;
+  int get playlistsRevision => _playlistsRevision;
+
   List<PlayHistoryEntry> get history => _history;
   List<PlaylistInfo> get playlists => _playlists;
 
@@ -131,6 +142,8 @@ class LibraryProvider extends ChangeNotifier {
     _historyLoaded = false;
     _playlistsLoaded = false;
     _favoritesLoaded = false;
+    _favoritesRevision++;
+    _playlistsRevision++;
     _tracksByPlaylist.clear();
     _notify();
     _pendingReload = Future.wait([
@@ -154,6 +167,7 @@ class LibraryProvider extends ChangeNotifier {
 
   /// 收藏变化的后台校准：列表保持可见，不翻转 loading。
   Future<void> _refreshFavoritesQuietly() async {
+    _favoritesRevision++;
     try {
       _favoriteKeys = await _repository.favoriteKeys();
       _favoritesLoaded = true;
@@ -169,12 +183,14 @@ class LibraryProvider extends ChangeNotifier {
         debugPrint('[Library] 刷新收藏列表失败: $e');
       }
     }
+    // _refreshPlaylistsQuietly 内部会通知，且此时收藏状态已全部更新：
+    // 这里不再追加一次尾部通知（一次收藏操作的通知次数因此收敛）。
     await _refreshPlaylistsQuietly();
-    _notify();
   }
 
   /// 列表集合/计数后台刷新（不清曲目缓存、不闪 loading）。
   Future<void> _refreshPlaylistsQuietly() async {
+    _playlistsRevision++;
     try {
       _playlists = await _repository.listPlaylists();
       _playlistsLoaded = true;
@@ -226,6 +242,7 @@ class LibraryProvider extends ChangeNotifier {
 
   Future<void> refreshPlaylists({bool force = false}) async {
     if (_playlistsLoaded && !force) return;
+    _playlistsRevision++;
     _isPlaylistsLoading = true;
     _notify();
     try {
@@ -241,6 +258,7 @@ class LibraryProvider extends ChangeNotifier {
 
   Future<void> ensureFavoritesLoaded({bool force = false}) async {
     if (_favoritesLoaded && !force) return;
+    _favoritesRevision++;
     try {
       _favoriteKeys = await _repository.favoriteKeys();
       _favoritesLoaded = true;
@@ -470,6 +488,7 @@ class LibraryProvider extends ChangeNotifier {
       }
       _favoriteKeys = keys;
       _favoritesLoaded = true;
+      _favoritesRevision++;
       _notify();
     }
     return added;
@@ -487,6 +506,7 @@ class LibraryProvider extends ChangeNotifier {
           if (!dropped.contains(key)) key,
       };
       _favoritesLoaded = true;
+      _favoritesRevision++;
       _notify();
     }
     return removed;
@@ -546,6 +566,7 @@ class LibraryProvider extends ChangeNotifier {
     }
     _favoriteKeys = keys;
     _favoritesLoaded = true;
+    _favoritesRevision++;
     _notify();
     return favorite;
   }

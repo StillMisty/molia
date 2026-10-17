@@ -562,42 +562,59 @@ class _PlayerState extends State<Player> with TickerProviderStateMixin {
 
   /// 可拖动进度滑杆：拖动中显示本地值（不被 position 通道回拽），
   /// 松手提交 seek；拖动气泡显示目标时间。
+  ///
+  /// 外层 `RepaintBoundary` 是硬需求：`M3ESlider.wavy` 内部是 `repeat()` 的
+  /// 无限动画（包内每帧重建/重绘轨道），不隔离的话播放中每次波形重绘都会把
+  /// 整个播放器（封面 + 阴影 + 文字）卷进同一图层重光栅化。
   Widget _buildSeekSlider(
       BuildContext context, PlaybackProvider playbackProvider) {
-    return ValueListenableBuilder<double?>(
-      valueListenable: _seekPreviewMs,
-      builder: (context, previewMs, _) {
-        return ValueListenableBuilder<Duration>(
-          valueListenable: playbackProvider.position,
-          builder: (context, position, _) {
-            final (durationMs, isPlaying) =
-                context.select<PlaybackProvider, (int, bool)>(
-              (provider) => (
-                provider.snapshot.duration.inMilliseconds,
-                provider.isPlaying,
-              ),
-            );
-            final bool enabled = playbackProvider.hasTrack && durationMs > 0;
-            final double maxMs = durationMs > 0 ? durationMs.toDouble() : 1.0;
-            final double valueMs =
-                (previewMs ?? position.inMilliseconds.toDouble())
-                    .clamp(0.0, maxMs);
-            final ValueChanged<double>? onChanged = enabled
-                ? (value) {
-                    // 新拖动作废上一次的等待落点。
-                    _seekTargetMs = null;
-                    _seekSettleTimer?.cancel();
-                    _seekPreviewMs.value = value;
-                  }
-                : null;
-            final ValueChanged<double>? onChangeEnd = enabled
-                ? (value) => _commitSeek(value, playbackProvider)
-                : null;
+    return RepaintBoundary(
+      child: ValueListenableBuilder<double?>(
+        valueListenable: _seekPreviewMs,
+        builder: (context, previewMs, _) {
+          return ValueListenableBuilder<Duration>(
+            valueListenable: playbackProvider.position,
+            builder: (context, position, _) {
+              final (durationMs, isPlaying) =
+                  context.select<PlaybackProvider, (int, bool)>(
+                (provider) => (
+                  provider.snapshot.duration.inMilliseconds,
+                  provider.isPlaying,
+                ),
+              );
+              final bool enabled = playbackProvider.hasTrack && durationMs > 0;
+              final double maxMs = durationMs > 0 ? durationMs.toDouble() : 1.0;
+              final double valueMs =
+                  (previewMs ?? position.inMilliseconds.toDouble())
+                      .clamp(0.0, maxMs);
+              final ValueChanged<double>? onChanged = enabled
+                  ? (value) {
+                      // 新拖动作废上一次的等待落点。
+                      _seekTargetMs = null;
+                      _seekSettleTimer?.cancel();
+                      _seekPreviewMs.value = value;
+                    }
+                  : null;
+              final ValueChanged<double>? onChangeEnd = enabled
+                  ? (value) => _commitSeek(value, playbackProvider)
+                  : null;
 
-            // 暂停时切到平直滑杆：波浪动画不会停（一直在动），
-            // 与「已暂停」的状态自相矛盾。
-            if (!isPlaying) {
-              return M3ESlider(
+              // 暂停时切到平直滑杆：波浪动画不会停（一直在动），
+              // 与「已暂停」的状态自相矛盾。
+              if (!isPlaying) {
+                return M3ESlider(
+                  value: valueMs,
+                  min: 0,
+                  max: maxMs,
+                  size: M3ESliderSize.xs,
+                  trackThickness: 6,
+                  enabled: enabled,
+                  label: _formatSeekTime(valueMs.round()),
+                  onChanged: onChanged,
+                  onChangeEnd: onChangeEnd,
+                );
+              }
+              return M3ESlider.wavy(
                 value: valueMs,
                 min: 0,
                 max: maxMs,
@@ -608,21 +625,10 @@ class _PlayerState extends State<Player> with TickerProviderStateMixin {
                 onChanged: onChanged,
                 onChangeEnd: onChangeEnd,
               );
-            }
-            return M3ESlider.wavy(
-              value: valueMs,
-              min: 0,
-              max: maxMs,
-              size: M3ESliderSize.xs,
-              trackThickness: 6,
-              enabled: enabled,
-              label: _formatSeekTime(valueMs.round()),
-              onChanged: onChanged,
-              onChangeEnd: onChangeEnd,
-            );
-          },
-        );
-      },
+            },
+          );
+        },
+      ),
     );
   }
 
@@ -804,36 +810,47 @@ class _PlayerState extends State<Player> with TickerProviderStateMixin {
   /// 迷你条底部细进度线。
   ///
   /// 播放中用波浪线（与全屏滑杆一致）；暂停时切平直线——波浪动画不会停，
-  /// 会让人以为还在播放。
+  /// 会让人以为还在播放。外层 `RepaintBoundary` 把无限波浪动画的重绘限制在
+  /// 进度线面积内（理由同全屏滑杆）。
   Widget _buildMiniProgress(BuildContext context, PlaybackProvider playback) {
     final scheme = Theme.of(context).colorScheme;
-    return ValueListenableBuilder<Duration>(
-      valueListenable: playback.position,
-      builder: (context, position, _) {
-        final (durationMs, isPlaying) =
-            context.select<PlaybackProvider, (int, bool)>(
-          (provider) => (
-            provider.snapshot.duration.inMilliseconds,
-            provider.isPlaying,
-          ),
-        );
-        if (durationMs <= 0) {
-          // 无曲目/无时长：只画静态轨道，避免不确定波浪动画抢视线。
-          return Center(
-            child: Container(
-              width: double.infinity,
-              height: 3,
-              decoration: BoxDecoration(
-                color: scheme.surfaceContainerHighest,
-                borderRadius: BorderRadius.circular(2),
-              ),
+    return RepaintBoundary(
+      child: ValueListenableBuilder<Duration>(
+        valueListenable: playback.position,
+        builder: (context, position, _) {
+          final (durationMs, isPlaying) =
+              context.select<PlaybackProvider, (int, bool)>(
+            (provider) => (
+              provider.snapshot.duration.inMilliseconds,
+              provider.isPlaying,
             ),
           );
-        }
-        final double fraction =
-            (position.inMilliseconds / durationMs).clamp(0.0, 1.0);
-        if (!isPlaying) {
-          return M3EProgressIndicator.linear(
+          if (durationMs <= 0) {
+            // 无曲目/无时长：只画静态轨道，避免不确定波浪动画抢视线。
+            return Center(
+              child: Container(
+                width: double.infinity,
+                height: 3,
+                decoration: BoxDecoration(
+                  color: scheme.surfaceContainerHighest,
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+            );
+          }
+          final double fraction =
+              (position.inMilliseconds / durationMs).clamp(0.0, 1.0);
+          if (!isPlaying) {
+            return M3EProgressIndicator.linear(
+              value: fraction,
+              linearSize: M3EProgressIndicatorSize.s,
+              strokeWidth: 3,
+              trackStrokeWidth: 3,
+              trackColor: scheme.surfaceContainerHighest,
+              color: scheme.primary,
+            );
+          }
+          return M3EProgressIndicator.linearWavy(
             value: fraction,
             linearSize: M3EProgressIndicatorSize.s,
             strokeWidth: 3,
@@ -841,16 +858,8 @@ class _PlayerState extends State<Player> with TickerProviderStateMixin {
             trackColor: scheme.surfaceContainerHighest,
             color: scheme.primary,
           );
-        }
-        return M3EProgressIndicator.linearWavy(
-          value: fraction,
-          linearSize: M3EProgressIndicatorSize.s,
-          strokeWidth: 3,
-          trackStrokeWidth: 3,
-          trackColor: scheme.surfaceContainerHighest,
-          color: scheme.primary,
-        );
-      },
+        },
+      ),
     );
   }
 
