@@ -20,21 +20,16 @@ void main() {
   final e = _track('e');
 
   group('规则 1：无新旧曲 / 同一首 → 不播动画', () {
-    test('from 为空时返回 0', () {
+    test('from / to 为空或新旧同 id 时返回 0', () {
       expect(
         resolveCoverSwapDirection(from: null, to: b, prevHint: b, nextHint: b),
         coverSwapNone,
       );
-    });
-
-    test('to 为空时返回 0', () {
       expect(
         resolveCoverSwapDirection(from: b, to: null, queue: [a, b, c]),
         coverSwapNone,
       );
-    });
-
-    test('新旧同 id 时返回 0（即便提示与下标都指向其它方向）', () {
+      // 同 id 时即便提示与下标都指向其它方向也不播。
       expect(
         resolveCoverSwapDirection(
           from: b,
@@ -51,7 +46,7 @@ void main() {
   });
 
   group('规则 2/3：变化前提示命中', () {
-    test('命中上一首提示 → 向后（优先于队列下标向前）', () {
+    test('命中上一首提示 → 向后（优先于下一首提示与队列下标向前）', () {
       // 随机模式下播放顺序与队列顺序不同：history 末位可以排在队列更后面。
       expect(
         resolveCoverSwapDirection(
@@ -66,9 +61,7 @@ void main() {
         ),
         coverSwapBackward,
       );
-    });
-
-    test('同时命中上一首与下一首提示时按上一首（向后）', () {
+      // 同时命中上一首与下一首提示时按上一首（向后）。
       expect(
         resolveCoverSwapDirection(
           from: b,
@@ -115,7 +108,7 @@ void main() {
   });
 
   group('规则 5：队列下标符号', () {
-    test('队列点选当前之后的曲目 → 向前', () {
+    test('队列点选：目标下标在当前之后 → 向前，之前 → 向后', () {
       expect(
         resolveCoverSwapDirection(
           from: a,
@@ -126,9 +119,6 @@ void main() {
         ),
         coverSwapForward,
       );
-    });
-
-    test('队列点选当前之前的曲目 → 向后', () {
       expect(
         resolveCoverSwapDirection(
           from: c,
@@ -141,8 +131,8 @@ void main() {
       );
     });
 
-    test('同一 id 出现多次：新位置取离旧下标最近的实例（向后）', () {
-      // queue: [a, b, c, d, e, a]；当前 b(1) → a：候选 0（距离 1）/ 5（距离 4）。
+    test('同一 id 出现多次：新位置取离旧下标最近的实例', () {
+      // queue: [a, b, c, d, e, a]；当前 b(1) → a：候选 0（距离 1）/ 5（距离 4）→ 向后。
       expect(
         resolveCoverSwapDirection(
           from: b,
@@ -152,9 +142,6 @@ void main() {
         ),
         coverSwapBackward,
       );
-    });
-
-    test('同一 id 出现多次：新位置取离旧下标最近的实例（向前）', () {
       // 当前 d(3) → a：候选 0（距离 3）/ 5（距离 2）→ 取 5 ≥ 3 向前。
       expect(
         resolveCoverSwapDirection(
@@ -182,7 +169,7 @@ void main() {
       );
     });
 
-    test('旧下标失效（队列编辑过）时按 id 回退解析', () {
+    test('下标失效（队列编辑过）时按 id 回退解析取最近实例', () {
       // 缓存旧下标 3 已越界，队列 [a, b, c] 中当前实际在 c(2) → 点选 a(0)。
       expect(
         resolveCoverSwapDirection(
@@ -194,9 +181,6 @@ void main() {
         ),
         coverSwapBackward,
       );
-    });
-
-    test('新旧下标都失配时按 id 回退解析取最近实例', () {
       // queue: [a, b, c, a]，oldIndex 越界、newIndex 越界：
       // c 按 id 找到 2；a 取离 2 最近的实例 3 → 向前。
       expect(
@@ -213,14 +197,11 @@ void main() {
   });
 
   group('规则 6：无法解析 → 兜底向前', () {
-    test('无队列信息时兜底向前', () {
+    test('无队列信息 / 新旧曲不在队列时兜底向前（即便下标向后）', () {
       expect(
         resolveCoverSwapDirection(from: c, to: a),
         coverSwapForward,
       );
-    });
-
-    test('新曲不在队列 → 兜底向前（即便下标向后）', () {
       expect(
         resolveCoverSwapDirection(
           from: c,
@@ -231,9 +212,6 @@ void main() {
         ),
         coverSwapForward,
       );
-    });
-
-    test('旧曲不在队列 → 兜底向前', () {
       expect(
         resolveCoverSwapDirection(
           from: e,

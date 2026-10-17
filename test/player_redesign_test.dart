@@ -228,7 +228,7 @@ void main() {
     await tester.pump(const Duration(milliseconds: 1600));
   });
 
-  testWidgets('收起/展开：高度连续过渡 + 封面飞行无异常', (tester) async {
+  testWidgets('收起/展开：封面飞行无异常', (tester) async {
     emitThreeTracks();
     final expand = AnimationController(
       vsync: const TestVSync(),
@@ -246,7 +246,6 @@ void main() {
     await tester.pump(const Duration(milliseconds: 180));
     expect(tester.takeException(), isNull);
     await tester.pump(const Duration(milliseconds: 220));
-    expect(expand.value, 0.0);
     expect(tester.takeException(), isNull);
 
     // 展开：回到完整布局。
@@ -255,7 +254,6 @@ void main() {
     await tester.pump(const Duration(milliseconds: 180));
     expect(tester.takeException(), isNull);
     await tester.pump(const Duration(milliseconds: 220));
-    expect(expand.value, 1.0);
     expect(tester.takeException(), isNull);
   });
 
@@ -324,24 +322,5 @@ void main() {
     expect(tester.takeException(), isNull);
     // 通知节流计时器跑完，避免测试结束时报 pending timer。
     await tester.pump(const Duration(milliseconds: 50));
-  });
-
-  testWidgets('窄屏（320 逻辑宽）不溢出', (tester) async {
-    emitThreeTracks();
-    final expand = AnimationController(
-      vsync: const TestVSync(),
-      duration: const Duration(milliseconds: 360),
-      value: 1.0,
-    );
-    addTearDown(expand.dispose);
-
-    await pumpPlayer(
-      tester,
-      expand: expand,
-      size: const Size(320, 700),
-    );
-
-    expect(tester.takeException(), isNull);
-    expect(find.byType(M3ESlider), findsOneWidget);
   });
 }

@@ -238,7 +238,7 @@ void main() {
       expect(session.dragStart(), isFalse);
     });
 
-    test('跟手帧不逐帧通知：只在阶段/身份变化时通知一次', () {
+    test('跟手帧不逐帧通知；空闲刷新只在左槽身份改变时通知', () {
       settleAt(2);
       var notifications = 0;
       session.addListener(() => notifications++);
@@ -250,6 +250,19 @@ void main() {
       session.dragUpdate(delta: -12, progress: 0.12);
       session.dragUpdate(delta: -30, progress: 0.3);
       expect(notifications, 1, reason: '进度条只走宿主控制器，不该逐帧通知');
+
+      // 回弹收尾到 idle，再验证空闲刷新：同 id 且左槽身份未变 → 静默；
+      // 左槽身份（previous 缓存）改变 → 通知一次。
+      session.releasePreview();
+      final int settled = notifications;
+      session.observe(snapshot: snapshotAt(2), displayTrack: c);
+      expect(notifications, settled);
+
+      session.observe(
+        snapshot: snapshotAt(2, queue: [b, d, c]),
+        displayTrack: c,
+      );
+      expect(notifications, settled + 1);
     });
   });
 
@@ -302,7 +315,7 @@ void main() {
       expect(host.calls, ['disarmTimeout', 'adoptSteadySlots', 'settleCommit']);
     });
 
-    test('到位曲目 != 预览目标且过渡仍在动画：延后到落位后再校正', () {
+    test('到位曲目 != 预览目标：过渡在动画则延后校正，已停则立即校正', () {
       settleAt(2);
       session.dragStart();
       session.dragUpdate(delta: -20, progress: 0.2);
@@ -326,9 +339,8 @@ void main() {
       session.correctionCompleted();
       expect(session.phase, CoverSwapPhase.idle);
       expect(session.to, isNull);
-    });
 
-    test('到位曲目 != 预览目标且过渡已停：立即校正', () {
+      // 过渡已停：同一场景不等待 progressCompleted，立即校正。
       settleAt(2);
       session.dragStart();
       session.dragUpdate(delta: -20, progress: 0.2);
@@ -379,21 +391,6 @@ void main() {
       // 同一批快照再通知一次（同 id）：空闲刷新不得清掉滑出身份。
       session.observe(snapshot: snapshotAt(1), displayTrack: b);
       expect(session.from, a);
-    });
-
-    test('空闲刷新改变了左槽身份才通知（否则静默）', () {
-      settleAt(1);
-      var notifications = 0;
-      session.addListener(() => notifications++);
-
-      session.observe(snapshot: snapshotAt(1), displayTrack: b);
-      expect(notifications, 0);
-
-      session.observe(
-        snapshot: snapshotAt(1, queue: [d, b, c]),
-        displayTrack: b,
-      );
-      expect(notifications, 1);
     });
   });
 

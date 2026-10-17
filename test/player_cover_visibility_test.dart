@@ -111,12 +111,13 @@ void main() {
     await tester.pump(const Duration(milliseconds: 600));
   }
 
-  testWidgets('隐藏期间切歌：直接落位，恢复可见不重播', (tester) async {
+  testWidgets('可见性边界：隐藏期间切歌与离开时进行中的动画都立即落位，恢复不重播', (tester) async {
     emitFor('b');
     final tickers = ValueNotifier<bool>(true);
     addTearDown(tickers.dispose);
     await pumpPlayer(tester, tickers);
 
+    // 边界一：隐藏期间切歌。
     tickers.value = false;
     await tester.pump();
 
@@ -145,15 +146,9 @@ void main() {
     await tester.pump(const Duration(milliseconds: 400));
     expect(find.byKey(PlayerCoverDeck.outgoingCoverCardKey), findsNothing);
     expect(tester.takeException(), isNull);
-  });
 
-  testWidgets('离开播放页时进行中的切歌动画立即落位，返回不重播', (tester) async {
+    // 边界二：切歌动画进行中离开播放页。
     emitFor('b');
-    final tickers = ValueNotifier<bool>(true);
-    addTearDown(tickers.dispose);
-    await pumpPlayer(tester, tickers);
-
-    emitFor('c');
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 100));
     expect(find.byKey(PlayerCoverDeck.outgoingCoverCardKey), findsOneWidget,
@@ -168,7 +163,7 @@ void main() {
     await tester.pump();
     expect(find.byKey(PlayerCoverDeck.outgoingCoverCardKey), findsNothing);
     expect(
-        find.byKey(PlayerCoverDeck.centerCoverTrackKey(c.id)), findsOneWidget);
+        find.byKey(PlayerCoverDeck.centerCoverTrackKey(b.id)), findsOneWidget);
     // 通知节流计时器跑完，避免测试结束时报 pending timer。
     await tester.pump(const Duration(milliseconds: 400));
     expect(find.byKey(PlayerCoverDeck.outgoingCoverCardKey), findsNothing);

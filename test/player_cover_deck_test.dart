@@ -119,7 +119,7 @@ void main() {
     return coverCenter.dx - deckCenter.dx;
   }
 
-  testWidgets('队列点选当前之前的曲目：进场封面从左侧滑入（向后）', (tester) async {
+  testWidgets('队列点选：进场封面按队列下标方向从对应一侧滑入', (tester) async {
     // 队列 [A,B,C,D]，当前 C（history 末位 B、next D 都已缓存为提示）。
     emitFor('c');
     await pumpPlayer(tester);
@@ -134,17 +134,12 @@ void main() {
     await tester.pump(const Duration(milliseconds: 600));
     expect(find.text('Title a'), findsWidgets);
     expect(tester.takeException(), isNull);
-  });
 
-  testWidgets('队列点选当前之后的曲目：进场封面从右侧滑入（向前）', (tester) async {
-    // 队列 [A,B,C,D]，当前 A，直接点选 C。
-    emitFor('a');
-    await pumpPlayer(tester);
-
+    // 当前 A 点选 C：方向向前，从右侧滑入。
     emitFor('c');
-    final offset = await sampleIncomingOffset(tester);
-    expect(offset, greaterThan(4),
-        reason: '向前切歌时进场封面应从右侧滑入，中间帧中心应偏右（实际 $offset）');
+    final forwardOffset = await sampleIncomingOffset(tester);
+    expect(forwardOffset, greaterThan(4),
+        reason: '向前切歌时进场封面应从右侧滑入，中间帧中心应偏右（实际 $forwardOffset）');
 
     await tester.pump(const Duration(milliseconds: 600));
     expect(find.text('Title c'), findsWidgets);

@@ -123,30 +123,25 @@ void main() {
     });
   }
 
-  testWidgets('按压中心封面：按下立即缩放，取消后回位', (tester) async {
+  testWidgets('按压中心与邻位封面：按下立即缩放，取消后回位', (tester) async {
     emitFor('b');
     await pumpPlayer(tester);
 
     final center = find.byKey(PlayerCoverDeck.centerCoverCardKey);
     expect(center, findsOneWidget);
 
-    final gesture = await tester.startGesture(tester.getCenter(center));
+    final centerGesture = await tester.startGesture(tester.getCenter(center));
     await tester.pump(); // 按压动画首 tick（elapsed 0）
     await tester.pump(const Duration(milliseconds: 80));
     expect(hasPressedScale(tester, center), isTrue,
         reason: '按下中心封面应立刻出现缩放反馈');
 
-    await gesture.cancel();
+    await centerGesture.cancel();
     await tester.pump(); // 回弹首 tick（elapsed 0）
     await tester.pump(const Duration(milliseconds: 250));
     expect(hasPressedScale(tester, center), isFalse,
         reason: '取消按压后应回弹到 1.0');
     expect(tester.takeException(), isNull);
-  });
-
-  testWidgets('按压左邻位封面：按下立即缩放，取消后回位', (tester) async {
-    emitFor('b');
-    await pumpPlayer(tester);
 
     final left =
         find.byKey(PlayerCoverDeck.sideCoverCardKey(left: true, id: a.id));
@@ -155,13 +150,13 @@ void main() {
     // 左卡外缘伸出屏幕：取屏内可见的左侧条带（中心卡覆盖不到的区域）。
     final rect = tester.getRect(left);
     final point = Offset(math.max(rect.left + 8, 8.0), rect.center.dy);
-    final gesture = await tester.startGesture(point);
+    final leftGesture = await tester.startGesture(point);
     await tester.pump(); // 按压动画首 tick（elapsed 0）
     await tester.pump(const Duration(milliseconds: 80));
     expect(hasPressedScale(tester, left), isTrue,
         reason: '按下邻位封面应立刻出现缩放反馈');
 
-    await gesture.cancel();
+    await leftGesture.cancel();
     await tester.pump(); // 回弹首 tick（elapsed 0）
     await tester.pump(const Duration(milliseconds: 250));
     expect(hasPressedScale(tester, left), isFalse,

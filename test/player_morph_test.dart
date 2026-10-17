@@ -109,78 +109,59 @@ void main() {
         .size!;
   }
 
-  testWidgets('前进（顶栏 → 播放页）：起点顶栏外观、落点播放页外观', (tester) async {
-    await pumpFlight(tester, toPage: true, value: 0);
-    expect(tester.takeException(), isNull);
-    // 起点与顶栏真身同款：圆角 8（裁剪也是 8）、无描边/阴影。
-    expect(coverClip(tester), BorderRadius.circular(8));
-    final start = coverDecoration(tester);
-    expect(start.borderRadius, BorderRadius.circular(8));
-    expect(start.border!.top.color.a, 0);
-    expect(start.boxShadow!.first.color.a, 0);
-
-    await pumpFlight(
-      tester,
-      toPage: true,
-      value: PlayerMorphFlight.flightPortion,
-    );
-    // 落点与播放页真身同款：外圆角 18、1px 描边内缘裁剪 17、柔和阴影。
-    expect(coverClip(tester), BorderRadius.circular(17));
-    final end = coverDecoration(tester);
-    expect(end.borderRadius, BorderRadius.circular(18));
-    expect(end.border!.top.color.a, closeTo(1, 1e-6));
-    expect(end.boxShadow!.first.color.a, closeTo(0.28, 1e-6));
-  });
-
-  testWidgets('反向（播放页 → 顶栏）：起点即播放页外观，落点为顶栏外观', (tester) async {
-    // 回归：反向飞行起飞帧 t=0 位于播放页端。若外观仍按 t 插值，大封面
-    // 圆角会瞬间从 18 掉到 8（看起来「圆角消失」），并在顶栏端以 18 落位
-    // （与顶栏真身 8 不匹配）。
-    await pumpFlight(tester, toPage: false, value: 0);
-    expect(tester.takeException(), isNull);
-    expect(coverClip(tester), BorderRadius.circular(17));
-    final start = coverDecoration(tester);
-    expect(start.borderRadius, BorderRadius.circular(18));
-    expect(start.border!.top.color.a, closeTo(1, 1e-6));
-    expect(start.boxShadow!.first.color.a, closeTo(0.28, 1e-6));
-
-    // 落点与顶栏真身同款：圆角 8、无描边/阴影，交接瞬间不跳变。
-    await pumpFlight(
-      tester,
-      toPage: false,
-      value: PlayerMorphFlight.flightPortion,
-    );
-    expect(coverClip(tester), BorderRadius.circular(8));
-    final end = coverDecoration(tester);
-    expect(end.borderRadius, BorderRadius.circular(8));
-    expect(end.border!.top.color.a, 0);
-    expect(end.boxShadow!.first.color.a, 0);
-  });
-
-  testWidgets('图标态（无封面）：回退图标尺寸按两端真身插值', (tester) async {
-    // 回归：副本回退图标固定 32 则起手比顶栏真身（22）大、落点比播放页
-    // 真身（边长 × 0.35）小，两端各跳一次。尺寸必须与几何同步插值。
+  testWidgets('双向飞行：外观（圆角/描边/阴影）与回退图标严格取两端真身', (tester) async {
+    // 端点值由 cover_appearance_test.dart 精确覆盖，这里只锁 widget 级接线：
+    // 飞行副本的起点/落点必须与两端真身一致，不随插值参数发生跳变。
     const pageIcon = 280 * playerCoverFallbackIconRatio;
 
+    // 前进（顶栏 → 播放页）起点：与顶栏真身同款——圆角 8（裁剪也是 8）、
+    // 无描边/阴影，回退图标 22。
     await pumpFlight(tester, toPage: true, value: 0);
+    expect(tester.takeException(), isNull);
+    expect(coverClip(tester), BorderRadius.circular(8));
+    final forwardStart = coverDecoration(tester);
+    expect(forwardStart.borderRadius, BorderRadius.circular(8));
+    expect(forwardStart.border!.top.color.a, 0);
+    expect(forwardStart.boxShadow!.first.color.a, 0);
     expect(fallbackIconSize(tester), barCoverFallbackIconSize);
 
+    // 前进落点：与播放页真身同款——外圆角 18、1px 描边内缘裁剪 17、柔和
+    // 阴影，回退图标（边长 × 0.35）。
     await pumpFlight(
       tester,
       toPage: true,
       value: PlayerMorphFlight.flightPortion,
     );
+    expect(coverClip(tester), BorderRadius.circular(17));
+    final forwardEnd = coverDecoration(tester);
+    expect(forwardEnd.borderRadius, BorderRadius.circular(18));
+    expect(forwardEnd.border!.top.color.a, closeTo(1, 1e-6));
+    expect(forwardEnd.boxShadow!.first.color.a, closeTo(0.28, 1e-6));
     expect(fallbackIconSize(tester), closeTo(pageIcon, 1e-6));
 
-    // 反向：起点即播放页端真身尺寸，落点为顶栏端尺寸。
+    // 反向（播放页 → 顶栏）起飞帧 t=0 位于播放页端：回归——若外观仍按 t
+    // 插值，大封面圆角会瞬间从 18 掉到 8（看起来「圆角消失」），并在顶栏端
+    // 以 18 落位（与顶栏真身 8 不匹配）。
     await pumpFlight(tester, toPage: false, value: 0);
+    expect(tester.takeException(), isNull);
+    expect(coverClip(tester), BorderRadius.circular(17));
+    final backwardStart = coverDecoration(tester);
+    expect(backwardStart.borderRadius, BorderRadius.circular(18));
+    expect(backwardStart.border!.top.color.a, closeTo(1, 1e-6));
+    expect(backwardStart.boxShadow!.first.color.a, closeTo(0.28, 1e-6));
     expect(fallbackIconSize(tester), closeTo(pageIcon, 1e-6));
 
+    // 反向落点与顶栏真身同款：圆角 8、无描边/阴影、图标 22，交接瞬间不跳变。
     await pumpFlight(
       tester,
       toPage: false,
       value: PlayerMorphFlight.flightPortion,
     );
+    expect(coverClip(tester), BorderRadius.circular(8));
+    final backwardEnd = coverDecoration(tester);
+    expect(backwardEnd.borderRadius, BorderRadius.circular(8));
+    expect(backwardEnd.border!.top.color.a, 0);
+    expect(backwardEnd.boxShadow!.first.color.a, 0);
     expect(fallbackIconSize(tester), barCoverFallbackIconSize);
   });
 

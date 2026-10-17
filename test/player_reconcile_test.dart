@@ -373,7 +373,7 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('空闲 next 换人：右槽旧身份淡出、新身份淡入（180ms 原位交叉淡化）', (tester) async {
+  testWidgets('空闲 next 变化：换人与变空都走 180ms 原位交叉淡化', (tester) async {
     emitFor('b');
     await pumpPlayer(tester);
     final double rightDx = sampleCoverOpacities(tester).last.dx;
@@ -410,28 +410,23 @@ void main() {
 
     await tester.pump(const Duration(milliseconds: 400)); // 通知节流计时器跑完
     expect(tester.takeException(), isNull);
-  });
 
-  testWidgets('空闲 next 变空：右槽旧身份淡出为空', (tester) async {
-    emitFor('b');
-    await pumpPlayer(tester);
-    final double rightDx = sampleCoverOpacities(tester).last.dx;
-
+    // 同一槽位再变空：旧身份（d）淡出为空，不允许残留封面卡。
     emitCustom(current: b, queue: [a, b], index: 1, history: [a], next: null);
     await tester.pump(const Duration(milliseconds: 50)); // 检测帧
 
-    final oldCard = sideCard(left: false, track: c);
-    expect(oldCard, findsOneWidget);
-    expect(nearestOpacityOf(tester, oldCard), closeTo(0.85, 0.01));
+    final emptyOldCard = sideCard(left: false, track: d);
+    expect(emptyOldCard, findsOneWidget);
+    expect(nearestOpacityOf(tester, emptyOldCard), closeTo(0.85, 0.01));
 
     await tester.pump(const Duration(milliseconds: 40));
-    final double mid = nearestOpacityOf(tester, oldCard);
-    expect(mid, allOf(greaterThan(0.1), lessThan(0.8)),
-        reason: '变空时旧身份应处于淡出中间值（实际 $mid）');
-    expect(cardDx(tester, oldCard), closeTo(rightDx, 0.5));
+    final double emptyMid = nearestOpacityOf(tester, emptyOldCard);
+    expect(emptyMid, allOf(greaterThan(0.1), lessThan(0.8)),
+        reason: '变空时旧身份应处于淡出中间值（实际 $emptyMid）');
+    expect(cardDx(tester, emptyOldCard), closeTo(rightDx, 0.5));
 
     await tester.pump(const Duration(milliseconds: 160));
-    expect(oldCard, findsNothing);
+    expect(emptyOldCard, findsNothing);
     expect(opacitiesNear(sampleCoverOpacities(tester), rightDx), isEmpty,
         reason: '变空后右槽不应再有封面卡');
 
@@ -439,7 +434,7 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('左槽语义：无历史且当前不在队首 → 显示队列前一位', (tester) async {
+  testWidgets('左槽语义：无历史时回退队列前一位，当前在队首则留空', (tester) async {
     // 队列 [a,b,c]，当前 c（index 2），无播放历史 → 左槽回退队列前一位 b。
     emitCustom(current: c, queue: [a, b, c], index: 2);
     await pumpPlayer(tester);
@@ -450,9 +445,8 @@ void main() {
     expect(cardDx(tester, leftCard),
         closeTo(sampleCoverOpacities(tester).first.dx, 0.5));
     expect(tester.takeException(), isNull);
-  });
 
-  testWidgets('左槽语义：当前在队首 → 留空', (tester) async {
+    // 切到队首（current a）：previous 回退到自身 → 左槽留空。
     emitCustom(current: a, queue: [a, b, c], index: 0, next: b);
     await pumpPlayer(tester);
 

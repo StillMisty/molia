@@ -114,7 +114,7 @@ void main() {
       tester.getCenter(finder).dx -
       tester.getCenter(coverSwipeHost()).dx;
 
-  testWidgets('逐帧左滑提交下一首，后端到位后落位新曲目', (tester) async {
+  testWidgets('逐帧横滑提交切歌：左滑下一首、右滑上一首，后端到位后落位新曲目', (tester) async {
     emitFor('b');
     await pumpPlayer(tester);
 
@@ -134,12 +134,8 @@ void main() {
     // 对账落位：标题已是新曲目，且没有卡在等待态。
     expect(find.text('Title c'), findsWidgets);
     expect(tester.takeException(), isNull);
-  });
 
-  testWidgets('逐帧右滑提交上一首', (tester) async {
-    emitFor('b');
-    await pumpPlayer(tester);
-
+    // 右滑回到上一首：当前 c 的播放顺序前一位是 b。
     await tester.timedDrag(
       coverSwipeHost(),
       const Offset(160, 0),
@@ -147,10 +143,10 @@ void main() {
     );
     expect(previousCalls(), 1);
 
-    emitFor('a');
+    emitFor('b');
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 700));
-    expect(find.text('Title a'), findsWidgets);
+    expect(find.text('Title b'), findsWidgets);
     expect(tester.takeException(), isNull);
   });
 
