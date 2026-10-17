@@ -1,8 +1,10 @@
 /// 传输层「缓存 + 重试」合并入口（[BuiltinTransport.cachedRetry]）的契约。
 ///
-/// 它取代了发现适配器里 `transport.cached(...)` 套 `retryRequest(...)` 的两层
-/// 写法；语义必须逐条保持：null = 本次失败继续重试、异常直接传播、用尽抛
-/// [StateError]（message 是与上游约定的信号）、失败不进缓存。
+/// 语义：null = 本次失败继续重试、异常直接传播、用尽抛 [StateError]
+/// （message 是与上游约定的信号）、失败不进缓存。
+///
+/// TODO: 发现适配器的 `retryRequest` 与本入口仍是两份同构的重试循环；
+/// 统一实现后可删除本文件里与之镜像的「成功即返回 / 异常上抛」用例。
 library;
 
 import 'package:flutter_test/flutter_test.dart';
