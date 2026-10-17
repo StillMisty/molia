@@ -45,16 +45,16 @@ Future<LocalDataStack> buildLocalDataStack({
 
   // 省流模式（仅移动数据生效）：必须在解析/播放/封面链路创建前就绪，
   // 供取链回调、封面网关与播放 provider 共享同一实例。
+  // 下载设置（设备本地：保存位置 / 文件名格式 / 标签嵌入开关）与省流
+  // 互不依赖：两者并行初始化（纯 prefs 读，等待时间取最大值）。
   final dataSaver = DataSaverService();
-  await dataSaver.init();
+  final downloadSettings = DownloadSettings();
+  await (dataSaver.init(), downloadSettings.init()).wait;
   // 封面统一咽喉：省流生效时只用本地缓存，不发网络请求
   // （AppNetworkImage / artworkImageProvider / 取色共用）。
   ArtworkCache.instance.networkImageBlocked =
       () => dataSaver.blockNetworkArtwork;
 
-  // 下载设置（设备本地：保存位置 / 文件名格式 / 标签嵌入开关）。
-  final downloadSettings = DownloadSettings();
-  await downloadSettings.init();
   final downloadStorage = createDownloadStorage(
     customRoot: () => downloadSettings.saveDir,
   );

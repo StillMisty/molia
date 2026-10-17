@@ -263,28 +263,36 @@ class _NowPlayingState extends State<NowPlaying>
 
   /// 内容顶部渐隐过渡：列表/歌词滑到圆点带下面时淡出（不是硬切）。
   ///
-  /// 用 ShaderMask + dstIn：只取 shader 的 alpha，不引入任何硬编码颜色，
-  /// 背景换主题也不会露出色块。
+  /// 顶部渐变的 surface 覆盖层（旧实现是 ShaderMask + dstIn）：两者视觉等价
+  /// （页面背景就是 `colorScheme.surface`，mask 的 alpha 与覆盖层不透明度互补），
+  /// 但 ShaderMask 会给内容区整块建立 saveLayer —— 滚动歌词 / 队列时每帧都要
+  /// 重新合成整块区域；覆盖层只是一次普通渐变绘制。
   Widget _buildTopFade(BuildContext context, {required Widget child}) {
     final scheme = Theme.of(context).colorScheme;
-    return ShaderMask(
-      blendMode: BlendMode.dstIn,
-      shaderCallback: (bounds) {
-        final double height = bounds.height;
-        final double stop =
-            height <= 0 ? 0.0 : (_dotsBandHeight / height).clamp(0.0, 1.0);
-        return LinearGradient(
-          begin: Alignment.topCenter,
-          end: Alignment.bottomCenter,
-          colors: [
-            scheme.surface.withValues(alpha: 0),
-            scheme.surface,
-            scheme.surface,
-          ],
-          stops: [0, stop, 1],
-        ).createShader(bounds);
-      },
-      child: child,
+    return Stack(
+      children: [
+        Positioned.fill(child: child),
+        Positioned(
+          top: 0,
+          left: 0,
+          right: 0,
+          height: _dotsBandHeight,
+          child: IgnorePointer(
+            child: DecoratedBox(
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  begin: Alignment.topCenter,
+                  end: Alignment.bottomCenter,
+                  colors: [
+                    scheme.surface,
+                    scheme.surface.withValues(alpha: 0),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ),
+      ],
     );
   }
 

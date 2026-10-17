@@ -99,6 +99,19 @@ class SyncEngine extends ChangeNotifier implements SyncSchedulerHost {
   /// 上轮本地视图指纹（用于区分「本机没有变化」与「有变更需要外发」）。
   String? _localFingerprint;
 
+  /// 上一轮快照指纹与它覆盖的日志头部（空闲轮复用，见 `_runRound`）。
+  String? _snapshotFingerprintId;
+  int? _snapshotFingerprintHead;
+
+  /// 上一轮开始时的日志头部：与本轮头部比较即「本机有没有变化」。
+  int? _localJournalHead;
+
+  /// 上一轮各适配器的收集结果（身份）与聚合视图：见 [_collect] 的复用守卫。
+  final Map<SyncAdapter, Map<SyncCategory, List<SyncRecord>>> _lastAdapterCollect =
+      {};
+  Map<SyncCategory, List<SyncRecord>>? _lastAggregate;
+  Set<SyncCategory>? _lastAggregateCategories;
+
   /// 每传输最近一次成功推送的增量窗口（`窗口边界 + ack` 指纹）。
   final Map<String, String> _lastPushedDeltaKey = {};
 
@@ -457,8 +470,12 @@ class SyncEngine extends ChangeNotifier implements SyncSchedulerHost {
       final categories = onlyCategories ?? _state.enabledCategories;
       // anti-entropy 轮重新读行（廉价指纹看不到「行被直接改写」）。
       final local = await _collect(categories, fresh: antiEntropy);
-      final fingerprint = _fingerprint(local);
-      final localChanged = _localFingerprint == null || fingerprint != _localFingerprint;
+      // 「本机有没有变化」的判定：注入日志时看日志头部（所有类别的本机写入
+      // 都在同一事务里追加，O(1)），否则退回整视图指纹（逐条 jsonEncode）。
+      final localChanged = journal == null
+          ? (_localFingerprint == null ||
+              _fingerprint(local) != _localFingerprint)
+          : journalHead != _localJournalHead;
 
       // 本地视图就是适配器当前状态：以本地版本播种登记（内存内，不落库），
       // 空闲轮不向适配器交付任何记录；远端胜者版本更高时仍会交付。
@@ -681,15 +698,33 @@ class SyncEngine extends ChangeNotifier implements SyncSchedulerHost {
 
       // 推送合并后的本地视图（重新收集，包含刚应用的远端记录）。
       final refreshed = await _collect(categories);
-      // 指纹以「本轮最终视图」为准：应用远端记录带来的变化不算本机变更，
-      // 否则下一轮永远判成「有变化」（结论就永远不是「无变化」）。
-      _localFingerprint = _fingerprint(refreshed);
       final pruned = _envelopeFrom(refreshed).pruneTombstones(
         now: _nowMs(),
         tombstoneRetentionMs: tombstoneRetentionMs,
       );
       // 内容指纹按实际外发的记录集（裁剪墓碑后）计算：对端探测应答 / 本机
       // 「未变不推」都拿它与自己缓存的值比较。
+      //
+      // 复用：日志头部未推进（没有任何本机写入）、本轮没有落地远端记录、
+      // 墓碑也没被裁掉时，记录集与上一轮完全相同——`_fingerprint` 是逐条
+      // jsonEncode 的 O(全库) 工作，空闲轮不必付。
+      final refreshedCount = _recordCount(refreshed);
+      final prunedCount = _recordCount(pruned.records);
+      final fingerprintReusable = journal != null &&
+          _snapshotFingerprintId != null &&
+          journalHead == _snapshotFingerprintHead &&
+          applied == 0 &&
+          prunedCount == refreshedCount;
+      final snapshotId = fingerprintReusable
+          ? _snapshotFingerprintId!
+          : _fingerprint(pruned.records);
+      _snapshotFingerprintId = snapshotId;
+      _snapshotFingerprintHead = journalHead;
+      _localJournalHead = journalHead;
+      // 未注入日志时保留整视图指纹：下一轮的变更判定用它。
+      if (journal == null) {
+        _localFingerprint = _fingerprint(refreshed);
+      }
       final outgoing = SyncEnvelope(
         deviceId: pruned.deviceId,
         deviceName: pruned.deviceName,
@@ -701,12 +736,24 @@ class SyncEngine extends ChangeNotifier implements SyncSchedulerHost {
         // 本载荷覆盖的类别（蜂窝小类别轮只含小类别）：anti-entropy 按它
         // 只在双方共享的类别上比对指纹。
         categories: [for (final category in categories) category.name],
-      ).withSnapshotId(_fingerprint(pruned.records));
+      ).withSnapshotId(snapshotId);
       _lastEnvelope = outgoing;
 
       // 增量窗口：只带变更（对端按自己的游标过滤应用）。窗口为空但 ack
       // 有推进时也要外发：对端据此 compact 自己的日志。
-      final delta = journal == null ? null : await _buildDelta(journal, outgoing);
+      //
+      // 惰性构建：窗口读取 + 逐条 jsonDecode 是 O(窗口条目) 的开销；
+      // 入站轮 / 没有可用传输的轮次根本用不到（此前无条件构建）。
+      SyncEnvelope? delta;
+      var deltaBuilt = false;
+      Future<SyncEnvelope?> buildDelta() async {
+        if (!deltaBuilt) {
+          deltaBuilt = true;
+          delta = journal == null ? null : await _buildDelta(journal, outgoing);
+        }
+        return delta;
+      }
+
       final acksKey = _acksKey(outgoing.acks);
 
       var succeededPushes = 0;
@@ -762,13 +809,15 @@ class SyncEngine extends ChangeNotifier implements SyncSchedulerHost {
             }
           }
           // 2) 增量窗口：内容或 ack 有变化才推（对端未变不传、不解密）。
-          if (delta != null) {
-            final deltaKey = '${delta.windowStart}:${delta.windowEnd}:$acksKey';
+          final deltaEnvelope = await buildDelta();
+          if (deltaEnvelope != null) {
+            final deltaKey =
+                '${deltaEnvelope.windowStart}:${deltaEnvelope.windowEnd}:$acksKey';
             if (_lastPushedDeltaKey[entry.key] == deltaKey) continue;
             final watch = Stopwatch()..start();
             SyncPushResult result;
             try {
-              result = await transport.push(delta);
+              result = await transport.push(deltaEnvelope);
             } catch (e) {
               result = SyncPushResult(
                 failedPeers: 1,
@@ -1451,25 +1500,73 @@ class SyncEngine extends ChangeNotifier implements SyncSchedulerHost {
     Set<SyncCategory> categories, {
     bool fresh = false,
   }) async {
-    final result = <SyncCategory, List<SyncRecord>>{};
+    // 适配器在指纹未变时返回同一份缓存对象（身份复用）；只要每个适配器的
+    // 返回值身份都没变、类别集合也没变，聚合结果与上一轮完全相同——直接
+    // 复用，省掉每轮 O(全库) 的按类别 addAll 拷贝（列表被当作不可变使用，
+    // 与适配器缓存同一约定）。
+    final results = <SyncAdapter, Map<SyncCategory, List<SyncRecord>>>{};
+    var identicalToLastRound = !fresh &&
+        _lastAggregate != null &&
+        _lastAdapterCollect.length == _readyAdapterCount;
     for (final adapter in _adapters) {
       if (!adapter.ready) continue;
       final collected = await adapter.collect(fresh: fresh);
+      results[adapter] = collected;
+      if (identicalToLastRound &&
+          !identical(_lastAdapterCollect[adapter], collected)) {
+        identicalToLastRound = false;
+      }
+    }
+    if (identicalToLastRound &&
+        _sameCategorySet(_lastAggregateCategories, categories)) {
+      return _lastAggregate!;
+    }
+    final result = <SyncCategory, List<SyncRecord>>{};
+    for (final collected in results.values) {
       for (final entry in collected.entries) {
         if (!categories.contains(entry.key)) continue;
         if (entry.value.isEmpty) continue;
         result.putIfAbsent(entry.key, () => []).addAll(entry.value);
       }
     }
+    _lastAdapterCollect
+      ..clear()
+      ..addAll(results);
+    _lastAggregate = result;
+    _lastAggregateCategories = {...categories};
     return result;
+  }
+
+  /// 就绪适配器数（`_collect` 的身份复用守卫：就绪集合变化即不能复用）。
+  int get _readyAdapterCount {
+    var count = 0;
+    for (final adapter in _adapters) {
+      if (adapter.ready) count++;
+    }
+    return count;
+  }
+
+  static bool _sameCategorySet(Set<SyncCategory>? a, Set<SyncCategory> b) {
+    if (a == null || a.length != b.length) return false;
+    for (final category in b) {
+      if (!a.contains(category)) return false;
+    }
+    return true;
+  }
+
+  static int _recordCount(Map<SyncCategory, List<SyncRecord>> records) {
+    var total = 0;
+    for (final list in records.values) {
+      total += list.length;
+    }
+    return total;
   }
 
   /// 本地视图指纹：用于区分「本机没有变化」与「有变更需要外发」。
   ///
   /// 逐类别按键排序后哈希，与集合顺序无关；只在同一进程内比较（跨重启由
   /// 后续的增量协议以游标替代）。
-  static String _fingerprint(Map<SyncCategory, List<SyncRecord>> records) {
-    final buffer = StringBuffer();
+  static String _fingerprint(Map<SyncCategory, List<SyncRecord>> records) {    final buffer = StringBuffer();
     for (final category in SyncCategory.values) {
       final list = records[category];
       if (list == null || list.isEmpty) continue;

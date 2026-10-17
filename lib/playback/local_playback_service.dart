@@ -70,6 +70,13 @@ class LocalPlaybackService extends ChangeNotifier {
   String? _contextName;
   PlayMode _mode = PlayMode.sequential;
 
+  /// 队列内容版本号：任何队列变更（装载 / 追加 / 原地替换 / 补图 / 清空）
+  /// 自增。系统媒体会话用它做 O(1) 的「队列是否真的变了」判定——避免位置
+  /// tick 也把整份队列重发给平台（audio_service 每次 queue 变更都会全量
+  /// 序列化队列 + MethodChannel 传输）。
+  int _queueRevision = 0;
+  int get queueRevision => _queueRevision;
+
   /// 已播放顺序（最近一首在后，栈顶供 previous 弹出）；存队列下标，
   /// 队列仅在 `playTracks` 时整体替换并同步清空。
   final PlaybackOrder _order = PlaybackOrder();
@@ -213,6 +220,7 @@ class LocalPlaybackService extends ChangeNotifier {
     final next = (coverUrl == null || coverUrl.isEmpty) ? null : coverUrl;
     if (old.coverUrl == next) return;
     _queue[index] = old.copyWith(coverUrl: next);
+    _queueRevision++;
     if (_currentIndex == index) {
       _currentTrack = _queue[index];
     }
@@ -234,6 +242,7 @@ class LocalPlaybackService extends ChangeNotifier {
       if (index == _currentIndex) currentHit = true;
     }
     if (!hit) return;
+    _queueRevision++;
     if (currentHit) {
       // _playIndex 内部同步 _currentTrack / 加载态 / 进度清零与重新取链。
       await _playIndex(_currentIndex);
@@ -251,6 +260,7 @@ class LocalPlaybackService extends ChangeNotifier {
     _queue
       ..clear()
       ..addAll(tracks);
+    _queueRevision++;
     // 新队列 = 新会话：播放顺序从头开始；shuffle 以起播曲目置首重洗。
     _order.clear();
     final safeIndex = index.clamp(0, tracks.length - 1);
@@ -272,6 +282,7 @@ class LocalPlaybackService extends ChangeNotifier {
     if (tracks.isEmpty) return;
     final oldLength = _queue.length;
     _queue.addAll(tracks);
+    _queueRevision++;
     if (_mode == PlayMode.shuffle) {
       _shuffleOrder.extend(oldLength, _queue.length);
     }
@@ -503,6 +514,7 @@ class LocalPlaybackService extends ChangeNotifier {
     _isPlaying = false;
     if (clear) {
       _queue.clear();
+      _queueRevision++;
       _currentIndex = -1;
       _currentTrack = null;
       _position = Duration.zero;

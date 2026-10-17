@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/foundation.dart';
 
 import '../domain/models/track.dart';
@@ -81,6 +83,29 @@ class LyricsProvider extends ChangeNotifier {
   final Set<String> _preloadedTrackIds = {};
   final Set<String> _preloadingTrackIds = {};
 
+  /// 在途取词（按曲目 id 合并 load / preload）：组合根在起播后立即预取
+  /// 下一首，用户快速切到该曲时 load 会再点一次；没有合并的话两条链路
+  /// 各自跑完「原生取词 + 六提供者并发回退」，网络与解析都翻倍。
+  final Map<String, Future<LyricsResult?>> _inFlight = {};
+
+  /// 取词（single-flight）：同曲目的在途请求共用同一个 Future。
+  Future<LyricsResult?> _fetch(Track track) {
+    final trackId = track.id.uri;
+    final pending = _inFlight[trackId];
+    if (pending != null) return pending;
+    final future = _service.getLyrics(
+      track.title,
+      track.artistLabel,
+      trackId,
+      track: track,
+    );
+    _inFlight[trackId] = future;
+    unawaited(future.whenComplete(() {
+      if (identical(_inFlight[trackId], future)) _inFlight.remove(trackId);
+    }));
+    return future;
+  }
+
   /// 加载曲目歌词；同一曲目已有结果 / 正在加载时直接复用。
   Future<void> load(Track track) async {
     final trackId = track.id.uri;
@@ -90,12 +115,7 @@ class LyricsProvider extends ChangeNotifier {
     }
     final requestId = ++_requestId;
     _setState(LyricsState(trackId: trackId, status: LyricsStatus.loading));
-    final result = await _service.getLyrics(
-      track.title,
-      track.artistLabel,
-      trackId,
-      track: track,
-    );
+    final result = await _fetch(track);
     if (requestId != _requestId) return; // 过期响应：丢弃
     _setState(_stateFor(trackId, result));
   }
@@ -109,12 +129,7 @@ class LyricsProvider extends ChangeNotifier {
       return;
     }
     try {
-      final result = await _service.getLyrics(
-        track.title,
-        track.artistLabel,
-        trackId,
-        track: track,
-      );
+      final result = await _fetch(track);
       if (result != null) {
         _preloadedTrackIds.add(trackId);
       }

@@ -5,8 +5,9 @@
  * 用于在 QuickJS/JavaScriptCore 中为第三方音源脚本提供 `globalThis.lx` 环境。
  *
  * 与宿主（Dart）的约定：
- *  - JS -> Dart: sendMessage('lx', JSON.stringify({type, data}))  （由 flutter_js 注入 sendMessage）
- *  - Dart -> JS: 通过 evaluate 调用 globalThis.__lxDeliver(msg)
+ *  - JS -> Dart: sendMessage('lx', JSON.stringify({type, data}))  （由 quickjs_engine 注入 sendMessage）
+ *  - Dart -> JS: 以 Dart 值直接调用 globalThis.__lxDeliver(msg) / __lxSetup(info)
+ *    （JSInvokable 同步 FFI 调用，不经 JS 源码字符串）
  *  - 同步工具函数: 由 Dart 绑定到 __lxMd5 / __lxAesEncrypt / __lxRsaEncrypt /
  *    __lxRandomBytes / __lxZlibInflate / __lxZlibDeflate
  */
@@ -74,7 +75,7 @@
     console.dir = function () { console.log.apply(null, arguments); };
   })();
 
-  // 定时器：flutter_js 提供 setTimeout；这里补齐 clearTimeout/setInterval。
+  // 定时器：运行时提供 setTimeout（宿主侧 Dart Timer 驱动）；这里补齐 clearTimeout/setInterval。
 
   (function () {
     var nativeSetTimeout = globalThis.setTimeout;
@@ -328,6 +329,22 @@
     },
   };
 
+  function __lxParseBody(msg) {
+    // 宿主默认只回原文（raw），body 在这里按需还原：同一份数据不再走两遍
+    // 编解码，也不在 JS 堆里同时驻留「原文 + 解析好的对象」两份（堆上限 64MiB）。
+    // 宿主显式给了 body（测试桩 / 未来宿主）时优先用它。
+    if (msg.body !== undefined) return msg.body;
+    var raw = msg.raw;
+    if (typeof raw !== 'string') return raw === undefined ? null : raw;
+    if (raw === '') return raw;
+    try {
+      return JSON.parse(raw);
+    } catch (e) {
+      // 非 JSON 响应（HTML / 纯文本）：body 退化为原文，脚本仍可从 raw 取到它
+      return raw;
+    }
+  }
+
   function __lxRequest(url, options, callback) {
     options = options || {};
     var reqId = 'http_' + (++__lxHttpSeq);
@@ -444,8 +461,8 @@
       }
       var resp = msg.response || {};
       resp.raw = msg.raw;
-      resp.body = msg.body;
-      cb(null, resp, msg.body);
+      resp.body = __lxParseBody(msg);
+      cb(null, resp, resp.body);
       return;
     }
     if (msg.type === 'invoke') {

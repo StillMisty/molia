@@ -108,15 +108,18 @@ class _KaraokeLyricTextState extends State<KaraokeLyricText>
 
   @override
   Widget build(BuildContext context) {
-    return AnimatedBuilder(
-      animation: _controller,
-      builder: (context, _) {
-        final ms = _currentMs;
-        return Text.rich(
-          TextSpan(children: _buildSpans(ms)),
-          textAlign: TextAlign.left,
-        );
-      },
+    // 每帧重建的 TextSpan 树与文本布局限制在本行内（外层是整页歌词列表）。
+    return RepaintBoundary(
+      child: AnimatedBuilder(
+        animation: _controller,
+        builder: (context, _) {
+          final ms = _currentMs;
+          return Text.rich(
+            TextSpan(children: _buildSpans(ms)),
+            textAlign: TextAlign.left,
+          );
+        },
+      ),
     );
   }
 

@@ -29,6 +29,7 @@
 library;
 
 import 'dart:async';
+import 'dart:typed_data';
 
 import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
@@ -1098,25 +1099,27 @@ class DownloadService extends ChangeNotifier {
 
   Future<_ResolvedCover?> _downloadCoverBytes(String url) async {
     try {
-      final response = await _dio.get<ResponseBody>(
-        url,
-        options: Options(
-          responseType: ResponseType.stream,
-          // 与封面显示同一套请求头（浏览器 UA + 平台 Referer）。
-          headers: ArtworkCache.headersFor(url),
-        ),
-      );
+      final response = await _dio
+          .get<ResponseBody>(
+            url,
+            options: Options(
+              responseType: ResponseType.stream,
+              // 与封面显示同一套请求头（浏览器 UA + 平台 Referer）。
+              headers: ArtworkCache.headersFor(url),
+            ),
+          )
+          .timeout(const Duration(seconds: 30));
       final status = response.statusCode ?? 0;
       if (status < 200 || status >= 300) return null;
-      final chunks = <int>[];
+      final builder = BytesBuilder(copy: false);
       var total = 0;
       await for (final chunk in streamBody(response).stream) {
         total += chunk.length;
         if (total > _maxCoverBytes) return null;
-        chunks.addAll(chunk);
+        builder.add(chunk);
       }
-      if (chunks.isEmpty) return null;
-      final bytes = Uint8List.fromList(chunks);
+      if (total == 0) return null;
+      final bytes = builder.takeBytes();
       // 回填封面缓存：后续展示 / 再次下载直接命中。
       unawaited(_artworkCache?.putBytes(url, bytes));
       return _ResolvedCover(

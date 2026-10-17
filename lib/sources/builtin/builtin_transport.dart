@@ -1,8 +1,10 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:math' as math;
 import 'dart:typed_data';
 
 import 'package:dio/dio.dart';
+import 'package:flutter/foundation.dart' show compute;
 
 import '../../data/cache/request_cache.dart';
 import '../../data/http/app_dio.dart';
@@ -24,7 +26,7 @@ class BuiltinHttpException implements Exception {
 /// （`BuiltinSearch.transport = BuiltinTransport(dio: appDioWith(MockDioAdapter(...)))`）
 /// 覆盖 fetch 路径。
 class BuiltinTransport {
-  BuiltinTransport({Dio? dio, RequestCache? cache})
+  BuiltinTransport({Dio? dio, RequestCache? cache, this.retryDelay})
       : _dio = dio ?? createAppDio(),
         _cache = cache ?? RequestCache(ttl: defaultCacheTtl);
 
@@ -33,6 +35,37 @@ class BuiltinTransport {
   /// 内置请求结果的统一缓存（single-flight + LRU + TTL）：发现适配器共用
   /// 此实例；测试注入新 transport 即得到干净缓存。
   final RequestCache _cache;
+
+  /// 重试退避（可注入；测试传 no-op 避免真实等待）。参数是第几次重试
+  /// （从 1 开始）。默认指数退避 + 抖动。
+  final Future<void> Function(int attempt)? retryDelay;
+
+  /// 全局测试钩子（`test/flutter_test_config.dart` 置为 no-op）：不逐个
+  /// 构造函数注入也能让测试不产生真实等待。生产恒为 null；发现适配器的
+  /// `retryRequest` 复用同一钩子（两处退避是同一策略）。
+  static Future<void> Function(int attempt)? retryDelayOverride;
+
+  /// 默认重试退避：`base × 2^(n-1)` 封顶 [_retryBackoffMax]，叠加 ±30% 抖动。
+  ///
+  /// 此前重试是紧挨着连发的：平台限流（403/429）时立刻重发只会把限流打成
+  /// 更长的封禁，且弱网下同时挂多个在途请求。发现适配器的 [retryRequest]
+  /// 复用同一策略（同一测试钩子）。
+  static const Duration retryBackoffBase = Duration(milliseconds: 300);
+  static const Duration _retryBackoffMax = Duration(seconds: 4);
+  static final math.Random _backoffJitter = math.Random();
+
+  static Future<void> retryBackoff(int attempt) {
+    final exponential = retryBackoffBase.inMilliseconds *
+        (1 << (attempt - 1).clamp(0, 5));
+    final capped = math.min(exponential, _retryBackoffMax.inMilliseconds);
+    final jitter = 0.7 + 0.6 * _backoffJitter.nextDouble();
+    return Future<void>.delayed(
+      Duration(milliseconds: (capped * jitter).round()),
+    );
+  }
+
+  Future<void> _delayBefore(int attempt) =>
+      (retryDelay ?? retryDelayOverride ?? retryBackoff)(attempt);
 
   /// 统一结果缓存 TTL（发现/热搜等，5 分钟）。
   static const Duration defaultCacheTtl = Duration(minutes: 5);
@@ -58,6 +91,7 @@ class BuiltinTransport {
   }) {
     return cached(key, () async {
       for (var tryNum = 0; tryNum < maxTries; tryNum++) {
+        if (tryNum > 0) await _delayBefore(tryNum);
         final result = await attempt(tryNum);
         if (result != null) return result;
       }
@@ -186,7 +220,7 @@ class BuiltinTransport {
   /// 空 body / 非法 JSON 属响应语义错误，不重试直接抛出。
   Future<T> _attempt<T>(
     Future<Response<dynamic>> Function(int attempt) send, {
-    required T Function(Response<dynamic> response) decode,
+    required FutureOr<T> Function(Response<dynamic> response) decode,
     required Duration timeout,
     required int retries,
     bool Function(T decoded)? retryIf,
@@ -194,9 +228,10 @@ class BuiltinTransport {
     final maxAttempts = retries < 1 ? 1 : retries;
     Object? lastError;
     for (var attempt = 0; attempt < maxAttempts; attempt++) {
+      if (attempt > 0) await _delayBefore(attempt);
       try {
         final response = await send(attempt).timeout(timeout);
-        final decoded = decode(response);
+        final decoded = await decode(response);
         if (retryIf != null &&
             attempt < maxAttempts - 1 &&
             retryIf(decoded)) {
@@ -212,12 +247,19 @@ class BuiltinTransport {
     throw BuiltinHttpException('$lastError', attempts: maxAttempts);
   }
 
-  dynamic _decodeJson(Response<dynamic> response) {
+  /// 大响应（万首级歌单等）转独立的 isolate 解码，避免数十 MB JSON 把
+  /// UI isolate 卡住（平台接口一次返回整单，解码本身是同步 CPU 工作）。
+  static const int decodeIsolateThreshold = 256 * 1024;
+
+  Future<dynamic> _decodeJson(Response<dynamic> response) async {
     final text = bodyText(response);
     if (text.trim().isEmpty) {
       throw BuiltinHttpException('HTTP ${response.statusCode}: empty body');
     }
     try {
+      if (text.length >= decodeIsolateThreshold) {
+        return await compute(jsonDecode, text);
+      }
       return jsonDecode(text);
     } catch (_) {
       throw BuiltinHttpException(

@@ -30,6 +30,7 @@ import '../widgets/collection_track_list.dart';
 import '../widgets/icon_swap.dart';
 import '../widgets/local_audio_import.dart' show importLocalAudioFilesFlow;
 import '../widgets/lxmc_import.dart' show importLxmcFavoritesFlow;
+import '../widgets/shell_page_visibility.dart';
 import '../widgets/shell_reselect.dart';
 
 /// AppLocalizations 查找：测试等场景可能直接挂载本页而不注册 delegate，
@@ -87,6 +88,14 @@ class _FavoritesPageState extends State<FavoritesPage> {
 
   int _selectedId = LibraryCollections.unset;
   CollectionTrackSort _sort = CollectionTrackSort.added;
+
+  /// 排序结果记忆化：键 = 源列表身份 + 排序口径。
+  ///
+  /// 排序是 O(n log n) 且与搜索词无关（过滤保序），每次按键/每次通知都重排
+  /// 纯属浪费；搜索只对这份已排序列表做一次 O(n) 过滤。
+  List<PlaylistTrack>? _sortedCache;
+  List<PlaylistTrack>? _sortedCacheSource;
+  CollectionTrackSort? _sortedCacheSort;
 
   /// 搜索栏是否展开（不展开时完全不占行高）。
   bool _searching = false;
@@ -218,6 +227,21 @@ class _FavoritesPageState extends State<FavoritesPage> {
     );
   }
 
+  /// 升序列表里第一个 `>= prefix` 的下标（前缀区间起点）。
+  static int _lowerBound(List<String> sorted, String prefix) {
+    var low = 0;
+    var high = sorted.length;
+    while (low < high) {
+      final mid = (low + high) >> 1;
+      if (sorted[mid].compareTo(prefix) < 0) {
+        low = mid + 1;
+      } else {
+        high = mid;
+      }
+    }
+    return low;
+  }
+
   /// 缓存行重算触发：签名变化才重算（只在浏览本地歌曲合集时调用）。
   void _scheduleCachedSongRowsReload(
     LibraryProvider provider,
@@ -247,6 +271,10 @@ class _FavoritesPageState extends State<FavoritesPage> {
     try {
       if (cache != null && downloads != null && downloads.supported) {
         final index = await cache.audioCacheIndex();
+        // 排序 + 二分定位前缀区间：旧实现对「每首历史 × 每个缓存文件」做
+        // startsWith（1000 历史 × 3000 文件 ≈ 300 万次字符串比较）；同前缀
+        // 的键在字典序上连续，二分到起点后只扫描命中区间。
+        final sortedKeys = index.keys.toList()..sort();
         final result = <CollectionLocalSong>[];
         for (final entry in provider.history) {
           final record = downloads.recordFor(entry.sourceKey, entry.songId);
@@ -256,10 +284,14 @@ class _FavoritesPageState extends State<FavoritesPage> {
             songId: entry.songId,
           );
           int? size;
-          for (final file in index.entries) {
-            if (!file.key.startsWith(prefix)) continue;
+          for (var i = _lowerBound(sortedKeys, prefix);
+              i < sortedKeys.length;
+              i++) {
+            final key = sortedKeys[i];
+            if (!key.startsWith(prefix)) break;
+            final fileSize = index[key]!;
             // 同一曲目可能有多个音质变体：取最大（展示用）。
-            size = size == null || file.value > size ? file.value : size;
+            size = size == null || fileSize > size ? fileSize : size;
           }
           if (size == null) continue;
           result.add(CollectionLocalSong.cached(entry, cachedSizeBytes: size));
@@ -935,7 +967,12 @@ class _FavoritesPageState extends State<FavoritesPage> {
 
   @override
   Widget build(BuildContext context) {
-    final provider = context.watch<LibraryProvider>();
+    // 可见性门控：本页在壳层中常驻挂载，隐藏时放弃 provider 订阅，
+    // 否则每次播放历史写入（每首歌一次）都会让整页 build 并重跑
+    // 过滤 / 排序（见 ShellPageVisibility）。
+    final provider = ShellPageVisibility.maybeVisibleOf(context) ?? true
+        ? context.watch<LibraryProvider>()
+        : context.read<LibraryProvider>();
     final l10n = _l10n(context);
     final playlists = provider.playlists;
     final favoritesId = LibraryCollections.favoritesPlaylistId(playlists);
@@ -1123,13 +1160,17 @@ class _FavoritesPageState extends State<FavoritesPage> {
   }
 
   List<PlaylistTrack> _filterAndSort(List<PlaylistTrack> tracks) {
-    return sortCollectionTracks(
-      filterRowsByQuery(
-        tracks,
-        query: _searchController.text,
-        fields: (track) => (title: track.title, artist: track.artist),
-      ),
-      _sort,
+    // 排序与搜索词无关（过滤保序）：源列表 / 口径不变时复用上一次排序结果，
+    // 每次按键只对已排序列表做一次 O(n) 过滤。
+    if (!identical(tracks, _sortedCacheSource) || _sort != _sortedCacheSort) {
+      _sortedCache = sortCollectionTracks(tracks, _sort);
+      _sortedCacheSource = tracks;
+      _sortedCacheSort = _sort;
+    }
+    return filterRowsByQuery(
+      _sortedCache!,
+      query: _searchController.text,
+      fields: (track) => (title: track.title, artist: track.artist),
     );
   }
 

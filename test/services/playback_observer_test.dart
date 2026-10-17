@@ -209,26 +209,33 @@ void main() {
     expect(sessionStore.saves.last.position, const Duration(seconds: 5));
   });
 
-  test('position 节流：1s 内最多落盘一次，跨过窗口恢复保存', () async {
+  test('进度 tick：只写轻量进度键（1s 节流），不整份重写会话', () async {
     final observer = buildObserver();
     addTearDown(observer.dispose);
 
     final item = track('a');
     backend.emit(snapshot(item));
     expect(sessionStore.saves, hasLength(1));
+    expect(sessionStore.positions, isEmpty);
 
     // 节流窗口内：进度 tick 不落盘。
     now = now.add(const Duration(milliseconds: 300));
     backend.emit(snapshot(item, position: const Duration(seconds: 1)));
     now = now.add(const Duration(milliseconds: 500));
     backend.emit(snapshot(item, position: const Duration(seconds: 2)));
-    expect(sessionStore.saves, hasLength(1));
+    expect(sessionStore.positions, isEmpty);
 
-    // 跨过 1s 窗口：下一次进度 tick 落盘最新进度。
+    // 跨过 1s 窗口：只写轻量进度键（会话 JSON 不重写）。
     now = now.add(const Duration(milliseconds: 400));
     backend.emit(snapshot(item, position: const Duration(seconds: 3)));
+    expect(sessionStore.positions, [3000]);
+    expect(sessionStore.saves, hasLength(1));
+
+    // 距上次整份落盘满 1 分钟：整份刷新一次（savedAt 抢占语义）。
+    now = now.add(const Duration(minutes: 1));
+    backend.emit(snapshot(item, position: const Duration(seconds: 4)));
     expect(sessionStore.saves, hasLength(2));
-    expect(sessionStore.saves.last.position, const Duration(seconds: 3));
+    expect(sessionStore.saves.last.position, const Duration(seconds: 4));
   });
 
   test('同曲目快照变化不重复扇出；首次出声只请求一次通知权限', () async {
@@ -275,13 +282,21 @@ class _RecordingSessionStore extends PlaybackSessionStore {
 
   final List<String> _log;
 
-  /// 落盘的会话（调用顺序即保存顺序）。
+  /// 整份落盘的会话（调用顺序即保存顺序）。
   final List<PlaybackSession> saves = [];
+
+  /// 轻量进度落盘（毫秒）。
+  final List<int> positions = [];
 
   @override
   Future<void> save(PlaybackSession session) async {
     _log.add('session');
     saves.add(session);
+  }
+
+  @override
+  Future<void> savePosition(int positionMs) async {
+    positions.add(positionMs);
   }
 }
 

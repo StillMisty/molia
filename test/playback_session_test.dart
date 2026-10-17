@@ -87,6 +87,26 @@ void main() {
     expect(loaded.tracks[0].payload['songmid'], 'mid_a');
   });
 
+  test('进度键拆分：savePosition 不重写会话 JSON，load 合并最新进度', () async {
+    final store = PlaybackSessionStore();
+    await store.save(PlaybackSession(
+      tracks: [_track('a')],
+      index: 0,
+      position: const Duration(seconds: 1),
+      mode: PlayMode.sequential,
+    ));
+    await store.savePosition(42000);
+
+    final prefs = await SharedPreferences.getInstance();
+    // 会话 JSON 里的 positionMs 仍是整份写入时的值（没有被进度 tick 重写）。
+    final rawSession = prefs.getString('playback_session_v1');
+    expect(rawSession, isNotNull);
+    expect(rawSession, contains('"positionMs":1000'));
+    // load / loadRaw 把轻量进度键合并成完整会话。
+    expect((await store.load())!.position, const Duration(seconds: 42));
+    expect((await store.loadRaw())!['positionMs'], 42000);
+  });
+
   test('落盘回调：save 通知（标记会话待外发），saveRaw 不通知', () async {
     var saved = 0;
     final store = PlaybackSessionStore()..onSaved = () => saved++;

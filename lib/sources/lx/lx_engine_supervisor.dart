@@ -10,10 +10,10 @@ import 'lx_script_info.dart';
 ///
 /// ```
 /// stopped ──start(script)──▶ starting ──ready──▶ ready
-///    ▲                          │ 失败              │ invoke 超时 / isolate 退出
+///    ▲                          │ 失败              │ isolate 退出 / 引擎无响应
 ///    │                          ▼                   ▼
 ///    └────────────────────── restarting ◀───────────┘
-///                              │ 连续失败 ≥ restartDelays.length
+///                              │ 连续失败 ≥ 阈值（重启尝试次数 / 连续超时次数）
 ///                              ▼
 ///                            failed
 /// ```
@@ -30,7 +30,8 @@ enum LxEngineState {
   /// 崩溃后按退避间隔自动重放 [LxEngineSupervisor.start]。
   restarting,
 
-  /// 连续多次自动重启失败：停止自动重启，直到外部再次 [LxEngineSupervisor.start]。
+  /// 连续多次自动重启失败（或连续超时熔断）：停止自动重启，直到外部再次
+  /// [LxEngineSupervisor.start]；原因见 [LxEngineSupervisor.failureReason]。
   failed,
 }
 
@@ -44,6 +45,9 @@ enum LxEngineState {
 /// - 连续 [restartDelays] 次崩溃（重放 `start` 失败，或重启后再次崩溃且期间
 ///   没有任何成功 invoke）进入 [LxEngineState.failed]，不再自动重启，避免
 ///   “脚本每次都崩溃时每首歌都吃满 20s 超时”；
+/// - invoke 超时不再杀掉引擎（引擎侧会自动探活，只有真卡死才重启），
+///   但连续 [maxConsecutiveTimeouts] 次超时说明脚本「每次起来都慢」，
+///   同样进入 [LxEngineState.failed] 并记录 [failureReason]；
 /// - 每次状态迁移通过 [onStateChanged] 同步通知（SourceManager 借此在重启
 ///   成功后刷新 `activeSources`，修复“引擎死了源列表还在”）。
 ///
@@ -57,10 +61,13 @@ class LxEngineSupervisor {
       Duration(seconds: 8),
     ],
     Duration readyWaitTimeout = const Duration(seconds: 10),
+    int maxConsecutiveTimeouts = 3,
   })  : assert(restartDelays.isNotEmpty, '至少需要一个退避间隔'),
+        assert(maxConsecutiveTimeouts > 0, '熔断阈值必须为正数'),
         _engine = (engineFactory ?? LxEngine.new)(),
         _restartDelays = List<Duration>.unmodifiable(restartDelays),
-        _readyWaitTimeout = readyWaitTimeout;
+        _readyWaitTimeout = readyWaitTimeout,
+        _maxConsecutiveTimeouts = maxConsecutiveTimeouts;
 
   /// 被包装的引擎实例（重启时复用同一实例重放 `start`）。
   final LxEngine _engine;
@@ -71,14 +78,19 @@ class LxEngineSupervisor {
   /// 重启期间等待 ready 的上限。
   final Duration _readyWaitTimeout;
 
+  /// 连续超时熔断阈值（见 [restartAttempts] 旁的说明）。
+  final int _maxConsecutiveTimeouts;
+
   LxEngineState _state = LxEngineState.stopped;
   LxScriptInfo? _lastScript;
   int _restartAttempts = 0;
+  int _consecutiveTimeouts = 0;
   int _restartGeneration = 0;
   Timer? _backoffTimer;
   Completer<bool>? _backoffCompleter;
   Completer<void>? _readyCompleter;
   bool _disposed = false;
+  String? _failureReason;
 
   /// 状态迁移回调（同步触发；仅在状态确实变化时调用）。
   void Function(LxEngineState state)? onStateChanged;
@@ -92,9 +104,16 @@ class LxEngineSupervisor {
   /// 是否正在自动重启。
   bool get isRestarting => _state == LxEngineState.restarting;
 
+  /// 进入 [LxEngineState.failed] 的原因（诊断 / 上报用）；未进入终态时为 null。
+  String? get failureReason => _failureReason;
+
   /// 连续崩溃计数（诊断/测试用）：重放 start 失败或重启后再次崩溃时累加，
   /// 任意一次成功 invoke 后清零。
   int get restartAttempts => _restartAttempts;
+
+  /// 连续超时计数（诊断/测试用）：引擎存活但连续不回响应时累加，
+  /// 任意一次成功 invoke 后清零。
+  int get consecutiveTimeouts => _consecutiveTimeouts;
 
   /// 与 [LxEngine.isRunning] 同义，但重启期间为 false。
   bool get isRunning => _state == LxEngineState.ready && _engine.isRunning;
@@ -115,6 +134,8 @@ class LxEngineSupervisor {
     _lastScript = script;
     _cancelPendingRestart();
     _restartAttempts = 0;
+    _consecutiveTimeouts = 0;
+    _failureReason = null;
     _setState(LxEngineState.starting);
     try {
       final sources = await _engine.start(script, timeout: timeout);
@@ -187,6 +208,8 @@ class LxEngineSupervisor {
     _cancelPendingRestart();
     _lastScript = null;
     _restartAttempts = 0;
+    _consecutiveTimeouts = 0;
+    _failureReason = null;
     _setState(LxEngineState.stopped);
     await _engine.dispose();
   }
@@ -197,6 +220,7 @@ class LxEngineSupervisor {
     _cancelPendingRestart();
     _lastScript = null;
     _restartAttempts = 0;
+    _consecutiveTimeouts = 0;
     _setState(LxEngineState.stopped);
     await _engine.close();
   }
@@ -212,12 +236,21 @@ class LxEngineSupervisor {
     await _ensureReady();
     try {
       final result = await action();
-      // 有成功请求证明脚本恢复健康：清零连续崩溃计数。
+      // 有成功请求证明脚本恢复健康：清零连续崩溃 / 超时计数。
       _restartAttempts = 0;
+      _consecutiveTimeouts = 0;
       return result;
+    } on LxEngineTimeoutException {
+      // 引擎存活但请求没回响应：不重启（引擎侧探活已排除卡死），累计熔断。
+      _consecutiveTimeouts++;
+      if (_consecutiveTimeouts >= _maxConsecutiveTimeouts) {
+        await _fail(
+            '音源脚本连续 $_consecutiveTimeouts 次请求超时，已停止自动重试');
+      }
+      rethrow;
     } catch (e) {
       if (!_disposed && !_engine.isRunning) {
-        _handleCrash(); // invoke 超时 / isolate 退出
+        _handleCrash(); // isolate 退出 / 引擎无响应被重启
       }
       rethrow;
     }
@@ -252,7 +285,7 @@ class LxEngineSupervisor {
     // 连续崩溃计数只在有成功请求后清零（见 _guard）；达到上限直接停用，
     // 避免“每次重启都成功、但脚本每次都崩溃”时无限循环 20s 超时。
     if (_restartAttempts >= _restartDelays.length) {
-      _setState(LxEngineState.failed);
+      unawaited(_fail('音源脚本连续重启 $_restartAttempts 次仍不可用，已停止自动重启'));
       return;
     }
     _setState(LxEngineState.restarting);
@@ -295,11 +328,24 @@ class LxEngineSupervisor {
               '($_restartAttempts/${_restartDelays.length}): $e');
         }
         if (_restartAttempts >= _restartDelays.length) {
-          _setState(LxEngineState.failed);
+          await _fail('音源脚本连续重启 $_restartAttempts 次均失败，已停止自动重启');
           return;
         }
       }
     }
+  }
+
+  /// 进入 failed 终态：记录原因、取消重启、释放引擎，并保持到外部再次 [start]。
+  ///
+  /// 释放 isolate 的原因：脚本已证明不可用（每次起来都慢 / 每次崩溃），
+  /// 继续留着它只会白占内存与 CPU；外部重新激活时会重新 `start`。
+  Future<void> _fail(String reason) async {
+    if (_state == LxEngineState.failed || _disposed) return;
+    _failureReason = reason;
+    _cancelPendingRestart();
+    _setState(LxEngineState.failed);
+    if (kDebugMode) debugPrint('[LxEngineSupervisor] $reason');
+    await _engine.dispose();
   }
 
   /// 可取消的退避等待；返回 false 表示被外部 start/dispose 取消。

@@ -7,6 +7,7 @@ import '../l10n/app_localizations.dart';
 import '../pages/discover_tracks_page.dart';
 import '../providers/discover_provider.dart';
 import '../services/haptics.dart';
+import 'shell_page_visibility.dart';
 
 AppLocalizations _l10n(BuildContext context) =>
     AppLocalizations.of(context) ?? lookupAppLocalizations(const Locale('zh'));
@@ -63,7 +64,10 @@ class _DiscoverLeaderboardsTabState extends State<DiscoverLeaderboardsTab>
   @override
   Widget build(BuildContext context) {
     super.build(context);
-    final provider = context.watch<DiscoverProvider>();
+    // 可见性门控：隐藏的常驻 tab 不订阅（见 ShellPageVisibility）。
+    final provider = ShellPageVisibility.maybeVisibleOf(context) ?? true
+        ? context.watch<DiscoverProvider>()
+        : context.read<DiscoverProvider>();
     // 渠道无发现能力时资料页会隐藏本 tab，这里兜底（切换渠道的瞬间）。
     if (!provider.hasDiscoverSource || !provider.supportsLeaderboards) {
       return const SizedBox.shrink();

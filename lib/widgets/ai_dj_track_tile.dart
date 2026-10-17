@@ -142,7 +142,12 @@ class _RowActionsMenu extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context)!;
-    final library = context.watch<LibraryProvider?>();
+    // 订阅收窄到「收藏版本」：菜单只显示收藏开关态，历史写入（每首歌一次）
+    // 不应让全部行的菜单重建；Provider 实例用 read 取。
+    context.select<LibraryProvider?, int>(
+      (provider) => provider?.favoritesRevision ?? -1,
+    );
+    final library = context.read<LibraryProvider?>();
     if (library == null) return const SizedBox.shrink();
     final Track track = item.track;
     final favorite = library.isFavorite(track.id.sourceKey, track.id.id);

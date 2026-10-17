@@ -164,6 +164,16 @@ class LocalAudioHandler extends BaseAudioHandler with SeekHandler {
   PlayMode? _lastMode;
   Duration _lastPosition = Duration.zero;
 
+  /// 上次广播的队列内容版本（`LocalPlaybackService.queueRevision`）：
+  /// 队列未变时不重发整份队列（audio_service 每次 queue.add 都会把全部条目
+  /// 序列化过平台通道；播放中的位置 tick 只是 playbackState 的事）。
+  int _lastQueueRevision = -1;
+  int _lastQueueIndex = -1;
+
+  /// 上次广播的曲目时长（播放器解析完成后要补发 mediaItem，否则通知进度条
+  /// 会用元数据时长）。
+  Duration _lastMediaDuration = Duration.zero;
+
   /// 上次广播的封面 URL（音源补图回写队列后需刷新通知/锁屏封面）。
   String? _lastArtworkUrl;
 
@@ -290,6 +300,7 @@ class LocalAudioHandler extends BaseAudioHandler with SeekHandler {
     final loading = _service.isLoading;
     final mode = _service.mode;
     final position = _service.position;
+    final duration = _service.duration;
 
     final trackChanged = trackId != _lastTrackId;
     final playingChanged = playing != _lastPlaying;
@@ -298,6 +309,11 @@ class LocalAudioHandler extends BaseAudioHandler with SeekHandler {
     final modeChanged = mode != _lastMode;
     final artworkUrl = track?.coverUrl;
     final artworkChanged = artworkUrl != _lastArtworkUrl;
+    final queueChanged = _service.queueRevision != _lastQueueRevision;
+    final queueIndexChanged = _service.currentIndex != _lastQueueIndex;
+    // 播放器解析出真实时长后补发一次 mediaItem（通知进度条的时长来源）。
+    final durationChanged =
+        duration > Duration.zero && duration != _lastMediaDuration;
     final seeked =
         (position - _lastPosition).abs() > const Duration(seconds: 1);
     if (!force &&
@@ -306,15 +322,28 @@ class LocalAudioHandler extends BaseAudioHandler with SeekHandler {
         !loadingChanged &&
         !modeChanged &&
         !seeked &&
-        !artworkChanged) {
+        !artworkChanged &&
+        !queueChanged &&
+        !queueIndexChanged &&
+        !durationChanged) {
       return;
     }
+
+    // 队列 / 媒体项只在内容真的变化时重建：位置 tick（每 ~1s 的 seeked）只
+    // 更新 playbackState，不重发整份队列。
+    final queueNeedsRebuild = force || queueChanged;
+    final mediaItemNeedsRebuild =
+        force || trackChanged || artworkChanged || durationChanged;
+
     _lastTrackId = trackId;
     _lastPlaying = playing;
     _lastLoading = loading;
     _lastMode = mode;
     _lastPosition = position;
     _lastArtworkUrl = artworkUrl;
+    _lastQueueRevision = _service.queueRevision;
+    _lastQueueIndex = _service.currentIndex;
+    if (duration > Duration.zero) _lastMediaDuration = duration;
 
     if (track == null) {
       mediaItem.add(null);
@@ -328,10 +357,14 @@ class LocalAudioHandler extends BaseAudioHandler with SeekHandler {
       return;
     }
 
-    queue.add([
-      for (final item in _service.queueTracks) _toMediaItem(item),
-    ]);
-    mediaItem.add(_toMediaItem(track, isCurrent: true));
+    if (queueNeedsRebuild) {
+      queue.add([
+        for (final item in _service.queueTracks) _toMediaItem(item),
+      ]);
+    }
+    if (mediaItemNeedsRebuild) {
+      mediaItem.add(_toMediaItem(track, isCurrent: true));
+    }
     playbackState.add(PlaybackState(
       controls: [
         MediaControl.skipToPrevious,

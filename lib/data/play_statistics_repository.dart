@@ -57,6 +57,15 @@ class PlayStatisticsRepository {
   final Random _random = Random.secure();
   final StreamController<void> _changes = StreamController<void>.broadcast();
 
+  /// 同步导出缓存：`null` = 未加载（下次导出全量读一次）。
+  ///
+  /// 见 [syncExportEvents]：写入点按 id 增量维护，避免每首歌收尾都全表重读。
+  Map<int, Map<String, Object?>>? _exportRows;
+  List<Map<String, Object?>>? _exportList;
+
+  /// 导出变更计数（[syncFingerprint] 的廉价指纹来源）。
+  int _syncRevision = 0;
+
   /// 统计变更广播（收尾事件 / 清空 / 遗留收尾后触发）。
   Stream<void> get changes => _changes.stream;
 
@@ -161,6 +170,9 @@ class PlayStatisticsRepository {
       ));
       await _appendEventJournal(_db, id);
     });
+    // 导出的已收尾集合发生变化：指纹推进（与缓存是否加载无关）。
+    _syncRevision++;
+    await _exportUpsert(id);
     _notifyChanged();
   }
 
@@ -199,7 +211,12 @@ class PlayStatisticsRepository {
         if (changes.isNotEmpty) await _journal.append(_db, changes);
       }
     });
-    if (closed > 0) _notifyChanged();
+    if (closed > 0) {
+      // 批量把进行中行变成已收尾：导出集合整体重建（一次性）。
+      _syncRevision++;
+      _exportInvalidate();
+      _notifyChanged();
+    }
     return closed;
   }
 
@@ -248,6 +265,8 @@ class PlayStatisticsRepository {
   /// 清空全部统计事件（不可撤销）。
   Future<void> clearAll() async {
     await _db.delete(_db.playEvents).go();
+    _syncRevision++;
+    _exportInvalidate();
     _notifyChanged();
   }
 
@@ -542,13 +561,27 @@ class PlayStatisticsRepository {
   ///
   /// 进行中事件不导出（远端无法继续更新进度，收尾后自然进入下一轮）；
   /// 无去重键的存量行按内容哈希一次性回填并落库。
+  ///
+  /// 结果常驻内存（[id → 导出行]），写入点按 id 增量维护：
+  /// 一次播放收尾 = 更新一行；导出本身不再 O(库龄) 全表读 + 逐行建 Map
+  /// （旧实现每首歌收尾后的同步轮都要整表重读一遍）。
   Future<List<Map<String, Object?>>> syncExportEvents() async {
+    final cached = _exportList;
+    if (cached != null) return cached;
+    final rows = await _loadExportRows();
+    _exportRows = rows;
+    _exportList = List.unmodifiable(rows.values);
+    return _exportList!;
+  }
+
+  /// 全量加载导出缓存（含 `syncKey` 回填）；只在首次导出 / 缓存失效后执行。
+  Future<Map<int, Map<String, Object?>>> _loadExportRows() async {
     final db = _db;
     // 导出行直接复用列名映射（远端按列名取值；不要改成类型化行）。
     final rows = await db
         .customSelect('SELECT * FROM play_events WHERE endedAt IS NOT NULL')
         .get();
-    final result = <Map<String, Object?>>[];
+    final result = <int, Map<String, Object?>>{};
     final backfilled = <(int, String)>[];
     for (final row in rows) {
       final data = row.data;
@@ -557,7 +590,7 @@ class PlayStatisticsRepository {
         syncKey = _legacySyncKey(data);
         backfilled.add((data['id'] as int? ?? -1, syncKey));
       }
-      result.add({...data, 'syncKey': syncKey});
+      result[data['id'] as int? ?? -1] = {...data, 'syncKey': syncKey};
     }
     if (backfilled.isNotEmpty) {
       await db.transaction(() async {
@@ -573,20 +606,90 @@ class PlayStatisticsRepository {
     return result;
   }
 
-  /// 同步导出的廉价指纹：已收尾事件的行数 + 最大版本 + 缺 `syncKey` 的行数。
+  /// 导出缓存按 id 增量更新（缓存未加载时空操作：下次导出全量读一次）。
+  Future<void> _exportUpsert(int id) async {
+    if (_exportRows == null) return;
+    final rows = await _db
+        .customSelect(
+          'SELECT * FROM play_events WHERE id = ?',
+          variables: [Variable.withInt(id)],
+        )
+        .get();
+    final row = rows.isEmpty ? null : rows.first.data;
+    if (row == null || row['endedAt'] == null) {
+      _exportRemove(id);
+      return;
+    }
+    var syncKey = row['syncKey'] as String?;
+    if (syncKey == null || syncKey.isEmpty) {
+      syncKey = _legacySyncKey(row);
+      await (_db.update(_db.playEvents)
+            ..where((t) =>
+                t.id.equals(id) & (t.syncKey.isNull() | t.syncKey.equals(''))))
+          .write(PlayEventsCompanion(syncKey: Value(syncKey)));
+    }
+    _exportRows![id] = {...row, 'syncKey': syncKey};
+    _exportList = null;
+  }
+
+  void _exportRemove(int id) {
+    if (_exportRows?.remove(id) != null) {
+      _exportList = null;
+    }
+  }
+
+  /// 导出缓存整体失效（批量改动：清理残留 / 清空 / 裁剪）。
+  void _exportInvalidate() {
+    _exportRows = null;
+    _exportList = null;
+  }
+
+  /// 同步导出的廉价指纹（本进程内的导出变更计数）。
   ///
-  /// 版本用 `MAX(versionPhysical * 1000000 + versionCounter)` 表达：同一毫秒
-  /// 内的多次写入只有计数分量变化，单看物理分量会漏掉。
-  /// 缺键行数参与指纹的原因：导出会就地回填 `syncKey`，回填后指纹变化触发
-  /// 一次重读；跳过导出也不会让缺键行永远读不到（回填是应用远端去重的前提）。
-  Future<String> syncFingerprint() async {
-    final row = await _db.customSelect(
-      'SELECT COUNT(*) AS n, '
-      'MAX(versionPhysical * 1000000 + versionCounter) AS m, '
-      'SUM(CASE WHEN syncKey IS NULL OR syncKey = \'\' THEN 1 ELSE 0 END) AS x '
-      'FROM play_events WHERE endedAt IS NOT NULL',
-    ).getSingle();
-    return '${row.data['n']}:${row.data['m'] ?? 0}:${row.data['x'] ?? 0}';
+  /// 导出的内容只可能在几个写入点变化（收尾 / 应用远端 / 清理 / 裁剪），
+  /// 在写入点递增计数即可；旧实现每轮对已收尾事件做一次全表聚合
+  /// （COUNT + MAX + SUM，随库龄线性增长）。跨进程一致本就无需要求：
+  /// 适配器的缓存不跨进程，重启后首次 collect 全量重读。
+  Future<String> syncFingerprint() async => 'r$_syncRevision';
+
+  /// 事件保留上限：行数上限 + 保留时长（超出即裁剪已收尾事件）。
+  ///
+  /// 统计口径全部「查询时计算」，裁剪只影响「全部」范围的可见历史；同步侧
+  /// 的导出缓存 / 引擎指纹 / 每轮合并都是 O(已保留行数)，不设上限会随库龄
+  /// 线性变慢。当前是快速演进的测试项目，不做长期数据保留承诺。
+  static const int maxRetainedEvents = 20000;
+  static const Duration eventRetention = Duration(days: 365);
+
+  /// 裁剪超出保留上限的已收尾事件；返回删除行数。
+  ///
+  /// 启动维护调用（与 [closeStaleEvents] 同一时机），裁剪后导出缓存失效。
+  Future<int> pruneOldEvents({int? maxRows, Duration? retention}) async {
+    final keep = maxRows ?? maxRetainedEvents;
+    final window = retention ?? eventRetention;
+    final cutoff = _clock() - window.inMilliseconds;
+    var deleted = 0;
+    await _db.transaction(() async {
+      deleted += await _db.customUpdate(
+        'DELETE FROM play_events WHERE endedAt IS NOT NULL AND endedAt < ?',
+        variables: [Variable.withInt(cutoff)],
+        updates: {_db.playEvents},
+      );
+      if (keep > 0) {
+        deleted += await _db.customUpdate(
+          'DELETE FROM play_events WHERE endedAt IS NOT NULL AND id NOT IN ('
+          'SELECT id FROM play_events WHERE endedAt IS NOT NULL '
+          'ORDER BY startedAt DESC LIMIT ?)',
+          variables: [Variable.withInt(keep)],
+          updates: {_db.playEvents},
+        );
+      }
+    });
+    if (deleted > 0) {
+      _syncRevision++;
+      _exportInvalidate();
+      _notifyChanged();
+    }
+    return deleted;
   }
 
   /// 同步应用：按 `syncKey` 去重合并；同键已存在且远端**版本更新**时覆盖
@@ -601,6 +704,7 @@ class PlayStatisticsRepository {
     final db = _db;
     var applied = 0;
     var skipped = 0;
+    final appliedIds = <int>[];
     await db.transaction(() async {
       for (final event in events) {
         final syncKey = event['syncKey'] as String? ?? '';
@@ -619,7 +723,7 @@ class PlayStatisticsRepository {
               ..limit(1))
             .getSingleOrNull();
         if (existing == null) {
-          await db.into(db.playEvents).insert(PlayEventsCompanion.insert(
+          final id = await db.into(db.playEvents).insert(PlayEventsCompanion.insert(
                 sourceKey: event['sourceKey'] as String? ?? '',
                 songId: event['songId'] as String? ?? '',
                 title: Value(event['title'] as String? ?? ''),
@@ -639,6 +743,7 @@ class PlayStatisticsRepository {
                 versionPhysical: Value(version.physical),
                 versionCounter: Value(version.counter),
               ));
+          appliedIds.add(id);
           applied++;
         } else if (version.isNewerThan(existing.syncVersion) ||
             (!version.isOlderThan(existing.syncVersion) &&
@@ -655,13 +760,25 @@ class PlayStatisticsRepository {
             versionPhysical: Value(version.physical),
             versionCounter: Value(version.counter),
           ));
+          appliedIds.add(existing.id);
           applied++;
         } else {
           skipped++;
         }
       }
     });
-    if (applied > 0) _notifyChanged();
+    if (applied > 0) {
+      _syncRevision++;
+      // 导出缓存增量维护：落地行数少时逐行刷新，批量落地（备份恢复）整体失效。
+      if (appliedIds.length <= 64) {
+        for (final id in appliedIds) {
+          await _exportUpsert(id);
+        }
+      } else {
+        _exportInvalidate();
+      }
+      _notifyChanged();
+    }
     return (applied: applied, skipped: skipped);
   }
 

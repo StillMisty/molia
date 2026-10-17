@@ -34,6 +34,8 @@ class _FakeService extends LocalPlaybackService {
   int skipToPreviousCalls = 0;
   int stopCalls = 0;
   PlayMode modeValue = PlayMode.sequential;
+  Duration positionValue = Duration.zero;
+  int queueRevisionValue = 0;
 
   /// 控制动作调用台账（断言调用与顺序）。
   final List<String> calls = [];
@@ -54,7 +56,7 @@ class _FakeService extends LocalPlaybackService {
   SourceTrack? get currentSourceTrack => trackValue;
 
   @override
-  Duration get position => Duration.zero;
+  Duration get position => positionValue;
 
   @override
   Duration get duration => Duration.zero;
@@ -65,6 +67,15 @@ class _FakeService extends LocalPlaybackService {
 
   @override
   int get currentIndex => trackValue == null ? -1 : 0;
+
+  @override
+  int get queueRevision => queueRevisionValue;
+
+  /// 模拟播放推进（位置通道 tick）。
+  void emitPosition(Duration position) {
+    positionValue = position;
+    notifyListeners();
+  }
 
   /// 模拟 App 内切换播放模式（后端 → 服务 → 快照链路）。
   void emitMode(PlayMode mode) {
@@ -236,6 +247,48 @@ void main() {
 
       expect(service.skipToNextCalls, 1);
       expect(restoredCalls, 0);
+    });
+  });
+
+  group('增量下发：位置推进不重发整份队列', () {
+    test('位置 tick 只更新 playbackState；队列版本变化才重发队列', () async {
+      final service = _FakeService()..trackValue = _track();
+      addTearDown(service.dispose);
+      final handler = LocalAudioHandler(service);
+
+      final queueEmissions = <List<MediaItem>>[];
+      final itemEmissions = <MediaItem?>[];
+      final stateEmissions = <PlaybackState>[];
+      final subs = [
+        handler.queue.listen(queueEmissions.add),
+        handler.mediaItem.listen(itemEmissions.add),
+        handler.playbackState.listen(stateEmissions.add),
+      ];
+      addTearDown(() {
+        for (final sub in subs) {
+          sub.cancel();
+        }
+      });
+      // rxdart 的初始回放走微任务：先让订阅排空，再记录基线（只看增量）。
+      await Future<void>.delayed(Duration.zero);
+      final baseQueue = queueEmissions.length;
+      final baseItem = itemEmissions.length;
+      final baseState = stateEmissions.length;
+
+      // 位置推进（超过 1s 的投影修正窗口）：只发 playbackState。
+      service.emitPosition(const Duration(seconds: 2));
+      await Future<void>.delayed(Duration.zero);
+      expect(queueEmissions.length, baseQueue, reason: '位置 tick 不应重发队列');
+      expect(itemEmissions.length, baseItem);
+      expect(stateEmissions.length, baseState + 1);
+      expect(stateEmissions.last.updatePosition, const Duration(seconds: 2));
+
+      // 队列内容变化（如追加 / 原地替换）：队列重发，媒体项不动。
+      service.queueRevisionValue++;
+      service.emitPosition(const Duration(seconds: 3));
+      await Future<void>.delayed(Duration.zero);
+      expect(queueEmissions.length, baseQueue + 1);
+      expect(itemEmissions.length, baseItem);
     });
   });
 
