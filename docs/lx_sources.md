@@ -82,8 +82,13 @@ lib/playback/
 
 ### 引擎要点
 
-- 脚本在**独立 isolate** 中运行，出现死循环 / 超时可整体 kill 恢复；
-- JS → Dart 使用 `sendMessage('lx', JSON)`，Dart → JS 使用 `__lxDeliver(...)`；
+- 脚本在**独立 isolate** 中运行；调用超时不再整体 kill——先探活（ping/pong）判定：
+  有在途 HTTP 时按脚本声明的超时延长预算、空闲即抛 `LxEngineTimeoutException`（只失败
+  该请求）；只有事件循环被卡死（无应答）才 kill 重启。supervisor 对连续超时熔断
+  （默认 3 次 → `failed` + `failureReason`，再次 `start` 可恢复）；
+- JS → Dart 使用 `sendMessage('lx', JSON)`，Dart → JS 通过 `__lxDeliver` / `__lxSetup` 的
+  **JSInvokable 值直投**（不再把消息拼成 JS 源码 evaluate）；HTTP 响应只下发原文
+  `raw`，`body` 由 prelude 在 JS 侧 `JSON.parse` 还原（失败 / 空串退化为原文）；
 - `lx.utils.crypto / buffer / zlib` 通过 quickjs_engine 的 JSInvokable 机制**同步**绑定到 Dart
   （pointycastle + dart:io zlib），行为经 Node.js crypto 向量单测校验；
 - 宿主↔脚本：`globalThis.lx.on('request'|'inited'|'updateAlert')`、`lx.send(...)`、

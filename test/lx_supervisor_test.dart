@@ -14,6 +14,9 @@ class _FakeLxEngine implements LxEngine {
   bool failStart = false;
   bool failInvoke = false;
 
+  /// 模拟「脚本活着但请求不回响应」：抛 [LxEngineTimeoutException] 且不退出。
+  bool timeoutInvoke = false;
+
   /// 每次 start 返回的源声明（测试可在重启前替换，验证 refresh）。
   Map<String, LxSourceDecl> nextSources = {};
 
@@ -118,6 +121,10 @@ class _FakeLxEngine implements LxEngine {
 
   /// invoke 超时（脚本死循环）语义：isolate 退出且抛错。
   void _simulateInvoke() {
+    if (timeoutInvoke) {
+      // 引擎侧新语义：请求超时但引擎仍存活（isolate 探活有应答）
+      throw const LxEngineTimeoutException('音源请求超时（fake）');
+    }
     if (failInvoke) {
       running = false;
       throw const LxEngineException('音源请求超时（fake），引擎已重启');
@@ -355,6 +362,72 @@ void main() {
       expect(supervisor.state, LxEngineState.ready);
       expect(supervisor.restartAttempts, 0);
       expect(await _musicUrl(supervisor), isNotEmpty);
+    });
+
+    test('连续超时熔断：引擎存活但连续 3 次超时 → failed 并上报原因', () async {
+      final engine = _FakeLxEngine()..nextSources = {'test': _decl('test')};
+      final supervisor = LxEngineSupervisor(
+        engineFactory: () => engine,
+        restartDelays: const [Duration(milliseconds: 10)],
+        maxConsecutiveTimeouts: 3,
+      );
+      addTearDown(supervisor.close);
+      final states = <LxEngineState>[];
+      supervisor.onStateChanged = states.add;
+      await supervisor.start(_scriptInfo());
+
+      engine.timeoutInvoke = true;
+      for (var i = 1; i <= 3; i++) {
+        await expectLater(
+          _musicUrl(supervisor),
+          throwsA(isA<LxEngineTimeoutException>()),
+        );
+        expect(supervisor.consecutiveTimeouts, i);
+        expect(supervisor.state,
+            i < 3 ? LxEngineState.ready : LxEngineState.failed);
+      }
+
+      expect(engine.startCalls, 1, reason: '超时不重启引擎');
+      expect(supervisor.failureReason, contains('连续 3 次请求超时'));
+      expect(states, contains(LxEngineState.failed));
+      expect(engine.disposeCalls, 1, reason: '进入 failed 时释放 isolate');
+
+      // failed 终态：后续 invoke 立即失败，不再重试（也可由外部再次 start 恢复）
+      await expectLater(
+        _musicUrl(supervisor),
+        throwsA(isA<LxEngineException>()),
+      );
+      expect(supervisor.consecutiveTimeouts, 3);
+
+      engine.timeoutInvoke = false;
+      await supervisor.start(_scriptInfo());
+      expect(supervisor.state, LxEngineState.ready);
+      expect(supervisor.consecutiveTimeouts, 0);
+      expect(supervisor.failureReason, isNull);
+      expect(await _musicUrl(supervisor), isNotEmpty);
+    });
+
+    test('超时计数被成功请求清零：不会误判熔断', () async {
+      final engine = _FakeLxEngine()..nextSources = {'test': _decl('test')};
+      final supervisor = LxEngineSupervisor(
+        engineFactory: () => engine,
+        restartDelays: const [Duration(milliseconds: 10)],
+        maxConsecutiveTimeouts: 2,
+      );
+      addTearDown(supervisor.close);
+      await supervisor.start(_scriptInfo());
+
+      for (var i = 0; i < 4; i++) {
+        engine.timeoutInvoke = true;
+        await expectLater(
+          _musicUrl(supervisor),
+          throwsA(isA<LxEngineTimeoutException>()),
+        );
+        engine.timeoutInvoke = false;
+        expect(await _musicUrl(supervisor), isNotEmpty);
+        expect(supervisor.consecutiveTimeouts, 0, reason: '成功请求后清零');
+        expect(supervisor.state, LxEngineState.ready);
+      }
     });
 
     test('dispose 取消待执行的重启并回到 stopped', () async {

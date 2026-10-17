@@ -525,9 +525,11 @@
 
 ## 5. 音源引擎
 
-- `LxEngineSupervisor` 状态机：`stopped → starting → ready`；invoke 超时/isolate 退出 →
-  `restarting`（退避 0.5s/2s/8s，重放同一脚本），连续 3 次 → `failed`；重启期间请求等待
-  ready（10s 上限）；重启成功刷新 `activeSources`。
+- `LxEngineSupervisor` 状态机：`stopped → starting → ready`；invoke 探活判定引擎无响应 /
+  isolate 退出 → `restarting`（退避 0.5s/2s/8s，重放同一脚本），连续 3 次 → `failed`；
+  单个请求超时（引擎仍在响应）不再重启，只失败该请求并计入连续超时熔断（3 次 → `failed`
+  + `failureReason`，成功一次清零）；重启期间请求等待 ready（10s 上限）；重启成功刷新
+  `activeSources`。
 - 在线更新：脚本 meta `@updateUrl` / 运行时 `updateAlert` → `checkScriptUpdate`（版本 +
   内容 hash）→ `applyScriptUpdate`（原地替换，激活中自动重放）；下载 10s 超时 / 1MB 上限 /
   HTML 识别。

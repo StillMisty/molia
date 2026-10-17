@@ -9,6 +9,17 @@ class LxEngineException implements Exception {
   String toString() => 'LxEngineException: $message';
 }
 
+/// 单次请求超时（引擎本身仍在运行）。
+///
+/// 与普通 [LxEngineException] 区分开：超时意味着脚本「活着但不回响应」，
+/// 上层（LxEngineSupervisor）据此累计熔断，而不是立刻重启引擎。
+class LxEngineTimeoutException extends LxEngineException {
+  const LxEngineTimeoutException(super.message);
+
+  @override
+  String toString() => 'LxEngineTimeoutException: $message';
+}
+
 class LxLogEntry {
   final String level; // log / info / warn / error
   final String message;
