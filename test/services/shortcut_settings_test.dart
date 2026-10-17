@@ -33,6 +33,19 @@ void main() {
     expect(settings.globalBindings.encode(), '');
   });
 
+  test('全局默认键全部落在平台可注册的键集内', () {
+    // system_hotkeys 只接受字母 / 数字 / F1–F12 / 空格（macOS 与 Windows 的
+    // 系统 API 限制）：默认值里混入方向键这类键，会让用户一开启全局热键
+    // 就整组 unsupported。默认值随模型改，这条测试跟着兜底。
+    for (final entry in ShortcutBindings.globalDefaults.entries) {
+      expect(
+        ShortcutSettings.isComboSupported(ShortcutScope.global, entry.value),
+        isTrue,
+        reason: '${entry.key.name} 的默认组合不可注册',
+      );
+    }
+  });
+
   test('setInAppEnabled：写登记键并可重新载入读回', () async {
     await ShortcutSettings.instance.setInAppEnabled(false);
 

@@ -208,6 +208,11 @@ class ShortcutBindings {
 
   /// 全局默认绑定（全部 Ctrl+Alt 前缀：全局热键必须带修饰键，且这个前缀
   /// 在三大桌面平台上都极少被系统占用；默认整体关闭，用户开启后才注册）。
+  ///
+  /// **键位只用 `HotKey.isSupportedKey` 收录的键**（字母 / 数字 / F1–F12 /
+  /// 空格）：macOS 与 Windows 的系统 API 只接受这几类，方向键一律
+  /// `unsupported`；Ctrl+Alt+F1..F12 在 Linux 会切 TTY，也一并避开。
+  /// `test/services/shortcut_settings_test.dart` 锁定「默认值全部可注册」。
   static const Map<ShortcutCommand, ShortcutCombo> globalDefaults = {
     ShortcutCommand.togglePlayPause: ShortcutCombo(
       key: LogicalKeyboardKey.space,
@@ -215,22 +220,22 @@ class ShortcutBindings {
       alt: true,
     ),
     ShortcutCommand.previousTrack: ShortcutCombo(
-      key: LogicalKeyboardKey.arrowLeft,
+      key: LogicalKeyboardKey.keyP,
       ctrl: true,
       alt: true,
     ),
     ShortcutCommand.nextTrack: ShortcutCombo(
-      key: LogicalKeyboardKey.arrowRight,
+      key: LogicalKeyboardKey.keyN,
       ctrl: true,
       alt: true,
     ),
     ShortcutCommand.volumeUp: ShortcutCombo(
-      key: LogicalKeyboardKey.arrowUp,
+      key: LogicalKeyboardKey.digit9,
       ctrl: true,
       alt: true,
     ),
     ShortcutCommand.volumeDown: ShortcutCombo(
-      key: LogicalKeyboardKey.arrowDown,
+      key: LogicalKeyboardKey.digit8,
       ctrl: true,
       alt: true,
     ),
