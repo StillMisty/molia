@@ -44,6 +44,7 @@ Future<void> pumpTrackList(
   Widget? empty,
   void Function(int from, int to)? onReorder,
   Key Function(int index)? keyOf,
+  bool tableColumns = false,
 }) {
   return pumpHost(
     tester,
@@ -53,6 +54,7 @@ Future<void> pumpTrackList(
       keyOf: keyOf ?? (row) => ValueKey<String>('row-$row'),
       empty: empty ?? const Text('空'),
       onReorder: onReorder,
+      tableColumns: tableColumns,
       itemBuilder: (context, row, index) => Text('行 $row'),
     ),
   );
@@ -76,6 +78,16 @@ void main() {
       // 懒加载：200 行只构建视口附近的行。
       expect(find.byType(Text), findsWidgets);
       expect(tester.widgetList<Text>(find.byType(Text)).length, lessThan(60));
+    });
+
+    testWidgets('表格档：itemExtent 与行渲染同档（单行 56 + 行距）', (tester) async {
+      await pumpTrackList(tester, count: 20, tableColumns: true);
+
+      final list = tester.widget<ListView>(find.byType(ListView));
+      final context = tester.element(find.byType(ListView));
+      final extent = TrackRow.extentOf(context, tableColumns: true);
+      expect(extent, M3EListItemTheme.defaults.minHeight, reason: 'M3E 列表 token');
+      expect(list.itemExtent, extent + TrackRow.gapOf(context));
     });
 
     testWidgets('行 key 由 keyOf 落定（列表原地刷新用）', (tester) async {
@@ -193,6 +205,11 @@ void main() {
       expect(find.byIcon(Icons.favorite_border_rounded), findsOneWidget);
       expect(find.text('还没有收藏记录'), findsOneWidget);
       expect(find.text('导入本地歌曲'), findsOneWidget);
+      // 空态口径：图标 40（不占满全屏，与资料库 / 发现页空态同档）。
+      expect(
+        tester.getSize(find.byIcon(Icons.favorite_border_rounded)),
+        const Size(40, 40),
+      );
     });
 
     testWidgets('搜索空态：只给文案', (tester) async {

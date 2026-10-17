@@ -26,6 +26,7 @@ class CollectionTrackList<T> extends StatelessWidget {
     required this.itemBuilder,
     required this.empty,
     this.onReorder,
+    this.tableColumns = false,
   });
 
   /// 列表上下内边距（水平走页面响应式留白）。
@@ -51,12 +52,19 @@ class CollectionTrackList<T> extends StatelessWidget {
   /// 「直接移动」语义，曲目落在目标下标）。
   final void Function(int from, int to)? onReorder;
 
+  /// 行内是否给表格列（调用方按行是否传 `TrackRowColumns` 给同一档）：
+  /// `itemExtent` 据此取哪一档行高（表格单行 56 / 单列双行 72，见
+  /// `TrackRow.extentOf`）；与行渲染差一档会让滚动条拇指与拖动定位失准。
+  final bool tableColumns;
+
   @override
   Widget build(BuildContext context) {
     if (rows.isEmpty) return empty;
     final horizontalPadding =
         context.layoutType(ResponsivePageType.browse).horizontalPadding;
     final gap = TrackRow.gapOf(context);
+    final itemExtent =
+        TrackRow.extentOf(context, tableColumns: tableColumns) + gap;
     final padding = EdgeInsets.fromLTRB(
       horizontalPadding,
       verticalPadding,
@@ -72,7 +80,7 @@ class CollectionTrackList<T> extends StatelessWidget {
           ? ListView.builder(
               controller: controller,
               padding: padding,
-              itemExtent: TrackRow.extent + gap,
+              itemExtent: itemExtent,
               itemCount: rows.length,
               itemBuilder: (context, index) => KeyedSubtree(
                 key: keyOf(rows[index]),
@@ -82,7 +90,7 @@ class CollectionTrackList<T> extends StatelessWidget {
           : ReorderableListView.builder(
               scrollController: controller,
               padding: padding,
-              itemExtent: TrackRow.extent + gap,
+              itemExtent: itemExtent,
               buildDefaultDragHandles: false,
               itemCount: rows.length,
               onReorderItem: onReorder,
@@ -185,6 +193,9 @@ class CollectionTrackRow extends StatelessWidget {
 }
 
 /// 合集列表的合集空态：图标 + 文案 + 可选动作（本地歌曲的导入入口）。
+///
+/// 尺寸走仓库统一的空态口径（图标 40，见 `pages/library.dart` /
+/// `discover_*_tab.dart`）：空态不占满全屏，视线留给文案与主行动。
 class CollectionEmptyState extends StatelessWidget {
   const CollectionEmptyState({
     super.key,
@@ -209,12 +220,8 @@ class CollectionEmptyState extends StatelessWidget {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(
-              icon,
-              size: 56,
-              color: theme.colorScheme.onSurfaceVariant,
-            ),
-            const SizedBox(height: 16),
+            Icon(icon, size: 40, color: theme.colorScheme.onSurfaceVariant),
+            const SizedBox(height: 12),
             Text(
               message,
               textAlign: TextAlign.center,
