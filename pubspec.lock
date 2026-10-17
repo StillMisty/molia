@@ -1338,7 +1338,7 @@ packages:
     source: hosted
     version: "0.2.0"
   system_hotkeys_linux:
-    dependency: transitive
+    dependency: "direct main"
     description:
       name: system_hotkeys_linux
       sha256: "9503fd4e9a903573c9b4cd95f6e31ce36f49a97ca528d2109bf7be834a7ebc46"

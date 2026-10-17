@@ -6256,6 +6256,18 @@ abstract class AppLocalizations {
   /// **'System-wide hotkeys that work while unfocused; must include Ctrl / Alt / Shift'**
   String get shortcutsGlobalHint;
 
+  /// No description provided for @shortcutsGlobalUnsupportedKey.
+  ///
+  /// In en, this message translates to:
+  /// **'System-wide hotkeys only support letters, digits, F1–F12 and space'**
+  String get shortcutsGlobalUnsupportedKey;
+
+  /// No description provided for @shortcutsGlobalFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Some global shortcuts could not be registered: {detail}'**
+  String shortcutsGlobalFailed(String detail);
+
   /// No description provided for @shortcutsGlobalLinuxHint.
   ///
   /// In en, this message translates to:

@@ -23,17 +23,15 @@ import 'dart:async';
 
 import 'package:flutter/services.dart';
 import 'package:material_ui/material_ui.dart';
+import 'package:logging/logging.dart';
 import 'package:provider/provider.dart';
 
 import '../../providers/playback_provider.dart';
 import '../../services/shortcut_settings.dart';
+import '../../services/shortcut_actions.dart';
 import '../../services/shortcuts.dart';
 
-/// 快退 / 快进步长。
-const Duration _seekStep = Duration(seconds: 5);
-
-/// 音量步进（每次按键 ±5%）。
-const double _volumeStep = 0.05;
+final _logger = Logger('molia.desktop_shortcuts');
 
 /// 软件内快捷键挂载点：包住桌面骨架整棵树，在顶层拦截按键。
 class DesktopShortcuts extends StatefulWidget {
@@ -133,54 +131,20 @@ class _DesktopShortcutsState extends State<DesktopShortcuts> {
     return context.findAncestorWidgetOfExactType<EditableText>() != null;
   }
 
-  void _execute(ShortcutCommand command) {
-    final playback = context.read<PlaybackProvider>();
-    switch (command) {
-      case ShortcutCommand.togglePlayPause:
-        unawaited(playback.togglePlayPause());
-      case ShortcutCommand.seekBackward:
-        unawaited(_seekBy(playback, -_seekStep));
-      case ShortcutCommand.seekForward:
-        unawaited(_seekBy(playback, _seekStep));
-      case ShortcutCommand.previousTrack:
-        unawaited(playback.skipToPrevious());
-      case ShortcutCommand.nextTrack:
-        unawaited(playback.skipToNext());
-      case ShortcutCommand.volumeUp:
-        unawaited(playback.adjustVolume(_volumeStep));
-      case ShortcutCommand.volumeDown:
-        unawaited(playback.adjustVolume(-_volumeStep));
-      case ShortcutCommand.toggleMute:
-        unawaited(playback.toggleMute());
-      case ShortcutCommand.focusSearch:
-        widget.onFocusSearch();
-      case ShortcutCommand.selectDestination1:
-        widget.onSelectDestinationIndex(0);
-      case ShortcutCommand.selectDestination2:
-        widget.onSelectDestinationIndex(1);
-      case ShortcutCommand.selectDestination3:
-        widget.onSelectDestinationIndex(2);
-      case ShortcutCommand.closeQueuePanel:
-        widget.onCloseQueuePanel();
-      case ShortcutCommand.showMainWindow:
-        // 全局分组专用（系统级热键把窗口拉到前台）；软件内绑定表里没有它，
-        // 走不到这里——穷尽 switch 需要一个分支，显式忽略。
-        break;
-    }
-  }
-
-  /// 相对 seek：当前进度 ± 步长，clamp 到 0..曲目时长（时长未知时只保底 0）。
+  /// 执行命令：走共享执行器（`ShortcutActions`），与全局热键同一套语义。
   ///
-  /// 无曲目时不动：seek 无处可去（恢复态有曲目，照常改保存进度）。
-  Future<void> _seekBy(PlaybackProvider playback, Duration delta) async {
-    final snapshot = playback.snapshot;
-    if (snapshot.current == null) return;
-    final durationMs = snapshot.duration.inMilliseconds;
-    var targetMs =
-        playback.currentPosition.inMilliseconds + delta.inMilliseconds;
-    if (targetMs < 0) targetMs = 0;
-    if (durationMs > 0 && targetMs > durationMs) targetMs = durationMs;
-    await playback.seekToPosition(targetMs);
+  /// 回调在 `HardwareKeyboard` 处理器里同步触发（不能 await），执行异常由
+  /// provider / 执行器自身兜底，这里只保证不把 Future 丢成未处理错误。
+  void _execute(ShortcutCommand command) {
+    final actions = ShortcutActions(
+      playback: context.read<PlaybackProvider>(),
+      onFocusSearch: widget.onFocusSearch,
+      onSelectDestinationIndex: widget.onSelectDestinationIndex,
+      onCloseQueuePanel: widget.onCloseQueuePanel,
+    );
+    unawaited(actions.execute(command).catchError((Object error) {
+      _logger.warning('快捷键命令执行失败（${command.name}）：$error');
+    }));
   }
 
   @override

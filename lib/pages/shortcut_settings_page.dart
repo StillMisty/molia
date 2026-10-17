@@ -5,11 +5,13 @@ import 'package:material_ui/material_ui.dart';
 import 'package:provider/provider.dart';
 
 import '../l10n/app_localizations.dart';
+import '../services/global_hotkeys.dart';
 import '../services/notification_service.dart';
 import '../services/shortcut_bindings.dart';
 import '../services/shortcut_settings.dart';
 import '../services/shortcuts.dart';
 import '../services/window/app_tray.dart';
+import '../services/window/window_chrome.dart';
 import '../widgets/card_list_surface.dart';
 import '../widgets/settings/settings_tiles.dart';
 import '../widgets/settings/shortcut_recorder_tile.dart';
@@ -82,7 +84,12 @@ class _ShortcutSettingsPageState extends State<ShortcutSettingsPage> {
                 : settings.setGlobalEnabled(value),
           ),
         ),
-        for (final command in ShortcutBindings.commandsOf(scope))
+        // 显示主窗口依赖窗口能力（macOS 走 stub）：没有实现时不摆死行，
+        // 注册侧也按同一判定跳过（见 GlobalHotkeys）。
+        for (final command in ShortcutBindings.commandsOf(scope)
+            .where((command) =>
+                command != ShortcutCommand.showMainWindow ||
+                WindowChrome.isSupported))
           ShortcutRecorderTile(
             key: Key('shortcutRow_${scope.name}_${command.name}'),
             icon: _actionIcon(command),
@@ -113,6 +120,13 @@ class _ShortcutSettingsPageState extends State<ShortcutSettingsPage> {
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         SettingsSectionHint(text: l10n.shortcutsGlobalHint),
+        // 注册失败（被别的应用占用 / 系统不支持 / 用户拒绝）时给出可见反馈：
+        // lastError 由 GlobalHotkeys 逐条记录，这里只是展示，不参与判定。
+        if (scope == ShortcutScope.global &&
+            GlobalHotkeys.lastError != null)
+          SettingsSectionHint(
+            text: l10n.shortcutsGlobalFailed(GlobalHotkeys.lastError!),
+          ),
         if (AppTray.isLinuxDesktop)
           SettingsSectionHint(text: l10n.shortcutsGlobalLinuxHint),
       ],
@@ -137,9 +151,15 @@ class _ShortcutSettingsPageState extends State<ShortcutSettingsPage> {
     final conflict = combo.isValidForScope(scope)
         ? bindings.conflictWith(combo, exclude: command)
         : null;
-    final message = conflict != null
-        ? l10n.shortcutsConflict(_actionLabel(l10n, conflict))
-        : l10n.shortcutsGlobalNeedsModifier;
+    final String message;
+    if (conflict != null) {
+      message = l10n.shortcutsConflict(_actionLabel(l10n, conflict));
+    } else if (!ShortcutSettings.isComboSupported(scope, combo)) {
+      // 平台只接受字母 / 数字 / F1–F12 / 空格（系统 API 限制）。
+      message = l10n.shortcutsGlobalUnsupportedKey;
+    } else {
+      message = l10n.shortcutsGlobalNeedsModifier;
+    }
     context.read<NotificationService?>()?.showSnackBar(message);
   }
 }

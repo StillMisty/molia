@@ -12,10 +12,12 @@ library;
 import 'dart:async';
 
 import 'package:flutter/foundation.dart';
+import 'package:system_hotkeys/system_hotkeys.dart' show HotKey;
 
 import '../data/settings/settings_key.dart';
 import '../data/settings/settings_keys.dart';
 import '../data/settings/settings_registry.dart';
+import 'global_hotkeys.dart';
 import 'shortcut_bindings.dart';
 import 'shortcuts.dart';
 
@@ -128,6 +130,7 @@ class ShortcutSettings extends ChangeNotifier {
     final bindings = _bindingsOf(scope);
     if (combo != null) {
       if (!combo.isValidForScope(scope)) return false;
+      if (!isComboSupported(scope, combo)) return false;
       if (bindings.conflictWith(combo, exclude: command) != null) return false;
     }
     // 录到与默认相同的组合等于没有自定义：清掉覆盖，避免「回默认」按钮
@@ -137,6 +140,17 @@ class ShortcutSettings extends ChangeNotifier {
     notifyListeners();
     await _persist(scope);
     return true;
+  }
+
+  /// 该组合在系统级是否可注册（仅全局分组有意义）。
+  ///
+  /// `system_hotkeys` 只接受字母 / 数字 / F1–F12 / 空格（macOS 与 Windows 的
+  /// 系统 API 限制）；其余键（方向键、标点）注册必返回 `unsupported`，
+  /// 在写入前拦掉，避免用户存下一个永远不会生效的绑定。
+  static bool isComboSupported(ShortcutScope scope, ShortcutCombo combo) {
+    if (scope != ShortcutScope.global) return true;
+    final physical = physicalKeyFor(combo.key);
+    return physical != null && HotKey.isSupportedKey(physical);
   }
 
   /// 整组恢复默认（清空全部覆盖）。

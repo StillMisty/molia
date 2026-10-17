@@ -103,6 +103,8 @@
   （`lib/utils/scroll_to_top.dart::animateScrollToTop`）。壳层不消费状态，但重复点击
   命中时统一给一次轻震（`lib/services/haptics.dart`，可在设置里全局关闭）；页面不重复给触感。
 
+- **Shortcut scopes（快捷键分组）** — `lib/services/shortcut_bindings.dart`：`ShortcutScope.inApp`（软件内，窗口聚焦时生效，`lib/app/desktop/desktop_shortcuts.dart` 用 `HardwareKeyboard` 处理器挂载）与 `ShortcutScope.global`（全局，系统级热键，`lib/services/global_hotkeys.dart` 经 `system_hotkeys` 注册）。两组都可开关（`kShortcutsEnabled` 默认开 / `kGlobalShortcutsEnabled` 默认关）、可自定义（`kShortcutBindings` / `kGlobalShortcutBindings` 存 JSON 覆盖，跟人走）；命令执行语义唯一实现在 `lib/services/shortcut_actions.dart`。
+
 - **Haptics（触感模块）** — `lib/services/haptics.dart`：全应用触感唯一入口（lightImpact / mediumImpact / selectionClick），带设备本地开关（默认开；关闭后不触碰平台通道）。所有调用点经它；M3E 包内自带的触感（swipe action / 排序等）不在此覆盖范围。
 
 - **Desktop shell（桌面骨架）** — `lib/app/desktop/**`：仅 linux/windows/macOS 生效的壳层版式（顶栏瘦身 + 可展开侧栏 + 常驻底栏播放条 + 队列右面板），由 `lib/app/app_shell.dart` 按平台分流（`MyApp(desktopShell:)` 可强制，测试用）；移动骨架与共享逻辑（页面栈 / 共享元素飞行 / 重复点击通道）仍在 `app_shell.dart`，两套骨架同源。

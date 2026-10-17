@@ -3497,6 +3497,15 @@ class AppLocalizationsEn extends AppLocalizations {
       'System-wide hotkeys that work while unfocused; must include Ctrl / Alt / Shift';
 
   @override
+  String get shortcutsGlobalUnsupportedKey =>
+      'System-wide hotkeys only support letters, digits, F1–F12 and space';
+
+  @override
+  String shortcutsGlobalFailed(String detail) {
+    return 'Some global shortcuts could not be registered: $detail';
+  }
+
+  @override
   String get shortcutsGlobalLinuxHint =>
       'On Linux these go through the desktop portal (GlobalShortcuts); minimal desktops may not support it and will report a failure';
 

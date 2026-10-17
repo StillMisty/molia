@@ -24,8 +24,10 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart'
     show LogicalKeyboardKey, PhysicalKeyboardKey;
 import 'package:system_hotkeys/system_hotkeys.dart';
+import 'package:system_hotkeys_linux/system_hotkeys_linux.dart';
 import 'package:logging/logging.dart';
 
+import 'window/window_chrome.dart';
 import 'shortcut_actions.dart';
 import 'shortcut_bindings.dart';
 import 'shortcut_settings.dart';
@@ -33,7 +35,10 @@ import 'shortcuts.dart';
 
 final _logger = Logger('molia.global_hotkeys');
 
-/// 一条系统热键的注册参数（纯数据）：hotkey_manager `HotKey` 的字段映射，
+/// Linux 桌面文件 / 门户会话用的应用 id（与 `linux/packaging` 的 .desktop 一致）。
+const String kLinuxApplicationId = 'top.stillmisty.molia';
+
+/// 一条系统热键的注册参数（纯数据）：`system_hotkeys.HotKey` 的字段映射，
 /// 单测只断言它、不触达平台插件。
 typedef HotKeySpec = ({
   /// 注册身份（系统侧按它回报按下事件）：用命令名，稳定且可读。
@@ -48,8 +53,8 @@ typedef HotKeySpec = ({
 /// 组合 → 注册参数（纯映射）。
 ///
 /// `keyId` 是 `LogicalKeyboardKey.keyId`：注册端经
-/// `LogicalKeyboardKey.findKeyByKeyId` 还原成键（hotkey_manager 的 `HotKey`
-/// 直接接受逻辑键，物理键码由插件内部按平台换算）。
+/// `LogicalKeyboardKey.findKeyByKeyId` 还原成逻辑键，再按
+/// [physicalKeyFor] 换算成物理键（平台编码是物理口径）。
 HotKeySpec hotKeySpecFor(ShortcutCommand command, ShortcutCombo combo) => (
       id: command.name,
       keyId: combo.key.keyId,
@@ -222,8 +227,8 @@ class _ShortcutSettingsView implements GlobalHotkeySettings {
 class GlobalHotkeys {
   GlobalHotkeys._();
 
-  /// 平台面：三桌面平台有 hotkey_manager 实现；移动端等无实现的平台空操作
-  /// （Wayland 的失效不在这里判定，见 [lastError]）。
+  /// 平台面：三桌面平台有 `system_hotkeys` 实现；移动端等无实现的平台空操作
+  /// （单条注册失败不在这里判定，见 [lastError]）。
   static bool get isSupported =>
       Platform.isLinux || Platform.isWindows || Platform.isMacOS;
 
@@ -231,7 +236,7 @@ class GlobalHotkeys {
   static String? get lastError => _lastError;
   static String? _lastError;
 
-  /// 测试注入：替换平台注册器（默认 hotkey_manager）。
+  /// 测试注入：替换平台注册器（默认 `system_hotkeys` 实现）。
   @visibleForTesting
   static GlobalHotkeyRegistrar? registrarOverride;
 
@@ -261,12 +266,24 @@ class GlobalHotkeys {
   static Future<void> attach() async {
     if (_attached || !isSupported) return;
     _attached = true;
+    _registerLinuxApplicationId();
     final settings = settingsOverride ?? const _ShortcutSettingsView();
     _settings = settings;
     _registrar = registrarOverride ?? _SystemHotkeysRegistrar();
     settings.addListener(_onSettingsChanged);
     _scheduleSync();
     await _syncChain;
+  }
+
+  /// Linux：把应用 id 交给门户实现（GNOME 的 GlobalShortcuts 会话要求应用
+  /// 身份与 `.desktop` 文件一致，否则整组注册被拒）。其余平台空操作。
+  static void _registerLinuxApplicationId() {
+    if (!Platform.isLinux) return;
+    try {
+      SystemHotkeysLinux.registerWith(applicationId: kLinuxApplicationId);
+    } catch (error) {
+      _logger.warning('设置 Linux 门户应用 id 失败：$error');
+    }
   }
 
   /// 设置变更（开关 / 绑定）：重新走一轮「先注销再注册」。
@@ -284,7 +301,7 @@ class GlobalHotkeys {
   /// 幂等同步：先整体注销，再按当前设置注册（开关关闭时只注销）。
   ///
   /// 先清后建是唯一安全的顺序：同一组合重复注册在系统层会失败或留下陈旧
-  /// 回调（hotkey_manager 的 Dart 侧对同一组合不去重）；注销失败则放弃本轮
+  /// 回调（`system_hotkeys` 的 Dart 侧对同一组合不去重）；注销失败则放弃本轮
   /// 注册——在未知的残留注册上叠加会得到重复或指向旧动作的按键。
   static Future<void> _sync() async {
     final settings = _settings;
@@ -305,6 +322,10 @@ class GlobalHotkeys {
     var registered = 0;
     for (final entry in settings.globalBindings.effective.entries) {
       final combo = entry.value;
+      if (entry.key == ShortcutCommand.showMainWindow &&
+          !_supportsShowWindow) {
+        continue;
+      }
       if (!combo.isValidForScope(ShortcutScope.global)) {
         // 无修饰键的全局热键会抢走普通按键：设置页已校验，这里兜底跳过。
         lastFailure = '${combo.label()}：全局热键必须带修饰键';
@@ -322,7 +343,7 @@ class GlobalHotkeys {
         _logger.warning('注册全局热键失败（${combo.label()}）：$error');
       }
     }
-    _lastError = lastFailure ?? _waylandHint;
+    _lastError = lastFailure;
     if (_lastError == null && registered > 0) {
       _logger.info('已注册 $registered 条全局热键');
     }
@@ -347,8 +368,9 @@ class GlobalHotkeys {
     }));
   }
 
-  /// 注册结果里的失败提示（Linux 门户不可用时的额外说明）。
-  static String? get _waylandHint => null;
+  /// macOS 上窗口能力缺失（`WindowChrome` 是 stub）：显示主窗口这条全局
+  /// 热键没有意义，注册前跳过（设置页也按同一判定隐藏该行）。
+  static bool get _supportsShowWindow => WindowChrome.isSupported;
 
   /// 等待在途的设置变更同步完成（测试用：通知回调是同步的，实际同步在
   /// [_syncChain] 异步链上）。

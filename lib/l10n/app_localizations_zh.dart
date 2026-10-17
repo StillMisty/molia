@@ -3349,6 +3349,14 @@ class AppLocalizationsZh extends AppLocalizations {
   String get shortcutsGlobalHint => '系统级热键，窗口失焦也生效；必须包含 Ctrl / Alt / Shift';
 
   @override
+  String get shortcutsGlobalUnsupportedKey => '系统级热键只支持字母、数字、F1–F12 与空格';
+
+  @override
+  String shortcutsGlobalFailed(String detail) {
+    return '部分全局快捷键未能注册：$detail';
+  }
+
+  @override
   String get shortcutsGlobalLinuxHint =>
       'Linux 通过桌面门户（xdg-desktop-portal 的 GlobalShortcuts）注册；精简桌面环境可能不支持，届时会提示注册失败';
 

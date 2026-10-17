@@ -1910,13 +1910,22 @@
   "settingsDesktopSection": "Desktop",
   "settingsCloseToTray": "Minimize to tray on close",
   "settingsCloseToTraySubtitle": "Keep playing in the background; reopen or quit from the tray icon",
-    "settingsShortcutsTitle": "Shortcuts",
+  "settingsShortcutsTitle": "Shortcuts",
   "settingsShortcutsSubtitle": "Enable and customize in-app and global shortcuts",
   "shortcutsInAppSection": "In-app shortcuts",
   "shortcutsInAppHint": "Active while the window is focused; tap a binding to re-record it",
   "shortcutsGlobalSection": "Global shortcuts",
   "shortcutsGlobalHint": "System-wide hotkeys that work while unfocused; must include Ctrl / Alt / Shift",
-  "shortcutsGlobalLinuxHint": "On Linux these go through the desktop portal (GlobalShortcuts); minimal desktops may not support it and will report a failure",
+  "shortcutsGlobalUnsupportedKey": "System-wide hotkeys only support letters, digits, F1–F12 and space",
+  "shortcutsGlobalFailed": "Some global shortcuts could not be registered: {detail}",
+  "@shortcutsGlobalFailed": {
+    "placeholders": {
+      "detail": {
+        "type": "String"
+      }
+    }
+  },
+"shortcutsGlobalLinuxHint": "On Linux these go through the desktop portal (GlobalShortcuts); minimal desktops may not support it and will report a failure",
   "shortcutsEnabledSwitch": "Enable in-app shortcuts",
   "shortcutsGlobalEnabledSwitch": "Enable global shortcuts",
   "shortcutsResetAll": "Reset to defaults",
@@ -1937,7 +1946,7 @@
   "shortcutActionDestination3": "Go to page 3",
   "shortcutActionCloseQueue": "Close queue panel",
   "shortcutActionShowWindow": "Show main window",
-"settingsRememberWindowBounds": "Remember window position and size",
+  "settingsRememberWindowBounds": "Remember window position and size",
   "settingsRememberWindowBoundsSubtitle": "Reopen at the last position, size and maximized state (on by default)",
   "settingsTrayLinuxHint": "The tray icon needs a system tray host; GNOME requires the AppIndicator extension. Without one, closing quits"
 }

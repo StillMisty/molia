@@ -563,11 +563,20 @@
   （`lib/app/desktop/shell_layout_prefs.dart`）。播放页桌面版式 = 左 420 固定
   （封面/标题/专辑/进度/传输控制）+ 右「歌词 / 歌曲信息」分页
   （`NowPlaying(desktopLayout: true)`，队列由右面板承载、无圆点手势）。
-  桌面专属交互：全局快捷键（`lib/services/shortcuts.dart` 纯映射 +
-  `lib/app/desktop/desktop_shortcuts.dart` 用 `HardwareKeyboard` 处理器挂载——**不要**
-  换回顶层 `Focus.onKeyEvent`：焦点落到壳层 Focus 的祖先（route 作用域）后按键会整体
-  失效；输入框聚焦时全部让位）、曲目行右键 = 现有 ⋮ 菜单同一动作域、行尾操作
-  `HoverReveal` 桌面 hover/focus 才显（触摸端恒显）、可点元素手型光标（M3E 组件自带）。
+  桌面专属交互：**快捷键分「软件内」与「全局」两组**（用户口径：都可关闭、可自定义）。
+  绑定模型在 `lib/services/shortcut_bindings.dart`（动作 ↔ 组合、两组默认表、JSON 覆盖），
+  开关与自定义持久化在 `lib/services/shortcut_settings.dart`（跟人走），设置入口
+  「设置 › 通用 › 快捷键」子页（录制交互见 `lib/widgets/settings/shortcut_recorder_tile.dart`）。
+  软件内挂载点是 `lib/app/desktop/desktop_shortcuts.dart`（`HardwareKeyboard` 处理器——
+  **不要**换回顶层 `Focus.onKeyEvent`：焦点落到壳层 Focus 的祖先（route 作用域）后按键会
+  整体失效；输入框聚焦 / 录制中 / 总开关关闭时全部让位）；全局热键是
+  `lib/services/global_hotkeys.dart`（`system_hotkeys`：Windows RegisterHotKey / macOS
+  RegisterEventHotKey / Linux `org.freedesktop.portal.GlobalShortcuts` 门户，**纯 Dart +
+  D-Bus、零原生依赖**；只收字母 / 数字 / F1–F12 / 空格，默认全 Ctrl+Alt 前缀且默认关闭；
+  注册结果 conflict/unsupported/declined 逐条记 `lastError` 并在设置页提示）。两组共用
+  `lib/services/shortcut_actions.dart` 的命令执行器。曲目行右键 = 现有 ⋮ 菜单同一动作域、
+  行尾操作 `HoverReveal` 桌面 hover/focus 才显（触摸端恒显）、可点元素手型光标（M3E 自带）、
+  收藏页桌面多选（Ctrl 点选 / Shift 范围 / Esc 退出，移动端长按语义不变）。
   内容版式：资料库渠道左栏（桌面 + 内容宽 ≥ 900 且渠道 ≥ 2，判定用 `LayoutBuilder`
   内容宽而非窗口宽）、搜索结果宽屏表格列（`TrackRowColumns` / `TrackTableHeader`，
   行高仍 72dp）、收藏页 master-detail 合集栏、设置弹层宽屏 880 + 首屏两列
