@@ -27,8 +27,7 @@ tool/agent/seed.sh android|linux <cmd>   # 数据注入：favorites/history/sess
 - 改 `lib/data/molia_database.dart` → `dart run build_runner build`；改表结构提 `schemaVersion`，
   用 `dart run drift_dev make-migrations` 生成快照 + `stepByStep` 写增量迁移并保留数据（ADR-0005）。
 
-发布：`git tag v1.2.3 && git push origin v1.2.3`（tag 即版本，测试版 `v1.2.3-beta.1`；流程与 secrets 见 `docs/release.md`）。
-Android 模拟器调试 / 热重载 / 截图走 `tool/agent/*.sh`，用法见 `docs/dev_environment.md`。
+发布：`git tag v1.2.3 && git push origin v1.2.3`（tag 即版本，测试版 `v1.2.3-beta.1`）。
 
 ## 架构地图
 
@@ -57,21 +56,15 @@ sources/playback。
 ## 开发约定
 
 - 订阅优先 `Selector`/`ValueListenableBuilder`；`select` 不返回 `Map`/`List` 引用（用不可变对象/record）；
-- 文案走 `AppLocalizations`（en/zh + `flutter gen-l10n`）；注释中文、写「为什么」，
-  噪音界定与清理标准见 `docs/comment_style.md`；
+- 文案走 `AppLocalizations`（en/zh + `flutter gen-l10n`）；注释中文、写「为什么」；
 - UI 硬约定（`test/architecture/` 强制，细节见 `docs/architecture.md` §6）：`Icons.*_rounded`；
   颜色只走 ColorScheme/`AppSemanticColors`（透明度用 `withValues(alpha:)`）；优先 `M3E*` 组件；
   禁止 import `package:flutter/material.dart`；
-- 每次改动至少 `flutter analyze --no-pub` + `flutter test --no-pub`（迭代可只跑改动范围，
-  提交前跑全量）；引擎/音源改动按 `docs/lx_sources.md` 的验证清单；
-- 测试只留有价值的：必须测领域不变量、边界与错误分支、真实回归、架构强制；不写复述实现、
-  重复覆盖（同一行为只测一处）、纯冒烟、锁死动画时序/像素、占位功能的错误矩阵；删测试先确认
-  替代覆盖并写进提交信息（`chore(test): ...`），与功能改动分开；小而散的测试文件并入同模块文件；
+- 每次改动至少 `flutter analyze --no-pub` + `flutter test --no-pub`（迭代可只跑改动范围，提交前跑全量）；
 - Git：功能分支（主分支 `main`），提交 `type(scope): 描述`；密钥不进仓库。
 
-## AI 工具链与领域文档
+## 领域文档与技能
 
-- 热重载：改 `lib/` 后 UI/简单方法 → hot reload；`initState`/全局静态状态/`main()` → hot restart；
-- `.agents/skills/` 为第三方内容勿手改；更新走 `npx skills update` + `dart run skills@ get --all`；
 - Issues 与规格走 GitHub issues（`gh` CLI，`docs/agents/issue-tracker.md`）；标签见
-  `docs/agents/triage-labels.md`；术语与决策见 `GLOSSARY.md` + `docs/adr/`（`docs/agents/domain.md`）。
+  `docs/agents/triage-labels.md`；术语与决策见 `GLOSSARY.md` + `docs/adr/`（`docs/agents/domain.md`）；
+- `.agents/skills/` 为第三方内容勿手改；更新走 `npx skills update` + `dart run skills@ get --all`。
