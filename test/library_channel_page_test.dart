@@ -132,8 +132,9 @@ void main() {
   Future<void> pumpLibrary(
     WidgetTester tester, {
     ShellReselectSignal? reselect,
+    double width = 1200,
   }) async {
-    tester.view.physicalSize = const Size(1200, 2400);
+    tester.view.physicalSize = Size(width, 2400);
     tester.view.devicePixelRatio = 1.0;
     addTearDown(() {
       tester.view.resetPhysicalSize();
@@ -283,6 +284,38 @@ void main() {
 
     expect(search.sourceKey, 'wy'); // 已同步到渠道 wy
   });
+
+  testWidgets(
+    '桌面宽屏：渠道收进左栏，顶部下拉框不再渲染',
+    (tester) async {
+      search = buildSearch(const []);
+      await pumpLibrary(tester);
+
+      expect(find.byType(LibraryChannelRail), findsOneWidget);
+      expect(find.byType(LibraryChannelSelector), findsNothing);
+      expect(find.text('网易音乐'), findsOneWidget, reason: '左栏列出全部启用渠道');
+
+      // 左栏点击 = 现有渠道选择路径（含组合根注入的搜索源跟随）。
+      await tester.tap(find.text('酷我音乐'));
+      await tester.pumpAndSettle();
+      expect(discover.channelKey, 'kw');
+    },
+    // 平台覆盖走 variant：测试体结束后框架自己还原，满足 foundation 变量
+    // 不变式（手工覆盖必须在测试体内复位）。
+    variant: TargetPlatformVariant.only(TargetPlatform.linux),
+  );
+
+  testWidgets(
+    '桌面窄窗口：回落顶部下拉框，无渠道左栏',
+    (tester) async {
+      search = buildSearch(const []);
+      await pumpLibrary(tester, width: 800);
+
+      expect(find.byType(LibraryChannelRail), findsNothing);
+      expect(find.byType(LibraryChannelSelector), findsOneWidget);
+    },
+    variant: TargetPlatformVariant.only(TargetPlatform.linux),
+  );
 }
 
 /// 只暴露描述列表的假注册表（搜索源选择用）。

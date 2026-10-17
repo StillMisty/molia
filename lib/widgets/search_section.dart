@@ -17,7 +17,9 @@ import '../utils/responsive.dart';
 import 'add_to_library.dart';
 import 'artist_row.dart';
 import 'favorite_track_tile.dart';
+import 'track_actions_menu.dart';
 import 'track_row.dart';
+import 'track_table_header.dart';
 
 /// AppLocalizations 查找：测试等场景可能直接挂载本页而不注册 delegate，
 /// 此时回退到简体中文，保证与中文正式环境文案一致（正式 App 恒有 delegate）。
@@ -56,95 +58,115 @@ class _SearchSectionState extends State<SearchSection> {
 
   @override
   Widget build(BuildContext context) {
-    return Consumer<SearchProvider>(
-      builder: (context, searchProvider, child) {
-        final l10n = _l10n(context);
-        final horizontalPadding =
-            context.layoutType(ResponsivePageType.browse).horizontalPadding;
-        final results = searchProvider.filteredResults;
-        final artistResults = searchProvider.artistResults;
-        final isArtistKind =
-            searchProvider.searchKind == SearchKind.artist;
-        final isLyricKind = searchProvider.searchKind == SearchKind.lyric;
-        final lyricResults = searchProvider.lyricResults;
-        final itemCount = isArtistKind
-            ? artistResults.length
-            : isLyricKind
-                ? lyricResults.length
-                : results.length;
-        final failure = searchProvider.failure;
-        final kinds = searchProvider.supportedSearchKinds;
+    // 表格列的判定要用**内容宽度**（桌面骨架的侧栏 / 队列面板会吃掉窗口
+    // 宽度，按窗口宽判定会在窄内容区给出固定列宽的行、把行撑溢出）。
+    return LayoutBuilder(
+      builder: (context, constraints) => Consumer<SearchProvider>(
+        builder: (context, searchProvider, child) {
+          final l10n = _l10n(context);
+          final horizontalPadding =
+              context.layoutType(ResponsivePageType.browse).horizontalPadding;
+          final results = searchProvider.filteredResults;
+          final artistResults = searchProvider.artistResults;
+          final isArtistKind = searchProvider.searchKind == SearchKind.artist;
+          final isLyricKind = searchProvider.searchKind == SearchKind.lyric;
+          final lyricResults = searchProvider.lyricResults;
+          final itemCount = isArtistKind
+              ? artistResults.length
+              : isLyricKind
+                  ? lyricResults.length
+                  : results.length;
+          final failure = searchProvider.failure;
+          final kinds = searchProvider.supportedSearchKinds;
+          // 宽屏表格列只在单曲段生效：歌手 / 歌词段的行结构不同（头像行 /
+          // 歌词片段副标题），不给它们套表格。
+          final tableColumns = !isArtistKind &&
+              !isLyricKind &&
+              showTrackTableColumns(
+                context,
+                availableWidth: constraints.maxWidth,
+              );
 
-        return Column(
-          children: [
-            // 结果页顶部无独立栏（搜索框自身即状态），只留少量间距。
-            const SizedBox(height: 8),
+          return Column(
+            children: [
+              // 结果页顶部无独立栏（搜索框自身即状态），只留少量间距。
+              const SizedBox(height: 8),
 
-            // 类型分段：仅在有多个可选类型且搜索已激活时显示。
-            if (searchProvider.isSearchActive && kinds.length > 1)
-              Padding(
-                padding: EdgeInsets.fromLTRB(
-                    horizontalPadding, 0, horizontalPadding, 8),
-                child: _buildKindSwitch(l10n, searchProvider, kinds),
-              ),
+              // 类型分段：仅在有多个可选类型且搜索已激活时显示。
+              if (searchProvider.isSearchActive && kinds.length > 1)
+                Padding(
+                  padding: EdgeInsets.fromLTRB(
+                      horizontalPadding, 0, horizontalPadding, 8),
+                  child: _buildKindSwitch(l10n, searchProvider, kinds),
+                ),
 
-            if (searchProvider.isSearching)
-              const Padding(
-                padding: EdgeInsets.only(bottom: 8),
-                child: M3EProgressIndicator.linear(),
-              ),
+              if (searchProvider.isSearching)
+                const Padding(
+                  padding: EdgeInsets.only(bottom: 8),
+                  child: M3EProgressIndicator.linear(),
+                ),
 
-            if (failure != null) _buildErrorView(l10n, searchProvider),
+              if (failure != null) _buildErrorView(l10n, searchProvider),
 
-            Expanded(
-              child: Scrollbar(
-                controller: _controller,
-                thumbVisibility: true,
-                interactive: true,
-                child: CustomScrollView(
+              // 表格列表头固定在滚动区之上：列标题不随结果滚走，三列与行内
+              // 列同宽同左缘（TrackTableHeader 内部复刻行的留白结构）。
+              if (tableColumns && itemCount > 0)
+                Padding(
+                  padding: EdgeInsets.symmetric(horizontal: horizontalPadding),
+                  child: const TrackTableHeader(),
+                ),
+
+              Expanded(
+                child: Scrollbar(
                   controller: _controller,
-                  slivers: [
-                    if (itemCount == 0 &&
-                        !searchProvider.isSearching &&
-                        failure == null)
-                      SliverFillRemaining(
-                        hasScrollBody: false,
-                        child: _buildEmptyResultsView(l10n, searchProvider),
-                      )
-                    else if (isArtistKind)
-                      SliverPadding(
-                        padding: EdgeInsets.symmetric(
-                            horizontal: horizontalPadding),
-                        sliver: _ArtistResultsList(
-                          items: artistResults,
-                          onItemTap: (artist) =>
-                              unawaited(_openArtist(searchProvider, artist)),
+                  thumbVisibility: true,
+                  interactive: true,
+                  child: CustomScrollView(
+                    controller: _controller,
+                    slivers: [
+                      if (itemCount == 0 &&
+                          !searchProvider.isSearching &&
+                          failure == null)
+                        SliverFillRemaining(
+                          hasScrollBody: false,
+                          child: _buildEmptyResultsView(l10n, searchProvider),
+                        )
+                      else if (isArtistKind)
+                        SliverPadding(
+                          padding: EdgeInsets.symmetric(
+                              horizontal: horizontalPadding),
+                          sliver: _ArtistResultsList(
+                            items: artistResults,
+                            onItemTap: (artist) =>
+                                unawaited(_openArtist(searchProvider, artist)),
+                          ),
+                        )
+                      else
+                        SliverPadding(
+                          padding: EdgeInsets.symmetric(
+                              horizontal: horizontalPadding),
+                          sliver: _SearchResultsList(
+                            // 歌词类型：条目带 `lyric_snippet`（行副标题显示命中片段）。
+                            items: isLyricKind ? lyricResults : results,
+                            onItemTap: (item) => searchProvider.playItem(item),
+                            tableColumns: tableColumns,
+                          ),
                         ),
-                      )
-                    else
-                      SliverPadding(
-                        padding: EdgeInsets.symmetric(
-                            horizontal: horizontalPadding),
-                        sliver: _SearchResultsList(
-                          // 歌词类型：条目带 `lyric_snippet`（行副标题显示命中片段）。
-                          items: isLyricKind ? lyricResults : results,
-                          onItemTap: (item) => searchProvider.playItem(item),
-                        ),
-                      ),
 
-                    // 音源搜索分页：列表尾部按钮加载下一页
-                    if (itemCount > 0 &&
-                        searchProvider.hasSelectedSource &&
-                        (searchProvider.hasMore ||
-                            searchProvider.isLoadingMore))
-                      _buildLoadMoreFooter(l10n, searchProvider),
-                  ],
+                      // 音源搜索分页：列表尾部按钮加载下一页
+                      if (itemCount > 0 &&
+                          searchProvider.hasSelectedSource &&
+                          (searchProvider.hasMore ||
+                              searchProvider.isLoadingMore))
+                        _buildLoadMoreFooter(l10n, searchProvider),
+                    ],
+                  ),
                 ),
               ),
-            ),
-          ],
-        );
-      },
+            ],
+          );
+        },
+      ),
     );
   }
 
@@ -183,7 +205,8 @@ class _SearchSectionState extends State<SearchSection> {
       };
 
   /// 打开歌手页（歌手条目 → 平台内歌手 id）。
-  Future<void> _openArtist(SearchProvider searchProvider, ArtistSummary artist) {
+  Future<void> _openArtist(
+      SearchProvider searchProvider, ArtistSummary artist) {
     return showArtistPage(
       context,
       searchProvider.sourceKey,
@@ -292,7 +315,9 @@ class _SearchSectionState extends State<SearchSection> {
           mainAxisSize: MainAxisSize.min,
           children: [
             Icon(
-              hasSelectedSource ? Icons.search_off_rounded : Icons.source_rounded,
+              hasSelectedSource
+                  ? Icons.search_off_rounded
+                  : Icons.source_rounded,
               size: 48,
               color: theme.colorScheme.onSurfaceVariant,
             ),
@@ -387,9 +412,13 @@ class _SearchResultsList extends StatelessWidget {
   final List<Map<String, dynamic>> items;
   final void Function(Map<String, dynamic>)? onItemTap;
 
+  /// 宽屏表格列（桌面宽屏的单曲段）：行内改表格布局，与表头列同源。
+  final bool tableColumns;
+
   const _SearchResultsList({
     required this.items,
     this.onItemTap,
+    this.tableColumns = false,
   });
 
   @override
@@ -420,6 +449,7 @@ class _SearchResultsList extends StatelessWidget {
             item: item,
             index: index,
             count: items.length,
+            tableColumns: tableColumns,
             onTap: onItemTap == null ? null : () => onItemTap!(item),
           ),
         );
@@ -437,6 +467,7 @@ class _SearchResultTile extends StatelessWidget {
     required this.index,
     required this.count,
     required this.onTap,
+    this.tableColumns = false,
   });
 
   final Map<String, dynamic> item;
@@ -444,9 +475,14 @@ class _SearchResultTile extends StatelessWidget {
   final int count;
   final VoidCallback? onTap;
 
+  /// 宽屏表格列（见 `showTrackTableColumns`）。
+  final bool tableColumns;
+
   @override
   Widget build(BuildContext context) {
     final l10n = _l10n(context);
+    if (tableColumns) return _buildTableRow(context, l10n);
+
     // 歌手链接能力位（同一平台固定）：内置平台为真时逐个歌手名可点。
     final sourceKey = item['source']?.toString() ?? '';
     final artistTapsEnabled = sourceKey.isNotEmpty &&
@@ -475,6 +511,59 @@ class _SearchResultTile extends StatelessWidget {
       favoriteOf: _favoriteOf,
       onToggleFavorite: () => unawaited(_toggleFavorite(context, l10n)),
       onAddToPlaylist: () => unawaited(_addToPlaylist(context)),
+    );
+  }
+
+  /// 宽屏表格行：标题 + 艺术家 / 专辑 / 时长三列（列宽与表头同源）。
+  ///
+  /// 表格模式不经 [FavoriteTrackTile]（该适配层不接受列参数，行内容形状
+  /// 也不同），行尾菜单按 `TrackMenuTile` 的同一规范在这里构建：条目与
+  /// 图标一致（收藏开关 + 加入列表），收藏态订阅同 [_favoriteOf]。
+  Widget _buildTableRow(BuildContext context, AppLocalizations l10n) {
+    final favorite = _favoriteOf(context);
+    final artist = _artistDisplayOf(item);
+    return TrackRow(
+      title: item['name']?.toString() ?? '',
+      // 表格模式标题格不渲染副标题，artist 只用于行的无障碍文案。
+      artist: artist,
+      coverUrl: _coverUrlOf(item),
+      columns: TrackRowColumns(
+        artist: artist,
+        album: _albumNameOf(item),
+        duration: durationText(_durationMsOf(item)) ?? '',
+      ),
+      position: calculateCardPosition(index, count),
+      onTap: onTap == null
+          ? null
+          : () {
+              HapticsService.lightImpact();
+              onTap!();
+            },
+      trailing: TrackActionsMenu(
+        tooltip: l10n.trackActionsTooltip,
+        entries: [
+          M3EMenuEntry(
+            label: favorite ? l10n.favoriteRemove : l10n.favoriteAdd,
+            leading: Icon(
+              favorite ? Icons.favorite_rounded : Icons.favorite_border_rounded,
+            ),
+            value: 'favorite',
+          ),
+          M3EMenuEntry(
+            label: l10n.addToPlaylist,
+            leading: const Icon(Icons.playlist_add_rounded),
+            value: 'add',
+          ),
+        ],
+        onSelected: (value) {
+          switch (value) {
+            case 'favorite':
+              unawaited(_toggleFavorite(context, l10n));
+            case 'add':
+              unawaited(_addToPlaylist(context));
+          }
+        },
+      ),
     );
   }
 
@@ -519,6 +608,27 @@ class _SearchResultTile extends StatelessWidget {
       final name = artists[0]['name'];
       if (name is String) return name;
     }
+    return '';
+  }
+
+  /// 表格列用的歌手显示名：与行内逐名副标题同口径（多名以「、」连接）；
+  /// 没有可用名字时返回空串（列留空，不显示占位符）。
+  String _artistDisplayOf(Map<String, dynamic> item) {
+    final artists = item['artists'];
+    if (artists is! List) return '';
+    final names = <String>[];
+    for (final entry in artists) {
+      if (entry is! Map) continue;
+      final name = entry['name']?.toString() ?? '';
+      if (name.isNotEmpty) names.add(name);
+    }
+    return names.join('、');
+  }
+
+  /// 专辑名（`album.name`）；缺失返回空串（列留空，不显示占位符）。
+  String _albumNameOf(Map<String, dynamic> item) {
+    final album = item['album'];
+    if (album is Map) return album['name']?.toString() ?? '';
     return '';
   }
 

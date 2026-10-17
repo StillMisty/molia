@@ -3,6 +3,8 @@ import 'dart:io';
 import 'dart:math' as math;
 import 'dart:typed_data';
 
+import 'package:flutter/foundation.dart'
+    show TargetPlatform, debugDefaultTargetPlatformOverride;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:molia/data/catalog/catalog_service.dart';
 import 'package:molia/data/downloads/downloads_repository.dart';
@@ -20,6 +22,7 @@ import 'package:molia/services/cache_storage.dart';
 import 'package:molia/services/download/download_service.dart';
 import 'package:molia/utils/responsive.dart';
 import 'package:molia/widgets/app_search_bar.dart';
+import 'package:molia/widgets/collection_rail.dart';
 import 'package:molia/widgets/shell_reselect.dart';
 import 'package:molia/widgets/swipe_reveal_row.dart';
 import 'package:molia/widgets/track_row.dart';
@@ -512,6 +515,72 @@ void main() {
     expect(backend.lastRequest!.context?.name, 'love');
     expect(backend.lastRequest!.tracks, hasLength(3));
   });
+
+  // 桌面平台 + 宽窗口才走 master-detail；平台覆盖由 variant 在测试体内设置
+  // 并复位（测试环境默认 Android 即移动版式基线）。
+  testWidgets('桌面宽屏：左侧合集栏切换合集并高亮当前项',
+      (tester) async {
+    await seedFavorites(tester);
+    await importLove(tester);
+    await pumpFavorites(tester);
+
+    // master-detail：合集栏在，标题行的弹层入口（下拉箭头）让位给合集名。
+    expect(find.byType(CollectionRail), findsOneWidget);
+    expect(find.byIcon(Icons.expand_more_rounded), findsNothing);
+
+    // 条目与弹层同源（同一份解析顺序），当前合集走 M3E 列表选中态。
+    List<CollectionEntry> railEntries() =>
+        tester.widget<CollectionRail>(find.byType(CollectionRail)).entries;
+    expect(
+      [for (final entry in railEntries()) entry.name],
+      ['我的收藏', '播放历史', 'love'],
+    );
+    expect(
+      railEntries().singleWhere((entry) => entry.name == '我的收藏').selected,
+      isTrue,
+    );
+    expect(headlines(tester), ['Song B', 'Song A', 'Song C']);
+
+    // 点合集栏条目：右侧列表与高亮同时跟随。
+    await tester.tap(
+      find.descendant(
+        of: find.byType(CollectionRail),
+        matching: find.text('love'),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(headlines(tester), ['Song 1', 'Song 2', 'Song 3']);
+    expect(
+      railEntries().singleWhere((entry) => entry.name == 'love').selected,
+      isTrue,
+    );
+    expect(
+      railEntries().singleWhere((entry) => entry.name == '我的收藏').selected,
+      isFalse,
+    );
+  }, variant: TargetPlatformVariant.only(TargetPlatform.linux));
+
+  testWidgets('窄屏 / 非桌面平台：不出现合集栏，回落标题行弹层切换',
+      (tester) async {
+    await seedFavorites(tester);
+    await importLove(tester);
+
+    // 桌面平台但窗口 < 900：仍是标题行弹层路径。
+    await pumpFavorites(tester, size: const Size(899, 1200));
+    expect(find.byType(CollectionRail), findsNothing);
+    expect(find.byIcon(Icons.expand_more_rounded), findsOneWidget);
+    await selectCollection(tester, 'love');
+    expect(headlines(tester), ['Song 1', 'Song 2', 'Song 3']);
+
+    // 非桌面平台 + 宽窗口：同样回落弹层（平台覆盖由 variant 复位）。
+    debugDefaultTargetPlatformOverride = TargetPlatform.android;
+    await pumpFavorites(tester);
+    expect(find.byType(CollectionRail), findsNothing);
+    expect(find.byIcon(Icons.expand_more_rounded), findsOneWidget);
+    await selectCollection(tester, '我的收藏');
+    expect(headlines(tester), ['Song B', 'Song A', 'Song C']);
+  }, variant: TargetPlatformVariant.only(TargetPlatform.linux));
 
   testWidgets('合集弹层：当前合集走 M3E selected 态，数量走 trailingText', (tester) async {
     await seedFavorites(tester);

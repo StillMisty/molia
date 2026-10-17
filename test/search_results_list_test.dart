@@ -8,6 +8,7 @@ import 'package:molia/providers/playback_provider.dart';
 import 'package:molia/providers/search_provider.dart';
 import 'package:molia/widgets/search_section.dart';
 import 'package:molia/widgets/track_row.dart';
+import 'package:molia/widgets/track_table_header.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -19,7 +20,8 @@ import 'support/fakes.dart';
 /// 发现页搜索结果列表（与收藏页同形曲目行）组件测试。
 ///
 /// 覆盖：列表行渲染（标题 / 歌手 / 时长）、点按播放（结果整体进队列）、
-/// 行尾 ⋮ 菜单（收藏写库 + 状态切换、加入列表弹层）、分页入口保留。
+/// 行尾 ⋮ 菜单（收藏写库 + 状态切换、加入列表弹层）、分页入口保留、
+/// 桌面宽屏表格列（表头 + 三列，与行内列左缘对齐）。
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
@@ -79,8 +81,12 @@ void main() {
     await repository.dispose();
   });
 
-  Future<void> pumpSection(WidgetTester tester, {ScrollController? controller}) async {
-    tester.view.physicalSize = const Size(1200, 2400);
+  Future<void> pumpSection(
+    WidgetTester tester, {
+    ScrollController? controller,
+    double width = 1200,
+  }) async {
+    tester.view.physicalSize = Size(width, 2400);
     tester.view.devicePixelRatio = 1.0;
     addTearDown(() {
       tester.view.resetPhysicalSize();
@@ -194,4 +200,63 @@ void main() {
     await tester.pumpAndSettle();
     expect(library.isFavorite('kw', 'a'), isTrue);
   });
+
+  testWidgets(
+    '桌面宽屏：单曲段渲染表格表头 + 三列，列左缘与表头对齐',
+    (tester) async {
+      await pumpSection(tester);
+      await runSearch(tester);
+
+      // 表头（艺术家 / 专辑 / 时长）只在宽屏单曲段出现。
+      expect(find.byType(TrackTableHeader), findsOneWidget);
+      expect(find.text('艺术家'), findsOneWidget);
+      expect(find.text('专辑'), findsOneWidget);
+      expect(find.text('时长'), findsOneWidget);
+
+      // 行内三列：fake 曲目为 Artist a / Album / 3:05（时长不再占行尾）。
+      expect(find.text('Artist a'), findsOneWidget);
+      expect(find.text('Album'), findsNWidgets(3));
+      expect(find.text('3:05'), findsNWidgets(3));
+
+      // 表头存在的意义就是与列对齐：三列左缘必须逐列相同。
+      expect(
+        tester.getTopLeft(find.text('Artist a')).dx,
+        tester.getTopLeft(find.text('艺术家')).dx,
+      );
+      expect(
+        tester.getTopLeft(find.text('Album').first).dx,
+        tester.getTopLeft(find.text('专辑')).dx,
+      );
+      expect(
+        tester.getTopLeft(find.text('3:05').first).dx,
+        tester.getTopLeft(find.text('时长')).dx,
+      );
+    },
+    // 平台覆盖走 variant：测试体结束后框架自己还原（见 widget_tester.dart）。
+    variant: TargetPlatformVariant.only(TargetPlatform.linux),
+  );
+
+  testWidgets('非桌面平台：不渲染表头，行保持单列布局', (tester) async {
+    // 测试环境默认平台为 android：窗口够宽也不进表格模式。
+    await pumpSection(tester);
+    await runSearch(tester);
+
+    expect(find.byType(TrackTableHeader), findsNothing);
+    expect(find.text('专辑'), findsNothing);
+    expect(find.text('Album'), findsNothing, reason: '单列行不展示专辑');
+    expect(find.text('Artist a'), findsOneWidget, reason: '副标题仍是歌手');
+    expect(find.text('3:05'), findsNWidgets(3), reason: '时长仍在行尾');
+  });
+
+  testWidgets(
+    '桌面窄窗口（< 900）：不渲染表头',
+    (tester) async {
+      await pumpSection(tester, width: 800);
+      await runSearch(tester);
+
+      expect(find.byType(TrackTableHeader), findsNothing);
+      expect(find.text('Artist a'), findsOneWidget);
+    },
+    variant: TargetPlatformVariant.only(TargetPlatform.linux),
+  );
 }

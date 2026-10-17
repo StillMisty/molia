@@ -1,3 +1,5 @@
+import 'package:flutter/foundation.dart'
+    show TargetPlatform, defaultTargetPlatform;
 import 'package:material_3_expressive/material_3_expressive.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:provider/provider.dart';
@@ -19,8 +21,19 @@ import '../widgets/shell_reselect.dart';
 /// 发现页 tab 标识（可见性随当前渠道能力变化，不用下标表示）。
 enum _LibraryTab { search, leaderboards, playlists }
 
+/// 桌面平台（Linux / Windows / macOS）：与桌面骨架、宽屏表格列
+/// （`showTrackTableColumns`）同一口径。
+bool _isDesktopPlatform() => switch (defaultTargetPlatform) {
+      TargetPlatform.linux ||
+      TargetPlatform.windows ||
+      TargetPlatform.macOS =>
+        true,
+      _ => false,
+    };
+
 /// 发现页（内置平台发现）：
-/// - 顶部为统一渠道下拉框 +「搜索 / 热榜 / 歌单」三个 tab；
+/// - 渠道切换 +「搜索 / 热榜 / 歌单」三个 tab：移动 / 窄窗口是顶部下拉框，
+///   桌面宽屏收进左侧竖栏（二选一，不出现两套入口）；
 /// - 渠道集合 = 可搜索源 + 内置发现平台并集（顺序/启停在「音源管理」页维护），
 ///   搜索、热榜、歌单全部跟随同一个渠道；
 /// - 渠道不支持某个 tab 时自动隐藏（脚本扩展源 / any-listen 无热榜/歌单；
@@ -157,53 +170,73 @@ class _LibraryState extends State<Library> {
     // 布局期写入（不触发重建）：重复点击回顶要滚「真正在渲染」的那个列表。
     _renderedTab = visibleTabs[selectedIndex];
 
-    return ResponsivePageContainer(
-      pageType: ResponsivePageType.browse,
-      alignment: Alignment.topCenter,
-      child: Column(
-        children: [
-          Padding(
-            padding: const EdgeInsets.fromLTRB(16, 8, 16, 4),
-            child: Row(
-              children: [
+    // 桌面宽屏把渠道切换收进左侧竖栏（下拉框不再渲染，避免两套入口）；
+    // 移动 / 窄窗口保持顶部下拉框。口径 = 桌面平台 + 窗口宽 ≥ 900
+    // （`context.isDesktop` 即 browse 桌面断点），与搜索结果宽屏表格列同源。
+    final showChannelRail = _isDesktopPlatform() && context.isDesktop;
+
+    final content = Column(
+      children: [
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 8, 16, 4),
+          child: Row(
+            children: [
+              if (!showChannelRail)
                 LibraryChannelSelector(
                   channels: sources.channels,
                   selectedKey: discover.channelKey,
                   onSelected: (key) => _selectChannel(key, enabledChannels),
                 ),
-                if (visibleTabs.length >= 2) ...[
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: M3ETabs(
-                      tabs: [for (final tab in visibleTabs) _tabSpec(l10n, tab)],
-                      selectedIndex: selectedIndex,
-                      onTabSelected: (index) =>
-                          setState(() => _tab = visibleTabs[index]),
-                    ),
-                  ),
-                ] else
-                  const Spacer(),
-              ],
-            ),
-          ),
-          Expanded(
-            child: visibleTabs.length >= 2
-                ? M3ETabsView(
+              if (visibleTabs.length >= 2) ...[
+                if (!showChannelRail) const SizedBox(width: 12),
+                Expanded(
+                  child: M3ETabs(
+                    tabs: [for (final tab in visibleTabs) _tabSpec(l10n, tab)],
                     selectedIndex: selectedIndex,
                     onTabSelected: (index) =>
                         setState(() => _tab = visibleTabs[index]),
-                    children: [
-                      for (final tab in visibleTabs)
-                        KeyedSubtree(
-                          key: ValueKey(tab),
-                          child: _tabContent(tab),
-                        ),
-                    ],
-                  )
-                : _tabContent(visibleTabs.first),
+                  ),
+                ),
+              ] else
+                const Spacer(),
+            ],
           ),
-        ],
-      ),
+        ),
+        Expanded(
+          child: visibleTabs.length >= 2
+              ? M3ETabsView(
+                  selectedIndex: selectedIndex,
+                  onTabSelected: (index) =>
+                      setState(() => _tab = visibleTabs[index]),
+                  children: [
+                    for (final tab in visibleTabs)
+                      KeyedSubtree(
+                        key: ValueKey(tab),
+                        child: _tabContent(tab),
+                      ),
+                  ],
+                )
+              : _tabContent(visibleTabs.first),
+        ),
+      ],
+    );
+
+    return ResponsivePageContainer(
+      pageType: ResponsivePageType.browse,
+      alignment: Alignment.topCenter,
+      child: showChannelRail
+          ? Row(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                LibraryChannelRail(
+                  channels: sources.channels,
+                  selectedKey: discover.channelKey,
+                  onSelected: (key) => _selectChannel(key, enabledChannels),
+                ),
+                Expanded(child: content),
+              ],
+            )
+          : content,
     );
   }
 

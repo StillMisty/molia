@@ -188,4 +188,54 @@ void main() {
     await pumpRow(tester);
     expect(find.text('Artist'), findsOneWidget);
   });
+
+  testWidgets('宽屏表格列：三列按常量列宽渲染，副标题与歌手链接让位', (tester) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: Center(
+            child: TrackRow(
+              title: 'Title',
+              artist: 'Row Artist',
+              artists: [
+                TrackRowArtist(name: 'Link A', onTap: () {}),
+              ],
+              columns: const TrackRowColumns(
+                artist: 'Col Artist',
+                album: 'Col Album',
+                duration: '3:05',
+              ),
+              position: M3ECardPosition.single,
+              onTap: () {},
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    // 三列文本各自出现（列宽与表头共用的常量，见 track_table_header.dart）。
+    expect(find.text('Col Artist'), findsOneWidget);
+    expect(find.text('Col Album'), findsOneWidget);
+    expect(find.text('3:05'), findsOneWidget);
+    expect(
+      tester.getSize(find.text('Col Artist')).width,
+      TrackRowColumns.artistWidth,
+    );
+    expect(
+      tester.getSize(find.text('Col Album')).width,
+      TrackRowColumns.albumWidth,
+    );
+    expect(
+      tester.getSize(find.text('3:05')).width,
+      TrackRowColumns.durationWidth,
+    );
+
+    // 标题格只显示标题：副标题与逐名歌手链接不再渲染（让位给独立列）。
+    expect(find.text('Row Artist'), findsNothing);
+    expect(find.text('Link A'), findsNothing);
+
+    // 密度不变：表格模式不改变固定行高。
+    expect(tester.getSize(find.byType(TrackRow)).height, TrackRow.extent);
+  });
 }
