@@ -501,6 +501,16 @@
   `snapshotId`（记录集规范化哈希，与 `producedAt` 的「时间变」分开），局域网
   探测应答携带它、WebDAV 用 `getetag` / `getlastmodified`，未变跳过
   GET + 解密 + 合并；本机内容指纹与上次成功推送一致时跳过加密 + 上传。
+- **Publish ledger（发布台账）** — `lib/data/sync/publish_ledger.dart`：每传输
+  一份（局域网 / WebDAV），把「这轮能不能跳过加密 / 上传？journal 能裁到哪」
+  的判据收在一处。聚合三处事实：**内存指纹**（本进程成功外发过的载荷身份：
+  全量快照按内容指纹、增量窗口按「窗口边界 + ack 集合」）、**持久覆盖**
+  （`sync_state_v1` 的 `snapshotPushSeq` = 该传输成功发布过的快照覆盖位置，
+  重启不回退）与 **`servesLiveSnapshot` 能力位**。两个动作：`plan(outgoing)`
+  回答是否外发，`mark(result)` 记账（成功才记；零对端与失败都遗忘，下轮重发；
+  快照成功才推进持久覆盖）；`publishedCoverage` / `journalCoverage` 回答日志
+  裁剪的覆盖下限（按需给实时快照的传输不约束）。push 循环与 journal compact
+  只消费台账，引擎只保留轮次编排。
 - **Key derivation cache（密钥派生缓存）** — `SyncCodec`：PBKDF2(口令, 应用级
   固定盐) 得根密钥并按口令会话内缓存一次，帧密钥 = HKDF(根密钥, 随机帧盐)；
   帧仍携带盐与迭代数，版本 1 帧（PBKDF2 直接派生）可解密。
