@@ -49,7 +49,8 @@ class WindowChrome {
     _onCloseRequested = handler;
   }
 
-  /// 隐藏原生标题栏并在首帧前显示窗口；由 main 在 runApp 前调用一次。
+  /// 创建窗口（隐藏原生标题栏 + 恢复几何），**不显示**；由 main 在 runApp
+  /// 前调用一次，首帧就绪后再调 [show] 把窗口亮出来。
   ///
   /// `titleBarStyle: hidden` 之后系统标题栏与系统按钮都不复存在，
   /// 窗口拖动全靠 UI 侧的 [WindowDragArea]，不要在别处再隐藏标题栏。
@@ -58,9 +59,11 @@ class WindowChrome {
   /// [WindowListener.onWindowClose]，由注入的策略决定「隐藏到托盘」还是
   /// 「退出」。真正退出走 [quit]（先解除拦截再销毁）。
   ///
-  /// show / focus 显式 await（不放进 `waitUntilReadyToShow` 的 callback）：
-  /// callback 是同步签名，内部的异步链会让「就绪即显示」晚于调用方后续操作
-  /// （集成测试里表现为 hide() 后又被 show() 拉回），这里保证返回时窗口已显示。
+  /// **为什么显示推迟到首帧**：runApp 之前要装完整套子系统（数据库 / 播放 /
+  /// 主题预解析，几百 ms 起），先显示窗口会让用户盯着一块空白窗等待
+  /// （用户反馈的「启动迟缓」主要来自这段观感）；先建窗不显示、首帧回调里
+  /// 再 [show]，窗口出现时内容已经画好。组合根同时挂一个超时兜底，
+  /// 启动异常时窗口也一定会出现。
   static Future<void> ensureInitialized() async {
     if (!isSupported) return;
     await windowManager.ensureInitialized();
@@ -77,12 +80,6 @@ class WindowChrome {
     );
     // 显示前先摆好位置：show() 后再 setBounds 会肉眼可见地跳一下。
     await _restoreSavedGeometry();
-    await windowManager.show();
-    await windowManager.focus();
-    if (_restoreMaximized) {
-      _restoreMaximized = false;
-      await windowManager.maximize();
-    }
     await _applyLinuxWindowIcon();
   }
 
@@ -213,11 +210,19 @@ class WindowChrome {
     await windowManager.hide();
   }
 
-  /// 显示并聚焦窗口（托盘「显示主窗口」/ 图标单击）。
+  /// 显示并聚焦窗口（首帧后 reveal / 托盘「显示主窗口」/ 单实例请求）。
+  ///
+  /// 幂等：重复调用只是再次 show + focus；恢复的最大化状态在这里补一次
+  /// （见 [_restoreSavedGeometry]——`getBounds` 在最大化态返回最大化矩形，
+  /// 所以几何与最大化分两步恢复）。
   static Future<void> show() async {
     if (!isSupported) return;
     await windowManager.show();
     await windowManager.focus();
+    if (_restoreMaximized) {
+      _restoreMaximized = false;
+      await windowManager.maximize();
+    }
   }
 
   /// 无视关闭策略真正退出（托盘「退出」/ 更新安装后的重启替换）：
