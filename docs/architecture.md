@@ -347,6 +347,11 @@
 （同步面）是两条 seam：同一个实现类（`lib/data/library_repository.dart`）
 兼两者，组合根分别注入。
 
+- **写入网关**：`lib/data/library_write_engine.dart` 拥有本地写入的五步仪式
+  （发号 → 写行 → journal 记录 → 墓碑 → 变更事件），仓库的公开写方法只做委托
+  ——漏步（漏号 / 漏日志 / 漏墓碑 / 漏通知）在结构上不再可能；同步面应用远端
+  记录不走仪式（版本由远端给、不发号、不追 journal），只复用网关的墓碑行形状
+  与 syncId 补齐原语；
 - **UI 面**：领域意图（历史 / 列表 / 曲目 / 收藏 / 导入）+ 类型化变更事件
   （`LibraryChange`，类型即失效范围）；`sortOrder`、墓碑、保留行名
   `__favorites__` 等存储形状不出实现（收藏是 `PlaylistInfo.isFavorites`）；

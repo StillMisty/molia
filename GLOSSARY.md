@@ -291,6 +291,15 @@
   类型化同步记录出 / 入（`PlaylistSyncRecord` / `PlaylistTrackSyncRecord` /
   `PlayHistorySyncRecord` / `SyncTombstoneRecord`，定义在 `device_sync.dart`）；
   列名、行结构与墓碑表只在实现内部；同步适配器只依赖本端口。
+- **Library write engine（资料库写入网关）** — `lib/data/library_write_engine.dart`：
+  本地变更五步仪式（发号 → 写行 → journal 记录 → 墓碑 → 变更事件）的唯一实现；
+  意图方法（`addHistoryEntry` / `replacePlaylistTrack` / `deletePlaylist` /
+  `toggleFavorite` / `importPlaylistTracks`…）是 data 层内部 API，
+  `LibraryRepository` 的公开写方法只做委托，读路径与同步面仍在仓库。同步面
+  （应用远端记录）不走仪式：不发号、不追 journal、版本从远端取，只复用网关的
+  墓碑行形状、历史墓碑清除与 syncId 补齐原语。两处既有口径显式保留并在网关内
+  注明：导出前补 syncId 不发号（靠 `syncFingerprints` 的 syncId 计数条款补偿）、
+  导入路径不追 journal。
 - **Library change（资料库变更事件）** — sealed `LibraryChange`（history /
   playlists / playlistTracks(id) / favorites / import）：`changes` 广播的载荷，
   类型即失效范围；取代 `Stream<void>` + 事后回读 `lastChangeKind` /
