@@ -1,5 +1,6 @@
 import 'dart:math';
 
+import 'package:material_3_expressive/material_3_expressive.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:motor/motor.dart';
 import 'package:molia/services/haptics.dart';
@@ -78,6 +79,13 @@ class _NowPlayingState extends State<NowPlaying>
   static const int _queuePageIndex = 0;
   static const int _infoPageIndex = 2;
 
+  /// 桌面版式播放器列宽度：封面按可用宽高自适应，这一列只负责给它留出
+  /// 「封面 + 两侧邻位露出」的横向余量。
+  static const double _desktopPlayerColumnWidth = 420;
+
+  /// 桌面版式右侧分页：0 = 歌词、1 = 歌曲信息（队列由壳层右面板承载）。
+  int _desktopTab = 0;
+
   // 页面与屏幕尺寸缓存：避免 PageView 每次重建导致歌词/队列滚动状态丢失。
   List<PageData>? _cachedPages;
   bool? _cachedIsLargeScreen;
@@ -136,10 +144,10 @@ class _NowPlayingState extends State<NowPlaying>
 
   /// 壳层重复点击「播放」目的地：与迷你条点击 / 圆点点击 / 到顶下拉同一入口。
   ///
-  /// 大屏没有迷你态（播放器始终完整），忽略请求。
+  /// 大屏与桌面版式都没有迷你态（播放器始终完整），忽略请求。
   /// 触感由壳层对重复点击统一给出（见 [ShellReselectSignal]），此处不再补一次。
   void _handleReselect() {
-    if (_isLargeScreen) return;
+    if (widget.desktopLayout || _isLargeScreen) return;
     _animateToggleExpand();
   }
 
@@ -413,9 +421,86 @@ class _NowPlayingState extends State<NowPlaying>
     );
   }
 
+  /// 桌面版式右侧分页切换（点标签与滑动分页同一入口）。
+  void _selectDesktopTab(int index) {
+    if (index == _desktopTab) return;
+    setState(() => _desktopTab = index);
+  }
+
+  /// 桌面骨架版式：左「播放器」固定列 + 右「歌词 / 歌曲信息」分页。
+  ///
+  /// 与移动版式的差别：没有迷你态与圆点切换（也不需要展开/收起与内容
+  /// 下拉手势），队列由壳层右面板承载，因此页内不出现队列页与顶部渐隐。
+  Widget _buildDesktopLayout(BuildContext context) {
+    final l10n = AppLocalizations.of(context)!;
+    return Scaffold(
+      body: Row(
+        children: [
+          SizedBox(
+            width: _desktopPlayerColumnWidth,
+            // 大屏播放器布局：封面自适应 + 标题/进度，始终完整（无 expandAnimation）。
+            child: Player(isLargeScreen: true, morph: widget.morph),
+          ),
+          // 两栏分界：M3E 竖线（outlineVariant / 主题线宽），不手写 1px 线。
+          const M3EDivider(axis: M3EDividerAxis.vertical),
+          Expanded(
+            child: Column(
+              children: [
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
+                  child: M3ETabs(
+                    // 与移动版式的歌词 / 歌曲信息页同一套标题与图标。
+                    tabs: [
+                      M3ETab(
+                        icon: const Icon(Icons.lyrics_rounded),
+                        label: l10n.lyricsTab,
+                      ),
+                      M3ETab(
+                        icon: const Icon(Icons.info_rounded),
+                        label: l10n.trackInfoTabTitle,
+                      ),
+                    ],
+                    selectedIndex: _desktopTab,
+                    onTabSelected: _selectDesktopTab,
+                  ),
+                ),
+                Expanded(
+                  child: M3ETabsView(
+                    selectedIndex: _desktopTab,
+                    onTabSelected: _selectDesktopTab,
+                    children: [
+                      RepaintBoundary(
+                        child: LyricsWidget(
+                          // 桌面歌词区常展开（无迷你条可让位），快捷操作常显。
+                          quickActionsEnabled: true,
+                          controller: _lyricsScrollController,
+                        ),
+                      ),
+                      RepaintBoundary(
+                        // 分页左右没有圆点过渡带，顶部留白交回内容自带间距。
+                        child: TrackInfoView(controller: _infoScrollController),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     super.build(context);
+
+    // 桌面版式由壳层启用：布局与窗口宽度解耦（窄窗口也保持两栏），
+    // 不走移动骨架的尺寸分支。
+    if (widget.desktopLayout) {
+      return _buildDesktopLayout(context);
+    }
+
     final bool isLargeScreen = _getIsLargeScreen(context);
     // 布局期写入（不触发重建）：壳层重复点击的忽略判定要读最新布局。
     _isLargeScreen = isLargeScreen;

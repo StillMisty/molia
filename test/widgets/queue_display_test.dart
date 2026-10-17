@@ -40,8 +40,9 @@ void main() {
 
   Future<ScrollController> pumpQueue(
     WidgetTester tester,
-    PlaybackProvider playback,
-  ) async {
+    PlaybackProvider playback, {
+    bool includeCurrent = false,
+  }) async {
     final controller = ScrollController();
     addTearDown(controller.dispose);
     await tester.pumpWidget(
@@ -55,7 +56,10 @@ void main() {
           ],
           supportedLocales: const [Locale('zh')],
           home: Scaffold(
-            body: QueueDisplay(controller: controller),
+            body: QueueDisplay(
+              controller: controller,
+              includeCurrent: includeCurrent,
+            ),
           ),
         ),
       ),
@@ -108,6 +112,88 @@ void main() {
     // 播放指示（均衡器图形）随「正在播放」行一起移除；时长走固定行尾。
     expect(find.byIcon(Icons.graphic_eq_rounded), findsNothing);
     expect(find.text('0:30'), findsOneWidget);
+
+    await drainThrottle(tester);
+  });
+
+  testWidgets('includeCurrent：顶部「正在播放」小节（高亮不可点）+ 接下来照常列出', (tester) async {
+    final backend = FakePlaybackBackend();
+    final playback = buildTestPlaybackProvider(backend: backend);
+    addTearDown(playback.dispose);
+
+    backend.emit(BackendSnapshot(
+      current: _track('a'),
+      queue: [_track('a'), _track('b')],
+      currentIndex: 0,
+      next: _track('b'),
+      upcoming: [_track('b')],
+      upNext: [_track('b')],
+      isPlaying: true,
+      position: Duration.zero,
+      duration: const Duration(seconds: 30),
+    ));
+    await pumpQueue(tester, playback, includeCurrent: true);
+
+    expect(tester.takeException(), isNull);
+    // 当前曲目在顶部独立成段，接下来仍照常列出。
+    expect(find.text('正在播放'), findsOneWidget);
+    expect(find.text('接下来'), findsOneWidget);
+    final titles = tester
+        .widgetList<TrackRow>(find.byType(TrackRow))
+        .map((row) => row.title)
+        .toList();
+    expect(titles, ['Title a', 'Title b']);
+
+    final currentRow = tester
+        .widgetList<TrackRow>(find.byType(TrackRow))
+        .firstWhere((row) => row.title == 'Title a');
+    expect(currentRow.selected, isTrue, reason: '当前曲目行高亮');
+    expect(currentRow.showCheckWhenSelected, isFalse, reason: '高亮不翻选中勾');
+    expect(currentRow.onTap, isNull, reason: '当前曲目行不可点');
+
+    await drainThrottle(tester);
+  });
+
+  testWidgets('includeCurrent 且队列为空：只渲染「正在播放」段，不出现队列空态', (tester) async {
+    final backend = FakePlaybackBackend();
+    final playback = buildTestPlaybackProvider(backend: backend);
+    addTearDown(playback.dispose);
+
+    // 最后一首：upNext 为空但当前曲目存在。
+    backend.emit(upcomingSnapshot([_track('a')]));
+    await pumpQueue(tester, playback, includeCurrent: true);
+
+    expect(find.text('正在播放'), findsOneWidget);
+    expect(find.text('Title a'), findsOneWidget);
+    expect(find.text('接下来'), findsNothing);
+    // 当前行不能被「队列为空」空态顶掉。
+    expect(find.text('当前队列为空'), findsNothing);
+
+    await drainThrottle(tester);
+  });
+
+  testWidgets('includeCurrent: false（播放页口径）：不出现「正在播放」小节', (tester) async {
+    final backend = FakePlaybackBackend();
+    final playback = buildTestPlaybackProvider(backend: backend);
+    addTearDown(playback.dispose);
+
+    backend.emit(BackendSnapshot(
+      current: _track('a'),
+      queue: [_track('a'), _track('b')],
+      currentIndex: 0,
+      next: _track('b'),
+      upcoming: [_track('b')],
+      upNext: [_track('b')],
+      isPlaying: true,
+      position: Duration.zero,
+      duration: const Duration(seconds: 30),
+    ));
+    await pumpQueue(tester, playback);
+
+    expect(find.text('正在播放'), findsNothing);
+    expect(find.text('Title a'), findsNothing, reason: '当前曲目由播放器承载');
+    expect(find.text('接下来'), findsOneWidget);
+    expect(find.text('Title b'), findsOneWidget);
 
     await drainThrottle(tester);
   });

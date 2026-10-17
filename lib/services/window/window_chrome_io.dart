@@ -47,7 +47,13 @@ class WindowChrome {
     windowManager.addListener(_listener);
     await windowManager.setPreventClose(true);
     await windowManager.waitUntilReadyToShow(
-      const WindowOptions(titleBarStyle: TitleBarStyle.hidden),
+      const WindowOptions(
+        titleBarStyle: TitleBarStyle.hidden,
+        // 最小尺寸与桌面骨架的折叠阈值配套：再窄时侧栏 + 播放器列 + 队列
+        // 面板会把内容区挤成破版式，直接在原生层拦住（初始 1280×800 见
+        // 原生 runner 默认值）。
+        minimumSize: Size(900, 600),
+      ),
     );
     await windowManager.show();
     await windowManager.focus();

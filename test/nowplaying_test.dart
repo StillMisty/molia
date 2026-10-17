@@ -13,6 +13,7 @@ import 'package:molia/services/notification_service.dart';
 import 'package:molia/widgets/mdtab.dart';
 import 'package:molia/widgets/lyrics.dart';
 import 'package:molia/widgets/player.dart';
+import 'package:molia/widgets/queue.dart';
 import 'package:molia/widgets/shell_reselect.dart';
 import 'package:molia/widgets/track_info_view.dart';
 import 'package:material_3_expressive/material_3_expressive.dart';
@@ -56,6 +57,7 @@ void main() {
     List<SingleChildWidget> extraProviders = const [],
     ShellReselectSignal? reselect,
     Size size = const Size(420, 900),
+    bool desktopLayout = false,
   }) async {
     tester.view.physicalSize = size;
     tester.view.devicePixelRatio = 1.0;
@@ -91,7 +93,7 @@ void main() {
             ...GlobalMaterialLocalizations.delegates,
           ],
           supportedLocales: const [Locale('zh')],
-          home: NowPlaying(reselect: reselect),
+          home: NowPlaying(reselect: reselect, desktopLayout: desktopLayout),
         ),
       ),
     );
@@ -283,6 +285,38 @@ void main() {
       reason: '大屏应忽略重复点击',
     );
 
+    await tester.pump(const Duration(milliseconds: 50));
+  });
+
+  testWidgets('桌面版式：左播放器列 + 右歌词/歌曲信息分页（无圆点、无队列）', (tester) async {
+    await pumpNowPlaying(
+      tester,
+      desktopLayout: true,
+      size: const Size(1400, 900),
+    );
+
+    expect(tester.takeException(), isNull);
+    // 播放器列始终完整（大屏布局），没有迷你态。
+    expect(tester.widget<Player>(find.byType(Player)).isLargeScreen, isTrue);
+    // 右侧分页：歌词 / 歌曲信息（与移动版式同一套标题），默认选中歌词。
+    final tabs = tester.widget<M3ETabs>(find.byType(M3ETabs));
+    expect(tabs.tabs.map((tab) => tab.label).toList(), ['歌词', '歌曲信息']);
+    expect(tabs.selectedIndex, 0);
+    expect(find.byType(LyricsWidget), findsOneWidget);
+    // 桌面没有圆点与队列页（队列由壳层右面板承载）。
+    expect(find.byType(LyricsQueueDots), findsNothing);
+    expect(find.byType(QueueDisplay), findsNothing);
+
+    // 切到歌曲信息页：分页内容与移动版式的信息页一致。
+    await tester.tap(
+      find.descendant(of: find.byType(M3ETabs), matching: find.text('歌曲信息')),
+    );
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 400));
+    expect(find.byType(TrackInfoView), findsOneWidget);
+    expect(find.text('本次播放音质'), findsOneWidget);
+
+    // 通知节流计时器跑完，避免 pending timer 报错。
     await tester.pump(const Duration(milliseconds: 50));
   });
 

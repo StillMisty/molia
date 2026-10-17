@@ -39,6 +39,8 @@ import '../widgets/playback_selectors.dart';
 import '../widgets/player_morph.dart';
 import '../widgets/shell_reselect.dart';
 import '../widgets/shell_page_visibility.dart';
+import 'desktop/desktop_shell.dart';
+import 'desktop/window_controls.dart';
 
 /// 当前曲目的封面 URL（空串视同无封面）：顶栏真身与共享飞行副本同一份取值。
 String? _coverUrlOf(PlaybackProvider provider) =>
@@ -174,7 +176,12 @@ class _ProgressIndicatorState extends State<ProgressIndicator>
 }
 
 class MyApp extends StatefulWidget {
-  const MyApp({super.key});
+  const MyApp({super.key, this.desktopShell});
+
+  /// 桌面骨架开关（**测试专用**）：null = 按平台判定（Linux / Windows /
+  /// macOS 走桌面骨架），true / false 强制指定。真机永远走平台判定。
+  final bool? desktopShell;
+
   @override
   State<MyApp> createState() => _MyAppState();
 }
@@ -226,6 +233,9 @@ class _MyAppState extends State<MyApp>
     ShellDestination.nowPlaying: NowPlaying(
       morph: _morph,
       reselect: _reselect[ShellDestination.nowPlaying],
+      // 桌面骨架的播放页换成「封面 + 控制 / 歌词 + 信息」版式（无迷你态，
+      // 队列由壳层右面板承载）；移动 / 平板骨架保持 PageView 版式。
+      desktopLayout: _desktopShell,
     ),
     ShellDestination.favorites: FavoritesPage(
       reselect: _reselect[ShellDestination.favorites],
@@ -235,17 +245,33 @@ class _MyAppState extends State<MyApp>
     ),
   };
 
-  /// 当前选中的目的地（与底栏顺序解耦；默认落在播放页）。
-  ShellDestination _selectedDestination = ShellDestination.nowPlaying;
-  ShellDestination _previousDestination = ShellDestination.nowPlaying;
+  /// 是否挂载桌面骨架：Linux / Windows / macOS 为真；[MyApp.desktopShell]
+  /// 非空时以它为准（测试强制走另一侧骨架）。
+  bool get _desktopShell => widget.desktopShell ??
+      switch (defaultTargetPlatform) {
+        TargetPlatform.linux ||
+        TargetPlatform.windows ||
+        TargetPlatform.macOS =>
+          true,
+        _ => false,
+      };
+
+  /// 当前选中的目的地（与底栏顺序解耦；初值 = 导航偏好的启动首页）。
+  late ShellDestination _selectedDestination;
+  late ShellDestination _previousDestination;
 
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
     _morphAnimation.addListener(_onMorphTick);
-    // 冷启动默认落在播放页：顶栏必须与「手动进入播放页」后的状态一致
-    // （收起为应用标识）。否则恢复会话后顶栏会重复显示曲目封面/进度。
+    // 启动首页：导航偏好在首帧前已就绪（组合根 await 过 preferencesReady），
+    // 这里同步读取即可；存储值不可见时 effectiveHomeDestination 已回退到
+    // 第一个可见目的地。
+    _selectedDestination = context.read<NavProvider>().effectiveHomeDestination;
+    _previousDestination = _selectedDestination;
+    // 顶栏 / 底栏的曲目信息区必须与「手动进入播放页」后的状态一致（播放页
+    // 激活即收起封面）：否则恢复会话后顶栏会重复显示曲目封面/进度。
     _morph.setBarHeaderHidden(
       _selectedDestination == ShellDestination.nowPlaying,
     );
@@ -450,6 +476,21 @@ class _MyAppState extends State<MyApp>
             : visibleDestinations.first);
     final selectedIndex = visibleDestinations.indexOf(selectedDestination);
 
+    // 桌面骨架：顶栏瘦身 + 可折叠侧栏 + 常驻底部播放条 + 队列右面板
+    // （结构见 `desktop/desktop_shell.dart`）；移动 / 平板骨架保持原结构。
+    if (_desktopShell) {
+      return DesktopShell(
+        selectedDestination: selectedDestination,
+        visibleDestinations: visibleDestinations,
+        selectedIndex: selectedIndex,
+        labelFor: (destination) => _destinationLabel(l10n, destination),
+        pageStack: _buildPageStack(),
+        morph: _morph,
+        onDestinationSelected: _onDestinationSelected,
+        onOpenSettings: () => _openSettings(context),
+      );
+    }
+
     // 顶栏整体是窗口拖动区（隐藏标题栏后唯一的拖动入口）：外层 PreferredSize
     // 用 AppBar 自报高度（56 工具栏 + 10 波浪进度），总高度与改动前一致，
     // 非桌面平台 WindowDragArea 是纯透传。
@@ -483,7 +524,7 @@ class _MyAppState extends State<MyApp>
           tooltip: l10n.settingsTitle,
           icon: const Icon(Icons.settings_rounded),
         ),
-        if (WindowChrome.isSupported) const _WindowControls(),
+        if (WindowChrome.isSupported) const WindowControls(),
         const SizedBox(width: 8),
       ],
       bottom: PreferredSize(
@@ -941,112 +982,6 @@ class _BarRevealTransition extends StatelessWidget {
       child: Opacity(
         opacity: t,
         child: Transform.scale(scale: 0.92 + 0.08 * t, child: child),
-      ),
-    );
-  }
-}
-
-/// 顶栏窗口按钮（仅 Linux / Windows 桌面构建）：最小化 / 最大化-还原 / 关闭。
-///
-/// 隐藏原生标题栏后由它承担系统按钮职责；其余平台整组不构建，
-/// 顶栏与改动前逐像素一致。图标随 [WindowChrome.maximized] 切换
-/// （最大化时显示「还原」）。
-///
-/// 三键与旁边应用按钮**同规格**（M3E `sm` 档：24 图标 / 40 视觉格 /
-/// 48 触控目标），不做桌面风格的紧凑化——顶部一排按钮观感统一优先；
-/// 与应用操作之间用一段短竖线分界，右侧贴窗口角，保留「窗口控制」的
-/// 识别度。关闭键遵循桌面习惯：hover / 按下时底色转 `errorContainer`、
-/// 字形转 `onErrorContainer`（危险色只在这里出现，不影响其它按钮）。
-///
-/// 字形选型：最小化用 [Icons.remove_rounded]（居中横线）而不是
-/// [Icons.minimize_rounded]——后者是 Material 的「下沉横线」设计，
-/// 笔画中心比同排的方形 / 叉低 6/24，看上去像没对齐。
-class _WindowControls extends StatelessWidget {
-  const _WindowControls();
-
-  @override
-  Widget build(BuildContext context) {
-    final l10n = AppLocalizations.of(context)!;
-    return Row(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        // 与左侧应用操作分界的短竖线（上下各留 10dp，长度约 36dp）。
-        const Padding(
-          padding: EdgeInsets.symmetric(horizontal: 8),
-          child: M3EDivider(
-            axis: M3EDividerAxis.vertical,
-            indent: 10,
-            endIndent: 10,
-          ),
-        ),
-        M3EIconButton(
-          variant: M3EIconButtonVariant.standard,
-          tooltip: l10n.windowMinimize,
-          icon: const Icon(Icons.remove_rounded),
-          onPressed: WindowChrome.minimize,
-        ),
-        ValueListenableBuilder<bool>(
-          valueListenable: WindowChrome.maximized,
-          builder: (context, maximized, _) => M3EIconButton(
-            variant: M3EIconButtonVariant.standard,
-            tooltip: maximized ? l10n.windowRestore : l10n.windowMaximize,
-            icon: IconSwap<bool>(
-              value: maximized,
-              builder: (context, maximized) => Icon(
-                maximized
-                    ? Icons.filter_none_rounded
-                    : Icons.crop_square_rounded,
-                // 20 而不是 24：Material 的方形/双方形字形更实（16dp 笔画），
-                // 与 24 档的叉（12dp）并排时显得重；20 档≈13dp 与叉对齐。
-                size: 20,
-              ),
-            ),
-            onPressed: WindowChrome.toggleMaximize,
-          ),
-        ),
-        const _WindowCloseButton(),
-      ],
-    );
-  }
-}
-
-/// 关闭键：hover / 按下走危险色（桌面习惯：关闭是破坏性操作）。
-///
-/// 底色用 `M3EIconButtonDecoration.overlayColor` 覆盖 M3E 的中性 state
-/// layer，字形色由外层 [MouseRegion] 的 hover 状态给出（decoration 的
-/// `foregroundColor` 只在 disabled/selected 上解析，不带 hover）。
-class _WindowCloseButton extends StatefulWidget {
-  const _WindowCloseButton();
-
-  @override
-  State<_WindowCloseButton> createState() => _WindowCloseButtonState();
-}
-
-class _WindowCloseButtonState extends State<_WindowCloseButton> {
-  bool _hovered = false;
-
-  @override
-  Widget build(BuildContext context) {
-    final l10n = AppLocalizations.of(context)!;
-    final scheme = M3ETheme.of(context).colorScheme;
-    return MouseRegion(
-      onEnter: (_) => setState(() => _hovered = true),
-      onExit: (_) => setState(() => _hovered = false),
-      child: M3EIconButton(
-        variant: M3EIconButtonVariant.standard,
-        tooltip: l10n.windowClose,
-        decoration: _hovered
-            ? M3EIconButtonDecoration(
-                overlayColor: WidgetStatePropertyAll<Color?>(
-                  scheme.errorContainer,
-                ),
-              )
-            : null,
-        icon: Icon(
-          Icons.close_rounded,
-          color: _hovered ? scheme.onErrorContainer : null,
-        ),
-        onPressed: WindowChrome.close,
       ),
     );
   }

@@ -9,7 +9,9 @@ import 'track_row.dart';
 
 /// 播放队列：只列出当前曲目之后的「接下来」。
 ///
-/// 当前播放曲目由上方播放器承载（封面/标题/进度），列表里不重复这一行。
+/// 当前播放曲目由上方播放器承载（封面/标题/进度），列表里不重复这一行；
+/// 桌面队列面板（[QueueDisplay.includeCurrent]）需要在面板顶部展示当前曲目，
+/// 此时在「接下来」之前补一段高亮、不可点的「正在播放」小节。
 /// 懒加载：`SliverFixedExtentList` + [TrackRow] 固定行高，队列再长也只构建
 /// 视口附近的行、只请求视口内的封面；固定 extent 让滚动条拇指尺寸与拖动
 /// 定位精确（`interactive` + `thumbVisibility`，可手按住拖动）。
@@ -34,6 +36,10 @@ class QueueDisplay extends StatelessWidget {
   /// 播放页版面里当前曲目由播放器承载，保持 false 不重复展示。
   final bool includeCurrent;
 
+  /// 「正在播放」与「接下来」两个卡片小节之间的空气：比行距大，
+  /// 避免两段分组视觉上粘成一段。
+  static const double _sectionSpacing = 16;
+
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context)!;
@@ -44,6 +50,12 @@ class QueueDisplay extends StatelessWidget {
     final currentQueue = context.select<PlaybackProvider, List<Track>>(
       (provider) => provider.snapshot.upNext,
     );
+    // 当前曲目只归「正在播放」小节；播放页版式不订阅，避免无关重建。
+    final Track? current = includeCurrent
+        ? context.select<PlaybackProvider, Track?>(
+            (provider) => provider.snapshot.current,
+          )
+        : null;
     final playbackProvider = context.read<PlaybackProvider>();
 
     return Scrollbar(
@@ -53,8 +65,44 @@ class QueueDisplay extends StatelessWidget {
       child: CustomScrollView(
         controller: controller,
         slivers: [
+          // 「正在播放」小节（无当前曲目时整段不存在）。
+          if (current != null)
+            SliverPadding(
+              padding: EdgeInsets.fromLTRB(24, topPadding, 24, 0),
+              sliver: SliverToBoxAdapter(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    _sectionLabel(context, l10n.queuePanelNowPlaying),
+                    // 当前曲目：高亮但不翻选中勾，也不响应点击——它本身就是
+                    // 正在播放的进度行，重复装载同一曲目没有意义。
+                    TrackRow(
+                      title: current.title,
+                      artist: current.artistLabel,
+                      coverUrl: _coverUrlOf(current),
+                      coverSize: 40,
+                      selected: true,
+                      showCheckWhenSelected: false,
+                      trailingText: _formatDuration(current.duration),
+                      // 单行小节 = 四周外圆角（calculateCardPosition(0, 1) 约定）。
+                      position: M3ECardPosition.single,
+                    ),
+                  ],
+                ),
+              ),
+            ),
           SliverPadding(
-            padding: EdgeInsets.fromLTRB(24, topPadding, 24, 0),
+            // 有「正在播放」段时用小节间距分隔两段；否则沿用顶部留白
+            // （播放页圆点过渡带）。
+            padding: EdgeInsets.fromLTRB(
+              24,
+              current != null && currentQueue.isNotEmpty
+                  ? _sectionSpacing
+                  : topPadding,
+              24,
+              0,
+            ),
             sliver: SliverToBoxAdapter(
               child: Column(
                 mainAxisSize: MainAxisSize.min,
@@ -98,7 +146,9 @@ class QueueDisplay extends StatelessWidget {
                 },
               ),
             )
-          else
+          else if (current == null)
+            // 空态只在整块面板没有任何行时出现：「正在播放」段存在时队列为空
+            // 只代表「没有接下来」，不是空面板（空态文案会误导）。
             SliverFillRemaining(
               hasScrollBody: false,
               child: Center(

@@ -108,7 +108,9 @@ extension ResponsiveExtension on BuildContext {
     return adaptiveColumns(
       minTileWidth: layoutType(ResponsivePageType.browse).defaultMinTileWidth,
       min: 3,
-      max: 6,
+      // 超宽屏（桌面骨架内容区最宽 1600）网格多留列：窗口越宽卡片列数越
+      // 接近可用宽度，避免两侧大片留白。
+      max: 8,
     );
   }
 
@@ -159,7 +161,9 @@ extension ResponsiveExtension on BuildContext {
           maxWidth: responsive(
             mobile: double.infinity,
             tablet: 1040,
-            desktop: 1280,
+            // 桌面骨架内容区更宽（侧栏 + 播放器列 + 队列面板并行），
+            // 网格页放宽上限；平板档与移动档不变。
+            desktop: 1600,
           ),
           horizontalPadding: padding,
           preferTwoPane: isLargeScreen,

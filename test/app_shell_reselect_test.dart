@@ -131,7 +131,7 @@ void main() {
             ...GlobalMaterialLocalizations.delegates,
           ],
           supportedLocales: const [Locale('zh')],
-          home: const MyApp(),
+          home: const MyApp(desktopShell: false),
         ),
       ),
     );
