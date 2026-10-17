@@ -286,6 +286,26 @@ void main() {
     );
   });
 
+  testWidgets('底栏进度条：拖动提交 seek', (tester) async {
+    final harness = await pumpShell(tester, desktopShell: true);
+
+    final slider = find.descendant(
+      of: find.byKey(DesktopNowPlayingBar.shellKey),
+      matching: find.byType(M3ESlider),
+    );
+    final rect = tester.getRect(slider);
+    // 从滑杆约 17% 拖到约 80% 位置（时长 30s ≈ 落点 24s）。
+    await tester.dragFrom(
+      Offset(rect.left + rect.width * 0.17, rect.center.dy),
+      Offset(rect.width * 0.6, 0),
+    );
+    await tester.pump();
+    expect(harness.backend.calls, contains('seek'));
+
+    // 松手后的保留窗口（1500ms 兜底）跑完，避免用例结束报 pending timer。
+    await tester.pump(const Duration(milliseconds: 1600));
+  });
+
   testWidgets('队列面板：底栏开关打开 / 关闭', (tester) async {
     await pumpShell(tester, desktopShell: true);
     expect(find.byType(QueueDisplay), findsNothing);

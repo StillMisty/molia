@@ -5,9 +5,6 @@
 /// 右：播放模式 + 音量（图标 + 弹出滑杆）+ 队列开关。
 library;
 
-import 'dart:async';
-
-import 'package:flutter/foundation.dart' show ValueListenable;
 import 'package:flutter/services.dart'
     show HardwareKeyboard, KeyDownEvent, KeyEvent, LogicalKeyboardKey;
 import 'package:material_3_expressive/material_3_expressive.dart';
@@ -22,11 +19,12 @@ import '../../providers/playback_provider.dart';
 import '../../services/app_branding_service.dart';
 import '../../services/escape_claims.dart';
 import '../../services/haptics.dart';
-import '../../utils/duration_text.dart';
 import '../../widgets/app_network_image.dart';
 import '../../widgets/cover_appearance.dart';
 import '../../widgets/icon_swap.dart';
 import '../../widgets/player_morph.dart';
+import '../../widgets/seek_bar.dart';
+import '../../widgets/seek_preview.dart';
 
 /// 常驻底部播放条。
 class DesktopNowPlayingBar extends StatelessWidget {
@@ -351,13 +349,9 @@ class _BarControls extends StatelessWidget {
 
 /// 可拖进度排：当前时间 + 波浪滑杆 + 总时长。
 ///
-/// seek 语义（拖动期本地预览、松手提交、position 追上或 1.5s 超时撤下
-/// 预览）与播放页 `player.dart::_buildSeekSlider` / `_commitSeek` /
-/// `_handlePositionTick` 三段逐字一致。
-///
-/// 为什么复制而不是复用：那份实现与播放页宿主（封面堆叠、入场动画、
-/// 迷你 ⇄ 完整切换）耦合且是私有成员，导出私有状态会污染播放页公开面；
-/// 两处宿主不同，只能各持一份。改 seek 语义时必须同步两份实现。
+/// seek 语义（拖动预览 / 提交等待 / 换曲清理）与播放页共用
+/// `widgets/seek_preview.dart` + `widgets/seek_bar.dart`；宿主只负责
+/// 生命周期与时间标签版式。
 class _BarSeekSlider extends StatefulWidget {
   const _BarSeekSlider();
 
@@ -366,172 +360,43 @@ class _BarSeekSlider extends StatefulWidget {
 }
 
 class _BarSeekSliderState extends State<_BarSeekSlider> {
-  /// 进度条拖动预览（毫秒）：非空时滑杆显示本地值、忽略 position 通道，
-  /// 松手后提交 seek 并保留显示，直到 position 追上目标或超时。
-  final ValueNotifier<double?> _seekPreviewMs = ValueNotifier<double?>(null);
-  int? _seekTargetMs;
-  Timer? _seekSettleTimer;
-  ValueListenable<Duration>? _positionListenable;
-  PlaybackProvider? _playback;
-  String? _lastTrackUri;
+  late final PlaybackProvider _playback;
+  late final SeekPreviewController _seekPreview;
 
   @override
   void initState() {
     super.initState();
-    final playback = context.read<PlaybackProvider>();
-    _playback = playback;
-    _positionListenable = playback.position..addListener(_handlePositionTick);
-    _lastTrackUri = playback.snapshot.current?.id.uri;
-    // 底栏没有播放页封面堆叠的「切歌回调」可用，直接订阅 provider 检测
-    // 换曲：切歌后清掉拖动预览，避免旧进度残留在新曲目的滑杆上。
-    playback.addListener(_handleProviderChanged);
+    _playback = context.read<PlaybackProvider>();
+    _seekPreview = SeekPreviewController(
+      position: _playback.position,
+      trackChanges: _playback,
+      currentTrackId: () => _playback.snapshot.current?.id,
+      seek: _playback.seekToPosition,
+    );
   }
 
   @override
   void dispose() {
-    _playback?.removeListener(_handleProviderChanged);
-    _positionListenable?.removeListener(_handlePositionTick);
-    _seekSettleTimer?.cancel();
-    _seekPreviewMs.dispose();
+    _seekPreview.dispose();
     super.dispose();
   }
 
-  void _handleProviderChanged() {
-    final uri = _playback?.snapshot.current?.id.uri;
-    if (uri == _lastTrackUri) return;
-    _lastTrackUri = uri;
-    _clearSeekPreview();
-  }
-
-  /// seek 提交后，position 追上目标（或超时兜底）才撤下预览，
-  /// 避免滑杆在通道追上之前回跳到旧位置。
-  void _handlePositionTick() {
-    final target = _seekTargetMs;
-    if (target == null) return;
-    final current = _positionListenable?.value.inMilliseconds ?? 0;
-    if ((current - target).abs() <= 800) {
-      _seekTargetMs = null;
-      _seekSettleTimer?.cancel();
-      _seekPreviewMs.value = null;
-    }
-  }
-
-  /// 松手提交 seek：保留拖动值显示直到 position 追上。
-  void _commitSeek(double value) {
-    final target = value.round();
-    _seekTargetMs = target;
-    _seekPreviewMs.value = value;
-    _seekSettleTimer?.cancel();
-    _seekSettleTimer = Timer(const Duration(milliseconds: 1500), () {
-      if (_seekTargetMs != target) return;
-      _seekTargetMs = null;
-      _seekPreviewMs.value = null;
-    });
-    unawaited(_playback!.seekToPosition(target));
-  }
-
-  void _clearSeekPreview() {
-    _seekTargetMs = null;
-    _seekSettleTimer?.cancel();
-    _seekPreviewMs.value = null;
-  }
-
-  /// 时间标签：m:ss；无曲目或时长 0 显示 `--:--`。
-  ///
-  /// tabular figures：等宽数字避免每秒文本宽度变化把滑杆左右推挤。
-  static TextStyle? _timeStyle(TextTheme textTheme) =>
-      textTheme.labelSmall?.copyWith(
-        fontFeatures: const [FontFeature.tabularFigures()],
-      );
-
   @override
   Widget build(BuildContext context) {
-    // 外层 RepaintBoundary 是硬需求：`M3ESlider.wavy` 内部是 `repeat()` 的
-    // 无限动画（包内每帧重建/重绘轨道），不隔离的话播放中每次波形重绘都会
-    // 把整条底栏（封面 + 文字）卷进同一图层重光栅化（理由同播放页滑杆）。
-    return RepaintBoundary(
-      child: ValueListenableBuilder<double?>(
-        valueListenable: _seekPreviewMs,
-        builder: (context, previewMs, _) {
-          return ValueListenableBuilder<Duration>(
-            valueListenable: _playback!.position,
-            builder: (context, position, _) {
-              final (durationMs, isPlaying, hasTrack) =
-                  context.select<PlaybackProvider, (int, bool, bool)>(
-                (provider) => (
-                  provider.snapshot.duration.inMilliseconds,
-                  provider.isPlaying,
-                  provider.hasTrack,
-                ),
-              );
-              final bool enabled = hasTrack && durationMs > 0;
-              final double maxMs = durationMs > 0 ? durationMs.toDouble() : 1.0;
-              final double valueMs =
-                  (previewMs ?? position.inMilliseconds.toDouble())
-                      .clamp(0.0, maxMs);
-              final ValueChanged<double>? onChanged = enabled
-                  ? (value) {
-                      // 新拖动作废上一次的等待落点。
-                      _seekTargetMs = null;
-                      _seekSettleTimer?.cancel();
-                      _seekPreviewMs.value = value;
-                    }
-                  : null;
-              final ValueChanged<double>? onChangeEnd =
-                  enabled ? _commitSeek : null;
-
-              // 暂停时切到平直滑杆：波浪动画不会停（一直在动），
-              // 与「已暂停」的状态自相矛盾。
-              final Widget slider = isPlaying
-                  ? M3ESlider.wavy(
-                      value: valueMs,
-                      min: 0,
-                      max: maxMs,
-                      size: M3ESliderSize.xs,
-                      trackThickness: 6,
-                      enabled: enabled,
-                      label: durationText(valueMs.round()) ?? '0:00',
-                      onChanged: onChanged,
-                      onChangeEnd: onChangeEnd,
-                    )
-                  : M3ESlider(
-                      value: valueMs,
-                      min: 0,
-                      max: maxMs,
-                      size: M3ESliderSize.xs,
-                      trackThickness: 6,
-                      enabled: enabled,
-                      label: durationText(valueMs.round()) ?? '0:00',
-                      onChanged: onChanged,
-                      onChangeEnd: onChangeEnd,
-                    );
-
-              final style = _timeStyle(Theme.of(context).textTheme);
-              return Row(
-                children: [
-                  SizedBox(
-                    width: 40,
-                    child: Text(
-                      enabled ? (durationText(valueMs.round()) ?? '0:00') : '--:--',
-                      style: style,
-                      maxLines: 1,
-                    ),
-                  ),
-                  Expanded(child: slider),
-                  SizedBox(
-                    width: 40,
-                    child: Text(
-                      enabled ? (durationText(durationMs) ?? '--:--') : '--:--',
-                      style: style,
-                      maxLines: 1,
-                      textAlign: TextAlign.end,
-                    ),
-                  ),
-                ],
-              );
-            },
-          );
-        },
+    return Selector<PlaybackProvider,
+        ({int durationMs, bool isPlaying, bool hasTrack})>(
+      selector: (_, provider) => (
+        durationMs: provider.snapshot.duration.inMilliseconds,
+        isPlaying: provider.isPlaying,
+        hasTrack: provider.hasTrack,
+      ),
+      builder: (context, state, _) => SeekBar(
+        controller: _seekPreview,
+        position: _playback.position,
+        durationMs: state.durationMs,
+        isPlaying: state.isPlaying,
+        hasTrack: state.hasTrack,
+        showTimeLabels: true,
       ),
     );
   }

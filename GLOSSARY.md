@@ -50,6 +50,13 @@
   暂停延后一个 microtask 以兼容 just_audio 的打断记账；恢复焦点不抢播（transient
   的续播由 just_audio 负责）。桌面无插件实现时 no-op。
 
+- **Seek preview（进度预览模块）** — `lib/widgets/seek_preview.dart` +
+  `lib/widgets/seek_bar.dart`：进度拖动预览的唯一实现（拖动期显示本地值；
+  松手提交后保留显示直到 position 追上（容差 800ms）或 1.5s 兜底；新拖动 /
+  新提交作废旧落点；换曲按身份变化清理；时序常量不给宿主配置面）。
+  `SeekBar` 是它的渲染面（波浪 ⇄ 平直、气泡与侧时间文案），播放页与桌面
+  底栏只是宿主，seek 语义不再各持一份。
+
 ## 播放页封面（cover deck）
 
 - **Cover deck（封面堆叠）** — `lib/widgets/player_cover_deck.dart`：播放页封面区
@@ -111,7 +118,7 @@
 
 - **Desktop shell（桌面骨架）** — `lib/app/desktop/**`：仅 linux/windows/macOS 生效的壳层版式（顶栏瘦身 + 可展开侧栏 + 常驻底栏播放条 + 队列右面板），由 `lib/app/app_shell.dart` 按平台分流（`MyApp(desktopShell:)` 可强制，测试用）；移动骨架与共享逻辑（页面栈 / 共享元素飞行 / 重复点击通道）仍在 `app_shell.dart`，两套骨架同源。
 
-- **Now playing bar（底栏播放条）** — `lib/app/desktop/now_playing_bar.dart`：桌面常驻 80dp 播放条（左：封面/歌名/收藏，点击进播放页并复用封面飞行；中：传输 + 可拖波浪进度 + 时间；右：播放模式 / 音量弹层 / 队列开关）。进度拖动语义与播放页滑杆同源（两处实现，改语义必须同步）。
+- **Now playing bar（底栏播放条）** — `lib/app/desktop/now_playing_bar.dart`：桌面常驻 80dp 播放条（左：封面/歌名/收藏，点击进播放页并复用封面飞行；中：传输 + 可拖波浪进度 + 时间；右：播放模式 / 音量弹层 / 队列开关）。进度拖动语义与播放页共用 **Seek preview**，宿主只负责版式。
 
 - **Queue panel（队列右面板）** — `lib/app/desktop/queue_panel.dart`：桌面右侧 supporting pane（260–480 可拖，默认 360；窗口宽 <1200 不渲染），内容为 `QueueDisplay(includeCurrent: true)`（顶部「正在播放」行 + 接下来队列）；开合与宽度经 `shell_layout_prefs.dart` 设备本地记忆。
 

@@ -1,8 +1,6 @@
-import 'dart:async';
 import 'dart:math';
 import 'dart:ui' show lerpDouble;
 
-import 'package:flutter/foundation.dart' show ValueListenable;
 import 'package:material_3_expressive/material_3_expressive.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:motor/motor.dart';
@@ -22,6 +20,8 @@ import 'cover_appearance.dart';
 import 'icon_swap.dart';
 import 'player_cover_deck.dart';
 import 'player_morph.dart';
+import 'seek_bar.dart';
+import 'seek_preview.dart';
 
 /// 迷你条封面外观与飞行定义在 `cover_appearance.dart`；这里再导出给既有
 /// import 面（迷你封面回退图标尺寸等）。
@@ -100,12 +100,8 @@ class _PlayerState extends State<Player> with TickerProviderStateMixin {
   double _playerContentHeight(double art) =>
       art * _artStackVerticalFactor + _sectionsReservedHeight;
 
-  /// 进度条拖动预览（毫秒）：非空时滑杆显示本地值、忽略 position 通道，
-  /// 松手后提交 seek 并保留显示，直到 position 追上目标或超时。
-  final _seekPreviewMs = ValueNotifier<double?>(null);
-  int? _seekTargetMs;
-  Timer? _seekSettleTimer;
-  ValueListenable<Duration>? _positionListenable;
+  /// 进度拖动预览：与桌面底栏共用同一状态机（见 `seek_preview.dart`）。
+  late final SeekPreviewController _seekPreview;
 
   /// 迷你 ⇄ 完整切换时的封面飞行：两端锚点与页内 Stack 坐标系。
   final GlobalKey _playerStackKey = GlobalKey(debugLabel: 'playerStack');
@@ -140,8 +136,13 @@ class _PlayerState extends State<Player> with TickerProviderStateMixin {
     widget.expandAnimation?.addStatusListener(_handleExpandStatus);
     widget.expandAnimation?.addListener(_handleExpandValue);
 
-    _positionListenable = context.read<PlaybackProvider>().position;
-    _positionListenable!.addListener(_handlePositionTick);
+    final playbackProvider = context.read<PlaybackProvider>();
+    _seekPreview = SeekPreviewController(
+      position: playbackProvider.position,
+      trackChanges: playbackProvider,
+      currentTrackId: () => playbackProvider.snapshot.current?.id,
+      seek: playbackProvider.seekToPosition,
+    );
 
     if (_lastImageUrl != null) {
       _prefetchImage(_lastImageUrl!);
@@ -152,33 +153,6 @@ class _PlayerState extends State<Player> with TickerProviderStateMixin {
   void didChangeDependencies() {
     super.didChangeDependencies();
     _tickersEnabled = TickerMode.valuesOf(context).enabled;
-  }
-
-  /// seek 提交后，position 追上目标（或超时兜底）才撤下预览，
-  /// 避免滑杆在通道追上之前回跳到旧位置。
-  void _handlePositionTick() {
-    final target = _seekTargetMs;
-    if (target == null) return;
-    final current = _positionListenable?.value.inMilliseconds ?? 0;
-    if ((current - target).abs() <= 800) {
-      _seekTargetMs = null;
-      _seekSettleTimer?.cancel();
-      _seekPreviewMs.value = null;
-    }
-  }
-
-  /// 松手提交 seek：保留拖动值显示直到 position 追上。
-  void _commitSeek(double value, PlaybackProvider playbackProvider) {
-    final target = value.round();
-    _seekTargetMs = target;
-    _seekPreviewMs.value = value;
-    _seekSettleTimer?.cancel();
-    _seekSettleTimer = Timer(const Duration(milliseconds: 1500), () {
-      if (_seekTargetMs != target) return;
-      _seekTargetMs = null;
-      _seekPreviewMs.value = null;
-    });
-    playbackProvider.seekToPosition(target);
   }
 
   @override
@@ -257,9 +231,7 @@ class _PlayerState extends State<Player> with TickerProviderStateMixin {
   void dispose() {
     widget.expandAnimation?.removeStatusListener(_handleExpandStatus);
     widget.expandAnimation?.removeListener(_handleExpandValue);
-    _positionListenable?.removeListener(_handlePositionTick);
-    _seekSettleTimer?.cancel();
-    _seekPreviewMs.dispose();
+    _seekPreview.dispose();
     _trackEntrance.dispose();
     super.dispose();
   }
@@ -288,10 +260,10 @@ class _PlayerState extends State<Player> with TickerProviderStateMixin {
     return label.isEmpty ? _l10n(context).unknownArtist : label;
   }
 
-  /// 封面模块的切歌联动（切歌帧的 post-frame 触发）：清掉进度拖动预览、
-  /// 非拖动中切换时启动标题入场（拖动中让位拖动预览）。
+  /// 封面模块的切歌联动（切歌帧的 post-frame 触发）：非拖动中切换时启动
+  /// 标题入场（拖动中让位拖动预览）。旧进度预览的清理由
+  /// `SeekPreviewController` 自行订阅曲目身份完成。
   void _handleTrackSwapped(bool duringDrag) {
-    _clearSeekPreviewAfterTrackChange();
     if (duringDrag) return;
     if (_tickersEnabled) {
       _trackEntrance.animateTo(1, from: 0, withVelocity: 0);
@@ -299,13 +271,6 @@ class _PlayerState extends State<Player> with TickerProviderStateMixin {
       // 页面不可见：直接落位，避免回到播放页时标题再弹一遍。
       _trackEntrance.value = 1.0;
     }
-  }
-
-  /// 切歌后清掉进度拖动预览，避免旧进度残留在滑杆上。
-  void _clearSeekPreviewAfterTrackChange() {
-    _seekTargetMs = null;
-    _seekSettleTimer?.cancel();
-    _seekPreviewMs.value = null;
   }
 
   @override
@@ -531,7 +496,7 @@ class _PlayerState extends State<Player> with TickerProviderStateMixin {
         children: [
           _buildFavoriteButton(),
           const SizedBox(width: 4),
-          Expanded(child: _buildSeekSlider(context, playbackProvider)),
+          Expanded(child: _buildSeekSlider(playbackProvider)),
           const SizedBox(width: 4),
           _buildModeButton(context, mode, () {
             HapticsService.lightImpact();
@@ -565,84 +530,24 @@ class _PlayerState extends State<Player> with TickerProviderStateMixin {
     );
   }
 
-  /// 可拖动进度滑杆：拖动中显示本地值（不被 position 通道回拽），
-  /// 松手提交 seek；拖动气泡显示目标时间。
-  ///
-  /// 外层 `RepaintBoundary` 是硬需求：`M3ESlider.wavy` 内部是 `repeat()` 的
-  /// 无限动画（包内每帧重建/重绘轨道），不隔离的话播放中每次波形重绘都会把
-  /// 整个播放器（封面 + 阴影 + 文字）卷进同一图层重光栅化。
-  Widget _buildSeekSlider(
-      BuildContext context, PlaybackProvider playbackProvider) {
-    return RepaintBoundary(
-      child: ValueListenableBuilder<double?>(
-        valueListenable: _seekPreviewMs,
-        builder: (context, previewMs, _) {
-          return ValueListenableBuilder<Duration>(
-            valueListenable: playbackProvider.position,
-            builder: (context, position, _) {
-              final (durationMs, isPlaying) =
-                  context.select<PlaybackProvider, (int, bool)>(
-                (provider) => (
-                  provider.snapshot.duration.inMilliseconds,
-                  provider.isPlaying,
-                ),
-              );
-              final bool enabled = playbackProvider.hasTrack && durationMs > 0;
-              final double maxMs = durationMs > 0 ? durationMs.toDouble() : 1.0;
-              final double valueMs =
-                  (previewMs ?? position.inMilliseconds.toDouble())
-                      .clamp(0.0, maxMs);
-              final ValueChanged<double>? onChanged = enabled
-                  ? (value) {
-                      // 新拖动作废上一次的等待落点。
-                      _seekTargetMs = null;
-                      _seekSettleTimer?.cancel();
-                      _seekPreviewMs.value = value;
-                    }
-                  : null;
-              final ValueChanged<double>? onChangeEnd = enabled
-                  ? (value) => _commitSeek(value, playbackProvider)
-                  : null;
-
-              // 暂停时切到平直滑杆：波浪动画不会停（一直在动），
-              // 与「已暂停」的状态自相矛盾。
-              if (!isPlaying) {
-                return M3ESlider(
-                  value: valueMs,
-                  min: 0,
-                  max: maxMs,
-                  size: M3ESliderSize.xs,
-                  trackThickness: 6,
-                  enabled: enabled,
-                  label: _formatSeekTime(valueMs.round()),
-                  onChanged: onChanged,
-                  onChangeEnd: onChangeEnd,
-                );
-              }
-              return M3ESlider.wavy(
-                value: valueMs,
-                min: 0,
-                max: maxMs,
-                size: M3ESliderSize.xs,
-                trackThickness: 6,
-                enabled: enabled,
-                label: _formatSeekTime(valueMs.round()),
-                onChanged: onChanged,
-                onChangeEnd: onChangeEnd,
-              );
-            },
-          );
-        },
+  /// 进度滑杆：低频状态（时长 / 播放中 / 有无曲目）经 Selector 订阅，
+  /// 取值与时序在共用模块 `seek_bar.dart` / `seek_preview.dart`。
+  Widget _buildSeekSlider(PlaybackProvider playbackProvider) {
+    return Selector<PlaybackProvider,
+        ({int durationMs, bool isPlaying, bool hasTrack})>(
+      selector: (_, provider) => (
+        durationMs: provider.snapshot.duration.inMilliseconds,
+        isPlaying: provider.isPlaying,
+        hasTrack: provider.hasTrack,
+      ),
+      builder: (context, state, _) => SeekBar(
+        controller: _seekPreview,
+        position: playbackProvider.position,
+        durationMs: state.durationMs,
+        isPlaying: state.isPlaying,
+        hasTrack: state.hasTrack,
       ),
     );
-  }
-
-  /// 拖动气泡时间：m:ss。
-  String _formatSeekTime(int milliseconds) {
-    final duration = Duration(milliseconds: milliseconds);
-    final minutes = duration.inMinutes;
-    final seconds = (duration.inSeconds % 60).toString().padLeft(2, '0');
-    return '$minutes:$seconds';
   }
 
   /// 标题/作者：单行「歌名 · 作者」+ 无过冲轻量入场（上移 14px）。
