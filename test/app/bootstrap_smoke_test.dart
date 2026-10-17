@@ -164,7 +164,7 @@ void main() {
     expect(playback.playbackProvider.snapshot.current?.id, track.id);
     expect(playback.facade.snapshot.value.current?.id, track.id);
 
-    // provider 拿到观察者：`flushPlaybackSession` 转发到观察者并落盘会话；
+    // provider 拿到会话模块：`flushPlaybackSession` 转发到会话模块并落盘会话；
     // 观察者同时挂在同一个 facade 上（最后播放信息同步更新）。
     playback.playbackProvider.flushPlaybackSession();
     await pumpEventQueue();

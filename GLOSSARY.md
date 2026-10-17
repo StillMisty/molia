@@ -30,8 +30,8 @@
   是其唯一出口：真实播放来自 facade，冷启动恢复态由 `PlaybackSessionCoordinator`
   构造覆盖快照（唯一构造点）；历史兼容 map 形状已删除。
 - **Played order（播放顺序）** — `lib/playback/playback_order.dart`：实际播放过的队列下标栈
-  （最近在后、上限 100、`popPrevious` 供上一首消费）。驱动 `PlaybackSnapshot.history` 与
-  `previous` 语义；与队列顺序 `upcoming` 是两回事。
+  （最近在后、上限 100、`popPrevious` 供上一首消费）。驱动 `PlaybackSnapshot.previous`
+  语义（实际播放顺序最近一首 → 队列前一位）；与队列面板的 `upNext`（队列顺序）是两回事。
 - **Resolved next（下一首解析）** — `PlaybackSnapshot.next`：后端按当前模式解析的下一首
   （shuffle 在单曲内稳定，切歌/切模式重抽）；peek（展示）与 commit（执行）两个语义在
   服务内显式命名（`_peekNextIndex` / `_commitNextIndex`），轮末重洗只发生在 commit。
@@ -46,7 +46,8 @@
   落盘口径收在一处：整份会话（曲目切换 / 暂停 / `flushSession` 强制）、轻量进度键
   （`savePosition`，1s 节流，满 1min 整份刷新）、`clear`，串行化由 store 的
   `pendingWrite` 承担。系统媒体控制（暂停 / 停止 / 切顺序 / seek）与恢复态切歌键
-  经组合根接线进来（不再直连 provider）。
+  经组合根接线进来（不再直连 provider）；「启动时恢复上次播放」开关的跨设备重载钩子
+  挂在 provider 上，协调者只回答「恢复态是否变化」（撤下 / 装载成功），UI 通知由调用方发。
 - **Playback observer（播放观察者模块）** — `lib/services/playback_observer.dart`：播放副作用扇出的唯一实现（最后播放 / 播放上下文 / 桌面小组件 / 播放历史 / 封面预取与补取 / 通知权限），直连 facade 快照通道（不经 provider 的节流通知），由组合根挂接；会话落盘与恢复态属 `PlaybackSessionCoordinator`，睡眠定时属 `PlaybackProvider`（与 `PlayStatisticsService`、`ArtworkThemeSync` 同为观察者形态）。
 - **Sleep timer（定时关闭）** — `lib/providers/sleep_timer.dart`：歌曲信息页入口的
   「到点暂停」。两种模式：倒计时（**仅播放时计时**，暂停冻结；实现为**绝对
@@ -88,8 +89,8 @@
   下）；顶栏↔播放页（`PlayerMorphFlight`）与迷你⇄完整（`player.dart` 页内）都是
   它的薄壳。锚点几何读取唯一实现 `player_morph.dart::anchorRectOf(key,
   {container})`（容器为空 = 全局坐标；含祖先缩放的两角映射）。
-- **Cover slot（封面槽位）** — 堆叠的三个位置：左 = 上一首（播放顺序最近一首
-  history 末位 → 队列前一位 → 空，排除与当前同 id，与后端 `skipToPrevious` 同源）、
+- **Cover slot（封面槽位）** — 堆叠的三个位置：左 = 上一首（实际播放顺序最近一首 →
+  队列前一位 → 空，排除与当前同 id，与后端 `skipToPrevious` 同源）、
   中 = 当前（拖动/提交等待期间为预览目标）、右 = `PlaybackSnapshot.next`；
   左右槽只要展示了身份即可点击切歌，为空时不渲染卡片。
 - **Swap session（切歌会话）** — `CoverSwapSession`：一次拖动/切歌从开始到落位的

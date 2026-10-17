@@ -58,7 +58,7 @@
     `Track.payload` 承载源脚本原始对象（原 `SourceTrack.raw`），**只在 data/sources 传递、必须原样回传**；
   - `PlaybackSnapshot` / `BackendSnapshot` / `PlaybackRequest` / `PlaybackContext`；
     `PlaybackSnapshot.next` 是后端按当前模式解析出的下一首（shuffle 单曲内稳定），
-    `history` 是实际播放顺序（最近在后），`upcoming` 是队列顺序（非播放顺序）；
+    `previous` 是实际播放顺序最近一首（无则队列前一位），`upNext` 是队列顺序；
   - `SearchQuery` / `SearchResult<T>`；`SourceFailure(kind/l10nKey/retryable)`；
   - `Comment` / `CommentPage`（评论正文 / 时间 / IP 归属 / 点赞 / 引用 / 楼中楼，
     `CommentKind` 区分热门与最新）；
@@ -80,7 +80,7 @@
   前缀失效与单曲搜索共用）与 `resolve`（缓存 10min，key=`url:{source}:{md5(canonical payload)}:{quality}`，
   失败不缓存，可 `invalidatePrefix`），并把异常归一化为 `SourceFailure`。
 - **Playback**：`LocalPlaybackBackend` 组合 `LocalPlaybackService`（值变才发快照；
-  播放顺序栈 `PlaybackOrder` 记录实际播放过的下标，供 `previous` 与快照 `history`）；
+  播放顺序栈 `PlaybackOrder` 记录实际播放过的下标，供快照 `previous`）；
   `DefaultPlaybackFacade` 合并快照通知（`==` 去重）、把进度拆到独立 `position`
   `ValueNotifier`（≥250ms 去重、换曲/seek 直接对齐、**不进快照**）、错误归一化。
   `PlaybackProvider` 对外只暴露领域 `PlaybackSnapshot` + position 通道：
@@ -502,7 +502,7 @@
   飞行 / `CoverCard` 卡片 / `MorphCover` 副本内容 / 封面 URL·key 归一化）、
   `player_cover_swap.dart`（方向判定纯函数）；播放器只提供布局尺寸、顶栏共享飞行
   锚点与主题联动。
-- **三槽位模型**：左 = 上一首（播放顺序最近一首 history 末位 → 队列前一位 → 空，
+- **三槽位模型**：左 = 上一首（实际播放顺序最近一首 → 队列前一位 → 空，
   排除与当前同 id，与后端 `skipToPrevious` 同源）、中 = 当前（拖动/提交等待期间
   为预览目标）、右 = `PlaybackSnapshot.next`；左右槽只要展示了身份即可点击切歌。
 - **会话与宿主（时机 / 效果分离）**：会话只决定「什么时候」，宿主（deck State）决定
