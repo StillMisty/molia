@@ -2,12 +2,12 @@
 // （用于内置歌词搜索解析单测）。用法：node tool/gen_lyric_search_fixtures.mjs
 //
 // 端点（与 lib/sources/builtin/*_lyric_search.dart 一一对应）：
-// - kw：`search.kuwo.cn/r.s?stype=lyric`（伪 JSON 或标准 JSON，原样存文本）；
-// - kg：`songsearch.kugou.com/lyric_search`；
-// - tx：musicu `music.search.SearchCgiService`（search_type=7，签名同搜索）；
-// - wy：`api/search/get/web?type=1006`（旧版字段 + 高亮 lyrics）；
+// kw：`search.kuwo.cn/r.s?stype=lyric`（伪 JSON 或标准 JSON，原样存文本）；
+// kg：`songsearch.kugou.com/lyric_search`；
+// tx：musicu `music.search.SearchCgiService`（search_type=7，签名同搜索）；
+// wy：`api/search/get/web?type=1006`（旧版字段 + 高亮 lyrics）；
 //        曲目 raw 由 ids → weapi/v3/song/detail 补全，一并抓 `wy_song_detail.json`；
-// - mg：jadeite `searchAll`（searchSwitch.lyricSong=1，签名同 mg_search.dart）。
+// mg：jadeite `searchAll`（searchSwitch.lyricSong=1，签名同 mg_search.dart）。
 //
 // 查询统一用「雨下整夜」（《七里香》歌词）；列表截断到前 3 条控制体积。
 import crypto from 'node:crypto';
@@ -25,7 +25,7 @@ const MG_UA =
 
 const keyword = '雨下整夜';
 
-// ---------------------------------------------------------------- kw
+// kw
 {
   const url =
     'http://search.kuwo.cn/r.s?client=kt&all=' + encodeURIComponent(keyword) +
@@ -35,7 +35,7 @@ const keyword = '雨下整夜';
   write('kw.txt', await (await fetch(url, { headers: { 'User-Agent': UA } })).text());
 }
 
-// ---------------------------------------------------------------- kg
+// kg
 {
   const url =
     'https://songsearch.kugou.com/lyric_search?keyword=' + encodeURIComponent(keyword) +
@@ -45,7 +45,7 @@ const keyword = '雨下整夜';
   write('kg.json', JSON.stringify(body));
 }
 
-// ---------------------------------------------------------------- tx（musicu 签名）
+// tx（musicu 签名）
 function zzcSign(text) {
   const P1 = [23, 14, 6, 36, 16, 40, 7, 19];
   const P2 = [16, 1, 32, 12, 19, 27, 8, 5];
@@ -87,7 +87,7 @@ async function txMusicu(body) {
   write('tx.json', JSON.stringify(await txMusicu(body)));
 }
 
-// ---------------------------------------------------------------- wy
+// wy
 const WY_PUBLIC_KEY = `-----BEGIN PUBLIC KEY-----
 MIGfMA0GCSqGSIb3DQEBAQUAA4GNADCBiQKBgQDgtQn2JZ34ZC28NWYpAUd98iZ37BUrX/aKzmFbt7clFSs6sXqHauqKWqdtLkF2KexO40H1YTX8z2lSgBBOAxLsvaklV8k4cBFK9snQXE9/DDaFt6Rr7iVZMldczhC0JNgTz+SHXT6CBHuX3e9SdB1Ua44oncaTWz7OBGLbCiK45wIDAQAB
 -----END PUBLIC KEY-----`;
@@ -156,7 +156,7 @@ async function wyWeapiPost(url, object) {
   write('wy_song_detail.json', JSON.stringify(detail));
 }
 
-// ---------------------------------------------------------------- mg
+// mg
 const MG_DEVICE_ID = '963B7AA0D21511ED807EE5846EC87D20';
 const MG_SIGNATURE_MD5 = '6cdc72a439cef99a3418d2a78aa28c73';
 const MG_APP_KEY = 'yyapp2d16148780a1dcc7408e06336b98cfd50';

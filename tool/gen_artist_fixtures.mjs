@@ -2,18 +2,18 @@
 // （用于内置歌手解析 / 歌手页单测）。用法：node tool/gen_artist_fixtures.mjs
 //
 // 端点（与 lib/sources/builtin/*_artist.dart 一一对应）：
-// - kw：搜索 `r.s?ft=artist`（伪 JSON，原样存 txt）；
+// kw：搜索 `r.s?ft=artist`（伪 JSON，原样存 txt）；
 //       详情 `wbd/api/bd/artist/artist_info`、歌曲 `…/artist_music`
 //       （签名 GET，响应为 percent-encoded base64 密文，原样存文本，
 //        测试里跑 kwWbdDecodeData 解密）；
-// - kg：搜索 `mobiles.kugou.com/api/v3/search/singer`；
+// kg：搜索 `mobiles.kugou.com/api/v3/search/singer`；
 //       详情 `…/api/v5/singer/info`、歌曲 `…/api/v5/singer/song`；
-// - tx：musicu `music.search.SearchCgiService`（search_type=1 歌手搜索）；
+// tx：musicu `music.search.SearchCgiService`（search_type=1 歌手搜索）；
 //       详情/歌曲 `music.web_singer_info_svr`（get_singer_detail_info）；
-// - wy：搜索 `api/search/get/web?type=100`；详情 `weapi/v1/artist/{id}`（weapi 加密）；
+// wy：搜索 `api/search/get/web?type=100`；详情 `weapi/v1/artist/{id}`（weapi 加密）；
 //       歌曲 `api/v1/artist/songs`（免签名；曲目 raw 由 ids → weapi/v3/song/detail 补全，
 //       一并抓 `wy_song_detail.json`）；
-// - mg：搜索 `jadeite…/searchAll`（searchSwitch.singer=1，签名同 mg_search.dart）；
+// mg：搜索 `jadeite…/searchAll`（searchSwitch.singer=1，签名同 mg_search.dart）；
 //       详情 `app.c.nf.migu.cn/pc/bmw/singer/info/v1.1`、歌曲 `…/singer/song/v1.0`。
 //
 // 为控制体积，歌手 / 歌曲列表统一截断到前 3 条（保留总数 / 分页字段原值）。
@@ -39,7 +39,7 @@ const MG_UA =
 
 const artistId = { kw: '336', kg: '3520', tx: '0025NhlN2yWrP4', wy: '6452', mg: '112' };
 
-// ---------------------------------------------------------------- kw（wbd 签名）
+// kw（wbd 签名）
 const KW_WBD_APPID = 'y67sprxhhpws';
 const KW_WBD_KEY = Buffer.from('cFcnPcf6Kb85RC1y3V6M5A==', 'base64');
 
@@ -90,7 +90,7 @@ function kwWbdBuildParam(data) {
   write('kw_songs.txt', await (await fetch(musicUrl, { headers: { 'User-Agent': KW_UA } })).text());
 }
 
-// ---------------------------------------------------------------- kg
+// kg
 {
   const searchUrl =
     'https://mobiles.kugou.com/api/v3/search/singer?keyword=' +
@@ -109,7 +109,7 @@ function kwWbdBuildParam(data) {
   write('kg_songs.json', JSON.stringify(songs));
 }
 
-// ---------------------------------------------------------------- tx（musicu 签名）
+// tx（musicu 签名）
 function zzcSign(text) {
   const P1 = [23, 14, 6, 36, 16, 40, 7, 19];
   const P2 = [16, 1, 32, 12, 19, 27, 8, 5];
@@ -170,7 +170,7 @@ async function txMusicu(body) {
   write('tx_detail.json', JSON.stringify(detail));
 }
 
-// ---------------------------------------------------------------- wy（weapi 加密）
+// wy（weapi 加密）
 const WY_PUBLIC_KEY = `-----BEGIN PUBLIC KEY-----
 MIGfMA0GCSqGSIb3DQEBAQUAA4GNADCBiQKBgQDgtQn2JZ34ZC28NWYpAUd98iZ37BUrX/aKzmFbt7clFSs6sXqHauqKWqdtLkF2KexO40H1YTX8z2lSgBBOAxLsvaklV8k4cBFK9snQXE9/DDaFt6Rr7iVZMldczhC0JNgTz+SHXT6CBHuX3e9SdB1Ua44oncaTWz7OBGLbCiK45wIDAQAB
 -----END PUBLIC KEY-----`;
@@ -260,7 +260,7 @@ async function wyWeapiPost(url, object) {
   write('wy_song_detail.json', JSON.stringify(detail));
 }
 
-// ---------------------------------------------------------------- mg
+// mg
 const MG_DEVICE_ID = '963B7AA0D21511ED807EE5846EC87D20';
 const MG_SIGNATURE_MD5 = '6cdc72a439cef99a3418d2a78aa28c73';
 const MG_APP_KEY = 'yyapp2d16148780a1dcc7408e06336b98cfd50';
