@@ -24,6 +24,7 @@ import 'playback/local_audio_handler.dart';
 import 'providers/library_provider.dart';
 import 'services/app_logging.dart';
 import 'services/notification_service.dart';
+import 'services/system_fonts_service.dart';
 import 'services/window/single_instance.dart';
 import 'services/window/window_chrome.dart';
 import 'services/window/window_settings.dart';
@@ -64,6 +65,10 @@ void main() async {
   // 窗口行为偏好（设备本地）：窗口几何的恢复/保存在建窗之前就要判定，
   // 因此先 await 载入一次（读取失败保持默认开启）。
   await WindowSettings.load();
+
+  // 平台默认 UI 字体（仅 Windows 读注册表，毫秒级）：未自定义「应用字体」
+  // 时用它，保证与系统其它窗口同源（中文系统 = 微软雅黑）。
+  await SystemFontsService.loadPlatformDefaultFamily();
 
   // 强制单实例（桌面）：已有实例在跑 → 请它显示主窗口后立即退出；此刻
   // 窗口还没创建，不会闪一下再消失。其余平台 / 抢锁异常按主实例继续。

@@ -94,33 +94,31 @@ void main() {
       );
     });
 
-    test('Windows 未自定义字体时注入微软雅黑字体栈', () {
-      final data = buildAppThemeData(light, platform: TargetPlatform.windows);
-      expect(data.textTheme.bodyMedium?.fontFamily, 'Microsoft YaHei UI');
-      expect(
-        data.textTheme.bodyMedium?.fontFamilyFallback,
-        contains('Microsoft YaHei'),
+    test('未自定义字体时使用平台默认 UI 字体，自定义字体优先', () {
+      // 平台默认 UI 字体由启动时解析（Windows 读系统窗口字体；其它平台为
+      // null 走引擎默认）——主题层只做「自定义 > 平台默认」的优先级。
+      final data = buildAppThemeData(
+        light,
+        platformDefaultFontFamily: 'Microsoft YaHei UI',
       );
+      expect(data.textTheme.bodyMedium?.fontFamily, 'Microsoft YaHei UI');
       // M3E 侧同步（typeScale 从 ThemeData.textTheme 映射）。
       expect(
         M3EThemeData.fromMaterial(data).typeScale.bodyMedium.fontFamily,
         'Microsoft YaHei UI',
       );
 
-      // 自定义字体优先：注入平台默认时不覆盖用户选择。
+      // 自定义字体优先：平台默认不再覆盖用户选择。
       final custom = buildAppThemeData(
         light,
         fontFamily: 'Noto Sans CJK SC',
-        platform: TargetPlatform.windows,
+        platformDefaultFontFamily: 'Microsoft YaHei UI',
       );
       expect(custom.textTheme.bodyMedium?.fontFamily, 'Noto Sans CJK SC');
 
-      // 其它平台保持引擎默认（不注入雅黑）。
+      // 平台默认缺失（非 Windows / 解析失败）时保持引擎默认。
       expect(
-        buildAppThemeData(light, platform: TargetPlatform.linux)
-            .textTheme
-            .bodyMedium
-            ?.fontFamily,
+        buildAppThemeData(light).textTheme.bodyMedium?.fontFamily,
         isNot('Microsoft YaHei UI'),
       );
     });
