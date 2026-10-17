@@ -12,7 +12,6 @@ import '../theme/app_semantic_colors.dart';
 import '../utils/sync_format.dart';
 import '../widgets/card_list_surface.dart';
 import '../widgets/settings/settings_tiles.dart';
-import 'sync_device_page.dart';
 import 'sync_dialogs.dart';
 import 'sync_labels.dart';
 
@@ -69,9 +68,10 @@ class SyncLogPage extends StatelessWidget {
                               provider: provider,
                               issue: entry.error,
                               l10n: l10n,
-                              // 口令动作直达设备子页（口令弹层在那里）。
-                              onConfigurePassphrase: () => openSettingsSubPage(
-                                  context, const SyncDevicePage()),
+                              // 口令动作就在本页弹层。
+                              onConfigurePassphrase: () =>
+                                  showSyncPassphraseDialog(
+                                      context, provider, l10n),
                             ))
                         : null,
                   ),

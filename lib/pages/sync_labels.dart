@@ -23,6 +23,7 @@ String syncIssueText(AppLocalizations l10n, SyncIssue issue) {
     SyncIssueCode.peerDecryptFailed => l10n.syncIssuePeerDecryptFailed(peer),
     SyncIssueCode.peerPushFailed => l10n.syncIssuePeerPushFailed(peer),
     SyncIssueCode.broadcastUnavailable => l10n.syncIssueBroadcastUnavailable,
+    SyncIssueCode.probePortUnavailable => l10n.syncIssueProbePortUnavailable,
     SyncIssueCode.discoverySilent => l10n.syncIssueDiscoverySilent,
     SyncIssueCode.webdavDirFailed => l10n.syncIssueWebdavDirFailed,
     SyncIssueCode.webdavListFailed => l10n.syncIssueWebdavListFailed,

@@ -83,6 +83,16 @@ void main() {
       syncIssueActions(const SyncIssue(code: SyncIssueCode.discoverySilent)),
       contains(SyncIssueAction.addManualPeer),
     );
+    // 探测端口不可用：与广播失败同组，给手动地址 / WebDAV / 重试三条出路。
+    expect(
+      syncIssueActions(
+          const SyncIssue(code: SyncIssueCode.probePortUnavailable)),
+      containsAll([
+        SyncIssueAction.addManualPeer,
+        SyncIssueAction.useWebdav,
+        SyncIssueAction.retry,
+      ]),
+    );
     // 未配置 WebDAV：主推荐是「去配置」（末位 = filled），重试只作次要出口。
     expect(
       syncIssueActions(const SyncIssue(code: SyncIssueCode.notConfigured)).last,

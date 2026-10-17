@@ -3860,12 +3860,6 @@ abstract class AppLocalizations {
   /// **'Sync'**
   String get syncGeneralSection;
 
-  /// No description provided for @syncTrustModelTitle.
-  ///
-  /// In en, this message translates to:
-  /// **'Trust model'**
-  String get syncTrustModelTitle;
-
   /// No description provided for @syncEnabledTitle.
   ///
   /// In en, this message translates to:
@@ -3878,17 +3872,23 @@ abstract class AppLocalizations {
   /// **'Exchange data with devices that share your passphrase'**
   String get syncEnabledSubtitle;
 
+  /// No description provided for @syncLocalSection.
+  ///
+  /// In en, this message translates to:
+  /// **'This device'**
+  String get syncLocalSection;
+
+  /// No description provided for @syncLocalSectionHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Peers need this information to reach this device; the addresses and ports travel inside the pairing code.'**
+  String get syncLocalSectionHint;
+
   /// No description provided for @syncDeviceNameTitle.
   ///
   /// In en, this message translates to:
   /// **'Device name'**
   String get syncDeviceNameTitle;
-
-  /// No description provided for @syncDevicePassphraseTitle.
-  ///
-  /// In en, this message translates to:
-  /// **'Device & passphrase'**
-  String get syncDevicePassphraseTitle;
 
   /// No description provided for @syncPassphraseTitle.
   ///
@@ -3901,12 +3901,6 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Not set'**
   String get syncPassphraseNotSet;
-
-  /// No description provided for @syncPassphraseSet.
-  ///
-  /// In en, this message translates to:
-  /// **'Passphrase set'**
-  String get syncPassphraseSet;
 
   /// No description provided for @syncPassphraseTrustHint.
   ///
@@ -4365,23 +4359,11 @@ abstract class AppLocalizations {
   /// **'Failed: {error}'**
   String syncLogFailed(String error);
 
-  /// No description provided for @syncPeersTitle.
-  ///
-  /// In en, this message translates to:
-  /// **'Paired devices'**
-  String get syncPeersTitle;
-
   /// No description provided for @syncPeersSection.
   ///
   /// In en, this message translates to:
   /// **'Devices'**
   String get syncPeersSection;
-
-  /// No description provided for @syncPeersSummaryEmpty.
-  ///
-  /// In en, this message translates to:
-  /// **'No device yet · LAN discovery is automatic'**
-  String get syncPeersSummaryEmpty;
 
   /// No description provided for @syncPeersHint.
   ///
@@ -4394,6 +4376,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'This device · {id}'**
   String syncPeerThisDevice(String id);
+
+  /// No description provided for @syncPeerThisDeviceTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'This device ID'**
+  String get syncPeerThisDeviceTitle;
 
   /// No description provided for @syncPeerLastSync.
   ///
@@ -4470,7 +4458,7 @@ abstract class AppLocalizations {
   /// No description provided for @syncPeerAddSubtitle.
   ///
   /// In en, this message translates to:
-  /// **'Enter a peer address when discovery fails'**
+  /// **'Enter a peer address or paste a pairing code when discovery fails'**
   String get syncPeerAddSubtitle;
 
   /// No description provided for @syncPeerAddTitle.
@@ -4488,7 +4476,7 @@ abstract class AppLocalizations {
   /// No description provided for @syncPeerHostHint.
   ///
   /// In en, this message translates to:
-  /// **'e.g. 192.168.1.23'**
+  /// **'e.g. 192.168.1.23, or a molia-pair code'**
   String get syncPeerHostHint;
 
   /// No description provided for @syncPeerNameLabel.
@@ -4598,6 +4586,180 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'not reached yet — it retries automatically once the peer is online'**
   String get syncPeerNotContacted;
+
+  /// No description provided for @syncPeerCandidatesTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'{count} candidate addresses'**
+  String syncPeerCandidatesTitle(int count);
+
+  /// No description provided for @syncPeerCandidatesSubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'not reached yet · tap to view or remove'**
+  String get syncPeerCandidatesSubtitle;
+
+  /// No description provided for @syncPairingShareTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Share pairing info'**
+  String get syncPairingShareTitle;
+
+  /// No description provided for @syncPairingShareSubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Copy the pairing code (contains the passphrase)'**
+  String get syncPairingShareSubtitle;
+
+  /// No description provided for @syncPairingCopied.
+  ///
+  /// In en, this message translates to:
+  /// **'Pairing info copied (contains the passphrase)'**
+  String get syncPairingCopied;
+
+  /// No description provided for @syncPairingShowQr.
+  ///
+  /// In en, this message translates to:
+  /// **'Show QR code'**
+  String get syncPairingShowQr;
+
+  /// No description provided for @syncPairingNeedsPassphrase.
+  ///
+  /// In en, this message translates to:
+  /// **'Set a sync passphrase first'**
+  String get syncPairingNeedsPassphrase;
+
+  /// No description provided for @syncPairingWarning.
+  ///
+  /// In en, this message translates to:
+  /// **'This content contains your sync passphrase — sharing it authorizes the other device to read all synced data.'**
+  String get syncPairingWarning;
+
+  /// No description provided for @syncPairingCopy.
+  ///
+  /// In en, this message translates to:
+  /// **'Copy text'**
+  String get syncPairingCopy;
+
+  /// No description provided for @syncPairingInvalidCode.
+  ///
+  /// In en, this message translates to:
+  /// **'Invalid pairing code (missing fields or unsupported version)'**
+  String get syncPairingInvalidCode;
+
+  /// No description provided for @syncPairingNoAddress.
+  ///
+  /// In en, this message translates to:
+  /// **'The pairing code has no usable address (the other device may only have loopback addresses)'**
+  String get syncPairingNoAddress;
+
+  /// No description provided for @syncPairingImported.
+  ///
+  /// In en, this message translates to:
+  /// **'Pairing info imported'**
+  String get syncPairingImported;
+
+  /// No description provided for @syncPairingPassphraseConflictTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Passphrase already set'**
+  String get syncPairingPassphraseConflictTitle;
+
+  /// No description provided for @syncPairingPassphraseConflictBody.
+  ///
+  /// In en, this message translates to:
+  /// **'This device already has a different sync passphrase. Replace it (other devices will need the new passphrase), or import the addresses only.'**
+  String get syncPairingPassphraseConflictBody;
+
+  /// No description provided for @syncPairingAddressOnly.
+  ///
+  /// In en, this message translates to:
+  /// **'Addresses only'**
+  String get syncPairingAddressOnly;
+
+  /// No description provided for @syncPairingReplacePassphrase.
+  ///
+  /// In en, this message translates to:
+  /// **'Replace passphrase (affects other devices)'**
+  String get syncPairingReplacePassphrase;
+
+  /// No description provided for @syncPairingScanTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Scan pairing code'**
+  String get syncPairingScanTitle;
+
+  /// No description provided for @syncPairingCameraDenied.
+  ///
+  /// In en, this message translates to:
+  /// **'Camera permission denied. Open system settings, or go back and paste the code instead.'**
+  String get syncPairingCameraDenied;
+
+  /// No description provided for @syncPairingCameraUnavailable.
+  ///
+  /// In en, this message translates to:
+  /// **'Camera unavailable on this device — paste the code instead.'**
+  String get syncPairingCameraUnavailable;
+
+  /// No description provided for @syncPairingModelUnavailable.
+  ///
+  /// In en, this message translates to:
+  /// **'The scanner needs to download its recognition model first (requires access to Google services)'**
+  String get syncPairingModelUnavailable;
+
+  /// No description provided for @syncPairingUsePaste.
+  ///
+  /// In en, this message translates to:
+  /// **'Paste instead'**
+  String get syncPairingUsePaste;
+
+  /// No description provided for @syncLocalAddressCopied.
+  ///
+  /// In en, this message translates to:
+  /// **'Address copied'**
+  String get syncLocalAddressCopied;
+
+  /// No description provided for @syncLocalAddressesEmptyTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'No routable address'**
+  String get syncLocalAddressesEmptyTitle;
+
+  /// No description provided for @syncLocalAddressesEmpty.
+  ///
+  /// In en, this message translates to:
+  /// **'Only loopback / link-local addresses were found; check the network connection.'**
+  String get syncLocalAddressesEmpty;
+
+  /// No description provided for @syncLocalProbePort.
+  ///
+  /// In en, this message translates to:
+  /// **'Discovery port'**
+  String get syncLocalProbePort;
+
+  /// No description provided for @syncLocalProbePortUnavailable.
+  ///
+  /// In en, this message translates to:
+  /// **'Unavailable — broadcast / multicast discovery is degraded; use manual addresses'**
+  String get syncLocalProbePortUnavailable;
+
+  /// No description provided for @syncLocalProbePortPerFamily.
+  ///
+  /// In en, this message translates to:
+  /// **'{v4} (IPv4) / {v6} (IPv6)'**
+  String syncLocalProbePortPerFamily(String v4, String v6);
+
+  /// No description provided for @syncLocalHttpPort.
+  ///
+  /// In en, this message translates to:
+  /// **'Direct endpoint port'**
+  String get syncLocalHttpPort;
+
+  /// No description provided for @syncLocalHttpPortUnavailable.
+  ///
+  /// In en, this message translates to:
+  /// **'Not bound yet'**
+  String get syncLocalHttpPortUnavailable;
 
   /// No description provided for @syncPeerAddress.
   ///
@@ -4724,6 +4886,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Broadcast failed (blocked by network policy)'**
   String get syncIssueBroadcastUnavailable;
+
+  /// No description provided for @syncIssueProbePortUnavailable.
+  ///
+  /// In en, this message translates to:
+  /// **'Probe port unavailable (reserved or occupied by the system) — add peer addresses manually to discover devices'**
+  String get syncIssueProbePortUnavailable;
 
   /// No description provided for @syncIssueDiscoverySilent.
   ///

@@ -583,10 +583,13 @@ class ManualPeer {
   /// 回写学到的新观测（只覆盖已知字段，避免把已有信息抹成空）。
   ///
   /// [name] 只在条目尚未命名时填入：手动条目优先保留用户命名，
-  /// 对端广播的设备名不覆盖用户输入。
+  /// 对端广播的设备名不覆盖用户输入。UDP 探测端口**不参与学习**：
+  /// 对端的来源端口随 NAT / 独立降级 / 重启变化，写回会污染用户配置
+  /// （学到 [httpPort] 后直连不再依赖 UDP 探测）。
   ManualPeer mergeLearned({int? httpPort, String? deviceId, String? name}) =>
       ManualPeer(
         host: host,
+        // 保留条目自身的探测端口（不参与学习，见文档注释）。
         probePort: probePort,
         httpPort: httpPort ?? this.httpPort,
         deviceId: (deviceId != null && deviceId.isNotEmpty) ? deviceId : this.deviceId,
@@ -792,6 +795,12 @@ abstract final class SyncIssueCode {
   /// 广播发送失败（网络策略 / 缺少广播 entitlement）。
   static const String broadcastUnavailable = 'broadcast_unavailable';
 
+  /// UDP 探测端口不可用（IPv4 / IPv6 绑定均失败：端口被系统保留或被占用）。
+  ///
+  /// 与 [startFailed] 的区别：HTTP 端点正常、传输在运行，只有发现降级；
+  /// 出路是「添加设备」手动地址直连或改用 WebDAV。
+  static const String probePortUnavailable = 'probe_port_unavailable';
+
   /// 探测窗口内零应答（本进程发现过设备、本轮无响应，可能被网络隔离）。
   static const String discoverySilent = 'discovery_silent';
 
@@ -834,6 +843,7 @@ abstract final class SyncIssueCode {
     peerDecryptFailed,
     peerPushFailed,
     broadcastUnavailable,
+    probePortUnavailable,
     discoverySilent,
     webdavDirFailed,
     webdavListFailed,

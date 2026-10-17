@@ -32,6 +32,7 @@ import '../../domain/models/library.dart';
 import '../../domain/ports/sync_transport.dart';
 import '../../providers/sync_provider.dart';
 import '../../services/data_saver_service.dart';
+import '../../services/local_endpoints_service.dart';
 import '../../services/playback_session_store.dart';
 import 'catalog_stack.dart';
 import 'library_stack.dart';
@@ -55,6 +56,8 @@ Future<SyncStack> buildSyncStack({
   final sourceManager = catalog.sourceManager;
   final syncState = library.syncState;
   final syncCodec = SyncCodec();
+  // 本机地址枚举（设置页地址列表 / 配对码 / 探测 addrs 三处共用同一口径）。
+  final localEndpoints = LocalEndpointsService();
   // 脚本同步的保留键：音源类别的设置键（避免脚本墓碑与设置键同名冲突）。
   final sourceCategoryKeys = {
     for (final key in catalog.settings.keys)
@@ -126,6 +129,7 @@ Future<SyncStack> buildSyncStack({
     onPeerResolved: (learned) => unawaited(syncState.learnManualPeer(learned)),
     httpPortProvider: () => syncState.lanHttpPort,
     onHttpPortBound: (port) => unawaited(syncState.setLanHttpPort(port)),
+    localAddressesProvider: localEndpoints.hosts,
   );
   final webdavSyncTransport = WebDavSyncTransport(
     deviceId: syncState.deviceId,
@@ -169,6 +173,7 @@ Future<SyncStack> buildSyncStack({
     engine: syncEngine,
     scheduler: scheduler,
     lanPermission: lanPermission,
+    localEndpoints: localEndpoints,
   );
 
   // 可选子系统（跨设备同步）初始化失败不允许阻断启动：runApp 之前任何

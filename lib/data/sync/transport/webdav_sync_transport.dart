@@ -94,6 +94,10 @@ class WebDavSyncTransport implements SyncTransport {
   @override
   bool get isRunning => _running;
 
+  /// WebDAV 没有本机发现端口（局域网才有 UDP 探测）。
+  @override
+  ({int v4, int v6}) get discoveryPorts => (v4: 0, v6: 0);
+
   /// 快照是远端文件（异步读取）：日志裁剪必须留在已发布的覆盖内。
   @override
   bool get servesLiveSnapshot => false;

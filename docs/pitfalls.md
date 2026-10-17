@@ -320,3 +320,57 @@
     处理器里「先到先得」，也不要用 `Focus.onKeyEvent` 接弹层 Esc——焦点被 Tab 移出
     弹层后收不到按键，登记又让壳层让位，按键被完全吞掉。注意登记只对壳层让位——
     两个非壳层消费方同时可见时（如收藏页多选 + 音量弹层）仍会各处理一次。
+46. **Windows 宿主保留端口块：UDP 绑定 errno 10013 不该被当成传输启动失败**：
+    WSL2 **mirrored 模式**下 Windows 宿主会把大段端口标记为系统保留（本机实测
+    44620–48715），Dart / Winsock 绑定这些端口抛
+    `SocketException ... errno = 10013`，而 `netsh excludedportrange show`
+    **看不到**这些块（上游 microsoft/WSL#40169）——排查时不要只在 netsh 里找。
+    处置：`LanSyncTransport` 的 UDP 绑定先试标准端口、失败只记警告并改绑系统
+    分配端口（对端按探测包里自报的 `udpPort` 单播回来），HTTP 端点能起来时
+    传输照常运行；只有 HTTP 也起不来才是 `start_failed`，UDP 不可用时给
+    `probe_port_unavailable` + 「添加设备」手动地址直连。端口被普通进程占用
+    抛的是 `errno = 10048`，症状 / 处置相同。
+    IPv6 相邻坑：Windows 防火墙要**单独放行 IPv6**（IPv4 规则不覆盖）；组播
+    源的地址必然是 link-local，必须带 zone 才能连（Dart 的 URI 用 `%25` 表达，
+    `InternetAddress` 对象自带 zone）——所以探测包交换 `addrs` 可路由候选地址，
+    不要拿观测到的源地址直接拼 HTTP；镜像模式下 WSL↔Windows 之间 IPv6 不通，
+    两端都在 WSL 或都在 Windows 才能按 IPv6 直连。
+47. **多网卡 / 虚拟网卡环境手动配对：地址列表里的地址不是每个都能用**：
+    设置页「本机」列出全部可路由地址（接口名 + 地址），配对时要挑**两台设备
+    真正互通的那条链路**：
+    - 同一 Wi-Fi / 以太网：挑 `wlan0` / `eth0` / `en0` 上的私网地址
+      （`192.168.x` / `10.x` / `172.16–31.x`）；`docker0` / `veth` / 虚拟机
+      网卡（WSL `vEthernet`、Hyper-V `vEthernet (Default Switch)`、VirtualBox
+      host-only）的地址对宿主之外不可达，别填；
+    - Windows + WSL2：mirrored 模式下 WSL 内的 Molia 与 Windows 侧 Molia
+      可以互相直连；NAT 模式下 WSL 只有 NAT 地址，跨 WSL↔Windows 请改用
+      WebDAV，或把两端都放在同一侧跑。`lo` 上的 `10.255.255.254` 一类宿主
+      地址只在 mirrored 模式有意义，不要当成通用兜底；
+    - 跨 NAT / 不同子网：内网地址怎么填都不通，直接用 WebDAV。
+    手动配对步骤：① 一端复制「分享配对信息」（或手抄地址 + 探测端口）；② 在
+    另一端「添加设备」粘贴 / 填写，接触成功才关弹层（失败留在弹层内可改）；
+    ③ 接触成功后名册出现设备行，点开可看端点端口 / 设备 id / 删除；④ 配对码
+    里带多个地址时，未认领的条目在名册折叠成一行「候选地址 N 个」，点开可
+    逐个查看与删除——「尚未接触」只是还没碰上，对端上线后会自动重试。
+48. **扫码走 unbundled ML Kit：无 GMS 隐藏入口，模型下载失败给「改用粘贴」**：
+    `mobile_scanner` 在 Android 上按 `android/gradle.properties` 的
+    `dev.steenbakker.mobile_scanner.useUnbundled=true` 选
+    `com.google.android.gms:play-services-mlkit-barcode-scanning:18.3.1`
+    （AAR 0.5MB），而不是 bundled 的
+    `com.google.mlkit:barcode-scanning:17.3.0`（AAR 9.9MB，arm64 `.so` 4.72MB）
+    ——扫码只是可选的配对入口，不值得让所有安装包变胖；iOS 不受影响（darwin
+    实现走系统 Vision/AVFoundation）。代价与处置：
+    - **无 GMS 设备**（AOSP / 部分国产 ROM）不显示扫码入口：
+      `PlayServicesAvailability` 经自有通道 `top.stillmisty.molia/play_services`
+      （原生 `GoogleApiAvailability.isGooglePlayServicesAvailable == SUCCESS`）
+      门控；探测中与不可用都不构建按钮（不给死胡同、也不做 loading 占位）。
+      false **不缓存**（用户会话中装了 Play 服务，重开弹层应出现入口），
+      true 会话内缓存；
+    - **有 GMS 但模型首次下载失败**（无网络 / 访问不了 Google 服务）：扫码页
+      按 `scanErrorKind` 识别为 `modelUnavailable`，给「重试 / 改用粘贴」；
+    - 排查「没有扫码按钮」先查 GMS，再查平台判定（`SyncPairingScanner`）；
+      改回 bundled 只需删掉那行 gradle 属性（包体 +9.4MB 量级）。
+    另：`PlayServicesChannelHandler` 用的 `play-services-base` 由
+    `play-services-mlkit-barcode-scanning` 传递带入；若某天 Gradle 解析不到
+    `GoogleApiAvailability`，在 `android/app/build.gradle*` 显式补
+    `implementation("com.google.android.gms:play-services-base:18.0.1")`。

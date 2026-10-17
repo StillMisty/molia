@@ -11,7 +11,7 @@ import '../l10n/app_localizations.dart';
 import '../providers/sync_provider.dart';
 import '../widgets/settings/settings_tiles.dart';
 import 'sync_labels.dart';
-import 'sync_peers_page.dart';
+import 'sync_pairing_dialogs.dart';
 
 /// WebDAV 配置弹层（设置页与日志子页共用；密码单独走安全存储）。
 Future<void> showWebdavConfigDialog(
@@ -131,6 +131,7 @@ List<SyncIssueAction> syncIssueActions(SyncIssue? issue) => switch (issue?.code)
       // 时手动地址无效，那种情况由 permissionDenied 分支覆盖）。
       SyncIssueCode.startFailed ||
       SyncIssueCode.broadcastUnavailable ||
+      SyncIssueCode.probePortUnavailable ||
       SyncIssueCode.discoverySilent ||
       SyncIssueCode.peerReadFailed ||
       SyncIssueCode.peerDecryptFailed ||
@@ -259,7 +260,7 @@ Widget _actionButton(
       ),
     SyncIssueAction.addManualPeer => (
         l10n.syncActionAddManualPeer,
-        () => openSettingsSubPage(context, const SyncPeersPage()),
+        () => showSyncAddPeerDialog(context, provider, l10n),
       ),
     SyncIssueAction.useWebdav => (
         l10n.syncActionUseWebdav,
@@ -321,7 +322,7 @@ Future<void> _hintSettingsPage(
       .showSnackBar(SnackBar(content: Text(l10n.syncConfigureOnSettingsPage)));
 }
 
-/// 口令弹层（首屏开启同步后与设备子页共用）：显示 / 复制 / 重置。
+/// 口令弹层（设置页共用）：显示 / 复制 / 重置。
 Future<void> showSyncPassphraseDialog(
   BuildContext context,
   SyncProvider provider,
