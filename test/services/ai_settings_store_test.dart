@@ -31,7 +31,6 @@ void main() {
     ));
 
     final config = await store.readConfig();
-    expect(config, isNotNull);
     expect(config!.baseUrl, 'https://api.deepseek.com');
     expect(config.apiKey, 'sk-abc');
     expect(config.model, 'deepseek-chat');

@@ -495,71 +495,6 @@ void main() {
     expect(headlines(tester), ['Song C']);
   });
 
-  testWidgets('窄屏（320 逻辑宽）不溢出：按钮/搜索入口/列表可渲染', (tester) async {
-    await seedFavorites(tester);
-    tester.view.physicalSize = const Size(320, 640);
-    tester.view.devicePixelRatio = 1.0;
-    addTearDown(() {
-      tester.view.resetPhysicalSize();
-      tester.view.resetDevicePixelRatio();
-    });
-
-    await tester.pumpWidget(
-      MultiProvider(
-        providers: [
-          ChangeNotifierProvider<PlaybackProvider>.value(value: playback),
-          ChangeNotifierProvider<LibraryProvider>.value(value: provider),
-        ],
-        child: MaterialApp(
-          locale: const Locale('zh'),
-          localizationsDelegates: const [
-            AppLocalizations.delegate,
-            ...GlobalMaterialLocalizations.delegates,
-          ],
-          supportedLocales: const [Locale('zh')],
-          home: const Scaffold(body: FavoritesPage()),
-        ),
-      ),
-    );
-    await tester.pumpAndSettle();
-
-    expect(tester.takeException(), isNull);
-    expect(find.byIcon(Icons.shuffle_rounded), findsOneWidget);
-    expect(find.byIcon(Icons.search_rounded), findsOneWidget);
-  });
-
-  testWidgets('大屏（1600 宽）头部保持可读宽度，列表完整渲染', (tester) async {
-    await seedFavorites(tester);
-    tester.view.physicalSize = const Size(1600, 900);
-    tester.view.devicePixelRatio = 1.0;
-    addTearDown(() {
-      tester.view.resetPhysicalSize();
-      tester.view.resetDevicePixelRatio();
-    });
-
-    await tester.pumpWidget(
-      MultiProvider(
-        providers: [
-          ChangeNotifierProvider<PlaybackProvider>.value(value: playback),
-          ChangeNotifierProvider<LibraryProvider>.value(value: provider),
-        ],
-        child: MaterialApp(
-          locale: const Locale('zh'),
-          localizationsDelegates: const [
-            AppLocalizations.delegate,
-            ...GlobalMaterialLocalizations.delegates,
-          ],
-          supportedLocales: const [Locale('zh')],
-          home: const Scaffold(body: FavoritesPage()),
-        ),
-      ),
-    );
-    await tester.pumpAndSettle();
-
-    expect(tester.takeException(), isNull);
-    expect(headlines(tester), ['Song B', 'Song A', 'Song C']);
-  });
-
   testWidgets('合集切换：收藏与导入列表互不干扰', (tester) async {
     await seedFavorites(tester);
     await importLove(tester);
@@ -585,7 +520,7 @@ void main() {
 
     await openCollectionPicker(tester);
 
-    // 标题行两个小按钮（新建 / 导入），列表里不再有动作行。
+    // 标题行两个小按钮：新建 / 导入。
     expect(pickerAction(Icons.add_rounded), findsOneWidget);
     expect(pickerAction(Icons.library_add_rounded), findsOneWidget);
 

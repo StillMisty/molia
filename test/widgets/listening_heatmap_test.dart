@@ -55,22 +55,7 @@ void main() {
     expect(tapped, lastDay);
   });
 
-  testWidgets('日历热力图：全部日期均无数据也安全渲染（空态）', (tester) async {
-    await pump(
-      tester,
-      CalendarHeatmap(
-        values: const {},
-        firstDay: DateTime(2026, 3, 2),
-        lastDay: DateTime(2026, 3, 8),
-        tooltipFor: (day, value) => '',
-        onDayTap: null,
-      ),
-    );
-
-    expect(find.byType(CalendarHeatmap), findsOneWidget);
-  });
-
-  testWidgets('数据前的补位日渲染为空方格且不可点', (tester) async {
+  testWidgets('数据前的补位日与无数据整周渲染为空方格；补位日不可点', (tester) async {
     final day = DateTime(2026, 3, 5);
     DateTime? tapped;
 
@@ -94,6 +79,27 @@ void main() {
 
     await tester.tap(find.byKey(ValueKey<int>(padded.millisecondsSinceEpoch)));
     expect(tapped, isNull, reason: '首播之前的补位日不可点');
+
+    // 整周无数据：范围内每一天仍渲染空方格（空态不塌成空白）。
+    final firstDay = DateTime(2026, 3, 2);
+    await pump(
+      tester,
+      CalendarHeatmap(
+        values: const {},
+        firstDay: firstDay,
+        lastDay: DateTime(2026, 3, 8),
+        tooltipFor: (day, value) => '',
+        onDayTap: null,
+      ),
+    );
+    for (var i = 0; i < 7; i++) {
+      final inRange = firstDay.add(Duration(days: i));
+      expect(
+        find.byKey(ValueKey<int>(inRange.millisecondsSinceEpoch)),
+        findsOneWidget,
+        reason: '无数据日 $inRange 仍应渲染空方格',
+      );
+    }
   });
 
   testWidgets('作息热力图按 7×24 渲染；图例 5 档', (tester) async {

@@ -187,7 +187,6 @@ void main() {
         'deviceId': 'devX',
         'name': 'X',
       });
-      expect(peer, isNotNull);
       expect(peer!.host, '10.0.0.5');
       expect(ManualPeer.fromJson(const {'host': ' '}), isNull);
       expect(ManualPeer.fromJson(null), isNull);

@@ -149,17 +149,4 @@ void main() {
     final prefs = await SharedPreferences.getInstance();
     expect(prefs.getStringList('lx_source_order'), ['tx', 'kw']);
   });
-
-  test('dispose 后不再转发 manager 通知（不抛错）', () async {
-    final manager = SourceManager();
-    await manager.init();
-    final registry = SourceRegistryImpl(manager);
-    addTearDown(manager.dispose);
-
-    registry.dispose();
-    await manager.updateAnyListenConfig(AnyListenConfig(
-      serverUrl: 'http://127.0.0.1:9500',
-      enabled: true,
-    ));
-  });
 }

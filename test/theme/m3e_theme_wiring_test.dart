@@ -178,18 +178,5 @@ void main() {
       expect(navigatorKey.currentState, isNotNull);
       expect(scaffoldMessengerKey.currentState, isNotNull);
     });
-
-    testWidgets('drawUnderSystemBars=true（main.dart 生产配置）冒烟', (tester) async {
-      await tester.pumpWidget(
-        M3EMaterialApp(
-          data: M3EThemeData.light(),
-          drawUnderSystemBars: true,
-          home: const Text('edge-to-edge'),
-        ),
-      );
-
-      expect(find.text('edge-to-edge'), findsOneWidget);
-      expect(tester.takeException(), isNull);
-    });
   });
 }

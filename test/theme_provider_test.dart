@@ -15,7 +15,6 @@ void main() {
   test('初始状态：基础配色=壁纸（无莫奈时回退种子色）、封面覆盖开、纯黑关', () async {
     final provider = ThemeProvider();
     await provider.preferencesReady;
-    expect(provider.colorScheme, isNotNull);
     expect(provider.themeMode, ThemeMode.system);
     // 从未配置过 → 新默认壁纸；测试环境无莫奈注入，配色回退种子色。
     expect(provider.baseColorSource, ColorBaseSource.wallpaper);

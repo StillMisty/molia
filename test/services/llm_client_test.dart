@@ -177,18 +177,38 @@ void main() {
     expect(failure.retryable, isTrue);
   });
 
-  test('testConnection 走同一请求路径', () async {
-    var called = false;
+  test('testConnection 走同一请求路径：2xx + choices 即通过（正文为空也算通）', () async {
+    late RequestOptions captured;
     final llm = LlmClient(
-      dio: mockDio((_) async {
-        called = true;
+      dio: mockDio((request) async {
+        captured = request;
         return ok('可用');
       }),
     );
 
-    await llm.testConnection(config());
+    await expectLater(llm.testConnection(config()), completes);
+    expect(captured.uri.toString(),
+        'https://api.example.com/v1/chat/completions');
+    expect(captured.headers['Authorization'], 'Bearer sk-test-123456');
 
-    expect(called, isTrue);
+    // 推理模型只回思维链、正文为空：2xx 且带 choices 即视为连通。
+    final reasoningOnly = LlmClient(
+      dio: mockDio(
+        (_) async => bytesResponse(
+          utf8.encode(jsonEncode({
+            'choices': [
+              {
+                'message': {
+                  'content': '',
+                  'reasoning_content': '推理模型只回了思维链',
+                },
+              },
+            ],
+          })),
+        ),
+      ),
+    );
+    await expectLater(reasoningOnly.testConnection(config()), completes);
   });
 
   group('响应形状容错（换服务商后「无法解析」误报的回归）', () {
@@ -254,22 +274,6 @@ void main() {
       );
 
       expect(content, '旧式正文');
-    });
-
-    test('testConnection：2xx + choices 即通过（正文为空也算通）', () async {
-      final llm = LlmClient(
-        dio: mockDio(
-          (_) async => raw(jsonEncode({
-            'choices': [
-              {
-                'message': {'content': '', 'reasoning_content': '推理模型只回了思维链'},
-              },
-            ],
-          })),
-        ),
-      );
-
-      await llm.testConnection(config());
     });
 
     test('testConnection：响应不含对话结果 → unknown', () async {

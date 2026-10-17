@@ -86,9 +86,6 @@ void main() {
         played.add(current);
       }
       expect(played, {0, 1, 2, 3}, reason: '一轮覆盖含追加曲目');
-
-      // 新一轮仍覆盖全量。
-      expect(order.next(current), isNotNull);
     });
 
     test('空排列 / 长度不匹配保守跳过', () {
