@@ -232,7 +232,10 @@
   文件）→ 逐键 LWW 合并（版本三元组
   `(versionPhysical, versionCounter, deviceId)`，删除为墓碑）→ 只把版本变化的
   胜者交给适配器（`sync_known` 登记表：交付成功才登记，空闲轮 0 次 apply）→
-  内容未变不推送（与上次成功推送的指纹比对）；版本戳由唯一发号器
+  按**发布台账**外发与裁剪（`publish_ledger.dart`：每传输一份，聚合内存指纹 /
+  `sync_state_v1` 的 `snapshotPushSeq` 持久覆盖 / `servesLiveSnapshot` 能力位；
+  「跳过加密 + 上传」与「journal 能裁到哪」都在台账里回答，引擎只保留轮次
+  编排）；版本戳由唯一发号器
   `SyncStampIssuer`（`sync_stamp.dart`，HLC-lite：吸收远端超前戳、同毫秒
   counter 递增、基线持久化 + 重启不倒退）发放，内容时间（playedAt / endedAt /
   savedAt / importedAt / 墓碑删除时间）**不参与胜负判定**（见 ADR-0003 v2 §2）。

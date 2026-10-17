@@ -243,6 +243,12 @@
   > 对端据此按 `min(对端 ack)` 裁剪日志。compact 的硬上限 = 30 天 / 4 MiB /
   > 5000 条，超限时把快照覆盖推进到头部、保留最新的仍在上限内的条目，
   > 更旧的对端降级 bootstrap；失联设备（180 天无接触）不参与 minAck。
+  > **发布台账（每传输一份，`publish_ledger.dart`）**：「跳过加密 / 上传」与
+  > 「窗口能裁到哪」的判据只有这一处——内存指纹（成功外发过的载荷身份：快照
+  > 按内容指纹、增量按窗口边界 + ack 集合）、`sync_state_v1` 的
+  > `snapshotPushSeq` 持久覆盖与 `servesLiveSnapshot` 能力位；compact 的
+  > 覆盖下限由 `journalCoverage` 推导（按需给实时快照的传输不约束），成功才
+  > 记账（零对端与失败不记、下轮重发），push 循环只问 `plan` / 记 `mark`。
   > 传输：局域网 `GET/POST /molia-sync/v1/journal?since=`（游标落后即回全量
   > 快照），WebDAV `<deviceId>.journal.msync`（每次变更重写）+
   > `<deviceId>.snapshot.msync`（按需重写）；非本协议文件名与载荷身份不符的

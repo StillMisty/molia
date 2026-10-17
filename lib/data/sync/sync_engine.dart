@@ -8,6 +8,7 @@ import 'package:logging/logging.dart';
 import '../../domain/models/device_sync.dart';
 import '../../domain/ports/sync_known_store.dart';
 import '../../domain/ports/sync_transport.dart';
+import 'publish_ledger.dart';
 import 'sync_adapter.dart';
 import 'sync_journal.dart';
 import 'sync_known_store.dart';
@@ -49,8 +50,15 @@ class SyncEngine extends ChangeNotifier implements SyncSchedulerHost {
         _journal = journal,
         _inboundWindow = inboundWindow,
         _clock = clock ?? DateTime.now {
-    for (final transport in transports.values) {
-      _incomingSubscriptions.add(transport.incoming.listen(
+    for (final entry in transports.entries) {
+      // 每传输一份发布台账：门控判据（跳过加密 / 上传、日志可裁范围）只有
+      // 台账回答，引擎只提供「哪些传输存在 / 启用」这一编排事实。
+      _publishLedgers[entry.key] = PublishLedger(
+        kind: entry.key,
+        state: state,
+        servesLiveSnapshot: () => entry.value.servesLiveSnapshot,
+      );
+      _incomingSubscriptions.add(entry.value.incoming.listen(
         (envelope) => unawaited(onIncomingEnvelope(envelope)),
       ));
     }
@@ -112,11 +120,9 @@ class SyncEngine extends ChangeNotifier implements SyncSchedulerHost {
   Map<SyncCategory, List<SyncRecord>>? _lastAggregate;
   Set<SyncCategory>? _lastAggregateCategories;
 
-  /// 每传输最近一次成功推送的增量窗口（`窗口边界 + ack` 指纹）。
-  final Map<String, String> _lastPushedDeltaKey = {};
-
-  /// 每传输最近一次成功推送的快照内容指纹（未注入日志时的「本机未变不推」）。
-  final Map<String, String> _lastPushedSnapshotId = {};
+  /// 每传输的发布台账（键 = 传输标识）：跳过加密 / 上传与日志可裁范围的
+  /// 唯一判据处（见 [PublishLedger]）。
+  final Map<String, PublishLedger> _publishLedgers = {};
 
   SyncStateStore get state => _state;
   bool get syncing => _syncing;
@@ -676,23 +682,29 @@ class SyncEngine extends ChangeNotifier implements SyncSchedulerHost {
       await _state.save();
 
       // compact：按对端 ack 与已发布快照覆盖裁剪日志窗口（注入日志时）。
-      // 覆盖位置只统计**需要发布快照文件**的传输：局域网对端按需拉取实时
-      // 快照，没有发布延迟；WebDAV 的文件是异步读取的，必须覆盖窗口起点。
-      var journalSnapshot = -1;
+      // 覆盖下限由发布台账推导：需要发布快照文件的传输（WebDAV）必须覆盖到
+      // 窗口起点，按需给出实时快照的传输（局域网）没有发布延迟、不参与。
       var journalBase = 0;
+      // 本轮全量快照的覆盖位置（null = 未注入增量日志：没有覆盖可依，
+      // 每轮都外发全量快照）。
+      int? snapshotSeq;
       if (journal != null) {
         final now = _nowMs();
         await journal.compact(
           minAck: _minPeerAck(now) ?? 0,
-          coverage: _publishedSnapshotSeq(journalHead),
+          coverage: journalCoverage(
+            ledgers: _publishLedgers.values,
+            enabledKinds: _state.enabledTransports,
+            journalHead: journalHead,
+          ),
           nowMs: now,
         );
-        journalSnapshot = await journal.snapshotSeq();
+        snapshotSeq = await journal.snapshotSeq();
         journalBase = await journal.baseSeq();
-        if (journalSnapshot < 0) {
+        if (snapshotSeq < 0) {
           // 首次构建全量快照：内容覆盖到本轮头部（引擎随后按需发布）。
           await journal.markSnapshotBuilt(journalHead);
-          journalSnapshot = journalHead;
+          snapshotSeq = journalHead;
         }
       }
 
@@ -702,8 +714,8 @@ class SyncEngine extends ChangeNotifier implements SyncSchedulerHost {
         now: _nowMs(),
         tombstoneRetentionMs: tombstoneRetentionMs,
       );
-      // 内容指纹按实际外发的记录集（裁剪墓碑后）计算：对端探测应答 / 本机
-      // 「未变不推」都拿它与自己缓存的值比较。
+      // 内容指纹按实际外发的记录集（裁剪墓碑后）计算：对端探测应答与发布
+      // 台账的快照门控都拿它与自己已记下的值比较。
       //
       // 复用：日志头部未推进（没有任何本机写入）、本轮没有落地远端记录、
       // 墓碑也没被裁掉时，记录集与上一轮完全相同——`_fingerprint` 是逐条
@@ -754,8 +766,6 @@ class SyncEngine extends ChangeNotifier implements SyncSchedulerHost {
         return delta;
       }
 
-      final acksKey = _acksKey(outgoing.acks);
-
       var succeededPushes = 0;
       if (push) {
         for (final entry in _transports.entries) {
@@ -765,86 +775,24 @@ class SyncEngine extends ChangeNotifier implements SyncSchedulerHost {
               !_state.enabledTransports.contains(entry.key)) {
             continue;
           }
+          final ledger = _publishLedgers[entry.key]!;
           // 1) 全量快照：首次引导 / 日志超硬上限重写时发布；未注入日志时
-          //    始终外发全量。内容未变则跳过加密 + 上传。
-          final publishedSeq = _state.snapshotPushSeq(entry.key);
-          final needsSnapshot = journal == null ||
-              (journalSnapshot >= 0 && publishedSeq < journalSnapshot);
-          final snapshotUnchanged = outgoing.snapshotId.isNotEmpty &&
-              _lastPushedSnapshotId[entry.key] == outgoing.snapshotId;
-          if (needsSnapshot && !snapshotUnchanged) {
-            final watch = Stopwatch()..start();
-            SyncPushResult result;
-            try {
-              result = await transport.push(outgoing);
-            } catch (e) {
-              result = SyncPushResult(
-                failedPeers: 1,
-                error: SyncIssue(code: SyncIssueCode.pushFailed, detail: '$e'),
-              );
-            }
-            watch.stop();
-            accumulator
-              ..pushed += result.succeededPeers
-              ..failedPushes += result.failedPeers
-              ..bytesOut += result.bytesOut
-              ..durationMs += watch.elapsedMilliseconds
-              ..error ??= result.error;
+          //    始终外发全量。内容未变 / 已发布覆盖够到时跳过加密 + 上传。
+          if (ledger.plan(outgoing, snapshotSeq: snapshotSeq)) {
+            final result =
+                await _pushEnvelope(transport, outgoing, accumulator);
             succeededPushes += result.succeededPeers;
-            // 只在「确实有对端收下且没有失败」时记住：零对端（局域网无人
-            // 在线）不算推送成功，否则对端上线后会被误判为「已推过」。
-            if (result.failedPeers == 0 && result.succeededPeers > 0) {
-              _lastPushedSnapshotId[entry.key] = outgoing.snapshotId;
-              if (journalSnapshot >= 0) {
-                await _state.setSnapshotPushSeq(entry.key, journalSnapshot);
-              }
-            } else {
-              _lastPushedSnapshotId.remove(entry.key);
-            }
-            for (final id in result.succeededIds) {
-              _touchPeer(id, entry.key, pushOk: true);
-            }
-            for (final id in result.failedIds) {
-              _touchPeer(id, entry.key, pushOk: false);
-            }
+            await ledger.mark(result);
+            _recordPushPeers(result, entry.key);
           }
           // 2) 增量窗口：内容或 ack 有变化才推（对端未变不传、不解密）。
           final deltaEnvelope = await buildDelta();
-          if (deltaEnvelope != null) {
-            final deltaKey =
-                '${deltaEnvelope.windowStart}:${deltaEnvelope.windowEnd}:$acksKey';
-            if (_lastPushedDeltaKey[entry.key] == deltaKey) continue;
-            final watch = Stopwatch()..start();
-            SyncPushResult result;
-            try {
-              result = await transport.push(deltaEnvelope);
-            } catch (e) {
-              result = SyncPushResult(
-                failedPeers: 1,
-                error: SyncIssue(code: SyncIssueCode.pushFailed, detail: '$e'),
-              );
-            }
-            watch.stop();
-            accumulator
-              ..pushed += result.succeededPeers
-              ..failedPushes += result.failedPeers
-              ..bytesOut += result.bytesOut
-              ..durationMs += watch.elapsedMilliseconds
-              ..error ??= result.error;
+          if (deltaEnvelope != null && ledger.plan(deltaEnvelope)) {
+            final result =
+                await _pushEnvelope(transport, deltaEnvelope, accumulator);
             succeededPushes += result.succeededPeers;
-            // 只在「确实有对端收下且没有失败」时记住指纹：零对端（局域网无人
-            // 在线）不算推送成功，否则对端上线后会被误判为「已推过」。
-            if (result.failedPeers == 0 && result.succeededPeers > 0) {
-              _lastPushedDeltaKey[entry.key] = deltaKey;
-            } else {
-              _lastPushedDeltaKey.remove(entry.key);
-            }
-            for (final id in result.succeededIds) {
-              _touchPeer(id, entry.key, pushOk: true);
-            }
-            for (final id in result.failedIds) {
-              _touchPeer(id, entry.key, pushOk: false);
-            }
+            await ledger.mark(result);
+            _recordPushPeers(result, entry.key);
           }
         }
       }
@@ -998,6 +946,44 @@ class SyncEngine extends ChangeNotifier implements SyncSchedulerHost {
     return contact;
   }
 
+  /// 通过传输外发一份载荷，并把耗时与计数记进本轮累计器。
+  ///
+  /// 传输异常在边界吸收成失败结果（单点崩溃不该打断本轮其余外发）。
+  Future<SyncPushResult> _pushEnvelope(
+    SyncTransport transport,
+    SyncEnvelope envelope,
+    _TransportAccumulator accumulator,
+  ) async {
+    final watch = Stopwatch()..start();
+    SyncPushResult result;
+    try {
+      result = await transport.push(envelope);
+    } catch (e) {
+      result = SyncPushResult(
+        failedPeers: 1,
+        error: SyncIssue(code: SyncIssueCode.pushFailed, detail: '$e'),
+      );
+    }
+    watch.stop();
+    accumulator
+      ..pushed += result.succeededPeers
+      ..failedPushes += result.failedPeers
+      ..bytesOut += result.bytesOut
+      ..durationMs += watch.elapsedMilliseconds
+      ..error ??= result.error;
+    return result;
+  }
+
+  /// 外发结果里的对端归属进名册（局域网能归属到具体对端；WebDAV 只有计数）。
+  void _recordPushPeers(SyncPushResult result, String kind) {
+    for (final id in result.succeededIds) {
+      _touchPeer(id, kind, pushOk: true);
+    }
+    for (final id in result.failedIds) {
+      _touchPeer(id, kind, pushOk: false);
+    }
+  }
+
   /// 处理收到的载荷：推进本机游标 / 学习对端 ack / 收集远端记录 / 识别缺口。
   ///
   /// 返回需要**全量兜底**的对端 id（窗口缺口，或 anti-entropy 发现指纹不一致
@@ -1141,12 +1127,6 @@ class SyncEngine extends ChangeNotifier implements SyncSchedulerHost {
     return acks;
   }
 
-  static String _acksKey(Map<String, int> acks) {
-    final entries = acks.entries.toList()
-      ..sort((a, b) => a.key.compareTo(b.key));
-    return entries.map((entry) => '${entry.key}=${entry.value}').join(',');
-  }
-
   /// anti-entropy 全量兜底的节流间隔（同一对端不频繁重拉；分歧仍会被修复）。
   static const int antiEntropyIntervalMs = 10 * 60 * 1000;
 
@@ -1215,22 +1195,6 @@ class SyncEngine extends ChangeNotifier implements SyncSchedulerHost {
       if (minAck == null || peer.ackedSeq < minAck) minAck = peer.ackedSeq;
     }
     return minAck;
-  }
-
-  /// 已发布的全量快照覆盖位置（需要发布快照文件的传输成功推送的最小值）。
-  ///
-  /// 按需给出实时快照的传输（[SyncTransport.servesLiveSnapshot]，如局域网）
-  /// 没有发布延迟，不参与下限；其余（WebDAV）的覆盖必须够到窗口起点，否则
-  /// 落后 / 新加入的对端无法 bootstrap。
-  int _publishedSnapshotSeq(int journalHead) {
-    var coverage = journalHead;
-    for (final kind in _state.enabledTransports) {
-      final transport = _transports[kind];
-      if (transport == null || transport.servesLiveSnapshot) continue;
-      final published = _state.snapshotPushSeq(kind);
-      coverage = published < 0 ? 0 : (published < coverage ? published : coverage);
-    }
-    return coverage;
   }
 
   /// 构建增量窗口载荷（当前保留的窗口条目；空窗口但 ack 有推进时也返回）。
