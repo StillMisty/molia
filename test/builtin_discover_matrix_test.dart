@@ -1153,6 +1153,60 @@ void main() {
       );
     });
 
+    test('歌单详情：翻页复用详情壳，不重复下载整单', () async {
+      // 1001 首：超过单页上限 1000，第二页只取剩余 1 首。
+      final trackIds = [
+        for (var i = 1; i <= 1001; i++) {'id': i},
+      ];
+      final stub = _Stub({
+        'api/linux/forward': jsonEncode({
+          'code': 200,
+          'playlist': {
+            ...wyPlaylist(trackIds: trackIds),
+            'tracks': const [],
+          },
+          // privileges 与 trackIds 不等长 → 走按页取曲目。
+          'privileges': const [],
+        }),
+        'song/detail': jsonEncode({
+          'code': 200,
+          'songs': [
+            {
+              'id': 1001,
+              'name': '尾曲',
+              'ar': [{'name': 'A'}],
+              'al': {'id': 9, 'picUrl': ''},
+              'dt': 1000,
+            },
+          ],
+          'privileges': [
+            {'id': 1001, 'maxbr': 320000},
+          ],
+        }),
+      });
+      stub.install();
+
+      final first = await source.playlistDetail('999', 1);
+      expect(first.info.trackCount, 1001);
+      // 详情壳只下载一次（旧实现 key 带 page：翻一页重下整单）。
+      final forwardRequests =
+          stub.requests.where((uri) => uri.toString().contains('linux/forward'));
+      expect(forwardRequests, hasLength(1));
+
+      final second = await source.playlistDetail('999', 2);
+      expect(second.tracks.single.title, '尾曲');
+      expect(
+        stub.requests.where((uri) => uri.toString().contains('linux/forward')),
+        hasLength(1),
+        reason: '第二页必须命中详情壳缓存',
+      );
+      expect(
+        stub.requests.where((uri) => uri.toString().contains('song/detail')),
+        hasLength(2),
+        reason: '曲目按页取（每页各一次）',
+      );
+    });
+
     test('热搜词：eapi 解析；直连失败一次即 StateError', () async {
       final ok = _Stub({
         'eapi/batch': jsonEncode({

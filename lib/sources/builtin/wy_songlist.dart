@@ -9,6 +9,22 @@ import 'discover_fetch.dart';
 import 'discover_track_mapper.dart';
 import 'wy_music_detail.dart';
 
+/// 歌单详情的「壳」：平台一次详情响应就带全的字段 + 全部 trackIds。
+///
+/// 曲目按页取（见 [WySongList.getListDetail]）：`allTracks` 非空表示平台
+/// 已随详情返回整表曲目（`privileges` 与 `trackIds` 等长）。
+class _WyPlaylistShell {
+  const _WyPlaylistShell({
+    required this.info,
+    required this.trackIds,
+    this.allTracks,
+  });
+
+  final DiscoverPlaylist info;
+  final List<Object?> trackIds;
+  final List<DiscoverTrack>? allTracks;
+}
+
 /// 短链跳转探测用的客户端（只读状态码与 Location，不读 body）。
 /// 惰性创建：`Dio` 的默认适配器会抓 `HttpOverrides.current`（见 AnyListenApi）。
 Dio? _redirectDioInstance;
@@ -183,18 +199,42 @@ class WySongList {
   }
 
   /// 歌单详情（支持链接 / ID / `id###token`；结果缓存 5 分钟）。
-  static Future<DiscoverDetail> getListDetail(String rawId, int page) {
-    final key = 'wy:playlist-detail:$rawId:$page';
-    return BuiltinSearch.transport.cached(
-      key,
-      () => _fetchListDetail(rawId, page),
+  ///
+  /// 缓存拆两层：详情「壳」（含全部 trackIds、体积远小于逐首曲目对象）按
+  /// **页无关** key 缓存一次；曲目按页取。旧实现整体 key 带 page，翻一页就
+  /// 重新下载 + 解析整张歌单（万首歌单 = 每次翻页数 MB）。
+  static Future<DiscoverDetail> getListDetail(String rawId, int page) async {
+    final shell = await BuiltinSearch.transport.cached(
+      'wy:playlist-detail:$rawId',
+      () => _fetchListShell(rawId),
+    );
+    final all = shell.allTracks;
+    if (all != null) {
+      // 平台已随详情返回整表曲目：翻页不会再发请求（保持旧行为）。
+      return DiscoverDetail(info: shell.info, tracks: all);
+    }
+    final rangeStart = (page - 1) * songPageLimit;
+    final ids = <Object>[
+      for (final trackId in shell.trackIds.skip(rangeStart).take(songPageLimit))
+        if (trackId is Map && trackId['id'] != null) trackId['id'],
+    ];
+    if (ids.isEmpty) {
+      return DiscoverDetail(info: shell.info, tracks: const []);
+    }
+    final tracks = await BuiltinSearch.transport.cached(
+      'wy:playlist-tracks:$rawId:$page',
+      () => WyMusicDetail.getList(ids),
+    );
+    return DiscoverDetail(
+      info: shell.info,
+      tracks: tracks.map(discoverTrackOf).toList(),
     );
   }
 
-  static Future<DiscoverDetail> _fetchListDetail(
-    String rawId,
-    int page,
-  ) async {
+  /// 歌单详情单页上限（平台 `song/detail` 批量接口一次最多 1000 首）。
+  static const int songPageLimit = 1000;
+
+  static Future<_WyPlaylistShell> _fetchListShell(String rawId) async {
     final parsed = await parseListId(rawId);
     if (parsed.cookie != null) _cookie = parsed.cookie!;
 
@@ -226,30 +266,17 @@ class WySongList {
         final privileges = body['privileges'];
 
         // 与 LX 一致：privileges 与 trackIds 数量一致时直接用响应内 tracks。
-        const limit = 1000;
-        final rangeStart = (page - 1) * limit;
-        List<SourceTrack> tracks;
+        List<DiscoverTrack>? allTracks;
         if (privileges is List && trackIds.length == privileges.length) {
-          tracks = filterListDetail(
+          allTracks = filterListDetail(
             tracks: (playlist['tracks'] as List?) ?? const [],
             privileges: privileges,
-          );
-        } else {
-          final ids = <Object>[
-            for (final trackId in trackIds.skip(rangeStart).take(limit))
-              if (trackId is Map && trackId['id'] != null) trackId['id'],
-          ];
-          try {
-            tracks = await WyMusicDetail.getList(ids);
-          } catch (e) {
-            if (e is StateError && e.message == 'try max num') rethrow;
-            return null;
-          }
+          ).map(discoverTrackOf).toList();
         }
 
         final creator = playlist['creator'];
         final playCount = playlist['playCount'];
-        return DiscoverDetail(
+        return _WyPlaylistShell(
           info: DiscoverPlaylist(
             id: parsed.id,
             name: (playlist['name'] ?? '').toString(),
@@ -260,7 +287,8 @@ class WySongList {
             trackCount: trackIds.length,
             description: _nonEmpty(playlist['description']),
           ),
-          tracks: tracks.map(discoverTrackOf).toList(),
+          trackIds: trackIds,
+          allTracks: allTracks,
         );
       },
     );

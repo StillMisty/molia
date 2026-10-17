@@ -4,7 +4,7 @@ import 'dart:math' as math;
 import 'dart:typed_data';
 
 import 'package:dio/dio.dart';
-import 'package:flutter/foundation.dart' show compute, visibleForTesting;
+import 'package:flutter/foundation.dart' show compute;
 
 import '../../data/cache/request_cache.dart';
 import '../../data/http/app_dio.dart';
@@ -41,19 +41,20 @@ class BuiltinTransport {
   final Future<void> Function(int attempt)? retryDelay;
 
   /// 全局测试钩子（`test/flutter_test_config.dart` 置为 no-op）：不逐个
-  /// 构造函数注入也能让测试不产生真实等待。生产恒为 null。
-  @visibleForTesting
+  /// 构造函数注入也能让测试不产生真实等待。生产恒为 null；发现适配器的
+  /// `retryRequest` 复用同一钩子（两处退避是同一策略）。
   static Future<void> Function(int attempt)? retryDelayOverride;
 
   /// 默认重试退避：`base × 2^(n-1)` 封顶 [_retryBackoffMax]，叠加 ±30% 抖动。
   ///
   /// 此前重试是紧挨着连发的：平台限流（403/429）时立刻重发只会把限流打成
-  /// 更长的封禁，且弱网下同时挂多个在途请求。
+  /// 更长的封禁，且弱网下同时挂多个在途请求。发现适配器的 [retryRequest]
+  /// 复用同一策略（同一测试钩子）。
   static const Duration retryBackoffBase = Duration(milliseconds: 300);
   static const Duration _retryBackoffMax = Duration(seconds: 4);
   static final math.Random _backoffJitter = math.Random();
 
-  Future<void> _defaultRetryDelay(int attempt) {
+  static Future<void> retryBackoff(int attempt) {
     final exponential = retryBackoffBase.inMilliseconds *
         (1 << (attempt - 1).clamp(0, 5));
     final capped = math.min(exponential, _retryBackoffMax.inMilliseconds);
@@ -64,7 +65,7 @@ class BuiltinTransport {
   }
 
   Future<void> _delayBefore(int attempt) =>
-      (retryDelay ?? retryDelayOverride ?? _defaultRetryDelay)(attempt);
+      (retryDelay ?? retryDelayOverride ?? retryBackoff)(attempt);
 
   /// 统一结果缓存 TTL（发现/热搜等，5 分钟）。
   static const Duration defaultCacheTtl = Duration(minutes: 5);
