@@ -149,6 +149,9 @@ class _SleepTimerSheet extends StatelessWidget {
         hour: initialMinutes ~/ 60,
         minute: initialMinutes % 60,
       ),
+      // 显式用 M3E time pickers 的表盘入口（Material 原生 showTimePicker 与
+      // 纯数字输入都不是本项目 UI 口径）。
+      initialEntryMode: M3ETimePickerEntryMode.dial,
       alwaysUse24HourFormat: true,
       helpText: l10n.sleepTimerCustomTitle,
       hourLabelText: l10n.sleepTimerHourLabel,

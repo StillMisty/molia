@@ -658,6 +658,10 @@ void main() {
     await tester.tap(find.byKey(const Key('sleepTimerCustomItem')));
     await tester.pumpAndSettle();
 
+    // 必须是 M3E time pickers 组件（表盘入口），不是 Material showTimePicker。
+    expect(find.byType(M3ETimePickerDialog), findsOneWidget);
+    expect(find.byType(M3EDialTimePicker), findsOneWidget);
+
     // 时间选择器（24 小时制）：确认即按初始 0:30（30 分钟）武装。
     expect(find.text('自定义时长'), findsWidgets);
     await tester.tap(find.text('设定'));
