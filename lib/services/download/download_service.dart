@@ -53,6 +53,7 @@ import '../../models/lyrics_result.dart';
 import '../../services/cache_service.dart';
 import '../../sources/source_track.dart' show pickQualityFor;
 import 'download_file_layout.dart';
+import 'download_record_assembler.dart';
 import 'download_settings.dart';
 
 /// 下载时取词结果（主歌词 + 可选翻译；罗马音/逐字不落盘）。
@@ -163,7 +164,8 @@ class DownloadService extends ChangeNotifier {
         _notifications = notifications ?? createDownloadNotifications(),
         _preferredQuality = preferredQuality,
         _clock = clock ?? (() => DateTime.now().millisecondsSinceEpoch),
-        _layout = DownloadFileLayout(storage: storage, settings: settings);
+        _layout = DownloadFileLayout(storage: storage, settings: settings),
+        _assembler = DownloadRecordAssembler(clock: clock);
 
   final CatalogService _catalog;
   final DownloadsRepository _repository;
@@ -189,6 +191,10 @@ class DownloadService extends ChangeNotifier {
   /// 文件名 / 放置模块：命名、去重与 sidecar 路径约定的唯一实现（见
   /// `download_file_layout.dart`）。
   final DownloadFileLayout _layout;
+
+  /// 记录装配模块：部分状态 → `DownloadedTrack` 的唯一装配点（见
+  /// `download_record_assembler.dart`）。
+  final DownloadRecordAssembler _assembler;
 
   final Logger _logger = Logger('molia.download_service');
 
@@ -339,23 +345,11 @@ class DownloadService extends ChangeNotifier {
             cover == null ? null : _remapRoot(cover, legacyRoot, newRoot);
         if (cover != null) await _copyIfNeeded(cover, newCover!);
 
-        final updated = DownloadedTrack(
-          originSourceKey: record.originSourceKey,
-          originSongId: record.originSongId,
-          title: record.title,
-          artist: record.artist,
-          album: record.album,
-          coverUrl: record.coverUrl,
-          durationMs: record.durationMs,
-          raw: record.raw,
-          quality: record.quality,
+        final updated = _assembler.relocated(
+          record,
           filePath: newAudio,
-          sizeBytes: record.sizeBytes,
           lyricPath: newLyric,
           coverPath: newCover,
-          publicUri: record.publicUri,
-          imported: record.imported,
-          downloadedAt: record.downloadedAt,
         );
         await _repository.insert(updated);
         _records[record.key] = updated;
@@ -643,23 +637,15 @@ class DownloadService extends ChangeNotifier {
         filePath,
         p.basename(filePath),
       );
-      final record = DownloadedTrack(
-        originSourceKey: track.id.sourceKey,
-        originSongId: track.id.id,
-        title: track.title,
-        artist: track.artistLabel,
-        album: track.album ?? '',
-        coverUrl: track.artwork?.uri.toString(),
-        durationMs: track.duration?.inMilliseconds,
-        raw: Map<String, dynamic>.from(track.payload),
+      final record = _assembler.forAudioDownload(
+        track: track,
         quality: resolvedQuality,
         filePath: filePath,
         sizeBytes: size,
-        // 分项合并：先前单独下载的歌词 / 封面不被本次下载覆盖丢失。
-        lyricPath: lyricPath ?? previous?.lyricPath,
-        coverPath: coverPath ?? previous?.coverPath,
-        publicUri: publicUri ?? previous?.publicUri,
-        downloadedAt: _clock(),
+        lyricPath: lyricPath,
+        coverPath: coverPath,
+        publicUri: publicUri,
+        previous: previous,
       );
       await _repository.insert(record);
       _records[key] = record;
@@ -831,18 +817,13 @@ class DownloadService extends ChangeNotifier {
           await _storage.readHead(path, kAudioTagReadLimit) ?? Uint8List(0);
       final tags = readAudioTags(head, extension: extension, fileSize: size);
       final fallback = splitFileNameMetadata(p.basenameWithoutExtension(path));
-      final record = DownloadedTrack(
-        originSourceKey: kLocalSourceKey,
-        originSongId: path,
+      final record = _assembler.forLocalImport(
+        filePath: path,
+        sizeBytes: size,
         title: tags.title ?? fallback.title,
         artist: tags.artist ?? fallback.artist,
         album: tags.album ?? '',
         durationMs: tags.durationMs,
-        quality: '',
-        filePath: path,
-        sizeBytes: size,
-        imported: true,
-        downloadedAt: _clock(),
       );
       await _repository.insert(record);
       _records[record.key] = record;
@@ -876,24 +857,7 @@ class DownloadService extends ChangeNotifier {
         failed++;
         continue;
       }
-      final updated = DownloadedTrack(
-        originSourceKey: record.originSourceKey,
-        originSongId: record.originSongId,
-        title: record.title,
-        artist: record.artist,
-        album: record.album,
-        coverUrl: record.coverUrl,
-        durationMs: record.durationMs,
-        raw: record.raw,
-        quality: record.quality,
-        filePath: record.filePath,
-        sizeBytes: record.sizeBytes,
-        lyricPath: record.lyricPath,
-        coverPath: record.coverPath,
-        publicUri: uri,
-        imported: record.imported,
-        downloadedAt: record.downloadedAt,
-      );
+      final updated = _assembler.republished(record, uri);
       await _repository.insert(updated);
       _records[record.key] = updated;
       published++;
@@ -1002,23 +966,11 @@ class DownloadService extends ChangeNotifier {
   }) async {
     final key = '${track.id.sourceKey}:${track.id.id}';
     final existing = _records[key];
-    final record = DownloadedTrack(
-      originSourceKey: track.id.sourceKey,
-      originSongId: track.id.id,
-      title: track.title,
-      artist: track.artistLabel,
-      album: track.album ?? '',
-      coverUrl: track.artwork?.uri.toString(),
-      durationMs: track.duration?.inMilliseconds,
-      raw: Map<String, dynamic>.from(track.payload),
-      quality: existing?.quality ?? '',
-      filePath: existing?.filePath,
-      sizeBytes: existing?.sizeBytes ?? 0,
-      lyricPath: lyricPath ?? existing?.lyricPath,
-      coverPath: coverPath ?? existing?.coverPath,
-      publicUri: existing?.publicUri,
-      imported: existing?.imported ?? false,
-      downloadedAt: existing?.downloadedAt ?? _clock(),
+    final record = _assembler.forPartialDownload(
+      track,
+      existing: existing,
+      lyricPath: lyricPath,
+      coverPath: coverPath,
     );
     await _repository.insert(record);
     _records[key] = record;
