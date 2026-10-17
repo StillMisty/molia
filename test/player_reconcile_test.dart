@@ -4,6 +4,7 @@ import 'package:molia/domain/models/track.dart';
 import 'package:molia/l10n/app_localizations.dart';
 import 'package:molia/providers/playback_provider.dart';
 import 'package:molia/widgets/app_network_image.dart';
+import 'package:molia/widgets/cover_deck_metrics.dart';
 import 'package:molia/widgets/player.dart';
 import 'package:molia/widgets/player_cover_deck.dart';
 import 'package:material_ui/material_ui.dart';
@@ -11,6 +12,12 @@ import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'support/fakes.dart';
+
+/// 封面堆叠尺寸：与播放器同一预算口径（封面边 240 → 堆叠 360 × 254.4）。
+final _deck = coverDeckMetricsFor(
+  availableWidth: 240 * coverDeckHorizontalFactor,
+  availableHeight: 300,
+);
 
 /// 对账与会话外槽位更新：
 /// - 提交对账到非预览曲目：中心封面 220ms 原位交叉淡化校正；
@@ -212,6 +219,13 @@ void main() {
     return opacity!;
   }
 
+  /// 拖动距离：deck 的换场行程是封面边长的 0.6（`_coverSwapRange`），
+  /// 硬编码像素会随版式缩放漂移（封面越界修复后手机封面由 324 → 280）。
+  double dragFor(WidgetTester tester, double fraction) =>
+      tester.getSize(find.byKey(PlayerCoverDeck.centerCoverCardKey)).width *
+      0.6 *
+      fraction;
+
   /// 指定封面卡相对堆叠中心的横向偏移。
   double cardDx(WidgetTester tester, Finder finder) =>
       tester.getCenter(finder).dx -
@@ -235,7 +249,7 @@ void main() {
     // 左滑提交下一首（预览目标 c）；提交过渡走完后再对账到 d（不匹配）。
     await tester.timedDrag(
       find.byKey(Player.artworkSwipeHostKey),
-      const Offset(-160, 0),
+      Offset(-dragFor(tester, 0.83), 0),
       const Duration(milliseconds: 300),
     );
     expect(backend.calls, contains('next'));
@@ -295,7 +309,7 @@ void main() {
     // 左滑提交下一首（预览目标 c）；提交过渡走完后再对账到 d（不匹配）。
     await tester.timedDrag(
       find.byKey(Player.artworkSwipeHostKey),
-      const Offset(-160, 0),
+      Offset(-dragFor(tester, 0.83), 0),
       const Duration(milliseconds: 300),
     );
     expect(backend.calls, contains('next'));
@@ -313,9 +327,9 @@ void main() {
     // 本身满足提交条件），但校正期间必须被忽略。两次移动累计超过阈值后松手。
     final gesture = await tester.startGesture(
         tester.getCenter(find.byKey(Player.artworkSwipeHostKey)));
-    await gesture.moveBy(const Offset(60, 0));
+    await gesture.moveBy(Offset(dragFor(tester, 0.31), 0));
     await tester.pump(const Duration(milliseconds: 60));
-    await gesture.moveBy(const Offset(60, 0));
+    await gesture.moveBy(Offset(dragFor(tester, 0.31), 0));
     await tester.pump(const Duration(milliseconds: 60));
     await gesture.up();
     await tester.pump(const Duration(milliseconds: 60));
@@ -629,9 +643,9 @@ class _DeckHost extends StatelessWidget {
         context.select<PlaybackProvider, Track?>((p) => p.snapshot.current);
     return PlayerCoverDeck(
       displayTrack: track,
-      artDimension: 240,
-      stackDimension: 240 * 1.38,
-      stackHeight: 240 * 1.06,
+      artDimension: _deck.artDimension,
+      stackDimension: _deck.stackWidth,
+      stackHeight: _deck.stackHeight,
       fullCoverKey: fullCoverKey,
     );
   }

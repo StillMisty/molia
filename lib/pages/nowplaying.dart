@@ -9,6 +9,7 @@ import 'package:molia/widgets/player.dart';
 import 'package:molia/widgets/queue.dart';
 import 'package:molia/widgets/lyrics.dart';
 import 'package:molia/widgets/mdtab.dart';
+import 'package:molia/widgets/now_playing_controller.dart';
 import 'package:molia/widgets/player_morph.dart';
 import 'package:molia/widgets/shell_reselect.dart';
 import 'package:molia/widgets/track_info_view.dart';
@@ -23,16 +24,21 @@ class NowPlaying extends StatefulWidget {
   /// 壳层「重复点击底栏 / 导航轨播放目的地」的请求通道：迷你 ⇄ 完整切换。
   final ShellReselectSignal? reselect;
 
-  /// 桌面骨架专用版式：左「封面 + 控制」固定栏 + 右「歌词 / 歌曲信息」分页。
+  /// 外部 tab 切换请求（如底栏队列按钮「跳播放页 + 切队列」）。
+  final NowPlayingController? controller;
+
+  /// 桌面骨架专用版式：左「封面 + 控制」固定栏 + 右「队列 / 歌词 / 歌曲
+  /// 信息」三 tab（默认歌词，与移动端圆点页序一致）。
   ///
-  /// 桌面没有迷你态与圆点手势（队列已由壳层右面板承载），此模式下
-  /// `reselect` 请求忽略；移动骨架（含平板宽屏）保持既有 PageView 版式。
+  /// 桌面没有迷你态与圆点手势，此模式下 `reselect` 请求忽略；移动骨架
+  /// （含平板宽屏）保持既有 PageView 版式。
   final bool desktopLayout;
 
   const NowPlaying({
     super.key,
     this.morph,
     this.reselect,
+    this.controller,
     this.desktopLayout = false,
   });
 
@@ -74,17 +80,19 @@ class _NowPlayingState extends State<NowPlaying>
   /// 本次内容区手势已触发过切换（一次手势只触发一次）。
   bool _contentToggleDone = false;
 
-  /// 默认显示歌词页；页序见 [_buildPages]：队列 / 歌词 / 歌曲信息。
-  static const int _currentPageIndex = 1;
-  static const int _queuePageIndex = 0;
-  static const int _infoPageIndex = 2;
+  /// 默认显示歌词页；页序见 [_buildPages]：队列 / 歌词 / 歌曲信息
+  /// （索引与 [NowPlayingController] 共用一份定义）。
+  static const int _currentPageIndex = nowPlayingLyricsTabIndex;
+  static const int _queuePageIndex = nowPlayingQueueTabIndex;
+  static const int _infoPageIndex = nowPlayingInfoTabIndex;
 
   /// 桌面版式播放器列宽度：封面按可用宽高自适应，这一列只负责给它留出
-  /// 「封面 + 两侧邻位露出」的横向余量。
-  static const double _desktopPlayerColumnWidth = 420;
+  /// 「封面 + 两侧邻位露出」的横向余量（480 下封面边 ≈288，
+  /// 见 `cover_deck_metrics.dart`）。
+  static const double _desktopPlayerColumnWidth = 480;
 
-  /// 桌面版式右侧分页：0 = 歌词、1 = 歌曲信息（队列由壳层右面板承载）。
-  int _desktopTab = 0;
+  /// 桌面版式右侧分页：0 = 队列、1 = 歌词、2 = 歌曲信息。
+  late int _desktopTab;
 
   // 页面与屏幕尺寸缓存：避免 PageView 每次重建导致歌词/队列滚动状态丢失。
   List<PageData>? _cachedPages;
@@ -94,7 +102,11 @@ class _NowPlayingState extends State<NowPlaying>
   @override
   void initState() {
     super.initState();
-    _pageController = PageController(initialPage: _currentPageIndex);
+    // 请求先于挂载（壳层先发请求、页面后才挂载）：作为初始页消费，不补动画。
+    final int? requested = widget.controller?.requestedTab;
+    _desktopTab = requested ?? nowPlayingLyricsTabIndex;
+    _pageController =
+        PageController(initialPage: requested ?? _currentPageIndex);
     _queueScrollController = ScrollController();
     _lyricsScrollController = ScrollController();
     _infoScrollController = ScrollController();
@@ -106,6 +118,7 @@ class _NowPlayingState extends State<NowPlaying>
     )..value = 1.0;
     _expandController.addListener(_handleExpandProgress);
     widget.reselect?.addListener(_handleReselect);
+    widget.controller?.addListener(_handleTabRequest);
   }
 
   @override
@@ -115,11 +128,16 @@ class _NowPlayingState extends State<NowPlaying>
       oldWidget.reselect?.removeListener(_handleReselect);
       widget.reselect?.addListener(_handleReselect);
     }
+    if (oldWidget.controller != widget.controller) {
+      oldWidget.controller?.removeListener(_handleTabRequest);
+      widget.controller?.addListener(_handleTabRequest);
+    }
   }
 
   @override
   void dispose() {
     widget.reselect?.removeListener(_handleReselect);
+    widget.controller?.removeListener(_handleTabRequest);
     _expandController.dispose();
     _pageController.dispose();
     _queueScrollController.dispose();
@@ -149,6 +167,36 @@ class _NowPlayingState extends State<NowPlaying>
   void _handleReselect() {
     if (widget.desktopLayout || _isLargeScreen) return;
     _animateToggleExpand();
+  }
+
+  /// 外部 tab 请求（[NowPlayingController]）：切到请求的页。
+  ///
+  /// 请求是动作不是状态：重复请求、请求当前页都照样处理（页面可能刚挂载，
+  /// 用户也可能手动切走后再触发一次）。
+  void _handleTabRequest() {
+    final int? requested = widget.controller?.requestedTab;
+    if (requested == null || !mounted) return;
+
+    if (widget.desktopLayout) {
+      _selectDesktopTab(requested);
+      return;
+    }
+
+    if (!_pageController.hasClients) {
+      // 挂载了但还没布局（请求落在 initState 与首帧之间）：初始页已在
+      // initState 取过，这里只兜一次帧末补跳。
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted && _pageController.hasClients) {
+          _pageController.jumpToPage(requested);
+        }
+      });
+      return;
+    }
+    _pageController.animateToPage(
+      requested,
+      duration: M3EMotion.medium2,
+      curve: M3EMotion.emphasizedDecelerate,
+    );
   }
 
   /// 展开进度跨过阈值即同步迷你态（视觉落定口径，不等弹簧容差拖尾）。
@@ -421,16 +469,16 @@ class _NowPlayingState extends State<NowPlaying>
     );
   }
 
-  /// 桌面版式右侧分页切换（点标签与滑动分页同一入口）。
+  /// 桌面版式右侧 tab 切换（点标签与滑动分页同一入口，外部请求也走这里）。
   void _selectDesktopTab(int index) {
     if (index == _desktopTab) return;
     setState(() => _desktopTab = index);
   }
 
-  /// 桌面骨架版式：左「播放器」固定列 + 右「歌词 / 歌曲信息」分页。
+  /// 桌面骨架版式：左「播放器」固定列 + 右「队列 / 歌词 / 歌曲信息」三 tab。
   ///
   /// 与移动版式的差别：没有迷你态与圆点切换（也不需要展开/收起与内容
-  /// 下拉手势），队列由壳层右面板承载，因此页内不出现队列页与顶部渐隐。
+  /// 下拉手势），页序与默认页跟移动端一致（队列 / 歌词 / 信息，默认歌词）。
   Widget _buildDesktopLayout(BuildContext context) {
     final l10n = AppLocalizations.of(context)!;
     return Scaffold(
@@ -452,17 +500,24 @@ class _NowPlayingState extends State<NowPlaying>
             child: Column(
               children: [
                 Padding(
-                  padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
+                  // tab 只留 icon：行高由 M3ETabTheme.height（图标态 48）
+                  // 决定，纵向不再叠加自拟内边距。
+                  padding: const EdgeInsets.symmetric(horizontal: 16),
                   child: M3ETabs(
-                    // 与移动版式的歌词 / 歌曲信息页同一套标题与图标。
+                    // 与移动版式的圆点页序同一套标题与图标；文字只留作
+                    // 无障碍名称（tab 行只显示 icon）。
                     tabs: [
                       M3ETab(
+                        icon: const Icon(Icons.queue_music_rounded),
+                        semanticLabel: l10n.queueTab,
+                      ),
+                      M3ETab(
                         icon: const Icon(Icons.lyrics_rounded),
-                        label: l10n.lyricsTab,
+                        semanticLabel: l10n.lyricsTab,
                       ),
                       M3ETab(
                         icon: const Icon(Icons.info_rounded),
-                        label: l10n.trackInfoTabTitle,
+                        semanticLabel: l10n.trackInfoTabTitle,
                       ),
                     ],
                     selectedIndex: _desktopTab,
@@ -474,6 +529,11 @@ class _NowPlayingState extends State<NowPlaying>
                     selectedIndex: _desktopTab,
                     onTabSelected: _selectDesktopTab,
                     children: [
+                      RepaintBoundary(
+                        // 当前曲目由左侧播放器承载，队列页只列「接下来」
+                        // （includeCurrent 保持 false，不重复展示）。
+                        child: QueueDisplay(controller: _queueScrollController),
+                      ),
                       RepaintBoundary(
                         child: LyricsWidget(
                           // 桌面歌词区常展开（无迷你条可让位），快捷操作常显。

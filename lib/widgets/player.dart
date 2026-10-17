@@ -17,11 +17,13 @@ import '../services/haptics.dart';
 import '../utils/responsive.dart';
 import 'app_network_image.dart';
 import 'cover_appearance.dart';
+import 'cover_deck_metrics.dart';
 import 'icon_swap.dart';
 import 'player_cover_deck.dart';
 import 'player_morph.dart';
 import 'seek_bar.dart';
 import 'seek_preview.dart';
+import 'volume_control.dart';
 
 /// 迷你条封面外观与飞行定义在 `cover_appearance.dart`；这里再导出给既有
 /// import 面（迷你封面回退图标尺寸等）。
@@ -41,6 +43,12 @@ class Player extends StatefulWidget {
   /// 封面区横向手势宿主 key（由封面堆叠模块持有）：拖动期间 element 必须
   /// 稳定（识别器不被 dispose），同时供测试精确定位这一层手势。
   static const Key artworkSwipeHostKey = PlayerCoverDeck.swipeHostKey;
+
+  /// 播放页音量入口的稳定 Key（底栏隐藏后音量只在播放页可达）。
+  static const Key volumeButtonKey = Key('playerVolumeButton');
+
+  /// 播放页音量弹层的稳定 Key。
+  static const Key volumePanelKey = Key('playerVolumePanel');
 
   /// 顶栏共享元素控制器：为封面/歌名/进度提供锚点并接收隐藏状态。
   final PlayerMorphController? morph;
@@ -82,23 +90,31 @@ class _PlayerState extends State<Player> with TickerProviderStateMixin {
   static const double _sectionsReservedHeight =
       _textSectionHeight + _seekSectionHeight + 14;
 
-  /// 封面堆叠纵向余量：邻位封面缩放 0.78 + 旋转 0.05rad 后并不超出主封面
-  /// 高度，纵向只留阴影的一点余量。
-  static const double _artStackVerticalFactor = 1.06;
+  /// 播放器内容的横向内边距：标题/专辑/进度排与封面区同一留白。
+  ///
+  /// 大屏版式里封面两侧是硬边界（导航轨 / 分栏线），封面堆叠按它反推可用
+  /// 宽度后不会再压过界（桌面列宽 480 → 可用 432 → 封面边 ≈288）。
+  static const double _contentHorizontalPadding = 24;
 
-  /// 封面尺寸：宽向留出邻位封面（96），高向扣掉标题/进度排与阴影余量。
-  double _artDimensionFor(double maxWidth, double maxHeight) {
-    final double byWidth = max(0, maxWidth - 96);
-    final double byHeight = maxHeight.isFinite
-        ? max(0,
-            (maxHeight - _sectionsReservedHeight) / _artStackVerticalFactor)
-        : double.infinity;
-    return min(byWidth, byHeight);
-  }
+  /// 封面区纵向留白（上下各一份）：高度预算里的固定占位是估算值，字号被
+  /// 放大时会先让封面收缩，而不是把进度排挤出可视区。
+  static const double _deckVerticalMargin = 24;
 
-  /// 完整播放器内容高度：高度贴合内容，避免大片留白。
+  /// 传输排 / 进度排的横向内边距：两排首尾控件（播放模式 / 音量）的视觉
+  /// 边缘对齐。
+  static const double _controlsRowPadding = 12;
+
+  /// 封面可用高度：容器高扣掉固定占位与上下留白（未约束宿主返回无限高，
+  /// 纵向不参与约束）。
+  static double _deckAvailableHeight(double maxHeight, double reserved) =>
+      maxHeight.isFinite
+          ? max(0.0, maxHeight - reserved - _deckVerticalMargin * 2)
+          : double.infinity;
+
+  /// 完整播放器内容高度：高度贴合内容（封面堆叠 + 文字/进度排），
+  /// 避免大片留白。
   double _playerContentHeight(double art) =>
-      art * _artStackVerticalFactor + _sectionsReservedHeight;
+      art * coverDeckVerticalFactor + _sectionsReservedHeight;
 
   /// 进度拖动预览：与桌面底栏共用同一状态机（见 `seek_preview.dart`）。
   late final SeekPreviewController _seekPreview;
@@ -325,7 +341,8 @@ class _PlayerState extends State<Player> with TickerProviderStateMixin {
   /// 小屏完整播放器：三封面堆叠 → 标题/作者（单行）→ 可拖动进度排。
   ///
   /// 高度感知：可用高度（NowPlaying 传入的 maxHeight）不足时收缩封面，
-  /// 避免进度排把歌词区挤出屏幕。
+  /// 避免进度排把歌词区挤出屏幕。小屏封面是全宽主场（两侧没有相邻列），
+  /// 可用宽就是容器宽。
   Widget _buildSmallScreenPlayerLayout(
     Track? displayTrack,
     PlaybackProvider playbackProvider, {
@@ -333,12 +350,13 @@ class _PlayerState extends State<Player> with TickerProviderStateMixin {
   }) {
     return LayoutBuilder(
       builder: (context, constraints) {
-        final double artDimension =
-            _artDimensionFor(constraints.maxWidth, constraints.maxHeight);
-        // 宽度方向仍需留出邻位封面露出的边（横向 1.38），纵向只留阴影余量。
-        final double stackDimension = artDimension * 1.38;
-        final double stackHeight =
-            artDimension * _artStackVerticalFactor;
+        final metrics = coverDeckMetricsFor(
+          availableWidth: constraints.maxWidth,
+          availableHeight: _deckAvailableHeight(
+            constraints.maxHeight,
+            _sectionsReservedHeight,
+          ),
+        );
 
         return Column(
           mainAxisSize: MainAxisSize.min,
@@ -346,9 +364,9 @@ class _PlayerState extends State<Player> with TickerProviderStateMixin {
           children: [
             PlayerCoverDeck(
               displayTrack: displayTrack,
-              artDimension: artDimension,
-              stackDimension: stackDimension,
-              stackHeight: stackHeight,
+              artDimension: metrics.artDimension,
+              stackDimension: metrics.stackWidth,
+              stackHeight: metrics.stackHeight,
               fullCoverKey: _fullCoverKey,
               isLargeScreen: widget.isLargeScreen,
               morph: morph,
@@ -357,7 +375,9 @@ class _PlayerState extends State<Player> with TickerProviderStateMixin {
             ),
             const SizedBox(height: 6),
             Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 24),
+              padding: const EdgeInsets.symmetric(
+                horizontal: _contentHorizontalPadding,
+              ),
               child: _buildTrackInfo(context, displayTrack, playbackProvider),
             ),
             const SizedBox(height: 2),
@@ -379,13 +399,15 @@ class _PlayerState extends State<Player> with TickerProviderStateMixin {
   ) {
     return LayoutBuilder(
       builder: (context, constraints) {
-        final double fullHeight = constraints.maxHeight.isFinite
-            ? min(
-                constraints.maxHeight,
-                _playerContentHeight(_artDimensionFor(
-                    constraints.maxWidth, constraints.maxHeight)),
-              )
-            : 560.0;
+        final double fullHeight = _playerContentHeight(
+          coverDeckMetricsFor(
+            availableWidth: constraints.maxWidth,
+            availableHeight: _deckAvailableHeight(
+              constraints.maxHeight,
+              _sectionsReservedHeight,
+            ),
+          ).artDimension,
+        );
         return AnimatedBuilder(
           animation: expand,
           builder: (context, _) {
@@ -491,7 +513,10 @@ class _PlayerState extends State<Player> with TickerProviderStateMixin {
     final mode = context.select<PlaybackProvider, PlayMode>(
         (provider) => provider.currentMode);
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 2),
+      padding: const EdgeInsets.symmetric(
+        horizontal: _controlsRowPadding,
+        vertical: 2,
+      ),
       child: Row(
         children: [
           _buildFavoriteButton(),
@@ -903,29 +928,23 @@ class _PlayerState extends State<Player> with TickerProviderStateMixin {
         const double textSectionFixedHeight = 56.0;
         const double seekSectionHeight = 56.0;
         const double spacingBelowArt = 2.0;
-        const double artExternalPaddingHorizontal = 48.0 * 2;
-        const double artExternalPaddingVertical = 24.0 * 2;
-        // 桌面版式多出的专辑行 + 传输控制排（封面可用高度要扣掉，否则
-        // 矮窗口里进度排会被挤出可视区）。
+        // 桌面版式多出的专辑行 + 传输控制排（md 播放键 56）（封面可用高度
+        // 要扣掉，否则矮窗口里进度排会被挤出可视区）。
         final double desktopExtrasHeight = widget.desktopLayout ? 92.0 : 0.0;
 
-        double artContentAvailableWidth =
-            constraints.maxWidth - artExternalPaddingHorizontal;
-        double artContentAvailableHeight = constraints.maxHeight -
-            textSectionFixedHeight -
-            seekSectionHeight -
-            spacingBelowArt -
-            desktopExtrasHeight -
-            artExternalPaddingVertical;
-        artContentAvailableWidth = max(0, artContentAvailableWidth);
-        artContentAvailableHeight = max(0, artContentAvailableHeight);
-        // 纵向同样只留阴影余量（与小屏一致）。
-        double artDimension = min(artContentAvailableWidth,
-            artContentAvailableHeight / _artStackVerticalFactor);
-        artDimension = max(0, artDimension);
-
-        final double stackDimension = artDimension * 1.38;
-        final double stackHeight = artDimension * _artStackVerticalFactor;
+        // 封面两侧与文字块共用同一内边距：大屏封面的左右是硬边界
+        // （导航轨 / 分栏线），堆叠不能贴上去。
+        final metrics = coverDeckMetricsFor(
+          availableWidth:
+              constraints.maxWidth - _contentHorizontalPadding * 2,
+          availableHeight: _deckAvailableHeight(
+            constraints.maxHeight,
+            textSectionFixedHeight +
+                seekSectionHeight +
+                spacingBelowArt +
+                desktopExtrasHeight,
+          ),
+        );
 
         return Column(
           mainAxisAlignment: MainAxisAlignment.center,
@@ -933,9 +952,9 @@ class _PlayerState extends State<Player> with TickerProviderStateMixin {
           children: [
             PlayerCoverDeck(
               displayTrack: displayTrack,
-              artDimension: artDimension,
-              stackDimension: stackDimension,
-              stackHeight: stackHeight,
+              artDimension: metrics.artDimension,
+              stackDimension: metrics.stackWidth,
+              stackHeight: metrics.stackHeight,
               fullCoverKey: _fullCoverKey,
               isLargeScreen: widget.isLargeScreen,
               morph: widget.morph,
@@ -944,7 +963,9 @@ class _PlayerState extends State<Player> with TickerProviderStateMixin {
             ),
             const SizedBox(height: spacingBelowArt),
             Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 24),
+              padding: const EdgeInsets.symmetric(
+                horizontal: _contentHorizontalPadding,
+              ),
               child: _buildTrackInfo(context, displayTrack, playbackProvider),
             ),
             if (widget.desktopLayout) ...[
@@ -967,7 +988,9 @@ class _PlayerState extends State<Player> with TickerProviderStateMixin {
     final album = displayTrack?.album?.trim() ?? '';
     if (album.isEmpty) return const SizedBox.shrink();
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 24),
+      padding: const EdgeInsets.symmetric(
+        horizontal: _contentHorizontalPadding,
+      ),
       child: Text(
         album,
         maxLines: 1,
@@ -981,6 +1004,9 @@ class _PlayerState extends State<Player> with TickerProviderStateMixin {
 
   /// 桌面骨架播放页：进度排上方补传输控制（底栏也有，但播放页是「操作
   /// 主场景」，与移动端把控制放在播放器里同一意图）。
+  ///
+  /// 底栏进播放页会隐藏（沉浸主场），音量必须在这一排同样可达；传输三键
+  /// 居中（播放键是这一列的视觉锚点），音量作为次级控件贴右缘。
   Widget _buildTransportRow(
     BuildContext context,
     PlaybackProvider playbackProvider,
@@ -990,53 +1016,76 @@ class _PlayerState extends State<Player> with TickerProviderStateMixin {
       (provider) => (provider.hasTrack, provider.isPlaying),
     );
     final l10n = _l10n(context);
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.center,
-      children: [
-        M3EIconButton(
-          variant: M3EIconButtonVariant.standard,
-          size: M3EIconButtonSize.md,
-          tooltip: l10n.previousTrackTooltip,
-          icon: const Icon(Icons.skip_previous_rounded),
-          onPressed: hasTrack
-              ? () {
-                  HapticsService.lightImpact();
-                  playbackProvider.skipToPrevious();
-                }
-              : null,
-        ),
-        const SizedBox(width: 12),
-        M3EIconButton(
-          variant: M3EIconButtonVariant.tonal,
-          size: M3EIconButtonSize.lg,
-          tooltip: isPlaying ? l10n.pause : l10n.play,
-          icon: IconSwap<bool>(
-            value: isPlaying,
-            builder: (context, isPlaying) => Icon(
-              isPlaying ? Icons.pause_rounded : Icons.play_arrow_rounded,
+    return SizedBox(
+      // 撑满列宽：传输三键按列居中，音量贴列右缘（Stack 只按最大子项定宽，
+      // 不撑满就会缩到三键那一小条上）。
+      width: double.infinity,
+      child: Stack(
+        alignment: Alignment.center,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              M3EIconButton(
+                variant: M3EIconButtonVariant.standard,
+                size: M3EIconButtonSize.sm,
+                tooltip: l10n.previousTrackTooltip,
+                icon: const Icon(Icons.skip_previous_rounded),
+                onPressed: hasTrack
+                    ? () {
+                        HapticsService.lightImpact();
+                        playbackProvider.skipToPrevious();
+                      }
+                    : null,
+              ),
+              const SizedBox(width: 8),
+              M3EIconButton(
+                variant: M3EIconButtonVariant.tonal,
+                size: M3EIconButtonSize.md,
+                tooltip: isPlaying ? l10n.pause : l10n.play,
+                icon: IconSwap<bool>(
+                  value: isPlaying,
+                  builder: (context, isPlaying) => Icon(
+                    isPlaying ? Icons.pause_rounded : Icons.play_arrow_rounded,
+                  ),
+                ),
+                onPressed: hasTrack
+                    ? () {
+                        HapticsService.lightImpact();
+                        playbackProvider.togglePlayPause();
+                      }
+                    : null,
+              ),
+              const SizedBox(width: 8),
+              M3EIconButton(
+                variant: M3EIconButtonVariant.standard,
+                size: M3EIconButtonSize.sm,
+                tooltip: l10n.nextTrackTooltip,
+                icon: const Icon(Icons.skip_next_rounded),
+                onPressed: hasTrack
+                    ? () {
+                        HapticsService.lightImpact();
+                        playbackProvider.skipToNext();
+                      }
+                    : null,
+              ),
+            ],
+          ),
+          Positioned.fill(
+            child: Align(
+              alignment: Alignment.centerRight,
+              child: Padding(
+                // 与进度排的播放模式同一内边距：两排右缘对齐。
+                padding: const EdgeInsets.only(right: _controlsRowPadding),
+                child: VolumeControl(
+                  key: Player.volumeButtonKey,
+                  panelKey: Player.volumePanelKey,
+                ),
+              ),
             ),
           ),
-          onPressed: hasTrack
-              ? () {
-                  HapticsService.lightImpact();
-                  playbackProvider.togglePlayPause();
-                }
-              : null,
-        ),
-        const SizedBox(width: 12),
-        M3EIconButton(
-          variant: M3EIconButtonVariant.standard,
-          size: M3EIconButtonSize.md,
-          tooltip: l10n.nextTrackTooltip,
-          icon: const Icon(Icons.skip_next_rounded),
-          onPressed: hasTrack
-              ? () {
-                  HapticsService.lightImpact();
-                  playbackProvider.skipToNext();
-                }
-              : null,
-        ),
-      ],
+        ],
+      ),
     );
   }
 }

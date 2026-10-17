@@ -140,6 +140,10 @@ class PlayerCoverDeck extends StatefulWidget {
   static Key centerCoverTrackKey(TrackId id) =>
       ValueKey('coverSlotCenter:${id.uri}');
 
+  /// 封面堆叠容器（三封面的布局盒）的语义 key：堆叠尺寸是否落在播放器列 /
+  /// 分栏内是可观察行为，对外用这个锚点断言。
+  static const Key stackKey = ValueKey('coverDeckStack');
+
   const PlayerCoverDeck({
     super.key,
     required this.displayTrack,
@@ -958,6 +962,7 @@ class _PlayerCoverDeckState extends State<PlayerCoverDeck>
         onHorizontalDragCancel: _handleHorizontalDragCancel,
         child: Center(
           child: SizedBox(
+            key: PlayerCoverDeck.stackKey,
             width: widget.stackDimension,
             height: widget.stackHeight,
             child: AnimatedBuilder(

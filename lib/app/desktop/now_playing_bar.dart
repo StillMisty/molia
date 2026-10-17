@@ -5,8 +5,6 @@
 /// 右：播放模式 + 音量（图标 + 弹出滑杆）+ 队列开关。
 library;
 
-import 'package:flutter/services.dart'
-    show HardwareKeyboard, KeyDownEvent, KeyEvent, LogicalKeyboardKey;
 import 'package:material_3_expressive/material_3_expressive.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:provider/provider.dart';
@@ -17,7 +15,6 @@ import '../../models/play_mode.dart';
 import '../../providers/library_provider.dart';
 import '../../providers/playback_provider.dart';
 import '../../services/app_branding_service.dart';
-import '../../services/escape_claims.dart';
 import '../../services/haptics.dart';
 import '../../widgets/app_network_image.dart';
 import '../../widgets/cover_appearance.dart';
@@ -25,6 +22,7 @@ import '../../widgets/icon_swap.dart';
 import '../../widgets/player_morph.dart';
 import '../../widgets/seek_bar.dart';
 import '../../widgets/seek_preview.dart';
+import '../../widgets/volume_control.dart';
 
 /// 常驻底部播放条。
 class DesktopNowPlayingBar extends StatelessWidget {
@@ -445,7 +443,10 @@ class _BarActions extends StatelessWidget {
             context.read<PlaybackProvider>().togglePlayMode();
           },
         ),
-        const _VolumeButton(),
+        VolumeControl(
+          buttonKey: DesktopNowPlayingBar.volumeButtonKey,
+          panelKey: DesktopNowPlayingBar.volumePanelKey,
+        ),
         M3EIconButton(
           key: DesktopNowPlayingBar.queueToggleKey,
           // 面板打开时用 tonal 变体表达选中态（一屏内唯一的「已展开」信号）。
@@ -459,171 +460,6 @@ class _BarActions extends StatelessWidget {
         ),
         const SizedBox(width: 4),
       ],
-    );
-  }
-}
-
-/// 音量按钮：图标随静音 / 零音量切换，点击在图标上方弹出滑杆面板。
-///
-/// 弹层用 [OverlayPortal]（不占布局、跟随图标锚点），点击外部或 Esc 关闭。
-class _VolumeButton extends StatefulWidget {
-  const _VolumeButton();
-
-  @override
-  State<_VolumeButton> createState() => _VolumeButtonState();
-}
-
-class _VolumeButtonState extends State<_VolumeButton> {
-  final OverlayPortalController _controller = OverlayPortalController();
-
-  /// 图标与面板同组：点图标算「组内」，不触发 onTapOutside——否则点图标
-  /// 关闭面板时 onTapOutside 会先关一次、onPressed 的 toggle 再把它开回来。
-  final Object _tapGroup = Object();
-
-  @override
-  Widget build(BuildContext context) {
-    final (muted, volume) = context.select<PlaybackProvider, (bool, double)>(
-      (provider) => (provider.muted, provider.volume),
-    );
-    final l10n = AppLocalizations.of(context)!;
-    final off = muted || volume == 0;
-    return OverlayPortal.overlayChildLayoutBuilder(
-      controller: _controller,
-      overlayChildBuilder: (context, info) {
-        // 锚点矩形（overlay 坐标系）= portal child 的本地矩形经
-        // childPaintTransform 映射。刻意不用 CompositedTransformFollower：
-        // overlay child 拿到的永远是整屏紧约束，follower 会以整屏尺寸参与
-        // 定位与命中（面板变成铺满屏幕的命中区，点外部永远关不掉）。
-        final anchor = MatrixUtils.transformRect(
-          info.childPaintTransform,
-          Offset.zero & info.childSize,
-        );
-        return Positioned(
-          // 面板右缘贴图标右缘（按钮在窗口右下角，向左展开不会出界），
-          // 底边在图标顶边上方 8dp。
-          right: info.overlaySize.width - anchor.right,
-          bottom: info.overlaySize.height - anchor.top + 8,
-          child: TapRegion(
-            groupId: _tapGroup,
-            onTapOutside: (_) => _controller.hide(),
-            child: _VolumePanel(
-              key: DesktopNowPlayingBar.volumePanelKey,
-              onClose: _controller.hide,
-            ),
-          ),
-        );
-      },
-      child: TapRegion(
-        groupId: _tapGroup,
-        child: MouseRegion(
-          // 桌面鼠标习惯：可点元素给手型（M3E 按钮自身不设鼠标指针）。
-          cursor: SystemMouseCursors.click,
-          child: M3EIconButton(
-            key: DesktopNowPlayingBar.volumeButtonKey,
-            variant: M3EIconButtonVariant.standard,
-            tooltip: l10n.playerBarVolume,
-            icon: IconSwap<bool>(
-              value: off,
-              builder: (context, off) => Icon(
-                off ? Icons.volume_off_rounded : Icons.volume_up_rounded,
-              ),
-            ),
-            onPressed: _controller.toggle,
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-/// 音量面板：横向滑杆（~120dp）+ 静音开关。
-///
-/// Esc 由自己的 [HardwareKeyboard] 处理器接住，与 [EscapeClaims] 登记同源
-/// （挂载 = 可见 = 占用，都不依赖焦点位置）。不用 [Focus.onKeyEvent]：焦点被
-/// Tab 移出弹层子树后按键不再冒泡到这里，而登记仍让壳层让位，Esc 会被完全
-/// 吞掉。[Focus] 只保留 autofocus，供滑杆的键盘操作。
-class _VolumePanel extends StatefulWidget {
-  const _VolumePanel({super.key, required this.onClose});
-
-  final VoidCallback onClose;
-
-  @override
-  State<_VolumePanel> createState() => _VolumePanelState();
-}
-
-class _VolumePanelState extends State<_VolumePanel> {
-  /// 登记判定：本组件存在 = 面板可见（随 Overlay 挂载 / 卸载）。
-  late final bool Function() _escapeClaim = _claimEscape;
-
-  bool _claimEscape() => true;
-
-  /// HardwareKeyboard 处理器引用：注册 / 注销必须是同一闭包。
-  late final bool Function(KeyEvent) _keyHandler = _handleKeyEvent;
-
-  bool _handleKeyEvent(KeyEvent event) {
-    if (event is! KeyDownEvent) return false;
-    if (event.logicalKey != LogicalKeyboardKey.escape) return false;
-    widget.onClose();
-    return true;
-  }
-
-  @override
-  void initState() {
-    super.initState();
-    EscapeClaims.add(_escapeClaim);
-    HardwareKeyboard.instance.addHandler(_keyHandler);
-  }
-
-  @override
-  void dispose() {
-    HardwareKeyboard.instance.removeHandler(_keyHandler);
-    EscapeClaims.remove(_escapeClaim);
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final (muted, volume) = context.select<PlaybackProvider, (bool, double)>(
-      (provider) => (provider.muted, provider.volume),
-    );
-    final l10n = AppLocalizations.of(context)!;
-    final scheme = Theme.of(context).colorScheme;
-    return Focus(
-      autofocus: true,
-      child: Material(
-        color: scheme.surfaceContainerHigh,
-        elevation: 8,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              SizedBox(
-                width: 120,
-                child: M3ESlider(
-                  value: volume.clamp(0.0, 1.0),
-                  min: 0,
-                  max: 1,
-                  onChanged: (value) =>
-                      context.read<PlaybackProvider>().setVolume(value),
-                ),
-              ),
-              M3EIconButton(
-                variant: M3EIconButtonVariant.standard,
-                tooltip: muted ? l10n.playerBarUnmute : l10n.playerBarMute,
-                icon: IconSwap<bool>(
-                  value: muted,
-                  builder: (context, muted) => Icon(
-                    muted ? Icons.volume_off_rounded : Icons.volume_up_rounded,
-                  ),
-                ),
-                onPressed: () => context.read<PlaybackProvider>().toggleMute(),
-              ),
-            ],
-          ),
-        ),
-      ),
     );
   }
 }

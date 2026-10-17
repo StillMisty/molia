@@ -2,12 +2,19 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:molia/domain/models/playback.dart';
 import 'package:molia/domain/models/track.dart';
 import 'package:molia/providers/playback_provider.dart';
+import 'package:molia/widgets/cover_deck_metrics.dart';
 import 'package:molia/widgets/player_cover_deck.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'support/fakes.dart';
+
+/// 封面堆叠尺寸：与播放器同一预算口径（封面边 240 → 堆叠 360 × 254.4）。
+final _deck = coverDeckMetricsFor(
+  availableWidth: 240 * coverDeckHorizontalFactor,
+  availableHeight: 300,
+);
 
 /// 切歌检测的快照监听路径：deck 不在自己的 build 里检测曲目变化，
 /// 而是监听 [PlaybackProvider] 通知、比较当前曲目 id 后开启切歌会话。
@@ -88,9 +95,9 @@ void main() {
             body: Center(
               child: PlayerCoverDeck(
                 displayTrack: a,
-                artDimension: 240,
-                stackDimension: 240 * 1.38,
-                stackHeight: 240 * 1.06,
+                artDimension: _deck.artDimension,
+                stackDimension: _deck.stackWidth,
+                stackHeight: _deck.stackHeight,
                 fullCoverKey: GlobalKey(),
                 onTrackSwapped: swaps.add,
               ),

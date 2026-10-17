@@ -1,3 +1,6 @@
+import 'dart:math' as math;
+
+import 'package:flutter/services.dart' show LogicalKeyboardKey;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:molia/data/catalog/catalog_service.dart';
 import 'package:molia/domain/models/playback.dart';
@@ -12,7 +15,9 @@ import 'package:molia/services/lyrics_display/lyrics_display_settings.dart';
 import 'package:molia/services/notification_service.dart';
 import 'package:molia/widgets/mdtab.dart';
 import 'package:molia/widgets/lyrics.dart';
+import 'package:molia/widgets/now_playing_controller.dart';
 import 'package:molia/widgets/player.dart';
+import 'package:molia/widgets/player_cover_deck.dart';
 import 'package:molia/widgets/queue.dart';
 import 'package:molia/widgets/shell_reselect.dart';
 import 'package:molia/widgets/track_info_view.dart';
@@ -56,6 +61,8 @@ void main() {
     WidgetTester tester, {
     List<SingleChildWidget> extraProviders = const [],
     ShellReselectSignal? reselect,
+    NowPlayingController? controller,
+    List<Track>? queue,
     Size size = const Size(420, 900),
     bool desktopLayout = false,
   }) async {
@@ -66,10 +73,15 @@ void main() {
       tester.view.resetDevicePixelRatio();
     });
 
+    // 默认单曲；给队列时停在中段，两侧邻位封面都有身份（越界断言需要）。
+    final tracks = queue ?? [_track('a')];
+    final int index = tracks.length > 1 ? 1 : 0;
     backend.emit(BackendSnapshot(
-      current: _track('a'),
-      queue: [_track('a')],
-      currentIndex: 0,
+      current: tracks[index],
+      queue: tracks,
+      currentIndex: index,
+      previous: index > 0 ? tracks[index - 1] : null,
+      next: index + 1 < tracks.length ? tracks[index + 1] : null,
       isPlaying: false,
       position: Duration.zero,
       duration: const Duration(seconds: 30),
@@ -93,7 +105,11 @@ void main() {
             ...GlobalMaterialLocalizations.delegates,
           ],
           supportedLocales: const [Locale('zh')],
-          home: NowPlaying(reselect: reselect, desktopLayout: desktopLayout),
+          home: NowPlaying(
+            reselect: reselect,
+            controller: controller,
+            desktopLayout: desktopLayout,
+          ),
         ),
       ),
     );
@@ -288,7 +304,31 @@ void main() {
     await tester.pump(const Duration(milliseconds: 50));
   });
 
-  testWidgets('桌面版式：左播放器列 + 右歌词/歌曲信息分页（无圆点、无队列）', (tester) async {
+  /// 桌面版式右侧 tab 的当前页（M3ETabs 的 selectedIndex）。
+  int desktopTabIndex(WidgetTester tester) =>
+      tester.widget<M3ETabs>(find.byType(M3ETabs)).selectedIndex;
+
+  /// 组件的实际绘制包围盒：本地四角经完整变换（含邻位封面的旋转）映射到
+  /// 全局——`getRect` 只用两角，旋转卡片的包围盒会被低估。
+  Rect paintedBounds(WidgetTester tester, Finder finder) {
+    final box = tester.renderObject<RenderBox>(finder);
+    final Rect local = Offset.zero & box.size;
+    final corners = <Offset>[
+      local.topLeft,
+      local.topRight,
+      local.bottomLeft,
+      local.bottomRight,
+    ].map(box.localToGlobal).toList();
+    return Rect.fromLTRB(
+      corners.map((point) => point.dx).reduce(math.min),
+      corners.map((point) => point.dy).reduce(math.min),
+      corners.map((point) => point.dx).reduce(math.max),
+      corners.map((point) => point.dy).reduce(math.max),
+    );
+  }
+
+  testWidgets('桌面版式：左播放器列 + 右「队列/歌词/信息」icon-only 三 tab（默认歌词）',
+      (tester) async {
     await pumpNowPlaying(
       tester,
       desktopLayout: true,
@@ -298,19 +338,29 @@ void main() {
     expect(tester.takeException(), isNull);
     // 播放器列始终完整（大屏布局），没有迷你态。
     expect(tester.widget<Player>(find.byType(Player)).isLargeScreen, isTrue);
-    // 右侧分页：歌词 / 歌曲信息（与移动版式同一套标题），默认选中歌词。
+    // 右侧三 tab：文字只留作无障碍名称（tab 行只显示 icon），顺序与移动端
+    // 圆点一致，默认激活歌词。
     final tabs = tester.widget<M3ETabs>(find.byType(M3ETabs));
-    expect(tabs.tabs.map((tab) => tab.label).toList(), ['歌词', '歌曲信息']);
-    expect(tabs.selectedIndex, 0);
+    expect(tabs.tabs.map((tab) => tab.label).toList(), [null, null, null]);
+    expect(
+      tabs.tabs.map((tab) => tab.semanticLabel).toList(),
+      ['队列', '歌词', '歌曲信息'],
+    );
+    expect(tabs.selectedIndex, nowPlayingLyricsTabIndex);
     expect(find.byType(LyricsWidget), findsOneWidget);
-    // 桌面没有圆点与队列页（队列由壳层右面板承载）。
+    // 桌面没有圆点与迷你态。
     expect(find.byType(LyricsQueueDots), findsNothing);
-    expect(find.byType(QueueDisplay), findsNothing);
+
+    // 切到队列 tab：队列页用 QueueDisplay，当前曲目由左侧播放器承载
+    // （includeCurrent = false，不重复展示）。
+    await tester.tap(find.byIcon(Icons.queue_music_rounded));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 400));
+    final queue = tester.widget<QueueDisplay>(find.byType(QueueDisplay));
+    expect(queue.includeCurrent, isFalse);
 
     // 切到歌曲信息页：分页内容与移动版式的信息页一致。
-    await tester.tap(
-      find.descendant(of: find.byType(M3ETabs), matching: find.text('歌曲信息')),
-    );
+    await tester.tap(find.byIcon(Icons.info_rounded));
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 400));
     expect(find.byType(TrackInfoView), findsOneWidget);
@@ -318,6 +368,184 @@ void main() {
 
     // 通知节流计时器跑完，避免 pending timer 报错。
     await tester.pump(const Duration(milliseconds: 50));
+  });
+
+  testWidgets('桌面版式：tab 行高按 M3ETabs 图标态 token（48）', (tester) async {
+    await pumpNowPlaying(
+      tester,
+      desktopLayout: true,
+      size: const Size(1400, 900),
+    );
+
+    final bar = find.byType(M3ETabs);
+    expect(
+      tester.getSize(bar).height,
+      M3ETabTheme.defaults.height,
+      reason: '图标态 tab 行高 = M3ETabTheme.height（48），不叠自拟内边距',
+    );
+
+    await tester.pump(const Duration(milliseconds: 50));
+  });
+
+  testWidgets('桌面版式：封面堆叠不越出播放器列（480）', (tester) async {
+    await pumpNowPlaying(
+      tester,
+      desktopLayout: true,
+      queue: [_track('a'), _track('b'), _track('c')],
+      size: const Size(1400, 900),
+    );
+    // 首帧切歌入场是弹簧动画（容差拖尾 > 0.7s）：动画期间邻位卡不带身份
+    // key，越界断言要等落定后再量。
+    await tester.pump(const Duration(milliseconds: 600));
+
+    final column = tester.getRect(find.byType(Player));
+    expect(column.width, 480, reason: '桌面播放器列宽（蓝图：420 → 480）');
+
+    // 预算口径：两侧各留一个内容内边距（24）→ 可用宽 432 → 封面边 ≈288。
+    final centerRect =
+        tester.getRect(find.byKey(PlayerCoverDeck.centerCoverCardKey));
+    expect(centerRect.width, closeTo(288, 0.5), reason: '视觉几乎不变（≈300）');
+
+    // 布局口径：堆叠容器自身不许比列宽（旧口径 art = 列宽 − 96、堆叠再
+    // ×1.38 = 530 > 480，容器被父级夹小、内层 Stack 仍按 530 绘制）。
+    final deck = tester.getRect(find.byKey(PlayerCoverDeck.stackKey));
+    expect(deck.width, lessThanOrEqualTo(column.width));
+    expect(deck.height, lessThanOrEqualTo(column.height));
+
+    // 绘制口径：三张卡（含邻位旋转包围盒）必须落在列内，不压进侧栏 /
+    // 歌词列。旧口径下这里会各越界约 32dp。
+    final painted = [
+      find.byKey(PlayerCoverDeck.centerCoverCardKey),
+      find.byKey(
+        PlayerCoverDeck.sideCoverCardKey(
+          left: true,
+          id: const TrackId('fake', 'a'),
+        ),
+      ),
+      find.byKey(
+        PlayerCoverDeck.sideCoverCardKey(
+          left: false,
+          id: const TrackId('fake', 'c'),
+        ),
+      ),
+    ]
+        .map((finder) => paintedBounds(tester, finder))
+        .reduce((a, b) => a.expandToInclude(b));
+    expect(painted.left, greaterThanOrEqualTo(column.left));
+    expect(painted.right, lessThanOrEqualTo(column.right));
+    expect(painted.top, greaterThanOrEqualTo(column.top));
+    expect(painted.bottom, lessThanOrEqualTo(column.bottom));
+
+    await tester.pump(const Duration(milliseconds: 50));
+  });
+
+  testWidgets('NowPlayingController：请求切页（重复触发也生效）', (tester) async {
+    final controller = NowPlayingController();
+    addTearDown(controller.dispose);
+    await pumpNowPlaying(
+      tester,
+      desktopLayout: true,
+      controller: controller,
+      size: const Size(1400, 900),
+    );
+    expect(desktopTabIndex(tester), nowPlayingLyricsTabIndex);
+
+    controller.showQueueTab();
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 400));
+    expect(desktopTabIndex(tester), nowPlayingQueueTabIndex);
+    expect(find.byType(QueueDisplay), findsOneWidget);
+
+    // 用户手动切回歌词后再请求：仍然生效（请求是动作不是状态）。
+    await tester.tap(find.byIcon(Icons.lyrics_rounded));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 400));
+    expect(desktopTabIndex(tester), nowPlayingLyricsTabIndex);
+
+    controller.showQueueTab();
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 400));
+    expect(desktopTabIndex(tester), nowPlayingQueueTabIndex);
+
+    controller.showInfoTab();
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 400));
+    expect(desktopTabIndex(tester), nowPlayingInfoTabIndex);
+
+    await tester.pump(const Duration(milliseconds: 50));
+  });
+
+  testWidgets('NowPlayingController：挂载前发出的请求在挂载时消费（默认页 = 请求页）',
+      (tester) async {
+    final controller = NowPlayingController()..showQueueTab();
+    addTearDown(controller.dispose);
+
+    await pumpNowPlaying(
+      tester,
+      desktopLayout: true,
+      controller: controller,
+      size: const Size(1400, 900),
+    );
+
+    expect(desktopTabIndex(tester), nowPlayingQueueTabIndex);
+    expect(find.byType(QueueDisplay), findsOneWidget);
+
+    await tester.pump(const Duration(milliseconds: 50));
+  });
+
+  testWidgets('移动版式：外部请求同样切到对应页', (tester) async {
+    final controller = NowPlayingController();
+    addTearDown(controller.dispose);
+    await pumpNowPlaying(tester, controller: controller);
+    expect(find.byType(LyricsWidget), findsOneWidget);
+
+    controller.showQueueTab();
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 400));
+    expect(find.byType(QueueDisplay), findsOneWidget);
+    expect(find.byType(LyricsWidget), findsNothing);
+
+    await tester.pump(const Duration(milliseconds: 50));
+  });
+
+  testWidgets('桌面版式：传输排带音量入口（面板改音量 / 百分比读数 / Esc 关闭）',
+      (tester) async {
+    await pumpNowPlaying(
+      tester,
+      desktopLayout: true,
+      size: const Size(1400, 900),
+    );
+
+    // 底栏进播放页会整条隐藏，音量必须在这一排可达。
+    final button = find.byKey(Player.volumeButtonKey);
+    expect(button, findsOneWidget);
+    await tester.tap(button);
+    await tester.pumpAndSettle();
+
+    final panel = find.byKey(Player.volumePanelKey);
+    expect(panel, findsOneWidget);
+    // 面板落在窗口内（列中段的锚点也要夹进宿主可绘制区）。
+    final panelRect = tester.getRect(panel);
+    final screen = tester.view.physicalSize / tester.view.devicePixelRatio;
+    expect(panelRect.left, greaterThanOrEqualTo(0));
+    expect(panelRect.right, lessThanOrEqualTo(screen.width));
+    // 百分比读数（默认音量 1.0 → 100%）。
+    expect(find.descendant(of: panel, matching: find.text('100%')),
+        findsOneWidget);
+
+    // 方向键调音量：面板一出现滑杆就持有焦点。
+    await tester.sendKeyEvent(LogicalKeyboardKey.arrowLeft);
+    await tester.pump();
+    expect(playback.volume, lessThan(1.0));
+    expect(backend.volumes, isNotEmpty);
+
+    // Esc 关闭面板（占用登记，不依赖焦点位置）。
+    await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+    await tester.pumpAndSettle();
+    expect(panel, findsNothing);
+
+    // 通知节流计时器跑完，避免 pending timer 报错。
+    await tester.pump(const Duration(milliseconds: 500));
   });
 
   testWidgets('第三个圆点：切到歌曲信息页（信息可见 + 到顶下拉切换播放器）', (tester) async {
