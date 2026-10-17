@@ -9,6 +9,7 @@ import 'package:molia/widgets/cover_appearance.dart';
 import 'package:molia/widgets/molia_mark.dart';
 import 'package:molia/widgets/player.dart';
 import 'package:molia/widgets/player_cover_deck.dart';
+import 'package:molia/widgets/seek_bar.dart';
 import 'package:material_3_expressive/material_3_expressive.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:provider/provider.dart';
@@ -60,6 +61,7 @@ void main() {
     ));
   }
 
+  /// 挂载播放器（高度用紧约束：与既有用例的既有口径一致）。
   Future<void> pumpPlayer(
     WidgetTester tester, {
     required AnimationController expand,
@@ -255,6 +257,78 @@ void main() {
     expect(tester.takeException(), isNull);
     await tester.pump(const Duration(milliseconds: 220));
     expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('小屏高度往返自洽：展开层内重算的封面尺寸与外层预算一致', (tester) async {
+    // 回归：完整层被 OverflowBox 按 fullHeight 强制布局，并在该高度上再算
+    // 一次封面尺寸。高度预算若预扣了不渲染的余量（如封面区纵向留白），
+    // 展开态 art 会比外层预算小一截、容器底部空出等量空白。
+    emitThreeTracks();
+
+    /// 播放器区域用宽松高度约束（`Align` 而非 `SizedBox`）：紧约束会把
+    /// 展开容器的插值高度压掉，量不到「容器底 − 内容底」。
+    Future<void> pumpTopAligned(AnimationController? expand) async {
+      tester.view.physicalSize = const Size(420, 900);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(() {
+        tester.view.resetPhysicalSize();
+        tester.view.resetDevicePixelRatio();
+      });
+      await tester.pumpWidget(
+        MultiProvider(
+          providers: [
+            ChangeNotifierProvider<PlaybackProvider>.value(value: playback),
+          ],
+          child: MaterialApp(
+            locale: const Locale('zh'),
+            localizationsDelegates: const [
+              AppLocalizations.delegate,
+              ...GlobalMaterialLocalizations.delegates,
+            ],
+            supportedLocales: const [Locale('zh')],
+            home: Scaffold(
+              body: Align(
+                alignment: Alignment.topCenter,
+                child: Player(
+                  expandAnimation: expand,
+                  onToggleExpand: () {},
+                ),
+              ),
+            ),
+          ),
+        ),
+      );
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 900));
+    }
+
+    double centerCoverWidth() => tester
+        .getSize(find.byKey(PlayerCoverDeck.centerCoverCardKey))
+        .width;
+
+    // 直接渲染完整版式：这一路的高度预算就是外层口径。
+    await pumpTopAligned(null);
+    final double directArt = centerCoverWidth();
+
+    final expand = AnimationController(
+      vsync: const TestVSync(),
+      duration: const Duration(milliseconds: 360),
+      value: 1.0,
+    );
+    addTearDown(expand.dispose);
+    await pumpTopAligned(expand);
+
+    expect(centerCoverWidth(), closeTo(directArt, 0.5),
+        reason: '展开层内再算的封面尺寸必须与外层预算一致（不双扣留白）');
+
+    // 容器底部不得留下「扣掉却不渲染」的 48dp 空白（只允许内部预留余量）。
+    final double bottomGap = tester.getRect(find.byType(Player)).bottom -
+        tester.getRect(find.byType(SeekBar)).bottom;
+    expect(bottomGap, greaterThanOrEqualTo(0));
+    expect(bottomGap, lessThan(48), reason: '展开容器底部空白 $bottomGap');
+
+    // 通知节流计时器跑完，避免 pending timer。
+    await tester.pump(const Duration(milliseconds: 50));
   });
 
   /// 飞行副本封面内的回退图标尺寸（无封面时副本只走默认回退这一颗）。

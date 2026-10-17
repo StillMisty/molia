@@ -96,23 +96,46 @@ class _PlayerState extends State<Player> with TickerProviderStateMixin {
   /// 宽度后不会再压过界（桌面列宽 480 → 可用 432 → 封面边 ≈288）。
   static const double _contentHorizontalPadding = 24;
 
-  /// 封面区纵向留白（上下各一份）：高度预算里的固定占位是估算值，字号被
-  /// 放大时会先让封面收缩，而不是把进度排挤出可视区。
-  static const double _deckVerticalMargin = 24;
+  /// 大屏封面区纵向留白（上下各一份）：高度预算里的固定占位是估算值，
+  /// 字号被放大时会先让封面收缩，而不是把进度排挤出可视区。
+  ///
+  /// 只有大屏版式留这段余量：小屏展开层会按内容高再算一次封面尺寸，
+  /// 「扣掉却不渲染」的高度会被双扣（见 [_smallScreenDeckMetrics]）。
+  static const double _largeScreenDeckMargin = 24;
 
   /// 传输排 / 进度排的横向内边距：两排首尾控件（播放模式 / 音量）的视觉
   /// 边缘对齐。
   static const double _controlsRowPadding = 12;
 
-  /// 封面可用高度：容器高扣掉固定占位与上下留白（未约束宿主返回无限高，
-  /// 纵向不参与约束）。
-  static double _deckAvailableHeight(double maxHeight, double reserved) =>
+  /// 小屏封面尺寸预算：容器高只扣标题/进度排。
+  ///
+  /// 与 [_playerContentHeight] 必须严格互逆：展开层的完整子树被
+  /// `OverflowBox` 按内容高强制布局，并在这个高度上**再算一次**封面尺寸——
+  /// 任何「扣掉却不渲染」的纵向余量都会双扣（art 变小、容器底部留白），
+  /// 所以小屏的可用高度不能预扣留白。
+  static CoverDeckMetrics _smallScreenDeckMetrics(
+    double maxWidth,
+    double maxHeight,
+  ) =>
+      coverDeckMetricsFor(
+        availableWidth: maxWidth,
+        availableHeight: maxHeight.isFinite
+            ? max(0.0, maxHeight - _sectionsReservedHeight)
+            : double.infinity,
+      );
+
+  /// 大屏封面可用高度：容器高扣掉固定占位与封面区上下留白（未约束宿主返回
+  /// 无限高，纵向不参与约束）。
+  static double _largeScreenDeckAvailableHeight(
+    double maxHeight,
+    double reserved,
+  ) =>
       maxHeight.isFinite
-          ? max(0.0, maxHeight - reserved - _deckVerticalMargin * 2)
+          ? max(0.0, maxHeight - reserved - _largeScreenDeckMargin * 2)
           : double.infinity;
 
-  /// 完整播放器内容高度：高度贴合内容（封面堆叠 + 文字/进度排），
-  /// 避免大片留白。
+  /// 完整播放器内容高度：高度贴合内容（封面堆叠 + 标题/进度排），
+  /// 避免大片留白；是 [_smallScreenDeckMetrics] 的逆函数。
   double _playerContentHeight(double art) =>
       art * coverDeckVerticalFactor + _sectionsReservedHeight;
 
@@ -342,7 +365,8 @@ class _PlayerState extends State<Player> with TickerProviderStateMixin {
   ///
   /// 高度感知：可用高度（NowPlaying 传入的 maxHeight）不足时收缩封面，
   /// 避免进度排把歌词区挤出屏幕。小屏封面是全宽主场（两侧没有相邻列），
-  /// 可用宽就是容器宽。
+  /// 可用宽就是容器宽；纵向预算与 [_playerContentHeight] 互逆（见
+  /// [_smallScreenDeckMetrics]）。
   Widget _buildSmallScreenPlayerLayout(
     Track? displayTrack,
     PlaybackProvider playbackProvider, {
@@ -350,12 +374,9 @@ class _PlayerState extends State<Player> with TickerProviderStateMixin {
   }) {
     return LayoutBuilder(
       builder: (context, constraints) {
-        final metrics = coverDeckMetricsFor(
-          availableWidth: constraints.maxWidth,
-          availableHeight: _deckAvailableHeight(
-            constraints.maxHeight,
-            _sectionsReservedHeight,
-          ),
+        final metrics = _smallScreenDeckMetrics(
+          constraints.maxWidth,
+          constraints.maxHeight,
         );
 
         return Column(
@@ -392,6 +413,10 @@ class _PlayerState extends State<Player> with TickerProviderStateMixin {
   ///
   /// 两套布局始终挂载（完整层按最终高度布局、顶部对齐裁剪），高度连续过渡；
   /// 封面由页内飞行副本在两端锚点间插值，两套布局共享同一次飞行。
+  ///
+  /// [fullHeight] 就是完整层的内容高：完整层在这个高度上重算封面尺寸，
+  /// 两者必须同一口径（见 [_smallScreenDeckMetrics]），否则展开态封面会
+  /// 比外层预算小一截、容器底部多出等量空白。
   Widget _buildExpandableSmallScreenLayout(
     Track? displayTrack,
     PlaybackProvider playbackProvider,
@@ -400,12 +425,9 @@ class _PlayerState extends State<Player> with TickerProviderStateMixin {
     return LayoutBuilder(
       builder: (context, constraints) {
         final double fullHeight = _playerContentHeight(
-          coverDeckMetricsFor(
-            availableWidth: constraints.maxWidth,
-            availableHeight: _deckAvailableHeight(
-              constraints.maxHeight,
-              _sectionsReservedHeight,
-            ),
+          _smallScreenDeckMetrics(
+            constraints.maxWidth,
+            constraints.maxHeight,
           ).artDimension,
         );
         return AnimatedBuilder(
@@ -937,7 +959,7 @@ class _PlayerState extends State<Player> with TickerProviderStateMixin {
         final metrics = coverDeckMetricsFor(
           availableWidth:
               constraints.maxWidth - _contentHorizontalPadding * 2,
-          availableHeight: _deckAvailableHeight(
+          availableHeight: _largeScreenDeckAvailableHeight(
             constraints.maxHeight,
             textSectionFixedHeight +
                 seekSectionHeight +
@@ -1078,7 +1100,7 @@ class _PlayerState extends State<Player> with TickerProviderStateMixin {
                 // 与进度排的播放模式同一内边距：两排右缘对齐。
                 padding: const EdgeInsets.only(right: _controlsRowPadding),
                 child: VolumeControl(
-                  key: Player.volumeButtonKey,
+                  buttonKey: Player.volumeButtonKey,
                   panelKey: Player.volumePanelKey,
                 ),
               ),

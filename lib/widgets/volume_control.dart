@@ -19,26 +19,17 @@ import '../services/escape_claims.dart';
 import 'icon_swap.dart';
 
 /// 音量图标按钮 + 弹层。
+///
+/// 图标按钮与面板两个锚点 key 由宿主给出：底栏与播放页各有自己的稳定 Key
+/// （测试定位入口与焦点包含判定）。
 class VolumeControl extends StatefulWidget {
-  const VolumeControl({
-    super.key,
-    this.buttonKey,
-    this.panelKey,
-    this.size = M3EIconButtonSize.sm,
-    this.visualSize,
-  });
+  const VolumeControl({super.key, this.buttonKey, this.panelKey});
 
   /// 图标按钮的稳定 Key（宿主 / 测试定位入口）。
   final Key? buttonKey;
 
   /// 弹层根节点的稳定 Key（定位面板与焦点包含判定）。
   final Key? panelKey;
-
-  /// 图标按钮档位（默认桌面档 `sm`：40 视觉 / 48 触控目标）。
-  final M3EIconButtonSize size;
-
-  /// 图标按钮视觉尺寸覆盖；为空用该档位的 token。
-  final Size? visualSize;
 
   @override
   State<VolumeControl> createState() => _VolumeControlState();
@@ -111,8 +102,6 @@ class _VolumeControlState extends State<VolumeControl> {
           child: M3EIconButton(
             key: widget.buttonKey,
             variant: M3EIconButtonVariant.standard,
-            size: widget.size,
-            visualSize: widget.visualSize,
             tooltip: l10n.playerBarVolume,
             icon: IconSwap<bool>(
               value: off,
