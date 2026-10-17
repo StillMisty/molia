@@ -1,6 +1,8 @@
 import 'package:flutter/foundation.dart';
 import 'package:molia/data/catalog/catalog_service.dart';
 import 'package:molia/data/playback/default_playback_facade.dart';
+import 'package:molia/data/settings/settings_keys.dart';
+import 'package:molia/data/settings/settings_registry.dart';
 import 'package:molia/domain/models/failure.dart';
 import 'package:molia/domain/models/playback.dart';
 import 'package:molia/domain/ports/library_store.dart';
@@ -197,11 +199,14 @@ PlaybackProvider buildTestPlaybackProvider({
   CatalogService? catalogService,
   LibraryStore? libraryRepository,
   PlaybackSessionStore? sessionStore,
+  SettingsRegistry? settings,
   Future<String?> Function(Track track)? artworkResolver,
 }) {
   final b = backend ?? FakePlaybackBackend();
   final facade = DefaultPlaybackFacade(backend: b);
   final store = sessionStore ?? PlaybackSessionStore();
+  // 设置注册表一处实例：provider 的重载钩子与协调者的读取同源（组合根口径）。
+  final registry = settings ?? SettingsRegistry(keys: kAllSettingsKeys);
   final observer = PlaybackObserver(
     facade: facade,
     libraryRepository: libraryRepository,
@@ -210,6 +215,7 @@ PlaybackProvider buildTestPlaybackProvider({
   final session = PlaybackSessionCoordinator(
     facade: facade,
     store: store,
+    settings: registry,
     onRestoredTrack: observer.showRestoredTrack,
   );
   final provider = PlaybackProvider(
@@ -218,6 +224,7 @@ PlaybackProvider buildTestPlaybackProvider({
     catalogService: catalogService,
     observer: observer,
     sessionCoordinator: session,
+    settings: registry,
   );
   // 与组合根同构：provider 先订阅、观察者后挂接（facade 监听顺序一致）。
   observer.attach();

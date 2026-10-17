@@ -173,6 +173,10 @@ class PlaybackProvider extends ChangeNotifier {
           onRestoredTrack: _observer?.showRestoredTrack,
         );
     _settings.bindReload(kDefaultPlayMode, reloadDefaultPlayMode);
+    // 启动恢复开关的重载钩子（跨设备同步应用远端值后由组合根触发）：钩子挂在
+    // provider 上——协调者只报告「恢复态是否变化」，UI 通知由这里发。
+    _settings.bindReload(
+        kRestoreSessionEnabled, reloadRestoreSessionPreference);
     _notifyThrottler = CategorizedNotifyThrottler(
       notifyCallback: super.notifyListeners,
       categoryIntervals: {
@@ -542,9 +546,15 @@ class PlaybackProvider extends ChangeNotifier {
     }
   }
 
-  /// 重新读取启动恢复开关（跨设备同步应用远端设置后由组合根调用）。
-  Future<void> reloadRestoreSessionPreference() =>
-      _session.reloadRestoreSessionPreference();
+  /// 重新读取启动恢复开关（跨设备同步应用远端设置后由组合根的重载钩子调用）。
+  ///
+  /// 恢复态发生撤下 / 装载时通知 UI（远端改开关与本地改同一口径）。
+  Future<void> reloadRestoreSessionPreference() async {
+    if (await _session.reloadRestoreSessionPreference()) {
+      _notifyCategory('track');
+      _notifyCategory('queue');
+    }
+  }
 
   /// facade 低频快照变化：处理失败并通知 UI（曲目/队列）；副作用扇出在
   /// [PlaybackObserver] 的同源监听里，恢复态交接在 [PlaybackSessionCoordinator]。

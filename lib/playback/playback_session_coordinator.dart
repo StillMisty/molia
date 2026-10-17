@@ -83,9 +83,6 @@ class PlaybackSessionCoordinator {
     _position = _RestoredPositionChannel(_facade.position);
     _facade.snapshot.addListener(_onLiveSnapshot);
     _facade.position.addListener(_onPositionTick);
-    // 设置页开关的重载钩子在本模块自绑（跨设备同步应用远端值后由组合根触发）。
-    _settings.bindReload(
-        kRestoreSessionEnabled, reloadRestoreSessionPreference);
     // 构造时同步一次快照：接线前真实播放可能已恢复曲目（如系统媒体会话），
     // 与观察者 attach 的「立即处理一次」同一口径（`_wasPlaying` 初值也由此对齐，
     // 否则启动即播放时第一次暂停会被当成「本就没在播」而少一次强制落盘）。
@@ -235,12 +232,19 @@ class PlaybackSessionCoordinator {
     return dropped;
   }
 
-  /// 重新读取启动恢复开关（跨设备同步应用远端设置后由组合根调用）。
-  Future<void> reloadRestoreSessionPreference() async {
+  /// 重新读取启动恢复开关（跨设备同步应用远端设置后由 provider 的重载钩子调用）。
+  ///
+  /// 返回恢复态是否发生变化（开关关闭撤下恢复态 / 开关开启且装载成功）：
+  /// 调用方据此刷新 UI——值未变或没进入恢复态时不必通知。
+  Future<bool> reloadRestoreSessionPreference() async {
     final enabled = await _settings.read(kRestoreSessionEnabled);
-    if (_restoreSessionEnabled == enabled) return;
-    _applyRestoreSessionEnabled(enabled);
-    if (enabled) await load();
+    if (_restoreSessionEnabled == enabled) return false;
+    if (enabled) {
+      _applyRestoreSessionEnabled(true);
+      // 开启：能装载才需要刷新（开关本身不改变现有画面）。
+      return load();
+    }
+    return _applyRestoreSessionEnabled(false);
   }
 
   /// 开关状态落地：关闭且无真实播放时撤下恢复态；返回是否撤下。

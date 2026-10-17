@@ -12,6 +12,7 @@ import 'dart:async';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:molia/data/playback/default_playback_facade.dart';
 import 'package:molia/data/settings/settings_keys.dart';
+import 'package:molia/data/settings/settings_registry.dart';
 import 'package:molia/domain/models/playback.dart';
 import 'package:molia/domain/models/track.dart';
 import 'package:molia/models/play_mode.dart';
@@ -136,11 +137,13 @@ void main() {
   late DateTime now;
 
   /// 装配协调者：[backendOverride] 给特殊后端（慢取链装载），
-  /// [persistStore] 让假 store 同时写真实存储，[onRestoredTrack] 记录恢复曲目。
+  /// [persistStore] 让假 store 同时写真实存储，[onRestoredTrack] 记录恢复曲目，
+  /// [settings] 给与 provider 同源的设置注册表（重载钩子测试）。
   PlaybackSessionCoordinator build({
     FakePlaybackBackend? backendOverride,
     bool persistStore = false,
     RestoredTrackReporter? onRestoredTrack,
+    SettingsRegistry? settings,
   }) {
     backend = backendOverride ?? FakePlaybackBackend();
     facade = DefaultPlaybackFacade(backend: backend);
@@ -149,6 +152,7 @@ void main() {
     session = PlaybackSessionCoordinator(
       facade: facade,
       store: store,
+      settings: settings,
       clock: () => now,
       onRestoredTrack: onRestoredTrack,
     );
@@ -481,6 +485,74 @@ void main() {
     expect(session.phase, PlaybackSessionPhase.idle);
     // 幂等：再关一次不再报告变化。
     expect(await session.setRestoreSessionEnabled(false), isFalse);
+  });
+
+  test('reloadRestoreSessionPreference：值未变不报告变化', () async {
+    final settings = SettingsRegistry(keys: kAllSettingsKeys);
+    build(settings: settings);
+
+    // 初始字段 = 键默认值（开），存储也是默认开 → 未变。
+    expect(await session.reloadRestoreSessionPreference(), isFalse);
+    expect(session.phase, PlaybackSessionPhase.idle);
+  });
+
+  test('reloadRestoreSessionPreference：远端关闭开关撤下恢复态并报告变化', () async {
+    final settings = SettingsRegistry(keys: kAllSettingsKeys);
+    build(settings: settings);
+    await seedSession(PlaybackSession(
+      tracks: [_track('a')],
+      index: 0,
+      position: const Duration(seconds: 12),
+    ));
+    expect(await session.load(), isTrue);
+
+    // 远端同步应用关闭值（协调者尚未看见）→ 重载钩子撤下恢复态。
+    await settings.write(kRestoreSessionEnabled, false);
+    expect(await session.reloadRestoreSessionPreference(), isTrue);
+    expect(session.restoreSessionEnabled, isFalse);
+    expect(session.hasRestoredSession, isFalse);
+    expect(session.phase, PlaybackSessionPhase.idle);
+
+    // 再 reload：值未变 → 不报告变化。
+    expect(await session.reloadRestoreSessionPreference(), isFalse);
+  });
+
+  test('reloadRestoreSessionPreference：远端开启开关重新装载并报告变化', () async {
+    SharedPreferences.setMockInitialValues({
+      kRestoreSessionEnabled.name: false,
+    });
+    final settings = SettingsRegistry(keys: kAllSettingsKeys);
+    build(settings: settings);
+    await seedSession(PlaybackSession(
+      tracks: [_track('a')],
+      index: 0,
+      position: const Duration(seconds: 12),
+    ));
+    expect(await session.load(), isFalse, reason: '关闭时不装载');
+    expect(session.phase, PlaybackSessionPhase.idle);
+
+    // 远端同步应用开启值 → 重载钩子重新装载恢复态。
+    await settings.write(kRestoreSessionEnabled, true);
+    expect(await session.reloadRestoreSessionPreference(), isTrue);
+    expect(session.restoreSessionEnabled, isTrue);
+    expect(session.hasRestoredSession, isTrue);
+    expect(session.resolve(facade.snapshot.value).current?.id.id, 'a');
+
+    // 已装载：再 reload 值未变 → 不报告变化。
+    expect(await session.reloadRestoreSessionPreference(), isFalse);
+  });
+
+  test('reloadRestoreSessionPreference：开启但无会话时不报告变化', () async {
+    SharedPreferences.setMockInitialValues({
+      kRestoreSessionEnabled.name: false,
+    });
+    final settings = SettingsRegistry(keys: kAllSettingsKeys);
+    build(settings: settings);
+
+    await settings.write(kRestoreSessionEnabled, true);
+    expect(await session.reloadRestoreSessionPreference(), isFalse);
+    expect(session.restoreSessionEnabled, isTrue);
+    expect(session.phase, PlaybackSessionPhase.idle);
   });
 
   test('reloadFromStore：远端删除会话撤下恢复态；有会话则重新装载', () async {
