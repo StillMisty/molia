@@ -94,7 +94,6 @@ Flutter 的规则是"**只注册在 pubspec 里声明了该平台的插件**"，
 | macos | `media_kit_libs_macos_audio` |
 | linux | `media_kit_libs_linux` |
 | windows | `media_kit_libs_windows_audio` |
-| web | （无） |
 
 对照现状：linux 只有 `media_kit_libs_linux`、windows 只有 `media_kit_libs_windows_audio`，
 android/ios/macos 列表里**没有任何 media_kit 插件**（本仓库 `.flutter-plugins-dependencies` 实测）。

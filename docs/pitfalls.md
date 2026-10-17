@@ -27,9 +27,8 @@
    `https://dl.google.com/dl/android/maven2`，不要改回 `maven.google.com`。
 6. **share_plus 13**：使用 `SharePlus.instance.share(ShareParams(files: ..., text: ...))`，
    `Share.shareXFiles` 已不存在。
-7. **Web 不支持音源**：`kIsWeb` 时 `SourceManager` 不激活引擎；不要移除条件导入
-   （`lx_engine.dart` / `desktop_audio_init.dart` 的 stub 分支）。数据库无需处理：
-   `drift_flutter` 自身按平台条件导出，Web 运行时不初始化数据库即可。
+7. **（已解决 / 已移除）Web 平台**：项目不再构建 Web（音源引擎依赖 isolates 与原生库，
+   播放 / 下载 / 同步也没有 Web 实现）。代码中不要重新引入 `kIsWeb` 分支或条件导入 stub。
 8. **音源脚本是不可信代码**：不要在引擎里暴露文件系统/平台通道；网络只走 `lx.request` 桥。
    `currentScriptInfo` 必须原样透传（部分脚本有防篡改校验，校验失败会死循环）。
 9. **ELECTRON 脚本兼容性**：脚本可能使用 `atob/btoa/TextEncoder/setTimeout/window/navigator`
@@ -59,8 +58,7 @@
     （Windows 的 `app_icon.ico` 同时是 exe/任务栏/安装器/快捷方式图标，不要手改）；
     `minSdk=37` 下传统 mipmap 密度图无意义，已全部移除，不要用工具再生成。
 14. **省流模式的网络检测**：Android 8+ 后台不广播网络变化，`_MyThemedAppState` 在
-    `resumed` 时调 `DataSaverService.refreshConnectivity()`，不要删除；Web 的
-    connectivity_plus 拿不到「蜂窝」类型（只会返回 wifi/none），省流在 Web 不会自动生效；
+    `resumed` 时调 `DataSaverService.refreshConnectivity()`，不要删除；
     检测失败时保守按「未生效」处理（`detectionAvailable=false`）。
 15. **`--no-pub` 会跳过插件注册文件再生成**：`flutter build ... --no-pub` 不重写
     `android/app/src/main/java/io/flutter/plugins/GeneratedPluginRegistrant.java`。
@@ -156,10 +154,10 @@
     （如 `flutter build linux --debug`）再以
     `LIBQUICKJSC_TEST_PATH=<abs>/libquickjs_c_bridge_plugin.so flutter test ...` 运行。
 30. **桌面窗口 chrome 只在 `lib/services/window/` 里碰 window_manager**：
-    `window_manager` 的 Dart 代码 import `dart:io`，任何会参与 Web 编译的代码
-    直接 import 它都会让 `flutter build web` 失败；统一经
-    `window_chrome.dart` 的条件导出（stub/io，同 `system_fonts_service.dart` 模式），
-    全仓库只有 `window_chrome_io.dart` 一处 import 该包。
+    `window_manager` 的 Dart 代码 import `dart:io`，散布进 UI 会把平台实现拖进
+    其它平台的构建/测试；统一经 `window_chrome.dart` 收口
+    （全仓库只有 `window_chrome_io.dart` 一处 import 该包，非桌面平台按不支持处理），
+    同 `system_fonts_service.dart` 模式。
     `TitleBarStyle.hidden` 之后系统标题栏与系统按钮都不复存在，窗口拖动只能靠
      UI 侧的 `WindowDragArea`（已包在壳层顶栏外层）——不要在别处再隐藏标题栏，
      也不要把顶栏的拖动区摘掉，否则窗口再也拖不动。

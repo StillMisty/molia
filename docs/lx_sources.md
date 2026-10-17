@@ -66,7 +66,7 @@ lib/sources/
     lx_script_info.dart      # 脚本元信息（@name/@version/@updateUrl...）与源声明解析
     lx_script_repository.dart# 脚本持久化（应用支持目录 lx_sources.json；replace 原地更新）
     lx_script_update.dart    # 在线检查/更新：下载（10s/1MB 上限）+ 校验 + HTML 识别
-    lx_engine.dart           # 引擎入口（Web 平台为占位实现）
+    lx_engine.dart           # 引擎入口（原生 isolates + FFI，自愈监督）
     lx_engine_native.dart    # isolate + quickjs_engine（QuickJS-NG）实现
     lx_engine_supervisor.dart# 状态机 + 退避重启（0.5s/2s/8s，连续 3 次 → failed）
     lx_native_utils.dart     # 同步工具：md5 / AES / RSA NoPadding / randomBytes / zlib
@@ -175,5 +175,4 @@ lib/playback/
 - 歌手 / 歌词检索为内置平台的非官方接口：tx 歌手歌曲无分页（约 60 首）、
   kg 歌手搜索无总数、mg 歌手无简介、kw 歌词搜索为模糊匹配、mg 歌词排序偏翻唱
   （按平台排序原样展示）；
-- Web 端不支持音源脚本（无本地 JS 引擎），界面已做降级；
 - iOS/Android 后台播放与通知/耳机键需真机验证。

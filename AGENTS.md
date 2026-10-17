@@ -35,7 +35,6 @@ tool/agent/test.sh android             # 同一套集成测试跑 Android 模拟
                                        # 首次 Gradle 构建较久，必要时 --timeout 放宽
 tool/agent/seed.sh android|linux <cmd> # 数据注入：favorites / history / session / mock-source / status / clear / restore
 flutter build apk --debug              # 手动装包验证用；自动化验证走上面的集成测试
-flutter build web --release            # 涉及 UI 组件时加跑；音源脚本在 Web 不可用
 flutter build apk --release --split-per-abi --split-debug-info=build/symbols --obfuscate --extra-gen-snapshot-options=--strip   # 构建发布
 git tag v1.2.3 && git push origin v1.2.3  # 发布（tag 即版本；测试版 v1.2.3-beta.1；流程与 secrets 见 docs/release.md）
 ```
@@ -108,7 +107,15 @@ lib/
   `withValues(alpha:)`；优先 `M3E*` 组件，禁止 import `package:flutter/material.dart`；
 - Git：功能分支开发（主分支 `main`），提交信息 `feat/fix/chore/refactor(scope): 描述`；
 - 每次改动后至少 `flutter analyze --no-pub` + `flutter test --no-pub`；引擎/音源改动按
-  `docs/lx_sources.md` 的验证清单，UI 组件改动加跑 `flutter build web --release`；
+  `docs/lx_sources.md` 的验证清单；迭代中可只跑改动范围（如 `flutter test --no-pub test/catalog`），提交前跑全量；
+- 不要写「无意义」的测试：必须测的是领域不变量（`raw`/`payload` 原样回传、
+  错误统一归一化、幂等）、边界与错误分支、真实回归（修过的 bug）、架构强制
+  （`test/architecture/`）；不写复述实现的断言、下层已专测的重复覆盖
+  （同一行为只测一处，如缓存语义只在 `test/catalog/request_cache_test.dart`）、
+  纯冒烟/布局（每页至多一条代表）、锁死动画时长与像素中间帧的实现细节、
+  占位功能的完整错误矩阵；删测试前先确认行为已有替代覆盖，并在提交信息里写明
+  「由谁覆盖」，与功能改动分开提交 `chore(test): ...`；小而散的测试文件优先并入
+  同模块文件（每个测试文件的装载开销约 2s，与文件数成正比）；
 - 不要把密钥（API Key 等）提交进仓库。
 
 ## AI 工具链（OpenCode）

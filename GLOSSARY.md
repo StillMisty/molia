@@ -48,7 +48,7 @@
   `androidWillPauseWhenDucked`（just_audio 对 `usage=media` 的 duck 既不压音量也不
   暂停，必须声明成暂停语义）；中断 `begin == true`（含 duck / 永久丢失）→ 暂停，
   暂停延后一个 microtask 以兼容 just_audio 的打断记账；恢复焦点不抢播（transient
-  的续播由 just_audio 负责）。桌面 / Web 无插件实现时 no-op。
+  的续播由 just_audio 负责）。桌面无插件实现时 no-op。
 
 ## 播放页封面（cover deck）
 
@@ -140,7 +140,7 @@
   any-listen → 内置五平台原生实现（wy eapi + yrc、tx PlayLyricInfo + QRC、
   kg KRC、kw LRCX、mg MRC；封面 wy 歌曲详情 / tx 专辑 mid / kg `get_res_privilege`
   / kw `pic.web` / mg 资源封面）。解码器在 `lib/sources/builtin/*_lyric.dart` +
-  `tx_qrc.dart`（zlib 走条件导入，Web 优雅降级）。内置派发的唯一实现（五平台
+  `tx_qrc.dart`（zlib 走 FFI 原生实现）。内置派发的唯一实现（五平台
   switch + 结果缓存）在 `lib/sources/builtin/builtin_lyric_dispatch.dart` /
   `builtin_pic_dispatch.dart`，与平台适配器同门。
 - **Word timing（逐字时间轴）** — `lib/models/lyric_line.dart`：`LyricLine.words`
@@ -356,7 +356,7 @@
   失败项折叠展示；推荐结果 100% 来自已启用音源。
 - **LLM config（AI 服务配置）** — `lib/services/ai/ai_settings_store.dart`：
   Base URL / API Key / 模型（OpenAI-compatible，预设 DeepSeek/OpenAI/自定义）；
-  Key 只写 `flutter_secure_storage`、不进日志；Web 平台隐藏入口（`aiDjSupportedPlatform`）。
+  Key 只写 `flutter_secure_storage`、不进日志。
 - **Queue enqueue（队列追加）** — `PlaybackFacade/Backend/Service.enqueueTracks` +
   `PlaybackProvider.enqueueDomainTracks`：顺序模式追加队尾；洗牌模式经
   `PlaybackShuffleOrder.extend` 扩展排列（当前轮老歌在前，轮末重洗覆盖全队列）。

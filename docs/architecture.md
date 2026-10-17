@@ -98,7 +98,7 @@
   （tick / 快照变化 / 回前台三路补触发），并按平台挂 `SleepTimerAlarm`
   （`lib/services/sleep_timer_alarm*.dart` → Android `SleepTimerChannelHandler` /
   iOS `SleepTimerChannelHandler.swift`）：熄屏 / Doze 下 Dart timer 被节流或
-  冻结时，由原生定时器到点唤醒 Dart 执行暂停；原生不可用（Web / 桌面 / 测试）
+  冻结时，由原生定时器到点唤醒 Dart 执行暂停；原生不可用（桌面 / 测试）
   自动退化为纯 Dart timer。
 - **Lyrics**：`LyricsProvider`（`lib/providers/lyrics_provider.dart`）是取词 → 缓存 →
   解析 → 预取的唯一实现，对外只暴露 `LyricsState`（idle/loading/ready/empty + isSynced，
@@ -209,7 +209,7 @@
   「上次更新」只在 AI 页与发现页推荐区展示。发现页 `AiDjCarousel` 用 carousel
   原生槽位展示歌名/歌手（`applyDynamicTextContentTransform: false`），
   功能未启用时整条隐藏；播放页不再有 AI 徽标。
-  首次开启隐私确认、Web 隐藏；定位与边界见 ADR-0002。
+  首次开启隐私确认；定位与边界见 ADR-0002。
 - **跨设备数据同步（可选，默认关闭）**：同步歌单 / 收藏 / 音源脚本与配置 /
   跟人走的设置 / 听歌统计 / 播放历史 / 上次播放会话 / AI DJ 与凭证。信任模型是
   **同步口令即信任根**（加入即完全互信，无逐项审批），快照整体加密：根密钥 =
@@ -263,7 +263,7 @@
   `importBackupJson`；协议旧版备份拒绝导入），凭证类默认排除。数据变更经
   调度器进入触发链，生命周期回调由 `main.dart` 的 `AppLifecycleListener` 转发；
   同步后的定向重载经 `PrefsSyncAdapter.onApplied` 接线。设置入口
-  `settings_page.dart` → `sync_settings_page.dart`，Web 隐藏。
+  `settings_page.dart` → `sync_settings_page.dart`。
 - **渠道选择**：`DiscoverProvider.channelKey` 是渠道状态的唯一持有者；渠道变化经
   注入的 `onChannelChanged`（组合根）同步搜索源（可搜索渠道才跟随），资料页只
   处理「渠道被停用」的 UI 回退，不再在两个 provider 之间仲裁同步。
@@ -357,7 +357,7 @@
   （`DownloadSettings.saveDir`，存储层每次解析读取，改设置无需重启）；
   `lyrics/` + `covers/` 子目录与 `cache/audio_cache` 完全隔离——「清理缓存」
   永不触碰下载，「删除下载」是独立动作；`DownloadStorage` 是平台 seam
-  （IO 实现 / Web 空实现，存储不可用时 `supported=false`，UI 隐藏全部入口）；
+  （原生 MethodChannel 实现，存储不可用时 `supported=false`，UI 隐藏全部入口）；
 - **Android 公共目录发布**（issue #17）：下载完成后把音频 best-effort 拷进
   MediaStore 的 Downloads 集合（`Download/Molia/`，与桌面同构），用户在文件
   管理器 / 其它播放器里可见。**公共副本是发布副本，不参与播放取链**：应用
@@ -365,7 +365,7 @@
   回收副本；API 29+ `insert + openOutputStream`（应用自己创建的行无需存储
   权限，`IS_PENDING` 防半成品可见），< 29 返回 null 不支持；平台 seam
   `DownloadsPublisher`（`lib/data/downloads/downloads_publisher.dart`：
-  IO = MethodChannel `top.stillmisty.molia/downloads`，Web = 空实现，
+  MethodChannel `top.stillmisty.molia/downloads`，
   失败 / 通道缺失一律 no-op 只记日志）；发布开关
   `DownloadSettings.publishToPublicDir`（默认开，仅 Android 显示），管理页
   提供「补发布到公共目录」回收旧记录；
@@ -690,7 +690,6 @@ tool/agent/test.sh android               # 同一份集成测试跑模拟器（�
 flutter build apk --debug
 flutter build apk --release --split-per-abi --split-debug-info=build/symbols --obfuscate \
   --extra-gen-snapshot-options=--strip   # 发布体积（APK 压缩打包见 android/app/build.gradle：~50%↓）
-flutter build web --release
 ```
 
 已兑现的性能收益：进度 tick 不再触发聚合通知（进度条/歌词行局部重建）；队列列表进度期 0

@@ -18,7 +18,7 @@ Molia 当前只有在播放页内渲染的滚动歌词。桌面悬浮歌词、�
 
 - Linux / Windows 桌面歌词（等待 Flutter 官方 windowing API 进入 stable 后实现，见 §11）；
 - 第三方状态栏模块（Lyricon / 墨·状态栏歌词）对接——用户已确认不做；
-- iOS / Web 的歌词输出（入口隐藏，全部 no-op）；
+- iOS 的歌词输出（入口隐藏，全部 no-op）；
 - 逐字歌词渲染（yrc / lxlyric 数据存在；应用内歌词页与应用**桌面歌词**
   均已实现词级高亮，通知 / 蓝牙输出仍按行）。
 
@@ -396,7 +396,7 @@ abstract class LyricsOutput {
 - [ ] 设置子页（桌面歌词分组 + 预览卡片）+ l10n
 - [ ] 模拟器截图验证：显示、拖动、锁定、控制条、权限拒绝/撤销、横竖屏
 
-**DoD**：模拟器全流程可用；Web 构建通过且入口隐藏。
+**DoD**：模拟器全流程可用；输出入口按平台能力隐藏。
 
 ### Phase 3：通知/锁屏 + 蓝牙
 
@@ -412,7 +412,7 @@ abstract class LyricsOutput {
 
 - [ ] 播放页歌词快捷操作栏加「桌面歌词」开关（可选）
 - [ ] `docs/architecture.md`、`AGENTS.md` 同步；本文件更新为 as-built
-- [ ] 全量验证：`flutter analyze` / `flutter test` / `flutter build web --release` /
+- [ ] 全量验证：`flutter analyze` / `flutter test` /
       桌面端集成测试保持可跑
 
 ## 8. 测试计划
