@@ -602,7 +602,7 @@
   **封面覆盖**（当前曲目已有封面取色结果时用封面 seed 覆盖基础配色，包括
   盖过莫奈；启动恢复态在首帧前用本地缓存预解析；无封面回退）+
   **纯黑**（深色下覆盖 surface 系列，与来源正交可叠加）。
-  解析：`封面 > 壁纸（可用时）> 自定义` → `applyPureBlackScheme`。
+  解析：`封面 > 壁纸图 seed（桌面）> 强调色方案 > 自定义` → `applyPureBlackScheme`。
 - 主题出口：`lib/theme/app_theme.dart::buildAppThemeData(ColorScheme)` 是唯一 ThemeData 构建处，
   并注册语义色扩展 `AppSemanticColors`（success/warning，固定色调、随亮度派生）；
   `ColorScheme` 派生唯一入口 `lib/theme/scheme_builder.dart::buildColorScheme`；

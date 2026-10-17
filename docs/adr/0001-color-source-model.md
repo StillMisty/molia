@@ -24,6 +24,11 @@
    > 新装 / 从未配置过的设备直接吃莫奈；平台不支持时解析仍回退自定义种子色）。
    > 迁移保持兼容：旧键 `monet_color_enabled` 显式关闭的用户迁到 `custom`，
    > 不因默认值变化改色。
+   > **2026-10-17 修订**：桌面（Linux GNOME 系 / Windows）`wallpaper` 档接入
+   > 真实壁纸图取色：`SystemWallpaperSource` 探测壁纸文件（Linux gsettings、
+   > Windows TranscodedWallpaper）、`ArtworkPaletteService.loadLocalFile` 取
+   > seed，优先级变为壁纸图 seed > 系统强调色方案 > 自定义种子色；其它桌面
+   > （KDE / XFCE）与拿不到壁纸时仍走强调色兜底；壁纸变更重启后生效（不监听）。
 2. 封面覆盖（开关，默认开）：当前曲目有封面取色结果时用封面 seed 覆盖基础配色
    （包括盖过莫奈）；无封面时清除并回退基础配色；取色失败保持现色；
    > **2026-10-15 修订**：冷启动恢复态在 `runApp` 前用本地已有封面预解析 seed
@@ -31,12 +36,14 @@
    > 封面色；未命中/失败仍回退稳态链路（settleDelay 后取色再过渡）。
 3. 纯黑背景（独立开关）：仅深色模式覆盖 surface 系列，与取色来源正交可叠加。
 
-解析唯一：`封面 > 壁纸（基础=壁纸且平台可用）> 自定义` → `applyPureBlackScheme`。
+解析唯一：`封面 > 壁纸图（桌面，基础=壁纸）> 强调色（基础=壁纸且平台可用）
+> 自定义` → `applyPureBlackScheme`。
 
 **派生唯一**：`buildColorScheme(seed, brightness)` 是全 App 唯一的 ColorScheme
-工厂；`ArtworkPaletteService` 是唯一的封面取色入口（像素 → seed → 双亮度方案 +
-LRU + 并发合并），由组合根监听 `PlaybackProvider` 触发（任何页面 / 后台切歌同一
-链路；省流模式本地缓存可取色，未命中保持现色）。任何模块不得二次提取封面像素。
+工厂；`ArtworkPaletteService` 是唯一的图像取色入口（封面 URL / 本地图像路径 →
+像素 → seed → 双亮度方案 + LRU + 并发合并），由组合根监听 `PlaybackProvider`
+触发（任何页面 / 后台切歌同一链路；省流模式本地缓存可取色，未命中保持现色）。
+任何模块不得二次提取封面像素。
 
 **消费面独立来源**：桌面歌词分组与海报各有 `SurfaceColorSource`
 （`appTheme` / `artwork`；海报另有 `custom` 专属任意色），经

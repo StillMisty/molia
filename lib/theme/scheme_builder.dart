@@ -2,7 +2,8 @@ import 'package:material_ui/material_ui.dart';
 
 /// 全局主题的基础配色来源（与「播放时跟随封面」覆盖层正交）。
 ///
-/// - [wallpaper]：系统壁纸（莫奈）配色，平台不支持时回退自定义种子色；
+/// - [wallpaper]：系统壁纸配色（桌面优先壁纸图 seed，其次系统强调色），
+///   不可用时回退自定义种子色；
 /// - [custom]：用户自定义种子色（`ThemeProvider.seedColor`）。
 enum ColorBaseSource { wallpaper, custom }
 
