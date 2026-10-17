@@ -2,8 +2,7 @@
 """生成应用内更新清单 latest.json（release.yml 在发布时调用）。
 
 清单是客户端唯一的版本信息来源：放在 Release 资产里（稳定版经
-`releases/latest/download/latest.json`、测试版经滚动 `beta` 标签），
-Web 端另由 Pages 同源提供，避免 GitHub API 的匿名限流。
+`releases/latest/download/latest.json`、测试版经滚动 `beta` 标签）。
 
 用法（见 .github/workflows/release.yml）：
 
@@ -19,7 +18,6 @@ Web 端另由 Pages 同源提供，避免 GitHub API 的匿名限流。
     molia-<version>-windows-x64-setup.exe  （安装版首选产物）
     molia-<version>-windows-x64.zip        （便携版产物）
     molia-<version>-linux-x64.tar.gz
-    molia-<version>-web.zip
     molia-<version>-ios-unsigned.zip       （不入清单：iOS 不走应用内更新）
 """
 

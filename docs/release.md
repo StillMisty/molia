@@ -8,9 +8,9 @@
 
 | 工作流 | 触发 | 做什么 |
 |---|---|---|
-| `ci.yml` | PR / push main / 手动 | `flutter analyze` + `flutter test` + `flutter build web`（UI 编译兜底） |
+| `ci.yml` | PR / push main / 手动 | `flutter analyze` + `flutter test` |
 | `integration.yml` | 每日 02:00（UTC+8）/ 手动 | Linux 端到端集成测试（真实引擎 + 本地 mock 服务；不含播放，见 `docs/pitfalls.md` #33；xvfb） |
-| `release.yml` | 推 `v*` tag | 矩阵构建 → 汇总产物 + sha256 + `latest.json` → GitHub Release →（稳定版）部署 Web |
+| `release.yml` | 推 `v*` tag | 矩阵构建 → 汇总产物 + sha256 + `latest.json` → GitHub Release |
 
 CI 的 Flutter 版本固定 `3.47.6`、JDK 26、Android NDK `30.0.16248370`，
 与 `AGENTS.md` 的工具链表一致；改版本时两边一起改。
@@ -26,7 +26,6 @@ CI 的 Flutter 版本固定 `3.47.6`、JDK 26、Android NDK `30.0.16248370`，
   - 稳定版：`https://github.com/StillMisty/molia/releases/latest/download/latest.json`
   - 测试版：`https://github.com/StillMisty/molia/releases/download/beta/latest.json`
     （`beta` 是发布流水线每次发测试版时重建的滚动标签）
-- Web 端在 Pages 根目录同时部署 `latest.json`（同源读取，避免 CORS 与限流）。
 
 ## 3. 一次性准备
 
@@ -41,10 +40,7 @@ CI 的 Flutter 版本固定 `3.47.6`、JDK 26、Android NDK `30.0.16248370`，
    注意：**签名必须与用户已安装的 APK 一致**，否则系统安装器会拒绝覆盖安装；
    keystore 必须长期保存（丢了就只能让用户卸载重装）。
 
-2. **GitHub Pages**（Settings → Pages）：Source 选「GitHub Actions」。
-   稳定版发布会部署 `molia-<ver>-web/`（base-href `/molia/`）。
-
-3. pub 源：`pubspec.lock` 锁定 `pub.flutter-io.cn`，工作流统一设置
+2. pub 源：`pubspec.lock` 锁定 `pub.flutter-io.cn`，工作流统一设置
    `PUB_HOSTED_URL=https://pub.flutter-io.cn` 保持同源（否则 lock 会被改写）。
 
 ## 4. 发布流程
@@ -66,7 +62,6 @@ molia-1.2.3-android-symbols.zip         # obfuscate 调试符号
 molia-1.2.3-windows-x64-setup.exe       # Windows 安装器（Inno Setup，安装版首选）
 molia-1.2.3-windows-x64.zip             # Windows 便携版
 molia-1.2.3-linux-x64.tar.gz
-molia-1.2.3-web.zip
 molia-1.2.3-ios-unsigned.zip            # 无签名，仅侧载
 latest.json                             # 应用内更新清单
 SHA256SUMS.txt
@@ -123,7 +118,6 @@ SHA256SUMS.txt
   在完成后自动拉起应用。
 - **Windows 便携版**：解压 zip 到任意可写目录运行；应用内更新是「解压覆盖 +
   重启」，目录不可写时降级为手动下载。
-- **Web**：无应用内安装，检测到新版本后刷新页面（Pages 同源清单）。
 - **iOS**：无应用内更新（App Store 规则），产物仅供侧载验证。
 
 ## 7. 本地验证

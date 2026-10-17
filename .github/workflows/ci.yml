@@ -1,6 +1,6 @@
 name: CI
 
-# PR / main 的快速校验：静态分析 + 单元测试 + Web 编译兜底。
+# PR / main 的快速校验：静态分析 + 单元测试。
 # 发布构建走 release.yml；真实引擎的集成测试走 integration.yml。
 on:
   pull_request:
@@ -18,7 +18,7 @@ env:
 
 jobs:
   analyze-test:
-    name: Analyze / Test / Web build
+    name: Analyze / Test
     # 明确固定 runner 版本（ubuntu-latest 正在迁移到 Ubuntu 26，避免被动换基线）。
     runs-on: ubuntu-24.04
     timeout-minutes: 45
@@ -50,8 +50,3 @@ jobs:
 
       - name: test
         run: flutter test --no-pub
-
-      # AGENTS.md：UI 组件改动需能通过 Web 编译（音源脚本在 Web 不可用，
-      # 但整仓必须保持可编译）。这里只构建、不部署。
-      - name: web build
-        run: flutter build web --release --no-pub

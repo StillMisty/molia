@@ -241,40 +241,6 @@ jobs:
           path: dist/*.tar.gz
           if-no-files-found: error
 
-  web:
-    name: Web
-    needs: prepare
-    runs-on: ubuntu-24.04
-    timeout-minutes: 45
-    steps:
-      - uses: actions/checkout@v7
-      - uses: subosito/flutter-action@v2
-        with:
-          flutter-version: 3.47.6
-          channel: stable
-          cache: true
-      - name: pub get
-        run: flutter pub get --enforce-lockfile
-      - name: 构建（GitHub Pages 子路径）
-        run: |
-          set -euo pipefail
-          v="${{ needs.prepare.outputs.version }}"
-          flutter build web --release --base-href /molia/ \
-            --build-name "$v" --build-number "${{ needs.prepare.outputs.build }}"
-          mkdir -p dist
-          (cd build/web && zip -qr "$GITHUB_WORKSPACE/dist/molia-$v-web.zip" .)
-      - uses: actions/upload-artifact@v7
-        with:
-          name: release-web
-          path: dist/*.zip
-          if-no-files-found: error
-      # Pages 部署用原始目录（含 index.html 与 flutter_service_worker.js）。
-      - uses: actions/upload-artifact@v7
-        with:
-          name: web-site
-          path: build/web
-          if-no-files-found: error
-
   ios:
     name: iOS（无签名校验）
     needs: prepare
@@ -305,7 +271,7 @@ jobs:
 
   publish:
     name: 发布 Release + latest.json
-    needs: [prepare, android, windows, linux, web, ios]
+    needs: [prepare, android, windows, linux, ios]
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v7
@@ -368,39 +334,3 @@ jobs:
             --title "Beta channel" \
             --notes "测试渠道滚动清单（latest.json 指向最新测试版）。" \
             beta-dist/latest.json
-      # Pages 部署需要稳定版清单与 Web 目录，单独传给部署 job。
-      - uses: actions/upload-artifact@v7
-        if: needs.prepare.outputs.channel == 'stable'
-        with:
-          name: latest-json
-          path: dist/latest.json
-          if-no-files-found: error
-
-  deploy-pages:
-    name: 部署 Web（GitHub Pages）
-    needs: [prepare, publish, web]
-    if: needs.prepare.outputs.channel == 'stable'
-    runs-on: ubuntu-24.04
-    permissions:
-      # 下载构建产物需要 actions: read；Pages 部署需要 pages/id-token。
-      actions: read
-      contents: read
-      pages: write
-      id-token: write
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
-    steps:
-      - uses: actions/download-artifact@v8
-        with:
-          name: web-site
-          path: site
-      - uses: actions/download-artifact@v8
-        with:
-          name: latest-json
-          path: site
-      - uses: actions/upload-pages-artifact@v5
-        with:
-          path: site
-      - id: deployment
-        uses: actions/deploy-pages@v5
