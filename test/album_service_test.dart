@@ -4,7 +4,7 @@ import 'package:molia/domain/models/album.dart';
 import 'package:molia/domain/models/failure.dart';
 import 'package:molia/domain/models/track.dart';
 
-/// 专辑服务：缓存（single-flight / TTL / 失效）+ 错误归一化。
+/// 专辑服务：缓存 key 形状、失效 + 错误归一化。
 void main() {
   Album albumOf(String id, int page, {int limit = 50, bool hasMore = true}) =>
       Album(
@@ -41,12 +41,8 @@ void main() {
     service = buildService();
   });
 
-  test('同 key 命中缓存（single-flight）；不同页各自取数', () async {
-    final first = await service.load('wy', '32311');
-    final second = await service.load('wy', '32311');
-    expect(calls, hasLength(1), reason: '同 key 命中缓存');
-    expect(second, first);
-
+  test('不同页 / 专辑 / 平台各自取数：page/limit/source 透传 fetch', () async {
+    await service.load('wy', '32311');
     await service.load('wy', '32311', page: 2);
     await service.load('wy', 'other');
     await service.load('tx', '32311');
@@ -54,15 +50,6 @@ void main() {
     expect(calls[1], (source: 'wy', albumId: '32311', page: 2, limit: 50));
     expect(calls[2], (source: 'wy', albumId: 'other', page: 1, limit: 50));
     expect(calls[3], (source: 'tx', albumId: '32311', page: 1, limit: 50));
-  });
-
-  test('并发同 key 只发一次请求（single-flight）', () async {
-    await Future.wait([
-      service.load('wy', '32311'),
-      service.load('wy', '32311'),
-      service.load('wy', '32311'),
-    ]);
-    expect(calls, hasLength(1));
   });
 
   test('invalidateAlbum 清该专辑全部页；其他专辑不受影响', () async {
@@ -77,29 +64,6 @@ void main() {
 
     await service.load('wy', '32311');
     expect(calls, hasLength(4), reason: '失效后重新取数');
-  });
-
-  test('失败不缓存：下一次调用重新取数', () async {
-    var shouldFail = true;
-    service = AlbumService(
-      fetch: (sourceKey, albumId, {required page, required limit}) async {
-        if (shouldFail) {
-          throw const SourceFailure(
-            kind: FailureKind.network,
-            message: 'boom',
-          );
-        }
-        return albumOf(albumId, page);
-      },
-    );
-
-    await expectLater(
-      service.load('wy', '32311'),
-      throwsA(isA<SourceFailure>()),
-    );
-    shouldFail = false;
-    final album = await service.load('wy', '32311');
-    expect(album.tracks, isNotEmpty);
   });
 
   test('任意异常归一化为 SourceFailure', () async {

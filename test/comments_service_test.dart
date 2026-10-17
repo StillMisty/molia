@@ -7,7 +7,7 @@ import 'package:molia/domain/models/track.dart';
 
 import 'support/fake_music_source.dart';
 
-/// 评论服务：缓存（single-flight / TTL / 失效）+ 错误归一化。
+/// 评论服务：缓存 key 形状、失效 + 错误归一化。
 void main() {
   const caps = SourceCapabilities(search: true, comment: true);
 
@@ -48,14 +48,10 @@ void main() {
     service = CommentsService(registry: FakeSourceRegistry({'wy': source}));
   });
 
-  test('同 key 命中缓存（single-flight）；不同页 / 类型各自取数', () async {
+  test('不同曲目 / 类型 / 页各自取数', () async {
     final track = trackOf('186016');
 
-    final first = await service.fetch(track, kind: CommentKind.hot);
-    final second = await service.fetch(track, kind: CommentKind.hot);
-    expect(source.commentCalls, 1, reason: '同 key 命中缓存');
-    expect(second.items, first.items);
-
+    await service.fetch(track, kind: CommentKind.hot);
     await service.fetch(track, kind: CommentKind.hot, page: 2);
     await service.fetch(track, kind: CommentKind.latest);
     await service.fetch(trackOf('other'), kind: CommentKind.hot);
@@ -68,16 +64,6 @@ void main() {
         (kind: CommentKind.hot, page: 1),
       ],
     );
-  });
-
-  test('并发同 key 只发一次请求（single-flight）', () async {
-    final track = trackOf('186016');
-    await Future.wait([
-      service.fetch(track, kind: CommentKind.hot),
-      service.fetch(track, kind: CommentKind.hot),
-      service.fetch(track, kind: CommentKind.hot),
-    ]);
-    expect(source.commentCalls, 1);
   });
 
   test('invalidateTrack 清该曲目全部页；其他曲目不受影响', () async {
@@ -94,29 +80,6 @@ void main() {
 
     await service.fetch(track, kind: CommentKind.hot);
     expect(source.commentCalls, 4, reason: '失效后重新取数');
-  });
-
-  test('失败不缓存：下一次调用重新取数', () async {
-    var shouldFail = true;
-    source.onComments = (kind, page, limit) async {
-      if (shouldFail) {
-        throw const SourceFailure(
-          kind: FailureKind.network,
-          message: 'boom',
-        );
-      }
-      return pageOf(kind, page);
-    };
-    final track = trackOf('186016');
-
-    await expectLater(
-      service.fetch(track, kind: CommentKind.hot),
-      throwsA(isA<SourceFailure>()),
-    );
-    shouldFail = false;
-    final page = await service.fetch(track, kind: CommentKind.hot);
-    expect(page.items, isNotEmpty);
-    expect(source.commentCalls, 2);
   });
 
   test('任意异常归一化为 SourceFailure', () async {

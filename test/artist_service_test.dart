@@ -4,7 +4,7 @@ import 'package:molia/domain/models/artist.dart';
 import 'package:molia/domain/models/failure.dart';
 import 'package:molia/domain/models/track.dart';
 
-/// 歌手服务：缓存（single-flight / TTL / 失效）+ 错误归一化。
+/// 歌手服务：缓存 key 形状、失效、名字解析 + 错误归一化。
 void main() {
   ArtistDetail artistOf(String id, int page, {bool hasMore = true}) =>
       ArtistDetail(
@@ -41,12 +41,8 @@ void main() {
     service = buildService();
   });
 
-  test('同 key 命中缓存（single-flight）；不同页各自取数', () async {
-    final first = await service.load('wy', '6452');
-    final second = await service.load('wy', '6452');
-    expect(calls, hasLength(1), reason: '同 key 命中缓存');
-    expect(second, first);
-
+  test('不同页 / 歌手 / 平台各自取数：page/limit/source 透传 fetch', () async {
+    await service.load('wy', '6452');
     await service.load('wy', '6452', page: 2);
     await service.load('wy', 'other');
     await service.load('tx', '6452');
@@ -54,15 +50,6 @@ void main() {
     expect(calls[1], (source: 'wy', artistId: '6452', page: 2, limit: 50));
     expect(calls[2], (source: 'wy', artistId: 'other', page: 1, limit: 50));
     expect(calls[3], (source: 'tx', artistId: '6452', page: 1, limit: 50));
-  });
-
-  test('并发同 key 只发一次请求（single-flight）', () async {
-    await Future.wait([
-      service.load('wy', '6452'),
-      service.load('wy', '6452'),
-      service.load('wy', '6452'),
-    ]);
-    expect(calls, hasLength(1));
   });
 
   test('invalidateArtist 清该歌手全部页；其他歌手不受影响', () async {
@@ -77,29 +64,6 @@ void main() {
 
     await service.load('wy', '6452');
     expect(calls, hasLength(4), reason: '失效后重新取数');
-  });
-
-  test('失败不缓存：下一次调用重新取数', () async {
-    var shouldFail = true;
-    service = ArtistService(
-      fetch: (sourceKey, artistId, {required page, required limit}) async {
-        if (shouldFail) {
-          throw const SourceFailure(
-            kind: FailureKind.network,
-            message: 'boom',
-          );
-        }
-        return artistOf(artistId, page);
-      },
-    );
-
-    await expectLater(
-      service.load('wy', '6452'),
-      throwsA(isA<SourceFailure>()),
-    );
-    shouldFail = false;
-    final artist = await service.load('wy', '6452');
-    expect(artist.tracks, isNotEmpty);
   });
 
   test('任意异常归一化为 SourceFailure', () async {

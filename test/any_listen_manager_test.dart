@@ -21,37 +21,34 @@ void main() {
   });
 
   group('SourceManager × any-listen：未配置/未启用时零影响', () {
-    test('未配置时不出现在 searchableSources，且可用性为 false', () async {
-      final manager = SourceManager();
-      await manager.init();
+    test('未配置 / 仅配置未启用：都不可用且不出现在 searchableSources', () async {
+      final cases = <({Map<String, Object> prefs, bool configured})>[
+        (prefs: {}, configured: false),
+        (
+          prefs: {
+            'any_listen_server_url': 'http://127.0.0.1:9500',
+            'any_listen_token': 'tk',
+            'any_listen_enabled': false,
+          },
+          configured: true,
+        ),
+      ];
 
-      expect(manager.anyListenAvailable, isFalse);
-      expect(manager.anyListenConfig.isConfigured, isFalse);
-      expect(
-        manager.searchableSources.where((o) => o.kind == SourceKind.anyListen),
-        isEmpty,
-      );
+      for (final c in cases) {
+        SharedPreferences.setMockInitialValues(c.prefs);
+        final manager = SourceManager();
+        await manager.init();
 
-      manager.dispose();
-    });
+        expect(manager.anyListenConfig.isConfigured, c.configured);
+        expect(manager.anyListenAvailable, isFalse);
+        expect(
+          manager.searchableSources
+              .where((o) => o.kind == SourceKind.anyListen),
+          isEmpty,
+        );
 
-    test('仅配置未启用时同样不出现', () async {
-      SharedPreferences.setMockInitialValues({
-        'any_listen_server_url': 'http://127.0.0.1:9500',
-        'any_listen_token': 'tk',
-        'any_listen_enabled': false,
-      });
-      final manager = SourceManager();
-      await manager.init();
-
-      expect(manager.anyListenConfig.isConfigured, isTrue);
-      expect(manager.anyListenAvailable, isFalse);
-      expect(
-        manager.searchableSources.where((o) => o.kind == SourceKind.anyListen),
-        isEmpty,
-      );
-
-      manager.dispose();
+        manager.dispose();
+      }
     });
 
     test('未配置时路由到 any-listen 的能力方法给出领域失败（不吞不崩）', () async {
@@ -89,7 +86,8 @@ void main() {
   });
 
   group('SourceManager × any-listen：配置与路由', () {
-    test('updateAnyListenConfig：持久化、通知、出现在列表末尾', () async {
+    test('updateAnyListenConfig：持久化、通知、出现在列表末尾；reloadAnyListenConfig 重新加载',
+        () async {
       final manager = SourceManager();
       await manager.init();
 
@@ -122,13 +120,7 @@ void main() {
       expect(prefs.getString('any_listen_server_url'), 'http://127.0.0.1:9500');
       expect(prefs.getBool('any_listen_enabled'), isTrue);
 
-      manager.dispose();
-    });
-
-    test('reloadAnyListenConfig：直接写 prefs 后重新加载可见性', () async {
-      final manager = SourceManager();
-      await manager.init();
-
+      // 直接写 prefs（模拟外部改动）后 reload：可见性随之刷新
       SharedPreferences.setMockInitialValues({
         'any_listen_server_url': 'http://127.0.0.1:9500',
         'any_listen_enabled': true,

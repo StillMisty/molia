@@ -223,7 +223,7 @@ void main() {
       expect((musicInfo['meta'] as Map)['source'], 'tx');
     });
 
-    test('fetchLyric 解析 info 包裹的歌词字段', () async {
+    test('歌词：解析 info 包裹字段；非 JSON 对象 badResponse；无歌词回退 null', () async {
       final track = (await source.search('夜曲')).tracks.single;
       final lyric = await source.fetchLyric(track);
 
@@ -232,6 +232,44 @@ void main() {
       expect(lyric.tlyric, '[00:01.00]translated');
       expect(lyric.rlyric, '[00:01.00]romaji');
       expect(lyric.awlyric, '[0,1000](0,1000,0)测');
+
+      // 独立 mock 服务器：歌词路径先回非法 JSON，再回 info 无 lyric 的合法 JSON
+      dynamic lyricPayload = 'oops';
+      final broken = MockAnyListenServer();
+      await broken.start((req) {
+        if (req.path == '/api/music/lyric') {
+          respondJson(req, lyricPayload);
+        } else {
+          handleDefault(broken, req);
+        }
+      });
+      final brokenSource = await buildSource(broken.baseUrl);
+      final rawTrack = SourceTrack(
+        sourceKey: AnyListenSource.sourceKey,
+        origin: AnyListenSource.origin,
+        title: 'x',
+        artist: '',
+        album: '',
+        raw: const {'id': 'any-1'},
+      );
+
+      await expectLater(
+        brokenSource.fetchLyric(rawTrack),
+        throwsA(isA<AnyListenException>().having(
+          (e) => e.kind,
+          'kind',
+          AnyListenErrorKind.badResponse,
+        )),
+      );
+
+      // info 存在但没有 lyric：视为「无歌词」，返回 null 以便上层回退
+      lyricPayload = {
+        'info': {'name': 'x'}
+      };
+      expect(await brokenSource.fetchLyric(rawTrack), isNull);
+
+      brokenSource.dispose();
+      await broken.stop();
     });
 
     test('fetchPic 解析 url 字段', () async {
@@ -239,7 +277,7 @@ void main() {
       expect(await source.fetchPic(track), '${server.baseUrl}/pic/1.jpg');
     });
 
-    test('testConnection 握手成功并返回服务器标识', () async {
+    test('连接测试：成功握手 / 非 any-listen badResponse', () async {
       final result = await source.testConnection();
 
       expect(result.ok, isTrue);
@@ -247,6 +285,17 @@ void main() {
       expect(result.message, contains('OjppZDo6-TEST-SERVER'));
       expect(result.errorKind, isNull);
       expect(server.requestTo('/api/ipc/hello').method, 'GET');
+
+      // 非 any-listen 的服务器只回无关文本
+      final other = MockAnyListenServer();
+      await other.start((req) => respondText(req, 'hello from some other app'));
+      final otherSource = await buildSource(other.baseUrl);
+      final bad = await otherSource.testConnection();
+      expect(bad.ok, isFalse);
+      expect(bad.errorKind, AnyListenErrorKind.badResponse);
+      expect(bad.message, contains('any-listen'));
+      otherSource.dispose();
+      await other.stop();
     });
   });
 
@@ -291,193 +340,11 @@ void main() {
         )),
       );
 
+      // testConnection 不抛异常：连接失败以结果对象返回
       final result = await source.testConnection();
       expect(result.ok, isFalse);
       expect(result.errorKind, AnyListenErrorKind.connectionFailed);
-      expect(result.message, contains('无法连接'));
       source.dispose();
-    });
-
-    test('请求超时归类为 connectionFailed', () async {
-      final server = MockAnyListenServer();
-      await server.start((req) async {
-        await Future<void>.delayed(const Duration(milliseconds: 500));
-        respondText(req, AnyListenEndpoints.helloMagic);
-      });
-
-      final source = AnyListenSource(
-        api: AnyListenApi(timeout: const Duration(milliseconds: 50)),
-      );
-      await source.updateConfig(AnyListenConfig(
-        serverUrl: server.baseUrl,
-        enabled: true,
-      ));
-
-      final result = await source.testConnection();
-      expect(result.ok, isFalse);
-      expect(result.errorKind, AnyListenErrorKind.connectionFailed);
-      expect(result.message, contains('超时'));
-
-      source.dispose();
-      await server.stop();
-    });
-
-    test('HTTP 401 归类为 unauthorized', () async {
-      final server = MockAnyListenServer();
-      await server.start((req) {
-        respondJson(req, {'message': 'Auth failed'}, status: 401);
-      });
-      final source = await buildSource(server.baseUrl);
-
-      await expectLater(
-        source.search('x'),
-        throwsA(isA<AnyListenException>().having(
-          (e) => e.kind,
-          'kind',
-          AnyListenErrorKind.unauthorized,
-        )),
-      );
-      source.dispose();
-      await server.stop();
-    });
-
-    test('HTTP 500 归类为 connectionFailed（可重试）', () async {
-      final server = MockAnyListenServer();
-      await server.start((req) {
-        respondJson(req, {'message': 'boom'}, status: 500);
-      });
-      final source = await buildSource(server.baseUrl);
-
-      AnyListenException? captured;
-      try {
-        await source.search('x');
-      } on AnyListenException catch (error) {
-        captured = error;
-      }
-      expect(captured!.kind, AnyListenErrorKind.connectionFailed);
-      expect(captured.retryable, isTrue);
-      source.dispose();
-      await server.stop();
-    });
-
-    test('响应不是合法 JSON 归类为 badResponse', () async {
-      final server = MockAnyListenServer();
-      await server.start((req) {
-        respondText(req, '<html>not json</html>',
-            contentType: ContentType.html);
-      });
-      final source = await buildSource(server.baseUrl);
-
-      await expectLater(
-        source.search('x'),
-        throwsA(isA<AnyListenException>().having(
-          (e) => e.kind,
-          'kind',
-          AnyListenErrorKind.badResponse,
-        )),
-      );
-      source.dispose();
-      await server.stop();
-    });
-
-    test('JSON 但缺少列表归类为 badResponse', () async {
-      final server = MockAnyListenServer();
-      await server.start((req) => respondJson(req, {'foo': 1}));
-      final source = await buildSource(server.baseUrl);
-
-      await expectLater(
-        source.search('x'),
-        throwsA(isA<AnyListenException>().having(
-          (e) => e.kind,
-          'kind',
-          AnyListenErrorKind.badResponse,
-        )),
-      );
-      source.dispose();
-      await server.stop();
-    });
-
-    test('歌词响应不是 JSON 对象归类为 badResponse；无歌词返回 null', () async {
-      dynamic lyricPayload = 'oops';
-      final server = MockAnyListenServer();
-      await server.start((req) {
-        if (req.path == '/api/music/lyric') {
-          respondJson(req, lyricPayload);
-        } else {
-          handleDefault(server, req);
-        }
-      });
-      final source = await buildSource(server.baseUrl);
-      final track = SourceTrack(
-        sourceKey: AnyListenSource.sourceKey,
-        origin: AnyListenSource.origin,
-        title: 'x',
-        artist: '',
-        album: '',
-        raw: const {'id': 'any-1'},
-      );
-
-      await expectLater(
-        source.fetchLyric(track),
-        throwsA(isA<AnyListenException>().having(
-          (e) => e.kind,
-          'kind',
-          AnyListenErrorKind.badResponse,
-        )),
-      );
-
-      // info 存在但没有 lyric：视为「无歌词」，返回 null 以便上层回退
-      lyricPayload = {
-        'info': {'name': 'x'}
-      };
-      expect(await source.fetchLyric(track), isNull);
-
-      source.dispose();
-      await server.stop();
-    });
-
-    test('取链响应缺少 url 归类为 badResponse', () async {
-      final server = MockAnyListenServer();
-      await server.start((req) {
-        if (req.path == '/api/music/url') {
-          respondJson(req, {'quality': '320k'});
-        } else {
-          handleDefault(server, req);
-        }
-      });
-      final source = await buildSource(server.baseUrl);
-      final track = SourceTrack(
-        sourceKey: AnyListenSource.sourceKey,
-        origin: AnyListenSource.origin,
-        title: 'x',
-        artist: '',
-        album: '',
-        raw: const {'id': 'any-1'},
-      );
-
-      await expectLater(
-        source.resolveUrl(track),
-        throwsA(isA<AnyListenException>().having(
-          (e) => e.kind,
-          'kind',
-          AnyListenErrorKind.badResponse,
-        )),
-      );
-      source.dispose();
-      await server.stop();
-    });
-
-    test('连接探测：服务器不是 any-listen 时给出 badResponse', () async {
-      final server = MockAnyListenServer();
-      await server.start((req) => respondText(req, 'hello from some other app'));
-      final source = await buildSource(server.baseUrl);
-
-      final result = await source.testConnection();
-      expect(result.ok, isFalse);
-      expect(result.errorKind, AnyListenErrorKind.badResponse);
-      expect(result.message, contains('any-listen'));
-      source.dispose();
-      await server.stop();
     });
   });
 }

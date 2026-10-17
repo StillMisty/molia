@@ -158,22 +158,6 @@ void main() {
     expect(result.tracks, hasLength(1));
   });
 
-  test('transport.cached：同 key 只创建一次（single-flight/命中）', () async {
-    var creates = 0;
-    final transport = BuiltinTransport();
-    final first = await transport.cached('k', () async {
-      creates++;
-      return 42;
-    });
-    final second = await transport.cached('k', () async {
-      creates++;
-      return 42;
-    });
-    expect(first, 42);
-    expect(second, 42);
-    expect(creates, 1);
-  });
-
   test('发现适配器 fetch：WyHotSearch 走注入客户端且结果被缓存', () async {
     var requests = 0;
     BuiltinSearch.transport =

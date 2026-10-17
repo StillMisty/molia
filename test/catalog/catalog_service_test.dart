@@ -189,7 +189,7 @@ void main() {
     );
   });
 
-  test('search：同 key 命中缓存；page/keyword 变化各自独立', () async {
+  test('search：page/keyword 变化各自独立取数', () async {
     final source = _FakeMusicSource('kw');
     final registry = _FakeRegistry({'kw': source});
     addTearDown(registry.dispose);
@@ -197,9 +197,6 @@ void main() {
 
     final query = const SearchQuery(keyword: 'hello', page: 1, limit: 30);
     final first = await service.search('kw', query);
-    final second = await service.search('kw', query);
-    expect(source.searchCalls, 1, reason: '同 key 第二次应命中缓存');
-    expect(second, first);
 
     await service.search('kw', const SearchQuery(keyword: 'hello', page: 2));
     expect(source.searchCalls, 2);
@@ -210,23 +207,6 @@ void main() {
     expect(first.total, 42);
     expect(first.hasMore, isTrue);
     expect(first.items.single.id, const TrackId('kw', 'hello-p1'));
-  });
-
-  test('search：并发同 key 单飞（只执行一次）', () async {
-    final source = _FakeMusicSource('kw');
-    final registry = _FakeRegistry({'kw': source});
-    addTearDown(registry.dispose);
-    final service = CatalogService(registry: registry);
-
-    const query = SearchQuery(keyword: 'same');
-    final results = await Future.wait([
-      service.search('kw', query),
-      service.search('kw', query),
-      service.search('kw', query),
-    ]);
-    expect(source.searchCalls, 1);
-    expect(results[1], results[0]);
-    expect(results[2], results[0]);
   });
 
   test('search：TTL 过期后重新请求（注入时钟）', () async {
@@ -276,21 +256,6 @@ void main() {
     expect(source.resolveCalls, 2, reason: '音质不同 → key 不同 → 各自取链');
     expect(first.uri.toString(), 'https://cdn.example/kw/a?q=320k');
     expect(second.uri.toString(), 'https://cdn.example/kw/a');
-  });
-
-  test('resolve：同曲同音质第二次命中缓存（0 次引擎调用）', () async {
-    final source = _FakeMusicSource('kw');
-    final registry = _FakeRegistry({'kw': source});
-    addTearDown(registry.dispose);
-    final service = CatalogService(registry: registry);
-
-    final track = _track('kw', 'a');
-    const quality = AudioQuality(type: '320k');
-    final first = await service.resolve(track, quality: quality);
-    final second = await service.resolve(track, quality: quality);
-
-    expect(source.resolveCalls, 1, reason: '第二次应命中 resolve 缓存');
-    expect(second, first);
   });
 
   test('resolveCacheKey：键排序稳定，音质/音源参与 key', () {

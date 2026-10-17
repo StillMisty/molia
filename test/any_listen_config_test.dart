@@ -64,7 +64,7 @@ void main() {
       );
     });
 
-    test('copyWith 归一化地址并保留其它字段', () {
+    test('copyWith：归一化地址、保留其它字段；相等性按归一化地址判定', () {
       const base = AnyListenConfig(token: 'tk', enabled: true);
       final copy = base.copyWith(serverUrl: 'http://host:9500/');
       expect(copy.serverUrl, 'http://host:9500');
@@ -73,9 +73,7 @@ void main() {
 
       final same = base.copyWith();
       expect(same, base);
-    });
 
-    test('相等性：地址归一化后相同则相等', () {
       final a = AnyListenConfig(
         serverUrl: AnyListenConfig.normalizeServerUrl('http://host:9500/'),
         token: 'x',
