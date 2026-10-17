@@ -40,7 +40,7 @@ class PlayServicesChannelHandler(
     private fun isAvailable(): Boolean = try {
         GoogleApiAvailability.getInstance()
             .isGooglePlayServicesAvailable(context) == ConnectionResult.SUCCESS
-    } catch (e: Exception) {
+    } catch (_: Exception) {
         false
     }
 
