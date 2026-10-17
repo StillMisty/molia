@@ -296,7 +296,7 @@
     位移是「行视图连自己的裁切边界一起走」，行视图只有视口宽时，移出视口的部分是
     行视图自身边界裁掉的——行尾永远露不出来（表现为「长歌词滚动被截断」）；视口裁切
     由 `contentHolder.clipChildren` 承担，溢出/对齐都按裁剪盒内宽算，不能拿行视图
-    `width` 当视口——57c1a32 引入 translationX 位移后行尾截断的根因就在这里。
+    `width` 当视口——拿行视图当视口时行尾会被它自己的边界裁掉。
 44. **悬浮窗位置要按「可用区」算，不能用 `resources.displayMetrics`**：
     `TYPE_APPLICATION_OVERLAY` 默认按 system bars / 刘海 insets 收边（fitTypes），
     `LayoutParams.x/y` 是安全区左上角起的偏移；edge-to-edge Activity 的
@@ -382,9 +382,10 @@
     两个同源缺陷都来自「滚动只看词轴、摆位只看主行」：
     ① 进度只看词轴：词轴越界（末词时间晚于下一行时间戳）时进度永远到不了 1，
     或末词恰好在切行时刻收尾——切行时行尾还没露出来，表现为「长歌词滚动被
-    截断」。`CurrentLineView.playedFraction` 因此取 `max(词轴进度, 行时间轴进度)`：
-    行时间轴口径提前 300ms 收尾（夹进行长的 1/3），保证切行前行尾完整露出、
-    留出可读时间；匀速模式的跨度也在 Dart 侧夹到 tracker 的行尾
+    截断」。`CurrentLineView.playedFraction` 因此分两支：词轴能在行内收尾时按
+    词轴推进、位置整体提前 300ms；词轴越界或没有词轴时按行时间轴线性推进并
+    提前 300ms 收尾（夹进行长的 1/3）——行尾在切行前完整露出、留出可读时间。
+    匀速模式的跨度也在 Dart 侧夹到 tracker 的行尾
     （`LyricsDisplayProvider._buildPresentation`）。行视图宽度与视口口径见第 43 条。
     ② 重建（换行 / 翻译开关）后主行的 `onSizeChanged` 先于扩展行布局触发：
     翻译 / 罗马音此时宽度还是 0，组偏移把它算到左缘（x=0），而**没有后续

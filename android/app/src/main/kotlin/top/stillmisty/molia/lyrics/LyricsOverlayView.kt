@@ -269,9 +269,8 @@ internal class CurrentLineView(context: Context) : TextView(context) {
     }
 
     /**
-     * 行宽贴合文本宽：横滚靠 `translationX` 位移整行，若行视图只有视口宽，
-     * 位移后行尾会被行视图自身的边界裁掉（永远露不出来）；视口裁切由宿主
-     * 的裁剪盒负责，行视图必须覆盖整段文本。
+     * 行宽贴合文本宽（见 [scrollingRowWidth]）：横滚靠 `translationX` 位移整行，
+     * 行视图必须覆盖整段文本，否则位移后行尾会被行视图自身边界裁掉。
      */
     private fun syncPreferredWidth() {
         val lp = layoutParams as? LinearLayout.LayoutParams ?: return
@@ -334,22 +333,24 @@ internal class CurrentLineView(context: Context) : TextView(context) {
     }
 
     /**
-     * 滚动进度（0..1）：词轴口径与行时间轴口径取较大值，保证「切行前必滚完」：
-     * - 跟随演唱（默认）：有词轴时取「已唱边界」在整行中的相对位置；
-     * - 行时间轴兜底：按 [lineStartMs]/[lineEndMs] 线性推进，并提前
-     *   [SCROLL_END_LEAD_MS] 到达 1——词轴越界（末词晚于切行时刻）或恰好
-     *   卡在切行时刻收尾时，行尾也能在切行前完整露出、留出可读时间；
-     * - 两者都缺（无词轴且无行时间轴）时为 0，不滚动。
+     * 滚动进度（0..1），保证「切行前必滚完」：
+     * - 词轴能在行内收尾（末词不晚于切行时刻）时以词轴为准：取「已唱边界」
+     *   在整行中的相对位置，位置整体提前 [SCROLL_END_LEAD_MS]——速度节奏仍随
+     *   演唱起伏，行尾在切行前留出可读时间；
+     * - 词轴越界（末词晚于切行时刻）或没有词轴时，按 [lineStartMs]/[lineEndMs]
+     *   线性推进并提前收尾（匀速模式同此口径）；
+     * - 两者都缺时为 0，不滚动。
      */
     private fun playedFraction(positionMs: Long): Float {
-        val sung = if (scrollFollowsSinging && words.isNotEmpty()) {
-            sungFraction(positionMs)
-        } else {
-            null
+        if (scrollFollowsSinging && words.isNotEmpty() && wordsEndWithinLine()) {
+            sungFraction(positionMs + scrollLeadMs())?.let { return it }
         }
-        val paced = pacedFraction(positionMs)
-        return max(sung ?: 0f, paced ?: 0f)
+        return pacedFraction(positionMs) ?: 0f
     }
+
+    /** 词轴是否能在行内收尾（行时间轴未知时按可以处理，不做时间轴兜底）。 */
+    private fun wordsEndWithinLine(): Boolean =
+        lineStartMs < 0 || lineEndMs <= lineStartMs || words.last().endMs <= lineEndMs
 
     /** 词轴口径的已完成比例；词轴还没布局时返回 null（下一帧再补）。 */
     private fun sungFraction(positionMs: Long): Float? {
@@ -361,16 +362,21 @@ internal class CurrentLineView(context: Context) : TextView(context) {
     }
 
     /**
-     * 行时间轴口径的进度；跨度提前 [SCROLL_END_LEAD_MS] 结束（夹到行长的
-     * 三分之一内），保证行尾在切行前可见。无有效行时间轴时返回 null。
+     * 行时间轴口径的进度；提前 [scrollLeadMs] 到达 1，保证行尾在切行前可见。
+     * 无有效行时间轴时返回 null。
      */
     private fun pacedFraction(positionMs: Long): Float? {
         if (lineStartMs < 0 || lineEndMs <= lineStartMs) return null
         val span = lineEndMs - lineStartMs
-        val lead = min(SCROLL_END_LEAD_MS, span / 3)
-        val denominator = max(1L, span - lead)
+        val denominator = max(1L, span - scrollLeadMs())
         return ((positionMs - lineStartMs).toFloat() / denominator)
             .coerceIn(0f, 1f)
+    }
+
+    /** 提前收尾量：夹到行长的三分之一内；行时间轴未知时为 0。 */
+    private fun scrollLeadMs(): Long {
+        if (lineStartMs < 0 || lineEndMs <= lineStartMs) return 0L
+        return min(SCROLL_END_LEAD_MS, (lineEndMs - lineStartMs) / 3)
     }
 
     /** 已唱边界在 Layout 坐标系中的 x（逐字词轴，词内线性插值）。 */
@@ -785,7 +791,7 @@ internal class LyricsOverlayView(
             column.addView(
                 view,
                 LinearLayout.LayoutParams(
-                    // 滚动组行宽取文本宽：位移后行尾不被行视图自身边界裁掉。
+                    // 滚动组行宽取文本宽（见 scrollingRowWidth），其余行撑满窗口。
                     if (isScrolling) {
                         scrollingRowWidth(view.paint, entry.text)
                     } else {
