@@ -243,6 +243,9 @@ class AnyListenApi {
       if (json) 'Content-Type': 'application/json; charset=utf-8',
       // TODO(any-listen): 官方 WebSocket 鉴权走 `POST /api/ipc/ah` 的 m/s 头 +
       // 服务端下发 token；资源请求的令牌传递方式未验证，接入时按官方协议校正。
+      // TODO(any-listen): 换到 WebSocket IPC 后，错误矩阵（连接拒绝 / 等待响应
+      // 超时、鉴权失败、非预期消息、字段缺失）需在本层重测——现有单测只覆盖
+      // HTTP 占位端点的主路径与领域失败归类。
       if (config.token.isNotEmpty) 'Authorization': 'Bearer ${config.token}',
     };
   }
