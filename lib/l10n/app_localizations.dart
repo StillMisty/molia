@@ -3812,6 +3812,12 @@ abstract class AppLocalizations {
   /// **'Device name'**
   String get syncDeviceNameTitle;
 
+  /// No description provided for @syncDevicePassphraseTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Device & passphrase'**
+  String get syncDevicePassphraseTitle;
+
   /// No description provided for @syncPassphraseTitle.
   ///
   /// In en, this message translates to:
@@ -4046,6 +4052,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'power save off'**
   String get syncPowerSaveOff;
+
+  /// No description provided for @syncCellularSection.
+  ///
+  /// In en, this message translates to:
+  /// **'Cellular'**
+  String get syncCellularSection;
 
   /// No description provided for @syncCellularPauseTitle.
   ///

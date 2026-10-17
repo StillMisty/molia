@@ -2078,6 +2078,9 @@ class AppLocalizationsEn extends AppLocalizations {
   String get syncDeviceNameTitle => 'Device name';
 
   @override
+  String get syncDevicePassphraseTitle => 'Device & passphrase';
+
+  @override
   String get syncPassphraseTitle => 'Sync passphrase';
 
   @override
@@ -2202,6 +2205,9 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get syncPowerSaveOff => 'power save off';
+
+  @override
+  String get syncCellularSection => 'Cellular';
 
   @override
   String get syncCellularPauseTitle => 'Pause automatic sync on cellular';

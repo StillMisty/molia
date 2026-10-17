@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:flutter/services.dart';
 import 'package:material_3_expressive/material_3_expressive.dart';
 import 'package:material_ui/material_ui.dart';
 
@@ -318,4 +319,185 @@ Future<void> _hintSettingsPage(
 ) async {
   ScaffoldMessenger.of(context)
       .showSnackBar(SnackBar(content: Text(l10n.syncConfigureOnSettingsPage)));
+}
+
+/// 口令弹层（首屏开启同步后与设备子页共用）：显示 / 复制 / 重置。
+Future<void> showSyncPassphraseDialog(
+  BuildContext context,
+  SyncProvider provider,
+  AppLocalizations l10n,
+) async {
+  final navigator = Navigator.of(context, rootNavigator: true);
+  final passphrase = provider.passphrase ?? '';
+  await M3EDialog.show<void>(
+    context,
+    dialog: M3EDialog(
+      title: l10n.syncPassphraseTitle,
+      content: SizedBox(
+        width: settingsDialogWidth(context),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            SelectableText(
+              passphrase,
+              style: const TextStyle(fontWeight: FontWeight.w600),
+            ),
+            const SizedBox(height: 12),
+            Text(
+              l10n.syncPassphraseTrustHint,
+              style: Theme.of(context).textTheme.bodySmall,
+            ),
+          ],
+        ),
+      ),
+      actions: [
+        M3EButton.text(
+          onPressed: () {
+            Clipboard.setData(ClipboardData(text: passphrase));
+            ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(content: Text(l10n.copiedToClipboard(
+                    l10n.syncPassphraseTitle))));
+          },
+          child: Text(l10n.syncPassphraseCopy),
+        ),
+        M3EButton.text(
+          onPressed: () {
+            navigator.pop();
+            unawaited(_confirmPassphraseReset(context, provider, l10n));
+          },
+          child: Text(l10n.syncPassphraseReset),
+        ),
+        M3EButton.text(
+          onPressed: () => navigator.pop(),
+          child: Text(l10n.cancelButton),
+        ),
+      ],
+    ),
+  );
+}
+
+/// 重置口令二次确认：重置后全组需重新输入新口令。
+Future<void> _confirmPassphraseReset(
+  BuildContext context,
+  SyncProvider provider,
+  AppLocalizations l10n,
+) async {
+  final navigator = Navigator.of(context, rootNavigator: true);
+  await M3EDialog.show<void>(
+    context,
+    dialog: M3EDialog(
+      title: l10n.syncPassphraseReset,
+      content: SizedBox(
+        width: settingsDialogWidth(context),
+        child: Text(l10n.syncPassphraseResetConfirm),
+      ),
+      actions: [
+        M3EButton.text(
+          onPressed: () => navigator.pop(),
+          child: Text(l10n.cancelButton),
+        ),
+        M3EButton.filled(
+          onPressed: () async {
+            navigator.pop();
+            await provider.resetPassphrase();
+            if (!context.mounted) return;
+            await showSyncPassphraseDialog(context, provider, l10n);
+          },
+          child: Text(l10n.syncPassphraseReset),
+        ),
+      ],
+    ),
+  );
+}
+
+/// 加入口令弹层：输入其它设备上的口令（无效输入在弹层内提示）。
+Future<void> showSyncJoinDialog(
+  BuildContext context,
+  SyncProvider provider,
+  AppLocalizations l10n,
+) async {
+  await _showTextDialog(
+    context,
+    title: l10n.syncPassphraseJoinTitle,
+    hint: l10n.syncPassphraseJoinHint,
+    initialValue: '',
+    saveLabel: l10n.syncSave,
+    onSave: (value) async {
+      try {
+        await provider.joinWithPassphrase(value);
+        return null;
+      } on ArgumentError {
+        return l10n.syncPassphraseInvalid;
+      }
+    },
+  );
+}
+
+/// 设备改名弹层（名称是其它设备上识别本机的展示名）。
+Future<void> showSyncRenameDialog(
+  BuildContext context,
+  SyncProvider provider,
+  AppLocalizations l10n,
+) async {
+  await _showTextDialog(
+    context,
+    title: l10n.syncDeviceNameDialogTitle,
+    hint: l10n.syncRenameHint,
+    initialValue: provider.deviceName,
+    saveLabel: l10n.syncSave,
+    onSave: (value) async {
+      if (value.trim().isEmpty) return l10n.syncDeviceNameEmpty;
+      await provider.setDeviceName(value.trim());
+      return null;
+    },
+  );
+}
+
+/// 通用文本输入弹窗；[onSave] 返回错误文案或 null（null = 已保存/关闭）。
+Future<void> _showTextDialog(
+  BuildContext context, {
+  required String title,
+  required String hint,
+  required String initialValue,
+  required String saveLabel,
+  required Future<String?> Function(String value) onSave,
+}) async {
+  final controller = TextEditingController(text: initialValue);
+  final navigator = Navigator.of(context, rootNavigator: true);
+  await M3EDialog.show<void>(
+    context,
+    dialog: M3EDialog(
+      title: title,
+      content: SizedBox(
+        width: settingsDialogWidth(context),
+        child: M3ETextField(
+          controller: controller,
+          label: title,
+          placeholder: hint,
+          leading: const Icon(Icons.edit_rounded),
+        ),
+      ),
+      actions: [
+        M3EButton.text(
+          onPressed: () => navigator.pop(),
+          child: Text(AppLocalizations.of(context)!.cancelButton),
+        ),
+        M3EButton.filled(
+          onPressed: () async {
+            final error = await onSave(controller.text);
+            if (!context.mounted) return;
+            if (error != null) {
+              ScaffoldMessenger.of(context)
+                  .showSnackBar(SnackBar(content: Text(error)));
+              return;
+            }
+            navigator.pop();
+          },
+          child: Text(saveLabel),
+        ),
+      ],
+    ),
+  );
+  controller.dispose();
 }

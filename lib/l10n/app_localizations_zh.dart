@@ -1993,6 +1993,9 @@ class AppLocalizationsZh extends AppLocalizations {
   String get syncDeviceNameTitle => '设备名称';
 
   @override
+  String get syncDevicePassphraseTitle => '设备与口令';
+
+  @override
   String get syncPassphraseTitle => '同步口令';
 
   @override
@@ -2113,6 +2116,9 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get syncPowerSaveOff => '非省电';
+
+  @override
+  String get syncCellularSection => '移动数据';
 
   @override
   String get syncCellularPauseTitle => '移动数据下暂停自动同步';
