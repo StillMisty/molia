@@ -1,5 +1,7 @@
 import 'dart:async';
 
+import 'package:flutter/foundation.dart'
+    show TargetPlatform, debugDefaultTargetPlatformOverride;
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:material_3_expressive/material_3_expressive.dart';
@@ -11,6 +13,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:molia/l10n/app_localizations.dart';
 import 'package:molia/data/play_statistics_repository.dart';
 import 'package:molia/models/play_mode.dart';
+import 'package:molia/pages/general_settings_page.dart';
 import 'package:molia/pages/settings_page.dart';
 import 'package:molia/providers/local_database_provider.dart';
 import 'package:molia/providers/lyrics_display_provider.dart';
@@ -31,6 +34,8 @@ import 'package:molia/services/window/tray_settings.dart';
 import 'package:molia/sources/source_manager.dart';
 import 'package:molia/theme/scheme_builder.dart';
 import 'package:molia/widgets/card_list_surface.dart';
+import 'package:molia/widgets/settings/settings_section_grid.dart';
+import 'package:molia/widgets/settings/settings_tiles.dart';
 
 import 'support/fakes.dart';
 import 'package:molia/data/settings/settings_keys.dart';
@@ -129,8 +134,9 @@ void main() {
   Future<void> pumpSettingsPage(
     WidgetTester tester, {
     List<SingleChildWidget> extraProviders = const [],
+    Size size = const Size(1200, 2400),
   }) async {
-    tester.view.physicalSize = const Size(1200, 2400);
+    tester.view.physicalSize = size;
     tester.view.devicePixelRatio = 1.0;
     addTearDown(() {
       tester.view.resetPhysicalSize();
@@ -143,6 +149,42 @@ void main() {
       const Scaffold(body: SettingsPage()),
       extraProviders: extraProviders,
     );
+  }
+
+  /// 首屏 5 个分区卡片的矩形（按展示顺序）：两列 / 单列断言共用。
+  List<Rect> sectionRects(WidgetTester tester) => [
+        for (var i = 0; i < 5; i++)
+          tester.getRect(find.byType(SettingsSectionCard).at(i)),
+      ];
+
+  /// 桌面宽屏打开真实设置弹层（顶栏入口路径：`showAdaptiveModalPage` 的
+  /// 居中对话框分支，屏宽 0.9 夹取不触发）。
+  Future<void> openWideSettingsSheet(
+    WidgetTester tester, {
+    Size size = const Size(1200, 900),
+  }) async {
+    tester.view.physicalSize = size;
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(() {
+      tester.view.resetPhysicalSize();
+      tester.view.resetDevicePixelRatio();
+    });
+
+    await pumpApp(
+      tester,
+      Scaffold(
+        body: Builder(
+          builder: (context) => Center(
+            child: M3EButton.filled(
+              onPressed: () => showSettingsSheet(context),
+              child: const Text('Open settings'),
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.tap(find.text('Open settings'));
+    await tester.pumpAndSettle();
   }
 
   /// 行内选项的命中：分段/预览圆的标签文本都在行 key 之内。
@@ -1071,6 +1113,70 @@ void main() {
       isNot(contains('SystemChrome.setEnabledSystemUIMode')),
     );
   });
+
+  testWidgets('宽屏桌面：设置弹层加宽，首屏分区两列流式（奇偶左右交替）',
+      (tester) async {
+    await openWideSettingsSheet(tester);
+
+    // 桌面档弹层按 modal spec 加宽（1200 屏宽下 0.9 夹取为 1080，不生效）。
+    expect(tester.getSize(find.byType(SettingsPage)).width, closeTo(880, 1));
+
+    final gridWidth = tester.getSize(find.byType(SettingsSectionGrid)).width;
+    final columnWidth = (gridWidth - kSettingsSectionSpacing) / 2;
+    final rects = sectionRects(tester);
+
+    // 1/2 成对：同排、左右分列、等分列宽。
+    expect(rects[0].top, rects[1].top, reason: '分区 1/2 应同排');
+    expect(rects[0].left, lessThan(rects[1].left));
+    expect(rects[1].left - rects[0].right, kSettingsSectionSpacing);
+    expect(rects[0].width, closeTo(columnWidth, 0.5));
+    expect(rects[1].width, closeTo(columnWidth, 0.5));
+
+    // 3/4 继续交替；5（奇数）回左列，右列留空。
+    expect(rects[2].top, rects[3].top, reason: '分区 3/4 应同排');
+    expect(rects[2].left, lessThan(rects[3].left));
+    expect(rects[4].left, rects[0].left);
+    expect(rects[4].top, greaterThan(rects[2].bottom));
+  }, variant: TargetPlatformVariant.only(TargetPlatform.linux));
+
+  testWidgets('窄屏或移动平台：首屏分区回落单列', (tester) async {
+    // 桌面平台但窗口 < 900：单列整宽。
+    await pumpSettingsPage(tester, size: const Size(899, 1200));
+    var gridWidth = tester.getSize(find.byType(SettingsSectionGrid)).width;
+    var rects = sectionRects(tester);
+    expect(rects[1].top, greaterThan(rects[0].bottom));
+    expect(rects[1].left, rects[0].left);
+    expect(rects[0].width, closeTo(gridWidth, 0.5));
+
+    // 非桌面平台 + 宽窗口：同样单列（平台覆盖由 variant 复位）。
+    debugDefaultTargetPlatformOverride = TargetPlatform.android;
+    await pumpSettingsPage(tester, size: const Size(1200, 1200));
+    gridWidth = tester.getSize(find.byType(SettingsSectionGrid)).width;
+    rects = sectionRects(tester);
+    expect(rects[1].top, greaterThan(rects[0].bottom));
+    expect(rects[1].left, rects[0].left);
+    expect(rects[0].width, closeTo(gridWidth, 0.5));
+  }, variant: TargetPlatformVariant.only(TargetPlatform.linux));
+
+  testWidgets('宽屏桌面：子页保持单列，底部导航拖拽卡片整宽', (tester) async {
+    await openWideSettingsSheet(tester);
+
+    // 进入通用子页（底部导航拖拽排序所在页）。
+    final generalItem = find.byKey(const Key('settingsGeneralItem'));
+    await tester.ensureVisible(generalItem);
+    await tester.pumpAndSettle();
+    await tester.tap(generalItem);
+    await tester.pumpAndSettle();
+    expect(find.byType(ReorderableListView), findsOneWidget);
+
+    // 子页不进两列：拖拽卡片与弹层内容等宽（页内左右各 kSettingsPadding），
+    // 拖拽命中区不会被列宽切分。
+    final pageWidth = tester.getSize(find.byType(GeneralSettingsPage)).width;
+    expect(
+      tester.getSize(find.byType(ReorderableListView)).width,
+      pageWidth - kSettingsPadding * 2,
+    );
+  }, variant: TargetPlatformVariant.only(TargetPlatform.linux));
 }
 
 /// 最小桌面歌词输出：能力就绪，不触碰平台通道。

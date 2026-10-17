@@ -1,5 +1,7 @@
 import 'dart:async';
 
+import 'package:flutter/foundation.dart'
+    show TargetPlatform, defaultTargetPlatform;
 import 'package:flutter/services.dart' show PredictiveBackEvent;
 import 'package:material_3_expressive/material_3_expressive.dart';
 import 'package:material_ui/material_ui.dart';
@@ -23,6 +25,7 @@ import '../utils/responsive.dart';
 import '../utils/source_quality_label.dart';
 import '../widgets/app_color_picker.dart';
 import '../widgets/font_picker_sheet.dart';
+import '../widgets/settings/settings_section_grid.dart';
 import '../widgets/settings/settings_tiles.dart';
 import 'ai_dj_page.dart';
 import 'data_settings_page.dart';
@@ -50,6 +53,9 @@ Future<void> showSettingsSheet(BuildContext context) {
   return ResponsiveNavigation.showAdaptiveModalPage<void>(
     context: context,
     showCloseButton: false,
+    // 宽屏设置弹层单独加宽（首屏两列）：公共 modal 档保持 560，避免定时
+    // 关闭 / 来源分享 / AI 推歌这些窄弹层跟着摊宽。
+    maxWidth: _useTwoColumnSections(context) ? _settingsSheetDesktopWidth : null,
     sheetThemeBuilder: (base) => _SettingsSheetTheme(base, backCoordinator),
     onDismissRequest: () async {
       // 预测返回提交：由手势归属决定收谁。子页手势返回 false，内层路由
@@ -390,6 +396,23 @@ class _SettingsSheetTheme extends M3EBottomSheetTheme {
           : 0;
 }
 
+/// 设置首屏分区两列流式的启用条件：桌面平台（linux / windows / macOS）+
+/// 窗口宽 ≥ [Breakpoints.desktop]（900）。
+///
+/// 口径与收藏页 master-detail（`favorites.dart::_useCollectionRail`）一致：
+/// 平台判定走 `defaultTargetPlatform`（与壳层骨架分流同源），窗口宽走
+/// `context.isDesktop`。两列画布上限取弹层宽度（`modalWidth` 桌面档），
+/// 列宽不随窗口继续变宽；子页是长表单，保持单列。
+/// 宽屏设置弹层宽度（首屏两列画布上限；见 `showSettingsSheet`）。
+const double _settingsSheetDesktopWidth = 880;
+
+bool _useTwoColumnSections(BuildContext context) {
+  final desktop = defaultTargetPlatform == TargetPlatform.linux ||
+      defaultTargetPlatform == TargetPlatform.windows ||
+      defaultTargetPlatform == TargetPlatform.macOS;
+  return desktop && context.isDesktop;
+}
+
 /// 设置首屏：分区卡片 + 弹层内部子页入口。
 class _SettingsHomeView extends StatefulWidget {
   const _SettingsHomeView({this.scrollController});
@@ -440,6 +463,9 @@ class _SettingsHomeViewState extends State<_SettingsHomeView>
     final sources = context.read<SourcesProvider?>();
     final lyricsDisplay = context.watch<LyricsDisplayProvider?>();
     final m3e = M3ETheme.of(context);
+    // 两列流式需要比单列舒适行宽（`maxWidth`）更宽的画布：上限取设置弹层
+    // 宽度，两列各占约半宽；单列沿用 `maxWidth` 不变。
+    final twoColumn = _useTwoColumnSections(context);
 
     return Container(
       padding: ResponsivePadding.horizontal(
@@ -455,6 +481,7 @@ class _SettingsHomeViewState extends State<_SettingsHomeView>
         padding: const EdgeInsets.symmetric(vertical: kSettingsPadding),
         child: ResponsivePageContainer(
           pageType: ResponsivePageType.modal,
+          maxWidth: twoColumn ? _settingsSheetDesktopWidth : null,
           child: Column(
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -486,25 +513,26 @@ class _SettingsHomeViewState extends State<_SettingsHomeView>
                 ],
               ),
               const SizedBox(height: kSettingsSectionSpacing),
-              _appearanceSection(context, l10n),
-              const SizedBox(height: kSettingsSectionSpacing),
-              _playbackSection(
-                context,
-                l10n,
-                dataSaver: dataSaver,
-                sourceSwapSettings: sourceSwapSettings,
-                sources: sources,
-              ),
-              const SizedBox(height: kSettingsSectionSpacing),
-              _lyricsSection(context, l10n, lyricsDisplay),
-              const SizedBox(height: kSettingsSectionSpacing),
-              _contentSection(context, l10n),
-              const SizedBox(height: kSettingsSectionSpacing),
-              _generalAndDataSection(
-                context,
-                l10n,
-                syncProvider: syncProvider,
-                updateProvider: updateProvider,
+              SettingsSectionGrid(
+                twoColumn: twoColumn,
+                children: [
+                  _appearanceSection(context, l10n),
+                  _playbackSection(
+                    context,
+                    l10n,
+                    dataSaver: dataSaver,
+                    sourceSwapSettings: sourceSwapSettings,
+                    sources: sources,
+                  ),
+                  _lyricsSection(context, l10n, lyricsDisplay),
+                  _contentSection(context, l10n),
+                  _generalAndDataSection(
+                    context,
+                    l10n,
+                    syncProvider: syncProvider,
+                    updateProvider: updateProvider,
+                  ),
+                ],
               ),
             ],
           ),

@@ -1,8 +1,9 @@
 /// 桌面应用骨架（Linux / Windows / macOS）。
 ///
-/// 顶栏瘦身（拖动区 + 当前页面标题 + 设置 + 窗口按钮，不再有播放控制与
-/// 进度线）+ 可折叠侧栏（96 ⇄ 240）+ 常驻底部播放条（80dp）+ 可选队列
-/// 右面板。手机 / 平板骨架不经过本文件（`app_shell.dart` 按平台分流）。
+/// 顶栏瘦身（拖动区 + 当前页面标题 + 全局搜索 + 设置 + 窗口按钮，不再有
+/// 播放控制与进度线）+ 可折叠侧栏（96 ⇄ 240）+ 常驻底部播放条（80dp）+
+/// 可选队列右面板。手机 / 平板骨架不经过本文件（`app_shell.dart` 按平台
+/// 分流）。
 ///
 /// 页面实例与共享元素飞行仍由壳层 State 单一持有（这里只接收页面栈与
 /// 回调）；本 State 只持有桌面布局状态（侧栏展开 / 队列面板开关与宽度），
@@ -10,6 +11,7 @@
 library;
 
 import 'dart:async';
+import 'dart:math' as math;
 
 import 'package:material_3_expressive/material_3_expressive.dart';
 import 'package:material_ui/material_ui.dart';
@@ -17,6 +19,7 @@ import 'package:material_ui/material_ui.dart';
 import '../../l10n/app_localizations.dart';
 import '../../providers/nav_provider.dart';
 import '../../services/window/window_chrome.dart';
+import '../../widgets/global_search.dart';
 import '../../widgets/nav_destination_style.dart';
 import '../../widgets/player_morph.dart';
 import 'now_playing_bar.dart';
@@ -36,6 +39,8 @@ class DesktopShell extends StatefulWidget {
     required this.morph,
     required this.onDestinationSelected,
     required this.onOpenSettings,
+    required this.onViewAllResults,
+    required this.onOpenSearch,
   });
 
   /// 当前选中的目的地（顶栏标题）。
@@ -62,11 +67,33 @@ class DesktopShell extends StatefulWidget {
   /// 打开设置弹层。
   final VoidCallback onOpenSettings;
 
+  /// 顶栏搜索「查看全部结果」（或面板内回车）→ 切到资料库目的地
+  /// （完整结果 / 分页 / 歌手链接都在那里，同一 `SearchProvider` 实例）。
+  final VoidCallback onViewAllResults;
+
+  /// 窄窗口搜索入口（图标态）→ 打开搜索：由壳层决定落点
+  /// （当前 = 资料库目的地的搜索页，见 [_buildCompactTitleBar]）。
+  final VoidCallback onOpenSearch;
+
   /// 窄窗口分级折叠阈值：宽 <1200 强制关队列面板、<1000 强制折叠侧栏。
   ///
   /// 只影响渲染，不改记忆值——窗口变宽后自动恢复用户设定。
   static const double queueForceCloseWidth = 1200;
   static const double railForceCollapseWidth = 1000;
+
+  /// 顶栏搜索退化为图标按钮的窗口宽阈值（= browse 桌面断点 900，
+  /// `Breakpoints.desktop`）：再窄中部放不下可用的搜索框，硬塞会把页面
+  /// 标题挤没。
+  static const double searchCompactWidth = 900;
+
+  /// 顶栏搜索槽最大宽（含包内默认静止 margin 2×24 → 可见 pill ≈ 460dp）。
+  static const double searchSlotMaxWidth = 508;
+
+  /// 搜索槽之外至少留给页面标题的宽度（约 4 个中文字，超出走省略号）。
+  static const double searchMinTitleWidth = 120;
+
+  /// 顶栏搜索入口的稳定 Key（宽窗 pill / 窄窗图标同一逻辑槽位，测试定位用）。
+  static const Key searchEntryKey = Key('desktopGlobalSearch');
 
   /// 侧栏展开宽度（M3E rail 的 `expandedWidth`；折叠档由包内定为 96）。
   static const double railExpandedWidth = 240;
@@ -139,20 +166,15 @@ class _DesktopShellState extends State<DesktopShell> {
             : M3ENavigationRailType.collapsed);
     final bool queuePanelVisible =
         _queuePanelOpen && windowWidth >= DesktopShell.queueForceCloseWidth;
+    final bool searchCompact = windowWidth < DesktopShell.searchCompactWidth;
 
     final appBar = AppBar(
       titleSpacing: 12,
       // 壳层是根页面，永远不需要返回键（理由同移动骨架顶栏）。
       automaticallyImplyLeading: false,
-      title: WindowDoubleTapMaximize(
-        // 双击顶栏标题区（拖动区的非按钮部分）= 最大化 / 还原（桌面肌肉
-        // 记忆）；按钮区不参与，避免双击按钮顺带改窗口状态。
-        child: Text(
-          widget.labelFor(widget.selectedDestination),
-          maxLines: 1,
-          overflow: TextOverflow.ellipsis,
-        ),
-      ),
+      title: searchCompact
+          ? _buildCompactTitleBar(l10n)
+          : _buildWideTitleBar(l10n),
       actions: [
         M3EIconButton(
           variant: M3EIconButtonVariant.standard,
@@ -220,6 +242,82 @@ class _DesktopShellState extends State<DesktopShell> {
         onOpenPlayer: () =>
             widget.onDestinationSelected(ShellDestination.nowPlaying),
         onToggleQueue: () => _setQueuePanelOpen(!_queuePanelOpen),
+      ),
+    );
+  }
+
+  /// 宽窗顶栏：页面标题（左）+ 搜索（中部，最多 [DesktopShell.searchSlotMaxWidth]）
+  /// + 等宽空位（右）。
+  ///
+  /// 左右两列等宽，把搜索槽钉在标题区正中；槽宽受
+  /// [DesktopShell.searchMinTitleWidth] 保护，标题过长先省略，不会把搜索框
+  /// 挤没或挤溢出。
+  Widget _buildWideTitleBar(AppLocalizations l10n) {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final slotWidth = math.min(
+          DesktopShell.searchSlotMaxWidth,
+          math.max(
+            0.0,
+            constraints.maxWidth - DesktopShell.searchMinTitleWidth,
+          ),
+        );
+        return Row(
+          children: [
+            Expanded(
+              child: Align(
+                alignment: Alignment.centerLeft,
+                child: _buildPageTitle(l10n),
+              ),
+            ),
+            SizedBox(
+              width: slotWidth,
+              child: GlobalSearch(
+                key: DesktopShell.searchEntryKey,
+                onViewAllResults: widget.onViewAllResults,
+              ),
+            ),
+            const Expanded(child: SizedBox.shrink()),
+          ],
+        );
+      },
+    );
+  }
+
+  /// 窄窗顶栏：页面标题 + 图标搜索入口。
+  ///
+  /// 窄窗不挂 docked 面板：面板最小宽 360dp，而锚点在窄窗只剩一个小圆，
+  /// 展开后是一块与锚点不成比例的浮层；改为把搜索交给资料库搜索页
+  /// （同一 provider，分段 / 分页 / 歌手链接齐全），窄窗下更顺。
+  Widget _buildCompactTitleBar(AppLocalizations l10n) {
+    return Row(
+      children: [
+        Expanded(
+          child: Align(
+            alignment: Alignment.centerLeft,
+            child: _buildPageTitle(l10n),
+          ),
+        ),
+        M3EIconButton(
+          key: DesktopShell.searchEntryKey,
+          variant: M3EIconButtonVariant.standard,
+          semanticLabel: l10n.libraryTabSearch,
+          icon: const Icon(Icons.search_rounded),
+          onPressed: widget.onOpenSearch,
+        ),
+      ],
+    );
+  }
+
+  /// 页面标题：双击 = 最大化 / 还原（桌面肌肉记忆）。
+  ///
+  /// 双击区只包标题文本本身：搜索框是交互控件，双击它不该顺带改窗口状态。
+  Widget _buildPageTitle(AppLocalizations l10n) {
+    return WindowDoubleTapMaximize(
+      child: Text(
+        widget.labelFor(widget.selectedDestination),
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
       ),
     );
   }

@@ -193,7 +193,9 @@ extension ResponsiveExtension on BuildContext {
           modalWidth: responsive(
             mobile: 420,
             tablet: 520,
-            desktop: 560,
+            // 桌面档二级页（专辑 / 歌手 / 评论等侧滑）加宽：行内信息更长，
+            // 宽一档减少横向拥挤；屏宽 0.82 的夹取仍在（见 _showSideSheet）。
+            desktop: 720,
           ),
           modalMaxHeightFactor: isLargeScreen ? 0.9 : 0.94,
           defaultMinTileWidth: 260,
@@ -216,6 +218,10 @@ extension ResponsiveExtension on BuildContext {
           modalWidth: responsive(
             mobile: 420,
             tablet: 500,
+            // 桌面档保持 560：本档被设置弹层、定时关闭、来源分享、AI 推歌
+            // 共用，设置页的宽弹层用显式 `maxWidth` 单独指定（见
+            // `settings_page.dart::_settingsSheetDesktopWidth`），不要在这里
+            // 一刀切加宽——窄弹层跟着变宽会在桌面上摊出大片空白。
             desktop: 560,
           ),
           modalMaxHeightFactor: isLargeScreen ? 0.86 : 0.92,

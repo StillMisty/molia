@@ -2,8 +2,11 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:material_3_expressive/material_3_expressive.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:molia/app/app_shell.dart';
+import 'package:molia/app/desktop/desktop_shell.dart';
 import 'package:molia/app/desktop/now_playing_bar.dart';
 import 'package:molia/app/desktop/queue_panel.dart';
+import 'package:molia/data/catalog/catalog_service.dart';
+import 'package:molia/domain/models/catalog.dart';
 import 'package:molia/domain/models/playback.dart';
 import 'package:molia/domain/models/track.dart';
 import 'package:molia/l10n/app_localizations.dart';
@@ -18,8 +21,10 @@ import 'package:molia/providers/theme_provider.dart';
 import 'package:molia/services/lyrics_display/lyrics_display_settings.dart';
 import 'package:molia/sources/source_manager.dart';
 import 'package:molia/widgets/cover_appearance.dart';
+import 'package:molia/widgets/global_search.dart';
 import 'package:molia/widgets/player.dart';
 import 'package:molia/widgets/queue.dart';
+import 'package:molia/widgets/track_row.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -31,7 +36,8 @@ import '../support/fakes.dart';
 ///
 /// 覆盖骨架结构与两条不变量：桌面底栏 / 侧栏存在且顶栏瘦身（无播放控制、
 /// 无进度线）；队列面板开关；底栏左区进播放页；移动骨架不受影响；
-/// 窄窗口分级折叠（阈值只影响渲染、记忆值保留）。
+/// 窄窗口分级折叠（阈值只影响渲染、记忆值保留）；顶栏全局搜索（宽窗 pill /
+/// 窄窗图标、docked 结果面板、查看全部结果切资料库）。
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
@@ -45,10 +51,15 @@ void main() {
 
   /// 装配与组合根同源的 provider 树并挂载壳层（骨架同 `app_shell_reselect_test`；
   /// provider 在测试体内创建：偏好加载的 Future 必须在 fake-async 区内解析）。
+  ///
+  /// [searchSource] 非空时给搜索 provider 接上假音源（顶栏搜索用例预置结果），
+  /// [configureSearch] 在挂载前配置搜索状态（如先提交一次搜索）。
   Future<void> pumpShell(
     WidgetTester tester, {
     required bool desktopShell,
     Size size = const Size(1440, 900),
+    FakeMusicSource? searchSource,
+    void Function(SearchProvider search)? configureSearch,
   }) async {
     tester.view.physicalSize = size;
     tester.view.devicePixelRatio = 1.0;
@@ -89,11 +100,17 @@ void main() {
       sources: const {},
     );
     addTearDown(discover.dispose);
+    final registry = FakeSourceRegistry(
+      searchSource == null ? const {} : {'kw': searchSource},
+    );
     final search = SearchProvider(
       playback,
-      sourceRegistry: FakeSourceRegistry(const {}),
+      catalogService:
+          searchSource == null ? null : CatalogService(registry: registry),
+      sourceRegistry: registry,
     );
     addTearDown(search.dispose);
+    configureSearch?.call(search);
     final lyrics = LyricsProvider();
     addTearDown(lyrics.dispose);
     final lyricsDisplay = LyricsDisplaySettings();
@@ -160,6 +177,34 @@ void main() {
 
   int navIndexOf(ShellDestination destination) =>
       nav.visibleDestinations.indexOf(destination);
+
+  /// 顶栏搜索用例的假曲目（不带封面：避免测试触发网络预取 / 取色）。
+  Track searchTrack(String id) => Track(
+        id: TrackId('kw', id),
+        title: 'Title $id',
+        artists: [Artist(name: 'Artist $id')],
+        album: 'Album',
+        duration: const Duration(minutes: 3, seconds: 5),
+        origin: TrackOrigin.builtin,
+        payload: {'songmid': id},
+      );
+
+  /// 装配「已有结果」的顶栏搜索用例：假音源返回两条结果并先提交一次搜索。
+  Future<void> pumpSearchShell(WidgetTester tester) async {
+    final source = FakeMusicSource('kw');
+    source.onSearch = (query) => Future.value(
+          SearchResult(
+            items: [searchTrack('a'), searchTrack('b')],
+            total: 2,
+          ),
+        );
+    await pumpShell(
+      tester,
+      desktopShell: true,
+      searchSource: source,
+      configureSearch: (search) => search.submitSearch('hello'),
+    );
+  }
 
   testWidgets('桌面骨架：底栏 / 侧栏存在，顶栏无播放控制与进度线', (tester) async {
     await pumpShell(tester, desktopShell: true);
@@ -289,6 +334,71 @@ void main() {
     expect(
       tester.widget<M3ENavigationRail>(find.byType(M3ENavigationRail)).type,
       M3ENavigationRailType.expanded,
+    );
+  });
+
+  testWidgets('顶栏搜索入口：宽窗是搜索 pill，窄窗退化为图标按钮', (tester) async {
+    await pumpShell(tester, desktopShell: true);
+
+    expect(find.byKey(DesktopShell.searchEntryKey), findsOneWidget);
+    expect(
+      find.byType(GlobalSearch),
+      findsOneWidget,
+      reason: '宽窗搜索入口是顶栏全局搜索组件',
+    );
+    expect(
+      find.byType(M3ESearchAnchor),
+      findsOneWidget,
+      reason: '宽窗搜索入口是 M3E 搜索 pill',
+    );
+
+    // < 900：入口退化为图标按钮（不再挂搜索锚点，顶栏不会被挤坏）。
+    tester.view.physicalSize = const Size(800, 900);
+    await settleTransition(tester);
+    expect(find.byKey(DesktopShell.searchEntryKey), findsOneWidget);
+    expect(find.byType(M3ESearchAnchor), findsNothing);
+    expect(
+      find.descendant(
+        of: find.byType(AppBar),
+        matching: find.byIcon(Icons.search_rounded),
+      ),
+      findsOneWidget,
+    );
+  });
+
+  testWidgets('顶栏搜索：点击入口弹出 docked 结果面板（曲目行 + 查看全部结果）', (tester) async {
+    await pumpSearchShell(tester);
+    expect(find.byType(TrackRow), findsNothing, reason: '面板未打开时不渲染结果');
+
+    await tester.tap(find.byKey(DesktopShell.searchEntryKey));
+    await tester.pumpAndSettle();
+
+    // 面板与资料库页共用同一个 SearchProvider：预置结果直接就地渲染。
+    expect(find.byType(TrackRow), findsNWidgets(2));
+    expect(
+      // 底栏当前曲目也叫 Title a：定位到面板行内。
+      find.descendant(
+        of: find.byType(TrackRow),
+        matching: find.text('Title a'),
+      ),
+      findsOneWidget,
+    );
+    expect(find.text(l10n.viewAllResults), findsOneWidget);
+  });
+
+  testWidgets('顶栏搜索：「查看全部结果」收起面板并切到资料库目的地', (tester) async {
+    await pumpSearchShell(tester);
+    await tester.tap(find.byKey(DesktopShell.searchEntryKey));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text(l10n.viewAllResults));
+    await settleTransition(tester);
+
+    expect(selectedRailIndex(tester), navIndexOf(ShellDestination.library));
+    expect(
+      find.text(l10n.viewAllResults),
+      findsNothing,
+      reason: '面板应已收起（跳转前先关搜索视图）',
     );
   });
 }

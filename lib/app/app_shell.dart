@@ -479,6 +479,13 @@ class _MyAppState extends State<MyApp>
         morph: _morph,
         onDestinationSelected: _onDestinationSelected,
         onOpenSettings: () => _openSettings(context),
+        // 顶栏搜索的两个出口当前都落在资料库目的地：完整结果（分段 / 分页 /
+        // 歌手链接）与窄窗的搜索页都在那里，且共用同一个 SearchProvider 实例。
+        // 两个回调分开传是因为触发语义不同（面板「查看全部结果」/ 窄窗图标），
+        // 将来给图标换落点只改这一处。
+        onViewAllResults: () =>
+            _onDestinationSelected(ShellDestination.library),
+        onOpenSearch: () => _onDestinationSelected(ShellDestination.library),
       );
     }
 
