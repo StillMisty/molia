@@ -154,10 +154,9 @@ void main() {
         'https://img.example/b.jpg');
     expect(provider.currentTrackId, const TrackId('fake', 'b'));
     // 恢复会话保留队列里 index-1：左侧「上一首」封面不因重启丢失。
-    expect(provider.snapshot.history.last.title, 'Title a');
+    expect(provider.snapshot.previous?.title, 'Title a');
     expect(provider.position.value, const Duration(seconds: 20));
     expect(provider.snapshot.next, isNull);
-    expect(provider.snapshot.upcoming, isEmpty);
 
     // 恢复态 seek：只更新保存的进度，不碰真实播放。
     await provider.seekToPosition(25000);
@@ -397,7 +396,6 @@ void main() {
       current: _track('a', artwork: 'https://img.example/a.jpg'),
       queue: [_track('a'), _track('b')],
       currentIndex: 0,
-      upcoming: [_track('b')],
       isPlaying: true,
       position: const Duration(seconds: 7),
       duration: const Duration(seconds: 30),

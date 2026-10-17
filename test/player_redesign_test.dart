@@ -53,7 +53,7 @@ void main() {
       queue: [a, b, c],
       currentIndex: 1,
       next: c,
-      upcoming: [c],
+      previous: a,
       isPlaying: true,
       position: const Duration(seconds: 5),
       duration: const Duration(seconds: 30),

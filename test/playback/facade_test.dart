@@ -79,9 +79,8 @@ class FakeBackend implements PlaybackBackend {
       queue: current.queue,
       currentIndex: current.currentIndex,
       next: current.next,
-      upcoming: current.upcoming,
+      previous: current.previous,
       upNext: current.upNext,
-      history: current.history,
       isPlaying: current.isPlaying,
       isLoading: current.isLoading,
       position: current.position,
@@ -325,7 +324,6 @@ void main() {
         current: trackA,
         queue: [trackA, trackB],
         currentIndex: 0,
-        upcoming: [trackB],
       ));
 
       await facade.playTrackInContext(trackB);
@@ -340,7 +338,7 @@ void main() {
   });
 
   group('领域快照形状', () {
-    test('current / next / upcoming / upNext / history', () {
+    test('current / next / previous / upNext', () {
       final backend = FakeBackend();
       final facade = DefaultPlaybackFacade(backend: backend);
       final previous = _track('z');
@@ -352,9 +350,8 @@ void main() {
         queue: [previous, current, next],
         currentIndex: 1,
         next: next,
-        upcoming: [next],
+        previous: previous,
         upNext: [next],
-        history: [previous],
         isPlaying: true,
         duration: const Duration(seconds: 42),
         context: const PlaybackContext(
@@ -368,14 +365,13 @@ void main() {
       expect(snapshot.current?.id, const TrackId('fake', 'a'));
       expect(snapshot.current?.title, 'Title a');
       expect(snapshot.next?.id, const TrackId('fake', 'b'));
-      expect(snapshot.upcoming.map((track) => track.id.id), ['b']);
+      expect(snapshot.previous?.id, const TrackId('fake', 'z'));
       expect(snapshot.upNext.map((track) => track.id.id), ['b']);
-      expect(snapshot.history.map((track) => track.id.id), ['z']);
       expect(snapshot.isPlaying, isTrue);
       expect(snapshot.duration, const Duration(seconds: 42));
       expect(snapshot.context?.name, '集成测试');
 
-      // 队列末尾（顺序模式）→ next 为 null（由后端解析），upcoming/upNext 为空。
+      // 队列末尾（顺序模式）→ next 为 null（由后端解析），upNext 为空。
       backend.emit(BackendSnapshot(
         current: next,
         queue: [previous, current, next],
@@ -383,7 +379,6 @@ void main() {
         mode: PlayMode.sequential,
       ));
       expect(facade.snapshot.value.next, isNull);
-      expect(facade.snapshot.value.upcoming, isEmpty);
       expect(facade.snapshot.value.upNext, isEmpty);
     });
 
@@ -462,7 +457,6 @@ void main() {
         current: trackA,
         queue: [trackA, trackB],
         currentIndex: 0,
-        upcoming: [trackB],
       ));
 
       // 命中队列：跳转播放

@@ -20,7 +20,7 @@ const int coverSwapNone = 0;
 /// [coverSwapNone]。规则按优先级（顺序即契约，不得调换）：
 ///
 /// 1. [from] 为空（无旧曲）、[to] 为空（无新曲）或新旧同 id → [coverSwapNone]；
-/// 2. [to] 命中「变化前」的上一首提示 [prevHint]（history 末位 = 播放顺序
+/// 2. [to] 命中「变化前」的上一首提示 [prevHint]（快照 previous = 播放顺序
 ///    最近一首）→ 向后；随机模式下播放顺序与队列顺序无关，这条也能覆盖
 ///    「上一首」排在队列更后面的情况；
 /// 3. [to] 命中「变化前」的下一首提示 [nextHint]（快照 next）→ 向前；

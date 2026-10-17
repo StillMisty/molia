@@ -15,7 +15,7 @@ import 'support/fakes.dart';
 /// 对账与会话外槽位更新：
 /// - 提交对账到非预览曲目：中心封面 220ms 原位交叉淡化校正；
 /// - 空闲期槽位身份变化（next 换人/变空）：180ms 原位交叉淡化；
-/// - 左槽「上一首」语义（history 末位 → 队列前一位 → 空）；
+/// - 左槽「上一首」语义（快照 previous：播放顺序最近一首 → 队列前一位 → 空）；
 /// - 中心封面同 id、URL 更新：250ms 交叉淡化换图；
 /// - 提交匹配路径：续走落位，不回起点重播。
 ///
@@ -53,7 +53,7 @@ void main() {
 
   tearDown(() => playback.dispose());
 
-  /// 模拟后端切到指定曲目：next/upcoming/history 与队列保持一致。
+  /// 模拟后端切到指定曲目：next / previous 与队列保持一致。
   void emitFor(String id) {
     final index = order.indexWhere((track) => track.id.id == id);
     backend.emit(BackendSnapshot(
@@ -61,8 +61,7 @@ void main() {
       queue: order,
       currentIndex: index,
       next: index + 1 < order.length ? order[index + 1] : null,
-      upcoming: index + 1 < order.length ? order.sublist(index + 1) : const [],
-      history: index > 0 ? order.sublist(0, index) : const [],
+      previous: index > 0 ? order[index - 1] : null,
       isPlaying: true,
       position: const Duration(seconds: 5),
       duration: const Duration(seconds: 30),
@@ -70,11 +69,13 @@ void main() {
   }
 
   /// 自定义快照：空闲身份变化（current 不变、队列/next 变化）与同 id 换图用。
+  ///
+  /// [previous] 缺省按后端口径回退队列前一位（与真实后端一致）。
   void emitCustom({
     required Track current,
     required List<Track> queue,
     required int index,
-    List<Track> history = const [],
+    Track? previous,
     Track? next,
   }) {
     backend.emit(BackendSnapshot(
@@ -82,8 +83,7 @@ void main() {
       queue: queue,
       currentIndex: index,
       next: next,
-      upcoming: next == null ? const [] : [next],
-      history: history,
+      previous: previous ?? (index > 0 ? queue[index - 1] : null),
       isPlaying: true,
       position: const Duration(seconds: 5),
       duration: const Duration(seconds: 30),
@@ -274,7 +274,7 @@ void main() {
     expect(find.byKey(PlayerCoverDeck.centerCoverTrackKey(d.id)), findsOneWidget,
         reason: '校正结束后中心应展示实际曲目 d');
     expect(sideCard(left: true, track: c), findsOneWidget,
-        reason: '校正后左槽应重建为 history 末位 c');
+        reason: '校正后左槽应重建为 previous c');
     expect(nearestOpacityOf(tester, sideCard(left: true, track: c)),
         closeTo(0.85, 0.01));
     expect(cardDx(tester, sideCard(left: true, track: c)), closeTo(leftDx, 1.5));
@@ -309,7 +309,7 @@ void main() {
     final double outStart = nearestOpacityOf(tester, outgoing);
     expect(outStart, closeTo(1.0, 0.01));
 
-    // 校正中途尝试拖动：右滑（history 末位 c 是可预览目标，这次拖动
+    // 校正中途尝试拖动：右滑（previous c 是可预览目标，这次拖动
     // 本身满足提交条件），但校正期间必须被忽略。两次移动累计超过阈值后松手。
     final gesture = await tester.startGesture(
         tester.getCenter(find.byKey(Player.artworkSwipeHostKey)));
@@ -379,7 +379,7 @@ void main() {
     final double rightDx = sampleCoverOpacities(tester).last.dx;
 
     // 播放中列表变化：下一首 c → d（current 不变）。
-    emitCustom(current: b, queue: [a, b, d], index: 1, history: [a], next: d);
+    emitCustom(current: b, queue: [a, b, d], index: 1, previous: a, next: d);
     // 检测帧（先泵掉通知节流的补发窗口）：淡化从 0 起步（旧身份满、新身份 0）。
     await tester.pump(const Duration(milliseconds: 50));
 
@@ -412,7 +412,7 @@ void main() {
     expect(tester.takeException(), isNull);
 
     // 同一槽位再变空：旧身份（d）淡出为空，不允许残留封面卡。
-    emitCustom(current: b, queue: [a, b], index: 1, history: [a], next: null);
+    emitCustom(current: b, queue: [a, b], index: 1, previous: a, next: null);
     await tester.pump(const Duration(milliseconds: 50)); // 检测帧
 
     final emptyOldCard = sideCard(left: false, track: d);
@@ -446,12 +446,12 @@ void main() {
         closeTo(sampleCoverOpacities(tester).first.dx, 0.5));
     expect(tester.takeException(), isNull);
 
-    // 切到队首（current a）：previous 回退到自身 → 左槽留空。
+    // 切到队首（current a）：没有可展示的上一首 → 左槽留空。
     emitCustom(current: a, queue: [a, b, c], index: 0, next: b);
     await pumpPlayer(tester);
 
     expect(sideCard(left: true, track: a), findsNothing,
-        reason: '队首 previous 回退到自身：左槽应留空');
+        reason: '队首没有上一首：左槽应留空');
     expect(sideCard(left: true, track: b), findsNothing);
     // 右槽照常显示下一首，证明堆叠已正常渲染。
     expect(sideCard(left: false, track: b), findsOneWidget);
@@ -462,7 +462,7 @@ void main() {
     // 音源补图（null → URL）与后续换图（URL → URL）都走 250ms 交叉淡化。
     final b1 = _track('b', artwork: 'https://img.example/b1.jpg');
     final b2 = _track('b', artwork: 'https://img.example/b2.jpg');
-    emitCustom(current: b, queue: [a, b, c], index: 1, history: [a], next: c);
+    emitCustom(current: b, queue: [a, b, c], index: 1, previous: a, next: c);
     // 直接挂载封面堆叠（带封面的曲目会触发播放器的取色/预取路径，与换图
     // 淡化无关）；宿主按快照 current 重建 displayTrack，等价播放器的喂法。
     await pumpDeckHost(tester);
@@ -477,7 +477,7 @@ void main() {
     Future<void> expectArtworkRefresh(
         Track newTrack, String newUrl, String reason) async {
       emitCustom(
-          current: newTrack, queue: [a, newTrack, c], index: 1, history: [a], next: c);
+          current: newTrack, queue: [a, newTrack, c], index: 1, previous: a, next: c);
       // 检测帧（先泵掉通知节流的补发窗口）：换图从 0 起步，旧图满、新图 0。
       await tester.pump(const Duration(milliseconds: 50));
       expect(outgoing, findsOneWidget, reason: '$reason：旧图卡应渲染（淡出起点）');
@@ -519,13 +519,13 @@ void main() {
   testWidgets('切歌占位：新曲目无封面时以旧封面 URL 作占位（不闪黑块）', (tester) async {
     final b1 = _track('b', artwork: 'https://img.example/b.jpg');
     final c = _track('c'); // 无封面
-    emitCustom(current: b1, queue: [a, b1, c], index: 1, history: [a], next: c);
+    emitCustom(current: b1, queue: [a, b1, c], index: 1, previous: a, next: c);
     // 直接挂载封面堆叠（带封面的曲目会触发播放器的取色/预取路径）。
     await pumpDeckHost(tester);
 
     // 切到无封面的 c：动画期间中心卡（c）以旧封面 b 的 URL 作占位。
     emitCustom(
-        current: c, queue: [a, b1, c], index: 2, history: [a, b1], next: null);
+        current: c, queue: [a, b1, c], index: 2, previous: b1, next: null);
     await tester.pump(const Duration(milliseconds: 50)); // 检测帧
     await tester.pump(); // 动画首 tick
 
@@ -552,12 +552,12 @@ void main() {
     final double rightDx = steady.last.dx;
 
     // 右槽先变化：c → d。
-    emitCustom(current: b, queue: [a, b, d], index: 1, history: [a], next: d);
+    emitCustom(current: b, queue: [a, b, d], index: 1, previous: a, next: d);
     await tester.pump(const Duration(milliseconds: 50)); // 检测帧
     await tester.pump(const Duration(milliseconds: 50)); // 右槽淡化中
 
     // 左槽接着变化：a → c（同一个淡化窗口内）。
-    emitCustom(current: b, queue: [c, b, d], index: 1, history: [c], next: d);
+    emitCustom(current: b, queue: [c, b, d], index: 1, previous: c, next: d);
     await tester.pump(const Duration(milliseconds: 50));
 
     final leftOld = sideCard(left: true, track: a);
@@ -591,14 +591,14 @@ void main() {
     final double rightDx = sampleCoverOpacities(tester).last.dx;
 
     // 第一段变化：c → d，等淡化过半。
-    emitCustom(current: b, queue: [a, b, d], index: 1, history: [a], next: d);
+    emitCustom(current: b, queue: [a, b, d], index: 1, previous: a, next: d);
     await tester.pump(const Duration(milliseconds: 50)); // 检测帧
     await tester.pump(const Duration(milliseconds: 60)); // 淡化过半
     final double midValue = nearestOpacityOf(tester, sideCard(left: false, track: d));
     expect(midValue, greaterThan(0.1));
 
     // 第二段变化：d → e（淡化尚未结束）。
-    emitCustom(current: b, queue: [a, b, e], index: 1, history: [a], next: e);
+    emitCustom(current: b, queue: [a, b, e], index: 1, previous: a, next: e);
     await tester.pump(const Duration(milliseconds: 50)); // 检测帧（接管，不重启）
     final newCard = sideCard(left: false, track: e);
     expect(newCard, findsOneWidget);

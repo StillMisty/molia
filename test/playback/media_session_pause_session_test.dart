@@ -104,9 +104,6 @@ class _FakeService extends LocalPlaybackService {
     return List.unmodifiable(_queue.sublist(_index + 1));
   }
 
-  @override
-  List<SourceTrack> get historyTracks => const [];
-
   /// 起播（等价 `playTracks` 装载完成后的状态）。
   void seed(
     List<SourceTrack> tracks, {

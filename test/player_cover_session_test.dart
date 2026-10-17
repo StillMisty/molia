@@ -87,7 +87,7 @@ void main() {
   final d = _track('d');
   final order = [a, b, c, d];
 
-  /// 按队列下标构造快照（next/history 与队列一致，与后端语义对齐）。
+  /// 按队列下标构造快照（next / previous 与队列一致，与后端语义对齐）。
   PlaybackSnapshot snapshotAt(
     int index, {
     List<Track>? queue,
@@ -99,8 +99,7 @@ void main() {
       queue: list,
       currentIndex: index,
       next: index + 1 < list.length ? list[index + 1] : null,
-      upcoming: index + 1 < list.length ? list.sublist(index + 1) : const [],
-      history: index > 0 ? list.sublist(0, index) : const [],
+      previous: index > 0 ? list[index - 1] : null,
       isPlaying: true,
       mode: mode,
     );
@@ -171,7 +170,7 @@ void main() {
 
   group('方向判定', () {
     test('命中「变化前」的上一首提示 → 向后，旧邻位取空闲缓存的下一首', () {
-      settleAt(2); // history 末位 = b（提示），next = d
+      settleAt(2); // previous = b（提示），next = d
       host.clear();
 
       session.observe(snapshot: snapshotAt(1), displayTrack: b);

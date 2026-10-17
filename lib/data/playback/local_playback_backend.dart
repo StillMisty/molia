@@ -215,12 +215,6 @@ class LocalPlaybackBackend implements PlaybackBackend {
     ];
     final current = currentSource == null ? null : _toTrack(currentSource);
 
-    final upcoming = <Track>[];
-    if (index >= 0) {
-      for (var i = index + 1; i < queue.length; i++) {
-        upcoming.add(queue[i]);
-      }
-    }
     final upNext = <Track>[
       for (final source in _service.upNextTracks) _toTrack(source),
     ];
@@ -232,18 +226,15 @@ class LocalPlaybackBackend implements PlaybackBackend {
             : (current.duration ?? Duration.zero));
 
     final nextSource = _service.nextSourceTrack;
-    final history = <Track>[
-      for (final source in _service.historyTracks) _toTrack(source),
-    ];
+    final previousSource = _service.previousSourceTrack;
 
     return BackendSnapshot(
       current: current,
       queue: List<Track>.unmodifiable(queue),
       currentIndex: index,
       next: nextSource == null ? null : _toTrack(nextSource),
-      upcoming: List<Track>.unmodifiable(upcoming),
+      previous: previousSource == null ? null : _toTrack(previousSource),
       upNext: List<Track>.unmodifiable(upNext),
-      history: List<Track>.unmodifiable(history),
       isPlaying: _service.isPlaying,
       isLoading: _service.isLoading,
       position: _service.position,

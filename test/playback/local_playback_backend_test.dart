@@ -72,13 +72,16 @@ class _FakeService extends LocalPlaybackService {
   }
 
   @override
+  SourceTrack? get previousSourceTrack {
+    if (!hasTrack || _index <= 0) return null;
+    return _queue[_index - 1];
+  }
+
+  @override
   List<SourceTrack> get upNextTracks {
     if (!hasTrack) return const [];
     return List.unmodifiable(_queue.sublist(_index + 1));
   }
-
-  @override
-  List<SourceTrack> get historyTracks => const [];
 
   void seed(
     List<SourceTrack> tracks, {
@@ -246,7 +249,7 @@ void main() {
     expect(snapshot.current?.id.id, 'a', reason: '当前曲目不变');
   });
 
-  test('状态映射：current/queue/upcoming/upNext/duration/context/error', () {
+  test('状态映射：current/queue/next/previous/upNext/duration/context/error', () {
     final a = _source('a');
     final b = _source('b');
     service.seed(
@@ -263,9 +266,14 @@ void main() {
     expect(snapshot.queue, hasLength(2));
     expect(snapshot.currentIndex, 0);
     expect(snapshot.next?.id.id, 'b');
-    expect(snapshot.upcoming.map((t) => t.id.id), ['b']);
     expect(snapshot.upNext.map((t) => t.id.id), ['b']);
-    expect(snapshot.history, isEmpty);
+    expect(snapshot.previous, isNull);
+
+    // 下标回退：previous 透传服务解析结果（当前在队尾时 next 为空）。
+    service.seed([a, b], index: 1, playing: true);
+    final atEnd = backend.state.value;
+    expect(atEnd.previous?.id.id, 'a');
+    expect(atEnd.next, isNull);
     expect(snapshot.isPlaying, isTrue);
     expect(snapshot.duration, const Duration(seconds: 42));
     expect(snapshot.context?.name, '集成测试');

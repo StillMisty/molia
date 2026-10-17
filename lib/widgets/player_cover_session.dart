@@ -128,8 +128,8 @@ class CoverSwapSession extends ChangeNotifier {
   /// 方向反转时让位的旧邻位（从另一侧淡出）。
   Track? _oldNeighbor;
 
-  /// 左槽「上一首」身份：播放顺序最近一首（history 末位）→ 队列前一位 →
-  /// 空（排除与当前同 id），与后端 `skipToPrevious` 同源。
+  /// 左槽「上一首」身份：快照解析好的 [PlaybackSnapshot.previous]
+  /// （播放顺序最近一首 → 队列前一位；同 id 已排除）。
   Track? _previous;
 
   /// 空闲帧缓存的下一首（向后拖动时的旧邻位身份）。
@@ -154,9 +154,9 @@ class CoverSwapSession extends ChangeNotifier {
   /// 否则旧预览卡会从半途位置跳回中心）。
   bool _correctionDeferred = false;
 
-  /// 方向判定「变化前」的上一首提示（history 末位 = 播放顺序最近一首）。
+  /// 方向判定「变化前」的上一首提示（快照 previous = 播放顺序最近一首）。
   ///
-  /// 方向纯函数消费的是变化前的提示：变化后快照的 next/history 已经翻页，
+  /// 方向纯函数消费的是变化前的提示：变化后快照的 next/previous 已经翻页，
   /// 无法代表用户实际来的方向。空闲帧与每次切歌解析后刷新。
   Track? _prevHint;
 
@@ -418,7 +418,7 @@ class CoverSwapSession extends ChangeNotifier {
     _oldNeighbor = resolved == coverSwapBackward ? _lastNext : _previous;
     // 新快照即下一次切歌的「变化前」基准（快速连切时动画中不会有空闲帧）。
     _cacheDirectionHints(snapshot);
-    _previous = _resolvePreviousTrack(snapshot);
+    _previous = snapshot.previous;
     _from = oldTrack;
     // 旧封面作为切歌动画中未加载完成时的占位，避免黑块闪一下。
     _placeholderUrl = artworkUrlOf(oldTrack) ?? _placeholderUrl;
@@ -431,7 +431,7 @@ class CoverSwapSession extends ChangeNotifier {
   void _settleCommit(PlaybackSnapshot snapshot) {
     _phase = CoverSwapPhase.idle;
     _to = null;
-    _previous = _resolvePreviousTrack(snapshot);
+    _previous = snapshot.previous;
     // 对账后新快照即下一次切歌的「变化前」基准。
     _cacheDirectionHints(snapshot);
     notifyListeners();
@@ -444,7 +444,7 @@ class CoverSwapSession extends ChangeNotifier {
   void _startCorrection(PlaybackSnapshot snapshot) {
     _correctionDeferred = false;
     _phase = CoverSwapPhase.correcting;
-    _previous = _resolvePreviousTrack(snapshot);
+    _previous = snapshot.previous;
     // 对账后新快照即下一次切歌的「变化前」基准。
     _cacheDirectionHints(snapshot);
     notifyListeners();
@@ -467,7 +467,7 @@ class CoverSwapSession extends ChangeNotifier {
     final snapshot = _snapshot;
     if (snapshot != null) {
       _lastNext = snapshot.next;
-      _previous = _resolvePreviousTrack(snapshot);
+      _previous = snapshot.previous;
       _cacheDirectionHints(snapshot);
     }
   }
@@ -482,7 +482,7 @@ class CoverSwapSession extends ChangeNotifier {
     final snapshot = _snapshot;
     if (snapshot == null) return;
     if (_host.progressAnimating || previewActive) return;
-    final Track? previous = _resolvePreviousTrack(snapshot);
+    final Track? previous = snapshot.previous;
     final bool previousChanged = previous?.id != _previous?.id;
     _lastNext = snapshot.next;
     _previous = previous;
@@ -493,44 +493,19 @@ class CoverSwapSession extends ChangeNotifier {
 
   /// 缓存「变化前」的方向判定提示（空闲缓存刷新与每次切歌解析后调用）。
   void _cacheDirectionHints(PlaybackSnapshot snapshot) {
-    _prevHint = snapshot.history.isNotEmpty ? snapshot.history.last : null;
+    _prevHint = snapshot.previous;
     _nextHint = snapshot.next;
     _hintIndex = snapshot.currentIndex;
   }
 
-  /// 本次拖动方向对应的预览目标；无目标（队列到头/无可回退曲目）返回 null。
+  /// 本次拖动方向对应的预览目标；无目标（队列到头 / 无可回退曲目）返回 null。
   ///
-  /// 必须与实际的 `skipToNext/skipToPrevious` 同源：next 用快照解析好的
-  /// 下一首（shuffle 会消费同一个随机值），previous 用 [_resolvePreviousTrack]
-  /// （history 末位 → 队列前一位 → 空，与后端 previous 的实现一致）。
+  /// 两个方向都直接读快照解析好的身份（服务侧已保证与实际的
+  /// `skipToNext` / `skipToPrevious` 同源，且上一首已排除与当前同 id）。
   Track? _previewTargetFor(int dir, PlaybackSnapshot snapshot) {
-    final Track? target =
-        dir == 1 ? snapshot.next : (dir == -1 ? _resolvePreviousTrack(snapshot) : null);
-    if (target == null) return null;
-    // 目标就是当前曲目（如队列首的 previous）：没有可预览的切换，按边界处理。
-    final current = snapshot.current;
-    if (current != null && target.id == current.id) return null;
-    return target;
-  }
-
-  /// 左槽「上一首」身份：播放顺序最近一首（history 末位）→ 队列前一位
-  /// （`currentIndex > 0` 时的 `queue[currentIndex-1]`）→ 空。
-  ///
-  /// 排除与当前曲目同 id：队首回退时后端会把「当前自身」当成 previous，
-  /// 界面上不能显示一张和自己一样的上一首（显示为空）。
-  Track? _resolvePreviousTrack(PlaybackSnapshot snapshot) {
-    final Track? target;
-    if (snapshot.history.isNotEmpty) {
-      target = snapshot.history.last;
-    } else {
-      final index = snapshot.currentIndex;
-      target = (index > 0 && index < snapshot.queue.length)
-          ? snapshot.queue[index - 1]
-          : null;
-    }
-    if (target == null) return null;
-    final current = snapshot.current;
-    if (current != null && target.id == current.id) return null;
+    final Track? target = dir == 1
+        ? snapshot.next
+        : (dir == -1 ? snapshot.previous : null);
     return target;
   }
 }
