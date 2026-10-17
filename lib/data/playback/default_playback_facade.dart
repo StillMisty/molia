@@ -104,6 +104,9 @@ class DefaultPlaybackFacade implements PlaybackFacade {
   Future<void> setMode(PlayMode mode) => _backend.setMode(mode);
 
   @override
+  Future<void> setVolume(double volume) => _backend.setVolume(volume);
+
+  @override
   Future<void> stop() => _backend.stop();
 
   @override

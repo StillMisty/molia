@@ -27,6 +27,9 @@ class FakePlaybackBackend implements PlaybackBackend {
   PlaybackRequest? lastRequest;
   List<Track>? lastEnqueued;
 
+  /// 音量下发记录（provider 音量链路测试用；有效音量含静音时的 0）。
+  final List<double> volumes = [];
+
   void emit(BackendSnapshot snapshot) => _notifier.value = snapshot;
 
   @override
@@ -39,6 +42,7 @@ class FakePlaybackBackend implements PlaybackBackend {
         previous: true,
         queue: true,
         setMode: true,
+        volume: true,
       );
 
   @override
@@ -126,7 +130,10 @@ class FakePlaybackBackend implements PlaybackBackend {
   Future<bool> toggleFavorite(Track track) async => false;
 
   @override
-  Future<void> setVolume(double value) async {}
+  Future<void> setVolume(double value) async {
+    // 只记专用列表：`calls` 保持「播放控制委托」语义，供既有测试断言。
+    volumes.add(value);
+  }
 
   @override
   Future<void> updateTrackArtwork(String trackUri, Uri? artwork) async {

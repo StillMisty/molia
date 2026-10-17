@@ -61,6 +61,7 @@ class LocalPlaybackBackend implements PlaybackBackend {
         previous: true,
         queue: true,
         setMode: true,
+        volume: true,
       );
 
   /// 本地是当前唯一后端：恒可处理。
@@ -171,12 +172,9 @@ class LocalPlaybackBackend implements PlaybackBackend {
         message: '本地播放后端暂不支持收藏',
       );
 
-  /// 可选能力：本地后端暂不支持。
+  /// 应用内音量：委托 [LocalPlaybackService.setVolume]。
   @override
-  Future<void> setVolume(double value) async => throw const SourceFailure(
-        kind: FailureKind.unsupported,
-        message: '本地播放后端暂不支持音量控制',
-      );
+  Future<void> setVolume(double value) => _service.setVolume(value);
 
   /// 音源补图：原地更新队列曲目封面（新 SourceTrack 触发领域映射重建）。
   @override

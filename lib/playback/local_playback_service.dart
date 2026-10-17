@@ -458,6 +458,15 @@ class LocalPlaybackService extends ChangeNotifier {
     _scheduleNotify();
   }
 
+  /// 应用内音量（0..1；直接读播放器，构造默认 1.0）。
+  double get volume => _player.volume;
+
+  /// 设置应用内音量：clamp 0..1 后直达 [AudioPlayer]（桌面 media_kit 后端
+  /// 与移动端共用同一播放器，无需分支）；失败向上抛，由调用方兜底。
+  Future<void> setVolume(double volume) async {
+    await _player.setVolume(volume.clamp(0.0, 1.0));
+  }
+
   Future<void> skipToNext() async {
     // 手动切歌与界面预览同源：shuffle 走洗牌排列的下一首（本轮末尾自动
     // 重洗新一轮）；单曲循环下手动切歌走队列下一位（只有自动播完才重播）。

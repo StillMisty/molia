@@ -38,6 +38,9 @@ abstract interface class PlaybackFacade {
   Future<void> next();
   Future<void> previous();
   Future<void> setMode(PlayMode mode);
+
+  /// 应用内音量 0..1（不含静音状态，静音由 provider 层表达）。
+  Future<void> setVolume(double volume);
   Future<void> stop();
 
   /// 原地更新队列曲目封面（音源补图；低频快照通知，值变才发）。

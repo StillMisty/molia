@@ -18,6 +18,7 @@ import '../models/play_mode.dart';
 import '../services/data_saver_service.dart';
 import '../services/playback_observer.dart';
 import '../services/playback_session_store.dart';
+import '../services/playback_volume_store.dart';
 import '../services/source_swap/source_swap_settings.dart';
 import '../sources/source_manager.dart';
 import '../sources/source_track.dart';
@@ -104,6 +105,9 @@ class _PositionChannel implements ValueListenable<Duration> {
 /// 职责边界（docs/architecture.md §2.1）：
 /// - 错误提示走注入的 [UiMessenger]（不依赖 `main.dart`）；
 /// - 状态从 facade 快照/进度通道订阅；
+/// - 应用内音量 / 静音是设备本地状态：不进 [PlaybackSnapshot]（快照 `==`
+///   契约与低频语义不能动、音量也不是播放事件），变化直接 `notifyListeners`
+///   且不新增节流类别；
 /// - 只保留命令 / 队列 / 模式 / 恢复态 / 失败恢复：持久化 / 写库 / 桌面
 ///   小组件 / 封面预取与补取 / 历史 / 会话落盘等副作用由 [PlaybackObserver]
 ///   承担（组合根创建并挂接），本类只转发 [flushPlaybackSession] 与
@@ -144,6 +148,9 @@ class PlaybackProvider extends ChangeNotifier {
   final PlaybackSessionStore _sessionStore;
   PlaybackSession? _restoredSession;
 
+  /// 应用内音量持久化（设备本地键，见 [PlaybackVolumeStore]）。
+  final PlaybackVolumeStore _volumeStore;
+
   /// 恢复态展示快照：`snapshot` getter 的覆盖值（无真实播放时生效）。
   PlaybackSnapshot? _restoredSnapshot;
   Duration _restoredPosition = Duration.zero;
@@ -179,6 +186,12 @@ class PlaybackProvider extends ChangeNotifier {
   /// 启动时是否恢复上次播放（曲目 / 队列 / 进度）；设置页开关，默认开。
   bool _restoreSessionEnabled = kRestoreSessionEnabled.defaultValue;
 
+  /// 应用内音量（0..1，不含静音状态）；设备本地持久化，不随账号同步。
+  double _volume = PlaybackVolumeStore.defaultVolume;
+
+  /// 是否静音：不改 [_volume] 的值，有效音量按 0 下发。
+  bool _muted = PlaybackVolumeStore.defaultMuted;
+
   late final Future<void> _preferencesReady;
 
   PlaybackProvider({
@@ -189,6 +202,7 @@ class PlaybackProvider extends ChangeNotifier {
     DataSaverService? dataSaver,
     PlaybackObserver? observer,
     PlaybackSessionStore? sessionStore,
+    PlaybackVolumeStore? volumeStore,
     SourceSwapSettings? autoSwapSettings,
     AutoSourceSwapResolver? autoSwapResolver,
     SettingsRegistry? settings,
@@ -201,7 +215,8 @@ class PlaybackProvider extends ChangeNotifier {
         _autoSwapSettings = autoSwapSettings,
         _autoSwapResolver = autoSwapResolver,
         _settings = settings ?? SettingsRegistry(keys: kAllSettingsKeys),
-        _sessionStore = sessionStore ?? PlaybackSessionStore() {
+        _sessionStore = sessionStore ?? PlaybackSessionStore(),
+        _volumeStore = volumeStore ?? PlaybackVolumeStore() {
     _settings.bindReload(kDefaultPlayMode, reloadDefaultPlayMode);
     _settings.bindReload(
         kRestoreSessionEnabled, reloadRestoreSessionPreference);
@@ -230,6 +245,7 @@ class PlaybackProvider extends ChangeNotifier {
       if (_observer != null) await _observer.ready;
       await _loadDefaultPlayMode();
       await _loadPlaybackSession();
+      await _loadVolume();
     }();
     // 构造时同步一次快照（系统媒体会话可能在构造前已恢复曲目）。
     _handlePlaybackSnapshot();
@@ -557,6 +573,58 @@ class PlaybackProvider extends ChangeNotifier {
     await setPlayMode(next);
   }
 
+  /// 应用内音量（0..1，不含静音；静音由 [muted] 表达）。
+  double get volume => _volume;
+
+  /// 是否静音（不改 [volume] 的值）。
+  bool get muted => _muted;
+
+  /// 设置音量：clamp → 应用到播放后端（静音时只更新值、不解除静音）→
+  /// 持久化 → 通知。
+  Future<void> setVolume(double value) async {
+    final clamped = value.clamp(0.0, 1.0);
+    if (clamped == _volume) return;
+    _volume = clamped;
+    await _applyEffectiveVolume();
+    await _persistVolumeState();
+    notifyListeners();
+  }
+
+  /// 静音开关：切换后把有效音量（静音 = 0）应用到后端 → 持久化 → 通知。
+  Future<void> toggleMute() async {
+    _muted = !_muted;
+    await _applyEffectiveVolume();
+    await _persistVolumeState();
+    notifyListeners();
+  }
+
+  /// 快捷键步进调整（±delta，clamp 0..1）：调整即期望听见声音，
+  /// 静音态自动解除。
+  Future<void> adjustVolume(double delta) async {
+    final next = (_volume + delta).clamp(0.0, 1.0);
+    if (!_muted && next == _volume) return;
+    _volume = next;
+    _muted = false;
+    await _applyEffectiveVolume();
+    await _persistVolumeState();
+    notifyListeners();
+  }
+
+  /// 有效音量：静音用 0 下发（跨平台最稳，不依赖后端的静音语义）。
+  double get _effectiveVolume => _muted ? 0.0 : _volume;
+
+  /// 把有效音量下发给后端；失败只记日志（本地状态与持久化照常）。
+  Future<void> _applyEffectiveVolume() async {
+    try {
+      await _facade.setVolume(_effectiveVolume);
+    } catch (e) {
+      _logger.warning('应用音量失败', e);
+    }
+  }
+
+  Future<void> _persistVolumeState() =>
+      _volumeStore.save(volume: _volume, muted: _muted);
+
   /// 设置默认播放模式：持久化；当前无曲目时立即应用到服务，作为
   /// 下一次播放的初始模式（不打断正在播放的会话）。
   Future<void> setDefaultPlayMode(PlayMode mode) async {
@@ -597,6 +665,18 @@ class PlaybackProvider extends ChangeNotifier {
 
   /// 重新读取默认播放模式（跨设备同步应用远端设置后由组合根调用）。
   Future<void> reloadDefaultPlayMode() => _loadDefaultPlayMode();
+
+  /// 启动加载设备本地音量：读取失败回默认（1.0 / 未静音）。
+  ///
+  /// 加载完成后把有效音量下发一次：后端构造默认 1.0，恢复的静音态
+  /// 需要压到 0，恢复的低音量也要立刻生效。不通知 UI——启动链在
+  /// runApp 前 await [preferencesReady]，首帧构建时直接读到新值。
+  Future<void> _loadVolume() async {
+    final saved = await _volumeStore.load();
+    _volume = saved.volume;
+    _muted = saved.muted;
+    await _applyEffectiveVolume();
+  }
 
   /// 启动时恢复上次播放（设置页开关，默认开）。
   bool get restoreSessionEnabled => _restoreSessionEnabled;

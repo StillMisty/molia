@@ -155,6 +155,14 @@ class _FakeService extends LocalPlaybackService {
     notifyListeners();
   }
 
+  final List<double> volumes = [];
+
+  @override
+  Future<void> setVolume(double volume) async {
+    calls.add('setVolume');
+    volumes.add(volume);
+  }
+
   @override
   Future<void> skipToNext() async => calls.add('next');
 
@@ -360,15 +368,17 @@ void main() {
     expect(snapshot.current?.id.id, 'a', reason: '未命中当前曲目时不重载');
   });
 
-  test('可选能力：toggleFavorite / setVolume 抛 unsupported', () async {
+  test('setVolume 委托服务；能力位 volume 为真', () async {
+    expect(backend.capabilities.volume, isTrue);
+    await backend.setVolume(0.4);
+    expect(service.calls, contains('setVolume'));
+    expect(service.volumes, [0.4]);
+  });
+
+  test('可选能力：toggleFavorite 抛 unsupported', () async {
     final track = trackFromSourceTrack(_source('a'));
     await expectLater(
       backend.toggleFavorite(track),
-      throwsA(isA<SourceFailure>()
-          .having((f) => f.kind, 'kind', FailureKind.unsupported)),
-    );
-    await expectLater(
-      backend.setVolume(0.5),
       throwsA(isA<SourceFailure>()
           .having((f) => f.kind, 'kind', FailureKind.unsupported)),
     );
