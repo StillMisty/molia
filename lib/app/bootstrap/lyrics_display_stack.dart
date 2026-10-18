@@ -70,6 +70,9 @@ Future<LyricsDisplayStack> buildLyricsDisplayStack({
       DesktopLyricsOutput(
         colorScheme: () => themeProvider.colorScheme,
         artworkColorScheme: () => themeProvider.artworkColorScheme,
+        // 悬浮窗文本跟随「应用字体」：字体变化同样经 themeProvider 通知
+        // （LyricsDisplayProvider 的 themeListenable）重下发配置。
+        appFontFamily: () => themeProvider.appFontFamily,
       ),
       MediaLyricOutput(
         supported: () => audioHandler != null,

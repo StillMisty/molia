@@ -303,6 +303,9 @@ abstract class LyricsOutput {
 - 重新落位：内容尺寸变化、控制条弹出、旋转 / 字号变化都走布局回调与
   `ComponentCallbacks.onConfigurationChanged`，按比例落位并夹进可用区；
   底缘固定、向上生长（歌词是贴底字幕，不被导航栏裁掉，顶到屏幕上方回夹顶部）。
+- 字体：行文本跟随设置页「应用字体」（config 的 `fontFamily` → `Typeface.create`，
+  解析不到回退系统默认；`null` = 不覆盖）。字体变化随主题通道重下发配置，
+  配置变化按全量重建生效——滚动行宽 / 逐字边界都在重建时用新字形度量重算。
 
 ### 5.6 A2DP 监测
 
@@ -376,6 +379,7 @@ abstract class LyricsOutput {
 | | `desktop.show` | style config map | 显示悬浮窗（已授权时）。 |
 | | `desktop.update` | `{title,line,extended[],upcoming[],isPlaying,hasLyrics}` | 策略已应用，直接展示。 |
 | | `desktop.setConfig` | style config map | 样式 + 锁定点击穿透即时生效。 |
+| | | ↑ config 里的 `fontFamily` | 行文本字体族（设置页「应用字体」）；`null` = 不覆盖，原生 `Typeface.create` 解析不到时同样回退系统默认。 |
 | | `desktop.hide` | — | 关闭并释放窗口。 |
 | | `desktop.resetPosition` | — | 清除原生持久化并回到默认位置。 |
 | | `audioRoute.isA2dpConnected` | → bool | 初始值。 |

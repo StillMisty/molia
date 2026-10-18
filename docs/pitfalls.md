@@ -58,6 +58,10 @@
     Microsoft YaHei UI）：那是原生 Win32 标题栏 / 消息框的口径，拉丁与数字字形
     和「其它应用」不一致（实测体感就是「字体像另一个应用」）；想要窗口字体的
     用户在选择器里选 `Microsoft YaHei UI` 即可（枚举里本来就有）。
+    原生渲染面的跟随范围：Android 桌面歌词悬浮窗能跟（`OverlayConfig.fontFamily`
+    → `Typeface.create`，解析不到回退系统默认）；通知 / 锁屏媒体歌词由系统
+    （media3 / SystemUI）渲染、主屏小组件是 RemoteViews、托盘菜单与窗口标题栏
+    归系统（GTK / Win32）——这四个改不了，别当 bug 修。
 13. **发布体积**：新增资产前先评估体积；不要内置 CJK 字体（系统字体 + 用户安装）。
     Android 启动图标自 2026-10 起为手绘矢量（`drawable/ic_launcher_foreground.xml`，
     维护方式见 `icons_launcher.yaml` 头注释），该工具现在只生成 iOS 与 Windows 图标

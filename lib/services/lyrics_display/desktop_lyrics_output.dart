@@ -22,10 +22,12 @@ class DesktopLyricsOutput implements InteractiveLyricsOutput {
     bool? supported,
     ColorScheme Function()? colorScheme,
     ColorScheme? Function()? artworkColorScheme,
+    String? Function()? appFontFamily,
   })  : _channel = channel ?? LyricsChannel.instance,
         _supported = supported ?? LyricsChannel.isSupportedPlatform,
         _colorScheme = colorScheme,
-        _artworkColorScheme = artworkColorScheme {
+        _artworkColorScheme = artworkColorScheme,
+        _appFontFamily = appFontFamily {
     if (_supported) {
       _eventSub = _channel.events.listen(_onChannelEvent);
     }
@@ -40,6 +42,13 @@ class DesktopLyricsOutput implements InteractiveLyricsOutput {
   /// 当前曲目封面色板提供者（「跟随封面」来源；无封面时返回 null，
   /// 由 [resolveSurfaceScheme] 回退应用主题）。
   final ColorScheme? Function()? _artworkColorScheme;
+
+  /// 「应用字体」提供者（设置页所选字体族；null = 系统默认）。
+  ///
+  /// 悬浮窗文本跟随应用字体：原生只认字体族名，解析不了时回退系统默认字体
+  /// （等价于不覆盖）。字体变化经 [LyricsDisplayProvider] 的主题通道重下发，
+  /// 配置等价判定（[_configEquals]）保证只在真变化时 `setConfig`。
+  final String? Function()? _appFontFamily;
   final StreamController<LyricsOutputAction> _actions =
       StreamController<LyricsOutputAction>.broadcast();
 
@@ -176,6 +185,9 @@ class DesktopLyricsOutput implements InteractiveLyricsOutput {
     final scheme = _resolveScheme(s);
     return {
       'fontSize': s.desktopFontSize,
+      // 悬浮窗文本跟随「应用字体」：null = 不覆盖，原生用系统默认字体
+      // （与 Flutter 侧未自定义字体时的平台默认排版一致）。
+      'fontFamily': _appFontFamily?.call(),
       'opacity': s.desktopOpacity,
       'playedColor':
           _resolveColor(s.desktopPlayedColorSource, s.desktopPlayedColor, scheme),
