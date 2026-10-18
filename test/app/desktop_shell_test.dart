@@ -717,6 +717,26 @@ void main() {
     await ShortcutSettings.instance.setInAppEnabled(true);
   });
 
+  testWidgets('Ctrl+F：窄窗同样打开遮罩（不再分流到资料库搜索页）', (tester) async {
+    await pumpShell(
+      tester,
+      desktopShell: true,
+      size: const Size(800, 900),
+      searchSource: FakeMusicSource('kw'),
+    );
+
+    await openSearchOverlay(tester);
+    expect(find.text(l10n.searchHint), findsOneWidget, reason: '窄窗也走遮罩');
+    expect(
+      selectedRailIndex(tester),
+      navIndexOf(ShellDestination.nowPlaying),
+      reason: '不切目的地（旧窄窗路径会跳资料库搜索页）',
+    );
+
+    await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+    await tester.pumpAndSettle();
+  });
+
   testWidgets('搜索遮罩：清除键清空关键词，结果面留空', (tester) async {
     await pumpSearchShell(tester);
     await openSearchOverlay(tester);
