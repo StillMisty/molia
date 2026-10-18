@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="app_name">茉咏</string>
+    <string name="app_name">Molia</string>
 
     <!-- 下载通知（Dart 侧只传曲目名 / 歌手 / 批量位置 / 进度，文案在这里组装） -->
     <string name="download_notification_channel_name">下载</string>

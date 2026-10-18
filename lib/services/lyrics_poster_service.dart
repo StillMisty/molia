@@ -32,7 +32,7 @@ class LyricsPosterService {
     required Color watermarkColor,
     required Color separatorColor,
     String? fontFamily,
-    /// 海报水印品牌名（随界面语言：Molia / 茉咏）。
+    /// 海报水印品牌名（Molia）。
     String watermarkText = 'Molia',
   }) async {
     const double scaleFactor = 2.0;

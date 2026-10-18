@@ -1140,7 +1140,7 @@ class _BarTrackInfo extends StatelessWidget {
   }
 }
 
-/// 自定义应用名（设置页可改，未自定义时随语言为 Molia/茉咏）。
+/// 自定义应用名（设置页可改，未自定义时为 Molia）。
 class _AppTitleText extends StatelessWidget {
   const _AppTitleText();
 
@@ -1276,7 +1276,7 @@ class _MyThemedAppState extends State<MyThemedApp> with WidgetsBindingObserver {
     }
   }
 
-  /// 品牌默认名跟随界面语言（en=Molia / zh=茉咏）。
+  /// 品牌默认名（Molia）。
   ///
   /// 只读计算 + 帧末注入：build 阶段直接更新 notifier 会触发
   /// markNeedsBuild 告警；已自定义名称时 applyLocalizedDefault 内部自动忽略。
@@ -1326,7 +1326,7 @@ class _MyThemedAppState extends State<MyThemedApp> with WidgetsBindingObserver {
         return ValueListenableBuilder<Locale?>(
           valueListenable: LanguageService.localeNotifier,
           builder: (context, locale, _) {
-            // 品牌默认名随界面语言本地化（Molia / 茉咏）。
+            // 品牌默认名统一 Molia（仍走 l10n：各语言同值，保留将来本地化的入口）。
             _syncLocalizedBranding(locale);
             return Selector<ThemeProvider,
                 ({ColorScheme scheme, String? fontFamily})>(

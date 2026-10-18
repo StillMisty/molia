@@ -5,7 +5,7 @@ import '../data/settings/settings_registry.dart';
 
 /// 应用显示名称（顶栏回退文案与设置项）。
 ///
-/// 默认名随界面语言本地化（英文 Molia / 中文 茉咏）：locale 就绪后由
+/// 默认名统一 Molia（不随界面语言分叉）：locale 就绪后由
 /// composition root 通过 [applyLocalizedDefault] 注入；设置页可自定义并
 /// 持久化（SharedPreferences），自定义后不再随语言切换。
 /// UI 通过 [titleNotifier] 订阅，修改后立即生效。
@@ -17,7 +17,7 @@ class AppBrandingService {
 
   static String _defaultTitle = fallbackTitle;
 
-  /// 当前生效的默认名（本地化后为 Molia / 茉咏）。
+  /// 当前生效的默认名（未自定义时等于 [fallbackTitle]）。
   static String get defaultTitle => _defaultTitle;
 
   static const int maxLength = 24;

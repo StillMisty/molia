@@ -33,7 +33,8 @@ void main() {
 
     expect(entries['Type'], 'Application');
     expect(entries['Name'], 'Molia');
-    expect(entries['Name[zh_CN]'], '茉咏');
+    // 品牌名全平台统一 Molia：不再有本地化名字（有 zh 覆盖就会跟系统语言变）。
+    expect(entries['Name[zh_CN]'], isNull);
     expect(entries['Exec'], 'molia');
     expect(entries['Icon'], appId);
     expect(entries['StartupWMClass'], appId);
