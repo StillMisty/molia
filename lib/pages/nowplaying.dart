@@ -309,7 +309,10 @@ class _NowPlayingState extends State<NowPlaying>
   }
 
   /// 圆点过渡带高度：内容顶部在这条带内渐隐，圆点浮于其中。
-  static const double _dotsBandHeight = 24;
+  ///
+  /// 20 是「圆点 + 上下各 6 的手感余量」这一档：带子只影响内容首行的渐隐与
+  /// 首项留白（队列 / 信息页的 `topPadding` 同源），再高就是白给的空行。
+  static const double _dotsBandHeight = 20;
 
   /// 歌词/队列小圆点切换行（常显；由父级 Positioned 撑满宽度）。
   ///

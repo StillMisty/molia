@@ -84,9 +84,10 @@ class _PlayerState extends State<Player> with TickerProviderStateMixin {
   /// 最近一次展示的封面地址：仅供迷你占位与预取复用（取色不在此处触发）。
   String? _lastImageUrl;
 
-  // 标题单行 38、进度排 56、两者间距 14。
+  // 标题单行 38、进度排 46（滑杆盒 32 + 时间行 2+16 的溢出绘制 + 余量）、
+  // 两者间距 14。
   static const double _textSectionHeight = 38;
-  static const double _seekSectionHeight = 56;
+  static const double _seekSectionHeight = 46;
   static const double _sectionsReservedHeight =
       _textSectionHeight + _seekSectionHeight + 14;
 
@@ -535,11 +536,13 @@ class _PlayerState extends State<Player> with TickerProviderStateMixin {
     final mode = context.select<PlaybackProvider, PlayMode>(
         (provider) => provider.currentMode);
     return Padding(
-      padding: const EdgeInsets.symmetric(
-        horizontal: _controlsRowPadding,
-        vertical: 2,
-      ),
+      // 纵向不留内边距：上方 2dp 由外层排布给（小屏 / 大屏两套版式都是
+      // `SizedBox(height: 2)`），下方 2dp 由时间行自己的呼吸位承担——进度排
+      // 的纵向预算就是滑杆盒子本身。
+      padding: const EdgeInsets.symmetric(horizontal: _controlsRowPadding),
       child: Row(
+        // 图标与进度条同一行居中：进度排的布局高度就是滑杆盒（时间行是溢出
+        // 绘制、不参与这一行的居中），默认居中即图标中线对齐条的中线。
         children: [
           _buildFavoriteButton(),
           const SizedBox(width: 4),
@@ -593,6 +596,8 @@ class _PlayerState extends State<Player> with TickerProviderStateMixin {
         durationMs: state.durationMs,
         isPlaying: state.isPlaying,
         hasTrack: state.hasTrack,
+        // 播放页版式：时间挪到条下方，横向空间全给进度条。
+        timeLabels: SeekTimeLabels.below,
       ),
     );
   }
@@ -970,7 +975,6 @@ class _PlayerState extends State<Player> with TickerProviderStateMixin {
         // 标题块高度预算：桌面版式是两行（歌名 + 作者），移动 / 平板大屏单行。
         final double textSectionFixedHeight =
             widget.desktopLayout ? 52.0 : 56.0;
-        const double seekSectionHeight = 56.0;
         const double spacingBelowArt = 2.0;
         // 桌面版式多出的传输控制排（md 播放键 56）与标题块间距 8：封面可用
         // 高度要扣掉，否则矮窗口里进度排会被挤出可视区。
@@ -984,7 +988,7 @@ class _PlayerState extends State<Player> with TickerProviderStateMixin {
           availableHeight: _largeScreenDeckAvailableHeight(
             constraints.maxHeight,
             textSectionFixedHeight +
-                seekSectionHeight +
+                _seekSectionHeight +
                 spacingBelowArt +
                 desktopExtrasHeight,
           ),

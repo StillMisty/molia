@@ -38,7 +38,8 @@ void main() {
     });
 
     test('提交后保留预览，position 追上（容差内）才撤下', () {
-      controller.commit(5000);
+      controller.preview(5000);
+      controller.commit();
       expect(controller.previewMs.value, 5000);
       expect(seeks, [5000]);
 
@@ -47,7 +48,8 @@ void main() {
     });
 
     test('容差外不回撤预览，差值落到容差即撤下', () {
-      controller.commit(5000);
+      controller.preview(5000);
+      controller.commit();
       position.value = const Duration(milliseconds: 4000);
       expect(controller.previewMs.value, 5000);
 
@@ -57,7 +59,8 @@ void main() {
 
     test('超时兜底撤下预览', () {
       fakeAsync((async) {
-        controller.commit(5000);
+        controller.preview(5000);
+        controller.commit();
         async.elapse(const Duration(milliseconds: 1499));
         expect(controller.previewMs.value, 5000);
         async.elapse(const Duration(milliseconds: 1));
@@ -67,7 +70,8 @@ void main() {
 
     test('新拖动作废上一次等待落点与兜底计时器', () {
       fakeAsync((async) {
-        controller.commit(5000);
+        controller.preview(5000);
+        controller.commit();
         controller.preview(8000);
         // 旧目标已作废：position 追上旧落点也不撤预览。
         position.value = const Duration(milliseconds: 5000);
@@ -75,6 +79,12 @@ void main() {
         async.elapse(SeekPreviewController.fallbackTimeout);
         expect(controller.previewMs.value, 8000);
       });
+    });
+
+    test('无预览时提交是空操作（值没变 / 交互被取消）', () {
+      controller.commit();
+      expect(seeks, isEmpty);
+      expect(controller.previewMs.value, isNull);
     });
 
     test('曲目身份变化撤下预览，同曲目的其它通知不撤', () {
@@ -89,7 +99,8 @@ void main() {
 
     test('dispose 取消兜底计时器且不再响应事件', () {
       fakeAsync((async) {
-        controller.commit(5000);
+        controller.preview(5000);
+        controller.commit();
         controller.dispose();
         disposed = true;
         // 兜底计时器已取消：超时后不会回写已 dispose 的预览 notifier。
@@ -106,15 +117,17 @@ void main() {
     late ValueNotifier<Duration> position;
     late ChangeNotifier trackChanges;
     late SeekPreviewController controller;
+    late List<int> seeks;
 
     setUp(() {
       position = ValueNotifier(const Duration(seconds: 5));
       trackChanges = ChangeNotifier();
+      seeks = [];
       controller = SeekPreviewController(
         position: position,
         trackChanges: trackChanges,
         currentTrackId: () => const TrackId('tx', 'a'),
-        seek: (_) {},
+        seek: seeks.add,
       );
     });
 
@@ -128,7 +141,7 @@ void main() {
       WidgetTester tester, {
       bool isPlaying = true,
       bool hasTrack = true,
-      bool showTimeLabels = false,
+      SeekTimeLabels timeLabels = SeekTimeLabels.inline,
     }) {
       return tester.pumpWidget(
         MaterialApp(
@@ -139,7 +152,7 @@ void main() {
               durationMs: 30000,
               isPlaying: isPlaying,
               hasTrack: hasTrack,
-              showTimeLabels: showTimeLabels,
+              timeLabels: timeLabels,
             ),
           ),
         ),
@@ -164,8 +177,24 @@ void main() {
       expect(slider(tester).value, 20000);
     });
 
+    testWidgets('快速单击直接跳点到点击位置', (tester) async {
+      await pumpBar(tester);
+      final rect = tester.getRect(find.byType(M3ESlider));
+      // tester.tapAt 的 down / up 之间不 pump，与真机 <100ms 的快速单击同一条
+      // 时序：M3ESlider 的 onTapDown / onTapUp 落在同一次事件分发里，中间没有
+      // 重建，它的 onChangeEnd 只能回传上一帧的 value（= 点击前的位置）。
+      await tester.tapAt(Offset(rect.left + rect.width * 0.75, rect.center.dy));
+
+      expect(seeks, hasLength(1));
+      expect(seeks.single, closeTo(30000 * 0.75, 1000));
+      expect(controller.previewMs.value, closeTo(30000 * 0.75, 1000));
+
+      // 松手后的保留窗口（1500ms 兜底）跑完，避免用例结束报 pending timer。
+      await tester.pump(const Duration(milliseconds: 1600));
+    });
+
     testWidgets('无曲目禁用且侧时间显示占位', (tester) async {
-      await pumpBar(tester, hasTrack: false, showTimeLabels: true);
+      await pumpBar(tester, hasTrack: false);
       final widget = slider(tester);
       expect(widget.enabled, isFalse);
       expect(widget.onChanged, isNull);
@@ -173,9 +202,28 @@ void main() {
     });
 
     testWidgets('侧时间文字显示当前值与总时长', (tester) async {
-      await pumpBar(tester, showTimeLabels: true);
+      await pumpBar(tester);
       expect(find.text('0:05'), findsOneWidget);
       expect(find.text('0:30'), findsOneWidget);
+    });
+
+    testWidgets('below 档：时间居中于进度条左右端点下方', (tester) async {
+      await pumpBar(tester, timeLabels: SeekTimeLabels.below);
+      final slider = tester.getRect(find.byType(M3ESlider));
+      final current = tester.getRect(find.text('0:05'));
+      final total = tester.getRect(find.text('0:30'));
+
+      // 居中于端点：标签中心对齐条的左右边界（各有一半悬在条外）。
+      expect(current.center.dx, closeTo(slider.left, 0.5));
+      expect(total.center.dx, closeTo(slider.right, 0.5));
+      // 在条下方：标签落在可见轨道的下半侧之下。
+      expect(current.top, greaterThan(slider.center.dy));
+      expect(total.top, greaterThan(slider.center.dy));
+      // 不占高度：块高只算条（时间行是溢出绘制）。
+      expect(
+        tester.getSize(find.byType(SeekBar)).height,
+        tester.getSize(find.byType(M3ESlider)).height,
+      );
     });
   });
 }

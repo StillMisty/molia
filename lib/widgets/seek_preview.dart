@@ -12,6 +12,8 @@ import '../domain/models/track.dart';
 ///   （容差 [settleToleranceMs]）或超时兜底 [fallbackTimeout]，避免滑杆在
 ///   position 通道追上之前回跳到旧位置；
 /// - 新的拖动 / 新的提交作废上一次的等待落点；
+/// - 提交落点只认最近一次预览值，不认滑杆回调的入参（快速单击时那是上一帧的
+///   旧位置，见 [commit]）；
 /// - 曲目身份变化即清预览：旧进度不残留在新曲目的滑杆上；
 /// - 时序常量收在这里，不给宿主配置面——行为必须一致。
 ///
@@ -59,11 +61,21 @@ class SeekPreviewController {
     _previewMs.value = valueMs;
   }
 
-  /// 松手提交：保留显示直到 position 追上或 [fallbackTimeout] 兜底。
-  void commit(double valueMs) {
-    final target = valueMs.round();
+  /// 松手提交：落点 = 最近一次 [preview] 记下的值；没有预览则什么都不做。
+  ///
+  /// 不接收落点入参：滑杆在一次点按里会先经 drag-cancel、再经 tap-up 各调一次
+  /// `onChangeEnd`，两次回传的都是它**上一帧**拿到的 value——快速单击
+  /// （按下 < 100ms）时中间没有一帧重建，那就是点击前的位置，照它提交等于把
+  /// 这次点击吞掉（用户看到的是「单击没反应，得按住」）。预览值才是用户点到 /
+  /// 拖到的位置。
+  ///
+  /// 提交后保留显示，直到 position 追上目标（容差 [settleToleranceMs]）或
+  /// 超时兜底 [fallbackTimeout]。
+  void commit() {
+    final double? pending = _previewMs.value;
+    if (pending == null) return;
+    final target = pending.round();
     _targetMs = target;
-    _previewMs.value = valueMs;
     _fallbackTimer?.cancel();
     _fallbackTimer = Timer(fallbackTimeout, () {
       // 期间若发生新拖动 / 新提交，这次等待作废。
