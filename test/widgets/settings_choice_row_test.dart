@@ -216,6 +216,42 @@ void main() {
     expect(find.text('Quality'), findsNWidgets(2));
   });
 
+  testWidgets('下拉行：声明宽度放不下最长选项时自动加宽，标签不折行', (tester) async {
+    // 两行并排：同一字段宽度约束下，长标签（Hi-Res）必须与短标签同高（单行）。
+    SettingsDropdownRow<String> row(String value, List<(String, String)> options) =>
+        SettingsDropdownRow<String>(
+          icon: Icons.high_quality_rounded,
+          title: 'Quality',
+          value: value,
+          // 设置页默认音质行的声明宽度：M3E 字段的选中文本没有 maxLines，
+          // 窄了会把「Hi-Res」折成两行、顶高整行。
+          fieldWidth: 112,
+          options: options,
+          onChanged: (_) {},
+        );
+    await pumpRow(
+      tester,
+      Center(
+        child: Column(
+          children: [
+            row('hires', const [
+              ('lossless', 'Lossless'),
+              ('320k', '320K'),
+              ('hires', 'Hi-Res'),
+            ]),
+            row('320k', const [('320k', '320K'), ('hires', 'Hi-Res')]),
+          ],
+        ),
+      ),
+    );
+
+    expect(
+      tester.getSize(find.text('Hi-Res')).height,
+      tester.getSize(find.text('320K')).height,
+      reason: 'Hi-Res 被折行：字段宽度没有按最长选项自适应',
+    );
+  });
+
   testWidgets('标签行：标题 1 行、副标题 2 行封顶（长文案不再折 3 行）',
       (tester) async {
     const longSubtitle =

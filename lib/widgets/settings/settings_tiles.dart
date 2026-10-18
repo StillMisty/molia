@@ -19,6 +19,9 @@ const double kSettingsSmallSpacing = 8.0;
 const EdgeInsets kSettingsRowPadding =
     EdgeInsets.symmetric(horizontal: 12, vertical: 8);
 
+/// 下拉字段自适应宽度的上限：选项文案再长也交给省略号，避免把标题挤没。
+const double _maxAutoFieldWidth = 240.0;
+
 /// 在设置弹层内部打开子页（不新开弹层）。
 ///
 /// [SettingsPage] 内部有一层 Navigator：这里 push 到最近一层 Navigator，
@@ -631,7 +634,8 @@ class SettingsDropdownRow<T> extends StatelessWidget {
   final String title;
   final String? subtitle;
 
-  /// 行尾下拉字段宽度（默认 170；短标签枚举可收窄，把宽度让给标题）。
+  /// 行尾下拉字段宽度（默认 170）：是**最小**宽度，选项文案更长时按最长选项
+  /// 自动加宽（见 [_resolvedFieldWidth]），避免「Hi-Res」/「Lossless」折行。
   final double fieldWidth;
 
   /// 当前值（不在 [options] 中时字段回落为 [title] 提示文案）。
@@ -659,8 +663,8 @@ class SettingsDropdownRow<T> extends StatelessWidget {
             ),
             const SizedBox(width: 8),
             SizedBox(
-              // 设置弹层窄于屏幕：字段定宽，避免撑挤标题。
-              width: fieldWidth,
+              // 设置弹层窄于屏幕：字段定宽，避免撑挤标题；但不能窄到折行。
+              width: _resolvedFieldWidth(context),
               child: M3EDropdownMenu<T>(
                 items: [
                   for (final (optionValue, label) in options)
@@ -682,6 +686,32 @@ class SettingsDropdownRow<T> extends StatelessWidget {
         ),
       ),
     );
+  }
+
+  /// 字段实际宽度：放得下最长选项（含系统字体缩放），但不小于 [fieldWidth]。
+  ///
+  /// 为什么必须量：M3E 下拉字段的选中文本只带省略号、没有 `maxLines`——
+  /// 宽度不足时折行而不是截断，「Hi-Res」被折成两行会顶高整行。度量口径与
+  /// 字段内部一致：`bodyMedium` + 左右 16 内边距 + 8 间距 + 箭头图标；
+  /// 上限 [_maxAutoFieldWidth] 保证标题不被长选项挤没（超出交给省略号）。
+  double _resolvedFieldWidth(BuildContext context) {
+    final m3e = M3ETheme.of(context);
+    final style = m3e.typeScale.bodyMedium;
+    final scaler = MediaQuery.textScalerOf(context);
+    final direction = Directionality.of(context);
+    var widest = 0.0;
+    for (final (_, label) in options) {
+      final painter = TextPainter(
+        text: TextSpan(text: label, style: style),
+        textDirection: direction,
+        textScaler: scaler,
+      )..layout();
+      widest = math.max(widest, painter.width);
+    }
+    // 字段内边距（M3E 默认 16×2）与行尾箭头（图标 + 8 间距）。
+    final icon = m3e.resolvedIconTheme.size ?? 18;
+    final needed = widest + 16 * 2 + 8 + icon;
+    return math.max(fieldWidth, math.min(needed, _maxAutoFieldWidth));
   }
 }
 

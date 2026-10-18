@@ -702,8 +702,8 @@ class _SettingsHomeViewState extends State<_SettingsHomeView>
               icon: Icons.high_quality_rounded,
               title: l10n.sourcesDefaultQuality,
               subtitle: l10n.sourcesQualityHint,
-              // 音质标签都是短词（无损 / 320K / Hi-Res）：字段收窄，
-              // 把行内宽度让给标题与说明。
+              // 音质标签都是短词（无损 / 320K / Hi-Res）：字段从 112 起按最长
+              // 选项自适应加宽（「Hi-Res」不被折行），把其余宽度让给标题与说明。
               fieldWidth: 112,
               value: quality,
               options: [
