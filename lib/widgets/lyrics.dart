@@ -939,6 +939,14 @@ class _LyricsWidgetState extends State<LyricsWidget>
                     !_isCopyLyricsMode &&
                     lineWords != null &&
                     lineWords.isNotEmpty;
+                // 行样式必须从环境样式派生：AnimatedDefaultTextStyle 是「替换」
+                // 而不是合并（内部直接 `DefaultTextStyle(style: …)`，见 SDK
+                // implicit_animations.dart），写字面量会把字体族一并丢成引擎
+                // 默认字体——设置页选的「应用字体」（含主题注入的平台默认）会在
+                // 整段歌词行失效，与本页其它文字两种字体。这里只覆盖字号/字重/
+                // 颜色/行高，其余（字体族、回退链、排版属性）继续继承主题。
+                final TextStyle lineBaseStyle =
+                    DefaultTextStyle.of(context).style;
                 // 扩展行样式：字号对齐桌面歌词规格（主字号 × 0.8），
                 // 颜色保持行角色契约的次要文本，不参与 primary 强调。
                 final TextStyle extendedLineStyle = TextStyle(
@@ -995,7 +1003,7 @@ class _LyricsWidgetState extends State<LyricsWidget>
                     child: AnimatedDefaultTextStyle(
                       duration: const Duration(milliseconds: 450),
                       curve: Curves.easeOutCubic,
-                      style: TextStyle(
+                      style: lineBaseStyle.copyWith(
                         fontSize: lyricFontSize,
                         fontWeight: isCurrentLine
                             ? FontWeight.w700

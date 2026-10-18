@@ -20,6 +20,7 @@ import 'package:molia/providers/playback_provider.dart';
 import 'package:molia/services/lyrics_display/lyrics_display_settings.dart';
 import 'package:molia/services/lyrics_service.dart';
 import 'package:molia/services/notification_service.dart';
+import 'package:molia/widgets/lyric_karaoke_text.dart';
 import 'package:molia/widgets/lyrics.dart';
 
 import '../support/fake_music_source.dart';
@@ -49,12 +50,16 @@ String _buildExtendedLrc(String prefix) {
   return buffer.toString();
 }
 
+/// 第 12 行（60s，测试的当前行）的逐字时间轴：词文本拼接与主行一致（合约）。
+String _buildWordLrc() => '[01:00.00]<0,500>Line <500,500>12';
+
 class _FakeLyricsService extends LyricsService {
-  _FakeLyricsService(this.lrc, {this.translation, this.roma});
+  _FakeLyricsService(this.lrc, {this.translation, this.roma, this.lxlyric});
 
   final String lrc;
   final String? translation;
   final String? roma;
+  final String? lxlyric;
 
   @override
   Future<LyricsResult?> getLyrics(
@@ -67,6 +72,7 @@ class _FakeLyricsService extends LyricsService {
         lyric: lrc,
         translation: translation,
         roma: roma,
+        lxlyric: lxlyric,
         provider: 'test',
       );
 }
@@ -109,11 +115,14 @@ void main() {
   tearDown(() => playback.dispose());
 
   /// 挂载歌词组件：420x900、进度 60s（第 12 行），等首轮歌词加载与自动滚动落定。
+  ///
+  /// [fontFamily] 注入 MaterialApp 主题（模拟设置页的「应用字体」）。
   Future<ScrollController> pumpLyrics(
     WidgetTester tester, {
     LyricsService? service,
     LyricsDisplaySettings? settings,
     SourceRegistry? registry,
+    String? fontFamily,
   }) async {
     tester.view.physicalSize = const Size(420, 900);
     tester.view.devicePixelRatio = 1.0;
@@ -148,6 +157,8 @@ void main() {
           Provider<SourceRegistry?>.value(value: registry),
         ],
         child: MaterialApp(
+          // 不注入字体时保持与原来一致的默认主题（MaterialApp 默认主题）。
+          theme: fontFamily == null ? null : ThemeData(fontFamily: fontFamily),
           locale: const Locale('zh'),
           localizationsDelegates: const [
             AppLocalizations.delegate,
@@ -210,6 +221,17 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.text(label));
     await tester.pumpAndSettle();
+  }
+
+  /// 文本实际生效的字体族：环境 DefaultTextStyle 合并组件自身样式后的结果
+  /// （与 Text / RichText 的解析口径一致）。歌词行若用字面量行样式替换掉
+  /// 主题样式，这里就会是 null（引擎默认字体）而不是主题注入的应用字体。
+  String? resolvedFontFamily(WidgetTester tester, Finder finder) {
+    final element = tester.element(finder);
+    return DefaultTextStyle.of(element)
+        .style
+        .merge(tester.widget<Text>(finder).style)
+        .fontFamily;
   }
 
   testWidgets('手动滚动后延迟自动恢复跟随并滚回当前行', (tester) async {
@@ -435,6 +457,43 @@ void main() {
     await tester.pump();
     expect(find.text('译 12'), findsNothing);
     expect(find.text('Roma 12'), findsOneWidget);
+  });
+
+  testWidgets('歌词行跟随应用字体：主行 / 逐字 / 翻译 / 罗马音', (tester) async {
+    // 歌词行的行样式是「替换式」的 DefaultTextStyle：一旦写字面量样式，
+    // 字体族就丢成引擎默认字体，与本页其它文字、设置页所选「应用字体」不一致。
+    const applied = 'Noto Serif CJK SC';
+    final settings = LyricsDisplaySettings();
+    await settings.setPageRomaEnabled(true);
+    await pumpLyrics(
+      tester,
+      settings: settings,
+      fontFamily: applied,
+      service: _FakeLyricsService(
+        _buildLrc(),
+        translation: _buildExtendedLrc('译'),
+        roma: _buildExtendedLrc('Roma'),
+        // 当前行（第 12 行）带逐字时间轴 → 走 KaraokeLyricText 分支。
+        lxlyric: _buildWordLrc(),
+      ),
+    );
+
+    // 普通行主行（非当前行）。
+    expect(resolvedFontFamily(tester, find.text('Line 10')), applied);
+    // 当前行翻译 / 罗马音（行样式下的扩展行）。
+    expect(resolvedFontFamily(tester, find.text('译 12')), applied);
+    expect(resolvedFontFamily(tester, find.text('Roma 12')), applied);
+    // 当前行逐字渲染（KaraokeLyricText 内部 Text.rich 的根样式）。
+    expect(
+      resolvedFontFamily(
+        tester,
+        find.descendant(
+          of: find.byType(KaraokeLyricText),
+          matching: find.byType(Text),
+        ),
+      ),
+      applied,
+    );
   });
 
   testWidgets('歌词页操作 FAB menu：项集与显隐随状态同步', (tester) async {

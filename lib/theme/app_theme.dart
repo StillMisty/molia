@@ -9,21 +9,21 @@ import 'app_semantic_colors.dart';
 /// 各自覆写造成「同语义不同颜色」。
 ///
 /// 只做与配色契约相关的全局配置；具体组件的颜色覆写应优先靠 M3E 默认值。
-/// [fontFamily] 为设备字体族名（设置页「应用字体」），null 时用平台默认 UI
-/// 字体（[platformDefaultFontFamily]，见 `SystemFontsService`）；未覆盖的
-/// 字形（如 CJK）由引擎逐字回退系统字体。
+/// [fontFamily] 为设备字体族名（设置页「应用字体」），null 时走 ThemeData 的
+/// 平台默认排版（Windows = Segoe UI、Android/Linux = Roboto、iOS/macOS 系统
+/// 字体——与 Chrome / 其它 Flutter 应用同源，**不读**系统「窗口字体」
+/// MessageFont）；未覆盖的字形（如 CJK）由引擎逐字回退系统字体（Windows 上
+/// 中文即雅黑）。
 ThemeData buildAppThemeData(
   ColorScheme scheme, {
   SystemUiOverlayStyle? systemUiOverlayStyle,
   String? fontFamily,
-  String? platformDefaultFontFamily,
 }) {
   return ThemeData(
     colorScheme: scheme,
     useMaterial3: true,
-    // 自定义字体优先；否则用启动时解析出的平台默认 UI 字体（Windows =
-    // 系统窗口字体，中文系统即微软雅黑；其它平台为 null，走引擎默认）。
-    fontFamily: fontFamily ?? platformDefaultFontFamily,
+    // 自定义字体优先，否则引擎默认（null）。
+    fontFamily: fontFamily,
     appBarTheme: AppBarTheme(systemOverlayStyle: systemUiOverlayStyle),
     // Android 页面过渡必须选框架的预测返回 builder：跟手预览只由它插入的
     // 手势 detector 提供，没有观察者接管时 `WidgetsBinding` 会把返回手势

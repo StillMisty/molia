@@ -52,6 +52,16 @@
     后缀（`Arial Bold`），不能直接当家族名），海报页可
     独立覆盖（`PosterFontStore`）。不要再向 `pubspec.yaml` 的 `fonts:` 或
     `assets/fonts/` 添加字体，保持包体精简。
+    未自定义「应用字体」时不注入字体族（`fontFamily: null`）= 引擎默认字体
+    （Windows = Segoe UI + 引擎 CJK 回退，与 Chrome / 其它 Flutter 应用同源）。
+    不要改回去读系统「窗口字体」（`WindowMetrics\MessageFont`，中文系统 =
+    Microsoft YaHei UI）：那是原生 Win32 标题栏 / 消息框的口径，拉丁与数字字形
+    和「其它应用」不一致（实测体感就是「字体像另一个应用」）；想要窗口字体的
+    用户在选择器里选 `Microsoft YaHei UI` 即可（枚举里本来就有）。
+    原生渲染面的跟随范围：Android 桌面歌词悬浮窗能跟（`OverlayConfig.fontFamily`
+    → `Typeface.create`，解析不到回退系统默认）；通知 / 锁屏媒体歌词由系统
+    （media3 / SystemUI）渲染、主屏小组件是 RemoteViews、托盘菜单与窗口标题栏
+    归系统（GTK / Win32）——这四个改不了，别当 bug 修。
 13. **发布体积**：新增资产前先评估体积；不要内置 CJK 字体（系统字体 + 用户安装）。
     Android 启动图标自 2026-10 起为手绘矢量（`drawable/ic_launcher_foreground.xml`，
     维护方式见 `icons_launcher.yaml` 头注释），该工具现在只生成 iOS 与 Windows 图标
@@ -506,3 +516,12 @@
     「打开即可输入」只能自建 route（出现 / 消失自己走 scrim 淡入 + 内容淡入轻微缩放，
     输入框首帧 autofocus）。回归：`test/app/desktop_shell_test.dart` 的
     「遮罩开合走淡入 + 缩放过渡」「打开后首帧即可输入」两条。
+
+58. **局部 `DefaultTextStyle` / `AnimatedDefaultTextStyle` 是「替换」不是合并**：
+    SDK 内部就是 `DefaultTextStyle(style: lerp(...))`（`implicit_animations.dart`），
+    写字面量样式会把**字体族**（应用字体 / 平台默认）一并丢成引擎默认字体——症状是
+    「设置里选了字体，只有这块内容不跟随」（歌词行曾整段中招）。局部样式必须从环境
+    派生：`DefaultTextStyle.of(context).style.copyWith(…)`，只覆盖要改的属性；
+    `Text(style:)` / `Text.rich` 是**合并**，本身安全，但在被替换过的环境样式下也会
+    一起丢字体——先修替换点。回归：`test/widgets/lyrics_widget_test.dart` 的
+    「歌词行跟随应用字体：主行 / 逐字 / 翻译 / 罗马音」。

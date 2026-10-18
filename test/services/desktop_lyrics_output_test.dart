@@ -400,6 +400,42 @@ void main() {
     await output.stop();
   });
 
+  test('跟随应用字体：字体族随配置下发，未自定义时不覆盖（null）', () async {
+    final channel = LyricsChannel();
+    String? fontFamily;
+    final output = DesktopLyricsOutput(
+      channel: channel,
+      supported: true,
+      appFontFamily: () => fontFamily,
+    );
+    final settings = await desktopSettings();
+    await output.start(settings);
+    // 窗口随首次投送建立（播放态未知时不抢先显示）。
+    await output.apply(presentation());
+    await pumpEventQueue();
+
+    // 未自定义字体：下发 null（原生用系统默认字体，不覆盖）。
+    final showCall = calls.firstWhere((call) => call.method == 'desktop.show');
+    expect((showCall.arguments as Map)['fontFamily'], isNull);
+
+    // 设置页选了字体（ThemeProvider 通知 → start 重下发）：只发变化项。
+    calls.clear();
+    fontFamily = 'Noto Sans CJK SC';
+    await output.start(settings);
+    await pumpEventQueue();
+    final setConfig =
+        calls.lastWhere((call) => call.method == 'desktop.setConfig');
+    expect((setConfig.arguments as Map)['fontFamily'], 'Noto Sans CJK SC');
+
+    // 字体没再变：重复 start 不重发（避免原生无谓重建）。
+    calls.clear();
+    await output.start(settings);
+    await pumpEventQueue();
+    expect(calls.map((call) => call.method), isNot(contains('desktop.setConfig')));
+
+    await output.stop();
+  });
+
   test('原生控制条动作进入 actions 流', () async {
     final channel = LyricsChannel();
     final output = DesktopLyricsOutput(channel: channel, supported: true);

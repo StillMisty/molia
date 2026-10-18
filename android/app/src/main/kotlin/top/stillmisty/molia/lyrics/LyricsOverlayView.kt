@@ -5,6 +5,7 @@ import android.content.Context
 import android.content.res.ColorStateList
 import android.graphics.Color
 import android.graphics.Point
+import android.graphics.Typeface
 import android.graphics.drawable.GradientDrawable
 import android.graphics.drawable.RippleDrawable
 import android.os.SystemClock
@@ -35,6 +36,13 @@ import kotlin.math.min
 /** 悬浮窗配置快照（由 Dart 侧下发；策略已在 Dart 侧应用）。 */
 internal data class OverlayConfig(
     val fontSize: Float = 22f,
+    /**
+     * 行文本字体族（「应用字体」；null = 系统默认）。
+     *
+     * 名字来自 Dart 侧设备字体枚举（Android 即 `fonts.xml` 的 family/alias），
+     * 与 `Typeface.create` 的解析口径同源；解析不到时退回系统默认字体。
+     */
+    val fontFamily: String? = null,
     val opacity: Float = 1f,
     val playedColor: Int = 0xFFFFFFFF.toInt(),
     val unplayedColor: Int = 0xB3FFFFFF.toInt(),
@@ -73,6 +81,7 @@ internal data class OverlayConfig(
             }
             return OverlayConfig(
                 fontSize = (map["fontSize"] as? Number)?.toFloat() ?: 22f,
+                fontFamily = (map["fontFamily"] as? String)?.takeIf { it.isNotBlank() },
                 opacity = (map["opacity"] as? Number)?.toFloat() ?: 1f,
                 playedColor = (map["playedColor"] as? Number)?.toInt() ?: 0xFFFFFFFF.toInt(),
                 unplayedColor = (map["unplayedColor"] as? Number)?.toInt() ?: 0xB3FFFFFF.toInt(),
@@ -487,6 +496,15 @@ internal class LyricsOverlayView(
     private var scrollGroup = mutableListOf<TextView>()
 
     /**
+     * 当前配置解析出的行字体（null = 不覆盖，用系统默认字体）。
+     *
+     * 只在 [applyConfig] 里随配置解析一次（`Typeface.create` 要查系统字体表），
+     * 行视图重建时套用；配置变化走 `render(force = true)` 全量重建，字体随之
+     * 生效（含横滚宽度重新测量——字形度量变了）。
+     */
+    private var lineTypeface: Typeface? = null
+
+    /**
      * 播放位置时钟：宿主持有（不随行视图重建）——切行不打断时基。
      * 每次投送只做一次样本纠偏，逐帧推进在 [frame] 里完成。
      */
@@ -562,6 +580,11 @@ internal class LyricsOverlayView(
             else -> Gravity.CENTER
         }
         rowAlignX = next.textAlignX
+        // 字体族随「应用字体」下发：解析失败（名字不在系统字体表里）退回默认
+        // 字体（null = 不覆盖）。变化由下面的全量重建生效。
+        lineTypeface = next.fontFamily?.let {
+            runCatching { Typeface.create(it, Typeface.NORMAL) }.getOrNull()
+        }
         rebuildControls()
         render(current, animate = false, force = true)
     }
@@ -768,6 +791,8 @@ internal class LyricsOverlayView(
                     TypedValue.COMPLEX_UNIT_SP,
                     if (entry.isExtended) config.fontSize * 0.8f else config.fontSize,
                 )
+                // 字体必须在测量滚动行宽之前套上（字形度量决定文本宽）。
+                lineTypeface?.let { setTypeface(it) }
                 setTextColor(if (entry.isCurrent) config.playedColor else config.unplayedColor)
                 setShadowLayer(2f, 0f, 1f, config.shadowColor)
                 // 滚动组（当前行 / 扩展行）强制左对齐：横向滚动布局宽度是超大
