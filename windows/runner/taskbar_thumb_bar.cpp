@@ -144,8 +144,7 @@ void TaskbarThumbBar::ApplyState(bool add) {
   auto setup = [&](int index, UINT id, Glyph glyph, bool usable,
                    const std::wstring& tooltip) {
     buttons[index].dwMask = static_cast<THUMBBUTTONMASK>(
-        THUMBBUTTONMASK_THUMBNAIL | THUMBBUTTONMASK_FLAGS |
-        THUMBBUTTONMASK_TOOLTIP);
+        THB_ICON | THB_TOOLTIP | THB_FLAGS);
     buttons[index].iId = id;
     buttons[index].iBitmap = 0;
     buttons[index].hIcon = IconFor(glyph);
