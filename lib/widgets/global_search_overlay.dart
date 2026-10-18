@@ -72,6 +72,12 @@ class GlobalSearchOverlay extends StatefulWidget {
 class GlobalSearchController {
   M3ESearchController? _search;
 
+  /// 遮罩开合（打开 = 搜索视图路由在场）。
+  ///
+  /// 壳层用它驱动「跟着遮罩一起出现」的装饰面（背景模糊层）；开合即时翻转，
+  /// 淡入淡出由消费面自己补。
+  final ValueNotifier<bool> open = ValueNotifier<bool>(false);
+
   /// 打开搜索遮罩（打开动画落定后包内让输入框取得焦点）。
   void focus() {
     final search = _search;
@@ -84,6 +90,8 @@ class GlobalSearchController {
   void _detach(M3ESearchController search) {
     if (_search == search) _search = null;
   }
+
+  void dispose() => open.dispose();
 }
 
 class _GlobalSearchOverlayState extends State<GlobalSearchOverlay> {
@@ -134,7 +142,10 @@ class _GlobalSearchOverlayState extends State<GlobalSearchOverlay> {
   bool _claimEscape() => _open;
 
   void _setOpen(bool open) {
-    if (mounted) _open = open;
+    if (!mounted) return;
+    _open = open;
+    // 壳层装饰面（背景模糊）跟遮罩一起出现 / 消失。
+    widget.controller?.open.value = open;
   }
 
   void _syncFromProvider() {
@@ -185,6 +196,10 @@ class _GlobalSearchOverlayState extends State<GlobalSearchOverlay> {
       // docked：整屏 scrim + 居中搜索条 + 结果面板；不铺满的不透明页才是
       // 「遮罩 + 中上搜索框」的形态。
       isFullScreen: false,
+      // 结果面板底自绘（见 _GlobalSearchResults._buildPanel）：包内那层在
+      // 空态也会留下一条 4dp 色条（内容为零仍有内边距），置透明后空态就真的
+      // 只剩搜索条。
+      viewBackgroundColor: Colors.transparent,
       // 结果面板贴合内容高度：默认 2/3 屏会在结果少时拖出一大片空白。
       shrinkWrap: true,
       viewHintText: l10n.searchHint,
@@ -258,10 +273,13 @@ class _SearchClearAction extends StatelessWidget {
 /// 直接订阅 [SearchProvider]：包内 suggestions 通道只在输入时触发一次，
 /// 接不住防抖之后的异步结果，面板内容必须自己订阅 provider 才会实时刷新。
 ///
-/// 整块内容是一个滚动视图：高度贴合内容、超出可用高度就整体滚动。这不是
-/// 版式偏好——M3E 的开合动画会把容器收缩回锚点高度，途中容器可以小于内容，
-/// 固定高度的子项（分段 / 底部出口）在 Flex 里必然溢出；换成滚动视图后
-/// 任何可用高度下都不会出现 RenderFlex 溢出（内容被视口裁掉即可）。
+/// 两个版式约束（都是包内行为倒逼的，不是版式偏好）：
+/// - 整块内容是一个滚动视图：高度贴合内容、超出可用高度就整体滚动。M3E 的
+///   开合动画会把容器收缩回锚点高度，途中容器可以小于内容，固定高度的子项
+///   （分段 / 底部出口）在 Flex 里必然溢出；换成滚动视图后任何可用高度下都
+///   不会出现 RenderFlex 溢出（内容被视口裁掉即可）。
+/// - 面板底自绘（[_buildPanel]）：包内结果面在空态也会画一条 4dp 色条，所以
+///   遮罩把包内那层置透明，卡片由这里画——空态（无关键词）就只剩搜索条。
 class _GlobalSearchResults extends StatelessWidget {
   const _GlobalSearchResults({
     required this.onOpenAllResults,
@@ -275,11 +293,9 @@ class _GlobalSearchResults extends StatelessWidget {
   Widget build(BuildContext context) {
     final l10n = _l10n(context);
     final search = context.watch<SearchProvider>();
-    // 无关键词：面板只留一行输入引导（与资料库搜索页 idle 态同文案）——
-    // 包内 docked 结果面始终存在，零内容会留下一条几 dp 的色条。
-    if (!search.isSearchActive) {
-      return SingleChildScrollView(child: _buildIdle(context, l10n));
-    }
+    // 无关键词：结果面留空（只留搜索条）——打开遮罩就是为了输入，一行
+    // 「输入关键词搜索歌曲」的引导是多余的。
+    if (!search.isSearchActive) return const SizedBox.shrink();
 
     final kinds = search.supportedSearchKinds;
     final isArtistKind = search.searchKind == SearchKind.artist;
@@ -289,65 +305,64 @@ class _GlobalSearchResults extends StatelessWidget {
     final itemCount = isArtistKind ? artists.length : results.length;
     final failure = search.failure;
 
-    return SingleChildScrollView(
-      // 不接 PrimaryScrollController：面板与页面里的主列表互不干扰。
-      primary: false,
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          if (kinds.length > 1)
-            Padding(
-              padding: const EdgeInsets.fromLTRB(12, 8, 12, 4),
-              child: _buildKindSwitch(l10n, search, kinds),
-            ),
-          if (search.isSearching)
-            const Padding(
-              padding: EdgeInsets.fromLTRB(12, 4, 12, 0),
-              child: M3EProgressIndicator.linear(),
-            ),
-          if (failure != null) _buildFailure(context, l10n, search),
-          if (itemCount > 0)
-            Padding(
-              padding: const EdgeInsets.fromLTRB(8, 4, 8, 4),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  for (var index = 0; index < itemCount; index++)
-                    isArtistKind
-                        ? _buildArtistRow(
-                            context, l10n, artists[index], index, itemCount)
-                        : _buildTrackRow(
-                            context, results[index], index, itemCount),
-                ],
+    return _buildPanel(
+      context,
+      child: SingleChildScrollView(
+        // 不接 PrimaryScrollController：面板与页面里的主列表互不干扰。
+        primary: false,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            if (kinds.length > 1)
+              Padding(
+                padding: const EdgeInsets.fromLTRB(12, 8, 12, 4),
+                child: _buildKindSwitch(l10n, search, kinds),
               ),
-            )
-          else if (!search.isSearching && failure == null)
-            _buildEmpty(context, l10n, search),
-          // 有结果才给「查看全部结果」：零结果时它无处可去（空态文案已说明）。
-          if (itemCount > 0) _buildFooter(l10n),
-        ],
+            if (search.isSearching)
+              const Padding(
+                padding: EdgeInsets.fromLTRB(12, 4, 12, 0),
+                child: M3EProgressIndicator.linear(),
+              ),
+            if (failure != null) _buildFailure(context, l10n, search),
+            if (itemCount > 0)
+              Padding(
+                padding: const EdgeInsets.fromLTRB(8, 4, 8, 4),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    for (var index = 0; index < itemCount; index++)
+                      isArtistKind
+                          ? _buildArtistRow(
+                              context, l10n, artists[index], index, itemCount)
+                          : _buildTrackRow(
+                              context, results[index], index, itemCount),
+                  ],
+                ),
+              )
+            else if (!search.isSearching && failure == null)
+              _buildEmpty(context, l10n, search),
+            // 有结果才给「查看全部结果」：零结果时它无处可去（空态文案已说明）。
+            if (itemCount > 0) _buildFooter(l10n),
+          ],
+        ),
       ),
     );
   }
 
-  /// 未输入关键词：一行输入引导，不渲染结果列表。
-  ///
-  /// `heightFactor: 1`：面板 shrinkWrap，居中容器必须按内容高度收缩
-  /// （默认的 Center 会撑满可用高度，把面板拖成整块空白）。
-  Widget _buildIdle(BuildContext context, AppLocalizations l10n) => Padding(
-        padding: const EdgeInsets.symmetric(vertical: 20),
-        child: Center(
-          heightFactor: 1,
-          child: Text(
-            l10n.searchIdleHint,
-            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                  color: Theme.of(context).colorScheme.onSurfaceVariant,
-                ),
-          ),
-        ),
-      );
+  /// 结果面板底：颜色与圆角取包内 docked 结果面同一套 token（遮罩已把包内
+  /// 那层设成透明，这里接手它的外观）。
+  Widget _buildPanel(BuildContext context, {required Widget child}) {
+    final m3e = M3ETheme.of(context);
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: m3e.searchViewTheme.containedContainerColor(m3e.colorScheme),
+        borderRadius: M3EShapes.radiusExtraLarge,
+      ),
+      child: ClipRRect(borderRadius: M3EShapes.radiusExtraLarge, child: child),
+    );
+  }
 
   /// 类型分段（单曲 / 歌手 / 歌词）：M3E 分段按钮需要紧约束铺满
   /// （内部 `Positioned.fill`，放松约束会塌成零宽）。

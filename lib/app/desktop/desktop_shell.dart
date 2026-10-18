@@ -11,7 +11,9 @@
 library;
 
 import 'dart:math' as math;
+import 'dart:ui' show ImageFilter;
 
+import 'package:flutter/foundation.dart' show ValueListenable;
 import 'package:material_3_expressive/material_3_expressive.dart';
 import 'package:material_ui/material_ui.dart';
 
@@ -86,6 +88,9 @@ class DesktopShell extends StatelessWidget {
   /// 顶栏品牌区（= 搜索入口）的稳定 Key（测试定位用）。
   static const Key searchEntryKey = Key('desktopGlobalSearch');
 
+  /// 搜索遮罩背景模糊层的稳定 Key（测试定位用）。
+  static const Key searchBackdropBlurKey = Key('desktopSearchBackdropBlur');
+
   /// 搜索右侧空白拖动区的稳定 Key（双击最大化挂在它上面）。
   static const Key titleDragAreaKey = Key('desktopTitleDragArea');
 
@@ -105,60 +110,72 @@ class DesktopShell extends StatelessWidget {
       onFocusSearch: onOpenSearch,
       onSelectDestinationIndex: onSelectDestinationIndex,
       onCloseQueuePanel: onCloseQueuePanel,
-      child: Scaffold(
-        appBar: appBar,
-        body: Stack(
-          children: [
-            Row(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
+      child: Stack(
+        children: [
+          Scaffold(
+            appBar: appBar,
+            body: Stack(
               children: [
-                M3ENavigationRail(
-                  // 恒折叠：无展开按钮、也不可展开；窗口宽不影响侧栏形态。
-                  type: M3ENavigationRailType.alwaysCollapse,
-                  // 标签一律隐藏：折叠轨里图标是唯一常显信息，标签留给无障碍名
-                  // （项高随之走包内 shortItemHeight）。
-                  labelBehavior: M3ENavigationRailLabelBehavior.alwaysHide,
-                  selectedIndex: chrome.selectedIndex,
-                  onDestinationSelected: chrome.selectDestinationAt,
-                  sections: [
-                    M3ENavigationRailSection(
-                      destinations: chrome.railDestinations(),
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    M3ENavigationRail(
+                      // 恒折叠：无展开按钮、也不可展开；窗口宽不影响侧栏形态。
+                      type: M3ENavigationRailType.alwaysCollapse,
+                      // 标签一律隐藏：折叠轨里图标是唯一常显信息，标签留给无障碍名
+                      // （项高随之走包内 shortItemHeight）。
+                      labelBehavior: M3ENavigationRailLabelBehavior.alwaysHide,
+                      selectedIndex: chrome.selectedIndex,
+                      onDestinationSelected: chrome.selectDestinationAt,
+                      sections: [
+                        M3ENavigationRailSection(
+                          destinations: chrome.railDestinations(),
+                        ),
+                      ],
                     ),
+                    Expanded(child: pageStack),
                   ],
                 ),
-                Expanded(child: pageStack),
+                // 搜索遮罩宿主：隐形锚点只提供搜索条展开的起始位置（中上、居中），
+                // 覆盖层由 M3E 搜索视图在根导航器上呈现（见 GlobalSearchOverlay）。
+                Positioned(
+                  top: GlobalSearchOverlay.anchorTopFor(context),
+                  left: 0,
+                  right: 0,
+                  height: GlobalSearchOverlay.anchorHeight,
+                  child: Center(
+                    child: GlobalSearchOverlay(
+                      controller: searchController,
+                      onViewAllResults: onViewAllResults,
+                    ),
+                  ),
+                ),
               ],
             ),
-            // 搜索遮罩宿主：隐形锚点只提供搜索条展开的起始位置（中上、居中），
-            // 覆盖层由 M3E 搜索视图在根导航器上呈现（见 GlobalSearchOverlay）。
-            Positioned(
-              top: GlobalSearchOverlay.anchorTopFor(context),
-              left: 0,
-              right: 0,
-              height: GlobalSearchOverlay.anchorHeight,
-              child: Center(
-                child: GlobalSearchOverlay(
-                  controller: searchController,
-                  onViewAllResults: onViewAllResults,
-                ),
-              ),
+            // 播放页是沉浸主场：整条底栏让位（传输 / 音量 / 队列在页内都有落点），
+            // 其余目的地常驻。瞬时让位（不做收起动画）：进入播放页的共享飞行以
+            // 底栏封面为起点，收起动画会把起点拖走、副本与被动画的封面错位。
+            bottomNavigationBar:
+                chrome.selectedDestination == ShellDestination.nowPlaying
+                    ? null
+                    : DesktopNowPlayingBar(
+                        key: DesktopNowPlayingBar.shellKey,
+                        morph: morph,
+                        onOpenPlayer: () => chrome.onDestinationSelected(
+                          ShellDestination.nowPlaying,
+                        ),
+                        onOpenQueue: onOpenQueue,
+                      ),
+          ),
+          // 搜索遮罩的背景模糊：整窗（含顶栏 / 底栏）淡入一层模糊，搜索视图的
+          // 半透明 scrim 盖在它上方（见 [_SearchBackdropBlur]）。
+          Positioned.fill(
+            child: _SearchBackdropBlur(
+              key: searchBackdropBlurKey,
+              open: searchController.open,
             ),
-          ],
-        ),
-        // 播放页是沉浸主场：整条底栏让位（传输 / 音量 / 队列在页内都有落点），
-        // 其余目的地常驻。瞬时让位（不做收起动画）：进入播放页的共享飞行以
-        // 底栏封面为起点，收起动画会把起点拖走、副本与被动画的封面错位。
-        bottomNavigationBar:
-            chrome.selectedDestination == ShellDestination.nowPlaying
-                ? null
-                : DesktopNowPlayingBar(
-                    key: DesktopNowPlayingBar.shellKey,
-                    morph: morph,
-                    onOpenPlayer: () => chrome.onDestinationSelected(
-                      ShellDestination.nowPlaying,
-                    ),
-                    onOpenQueue: onOpenQueue,
-                  ),
+          ),
+        ],
       ),
     );
   }
@@ -196,6 +213,42 @@ class DesktopShell extends StatelessWidget {
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+/// 搜索遮罩的背景模糊层：跟着遮罩开合淡入淡出。
+///
+/// 为什么在壳层：M3E 搜索视图的 scrim 是纯色压暗（`scrimColor` 无模糊），背景
+/// 模糊只能由壳层补——搜索视图路由挂在根导航器上，壳层整体在它下方，半透明
+/// 的 scrim 会把这一层的模糊透出来。
+///
+/// 关闭时 opacity 为 0：`Opacity` 不绘制子树，`BackdropFilter` 也不参与合成，
+/// 不留常驻开销（模糊只在遮罩打开的这几秒里算）。
+class _SearchBackdropBlur extends StatelessWidget {
+  const _SearchBackdropBlur({super.key, required this.open});
+
+  /// 遮罩开合（语义见 [GlobalSearchController.open]）。
+  final ValueListenable<bool> open;
+
+  /// 模糊半径：糊住下层文字与封面纹理即可；过大的半径在弱 GPU 上代价高。
+  static const double blurSigma = 12;
+
+  @override
+  Widget build(BuildContext context) {
+    return IgnorePointer(
+      child: ValueListenableBuilder<bool>(
+        valueListenable: open,
+        builder: (context, open, _) => AnimatedOpacity(
+          opacity: open ? 1 : 0,
+          // 与 scrim 的淡入同拍（scrim 走包内 effects 弹簧，约 200ms 量级）。
+          duration: const Duration(milliseconds: 200),
+          child: BackdropFilter(
+            filter: ImageFilter.blur(sigmaX: blurSigma, sigmaY: blurSigma),
+            child: const SizedBox.expand(),
+          ),
+        ),
       ),
     );
   }

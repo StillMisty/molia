@@ -244,6 +244,16 @@ void main() {
   /// 底栏当前是否在场。
   Finder playingBar() => find.byKey(DesktopNowPlayingBar.shellKey);
 
+  /// 搜索遮罩背景模糊层的当前不透明度（0 = 未绘制，1 = 全模糊）。
+  double backdropBlurOpacity(WidgetTester tester) => tester
+      .widget<AnimatedOpacity>(
+        find.descendant(
+          of: find.byKey(DesktopShell.searchBackdropBlurKey),
+          matching: find.byType(AnimatedOpacity),
+        ),
+      )
+      .opacity;
+
   /// 焦点当前是否在音量弹层子树内。
   bool focusInsideVolumePanel(WidgetTester tester, Key panelKey) {
     final focusContext = FocusManager.instance.primaryFocus?.context;
@@ -609,14 +619,24 @@ void main() {
     );
     expect(find.byType(GlobalSearchOverlay), findsOneWidget);
     expect(find.text(l10n.searchHint), findsNothing, reason: '遮罩未打开');
+    expect(backdropBlurOpacity(tester), 0, reason: '遮罩未打开时背景模糊不参与绘制');
 
     await tester.tap(brand);
     await tester.pumpAndSettle();
     expect(find.text(l10n.searchHint), findsOneWidget, reason: '点击品牌区打开遮罩');
+    expect(backdropBlurOpacity(tester), 1, reason: '遮罩打开时背景模糊淡入');
+    expect(
+      find.descendant(
+        of: find.byKey(DesktopShell.searchBackdropBlurKey),
+        matching: find.byType(BackdropFilter),
+      ),
+      findsOneWidget,
+      reason: '背景模糊层是整窗 BackdropFilter',
+    );
     expect(
       find.text(l10n.searchIdleHint),
-      findsOneWidget,
-      reason: '无关键词时给输入引导（与资料库搜索页同文案）',
+      findsNothing,
+      reason: '无关键词时结果面留空（不显示输入引导）',
     );
   });
 
@@ -671,6 +691,7 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.byType(TrackRow), findsNothing, reason: 'Esc 收起遮罩');
     expect(find.text(l10n.searchHint), findsNothing);
+    expect(backdropBlurOpacity(tester), 0, reason: '遮罩收起后背景模糊淡出');
   });
 
   testWidgets('顶栏品牌区：tooltip 跟随生效键位（软件内快捷键关闭即隐藏）',
@@ -696,7 +717,7 @@ void main() {
     await ShortcutSettings.instance.setInAppEnabled(true);
   });
 
-  testWidgets('搜索遮罩：清除键清空关键词并回落输入引导', (tester) async {
+  testWidgets('搜索遮罩：清除键清空关键词，结果面留空', (tester) async {
     await pumpSearchShell(tester);
     await openSearchOverlay(tester);
     expect(find.byType(TrackRow), findsNWidgets(2));
@@ -713,7 +734,11 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.byType(TrackRow), findsNothing);
-    expect(find.text(l10n.searchIdleHint), findsOneWidget, reason: '空词回落输入引导');
+    expect(
+      find.text(l10n.searchIdleHint),
+      findsNothing,
+      reason: '空词时结果面留空，不显示输入引导',
+    );
 
     // 收起遮罩，避免用例结束时路由仍挂在导航栈上。
     await tester.sendKeyEvent(LogicalKeyboardKey.escape);

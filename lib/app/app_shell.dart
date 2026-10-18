@@ -314,6 +314,7 @@ class _MyAppState extends State<MyApp>
     _morphEntry = null;
     _morph.dispose();
     _nowPlaying.dispose();
+    _globalSearch.dispose();
     for (final signal in _reselect.values) {
       signal.dispose();
     }
