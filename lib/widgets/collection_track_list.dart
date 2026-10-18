@@ -192,55 +192,8 @@ class CollectionTrackRow extends StatelessWidget {
   }
 }
 
-/// 合集列表的合集空态：图标 + 文案 + 可选动作（本地歌曲的导入入口）。
-///
-/// 尺寸走仓库统一的空态口径（图标 40，见 `pages/library.dart` /
-/// `discover_*_tab.dart`）：空态不占满全屏，视线留给文案与主行动。
-class CollectionEmptyState extends StatelessWidget {
-  const CollectionEmptyState({
-    super.key,
-    required this.icon,
-    required this.message,
-    this.action,
-  });
-
-  final IconData icon;
-  final String message;
-
-  /// 空态下的补充入口（如「导入本地歌曲」）。
-  final Widget? action;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final action = this.action;
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(24),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(icon, size: 40, color: theme.colorScheme.onSurfaceVariant),
-            const SizedBox(height: 12),
-            Text(
-              message,
-              textAlign: TextAlign.center,
-              style: theme.textTheme.bodyMedium?.copyWith(
-                color: theme.colorScheme.onSurfaceVariant,
-              ),
-            ),
-            if (action != null) ...[
-              const SizedBox(height: 16),
-              action,
-            ],
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-/// 搜索无结果空态：合集本身有内容，只是被搜索条件过滤掉。
+/// 搜索无结果空态：合集本身有内容，只是被搜索条件过滤掉（合集为空的
+/// 图标版空态见 `widgets/empty_state.dart`）。
 class CollectionSearchEmpty extends StatelessWidget {
   const CollectionSearchEmpty({super.key, required this.message});
 

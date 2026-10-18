@@ -11,6 +11,7 @@ import '../utils/responsive.dart';
 import '../utils/scroll_to_top.dart';
 import '../widgets/discover_leaderboards_tab.dart';
 import '../widgets/discover_playlists_tab.dart';
+import '../widgets/empty_state.dart';
 import '../widgets/library_channel_selector.dart';
 import '../widgets/library_search_tab.dart';
 import '../widgets/shell_page_visibility.dart';
@@ -168,10 +169,24 @@ class _LibraryState extends State<Library> {
     ];
 
     if (visibleTabs.isEmpty) {
+      // 页面级空态版式：在可用高度里居中（Center），外边距 24。主行动只打开
+      // 设置首屏：渠道开关在设置里的「音源管理」子页维护。
       return ResponsivePageContainer(
         pageType: ResponsivePageType.browse,
         alignment: Alignment.topCenter,
-        child: _buildEmptyState(l10n),
+        child: Center(
+          child: Padding(
+            padding: const EdgeInsets.all(24),
+            child: EmptyState(
+              icon: Icons.source_rounded,
+              message: l10n.libraryNoChannels,
+              action: M3EButton.text(
+                onPressed: () => showSettingsSheet(context),
+                child: Text(l10n.settingsTitle),
+              ),
+            ),
+          ),
+        ),
       );
     }
 
@@ -281,40 +296,4 @@ class _LibraryState extends State<Library> {
             label: l10n.libraryTabPlaylists,
           ),
       };
-
-  /// 空态：图标 40 + 文案 + 主行动（打开设置首屏；渠道开关在「音源管理」里）。
-  ///
-  /// 图标尺寸与间距走仓库统一的空态口径（不占满全屏，把视线留给文案与行动）。
-  Widget _buildEmptyState(AppLocalizations l10n) {
-    final theme = Theme.of(context);
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(24),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(
-              Icons.source_rounded,
-              size: 40,
-              color: theme.colorScheme.onSurfaceVariant,
-            ),
-            const SizedBox(height: 12),
-            Text(
-              l10n.libraryNoChannels,
-              textAlign: TextAlign.center,
-              style: theme.textTheme.bodyMedium?.copyWith(
-                color: theme.colorScheme.onSurfaceVariant,
-              ),
-            ),
-            const SizedBox(height: 16),
-            // 主行动只打开设置首屏：渠道开关在设置里的「音源管理」子页维护。
-            M3EButton.text(
-              onPressed: () => showSettingsSheet(context),
-              child: Text(l10n.settingsTitle),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
 }

@@ -33,6 +33,7 @@ import '../widgets/collection_scroll_bookkeeping.dart';
 import '../widgets/collection_selection.dart';
 import '../widgets/collection_track_list.dart';
 import '../widgets/desktop_layout.dart';
+import '../widgets/empty_state.dart';
 import '../widgets/icon_swap.dart';
 import '../widgets/local_audio_import.dart' show importLocalAudioFilesFlow;
 import '../widgets/lxmc_import.dart' show importLxmcFavoritesFlow;
@@ -2147,33 +2148,39 @@ class _FavoritesPageState extends State<FavoritesPage> {
     AppLocalizations l10n,
     _CollectionView view,
   ) {
-    return CollectionEmptyState(
-      icon: view.isHistory
-          ? Icons.history_rounded
-          : view.isLocalSongs
-              ? Icons.library_music_rounded
-              : view.isFavorites
-                  ? Icons.favorite_border_rounded
-                  : Icons.queue_music_rounded,
-      message: view.isHistory
-          ? l10n.historyEmpty
-          : view.isLocalSongs
-              ? l10n.localSongsEmpty
-              : view.isFavorites
-                  ? l10n.favoritesEmpty
-                  : l10n.playlistTracksEmpty,
-      // 主行动只在「本页就能完成」时给：本地歌曲空态 = 导入入口（标题行按钮
-      // 之外的第二入口，同一动作）。收藏 / 历史 / 自建列表空态不给按钮——
-      // 收藏要先在别处收藏、历史要先有播放、自建列表要先在别处加入曲目，
-      // 页内没有对应动作可挂（挂「去发现」还得给本页新增跨目的地导航通道）。
-      action: view.isLocalSongs
-          ? M3EButton.icon(
-              style: M3EButtonStyle.tonal,
-              icon: const Icon(Icons.audio_file_rounded),
-              label: Text(l10n.libraryImportLocalSongs),
-              onPressed: () => unawaited(importLocalAudioFilesFlow(context)),
-            )
-          : null,
+    // 页面级空态版式：在可用高度里居中（Center），外边距 24。
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(24),
+        child: EmptyState(
+          icon: view.isHistory
+              ? Icons.history_rounded
+              : view.isLocalSongs
+                  ? Icons.library_music_rounded
+                  : view.isFavorites
+                      ? Icons.favorite_border_rounded
+                      : Icons.queue_music_rounded,
+          message: view.isHistory
+              ? l10n.historyEmpty
+              : view.isLocalSongs
+                  ? l10n.localSongsEmpty
+                  : view.isFavorites
+                      ? l10n.favoritesEmpty
+                      : l10n.playlistTracksEmpty,
+          // 主行动只在「本页就能完成」时给：本地歌曲空态 = 导入入口（标题行按钮
+          // 之外的第二入口，同一动作）。收藏 / 历史 / 自建列表空态不给按钮——
+          // 收藏要先在别处收藏、历史要先有播放、自建列表要先在别处加入曲目，
+          // 页内没有对应动作可挂（挂「去发现」还得给本页新增跨目的地导航通道）。
+          action: view.isLocalSongs
+              ? M3EButton.icon(
+                  style: M3EButtonStyle.tonal,
+                  icon: const Icon(Icons.audio_file_rounded),
+                  label: Text(l10n.libraryImportLocalSongs),
+                  onPressed: () => unawaited(importLocalAudioFilesFlow(context)),
+                )
+              : null,
+        ),
+      ),
     );
   }
 }

@@ -11,6 +11,7 @@ import '../providers/discover_provider.dart';
 import '../providers/paged_list_controller.dart';
 import '../services/haptics.dart';
 import 'app_search_bar.dart';
+import 'empty_state.dart';
 import 'library_cover.dart';
 import 'shell_page_visibility.dart';
 
@@ -389,40 +390,6 @@ class _DiscoverPlaylistsTabState extends State<DiscoverPlaylistsTab>
     );
   }
 
-  /// 列表空态：图标 40 + 文案 + 能立刻脱困的主行动（清搜索 / 回「全部」标签）。
-  Widget _buildEmptyState(AppLocalizations l10n, ThemeData theme) {
-    final searching = _query.isNotEmpty;
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
-      child: Column(
-        children: [
-          Icon(
-            searching ? Icons.search_off_rounded : Icons.queue_music_rounded,
-            size: 40,
-            color: theme.colorScheme.onSurfaceVariant,
-          ),
-          const SizedBox(height: 12),
-          Text(
-            searching ? l10n.discoverSearchEmpty : l10n.discoverNoContent,
-            textAlign: TextAlign.center,
-            style: theme.textTheme.bodyMedium?.copyWith(
-              color: theme.colorScheme.onSurfaceVariant,
-            ),
-          ),
-          if (searching || _selectedTag.isNotEmpty) ...[
-            const SizedBox(height: 16),
-            M3EButton.text(
-              onPressed: searching ? _clearSearch : () => _selectTag(''),
-              child: Text(
-                searching ? l10n.clearSearch : l10n.discoverAll,
-              ),
-            ),
-          ],
-        ],
-      ),
-    );
-  }
-
   List<Widget> _buildPlaylistSlivers(
     AppLocalizations l10n,
     ThemeData theme,
@@ -468,8 +435,32 @@ class _DiscoverPlaylistsTabState extends State<DiscoverPlaylistsTab>
       ];
     }
     if (items.isEmpty) {
+      // 滚动内容里的空态版式：页面对齐的 16/16 外边距；主行动给能立刻
+      // 脱困的动作（清搜索 / 回「全部」标签），无筛选时没有可执行动作。
+      final searching = _query.isNotEmpty;
       return [
-        SliverToBoxAdapter(child: _buildEmptyState(l10n, theme)),
+        SliverToBoxAdapter(
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+            child: EmptyState(
+              icon: searching
+                  ? Icons.search_off_rounded
+                  : Icons.queue_music_rounded,
+              message: searching
+                  ? l10n.discoverSearchEmpty
+                  : l10n.discoverNoContent,
+              action: searching || _selectedTag.isNotEmpty
+                  ? M3EButton.text(
+                      onPressed:
+                          searching ? _clearSearch : () => _selectTag(''),
+                      child: Text(
+                        searching ? l10n.clearSearch : l10n.discoverAll,
+                      ),
+                    )
+                  : null,
+            ),
+          ),
+        ),
       ];
     }
     return [

@@ -1,5 +1,6 @@
 /// 合集列表 module 的脚手架与行形状测试：滚动条 / 固定行高 / 行 key /
-/// 空态 / 排序模式 / 左滑动作配色与构成 / 本地歌曲行映射。
+/// 空态（共享 EmptyState 配方 + 搜索空态）/ 排序模式 / 左滑动作配色与构成 /
+/// 本地歌曲行映射。
 library;
 
 import 'package:flutter_test/flutter_test.dart';
@@ -7,6 +8,7 @@ import 'package:molia/domain/models/download.dart';
 import 'package:molia/domain/models/library.dart';
 import 'package:molia/l10n/app_localizations.dart';
 import 'package:molia/widgets/collection_track_list.dart';
+import 'package:molia/widgets/empty_state.dart';
 import 'package:molia/widgets/swipe_reveal_row.dart';
 import 'package:molia/widgets/track_row.dart';
 import 'package:material_3_expressive/material_3_expressive.dart';
@@ -192,24 +194,31 @@ void main() {
   });
 
   group('空态', () {
-    testWidgets('合集空态：图标 + 文案 + 动作', (tester) async {
+    testWidgets('共享空态：图标 + 文案 + 可选行动', (tester) async {
       await pumpHost(
         tester,
-        const CollectionEmptyState(
+        const EmptyState(
           icon: Icons.favorite_border_rounded,
           message: '还没有收藏记录',
           action: Text('导入本地歌曲'),
         ),
       );
 
+      expect(find.byType(EmptyState), findsOneWidget);
       expect(find.byIcon(Icons.favorite_border_rounded), findsOneWidget);
       expect(find.text('还没有收藏记录'), findsOneWidget);
       expect(find.text('导入本地歌曲'), findsOneWidget);
-      // 空态口径：图标 40（不占满全屏，与资料库 / 发现页空态同档）。
-      expect(
-        tester.getSize(find.byIcon(Icons.favorite_border_rounded)),
-        const Size(40, 40),
+    });
+
+    testWidgets('共享空态：无行动时不渲染行动位', (tester) async {
+      await pumpHost(
+        tester,
+        const EmptyState(icon: Icons.queue_music_rounded, message: '合集为空'),
       );
+
+      expect(find.byType(EmptyState), findsOneWidget);
+      expect(find.text('合集为空'), findsOneWidget);
+      expect(find.byType(M3EButton), findsNothing);
     });
 
     testWidgets('搜索空态：只给文案', (tester) async {

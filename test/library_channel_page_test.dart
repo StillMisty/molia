@@ -18,6 +18,7 @@ import 'package:molia/sources/lx/lx_engine_types.dart';
 import 'package:molia/sources/lx/lx_script_info.dart';
 import 'package:molia/sources/source_manager.dart';
 import 'package:molia/widgets/discover_playlists_tab.dart';
+import 'package:molia/widgets/empty_state.dart';
 import 'package:molia/widgets/library_channel_selector.dart';
 import 'package:molia/widgets/shell_reselect.dart';
 import 'package:material_3_expressive/material_3_expressive.dart';
@@ -223,6 +224,7 @@ void main() {
     }
     await tester.pumpAndSettle();
 
+    expect(find.byType(EmptyState), findsOneWidget);
     expect(find.text('所有渠道都已停用，请在「音源管理」中启用渠道。'), findsOneWidget);
     expect(find.byType(LibraryChannelSelector), findsNothing);
     // 空态的主行动：把人送到设置（渠道开关仍在「音源管理」子页）。

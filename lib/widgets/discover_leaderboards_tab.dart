@@ -7,6 +7,7 @@ import '../l10n/app_localizations.dart';
 import '../pages/discover_tracks_page.dart';
 import '../providers/discover_provider.dart';
 import '../services/haptics.dart';
+import 'empty_state.dart';
 import 'icon_swap.dart';
 import 'shell_page_visibility.dart';
 
@@ -159,14 +160,20 @@ class _DiscoverLeaderboardsTabState extends State<DiscoverLeaderboardsTab>
       _expandedChannelKey = provider.channelKey;
     }
     final l10n = _l10n(context);
-    final theme = Theme.of(context);
     final boards = provider.leaderboards;
 
     return SingleChildScrollView(
       controller: _controller,
       padding: const EdgeInsets.only(top: 12, bottom: 32),
       child: boards.isEmpty
-          ? _buildEmptyState(l10n, theme)
+          // 滚动内容里的空态版式：页面对齐的 16/16 外边距。
+          ? Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+              child: EmptyState(
+                icon: Icons.leaderboard_rounded,
+                message: l10n.discoverNoContent,
+              ),
+            )
           : Padding(
               padding: const EdgeInsets.symmetric(horizontal: 16),
               child: LayoutBuilder(
@@ -250,30 +257,6 @@ class _DiscoverLeaderboardsTabState extends State<DiscoverLeaderboardsTab>
             ),
           ),
       ],
-    );
-  }
-
-  /// 空态：图标 40 + 文案（不占满屏的空态口径）。
-  Widget _buildEmptyState(AppLocalizations l10n, ThemeData theme) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
-      child: Column(
-        children: [
-          Icon(
-            Icons.leaderboard_rounded,
-            size: 40,
-            color: theme.colorScheme.onSurfaceVariant,
-          ),
-          const SizedBox(height: 12),
-          Text(
-            l10n.discoverNoContent,
-            textAlign: TextAlign.center,
-            style: theme.textTheme.bodyMedium?.copyWith(
-              color: theme.colorScheme.onSurfaceVariant,
-            ),
-          ),
-        ],
-      ),
     );
   }
 }

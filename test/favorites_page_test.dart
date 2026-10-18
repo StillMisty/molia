@@ -28,6 +28,7 @@ import 'package:molia/services/track_local_data_service.dart';
 import 'package:molia/utils/responsive.dart';
 import 'package:molia/utils/sync_format.dart';
 import 'package:molia/widgets/app_search_bar.dart';
+import 'package:molia/widgets/empty_state.dart';
 import 'package:molia/widgets/shell_reselect.dart';
 import 'package:molia/widgets/swipe_reveal_row.dart';
 import 'package:molia/widgets/track_row.dart';
@@ -388,6 +389,7 @@ void main() {
   testWidgets('空态：无任何合集时显示爱心图标与收藏空提示', (tester) async {
     await pumpFavorites(tester);
 
+    expect(find.byType(EmptyState), findsOneWidget);
     expect(find.text('还没有收藏记录'), findsOneWidget);
     expect(find.byIcon(Icons.favorite_border_rounded), findsOneWidget);
     // 随机关闭；播放/暂停只在顶栏；搜索按钮在；

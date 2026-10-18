@@ -7,6 +7,7 @@ import 'package:molia/providers/playback_provider.dart';
 import 'package:molia/widgets/app_search_bar.dart';
 import 'package:molia/widgets/discover_leaderboards_tab.dart';
 import 'package:molia/widgets/discover_playlists_tab.dart';
+import 'package:molia/widgets/empty_state.dart';
 import 'package:material_3_expressive/material_3_expressive.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:provider/provider.dart';
@@ -293,10 +294,11 @@ void main() {
     }
   });
 
-  testWidgets('歌单 tab：空态收敛为图标 40 + 文案 + 主行动', (tester) async {
+  testWidgets('歌单 tab：空态用共享 EmptyState + 文案 + 主行动', (tester) async {
     wy.playlistsPerPage = 0;
     await pumpTab(tester, const DiscoverPlaylistsTab());
 
+    expect(find.byType(EmptyState), findsOneWidget);
     expect(find.text('暂无内容'), findsOneWidget);
     expect(find.byIcon(Icons.queue_music_rounded), findsOneWidget);
     // 未加筛选时没有可执行的主行动。
