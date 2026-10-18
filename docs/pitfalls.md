@@ -525,3 +525,23 @@
     `Text(style:)` / `Text.rich` 是**合并**，本身安全，但在被替换过的环境样式下也会
     一起丢字体——先修替换点。回归：`test/widgets/lyrics_widget_test.dart` 的
     「歌词行跟随应用字体：主行 / 逐字 / 翻译 / 罗马音」。
+59. **Windows 任务栏的图标与名字来自「应用身份」，不是现取 exe 资源**：任务栏上有
+    三条取图路径，互不共享——按钮走窗口图标（类图标 / `WM_SETICON`）、悬浮预览
+    头部与右键菜单头部走 shell 按 **AppUserModelID 解析后缓存**的图标。换过图标的
+    旧构建会在 shell 里留下旧图，实际表现是「任务栏按钮是品牌图、右击菜单头部
+    还是 Flutter 默认图」。修法（见 ADR-0012、`windows/runner/shell_identity.cpp`）：
+    启动时写 `HKCU\Software\Classes\AppUserModelId\<AUMID>`（`DisplayName` +
+    `IconUri` = exe 全路径），并给窗口类补 `hIconSm`、窗口补 `WM_SETICON`，
+    不要让 shell 走「自己派生 / 回退缓存」的路径。
+    同源事实（缩略图工具栏 `ThumbBarAddButtons`）：① 只能在窗口**已经出现在任务栏
+    上**之后挂（`WM_SHOWWINDOW(TRUE)`），返回失败要留给下一次重试；② `explorer.exe`
+    重启会清空工具栏，必须监听 `RegisterWindowMessage("TaskbarCreated")` 重挂；
+    ③ 按钮图标必须是 **32 位、`SM_CXICON`×`SM_CYICON`** 的 HICON（100% 缩放 = 32，
+    150% = 48，200% = 64），且任务栏**不随主题反色**——浅色任务栏要另备一套暗字形，
+    按 `SystemUsesLightTheme` 切换；④ `/W4 /WX` 下结构体成员别在中间混放
+    `bool` 与指针 / `std::wstring`（成员间填充会触发 C4820，警告即错误），标量放末尾。
+    图标资源是生成物：改字形后跑 `python3 tool/gen_taskbar_icons.py`。
+60. **Windows 安装器改快捷方式名必须显式删旧文件**：Inno 的 `[Icons]` 只负责创建，
+    品牌名从「Molia 茉咏」改成「Molia」后旧 `.lnk` 不会自动消失，开始菜单 / 桌面会
+    各留一个指向同一个 exe 的入口。改快捷方式名时同步补
+    `[InstallDelete]`（`{autoprograms}` / `{autodesktop}` 两个位置，见 ADR-0011）。

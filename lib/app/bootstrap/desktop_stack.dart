@@ -1,9 +1,10 @@
 /// 桌面壳栈：托盘行为偏好（关闭时最小化到托盘）+ 统一退出路径 +
-/// 关闭请求分流 + 托盘菜单状态同步。
+/// 关闭请求分流 + 桌面状态同步（托盘菜单 / Windows 任务栏缩略图按钮）。
 ///
-/// 托盘实现（`app_tray.dart` 出口）与窗口 chrome 只在这里出现，
-/// 其余组合根代码不感知桌面插件；首帧后的托盘创建由 [DesktopStack.initTray]
-/// 承担（图标资源可读、不占启动关键路径）。
+/// 桌面实现（`app_tray.dart` / `taskbar_thumb_bar.dart` 出口）与窗口 chrome
+/// 只在这里出现，其余组合根代码不感知桌面插件；首帧后的托盘与任务栏按钮
+/// 创建由 [DesktopStack.initDesktopSurfaces] 承担（图标资源可读、不占启动
+/// 关键路径）。
 library;
 
 import 'dart:async';
@@ -19,6 +20,7 @@ import '../../services/app_presence.dart';
 import '../../services/language_service.dart';
 import '../../services/play_statistics_service.dart';
 import '../../services/window/app_tray.dart';
+import '../../services/window/taskbar_thumb_bar.dart';
 import '../../services/window/tray_settings.dart';
 import '../../services/window/window_chrome.dart';
 
@@ -29,8 +31,9 @@ typedef DesktopStack = ({
   /// 统一退出路径（托盘「退出」/ 更新安装后的重启替换）。
   Future<void> Function() quitApp,
 
-  /// 首帧后创建托盘（含宿主探测预热）。
-  void Function() initTray,
+  /// 首帧后创建桌面外壳入口：托盘（含宿主探测预热）与 Windows 任务栏
+  /// 缩略图按钮；其余平台都是空操作。
+  void Function() initDesktopSurfaces,
 });
 
 /// 装配托盘偏好、退出路径与关闭策略（无托盘的平台全部是安全的空操作）。
@@ -43,6 +46,21 @@ Future<DesktopStack> buildDesktopStack({
   // 最小化到托盘（播放不中断）；偏好可在设置 › 通用 › 桌面 切换为直接退出。
   final traySettings = TraySettings();
   await traySettings.init();
+
+  // Windows 任务栏缩略图工具栏：与托盘共用同一批动作与同一份文案，
+  // 非 Windows 平台上所有方法都是空操作。
+  final taskbar = TaskbarThumbBar();
+
+  // 菜单动作（托盘菜单与任务栏按钮共用）：全部落到既有 provider。
+  void togglePlay() => unawaited(playback.togglePlayPause());
+  void skipToPrevious() => unawaited(playback.skipToPrevious());
+  void skipToNext() => unawaited(playback.skipToNext());
+  void toggleFavorite() {
+    final track = playback.snapshot.current;
+    if (track != null) {
+      unawaited(libraryProvider.toggleFavoriteTrack(track));
+    }
+  }
 
   // 统一退出路径（托盘「退出」/ 更新安装后的重启替换）：先把播放会话与
   // 统计落盘（等价于 App 进入后台的 flush，两者都是同步的「标记 + 触发」），
@@ -80,18 +98,25 @@ Future<DesktopStack> buildDesktopStack({
     final snapshot = playback.snapshot;
     final track = snapshot.current;
     final brand = AppBrandingService.titleNotifier.value;
-    AppTray.setLabels(_trayLabels());
+    final labels = _trayLabels();
+    final isFavorite = track != null &&
+        libraryProvider.isFavorite(track.id.sourceKey, track.id.id);
+    AppTray.setLabels(labels);
     AppTray.setPlaybackState(
       hasTrack: track != null,
       isPlaying: snapshot.isPlaying,
     );
-    AppTray.setFavorite(
-      track != null &&
-          libraryProvider.isFavorite(track.id.sourceKey, track.id.id),
-    );
+    AppTray.setFavorite(isFavorite);
     AppTray.setTooltip(
       track == null ? brand : '$brand · ${_trackTooltip(track)}',
     );
+    // Windows 任务栏缩略图按钮：同一份状态与文案（原生只在值变化时重画）。
+    taskbar.setLabels(labels);
+    taskbar.setPlaybackState(
+      hasTrack: track != null,
+      isPlaying: snapshot.isPlaying,
+    );
+    taskbar.setFavorite(isFavorite);
     // 任务栏 / 窗口列表标题：显示当前曲目（无曲目回退应用名）。与托盘
     // tooltip 同一份文案来源，切歌 / 播放态变化都在这里一次同步。
     unawaited(
@@ -112,21 +137,27 @@ Future<DesktopStack> buildDesktopStack({
     quitApp: quitApp,
     // 托盘在首帧后创建：此时图标资源可读，且不占启动关键路径。
     // 宿主探测预热：关闭策略首次触发时直接读缓存结果（并留下启动日志）。
-    initTray: () {
+    initDesktopSurfaces: () {
       unawaited(AppTray.detectHost());
       AppTray.init(
         labels: _trayLabels(),
         onShowWindow: () => unawaited(WindowChrome.show()),
-        onTogglePlay: () => unawaited(playback.togglePlayPause()),
-        onPrevious: () => unawaited(playback.skipToPrevious()),
-        onNext: () => unawaited(playback.skipToNext()),
-        onToggleFavorite: () {
-          final track = playback.snapshot.current;
-          if (track != null) {
-            unawaited(libraryProvider.toggleFavoriteTrack(track));
-          }
-        },
+        onTogglePlay: togglePlay,
+        onPrevious: skipToPrevious,
+        onNext: skipToNext,
+        onToggleFavorite: toggleFavorite,
         onQuit: () => unawaited(quitApp()),
+      );
+      // Windows 任务栏缩略图按钮（悬浮任务栏按钮时的预览浮层）：点击与
+      // 托盘菜单共用上面这批动作，非 Windows 上是空操作。
+      unawaited(
+        taskbar.init(
+          labels: _trayLabels(),
+          onTogglePlay: togglePlay,
+          onPrevious: skipToPrevious,
+          onNext: skipToNext,
+          onToggleFavorite: toggleFavorite,
+        ),
       );
     },
   );

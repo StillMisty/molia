@@ -335,7 +335,7 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get importDialogMessage =>
-      '导入数据将替换具有相同标识符的现有最近播放记录。此操作无法撤销。您确定要继续吗？\n\n确保 JSON 文件有效且之前是从茉咏导出的。';
+      '导入数据将替换具有相同标识符的现有最近播放记录。此操作无法撤销。您确定要继续吗？\n\n确保 JSON 文件有效且之前是从 Molia 导出的。';
 
   @override
   String get importButton => '导入数据';
@@ -1199,7 +1199,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get settingsAppTitleHint => '输入名称';
 
   @override
-  String get appName => '茉咏';
+  String get appName => 'Molia';
 
   @override
   String get libraryRecentContexts => '最近播放';

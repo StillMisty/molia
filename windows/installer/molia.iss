@@ -34,7 +34,7 @@
   #define OutputDir "..\..\dist"
 #endif
 
-#define AppName "Molia 茉咏"
+#define AppName "Molia"
 #define AppPublisher "StillMisty"
 #define AppUrl "https://github.com/StillMisty/molia"
 #define AppExeName "molia.exe"
@@ -95,8 +95,15 @@ Source: "{#SourceDir}\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs 
 ; AppUserModelID 必须与 windows/runner/main.cpp 的
 ; SetCurrentProcessExplicitAppUserModelID 一致：Windows 用快捷方式的 AUMID
 ; 把 SMTC 媒体浮层 / 通知归到本应用，缺失时显示为 "Unknown Application"。
+; 品牌名统一 Molia（旧版快捷方式叫 "Molia 茉咏"，见 [InstallDelete]）。
 Name: "{autoprograms}\{#AppName}"; Filename: "{app}\{#AppExeName}"; AppUserModelID: "top.stillmisty.molia"
 Name: "{autodesktop}\{#AppName}"; Filename: "{app}\{#AppExeName}"; Tasks: desktopicon; AppUserModelID: "top.stillmisty.molia"
+
+[InstallDelete]
+; 旧版快捷方式名带中文后缀 "Molia 茉咏"：改名升级后不会自动消失，
+; 不清掉开始菜单 / 桌面会各留一个指向同一个 exe 的入口。
+Type: files; Name: "{autoprograms}\Molia 茉咏.lnk"
+Type: files; Name: "{autodesktop}\Molia 茉咏.lnk"
 
 [Run]
 ; 静默升级也走这里：应用内更新启动 setup 后自行退出，安装完由本行拉起新版。

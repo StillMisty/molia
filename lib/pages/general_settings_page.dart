@@ -167,7 +167,7 @@ class _GeneralSettingsPageState extends State<GeneralSettingsPage> {
     );
   }
 
-  /// 自定义应用名称：文本输入弹层（空白回退默认名称，随语言为 Molia/茉咏）。
+  /// 自定义应用名称：文本输入弹层（空白回退默认名称 Molia）。
   Future<void> _showAppTitleDialog(
       BuildContext context, AppLocalizations l10n) async {
     final controller = TextEditingController(

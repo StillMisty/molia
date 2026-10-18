@@ -12,6 +12,11 @@ void CreateAndAttachConsole();
 // encoded in UTF-8. Returns an empty std::string on failure.
 std::string Utf8FromUtf16(const wchar_t* utf16_string);
 
+// Takes a std::string encoded in UTF-8 and returns a std::wstring encoded in
+// UTF-16. Returns an empty std::wstring on failure. 反向转换用于原生侧要吃
+// Dart 传来的字符串（通道参数是 UTF-8），如任务栏按钮的 tooltip。
+std::wstring Utf16FromUtf8(const std::string& utf8_string);
+
 // Gets the command line arguments passed in as a std::vector<std::string>,
 // encoded in UTF-8. Returns an empty std::vector<std::string> on failure.
 std::vector<std::string> GetCommandLineArguments();
