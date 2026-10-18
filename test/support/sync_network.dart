@@ -170,7 +170,7 @@ class SyncDevice {
     );
     await state.init();
     await state.writePassphrase(network.passphrase);
-    await state.setEnabled(true);
+    await state.setTransportEnabled(SyncTransportKind.lan, true);
     journal = SyncJournalRepository(
       databaseProvider: () => db,
       limits: _limits,

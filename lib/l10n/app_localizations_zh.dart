@@ -2033,15 +2033,6 @@ class AppLocalizationsZh extends AppLocalizations {
   String get settingsSyncItemSubtitle => '歌单、音源、设置与凭证';
 
   @override
-  String get syncGeneralSection => '同步';
-
-  @override
-  String get syncEnabledTitle => '启用同步';
-
-  @override
-  String get syncEnabledSubtitle => '与持有同一口令的设备交换数据';
-
-  @override
   String get syncPairingSection => '配对设备';
 
   @override
@@ -2261,6 +2252,9 @@ class AppLocalizationsZh extends AppLocalizations {
   String get syncTransportSection => '传输方式';
 
   @override
+  String get syncTransportAllOffHint => '两路传输都关闭时同步不会运行；打开任一开关即开始交换数据。';
+
+  @override
   String get syncLanTitle => '局域网直连';
 
   @override
@@ -2317,7 +2311,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get syncAdvancedTitle => '高级设置';
 
   @override
-  String get syncAdvancedSubtitle => '设备名、口令、网络地址与传输方式';
+  String get syncAdvancedSubtitle => '设备名、口令与网络地址';
 
   @override
   String get syncPeersSection => '设备';

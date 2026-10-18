@@ -45,7 +45,7 @@ void main() {
     );
     await state.init();
     await state.writePassphrase('ABCD-EFGH-JKLM-NPQR-STUV-WXYZ-2345-6789');
-    await state.setEnabled(true);
+    await state.setTransportEnabled('lan', true);
     transport = FakeSyncTransport();
     adapter = RecordingSyncAdapter();
   });

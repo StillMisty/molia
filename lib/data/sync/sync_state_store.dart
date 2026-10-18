@@ -1,4 +1,4 @@
-/// 同步运行状态持久化：设备身份 / 开关 / 传输配置 / 变更登记 / 日志。
+/// 同步运行状态持久化：设备身份 / 传输开关 / 传输配置 / 变更登记 / 日志。
 ///
 /// - 非敏感状态走 SharedPreferences 单 JSON 键（`sync_state_v1`）；
 /// - 敏感项（同步口令、WebDAV 密码）走 [SettingsSecretStore]（生产 =
@@ -15,7 +15,6 @@ import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../domain/models/device_sync.dart';
-import '../../domain/ports/sync_transport.dart';
 import '../settings/settings_secret_store.dart';
 import 'sync_activity.dart';
 import 'sync_stamp.dart';
@@ -202,11 +201,13 @@ class SyncStateStore {
   SharedPreferences? _prefs;
   String _deviceId;
   String _deviceName = '';
-  bool _enabled = false;
   final Map<SyncCategory, bool> _categories = {
     for (final category in SyncCategory.values) category: true,
   };
-  final Set<String> _enabledTransports = {SyncTransportKind.lan};
+
+  /// 启用的传输：两路默认关——装机时不启动监听、不广播、不弹局域网权限，
+  /// 用户打开任一开关才算启用同步（开关即总闸，见 [enabled]）。
+  final Set<String> _enabledTransports = {};
   WebDavConfig _webdav = const WebDavConfig();
 
   /// 蜂窝网络下的自动同步策略（默认只同步小类别）。
@@ -264,7 +265,13 @@ class SyncStateStore {
 
   String get deviceId => _deviceId;
   String get deviceName => _deviceName;
-  bool get enabled => _enabled;
+
+  /// 同步是否启用 = 至少一路传输开启。
+  ///
+  /// 没有独立总开关：传输开关就是总闸（两路都关 = 完全停，轮次 / 入站 /
+  /// 调度器一并停摆）。派生而非持久化，避免「总开关已开但没有任何通道」的
+  /// 僵尸状态。
+  bool get enabled => _enabledTransports.isNotEmpty;
   Map<SyncCategory, bool> get categories => Map.unmodifiable(_categories);
   Set<String> get enabledTransports => Set.unmodifiable(_enabledTransports);
   WebDavConfig get webdav => _webdav;
@@ -371,11 +378,6 @@ class SyncStateStore {
 
   Future<void> writeWebdavPassword(String password) =>
       _secrets.write(webdavPasswordSecretKey, password);
-
-  Future<void> setEnabled(bool value) async {
-    _enabled = value;
-    await save();
-  }
 
   Future<void> setCategory(SyncCategory category, bool value) async {
     _categories[category] = value;
@@ -568,7 +570,8 @@ class SyncStateStore {
         'v': 2,
         'deviceId': _deviceId,
         'deviceName': _deviceName,
-        'enabled': _enabled,
+        // 派生值照写：旧版本降级读取时按总开关语义理解仍然正确（有传输 = 开）。
+        'enabled': enabled,
         'categories': {
           for (final entry in _categories.entries) entry.key.name: entry.value,
         },
@@ -608,7 +611,6 @@ class SyncStateStore {
   void _applyJson(Map<String, dynamic> json) {
     _deviceId = json['deviceId'] is String ? json['deviceId'] as String : '';
     _deviceName = json['deviceName'] is String ? json['deviceName'] as String : '';
-    _enabled = json['enabled'] == true;
 
     final categories = json['categories'];
     if (categories is Map) {
@@ -623,6 +625,10 @@ class SyncStateStore {
         ..clear()
         ..addAll(transports.whereType<String>());
     }
+    // 迁移旧的总开关键：旧版 `enabled=false` 的用户从未开启过同步，其
+    // transports 默认值（{lan}）不能当作启用信号——清空以保持「升级后同步
+    // 仍关闭」；`enabled=true` 保留原 transports（派生值自然为真）。
+    if (json['enabled'] == false) _enabledTransports.clear();
     _webdav = WebDavConfig.fromJson(json['webdav']);
     _cellularPolicy = SyncCellularPolicy.parse(json['cellularPolicy'] as String?);
 

@@ -36,7 +36,7 @@ void main() {
     );
     await state.init();
     await state.writePassphrase('ABCD-EFGH-JKLM-NPQR-STUV-WXYZ-2345-6789');
-    await state.setEnabled(true);
+    await state.setTransportEnabled('lan', true);
     transport = FakeSyncTransport();
     engine = SyncEngine(
       state: state,
@@ -400,15 +400,15 @@ void main() {
     expect(transport.lastRequest!.fullPeers, contains('devB'));
   });
 
-  test('传输关闭时不启动也不拉取', () async {
-    await state.setTransportEnabled('lan', false);
-    await engine.setEnabled(false);
-    await engine.setEnabled(true);
+  test('传输全关：同步完全停（不启动传输、不跑轮次）', () async {
+    // 没有独立总开关：关掉唯一一路传输 = 同步已停。
+    await engine.setTransportEnabled('lan', true);
+    await engine.setTransportEnabled('lan', false);
     expect(transport.isRunning, isFalse);
 
     transport.available.add(remoteTheme('dark'));
-    final disabled = await engine.syncNow();
-    expect(disabled!.outcome, SyncOutcome.noPeers);
+    // 两路都关时轮次直接跳过：不启动传输、不拉取、连报告都不产生。
+    expect(await engine.syncNow(), isNull);
     expect(prefs.getString('theme_mode'), isNull);
 
     await engine.setTransportEnabled('lan', true);
@@ -473,7 +473,7 @@ void main() {
   test('应用失败：入站快照放回队列，下一轮重试', () async {
     final failingState = SyncStateStore(preferences: prefs, secrets: secrets);
     await failingState.init();
-    await failingState.setEnabled(true);
+    await failingState.setTransportEnabled('lan', true);
     final failingTransport = FakeSyncTransport();
     final adapter = _FlakyAdapter();
     final failingEngine = SyncEngine(

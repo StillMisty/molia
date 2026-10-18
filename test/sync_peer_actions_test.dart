@@ -30,7 +30,7 @@ void main() {
       clock: () => DateTime.now().millisecondsSinceEpoch,
     );
     await state.init();
-    await state.setEnabled(true);
+    await state.setTransportEnabled(SyncTransportKind.lan, true);
     await state.writePassphrase('ABCD-EFGH-JKLM-NPQR-STUV-WXYZ-2345-6789');
     transport = FakeSyncTransport();
     engine = SyncEngine(

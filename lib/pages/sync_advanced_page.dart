@@ -9,16 +9,16 @@ import '../domain/ports/sync_transport.dart';
 import '../l10n/app_localizations.dart';
 import '../providers/sync_provider.dart';
 import '../services/local_endpoints_service.dart';
-import '../theme/app_semantic_colors.dart';
 import '../utils/device_id.dart';
 import '../widgets/settings/settings_tiles.dart';
 import 'sync_dialogs.dart';
 import 'sync_pairing_dialogs.dart';
 
-/// 同步高级设置子页：设备身份 / 口令 / 网络地址与端口 / 地址簿 / 传输方式。
+/// 同步高级设置子页：设备身份 / 口令 / 网络地址与端口 / 地址簿。
 ///
-/// 这些是排障与手工接入才用得到的底层信息，从首屏搬到子页——首屏只留配对与
-/// 设备（见 `sync_settings_page.dart` 的信息架构说明）。
+/// 这些是排障与手工接入才用得到的底层信息，从首屏搬到子页——首屏只留用户
+/// 真正要做的事：传输方式、配对与设备（见 `sync_settings_page.dart` 的信息
+/// 架构说明）。
 class SyncAdvancedPage extends StatefulWidget {
   const SyncAdvancedPage({super.key});
 
@@ -43,7 +43,7 @@ class _SyncAdvancedPageState extends State<SyncAdvancedPage> {
     final provider = context.watch<SyncProvider>();
     final ports = provider.lanDiscoveryPorts;
     final signature = Object.hash(
-      provider.enabled,
+      provider.enabledTransports.contains(SyncTransportKind.lan),
       ports.v4,
       ports.v6,
       provider.lanHttpPort,
@@ -70,8 +70,6 @@ class _SyncAdvancedPageState extends State<SyncAdvancedPage> {
             _localSection(context, provider, l10n, snapshot.data),
             const SizedBox(height: kSettingsSectionSpacing),
             _peersSection(context, provider, l10n),
-            const SizedBox(height: kSettingsSectionSpacing),
-            _transportsSection(context, provider, l10n),
           ],
         ),
       ),
@@ -243,75 +241,6 @@ class _SyncAdvancedPageState extends State<SyncAdvancedPage> {
     );
   }
 
-  /// 传输：局域网（含权限动作）与 WebDAV（含配置入口）。
-  Widget _transportsSection(
-    BuildContext context,
-    SyncProvider provider,
-    AppLocalizations l10n,
-  ) {
-    final lanState =
-        _transportState(context, provider, l10n, SyncTransportKind.lan);
-    final webdavState =
-        _transportState(context, provider, l10n, SyncTransportKind.webdav);
-    final webdavEnabled =
-        provider.enabledTransports.contains(SyncTransportKind.webdav);
-    return SettingsSectionCard(
-      title: l10n.syncTransportSection,
-      children: [
-        SettingsSwitchTile(
-          switchKey: const Key('settingsSyncLanSwitch'),
-          icon: Icons.wifi_rounded,
-          title: l10n.syncLanTitle,
-          subtitle: lanState.text,
-          subtitleColor: lanState.color,
-          value: provider.enabledTransports.contains(SyncTransportKind.lan),
-          onChanged: (value) => unawaited(
-              provider.setTransportEnabled(SyncTransportKind.lan, value)),
-        ),
-        // 权限被拒时给可行动入口（手动地址救不了权限，只能授权或转 WebDAV）。
-        if (_needsLanPermission(provider))
-          SettingsNavTile(
-            key: const Key('settingsSyncLanPermissionItem'),
-            icon: provider.lanPermissionPermanentlyDenied
-                ? Icons.settings_rounded
-                : Icons.lock_open_rounded,
-            title: provider.lanPermissionPermanentlyDenied
-                ? l10n.syncOpenSystemSettings
-                : l10n.syncLanPermissionTitle,
-            subtitle: provider.lanPermissionPermanentlyDenied
-                ? l10n.syncLanPermissionPermanentSubtitle
-                : l10n.syncLanPermissionSubtitle,
-            onTap: () => unawaited(
-                provider.lanPermissionPermanentlyDenied
-                    ? provider.openSystemSettings()
-                    : _requestLanPermission(context, provider, l10n)),
-          ),
-        SettingsSwitchTile(
-          switchKey: const Key('settingsSyncWebdavSwitch'),
-          icon: Icons.cloud_rounded,
-          title: l10n.syncWebdavTitle,
-          subtitle: webdavState.text,
-          subtitleColor: webdavState.color,
-          value: webdavEnabled,
-          onChanged: (value) => unawaited(
-              provider.setTransportEnabled(SyncTransportKind.webdav, value)),
-        ),
-        // 配置入口只在 WebDAV 启用后才有意义（未启用时开关副文案已说明）。
-        if (webdavEnabled)
-          SettingsNavTile(
-            key: const Key('settingsSyncWebdavConfigItem'),
-            icon: Icons.settings_rounded,
-            title: l10n.syncWebdavConfigTitle,
-            subtitle: provider.webdav.isConfigured
-                ? provider.webdav.baseUrl
-                : l10n.syncWebdavNotConfigured,
-            onTap: () =>
-                unawaited(showWebdavConfigDialog(context, provider, l10n)),
-          ),
-      ],
-    );
-  }
-
   /// 探测端口副标题：两族同值折叠成一个数字；独立降级（端口不同 / 单族
   /// 不可用）时按族列出，用户才能按族把地址 + 端口一起交给对端。
   static String _probePortSubtitle(
@@ -325,72 +254,6 @@ class _SyncAdvancedPageState extends State<SyncAdvancedPage> {
     return l10n.syncLocalProbePortPerFamily(
       ports.v4 > 0 ? '${ports.v4}' : '—',
       ports.v6 > 0 ? '${ports.v6}' : '—',
-    );
-  }
-
-  /// 传输副文案：只说状态词（运行中 / 已关闭 / 未配置 / 启动失败 / 缺少权限）。
-  ///
-  /// 用户主动关闭的传输先于状态判定：开关状态由 `enabled` 表达，关闭后不再
-  /// 显示「未配置 / 启动失败」这类残留原因。状态色只作增强：不可用 / 启动失败
-  /// 走 warning，运行中且有成功记录走 success。最后成功时间与原始失败细节
-  /// 不进首屏（日志子页的失败行里有）。
-  static ({String text, Color? color}) _transportState(
-    BuildContext context,
-    SyncProvider provider,
-    AppLocalizations l10n,
-    String kind,
-  ) {
-    final status = provider.transportStatus(kind);
-    if (status == null) {
-      return (text: l10n.syncTransportNotConfigured, color: null);
-    }
-    if (!status.enabled) {
-      return (text: l10n.syncTransportDisabled, color: null);
-    }
-    final semantic = AppSemanticColors.of(context);
-    final state = switch (status.unavailableReason) {
-      SyncUnavailableReason.notConfigured => l10n.syncTransportNotConfigured,
-      // 启动类失败只说「启动失败」；原因码细节在日志子页的失败弹层里。
-      SyncUnavailableReason.startFailed => l10n.syncTransportStartFailed,
-      SyncUnavailableReason.permissionDenied =>
-        l10n.syncTransportPermissionDenied,
-      _ =>
-        status.running ? l10n.syncTransportRunning : l10n.syncTransportStopped,
-    };
-    final available = status.running && status.unavailableReason == null;
-    return (
-      text: state,
-      color: available
-          ? (provider.transportLastSuccessAt(kind) > 0
-              ? semantic.success
-              : null)
-          : semantic.warning,
-    );
-  }
-
-  /// 局域网因缺少权限而不可用（Android 17+：手动地址也无效，只能授权或转 WebDAV）。
-  static bool _needsLanPermission(SyncProvider provider) =>
-      provider.lanPermissionNeeded &&
-      provider.enabledTransports.contains(SyncTransportKind.lan) &&
-      provider.transportStatus(SyncTransportKind.lan)?.unavailableReason ==
-          SyncUnavailableReason.permissionDenied;
-
-  /// 用户显式申请权限；仍被拒时给「去系统设置」的下一步动作。
-  static Future<void> _requestLanPermission(
-    BuildContext context,
-    SyncProvider provider,
-    AppLocalizations l10n,
-  ) async {
-    final granted = await provider.requestLanPermission();
-    if (granted || !context.mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(l10n.syncLanPermissionDenied),
-        action: SnackBarAction(
-          label: l10n.syncOpenSystemSettings,
-          onPressed: () => unawaited(provider.openSystemSettings()),
-        ),
-      ),
     );
   }
 }

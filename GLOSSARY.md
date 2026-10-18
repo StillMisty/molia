@@ -506,11 +506,13 @@
   地址簿里尚未进名册的条目（未认领候选折叠为一行「候选地址 N 个」）在
   「高级设置」子页；「落后条数」由增量协议填充。
 - **Pairing workbench（配对工作台）** — `lib/pages/sync_settings_page.dart`：
-  同步设置页的首屏信息架构（开关与结论 / 配对：复制配对码 · 二维码 · 加入其它
-  设备 / 已配对设备名册 / 同步内容与日志 · 高级设置入口）；设备名、口令、地址与
-  端口、地址簿、传输方式在 `lib/pages/sync_advanced_page.dart`（首屏只留用户
-  真正要做的配对与设备，底层细节进子页）。首次开启同步不再弹口令窗：口令随
-  配对码交给对端。
+  同步设置页的首屏信息架构（传输方式：局域网 / WebDAV 两路开关 + 最近一轮结论
+  / 配对：复制配对码 · 二维码 · 加入其它设备 / 已配对设备名册 / 同步内容与日志 ·
+  高级设置入口）；设备名、口令、地址与端口、地址簿在
+  `lib/pages/sync_advanced_page.dart`（首屏只留用户真正要做的传输、配对与设备，
+  底层细节进子页）。没有独立总开关：传输开关就是总闸，任一开启即启用同步、
+  两路都关 = 完全停；口令在初始化即生成（设备身份，不依赖开关），首次开启
+  同步不再弹口令窗：口令随配对码交给对端。
 - **Pairing code（配对码）** — `lib/domain/models/sync_pairing.dart`：
   `molia-pair:1:<base64url(utf8(json))>`，字段短名 `n` 设备名 / `i` 设备 id /
   `p` 口令 / `a` 地址候选 `[[host, probePort], …]` / `h` HTTP 端点端口；
@@ -528,7 +530,8 @@
 - **Sync transport status（传输状态）** — `SyncTransport.unavailableReason`
   （`not_configured` / `start_failed` / `permission_denied`）：传输启动失败、
   未配置或缺权限时必须显式可见，不能只留在日志里（开关显示「已打开」而实际
-  没有监听是排查事故的主要来源）。
+  没有监听是排查事故的主要来源）。传输开关同时是同步的总闸：`enabled` 是
+  `enabledTransports` 非空的派生值（没有独立总开关键），两路都关 = 完全停。
 - **Local network permission（局域网权限门）** —
   `transport/local_network_permission.dart`：Android 17 / API 37 起局域网访问
   默认阻断，LAN 传输启动前先过门；**权限被拒时手动对端地址同样无效**

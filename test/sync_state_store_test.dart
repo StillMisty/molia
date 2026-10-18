@@ -23,6 +23,43 @@ void main() {
     return store;
   }
 
+  test('传输开关默认两路都关，且没有独立总开关', () async {
+    final store = await freshStore();
+    // 装机默认：不启动监听 / 不广播（用户开开关才算启用同步）。
+    expect(store.enabledTransports, isEmpty);
+    expect(store.enabled, isFalse);
+
+    // 任一传输开启 = 启用同步；总闸就是传输集合本身。
+    await store.setTransportEnabled('lan', true);
+    expect(store.enabled, isTrue);
+    await store.setTransportEnabled('lan', false);
+    expect(store.enabled, isFalse);
+  });
+
+  test('旧状态迁移：enabled=false 的老用户升级后同步保持关闭', () async {
+    // 旧版写入：总开关关着，但 transports 默认已含 lan。
+    await SharedPreferences.getInstance().then((prefs) => prefs.setString(
+          SyncStateStore.stateKey,
+          '{"v":2,"deviceId":"devA","enabled":false,"transports":["lan"]}',
+        ));
+
+    final store = await freshStore();
+    expect(store.enabledTransports, isEmpty,
+        reason: '总开关关过：transport 里的默认值不是启用信号');
+    expect(store.enabled, isFalse);
+  });
+
+  test('旧状态迁移：enabled=true 的原有开启用户保持开启', () async {
+    await SharedPreferences.getInstance().then((prefs) => prefs.setString(
+          SyncStateStore.stateKey,
+          '{"v":2,"deviceId":"devA","enabled":true,"transports":["lan"]}',
+        ));
+
+    final store = await freshStore();
+    expect(store.enabledTransports, contains('lan'));
+    expect(store.enabled, isTrue);
+  });
+
   test('蜂窝策略默认 auto，写入后跨实例保持', () async {
     final store = await freshStore();
     expect(store.cellularPolicy, SyncCellularPolicy.auto);

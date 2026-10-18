@@ -262,17 +262,6 @@ class SyncEngine extends ChangeNotifier implements SyncSchedulerHost {
   /// 组合根在**首帧之后**调用它：局域网传输启动要过权限门（Android 17 起是
   /// 系统对话框）并绑套接字 / 枚举网卡，放在 `runApp` 之前会让首帧等一个
   /// 用户看不见的对话框。装配期只初始化状态，传输留给首帧收尾或首个轮次。
-
-  Future<void> setEnabled(bool value) async {
-    await _state.setEnabled(value);
-    if (value) {
-      await _ensureTransportsRunning();
-    } else {
-      await _stopTransports();
-    }
-    notifyListeners();
-  }
-
   Future<void> startTransports() async {
     if (!_state.enabled) return;
     await _ensureTransportsRunning();
@@ -283,6 +272,7 @@ class SyncEngine extends ChangeNotifier implements SyncSchedulerHost {
     notifyListeners();
   }
 
+  /// 开 / 关一路传输（= 总开关：两路都关时 [syncEnabled] 为假，一切停摆）。
   Future<void> setTransportEnabled(String kind, bool value) async {
     await _state.setTransportEnabled(kind, value);
     final transport = _transports[kind];
