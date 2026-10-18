@@ -12,9 +12,11 @@ import 'package:molia/pages/ai_dj_page.dart';
 import 'package:molia/providers/ai_dj_provider.dart';
 import 'package:molia/providers/library_provider.dart';
 import 'package:molia/providers/playback_provider.dart';
+import 'package:molia/providers/search_provider.dart';
 import 'package:molia/services/ai/ai_recommendation_service.dart';
 import 'package:molia/services/ai/ai_settings_store.dart';
 import 'package:molia/widgets/ai_dj_carousel.dart';
+import 'package:molia/widgets/library_search_tab.dart';
 
 import '../support/fake_library_repository.dart';
 import '../support/fakes.dart';
@@ -288,8 +290,8 @@ void main() {
   /// 桌面用例的推荐列表（6 首 = 6 张歌曲卡 + 「换一批」卡）。
   AiDjBatch desktopBatch() => _batch(0, 6);
 
-  /// 信息区当前展示的歌名行（歌名 · 歌手）。
-  Finder reasonTitleOf(int i) => find.text('Song $i · Artist');
+  /// 信息区当前展示的推荐理由（信息区只显示理由，歌名 / 歌手由卡片承担）。
+  Finder reasonOf(int i) => find.text('Reason $i');
 
   testWidgets('桌面：鼠标拖动卡片流，信息区跟随焦点换卡', (tester) async {
     generator.batchFactory = desktopBatch;
@@ -299,10 +301,9 @@ void main() {
 
     await pumpCarousel(tester);
 
-    // 初始焦点是首卡：信息区显示首张的歌名与理由。
+    // 初始焦点是首卡：信息区显示首张的理由。
     expect(find.byKey(const Key('aiDjReasonPanel')), findsOneWidget);
-    expect(reasonTitleOf(0), findsOneWidget);
-    expect(find.text('Reason 0'), findsOneWidget);
+    expect(reasonOf(0), findsOneWidget);
 
     // 鼠标拖动（桌面才放开 dragDevices）：松手吸附到下一张。
     await tester.drag(
@@ -312,9 +313,8 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    expect(reasonTitleOf(0), findsNothing);
-    expect(reasonTitleOf(1), findsOneWidget);
-    expect(find.text('Reason 1'), findsOneWidget);
+    expect(reasonOf(0), findsNothing);
+    expect(reasonOf(1), findsOneWidget);
   }, variant: TargetPlatformVariant.only(TargetPlatform.linux));
 
   testWidgets('桌面：滚轮翻卡（未到阈值不翻、到阈值翻一张）', (tester) async {
@@ -376,7 +376,6 @@ void main() {
     expect(backend.lastRequest?.tracks.first.title, 'Song 0');
     expect(backend.lastRequest?.startIndex, 1);
     // 点中的卡滚到焦点位：信息区跟着落到它身上。
-    expect(reasonTitleOf(1), findsOneWidget);
     expect(find.text('Reason 1'), findsOneWidget);
     expect(find.text('Reason 0'), findsNothing);
   }, variant: TargetPlatformVariant.only(TargetPlatform.linux));
@@ -426,5 +425,61 @@ void main() {
     expect(find.byType(AiDjPage), findsOneWidget);
     // 弹层 chrome 的 X 已去掉：关闭走遮罩 / Esc / 系统返回。
     expect(find.byIcon(Icons.close_rounded), findsNothing);
+  });
+
+  testWidgets('发现页搜索 tab：AI 推歌开启后空占位让位给推荐流', (tester) async {
+    await pumpProvider();
+    final search = SearchProvider(playbackProvider);
+    addTearDown(search.dispose);
+
+    Future<void> pumpTab() async {
+      tester.view.physicalSize = const Size(800, 1000);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(() {
+        tester.view.resetPhysicalSize();
+        tester.view.resetDevicePixelRatio();
+      });
+      await tester.pumpWidget(
+        MultiProvider(
+          providers: [
+            ChangeNotifierProvider<AiDjProvider>.value(value: provider),
+            ChangeNotifierProvider<PlaybackProvider>.value(
+                value: playbackProvider),
+            ChangeNotifierProvider<LibraryProvider>.value(
+                value: libraryProvider),
+            ChangeNotifierProvider<SearchProvider>.value(value: search),
+          ],
+          child: M3EMaterialApp(
+            data: M3EThemeData.fromMaterial(ThemeData()),
+            theme: ThemeData(),
+            locale: const Locale('zh'),
+            localizationsDelegates: const [
+              AppLocalizations.delegate,
+              ...GlobalMaterialLocalizations.delegates,
+            ],
+            supportedLocales: const [Locale('zh')],
+            home: const Scaffold(body: LibrarySearchTab()),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+    }
+
+    // 未开启：保留「输入关键词搜索歌曲」占位，推荐流不出现。
+    await pumpTab();
+    expect(find.text('输入关键词搜索歌曲'), findsOneWidget);
+    expect(find.byKey(const Key('aiDjGenerateCard')), findsNothing);
+
+    // 开启：占位让位给推荐流（空列表时是「生成推荐」引导卡）。
+    await provider.setEnabled(true);
+    await tester.pumpAndSettle();
+    expect(find.text('输入关键词搜索歌曲'), findsNothing);
+    expect(find.byKey(const Key('aiDjGenerateCard')), findsOneWidget);
+
+    // 关闭：占位回来。
+    await provider.setEnabled(false);
+    await tester.pumpAndSettle();
+    expect(find.text('输入关键词搜索歌曲'), findsOneWidget);
+    expect(find.byKey(const Key('aiDjGenerateCard')), findsNothing);
   });
 }

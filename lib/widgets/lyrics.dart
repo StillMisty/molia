@@ -461,8 +461,11 @@ class _LyricsWidgetState extends State<LyricsWidget>
     });
   }
 
-  /// FAB menu 项（歌词域操作）：换歌词 / 复制模式 / 歌词选择·海报 /
+  /// FAB menu 项（歌词域操作）：换歌词 / 复制模式 / 歌词海报 /
   /// 居中跟随（条件）；无歌词时 = 换歌词 + 歌词显示设置。
+  ///
+  /// 文案统一取「动作 + 对象」的短名（3–6 字）：胶囊宽度随文案生长 + 右缘对齐，
+  /// 长短悬殊时一眼就能看出参差，所以海报入口用「歌词海报」而不是整句说明。
   ///
   /// `M3EFabMenu` 要求 2–6 项且不支持 disabled：条件项只能增删，因此无歌词
   /// 时用「显示设置」凑下限，而不是展示禁用项。
@@ -504,7 +507,7 @@ class _LyricsWidgetState extends State<LyricsWidget>
       if (hasLyrics)
         M3EFabMenuItem(
           icon: const Icon(Icons.checklist_rounded),
-          label: l10n.selectLyricsTooltip,
+          label: l10n.lyricsPosterAction,
           onPressed: () => unawaited(_showLyricsSelectionPage()),
         ),
       // 居中/恢复跟随：仅「手动滚动暂停 + 有同步歌词」时入列。
@@ -1074,12 +1077,12 @@ class _LyricsWidgetState extends State<LyricsWidget>
                 ),
               ),
             ),
-            // 底部快捷操作栏：M3EFabMenu（底部左侧 FAB → 带文字 label 的
+            // 底部快捷操作栏：M3EFabMenu（底部右侧 FAB → 带文字 label 的
             // 操作胶囊）。常驻挂载 + 弹性滑入淡出（进度 0..1）；隐藏态
             // IgnorePointer 让手势穿透到歌词滚动，不与「到顶继续下拉」
             // 切换播放器竞争。
             Positioned(
-              left: _quickActionsScreenOffset,
+              right: _quickActionsScreenOffset,
               bottom: _quickActionsScreenOffset +
                   MediaQuery.of(context).padding.bottom,
               child: IgnorePointer(
@@ -1112,7 +1115,9 @@ class _LyricsWidgetState extends State<LyricsWidget>
                         key: const Key('lyricsQuickActions'),
                         controller: _fabMenuController,
                         size: M3EFabSize.regular,
-                        position: M3EFabMenuPosition.left,
+                        // 右下角：胶囊自右缘生长、右边缘对齐，多项 label
+                        // 长短不一时比左侧更整齐（也避开歌词左侧的阅读边）。
+                        position: M3EFabMenuPosition.right,
                         icon: const Icon(Icons.more_horiz_rounded),
                         items: _buildQuickActions(l10n),
                       ),

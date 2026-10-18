@@ -68,6 +68,9 @@ class _LyricsPosterPreviewPageState extends State<LyricsPosterPreviewPage> {
   /// 当前曲目是否带封面（「跟随封面」来源可用性）。
   bool get _hasArtwork => (widget.albumCoverUrl ?? '').isNotEmpty;
 
+  /// 底部设置行里值控件的统一宽度：右值成一列，行与行之间不参差。
+  static const double _settingValueWidth = 190;
+
   @override
   void initState() {
     super.initState();
@@ -361,77 +364,74 @@ class _LyricsPosterPreviewPageState extends State<LyricsPosterPreviewPage> {
     return '#${rgb.toRadixString(16).padLeft(6, '0').toUpperCase()}';
   }
 
-  /// 取色来源选择行。
-  Widget _buildColorSourceRow(AppLocalizations l10n, ColorScheme scheme) {
+  /// 设置行：左标签 + 右值控件（值控件同宽 [_settingValueWidth]、右对齐成一列）。
+  Widget _settingRow({required String label, required Widget value}) {
     return Row(
       children: [
-        Expanded(child: Text(l10n.posterColorSource)),
+        Expanded(child: Text(label)),
         SizedBox(
-          width: 190,
-          child: M3EDropdownMenu<PosterColorSource>(
-            items: [
-              M3EDropdownItem<PosterColorSource>(
-                label: l10n.posterColorSourceAppTheme,
-                value: PosterColorSource.appTheme,
-                selected: _colorSource == PosterColorSource.appTheme,
-              ),
-              M3EDropdownItem<PosterColorSource>(
-                label: l10n.posterColorSourceArtwork,
-                value: PosterColorSource.artwork,
-                selected: _colorSource == PosterColorSource.artwork,
-                // 无封面：置灰并提示（tooltip 不可用于 item，副文案由页面
-                // 状态保证：选中态不会被置灰项污染）。
-                disabled: !_hasArtwork,
-              ),
-              M3EDropdownItem<PosterColorSource>(
-                label: l10n.posterColorSourceCustom,
-                value: PosterColorSource.custom,
-                selected: _colorSource == PosterColorSource.custom,
-              ),
-            ],
-            singleSelect: true,
-            showChipAnimation: false,
-            onSelectionChanged: (items) {
-              if (items.isNotEmpty) _changeColorSource(items.first.value);
-            },
-          ),
+          width: _settingValueWidth,
+          child: Align(alignment: Alignment.centerRight, child: value),
         ),
       ],
     );
   }
 
-  /// 自定义色行：色块 + Hex，点击打开任意取色器。
-  Widget _buildCustomColorRow(AppLocalizations l10n, ColorScheme scheme) {
-    return Row(
-      children: [
-        Expanded(child: Text(l10n.posterColorCustomLabel)),
-        InkWell(
-          onTap: _isBusy ? null : _pickPosterColor,
-          borderRadius: BorderRadius.circular(8),
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Container(
-                  width: 20,
-                  height: 20,
-                  decoration: BoxDecoration(
-                    shape: BoxShape.circle,
-                    color: Color(_customSeed),
-                    border: Border.all(color: scheme.outlineVariant),
-                  ),
-                ),
-                const SizedBox(width: 8),
-                Text(
-                  _hexOf(_customSeed),
-                  style: Theme.of(context).textTheme.bodyMedium,
-                ),
-              ],
-            ),
-          ),
+  /// 取色来源选择控件（跟随应用主题 / 跟随封面 / 自定义色）。
+  Widget _buildColorSourcePicker(AppLocalizations l10n) {
+    return M3EDropdownMenu<PosterColorSource>(
+      items: [
+        M3EDropdownItem<PosterColorSource>(
+          label: l10n.posterColorSourceAppTheme,
+          value: PosterColorSource.appTheme,
+          selected: _colorSource == PosterColorSource.appTheme,
+        ),
+        M3EDropdownItem<PosterColorSource>(
+          label: l10n.posterColorSourceArtwork,
+          value: PosterColorSource.artwork,
+          selected: _colorSource == PosterColorSource.artwork,
+          // 无封面：置灰并提示（tooltip 不可用于 item，副文案由页面
+          // 状态保证：选中态不会被置灰项污染）。
+          disabled: !_hasArtwork,
+        ),
+        M3EDropdownItem<PosterColorSource>(
+          label: l10n.posterColorSourceCustom,
+          value: PosterColorSource.custom,
+          selected: _colorSource == PosterColorSource.custom,
         ),
       ],
+      singleSelect: true,
+      showChipAnimation: false,
+      onSelectionChanged: (items) {
+        if (items.isNotEmpty) _changeColorSource(items.first.value);
+      },
+    );
+  }
+
+  /// 自定义色控件：色块 + Hex，点击打开任意取色器。
+  Widget _buildCustomColorButton(ColorScheme scheme) {
+    return M3EButton(
+      style: M3EButtonStyle.text,
+      onPressed: _isBusy ? null : _pickPosterColor,
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Container(
+            width: 20,
+            height: 20,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              color: Color(_customSeed),
+              border: Border.all(color: scheme.outlineVariant),
+            ),
+          ),
+          const SizedBox(width: 8),
+          Text(
+            _hexOf(_customSeed),
+            style: Theme.of(context).textTheme.bodyMedium,
+          ),
+        ],
+      ),
     );
   }
 
@@ -488,58 +488,65 @@ class _LyricsPosterPreviewPageState extends State<LyricsPosterPreviewPage> {
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    // 第一行：字体选择（跟随应用字体 / 系统默认 / 设备字体）
-                    SizedBox(
-                      width: double.infinity,
-                      child: M3EButton.text(
+                    // 版式：设置项统一成「左标签 + 右值控件」的行，值控件同宽
+                    // 190 并右对齐成一列（字体不再是一个占满整宽、看起来像
+                    // CTA 的 text 按钮）；动作收成底部两个带文案的按钮——
+                    // 原来两个撑满半屏、只有图标的按钮看不出「保存 / 分享」。
+                    _settingRow(
+                      label: l10n!.posterFontLabel,
+                      value: M3EButton(
+                        style: M3EButtonStyle.text,
                         onPressed: _isLoading || _isOperating
                             ? null
                             : _changePosterFont,
                         child: Row(
                           mainAxisSize: MainAxisSize.min,
                           children: [
-                            const Icon(Icons.text_fields_rounded, size: 18),
-                            const SizedBox(width: 8),
                             Flexible(
                               child: Text(
-                                _posterFontLabel(
-                                    AppLocalizations.of(context)!),
+                                _posterFontLabel(l10n),
                                 maxLines: 1,
                                 overflow: TextOverflow.ellipsis,
                               ),
                             ),
+                            const SizedBox(width: 4),
+                            const Icon(Icons.expand_more_rounded, size: 18),
                           ],
                         ),
                       ),
                     ),
-                    const SizedBox(height: 12),
-                    // 第二行：取色来源（跟随应用主题 / 跟随封面 / 自定义色）
-                    _buildColorSourceRow(l10n!, theme.colorScheme),
+                    const SizedBox(height: 4),
+                    _settingRow(
+                      label: l10n.posterColorSource,
+                      value: _buildColorSourcePicker(l10n),
+                    ),
                     if (_colorSource == PosterColorSource.custom) ...[
-                      const SizedBox(height: 8),
-                      _buildCustomColorRow(l10n, theme.colorScheme),
+                      const SizedBox(height: 4),
+                      _settingRow(
+                        label: l10n.posterColorCustomLabel,
+                        value: _buildCustomColorButton(theme.colorScheme),
+                      ),
                     ],
                     const SizedBox(height: 12),
+                    Divider(color: theme.colorScheme.outlineVariant),
+                    const SizedBox(height: 12),
                     Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                       children: [
                         Expanded(
-                          child: M3EIconButton(
-                            variant: M3EIconButtonVariant.tonal,
-                            matchParentConstraints: true,
+                          child: M3EButton.tonal(
+                            key: const Key('posterSaveButton'),
                             onPressed: _isOperating ? null : _savePoster,
                             icon: const Icon(Icons.download_rounded),
-                            semanticLabel: AppLocalizations.of(context)!.saveChanges,
+                            label: Text(l10n.saveChanges),
                           ),
                         ),
-                        const SizedBox(width: 16),
+                        const SizedBox(width: 12),
                         Expanded(
-                          child: M3EIconButton(
-                            variant: M3EIconButtonVariant.filled,
-                            matchParentConstraints: true,
+                          child: M3EButton.filled(
+                            key: const Key('posterShareButton'),
                             onPressed: _isOperating ? null : _sharePoster,
                             icon: const Icon(Icons.share_rounded),
-                            semanticLabel: AppLocalizations.of(context)!.sharePoster,
+                            label: Text(l10n.sharePoster),
                           ),
                         ),
                       ],

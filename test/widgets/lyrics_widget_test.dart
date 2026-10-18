@@ -503,6 +503,32 @@ void main() {
     expect(fabIcons(tester), isNot(contains(Icons.comment_rounded)));
   });
 
+  testWidgets('歌词页操作 FAB menu：停靠右下角、项文案长短齐整', (tester) async {
+    await pumpLyrics(tester);
+    // 手动滚动暂停跟随 → 操作栏展开（收起态只验几何会被 IgnorePointer 掩盖）。
+    await dragUpSlowly(tester, -300);
+
+    // 位置：贴在歌词区的右下角（屏边距 16），不再压着左侧的阅读边。
+    final fab = tester.getRect(find.byKey(const Key('lyricsQuickActions')));
+    final lyrics = tester.getRect(find.byType(LyricsWidget));
+    expect(lyrics.right - fab.right, closeTo(16, 0.5), reason: 'FAB 贴右缘');
+    expect(lyrics.bottom - fab.bottom, closeTo(16, 0.5), reason: 'FAB 贴下缘');
+
+    // 文案：海报入口用短名（与其余项同档），不吃整句说明。
+    expect(
+      fabItems(tester).map((item) => item.label),
+      contains('歌词海报'),
+    );
+    expect(
+      fabItems(tester).map((item) => item.label),
+      isNot(contains('选择歌词片段生成海报或分享')),
+    );
+
+    await tester.tap(find.byKey(const Key('lyricsQuickActions')));
+    await tester.pumpAndSettle();
+    expect(find.text('歌词海报'), findsOneWidget);
+  });
+
   testWidgets('本地下载曲目：FAB menu 隐藏「换歌词」入口', (tester) async {
     await pumpLyrics(tester);
 

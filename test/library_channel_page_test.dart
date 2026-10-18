@@ -184,7 +184,7 @@ void main() {
 
     expect(discover.channelKey, 'kw');
     expect(find.text('酷我音乐'), findsOneWidget);
-  });
+  }, variant: TargetPlatformVariant.only(TargetPlatform.linux));
 
   testWidgets('重复点击资料库：当前 tab 列表回到顶部', (tester) async {
     // 歌单 tab 注入多页数据，列表可滚。
@@ -195,8 +195,12 @@ void main() {
     addTearDown(reselect.dispose);
     await pumpLibrary(tester, reselect: reselect);
 
-    // 无脚本：可见 tab = 热榜 / 歌单（默认渲染热榜）。切到歌单。
-    await tester.tap(find.text('歌单'));
+    // 无脚本：可见 tab = 热榜 / 歌单（默认渲染热榜）。切到歌单（按图标点：
+    // 触摸档 tab 只留图标，按文案找会因平台而异）。
+    await tester.tap(find.descendant(
+      of: find.byType(M3ETabs),
+      matching: find.byIcon(Icons.queue_music_rounded),
+    ));
     await tester.pumpAndSettle();
 
     final controller = tester
@@ -214,6 +218,33 @@ void main() {
     await tester.pumpAndSettle();
     expect(controller.offset, 0, reason: '壳层重复点击应回到顶部');
   });
+
+  testWidgets('触摸端：资料页 tab 只留图标（文案走无障碍名）', (tester) async {
+    search = buildSearch(const []);
+    await pumpLibrary(tester, width: 400);
+
+    // 触摸端窄屏上「渠道下拉 + 三 tab」挤在一条工具行里：tab 只留图标，
+    // 文案不渲染为可见文本（仍挂在 tab 的无障碍名上）。
+    expect(find.text('热榜'), findsNothing);
+    expect(find.text('歌单'), findsNothing);
+
+    Finder tabIcon(IconData icon) => find.descendant(
+          of: find.byType(M3ETabs),
+          matching: find.byIcon(icon),
+        );
+    expect(tabIcon(Icons.leaderboard_rounded), findsOneWidget);
+    expect(tabIcon(Icons.queue_music_rounded), findsOneWidget);
+
+    final semantics = tester.ensureSemantics();
+    expect(
+      find.bySemanticsLabel('热榜'),
+      findsWidgets,
+      reason: '触摸档 tab 的无障碍名仍是文案',
+    );
+    expect(find.bySemanticsLabel('歌单'), findsWidgets);
+    // 句柄必须在用例体内释放（框架在用例结束时校验，tearDown 太晚）。
+    semantics.dispose();
+  }, variant: TargetPlatformVariant.only(TargetPlatform.android));
 
   testWidgets('全部渠道停用：展示空态引导', (tester) async {
     search = buildSearch(const []);
@@ -258,7 +289,7 @@ void main() {
 
     expect(discover.channelKey, 'wy');
     expect(find.text('热榜'), findsOneWidget);
-  });
+  }, variant: TargetPlatformVariant.only(TargetPlatform.linux));
 
   testWidgets('搜索源跟随渠道：挂载时将搜索源同步到当前渠道', (tester) async {
     await activateScript(tester, sources: {
