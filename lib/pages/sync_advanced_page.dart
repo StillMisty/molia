@@ -26,11 +26,8 @@ class SyncAdvancedPage extends StatefulWidget {
   State<SyncAdvancedPage> createState() => _SyncAdvancedPageState();
 }
 
-/// 本机信息（地址列表）：与端口 / 开关同源，改动后重建。
-typedef _LocalEndpoints = List<LocalEndpoint>;
-
 class _SyncAdvancedPageState extends State<SyncAdvancedPage> {
-  late Future<_LocalEndpoints> _endpoints;
+  late Future<List<LocalEndpoint>> _endpoints;
   Object? _endpointsSignature;
 
   @override
@@ -65,7 +62,7 @@ class _SyncAdvancedPageState extends State<SyncAdvancedPage> {
         title: Text(l10n.syncAdvancedTitle),
         automaticallyImplyLeading: true,
       ),
-      body: FutureBuilder<_LocalEndpoints>(
+      body: FutureBuilder<List<LocalEndpoint>>(
         future: _endpoints,
         builder: (context, snapshot) => ListView(
           padding: const EdgeInsets.all(kSettingsPadding),
@@ -86,7 +83,7 @@ class _SyncAdvancedPageState extends State<SyncAdvancedPage> {
     BuildContext context,
     SyncProvider provider,
     AppLocalizations l10n,
-    _LocalEndpoints? endpoints,
+    List<LocalEndpoint>? endpoints,
   ) {
     final passphrase = provider.passphrase;
     return SettingsSectionCard(
