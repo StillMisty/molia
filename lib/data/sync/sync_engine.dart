@@ -148,6 +148,9 @@ class SyncEngine extends ChangeNotifier implements SyncSchedulerHost {
     if (journal == null) return serveSnapshot();
     final baseSeq = await journal.baseSeq();
     if (since < baseSeq) return serveSnapshot();
+    // 对端游标超前本机头部 = 本机日志被重置（派生状态随版本重建）：
+    // 继续给增量会让对端等一个永远不会出现的 seq，必须回全量让它重新引导。
+    if (since > await journal.headSeq()) return serveSnapshot();
     final snapshot = _lastEnvelope ??
         await _buildLiveSnapshot(categories: _state.enabledCategories);
     final entries = await journal.window(since: since);
@@ -1079,14 +1082,17 @@ class SyncEngine extends ChangeNotifier implements SyncSchedulerHost {
             }
           }
         }
-        if (envelope.journalHead > nextCursor) nextCursor = envelope.journalHead;
+        // 全量快照 = 权威全量视图：游标落在快照覆盖位置（**不取最大**）。
+        // 对端日志重置时它的头部会变小，取最大会让游标悬空——之后 seq 更小
+        // 的变更被永久跳过（静默分歧）。回退导致的重取是幂等的。
+        nextCursor = envelope.journalHead;
         fullPulledAt = now;
       }
-      if (nextCursor > cursor) {
-        final previous = pendingCursors[peerId];
-        pendingCursors[peerId] = previous == null || nextCursor > previous
-            ? nextCursor
-            : previous;
+      if (nextCursor != cursor) {
+        // 同一轮同一对端可能有多份载荷（拉取 + 入站推送）：以**后处理**的
+        // 那份判定为准（全量快照的权威位置覆盖此前的增量推进），因此这里不做
+        // 「取最大」——那会让重置后的回退永远提交不出去。
+        pendingCursors[peerId] = nextCursor;
       }
       if (!gap) {
         // 对端载荷里的 ack 回执：它已消费本机 journal 到该位置（用于 compact）。
