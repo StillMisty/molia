@@ -394,3 +394,23 @@
     后回调），在同一帧绘制前用真实宽度重摆；`DesktopLyricsOutput.start` 同步
     按配置去重（`controls` 是每次现取的 unmodifiable map，按键值比较）——
     不去重时任何设置变化都会触发重建，会放大这个闪动。
+50. **接线型缺陷：引擎漏接增量日志，测试全绿而生产跑了两年的全量模式**：
+    `SyncEngine` 的 `journal` 是可空参数（未注入时仍正确，只是退化为「每轮全量
+    快照」：全库指纹、整库加密推送、`serveJournal` 退化为全量、`compact` 从不
+    执行因而 `sync_journal` 只写不裁）。组合根 `buildSyncStack` 从未传它，
+    而引擎测试各自注入 journal（或不需要）、组合根冒烟测试又没覆盖
+    `buildSyncStack`——缺陷因此长期不可见。教训与契约：
+    - 「可选注入的降级路径」必须有**组合根级**断言（现由
+      `SyncEngine.incrementalEnabled` + `test/app/bootstrap_smoke_test.dart`
+      的 `syncStack` 用例守住），不能只靠单元测试；
+    - 新增此类「注入了才走快路」的参数时，同步补一条组合根断言；
+    - 症状排查入口：同步日志页每轮 `durationMs` 与 `bytesOut`（全量模式下
+      任何本地变更都会重传整库）、`sync_journal` 表行数只增不减。
+51. **派生状态（journal / known / 游标）允许重建，但重建后必须回退游标语义**：
+    升级 / 迁移清空 `sync_journal` 后本机头部归零，而各对端记录的游标还是旧值
+    （如 5000）：`serveJournal` 会给出空窗口，对端判成「没有缺口、无需拉取」，
+    之后新增变更的 seq（1、2、3…）全部小于游标——**永久静默跳过**。修复在两侧：
+    发送侧 `since > head` → 回全量快照（让对端重新引导）；接收侧全量快照把
+    游标**落在快照覆盖位置**（不是取最大），且待提交游标允许回退。回归用例见
+    `test/sync_pipeline_reset_test.dart`。任何将来「清日志 / 换载荷格式」的改动
+    都要带上这条语义。

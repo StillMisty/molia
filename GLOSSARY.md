@@ -433,7 +433,7 @@
 
 - **Sync envelope（同步快照）** — `lib/domain/models/device_sync.dart`：
   一次交换的完整视图（设备身份 + 各类别记录）；全量合并模型，设备间互换快照后
-  逐键取新，无增量/版本向量（见 ADR-0003）。协议自始为 v2：快照的 `v` 字段
+  逐键取新，无增量/版本向量（见 ADR-0003）。协议自始为 v3：快照的 `v` 字段
   自描述格式，当前没有按版本号的分支 / 协商 / 降级。
 - **Sync record（同步记录）** — 快照最小单元：`key + version + data`；`version`
   是 `SyncVersion` 三元组，删除表示为 `deleted` 墓碑记录（墓碑另带真实删除
