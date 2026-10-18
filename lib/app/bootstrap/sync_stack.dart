@@ -139,6 +139,9 @@ Future<SyncStack> buildSyncStack({
     passphraseProvider: syncState.readPassphrase,
     configProvider: () => syncState.webdav,
     passwordProvider: syncState.readWebdavPassword,
+    // 块的裁剪边界：本机日志只在所有对端 ack 之后前移 baseSeq，
+    // 因此 `end <= baseSeq` 的远端块可以安全删除。
+    journalBaseSeqProvider: library.syncJournal.baseSeq,
     ignoredPeersProvider: syncState.isPeerIgnored,
   );
   final syncEngine = SyncEngine(
