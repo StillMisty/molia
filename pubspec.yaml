@@ -3,7 +3,7 @@ description: "Molia —— 多音源本地音乐播放器"
 
 publish_to: "none" # Remove this line if you wish to publish to pub.dev
 
-version: 0.1.0-beta.12+1
+version: 0.1.0-beta.13+1
 
 environment:
   sdk: ^3.5.4
