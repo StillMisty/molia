@@ -12,7 +12,8 @@ import 'seek_preview.dart';
 /// - 松手提交不看滑杆回调的入参（快速单击时它是上一帧的旧位置），落点由
 ///   [SeekPreviewController.commit] 按预览值决定；
 /// - 播放中用波浪滑杆，暂停切平直：波浪动画不会停，与暂停态自相矛盾；
-/// - 气泡 / 侧时间统一走 [durationText]，无效值兜 `0:00` / `--:--`；
+/// - 两侧固定宽度的时间文字是版式的一部分（当前值 / 总时长），两处宿主一致，
+///   不给宿主开关；气泡 / 侧时间统一走 [durationText]，无效值兜 `0:00` / `--:--`；
 /// - 外层 `RepaintBoundary` 是硬需求：波浪滑杆内部是 `repeat()` 的无限
 ///   动画，不隔离的话播放中每次波形重绘都会把宿主整块卷进同一图层重光栅化。
 class SeekBar extends StatelessWidget {
@@ -23,7 +24,6 @@ class SeekBar extends StatelessWidget {
     required this.durationMs,
     required this.isPlaying,
     required this.hasTrack,
-    this.showTimeLabels = false,
   });
 
   final SeekPreviewController controller;
@@ -34,9 +34,6 @@ class SeekBar extends StatelessWidget {
   final int durationMs;
   final bool isPlaying;
   final bool hasTrack;
-
-  /// 显示左右时间文字（桌面底栏版式）；播放页只显示拖动气泡。
-  final bool showTimeLabels;
 
   @override
   Widget build(BuildContext context) {
@@ -83,7 +80,6 @@ class SeekBar extends StatelessWidget {
                       onChanged: onChanged,
                       onChangeEnd: onChangeEnd,
                     );
-              if (!showTimeLabels) return slider;
 
               // tabular figures：等宽数字避免每秒文本宽度变化把滑杆左右推挤。
               final style = Theme.of(context).textTheme.labelSmall?.copyWith(

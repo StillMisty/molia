@@ -141,7 +141,6 @@ void main() {
       WidgetTester tester, {
       bool isPlaying = true,
       bool hasTrack = true,
-      bool showTimeLabels = false,
     }) {
       return tester.pumpWidget(
         MaterialApp(
@@ -152,7 +151,6 @@ void main() {
               durationMs: 30000,
               isPlaying: isPlaying,
               hasTrack: hasTrack,
-              showTimeLabels: showTimeLabels,
             ),
           ),
         ),
@@ -194,7 +192,7 @@ void main() {
     });
 
     testWidgets('无曲目禁用且侧时间显示占位', (tester) async {
-      await pumpBar(tester, hasTrack: false, showTimeLabels: true);
+      await pumpBar(tester, hasTrack: false);
       final widget = slider(tester);
       expect(widget.enabled, isFalse);
       expect(widget.onChanged, isNull);
@@ -202,7 +200,7 @@ void main() {
     });
 
     testWidgets('侧时间文字显示当前值与总时长', (tester) async {
-      await pumpBar(tester, showTimeLabels: true);
+      await pumpBar(tester);
       expect(find.text('0:05'), findsOneWidget);
       expect(find.text('0:30'), findsOneWidget);
     });

@@ -84,11 +84,10 @@ class DesktopNowPlayingBar extends StatelessWidget {
               onOpenPlayer: onOpenPlayer,
             ),
           ),
-          const Expanded(flex: 4, child: _BarControls()),
-          Expanded(
-            flex: 3,
-            child: _BarActions(onOpenQueue: onOpenQueue),
-          ),
+          // 中区（传输三键 + 进度排）吃右区之外的余量：右区按内容宽贴右缘，
+          // 省下的空白全归进度排——进度条是这条底栏上唯一需要宽度的控件。
+          const Expanded(flex: 6, child: _BarControls()),
+          _BarActions(onOpenQueue: onOpenQueue),
         ],
       ),
     );
@@ -337,8 +336,8 @@ class _BarControls extends StatelessWidget {
 /// 可拖进度排：当前时间 + 波浪滑杆 + 总时长。
 ///
 /// seek 语义（拖动预览 / 提交等待 / 换曲清理）与播放页共用
-/// `widgets/seek_preview.dart` + `widgets/seek_bar.dart`；宿主只负责
-/// 生命周期与时间标签版式。
+/// `widgets/seek_preview.dart` + `widgets/seek_bar.dart`；宿主只负责生命周期，
+/// 取值与时间标签版式都在共享模块里。
 class _BarSeekSlider extends StatefulWidget {
   const _BarSeekSlider();
 
@@ -383,13 +382,15 @@ class _BarSeekSliderState extends State<_BarSeekSlider> {
         durationMs: state.durationMs,
         isPlaying: state.isPlaying,
         hasTrack: state.hasTrack,
-        showTimeLabels: true,
       ),
     );
   }
 }
 
 /// 右区：播放模式 + 音量 + 队列入口。
+///
+/// 按内容宽收口（不吃 Expanded）：底栏的余量让给中区进度排，见
+/// [DesktopNowPlayingBar.build]。
 class _BarActions extends StatelessWidget {
   const _BarActions({required this.onOpenQueue});
 
@@ -402,7 +403,7 @@ class _BarActions extends StatelessWidget {
     );
     final l10n = AppLocalizations.of(context)!;
     return Row(
-      mainAxisAlignment: MainAxisAlignment.end,
+      mainAxisSize: MainAxisSize.min,
       children: [
         M3EIconButton(
           variant: M3EIconButtonVariant.standard,
