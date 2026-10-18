@@ -20,7 +20,7 @@ import '../../data/sync/adapters/prefs_sync_adapter.dart';
 import '../../data/sync/adapters/script_sync_adapter.dart';
 import '../../data/sync/adapters/session_sync_adapter.dart';
 import '../../data/sync/adapters/statistics_sync_adapter.dart';
-import '../../data/sync/sync_crypto.dart';
+import '../../data/sync/sync_codec_isolate.dart';
 import '../../data/sync/sync_engine.dart';
 import '../../data/sync/sync_known_store.dart';
 import '../../data/sync/sync_scheduler.dart';
@@ -55,7 +55,9 @@ Future<SyncStack> buildSyncStack({
 }) async {
   final sourceManager = catalog.sourceManager;
   final syncState = library.syncState;
-  final syncCodec = SyncCodec();
+  // 编解码在 worker isolate 里跑（载荷编码 / 压缩 / PBKDF2 / AES 都是纯计算，
+  // 放主 isolate 会让 UI 在首轮与整库快照时卡住数秒）。
+  final syncCodec = IsolateSyncCodecPort();
   // 本机地址枚举（设置页地址列表 / 配对码 / 探测 addrs 三处共用同一口径）。
   final localEndpoints = LocalEndpointsService();
   // 脚本同步的保留键：音源类别的设置键（避免脚本墓碑与设置键同名冲突）。
@@ -179,6 +181,7 @@ Future<SyncStack> buildSyncStack({
     scheduler: scheduler,
     lanPermission: lanPermission,
     localEndpoints: localEndpoints,
+    codec: syncCodec,
   );
 
   // 可选子系统（跨设备同步）初始化失败不允许阻断启动：runApp 之前任何

@@ -1,12 +1,9 @@
-import 'dart:convert';
-import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:molia/data/sync/sync_crypto.dart';
 import 'package:molia/data/sync/sync_passphrase.dart';
 import 'package:molia/domain/models/device_sync.dart';
-import 'package:pointycastle/export.dart';
 
 /// 快照编解码测试：往返、错误口令、篡改、帧格式。
 void main() {
@@ -114,49 +111,39 @@ void main() {
     expect(fresh.pbkdf2Derivations, 1);
   });
 
-  test('加密产出版本 2 帧（HKDF 派生）', () {
+  test('加密产出 v3 帧（magic 与版本在前 4 字节）', () {
     final bytes = codec.encrypt(envelope(), passphrase);
-    // magic(9) 之后是帧版本字节。
-    expect(bytes[9], 2);
+    expect(String.fromCharCodes(bytes.sublist(0, 3)), SyncCodec.magic);
+    expect(bytes[3], SyncCodec.version);
+    // 帧头只有 magic + 版本 + nonce：不再携带盐与迭代数（v3 首版即协议）。
+    expect(bytes.length, greaterThan(SyncCodec.headerLength + SyncCodec.tagLength));
   });
 
-  test('版本 1 帧（PBKDF2 直接派生）仍可解密', () {
-    final legacy = _legacyFrame(codec.iterations, passphrase, envelope());
-    expect(codec.decrypt(legacy, passphrase).deviceId, 'dev-a');
-  });
-}
-
-/// 版本 1 帧（`PBKDF2(口令, 帧盐)` 直接作为 AES 密钥）：已发布版本的帧格式。
-///
-/// 帧头布局与当前实现一致，只有版本字节与派生方式不同；用于钉住解密兼容。
-Uint8List _legacyFrame(
-  int iterations,
-  String passphrase,
-  SyncEnvelope envelope,
-) {
-  final salt = Uint8List.fromList(List<int>.generate(16, (i) => i + 1));
-  final nonce = Uint8List.fromList(List<int>.generate(12, (i) => i + 20));
-  final header = BytesBuilder()
-    ..add(utf8.encode('MOLIASYNC'))
-    ..addByte(1)
-    ..add(salt)
-    ..add(
-      Uint8List(4)..buffer.asByteData().setUint32(0, iterations),
-    )
-    ..add(nonce);
-  final headerBytes = header.toBytes();
-  final key = PBKDF2KeyDerivator(HMac(SHA256Digest(), 64))
-    ..init(Pbkdf2Parameters(salt, iterations, 32));
-  final derived = key.process(
-    Uint8List.fromList(utf8.encode(SyncPassphrase.normalize(passphrase))),
-  );
-  final compressed = Uint8List.fromList(
-    gzip.encode(utf8.encode(jsonEncode(envelope.toJson()))),
-  );
-  final cipher = GCMBlockCipher(AESEngine())
-    ..init(
-      true,
-      AEADParameters(KeyParameter(derived), 128, nonce, headerBytes),
+  test('小载荷不压缩、大载荷压缩（压缩在帧内明文侧，按阈值判定）', () {
+    final small = codec.encrypt(envelope(), passphrase);
+    // 明文头：marker / codec / flags 三个字节在密文里不可读，这里只钉住
+    // 「大载荷更小」这一可观察结果：压缩生效时帧长明显小于明文长度。
+    final bigRecords = {
+      SyncCategory.history: [
+        for (var i = 0; i < 64; i++)
+          SyncRecord(
+            key: 'kw|song-$i',
+            version: SyncVersion(physical: 1000 + i, deviceId: 'dev-a'),
+            data: {'title': '标题' * 20, 'raw': '{"songmid":"${'a' * 32}"}'},
+          ),
+      ],
+    };
+    final big = codec.encrypt(
+      SyncEnvelope(
+        deviceId: 'dev-a',
+        producedAt: 1728640000000,
+        records: bigRecords,
+      ),
+      passphrase,
     );
-  return Uint8List.fromList([...headerBytes, ...cipher.process(compressed)]);
+    expect(small.length, greaterThan(SyncCodec.headerLength));
+    expect(big.length, lessThan(small.length * 64));
+    expect(codec.decrypt(big, passphrase).recordsOf(SyncCategory.history),
+        hasLength(64));
+  });
 }

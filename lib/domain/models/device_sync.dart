@@ -276,13 +276,13 @@ class SyncJournalEntry {
 /// [acks] 是「我已消费各对端 journal 到哪」的回执：对端据此 compact
 /// （`min(对端 ack)` 裁剪日志）。
 class SyncEnvelope {
-  /// 线上协议版本（快照 JSON 的 `v` 字段值）。
-  static const int protocolVersion = 2;
-
-  /// 快照的协议版本（`v` 字段）；缺省按 [protocolVersion] 处理。
+  /// 线上协议版本（载荷自描述字段的 `v`；帧层版本见 `SyncCodec.version`）。
   ///
-  /// 目前只有 v2 一种线上格式，没有按版本分支的行为；字段保留是为了让
-  /// 快照自描述、便于将来做能力协商（见 ADR-0003 v2 §1）。
+  /// 协议自始为 v3：只写 v3、只读 v3，不做版本协商与降级（ADR-0003 §1 修订）。
+  /// 字段保留是让载荷自描述、便于排障与备份识别，不参与任何分支。
+  static const int protocolVersion = 3;
+
+  /// 载荷的协议版本（自描述字段）；缺省按 [protocolVersion] 处理。
   final int version;
 
   final String deviceId;

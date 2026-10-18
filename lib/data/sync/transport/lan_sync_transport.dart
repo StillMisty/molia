@@ -9,6 +9,7 @@ import '../../../domain/models/device_sync.dart';
 import '../../../domain/ports/sync_transport.dart';
 import '../../../utils/device_id.dart';
 import '../../../utils/peer_address.dart';
+import '../sync_codec_port.dart';
 import '../sync_crypto.dart';
 
 /// 局域网直连传输：UDP 探测（IPv4 广播 + IPv6 组播 + 单播）发现 +
@@ -49,7 +50,7 @@ class LanSyncTransport implements SyncTransport {
   LanSyncTransport({
     required this.deviceId,
     required String Function() deviceName,
-    required SyncCodec codec,
+    required SyncCodecPort codec,
     required Future<String?> Function() passphraseProvider,
     required Future<SyncEnvelope> Function() snapshotProvider,
     Future<SyncEnvelope> Function(int since)? journalProvider,
@@ -110,7 +111,7 @@ class LanSyncTransport implements SyncTransport {
 
   final String deviceId;
   final String Function() _deviceName;
-  final SyncCodec _codec;
+  final SyncCodecPort _codec;
   final Future<String?> Function() _passphraseProvider;
   final Future<SyncEnvelope> Function() _snapshotProvider;
 
@@ -430,7 +431,7 @@ class LanSyncTransport implements SyncTransport {
       }
       bytesIn += bytes.length;
       try {
-        final envelope = _codec.decrypt(bytes, passphrase);
+        final envelope = await _codec.decrypt(bytes, passphrase);
         envelopes.add(envelope);
         final fingerprint = envelope.snapshotId.isNotEmpty
             ? envelope.snapshotId
@@ -493,7 +494,7 @@ class LanSyncTransport implements SyncTransport {
         error: SyncIssue(code: SyncIssueCode.noPassphrase),
       );
     }
-    final payload = _codec.encrypt(envelope, passphrase);
+    final payload = await _codec.encrypt(envelope, passphrase);
     final path = envelope.isDelta ? journalPath : snapshotPath;
     final succeededIds = <String>[];
     final failedIds = <String>[];
@@ -942,7 +943,7 @@ class LanSyncTransport implements SyncTransport {
           final envelope = path == journalPath
               ? await _journalFor(request.uri.queryParameters['since'])
               : await _snapshotProvider();
-          final payload = _codec.encrypt(envelope, passphrase);
+          final payload = await _codec.encrypt(envelope, passphrase);
           request.response.headers.contentType = ContentType.binary;
           request.response.add(payload);
         }
@@ -956,7 +957,7 @@ class LanSyncTransport implements SyncTransport {
             request.response.statusCode = HttpStatus.serviceUnavailable;
           } else {
             try {
-              final envelope = _codec.decrypt(bytes, passphrase);
+              final envelope = await _codec.decrypt(bytes, passphrase);
               if (!_incoming.isClosed) _incoming.add(envelope);
             } on SyncCryptoException {
               request.response.statusCode = HttpStatus.badRequest;

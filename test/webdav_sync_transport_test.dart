@@ -2,6 +2,7 @@ import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:flutter_test/flutter_test.dart';
+import 'package:molia/data/sync/sync_codec_port.dart';
 import 'package:molia/data/sync/sync_crypto.dart';
 import 'package:molia/data/sync/sync_state_store.dart';
 import 'package:molia/data/sync/transport/webdav_sync_transport.dart';
@@ -12,6 +13,8 @@ import 'package:molia/domain/ports/sync_transport.dart';
 void main() {
   const passphrase = 'ABCD-EFGH-JKLM-NPQR-STUV-WXYZ-2345-6789';
   final codec = SyncCodec(iterations: 1000);
+  // 传输只依赖编解码端口；单测用进程内实现（worker isolate 由专门测试覆盖）。
+  final codecPort = InlineSyncCodecPort(codec);
 
   late FakeWebDavServer server;
 
@@ -47,7 +50,7 @@ void main() {
   }) =>
       WebDavSyncTransport(
         deviceId: deviceId,
-        codec: codec,
+        codec: codecPort,
         passphraseProvider: () async => passphraseOverride ?? passphrase,
         configProvider: () => WebDavConfig(
           baseUrl: server.baseUrl,
@@ -99,7 +102,7 @@ void main() {
   test('未配置 / 未启动时为空操作', () async {
     final unconfigured = WebDavSyncTransport(
       deviceId: 'devX',
-      codec: codec,
+      codec: codecPort,
       passphraseProvider: () async => passphrase,
       configProvider: () => const WebDavConfig(),
       passwordProvider: () async => '',

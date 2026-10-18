@@ -8,6 +8,7 @@ import 'package:logging/logging.dart';
 import '../../../domain/models/device_sync.dart';
 import '../../../domain/ports/sync_transport.dart';
 import '../../http/app_dio.dart';
+import '../sync_codec_port.dart';
 import '../sync_crypto.dart';
 import '../sync_state_store.dart';
 
@@ -38,7 +39,7 @@ class WebDavHttpException implements Exception {
 class WebDavSyncTransport implements SyncTransport {
   WebDavSyncTransport({
     required this.deviceId,
-    required SyncCodec codec,
+    required SyncCodecPort codec,
     required Future<String?> Function() passphraseProvider,
     required WebDavConfig Function() configProvider,
     required Future<String?> Function() passwordProvider,
@@ -63,7 +64,7 @@ class WebDavSyncTransport implements SyncTransport {
   static const int maxSnapshotBytes = 32 * 1024 * 1024;
 
   final String deviceId;
-  final SyncCodec _codec;
+  final SyncCodecPort _codec;
   final Future<String?> Function() _passphraseProvider;
   final WebDavConfig Function() _configProvider;
   final Future<String?> Function() _passwordProvider;
@@ -213,7 +214,7 @@ class WebDavSyncTransport implements SyncTransport {
       bytesIn += bytes.length;
       SyncEnvelope envelope;
       try {
-        envelope = _codec.decrypt(bytes, passphrase);
+        envelope = await _codec.decrypt(bytes, passphrase);
       } on SyncCryptoException {
         // 口令不同或文件损坏：跳过（不记版本，下轮重试）。
         failed++;
@@ -241,7 +242,7 @@ class WebDavSyncTransport implements SyncTransport {
         final fallback = await _getFile(config, snapshotFile.name);
         if (fallback != null) {
           try {
-            final full = _codec.decrypt(fallback, passphrase);
+            final full = await _codec.decrypt(fallback, passphrase);
             if (full.deviceId == device) {
               bytesIn += fallback.length;
               if (snapshotFile.version.isNotEmpty) {
@@ -318,7 +319,7 @@ class WebDavSyncTransport implements SyncTransport {
     }
     try {
       await _ensureDir(config);
-      final payload = _codec.encrypt(envelope, passphrase);
+      final payload = await _codec.encrypt(envelope, passphrase);
       // 增量窗口与全量快照分开文件：日常只重写增量（体积 ∝ 变更量），
       // 全量快照按需发布（首次引导 / 日志超硬上限）。
       final name = envelope.isDelta

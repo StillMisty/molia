@@ -8,6 +8,7 @@ import 'package:pointycastle/export.dart';
 
 import '../../domain/models/device_sync.dart';
 import 'sync_passphrase.dart';
+import 'sync_payload.dart';
 
 /// 快照解密失败（口令不符 / 数据损坏 / 非本协议数据）。
 class SyncCryptoException implements Exception {
@@ -19,56 +20,53 @@ class SyncCryptoException implements Exception {
   String toString() => 'SyncCryptoException($message)';
 }
 
-/// 快照编解码：gzip(JSON) → 口令派生密钥 → AES-256-GCM。
+/// 同步帧编解码（协议 v3）：载荷编码 → 可选压缩 → AES-256-GCM。
 ///
-/// 帧结构（解密所需参数全部随帧携带，口令是唯一秘密）：
-/// `magic(9) | version(1) | salt(16) | iterations(4, BE) | nonce(12) | 密文+GCM tag`
-/// 头部作为 AAD 参与认证。
+/// 帧布局：`magic(3, 'MSY') | version(1, =3) | nonce(12) | 密文 + GCM tag`，
+/// 头部作为 AAD 参与认证。明文载荷由 [SyncPayload] 编解码：
+/// `marker(1, =3) | codec(1) | flags(1) | body`（flags bit0 = body 为
+/// raw deflate）。
 ///
-/// 密钥派生分两级，消除「每份快照一次 PBKDF2(120k)」的开销：
-/// - 根密钥 = PBKDF2(口令, 应用级固定盐, 迭代数)，**会话内按（口令, 迭代数）
-///   缓存一次**；
-/// - 帧密钥 = HKDF(根密钥, 帧盐)（RFC 5869，info 固定）。
+/// 密钥派生两级，消除「每份快照一次 PBKDF2」：
+/// - 根密钥 = PBKDF2(口令, 应用级固定盐, [iterations])，**会话内按口令缓存一次**；
+/// - 帧密钥 = HKDF(根密钥, 帧 nonce, 固定 info)。
 ///
-/// 帧盐仍是随机值（每帧唯一），迭代数照常随帧携带并校验；PBKDF2 用固定盐
-/// 不降低离线猜口令成本（帧盐本来就随密文公开），而接收方一轮内 N 份快照
-/// 只做一次 PBKDF2。
+/// v3 不再随帧携带盐与迭代数：帧 nonce 已保证 (key, nonce) 唯一；旧帧的逐帧
+/// 盐只是早已删除的 v1 派生路径的遗留（协议自始为 v3，不读旧帧，见 ADR-0003 §1）。
 ///
-/// 帧版本决定密钥派生路径（帧布局与解密语义不变）：
-/// - 版本 1：`PBKDF2(口令, 帧盐)` 直接派生——v0.1.0-beta.7 及更早版本产出的
-///   帧格式，保留解密；
-/// - 版本 2：上述两级派生；加密只产出版本 2。
+/// 小载荷（< [compressThreshold]）不压缩：压缩头与无效匹配会让几百字节的
+/// 载荷反而变大（实测单条变更 239B → 250B），压缩开销也白付。
 class SyncCodec {
   SyncCodec({this.iterations = 120000});
 
-  static const String _magic = 'MOLIASYNC';
+  /// 帧标识与版本（`protocolVersion` 的线上表达）。
+  static const String magic = 'MSY';
+  static const int version = 3;
 
-  /// 帧版本 1：`PBKDF2(口令, 帧盐)` 直接派生（已发布帧格式，保留解密）。
-  static const int _versionPbkdf2 = 1;
+  static const int nonceLength = 12;
+  static const int tagLength = 16;
+  static const int headerLength = 3 + 1 + nonceLength;
 
-  /// 帧版本 2：根密钥（PBKDF2 缓存）+ HKDF 帧密钥。
-  static const int _versionHkdf = 2;
+  /// 明文头：marker | payloadCodec | flags。
+  static const int payloadMarker = 3;
+  static const int payloadHeaderLength = 3;
+  static const int _flagDeflated = 0x01;
 
-  static const int _saltLength = 16;
-  static const int _iterationsLength = 4;
-  static const int _nonceLength = 12;
-  static const int _keyLength = 32;
-  static const int _headerLength =
-      _magic.length + 1 + _saltLength + _iterationsLength + _nonceLength;
+  /// 低于该长度不压缩。
+  static const int compressThreshold = 256;
 
-  /// 根密钥的 PBKDF2 固定盐与帧密钥的 HKDF info（同属协议常量，随帧版本 2）。
-  static final Uint8List _rootSalt = Uint8List.fromList(
-    utf8.encode('molia-sync-root-v2'),
-  );
-  static final Uint8List _frameInfo = Uint8List.fromList(
-    utf8.encode('molia-sync-frame-v2'),
-  );
-
-  /// PBKDF2 迭代次数（加密时写入帧头；解密按帧头值执行）。
+  /// PBKDF2 迭代数（协议常量：v3 只有一种帧，不再随帧携带）。
   final int iterations;
 
-  /// 根密钥缓存：口令 → (迭代数, 密钥)。口令通常只有一组，缓存上限兜底
-  /// 异常输入（对端口令不同的帧）不会让缓存无界增长。
+  /// 根密钥盐与帧密钥 info（协议常量，随帧版本固定）。
+  static final Uint8List _rootSalt = Uint8List.fromList(
+    utf8.encode('molia-sync-root-v3'),
+  );
+  static final Uint8List _frameInfo = Uint8List.fromList(
+    utf8.encode('molia-sync-frame-v3'),
+  );
+
+  /// 根密钥缓存：口令 → (迭代数, 密钥)。上限兜底异常输入（对端口令不同的帧）。
   static const int _maxCachedRoots = 4;
   final Map<String, ({int iterations, Uint8List key})> _rootKeys = {};
   int _pbkdf2Derivations = 0;
@@ -82,87 +80,96 @@ class SyncCodec {
   @visibleForTesting
   int get decryptions => _decryptions;
 
-  /// 加密快照（帧版本 2）。
-  Uint8List encrypt(SyncEnvelope envelope, String passphrase) {
+  /// 编码一份载荷（帧）：
+  /// `magic + 版本 + nonce | AES-256-GCM(明文头 + 载荷)`。
+  Uint8List encrypt(
+    SyncEnvelope envelope,
+    String passphrase, {
+    int payloadCodec = SyncPayload.wireCodec,
+  }) {
     final key = SyncPassphrase.normalize(passphrase);
     if (key.isEmpty) throw const SyncCryptoException('同步口令为空');
-    final json = utf8.encode(jsonEncode(envelope.toJson()));
-    final compressed = Uint8List.fromList(gzip.encode(json));
-    final random = Random.secure();
-    final salt = _randomBytes(random, _saltLength);
-    final nonce = _randomBytes(random, _nonceLength);
-    final header = _buildHeader(_versionHkdf, salt, iterations, nonce);
-    final derived = _deriveFrameKey(key, salt, iterations);
-    final cipher = GCMBlockCipher(AESEngine())
-      ..init(
-        true,
-        AEADParameters(KeyParameter(derived), 128, nonce, header),
+    final body = SyncPayload.encode(envelope, codec: payloadCodec);
+    var flags = 0;
+    var payloadBody = body;
+    if (body.length >= compressThreshold) {
+      final deflated = Uint8List.fromList(
+        ZLibCodec(raw: true, level: 6).encode(body),
       );
-    final cipherText = cipher.process(compressed);
-    return Uint8List.fromList([...header, ...cipherText]);
+      if (deflated.length < body.length) {
+        payloadBody = deflated;
+        flags = _flagDeflated;
+      }
+    }
+    final plaintext = Uint8List.fromList([
+      payloadMarker,
+      payloadCodec,
+      flags,
+      ...payloadBody,
+    ]);
+    final nonce = _randomBytes(Random.secure(), nonceLength);
+    final header = _buildHeader(nonce);
+    final derived = _deriveFrameKey(key, nonce);
+    final cipher = GCMBlockCipher(AESEngine())
+      ..init(true, AEADParameters(KeyParameter(derived), 128, nonce, header));
+    return Uint8List.fromList([...header, ...cipher.process(plaintext)]);
   }
 
-  /// 解密快照；任何帧/口令/认证失败统一抛 [SyncCryptoException]。
+  /// 解码一份帧；任何帧 / 口令 / 认证 / 载荷结构失败统一抛
+  /// [SyncCryptoException]。
   SyncEnvelope decrypt(Uint8List bytes, String passphrase) {
     _decryptions++;
     final key = SyncPassphrase.normalize(passphrase);
     if (key.isEmpty) throw const SyncCryptoException('同步口令为空');
-    if (bytes.length <= _headerLength) {
+    if (bytes.length <= headerLength + tagLength) {
       throw const SyncCryptoException('快照数据不完整');
     }
-    final header = Uint8List.sublistView(bytes, 0, _headerLength);
-    final magic = utf8.decode(header.sublist(0, _magic.length), allowMalformed: true);
-    if (magic != _magic) throw const SyncCryptoException('不是 Molia 同步数据');
-    final version = header[_magic.length];
-    if (version != _versionPbkdf2 && version != _versionHkdf) {
+    final header = Uint8List.sublistView(bytes, 0, headerLength);
+    for (var i = 0; i < magic.length; i++) {
+      if (header[i] != magic.codeUnitAt(i)) {
+        throw const SyncCryptoException('不是 Molia 同步数据');
+      }
+    }
+    if (header[magic.length] != version) {
       throw const SyncCryptoException('同步协议版本不支持');
     }
-    final salt = Uint8List.sublistView(
-        bytes, _magic.length + 1, _magic.length + 1 + _saltLength);
-    final iterations = _readUint32(
-        bytes, _magic.length + 1 + _saltLength, _iterationsLength);
-    if (iterations < 1000 || iterations > 5000000) {
-      throw const SyncCryptoException('快照迭代参数异常');
-    }
-    final nonce = Uint8List.sublistView(
-      bytes,
-      _magic.length + 1 + _saltLength + _iterationsLength,
-      _headerLength,
-    );
-    final cipherText = Uint8List.sublistView(bytes, _headerLength);
-    final derived = version == _versionHkdf
-        ? _deriveFrameKey(key, salt, iterations)
-        : _deriveRootKey(key, salt, iterations);
+    final nonce = Uint8List.sublistView(bytes, magic.length + 1, headerLength);
+    final cipherText = Uint8List.sublistView(bytes, headerLength);
+    final derived = _deriveFrameKey(key, nonce);
     final cipher = GCMBlockCipher(AESEngine())
-      ..init(
-        false,
-        AEADParameters(KeyParameter(derived), 128, nonce, header),
-      );
-    late final Uint8List compressed;
+      ..init(false, AEADParameters(KeyParameter(derived), 128, nonce, header));
+    late final Uint8List plaintext;
     try {
-      compressed = cipher.process(cipherText);
+      plaintext = cipher.process(cipherText);
     } catch (_) {
       throw const SyncCryptoException('口令不正确或数据已损坏');
     }
     try {
-      final json = jsonDecode(utf8.decode(gzip.decode(compressed)));
-      final envelope = SyncEnvelope.fromJson(json);
-      if (envelope == null) throw const SyncCryptoException('快照格式无效');
-      return envelope;
-    } catch (e) {
-      if (e is SyncCryptoException) rethrow;
+      if (plaintext.length < payloadHeaderLength ||
+          plaintext[0] != payloadMarker) {
+        throw const SyncCryptoException('载荷结构无效');
+      }
+      final payloadCodec = plaintext[1];
+      final flags = plaintext[2];
+      var body = Uint8List.sublistView(plaintext, payloadHeaderLength);
+      if (flags & _flagDeflated != 0) {
+        body = Uint8List.fromList(ZLibCodec(raw: true).decode(body));
+      }
+      return SyncPayload.decode(body, codec: payloadCodec);
+    } on SyncCryptoException {
+      rethrow;
+    } on SyncPayloadFormatException catch (e) {
+      throw SyncCryptoException(e.message);
+    } catch (_) {
       throw const SyncCryptoException('快照内容无法解析');
     }
   }
 
-  /// 生成同步口令（见 [SyncPassphrase.generate]）。
-  static String generatePassphrase() => SyncPassphrase.generate();
-
-  /// 帧密钥 = HKDF(根密钥, 帧盐)。
-  Uint8List _deriveFrameKey(String passphrase, Uint8List salt, int iterations) {
+  /// 帧密钥 = HKDF(根密钥, 帧 nonce)。
+  Uint8List _deriveFrameKey(String passphrase, Uint8List nonce) {
     final root = _cachedRootKey(passphrase, iterations);
     final derivator = HKDFKeyDerivator(SHA256Digest())
-      ..init(HkdfParameters(root, _keyLength, salt, _frameInfo));
+      ..init(HkdfParameters(root, 32, nonce, _frameInfo));
     return derivator.process(Uint8List(0));
   }
 
@@ -186,28 +193,18 @@ class SyncCodec {
     return bytes;
   }
 
-  static Uint8List _buildHeader(
-      int version, Uint8List salt, int iterations, Uint8List nonce) {
-    final header = BytesBuilder();
-    header.add(utf8.encode(_magic));
-    header.addByte(version);
-    header.add(salt);
-    final iterationBytes = Uint8List(_iterationsLength);
-    iterationBytes.buffer.asByteData().setUint32(0, iterations);
-    header.add(iterationBytes);
-    header.add(nonce);
+  static Uint8List _buildHeader(Uint8List nonce) {
+    final header = BytesBuilder()
+      ..add(utf8.encode(magic))
+      ..addByte(version)
+      ..add(nonce);
     return header.toBytes();
-  }
-
-  static int _readUint32(Uint8List bytes, int offset, int length) {
-    final view = ByteData.sublistView(bytes, offset, offset + length);
-    return view.getUint32(0);
   }
 
   Uint8List _deriveRootKey(String passphrase, Uint8List salt, int iterations) {
     _pbkdf2Derivations++;
     final derivator = PBKDF2KeyDerivator(HMac(SHA256Digest(), 64))
-      ..init(Pbkdf2Parameters(salt, iterations, _keyLength));
+      ..init(Pbkdf2Parameters(salt, iterations, 32));
     return derivator.process(Uint8List.fromList(utf8.encode(passphrase)));
   }
 }

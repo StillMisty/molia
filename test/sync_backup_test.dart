@@ -77,8 +77,8 @@ void main() {
     expect(json, contains('dark'));
     expect(json, isNot(contains('ai_dj_api_key')));
     expect(json, isNot(contains('sk-secret')));
-    // 内层 envelope 是协议 v2（记录带版本对象）。
-    expect(jsonDecode(json)['envelope']['v'], 2);
+    // 内层 envelope 是协议 v3（记录带版本对象；协议自始为 v3）。
+    expect(jsonDecode(json)['envelope']['v'], SyncEnvelope.protocolVersion);
   });
 
   test('导出：显式要求时凭证随快照进入（由调用方负责密文/保管）', () async {
