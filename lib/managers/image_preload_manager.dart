@@ -5,6 +5,7 @@ import 'package:flutter/widgets.dart';
 import 'package:logging/logging.dart';
 
 import '../domain/models/track.dart';
+import '../services/app_presence.dart';
 import 'artwork_cache.dart';
 
 /// 图片预加载管理器：优先级队列、并发控制与 LRU 去重。
@@ -14,6 +15,10 @@ class ImagePreloadManager {
   ImagePreloadManager._internal();
 
   final Logger _logger = Logger('molia.image_preload_manager');
+
+  /// 窗口存在态：托盘 / 最小化期间不预取——预取只为「看得见的封面」服务，
+  /// 后台期解码的图只会白占内存，恢复后由调用方补一次。
+  final AppPresence _presence = AppPresence.instance;
 
   /// 已缓存的图片 URL（LRU 缓存）
   final LinkedHashMap<String, DateTime> _cachedUrls = LinkedHashMap();
@@ -52,6 +57,12 @@ class ImagePreloadManager {
     String? nextAlbumArt,
     List<String?>? queueAlbumArts,
   }) async {
+    // 后台期不排新任务，并把藏在队列里的旧任务一并作废：这些图此刻没有任何
+    // 展示面（托盘隐藏时界面已休眠）。
+    if (_presence.isBackgrounded) {
+      _queue.clear();
+      return;
+    }
     // 先收集任务再统一入队：避免在 async gap 之后使用 context。
     final tasks = <({String url, int priority})>[];
 
@@ -82,6 +93,11 @@ class ImagePreloadManager {
   }
 
   void _processQueue() {
+    // 后台期队列不消费（可能在预取途中进入后台）。
+    if (_presence.isBackgrounded) {
+      _queue.clear();
+      return;
+    }
     while (_currentConcurrent < _maxConcurrent && _queue.isNotEmpty) {
       final task = _queue.removeAt(0);
 
@@ -112,6 +128,12 @@ class ImagePreloadManager {
     if (!task.context.mounted) return;
     await precacheImage(imageProvider, task.context);
 
+    // 预取途中进入后台：刚落的 keepAlive 条目马上摘掉——托盘期没有任何
+    // 展示面，留着只会占内存（恢复后按需重解）。
+    if (_presence.isBackgrounded) {
+      await imageProvider.evict();
+      return;
+    }
     _addToCache(task.url);
   }
 

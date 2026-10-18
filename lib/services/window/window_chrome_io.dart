@@ -7,6 +7,7 @@ import 'package:logging/logging.dart';
 import 'package:screen_retriever/screen_retriever.dart';
 import 'package:window_manager/window_manager.dart';
 
+import '../app_presence.dart';
 import 'single_instance.dart';
 import 'window_bounds.dart';
 import 'window_bounds_store.dart';
@@ -207,8 +208,12 @@ class WindowChrome {
 
   /// 隐藏窗口（「关闭时最小化到托盘」）：进程与播放继续，任务栏/Tab 列表里
   /// 不再出现窗口；从托盘「显示主窗口」或单击图标恢复。
+  ///
+  /// 置「托盘隐藏」存在态在原生调用**之前**：组合根在隐藏前还要抢一帧把
+  /// 界面卸下来（帧只在窗口可见时开），先置位才能保证那一帧建的是休眠树。
   static Future<void> hide() async {
     if (!isSupported) return;
+    AppPresence.instance.markTrayHidden();
     await windowManager.hide();
   }
 
@@ -231,8 +236,13 @@ class WindowChrome {
   /// 幂等：重复调用只是再次 show + focus；恢复的最大化状态在这里补一次
   /// （见 [_restoreSavedGeometry]——`getBounds` 在最大化态返回最大化矩形，
   /// 所以几何与最大化分两步恢复）。
+  ///
+  /// 置「可见」存在态在原生调用**之前**：隐藏期间帧是停的，提前置位让重建
+  /// 请求排进队列，窗口映射回屏幕、帧恢复时第一帧就是界面（而不是先亮一帧
+  /// 休眠占位）。
   static Future<void> show() async {
     if (!isSupported) return;
+    AppPresence.instance.markVisible();
     await windowManager.show();
     await windowManager.focus();
     if (_restoreMaximized) {
@@ -307,12 +317,24 @@ class _MaximizedStateListener extends WindowListener {
   /// 因此重新查询真实状态而不是直接置 false。
   @override
   void onWindowRestore() {
+    AppPresence.instance.markVisible();
     if (!WindowChrome.isSupported) return;
     unawaited(
       windowManager.isMaximized().then((maximized) {
         WindowChrome._maximized.value = maximized;
       }),
     );
+  }
+
+  /// 最小化只置「最小化」态：界面状态保留（内存守卫只停后台解码类工作，
+  /// 不清缓存，保证最小化↔恢复跟手）。
+  ///
+  /// 已是托盘隐藏时不降级：个别平台在原生隐藏时也会补一个最小化事件，
+  /// 若覆盖成「最小化」，托盘休眠与缓存清理就会被跳过。
+  @override
+  void onWindowMinimize() {
+    if (!AppPresence.instance.isVisible) return;
+    AppPresence.instance.markMinimized();
   }
 }
 

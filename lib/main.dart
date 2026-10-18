@@ -19,6 +19,7 @@ import 'app/bootstrap/post_frame_init.dart';
 import 'app/bootstrap/provider_tree.dart';
 import 'app/bootstrap/sync_stack.dart';
 import 'app/bootstrap/update_stack.dart';
+import 'managers/app_memory_manager.dart';
 import 'playback/desktop_audio_init.dart';
 import 'playback/local_audio_handler.dart';
 import 'providers/library_provider.dart';
@@ -63,6 +64,10 @@ void main() async {
 
   // 日志装配（package:logging 的 handler / level 只在这里和测试配置里设一次）
   initAppLogging();
+
+  // 托盘期内存守卫：窗口隐藏 / 最小化 / 恢复时清理或恢复图片缓存预算
+  // （`molia.memory` 日志是托盘内存回归的观测点）。
+  AppMemoryManager.instance.attach();
 
   // 窗口行为偏好（设备本地）/ 平台默认 UI 字体 / 单实例锁互不依赖：并行等待
   // （串行是三段相加，并行取最大值）。三者都完成才建窗，语义与拆分前一致。

@@ -20,6 +20,9 @@
 # 说明:
 # - 依赖：bash + python3 + adb（android）/ 本机文件（linux）；
 # - 任何写入前把原文件备份到 $RUN_DIR/seed-backup/<时间戳>/；
+# - DB 注入要求数据库已存在（应用至少启动过一次生成库）；写库前会清掉
+#   `-wal` / `-shm` 旁挂文件，否则残留 WAL 会在应用下次打开时重放旧页面、
+#   盖掉刚注入的数据；
 # - Android 写入前自动 force-stop 应用（SharedPreferences 有内存缓存，
 #   运行中写入会被覆盖）；Linux 请先退出正在运行的应用；
 # - Android 上的 mock 音频 URL 用 127.0.0.1:<port> + `adb reverse`（模拟器→
@@ -181,26 +184,44 @@ PY
 
 # ---------- DB 注入 ----------
 
+# 删除数据库的 WAL / SHM 旁挂文件。
+#
+# 脚本推 / 拉的是单文件副本：残留 WAL 里可能还留着旧页面，应用下次打开时
+# 会把它重放到刚推入的文件上，注入数据被静默盖掉（实测收藏全部丢失）。
+# 注入前后各收一次，保证读到的与写入的都是自洽的单文件库。
+seed_drop_sqlite_sidecars() {
+  local remote="$1"
+  if [[ "$platform" == android ]]; then
+    "$ADB" -s "$DEVICE_ID" shell \
+      "run-as $APP_ID rm -f '$remote-wal' '$remote-shm'" >/dev/null 2>&1 || true
+  else
+    rm -f "$remote-wal" "$remote-shm"
+  fi
+}
+
 seed_db() {
   local mode="$1" count="$2"
-  local db remote tmp backup
+  local remote tmp backup
   if [[ "$platform" == android ]]; then
     remote="$ANDROID_DB_PATH"
   else
     remote="$(linux_db_path)"
   fi
+  seed_drop_sqlite_sidecars "$remote"
   mkdir -p "$SEED_BACKUP_DIR/latest"
   backup="$(backup_file "$SEED_BACKUP_DIR/latest" "$remote" "molia_database.sqlite")"
   [[ -n "$backup" ]] && log "已备份数据库 → $backup"
-  # 工作副本 = 当前文件（可能已被上一次注入改过）；不存在时从空库开始。
+  # 工作副本 = 当前文件（可能已被上一次注入改过）。库由应用首启建出：
+  # 缺库时不再自建表——脚本维护的 DDL 会随 schema 演进失配（v5 起
+  # playlist 版本列取代了 updatedAt/updatedBy），且只会造出缺表缺列的
+  # 半成品库（drift 以 user_version 判定版本，不会走 onCreate 补表）。
   tmp="$SEED_BACKUP_DIR/work.sqlite"
   if ! seed_pull "$remote" "$tmp"; then
-    log "未找到现有数据库（$remote）：将从空库开始建表"
-    rm -f "$tmp"
-    python3 - "$tmp" <<'PY'
-import sqlite3, sys
-sqlite3.connect(sys.argv[1]).close()
-PY
+    if [[ "$mode" == "clear" ]]; then
+      log "未找到现有数据库（$remote）：无需清除"
+      return 0
+    fi
+    die "未找到现有数据库（$remote）：先启动一次应用生成库，再执行注入"
   fi
 
   local tracks
@@ -213,58 +234,16 @@ now = int(time.time() * 1000)
 conn = sqlite3.connect(path)
 cur = conn.cursor()
 
-# 表结构由应用首启建出；这里只做防御性建表（与 drift schema v1 对齐）。
-cur.executescript(
-    """
-    CREATE TABLE IF NOT EXISTS playlists (
-      id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
-      name TEXT NOT NULL,
-      createdAt INTEGER NOT NULL,
-      syncId TEXT NULL,
-      updatedAt INTEGER NOT NULL DEFAULT 0,
-      updatedBy TEXT NOT NULL DEFAULT ''
-    );
-    CREATE TABLE IF NOT EXISTS playlist_tracks (
-      id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
-      playlistId INTEGER NOT NULL,
-      sourceKey TEXT NOT NULL,
-      songId TEXT NOT NULL,
-      title TEXT NOT NULL,
-      artist TEXT NOT NULL DEFAULT '',
-      album TEXT NOT NULL DEFAULT '',
-      coverUrl TEXT NULL,
-      durationMs INTEGER NULL,
-      raw TEXT NOT NULL DEFAULT '{}',
-      addedAt INTEGER NOT NULL,
-      sortOrder INTEGER NOT NULL DEFAULT 0,
-      updatedAt INTEGER NOT NULL DEFAULT 0,
-      updatedBy TEXT NOT NULL DEFAULT '',
-      UNIQUE (playlistId, sourceKey, songId)
-    );
-    CREATE TABLE IF NOT EXISTS play_history (
-      sourceKey TEXT NOT NULL,
-      songId TEXT NOT NULL,
-      title TEXT NOT NULL,
-      artist TEXT NOT NULL DEFAULT '',
-      album TEXT NOT NULL DEFAULT '',
-      coverUrl TEXT NULL,
-      durationMs INTEGER NULL,
-      raw TEXT NOT NULL DEFAULT '{}',
-      playedAt INTEGER NOT NULL,
-      UNIQUE (sourceKey, songId)
-    );
-    """
-)
-
+# 列集与 drift schema v5 对齐：版本列（versionPhysical/versionCounter/deviceId）
+# 走表默认值，这里不写，与本地写引擎落下的行形状一致。
 if mode == "favorites":
     row = cur.execute(
         "SELECT id FROM playlists WHERE name = '__favorites__' ORDER BY id LIMIT 1"
     ).fetchone()
     if row is None:
         cur.execute(
-            "INSERT INTO playlists (name, createdAt, updatedAt, updatedBy) "
-            "VALUES ('__favorites__', ?, ?, '')",
-            (now, now),
+            "INSERT INTO playlists (name, createdAt) VALUES ('__favorites__', ?)",
+            (now,),
         )
         pid = cur.lastrowid
     else:
@@ -273,13 +252,13 @@ if mode == "favorites":
     for i, t in enumerate(tracks):
         cur.execute(
             "INSERT INTO playlist_tracks (playlistId, sourceKey, songId, title, "
-            "artist, album, coverUrl, durationMs, raw, addedAt, sortOrder, "
-            "updatedAt, updatedBy) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)",
+            "artist, album, coverUrl, durationMs, raw, addedAt, sortOrder) "
+            "VALUES (?,?,?,?,?,?,?,?,?,?,?)",
             (
                 pid, t["sourceKey"], t["songId"], t["title"], t["artist"],
                 t["album"], None, t["durationMs"],
                 json.dumps({"songId": t["songId"]}, ensure_ascii=False),
-                now + i, i, now + i, "",
+                now + i, i,
             ),
         )
 elif mode == "history":
@@ -309,6 +288,8 @@ conn.close()
 PY
 
   seed_push "$tmp" "$remote"
+  # 推入的是自洽单文件：再清一次旁挂文件，防止旧 WAL 在应用下次打开时重放。
+  seed_drop_sqlite_sidecars "$remote"
   log "已写入数据库 → $remote"
 }
 

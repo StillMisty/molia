@@ -15,6 +15,7 @@ import '../../l10n/app_localizations.dart';
 import '../../providers/library_provider.dart';
 import '../../providers/playback_provider.dart';
 import '../../services/app_branding_service.dart';
+import '../../services/app_presence.dart';
 import '../../services/language_service.dart';
 import '../../services/play_statistics_service.dart';
 import '../../services/window/app_tray.dart';
@@ -61,6 +62,12 @@ Future<DesktopStack> buildDesktopStack({
   // 藏起来就没有找回入口，退回直接退出（设置页对 Linux 有同一提示）。
   WindowChrome.setCloseHandler(() async {
     if (traySettings.closeToTray && await AppTray.detectHost()) {
+      // 先置休眠态并等这一帧把界面卸下来（窗口还可见、帧还开着），再隐藏：
+      // 隐藏后平台会停帧，休眠树若没建成就要等恢复窗口才建，托盘期省不下来。
+      // endOfFrame 自带超时兜底，异常路径不把「点关闭」卡死。
+      AppPresence.instance.markTrayHidden();
+      await WidgetsBinding.instance.endOfFrame
+          .timeout(const Duration(seconds: 2), onTimeout: () {});
       await WindowChrome.hide();
     } else {
       await quitApp();
