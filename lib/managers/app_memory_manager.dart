@@ -16,7 +16,8 @@
 library;
 
 import 'dart:async';
-import 'dart:io' show ProcessInfo;
+import 'dart:ffi';
+import 'dart:io' show Platform, ProcessInfo;
 import 'dart:math' as math;
 
 import 'package:flutter/painting.dart' show ImageCache, PaintingBinding;
@@ -65,6 +66,27 @@ class PaintingImageCache implements ImageCacheTarget {
 /// 托盘隐藏期间允许的图片缓存上限：留一点预算给漏网的解码（系统媒体会话
 /// 封面本地化、用户点托盘菜单切歌时的即时解码），又不至于重新堆到 100 MiB。
 const int kTrayImageCacheLimitBytes = 16 * 1024 * 1024;
+
+/// glibc `malloc_trim(0)` 的 Dart 签名（size_t → IntPtr）。
+typedef _MallocTrimNative = Int32 Function(IntPtr pad);
+typedef _MallocTrimDart = int Function(int pad);
+
+/// 把已 free 的堆页交还内核（Linux/glibc；其余平台或符号缺失时静默跳过）。
+///
+/// 为什么需要：清空图片缓存只是把像素 free 回 allocator，空闲页留在 arena
+/// 里不会自动归还，系统观测（RSS / 任务管理器）看不到下降；浏览器 / 播放器
+/// 这类「缩到托盘」的应用普遍在释放后补一次 trim。mpv 自带 allocator 与
+/// Dart 堆不受影响，这里只解决 glibc 这一层。
+void _releaseFreedHeapToOs() {
+  if (!Platform.isLinux) return;
+  try {
+    final trim = DynamicLibrary.process()
+        .lookupFunction<_MallocTrimNative, _MallocTrimDart>('malloc_trim');
+    trim(0);
+  } catch (_) {
+    // musl / 静态链接等场景没有该符号：跳过即可，不影响释放逻辑本身。
+  }
+}
 
 /// 托盘期内存守卫（单例入口 [AppMemoryManager.instance]）。
 class AppMemoryManager {
@@ -138,6 +160,8 @@ class AppMemoryManager {
     _cache.clearLiveImages();
     _cache.maximumSizeBytes =
         math.min(_fullLimitBytes, kTrayImageCacheLimitBytes);
+    // 清完再 trim：不然日志里的 RSS 还是 arena 里那笔「已释放未归还」的数。
+    _releaseFreedHeapToOs();
     _log('托盘隐藏完成');
   }
 

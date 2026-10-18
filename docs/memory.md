@@ -6,8 +6,10 @@
 ## 1. 结论（一行）
 
 关闭到托盘不再把「界面侧」内存挂到重新打开窗口为止：托盘隐藏时清空 Flutter
-图片缓存并把上限临时压低、停掉后台期无展示面的封面预取与取色，界面整棵卸载
-（等价一次保留播放的冷启动）；mpv 解复用缓存上限从 64 MiB 降到 32 MiB。
+图片缓存并把上限临时压低（Linux 上补一次 `malloc_trim` 让释放体现在系统观测
+上）、停掉后台期无展示面的封面预取与取色，界面整棵卸载（等价一次保留播放的
+冷启动）；压测实测关到托盘瞬间 RSS 下降 63–73 MB（98.9 MB 图片缓存场景）。
+mpv 解复用缓存上限从 64 MiB 降到 32 MiB。
 
 ## 2. 背景：托盘态本来在占什么
 
@@ -29,12 +31,18 @@
 | 位置 | 行为 |
 | --- | --- |
 | `lib/services/app_presence.dart` | 窗口三态（可见 / 最小化 / 托盘隐藏）；置位只在窗口层，消费者按状态各自应对 |
-| `lib/managers/app_memory_manager.dart` | 托盘隐藏：等休眠帧落定后 `imageCache.clear()` + `clearLiveImages()` + 上限临时 16 MiB；恢复还原；每次翻转打 `molia.memory`（RSS + 缓存占用） |
+| `lib/managers/app_memory_manager.dart` | 托盘隐藏：等休眠帧落定后 `imageCache.clear()` + `clearLiveImages()` + 上限临时 16 MiB + Linux `malloc_trim(0)`；恢复还原；每次翻转打 `molia.memory`（RSS + 缓存占用） |
 | `lib/managers/image_preload_manager.dart` | 后台期不排预取、清空待办；预取途中进入后台的条目立即 `evict` |
 | `lib/services/playback_observer.dart` | 后台期跳过封面预取；恢复后等重建帧落定补一次 |
 | `lib/services/artwork_palette_service.dart` | `ArtworkThemeSync` 后台期只记 URL 不取色；恢复后补一次且同 URL 不重复应用 |
 | `lib/app/tray_dormant_gate.dart` | 托盘隐藏卸载整棵 `MaterialApp`（导航 / 常驻页面 / 弹层），恢复重建 |
 | `lib/playback/desktop_audio_init_io.dart` | `JustAudioMediaKit.bufferSize = 16 MiB`（上限 64 → 32 MiB） |
+
+**为什么还要 `malloc_trim`**：清空图片缓存只是把像素 `free` 回 allocator，空闲页
+留在 arena 里不会自动归还内核，系统观测（RSS / 任务管理器）看不到下降——实测
+「清 40 MB 缓存、RSS 反而 +10 MB」。所以守卫在清理后按 Linux/glibc 补一次
+`malloc_trim(0)`（FFI，符号缺失静默跳过），让「已释放」真正体现在观测上；
+mpv 自带 allocator 与 Dart 堆不受它影响。
 
 恢复语义：页面滚动位置 / 合集选择本就有持久化（`CollectionScrollBookkeeping` /
 `LibraryCollections`），恢复后自然回位；页内瞬时状态（搜索词、展开的弹层、
@@ -69,9 +77,7 @@ RSS 曲线一起打印；结束给出 min / 中位 / max。
 
 ### 4.3 改后（真实引擎往返，2026-10-18）
 
-debug 应用 + Xvfb，经 VM service 直接调用 `WindowChrome.hide()` / `show()` 驱动
-托盘往返（无 WM 的 Xvfb 里点原生关闭走的是窗口销毁，触发不到托盘路径），
-`molia.memory` 三行：
+**空会话往返**（debug + Xvfb，VM service 驱动 `WindowChrome.hide()`/`show()`）：
 
 ```
 托盘隐藏（等休眠帧）：RSS=680.2MB，imageCache=2.5MB/100MB
@@ -79,14 +85,26 @@ debug 应用 + Xvfb，经 VM service 直接调用 `WindowChrome.hide()` / `show(
 窗口可见：RSS=674.1MB，imageCache=0.0MB/100MB
 ```
 
-同刻在 VM service 断言：隐藏后 `AppPresence.value == trayHidden`、
+**压测往返**（同一进程，先把 40 张 800×800 本地封面显式灌进图片缓存，模拟
+「浏览过大量封面后关到托盘」）：
+
+```
+托盘隐藏（等休眠帧）：RSS=825.8MB，imageCache=98.9MB/100MB
+托盘隐藏完成：RSS=762.7MB，imageCache=0.0MB/16MB   # −63.1MB
+（3 秒后进程 RSS 753.1MB，−72.7MB）
+```
+
+对照：加 `malloc_trim` 之前，同样清掉 40.3MB 缓存的实测是
+`719.9MB → 729.9MB`（RSS 反升，空闲页留在 arena）——trim 是让释放体现在
+系统观测上的关键一步。
+
+同刻 VM service 断言：隐藏后 `AppPresence.value == trayHidden`、
 `imageCache.currentSizeBytes == 0`、`maximumSizeBytes == 16 MiB`、
 `framesEnabled == false`（休眠帧已在隐藏前抢到）；恢复后逐项还原，封面预取
 补跑（缓存重新出现条目）。
 
-- 数字是 debug + 软件渲染，绝对值不代表发布包（只用于「释放发生了」的证据）；
-  2.5 MB 的缓存差是本次会话没有浏览封面——正常浏览后会大得多（托盘听歌时
-  每首歌的预取都曾进这块缓存）。
+- 数字是 debug + 软件渲染，绝对值不代表发布包；**差额**（本次 63–73MB）才是
+  改动效果的量级——缓存越大差额越大（上限 100MB），恢复后按需重解。
 - 托盘挂机 30 分钟的完整 RSS 曲线需在真实显示 + 托盘宿主下用 `memory.sh`
   采样（无头 Xvfb 既没有托盘宿主、也没有窗口管理器，触发不了原生关闭）。
 
