@@ -5,6 +5,7 @@ import 'package:material_ui/material_ui.dart';
 import 'package:molia/app/app_shell.dart';
 import 'package:molia/app/desktop/desktop_shell.dart';
 import 'package:molia/app/desktop/now_playing_bar.dart';
+import 'package:molia/app/shell_chrome.dart';
 import 'package:molia/data/catalog/catalog_service.dart';
 import 'package:molia/domain/models/catalog.dart';
 import 'package:molia/domain/models/playback.dart';
@@ -45,11 +46,11 @@ import '../support/fakes.dart';
 /// 桌面骨架（`MyApp(desktopShell: true)`）的挂载测试。
 ///
 /// 覆盖骨架结构与三条不变量：顶栏是纯工具条（无标题 / 无播放控制 / 无进度线，
-/// 最左是「标志 + 应用名」品牌区、右侧空白拖动区）；侧栏恒折叠（无展开按钮）；
-/// 底栏只在非播放页出现（播放页沉浸）且封面飞行两端都成立。另有队列入口
-/// （跳播放页 + 切队列 tab）、搜索遮罩（品牌区点击 / Ctrl+F 打开、docked 结果
-/// 面板、查看全部结果切资料库、键位提示）、全局快捷键（Space 切播放态、Esc
-/// 收起队列视图、输入框聚焦时让位）。
+/// 最左是「标志 + 应用名」品牌区（贴窗口左缘、无 tooltip）、右侧空白拖动区）；
+/// 侧栏恒折叠（无展开按钮）；底栏只在非播放页出现（播放页沉浸）且封面飞行两端
+/// 都成立。另有队列入口（跳播放页 + 切队列 tab）、搜索遮罩（品牌区点击 /
+/// Ctrl+F 打开、docked 结果面板、查看全部结果切资料库）、全局快捷键（Space 切
+/// 播放态、Esc 收起队列视图、输入框聚焦时让位）。
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
@@ -599,6 +600,18 @@ void main() {
       findsOneWidget,
       reason: '品牌标志在应用名左侧',
     );
+    // 品牌块贴窗口左缘（AppBar `titleSpacing` 处），不再与内容左缘对齐：
+    // 应用左上角就是标志本身。
+    expect(
+      tester.getRect(brand).left,
+      ShellChrome.appBarTitleSpacing,
+      reason: '品牌区左缘 = 顶栏 titleSpacing，与侧栏 / 页面留白解耦',
+    );
+    expect(
+      find.descendant(of: brand, matching: find.byType(Tooltip)),
+      findsNothing,
+      reason: '顶栏工具条不做悬浮提示（键位提示只留在设置 › 快捷键）',
+    );
     expect(
       find.descendant(
         of: brand,
@@ -694,26 +707,26 @@ void main() {
     expect(backdropBlurOpacity(tester), 0, reason: '遮罩收起后背景模糊淡出');
   });
 
-  testWidgets('顶栏品牌区：tooltip 跟随生效键位（软件内快捷键关闭即隐藏）',
-      (tester) async {
+  testWidgets('顶栏品牌区：tooltip 已移除（不做悬浮提示）', (tester) async {
     await pumpShell(tester, desktopShell: true);
 
-    String? tooltipMessage() => tester
-        .widget<Tooltip>(
-          find.descendant(
-            of: find.byKey(DesktopShell.searchEntryKey),
-            matching: find.byType(Tooltip),
-          ),
-        )
-        .message;
-
-    // 默认绑定 Ctrl+F（设置页同一套书写）写进品牌区 tooltip。
-    expect(tooltipMessage(), '搜索 · Ctrl + F');
-
-    // 软件内快捷键整体关闭后只剩入口名（键位只在开着的分组里可用）。
+    // 键位提示只留在设置 › 快捷键；品牌块（贴窗口左上角、带应用名文案）
+    // 不再挂 Tooltip。
+    expect(
+      find.descendant(
+        of: find.byKey(DesktopShell.searchEntryKey),
+        matching: find.byType(Tooltip),
+      ),
+      findsNothing,
+    );
+    // 软件内快捷键开关状态变化也不该再影响顶栏（没有提示可跟）。
     await ShortcutSettings.instance.setInAppEnabled(false);
     await tester.pump();
-    expect(tooltipMessage(), '搜索');
+    expect(
+      find.byKey(DesktopShell.searchEntryKey),
+      findsOneWidget,
+      reason: '开关只影响按键是否生效，不影响品牌区存在',
+    );
     await ShortcutSettings.instance.setInAppEnabled(true);
   });
 

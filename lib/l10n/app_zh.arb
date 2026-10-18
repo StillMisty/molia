@@ -142,7 +142,6 @@
   "loadingGenerating": "正在生成海报...",
   "currentQueueEmpty": "当前队列为空",
   "nowPlayingSection": "正在播放",
-  "upNextSection": "接下来",
   "searchLyrics": "搜索歌词",
   "noCurrentTrackPlaying": "没有正在播放的歌曲",
   "cannotGetTrackInfo": "无法获取当前歌曲信息",

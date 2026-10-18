@@ -14,7 +14,10 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import '../support/fakes.dart';
 
-/// 队列显示：只列出「接下来」；当前曲目由上方播放器承载，不在列表重复。
+/// 队列显示：只列出当前曲目之后的曲目；当前曲目由上方播放器承载，不在列表重复。
+///
+/// 列表不带「接下来」分组标题（tab 文案已表达分组）；`includeCurrent` 面板
+/// 保留「正在播放」小节。
 ///
 /// 懒加载：队列行是固定行高的 [TrackRow]，长队列只构建视口附近的行；
 /// 滚动条常显且可手拖（interactive + thumbVisibility）。
@@ -85,7 +88,7 @@ void main() {
         duration: const Duration(seconds: 30),
       );
 
-  testWidgets('只列出接下来：当前曲目不重复出现在列表（圆角封面/统一字号）', (tester) async {
+  testWidgets('只列出当前曲目之后的曲目：当前曲目不重复出现在列表（圆角封面/统一字号）', (tester) async {
     final backend = FakePlaybackBackend();
     final playback = buildTestPlaybackProvider(backend: backend);
     addTearDown(playback.dispose);
@@ -106,7 +109,8 @@ void main() {
     // 当前曲目只在播放器里，列表页不重复。
     expect(find.text('正在播放'), findsNothing);
     expect(find.text('Title a'), findsNothing);
-    expect(find.text('接下来'), findsOneWidget);
+    // 分组标题不再渲染：首行就是队列条目。
+    expect(find.text('接下来'), findsNothing);
     expect(find.text('Title b'), findsOneWidget);
     // 播放指示（均衡器图形）随「正在播放」行一起移除；时长走固定行尾。
     expect(find.byIcon(Icons.graphic_eq_rounded), findsNothing);
@@ -115,7 +119,7 @@ void main() {
     await drainThrottle(tester);
   });
 
-  testWidgets('includeCurrent：顶部「正在播放」小节（高亮不可点）+ 接下来照常列出', (tester) async {
+  testWidgets('includeCurrent：顶部「正在播放」小节（高亮不可点）+ 后续曲目照常列出', (tester) async {
     final backend = FakePlaybackBackend();
     final playback = buildTestPlaybackProvider(backend: backend);
     addTearDown(playback.dispose);
@@ -133,9 +137,9 @@ void main() {
     await pumpQueue(tester, playback, includeCurrent: true);
 
     expect(tester.takeException(), isNull);
-    // 当前曲目在顶部独立成段，接下来仍照常列出。
+    // 当前曲目在顶部独立成段，后续曲目照常列出（无「接下来」小标题）。
     expect(find.text('正在播放'), findsOneWidget);
-    expect(find.text('接下来'), findsOneWidget);
+    expect(find.text('接下来'), findsNothing);
     final titles = tester
         .widgetList<TrackRow>(find.byType(TrackRow))
         .map((row) => row.title)
@@ -189,13 +193,13 @@ void main() {
 
     expect(find.text('正在播放'), findsNothing);
     expect(find.text('Title a'), findsNothing, reason: '当前曲目由播放器承载');
-    expect(find.text('接下来'), findsOneWidget);
+    expect(find.text('接下来'), findsNothing);
     expect(find.text('Title b'), findsOneWidget);
 
     await drainThrottle(tester);
   });
 
-  testWidgets('恢复态：列表只有接下来，点条目从该曲目恢复播放', (tester) async {
+  testWidgets('恢复态：列表只列会话里当前曲目之后的曲目，点条目从该曲目恢复播放', (tester) async {
     // 先写入会话，再创建 provider（构造时即读取）。
     await PlaybackSessionStore().save(PlaybackSession(
       tracks: [_track('a'), _track('b')],
@@ -209,13 +213,13 @@ void main() {
     await playback.preferencesReady;
     await pumpQueue(tester, playback);
 
-    // 恢复的当前曲目同样不在列表重复；只有接下来的 b。
+    // 恢复的当前曲目同样不在列表重复；只有其后的 b。
     expect(find.text('正在播放'), findsNothing);
     expect(find.text('Title a'), findsNothing);
     expect(find.text('Title b'), findsOneWidget);
     expect(find.byIcon(Icons.pause_rounded), findsNothing);
 
-    // 点「接下来」条目 → 用会话队列从该曲目恢复播放（而不是静默无响应）。
+    // 点后续曲目条目 → 用会话队列从该曲目恢复播放（而不是静默无响应）。
     await tester.tap(find.text('Title b'));
     await tester.pump();
     await tester.pump();

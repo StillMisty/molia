@@ -110,6 +110,8 @@ class _SourceSwapPageState extends State<SourceSwapPage> {
           Padding(
             padding: const EdgeInsets.fromLTRB(16, 4, 16, 8),
             child: M3ETabs(
+              // 次 tab：图标在文案左侧同一行、行高 48（换源页内的分组切换）。
+              variant: M3ETabsVariant.secondary,
               tabs: [
                 M3ETab(
                   icon: const Icon(Icons.lyrics_rounded),

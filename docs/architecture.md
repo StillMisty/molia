@@ -619,8 +619,9 @@
   标签映射、设置按钮、窗口控件、titleSpacing / 拖动区只一份；骨架各自适配渲染），
   布局阈值在 `lib/widgets/desktop_layout.dart`（壳层解析一次，页面 / 骨架只消费）。
   顶栏是纯工具条（无当前页标题、无播放控制、无进度线）：最左是**品牌区**
-  （`MoliaMark` + 自定义应用名，左缘对齐内容左缘 = 侧栏折叠宽 + 页面留白 −
-  `titleSpacing`，整块可点打开搜索遮罩，tooltip 带当前「聚焦搜索」键位）；
+  （`MoliaMark` + 自定义应用名，贴窗口左缘（AppBar `titleSpacing` 处）、不再
+  与内容左缘对齐，整块可点打开搜索遮罩，**不做 tooltip**：键位提示只留在
+  设置 › 快捷键）；
   品牌区右侧的空白是拖动区（双击最大化，只有它包 `WindowDoubleTapMaximize`，
   双击品牌 / 按钮不最大化）+ 设置 + 窗口按钮（四键无 tooltip，只留 `semanticLabel`）。
   **全局搜索**是 Ctrl+F / 品牌区打开的全屏遮罩（`lib/widgets/global_search_overlay.dart`）：
@@ -640,6 +641,9 @@
   命令按目的地生效）。播放页桌面版式 = 左 **480** 固定
   （封面/歌名·歌手两行/进度/传输控制 + 音量，不显示专辑行）+ 右「队列 / 歌词 /
   详细」三 tab（**次 tab**：图标 + 文案一行、行高 48、默认歌词，图标走 `M3EIcons`；
+  tab 栏与内容同一内容边距 **16**（队列列表 / 宽版式歌词行 / 歌曲信息页都对齐
+  tab 栏，页面边距 24 只用于浏览 / 详情页），队列列表不再分「正在播放 / 接下来」
+  小标题（tab 文案已表达分组，只有 `includeCurrent` 面板保留「正在播放」小节）；
   `NowPlaying(desktopLayout: true)`，无圆点手势）。
   桌面专属交互：**快捷键分「软件内」与「全局」两组**（用户口径：都可关闭、可自定义）。
   绑定模型在 `lib/services/shortcut_bindings.dart`（动作 ↔ 组合、两组默认表、JSON 覆盖），

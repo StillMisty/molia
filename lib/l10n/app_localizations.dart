@@ -950,12 +950,6 @@ abstract class AppLocalizations {
   /// **'Now Playing'**
   String get nowPlayingSection;
 
-  /// No description provided for @upNextSection.
-  ///
-  /// In en, this message translates to:
-  /// **'Up Next'**
-  String get upNextSection;
-
   /// No description provided for @searchLyrics.
   ///
   /// In en, this message translates to:

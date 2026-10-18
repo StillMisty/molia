@@ -10,21 +10,15 @@
 /// 单一持有。
 library;
 
-import 'dart:math' as math;
 import 'dart:ui' show ImageFilter;
 
 import 'package:flutter/foundation.dart' show ValueListenable;
 import 'package:material_3_expressive/material_3_expressive.dart';
 import 'package:material_ui/material_ui.dart';
 
-import '../../l10n/app_localizations.dart';
 import '../../providers/nav_provider.dart';
 import '../../services/app_branding_service.dart';
-import '../../services/shortcut_settings.dart';
-import '../../services/shortcuts.dart';
 import '../../services/window/window_chrome.dart';
-import '../../utils/responsive.dart';
-import '../../widgets/desktop_layout.dart';
 import '../../widgets/global_search_overlay.dart';
 import '../../widgets/molia_mark.dart';
 import '../../widgets/player_morph.dart';
@@ -183,37 +177,26 @@ class DesktopShell extends StatelessWidget {
   /// 顶栏：最左品牌区（图标 + 应用名，点击打开搜索遮罩）+ 右侧空白拖动区
   /// （双击最大化）。
   ///
-  /// 内容左缘 = 侧栏折叠宽 + 页面留白；AppBar 从 `titleSpacing` 处开始排
-  /// title，减去同一常量才是落点。侧栏宽取自 M3E 导航轨主题（恒折叠档），
-  /// 页面留白取自页面自己消费的那一档，两者都不写死数值。
+  /// 品牌块贴窗口左缘（AppBar `titleSpacing` 处），不再与内容左缘对齐：
+  /// 应用左上角就是标志本身，与侧栏折叠宽 / 页面留白解耦。
   Widget _buildTitleBar(BuildContext context) {
-    final layout = DesktopLayout.of(context);
-    final double inset = math.max(
-      0,
-      layout.railWidth +
-          context.layoutType(ResponsivePageType.browse).horizontalPadding -
-          ShellChrome.appBarTitleSpacing,
-    );
-    return Padding(
-      padding: EdgeInsets.only(left: inset),
-      child: Row(
-        children: [
-          _BrandSearchEntry(
-            key: DesktopShell.searchEntryKey,
-            onTap: onOpenSearch,
+    return Row(
+      children: [
+        _BrandSearchEntry(
+          key: DesktopShell.searchEntryKey,
+          onTap: onOpenSearch,
+        ),
+        // 空白拖动区：窗口拖动由 AppBar 外层的 WindowDragArea 承担，这里
+        // 只补「双击最大化」。高度取工具行那一档（与品牌区同一条工具行上
+        // 的可点区域等高）；只包空白区 —— 双击品牌区或按钮不该顺带改窗口
+        // 状态。
+        Expanded(
+          child: WindowDoubleTapMaximize(
+            key: DesktopShell.titleDragAreaKey,
+            child: SizedBox(height: DesktopShell.toolRowHeight(context)),
           ),
-          // 空白拖动区：窗口拖动由 AppBar 外层的 WindowDragArea 承担，这里
-          // 只补「双击最大化」。高度取工具行那一档（与品牌区同一条工具行上
-          // 的可点区域等高）；只包空白区 —— 双击品牌区或按钮不该顺带改窗口
-          // 状态。
-          Expanded(
-            child: WindowDoubleTapMaximize(
-              key: DesktopShell.titleDragAreaKey,
-              child: SizedBox(height: DesktopShell.toolRowHeight(context)),
-            ),
-          ),
-        ],
-      ),
+        ),
+      ],
     );
   }
 }
@@ -256,8 +239,9 @@ class _SearchBackdropBlur extends StatelessWidget {
 
 /// 品牌区（= 搜索入口）：应用标志 + 名称，整块可点打开搜索遮罩。
 ///
-/// 搜索入口不再占顶栏一条搜索框，落点收到这个品牌块上（Ctrl+F 同路径）；
-/// tooltip 带上当前生效的键位，顶栏不挂搜索条也能发现快捷键。
+/// 搜索入口不占顶栏一条搜索框，落点收到这个品牌块上（Ctrl+F 同路径）。
+/// 不做悬浮提示：整块贴着窗口左上角、文案（应用名）自解释，键位提示只留在
+/// 设置 › 快捷键。
 class _BrandSearchEntry extends StatelessWidget {
   const _BrandSearchEntry({super.key, required this.onTap});
 
@@ -265,53 +249,36 @@ class _BrandSearchEntry extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final l10n = AppLocalizations.of(context)!;
-    final settings = ShortcutSettings.instance;
-    return ListenableBuilder(
-      listenable: settings,
-      builder: (context, _) {
-        // 软件内快捷键关闭时不提示键位（按不出来）；键名与设置页同一套书写。
-        final combo = settings.inAppEnabled
-            ? settings.inAppBindings.comboFor(ShortcutCommand.focusSearch)
-            : null;
-        final message = combo == null
-            ? l10n.libraryTabSearch
-            : '${l10n.libraryTabSearch} · ${combo.label()}';
-        return Tooltip(
-          message: message,
-          child: Semantics(
-            button: true,
-            child: GestureDetector(
-              // 刻意不用 M3ETappable：它点击时会请求焦点（打断页内输入），
-              // GestureDetector 与顶栏其它手势宿主保持同一取舍。
-              behavior: HitTestBehavior.opaque,
-              onTap: onTap,
-              child: SizedBox(
-                height: DesktopShell.toolRowHeight(context),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    const MoliaMark(size: 24),
-                    const SizedBox(width: 8),
-                    ValueListenableBuilder<String>(
-                      valueListenable: AppBrandingService.titleNotifier,
-                      builder: (context, title, _) => Text(
-                        title,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: Theme.of(context)
-                            .textTheme
-                            .titleMedium
-                            ?.copyWith(fontWeight: FontWeight.w600),
-                      ),
-                    ),
-                  ],
+    return Semantics(
+      button: true,
+      child: GestureDetector(
+        // 刻意不用 M3ETappable：它点击时会请求焦点（打断页内输入），
+        // GestureDetector 与顶栏其它手势宿主保持同一取舍。
+        behavior: HitTestBehavior.opaque,
+        onTap: onTap,
+        child: SizedBox(
+          height: DesktopShell.toolRowHeight(context),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const MoliaMark(size: 24),
+              const SizedBox(width: 8),
+              ValueListenableBuilder<String>(
+                valueListenable: AppBrandingService.titleNotifier,
+                builder: (context, title, _) => Text(
+                  title,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: Theme.of(context)
+                      .textTheme
+                      .titleMedium
+                      ?.copyWith(fontWeight: FontWeight.w600),
                 ),
               ),
-            ),
+            ],
           ),
-        );
-      },
+        ),
+      ),
     );
   }
 }

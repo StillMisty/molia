@@ -985,7 +985,9 @@ class _LyricsWidgetState extends State<LyricsWidget>
                     curve: Curves.easeOutCubic,
                     padding: EdgeInsets.symmetric(
                       vertical: isCurrentLine ? 12.0 : 8.0,
-                      horizontal: isWideLyricLayout ? 24.0 : 40.0,
+                      // 宽版式（桌面右栏 / 平板两栏）与队列、详情同一内容边距
+                      // （16，M3E 口径）；窄版式保持歌词行特有的 40。
+                      horizontal: isWideLyricLayout ? 16.0 : 40.0,
                     ),
                     child: AnimatedDefaultTextStyle(
                       duration: const Duration(milliseconds: 450),

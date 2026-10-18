@@ -187,7 +187,6 @@
   "loadingGenerating": "Generating poster...",
   "currentQueueEmpty": "Current queue is empty",
   "nowPlayingSection": "Now Playing",
-  "upNextSection": "Up Next",
   "searchLyrics": "Search Lyrics",
   "noCurrentTrackPlaying": "No track currently playing",
   "cannotGetTrackInfo": "Cannot get current track information",

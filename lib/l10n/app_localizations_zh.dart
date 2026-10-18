@@ -448,9 +448,6 @@ class AppLocalizationsZh extends AppLocalizations {
   String get nowPlayingSection => '正在播放';
 
   @override
-  String get upNextSection => '接下来';
-
-  @override
   String get searchLyrics => '搜索歌词';
 
   @override

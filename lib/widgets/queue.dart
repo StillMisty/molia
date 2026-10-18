@@ -24,16 +24,19 @@ String _formatDuration(Duration? duration) {
   return '$minutes:$seconds';
 }
 
-/// 播放队列：只列出当前曲目之后的「接下来」。
+/// 播放队列：只列出当前曲目之后的曲目。
 ///
 /// 当前播放曲目由上方播放器承载（封面/标题/进度），列表里不重复这一行；
 /// 桌面队列面板（[QueueDisplay.includeCurrent]）需要在面板顶部展示当前曲目，
-/// 此时在「接下来」之前补一段高亮、不可点的「正在播放」小节。
+/// 此时在列表之前补一段高亮、不可点的「正在播放」小节。
 /// 懒加载：`SliverFixedExtentList` + [TrackRow] 固定行高，队列再长也只构建
 /// 视口附近的行、只请求视口内的封面；固定 extent 让滚动条拇指尺寸与拖动
 /// 定位精确（`interactive` + `thumbVisibility`，可手按住拖动）。
 ///
-/// 恢复态（冷启动未真正加载）同样可用：点击「接下来」条目会从该曲目恢复播放。
+/// 恢复态（冷启动未真正加载）同样可用：点击条目会从该曲目恢复播放。
+///
+/// 列表不再分「正在播放 / 接下来」两段小标题：面板本身就是队列
+/// （tab 文案已说明分组），标题只会把首行往下推。
 class QueueDisplay extends StatelessWidget {
   const QueueDisplay({
     super.key,
@@ -45,7 +48,7 @@ class QueueDisplay extends StatelessWidget {
   /// 队列滚动控制器（滚动条与父页面「滑到顶下拉收起」共用）。
   final ScrollController controller;
 
-  /// 内容顶部额外留白（播放页圆点过渡带）。
+  /// 内容顶部额外留白（播放页圆点过渡带 / 桌面版式 tab 栏下的内容间距）。
   final double topPadding;
 
   /// 队列面板（桌面右栏）用：顶部补一行「正在播放」（当前曲目，高亮、不可点）。
@@ -53,8 +56,7 @@ class QueueDisplay extends StatelessWidget {
   /// 播放页版面里当前曲目由播放器承载，保持 false 不重复展示。
   final bool includeCurrent;
 
-  /// 「正在播放」与「接下来」两个卡片小节之间的空气：比行距大，
-  /// 避免两段分组视觉上粘成一段。
+  /// 「正在播放」小节与队列列表之间的空气：比行距大，避免两段视觉上粘成一段。
   static const double _sectionSpacing = 16;
 
   @override
@@ -85,7 +87,8 @@ class QueueDisplay extends StatelessWidget {
           // 「正在播放」小节（无当前曲目时整段不存在）。
           if (current != null)
             SliverPadding(
-              padding: EdgeInsets.fromLTRB(24, topPadding, 24, 0),
+              // 左右 16 与 tab 栏 / 其它内容同一内容边距（M3E 口径）。
+              padding: EdgeInsets.fromLTRB(16, topPadding, 16, 0),
               sliver: SliverToBoxAdapter(
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
@@ -109,31 +112,16 @@ class QueueDisplay extends StatelessWidget {
                 ),
               ),
             ),
-          SliverPadding(
-            // 有「正在播放」段时用小节间距分隔两段；否则沿用顶部留白
-            // （播放页圆点过渡带）。
-            padding: EdgeInsets.fromLTRB(
-              24,
-              current != null && currentQueue.isNotEmpty
-                  ? _sectionSpacing
-                  : topPadding,
-              24,
-              0,
-            ),
-            sliver: SliverToBoxAdapter(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  if (currentQueue.isNotEmpty)
-                    _sectionLabel(context, l10n.upNextSection),
-                ],
-              ),
-            ),
-          ),
           if (currentQueue.isNotEmpty)
             SliverPadding(
-              padding: const EdgeInsets.symmetric(horizontal: 24),
+              // 有「正在播放」段时用小节间距分隔两段；否则沿用顶部留白
+              // （播放页圆点过渡带 / tab 栏下的内容间距）。
+              padding: EdgeInsets.fromLTRB(
+                16,
+                current != null ? _sectionSpacing : topPadding,
+                16,
+                0,
+              ),
               sliver: SliverFixedExtentList.builder(
                 // 行高 + 行距：固定 extent，滚动条拖动一次定位。
                 itemExtent: TrackRow.extent + cardList.gap,
@@ -160,7 +148,7 @@ class QueueDisplay extends StatelessWidget {
             )
           else if (current == null)
             // 空态只在整块面板没有任何行时出现：「正在播放」段存在时队列为空
-            // 只代表「没有接下来」，不是空面板（空态文案会误导）。
+            // 只是「播放顺序走完」，不是空面板（空态文案会误导）。
             SliverFillRemaining(
               hasScrollBody: false,
               child: Center(
@@ -193,7 +181,7 @@ class QueueDisplay extends StatelessWidget {
   }
 }
 
-/// 队列「接下来」行：行内容 + 桌面的行表面右键菜单（收藏开关 / 加入列表，
+/// 队列行：行内容 + 桌面的行表面右键菜单（收藏开关 / 加入列表，
 /// 与搜索结果行共用 [trackRowActionMenuForTrack]）。
 ///
 /// 入口分平台：桌面端行表面右键在落点弹菜单；触摸端队列行无 ⋮、无右键
