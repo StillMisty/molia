@@ -1064,7 +1064,12 @@ class SyncEngine extends ChangeNotifier implements SyncSchedulerHost {
       var nextCursor = cursor;
       var gap = false;
       if (envelope.isDelta) {
-        if (cursor < envelope.baseSeq) {
+        // 游标 -1 = 尚未消费任何条目（全新对端 / 刚引导过）：与窗口起点比较时
+        // 夹到 0——日志 seq 从 1 开始，`-1 < baseSeq(0)` 不是「落后」而是
+        // 「正好从头开始」，按落后处理会白做一次全量 bootstrap（且快照可能
+        // 早于本次变更，白白丢掉这一窗）。
+        final baseline = cursor < 0 ? 0 : cursor;
+        if (baseline < envelope.baseSeq) {
           // 窗口缺口：本机游标之前的条目已被对端裁剪，窗口不完整。
           gap = true;
           fullPeers.add(peerId);
@@ -1073,7 +1078,9 @@ class SyncEngine extends ChangeNotifier implements SyncSchedulerHost {
           // 类别会造成空洞，此时不能把游标推到 windowEnd（会永久跳过它们）。
           final entries = [...(envelope.journal ?? const <SyncJournalEntry>[])]
             ..sort((a, b) => a.seq.compareTo(b.seq));
-          var expected = cursor + 1;
+          // 起点同样夹到 1：游标 -1（全新对端 / 刚被重置）时首条合法 seq 是 1，
+          // 从 0 起算会把每条窗口都判成「首条即空洞」。
+          var expected = baseline + 1;
           var hole = false;
           for (final entry in entries) {
             if (entry.seq <= cursor) continue;
@@ -1084,7 +1091,14 @@ class SyncEngine extends ChangeNotifier implements SyncSchedulerHost {
             expected = entry.seq + 1;
             remoteRecords.putIfAbsent(entry.category, () => []).add(entry.record);
           }
-          if (hole || (envelope.windowEnd > cursor && expected - 1 < envelope.windowEnd)) {
+          // 缺口判定只对**非空窗口**成立：`windowEnd == 0` 是空窗口（回执
+          // 类载荷），它什么都没带，不该被当成「窗口被裁剪」——否则全新对端
+          // （游标 -1）会被推进一次多余的 bootstrap，而快照可能早于本次变更，
+          // 白丢一窗。
+          final truncated = envelope.windowEnd > 0 &&
+              expected - 1 < envelope.windowEnd &&
+              envelope.windowEnd > cursor;
+          if (hole || truncated) {
             // 窗口内不连续：标缺口改走 bootstrap（已接受的条目照常应用，
             // 游标只推进到已接受的最大 seq）。
             gap = true;
