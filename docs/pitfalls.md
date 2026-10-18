@@ -414,3 +414,17 @@
     游标**落在快照覆盖位置**（不是取最大），且待提交游标允许回退。回归用例见
     `test/sync_pipeline_reset_test.dart`。任何将来「清日志 / 换载荷格式」的改动
     都要带上这条语义。
+52. **游标 -1 与「seq 从 1 开始」：三处 off-by-one 都会让全新对端退化成 bootstrap**：
+    日志 seq 从 1 开始、`cursorSeq = -1` 表示「尚未消费任何条目」，两者相减时
+    `cursor + 1 = 0` 不是合法的第一条。按 `cursor + 1` 推算起点的地方都要把
+    游标夹到 0（或把起点夹到 1）：
+    ① 窗口完整性 `cursor < baseSeq`：`-1 < 0` 会把「正好从头开始」判成「窗口
+    已被裁剪」→ 白做一次全量 bootstrap（快照还可能早于本次变更，白丢一窗）；
+    ② 条目连续性 `expected = cursor + 1`：首条 seq 1 ≠ 0 → 判成「首条即空洞」
+    → **增量窗口永远吃不下**；
+    ③ 缺口判定 `windowEnd > cursor`：空窗口（`windowEnd = 0`，回执类载荷）
+    在游标 -1 时被当成「窗口被截断」。
+    这三处在旧布局下被掩盖：局域网 `serveJournal(since = -1)` 与单文件 WebDAV
+    都会给全新对端**回全量快照**（`since < baseSeq(0)`），增量窗口根本到不了
+    全新对端；改成分块文件后增量直接发给全新对端，才全部暴露。回归用例：
+    `test/sync_engine_test.dart`（空窗口 / 截断）、`test/sync_webdav_e2e_test.dart`。
