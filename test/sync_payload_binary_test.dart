@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:flutter_test/flutter_test.dart';
@@ -195,9 +196,12 @@ void main() {
         ],
       },
     );
-    final frame = SyncCodec(iterations: 2000).encrypt(envelope, 'ABCD-EFGH-JKLM-NPQR-STUV-WXYZ-2345-6789');
-    final jsonBytes = SyncPayload.encode(envelope, codec: SyncPayloadCodec.json);
-    expect(frame.length, lessThan(jsonBytes.length ~/ 3));
+    final frame = SyncCodec(iterations: 2000)
+        .encrypt(envelope, 'ABCD-EFGH-JKLM-NPQR-STUV-WXYZ-2345-6789');
+    final compressedJson = gzip.encode(
+      SyncPayload.encode(envelope, codec: SyncPayloadCodec.json),
+    );
+    expect(frame.length, lessThan(compressedJson.length ~/ 3));
   });
 
   test('空载荷 / 无 data / 空 map / 越界拒绝', () {    final empty = SyncEnvelope(deviceId: 'dev-a', producedAt: 1);

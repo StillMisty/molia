@@ -116,7 +116,7 @@ abstract final class SyncPayloadBinary {
     _writeColumn(w, rowSeqs, intDelta: true);
     _writeColumn(w, rowKeys);
     _writeColumn(w, rowPhysical, intDelta: true);
-    _writeColumn(w, rowCounter, intDelta: false);
+    _writeColumn(w, rowCounter);
     _writeColumn(w, rowDevice);
     w.raw(rowFlags);
     _writeDataColumns(w, rows);

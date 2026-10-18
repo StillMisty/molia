@@ -160,6 +160,8 @@ Future<SyncStack> buildSyncStack({
     },
     // 引擎与各仓库共用同一个发号器（唯一）与同一时钟源。
     stamps: syncState.stampIssuer,
+    // 全库指纹也走 worker（一次本地变更就要重算一遍，主 isolate 上会掉帧）。
+    fingerprintPort: syncCodec,
     // 变更集基线（sync_known）：跨重启只把版本变化的胜者交给适配器。
     known: SyncKnownRepository(
       databaseProvider: () => MoliaDatabase.instance,
@@ -172,6 +174,9 @@ Future<SyncStack> buildSyncStack({
     clock: () => DateTime.fromMillisecondsSinceEpoch(syncState.nowMs()),
   );
   engineRef = syncEngine;
+  // 接线契约显式化：漏传增量日志会让引擎静默退化为「每轮全量」（全库指纹 +
+  // 整库加密推送）。冒烟测试是主守卫，这里再兜一层 debug 断言。
+  assert(syncEngine.incrementalEnabled, '同步引擎必须注入 library.syncJournal');
   // 蜂窝判定用调度器默认的真实探针（connectivity_plus）：省流服务的 onCellular
   // 只是缓存值，Wi-Fi 启动后切蜂窝不会反映到它上面。
   final scheduler = SyncScheduler(

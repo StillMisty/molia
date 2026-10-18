@@ -4,13 +4,11 @@
 /// [SyncPayloadCodec]：
 /// - [SyncPayloadCodec.binary]：列式二进制，**线上唯一格式**
 ///   （见 `sync_payload_binary.dart`）；
-/// - [SyncPayloadCodec.json]：JSON 文本，只服务备份文件与测试往返，
-///   不是线上格式。
+/// - [SyncPayloadCodec.json]：JSON 文本，只服务测试对照与排障渲染，不参与
+///   线上；完整备份走 `SyncEnvelope.toJson`（同一模型、不经帧层）。
 ///
-/// 为什么保留 JSON：完整备份（数据与存储页的导出/导入）是用户可见、
-/// 要被外部工具读取的自包含文本，与线上载荷共用 `SyncEnvelope`；二进制
-/// 编解码因此复用 JSON 路径做**双向对照测试**（同一 envelope 两种编码
-/// 往返必须等价），排障时也能把线上载荷渲染回 JSON。
+/// 为什么保留 JSON 编码：二进制编解码用它做**双向对照测试**（同一 envelope
+/// 两种编码往返必须等价），排障时也能把线上载荷渲染回可读文本。
 library;
 
 import 'dart:convert';

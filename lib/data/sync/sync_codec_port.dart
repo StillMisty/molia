@@ -10,6 +10,7 @@ import 'dart:typed_data';
 
 import '../../domain/models/device_sync.dart';
 import 'sync_crypto.dart';
+import 'sync_fingerprint.dart';
 
 abstract interface class SyncCodecPort {
   /// 编码一份载荷（帧字节）。
@@ -17,6 +18,9 @@ abstract interface class SyncCodecPort {
 
   /// 解码一份帧；口令 / 认证 / 载荷结构失败抛 [SyncCryptoException]。
   Future<SyncEnvelope> decrypt(Uint8List bytes, String passphrase);
+
+  /// 记录集内容指纹（`snapshotId`）：引擎每轮按需重算，也是全库遍历的 CPU 工作。
+  Future<String> fingerprint(Map<SyncCategory, List<SyncRecord>> records);
 
   /// 释放底层资源（worker isolate 等）；重复调用幂等。
   Future<void> dispose();
@@ -35,6 +39,10 @@ class InlineSyncCodecPort implements SyncCodecPort {
   @override
   Future<SyncEnvelope> decrypt(Uint8List bytes, String passphrase) async =>
       codec.decrypt(bytes, passphrase);
+
+  @override
+  Future<String> fingerprint(Map<SyncCategory, List<SyncRecord>> records) async =>
+      syncFingerprint(records);
 
   @override
   Future<void> dispose() async {}

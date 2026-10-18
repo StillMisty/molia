@@ -449,10 +449,10 @@
   `savedAt` / `importedAt` 与墓碑的真实删除时间是内容语义，进记录 `data`、
   **永不参与胜负判定**；历史「删除 vs 播放」由库内按真实时间比较
   （`playedAt <= deletedAt` → 删除生效，否则复活并撤墓碑，见 ADR-0003 v2 §2）。
-- **Protocol v2（协议版本）** — `SyncEnvelope.protocolVersion = 2`：线上格式
-  自始为 v2，快照 JSON 的 `v` 字段随 envelope 读写（自描述 / 将来能力协商的
-  锚点）；**没有版本闸门、协商或降级**，对端快照直接合并。备份导入只做结构
-  校验（不是 Molia 备份 / 内层 envelope 无效才抛 `FormatException`）。
+- **Protocol v3（协议版本）** — `SyncEnvelope.protocolVersion = 3`：线上格式
+  只有 v3（帧 `magic + 版本 + nonce`、载荷列式二进制，见 ADR-0003 §1），
+  只写只读 v3；**没有版本闸门、协商或降级**，版本不符一律明确失败。备份导入
+  只做结构校验（不是 Molia 备份 / 内层 envelope 无效才抛 `FormatException`）。
 - **Sync category（同步类别）** — 可开关的数据类别：`playlists` /
   `playlistTracks` / `sources` / `settings` / `credentials` / `statistics` /
   `history` / `session`；关闭的类别既不推送也不应用（本机仍持续登记本地变化）。

@@ -20,11 +20,13 @@ import 'package:logging/logging.dart';
 import '../../domain/models/device_sync.dart';
 import 'sync_codec_port.dart';
 import 'sync_crypto.dart';
+import 'sync_fingerprint.dart';
 
 /// 请求操作码（跨 isolate 消息里只传 int）。
 abstract final class _CodecOp {
   static const int encrypt = 0;
   static const int decrypt = 1;
+  static const int fingerprint = 2;
 }
 
 class IsolateSyncCodecPort implements SyncCodecPort {
@@ -68,6 +70,16 @@ class IsolateSyncCodecPort implements SyncCodecPort {
   }
 
   @override
+  Future<String> fingerprint(Map<SyncCategory, List<SyncRecord>> records) async {
+    final reply = await _send(
+      _CodecOp.fingerprint,
+      records: records,
+      passphrase: '',
+    );
+    return reply.fingerprint!;
+  }
+
+  @override
   Future<void> dispose() async {
     if (_disposed) return;
     _disposed = true;
@@ -86,6 +98,7 @@ class IsolateSyncCodecPort implements SyncCodecPort {
     int op, {
     SyncEnvelope? envelope,
     Uint8List? bytes,
+    Map<SyncCategory, List<SyncRecord>>? records,
     required String passphrase,
   }) async {
     if (_disposed) throw StateError('同步编码端口已释放');
@@ -99,6 +112,7 @@ class IsolateSyncCodecPort implements SyncCodecPort {
       passphrase,
       envelope: envelope,
       bytes: bytes,
+      records: records,
     ));
     final reply = await completer.future;
     final error = reply.error;
@@ -172,6 +186,8 @@ void _codecWorker(List<Object?> args) {
           reply.bytes = codec.encrypt(message.envelope!, message.passphrase);
         case _CodecOp.decrypt:
           reply.envelope = codec.decrypt(message.bytes!, message.passphrase);
+        case _CodecOp.fingerprint:
+          reply.fingerprint = syncFingerprint(message.records!);
       }
     } on SyncCryptoException catch (e) {
       reply.error = e.message;
@@ -190,6 +206,7 @@ class _CodecRequest {
     this.passphrase, {
     this.envelope,
     this.bytes,
+    this.records,
   });
 
   final int id;
@@ -197,6 +214,7 @@ class _CodecRequest {
   final String passphrase;
   final SyncEnvelope? envelope;
   final Uint8List? bytes;
+  final Map<SyncCategory, List<SyncRecord>>? records;
 }
 
 /// 编解码应答（error 非空即为失败原因）。
@@ -206,5 +224,6 @@ class _CodecReply {
   final int id;
   Uint8List? bytes;
   SyncEnvelope? envelope;
+  String? fingerprint;
   String? error;
 }
