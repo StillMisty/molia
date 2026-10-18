@@ -7,7 +7,7 @@
   `android/app/src/main/kotlin/top/stillmisty/molia/MainActivity.kt`、
   `windows/installer/molia.iss`、
   `.github/workflows/release.yml`、`tool/ci/gen_update_manifest.py`、
-  `docs/release.md`
+  `.agents/skills/molia-release/SKILL.md`
 
 ## 背景
 
@@ -89,5 +89,5 @@
 - `android/app/src/main/AndroidManifest.xml` 增加 `REQUEST_INSTALL_PACKAGES`
   与 FileProvider；`MainActivity` 增加更新通道。
 - 新增依赖只有 `package_info_plus`（读当前版本）。
-- 发布流程新增 tag 约定与 secrets 配置，见 `docs/release.md`。
+- 发布流程新增 tag 约定与 secrets 配置，见 `.agents/skills/molia-release/SKILL.md`。
 - 设置首屏「通用与数据」新增「关于与更新」入口。

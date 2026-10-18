@@ -2,7 +2,8 @@
 /// （Android 系统安装器 / 桌面替换脚本）。
 ///
 /// 版本号来自平台包信息（CI 用 `--build-name/--build-number` 注入，见
-/// docs/release.md）；读不到时退化为 0.0.0（仍可检查，只是比较无基准）。
+/// `.agents/skills/molia-release/SKILL.md`）；读不到时退化为 0.0.0
+/// （仍可检查，只是比较无基准）。
 library;
 
 import 'package:flutter/foundation.dart';

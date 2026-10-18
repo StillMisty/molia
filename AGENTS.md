@@ -27,8 +27,8 @@ tool/agent/seed.sh android|linux <cmd>   # 数据注入：favorites/history/sess
 - 改 `lib/data/molia_database.dart` → `dart run build_runner build`；改表结构提 `schemaVersion`，
   用 `dart run drift_dev make-migrations` 生成快照 + `stepByStep` 写增量迁移并保留数据（ADR-0005）。
 
-发布：`git tag -s v1.2.3 -m "Molia 1.2.3" && git push origin v1.2.3`（tag 即版本，测试版 `v1.2.3-beta.1`；
-必须 `-s`——轻量标签不签名，`tag.gpgsign` 只覆盖附注标签）。
+发布：`git tag -s v1.2.3 -m "Molia 1.2.3" && git push origin v1.2.3`（tag 即版本；
+流程、secrets 与产物清单见 `.agents/skills/molia-release/`）。
 
 ## 架构地图
 

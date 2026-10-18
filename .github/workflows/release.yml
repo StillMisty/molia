@@ -1,7 +1,7 @@
 name: Release
 
 # 推 `v*` tag 触发：矩阵构建 → 汇总产物 + sha256 + latest.json → GitHub Release。
-# 版本约定（见 docs/release.md）：
+# 版本约定（见 .agents/skills/molia-release/SKILL.md）：
 #   稳定版 v1.2.3 / 测试版 v1.2.3-beta.1（发布为 prerelease）
 #   打 tag 前必须先把 pubspec.yaml 的版本改成同一个版本号。
 on:
@@ -87,7 +87,7 @@ jobs:
           flutter-version: 3.47.6
           channel: stable
           cache: true
-      - name: 还原签名（Secrets，见 docs/release.md）
+      - name: 还原签名（Secrets，见 .agents/skills/molia-release/SKILL.md）
         env:
           KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
           STORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
@@ -96,7 +96,7 @@ jobs:
         run: |
           set -euo pipefail
           if [[ -z "${KEYSTORE_BASE64:-}" ]]; then
-            echo "::error::缺少 ANDROID_KEYSTORE_BASE64（docs/release.md 的 secrets 清单）"
+            echo "::error::缺少 ANDROID_KEYSTORE_BASE64（.agents/skills/molia-release/SKILL.md 的 secrets 清单）"
             exit 1
           fi
           echo "$KEYSTORE_BASE64" | base64 -d > android/molia-release.jks
@@ -204,7 +204,7 @@ jobs:
   linux:
     name: Linux x64
     needs: prepare
-    # 22.04 构建以兼容更老的 glibc；运行仍需系统 libmpv（见 docs/release.md）。
+    # 22.04 构建以兼容更老的 glibc；运行仍需系统 libmpv（见 .agents/skills/molia-release/references/platforms.md）。
     runs-on: ubuntu-22.04
     timeout-minutes: 60
     steps:

@@ -9,7 +9,7 @@ import 'update_repository.dart';
 
 /// 更新清单（latest.json）客户端：拉取 + 结构校验 + 镜像地址重写。
 ///
-/// 清单来源（约定见 docs/release.md）：
+/// 清单来源（约定见 `.agents/skills/molia-release/references/latest-json.md`）：
 /// - 稳定版 `releases/latest/download/latest.json`（GitHub 的 latest 排除
 ///   prerelease）；
 /// - 测试版 `releases/download/beta/latest.json`（发布流水线维护的滚动标签）。
