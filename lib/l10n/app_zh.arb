@@ -10,6 +10,14 @@
   "searchIdleHint": "输入关键词搜索歌曲",
   "clearSearch": "清除搜索",
   "searchClose": "关闭搜索",
+  "searchResultsAnnouncement": "{count} 条搜索结果",
+  "@searchResultsAnnouncement": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
   "copiedToClipboard": "已复制到剪贴板",
   "delete": "删除",
   "lyricsFetching": "正在获取歌词...",
@@ -117,7 +125,7 @@
   "cacheClearFailed": "清除缓存失败。",
   "saveChanges": "保存",
   "selectLyrics": "选择歌词",
-  "selectLyricsTooltip": "选择歌词片段生成海报或分享",
+  "lyricsPosterAction": "歌词海报",
   "deselectAll": "取消全选",
   "noLyricsSelected": "请先选择一些歌词",
   "sharePoster": "分享海报",

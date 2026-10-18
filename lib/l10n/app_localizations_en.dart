@@ -41,6 +41,11 @@ class AppLocalizationsEn extends AppLocalizations {
   String get searchClose => 'Close search';
 
   @override
+  String searchResultsAnnouncement(int count) {
+    return '$count results available';
+  }
+
+  @override
   String copiedToClipboard(String type) {
     return 'Copied to clipboard';
   }
@@ -384,8 +389,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get selectLyrics => 'Select Lyrics';
 
   @override
-  String get selectLyricsTooltip =>
-      'Select lyrics fragments to make a poster or share';
+  String get lyricsPosterAction => 'Lyrics poster';
 
   @override
   String get deselectAll => 'Deselect All';

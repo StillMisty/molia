@@ -158,6 +158,12 @@ abstract class AppLocalizations {
   /// **'Close search'**
   String get searchClose;
 
+  /// No description provided for @searchResultsAnnouncement.
+  ///
+  /// In en, this message translates to:
+  /// **'{count} results available'**
+  String searchResultsAnnouncement(int count);
+
   /// No description provided for @copiedToClipboard.
   ///
   /// In en, this message translates to:
@@ -800,11 +806,11 @@ abstract class AppLocalizations {
   /// **'Select Lyrics'**
   String get selectLyrics;
 
-  /// No description provided for @selectLyricsTooltip.
+  /// No description provided for @lyricsPosterAction.
   ///
   /// In en, this message translates to:
-  /// **'Select lyrics fragments to make a poster or share'**
-  String get selectLyricsTooltip;
+  /// **'Lyrics poster'**
+  String get lyricsPosterAction;
 
   /// No description provided for @deselectAll.
   ///

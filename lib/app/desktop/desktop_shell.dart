@@ -130,13 +130,13 @@ class DesktopShell extends StatelessWidget {
                     Expanded(child: pageStack),
                   ],
                 ),
-                // 搜索遮罩宿主：隐形锚点只提供搜索条展开的起始位置（中上、居中），
-                // 覆盖层由 M3E 搜索视图在根导航器上呈现（见 GlobalSearchOverlay）。
+                // 搜索遮罩宿主：不可见占位盒只提供搜索条的静止位置（中上、居中），
+                // 内容由 GlobalSearchOverlay 挂到根导航器上呈现。
                 Positioned(
-                  top: GlobalSearchOverlay.anchorTopFor(context),
+                  top: GlobalSearchOverlay.barTopFor(context),
                   left: 0,
                   right: 0,
-                  height: GlobalSearchOverlay.anchorHeight,
+                  height: GlobalSearchOverlay.barHeight,
                   child: Center(
                     child: GlobalSearchOverlay(
                       controller: searchController,

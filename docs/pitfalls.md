@@ -480,3 +480,12 @@
     拿不到渲染对象时原样使用（根 overlay 无祖先变换，全局 = 局部）。唯一实现：
     `lib/widgets/track_actions_menu.dart::showTrackActionsMenuAtPointer`
     （触摸端 ⋮ 仍走 `M3EMenu.entries` 的组件锚点）。
+56. **M3E 搜索视图（`M3ESearchAnchor`）不适合「就地展开」的全屏遮罩**：包内 docked
+    视图的目标矩形完全由锚点矩形推导（`_dockedRect` 的 x / y / 宽都取自 `begin`），
+    锚点只要摆在搜索条静止位置，容器变换的位移就是 0——开合没有过渡动画（只剩一层
+    容易被忽略的 scrim 淡入），且包内只在容器变换弹簧落定后才给输入框聚焦
+    （`_tryFocusViewField` 挂在弹簧的 TickerFuture 上），Ctrl+F 之后立刻打字的按键
+    会被吞掉（实测 5 个字符丢 2 个）。包内没有暴露动画 / 聚焦钩子，遮罩要动效与
+    「打开即可输入」只能自建 route（出现 / 消失自己走 scrim 淡入 + 内容淡入轻微缩放，
+    输入框首帧 autofocus）。回归：`test/app/desktop_shell_test.dart` 的
+    「遮罩开合走淡入 + 缩放过渡」「打开后首帧即可输入」两条。

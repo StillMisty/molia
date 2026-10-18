@@ -1,4 +1,4 @@
-/// 桌面壳层全局搜索遮罩：全屏 scrim + 上方居中搜索条 + 就地结果面板。
+/// 桌面壳层全局搜索遮罩：全屏 scrim + 中上居中搜索条 + 就地结果面板。
 ///
 /// 与资料库页共用同一个 [SearchProvider]（不新建 provider）：关键词、分段、
 /// 结果与「查看全部结果」后的完整结果链天然同源。结果行点击复用
@@ -6,13 +6,30 @@
 /// 结果整体进队列、从该行开始、上下文名 = 音源显示名），不复制第二套播放语义。
 ///
 /// 形态：壳层没有常驻搜索条（顶栏最左让位给品牌区），Ctrl+F / 品牌区点击经
-/// [GlobalSearchController] 打开本遮罩。锚点是一个不可见、不可点的占位盒：
-/// 只有位置与尺寸有意义——M3E 搜索视图从锚点矩形做容器变换，展开成全屏 scrim
-/// + 居中搜索条 + 贴合内容高度的结果面板（docked 形态；整屏不透明页与
-/// 「遮罩」语义不符）。结果列表在面板内限高滚动，更长的列表交给资料库目的地
-/// （「查看全部结果」回调由壳层给）。
+/// [GlobalSearchController] 打开本遮罩。宿主是一个不可见、不可点的占位盒：
+/// 只有位置与尺寸有意义——遮罩打开时实测它的矩形，把搜索条与结果面板摆在
+/// 同一位置（route 挂在根导航器上、坐标是整窗口径，所以顶栏高度不用写死在这里）。
+///
+/// **为什么自建 route，而不是 M3E 的 search view**：
+/// - 包内 docked 视图的目标矩形完全由锚点矩形推导（`_dockedRect` 的 x / y / 宽
+///   都取自 `begin`）：锚点本就摆在搜索条静止位置时，容器变换的位移是 0，
+///   开合只剩一层容易被忽略的 scrim 淡入淡出——表现就是「搜索框闪现闪消」；
+/// - 包内只在容器变换弹簧落定后才给输入框聚焦（`_tryFocusViewField` 挂在
+///   弹簧的 TickerFuture 上）：Ctrl+F 之后立刻打字的按键会被吞掉；
+/// - 包内没有暴露动画 / 聚焦钩子，这两点只能靠自建 route 解决：开合走
+///   「scrim 淡入 + 内容淡入 + 轻微缩放」，输入框在首帧就 autofocus。
+///
+/// 结果列表在面板内限高滚动，更长的列表交给资料库目的地（「查看全部结果」
+/// 回调由壳层给）。
+///
+/// 与 M3E 搜索视图的取舍细节见 `docs/pitfalls.md` 已知坑 56。
 library;
 
+import 'dart:async';
+import 'dart:math' as math;
+
+import 'package:flutter/semantics.dart';
+import 'package:flutter/services.dart';
 import 'package:material_3_expressive/material_3_expressive.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:provider/provider.dart';
@@ -24,6 +41,7 @@ import '../providers/search_provider.dart';
 import '../services/escape_claims.dart';
 import '../services/haptics.dart';
 import '../utils/duration_text.dart';
+import 'app_search_bar.dart';
 import 'artist_row.dart';
 import 'track_row.dart';
 
@@ -32,7 +50,19 @@ import 'track_row.dart';
 AppLocalizations _l10n(BuildContext context) =>
     AppLocalizations.of(context) ?? lookupAppLocalizations(const Locale('zh'));
 
-/// 壳层搜索遮罩宿主：隐形锚点 + M3E 搜索视图（打开入口见
+/// 搜索条与结果面板之间的间隙（M3E docked 口径：2dp）。
+const double _barPanelGap = 2;
+
+/// 面板与窗口底缘的最小留白：结果再多也不贴底。
+const double _panelBottomMargin = 24;
+
+/// 开合时长：scrim（路由 barrier）与内容同一拍，M3E effects 档量级。
+const Duration _openDuration = Duration(milliseconds: 200);
+
+/// 内容入场缩放起点：只做「轻微」缩放，避免整块像弹窗一样飞进来。
+const double _enterScale = 0.97;
+
+/// 壳层搜索遮罩宿主：静止位置占位盒 + 自建搜索视图（打开入口见
 /// [GlobalSearchController.focus]）。
 class GlobalSearchOverlay extends StatefulWidget {
   const GlobalSearchOverlay({
@@ -47,19 +77,21 @@ class GlobalSearchOverlay extends StatefulWidget {
   /// 壳层打开入口（Ctrl+F / 品牌区点击）：把「打开并聚焦」暴露给壳层。
   final GlobalSearchController? controller;
 
-  /// 遮罩内搜索条的静止宽度：docked 视图从锚点宽度起步（窄窗由视图自己
-  /// 按屏宽收窄，这里只给桌面宽窗的目标值）。
-  static const double anchorWidth = 640;
+  /// 遮罩内搜索条的静止宽度（宽窗目标值；窄窗由宿主约束夹取）。
+  static const double barWidth = 640;
 
-  /// 静止条高：M3E docked 头部同档（56），开合变换的起止高度一致。
-  static const double anchorHeight = 56;
+  /// 静止条高：M3E docked 头部同档（56），占位盒与搜索条等高。
+  static const double barHeight = 56;
 
-  /// 锚点纵向位置：屏幕「中上」（15% 屏高）。
+  /// 静止条纵向位置：内容区「中上」（15% 屏高）。
   ///
   /// 夹在 72–160 之间：最小窗口（600 高）不贴顶、不与顶栏（56）重叠，
-  /// 高窗口不被顶栏拉下去。搜索条从这条位置展开，结果面板向下生长。
-  static double anchorTopFor(BuildContext context) =>
+  /// 高窗口不被顶栏拉下去。搜索条落在这条位置，结果面板向下生长。
+  static double barTopFor(BuildContext context) =>
       (MediaQuery.sizeOf(context).height * 0.15).clamp(72.0, 160.0);
+
+  /// 开合过渡的稳定 Key（测试定位用）。
+  static const Key transitionKey = Key('globalSearchTransition');
 
   @override
   State<GlobalSearchOverlay> createState() => _GlobalSearchOverlayState();
@@ -67,10 +99,10 @@ class GlobalSearchOverlay extends StatefulWidget {
 
 /// 全局搜索的壳层入口：把「打开 / 聚焦搜索」暴露给壳层（Ctrl+F / 品牌区）。
 ///
-/// 只持有当前挂载的 [M3ESearchController] 引用；未挂载（如独立测试）时
-/// [focus] 是 no-op。已打开时同样 no-op——输入框本就持有焦点。
+/// 只持有当前挂载的遮罩 State；未挂载（如独立测试）时 [focus] 是 no-op。
+/// 已打开时同样 no-op——输入框本就持有焦点。
 class GlobalSearchController {
-  M3ESearchController? _search;
+  _GlobalSearchOverlayState? _overlay;
 
   /// 遮罩开合（打开 = 搜索视图路由在场）。
   ///
@@ -78,45 +110,29 @@ class GlobalSearchController {
   /// 淡入淡出由消费面自己补。
   final ValueNotifier<bool> open = ValueNotifier<bool>(false);
 
-  /// 打开搜索遮罩（打开动画落定后包内让输入框取得焦点）。
-  void focus() {
-    final search = _search;
-    if (search == null || !search.isAttached || search.isOpen) return;
-    search.openView();
-  }
+  /// 打开搜索遮罩并聚焦输入框（搜索条自身 autofocus，首帧即拿到焦点）。
+  void focus() => _overlay?._open();
 
-  void _attach(M3ESearchController search) => _search = search;
+  void _attach(_GlobalSearchOverlayState overlay) => _overlay = overlay;
 
-  void _detach(M3ESearchController search) {
-    if (_search == search) _search = null;
+  void _detach(_GlobalSearchOverlayState overlay) {
+    if (_overlay == overlay) _overlay = null;
   }
 
   void dispose() => open.dispose();
 }
 
 class _GlobalSearchOverlayState extends State<GlobalSearchOverlay> {
-  /// 遮罩与结果行共用的控制器（打开后编辑在视图头部，锚点不参与编辑）。
-  final M3ESearchController _controller = M3ESearchController();
-
-  late final SearchProvider _search = context.read<SearchProvider>();
-
   /// 遮罩是否打开：Esc 占用登记的判据（见 [_claimEscape]）。
-  ///
-  /// 只被按键判定读取、不参与 build，故不 setState（避免一次多余重建）。
-  bool _open = false;
+  bool _isOpen = false;
 
   @override
   void initState() {
     super.initState();
-    widget.controller?._attach(_controller);
-    // provider → 输入框单向同步（provider 是搜索状态的唯一源）：在资料库页
-    // 改词 / 清空后重新打开遮罩不能残留旧关键词，否则会出现「框里有词、
-    // 结果区却为空」的自相矛盾状态。
-    _search.addListener(_syncFromProvider);
-    _syncFromProvider();
-    // Esc：M3E 视图自带关闭绑定；登记占用让壳层可配置命令（默认「关闭队列」）
-    // 让位——焦点不在输入框（Tab 到关闭键 / 结果区）时同一次 Esc 不会被两处
-    // 消费（协议见 escape_claims.dart）。
+    widget.controller?._attach(this);
+    // Esc：自建视图自带关闭绑定；登记占用让壳层可配置命令（默认「关闭队列」）
+    // 让位——焦点不在输入框（Tab 到结果区）时同一次 Esc 不会被两处消费
+    // （协议见 escape_claims.dart）。
     EscapeClaims.add(_claimEscape);
   }
 
@@ -124,44 +140,209 @@ class _GlobalSearchOverlayState extends State<GlobalSearchOverlay> {
   void didUpdateWidget(covariant GlobalSearchOverlay oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.controller != widget.controller) {
-      oldWidget.controller?._detach(_controller);
-      widget.controller?._attach(_controller);
+      oldWidget.controller?._detach(this);
+      widget.controller?._attach(this);
     }
   }
 
   @override
   void dispose() {
     EscapeClaims.remove(_claimEscape);
-    widget.controller?._detach(_controller);
-    _search.removeListener(_syncFromProvider);
-    _controller.dispose();
+    widget.controller?._detach(this);
     super.dispose();
   }
 
-  /// Esc 归属判定：遮罩打开时由 M3E 视图处理（与视图自己的关闭路径同源）。
-  bool _claimEscape() => _open;
+  /// Esc 归属判定：遮罩打开时由视图自己处理（与视图的关闭路径同源）。
+  bool _claimEscape() => _isOpen;
 
   void _setOpen(bool open) {
     if (!mounted) return;
-    _open = open;
+    _isOpen = open;
     // 壳层装饰面（背景模糊）跟遮罩一起出现 / 消失。
     widget.controller?.open.value = open;
   }
 
-  void _syncFromProvider() {
-    final query = _search.searchQuery;
-    if (_controller.text == query) return;
-    _controller.text = query;
+  /// 打开搜索遮罩（Ctrl+F / 品牌区点击；已打开时是空操作）。
+  ///
+  /// 路由由根导航器承载（`showGeneralDialog` 默认 `useRootNavigator`），与旧
+  /// M3E 搜索视图一致：遮罩盖在壳层之上，顶栏 / 底栏一起压暗。
+  Future<void> _open() async {
+    if (_isOpen) return;
+    _setOpen(true);
+    await showGeneralDialog<void>(
+      context: context,
+      barrierDismissible: true,
+      barrierLabel: _l10n(context).searchClose,
+      barrierColor: _scrimColor(context),
+      transitionDuration: _openDuration,
+      pageBuilder: (context, animation, secondaryAnimation) =>
+          _GlobalSearchView(
+        restingRect: _restingRect(context),
+        onViewAllResults: widget.onViewAllResults,
+      ),
+      transitionBuilder: _buildTransition,
+    );
+    // 视图已被 pop（返回键 / Esc / 点结果行 / 点遮罩）：复位开合状态。
+    if (!mounted) return;
+    _setOpen(false);
   }
 
-  /// 收起遮罩（仅在打开时）：所有跳转前先关，避免遮罩盖在目标页上。
-  void _closePanel() {
-    if (_controller.isOpen) _controller.closeView(null);
+  /// 出现 / 消失：内容淡入淡出 + 轻微缩放（scrim 由路由 barrier 自己随动画淡入）。
+  ///
+  /// 缩放锚点取顶中点：搜索条停在屏幕中上，从它向下展开的观感比居中缩放更贴
+  /// 「搜索条就地展开」的语义，也不会让整块横向滑动。
+  Widget _buildTransition(
+    BuildContext context,
+    Animation<double> animation,
+    Animation<double> secondaryAnimation,
+    Widget child,
+  ) {
+    final curved = CurvedAnimation(
+      parent: animation,
+      curve: Curves.easeOutCubic,
+      reverseCurve: Curves.easeInCubic,
+    );
+    return FadeTransition(
+      key: GlobalSearchOverlay.transitionKey,
+      opacity: curved,
+      child: ScaleTransition(
+        scale: Tween<double>(begin: _enterScale, end: 1).animate(curved),
+        alignment: Alignment.topCenter,
+        child: child,
+      ),
+    );
   }
+
+  /// 遮罩的压暗底色：与 M3E 搜索视图同一 token（scrim × 32%）。
+  Color _scrimColor(BuildContext context) {
+    final m3e = M3ETheme.of(context);
+    return m3e.searchViewTheme.scrimColor(m3e.colorScheme);
+  }
+
+  /// 搜索条静止矩形（整窗坐标）：宿主占位盒的实测矩形。
+  ///
+  /// route 与占位盒都在同一个窗口坐标系里（导航器覆盖整窗），实测值可以直接
+  /// 摆到视图的 `Positioned` 上；窄窗下占位盒被父约束夹窄，这里自然跟着变窄。
+  Rect _restingRect(BuildContext context) {
+    final renderObject = context.findRenderObject();
+    if (renderObject is RenderBox && renderObject.hasSize) {
+      return renderObject.localToGlobal(Offset.zero) & renderObject.size;
+    }
+    // 未布局（理论不可达）：退回「屏宽夹取 + 中上」的估算值。
+    final screen = MediaQuery.sizeOf(context);
+    final width = math.min(
+      GlobalSearchOverlay.barWidth,
+      math.max(0.0, screen.width - 48),
+    );
+    return Rect.fromLTWH(
+      (screen.width - width) / 2,
+      GlobalSearchOverlay.barTopFor(context),
+      width,
+      GlobalSearchOverlay.barHeight,
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    // 占位盒：只提供搜索条静止位置与宽度，自己不画任何东西。
+    return const SizedBox(
+      width: GlobalSearchOverlay.barWidth,
+      height: GlobalSearchOverlay.barHeight,
+    );
+  }
+}
+
+/// 搜索视图（route 内容）：搜索条 + 结果面板，落在宿主的静止矩形上。
+///
+/// 直接订阅 [SearchProvider]：关键词、类型分段、结果与失败态都在 provider 里，
+/// 面板只做展示；输入框在首帧 autofocus（打开即能打字，不丢按键）。
+class _GlobalSearchView extends StatefulWidget {
+  const _GlobalSearchView({
+    required this.restingRect,
+    required this.onViewAllResults,
+  });
+
+  /// 搜索条静止矩形（整窗坐标，来自宿主占位盒的实测值）。
+  final Rect restingRect;
+
+  /// 「查看全部结果」（或面板内回车）→ 关闭遮罩并切到资料库目的地。
+  final VoidCallback onViewAllResults;
+
+  @override
+  State<_GlobalSearchView> createState() => _GlobalSearchViewState();
+}
+
+class _GlobalSearchViewState extends State<_GlobalSearchView> {
+  /// 遮罩与结果行共用的控制器（本视图独占；打开时用 provider 的词种上）。
+  final TextEditingController _field = TextEditingController();
+  final FocusNode _focusNode = FocusNode(debugLabel: 'globalSearchField');
+
+  late final SearchProvider _search = context.read<SearchProvider>();
+
+  /// 上一次已播报的内容（关键词 + 文案）：同一条消息不重复播报。
+  String? _lastAnnouncement;
+
+  @override
+  void initState() {
+    super.initState();
+    // provider → 输入框单向同步（provider 是搜索状态的唯一源）：在资料库页
+    // 改词 / 清空后重新打开遮罩不能残留旧关键词，否则会出现「框里有词、
+    // 结果区却为空」的自相矛盾状态。
+    _search.addListener(_onSearchChanged);
+    _syncFromProvider();
+  }
+
+  @override
+  void dispose() {
+    _search.removeListener(_onSearchChanged);
+    _field.dispose();
+    _focusNode.dispose();
+    super.dispose();
+  }
+
+  void _onSearchChanged() {
+    _syncFromProvider();
+    _announceResults();
+  }
+
+  void _syncFromProvider() {
+    final query = _search.searchQuery;
+    if (_field.text == query) return;
+    _field.text = query;
+  }
+
+  /// 当前搜索类型已加载的结果条数（与面板列表同口径）。
+  int get _resultCount => switch (_search.searchKind) {
+        SearchKind.song => _search.filteredResults.length,
+        SearchKind.artist => _search.artistResults.length,
+        SearchKind.lyric => _search.lyricResults.length,
+      };
+
+  /// 结果数变化时给读屏播报（空词 / 加载中不播报；文案走 l10n）。
+  ///
+  /// 替换包内硬编码英文的播报：同一份「N 条结果」信息按应用语言读出。
+  void _announceResults() {
+    if (!mounted || !_search.isSearchActive || _search.isSearching) return;
+    final message = _l10n(context).searchResultsAnnouncement(_resultCount);
+    final key = '${_search.searchQuery}\u0000$message';
+    if (key == _lastAnnouncement) return;
+    _lastAnnouncement = key;
+    final view = View.maybeOf(context);
+    if (view == null) return;
+    final direction = Directionality.of(context);
+    // 下一帧再播报：本次通知期间结果 widget 还没重建，读屏会读到旧内容。
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      unawaited(SemanticsService.sendAnnouncement(view, message, direction));
+    });
+  }
+
+  /// 收起遮罩：本视图是 route 内容，pop 即关闭（开合状态由宿主复位）。
+  void _close() => Navigator.of(context).maybePop();
 
   /// 「查看全部结果」：完整结果交给资料库目的地。
   void _openAllResults() {
-    _closePanel();
+    _close();
     widget.onViewAllResults();
   }
 
@@ -175,111 +356,94 @@ class _GlobalSearchOverlayState extends State<GlobalSearchOverlay> {
   /// （[SearchProvider.playItem]），播放后收起遮罩。
   void _playItem(Map<String, dynamic> item) {
     _search.playItem(item);
-    _closePanel();
+    _close();
   }
-
-  /// 当前搜索类型已加载的结果条数（与面板列表同口径）。
-  int get _resultCount => switch (_search.searchKind) {
-        SearchKind.song => _search.filteredResults.length,
-        SearchKind.artist => _search.artistResults.length,
-        SearchKind.lyric => _search.lyricResults.length,
-      };
 
   @override
   Widget build(BuildContext context) {
     final l10n = _l10n(context);
-    return M3ESearchAnchor(
-      searchController: _controller,
-      // 隐形锚点：只提供「搜索条从哪里展开」的几何，不接受点击与焦点
-      // （打开只走 Ctrl+F / 品牌区，见 GlobalSearchController）。
-      enabled: false,
-      // docked：整屏 scrim + 居中搜索条 + 结果面板；不铺满的不透明页才是
-      // 「遮罩 + 中上搜索框」的形态。
-      isFullScreen: false,
-      // 结果面板底自绘（见 _GlobalSearchResults._buildPanel）：包内那层在
-      // 空态也会留下一条 4dp 色条（内容为零仍有内边距），置透明后空态就真的
-      // 只剩搜索条。
-      viewBackgroundColor: Colors.transparent,
-      // 结果面板贴合内容高度：默认 2/3 屏会在结果少时拖出一大片空白。
-      shrinkWrap: true,
-      viewHintText: l10n.searchHint,
-      // 视图头部自绘关闭键：包内默认返回键会弹硬编码英文提示
-      // （M3ESearchConstants.backButtonTooltip），不符「文案必须走 l10n」。
-      // 图标沿用返回箭头（包内语义）：右缘的自绘清除键才是 X，两个 X 并排
-      // 会分不清「关面板」与「清关键词」。
-      viewLeading: M3EIconButton(
-        variant: M3EIconButtonVariant.standard,
-        icon: const Icon(Icons.arrow_back_rounded),
-        semanticLabel: l10n.searchClose,
-        onPressed: () => _controller.closeView(null),
-      ),
-      // 清除键自绘：包内置键会弹英文硬编码提示，且清除时不回调 onChanged
-      // （输入框与 provider 同步，需自行把空词同步过去）。
-      showViewClearButton: false,
-      viewTrailing: [_SearchClearAction(controller: _controller)],
-      // 包内把 suggestions 的长度当作「结果数」做无障碍播报，而结果区实际由
-      // viewBuilder 订阅 provider 自绘（异步结果到达不会重跑 suggestions）；
-      // 这里只回填与结果数等长的占位 widget 保住播报计数，widget 本身不用。
-      suggestionsBuilder: (context, controller) =>
-          List<Widget>.filled(_resultCount, const SizedBox.shrink()),
-      viewBuilder: (_) => _GlobalSearchResults(
-        onOpenAllResults: _openAllResults,
-        onPlayItem: _playItem,
-      ),
-      viewOnChanged: _search.updateSearchQuery,
-      viewOnSubmitted: _submit,
-      viewOnOpen: () => _setOpen(true),
-      viewOnClose: () => _setOpen(false),
-      builder: (context, controller) => const SizedBox(
-        width: GlobalSearchOverlay.anchorWidth,
-        height: GlobalSearchOverlay.anchorHeight,
-      ),
+    final rect = widget.restingRect;
+    // 面板限高：条下沿到窗口底部留出边距，更长的列表交给资料库目的地。
+    final maxPanelHeight = math.max(
+      0.0,
+      MediaQuery.sizeOf(context).height -
+          rect.bottom -
+          _barPanelGap -
+          _panelBottomMargin,
     );
-  }
-}
 
-/// 视图头部的清除键：本地化无障碍名 + 清空后把空词同步给 provider。
-///
-/// 自绘的原因同 `app_search_bar.dart`：包内置键会弹英文硬编码提示，
-/// 且清除只 `controller.clear()`、不触发 onChanged，面板会停留在上一轮结果上。
-class _SearchClearAction extends StatelessWidget {
-  const _SearchClearAction({required this.controller});
-
-  final M3ESearchController controller;
-
-  @override
-  Widget build(BuildContext context) {
-    final l10n = _l10n(context);
-    return ListenableBuilder(
-      listenable: controller,
-      builder: (context, _) {
-        if (controller.text.isEmpty) return const SizedBox.shrink();
-        return M3EIconButton(
-          variant: M3EIconButtonVariant.standard,
-          icon: const Icon(Icons.close_rounded),
-          semanticLabel: l10n.clearSearch,
-          onPressed: () {
-            controller.clear();
-            context.read<SearchProvider>().updateSearchQuery('');
-          },
-        );
+    return CallbackShortcuts(
+      bindings: <ShortcutActivator, VoidCallback>{
+        const SingleActivator(LogicalKeyboardKey.escape): _close,
       },
+      // M3E 弹层不提供 Material 祖先，结果行的水波会直接崩溃；
+      // 透明 Material 只补齐 ink 绘制层，不改变观感。
+      child: Material(
+        type: MaterialType.transparency,
+        child: Stack(
+          children: [
+            Positioned(
+              left: rect.left,
+              top: rect.top,
+              width: rect.width,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  AppSearchBar(
+                    controller: _field,
+                    focusNode: _focusNode,
+                    hintText: l10n.searchHint,
+                    // 打开即聚焦：键盘输入不再被开合动画吞掉。
+                    autofocus: true,
+                    // 静止外边距取 M3E search bar 的 resting margin（24），
+                    // 与结果面板（满宽）错开一档，保持原搜索视图的观感。
+                    margin: 24,
+                    // 视图头部自绘关闭键：包内默认返回键会弹硬编码英文提示
+                    // （M3ESearchConstants.backButtonTooltip），不符「文案必须
+                    // 走 l10n」。图标沿用返回箭头（包内语义）：右缘的自绘清除
+                    // 键才是 X，两个 X 并排会分不清「关面板」与「清关键词」。
+                    leading: M3EIconButton(
+                      variant: M3EIconButtonVariant.standard,
+                      icon: const Icon(Icons.arrow_back_rounded),
+                      semanticLabel: l10n.searchClose,
+                      onPressed: _close,
+                    ),
+                    onChanged: _search.updateSearchQuery,
+                    onSubmitted: _submit,
+                    // Esc：焦点在输入框时由搜索栏自身就近分发（外层
+                    // CallbackShortcuts 接不到——包内输入框会先消费 Esc 并
+                    // 退化成「失焦」）；焦点在结果区时由外层绑定兜底。
+                    onEscape: _close,
+                  ),
+                  const SizedBox(height: _barPanelGap),
+                  ConstrainedBox(
+                    constraints: BoxConstraints(maxHeight: maxPanelHeight),
+                    child: _GlobalSearchResults(
+                      onOpenAllResults: _openAllResults,
+                      onPlayItem: _playItem,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
     );
   }
 }
 
-/// docked 面板内容：类型分段 + 结果列表 + 底部「查看全部结果」。
+/// 面板内容：类型分段 + 结果列表 + 底部「查看全部结果」。
 ///
-/// 直接订阅 [SearchProvider]：包内 suggestions 通道只在输入时触发一次，
-/// 接不住防抖之后的异步结果，面板内容必须自己订阅 provider 才会实时刷新。
+/// 直接订阅 [SearchProvider]：结果在防抖之后异步到达，面板内容必须自己订阅
+/// provider 才会实时刷新。
 ///
-/// 两个版式约束（都是包内行为倒逼的，不是版式偏好）：
-/// - 整块内容是一个滚动视图：高度贴合内容、超出可用高度就整体滚动。M3E 的
-///   开合动画会把容器收缩回锚点高度，途中容器可以小于内容，固定高度的子项
-///   （分段 / 底部出口）在 Flex 里必然溢出；换成滚动视图后任何可用高度下都
-///   不会出现 RenderFlex 溢出（内容被视口裁掉即可）。
-/// - 面板底自绘（[_buildPanel]）：包内结果面在空态也会画一条 4dp 色条，所以
-///   遮罩把包内那层置透明，卡片由这里画——空态（无关键词）就只剩搜索条。
+/// 两个版式约束：
+/// - 整块内容是一个滚动视图：高度贴合内容，超出可用高度就整体滚动；固定高度的
+///   子项（分段 / 底部出口）在 Flex 里遇到更小的可用高度时必然溢出，滚动视图
+///   在任何可用高度下都只会裁掉内容，不会出现 RenderFlex 溢出。
+/// - 面板底自绘（[_buildPanel]）：空态（无关键词）就只剩搜索条。
 class _GlobalSearchResults extends StatelessWidget {
   const _GlobalSearchResults({
     required this.onOpenAllResults,
@@ -351,8 +515,7 @@ class _GlobalSearchResults extends StatelessWidget {
     );
   }
 
-  /// 结果面板底：颜色与圆角取包内 docked 结果面同一套 token（遮罩已把包内
-  /// 那层设成透明，这里接手它的外观）。
+  /// 结果面板底：颜色与圆角取包内 docked 结果面同一套 token。
   Widget _buildPanel(BuildContext context, {required Widget child}) {
     final m3e = M3ETheme.of(context);
     return DecoratedBox(
