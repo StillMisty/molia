@@ -86,7 +86,7 @@
   "generalTitle": "通用",
   "settingsHapticsTitle": "震动反馈",
   "settingsHapticsSubtitle": "点按导航、播放等操作时给出轻震动（默认开启）",
-  "settingsGeneralTitle": "通用",
+  "settingsGeneralTitle": "通用设置",
   "settingsGeneralSubtitle": "语言、应用名称与底部导航",
   "settingsDataSection": "数据",
   "dataManagementTitle": "数据与存储",

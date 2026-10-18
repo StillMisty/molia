@@ -287,18 +287,20 @@ class AppLocalizationsEn extends AppLocalizations {
       'Light vibration on taps such as navigation and playback (on by default)';
 
   @override
-  String get settingsGeneralAndDataTitle => 'General & data';
+  String get settingsGeneralTitle => 'General settings';
 
   @override
   String get settingsGeneralSubtitle =>
       'Language, app name and bottom navigation';
 
   @override
+  String get settingsDataSection => 'Data';
+
+  @override
   String get dataManagementTitle => 'Data & storage';
 
   @override
-  String get settingsDataSubtitle =>
-      'Cache, listening stats and data import/export';
+  String get settingsDataSubtitle => 'Cache, downloads and data import/export';
 
   @override
   String get settingsDataStorageSection => 'Storage & stats';

@@ -14,7 +14,6 @@ import '../widgets/settings/settings_tiles.dart';
 import 'cache_management_page.dart';
 import 'download_settings_page.dart';
 import 'downloads_manage_page.dart';
-import 'play_statistics_page.dart';
 
 /// 数据与存储子页：缓存、听歌统计与数据导入导出。
 ///
@@ -71,18 +70,8 @@ class DataSettingsPage extends StatelessWidget {
                   const DownloadsManagePage(),
                 ),
               ),
-              // 听歌统计：事件级采集（本机），播放次数 / 热力图 / 导出。
-              SettingsNavTile(
-                key: const Key('settingsPlayStatisticsItem'),
-                icon: Icons.insights_rounded,
-                title: l10n.statsTitle,
-                subtitle: l10n.statsSettingsSubtitle,
-                onTap: () => openSettingsSubPage(
-                  context,
-                  const PlayStatisticsPage(),
-                ),
-              ),
-              // 统计采集开关（关闭 = 停止记录新事件，已有数据保留）。
+              // 统计采集开关（关闭 = 停止记录新事件，已有数据保留）；
+              // 统计明细入口在设置首屏「数据」卡（与听歌统计同一处）。
               ValueListenableBuilder<bool>(
                 valueListenable:
                     context.read<PlayStatisticsService>().enabledNotifier,

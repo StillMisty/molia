@@ -217,7 +217,7 @@ void main() {
     );
   }
 
-  testWidgets('设置首屏：5 分区齐全，低频内容移出首屏', (tester) async {
+  testWidgets('设置首屏：6 分区齐全，低频内容移出首屏', (tester) async {
     await pumpSettingsPage(tester);
 
     // 分区卡片标题（卡片上方结构标签）。
@@ -225,7 +225,8 @@ void main() {
     expect(find.text('Playback'), findsOneWidget);
     expect(find.text('Lyrics & display'), findsOneWidget);
     expect(find.text('Content & sources'), findsOneWidget);
-    expect(find.text('General & data'), findsOneWidget);
+    expect(find.text('General'), findsOneWidget);
+    expect(find.text('Data'), findsOneWidget);
 
     expect(find.text('Theme mode'), findsOneWidget);
     expect(find.text('Base colors'), findsOneWidget);
@@ -239,9 +240,14 @@ void main() {
     expect(find.text('Lyrics & outputs'), findsOneWidget);
     expect(find.text('Source Management'), findsOneWidget);
     expect(find.text('AI DJ'), findsOneWidget);
-    // 通用与数据：入口行同组。
-    expect(find.text('General'), findsOneWidget);
+    // 通用与数据拆成两张卡：入口行与新增的一级入口同组。
+    expect(find.text('General settings'), findsOneWidget);
     expect(find.text('Data & storage'), findsOneWidget);
+    expect(
+      find.byKey(const Key('settingsPlayStatisticsItem')),
+      findsOneWidget,
+      reason: '听歌统计入口提到首屏「数据」卡',
+    );
     // 震动反馈已移入通用子页：首屏不再直接显示。
     expect(find.text('Vibration feedback'), findsNothing);
 
@@ -250,7 +256,6 @@ void main() {
     expect(find.text('App Language'), findsNothing);
     expect(find.text('App name'), findsNothing);
     expect(find.text('Cache management'), findsNothing);
-    expect(find.text('Listening Stats'), findsNothing);
     expect(find.text('Export Recent Plays'), findsNothing);
     // 默认音质入口在播放区（需 SourcesProvider；本树未注入）。
     expect(find.text('Default quality'), findsNothing);
@@ -638,11 +643,8 @@ void main() {
 
   // 快捷键入口只在桌面平台显示（`flutter test` 的 defaultTargetPlatform 是
   // android，需要 variant 钉住 linux，与其它桌面门控用例同口径）。
-  testWidgets('通用子页：快捷键入口打开绑定设置子页', (tester) async {
+  testWidgets('设置首屏：快捷键入口打开绑定设置子页', (tester) async {
     await pumpSettingsPage(tester);
-
-    await tester.tap(find.byKey(const Key('settingsGeneralItem')));
-    await tester.pumpAndSettle();
 
     final entry = find.byKey(const Key('settingsShortcutsItem'));
     await tester.ensureVisible(entry);
@@ -692,8 +694,7 @@ void main() {
         ),
       ],
     );
-    await tester.tap(find.byKey(const Key('settingsGeneralItem')));
-    await tester.pumpAndSettle();
+    // 快捷键入口在设置首屏「通用」卡（不再藏在通用子页里）。
     final entry = find.byKey(const Key('settingsShortcutsItem'));
     await tester.ensureVisible(entry);
     await tester.pumpAndSettle();
@@ -794,8 +795,7 @@ void main() {
         ),
       ],
     );
-    await tester.tap(find.byKey(const Key('settingsGeneralItem')));
-    await tester.pumpAndSettle();
+    // 快捷键入口在设置首屏「通用」卡（不再藏在通用子页里）。
     final entry = find.byKey(const Key('settingsShortcutsItem'));
     await tester.ensureVisible(entry);
     await tester.pumpAndSettle();
@@ -898,8 +898,7 @@ void main() {
         ),
       ],
     );
-    await tester.tap(find.byKey(const Key('settingsGeneralItem')));
-    await tester.pumpAndSettle();
+    // 快捷键入口在设置首屏「通用」卡（不再藏在通用子页里）。
     final entry = find.byKey(const Key('settingsShortcutsItem'));
     await tester.ensureVisible(entry);
     await tester.pumpAndSettle();
@@ -1412,18 +1411,21 @@ void main() {
     expect(find.text('Settings'), findsNothing);
   });
 
-  testWidgets('数据与存储子页：统计开关与入口同组，返回退回首屏', (tester) async {
+  testWidgets('数据与存储子页：统计开关在场（统计入口在首屏），返回退回首屏',
+      (tester) async {
     await pumpSettingsPage(tester);
+
+    // 统计入口在设置首屏「数据」卡（不再藏在数据子页里）。
+    expect(find.text('Listening Stats'), findsOneWidget);
 
     await tester.tap(find.byKey(const Key('settingsDataItem')));
     await tester.pumpAndSettle();
 
     expect(find.text('Cache management'), findsOneWidget);
-    expect(find.text('Listening Stats'), findsOneWidget);
     expect(find.text('Export data'), findsOneWidget);
     expect(find.text('Import data'), findsOneWidget);
     expect(find.text('Import Favorites'), findsOneWidget);
-    // 采集开关与统计入口同页同组。
+    // 采集开关留在数据子页（与缓存 / 导入导出同一处）。
     expect(
       find.byKey(const Key('settingsPlayStatisticsSwitch')),
       findsOneWidget,
@@ -1440,7 +1442,7 @@ void main() {
     await tester.tap(find.byIcon(Icons.arrow_back));
     await tester.pumpAndSettle();
     expect(find.text('Appearance'), findsOneWidget);
-    expect(find.text('Listening Stats'), findsNothing);
+    expect(find.text('Listening Stats'), findsOneWidget, reason: '统计入口在首屏');
   });
 
   testWidgets('设置页不直接操作系统栏（避免关闭弹层返回时闪烁）', (tester) async {

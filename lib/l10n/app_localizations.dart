@@ -614,17 +614,23 @@ abstract class AppLocalizations {
   /// **'Light vibration on taps such as navigation and playback (on by default)'**
   String get settingsHapticsSubtitle;
 
-  /// No description provided for @settingsGeneralAndDataTitle.
+  /// No description provided for @settingsGeneralTitle.
   ///
   /// In en, this message translates to:
-  /// **'General & data'**
-  String get settingsGeneralAndDataTitle;
+  /// **'General settings'**
+  String get settingsGeneralTitle;
 
   /// No description provided for @settingsGeneralSubtitle.
   ///
   /// In en, this message translates to:
   /// **'Language, app name and bottom navigation'**
   String get settingsGeneralSubtitle;
+
+  /// No description provided for @settingsDataSection.
+  ///
+  /// In en, this message translates to:
+  /// **'Data'**
+  String get settingsDataSection;
 
   /// No description provided for @dataManagementTitle.
   ///
@@ -635,7 +641,7 @@ abstract class AppLocalizations {
   /// No description provided for @settingsDataSubtitle.
   ///
   /// In en, this message translates to:
-  /// **'Cache, listening stats and data import/export'**
+  /// **'Cache, downloads and data import/export'**
   String get settingsDataSubtitle;
 
   /// No description provided for @settingsDataStorageSection.

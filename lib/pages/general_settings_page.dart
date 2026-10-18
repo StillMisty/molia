@@ -12,12 +12,10 @@ import '../services/language_service.dart';
 import '../services/notification_service.dart';
 import '../services/window/app_tray.dart';
 import '../services/window/tray_settings.dart';
-import '../utils/responsive.dart';
 import '../services/window/window_settings.dart';
 import '../widgets/nav_destination_style.dart';
 import '../widgets/settings/settings_reorderable_rows.dart';
 import '../widgets/settings/settings_tiles.dart';
-import 'shortcut_settings_page.dart';
 
 /// 通用设置子页：底部导航、语言、应用名称与震动反馈（按改动频率排序）。
 ///
@@ -124,21 +122,6 @@ class _GeneralSettingsPageState extends State<GeneralSettingsPage> {
                   title: l10n.settingsAppTitle,
                   subtitle: appTitle,
                   onTap: () => _showAppTitleDialog(context, l10n),
-                ),
-              ),
-              // 快捷键：软件内 / 全局两组的总开关与绑定自定义（低频改动，
-              // 排在应用名称之后）。只在桌面平台显示：软件内快捷键只在桌面
-              // 骨架挂载、全局热键也只对 Linux/Windows/macOS 注册，移动端
-              // 摆一个点了没用的入口没有意义。
-              if (isDesktopPlatform())
-                SettingsNavTile(
-                key: const Key('settingsShortcutsItem'),
-                icon: Icons.keyboard_rounded,
-                title: l10n.settingsShortcutsTitle,
-                subtitle: l10n.settingsShortcutsSubtitle,
-                onTap: () => openSettingsSubPage(
-                  context,
-                  const ShortcutSettingsPage(),
                 ),
               ),
             ],

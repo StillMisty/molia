@@ -32,6 +32,8 @@ import 'general_settings_page.dart';
 import 'lyrics_display/desktop_lyrics_settings_page.dart';
 import 'lyrics_display/lyrics_content_settings_page.dart';
 import 'lyrics_display/system_media_lyrics_settings_page.dart';
+import 'play_statistics_page.dart';
+import 'shortcut_settings_page.dart';
 import 'sources_page.dart';
 import 'sync_settings_page.dart';
 import 'update_settings_page.dart';
@@ -517,11 +519,15 @@ class _SettingsHomeViewState extends State<_SettingsHomeView>
                   ),
                   _lyricsSection(context, l10n, lyricsDisplay),
                   _contentSection(context, l10n),
-                  _generalAndDataSection(
+                  _generalSection(
+                    context,
+                    l10n,
+                    updateProvider: updateProvider,
+                  ),
+                  _dataSection(
                     context,
                     l10n,
                     syncProvider: syncProvider,
-                    updateProvider: updateProvider,
                   ),
                 ],
               ),
@@ -904,46 +910,39 @@ class _SettingsHomeViewState extends State<_SettingsHomeView>
     );
   }
 
-  /// 通用与数据：通用子页 / 数据子页 / 同步子页 / 关于与更新。
-  Widget _generalAndDataSection(
+  /// 通用与数据：通用子页 / 快捷键 / 听歌统计 / 数据子页 / 同步 / 更新。
+  ///
+  /// 两部分各自成卡（原来的「通用与数据」一张卡内容太长）：快捷键（桌面）与
+  /// 听歌统计从通用 / 数据子页提到首屏——两者是高频入口，原先要找两步。
+  Widget _generalSection(
     BuildContext context,
     AppLocalizations l10n, {
-    required SyncProvider? syncProvider,
     required UpdateProvider? updateProvider,
   }) {
-    final showSync = syncProvider != null;
     return SettingsSectionCard(
-      title: l10n.settingsGeneralAndDataTitle,
+      title: l10n.generalTitle,
       children: [
         SettingsNavTile(
           key: const Key('settingsGeneralItem'),
           icon: Icons.tune_rounded,
-          title: l10n.generalTitle,
+          title: l10n.settingsGeneralTitle,
           subtitle: l10n.settingsGeneralSubtitle,
           onTap: () => openSettingsSubPage(
             context,
             const GeneralSettingsPage(),
           ),
         ),
-        SettingsNavTile(
-          key: const Key('settingsDataItem'),
-          icon: Icons.sd_storage_rounded,
-          title: l10n.dataManagementTitle,
-          subtitle: l10n.settingsDataSubtitle,
-          onTap: () => openSettingsSubPage(
-            context,
-            const DataSettingsPage(),
-          ),
-        ),
-        if (showSync)
+        // 快捷键：软件内 / 全局两组的总开关与绑定自定义。只在桌面平台显示
+        // （移动端软件内快捷键与全局热键都不注册）。
+        if (isDesktopPlatform())
           SettingsNavTile(
-            key: const Key('settingsSyncItem'),
-            icon: Icons.sync_rounded,
-            title: l10n.settingsSyncTitle,
-            subtitle: l10n.settingsSyncItemSubtitle,
+            key: const Key('settingsShortcutsItem'),
+            icon: Icons.keyboard_rounded,
+            title: l10n.settingsShortcutsTitle,
+            subtitle: l10n.settingsShortcutsSubtitle,
             onTap: () => openSettingsSubPage(
               context,
-              const SyncSettingsPage(),
+              const ShortcutSettingsPage(),
             ),
           ),
         // 关于与更新：版本 / 渠道 / 自动检查 / 下载安装。
@@ -956,6 +955,52 @@ class _SettingsHomeViewState extends State<_SettingsHomeView>
             onTap: () => openSettingsSubPage(
               context,
               const UpdateSettingsPage(),
+            ),
+          ),
+      ],
+    );
+  }
+
+  /// 数据：数据子页 / 听歌统计 / 跨设备同步。
+  Widget _dataSection(
+    BuildContext context,
+    AppLocalizations l10n, {
+    required SyncProvider? syncProvider,
+  }) {
+    return SettingsSectionCard(
+      title: l10n.settingsDataSection,
+      children: [
+        SettingsNavTile(
+          key: const Key('settingsDataItem'),
+          icon: Icons.sd_storage_rounded,
+          title: l10n.dataManagementTitle,
+          subtitle: l10n.settingsDataSubtitle,
+          onTap: () => openSettingsSubPage(
+            context,
+            const DataSettingsPage(),
+          ),
+        ),
+        // 听歌统计：事件级采集（本机），播放次数 / 热力图 / 导出。
+        // 采集开关留在数据子页（与缓存 / 导入导出同一处）。
+        SettingsNavTile(
+          key: const Key('settingsPlayStatisticsItem'),
+          icon: Icons.insights_rounded,
+          title: l10n.statsTitle,
+          subtitle: l10n.statsSettingsSubtitle,
+          onTap: () => openSettingsSubPage(
+            context,
+            const PlayStatisticsPage(),
+          ),
+        ),
+        if (syncProvider != null)
+          SettingsNavTile(
+            key: const Key('settingsSyncItem'),
+            icon: Icons.sync_rounded,
+            title: l10n.settingsSyncTitle,
+            subtitle: l10n.settingsSyncItemSubtitle,
+            onTap: () => openSettingsSubPage(
+              context,
+              const SyncSettingsPage(),
             ),
           ),
       ],
