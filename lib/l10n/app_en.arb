@@ -4,6 +4,7 @@
   "queueTab": "QUEUE",
   "lyricsTab": "LYRICS",
   "cancel": "Cancel",
+  "close": "Close",
   "playbackFailed": "Playback failed: {error}",
   "@playbackFailed": {
     "placeholders": {
@@ -322,6 +323,7 @@
       }
     }
   },
+  "sourcesScriptActions": "Source script actions",
   "sourcesEnable": "Enable",
   "sourcesDisable": "Disable",
   "sourcesActivated": "Source enabled: {name}",

@@ -316,7 +316,7 @@ class _DiscoverPlaylistsTabState extends State<DiscoverPlaylistsTab>
                             trailing: [
                               M3EIconButton(
                                 variant: M3EIconButtonVariant.standard,
-                                tooltip: l10n.discoverOpenPlaylist,
+                                semanticLabel: l10n.discoverOpenPlaylist,
                                 icon: const Icon(Icons.link_rounded),
                                 onPressed: _openLinkDialog,
                               ),
@@ -425,7 +425,7 @@ class _DiscoverPlaylistsTabState extends State<DiscoverPlaylistsTab>
                   key: const Key('discoverPlaylistsRetry'),
                   variant: M3EIconButtonVariant.standard,
                   icon: const Icon(Icons.refresh_rounded),
-                  tooltip: l10n.discoverRetry,
+                  semanticLabel: l10n.discoverRetry,
                   onPressed: _reload,
                 ),
               ],

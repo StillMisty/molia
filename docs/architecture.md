@@ -623,7 +623,8 @@
   与内容左缘对齐，整块可点打开搜索遮罩，**不做 tooltip**：键位提示只留在
   设置 › 快捷键）；
   品牌区右侧的空白是拖动区（双击最大化，只有它包 `WindowDoubleTapMaximize`，
-  双击品牌 / 按钮不最大化）+ 设置 + 窗口按钮（四键无 tooltip，只留 `semanticLabel`）。
+  双击品牌 / 按钮不最大化）+ 设置 + 窗口按钮（图标按钮一律不做悬浮提示，
+  语义走 `semanticLabel`，全应用同口径——见「按钮选型」）。
   **全局搜索**是 Ctrl+F / 品牌区打开的全屏遮罩（`lib/widgets/global_search_overlay.dart`）：
   壳层在内容区中上放一个隐形锚点，`M3ESearchAnchor`（docked）从它展开成全屏
   scrim + 居中搜索条 + 结果面板；结果与资料库共用同一 `SearchProvider`，空关键词
@@ -793,7 +794,7 @@
   页内过滤 / 排序口径在 `lib/utils/collection_row_query.dart`。
 - 曲目行操作菜单的呈现面分平台，唯一实现 `lib/widgets/track_actions_menu.dart`：
   触摸端行尾常显 ⋮（搜索结果 / 发现详情 / 歌手·专辑页 / AI 推歌行；队列行维持
-  无 ⋮；锚点固定 standard 图标按钮 + tooltip），桌面端行尾无 ⋮、行表面右键在鼠标
+  无 ⋮；锚点固定 standard 图标按钮且语义走 `semanticLabel`），桌面端行尾无 ⋮、行表面右键在鼠标
   落点弹同一份菜单（`showTrackActionsMenuAtPointer`：零尺寸锚点 + root overlay
   坐标换算，贴边由 M3E placer 夹取）；条目一律「leading 图标 + 文案」，收藏这类
   开关态用图标 + 文案表达（选中即关菜单，不留勾选态）。菜单定义（收藏 / 加入列表
@@ -808,11 +809,12 @@
   - 同一批对象的 2–3 个平级动作 → `M3EButtonGroup`（`standard` 间距；命令式动作
     组级统一 `tonal`，把 `selectedIndex` 恒留空、回调里直接分发，避免留下选中态）。
     图标 + 文案是常态；只给图标（如合集弹层标题行的新建 / 导入）或只给文案都可，
-    icon-only 动作按方形静止宽渲染（sm 40×40），语义与悬浮提示走
-    `tooltip` + `semanticLabel`——纯图标动作需要中性色时用 `style: text` +
+    icon-only 动作按方形静止宽渲染（sm 40×40）；**图标按钮的语义一律走
+    `semanticLabel`、不做悬浮提示**（icon 自解释时，hover / 长按 / 键盘焦点弹的
+    气泡只是噪音，桌面鼠标扫过尤其明显；`tooltip` 只留给图标表达不了的文本：
+    热力图数据值、页圆点隐藏标题；护栏 `test/architecture/tooltip_usage_test.dart`）。
+    纯图标动作需要中性色时用 `style: text` +
     组级 `decoration.foregroundColor`（`material_3_expressive ≥ 1.1.8`）；
-    **例外：桌面顶栏**（设置 / 最小化 / 最大化 / 关闭）按用户要求不做悬浮
-    提示（一排窗口按钮弹提示反而吵），只留 `semanticLabel` 保无障碍；
   - 「主操作 + 变体 / 次要出口」→ `M3ESplitButton`（播放全部 ▾ 随机播放全部·加入列表、
     下载并安装 ▾ 打开发布页、复制 ▾ 复制全部）；纯文本样式不支持（包内断言
     `style != text`）；「随机播放全部」先 `setPlayMode(shuffle)` 再装载队列、
@@ -821,7 +823,8 @@
     `find.byIcon(...).hitTestable()`（或自定义 finder）定位真实动作；
   - 对话框 action 区保持「text 取消 + filled 确认」两颗独立按钮：弹窗宽度放不下
     带图标的分组，且主次层级要保住；
-  - 紧凑位置（行内重试、状态卡内取消）用 `M3EIconButton`（语义交给 tooltip）；
+  - 紧凑位置（行内重试、状态卡内取消）用 `M3EIconButton`（语义交给
+    `semanticLabel`）；
     纯图标按钮保留稳定 key，测试按 key 定位。
 - 触感：全应用唯一入口 `lib/services/haptics.dart`（设置 › 通用 › 通用设置 ›
   震动反馈，默认开，设备本地键）；底栏重复点击的轻震由壳层给一次、页面不重复给

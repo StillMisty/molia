@@ -54,7 +54,7 @@ class _SourcesPageState extends State<SourcesPage> {
         actions: [
           M3EIconButton(
             variant: M3EIconButtonVariant.standard,
-            tooltip: l10n.anyListenEntry,
+            semanticLabel: l10n.anyListenEntry,
             icon: const Icon(Icons.cloud_rounded),
             onPressed: () {
               Navigator.of(context).push(
@@ -412,6 +412,7 @@ class _SourcesPageState extends State<SourcesPage> {
         anchorBuilder: (context, open) => M3EIconButton(
           variant: M3EIconButtonVariant.standard,
           icon: const Icon(Icons.more_vert_rounded),
+          semanticLabel: l10n.sourcesScriptActions,
           onPressed: open,
         ),
         onSelected: (value) {

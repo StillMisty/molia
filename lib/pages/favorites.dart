@@ -1423,7 +1423,7 @@ class _FavoritesPageState extends State<FavoritesPage> {
             const SizedBox(width: 8),
             M3EIconButton(
               variant: M3EIconButtonVariant.standard,
-              tooltip: l10n.shufflePlay,
+              semanticLabel: l10n.shufflePlay,
               icon: const Icon(Icons.shuffle_rounded),
               onPressed: canPlay ? () => _playShuffledFor(view) : null,
             ),
@@ -1433,7 +1433,7 @@ class _FavoritesPageState extends State<FavoritesPage> {
               M3EIconButton(
                 key: const Key('localSongsImportButton'),
                 variant: M3EIconButtonVariant.standard,
-                tooltip: l10n.libraryImportLocalSongs,
+                semanticLabel: l10n.libraryImportLocalSongs,
                 icon: const Icon(Icons.audio_file_rounded),
                 onPressed: () => unawaited(importLocalAudioFilesFlow(context)),
               ),
@@ -1441,7 +1441,7 @@ class _FavoritesPageState extends State<FavoritesPage> {
             const SizedBox(width: 4),
             M3EIconButton(
               variant: M3EIconButtonVariant.standard,
-              tooltip: l10n.libraryTabSearch,
+              semanticLabel: l10n.libraryTabSearch,
               icon: const Icon(Icons.search_rounded),
               onPressed: _openSearch,
             ),
@@ -1487,7 +1487,7 @@ class _FavoritesPageState extends State<FavoritesPage> {
           hintText: l10n.favoritesSearchHint,
           leading: M3EIconButton(
             variant: M3EIconButtonVariant.standard,
-            tooltip: l10n.cancel,
+            semanticLabel: l10n.cancel,
             icon: const Icon(Icons.arrow_back_rounded),
             onPressed: _exitSearch,
           ),
@@ -1551,7 +1551,7 @@ class _FavoritesPageState extends State<FavoritesPage> {
               const SizedBox(width: 8),
               M3EIconButton(
                 variant: M3EIconButtonVariant.filled,
-                tooltip: l10n.playlistReorderDone,
+                semanticLabel: l10n.playlistReorderDone,
                 icon: const Icon(Icons.done_rounded),
                 onPressed: _exitReorder,
               ),
@@ -1582,7 +1582,7 @@ class _FavoritesPageState extends State<FavoritesPage> {
       anchorBuilder: (context, open) => M3EIconButton(
         variant: M3EIconButtonVariant.standard,
         icon: const Icon(Icons.more_vert_rounded),
-        tooltip: view.isHistory ? l10n.historyClear : l10n.sortTooltip,
+        semanticLabel: view.isHistory ? l10n.historyClear : l10n.sortTooltip,
         onPressed: open,
       ),
       onSelected: (value) {
@@ -1654,7 +1654,7 @@ class _FavoritesPageState extends State<FavoritesPage> {
       M3EIconButton(
         variant: M3EIconButtonVariant.standard,
         icon: const Icon(Icons.playlist_add_rounded),
-        tooltip: l10n.addToPlaylist,
+        semanticLabel: l10n.addToPlaylist,
         onPressed: () => unawaited(_copySelectionToPlaylist(view)),
       ),
       M3EIconButton(
@@ -1667,7 +1667,7 @@ class _FavoritesPageState extends State<FavoritesPage> {
                 : Icons.favorite_border_rounded,
           ),
         ),
-        tooltip: allFavorited ? l10n.favoriteRemove : l10n.favoriteAdd,
+        semanticLabel: allFavorited ? l10n.favoriteRemove : l10n.favoriteAdd,
         onPressed: () {
           if (view.isHistory) {
             unawaited(allFavorited
@@ -1688,14 +1688,14 @@ class _FavoritesPageState extends State<FavoritesPage> {
         M3EIconButton(
           variant: M3EIconButtonVariant.standard,
           icon: const Icon(Icons.playlist_remove_rounded),
-          tooltip: l10n.playlistRemoveTrack,
+          semanticLabel: l10n.playlistRemoveTrack,
           onPressed: () => unawaited(_removeSelectedFromPlaylist(view)),
         ),
       if (view.isHistory)
         M3EIconButton(
           variant: M3EIconButtonVariant.standard,
           icon: const Icon(Icons.delete_rounded),
-          tooltip: l10n.historyDeleteEntry,
+          semanticLabel: l10n.historyDeleteEntry,
           onPressed: () => unawaited(_deleteSelectedHistory(view)),
         ),
       // 本地歌曲：下载副本删文件、导入项只移出列表（确认文案在动作内区分）。
@@ -1703,7 +1703,7 @@ class _FavoritesPageState extends State<FavoritesPage> {
         M3EIconButton(
           variant: M3EIconButtonVariant.standard,
           icon: const Icon(Icons.delete_rounded),
-          tooltip: l10n.delete,
+          semanticLabel: l10n.delete,
           onPressed: () => unawaited(_deleteSelectedLocalSongs(view)),
         ),
     ];
@@ -1742,7 +1742,7 @@ class _FavoritesPageState extends State<FavoritesPage> {
                 M3EIconButton(
                   variant: M3EIconButtonVariant.standard,
                   icon: const Icon(Icons.close_rounded),
-                  tooltip: l10n.cancel,
+                  semanticLabel: l10n.cancel,
                   onPressed: _selection.clear,
                 ),
                 Expanded(
@@ -1754,7 +1754,7 @@ class _FavoritesPageState extends State<FavoritesPage> {
                 M3EIconButton(
                   variant: M3EIconButtonVariant.standard,
                   icon: const Icon(Icons.select_all_rounded),
-                  tooltip:
+                  semanticLabel:
                       allSelected ? l10n.deselectAll : l10n.selectAllItems,
                   onPressed: () {
                     if (allSelected) {
@@ -2449,12 +2449,12 @@ class _CollectionPickerSheetState extends State<_CollectionPickerSheet> {
                 // （material_3_expressive 1.1.7）里 M3EButton 仅当 icon 与
                 // label 同时非空才渲染内容，icon-only 动作会退化成空白按钮
                 // （上游修复需 ≥ 1.1.8，尚未发布）；在依赖升级前保持两颗标准
-                // 图标键：可见、可点，纯图标语义走 tooltip，key 保留稳定定位。
+                // 图标键：可见、可点，纯图标语义走 semanticLabel，key 保留稳定定位。
                 M3EIconButton(
                   key: const Key('favoritesCreatePlaylist'),
                   variant: M3EIconButtonVariant.standard,
                   size: M3EIconButtonSize.sm,
-                  tooltip: l10n.playlistCreate,
+                  semanticLabel: l10n.playlistCreate,
                   icon: const Icon(Icons.add_rounded),
                   onPressed: _createPlaylist,
                 ),
@@ -2462,7 +2462,7 @@ class _CollectionPickerSheetState extends State<_CollectionPickerSheet> {
                   key: const Key('favoritesImportCollection'),
                   variant: M3EIconButtonVariant.standard,
                   size: M3EIconButtonSize.sm,
-                  tooltip: l10n.libraryImportFavorites,
+                  semanticLabel: l10n.libraryImportFavorites,
                   icon: const Icon(Icons.library_add_rounded),
                   onPressed: () => Navigator.of(context).pop(
                     const _PickerOutcome.importRequested(),
@@ -2498,7 +2498,7 @@ class _CollectionPickerSheetState extends State<_CollectionPickerSheet> {
                           anchorBuilder: (context, open) => M3EIconButton(
                             variant: M3EIconButtonVariant.standard,
                             icon: const Icon(Icons.more_vert_rounded),
-                            tooltip: l10n.playlistRename,
+                            semanticLabel: l10n.playlistRename,
                             onPressed: open,
                           ),
                           onSelected: (value) {

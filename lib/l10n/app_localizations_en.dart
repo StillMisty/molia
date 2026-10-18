@@ -21,6 +21,9 @@ class AppLocalizationsEn extends AppLocalizations {
   String get cancel => 'Cancel';
 
   @override
+  String get close => 'Close';
+
+  @override
   String playbackFailed(String error) {
     return 'Playback failed: $error';
   }
@@ -742,6 +745,9 @@ class AppLocalizationsEn extends AppLocalizations {
   String sourcesScriptByAuthor(String author) {
     return 'by $author';
   }
+
+  @override
+  String get sourcesScriptActions => 'Source script actions';
 
   @override
   String get sourcesEnable => 'Enable';

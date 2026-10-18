@@ -259,7 +259,7 @@ class _AiDjPageState extends State<AiDjPage> {
           key: const Key('aiDjRefreshBatchButton'),
           variant: M3EIconButtonVariant.standard,
           icon: const Icon(Icons.refresh_rounded),
-          tooltip: l10n.aiDjRefreshBatch,
+          semanticLabel: l10n.aiDjRefreshBatch,
           onPressed:
               busy ? null : () => unawaited(provider.refreshRecommendations()),
         ),
@@ -431,7 +431,7 @@ class _AiDjPageState extends State<AiDjPage> {
                   : Icons.expand_more_rounded,
             ),
           ),
-          tooltip: l10n.aiDjUpstreamTitle,
+          semanticLabel: l10n.aiDjUpstreamTitle,
           onPressed: _toggleUpstream,
         ),
       ),

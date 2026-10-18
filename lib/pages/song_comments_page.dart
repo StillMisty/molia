@@ -93,7 +93,7 @@ class _SongCommentsPageState extends State<SongCommentsPage> {
         actions: [
           M3EIconButton(
             variant: M3EIconButtonVariant.standard,
-            tooltip: l10n.commentsRefresh,
+            semanticLabel: l10n.commentsRefresh,
             icon: const Icon(Icons.refresh_rounded),
             onPressed:
                 provider.isSupported ? () => unawaited(provider.refresh()) : null,

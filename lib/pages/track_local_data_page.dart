@@ -611,7 +611,7 @@ class _TrackLocalDataPageState extends State<TrackLocalDataPage> {
             trailing: M3EIconButton(
               variant: M3EIconButtonVariant.standard,
               icon: const Icon(Icons.delete_outline_rounded),
-              tooltip: l10n.downloadPartRemove,
+              semanticLabel: l10n.downloadPartRemove,
               onPressed:
                   data == null || _busy || !_cachePartHasCache(part, data)
                       ? null

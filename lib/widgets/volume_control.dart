@@ -100,7 +100,7 @@ class _VolumeControlState extends State<VolumeControl> {
           child: M3EIconButton(
             key: widget.buttonKey,
             variant: M3EIconButtonVariant.standard,
-            tooltip: l10n.playerBarVolume,
+            semanticLabel: l10n.playerBarVolume,
             icon: IconSwap<bool>(
               value: off,
               builder: (context, off) => Icon(
@@ -191,7 +191,7 @@ class _VolumePanelState extends State<_VolumePanel> {
               M3EIconButton(
                 variant: M3EIconButtonVariant.standard,
                 size: M3EIconButtonSize.sm,
-                tooltip: muted ? l10n.playerBarUnmute : l10n.playerBarMute,
+                semanticLabel: muted ? l10n.playerBarUnmute : l10n.playerBarMute,
                 icon: IconSwap<bool>(
                   value: muted,
                   builder: (context, muted) => Icon(

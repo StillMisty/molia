@@ -196,7 +196,7 @@ class _AnyListenPageState extends State<AnyListenPage> {
                         leading: const Icon(Icons.key_rounded),
                         trailing: M3EIconButton(
                           variant: M3EIconButtonVariant.standard,
-                          tooltip: _tokenVisible
+                          semanticLabel: _tokenVisible
                               ? l10n.anyListenTokenHide
                               : l10n.anyListenTokenShow,
                           icon: IconSwap<bool>(

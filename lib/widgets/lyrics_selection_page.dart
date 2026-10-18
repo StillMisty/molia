@@ -235,7 +235,7 @@ class _LyricsSelectionPageState extends State<LyricsSelectionPage> {
                 variant: M3EIconButtonVariant.standard,
                 icon: Icon(Icons.more_vert_rounded),
                 onPressed: open,
-                tooltip: l10n.copyButtonText,
+                semanticLabel: l10n.copyButtonText,
               ),
               onSelected: (value) {
                 if (value == 'copyAll') {
@@ -431,7 +431,7 @@ class _LyricsSelectionPageState extends State<LyricsSelectionPage> {
                           visualSize: const Size(56, 56),
                           onPressed: _isLoading ? null : _deselectAllLines,
                           icon: const Icon(Icons.close_rounded),
-                          tooltip: l10n.deselectAll,
+                          semanticLabel: l10n.deselectAll,
                         ),
                         const SizedBox(width: 12),
                         Expanded(

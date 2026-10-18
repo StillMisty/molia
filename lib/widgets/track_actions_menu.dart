@@ -37,8 +37,8 @@ Future<void> showTrackActionsMenuAtPointer({
 /// [showTrackActionsMenuAtPointer]）。
 ///
 /// 统一两件容易各写各的事，保证全 App 同一种菜单观感：
-/// - **锚点**：standard 图标按钮 + tooltip（纯图标不自解释，tooltip 同时
-///   承担无障碍语义）；
+/// - **锚点**：standard 图标按钮 + `semanticLabel`（只留无障碍名，不做
+///   悬浮提示——口径见 docs/architecture.md §6「按钮选型」）；
 /// - **条目**：调用方只给动作，规范一律「leading 图标 + 文案」，收藏这类
 ///   开关态用图标 + 文案表达（如实心 ♥ +「取消收藏」），不用勾选条目——
 ///   选中即关菜单，勾选态没有第二次阅读的机会。
@@ -47,7 +47,7 @@ class TrackActionsMenu extends StatelessWidget {
     super.key,
     required this.entries,
     required this.onSelected,
-    required this.tooltip,
+    required this.semanticLabel,
     this.compact = false,
     this.enabled = true,
     this.position = M3EMenuAnchorPosition.bottomEnd,
@@ -59,8 +59,8 @@ class TrackActionsMenu extends StatelessWidget {
   /// 条目选中回调（值与条目的 `value` 对应）。
   final ValueChanged<Object?> onSelected;
 
-  /// 锚点 tooltip（无障碍名称）。
-  final String tooltip;
+  /// 锚点无障碍名称（纯图标按钮不做悬浮提示）。
+  final String semanticLabel;
 
   /// 紧凑锚点（AI 推歌行内与其它行内动作并排时用）。
   final bool compact;
@@ -80,7 +80,7 @@ class TrackActionsMenu extends StatelessWidget {
         size: compact ? M3EIconButtonSize.sm : M3EIconButtonSize.md,
         visualSize: compact ? const Size(40, 40) : null,
         icon: const Icon(Icons.more_vert_rounded),
-        tooltip: tooltip,
+        semanticLabel: semanticLabel,
         onPressed: enabled ? open : null,
       ),
       onSelected: onSelected,

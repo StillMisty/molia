@@ -10,7 +10,7 @@ AppLocalizations _l10n(BuildContext context) =>
 /// 全 App 统一的搜索输入（M3E contained 胶囊搜索栏）。
 ///
 /// 不直接在各页面用 [M3ESearchBar] 的原因：
-/// - 内置清除键 tooltip 是硬编码英文（`M3ESearchConstants.clearButtonTooltip`），
+/// - 内置清除键会弹硬编码英文提示（`M3ESearchConstants.clearButtonTooltip`），
 ///   不符合「UI 文案必须走 AppLocalizations」；
 /// - 内置清除键只 `controller.clear()`、不触发 onChanged，靠 onChanged 刷新
 ///   过滤结果的页面点 X 后列表不会刷新；
@@ -119,7 +119,7 @@ class _AppSearchBarState extends State<AppSearchBar> {
       focusNode: widget.focusNode,
       hintText: widget.hintText,
       leading: widget.leading ?? const Icon(Icons.search_rounded),
-      // 清除键自绘：内置的 tooltip 是英文硬编码且清除时不回调 onChanged。
+      // 清除键自绘：内置键会弹英文硬编码提示，且清除时不回调 onChanged。
       showClearButton: false,
       autoFocus: widget.autofocus,
       enabled: widget.enabled,
@@ -135,7 +135,7 @@ class _AppSearchBarState extends State<AppSearchBar> {
           M3EIconButton(
             variant: M3EIconButtonVariant.standard,
             icon: const Icon(Icons.close_rounded),
-            tooltip: _l10n(context).clearSearch,
+            semanticLabel: _l10n(context).clearSearch,
             onPressed: _clear,
           ),
         ...widget.trailing,

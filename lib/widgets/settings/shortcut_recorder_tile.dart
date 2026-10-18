@@ -169,7 +169,7 @@ class _ShortcutRecorderTileState extends State<ShortcutRecorderTile> {
                 M3EIconButton(
                   key: widget.resetKey,
                   variant: M3EIconButtonVariant.standard,
-                  tooltip: l10n.shortcutsResetAll,
+                  semanticLabel: l10n.shortcutsResetAll,
                   icon: const Icon(Icons.restart_alt_rounded),
                   onPressed: widget.onReset,
                 ),

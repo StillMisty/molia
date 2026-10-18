@@ -1157,10 +1157,13 @@ void main() {
     expect(buttons[0].variant, M3EIconButtonVariant.tonal);
     expect(buttons[1].variant, M3EIconButtonVariant.tonal);
     expect(buttons.last.variant, M3EIconButtonVariant.filled);
-    // 纯图标语义有限：tooltip 承担动作名。
-    expect(find.byTooltip('加入列表'), findsOneWidget);
-    expect(find.byTooltip('换源'), findsOneWidget);
-    expect(find.byTooltip('取消收藏'), findsOneWidget);
+    // 纯图标语义有限：动作名走 Icon.semanticLabel（不做悬浮提示）。
+    bool hasLabeledIcon(String label) => tester
+        .widgetList<Icon>(find.byType(Icon))
+        .any((icon) => icon.semanticLabel == label);
+    expect(hasLabeledIcon('加入列表'), isTrue);
+    expect(hasLabeledIcon('换源'), isTrue);
+    expect(hasLabeledIcon('取消收藏'), isTrue);
 
     // 完全露出后：行位移 = Σ 动作宽 + 间距；胶囊均分内宽（行高 − 8 高），三段等宽。
     final sizes = [

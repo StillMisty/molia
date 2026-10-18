@@ -256,7 +256,7 @@ class TrackMenuTile extends StatelessWidget {
           : TrackActionsMenu(
               entries: menu.entries,
               onSelected: menu.onSelected,
-              tooltip: _l10n(context).trackActionsTooltip,
+              semanticLabel: _l10n(context).trackActionsTooltip,
             ),
     );
   }

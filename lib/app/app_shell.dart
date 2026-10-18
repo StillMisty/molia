@@ -1017,7 +1017,7 @@ class _BarPlayPauseButton extends StatelessWidget {
         progress: reveal.progress,
         child: M3EIconButton(
           variant: M3EIconButtonVariant.tonal,
-          tooltip: isPlaying ? l10n.pause : l10n.play,
+          semanticLabel: isPlaying ? l10n.pause : l10n.play,
           icon: IconSwap<bool>(
             value: isPlaying,
             builder: (context, isPlaying) => Icon(
@@ -1058,7 +1058,7 @@ class _BarNextButton extends StatelessWidget {
         progress: reveal.progress,
         child: M3EIconButton(
           variant: M3EIconButtonVariant.standard,
-          tooltip: l10n.nextTrackTooltip,
+          semanticLabel: l10n.nextTrackTooltip,
           icon: const Icon(Icons.skip_next_rounded),
           onPressed: hasTrack
               ? () {
