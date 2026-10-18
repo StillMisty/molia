@@ -94,32 +94,26 @@ void main() {
       );
     });
 
-    test('未自定义字体时使用平台默认 UI 字体，自定义字体优先', () {
-      // 平台默认 UI 字体由启动时解析（Windows 读系统窗口字体；其它平台为
-      // null 走引擎默认）——主题层只做「自定义 > 平台默认」的优先级。
-      final data = buildAppThemeData(
-        light,
-        platformDefaultFontFamily: 'Microsoft YaHei UI',
-      );
-      expect(data.textTheme.bodyMedium?.fontFamily, 'Microsoft YaHei UI');
+    test('未自定义字体时不注入字体族（走平台默认排版），自定义字体优先', () {
+      // 「系统默认」= ThemeData 的平台默认排版（Windows = Segoe UI、
+      // Android/Linux = Roboto——与 Chrome / 其它 Flutter 应用同源）；
+      // 主题层不做平台特判，**不读**系统窗口字体 MessageFont。
+      final data = buildAppThemeData(light);
+      final defaultFamily =
+          ThemeData(colorScheme: light).textTheme.bodyMedium?.fontFamily;
+      expect(data.textTheme.bodyMedium?.fontFamily, defaultFamily);
       // M3E 侧同步（typeScale 从 ThemeData.textTheme 映射）。
       expect(
         M3EThemeData.fromMaterial(data).typeScale.bodyMedium.fontFamily,
-        'Microsoft YaHei UI',
+        defaultFamily,
       );
 
-      // 自定义字体优先：平台默认不再覆盖用户选择。
-      final custom = buildAppThemeData(
-        light,
-        fontFamily: 'Noto Sans CJK SC',
-        platformDefaultFontFamily: 'Microsoft YaHei UI',
-      );
+      // 自定义字体直接落到两套主题。
+      final custom = buildAppThemeData(light, fontFamily: 'Noto Sans CJK SC');
       expect(custom.textTheme.bodyMedium?.fontFamily, 'Noto Sans CJK SC');
-
-      // 平台默认缺失（非 Windows / 解析失败）时保持引擎默认。
       expect(
-        buildAppThemeData(light).textTheme.bodyMedium?.fontFamily,
-        isNot('Microsoft YaHei UI'),
+        M3EThemeData.fromMaterial(custom).typeScale.bodyMedium.fontFamily,
+        'Noto Sans CJK SC',
       );
     });
   });

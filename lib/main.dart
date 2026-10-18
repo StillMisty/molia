@@ -27,7 +27,6 @@ import 'services/app_logging.dart';
 import 'services/global_hotkeys.dart';
 import 'services/notification_service.dart';
 import 'services/shortcut_actions.dart';
-import 'services/system_fonts_service.dart';
 import 'services/window/single_instance.dart';
 import 'services/window/window_chrome.dart';
 import 'services/window/window_settings.dart';
@@ -69,17 +68,14 @@ void main() async {
   // （`molia.memory` 日志是托盘内存回归的观测点）。
   AppMemoryManager.instance.attach();
 
-  // 窗口行为偏好（设备本地）/ 平台默认 UI 字体 / 单实例锁互不依赖：并行等待
-  // （串行是三段相加，并行取最大值）。三者都完成才建窗，语义与拆分前一致。
+  // 窗口行为偏好（设备本地）/ 单实例锁互不依赖：并行等待（串行是两段相加，
+  // 并行取最大值）。两者都完成才建窗，语义与拆分前一致。
   //
   // - 窗口几何的恢复/保存在建窗之前就要判定，因此必须 await；
-  // - 平台默认字体仅 Windows 读注册表（毫秒级）：未自定义「应用字体」时用它，
-  //   保证与系统其它窗口同源（中文系统 = 微软雅黑）；
   // - 单实例（桌面）：已有实例在跑 → 请它显示主窗口后立即退出；此刻窗口还没
   //   创建，不会闪一下再消失。其余平台 / 抢锁异常按主实例继续。
-  final (_, _, instanceRole) = await (
+  final (_, instanceRole) = await (
     WindowSettings.load(),
-    SystemFontsService.loadPlatformDefaultFamily(),
     SingleInstance.acquire(),
   ).wait;
   if (instanceRole == SingleInstanceRole.secondary) {

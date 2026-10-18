@@ -32,7 +32,6 @@ import '../services/data_saver_service.dart';
 import '../services/haptics.dart';
 import '../services/language_service.dart';
 import '../services/play_statistics_service.dart';
-import '../services/system_fonts_service.dart';
 import '../services/window/window_chrome.dart';
 import '../theme/animated_scheme.dart';
 import '../theme/app_theme.dart';
@@ -1347,10 +1346,6 @@ class _MyThemedAppState extends State<MyThemedApp> with WidgetsBindingObserver {
                   animatedScheme,
                   systemUiOverlayStyle: systemUiOverlayStyle,
                   fontFamily: themeState.fontFamily,
-                  // 未自定义「应用字体」时跟随平台默认 UI 字体（启动时解析，
-                  // 见 SystemFontsService.loadPlatformDefaultFamily）。
-                  platformDefaultFontFamily:
-                      SystemFontsService.platformDefaultFamily,
                 );
 
                 return M3EMaterialApp(

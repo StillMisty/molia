@@ -73,7 +73,9 @@ tool/agent/startup.sh --window        # Linux：在真实显示上跑（WSLg 会
 
 - 窗口前缀三项互不依赖 → `(WindowSettings.load, SystemFontsService.loadPlatformDefaultFamily,
   SingleInstance.acquire).wait`：实测这三项自身合计 ≈0ms（Windows 上字体读注册表，
-  仍是毫秒级），并行后完全被后面的建窗遮住。
+  仍是毫秒级），并行后完全被后面的建窗遮住。（2026-10 字体口径修正：默认字体改回
+  引擎默认、不再读注册表，第三项已删，现在是 `(WindowSettings.load,
+  SingleInstance.acquire).wait`——并行结论不受影响。）
 - 本地数据栈与资料库栈互不依赖 → 并行装配。内部细分（实测）：`dataSaver.init`
   8–9ms、`downloadSettings.init` 0ms、`syncState.init` 0ms、统计 init / 换源 init /
   DB `maxVersion()`（含 drift 库打开）11–12ms、`downloadService.init` 12–13ms；

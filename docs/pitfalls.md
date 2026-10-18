@@ -52,6 +52,12 @@
     后缀（`Arial Bold`），不能直接当家族名），海报页可
     独立覆盖（`PosterFontStore`）。不要再向 `pubspec.yaml` 的 `fonts:` 或
     `assets/fonts/` 添加字体，保持包体精简。
+    未自定义「应用字体」时不注入字体族（`fontFamily: null`）= 引擎默认字体
+    （Windows = Segoe UI + 引擎 CJK 回退，与 Chrome / 其它 Flutter 应用同源）。
+    不要改回去读系统「窗口字体」（`WindowMetrics\MessageFont`，中文系统 =
+    Microsoft YaHei UI）：那是原生 Win32 标题栏 / 消息框的口径，拉丁与数字字形
+    和「其它应用」不一致（实测体感就是「字体像另一个应用」）；想要窗口字体的
+    用户在选择器里选 `Microsoft YaHei UI` 即可（枚举里本来就有）。
 13. **发布体积**：新增资产前先评估体积；不要内置 CJK 字体（系统字体 + 用户安装）。
     Android 启动图标自 2026-10 起为手绘矢量（`drawable/ic_launcher_foreground.xml`，
     维护方式见 `icons_launcher.yaml` 头注释），该工具现在只生成 iOS 与 Windows 图标
