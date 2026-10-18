@@ -168,7 +168,7 @@ FlutterWindow::MessageHandler(HWND hwnd, UINT const message,
   }
 
   // 窗口第一次显示后才会出现在任务栏上：这时挂按钮才会成功。
-  if (message == WM_SHOWWINDOW && wparam == TRUE && thumb_bar_ != nullptr) {
+  if (message == WM_SHOWWINDOW && wparam != 0 && thumb_bar_ != nullptr) {
     thumb_bar_->AddButtons();
   }
 

@@ -65,7 +65,7 @@ void TaskbarThumbBar::Attach(HWND window, ActionCallback on_action) {
 }
 
 void TaskbarThumbBar::AddButtons() {
-  if (window_ == nullptr || window_ == INVALID_HANDLE_VALUE) {
+  if (window_ == nullptr) {
     return;
   }
   if (taskbar_ == nullptr) {
