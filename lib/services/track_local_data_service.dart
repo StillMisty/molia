@@ -188,6 +188,32 @@ class TrackLocalDataService {
     return result;
   }
 
+  /// 命中「已缓存」档（易失）的曲目集合：完整音频缓存 且 没有音频下载
+  /// （下载优先）——与 [TrackLocalData.audioState] 同一判据，只是不走
+  /// [loadMany] 的四分项统计。
+  ///
+  /// 为什么单独开一条：本地歌曲合集只需要音频这一档（歌词 / 封面 / 取链的
+  /// 占用算出来也没人看），而 [loadMany] 会为每首曲目读 prefs、探封面文件；
+  /// 合集列表与合集计数（弹层）都要等这份结果，代价必须与列表长度同阶。
+  /// 目录不可用 / 列举失败按无缓存呈现（空集合）。
+  Future<Set<TrackId>> cachedAudioTrackIds(Iterable<Track> tracks) async {
+    if (tracks.isEmpty) return const <TrackId>{};
+    final index = await _cacheService.audioStore.index();
+    if (index.isEmpty) return const <TrackId>{};
+    final result = <TrackId>{};
+    for (final track in tracks) {
+      // 下载优先：有音频下载的曲目归下载档，不出现在缓存行。
+      if (_downloadService?.recordForTrack(track)?.hasAudio ?? false) continue;
+      final usage = AudioCacheStore.usageForTrackInFiles(
+        index,
+        sourceKey: track.id.sourceKey,
+        songId: track.id.id,
+      );
+      if (usage.count > 0) result.add(track.id);
+    }
+    return result;
+  }
+
   /// 清理单项缓存（音频跳过正在写入的文件，见
   /// `CacheService.clearAudioForTrack`）。
   Future<LocalCacheClearResult> clear(

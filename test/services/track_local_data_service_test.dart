@@ -202,6 +202,42 @@ void main() {
     expect(await service.loadMany(const []), isEmpty);
   });
 
+  test('cachedAudioTrackIds：只认完整音频缓存；已有音频下载的曲目不算', () async {
+    final a = track();
+    final b = track(id: 'b');
+    await writeAudio(
+      AudioCacheStore.key(sourceKey: 'kw', songId: 'a', quality: '320k'),
+      100,
+    );
+    // 半成品（.part）不是可播放缓存，不算命中。
+    await writeAudio(
+      '${AudioCacheStore.key(sourceKey: 'kw', songId: 'a', quality: '320k')}'
+      '$audioCachePartSuffix',
+      50,
+    );
+    expect(
+      await service.cachedAudioTrackIds([a, b]),
+      {const TrackId('kw', 'a')},
+    );
+
+    // 有音频下载就归下载档（下载优先）：缓存文件还在也不算「已缓存」。
+    downloadService.record = DownloadedTrack(
+      originSourceKey: 'kw',
+      originSongId: 'a',
+      title: a.title,
+      artist: 'Artist',
+      album: '',
+      filePath: '/downloads/Title a.mp3',
+      downloadedAt: 1,
+    );
+    expect(
+      await service.cachedAudioTrackIds([a, b]),
+      isEmpty,
+      reason: '下载优先：下载行的曲目不进缓存行',
+    );
+    expect(await service.cachedAudioTrackIds(const []), isEmpty);
+  });
+
   test('两档状态：无 → 已缓存 → 已下载（下载 > 缓存）', () async {
     final t = track();
     expect((await service.load(t)).audioState, LocalPartState.none);

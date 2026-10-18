@@ -897,10 +897,67 @@ void main() {
     final current = tester.widget<M3EListItem>(pickerRow('我的收藏'));
     expect(current.selected, isTrue, reason: '当前合集用 M3E 选中态');
     expect(current.trailingText, '3 首', reason: '数量走 M3E 元文本槽');
+    // 当前合集只靠 selected 高亮（选中容器），不再叠对号图标。
+    expect(
+      find.descendant(
+        of: find.byType(M3EBottomSheetSurface),
+        matching: find.byIcon(Icons.check_rounded),
+      ),
+      findsNothing,
+    );
 
     final other = tester.widget<M3EListItem>(pickerRow('love'));
     expect(other.selected, isFalse);
     expect(other.trailingText, '3 首');
+  });
+
+  testWidgets('合集弹层：只有缓存行（0 下载）时本地歌曲计数不为 0', (tester) async {
+    await repository.addHistoryEntry(_history('1', playedAt: 2));
+    await pumpFavorites(
+      tester,
+      downloads: _StubDownloadService(),
+      cache: CacheService(
+        storage: _FakeCacheStorage(files: {
+          AudioCacheStore.key(sourceKey: 'wy', songId: '1', quality: '320k'):
+              2048,
+        }),
+      ),
+    );
+
+    // 弹层直接从其他合集打开：缓存行（历史 × 完整音频缓存命中）也要进计数。
+    await openCollectionPicker(tester);
+    expect(
+      tester.widget<M3EListItem>(pickerRow('本地歌曲')).trailingText,
+      '1 首',
+      reason: '计数与列表行数同源，不能只算下载记录',
+    );
+
+    // 进合集确认列表确实有一行（缓存行），与计数一致。
+    await tester.tap(pickerRow('本地歌曲'));
+    await tester.pumpAndSettle();
+    expect(headlines(tester), ['Song 1']);
+    expect(find.text('缓存'), findsOneWidget);
+  });
+
+  testWidgets('合集弹层：本地歌曲计数 = 下载 / 导入记录 + 缓存行', (tester) async {
+    await repository.addHistoryEntry(_history('1', playedAt: 2));
+    await pumpFavorites(
+      tester,
+      downloads: _StubDownloadService(seed: [_localSong('2')]),
+      cache: CacheService(
+        storage: _FakeCacheStorage(files: {
+          AudioCacheStore.key(sourceKey: 'wy', songId: '1', quality: '320k'):
+              2048,
+        }),
+      ),
+    );
+
+    await openCollectionPicker(tester);
+    expect(
+      tester.widget<M3EListItem>(pickerRow('本地歌曲')).trailingText,
+      '2 首',
+      reason: '下载记录 1 + 缓存行 1',
+    );
   });
 
   testWidgets('合集弹层：窄屏（手机宽度）不溢出，行内容齐全', (tester) async {

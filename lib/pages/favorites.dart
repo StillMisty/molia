@@ -182,6 +182,10 @@ class _FavoritesPageState extends State<FavoritesPage> {
   /// 缓存行加载令牌：输入变化后丢弃过期结果。
   int _cachedSongRowsLoadToken = 0;
 
+  /// 进行中的缓存行加载：同一输入下的重复触发复用同一轮（合集弹层的本地
+  /// 歌曲计数要等它落定，不能读到半旧状态）。
+  Future<void>? _cachedSongRowsLoad;
+
   /// 随机播放起点随机源（测试可注入种子）。
   late final math.Random _shuffleRandom =
       widget.shuffleRandom ?? math.Random();
@@ -288,23 +292,31 @@ class _FavoritesPageState extends State<FavoritesPage> {
     );
   }
 
-  /// 缓存行重算触发：签名变化才重算（只在浏览本地歌曲合集时调用）。
-  void _scheduleCachedSongRowsReload(
+  /// 缓存行重算触发：签名变化才重算；返回本轮加载的完成 Future
+  /// （浏览本地歌曲合集时 fire-and-forget，合集弹层计数需要等它落定）。
+  Future<void> _reloadCachedSongRowsIfStale(
     LibraryProvider provider,
     DownloadService? downloads,
   ) {
     final signature =
         _cachedSongRowsInputSignature(provider, downloads, _cacheService);
-    if (_cachedSongRowsSignature == signature) return;
+    if (_cachedSongRowsSignature == signature) {
+      // 签名已同步：若上一轮仍在加载，等它（不能读到半旧结果）。
+      return _cachedSongRowsLoad ?? Future<void>.value();
+    }
     _cachedSongRowsSignature = signature;
     _cachedSongRowsLoading = true;
     final token = ++_cachedSongRowsLoadToken;
-    unawaited(_reloadCachedSongRows(provider, downloads, signature, token));
+    final load = _reloadCachedSongRows(provider, downloads, signature, token);
+    _cachedSongRowsLoad = load;
+    return load.whenComplete(() {
+      if (identical(_cachedSongRowsLoad, load)) _cachedSongRowsLoad = null;
+    });
   }
 
-  /// 重算缓存行：历史曲目经唯一读取口批量取音频两档状态（一次目录列举）；
-  /// 只有「已缓存」进本地歌曲列表——已有音频下载的曲目由下载行承担
-  /// （下载优先）。
+  /// 重算缓存行：历史曲目经唯一读取口批量判定「已缓存」档（一次目录列举、
+  /// 只算音频）；只有「已缓存」进本地歌曲列表——已有音频下载的曲目由下载行
+  /// 承担（下载优先）。
   Future<void> _reloadCachedSongRows(
     LibraryProvider provider,
     DownloadService? downloads,
@@ -319,10 +331,10 @@ class _FavoritesPageState extends State<FavoritesPage> {
         final tracks = [
           for (final entry in entries) provider.trackFromHistoryEntry(entry),
         ];
-        final data = await service.loadMany(tracks);
+        final cachedIds = await service.cachedAudioTrackIds(tracks);
         final result = <CollectionLocalSong>[];
         for (var i = 0; i < entries.length; i++) {
-          if (data[tracks[i].id.uri]?.audioState == LocalPartState.cached) {
+          if (cachedIds.contains(tracks[i].id)) {
             result.add(CollectionLocalSong.cached(entries[i]));
           }
         }
@@ -344,7 +356,9 @@ class _FavoritesPageState extends State<FavoritesPage> {
       _cacheService,
     );
     if (nowSignature != signature) {
-      _scheduleCachedSongRowsReload(provider, context.read<DownloadService?>());
+      unawaited(
+        _reloadCachedSongRowsIfStale(provider, context.read<DownloadService?>()),
+      );
     }
   }
 
@@ -586,7 +600,9 @@ class _FavoritesPageState extends State<FavoritesPage> {
           id: LibraryCollections.downloadsSentinel,
           name: l10n.libraryLocalSongs,
           icon: Icons.library_music_rounded,
-          trackCount: downloadService!.downloads.length,
+          // 计数与列表行数同源：下载 / 导入记录 + 播放历史里的缓存行
+          //（弹层打开前会先把缓存行重算到当前输入，见 _showCollectionPicker）。
+          trackCount: downloadService!.downloads.length + _cachedSongRows.length,
           selected: selected == LibraryCollections.downloadsSentinel,
         ),
       for (final playlist in playlists)
@@ -620,6 +636,10 @@ class _FavoritesPageState extends State<FavoritesPage> {
 
   /// 打开合集切换弹层：点行切换、新建/重命名/删除、导入收藏、
   /// 行尾把手拖动排序。
+  ///
+  /// 本地歌曲计数含缓存行：弹层打开前先把缓存行重算到当前输入，否则刚启动
+  /// （还没进过本地歌曲合集）时计数会漏掉缓存行、与列表行数对不上。
+  /// 签名未变时是零等待；只有输入变过才等一次音频缓存目录列举。
   Future<void> _showCollectionPicker(
     AppLocalizations l10n,
     List<PlaylistInfo> playlists,
@@ -628,6 +648,8 @@ class _FavoritesPageState extends State<FavoritesPage> {
   ) async {
     final provider = context.read<LibraryProvider>();
     final downloadService = context.read<DownloadService?>();
+    await _reloadCachedSongRowsIfStale(provider, downloadService);
+    if (!mounted) return;
     final outcome = await M3EBottomSheet.show<_PickerOutcome>(
       context,
       builder: (_) => _CollectionPickerSheet(
@@ -1123,10 +1145,11 @@ class _FavoritesPageState extends State<FavoritesPage> {
     final downloadSongs = downloadService?.supported ?? false
         ? downloadService!.downloads
         : const <DownloadedTrack>[];
-    // 缓存行（缓存 = 已下载）：播放历史 × 完整音频缓存索引，随历史 / 缓存
-    // revision / 下载记录变化重算；只在浏览本地歌曲时触发。
+    // 缓存行（缓存 = 已下载）：播放历史 × 完整音频缓存命中，随历史 / 缓存
+    // revision / 下载记录变化重算；只在浏览本地歌曲合集时触发。
+    // 合集弹层打开前会另按需等同一份状态（弹层计数 = 列表行数）。
     if (isLocalSongs) {
-      _scheduleCachedSongRowsReload(provider, downloadService);
+      unawaited(_reloadCachedSongRowsIfStale(provider, downloadService));
     }
     final localSongs = isLocalSongs
         ? <CollectionLocalSong>[
@@ -2459,8 +2482,8 @@ class _CollectionPickerSheetState extends State<_CollectionPickerSheet> {
                   key: ValueKey<String>(entry.key),
                   leading: Icon(entry.icon),
                   headline: entry.name,
-                  // 数量走 M3E 元文本槽（选中态自带配色）；当前合集走 selected
-                  // 态（选中容器 + 对号），不再自绘数量文本。
+                  // 数量走 M3E 元文本槽（选中态自带配色）；当前合集只靠
+                  // selected 高亮（选中容器），不叠对号图标。
                   trailingText: l10n.playlistTrackCount(entry.trackCount),
                   selected: entry.selected,
                   onTap: () =>
@@ -2468,8 +2491,6 @@ class _CollectionPickerSheetState extends State<_CollectionPickerSheet> {
                   trailing: Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      if (entry.selected)
-                        const Icon(Icons.check_rounded, size: 20),
                       if (entry.playlistId != null)
                         M3EMenu.entries(
                           position: M3EMenuAnchorPosition.bottomEnd,
