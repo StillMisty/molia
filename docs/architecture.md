@@ -760,7 +760,9 @@
   `itemExtent = TrackRow.extentOf(context, tableColumns: …) + gap`，
   列表一律懒构建（发现详情滚到底自动加载下一页）。不要改回 `M3EListItem`（原因见 pitfalls #20）。
   收藏页四个合集共用一份列表脚手架 `lib/widgets/collection_track_list.dart`
-  （顺序列表 / 重排模式、空态与搜索空态、左滑动作形状），滚动位置簿记在
+  （顺序列表 / 重排模式、搜索空态、左滑动作形状）；
+  空态配方统一在 `lib/widgets/empty_state.dart`（图标 40 + 文案 + 可选行动，
+  收藏 / 资料 / 发现共用，居中与页边距由调用方包一层），滚动位置簿记在
   `lib/widgets/collection_scroll_bookkeeping.dart`（调度器可注入，脱离 widget 树可单测），
   页内过滤 / 排序口径在 `lib/utils/collection_row_query.dart`。
 - 曲目行尾的 ⋮ 菜单统一走 `lib/widgets/track_actions_menu.dart`（发现详情 / 搜索结果 /

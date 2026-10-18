@@ -148,6 +148,8 @@
 
 - **TrackRowColumnSpec（表格列宽规范）** — `lib/widgets/track_row.dart`：宽屏表格的列宽与「有没有播放时间列」的唯一宽表（行与表头同源），`minContentWidth` 是本套列不溢出所需的最小内容宽（默认档 720 / 播放历史档 812，判定见 `DesktopLayout.tableColumnsFor`）。
 
+- **EmptyState（空态配方）** — `lib/widgets/empty_state.dart`：空态的唯一配方（图标 40 · `onSurfaceVariant` + 12 + `bodyMedium` 居中文案 + 16 + 可选行动，`Column.mainAxisSize.min` 不占满屏）。收藏 / 资料 / 发现共用；居中与外边距（页面级 `Center` + 24、滚动内容 16/16）由调用方包一层，尺寸与间距只在本文件调整。
+
 - **Startup page（启动首页）** — `kShellHomeDestination`（跟人走）+ `NavProvider.homeDestination` / `effectiveHomeDestination`：冷启动落在用户选定的目的地（设置 › 通用 › 启动时打开，默认播放页）。存储首页不可见时（跨设备同步推来的 hidden 列表）按导航顺序取第一个可见项兜底且**不改写存储**（避免同步回环）；本地隐藏「正在作为首页的目的地」被拒绝（锁定）。
 
 - **App volume（应用内音量）** — `PlaybackProvider.volume` / `muted` / `setVolume` / `toggleMute`（设备本地持久化，不随同步：音量是设备能力）→ `PlaybackFacade.setVolume` → `LocalPlaybackService`（just_audio；桌面 media_kit 同一播放器）。静音以「有效音量 0」下发；音量不进 `PlaybackSnapshot`（低频快照契约不动）。
