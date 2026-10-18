@@ -38,7 +38,8 @@ void main() {
     });
 
     test('提交后保留预览，position 追上（容差内）才撤下', () {
-      controller.commit(5000);
+      controller.preview(5000);
+      controller.commit();
       expect(controller.previewMs.value, 5000);
       expect(seeks, [5000]);
 
@@ -47,7 +48,8 @@ void main() {
     });
 
     test('容差外不回撤预览，差值落到容差即撤下', () {
-      controller.commit(5000);
+      controller.preview(5000);
+      controller.commit();
       position.value = const Duration(milliseconds: 4000);
       expect(controller.previewMs.value, 5000);
 
@@ -57,7 +59,8 @@ void main() {
 
     test('超时兜底撤下预览', () {
       fakeAsync((async) {
-        controller.commit(5000);
+        controller.preview(5000);
+        controller.commit();
         async.elapse(const Duration(milliseconds: 1499));
         expect(controller.previewMs.value, 5000);
         async.elapse(const Duration(milliseconds: 1));
@@ -67,7 +70,8 @@ void main() {
 
     test('新拖动作废上一次等待落点与兜底计时器', () {
       fakeAsync((async) {
-        controller.commit(5000);
+        controller.preview(5000);
+        controller.commit();
         controller.preview(8000);
         // 旧目标已作废：position 追上旧落点也不撤预览。
         position.value = const Duration(milliseconds: 5000);
@@ -75,6 +79,12 @@ void main() {
         async.elapse(SeekPreviewController.fallbackTimeout);
         expect(controller.previewMs.value, 8000);
       });
+    });
+
+    test('无预览时提交是空操作（值没变 / 交互被取消）', () {
+      controller.commit();
+      expect(seeks, isEmpty);
+      expect(controller.previewMs.value, isNull);
     });
 
     test('曲目身份变化撤下预览，同曲目的其它通知不撤', () {
@@ -89,7 +99,8 @@ void main() {
 
     test('dispose 取消兜底计时器且不再响应事件', () {
       fakeAsync((async) {
-        controller.commit(5000);
+        controller.preview(5000);
+        controller.commit();
         controller.dispose();
         disposed = true;
         // 兜底计时器已取消：超时后不会回写已 dispose 的预览 notifier。
@@ -106,15 +117,17 @@ void main() {
     late ValueNotifier<Duration> position;
     late ChangeNotifier trackChanges;
     late SeekPreviewController controller;
+    late List<int> seeks;
 
     setUp(() {
       position = ValueNotifier(const Duration(seconds: 5));
       trackChanges = ChangeNotifier();
+      seeks = [];
       controller = SeekPreviewController(
         position: position,
         trackChanges: trackChanges,
         currentTrackId: () => const TrackId('tx', 'a'),
-        seek: (_) {},
+        seek: seeks.add,
       );
     });
 
@@ -162,6 +175,22 @@ void main() {
       controller.preview(20000);
       await tester.pump();
       expect(slider(tester).value, 20000);
+    });
+
+    testWidgets('快速单击直接跳点到点击位置', (tester) async {
+      await pumpBar(tester);
+      final rect = tester.getRect(find.byType(M3ESlider));
+      // tester.tapAt 的 down / up 之间不 pump，与真机 <100ms 的快速单击同一条
+      // 时序：M3ESlider 的 onTapDown / onTapUp 落在同一次事件分发里，中间没有
+      // 重建，它的 onChangeEnd 只能回传上一帧的 value（= 点击前的位置）。
+      await tester.tapAt(Offset(rect.left + rect.width * 0.75, rect.center.dy));
+
+      expect(seeks, hasLength(1));
+      expect(seeks.single, closeTo(30000 * 0.75, 1000));
+      expect(controller.previewMs.value, closeTo(30000 * 0.75, 1000));
+
+      // 松手后的保留窗口（1500ms 兜底）跑完，避免用例结束报 pending timer。
+      await tester.pump(const Duration(milliseconds: 1600));
     });
 
     testWidgets('无曲目禁用且侧时间显示占位', (tester) async {

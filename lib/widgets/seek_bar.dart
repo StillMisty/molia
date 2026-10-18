@@ -9,6 +9,8 @@ import 'seek_preview.dart';
 ///
 /// 只做取值与外观映射，不含时序语义（时序在 controller）：
 /// - 预览值优先于 position 通道：拖动中与提交等待期不被旧值回拽；
+/// - 松手提交不看滑杆回调的入参（快速单击时它是上一帧的旧位置），落点由
+///   [SeekPreviewController.commit] 按预览值决定；
 /// - 播放中用波浪滑杆，暂停切平直：波浪动画不会停，与暂停态自相矛盾；
 /// - 气泡 / 侧时间统一走 [durationText]，无效值兜 `0:00` / `--:--`；
 /// - 外层 `RepaintBoundary` 是硬需求：波浪滑杆内部是 `repeat()` 的无限
@@ -52,8 +54,10 @@ class SeekBar extends StatelessWidget {
                       .clamp(0.0, maxMs);
               final ValueChanged<double>? onChanged =
                   enabled ? controller.preview : null;
+              // 入参是滑杆上一帧的 value（快速单击时即点击前的位置），不可用：
+              // 提交落点由 controller 记住的预览值决定。
               final ValueChanged<double>? onChangeEnd =
-                  enabled ? controller.commit : null;
+                  enabled ? (double _) => controller.commit() : null;
               final String label = durationText(valueMs.round()) ?? '0:00';
 
               final Widget slider = isPlaying
