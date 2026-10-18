@@ -113,6 +113,56 @@ void main() {
     expect(card.color, scheme.secondaryContainer);
   });
 
+  testWidgets('多选：封面 ⇄ 勾选切换保持前导槽宽，标题不横移', (tester) async {
+    Future<void> pump({required bool selected}) async {
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: Center(
+              child: SizedBox(
+                width: 360,
+                child: TrackRow(
+                  title: 'Title',
+                  artist: 'Artist',
+                  selected: selected,
+                  position: M3ECardPosition.single,
+                  onTap: () {},
+                ),
+              ),
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+    }
+
+    final leading = find.descendant(
+      of: find.byType(TrackRow),
+      matching: find.byType(AnimatedSwitcher),
+    );
+
+    await pump(selected: false);
+    final double titleLeft = tester.getTopLeft(find.text('Title')).dx;
+    expect(
+      tester.getSize(leading).width,
+      TrackRow.defaultCoverSize,
+      reason: '封面态占用完整前导槽',
+    );
+
+    await pump(selected: true);
+    expect(find.byIcon(Icons.check_circle_rounded), findsOneWidget);
+    expect(
+      tester.getSize(leading).width,
+      TrackRow.defaultCoverSize,
+      reason: '勾选图标不能收窄前导槽（否则标题与表格列左移）',
+    );
+    expect(
+      tester.getTopLeft(find.text('Title')).dx,
+      titleLeft,
+      reason: '封面 ⇄ 勾选切换不改变标题起点',
+    );
+  });
+
   testWidgets('行距取 M3E 列表卡片 token（默认 2dp）', (tester) async {
     await pumpRow(tester);
     expect(TrackRow.gapOf(tester.element(find.byType(TrackRow))), 2);
