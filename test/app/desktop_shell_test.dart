@@ -19,6 +19,7 @@ import 'package:molia/providers/playback_provider.dart';
 import 'package:molia/providers/search_provider.dart';
 import 'package:molia/providers/sources_provider.dart';
 import 'package:molia/providers/theme_provider.dart';
+import 'package:molia/services/app_branding_service.dart';
 import 'package:molia/services/escape_claims.dart';
 import 'package:molia/services/lyrics_display/lyrics_display_settings.dart';
 import 'package:molia/services/shortcut_bindings.dart';
@@ -27,7 +28,7 @@ import 'package:molia/services/shortcuts.dart';
 import 'package:molia/services/window/window_chrome.dart';
 import 'package:molia/sources/source_manager.dart';
 import 'package:molia/widgets/cover_appearance.dart';
-import 'package:molia/widgets/global_search.dart';
+import 'package:molia/widgets/global_search_overlay.dart';
 import 'package:molia/widgets/molia_mark.dart';
 import 'package:molia/widgets/now_playing_controller.dart';
 import 'package:molia/widgets/player.dart';
@@ -44,11 +45,11 @@ import '../support/fakes.dart';
 /// 桌面骨架（`MyApp(desktopShell: true)`）的挂载测试。
 ///
 /// 覆盖骨架结构与三条不变量：顶栏是纯工具条（无标题 / 无播放控制 / 无进度线，
-/// 搜索在最左、右侧空白拖动区）；侧栏恒折叠（无展开按钮）；底栏只在非播放页
-/// 出现（播放页沉浸）且封面飞行两端都成立。另有队列入口（跳播放页 + 切队列
-/// tab）、顶栏全局搜索（宽窗工具条 / 窄窗图标、docked 结果面板、查看全部结果
-/// 切资料库）、全局快捷键（Space 切播放态、Esc 收起队列视图、输入框聚焦时
-/// 让位）。
+/// 最左是「标志 + 应用名」品牌区、右侧空白拖动区）；侧栏恒折叠（无展开按钮）；
+/// 底栏只在非播放页出现（播放页沉浸）且封面飞行两端都成立。另有队列入口
+/// （跳播放页 + 切队列 tab）、搜索遮罩（品牌区点击 / Ctrl+F 打开、docked 结果
+/// 面板、查看全部结果切资料库、键位提示）、全局快捷键（Space 切播放态、Esc
+/// 收起队列视图、输入框聚焦时让位）。
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
@@ -201,6 +202,14 @@ void main() {
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 900));
     await tester.pump(const Duration(milliseconds: 900));
+  }
+
+  /// 打开搜索遮罩（Ctrl+F：与品牌区点击同一条壳层回调）。
+  Future<void> openSearchOverlay(WidgetTester tester) async {
+    await tester.sendKeyDownEvent(LogicalKeyboardKey.controlLeft);
+    await tester.sendKeyEvent(LogicalKeyboardKey.keyF);
+    await tester.sendKeyUpEvent(LogicalKeyboardKey.controlLeft);
+    await tester.pumpAndSettle();
   }
 
   /// 侧栏条目：标签恒隐藏（`alwaysHide`），只能按图标定位。
@@ -570,47 +579,48 @@ void main() {
     expect(find.byType(M3ENavigationRail), findsNothing);
   });
 
-  testWidgets('顶栏搜索：宽窗是 320×48 工具条，左上对齐内容左缘', (tester) async {
+  testWidgets('顶栏品牌区：左上角是标志 + 应用名，点击打开搜索遮罩', (tester) async {
     await pumpShell(tester, desktopShell: true);
 
-    expect(find.byKey(DesktopShell.searchEntryKey), findsOneWidget);
+    final brand = find.byKey(DesktopShell.searchEntryKey);
+    expect(brand, findsOneWidget);
     expect(
-      find.byType(GlobalSearch),
+      find.descendant(of: brand, matching: find.byType(MoliaMark)),
       findsOneWidget,
-      reason: '宽窗搜索入口是顶栏全局搜索组件',
+      reason: '品牌标志在应用名左侧',
     );
     expect(
-      find.byType(M3ESearchAnchor),
+      find.descendant(
+        of: brand,
+        matching: find.text(AppBrandingService.fallbackTitle),
+      ),
       findsOneWidget,
-      reason: '宽窗搜索入口是 M3E 搜索条',
+      reason: '未自定义名称时显示品牌名（测试未走组合根本地化注入，取兜底名）',
     );
-    expect(
-      tester.getSize(find.byKey(DesktopShell.searchEntryKey)),
-      const Size(320, 48),
-      reason: '搜索槽 320×48（M3 最小触控 48）',
-    );
-    // 左缘 = 侧栏折叠宽 96 + 页面留白 24（AppBar 的 titleSpacing 已在槽位里补偿）。
-    expect(
-      tester.getRect(find.byKey(DesktopShell.searchEntryKey)).left,
-      96 + 24,
-      reason: '搜索条左对齐内容左缘',
-    );
-
-    // < 900：入口退化为图标按钮（不挂搜索锚点，顶栏不会被挤坏）。
-    tester.view.physicalSize = const Size(800, 900);
-    await settleTransition(tester);
-    expect(find.byKey(DesktopShell.searchEntryKey), findsOneWidget);
-    expect(find.byType(M3ESearchAnchor), findsNothing);
+    // 顶栏不再挂搜索条：整条工具行只有品牌区（+ 右侧空白拖动区）；
+    // 搜索遮罩宿主挂在页面栈上（隐形锚点，Ctrl+F / 品牌区打开）。
     expect(
       find.descendant(
         of: find.byType(AppBar),
-        matching: find.byIcon(Icons.search_rounded),
+        matching: find.byType(M3ESearchBar),
       ),
+      findsNothing,
+      reason: '搜索框已从顶栏移除',
+    );
+    expect(find.byType(GlobalSearchOverlay), findsOneWidget);
+    expect(find.text(l10n.searchHint), findsNothing, reason: '遮罩未打开');
+
+    await tester.tap(brand);
+    await tester.pumpAndSettle();
+    expect(find.text(l10n.searchHint), findsOneWidget, reason: '点击品牌区打开遮罩');
+    expect(
+      find.text(l10n.searchIdleHint),
       findsOneWidget,
+      reason: '无关键词时给输入引导（与资料库搜索页同文案）',
     );
   });
 
-  testWidgets('顶栏拖动区：在搜索右侧，且不包住搜索入口', (tester) async {
+  testWidgets('顶栏拖动区：在品牌区右侧，且不包住品牌入口', (tester) async {
     await pumpShell(tester, desktopShell: true);
 
     final dragArea = find.byKey(DesktopShell.titleDragAreaKey);
@@ -625,7 +635,7 @@ void main() {
       greaterThanOrEqualTo(
         tester.getRect(find.byKey(DesktopShell.searchEntryKey)).right,
       ),
-      reason: '拖动区在搜索右侧',
+      reason: '拖动区在品牌区右侧',
     );
     expect(
       find.ancestor(
@@ -633,18 +643,17 @@ void main() {
         matching: dragArea,
       ),
       findsNothing,
-      reason: '双击按钮不最大化：搜索入口不在拖动区里',
+      reason: '双击按钮不最大化：品牌入口不在拖动区里',
     );
   });
 
-  testWidgets('顶栏搜索：点击入口弹出 docked 结果面板（曲目行 + 查看全部结果）', (tester) async {
+  testWidgets('Ctrl+F：打开搜索遮罩（docked 面板），Esc 收起', (tester) async {
     await pumpSearchShell(tester);
-    expect(find.byType(TrackRow), findsNothing, reason: '面板未打开时不渲染结果');
+    expect(find.byType(TrackRow), findsNothing, reason: '遮罩未打开时不渲染结果');
 
-    await tester.tap(find.byKey(DesktopShell.searchEntryKey));
-    await tester.pumpAndSettle();
+    await openSearchOverlay(tester);
 
-    // 面板与资料库页共用同一个 SearchProvider：预置结果直接就地渲染。
+    // 遮罩与资料库页共用同一个 SearchProvider：预置结果直接就地渲染。
     expect(find.byType(TrackRow), findsNWidgets(2));
     expect(
       // 底栏当前曲目也叫 Title a：定位到面板行内。
@@ -655,37 +664,65 @@ void main() {
       findsOneWidget,
     );
     expect(find.text(l10n.viewAllResults), findsOneWidget);
+
+    // Esc 关闭：焦点在输入框内时按键放行给视图的关闭绑定（见 DesktopShortcuts
+    // 的让位规则），一次按键只关遮罩、不触发壳层「关闭队列」命令。
+    await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+    await tester.pumpAndSettle();
+    expect(find.byType(TrackRow), findsNothing, reason: 'Esc 收起遮罩');
+    expect(find.text(l10n.searchHint), findsNothing);
   });
 
-  testWidgets('顶栏搜索：键位提示跟随生效绑定', (tester) async {
+  testWidgets('顶栏品牌区：tooltip 跟随生效键位（软件内快捷键关闭即隐藏）',
+      (tester) async {
     await pumpShell(tester, desktopShell: true);
 
-    // 默认绑定 Ctrl+F（设置页同一套书写）挂在搜索条右侧。
-    expect(
-      find.descendant(
-        of: find.byKey(DesktopShell.searchEntryKey),
-        matching: find.text('Ctrl + F'),
-      ),
-      findsOneWidget,
-    );
+    String? tooltipMessage() => tester
+        .widget<Tooltip>(
+          find.descendant(
+            of: find.byKey(DesktopShell.searchEntryKey),
+            matching: find.byType(Tooltip),
+          ),
+        )
+        .message;
 
-    // 软件内快捷键整体关闭后提示消失（键位只在开着的分组里可用）。
+    // 默认绑定 Ctrl+F（设置页同一套书写）写进品牌区 tooltip。
+    expect(tooltipMessage(), '搜索 · Ctrl + F');
+
+    // 软件内快捷键整体关闭后只剩入口名（键位只在开着的分组里可用）。
     await ShortcutSettings.instance.setInAppEnabled(false);
     await tester.pump();
-    expect(
-      find.descendant(
-        of: find.byKey(DesktopShell.searchEntryKey),
-        matching: find.text('Ctrl + F'),
-      ),
-      findsNothing,
-    );
+    expect(tooltipMessage(), '搜索');
     await ShortcutSettings.instance.setInAppEnabled(true);
   });
 
-  testWidgets('顶栏搜索：「查看全部结果」收起面板并切到资料库目的地', (tester) async {
+  testWidgets('搜索遮罩：清除键清空关键词并回落输入引导', (tester) async {
     await pumpSearchShell(tester);
-    await tester.tap(find.byKey(DesktopShell.searchEntryKey));
+    await openSearchOverlay(tester);
+    expect(find.byType(TrackRow), findsNWidgets(2));
+
+    // 清除键自绘（tooltip 走 l10n）：清空必须同步给 provider，面板不能停留
+    // 在上一轮结果上。图标 X 与左侧的关闭箭头区分开；窗口控件里也有一个 X
+    // （窗口关闭键），定位收在搜索条内。
+    final clearButton = find.descendant(
+      of: find.byType(M3ESearchBar),
+      matching: find.byIcon(Icons.close_rounded),
+    );
+    expect(clearButton, findsOneWidget);
+    await tester.tap(clearButton);
     await tester.pumpAndSettle();
+
+    expect(find.byType(TrackRow), findsNothing);
+    expect(find.text(l10n.searchIdleHint), findsOneWidget, reason: '空词回落输入引导');
+
+    // 收起遮罩，避免用例结束时路由仍挂在导航栈上。
+    await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+    await tester.pumpAndSettle();
+  });
+
+  testWidgets('搜索遮罩：「查看全部结果」收起遮罩并切到资料库目的地', (tester) async {
+    await pumpSearchShell(tester);
+    await openSearchOverlay(tester);
 
     await tester.tap(find.text(l10n.viewAllResults));
     await settleTransition(tester);
@@ -694,7 +731,7 @@ void main() {
     expect(
       find.text(l10n.viewAllResults),
       findsNothing,
-      reason: '面板应已收起（跳转前先关搜索视图）',
+      reason: '遮罩应已收起（跳转前先关搜索视图）',
     );
   });
 

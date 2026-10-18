@@ -35,6 +35,9 @@ class AppLocalizationsEn extends AppLocalizations {
   String get clearSearch => 'Clear search';
 
   @override
+  String get searchClose => 'Close search';
+
+  @override
   String copiedToClipboard(String type) {
     return 'Copied to clipboard';
   }

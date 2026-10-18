@@ -60,12 +60,6 @@ class DesktopLayout extends InheritedWidget {
   bool get masterDetail =>
       isDesktopPlatform && windowWidth >= Breakpoints.desktop;
 
-  /// 顶栏搜索形态：窗口宽 < [Breakpoints.desktop]（900）退化为图标按钮。
-  ///
-  /// 消费方：桌面骨架顶栏与壳层 Ctrl+F 快捷键分流（两者必须同一判据，
-  /// 否则快捷键会落到不可见的入口上）。
-  bool get searchCompact => windowWidth < Breakpoints.desktop;
-
   /// 内容宽（窗口宽语义）：窗口宽 − 实际栏宽（[railWidth] 的不变量：
   /// 壳层只有侧栏一条常驻栏，这里就是内容区可用宽）。
   double get contentWidth => windowWidth - railWidth;
@@ -86,9 +80,6 @@ class DesktopLayout extends InheritedWidget {
   /// 壳层提供入口：解析当前 context 的窗口宽 / 平台位，并用结果包住 [child]。
   static Widget scope(BuildContext context, {required Widget child}) =>
       _resolveLayout(context, child: child);
-
-  /// 解析当前 context 的桌面布局（壳层非 build 时读取：快捷键分流等）。
-  static DesktopLayout resolve(BuildContext context) => _resolveLayout(context);
 
   /// 消费入口：取壳层解析结果；无壳层时按当前 context 回退解析。
   static DesktopLayout of(BuildContext context) =>

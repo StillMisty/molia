@@ -35,7 +35,7 @@ import '../utils/responsive.dart';
 import '../widgets/app_network_image.dart';
 import '../widgets/cover_appearance.dart';
 import '../widgets/desktop_layout.dart';
-import '../widgets/global_search.dart';
+import '../widgets/global_search_overlay.dart';
 import '../widgets/icon_swap.dart';
 import '../widgets/now_playing_controller.dart';
 import '../widgets/playback_selectors.dart';
@@ -234,8 +234,8 @@ class _MyAppState extends State<MyApp>
       destination: ShellReselectSignal(),
   };
 
-  /// 顶栏全局搜索的聚焦入口（Ctrl+F 宽窗路径）：搜索 pill 挂在
-  /// DesktopShell 里，控制器由壳层持有后下传；窄窗没有 pill，不被附着。
+  /// 搜索遮罩的打开入口（Ctrl+F / 顶栏品牌区路径）：遮罩宿主挂在
+  /// DesktopShell 里，控制器由壳层持有后下传。
   final GlobalSearchController _globalSearch = GlobalSearchController();
 
   /// 播放页右栏的 tab 切换请求通道（底栏队列按钮 / Esc 的「关闭队列」）。
@@ -527,19 +527,11 @@ class _MyAppState extends State<MyApp>
     showSettingsSheet(context);
   }
 
-  /// 全局快捷键 Ctrl+F：聚焦 / 打开全局搜索。
+  /// 打开搜索遮罩（顶栏品牌区点击 / 全局快捷键 Ctrl+F 同一条路径）。
   ///
-  /// 宽窗聚焦顶栏搜索 pill（打开面板后输入框自动取得焦点）；窄窗顶栏搜索
-  /// 已退化为图标，落到与图标同一条路径（资料库搜索页）。宽度判定与
-  /// [DesktopShell] 渲染搜索 pill / 图标的判据同源（`DesktopLayout`，
-  /// 见 `widgets/desktop_layout.dart`），口径不会漂移。
-  void _focusGlobalSearch() {
-    if (DesktopLayout.resolve(context).searchCompact) {
-      _openLibrarySearch();
-      return;
-    }
-    _globalSearch.focus();
-  }
+  /// 宽窄窗不再分流：遮罩自体全屏呈现、搜索条居中，任何窗口宽下都是同一个
+  /// 落点（宽度判定只服务遮罩内的布局，不再决定入口形态）。
+  void _openGlobalSearch() => _globalSearch.focus();
 
   /// 打开资料库搜索：发一次「显示搜索 tab」意图再切目的地。
   ///
@@ -619,16 +611,14 @@ class _MyAppState extends State<MyApp>
           chrome: chrome,
           pageStack: _buildPageStack(),
           morph: _morph,
-          // 顶栏搜索的两个出口当前都落在资料库目的地：完整结果（分段 / 分页 /
-          // 歌手链接）与窄窗的搜索页都在那里，且共用同一个 SearchProvider 实例。
-          // 两个回调分开传是因为触发语义不同（面板「查看全部结果」/ 窄窗图标），
-          // 将来给图标换落点只改这一处。
+          // 搜索遮罩：入口（品牌区 / Ctrl+F）与「查看全部结果」分别接线。
+          // 后者落在资料库目的地：完整结果（分段 / 分页 / 歌手链接）在那里，
+          // 且共用同一个 SearchProvider 实例。
           onViewAllResults: _openLibrarySearch,
-          onOpenSearch: _openLibrarySearch,
-          // 全局快捷键：Ctrl+F 与 Ctrl+1/2/3 的落点由壳层决定（宽窄窗分流、
-          // 可见目的地顺序），DesktopShell 只负责在顶层监听按键。
+          onOpenSearch: _openGlobalSearch,
+          // 全局快捷键：Ctrl+F 打开搜索遮罩、Ctrl+1/2/3 切可见目的地，
+          // DesktopShell 只负责在顶层监听按键，落点由壳层回调决定。
           searchController: _globalSearch,
-          onFocusSearch: _focusGlobalSearch,
           onSelectDestinationIndex: _selectVisibleDestinationAt,
           // 队列入口（底栏按钮）与 Esc 的「关闭队列」都要落回播放页右栏，
           // 由壳层持有控制器后分发。

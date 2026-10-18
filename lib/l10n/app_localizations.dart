@@ -146,6 +146,12 @@ abstract class AppLocalizations {
   /// **'Clear search'**
   String get clearSearch;
 
+  /// No description provided for @searchClose.
+  ///
+  /// In en, this message translates to:
+  /// **'Close search'**
+  String get searchClose;
+
   /// No description provided for @copiedToClipboard.
   ///
   /// In en, this message translates to:

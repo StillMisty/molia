@@ -35,6 +35,9 @@ class AppLocalizationsZh extends AppLocalizations {
   String get clearSearch => '清除搜索';
 
   @override
+  String get searchClose => '关闭搜索';
+
+  @override
   String copiedToClipboard(String type) {
     return '已复制到剪贴板';
   }

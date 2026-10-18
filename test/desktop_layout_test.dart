@@ -31,11 +31,6 @@ void main() {
       expect(Breakpoints.desktop, 900, reason: '阈值常量是唯一来源');
     });
 
-    test('searchCompact（顶栏搜索形态）：899 退化 / 900 完整', () {
-      expect(layout(windowWidth: 899).searchCompact, isTrue);
-      expect(layout(windowWidth: 900).searchCompact, isFalse);
-    });
-
     test('非桌面平台：再宽也不启用任何桌面增强', () {
       final mobile = layout(windowWidth: 1440, desktopPlatform: false);
       expect(mobile.masterDetail, isFalse);

@@ -15,6 +15,7 @@
   "searchHint": "Search songs, albums, artists...",
   "searchIdleHint": "Search songs by keyword",
   "clearSearch": "Clear search",
+  "searchClose": "Close search",
   "copiedToClipboard": "Copied to clipboard",
   "@copiedToClipboard": {
     "placeholders": {
