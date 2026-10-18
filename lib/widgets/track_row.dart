@@ -413,19 +413,25 @@ class TrackRow extends StatelessWidget {
   Widget _buildLeading(BuildContext context, M3EColorScheme scheme) {
     final Widget cover = LibraryCoverThumb(url: coverUrl, size: coverSize);
     if (!showCheckWhenSelected) return cover;
-    return AnimatedSwitcher(
-      duration: const Duration(milliseconds: 180),
-      child: selected
-          ? Icon(
-              Icons.check_circle_rounded,
-              key: const ValueKey<String>('selected'),
-              size: coverSize * 0.7,
-              color: scheme.onSecondaryContainer,
-            )
-          : KeyedSubtree(
-              key: const ValueKey<String>('cover'),
-              child: cover,
-            ),
+    // 前导槽按封面尺寸固定：AnimatedSwitcher 默认以 Stack 的最大子项定宽，
+    // 勾选图标只有 coverSize * 0.7，淡出结束后单独留下时槽会收窄，标题与
+    // 表格列随之左移（表头仍按封面尺寸预留）。固定槽宽让切换不影响行内网格。
+    return SizedBox.square(
+      dimension: coverSize,
+      child: AnimatedSwitcher(
+        duration: const Duration(milliseconds: 180),
+        child: selected
+            ? Icon(
+                Icons.check_circle_rounded,
+                key: const ValueKey<String>('selected'),
+                size: coverSize * 0.7,
+                color: scheme.onSecondaryContainer,
+              )
+            : KeyedSubtree(
+                key: const ValueKey<String>('cover'),
+                child: cover,
+              ),
+      ),
     );
   }
 }
