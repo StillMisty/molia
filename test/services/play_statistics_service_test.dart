@@ -1,6 +1,7 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:molia/data/molia_database.dart';
 import 'package:molia/data/play_statistics_repository.dart';
+import 'package:molia/data/stats_payload_codec.dart';
 import 'package:molia/data/settings/settings_keys.dart';
 import 'package:molia/domain/models/failure.dart';
 import 'package:molia/domain/models/playback.dart';
@@ -79,7 +80,7 @@ void main() {
 
   Future<List<Map<String, Object?>>> rows() async {
     await service.pendingWrites;
-    final rows = await tableRows(db, 'play_events');
+    final rows = await playEventRows(db);
     return rows..sort((a, b) => (a['id']! as int).compareTo(b['id']! as int));
   }
 
@@ -98,7 +99,8 @@ void main() {
       expect(opened.single['endedAt'], isNull);
       expect(opened.single['startedAt'], now.millisecondsSinceEpoch);
       expect(opened.single['songId'], 'a');
-      expect(opened.single['raw'], '{}');
+      // 载荷按 gzip 存 BLOB：断言解码后的 JSON。
+      expect(decodeStatsPayload(opened.single['raw']), '{}');
     });
 
     test('正常前进计入时长；seek 快进不计入', () async {
@@ -123,7 +125,7 @@ void main() {
       // 未到 touchInterval：库里仍是最新一次已落盘值（此处为 0）。
       await service.pendingWrites;
       expect(
-        (await tableRows(db, 'play_events')).single['listenedMs'],
+        (await playEventRows(db)).single['listenedMs'],
         0,
         reason: '节流窗口内不写库',
       );
@@ -132,7 +134,7 @@ void main() {
       service.onPosition(const Duration(seconds: 4));
       await service.pendingWrites;
       expect(
-        (await tableRows(db, 'play_events')).single['listenedMs'],
+        (await playEventRows(db)).single['listenedMs'],
         3000,
       );
     });
@@ -277,7 +279,7 @@ void main() {
 
       // 模拟下次冷启动：不经过服务收尾，直接跑遗留清理。
       expect(await repository.closeStaleEvents(), 1);
-      final row = (await tableRows(db, 'play_events')).single;
+      final row = (await playEventRows(db)).single;
       expect(row['endReason'], 'interrupted');
       expect(row['endedAt'], (row['startedAt'] as int) + 2000);
     });

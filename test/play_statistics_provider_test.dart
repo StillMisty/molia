@@ -1,6 +1,4 @@
-import 'dart:convert';
 
-import 'package:drift/drift.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:molia/data/molia_database.dart';
 import 'package:molia/data/play_statistics_repository.dart';
@@ -16,29 +14,42 @@ void main() {
   late PlayStatisticsRepository repository;
   late PlayStatisticsProvider provider;
 
+  /// 直接插入已收尾事件（查询测试用，绕开采集服务）。
   Future<int> insertEvent({
-    required String songId,
+    String sourceKey = 'wy',
+    String songId = 'Song 1',
+    String title = 'Song 1',
+    String artist = 'Artist',
+    String album = '',
+    String? coverUrl,
+    int? durationMs = 200000,
+    Map<String, dynamic>? raw,
     required int startedAt,
     int listenedMs = 60000,
-    int durationMs = 200000,
-    String endReason = 'completed',
-    String sourceKey = 'wy',
-  }) async {
-    return db.into(db.playEvents).insert(PlayEventsCompanion.insert(
-          sourceKey: sourceKey,
-          songId: songId,
-          title: Value('Song $songId'),
-          artist: const Value('Artist'),
-          album: const Value(''),
-          durationMs: Value(durationMs),
-          raw: Value(jsonEncode({'id': songId})),
-          startedAt: startedAt,
-          endedAt: Value(startedAt + listenedMs),
-          listenedMs: Value(listenedMs),
-          maxPositionMs: Value(listenedMs),
-          endReason: Value(endReason),
-        ));
-  }
+    int maxPositionMs = 60000,
+    String? endReason = 'completed',
+    int? endedAt,
+    String? syncKey,
+  }) =>
+      insertPlayEvent(
+        db,
+        sourceKey: sourceKey,
+        songId: songId,
+        title: title,
+        artist: artist,
+        album: album,
+        coverUrl: coverUrl,
+        durationMs: durationMs,
+        raw: raw,
+        startedAt: startedAt,
+        listenedMs: listenedMs,
+        maxPositionMs: maxPositionMs,
+        endReason: endReason,
+        // 未显式给 endedAt 的行按「收尾于 startedAt + listenedMs」造（查询只看
+        // 已收尾事件）。
+        endedAt: endedAt ?? startedAt + listenedMs,
+        syncKey: syncKey,
+      );
 
   setUp(() async {
     db = openMemoryDatabase();

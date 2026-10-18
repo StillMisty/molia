@@ -429,17 +429,29 @@
     全新对端；改成分块文件后增量直接发给全新对端，才全部暴露。回归用例：
     `test/sync_engine_test.dart`（空窗口 / 截断）、`test/sync_webdav_e2e_test.dart`。
 
-53. **统计事件的 `raw` 每曲一份：载荷归属在「该曲最新行」**：`play_events.raw`
-    不是「每行自包含」的列——它只落在该曲 `startedAt` 最新的一行，更早的行是
-    空串。理由：载荷是每曲属性（取链参数），逐条存一份在保留窗口（20k 行 /
-    365 天）下实测 18 MB（内置平台载荷 ~700 B）到 97 MB（LX 脚本原样透传平台
-    对象 ~3.6 KB）。改这块要同时守三条：
-    ① 写入点（`startEvent` / `syncApplyEvents`）必须调用
-       `_keepPayloadOnNewestRow`，且只在**新行**带载荷——写到更早的行会在裁剪
-       （按旧 → 新删）时先于事件被删掉；
-    ② 读取侧（`topTracks` 的 `MAX(raw)`、`dayEvents` / `listEventsForExport`、
-       同步导出）依赖「每曲至多一行非空」补齐，别假设某行自己有值；
-    ③ 存量库靠启动维护 `dedupeTrackPayloads()` 归并（幂等，先做存在性检查）；
-       新写路径若破坏不变量，它会在下次启动修回来。
-    实测（20k 事件 / 1781 不同曲目，真实仓库写入）：18.17 → 6.07 MB、
-    97.41 → 12.31 MB（载荷列 11.98 → 1.12 MB / 72.52 → 6.16 MB）。
+53. **统计曲目内容在 `play_tracks`，不在事件行（v5）**：`play_events` 只存
+    事件自身字段（时间 / 进度 / 结束原因 / 版本 + `trackId`），曲目元数据与
+    取链参数在 `play_tracks`（每曲一行，`UNIQUE (sourceKey, songId)`，`raw` 是
+    **gzip 字节**）。为什么：事件是 append-only，逐行复制元数据 + 载荷在保留
+    窗口（20k 行 / 365 天）下实测 18 MB（内置平台载荷 ~700 B/条）到 97 MB
+    （LX 脚本原样透传平台对象 ~3.6 KB/条）——内容表 + gzip 后是 4.1 MB / 6.4 MB。
+    改这块要同时守四条：
+    ① **读取一律 join**：`sourceKey` / `songId` / `title` / `artist` / `album` /
+       `coverUrl` / `durationMs` / `raw` 都不在事件表上；连表后 `_qualifiedPredicate`
+       必须写 `pt.durationMs`（否则列名歧义 / 找不到列）；
+    ② **写入口径是「内容时间取新」**：`_upsertTrack` 只在事件 `startedAt` 不早于
+       内容行 `updatedAt` 时覆盖——远端补发的旧事件不许顶掉新内容；记录没带
+       `raw` 时不覆盖载荷（`Value.absent()`）；
+    ③ **载荷按 gzip 存**（`stats_payload_codec.dart`）：写入 `encodeStatsPayload`、
+       读取 `decodeStatsPayload`，别再往库里塞明文 JSON（解码器对非 gzip 字节做了
+       明文降级，只为迁移期兜底）；线上记录 / 日志条目必须在导出侧解码补齐，
+       否则远端拿到的是二进制乱码；
+    ④ **载荷预算**（`PlayStatisticsRepository.maxRetainedPayloadBytes`，默认
+       16 MB）：超出按「最近播放」保留、其余清 `raw`（点播回退重新解析）——
+       单条载荷大小由脚本决定，行数上限约束不了字节。
+    迁移（v4 → v5）在 `from4To5`：内容行取每曲最新一行快照（SQLite 单 min/max
+    聚合的裸列语义）+ Dart 侧 gzip 搬载荷 + `alterTable` 给事件加 `trackId`
+    （先 `DROP INDEX idx_play_events_track`，否则 alterTable 会重建这个引用
+    已删列的索引）。回归：`test/drift/molia/migration_test.dart` 的
+    「from v4 to v5」数据用例、`test/play_statistics_repository_test.dart` 的
+    「曲目内容表」组。

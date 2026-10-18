@@ -1,9 +1,11 @@
 import 'dart:convert';
+import 'dart:typed_data';
 
 import 'package:drift/drift.dart' hide isNull;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:molia/data/molia_database.dart';
 import 'package:molia/data/play_statistics_repository.dart';
+import 'package:molia/data/stats_payload_codec.dart';
 import 'package:molia/domain/models/play_statistics.dart';
 import 'support/sync_test_support.dart';
 
@@ -14,7 +16,7 @@ void main() {
   late MoliaDatabase db;
   late PlayStatisticsRepository repository;
 
-  /// 直接插入已收尾/进行中事件（查询测试用，绕开采集服务）。
+  /// 直接插入已收尾 / 进行中事件（查询测试用，绕开采集服务）。
   Future<int> insertEvent({
     String sourceKey = 'wy',
     String songId = 'song1',
@@ -29,23 +31,25 @@ void main() {
     int maxPositionMs = 100000,
     String? endReason = 'skipped',
     int? endedAt,
-  }) async {
-    return db.into(db.playEvents).insert(PlayEventsCompanion.insert(
-          sourceKey: sourceKey,
-          songId: songId,
-          title: Value(title),
-          artist: Value(artist),
-          album: Value(album),
-          coverUrl: Value(coverUrl),
-          durationMs: Value(durationMs),
-          raw: Value(jsonEncode(raw ?? {'id': songId})),
-          startedAt: startedAt,
-          endedAt: Value(endedAt),
-          listenedMs: Value(listenedMs),
-          maxPositionMs: Value(maxPositionMs),
-          endReason: Value(endReason),
-        ));
-  }
+    String? syncKey,
+  }) =>
+      insertPlayEvent(
+        db,
+        sourceKey: sourceKey,
+        songId: songId,
+        title: title,
+        artist: artist,
+        album: album,
+        coverUrl: coverUrl,
+        durationMs: durationMs,
+        raw: raw,
+        startedAt: startedAt,
+        listenedMs: listenedMs,
+        maxPositionMs: maxPositionMs,
+        endReason: endReason,
+        endedAt: endedAt,
+        syncKey: syncKey,
+      );
 
   setUp(() async {
     db = openMemoryDatabase();
@@ -82,7 +86,11 @@ void main() {
       expect(row['endedAt'], isNull);
       expect(row['listenedMs'], 12000);
       expect(row['maxPositionMs'], 13000);
-      expect(row['raw'], '{"rid":7}');
+      // 载荷在内容行上（schema v5），按 gzip 存。
+      expect(
+        decodeStatsPayload((await tableRows(db, 'play_tracks')).single['raw']),
+        '{"rid":7}',
+      );
       expect(changes, isEmpty, reason: '进行中事件不广播');
 
       await repository.finishEvent(
@@ -637,14 +645,14 @@ void main() {
     expect(await repository.syncFingerprint(), isNot(started));
   });
 
-  group('载荷归属（raw 每曲一份）', () {
-    /// 播放同一曲三次（载荷 v1→v3），返回行 id。
+  group('曲目内容表（play_tracks）', () {
+    /// 播放同一曲三次（载荷 v1→v3，标题跟着变），返回行 id。
     Future<void> playSameTrack(List<String> values, {int base = 1000}) async {
       for (var i = 0; i < values.length; i++) {
         final id = await repository.startEvent(
           sourceKey: 'wy',
           songId: 'same',
-          title: '曲目',
+          title: '标题${values[i]}',
           raw: {'v': values[i]},
           startedAt: base + i * 1000,
         );
@@ -658,39 +666,117 @@ void main() {
       }
     }
 
-    Future<List<Map<String, Object?>>> payloadHolders() async => [
-          for (final row in await tableRows(db, 'play_events'))
-            if ((row['raw'] as String? ?? '').isNotEmpty) row,
-        ];
-
-    test('连续播放同一曲：载荷只留最新一行，读取侧按曲补齐', () async {
+    test('连续播放同一曲：内容行每曲一行，元数据 / 载荷取最近一次', () async {
       await playSameTrack(['v1', 'v2', 'v3']);
 
-      final holders = await payloadHolders();
-      expect(holders, hasLength(1), reason: '载荷每曲一份（不再逐条复制）');
-      expect(holders.single['raw'], '{"v":"v3"}');
-      expect(holders.single['startedAt'], 3000, reason: '持有行是该曲最新一行');
+      final tracks = await tableRows(db, 'play_tracks');
+      expect(tracks, hasLength(1), reason: '内容每曲一行（不再逐事件复制）');
+      expect(tracks.single['title'], '标题v3');
+      expect(tracks.single['updatedAt'], 3000);
+      expect(decodeStatsPayload(tracks.single['raw']), '{"v":"v3"}');
+      expect(await tableRows(db, 'play_events'), hasLength(3), reason: '事件全保留');
 
-      // 读取侧：三条事件都拿到该曲载荷（统计页点播参数按曲补齐）。
+      // 读取侧：三条事件都拿到该曲载荷（明细 / 榜单 / 点播口径一致）。
       final events = await repository.listEventsForExport();
       expect(events, hasLength(3));
       expect(events.every((event) => event.raw['v'] == 'v3'), isTrue);
       final top = await repository.topTracks();
       expect(top.single.raw, {'v': 'v3'});
+      expect(top.single.title, '标题v3');
       expect(top.single.playCount, 3);
     });
 
-    test('裁剪删掉旧行后载荷仍在：点播参数不随旧行消失', () async {
+    test('载荷按 gzip 存 BLOB（库里不是明文 JSON）', () async {
+      await playSameTrack(['v1']);
+
+      final raw = (await tableRows(db, 'play_tracks')).single['raw'];
+      expect(raw, isA<Uint8List>());
+      expect(
+        utf8.decode(raw! as Uint8List, allowMalformed: true),
+        isNot(contains('"v":"v1"')),
+        reason: 'gzip 字节不是可读 JSON',
+      );
+      expect(decodeStatsPayload(raw), '{"v":"v1"}');
+    });
+
+    test('事件裁剪后：被裁光事件的曲目内容行 GC，仍有事件的曲目载荷保留', () async {
       final now = DateTime.now().millisecondsSinceEpoch;
       await playSameTrack(['v1', 'v2', 'v3'], base: now);
+      await insertEvent(
+        songId: 'other',
+        startedAt: now - 10 * 1000,
+        endedAt: now - 9000,
+        listenedMs: 60000,
+      );
+
       await repository.pruneOldEvents(
         maxRows: 1,
         retention: const Duration(days: 3650),
       );
 
+      expect(await tableRows(db, 'play_events'), hasLength(1));
+      final tracks = await tableRows(db, 'play_tracks');
+      expect(tracks, hasLength(1), reason: '事件被裁光的曲目内容行一并清理');
+      expect(tracks.single['songId'], 'same');
       final events = await repository.listEventsForExport();
-      expect(events, hasLength(1));
-      expect(events.single.raw, {'v': 'v3'}, reason: '载荷放最新行：裁剪后仍可点播');
+      expect(events.single.raw, {'v': 'v3'}, reason: '载荷不随旧事件丢失');
+    });
+
+    test('载荷预算：超出按「最近播放」保留，越界的清空（历史 / 明细不变）', () async {
+      final now = DateTime.now().millisecondsSinceEpoch;
+      final pad = 'x' * 600;
+      for (final (index, songId) in ['a', 'b', 'c'].indexed) {
+        final id = await repository.startEvent(
+          sourceKey: 'wy',
+          songId: songId,
+          title: 'T$songId',
+          raw: {'id': songId, 'pad': pad},
+          startedAt: now + index * 1000,
+        );
+        await repository.finishEvent(
+          id,
+          reason: PlayEventEndReason.completed,
+          listenedMs: 60000,
+          maxPositionMs: 60000,
+          endedAt: now + index * 1000 + 500,
+        );
+      }
+      // 预算 = 最近两首的载荷字节（按 gzip 后的实际长度算）。
+      final holders = await db
+          .customSelect(
+            'SELECT LENGTH(raw) AS bytes FROM play_tracks '
+            'WHERE raw IS NOT NULL ORDER BY updatedAt DESC, id DESC',
+          )
+          .get();
+      final budget = holders
+          .take(2)
+          .fold<int>(0, (sum, row) => sum + ((row.data['bytes'] as int?) ?? 0));
+      expect(holders, hasLength(3));
+
+      await repository.pruneOldEvents(
+        maxRows: 100,
+        retention: const Duration(days: 3650),
+        maxPayloadBytes: budget,
+      );
+
+      final tracks = await tableRows(db, 'play_tracks');
+      expect(tracks, hasLength(3), reason: '只清载荷，不删内容行 / 事件');
+      final withPayload = [
+        for (final track in tracks)
+          if (track['raw'] != null) track['songId'],
+      ];
+      expect(withPayload.toSet(), {'b', 'c'}, reason: '最久未播放的载荷先清');
+      expect(await repository.listEventsForExport(), hasLength(3));
+      final top = await repository.topTracks();
+      expect(
+        top.firstWhere((entry) => entry.songId == 'a').raw,
+        isEmpty,
+        reason: '点播参数没了 → 回退重新解析',
+      );
+      expect(
+        top.firstWhere((entry) => entry.songId == 'c').raw,
+        <String, dynamic>{'id': 'c', 'pad': pad},
+      );
     });
 
     test('同步导出：每条记录自包含（载荷按曲补齐）', () async {
@@ -705,11 +791,11 @@ void main() {
       }
     });
 
-    test('远端落地：更旧的事件不抢载荷，更新的事件归位', () async {
+    test('远端落地：更旧的事件不改内容行，更新的事件才覆盖', () async {
       final localId = await repository.startEvent(
         sourceKey: 'wy',
         songId: 'same',
-        title: '本机',
+        title: '本机新标题',
         raw: {'v': 'local'},
         startedAt: 5000,
       );
@@ -721,12 +807,11 @@ void main() {
         endedAt: 5500,
       );
 
-      // 更旧的远端事件：载荷留在本机最新持有行。
       await repository.syncApplyEvents([
         {
           'sourceKey': 'wy',
           'songId': 'same',
-          'title': '远端旧',
+          'title': '远端旧标题',
           'raw': '{"v":"old"}',
           'startedAt': 3000,
           'endedAt': 3500,
@@ -736,17 +821,16 @@ void main() {
           'originDeviceId': 'devB',
         },
       ]);
-      var holders = await payloadHolders();
-      expect(holders, hasLength(1));
-      expect(holders.single['raw'], '{"v":"local"}');
-      expect(holders.single['startedAt'], 5000);
+      expect(await tableRows(db, 'play_events'), hasLength(2), reason: '事件仍落地');
+      var track = (await tableRows(db, 'play_tracks')).single;
+      expect(track['title'], '本机新标题', reason: '旧事件不覆盖新内容');
+      expect(decodeStatsPayload(track['raw']), '{"v":"local"}');
 
-      // 更新的远端事件：载荷归位到新行。
       await repository.syncApplyEvents([
         {
           'sourceKey': 'wy',
           'songId': 'same',
-          'title': '远端新',
+          'title': '远端新标题',
           'raw': '{"v":"new"}',
           'startedAt': 9000,
           'endedAt': 9500,
@@ -756,39 +840,9 @@ void main() {
           'originDeviceId': 'devB',
         },
       ]);
-      holders = await payloadHolders();
-      expect(holders, hasLength(1));
-      expect(holders.single['raw'], '{"v":"new"}');
-      expect(holders.single['startedAt'], 9000);
-    });
-
-    test('启动维护：存量逐行重复的载荷归并到最新一行（幂等）', () async {
-      // 存量库（旧版本逐行存过一份）：直接插入，绕开 startEvent 的归位。
-      for (final (index, value) in ['v1', 'v2', 'v3'].indexed) {
-        await insertEvent(
-          songId: 'legacy',
-          raw: {'v': value},
-          startedAt: 1000 + index * 1000,
-          endedAt: 1500 + index * 1000,
-        );
-      }
-      await insertEvent(
-        songId: 'other',
-        raw: {'v': 'x'},
-        startedAt: 9000,
-        endedAt: 9500,
-      );
-
-      expect(await repository.dedupeTrackPayloads(), 2, reason: '清掉两条旧副本');
-      final holders = await payloadHolders();
-      expect(holders, hasLength(2));
-      expect(holders.map((row) => row['startedAt']), containsAll([3000, 9000]));
-
-      // 幂等：不变量成立后是空操作（每次启动都跑）。
-      expect(await repository.dedupeTrackPayloads(), 0);
-      // 归并后读取侧不受影响。
-      final top = await repository.topTracks();
-      expect(top.firstWhere((entry) => entry.songId == 'legacy').raw, {'v': 'v3'});
+      track = (await tableRows(db, 'play_tracks')).single;
+      expect(track['title'], '远端新标题');
+      expect(decodeStatsPayload(track['raw']), '{"v":"new"}');
     });
   });
 }

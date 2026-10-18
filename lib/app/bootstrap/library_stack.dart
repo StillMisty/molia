@@ -80,11 +80,9 @@ Future<LibraryStack> buildLibraryStack({
   ).wait;
   syncState.stampIssuer.seed(dbMaxVersion);
   unawaited(playStatisticsRepository.closeStaleEvents());
-  // 载荷归并（存量库升级一次）：`raw` 每曲一份，历史版本逐行存过一份，
-  // 首次启动把重复的归并到每曲最新一行（幂等，之后是空操作）。
-  unawaited(playStatisticsRepository.dedupeTrackPayloads());
-  // 事件保留裁剪（行数 + 时长上限）：统计查询 / 同步导出与指纹都随库龄
-  // 线性变慢，超出上限的已收尾事件在启动维护时裁掉。
+  // 事件保留裁剪（行数 + 时长上限）与载荷预算：统计查询 / 同步导出与指纹都随
+  // 库龄线性变慢，超出上限的已收尾事件在启动维护时裁掉；载荷（gzip 字节）另按
+  // 最近播放保留一份预算，病态大载荷脚本不会把库顶穿。
   unawaited(playStatisticsRepository.pruneOldEvents());
   // 最近播放上下文（play_contexts）：提前创建，同一实例既进 Provider 树，
   // 也直接注入 PlaybackProvider / 播放观察者。

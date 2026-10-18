@@ -3351,12 +3351,12 @@ class SyncJournalStatesCompanion extends UpdateCompanion<SyncJournalState> {
   }
 }
 
-class $PlayEventsTable extends PlayEvents
-    with TableInfo<$PlayEventsTable, PlayEventRow> {
+class $PlayTracksTable extends PlayTracks
+    with TableInfo<$PlayTracksTable, PlayTrackRow> {
   @override
   final GeneratedDatabase attachedDatabase;
   final String? _alias;
-  $PlayEventsTable(this.attachedDatabase, [this._alias]);
+  $PlayTracksTable(this.attachedDatabase, [this._alias]);
   static const VerificationMeta _idMeta = const VerificationMeta('id');
   @override
   late final GeneratedColumn<int> id = GeneratedColumn<int>(
@@ -3412,11 +3412,464 @@ class $PlayEventsTable extends PlayEvents
       type: DriftSqlType.int, requiredDuringInsert: false);
   static const VerificationMeta _rawMeta = const VerificationMeta('raw');
   @override
-  late final GeneratedColumn<String> raw = GeneratedColumn<String>(
-      'raw', aliasedName, false,
-      type: DriftSqlType.string,
+  late final GeneratedColumn<Uint8List> raw = GeneratedColumn<Uint8List>(
+      'raw', aliasedName, true,
+      type: DriftSqlType.blob, requiredDuringInsert: false);
+  static const VerificationMeta _updatedAtMeta =
+      const VerificationMeta('updatedAt');
+  @override
+  late final GeneratedColumn<int> updatedAt = GeneratedColumn<int>(
+      'updatedAt', aliasedName, false,
+      type: DriftSqlType.int, requiredDuringInsert: true);
+  @override
+  List<GeneratedColumn> get $columns => [
+        id,
+        sourceKey,
+        songId,
+        title,
+        artist,
+        album,
+        coverUrl,
+        durationMs,
+        raw,
+        updatedAt
+      ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'play_tracks';
+  @override
+  VerificationContext validateIntegrity(Insertable<PlayTrackRow> instance,
+      {bool isInserting = false}) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('id')) {
+      context.handle(_idMeta, id.isAcceptableOrUnknown(data['id']!, _idMeta));
+    }
+    if (data.containsKey('sourceKey')) {
+      context.handle(_sourceKeyMeta,
+          sourceKey.isAcceptableOrUnknown(data['sourceKey']!, _sourceKeyMeta));
+    } else if (isInserting) {
+      context.missing(_sourceKeyMeta);
+    }
+    if (data.containsKey('songId')) {
+      context.handle(_songIdMeta,
+          songId.isAcceptableOrUnknown(data['songId']!, _songIdMeta));
+    } else if (isInserting) {
+      context.missing(_songIdMeta);
+    }
+    if (data.containsKey('title')) {
+      context.handle(
+          _titleMeta, title.isAcceptableOrUnknown(data['title']!, _titleMeta));
+    }
+    if (data.containsKey('artist')) {
+      context.handle(_artistMeta,
+          artist.isAcceptableOrUnknown(data['artist']!, _artistMeta));
+    }
+    if (data.containsKey('album')) {
+      context.handle(
+          _albumMeta, album.isAcceptableOrUnknown(data['album']!, _albumMeta));
+    }
+    if (data.containsKey('coverUrl')) {
+      context.handle(_coverUrlMeta,
+          coverUrl.isAcceptableOrUnknown(data['coverUrl']!, _coverUrlMeta));
+    }
+    if (data.containsKey('durationMs')) {
+      context.handle(
+          _durationMsMeta,
+          durationMs.isAcceptableOrUnknown(
+              data['durationMs']!, _durationMsMeta));
+    }
+    if (data.containsKey('raw')) {
+      context.handle(
+          _rawMeta, raw.isAcceptableOrUnknown(data['raw']!, _rawMeta));
+    }
+    if (data.containsKey('updatedAt')) {
+      context.handle(_updatedAtMeta,
+          updatedAt.isAcceptableOrUnknown(data['updatedAt']!, _updatedAtMeta));
+    } else if (isInserting) {
+      context.missing(_updatedAtMeta);
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {id};
+  @override
+  PlayTrackRow map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return PlayTrackRow(
+      id: attachedDatabase.typeMapping
+          .read(DriftSqlType.int, data['${effectivePrefix}id'])!,
+      sourceKey: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}sourceKey'])!,
+      songId: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}songId'])!,
+      title: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}title'])!,
+      artist: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}artist'])!,
+      album: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}album'])!,
+      coverUrl: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}coverUrl']),
+      durationMs: attachedDatabase.typeMapping
+          .read(DriftSqlType.int, data['${effectivePrefix}durationMs']),
+      raw: attachedDatabase.typeMapping
+          .read(DriftSqlType.blob, data['${effectivePrefix}raw']),
+      updatedAt: attachedDatabase.typeMapping
+          .read(DriftSqlType.int, data['${effectivePrefix}updatedAt'])!,
+    );
+  }
+
+  @override
+  $PlayTracksTable createAlias(String alias) {
+    return $PlayTracksTable(attachedDatabase, alias);
+  }
+}
+
+class PlayTrackRow extends DataClass implements Insertable<PlayTrackRow> {
+  final int id;
+  final String sourceKey;
+  final String songId;
+  final String title;
+  final String artist;
+  final String album;
+  final String? coverUrl;
+  final int? durationMs;
+
+  /// 取链参数：gzip(JSON) 字节；NULL = 无载荷（未提供 / 已被载荷预算清掉）。
+  final Uint8List? raw;
+
+  /// 最近一次写入的内容时间（事件 `startedAt`）。
+  final int updatedAt;
+  const PlayTrackRow(
+      {required this.id,
+      required this.sourceKey,
+      required this.songId,
+      required this.title,
+      required this.artist,
+      required this.album,
+      this.coverUrl,
+      this.durationMs,
+      this.raw,
+      required this.updatedAt});
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['id'] = Variable<int>(id);
+    map['sourceKey'] = Variable<String>(sourceKey);
+    map['songId'] = Variable<String>(songId);
+    map['title'] = Variable<String>(title);
+    map['artist'] = Variable<String>(artist);
+    map['album'] = Variable<String>(album);
+    if (!nullToAbsent || coverUrl != null) {
+      map['coverUrl'] = Variable<String>(coverUrl);
+    }
+    if (!nullToAbsent || durationMs != null) {
+      map['durationMs'] = Variable<int>(durationMs);
+    }
+    if (!nullToAbsent || raw != null) {
+      map['raw'] = Variable<Uint8List>(raw);
+    }
+    map['updatedAt'] = Variable<int>(updatedAt);
+    return map;
+  }
+
+  PlayTracksCompanion toCompanion(bool nullToAbsent) {
+    return PlayTracksCompanion(
+      id: Value(id),
+      sourceKey: Value(sourceKey),
+      songId: Value(songId),
+      title: Value(title),
+      artist: Value(artist),
+      album: Value(album),
+      coverUrl: coverUrl == null && nullToAbsent
+          ? const Value.absent()
+          : Value(coverUrl),
+      durationMs: durationMs == null && nullToAbsent
+          ? const Value.absent()
+          : Value(durationMs),
+      raw: raw == null && nullToAbsent ? const Value.absent() : Value(raw),
+      updatedAt: Value(updatedAt),
+    );
+  }
+
+  factory PlayTrackRow.fromJson(Map<String, dynamic> json,
+      {ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return PlayTrackRow(
+      id: serializer.fromJson<int>(json['id']),
+      sourceKey: serializer.fromJson<String>(json['sourceKey']),
+      songId: serializer.fromJson<String>(json['songId']),
+      title: serializer.fromJson<String>(json['title']),
+      artist: serializer.fromJson<String>(json['artist']),
+      album: serializer.fromJson<String>(json['album']),
+      coverUrl: serializer.fromJson<String?>(json['coverUrl']),
+      durationMs: serializer.fromJson<int?>(json['durationMs']),
+      raw: serializer.fromJson<Uint8List?>(json['raw']),
+      updatedAt: serializer.fromJson<int>(json['updatedAt']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'id': serializer.toJson<int>(id),
+      'sourceKey': serializer.toJson<String>(sourceKey),
+      'songId': serializer.toJson<String>(songId),
+      'title': serializer.toJson<String>(title),
+      'artist': serializer.toJson<String>(artist),
+      'album': serializer.toJson<String>(album),
+      'coverUrl': serializer.toJson<String?>(coverUrl),
+      'durationMs': serializer.toJson<int?>(durationMs),
+      'raw': serializer.toJson<Uint8List?>(raw),
+      'updatedAt': serializer.toJson<int>(updatedAt),
+    };
+  }
+
+  PlayTrackRow copyWith(
+          {int? id,
+          String? sourceKey,
+          String? songId,
+          String? title,
+          String? artist,
+          String? album,
+          Value<String?> coverUrl = const Value.absent(),
+          Value<int?> durationMs = const Value.absent(),
+          Value<Uint8List?> raw = const Value.absent(),
+          int? updatedAt}) =>
+      PlayTrackRow(
+        id: id ?? this.id,
+        sourceKey: sourceKey ?? this.sourceKey,
+        songId: songId ?? this.songId,
+        title: title ?? this.title,
+        artist: artist ?? this.artist,
+        album: album ?? this.album,
+        coverUrl: coverUrl.present ? coverUrl.value : this.coverUrl,
+        durationMs: durationMs.present ? durationMs.value : this.durationMs,
+        raw: raw.present ? raw.value : this.raw,
+        updatedAt: updatedAt ?? this.updatedAt,
+      );
+  PlayTrackRow copyWithCompanion(PlayTracksCompanion data) {
+    return PlayTrackRow(
+      id: data.id.present ? data.id.value : this.id,
+      sourceKey: data.sourceKey.present ? data.sourceKey.value : this.sourceKey,
+      songId: data.songId.present ? data.songId.value : this.songId,
+      title: data.title.present ? data.title.value : this.title,
+      artist: data.artist.present ? data.artist.value : this.artist,
+      album: data.album.present ? data.album.value : this.album,
+      coverUrl: data.coverUrl.present ? data.coverUrl.value : this.coverUrl,
+      durationMs:
+          data.durationMs.present ? data.durationMs.value : this.durationMs,
+      raw: data.raw.present ? data.raw.value : this.raw,
+      updatedAt: data.updatedAt.present ? data.updatedAt.value : this.updatedAt,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('PlayTrackRow(')
+          ..write('id: $id, ')
+          ..write('sourceKey: $sourceKey, ')
+          ..write('songId: $songId, ')
+          ..write('title: $title, ')
+          ..write('artist: $artist, ')
+          ..write('album: $album, ')
+          ..write('coverUrl: $coverUrl, ')
+          ..write('durationMs: $durationMs, ')
+          ..write('raw: $raw, ')
+          ..write('updatedAt: $updatedAt')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(id, sourceKey, songId, title, artist, album,
+      coverUrl, durationMs, $driftBlobEquality.hash(raw), updatedAt);
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is PlayTrackRow &&
+          other.id == this.id &&
+          other.sourceKey == this.sourceKey &&
+          other.songId == this.songId &&
+          other.title == this.title &&
+          other.artist == this.artist &&
+          other.album == this.album &&
+          other.coverUrl == this.coverUrl &&
+          other.durationMs == this.durationMs &&
+          $driftBlobEquality.equals(other.raw, this.raw) &&
+          other.updatedAt == this.updatedAt);
+}
+
+class PlayTracksCompanion extends UpdateCompanion<PlayTrackRow> {
+  final Value<int> id;
+  final Value<String> sourceKey;
+  final Value<String> songId;
+  final Value<String> title;
+  final Value<String> artist;
+  final Value<String> album;
+  final Value<String?> coverUrl;
+  final Value<int?> durationMs;
+  final Value<Uint8List?> raw;
+  final Value<int> updatedAt;
+  const PlayTracksCompanion({
+    this.id = const Value.absent(),
+    this.sourceKey = const Value.absent(),
+    this.songId = const Value.absent(),
+    this.title = const Value.absent(),
+    this.artist = const Value.absent(),
+    this.album = const Value.absent(),
+    this.coverUrl = const Value.absent(),
+    this.durationMs = const Value.absent(),
+    this.raw = const Value.absent(),
+    this.updatedAt = const Value.absent(),
+  });
+  PlayTracksCompanion.insert({
+    this.id = const Value.absent(),
+    required String sourceKey,
+    required String songId,
+    this.title = const Value.absent(),
+    this.artist = const Value.absent(),
+    this.album = const Value.absent(),
+    this.coverUrl = const Value.absent(),
+    this.durationMs = const Value.absent(),
+    this.raw = const Value.absent(),
+    required int updatedAt,
+  })  : sourceKey = Value(sourceKey),
+        songId = Value(songId),
+        updatedAt = Value(updatedAt);
+  static Insertable<PlayTrackRow> custom({
+    Expression<int>? id,
+    Expression<String>? sourceKey,
+    Expression<String>? songId,
+    Expression<String>? title,
+    Expression<String>? artist,
+    Expression<String>? album,
+    Expression<String>? coverUrl,
+    Expression<int>? durationMs,
+    Expression<Uint8List>? raw,
+    Expression<int>? updatedAt,
+  }) {
+    return RawValuesInsertable({
+      if (id != null) 'id': id,
+      if (sourceKey != null) 'sourceKey': sourceKey,
+      if (songId != null) 'songId': songId,
+      if (title != null) 'title': title,
+      if (artist != null) 'artist': artist,
+      if (album != null) 'album': album,
+      if (coverUrl != null) 'coverUrl': coverUrl,
+      if (durationMs != null) 'durationMs': durationMs,
+      if (raw != null) 'raw': raw,
+      if (updatedAt != null) 'updatedAt': updatedAt,
+    });
+  }
+
+  PlayTracksCompanion copyWith(
+      {Value<int>? id,
+      Value<String>? sourceKey,
+      Value<String>? songId,
+      Value<String>? title,
+      Value<String>? artist,
+      Value<String>? album,
+      Value<String?>? coverUrl,
+      Value<int?>? durationMs,
+      Value<Uint8List?>? raw,
+      Value<int>? updatedAt}) {
+    return PlayTracksCompanion(
+      id: id ?? this.id,
+      sourceKey: sourceKey ?? this.sourceKey,
+      songId: songId ?? this.songId,
+      title: title ?? this.title,
+      artist: artist ?? this.artist,
+      album: album ?? this.album,
+      coverUrl: coverUrl ?? this.coverUrl,
+      durationMs: durationMs ?? this.durationMs,
+      raw: raw ?? this.raw,
+      updatedAt: updatedAt ?? this.updatedAt,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (id.present) {
+      map['id'] = Variable<int>(id.value);
+    }
+    if (sourceKey.present) {
+      map['sourceKey'] = Variable<String>(sourceKey.value);
+    }
+    if (songId.present) {
+      map['songId'] = Variable<String>(songId.value);
+    }
+    if (title.present) {
+      map['title'] = Variable<String>(title.value);
+    }
+    if (artist.present) {
+      map['artist'] = Variable<String>(artist.value);
+    }
+    if (album.present) {
+      map['album'] = Variable<String>(album.value);
+    }
+    if (coverUrl.present) {
+      map['coverUrl'] = Variable<String>(coverUrl.value);
+    }
+    if (durationMs.present) {
+      map['durationMs'] = Variable<int>(durationMs.value);
+    }
+    if (raw.present) {
+      map['raw'] = Variable<Uint8List>(raw.value);
+    }
+    if (updatedAt.present) {
+      map['updatedAt'] = Variable<int>(updatedAt.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('PlayTracksCompanion(')
+          ..write('id: $id, ')
+          ..write('sourceKey: $sourceKey, ')
+          ..write('songId: $songId, ')
+          ..write('title: $title, ')
+          ..write('artist: $artist, ')
+          ..write('album: $album, ')
+          ..write('coverUrl: $coverUrl, ')
+          ..write('durationMs: $durationMs, ')
+          ..write('raw: $raw, ')
+          ..write('updatedAt: $updatedAt')
+          ..write(')'))
+        .toString();
+  }
+}
+
+class $PlayEventsTable extends PlayEvents
+    with TableInfo<$PlayEventsTable, PlayEventRow> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $PlayEventsTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _idMeta = const VerificationMeta('id');
+  @override
+  late final GeneratedColumn<int> id = GeneratedColumn<int>(
+      'id', aliasedName, false,
+      hasAutoIncrement: true,
+      type: DriftSqlType.int,
       requiredDuringInsert: false,
-      defaultValue: const Constant('{}'));
+      defaultConstraints:
+          GeneratedColumn.constraintIsAlways('PRIMARY KEY AUTOINCREMENT'));
+  static const VerificationMeta _trackIdMeta =
+      const VerificationMeta('trackId');
+  @override
+  late final GeneratedColumn<int> trackId = GeneratedColumn<int>(
+      'trackId', aliasedName, false,
+      type: DriftSqlType.int,
+      requiredDuringInsert: true,
+      defaultConstraints: GeneratedColumn.constraintIsAlways(
+          'REFERENCES play_tracks (id) ON DELETE RESTRICT'));
   static const VerificationMeta _startedAtMeta =
       const VerificationMeta('startedAt');
   @override
@@ -3484,14 +3937,7 @@ class $PlayEventsTable extends PlayEvents
   @override
   List<GeneratedColumn> get $columns => [
         id,
-        sourceKey,
-        songId,
-        title,
-        artist,
-        album,
-        coverUrl,
-        durationMs,
-        raw,
+        trackId,
         startedAt,
         endedAt,
         listenedMs,
@@ -3515,43 +3961,11 @@ class $PlayEventsTable extends PlayEvents
     if (data.containsKey('id')) {
       context.handle(_idMeta, id.isAcceptableOrUnknown(data['id']!, _idMeta));
     }
-    if (data.containsKey('sourceKey')) {
-      context.handle(_sourceKeyMeta,
-          sourceKey.isAcceptableOrUnknown(data['sourceKey']!, _sourceKeyMeta));
+    if (data.containsKey('trackId')) {
+      context.handle(_trackIdMeta,
+          trackId.isAcceptableOrUnknown(data['trackId']!, _trackIdMeta));
     } else if (isInserting) {
-      context.missing(_sourceKeyMeta);
-    }
-    if (data.containsKey('songId')) {
-      context.handle(_songIdMeta,
-          songId.isAcceptableOrUnknown(data['songId']!, _songIdMeta));
-    } else if (isInserting) {
-      context.missing(_songIdMeta);
-    }
-    if (data.containsKey('title')) {
-      context.handle(
-          _titleMeta, title.isAcceptableOrUnknown(data['title']!, _titleMeta));
-    }
-    if (data.containsKey('artist')) {
-      context.handle(_artistMeta,
-          artist.isAcceptableOrUnknown(data['artist']!, _artistMeta));
-    }
-    if (data.containsKey('album')) {
-      context.handle(
-          _albumMeta, album.isAcceptableOrUnknown(data['album']!, _albumMeta));
-    }
-    if (data.containsKey('coverUrl')) {
-      context.handle(_coverUrlMeta,
-          coverUrl.isAcceptableOrUnknown(data['coverUrl']!, _coverUrlMeta));
-    }
-    if (data.containsKey('durationMs')) {
-      context.handle(
-          _durationMsMeta,
-          durationMs.isAcceptableOrUnknown(
-              data['durationMs']!, _durationMsMeta));
-    }
-    if (data.containsKey('raw')) {
-      context.handle(
-          _rawMeta, raw.isAcceptableOrUnknown(data['raw']!, _rawMeta));
+      context.missing(_trackIdMeta);
     }
     if (data.containsKey('startedAt')) {
       context.handle(_startedAtMeta,
@@ -3612,22 +4026,8 @@ class $PlayEventsTable extends PlayEvents
     return PlayEventRow(
       id: attachedDatabase.typeMapping
           .read(DriftSqlType.int, data['${effectivePrefix}id'])!,
-      sourceKey: attachedDatabase.typeMapping
-          .read(DriftSqlType.string, data['${effectivePrefix}sourceKey'])!,
-      songId: attachedDatabase.typeMapping
-          .read(DriftSqlType.string, data['${effectivePrefix}songId'])!,
-      title: attachedDatabase.typeMapping
-          .read(DriftSqlType.string, data['${effectivePrefix}title'])!,
-      artist: attachedDatabase.typeMapping
-          .read(DriftSqlType.string, data['${effectivePrefix}artist'])!,
-      album: attachedDatabase.typeMapping
-          .read(DriftSqlType.string, data['${effectivePrefix}album'])!,
-      coverUrl: attachedDatabase.typeMapping
-          .read(DriftSqlType.string, data['${effectivePrefix}coverUrl']),
-      durationMs: attachedDatabase.typeMapping
-          .read(DriftSqlType.int, data['${effectivePrefix}durationMs']),
-      raw: attachedDatabase.typeMapping
-          .read(DriftSqlType.string, data['${effectivePrefix}raw'])!,
+      trackId: attachedDatabase.typeMapping
+          .read(DriftSqlType.int, data['${effectivePrefix}trackId'])!,
       startedAt: attachedDatabase.typeMapping
           .read(DriftSqlType.int, data['${effectivePrefix}startedAt'])!,
       endedAt: attachedDatabase.typeMapping
@@ -3657,14 +4057,7 @@ class $PlayEventsTable extends PlayEvents
 
 class PlayEventRow extends DataClass implements Insertable<PlayEventRow> {
   final int id;
-  final String sourceKey;
-  final String songId;
-  final String title;
-  final String artist;
-  final String album;
-  final String? coverUrl;
-  final int? durationMs;
-  final String raw;
+  final int trackId;
   final int startedAt;
   final int? endedAt;
   final int listenedMs;
@@ -3676,14 +4069,7 @@ class PlayEventRow extends DataClass implements Insertable<PlayEventRow> {
   final int versionCounter;
   const PlayEventRow(
       {required this.id,
-      required this.sourceKey,
-      required this.songId,
-      required this.title,
-      required this.artist,
-      required this.album,
-      this.coverUrl,
-      this.durationMs,
-      required this.raw,
+      required this.trackId,
       required this.startedAt,
       this.endedAt,
       required this.listenedMs,
@@ -3697,18 +4083,7 @@ class PlayEventRow extends DataClass implements Insertable<PlayEventRow> {
   Map<String, Expression> toColumns(bool nullToAbsent) {
     final map = <String, Expression>{};
     map['id'] = Variable<int>(id);
-    map['sourceKey'] = Variable<String>(sourceKey);
-    map['songId'] = Variable<String>(songId);
-    map['title'] = Variable<String>(title);
-    map['artist'] = Variable<String>(artist);
-    map['album'] = Variable<String>(album);
-    if (!nullToAbsent || coverUrl != null) {
-      map['coverUrl'] = Variable<String>(coverUrl);
-    }
-    if (!nullToAbsent || durationMs != null) {
-      map['durationMs'] = Variable<int>(durationMs);
-    }
-    map['raw'] = Variable<String>(raw);
+    map['trackId'] = Variable<int>(trackId);
     map['startedAt'] = Variable<int>(startedAt);
     if (!nullToAbsent || endedAt != null) {
       map['endedAt'] = Variable<int>(endedAt);
@@ -3730,18 +4105,7 @@ class PlayEventRow extends DataClass implements Insertable<PlayEventRow> {
   PlayEventsCompanion toCompanion(bool nullToAbsent) {
     return PlayEventsCompanion(
       id: Value(id),
-      sourceKey: Value(sourceKey),
-      songId: Value(songId),
-      title: Value(title),
-      artist: Value(artist),
-      album: Value(album),
-      coverUrl: coverUrl == null && nullToAbsent
-          ? const Value.absent()
-          : Value(coverUrl),
-      durationMs: durationMs == null && nullToAbsent
-          ? const Value.absent()
-          : Value(durationMs),
-      raw: Value(raw),
+      trackId: Value(trackId),
       startedAt: Value(startedAt),
       endedAt: endedAt == null && nullToAbsent
           ? const Value.absent()
@@ -3765,14 +4129,7 @@ class PlayEventRow extends DataClass implements Insertable<PlayEventRow> {
     serializer ??= driftRuntimeOptions.defaultSerializer;
     return PlayEventRow(
       id: serializer.fromJson<int>(json['id']),
-      sourceKey: serializer.fromJson<String>(json['sourceKey']),
-      songId: serializer.fromJson<String>(json['songId']),
-      title: serializer.fromJson<String>(json['title']),
-      artist: serializer.fromJson<String>(json['artist']),
-      album: serializer.fromJson<String>(json['album']),
-      coverUrl: serializer.fromJson<String?>(json['coverUrl']),
-      durationMs: serializer.fromJson<int?>(json['durationMs']),
-      raw: serializer.fromJson<String>(json['raw']),
+      trackId: serializer.fromJson<int>(json['trackId']),
       startedAt: serializer.fromJson<int>(json['startedAt']),
       endedAt: serializer.fromJson<int?>(json['endedAt']),
       listenedMs: serializer.fromJson<int>(json['listenedMs']),
@@ -3789,14 +4146,7 @@ class PlayEventRow extends DataClass implements Insertable<PlayEventRow> {
     serializer ??= driftRuntimeOptions.defaultSerializer;
     return <String, dynamic>{
       'id': serializer.toJson<int>(id),
-      'sourceKey': serializer.toJson<String>(sourceKey),
-      'songId': serializer.toJson<String>(songId),
-      'title': serializer.toJson<String>(title),
-      'artist': serializer.toJson<String>(artist),
-      'album': serializer.toJson<String>(album),
-      'coverUrl': serializer.toJson<String?>(coverUrl),
-      'durationMs': serializer.toJson<int?>(durationMs),
-      'raw': serializer.toJson<String>(raw),
+      'trackId': serializer.toJson<int>(trackId),
       'startedAt': serializer.toJson<int>(startedAt),
       'endedAt': serializer.toJson<int?>(endedAt),
       'listenedMs': serializer.toJson<int>(listenedMs),
@@ -3811,14 +4161,7 @@ class PlayEventRow extends DataClass implements Insertable<PlayEventRow> {
 
   PlayEventRow copyWith(
           {int? id,
-          String? sourceKey,
-          String? songId,
-          String? title,
-          String? artist,
-          String? album,
-          Value<String?> coverUrl = const Value.absent(),
-          Value<int?> durationMs = const Value.absent(),
-          String? raw,
+          int? trackId,
           int? startedAt,
           Value<int?> endedAt = const Value.absent(),
           int? listenedMs,
@@ -3830,14 +4173,7 @@ class PlayEventRow extends DataClass implements Insertable<PlayEventRow> {
           int? versionCounter}) =>
       PlayEventRow(
         id: id ?? this.id,
-        sourceKey: sourceKey ?? this.sourceKey,
-        songId: songId ?? this.songId,
-        title: title ?? this.title,
-        artist: artist ?? this.artist,
-        album: album ?? this.album,
-        coverUrl: coverUrl.present ? coverUrl.value : this.coverUrl,
-        durationMs: durationMs.present ? durationMs.value : this.durationMs,
-        raw: raw ?? this.raw,
+        trackId: trackId ?? this.trackId,
         startedAt: startedAt ?? this.startedAt,
         endedAt: endedAt.present ? endedAt.value : this.endedAt,
         listenedMs: listenedMs ?? this.listenedMs,
@@ -3851,15 +4187,7 @@ class PlayEventRow extends DataClass implements Insertable<PlayEventRow> {
   PlayEventRow copyWithCompanion(PlayEventsCompanion data) {
     return PlayEventRow(
       id: data.id.present ? data.id.value : this.id,
-      sourceKey: data.sourceKey.present ? data.sourceKey.value : this.sourceKey,
-      songId: data.songId.present ? data.songId.value : this.songId,
-      title: data.title.present ? data.title.value : this.title,
-      artist: data.artist.present ? data.artist.value : this.artist,
-      album: data.album.present ? data.album.value : this.album,
-      coverUrl: data.coverUrl.present ? data.coverUrl.value : this.coverUrl,
-      durationMs:
-          data.durationMs.present ? data.durationMs.value : this.durationMs,
-      raw: data.raw.present ? data.raw.value : this.raw,
+      trackId: data.trackId.present ? data.trackId.value : this.trackId,
       startedAt: data.startedAt.present ? data.startedAt.value : this.startedAt,
       endedAt: data.endedAt.present ? data.endedAt.value : this.endedAt,
       listenedMs:
@@ -3885,14 +4213,7 @@ class PlayEventRow extends DataClass implements Insertable<PlayEventRow> {
   String toString() {
     return (StringBuffer('PlayEventRow(')
           ..write('id: $id, ')
-          ..write('sourceKey: $sourceKey, ')
-          ..write('songId: $songId, ')
-          ..write('title: $title, ')
-          ..write('artist: $artist, ')
-          ..write('album: $album, ')
-          ..write('coverUrl: $coverUrl, ')
-          ..write('durationMs: $durationMs, ')
-          ..write('raw: $raw, ')
+          ..write('trackId: $trackId, ')
           ..write('startedAt: $startedAt, ')
           ..write('endedAt: $endedAt, ')
           ..write('listenedMs: $listenedMs, ')
@@ -3909,14 +4230,7 @@ class PlayEventRow extends DataClass implements Insertable<PlayEventRow> {
   @override
   int get hashCode => Object.hash(
       id,
-      sourceKey,
-      songId,
-      title,
-      artist,
-      album,
-      coverUrl,
-      durationMs,
-      raw,
+      trackId,
       startedAt,
       endedAt,
       listenedMs,
@@ -3931,14 +4245,7 @@ class PlayEventRow extends DataClass implements Insertable<PlayEventRow> {
       identical(this, other) ||
       (other is PlayEventRow &&
           other.id == this.id &&
-          other.sourceKey == this.sourceKey &&
-          other.songId == this.songId &&
-          other.title == this.title &&
-          other.artist == this.artist &&
-          other.album == this.album &&
-          other.coverUrl == this.coverUrl &&
-          other.durationMs == this.durationMs &&
-          other.raw == this.raw &&
+          other.trackId == this.trackId &&
           other.startedAt == this.startedAt &&
           other.endedAt == this.endedAt &&
           other.listenedMs == this.listenedMs &&
@@ -3952,14 +4259,7 @@ class PlayEventRow extends DataClass implements Insertable<PlayEventRow> {
 
 class PlayEventsCompanion extends UpdateCompanion<PlayEventRow> {
   final Value<int> id;
-  final Value<String> sourceKey;
-  final Value<String> songId;
-  final Value<String> title;
-  final Value<String> artist;
-  final Value<String> album;
-  final Value<String?> coverUrl;
-  final Value<int?> durationMs;
-  final Value<String> raw;
+  final Value<int> trackId;
   final Value<int> startedAt;
   final Value<int?> endedAt;
   final Value<int> listenedMs;
@@ -3971,14 +4271,7 @@ class PlayEventsCompanion extends UpdateCompanion<PlayEventRow> {
   final Value<int> versionCounter;
   const PlayEventsCompanion({
     this.id = const Value.absent(),
-    this.sourceKey = const Value.absent(),
-    this.songId = const Value.absent(),
-    this.title = const Value.absent(),
-    this.artist = const Value.absent(),
-    this.album = const Value.absent(),
-    this.coverUrl = const Value.absent(),
-    this.durationMs = const Value.absent(),
-    this.raw = const Value.absent(),
+    this.trackId = const Value.absent(),
     this.startedAt = const Value.absent(),
     this.endedAt = const Value.absent(),
     this.listenedMs = const Value.absent(),
@@ -3991,14 +4284,7 @@ class PlayEventsCompanion extends UpdateCompanion<PlayEventRow> {
   });
   PlayEventsCompanion.insert({
     this.id = const Value.absent(),
-    required String sourceKey,
-    required String songId,
-    this.title = const Value.absent(),
-    this.artist = const Value.absent(),
-    this.album = const Value.absent(),
-    this.coverUrl = const Value.absent(),
-    this.durationMs = const Value.absent(),
-    this.raw = const Value.absent(),
+    required int trackId,
     required int startedAt,
     this.endedAt = const Value.absent(),
     this.listenedMs = const Value.absent(),
@@ -4008,19 +4294,11 @@ class PlayEventsCompanion extends UpdateCompanion<PlayEventRow> {
     this.originDeviceId = const Value.absent(),
     this.versionPhysical = const Value.absent(),
     this.versionCounter = const Value.absent(),
-  })  : sourceKey = Value(sourceKey),
-        songId = Value(songId),
+  })  : trackId = Value(trackId),
         startedAt = Value(startedAt);
   static Insertable<PlayEventRow> custom({
     Expression<int>? id,
-    Expression<String>? sourceKey,
-    Expression<String>? songId,
-    Expression<String>? title,
-    Expression<String>? artist,
-    Expression<String>? album,
-    Expression<String>? coverUrl,
-    Expression<int>? durationMs,
-    Expression<String>? raw,
+    Expression<int>? trackId,
     Expression<int>? startedAt,
     Expression<int>? endedAt,
     Expression<int>? listenedMs,
@@ -4033,14 +4311,7 @@ class PlayEventsCompanion extends UpdateCompanion<PlayEventRow> {
   }) {
     return RawValuesInsertable({
       if (id != null) 'id': id,
-      if (sourceKey != null) 'sourceKey': sourceKey,
-      if (songId != null) 'songId': songId,
-      if (title != null) 'title': title,
-      if (artist != null) 'artist': artist,
-      if (album != null) 'album': album,
-      if (coverUrl != null) 'coverUrl': coverUrl,
-      if (durationMs != null) 'durationMs': durationMs,
-      if (raw != null) 'raw': raw,
+      if (trackId != null) 'trackId': trackId,
       if (startedAt != null) 'startedAt': startedAt,
       if (endedAt != null) 'endedAt': endedAt,
       if (listenedMs != null) 'listenedMs': listenedMs,
@@ -4055,14 +4326,7 @@ class PlayEventsCompanion extends UpdateCompanion<PlayEventRow> {
 
   PlayEventsCompanion copyWith(
       {Value<int>? id,
-      Value<String>? sourceKey,
-      Value<String>? songId,
-      Value<String>? title,
-      Value<String>? artist,
-      Value<String>? album,
-      Value<String?>? coverUrl,
-      Value<int?>? durationMs,
-      Value<String>? raw,
+      Value<int>? trackId,
       Value<int>? startedAt,
       Value<int?>? endedAt,
       Value<int>? listenedMs,
@@ -4074,14 +4338,7 @@ class PlayEventsCompanion extends UpdateCompanion<PlayEventRow> {
       Value<int>? versionCounter}) {
     return PlayEventsCompanion(
       id: id ?? this.id,
-      sourceKey: sourceKey ?? this.sourceKey,
-      songId: songId ?? this.songId,
-      title: title ?? this.title,
-      artist: artist ?? this.artist,
-      album: album ?? this.album,
-      coverUrl: coverUrl ?? this.coverUrl,
-      durationMs: durationMs ?? this.durationMs,
-      raw: raw ?? this.raw,
+      trackId: trackId ?? this.trackId,
       startedAt: startedAt ?? this.startedAt,
       endedAt: endedAt ?? this.endedAt,
       listenedMs: listenedMs ?? this.listenedMs,
@@ -4100,29 +4357,8 @@ class PlayEventsCompanion extends UpdateCompanion<PlayEventRow> {
     if (id.present) {
       map['id'] = Variable<int>(id.value);
     }
-    if (sourceKey.present) {
-      map['sourceKey'] = Variable<String>(sourceKey.value);
-    }
-    if (songId.present) {
-      map['songId'] = Variable<String>(songId.value);
-    }
-    if (title.present) {
-      map['title'] = Variable<String>(title.value);
-    }
-    if (artist.present) {
-      map['artist'] = Variable<String>(artist.value);
-    }
-    if (album.present) {
-      map['album'] = Variable<String>(album.value);
-    }
-    if (coverUrl.present) {
-      map['coverUrl'] = Variable<String>(coverUrl.value);
-    }
-    if (durationMs.present) {
-      map['durationMs'] = Variable<int>(durationMs.value);
-    }
-    if (raw.present) {
-      map['raw'] = Variable<String>(raw.value);
+    if (trackId.present) {
+      map['trackId'] = Variable<int>(trackId.value);
     }
     if (startedAt.present) {
       map['startedAt'] = Variable<int>(startedAt.value);
@@ -4158,14 +4394,7 @@ class PlayEventsCompanion extends UpdateCompanion<PlayEventRow> {
   String toString() {
     return (StringBuffer('PlayEventsCompanion(')
           ..write('id: $id, ')
-          ..write('sourceKey: $sourceKey, ')
-          ..write('songId: $songId, ')
-          ..write('title: $title, ')
-          ..write('artist: $artist, ')
-          ..write('album: $album, ')
-          ..write('coverUrl: $coverUrl, ')
-          ..write('durationMs: $durationMs, ')
-          ..write('raw: $raw, ')
+          ..write('trackId: $trackId, ')
           ..write('startedAt: $startedAt, ')
           ..write('endedAt: $endedAt, ')
           ..write('listenedMs: $listenedMs, ')
@@ -4982,6 +5211,7 @@ abstract class _$MoliaDatabase extends GeneratedDatabase {
   late final $SyncJournalTable syncJournal = $SyncJournalTable(this);
   late final $SyncJournalStatesTable syncJournalStates =
       $SyncJournalStatesTable(this);
+  late final $PlayTracksTable playTracks = $PlayTracksTable(this);
   late final $PlayEventsTable playEvents = $PlayEventsTable(this);
   late final $DownloadsTable downloads = $DownloadsTable(this);
   late final Index idxPlayContextsLastPlayedAt = Index(
@@ -4997,8 +5227,8 @@ abstract class _$MoliaDatabase extends GeneratedDatabase {
       'CREATE INDEX idx_sync_journal_at ON sync_journal (at)');
   late final Index idxPlayEventsStartedAt = Index('idx_play_events_startedAt',
       'CREATE INDEX idx_play_events_startedAt ON play_events (startedAt)');
-  late final Index idxPlayEventsTrack = Index('idx_play_events_track',
-      'CREATE INDEX idx_play_events_track ON play_events (sourceKey, songId)');
+  late final Index idxPlayEventsTrackId = Index('idx_play_events_trackId',
+      'CREATE INDEX idx_play_events_trackId ON play_events (trackId)');
   late final Index idxPlayEventsEndedAt = Index('idx_play_events_endedAt',
       'CREATE INDEX idx_play_events_endedAt ON play_events (endedAt)');
   late final Index idxPlayEventsSyncKey = Index('idx_play_events_syncKey',
@@ -5019,6 +5249,7 @@ abstract class _$MoliaDatabase extends GeneratedDatabase {
         syncKnown,
         syncJournal,
         syncJournalStates,
+        playTracks,
         playEvents,
         downloads,
         idxPlayContextsLastPlayedAt,
@@ -5027,7 +5258,7 @@ abstract class _$MoliaDatabase extends GeneratedDatabase {
         idxPlaylistTracksOrder,
         idxSyncJournalAt,
         idxPlayEventsStartedAt,
-        idxPlayEventsTrack,
+        idxPlayEventsTrackId,
         idxPlayEventsEndedAt,
         idxPlayEventsSyncKey,
         idxDownloadsDownloadedAt
@@ -6776,7 +7007,7 @@ typedef $$SyncJournalStatesTableProcessedTableManager = ProcessedTableManager<
     ),
     SyncJournalState,
     PrefetchHooks Function()>;
-typedef $$PlayEventsTableCreateCompanionBuilder = PlayEventsCompanion Function({
+typedef $$PlayTracksTableCreateCompanionBuilder = PlayTracksCompanion Function({
   Value<int> id,
   required String sourceKey,
   required String songId,
@@ -6785,18 +7016,10 @@ typedef $$PlayEventsTableCreateCompanionBuilder = PlayEventsCompanion Function({
   Value<String> album,
   Value<String?> coverUrl,
   Value<int?> durationMs,
-  Value<String> raw,
-  required int startedAt,
-  Value<int?> endedAt,
-  Value<int> listenedMs,
-  Value<int> maxPositionMs,
-  Value<String?> endReason,
-  Value<String?> syncKey,
-  Value<String> originDeviceId,
-  Value<int> versionPhysical,
-  Value<int> versionCounter,
+  Value<Uint8List?> raw,
+  required int updatedAt,
 });
-typedef $$PlayEventsTableUpdateCompanionBuilder = PlayEventsCompanion Function({
+typedef $$PlayTracksTableUpdateCompanionBuilder = PlayTracksCompanion Function({
   Value<int> id,
   Value<String> sourceKey,
   Value<String> songId,
@@ -6805,21 +7028,32 @@ typedef $$PlayEventsTableUpdateCompanionBuilder = PlayEventsCompanion Function({
   Value<String> album,
   Value<String?> coverUrl,
   Value<int?> durationMs,
-  Value<String> raw,
-  Value<int> startedAt,
-  Value<int?> endedAt,
-  Value<int> listenedMs,
-  Value<int> maxPositionMs,
-  Value<String?> endReason,
-  Value<String?> syncKey,
-  Value<String> originDeviceId,
-  Value<int> versionPhysical,
-  Value<int> versionCounter,
+  Value<Uint8List?> raw,
+  Value<int> updatedAt,
 });
 
-class $$PlayEventsTableFilterComposer
-    extends Composer<_$MoliaDatabase, $PlayEventsTable> {
-  $$PlayEventsTableFilterComposer({
+final class $$PlayTracksTableReferences
+    extends BaseReferences<_$MoliaDatabase, $PlayTracksTable, PlayTrackRow> {
+  $$PlayTracksTableReferences(super.$_db, super.$_table, super.$_typedResult);
+
+  static MultiTypedResultKey<$PlayEventsTable, List<PlayEventRow>>
+      _playEventsRefsTable(_$MoliaDatabase db) =>
+          MultiTypedResultKey.fromTable(db.playEvents,
+              aliasName: 'play_tracks__id__play_events__trackId');
+
+  $$PlayEventsTableProcessedTableManager get playEventsRefs {
+    final manager = $$PlayEventsTableTableManager($_db, $_db.playEvents)
+        .filter((f) => f.trackId.id.sqlEquals($_itemColumn<int>('id')!));
+
+    final cache = $_typedResult.readTableOrNull(_playEventsRefsTable($_db));
+    return ProcessedTableManager(
+        manager.$state.copyWith(prefetchedData: cache));
+  }
+}
+
+class $$PlayTracksTableFilterComposer
+    extends Composer<_$MoliaDatabase, $PlayTracksTable> {
+  $$PlayTracksTableFilterComposer({
     required super.$db,
     required super.$table,
     super.joinBuilder,
@@ -6850,43 +7084,37 @@ class $$PlayEventsTableFilterComposer
   ColumnFilters<int> get durationMs => $composableBuilder(
       column: $table.durationMs, builder: (column) => ColumnFilters(column));
 
-  ColumnFilters<String> get raw => $composableBuilder(
+  ColumnFilters<Uint8List> get raw => $composableBuilder(
       column: $table.raw, builder: (column) => ColumnFilters(column));
 
-  ColumnFilters<int> get startedAt => $composableBuilder(
-      column: $table.startedAt, builder: (column) => ColumnFilters(column));
+  ColumnFilters<int> get updatedAt => $composableBuilder(
+      column: $table.updatedAt, builder: (column) => ColumnFilters(column));
 
-  ColumnFilters<int> get endedAt => $composableBuilder(
-      column: $table.endedAt, builder: (column) => ColumnFilters(column));
-
-  ColumnFilters<int> get listenedMs => $composableBuilder(
-      column: $table.listenedMs, builder: (column) => ColumnFilters(column));
-
-  ColumnFilters<int> get maxPositionMs => $composableBuilder(
-      column: $table.maxPositionMs, builder: (column) => ColumnFilters(column));
-
-  ColumnFilters<String> get endReason => $composableBuilder(
-      column: $table.endReason, builder: (column) => ColumnFilters(column));
-
-  ColumnFilters<String> get syncKey => $composableBuilder(
-      column: $table.syncKey, builder: (column) => ColumnFilters(column));
-
-  ColumnFilters<String> get originDeviceId => $composableBuilder(
-      column: $table.originDeviceId,
-      builder: (column) => ColumnFilters(column));
-
-  ColumnFilters<int> get versionPhysical => $composableBuilder(
-      column: $table.versionPhysical,
-      builder: (column) => ColumnFilters(column));
-
-  ColumnFilters<int> get versionCounter => $composableBuilder(
-      column: $table.versionCounter,
-      builder: (column) => ColumnFilters(column));
+  Expression<bool> playEventsRefs(
+      Expression<bool> Function($$PlayEventsTableFilterComposer f) f) {
+    final $$PlayEventsTableFilterComposer composer = $composerBuilder(
+        composer: this,
+        getCurrentColumn: (t) => t.id,
+        referencedTable: $db.playEvents,
+        getReferencedColumn: (t) => t.trackId,
+        builder: (joinBuilder,
+                {$addJoinBuilderToRootComposer,
+                $removeJoinBuilderFromRootComposer}) =>
+            $$PlayEventsTableFilterComposer(
+              $db: $db,
+              $table: $db.playEvents,
+              $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+              joinBuilder: joinBuilder,
+              $removeJoinBuilderFromRootComposer:
+                  $removeJoinBuilderFromRootComposer,
+            ));
+    return f(composer);
+  }
 }
 
-class $$PlayEventsTableOrderingComposer
-    extends Composer<_$MoliaDatabase, $PlayEventsTable> {
-  $$PlayEventsTableOrderingComposer({
+class $$PlayTracksTableOrderingComposer
+    extends Composer<_$MoliaDatabase, $PlayTracksTable> {
+  $$PlayTracksTableOrderingComposer({
     required super.$db,
     required super.$table,
     super.joinBuilder,
@@ -6917,8 +7145,309 @@ class $$PlayEventsTableOrderingComposer
   ColumnOrderings<int> get durationMs => $composableBuilder(
       column: $table.durationMs, builder: (column) => ColumnOrderings(column));
 
-  ColumnOrderings<String> get raw => $composableBuilder(
+  ColumnOrderings<Uint8List> get raw => $composableBuilder(
       column: $table.raw, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<int> get updatedAt => $composableBuilder(
+      column: $table.updatedAt, builder: (column) => ColumnOrderings(column));
+}
+
+class $$PlayTracksTableAnnotationComposer
+    extends Composer<_$MoliaDatabase, $PlayTracksTable> {
+  $$PlayTracksTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<int> get id =>
+      $composableBuilder(column: $table.id, builder: (column) => column);
+
+  GeneratedColumn<String> get sourceKey =>
+      $composableBuilder(column: $table.sourceKey, builder: (column) => column);
+
+  GeneratedColumn<String> get songId =>
+      $composableBuilder(column: $table.songId, builder: (column) => column);
+
+  GeneratedColumn<String> get title =>
+      $composableBuilder(column: $table.title, builder: (column) => column);
+
+  GeneratedColumn<String> get artist =>
+      $composableBuilder(column: $table.artist, builder: (column) => column);
+
+  GeneratedColumn<String> get album =>
+      $composableBuilder(column: $table.album, builder: (column) => column);
+
+  GeneratedColumn<String> get coverUrl =>
+      $composableBuilder(column: $table.coverUrl, builder: (column) => column);
+
+  GeneratedColumn<int> get durationMs => $composableBuilder(
+      column: $table.durationMs, builder: (column) => column);
+
+  GeneratedColumn<Uint8List> get raw =>
+      $composableBuilder(column: $table.raw, builder: (column) => column);
+
+  GeneratedColumn<int> get updatedAt =>
+      $composableBuilder(column: $table.updatedAt, builder: (column) => column);
+
+  Expression<T> playEventsRefs<T extends Object>(
+      Expression<T> Function($$PlayEventsTableAnnotationComposer a) f) {
+    final $$PlayEventsTableAnnotationComposer composer = $composerBuilder(
+        composer: this,
+        getCurrentColumn: (t) => t.id,
+        referencedTable: $db.playEvents,
+        getReferencedColumn: (t) => t.trackId,
+        builder: (joinBuilder,
+                {$addJoinBuilderToRootComposer,
+                $removeJoinBuilderFromRootComposer}) =>
+            $$PlayEventsTableAnnotationComposer(
+              $db: $db,
+              $table: $db.playEvents,
+              $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+              joinBuilder: joinBuilder,
+              $removeJoinBuilderFromRootComposer:
+                  $removeJoinBuilderFromRootComposer,
+            ));
+    return f(composer);
+  }
+}
+
+class $$PlayTracksTableTableManager extends RootTableManager<
+    _$MoliaDatabase,
+    $PlayTracksTable,
+    PlayTrackRow,
+    $$PlayTracksTableFilterComposer,
+    $$PlayTracksTableOrderingComposer,
+    $$PlayTracksTableAnnotationComposer,
+    $$PlayTracksTableCreateCompanionBuilder,
+    $$PlayTracksTableUpdateCompanionBuilder,
+    (PlayTrackRow, $$PlayTracksTableReferences),
+    PlayTrackRow,
+    PrefetchHooks Function({bool playEventsRefs})> {
+  $$PlayTracksTableTableManager(_$MoliaDatabase db, $PlayTracksTable table)
+      : super(TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$PlayTracksTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$PlayTracksTableOrderingComposer($db: db, $table: table),
+          createComputedFieldComposer: () =>
+              $$PlayTracksTableAnnotationComposer($db: db, $table: table),
+          updateCompanionCallback: ({
+            Value<int> id = const Value.absent(),
+            Value<String> sourceKey = const Value.absent(),
+            Value<String> songId = const Value.absent(),
+            Value<String> title = const Value.absent(),
+            Value<String> artist = const Value.absent(),
+            Value<String> album = const Value.absent(),
+            Value<String?> coverUrl = const Value.absent(),
+            Value<int?> durationMs = const Value.absent(),
+            Value<Uint8List?> raw = const Value.absent(),
+            Value<int> updatedAt = const Value.absent(),
+          }) =>
+              PlayTracksCompanion(
+            id: id,
+            sourceKey: sourceKey,
+            songId: songId,
+            title: title,
+            artist: artist,
+            album: album,
+            coverUrl: coverUrl,
+            durationMs: durationMs,
+            raw: raw,
+            updatedAt: updatedAt,
+          ),
+          createCompanionCallback: ({
+            Value<int> id = const Value.absent(),
+            required String sourceKey,
+            required String songId,
+            Value<String> title = const Value.absent(),
+            Value<String> artist = const Value.absent(),
+            Value<String> album = const Value.absent(),
+            Value<String?> coverUrl = const Value.absent(),
+            Value<int?> durationMs = const Value.absent(),
+            Value<Uint8List?> raw = const Value.absent(),
+            required int updatedAt,
+          }) =>
+              PlayTracksCompanion.insert(
+            id: id,
+            sourceKey: sourceKey,
+            songId: songId,
+            title: title,
+            artist: artist,
+            album: album,
+            coverUrl: coverUrl,
+            durationMs: durationMs,
+            raw: raw,
+            updatedAt: updatedAt,
+          ),
+          withReferenceMapper: (p0) => p0
+              .map((e) => (
+                    e.readTable<$PlayTracksTable, PlayTrackRow>(table),
+                    $$PlayTracksTableReferences(db, table, e)
+                  ))
+              .toList(),
+          prefetchHooksCallback: ({playEventsRefs = false}) {
+            return PrefetchHooks(
+              db: db,
+              explicitlyWatchedTables: [if (playEventsRefs) db.playEvents],
+              addJoins: null,
+              getPrefetchedDataCallback: (items) async {
+                return [
+                  if (playEventsRefs)
+                    await $_getPrefetchedData<PlayTrackRow, $PlayTracksTable,
+                            PlayEventRow>(
+                        currentTable: table,
+                        referencedTable: $$PlayTracksTableReferences
+                            ._playEventsRefsTable(db),
+                        managerFromTypedResult: (p0) =>
+                            $$PlayTracksTableReferences(db, table, p0)
+                                .playEventsRefs,
+                        referencedItemsForCurrentItem: (item,
+                                referencedItems) =>
+                            referencedItems.where((e) => e.trackId == item.id),
+                        typedResults: items)
+                ];
+              },
+            );
+          },
+        ));
+}
+
+typedef $$PlayTracksTableProcessedTableManager = ProcessedTableManager<
+    _$MoliaDatabase,
+    $PlayTracksTable,
+    PlayTrackRow,
+    $$PlayTracksTableFilterComposer,
+    $$PlayTracksTableOrderingComposer,
+    $$PlayTracksTableAnnotationComposer,
+    $$PlayTracksTableCreateCompanionBuilder,
+    $$PlayTracksTableUpdateCompanionBuilder,
+    (PlayTrackRow, $$PlayTracksTableReferences),
+    PlayTrackRow,
+    PrefetchHooks Function({bool playEventsRefs})>;
+typedef $$PlayEventsTableCreateCompanionBuilder = PlayEventsCompanion Function({
+  Value<int> id,
+  required int trackId,
+  required int startedAt,
+  Value<int?> endedAt,
+  Value<int> listenedMs,
+  Value<int> maxPositionMs,
+  Value<String?> endReason,
+  Value<String?> syncKey,
+  Value<String> originDeviceId,
+  Value<int> versionPhysical,
+  Value<int> versionCounter,
+});
+typedef $$PlayEventsTableUpdateCompanionBuilder = PlayEventsCompanion Function({
+  Value<int> id,
+  Value<int> trackId,
+  Value<int> startedAt,
+  Value<int?> endedAt,
+  Value<int> listenedMs,
+  Value<int> maxPositionMs,
+  Value<String?> endReason,
+  Value<String?> syncKey,
+  Value<String> originDeviceId,
+  Value<int> versionPhysical,
+  Value<int> versionCounter,
+});
+
+final class $$PlayEventsTableReferences
+    extends BaseReferences<_$MoliaDatabase, $PlayEventsTable, PlayEventRow> {
+  $$PlayEventsTableReferences(super.$_db, super.$_table, super.$_typedResult);
+
+  static $PlayTracksTable _trackIdTable(_$MoliaDatabase db) =>
+      db.playTracks.createAlias('play_events__trackId__play_tracks__id');
+
+  $$PlayTracksTableProcessedTableManager get trackId {
+    final $_column = $_itemColumn<int>('trackId')!;
+
+    final manager = $$PlayTracksTableTableManager($_db, $_db.playTracks)
+        .filter((f) => f.id.sqlEquals($_column));
+    final item = $_typedResult.readTableOrNull(_trackIdTable($_db));
+    if (item == null) return manager;
+    return ProcessedTableManager(
+        manager.$state.copyWith(prefetchedData: [item]));
+  }
+}
+
+class $$PlayEventsTableFilterComposer
+    extends Composer<_$MoliaDatabase, $PlayEventsTable> {
+  $$PlayEventsTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<int> get id => $composableBuilder(
+      column: $table.id, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<int> get startedAt => $composableBuilder(
+      column: $table.startedAt, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<int> get endedAt => $composableBuilder(
+      column: $table.endedAt, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<int> get listenedMs => $composableBuilder(
+      column: $table.listenedMs, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<int> get maxPositionMs => $composableBuilder(
+      column: $table.maxPositionMs, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get endReason => $composableBuilder(
+      column: $table.endReason, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get syncKey => $composableBuilder(
+      column: $table.syncKey, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get originDeviceId => $composableBuilder(
+      column: $table.originDeviceId,
+      builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<int> get versionPhysical => $composableBuilder(
+      column: $table.versionPhysical,
+      builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<int> get versionCounter => $composableBuilder(
+      column: $table.versionCounter,
+      builder: (column) => ColumnFilters(column));
+
+  $$PlayTracksTableFilterComposer get trackId {
+    final $$PlayTracksTableFilterComposer composer = $composerBuilder(
+        composer: this,
+        getCurrentColumn: (t) => t.trackId,
+        referencedTable: $db.playTracks,
+        getReferencedColumn: (t) => t.id,
+        builder: (joinBuilder,
+                {$addJoinBuilderToRootComposer,
+                $removeJoinBuilderFromRootComposer}) =>
+            $$PlayTracksTableFilterComposer(
+              $db: $db,
+              $table: $db.playTracks,
+              $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+              joinBuilder: joinBuilder,
+              $removeJoinBuilderFromRootComposer:
+                  $removeJoinBuilderFromRootComposer,
+            ));
+    return composer;
+  }
+}
+
+class $$PlayEventsTableOrderingComposer
+    extends Composer<_$MoliaDatabase, $PlayEventsTable> {
+  $$PlayEventsTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<int> get id => $composableBuilder(
+      column: $table.id, builder: (column) => ColumnOrderings(column));
 
   ColumnOrderings<int> get startedAt => $composableBuilder(
       column: $table.startedAt, builder: (column) => ColumnOrderings(column));
@@ -6950,6 +7479,26 @@ class $$PlayEventsTableOrderingComposer
   ColumnOrderings<int> get versionCounter => $composableBuilder(
       column: $table.versionCounter,
       builder: (column) => ColumnOrderings(column));
+
+  $$PlayTracksTableOrderingComposer get trackId {
+    final $$PlayTracksTableOrderingComposer composer = $composerBuilder(
+        composer: this,
+        getCurrentColumn: (t) => t.trackId,
+        referencedTable: $db.playTracks,
+        getReferencedColumn: (t) => t.id,
+        builder: (joinBuilder,
+                {$addJoinBuilderToRootComposer,
+                $removeJoinBuilderFromRootComposer}) =>
+            $$PlayTracksTableOrderingComposer(
+              $db: $db,
+              $table: $db.playTracks,
+              $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+              joinBuilder: joinBuilder,
+              $removeJoinBuilderFromRootComposer:
+                  $removeJoinBuilderFromRootComposer,
+            ));
+    return composer;
+  }
 }
 
 class $$PlayEventsTableAnnotationComposer
@@ -6963,30 +7512,6 @@ class $$PlayEventsTableAnnotationComposer
   });
   GeneratedColumn<int> get id =>
       $composableBuilder(column: $table.id, builder: (column) => column);
-
-  GeneratedColumn<String> get sourceKey =>
-      $composableBuilder(column: $table.sourceKey, builder: (column) => column);
-
-  GeneratedColumn<String> get songId =>
-      $composableBuilder(column: $table.songId, builder: (column) => column);
-
-  GeneratedColumn<String> get title =>
-      $composableBuilder(column: $table.title, builder: (column) => column);
-
-  GeneratedColumn<String> get artist =>
-      $composableBuilder(column: $table.artist, builder: (column) => column);
-
-  GeneratedColumn<String> get album =>
-      $composableBuilder(column: $table.album, builder: (column) => column);
-
-  GeneratedColumn<String> get coverUrl =>
-      $composableBuilder(column: $table.coverUrl, builder: (column) => column);
-
-  GeneratedColumn<int> get durationMs => $composableBuilder(
-      column: $table.durationMs, builder: (column) => column);
-
-  GeneratedColumn<String> get raw =>
-      $composableBuilder(column: $table.raw, builder: (column) => column);
 
   GeneratedColumn<int> get startedAt =>
       $composableBuilder(column: $table.startedAt, builder: (column) => column);
@@ -7014,6 +7539,26 @@ class $$PlayEventsTableAnnotationComposer
 
   GeneratedColumn<int> get versionCounter => $composableBuilder(
       column: $table.versionCounter, builder: (column) => column);
+
+  $$PlayTracksTableAnnotationComposer get trackId {
+    final $$PlayTracksTableAnnotationComposer composer = $composerBuilder(
+        composer: this,
+        getCurrentColumn: (t) => t.trackId,
+        referencedTable: $db.playTracks,
+        getReferencedColumn: (t) => t.id,
+        builder: (joinBuilder,
+                {$addJoinBuilderToRootComposer,
+                $removeJoinBuilderFromRootComposer}) =>
+            $$PlayTracksTableAnnotationComposer(
+              $db: $db,
+              $table: $db.playTracks,
+              $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+              joinBuilder: joinBuilder,
+              $removeJoinBuilderFromRootComposer:
+                  $removeJoinBuilderFromRootComposer,
+            ));
+    return composer;
+  }
 }
 
 class $$PlayEventsTableTableManager extends RootTableManager<
@@ -7025,12 +7570,9 @@ class $$PlayEventsTableTableManager extends RootTableManager<
     $$PlayEventsTableAnnotationComposer,
     $$PlayEventsTableCreateCompanionBuilder,
     $$PlayEventsTableUpdateCompanionBuilder,
-    (
-      PlayEventRow,
-      BaseReferences<_$MoliaDatabase, $PlayEventsTable, PlayEventRow>
-    ),
+    (PlayEventRow, $$PlayEventsTableReferences),
     PlayEventRow,
-    PrefetchHooks Function()> {
+    PrefetchHooks Function({bool trackId})> {
   $$PlayEventsTableTableManager(_$MoliaDatabase db, $PlayEventsTable table)
       : super(TableManagerState(
           db: db,
@@ -7043,14 +7585,7 @@ class $$PlayEventsTableTableManager extends RootTableManager<
               $$PlayEventsTableAnnotationComposer($db: db, $table: table),
           updateCompanionCallback: ({
             Value<int> id = const Value.absent(),
-            Value<String> sourceKey = const Value.absent(),
-            Value<String> songId = const Value.absent(),
-            Value<String> title = const Value.absent(),
-            Value<String> artist = const Value.absent(),
-            Value<String> album = const Value.absent(),
-            Value<String?> coverUrl = const Value.absent(),
-            Value<int?> durationMs = const Value.absent(),
-            Value<String> raw = const Value.absent(),
+            Value<int> trackId = const Value.absent(),
             Value<int> startedAt = const Value.absent(),
             Value<int?> endedAt = const Value.absent(),
             Value<int> listenedMs = const Value.absent(),
@@ -7063,14 +7598,7 @@ class $$PlayEventsTableTableManager extends RootTableManager<
           }) =>
               PlayEventsCompanion(
             id: id,
-            sourceKey: sourceKey,
-            songId: songId,
-            title: title,
-            artist: artist,
-            album: album,
-            coverUrl: coverUrl,
-            durationMs: durationMs,
-            raw: raw,
+            trackId: trackId,
             startedAt: startedAt,
             endedAt: endedAt,
             listenedMs: listenedMs,
@@ -7083,14 +7611,7 @@ class $$PlayEventsTableTableManager extends RootTableManager<
           ),
           createCompanionCallback: ({
             Value<int> id = const Value.absent(),
-            required String sourceKey,
-            required String songId,
-            Value<String> title = const Value.absent(),
-            Value<String> artist = const Value.absent(),
-            Value<String> album = const Value.absent(),
-            Value<String?> coverUrl = const Value.absent(),
-            Value<int?> durationMs = const Value.absent(),
-            Value<String> raw = const Value.absent(),
+            required int trackId,
             required int startedAt,
             Value<int?> endedAt = const Value.absent(),
             Value<int> listenedMs = const Value.absent(),
@@ -7103,14 +7624,7 @@ class $$PlayEventsTableTableManager extends RootTableManager<
           }) =>
               PlayEventsCompanion.insert(
             id: id,
-            sourceKey: sourceKey,
-            songId: songId,
-            title: title,
-            artist: artist,
-            album: album,
-            coverUrl: coverUrl,
-            durationMs: durationMs,
-            raw: raw,
+            trackId: trackId,
             startedAt: startedAt,
             endedAt: endedAt,
             listenedMs: listenedMs,
@@ -7124,11 +7638,44 @@ class $$PlayEventsTableTableManager extends RootTableManager<
           withReferenceMapper: (p0) => p0
               .map((e) => (
                     e.readTable<$PlayEventsTable, PlayEventRow>(table),
-                    BaseReferences<_$MoliaDatabase, $PlayEventsTable,
-                        PlayEventRow>(db, table, e)
+                    $$PlayEventsTableReferences(db, table, e)
                   ))
               .toList(),
-          prefetchHooksCallback: null,
+          prefetchHooksCallback: ({trackId = false}) {
+            return PrefetchHooks(
+              db: db,
+              explicitlyWatchedTables: [],
+              addJoins: <
+                  T extends TableManagerState<
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic>>(state) {
+                if (trackId) {
+                  state = state.withJoin(
+                    currentTable: table,
+                    currentColumn: table.trackId,
+                    referencedTable:
+                        $$PlayEventsTableReferences._trackIdTable(db),
+                    referencedColumn:
+                        $$PlayEventsTableReferences._trackIdTable(db).id,
+                  ) as T;
+                }
+
+                return state;
+              },
+              getPrefetchedDataCallback: (items) async {
+                return [];
+              },
+            );
+          },
         ));
 }
 
@@ -7141,12 +7688,9 @@ typedef $$PlayEventsTableProcessedTableManager = ProcessedTableManager<
     $$PlayEventsTableAnnotationComposer,
     $$PlayEventsTableCreateCompanionBuilder,
     $$PlayEventsTableUpdateCompanionBuilder,
-    (
-      PlayEventRow,
-      BaseReferences<_$MoliaDatabase, $PlayEventsTable, PlayEventRow>
-    ),
+    (PlayEventRow, $$PlayEventsTableReferences),
     PlayEventRow,
-    PrefetchHooks Function()>;
+    PrefetchHooks Function({bool trackId})>;
 typedef $$DownloadsTableCreateCompanionBuilder = DownloadsCompanion Function({
   Value<int> id,
   required String originSourceKey,
@@ -7520,6 +8064,8 @@ class $MoliaDatabaseManager {
       $$SyncJournalTableTableManager(_db, _db.syncJournal);
   $$SyncJournalStatesTableTableManager get syncJournalStates =>
       $$SyncJournalStatesTableTableManager(_db, _db.syncJournalStates);
+  $$PlayTracksTableTableManager get playTracks =>
+      $$PlayTracksTableTableManager(_db, _db.playTracks);
   $$PlayEventsTableTableManager get playEvents =>
       $$PlayEventsTableTableManager(_db, _db.playEvents);
   $$DownloadsTableTableManager get downloads =>

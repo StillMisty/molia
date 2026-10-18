@@ -4,9 +4,7 @@
 /// Dart 判定都从它派生。任何一侧改了阈值而另一侧没跟上，本测试红。
 library;
 
-import 'dart:convert';
 
-import 'package:drift/drift.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:molia/data/molia_database.dart';
 import 'package:molia/data/play_statistics_repository.dart';
@@ -44,20 +42,19 @@ void main() {
     var index = 0;
     for (final (listenedMs, durationMs) in cases) {
       index++;
-      await db.into(db.playEvents).insert(PlayEventsCompanion.insert(
-            sourceKey: 'wy',
-            songId: 'case$index',
-            title: Value('Case $index'),
-            artist: const Value('Artist'),
-            album: const Value(''),
-            durationMs: Value(durationMs),
-            raw: Value(jsonEncode(<String, Object?>{'id': index})),
-            startedAt: 1000 + index,
-            endedAt: Value(2000 + index),
-            listenedMs: Value(listenedMs),
-            maxPositionMs: Value(listenedMs),
-            endReason: const Value('completed'),
-          ));
+      await insertPlayEvent(
+        db,
+        songId: 'case$index',
+        title: 'Case $index',
+        artist: 'Artist',
+        durationMs: durationMs,
+        raw: {'id': index},
+        startedAt: 1000 + index,
+        endedAt: 2000 + index,
+        listenedMs: listenedMs,
+        maxPositionMs: listenedMs,
+        endReason: 'completed',
+      );
     }
   });
 

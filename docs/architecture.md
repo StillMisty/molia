@@ -196,8 +196,8 @@
   由 `SourceFailure.from` 按类型名识别 `BuiltinHttpException`。providers/UI 只消费
   kind / l10nKey / retryable。
 - **听歌统计**：`play_events`（一次播放尝试一行，drift 本地库 v1）由
-  `PlayStatisticsRepository` 读写；`raw`（取链参数）**每曲一份**、只落在该曲
-  最新一行（载荷归属，见 pitfalls #53），读取侧按曲补齐；聚合全部查询时计算，
+  `PlayStatisticsRepository` 读写；曲目元数据与取链参数（`raw`，gzip 字节）在
+  `play_tracks`（每曲一行，见 pitfalls #53），读取一律 join；聚合全部查询时计算，
   口径常量唯一来源是
   `PlayStatisticsLimits`（有效播放 = `min(30s, 50%·时长)`，error 事件不计入
   计数/比率）。采集是 `PlayStatisticsService` 纯观察者——组合根把
@@ -285,7 +285,7 @@
   （v4 / v6 可独立降级到不同端口，设置页端口行同值折叠、不同值按族列出），
   口令随码传递是刻意取舍——信任模型就是
   口令即信任根，弹层明确警告「等同授权对方读取全部同步数据」。
-  资料库 schema（drift，`schemaVersion = 2`）含 `playlists.syncId` / 行级
+  资料库 schema（drift，`schemaVersion = 5`）含 `playlists.syncId` / 行级
   `versionPhysical + versionCounter + deviceId` / `sync_tombstones`（版本三列 +
   真实删除时间）/ `sync_known`（已知版本登记）/ `play_events`（syncKey +
   版本列，`originDeviceId` 兼作设备列）；设置同步用「登记哈希」做变化检测，
@@ -360,10 +360,11 @@
   （曾经 SQL / Dart / AI 三份手写，奇数时长上 AI 还差 1ms）；
 - **范围值类型**：`PlayStatisticsRange` + `startOf(now)` / `sinceMs(now)`
   （领域扩展）是范围 → 时间窗口的唯一映射，查询与热力图高亮共用；
-- **载荷归属**：`raw` 每曲一份、落 `startedAt` 最新行（`_keepPayloadOnNewestRow`；
-  裁剪按旧 → 新删，故放最新行），读取侧（`topTracks` / `dayEvents` /
-  `listEventsForExport` / 同步导出）按曲补齐，存量库由启动维护
-  `dedupeTrackPayloads()` 归并；
+- **曲目内容表**（v5）：`play_events` 只存事件字段 + `trackId`；元数据与载荷
+  （gzip BLOB）在 `play_tracks` 每曲一行，写入按「内容时间取新」（旧事件不顶
+  新内容），读取（`topTracks` / `dayEvents` / `listEventsForExport` / 同步导出）
+  一律 join 补齐；载荷另有字节预算（`maxRetainedPayloadBytes`），超出按最近
+  播放保留、其余清 `raw`（点播回退重新解析）；
 - **一次快照**：`PlayStatisticsRepository.snapshot(since:)` 并发取回
   `ListeningStatisticsSnapshot`（汇总 / 榜单 / 日历 / 作息热力图 / 来源分布），
   统计页只渲染它（不再分开读 6 个查询）。

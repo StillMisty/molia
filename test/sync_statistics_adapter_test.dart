@@ -6,6 +6,7 @@ import 'package:molia/data/molia_database.dart';
 import 'package:molia/data/play_statistics_repository.dart';
 import 'package:molia/data/sync/adapters/statistics_sync_adapter.dart';
 import 'package:molia/domain/models/device_sync.dart';
+import 'package:molia/data/stats_payload_codec.dart';
 import 'package:molia/domain/models/play_statistics.dart';
 import 'support/sync_test_support.dart';
 
@@ -99,7 +100,8 @@ void main() {
     final result = await adapterA.apply(await adapterB.collect());
     expect(result.applied, 1);
     final rows = await dbA.customSelect(
-      'SELECT originDeviceId FROM play_events WHERE songId = ?',
+      'SELECT e.originDeviceId AS originDeviceId FROM play_events e '
+      'JOIN play_tracks pt ON pt.id = e.trackId WHERE pt.songId = ?',
       variables: [Variable.withString('s9')],
     ).get();
     expect(rows.single.data['originDeviceId'], 'devB');
@@ -127,22 +129,21 @@ void main() {
   });
 
   test('存量事件（无 syncKey）导出时按内容哈希回填且跨库一致', () async {
-    // 模拟没有 syncKey 的存量行：直接插入。
+    // 模拟没有 syncKey 的存量行：直接插入（内容行 + 事件行）。
     for (final db in [dbA, dbB]) {
-      await db.into(db.playEvents).insert(PlayEventsCompanion.insert(
-            sourceKey: 'wy',
-            songId: 'legacy',
-            title: const Value('Legacy'),
-            artist: const Value(''),
-            album: const Value(''),
-            raw: const Value('{}'),
-            startedAt: 100,
-            endedAt: const Value(200),
-            listenedMs: const Value(100),
-            maxPositionMs: const Value(100),
-            endReason: const Value('completed'),
-            originDeviceId: const Value(''),
-          ));
+      await insertPlayEvent(
+        db,
+        songId: 'legacy',
+        title: 'Legacy',
+        artist: '',
+        album: '',
+        raw: const {},
+        startedAt: 100,
+        endedAt: 200,
+        listenedMs: 100,
+        maxPositionMs: 100,
+        endReason: 'completed',
+      );
     }
     final a = await adapterA.collect();
     final keyA = a.values.single.single.key;
@@ -200,7 +201,7 @@ void main() {
     expect((await repoB.summary()).playCount, 0);
   });
 
-  test('载荷每曲一份不影响线上记录：重复播放的导出记录逐条自包含', () async {
+  test('重复播放同一曲：线上记录逐条自包含，对端落地为每曲一行内容', () async {
     for (final (index, value) in ['v1', 'v2'].indexed) {
       final id = await repoA.startEvent(
         sourceKey: 'wy',
@@ -221,19 +222,28 @@ void main() {
     final records =
         (await adapterA.collect(fresh: true))[SyncCategory.statistics]!;
     expect(records, hasLength(2));
+    expect(
+      records.first.data!.containsKey('trackId'),
+      isFalse,
+      reason: '本机行 id 不进线上记录（曲目身份是 sourceKey + songId）',
+    );
+    expect(records.first.data!.containsKey('sourceKey'), isTrue);
     for (final record in records) {
       final raw = record.data!['raw'] as String? ?? '';
       expect(raw.isNotEmpty, isTrue, reason: '远端按记录独立落地，raw 必须补齐');
       expect(jsonDecode(raw), {'v': 'v2'});
     }
 
-    // 对端落地后同样是「每曲一份」：载荷归到该曲最新一行。
+    // 对端落地：内容行每曲一行（载荷取最新记录），事件两行。
     await adapterB.apply({SyncCategory.statistics: records});
-    final holders = [
-      for (final row in await tableRows(dbB, 'play_events'))
-        if ((row['raw'] as String? ?? '').isNotEmpty) row,
-    ];
-    expect(holders, hasLength(1));
-    expect(holders.single['raw'], '{"v":"v2"}');
+    final tracks = await tableRows(dbB, 'play_tracks');
+    expect(tracks, hasLength(1));
+    expect(tracks.single['songId'], 'same');
+    expect(tracks.single['raw'], isA<Uint8List>(), reason: '载荷按 gzip 存 BLOB');
+    expect(
+      decodeStatsPayload(tracks.single['raw']),
+      '{"v":"v2"}',
+    );
+    expect(await tableRows(dbB, 'play_events'), hasLength(2));
   });
 }

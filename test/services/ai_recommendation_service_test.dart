@@ -1,6 +1,5 @@
 import 'dart:convert';
 
-import 'package:drift/drift.dart' hide isNull;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:molia/data/catalog/catalog_service.dart';
 import 'package:molia/data/molia_database.dart';
@@ -135,19 +134,19 @@ void main() {
   );
 
   Future<void> insertPlayed(String title, String artist) async {
-    await db.into(db.playEvents).insert(PlayEventsCompanion.insert(
-          sourceKey: 'wy',
-          songId: '$title-$artist',
-          title: Value(title),
-          artist: Value(artist),
-          durationMs: const Value(200000),
-          raw: const Value('{}'),
-          startedAt: 1000,
-          endedAt: const Value(200000),
-          listenedMs: const Value(150000),
-          maxPositionMs: const Value(190000),
-          endReason: const Value('completed'),
-        ));
+    await insertPlayEvent(
+      db,
+      songId: '$title-$artist',
+      title: title,
+      artist: artist,
+      durationMs: 200000,
+      raw: const {},
+      startedAt: 1000,
+      endedAt: 200000,
+      listenedMs: 150000,
+      maxPositionMs: 190000,
+      endReason: 'completed',
+    );
   }
 
   AiRecommendationService buildService(List<MusicSource> sources) {

@@ -378,9 +378,10 @@
 - **Play event（播放事件）** — `play_events` 一行 = 一次播放尝试（append-only）：
   **真正出声才开行**（首个 `position > 0` 的 tick）；切歌 / 播完 /
   单曲循环每遍 / 位置回到开头（restart）/ 停止各收尾一行；暂停不切断；
-  进程被杀由启动时 `closeStaleEvents()` 收尾为 interrupted。元数据为播放时
-  快照、自包含（`raw` 供统计页点播）。与「播放历史」（`play_history`，
-  最近播放 500 条）是两套数据。
+  进程被杀由启动时 `closeStaleEvents()` 收尾为 interrupted。曲目元数据与取链
+  参数在 `play_tracks`（每曲一行，`raw` 为 gzip 字节，供统计页点播）；本表只存
+  事件的 `trackId`（v5 起）。与「播放历史」（`play_history`，最近播放 500 条）
+  是两套数据。
 - **Statistics capture（统计采集）** — `lib/services/play_statistics_service.dart`：
   纯观察者（组合根接 `PlaybackProvider` 快照 + position 两根监听，零改动
   `lib/playback`）；`PlayStatisticsLimits` 是口径常量唯一来源

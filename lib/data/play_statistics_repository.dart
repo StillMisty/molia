@@ -16,14 +16,14 @@
 /// - 进行中（`endedAt IS NULL`）的事件不出现在任何查询结果里；
 /// - 日/小时分桶在 Dart 侧按本地时区计算（SQLite 无时区语义）。
 ///
-/// **载荷归属（`raw` 每曲一份）**：`raw`（取链参数）只落在该曲
-/// `startedAt` 最新的一行，更早的行为空串。载荷是「每曲属性」，而事件是
-/// append-only：逐条存一份在保留窗口（[maxRetainedEvents] 行 / 365 天）下会把
-/// 库体积顶到数十 MB（LX 脚本原样透传平台对象时单条 2–8 KB，见 ADR-0003 的
-/// 实测）。放**最新行**是因为裁剪按「旧 → 新」删——放首行会让后段事件失去可
-/// 点播的载荷。读取侧（[topTracks] / [dayEvents] / [listEventsForExport] /
-/// 同步导出）按曲补齐，记录仍自包含；不变量由写入点（[startEvent] /
-/// [syncApplyEvents]）与启动维护 [dedupeTrackPayloads] 共同维持。
+/// **曲目内容（`play_tracks`，每曲一行）**：元数据（title / artist / album /
+/// coverUrl / durationMs）与取链参数（`raw`，gzip BLOB）不再逐事件复制——事件
+/// 是 append-only 的，逐行复制在保留窗口（[maxRetainedEvents] 行 / 365 天）下把
+/// 库顶到数十 MB（LX 脚本原样透传平台对象时单条 2–8 KB，见 ADR-0003 实测）。
+/// 语义：元数据是**该曲最近一次播放时的快照**（`updatedAt` = 该次事件的内容
+/// 时间，旧事件不覆盖新内容）；载荷按「最近播放」保留，超出
+/// [maxRetainedPayloadBytes] 的曲目清空 `raw`（点播回退到重新解析）。
+/// 读取侧统一 join 取内容，同步导出 / 日志条目按行补齐（记录仍**逐条自包含**）。
 library;
 
 import 'dart:async';
@@ -36,6 +36,7 @@ import 'package:drift/drift.dart';
 import '../domain/models/device_sync.dart';
 import '../domain/models/play_statistics.dart';
 import 'molia_database.dart';
+import 'stats_payload_codec.dart';
 import 'sync/sync_journal.dart';
 import 'sync/sync_stamp.dart';
 
@@ -69,11 +70,11 @@ class PlayStatisticsRepository {
   /// 同步导出缓存：`null` = 未加载（下次导出全量读一次）。
   ///
   /// 见 [syncExportEvents]：写入点按 id 增量维护，避免每首歌收尾都全表重读。
-  /// 行里**不留载荷**（`raw` 置空），载荷另存一份（每曲一条，键 = 曲目键）——
-  /// 导出时按曲补齐，记录仍自包含，而缓存不再逐行复制大字段。
+  /// 行里**不留载荷**（`raw` 置空），载荷按曲另存（解码后的 JSON 文本，每曲
+  /// 一条）——导出时按曲补齐，记录仍自包含，而缓存不再逐行复制大字段。
   Map<int, Map<String, Object?>>? _exportRows;
   List<Map<String, Object?>>? _exportList;
-  Map<(String sourceKey, String songId), String>? _exportPayloads;
+  Map<int, String>? _exportPayloads;
 
   /// 导出变更计数（[syncFingerprint] 的廉价指纹来源）。
   int _syncRevision = 0;
@@ -93,11 +94,13 @@ class PlayStatisticsRepository {
   ///
   /// 与 [PlayStatisticsLimits.qualifiedThresholdMs] 同口径；一致性由
   /// test/play_statistics_formula_test.dart 用同一批 fixture 行逐行对照。
+  /// 用到它的查询必须 join `play_tracks`（`durationMs` 在内容表上）；SQL 里
+  /// 一律以 `pt.` 限定，避免连表后列名歧义。
   static const String _qualifiedPredicate =
-      'listenedMs >= CASE WHEN durationMs IS NULL OR durationMs <= 0 '
+      'listenedMs >= CASE WHEN pt.durationMs IS NULL OR pt.durationMs <= 0 '
       'THEN ${PlayStatisticsLimits.qualifiedMinListenedMs} '
       'ELSE MIN(${PlayStatisticsLimits.qualifiedMinListenedMs}, '
-      'durationMs * ${PlayStatisticsLimits.qualifiedFraction}) END';
+      'pt.durationMs * ${PlayStatisticsLimits.qualifiedFraction}) END';
 
   /// 已收尾且非 error 事件的公共过滤（计数/比率/时长统一口径）。
   static const String _countablePredicate =
@@ -115,7 +118,7 @@ class PlayStatisticsRepository {
 
   /// 开始一次播放事件，返回行 id（`endedAt` 为 null = 进行中）。
   ///
-  /// 载荷按归属规则落在新行上（新行是本曲最新），同一事务里清掉旧行副本。
+  /// 同一事务里 upsert 曲目内容行（元数据 + 载荷，见 [PlayTracks]）。
   Future<int> startEvent({
     required String sourceKey,
     required String songId,
@@ -128,15 +131,19 @@ class PlayStatisticsRepository {
     required int startedAt,
   }) {
     return _db.transaction(() async {
-      final id = await _db.into(_db.playEvents).insert(PlayEventsCompanion.insert(
-            sourceKey: sourceKey,
-            songId: songId,
-            title: Value(title),
-            artist: Value(artist),
-            album: Value(album),
-            coverUrl: Value(coverUrl),
-            durationMs: Value(durationMs),
-            raw: Value(jsonEncode(raw)),
+      final trackId = await _upsertTrack(
+        sourceKey: sourceKey,
+        songId: songId,
+        title: title,
+        artist: artist,
+        album: album,
+        coverUrl: coverUrl,
+        durationMs: durationMs,
+        payload: jsonEncode(raw),
+        updatedAt: startedAt,
+      );
+      return _db.into(_db.playEvents).insert(PlayEventsCompanion.insert(
+            trackId: trackId,
             startedAt: startedAt,
             endedAt: const Value(null),
             listenedMs: const Value(0),
@@ -145,77 +152,62 @@ class PlayStatisticsRepository {
             syncKey: Value(_newSyncKey()),
             originDeviceId: Value(_stamps.deviceId),
           ));
-      await _keepPayloadOnNewestRow(sourceKey, songId);
-      return id;
     });
   }
 
-  /// 载荷归属的唯一写实现：只保留该曲最新一行的 `raw`，清掉更早行的副本。
+  /// 取（或建）曲目内容行，返回 `trackId`。
   ///
-  /// 走 `idx_play_events_track`（sourceKey + songId）的单条索引 UPDATE，命中
-  /// 至多一行；「最新」按 `startedAt`，并列时按 `id`（同曲同秒也确定）。
-  /// 注意保留的是**最新持有行**的载荷：远端事件比本机旧时不会抢走载荷。
-  Future<void> _keepPayloadOnNewestRow(String sourceKey, String songId) {
-    return _db.customUpdate(
-      'UPDATE play_events SET raw = ? WHERE sourceKey = ? AND songId = ? '
-      "AND raw <> '' AND id NOT IN ("
-      'SELECT id FROM play_events WHERE sourceKey = ? AND songId = ? '
-      "AND raw <> '' ORDER BY startedAt DESC, id DESC LIMIT 1)",
-      variables: [
-        Variable.withString(''),
-        Variable.withString(sourceKey),
-        Variable.withString(songId),
-        Variable.withString(sourceKey),
-        Variable.withString(songId),
-      ],
-      updates: {_db.playEvents},
-    );
-  }
-
-  /// 按曲补齐载荷（只查缺失的曲子，页面级条数）。
+  /// [updatedAt] 是本次事件的内容时间（`startedAt`）：**不早于**已有时才覆盖
+  /// 元数据与载荷——远端补发的一条旧事件不该把新内容顶掉（门在外层调用点，
+  /// 见 [_upsertTrack] 的 `updatedAt >= existing.updatedAt`）。本地播放的
+  /// `startedAt` 总是最新，等价于「最近一次播放的元数据 + 最新取链参数」。
   ///
-  /// 键用 record（结构化相等），避免拼字符串时引入分隔符约定。
-  Future<Map<(String sourceKey, String songId), String>> _payloadsFor(
-    List<PlayEventRow> rows,
-  ) async {
-    final keys = <(String, String)>{};
-    for (final row in rows) {
-      if (row.raw.isNotEmpty) continue;
-      keys.add((row.sourceKey, row.songId));
+  /// [payload] 为 null 表示**不覆盖载荷**（远端记录没带 raw 时，别把本机已有
+  /// 的取链参数抹掉）。
+  Future<int> _upsertTrack({
+    required String sourceKey,
+    required String songId,
+    required String title,
+    required String artist,
+    required String album,
+    required String? coverUrl,
+    required int? durationMs,
+    required String? payload,
+    required int updatedAt,
+  }) async {
+    final existing = await (_db.select(_db.playTracks)
+          ..where((t) => t.sourceKey.equals(sourceKey) & t.songId.equals(songId))
+          ..limit(1))
+        .getSingleOrNull();
+    if (existing == null) {
+      return _db.into(_db.playTracks).insert(PlayTracksCompanion.insert(
+            sourceKey: sourceKey,
+            songId: songId,
+            title: Value(title),
+            artist: Value(artist),
+            album: Value(album),
+            coverUrl: Value(coverUrl),
+            durationMs: Value(durationMs),
+            raw: Value(payload == null ? null : encodeStatsPayload(payload)),
+            updatedAt: updatedAt,
+          ));
     }
-    if (keys.isEmpty) return const {};
-    final where =
-        List.filled(keys.length, '(sourceKey = ? AND songId = ?)').join(' OR ');
-    final result = await _db.customSelect(
-      "SELECT sourceKey, songId, raw FROM play_events WHERE raw <> '' AND ($where)",
-      variables: [
-        for (final (sourceKey, songId) in keys) ...[
-          Variable.withString(sourceKey),
-          Variable.withString(songId),
-        ],
-      ],
-    ).get();
-    return {
-      for (final row in result)
-        (
-          row.data['sourceKey'] as String? ?? '',
-          row.data['songId'] as String? ?? '',
-        ): row.data['raw'] as String? ?? '',
-    };
-  }
-
-  /// 明细行 → 领域事件（按曲补齐载荷，统计页点播始终拿得到取链参数）。
-  Future<List<PlayEvent>> _eventsWithPayloads(List<PlayEventRow> rows) async {
-    final payloads = await _payloadsFor(rows);
-    return [
-      for (final row in rows)
-        _eventFromRow(
-          row,
-          payload: row.raw.isNotEmpty
-              ? row.raw
-              : payloads[(row.sourceKey, row.songId)],
-        ),
-    ];
+    if (updatedAt >= existing.updatedAt) {
+      await (_db.update(_db.playTracks)..where((t) => t.id.equals(existing.id)))
+          .write(PlayTracksCompanion(
+        title: Value(title),
+        artist: Value(artist),
+        album: Value(album),
+        coverUrl: Value(coverUrl),
+        durationMs: Value(durationMs),
+        // payload == null：不覆盖载荷（远端记录没带 raw 时不抹掉已有取链参数）。
+        raw: payload == null
+            ? const Value.absent()
+            : Value(encodeStatsPayload(payload)),
+        updatedAt: Value(updatedAt),
+      ));
+    }
+    return existing.id;
   }
 
   /// 落盘进行中事件的进度（节流调用；不广播变更，进行中事件不影响统计）。
@@ -307,52 +299,55 @@ class PlayStatisticsRepository {
   }
 
   /// 已收尾事件 → 增量日志条目（形状与 `syncExportEvents` 一致：除 `id`
-  /// 外的全部列，版本 = 三个版本列 / `originDeviceId`）。
+  /// 外的全部列——事件字段 + 曲目内容，记录**自包含**）。
   ///
   /// 返回 null = 事件不存在 / 未收尾 / 缺去重键（不该被同步的行）。
   Future<SyncJournalChange?> _eventJournalChange(
     DatabaseConnectionUser executor,
     int id,
   ) async {
-    final row = await (executor.select(_db.playEvents)
-          ..where((t) => t.id.equals(id))
-          ..limit(1))
+    final row = await executor
+        .customSelect(
+          '$_eventSelect WHERE e.id = ?',
+          variables: [Variable.withInt(id)],
+        )
         .getSingleOrNull();
-    if (row == null || row.endedAt == null) return null;
-    final syncKey = row.syncKey;
-    if (syncKey == null || syncKey.isEmpty) return null;
-    final data = row.toJson()..remove('id');
-    if ((data['raw'] as String? ?? '').isEmpty) {
-      // 本行不是该曲的载荷持有行（只可能出现在：更晚的远端事件先落地，把载荷
-      // 归位到了它那一行——跨设备时钟偏移时可发生）：日志条目仍要自包含，
-      // 否则远端拿到的是一条没有取链参数的事件记录。
-      data['raw'] = await _payloadFor(executor, row.sourceKey, row.songId) ?? '';
-    }
+    if (row == null || row.data['endedAt'] == null) return null;
+    final data = _selfContainedEvent(row.data)..remove('id');
+    final syncKey = data['syncKey'] as String? ?? '';
+    if (syncKey.isEmpty) return null;
     return (
       category: SyncCategory.statistics,
       record: SyncRecord(
         key: syncKey,
-        version: row.syncVersion,
+        version: SyncVersion(
+          physical: (data['versionPhysical'] as num?)?.toInt() ?? 0,
+          counter: (data['versionCounter'] as num?)?.toInt() ?? 0,
+          deviceId: data['originDeviceId'] as String? ?? '',
+        ),
         data: data,
       ),
     );
   }
 
-  /// 该曲当前的载荷（每曲一份，取最新持有行）。
-  Future<String?> _payloadFor(
-    DatabaseConnectionUser executor,
-    String sourceKey,
-    String songId,
-  ) async {
-    final row = await executor.customSelect(
-      "SELECT raw FROM play_events WHERE sourceKey = ? AND songId = ? "
-      "AND raw <> '' ORDER BY startedAt DESC, id DESC LIMIT 1",
-      variables: [
-        Variable.withString(sourceKey),
-        Variable.withString(songId),
-      ],
-    ).getSingleOrNull();
-    return row?.data['raw'] as String?;
+  /// 事件 + 曲目内容的连表查询：同步导出 / 日志条目共用同一列集合（键名与
+  /// v5 之前的行结构一致——线上格式不变）。
+  static const String _eventSelect = 'SELECT '
+      'e.id, e.trackId, e.startedAt, e.endedAt, e.listenedMs, e.maxPositionMs, '
+      'e.endReason, e.syncKey, e.originDeviceId, e.versionPhysical, '
+      'e.versionCounter, '
+      'pt.sourceKey, pt.songId, pt.title, pt.artist, pt.album, pt.coverUrl, '
+      'pt.durationMs, pt.raw '
+      'FROM play_events e LEFT JOIN play_tracks pt ON pt.id = e.trackId';
+
+  /// 查询行 → 自包含事件映射（载荷解码为 JSON 文本；导出 / 日志共用形状）。
+  ///
+  /// `trackId` 剥掉：它是本机行 id（内容表主键），进了线上记录只会误导对端
+  /// ——记录里的曲目身份是 `sourceKey` + `songId`。
+  static Map<String, Object?> _selfContainedEvent(Map<String, Object?> row) {
+    final data = {...row, 'raw': decodeStatsPayload(row['raw'])};
+    data.remove('trackId');
+    return data;
   }
 
   /// 收尾事件后追加日志（与写入同事务；未注入日志时为空操作）。
@@ -371,9 +366,11 @@ class PlayStatisticsRepository {
       row.maxPositionMs == ((event['maxPositionMs'] as num?)?.toInt() ?? 0) &&
       row.endReason == event['endReason'] as String?;
 
-  /// 清空全部统计事件（不可撤销）。
+  /// 清空全部统计事件与曲目内容（不可撤销）。
   Future<void> clearAll() async {
+    // 先事件后内容：`play_events.trackId` 是 ON DELETE RESTRICT。
     await _db.delete(_db.playEvents).go();
+    await _db.delete(_db.playTracks).go();
     _syncRevision++;
     _exportInvalidate();
     _notifyChanged();
@@ -389,11 +386,12 @@ class PlayStatisticsRepository {
         COALESCE(SUM(CASE WHEN $_countablePredicate THEN listenedMs ELSE 0 END), 0)
             AS listenedMs,
         COUNT(DISTINCT CASE WHEN $_countablePredicate
-            THEN sourceKey || ':' || songId END) AS uniqueTracks,
+            THEN trackId END) AS uniqueTracks,
         SUM(CASE WHEN endReason = 'completed' THEN 1 ELSE 0 END) AS completedCount,
         SUM(CASE WHEN endReason = 'skipped' AND NOT ($_qualifiedPredicate)
             THEN 1 ELSE 0 END) AS skippedUnqualifiedCount
-      FROM play_events
+      FROM play_events e
+      JOIN play_tracks pt ON pt.id = e.trackId
       WHERE endedAt IS NOT NULL${since != null ? ' AND startedAt >= ?' : ''}
     ''', variables: [if (since != null) Variable.withInt(since)]).getSingle();
     final data = row.data;
@@ -451,22 +449,23 @@ class PlayStatisticsRepository {
   }) async {
     final rows = await _db.customSelect('''
       SELECT
-        sourceKey,
-        songId,
-        MAX(title) AS title,
-        MAX(artist) AS artist,
-        MAX(album) AS album,
-        MAX(coverUrl) AS coverUrl,
-        MAX(durationMs) AS durationMs,
-        -- 载荷每曲一份（只在该曲最新持有行）：MAX 取到的就是那一份；
-        -- 空串 = 载荷已随该曲事件一起被裁剪（点播走重新解析）。
-        MAX(raw) AS raw,
+        pt.sourceKey AS sourceKey,
+        pt.songId AS songId,
+        MAX(pt.title) AS title,
+        MAX(pt.artist) AS artist,
+        MAX(pt.album) AS album,
+        MAX(pt.coverUrl) AS coverUrl,
+        MAX(pt.durationMs) AS durationMs,
+        -- 载荷每曲一份（内容表一行）：MAX 取到的就是那一份；NULL = 无载荷
+        -- （未提供 / 已被载荷预算清掉）→ 点播走重新解析。
+        MAX(pt.raw) AS raw,
         SUM(CASE WHEN ($_qualifiedPredicate) THEN 1 ELSE 0 END) AS playCount,
         COALESCE(SUM(listenedMs), 0) AS listenedMs,
         MAX(startedAt) AS lastPlayedAt
-      FROM play_events
+      FROM play_events e
+      JOIN play_tracks pt ON pt.id = e.trackId
       WHERE $_countablePredicate${since != null ? ' AND startedAt >= ?' : ''}
-      GROUP BY sourceKey, songId
+      GROUP BY e.trackId
       HAVING playCount > 0
       ORDER BY playCount DESC, listenedMs DESC, lastPlayedAt DESC
       LIMIT ?
@@ -498,16 +497,20 @@ class PlayStatisticsRepository {
     int limit = 10,
   }) async {
     final events = _db.playEvents;
+    final tracks = _db.playTracks;
     final rows = await (_db.selectOnly(events)
-          ..addColumns([events.artist, events.durationMs, events.listenedMs])
+          ..addColumns([tracks.artist, tracks.durationMs, events.listenedMs])
+          ..join([
+            innerJoin(tracks, tracks.id.equalsExp(events.trackId)),
+          ])
           ..where(_countableSince(since)))
         .get();
     final counts = <String, int>{};
     final listened = <String, int>{};
     for (final row in rows) {
       final listenedMs = row.read(events.listenedMs) ?? 0;
-      if (!_isQualified(listenedMs, row.read(events.durationMs))) continue;
-      for (final name in splitArtistNames(row.read(events.artist) ?? '')) {
+      if (!_isQualified(listenedMs, row.read(tracks.durationMs))) continue;
+      for (final name in splitArtistNames(row.read(tracks.artist) ?? '')) {
         counts[name] = (counts[name] ?? 0) + 1;
         listened[name] = (listened[name] ?? 0) + listenedMs;
       }
@@ -602,12 +605,13 @@ class PlayStatisticsRepository {
   Future<List<SourceListened>> sourceDistribution({int? since}) async {
     final rows = await _db.customSelect('''
       SELECT
-        sourceKey,
+        pt.sourceKey AS sourceKey,
         COALESCE(SUM(listenedMs), 0) AS listenedMs,
         SUM(CASE WHEN ($_qualifiedPredicate) THEN 1 ELSE 0 END) AS playCount
-      FROM play_events
+      FROM play_events e
+      JOIN play_tracks pt ON pt.id = e.trackId
       WHERE $_countablePredicate${since != null ? ' AND startedAt >= ?' : ''}
-      GROUP BY sourceKey
+      GROUP BY pt.sourceKey
       ORDER BY listenedMs DESC, playCount DESC
     ''', variables: [if (since != null) Variable.withInt(since)]).get();
     return [
@@ -622,22 +626,20 @@ class PlayStatisticsRepository {
 
   /// 某一天的播放明细（热力图点按弹层用；不含 error 事件）。
   Future<DayPlayEvents> dayEvents(DateTime day) async {
-    final db = _db;
     final start = DateTime(day.year, day.month, day.day);
     final end = start.add(const Duration(days: 1));
-    final events = db.playEvents;
-    final rows = await (db.select(events)
-          ..where((t) =>
-              _countableSince(null) &
-              t.startedAt
-                  .isBiggerOrEqualValue(start.millisecondsSinceEpoch) &
-              t.startedAt.isSmallerThanValue(end.millisecondsSinceEpoch))
-          ..orderBy([
-            (t) => OrderingTerm.asc(t.startedAt),
-            (t) => OrderingTerm.asc(t.id),
-          ]))
-        .get();
-    final playEvents = await _eventsWithPayloads(rows);
+    final rows = await _db.customSelect(
+      '$_eventSelect WHERE $_countablePredicate '
+      'AND e.startedAt >= ? AND e.startedAt < ? '
+      'ORDER BY e.startedAt ASC, e.id ASC',
+      variables: [
+        Variable.withInt(start.millisecondsSinceEpoch),
+        Variable.withInt(end.millisecondsSinceEpoch),
+      ],
+    ).get();
+    final playEvents = [
+      for (final row in rows) _eventFromQueryRow(row.data),
+    ];
     var listenedMs = 0;
     var playCount = 0;
     for (final event in playEvents) {
@@ -656,16 +658,12 @@ class PlayStatisticsRepository {
   Future<List<PlayEvent>> listEventsForExport({
     int limit = PlayStatisticsLimits.exportEventLimit,
   }) async {
-    final events = _db.playEvents;
-    final rows = await (_db.select(events)
-          ..where((t) => t.endedAt.isNotNull())
-          ..orderBy([
-            (t) => OrderingTerm.desc(t.startedAt),
-            (t) => OrderingTerm.desc(t.id),
-          ])
-          ..limit(limit))
-        .get();
-    return _eventsWithPayloads(rows);
+    final rows = await _db.customSelect(
+      '$_eventSelect WHERE e.endedAt IS NOT NULL '
+      'ORDER BY e.startedAt DESC, e.id DESC LIMIT ?',
+      variables: [Variable.withInt(limit)],
+    ).get();
+    return [for (final row in rows) _eventFromQueryRow(row.data)];
   }
 
   /// 同步导出：全部已收尾事件。
@@ -680,33 +678,35 @@ class PlayStatisticsRepository {
     if (cached != null) return cached;
     final rows = await _loadExportRows();
     _exportRows = rows;
-    final payloads = _exportPayloads ?? const <(String, String), String>{};
-    // 按曲补齐载荷：大字段按引用共享，不逐行复制。
+    final payloads = _exportPayloads ?? const <int, String>{};
+    // 按曲补齐载荷：同一份字符串按引用共享（只复制行 Map，不复制大字段）；
+    // `trackId` 只在缓存内部用于按曲补齐，不进导出记录（见 [_selfContainedEvent]）。
     _exportList = List.unmodifiable([
       for (final row in rows.values)
-        {
-          ...row,
-          'raw': payloads[
-                (row['sourceKey'] as String? ?? '', row['songId'] as String? ?? '')
-              ] ??
-              '',
-        },
+        Map<String, Object?>.of(row)
+          ..remove('trackId')
+          ..['raw'] = payloads[(row['trackId'] as num?)?.toInt() ?? -1] ?? '',
     ]);
     return _exportList!;
   }
 
   /// 全量加载导出缓存（含 `syncKey` 回填）；只在首次导出 / 缓存失效后执行。
+  ///
+  /// 行 = 事件 + 曲目内容（键名与 v5 之前一致），载荷解码一次后按曲另存
+  /// （[_exportPayloads]），行里只留空占位。
   Future<Map<int, Map<String, Object?>>> _loadExportRows() async {
     final db = _db;
-    // 导出行直接复用列名映射（远端按列名取值；不要改成类型化行）。
     final rows = await db
-        .customSelect('SELECT * FROM play_events WHERE endedAt IS NOT NULL')
+        .customSelect('$_eventSelect WHERE e.endedAt IS NOT NULL')
         .get();
-    _exportPayloads = await _loadTrackPayloads();
+    final payloads = <int, String>{};
     final result = <int, Map<String, Object?>>{};
     final backfilled = <(int, String)>[];
     for (final row in rows) {
       final data = row.data;
+      final trackId = (data['trackId'] as num?)?.toInt() ?? -1;
+      final payload = decodeStatsPayload(data['raw']);
+      if (payload.isNotEmpty) payloads[trackId] = payload;
       var syncKey = data['syncKey'] as String?;
       if (syncKey == null || syncKey.isEmpty) {
         syncKey = _legacySyncKey(data);
@@ -716,9 +716,10 @@ class PlayStatisticsRepository {
       result[data['id'] as int? ?? -1] = {
         ...data,
         'syncKey': syncKey,
-        'raw': '',
+        'raw': null,
       };
     }
+    _exportPayloads = payloads;
     if (backfilled.isNotEmpty) {
       await db.transaction(() async {
         for (final (id, key) in backfilled) {
@@ -738,7 +739,7 @@ class PlayStatisticsRepository {
     if (_exportRows == null) return;
     final rows = await _db
         .customSelect(
-          'SELECT * FROM play_events WHERE id = ?',
+          '$_eventSelect WHERE e.id = ?',
           variables: [Variable.withInt(id)],
         )
         .get();
@@ -755,33 +756,14 @@ class PlayStatisticsRepository {
                 t.id.equals(id) & (t.syncKey.isNull() | t.syncKey.equals(''))))
           .write(PlayEventsCompanion(syncKey: Value(syncKey)));
     }
-    final raw = row['raw'] as String? ?? '';
-    if (raw.isNotEmpty) {
-      // 本行是该曲当前的载荷持有行（写入点保证最新行持有）：刷新载荷表。
-      _exportPayloads?[(
-        row['sourceKey'] as String? ?? '',
-        row['songId'] as String? ?? '',
-      )] = raw;
+    final trackId = (row['trackId'] as num?)?.toInt() ?? -1;
+    final payload = decodeStatsPayload(row['raw']);
+    if (payload.isNotEmpty) {
+      // 本曲当前载荷（内容行是唯一来源）：刷新按曲表，导出时共享这一份。
+      _exportPayloads?[trackId] = payload;
     }
-    _exportRows![id] = {...row, 'syncKey': syncKey, 'raw': ''};
+    _exportRows![id] = {...row, 'syncKey': syncKey, 'raw': null};
     _exportList = null;
-  }
-
-  /// 载荷表（每曲一份）：导出的载荷来源（行里的 `raw` 只在新est 持有行）。
-  Future<Map<(String sourceKey, String songId), String>>
-      _loadTrackPayloads() async {
-    final rows = await _db
-        .customSelect(
-          "SELECT sourceKey, songId, raw FROM play_events WHERE raw <> ''",
-        )
-        .get();
-    return {
-      for (final row in rows)
-        (
-          row.data['sourceKey'] as String? ?? '',
-          row.data['songId'] as String? ?? '',
-        ): row.data['raw'] as String? ?? '',
-    };
   }
 
   void _exportRemove(int id) {
@@ -813,37 +795,30 @@ class PlayStatisticsRepository {
   static const int maxRetainedEvents = 20000;
   static const Duration eventRetention = Duration(days: 365);
 
-  /// 启动维护：把存量「逐行重复的载荷」归并到每曲最新一行（载荷归属迁移）。
+  /// 载荷（gzip 后）总量预算：超出按「最近播放」（`updatedAt` 降序）保留，
+  /// 其余曲目清空 `raw`。
   ///
-  /// 幂等且廉价：先做一次存在性检查，不变量成立时只走一次索引扫描。返回清空
-  /// 的行数。只在升级后首次启动真正改动数据，之后每次启动都是空操作。
-  Future<int> dedupeTrackPayloads() async {
-    final duplicated = await _db.customSelect(
-      "SELECT 1 FROM play_events WHERE raw <> '' "
-      'GROUP BY sourceKey, songId HAVING COUNT(*) > 1 LIMIT 1',
-    ).get();
-    if (duplicated.isEmpty) return 0;
-    // 只保留每曲最新持有行的载荷：其余含载荷行清空（NOT IN 的 id 非空，无 NULL 陷阱）。
-    final cleared = await _db.customUpdate(
-      "UPDATE play_events SET raw = '' WHERE raw <> '' AND id NOT IN ("
-      "SELECT id FROM play_events p WHERE p.raw <> '' AND NOT EXISTS ("
-      "SELECT 1 FROM play_events q WHERE q.sourceKey = p.sourceKey "
-      "AND q.songId = p.songId AND q.raw <> '' AND (q.startedAt > p.startedAt "
-      'OR (q.startedAt = p.startedAt AND q.id > p.id))))',
-      updates: {_db.playEvents},
-    );
-    if (cleared > 0) _exportInvalidate();
-    return cleared;
-  }
+  /// 兜底用途：单条载荷大小由脚本决定（原样透传平台对象 2–8 KB；病态脚本
+  /// 可以更大），行数上限约束不了字节。清空只影响「点播参数」——历史 / 计数 /
+  /// 明细都不变，点播回退到重新解析；下次播放该曲会带回载荷。
+  static const int maxRetainedPayloadBytes = 16 * 1024 * 1024;
 
   /// 裁剪超出保留上限的已收尾事件；返回删除行数。
   ///
-  /// 启动维护调用（与 [closeStaleEvents] 同一时机），裁剪后导出缓存失效。
-  Future<int> pruneOldEvents({int? maxRows, Duration? retention}) async {
+  /// 启动维护调用（与 [closeStaleEvents] 同一时机）。除事件裁剪外还做两件
+  /// 收尾：内容行 GC（没有任何事件引用的曲目）与载荷字节预算裁剪。
+  Future<int> pruneOldEvents({
+    int? maxRows,
+    Duration? retention,
+    int? maxPayloadBytes,
+  }) async {
     final keep = maxRows ?? maxRetainedEvents;
     final window = retention ?? eventRetention;
+    final payloadBudget = maxPayloadBytes ?? maxRetainedPayloadBytes;
     final cutoff = _clock() - window.inMilliseconds;
     var deleted = 0;
+    var tracksDropped = 0;
+    var payloadsCleared = 0;
     await _db.transaction(() async {
       deleted += await _db.customUpdate(
         'DELETE FROM play_events WHERE endedAt IS NOT NULL AND endedAt < ?',
@@ -859,8 +834,37 @@ class PlayStatisticsRepository {
           updates: {_db.playEvents},
         );
       }
+      // 内容行 GC：该曲事件全被裁掉（或从未有事件）→ 删除内容行。
+      tracksDropped = await _db.customUpdate(
+        'DELETE FROM play_tracks WHERE id NOT IN ('
+        'SELECT DISTINCT trackId FROM play_events)',
+        updates: {_db.playTracks},
+      );
+      // 载荷字节预算：按最近播放保留，超出即清空（最坏情况兜底）。
+      final holders = await _db.customSelect(
+        'SELECT id, LENGTH(raw) AS bytes FROM play_tracks '
+        'WHERE raw IS NOT NULL ORDER BY updatedAt DESC, id DESC',
+      ).get();
+      var remaining = payloadBudget;
+      final drop = <int>[];
+      for (final row in holders) {
+        final bytes = (row.data['bytes'] as num?)?.toInt() ?? 0;
+        if (bytes <= remaining) {
+          remaining -= bytes;
+        } else {
+          drop.add((row.data['id'] as num).toInt());
+        }
+      }
+      if (drop.isNotEmpty) {
+        payloadsCleared = await _db.customUpdate(
+          'UPDATE play_tracks SET raw = NULL WHERE id IN ('
+          '${List.filled(drop.length, '?').join(', ')})',
+          variables: [for (final id in drop) Variable.withInt(id)],
+          updates: {_db.playTracks},
+        );
+      }
     });
-    if (deleted > 0) {
+    if (deleted > 0 || tracksDropped > 0 || payloadsCleared > 0) {
       _syncRevision++;
       _exportInvalidate();
       _notifyChanged();
@@ -881,8 +885,6 @@ class PlayStatisticsRepository {
     var applied = 0;
     var skipped = 0;
     final appliedIds = <int>[];
-    /// 落地了行的曲目：本轮结束时做一次载荷归位（见 [_keepPayloadOnNewestRow]）。
-    final touchedTracks = <(String, String)>{};
     await db.transaction(() async {
       for (final event in events) {
         final syncKey = event['syncKey'] as String? ?? '';
@@ -898,21 +900,30 @@ class PlayStatisticsRepository {
           counter: (event['versionCounter'] as num?)?.toInt() ?? 0,
           deviceId: event['originDeviceId'] as String? ?? '',
         );
+        final startedAt = (event['startedAt'] as num?)?.toInt() ?? 0;
+        // 内容行按内容时间取新（远端记录自包含：元数据 + 载荷；没带载荷时
+        // 不覆盖本机已有的取链参数）。
+        final trackId = await _upsertTrack(
+          sourceKey: sourceKey,
+          songId: songId,
+          title: event['title'] as String? ?? '',
+          artist: event['artist'] as String? ?? '',
+          album: event['album'] as String? ?? '',
+          coverUrl: event['coverUrl'] as String?,
+          durationMs: (event['durationMs'] as num?)?.toInt(),
+          payload: (event['raw'] as String?)?.isEmpty ?? true
+              ? null
+              : event['raw'] as String,
+          updatedAt: startedAt,
+        );
         final existing = await (db.select(db.playEvents)
               ..where((t) => t.syncKey.equals(syncKey))
               ..limit(1))
             .getSingleOrNull();
         if (existing == null) {
           final id = await db.into(db.playEvents).insert(PlayEventsCompanion.insert(
-                sourceKey: sourceKey,
-                songId: songId,
-                title: Value(event['title'] as String? ?? ''),
-                artist: Value(event['artist'] as String? ?? ''),
-                album: Value(event['album'] as String? ?? ''),
-                coverUrl: Value(event['coverUrl'] as String?),
-                durationMs: Value((event['durationMs'] as num?)?.toInt()),
-                raw: Value(event['raw'] as String? ?? '{}'),
-                startedAt: (event['startedAt'] as num?)?.toInt() ?? 0,
+                trackId: trackId,
+                startedAt: startedAt,
                 endedAt: Value(endedAt),
                 listenedMs: Value((event['listenedMs'] as num?)?.toInt() ?? 0),
                 maxPositionMs:
@@ -925,7 +936,6 @@ class PlayStatisticsRepository {
               ));
           appliedIds.add(id);
           applied++;
-          touchedTracks.add((sourceKey, songId));
         } else if (version.isNewerThan(existing.syncVersion) ||
             (!version.isOlderThan(existing.syncVersion) &&
                 !_eventMatches(existing, event))) {
@@ -946,11 +956,6 @@ class PlayStatisticsRepository {
         } else {
           skipped++;
         }
-      }
-      // 载荷归属：记录自带的 raw 只在该事件成为本曲最新时留下——远端事件比
-      // 本机旧时不抢载荷（载荷留在本机持有的最新行），否则归位到新行。
-      for (final (sourceKey, songId) in touchedTracks) {
-        await _keepPayloadOnNewestRow(sourceKey, songId);
       }
     });
     if (applied > 0) {
@@ -997,10 +1002,12 @@ class PlayStatisticsRepository {
     int limit = 1000,
   }) async {
     final rows = await _db.customSelect('''
-      SELECT title, artist, MAX(startedAt) AS lastAt
-      FROM play_events
-      WHERE endedAt IS NOT NULL
-      GROUP BY title, artist
+      SELECT pt.title AS title, pt.artist AS artist,
+             MAX(e.startedAt) AS lastAt
+      FROM play_events e
+      JOIN play_tracks pt ON pt.id = e.trackId
+      WHERE e.endedAt IS NOT NULL
+      GROUP BY pt.title, pt.artist
       ORDER BY lastAt DESC
       LIMIT ?
     ''', variables: [Variable.withInt(limit)]).get();
@@ -1036,45 +1043,53 @@ class PlayStatisticsRepository {
   }
 
   Future<List<_StatRow>> _statsRows(int? since) async {
-    final events = _db.playEvents;
-    final rows = await (_db.select(events)
-          ..where((t) => _countableSince(since))
-          ..orderBy([(t) => OrderingTerm.asc(t.startedAt)]))
-        .get();
+    final rows = await _db.customSelect(
+      'SELECT e.startedAt AS startedAt, e.listenedMs AS listenedMs, '
+      'pt.durationMs AS durationMs FROM play_events e '
+      'JOIN play_tracks pt ON pt.id = e.trackId '
+      'WHERE $_countablePredicate${since != null ? ' AND e.startedAt >= ?' : ''} '
+      'ORDER BY e.startedAt ASC',
+      variables: [if (since != null) Variable.withInt(since)],
+    ).get();
     return [
       for (final row in rows)
         _StatRow(
-          startedAt: row.startedAt,
-          listenedMs: row.listenedMs,
-          qualified: _isQualified(row.listenedMs, row.durationMs),
+          startedAt: _intOf(row.data['startedAt']),
+          listenedMs: _intOf(row.data['listenedMs']),
+          qualified: _isQualified(
+            row.data['listenedMs'],
+            (row.data['durationMs'] as num?)?.toInt(),
+          ),
         ),
     ];
   }
 
-  /// [payload] = 该曲的载荷（归属在别行时为读取侧补齐的值；缺省用本行）。
-  PlayEvent _eventFromRow(PlayEventRow row, {String? payload}) => PlayEvent(
-        id: row.id,
-        sourceKey: row.sourceKey,
-        songId: row.songId,
-        title: row.title,
-        artist: row.artist,
-        album: row.album,
-        coverUrl: row.coverUrl,
-        durationMs: row.durationMs,
-        raw: _decodeRaw(payload ?? row.raw),
-        startedAt: row.startedAt,
-        endedAt: row.endedAt,
-        listenedMs: row.listenedMs,
-        maxPositionMs: row.maxPositionMs,
-        endReason: PlayEventEndReason.fromStorage(row.endReason),
+  /// 明细查询行（[_eventSelect]：事件 + 曲目内容）→ 领域事件。
+  static PlayEvent _eventFromQueryRow(Map<String, Object?> row) => PlayEvent(
+        id: (row['id'] as num?)?.toInt() ?? 0,
+        sourceKey: row['sourceKey'] as String? ?? '',
+        songId: row['songId'] as String? ?? '',
+        title: row['title'] as String? ?? '',
+        artist: row['artist'] as String? ?? '',
+        album: row['album'] as String? ?? '',
+        coverUrl: row['coverUrl'] as String?,
+        durationMs: (row['durationMs'] as num?)?.toInt(),
+        raw: _decodeRaw(row['raw']),
+        startedAt: (row['startedAt'] as num?)?.toInt() ?? 0,
+        endedAt: (row['endedAt'] as num?)?.toInt(),
+        listenedMs: (row['listenedMs'] as num?)?.toInt() ?? 0,
+        maxPositionMs: (row['maxPositionMs'] as num?)?.toInt() ?? 0,
+        endReason: PlayEventEndReason.fromStorage(row['endReason'] as String?),
       );
 
   static int _intOf(Object? value) => (value as num?)?.toInt() ?? 0;
 
-  Map<String, dynamic> _decodeRaw(Object? raw) {
-    if (raw is! String || raw.isEmpty) return const {};
+  /// 载荷 → JSON 映射：gzip BLOB（v5 起）或文本（迁移期 / 直接注入的占位）。
+  static Map<String, dynamic> _decodeRaw(Object? raw) {
+    final json = raw is String ? raw : decodeStatsPayload(raw);
+    if (json.isEmpty) return const {};
     try {
-      final decoded = jsonDecode(raw);
+      final decoded = jsonDecode(json);
       if (decoded is Map) {
         return decoded.map((key, value) => MapEntry(key.toString(), value));
       }
