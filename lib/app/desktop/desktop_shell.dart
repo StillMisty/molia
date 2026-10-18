@@ -44,7 +44,7 @@ class DesktopShell extends StatelessWidget {
     required this.onOpenSearch,
     required this.onFocusSearch,
     required this.onSelectDestinationIndex,
-    required this.onToggleQueue,
+    required this.onOpenQueue,
     required this.onCloseQueuePanel,
   });
 
@@ -78,7 +78,7 @@ class DesktopShell extends StatelessWidget {
   final ValueChanged<int> onSelectDestinationIndex;
 
   /// 底栏队列按钮：跳播放页 + 让页内右栏切到队列 tab。
-  final VoidCallback onToggleQueue;
+  final VoidCallback onOpenQueue;
 
   /// Esc 的壳层命令（可配置的「关闭队列」）：队列并入播放页右栏后，
   /// 落点 = 收起队列视图（见壳层回调）。
@@ -144,7 +144,7 @@ class DesktopShell extends StatelessWidget {
                     onOpenPlayer: () => chrome.onDestinationSelected(
                       ShellDestination.nowPlaying,
                     ),
-                    onToggleQueue: onToggleQueue,
+                    onOpenQueue: onOpenQueue,
                   ),
       ),
     );

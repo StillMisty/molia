@@ -33,14 +33,14 @@ class DesktopNowPlayingBar extends StatelessWidget {
     super.key,
     required this.morph,
     required this.onOpenPlayer,
-    required this.onToggleQueue,
+    required this.onOpenQueue,
   });
 
   /// 稳定 Key：测试定位整条播放条（桌面骨架存在性）。
   static const Key shellKey = Key('desktopNowPlayingBar');
 
   /// 队列入口按钮的稳定 Key。
-  static const Key queueToggleKey = Key('desktopQueueToggle');
+  static const Key openQueueKey = Key('desktopOpenQueue');
 
   /// 音量按钮的稳定 Key。
   static const Key volumeButtonKey = Key('desktopVolumeButton');
@@ -68,7 +68,7 @@ class DesktopNowPlayingBar extends StatelessWidget {
   final VoidCallback onOpenPlayer;
 
   /// 队列入口：跳播放页并让页内右栏切到队列 tab。
-  final VoidCallback onToggleQueue;
+  final VoidCallback onOpenQueue;
 
   @override
   Widget build(BuildContext context) {
@@ -87,7 +87,7 @@ class DesktopNowPlayingBar extends StatelessWidget {
           const Expanded(flex: 4, child: _BarControls()),
           Expanded(
             flex: 3,
-            child: _BarActions(onToggleQueue: onToggleQueue),
+            child: _BarActions(onOpenQueue: onOpenQueue),
           ),
         ],
       ),
@@ -391,9 +391,9 @@ class _BarSeekSliderState extends State<_BarSeekSlider> {
 
 /// 右区：播放模式 + 音量 + 队列入口。
 class _BarActions extends StatelessWidget {
-  const _BarActions({required this.onToggleQueue});
+  const _BarActions({required this.onOpenQueue});
 
-  final VoidCallback onToggleQueue;
+  final VoidCallback onOpenQueue;
 
   @override
   Widget build(BuildContext context) {
@@ -431,12 +431,12 @@ class _BarActions extends StatelessWidget {
           panelKey: DesktopNowPlayingBar.volumePanelKey,
         ),
         M3EIconButton(
-          key: DesktopNowPlayingBar.queueToggleKey,
+          key: DesktopNowPlayingBar.openQueueKey,
           variant: M3EIconButtonVariant.standard,
           tooltip: l10n.playerBarQueue,
           icon: const Icon(Icons.queue_music_rounded),
           // 「跳播放页 + 切队列 tab」在任何窗口宽下都成立：按钮不置灰。
-          onPressed: onToggleQueue,
+          onPressed: onOpenQueue,
         ),
         const SizedBox(width: 4),
       ],

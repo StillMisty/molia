@@ -632,7 +632,7 @@ class _MyAppState extends State<MyApp>
           onSelectDestinationIndex: _selectVisibleDestinationAt,
           // 队列入口（底栏按钮）与 Esc 的「关闭队列」都要落回播放页右栏，
           // 由壳层持有控制器后分发。
-          onToggleQueue: _openQueue,
+          onOpenQueue: _openQueue,
           onCloseQueuePanel: _closeQueuePanel,
         ),
       );

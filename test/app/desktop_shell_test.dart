@@ -506,7 +506,7 @@ void main() {
     expect(playerTabIndex(tester), nowPlayingLyricsTabIndex, reason: '默认歌词页');
     expect(selectedRailIndex(tester), navIndexOf(ShellDestination.favorites));
 
-    await tester.tap(find.byKey(DesktopNowPlayingBar.queueToggleKey));
+    await tester.tap(find.byKey(DesktopNowPlayingBar.openQueueKey));
     await settleTransition(tester);
 
     expect(selectedRailIndex(tester), navIndexOf(ShellDestination.nowPlaying));
@@ -516,7 +516,7 @@ void main() {
     // 在播放页把 tab 切走，再回收藏点一次：重复请求同样生效（控制器每次都通知）。
     await tapPlayerTab(tester, Icons.lyrics_rounded);
     await tapRailItem(tester, railItem(Icons.favorite_border_rounded));
-    await tester.tap(find.byKey(DesktopNowPlayingBar.queueToggleKey));
+    await tester.tap(find.byKey(DesktopNowPlayingBar.openQueueKey));
     await settleTransition(tester);
     expect(playerTabIndex(tester), nowPlayingQueueTabIndex);
   });
@@ -530,7 +530,7 @@ void main() {
     await tapRailItem(tester, railItem(Icons.favorite_border_rounded));
     expect(
       tester
-          .widget<M3EIconButton>(find.byKey(DesktopNowPlayingBar.queueToggleKey))
+          .widget<M3EIconButton>(find.byKey(DesktopNowPlayingBar.openQueueKey))
           .onPressed,
       isNotNull,
       reason: '队列入口在任何窗口宽下都可点',
