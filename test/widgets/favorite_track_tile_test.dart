@@ -17,7 +17,8 @@ import '../support/fake_library_repository.dart';
 import '../support/fakes.dart';
 
 /// 收藏曲目行（歌手页 / 专辑页 / 搜索结果共用的唯一适配层）：
-/// 行内容词表（[Track.artistLabel]）+ 收藏态订阅 + 行尾菜单动作接线。
+/// 行内容词表（[Track.artistLabel]）+ 收藏态订阅 + 操作菜单动作接线
+/// （触摸端行尾 ⋮ / 桌面行表面右键）。
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
@@ -141,27 +142,21 @@ void main() {
   });
 
   testWidgets(
-    '桌面：⋮ hover 显现、右键打开同一份菜单（适配层不吞桌面增强）',
+    '桌面：行内无 ⋮，右键在落点弹出同一份菜单（适配层不吞桌面入口）',
     (tester) async {
       await pumpTile(tester);
 
-      Finder revealOpacity() => find
-          .descendant(
-            of: find.byType(HoverReveal),
-            matching: find.byType(AnimatedOpacity),
-          )
-          .first;
-      expect(tester.widget<AnimatedOpacity>(revealOpacity()).opacity, 0);
+      expect(
+        find.byIcon(Icons.more_vert_rounded),
+        findsNothing,
+        reason: '桌面入口是行表面右键，不再有行尾 ⋮',
+      );
 
-      final gesture = await tester.createGesture(kind: PointerDeviceKind.mouse);
-      await gesture.addPointer(location: Offset.zero);
-      addTearDown(gesture.removePointer);
-      await tester.pump();
-      await gesture.moveTo(tester.getCenter(find.byType(TrackRow)));
-      await tester.pumpAndSettle();
-      expect(tester.widget<AnimatedOpacity>(revealOpacity()).opacity, 1);
-
-      await tester.tap(find.byType(TrackRow), buttons: kSecondaryButton);
+      await tester.tapAt(
+        tester.getRect(find.byType(TrackRow)).center,
+        buttons: kSecondaryButton,
+        kind: PointerDeviceKind.mouse,
+      );
       await tester.pumpAndSettle();
       expect(find.text('收藏'), findsOneWidget);
       expect(find.text('加入列表'), findsOneWidget);

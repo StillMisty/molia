@@ -160,6 +160,10 @@ void main() {
           tester.getRect(find.byType(SettingsSectionCard).at(i)),
       ];
 
+  /// 设置首屏在场的标记：顶部「设置」标题行已移除（弹层 chrome 只剩内容），
+  /// 用第一个分区标题判断首屏在不在。
+  Finder settingsHome() => find.text('Appearance');
+
   /// 桌面宽屏打开真实设置弹层（顶栏入口路径：`showAdaptiveModalPage` 的
   /// 居中对话框分支，屏宽 0.9 夹取不触发）。
   Future<void> openWideSettingsSheet(
@@ -265,6 +269,22 @@ void main() {
     expect(find.byIcon(Icons.email_rounded), findsNothing);
   });
 
+  testWidgets('设置首屏：无「设置」标题行与关闭按钮（弹层 chrome 去除）', (tester) async {
+    await openWideSettingsSheet(tester);
+    expect(settingsHome(), findsOneWidget);
+
+    // 标题行整行移除（含关闭按钮）后，弹层顶部只剩内容：关闭走遮罩 /
+    // Esc / 下滑 / 系统返回。
+    expect(find.text('Settings'), findsNothing);
+    expect(
+      find.descendant(
+        of: find.byType(SettingsPage),
+        matching: find.byIcon(Icons.close_rounded),
+      ),
+      findsNothing,
+    );
+  });
+
   testWidgets('震动反馈：行在通用子页，默认开，关闭后即时生效并持久化', (tester) async {
     await pumpSettingsPage(tester);
     addTearDown(() => HapticsService.setEnabled(HapticsService.defaultEnabled));
@@ -328,8 +348,7 @@ void main() {
     expect(prefs.getString('color_base'), 'custom');
   });
 
-  testWidgets('基础配色副标题三态：壁纸 / 强调色 / 都不可用；仅壁纸 seed 时壁纸段可点',
-      (tester) async {
+  testWidgets('基础配色副标题三态：壁纸 / 强调色 / 都不可用；仅壁纸 seed 时壁纸段可点', (tester) async {
     await pumpSettingsPage(tester);
 
     // 都不可用：说明文案 + 壁纸段禁用（既有行为）。
@@ -724,7 +743,8 @@ void main() {
     await tester.tap(find.text('Cancel'));
     await tester.pumpAndSettle();
     expect(
-      ShortcutSettings.instance.inAppBindings.comboFor(ShortcutCommand.volumeUp),
+      ShortcutSettings.instance.inAppBindings
+          .comboFor(ShortcutCommand.volumeUp),
       const ShortcutCombo(key: LogicalKeyboardKey.arrowUp),
     );
 
@@ -835,7 +855,8 @@ void main() {
     await tester.tap(find.text('Cancel'));
     await tester.pumpAndSettle();
     expect(
-      ShortcutSettings.instance.inAppBindings.comboFor(ShortcutCommand.volumeUp),
+      ShortcutSettings.instance.inAppBindings
+          .comboFor(ShortcutCommand.volumeUp),
       const ShortcutCombo(key: LogicalKeyboardKey.space),
     );
 
@@ -1003,7 +1024,7 @@ void main() {
 
     await tester.tap(find.text('Open settings'));
     await tester.pumpAndSettle();
-    expect(find.text('Settings'), findsOneWidget);
+    expect(settingsHome(), findsOneWidget);
 
     // 进入通用子页（列表底部，先滚到可见）。
     final generalItem = find.byKey(const Key('settingsGeneralItem'));
@@ -1021,12 +1042,12 @@ void main() {
     await tester.binding.handlePopRoute();
     await tester.pumpAndSettle();
     expect(find.text('App Language'), findsNothing);
-    expect(find.text('Settings'), findsOneWidget);
+    expect(settingsHome(), findsOneWidget);
 
     // 回到首屏后再系统返回：弹层正常关闭。
     await tester.binding.handlePopRoute();
     await tester.pumpAndSettle();
-    expect(find.text('Settings'), findsNothing);
+    expect(settingsHome(), findsNothing);
     expect(find.text('Open settings'), findsOneWidget);
   });
 
@@ -1076,7 +1097,7 @@ void main() {
     await sendBack(tester, 'commitBackGesture');
     await tester.pumpAndSettle();
     expect(find.text('App Language'), findsNothing);
-    expect(find.text('Settings'), findsOneWidget);
+    expect(settingsHome(), findsOneWidget);
 
     // 回到首屏后再次提交：允许关闭弹层。
     await sendBack(tester, 'startBackGesture', backArgs(0));
@@ -1084,7 +1105,7 @@ void main() {
     await tester.pump();
     await sendBack(tester, 'commitBackGesture');
     await tester.pumpAndSettle();
-    expect(find.text('Settings'), findsNothing);
+    expect(settingsHome(), findsNothing);
     expect(find.text('Open settings'), findsOneWidget);
   });
 
@@ -1166,7 +1187,7 @@ void main() {
     await sendBack(tester, 'commitBackGesture');
     await tester.pumpAndSettle();
     expect(find.text('App Language'), findsNothing);
-    expect(find.text('Settings'), findsOneWidget);
+    expect(settingsHome(), findsOneWidget);
     expect(
       sheetBackScaleX(tester),
       1.0,
@@ -1215,7 +1236,7 @@ void main() {
 
     await sendBack(tester, 'commitBackGesture');
     await tester.pumpAndSettle();
-    expect(find.text('Settings'), findsNothing);
+    expect(settingsHome(), findsNothing);
     expect(find.text('Open settings'), findsOneWidget);
   });
 
@@ -1393,7 +1414,7 @@ void main() {
 
     await tester.tap(find.text('Open settings'));
     await tester.pumpAndSettle();
-    expect(find.text('Settings'), findsOneWidget);
+    expect(settingsHome(), findsOneWidget);
 
     // 列表在顶部继续下滑：设置首屏的滚动视图挂的是弹层控制器，
     // 拖动应联动收缩/关闭弹层（回归：内嵌 Navigator 路由遮蔽控制器）。
@@ -1404,15 +1425,14 @@ void main() {
         1500,
       );
       await tester.pumpAndSettle();
-      if (find.text('Settings').evaluate().isEmpty) break;
+      if (settingsHome().evaluate().isEmpty) break;
     }
 
     expect(find.text('Open settings'), findsOneWidget);
-    expect(find.text('Settings'), findsNothing);
+    expect(settingsHome(), findsNothing);
   });
 
-  testWidgets('数据与存储子页：统计开关在场（统计入口在首屏），返回退回首屏',
-      (tester) async {
+  testWidgets('数据与存储子页：统计开关在场（统计入口在首屏），返回退回首屏', (tester) async {
     await pumpSettingsPage(tester);
 
     // 统计入口在设置首屏「数据」卡（不再藏在数据子页里）。
@@ -1471,8 +1491,7 @@ void main() {
     );
   });
 
-  testWidgets('宽屏桌面：设置弹层加宽，首屏分区两列流式（奇偶左右交替）',
-      (tester) async {
+  testWidgets('宽屏桌面：设置弹层加宽，首屏分区两列流式（奇偶左右交替）', (tester) async {
     await openWideSettingsSheet(tester);
 
     // 桌面档弹层按 modal spec 加宽（1200 屏宽下 0.9 夹取为 1080，不生效）。

@@ -455,3 +455,25 @@
     已删列的索引）。回归：`test/drift/molia/migration_test.dart` 的
     「from v4 to v5」数据用例、`test/play_statistics_repository_test.dart` 的
     「曲目内容表」组。
+
+54. **横向滚动视图在桌面端「拖不动、滚轮不动」是两个独立成因**：
+    ①鼠标拖动被 `ScrollBehavior.dragDevices` 挡掉——默认集合不含
+      `PointerDeviceKind.mouse`，要 `ScrollConfiguration.of(context).copyWith(
+      dragDevices: {…dragDevices, PointerDeviceKind.mouse})` 才放开（跟手拖动还要求
+      内部是自由滚动档，如 `M3ECarousel.freeScroll`，否则仍是一步一张）；
+    ②横向轴只吃 `scrollDelta.dx`，普通滚轮给的是 `dy`，到不了横向 `ScrollPosition`——
+      要自己接 `Listener.onPointerSignal` 把 dy 攒成步进。自接信号时三个边界容易漏：
+      消费要经 `GestureBinding.instance.pointerSignalResolver` 占住这次信号（否则同一次
+      滚轮顺带把外层竖向页面带走，哪怕这一格还没攒够）、翻卡动画进行中与贴边方向不要
+      消费（让给外层滚动）、按累计阈值 + 动画去重（一次惯性连翻好几张）。
+    回归：`test/widgets/ai_dj_carousel_test.dart`（发现页卡片流两个平台形态都覆盖）。
+55. **`M3EMenu` 只能贴锚点组件的矩形弹出，按鼠标落点弹要绕开 `M3EMenu.entries`**：
+    `anchorBuilder` 锚定的是某个 widget 的矩形；行表面右键只拿到一个坐标，没有对应
+    组件。按落点弹用 `showM3EMenu` + 零尺寸 `Rect.fromLTWH(x, y, 0, 0)` 作锚点
+    （`bottomStart` 自落点向右下展开，贴屏幕边 / 空间不足由 M3E placer 夹取与上翻，
+    不要再算第二套边界）。坐标系必须与 `showM3EMenu` 插入的 overlay 一致——它固定
+    插进 **root overlay** 并按局部坐标摆位：`Overlay.of(context, rootOverlay: true)`
+    取 overlay 的渲染对象（`RenderBox`）`globalToLocal` 换算 `globalPosition`；
+    拿不到渲染对象时原样使用（根 overlay 无祖先变换，全局 = 局部）。唯一实现：
+    `lib/widgets/track_actions_menu.dart::showTrackActionsMenuAtPointer`
+    （触摸端 ⋮ 仍走 `M3EMenu.entries` 的组件锚点）。

@@ -1881,22 +1881,22 @@ class _FavoritesPageState extends State<FavoritesPage> {
           : (ctrl, shift) =>
               _onTrackRowTap(view, index, ctrl: ctrl, shift: shift),
       onLongPress: reorderActive ? null : () => _enterSelection(index),
-      swipeActions: (reorderActive || _selecting)
+      actions: (reorderActive || _selecting)
           ? null
-          : _trackSwipeActions(context, l10n, view, track),
+          : _trackRowActions(context, l10n, view, track),
     );
   }
 
-  /// 曲目左滑操作：加入列表 + 换源 + 移除类（按合集取语义）。
-  List<M3EListSwipeAction> _trackSwipeActions(
+  /// 曲目行操作（触摸端左滑胶囊 / 桌面右键菜单）：加入列表 + 换源 +
+  /// 移除类（按合集取语义）。
+  List<CollectionRowAction> _trackRowActions(
     BuildContext context,
     AppLocalizations l10n,
     _CollectionView view,
     PlaylistTrack track,
   ) {
     final playlistId = view.playlistId;
-    return collectionTrackRowSwipeActions(
-      context,
+    return collectionTrackRowActions(
       l10n: l10n,
       track: track,
       isFavorites: view.isFavorites,
@@ -1984,21 +1984,21 @@ class _FavoritesPageState extends State<FavoritesPage> {
               _onHistoryRowTap(view, index, ctrl: ctrl, shift: shift)
           : null,
       onLongPress: () => _enterSelection(index),
-      swipeActions: _selecting
+      actions: _selecting
           ? null
-          : _historySwipeActions(context, l10n, provider, entry),
+          : _historyRowActions(context, l10n, provider, entry),
     );
   }
 
-  /// 历史行左滑操作：加入列表 + 换源（非本地）+ 删除单条。
-  List<M3EListSwipeAction> _historySwipeActions(
+  /// 历史行操作（触摸端左滑胶囊 / 桌面右键菜单）：加入列表 + 换源（非本地）+
+  /// 删除单条。
+  List<CollectionRowAction> _historyRowActions(
     BuildContext context,
     AppLocalizations l10n,
     LibraryProvider provider,
     PlayHistoryEntry entry,
   ) {
-    return collectionHistoryRowSwipeActions(
-      context,
+    return collectionHistoryRowActions(
       l10n: l10n,
       entry: entry,
       onCopy: () => _copyToPlaylist(entries: [entry], includeHistory: false),
@@ -2012,8 +2012,8 @@ class _FavoritesPageState extends State<FavoritesPage> {
     );
   }
 
-  /// 本地歌曲单条删除（左滑入口）：先确认再按行来源删（下载副本删文件、
-  /// 导入项只移出列表、缓存行清缓存）。
+  /// 本地歌曲单条删除（行动作入口：触摸端左滑 / 桌面右键）：先确认再按行
+  /// 来源删（下载副本删文件、导入项只移出列表、缓存行清缓存）。
   Future<void> _deleteLocalSong(
     DownloadService service,
     CollectionLocalSong song,
@@ -2046,8 +2046,9 @@ class _FavoritesPageState extends State<FavoritesPage> {
 
   /// 本地歌曲列表：下载副本与导入的本地文件统一浏览。
   ///
-  /// 行内点播走 `local` 音源（离线可用）；左滑「加入列表 / 收藏 / 删除」，
-  /// 删除动作按记录来源区分文案（下载副本删文件、导入项只移出列表）。
+  /// 行内点播走 `local` 音源（离线可用）；行动作「加入列表 / 收藏 / 删除」
+  /// （触摸端左滑胶囊 / 桌面右键菜单），删除动作按记录来源区分文案
+  /// （下载副本删文件、导入项只移出列表）。
   Widget _buildLocalSongsBody(
     BuildContext context,
     AppLocalizations l10n,
@@ -2125,9 +2126,9 @@ class _FavoritesPageState extends State<FavoritesPage> {
               _onLocalSongRowTap(view, index, ctrl: ctrl, shift: shift)
           : null,
       onLongPress: () => _enterSelection(index),
-      swipeActions: _selecting
+      actions: _selecting
           ? null
-          : _localSongSwipeActions(
+          : _localSongRowActions(
               context,
               l10n,
               provider,
@@ -2139,8 +2140,9 @@ class _FavoritesPageState extends State<FavoritesPage> {
     );
   }
 
-  /// 本地歌曲行左滑操作：加入列表 + 收藏开关 + 删除（按记录来源区分文案）。
-  List<M3EListSwipeAction> _localSongSwipeActions(
+  /// 本地歌曲行操作（触摸端左滑胶囊 / 桌面右键菜单）：加入列表 + 收藏开关 +
+  /// 删除（按记录来源区分文案）。
+  List<CollectionRowAction> _localSongRowActions(
     BuildContext context,
     AppLocalizations l10n,
     LibraryProvider provider,
@@ -2152,8 +2154,7 @@ class _FavoritesPageState extends State<FavoritesPage> {
     PlaylistTrack playable() => song.toPlaylistTrack(
           addedAt: DateTime.now().millisecondsSinceEpoch,
         );
-    return localSongRowSwipeActions(
-      context,
+    return localSongRowActions(
       l10n: l10n,
       isFavorite: isFavorite,
       isCached: song.isCached,

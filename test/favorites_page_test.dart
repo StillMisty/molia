@@ -5,6 +5,7 @@ import 'dart:typed_data';
 
 import 'package:flutter/foundation.dart'
     show TargetPlatform, debugDefaultTargetPlatformOverride;
+import 'package:flutter/gestures.dart';
 import 'package:flutter/services.dart' show LogicalKeyboardKey;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:molia/data/catalog/catalog_service.dart';
@@ -201,8 +202,8 @@ DownloadedTrack _localSong(
 /// 「收藏」页 widget 测试。
 ///
 /// 覆盖：快捷播放（两次点击）、搜索按钮展开/收起、排序菜单、行尾 ♥、
-/// 左滑单曲管理（移除/删除记录）、长按多选批量操作、合集弹层
-/// （切换/新建/重命名/删除/拖拽排序）与常显滚动条。
+/// 单曲管理（触摸端左滑 / 桌面右键菜单的移除与删除记录）、长按多选批量操作、
+/// 合集弹层（切换/新建/重命名/删除/拖拽排序）与常显滚动条。
 ///
 /// 使用 [FakeLibraryRepository]（内存实现）：widget 测试处于 fake-async 区，
 /// 真实数据库 I/O 不会完成（导致加载动画永不停止）。
@@ -1170,6 +1171,38 @@ void main() {
     expect(sizes[1].width, moreOrLessEquals(sizes.first.width, epsilon: 0.01));
     expect(sizes[2].width, moreOrLessEquals(sizes.first.width, epsilon: 0.01));
   });
+
+  testWidgets('桌面：收藏行无左滑外壳，右键在落点弹菜单，「取消收藏」后该行消失', (tester) async {
+    await seedFavorites(tester);
+    await pumpFavorites(tester);
+
+    expect(
+      find.byType(SwipeRevealRow),
+      findsNothing,
+      reason: '桌面不再有鼠标左滑，行动作走行表面右键',
+    );
+
+    // 右键行内非中心点：菜单在落点展开（加入列表 / 换源 / 取消收藏）。
+    final rowRect = tester.getRect(
+      find.ancestor(of: find.text('Song A'), matching: find.byType(TrackRow)),
+    );
+    await tester.tapAt(
+      Offset(rowRect.left + 40, rowRect.center.dy),
+      buttons: kSecondaryButton,
+      kind: PointerDeviceKind.mouse,
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('加入列表'), findsOneWidget);
+    expect(find.text('换源'), findsOneWidget);
+    expect(find.text('取消收藏'), findsOneWidget);
+
+    await tester.tap(find.text('取消收藏'));
+    await tester.pumpAndSettle();
+    await flushLibraryReloads(tester);
+
+    expect(headlines(tester), ['Song B', 'Song C']);
+    expect(await repository.favoriteKeys(), hasLength(2));
+  }, variant: TargetPlatformVariant.only(TargetPlatform.linux));
 
   testWidgets('在自建列表收藏后不会跳回我的收藏（默认选择固定）', (tester) async {
     await importLove(tester);

@@ -10,7 +10,7 @@ import 'track_row.dart';
 
 /// 曲目行（行尾 ⋮ 菜单：收藏 / 加入列表）的收藏域适配层。
 ///
-/// 与 [TrackMenuTile] 的分工：行渲染、菜单形状与桌面 hover / 右键增强都在
+/// 与 [TrackMenuTile] 的分工：行渲染、菜单形状与桌面行表面右键入口都在
 /// [TrackMenuTile]，本组件只负责「行内容从哪来、收藏态怎么订阅」。歌手页 /
 /// 专辑页共用 [FavoriteTrackTile.track]：
 /// - [FavoriteTrackTile.track]：领域曲目（歌手页 / 专辑页），标题 / 歌手

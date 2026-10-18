@@ -454,7 +454,6 @@ class _SettingsHomeViewState extends State<_SettingsHomeView>
     final sourceSwapSettings = context.watch<SourceSwapSettings?>();
     final sources = context.read<SourcesProvider?>();
     final lyricsDisplay = context.watch<LyricsDisplayProvider?>();
-    final m3e = M3ETheme.of(context);
     // 两列流式需要比单列舒适行宽（`maxWidth`）更宽的画布：上限取设置弹层
     // 宽度，两列各占约半宽；单列沿用 `maxWidth` 不变。判据由壳层解析的
     // DesktopLayout 给出（`masterDetail` 的当前消费方只此一处）。
@@ -479,33 +478,6 @@ class _SettingsHomeViewState extends State<_SettingsHomeView>
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Padding(
-                    padding: const EdgeInsets.only(left: kSettingsSmallSpacing),
-                    child: Text(
-                      l10n.settingsTitle,
-                      // 页面标题走 M3E typeScale（与行内排版同一套 token；
-                      // 不再用 material 的 textTheme.headlineSmall）。
-                      style: m3e.typeScale.headlineSmall,
-                    ),
-                  ),
-                  Row(
-                    children: [
-                      M3EIconButton(
-                        variant: M3EIconButtonVariant.standard,
-                        // 关闭的是承载设置的弹层/对话框本体：用 pop 绕过
-                        // dismiss guard，子页打开时也整个关闭。
-                        onPressed: () =>
-                            Navigator.of(context, rootNavigator: true).pop(),
-                        icon: const Icon(Icons.close_rounded),
-                      ),
-                    ],
-                  ),
-                ],
-              ),
-              const SizedBox(height: kSettingsSectionSpacing),
               SettingsSectionGrid(
                 twoColumn: twoColumn,
                 children: [

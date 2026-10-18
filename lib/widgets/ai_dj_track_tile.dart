@@ -6,18 +6,21 @@ import '../domain/models/ai_dj.dart';
 import '../domain/models/track.dart';
 import '../l10n/app_localizations.dart';
 import '../providers/library_provider.dart';
+import '../utils/responsive.dart';
 import 'card_list_surface.dart';
 import 'library_cover.dart';
 import 'track_actions_menu.dart';
 
-/// AI 推荐卡（「今日推荐」列表项）：封面 + 歌名/歌手 + AI 理由 + ⋮ 操作。
+/// AI 推荐卡（「今日推荐」列表项）：封面 + 歌名/歌手 + AI 理由 + 操作菜单。
 ///
 /// 为什么不用 [TrackRow]：推荐理由是可换行的第二行信息，行高不固定；
 /// 表面仍走共享的 [CardListSurface]（M3E 列表规范 + 弹簧 morph），
 /// 与全 App 列表保持同一形状语言。
 ///
-/// 收藏收进行尾 ⋮ 菜单（与 `TrackMenuTile` 同一契约）：行尾只保留一个动作，
-/// 收藏态用「实心 ♥ + 取消收藏」图标 + 文案表达。
+/// 操作入口分平台：触摸端行尾常显 ⋮（[TrackActionsMenu]）；桌面端不渲染
+/// ⋮，行表面右键在落点弹同一份菜单（[showTrackActionsMenuAtPointer]）。
+/// 收藏收进菜单（与 `TrackMenuTile` 同一契约）：收藏态用「实心 ♥ +
+/// 取消收藏」图标 + 文案表达。
 class AiDjTrackTile extends StatelessWidget {
   const AiDjTrackTile({
     super.key,
@@ -59,8 +62,14 @@ class AiDjTrackTile extends StatelessWidget {
     final track = item.track;
     final artist = track.artistLabel;
     final reason = item.source.reason;
+    final actionMenu = _aiDjActionMenu(
+      context,
+      item: item,
+      onReplace: onReplace,
+      onNotInterested: onNotInterested,
+    );
 
-    return CardListSurface(
+    Widget surface = CardListSurface(
       position: calculateCardPosition(index, count),
       onPressed: busy ? null : onPlay,
       padding: const EdgeInsets.fromLTRB(12, 8, 4, 8),
@@ -110,80 +119,99 @@ class AiDjTrackTile extends StatelessWidget {
               ],
             ),
           ),
-          _RowActionsMenu(
-            item: item,
-            enabled: !busy,
-            onReplace: onReplace,
-            onNotInterested: onNotInterested,
-          ),
+          // 触摸端行尾 ⋮ 常显；桌面端入口是行表面右键，不再渲染 ⋮。
+          if (!isDesktopPlatform() && actionMenu != null)
+            TrackActionsMenu(
+              compact: true,
+              enabled: !busy,
+              tooltip: AppLocalizations.of(context)!.aiDjItemActions,
+              entries: actionMenu.entries,
+              onSelected: actionMenu.onSelected,
+            ),
         ],
       ),
     );
+
+    // 桌面：行表面右键在落点弹同一份菜单。生成中（busy）行内操作禁用，
+    // 右键与 ⋮ 一致不可开（[TrackActionsMenu.enabled] 的同一语义）。
+    if (isDesktopPlatform() && !busy && actionMenu != null) {
+      final _AiDjActionMenu menu = actionMenu;
+      surface = GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onSecondaryTapUp: (details) => showTrackActionsMenuAtPointer(
+          context: context,
+          globalPosition: details.globalPosition,
+          entries: menu.entries,
+          onSelected: menu.onSelected,
+        ),
+        child: surface,
+      );
+    }
+    return surface;
   }
 }
 
-/// 行尾 ⋮ 菜单：收藏（开关态）/ 换一首 / 不感兴趣。
+/// AI 推荐行的菜单定义（条目 + 选中处理）：触摸端 ⋮ 与桌面右键共用同一份。
+class _AiDjActionMenu {
+  const _AiDjActionMenu({required this.entries, required this.onSelected});
+
+  /// 菜单条目（收藏 / 换一首 / 不感兴趣）。
+  final List<M3EMenuEntry> entries;
+
+  /// 条目选中回调（值与条目的 `value` 对应）。
+  final ValueChanged<Object?> onSelected;
+}
+
+/// 构建 AI 推荐行的菜单定义：收藏（开关态）/ 换一首 / 不感兴趣。
 ///
-/// 单独包一层是把 [LibraryProvider] 的订阅限制在菜单内——收藏变化只重建
-/// 菜单，不整表重建。
-class _RowActionsMenu extends StatelessWidget {
-  const _RowActionsMenu({
-    required this.item,
-    required this.enabled,
-    required this.onReplace,
-    required this.onNotInterested,
-  });
-
-  final ResolvedRecommendation item;
-  final bool enabled;
-  final VoidCallback onReplace;
-  final VoidCallback onNotInterested;
-
-  @override
-  Widget build(BuildContext context) {
-    final l10n = AppLocalizations.of(context)!;
-    // 订阅收窄到「收藏版本」：菜单只显示收藏开关态，历史写入（每首歌一次）
-    // 不应让全部行的菜单重建；Provider 实例用 read 取。
-    context.select<LibraryProvider?, int>(
-      (provider) => provider?.favoritesRevision ?? -1,
-    );
-    final library = context.read<LibraryProvider?>();
-    if (library == null) return const SizedBox.shrink();
-    final Track track = item.track;
-    final favorite = library.isFavorite(track.id.sourceKey, track.id.id);
-    return TrackActionsMenu(
-      compact: true,
-      enabled: enabled,
-      tooltip: l10n.aiDjItemActions,
-      entries: [
-        M3EMenuEntry(
-          label: favorite ? l10n.favoriteRemove : l10n.favoriteAdd,
-          leading: Icon(
-            favorite ? Icons.favorite_rounded : Icons.favorite_border_rounded,
-          ),
-          value: 'favorite',
+/// 为什么是函数而不是包装组件：菜单的呈现面分平台（触摸端常显 ⋮ / 桌面
+/// 右键落点），条目与选中处理必须两种入口共用一份。[LibraryProvider] 缺失
+/// 时返回 null（不提供收藏动作，调用方也不渲染入口）。
+_AiDjActionMenu? _aiDjActionMenu(
+  BuildContext context, {
+  required ResolvedRecommendation item,
+  required VoidCallback onReplace,
+  required VoidCallback onNotInterested,
+}) {
+  final l10n = AppLocalizations.of(context)!;
+  // 订阅收窄到「收藏版本」：菜单只显示收藏开关态，历史写入（每首歌一次）
+  // 不应让全部行的菜单重建；Provider 实例用 read 取。
+  context.select<LibraryProvider?, int>(
+    (provider) => provider?.favoritesRevision ?? -1,
+  );
+  final library = context.read<LibraryProvider?>();
+  if (library == null) return null;
+  final Track track = item.track;
+  final favorite = library.isFavorite(track.id.sourceKey, track.id.id);
+  return _AiDjActionMenu(
+    entries: [
+      M3EMenuEntry(
+        label: favorite ? l10n.favoriteRemove : l10n.favoriteAdd,
+        leading: Icon(
+          favorite ? Icons.favorite_rounded : Icons.favorite_border_rounded,
         ),
-        M3EMenuEntry(
-          label: l10n.aiDjReplaceItem,
-          leading: const Icon(Icons.refresh_rounded),
-          value: 'replace',
-        ),
-        M3EMenuEntry(
-          label: l10n.aiDjNotInterested,
-          leading: const Icon(Icons.visibility_off_rounded),
-          value: 'notInterested',
-        ),
-      ],
-      onSelected: (value) {
-        switch (value) {
-          case 'favorite':
-            library.toggleFavoriteTrack(track);
-          case 'replace':
-            onReplace();
-          case 'notInterested':
-            onNotInterested();
-        }
-      },
-    );
-  }
+        value: 'favorite',
+      ),
+      M3EMenuEntry(
+        label: l10n.aiDjReplaceItem,
+        leading: const Icon(Icons.refresh_rounded),
+        value: 'replace',
+      ),
+      M3EMenuEntry(
+        label: l10n.aiDjNotInterested,
+        leading: const Icon(Icons.visibility_off_rounded),
+        value: 'notInterested',
+      ),
+    ],
+    onSelected: (value) {
+      switch (value) {
+        case 'favorite':
+          library.toggleFavoriteTrack(track);
+        case 'replace':
+          onReplace();
+        case 'notInterested':
+          onNotInterested();
+      }
+    },
+  );
 }

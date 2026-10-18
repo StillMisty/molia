@@ -220,9 +220,14 @@
   单曲「换一首」「不感兴趣（可撤销）」与反馈面板；缓存有效期
   （`aiDjCacheTtlDays`，默认 1 天）只影响续推是否消费旧列表，不做过期提示，
   「上次更新」只在 AI 页与发现页推荐区展示。发现页 `AiDjCarousel` 用 carousel
-  原生槽位展示歌名/歌手（`applyDynamicTextContentTransform: false`），
-  功能未启用时整条隐藏；播放页不再有 AI 徽标。
-  首次开启隐私确认；定位与边界见 ADR-0002。
+  原生槽位展示歌名/歌手（`applyDynamicTextContentTransform: false`）：桌面端
+  鼠标拖拽跟手（松手吸附）、滚轮翻卡（自接指针信号把 `dy` 转成步进，横向滚动
+  视图默认只吃 `dx`），点卡滚到焦点位（`M3ECarouselController.animateToItem`）；
+  卡片流下方信息区显示焦点卡的歌名 · 歌手 + 推荐理由，随焦点变化更新，理由为空 /
+  焦点越界不渲染（`aiDjReasonPanel`）。「查看全部」进 AI 页的弹层不带关闭 X
+  （`showCloseButton: false`：页面自己的标题栏已有返回，避免双层 chrome，
+  关闭走遮罩 / Esc / 下滑 / 系统返回）。功能未启用时整条隐藏；播放页不再有
+  AI 徽标。首次开启隐私确认；定位与边界见 ADR-0002。
 - **跨设备数据同步（可选，默认关闭）**：同步歌单 / 收藏 / 音源脚本与配置 /
   跟人走的设置 / 听歌统计 / 播放历史 / 上次播放会话 / AI DJ 与凭证。信任模型是
   **同步口令即信任根**（加入即完全互信，无逐项审批），快照整体加密：根密钥 =
@@ -339,7 +344,8 @@
   （`lib/pages/source_swap_page.dart`：歌词 / 音频两个 tab，歌词侧为
   `LyricsSourceSearchView`，音频侧为 `SourceSwapView`；入口：歌曲信息页「换源」
   默认音频 tab、歌词页 FAB menu「换歌词」默认歌词 tab、收藏页合集（收藏 / 历史 /
-  自建列表）左滑默认音频 tab）点候选即试听（单曲「换源试听」上下文）、
+  自建列表）行动作（触摸端左滑胶囊 / 桌面右键菜单）默认音频 tab）点候选即试听
+  （单曲「换源试听」上下文）、
   确认后经 `LibraryProvider.replacePlaylistTrack` / `replaceHistoryEntry` 原位
   替换（仓库事务保 `sortOrder`/`addedAt`/`playedAt`，目标键已存在先确认去重），
   并经 `PlaybackProvider.replaceQueueTrack` 让队列中同 id 曲目跟随换源（新增
@@ -650,9 +656,11 @@
   RegisterEventHotKey / Linux `org.freedesktop.portal.GlobalShortcuts` 门户，**纯 Dart +
   D-Bus、零原生依赖**；只收字母 / 数字 / F1–F12 / 空格，默认全 Ctrl+Alt 前缀且默认关闭；
   注册结果 conflict/unsupported/declined 逐条记 `lastError` 并在设置页提示）。两组共用
-  `lib/services/shortcut_actions.dart` 的命令执行器。曲目行右键 = 现有 ⋮ 菜单同一动作域、
-  行尾操作 `HoverReveal` 桌面 hover/focus 才显（触摸端恒显）、可点元素手型光标（M3E 自带）、
-  收藏页桌面多选（Ctrl 点选 / Shift 范围 / Esc 退出，移动端长按语义不变）。
+  `lib/services/shortcut_actions.dart` 的命令执行器。曲目行操作入口 = 桌面行表面右键在
+  鼠标落点弹菜单（`lib/widgets/track_actions_menu.dart::showTrackActionsMenuAtPointer`）、
+  触摸端行尾 ⋮ 常显（队列行维持无 ⋮）、收藏页桌面同样走右键 / 触摸端左滑胶囊
+  （同一组动作）、可点元素手型光标（M3E 自带）、收藏页桌面多选（Ctrl 点选 /
+  Shift 范围 / Esc 退出，移动端长按语义不变）。
   Esc 裁决：`HardwareKeyboard` 处理器**全部执行、返回值不短路**（无法靠返回值
   裁决谁消费），页面级 / 弹层经 `lib/services/escape_claims.dart` 登记「此刻的
   Esc 归我」（判定现算，隐藏页 / 已关弹层不残留占用），壳层命中 Esc 命令前先让位
@@ -773,17 +781,25 @@
   `itemExtent = TrackRow.extentOf(context, tableColumns: …) + gap`，
   列表一律懒构建（发现详情滚到底自动加载下一页）。不要改回 `M3EListItem`（原因见 pitfalls #20）。
   收藏页四个合集共用一份列表脚手架 `lib/widgets/collection_track_list.dart`
-  （顺序列表 / 重排模式、搜索空态、左滑动作形状）；
+  （顺序列表 / 重排模式、搜索空态、行动作形状：触摸端左滑胶囊 `SwipeRevealRow` /
+  桌面右键菜单，动作描述 `CollectionRowAction`）；
   空态配方统一在 `lib/widgets/empty_state.dart`（图标 40 + 文案 + 可选行动，
   收藏 / 资料 / 发现共用，居中与页边距由调用方包一层），滚动位置簿记在
   `lib/widgets/collection_scroll_bookkeeping.dart`（调度器可注入，脱离 widget 树可单测），
   页内过滤 / 排序口径在 `lib/utils/collection_row_query.dart`。
-- 曲目行尾的 ⋮ 菜单统一走 `lib/widgets/track_actions_menu.dart`（发现详情 / 搜索结果 /
-  AI 推歌共用）：锚点固定 standard 图标按钮 + tooltip，条目一律「leading 图标 + 文案」，
-  收藏这类开关态用图标 + 文案表达（选中即关菜单，不留勾选态）。行本体（收藏 / 加入列表
-  两条动作 + 领域接线）见 `lib/widgets/track_menu_tile.dart`，发现详情与搜索结果共用，
-  领域状态由调用方 `select` 后传入；收藏域的行适配（歌手页 / 专辑页 / 收藏页 / 搜索行）
-  统一走 `lib/widgets/favorite_track_tile.dart`。
+- 曲目行操作菜单的呈现面分平台，唯一实现 `lib/widgets/track_actions_menu.dart`：
+  触摸端行尾常显 ⋮（搜索结果 / 发现详情 / 歌手·专辑页 / AI 推歌行；队列行维持
+  无 ⋮；锚点固定 standard 图标按钮 + tooltip），桌面端行尾无 ⋮、行表面右键在鼠标
+  落点弹同一份菜单（`showTrackActionsMenuAtPointer`：零尺寸锚点 + root overlay
+  坐标换算，贴边由 M3E placer 夹取）；条目一律「leading 图标 + 文案」，收藏这类
+  开关态用图标 + 文案表达（选中即关菜单，不留勾选态）。菜单定义（收藏 / 加入列表
+  两条动作 + 领域接线）见 `lib/widgets/track_menu_tile.dart`（`trackRowActionMenu` /
+  `…ForTrack` / `…ForSearchItem` 纯数据构造，行组件与自建行共用，领域状态由构造处
+  `select` 后传入）；收藏域的行适配（歌手页 / 专辑页）走
+  `lib/widgets/favorite_track_tile.dart`；收藏页合集的行动作由
+  `lib/widgets/collection_track_list.dart` 的 `collectionTrackRowActions` /
+  `collectionHistoryRowActions` / `localSongRowActions` 工厂产出，触摸端编译成
+  左滑胶囊（`collectionSwipeActions`）、桌面端直接作右键菜单条目。
 - 按钮选型（按作用对象与意图，已按 M3E 实测校正）：
   - 同一批对象的 2–3 个平级动作 → `M3EButtonGroup`（`standard` 间距；命令式动作
     组级统一 `tonal`，把 `selectedIndex` 恒留空、回调里直接分发，避免留下选中态）。

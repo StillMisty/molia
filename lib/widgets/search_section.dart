@@ -27,9 +27,10 @@ AppLocalizations _l10n(BuildContext context) =>
 
 /// 搜索结果区：类型分段（单曲 / 歌手 / 歌词）+ 各类型的结果列表与音源分页。
 ///
-/// 结果行是收藏页同形的 [TrackRow]（点击播放；行尾 ⋮ 菜单收藏 / 加入列表，
-/// 与 `TrackMenuTile` 同一份动作域），歌手类型用 [ArtistRow]（点击进歌手页）；
-/// 分段按渠道能力位显隐（脚本源只有单曲）。
+/// 结果行是收藏页同形的 [TrackRow]（点击播放；操作菜单收藏 / 加入列表，
+/// 与 `TrackMenuTile` 同一份动作域：触摸端行尾 ⋮、桌面端行表面右键），
+/// 歌手类型用 [ArtistRow]（点击进歌手页）；分段按渠道能力位显隐（脚本源
+/// 只有单曲）。
 class SearchSection extends StatefulWidget {
   const SearchSection({super.key, this.controller});
 
@@ -455,13 +456,14 @@ class _SearchResultsList extends StatelessWidget {
   }
 }
 
-/// 搜索结果行：点击播放；行尾 ⋮ 菜单收藏 / 加入列表（与 `TrackMenuTile` 共用
-/// [TrackRowActionsMenu]，条目 / 图标 / 语义与桌面 hover / 右键一致）。
+/// 搜索结果行：点击播放；操作菜单收藏 / 加入列表（与 `TrackMenuTile` 共用
+/// [trackRowActionMenuForSearchItem]，条目 / 图标 / 语义全 App 一致）。
 ///
-/// 行内容直接在 [TrackRow] 上构建（单列 / 表格两种版式共用），不走
-/// `FavoriteTrackTile` 适配层：表格列版式适配层不支持。行尾菜单用
-/// [TrackRowActionsMenu.searchItem]，收藏订阅与写入都在菜单内部。
-class _SearchResultTile extends StatefulWidget {
+/// 入口分平台：触摸端行尾常显 ⋮；桌面端不渲染 ⋮，行表面右键在落点弹菜单
+/// （[showTrackActionsMenuAtPointer]）。行内容直接在 [TrackRow] 上构建
+/// （单列 / 表格两种版式共用），不走 `FavoriteTrackTile` 适配层：表格列
+/// 版式适配层不支持。
+class _SearchResultTile extends StatelessWidget {
   const _SearchResultTile({
     super.key,
     required this.item,
@@ -480,34 +482,27 @@ class _SearchResultTile extends StatefulWidget {
   final bool tableColumns;
 
   @override
-  State<_SearchResultTile> createState() => _SearchResultTileState();
-}
-
-class _SearchResultTileState extends State<_SearchResultTile> {
-  /// 行尾 ⋮ 的外部打开句柄（桌面右键 → 同一份菜单）。
-  final TrackActionsMenuController _menu = TrackActionsMenuController();
-
-  @override
   Widget build(BuildContext context) {
-    final onTap = widget.onTap;
+    final onTap = this.onTap;
     final rowTap = onTap == null
         ? null
         : () {
             HapticsService.lightImpact();
             onTap();
           };
-    if (widget.tableColumns) {
-      return _buildTableRow(rowTap: rowTap);
+    final menu = trackRowActionMenuForSearchItem(context, item);
+    if (tableColumns) {
+      return _buildTableRow(context, rowTap: rowTap, menu: menu);
     }
-    return _buildSingleColumnRow(context, rowTap: rowTap);
+    return _buildSingleColumnRow(context, rowTap: rowTap, menu: menu);
   }
 
   /// 单列行（非宽屏 / 触摸端）：封面 + 标题 + 歌手 / 歌词片段副标题。
   Widget _buildSingleColumnRow(
     BuildContext context, {
     required VoidCallback? rowTap,
+    required TrackRowActionMenu menu,
   }) {
-    final item = widget.item;
     // 歌手链接能力位（同一平台固定）：内置平台为真时逐个歌手名可点。
     final sourceKey = item['source']?.toString() ?? '';
     final artistTapsEnabled = sourceKey.isNotEmpty &&
@@ -526,16 +521,19 @@ class _SearchResultTileState extends State<_SearchResultTile> {
       artists: artistLinks,
       coverUrl: _coverUrlOf(item),
       trailingText: durationText(_durationMsOf(item)),
-      position: calculateCardPosition(widget.index, widget.count),
+      position: calculateCardPosition(index, count),
       onTap: rowTap,
-      onSecondaryTap: _menu.open,
-      trailing: TrackRowActionsMenu.searchItem(item: item, controller: _menu),
+      onSecondaryTap: _onSecondaryTap(context, menu),
+      trailing: _trailing(context, menu),
     );
   }
 
   /// 宽屏表格行：标题 + 艺术家 / 专辑 / 时长列（列宽走默认规范，与表头同源）。
-  Widget _buildTableRow({required VoidCallback? rowTap}) {
-    final item = widget.item;
+  Widget _buildTableRow(
+    BuildContext context, {
+    required VoidCallback? rowTap,
+    required TrackRowActionMenu menu,
+  }) {
     final artist = _artistDisplayOf(item);
     return TrackRow(
       title: item['name']?.toString() ?? '',
@@ -547,11 +545,35 @@ class _SearchResultTileState extends State<_SearchResultTile> {
         album: _albumNameOf(item),
         duration: durationText(_durationMsOf(item)) ?? '',
       ),
-      position: calculateCardPosition(widget.index, widget.count),
+      position: calculateCardPosition(index, count),
       onTap: rowTap,
-      onSecondaryTap: _menu.open,
-      trailing: TrackRowActionsMenu.searchItem(item: item, controller: _menu),
+      onSecondaryTap: _onSecondaryTap(context, menu),
+      trailing: _trailing(context, menu),
     );
+  }
+
+  /// 行尾插槽：触摸端常显 ⋮；桌面端无 ⋮（入口改为行表面右键）。
+  Widget? _trailing(BuildContext context, TrackRowActionMenu menu) {
+    if (isDesktopPlatform()) return null;
+    return TrackActionsMenu(
+      entries: menu.entries,
+      onSelected: menu.onSelected,
+      tooltip: _l10n(context).trackActionsTooltip,
+    );
+  }
+
+  /// 桌面行表面右键 = 同一份菜单（在落点弹出）；触摸端不接次级手势。
+  void Function(Offset globalPosition)? _onSecondaryTap(
+    BuildContext context,
+    TrackRowActionMenu menu,
+  ) {
+    if (!isDesktopPlatform()) return null;
+    return (globalPosition) => showTrackActionsMenuAtPointer(
+          context: context,
+          globalPosition: globalPosition,
+          entries: menu.entries,
+          onSelected: menu.onSelected,
+        );
   }
 
   /// 首位艺术家；无艺术家信息返回空串（[TrackRow] 据此隐藏副标题行）。

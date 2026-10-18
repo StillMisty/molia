@@ -149,8 +149,7 @@ class QueueDisplay extends StatelessWidget {
                             calculateCardPosition(index, currentQueue.length),
                         onTap: () {
                           // 本地音源曲目：交给本地播放队列（恢复态自动续播）。
-                          playbackProvider
-                              .playLocalQueueItemById(track.id.uri);
+                          playbackProvider.playLocalQueueItemById(track.id.uri);
                         },
                       ),
                       if (!isLast) SizedBox(height: cardList.gap),
@@ -194,15 +193,13 @@ class QueueDisplay extends StatelessWidget {
   }
 }
 
-/// 队列「接下来」行：行内容 + 桌面的行尾 ⋮ 菜单（收藏开关 / 加入列表，与
-/// 搜索结果行共用 [TrackRowActionsMenu]）。
+/// 队列「接下来」行：行内容 + 桌面的行表面右键菜单（收藏开关 / 加入列表，
+/// 与搜索结果行共用 [trackRowActionMenuForTrack]）。
 ///
-/// 桌面端 ⋮ 随整行 hover / 焦点显现（[HoverReveal]），行表面右键打开同一
-/// 份菜单；触摸端维持现状（不加 ⋮，行内容逐像素不变）。
-///
-/// 为什么是 StatefulWidget：行要持有 [TrackActionsMenuController]——它必须
-/// 跟行同生命周期（建在 itemBuilder 里每次重建都会注册一份新回调）。
-class _QueueTrackRow extends StatefulWidget {
+/// 入口分平台：桌面端行表面右键在落点弹菜单；触摸端队列行无 ⋮、无右键
+/// （维持现状）。桌面判定挡在菜单定义之前——[trackRowActionMenuForTrack]
+/// 含逐行 `select` 订阅，触摸端不需要这份订阅。
+class _QueueTrackRow extends StatelessWidget {
   const _QueueTrackRow({
     required this.track,
     required this.position,
@@ -214,30 +211,25 @@ class _QueueTrackRow extends StatefulWidget {
   final VoidCallback onTap;
 
   @override
-  State<_QueueTrackRow> createState() => _QueueTrackRowState();
-}
-
-class _QueueTrackRowState extends State<_QueueTrackRow> {
-  /// 行尾 ⋮ 的外部打开句柄（行表面右键 → 同一份菜单）。
-  final TrackActionsMenuController _menu = TrackActionsMenuController();
-
-  @override
   Widget build(BuildContext context) {
-    final track = widget.track;
+    final TrackRowActionMenu? menu =
+        isDesktopPlatform() ? trackRowActionMenuForTrack(context, track) : null;
     return TrackRow(
       title: track.title,
       artist: track.artistLabel,
       coverUrl: _coverUrlOf(track),
       coverSize: 40,
-      position: widget.position,
+      position: position,
       trailingText: _formatDuration(track.duration),
-      onTap: widget.onTap,
-      onSecondaryTap: _menu.open,
-      // 触摸端队列行不加 ⋮（入口不藏也不加）；菜单本身只管收藏 / 加入列表，
-      // 收藏订阅与写入在 TrackRowActionsMenu 内部。
-      trailing: isDesktopPlatform()
-          ? TrackRowActionsMenu.track(track: track, controller: _menu)
-          : null,
+      onTap: onTap,
+      onSecondaryTap: menu == null
+          ? null
+          : (tapPosition) => showTrackActionsMenuAtPointer(
+                context: context,
+                globalPosition: tapPosition,
+                entries: menu.entries,
+                onSelected: menu.onSelected,
+              ),
     );
   }
 }
