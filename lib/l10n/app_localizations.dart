@@ -5389,7 +5389,7 @@ abstract class AppLocalizations {
   /// No description provided for @trackInfoTabTitle.
   ///
   /// In en, this message translates to:
-  /// **'Song info'**
+  /// **'Details'**
   String get trackInfoTabTitle;
 
   /// No description provided for @trackInfoEmpty.

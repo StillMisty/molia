@@ -3000,7 +3000,7 @@ class AppLocalizationsEn extends AppLocalizations {
   }
 
   @override
-  String get trackInfoTabTitle => 'Song info';
+  String get trackInfoTabTitle => 'Details';
 
   @override
   String get trackInfoEmpty => 'Nothing playing';

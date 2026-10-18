@@ -148,9 +148,9 @@ void main() {
 
     expect(tester.takeException(), isNull);
     expect(find.byType(LyricsQueueDots), findsOneWidget);
-    // 图标切换器/收起按钮不应出现。
-    expect(find.byIcon(Icons.queue_music_rounded), findsNothing);
-    expect(find.byIcon(Icons.lyrics_rounded), findsNothing);
+    // 图标切换器/收起按钮不应出现（桌面版式的 icon tab 也不在移动版式里）。
+    expect(find.byIcon(M3EIcons.queue_music_rounded), findsNothing);
+    expect(find.byIcon(M3EIcons.lyrics_rounded), findsNothing);
     expect(find.byIcon(Icons.expand_more_rounded), findsNothing);
     expect(find.byIcon(Icons.expand_less_rounded), findsNothing);
   });
@@ -327,7 +327,7 @@ void main() {
     );
   }
 
-  testWidgets('桌面版式：左播放器列 + 右「队列/歌词/信息」icon-only 三 tab（默认歌词）',
+  testWidgets('桌面版式：左播放器列 + 右「队列/歌词/详细」三 tab（默认歌词）',
       (tester) async {
     await pumpNowPlaying(
       tester,
@@ -338,13 +338,22 @@ void main() {
     expect(tester.takeException(), isNull);
     // 播放器列始终完整（大屏布局），没有迷你态。
     expect(tester.widget<Player>(find.byType(Player)).isLargeScreen, isTrue);
-    // 右侧三 tab：文字只留作无障碍名称（tab 行只显示 icon），顺序与移动端
-    // 圆点一致，默认激活歌词。
+    // 右侧三 tab：次 tab（图标 + 文案一行，不叠展开按钮），文案与移动端圆点
+    // 同一套词表，默认激活歌词。
     final tabs = tester.widget<M3ETabs>(find.byType(M3ETabs));
-    expect(tabs.tabs.map((tab) => tab.label).toList(), [null, null, null]);
+    expect(tabs.variant, M3ETabsVariant.secondary);
     expect(
-      tabs.tabs.map((tab) => tab.semanticLabel).toList(),
-      ['队列', '歌词', '歌曲信息'],
+      tabs.tabs.map((tab) => tab.label).toList(),
+      ['队列', '歌词', '详细'],
+    );
+    expect(
+      tabs.tabs.map((tab) => tab.icon).map((icon) => icon is Icon ? icon.icon : null).toList(),
+      [
+        M3EIcons.queue_music_rounded,
+        M3EIcons.lyrics_rounded,
+        M3EIcons.info_rounded,
+      ],
+      reason: 'tab 图标统一走 M3E 图标集（与 M3E 组件同一套字形）',
     );
     expect(tabs.selectedIndex, nowPlayingLyricsTabIndex);
     expect(find.byType(LyricsWidget), findsOneWidget);
@@ -353,14 +362,14 @@ void main() {
 
     // 切到队列 tab：队列页用 QueueDisplay，当前曲目由左侧播放器承载
     // （includeCurrent = false，不重复展示）。
-    await tester.tap(find.byIcon(Icons.queue_music_rounded));
+    await tester.tap(find.byIcon(M3EIcons.queue_music_rounded));
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 400));
     final queue = tester.widget<QueueDisplay>(find.byType(QueueDisplay));
     expect(queue.includeCurrent, isFalse);
 
     // 切到歌曲信息页：分页内容与移动版式的信息页一致。
-    await tester.tap(find.byIcon(Icons.info_rounded));
+    await tester.tap(find.byIcon(M3EIcons.info_rounded));
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 400));
     expect(find.byType(TrackInfoView), findsOneWidget);
@@ -370,7 +379,7 @@ void main() {
     await tester.pump(const Duration(milliseconds: 50));
   });
 
-  testWidgets('桌面版式：tab 行高按 M3ETabs 图标态 token（48）', (tester) async {
+  testWidgets('桌面版式：tab 行高按次 tab token（48）', (tester) async {
     await pumpNowPlaying(
       tester,
       desktopLayout: true,
@@ -381,7 +390,7 @@ void main() {
     expect(
       tester.getSize(bar).height,
       M3ETabTheme.defaults.height,
-      reason: '图标态 tab 行高 = M3ETabTheme.height（48），不叠自拟内边距',
+      reason: '次 tab（图标 + 文案一行）行高 = M3ETabTheme.height（48），不叠自拟内边距',
     );
 
     await tester.pump(const Duration(milliseconds: 50));
@@ -457,7 +466,7 @@ void main() {
     expect(find.byType(QueueDisplay), findsOneWidget);
 
     // 用户手动切回歌词后再请求：仍然生效（请求是动作不是状态）。
-    await tester.tap(find.byIcon(Icons.lyrics_rounded));
+    await tester.tap(find.byIcon(M3EIcons.lyrics_rounded));
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 400));
     expect(desktopTabIndex(tester), nowPlayingLyricsTabIndex);

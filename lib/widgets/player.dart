@@ -619,7 +619,8 @@ class _PlayerState extends State<Player> with TickerProviderStateMixin {
     );
   }
 
-  /// 「歌名 · 作者」单行块：超长省略（单行是为了给歌词/队列让出纵向空间）。
+  /// 标题块：桌面版式是「歌名 / 作者」两行，移动 / 平板大屏是「歌名 · 作者」
+  /// 单行（那里纵向空间优先让给歌词）。
   ///
   /// 标题块不带左侧竖条：它与进度把手同宽、同色、同形，上下相邻时会被读成
   /// 重复元素（用户反馈的「两根竖条」），且形似可拖动的把手却不可交互；
@@ -637,25 +638,44 @@ class _PlayerState extends State<Player> with TickerProviderStateMixin {
         ? _artistsLabel(context, displayTrack)
         : playbackProvider.lastPlayedArtists ?? _l10n(context).unknownArtist;
 
+    // 标题/作者与全 App 文本契约一致：onSurface / onSurfaceVariant；
+    // 强调色只给可交互控件（进度波浪/把手）。
+    final titleStyle = Theme.of(context).textTheme.titleLarge?.copyWith(
+          fontWeight: FontWeight.bold,
+          color: scheme.onSurface,
+        );
+    final artistStyle = Theme.of(context).textTheme.bodyMedium?.copyWith(
+          color: scheme.onSurfaceVariant,
+        );
+
+    if (widget.desktopLayout) {
+      return Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            header,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: titleStyle,
+          ),
+          if (artistText.isNotEmpty)
+            Text(
+              artistText,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: artistStyle,
+            ),
+        ],
+      );
+    }
+
     return Text.rich(
       TextSpan(
         children: [
-          TextSpan(
-            text: header,
-            // 标题/作者与全 App 文本契约一致：onSurface / onSurfaceVariant；
-            // 强调色只给可交互控件（进度波浪/把手）。
-            style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                  fontWeight: FontWeight.bold,
-                  color: scheme.onSurface,
-                ),
-          ),
+          TextSpan(text: header, style: titleStyle),
           if (artistText.isNotEmpty)
-            TextSpan(
-              text: '  ·  $artistText',
-              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                    color: scheme.onSurfaceVariant,
-                  ),
-            ),
+            TextSpan(text: '  ·  $artistText', style: artistStyle),
         ],
       ),
       maxLines: 1,
@@ -941,18 +961,20 @@ class _PlayerState extends State<Player> with TickerProviderStateMixin {
     );
   }
 
-  /// 大屏全屏播放器：与小屏同构（三封面堆叠 → 标题/作者 → 可拖动进度排），
+  /// 大屏全屏播放器：与小屏同构（三封面堆叠 → 歌名/作者 → 可拖动进度排），
   /// 封面按两轴可用空间自适应。
   Widget _buildLargeScreenPlayerLayout(
       Track? displayTrack, PlaybackProvider playbackProvider) {
     return LayoutBuilder(
       builder: (BuildContext context, BoxConstraints constraints) {
-        const double textSectionFixedHeight = 56.0;
+        // 标题块高度预算：桌面版式是两行（歌名 + 作者），移动 / 平板大屏单行。
+        final double textSectionFixedHeight =
+            widget.desktopLayout ? 52.0 : 56.0;
         const double seekSectionHeight = 56.0;
         const double spacingBelowArt = 2.0;
-        // 桌面版式多出的专辑行 + 传输控制排（md 播放键 56）（封面可用高度
-        // 要扣掉，否则矮窗口里进度排会被挤出可视区）。
-        final double desktopExtrasHeight = widget.desktopLayout ? 92.0 : 0.0;
+        // 桌面版式多出的传输控制排（md 播放键 56）与标题块间距 8：封面可用
+        // 高度要扣掉，否则矮窗口里进度排会被挤出可视区。
+        final double desktopExtrasHeight = widget.desktopLayout ? 64.0 : 0.0;
 
         // 封面两侧与文字块共用同一内边距：大屏封面的左右是硬边界
         // （导航轨 / 分栏线），堆叠不能贴上去。
@@ -991,9 +1013,7 @@ class _PlayerState extends State<Player> with TickerProviderStateMixin {
               child: _buildTrackInfo(context, displayTrack, playbackProvider),
             ),
             if (widget.desktopLayout) ...[
-              const SizedBox(height: 4),
-              _buildAlbumLine(context, displayTrack),
-              const SizedBox(height: 12),
+              const SizedBox(height: 8),
               _buildTransportRow(context, playbackProvider),
             ],
             const SizedBox(height: spacingBelowArt),
@@ -1001,26 +1021,6 @@ class _PlayerState extends State<Player> with TickerProviderStateMixin {
           ],
         );
       },
-    );
-  }
-
-  /// 桌面骨架播放页：标题块下补一行专辑（移动/平板大屏版式不显示，
-  /// 那里纵向空间优先留给歌词）。
-  Widget _buildAlbumLine(BuildContext context, Track? displayTrack) {
-    final album = displayTrack?.album?.trim() ?? '';
-    if (album.isEmpty) return const SizedBox.shrink();
-    return Padding(
-      padding: const EdgeInsets.symmetric(
-        horizontal: _contentHorizontalPadding,
-      ),
-      child: Text(
-        album,
-        maxLines: 1,
-        overflow: TextOverflow.ellipsis,
-        style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-              color: Theme.of(context).colorScheme.onSurfaceVariant,
-            ),
-      ),
     );
   }
 

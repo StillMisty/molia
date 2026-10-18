@@ -1618,7 +1618,7 @@
       }
     }
   },
-  "trackInfoTabTitle": "Song info",
+  "trackInfoTabTitle": "Details",
   "trackInfoEmpty": "Nothing playing",
   "trackInfoQuality": "Playing quality",
   "trackInfoQualityAvailable": "Available qualities",

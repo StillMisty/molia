@@ -2868,7 +2868,7 @@ class AppLocalizationsZh extends AppLocalizations {
   }
 
   @override
-  String get trackInfoTabTitle => '歌曲信息';
+  String get trackInfoTabTitle => '详细';
 
   @override
   String get trackInfoEmpty => '暂无播放曲目';

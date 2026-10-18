@@ -533,7 +533,7 @@ void main() {
     expect(playingBar(), findsNothing, reason: '已进播放页（底栏让位）');
 
     // 在播放页把 tab 切走，再回收藏点一次：重复请求同样生效（控制器每次都通知）。
-    await tapPlayerTab(tester, Icons.lyrics_rounded);
+    await tapPlayerTab(tester, M3EIcons.lyrics_rounded);
     await tapRailItem(tester, railItem(Icons.favorite_border_rounded));
     await tester.tap(find.byKey(DesktopNowPlayingBar.openQueueKey));
     await settleTransition(tester);
@@ -785,7 +785,7 @@ void main() {
 
     // Esc（可配置的「关闭队列」）：落点 = 在播放页里把队列视图收成默认页
     //（先手动切到队列 tab 才有可收的视图）。
-    await tapPlayerTab(tester, Icons.queue_music_rounded);
+    await tapPlayerTab(tester, M3EIcons.queue_music_rounded);
     expect(playerTabIndex(tester), nowPlayingQueueTabIndex);
     await tester.sendKeyEvent(LogicalKeyboardKey.escape);
     await settleTransition(tester);
@@ -797,14 +797,14 @@ void main() {
 
     // 播放页停在信息 tab：命令是「把队列视图收成默认页」，壳层看不到页内
     // tab，因此在播放页里一律回默认页。
-    await tapPlayerTab(tester, Icons.info_rounded);
+    await tapPlayerTab(tester, M3EIcons.info_rounded);
     expect(playerTabIndex(tester), nowPlayingInfoTabIndex);
     await tester.sendKeyEvent(LogicalKeyboardKey.escape);
     await settleTransition(tester);
     expect(playerTabIndex(tester), nowPlayingLyricsTabIndex);
 
     // 非播放页：no-op（不切目的地、不动页内 tab）。
-    await tapPlayerTab(tester, Icons.queue_music_rounded);
+    await tapPlayerTab(tester, M3EIcons.queue_music_rounded);
     await tapRailItem(tester, railItem(Icons.favorite_border_rounded));
     expect(playerTabIndex(tester), nowPlayingQueueTabIndex);
     await tester.sendKeyEvent(LogicalKeyboardKey.escape);
@@ -821,7 +821,7 @@ void main() {
       (tester) async {
     await pumpShell(tester, desktopShell: true);
     // 前提一：播放页停在队列 tab（Esc 的壳层命令是收起队列视图）。
-    await tapPlayerTab(tester, Icons.queue_music_rounded);
+    await tapPlayerTab(tester, M3EIcons.queue_music_rounded);
     expect(playerTabIndex(tester), nowPlayingQueueTabIndex);
 
     // 前提二：播放页的音量弹层打开（占用登记的 Esc 消费方）。
@@ -876,7 +876,7 @@ void main() {
     await pumpShell(tester, desktopShell: true);
 
     // 前提一：播放页停在队列 tab（Esc 的壳层命令是收起队列视图）。
-    await tapPlayerTab(tester, Icons.queue_music_rounded);
+    await tapPlayerTab(tester, M3EIcons.queue_music_rounded);
     expect(playerTabIndex(tester), nowPlayingQueueTabIndex);
 
     // 前提二：音量弹层打开，再把焦点 Tab 出弹层子树。

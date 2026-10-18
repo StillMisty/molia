@@ -1250,7 +1250,7 @@
       }
     }
   },
-  "trackInfoTabTitle": "歌曲信息",
+  "trackInfoTabTitle": "详细",
   "trackInfoEmpty": "暂无播放曲目",
   "trackInfoQuality": "本次播放音质",
   "trackInfoQualityAvailable": "可用音质",

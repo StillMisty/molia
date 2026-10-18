@@ -486,38 +486,37 @@ class _NowPlayingState extends State<NowPlaying>
         children: [
           SizedBox(
             width: _desktopPlayerColumnWidth,
-            // 大屏播放器布局：封面自适应 + 标题/作者/专辑 + 进度 + 传输控制
-            // （desktopLayout：专辑行与传输排在播放器列里，见 player.dart）。
+            // 大屏播放器布局：封面自适应 + 歌名/歌手两行 + 进度 + 传输控制
+            // （desktopLayout：传输排在播放器列里，见 player.dart）。
             child: Player(
               isLargeScreen: true,
               desktopLayout: true,
               morph: widget.morph,
             ),
           ),
-          // 两栏分界：M3E 竖线（outlineVariant / 主题线宽），不手写 1px 线。
-          const M3EDivider(axis: M3EDividerAxis.vertical),
           Expanded(
             child: Column(
               children: [
                 Padding(
-                  // tab 只留 icon：行高由 M3ETabTheme.height（图标态 48）
+                  // 次 tab（图标 + 文案一行）：行高由 M3ETabTheme.height（48）
                   // 决定，纵向不再叠加自拟内边距。
                   padding: const EdgeInsets.symmetric(horizontal: 16),
                   child: M3ETabs(
-                    // 与移动版式的圆点页序同一套标题与图标；文字只留作
-                    // 无障碍名称（tab 行只显示 icon）。
+                    // 次 tab：图标在文案左侧、同一行排布（桌面右栏是内容区里
+                    // 的分组切换，不是顶层导航）。
+                    variant: M3ETabsVariant.secondary,
                     tabs: [
                       M3ETab(
-                        icon: const Icon(Icons.queue_music_rounded),
-                        semanticLabel: l10n.queueTab,
+                        icon: const Icon(M3EIcons.queue_music_rounded),
+                        label: l10n.queueTab,
                       ),
                       M3ETab(
-                        icon: const Icon(Icons.lyrics_rounded),
-                        semanticLabel: l10n.lyricsTab,
+                        icon: const Icon(M3EIcons.lyrics_rounded),
+                        label: l10n.lyricsTab,
                       ),
                       M3ETab(
-                        icon: const Icon(Icons.info_rounded),
-                        semanticLabel: l10n.trackInfoTabTitle,
+                        icon: const Icon(M3EIcons.info_rounded),
+                        label: l10n.trackInfoTabTitle,
                       ),
                     ],
                     selectedIndex: _desktopTab,
