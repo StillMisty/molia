@@ -32,14 +32,18 @@ GTK 建窗 ~46ms + libmpv `dlopen` ~39ms + 引擎与首帧渲染 ~100ms；我们
 ## 3. 复测方法
 
 ```bash
-tool/agent/startup.sh                 # 构建 release 后采样 5 次，打印中位数
+tool/agent/startup.sh                 # Linux 桌面：构建 release 后采样 5 次，打印中位数
+tool/agent/startup.sh android         # Android：默认取运行中的模拟器（先 tool/agent/emu.sh start）
 tool/agent/startup.sh --runs 9        # 采样 9 次
 tool/agent/startup.sh --no-build      # 复用已有产物（只重测）
-tool/agent/startup.sh --window        # 在真实显示上跑（WSLg 会弹窗）
+tool/agent/startup.sh --window        # Linux：在真实显示上跑（WSLg 会弹窗）
 ```
 
-- 结果落在 `/tmp/opencode/molia/startup-<时间戳>/`：每轮原始日志 `run-N.log`
+- 结果落在 `/tmp/opencode/molia/startup-<平台>-<时间戳>/`：每轮原始日志 `run-N.log`
   + `summary.txt`（各阶段中位 / 最小 / 最大 / 原始样本）。
+- Android 模式会构建 release APK 并按设备 ABI 安装（`am start -W -S` 冷启动 + logcat
+  抓埋点）；汇总表里多一行 `Activity TotalTime`——那是 `am -W` 的系统口径（进程起到首帧
+  绘制），与应用自己的「首帧」不是同一把尺。
 - 脚本只删 `build/linux/x64/release/bundle`（install 产物），保留中间产物做增量构建。
   **不要** `rm -rf build/linux/x64/release`：那会连带删掉 media_kit_libs_linux
   下载的 `mimalloc-2.1.2.tar.gz`，而它的下载在受限网络下会失败（CMake 只报
@@ -117,9 +121,30 @@ I/O 空档。试法：在后台 isolate 里先 `DynamicLibrary.open` 一次（�
 | 引擎 + 框架 + 首帧渲染 | ~100ms | 见 §5.5，与界面树无关 |
 | Dart 侧装配（`molia.startup` 各阶段合计） | ~20ms | 省流探测、下载存储、drift 库打开；都是首帧内容或播放链路的前置 |
 
-## 7. 未覆盖
+## 7. Android 参考（模拟器，非真机）
 
-- **Android / iOS**：本机没有对应设备侧采样；这份数据只覆盖桌面。若要在 Android 上
-  复现，思路是 release APK + `adb shell am start -W`（TotalTime）配合 logcat 里的
-  `molia.startup` 行取中位；`tool/agent/startup.sh` 目前只实现了 Linux。
-- **Windows**：见 §2 说明（无 Windows 侧工具链）。
+2026-10-18 本机模拟器（`molia_api37`，x86_64）实测，release APK，
+`tool/agent/startup.sh android --no-build --runs 5`：
+
+| 口径 | 中位 | 最小 | 最大 |
+| --- | ---: | ---: | ---: |
+| `Activity TotalTime`（系统：进程起到首帧绘制） | 1353 | 1324 | 1387 |
+| 应用内「首帧」埋点 | 451 | 406 | 498 |
+| ├ 窗口就绪 | 16 | 4 | 412 |
+| ├ 本地数据/资料库栈 | 385 | 347 | 426 |
+| ├ 播放栈（含媒体会话） | 418 | 379 | 460 |
+| └ 同步栈 / 更新栈（已后移，与主题同刻） | 421 | 383 | 463 |
+
+- 模拟器比真机慢得多（x86_64 转译 + 宿主负载），抖动也大，只用于**相对比较**与冒烟：
+  release 包能正常启动、没有插件异常（这一步抓到过 `shared_preferences_android 2.5.0`
+  的 R8 冲突，见 `docs/pitfalls.md` #56）。
+- 绝对值不代表真机：真机的总时长应远低于这里的 1.3s；系统口径与应用埋点之差
+  （约 900ms）是进程 fork + 引擎初始化 + 首帧绘制，在模拟器上被放大得最厉害。
+- 本轮改动（§5.1–5.3）都是平台无关的 Dart 侧装配，Android 同样受益；上面的数字是
+  **同一次改动后**的参照值，没有做改动前的 Android A/B（模拟器方差不足以分辨几十毫秒）。
+
+## 8. 未覆盖
+
+- **iOS**：本机没有对应设备侧采样；做法同 Android（release 构建 + 平台日志）。
+- **Windows / 真机**：本机是 WSL2，没有 Windows 侧 Flutter SDK，Android 只有模拟器；
+  要精确数字需在目标机上跑 `tool/agent/startup.sh`（Linux 分支即可作桌面代理）。
