@@ -1,3 +1,4 @@
+import 'package:flutter/gestures.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:material_3_expressive/material_3_expressive.dart';
 import 'package:material_ui/material_ui.dart';
@@ -7,6 +8,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:molia/domain/models/ai_dj.dart';
 import 'package:molia/domain/models/track.dart';
 import 'package:molia/l10n/app_localizations.dart';
+import 'package:molia/pages/ai_dj_page.dart';
 import 'package:molia/providers/ai_dj_provider.dart';
 import 'package:molia/providers/library_provider.dart';
 import 'package:molia/providers/playback_provider.dart';
@@ -82,8 +84,9 @@ void main() {
     final prefs = await SharedPreferences.getInstance();
     if (withConfig) {
       await AiSettingsStore(
-            settings: testSettingsRegistry(
-                preferences: prefs, secrets: secrets)).saveConfig(
+              settings:
+                  testSettingsRegistry(preferences: prefs, secrets: secrets))
+          .saveConfig(
         const LlmConfig(
           baseUrl: 'https://api.example.com/v1',
           apiKey: 'sk-test',
@@ -98,8 +101,7 @@ void main() {
       libraryProvider: libraryProvider,
       recommendationService: generator,
       settingsStore: AiSettingsStore(
-            settings: testSettingsRegistry(
-                preferences: prefs, secrets: secrets)),
+          settings: testSettingsRegistry(preferences: prefs, secrets: secrets)),
     );
     await provider.init();
   }
@@ -186,9 +188,7 @@ void main() {
     await pumpCarousel(tester);
     final callsBefore = generator.calls;
 
-    for (var i = 0;
-        i < 6 && find.text('New batch').evaluate().isEmpty;
-        i++) {
+    for (var i = 0; i < 6 && find.text('New batch').evaluate().isEmpty; i++) {
       await tester.fling(
         find.byKey(const Key('aiDjCarousel')),
         const Offset(-400, 0),
@@ -278,5 +278,153 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.byKey(const Key('aiDjCarousel')), findsNothing);
+  });
+
+  // ── 桌面增强（鼠标拖动 / 滚轮翻卡 / 点卡对位 / 信息区）─────────────────
+  //
+  // contained 布局同时显示 3 张卡（可翻张数 = 卡数 − 3），因此桌面用例用
+  // 6 首的批次：拖动与滚轮才有可翻的空间。
+
+  /// 桌面用例的推荐列表（6 首 = 6 张歌曲卡 + 「换一批」卡）。
+  AiDjBatch desktopBatch() => _batch(0, 6);
+
+  /// 信息区当前展示的歌名行（歌名 · 歌手）。
+  Finder reasonTitleOf(int i) => find.text('Song $i · Artist');
+
+  testWidgets('桌面：鼠标拖动卡片流，信息区跟随焦点换卡', (tester) async {
+    generator.batchFactory = desktopBatch;
+    await pumpProvider();
+    await provider.grantConsent();
+    await provider.setEnabled(true);
+
+    await pumpCarousel(tester);
+
+    // 初始焦点是首卡：信息区显示首张的歌名与理由。
+    expect(find.byKey(const Key('aiDjReasonPanel')), findsOneWidget);
+    expect(reasonTitleOf(0), findsOneWidget);
+    expect(find.text('Reason 0'), findsOneWidget);
+
+    // 鼠标拖动（桌面才放开 dragDevices）：松手吸附到下一张。
+    await tester.drag(
+      find.byKey(const Key('aiDjCarousel')),
+      const Offset(-500, 0),
+      kind: PointerDeviceKind.mouse,
+    );
+    await tester.pumpAndSettle();
+
+    expect(reasonTitleOf(0), findsNothing);
+    expect(reasonTitleOf(1), findsOneWidget);
+    expect(find.text('Reason 1'), findsOneWidget);
+  }, variant: TargetPlatformVariant.only(TargetPlatform.linux));
+
+  testWidgets('桌面：滚轮翻卡（未到阈值不翻、到阈值翻一张）', (tester) async {
+    generator.batchFactory = desktopBatch;
+    await pumpProvider();
+    await provider.grantConsent();
+    await provider.setEnabled(true);
+
+    await pumpCarousel(tester);
+    expect(find.text('Reason 0'), findsOneWidget);
+
+    final center = tester.getCenter(find.byKey(const Key('aiDjCarousel')));
+
+    // 首卡再向上翻：没有上一张可翻，滚轮不生效（这次滚动留给外层页面）。
+    await tester.sendEventToBinding(
+      PointerScrollEvent(position: center, scrollDelta: const Offset(0, -60)),
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('Reason 0'), findsOneWidget);
+
+    // 单次位移不足阈值：只累计，不翻卡。
+    await tester.sendEventToBinding(
+      PointerScrollEvent(position: center, scrollDelta: const Offset(0, 20)),
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('Reason 0'), findsOneWidget);
+    expect(find.text('Reason 1'), findsNothing);
+
+    // 累计越过阈值：翻到下一张。
+    await tester.sendEventToBinding(
+      PointerScrollEvent(position: center, scrollDelta: const Offset(0, 25)),
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('Reason 1'), findsOneWidget);
+    expect(find.text('Reason 0'), findsNothing);
+
+    // 反向滚轮翻回上一张。
+    await tester.sendEventToBinding(
+      PointerScrollEvent(position: center, scrollDelta: const Offset(0, -60)),
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('Reason 0'), findsOneWidget);
+  }, variant: TargetPlatformVariant.only(TargetPlatform.linux));
+
+  testWidgets('桌面：点卡起播并把该卡移到焦点位，信息区换到该卡', (tester) async {
+    generator.batchFactory = desktopBatch;
+    await pumpProvider();
+    await provider.grantConsent();
+    await provider.setEnabled(true);
+
+    await pumpCarousel(tester);
+    expect(find.text('Reason 0'), findsOneWidget);
+
+    await tester.tap(find.text('Song 1'));
+    await tester.pumpAndSettle();
+
+    // 起播该首（队列仍从列表头开始，起始索引是点中的那张）。
+    expect(provider.status, AiDjStatus.playing);
+    expect(backend.lastRequest?.tracks.first.title, 'Song 0');
+    expect(backend.lastRequest?.startIndex, 1);
+    // 点中的卡滚到焦点位：信息区跟着落到它身上。
+    expect(reasonTitleOf(1), findsOneWidget);
+    expect(find.text('Reason 1'), findsOneWidget);
+    expect(find.text('Reason 0'), findsNothing);
+  }, variant: TargetPlatformVariant.only(TargetPlatform.linux));
+
+  testWidgets('焦点卡没有推荐理由：信息区整块不渲染', (tester) async {
+    generator.batchFactory = () => AiDjBatch(
+          items: [
+            for (var i = 0; i < 3; i++)
+              ResolvedRecommendation(
+                source: AiRecommendation(
+                  title: 'Song $i',
+                  artist: 'Artist',
+                ),
+                track: Track(
+                  id: TrackId('wy', '$i'),
+                  title: 'Song $i',
+                  artists: const [Artist(name: 'Artist')],
+                  duration: const Duration(seconds: 100),
+                  origin: TrackOrigin.builtin,
+                ),
+              ),
+          ],
+          generatedAt: DateTime.now(),
+        );
+    await pumpProvider();
+    await provider.grantConsent();
+    await provider.setEnabled(true);
+
+    await pumpCarousel(tester);
+
+    // 卡片流照常，信息区不留空块。
+    expect(find.byKey(const Key('aiDjCarousel')), findsOneWidget);
+    expect(find.text('Song 0'), findsOneWidget);
+    expect(find.byKey(const Key('aiDjReasonPanel')), findsNothing);
+  });
+
+  testWidgets('点「查看全部」打开 AI 页：弹层顶部不再有关闭按钮', (tester) async {
+    await pumpProvider();
+    await provider.grantConsent();
+    await provider.setEnabled(true);
+
+    await pumpCarousel(tester);
+
+    await tester.tap(find.byKey(const Key('aiDjManageButton')));
+    await tester.pumpAndSettle();
+
+    expect(find.byType(AiDjPage), findsOneWidget);
+    // 弹层 chrome 的 X 已去掉：关闭走遮罩 / Esc / 系统返回。
+    expect(find.byIcon(Icons.close_rounded), findsNothing);
   });
 }
