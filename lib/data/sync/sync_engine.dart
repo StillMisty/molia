@@ -134,6 +134,13 @@ class SyncEngine extends ChangeNotifier implements SyncSchedulerHost {
   /// 最近一轮推送/构建的快照（局域网端点直接返回给对端 GET）。
   SyncEnvelope? get lastEnvelope => _lastEnvelope;
 
+  /// 增量模式是否启用（注入 journal 的前提）。
+  ///
+  /// 组合根接线契约：`buildSyncStack` 必须传 `library.syncJournal`。
+  /// 未注入时引擎仍正确，但整体退化为「每轮全量」——全库指纹、整库加密
+  /// 推送、日志只写不裁；这条只读位供组合根冒烟测试守住接线。
+  bool get incrementalEnabled => _journal != null;
+
   /// 服务端语义（局域网增量端点 / WebDAV 日志文件）：按请求方游标返回
   /// 增量窗口；游标落后于窗口起点（条目已被裁剪）时返回全量快照（bootstrap）。
   Future<SyncEnvelope> serveJournal({required int since}) async {

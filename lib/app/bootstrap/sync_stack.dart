@@ -159,6 +159,11 @@ Future<SyncStack> buildSyncStack({
     known: SyncKnownRepository(
       databaseProvider: () => MoliaDatabase.instance,
     ),
+    // 增量日志：**引擎与仓库共用同一实例**——写入点在仓库侧追加、引擎侧
+    // 读窗口 / 按 ack 裁剪。漏传这一项不会报错，但引擎会整体退化为
+    // 「每轮全量快照」：全库指纹、整库加密推送、日志永不裁剪
+    // （历史缺陷：接线缺失时生产跑了两年的全量模式，测试全绿）。
+    journal: library.syncJournal,
     clock: () => DateTime.fromMillisecondsSinceEpoch(syncState.nowMs()),
   );
   engineRef = syncEngine;
