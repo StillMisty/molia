@@ -196,7 +196,9 @@
   由 `SourceFailure.from` 按类型名识别 `BuiltinHttpException`。providers/UI 只消费
   kind / l10nKey / retryable。
 - **听歌统计**：`play_events`（一次播放尝试一行，drift 本地库 v1）由
-  `PlayStatisticsRepository` 读写；聚合全部查询时计算，口径常量唯一来源是
+  `PlayStatisticsRepository` 读写；`raw`（取链参数）**每曲一份**、只落在该曲
+  最新一行（载荷归属，见 pitfalls #53），读取侧按曲补齐；聚合全部查询时计算，
+  口径常量唯一来源是
   `PlayStatisticsLimits`（有效播放 = `min(30s, 50%·时长)`，error 事件不计入
   计数/比率）。采集是 `PlayStatisticsService` 纯观察者——组合根把
   `PlaybackProvider` 快照 + position 接进去，**零改动播放内核**；
@@ -358,6 +360,10 @@
   （曾经 SQL / Dart / AI 三份手写，奇数时长上 AI 还差 1ms）；
 - **范围值类型**：`PlayStatisticsRange` + `startOf(now)` / `sinceMs(now)`
   （领域扩展）是范围 → 时间窗口的唯一映射，查询与热力图高亮共用；
+- **载荷归属**：`raw` 每曲一份、落 `startedAt` 最新行（`_keepPayloadOnNewestRow`；
+  裁剪按旧 → 新删，故放最新行），读取侧（`topTracks` / `dayEvents` /
+  `listEventsForExport` / 同步导出）按曲补齐，存量库由启动维护
+  `dedupeTrackPayloads()` 归并；
 - **一次快照**：`PlayStatisticsRepository.snapshot(since:)` 并发取回
   `ListeningStatisticsSnapshot`（汇总 / 榜单 / 日历 / 作息热力图 / 来源分布），
   统计页只渲染它（不再分开读 6 个查询）。

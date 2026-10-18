@@ -636,4 +636,159 @@ void main() {
     );
     expect(await repository.syncFingerprint(), isNot(started));
   });
+
+  group('载荷归属（raw 每曲一份）', () {
+    /// 播放同一曲三次（载荷 v1→v3），返回行 id。
+    Future<void> playSameTrack(List<String> values, {int base = 1000}) async {
+      for (var i = 0; i < values.length; i++) {
+        final id = await repository.startEvent(
+          sourceKey: 'wy',
+          songId: 'same',
+          title: '曲目',
+          raw: {'v': values[i]},
+          startedAt: base + i * 1000,
+        );
+        await repository.finishEvent(
+          id,
+          reason: PlayEventEndReason.completed,
+          listenedMs: 60000,
+          maxPositionMs: 60000,
+          endedAt: base + i * 1000 + 500,
+        );
+      }
+    }
+
+    Future<List<Map<String, Object?>>> payloadHolders() async => [
+          for (final row in await tableRows(db, 'play_events'))
+            if ((row['raw'] as String? ?? '').isNotEmpty) row,
+        ];
+
+    test('连续播放同一曲：载荷只留最新一行，读取侧按曲补齐', () async {
+      await playSameTrack(['v1', 'v2', 'v3']);
+
+      final holders = await payloadHolders();
+      expect(holders, hasLength(1), reason: '载荷每曲一份（不再逐条复制）');
+      expect(holders.single['raw'], '{"v":"v3"}');
+      expect(holders.single['startedAt'], 3000, reason: '持有行是该曲最新一行');
+
+      // 读取侧：三条事件都拿到该曲载荷（统计页点播参数按曲补齐）。
+      final events = await repository.listEventsForExport();
+      expect(events, hasLength(3));
+      expect(events.every((event) => event.raw['v'] == 'v3'), isTrue);
+      final top = await repository.topTracks();
+      expect(top.single.raw, {'v': 'v3'});
+      expect(top.single.playCount, 3);
+    });
+
+    test('裁剪删掉旧行后载荷仍在：点播参数不随旧行消失', () async {
+      final now = DateTime.now().millisecondsSinceEpoch;
+      await playSameTrack(['v1', 'v2', 'v3'], base: now);
+      await repository.pruneOldEvents(
+        maxRows: 1,
+        retention: const Duration(days: 3650),
+      );
+
+      final events = await repository.listEventsForExport();
+      expect(events, hasLength(1));
+      expect(events.single.raw, {'v': 'v3'}, reason: '载荷放最新行：裁剪后仍可点播');
+    });
+
+    test('同步导出：每条记录自包含（载荷按曲补齐）', () async {
+      await playSameTrack(['v1', 'v2']);
+
+      final exported = await repository.syncExportEvents();
+      expect(exported, hasLength(2));
+      for (final row in exported) {
+        expect((row['raw'] as String? ?? '').isNotEmpty, isTrue,
+            reason: '远端按记录独立落地，raw 必须补齐');
+        expect(jsonDecode(row['raw'] as String), {'v': 'v2'});
+      }
+    });
+
+    test('远端落地：更旧的事件不抢载荷，更新的事件归位', () async {
+      final localId = await repository.startEvent(
+        sourceKey: 'wy',
+        songId: 'same',
+        title: '本机',
+        raw: {'v': 'local'},
+        startedAt: 5000,
+      );
+      await repository.finishEvent(
+        localId,
+        reason: PlayEventEndReason.completed,
+        listenedMs: 60000,
+        maxPositionMs: 60000,
+        endedAt: 5500,
+      );
+
+      // 更旧的远端事件：载荷留在本机最新持有行。
+      await repository.syncApplyEvents([
+        {
+          'sourceKey': 'wy',
+          'songId': 'same',
+          'title': '远端旧',
+          'raw': '{"v":"old"}',
+          'startedAt': 3000,
+          'endedAt': 3500,
+          'syncKey': 'remote-old',
+          'versionPhysical': 9000,
+          'versionCounter': 0,
+          'originDeviceId': 'devB',
+        },
+      ]);
+      var holders = await payloadHolders();
+      expect(holders, hasLength(1));
+      expect(holders.single['raw'], '{"v":"local"}');
+      expect(holders.single['startedAt'], 5000);
+
+      // 更新的远端事件：载荷归位到新行。
+      await repository.syncApplyEvents([
+        {
+          'sourceKey': 'wy',
+          'songId': 'same',
+          'title': '远端新',
+          'raw': '{"v":"new"}',
+          'startedAt': 9000,
+          'endedAt': 9500,
+          'syncKey': 'remote-new',
+          'versionPhysical': 9001,
+          'versionCounter': 0,
+          'originDeviceId': 'devB',
+        },
+      ]);
+      holders = await payloadHolders();
+      expect(holders, hasLength(1));
+      expect(holders.single['raw'], '{"v":"new"}');
+      expect(holders.single['startedAt'], 9000);
+    });
+
+    test('启动维护：存量逐行重复的载荷归并到最新一行（幂等）', () async {
+      // 存量库（旧版本逐行存过一份）：直接插入，绕开 startEvent 的归位。
+      for (final (index, value) in ['v1', 'v2', 'v3'].indexed) {
+        await insertEvent(
+          songId: 'legacy',
+          raw: {'v': value},
+          startedAt: 1000 + index * 1000,
+          endedAt: 1500 + index * 1000,
+        );
+      }
+      await insertEvent(
+        songId: 'other',
+        raw: {'v': 'x'},
+        startedAt: 9000,
+        endedAt: 9500,
+      );
+
+      expect(await repository.dedupeTrackPayloads(), 2, reason: '清掉两条旧副本');
+      final holders = await payloadHolders();
+      expect(holders, hasLength(2));
+      expect(holders.map((row) => row['startedAt']), containsAll([3000, 9000]));
+
+      // 幂等：不变量成立后是空操作（每次启动都跑）。
+      expect(await repository.dedupeTrackPayloads(), 0);
+      // 归并后读取侧不受影响。
+      final top = await repository.topTracks();
+      expect(top.firstWhere((entry) => entry.songId == 'legacy').raw, {'v': 'v3'});
+    });
+  });
 }

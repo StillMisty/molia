@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:drift/drift.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:molia/data/molia_database.dart';
@@ -196,5 +198,42 @@ void main() {
     });
     expect(result.applied, 0);
     expect((await repoB.summary()).playCount, 0);
+  });
+
+  test('载荷每曲一份不影响线上记录：重复播放的导出记录逐条自包含', () async {
+    for (final (index, value) in ['v1', 'v2'].indexed) {
+      final id = await repoA.startEvent(
+        sourceKey: 'wy',
+        songId: 'same',
+        title: 'Song same',
+        raw: {'v': value},
+        startedAt: 1000 + index * 1000,
+      );
+      await repoA.finishEvent(
+        id,
+        reason: PlayEventEndReason.completed,
+        listenedMs: 60000,
+        maxPositionMs: 60000,
+        endedAt: 1500 + index * 1000,
+      );
+    }
+
+    final records =
+        (await adapterA.collect(fresh: true))[SyncCategory.statistics]!;
+    expect(records, hasLength(2));
+    for (final record in records) {
+      final raw = record.data!['raw'] as String? ?? '';
+      expect(raw.isNotEmpty, isTrue, reason: '远端按记录独立落地，raw 必须补齐');
+      expect(jsonDecode(raw), {'v': 'v2'});
+    }
+
+    // 对端落地后同样是「每曲一份」：载荷归到该曲最新一行。
+    await adapterB.apply({SyncCategory.statistics: records});
+    final holders = [
+      for (final row in await tableRows(dbB, 'play_events'))
+        if ((row['raw'] as String? ?? '').isNotEmpty) row,
+    ];
+    expect(holders, hasLength(1));
+    expect(holders.single['raw'], '{"v":"v2"}');
   });
 }
