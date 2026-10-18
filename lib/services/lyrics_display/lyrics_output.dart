@@ -52,8 +52,9 @@ class LyricsPresentation {
   /// 横向滚动的线性映射跨度（毫秒；-1 = 未知）。
   ///
   /// 无逐字数据时是当前行时间轴；匀速模式（[scrollFollowsSinging] 为 false）
-  /// 且该行有逐字数据时，Dart 侧换成「首词开始 → 末词结束」的演唱跨度，
-  /// 避免尾奏空档把文本拖走。
+  /// 且该行有逐字数据时，Dart 侧换成「首词开始 → 末词结束」的演唱跨度
+  /// （终点越过切行时刻时夹到行尾），避免尾奏空档把文本拖走、也保证切行前
+  /// 滚完。跟随演唱模式下这是行时间轴兜底口径，见 `CurrentLineView`。
   final int lineStartMs;
   final int lineEndMs;
 

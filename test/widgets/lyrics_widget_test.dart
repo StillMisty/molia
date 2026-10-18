@@ -356,7 +356,7 @@ void main() {
     );
   });
 
-  testWidgets('歌词页翻译只跟当前行显示，且不受输出侧开关影响', (tester) async {
+  testWidgets('歌词页每行显示自己的翻译，且不受输出侧开关影响', (tester) async {
     final settings = LyricsDisplaySettings();
     await pumpLyrics(
       tester,
@@ -367,24 +367,27 @@ void main() {
       ),
     );
 
-    // 当前行（12，偶数行有翻译）显示；其他行即使有翻译也不渲染。
+    // 偶数行（10 / 12 / 14）各自有翻译就渲染；奇数行无翻译不占位。
+    expect(find.text('译 10'), findsOneWidget);
     expect(find.text('译 12'), findsOneWidget);
-    expect(find.text('译 14'), findsNothing);
-    expect(find.text('译 10'), findsNothing);
+    expect(find.text('译 14'), findsOneWidget);
+    expect(find.text('译 11'), findsNothing);
 
     // 输出侧（桌面 / 通知 / 蓝牙）开关与歌词页无关。
     await settings.setTranslationEnabled(false);
     await tester.pump();
     expect(find.text('译 12'), findsOneWidget);
 
-    // 歌词页开关关闭后翻译消失（收起动画走完）。
+    // 歌词页开关关闭后所有行翻译消失（收起动画走完）。
     await settings.setPageTranslationEnabled(false);
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 500));
+    expect(find.text('译 10'), findsNothing);
     expect(find.text('译 12'), findsNothing);
+    expect(find.text('译 14'), findsNothing);
   });
 
-  testWidgets('行切换后上一行的翻译随该行一起消失', (tester) async {
+  testWidgets('行切换不改变其他行的翻译（逐行常显）', (tester) async {
     final settings = LyricsDisplaySettings();
     await pumpLyrics(
       tester,
@@ -396,12 +399,13 @@ void main() {
     );
     expect(find.text('译 12'), findsOneWidget);
 
-    // 推进到第 14 行（偶数行，也有翻译）：12 的翻译消失、14 的出现。
+    // 推进到第 14 行：12 不再是当前行，但它的翻译仍随行保留；
+    // 14 成为当前行后翻译同样在。
     backend.emit(_snapshot(positionSeconds: 70));
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 700));
     await tester.pump(const Duration(milliseconds: 700));
-    expect(find.text('译 12'), findsNothing);
+    expect(find.text('译 12'), findsOneWidget);
     expect(find.text('译 14'), findsOneWidget);
   });
 
@@ -417,13 +421,15 @@ void main() {
       ),
     );
 
-    // 默认关：罗马音不显示，翻译照常。
+    // 默认关：罗马音不显示；翻译逐行照常。
     expect(find.text('Roma 12'), findsNothing);
+    expect(find.text('Roma 14'), findsNothing);
     expect(find.text('译 12'), findsOneWidget);
 
     await settings.setPageRomaEnabled(true);
     await tester.pump();
     expect(find.text('Roma 12'), findsOneWidget);
+    expect(find.text('Roma 14'), findsOneWidget);
 
     await settings.setPageTranslationEnabled(false);
     await tester.pump();

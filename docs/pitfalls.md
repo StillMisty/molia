@@ -286,13 +286,17 @@
     最大化态只写 `window_maximized` 标记、不写几何；相应地恢复路径也不能
     「几何缺失就整体跳过」——「首次启动就最大化 → 退出」这类会话只有标记可读，
     跳过就等于最大化状态永远恢复不了（`WindowBoundsStore.loadMaximized()` 独立读取）。
-43. **桌面歌词滚动组的 `translationX` 符号**：滚动组（当前行 + 翻译 / 罗马音）强制
+43. **桌面歌词滚动组的 `translationX` 符号与行宽**：滚动组（当前行 + 翻译 / 罗马音）强制
     `Gravity.START`，对齐与横滚都在 `applyGroupScroll` 里用位移实现——`translationX`
     正 = 内容右移，与 `scrollX`（正 = 内容左移）相反。符号写反时：居中 / 右对齐把整行
     推到屏幕左外（首字被裁，短句如「我接着写」4 字会整句消失），长行滚动方向也反过来
     （越唱越往右、行尾永远露不出来）。未超宽时对齐取正位移、超宽后由 0 递减到 −溢出，
     两者共用 `x = alignedShift - scroll`；改动前先读 `docs/lyrics_display.md` §4 FR-3
-    的符号约定。
+    的符号约定。**行视图宽度必须取文本宽**（`scrollingRowWidth`，不是 `MATCH_PARENT`）：
+    位移是「行视图连自己的裁切边界一起走」，行视图只有视口宽时，移出视口的部分是
+    行视图自身边界裁掉的——行尾永远露不出来（表现为「长歌词滚动被截断」）；视口裁切
+    由 `contentHolder.clipChildren` 承担，溢出/对齐都按裁剪盒内宽算，不能拿行视图
+    `width` 当视口——拿行视图当视口时行尾会被它自己的边界裁掉。
 44. **悬浮窗位置要按「可用区」算，不能用 `resources.displayMetrics`**：
     `TYPE_APPLICATION_OVERLAY` 默认按 system bars / 刘海 insets 收边（fitTypes），
     `LayoutParams.x/y` 是安全区左上角起的偏移；edge-to-edge Activity 的
@@ -374,3 +378,19 @@
     `play-services-mlkit-barcode-scanning` 传递带入；若某天 Gradle 解析不到
     `GoogleApiAvailability`，在 `android/app/build.gradle*` 显式补
     `implementation("com.google.android.gms:play-services-base:18.0.1")`。
+49. **桌面歌词：横滚必须在切行前收尾，重建后要等整列布局完成再摆位**：
+    两个同源缺陷都来自「滚动只看词轴、摆位只看主行」：
+    ① 进度只看词轴：词轴越界（末词时间晚于下一行时间戳）时进度永远到不了 1，
+    或末词恰好在切行时刻收尾——切行时行尾还没露出来，表现为「长歌词滚动被
+    截断」。`CurrentLineView.playedFraction` 因此分两支：词轴能在行内收尾时按
+    词轴推进、位置整体提前 300ms；词轴越界或没有词轴时按行时间轴线性推进并
+    提前 300ms 收尾（夹进行长的 1/3）——行尾在切行前完整露出、留出可读时间。
+    匀速模式的跨度也在 Dart 侧夹到 tracker 的行尾
+    （`LyricsDisplayProvider._buildPresentation`）。行视图宽度与视口口径见第 43 条。
+    ② 重建（换行 / 翻译开关）后主行的 `onSizeChanged` 先于扩展行布局触发：
+    翻译 / 罗马音此时宽度还是 0，组偏移把它算到左缘（x=0），而**没有后续
+    回调纠正**（暂停时没有帧循环）——表现为「切翻译时闪到左侧再恢复」。纠正
+    挂在整列的 `addOnLayoutChangeListener`（ViewGroup 先 `onLayout()` 子视图、
+    后回调），在同一帧绘制前用真实宽度重摆；`DesktopLyricsOutput.start` 同步
+    按配置去重（`controls` 是每次现取的 unmodifiable map，按键值比较）——
+    不去重时任何设置变化都会触发重建，会放大这个闪动。

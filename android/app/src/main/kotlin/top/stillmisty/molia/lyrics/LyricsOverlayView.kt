@@ -28,7 +28,9 @@ import android.widget.TextView
 import androidx.annotation.DrawableRes
 import top.stillmisty.molia.R
 import kotlin.math.abs
+import kotlin.math.ceil
 import kotlin.math.max
+import kotlin.math.min
 
 /** 悬浮窗配置快照（由 Dart 侧下发；策略已在 Dart 侧应用）。 */
 internal data class OverlayConfig(
@@ -103,6 +105,18 @@ internal data class OverlayConfig(
 /** 逐字时间轴里的一个词（绝对毫秒）。 */
 internal data class OverlayWord(val text: String, val startMs: Long, val endMs: Long)
 
+/**
+ * 滚动组行宽：文本宽 + 余量（取整 / 阴影）。
+ *
+ * 横滚靠 `translationX` 位移整行，行视图必须比文本宽略大，位移后行尾才
+ * 不会被行视图自身的边界裁掉；视口裁切由宿主的裁剪盒负责。
+ */
+private fun scrollingRowWidth(paint: TextPaint, text: String): Int =
+    (ceil(paint.measureText(text)).toInt() + SCROLL_ROW_WIDTH_SLACK).coerceAtLeast(1)
+
+/** 滚动组行宽余量（像素）：取整误差 + 阴影扩散。 */
+private const val SCROLL_ROW_WIDTH_SLACK = 4
+
 /** 一次投送的行数据（Dart 侧策略结果）。 */
 internal data class OverlayPresentation(
     val title: String = "",
@@ -118,7 +132,8 @@ internal data class OverlayPresentation(
     /** 横向滚动映射：true = 跟随已唱边界（逐字）；false = 按行跨度线性匀速。 */
     val scrollFollowsSinging: Boolean = true,
     /** 横向滚动的线性映射跨度（-1 = 未知）：无逐字数据时是行时间轴，
-     *  匀速模式下 Dart 侧已换成「首词开始 → 末词结束」。 */
+     *  匀速模式下 Dart 侧已换成「首词开始 → 末词结束」（终点越过切行
+     *  时刻时夹到行尾）；跟随演唱模式下作为提前收尾的兜底口径。 */
     val lineStartMs: Long = -1L,
     val lineEndMs: Long = -1L,
     /** 当前行的逐字时间轴（null = 无逐字数据，按整行着色）。 */
@@ -168,15 +183,16 @@ private val EASE_ACCELERATE = PathInterpolator(0.3f, 0f, 0.8f, 0.15f)
  * - 位置时基不在这里：由宿主 [LyricsOverlayView] 持有 [LyricClock]，每帧
  *   把已纠偏的位置传进来（[applyAt]）。切行重建视图不会打断时基；
  * - 横向滚动按「已唱边界在整行中的比例」映射到溢出宽度：行首即动、行尾
- *   正好滚到位；匀速模式改按 [lineStartMs]/[lineEndMs] 线性映射。真实文本
- *   宽没有超过视图宽时恒不滚动；
+ *   正好滚到位；匀速模式改按 [lineStartMs]/[lineEndMs] 线性映射。行时间轴
+ *   可用时再取行时间轴进度兜底（提前 [SCROLL_END_LEAD_MS] 收尾），保证
+ *   切行前行尾已经完整露出；真实文本宽没有超过视口宽时恒不滚动；
  * - 词边界 x 坐标按 Layout 缓存（每帧只剩一次查询 + 插值），颜色用可变
  *   color span 而不是自绘：更新颜色不触发重新排版。
  */
 @SuppressLint("ViewConstructor")
 internal class CurrentLineView(context: Context) : TextView(context) {
 
-    /** 尺寸 / Layout 变化回调：宿主据此补一帧（偏移与裁剪都依赖视图宽）。 */
+    /** 尺寸 / Layout 变化回调：宿主据此补一帧（偏移与裁剪都依赖行宽 / 视口宽）。 */
     var onLayoutChanged: (() -> Unit)? = null
 
     private var words: List<OverlayWord> = emptyList()
@@ -223,7 +239,7 @@ internal class CurrentLineView(context: Context) : TextView(context) {
         val end = max(lineEndMs, words.lastOrNull()?.endMs ?: -1L)
         if (end <= 0 || positionMs >= end) return false
         // 无逐字数据且文本不超宽时，行内没有任何随时间变化的内容（不排帧）。
-        return words.isNotEmpty() || measuredTextWidth() > width
+        return words.isNotEmpty() || measuredTextWidth() > viewportWidth()
     }
 
     override fun onSizeChanged(w: Int, h: Int, oldw: Int, oldh: Int) {
@@ -249,6 +265,20 @@ internal class CurrentLineView(context: Context) : TextView(context) {
         }
         spans = nextSpans
         text = builder
+        syncPreferredWidth()
+    }
+
+    /**
+     * 行宽贴合文本宽（见 [scrollingRowWidth]）：横滚靠 `translationX` 位移整行，
+     * 行视图必须覆盖整段文本，否则位移后行尾会被行视图自身边界裁掉。
+     */
+    private fun syncPreferredWidth() {
+        val lp = layoutParams as? LinearLayout.LayoutParams ?: return
+        val desired = scrollingRowWidth(paint, text?.toString().orEmpty())
+        if (lp.width != desired) {
+            lp.width = desired
+            requestLayout()
+        }
     }
 
     private fun applyColors(positionMs: Long) {
@@ -269,16 +299,27 @@ internal class CurrentLineView(context: Context) : TextView(context) {
     }
 
     /**
-     * 目标偏移：真实文本宽超出视图宽时，按「已唱比例」把文本滚到对应
-     * 位置——行首即动、行尾正好滚到位；没有超出视图时恒为 0。
+     * 目标偏移：真实文本宽超出视口宽时，按「已唱比例」把文本滚到对应
+     * 位置——行首即动、行尾正好滚到位；没有超出视口时恒为 0。
      */
     private fun targetOffset(positionMs: Long): Float {
-        val viewWidth = width.toFloat()
-        if (viewWidth <= 0f) return 0f
+        val viewport = viewportWidth()
+        if (viewport <= 0f) return 0f
         val textWidth = measuredTextWidth()
-        val overflow = textWidth - viewWidth
+        val overflow = textWidth - viewport
         if (overflow <= 0f) return 0f
         return (playedFraction(positionMs) * overflow).coerceIn(0f, overflow)
+    }
+
+    /**
+     * 滚动视口宽：父级内容列（即裁剪盒内宽）；未挂载时退回自身宽。
+     *
+     * 不能用自己的 `width`：行视图宽贴合文本宽（见 [syncPreferredWidth]），
+     * 用它当视口会让所有行都被判成「不超宽」而不滚动。
+     */
+    private fun viewportWidth(): Float {
+        val parentWidth = (parent as? View)?.width ?: 0
+        return (if (parentWidth > 0) parentWidth else width).toFloat()
     }
 
     /** 单行真实文本宽：Layout 的行宽；未布局时退回 Paint 测量。 */
@@ -292,22 +333,50 @@ internal class CurrentLineView(context: Context) : TextView(context) {
     }
 
     /**
-     * 已唱比例（0..1）：
-     * - 跟随演唱（默认）：有词轴时取「已唱边界」在整行中的相对位置；
-     * - 匀速：按 [lineStartMs]/[lineEndMs] 线性推进（无词轴时恒按此口径）；
-     * - 两者都缺（无词轴且无行时间轴）时为 0，不滚动。
+     * 滚动进度（0..1），保证「切行前必滚完」：
+     * - 词轴能在行内收尾（末词不晚于切行时刻）时以词轴为准：取「已唱边界」
+     *   在整行中的相对位置，位置整体提前 [SCROLL_END_LEAD_MS]——速度节奏仍随
+     *   演唱起伏，行尾在切行前留出可读时间；
+     * - 词轴越界（末词晚于切行时刻）或没有词轴时，按 [lineStartMs]/[lineEndMs]
+     *   线性推进并提前收尾（匀速模式同此口径）；
+     * - 两者都缺时为 0，不滚动。
      */
     private fun playedFraction(positionMs: Long): Float {
-        if (!scrollFollowsSinging || words.isEmpty()) {
-            if (lineStartMs < 0 || lineEndMs <= lineStartMs) return 0f
-            return ((positionMs - lineStartMs).toFloat() / (lineEndMs - lineStartMs))
-                .coerceIn(0f, 1f)
+        if (scrollFollowsSinging && words.isNotEmpty() && wordsEndWithinLine()) {
+            sungFraction(positionMs + scrollLeadMs())?.let { return it }
         }
-        val edges = wordEdgeX() ?: return 0f
+        return pacedFraction(positionMs) ?: 0f
+    }
+
+    /** 词轴是否能在行内收尾（行时间轴未知时按可以处理，不做时间轴兜底）。 */
+    private fun wordsEndWithinLine(): Boolean =
+        lineStartMs < 0 || lineEndMs <= lineStartMs || words.last().endMs <= lineEndMs
+
+    /** 词轴口径的已完成比例；词轴还没布局时返回 null（下一帧再补）。 */
+    private fun sungFraction(positionMs: Long): Float? {
+        val edges = wordEdgeX() ?: return null
         val span = edges[edges.size - 1] - edges[0]
-        if (span <= 0f) return 0f
+        if (span <= 0f) return null
         val edgeX = playedEdgeX(edges, positionMs)
         return ((edgeX - edges[0]) / span).coerceIn(0f, 1f)
+    }
+
+    /**
+     * 行时间轴口径的进度；提前 [scrollLeadMs] 到达 1，保证行尾在切行前可见。
+     * 无有效行时间轴时返回 null。
+     */
+    private fun pacedFraction(positionMs: Long): Float? {
+        if (lineStartMs < 0 || lineEndMs <= lineStartMs) return null
+        val span = lineEndMs - lineStartMs
+        val denominator = max(1L, span - scrollLeadMs())
+        return ((positionMs - lineStartMs).toFloat() / denominator)
+            .coerceIn(0f, 1f)
+    }
+
+    /** 提前收尾量：夹到行长的三分之一内；行时间轴未知时为 0。 */
+    private fun scrollLeadMs(): Long {
+        if (lineStartMs < 0 || lineEndMs <= lineStartMs) return 0L
+        return min(SCROLL_END_LEAD_MS, (lineEndMs - lineStartMs) / 3)
     }
 
     /** 已唱边界在 Layout 坐标系中的 x（逐字词轴，词内线性插值）。 */
@@ -359,6 +428,9 @@ internal class CurrentLineView(context: Context) : TextView(context) {
     }
 
     private companion object {
+        /** 横向滚动提前收尾量（毫秒）：行时间轴兜底在切行前给行尾留可读时间。 */
+        const val SCROLL_END_LEAD_MS = 300L
+
         fun blend(from: Int, to: Int, fraction: Float): Int {
             val f = fraction.coerceIn(0f, 1f)
             val a = (Color.alpha(from) + (Color.alpha(to) - Color.alpha(from)) * f).toInt()
@@ -673,17 +745,18 @@ internal class LyricsOverlayView(
         return entries
     }
 
-    /** 构建内容列：当前行挂滚动回调、扩展行并入滚动组；行宽撑满窗口。 */
+    /** 构建内容列：当前行挂滚动回调、扩展行并入滚动组；滚动行宽取文本宽，其余撑满窗口。 */
     private fun buildColumn(entries: List<Entry>): LinearLayout {
         val column = LinearLayout(context).apply { orientation = VERTICAL }
         entryViews = mutableListOf()
         currentLineView = null
         scrollGroup = mutableListOf()
         for (entry in entries) {
+            val isScrolling = entry.isCurrent || entry.isExtended
             val view: TextView =
                 if (entry.isCurrent) {
                     CurrentLineView(context).also {
-                        it.onLayoutChanged = ::onLineLayoutChanged
+                        it.onLayoutChanged = ::reapplyGroupScroll
                         currentLineView = it
                     }
                 } else {
@@ -701,17 +774,13 @@ internal class LyricsOverlayView(
                 // 哨兵值（实测 1048576），系统「居中/右对齐」会把布局整体滚走
                 // （长文本被推出视口、短文本位置也不受控）；对齐由
                 // applyGroupScroll 的偏移统一实现。
-                gravity = if (entry.isCurrent || entry.isExtended) {
-                    Gravity.START
-                } else {
-                    rowGravity
-                }
+                gravity = if (isScrolling) Gravity.START else rowGravity
                 maxLines = 1
                 setSingleLine(true)
                 isSelected = false
                 isFocusable = false
                 isFocusableInTouchMode = false
-                if (entry.isCurrent || entry.isExtended) {
+                if (isScrolling) {
                     // 滚动组不做省略号截断：超宽部分随组偏移进出窗口。
                     ellipsize = null
                 } else {
@@ -722,12 +791,21 @@ internal class LyricsOverlayView(
             column.addView(
                 view,
                 LinearLayout.LayoutParams(
-                    LinearLayout.LayoutParams.MATCH_PARENT,
+                    // 滚动组行宽取文本宽（见 scrollingRowWidth），其余行撑满窗口。
+                    if (isScrolling) {
+                        scrollingRowWidth(view.paint, entry.text)
+                    } else {
+                        LinearLayout.LayoutParams.MATCH_PARENT
+                    },
                     LinearLayout.LayoutParams.WRAP_CONTENT,
                 ),
             )
             entryViews.add(view)
-            if (entry.isCurrent || entry.isExtended) scrollGroup.add(view)
+            if (isScrolling) scrollGroup.add(view)
+        }
+        // 整列（含扩展行）布局完成后重排滚动组偏移，见 [reapplyGroupScroll]。
+        column.addOnLayoutChangeListener { _, _, _, _, _, _, _, _, _ ->
+            reapplyGroupScroll()
         }
         return column
     }
@@ -832,8 +910,15 @@ internal class LyricsOverlayView(
         if (shouldKeepFrames()) scheduleFrame()
     }
 
-    /** 行视图尺寸 / Layout 变化：偏移与裁剪都依赖视图宽，补一帧。 */
-    private fun onLineLayoutChanged() {
+    /**
+     * 重新落位滚动组：行视图 / 整列布局完成后调用。
+     *
+     * 不能只依赖主行 [CurrentLineView.onLayoutChanged]：一次布局中主行先于
+     * 扩展行完成，扩展行的宽度此时还是 0，x 会被算成 0；列级回调在所有
+     * 滚动组成员拿到真实宽度后触发，保证同一帧绘制前摆位正确（暂停时没有
+     * 后续帧，必须在这里纠正）。
+     */
+    private fun reapplyGroupScroll() {
         applyFrame(advance = false)
         if (shouldKeepFrames()) scheduleFrame()
     }
@@ -851,30 +936,32 @@ internal class LyricsOverlayView(
 
     /**
      * 把滚动组按主行算出的目标偏移应用：
-     * - 文本未超宽：按配置对齐摆位（滚动组强制左对齐，这里用位移实现）；
+     * - 文本未超宽：按配置在视口内对齐摆位（滚动组强制左对齐，这里用位移实现）；
      * - 文本超宽：左缘起滚，主行偏移由进度驱动，扩展行按自身溢出裁剪——
-     *   翻译 / 罗马音跟主行一起滚、超出窗口的部分一起被裁掉（消失）。
+     *   翻译 / 罗马音跟主行一起滚、超出视口的部分一起被裁掉（消失）。
      *
      * 位移用 `translationX`（float）：慢速行（长行 / 高刷屏）每帧位移常常不足
-     * 1px，整像素滚动会退化成台阶；父级 contentHolder 已 `clipChildren`，
-     * 浮点位移的裁切行为与滚动一致。
+     * 1px，整像素滚动会退化成台阶。行视图宽度取文本宽（见 [scrollingRowWidth]），
+     * 位移不会把行尾裁在行视图自身边界内；浮点位移的裁切由 contentHolder 承担，
+     * 与滚动一致。
      *
      * 符号约定（勿对调）：`translationX` 正 = 内容右移——未超宽时按对齐摆位
      * 取正位移（居中 / 右对齐向右摆，左对齐为 0），超宽后由 0 递减到负溢出
      * （文本向左滚，行尾正好滚到位）。
      */
     private fun applyGroupScroll(groupOffset: Float) {
+        val viewport = viewportWidth()
+        if (viewport <= 0f) return
         for (view in scrollGroup) {
             val textWidth = textWidthOf(view)
-            val viewWidth = view.width.toFloat()
-            val overflow = (textWidth - viewWidth).coerceAtLeast(0f)
+            val overflow = (textWidth - viewport).coerceAtLeast(0f)
             val alignedShift = if (overflow > 0f) {
                 0f
             } else {
                 when (rowAlignX) {
                     "left" -> 0f
-                    "right" -> (viewWidth - textWidth).coerceAtLeast(0f)
-                    else -> ((viewWidth - textWidth) / 2f).coerceAtLeast(0f)
+                    "right" -> (viewport - textWidth).coerceAtLeast(0f)
+                    else -> ((viewport - textWidth) / 2f).coerceAtLeast(0f)
                 }
             }
             val scroll = groupOffset.coerceIn(0f, overflow)
@@ -882,6 +969,10 @@ internal class LyricsOverlayView(
             if (view.translationX != x) view.translationX = x
         }
     }
+
+    /** 滚动视口宽：裁剪盒（contentHolder）的内宽。 */
+    private fun viewportWidth(): Float =
+        (if (contentHolder.width > 0) contentHolder.width else width).toFloat()
 
     /** 行文本实际宽度（未布局为 0）。 */
     private fun textWidthOf(view: TextView): Float {

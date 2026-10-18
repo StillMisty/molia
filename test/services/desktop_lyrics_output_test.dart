@@ -75,11 +75,23 @@ void main() {
     final showCall = calls.firstWhere((call) => call.method == 'desktop.show');
     expect((showCall.arguments as Map)['fontSize'], 30);
 
-    // 窗口已在：再次 start（设置变更触发）走 setConfig 更新。
+    // 窗口已在且配置没变：再次 start（设置变更触发）不重发 setConfig，
+    // 避免原生无谓重建（重建会闪一下横滚位移）。
     calls.clear();
     await output.start(settings);
     await pumpEventQueue();
-    expect(calls.map((call) => call.method), contains('desktop.setConfig'));
+    expect(
+      calls.map((call) => call.method),
+      isNot(contains('desktop.setConfig')),
+    );
+
+    // 配置真的变了才下发。
+    await settings.setDesktopFontSize(32);
+    await output.start(settings);
+    await pumpEventQueue();
+    final configCall =
+        calls.lastWhere((call) => call.method == 'desktop.setConfig');
+    expect((configCall.arguments as Map)['fontSize'], 32);
 
     await output.apply(presentation());
     final updateCall =

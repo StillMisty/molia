@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:flutter/foundation.dart';
 import 'package:material_ui/material_ui.dart';
 
 import '../../models/lyric_line.dart';
@@ -46,6 +47,11 @@ class DesktopLyricsOutput implements InteractiveLyricsOutput {
   LyricsDisplaySettings? _settings;
   LyricsOutputCapability _capability = LyricsOutputCapability.unsupported;
   bool _shown = false;
+
+  /// 上次成功下发的配置（`show` / `setConfig` 都算）：设置变化但悬浮窗
+  /// 配置没变（如只改歌词页开关）时跳过 `setConfig`，避免原生无谓重建——
+  /// 重建会打断滚动、并在新视图布局完成前瞬间重置横滚位移（闪一下）。
+  Map<String, Object?>? _lastConfig;
 
   /// 上次投送的播放态（暂停隐藏 `desktop.hideOnPause` 的窗口生命周期依据）。
   ///
@@ -109,8 +115,13 @@ class DesktopLyricsOutput implements InteractiveLyricsOutput {
     if (!_shown) {
       await _channel.showDesktop(config);
       _shown = true;
+      _lastConfig = config;
+      return;
     }
+    // 幂等：配置没变就不重发（播放页开关等设置变化不该重建悬浮窗）。
+    if (_configEquals(_lastConfig, config)) return;
     await _channel.setDesktopConfig(config);
+    _lastConfig = config;
   }
 
   /// 当前是否应显示悬浮窗：配置开启 + 权限就绪 + 不在「暂停隐藏」态。
@@ -135,8 +146,10 @@ class DesktopLyricsOutput implements InteractiveLyricsOutput {
     if (!_shown) {
       // 恢复播放（或清空后重新具备条件）：重建窗口 + 首次内容一起下发，
       // 位置由原生按比例持久化，回到暂停前的位置。
-      await _channel.showDesktop(_configOf(settings));
+      final config = _configOf(settings);
+      await _channel.showDesktop(config);
       _shown = true;
+      _lastConfig = config;
     }
     await _channel.updateDesktop(_presentationMap(presentation, settings));
   }
@@ -147,6 +160,7 @@ class DesktopLyricsOutput implements InteractiveLyricsOutput {
   @override
   Future<void> stop() async {
     await _hideIfShown();
+    _lastConfig = null;
     await _eventSub?.cancel();
     _eventSub = null;
     await _actions.close();
@@ -183,6 +197,24 @@ class DesktopLyricsOutput implements InteractiveLyricsOutput {
           : scheme.surfaceContainerHigh.withValues(alpha: 0.94).toARGB32(),
       'controlTint': scheme?.onSurfaceVariant.toARGB32() ?? 0xFFFFFFFF,
     };
+  }
+
+  /// 配置等价判定：标量直接比较；`controls` 是每次现取的 unmodifiable map，
+  /// 按键值比较（引用比较会永远不等，去重失效）。
+  static bool _configEquals(Map<String, Object?>? a, Map<String, Object?>? b) {
+    if (identical(a, b)) return true;
+    if (a == null || b == null || a.length != b.length) return false;
+    for (final entry in a.entries) {
+      if (!b.containsKey(entry.key)) return false;
+      final av = entry.value;
+      final bv = b[entry.key];
+      if (av is Map && bv is Map) {
+        if (!mapEquals(av, bv)) return false;
+      } else if (av != bv) {
+        return false;
+      }
+    }
+    return true;
   }
 
   /// 「跟随主题角色」所用方案：按设置来源解析，封面缺失回退应用主题；
