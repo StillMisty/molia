@@ -78,12 +78,32 @@ shell 按 AUMID 解析并**缓存**的应用身份图标——旧构建（2026-1
 ## 验证
 
 - `flutter analyze --no-pub`：0 error / 0 warning；
-- `flutter test --no-pub`：全绿，含 `test/services/taskbar_thumb_bar_test.dart`
+- `flutter test --no-pub`：全绿（2322 条），含 `test/services/taskbar_thumb_bar_test.dart`
   的通道契约（字段名 / 按钮 id / 幂等 / 非 Windows 空操作）；
-- `tool/agent/test.sh linux`：端到端不受影响（非 Windows 平台空操作）；
-- Windows 真机（试构建产物，本机 WSL 编不了 C++，以下为待复核项）：
-  1. 悬浮任务栏按钮 → 4 个按钮出现且可用，播放 / 收藏态实时同步；
-  2. 右击任务栏按钮 → 菜单头部图标为品牌图；
-  3. 隐藏到托盘后恢复 → 按钮仍在（`WM_SHOWWINDOW` 重挂路径）；
-  4. 重启 `explorer.exe` → 按钮仍在（`TaskbarCreated` 重挂路径）；
-  5. 系统浅色 / 深色任务栏切换 → 按钮图标颜色随之切换。
+- `tool/agent/test.sh linux`：端到端通过（非 Windows 平台空操作，托盘 / 窗口用例不受影响）；
+- CI 试构建（`gh workflow run ci.yml --ref feat/windows-taskbar`，run 39144947225）：
+  `Analyze / Test` 与 `Windows 试构建` 两个 job 全绿——Windows runner 的 C++ 编译通过、
+  Inno 安装器打包成功；
+- 产物核对（`molia-0.1.0-beta.12-dev49-windows-x64`）：
+  - exe 资源里 13 个图标组（101 应用图标 + 201…212 十二个按钮图标）、共 92 张图标图；
+  - 版本资源 `ProductName = Molia`、`FileDescription = Molia - …`（ADR-0011 生效）；
+  - 二进制里能查到通道名与方法名（`top.stillmisty.molia/taskbar`、`update`、`pressed`）
+    与宽字符常量（`AppUserModelId` / `TaskbarCreated` / `DisplayName` / `IconUri`）；
+- 真机运行时（同一产物，Windows 11 build 26300）：
+  - `HKCU\Software\Classes\AppUserModelId\top.stillmisty.molia` 出现
+    `DisplayName = Molia`、`IconUri = <该 exe 路径>`；
+  - 窗口 `WM_GETICON(ICON_BIG)` 从「无」变成有效句柄，取出即品牌图（修复前三个档位
+    全为 none、`GWL_HICON` 为 0）；
+  - 窗口标题显示「曲名 · Molia」（品牌名统一生效）、进程正常存活。
+
+## 未验证（需人工在任务栏上点一遍）
+
+自动化点不到任务栏浮层（本机任务栏是 auto-hide + TranslucentTB 动态隐藏，被最大化的
+浏览器压住），以下人工复核项待验证：
+
+1. 悬浮任务栏按钮 → 预览浮层出现 4 个按钮，点击能控制播放 / 收藏，状态实时同步；
+2. 右击任务栏按钮 → 菜单头部图标为品牌图（不再回退 Flutter 默认图）；
+3. 隐藏到托盘再恢复、`explorer.exe` 重启后按钮仍在；
+4. 浅色 / 深色任务栏切换 → 按钮字形跟随主题；
+5. 用安装器升级后：开始菜单只有 `Molia`，旧「Molia 茉咏.lnk」被清掉（ADR-0011）。
+
