@@ -500,6 +500,54 @@ void main() {
     await failingEngine.syncNow();
     expect(adapter.appliedKeys, ['theme_mode']);
   });
+
+  test('首次连通：真正交换过数据才通知一次（探测应答不算、重启不重发）', () async {
+    final noticed = <String>[];
+    final subscription =
+        engine.peerConnectedNotices.listen((peer) => noticed.add(peer.deviceId));
+    addTearDown(subscription.cancel);
+
+    // 只有探测应答（接触但没有数据流转）：不算连通。
+    transport.seenIdsOverride = const ['devB'];
+    transport.peersSeenOverride = 1;
+    await engine.syncNow();
+    await pumpEventQueue();
+    expect(noticed, isEmpty, reason: '只探测应答不算真正连通');
+
+    // 真正拉到了载荷：通知一次。
+    transport.seenIdsOverride = null;
+    transport.peersSeenOverride = null;
+    transport.available.add(remoteTheme('dark'));
+    await engine.syncNow();
+    await pumpEventQueue();
+    expect(noticed, ['devB']);
+
+    // 后续轮次不重复（登记已持久化）。
+    await engine.syncNow();
+    await pumpEventQueue();
+    expect(noticed, ['devB']);
+    expect(state.isPeerConnectNotified('devB'), isTrue);
+
+    // 重启（同一份状态）：标记已落盘，不重发。
+    final reloaded = SyncStateStore(preferences: prefs, secrets: secrets);
+    await reloaded.init();
+    expect(reloaded.isPeerConnectNotified('devB'), isTrue,
+        reason: '一次性提示跨重启生效');
+  });
+
+  test('首次连通：对端主动推送（入站）同样算连通', () async {
+    final noticed = <String>[];
+    final subscription =
+        engine.peerConnectedNotices.listen((peer) => noticed.add(peer.deviceId));
+    addTearDown(subscription.cancel);
+
+    await engine.onIncomingEnvelope(remoteTheme('light'));
+    // 入站合流窗口（10ms）后跑一轮入站轮。
+    await Future<void>.delayed(const Duration(milliseconds: 40));
+    await pumpEventQueue();
+    expect(noticed, ['devB']);
+    expect(state.isPeerConnectNotified('devB'), isTrue);
+  });
 }
 
 /// 首次 apply 抛异常、之后成功：验证「应用失败不丢入站数据」。

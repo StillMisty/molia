@@ -216,6 +216,9 @@ class SyncStateStore {
   /// 手动添加的对端地址（局域网发现失败时的兜底）。
   final List<ManualPeer> _manualPeers = [];
 
+  /// 已提示过「首次连通」的设备 id（一次性 UI 提示；见 [markPeerConnectNotified]）。
+  final Set<String> _notifiedPeers = {};
+
   /// 本机局域网快照端点端口（0 = 尚未绑定过）。
   int _lanHttpPort = 0;
 
@@ -418,8 +421,81 @@ class SyncStateStore {
       _upsertManualPeer(peer, overwriteName: true);
 
   /// 移除手动对端（按地址；仅移除地址簿条目，不影响已发现的对端）。
+  ///
+  /// 该设备的条目全部移除 = 解除配对：顺手清掉「已连通」提示标记，
+  /// 重新配对时值得再提示一次。
   Future<void> removeManualPeer(String host) async {
-    _manualPeers.removeWhere((entry) => entry.host == host);
+    final index = _manualPeers.indexWhere((entry) => entry.host == host);
+    if (index < 0) return;
+    final removed = _manualPeers.removeAt(index);
+    if (removed.deviceId.isNotEmpty &&
+        !_manualPeers.any((entry) => entry.deviceId == removed.deviceId)) {
+      _notifiedPeers.remove(removed.deviceId);
+    }
+    await save();
+  }
+
+  /// 用配对码里的地址集合收敛该设备的条目。
+  ///
+  /// 码是**当时的权威地址集合**（同一设备的多条地址 = 双栈 / 多网卡候选，
+  /// 全部写入）：该设备在码外的旧条目移除——内网 IP 变动后「重新粘贴配对码」
+  /// 即完成换地址，不会留下永远探不通的旧 IP。用户命名随条目迁移；码里没有
+  /// 的其它设备条目不受影响。
+  Future<void> adoptPeerAddresses(
+    String deviceId,
+    List<ManualPeer> addresses,
+  ) async {
+    if (deviceId.isEmpty || addresses.isEmpty) return;
+    final hosts = {for (final entry in addresses) entry.host};
+    var carriedName = '';
+    for (final entry in _manualPeers) {
+      if (entry.deviceId == deviceId && entry.name.trim().isNotEmpty) {
+        carriedName = entry.name;
+        break;
+      }
+    }
+    _manualPeers.removeWhere(
+      (entry) => entry.deviceId == deviceId && !hosts.contains(entry.host),
+    );
+    // 用户命名优先：旧条目上的命名跟到码里的每条地址（同一台设备，
+    // 对端自报名只是兜底），否则用码里带的设备名。
+    for (final address in addresses) {
+      await _upsertManualPeer(
+        carriedName.isEmpty ? address : address.copyWith(name: carriedName),
+        overwriteName: false,
+      );
+    }
+    await save();
+  }
+
+  /// 更新某条手动地址的 host / 探测端口 / 命名（设备详情里的「更新地址」）。
+  ///
+  /// 身份（deviceId）与已学到的端点端口保留：改的是「设备在哪」，不是「是谁」。
+  /// 目标地址已有条目时并入该条目并移除旧条目（同一地址不重复入簿）。
+  Future<void> moveManualPeer(
+    String fromHost, {
+    required String toHost,
+    int? probePort,
+    String? name,
+  }) async {
+    final index = _manualPeers.indexWhere((entry) => entry.host == fromHost);
+    if (index < 0 || toHost.isEmpty || toHost == fromHost) return;
+    final moved = _manualPeers.removeAt(index).copyWith(
+          host: toHost,
+          probePort: probePort,
+          name: name,
+        );
+    final existing = _manualPeers.indexWhere((entry) => entry.host == toHost);
+    if (existing >= 0) {
+      _manualPeers[existing] = _manualPeers[existing].mergeLearned(
+        httpPort: moved.httpPort > 0 ? moved.httpPort : null,
+        deviceId: moved.deviceId.isNotEmpty ? moved.deviceId : null,
+        name: moved.name.isNotEmpty ? moved.name : null,
+      );
+    } else {
+      // 刚配置的地址排前面：地址簿顺序即探测与展示的优先序。
+      _manualPeers.insert(0, moved);
+    }
     await save();
   }
 
@@ -427,16 +503,30 @@ class SyncStateStore {
   ///
   /// 学到的对端名只在条目尚未命名时填入：手动条目优先保留用户命名。
   Future<void> learnManualPeer(ManualPeer learned) async {
-    await _upsertManualPeer(learned, overwriteName: false);
+    await _upsertManualPeer(learned, overwriteName: false, promote: true);
+  }
+
+  /// 该设备是否已提示过「首次连通」（一次性提示，见 [markPeerConnectNotified]）。
+  bool isPeerConnectNotified(String deviceId) =>
+      _notifiedPeers.contains(deviceId);
+
+  /// 登记「首次连通」已提示：设备第一次真正交换过数据时只提示一次，
+  /// 持久化后重启不重复。
+  Future<void> markPeerConnectNotified(String deviceId) async {
+    if (deviceId.isEmpty || !_notifiedPeers.add(deviceId)) return;
+    await save();
   }
 
   /// 地址簿写入的唯一入口：按 host 查找合并（重复地址不新增条目）。
   ///
   /// [overwriteName] 是命名策略开关：用户提交同一地址是显式改名，学习路径
-  /// 不覆盖已有命名（对端广播的设备名只填空名）。返回 false = 地址已存在。
+  /// 不覆盖已有命名（对端广播的设备名只填空名）。[promote] 把刚更新过的条目
+  /// 提到最前（地址簿顺序即探测与展示的优先序；仅学习路径需要）。
+  /// 返回 false = 地址已存在。
   Future<bool> _upsertManualPeer(
     ManualPeer peer, {
     required bool overwriteName,
+    bool promote = false,
   }) async {
     final host = peer.host.trim();
     if (host.isEmpty) return false;
@@ -452,7 +542,12 @@ class SyncStateStore {
       if (overwriteName && name.isNotEmpty) {
         merged = merged.copyWith(name: name);
       }
-      _manualPeers[index] = merged;
+      if (promote) {
+        _manualPeers.removeAt(index);
+        _manualPeers.insert(0, merged);
+      } else {
+        _manualPeers[index] = merged;
+      }
       await save();
       return false;
     }
@@ -580,6 +675,8 @@ class SyncStateStore {
         'cellularPolicy': _cellularPolicy.name,
         if (_manualPeers.isNotEmpty)
           'manualPeers': [for (final peer in _manualPeers) peer.toJson()],
+        if (_notifiedPeers.isNotEmpty)
+          'notifiedPeers': _notifiedPeers.toList(),
         if (_lanHttpPort > 0) 'lanHttpPort': _lanHttpPort,
         'stampSeq': _stampBaseline.toJson(),
         'settings': {
@@ -640,6 +737,9 @@ class SyncStateStore {
         if (peer != null) _manualPeers.add(peer);
       }
     }
+    _notifiedPeers
+      ..clear()
+      ..addAll((json['notifiedPeers'] as List?)?.whereType<String>() ?? const []);
     _lanHttpPort = (json['lanHttpPort'] as num?)?.toInt() ?? 0;
 
     final stampSeq = json['stampSeq'];

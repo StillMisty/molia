@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:flutter/services.dart';
 import 'package:material_3_expressive/material_3_expressive.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:provider/provider.dart';
@@ -11,19 +12,22 @@ import '../l10n/app_localizations.dart';
 import '../providers/sync_provider.dart';
 import '../theme/app_semantic_colors.dart';
 import '../widgets/settings/settings_tiles.dart';
+import '../widgets/sync_pairing_scanner.dart';
 import 'sync_advanced_page.dart';
 import 'sync_content_page.dart';
 import 'sync_dialogs.dart';
 import 'sync_labels.dart';
 import 'sync_log_page.dart';
+import 'sync_notices.dart';
 import 'sync_pairing_dialogs.dart';
 
 /// 跨设备同步设置页：一页闭环的**配对工作台**。
 ///
 /// 信息架构（首屏只留用户真正要做的事）：①传输方式（局域网 / WebDAV 两路
-/// 开关 + 最近一轮结论）②配对（复制 / 二维码 / 加入其它设备）③已配对设备
-/// 名册 ④同步内容 / 日志 / 高级设置入口。设备名、设备 id、口令、地址列表、
-/// 端口、地址簿这些底层细节收进「高级设置」子页（`sync_advanced_page.dart`）。
+/// 开关 + 最近一轮结论）②配对（分享 = 复制 / 二维码；加入 = 粘贴 / 扫码）
+/// ③已配对设备名册 ④同步内容 / 日志 / 高级设置入口。设备名、设备 id、口令、
+/// 网络地址（一行入口，明细进弹窗）、端口、地址簿这些底层细节收进「高级设置」
+/// 子页（`sync_advanced_page.dart`）。
 ///
 /// 没有独立总开关：传输开关就是总闸，两路都关 = 同步完全停（轮次 / 入站 /
 /// 调度器一并停摆）。传输状态必须留在首屏——「开关已开而实际没有监听」
@@ -44,12 +48,25 @@ class _SyncSettingsPageState extends State<SyncSettingsPage> {
   late Future<SyncPairingCode?> _pairing;
   Object? _pairingSignature;
 
+  /// 扫码入口可用性（平台 × GMS，见 [SyncPairingScanner.isAvailable]）。
+  ///
+  /// 探测中与不可用都不构建按钮：不做 loading 占位（闪动比没有按钮更糟），
+  /// 也不给「无 GMS 设备」留一个点开才知道不可用的死胡同入口。
+  bool _scanAvailable = false;
+
   @override
   void initState() {
     super.initState();
     // 进入设置页 = 本机地址缓存的真实失效点：网络切换后重进即可看到新地址
     // （配对码的地址候选也走这份缓存）。
     context.read<SyncProvider>().refreshLocalEndpoints();
+    unawaited(_probeScanAvailability());
+  }
+
+  Future<void> _probeScanAvailability() async {
+    final available = await SyncPairingScanner.isAvailable();
+    if (!mounted || available == _scanAvailable) return;
+    setState(() => _scanAvailable = available);
   }
 
   @override
@@ -180,10 +197,10 @@ class _SyncSettingsPageState extends State<SyncSettingsPage> {
     );
   }
 
-  /// ② 配对：复制配对码（行尾二维码按钮）/ 加入其它设备。
+  /// ② 配对：分享配对码（复制 / 二维码）+ 加入其它设备（粘贴 / 扫码）。
   ///
-  /// 口令随配对码一起交给对端，首屏不再单列口令行；「输入已有口令加入」这类
-  /// 手工路径在高级设置里（`sync_advanced_page.dart`）。
+  /// 口令随配对码一起交给对端，首屏不单列口令行；手填地址这类兜底路径在
+  /// 高级设置里（`sync_advanced_page.dart`）。
   Widget _pairingSection(
     BuildContext context,
     SyncProvider provider,
@@ -220,16 +237,57 @@ class _SyncSettingsPageState extends State<SyncSettingsPage> {
             title: l10n.syncPairingShareTitle,
             subtitle: l10n.syncPairingNeedsPassphrase,
           ),
-        // 加入其它设备：粘贴对方配对码 / 手机端扫码 / 手动填地址，都在同一个
-        // 弹层里（配对码是主路径，地址是发现失败时的兜底）。
+        // 加入其它设备 = 粘贴配对码 / 扫码（移动端）：两条动作路径都在卡片里，
+        // 不再有输入弹层——配对码是加入同步的唯一入口，地址兜底在高级设置里。
         SettingsNavTile(
-          key: const Key('settingsSyncJoinItem'),
-          icon: Icons.login_rounded,
-          title: l10n.syncPeerAdd,
-          subtitle: l10n.syncPeerAddSubtitle,
-          onTap: () => unawaited(showSyncAddPeerDialog(context, provider, l10n)),
+          key: const Key('settingsSyncPasteCodeItem'),
+          icon: Icons.content_paste_rounded,
+          title: l10n.syncPairingPasteTitle,
+          subtitle: l10n.syncPairingPasteSubtitle,
+          onTap: () => unawaited(_pastePairingCode()),
         ),
+        // 扫码入口 = 平台 × GMS 可用性（无 GMS / 桌面隐藏，只给粘贴）。
+        if (_scanAvailable)
+          SettingsNavTile(
+            key: const Key('settingsSyncScanCodeItem'),
+            icon: Icons.qr_code_scanner_rounded,
+            title: l10n.syncPairingScanTitle,
+            subtitle: l10n.syncPairingScanSubtitle,
+            onTap: () => unawaited(_scanPairingCode()),
+          ),
       ],
+    );
+  }
+
+  /// 粘贴配对码：读剪贴板即导入（口令随码传递、地址按码收敛，见
+  /// [importSyncPairingText]）；剪贴板里没有码时给一句「先去复制」的提示。
+  Future<void> _pastePairingCode() async {
+    final provider = context.read<SyncProvider>();
+    final l10n = AppLocalizations.of(context)!;
+    final data = await Clipboard.getData(Clipboard.kTextPlain);
+    if (!mounted) return;
+    await importSyncPairingText(
+      context,
+      provider: provider,
+      l10n: l10n,
+      raw: data?.text ?? '',
+    );
+  }
+
+  /// 扫码导入：相机 → 配对码文本 → 与粘贴走同一条导入路径。
+  Future<void> _scanPairingCode() async {
+    final provider = context.read<SyncProvider>();
+    final l10n = AppLocalizations.of(context)!;
+    final result = await showSyncPairingScanner(
+      context,
+      onOpenSettings: provider.openSystemSettings,
+    );
+    if (result == null || !mounted) return;
+    await importSyncPairingText(
+      context,
+      provider: provider,
+      l10n: l10n,
+      raw: result,
     );
   }
 
@@ -418,14 +476,12 @@ class _SyncSettingsPageState extends State<SyncSettingsPage> {
   ) async {
     final granted = await provider.requestLanPermission();
     if (granted || !context.mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(l10n.syncLanPermissionDenied),
-        action: SnackBarAction(
-          label: l10n.syncOpenSystemSettings,
-          onPressed: () => unawaited(provider.openSystemSettings()),
-        ),
-      ),
+    showSyncNotice(
+      context,
+      l10n.syncLanPermissionDenied,
+      isError: true,
+      actionLabel: l10n.syncOpenSystemSettings,
+      onAction: () => unawaited(provider.openSystemSettings()),
     );
   }
 }

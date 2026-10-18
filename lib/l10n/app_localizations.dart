@@ -3950,24 +3950,6 @@ abstract class AppLocalizations {
   /// **'All devices must re-enter the new passphrase. Continue?'**
   String get syncPassphraseResetConfirm;
 
-  /// No description provided for @syncPassphraseJoin.
-  ///
-  /// In en, this message translates to:
-  /// **'Join with existing passphrase'**
-  String get syncPassphraseJoin;
-
-  /// No description provided for @syncPassphraseJoinTitle.
-  ///
-  /// In en, this message translates to:
-  /// **'Enter sync passphrase'**
-  String get syncPassphraseJoinTitle;
-
-  /// No description provided for @syncPassphraseJoinHint.
-  ///
-  /// In en, this message translates to:
-  /// **'Enter the passphrase shown on another device'**
-  String get syncPassphraseJoinHint;
-
   /// No description provided for @syncPassphraseInvalid.
   ///
   /// In en, this message translates to:
@@ -4446,7 +4428,7 @@ abstract class AppLocalizations {
   /// No description provided for @syncPeerNever.
   ///
   /// In en, this message translates to:
-  /// **'Not reached yet'**
+  /// **'Not connected yet'**
   String get syncPeerNever;
 
   /// No description provided for @syncPeerBehind.
@@ -4503,24 +4485,6 @@ abstract class AppLocalizations {
   /// **'Open settings'**
   String get syncOpenSystemSettings;
 
-  /// No description provided for @syncPeerAdd.
-  ///
-  /// In en, this message translates to:
-  /// **'Add device'**
-  String get syncPeerAdd;
-
-  /// No description provided for @syncPeerAddSubtitle.
-  ///
-  /// In en, this message translates to:
-  /// **'Enter a peer address or paste a pairing code when discovery fails'**
-  String get syncPeerAddSubtitle;
-
-  /// No description provided for @syncPeerAddTitle.
-  ///
-  /// In en, this message translates to:
-  /// **'Add device'**
-  String get syncPeerAddTitle;
-
   /// No description provided for @syncPeerHostLabel.
   ///
   /// In en, this message translates to:
@@ -4530,7 +4494,7 @@ abstract class AppLocalizations {
   /// No description provided for @syncPeerHostHint.
   ///
   /// In en, this message translates to:
-  /// **'e.g. 192.168.1.23, or a molia-pair code'**
+  /// **'e.g. 192.168.1.23 or 2409:8a55::5'**
   String get syncPeerHostHint;
 
   /// No description provided for @syncPeerNameLabel.
@@ -4638,7 +4602,7 @@ abstract class AppLocalizations {
   /// No description provided for @syncPeerNotContacted.
   ///
   /// In en, this message translates to:
-  /// **'not reached yet — it retries automatically once the peer is online'**
+  /// **'not connected yet — it retries automatically once the peer is online'**
   String get syncPeerNotContacted;
 
   /// No description provided for @syncPeerCandidatesTitle.
@@ -4650,7 +4614,7 @@ abstract class AppLocalizations {
   /// No description provided for @syncPeerCandidatesSubtitle.
   ///
   /// In en, this message translates to:
-  /// **'not reached yet · tap to view or remove'**
+  /// **'not connected yet · tap to view or remove'**
   String get syncPeerCandidatesSubtitle;
 
   /// No description provided for @syncPairingShareTitle.
@@ -4664,6 +4628,24 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Copy the pairing code (contains the passphrase)'**
   String get syncPairingShareSubtitle;
+
+  /// No description provided for @syncPairingPasteTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Paste pairing code'**
+  String get syncPairingPasteTitle;
+
+  /// No description provided for @syncPairingPasteSubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Copy it on the other device, then tap here'**
+  String get syncPairingPasteSubtitle;
+
+  /// No description provided for @syncPairingScanSubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Point the camera at the QR code on the other device'**
+  String get syncPairingScanSubtitle;
 
   /// No description provided for @syncPairingCopied.
   ///
@@ -4698,20 +4680,20 @@ abstract class AppLocalizations {
   /// No description provided for @syncPairingInvalidCode.
   ///
   /// In en, this message translates to:
-  /// **'Invalid pairing code (missing fields or unsupported version)'**
+  /// **'Invalid pairing code — copy it again on the other device'**
   String get syncPairingInvalidCode;
+
+  /// No description provided for @syncClipboardNoPairingCode.
+  ///
+  /// In en, this message translates to:
+  /// **'No pairing code in the clipboard — copy it on the other device first'**
+  String get syncClipboardNoPairingCode;
 
   /// No description provided for @syncPairingNoAddress.
   ///
   /// In en, this message translates to:
-  /// **'The pairing code has no usable address (the other device may only have loopback addresses)'**
+  /// **'The pairing code has no usable network address'**
   String get syncPairingNoAddress;
-
-  /// No description provided for @syncPairingImported.
-  ///
-  /// In en, this message translates to:
-  /// **'Pairing info imported'**
-  String get syncPairingImported;
 
   /// No description provided for @syncPairingPassphraseConflictTitle.
   ///
@@ -4779,6 +4761,12 @@ abstract class AppLocalizations {
   /// **'No routable address'**
   String get syncLocalAddressesEmptyTitle;
 
+  /// No description provided for @syncLocalAddressesHint.
+  ///
+  /// In en, this message translates to:
+  /// **'These are the same addresses shared in the pairing code.'**
+  String get syncLocalAddressesHint;
+
   /// No description provided for @syncLocalAddressesEmpty.
   ///
   /// In en, this message translates to:
@@ -4814,12 +4802,6 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Not bound yet'**
   String get syncLocalHttpPortUnavailable;
-
-  /// No description provided for @syncPeerAddress.
-  ///
-  /// In en, this message translates to:
-  /// **'Address {host}'**
-  String syncPeerAddress(String host);
 
   /// No description provided for @syncPeerDeviceId.
   ///
@@ -5070,7 +5052,7 @@ abstract class AppLocalizations {
   /// No description provided for @syncPeerUnreachable.
   ///
   /// In en, this message translates to:
-  /// **'Not reached yet — check that the peer is online on the same network, or use WebDAV'**
+  /// **'Not reachable — check that the peer is online on the same network, or update its address'**
   String get syncPeerUnreachable;
 
   /// No description provided for @syncPeerProbePortLabel.
@@ -5091,16 +5073,94 @@ abstract class AppLocalizations {
   /// **'Already in the list — name and port updated'**
   String get syncPeerAlreadyAdded;
 
+  /// No description provided for @syncManualConnect.
+  ///
+  /// In en, this message translates to:
+  /// **'Connect manually'**
+  String get syncManualConnect;
+
+  /// No description provided for @syncManualConnectSubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Enter the peer address when discovery fails (subnets / firewall / VPN)'**
+  String get syncManualConnectSubtitle;
+
+  /// No description provided for @syncManualConnectHint.
+  ///
+  /// In en, this message translates to:
+  /// **'After the peer\'s IP changes, paste its pairing code again or update the address here'**
+  String get syncManualConnectHint;
+
+  /// No description provided for @syncNetworkAddresses.
+  ///
+  /// In en, this message translates to:
+  /// **'Network addresses'**
+  String get syncNetworkAddresses;
+
+  /// No description provided for @syncNetworkAddressesCount.
+  ///
+  /// In en, this message translates to:
+  /// **'{count} available'**
+  String syncNetworkAddressesCount(int count);
+
+  /// No description provided for @syncPeerAddressCount.
+  ///
+  /// In en, this message translates to:
+  /// **'{count} addresses'**
+  String syncPeerAddressCount(int count);
+
+  /// No description provided for @syncPeerAddressEdit.
+  ///
+  /// In en, this message translates to:
+  /// **'Update address'**
+  String get syncPeerAddressEdit;
+
+  /// No description provided for @syncPeerAddressDelete.
+  ///
+  /// In en, this message translates to:
+  /// **'Remove address'**
+  String get syncPeerAddressDelete;
+
+  /// No description provided for @syncPeerAddressDeleteConfirm.
+  ///
+  /// In en, this message translates to:
+  /// **'Removes this address from the list; a connected device is unaffected.'**
+  String get syncPeerAddressDeleteConfirm;
+
+  /// No description provided for @syncPeerAddressUpdated.
+  ///
+  /// In en, this message translates to:
+  /// **'Address updated'**
+  String get syncPeerAddressUpdated;
+
+  /// No description provided for @syncPeerAddressRemoved.
+  ///
+  /// In en, this message translates to:
+  /// **'Removed from the address list'**
+  String get syncPeerAddressRemoved;
+
   /// No description provided for @syncPeerContactQueued.
   ///
   /// In en, this message translates to:
-  /// **'Device saved — contact will follow'**
+  /// **'Device added — it will connect shortly'**
   String get syncPeerContactQueued;
+
+  /// No description provided for @syncPeerAddedOffline.
+  ///
+  /// In en, this message translates to:
+  /// **'{name} added — not reachable yet, it will retry'**
+  String syncPeerAddedOffline(String name);
+
+  /// No description provided for @syncPeerConnected.
+  ///
+  /// In en, this message translates to:
+  /// **'Connected to {name}'**
+  String syncPeerConnected(String name);
 
   /// No description provided for @syncPeerContacting.
   ///
   /// In en, this message translates to:
-  /// **'Contacting…'**
+  /// **'Connecting…'**
   String get syncPeerContacting;
 
   /// No description provided for @syncLanPermissionPermanentSubtitle.

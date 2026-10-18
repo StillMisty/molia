@@ -114,29 +114,22 @@ class _SyncAdvancedPageState extends State<SyncAdvancedPage> {
           onTap: () =>
               unawaited(showSyncPassphraseDialog(context, provider, l10n)),
         ),
-        // 手工路径：只拿到口令（没有配对码）时在这里输入。
+        // 网络地址：一行入口（双栈 + 多网卡的地址明细收进弹窗，不撑长卡片）。
         SettingsNavTile(
-          key: const Key('settingsSyncPassphraseJoinItem'),
-          icon: Icons.password_rounded,
-          title: l10n.syncPassphraseJoin,
-          subtitle: l10n.syncPassphraseJoinHint,
-          onTap: () => unawaited(showSyncJoinDialog(context, provider, l10n)),
+          key: const Key('settingsSyncLocalAddressesItem'),
+          icon: Icons.lan_rounded,
+          title: l10n.syncNetworkAddresses,
+          subtitle: endpoints == null
+              ? l10n.syncNetworkAddressesCount(0)
+              : endpoints.isEmpty
+                  ? l10n.syncLocalAddressesEmptyTitle
+                  : l10n.syncNetworkAddressesCount(endpoints.length),
+          onTap: () => unawaited(showSyncLocalAddressesDialog(
+            context,
+            provider: provider,
+            l10n: l10n,
+          )),
         ),
-        for (final endpoint in endpoints ?? const <LocalEndpoint>[])
-          SettingsCopyTile(
-            key: Key('settingsSyncLocalAddress-${endpoint.address}'),
-            icon: Icons.lan_rounded,
-            title: endpoint.address,
-            subtitle: endpoint.interfaceName,
-            copyText: endpoint.address,
-            copiedMessage: l10n.syncLocalAddressCopied,
-          ),
-        if (endpoints != null && endpoints.isEmpty)
-          SettingsInfoTile(
-            icon: Icons.wifi_off_rounded,
-            title: l10n.syncLocalAddressesEmptyTitle,
-            subtitle: l10n.syncLocalAddressesEmpty,
-          ),
         SettingsInfoTile(
           key: const Key('settingsSyncProbePortItem'),
           icon: Icons.settings_ethernet_rounded,
@@ -155,9 +148,10 @@ class _SyncAdvancedPageState extends State<SyncAdvancedPage> {
     );
   }
 
-  /// 地址簿：已认领但未进名册的条目（点开可看详情 / 删除）+ 未认领候选。
+  /// 地址簿：手动连接入口 + 已认领但未进名册的条目（点开可看详情 / 删除）
+  /// + 未认领候选。
   ///
-  /// 配对码一次可导 8 个地址，全展开会把名册撑成「尚未接触」墙；未认领候选
+  /// 配对码一次可导 8 个地址，全展开会把名册撑成「还没连上」墙；未认领候选
   /// 多个折叠成一行，N=1 直列（比「候选地址 1 个」更可读）。
   Widget _peersSection(
     BuildContext context,
@@ -180,8 +174,20 @@ class _SyncAdvancedPageState extends State<SyncAdvancedPage> {
     }
     return SettingsSectionCard(
       title: l10n.syncPeersSection,
-      footer: SettingsSectionHint(text: l10n.syncPeersHint),
+      footer: SettingsSectionHint(text: l10n.syncManualConnectHint),
       children: [
+        // 手动连接：自动发现失败（多网段 / 防火墙 / VPN）时的兜底路径。
+        SettingsNavTile(
+          key: const Key('settingsSyncManualConnectItem'),
+          icon: Icons.add_link_rounded,
+          title: l10n.syncManualConnect,
+          subtitle: l10n.syncManualConnectSubtitle,
+          onTap: () => unawaited(showSyncManualPeerDialog(
+            context,
+            provider,
+            l10n,
+          )),
+        ),
         for (final group in claimedGroups.entries)
           SettingsNavTile(
             key: Key('settingsSyncPeer-${group.key}'),
@@ -190,12 +196,15 @@ class _SyncAdvancedPageState extends State<SyncAdvancedPage> {
                 ? group.value.first.host
                 : group.value.first.name,
             subtitle:
-                '${group.value.map((entry) => entry.host).join(', ')} · ${l10n.syncPeerNotContacted}',
-            onTap: () => unawaited(showSyncCandidatesDialog(
+                '${l10n.syncPeerAddressCount(group.value.length)} · ${l10n.syncPeerNever}',
+            onTap: () => unawaited(showSyncPeerAddressesDialog(
               context,
               provider: provider,
               l10n: l10n,
-              candidates: group.value,
+              title: group.value.first.name.isEmpty
+                  ? group.value.first.host
+                  : group.value.first.name,
+              entries: group.value,
             )),
           ),
         if (unclaimed.length == 1)
