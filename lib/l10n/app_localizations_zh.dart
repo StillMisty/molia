@@ -74,7 +74,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get lyricsFailedToLoad => '加载歌词失败。';
 
   @override
-  String get lyricsCopyModeSnackbar => '歌词复制模式：已切到单曲循环、暂停自动跟随；退出时恢复原播放模式。';
+  String get lyricsCopyModeSnackbar => '已进入复制模式：切到单曲循环并暂停跟随，退出时恢复原设置。';
 
   @override
   String get centerCurrentLine => '居中当前行';
@@ -104,7 +104,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get settingsBaseColor => '基础配色';
 
   @override
-  String get settingsBaseColorWallpaper => '系统壁纸（莫奈）';
+  String get settingsBaseColorWallpaper => '系统壁纸（跟随系统取色）';
 
   @override
   String get settingsBaseColorCustom => '自定义颜色';
@@ -116,13 +116,13 @@ class AppLocalizationsZh extends AppLocalizations {
   String get settingsBaseColorWallpaperActive => '当前来源：系统壁纸';
 
   @override
-  String get settingsBaseColorAccentActive => '当前来源：系统强调色';
+  String get settingsBaseColorAccentActive => '当前来源：系统主题色';
 
   @override
   String get settingsPureBlack => '纯黑背景';
 
   @override
-  String get settingsPureBlackSubtitle => '深色模式下表面纯黑（OLED 省电；可与取色叠加）';
+  String get settingsPureBlackSubtitle => '深色模式下背景纯黑，OLED 更省电';
 
   @override
   String get settingsSeedColor => '自定义颜色';
@@ -131,7 +131,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get settingsFollowArtwork => '播放时跟随封面';
 
   @override
-  String get settingsFollowArtworkSubtitle => '按当前曲目封面取色，无封面回退基础配色';
+  String get settingsFollowArtworkSubtitle => '按当前歌曲封面取色，无封面时用基础配色';
 
   @override
   String get settingsAppFont => '应用字体';
@@ -143,7 +143,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get fontPickerSearchHint => '搜索字体';
 
   @override
-  String get fontPickerEmpty => '未找到设备字体';
+  String get fontPickerEmpty => '未找到可用字体';
 
   @override
   String get posterFontLabel => '字体';
@@ -194,7 +194,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get settingsDefaultPlayMode => '默认播放模式';
 
   @override
-  String get settingsDefaultPlayModeSubtitle => '新播放会话的初始模式，不打断当前播放';
+  String get settingsDefaultPlayModeSubtitle => '下次开始播放时用这个模式，不影响当前播放';
 
   @override
   String get settingsRestoreSessionTitle => '启动时恢复上次播放';
@@ -206,13 +206,13 @@ class AppLocalizationsZh extends AppLocalizations {
   String get settingsAutoSourceSwap => '自动换源';
 
   @override
-  String get settingsAutoSourceSwapSubtitle => '播放失败时自动在其它音源找回同一首歌并切换（默认开启）';
+  String get settingsAutoSourceSwapSubtitle => '播放失败时自动换到其它音源找同一首歌（默认开启）';
 
   @override
   String get settingsDataSaverTitle => '省流模式';
 
   @override
-  String get settingsDataSaverSubtitle => '开启后，使用移动数据时自动降低音质并减少封面加载';
+  String get settingsDataSaverSubtitle => '使用移动数据时自动降低音质、少加载封面';
 
   @override
   String get settingsDataSaverNetworkCellular => '移动数据 · 已生效';
@@ -230,10 +230,10 @@ class AppLocalizationsZh extends AppLocalizations {
   String get settingsDataSaverCovers => '移动数据下仅使用已缓存封面';
 
   @override
-  String get settingsDataSaverCoversSubtitle => '不发起新的封面请求，无缓存时显示占位图标';
+  String get settingsDataSaverCoversSubtitle => '不再加载新封面，未缓存的显示占位图';
 
   @override
-  String get settingsSourcesItemSubtitle => '导入 LX Music 音源脚本，搜索第三方平台歌曲';
+  String get settingsSourcesItemSubtitle => '导入 LX Music 音源脚本，扩展可搜索的平台';
 
   @override
   String get settingsContentSection => '内容与来源';
@@ -335,7 +335,7 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get importDialogMessage =>
-      '导入数据将替换具有相同标识符的现有最近播放记录。此操作无法撤销。您确定要继续吗？\n\n确保 JSON 文件有效且之前是从 Molia 导出的。';
+      '导入会把备份与本地数据合并，相同条目以备份为准，且无法撤销。\n\n请确认文件是从 Molia 导出的备份。';
 
   @override
   String get importButton => '导入数据';
@@ -537,12 +537,10 @@ class AppLocalizationsZh extends AppLocalizations {
   String get anyListenEntry => 'any-listen 接入';
 
   @override
-  String get anyListenIntroBody =>
-      'any-listen 是自托管的私有音乐播放服务。填写服务器地址并启用后，服务器提供的在线音源会出现在搜索页的音源列表中。';
+  String get anyListenIntroBody => 'any-listen 是自托管的音乐服务。启用后，它的在线音源会出现在搜索页。';
 
   @override
-  String get anyListenIntroHint =>
-      '当前为骨架实现：握手探测（/api/ipc/hello、/api/ipc/id）已对照官方源码，搜索/取链/歌词/封面接口尚未与真实服务器验证，可能暂不可用。';
+  String get anyListenIntroHint => '该接入尚未与真实服务器验证，可能暂不可用。';
 
   @override
   String get anyListenServerSection => '服务器配置';
@@ -551,7 +549,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get anyListenServerUrl => '服务器地址';
 
   @override
-  String get anyListenServerUrlHint => 'Docker / 桌面端部署的 any-listen 服务地址';
+  String get anyListenServerUrlHint => 'any-listen 服务的访问地址';
 
   @override
   String get anyListenServerUrlRequired => '请先填写服务器地址';
@@ -560,22 +558,22 @@ class AppLocalizationsZh extends AppLocalizations {
   String get anyListenServerUrlRequiredToEnable => '启用前请填写服务器地址';
 
   @override
-  String get anyListenToken => '访问令牌（可选）';
+  String get anyListenToken => '访问密码（可选）';
 
   @override
-  String get anyListenTokenPlaceholder => '连接测试通过后可粘贴服务器下发的令牌';
+  String get anyListenTokenPlaceholder => '连接测试通过后，粘贴服务器提供的访问密码';
 
   @override
-  String get anyListenTokenShow => '显示令牌';
+  String get anyListenTokenShow => '显示访问密码';
 
   @override
-  String get anyListenTokenHide => '隐藏令牌';
+  String get anyListenTokenHide => '隐藏访问密码';
 
   @override
   String get anyListenEnable => '启用 any-listen 音源';
 
   @override
-  String get anyListenEnableSubtitle => '关闭后不会出现在搜索页，也不发起任何请求';
+  String get anyListenEnableSubtitle => '关闭后不出现在搜索页，也不会联网';
 
   @override
   String get anyListenSave => '保存';
@@ -654,7 +652,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get sourcesImportFromUrl => '从链接导入';
 
   @override
-  String get sourcesImportFromUrlSubtitle => '从 HTTP(S) 链接下载脚本';
+  String get sourcesImportFromUrlSubtitle => '从链接下载脚本';
 
   @override
   String get sourcesDefaultQuality => '默认音质';
@@ -681,7 +679,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get sourcesQuality128k => '128K';
 
   @override
-  String get sourcesQualityHint => '取链优先使用该音质，不可用时自动回退';
+  String get sourcesQualityHint => '优先用这个音质播放，不支持时自动降级';
 
   @override
   String get sourcesSortTitle => '渠道排序';
@@ -693,8 +691,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get sourcesSortResetSubtitle => '恢复「脚本音源在前、内置平台在后」的默认顺序';
 
   @override
-  String get sourcesSortHint =>
-      '发现页的渠道顺序与下方一致，同时决定搜索音源顺序；新导入的渠道自动排在末尾，关闭开关后该渠道不再出现在发现页与搜索结果中。';
+  String get sourcesSortHint => '发现页与搜索都按这里的顺序；新渠道排在末尾，关闭后不再出现。';
 
   @override
   String get sourcesChannelDisabled => '已停用';
@@ -719,7 +716,7 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String sourcesScriptByAuthor(String author) {
-    return 'by $author';
+    return '作者：$author';
   }
 
   @override
@@ -754,7 +751,7 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get sourcesDisclaimerBody =>
-      '音源脚本为第三方社区提供的可执行 JavaScript 代码，\n导入后将在本机 JS 引擎中运行，可发起网络请求。\n请仅导入来源可信的脚本，脚本的可用性与合法性由提供者负责。';
+      '音源脚本是第三方提供的可执行代码，导入后会在本机运行并联网。\n请只导入可信来源的脚本；脚本的可用性与合法性由提供者负责。';
 
   @override
   String get sourcesContinueImport => '继续导入';
@@ -768,7 +765,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get sourcesPasteTitle => '粘贴音源脚本';
 
   @override
-  String get sourcesPasteHint => '粘贴以 /** @name ... */ 开头的脚本全文';
+  String get sourcesPasteHint => '粘贴音源脚本全文';
 
   @override
   String get sourcesImportAction => '导入';
@@ -817,7 +814,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get languageSystem => '跟随系统';
 
   @override
-  String get recentlyPlayedEmpty => '还没有最近播放内容。播放一些歌曲后，最近播放的专辑/歌单会显示在这里。';
+  String get recentlyPlayedEmpty => '播放一些歌曲后，最近听过的专辑与歌单会显示在这里。';
 
   @override
   String get libraryRecentPlays => '最近播放';
@@ -1042,7 +1039,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get sourceSwapDuplicateTitle => '曲目已存在';
 
   @override
-  String get sourceSwapDuplicateMessage => '目标列表已包含这首歌。换源将移除重复项，并以所选版本替换。';
+  String get sourceSwapDuplicateMessage => '列表里已有这首歌。换源会用它替换原来的版本。';
 
   @override
   String get sourceSwapDone => '已换源';
@@ -1239,7 +1236,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get settingsCacheTitle => '缓存管理';
 
   @override
-  String get settingsCacheSubtitle => '音频 / 歌词 / 封面占用与策略';
+  String get settingsCacheSubtitle => '音频、歌词、封面的占用与清理规则';
 
   @override
   String get cachePartitionAudio => '音频缓存';
@@ -1262,11 +1259,10 @@ class AppLocalizationsZh extends AppLocalizations {
   String get cachePolicyAudioEnabled => '边播边缓存';
 
   @override
-  String get cachePolicyAudioScope => '听过即缓存';
+  String get cachePolicyAudioScope => '听过的自动缓存';
 
   @override
-  String get cachePolicyAudioHint =>
-      '移动端边播边写；桌面端由后台下载补齐。命中缓存可离线播放、可转存为下载；容量上限与 LRU 淘汰照常生效。';
+  String get cachePolicyAudioHint => '播放时自动缓存，可离线播放，也可另存为下载；超出上限时自动清理最早的缓存。';
 
   @override
   String get cachePolicyAudioMax => '容量上限';
@@ -1322,7 +1318,7 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String cacheAudioMaxSuggested(String value) {
-    return '建议 $value（内部存储的 1/128）';
+    return '建议 $value';
   }
 
   @override
@@ -1337,7 +1333,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get cacheClearAll => '清理全部缓存';
 
   @override
-  String get cacheClearAllConfirm => '确定清理全部缓存（音频 / 歌词 / 封面）？此操作无法撤销。';
+  String get cacheClearAllConfirm => '清理全部缓存（音频、歌词、封面）？此操作无法撤销。';
 
   @override
   String get lyricsContentTitle => '歌词与输出';
@@ -1460,10 +1456,10 @@ class AppLocalizationsZh extends AppLocalizations {
   String get lyricsDesktopSchemeArtwork => '跟随封面';
 
   @override
-  String get lyricsDesktopLock => '锁定位置（点击穿透）';
+  String get lyricsDesktopLock => '锁定位置（不挡鼠标操作）';
 
   @override
-  String get lyricsDesktopFreeze => '息屏时冻结歌词';
+  String get lyricsDesktopFreeze => '息屏时暂停更新';
 
   @override
   String get lyricsDesktopPauseBehavior => '暂停时';
@@ -1475,7 +1471,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get lyricsDesktopHideOnPauseSubtitle => '暂停后收起悬浮窗，恢复播放时再显示';
 
   @override
-  String get lyricsDesktopPauseFallbackOverridden => '暂停时已整窗隐藏，此回退不生效';
+  String get lyricsDesktopPauseFallbackOverridden => '暂停时已隐藏整个窗口，此设置不会生效';
 
   @override
   String get lyricsDesktopNoLyrics => '无歌词时';
@@ -1487,7 +1483,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get lyricsDesktopScrollMode => '长行滚动';
 
   @override
-  String get lyricsDesktopScrollModeSubtitle => '跟随演唱：文本跟着高亮走；匀速：整行速度恒定';
+  String get lyricsDesktopScrollModeSubtitle => '跟随演唱：文字跟着高亮走；匀速：按固定速度滚动';
 
   @override
   String get lyricsDesktopScrollFollow => '跟随演唱';
@@ -1544,7 +1540,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get lyricsNotificationEnable => '在通知栏显示歌词';
 
   @override
-  String get lyricsNotificationEnableSubtitle => '把当前歌词行写入媒体元数据';
+  String get lyricsNotificationEnableSubtitle => '把当前歌词同步到系统播放控制';
 
   @override
   String get lyricsMetadataTarget => '显示在';
@@ -1586,7 +1582,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get lyricsBluetoothEnable => '车机显示歌词';
 
   @override
-  String get lyricsBluetoothEnableSubtitle => '把当前歌词行写入媒体元数据（通知栏 / 锁屏会同步显示）';
+  String get lyricsBluetoothEnableSubtitle => '让车机、通知栏与锁屏显示当前歌词';
 
   @override
   String get lyricsBluetoothOnlyA2dp => '仅在蓝牙音频连接时生效';
@@ -1613,11 +1609,10 @@ class AppLocalizationsZh extends AppLocalizations {
   String get lyricsNotificationPermissionTitle => '需要通知权限';
 
   @override
-  String get lyricsNotificationPermissionSubtitle =>
-      '允许通知后媒体控制卡才能稳定展示；点按前往系统设置';
+  String get lyricsNotificationPermissionSubtitle => '允许通知后媒体控制才能稳定显示；点按前往系统设置';
 
   @override
-  String get lyricsMediaSessionUnavailable => '系统媒体会话初始化失败：通知栏 / 锁屏歌词与播放控制不可用';
+  String get lyricsMediaSessionUnavailable => '系统媒体控制初始化失败：通知栏 / 锁屏歌词与播放控制不可用';
 
   @override
   String get lyricsDisplayUnsupported => '当前平台暂不支持歌词输出';
@@ -1672,7 +1667,7 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get lyricsDesktopColorThemeHint =>
-      '取色来源决定三行「跟随主题角色」用哪套方案：跟随应用主题随外观设置变化；跟随封面按当前曲目封面取色并实时更新。';
+      '「跟随应用主题」随外观设置变化；「跟随封面」按当前歌曲封面取色并实时更新。';
 
   @override
   String get statsTitle => '听歌统计';
@@ -1799,7 +1794,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get aiDjTitle => 'AI 推歌';
 
   @override
-  String get aiDjSettingsSubtitle => '自备 Key 的 AI 推荐电台（默认关闭）';
+  String get aiDjSettingsSubtitle => '自备密钥的 AI 推荐电台（默认关闭）';
 
   @override
   String get aiDjNotConfigured => '尚未配置 AI 服务';
@@ -1835,7 +1830,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get aiDjToggle => 'AI 推歌模式';
 
   @override
-  String get aiDjToggleSubtitle => '开启后 AI 持续选歌入队，播完自动续推';
+  String get aiDjToggleSubtitle => '开启后 AI 会持续选歌加入队列，播完自动继续';
 
   @override
   String get aiDjFeedMore => '再来一批';
@@ -1854,7 +1849,7 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get aiDjConsentBody =>
-      '开启后会把你的听歌画像（聚合统计、最近 200 条播放明细、已听曲目清单）发送给你配置的 AI 服务用于生成推荐；数据直达该服务、不经过本应用中转，应用不含内置 Key。关闭模式即停止续推，清除配置即断开连接。';
+      '开启后会把听歌画像（统计汇总、最近 200 条播放、已听曲目）发送给你配置的 AI 服务用于生成推荐；数据直达该服务，不经过本应用，应用不含内置 Key。\n关闭后停止推荐；清除配置即断开连接。';
 
   @override
   String get aiDjAgree => '同意并开启';
@@ -1894,7 +1889,7 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String aiDjQueued(int count) {
-    return '本会话已入队 $count 首';
+    return '本次已加入队列 $count 首';
   }
 
   @override
@@ -1999,11 +1994,11 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String aiDjUpstreamBody(int events, int artists, int exclusions) {
-    return '最近 $events 条播放记录 · Top 艺人 $artists 位 · 已听排除 $exclusions 首';
+    return '最近 $events 条播放记录 · 常听歌手 $artists 位 · 排除已听 $exclusions 首';
   }
 
   @override
-  String get aiDjUpstreamHint => '只包含以上统计与曲名/歌手，不含播放链接与设备信息。';
+  String get aiDjUpstreamHint => '只发送以上统计与歌名、歌手，不含播放链接与设备信息。';
 
   @override
   String get aiDjCacheTtlTitle => '推荐缓存';
@@ -2017,7 +2012,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get aiDjCacheTtlForever => '永久';
 
   @override
-  String get aiDjCacheTtlHint => '过期后不再作为续推来源，下一次续推自动生成新一批（不打断播放、不提示）。';
+  String get aiDjCacheTtlHint => '过期后会自动生成新一批，不打断播放。';
 
   @override
   String get aiDjGenerate => '生成推荐';
@@ -2035,7 +2030,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get settingsSyncTitle => '跨设备同步';
 
   @override
-  String get settingsSyncItemSubtitle => '歌单、音源、设置与凭证';
+  String get settingsSyncItemSubtitle => '歌单、音源、设置与密钥';
 
   @override
   String get syncPairingSection => '配对设备';
@@ -2044,7 +2039,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get syncLocalSection => '本机';
 
   @override
-  String get syncLocalSectionHint => '对端需要这些信息才能连上本机；地址与端口会随配对码一起分享。';
+  String get syncLocalSectionHint => '其它设备需要这些信息才能连上本机；地址会随配对码一起分享。';
 
   @override
   String get syncDeviceNameTitle => '设备名称';
@@ -2056,7 +2051,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get syncPassphraseNotSet => '未设置';
 
   @override
-  String get syncPassphraseTrustHint => '口令即信任根：持有者完全互信；怀疑泄露请重置。';
+  String get syncPassphraseTrustHint => '知道口令的设备可以读写全部同步数据；怀疑泄露请重置。';
 
   @override
   String get syncPassphraseCopy => '复制口令';
@@ -2106,7 +2101,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get syncOutcomeNoChanges => '无变化';
 
   @override
-  String get syncOutcomeNoPeers => '未发现对端';
+  String get syncOutcomeNoPeers => '未发现其它设备';
 
   @override
   String get syncOutcomePartial => '部分失败';
@@ -2118,13 +2113,13 @@ class AppLocalizationsZh extends AppLocalizations {
   String get syncTriggerStartup => '启动';
 
   @override
-  String get syncTriggerDebounce => '数据变更';
+  String get syncTriggerDebounce => '数据有变化';
 
   @override
   String get syncTriggerTimer => '定时';
 
   @override
-  String get syncTriggerIncoming => '对端推送';
+  String get syncTriggerIncoming => '其它设备发来';
 
   @override
   String get syncTriggerResume => '回前台';
@@ -2143,7 +2138,7 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String syncActivityRounds(int rounds, int effective, String bytes) {
-    return '触发 $rounds 轮，其中有效传输 $effective 轮，流量 $bytes';
+    return '运行 $rounds 次，其中 $effective 次有变化 · 流量 $bytes';
   }
 
   @override
@@ -2186,17 +2181,16 @@ class AppLocalizationsZh extends AppLocalizations {
   String get syncCellularPauseTitle => '移动数据下暂停自动同步';
 
   @override
-  String get syncCellularPauseSubtitle =>
-      '关闭时移动数据下只同步设置 / 歌单 / 会话等小类别，统计与历史留到 Wi-Fi';
+  String get syncCellularPauseSubtitle => '关闭后，移动数据下只同步设置、歌单等小数据，统计与历史等 Wi-Fi';
 
   @override
   String syncAppliedItems(int applied) {
-    return '应用 $applied 项';
+    return '已更新 $applied 项';
   }
 
   @override
   String syncPeerCount(int count) {
-    return '$count 个对端';
+    return '$count 台设备';
   }
 
   @override
@@ -2239,16 +2233,16 @@ class AppLocalizationsZh extends AppLocalizations {
   String get syncCategoryHistory => '播放历史';
 
   @override
-  String get syncCategorySession => '上次播放会话';
+  String get syncCategorySession => '上次播放状态';
 
   @override
-  String get syncCategoryCredentials => 'AI DJ 与凭证';
+  String get syncCategoryCredentials => 'AI 推歌与密钥';
 
   @override
   String get syncTransportSection => '传输方式';
 
   @override
-  String get syncTransportAllOffHint => '两路传输都关闭时同步不会运行；打开任一开关即开始交换数据。';
+  String get syncTransportAllOffHint => '两种方式都关闭时不会同步；打开任一开关即可开始。';
 
   @override
   String get syncLanTitle => '局域网直连';
@@ -2269,7 +2263,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get syncWebdavPassword => '密码';
 
   @override
-  String get syncWebdavRemoteDir => '远端目录';
+  String get syncWebdavRemoteDir => '云端目录';
 
   @override
   String get syncWebdavNotConfigured => '未配置';
@@ -2313,8 +2307,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get syncPeersSection => '设备';
 
   @override
-  String get syncPeersHint =>
-      '在其它设备输入同一口令即可加入。若长期发现不到设备，检查局域网传输是否可用（权限 / 网络隔离），或改用 WebDAV。';
+  String get syncPeersHint => '在其它设备输入同一口令即可加入。如果一直找不到设备，请检查局域网权限，或改用 WebDAV。';
 
   @override
   String get syncPeersEmptyTitle => '还没有配对设备';
@@ -2328,7 +2321,7 @@ class AppLocalizationsZh extends AppLocalizations {
   }
 
   @override
-  String get syncPeerThisDeviceTitle => '本机设备 id';
+  String get syncPeerThisDeviceTitle => '本机设备 ID';
 
   @override
   String syncPeerLastSync(String time) {
@@ -2340,17 +2333,17 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String syncPeerBehind(int count) {
-    return '落后 $count 项';
+    return '待同步 $count 项';
   }
 
   @override
   String syncPeerBehindBytes(int count, String size) {
-    return '落后 $count 项（约 $size）';
+    return '待同步 $count 项（约 $size）';
   }
 
   @override
   String syncPeerClockSkew(int minutes) {
-    return '时钟差 $minutes 分钟';
+    return '设备时间相差 $minutes 分钟';
   }
 
   @override
@@ -2399,35 +2392,35 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get syncPeerLostHint =>
-      '该设备超过 180 天没有接触（可能已重装或不再使用）。可以本地忽略它，或显式清理它的远端文件；本机不会自动删除。';
+      '该设备已超过 180 天没有连接（可能已重装或不再使用）。可以忽略它，或清理它在云端的同步文件；本机数据不受影响。';
 
   @override
-  String get syncPeerIgnore => '本地忽略该设备';
+  String get syncPeerIgnore => '忽略该设备';
 
   @override
-  String get syncPeerUnignore => '取消本地忽略';
+  String get syncPeerUnignore => '取消忽略';
 
   @override
-  String get syncPeerIgnoreHint => '不再拉取 / 合并该设备的载荷（只影响本机）';
+  String get syncPeerIgnoreHint => '不再从该设备接收同步数据（只影响本机）';
 
   @override
-  String get syncPeerIgnoredHint => '已本地忽略：不再拉取 / 合并它的载荷。';
+  String get syncPeerIgnoredHint => '已忽略：不再从该设备接收同步数据。';
 
   @override
-  String get syncPeerCleanupRemote => '清理远端文件';
+  String get syncPeerCleanupRemote => '清理云端文件';
 
   @override
-  String get syncPeerCleanupRemoteHint => '删除该设备在 WebDAV 上的日志与快照文件';
+  String get syncPeerCleanupRemoteHint => '删除该设备在 WebDAV 上的同步文件';
 
   @override
   String get syncPeerCleanupRemoteConfirm =>
-      '将删除该设备在 WebDAV 上的日志与快照文件。本机数据不受影响，文件也不会自动重建（对端重新在线后才会再写入）。局域网直连没有远端存储，无需清理。';
+      '将删除该设备在 WebDAV 上的同步文件，本机数据不受影响；该设备重新上线后会再写入。局域网直连无需清理。';
 
   @override
-  String get syncPeerCleanupRemoteDone => '已清理远端文件';
+  String get syncPeerCleanupRemoteDone => '已清理云端文件';
 
   @override
-  String get syncPeerCleanupRemoteNone => '没有可清理的远端文件';
+  String get syncPeerCleanupRemoteNone => '没有可清理的云端文件';
 
   @override
   String syncPeerCleanupRemoteFailed(Object error) {
@@ -2435,15 +2428,15 @@ class AppLocalizationsZh extends AppLocalizations {
   }
 
   @override
-  String get syncPeerNotContacted => '还没连上，对端上线后会自动重试';
+  String get syncPeerNotContacted => '还没连上，设备上线后会自动重试';
 
   @override
   String syncPeerCandidatesTitle(int count) {
-    return '候选地址 $count 个';
+    return '可用地址 $count 个';
   }
 
   @override
-  String get syncPeerCandidatesSubtitle => '还没连上 · 点开可查看 / 删除';
+  String get syncPeerCandidatesSubtitle => '还没连上 · 点开可查看或删除';
 
   @override
   String get syncPairingShareTitle => '分享配对信息';
@@ -2516,19 +2509,19 @@ class AppLocalizationsZh extends AppLocalizations {
   String get syncLocalAddressCopied => '已复制地址';
 
   @override
-  String get syncLocalAddressesEmptyTitle => '没有可路由地址';
+  String get syncLocalAddressesEmptyTitle => '没有可用的网络地址';
 
   @override
-  String get syncLocalAddressesHint => '这些地址与配对码一起分享给对端（同一口径）。';
+  String get syncLocalAddressesHint => '这些地址会随配对码一起分享给其它设备。';
 
   @override
-  String get syncLocalAddressesEmpty => '只找到回环 / link-local 地址，请检查网络连接。';
+  String get syncLocalAddressesEmpty => '没有找到可用的局域网地址，请检查网络连接。';
 
   @override
-  String get syncLocalProbePort => '探测端口';
+  String get syncLocalProbePort => '发现端口';
 
   @override
-  String get syncLocalProbePortUnavailable => '不可用（广播 / 组播探测已降级，请用手动地址直连）';
+  String get syncLocalProbePortUnavailable => '不可用；请手动添加设备地址';
 
   @override
   String syncLocalProbePortPerFamily(String v4, String v6) {
@@ -2536,10 +2529,10 @@ class AppLocalizationsZh extends AppLocalizations {
   }
 
   @override
-  String get syncLocalHttpPort => '直连端点端口';
+  String get syncLocalHttpPort => '连接端口';
 
   @override
-  String get syncLocalHttpPortUnavailable => '尚未绑定';
+  String get syncLocalHttpPortUnavailable => '尚未启动';
 
   @override
   String syncPeerDeviceId(String id) {
@@ -2556,7 +2549,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get syncDeviceNameEmpty => '名称不能为空';
 
   @override
-  String get syncCategorySubtitle => '关闭后本机不推送也不应用该类数据';
+  String get syncCategorySubtitle => '关闭后本机不再上传或接收该类数据';
 
   @override
   String get syncIssueDialogTitle => '同步问题';
@@ -2577,22 +2570,22 @@ class AppLocalizationsZh extends AppLocalizations {
   String get syncIssueNoPassphrase => '尚未设置同步口令';
 
   @override
-  String get syncIssueAllPeersUnreachable => '所有对端均不可达';
+  String get syncIssueAllPeersUnreachable => '所有设备都连不上';
 
   @override
-  String get syncIssuePullFailed => '拉取远端快照失败';
+  String get syncIssuePullFailed => '读取同步数据失败';
 
   @override
-  String get syncIssuePushFailed => '推送本地变更失败';
+  String get syncIssuePushFailed => '上传本机改动失败';
 
   @override
   String syncIssueApplyFailed(int count) {
-    return '应用远端数据失败 $count 次';
+    return '接收同步数据失败 $count 次';
   }
 
   @override
   String syncIssuePeerReadFailed(String peer) {
-    return '$peer：读取快照失败';
+    return '$peer：读取同步数据失败';
   }
 
   @override
@@ -2602,28 +2595,27 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String syncIssuePeerPushFailed(String peer) {
-    return '$peer：推送失败';
+    return '$peer：上传失败';
   }
 
   @override
-  String get syncIssueBroadcastUnavailable => '广播发送失败（被网络策略拦截）';
+  String get syncIssueBroadcastUnavailable => '自动发现失败（被网络策略拦截）';
 
   @override
-  String get syncIssueProbePortUnavailable =>
-      '探测端口不可用（端口被系统保留或被占用），发现对端请用「添加设备」手动地址';
+  String get syncIssueProbePortUnavailable => '自动发现不可用，请用「添加设备」手动填写地址';
 
   @override
-  String get syncIssueDiscoverySilent => '探测窗口内没有设备应答（可能被网络隔离）';
+  String get syncIssueDiscoverySilent => '没有发现其它设备（可能被网络隔离）';
 
   @override
-  String get syncIssueWebdavDirFailed => 'WebDAV 目录准备失败';
+  String get syncIssueWebdavDirFailed => 'WebDAV 目录不可用';
 
   @override
-  String get syncIssueWebdavListFailed => 'WebDAV 目录列表失败';
+  String get syncIssueWebdavListFailed => 'WebDAV 目录读取失败';
 
   @override
   String syncIssueWebdavReadFailed(String peer) {
-    return '$peer：读取快照失败';
+    return '$peer：读取同步数据失败';
   }
 
   @override
@@ -2632,15 +2624,15 @@ class AppLocalizationsZh extends AppLocalizations {
   }
 
   @override
-  String get syncIssueWebdavUploadFailed => 'WebDAV 快照上传失败';
+  String get syncIssueWebdavUploadFailed => 'WebDAV 同步数据上传失败';
 
   @override
   String syncIssueDeleteRemoteFailed(String peer) {
-    return '清理对端 $peer 的远端文件失败';
+    return '清理设备 $peer 的云端文件失败';
   }
 
   @override
-  String get syncIssueInternal => '同步内部错误';
+  String get syncIssueInternal => '同步出错';
 
   @override
   String get syncActionGrantPermission => '授予权限';
@@ -2667,10 +2659,10 @@ class AppLocalizationsZh extends AppLocalizations {
   String get syncPeerUnknown => '未知设备';
 
   @override
-  String get syncPeerDeviceIdCopied => '已复制完整设备 id';
+  String get syncPeerDeviceIdCopied => '已复制完整设备 ID';
 
   @override
-  String get syncPeerHostFormatInvalid => '地址格式不正确（支持 IP、IPv6 或域名，不含端口）';
+  String get syncPeerHostFormatInvalid => '地址格式不正确（支持 IP 或域名，不含端口）';
 
   @override
   String get syncPeerPortInvalid => '端口需为 1–65535';
@@ -2682,10 +2674,10 @@ class AppLocalizationsZh extends AppLocalizations {
   String get syncPeerUpdated => '设备已更新';
 
   @override
-  String get syncPeerUnreachable => '没连上：确认对端在线且在同一网络，或更新对端地址';
+  String get syncPeerUnreachable => '没连上：确认设备在线且在同一网络，或更新它的地址';
 
   @override
-  String get syncPeerProbePortLabel => '探测端口';
+  String get syncPeerProbePortLabel => '发现端口';
 
   @override
   String syncPeerProbePortHint(int port) {
@@ -2699,10 +2691,10 @@ class AppLocalizationsZh extends AppLocalizations {
   String get syncManualConnect => '手动连接';
 
   @override
-  String get syncManualConnectSubtitle => '自动发现失败（多网段 / 防火墙 / VPN）时手填对端地址';
+  String get syncManualConnectSubtitle => '自动发现失败时，手动填写设备地址';
 
   @override
-  String get syncManualConnectHint => '设备换 IP 后：重新粘贴它的配对码，或在这里更新地址';
+  String get syncManualConnectHint => '设备换了地址后：重新粘贴它的配对码，或在这里更新地址';
 
   @override
   String get syncNetworkAddresses => '网络地址';
@@ -2860,7 +2852,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get updateAdvancedSection => '高级';
 
   @override
-  String get updateManifestOverrideTitle => '更新清单地址';
+  String get updateManifestOverrideTitle => '更新信息地址';
 
   @override
   String get updateManifestOverrideDefault => '默认（官方 GitHub Release）';
@@ -2894,7 +2886,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get updateErrorNetwork => '网络错误，检查更新失败';
 
   @override
-  String get updateErrorManifest => '更新清单无效';
+  String get updateErrorManifest => '更新信息无效';
 
   @override
   String get updateErrorUnsupported => '当前平台不支持应用内更新';
@@ -2957,7 +2949,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get localDataTitle => '本地数据';
 
   @override
-  String get trackInfoCacheResolve => '取链缓存';
+  String get trackInfoCacheResolve => '播放链接缓存';
 
   @override
   String get trackInfoCacheNone => '无缓存';
@@ -3033,7 +3025,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get localDataTransferHint => '已缓存 · 转存不触网';
 
   @override
-  String get localDataAudioPlatformHint => '当前平台不写播放缓存，播放过会自动补齐缓存副本';
+  String get localDataAudioPlatformHint => '当前平台播放时不会写入缓存；播放后会补上缓存';
 
   @override
   String get trackCacheClearAll => '全部清理';
@@ -3047,7 +3039,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get trackCacheClearAllConfirm => '清理这首歌的全部缓存？';
 
   @override
-  String get trackCacheClearHint => '只清理缓存副本，不影响已下载文件与当前播放。';
+  String get trackCacheClearHint => '只清理缓存，不影响已下载文件与当前播放。';
 
   @override
   String cacheClearPart(String part) {
@@ -3093,7 +3085,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get downloadAll => '全部下载';
 
   @override
-  String get downloadFromCache => '命中本地缓存，无需下载';
+  String get downloadFromCache => '已有本地缓存，无需下载';
 
   @override
   String get downloadLyricsDone => '歌词已下载';
@@ -3143,21 +3135,21 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get downloadEmbedTagsSubtitle =>
-      '写入音频文件标签（MP3 / FLAC），其它播放器也能读到；失败时保留同名文件';
+      '写入音频标签（MP3 / FLAC），其它播放器也能读到；失败时保留原文件';
 
   @override
   String get downloadPublishToPublicDir => '发布到公共下载目录';
 
   @override
   String get downloadPublishToPublicDirSubtitle =>
-      '下载完成后额外拷贝一份到系统「下载」目录（Android 公共目录），文件管理器与其它播放器可见；播放仍用应用内的副本';
+      '完成后另存一份到系统「下载」目录（Android），文件管理器与其它播放器可见';
 
   @override
   String get downloadNotifications => '下载通知';
 
   @override
   String get downloadNotificationsSubtitle =>
-      '下载时在通知栏显示进度，并由前台服务让下载在后台继续（Android）；需要通知权限';
+      '在通知栏显示下载进度，退到后台也能继续（Android，需要通知权限）';
 
   @override
   String get downloadLocationInfo => '下载目录';
@@ -3169,7 +3161,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get save => '保存';
 
   @override
-  String get lyricsEmptyState => '这首歌暂时没找到词，换一个来源试试？ (´･ω･`)';
+  String get lyricsEmptyState => '暂时没找到歌词，换个来源试试？';
 
   @override
   String get lyricsDisplaySettingsAction => '歌词显示设置';
@@ -3267,11 +3259,10 @@ class AppLocalizationsZh extends AppLocalizations {
   String get downloadDelete => '删除下载';
 
   @override
-  String get downloadDeleteConfirm => '删除本地副本？音频、歌词与封面文件将一并删除。';
+  String get downloadDeleteConfirm => '删除下载？音频、歌词与封面会一起删除。';
 
   @override
-  String get downloadDeleteConfirmMixed =>
-      '删除本地副本？音频、歌词与封面文件将一并删除；导入的本地歌曲只从列表移除。';
+  String get downloadDeleteConfirmMixed => '删除下载？音频、歌词与封面会一起删除；导入的歌曲只从列表移除。';
 
   @override
   String get localSongsCachedTag => '缓存';
@@ -3280,14 +3271,14 @@ class AppLocalizationsZh extends AppLocalizations {
   String get localSongsCachedRemove => '清除缓存';
 
   @override
-  String get localSongsCachedRemoveConfirm => '清除这首歌的音频缓存？只移除缓存副本，不影响下载与导入的文件。';
+  String get localSongsCachedRemoveConfirm => '清除这首歌的音频缓存？只移除缓存，不影响下载与导入的文件。';
 
   @override
   String get localSongsMixedRemoveConfirm =>
-      '删除所选内容？下载副本会删除文件，导入项只从列表移除，缓存副本会被清除。';
+      '删除所选内容？下载的会删除文件，导入的只从列表移除，缓存的会被清除。';
 
   @override
-  String get downloadShare => '分享导出';
+  String get downloadShare => '分享文件';
 
   @override
   String downloadProgressPercent(int percent) {
@@ -3371,7 +3362,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get downloadsCleanupParts => '清理未完成的下载文件';
 
   @override
-  String get downloadsCleanupPartsSubtitle => '崩溃遗留的半成品（.part），不影响已完成下载';
+  String get downloadsCleanupPartsSubtitle => '清理上次中断留下的临时文件，不影响已完成的下载';
 
   @override
   String downloadsCleanupPartsDone(int count) {
@@ -3379,14 +3370,14 @@ class AppLocalizationsZh extends AppLocalizations {
   }
 
   @override
-  String get downloadsCleanupOrphans => '清理无记录的孤儿文件';
+  String get downloadsCleanupOrphans => '清理残留文件';
 
   @override
-  String get downloadsCleanupOrphansSubtitle => '删除下载目录中不被任何记录引用的文件';
+  String get downloadsCleanupOrphansSubtitle => '删除下载目录里找不到记录的残留文件';
 
   @override
   String downloadsCleanupOrphansDone(int count) {
-    return '已清理 $count 个孤儿文件';
+    return '已清理 $count 个残留文件';
   }
 
   @override
@@ -3410,18 +3401,19 @@ class AppLocalizationsZh extends AppLocalizations {
   }
 
   @override
-  String get downloadsPublishPublic => '补发布到公共目录';
+  String get downloadsPublishPublic => '补一份到公共目录';
 
   @override
-  String get downloadsPublishPublicSubtitle => '把还没有公共副本的下载拷进系统「下载」目录（Android）';
+  String get downloadsPublishPublicSubtitle =>
+      '把还没复制到系统「下载」目录的下载文件补一份（Android）';
 
   @override
   String downloadsPublishPublicDone(int published, int failed) {
-    return '已发布 $published 首，失败 $failed 首';
+    return '已复制 $published 首，失败 $failed 首';
   }
 
   @override
-  String get downloadsNoResume => '不做断点续传：平台直链多为一次性签名地址，失败后重下更可靠';
+  String get downloadsNoResume => '下载失败会从头重下（平台链接通常短期有效）。';
 
   @override
   String get downloadsEmpty => '还没有下载的歌曲';
@@ -3506,19 +3498,18 @@ class AppLocalizationsZh extends AppLocalizations {
   String get shortcutsGlobalSection => '全局快捷键';
 
   @override
-  String get shortcutsGlobalHint => '系统级热键，窗口失焦也生效；必须包含 Ctrl / Alt / Shift';
+  String get shortcutsGlobalHint => '全局快捷键，窗口不在前台也生效；必须包含 Ctrl / Alt / Shift';
 
   @override
-  String get shortcutsGlobalUnsupportedKey => '系统级热键只支持字母、数字、F1–F12 与空格';
+  String get shortcutsGlobalUnsupportedKey => '全局快捷键只支持字母、数字、F1–F12 与空格';
 
   @override
   String shortcutsGlobalFailed(String detail) {
-    return '部分全局快捷键未能注册：$detail';
+    return '部分全局快捷键未能生效：$detail';
   }
 
   @override
-  String get shortcutsGlobalLinuxHint =>
-      'Linux 通过桌面门户（xdg-desktop-portal 的 GlobalShortcuts）注册；精简桌面环境可能不支持，届时会提示注册失败';
+  String get shortcutsGlobalLinuxHint => 'Linux 由桌面门户提供；精简桌面环境可能不支持，届时会提示失败';
 
   @override
   String get shortcutsEnabledSwitch => '启用软件内快捷键';
@@ -3545,7 +3536,7 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String shortcutsSwapDialogMessage(String action) {
-    return '「$action」已使用该组合，替换将互换两者的绑定。';
+    return '「$action」已使用该组合，替换会交换两者的快捷键。';
   }
 
   @override
@@ -3553,7 +3544,7 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String shortcutsSwapDone(String action) {
-    return '已与「$action」互换绑定';
+    return '已与「$action」互换快捷键';
   }
 
   @override
@@ -3607,5 +3598,5 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get settingsTrayLinuxHint =>
-      '托盘图标需要系统托盘支持：GNOME 需安装 AppIndicator 扩展；没有托盘宿主时，关闭将直接退出';
+      'GNOME 等桌面需安装托盘扩展才能显示图标；没有托盘时，关闭窗口会直接退出应用';
 }

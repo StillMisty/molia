@@ -61,7 +61,8 @@ sources/playback。
 ## 开发约定
 
 - 订阅优先 `Selector`/`ValueListenableBuilder`；`select` 不返回 `Map`/`List` 引用（用不可变对象/record）；
-- 文案走 `AppLocalizations`（en/zh + `flutter gen-l10n`）；注释中文、写「为什么」；
+- 文案走 `AppLocalizations`（en/zh + `flutter gen-l10n`）；用户可见文案只说「能不能用 + 怎么办」，
+  黑话对照与长度约定见 `docs/copy_style.md`（zh/en 与测试断言同步改）；注释中文、写「为什么」；
 - UI 硬约定（`test/architecture/` 强制，细节见 `docs/architecture.md` §6）：`Icons.*_rounded`；
   颜色只走 ColorScheme/`AppSemanticColors`（透明度用 `withValues(alpha:)`）；优先 `M3E*` 组件；
   禁止 import `package:flutter/material.dart`；

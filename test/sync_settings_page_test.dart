@@ -251,7 +251,7 @@ void main() {
     expect(provider.passphrase, isNotNull);
     expect(find.text('turned off'), findsOneWidget, reason: '局域网默认关');
     expect(
-      find.textContaining('both transports are off'),
+      find.textContaining('both methods are off'),
       findsOneWidget,
       reason: 'footer 说明「同步不会运行」，免得把没同步误读成故障',
     );
@@ -329,7 +329,7 @@ void main() {
     await provider.syncNow(manual: true);
     await tester.pumpAndSettle();
     final footer = transportFooter(tester);
-    expect(footer, contains('No peer found'));
+    expect(footer, contains('No other device found'));
     expect(footer, contains('just now'));
     // 「跳过 N 项」这类全库计数不出现在任何文案里。
     expect(find.textContaining('skipped'), findsNothing);
@@ -368,7 +368,7 @@ void main() {
       findsOneWidget,
     );
     // 行副标题：网卡 · 地址族 · 该族探测端口。
-    expect(find.text('wlan0 · IPv4 · Probe port 47825'), findsOneWidget);
+    expect(find.text('wlan0 · IPv4 · Discovery port 47825'), findsOneWidget);
 
     await tester.tap(
       find.byKey(const Key('settingsSyncLocalAddress-192.168.1.10')),
@@ -696,7 +696,7 @@ void main() {
 
     // 地址已写入地址簿（用户不用重填），但弹层留在原地让用户改地址重试。
     expect(provider.manualPeers.single.host, '192.168.1.23');
-    expect(find.textContaining('Not reachable'), findsOneWidget);
+    expect(find.textContaining('make sure the device is online'), findsOneWidget);
     expect(find.text('Save'), findsOneWidget);
 
     // 关掉弹层后：未连上的条目在地址簿里可见（点开可改 / 删）。
@@ -805,8 +805,8 @@ void main() {
       find.byKey(const Key('settingsSyncPeerAddress-2409:8a55::9')),
       findsOneWidget,
     );
-    expect(find.text('Probe port 47825'), findsOneWidget);
-    expect(find.text('Probe port 51234'), findsOneWidget);
+    expect(find.text('Discovery port 47825'), findsOneWidget);
+    expect(find.text('Discovery port 51234'), findsOneWidget);
 
     // 更新第一条地址（换 IP）：身份与已学端点端口保留。
     await tester.tap(
@@ -863,7 +863,7 @@ void main() {
       find.byKey(const Key('settingsSyncPeerCandidatesItem')),
       findsOneWidget,
     );
-    expect(find.text('3 candidate addresses'), findsOneWidget);
+    expect(find.text('3 available addresses'), findsOneWidget);
     expect(find.byKey(const Key('settingsSyncPeer-192.168.1.24')), findsNothing);
 
     await tester.tap(find.byKey(const Key('settingsSyncPeerCandidatesItem')));
@@ -928,7 +928,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(transport.deletedRemotes, ['ghost']);
-    expect(notifications.last, 'Remote files cleaned up');
+    expect(notifications.last, 'Cloud files cleaned up');
   });
 
   testWidgets('名册展示优先用户命名，对端自报名仅兜底', (tester) async {
@@ -1024,7 +1024,7 @@ void main() {
     await openSubPage(tester, 'settingsSyncLogItem');
     expect(find.text('Last 24 hours'), findsOneWidget);
     expect(
-      find.textContaining('1 rounds, 0 with transfer'),
+      find.textContaining('1 runs, 0 with changes'),
       findsOneWidget,
     );
     // 环境行：未注入调度器 → 等级「未运行」；非移动数据；非省电。
@@ -1059,7 +1059,7 @@ void main() {
     expect(find.text('No records yet'), findsNothing);
     final logTile = tester
         .widget<SettingsNavTile>(find.byKey(const Key('settingsSyncLogItem')));
-    expect(logTile.subtitle, contains('No peer found'));
+    expect(logTile.subtitle, contains('No other device found'));
     expect(logTile.subtitle, contains('just now'));
   });
 
@@ -1154,7 +1154,7 @@ void main() {
     await openSubPage(tester, 'settingsSyncLogItem');
     // 零应答（区别于从未发现）：日志行可点开下一步动作。
     expect(find.byType(SyncLogRow), findsOneWidget);
-    expect(find.textContaining('No device answered'), findsWidgets);
+    expect(find.textContaining('the network may be isolated'), findsWidgets);
     await tester.tap(find.byType(SyncLogRow));
     await tester.pumpAndSettle();
 
@@ -1184,7 +1184,7 @@ void main() {
     await openSubPage(tester, 'settingsSyncLogItem');
     await tester.tap(find.byType(SyncLogRow));
     await tester.pumpAndSettle();
-    expect(find.textContaining('Probe port unavailable'), findsWidgets);
+    expect(find.textContaining('Auto-discovery unavailable'), findsWidgets);
     expect(find.text('Add manual address'), findsOneWidget);
     // 「添加手动地址」直接打开手动连接弹层（不跳页）。
     await tester.tap(find.text('Add manual address'));

@@ -47,7 +47,7 @@
   "lyricsTitle": "Lyrics",
   "lyricsLoading": "Loading lyrics...",
   "lyricsFailedToLoad": "Failed to load lyrics.",
-  "lyricsCopyModeSnackbar": "Copy lyrics mode: single repeat is on and auto-follow is paused; your previous play mode returns when you exit.",
+  "lyricsCopyModeSnackbar": "Copy mode: single repeat is on and auto-follow is paused; your settings return when you exit.",
   "centerCurrentLine": "Center Current Line",
   "playlist": "Playlist",
   "operationFailed": "Operation failed",
@@ -57,20 +57,20 @@
   "themeModeLight": "Light",
   "themeModeDark": "Dark",
   "settingsBaseColor": "Base colors",
-  "settingsBaseColorWallpaper": "System wallpaper",
+  "settingsBaseColorWallpaper": "System wallpaper (follows system colors)",
   "settingsBaseColorCustom": "Custom color",
   "settingsMonetUnavailable": "Not supported on this platform",
   "settingsBaseColorWallpaperActive": "Source: system wallpaper",
-  "settingsBaseColorAccentActive": "Source: system accent color",
+  "settingsBaseColorAccentActive": "Source: system theme color",
   "settingsPureBlack": "Pure black background",
-  "settingsPureBlackSubtitle": "Use pure black surfaces in dark mode (OLED)",
+  "settingsPureBlackSubtitle": "Pure black background in dark mode — saves power on OLED",
   "settingsSeedColor": "Custom color",
   "settingsFollowArtwork": "Follow album art",
-  "settingsFollowArtworkSubtitle": "Follow the current track's album art; falls back to base colors without artwork",
+  "settingsFollowArtworkSubtitle": "Pick colors from the current song’s artwork; base colors when there is none",
   "settingsAppFont": "App font",
   "fontSystemDefault": "System default",
   "fontPickerSearchHint": "Search fonts",
-  "fontPickerEmpty": "No fonts available on this device",
+  "fontPickerEmpty": "No available fonts found",
   "posterFontLabel": "Font",
   "posterColorSource": "Color source",
   "posterColorSourceAppTheme": "Follow app theme",
@@ -87,20 +87,20 @@
   "colorTeal": "Teal",
   "settingsPlaybackTitle": "Playback",
   "settingsDefaultPlayMode": "Default play mode",
-  "settingsDefaultPlayModeSubtitle": "Initial mode for new sessions; current playback is unaffected",
+  "settingsDefaultPlayModeSubtitle": "Used the next time playback starts; current playback is unaffected",
   "settingsRestoreSessionTitle": "Resume last playback",
   "settingsRestoreSessionSubtitle": "Restore track, queue and position on launch (on by default)",
   "settingsAutoSourceSwap": "Auto source switch",
-  "settingsAutoSourceSwapSubtitle": "On failure, find the same song in another source and switch (on by default)",
+  "settingsAutoSourceSwapSubtitle": "On playback failure, look for the same song in another source (on by default)",
   "settingsDataSaverTitle": "Data saver",
-  "settingsDataSaverSubtitle": "When on, lower audio quality and reduce artwork loading on mobile data",
+  "settingsDataSaverSubtitle": "Lower audio quality and load fewer covers on mobile data",
   "settingsDataSaverNetworkCellular": "Mobile data · active",
   "settingsDataSaverNetworkWifi": "Wi-Fi · inactive",
   "settingsDataSaverNetworkUnknown": "Network type unavailable",
   "settingsDataSaverQuality": "Data saver quality cap",
   "settingsDataSaverCovers": "Cached artwork only on mobile data",
-  "settingsDataSaverCoversSubtitle": "Do not request new artwork; show a placeholder when not cached",
-  "settingsSourcesItemSubtitle": "Import LX Music source scripts to search third-party platforms",
+  "settingsDataSaverCoversSubtitle": "Stop loading new artwork; show a placeholder when not cached",
+  "settingsSourcesItemSubtitle": "Import LX Music source scripts to search more platforms",
   "settingsContentSection": "Content & sources",
   "settingsLyricsSection": "Lyrics & display",
   "settingsBottomNavTitle": "Bottom navigation",
@@ -143,7 +143,7 @@
   "languageSaved": "Language setting saved",
   "exportFailed": "Export failed or cancelled.",
   "importDialogTitle": "Confirm Import",
-  "importDialogMessage": "Importing data will replace existing recent play entries with the same identifiers. This cannot be undone. Are you sure you want to continue?\n\nEnsure the JSON file is valid and was previously exported from Molia.",
+  "importDialogMessage": "Importing merges the backup with local data; matching entries are replaced by the backup. This cannot be undone.\n\nMake sure the file is a backup exported from Molia.",
   "importButton": "Import Data",
   "importSuccess": "Data imported successfully!",
   "importFailed": "Failed to import data.",
@@ -223,19 +223,19 @@
   "sourcesStatusSection": "Status",
   "sourcesImportSection": "Import script",
   "anyListenEntry": "any-listen",
-  "anyListenIntroBody": "any-listen is a self-hosted private music service. Once the server address is set and the source is enabled, its online sources appear in search.",
-  "anyListenIntroHint": "Skeleton implementation: the handshake probes (/api/ipc/hello, /api/ipc/id) follow the official source; search / url / lyric / pic endpoints are not yet verified against a real server and may not work.",
+  "anyListenIntroBody": "any-listen is a self-hosted music service. Once enabled, its online sources appear in search.",
+  "anyListenIntroHint": "This integration has not been tested against a real server and may not work yet.",
   "anyListenServerSection": "Server",
   "anyListenServerUrl": "Server address",
-  "anyListenServerUrlHint": "Address of a Docker / desktop any-listen deployment",
+  "anyListenServerUrlHint": "Address of your any-listen service",
   "anyListenServerUrlRequired": "Enter the server address first",
   "anyListenServerUrlRequiredToEnable": "Enter the server address before enabling",
-  "anyListenToken": "Access token (optional)",
-  "anyListenTokenPlaceholder": "Paste the token issued by the server after a successful test",
-  "anyListenTokenShow": "Show token",
-  "anyListenTokenHide": "Hide token",
+  "anyListenToken": "Access password (optional)",
+  "anyListenTokenPlaceholder": "After a successful test, paste the access password provided by the server",
+  "anyListenTokenShow": "Show access password",
+  "anyListenTokenHide": "Hide access password",
   "anyListenEnable": "Enable any-listen source",
-  "anyListenEnableSubtitle": "When off, it does not appear in search and makes no requests",
+  "anyListenEnableSubtitle": "When off, it is hidden from search and makes no network requests",
   "anyListenSave": "Save",
   "anyListenTest": "Test connection",
   "anyListenSaveFailed": "Save failed: cannot write local storage",
@@ -296,7 +296,7 @@
   "sourcesImportFromText": "Paste script",
   "sourcesImportFromTextSubtitle": "Paste the full script from the clipboard",
   "sourcesImportFromUrl": "Import from URL",
-  "sourcesImportFromUrlSubtitle": "Download the script over HTTP(S)",
+  "sourcesImportFromUrlSubtitle": "Download a script from a link",
   "sourcesDefaultQuality": "Default quality",
   "sourcesQualityHiRes": "Hi-Res",
   "sourcesQualityLossless": "Lossless",
@@ -305,11 +305,11 @@
   "sourcesQuality320k": "320K",
   "sourcesQuality192k": "192K",
   "sourcesQuality128k": "128K",
-  "sourcesQualityHint": "Preferred when resolving a track URL; falls back when unavailable.",
+  "sourcesQualityHint": "Play at this quality when available; fall back automatically otherwise",
   "sourcesSortTitle": "Channel order",
   "sourcesSortReset": "Reset",
   "sourcesSortResetSubtitle": "Restore the default order: script sources first, built-in platforms after",
-  "sourcesSortHint": "The channel order on the Discover page matches the list below and also controls the search source order. Newly imported channels are appended at the end; turning a channel off removes it from the Discover page and search results.",
+  "sourcesSortHint": "Discover and search follow this order; new channels go to the end, and disabled channels disappear.",
   "sourcesChannelDisabled": "Disabled",
   "sourcesNoSearchableSources": "No searchable sources yet. Enable a source script to list searchable platforms here.",
   "sourcesKindLx": "Script source",
@@ -360,7 +360,7 @@
     }
   },
   "sourcesDisclaimerTitle": "Import source script",
-  "sourcesDisclaimerBody": "Source scripts are executable JavaScript code provided by third-party communities.\nOnce imported, they run in the local JS engine and can make network requests.\nImport only scripts from trusted sources; their availability and legality are the responsibility of the provider.",
+  "sourcesDisclaimerBody": "Source scripts are executable code from third parties; once imported they run on this device and can access the network.\nOnly import scripts from trusted sources. Their availability and legality are the provider’s responsibility.",
   "sourcesContinueImport": "Continue import",
   "sourcesImportFailed": "Import failed: {error}",
   "@sourcesImportFailed": {
@@ -371,7 +371,7 @@
     }
   },
   "sourcesPasteTitle": "Paste source script",
-  "sourcesPasteHint": "Paste the full script starting with /** @name ... */",
+  "sourcesPasteHint": "Paste the full source script",
   "sourcesImportAction": "Import",
   "sourcesDownloadAndImport": "Download & import",
   "searchFailed": "Search failed",
@@ -400,7 +400,7 @@
   "languageSettingTitle": "App Language",
   "languageSettingSubtitle": "Change the interface display language",
   "languageSystem": "System default",
-  "recentlyPlayedEmpty": "Nothing played recently yet. Albums and playlists you play will show up here.",
+  "recentlyPlayedEmpty": "Albums and playlists you listen to will show up here.",
   "libraryRecentPlays": "Recent Plays",
   "libraryPlaylists": "My Playlists",
   "libraryImportFavorites": "Import Favorites",
@@ -513,7 +513,7 @@
   "sourceSwapConfirm": "Change source",
   "sourceSwapPreviewContext": "Source preview",
   "sourceSwapDuplicateTitle": "Track already exists",
-  "sourceSwapDuplicateMessage": "The target playlist already contains this track. Changing the source will remove the duplicate and replace it with the selected version.",
+  "sourceSwapDuplicateMessage": "This song is already in the list. Changing the source replaces the existing version.",
   "sourceSwapDone": "Source changed",
   "sourceSwapQueueFollowed": "Source changed and playback switched",
   "sourceSwapNotFound": "The track is no longer in its original place",
@@ -629,7 +629,7 @@
   "localSongsRemoveConfirm": "Removes the entry only; the original file is kept.",
   "libraryListEnd": "— End —",
   "settingsCacheTitle": "Cache management",
-  "settingsCacheSubtitle": "Audio, lyrics and artwork usage and policies",
+  "settingsCacheSubtitle": "Audio, lyric and artwork usage and cleanup rules",
   "cachePartitionAudio": "Audio cache",
   "cachePartitionLyrics": "Lyrics cache",
   "cachePartitionArtwork": "Artwork cache",
@@ -646,8 +646,8 @@
   },
   "cacheUsageComputing": "Calculating…",
   "cachePolicyAudioEnabled": "Cache audio while playing",
-  "cachePolicyAudioScope": "Cache on play",
-  "cachePolicyAudioHint": "Written while playing on mobile; filled in by a background download on desktop. Cached tracks play offline and can be saved as downloads; the size limit and LRU eviction still apply.",
+  "cachePolicyAudioScope": "Cache what you play",
+  "cachePolicyAudioHint": "Songs are cached as they play, so they can play offline or be saved as downloads; the oldest cache is cleared when the limit is reached.",
   "cachePolicyAudioMax": "Size limit",
   "cachePolicyLyricsTtl": "Keep lyrics for",
   "cachePolicyArtworkMax": "Max artwork objects",
@@ -703,7 +703,7 @@
       }
     }
   },
-  "cacheAudioMaxSuggested": "Suggested {value} (internal storage ÷ 128)",
+  "cacheAudioMaxSuggested": "Suggested: {value}",
   "@cacheAudioMaxSuggested": {
     "placeholders": {
       "value": {
@@ -724,7 +724,7 @@
   },
   "cacheClearPartition": "Clear",
   "cacheClearAll": "Clear all caches",
-  "cacheClearAllConfirm": "Clear all caches (audio / lyrics / artwork)? This cannot be undone.",
+  "cacheClearAllConfirm": "Clear all caches (audio, lyrics and artwork)? This cannot be undone.",
   "lyricsContentTitle": "Lyrics & outputs",
   "lyricsContentSubtitle": "Lyrics page, translation, offset and shared options",
   "lyricsPageTitle": "Lyrics page",
@@ -771,16 +771,16 @@
   "lyricsDesktopSchemeSource": "Color source",
   "lyricsDesktopSchemeAppTheme": "Follow app theme",
   "lyricsDesktopSchemeArtwork": "Follow album art",
-  "lyricsDesktopLock": "Lock position (click-through)",
-  "lyricsDesktopFreeze": "Freeze while screen off",
+  "lyricsDesktopLock": "Lock position (mouse clicks pass through)",
+  "lyricsDesktopFreeze": "Pause updates while the screen is off",
   "lyricsDesktopPauseBehavior": "When paused",
   "lyricsDesktopHideOnPause": "Hide when paused",
   "lyricsDesktopHideOnPauseSubtitle": "Collapse the floating window while paused; it returns when playback resumes",
-  "lyricsDesktopPauseFallbackOverridden": "The window is hidden while paused, so this fallback is inactive",
+  "lyricsDesktopPauseFallbackOverridden": "The whole window is hidden while paused, so this setting has no effect",
   "lyricsDesktopNoLyrics": "Without lyrics",
   "lyricsDesktopAnimation": "Line transition animation",
   "lyricsDesktopScrollMode": "Long line scrolling",
-  "lyricsDesktopScrollModeSubtitle": "Follow singing: the text moves with the highlight; Constant: steady speed across the line",
+  "lyricsDesktopScrollModeSubtitle": "Follow singing: text moves with the highlight; Constant: scrolls at a steady speed",
   "lyricsDesktopScrollFollow": "Follow singing",
   "lyricsDesktopScrollConstant": "Constant speed",
   "lyricsDesktopBehaviorSection": "Behavior & controls",
@@ -799,7 +799,7 @@
   "lyricsBehaviorClear": "Clear",
   "lyricsNotificationTitle": "Notification & lock screen",
   "lyricsNotificationEnable": "Show lyrics in notification",
-  "lyricsNotificationEnableSubtitle": "Writes the current line into media metadata",
+  "lyricsNotificationEnableSubtitle": "Sync the current lyric to system playback controls",
   "lyricsMetadataTarget": "Show in",
   "lyricsMetadataTargetSubtitle": "Subtitle",
   "lyricsMetadataTargetArtist": "Artist",
@@ -813,7 +813,7 @@
   "lyricsMetadataPauseBehavior": "When paused",
   "lyricsBluetoothTitle": "Bluetooth lyrics",
   "lyricsBluetoothEnable": "Show lyrics on car display",
-  "lyricsBluetoothEnableSubtitle": "Writes the current line into media metadata (also visible in notification & lock screen)",
+  "lyricsBluetoothEnableSubtitle": "Show the current lyric on the car head unit, notification shade and lock screen",
   "lyricsBluetoothOnlyA2dp": "Only while Bluetooth audio is connected",
   "lyricsBluetoothStatusConnected": "Bluetooth audio connected",
   "lyricsBluetoothStatusDisconnected": "Bluetooth audio not connected",
@@ -822,8 +822,8 @@
   "lyricsBluetoothInterval1s": "Every second",
   "lyricsBluetoothInterval2s": "Every 2 seconds",
   "lyricsNotificationPermissionTitle": "Notification permission needed",
-  "lyricsNotificationPermissionSubtitle": "Allow notifications so the media card appears; tap to open system settings",
-  "lyricsMediaSessionUnavailable": "System media session unavailable: notification / lock-screen lyrics and playback controls are disabled",
+  "lyricsNotificationPermissionSubtitle": "Allow notifications so media controls can stay visible; tap to open system settings",
+  "lyricsMediaSessionUnavailable": "System media controls failed to start: notification/lock-screen lyrics and playback controls are unavailable",
   "lyricsDisplayUnsupported": "Lyric outputs are not available on this platform",
   "colorPickerTitle": "Pick a color",
   "colorPickerCustom": "Custom color…",
@@ -841,7 +841,7 @@
   "lyricsColorSourceOnSurface": "On surface",
   "lyricsColorSourceOnSurfaceVariant": "Variant",
   "lyricsColorSourceSurface": "Surface",
-  "lyricsDesktopColorThemeHint": "The color source decides which scheme the theme-role rows use: app theme follows the appearance settings; album art updates live with the current track.",
+  "lyricsDesktopColorThemeHint": "“Follow app theme” changes with the appearance settings; “Follow artwork” picks colors from the current song and updates live.",
   "statsTitle": "Listening Stats",
   "statsSubtitle": "Play counts, listening time, and activity heatmaps (stored on this device only)",
   "statsSettingsSubtitle": "Plays / activity heatmaps / export",
@@ -943,7 +943,7 @@
     }
   },
   "aiDjTitle": "AI DJ",
-  "aiDjSettingsSubtitle": "AI-powered radio with your own API key (off by default)",
+  "aiDjSettingsSubtitle": "AI radio with your own key (off by default)",
   "aiDjNotConfigured": "AI service is not configured yet",
   "aiDjRequestFailed": "AI request failed. Try again later.",
   "aiDjUnauthorized": "Invalid API key or permission denied",
@@ -955,13 +955,13 @@
   "aiDjStatusPlaying": "Live",
   "aiDjStatusError": "Paused (queue kept)",
   "aiDjToggle": "AI DJ mode",
-  "aiDjToggleSubtitle": "Keeps AI-picked songs coming and extends the queue automatically",
+  "aiDjToggleSubtitle": "AI keeps picking songs into the queue and continues when it ends",
   "aiDjFeedMore": "More",
   "aiDjStopKeepQueue": "Keep playing",
   "aiDjStopClearQueue": "Clear queue & stop",
   "aiDjStopDialogTitle": "Exit AI DJ?",
   "aiDjConsentTitle": "Before you start",
-  "aiDjConsentBody": "When enabled, your listening profile (aggregated stats, the latest 200 play events, and the list of already-played tracks) will be sent to the AI service you configure in order to generate recommendations. Data goes straight to that service with no relay through this app, and no bundled API key is provided. Turning the mode off stops continuation; clearing the config disconnects it.",
+  "aiDjConsentBody": "When enabled, your listening profile (stats summary, the latest 200 plays, and songs already heard) is sent to the AI service you configure to generate recommendations. Data goes directly to that service, not through this app, and no built-in key is provided.\nTurning the mode off stops recommendations; clearing the config disconnects it.",
   "aiDjAgree": "Agree & start",
   "aiDjConfigTitle": "AI service",
   "aiDjBaseUrl": "Base URL",
@@ -974,7 +974,7 @@
   "aiDjSaveConfig": "Save",
   "aiDjClearConfig": "Clear",
   "aiDjConfigSaved": "Saved",
-  "aiDjQueued": "{count} queued this session",
+  "aiDjQueued": "{count} added to the queue this time",
   "@aiDjQueued": {
     "placeholders": {
       "count": {
@@ -1069,7 +1069,7 @@
   "aiDjFeedbackLiked": "Liked",
   "aiDjFeedbackSkipped": "Skipped",
   "aiDjUpstreamTitle": "Data sent this time",
-  "aiDjUpstreamBody": "Latest {events} play events · top {artists} artists · {exclusions} already-played excluded",
+  "aiDjUpstreamBody": "Latest {events} plays · {artists} frequent artists · {exclusions} already-heard songs excluded",
   "@aiDjUpstreamBody": {
     "placeholders": {
       "events": {
@@ -1083,7 +1083,7 @@
       }
     }
   },
-  "aiDjUpstreamHint": "Only the stats above plus titles/artists — no play URLs, no device info.",
+  "aiDjUpstreamHint": "Only the stats above plus song and artist names — no play links or device information.",
   "aiDjCacheTtlTitle": "Recommendation cache",
   "aiDjCacheTtlDays": "{days} days",
   "@aiDjCacheTtlDays": {
@@ -1094,20 +1094,20 @@
     }
   },
   "aiDjCacheTtlForever": "Forever",
-  "aiDjCacheTtlHint": "An expired list stops feeding the radio; the next extension generates a new batch (no interruption, no notice).",
+  "aiDjCacheTtlHint": "After expiry a new batch is generated automatically without interrupting playback.",
   "aiDjGenerate": "Generate",
   "aiDjEmptyList": "No recommendations yet",
   "aiDjEmptyListHint": "Generate today's picks — playable any time.",
   "aiDjEnqueueEmpty": "Everything here is already queued",
   "settingsSyncTitle": "Cross-device sync",
-  "settingsSyncItemSubtitle": "Playlists, sources, settings and credentials",
+  "settingsSyncItemSubtitle": "Playlists, sources, settings and keys",
   "syncPairingSection": "Pair with a device",
   "syncLocalSection": "This device",
-  "syncLocalSectionHint": "Peers need this information to reach this device; the addresses and ports travel inside the pairing code.",
+  "syncLocalSectionHint": "Other devices need this information to reach this device; the address is shared in the pairing code.",
   "syncDeviceNameTitle": "Device name",
   "syncPassphraseTitle": "Sync passphrase",
   "syncPassphraseNotSet": "Not set",
-  "syncPassphraseTrustHint": "Passphrase is the trust root; every holder is fully trusted. Reset it if leaked.",
+  "syncPassphraseTrustHint": "Any device that knows the passphrase can read and write all synced data; reset it if leaked.",
   "syncPassphraseCopy": "Copy passphrase",
   "syncPassphraseReset": "Reset passphrase",
   "syncPassphraseResetConfirm": "All devices must re-enter the new passphrase. Continue?",
@@ -1149,19 +1149,19 @@
   },
   "syncOutcomeOk": "Synced",
   "syncOutcomeNoChanges": "No changes",
-  "syncOutcomeNoPeers": "No peer found",
+  "syncOutcomeNoPeers": "No other device found",
   "syncOutcomePartial": "Partly failed",
   "syncOutcomeFailed": "Sync failed",
   "syncTriggerStartup": "startup",
-  "syncTriggerDebounce": "data change",
+  "syncTriggerDebounce": "data changed",
   "syncTriggerTimer": "scheduled",
-  "syncTriggerIncoming": "peer push",
+  "syncTriggerIncoming": "sent by another device",
   "syncTriggerResume": "resumed",
   "syncTriggerPause": "before background",
   "syncTriggerManual": "manual",
   "syncActivitySection": "Activity",
   "syncActivityTitle": "Last 24 hours",
-  "syncActivityRounds": "{rounds} rounds, {effective} with transfer, {bytes} traffic",
+  "syncActivityRounds": "{rounds} runs, {effective} with changes · {bytes} transferred",
   "@syncActivityRounds": {
     "placeholders": {
       "rounds": {
@@ -1200,8 +1200,8 @@
   "syncPowerSaveOff": "power save off",
   "syncCellularSection": "Cellular",
   "syncCellularPauseTitle": "Pause automatic sync on cellular",
-  "syncCellularPauseSubtitle": "When off, cellular syncs only small categories (settings, playlists, session); statistics and history wait for Wi-Fi",
-  "syncAppliedItems": "{applied} applied",
+  "syncCellularPauseSubtitle": "When off, mobile data syncs only small items (settings, playlists); stats and history wait for Wi-Fi",
+  "syncAppliedItems": "{applied} updated",
   "@syncAppliedItems": {
     "placeholders": {
       "applied": {
@@ -1209,7 +1209,7 @@
       }
     }
   },
-  "syncPeerCount": "{count} peers",
+  "syncPeerCount": "{count} devices",
   "@syncPeerCount": {
     "placeholders": {
       "count": {
@@ -1252,17 +1252,17 @@
   "syncCategorySettings": "App settings",
   "syncCategoryStatistics": "Play statistics",
   "syncCategoryHistory": "Play history",
-  "syncCategorySession": "Last playback session",
-  "syncCategoryCredentials": "AI DJ & credentials",
+  "syncCategorySession": "Last playback state",
+  "syncCategoryCredentials": "AI radio and keys",
   "syncTransportSection": "Transport",
-  "syncTransportAllOffHint": "Sync does not run while both transports are off — turn one on to start exchanging data.",
+  "syncTransportAllOffHint": "Sync does not run while both methods are off; turn one on to start.",
   "syncLanTitle": "LAN direct",
   "syncWebdavTitle": "WebDAV / cloud",
   "syncWebdavConfigTitle": "WebDAV settings",
   "syncWebdavServer": "Server URL",
   "syncWebdavUsername": "Username",
   "syncWebdavPassword": "Password",
-  "syncWebdavRemoteDir": "Remote directory",
+  "syncWebdavRemoteDir": "Cloud folder",
   "syncWebdavNotConfigured": "Not configured",
   "syncTransportRunning": "running",
   "syncTransportStopped": "stopped",
@@ -1283,7 +1283,7 @@
   "syncAdvancedTitle": "Advanced",
   "syncAdvancedSubtitle": "Device name, passphrase, and network addresses",
   "syncPeersSection": "Devices",
-  "syncPeersHint": "Enter the same passphrase on another device to join. If no device is ever discovered, check whether LAN sync can run (permission / network isolation) or switch to WebDAV.",
+  "syncPeersHint": "Enter the same passphrase on another device to join. If no device is found, check LAN permission or switch to WebDAV.",
   "syncPeersEmptyTitle": "No paired devices yet",
   "syncPeersEmptySubtitle": "Add one with the pairing code above",
   "syncPeerThisDevice": "This device · {id}",
@@ -1304,8 +1304,8 @@
     }
   },
   "syncPeerNever": "Not connected yet",
-  "syncPeerBehind": "{count} behind",
-  "syncPeerBehindBytes": "{count} behind (~{size})",
+  "syncPeerBehind": "{count} pending",
+  "syncPeerBehindBytes": "{count} pending (~{size})",
   "@syncPeerBehindBytes": {
     "placeholders": { "count": { "type": "int" }, "size": { "type": "String" } }
   },
@@ -1316,7 +1316,7 @@
       }
     }
   },
-  "syncPeerClockSkew": "clock off by {minutes} min",
+  "syncPeerClockSkew": "device time differs by {minutes} min",
   "@syncPeerClockSkew": {
     "placeholders": {
       "minutes": {
@@ -1345,19 +1345,19 @@
   "syncPeerDeleteConfirm": "This device will no longer connect to that address (other devices are unaffected).",
   "syncPeerManual": "added manually",
   "syncPeerLost": "lost",
-  "syncPeerLostHint": "No contact for over 180 days (reinstalled or retired). You can ignore it locally or explicitly clean up its remote files — nothing is deleted automatically.",
-  "syncPeerIgnore": "Ignore this device locally",
-  "syncPeerUnignore": "Stop ignoring locally",
-  "syncPeerIgnoreHint": "No longer pull or merge its payloads (this device only)",
-  "syncPeerIgnoredHint": "Ignored locally: its payloads are no longer pulled or merged.",
-  "syncPeerCleanupRemote": "Clean up remote files",
-  "syncPeerCleanupRemoteHint": "Delete its journal and snapshot files on WebDAV",
-  "syncPeerCleanupRemoteConfirm": "Deletes this device's journal and snapshot files on WebDAV. Local data is untouched and the files are not recreated automatically (only when the peer is online again). LAN connections have no remote storage.",
-  "syncPeerCleanupRemoteDone": "Remote files cleaned up",
-  "syncPeerCleanupRemoteNone": "No remote files to clean up",
+  "syncPeerLostHint": "This device has not connected for over 180 days (it may have been reinstalled or retired). You can ignore it, or clean up its cloud sync files; local data is unaffected.",
+  "syncPeerIgnore": "Ignore this device",
+  "syncPeerUnignore": "Stop ignoring",
+  "syncPeerIgnoreHint": "Stop receiving synced data from this device (this device only)",
+  "syncPeerIgnoredHint": "Ignored: no more synced data is received from this device.",
+  "syncPeerCleanupRemote": "Clean up cloud files",
+  "syncPeerCleanupRemoteHint": "Delete this device’s sync files on WebDAV",
+  "syncPeerCleanupRemoteConfirm": "Deletes this device’s sync files on WebDAV; local data is unaffected. Files are written again when the device comes back online. LAN connections have no cloud files.",
+  "syncPeerCleanupRemoteDone": "Cloud files cleaned up",
+  "syncPeerCleanupRemoteNone": "No cloud files to clean up",
   "syncPeerCleanupRemoteFailed": "Cleanup failed: {error}",
-  "syncPeerNotContacted": "not connected yet — it retries automatically once the peer is online",
-  "syncPeerCandidatesTitle": "{count} candidate addresses",
+  "syncPeerNotContacted": "Not connected yet — it retries automatically when the device is online",
+  "syncPeerCandidatesTitle": "{count} available addresses",
   "@syncPeerCandidatesTitle": {
     "placeholders": {
       "count": {
@@ -1389,11 +1389,11 @@
   "syncPairingModelUnavailable": "The scanner needs to download its recognition model first (requires access to Google services)",
   "syncPairingUsePaste": "Paste instead",
   "syncLocalAddressCopied": "Address copied",
-  "syncLocalAddressesEmptyTitle": "No routable address",
-  "syncLocalAddressesHint": "These are the same addresses shared in the pairing code.",
-  "syncLocalAddressesEmpty": "Only loopback / link-local addresses were found; check the network connection.",
+  "syncLocalAddressesEmptyTitle": "No available network address",
+  "syncLocalAddressesHint": "These addresses are shared with other devices in the pairing code.",
+  "syncLocalAddressesEmpty": "No usable LAN address found; check the network connection.",
   "syncLocalProbePort": "Discovery port",
-  "syncLocalProbePortUnavailable": "Unavailable — broadcast / multicast discovery is degraded; use manual addresses",
+  "syncLocalProbePortUnavailable": "Unavailable; add a device address manually",
   "syncLocalProbePortPerFamily": "{v4} (IPv4) / {v6} (IPv6)",
   "@syncLocalProbePortPerFamily": {
     "placeholders": {
@@ -1405,8 +1405,8 @@
       }
     }
   },
-  "syncLocalHttpPort": "Direct endpoint port",
-  "syncLocalHttpPortUnavailable": "Not bound yet",
+  "syncLocalHttpPort": "Connection port",
+  "syncLocalHttpPortUnavailable": "Not started yet",
   "syncPeerDeviceId": "Device {id}",
   "@syncPeerDeviceId": {
     "placeholders": {
@@ -1418,17 +1418,17 @@
   "syncDeviceNameDialogTitle": "Device name",
   "syncRenameHint": "Shown on other devices",
   "syncDeviceNameEmpty": "Name cannot be empty",
-  "syncCategorySubtitle": "Turning it off stops pushing and applying this data on this device",
+  "syncCategorySubtitle": "When off, this device neither uploads nor receives this data",
   "syncIssueDialogTitle": "Sync issue",
   "syncIssueUnknown": "Unknown reason — retry first; if it keeps failing, check the sync log",
   "syncIssueNotConfigured": "Sync transport is not configured",
   "syncIssueStartFailed": "Transport failed to start",
   "syncIssuePermissionDenied": "LAN permission missing (Android 17+ needs the nearby-devices permission)",
   "syncIssueNoPassphrase": "No sync passphrase set",
-  "syncIssueAllPeersUnreachable": "All peers are unreachable",
-  "syncIssuePullFailed": "Failed to pull remote snapshots",
-  "syncIssuePushFailed": "Failed to push local changes",
-  "syncIssueApplyFailed": "Failed to apply remote data {count} time(s)",
+  "syncIssueAllPeersUnreachable": "No device can be reached",
+  "syncIssuePullFailed": "Failed to read sync data",
+  "syncIssuePushFailed": "Failed to upload local changes",
+  "syncIssueApplyFailed": "Failed to receive sync data {count} time(s)",
   "@syncIssueApplyFailed": {
     "placeholders": {
       "count": {
@@ -1436,7 +1436,7 @@
       }
     }
   },
-  "syncIssuePeerReadFailed": "{peer}: failed to read snapshot",
+  "syncIssuePeerReadFailed": "{peer}: failed to read sync data",
   "@syncIssuePeerReadFailed": {
     "placeholders": {
       "peer": {
@@ -1452,7 +1452,7 @@
       }
     }
   },
-  "syncIssuePeerPushFailed": "{peer}: push failed",
+  "syncIssuePeerPushFailed": "{peer}: upload failed",
   "@syncIssuePeerPushFailed": {
     "placeholders": {
       "peer": {
@@ -1460,12 +1460,12 @@
       }
     }
   },
-  "syncIssueBroadcastUnavailable": "Broadcast failed (blocked by network policy)",
-  "syncIssueProbePortUnavailable": "Probe port unavailable (reserved or occupied by the system) — add peer addresses manually to discover devices",
-  "syncIssueDiscoverySilent": "No device answered during discovery (the network may be isolated)",
-  "syncIssueWebdavDirFailed": "Failed to prepare the WebDAV directory",
-  "syncIssueWebdavListFailed": "Failed to list the WebDAV directory",
-  "syncIssueWebdavReadFailed": "{peer}: failed to read snapshot",
+  "syncIssueBroadcastUnavailable": "Auto-discovery failed (blocked by network policy)",
+  "syncIssueProbePortUnavailable": "Auto-discovery unavailable; add a device address manually",
+  "syncIssueDiscoverySilent": "No other device found (the network may be isolated)",
+  "syncIssueWebdavDirFailed": "WebDAV folder unavailable",
+  "syncIssueWebdavListFailed": "Failed to read the WebDAV folder",
+  "syncIssueWebdavReadFailed": "{peer}: failed to read sync data",
   "@syncIssueWebdavReadFailed": {
     "placeholders": {
       "peer": {
@@ -1481,12 +1481,12 @@
       }
     }
   },
-  "syncIssueWebdavUploadFailed": "Failed to upload the snapshot to WebDAV",
-  "syncIssueDeleteRemoteFailed": "Failed to delete the remote files of {peer}",
+  "syncIssueWebdavUploadFailed": "Failed to upload sync data to WebDAV",
+  "syncIssueDeleteRemoteFailed": "Failed to clean up cloud files for {peer}",
   "@syncIssueDeleteRemoteFailed": {
     "placeholders": { "peer": { "type": "String" } }
   },
-  "syncIssueInternal": "Internal sync error",
+  "syncIssueInternal": "Sync error",
   "syncActionGrantPermission": "Grant permission",
   "syncActionConfigure": "Configure",
   "syncActionConfigurePassphrase": "Set passphrase",
@@ -1496,12 +1496,12 @@
   "syncConfigureOnSettingsPage": "Set the passphrase on the sync settings page",
   "syncPeerUnknown": "Unknown device",
   "syncPeerDeviceIdCopied": "Full device ID copied",
-  "syncPeerHostFormatInvalid": "Invalid address (use an IP, IPv6 or hostname, without a port)",
+  "syncPeerHostFormatInvalid": "Invalid address (use an IP or hostname, without a port)",
   "syncPeerPortInvalid": "Port must be 1–65535",
   "syncPeerAdded": "Device added",
   "syncPeerUpdated": "Device updated",
-  "syncPeerUnreachable": "Not reachable — check that the peer is online on the same network, or update its address",
-  "syncPeerProbePortLabel": "Probe port",
+  "syncPeerUnreachable": "Not connected: make sure the device is online on the same network, or update its address",
+  "syncPeerProbePortLabel": "Discovery port",
   "syncPeerProbePortHint": "Default {port}",
   "@syncPeerProbePortHint": {
     "placeholders": {
@@ -1512,8 +1512,8 @@
   },
   "syncPeerAlreadyAdded": "Already in the list — name and port updated",
   "syncManualConnect": "Connect manually",
-  "syncManualConnectSubtitle": "Enter the peer address when discovery fails (subnets / firewall / VPN)",
-  "syncManualConnectHint": "After the peer's IP changes, paste its pairing code again or update the address here",
+  "syncManualConnectSubtitle": "Enter the device address manually when auto-discovery fails",
+  "syncManualConnectHint": "If the device’s address changed, paste its pairing code again or update it here",
   "syncNetworkAddresses": "Network addresses",
   "syncNetworkAddressesCount": "{count} available",
   "@syncNetworkAddressesCount": {
@@ -1587,7 +1587,7 @@
   "updateDownloadAndInstall": "Download and install",
   "updateOpenDownloadPage": "Open download page",
   "updateAdvancedSection": "Advanced",
-  "updateManifestOverrideTitle": "Manifest URL",
+  "updateManifestOverrideTitle": "Update information URL",
   "updateManifestOverrideDefault": "Default (official GitHub release)",
   "updateManifestOverrideHint": "Leave empty to use the official URL",
   "updateDownloadPrefixTitle": "Download mirror prefix",
@@ -1598,7 +1598,7 @@
   "updatePlatformTitle": "Platform",
   "updateGithubTitle": "GitHub repository",
   "updateErrorNetwork": "Network error — update check failed",
-  "updateErrorManifest": "Invalid update manifest",
+  "updateErrorManifest": "Invalid update information",
   "updateErrorUnsupported": "In-app updates are not supported on this platform",
   "updateErrorChecksum": "Package checksum mismatch; file deleted",
   "updateErrorPermission": "Allow \"Install unknown apps\" to install updates",
@@ -1673,7 +1673,7 @@
   "trackInfoTrackId": "Track ID",
   "trackInfoIdCopied": "Track ID copied",
   "localDataTitle": "Local data",
-  "trackInfoCacheResolve": "Resolved link cache",
+  "trackInfoCacheResolve": "Playback link cache",
   "trackInfoCacheNone": "Not cached",
   "trackInfoCacheEntries": "{count} entries",
   "@trackInfoCacheEntries": {
@@ -1711,7 +1711,7 @@
   "localDataOfflineAvailable": "Available offline",
   "localDataTransferToFolder": "Save a copy to folder",
   "localDataTransferHint": "Cached · transfers without network",
-  "localDataAudioPlatformHint": "Playback caching is off here; a cache copy is written in the background",
+  "localDataAudioPlatformHint": "This platform does not write a playback cache; one is added after playback",
   "trackCacheClearAll": "Clear all",
   "trackCacheClearConfirm": "Clear \"{part}\"?",
   "@trackCacheClearConfirm": {
@@ -1722,7 +1722,7 @@
     }
   },
   "trackCacheClearAllConfirm": "Clear all cached data for this track?",
-  "trackCacheClearHint": "Only cached copies are removed; downloads and playback are unaffected.",
+  "trackCacheClearHint": "Only the cache is cleared; downloads and playback are unaffected.",
   "cacheClearPart": "Clear \"{part}\"?",
   "@cacheClearPart": {
     "placeholders": {
@@ -1750,7 +1750,7 @@
   "downloadPartDownload": "Download",
   "downloadPartRemove": "Remove",
   "downloadAll": "Download all",
-  "downloadFromCache": "Using local cache",
+  "downloadFromCache": "Already cached — no download needed",
   "downloadLyricsDone": "Lyrics downloaded",
   "downloadCoverDone": "Cover downloaded",
   "downloadNoArtwork": "No cover for this track",
@@ -1766,15 +1766,15 @@
   "downloadFilenamePreview": "Preview",
   "downloadReset": "Reset to default",
   "downloadEmbedTags": "Embed lyrics & cover tags",
-  "downloadEmbedTagsSubtitle": "Write tags into the audio file (MP3 / FLAC) so other players can read them; sidecar files remain when writing fails",
+  "downloadEmbedTagsSubtitle": "Write tags into the audio file (MP3 / FLAC) so other players can read them; the original file is kept if writing fails",
   "downloadPublishToPublicDir": "Publish to system Downloads",
-  "downloadPublishToPublicDirSubtitle": "Also copy finished downloads into the system Downloads folder (Android public storage) so file managers and other players can see them; playback still uses the in-app copy",
+  "downloadPublishToPublicDirSubtitle": "Also save a copy to the system Downloads folder (Android) so file managers and other players can see it",
   "downloadNotifications": "Download notifications",
-  "downloadNotificationsSubtitle": "Show download progress in the notification shade and keep downloads running in the background (Android foreground service)",
+  "downloadNotificationsSubtitle": "Show download progress in the notification shade and keep downloading in the background (Android; notification permission required)",
   "downloadLocationInfo": "Download folder",
   "downloadLocationUnsupported": "Downloading is not supported on this platform",
   "save": "Save",
-  "lyricsEmptyState": "No lyrics for this one yet — try another source? (´･ω･`)",
+  "lyricsEmptyState": "No lyrics found — try another source?",
   "lyricsDisplaySettingsAction": "Lyrics display settings",
   "lyricsSwapAction": "Change lyrics",
   "lyricsCopyModeAction": "Copy lyrics mode",
@@ -1851,13 +1851,13 @@
   "downloadAction": "Download",
   "downloadCancel": "Cancel download",
   "downloadDelete": "Delete download",
-  "downloadDeleteConfirm": "Delete the local copy? Audio, lyrics and cover files will be removed.",
-  "downloadDeleteConfirmMixed": "Delete the local copies? Audio, lyrics and cover files will be removed; imported local tracks are only removed from the list.",
+  "downloadDeleteConfirm": "Delete the download? Audio, lyrics and cover files will be removed.",
+  "downloadDeleteConfirmMixed": "Delete the downloads? Audio, lyrics and cover files will be removed; imported songs are only removed from the list.",
   "localSongsCachedTag": "Cached",
   "localSongsCachedRemove": "Clear cache",
-  "localSongsCachedRemoveConfirm": "Clear this track's audio cache? Only the cached copy is removed; downloads and imported files are unaffected.",
-  "localSongsMixedRemoveConfirm": "Remove the selected items? Downloads delete files, imported items are only removed from the list, cached copies are cleared.",
-  "downloadShare": "Share / export",
+  "localSongsCachedRemoveConfirm": "Clear this song’s audio cache? Only the cache is removed; downloads and imported files are unaffected.",
+  "localSongsMixedRemoveConfirm": "Remove the selected items? Downloads delete files, imported items are only removed from the list, and cached copies are cleared.",
+  "downloadShare": "Share file",
   "downloadProgressPercent": "{percent}%",
   "@downloadProgressPercent": {
     "placeholders": {
@@ -1926,7 +1926,7 @@
   },
   "downloadsMaintenanceSection": "File maintenance",
   "downloadsCleanupParts": "Remove unfinished downloads",
-  "downloadsCleanupPartsSubtitle": "Leftover .part files from crashes; finished downloads are untouched",
+  "downloadsCleanupPartsSubtitle": "Remove temporary files left by interrupted downloads; finished downloads are untouched",
   "downloadsCleanupPartsDone": "Removed {count} unfinished file(s)",
   "@downloadsCleanupPartsDone": {
     "placeholders": {
@@ -1935,9 +1935,9 @@
       }
     }
   },
-  "downloadsCleanupOrphans": "Remove orphan files",
-  "downloadsCleanupOrphansSubtitle": "Delete files in the download folder that no record references",
-  "downloadsCleanupOrphansDone": "Removed {count} orphan file(s)",
+  "downloadsCleanupOrphans": "Remove leftover files",
+  "downloadsCleanupOrphansSubtitle": "Delete files in the download folder that no record points to",
+  "downloadsCleanupOrphansDone": "Removed {count} leftover file(s)",
   "@downloadsCleanupOrphansDone": {
     "placeholders": {
       "count": {
@@ -1961,9 +1961,9 @@
       }
     }
   },
-  "downloadsPublishPublic": "Publish to system Downloads",
-  "downloadsPublishPublicSubtitle": "Copy downloads that have no public copy yet into the system Downloads folder (Android)",
-  "downloadsPublishPublicDone": "{published} published, {failed} failed",
+  "downloadsPublishPublic": "Copy to public Downloads folder",
+  "downloadsPublishPublicSubtitle": "Copy downloads that are not in the system Downloads folder yet (Android)",
+  "downloadsPublishPublicDone": "Copied {published}, failed {failed}",
   "@downloadsPublishPublicDone": {
     "placeholders": {
       "published": {
@@ -1974,7 +1974,7 @@
       }
     }
   },
-  "downloadsNoResume": "No resume support: platform links are usually one-time signed URLs; re-downloading is more reliable",
+  "downloadsNoResume": "Failed downloads start over (platform links usually expire quickly).",
   "downloadsEmpty": "No downloaded tracks yet",
   "sleepTimerTitle": "Sleep timer",
   "sleepTimerOff": "Off",
@@ -2015,9 +2015,9 @@
   "shortcutsInAppSection": "In-app shortcuts",
   "shortcutsInAppHint": "Active while the window is focused; tap a binding to re-record it",
   "shortcutsGlobalSection": "Global shortcuts",
-  "shortcutsGlobalHint": "System-wide hotkeys that work while unfocused; must include Ctrl / Alt / Shift",
-  "shortcutsGlobalUnsupportedKey": "System-wide hotkeys only support letters, digits, F1–F12 and space",
-  "shortcutsGlobalFailed": "Some global shortcuts could not be registered: {detail}",
+  "shortcutsGlobalHint": "Global shortcuts work even when the window is in the background; must include Ctrl / Alt / Shift",
+  "shortcutsGlobalUnsupportedKey": "Global shortcuts only support letters, digits, F1–F12 and space",
+  "shortcutsGlobalFailed": "Some global shortcuts could not be enabled: {detail}",
   "@shortcutsGlobalFailed": {
     "placeholders": {
       "detail": {
@@ -2025,7 +2025,7 @@
       }
     }
   },
-"shortcutsGlobalLinuxHint": "On Linux these go through the desktop portal (GlobalShortcuts); minimal desktops may not support it and will report a failure",
+"shortcutsGlobalLinuxHint": "On Linux these are provided through the desktop portal; minimal desktops may not support it and will report a failure",
   "shortcutsEnabledSwitch": "Enable in-app shortcuts",
   "shortcutsGlobalEnabledSwitch": "Enable global shortcuts",
   "shortcutsResetAll": "Reset to defaults",
@@ -2033,7 +2033,7 @@
   "shortcutsConflict": "Already used by “{action}”",
   "shortcutsGlobalNeedsModifier": "Global shortcuts must include Ctrl / Alt / Shift",
   "shortcutsSwapDialogTitle": "Replace shortcut?",
-  "shortcutsSwapDialogMessage": "“{action}” already uses this combo. Replacing will swap the two bindings.",
+  "shortcutsSwapDialogMessage": "“{action}” already uses this combination. Replacing will swap the two shortcuts.",
   "@shortcutsSwapDialogMessage": {
     "placeholders": {
       "action": {
@@ -2042,7 +2042,7 @@
     }
   },
   "shortcutsSwapConfirm": "Replace",
-  "shortcutsSwapDone": "Swapped bindings with “{action}”",
+  "shortcutsSwapDone": "Swapped shortcuts with “{action}”",
   "@shortcutsSwapDone": {
     "placeholders": {
       "action": {
@@ -2066,5 +2066,5 @@
   "shortcutActionShowWindow": "Show main window",
   "settingsRememberWindowBounds": "Remember window position and size",
   "settingsRememberWindowBoundsSubtitle": "Reopen at the last position, size and maximized state (on by default)",
-  "settingsTrayLinuxHint": "The tray icon needs a system tray host; GNOME requires the AppIndicator extension. Without one, closing quits"
+  "settingsTrayLinuxHint": "GNOME and similar desktops need a tray extension to show the icon; without a tray, closing the window quits the app"
 }

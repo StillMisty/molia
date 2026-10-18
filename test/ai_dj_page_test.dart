@@ -304,10 +304,10 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(
-      find.textContaining('Latest 12 play events'),
+      find.textContaining('Latest 12 plays'),
       findsOneWidget,
     );
-    expect(find.textContaining('top 3 artists'), findsOneWidget);
+    expect(find.textContaining('3 frequent artists'), findsOneWidget);
   });
 
   testWidgets('收藏收进行尾菜单：行内无独立收藏按钮，菜单可切换', (tester) async {
