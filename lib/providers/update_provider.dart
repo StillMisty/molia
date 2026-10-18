@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
 import 'package:logging/logging.dart';
+import 'package:package_info_plus/package_info_plus.dart';
 
 import '../domain/models/app_release.dart';
 import '../services/update/update_installer.dart';
@@ -70,8 +71,10 @@ class UpdateProvider extends ChangeNotifier {
   UpdateProvider({
     required UpdateService service,
     required UpdatePreferences preferences,
-    required String currentVersion,
-    required int currentBuild,
+    // 版本 / 构建号：默认占位（0.0.0+0），[start] 里从平台包信息读真值。
+    // 读不到时保持占位，检查仍可跑（只是比较无基准），与拆分前的口径一致。
+    String currentVersion = '0.0.0',
+    int currentBuild = 0,
     Future<void> Function()? quitApp,
     DateTime Function()? now,
   })  : _service = service,
@@ -88,8 +91,10 @@ class UpdateProvider extends ChangeNotifier {
 
   final UpdateService _service;
   final UpdatePreferences _preferences;
-  final String _currentVersion;
-  final int _currentBuild;
+
+  /// 由 [start] 从平台包信息填入（构造时是占位值）。
+  String _currentVersion;
+  int _currentBuild;
   final Future<void> Function()? _quitApp;
   final DateTime Function() _now;
   final Logger _logger = Logger('molia.update_provider');
@@ -150,6 +155,24 @@ class UpdateProvider extends ChangeNotifier {
   /// 是否已有「与当前清单一致」的下载包（授权后可直接重试安装）。
   bool get hasDownloadedPackage =>
       _downloadedPath != null && _sameAsDownloaded(_release);
+
+  /// 启动准备（组合根在**首帧之后**调用一次）：平台包信息 → 本地偏好 →
+  /// 平台信息。
+  ///
+  /// 为什么后移：读包信息要过平台通道，读偏好要碰磁盘，两者都不参与首帧
+  /// 内容，放在 `runApp` 之前只是让用户多等一次 IPC（桌面实测 ~14ms）。
+  /// 后移不改变可见行为——自动检查（[maybeAutoCheck]）本来就排在首帧之后，
+  /// 且排在 [start] 之后（见 `post_frame_init.dart`）。
+  Future<void> start() async {
+    try {
+      final packageInfo = await PackageInfo.fromPlatform();
+      _currentVersion = packageInfo.version;
+      _currentBuild = int.tryParse(packageInfo.buildNumber) ?? 0;
+    } catch (e) {
+      debugPrint('[Molia] 读取应用版本失败（更新检查按 0.0.0 处理）: $e');
+    }
+    await init();
+  }
 
   Future<void> init() async {
     await _preferences.load();

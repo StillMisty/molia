@@ -22,6 +22,15 @@ dependencies:
   provider: ^6.1.2
   cached_network_image: ^4.0.4
   shared_preferences: ^2.3.3
+  # 2.5.0 把内部实现换成 Pigeon JNI：Dart 侧按**未混淆**签名查 Java 方法，而
+  # release（minifyEnabled）下 R8 会改名 kotlin.coroutines.Continuation、甚至整个
+  # 删掉 kotlin.coroutines.intrinsics.CoroutineSingletons —— 启动读偏好即抛
+  # PlatformException（NoSuchMethodError / ClassNotFoundException，安卓 release
+  # 包实测）。插件没有 consumer-rules.pro，堆 keep 规则是打地鼠且 +1.1MB；
+  # 这里钉回 JNI 改造前的最后一个版本。
+  # 复评条件：上游给 shared_preferences_android 补上 JNI 的 consumer-rules.pro
+  # （或改回平台通道）后再升。
+  shared_preferences_android: 2.4.28
   url_launcher: ^6.3.1
   collection: ^1.19.0
   drift: ^2.35.2

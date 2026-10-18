@@ -480,3 +480,18 @@
     拿不到渲染对象时原样使用（根 overlay 无祖先变换，全局 = 局部）。唯一实现：
     `lib/widgets/track_actions_menu.dart::showTrackActionsMenuAtPointer`
     （触摸端 ⋮ 仍走 `M3EMenu.entries` 的组件锚点）。
+
+56. **release 包才暴露：插件换 Pigeon JNI 后与 R8 混淆冲突（偏好读取直接炸）**：
+    `shared_preferences_android 2.5.0` 把内部实现换成 Pigeon JNI，Dart 侧按**未混淆**的
+    类名 / 方法签名查 Java 方法（生成的签名串里带 `kotlin/coroutines/Continuation`、
+    `kotlin/jvm/internal/DefaultConstructorMarker`），而 `minifyEnabled true` 的 release
+    构建下 R8 会把这些 Kotlin 类型改名（`Continuation` → `uw`）甚至整个删掉
+    （`kotlin.coroutines.intrinsics.CoroutineSingletons`）——启动读偏好即抛
+    `PlatformException(NoSuchMethodError / ClassNotFoundException)`，在 `main()` 的并行
+    装配里外层表现为 `ParallelWaitError`；**debug 构建完全正常**，只有 release 复现。
+    处置：钉 `shared_preferences_android: 2.4.28`（JNI 改造前最后一个版本，理由与复评
+    条件写在 `pubspec.yaml` 注释里）。补 keep 规则试过——修完 `Continuation` 又缺
+    `CoroutineSingletons`，是打地鼠且 APK +1.1MB，放弃；上游补 consumer-rules.pro 后再升。
+    发现路径：Android release APK 装设备启动后 `adb logcat | grep -E
+    "NoSuchMethodError|ClassNotFoundException"`；`tool/agent/startup.sh android`
+    会构建并安装 release APK 跑采样，顺带当这道冒烟。
