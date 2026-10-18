@@ -26,6 +26,7 @@ class AppSearchBar extends StatefulWidget {
     this.focusNode,
     this.onChanged,
     this.onSubmitted,
+    this.onEscape,
     this.trailing = const <Widget>[],
     this.leading,
     this.autofocus = false,
@@ -51,6 +52,9 @@ class AppSearchBar extends StatefulWidget {
 
   /// 键盘提交（回车 / 搜索键）回调。
   final ValueChanged<String>? onSubmitted;
+
+  /// Esc 回调：设置后 Esc 交给调用方（如关闭遮罩），不再退化为「输入框失焦」。
+  final VoidCallback? onEscape;
 
   /// 清除键右侧的额外尾部动作（如歌词搜索的加载指示），最多两个。
   final List<Widget> trailing;
@@ -130,6 +134,7 @@ class _AppSearchBarState extends State<AppSearchBar> {
       textInputAction: widget.textInputAction,
       onChanged: widget.onChanged,
       onSubmitted: widget.onSubmitted,
+      onEscape: widget.onEscape,
       trailing: <Widget>[
         if (widget.controller.text.isNotEmpty)
           M3EIconButton(

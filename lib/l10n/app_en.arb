@@ -17,6 +17,14 @@
   "searchIdleHint": "Search songs by keyword",
   "clearSearch": "Clear search",
   "searchClose": "Close search",
+  "searchResultsAnnouncement": "{count} results available",
+  "@searchResultsAnnouncement": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
   "copiedToClipboard": "Copied to clipboard",
   "@copiedToClipboard": {
     "placeholders": {
@@ -148,7 +156,7 @@
   "cacheClearFailed": "Failed to clear cache",
   "saveChanges": "Save",
   "selectLyrics": "Select Lyrics",
-  "selectLyricsTooltip": "Select lyrics fragments to make a poster or share",
+  "lyricsPosterAction": "Lyrics poster",
   "deselectAll": "Deselect All",
   "noLyricsSelected": "Please select some lyrics first",
   "sharePoster": "Share Poster",

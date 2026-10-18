@@ -707,6 +707,49 @@ void main() {
     expect(backdropBlurOpacity(tester), 0, reason: '遮罩收起后背景模糊淡出');
   });
 
+  // 旧实现（M3E docked 搜索视图）的容器变换终点矩形完全由锚点推导，锚点就在
+  // 静止位置时位移为 0：遮罩是「闪现」的。这里钉住开合真的走了过渡。
+  testWidgets('Ctrl+F：遮罩开合走淡入 + 缩放过渡（不是瞬间出现）', (tester) async {
+    await pumpShell(tester, desktopShell: true);
+
+    await tester.sendKeyDownEvent(LogicalKeyboardKey.controlLeft);
+    await tester.sendKeyEvent(LogicalKeyboardKey.keyF);
+    await tester.sendKeyUpEvent(LogicalKeyboardKey.controlLeft);
+
+    // 过渡中（半程以内）：透明度与缩放都没到终点。
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 60));
+    final fade = tester.widget<FadeTransition>(
+      find.byKey(GlobalSearchOverlay.transitionKey),
+    );
+    expect(fade.opacity.value, greaterThan(0), reason: '淡入已开始');
+    expect(fade.opacity.value, lessThan(1), reason: '尚未落定');
+    final scale = tester.widget<ScaleTransition>(
+      find.descendant(
+        of: find.byKey(GlobalSearchOverlay.transitionKey),
+        matching: find.byType(ScaleTransition),
+      ),
+    );
+    expect(scale.scale.value, lessThan(1), reason: '轻微缩放同步进行');
+
+    // 落定：透明度到 1（过程里不会卡在中途）。
+    await tester.pumpAndSettle();
+    expect(fade.opacity.value, 1);
+  });
+
+  testWidgets('Ctrl+F：打开后首帧即可输入（不等动画落定）', (tester) async {
+    await pumpSearchShell(tester);
+    await openSearchOverlay(tester);
+
+    // 输入框在遮罩打开后就持有焦点：立刻输入不会丢字。
+    expect(
+      tester.widget<EditableText>(find.byType(EditableText).first).focusNode
+          .hasFocus,
+      isTrue,
+      reason: '搜索框打开即聚焦（旧实现要等容器弹簧落定才聚焦，会吞按键）',
+    );
+  });
+
   testWidgets('顶栏品牌区：tooltip 已移除（不做悬浮提示）', (tester) async {
     await pumpShell(tester, desktopShell: true);
 

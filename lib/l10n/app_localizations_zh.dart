@@ -41,6 +41,11 @@ class AppLocalizationsZh extends AppLocalizations {
   String get searchClose => '关闭搜索';
 
   @override
+  String searchResultsAnnouncement(int count) {
+    return '$count 条搜索结果';
+  }
+
+  @override
   String copiedToClipboard(String type) {
     return '已复制到剪贴板';
   }
@@ -369,7 +374,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get selectLyrics => '选择歌词';
 
   @override
-  String get selectLyricsTooltip => '选择歌词片段生成海报或分享';
+  String get lyricsPosterAction => '歌词海报';
 
   @override
   String get deselectAll => '取消全选';

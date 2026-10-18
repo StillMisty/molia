@@ -9,9 +9,9 @@
 ///   避免与发现页的竖向滚动手势互抢；
 /// - 点卡即从该首起播、AI 接管队列（`playRecommendation`），并把该卡滚到
 ///   焦点位：拖动/滚轮之后焦点未必在点中的卡上，滚过去信息区才落到这首；
-/// - 卡片流下方是推荐理由信息区：只显示焦点卡（carousel 最大槽位）的理由；
-///   理由为空或焦点越界（「换一批」卡、换批后的过期索引）时整区不渲染——
-///   留一个空块比不显示更突兀；
+/// - 卡片流下方是推荐理由信息区：只显示焦点卡（carousel 最大槽位）的理由，
+///   歌名 / 歌手由卡片承担、不在信息区重复；理由为空或焦点越界（「换一批」卡、
+///   换批后的过期索引）时整区不渲染——留一个空块比不显示更突兀；
 /// - 尾部「换一批」卡替换列表（推歌中只换"下一批来源"，不打断播放）；
 /// - 未配置/未启用 → 整块（卡片流 + 信息区）不渲染（不额外做引导）；搜索
 ///   激活时由宿主页不挂载本组件（让位给结果区），本组件不感知搜索态；
@@ -367,8 +367,9 @@ class _AiDjCarouselState extends State<AiDjCarousel> {
 
   /// 推荐理由信息区：显示焦点卡（carousel 最大槽位）的推荐理由。
   ///
-  /// 焦点不在推荐卡上（「换一批」卡，或换批后越界的过期索引）或该卡没有理由
-  /// 时整区不渲染——留一个空块比不显示更突兀。
+  /// 歌名 / 歌手不再在这里重复一遍——卡片流上的槽位文字就是这首的标识，信息区
+  /// 只留 AI 的理由。焦点不在推荐卡上（「换一批」卡，或换批后越界的过期索引）
+  /// 或该卡没有理由时整区不渲染——留一个空块比不显示更突兀。
   Widget _reasonPanel(BuildContext context, AiDjBatch batch) {
     if (_focalIndex < 0 || _focalIndex >= batch.items.length) {
       return const SizedBox.shrink();
@@ -378,7 +379,6 @@ class _AiDjCarouselState extends State<AiDjCarousel> {
     if (reason.isEmpty) return const SizedBox.shrink();
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
-    final artist = _artistOf(item);
     return Padding(
       key: const Key('aiDjReasonPanel'),
       padding: const EdgeInsets.fromLTRB(16, 6, 16, 0),
@@ -395,27 +395,11 @@ class _AiDjCarouselState extends State<AiDjCarousel> {
           ),
           const SizedBox(width: 8),
           Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  artist.isEmpty
-                      ? item.track.title
-                      : '${item.track.title} · $artist',
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: theme.textTheme.labelMedium?.copyWith(
-                    color: scheme.onSurfaceVariant,
-                  ),
-                ),
-                const SizedBox(height: 2),
-                Text(
-                  reason,
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                  style: theme.textTheme.bodySmall,
-                ),
-              ],
+            child: Text(
+              reason,
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+              style: theme.textTheme.bodySmall,
             ),
           ),
         ],

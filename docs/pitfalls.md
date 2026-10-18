@@ -481,6 +481,7 @@
     `lib/widgets/track_actions_menu.dart::showTrackActionsMenuAtPointer`
     （触摸端 ⋮ 仍走 `M3EMenu.entries` 的组件锚点）。
 
+
 56. **release 包才暴露：插件换 Pigeon JNI 后与 R8 混淆冲突（偏好读取直接炸）**：
     `shared_preferences_android 2.5.0` 把内部实现换成 Pigeon JNI，Dart 侧按**未混淆**的
     类名 / 方法签名查 Java 方法（生成的签名串里带 `kotlin/coroutines/Continuation`、
@@ -495,3 +496,13 @@
     发现路径：Android release APK 装设备启动后 `adb logcat | grep -E
     "NoSuchMethodError|ClassNotFoundException"`；`tool/agent/startup.sh android`
     会构建并安装 release APK 跑采样，顺带当这道冒烟。
+
+57. **M3E 搜索视图（`M3ESearchAnchor`）不适合「就地展开」的全屏遮罩**：包内 docked
+    视图的目标矩形完全由锚点矩形推导（`_dockedRect` 的 x / y / 宽都取自 `begin`），
+    锚点只要摆在搜索条静止位置，容器变换的位移就是 0——开合没有过渡动画（只剩一层
+    容易被忽略的 scrim 淡入），且包内只在容器变换弹簧落定后才给输入框聚焦
+    （`_tryFocusViewField` 挂在弹簧的 TickerFuture 上），Ctrl+F 之后立刻打字的按键
+    会被吞掉（实测 5 个字符丢 2 个）。包内没有暴露动画 / 聚焦钩子，遮罩要动效与
+    「打开即可输入」只能自建 route（出现 / 消失自己走 scrim 淡入 + 内容淡入轻微缩放，
+    输入框首帧 autofocus）。回归：`test/app/desktop_shell_test.dart` 的
+    「遮罩开合走淡入 + 缩放过渡」「打开后首帧即可输入」两条。

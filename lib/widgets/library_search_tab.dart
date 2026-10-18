@@ -2,6 +2,7 @@ import 'package:material_ui/material_ui.dart';
 import 'package:provider/provider.dart';
 
 import '../l10n/app_localizations.dart';
+import '../providers/ai_dj_provider.dart';
 import '../providers/search_provider.dart';
 import 'ai_dj_carousel.dart';
 import 'app_search_bar.dart';
@@ -62,6 +63,12 @@ class _LibrarySearchTabState extends State<LibrarySearchTab>
       builder: (context, searchProvider, child) {
         final isSearchActive = searchProvider.isSearchActive;
 
+        // AI 推歌开启时，下方空占位让位给推荐流（推荐流自身有引导卡 / 骨架 /
+        // 错误卡）；关闭时保留「输入关键词搜索歌曲」占位。
+        final aiDjEnabled = context.select<AiDjProvider?, bool>(
+          (provider) => provider?.enabled ?? false,
+        );
+
         // provider 清空搜索时同步清空输入框（须等构建结束再动控制器）
         if (!isSearchActive && _searchController.text.isNotEmpty) {
           WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -94,7 +101,9 @@ class _LibrarySearchTabState extends State<LibrarySearchTab>
               child: RepaintBoundary(
                 child: isSearchActive
                     ? SearchSection(controller: widget.controller)
-                    : _buildIdle(context),
+                    : (aiDjEnabled
+                        ? const SizedBox.shrink()
+                        : _buildIdle(context)),
               ),
             ),
           ],

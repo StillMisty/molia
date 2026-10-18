@@ -286,17 +286,30 @@ class _LibraryState extends State<Library> {
       };
 
   M3ETab _tabSpec(AppLocalizations l10n, _LibraryTab tab) => switch (tab) {
-        _LibraryTab.search => M3ETab(
-            icon: const Icon(Icons.search_rounded),
+        _LibraryTab.search => _buildTab(
+            icon: Icons.search_rounded,
             label: l10n.libraryTabSearch,
           ),
-        _LibraryTab.leaderboards => M3ETab(
-            icon: const Icon(Icons.leaderboard_rounded),
+        _LibraryTab.leaderboards => _buildTab(
+            icon: Icons.leaderboard_rounded,
             label: l10n.libraryTabLeaderboards,
           ),
-        _LibraryTab.playlists => M3ETab(
-            icon: const Icon(Icons.queue_music_rounded),
+        _LibraryTab.playlists => _buildTab(
+            icon: Icons.queue_music_rounded,
             label: l10n.libraryTabPlaylists,
           ),
       };
+
+  /// 单个 tab：桌面端图标 + 文案，触摸端只留图标（文案走无障碍名）。
+  ///
+  /// 触摸端去掉文案：窄屏上「渠道下拉框 + 三 tab」挤在一行，文案会被压到
+  /// 逐字换行 / 截断；桌面窗口富余、文案与图标同行也更有可读性，保持原样。
+  M3ETab _buildTab({required IconData icon, required String label}) {
+    final showLabel = isDesktopPlatform();
+    return M3ETab(
+      icon: Icon(icon),
+      label: showLabel ? label : null,
+      semanticLabel: label,
+    );
+  }
 }
