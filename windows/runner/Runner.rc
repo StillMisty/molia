@@ -54,6 +54,20 @@ END
 // remains consistent on all systems.
 IDI_APP_ICON            ICON                    "resources\\app_icon.ico"
 
+// 任务栏缩略图工具栏按钮（16..64 全档位，见 tool/gen_taskbar_icons.py）。
+IDI_TB_PREVIOUS_DARK    ICON                    "resources\\thumbbar\\previous_dark.ico"
+IDI_TB_PREVIOUS_LIGHT   ICON                    "resources\\thumbbar\\previous_light.ico"
+IDI_TB_PLAY_DARK        ICON                    "resources\\thumbbar\\play_dark.ico"
+IDI_TB_PLAY_LIGHT       ICON                    "resources\\thumbbar\\play_light.ico"
+IDI_TB_PAUSE_DARK       ICON                    "resources\\thumbbar\\pause_dark.ico"
+IDI_TB_PAUSE_LIGHT      ICON                    "resources\\thumbbar\\pause_light.ico"
+IDI_TB_NEXT_DARK        ICON                    "resources\\thumbbar\\next_dark.ico"
+IDI_TB_NEXT_LIGHT       ICON                    "resources\\thumbbar\\next_light.ico"
+IDI_TB_FAVORITE_DARK    ICON                    "resources\\thumbbar\\favorite_dark.ico"
+IDI_TB_FAVORITE_LIGHT   ICON                    "resources\\thumbbar\\favorite_light.ico"
+IDI_TB_FAVORITE_ON_DARK ICON                    "resources\\thumbbar\\favorite_on_dark.ico"
+IDI_TB_FAVORITE_ON_LIGHT ICON                   "resources\\thumbbar\\favorite_on_light.ico"
+
 
 /////////////////////////////////////////////////////////////////////////////
 //
@@ -90,12 +104,12 @@ BEGIN
         BLOCK "040904e4"
         BEGIN
             VALUE "CompanyName", "top.stillmisty" "\0"
-            VALUE "FileDescription", "Molia 茉咏 - 多音源本地音乐播放器" "\0"
+            VALUE "FileDescription", "Molia - 多音源本地音乐播放器" "\0"
             VALUE "FileVersion", VERSION_AS_STRING "\0"
             VALUE "InternalName", "molia" "\0"
             VALUE "LegalCopyright", "Copyright (C) 2026 top.stillmisty. All rights reserved." "\0"
             VALUE "OriginalFilename", "molia.exe" "\0"
-            VALUE "ProductName", "Molia 茉咏" "\0"
+            VALUE "ProductName", "Molia" "\0"
             VALUE "ProductVersion", VERSION_AS_STRING "\0"
         END
     END

@@ -1,8 +1,55 @@
 #include "flutter_window.h"
 
+#include <flutter/method_channel.h>
+#include <flutter/standard_method_codec.h>
+
 #include <optional>
+#include <string>
 
 #include "flutter/generated_plugin_registrant.h"
+#include "taskbar_thumb_bar.h"
+#include "utils.h"
+
+namespace {
+
+// 任务栏通道：与 Dart 侧 `lib/services/window/taskbar_thumb_bar_io.dart` 的通道名
+// 成对出现，改一处必须改两处。
+constexpr char kTaskbarChannelName[] = "top.stillmisty.molia/taskbar";
+
+bool ReadBool(const flutter::EncodableMap& arguments, const char* key) {
+  const auto entry = arguments.find(flutter::EncodableValue(key));
+  if (entry == arguments.end()) {
+    return false;
+  }
+  const bool* value = std::get_if<bool>(&entry->second);
+  return value != nullptr && *value;
+}
+
+std::wstring ReadString(const flutter::EncodableMap& arguments,
+                        const char* key) {
+  const auto entry = arguments.find(flutter::EncodableValue(key));
+  if (entry == arguments.end()) {
+    return std::wstring();
+  }
+  const std::string* value = std::get_if<std::string>(&entry->second);
+  return value == nullptr ? std::wstring() : Utf16FromUtf8(*value);
+}
+
+std::string ActionName(TaskbarThumbBar::Action action) {
+  switch (action) {
+    case TaskbarThumbBar::Action::kFavorite:
+      return "favorite";
+    case TaskbarThumbBar::Action::kPrevious:
+      return "previous";
+    case TaskbarThumbBar::Action::kPlayPause:
+      return "playPause";
+    case TaskbarThumbBar::Action::kNext:
+      return "next";
+  }
+  return std::string();
+}
+
+}  // namespace
 
 FlutterWindow::FlutterWindow(const flutter::DartProject& project)
     : project_(project) {}
@@ -25,6 +72,50 @@ bool FlutterWindow::OnCreate() {
     return false;
   }
   RegisterPlugins(flutter_controller_->engine());
+
+  // 任务栏缩略图工具栏（悬浮任务栏按钮时预览浮层里的播放控制按钮）：
+  // 按钮状态由 Dart 侧下发（播放 / 收藏 / 语言），点击回调经通道回 Dart。
+  taskbar_channel_ =
+      std::make_unique<flutter::MethodChannel<flutter::EncodableValue>>(
+          flutter_controller_->engine()->messenger(), kTaskbarChannelName,
+          &flutter::StandardMethodCodec::GetInstance());
+  taskbar_channel_->SetMethodCallHandler(
+      [this](const flutter::MethodCall<flutter::EncodableValue>& call,
+             std::unique_ptr<flutter::MethodResult<flutter::EncodableValue>>
+                 result) {
+        if (call.method_name() != "update") {
+          result->NotImplemented();
+          return;
+        }
+        const auto* arguments =
+            std::get_if<flutter::EncodableMap>(call.arguments());
+        if (arguments == nullptr) {
+          result->Error("invalid_arguments", "update 需要 map 参数");
+          return;
+        }
+        TaskbarThumbBar::State state;
+        state.has_track = ReadBool(*arguments, "hasTrack");
+        state.is_playing = ReadBool(*arguments, "isPlaying");
+        state.is_favorite = ReadBool(*arguments, "isFavorite");
+        state.tooltip_previous = ReadString(*arguments, "tooltipPrevious");
+        state.tooltip_play_pause = ReadString(*arguments, "tooltipPlayPause");
+        state.tooltip_next = ReadString(*arguments, "tooltipNext");
+        state.tooltip_favorite = ReadString(*arguments, "tooltipFavorite");
+        if (thumb_bar_ != nullptr) {
+          thumb_bar_->UpdateState(state);
+        }
+        result->Success();
+      });
+
+  thumb_bar_ = std::make_unique<TaskbarThumbBar>();
+  thumb_bar_->Attach(GetHandle(), [this](TaskbarThumbBar::Action action) {
+    if (taskbar_channel_ != nullptr) {
+      taskbar_channel_->InvokeMethod(
+          "pressed",
+          std::make_unique<flutter::EncodableValue>(ActionName(action)));
+    }
+  });
+
   SetChildContent(flutter_controller_->view()->GetNativeWindow());
 
   flutter_controller_->engine()->SetNextFrameCallback([&]() {
@@ -40,6 +131,14 @@ bool FlutterWindow::OnCreate() {
 }
 
 void FlutterWindow::OnDestroy() {
+  // 通道先于引擎销毁，并显式摘掉处理函数：MethodChannel 的析构**不会**注销
+  // 注册到 messenger 的回调（句柄归 messenger 所有，见 method_channel.h），
+  // 不摘会在退出路径上回调到已析构的窗口。
+  if (taskbar_channel_ != nullptr) {
+    taskbar_channel_->SetMethodCallHandler(nullptr);
+    taskbar_channel_.reset();
+  }
+  thumb_bar_.reset();
   if (flutter_controller_) {
     flutter_controller_ = nullptr;
   }
@@ -51,6 +150,36 @@ LRESULT
 FlutterWindow::MessageHandler(HWND hwnd, UINT const message,
                               WPARAM const wparam,
                               LPARAM const lparam) noexcept {
+  // 任务栏缩略图按钮点击：WM_COMMAND 的低字是按钮 id、高字是 THBN_CLICKED，
+  // 命中本工具栏时直接吃掉（其余 WM_COMMAND 照旧交给 Flutter / 基类）。
+  if (message == WM_COMMAND && thumb_bar_ != nullptr &&
+      thumb_bar_->HandleCommand(wparam)) {
+    return 0;
+  }
+
+  // Explorer 重启后任务栏按钮会重建，工具栏必须重新挂一次，否则悬浮预览
+  // 里就再也没有那 4 个按钮（注册消息由 TaskbarThumbBar 提供）。
+  const UINT taskbar_created = TaskbarThumbBar::TaskbarCreatedMessage();
+  if (taskbar_created != 0 && message == taskbar_created) {
+    if (thumb_bar_ != nullptr) {
+      thumb_bar_->AddButtons();
+    }
+    return Win32Window::MessageHandler(hwnd, message, wparam, lparam);
+  }
+
+  // 窗口第一次显示后才会出现在任务栏上：这时挂按钮才会成功。
+  if (message == WM_SHOWWINDOW && wparam == TRUE && thumb_bar_ != nullptr) {
+    thumb_bar_->AddButtons();
+  }
+
+  // 任务栏亮暗切换：按钮图标是原样绘制的，要换一套字形。
+  if (message == WM_THEMECHANGED || message == WM_SETTINGCHANGE ||
+      message == WM_DWMCOLORIZATIONCOLORCHANGED) {
+    if (thumb_bar_ != nullptr) {
+      thumb_bar_->RefreshThemeIcons();
+    }
+  }
+
   // Give Flutter, including plugins, an opportunity to handle window messages.
   if (flutter_controller_) {
     std::optional<LRESULT> result =

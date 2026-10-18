@@ -1,6 +1,6 @@
 # AGENTS.md
 
-**Molia（茉咏）** 是 Flutter 音乐播放器：LX 音源脚本 + 五平台内置搜索/发现、本地与网络播放
+**Molia** 是 Flutter 音乐播放器：LX 音源脚本 + 五平台内置搜索/发现、本地与网络播放
 （桌面 media_kit/libmpv）、歌词（含桌面歌词与海报）、省流模式、AI 推歌（可选）、跨设备同步
 （WebDAV / 局域网，可选）。any-listen 接入目前是 HTTP 占位骨架。不构建 Web。
 完整术语与能力地图见 `GLOSSARY.md`。
@@ -27,7 +27,9 @@ tool/agent/memory.sh                     # 托盘内存采样（RSS 曲线 + mol
 - 改 `tool/lx_prelude/` → `node tool/build_lx_prelude.mjs`（`assets/lx/lx_prelude.js` 是 terser 产物，勿手改）
   + `node tool/lx_prelude_harness.mjs`（应输出 PROTOCOL OK）；重抓平台响应 → `node tool/gen_{search,artist,lyric_search}_fixtures.mjs`；
 - 改 `lib/data/molia_database.dart` → `dart run build_runner build`；改表结构提 `schemaVersion`，
-  用 `dart run drift_dev make-migrations` 生成快照 + `stepByStep` 写增量迁移并保留数据（ADR-0005）。
+  用 `dart run drift_dev make-migrations` 生成快照 + `stepByStep` 写增量迁移并保留数据（ADR-0005）；
+- 改 `tool/gen_taskbar_icons.py`（Windows 任务栏按钮字形 / 档位）→ `python3 tool/gen_taskbar_icons.py`
+  （产物 `windows/runner/resources/thumbbar/*.ico` 提交进仓库；需 `rsvg-convert`）。
 
 发布：`git tag -s v1.2.3 -m "Molia 1.2.3" && git push origin v1.2.3`（tag 即版本；
 流程、secrets 与产物清单见 `.agents/skills/molia-release/`）。

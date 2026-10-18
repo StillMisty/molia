@@ -82,6 +82,9 @@ class WindowClassRegistrar {
   static WindowClassRegistrar* instance_;
 
   bool class_registered_ = false;
+
+  // 类的小图标（LoadImage 出来的非共享句柄，注销窗口类时销毁）。
+  HICON small_icon_ = nullptr;
 };
 
 WindowClassRegistrar* WindowClassRegistrar::instance_ = nullptr;
@@ -97,6 +100,15 @@ const wchar_t* WindowClassRegistrar::GetWindowClass() {
     window_class.hInstance = GetModuleHandle(nullptr);
     window_class.hIcon =
         LoadIcon(window_class.hInstance, MAKEINTRESOURCE(IDI_APP_ICON));
+    // 小图标也显式给：类上只有 hIcon 时，小图标由系统派生，各 shell 表面
+    // （任务栏按钮 / 悬浮预览 / 右键菜单）取图路径不一致，部分表面会回退到
+    // 默认图标或缓存（见 docs/pitfalls.md「Windows 任务栏图标」）。
+    // LoadIcon 的句柄是共享的（不能 DestroyIcon），LoadImage 的由本类持有。
+    small_icon_ = static_cast<HICON>(
+        LoadImage(window_class.hInstance, MAKEINTRESOURCE(IDI_APP_ICON),
+                  IMAGE_ICON, GetSystemMetrics(SM_CXSMICON),
+                  GetSystemMetrics(SM_CYSMICON), 0));
+    window_class.hIconSm = small_icon_;
     window_class.hbrBackground = 0;
     window_class.lpszMenuName = nullptr;
     window_class.lpfnWndProc = Win32Window::WndProc;
@@ -108,6 +120,10 @@ const wchar_t* WindowClassRegistrar::GetWindowClass() {
 
 void WindowClassRegistrar::UnregisterWindowClass() {
   UnregisterClass(kWindowClassName, nullptr);
+  if (small_icon_ != nullptr) {
+    DestroyIcon(small_icon_);
+    small_icon_ = nullptr;
+  }
   class_registered_ = false;
 }
 
@@ -142,6 +158,16 @@ bool Win32Window::Create(const std::wstring& title,
 
   if (!window) {
     return false;
+  }
+
+  // 类图标之外再显式走一次 WM_SETICON：shell 里取窗口图标有 WM_GETICON /
+  // 类图标两条路径，只设类图标时部分表面（悬浮预览头部 / Alt-Tab）会拿不到
+  // 图标而回退到缓存或默认图（见 docs/pitfalls.md「Windows 任务栏图标」）。
+  HICON icon = LoadIcon(GetModuleHandle(nullptr), MAKEINTRESOURCE(IDI_APP_ICON));
+  if (icon != nullptr) {
+    SendMessage(window, WM_SETICON, ICON_BIG, reinterpret_cast<LPARAM>(icon));
+    SendMessage(window, WM_SETICON, ICON_SMALL,
+                GetClassLongPtr(window, GCLP_HICONSM));
   }
 
   UpdateTheme(window);

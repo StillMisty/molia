@@ -3,7 +3,10 @@
 #include <shobjidl.h>
 #include <windows.h>
 
+#include <iterator>
+
 #include "flutter_window.h"
+#include "shell_identity.h"
 #include "utils.h"
 
 int APIENTRY wWinMain(_In_ HINSTANCE instance, _In_opt_ HINSTANCE prev,
@@ -21,7 +24,19 @@ int APIENTRY wWinMain(_In_ HINSTANCE instance, _In_opt_ HINSTANCE prev,
   // Windows 系统媒体浮层（SMTC）按 AppUserModelID 归档应用。必须在创建任何
   // 窗口 / 初始化 SMTC 之前设置，且与安装器快捷方式的 AppUserModelID 一致；
   // 否则媒体浮层显示为 "Unknown Application"，通知归属也会错乱。
-  ::SetCurrentProcessExplicitAppUserModelID(L"top.stillmisty.molia");
+  ::SetCurrentProcessExplicitAppUserModelID(shell_identity::kAppUserModelId);
+
+  // 把身份落到注册表（DisplayName + IconUri = 本 exe）：任务栏按钮的右键菜单
+  // 与悬浮预览头部按这个身份解析图标 / 名字，只设 AUMID 不注册时会退回 shell
+  // 缓存的旧图（见 shell_identity.h 与 docs/pitfalls.md）。
+  wchar_t executable_path[1024] = {};
+  const DWORD executable_path_length =
+      ::GetModuleFileNameW(nullptr, executable_path,
+                           static_cast<DWORD>(std::size(executable_path)));
+  if (executable_path_length > 0 &&
+      executable_path_length < std::size(executable_path)) {
+    shell_identity::RegisterAppUserModelId(executable_path);
+  }
 
   flutter::DartProject project(L"data");
 
