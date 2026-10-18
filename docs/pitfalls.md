@@ -506,3 +506,12 @@
     「打开即可输入」只能自建 route（出现 / 消失自己走 scrim 淡入 + 内容淡入轻微缩放，
     输入框首帧 autofocus）。回归：`test/app/desktop_shell_test.dart` 的
     「遮罩开合走淡入 + 缩放过渡」「打开后首帧即可输入」两条。
+
+58. **局部 `DefaultTextStyle` / `AnimatedDefaultTextStyle` 是「替换」不是合并**：
+    SDK 内部就是 `DefaultTextStyle(style: lerp(...))`（`implicit_animations.dart`），
+    写字面量样式会把**字体族**（应用字体 / 平台默认）一并丢成引擎默认字体——症状是
+    「设置里选了字体，只有这块内容不跟随」（歌词行曾整段中招）。局部样式必须从环境
+    派生：`DefaultTextStyle.of(context).style.copyWith(…)`，只覆盖要改的属性；
+    `Text(style:)` / `Text.rich` 是**合并**，本身安全，但在被替换过的环境样式下也会
+    一起丢字体——先修替换点。回归：`test/widgets/lyrics_widget_test.dart` 的
+    「歌词行跟随应用字体：主行 / 逐字 / 翻译 / 罗马音」。
