@@ -1,5 +1,4 @@
 import 'package:flutter/gestures.dart';
-import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:molia/widgets/track_row.dart';
 import 'package:material_3_expressive/material_3_expressive.dart';
@@ -10,8 +9,8 @@ import 'package:material_ui/material_ui.dart';
 /// 16dp（shape large），且带弹簧 morph——防止回退到 `M3EListRowSurface`
 /// 的「hover 瞬间跳到 16dp」（docs/pitfalls.md #20）。
 ///
-/// 另覆盖桌面交互：行内操作 hover 显现（[HoverReveal]，触摸端原样显示）
-/// 与行表面右键（`onSecondaryTap`）。
+/// 另覆盖行操作入口：行内 trailing 无显隐包装（首帧即可见可点）与桌面
+/// 行表面右键回调（参数 = 右键落点的全局坐标）。
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
@@ -403,83 +402,42 @@ void main() {
     );
   });
 
-  testWidgets(
-    '桌面：行内操作默认透明不可点，行 hover 后显现可点',
-    (tester) async {
-      var rowTaps = 0;
-      var actionTaps = 0;
-      await tester.pumpWidget(
-        MaterialApp(
-          home: Scaffold(
-            body: Center(
-              child: TrackRow(
-                title: 'Title',
-                artist: 'Artist',
-                position: M3ECardPosition.single,
-                onTap: () => rowTaps++,
-                trailing: HoverReveal(
-                  child: M3EIconButton(
-                    variant: M3EIconButtonVariant.standard,
-                    tooltip: 'actions',
-                    icon: const Icon(Icons.more_vert_rounded),
-                    onPressed: () => actionTaps++,
-                  ),
-                ),
+  testWidgets('行内操作（trailing）：首帧即可见可点，点按钮不触发行点击', (tester) async {
+    var rowTaps = 0;
+    var actionTaps = 0;
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: Center(
+            child: TrackRow(
+              title: 'Title',
+              artist: 'Artist',
+              position: M3ECardPosition.single,
+              onTap: () => rowTaps++,
+              trailing: M3EIconButton(
+                variant: M3EIconButtonVariant.standard,
+                tooltip: 'actions',
+                icon: const Icon(Icons.more_vert_rounded),
+                onPressed: () => actionTaps++,
               ),
             ),
           ),
         ),
-      );
-      await tester.pumpAndSettle();
+      ),
+    );
+    await tester.pump();
 
-      // HoverReveal 自身的透明度包装（子组件内部的同类包装在遍历序里更靠后）。
-      Finder revealOpacity() => find
-          .descendant(
-            of: find.byType(HoverReveal),
-            matching: find.byType(AnimatedOpacity),
-          )
-          .first;
+    // 没有 hover 才显现的显隐包装：入口首帧就命中可点。
+    expect(find.byIcon(Icons.more_vert_rounded).hitTestable(), findsOneWidget);
+    await tester.tap(find.byIcon(Icons.more_vert_rounded));
+    await tester.pump();
+    expect(actionTaps, 1);
+    expect(rowTaps, 0, reason: '按钮吃掉点击，不触发行播放');
+  });
 
-      // 未 hover：透明（目标值 0），点击穿透到行表面。
-      expect(tester.widget<AnimatedOpacity>(revealOpacity()).opacity, 0);
-      await tester.tap(
-        find.byIcon(Icons.more_vert_rounded),
-        warnIfMissed: false,
-      );
-      await tester.pump();
-      expect(actionTaps, 0, reason: '隐藏时行内操作不可点');
-      expect(rowTaps, 1, reason: '点击穿透到行（播放）');
-
-      // 悬停整行即可显现：不要求指针先精确落在按钮上。
-      final gesture = await tester.createGesture(kind: PointerDeviceKind.mouse);
-      await gesture.addPointer(location: Offset.zero);
-      addTearDown(gesture.removePointer);
-      await tester.pump();
-      await gesture.moveTo(tester.getCenter(find.byType(TrackRow)));
-      await tester.pumpAndSettle();
-      expect(tester.widget<AnimatedOpacity>(revealOpacity()).opacity, 1);
-
-      await tester.tap(find.byIcon(Icons.more_vert_rounded));
-      await tester.pumpAndSettle();
-      expect(actionTaps, 1, reason: '显现后可点');
-      expect(rowTaps, 1, reason: '按钮吃掉点击，不再穿透');
-
-      // 指针移出：重新隐藏。
-      await gesture.moveTo(const Offset(0, 0));
-      await tester.pumpAndSettle();
-      expect(tester.widget<AnimatedOpacity>(revealOpacity()).opacity, 0);
-
-      // 键盘焦点（Tab）同样显现：焦点落进行 / 行内按钮即显。
-      await tester.sendKeyEvent(LogicalKeyboardKey.tab);
-      await tester.pumpAndSettle();
-      expect(tester.widget<AnimatedOpacity>(revealOpacity()).opacity, 1);
-    },
-    variant: TargetPlatformVariant.only(TargetPlatform.linux),
-  );
-
-  testWidgets('触摸端：行内操作原样显示（不藏入口），右键不接线', (tester) async {
+  testWidgets('触摸端：右键不接线（行内 trailing 不受影响）', (tester) async {
     var actionTaps = 0;
-    var secondaryTaps = 0;
+    final secondaryTaps = <Offset>[];
     await tester.pumpWidget(
       MaterialApp(
         home: Scaffold(
@@ -488,14 +446,12 @@ void main() {
               title: 'Title',
               position: M3ECardPosition.single,
               onTap: () {},
-              onSecondaryTap: () => secondaryTaps++,
-              trailing: HoverReveal(
-                child: M3EIconButton(
-                  variant: M3EIconButtonVariant.standard,
-                  tooltip: 'actions',
-                  icon: const Icon(Icons.more_vert_rounded),
-                  onPressed: () => actionTaps++,
-                ),
+              onSecondaryTap: secondaryTaps.add,
+              trailing: M3EIconButton(
+                variant: M3EIconButtonVariant.standard,
+                tooltip: 'actions',
+                icon: const Icon(Icons.more_vert_rounded),
+                onPressed: () => actionTaps++,
               ),
             ),
           ),
@@ -504,14 +460,6 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    // 非桌面：不引入显隐包装，入口恒定可见可点。
-    expect(
-      find.descendant(
-        of: find.byType(HoverReveal),
-        matching: find.byType(AnimatedOpacity),
-      ),
-      findsNothing,
-    );
     await tester.tap(find.byIcon(Icons.more_vert_rounded));
     await tester.pumpAndSettle();
     expect(actionTaps, 1);
@@ -519,14 +467,14 @@ void main() {
     // 右键是桌面专属：触摸端不接（也不吞掉行自己的手势）。
     await tester.tap(find.byType(TrackRow), buttons: kSecondaryButton);
     await tester.pump();
-    expect(secondaryTaps, 0);
+    expect(secondaryTaps, isEmpty);
   });
 
   testWidgets(
-    '桌面：行表面右键触发 onSecondaryTap，主键仍是行点击',
+    '桌面：行表面右键回调带回落的全局坐标，主键仍是行点击',
     (tester) async {
       var rowTaps = 0;
-      var secondaryTaps = 0;
+      final secondaryTaps = <Offset>[];
       await tester.pumpWidget(
         MaterialApp(
           home: Scaffold(
@@ -535,7 +483,7 @@ void main() {
                 title: 'Title',
                 position: M3ECardPosition.single,
                 onTap: () => rowTaps++,
-                onSecondaryTap: () => secondaryTaps++,
+                onSecondaryTap: secondaryTaps.add,
               ),
             ),
           ),
@@ -543,15 +491,24 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      await tester.tap(find.byType(TrackRow), buttons: kSecondaryButton);
+      final rowRect = tester.getRect(find.byType(TrackRow));
+      final target = Offset(rowRect.left + 37, rowRect.top + 21);
+      await tester.tapAt(
+        target,
+        buttons: kSecondaryButton,
+        kind: PointerDeviceKind.mouse,
+      );
       await tester.pump();
-      expect(secondaryTaps, 1);
+
+      expect(secondaryTaps, hasLength(1));
+      expect(secondaryTaps.single.dx, moreOrLessEquals(target.dx));
+      expect(secondaryTaps.single.dy, moreOrLessEquals(target.dy));
       expect(rowTaps, 0, reason: '右键不触发行播放');
 
       await tester.tap(find.byType(TrackRow));
       await tester.pump();
       expect(rowTaps, 1, reason: '主键仍归行表面');
-      expect(secondaryTaps, 1);
+      expect(secondaryTaps, hasLength(1));
     },
     variant: TargetPlatformVariant.only(TargetPlatform.linux),
   );

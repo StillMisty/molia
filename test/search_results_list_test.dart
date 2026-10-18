@@ -21,8 +21,9 @@ import 'support/fakes.dart';
 /// 发现页搜索结果列表（与收藏页同形曲目行）组件测试。
 ///
 /// 覆盖：列表行渲染（标题 / 歌手 / 时长）、点按播放（结果整体进队列）、
-/// 行尾 ⋮ 菜单（收藏写库 + 状态切换、加入列表弹层）、分页入口保留、
-/// 桌面宽屏表格列（表头 + 三列，与行内列左缘对齐）。
+/// 操作菜单（触摸端行尾 ⋮ 收藏写库 + 状态切换、加入列表弹层；桌面端行表面
+/// 右键在落点弹菜单）、分页入口保留、桌面宽屏表格列（表头 + 三列，与行内列
+/// 左缘对齐）。
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
@@ -288,40 +289,43 @@ void main() {
   );
 
   testWidgets(
-    '桌面：结果行 hover 显现 ⋮，右键打开同一份菜单（表格 / 单列都接）',
+    '桌面：宽屏表格 / 窄屏单列行内都无 ⋮，右键在落点弹菜单',
     (tester) async {
       await pumpSection(tester);
       await runSearch(tester);
       expect(find.byType(TrackTableHeader), findsOneWidget, reason: '宽屏走表格行');
+      expect(
+        find.byIcon(Icons.more_vert_rounded),
+        findsNothing,
+        reason: '桌面入口是行表面右键，不再有行尾 ⋮',
+      );
 
-      Finder revealOpacity() => find
-          .descendant(
-            of: find.byType(HoverReveal),
-            matching: find.byType(AnimatedOpacity),
-          )
-          .first;
-      expect(tester.widget<AnimatedOpacity>(revealOpacity()).opacity, 0);
-
-      // 悬停整行 → ⋮ 显现。
-      final gesture = await tester.createGesture(kind: PointerDeviceKind.mouse);
-      await gesture.addPointer(location: Offset.zero);
-      addTearDown(gesture.removePointer);
-      await tester.pump();
-      await gesture.moveTo(tester.getCenter(find.byType(TrackRow).first));
-      await tester.pumpAndSettle();
-      expect(tester.widget<AnimatedOpacity>(revealOpacity()).opacity, 1);
-
-      // 右键行表面 → 与 ⋮ 锚点同一份菜单；收起后再验单列版式。
-      await tester.tap(find.byType(TrackRow).first, buttons: kSecondaryButton);
+      // 右键落到第一行内的一个非中心点：菜单在落点展开（收藏 / 加入列表）。
+      final rowRect = tester.getRect(find.byType(TrackRow).first);
+      await tester.tapAt(
+        Offset(rowRect.left + 40, rowRect.center.dy),
+        buttons: kSecondaryButton,
+        kind: PointerDeviceKind.mouse,
+      );
       await tester.pumpAndSettle();
       expect(find.text('收藏'), findsOneWidget);
       expect(find.text('加入列表'), findsOneWidget);
       await tester.tapAt(const Offset(8, 8));
       await tester.pumpAndSettle();
 
+      // 窄屏（内容宽 < 720）走单列行：同一份右键接线仍然生效。
       await pumpSection(tester, width: 800);
       expect(find.byType(TrackTableHeader), findsNothing, reason: '窄屏走单列行');
-      await tester.tap(find.byType(TrackRow).first, buttons: kSecondaryButton);
+      expect(
+        find.byIcon(Icons.more_vert_rounded),
+        findsNothing,
+        reason: '桌面入口是行表面右键，不再有行尾 ⋮',
+      );
+      await tester.tap(
+        find.byType(TrackRow).first,
+        buttons: kSecondaryButton,
+        kind: PointerDeviceKind.mouse,
+      );
       await tester.pumpAndSettle();
       expect(find.text('收藏'), findsOneWidget);
       await tester.tapAt(const Offset(8, 8));

@@ -8,6 +8,7 @@ import '../domain/models/library.dart';
 import '../domain/models/track.dart';
 import '../l10n/app_localizations.dart';
 import '../providers/library_provider.dart';
+import '../utils/responsive.dart';
 import 'add_to_library.dart';
 import 'track_actions_menu.dart';
 import 'track_row.dart';
@@ -15,127 +16,93 @@ import 'track_row.dart';
 AppLocalizations _l10n(BuildContext context) =>
     AppLocalizations.of(context) ?? lookupAppLocalizations(const Locale('zh'));
 
-/// 曲目行尾 ⋮ 菜单（「收藏 / 加入列表」）的唯一实现：行本体 [TrackMenuTile]
-/// 与自建行（队列 / 搜索结果）共用同一份条目、图标、语义与领域接线。
+/// 曲目行操作菜单的定义（条目 + 选中处理）：行本体 [TrackMenuTile] 与自建行
+/// （队列 / 搜索结果）共用同一份条目、图标、语义与领域接线。
 ///
-/// 三种构造：
-/// - 通用构造：收藏态与两条动作由调用方注入（发现域 / 收藏域适配层）——
-///   组件不认具体 provider，避免把 DiscoverProvider 焊进共享件；
-/// - [TrackRowActionsMenu.track] / [TrackRowActionsMenu.searchItem]：领域
-///   构造，收藏订阅（每行一个 `select`，只重建菜单不重建整表）与写入流程
-///   （收藏切换 + snackbar、加入列表走统一目标弹层）收进菜单自身，自建行
-///   不再各抄一份。
-///
-/// 桌面增强对所有构造一致：套 [HoverReveal]，⋮ 随**整行** hover / 键盘焦点
-/// 显现，触摸端恒显（[HoverReveal] 非桌面原样返回）；[controller] 是行表面
-/// 右键（[TrackRow.onSecondaryTap]）打开同一份菜单的句柄，由行的 State 持有。
-class TrackRowActionsMenu extends StatelessWidget {
-  /// 通用构造：收藏态与两条动作由调用方注入。
-  const TrackRowActionsMenu({
-    super.key,
-    required this.favorite,
-    required this.onToggleFavorite,
-    required this.onAddToPlaylist,
-    this.controller,
-  })  : track = null,
-        searchItem = null;
+/// 为什么是纯数据而不是组件：菜单的呈现面分平台——触摸端是常显 ⋮
+/// （[TrackActionsMenu]），桌面端没有 ⋮、由行表面右键在落点弹菜单
+/// （[showTrackActionsMenuAtPointer]）。把「造菜单」与「怎么呈现」拆开，
+/// 两种入口才能共用一份定义而不是各抄一份。
+class TrackRowActionMenu {
+  const TrackRowActionMenu({required this.entries, required this.onSelected});
 
-  /// 领域曲目（队列等自建行）：收藏态订阅与写入走 LibraryProvider。
-  const TrackRowActionsMenu.track({
-    super.key,
-    required Track this.track,
-    this.controller,
-  })  : favorite = false,
-        onToggleFavorite = null,
-        onAddToPlaylist = null,
-        searchItem = null;
+  /// 菜单条目。
+  final List<M3EMenuEntry> entries;
 
-  /// 搜索结果项（Map 域自建行，item 由 SearchProvider 生成、含 `_sourceTrack`）。
-  const TrackRowActionsMenu.searchItem({
-    super.key,
-    required Map<String, dynamic> item,
-    this.controller,
-  })  : favorite = false,
-        onToggleFavorite = null,
-        onAddToPlaylist = null,
-        track = null,
-        searchItem = item;
+  /// 条目选中回调（值与条目的 `value` 对应）。
+  final ValueChanged<Object?> onSelected;
+}
 
-  /// 是否已收藏（决定菜单文案与图标）；领域构造下由行内订阅得出。
-  final bool favorite;
-
-  /// 收藏 / 取消收藏（通用构造必填；领域构造下由 LibraryProvider 接线）。
-  final VoidCallback? onToggleFavorite;
-
-  /// 加入列表（通用构造必填；领域构造下由 LibraryProvider 接线）。
-  final VoidCallback? onAddToPlaylist;
-
-  /// 领域曲目；非空时菜单自己做收藏订阅与写入。
-  final Track? track;
-
-  /// 搜索结果项；非空时菜单自己做收藏订阅与写入。
-  final Map<String, dynamic>? searchItem;
-
-  /// 行尾 ⋮ 的外部打开句柄（行表面右键）；null = 仅锚点按钮可开。
-  final TrackActionsMenuController? controller;
-
-  @override
-  Widget build(BuildContext context) {
-    final l10n = _l10n(context);
-    final Track? track = this.track;
-    final Map<String, dynamic>? searchItem = this.searchItem;
-    final bool favorite;
-    final VoidCallback? onToggleFavorite;
-    final VoidCallback? onAddToPlaylist;
-    if (track != null) {
-      favorite = context.select<LibraryProvider?, bool>(
-        (provider) =>
-            provider?.isFavorite(track.id.sourceKey, track.id.id) ?? false,
-      );
-      onToggleFavorite = () => unawaited(_toggleTrackFavorite(context, track));
-      onAddToPlaylist = () => unawaited(_addTrackToPlaylist(context, track));
-    } else if (searchItem != null) {
-      favorite = context.select<LibraryProvider?, bool>(
-        (provider) => provider?.isFavoriteSearchItem(searchItem) ?? false,
-      );
-      onToggleFavorite =
-          () => unawaited(_toggleSearchItemFavorite(context, searchItem));
-      onAddToPlaylist =
-          () => unawaited(_addSearchItemToPlaylist(context, searchItem));
-    } else {
-      favorite = this.favorite;
-      onToggleFavorite = this.onToggleFavorite;
-      onAddToPlaylist = this.onAddToPlaylist;
-    }
-    return HoverReveal(
-      child: TrackActionsMenu(
-        controller: controller,
-        tooltip: l10n.trackActionsTooltip,
-        entries: [
-          M3EMenuEntry(
-            label: favorite ? l10n.favoriteRemove : l10n.favoriteAdd,
-            leading: Icon(
-              favorite ? Icons.favorite_rounded : Icons.favorite_border_rounded,
-            ),
-            value: 'favorite',
-          ),
-          M3EMenuEntry(
-            label: l10n.addToPlaylist,
-            leading: const Icon(Icons.playlist_add_rounded),
-            value: 'add',
-          ),
-        ],
-        onSelected: (value) {
-          switch (value) {
-            case 'favorite':
-              onToggleFavorite?.call();
-            case 'add':
-              onAddToPlaylist?.call();
-          }
-        },
+/// 通用构造：收藏态与两条动作由调用方注入（发现域 / 收藏域适配层）——
+/// 组件不认具体 provider，避免把 DiscoverProvider 焊进共享件。
+TrackRowActionMenu trackRowActionMenu(
+  BuildContext context, {
+  required bool favorite,
+  required VoidCallback? onToggleFavorite,
+  required VoidCallback? onAddToPlaylist,
+}) {
+  final l10n = _l10n(context);
+  return TrackRowActionMenu(
+    entries: [
+      M3EMenuEntry(
+        label: favorite ? l10n.favoriteRemove : l10n.favoriteAdd,
+        leading: Icon(
+          favorite ? Icons.favorite_rounded : Icons.favorite_border_rounded,
+        ),
+        value: 'favorite',
       ),
-    );
-  }
+      M3EMenuEntry(
+        label: l10n.addToPlaylist,
+        leading: const Icon(Icons.playlist_add_rounded),
+        value: 'add',
+      ),
+    ],
+    onSelected: (value) {
+      switch (value) {
+        case 'favorite':
+          onToggleFavorite?.call();
+        case 'add':
+          onAddToPlaylist?.call();
+      }
+    },
+  );
+}
+
+/// 领域曲目（队列等自建行）：收藏态订阅与写入流程（收藏切换 + snackbar、
+/// 加入列表走统一目标弹层）收在这里，自建行不再各抄一份。
+///
+/// 订阅是逐行的（每行一个 `select`，只影响本行）——调用方按行调用即可，
+/// 不要在列表层调用后透传。
+TrackRowActionMenu trackRowActionMenuForTrack(
+  BuildContext context,
+  Track track,
+) {
+  final favorite = context.select<LibraryProvider?, bool>(
+    (provider) =>
+        provider?.isFavorite(track.id.sourceKey, track.id.id) ?? false,
+  );
+  return trackRowActionMenu(
+    context,
+    favorite: favorite,
+    onToggleFavorite: () => unawaited(_toggleTrackFavorite(context, track)),
+    onAddToPlaylist: () => unawaited(_addTrackToPlaylist(context, track)),
+  );
+}
+
+/// 搜索结果项（Map 域自建行，item 由 SearchProvider 生成、含 `_sourceTrack`）。
+TrackRowActionMenu trackRowActionMenuForSearchItem(
+  BuildContext context,
+  Map<String, dynamic> item,
+) {
+  final favorite = context.select<LibraryProvider?, bool>(
+    (provider) => provider?.isFavoriteSearchItem(item) ?? false,
+  );
+  return trackRowActionMenu(
+    context,
+    favorite: favorite,
+    onToggleFavorite: () => unawaited(_toggleSearchItemFavorite(context, item)),
+    onAddToPlaylist: () => unawaited(_addSearchItemToPlaylist(context, item)),
+  );
 }
 
 /// 领域曲目收藏切换：菜单文案已表达状态，反馈只留 snackbar 确认。
@@ -199,7 +166,10 @@ Future<void> _addSearchItemToPlaylist(
   );
 }
 
-/// 曲目行（行渲染 + 行尾 ⋮ 菜单）：点击播放 + 行尾 ⋮ 菜单。
+/// 曲目行（行渲染 + 操作菜单入口）：点击播放。
+///
+/// 入口分平台：触摸端行尾常显 ⋮（[TrackActionsMenu]）；桌面端不渲染 ⋮，
+/// 行表面右键在落点弹同一份菜单（[showTrackActionsMenuAtPointer]）。
 ///
 /// 收藏域（歌手页 / 专辑页）经 [FavoriteTrackTile] 适配层使用；发现详情页
 /// 直接使用。菜单固定「收藏 / 加入列表」两条动作——各入口的语义本来就相同，
@@ -208,10 +178,8 @@ Future<void> _addSearchItemToPlaylist(
 ///   DiscoverProvider / LibraryProvider 焊进共享件，也避免整表重建）；
 /// - 行尾元信息（时长）由调用方按数据可得性传入，未知传 null 不占位。
 ///
-/// 菜单本体（条目 / 桌面 hover 显现 / 右键打开）见 [TrackRowActionsMenu]，
-/// 本组件只负责把行内容与行尾插槽接起来；⋮ 的外部打开句柄必须与行同生命
-/// 周期（建在 build 里每次重建都会注册一份新回调），所以本组件是 Stateful。
-class TrackMenuTile extends StatefulWidget {
+/// 菜单条目见 [trackRowActionMenu]。
+class TrackMenuTile extends StatelessWidget {
   const TrackMenuTile({
     super.key,
     required this.title,
@@ -258,32 +226,38 @@ class TrackMenuTile extends StatefulWidget {
   final VoidCallback onAddToPlaylist;
 
   @override
-  State<TrackMenuTile> createState() => _TrackMenuTileState();
-}
-
-class _TrackMenuTileState extends State<TrackMenuTile> {
-  /// 行尾 ⋮ 的外部打开句柄（行表面右键 → 同一份菜单）。
-  final TrackActionsMenuController _menu = TrackActionsMenuController();
-
-  @override
   Widget build(BuildContext context) {
+    final menu = trackRowActionMenu(
+      context,
+      favorite: favorite,
+      onToggleFavorite: onToggleFavorite,
+      onAddToPlaylist: onAddToPlaylist,
+    );
     return TrackRow(
-      title: widget.title,
-      artist: widget.artist,
-      artists: widget.artists,
-      coverUrl: widget.coverUrl,
-      columns: widget.columns,
-      trailingText: widget.trailingText,
-      position: widget.position,
-      onTap: widget.onTap,
-      // 右键只在桌面接线（[TrackRow] 内部判定），触摸端无次级手势。
-      onSecondaryTap: _menu.open,
-      trailing: TrackRowActionsMenu(
-        controller: _menu,
-        favorite: widget.favorite,
-        onToggleFavorite: widget.onToggleFavorite,
-        onAddToPlaylist: widget.onAddToPlaylist,
-      ),
+      title: title,
+      artist: artist,
+      artists: artists,
+      coverUrl: coverUrl,
+      columns: columns,
+      trailingText: trailingText,
+      position: position,
+      onTap: onTap,
+      onSecondaryTap: isDesktopPlatform()
+          ? (position) => showTrackActionsMenuAtPointer(
+                context: context,
+                globalPosition: position,
+                entries: menu.entries,
+                onSelected: menu.onSelected,
+              )
+          : null,
+      // 触摸端行尾 ⋮ 常显；桌面端入口是行表面右键，不再渲染 ⋮。
+      trailing: isDesktopPlatform()
+          ? null
+          : TrackActionsMenu(
+              entries: menu.entries,
+              onSelected: menu.onSelected,
+              tooltip: _l10n(context).trackActionsTooltip,
+            ),
     );
   }
 }

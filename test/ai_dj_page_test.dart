@@ -1,3 +1,4 @@
+import 'package:flutter/gestures.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:material_3_expressive/material_3_expressive.dart';
 import 'package:material_ui/material_ui.dart';
@@ -13,6 +14,7 @@ import 'package:molia/providers/library_provider.dart';
 import 'package:molia/providers/playback_provider.dart';
 import 'package:molia/services/ai/ai_recommendation_service.dart';
 import 'package:molia/services/ai/ai_settings_store.dart';
+import 'package:molia/widgets/ai_dj_track_tile.dart';
 
 import 'support/fake_library_repository.dart';
 import 'support/fakes.dart';
@@ -89,8 +91,9 @@ void main() {
     final prefs = await SharedPreferences.getInstance();
     if (withConfig) {
       await AiSettingsStore(
-            settings: testSettingsRegistry(
-                preferences: prefs, secrets: secrets)).saveConfig(
+              settings:
+                  testSettingsRegistry(preferences: prefs, secrets: secrets))
+          .saveConfig(
         const LlmConfig(
           baseUrl: 'https://api.example.com/v1',
           apiKey: 'sk-test',
@@ -105,8 +108,7 @@ void main() {
       libraryProvider: libraryProvider,
       recommendationService: generator,
       settingsStore: AiSettingsStore(
-            settings: testSettingsRegistry(
-                preferences: prefs, secrets: secrets)),
+          settings: testSettingsRegistry(preferences: prefs, secrets: secrets)),
     );
     await provider.init();
   }
@@ -315,7 +317,7 @@ void main() {
     await provider.setEnabled(true);
     await tester.pumpAndSettle();
 
-    // 收藏入口在行尾 ⋮ 菜单，行内不设独立按钮。
+    // 收藏入口在行尾 ⋮ 菜单（触摸端），行内不设独立按钮。
     expect(find.byIcon(Icons.favorite_border_rounded), findsNothing);
 
     await tester.tap(find.byIcon(Icons.more_vert_rounded).first);
@@ -330,6 +332,34 @@ void main() {
     await tester.pumpAndSettle();
     expect(libraryProvider.isFavorite('wy', '0'), isFalse);
   });
+
+  testWidgets(
+    '桌面：推荐行无 ⋮，右键在落点弹出同一份菜单',
+    (tester) async {
+      await pumpProvider();
+      await pumpPage(tester);
+      await provider.grantConsent();
+      await provider.setEnabled(true);
+      await tester.pumpAndSettle();
+
+      expect(
+        find.byIcon(Icons.more_vert_rounded),
+        findsNothing,
+        reason: '桌面入口是行表面右键，不再有行尾 ⋮',
+      );
+
+      await tester.tap(
+        find.byType(AiDjTrackTile).first,
+        buttons: kSecondaryButton,
+        kind: PointerDeviceKind.mouse,
+      );
+      await tester.pumpAndSettle();
+      expect(find.text('Add to favorites'), findsOneWidget);
+      expect(find.text('Swap this one'), findsOneWidget);
+      expect(find.text('Not interested'), findsOneWidget);
+    },
+    variant: TargetPlatformVariant.only(TargetPlatform.linux),
+  );
 
   testWidgets('测试连接成功：自动保存表单里的新配置并收起表单', (tester) async {
     await pumpProvider();

@@ -25,7 +25,7 @@ abstract class Breakpoints {
 /// 桌面平台（Linux / Windows / macOS）：桌面骨架与桌面专属交互的统一判定。
 ///
 /// 与壳层骨架分流（`MyApp.desktopShell`）互补：生产路径两者一致；测试里可用
-/// 开关强制骨架，页面内的桌面增强（渠道栏 / 表格列 / hover 显现 / 右键菜单）
+/// 开关强制骨架，页面内的桌面增强（渠道栏 / 表格列 / 右键菜单）
 /// 仍按平台判定——它们只在桌面骨架里渲染，无需再逐层传开关。
 bool isDesktopPlatform() => switch (defaultTargetPlatform) {
       TargetPlatform.linux ||
@@ -607,8 +607,7 @@ class ResponsiveNavigation {
       barrierDismissible: barrierDismissible,
       barrierLabel: MaterialLocalizations.of(context).modalBarrierDismissLabel,
       // 遮罩走主题 scrim（随亮度/纯黑变化）。
-      barrierColor:
-          Theme.of(context).colorScheme.scrim.withValues(alpha: 0.54),
+      barrierColor: Theme.of(context).colorScheme.scrim.withValues(alpha: 0.54),
       // 路由时长 = 入场弹簧的落定时间（见 transitionBuilder 注释）。
       transitionDuration: const Duration(milliseconds: 400),
       pageBuilder: (context, animation, secondaryAnimation) {
@@ -644,8 +643,7 @@ class ResponsiveNavigation {
               // 把弹簧按秒采样，因此路由时长取落定时间 400ms（末尾误差
               // <0.1%，不会收尾跳变）。
               curve: MotionCurve(
-                motion:
-                    SpringMotion(M3EMotion.spatialDefault.toDescription()),
+                motion: SpringMotion(M3EMotion.spatialDefault.toDescription()),
               ),
             ),
           ),

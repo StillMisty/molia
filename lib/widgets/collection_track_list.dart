@@ -9,6 +9,7 @@ import '../domain/models/library.dart';
 import '../l10n/app_localizations.dart';
 import '../utils/responsive.dart';
 import 'swipe_reveal_row.dart';
+import 'track_actions_menu.dart';
 import 'track_row.dart';
 
 /// 合集曲目列表脚手架：常显可拖动滚动条 + 固定行高懒加载列表
@@ -113,10 +114,11 @@ class CollectionTrackList<T> extends StatelessWidget {
   }
 }
 
-/// 合集曲目行：固定行高行 + 多选勾选 + （给了动作时的）左滑外壳。
+/// 合集曲目行：固定行高行 + 多选勾选 + （给了动作时的）管理入口。
 ///
 /// 四种合集的行走同一形状；点播 / 多选 / 动作语义（图标、文案、回调）
-/// 都在调用方，这里只组装 [TrackRow] 与 [SwipeRevealRow]。
+/// 都在调用方，这里只组装 [TrackRow]：触摸端动作渲染成 [SwipeRevealRow]
+/// 左滑胶囊；桌面端不装左滑外壳，行表面右键在落点弹同一组动作的菜单。
 class CollectionTrackRow extends StatelessWidget {
   const CollectionTrackRow({
     super.key,
@@ -131,7 +133,7 @@ class CollectionTrackRow extends StatelessWidget {
     this.onTap,
     this.onTapWithModifiers,
     this.onLongPress,
-    this.swipeActions,
+    this.actions,
   });
 
   final String title;
@@ -161,12 +163,34 @@ class CollectionTrackRow extends StatelessWidget {
 
   final VoidCallback? onLongPress;
 
-  /// 左滑动作；null / 空 = 无左滑（多选与排序模式）。
-  final List<M3EListSwipeAction>? swipeActions;
+  /// 行动作描述；null / 空 = 无动作（多选与排序模式：触摸端无左滑、
+  /// 桌面端也没有右键菜单）。
+  final List<CollectionRowAction>? actions;
 
   @override
   Widget build(BuildContext context) {
     final tapWithModifiers = onTapWithModifiers;
+    final rowActions = actions ?? const <CollectionRowAction>[];
+    // 桌面端入口是行表面右键：同一组动作编译成菜单条目，`value` 记动作下标，
+    // 选中后回读对应回调。菜单在落点弹出（靠边由 M3E placer 处理）。
+    final onSecondaryTap = isDesktopPlatform() && rowActions.isNotEmpty
+        ? (Offset tapPosition) => showTrackActionsMenuAtPointer(
+              context: context,
+              globalPosition: tapPosition,
+              entries: [
+                for (var index = 0; index < rowActions.length; index++)
+                  M3EMenuEntry(
+                    label: rowActions[index].label,
+                    leading: Icon(rowActions[index].icon),
+                    isDestructive: rowActions[index].destructive,
+                    value: index,
+                  ),
+              ],
+              onSelected: (value) {
+                if (value is int) rowActions[value].onPressed();
+              },
+            )
+        : null;
     final row = TrackRow(
       title: title,
       artist: artist,
@@ -185,10 +209,15 @@ class CollectionTrackRow extends StatelessWidget {
                 HardwareKeyboard.instance.isShiftPressed,
               ),
       onLongPress: onLongPress,
+      onSecondaryTap: onSecondaryTap,
     );
-    final actions = swipeActions;
-    if (actions == null || actions.isEmpty) return row;
-    return SwipeRevealRow(actions: actions, child: row);
+    if (rowActions.isEmpty) return row;
+    // 桌面不再有鼠标左滑：动作已挂在行表面右键，不装左滑外壳。
+    if (isDesktopPlatform()) return row;
+    return SwipeRevealRow(
+      actions: collectionSwipeActions(context, rowActions),
+      child: row,
+    );
   }
 }
 
@@ -262,10 +291,11 @@ class CollectionLocalSong {
       : (sourceKey: history!.sourceKey, songId: history!.songId);
 }
 
-/// 一条左滑动作的描述：图标 + 文案 + 回调；[destructive] 表达「移除类」
-/// （filled + error 配色，对齐 M3E 列表示例的删除动作）。
-class CollectionSwipeAction {
-  const CollectionSwipeAction({
+/// 一条行动作的描述（触摸端左滑胶囊 / 桌面右键菜单共用）：图标 + 文案 +
+/// 回调；[destructive] 表达「移除类」（触摸端 filled + error 配色，桌面端
+/// 菜单条目走 error 语义，对齐 M3E 列表示例的删除动作）。
+class CollectionRowAction {
+  const CollectionRowAction({
     required this.icon,
     required this.label,
     required this.onPressed,
@@ -278,12 +308,14 @@ class CollectionSwipeAction {
   final bool destructive;
 }
 
-/// 把动作描述编译成 [M3EListSwipeAction]（胶囊渲染在 [SwipeRevealRow]）。
+/// 把动作描述编译成 [M3EListSwipeAction]（触摸端左滑胶囊，渲染在
+/// [SwipeRevealRow]）；桌面端右键菜单条目直接取动作描述，不经过这里
+/// （菜单只要图标 + 文案，不需要配色）。
 ///
 /// 图标用 tooltip 承担无障碍语义：纯图标在窄胶囊里不容易自解释。
 List<M3EListSwipeAction> collectionSwipeActions(
   BuildContext context,
-  List<CollectionSwipeAction> actions,
+  List<CollectionRowAction> actions,
 ) {
   final scheme = Theme.of(context).colorScheme;
   return [
@@ -298,13 +330,13 @@ List<M3EListSwipeAction> collectionSwipeActions(
   ];
 }
 
-/// 收藏 / 自建列表曲目行的左滑动作：加入列表 + 换源（非本地曲目）+
-/// 移除类（自建列表「从本列表移除」/ 收藏「取消收藏」）。
+/// 收藏 / 自建列表曲目行的动作（触摸端左滑胶囊 / 桌面右键菜单共用）：
+/// 加入列表 + 换源（非本地曲目）+ 移除类（自建列表「从本列表移除」/
+/// 收藏「取消收藏」）。
 ///
 /// 动作构成 / 图标 / 文案在这一份实现；写入动作（含「谁被移除」）由调用方给，
 /// 回调可以是异步写入（模块负责 fire-and-forget）。
-List<M3EListSwipeAction> collectionTrackRowSwipeActions(
-  BuildContext context, {
+List<CollectionRowAction> collectionTrackRowActions({
   required AppLocalizations l10n,
   required PlaylistTrack track,
   required bool isFavorites,
@@ -315,69 +347,69 @@ List<M3EListSwipeAction> collectionTrackRowSwipeActions(
   required Future<void> Function() onRemoveFromPlaylist,
   required Future<void> Function() onRemoveFromFavorites,
 }) {
-  return collectionSwipeActions(context, [
-    CollectionSwipeAction(
+  return [
+    CollectionRowAction(
       icon: Icons.playlist_add_rounded,
       label: l10n.addToPlaylist,
       onPressed: () => unawaited(onCopy()),
     ),
     if (playlistId != null && track.sourceKey != kLocalSourceKey)
-      CollectionSwipeAction(
+      CollectionRowAction(
         icon: Icons.swap_horiz_rounded,
         label: l10n.sourceSwap,
         onPressed: () => unawaited(onSwap()),
       ),
     if (isCustom && playlistId != null)
-      CollectionSwipeAction(
+      CollectionRowAction(
         icon: Icons.playlist_remove_rounded,
         label: l10n.playlistRemoveTrack,
         destructive: true,
         onPressed: () => unawaited(onRemoveFromPlaylist()),
       )
     else if (isFavorites)
-      CollectionSwipeAction(
+      CollectionRowAction(
         icon: Icons.delete_rounded,
         label: l10n.favoriteRemove,
         destructive: true,
         onPressed: () => unawaited(onRemoveFromFavorites()),
       ),
-  ]);
+  ];
 }
 
-/// 播放历史行的左滑动作：加入列表 + 换源（非本地记录）+ 删除单条。
-List<M3EListSwipeAction> collectionHistoryRowSwipeActions(
-  BuildContext context, {
+/// 播放历史行的动作（触摸端左滑胶囊 / 桌面右键菜单共用）：加入列表 +
+/// 换源（非本地记录）+ 删除单条。
+List<CollectionRowAction> collectionHistoryRowActions({
   required AppLocalizations l10n,
   required PlayHistoryEntry entry,
   required Future<void> Function() onCopy,
   required Future<void> Function() onSwap,
   required Future<void> Function() onDelete,
 }) {
-  return collectionSwipeActions(context, [
-    CollectionSwipeAction(
+  return [
+    CollectionRowAction(
       icon: Icons.playlist_add_rounded,
       label: l10n.addToPlaylist,
       onPressed: () => unawaited(onCopy()),
     ),
     if (entry.sourceKey != kLocalSourceKey)
-      CollectionSwipeAction(
+      CollectionRowAction(
         icon: Icons.swap_horiz_rounded,
         label: l10n.sourceSwap,
         onPressed: () => unawaited(onSwap()),
       ),
-    CollectionSwipeAction(
+    CollectionRowAction(
       icon: Icons.delete_rounded,
       label: l10n.historyDeleteEntry,
       destructive: true,
       onPressed: () => unawaited(onDelete()),
     ),
-  ]);
+  ];
 }
 
-/// 本地歌曲行的左滑动作：加入列表 + 收藏开关 + 删除（文案按记录来源区分：
-/// 缓存行清缓存 / 导入项只移出列表 / 下载副本删文件）。
-List<M3EListSwipeAction> localSongRowSwipeActions(
-  BuildContext context, {
+/// 本地歌曲行的动作（触摸端左滑胶囊 / 桌面右键菜单共用）：加入列表 +
+/// 收藏开关 + 删除（文案按记录来源区分：缓存行清缓存 / 导入项只移出列表 /
+/// 下载副本删文件）。
+List<CollectionRowAction> localSongRowActions({
   required AppLocalizations l10n,
   required bool isFavorite,
   required bool isCached,
@@ -386,20 +418,20 @@ List<M3EListSwipeAction> localSongRowSwipeActions(
   required Future<void> Function() onToggleFavorite,
   required Future<void> Function() onDelete,
 }) {
-  return collectionSwipeActions(context, [
-    CollectionSwipeAction(
+  return [
+    CollectionRowAction(
       icon: Icons.playlist_add_rounded,
       label: l10n.addToPlaylist,
       onPressed: () => unawaited(onCopy()),
     ),
-    CollectionSwipeAction(
+    CollectionRowAction(
       icon: isFavorite
           ? Icons.heart_broken_rounded
           : Icons.favorite_border_rounded,
       label: isFavorite ? l10n.favoriteRemove : l10n.favoriteAdd,
       onPressed: () => unawaited(onToggleFavorite()),
     ),
-    CollectionSwipeAction(
+    CollectionRowAction(
       icon: Icons.delete_rounded,
       label: isCached
           ? l10n.localSongsCachedRemove
@@ -409,5 +441,5 @@ List<M3EListSwipeAction> localSongRowSwipeActions(
       destructive: true,
       onPressed: () => unawaited(onDelete()),
     ),
-  ]);
+  ];
 }

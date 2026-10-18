@@ -1,8 +1,9 @@
 /// 合集列表 module 的脚手架与行形状测试：滚动条 / 固定行高 / 行 key /
-/// 空态（共享 EmptyState 配方 + 搜索空态）/ 排序模式 / 左滑动作配色与构成 /
-/// 本地歌曲行映射。
+/// 空态（共享 EmptyState 配方 + 搜索空态）/ 排序模式 / 行动作构成与两平台
+/// 入口（触摸端左滑胶囊 / 桌面右键菜单）/ 本地歌曲行映射。
 library;
 
+import 'package:flutter/gestures.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:molia/domain/models/download.dart';
 import 'package:molia/domain/models/library.dart';
@@ -144,7 +145,6 @@ void main() {
 
   group('CollectionTrackRow 行外壳', () {
     testWidgets('无动作 = 纯行；有动作 = 左滑外壳', (tester) async {
-      const action = M3EListSwipeAction(icon: Icon(Icons.delete_rounded));
       await pumpHost(
         tester,
         Column(
@@ -152,17 +152,23 @@ void main() {
             CollectionTrackRow(
               title: '无动作',
               position: M3ECardPosition.first,
-              swipeActions: null,
+              actions: null,
             ),
             CollectionTrackRow(
               title: '有空列表',
               position: M3ECardPosition.middle,
-              swipeActions: const [],
+              actions: const [],
             ),
             CollectionTrackRow(
               title: '有动作',
               position: M3ECardPosition.last,
-              swipeActions: const [action],
+              actions: [
+                CollectionRowAction(
+                  icon: Icons.delete_rounded,
+                  label: '删除',
+                  onPressed: () {},
+                ),
+              ],
             ),
           ],
         ),
@@ -171,6 +177,85 @@ void main() {
       expect(find.byType(TrackRow), findsNWidgets(3));
       expect(find.byType(SwipeRevealRow), findsOneWidget);
     });
+
+    testWidgets('桌面：无左滑外壳，右键行表面弹动作菜单，选中触发对应回调', (tester) async {
+      var copyPressed = 0;
+      var removePressed = 0;
+      await pumpHost(
+        tester,
+        CollectionTrackRow(
+          title: '有动作',
+          position: M3ECardPosition.single,
+          actions: [
+            CollectionRowAction(
+              icon: Icons.playlist_add_rounded,
+              label: '加入列表',
+              onPressed: () => copyPressed++,
+            ),
+            CollectionRowAction(
+              icon: Icons.delete_rounded,
+              label: '取消收藏',
+              destructive: true,
+              onPressed: () => removePressed++,
+            ),
+          ],
+        ),
+      );
+
+      expect(
+        find.byType(SwipeRevealRow),
+        findsNothing,
+        reason: '桌面不再有鼠标左滑，动作走行表面右键',
+      );
+
+      // 右键行表面 → 菜单在落点展开，条目与动作 label 一一对应。
+      final rowRect = tester.getRect(find.byType(TrackRow));
+      await tester.tapAt(
+        Offset(rowRect.left + 40, rowRect.center.dy),
+        buttons: kSecondaryButton,
+        kind: PointerDeviceKind.mouse,
+      );
+      await tester.pumpAndSettle();
+      expect(find.text('加入列表'), findsOneWidget);
+      expect(find.text('取消收藏'), findsOneWidget);
+
+      // 选中条目（value = 动作下标）→ 对应动作回调，选中即关菜单。
+      await tester.tap(find.text('取消收藏'));
+      await tester.pumpAndSettle();
+      expect(removePressed, 1);
+      expect(copyPressed, 0);
+      expect(find.text('加入列表'), findsNothing);
+    }, variant: TargetPlatformVariant.only(TargetPlatform.linux));
+
+    testWidgets('桌面：无动作时右键不弹菜单（纯行）', (tester) async {
+      var taps = 0;
+      await pumpHost(
+        tester,
+        CollectionTrackRow(
+          title: '无动作',
+          position: M3ECardPosition.single,
+          onTap: () => taps++,
+          actions: const [],
+        ),
+      );
+
+      await tester.tap(
+        find.byType(TrackRow),
+        buttons: kSecondaryButton,
+        kind: PointerDeviceKind.mouse,
+      );
+      await tester.pumpAndSettle();
+      expect(
+        find.byType(M3EMenuPopup),
+        findsNothing,
+        reason: '无动作 = 纯行，无右键菜单',
+      );
+      expect(taps, 0, reason: '右键不触发行点击');
+
+      await tester.tap(find.byType(TrackRow));
+      await tester.pump();
+      expect(taps, 1);
+    }, variant: TargetPlatformVariant.only(TargetPlatform.linux));
 
     testWidgets('多选态：行尾插槽与勾选态透传', (tester) async {
       await pumpHost(
@@ -231,8 +316,8 @@ void main() {
     });
   });
 
-  group('左滑动作形状与构成', () {
-    testWidgets('中性 = 默认胶囊；移除类 = primary + error 配色', (tester) async {
+  group('行动作形状与构成', () {
+    testWidgets('触摸端编译：中性 = 默认胶囊；移除类 = primary + error 配色', (tester) async {
       await pumpHost(tester, const SizedBox());
       final context = tester.element(find.byType(SizedBox));
       final scheme = Theme.of(context).colorScheme;
@@ -240,12 +325,12 @@ void main() {
       var destructivePressed = false;
 
       final actions = collectionSwipeActions(context, [
-        CollectionSwipeAction(
+        CollectionRowAction(
           icon: Icons.playlist_add_rounded,
           label: '加入列表',
           onPressed: () => neutralPressed = true,
         ),
-        CollectionSwipeAction(
+        CollectionRowAction(
           icon: Icons.delete_rounded,
           label: '删除',
           destructive: true,
@@ -274,17 +359,15 @@ void main() {
 
     testWidgets('曲目行：加入列表 + 换源（非本地）+ 移除类', (tester) async {
       await pumpHost(tester, const SizedBox());
-      final context = tester.element(find.byType(SizedBox));
       final l10n = l10nOf(tester);
 
-      List<M3EListSwipeAction> actionsFor({
+      List<CollectionRowAction> actionsFor({
         required bool isFavorites,
         required bool isCustom,
         int? playlistId,
         String sourceKey = 'wy',
       }) {
-        return collectionTrackRowSwipeActions(
-          context,
+        return collectionTrackRowActions(
           l10n: l10n,
           track: PlaylistTrack(
             playlistId: playlistId ?? 0,
@@ -306,20 +389,20 @@ void main() {
       }
 
       // 收藏：加入列表 + 换源 + 取消收藏。
-      expect(
-        actionsFor(isFavorites: true, isCustom: false, playlistId: 9),
-        hasLength(3),
-      );
-      expect(
-        actionsFor(isFavorites: true, isCustom: false, playlistId: 9)[2]
-            .isPrimary,
-        isTrue,
-      );
+      final favorites =
+          actionsFor(isFavorites: true, isCustom: false, playlistId: 9);
+      expect(favorites, hasLength(3));
+      expect(favorites[0].label, l10n.addToPlaylist);
+      expect(favorites[1].label, l10n.sourceSwap);
+      expect(favorites[1].icon, Icons.swap_horiz_rounded);
+      expect(favorites[2].label, l10n.favoriteRemove);
+      expect(favorites[2].destructive, isTrue);
       // 自建列表：移除类为「从本列表移除」。
-      expect(
-        actionsFor(isFavorites: false, isCustom: true, playlistId: 9),
-        hasLength(3),
-      );
+      final custom =
+          actionsFor(isFavorites: false, isCustom: true, playlistId: 9);
+      expect(custom, hasLength(3));
+      expect(custom[2].label, l10n.playlistRemoveTrack);
+      expect(custom[2].destructive, isTrue);
       // 本地曲目：无换源。
       expect(
         actionsFor(
@@ -339,12 +422,10 @@ void main() {
 
     testWidgets('历史行：本地记录无换源', (tester) async {
       await pumpHost(tester, const SizedBox());
-      final context = tester.element(find.byType(SizedBox));
       final l10n = l10nOf(tester);
 
-      List<M3EListSwipeAction> actionsFor(String sourceKey) {
-        return collectionHistoryRowSwipeActions(
-          context,
+      List<CollectionRowAction> actionsFor(String sourceKey) {
+        return collectionHistoryRowActions(
           l10n: l10n,
           entry: PlayHistoryEntry(
             sourceKey: sourceKey,
@@ -362,22 +443,25 @@ void main() {
         );
       }
 
-      expect(actionsFor('wy'), hasLength(3));
+      final remote = actionsFor('wy');
+      expect(remote, hasLength(3));
+      expect(remote[0].label, l10n.addToPlaylist);
+      expect(remote[1].label, l10n.sourceSwap);
+      expect(remote[2].label, l10n.historyDeleteEntry);
+      expect(remote[2].destructive, isTrue);
       expect(actionsFor(kLocalSourceKey), hasLength(2));
     });
 
     testWidgets('本地歌曲行：删除文案按来源区分，收藏开关切换图标与文案', (tester) async {
       await pumpHost(tester, const SizedBox());
-      final context = tester.element(find.byType(SizedBox));
       final l10n = l10nOf(tester);
 
-      List<M3EListSwipeAction> actionsFor({
+      List<CollectionRowAction> actionsFor({
         required bool isFavorite,
         required bool isCached,
         required bool isImported,
       }) {
-        return localSongRowSwipeActions(
-          context,
+        return localSongRowActions(
           l10n: l10n,
           isFavorite: isFavorite,
           isCached: isCached,
@@ -388,30 +472,27 @@ void main() {
         );
       }
 
-      String labelOf(M3EListSwipeAction action) =>
-          ((action.icon as Tooltip).message)!;
-
-      expect(
-          labelOf(actionsFor(
-            isFavorite: false,
-            isCached: false,
-            isImported: false,
-          )[2]),
-          l10n.downloadDelete);
-      expect(
-          labelOf(actionsFor(
-            isFavorite: false,
-            isCached: false,
-            isImported: true,
-          )[2]),
-          l10n.localSongsRemove);
-      expect(
-          labelOf(actionsFor(
-            isFavorite: false,
-            isCached: true,
-            isImported: false,
-          )[2]),
-          l10n.localSongsCachedRemove);
+      final deleteDownload = actionsFor(
+        isFavorite: false,
+        isCached: false,
+        isImported: false,
+      )[2];
+      final deleteImport = actionsFor(
+        isFavorite: false,
+        isCached: false,
+        isImported: true,
+      )[2];
+      final deleteCached = actionsFor(
+        isFavorite: false,
+        isCached: true,
+        isImported: false,
+      )[2];
+      expect(deleteDownload.label, l10n.downloadDelete);
+      expect(deleteImport.label, l10n.localSongsRemove);
+      expect(deleteCached.label, l10n.localSongsCachedRemove);
+      expect(deleteDownload.destructive, isTrue);
+      expect(deleteImport.destructive, isTrue);
+      expect(deleteCached.destructive, isTrue);
 
       final notFavorite = actionsFor(
         isFavorite: false,
@@ -423,8 +504,10 @@ void main() {
         isCached: false,
         isImported: false,
       )[1];
-      expect(labelOf(notFavorite), l10n.favoriteAdd);
-      expect(labelOf(favorite), l10n.favoriteRemove);
+      expect(notFavorite.label, l10n.favoriteAdd);
+      expect(notFavorite.icon, Icons.favorite_border_rounded);
+      expect(favorite.label, l10n.favoriteRemove);
+      expect(favorite.icon, Icons.heart_broken_rounded);
     });
   });
 

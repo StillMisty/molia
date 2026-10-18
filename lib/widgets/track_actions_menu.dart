@@ -1,29 +1,40 @@
 import 'package:material_3_expressive/material_3_expressive.dart';
 import 'package:material_ui/material_ui.dart';
 
-/// ⋮ 菜单的外部打开句柄：曲目行右键打开**同一份**菜单（锚点仍是行尾 ⋮
-/// 按钮，不新造第二套菜单）。
+/// 在鼠标落点弹出曲目行操作菜单（全 App「桌面右键菜单跟随落点」的唯一实现）。
 ///
-/// 每行一个，由调用方持有（行的 State 创建 / 释放，不能建在 itemBuilder
-/// 里——每次重建都会注册一份新回调）。菜单未挂载 / 已打开时 [open] 为空
-/// 操作，调用方无需关心挂载时序。
-class TrackActionsMenuController {
-  VoidCallback? _open;
-
-  /// 打开菜单（锚点 = 行尾 ⋮ 按钮）。
-  void open() => _open?.call();
-
-  /// 注册 / 注销打开回调；锚点禁用（生成中等）时注册 null，右键同样不可开。
-  void _attach(VoidCallback? open) => _open = open;
-
-  void _detach(VoidCallback? open) {
-    // 按回调相等性比对：重建时 anchorBuilder 给的是同一实例，只有换
-    // 控制器 / 销毁时才真正清掉，避免误清新一轮注册的回调。
-    if (_open == open) _open = null;
-  }
+/// 为什么要有它：桌面端不再显示行尾 ⋮，行表面右键就是唯一入口，菜单必须在
+/// 指针落点展开。实现用**零尺寸矩形**（`Rect.fromLTWH(pos.dx, pos.dy, 0, 0)`）
+/// 作锚点 + `bottomStart`：菜单自落点向右下展开；靠近屏幕右缘 / 下缘时由 M3E
+/// placer 自动水平夹取、空间不足自动上翻——这里不做第二套边界计算。
+///
+/// 坐标系必须与 [showM3EMenu] 插入的 overlay 一致（它固定插进 root overlay，
+/// 并按 overlay 局部坐标摆位）：[globalPosition] 先经 root overlay 的渲染对象
+/// 换算成局部坐标；极端情况拿不到 [RenderBox] 时原样使用——根 overlay 无祖先
+/// 变换时全局与局部同值。
+Future<void> showTrackActionsMenuAtPointer({
+  required BuildContext context,
+  required Offset globalPosition,
+  required List<M3EMenuEntry> entries,
+  required ValueChanged<Object?> onSelected,
+  M3EMenuAnchorPosition position = M3EMenuAnchorPosition.bottomStart,
+}) async {
+  final OverlayState overlay = Overlay.of(context, rootOverlay: true);
+  final RenderObject? overlayObject = overlay.context.findRenderObject();
+  final Offset anchor = overlayObject is RenderBox
+      ? overlayObject.globalToLocal(globalPosition)
+      : globalPosition;
+  final Object? selected = await showM3EMenu<Object>(
+    context: context,
+    anchor: Rect.fromLTWH(anchor.dx, anchor.dy, 0, 0),
+    children: entries,
+    position: position,
+  );
+  if (selected != null) onSelected(selected);
 }
 
-/// 曲目行尾的 ⋮ 操作菜单（发现详情 / 搜索结果 / AI 推歌共用）。
+/// 曲目行尾的 ⋮ 操作菜单（触摸端与 AI 推歌行共用；桌面端无 ⋮，走行表面右键
+/// [showTrackActionsMenuAtPointer]）。
 ///
 /// 统一两件容易各写各的事，保证全 App 同一种菜单观感：
 /// - **锚点**：standard 图标按钮 + tooltip（纯图标不自解释，tooltip 同时
@@ -31,10 +42,7 @@ class TrackActionsMenuController {
 /// - **条目**：调用方只给动作，规范一律「leading 图标 + 文案」，收藏这类
 ///   开关态用图标 + 文案表达（如实心 ♥ +「取消收藏」），不用勾选条目——
 ///   选中即关菜单，勾选态没有第二次阅读的机会。
-///
-/// 右键复用入口：传 [controller] 后，行表面（[TrackRow.onSecondaryTap]）
-/// 可以打开与锚点按钮完全相同的那份菜单。
-class TrackActionsMenu extends StatefulWidget {
+class TrackActionsMenu extends StatelessWidget {
   const TrackActionsMenu({
     super.key,
     required this.entries,
@@ -43,7 +51,6 @@ class TrackActionsMenu extends StatefulWidget {
     this.compact = false,
     this.enabled = true,
     this.position = M3EMenuAnchorPosition.bottomEnd,
-    this.controller,
   });
 
   /// 菜单条目（各页动作不同；图标规范见类文档）。
@@ -64,52 +71,20 @@ class TrackActionsMenu extends StatefulWidget {
   /// 菜单弹出位置（默认贴锚点右下）。
   final M3EMenuAnchorPosition position;
 
-  /// 外部打开句柄（曲目行右键）；null = 仅锚点按钮可开。
-  final TrackActionsMenuController? controller;
-
-  @override
-  State<TrackActionsMenu> createState() => _TrackActionsMenuState();
-}
-
-class _TrackActionsMenuState extends State<TrackActionsMenu> {
-  /// 最近一次 anchorBuilder 注入的打开回调（M3EMenu 私有 State 的方法
-  /// tear-off，同一次挂载内重建都是同一实例）。
-  VoidCallback? _open;
-
-  @override
-  void didUpdateWidget(covariant TrackActionsMenu oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    if (identical(oldWidget.controller, widget.controller)) return;
-    oldWidget.controller?._detach(_open);
-    widget.controller?._attach(_open);
-  }
-
-  @override
-  void dispose() {
-    widget.controller?._detach(_open);
-    super.dispose();
-  }
-
   @override
   Widget build(BuildContext context) {
     return M3EMenu.entries(
-      position: widget.position,
-      anchorBuilder: (context, open) {
-        // 注册点只能在这里：M3EMenu 不暴露控制器，打开回调只经
-        // anchorBuilder 下发（每次 build 重复注册同一实例，幂等）。
-        _open = widget.enabled ? open : null;
-        widget.controller?._attach(_open);
-        return M3EIconButton(
-          variant: M3EIconButtonVariant.standard,
-          size: widget.compact ? M3EIconButtonSize.sm : M3EIconButtonSize.md,
-          visualSize: widget.compact ? const Size(40, 40) : null,
-          icon: const Icon(Icons.more_vert_rounded),
-          tooltip: widget.tooltip,
-          onPressed: widget.enabled ? open : null,
-        );
-      },
-      onSelected: widget.onSelected,
-      entries: widget.entries,
+      position: position,
+      anchorBuilder: (context, open) => M3EIconButton(
+        variant: M3EIconButtonVariant.standard,
+        size: compact ? M3EIconButtonSize.sm : M3EIconButtonSize.md,
+        visualSize: compact ? const Size(40, 40) : null,
+        icon: const Icon(Icons.more_vert_rounded),
+        tooltip: tooltip,
+        onPressed: enabled ? open : null,
+      ),
+      onSelected: onSelected,
+      entries: entries,
     );
   }
 }
