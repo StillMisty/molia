@@ -42,6 +42,7 @@ import 'package:molia/widgets/settings/settings_tiles.dart';
 
 import 'support/fakes.dart';
 import 'package:molia/data/settings/settings_keys.dart';
+import 'support/notification_recorder.dart';
 import 'support/sync_test_support.dart';
 
 import 'support/settings_test_support.dart';
@@ -696,7 +697,7 @@ void main() {
     ShortcutSettings.attachSettings(testSettingsRegistry(preferences: prefs));
     await ShortcutSettings.load();
     // 提示出口换成记录型（默认构造缺 hostContextKey，展示是空操作）。
-    final notifications = _RecordingNotificationService();
+    final notifications = RecordingNotificationService();
     addTearDown(() async {
       await ShortcutSettings.instance.resetScope(ShortcutScope.inApp);
       await ShortcutSettings.instance.resetScope(ShortcutScope.global);
@@ -798,7 +799,7 @@ void main() {
     final prefs = await SharedPreferences.getInstance();
     ShortcutSettings.attachSettings(testSettingsRegistry(preferences: prefs));
     await ShortcutSettings.load();
-    final notifications = _RecordingNotificationService();
+    final notifications = RecordingNotificationService();
     addTearDown(() async {
       await ShortcutSettings.instance.resetScope(ShortcutScope.inApp);
       await ShortcutSettings.instance.resetScope(ShortcutScope.global);
@@ -904,7 +905,7 @@ void main() {
     final prefs = await SharedPreferences.getInstance();
     ShortcutSettings.attachSettings(testSettingsRegistry(preferences: prefs));
     await ShortcutSettings.load();
-    final notifications = _RecordingNotificationService();
+    final notifications = RecordingNotificationService();
     addTearDown(() async {
       await ShortcutSettings.instance.resetScope(ShortcutScope.inApp);
       await ShortcutSettings.instance.resetScope(ShortcutScope.global);
@@ -1597,21 +1598,3 @@ class _FakeMediaOutput implements LyricsOutput {
   Future<void> stop() async {}
 }
 
-/// 记录型提示服务：默认构造缺 hostContextKey（展示是空操作），
-/// 这里只收文案用于断言。
-class _RecordingNotificationService extends NotificationService {
-  _RecordingNotificationService() : super(GlobalKey<ScaffoldMessengerState>());
-
-  final List<String> messages = [];
-
-  @override
-  void showSnackBar(
-    String message, {
-    bool isError = false,
-    Duration duration = const Duration(seconds: 4),
-    String? actionLabel,
-    void Function()? onActionPressed,
-  }) {
-    messages.add(message);
-  }
-}

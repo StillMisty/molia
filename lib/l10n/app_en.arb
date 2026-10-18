@@ -1111,9 +1111,6 @@
   "syncPassphraseCopy": "Copy passphrase",
   "syncPassphraseReset": "Reset passphrase",
   "syncPassphraseResetConfirm": "All devices must re-enter the new passphrase. Continue?",
-  "syncPassphraseJoin": "Join with existing passphrase",
-  "syncPassphraseJoinTitle": "Enter sync passphrase",
-  "syncPassphraseJoinHint": "Enter the passphrase shown on another device",
   "syncPassphraseInvalid": "Invalid passphrase (at least 16 characters)",
   "syncSave": "Save",
   "syncNever": "Never synced",
@@ -1306,7 +1303,7 @@
       }
     }
   },
-  "syncPeerNever": "Not reached yet",
+  "syncPeerNever": "Not connected yet",
   "syncPeerBehind": "{count} behind",
   "syncPeerBehindBytes": "{count} behind (~{size})",
   "@syncPeerBehindBytes": {
@@ -1340,11 +1337,8 @@
   "syncLanPermissionSubtitle": "Android 17+ needs the nearby-devices permission to reach other devices",
   "syncLanPermissionDenied": "Permission not granted: LAN sync is unavailable (manual addresses cannot work around it). Switch to WebDAV instead.",
   "syncOpenSystemSettings": "Open settings",
-  "syncPeerAdd": "Add device",
-  "syncPeerAddSubtitle": "Enter a peer address or paste a pairing code when discovery fails",
-  "syncPeerAddTitle": "Add device",
   "syncPeerHostLabel": "Address",
-  "syncPeerHostHint": "e.g. 192.168.1.23, or a molia-pair code",
+  "syncPeerHostHint": "e.g. 192.168.1.23 or 2409:8a55::5",
   "syncPeerNameLabel": "Name (optional)",
   "syncPeerHostInvalid": "Address cannot be empty",
   "syncPeerDelete": "Remove device",
@@ -1362,7 +1356,7 @@
   "syncPeerCleanupRemoteDone": "Remote files cleaned up",
   "syncPeerCleanupRemoteNone": "No remote files to clean up",
   "syncPeerCleanupRemoteFailed": "Cleanup failed: {error}",
-  "syncPeerNotContacted": "not reached yet — it retries automatically once the peer is online",
+  "syncPeerNotContacted": "not connected yet — it retries automatically once the peer is online",
   "syncPeerCandidatesTitle": "{count} candidate addresses",
   "@syncPeerCandidatesTitle": {
     "placeholders": {
@@ -1371,18 +1365,21 @@
       }
     }
   },
-  "syncPeerCandidatesSubtitle": "not reached yet · tap to view or remove",
+  "syncPeerCandidatesSubtitle": "not connected yet · tap to view or remove",
   "syncPairingShareTitle": "Share pairing info",
   "syncPairingShareSubtitle": "Copy the pairing code (contains the passphrase)",
+  "syncPairingPasteTitle": "Paste pairing code",
+  "syncPairingPasteSubtitle": "Copy it on the other device, then tap here",
+  "syncPairingScanSubtitle": "Point the camera at the QR code on the other device",
   "syncPairingCopied": "Pairing info copied (contains the passphrase)",
   "syncPairingShowQr": "Show QR code",
   "syncPairingNeedsPassphrase": "Set a sync passphrase first",
   "syncPairingWarning": "This content contains your sync passphrase — sharing it authorizes the other device to read all synced data.",
   "syncPairingCopy": "Copy text",
-  "syncPairingInvalidCode": "Invalid pairing code (missing fields or unsupported version)",
-  "syncPairingNoAddress": "The pairing code has no usable address (the other device may only have loopback addresses)",
-  "syncPairingImported": "Pairing info imported",
-  "syncPairingPassphraseConflictTitle": "Passphrase already set",
+  "syncPairingInvalidCode": "Invalid pairing code — copy it again on the other device",
+  "syncClipboardNoPairingCode": "No pairing code in the clipboard — copy it on the other device first",
+  "syncPairingNoAddress": "The pairing code has no usable network address",
+    "syncPairingPassphraseConflictTitle": "Passphrase already set",
   "syncPairingPassphraseConflictBody": "This device already has a different sync passphrase. Replace it (other devices will need the new passphrase), or import the addresses only.",
   "syncPairingAddressOnly": "Addresses only",
   "syncPairingReplacePassphrase": "Replace passphrase (affects other devices)",
@@ -1393,6 +1390,7 @@
   "syncPairingUsePaste": "Paste instead",
   "syncLocalAddressCopied": "Address copied",
   "syncLocalAddressesEmptyTitle": "No routable address",
+  "syncLocalAddressesHint": "These are the same addresses shared in the pairing code.",
   "syncLocalAddressesEmpty": "Only loopback / link-local addresses were found; check the network connection.",
   "syncLocalProbePort": "Discovery port",
   "syncLocalProbePortUnavailable": "Unavailable — broadcast / multicast discovery is degraded; use manual addresses",
@@ -1409,14 +1407,6 @@
   },
   "syncLocalHttpPort": "Direct endpoint port",
   "syncLocalHttpPortUnavailable": "Not bound yet",
-  "syncPeerAddress": "Address {host}",
-  "@syncPeerAddress": {
-    "placeholders": {
-      "host": {
-        "type": "String"
-      }
-    }
-  },
   "syncPeerDeviceId": "Device {id}",
   "@syncPeerDeviceId": {
     "placeholders": {
@@ -1510,7 +1500,7 @@
   "syncPeerPortInvalid": "Port must be 1–65535",
   "syncPeerAdded": "Device added",
   "syncPeerUpdated": "Device updated",
-  "syncPeerUnreachable": "Not reached yet — check that the peer is online on the same network, or use WebDAV",
+  "syncPeerUnreachable": "Not reachable — check that the peer is online on the same network, or update its address",
   "syncPeerProbePortLabel": "Probe port",
   "syncPeerProbePortHint": "Default {port}",
   "@syncPeerProbePortHint": {
@@ -1521,8 +1511,49 @@
     }
   },
   "syncPeerAlreadyAdded": "Already in the list — name and port updated",
-  "syncPeerContactQueued": "Device saved — contact will follow",
-  "syncPeerContacting": "Contacting…",
+  "syncManualConnect": "Connect manually",
+  "syncManualConnectSubtitle": "Enter the peer address when discovery fails (subnets / firewall / VPN)",
+  "syncManualConnectHint": "After the peer's IP changes, paste its pairing code again or update the address here",
+  "syncNetworkAddresses": "Network addresses",
+  "syncNetworkAddressesCount": "{count} available",
+  "@syncNetworkAddressesCount": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "syncPeerAddressCount": "{count} addresses",
+  "@syncPeerAddressCount": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "syncPeerAddressEdit": "Update address",
+  "syncPeerAddressDelete": "Remove address",
+  "syncPeerAddressDeleteConfirm": "Removes this address from the list; a connected device is unaffected.",
+  "syncPeerAddressUpdated": "Address updated",
+  "syncPeerAddressRemoved": "Removed from the address list",
+  "syncPeerContactQueued": "Device added — it will connect shortly",
+  "syncPeerAddedOffline": "{name} added — not reachable yet, it will retry",
+  "@syncPeerAddedOffline": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "syncPeerConnected": "Connected to {name}",
+  "@syncPeerConnected": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "syncPeerContacting": "Connecting…",
   "syncLanPermissionPermanentSubtitle": "Permission permanently denied — enable nearby-devices in system settings",
   "syncLogHint": "Results of recent sync rounds; tap a failed row for the reason and next steps",
   "settingsUpdateTitle": "About & updates",

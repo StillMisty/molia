@@ -2068,15 +2068,6 @@ class AppLocalizationsZh extends AppLocalizations {
   String get syncPassphraseResetConfirm => '重置后所有设备需重新输入新口令，确定继续？';
 
   @override
-  String get syncPassphraseJoin => '输入已有口令加入';
-
-  @override
-  String get syncPassphraseJoinTitle => '输入同步口令';
-
-  @override
-  String get syncPassphraseJoinHint => '输入其它设备上显示的同步口令';
-
-  @override
   String get syncPassphraseInvalid => '口令无效（至少 16 位）';
 
   @override
@@ -2345,7 +2336,7 @@ class AppLocalizationsZh extends AppLocalizations {
   }
 
   @override
-  String get syncPeerNever => '尚未接触';
+  String get syncPeerNever => '还没连上';
 
   @override
   String syncPeerBehind(int count) {
@@ -2383,19 +2374,10 @@ class AppLocalizationsZh extends AppLocalizations {
   String get syncOpenSystemSettings => '去系统设置';
 
   @override
-  String get syncPeerAdd => '添加设备';
-
-  @override
-  String get syncPeerAddSubtitle => '发现不到设备时，手动填对端地址或粘贴配对码';
-
-  @override
-  String get syncPeerAddTitle => '添加设备';
-
-  @override
   String get syncPeerHostLabel => '地址';
 
   @override
-  String get syncPeerHostHint => '例如 192.168.1.23，或 molia-pair 配对码';
+  String get syncPeerHostHint => '例如 192.168.1.23 或 2409:8a55::5';
 
   @override
   String get syncPeerNameLabel => '名称（可选）';
@@ -2407,7 +2389,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get syncPeerDelete => '删除设备';
 
   @override
-  String get syncPeerDeleteConfirm => '删除后本机不再主动连接该地址（不影响其它设备的同步）。';
+  String get syncPeerDeleteConfirm => '删除后本机不再主动连接该设备（不影响其它设备的同步）。';
 
   @override
   String get syncPeerManual => '手动添加';
@@ -2453,7 +2435,7 @@ class AppLocalizationsZh extends AppLocalizations {
   }
 
   @override
-  String get syncPeerNotContacted => '尚未接触，对端在线后会自动接触';
+  String get syncPeerNotContacted => '还没连上，对端上线后会自动重试';
 
   @override
   String syncPeerCandidatesTitle(int count) {
@@ -2461,13 +2443,22 @@ class AppLocalizationsZh extends AppLocalizations {
   }
 
   @override
-  String get syncPeerCandidatesSubtitle => '尚未接触 · 点开可查看 / 删除';
+  String get syncPeerCandidatesSubtitle => '还没连上 · 点开可查看 / 删除';
 
   @override
   String get syncPairingShareTitle => '分享配对信息';
 
   @override
   String get syncPairingShareSubtitle => '复制配对码（含同步口令）';
+
+  @override
+  String get syncPairingPasteTitle => '粘贴配对码';
+
+  @override
+  String get syncPairingPasteSubtitle => '在另一台设备点「分享配对信息」复制，再回到这里';
+
+  @override
+  String get syncPairingScanSubtitle => '对准另一台设备上的二维码';
 
   @override
   String get syncPairingCopied => '已复制配对信息（含口令）';
@@ -2485,13 +2476,13 @@ class AppLocalizationsZh extends AppLocalizations {
   String get syncPairingCopy => '复制文本';
 
   @override
-  String get syncPairingInvalidCode => '配对码无效（内容缺失或版本不符）';
+  String get syncPairingInvalidCode => '配对码无效，请在另一台设备重新复制';
 
   @override
-  String get syncPairingNoAddress => '配对码里没有可用地址（对端可能只有回环地址）';
+  String get syncClipboardNoPairingCode => '剪贴板里没有配对码：先在另一台设备点「分享配对信息」复制';
 
   @override
-  String get syncPairingImported => '已导入配对信息';
+  String get syncPairingNoAddress => '配对码里没有可用的网络地址';
 
   @override
   String get syncPairingPassphraseConflictTitle => '本机已有口令';
@@ -2528,6 +2519,9 @@ class AppLocalizationsZh extends AppLocalizations {
   String get syncLocalAddressesEmptyTitle => '没有可路由地址';
 
   @override
+  String get syncLocalAddressesHint => '这些地址与配对码一起分享给对端（同一口径）。';
+
+  @override
   String get syncLocalAddressesEmpty => '只找到回环 / link-local 地址，请检查网络连接。';
 
   @override
@@ -2546,11 +2540,6 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get syncLocalHttpPortUnavailable => '尚未绑定';
-
-  @override
-  String syncPeerAddress(String host) {
-    return '地址 $host';
-  }
 
   @override
   String syncPeerDeviceId(String id) {
@@ -2693,7 +2682,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get syncPeerUpdated => '设备已更新';
 
   @override
-  String get syncPeerUnreachable => '暂未接触成功：确认对端在线且在同一网络，或改用 WebDAV';
+  String get syncPeerUnreachable => '没连上：确认对端在线且在同一网络，或更新对端地址';
 
   @override
   String get syncPeerProbePortLabel => '探测端口';
@@ -2707,10 +2696,57 @@ class AppLocalizationsZh extends AppLocalizations {
   String get syncPeerAlreadyAdded => '该地址已在列表中，已更新名称与端口';
 
   @override
-  String get syncPeerContactQueued => '设备已保存，稍后自动接触';
+  String get syncManualConnect => '手动连接';
 
   @override
-  String get syncPeerContacting => '正在接触…';
+  String get syncManualConnectSubtitle => '自动发现失败（多网段 / 防火墙 / VPN）时手填对端地址';
+
+  @override
+  String get syncManualConnectHint => '设备换 IP 后：重新粘贴它的配对码，或在这里更新地址';
+
+  @override
+  String get syncNetworkAddresses => '网络地址';
+
+  @override
+  String syncNetworkAddressesCount(int count) {
+    return '$count 个可用地址';
+  }
+
+  @override
+  String syncPeerAddressCount(int count) {
+    return '$count 条地址';
+  }
+
+  @override
+  String get syncPeerAddressEdit => '更新地址';
+
+  @override
+  String get syncPeerAddressDelete => '删除该地址';
+
+  @override
+  String get syncPeerAddressDeleteConfirm => '从地址簿移除该地址；已连上的设备不受影响。';
+
+  @override
+  String get syncPeerAddressUpdated => '地址已更新';
+
+  @override
+  String get syncPeerAddressRemoved => '已从地址簿移除';
+
+  @override
+  String get syncPeerContactQueued => '已添加设备，稍后自动连接';
+
+  @override
+  String syncPeerAddedOffline(String name) {
+    return '已添加「$name」；暂时没连上，稍后自动重试';
+  }
+
+  @override
+  String syncPeerConnected(String name) {
+    return '已与「$name」连通';
+  }
+
+  @override
+  String get syncPeerContacting => '正在连接…';
 
   @override
   String get syncLanPermissionPermanentSubtitle => '权限已被永久拒绝，请到系统设置开启「附近设备」权限';

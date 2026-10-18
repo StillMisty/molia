@@ -5,6 +5,8 @@
 /// 消费注入的 provider。
 library;
 
+import 'dart:async';
+
 import 'package:dynamic_color/dynamic_color.dart';
 import 'package:flutter/foundation.dart'
     show defaultTargetPlatform, visibleForTesting;
@@ -14,13 +16,16 @@ import 'package:material_ui/material_ui.dart';
 import 'package:motor/motor.dart';
 import 'package:provider/provider.dart';
 
+import '../domain/models/device_sync.dart';
 import '../l10n/app_localizations.dart';
 import '../pages/favorites.dart';
 import '../pages/library.dart';
 import '../pages/nowplaying.dart';
 import '../pages/settings_page.dart';
+import '../pages/sync_notices.dart';
 import '../providers/nav_provider.dart';
 import '../providers/playback_provider.dart';
+import '../providers/sync_provider.dart';
 import '../providers/theme_provider.dart';
 import '../services/app_branding_service.dart';
 import '../services/data_saver_service.dart';
@@ -1205,6 +1210,9 @@ class MyThemedApp extends StatefulWidget {
 }
 
 class _MyThemedAppState extends State<MyThemedApp> with WidgetsBindingObserver {
+  /// 「首次连通」通知订阅：与在哪个页面无关，双方各自弹一次底栏提示。
+  StreamSubscription<SyncPeerState>? _peerConnected;
+
   @override
   void initState() {
     super.initState();
@@ -1215,6 +1223,21 @@ class _MyThemedAppState extends State<MyThemedApp> with WidgetsBindingObserver {
     AppBrandingService.load();
     // 震动反馈开关（设备本地偏好）：载入后全应用触感立即按它判定。
     HapticsService.load();
+    _peerConnected =
+        context.read<SyncProvider>().peerConnectedNotices.listen(_onPeerConnected);
+  }
+
+  /// 首次与某台设备真正交换数据：提示一次（名称缺失时用短设备 id 兜底）。
+  ///
+  /// 文案与提示出口都取 Navigator 之下的 context（本 State 在
+  /// MaterialApp 之上，没有 Localizations 祖先，见 app_ui_messenger.dart）。
+  void _onPeerConnected(SyncPeerState peer) {
+    if (!mounted) return;
+    // 本 State 在 MaterialApp 之上（没有 Localizations 祖先），提示文案取
+    // Navigator 之下的宿主 context（与 AppUiMessenger 同一做法）。
+    final hostContext = navigatorKey.currentContext;
+    if (hostContext == null) return;
+    showSyncPeerConnectedNotice(hostContext, peer);
   }
 
   @override
@@ -1241,6 +1264,7 @@ class _MyThemedAppState extends State<MyThemedApp> with WidgetsBindingObserver {
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
     AppBrandingService.titleNotifier.removeListener(_onBrandingChanged);
+    unawaited(_peerConnected?.cancel());
     super.dispose();
   }
 

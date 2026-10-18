@@ -9,8 +9,10 @@ import '../domain/models/device_sync.dart';
 import '../domain/ports/sync_transport.dart';
 import '../l10n/app_localizations.dart';
 import '../providers/sync_provider.dart';
+import '../services/local_endpoints_service.dart';
 import '../widgets/settings/settings_tiles.dart';
 import 'sync_labels.dart';
+import 'sync_notices.dart';
 import 'sync_pairing_dialogs.dart';
 
 /// WebDAV 配置弹层（设置页与日志子页共用；密码单独走安全存储）。
@@ -260,7 +262,7 @@ Widget _actionButton(
       ),
     SyncIssueAction.addManualPeer => (
         l10n.syncActionAddManualPeer,
-        () => showSyncAddPeerDialog(context, provider, l10n),
+        () => showSyncManualPeerDialog(context, provider, l10n),
       ),
     SyncIssueAction.useWebdav => (
         l10n.syncActionUseWebdav,
@@ -287,14 +289,12 @@ Future<void> _grantLanPermission(
 ) async {
   final granted = await provider.requestLanPermission();
   if (granted || !context.mounted) return;
-  ScaffoldMessenger.of(context).showSnackBar(
-    SnackBar(
-      content: Text(l10n.syncLanPermissionDenied),
-      action: SnackBarAction(
-        label: l10n.syncOpenSystemSettings,
-        onPressed: () => unawaited(provider.openSystemSettings()),
-      ),
-    ),
+  showSyncNotice(
+    context,
+    l10n.syncLanPermissionDenied,
+    isError: true,
+    actionLabel: l10n.syncOpenSystemSettings,
+    onAction: () => unawaited(provider.openSystemSettings()),
   );
 }
 
@@ -307,8 +307,7 @@ Future<void> _useWebdav(
   await provider.setTransportEnabled(SyncTransportKind.webdav, true);
   if (!context.mounted) return;
   if (provider.webdav.isConfigured) {
-    ScaffoldMessenger.of(context)
-        .showSnackBar(SnackBar(content: Text(l10n.syncWebdavEnabled)));
+    showSyncNotice(context, l10n.syncWebdavEnabled);
     return;
   }
   await showWebdavConfigDialog(context, provider, l10n);
@@ -318,8 +317,7 @@ Future<void> _hintSettingsPage(
   BuildContext context,
   AppLocalizations l10n,
 ) async {
-  ScaffoldMessenger.of(context)
-      .showSnackBar(SnackBar(content: Text(l10n.syncConfigureOnSettingsPage)));
+  showSyncNotice(context, l10n.syncConfigureOnSettingsPage);
 }
 
 /// 口令弹层（设置页共用）：显示 / 复制 / 重置。
@@ -356,9 +354,8 @@ Future<void> showSyncPassphraseDialog(
         M3EButton.text(
           onPressed: () {
             Clipboard.setData(ClipboardData(text: passphrase));
-            ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(content: Text(l10n.copiedToClipboard(
-                    l10n.syncPassphraseTitle))));
+            showSyncNotice(
+                context, l10n.copiedToClipboard(l10n.syncPassphraseTitle));
           },
           child: Text(l10n.syncPassphraseCopy),
         ),
@@ -409,29 +406,6 @@ Future<void> _confirmPassphraseReset(
         ),
       ],
     ),
-  );
-}
-
-/// 加入口令弹层：输入其它设备上的口令（无效输入在弹层内提示）。
-Future<void> showSyncJoinDialog(
-  BuildContext context,
-  SyncProvider provider,
-  AppLocalizations l10n,
-) async {
-  await _showTextDialog(
-    context,
-    title: l10n.syncPassphraseJoinTitle,
-    hint: l10n.syncPassphraseJoinHint,
-    initialValue: '',
-    saveLabel: l10n.syncSave,
-    onSave: (value) async {
-      try {
-        await provider.joinWithPassphrase(value);
-        return null;
-      } on ArgumentError {
-        return l10n.syncPassphraseInvalid;
-      }
-    },
   );
 }
 
@@ -489,8 +463,7 @@ Future<void> _showTextDialog(
             final error = await onSave(controller.text);
             if (!context.mounted) return;
             if (error != null) {
-              ScaffoldMessenger.of(context)
-                  .showSnackBar(SnackBar(content: Text(error)));
+              showSyncNotice(context, error, isError: true);
               return;
             }
             navigator.pop();
@@ -501,4 +474,81 @@ Future<void> _showTextDialog(
     ),
   );
   controller.dispose();
+}
+
+/// 本机网络地址弹层：可路由地址逐条列出（地址 · 网卡 · 地址族 · 该族探测
+/// 端口，整行点击复制）。
+///
+/// 地址是排障明细：卡片上只留一行入口，双栈 + 多网卡时也不会把「本机」卡片
+/// 撑长。这里的地址与配对码同口径（同一枚举与过滤，见 `LocalEndpointsService`），
+/// 逐个复制时按行取，不必回看卡片。
+Future<void> showSyncLocalAddressesDialog(
+  BuildContext context, {
+  required SyncProvider provider,
+  required AppLocalizations l10n,
+}) async {
+  final endpoints = await provider.localEndpoints();
+  if (!context.mounted) return;
+  final ports = provider.lanDiscoveryPorts;
+  final navigator = Navigator.of(context, rootNavigator: true);
+  await M3EDialog.show<void>(
+    context,
+    dialog: M3EDialog(
+      title: l10n.syncNetworkAddresses,
+      content: SizedBox(
+        width: settingsDialogWidth(context),
+        child: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              if (endpoints.isEmpty)
+                SettingsInfoTile(
+                  key: const Key('settingsSyncLocalAddressesEmpty'),
+                  icon: Icons.wifi_off_rounded,
+                  title: l10n.syncLocalAddressesEmptyTitle,
+                  subtitle: l10n.syncLocalAddressesEmpty,
+                )
+              else ...[
+                Text(
+                  l10n.syncLocalAddressesHint,
+                  style: Theme.of(context).textTheme.bodySmall,
+                ),
+                const SizedBox(height: kSettingsSmallSpacing),
+                for (final endpoint in endpoints)
+                  SettingsCopyTile(
+                    key: Key('settingsSyncLocalAddress-${endpoint.address}'),
+                    icon: Icons.lan_rounded,
+                    title: endpoint.address,
+                    subtitle: syncLocalAddressSubtitle(l10n, endpoint, ports),
+                    copyText: endpoint.address,
+                    copiedMessage: l10n.syncLocalAddressCopied,
+                  ),
+              ],
+            ],
+          ),
+        ),
+      ),
+      actions: [
+        M3EButton.text(
+          onPressed: () => navigator.pop(),
+          child: Text(l10n.cancelButton),
+        ),
+      ],
+    ),
+  );
+}
+
+/// 地址行副标题：网卡 · 地址族 · 该族探测端口（该族不可用时只给前两项）。
+///
+/// 端口按**地址族**取：v4 / v6 可独立降级到不同端口，拿错族的端口打不通。
+String syncLocalAddressSubtitle(
+  AppLocalizations l10n,
+  LocalEndpoint endpoint,
+  ({int v4, int v6}) ports,
+) {
+  final family = endpoint.isIpv6 ? 'IPv6' : 'IPv4';
+  final port = endpoint.isIpv6 ? ports.v6 : ports.v4;
+  final head = '${endpoint.interfaceName} · $family';
+  return port > 0 ? '$head · ${l10n.syncPeerProbePortLabel} $port' : head;
 }

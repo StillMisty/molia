@@ -116,6 +116,11 @@ class SyncEngine extends ChangeNotifier implements SyncSchedulerHost {
   SyncRoundReport? _lastReport;
   SyncEnvelope? _lastEnvelope;
 
+  /// 「首次连通」通知流：每台设备只在第一次真正交换数据后发一次
+  /// （判据与一次性保证见 [_announceConnectedPeers]）。
+  final StreamController<SyncPeerState> _peerConnected =
+      StreamController<SyncPeerState>.broadcast();
+
   /// 上轮本地视图指纹（用于区分「本机没有变化」与「有变更需要外发」）。
   String? _localFingerprint;
 
@@ -918,9 +923,26 @@ class SyncEngine extends ChangeNotifier implements SyncSchedulerHost {
       _lastReport = report;
       _state.recordRound(report);
       await _state.save();
+      _announceConnectedPeers();
       notifyListeners();
     }
     return report;
+  }
+
+  /// 首次连通：名册里「真正交换过数据」的对端，未提示过的各补发一次。
+  ///
+  /// 判据用 `lastPullAt` / `lastPushAt` 而不是 `lastSeenAt`：探测应答只说明
+  /// 「在线」，真正交换过（含入站推送，它按拉取计）才代表口令对得上、数据通了。
+  /// 一次性由 [SyncStateStore.markPeerConnectNotified] 持久化保证，重启不重发。
+  void _announceConnectedPeers() {
+    if (_peerConnected.isClosed) return;
+    for (final peer in _state.peers) {
+      if (peer.deviceId.isEmpty) continue;
+      if (peer.lastPullAt <= 0 && peer.lastPushAt <= 0) continue;
+      if (_state.isPeerConnectNotified(peer.deviceId)) continue;
+      unawaited(_state.markPeerConnectNotified(peer.deviceId));
+      _peerConnected.add(peer);
+    }
   }
 
   /// 逐传输拉取一次并把载荷追加到 [out]；返回是否接触到了远端。
@@ -1586,6 +1608,9 @@ class SyncEngine extends ChangeNotifier implements SyncSchedulerHost {
         records: records,
       );
 
+  /// 首次连通通知流（UI 消费：应用壳弹一次底栏提示）。
+  Stream<SyncPeerState> get peerConnectedNotices => _peerConnected.stream;
+
   @override
   void dispose() {
     _inboundTimer?.cancel();
@@ -1593,6 +1618,7 @@ class SyncEngine extends ChangeNotifier implements SyncSchedulerHost {
     for (final subscription in _incomingSubscriptions) {
       unawaited(subscription.cancel());
     }
+    unawaited(_peerConnected.close());
     unawaited(_stopTransports());
     super.dispose();
   }

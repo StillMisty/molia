@@ -101,22 +101,41 @@ class SyncProvider extends ChangeNotifier {
 
   /// 配对码里的地址逐个入簿，返回首个地址（供立即接触）。
   ///
-  /// 一轮探测会覆盖全部地址簿条目，所以「立即接触」只需对首个地址做一次；
-  /// 无可用地址返回 null（调用方给「码里没有地址」的提示）。
+  /// 码是**当时的权威地址集合**（同一设备的多条地址 = 双栈 / 多网卡候选，
+  /// 全部保留）：该设备的旧地址条目被替换——内网 IP 变动后重新粘贴配对码
+  /// 即完成换地址。一轮探测会覆盖全部地址簿条目，所以「立即接触」只需对
+  /// 首个地址做一次；无可用地址返回 null（调用方给「码里没有地址」的提示）。
   Future<String?> importPairingAddresses(SyncPairingCode code) async {
-    String? primary;
-    for (final address in code.addresses) {
-      await addManualPeer(
-        address.host,
-        name: code.deviceName,
-        probePort: address.probePort,
-        httpPort: code.httpPort,
-        deviceId: code.deviceId,
-      );
-      primary ??= normalizePeerHost(address.host);
-    }
-    return primary;
+    final addresses = [
+      for (final address in code.addresses)
+        ManualPeer(
+          host: normalizePeerHost(address.host),
+          probePort: address.probePort,
+          httpPort: code.httpPort,
+          deviceId: code.deviceId,
+          name: code.deviceName,
+        ),
+    ].where((entry) => entry.host.isNotEmpty).toList();
+    if (addresses.isEmpty) return null;
+    await _engine.state.adoptPeerAddresses(code.deviceId, addresses);
+    return addresses.first.host;
   }
+
+  /// 更新某条手动地址（设备详情里的「更新地址」）。
+  ///
+  /// 身份（deviceId）与已学到的端点端口保留：改的是「设备在哪」，不是「是谁」。
+  Future<void> moveManualPeer(
+    String fromHost, {
+    required String toHost,
+    int? probePort,
+    String? name,
+  }) =>
+      _engine.state.moveManualPeer(
+        normalizePeerHost(fromHost),
+        toHost: normalizePeerHost(toHost),
+        probePort: probePort,
+        name: name,
+      );
 
   /// 组装本机配对信息（含口令）；未设置口令时返回 null。
   ///
@@ -229,6 +248,11 @@ class SyncProvider extends ChangeNotifier {
 
   /// 最近一轮完整结果；null = 本次进程内还没跑过。
   SyncRoundReport? get lastReport => _engine.lastReport;
+
+  /// 首次连通通知（应用壳消费：每台设备只在第一次真正交换数据后发一次，
+  /// 持久化在同步状态里，重启不重复）。
+  Stream<SyncPeerState> get peerConnectedNotices =>
+      _engine.peerConnectedNotices;
 
   /// 最近一轮的结论（UI 状态用语）。
   SyncOutcome? get lastOutcome => _engine.lastReport?.outcome;

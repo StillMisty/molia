@@ -2153,16 +2153,6 @@ class AppLocalizationsEn extends AppLocalizations {
       'All devices must re-enter the new passphrase. Continue?';
 
   @override
-  String get syncPassphraseJoin => 'Join with existing passphrase';
-
-  @override
-  String get syncPassphraseJoinTitle => 'Enter sync passphrase';
-
-  @override
-  String get syncPassphraseJoinHint =>
-      'Enter the passphrase shown on another device';
-
-  @override
   String get syncPassphraseInvalid =>
       'Invalid passphrase (at least 16 characters)';
 
@@ -2434,7 +2424,7 @@ class AppLocalizationsEn extends AppLocalizations {
   }
 
   @override
-  String get syncPeerNever => 'Not reached yet';
+  String get syncPeerNever => 'Not connected yet';
 
   @override
   String syncPeerBehind(int count) {
@@ -2474,20 +2464,10 @@ class AppLocalizationsEn extends AppLocalizations {
   String get syncOpenSystemSettings => 'Open settings';
 
   @override
-  String get syncPeerAdd => 'Add device';
-
-  @override
-  String get syncPeerAddSubtitle =>
-      'Enter a peer address or paste a pairing code when discovery fails';
-
-  @override
-  String get syncPeerAddTitle => 'Add device';
-
-  @override
   String get syncPeerHostLabel => 'Address';
 
   @override
-  String get syncPeerHostHint => 'e.g. 192.168.1.23, or a molia-pair code';
+  String get syncPeerHostHint => 'e.g. 192.168.1.23 or 2409:8a55::5';
 
   @override
   String get syncPeerNameLabel => 'Name (optional)';
@@ -2550,7 +2530,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get syncPeerNotContacted =>
-      'not reached yet — it retries automatically once the peer is online';
+      'not connected yet — it retries automatically once the peer is online';
 
   @override
   String syncPeerCandidatesTitle(int count) {
@@ -2559,7 +2539,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get syncPeerCandidatesSubtitle =>
-      'not reached yet · tap to view or remove';
+      'not connected yet · tap to view or remove';
 
   @override
   String get syncPairingShareTitle => 'Share pairing info';
@@ -2567,6 +2547,17 @@ class AppLocalizationsEn extends AppLocalizations {
   @override
   String get syncPairingShareSubtitle =>
       'Copy the pairing code (contains the passphrase)';
+
+  @override
+  String get syncPairingPasteTitle => 'Paste pairing code';
+
+  @override
+  String get syncPairingPasteSubtitle =>
+      'Copy it on the other device, then tap here';
+
+  @override
+  String get syncPairingScanSubtitle =>
+      'Point the camera at the QR code on the other device';
 
   @override
   String get syncPairingCopied =>
@@ -2587,14 +2578,15 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get syncPairingInvalidCode =>
-      'Invalid pairing code (missing fields or unsupported version)';
+      'Invalid pairing code — copy it again on the other device';
+
+  @override
+  String get syncClipboardNoPairingCode =>
+      'No pairing code in the clipboard — copy it on the other device first';
 
   @override
   String get syncPairingNoAddress =>
-      'The pairing code has no usable address (the other device may only have loopback addresses)';
-
-  @override
-  String get syncPairingImported => 'Pairing info imported';
+      'The pairing code has no usable network address';
 
   @override
   String get syncPairingPassphraseConflictTitle => 'Passphrase already set';
@@ -2635,6 +2627,10 @@ class AppLocalizationsEn extends AppLocalizations {
   String get syncLocalAddressesEmptyTitle => 'No routable address';
 
   @override
+  String get syncLocalAddressesHint =>
+      'These are the same addresses shared in the pairing code.';
+
+  @override
   String get syncLocalAddressesEmpty =>
       'Only loopback / link-local addresses were found; check the network connection.';
 
@@ -2655,11 +2651,6 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get syncLocalHttpPortUnavailable => 'Not bound yet';
-
-  @override
-  String syncPeerAddress(String host) {
-    return 'Address $host';
-  }
 
   @override
   String syncPeerDeviceId(String id) {
@@ -2812,7 +2803,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get syncPeerUnreachable =>
-      'Not reached yet — check that the peer is online on the same network, or use WebDAV';
+      'Not reachable — check that the peer is online on the same network, or update its address';
 
   @override
   String get syncPeerProbePortLabel => 'Probe port';
@@ -2827,10 +2818,60 @@ class AppLocalizationsEn extends AppLocalizations {
       'Already in the list — name and port updated';
 
   @override
-  String get syncPeerContactQueued => 'Device saved — contact will follow';
+  String get syncManualConnect => 'Connect manually';
 
   @override
-  String get syncPeerContacting => 'Contacting…';
+  String get syncManualConnectSubtitle =>
+      'Enter the peer address when discovery fails (subnets / firewall / VPN)';
+
+  @override
+  String get syncManualConnectHint =>
+      'After the peer\'s IP changes, paste its pairing code again or update the address here';
+
+  @override
+  String get syncNetworkAddresses => 'Network addresses';
+
+  @override
+  String syncNetworkAddressesCount(int count) {
+    return '$count available';
+  }
+
+  @override
+  String syncPeerAddressCount(int count) {
+    return '$count addresses';
+  }
+
+  @override
+  String get syncPeerAddressEdit => 'Update address';
+
+  @override
+  String get syncPeerAddressDelete => 'Remove address';
+
+  @override
+  String get syncPeerAddressDeleteConfirm =>
+      'Removes this address from the list; a connected device is unaffected.';
+
+  @override
+  String get syncPeerAddressUpdated => 'Address updated';
+
+  @override
+  String get syncPeerAddressRemoved => 'Removed from the address list';
+
+  @override
+  String get syncPeerContactQueued => 'Device added — it will connect shortly';
+
+  @override
+  String syncPeerAddedOffline(String name) {
+    return '$name added — not reachable yet, it will retry';
+  }
+
+  @override
+  String syncPeerConnected(String name) {
+    return 'Connected to $name';
+  }
+
+  @override
+  String get syncPeerContacting => 'Connecting…';
 
   @override
   String get syncLanPermissionPermanentSubtitle =>
