@@ -20,7 +20,7 @@ import '../../data/sync/adapters/prefs_sync_adapter.dart';
 import '../../data/sync/adapters/script_sync_adapter.dart';
 import '../../data/sync/adapters/session_sync_adapter.dart';
 import '../../data/sync/adapters/statistics_sync_adapter.dart';
-import '../../data/sync/sync_crypto.dart';
+import '../../data/sync/sync_codec_isolate.dart';
 import '../../data/sync/sync_engine.dart';
 import '../../data/sync/sync_known_store.dart';
 import '../../data/sync/sync_scheduler.dart';
@@ -55,7 +55,9 @@ Future<SyncStack> buildSyncStack({
 }) async {
   final sourceManager = catalog.sourceManager;
   final syncState = library.syncState;
-  final syncCodec = SyncCodec();
+  // 编解码在 worker isolate 里跑（载荷编码 / 压缩 / PBKDF2 / AES 都是纯计算，
+  // 放主 isolate 会让 UI 在首轮与整库快照时卡住数秒）。
+  final syncCodec = IsolateSyncCodecPort();
   // 本机地址枚举（设置页地址列表 / 配对码 / 探测 addrs 三处共用同一口径）。
   final localEndpoints = LocalEndpointsService();
   // 脚本同步的保留键：音源类别的设置键（避免脚本墓碑与设置键同名冲突）。
@@ -137,6 +139,9 @@ Future<SyncStack> buildSyncStack({
     passphraseProvider: syncState.readPassphrase,
     configProvider: () => syncState.webdav,
     passwordProvider: syncState.readWebdavPassword,
+    // 块的裁剪边界：本机日志只在所有对端 ack 之后前移 baseSeq，
+    // 因此 `end <= baseSeq` 的远端块可以安全删除。
+    journalBaseSeqProvider: library.syncJournal.baseSeq,
     ignoredPeersProvider: syncState.isPeerIgnored,
   );
   final syncEngine = SyncEngine(
@@ -155,13 +160,23 @@ Future<SyncStack> buildSyncStack({
     },
     // 引擎与各仓库共用同一个发号器（唯一）与同一时钟源。
     stamps: syncState.stampIssuer,
+    // 全库指纹也走 worker（一次本地变更就要重算一遍，主 isolate 上会掉帧）。
+    fingerprintPort: syncCodec,
     // 变更集基线（sync_known）：跨重启只把版本变化的胜者交给适配器。
     known: SyncKnownRepository(
       databaseProvider: () => MoliaDatabase.instance,
     ),
+    // 增量日志：**引擎与仓库共用同一实例**——写入点在仓库侧追加、引擎侧
+    // 读窗口 / 按 ack 裁剪。漏传这一项不报错，但引擎会整体退化为
+    // 「每轮全量快照」：全库指纹、整库加密推送、日志永不裁剪；
+    // 组合根冒烟测试（`test/app/bootstrap_smoke_test.dart`）守住这条接线。
+    journal: library.syncJournal,
     clock: () => DateTime.fromMillisecondsSinceEpoch(syncState.nowMs()),
   );
   engineRef = syncEngine;
+  // 接线契约显式化：漏传增量日志会让引擎静默退化为「每轮全量」（全库指纹 +
+  // 整库加密推送）。冒烟测试是主守卫，这里再兜一层 debug 断言。
+  assert(syncEngine.incrementalEnabled, '同步引擎必须注入 library.syncJournal');
   // 蜂窝判定用调度器默认的真实探针（connectivity_plus）：省流服务的 onCellular
   // 只是缓存值，Wi-Fi 启动后切蜂窝不会反映到它上面。
   final scheduler = SyncScheduler(
@@ -174,6 +189,7 @@ Future<SyncStack> buildSyncStack({
     scheduler: scheduler,
     lanPermission: lanPermission,
     localEndpoints: localEndpoints,
+    codec: syncCodec,
   );
 
   // 可选子系统（跨设备同步）初始化失败不允许阻断启动：runApp 之前任何

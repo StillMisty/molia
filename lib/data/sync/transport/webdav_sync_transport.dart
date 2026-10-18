@@ -8,6 +8,7 @@ import 'package:logging/logging.dart';
 import '../../../domain/models/device_sync.dart';
 import '../../../domain/ports/sync_transport.dart';
 import '../../http/app_dio.dart';
+import '../sync_codec_port.dart';
 import '../sync_crypto.dart';
 import '../sync_state_store.dart';
 
@@ -21,16 +22,24 @@ class WebDavHttpException implements Exception {
   String toString() => 'WebDavHttpException($message)';
 }
 
-/// 用户自备 WebDAV 的传输：每台设备上传自己的**增量日志**与**全量快照**，
-/// 读取其余设备的文件。
+/// WebDAV 传输：用户自备 WebDAV，每台设备写自己的三类文件、读其余设备的。
 ///
-/// - 文件布局（都在 `<baseUrl>/<remoteDir>/` 下）：
-///   - `<deviceId>.journal.msync`：增量窗口（每次变更后重写，体积 ∝ 变更量）；
-///   - `<deviceId>.snapshot.msync`：全量快照（**按需重写**：首次引导 /
-///     日志超硬上限时发布，对端落后超出日志窗口时读它做 bootstrap）；
+/// 文件布局（都在 `<baseUrl>/<remoteDir>/` 下，v3）：
+/// - `<deviceId>.acks.msync`：**回执**（本机游标 / ack / 日志头部 / 基线下标），
+///   固定名、可变、几百字节，每次推送顺手重写；对端按 `etag` 门控读取；
+/// - `<deviceId>.<start>-<end>.chunk.msync`：**增量块**，写一次不再改
+///   （名字自带 seq 区间）；
+/// - `<deviceId>.<coverage>.snapshot.msync`：**全量快照**，按需发布（首次引导 /
+///   日志超硬上限），写一次不再改。
+///
+/// 为什么分块：单文件写「整个窗口」时，对端长期离线会让窗口涨到硬上限，
+/// 之后**每改一条记录都要重传整个窗口**（MB 量级）；分块后每次变更只写一个
+/// 新块（体积 ∝ 本次变更），对端按名字取自己缺的块。块的裁剪由本机日志的
+/// `baseSeq` 驱动——它只在所有对端 ack 之后前移，删掉的块不会再被需要
+/// （更落后的对端走 bootstrap 快照）。
+///
 /// - 目录不存在时 MKCOL 自动创建；列表用 PROPFIND（Depth: 1）并请求
-///   `getetag` / `getlastmodified`：文件版本与上次拉到的一致且本机游标已到
-///   上次读到位置时跳过 GET + 解密 + 合并；
+///   `getetag` / `getlastmodified`：回执文件按版本门控，块不可变、靠游标过滤；
 /// - 非本协议文件名（其它命名的残留、被改名 / 拷贝的幽灵文件）不参与合并；
 ///   解密后的载荷 `deviceId` 与文件名不符时同样跳过；
 /// - 数据在离开设备前已用同步口令加密，服务端只见密文；
@@ -38,14 +47,16 @@ class WebDavHttpException implements Exception {
 class WebDavSyncTransport implements SyncTransport {
   WebDavSyncTransport({
     required this.deviceId,
-    required SyncCodec codec,
+    required SyncCodecPort codec,
     required Future<String?> Function() passphraseProvider,
     required WebDavConfig Function() configProvider,
     required Future<String?> Function() passwordProvider,
     bool Function(String deviceId)? ignoredPeersProvider,
+    Future<int> Function()? journalBaseSeqProvider,
     Dio? dio,
     Duration requestTimeout = const Duration(seconds: 15),
   })  : _codec = codec,
+        _journalBaseSeqProvider = journalBaseSeqProvider,
         _passphraseProvider = passphraseProvider,
         _configProvider = configProvider,
         _passwordProvider = passwordProvider,
@@ -54,19 +65,29 @@ class WebDavSyncTransport implements SyncTransport {
         _ownsDio = dio == null,
         _requestTimeout = requestTimeout;
 
-  /// 全量快照文件后缀（按需重写：首次引导 / 日志超硬上限时发布）。
+  /// 回执文件后缀（固定名，可变）：`<deviceId>.acks.msync`。
+  static const String acksSuffix = '.acks.msync';
+
+  /// 增量块后缀（不可变）：`<deviceId>.<start>-<end>.chunk.msync`。
+  static const String chunkSuffix = '.chunk.msync';
+
+  /// 全量快照后缀（不可变）：`<deviceId>.<coverage>.snapshot.msync`。
   static const String snapshotSuffix = '.snapshot.msync';
 
-  /// 增量窗口文件后缀（每次变更后重写，体积 ∝ 变更量）。
-  static const String journalSuffix = '.journal.msync';
+  /// v3 之前的增量文件命名（只清理不读）。
+  static const String legacyJournalSuffix = '.journal.msync';
 
   static const int maxSnapshotBytes = 32 * 1024 * 1024;
 
   final String deviceId;
-  final SyncCodec _codec;
+  final SyncCodecPort _codec;
   final Future<String?> Function() _passphraseProvider;
   final WebDavConfig Function() _configProvider;
   final Future<String?> Function() _passwordProvider;
+
+  /// 本机日志已裁剪到的位置（块的裁剪边界）：只在所有对端 ack 之后前移，
+  /// 因此 `end <= baseSeq` 的块可以安全删除；未注入时不裁剪自己的旧块。
+  final Future<int> Function()? _journalBaseSeqProvider;
 
   /// 本地忽略的设备（不读它们的远端文件）。
   final bool Function(String deviceId)? _ignoredPeersProvider;
@@ -144,8 +165,6 @@ class WebDavSyncTransport implements SyncTransport {
         ),
       );
     }
-
-    final envelopes = <SyncEnvelope>[];
     try {
       await _ensureDir(config);
     } catch (e) {
@@ -159,7 +178,7 @@ class WebDavSyncTransport implements SyncTransport {
     }
     final List<_RemoteFile>? files;
     try {
-      files = await _listSnapshotFiles(config);
+      files = await _listFiles(config);
     } catch (e) {
       _logger.warning('WebDAV 目录列表失败', e);
       return SyncPullResult(
@@ -173,91 +192,140 @@ class WebDavSyncTransport implements SyncTransport {
         error: SyncIssue(code: SyncIssueCode.webdavListFailed),
       );
     }
+
+    final devices = _groupDevices(files);
+    final envelopes = <SyncEnvelope>[];
+    final seenDevices = <String>{};
     var failed = 0;
     var skipped = 0;
     var bytesIn = 0;
     SyncIssue? firstError;
-    // 真实对端（载荷身份与文件名一致 / 解密失败的）；幽灵文件不计入。
-    final seenDevices = <String>{};
-    // 按设备归并两类文件：优先读增量日志；游标落后于窗口起点（或引擎显式
-    // 要求全量）时改读全量快照做 bootstrap。
-    final devices = _groupFiles(files);
     for (final entry in devices.entries) {
       final device = entry.key;
-      final journalFile = entry.value.journal;
-      final snapshotFile = entry.value.snapshot;
+      final deviceFiles = entry.value;
       final cursor = request.cursorFor(device);
       final forceFull = request.fullPeers.contains(device);
-      var file = forceFull || journalFile == null ? snapshotFile : journalFile;
-      if (file == null) continue;
-      // 文件版本未变且本机游标已到上次读到的头部：跳过 GET + 解密 + 合并。
-      final cached = _fileVersions[file.name];
-      final upToDate = cursor >= (_peerHeads[device] ?? SyncPullRequest.noCursor);
-      if (!forceFull &&
-          file.version.isNotEmpty &&
-          cached == file.version &&
-          upToDate) {
-        skipped++;
+
+      // 1) 回执（可变文件，按版本门控）：对端的头部 / ack / 基线下标。
+      var peerHead = _peerHeads[device] ?? SyncPullRequest.noCursor;
+      SyncEnvelope? acksEnvelope;
+      var delivered = false;
+      var skipCounted = false;
+      final acksFile = deviceFiles.acks;
+      if (acksFile != null) {
+        final outcome = await _readEnvelope(
+          config,
+          acksFile,
+          device,
+          passphrase,
+          useVersionCache: true,
+        );
+        if (outcome.error != null) {
+          failed++;
+          firstError ??= outcome.error;
+        } else if (outcome.ghost) {
+          _logger.warning('远端文件 ${acksFile.name} 身份不符，跳过');
+        } else if (outcome.skipped) {
+          seenDevices.add(device);
+          skipped++;
+          skipCounted = true;
+        } else if (outcome.envelope != null) {
+          bytesIn += outcome.bytes;
+          seenDevices.add(device);
+          // 数据载荷自带同一轮写下的 ack：只有「本轮读不到任何数据」时
+          // 才把回执单独交付（否则每轮多一份空载荷、引擎多跑一次消费）。
+          acksEnvelope = outcome.envelope;
+          peerHead = outcome.envelope!.journalHead;
+          _peerHeads[device] = peerHead;
+        }
+      }
+
+      // 2) 数据：游标之后必须有**连续**的块（块名自带区间）；缺口 / 落后
+      //    超出窗口 / 对端日志重置 / 引擎显式要求全量 → 读最新快照 bootstrap。
+      final headKnown = peerHead != SyncPullRequest.noCursor;
+      if (!forceFull && headKnown && peerHead <= cursor) {
+        // 已到对端头部：不读块，只把回执带回去。
         seenDevices.add(device);
+        if (!skipCounted) skipped++;
+        if (acksEnvelope != null) envelopes.add(acksEnvelope);
         continue;
       }
-      var bytes = await _getFile(config, file.name);
-      if (bytes == null) {
+      final needed = [
+        for (final chunk in deviceFiles.chunks)
+          if (chunk.endSeq > cursor) chunk,
+      ];
+      // 衔接判定：窗口起点要么正好接在游标之后，要么是日志的第一个 seq（1）——
+      // 后者覆盖「本机还没消费过任何条目」（游标 -1 / 0）的情形。
+      final expectedFirst = cursor + 1 < 1 ? 1 : cursor + 1;
+      final contiguous = needed.isNotEmpty &&
+          needed.first.startSeq <= expectedFirst &&
+          _isContiguous(needed);
+      if (!forceFull && contiguous) {
+        for (final chunk in needed) {
+          final outcome = await _readEnvelope(
+            config,
+            chunk.file,
+            device,
+            passphrase,
+          );
+          if (outcome.error != null) {
+            failed++;
+            firstError ??= outcome.error;
+            break;
+          }
+          if (outcome.ghost) {
+            _logger.warning('远端文件 ${chunk.file.name} 身份不符，跳过');
+            continue;
+          }
+          if (outcome.envelope == null) continue;
+          bytesIn += outcome.bytes;
+          delivered = true;
+          seenDevices.add(device);
+          _peerHeads[device] = outcome.envelope!.journalHead;
+          envelopes.add(outcome.envelope!);
+        }
+        if (!delivered && acksEnvelope != null) envelopes.add(acksEnvelope);
+        continue;
+      }
+      final snapshot = deviceFiles.snapshot;
+      if (snapshot == null) {
+        // 需要全量但没有可读的快照文件（对端还没发布）：计失败，下轮重试。
         failed++;
         firstError ??= SyncIssue(
           code: SyncIssueCode.webdavReadFailed,
-          args: {'peer': file.name},
+          args: {'peer': device},
         );
+        if (acksEnvelope != null) envelopes.add(acksEnvelope);
         continue;
       }
-      bytesIn += bytes.length;
-      SyncEnvelope envelope;
-      try {
-        envelope = _codec.decrypt(bytes, passphrase);
-      } on SyncCryptoException {
-        // 口令不同或文件损坏：跳过（不记版本，下轮重试）。
+      final outcome = await _readEnvelope(
+        config,
+        snapshot.file,
+        device,
+        passphrase,
+      );
+      if (outcome.error != null) {
         failed++;
+        firstError ??= outcome.error;
+        continue;
+      }
+      if (outcome.ghost) {
+        _logger.warning('远端文件 ${snapshot.file.name} 身份不符，跳过');
+        continue;
+      }
+      if (outcome.envelope != null) {
         seenDevices.add(device);
-        firstError ??= SyncIssue(
-          code: SyncIssueCode.webdavDecryptFailed,
-          args: {'peer': file.name},
-        );
-        continue;
+        bytesIn += outcome.bytes;
+        delivered = true;
+        _peerHeads[device] = outcome.envelope!.journalHead;
+        envelopes.add(outcome.envelope!);
       }
-      // 幽灵 / 被改名文件：载荷身份与文件名不符，不参与合并（也不算对端）。
-      if (envelope.deviceId != device) {
-        _logger.warning('远端文件 ${file.name} 的身份不符（载荷 ${envelope.deviceId}），跳过');
-        continue;
-      }
-      seenDevices.add(device);
-      if (file.version.isNotEmpty) _fileVersions[file.name] = file.version;
-      _peerHeads[device] = envelope.journalHead;
-      // 增量窗口的起点超出本机游标（条目已被对端裁剪）：改读全量快照。
-      if (!forceFull &&
-          envelope.isDelta &&
-          cursor < envelope.baseSeq &&
-          snapshotFile != null &&
-          snapshotFile.name != file.name) {
-        final fallback = await _getFile(config, snapshotFile.name);
-        if (fallback != null) {
-          try {
-            final full = _codec.decrypt(fallback, passphrase);
-            if (full.deviceId == device) {
-              bytesIn += fallback.length;
-              if (snapshotFile.version.isNotEmpty) {
-                _fileVersions[snapshotFile.name] = snapshotFile.version;
-              }
-              _peerHeads[device] = full.journalHead;
-              envelopes.add(full);
-              continue;
-            }
-          } on SyncCryptoException {
-            // 快照文件不可用：保留增量窗口（引擎会标记缺口并在下轮重试）。
-          }
-        }
-      }
-      envelopes.add(envelope);
+      if (!delivered && acksEnvelope != null) envelopes.add(acksEnvelope);
     }
+
+    // 3) 裁剪自己的旧块 / 旧快照（best effort）。
+    await _pruneOwnFiles(config, files);
+
     return SyncPullResult(
       envelopes: envelopes,
       peersSeen: seenDevices.length,
@@ -272,32 +340,185 @@ class WebDavSyncTransport implements SyncTransport {
     );
   }
 
+  /// 读一个远端文件并解密（版本缓存只对可变文件——回执——有意义）。
+  Future<_ReadOutcome> _readEnvelope(
+    WebDavConfig config,
+    _RemoteFile file,
+    String device,
+    String passphrase, {
+    bool useVersionCache = false,
+  }) async {
+    if (useVersionCache &&
+        file.version.isNotEmpty &&
+        _fileVersions[file.name] == file.version) {
+      return const _ReadOutcome(skipped: true);
+    }
+    final bytes = await _getFile(config, file.name);
+    if (bytes == null) {
+      return _ReadOutcome(
+        error: SyncIssue(
+          code: SyncIssueCode.webdavReadFailed,
+          args: {'peer': file.name},
+        ),
+      );
+    }
+    final SyncEnvelope envelope;
+    try {
+      envelope = await _codec.decrypt(bytes, passphrase);
+    } on SyncCryptoException {
+      // 口令不同或文件损坏：跳过（不记版本，下轮重试）。
+      return _ReadOutcome(
+        error: SyncIssue(
+          code: SyncIssueCode.webdavDecryptFailed,
+          args: {'peer': file.name},
+        ),
+      );
+    }
+    if (envelope.deviceId != device) {
+      return const _ReadOutcome(ghost: true);
+    }
+    if (file.version.isNotEmpty) _fileVersions[file.name] = file.version;
+    return _ReadOutcome(envelope: envelope, bytes: bytes.length);
+  }
+
+  /// 读到的块是否连续（块名自带区间：后一块起点不越过前一块终点 + 1）。
+  static bool _isContiguous(List<_ChunkFile> chunks) {
+    for (var i = 1; i < chunks.length; i++) {
+      if (chunks[i].startSeq > chunks[i - 1].endSeq + 1) return false;
+    }
+    return true;
+  }
+
   /// 把远端文件按设备归并（非本协议文件名忽略：幽灵文件不参与合并）。
-  Map<String, ({_RemoteFile? journal, _RemoteFile? snapshot})> _groupFiles(
-    List<_RemoteFile> files,
-  ) {
-    final grouped = <String, ({_RemoteFile? journal, _RemoteFile? snapshot})>{};
+  ///
+  /// 本机文件在这里被跳过（只参与 [_pruneOwnFiles] 的裁剪判定）。
+  Map<String, _DeviceFiles> _groupDevices(List<_RemoteFile> files) {
+    final grouped = <String, _DeviceFiles>{};
     for (final file in files) {
-      final String device;
-      final bool isJournal;
-      if (file.name.endsWith(journalSuffix)) {
-        device = file.name.substring(0, file.name.length - journalSuffix.length);
-        isJournal = true;
-      } else if (file.name.endsWith(snapshotSuffix)) {
-        device = file.name.substring(0, file.name.length - snapshotSuffix.length);
-        isJournal = false;
-      } else {
-        continue;
-      }
+      final parsed = _parseFileName(file.name);
+      if (parsed == null) continue;
+      final device = parsed.device;
       if (device.isEmpty || device == deviceId) continue;
       if (_ignoredPeersProvider?.call(device) ?? false) continue;
-      final existing = grouped[device] ??
-          (journal: null, snapshot: null) as ({_RemoteFile? journal, _RemoteFile? snapshot});
-      grouped[device] = isJournal
-          ? (journal: file, snapshot: existing.snapshot)
-          : (journal: existing.journal, snapshot: file);
+      if (parsed.kind == _FileKind.legacy) continue;
+      final entry = grouped.putIfAbsent(device, _DeviceFiles.new);
+      switch (parsed.kind) {
+        case _FileKind.acks:
+          entry.acks = file;
+        case _FileKind.chunk:
+          entry.chunks.add(
+            _ChunkFile(file: file, startSeq: parsed.first, endSeq: parsed.second),
+          );
+        case _FileKind.snapshot:
+          final current = entry.snapshot;
+          if (current == null || parsed.first > current.coverage) {
+            entry.snapshot =
+                _SnapshotFile(file: file, coverage: parsed.first);
+          }
+        case _FileKind.legacy:
+          break;
+      }
+    }
+    for (final entry in grouped.values) {
+      entry.chunks.sort((a, b) => a.startSeq.compareTo(b.startSeq));
     }
     return grouped;
+  }
+
+  /// 解析本协议文件名：`<deviceId>.acks.msync` /
+  /// `<deviceId>.<start>-<end>.chunk.msync` / `<deviceId>.<coverage>.snapshot.msync`
+  /// / 旧命名 `<deviceId>.journal.msync`（legacy，只清理不读）。
+  ///
+  /// 设备 id 是本协议自产的 32 位小写十六进制（不含 `.`），按最后一个 `.` 分段
+  /// 解析即可；其它命名（幽灵 / 残留）返回 null。
+  static _ParsedName? _parseFileName(String name) {
+    String strip(String suffix) => name.substring(0, name.length - suffix.length);
+    if (name.endsWith(acksSuffix)) {
+      final device = strip(acksSuffix);
+      if (!device.contains('.')) return _ParsedName(device, _FileKind.acks);
+    } else if (name.endsWith(legacyJournalSuffix)) {
+      final device = strip(legacyJournalSuffix);
+      if (device.isNotEmpty && !device.contains('.')) {
+        return _ParsedName(device, _FileKind.legacy);
+      }
+    } else if (name.endsWith(chunkSuffix)) {
+      final stem = strip(chunkSuffix);
+      final dot = stem.lastIndexOf('.');
+      if (dot > 0) {
+        final range = stem.substring(dot + 1).split('-');
+        if (range.length == 2) {
+          final start = int.tryParse(range[0]);
+          final end = int.tryParse(range[1]);
+          if (start != null && end != null && end >= start) {
+            return _ParsedName(
+              stem.substring(0, dot),
+              _FileKind.chunk,
+              first: start,
+              second: end,
+            );
+          }
+        }
+      }
+    } else if (name.endsWith(snapshotSuffix)) {
+      final stem = strip(snapshotSuffix);
+      final dot = stem.lastIndexOf('.');
+      if (dot > 0) {
+        final coverage = int.tryParse(stem.substring(dot + 1));
+        if (coverage != null) {
+          return _ParsedName(
+            stem.substring(0, dot),
+            _FileKind.snapshot,
+            first: coverage,
+          );
+        }
+        // `<deviceId>.snapshot.msync`（旧命名，无覆盖位置）：只清理不读。
+        if (!stem.contains('.')) {
+          return _ParsedName(stem, _FileKind.legacy);
+        }
+      }
+    }
+    return null;
+  }
+
+  /// 裁剪自己的旧文件（best effort；DELETE 失败只记日志，不影响本轮结果）：
+  /// - 块：`endSeq <= baseSeq`（baseSeq 只在所有对端 ack 之后前移）；
+  /// - 快照：只留覆盖位置最大的那一份；
+  /// - v3 之前的旧命名：只清理不读。
+  ///
+  /// 同名块在日志重置后可能被覆盖（seq 从 1 重新开始）：对端在重置后走
+  /// 「游标超前头部 → bootstrap 快照」，不会读到被覆盖的块。
+  Future<void> _pruneOwnFiles(WebDavConfig config, List<_RemoteFile> files) async {
+    final baseSeq = await _journalBaseSeqProvider?.call();
+    final stale = <String>[];
+    final snapshots = <_SnapshotFile>[];
+    for (final file in files) {
+      final parsed = _parseFileName(file.name);
+      if (parsed == null || parsed.device != deviceId) continue;
+      switch (parsed.kind) {
+        case _FileKind.acks:
+          break;
+        case _FileKind.chunk:
+          if (baseSeq != null && parsed.second <= baseSeq) stale.add(file.name);
+        case _FileKind.snapshot:
+          snapshots.add(_SnapshotFile(file: file, coverage: parsed.first));
+        case _FileKind.legacy:
+          stale.add(file.name);
+      }
+    }
+    if (snapshots.length > 1) {
+      snapshots.sort((a, b) => b.coverage.compareTo(a.coverage));
+      for (final older in snapshots.skip(1)) {
+        stale.add(older.file.name);
+      }
+    }
+    for (final name in stale) {
+      try {
+        await _deleteFile(config, name);
+        _fileVersions.remove(name);
+      } catch (e) {
+        _logger.warning('WebDAV 裁剪自身旧文件失败（$name）', e);
+      }
+    }
   }
 
   @override
@@ -318,22 +539,49 @@ class WebDavSyncTransport implements SyncTransport {
     }
     try {
       await _ensureDir(config);
-      final payload = _codec.encrypt(envelope, passphrase);
-      // 增量窗口与全量快照分开文件：日常只重写增量（体积 ∝ 变更量），
-      // 全量快照按需发布（首次引导 / 日志超硬上限）。
-      final name = envelope.isDelta
-          ? '$deviceId$journalSuffix'
-          : '$deviceId$snapshotSuffix';
-      await _putFile(config, name, payload);
-      return SyncPushResult(succeededPeers: 1, bytesOut: payload.length);
+      // 回执（固定名、几百字节）每次推送顺手更新：对端据此裁剪自己的日志
+      // 窗口，不必读数据块；空窗口的轮次（只有 ack 变化）只写它。
+      final acksPayload =
+          await _codec.encrypt(_acksEnvelope(envelope), passphrase);
+      await _putFile(config, '$deviceId$acksSuffix', acksPayload);
+      var bytesOut = acksPayload.length;
+      // 数据：快照按覆盖位置命名、增量块按窗口区间命名——都写一次不再改。
+      final String? name;
+      if (envelope.isDelta) {
+        name = envelope.windowEnd > 0
+            ? '$deviceId.${envelope.windowStart}-${envelope.windowEnd}$chunkSuffix'
+            : null;
+      } else {
+        name = '$deviceId.${envelope.journalHead}$snapshotSuffix';
+      }
+      if (name != null) {
+        final payload = await _codec.encrypt(envelope, passphrase);
+        await _putFile(config, name, payload);
+        bytesOut += payload.length;
+      }
+      return SyncPushResult(succeededPeers: 1, bytesOut: bytesOut);
     } catch (e) {
-      _logger.warning('WebDAV 快照上传失败', e);
+      _logger.warning('WebDAV 上传失败', e);
       return SyncPushResult(
         failedPeers: 1,
         error: SyncIssue(code: SyncIssueCode.webdavUploadFailed, detail: '$e'),
       );
     }
   }
+
+  /// 回执载荷：只带游标 / ack / 头部（保持「增量 + 空窗口」形态，对端按
+  /// 同一套游标语义消费它）。
+  SyncEnvelope _acksEnvelope(SyncEnvelope envelope) => SyncEnvelope(
+        deviceId: envelope.deviceId,
+        deviceName: envelope.deviceName,
+        producedAt: envelope.producedAt,
+        snapshotId: envelope.snapshotId,
+        journalHead: envelope.journalHead,
+        baseSeq: envelope.baseSeq,
+        journal: const [],
+        acks: envelope.acks,
+        categories: envelope.categories,
+      );
 
   /// 显式清理某台对端的远端文件（用户动作；**不做自动删除**）。
   ///
@@ -346,25 +594,29 @@ class WebDavSyncTransport implements SyncTransport {
     if (!_running) return false;
     final config = _configProvider();
     if (!config.isConfigured) return false;
+    final files = await _listFiles(config);
+    if (files == null) {
+      throw WebDavHttpException('目录列表失败（无法确认待清理文件）');
+    }
+    final targets = <String>[
+      for (final file in files)
+        if (_parseFileName(file.name)?.device == deviceId) file.name,
+      // 更早版本的残留命名（无区间 / 无覆盖位置）。
+      '$deviceId.msync',
+      if ('$deviceId$legacyJournalSuffix' != '$deviceId.msync')
+        '$deviceId$legacyJournalSuffix',
+    ];
     var removed = false;
     String? failure;
-    for (final name in [
-      '$deviceId$journalSuffix',
-      '$deviceId$snapshotSuffix',
-      '$deviceId.msync',
-    ]) {
+    for (final name in targets) {
       try {
-        final response = await _send(
-          'DELETE',
-          _fileUri(config, name),
-          headers: await _authHeaders(config),
-        );
-        if (response.httpStatus >= 200 && response.httpStatus < 300) {
+        final deleted = await _deleteFile(config, name);
+        if (deleted) {
           removed = true;
           _fileVersions.remove(name);
-        } else if (response.httpStatus != 404) {
-          failure ??= 'DELETE $name 失败: ${response.httpStatus}';
         }
+      } on WebDavHttpException catch (e) {
+        failure ??= e.message;
       } catch (e) {
         _logger.warning('WebDAV 清理远端文件失败（$name）', e);
         failure ??= 'DELETE $name 异常: $e';
@@ -372,6 +624,18 @@ class WebDavSyncTransport implements SyncTransport {
     }
     if (failure != null) throw WebDavHttpException(failure);
     return removed;
+  }
+
+  /// DELETE 单个文件；404（本来就没有）不算失败。
+  Future<bool> _deleteFile(WebDavConfig config, String name) async {
+    final response = await _send(
+      'DELETE',
+      _fileUri(config, name),
+      headers: await _authHeaders(config),
+    );
+    if (response.httpStatus >= 200 && response.httpStatus < 300) return true;
+    if (response.httpStatus == 404) return false;
+    throw WebDavHttpException('DELETE $name 失败: ${response.httpStatus}');
   }
 
   Future<void> _ensureDir(WebDavConfig config) async {
@@ -394,9 +658,9 @@ class WebDavSyncTransport implements SyncTransport {
     throw WebDavHttpException('MKCOL 失败: ${response.httpStatus}');
   }
 
-  /// 列出远端快照文件（含 `getetag` / `getlastmodified` 版本）；
+  /// 列出目录里的本协议文件（含 `getetag` / `getlastmodified` 版本）；
   /// 服务端返回错误状态码时返回 null（由调用方计为失败）。
-  Future<List<_RemoteFile>?> _listSnapshotFiles(WebDavConfig config) async {
+  Future<List<_RemoteFile>?> _listFiles(WebDavConfig config) async {
     final response = await _send(
       'PROPFIND',
       _dirUri(config),
@@ -414,19 +678,14 @@ class WebDavSyncTransport implements SyncTransport {
       await _collectBodyBytes(response) ?? const <int>[],
       allowMalformed: true,
     );
-    final ownJournal = '$deviceId$journalSuffix';
-    final ownSnapshot = '$deviceId$snapshotSuffix';
     final files = <_RemoteFile>[];
     for (final entry in _parsePropfind(body)) {
       final segments =
           entry.name.split('/').where((segment) => segment.isNotEmpty).toList();
       if (segments.isEmpty) continue;
       final name = segments.last;
-      // 两类文件都要列出（日常变更只重写增量日志，快照按需重写）。
-      if (name == ownJournal || name == ownSnapshot) continue;
-      if (!name.endsWith(journalSuffix) && !name.endsWith(snapshotSuffix)) {
-        continue;
-      }
+      // 本机文件也列出（裁剪自身旧块要看到它们）；幽灵文件按命名解析排除。
+      if (_parseFileName(name) == null) continue;
       if (files.any((file) => file.name == name)) continue;
       files.add(_RemoteFile(name: name, version: entry.version));
     }
@@ -563,6 +822,68 @@ class WebDavSyncTransport implements SyncTransport {
     final dir = _dirUri(config);
     return dir.replace(path: '${dir.path}$name');
   }
+}
+
+/// 本协议文件种类（命名解析结果）。
+enum _FileKind { acks, chunk, snapshot, legacy }
+
+/// `<deviceId>.<数字>[.<数字>].<后缀>` 的解析结果。
+class _ParsedName {
+  const _ParsedName(this.device, this.kind, {this.first = 0, this.second = 0});
+
+  final String device;
+  final _FileKind kind;
+
+  /// 块 = 起点 seq；快照 = 覆盖位置。
+  final int first;
+
+  /// 块 = 终点 seq。
+  final int second;
+}
+
+/// 一台对端的文件集合（回执 / 块 / 最新快照）。
+class _DeviceFiles {
+  _RemoteFile? acks;
+  final List<_ChunkFile> chunks = [];
+  _SnapshotFile? snapshot;
+}
+
+/// 增量块（名字自带 seq 区间，不可变）。
+class _ChunkFile {
+  const _ChunkFile({
+    required this.file,
+    required this.startSeq,
+    required this.endSeq,
+  });
+
+  final _RemoteFile file;
+  final int startSeq;
+  final int endSeq;
+}
+
+/// 全量快照（名字自带覆盖位置，不可变）。
+class _SnapshotFile {
+  const _SnapshotFile({required this.file, required this.coverage});
+
+  final _RemoteFile file;
+  final int coverage;
+}
+
+/// 单文件读取结果（三态：读到 / 跳过 / 失败；ghost = 身份不符的幽灵文件）。
+class _ReadOutcome {
+  const _ReadOutcome({
+    this.envelope,
+    this.bytes = 0,
+    this.skipped = false,
+    this.ghost = false,
+    this.error,
+  });
+
+  final SyncEnvelope? envelope;
+  final int bytes;
+  final bool skipped;
+  final bool ghost;
+  final SyncIssue? error;
 }
 
 /// 远端快照文件的列表项：名称 + 版本令牌（`etag` 优先，缺省 `lastmodified`）。

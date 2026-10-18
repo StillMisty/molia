@@ -1,7 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
 
-import 'package:crypto/crypto.dart';
 import 'package:flutter/foundation.dart';
 import 'package:logging/logging.dart';
 
@@ -10,6 +9,8 @@ import '../../domain/ports/sync_known_store.dart';
 import '../../domain/ports/sync_transport.dart';
 import 'publish_ledger.dart';
 import 'sync_adapter.dart';
+import 'sync_codec_port.dart';
+import 'sync_fingerprint.dart';
 import 'sync_journal.dart';
 import 'sync_known_store.dart';
 import 'sync_passphrase.dart';
@@ -40,9 +41,11 @@ class SyncEngine extends ChangeNotifier implements SyncSchedulerHost {
     required SyncStampIssuer stamps,
     SyncKnownStore? known,
     SyncJournalStore? journal,
+    SyncCodecPort? fingerprintPort,
     DateTime Function()? clock,
     Duration inboundWindow = const Duration(milliseconds: 1500),
   })  : _state = state,
+        _fingerprintPort = fingerprintPort,
         _adapters = adapters,
         _transports = transports,
         _stamps = stamps,
@@ -80,6 +83,15 @@ class SyncEngine extends ChangeNotifier implements SyncSchedulerHost {
   /// 增量日志（可选）：注入后日常轮次只外发**变更**（增量窗口），对端按游标
   /// 拉取；未注入时始终外发全量快照（仍正确，只是不增量）。
   final SyncJournalStore? _journal;
+
+  /// 指纹计算的落地位置（可选）：注入后把**全库遍历的 CPU**放进 worker
+  /// isolate（一次本地变更就要重算一遍，主 isolate 上会掉帧）；未注入时
+  /// 就地计算（单测走这条，结果逐字节相同）。
+  final SyncCodecPort? _fingerprintPort;
+
+  Future<String> _fingerprintOf(Map<SyncCategory, List<SyncRecord>> records) =>
+      _fingerprintPort?.fingerprint(records) ??
+      Future.value(syncFingerprint(records));
 
   /// 入站合流窗口：窗口内到达的多个对端推送合并成一轮。
   final Duration _inboundWindow;
@@ -134,6 +146,13 @@ class SyncEngine extends ChangeNotifier implements SyncSchedulerHost {
   /// 最近一轮推送/构建的快照（局域网端点直接返回给对端 GET）。
   SyncEnvelope? get lastEnvelope => _lastEnvelope;
 
+  /// 增量模式是否启用（注入 journal 的前提）。
+  ///
+  /// 组合根接线契约：`buildSyncStack` 必须传 `library.syncJournal`。
+  /// 未注入时引擎仍正确，但整体退化为「每轮全量」——全库指纹、整库加密
+  /// 推送、日志只写不裁；这条只读位供组合根冒烟测试守住接线。
+  bool get incrementalEnabled => _journal != null;
+
   /// 服务端语义（局域网增量端点 / WebDAV 日志文件）：按请求方游标返回
   /// 增量窗口；游标落后于窗口起点（条目已被裁剪）时返回全量快照（bootstrap）。
   Future<SyncEnvelope> serveJournal({required int since}) async {
@@ -141,6 +160,9 @@ class SyncEngine extends ChangeNotifier implements SyncSchedulerHost {
     if (journal == null) return serveSnapshot();
     final baseSeq = await journal.baseSeq();
     if (since < baseSeq) return serveSnapshot();
+    // 对端游标超前本机头部 = 本机日志被重置（派生状态随版本重建）：
+    // 继续给增量会让对端等一个永远不会出现的 seq，必须回全量让它重新引导。
+    if (since > await journal.headSeq()) return serveSnapshot();
     final snapshot = _lastEnvelope ??
         await _buildLiveSnapshot(categories: _state.enabledCategories);
     final entries = await journal.window(since: since);
@@ -180,6 +202,7 @@ class SyncEngine extends ChangeNotifier implements SyncSchedulerHost {
       now: _nowMs(),
       tombstoneRetentionMs: tombstoneRetentionMs,
     );
+    final snapshotId = await _fingerprintOf(pruned.records);
     return SyncEnvelope(
       deviceId: pruned.deviceId,
       deviceName: pruned.deviceName,
@@ -189,7 +212,7 @@ class SyncEngine extends ChangeNotifier implements SyncSchedulerHost {
       baseSeq: base,
       acks: _acks(),
       categories: [for (final category in categories) category.name],
-    ).withSnapshotId(_fingerprint(pruned.records));
+    ).withSnapshotId(snapshotId);
   }
 
   /// 传输当前状态（UI 呈现「开关开着但没在工作」）；未知 kind 返回 null。
@@ -230,10 +253,15 @@ class SyncEngine extends ChangeNotifier implements SyncSchedulerHost {
   Future<void> init() async {
     if (_initialized) return;
     await _state.init();
-    if (_state.enabled) await _ensureTransportsRunning();
     _initialized = true;
     notifyListeners();
   }
+
+  /// 启动已启用且未运行的传输（幂等）。
+  ///
+  /// 组合根在**首帧之后**调用它：局域网传输启动要过权限门（Android 17 起是
+  /// 系统对话框）并绑套接字 / 枚举网卡，放在 `runApp` 之前会让首帧等一个
+  /// 用户看不见的对话框。装配期只初始化状态，传输留给首帧收尾或首个轮次。
 
   Future<void> setEnabled(bool value) async {
     await _state.setEnabled(value);
@@ -243,6 +271,11 @@ class SyncEngine extends ChangeNotifier implements SyncSchedulerHost {
       await _stopTransports();
     }
     notifyListeners();
+  }
+
+  Future<void> startTransports() async {
+    if (!_state.enabled) return;
+    await _ensureTransportsRunning();
   }
 
   Future<void> setCategory(SyncCategory category, bool value) async {
@@ -490,7 +523,7 @@ class SyncEngine extends ChangeNotifier implements SyncSchedulerHost {
       // 都在同一事务里追加，O(1)），否则退回整视图指纹（逐条 jsonEncode）。
       final localChanged = journal == null
           ? (_localFingerprint == null ||
-              _fingerprint(local) != _localFingerprint)
+              await _fingerprintOf(local) != _localFingerprint)
           : journalHead != _localJournalHead;
 
       // 本地视图就是适配器当前状态：以本地版本播种登记（内存内，不落库），
@@ -542,9 +575,8 @@ class SyncEngine extends ChangeNotifier implements SyncSchedulerHost {
 
       // anti-entropy：对端内容指纹与本机不一致、且本机没有它的新条目时，
       // 主动取一次全量快照修复静默分歧（LWW 只保证「有新数据时收敛」）。
-      final fullFor = antiEntropy
-          ? _antiEntropyPeers(local, categories)
-          : const <String>{};
+      final fullFor =
+          antiEntropy ? await _antiEntropyPeers(local, categories) : const <String>{};
       if (!inboundOnly) {
         pullContact = await _pullInto(
           accumulators,
@@ -563,7 +595,7 @@ class SyncEngine extends ChangeNotifier implements SyncSchedulerHost {
       // 待提交的游标（应用成功后才落进名册 / ack）：apply 失败时不推进，
       // 下轮按原游标重取，避免「未落地的变更被永久跳过」。
       final pendingCursors = <String, int>{};
-      var fullPeers = _consumePayloads(
+      var fullPeers = await _consumePayloads(
         pulledEntries,
         remoteRecords,
         forcedDelivery,
@@ -585,7 +617,7 @@ class SyncEngine extends ChangeNotifier implements SyncSchedulerHost {
         );
         pullContact = pullContact || contacted;
         pulledEntries.addAll(secondEntries);
-        fullPeers = _consumePayloads(
+        fullPeers = await _consumePayloads(
           secondEntries,
           remoteRecords,
           forcedDelivery,
@@ -739,13 +771,13 @@ class SyncEngine extends ChangeNotifier implements SyncSchedulerHost {
           prunedCount == refreshedCount;
       final snapshotId = fingerprintReusable
           ? _snapshotFingerprintId!
-          : _fingerprint(pruned.records);
+          : await _fingerprintOf(pruned.records);
       _snapshotFingerprintId = snapshotId;
       _snapshotFingerprintHead = journalHead;
       _localJournalHead = journalHead;
       // 未注入日志时保留整视图指纹：下一轮的变更判定用它。
       if (journal == null) {
-        _localFingerprint = _fingerprint(refreshed);
+        _localFingerprint = await _fingerprintOf(refreshed);
       }
       final outgoing = SyncEnvelope(
         deviceId: pruned.deviceId,
@@ -998,7 +1030,7 @@ class SyncEngine extends ChangeNotifier implements SyncSchedulerHost {
   ///
   /// 返回需要**全量兜底**的对端 id（窗口缺口，或 anti-entropy 发现指纹不一致
   /// 且本机没有它的新条目）；调用方在同一轮内再取一次它们的全量快照。
-  Set<String> _consumePayloads(
+  Future<Set<String>> _consumePayloads(
     List<(String, SyncEnvelope)> payloads,
     Map<SyncCategory, List<SyncRecord>> remoteRecords,
     Set<SyncKnownKey> forcedDelivery,
@@ -1007,7 +1039,7 @@ class SyncEngine extends ChangeNotifier implements SyncSchedulerHost {
     required bool antiEntropy,
     required Map<SyncCategory, List<SyncRecord>> local,
     required Set<SyncCategory> categories,
-  }) {
+  }) async {
     final fullPeers = <String>{};
     final now = _nowMs();
     for (final (kind, envelope) in payloads) {
@@ -1032,7 +1064,12 @@ class SyncEngine extends ChangeNotifier implements SyncSchedulerHost {
       var nextCursor = cursor;
       var gap = false;
       if (envelope.isDelta) {
-        if (cursor < envelope.baseSeq) {
+        // 游标 -1 = 尚未消费任何条目（全新对端 / 刚引导过）：与窗口起点比较时
+        // 夹到 0——日志 seq 从 1 开始，`-1 < baseSeq(0)` 不是「落后」而是
+        // 「正好从头开始」，按落后处理会白做一次全量 bootstrap（且快照可能
+        // 早于本次变更，白白丢掉这一窗）。
+        final baseline = cursor < 0 ? 0 : cursor;
+        if (baseline < envelope.baseSeq) {
           // 窗口缺口：本机游标之前的条目已被对端裁剪，窗口不完整。
           gap = true;
           fullPeers.add(peerId);
@@ -1041,7 +1078,9 @@ class SyncEngine extends ChangeNotifier implements SyncSchedulerHost {
           // 类别会造成空洞，此时不能把游标推到 windowEnd（会永久跳过它们）。
           final entries = [...(envelope.journal ?? const <SyncJournalEntry>[])]
             ..sort((a, b) => a.seq.compareTo(b.seq));
-          var expected = cursor + 1;
+          // 起点同样夹到 1：游标 -1（全新对端 / 刚被重置）时首条合法 seq 是 1，
+          // 从 0 起算会把每条窗口都判成「首条即空洞」。
+          var expected = baseline + 1;
           var hole = false;
           for (final entry in entries) {
             if (entry.seq <= cursor) continue;
@@ -1052,7 +1091,14 @@ class SyncEngine extends ChangeNotifier implements SyncSchedulerHost {
             expected = entry.seq + 1;
             remoteRecords.putIfAbsent(entry.category, () => []).add(entry.record);
           }
-          if (hole || (envelope.windowEnd > cursor && expected - 1 < envelope.windowEnd)) {
+          // 缺口判定只对**非空窗口**成立：`windowEnd == 0` 是空窗口（回执
+          // 类载荷），它什么都没带，不该被当成「窗口被裁剪」——否则全新对端
+          // （游标 -1）会被推进一次多余的 bootstrap，而快照可能早于本次变更，
+          // 白丢一窗。
+          final truncated = envelope.windowEnd > 0 &&
+              expected - 1 < envelope.windowEnd &&
+              envelope.windowEnd > cursor;
+          if (hole || truncated) {
             // 窗口内不连续：标缺口改走 bootstrap（已接受的条目照常应用，
             // 游标只推进到已接受的最大 seq）。
             gap = true;
@@ -1072,14 +1118,17 @@ class SyncEngine extends ChangeNotifier implements SyncSchedulerHost {
             }
           }
         }
-        if (envelope.journalHead > nextCursor) nextCursor = envelope.journalHead;
+        // 全量快照 = 权威全量视图：游标落在快照覆盖位置（**不取最大**）。
+        // 对端日志重置时它的头部会变小，取最大会让游标悬空——之后 seq 更小
+        // 的变更被永久跳过（静默分歧）。回退导致的重取是幂等的。
+        nextCursor = envelope.journalHead;
         fullPulledAt = now;
       }
-      if (nextCursor > cursor) {
-        final previous = pendingCursors[peerId];
-        pendingCursors[peerId] = previous == null || nextCursor > previous
-            ? nextCursor
-            : previous;
+      if (nextCursor != cursor) {
+        // 同一轮同一对端可能有多份载荷（拉取 + 入站推送）：以**后处理**的
+        // 那份判定为准（全量快照的权威位置覆盖此前的增量推进），因此这里不做
+        // 「取最大」——那会让重置后的回退永远提交不出去。
+        pendingCursors[peerId] = nextCursor;
       }
       if (!gap) {
         // 对端载荷里的 ack 回执：它已消费本机 journal 到该位置（用于 compact）。
@@ -1092,7 +1141,7 @@ class SyncEngine extends ChangeNotifier implements SyncSchedulerHost {
             envelope.snapshotId.isNotEmpty &&
             cursor >= envelope.journalHead &&
             now - fullPulledAt >= antiEntropyIntervalMs &&
-            _fingerprintDiffers(
+            await _fingerprintDiffers(
               peerSnapshotId: envelope.snapshotId,
               peerCategories: envelope.categories,
               local: local,
@@ -1145,12 +1194,12 @@ class SyncEngine extends ChangeNotifier implements SyncSchedulerHost {
   /// [peerCategories] 是对端本轮覆盖的类别：本机按**同一类别集合**、同一
   /// 裁剪口径（墓碑保留期）计算指纹——类别开关不同的设备不会被误判为分歧；
   /// 对端覆盖了本机没有的类别时无法比较（返回 false，不做兜底）。
-  bool _fingerprintDiffers({
+  Future<bool> _fingerprintDiffers({
     required String peerSnapshotId,
     required List<String> peerCategories,
     required Map<SyncCategory, List<SyncRecord>> local,
     required Set<SyncCategory> categories,
-  }) {
+  }) async {
     final peerSet = <SyncCategory>{
       for (final name in peerCategories)
         if (SyncCategory.tryParse(name) case final category?) category,
@@ -1168,27 +1217,30 @@ class SyncEngine extends ChangeNotifier implements SyncSchedulerHost {
       for (final entry in pruned.records.entries)
         if (peerSet.contains(entry.key)) entry.key: entry.value,
     };
-    return _fingerprint(subset) != peerSnapshotId;
+    final localFingerprint = await _fingerprintOf(subset);
+    return localFingerprint != peerSnapshotId;
   }
 
   /// anti-entropy 的全量兜底名单：指纹不一致、且距上次兜底超过节流间隔。
-  Set<String> _antiEntropyPeers(
+  Future<Set<String>> _antiEntropyPeers(
     Map<SyncCategory, List<SyncRecord>> local,
     Set<SyncCategory> categories,
-  ) {
+  ) async {
     final now = _nowMs();
-    return {
-      for (final peer in _allPeers())
-        if (peer.snapshotId.isNotEmpty &&
-            now - peer.fullPulledAt >= antiEntropyIntervalMs &&
-            _fingerprintDiffers(
-              peerSnapshotId: peer.snapshotId,
-              peerCategories: peer.categories,
-              local: local,
-              categories: categories,
-            ))
-          peer.deviceId,
-    };
+    final peers = <String>[];
+    for (final peer in _allPeers()) {
+      if (peer.snapshotId.isEmpty) continue;
+      if (now - peer.fullPulledAt < antiEntropyIntervalMs) continue;
+      if (await _fingerprintDiffers(
+        peerSnapshotId: peer.snapshotId,
+        peerCategories: peer.categories,
+        local: local,
+        categories: categories,
+      )) {
+        peers.add(peer.deviceId);
+      }
+    }
+    return peers.toSet();
   }
 
   /// 各对端 ack 的最小值（compact 的裁剪边界）；null = 没有对端 ack 过。
@@ -1534,36 +1586,6 @@ class SyncEngine extends ChangeNotifier implements SyncSchedulerHost {
       total += list.length;
     }
     return total;
-  }
-
-  /// 本地视图指纹：用于区分「本机没有变化」与「有变更需要外发」。
-  ///
-  /// 逐类别按键排序后哈希，与集合顺序无关；只在同一进程内比较（跨重启由
-  /// 后续的增量协议以游标替代）。
-  static String _fingerprint(Map<SyncCategory, List<SyncRecord>> records) {    final buffer = StringBuffer();
-    for (final category in SyncCategory.values) {
-      final list = records[category];
-      if (list == null || list.isEmpty) continue;
-      final sorted = [...list]..sort((a, b) => a.key.compareTo(b.key));
-      for (final record in sorted) {
-        buffer
-          ..write(category.name)
-          ..write('\u0001')
-          ..write(record.key)
-          ..write('\u0001')
-          ..write(record.version.physical)
-          ..write('\u0001')
-          ..write(record.version.counter)
-          ..write('\u0001')
-          ..write(record.version.deviceId)
-          ..write('\u0001')
-          ..write(record.deleted ? '1' : '0')
-          ..write('\u0001')
-          ..write(record.data == null ? '' : jsonEncode(record.data))
-          ..write('\n');
-      }
-    }
-    return sha256.convert(utf8.encode(buffer.toString())).toString();
   }
 
   SyncEnvelope _envelopeFrom(Map<SyncCategory, List<SyncRecord>> records) =>

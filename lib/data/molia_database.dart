@@ -2,7 +2,8 @@
 /// （播放历史 / 用户列表 / 删除墓碑 / 同步已知版本）+ 跨设备增量日志
 /// （sync_journal / sync_journal_state）+ 听歌统计（play_events）+ 本地下载。
 ///
-/// `schemaVersion = 3`（v1 → v2 新增 `sync_known`，v2 → v3 新增增量日志，
+/// `schemaVersion = 5`（v1 → v2 新增 `sync_known`，v2 → v3 新增增量日志，
+/// v3 → v4 新增统计索引，v4 → v5 统计载荷与元数据移入 `play_tracks`，
 /// 均保留既有数据）；后续结构变更同样必须写增量迁移、保留数据
 /// （见 docs/adr/0005-drift-migration.md）。
 ///
@@ -17,6 +18,7 @@ import 'package:path_provider/path_provider.dart';
 
 import '../domain/models/device_sync.dart';
 import 'molia_database.steps.dart';
+import 'stats_payload_codec.dart';
 
 part 'molia_database.g.dart';
 
@@ -252,16 +254,51 @@ class Downloads extends Table {
       ];
 }
 
+/// 统计曲目内容：元数据 + 取链参数，**每曲一行**（`UNIQUE (sourceKey, songId)`）。
+///
+/// 为什么独立成表：`play_events` 是 append-only 的事件流，逐行复制元数据与
+/// 载荷（LX 脚本原样透传平台对象时单条 2–8 KB）在保留窗口（20k 行 / 365 天）
+/// 下把库顶到数十 MB（实测 18 MB 内置平台载荷 / 97 MB 平台对象）。
+/// 语义：元数据是**该曲最近一次播放时的快照**（不再逐事件快照，v5 起），
+/// `raw` 按 gzip 存 BLOB（见 `stats_payload_codec.dart`），`updatedAt` 供载荷
+/// 预算按「最近播放」保留（`PlayStatisticsRepository.pruneOldEvents`）。
+/// 引用的行由 `play_events.trackId` 关联（`ON DELETE RESTRICT`：裁曲目前先删
+/// 事件，误删有事件的曲目会直接报错而不是静默丢数据）。
+@DataClassName('PlayTrackRow')
+class PlayTracks extends Table {
+  @override
+  String get tableName => 'play_tracks';
+
+  IntColumn get id => integer().autoIncrement()();
+  TextColumn get sourceKey => text()();
+  TextColumn get songId => text()();
+  TextColumn get title => text().withDefault(const Constant(''))();
+  TextColumn get artist => text().withDefault(const Constant(''))();
+  TextColumn get album => text().withDefault(const Constant(''))();
+  TextColumn get coverUrl => text().nullable()();
+  IntColumn get durationMs => integer().nullable()();
+  /// 取链参数：gzip(JSON) 字节；NULL = 无载荷（未提供 / 已被载荷预算清掉）。
+  BlobColumn get raw => blob().nullable()();
+  /// 最近一次写入的内容时间（事件 `startedAt`）。
+  IntColumn get updatedAt => integer()();
+
+  @override
+  List<String> get customConstraints => const [
+        'UNIQUE (sourceKey, songId)',
+      ];
+}
+
 /// 听歌统计事件：一次播放尝试一行（append-only）。
 ///
-/// 元数据为播放时快照、自包含（`raw` 供统计页点播）；`endedAt` 为 null
+/// 事件只存**事件自身**的字段（时间 / 进度 / 结束原因 / 版本三元组）；曲目
+/// 元数据与取链参数在 [PlayTracks]（`trackId` 关联，v5 起）。`endedAt` 为 null
 /// 表示进行中（进程被杀遗留的行由启动时 `closeStaleEvents()` 收尾）。
 /// `syncKey` 为跨设备去重键（新事件 UUID；存量行导出时回填哈希），
 /// `originDeviceId` 记录事件产生设备（同时充当版本三元组的 deviceId）。
 /// `endedAt` / `startedAt` 是内容时间；版本是 `versionPhysical +
 /// versionCounter + originDeviceId`，跨设备「晚收尾覆盖」按版本判定。
 @TableIndex(name: 'idx_play_events_startedAt', columns: {#startedAt})
-@TableIndex(name: 'idx_play_events_track', columns: {#sourceKey, #songId})
+@TableIndex(name: 'idx_play_events_trackId', columns: {#trackId})
 @TableIndex(name: 'idx_play_events_endedAt', columns: {#endedAt})
 @TableIndex.sql(
     'CREATE UNIQUE INDEX idx_play_events_syncKey ON play_events (syncKey) '
@@ -272,14 +309,8 @@ class PlayEvents extends Table {
   String get tableName => 'play_events';
 
   IntColumn get id => integer().autoIncrement()();
-  TextColumn get sourceKey => text()();
-  TextColumn get songId => text()();
-  TextColumn get title => text().withDefault(const Constant(''))();
-  TextColumn get artist => text().withDefault(const Constant(''))();
-  TextColumn get album => text().withDefault(const Constant(''))();
-  TextColumn get coverUrl => text().nullable()();
-  IntColumn get durationMs => integer().nullable()();
-  TextColumn get raw => text().withDefault(const Constant('{}'))();
+  IntColumn get trackId =>
+      integer().references(PlayTracks, #id, onDelete: KeyAction.restrict)();
   IntColumn get startedAt => integer()();
   IntColumn get endedAt => integer().nullable()();
   IntColumn get listenedMs => integer().withDefault(const Constant(0))();
@@ -303,6 +334,7 @@ const String moliaDatabaseFileName = 'molia_database';
   SyncKnown,
   SyncJournal,
   SyncJournalStates,
+  PlayTracks,
   PlayEvents,
   Downloads,
 ])
@@ -348,12 +380,14 @@ class MoliaDatabase extends _$MoliaDatabase {
 
   /// 当前 schema 版本：`1` 建出基线全部表，`2` 新增 `sync_known`，
   /// `3` 新增增量日志（`sync_journal` + `sync_journal_state`），
-  /// `4` 新增 `play_events(endedAt)` 索引（统计查询 / 同步指纹）。
+  /// `4` 新增 `play_events(endedAt)` 索引（统计查询 / 同步指纹），
+  /// `5` 新增 `play_tracks`（曲目元数据 + gzip 载荷，每曲一行），
+  /// `play_events` 只留事件字段 + `trackId`（原先逐行复制元数据与载荷）。
   ///
   /// 结构变更必须写增量迁移：提版本号 → `dart run drift_dev make-migrations`
   /// 生成 schema 快照 → 用 `stepByStep` 写迁移并保留数据（见 ADR-0005）。
   @override
-  int get schemaVersion => 4;
+  int get schemaVersion => 5;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -374,6 +408,39 @@ class MoliaDatabase extends _$MoliaDatabase {
             // 按 `endedAt IS NOT NULL` 过滤，没索引就是全表扫描。
             await m.createIndex(schema.idxPlayEventsEndedAt);
           },
+          from4To5: (m, schema) async {
+            // v4 → v5：曲目元数据与取链参数移入 `play_tracks`（每曲一行），
+            // 载荷改存 gzip BLOB；事件表只留事件字段 + `trackId`。
+            // 数据保留：元数据取该曲**最新一行**的快照（SQLite 在只有一个
+            // min/max 聚合时，裸列取自命中该聚合的行），载荷取该曲最新一条
+            // 非空（旧版本逐行存过一份）。
+            await m.createTable(schema.playTracks);
+            await m.database.customStatement(
+              'INSERT INTO play_tracks '
+              '(sourceKey, songId, title, artist, album, coverUrl, durationMs, '
+              'raw, updatedAt) '
+              'SELECT sourceKey, songId, title, artist, album, coverUrl, '
+              'durationMs, NULL, MAX(startedAt) '
+              'FROM play_events GROUP BY sourceKey, songId',
+            );
+            await _moveStatsPayloadsToTracks(m.database);
+            // 旧 (sourceKey, songId) 索引随列一起废弃：alterTable 会从
+            // sqlite_master 重建该表的既有索引，留着会引用已删除的列。
+            await m.database
+                .customStatement('DROP INDEX IF EXISTS idx_play_events_track');
+            await m.alterTable(TableMigration(
+              schema.playEvents,
+              newColumns: [schema.playEvents.trackId],
+              columnTransformer: {
+                schema.playEvents.trackId: CustomExpression<int>(
+                  '(SELECT pt.id FROM play_tracks pt '
+                  'WHERE pt.sourceKey = play_events.sourceKey '
+                  'AND pt.songId = play_events.songId)',
+                ),
+              },
+            ));
+            await m.createIndex(schema.idxPlayEventsTrackId);
+          },
         ),
         beforeOpen: (details) async {
           // SQLite 外键默认关闭，这里显式开启（列表删除级联依赖它）。
@@ -385,6 +452,33 @@ class MoliaDatabase extends _$MoliaDatabase {
   Future<void> close() async {
     if (identical(_instance, this)) _instance = null;
     await super.close();
+  }
+
+  /// v4 → v5 迁移用：旧 `play_events.raw`（JSON 文本，每曲可能多份）→
+  /// `play_tracks.raw`（gzip BLOB，每曲一份）。
+  ///
+  /// 顺序读（`startedAt` 升序）覆盖写：每个曲目键最后留下的是**最新一条**载荷；
+  /// SQL 里没有 gzip，所以压缩在 Dart 侧做（每曲一次）。
+  static Future<void> _moveStatsPayloadsToTracks(GeneratedDatabase db) async {
+    final rows = await db.customSelect(
+      "SELECT sourceKey, songId, raw FROM play_events WHERE raw <> '' "
+      'ORDER BY startedAt ASC, id ASC',
+    ).get();
+    final newest = <(String, String), String>{};
+    for (final row in rows) {
+      final payload = row.data['raw'] as String? ?? '';
+      if (payload.isEmpty) continue;
+      newest[(
+        row.data['sourceKey'] as String? ?? '',
+        row.data['songId'] as String? ?? '',
+      )] = payload;
+    }
+    for (final entry in newest.entries) {
+      await db.customStatement(
+        'UPDATE play_tracks SET raw = ? WHERE sourceKey = ? AND songId = ?',
+        [encodeStatsPayload(entry.value), entry.key.$1, entry.key.$2],
+      );
+    }
   }
 
   /// 全库最大同步版本（物理分量 + 计数）：`SyncStampIssuer` 首次初始化的

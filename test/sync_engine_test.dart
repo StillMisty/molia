@@ -311,6 +311,95 @@ void main() {
     expect(prefs.getString('theme_mode'), isNull);
   });
 
+  test('装配不启动传输：首帧后的 startTransports 才起（权限门不挡首帧）', () async {
+    final fresh = SyncEngine(
+      state: state,
+      stamps: state.stampIssuer,
+      adapters: const [],
+      transports: {'lan': transport},
+      journal: FakeJournalStore(head: 0),
+      clock: () => DateTime.fromMillisecondsSinceEpoch(7000),
+    );
+    addTearDown(fresh.dispose);
+
+    await fresh.init();
+    expect(transport.isRunning, isFalse, reason: '装配不触发权限门 / 套接字绑定');
+
+    await fresh.startTransports();
+    expect(transport.isRunning, isTrue);
+    // 幂等：重复调用不重启。
+    final started = transport.startCount;
+    await fresh.startTransports();
+    expect(transport.startCount, started);
+  });
+
+  test('空窗口（只带回执）不算缺口；游标 -1 直接消费增量，不 bootstrap', () async {
+    // 回执类载荷：增量 + 空窗口（windowEnd = 0）。
+    transport.available.add(SyncEnvelope(
+      deviceId: 'devB',
+      deviceName: 'B',
+      producedAt: 6000,
+      journalHead: 1,
+      acks: const {'devA': 0},
+      journal: const [],
+    ));
+    final receiptPullCount = (await engine.syncNow())!;
+    expect(transport.pullCount, 1, reason: '空窗口不触发第二轮全量拉取');
+    expect(receiptPullCount.applied, 0);
+
+    // 真正的增量窗口：游标 -1（全新对端）直接应用，不 bootstrap。
+    transport.available.add(SyncEnvelope(
+      deviceId: 'devB',
+      deviceName: 'B',
+      producedAt: 6000,
+      journalHead: 1,
+      windowStart: 1,
+      windowEnd: 1,
+      journal: [
+        SyncJournalEntry(
+          seq: 1,
+          category: SyncCategory.settings,
+          record: SyncRecord(
+            key: 'theme_mode',
+            version: const SyncVersion(physical: 9000, deviceId: 'devB'),
+            data: const {'v': 'dark'},
+          ),
+        ),
+      ],
+    ));
+    final report = await engine.syncNow();
+    expect(report!.applied, 1);
+    expect(transport.pullCount, 2, reason: '没有第二次 bootstrap 拉取');
+    expect(prefs.getString('theme_mode'), 'dark');
+  });
+
+  test('窗口被截断（声明的 windowEnd 大于实到条目）仍触发 bootstrap', () async {
+    transport.available.add(SyncEnvelope(
+      deviceId: 'devB',
+      deviceName: 'B',
+      producedAt: 6000,
+      journalHead: 3,
+      windowStart: 1,
+      // 声明到 3，实际只带 1 条：解析层丢条目 / 载荷被截断 → 必须回全量。
+      windowEnd: 3,
+      journal: [
+        SyncJournalEntry(
+          seq: 1,
+          category: SyncCategory.settings,
+          record: SyncRecord(
+            key: 'theme_mode',
+            version: const SyncVersion(physical: 9000, deviceId: 'devB'),
+            data: const {'v': 'dark'},
+          ),
+        ),
+      ],
+    ));
+    final report = await engine.syncNow();
+    expect(report!.applied, 1);
+    expect(transport.pullCount, 2, reason: '缺口 → 本轮内再拉一次全量兜底');
+    expect(transport.lastRequest!.fullPeers, contains('devB'));
+  });
+
   test('传输关闭时不启动也不拉取', () async {
     await state.setTransportEnabled('lan', false);
     await engine.setEnabled(false);

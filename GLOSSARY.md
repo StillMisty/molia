@@ -378,9 +378,10 @@
 - **Play event（播放事件）** — `play_events` 一行 = 一次播放尝试（append-only）：
   **真正出声才开行**（首个 `position > 0` 的 tick）；切歌 / 播完 /
   单曲循环每遍 / 位置回到开头（restart）/ 停止各收尾一行；暂停不切断；
-  进程被杀由启动时 `closeStaleEvents()` 收尾为 interrupted。元数据为播放时
-  快照、自包含（`raw` 供统计页点播）。与「播放历史」（`play_history`，
-  最近播放 500 条）是两套数据。
+  进程被杀由启动时 `closeStaleEvents()` 收尾为 interrupted。曲目元数据与取链
+  参数在 `play_tracks`（每曲一行，`raw` 为 gzip 字节，供统计页点播）；本表只存
+  事件的 `trackId`（v5 起）。与「播放历史」（`play_history`，最近播放 500 条）
+  是两套数据。
 - **Statistics capture（统计采集）** — `lib/services/play_statistics_service.dart`：
   纯观察者（组合根接 `PlaybackProvider` 快照 + position 两根监听，零改动
   `lib/playback`）；`PlayStatisticsLimits` 是口径常量唯一来源
@@ -433,7 +434,7 @@
 
 - **Sync envelope（同步快照）** — `lib/domain/models/device_sync.dart`：
   一次交换的完整视图（设备身份 + 各类别记录）；全量合并模型，设备间互换快照后
-  逐键取新，无增量/版本向量（见 ADR-0003）。协议自始为 v2：快照的 `v` 字段
+  逐键取新，无增量/版本向量（见 ADR-0003）。协议自始为 v3：快照的 `v` 字段
   自描述格式，当前没有按版本号的分支 / 协商 / 降级。
 - **Sync record（同步记录）** — 快照最小单元：`key + version + data`；`version`
   是 `SyncVersion` 三元组，删除表示为 `deleted` 墓碑记录（墓碑另带真实删除
@@ -449,10 +450,10 @@
   `savedAt` / `importedAt` 与墓碑的真实删除时间是内容语义，进记录 `data`、
   **永不参与胜负判定**；历史「删除 vs 播放」由库内按真实时间比较
   （`playedAt <= deletedAt` → 删除生效，否则复活并撤墓碑，见 ADR-0003 v2 §2）。
-- **Protocol v2（协议版本）** — `SyncEnvelope.protocolVersion = 2`：线上格式
-  自始为 v2，快照 JSON 的 `v` 字段随 envelope 读写（自描述 / 将来能力协商的
-  锚点）；**没有版本闸门、协商或降级**，对端快照直接合并。备份导入只做结构
-  校验（不是 Molia 备份 / 内层 envelope 无效才抛 `FormatException`）。
+- **Protocol v3（协议版本）** — `SyncEnvelope.protocolVersion = 3`：线上格式
+  只有 v3（帧 `magic + 版本 + nonce`、载荷列式二进制，见 ADR-0003 §1），
+  只写只读 v3；**没有版本闸门、协商或降级**，版本不符一律明确失败。备份导入
+  只做结构校验（不是 Molia 备份 / 内层 envelope 无效才抛 `FormatException`）。
 - **Sync category（同步类别）** — 可开关的数据类别：`playlists` /
   `playlistTracks` / `sources` / `settings` / `credentials` / `statistics` /
   `history` / `session`；关闭的类别既不推送也不应用（本机仍持续登记本地变化）。
@@ -558,8 +559,9 @@
   裁剪的覆盖下限（按需给实时快照的传输不约束）。push 循环与 journal compact
   只消费台账，引擎只保留轮次编排。
 - **Key derivation cache（密钥派生缓存）** — `SyncCodec`：PBKDF2(口令, 应用级
-  固定盐) 得根密钥并按口令会话内缓存一次，帧密钥 = HKDF(根密钥, 随机帧盐)；
-  帧仍携带盐与迭代数，版本 1 帧（PBKDF2 直接派生）可解密。
+  固定盐) 得根密钥并按口令会话内缓存一次，帧密钥 = HKDF(根密钥, 帧 nonce)；
+  帧不携带盐与迭代数，帧密钥派生与载荷编码在 worker isolate 内执行
+  （见 ADR-0003 §1）。
 - **Sync level（同步等级）** — `SyncScheduler` 的四个等级：**活跃**（可见 +
   最近交互 / 正在播放，变更去抖 4s）/ **空闲**（退避 10→20→40→60 分钟封顶；
   蜂窝下无本地变更不广播、不发 PROPFIND，非蜂窝网络唤醒照常探测与拉取）/

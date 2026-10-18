@@ -24,6 +24,7 @@ import 'package:molia/app/bootstrap/catalog_stack.dart';
 import 'package:molia/app/bootstrap/library_stack.dart';
 import 'package:molia/app/bootstrap/local_data_stack.dart';
 import 'package:molia/app/bootstrap/playback_stack.dart';
+import 'package:molia/app/bootstrap/sync_stack.dart';
 import 'package:molia/data/settings/settings_keys.dart';
 import 'package:molia/domain/models/download.dart' show kLocalSourceKey;
 import 'package:molia/domain/models/playback.dart';
@@ -171,6 +172,30 @@ void main() {
     final saved = await PlaybackSessionStore().load();
     expect(saved?.current?.id, track.id);
     expect(playback.observer.lastPlayedTrackName, track.title);
+  });
+
+  test('syncStack：引擎必须拿到增量日志（漏接 = 生产退化为每轮全量）', () async {
+    final local = await buildLocalDataStack(catalog: catalog);
+    final library = await buildLibraryStack(catalog: catalog);
+    final playback = await buildPlaybackStack(
+      catalog: catalog,
+      local: local,
+      library: library,
+      messenger: FakeMessenger(),
+      mediaSessionFactory: null,
+      backend: FakePlaybackBackend(),
+    );
+    final sync = await buildSyncStack(
+      catalog: catalog,
+      library: library,
+      playback: playback,
+      dataSaver: local.dataSaver,
+    );
+    addTearDown(sync.provider.dispose);
+
+    // 接线契约：引擎与写入点共用同一份增量日志与状态（组合根唯一的断言点）。
+    expect(sync.engine.incrementalEnabled, isTrue);
+    expect(identical(sync.engine.state, library.syncState), isTrue);
   });
 }
 

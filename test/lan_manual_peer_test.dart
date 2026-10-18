@@ -1,4 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:molia/data/sync/sync_codec_port.dart';
 import 'package:molia/data/sync/sync_crypto.dart';
 import 'package:molia/data/sync/transport/lan_sync_transport.dart';
 import 'package:molia/domain/models/device_sync.dart';
@@ -9,6 +10,8 @@ import 'package:molia/domain/ports/sync_transport.dart';
 void main() {
   const passphrase = 'ABCD-EFGH-JKLM-NPQR-STUV-WXYZ-2345-6789';
   final codec = SyncCodec(iterations: 1000);
+  // 传输只依赖编解码端口；单测用进程内实现（worker isolate 由专门测试覆盖）。
+  final codecPort = InlineSyncCodecPort(codec);
 
   SyncEnvelope envelope(String deviceId, {String value = 'v'}) => SyncEnvelope(
         deviceId: deviceId,
@@ -29,7 +32,7 @@ void main() {
     final transport = LanSyncTransport(
       deviceId: 'devA',
       deviceName: () => 'A',
-      codec: codec,
+      codec: codecPort,
       passphraseProvider: () async => passphrase,
       snapshotProvider: () async => envelope('devA'),
       permissionGate: () async => false,
@@ -52,7 +55,7 @@ void main() {
     final transport = LanSyncTransport(
       deviceId: 'devA',
       deviceName: () => 'A',
-      codec: codec,
+      codec: codecPort,
       passphraseProvider: () async => passphrase,
       snapshotProvider: () async => envelope('devA'),
       permissionGate: () async => false,
@@ -72,7 +75,7 @@ void main() {
     final transportA = LanSyncTransport(
       deviceId: 'devA',
       deviceName: () => '设备A',
-      codec: codec,
+      codec: codecPort,
       passphraseProvider: () async => passphrase,
       snapshotProvider: () async => envelope('devA'),
       udpPort: 47867,
@@ -80,7 +83,7 @@ void main() {
     final transportB = LanSyncTransport(
       deviceId: 'devB',
       deviceName: () => '设备B',
-      codec: codec,
+      codec: codecPort,
       passphraseProvider: () async => passphrase,
       snapshotProvider: () async => envelope('devB'),
       probeTargets: const [(host: '127.0.0.1', port: 47867)],
@@ -108,7 +111,7 @@ void main() {
     final transportA = LanSyncTransport(
       deviceId: 'devA',
       deviceName: () => '设备A',
-      codec: codec,
+      codec: codecPort,
       passphraseProvider: () async => passphrase,
       snapshotProvider: () async => envelope('devA', value: 'light'),
       udpPort: 47862,
@@ -117,7 +120,7 @@ void main() {
     final transportB = LanSyncTransport(
       deviceId: 'devB',
       deviceName: () => '设备B',
-      codec: codec,
+      codec: codecPort,
       passphraseProvider: () async => passphrase,
       snapshotProvider: () async => envelope('devB'),
       manualPeersProvider: () => const [ManualPeer(host: '127.0.0.1', probePort: 47862)],
@@ -143,7 +146,7 @@ void main() {
     final transportA = LanSyncTransport(
       deviceId: 'devA',
       deviceName: () => '设备A',
-      codec: codec,
+      codec: codecPort,
       passphraseProvider: () async => passphrase,
       snapshotProvider: () async => envelope('devA'),
       udpPort: 47869,
@@ -152,7 +155,7 @@ void main() {
     final transportB = LanSyncTransport(
       deviceId: 'devB',
       deviceName: () => '设备B',
-      codec: codec,
+      codec: codecPort,
       passphraseProvider: () async => passphrase,
       snapshotProvider: () async => envelope('devB'),
       // 用户填的是标准端口（打不通）；实际接触经注入目标完成：应答的来源端口
@@ -188,7 +191,7 @@ void main() {
     final transportA = LanSyncTransport(
       deviceId: 'devA',
       deviceName: () => '设备A',
-      codec: codec,
+      codec: codecPort,
       passphraseProvider: () async => passphrase,
       snapshotProvider: () async => envelope('devA', value: 'light'),
       udpPort: 47864,
@@ -198,7 +201,7 @@ void main() {
     final scout = LanSyncTransport(
       deviceId: 'devScout',
       deviceName: () => 'Scout',
-      codec: codec,
+      codec: codecPort,
       passphraseProvider: () async => passphrase,
       snapshotProvider: () async => envelope('devScout'),
       manualPeersProvider: () =>
@@ -221,7 +224,7 @@ void main() {
     final transportC = LanSyncTransport(
       deviceId: 'devC',
       deviceName: () => '设备C',
-      codec: codec,
+      codec: codecPort,
       passphraseProvider: () async => passphrase,
       snapshotProvider: () async => envelope('devC'),
       manualPeersProvider: () => [learned!.copyWith(probePort: 47999)],

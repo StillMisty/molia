@@ -13,6 +13,8 @@ import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:molia/data/molia_database.dart';
 
+import 'support/memory_database.dart';
+
 void main() {
   late MoliaDatabase db;
 
@@ -46,6 +48,7 @@ void main() {
         'play_contexts',
         'play_events',
         'play_history',
+        'play_tracks',
         'playlist_tracks',
         'playlists',
         'sqlite_sequence',
@@ -158,14 +161,7 @@ void main() {
       ],
       'play_events': [
         'id|INTEGER|0|null|1',
-        'sourceKey|TEXT|1|null|0',
-        'songId|TEXT|1|null|0',
-        "title|TEXT|1|''|0",
-        "artist|TEXT|1|''|0",
-        "album|TEXT|1|''|0",
-        'coverUrl|TEXT|0|null|0',
-        'durationMs|INTEGER|0|null|0',
-        "raw|TEXT|1|'{}'|0",
+        'trackId|INTEGER|1|null|0',
         'startedAt|INTEGER|1|null|0',
         'endedAt|INTEGER|0|null|0',
         'listenedMs|INTEGER|1|0|0',
@@ -175,6 +171,18 @@ void main() {
         "originDeviceId|TEXT|1|''|0",
         'versionPhysical|INTEGER|1|0|0',
         'versionCounter|INTEGER|1|0|0',
+      ],
+      'play_tracks': [
+        'id|INTEGER|0|null|1',
+        'sourceKey|TEXT|1|null|0',
+        'songId|TEXT|1|null|0',
+        "title|TEXT|1|''|0",
+        "artist|TEXT|1|''|0",
+        "album|TEXT|1|''|0",
+        'coverUrl|TEXT|0|null|0',
+        'durationMs|INTEGER|0|null|0',
+        'raw|BLOB|0|null|0',
+        'updatedAt|INTEGER|1|null|0',
       ],
     };
 
@@ -211,13 +219,36 @@ void main() {
             'CREATE INDEX idx_play_events_startedAt ON play_events (startedAt)',
         'idx_play_events_endedAt':
             'CREATE INDEX idx_play_events_endedAt ON play_events (endedAt)',
-        'idx_play_events_track': 'CREATE INDEX idx_play_events_track '
-            'ON play_events (sourceKey, songId)',
+        'idx_play_events_trackId': 'CREATE INDEX idx_play_events_trackId '
+            'ON play_events (trackId)',
         'idx_play_events_syncKey': 'CREATE UNIQUE INDEX idx_play_events_syncKey '
             'ON play_events (syncKey) WHERE syncKey IS NOT NULL',
         'idx_sync_journal_at':
             'CREATE INDEX idx_sync_journal_at ON sync_journal (at)',
       },
+    );
+  });
+
+  test('统计事件外键：指向内容行，且删除内容行被拒（RESTRICT）', () async {
+    final fk = await rowsOf('PRAGMA foreign_key_list(play_events)');
+    expect(
+      fk.map((row) => [
+            row['table'],
+            row['from'],
+            row['to'],
+            row['on_update'],
+            row['on_delete'],
+          ]),
+      [
+        ['play_tracks', 'trackId', 'id', 'NO ACTION', 'RESTRICT'],
+      ],
+    );
+    final trackId = await insertPlayTrack(db, songId: 'fk');
+    await insertPlayEvent(db, songId: 'fk', startedAt: 1, endedAt: 2);
+    await expectLater(
+      (db.delete(db.playTracks)..where((t) => t.id.equals(trackId))).go(),
+      throwsA(predicate((e) => e.toString().contains('FOREIGN KEY'))),
+      reason: '还有事件引用时不允许删内容行（先删事件）',
     );
   });
 
@@ -283,26 +314,14 @@ void main() {
       throwsA(anything),
     );
 
-    await db.into(db.playEvents).insert(PlayEventsCompanion.insert(
-          sourceKey: 'wy',
-          songId: '1',
-          startedAt: 1,
-        ));
-    await db.into(db.playEvents).insert(PlayEventsCompanion.insert(
-          sourceKey: 'wy',
-          songId: '2',
-          startedAt: 2,
-        ));
-    final eventId = await db.into(db.playEvents).insert(
-          PlayEventsCompanion.insert(
-              sourceKey: 'wy', songId: '3', startedAt: 3, syncKey: const Value('k1')),
-        );
+    await insertPlayEvent(db, songId: '1', startedAt: 1);
+    await insertPlayEvent(db, songId: '2', startedAt: 2);
+    final eventId =
+        await insertPlayEvent(db, songId: '3', startedAt: 3, syncKey: 'k1');
     await expectLater(
-      db.into(db.playEvents).insert(
-            PlayEventsCompanion.insert(
-                sourceKey: 'wy', songId: '4', startedAt: 4, syncKey: const Value('k1')),
-          ),
+      insertPlayEvent(db, songId: '4', startedAt: 4, syncKey: 'k1'),
       throwsA(anything),
+      reason: 'syncKey 部分唯一索引生效',
     );
     expect(eventId, greaterThan(0));
   });

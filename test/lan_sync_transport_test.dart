@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
+import 'package:molia/data/sync/sync_codec_port.dart';
 import 'package:molia/data/sync/sync_crypto.dart';
 import 'package:molia/data/sync/transport/lan_sync_transport.dart';
 import 'package:molia/domain/models/device_sync.dart';
@@ -11,6 +12,8 @@ import 'package:molia/domain/ports/sync_transport.dart';
 void main() {
   const passphrase = 'ABCD-EFGH-JKLM-NPQR-STUV-WXYZ-2345-6789';
   final codec = SyncCodec(iterations: 1000);
+  // 传输只依赖编解码端口；单测用进程内实现（worker isolate 由专门测试覆盖）。
+  final codecPort = InlineSyncCodecPort(codec);
 
   SyncEnvelope envelope(String deviceId, {String value = 'v'}) => SyncEnvelope(
         deviceId: deviceId,
@@ -33,7 +36,7 @@ void main() {
     final transportA = LanSyncTransport(
       deviceId: 'devA',
       deviceName: () => '设备A',
-      codec: codec,
+      codec: codecPort,
       passphraseProvider: () async => passphrase,
       snapshotProvider: () async => envA,
       udpPort: 47891,
@@ -41,7 +44,7 @@ void main() {
     final transportB = LanSyncTransport(
       deviceId: 'devB',
       deviceName: () => '设备B',
-      codec: codec,
+      codec: codecPort,
       passphraseProvider: () async => passphrase,
       snapshotProvider: () async => envB,
       probeTargets: const [(host: '127.0.0.1', port: 47891)],
@@ -79,7 +82,7 @@ void main() {
     final transportA = LanSyncTransport(
       deviceId: 'devA',
       deviceName: () => '设备A',
-      codec: codec,
+      codec: codecPort,
       passphraseProvider: () async => passphrase,
       snapshotProvider: () async => envelope('devA'),
       udpPort: 47893,
@@ -87,7 +90,7 @@ void main() {
     final transportC = LanSyncTransport(
       deviceId: 'devC',
       deviceName: () => '设备C',
-      codec: codec,
+      codec: codecPort,
       passphraseProvider: () async =>
           'ZZZZ-ZZZZ-ZZZZ-ZZZZ-ZZZZ-ZZZZ-ZZZZ-ZZZZ',
       snapshotProvider: () async => envelope('devC'),
@@ -114,7 +117,7 @@ void main() {
     final transportA = LanSyncTransport(
       deviceId: 'devA',
       deviceName: () => '设备A',
-      codec: codec,
+      codec: codecPort,
       passphraseProvider: () async => passphrase,
       snapshotProvider: () async => envA,
       snapshotIdProvider: () => ownSnapshotId,
@@ -123,7 +126,7 @@ void main() {
     final transportB = LanSyncTransport(
       deviceId: 'devB',
       deviceName: () => '设备B',
-      codec: codec,
+      codec: codecPort,
       passphraseProvider: () async => passphrase,
       snapshotProvider: () async => envelope('devB'),
       probeTargets: const [(host: '127.0.0.1', port: 47896)],
@@ -204,7 +207,7 @@ void main() {
     final transportA = LanSyncTransport(
       deviceId: 'devA',
       deviceName: () => '设备A',
-      codec: codec,
+      codec: codecPort,
       passphraseProvider: () async => passphrase,
       snapshotProvider: () async => envelope('devA', value: 'full'),
       journalProvider: serve,
@@ -215,7 +218,7 @@ void main() {
     final transportB = LanSyncTransport(
       deviceId: 'devB',
       deviceName: () => '设备B',
-      codec: codec,
+      codec: codecPort,
       passphraseProvider: () async => passphrase,
       snapshotProvider: () async => envelope('devB'),
       probeTargets: const [(host: '127.0.0.1', port: 47898)],
@@ -255,7 +258,7 @@ void main() {
     final transportA = LanSyncTransport(
       deviceId: 'devA',
       deviceName: () => '设备A',
-      codec: codec,
+      codec: codecPort,
       passphraseProvider: () async => passphrase,
       snapshotProvider: () async => envelope('devA'),
       udpPort: 47903,
@@ -263,7 +266,7 @@ void main() {
     final transportB = LanSyncTransport(
       deviceId: 'devB',
       deviceName: () => '设备B',
-      codec: codec,
+      codec: codecPort,
       passphraseProvider: () async => passphrase,
       snapshotProvider: () async => envelope('devB'),
       probeTargets: const [(host: '127.0.0.1', port: 47903)],
@@ -287,7 +290,7 @@ void main() {
     final transport = LanSyncTransport(
       deviceId: 'devX',
       deviceName: () => 'X',
-      codec: codec,
+      codec: codecPort,
       passphraseProvider: () async => passphrase,
       snapshotProvider: () async => envelope('devX'),
       udpPort: 47895,
@@ -317,7 +320,7 @@ void main() {
     final transportA = LanSyncTransport(
       deviceId: 'devA',
       deviceName: () => '设备A',
-      codec: codec,
+      codec: codecPort,
       passphraseProvider: () async => passphrase,
       snapshotProvider: () async => envelope('devA', value: 'light'),
       probeTargets: const [(host: '127.0.0.1', port: 47942)],
@@ -328,7 +331,7 @@ void main() {
     final transportB = LanSyncTransport(
       deviceId: 'devB',
       deviceName: () => '设备B',
-      codec: codec,
+      codec: codecPort,
       passphraseProvider: () async => passphrase,
       snapshotProvider: () async => envelope('devB', value: 'dark'),
       probeWindow: const Duration(milliseconds: 250),
@@ -362,7 +365,7 @@ void main() {
     final server = LanSyncTransport(
       deviceId: 'devB',
       deviceName: () => '设备B',
-      codec: codec,
+      codec: codecPort,
       passphraseProvider: () async => passphrase,
       snapshotProvider: () async => envelope('devB', value: 'dark'),
       onHttpPortBound: (port) => serverHttpPort = port,
@@ -381,7 +384,7 @@ void main() {
     final client = LanSyncTransport(
       deviceId: 'devA',
       deviceName: () => '设备A',
-      codec: codec,
+      codec: codecPort,
       passphraseProvider: () async => passphrase,
       snapshotProvider: () async => envelope('devA'),
       udpBinder: unavailable,
@@ -416,7 +419,7 @@ void main() {
     final transportA = LanSyncTransport(
       deviceId: 'devA',
       deviceName: () => '设备A',
-      codec: codec,
+      codec: codecPort,
       passphraseProvider: () async => passphrase,
       snapshotProvider: () async => envelope('devA', value: 'light'),
       localAddressesProvider: () async => const [],
@@ -425,7 +428,7 @@ void main() {
     final transportB = LanSyncTransport(
       deviceId: 'devB',
       deviceName: () => '设备B',
-      codec: codec,
+      codec: codecPort,
       passphraseProvider: () async => passphrase,
       snapshotProvider: () async => envelope('devB'),
       probeTargets: const [(host: '::1', port: 47945)],
@@ -453,7 +456,7 @@ void main() {
     final server = LanSyncTransport(
       deviceId: 'devA',
       deviceName: () => '设备A',
-      codec: codec,
+      codec: codecPort,
       passphraseProvider: () async => passphrase,
       snapshotProvider: () async => envelope('devA', value: 'light'),
       onHttpPortBound: (port) => serverHttpPort = port,
@@ -463,7 +466,7 @@ void main() {
     final client = LanSyncTransport(
       deviceId: 'devB',
       deviceName: () => '设备B',
-      codec: codec,
+      codec: codecPort,
       passphraseProvider: () async => passphrase,
       snapshotProvider: () async => envelope('devB'),
       manualPeersProvider: () => [
@@ -492,7 +495,7 @@ void main() {
     final transportA = LanSyncTransport(
       deviceId: 'devA',
       deviceName: () => '设备A',
-      codec: codec,
+      codec: codecPort,
       passphraseProvider: () async => passphrase,
       snapshotProvider: () async => envelope('devA', value: 'light'),
       probeWindow: const Duration(milliseconds: 250),
@@ -502,7 +505,7 @@ void main() {
     final transportB = LanSyncTransport(
       deviceId: 'devB',
       deviceName: () => '设备B',
-      codec: codec,
+      codec: codecPort,
       passphraseProvider: () async => passphrase,
       snapshotProvider: () async => envelope('devB', value: 'dark'),
       probeTargets: const [(host: '127.0.0.1', port: 47949)],
@@ -530,7 +533,7 @@ void main() {
     final transport = LanSyncTransport(
       deviceId: 'devA',
       deviceName: () => '设备A',
-      codec: codec,
+      codec: codecPort,
       passphraseProvider: () async => passphrase,
       snapshotProvider: () async => envelope('devA'),
       // 模拟 IPv6 栈不可用（禁用 / 无 v6 地址）：只让 v6 绑定失败。
@@ -568,7 +571,7 @@ void main() {
     final transport = LanSyncTransport(
       deviceId: 'devA',
       deviceName: () => '设备A',
-      codec: codec,
+      codec: codecPort,
       passphraseProvider: () async => passphrase,
       snapshotProvider: () async => envelope('devA'),
       // 注入的 provider 不做过滤（真实的 LocalEndpointsService 会过滤）：
@@ -599,7 +602,7 @@ void main() {
   test('候选地址优先尝试：不可达的候选回落到观测源地址', () async {    final transportA = LanSyncTransport(
       deviceId: 'devA',
       deviceName: () => '设备A',
-      codec: codec,
+      codec: codecPort,
       passphraseProvider: () async => passphrase,
       snapshotProvider: () async => envelope('devA', value: 'light'),
       // TEST-NET-3：保留给文档的地址，保证不可达。
@@ -609,7 +612,7 @@ void main() {
     final transportB = LanSyncTransport(
       deviceId: 'devB',
       deviceName: () => '设备B',
-      codec: codec,
+      codec: codecPort,
       passphraseProvider: () async => passphrase,
       snapshotProvider: () async => envelope('devB'),
       probeTargets: const [(host: '127.0.0.1', port: 47951)],

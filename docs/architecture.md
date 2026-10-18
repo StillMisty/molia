@@ -196,7 +196,9 @@
   由 `SourceFailure.from` 按类型名识别 `BuiltinHttpException`。providers/UI 只消费
   kind / l10nKey / retryable。
 - **听歌统计**：`play_events`（一次播放尝试一行，drift 本地库 v1）由
-  `PlayStatisticsRepository` 读写；聚合全部查询时计算，口径常量唯一来源是
+  `PlayStatisticsRepository` 读写；曲目元数据与取链参数（`raw`，gzip 字节）在
+  `play_tracks`（每曲一行，见 pitfalls #53），读取一律 join；聚合全部查询时计算，
+  口径常量唯一来源是
   `PlayStatisticsLimits`（有效播放 = `min(30s, 50%·时长)`，error 事件不计入
   计数/比率）。采集是 `PlayStatisticsService` 纯观察者——组合根把
   `PlaybackProvider` 快照 + position 接进去，**零改动播放内核**；
@@ -224,9 +226,9 @@
 - **跨设备数据同步（可选，默认关闭）**：同步歌单 / 收藏 / 音源脚本与配置 /
   跟人走的设置 / 听歌统计 / 播放历史 / 上次播放会话 / AI DJ 与凭证。信任模型是
   **同步口令即信任根**（加入即完全互信，无逐项审批），快照整体加密：根密钥 =
-  PBKDF2(口令) 会话内一次派生（按口令缓存），帧密钥 = HKDF(根密钥, 随机帧盐)，
-  AES-256-GCM 认证（帧结构保留盐与迭代数，版本 1 帧仍可解密；帧与信任边界见
-  ADR-0003）。引擎（`lib/data/sync/sync_engine.dart`）一轮 = 各 `SyncAdapter`
+  PBKDF2(口令) 会话内一次派生（按口令缓存），帧密钥 = HKDF(根密钥, 帧 nonce)，
+  AES-256-GCM 认证；帧 = `magic + 版本 + nonce`，载荷是列式二进制，编解码与
+  加解密在 worker isolate 内执行（帧与信任边界见 ADR-0003 §1）。引擎（`lib/data/sync/sync_engine.dart`）一轮 = 各 `SyncAdapter`
   收集本地视图（按类别廉价指纹缓存：指纹未变不读行）→ `SyncTransport` 拉取
   变化对端（WebDAV 按 `getetag` / 局域网按探测应答的 `snapshotId` 跳过未变
   文件）→ 逐键 LWW 合并（版本三元组
@@ -239,7 +241,7 @@
   `SyncStampIssuer`（`sync_stamp.dart`，HLC-lite：吸收远端超前戳、同毫秒
   counter 递增、基线持久化 + 重启不倒退）发放，内容时间（playedAt / endedAt /
   savedAt / importedAt / 墓碑删除时间）**不参与胜负判定**（见 ADR-0003 v2 §2）。
-  协议自始为 v2（快照里的 `v` 字段用于自描述与将来能力协商）：对端快照直接
+  协议自始为 v3（帧带版本与 nonce，载荷是列式二进制；见 ADR-0003 §1）：对端快照直接
   合并，备份只做结构性校验（不是 Molia 备份 / 结构无效才拒绝），都没有按版本号
   的分支。全量合并模型天然幂等，推送裁剪 90 天前墓碑（按真实删除时间）；入站
   推送在 1–2s 窗口内合流成一轮，入站轮只消费收到的快照（不拉取、不推送，防
@@ -283,7 +285,7 @@
   （v4 / v6 可独立降级到不同端口，设置页端口行同值折叠、不同值按族列出），
   口令随码传递是刻意取舍——信任模型就是
   口令即信任根，弹层明确警告「等同授权对方读取全部同步数据」。
-  资料库 schema（drift，`schemaVersion = 2`）含 `playlists.syncId` / 行级
+  资料库 schema（drift，`schemaVersion = 5`）含 `playlists.syncId` / 行级
   `versionPhysical + versionCounter + deviceId` / `sync_tombstones`（版本三列 +
   真实删除时间）/ `sync_known`（已知版本登记）/ `play_events`（syncKey +
   版本列，`originDeviceId` 兼作设备列）；设置同步用「登记哈希」做变化检测，
@@ -358,6 +360,11 @@
   （曾经 SQL / Dart / AI 三份手写，奇数时长上 AI 还差 1ms）；
 - **范围值类型**：`PlayStatisticsRange` + `startOf(now)` / `sinceMs(now)`
   （领域扩展）是范围 → 时间窗口的唯一映射，查询与热力图高亮共用；
+- **曲目内容表**（v5）：`play_events` 只存事件字段 + `trackId`；元数据与载荷
+  （gzip BLOB）在 `play_tracks` 每曲一行，写入按「内容时间取新」（旧事件不顶
+  新内容），读取（`topTracks` / `dayEvents` / `listEventsForExport` / 同步导出）
+  一律 join 补齐；载荷另有字节预算（`maxRetainedPayloadBytes`），超出按最近
+  播放保留、其余清 `raw`（点播回退重新解析）；
 - **一次快照**：`PlayStatisticsRepository.snapshot(since:)` 并发取回
   `ListeningStatisticsSnapshot`（汇总 / 榜单 / 日历 / 作息热力图 / 来源分布），
   统计页只渲染它（不再分开读 6 个查询）。

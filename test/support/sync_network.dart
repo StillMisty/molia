@@ -7,10 +7,13 @@ import 'package:molia/data/settings/settings_keys.dart';
 import 'package:molia/data/settings/settings_registry.dart';
 import 'package:molia/data/sync/adapters/history_sync_adapter.dart';
 import 'package:molia/data/sync/adapters/prefs_sync_adapter.dart';
+import 'package:molia/data/sync/sync_codec_port.dart';
 import 'package:molia/data/sync/sync_crypto.dart';
 import 'package:molia/data/sync/sync_engine.dart';
 import 'package:molia/data/sync/sync_journal.dart';
 import 'package:molia/data/sync/sync_state_store.dart';
+import 'package:molia/data/sync/sync_codec_isolate.dart';
+import 'package:molia/data/sync/transport/webdav_sync_transport.dart';
 import 'package:molia/domain/models/device_sync.dart';
 import 'package:molia/domain/ports/sync_transport.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -31,12 +34,20 @@ import 'sync_test_support.dart';
 /// 加密 / 解密次数与传输字节数在 [SyncNetwork] 上统计：验收断言
 /// 「解密次数与字节数恒定，不随库大小变化」用它。
 class SyncNetwork {
-  SyncNetwork({required this.passphrase, this.limits = const SyncJournalLimits()}) {
+  SyncNetwork({
+    required this.passphrase,
+    this.limits = const SyncJournalLimits(),
+    this.webdavBaseUrl,
+  }) {
     // 多设备各自一个内存库：不是「同一执行器被重复打开」，无需告警。
     driftRuntimeOptions.dontWarnAboutMultipleDatabases = true;
   }
 
   final String passphrase;
+
+  /// 非空时各设备走**真实 WebDAV 传输**（指向该 baseUrl 的假服务端），
+  /// 用于多设备端到端（块文件 / 回执 / 裁剪在真实 HTTP 上跑一遍）。
+  final String? webdavBaseUrl;
   final SyncJournalLimits limits;
 
   /// 迭代数调低：测试只关心协议路径，不需要真实口令强度。
@@ -91,12 +102,22 @@ class SyncNetwork {
     return device;
   }
 
+  /// 每台设备一个编解码端口（真实 worker isolate），release 时统一回收。
+  final Map<String, SyncCodecPort> _codecPorts = {};
+
+  SyncCodecPort codecPortFor(String id) =>
+      _codecPorts.putIfAbsent(id, () => IsolateSyncCodecPort(iterations: 1000));
+
   Future<void> dispose() async {
     for (final device in devices.values) {
       device.engine.dispose();
       await device.db.close();
     }
     devices.clear();
+    for (final port in _codecPorts.values) {
+      await port.dispose();
+    }
+    _codecPorts.clear();
   }
 }
 
@@ -133,7 +154,7 @@ class SyncDevice {
   late final PrefsSyncAdapter settingsAdapter;
   late final LibraryRepository library;
   late final HistorySyncAdapter historyAdapter;
-  late final NetworkTransport transport;
+  late final SyncTransport transport;
   late final SyncEngine engine;
 
   Future<void> init() async {
@@ -165,6 +186,9 @@ class SyncDevice {
       settings: settings,
       journal: journal,
     );
+    // 与组合根一致：设置写入点即时取版本 / 登记 / 追加日志（不依赖下一轮的
+    // 登记哈希检测），否则「同一轮内改两次」这类用例会退化成检测时序问题。
+    settings.onWrite = (key) => unawaited(settingsAdapter.noteKeyWritten(key));
     library = LibraryRepository(
       databaseProvider: () => db,
       clock: () => state.nowMs(),
@@ -172,11 +196,25 @@ class SyncDevice {
       journal: journal,
     );
     historyAdapter = HistorySyncAdapter(repository: library);
-    transport = NetworkTransport(
-      this,
-      kind: _kind,
-      servesLiveSnapshot: _servesLiveSnapshot,
-    );
+    final webdavBaseUrl = network.webdavBaseUrl;
+    transport = webdavBaseUrl == null
+        ? NetworkTransport(
+            this,
+            kind: _kind,
+            servesLiveSnapshot: _servesLiveSnapshot,
+          )
+        : WebDavSyncTransport(
+            deviceId: id,
+            // 端到端走**真实 worker isolate**（载荷编码 / 压缩 / PBKDF2 / AES
+            // 都在里面跑），与生产同一条路径。
+            codec: network.codecPortFor(id),
+            passphraseProvider: () async => network.passphrase,
+            configProvider: () =>
+                WebDavConfig(baseUrl: webdavBaseUrl, username: 'user'),
+            passwordProvider: () async => 'secret',
+            journalBaseSeqProvider: journal.baseSeq,
+            requestTimeout: const Duration(seconds: 5),
+          );
     // 传输默认开关只有局域网：其它标识的假传输要显式打开（与真实配置一致）。
     await state.setTransportEnabled(transport.kind, true);
     engine = SyncEngine(

@@ -5,6 +5,7 @@ import 'package:flutter/foundation.dart';
 import '../data/sync/sync_activity.dart';
 import '../data/sync/sync_engine.dart';
 import '../data/sync/sync_passphrase.dart';
+import '../data/sync/sync_codec_port.dart';
 import '../data/sync/sync_scheduler.dart';
 import '../data/sync/sync_state_store.dart';
 import '../data/sync/transport/local_network_permission.dart';
@@ -25,16 +26,21 @@ class SyncProvider extends ChangeNotifier {
     SyncScheduler? scheduler,
     LocalNetworkPermission? lanPermission,
     LocalEndpointsService? localEndpoints,
+    SyncCodecPort? codec,
   })  : _engine = engine,
         _scheduler = scheduler,
         _lanPermission = lanPermission,
-        _endpoints = localEndpoints ?? LocalEndpointsService() {
+        _endpoints = localEndpoints ?? LocalEndpointsService(),
+        _codec = codec {
     _engine.addListener(notifyListeners);
   }
 
   final SyncEngine _engine;
   final SyncScheduler? _scheduler;
   final LocalNetworkPermission? _lanPermission;
+
+  /// 载荷编解码端口（生产 = worker isolate）：随 provider 释放。
+  final SyncCodecPort? _codec;
 
   /// 本机地址枚举（设置页列表 / 配对码 / 探测候选三处共用；内部有缓存）。
   final LocalEndpointsService _endpoints;
@@ -257,6 +263,9 @@ class SyncProvider extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// 启动已启用的传输（首帧后调用；幂等）。
+  Future<void> startTransports() => _engine.startTransports();
+
   Future<void> setEnabled(bool value) async {
     if (value) await _engine.ensurePassphrase();
     await _engine.setEnabled(value);
@@ -380,6 +389,8 @@ class SyncProvider extends ChangeNotifier {
   void dispose() {
     _scheduler?.dispose();
     _engine.removeListener(notifyListeners);
+    // worker isolate 随 provider 释放（进程退出前不留常驻 isolate）。
+    unawaited(_codec?.dispose() ?? Future<void>.value());
     super.dispose();
   }
 }

@@ -394,3 +394,64 @@
     后回调），在同一帧绘制前用真实宽度重摆；`DesktopLyricsOutput.start` 同步
     按配置去重（`controls` 是每次现取的 unmodifiable map，按键值比较）——
     不去重时任何设置变化都会触发重建，会放大这个闪动。
+50. **接线型缺陷：引擎漏接增量日志，测试全绿而生产跑了两年的全量模式**：
+    `SyncEngine` 的 `journal` 是可空参数（未注入时仍正确，只是退化为「每轮全量
+    快照」：全库指纹、整库加密推送、`serveJournal` 退化为全量、`compact` 从不
+    执行因而 `sync_journal` 只写不裁）。组合根 `buildSyncStack` 从未传它，
+    而引擎测试各自注入 journal（或不需要）、组合根冒烟测试又没覆盖
+    `buildSyncStack`——缺陷因此长期不可见。教训与契约：
+    - 「可选注入的降级路径」必须有**组合根级**断言（现由
+      `SyncEngine.incrementalEnabled` + `test/app/bootstrap_smoke_test.dart`
+      的 `syncStack` 用例守住），不能只靠单元测试；
+    - 新增此类「注入了才走快路」的参数时，同步补一条组合根断言；
+    - 症状排查入口：同步日志页每轮 `durationMs` 与 `bytesOut`（全量模式下
+      任何本地变更都会重传整库）、`sync_journal` 表行数只增不减。
+51. **派生状态（journal / known / 游标）允许重建，但重建后必须回退游标语义**：
+    升级 / 迁移清空 `sync_journal` 后本机头部归零，而各对端记录的游标还是旧值
+    （如 5000）：`serveJournal` 会给出空窗口，对端判成「没有缺口、无需拉取」，
+    之后新增变更的 seq（1、2、3…）全部小于游标——**永久静默跳过**。修复在两侧：
+    发送侧 `since > head` → 回全量快照（让对端重新引导）；接收侧全量快照把
+    游标**落在快照覆盖位置**（不是取最大），且待提交游标允许回退。回归用例见
+    `test/sync_pipeline_reset_test.dart`。任何将来「清日志 / 换载荷格式」的改动
+    都要带上这条语义。
+52. **游标 -1 与「seq 从 1 开始」：三处 off-by-one 都会让全新对端退化成 bootstrap**：
+    日志 seq 从 1 开始、`cursorSeq = -1` 表示「尚未消费任何条目」，两者相减时
+    `cursor + 1 = 0` 不是合法的第一条。按 `cursor + 1` 推算起点的地方都要把
+    游标夹到 0（或把起点夹到 1）：
+    ① 窗口完整性 `cursor < baseSeq`：`-1 < 0` 会把「正好从头开始」判成「窗口
+    已被裁剪」→ 白做一次全量 bootstrap（快照还可能早于本次变更，白丢一窗）；
+    ② 条目连续性 `expected = cursor + 1`：首条 seq 1 ≠ 0 → 判成「首条即空洞」
+    → **增量窗口永远吃不下**；
+    ③ 缺口判定 `windowEnd > cursor`：空窗口（`windowEnd = 0`，回执类载荷）
+    在游标 -1 时被当成「窗口被截断」。
+    这三处在旧布局下被掩盖：局域网 `serveJournal(since = -1)` 与单文件 WebDAV
+    都会给全新对端**回全量快照**（`since < baseSeq(0)`），增量窗口根本到不了
+    全新对端；改成分块文件后增量直接发给全新对端，才全部暴露。回归用例：
+    `test/sync_engine_test.dart`（空窗口 / 截断）、`test/sync_webdav_e2e_test.dart`。
+
+53. **统计曲目内容在 `play_tracks`，不在事件行（v5）**：`play_events` 只存
+    事件自身字段（时间 / 进度 / 结束原因 / 版本 + `trackId`），曲目元数据与
+    取链参数在 `play_tracks`（每曲一行，`UNIQUE (sourceKey, songId)`，`raw` 是
+    **gzip 字节**）。为什么：事件是 append-only，逐行复制元数据 + 载荷在保留
+    窗口（20k 行 / 365 天）下实测 18 MB（内置平台载荷 ~700 B/条）到 97 MB
+    （LX 脚本原样透传平台对象 ~3.6 KB/条）——内容表 + gzip 后是 4.1 MB / 6.4 MB。
+    改这块要同时守四条：
+    ① **读取一律 join**：`sourceKey` / `songId` / `title` / `artist` / `album` /
+       `coverUrl` / `durationMs` / `raw` 都不在事件表上；连表后 `_qualifiedPredicate`
+       必须写 `pt.durationMs`（否则列名歧义 / 找不到列）；
+    ② **写入口径是「内容时间取新」**：`_upsertTrack` 只在事件 `startedAt` 不早于
+       内容行 `updatedAt` 时覆盖——远端补发的旧事件不许顶掉新内容；记录没带
+       `raw` 时不覆盖载荷（`Value.absent()`）；
+    ③ **载荷按 gzip 存**（`stats_payload_codec.dart`）：写入 `encodeStatsPayload`、
+       读取 `decodeStatsPayload`，别再往库里塞明文 JSON（解码器对非 gzip 字节做了
+       明文降级，只为迁移期兜底）；线上记录 / 日志条目必须在导出侧解码补齐，
+       否则远端拿到的是二进制乱码；
+    ④ **载荷预算**（`PlayStatisticsRepository.maxRetainedPayloadBytes`，默认
+       16 MB）：超出按「最近播放」保留、其余清 `raw`（点播回退重新解析）——
+       单条载荷大小由脚本决定，行数上限约束不了字节。
+    迁移（v4 → v5）在 `from4To5`：内容行取每曲最新一行快照（SQLite 单 min/max
+    聚合的裸列语义）+ Dart 侧 gzip 搬载荷 + `alterTable` 给事件加 `trackId`
+    （先 `DROP INDEX idx_play_events_track`，否则 alterTable 会重建这个引用
+    已删列的索引）。回归：`test/drift/molia/migration_test.dart` 的
+    「from v4 to v5」数据用例、`test/play_statistics_repository_test.dart` 的
+    「曲目内容表」组。
