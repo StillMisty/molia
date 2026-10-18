@@ -58,7 +58,7 @@ void main() {
     );
     await stateA.init();
     await stateA.writePassphrase(passphrase);
-    await stateA.setEnabled(true);
+    await stateA.setTransportEnabled('lan', true);
 
     prefsB = await freshPrefs();
     final secretsB = MemorySyncSecretStore();
@@ -70,7 +70,7 @@ void main() {
     );
     await stateB.init();
     await stateB.writePassphrase(passphrase);
-    await stateB.setEnabled(true);
+    await stateB.setTransportEnabled('lan', true);
 
     repoA = LibraryRepository(
       databaseProvider: () => dbA,

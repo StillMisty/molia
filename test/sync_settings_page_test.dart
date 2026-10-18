@@ -31,8 +31,9 @@ import 'package:molia/widgets/sync_pairing_scanner.dart';
 
 import 'support/sync_test_support.dart';
 
-/// 同步设置页（配对工作台）：首屏 = 开关 / 配对 / 设备 / 内容 · 日志 · 高级；
-/// 设备名、口令、地址与端口、传输方式在「高级设置」子页（`SyncAdvancedPage`）。
+/// 同步设置页（配对工作台）：首屏 = 传输方式（局域网 / WebDAV，开关即总闸）/
+/// 配对 / 设备 / 内容 · 日志 · 高级；设备名、口令、地址与端口在「高级设置」
+/// 子页（`SyncAdvancedPage`）。
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
@@ -137,7 +138,7 @@ void main() {
     await tester.pumpAndSettle();
   }
 
-  /// 进入「高级设置」子页（设备名 / 口令 / 地址与端口 / 传输方式）。
+  /// 进入「高级设置」子页（设备名 / 口令 / 地址与端口 / 地址簿）。
   Future<void> openAdvanced(WidgetTester tester) async {
     final entry = find.byKey(const Key('settingsSyncAdvancedItem'));
     await tester.ensureVisible(entry);
@@ -153,14 +154,18 @@ void main() {
 
   Finder fieldAt(int index) => find.byType(EditableText).at(index);
 
-  /// 首屏总开关行（副文案 = 一句话状态）。
-  SettingsSwitchTile syncSwitchTile(WidgetTester tester) =>
-      tester.widget<SettingsSwitchTile>(
-        find.ancestor(
-          of: find.byKey(const Key('settingsSyncSwitch')),
-          matching: find.byType(SettingsSwitchTile),
-        ),
-      );
+  /// 传输卡片 footer 的状态结论（原总开关副文案搬到卡片脚注）。
+  String transportFooter(WidgetTester tester) {
+    final card = find.ancestor(
+      of: find.byKey(const Key('settingsSyncLanSwitch')),
+      matching: find.byType(SettingsSectionCard),
+    );
+    return tester
+        .widget<SettingsSectionHint>(
+          find.descendant(of: card, matching: find.byType(SettingsSectionHint)),
+        )
+        .text;
+  }
 
   /// 剪贴板 mock：返回收集到的复制内容列表。
   List<String> mockClipboard(WidgetTester tester) {
@@ -200,24 +205,45 @@ void main() {
     provider.notifyListeners();
   }
 
-  testWidgets('默认关闭：只留总开关与一句说明，隐藏其余分区', (tester) async {
+  testWidgets('默认两路传输都关：页面完整可见，footer 提示同步不会运行', (tester) async {
     await pumpPage(tester);
+
     expect(find.text('Cross-device sync'), findsOneWidget);
-    expect(find.byKey(const Key('settingsSyncSwitch')), findsOneWidget);
+    // 没有总开关：传输开关就是总闸，两路都在首屏。
+    expect(find.byKey(const Key('settingsSyncSwitch')), findsNothing);
+    expect(find.text('Transport'), findsOneWidget);
+    expect(find.byKey(const Key('settingsSyncLanSwitch')), findsOneWidget);
+    expect(find.byKey(const Key('settingsSyncWebdavSwitch')), findsOneWidget);
+    expect(provider.enabled, isFalse);
+    // 口令在初始化时就绪：配对码随时可分享，不等任何开关。
+    expect(provider.passphrase, isNotNull);
+    expect(find.text('turned off'), findsOneWidget, reason: '局域网默认关');
+    expect(
+      find.textContaining('both transports are off'),
+      findsOneWidget,
+      reason: 'footer 说明「同步不会运行」，免得把没同步误读成故障',
+    );
+
+    // 配对 / 设备 / 内容入口不依赖总开关：始终可见。
+    expect(find.byKey(const Key('settingsSyncJoinItem')), findsOneWidget);
+    expect(find.byKey(const Key('settingsSyncPeersEmpty')), findsOneWidget);
+    expect(find.byKey(const Key('settingsSyncContentItem')), findsOneWidget);
+    // 底层信息仍在高级子页，不暴露在首屏。
     expect(find.text('This device'), findsNothing);
-    expect(find.text('What to sync'), findsNothing);
-    expect(find.text('Transport'), findsNothing);
+    expect(find.byKey(const Key('settingsSyncDeviceNameItem')), findsNothing);
   });
 
-  testWidgets('开启同步：不再弹口令窗，首屏出现配对 / 设备 / 内容 · 日志 · 高级',
-      (tester) async {
+  testWidgets('开局域网传输即启用同步：不弹口令窗，各分区齐全', (tester) async {
     await pumpPage(tester);
-    await tester.tap(find.byKey(const Key('settingsSyncSwitch')));
+    expect(provider.enabled, isFalse);
+
+    await tester.tap(find.byKey(const Key('settingsSyncLanSwitch')));
     await tester.pumpAndSettle();
 
-    // 首次开启自动生成口令：不再打断（口令随配对码交给对端，需要时去高级页）。
-    expect(find.text('Copy passphrase'), findsNothing);
     expect(provider.enabled, isTrue);
+    expect(provider.enabledTransports, contains(SyncTransportKind.lan));
+    // 口令在初始化时就绪：开启同步不打断（口令随配对码交给对端）。
+    expect(find.text('Copy passphrase'), findsNothing);
     expect(provider.passphrase, isNotNull);
 
     // ② 配对：复制配对码（行尾二维码）/ 加入其它设备。
@@ -236,13 +262,11 @@ void main() {
     expect(find.byKey(const Key('settingsSyncDeviceNameItem')), findsNothing);
     expect(find.byKey(const Key('settingsSyncPeerSelfItem')), findsNothing);
     expect(find.byKey(const Key('settingsSyncPassphraseItem')), findsNothing);
-    expect(find.byKey(const Key('settingsSyncLanSwitch')), findsNothing);
-    expect(find.byKey(const Key('settingsSyncWebdavSwitch')), findsNothing);
   });
 
-  testWidgets('高级设置：设备名 / 设备 id / 口令 / 加入口令 / 地址与端口 / 传输方式齐全',
+  testWidgets('高级设置：设备名 / 设备 id / 口令 / 加入口令 / 地址与端口齐全',
       (tester) async {
-    await provider.setEnabled(true);
+    await provider.setTransportEnabled(SyncTransportKind.lan, true);
     await pumpPage(tester);
     await openAdvanced(tester);
 
@@ -257,23 +281,23 @@ void main() {
     );
     expect(find.byKey(const Key('settingsSyncProbePortItem')), findsOneWidget);
     expect(find.byKey(const Key('settingsSyncHttpPortItem')), findsOneWidget);
-    // 传输方式：局域网 / WebDAV。
-    expect(find.byKey(const Key('settingsSyncLanSwitch')), findsOneWidget);
-    expect(find.byKey(const Key('settingsSyncWebdavSwitch')), findsOneWidget);
+    // 传输方式在首屏，子页不再重复一份（开关只有一处）。
+    expect(find.byKey(const Key('settingsSyncLanSwitch')), findsNothing);
+    expect(find.byKey(const Key('settingsSyncWebdavSwitch')), findsNothing);
   });
 
-  testWidgets('状态副文案：未同步说「尚未同步」；跑完一轮给结论与相对时间', (tester) async {
-    await provider.setEnabled(true);
+  testWidgets('传输卡片 footer：未同步说「尚未同步」；跑完一轮给结论与相对时间', (tester) async {
+    await provider.setTransportEnabled(SyncTransportKind.lan, true);
     await pumpPage(tester);
-    expect(syncSwitchTile(tester).subtitle, 'Never synced');
+    expect(transportFooter(tester), 'Never synced');
 
     // 跑一轮（页面无手动主操作，这里直接驱动 provider）：无对端 →
     // 结论「No peer found」+ 相对时间「just now」。
     await provider.syncNow(manual: true);
     await tester.pumpAndSettle();
-    final subtitle = syncSwitchTile(tester).subtitle;
-    expect(subtitle, contains('No peer found'));
-    expect(subtitle, contains('just now'));
+    final footer = transportFooter(tester);
+    expect(footer, contains('No peer found'));
+    expect(footer, contains('just now'));
     // 「跳过 N 项」这类全库计数不出现在任何文案里。
     expect(find.textContaining('skipped'), findsNothing);
   });
@@ -282,7 +306,7 @@ void main() {
     final clipboard = mockClipboard(tester);
     transport.discoveryPortsOverride = (v4: 47825, v6: 47825);
     await state.setLanHttpPort(40000);
-    await provider.setEnabled(true);
+    await provider.setTransportEnabled(SyncTransportKind.lan, true);
     await pumpPage(tester);
     // 底层明细在「高级设置」子页。
     await openAdvanced(tester);
@@ -314,7 +338,7 @@ void main() {
 
   testWidgets('探测端口分族展示：v6 独立降级后按族列出', (tester) async {
     transport.discoveryPortsOverride = (v4: 47825, v6: 51234);
-    await provider.setEnabled(true);
+    await provider.setTransportEnabled(SyncTransportKind.lan, true);
     await pumpPage(tester);
     // 底层明细在「高级设置」子页。
     await openAdvanced(tester);
@@ -326,7 +350,7 @@ void main() {
 
   testWidgets('配对码按地址族取探测端口：v6 候选带 v6 的端口', (tester) async {
     transport.discoveryPortsOverride = (v4: 47825, v6: 51234);
-    await provider.setEnabled(true);
+    await provider.setTransportEnabled(SyncTransportKind.lan, true);
     await pumpPage(tester);
 
     final code = (await provider.pairingCode())!;
@@ -342,7 +366,7 @@ void main() {
 
   testWidgets('本机设备 id：短号可读，点按复制完整 id', (tester) async {
     final clipboard = mockClipboard(tester);
-    await provider.setEnabled(true);
+    await provider.setTransportEnabled(SyncTransportKind.lan, true);
     await pumpPage(tester);
     // 底层明细在「高级设置」子页。
     await openAdvanced(tester);
@@ -356,7 +380,7 @@ void main() {
   });
 
   testWidgets('口令行可查看完整口令；加入口令入口打开输入弹层', (tester) async {
-    await provider.setEnabled(true);
+    await provider.setTransportEnabled(SyncTransportKind.lan, true);
     await pumpPage(tester);
     // 底层明细在「高级设置」子页。
     await openAdvanced(tester);
@@ -375,7 +399,7 @@ void main() {
   });
 
   testWidgets('设备名行：改名入口打开弹窗并保存', (tester) async {
-    await provider.setEnabled(true);
+    await provider.setTransportEnabled(SyncTransportKind.lan, true);
     await pumpPage(tester);
     // 底层明细在「高级设置」子页。
     await openAdvanced(tester);
@@ -388,7 +412,7 @@ void main() {
 
   testWidgets('分享配对信息：点行复制配对码，行尾二维码弹层展示二维码与警告', (tester) async {
     final clipboard = mockClipboard(tester);
-    await provider.setEnabled(true);
+    await provider.setTransportEnabled(SyncTransportKind.lan, true);
     await pumpPage(tester);
 
     await tester.tap(find.byKey(const Key('settingsSyncPairingShareItem')));
@@ -416,7 +440,7 @@ void main() {
   });
 
   testWidgets('添加设备：写入地址簿并立即跑一轮', (tester) async {
-    await provider.setEnabled(true);
+    await provider.setTransportEnabled(SyncTransportKind.lan, true);
     await pumpPage(tester);
     await openAddDialog(tester);
 
@@ -437,7 +461,7 @@ void main() {
   });
 
   testWidgets('添加设备：探测端口默认 47825，地址与端口校验在弹层内', (tester) async {
-    await provider.setEnabled(true);
+    await provider.setTransportEnabled(SyncTransportKind.lan, true);
     await pumpPage(tester);
     await openAddDialog(tester);
 
@@ -469,7 +493,7 @@ void main() {
   });
 
   testWidgets('接触失败：弹层不关闭，层内给出未接触成功提示', (tester) async {
-    await provider.setEnabled(true);
+    await provider.setTransportEnabled(SyncTransportKind.lan, true);
     await pumpPage(tester);
     await openAddDialog(tester);
 
@@ -484,7 +508,7 @@ void main() {
   });
 
   testWidgets('重复地址：提示已更新而不是重复添加', (tester) async {
-    await provider.setEnabled(true);
+    await provider.setTransportEnabled(SyncTransportKind.lan, true);
     await provider.addManualPeer('192.168.1.23', name: '书房');
     await pumpPage(tester);
     await openAddDialog(tester);
@@ -514,7 +538,7 @@ void main() {
       producedAt: 5000,
       records: const {},
     ));
-    await provider.setEnabled(true);
+    await provider.setTransportEnabled(SyncTransportKind.lan, true);
     await provider.addManualPeer('192.168.1.23', name: '书房');
     await pumpPage(tester);
     await openAddDialog(tester);
@@ -542,7 +566,7 @@ void main() {
       producedAt: 5000,
       records: const {},
     ));
-    await provider.setEnabled(true);
+    await provider.setTransportEnabled(SyncTransportKind.lan, true);
     await pumpPage(tester);
     await openAddDialog(tester);
 
@@ -571,7 +595,7 @@ void main() {
       await tester.pumpAndSettle();
     }
 
-    await provider.setEnabled(true);
+    await provider.setTransportEnabled(SyncTransportKind.lan, true);
     await pumpPage(tester);
 
     // Android + GMS：显示。
@@ -594,7 +618,7 @@ void main() {
   });
 
   testWidgets('配对码前缀但内容损坏：报「配对码无效」并按码处理（不落成地址）', (tester) async {
-    await provider.setEnabled(true);
+    await provider.setTransportEnabled(SyncTransportKind.lan, true);
     await pumpPage(tester);
     await openAddDialog(tester);
 
@@ -607,7 +631,7 @@ void main() {
   });
 
   testWidgets('配对码导入：地址逐个入簿并立即接触（无需手填端口）', (tester) async {
-    await provider.setEnabled(true);
+    await provider.setTransportEnabled(SyncTransportKind.lan, true);
     await pumpPage(tester);
 
     final code = SyncPairingCode(
@@ -645,7 +669,7 @@ void main() {
   });
 
   testWidgets('配对码口令冲突：确认后替换本机口令；选「仅导入地址」则保留', (tester) async {
-    await provider.setEnabled(true);
+    await provider.setTransportEnabled(SyncTransportKind.lan, true);
     final original = provider.passphrase!;
     await pumpPage(tester);
 
@@ -679,7 +703,7 @@ void main() {
   });
 
   testWidgets('多地址导入后：未认领候选折叠为一行，点开可查看 / 删除', (tester) async {
-    await provider.setEnabled(true);
+    await provider.setTransportEnabled(SyncTransportKind.lan, true);
     await provider.addManualPeer('192.168.1.23');
     await provider.addManualPeer('192.168.1.24');
     await provider.addManualPeer('192.168.1.25');
@@ -707,7 +731,7 @@ void main() {
   });
 
   testWidgets('名册行内联：对端行有名称与最后同步时间', (tester) async {
-    await provider.setEnabled(true);
+    await provider.setTransportEnabled(SyncTransportKind.lan, true);
     transport.available.add(SyncEnvelope(
       deviceId: 'devB',
       deviceName: 'Device B',
@@ -734,7 +758,7 @@ void main() {
     // 注入时钟：失联阈值 = 180 天（与 lostPeers 判定同一时钟源）。
     nowMs = DateTime.now().millisecondsSinceEpoch;
     seedPeer('ghost', lastSeenAt: nowMs - SyncPeerState.lostThresholdMs - 1000);
-    await provider.setEnabled(true);
+    await provider.setTransportEnabled(SyncTransportKind.lan, true);
     await pumpPage(tester);
     expect(find.textContaining('lost'), findsOneWidget);
 
@@ -760,7 +784,7 @@ void main() {
   });
 
   testWidgets('名册展示优先用户命名，对端自报名仅兜底', (tester) async {
-    await provider.setEnabled(true);
+    await provider.setTransportEnabled(SyncTransportKind.lan, true);
     await provider.addManualPeer('192.168.1.23', name: '书房');
     await state.learnManualPeer(const ManualPeer(
       host: '192.168.1.23',
@@ -795,7 +819,7 @@ void main() {
   });
 
   testWidgets('同步在途时保存设备：不误报未接触，提示稍后接触', (tester) async {
-    await provider.setEnabled(true);
+    await provider.setTransportEnabled(SyncTransportKind.lan, true);
     // 先完成一轮，留下历史报告（排队路径拿到的正是这份旧报告）。
     await provider.syncNow(manual: true);
 
@@ -820,7 +844,7 @@ void main() {
   });
 
   testWidgets('同步内容子页：类别开关可切、蜂窝暂停在页内，入口副文案跟随', (tester) async {
-    await provider.setEnabled(true);
+    await provider.setTransportEnabled(SyncTransportKind.lan, true);
     await pumpPage(tester);
     expect(find.text('All categories'), findsOneWidget);
 
@@ -843,7 +867,7 @@ void main() {
   });
 
   testWidgets('日志与诊断子页：24h 动态行与环境行', (tester) async {
-    await provider.setEnabled(true);
+    await provider.setTransportEnabled(SyncTransportKind.lan, true);
     // 手动一轮：日志里出现一条无对端轮次（0 字节、0 落地）。
     await provider.syncNow(manual: true);
     await pumpPage(tester);
@@ -863,7 +887,7 @@ void main() {
   });
 
   testWidgets('日志子页：完整日志（超过 6 条不截断），入口副文案跟随', (tester) async {
-    await provider.setEnabled(true);
+    await provider.setTransportEnabled(SyncTransportKind.lan, true);
     for (var i = 0; i < 7; i++) {
       await provider.syncNow(manual: true);
     }
@@ -878,7 +902,7 @@ void main() {
   });
 
   testWidgets('日志入口副文案：无记录说「暂无记录」，有记录给最近结论', (tester) async {
-    await provider.setEnabled(true);
+    await provider.setTransportEnabled(SyncTransportKind.lan, true);
     await pumpPage(tester);
     expect(find.text('No records yet'), findsOneWidget);
 
@@ -892,10 +916,8 @@ void main() {
   });
 
   testWidgets('WebDAV 启用后才出现配置入口，副文案给地址 / 未配置', (tester) async {
-    await provider.setEnabled(true);
+    await provider.setTransportEnabled(SyncTransportKind.lan, true);
     await pumpPage(tester);
-    // 底层明细在「高级设置」子页。
-    await openAdvanced(tester);
     expect(find.byKey(const Key('settingsSyncWebdavConfigItem')), findsNothing);
 
     await tester.tap(find.byKey(const Key('settingsSyncWebdavSwitch')));
@@ -906,7 +928,7 @@ void main() {
   });
 
   testWidgets('日志子页不提供诊断导出入口', (tester) async {
-    await provider.setEnabled(true);
+    await provider.setTransportEnabled(SyncTransportKind.lan, true);
     await pumpPage(tester);
     expect(find.byKey(const Key('settingsSyncDiagnosticItem')), findsNothing);
 
@@ -917,7 +939,7 @@ void main() {
   });
 
   testWidgets('局域网权限被永久拒绝：动作是「去系统设置」', (tester) async {
-    await provider.setEnabled(true);
+    await provider.setTransportEnabled(SyncTransportKind.lan, true);
     transport.unavailableReason = SyncUnavailableReason.permissionDenied;
     var opened = 0;
     final permission = LocalNetworkPermission(
@@ -935,8 +957,6 @@ void main() {
     );
     await provider.init();
     await pumpPage(tester);
-    // 底层明细在「高级设置」子页。
-    await openAdvanced(tester);
 
     expect(
       find.byKey(const Key('settingsSyncLanPermissionItem')),
@@ -951,7 +971,7 @@ void main() {
   });
 
   testWidgets('局域网权限可再申请：动作是「授予权限」', (tester) async {
-    await provider.setEnabled(true);
+    await provider.setTransportEnabled(SyncTransportKind.lan, true);
     transport.unavailableReason = SyncUnavailableReason.permissionDenied;
     var requested = 0;
     final permission = LocalNetworkPermission(
@@ -970,8 +990,6 @@ void main() {
     );
     await provider.init();
     await pumpPage(tester);
-    // 底层明细在「高级设置」子页。
-    await openAdvanced(tester);
 
     expect(find.text('Grant LAN permission'), findsOneWidget);
     await tester.tap(find.byKey(const Key('settingsSyncLanPermissionItem')));
@@ -980,7 +998,7 @@ void main() {
   });
 
   testWidgets('失败行按原因给可点动作：手动地址 / WebDAV / 重试', (tester) async {
-    await provider.setEnabled(true);
+    await provider.setTransportEnabled(SyncTransportKind.lan, true);
     transport.pullError = const SyncIssue(code: SyncIssueCode.discoverySilent);
     await provider.syncNow(manual: true);
     await pumpPage(tester);
@@ -1009,7 +1027,7 @@ void main() {
     // 桌面不构建扫码入口（弹层里只有粘贴）。
     SyncPairingScanner.debugPlatformOverride = TargetPlatform.linux;
     addTearDown(() => SyncPairingScanner.debugPlatformOverride = null);
-    await provider.setEnabled(true);
+    await provider.setTransportEnabled(SyncTransportKind.lan, true);
     transport.pullError =
         const SyncIssue(code: SyncIssueCode.probePortUnavailable);
     await provider.syncNow(manual: true);
@@ -1029,13 +1047,11 @@ void main() {
   });
 
   testWidgets('传输副文案：启动失败只说状态词（原始细节不上界面）', (tester) async {
-    await provider.setEnabled(true);
+    await provider.setTransportEnabled(SyncTransportKind.lan, true);
     transport.unavailableReason = SyncUnavailableReason.startFailed;
     transport.unavailableDetail = 'SocketException: 端口占用';
     await transport.stop();
     await pumpPage(tester);
-    // 底层明细在「高级设置」子页。
-    await openAdvanced(tester);
 
     expect(find.textContaining('failed to start'), findsOneWidget);
     expect(find.textContaining('SocketException'), findsNothing);
@@ -1044,14 +1060,12 @@ void main() {
   });
 
   testWidgets('传输关闭：副文案中性「已关闭」，不显示残留失败原因', (tester) async {
-    await provider.setEnabled(true);
+    await provider.setTransportEnabled(SyncTransportKind.lan, true);
     transport.unavailableReason = SyncUnavailableReason.startFailed;
     transport.unavailableDetail = 'SocketException: 端口占用';
     await transport.stop();
     await provider.setTransportEnabled(SyncTransportKind.lan, false);
     await pumpPage(tester);
-    // 底层明细在「高级设置」子页。
-    await openAdvanced(tester);
 
     expect(find.text('turned off'), findsOneWidget);
     expect(find.textContaining('failed to start'), findsNothing);
@@ -1066,7 +1080,7 @@ void main() {
   });
 
   testWidgets('传输副文案：成功接触后状态词仍是「运行中」，颜色走成功色', (tester) async {
-    await provider.setEnabled(true);
+    await provider.setTransportEnabled(SyncTransportKind.lan, true);
     transport.available.add(SyncEnvelope(
       deviceId: 'devB',
       deviceName: 'Device B',
@@ -1075,8 +1089,6 @@ void main() {
     ));
     await provider.syncNow(manual: true);
     await pumpPage(tester);
-    // 底层明细在「高级设置」子页。
-    await openAdvanced(tester);
 
     final finder = find.byKey(const Key('settingsSyncLanSwitch'));
     final tile = tester.widget<SettingsSwitchTile>(

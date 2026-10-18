@@ -175,6 +175,9 @@
     只记一次日志），`main.dart` 再兜一层包住 `syncProvider.init()`。
     新增任何「读安全存储」的路径都要遵守这条：可选子系统的故障不能阻断启动；
     写入/删除仍保持抛出（用户主动操作要知道失败）。
+    启动期的**隐式写入**（`SyncProvider.init` 首次生成口令）是例外：写入失败
+    在这里按「未设置」降级并继续（口令改为初始化即生成后，无钥匙串机器不再
+    等到用户点开关才发现写不进去），用户主动重置口令时照旧抛给调用方。
 32. **`build/linux/x64/debug/bundle` 可能是 `flutter test` 的产物，不是应用**：
     跑过 `flutter test integration_test/... -d linux` 之后，该目录里的可执行文件
     入口是测试 listener（VM Service `rootLib` 是 `flutter_test_listener.dart`），

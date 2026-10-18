@@ -217,7 +217,7 @@ class SyncProvider extends ChangeNotifier {
     if (permission == null) return true;
     if (!await permission.refresh()) await permission.ensure(retry: true);
     final granted = permission.granted;
-    if (granted) await _engine.setTransportEnabled(SyncTransportKind.lan, true);
+    if (granted) await setTransportEnabled(SyncTransportKind.lan, true);
     notifyListeners();
     return granted;
   }
@@ -259,6 +259,18 @@ class SyncProvider extends ChangeNotifier {
 
   Future<void> init() async {
     await _engine.init();
+    // 口令即设备身份：初始化就绪，配对码 / 配对信息随时可分享。生成口令没有
+    // 网络副作用，不依赖任何传输开关——没有总开关后，不能等「首次开启同步」
+    // 才生成（否则配对卡片会指向一个不存在的口令）。
+    //
+    // 无钥匙串的环境（WSLg / 容器）写入会抛：按「未设置」降级继续，可选子
+    // 系统的故障不允许阻断启动（与 `SecureSettingsSecretStore.read` 的容错
+    // 同一契约，见 docs/pitfalls.md #31）。
+    try {
+      await _engine.ensurePassphrase();
+    } catch (e) {
+      debugPrint('[Molia] 同步口令初始化失败（按未设置继续）: $e');
+    }
     _passphrase = await _engine.readPassphrase();
     notifyListeners();
   }
@@ -266,18 +278,19 @@ class SyncProvider extends ChangeNotifier {
   /// 启动已启用的传输（首帧后调用；幂等）。
   Future<void> startTransports() => _engine.startTransports();
 
-  Future<void> setEnabled(bool value) async {
+  /// 开 / 关一路传输（开关即总闸：两路都关 = 同步完全停）。
+  ///
+  /// 开传输即启用同步：口令在这里兜一层（正常已由 [init] 生成；init 异常降级
+  /// 的路径也能补上），保证「开传输 → 配对 → 分享码」的链路不缺口令。
+  Future<void> setTransportEnabled(String kind, bool value) async {
     if (value) await _engine.ensurePassphrase();
-    await _engine.setEnabled(value);
+    await _engine.setTransportEnabled(kind, value);
     _passphrase = await _engine.readPassphrase();
     notifyListeners();
   }
 
   Future<void> setCategory(SyncCategory category, bool value) =>
       _engine.setCategory(category, value);
-
-  Future<void> setTransportEnabled(String kind, bool value) =>
-      _engine.setTransportEnabled(kind, value);
 
   Future<void> setDeviceName(String value) => _engine.setDeviceName(value);
 

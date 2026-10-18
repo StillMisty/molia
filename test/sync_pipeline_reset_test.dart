@@ -25,7 +25,7 @@ void main() {
     );
     await state.init();
     await state.writePassphrase(passphrase);
-    await state.setEnabled(true);
+    await state.setTransportEnabled(SyncTransportKind.lan, true);
   });
 
   test('serveJournal：对端游标超前本机头部（日志已重置）→ 回全量快照', () async {

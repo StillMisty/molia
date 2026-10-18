@@ -84,7 +84,7 @@ jobs:
           echo "ANDROID_NDK_HOME=$ANDROID_HOME/ndk/$ndk_version" >> "$GITHUB_ENV"
       - uses: subosito/flutter-action@v2
         with:
-          flutter-version: 3.47.6
+          flutter-version: 3.47.7
           channel: stable
           cache: true
       - name: 还原签名（Secrets，见 .agents/skills/molia-release/SKILL.md）
@@ -162,7 +162,7 @@ jobs:
       - uses: actions/checkout@v7
       - uses: subosito/flutter-action@v2
         with:
-          flutter-version: 3.47.6
+          flutter-version: 3.47.7
           channel: stable
           cache: true
       - name: pub get
@@ -215,7 +215,7 @@ jobs:
           sudo apt-get install -y --no-install-recommends libgtk-3-dev libx11-dev libxi-dev ninja-build libglu1-mesa
       - uses: subosito/flutter-action@v2
         with:
-          flutter-version: 3.47.6
+          flutter-version: 3.47.7
           channel: stable
           cache: true
       - name: pub get
@@ -250,7 +250,7 @@ jobs:
       - uses: actions/checkout@v7
       - uses: subosito/flutter-action@v2
         with:
-          flutter-version: 3.47.6
+          flutter-version: 3.47.7
           channel: stable
           cache: true
       - name: pub get

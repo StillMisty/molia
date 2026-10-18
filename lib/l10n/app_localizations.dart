@@ -3884,24 +3884,6 @@ abstract class AppLocalizations {
   /// **'Playlists, sources, settings and credentials'**
   String get settingsSyncItemSubtitle;
 
-  /// No description provided for @syncGeneralSection.
-  ///
-  /// In en, this message translates to:
-  /// **'Sync'**
-  String get syncGeneralSection;
-
-  /// No description provided for @syncEnabledTitle.
-  ///
-  /// In en, this message translates to:
-  /// **'Enable sync'**
-  String get syncEnabledTitle;
-
-  /// No description provided for @syncEnabledSubtitle.
-  ///
-  /// In en, this message translates to:
-  /// **'Exchange data with devices that share your passphrase'**
-  String get syncEnabledSubtitle;
-
   /// No description provided for @syncPairingSection.
   ///
   /// In en, this message translates to:
@@ -4293,6 +4275,12 @@ abstract class AppLocalizations {
   /// **'Transport'**
   String get syncTransportSection;
 
+  /// No description provided for @syncTransportAllOffHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Sync does not run while both transports are off — turn one on to start exchanging data.'**
+  String get syncTransportAllOffHint;
+
   /// No description provided for @syncLanTitle.
   ///
   /// In en, this message translates to:
@@ -4404,7 +4392,7 @@ abstract class AppLocalizations {
   /// No description provided for @syncAdvancedSubtitle.
   ///
   /// In en, this message translates to:
-  /// **'Device name, passphrase, addresses and transports'**
+  /// **'Device name, passphrase, and network addresses'**
   String get syncAdvancedSubtitle;
 
   /// No description provided for @syncPeersSection.

@@ -29,7 +29,7 @@ void main() {
     );
     await state.init();
     await state.writePassphrase(passphrase);
-    await state.setEnabled(true);
+    await state.setTransportEnabled('lan', true);
     transport = FakeSyncTransport();
     adapter = RecordingAdapter();
   });

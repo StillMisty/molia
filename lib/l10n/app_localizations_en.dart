@@ -2116,16 +2116,6 @@ class AppLocalizationsEn extends AppLocalizations {
       'Playlists, sources, settings and credentials';
 
   @override
-  String get syncGeneralSection => 'Sync';
-
-  @override
-  String get syncEnabledTitle => 'Enable sync';
-
-  @override
-  String get syncEnabledSubtitle =>
-      'Exchange data with devices that share your passphrase';
-
-  @override
   String get syncPairingSection => 'Pair with a device';
 
   @override
@@ -2350,6 +2340,10 @@ class AppLocalizationsEn extends AppLocalizations {
   String get syncTransportSection => 'Transport';
 
   @override
+  String get syncTransportAllOffHint =>
+      'Sync does not run while both transports are off — turn one on to start exchanging data.';
+
+  @override
   String get syncLanTitle => 'LAN direct';
 
   @override
@@ -2407,7 +2401,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get syncAdvancedSubtitle =>
-      'Device name, passphrase, addresses and transports';
+      'Device name, passphrase, and network addresses';
 
   @override
   String get syncPeersSection => 'Devices';
