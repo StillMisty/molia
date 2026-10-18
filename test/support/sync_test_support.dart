@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:molia/data/settings/settings_secret_store.dart';
+import 'package:molia/data/sync/sync_journal.dart';
 import 'package:molia/data/sync/sync_stamp.dart';
 import 'package:molia/domain/models/device_sync.dart';
 import 'package:molia/domain/ports/library_sync_store.dart';
@@ -164,8 +165,12 @@ class FakeSyncTransport implements SyncTransport {
   @override
   bool get servesLiveSnapshot => true;
 
+  /// start 被调用的次数（验证幂等：重复调用不重启传输）。
+  int startCount = 0;
+
   @override
   Future<void> start() async {
+    startCount++;
     _running = true;
   }
 
@@ -234,4 +239,52 @@ class FakeSyncTransport implements SyncTransport {
 
   /// 模拟对端主动推送。
   void emitIncoming(SyncEnvelope envelope) => _incoming.add(envelope);
+}
+
+/// 可控 head / base 的日志替身（重置 = 头部归零）。
+class FakeJournalStore implements SyncJournalStore {
+  FakeJournalStore({required this.head});
+
+  int head;
+  int base = 0;
+  int snapshot = -1;
+
+  @override
+  Future<int> headSeq() async => head;
+
+  @override
+  Future<int> baseSeq() async => base;
+
+  @override
+  Future<int> snapshotSeq() async => snapshot;
+
+  @override
+  Future<SyncJournalStats> stats() async => SyncJournalStats(
+        headSeq: head,
+        baseSeq: base,
+        snapshotSeq: snapshot,
+        entries: head - base,
+        bytes: 0,
+        oldestAt: 0,
+      );
+
+  @override
+  Future<List<SyncJournalEntry>> window({int since = -1, int limit = 0}) async =>
+      const [];
+
+  @override
+  Future<int> windowBytes({int since = -1}) async => 0;
+
+  @override
+  Future<void> markSnapshotBuilt(int seq) async {
+    snapshot = seq;
+  }
+
+  @override
+  Future<int> compact({
+    required int minAck,
+    required int coverage,
+    int? nowMs,
+  }) async =>
+      base;
 }

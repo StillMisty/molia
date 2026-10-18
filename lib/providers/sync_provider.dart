@@ -263,6 +263,9 @@ class SyncProvider extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// 启动已启用的传输（首帧后调用；幂等）。
+  Future<void> startTransports() => _engine.startTransports();
+
   Future<void> setEnabled(bool value) async {
     if (value) await _engine.ensurePassphrase();
     await _engine.setEnabled(value);

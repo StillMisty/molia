@@ -311,6 +311,28 @@ void main() {
     expect(prefs.getString('theme_mode'), isNull);
   });
 
+  test('装配不启动传输：首帧后的 startTransports 才起（权限门不挡首帧）', () async {
+    final fresh = SyncEngine(
+      state: state,
+      stamps: state.stampIssuer,
+      adapters: const [],
+      transports: {'lan': transport},
+      journal: FakeJournalStore(head: 0),
+      clock: () => DateTime.fromMillisecondsSinceEpoch(7000),
+    );
+    addTearDown(fresh.dispose);
+
+    await fresh.init();
+    expect(transport.isRunning, isFalse, reason: '装配不触发权限门 / 套接字绑定');
+
+    await fresh.startTransports();
+    expect(transport.isRunning, isTrue);
+    // 幂等：重复调用不重启。
+    final started = transport.startCount;
+    await fresh.startTransports();
+    expect(transport.startCount, started);
+  });
+
   test('传输关闭时不启动也不拉取', () async {
     await state.setTransportEnabled('lan', false);
     await engine.setEnabled(false);
