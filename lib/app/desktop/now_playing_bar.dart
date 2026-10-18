@@ -382,6 +382,8 @@ class _BarSeekSliderState extends State<_BarSeekSlider> {
         durationMs: state.durationMs,
         isPlaying: state.isPlaying,
         hasTrack: state.hasTrack,
+        // 底栏版式：时间与条同行（底栏横向与传输键 / 右区共享，另起一行会顶高整条）。
+        timeLabels: SeekTimeLabels.inline,
       ),
     );
   }

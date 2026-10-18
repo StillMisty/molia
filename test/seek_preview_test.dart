@@ -141,6 +141,7 @@ void main() {
       WidgetTester tester, {
       bool isPlaying = true,
       bool hasTrack = true,
+      SeekTimeLabels timeLabels = SeekTimeLabels.inline,
     }) {
       return tester.pumpWidget(
         MaterialApp(
@@ -151,6 +152,7 @@ void main() {
               durationMs: 30000,
               isPlaying: isPlaying,
               hasTrack: hasTrack,
+              timeLabels: timeLabels,
             ),
           ),
         ),
@@ -203,6 +205,25 @@ void main() {
       await pumpBar(tester);
       expect(find.text('0:05'), findsOneWidget);
       expect(find.text('0:30'), findsOneWidget);
+    });
+
+    testWidgets('below 档：时间居中于进度条左右端点下方', (tester) async {
+      await pumpBar(tester, timeLabels: SeekTimeLabels.below);
+      final slider = tester.getRect(find.byType(M3ESlider));
+      final current = tester.getRect(find.text('0:05'));
+      final total = tester.getRect(find.text('0:30'));
+
+      // 居中于端点：标签中心对齐条的左右边界（各有一半悬在条外）。
+      expect(current.center.dx, closeTo(slider.left, 0.5));
+      expect(total.center.dx, closeTo(slider.right, 0.5));
+      // 在条下方：标签落在可见轨道的下半侧之下。
+      expect(current.top, greaterThan(slider.center.dy));
+      expect(total.top, greaterThan(slider.center.dy));
+      // 不占高度：块高只算条（时间行是溢出绘制）。
+      expect(
+        tester.getSize(find.byType(SeekBar)).height,
+        tester.getSize(find.byType(M3ESlider)).height,
+      );
     });
   });
 }
