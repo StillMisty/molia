@@ -43,14 +43,18 @@ CI 的 Flutter 版本固定 `3.47.6`、JDK 26、Android NDK `30.0.16248370`，
 2. pub 源：`pubspec.lock` 锁定 `pub.flutter-io.cn`，工作流统一设置
    `PUB_HOSTED_URL=https://pub.flutter-io.cn` 保持同源（否则 lock 会被改写）。
 
+3. 发布 tag 的 GPG 签名：`git tag -s` 需要本机有 GPG 私钥，且公钥已上传到 GitHub
+   （Settings → SSH and GPG keys），Release 页才会显示 Verified。
+   `tag.gpgsign` / `commit.gpgsign` 只作用于附注标签与提交，所以发布命令始终显式写 `-s`。
+
 ## 4. 发布流程
 
 ```bash
 # 1. 改 pubspec.yaml 的 version（如 1.2.3+12 的版本前缀必须是 1.2.3）
 # 2. 走完 PR 校验后合并到 main
-# 3. 打 tag 并推送（稳定版 / 测试版二选一）
-git tag v1.2.3 && git push origin v1.2.3
-git tag v1.2.3-beta.1 && git push origin v1.2.3-beta.1
+# 3. 打 tag 并推送（稳定版 / 测试版二选一；必须 -s，轻量标签不签名）
+git tag -s v1.2.3 -m "Molia 1.2.3" && git push origin v1.2.3
+git tag -s v1.2.3-beta.1 -m "Molia 1.2.3-beta.1" && git push origin v1.2.3-beta.1
 ```
 
 发布产物（Release 资产）：
@@ -126,7 +130,7 @@ SHA256SUMS.txt
 python3 tool/ci/gen_update_manifest.py --help      # 清单脚本自测
 flutter test --no-pub test/update                  # 更新链路单测/组件测试
 # 试发：先推一个测试 tag（会真的创建 Release，确认后再发正式版）
-git tag v0.0.1-beta.1 && git push origin v0.0.1-beta.1
+git tag -s v0.0.1-beta.1 -m "Molia 0.0.1-beta.1" && git push origin v0.0.1-beta.1
 ```
 
 Windows 安装器可在 Windows 本机单独编译验证：
