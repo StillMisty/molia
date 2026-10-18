@@ -575,7 +575,7 @@ class _PlayerState extends State<Player> with TickerProviderStateMixin {
         value: mode,
         builder: (context, mode) => Icon(_getPlayModeIcon(mode)),
       ),
-      tooltip: label,
+      semanticLabel: label,
       onPressed: onPressed,
     );
   }
@@ -874,6 +874,7 @@ class _PlayerState extends State<Player> with TickerProviderStateMixin {
         _buildMiniIconControl(
           context,
           icon: Icons.skip_previous_rounded,
+          semanticLabel: _l10n(context).previousTrackTooltip,
           size: size,
           visualSize: visualSize,
           onPressed: () {
@@ -891,6 +892,7 @@ class _PlayerState extends State<Player> with TickerProviderStateMixin {
         _buildMiniIconControl(
           context,
           icon: Icons.skip_next_rounded,
+          semanticLabel: _l10n(context).nextTrackTooltip,
           size: size,
           visualSize: visualSize,
           onPressed: () {
@@ -905,6 +907,7 @@ class _PlayerState extends State<Player> with TickerProviderStateMixin {
   Widget _buildMiniIconControl(
     BuildContext context, {
     required IconData icon,
+    required String semanticLabel,
     required M3EIconButtonSize size,
     required Size visualSize,
     required VoidCallback onPressed,
@@ -915,6 +918,7 @@ class _PlayerState extends State<Player> with TickerProviderStateMixin {
       visualSize: visualSize,
       // 图标颜色交给 standard 变体默认值。
       icon: Icon(icon),
+      semanticLabel: semanticLabel,
       onPressed: onPressed,
     );
   }
@@ -926,6 +930,7 @@ class _PlayerState extends State<Player> with TickerProviderStateMixin {
     required M3EIconButtonSize size,
     required Size visualSize,
   }) {
+    final l10n = _l10n(context);
     return M3EIconButton(
       variant: M3EIconButtonVariant.standard,
       size: size,
@@ -937,6 +942,7 @@ class _PlayerState extends State<Player> with TickerProviderStateMixin {
           // 颜色交给 standard 变体默认值。
         ),
       ),
+      semanticLabel: isPlaying ? l10n.pause : l10n.play,
       onPressed: () {
         HapticsService.lightImpact();
         playback.togglePlayPause();
@@ -1055,7 +1061,7 @@ class _PlayerState extends State<Player> with TickerProviderStateMixin {
               M3EIconButton(
                 variant: M3EIconButtonVariant.standard,
                 size: M3EIconButtonSize.sm,
-                tooltip: l10n.previousTrackTooltip,
+                semanticLabel: l10n.previousTrackTooltip,
                 icon: const Icon(Icons.skip_previous_rounded),
                 onPressed: hasTrack
                     ? () {
@@ -1068,7 +1074,7 @@ class _PlayerState extends State<Player> with TickerProviderStateMixin {
               M3EIconButton(
                 variant: M3EIconButtonVariant.tonal,
                 size: M3EIconButtonSize.md,
-                tooltip: isPlaying ? l10n.pause : l10n.play,
+                semanticLabel: isPlaying ? l10n.pause : l10n.play,
                 icon: IconSwap<bool>(
                   value: isPlaying,
                   builder: (context, isPlaying) => Icon(
@@ -1086,7 +1092,7 @@ class _PlayerState extends State<Player> with TickerProviderStateMixin {
               M3EIconButton(
                 variant: M3EIconButtonVariant.standard,
                 size: M3EIconButtonSize.sm,
-                tooltip: l10n.nextTrackTooltip,
+                semanticLabel: l10n.nextTrackTooltip,
                 icon: const Icon(Icons.skip_next_rounded),
                 onPressed: hasTrack
                     ? () {
@@ -1155,7 +1161,7 @@ class _FavoriteButton extends StatelessWidget {
               : Theme.of(context).colorScheme.onSurfaceVariant,
         ),
       ),
-      tooltip: favorite ? l10n.favoriteRemove : l10n.favoriteAdd,
+      semanticLabel: favorite ? l10n.favoriteRemove : l10n.favoriteAdd,
       onPressed: () async {
         HapticsService.lightImpact();
         await library.toggleFavoriteTrack(track);

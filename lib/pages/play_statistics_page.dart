@@ -69,7 +69,7 @@ class _PlayStatisticsPageState extends State<PlayStatisticsPage> {
           M3EIconButton(
             variant: M3EIconButtonVariant.standard,
             icon: const Icon(Icons.ios_share_rounded),
-            tooltip: l10n.statsExport,
+            semanticLabel: l10n.statsExport,
             onPressed: _export,
           ),
           M3EMenu.entries(
@@ -77,7 +77,7 @@ class _PlayStatisticsPageState extends State<PlayStatisticsPage> {
             anchorBuilder: (context, open) => M3EIconButton(
               variant: M3EIconButtonVariant.standard,
               icon: const Icon(Icons.more_vert_rounded),
-              tooltip: l10n.statsClear,
+              semanticLabel: l10n.statsClear,
               onPressed: open,
             ),
             onSelected: (value) {

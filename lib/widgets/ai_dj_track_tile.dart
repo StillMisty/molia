@@ -124,7 +124,7 @@ class AiDjTrackTile extends StatelessWidget {
             TrackActionsMenu(
               compact: true,
               enabled: !busy,
-              tooltip: AppLocalizations.of(context)!.aiDjItemActions,
+              semanticLabel: AppLocalizations.of(context)!.aiDjItemActions,
               entries: actionMenu.entries,
               onSelected: actionMenu.onSelected,
             ),

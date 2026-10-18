@@ -105,8 +105,8 @@ class ShellChrome {
         M3EIconButton(
           variant: M3EIconButtonVariant.standard,
           onPressed: onOpenSettings,
-          // 顶栏不做悬浮提示（窗口控件区一排按钮，tooltip 反而吵）；
-          // 无障碍语义仍保留（icon-only 按钮的可访问名）。
+          // 图标按钮统一不做悬浮提示（口径见 docs/architecture.md §6
+          // 「按钮选型」）；这一排紧挨窗口控件，提示只会更吵，无障碍名保留。
           semanticLabel: l10n.settingsTitle,
           icon: const Icon(Icons.settings_rounded),
         ),

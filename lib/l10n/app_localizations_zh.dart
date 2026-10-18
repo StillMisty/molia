@@ -21,6 +21,9 @@ class AppLocalizationsZh extends AppLocalizations {
   String get cancel => '取消';
 
   @override
+  String get close => '关闭';
+
+  @override
   String playbackFailed(String error) {
     return '播放失败: $error';
   }
@@ -448,9 +451,6 @@ class AppLocalizationsZh extends AppLocalizations {
   String get nowPlayingSection => '正在播放';
 
   @override
-  String get upNextSection => '接下来';
-
-  @override
   String get searchLyrics => '搜索歌词';
 
   @override
@@ -716,6 +716,9 @@ class AppLocalizationsZh extends AppLocalizations {
   String sourcesScriptByAuthor(String author) {
     return 'by $author';
   }
+
+  @override
+  String get sourcesScriptActions => '音源脚本操作';
 
   @override
   String get sourcesEnable => '启用';

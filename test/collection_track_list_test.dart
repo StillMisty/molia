@@ -346,10 +346,10 @@ void main() {
       expect(actions[1].backgroundColor, scheme.error);
       expect(actions[1].foregroundColor, scheme.onError);
 
-      // 图标 tooltip 承担无障碍语义。
+      // 图标 semanticLabel 承担无障碍语义（提示气泡不做）。
       final icon = actions[0].icon;
-      expect(icon, isA<Tooltip>());
-      expect((icon as Tooltip).message, '加入列表');
+      expect(icon, isA<Icon>());
+      expect((icon as Icon).semanticLabel, '加入列表');
 
       actions[0].onPressed!();
       actions[1].onPressed!();

@@ -6,6 +6,8 @@ import 'package:material_3_expressive/material_3_expressive.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:motor/motor.dart';
 
+import '../l10n/app_localizations.dart';
+
 /// 响应式设计断点常量
 /// 用于在整个应用中统一响应式行为
 abstract class Breakpoints {
@@ -791,6 +793,10 @@ class ResponsiveNavigation {
                   M3EIconButton(
                     variant: M3EIconButtonVariant.standard,
                     icon: const Icon(Icons.close_rounded),
+                    // 弹层头部是通用件，l10n 可能未注册（测试 / 独立挂载）。
+                    semanticLabel: (AppLocalizations.of(context) ??
+                            lookupAppLocalizations(const Locale('zh')))
+                        .close,
                     onPressed: () => Navigator.of(context).pop(),
                   ),
                 if (title != null)

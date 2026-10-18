@@ -122,6 +122,12 @@ abstract class AppLocalizations {
   /// **'Cancel'**
   String get cancel;
 
+  /// No description provided for @close.
+  ///
+  /// In en, this message translates to:
+  /// **'Close'**
+  String get close;
+
   /// No description provided for @playbackFailed.
   ///
   /// In en, this message translates to:
@@ -950,12 +956,6 @@ abstract class AppLocalizations {
   /// **'Now Playing'**
   String get nowPlayingSection;
 
-  /// No description provided for @upNextSection.
-  ///
-  /// In en, this message translates to:
-  /// **'Up Next'**
-  String get upNextSection;
-
   /// No description provided for @searchLyrics.
   ///
   /// In en, this message translates to:
@@ -1453,6 +1453,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'by {author}'**
   String sourcesScriptByAuthor(String author);
+
+  /// No description provided for @sourcesScriptActions.
+  ///
+  /// In en, this message translates to:
+  /// **'Source script actions'**
+  String get sourcesScriptActions;
 
   /// No description provided for @sourcesEnable.
   ///

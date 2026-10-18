@@ -260,7 +260,7 @@ class _BarFavoriteButton extends StatelessWidget {
               : Theme.of(context).colorScheme.onSurfaceVariant,
         ),
       ),
-      tooltip: favorite ? l10n.favoriteRemove : l10n.favoriteAdd,
+      semanticLabel: favorite ? l10n.favoriteRemove : l10n.favoriteAdd,
       onPressed: () async {
         HapticsService.lightImpact();
         await library.toggleFavoriteTrack(track);
@@ -288,7 +288,7 @@ class _BarControls extends StatelessWidget {
       children: [
         M3EIconButton(
           variant: M3EIconButtonVariant.standard,
-          tooltip: l10n.previousTrackTooltip,
+          semanticLabel: l10n.previousTrackTooltip,
           icon: const Icon(Icons.skip_previous_rounded),
           onPressed: hasTrack
               ? () {
@@ -301,7 +301,7 @@ class _BarControls extends StatelessWidget {
           // 播放/暂停是这条底栏唯一的高亮按钮（tonal）：一屏一个视觉重点，
           // 与移动骨架顶栏的约定一致。
           variant: M3EIconButtonVariant.tonal,
-          tooltip: isPlaying ? l10n.pause : l10n.play,
+          semanticLabel: isPlaying ? l10n.pause : l10n.play,
           icon: IconSwap<bool>(
             value: isPlaying,
             builder: (context, isPlaying) => Icon(
@@ -317,7 +317,7 @@ class _BarControls extends StatelessWidget {
         ),
         M3EIconButton(
           variant: M3EIconButtonVariant.standard,
-          tooltip: l10n.nextTrackTooltip,
+          semanticLabel: l10n.nextTrackTooltip,
           icon: const Icon(Icons.skip_next_rounded),
           onPressed: hasTrack
               ? () {
@@ -419,7 +419,7 @@ class _BarActions extends StatelessWidget {
               },
             ),
           ),
-          tooltip: switch (mode) {
+          semanticLabel: switch (mode) {
             PlayMode.sequential => l10n.playModeSequential,
             PlayMode.shuffle => l10n.playModeShuffle,
             PlayMode.singleRepeat => l10n.playModeSingleRepeat,
@@ -436,7 +436,7 @@ class _BarActions extends StatelessWidget {
         M3EIconButton(
           key: DesktopNowPlayingBar.openQueueKey,
           variant: M3EIconButtonVariant.standard,
-          tooltip: l10n.playerBarQueue,
+          semanticLabel: l10n.playerBarQueue,
           icon: const Icon(Icons.queue_music_rounded),
           // 「跳播放页 + 切队列 tab」在任何窗口宽下都成立：按钮不置灰。
           onPressed: onOpenQueue,

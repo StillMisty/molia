@@ -216,6 +216,9 @@ class _LibraryState extends State<Library> {
                   if (multiChannel) const SizedBox(width: 12),
                   Expanded(
                     child: M3ETabs(
+                      // 次 tab：图标在文案左侧同一行、行高 48；渠道下拉框与
+                      // 内容页共用这一行分组切换（不是顶层导航）。
+                      variant: M3ETabsVariant.secondary,
                       tabs: [
                         for (final tab in visibleTabs) _tabSpec(l10n, tab),
                       ],

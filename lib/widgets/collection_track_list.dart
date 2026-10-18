@@ -312,7 +312,8 @@ class CollectionRowAction {
 /// [SwipeRevealRow]）；桌面端右键菜单条目直接取动作描述，不经过这里
 /// （菜单只要图标 + 文案，不需要配色）。
 ///
-/// 图标用 tooltip 承担无障碍语义：纯图标在窄胶囊里不容易自解释。
+/// 图标用 `semanticLabel` 承担无障碍语义：纯图标在窄胶囊里不容易自解释，
+/// 提示气泡则不做（口径见 docs/architecture.md §6「按钮选型」）。
 List<M3EListSwipeAction> collectionSwipeActions(
   BuildContext context,
   List<CollectionRowAction> actions,
@@ -321,7 +322,7 @@ List<M3EListSwipeAction> collectionSwipeActions(
   return [
     for (final action in actions)
       M3EListSwipeAction(
-        icon: Tooltip(message: action.label, child: Icon(action.icon)),
+        icon: Icon(action.icon, semanticLabel: action.label),
         isPrimary: action.destructive,
         backgroundColor: action.destructive ? scheme.error : null,
         foregroundColor: action.destructive ? scheme.onError : null,

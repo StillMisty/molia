@@ -93,7 +93,7 @@ class _SongCommentsPageState extends State<SongCommentsPage> {
         actions: [
           M3EIconButton(
             variant: M3EIconButtonVariant.standard,
-            tooltip: l10n.commentsRefresh,
+            semanticLabel: l10n.commentsRefresh,
             icon: const Icon(Icons.refresh_rounded),
             onPressed:
                 provider.isSupported ? () => unawaited(provider.refresh()) : null,
@@ -106,6 +106,8 @@ class _SongCommentsPageState extends State<SongCommentsPage> {
           Padding(
             padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
             child: M3ETabs(
+              // 次 tab：图标在文案左侧同一行、行高 48（详情页内的分组切换）。
+              variant: M3ETabsVariant.secondary,
               tabs: [
                 M3ETab(
                   icon: const Icon(Icons.local_fire_department_rounded),

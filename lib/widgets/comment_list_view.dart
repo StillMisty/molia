@@ -130,7 +130,7 @@ class CommentListView extends StatelessWidget {
               key: const Key('commentsLoadMoreRetry'),
               variant: M3EIconButtonVariant.standard,
               icon: const Icon(Icons.refresh_rounded),
-              tooltip: l10n.retry,
+              semanticLabel: l10n.retry,
               onPressed: () => unawaited(provider.loadMore()),
             ),
           ],

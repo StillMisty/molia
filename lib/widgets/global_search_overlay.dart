@@ -203,17 +203,17 @@ class _GlobalSearchOverlayState extends State<GlobalSearchOverlay> {
       // 结果面板贴合内容高度：默认 2/3 屏会在结果少时拖出一大片空白。
       shrinkWrap: true,
       viewHintText: l10n.searchHint,
-      // 视图头部自绘关闭键：包内默认返回键的 tooltip 是硬编码英文
+      // 视图头部自绘关闭键：包内默认返回键会弹硬编码英文提示
       // （M3ESearchConstants.backButtonTooltip），不符「文案必须走 l10n」。
       // 图标沿用返回箭头（包内语义）：右缘的自绘清除键才是 X，两个 X 并排
       // 会分不清「关面板」与「清关键词」。
       viewLeading: M3EIconButton(
         variant: M3EIconButtonVariant.standard,
         icon: const Icon(Icons.arrow_back_rounded),
-        tooltip: l10n.searchClose,
+        semanticLabel: l10n.searchClose,
         onPressed: () => _controller.closeView(null),
       ),
-      // 清除键自绘：包内置的是英文硬编码 tooltip，且清除时不回调 onChanged
+      // 清除键自绘：包内置键会弹英文硬编码提示，且清除时不回调 onChanged
       // （输入框与 provider 同步，需自行把空词同步过去）。
       showViewClearButton: false,
       viewTrailing: [_SearchClearAction(controller: _controller)],
@@ -238,9 +238,9 @@ class _GlobalSearchOverlayState extends State<GlobalSearchOverlay> {
   }
 }
 
-/// 视图头部的清除键：本地化 tooltip + 清空后把空词同步给 provider。
+/// 视图头部的清除键：本地化无障碍名 + 清空后把空词同步给 provider。
 ///
-/// 自绘的原因同 `app_search_bar.dart`：包内置的清除键 tooltip 是英文硬编码，
+/// 自绘的原因同 `app_search_bar.dart`：包内置键会弹英文硬编码提示，
 /// 且清除只 `controller.clear()`、不触发 onChanged，面板会停留在上一轮结果上。
 class _SearchClearAction extends StatelessWidget {
   const _SearchClearAction({required this.controller});
@@ -257,7 +257,7 @@ class _SearchClearAction extends StatelessWidget {
         return M3EIconButton(
           variant: M3EIconButtonVariant.standard,
           icon: const Icon(Icons.close_rounded),
-          tooltip: l10n.clearSearch,
+          semanticLabel: l10n.clearSearch,
           onPressed: () {
             controller.clear();
             context.read<SearchProvider>().updateSearchQuery('');

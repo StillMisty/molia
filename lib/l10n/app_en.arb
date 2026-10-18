@@ -4,6 +4,7 @@
   "queueTab": "QUEUE",
   "lyricsTab": "LYRICS",
   "cancel": "Cancel",
+  "close": "Close",
   "playbackFailed": "Playback failed: {error}",
   "@playbackFailed": {
     "placeholders": {
@@ -187,7 +188,6 @@
   "loadingGenerating": "Generating poster...",
   "currentQueueEmpty": "Current queue is empty",
   "nowPlayingSection": "Now Playing",
-  "upNextSection": "Up Next",
   "searchLyrics": "Search Lyrics",
   "noCurrentTrackPlaying": "No track currently playing",
   "cannotGetTrackInfo": "Cannot get current track information",
@@ -323,6 +323,7 @@
       }
     }
   },
+  "sourcesScriptActions": "Source script actions",
   "sourcesEnable": "Enable",
   "sourcesDisable": "Disable",
   "sourcesActivated": "Source enabled: {name}",

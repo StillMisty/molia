@@ -200,7 +200,7 @@ class _DiscoverTracksPageState extends State<DiscoverTracksPage> {
             if (widget.importable && _detail != null && state.items.isNotEmpty)
               M3EIconButton(
                 variant: M3EIconButtonVariant.standard,
-                tooltip: _l10n(context).playlistImportToMine,
+                semanticLabel: _l10n(context).playlistImportToMine,
                 icon: const Icon(Icons.download_rounded),
                 onPressed: _importPlaylist,
               ),

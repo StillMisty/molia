@@ -416,7 +416,7 @@ void main() {
               onTap: () => rowTaps++,
               trailing: M3EIconButton(
                 variant: M3EIconButtonVariant.standard,
-                tooltip: 'actions',
+                semanticLabel: 'actions',
                 icon: const Icon(Icons.more_vert_rounded),
                 onPressed: () => actionTaps++,
               ),
@@ -449,7 +449,7 @@ void main() {
               onSecondaryTap: secondaryTaps.add,
               trailing: M3EIconButton(
                 variant: M3EIconButtonVariant.standard,
-                tooltip: 'actions',
+                semanticLabel: 'actions',
                 icon: const Icon(Icons.more_vert_rounded),
                 onPressed: () => actionTaps++,
               ),

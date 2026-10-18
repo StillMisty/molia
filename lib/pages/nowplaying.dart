@@ -94,6 +94,10 @@ class _NowPlayingState extends State<NowPlaying>
   /// 桌面版式右侧分页：0 = 队列、1 = 歌词、2 = 歌曲信息。
   late int _desktopTab;
 
+  /// 桌面版式右栏内容与 tab 栏之间的间距（M3E：tab 栏与内容同为 16 口径，
+  /// 内容左右边距由各内容组件自持）。
+  static const double _desktopContentTopPadding = 16;
+
   // 页面与屏幕尺寸缓存：避免 PageView 每次重建导致歌词/队列滚动状态丢失。
   List<PageData>? _cachedPages;
   bool? _cachedIsLargeScreen;
@@ -502,7 +506,8 @@ class _NowPlayingState extends State<NowPlaying>
               children: [
                 Padding(
                   // 次 tab（图标 + 文案一行）：行高由 M3ETabTheme.height（48）
-                  // 决定，纵向不再叠加自拟内边距。
+                  // 决定，纵向不再叠加自拟内边距；左右 16 与下方内容同一
+                  // 内容边距（M3E 口径）。
                   padding: const EdgeInsets.symmetric(horizontal: 16),
                   child: M3ETabs(
                     // 次 tab：图标在文案左侧、同一行排布（桌面右栏是内容区里
@@ -532,9 +537,13 @@ class _NowPlayingState extends State<NowPlaying>
                     onTabSelected: _selectDesktopTab,
                     children: [
                       RepaintBoundary(
-                        // 当前曲目由左侧播放器承载，队列页只列「接下来」
+                        // 当前曲目由左侧播放器承载，队列页只列其后曲目
                         // （includeCurrent 保持 false，不重复展示）。
-                        child: QueueDisplay(controller: _queueScrollController),
+                        child: QueueDisplay(
+                          controller: _queueScrollController,
+                          // tab 栏与内容之间留 16（M3E 口径）。
+                          topPadding: _desktopContentTopPadding,
+                        ),
                       ),
                       RepaintBoundary(
                         child: LyricsWidget(
@@ -544,8 +553,12 @@ class _NowPlayingState extends State<NowPlaying>
                         ),
                       ),
                       RepaintBoundary(
-                        // 分页左右没有圆点过渡带，顶部留白交回内容自带间距。
-                        child: TrackInfoView(controller: _infoScrollController),
+                        // 分页左右没有圆点过渡带，顶部留白按 tab 栏下的内容间距；
+                        // 内容左右边距由内容自带（16，与 tab 栏对齐）。
+                        child: TrackInfoView(
+                          controller: _infoScrollController,
+                          topPadding: _desktopContentTopPadding,
+                        ),
                       ),
                     ],
                   ),
