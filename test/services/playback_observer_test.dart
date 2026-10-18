@@ -4,6 +4,7 @@ import 'package:molia/domain/models/library.dart';
 import 'package:molia/domain/models/playback.dart';
 import 'package:molia/domain/models/track.dart';
 import 'package:molia/managers/image_preload_manager.dart';
+import 'package:molia/services/app_presence.dart';
 import 'package:molia/services/playback_observer.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -74,6 +75,7 @@ void main() {
   PlaybackObserver buildObserver({
     Future<String?> Function(Track track)? artworkResolver,
     GlobalKey<NavigatorState>? navigatorKey,
+    AppPresence? presence,
   }) {
     log = [];
     widgetPayloads = [];
@@ -105,6 +107,7 @@ void main() {
         log.add('notify');
         notificationRequests++;
       },
+      presence: presence,
     )..attach();
   }
 
@@ -208,6 +211,37 @@ void main() {
 
     expect(libraryStore.history, hasLength(2));
     expect(widgetPayloads, hasLength(2));
+  });
+
+  testWidgets('后台期不预取封面；恢复后补一次', (tester) async {
+    final presence = AppPresence();
+    final navigatorKey = GlobalKey<NavigatorState>();
+    final observer = buildObserver(
+      navigatorKey: navigatorKey,
+      presence: presence,
+    );
+    addTearDown(observer.dispose);
+    await tester.pumpWidget(MaterialApp(
+      navigatorKey: navigatorKey,
+      home: const SizedBox.shrink(),
+    ));
+    await tester.pump();
+
+    // 托盘隐藏期间切歌：历史 / 小组件照常，封面预取被门控拦下。
+    presence.markTrayHidden();
+    final item = track('a', artwork: 'https://img.example/a.jpg');
+    backend.emit(snapshot(item));
+    await tester.pump();
+    await tester.pump();
+    expect(notificationRequests, 1);
+    expect(preloader.preloaded, isEmpty);
+
+    // 恢复：等休眠后的重建帧落定，补一次预取。
+    presence.markVisible();
+    await tester.pump();
+    await tester.pump();
+    expect(preloader.preloaded, hasLength(1));
+    expect(preloader.preloaded.single.current?.id.uri, 'fake:a');
   });
 }
 

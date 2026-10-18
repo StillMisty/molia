@@ -24,7 +24,8 @@ import 'dart:async';
 import 'package:flutter/foundation.dart'
     show TargetPlatform, defaultTargetPlatform;
 import 'package:flutter/services.dart' show MethodChannel;
-import 'package:flutter/widgets.dart' show GlobalKey, NavigatorState;
+import 'package:flutter/widgets.dart'
+    show GlobalKey, NavigatorState, WidgetsBinding;
 import 'package:logging/logging.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -34,6 +35,7 @@ import '../domain/models/track.dart';
 import '../domain/ports/library_store.dart';
 import '../domain/ports/playback_facade.dart';
 import '../managers/image_preload_manager.dart';
+import 'app_presence.dart';
 import 'data_saver_service.dart';
 import 'notification_permission.dart';
 
@@ -84,6 +86,7 @@ class PlaybackObserver {
     Future<String?> Function(Track track)? artworkResolver,
     GlobalKey<NavigatorState>? navigatorKey,
     Future<void> Function()? requestNotificationPermission,
+    AppPresence? presence,
   })  : _facade = facade,
         _dataSaver = dataSaver,
         _libraryRepository = libraryRepository,
@@ -93,7 +96,8 @@ class PlaybackObserver {
         _artworkResolver = artworkResolver,
         _navigatorKey = navigatorKey,
         _requestNotificationPermission = requestNotificationPermission ??
-            NotificationPermission.ensureRequested {
+            NotificationPermission.ensureRequested,
+        _presence = presence ?? AppPresence.instance {
     _ready = _loadLastPlayedTrackInfo();
   }
 
@@ -121,6 +125,9 @@ class PlaybackObserver {
 
   /// 组合根注入（封面预加载需要 BuildContext）。
   final GlobalKey<NavigatorState>? _navigatorKey;
+
+  /// 窗口存在态：后台期不预取封面；恢复后补一次（见 [_onPresenceChanged]）。
+  final AppPresence _presence;
 
   /// 首次真正出声请求通知权限（测试注入记录器）。
   final Future<void> Function() _requestNotificationPermission;
@@ -155,6 +162,7 @@ class PlaybackObserver {
     if (_attached) return;
     _attached = true;
     _facade.snapshot.addListener(_onSnapshot);
+    _presence.addListener(_onPresenceChanged);
     _onSnapshot();
   }
 
@@ -163,6 +171,21 @@ class PlaybackObserver {
     if (!_attached) return;
     _attached = false;
     _facade.snapshot.removeListener(_onSnapshot);
+    _presence.removeListener(_onPresenceChanged);
+  }
+
+  /// 回到可见：补一次封面预取。
+  ///
+  /// 托盘隐藏期间界面处于休眠，唤醒后的页面重建发生在下一帧——
+  /// [_triggerImagePreload] 依赖 navigator context，因此必须等这一帧建完；
+  /// 提前置位 `visible` 时帧可能还是停的，先 `ensureVisualUpdate` 把帧排上。
+  void _onPresenceChanged() {
+    if (!_presence.isVisible) return;
+    WidgetsBinding.instance.ensureVisualUpdate();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!_attached) return;
+      _triggerImagePreload();
+    });
   }
 
   /// 冷启动恢复态：把恢复曲目信息作为「最后播放」展示（不落盘）。
@@ -301,8 +324,11 @@ class PlaybackObserver {
   /// 触发播放相关图片的智能预加载。
   ///
   /// 使用 ImagePreloadManager 预加载当前曲目、下一首、以及队列中的封面图片。
-  /// 省流模式阻止封面网络请求时直接跳过（避免注定失败的下载与日志噪音）。
+  /// 省流模式阻止封面网络请求时直接跳过（避免注定失败的下载与日志噪音）；
+  /// 窗口在后台（托盘 / 最小化）时同样跳过——解码结果没有展示面，只白占内存，
+  /// 恢复后由 [_onPresenceChanged] 补一次。
   void _triggerImagePreload() {
+    if (_presence.isBackgrounded) return;
     if (_dataSaver?.blockNetworkArtwork ?? false) return;
     final context = _navigatorKey?.currentContext;
     if (context == null || !context.mounted) return;

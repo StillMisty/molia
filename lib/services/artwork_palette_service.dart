@@ -11,6 +11,7 @@ import 'package:material_ui/material_ui.dart';
 import '../managers/artwork_cache.dart';
 import '../theme/scheme_builder.dart';
 import '../utils/local_image_provider.dart';
+import 'app_presence.dart';
 
 /// 单张图像的取色结果：种子色 + 双亮度方案（一次提取，多处复用）。
 class ArtworkPalette {
@@ -270,24 +271,36 @@ class ArtworkPaletteService {
 /// - 有封面：等待 [settleDelay]（连读切歌只取最后一首）后提取；提取失败
 ///   保持现色；
 /// - 无封面：通知 [onCleared] 回退基础配色（与「有封面才覆盖」语义一致）；
-/// - 结果过期（期间又切歌）直接丢弃。
+/// - 结果过期（期间又切歌）直接丢弃；
+/// - 窗口在后台（托盘 / 最小化）：只记 URL 不取色——取色要解码封面，后台
+///   没有任何展示面；恢复后补一次（LRU 命中时等于零成本）。
 class ArtworkThemeSync {
   ArtworkThemeSync({
     required Future<ArtworkPalette?> Function(String url) load,
     required void Function(ArtworkPalette palette) onPalette,
     required void Function() onCleared,
     Duration settleDelay = const Duration(milliseconds: 500),
+    AppPresence? presence,
   })  : _load = load,
         _onPalette = onPalette,
         _onCleared = onCleared,
-        _settleDelay = settleDelay;
+        _settleDelay = settleDelay,
+        _presence = presence ?? AppPresence.instance {
+    _presence.addListener(_onPresenceChanged);
+  }
 
   final Future<ArtworkPalette?> Function(String url) _load;
   final void Function(ArtworkPalette palette) _onPalette;
   final void Function() _onCleared;
   final Duration _settleDelay;
+  final AppPresence _presence;
 
   String? _currentUrl;
+
+  /// 最近一次成功取色并下发的 URL：后台期只记 URL 不取色，恢复时用它去重
+  /// （同一 URL 不重复提取、不重复下发）。
+  String? _appliedUrl;
+
   Timer? _timer;
   bool _disposed = false;
 
@@ -300,20 +313,34 @@ class ArtworkThemeSync {
     _timer?.cancel();
     _timer = null;
     if (normalized == null) {
+      _appliedUrl = null;
       _onCleared();
       return;
     }
+    if (_presence.isBackgrounded) return;
     _timer = Timer(_settleDelay, () => _request(normalized));
+  }
+
+  /// 回到可见：对当前封面补一次取色（最后一次切歌可能发生在后台期）。
+  void _onPresenceChanged() {
+    if (_disposed || !_presence.isVisible) return;
+    final url = _currentUrl;
+    if (url == null || url == _appliedUrl) return;
+    _timer?.cancel();
+    _timer = null;
+    unawaited(_request(url));
   }
 
   Future<void> _request(String url) async {
     final palette = await _load(url);
     if (_disposed || _currentUrl != url || palette == null) return;
+    _appliedUrl = url;
     _onPalette(palette);
   }
 
   void dispose() {
     _disposed = true;
+    _presence.removeListener(_onPresenceChanged);
     _timer?.cancel();
     _timer = null;
   }

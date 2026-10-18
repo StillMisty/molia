@@ -44,6 +44,7 @@ import '../widgets/shell_reselect.dart';
 import '../widgets/shell_page_visibility.dart';
 import 'desktop/desktop_shell.dart';
 import 'shell_chrome.dart';
+import 'tray_dormant_gate.dart';
 
 /// 当前曲目的封面 URL（空串视同无封面）：顶栏真身与共享飞行副本同一份取值。
 String? _coverUrlOf(PlaybackProvider provider) =>
@@ -1273,6 +1274,15 @@ class _MyThemedAppState extends State<MyThemedApp> with WidgetsBindingObserver {
 
   @override
   Widget build(BuildContext context) {
+    // 外层 TrayDormantGate：关闭到托盘时整棵界面（含 MaterialApp）换成
+    // 休眠占位，恢复时重建（见 tray_dormant_gate.dart）。
+    return TrayDormantGate(
+      color: context.read<ThemeProvider>().colorScheme.surface,
+      child: _buildApp(context),
+    );
+  }
+
+  Widget _buildApp(BuildContext context) {
     // ThemeProvider（主题模式 + 基础配色 + 封面覆盖 + 纯黑）是唯一主题来源：
     // Selector 提升到壳外，colorScheme 变化时重建整个 M3EMaterialApp，
     // 同时刷新 material_ui ThemeData 与 M3EThemeData。

@@ -21,6 +21,13 @@ String? desktopAudioInitError;
 void initDesktopAudioIfNeeded() {
   if (Platform.isWindows || Platform.isLinux) {
     try {
+      // mpv 解复用缓存上限：just_audio_media_kit 把同一个值同时设给
+      // `demuxer-max-bytes` 与 `demuxer-max-back-bytes`，缺省 32 MiB 意味着
+      // 一首流播曲目最多占 ~64 MiB 内存。音乐场景 16 MiB（320kbps ≈ 6.7
+      // 分钟、无损 ≈ 2 分钟）已足够抗抖动，且只影响「当前流播」的内存缓冲：
+      // 下载 / 下一首预取走独立 HTTP 直写磁盘，不受此值影响（见
+      // docs/memory.md）。
+      JustAudioMediaKit.bufferSize = 16 * 1024 * 1024;
       JustAudioMediaKit.ensureInitialized();
       desktopAudioAvailable = true;
       desktopAudioInitError = null;

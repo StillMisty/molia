@@ -7,6 +7,7 @@ import 'package:flutter/foundation.dart' show SynchronousFuture;
 import 'package:material_ui/material_ui.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:molia/managers/artwork_cache.dart';
+import 'package:molia/services/app_presence.dart';
 import 'package:molia/services/artwork_palette_service.dart';
 import 'package:molia/theme/scheme_builder.dart';
 
@@ -327,6 +328,44 @@ void main() {
       await pumpEventQueue();
       expect(applied, isEmpty);
       expect(cleared, 0);
+
+      sync.dispose();
+    });
+
+    test('后台期只记 URL 不取色；恢复后补一次且不重复应用', () async {
+      final presence = AppPresence();
+      final loaded = <String>[];
+      final applied = <ArtworkPalette>[];
+      final sync = ArtworkThemeSync(
+        load: (url) async {
+          loaded.add(url);
+          return paletteOf(Colors.green);
+        },
+        onPalette: applied.add,
+        onCleared: () {},
+        settleDelay: Duration.zero,
+        presence: presence,
+      );
+
+      // 托盘隐藏期间切歌：URL 记下、不触发解码取色。
+      presence.markTrayHidden();
+      sync.onArtworkChanged('a');
+      await pumpEventQueue();
+      expect(loaded, isEmpty);
+      expect(applied, isEmpty);
+
+      // 恢复：对当前封面补一次。
+      presence.markVisible();
+      await pumpEventQueue();
+      expect(loaded, ['a']);
+      expect(applied, hasLength(1));
+
+      // 已应用的 URL 不因后续存在态翻转重复取色（最小化→恢复）。
+      presence.markMinimized();
+      presence.markVisible();
+      await pumpEventQueue();
+      expect(loaded, ['a']);
+      expect(applied, hasLength(1));
 
       sync.dispose();
     });
