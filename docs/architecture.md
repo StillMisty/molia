@@ -224,9 +224,9 @@
 - **跨设备数据同步（可选，默认关闭）**：同步歌单 / 收藏 / 音源脚本与配置 /
   跟人走的设置 / 听歌统计 / 播放历史 / 上次播放会话 / AI DJ 与凭证。信任模型是
   **同步口令即信任根**（加入即完全互信，无逐项审批），快照整体加密：根密钥 =
-  PBKDF2(口令) 会话内一次派生（按口令缓存），帧密钥 = HKDF(根密钥, 随机帧盐)，
-  AES-256-GCM 认证（帧结构保留盐与迭代数，版本 1 帧仍可解密；帧与信任边界见
-  ADR-0003）。引擎（`lib/data/sync/sync_engine.dart`）一轮 = 各 `SyncAdapter`
+  PBKDF2(口令) 会话内一次派生（按口令缓存），帧密钥 = HKDF(根密钥, 帧 nonce)，
+  AES-256-GCM 认证；帧 = `magic + 版本 + nonce`，载荷是列式二进制，编解码与
+  加解密在 worker isolate 内执行（帧与信任边界见 ADR-0003 §1）。引擎（`lib/data/sync/sync_engine.dart`）一轮 = 各 `SyncAdapter`
   收集本地视图（按类别廉价指纹缓存：指纹未变不读行）→ `SyncTransport` 拉取
   变化对端（WebDAV 按 `getetag` / 局域网按探测应答的 `snapshotId` 跳过未变
   文件）→ 逐键 LWW 合并（版本三元组

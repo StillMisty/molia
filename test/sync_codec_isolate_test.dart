@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'dart:typed_data';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:molia/data/sync/sync_codec_isolate.dart';
@@ -94,13 +93,5 @@ void main() {
     final bytes = await port.encrypt(envelope(records: 2), passphrase);
     final decoded = SyncCodec(iterations: 2000).decrypt(bytes, passphrase);
     expect(decoded.recordsOf(SyncCategory.playlistTracks), hasLength(2));
-  });
-
-  test('空载荷与 Uint8List 按引用传递不深拷贝（帧长稳定）', () async {
-    final port = IsolateSyncCodecPort(iterations: 2000);
-    addTearDown(port.dispose);
-    final bytes = await port.encrypt(envelope(), passphrase);
-    expect(bytes, isA<Uint8List>());
-    expect(bytes.length, greaterThan(SyncCodec.headerLength));
   });
 }

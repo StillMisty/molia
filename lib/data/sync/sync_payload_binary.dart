@@ -1,9 +1,9 @@
 /// 列式二进制载荷（协议 v3 的线上格式）。
 ///
-/// 设计约束（首版即 v3，不留兼容包袱，见 ADR-0003 §1 修订）：
+/// 设计约束（协议只有 v3，无兼容分支，见 ADR-0003 §1）：
 /// - **自描述**：载荷内写「data 键名表 + 每列的编码方式」，解码端按编码还原
-///   `SyncRecord.data`；领域模型加字段不需要动编码器（备份与线上共用同一
-///   `SyncEnvelope`，字段表不进协议）。
+///   `SyncRecord.data`；领域模型加字段不需要动编码器（字段表不进协议，
+///   线上与备份共用同一 `SyncEnvelope`）。
 /// - **列式 + 每列按体积择优**：int 走 varint（可选差分）、字符串走
 ///   字典 / 公共前缀 / 十六进制打包、混合与嵌套走 JSON 兜底。同一首歌的
 ///   payload 被历史 / 统计重复携带时，字典列把每次播放的数百字节压到几十
@@ -297,8 +297,6 @@ abstract final class SyncPayloadBinary {
     }
     return [for (final key in keys) _DataColumn(key, _readColumn(r, rowCount))];
   }
-
-  // ---- 单列编码 ----
 
   /// 一列：`编码(1) | 标志(1) | [存在位图] | [空值位图] | 值区`。
   ///
@@ -668,8 +666,6 @@ class _Bitmap {
 
   bool has(int index) => bits[index >> 3] & (1 << (index & 7)) != 0;
 }
-
-// ---- 读写原语 ----
 
 class _Writer {
   final BytesBuilder _out = BytesBuilder(copy: false);

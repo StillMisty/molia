@@ -3,6 +3,7 @@ import 'dart:typed_data';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:molia/data/sync/sync_crypto.dart';
 import 'package:molia/data/sync/sync_passphrase.dart';
+import 'package:molia/data/sync/sync_payload.dart';
 import 'package:molia/domain/models/device_sync.dart';
 
 /// 快照编解码测试：往返、错误口令、篡改、帧格式。
@@ -119,31 +120,38 @@ void main() {
     expect(bytes.length, greaterThan(SyncCodec.headerLength + SyncCodec.tagLength));
   });
 
-  test('小载荷不压缩、大载荷压缩（压缩在帧内明文侧，按阈值判定）', () {
-    final small = codec.encrypt(envelope(), passphrase);
-    // 明文头：marker / codec / flags 三个字节在密文里不可读，这里只钉住
-    // 「大载荷更小」这一可观察结果：压缩生效时帧长明显小于明文长度。
-    final bigRecords = {
-      SyncCategory.history: [
-        for (var i = 0; i < 64; i++)
-          SyncRecord(
-            key: 'kw|song-$i',
-            version: SyncVersion(physical: 1000 + i, deviceId: 'dev-a'),
-            data: {'title': '标题' * 20, 'raw': '{"songmid":"${'a' * 32}"}'},
-          ),
-      ],
-    };
-    final big = codec.encrypt(
-      SyncEnvelope(
-        deviceId: 'dev-a',
-        producedAt: 1728640000000,
-        records: bigRecords,
-      ),
-      passphrase,
+  test('小载荷不压缩：帧长 = 帧头 + tag + 明文头 + 载荷（判定阈值见常量）', () {
+    final small = envelope();
+    final body = SyncPayload.encode(small);
+    expect(body.length, lessThan(SyncCodec.compressThreshold));
+    final frame = codec.encrypt(small, passphrase);
+    expect(
+      frame.length,
+      SyncCodec.headerLength + SyncCodec.tagLength + SyncCodec.payloadHeaderLength + body.length,
+      reason: '未压缩载荷逐字节进帧（AES-GCM 不改变长度）',
     );
-    expect(small.length, greaterThan(SyncCodec.headerLength));
-    expect(big.length, lessThan(small.length * 64));
-    expect(codec.decrypt(big, passphrase).recordsOf(SyncCategory.history),
+    expect(codec.decrypt(frame, passphrase).deviceId, 'dev-a');
+  });
+
+  test('大载荷压缩：帧长明显小于明文载荷（压缩确实生效）', () {
+    final big = SyncEnvelope(
+      deviceId: 'dev-a',
+      producedAt: 1728640000000,
+      records: {
+        SyncCategory.history: [
+          for (var i = 0; i < 64; i++)
+            SyncRecord(
+              key: 'kw|song-$i',
+              version: SyncVersion(physical: 1000 + i, deviceId: 'dev-a'),
+              data: {'title': '标题' * 20, 'raw': '{"songmid":"${'a' * 32}"}'},
+            ),
+        ],
+      },
+    );
+    final body = SyncPayload.encode(big);
+    final frame = codec.encrypt(big, passphrase);
+    expect(frame.length, lessThan(body.length ~/ 2));
+    expect(codec.decrypt(frame, passphrase).recordsOf(SyncCategory.history),
         hasLength(64));
   });
 }
