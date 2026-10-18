@@ -1095,6 +1095,7 @@
   "syncGeneralSection": "Sync",
   "syncEnabledTitle": "Enable sync",
   "syncEnabledSubtitle": "Exchange data with devices that share your passphrase",
+  "syncPairingSection": "Pair with a device",
   "syncLocalSection": "This device",
   "syncLocalSectionHint": "Peers need this information to reach this device; the addresses and ports travel inside the pairing code.",
   "syncDeviceNameTitle": "Device name",
@@ -1275,8 +1276,12 @@
       }
     }
   },
+  "syncAdvancedTitle": "Advanced",
+  "syncAdvancedSubtitle": "Device name, passphrase, addresses and transports",
   "syncPeersSection": "Devices",
   "syncPeersHint": "Enter the same passphrase on another device to join. If no device is ever discovered, check whether LAN sync can run (permission / network isolation) or switch to WebDAV.",
+  "syncPeersEmptyTitle": "No paired devices yet",
+  "syncPeersEmptySubtitle": "Add one with the pairing code above",
   "syncPeerThisDevice": "This device · {id}",
   "@syncPeerThisDevice": {
     "placeholders": {
@@ -1417,7 +1422,6 @@
   "syncRenameHint": "Shown on other devices",
   "syncDeviceNameEmpty": "Name cannot be empty",
   "syncCategorySubtitle": "Turning it off stops pushing and applying this data on this device",
-  "syncGeneratedHint": "Passphrase generated; enter it on other devices to join",
   "syncIssueDialogTitle": "Sync issue",
   "syncIssueUnknown": "Unknown reason — retry first; if it keeps failing, check the sync log",
   "syncIssueNotConfigured": "Sync transport is not configured",

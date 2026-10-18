@@ -31,7 +31,8 @@ import 'package:molia/widgets/sync_pairing_scanner.dart';
 
 import 'support/sync_test_support.dart';
 
-/// 同步设置页（配对工作台）：一页闭环 = 开关 / 本机 / 设备 / 传输 / 内容 / 日志。
+/// 同步设置页（配对工作台）：首屏 = 开关 / 配对 / 设备 / 内容 · 日志 · 高级；
+/// 设备名、口令、地址与端口、传输方式在「高级设置」子页（`SyncAdvancedPage`）。
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
@@ -132,7 +133,16 @@ void main() {
   }
 
   Future<void> openAddDialog(WidgetTester tester) async {
-    await tester.tap(find.byKey(const Key('settingsSyncAddPeerItem')));
+    await tester.tap(find.byKey(const Key('settingsSyncJoinItem')));
+    await tester.pumpAndSettle();
+  }
+
+  /// 进入「高级设置」子页（设备名 / 口令 / 地址与端口 / 传输方式）。
+  Future<void> openAdvanced(WidgetTester tester) async {
+    final entry = find.byKey(const Key('settingsSyncAdvancedItem'));
+    await tester.ensureVisible(entry);
+    await tester.pumpAndSettle();
+    await tester.tap(entry);
     await tester.pumpAndSettle();
   }
 
@@ -199,35 +209,57 @@ void main() {
     expect(find.text('Transport'), findsNothing);
   });
 
-  testWidgets('开启同步：生成口令弹窗，确认后一页出现本机 / 设备 / 传输 / 内容 / 日志', (tester) async {
+  testWidgets('开启同步：不再弹口令窗，首屏出现配对 / 设备 / 内容 · 日志 · 高级',
+      (tester) async {
     await pumpPage(tester);
     await tester.tap(find.byKey(const Key('settingsSyncSwitch')));
     await tester.pumpAndSettle();
 
-    // 首次开启自动生成口令并弹出展示弹窗（含复制与重置动作）。
-    expect(find.text('Copy passphrase'), findsOneWidget);
-    expect(find.text('Reset passphrase'), findsOneWidget);
-    await tester.tap(find.text('Cancel'));
-    await tester.pumpAndSettle();
-
+    // 首次开启自动生成口令：不再打断（口令随配对码交给对端，需要时去高级页）。
+    expect(find.text('Copy passphrase'), findsNothing);
     expect(provider.enabled, isTrue);
     expect(provider.passphrase, isNotNull);
-    // ② 本机：设备名 / 设备 id / 口令 / 加入口令 / 配对信息 / 地址 / 端口。
+
+    // ② 配对：复制配对码（行尾二维码）/ 加入其它设备。
+    expect(find.text('Pair with a device'), findsOneWidget);
+    expect(
+        find.byKey(const Key('settingsSyncPairingShareItem')), findsOneWidget);
+    expect(find.byKey(const Key('settingsSyncPairingQrItem')), findsOneWidget);
+    expect(find.byKey(const Key('settingsSyncJoinItem')), findsOneWidget);
+    // ③ 设备：空名册给一句引导。
+    expect(find.byKey(const Key('settingsSyncPeersEmpty')), findsOneWidget);
+    // ④ 内容 / 日志 / 高级设置入口。
+    expect(find.byKey(const Key('settingsSyncContentItem')), findsOneWidget);
+    expect(find.byKey(const Key('settingsSyncLogItem')), findsOneWidget);
+    expect(find.byKey(const Key('settingsSyncAdvancedItem')), findsOneWidget);
+    // 底层信息不再暴露在首屏。
+    expect(find.byKey(const Key('settingsSyncDeviceNameItem')), findsNothing);
+    expect(find.byKey(const Key('settingsSyncPeerSelfItem')), findsNothing);
+    expect(find.byKey(const Key('settingsSyncPassphraseItem')), findsNothing);
+    expect(find.byKey(const Key('settingsSyncLanSwitch')), findsNothing);
+    expect(find.byKey(const Key('settingsSyncWebdavSwitch')), findsNothing);
+  });
+
+  testWidgets('高级设置：设备名 / 设备 id / 口令 / 加入口令 / 地址与端口 / 传输方式齐全',
+      (tester) async {
+    await provider.setEnabled(true);
+    await pumpPage(tester);
+    await openAdvanced(tester);
+
+    // 本机：设备名 / 设备 id / 口令 / 加入口令 / 地址 / 端口。
     expect(find.text('This device'), findsOneWidget);
     expect(find.byKey(const Key('settingsSyncDeviceNameItem')), findsOneWidget);
     expect(find.byKey(const Key('settingsSyncPeerSelfItem')), findsOneWidget);
     expect(find.byKey(const Key('settingsSyncPassphraseItem')), findsOneWidget);
-    expect(find.byKey(const Key('settingsSyncJoinItem')), findsOneWidget);
     expect(
-        find.byKey(const Key('settingsSyncPairingShareItem')), findsOneWidget);
+      find.byKey(const Key('settingsSyncPassphraseJoinItem')),
+      findsOneWidget,
+    );
     expect(find.byKey(const Key('settingsSyncProbePortItem')), findsOneWidget);
     expect(find.byKey(const Key('settingsSyncHttpPortItem')), findsOneWidget);
-    // ③ 设备 / ④ 传输 / ⑤⑥ 内容与日志入口。
-    expect(find.byKey(const Key('settingsSyncAddPeerItem')), findsOneWidget);
+    // 传输方式：局域网 / WebDAV。
     expect(find.byKey(const Key('settingsSyncLanSwitch')), findsOneWidget);
     expect(find.byKey(const Key('settingsSyncWebdavSwitch')), findsOneWidget);
-    expect(find.byKey(const Key('settingsSyncContentItem')), findsOneWidget);
-    expect(find.byKey(const Key('settingsSyncLogItem')), findsOneWidget);
   });
 
   testWidgets('状态副文案：未同步说「尚未同步」；跑完一轮给结论与相对时间', (tester) async {
@@ -252,6 +284,8 @@ void main() {
     await state.setLanHttpPort(40000);
     await provider.setEnabled(true);
     await pumpPage(tester);
+    // 底层明细在「高级设置」子页。
+    await openAdvanced(tester);
 
     expect(
       find.byKey(const Key('settingsSyncLocalAddress-192.168.1.10')),
@@ -282,6 +316,8 @@ void main() {
     transport.discoveryPortsOverride = (v4: 47825, v6: 51234);
     await provider.setEnabled(true);
     await pumpPage(tester);
+    // 底层明细在「高级设置」子页。
+    await openAdvanced(tester);
 
     final probe = tester.widget<SettingsInfoTile>(
         find.byKey(const Key('settingsSyncProbePortItem')));
@@ -308,6 +344,8 @@ void main() {
     final clipboard = mockClipboard(tester);
     await provider.setEnabled(true);
     await pumpPage(tester);
+    // 底层明细在「高级设置」子页。
+    await openAdvanced(tester);
 
     final shortId = provider.deviceId.substring(provider.deviceId.length - 6);
     expect(find.textContaining(shortId), findsOneWidget);
@@ -320,6 +358,8 @@ void main() {
   testWidgets('口令行可查看完整口令；加入口令入口打开输入弹层', (tester) async {
     await provider.setEnabled(true);
     await pumpPage(tester);
+    // 底层明细在「高级设置」子页。
+    await openAdvanced(tester);
 
     await tester.tap(find.byKey(const Key('settingsSyncPassphraseItem')));
     await tester.pumpAndSettle();
@@ -327,7 +367,7 @@ void main() {
     await tester.tap(find.text('Cancel'));
     await tester.pumpAndSettle();
 
-    await tester.tap(find.byKey(const Key('settingsSyncJoinItem')));
+    await tester.tap(find.byKey(const Key('settingsSyncPassphraseJoinItem')));
     await tester.pumpAndSettle();
     expect(find.text('Enter sync passphrase'), findsWidgets);
     await tester.tap(find.text('Cancel'));
@@ -337,6 +377,8 @@ void main() {
   testWidgets('设备名行：改名入口打开弹窗并保存', (tester) async {
     await provider.setEnabled(true);
     await pumpPage(tester);
+    // 底层明细在「高级设置」子页。
+    await openAdvanced(tester);
     await openRenameDialog(tester);
     await tester.enterText(find.byType(EditableText).first, '书房');
     await tester.tap(find.text('Save'));
@@ -383,7 +425,11 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(provider.manualPeers.single.host, '192.168.1.23');
-    // 尚未接触的对端在名册区可见（点开可删除）。
+    // 未接触成功：弹层留在原地（提示见「接触失败」用例）；关掉它再看地址簿。
+    await tester.tap(find.text('Cancel'));
+    await tester.pumpAndSettle();
+    // 尚未接触的条目在「高级设置」的地址簿里可见（点开可删除）。
+    await openAdvanced(tester);
     expect(
       find.byKey(const Key('settingsSyncPeer-192.168.1.23')),
       findsOneWidget,
@@ -584,11 +630,12 @@ void main() {
     expect(provider.manualPeers.first.httpPort, 40000);
     expect(provider.manualPeers.first.name, 'Device B');
     // 未接触成功：弹层留在原地，条目已在地址簿（按设备合并成一行）。
-    expect(find.byKey(const Key('settingsSyncPeer-devB')), findsOneWidget);
-    expect(find.text('Device B'), findsWidgets);
-    // 弹层关闭后点开该行：两个地址都在（逐个可删）。
     await tester.tap(find.text('Cancel'));
     await tester.pumpAndSettle();
+    await openAdvanced(tester);
+    expect(find.byKey(const Key('settingsSyncPeer-devB')), findsOneWidget);
+    expect(find.text('Device B'), findsWidgets);
+    // 点开该行：两个地址都在（逐个可删）。
     await tester.tap(find.byKey(const Key('settingsSyncPeer-devB')));
     await tester.pumpAndSettle();
     expect(
@@ -637,6 +684,8 @@ void main() {
     await provider.addManualPeer('192.168.1.24');
     await provider.addManualPeer('192.168.1.25');
     await pumpPage(tester);
+    // 底层明细在「高级设置」子页。
+    await openAdvanced(tester);
 
     expect(
       find.byKey(const Key('settingsSyncPeerCandidatesItem')),
@@ -845,6 +894,8 @@ void main() {
   testWidgets('WebDAV 启用后才出现配置入口，副文案给地址 / 未配置', (tester) async {
     await provider.setEnabled(true);
     await pumpPage(tester);
+    // 底层明细在「高级设置」子页。
+    await openAdvanced(tester);
     expect(find.byKey(const Key('settingsSyncWebdavConfigItem')), findsNothing);
 
     await tester.tap(find.byKey(const Key('settingsSyncWebdavSwitch')));
@@ -884,6 +935,8 @@ void main() {
     );
     await provider.init();
     await pumpPage(tester);
+    // 底层明细在「高级设置」子页。
+    await openAdvanced(tester);
 
     expect(
       find.byKey(const Key('settingsSyncLanPermissionItem')),
@@ -917,6 +970,8 @@ void main() {
     );
     await provider.init();
     await pumpPage(tester);
+    // 底层明细在「高级设置」子页。
+    await openAdvanced(tester);
 
     expect(find.text('Grant LAN permission'), findsOneWidget);
     await tester.tap(find.byKey(const Key('settingsSyncLanPermissionItem')));
@@ -979,6 +1034,8 @@ void main() {
     transport.unavailableDetail = 'SocketException: 端口占用';
     await transport.stop();
     await pumpPage(tester);
+    // 底层明细在「高级设置」子页。
+    await openAdvanced(tester);
 
     expect(find.textContaining('failed to start'), findsOneWidget);
     expect(find.textContaining('SocketException'), findsNothing);
@@ -993,6 +1050,8 @@ void main() {
     await transport.stop();
     await provider.setTransportEnabled(SyncTransportKind.lan, false);
     await pumpPage(tester);
+    // 底层明细在「高级设置」子页。
+    await openAdvanced(tester);
 
     expect(find.text('turned off'), findsOneWidget);
     expect(find.textContaining('failed to start'), findsNothing);
@@ -1016,6 +1075,8 @@ void main() {
     ));
     await provider.syncNow(manual: true);
     await pumpPage(tester);
+    // 底层明细在「高级设置」子页。
+    await openAdvanced(tester);
 
     final finder = find.byKey(const Key('settingsSyncLanSwitch'));
     final tile = tester.widget<SettingsSwitchTile>(

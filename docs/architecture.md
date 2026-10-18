@@ -265,11 +265,12 @@
   iOS 广播发现需向 Apple 申请 multicast entitlement（未获批时降级手动地址 /
   WebDAV）；发现失败可用手动对端地址簿兜底（单播探测后认领 deviceId 与端点
   端口），本机端点端口持久化避免对端记不住本机。**同步设置页是配对工作台
-  （一页闭环）**：开关与五态结论 / 本机（设备名、设备 id、口令、可路由地址
-  列表、探测端口与直连端点端口、分享配对信息）/ 设备（名册内联 + 未认领候选
-  折叠 + 添加设备）/ 传输（局域网与 WebDAV）/ 同步内容与日志入口；原来的
-  「设备与口令」「已配对设备」子页已并入（配对是「我把本机信息交给对方、
-  把对方地址收进名册」的一件事，拆页只能让用户来回找）。**本机地址**
+  （一页闭环）**：首屏只留用户真正要做的事——开关与五态结论 / 配对（复制配对码、
+  二维码、加入其它设备）/ 已配对设备名册（空名册给引导）/ 同步内容与日志 / 高级
+  设置入口；设备名、设备 id、口令、可路由地址列表、探测端口与直连端点端口、
+  地址簿（未认领候选）、传输方式（局域网与 WebDAV）全在「高级设置」子页
+  （`sync_advanced_page.dart`）——底层细节不占首屏。首次开启同步不再弹口令窗
+  （口令随配对码交给对端）。**本机地址**
   （`LocalEndpointsService`：IPv4 + 全局 / ULA IPv6，排除回环 / link-local /
   zone，私网优先排序；过滤判定 `isRoutablePeerAddress` 与服务 / 传输共用）
   是地址列表、配对码与探测 `addrs` 候选的同一口径；
@@ -604,14 +605,17 @@
   两套骨架的导航 / 顶栏共享 spec 在 `lib/app/shell_chrome.dart`（目的地 → 图标 /
   标签映射、设置按钮、窗口控件、titleSpacing / 拖动区只一份；骨架各自适配渲染），
   布局阈值在 `lib/widgets/desktop_layout.dart`（壳层解析一次，页面 / 骨架只消费）。
-  顶栏是纯工具条（无当前页标题、无播放控制、无进度线）：
-  **全局搜索**在最左，左缘对齐内容左缘（侧栏折叠宽 + 页面留白 − `titleSpacing`）——
-  `M3ESearchAnchor.bar` 收成 **320×48** 工具条（方角 12 / 1dp `outlineVariant`
-  描边 / 无阴影 / 不随聚焦变宽，右侧挂当前「聚焦搜索」绑定的键位提示）；
-  docked 结果面板与资料库共用同一 `SearchProvider`；
-  `DesktopLayout.searchCompact`（窗口宽 <900）退化为图标，落资料库搜索页；
-  搜索右侧的空白是拖动区（双击最大化，只有它包 `WindowDoubleTapMaximize`，
-  双击搜索 / 按钮不最大化）+ 设置 + 窗口按钮（四键无 tooltip，只留 `semanticLabel`）。
+  顶栏是纯工具条（无当前页标题、无播放控制、无进度线）：最左是**品牌区**
+  （`MoliaMark` + 自定义应用名，左缘对齐内容左缘 = 侧栏折叠宽 + 页面留白 −
+  `titleSpacing`，整块可点打开搜索遮罩，tooltip 带当前「聚焦搜索」键位）；
+  品牌区右侧的空白是拖动区（双击最大化，只有它包 `WindowDoubleTapMaximize`，
+  双击品牌 / 按钮不最大化）+ 设置 + 窗口按钮（四键无 tooltip，只留 `semanticLabel`）。
+  **全局搜索**是 Ctrl+F / 品牌区打开的全屏遮罩（`lib/widgets/global_search_overlay.dart`）：
+  壳层在内容区中上放一个隐形锚点，`M3ESearchAnchor`（docked）从它展开成全屏
+  scrim + 居中搜索条 + 结果面板；结果与资料库共用同一 `SearchProvider`，空关键词
+  时结果面留空（只剩搜索条）；遮罩打开时壳层 Esc 让位（`EscapeClaims` 登记），
+  另有一层整窗 `BackdropFilter` 跟遮罩开合淡入淡出（M3E 的 scrim 只压暗，模糊
+  由壳层补；关闭时 `Opacity` 为 0、不参与合成）。
   左侧 `M3ENavigationRail` **恒折叠** 96dp（`alwaysCollapse` + `alwaysHide`：
   无展开按钮、标签只留给无障碍名，改窗口宽不改变形态）；底部播放条 80dp
   只在非播放页出现（左：封面/歌名/收藏 · 中：上一首/播放/暂停/下一首 +
@@ -621,12 +625,14 @@
   跳播放页 + 切队列 tab（`NowPlayingController`），Esc 的可配置「关闭队列」
   在播放页里把队列视图收成默认页（其它目的地 no-op —— 壳层看不到页内 tab，
   命令按目的地生效）。播放页桌面版式 = 左 **480** 固定
-  （封面/标题/专辑/进度/传输控制 + 音量）+ 右「队列 / 歌词 / 歌曲信息」三 tab
-  （icon-only、行高 48、默认歌词；`NowPlaying(desktopLayout: true)`，无圆点手势）。
+  （封面/歌名·歌手两行/进度/传输控制 + 音量，不显示专辑行）+ 右「队列 / 歌词 /
+  详细」三 tab（**次 tab**：图标 + 文案一行、行高 48、默认歌词，图标走 `M3EIcons`；
+  `NowPlaying(desktopLayout: true)`，无圆点手势）。
   桌面专属交互：**快捷键分「软件内」与「全局」两组**（用户口径：都可关闭、可自定义）。
   绑定模型在 `lib/services/shortcut_bindings.dart`（动作 ↔ 组合、两组默认表、JSON 覆盖），
   开关与自定义持久化在 `lib/services/shortcut_settings.dart`（跟人走），设置入口
-  「设置 › 通用 › 快捷键」子页（录制交互见 `lib/widgets/settings/shortcut_recorder_tile.dart`；
+  「设置 › 快捷键」（设置首屏「通用」卡，与听歌统计同一层；
+  录制交互见 `lib/widgets/settings/shortcut_recorder_tile.dart`；
   录到已被占用的组合、或单行「回默认」撞上被占用的默认组合时弹确认层，确认后
   互换两者的生效组合——`ShortcutSettings.swapBindings`；「同组无重复」由
   `ShortcutSettings.setBinding` 单点保证）。
@@ -689,7 +695,7 @@
   用 `aospSpatial` 无过冲弹簧并在落定帧零速度交接；不要再用
   `AnimationController` + `Curves`/`SpringSimulation` 手搓 spatial 运动
   （交互细节见 `docs/pitfalls.md` #21）。
-- 设置页：首屏 5 个语义分区（外观 / 播放 / 歌词与展示 / 内容与来源 / 通用与数据），
+- 设置页：首屏 6 个语义分区（外观 / 播放 / 歌词与展示 / 内容与来源 / 通用 / 数据），
   分组标题 + 分段卡片行：行表面统一走共享的 `lib/widgets/card_list_surface.dart`
   （`CardListSurface`：静止内 4dp / 首末外侧 16dp、hover 12dp、press 16dp，
   expressive spatial 形状弹簧；`TrackRow`、设置行、AI 推荐卡同一套形状语言），
@@ -790,7 +796,7 @@
     带图标的分组，且主次层级要保住；
   - 紧凑位置（行内重试、状态卡内取消）用 `M3EIconButton`（语义交给 tooltip）；
     纯图标按钮保留稳定 key，测试按 key 定位。
-- 触感：全应用唯一入口 `lib/services/haptics.dart`（设置 › 通用与数据 › 通用 ›
+- 触感：全应用唯一入口 `lib/services/haptics.dart`（设置 › 通用 › 通用设置 ›
   震动反馈，默认开，设备本地键）；底栏重复点击的轻震由壳层给一次、页面不重复给
   （原「壳层不给触感」的口径已反转）。
 - 已知保留（无法等价替换）：带 `bottom:` 槽的 AppBar（2 处）、`_showCenterDialog`、

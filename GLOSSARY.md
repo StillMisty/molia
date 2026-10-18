@@ -134,9 +134,17 @@
 
 - **Haptics（触感模块）** — `lib/services/haptics.dart`：全应用触感唯一入口（lightImpact / mediumImpact / selectionClick），带设备本地开关（默认开；关闭后不触碰平台通道）。所有调用点经它；M3E 包内自带的触感（swipe action / 排序等）不在此覆盖范围。
 
-- **Desktop shell（桌面骨架）** — `lib/app/desktop/**`：仅 linux/windows/macOS 生效的壳层版式（顶栏工具条 + 恒折叠侧栏 + 常驻底栏播放条，播放页里整条让位），由 `lib/app/app_shell.dart` 按平台分流（`MyApp(desktopShell:)` 可强制，测试用）；移动骨架与共享逻辑（页面栈 / 共享元素飞行 / 重复点击通道 / `NowPlayingController`）仍在 `app_shell.dart`，两套骨架同源。
+- **Desktop shell（桌面骨架）** — `lib/app/desktop/**`：仅 linux/windows/macOS 生效的壳层版式（顶栏工具条 + 恒折叠侧栏 + 常驻底栏播放条 + 搜索遮罩，播放页里整条让位），由 `lib/app/app_shell.dart` 按平台分流（`MyApp(desktopShell:)` 可强制，测试用）；移动骨架与共享逻辑（页面栈 / 共享元素飞行 / 重复点击通道 / `NowPlayingController`）仍在 `app_shell.dart`，两套骨架同源。
 
-- **Desktop layout（桌面布局解析）** — `lib/widgets/desktop_layout.dart::DesktopLayout`：「是不是桌面宽布局」的唯一解析处（壳层在 `build` 里解析一次并向下提供，页面 / 骨架只消费；独立挂载页面 / 弹层路由按当前 context 回退解析，与生产同一公式）。全部判据都以窗口宽为来源：`masterDetail`（设置首屏两列的页面级增强）、`searchCompact`（顶栏搜索形态）、`contentWidth`（窗口宽 − 实际栏宽；侧栏恒折叠 ⇒ 它就是内容区可用宽）、`tableColumns` / `tableColumnsFor`（内容宽 ≥ 720 / 历史档 812）。900 / 720 / 812 等阈值与宽度来源的选择集中在这里，页面 / 骨架只消费。
+- **Global search overlay（搜索遮罩）** — `lib/widgets/global_search_overlay.dart`：桌面顶栏
+  不再挂搜索条，最左是**品牌区**（`MoliaMark` + 应用名，整块可点）——品牌区与 Ctrl+F
+  都经 `GlobalSearchController.focus()` 打开遮罩（壳层在内容区中上放隐形锚点，
+  `M3ESearchAnchor` docked 从锚点展开成全屏 scrim + 居中搜索条 + 结果面板；结果复用
+  `SearchProvider` 与资料库同一条播放语义）。空关键词时结果面留空；Esc 由视图自收
+  （壳层经 `EscapeClaims` 让位）；壳层另叠一层整窗 `BackdropFilter` 跟遮罩开合
+  淡入淡出（`GlobalSearchController.open` 驱动，关闭时零绘制开销）。
+
+- **Desktop layout（桌面布局解析）** — `lib/widgets/desktop_layout.dart::DesktopLayout`：「是不是桌面宽布局」的唯一解析处（壳层在 `build` 里解析一次并向下提供，页面 / 骨架只消费；独立挂载页面 / 弹层路由按当前 context 回退解析，与生产同一公式）。全部判据都以窗口宽为来源：`masterDetail`（设置首屏两列的页面级增强）、`contentWidth`（窗口宽 − 实际栏宽；侧栏恒折叠 ⇒ 它就是内容区可用宽）、`tableColumns` / `tableColumnsFor`（内容宽 ≥ 720 / 历史档 812）。900 / 720 / 812 等阈值与宽度来源的选择集中在这里，页面 / 骨架只消费。
 
 - **Shell chrome（壳层 chrome spec）** — `lib/app/shell_chrome.dart::ShellChrome`：两套骨架（移动 / 桌面）共用的导航与顶栏 spec（目的地 + 标签 + 选择 + 顶栏槽位）。目的地 → 图标 / 标签映射（`railDestinations` / `barDestinations`）、索引 → 目的地回调（`selectDestinationAt`）、顶栏构造（`appBar`：titleSpacing / 无返回键 / 拖动区包装 / 设置按钮 / 窗口控件）只此一份；骨架不合并——顶栏槽里的内容、侧栏类型与底栏形态仍由各自适配渲染。
 
@@ -491,12 +499,15 @@
   变更量（不是全库规模）。
 - **Sync peer roster（同步名册）** — `SyncPeerState`：每台对端的最近接触观测
   （名称 / 传输 / 最后拉取·推送 / 时钟偏移 / 落后条数 / 最近失败），持久化在
-  `sync_state_v1`，UI 在同步设置页的「设备」区呈现（名册内联 + 地址簿里尚未
-  进名册的条目；未认领的候选地址折叠为一行「候选地址 N 个」）；「落后条数」
-  由增量协议填充。
+  `sync_state_v1`，UI 在同步设置页首屏的「设备」区呈现（名册内联）；
+  地址簿里尚未进名册的条目（未认领候选折叠为一行「候选地址 N 个」）在
+  「高级设置」子页；「落后条数」由增量协议填充。
 - **Pairing workbench（配对工作台）** — `lib/pages/sync_settings_page.dart`：
-  同步设置页的一页闭环信息架构（开关与结论 / 本机 / 设备 / 传输 / 同步内容 /
-  日志）；本机与设备原本各占一个子页，配对流程要来回跳页，现已合并。
+  同步设置页的首屏信息架构（开关与结论 / 配对：复制配对码 · 二维码 · 加入其它
+  设备 / 已配对设备名册 / 同步内容与日志 · 高级设置入口）；设备名、口令、地址与
+  端口、地址簿、传输方式在 `lib/pages/sync_advanced_page.dart`（首屏只留用户
+  真正要做的配对与设备，底层细节进子页）。首次开启同步不再弹口令窗：口令随
+  配对码交给对端。
 - **Pairing code（配对码）** — `lib/domain/models/sync_pairing.dart`：
   `molia-pair:1:<base64url(utf8(json))>`，字段短名 `n` 设备名 / `i` 设备 id /
   `p` 口令 / `a` 地址候选 `[[host, probePort], …]` / `h` HTTP 端点端口；

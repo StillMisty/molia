@@ -2039,6 +2039,9 @@ class AppLocalizationsZh extends AppLocalizations {
   String get syncEnabledSubtitle => '与持有同一口令的设备交换数据';
 
   @override
+  String get syncPairingSection => '配对设备';
+
+  @override
   String get syncLocalSection => '本机';
 
   @override
@@ -2308,11 +2311,23 @@ class AppLocalizationsZh extends AppLocalizations {
   }
 
   @override
+  String get syncAdvancedTitle => '高级设置';
+
+  @override
+  String get syncAdvancedSubtitle => '设备名、口令、网络地址与传输方式';
+
+  @override
   String get syncPeersSection => '设备';
 
   @override
   String get syncPeersHint =>
       '在其它设备输入同一口令即可加入。若长期发现不到设备，检查局域网传输是否可用（权限 / 网络隔离），或改用 WebDAV。';
+
+  @override
+  String get syncPeersEmptyTitle => '还没有配对设备';
+
+  @override
+  String get syncPeersEmptySubtitle => '用上面的配对码把设备加进来';
 
   @override
   String syncPeerThisDevice(String id) {
@@ -2551,9 +2566,6 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get syncCategorySubtitle => '关闭后本机不推送也不应用该类数据';
-
-  @override
-  String get syncGeneratedHint => '已生成同步口令，在其它设备输入同一口令即可加入';
 
   @override
   String get syncIssueDialogTitle => '同步问题';

@@ -3896,6 +3896,12 @@ abstract class AppLocalizations {
   /// **'Exchange data with devices that share your passphrase'**
   String get syncEnabledSubtitle;
 
+  /// No description provided for @syncPairingSection.
+  ///
+  /// In en, this message translates to:
+  /// **'Pair with a device'**
+  String get syncPairingSection;
+
   /// No description provided for @syncLocalSection.
   ///
   /// In en, this message translates to:
@@ -4383,6 +4389,18 @@ abstract class AppLocalizations {
   /// **'Failed: {error}'**
   String syncLogFailed(String error);
 
+  /// No description provided for @syncAdvancedTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Advanced'**
+  String get syncAdvancedTitle;
+
+  /// No description provided for @syncAdvancedSubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Device name, passphrase, addresses and transports'**
+  String get syncAdvancedSubtitle;
+
   /// No description provided for @syncPeersSection.
   ///
   /// In en, this message translates to:
@@ -4394,6 +4412,18 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Enter the same passphrase on another device to join. If no device is ever discovered, check whether LAN sync can run (permission / network isolation) or switch to WebDAV.'**
   String get syncPeersHint;
+
+  /// No description provided for @syncPeersEmptyTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'No paired devices yet'**
+  String get syncPeersEmptyTitle;
+
+  /// No description provided for @syncPeersEmptySubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Add one with the pairing code above'**
+  String get syncPeersEmptySubtitle;
 
   /// No description provided for @syncPeerThisDevice.
   ///
@@ -4820,12 +4850,6 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Turning it off stops pushing and applying this data on this device'**
   String get syncCategorySubtitle;
-
-  /// No description provided for @syncGeneratedHint.
-  ///
-  /// In en, this message translates to:
-  /// **'Passphrase generated; enter it on other devices to join'**
-  String get syncGeneratedHint;
 
   /// No description provided for @syncIssueDialogTitle.
   ///

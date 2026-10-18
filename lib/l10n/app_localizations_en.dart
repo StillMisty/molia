@@ -2123,6 +2123,9 @@ class AppLocalizationsEn extends AppLocalizations {
       'Exchange data with devices that share your passphrase';
 
   @override
+  String get syncPairingSection => 'Pair with a device';
+
+  @override
   String get syncLocalSection => 'This device';
 
   @override
@@ -2397,11 +2400,24 @@ class AppLocalizationsEn extends AppLocalizations {
   }
 
   @override
+  String get syncAdvancedTitle => 'Advanced';
+
+  @override
+  String get syncAdvancedSubtitle =>
+      'Device name, passphrase, addresses and transports';
+
+  @override
   String get syncPeersSection => 'Devices';
 
   @override
   String get syncPeersHint =>
       'Enter the same passphrase on another device to join. If no device is ever discovered, check whether LAN sync can run (permission / network isolation) or switch to WebDAV.';
+
+  @override
+  String get syncPeersEmptyTitle => 'No paired devices yet';
+
+  @override
+  String get syncPeersEmptySubtitle => 'Add one with the pairing code above';
 
   @override
   String syncPeerThisDevice(String id) {
@@ -2661,10 +2677,6 @@ class AppLocalizationsEn extends AppLocalizations {
   @override
   String get syncCategorySubtitle =>
       'Turning it off stops pushing and applying this data on this device';
-
-  @override
-  String get syncGeneratedHint =>
-      'Passphrase generated; enter it on other devices to join';
 
   @override
   String get syncIssueDialogTitle => 'Sync issue';
