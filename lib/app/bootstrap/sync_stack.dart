@@ -196,11 +196,11 @@ Future<SyncStack> buildSyncStack({
   // 未捕获异常都会让桌面端停在「窗口已显示但没有首帧」的黑窗状态。
   // 口令读取失败已在 SecureSettingsSecretStore 内降级为「未设置」，
   // 这里再兜一层其它初始化异常（日志 + 继续，同步页表现为未配置）。
-  try {
-    await syncProvider.init();
-  } catch (e) {
-    debugPrint('[Molia] 同步初始化失败（继续启动）: $e');
-  }
+  //
+  // 引擎 init（含安全存储读口令）与调度器启动都后移到首帧之后
+  // （见 [startSync]）：两者都要碰安全存储 / 电量与网络探针
+  // （sync_scheduler 的 refreshEnvironment），不参与首帧内容，
+  // 留在 runApp 前只是让用户多等一次 IPC。
 
   // 数据变更 → 调度器（活跃等级去抖 3–5s、空闲等级标记待外发）；所有启用
   // 类别的本地写入都要置待发标记：资料库 / 统计 / 音源 / 设置与凭证 / 会话。
@@ -243,7 +243,21 @@ Future<SyncStack> buildSyncStack({
   // 网络类型变化（connectivity_plus）→ 立即重估环境：Wi-Fi 与蜂窝之间切换
   // 后，小类别限制 / 「移动数据下暂停」不再等下一次唤醒。
   dataSaver.addListener(() => unawaited(scheduler.refreshEnvironment()));
-  await scheduler.start();
 
   return (engine: syncEngine, scheduler: scheduler, provider: syncProvider);
+}
+
+/// 首帧后的同步启动：引擎 init（安全存储读口令）→ 调度器启动。
+///
+/// 为什么拆出来（组合根在 `post_frame_init.dart` 调用）：这两步以前排在
+/// `runApp` 之前，实测是启动装配里最大的一段（桌面 release 中位数 ~38ms），
+/// 而同步状态面（设置页开关 / 口令）在首帧后才有机会被看到。失败不阻断启动
+/// （口径同原 buildSyncStack 里的 try/catch，见 docs/pitfalls.md #31）。
+Future<void> startSync(SyncStack sync) async {
+  try {
+    await sync.provider.init();
+    await sync.scheduler.start();
+  } catch (e) {
+    debugPrint('[Molia] 同步初始化失败（继续启动）: $e');
+  }
 }

@@ -13,6 +13,11 @@ String? desktopAudioInitError;
 ///
 /// Linux 需要系统提供 libmpv（如 `pacman -S mpv` / `apt install libmpv-dev`）；
 /// 缺失时不阻塞启动，但本地播放功能不可用。
+///
+/// 这里的 media_kit 初始化会在主 isolate 上同步 `dlopen` libmpv（本机实测
+/// 39–48ms，见 `docs/performance.md`）：试过在后台 isolate 里预热，但两次
+/// dlopen 争用进程级的动态加载器锁，与建窗阶段互相串行、总时长不变，故保留
+/// 现在这版直白实现。
 void initDesktopAudioIfNeeded() {
   if (Platform.isWindows || Platform.isLinux) {
     try {

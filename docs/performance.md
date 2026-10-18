@@ -1,0 +1,125 @@
+# 启动耗时：基线、测量方法与已做的优化
+
+> 本文只记**可复现的数字**与**为什么这样改**。改动前的每一步都用同一脚本在同一台机器
+> 上采样（release / 冷启动 / 5 次取中位），「首帧」那行即用户可感总时长
+> （`main.dart` 的 `molia.startup` 埋点，release 也输出）。
+>
+> 采样脚本：`tool/agent/startup.sh`（见 §3）。最近一次全表复测：2026-10-18。
+
+---
+
+## 1. 结论（一行）
+
+桌面 release 冷启动「首帧」中位数 **293ms → 207ms（−29%）**，全部改动对用户
+可见行为无影响：装配期串行等待改并行、同步/更新两个可选子系统初始化后移到首帧之后。
+
+改完后剩下的 **~207ms 里有 ~190ms 是进程外的固定成本**：
+GTK 建窗 ~46ms + libmpv `dlopen` ~39ms + 引擎与首帧渲染 ~100ms；我们自己 Dart 侧
+的装配只剩 ~20ms。
+
+## 2. 测量方法
+
+- **只用 release 产物**：debug 的首帧含 JIT / 断言开销，历史 debug 数据在 1.5–2.4s，
+  完全不能代表用户可感时长（release 是它的 1/7）。
+- **冷启动、逐次新进程**：每轮 `TERM` 掉上一轮进程，跑 5 次取中位数（抖动 ±5ms）。
+- **无头显示**：`xvfb-run -a` + `env -u WAYLAND_DISPLAY GDK_BACKEND=x11`（只改
+  `DISPLAY` 不够：GDK 见到 `WAYLAND_DISPLAY` 会优先连真实合成器）。
+- **测量机器**：本机 WSL2（Arch，20 vCPU / 23GB），Flutter 3.47.7 / Dart 3.13.5。
+- **Windows 说明**：本机是 WSL2，没有 Windows 侧 Flutter SDK（无 MSVC 也无法构建），
+  所以桌面数据全部来自 Linux 产物。应用代码在桌面两侧同源（差异只在插件实现），
+  可作为 Windows 的代理基线；要精确数字需在 Windows 上跑同一脚本。
+
+## 3. 复测方法
+
+```bash
+tool/agent/startup.sh                 # 构建 release 后采样 5 次，打印中位数
+tool/agent/startup.sh --runs 9        # 采样 9 次
+tool/agent/startup.sh --no-build      # 复用已有产物（只重测）
+tool/agent/startup.sh --window        # 在真实显示上跑（WSLg 会弹窗）
+```
+
+- 结果落在 `/tmp/opencode/molia/startup-<时间戳>/`：每轮原始日志 `run-N.log`
+  + `summary.txt`（各阶段中位 / 最小 / 最大 / 原始样本）。
+- 脚本只删 `build/linux/x64/release/bundle`（install 产物），保留中间产物做增量构建。
+  **不要** `rm -rf build/linux/x64/release`：那会连带删掉 media_kit_libs_linux
+  下载的 `mimalloc-2.1.2.tar.gz`，而它的下载在受限网络下会失败（CMake 只报
+  "Integrity check failed"，实际是 0 字节文件）。真遇到时手动放一份 MD5 为
+  `5179c8f5cf1237d2300e2d8559a7bc55` 的 tarball 到该目录即可。
+
+## 4. 结果（中位数，ms）
+
+| 阶段 | 基线 | 依赖升级后 | 并行化 + 后移后 | 撤掉预热实验后（现状） |
+| --- | ---: | ---: | ---: | ---: |
+| 窗口就绪 | 54 | 54 | 49 | **46** |
+| 本地数据/资料库栈 | 124 | 123 | 100 | **98** |
+| 播放栈（含媒体会话） | 134 | 132 | 109 | **107** |
+| 主题/歌词显示 | 136 | 135 | 111 | **109** |
+| 同步栈 | 174 | 173 | 111 | **109** |
+| 更新栈（装配完成） | 189 | 187 | 111 | **109** |
+| **首帧** | **293** | **288** | **211** | **207** |
+
+- 「基线」= 依赖升级前（`chore(deps)` 提交之前）。
+- 「依赖升级后」= `flutter pub upgrade`（17 包）+ Flutter 3.47.7：与基线之差在噪声内，
+  **依赖升级没有带来启动回归**。
+- 最后两列之差是 §5.4 的否证实验（撤掉后回到 207ms）。
+
+## 5. 逐项：改了什么、实测多少
+
+### 5.1 装配期等待改并行（≈ −28ms）
+
+- 窗口前缀三项互不依赖 → `(WindowSettings.load, SystemFontsService.loadPlatformDefaultFamily,
+  SingleInstance.acquire).wait`：实测这三项自身合计 ≈0ms（Windows 上字体读注册表，
+  仍是毫秒级），并行后完全被后面的建窗遮住。
+- 本地数据栈与资料库栈互不依赖 → 并行装配。内部细分（实测）：`dataSaver.init`
+  8–9ms、`downloadSettings.init` 0ms、`syncState.init` 0ms、统计 init / 换源 init /
+  DB `maxVersion()`（含 drift 库打开）11–12ms、`downloadService.init` 12–13ms；
+  串行是相加，并行取最大值。
+
+### 5.2 同步栈初始化后移（≈ −38ms）
+
+`buildSyncStack` 里 `await syncProvider.init()` + `await scheduler.start()` 移到
+首帧之后（新的 `startSync`，由 `post_frame_init.dart` 调用）。这两步要开安全存储
+（Android Keystore 冷读更贵）**和跑电量/网络探针**（`SyncScheduler.refreshEnvironment`），
+都不参与首帧内容；同步设置页在首帧后才可能被打开，状态面看不到差别。
+失败仍不阻断启动（口径不变，见 `docs/pitfalls.md` #31）。
+
+### 5.3 更新栈后移（≈ −14ms）
+
+`buildUpdateStack` 变成纯构造（无 IO），`PackageInfo.fromPlatform()` + 偏好 +
+平台信息的读取收进 `UpdateProvider.start()`，首帧后与自动检查（本来就排在首帧后）
+串起来。读不到包信息仍按 0.0.0 处理（可检查、无比较基准），与拆分前一致。
+
+### 5.4 libmpv 预热：试过，**无效**（否证，勿重试）
+
+`initDesktopAudioIfNeeded()` 会在主 isolate 上同步 `dlopen` libmpv，实测 39–48ms
+（Windows 打包的是 ~30MB 的 `libmpv-2.dll`，只会更贵），看起来很适合藏进建窗的
+I/O 空档。试法：在后台 isolate 里先 `DynamicLibrary.open` 一次（动态库是进程级的，
+理论上后续 open 命中缓存）。
+
+实测结果：后台 isolate 的 dlopen 在 38ms 内完成（时间戳证明它在建窗结束前就跑完了），
+但「窗口就绪」同时从 46ms 涨到 89ms —— **两次 dlopen 争用进程级动态加载器锁，
+与 GTK 建窗互相串行，总时长一分不省**。已回退，代码里留了注释。
+
+### 5.5 首帧内的界面树：**不用优化**（否证）
+
+用 `--dart-define` 临时把 `runApp` 的整棵树换成 `SizedBox.shrink()` 实测：
+首帧仍是 **211ms**，与真实界面树（211ms）完全一致。结论：runApp → 首帧的 ~100ms
+是引擎/框架/窗口表面的固定成本（Impeller 初始化、首帧光栅化），**与我们构建了
+几个页面无关**，因此不需要动「三个常驻页面同帧构建」这类设计（也就不用牺牲
+播放页共享元素飞行的首帧行为）。
+
+## 6. 剩下的固定成本（不建议再碰）
+
+| 项 | 实测 | 为什么留着 |
+| --- | ---: | --- |
+| GTK 建窗 + 隐藏 + 几何恢复（`WindowChrome.ensureInitialized`） | ~46ms | 窗口必须存在才能 `runApp`；窗口先隐藏、首帧回调再亮（避免盯空白窗）是既定交互 |
+| libmpv `dlopen`（`initDesktopAudioIfNeeded`） | ~39ms | 播放后端注册必须早于播放栈（恢复会话要用），推迟到首帧后会让恢复态/通知状态可见地迟一拍 |
+| 引擎 + 框架 + 首帧渲染 | ~100ms | 见 §5.5，与界面树无关 |
+| Dart 侧装配（`molia.startup` 各阶段合计） | ~20ms | 省流探测、下载存储、drift 库打开；都是首帧内容或播放链路的前置 |
+
+## 7. 未覆盖
+
+- **Android / iOS**：本机没有对应设备侧采样；这份数据只覆盖桌面。若要在 Android 上
+  复现，思路是 release APK + `adb shell am start -W`（TotalTime）配合 logcat 里的
+  `molia.startup` 行取中位；`tool/agent/startup.sh` 目前只实现了 Linux。
+- **Windows**：见 §2 说明（无 Windows 侧工具链）。

@@ -64,17 +64,20 @@ void main() async {
   // 日志装配（package:logging 的 handler / level 只在这里和测试配置里设一次）
   initAppLogging();
 
-  // 窗口行为偏好（设备本地）：窗口几何的恢复/保存在建窗之前就要判定，
-  // 因此先 await 载入一次（读取失败保持默认开启）。
-  await WindowSettings.load();
-
-  // 平台默认 UI 字体（仅 Windows 读注册表，毫秒级）：未自定义「应用字体」
-  // 时用它，保证与系统其它窗口同源（中文系统 = 微软雅黑）。
-  await SystemFontsService.loadPlatformDefaultFamily();
-
-  // 强制单实例（桌面）：已有实例在跑 → 请它显示主窗口后立即退出；此刻
-  // 窗口还没创建，不会闪一下再消失。其余平台 / 抢锁异常按主实例继续。
-  if (await SingleInstance.acquire() == SingleInstanceRole.secondary) {
+  // 窗口行为偏好（设备本地）/ 平台默认 UI 字体 / 单实例锁互不依赖：并行等待
+  // （串行是三段相加，并行取最大值）。三者都完成才建窗，语义与拆分前一致。
+  //
+  // - 窗口几何的恢复/保存在建窗之前就要判定，因此必须 await；
+  // - 平台默认字体仅 Windows 读注册表（毫秒级）：未自定义「应用字体」时用它，
+  //   保证与系统其它窗口同源（中文系统 = 微软雅黑）；
+  // - 单实例（桌面）：已有实例在跑 → 请它显示主窗口后立即退出；此刻窗口还没
+  //   创建，不会闪一下再消失。其余平台 / 抢锁异常按主实例继续。
+  final (_, _, instanceRole) = await (
+    WindowSettings.load(),
+    SystemFontsService.loadPlatformDefaultFamily(),
+    SingleInstance.acquire(),
+  ).wait;
+  if (instanceRole == SingleInstanceRole.secondary) {
     exit(0);
   }
 
@@ -101,10 +104,13 @@ void main() async {
 
   // ① 音源与目录（设置注册表 → SourceManager → 目录/评论/专辑/歌手）。
   final catalog = buildCatalogStack();
-  // ② 本地数据（省流 + 封面网关 + 下载链路 + 歌词服务 + 缓存写入器）。
-  final local = await buildLocalDataStack(catalog: catalog);
-  // ③ 资料库 / 统计 / 换源偏好（设备戳在 syncState 就绪后可用）。
-  final library = await buildLibraryStack(catalog: catalog);
+  // ② 本地数据（省流 + 封面网关 + 下载链路 + 歌词服务 + 缓存写入器）
+  //    与 ③ 资料库 / 统计 / 换源偏好互不依赖：并行装配，等待取最大值
+  //    （串行等待是两段相加，实测该段是启动装配里最大的一块）。
+  final (local, library) = await (
+    buildLocalDataStack(catalog: catalog),
+    buildLibraryStack(catalog: catalog),
+  ).wait;
   _markStartup('本地数据/资料库栈', startup);
   // ④ 播放链路 + provider + 观察者 + 系统媒体会话。
   final playback = await buildPlaybackStack(
@@ -164,7 +170,8 @@ void main() async {
     playback: playback.playbackProvider,
     service: library.playStatisticsService,
   );
-  // ⑩ 跨设备同步（可选子系统；初始化失败不阻断启动）。
+  // ⑩ 跨设备同步（可选子系统；引擎 init / 调度器启动后移到首帧，见
+  //    post_frame_init.dart 的 startSync）。
   final sync = await buildSyncStack(
     catalog: catalog,
     library: library,
@@ -172,8 +179,8 @@ void main() async {
     dataSaver: local.dataSaver,
   );
   _markStartup('同步栈', startup);
-  // ⑪ 应用内更新（渠道 / 自动检查 / 下载安装；退出走统一路径）。
-  final update = await buildUpdateStack(quitApp: desktop.quitApp);
+  // ⑪ 应用内更新（纯构造；包信息 / 偏好 / 平台信息读取后移到首帧）。
+  final update = buildUpdateStack(quitApp: desktop.quitApp);
   _markStartup('更新栈（装配完成）', startup);
 
   // 前台恢复：拉一次（有本地变更时一并推送）并复查更新安装权限——从
@@ -212,7 +219,7 @@ void main() async {
   );
 
   // 首帧：先亮窗口（内容已画好，用户不再盯空白窗），再做启动尾巴
-  // （托盘落地 + 自动更新检查 + 音源初始化）。
+  // （托盘落地 + 更新准备/自动检查 + 同步启动 + 音源初始化）。
   WidgetsBinding.instance.addPostFrameCallback((_) {
     revealFallback.cancel();
     _markStartup('首帧', startup);
@@ -221,7 +228,7 @@ void main() async {
       catalog: catalog,
       desktop: desktop,
       update: update,
-      syncProvider: sync.provider,
+      sync: sync,
     );
   });
 }
