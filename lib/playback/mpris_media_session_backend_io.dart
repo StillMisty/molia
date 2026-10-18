@@ -48,7 +48,7 @@ class MprisMediaSessionBackend implements MediaSessionBackend {
             // 避免与其它实例 / 旧 audio_service 配置撞名。
             androidNotificationChannelId: 'top.stillmisty.molia.media',
             androidNotificationChannelName: 'Molia',
-            androidNotificationChannelDescription: '本地音源播放控制',
+            androidNotificationChannelDescription: '播放控制与歌词',
           ),
         ),
       );

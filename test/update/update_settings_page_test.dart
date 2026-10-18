@@ -162,7 +162,7 @@ void main() {
   testWidgets('高级：清单地址与镜像前缀默认展示', (tester) async {
     await pumpPage(tester);
 
-    expect(find.text('更新清单地址'), findsOneWidget);
+    expect(find.text('更新信息地址'), findsOneWidget);
     expect(find.text('默认（官方 GitHub Release）'), findsOneWidget);
     expect(find.text('下载镜像前缀'), findsOneWidget);
     expect(find.text('默认（GitHub 直连）'), findsOneWidget);

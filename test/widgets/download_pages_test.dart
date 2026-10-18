@@ -180,7 +180,7 @@ void main() {
     expect(find.byKey(const Key('downloadsMigrateLegacyItem')), findsOneWidget);
     // 发布器支持（Android）：补发布入口可见。
     expect(find.byKey(const Key('downloadsPublishPublicItem')), findsOneWidget);
-    expect(find.text('补发布到公共目录'), findsOneWidget);
+    expect(find.text('补一份到公共目录'), findsOneWidget);
   });
 
   testWidgets('下载管理页：半成品清扫提示数量', (tester) async {

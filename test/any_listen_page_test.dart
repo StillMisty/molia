@@ -40,7 +40,7 @@ void main() {
 
     expect(find.text('any-listen 接入'), findsOneWidget);
     expect(find.text('服务器地址'), findsOneWidget);
-    expect(find.text('访问令牌（可选）'), findsOneWidget);
+    expect(find.text('访问密码（可选）'), findsOneWidget);
     expect(find.text('启用 any-listen 音源'), findsOneWidget);
     expect(find.text('保存').hitTestable(), findsOneWidget);
     expect(find.text('连接测试').hitTestable(), findsOneWidget);

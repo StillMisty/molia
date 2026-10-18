@@ -215,7 +215,7 @@ abstract class AppLocalizations {
   /// No description provided for @lyricsCopyModeSnackbar.
   ///
   /// In en, this message translates to:
-  /// **'Copy lyrics mode: single repeat is on and auto-follow is paused; your previous play mode returns when you exit.'**
+  /// **'Copy mode: single repeat is on and auto-follow is paused; your settings return when you exit.'**
   String get lyricsCopyModeSnackbar;
 
   /// No description provided for @centerCurrentLine.
@@ -275,7 +275,7 @@ abstract class AppLocalizations {
   /// No description provided for @settingsBaseColorWallpaper.
   ///
   /// In en, this message translates to:
-  /// **'System wallpaper'**
+  /// **'System wallpaper (follows system colors)'**
   String get settingsBaseColorWallpaper;
 
   /// No description provided for @settingsBaseColorCustom.
@@ -299,7 +299,7 @@ abstract class AppLocalizations {
   /// No description provided for @settingsBaseColorAccentActive.
   ///
   /// In en, this message translates to:
-  /// **'Source: system accent color'**
+  /// **'Source: system theme color'**
   String get settingsBaseColorAccentActive;
 
   /// No description provided for @settingsPureBlack.
@@ -311,7 +311,7 @@ abstract class AppLocalizations {
   /// No description provided for @settingsPureBlackSubtitle.
   ///
   /// In en, this message translates to:
-  /// **'Use pure black surfaces in dark mode (OLED)'**
+  /// **'Pure black background in dark mode — saves power on OLED'**
   String get settingsPureBlackSubtitle;
 
   /// No description provided for @settingsSeedColor.
@@ -329,7 +329,7 @@ abstract class AppLocalizations {
   /// No description provided for @settingsFollowArtworkSubtitle.
   ///
   /// In en, this message translates to:
-  /// **'Follow the current track\'s album art; falls back to base colors without artwork'**
+  /// **'Pick colors from the current song’s artwork; base colors when there is none'**
   String get settingsFollowArtworkSubtitle;
 
   /// No description provided for @settingsAppFont.
@@ -353,7 +353,7 @@ abstract class AppLocalizations {
   /// No description provided for @fontPickerEmpty.
   ///
   /// In en, this message translates to:
-  /// **'No fonts available on this device'**
+  /// **'No available fonts found'**
   String get fontPickerEmpty;
 
   /// No description provided for @posterFontLabel.
@@ -455,7 +455,7 @@ abstract class AppLocalizations {
   /// No description provided for @settingsDefaultPlayModeSubtitle.
   ///
   /// In en, this message translates to:
-  /// **'Initial mode for new sessions; current playback is unaffected'**
+  /// **'Used the next time playback starts; current playback is unaffected'**
   String get settingsDefaultPlayModeSubtitle;
 
   /// No description provided for @settingsRestoreSessionTitle.
@@ -479,7 +479,7 @@ abstract class AppLocalizations {
   /// No description provided for @settingsAutoSourceSwapSubtitle.
   ///
   /// In en, this message translates to:
-  /// **'On failure, find the same song in another source and switch (on by default)'**
+  /// **'On playback failure, look for the same song in another source (on by default)'**
   String get settingsAutoSourceSwapSubtitle;
 
   /// No description provided for @settingsDataSaverTitle.
@@ -491,7 +491,7 @@ abstract class AppLocalizations {
   /// No description provided for @settingsDataSaverSubtitle.
   ///
   /// In en, this message translates to:
-  /// **'When on, lower audio quality and reduce artwork loading on mobile data'**
+  /// **'Lower audio quality and load fewer covers on mobile data'**
   String get settingsDataSaverSubtitle;
 
   /// No description provided for @settingsDataSaverNetworkCellular.
@@ -527,13 +527,13 @@ abstract class AppLocalizations {
   /// No description provided for @settingsDataSaverCoversSubtitle.
   ///
   /// In en, this message translates to:
-  /// **'Do not request new artwork; show a placeholder when not cached'**
+  /// **'Stop loading new artwork; show a placeholder when not cached'**
   String get settingsDataSaverCoversSubtitle;
 
   /// No description provided for @settingsSourcesItemSubtitle.
   ///
   /// In en, this message translates to:
-  /// **'Import LX Music source scripts to search third-party platforms'**
+  /// **'Import LX Music source scripts to search more platforms'**
   String get settingsSourcesItemSubtitle;
 
   /// No description provided for @settingsContentSection.
@@ -731,7 +731,7 @@ abstract class AppLocalizations {
   /// No description provided for @importDialogMessage.
   ///
   /// In en, this message translates to:
-  /// **'Importing data will replace existing recent play entries with the same identifiers. This cannot be undone. Are you sure you want to continue?\n\nEnsure the JSON file is valid and was previously exported from Molia.'**
+  /// **'Importing merges the backup with local data; matching entries are replaced by the backup. This cannot be undone.\n\nMake sure the file is a backup exported from Molia.'**
   String get importDialogMessage;
 
   /// No description provided for @importButton.
@@ -1127,13 +1127,13 @@ abstract class AppLocalizations {
   /// No description provided for @anyListenIntroBody.
   ///
   /// In en, this message translates to:
-  /// **'any-listen is a self-hosted private music service. Once the server address is set and the source is enabled, its online sources appear in search.'**
+  /// **'any-listen is a self-hosted music service. Once enabled, its online sources appear in search.'**
   String get anyListenIntroBody;
 
   /// No description provided for @anyListenIntroHint.
   ///
   /// In en, this message translates to:
-  /// **'Skeleton implementation: the handshake probes (/api/ipc/hello, /api/ipc/id) follow the official source; search / url / lyric / pic endpoints are not yet verified against a real server and may not work.'**
+  /// **'This integration has not been tested against a real server and may not work yet.'**
   String get anyListenIntroHint;
 
   /// No description provided for @anyListenServerSection.
@@ -1151,7 +1151,7 @@ abstract class AppLocalizations {
   /// No description provided for @anyListenServerUrlHint.
   ///
   /// In en, this message translates to:
-  /// **'Address of a Docker / desktop any-listen deployment'**
+  /// **'Address of your any-listen service'**
   String get anyListenServerUrlHint;
 
   /// No description provided for @anyListenServerUrlRequired.
@@ -1169,25 +1169,25 @@ abstract class AppLocalizations {
   /// No description provided for @anyListenToken.
   ///
   /// In en, this message translates to:
-  /// **'Access token (optional)'**
+  /// **'Access password (optional)'**
   String get anyListenToken;
 
   /// No description provided for @anyListenTokenPlaceholder.
   ///
   /// In en, this message translates to:
-  /// **'Paste the token issued by the server after a successful test'**
+  /// **'After a successful test, paste the access password provided by the server'**
   String get anyListenTokenPlaceholder;
 
   /// No description provided for @anyListenTokenShow.
   ///
   /// In en, this message translates to:
-  /// **'Show token'**
+  /// **'Show access password'**
   String get anyListenTokenShow;
 
   /// No description provided for @anyListenTokenHide.
   ///
   /// In en, this message translates to:
-  /// **'Hide token'**
+  /// **'Hide access password'**
   String get anyListenTokenHide;
 
   /// No description provided for @anyListenEnable.
@@ -1199,7 +1199,7 @@ abstract class AppLocalizations {
   /// No description provided for @anyListenEnableSubtitle.
   ///
   /// In en, this message translates to:
-  /// **'When off, it does not appear in search and makes no requests'**
+  /// **'When off, it is hidden from search and makes no network requests'**
   String get anyListenEnableSubtitle;
 
   /// No description provided for @anyListenSave.
@@ -1337,7 +1337,7 @@ abstract class AppLocalizations {
   /// No description provided for @sourcesImportFromUrlSubtitle.
   ///
   /// In en, this message translates to:
-  /// **'Download the script over HTTP(S)'**
+  /// **'Download a script from a link'**
   String get sourcesImportFromUrlSubtitle;
 
   /// No description provided for @sourcesDefaultQuality.
@@ -1391,7 +1391,7 @@ abstract class AppLocalizations {
   /// No description provided for @sourcesQualityHint.
   ///
   /// In en, this message translates to:
-  /// **'Preferred when resolving a track URL; falls back when unavailable.'**
+  /// **'Play at this quality when available; fall back automatically otherwise'**
   String get sourcesQualityHint;
 
   /// No description provided for @sourcesSortTitle.
@@ -1415,7 +1415,7 @@ abstract class AppLocalizations {
   /// No description provided for @sourcesSortHint.
   ///
   /// In en, this message translates to:
-  /// **'The channel order on the Discover page matches the list below and also controls the search source order. Newly imported channels are appended at the end; turning a channel off removes it from the Discover page and search results.'**
+  /// **'Discover and search follow this order; new channels go to the end, and disabled channels disappear.'**
   String get sourcesSortHint;
 
   /// No description provided for @sourcesChannelDisabled.
@@ -1511,7 +1511,7 @@ abstract class AppLocalizations {
   /// No description provided for @sourcesDisclaimerBody.
   ///
   /// In en, this message translates to:
-  /// **'Source scripts are executable JavaScript code provided by third-party communities.\nOnce imported, they run in the local JS engine and can make network requests.\nImport only scripts from trusted sources; their availability and legality are the responsibility of the provider.'**
+  /// **'Source scripts are executable code from third parties; once imported they run on this device and can access the network.\nOnly import scripts from trusted sources. Their availability and legality are the provider’s responsibility.'**
   String get sourcesDisclaimerBody;
 
   /// No description provided for @sourcesContinueImport.
@@ -1535,7 +1535,7 @@ abstract class AppLocalizations {
   /// No description provided for @sourcesPasteHint.
   ///
   /// In en, this message translates to:
-  /// **'Paste the full script starting with /** @name ... */'**
+  /// **'Paste the full source script'**
   String get sourcesPasteHint;
 
   /// No description provided for @sourcesImportAction.
@@ -1625,7 +1625,7 @@ abstract class AppLocalizations {
   /// No description provided for @recentlyPlayedEmpty.
   ///
   /// In en, this message translates to:
-  /// **'Nothing played recently yet. Albums and playlists you play will show up here.'**
+  /// **'Albums and playlists you listen to will show up here.'**
   String get recentlyPlayedEmpty;
 
   /// No description provided for @libraryRecentPlays.
@@ -2051,7 +2051,7 @@ abstract class AppLocalizations {
   /// No description provided for @sourceSwapDuplicateMessage.
   ///
   /// In en, this message translates to:
-  /// **'The target playlist already contains this track. Changing the source will remove the duplicate and replace it with the selected version.'**
+  /// **'This song is already in the list. Changing the source replaces the existing version.'**
   String get sourceSwapDuplicateMessage;
 
   /// No description provided for @sourceSwapDone.
@@ -2417,7 +2417,7 @@ abstract class AppLocalizations {
   /// No description provided for @settingsCacheSubtitle.
   ///
   /// In en, this message translates to:
-  /// **'Audio, lyrics and artwork usage and policies'**
+  /// **'Audio, lyric and artwork usage and cleanup rules'**
   String get settingsCacheSubtitle;
 
   /// No description provided for @cachePartitionAudio.
@@ -2459,13 +2459,13 @@ abstract class AppLocalizations {
   /// No description provided for @cachePolicyAudioScope.
   ///
   /// In en, this message translates to:
-  /// **'Cache on play'**
+  /// **'Cache what you play'**
   String get cachePolicyAudioScope;
 
   /// No description provided for @cachePolicyAudioHint.
   ///
   /// In en, this message translates to:
-  /// **'Written while playing on mobile; filled in by a background download on desktop. Cached tracks play offline and can be saved as downloads; the size limit and LRU eviction still apply.'**
+  /// **'Songs are cached as they play, so they can play offline or be saved as downloads; the oldest cache is cleared when the limit is reached.'**
   String get cachePolicyAudioHint;
 
   /// No description provided for @cachePolicyAudioMax.
@@ -2555,7 +2555,7 @@ abstract class AppLocalizations {
   /// No description provided for @cacheAudioMaxSuggested.
   ///
   /// In en, this message translates to:
-  /// **'Suggested {value} (internal storage ÷ 128)'**
+  /// **'Suggested: {value}'**
   String cacheAudioMaxSuggested(String value);
 
   /// No description provided for @cacheCustomRangeError.
@@ -2579,7 +2579,7 @@ abstract class AppLocalizations {
   /// No description provided for @cacheClearAllConfirm.
   ///
   /// In en, this message translates to:
-  /// **'Clear all caches (audio / lyrics / artwork)? This cannot be undone.'**
+  /// **'Clear all caches (audio, lyrics and artwork)? This cannot be undone.'**
   String get cacheClearAllConfirm;
 
   /// No description provided for @lyricsContentTitle.
@@ -2819,13 +2819,13 @@ abstract class AppLocalizations {
   /// No description provided for @lyricsDesktopLock.
   ///
   /// In en, this message translates to:
-  /// **'Lock position (click-through)'**
+  /// **'Lock position (mouse clicks pass through)'**
   String get lyricsDesktopLock;
 
   /// No description provided for @lyricsDesktopFreeze.
   ///
   /// In en, this message translates to:
-  /// **'Freeze while screen off'**
+  /// **'Pause updates while the screen is off'**
   String get lyricsDesktopFreeze;
 
   /// No description provided for @lyricsDesktopPauseBehavior.
@@ -2849,7 +2849,7 @@ abstract class AppLocalizations {
   /// No description provided for @lyricsDesktopPauseFallbackOverridden.
   ///
   /// In en, this message translates to:
-  /// **'The window is hidden while paused, so this fallback is inactive'**
+  /// **'The whole window is hidden while paused, so this setting has no effect'**
   String get lyricsDesktopPauseFallbackOverridden;
 
   /// No description provided for @lyricsDesktopNoLyrics.
@@ -2873,7 +2873,7 @@ abstract class AppLocalizations {
   /// No description provided for @lyricsDesktopScrollModeSubtitle.
   ///
   /// In en, this message translates to:
-  /// **'Follow singing: the text moves with the highlight; Constant: steady speed across the line'**
+  /// **'Follow singing: text moves with the highlight; Constant: scrolls at a steady speed'**
   String get lyricsDesktopScrollModeSubtitle;
 
   /// No description provided for @lyricsDesktopScrollFollow.
@@ -2987,7 +2987,7 @@ abstract class AppLocalizations {
   /// No description provided for @lyricsNotificationEnableSubtitle.
   ///
   /// In en, this message translates to:
-  /// **'Writes the current line into media metadata'**
+  /// **'Sync the current lyric to system playback controls'**
   String get lyricsNotificationEnableSubtitle;
 
   /// No description provided for @lyricsMetadataTarget.
@@ -3071,7 +3071,7 @@ abstract class AppLocalizations {
   /// No description provided for @lyricsBluetoothEnableSubtitle.
   ///
   /// In en, this message translates to:
-  /// **'Writes the current line into media metadata (also visible in notification & lock screen)'**
+  /// **'Show the current lyric on the car head unit, notification shade and lock screen'**
   String get lyricsBluetoothEnableSubtitle;
 
   /// No description provided for @lyricsBluetoothOnlyA2dp.
@@ -3125,13 +3125,13 @@ abstract class AppLocalizations {
   /// No description provided for @lyricsNotificationPermissionSubtitle.
   ///
   /// In en, this message translates to:
-  /// **'Allow notifications so the media card appears; tap to open system settings'**
+  /// **'Allow notifications so media controls can stay visible; tap to open system settings'**
   String get lyricsNotificationPermissionSubtitle;
 
   /// No description provided for @lyricsMediaSessionUnavailable.
   ///
   /// In en, this message translates to:
-  /// **'System media session unavailable: notification / lock-screen lyrics and playback controls are disabled'**
+  /// **'System media controls failed to start: notification/lock-screen lyrics and playback controls are unavailable'**
   String get lyricsMediaSessionUnavailable;
 
   /// No description provided for @lyricsDisplayUnsupported.
@@ -3239,7 +3239,7 @@ abstract class AppLocalizations {
   /// No description provided for @lyricsDesktopColorThemeHint.
   ///
   /// In en, this message translates to:
-  /// **'The color source decides which scheme the theme-role rows use: app theme follows the appearance settings; album art updates live with the current track.'**
+  /// **'“Follow app theme” changes with the appearance settings; “Follow artwork” picks colors from the current song and updates live.'**
   String get lyricsDesktopColorThemeHint;
 
   /// No description provided for @statsTitle.
@@ -3461,7 +3461,7 @@ abstract class AppLocalizations {
   /// No description provided for @aiDjSettingsSubtitle.
   ///
   /// In en, this message translates to:
-  /// **'AI-powered radio with your own API key (off by default)'**
+  /// **'AI radio with your own key (off by default)'**
   String get aiDjSettingsSubtitle;
 
   /// No description provided for @aiDjNotConfigured.
@@ -3533,7 +3533,7 @@ abstract class AppLocalizations {
   /// No description provided for @aiDjToggleSubtitle.
   ///
   /// In en, this message translates to:
-  /// **'Keeps AI-picked songs coming and extends the queue automatically'**
+  /// **'AI keeps picking songs into the queue and continues when it ends'**
   String get aiDjToggleSubtitle;
 
   /// No description provided for @aiDjFeedMore.
@@ -3569,7 +3569,7 @@ abstract class AppLocalizations {
   /// No description provided for @aiDjConsentBody.
   ///
   /// In en, this message translates to:
-  /// **'When enabled, your listening profile (aggregated stats, the latest 200 play events, and the list of already-played tracks) will be sent to the AI service you configure in order to generate recommendations. Data goes straight to that service with no relay through this app, and no bundled API key is provided. Turning the mode off stops continuation; clearing the config disconnects it.'**
+  /// **'When enabled, your listening profile (stats summary, the latest 200 plays, and songs already heard) is sent to the AI service you configure to generate recommendations. Data goes directly to that service, not through this app, and no built-in key is provided.\nTurning the mode off stops recommendations; clearing the config disconnects it.'**
   String get aiDjConsentBody;
 
   /// No description provided for @aiDjAgree.
@@ -3647,7 +3647,7 @@ abstract class AppLocalizations {
   /// No description provided for @aiDjQueued.
   ///
   /// In en, this message translates to:
-  /// **'{count} queued this session'**
+  /// **'{count} added to the queue this time'**
   String aiDjQueued(int count);
 
   /// No description provided for @aiDjSkippedCount.
@@ -3821,13 +3821,13 @@ abstract class AppLocalizations {
   /// No description provided for @aiDjUpstreamBody.
   ///
   /// In en, this message translates to:
-  /// **'Latest {events} play events · top {artists} artists · {exclusions} already-played excluded'**
+  /// **'Latest {events} plays · {artists} frequent artists · {exclusions} already-heard songs excluded'**
   String aiDjUpstreamBody(int events, int artists, int exclusions);
 
   /// No description provided for @aiDjUpstreamHint.
   ///
   /// In en, this message translates to:
-  /// **'Only the stats above plus titles/artists — no play URLs, no device info.'**
+  /// **'Only the stats above plus song and artist names — no play links or device information.'**
   String get aiDjUpstreamHint;
 
   /// No description provided for @aiDjCacheTtlTitle.
@@ -3851,7 +3851,7 @@ abstract class AppLocalizations {
   /// No description provided for @aiDjCacheTtlHint.
   ///
   /// In en, this message translates to:
-  /// **'An expired list stops feeding the radio; the next extension generates a new batch (no interruption, no notice).'**
+  /// **'After expiry a new batch is generated automatically without interrupting playback.'**
   String get aiDjCacheTtlHint;
 
   /// No description provided for @aiDjGenerate.
@@ -3887,7 +3887,7 @@ abstract class AppLocalizations {
   /// No description provided for @settingsSyncItemSubtitle.
   ///
   /// In en, this message translates to:
-  /// **'Playlists, sources, settings and credentials'**
+  /// **'Playlists, sources, settings and keys'**
   String get settingsSyncItemSubtitle;
 
   /// No description provided for @syncPairingSection.
@@ -3905,7 +3905,7 @@ abstract class AppLocalizations {
   /// No description provided for @syncLocalSectionHint.
   ///
   /// In en, this message translates to:
-  /// **'Peers need this information to reach this device; the addresses and ports travel inside the pairing code.'**
+  /// **'Other devices need this information to reach this device; the address is shared in the pairing code.'**
   String get syncLocalSectionHint;
 
   /// No description provided for @syncDeviceNameTitle.
@@ -3929,7 +3929,7 @@ abstract class AppLocalizations {
   /// No description provided for @syncPassphraseTrustHint.
   ///
   /// In en, this message translates to:
-  /// **'Passphrase is the trust root; every holder is fully trusted. Reset it if leaked.'**
+  /// **'Any device that knows the passphrase can read and write all synced data; reset it if leaked.'**
   String get syncPassphraseTrustHint;
 
   /// No description provided for @syncPassphraseCopy.
@@ -4013,7 +4013,7 @@ abstract class AppLocalizations {
   /// No description provided for @syncOutcomeNoPeers.
   ///
   /// In en, this message translates to:
-  /// **'No peer found'**
+  /// **'No other device found'**
   String get syncOutcomeNoPeers;
 
   /// No description provided for @syncOutcomePartial.
@@ -4037,7 +4037,7 @@ abstract class AppLocalizations {
   /// No description provided for @syncTriggerDebounce.
   ///
   /// In en, this message translates to:
-  /// **'data change'**
+  /// **'data changed'**
   String get syncTriggerDebounce;
 
   /// No description provided for @syncTriggerTimer.
@@ -4049,7 +4049,7 @@ abstract class AppLocalizations {
   /// No description provided for @syncTriggerIncoming.
   ///
   /// In en, this message translates to:
-  /// **'peer push'**
+  /// **'sent by another device'**
   String get syncTriggerIncoming;
 
   /// No description provided for @syncTriggerResume.
@@ -4085,7 +4085,7 @@ abstract class AppLocalizations {
   /// No description provided for @syncActivityRounds.
   ///
   /// In en, this message translates to:
-  /// **'{rounds} rounds, {effective} with transfer, {bytes} traffic'**
+  /// **'{rounds} runs, {effective} with changes · {bytes} transferred'**
   String syncActivityRounds(int rounds, int effective, String bytes);
 
   /// No description provided for @syncActivityEnvironment.
@@ -4164,19 +4164,19 @@ abstract class AppLocalizations {
   /// No description provided for @syncCellularPauseSubtitle.
   ///
   /// In en, this message translates to:
-  /// **'When off, cellular syncs only small categories (settings, playlists, session); statistics and history wait for Wi-Fi'**
+  /// **'When off, mobile data syncs only small items (settings, playlists); stats and history wait for Wi-Fi'**
   String get syncCellularPauseSubtitle;
 
   /// No description provided for @syncAppliedItems.
   ///
   /// In en, this message translates to:
-  /// **'{applied} applied'**
+  /// **'{applied} updated'**
   String syncAppliedItems(int applied);
 
   /// No description provided for @syncPeerCount.
   ///
   /// In en, this message translates to:
-  /// **'{count} peers'**
+  /// **'{count} devices'**
   String syncPeerCount(int count);
 
   /// No description provided for @syncFailedCount.
@@ -4248,13 +4248,13 @@ abstract class AppLocalizations {
   /// No description provided for @syncCategorySession.
   ///
   /// In en, this message translates to:
-  /// **'Last playback session'**
+  /// **'Last playback state'**
   String get syncCategorySession;
 
   /// No description provided for @syncCategoryCredentials.
   ///
   /// In en, this message translates to:
-  /// **'AI DJ & credentials'**
+  /// **'AI radio and keys'**
   String get syncCategoryCredentials;
 
   /// No description provided for @syncTransportSection.
@@ -4266,7 +4266,7 @@ abstract class AppLocalizations {
   /// No description provided for @syncTransportAllOffHint.
   ///
   /// In en, this message translates to:
-  /// **'Sync does not run while both transports are off — turn one on to start exchanging data.'**
+  /// **'Sync does not run while both methods are off; turn one on to start.'**
   String get syncTransportAllOffHint;
 
   /// No description provided for @syncLanTitle.
@@ -4308,7 +4308,7 @@ abstract class AppLocalizations {
   /// No description provided for @syncWebdavRemoteDir.
   ///
   /// In en, this message translates to:
-  /// **'Remote directory'**
+  /// **'Cloud folder'**
   String get syncWebdavRemoteDir;
 
   /// No description provided for @syncWebdavNotConfigured.
@@ -4392,7 +4392,7 @@ abstract class AppLocalizations {
   /// No description provided for @syncPeersHint.
   ///
   /// In en, this message translates to:
-  /// **'Enter the same passphrase on another device to join. If no device is ever discovered, check whether LAN sync can run (permission / network isolation) or switch to WebDAV.'**
+  /// **'Enter the same passphrase on another device to join. If no device is found, check LAN permission or switch to WebDAV.'**
   String get syncPeersHint;
 
   /// No description provided for @syncPeersEmptyTitle.
@@ -4434,19 +4434,19 @@ abstract class AppLocalizations {
   /// No description provided for @syncPeerBehind.
   ///
   /// In en, this message translates to:
-  /// **'{count} behind'**
+  /// **'{count} pending'**
   String syncPeerBehind(int count);
 
   /// No description provided for @syncPeerBehindBytes.
   ///
   /// In en, this message translates to:
-  /// **'{count} behind (~{size})'**
+  /// **'{count} pending (~{size})'**
   String syncPeerBehindBytes(int count, String size);
 
   /// No description provided for @syncPeerClockSkew.
   ///
   /// In en, this message translates to:
-  /// **'clock off by {minutes} min'**
+  /// **'device time differs by {minutes} min'**
   String syncPeerClockSkew(int minutes);
 
   /// No description provided for @syncPeerLastError.
@@ -4536,61 +4536,61 @@ abstract class AppLocalizations {
   /// No description provided for @syncPeerLostHint.
   ///
   /// In en, this message translates to:
-  /// **'No contact for over 180 days (reinstalled or retired). You can ignore it locally or explicitly clean up its remote files — nothing is deleted automatically.'**
+  /// **'This device has not connected for over 180 days (it may have been reinstalled or retired). You can ignore it, or clean up its cloud sync files; local data is unaffected.'**
   String get syncPeerLostHint;
 
   /// No description provided for @syncPeerIgnore.
   ///
   /// In en, this message translates to:
-  /// **'Ignore this device locally'**
+  /// **'Ignore this device'**
   String get syncPeerIgnore;
 
   /// No description provided for @syncPeerUnignore.
   ///
   /// In en, this message translates to:
-  /// **'Stop ignoring locally'**
+  /// **'Stop ignoring'**
   String get syncPeerUnignore;
 
   /// No description provided for @syncPeerIgnoreHint.
   ///
   /// In en, this message translates to:
-  /// **'No longer pull or merge its payloads (this device only)'**
+  /// **'Stop receiving synced data from this device (this device only)'**
   String get syncPeerIgnoreHint;
 
   /// No description provided for @syncPeerIgnoredHint.
   ///
   /// In en, this message translates to:
-  /// **'Ignored locally: its payloads are no longer pulled or merged.'**
+  /// **'Ignored: no more synced data is received from this device.'**
   String get syncPeerIgnoredHint;
 
   /// No description provided for @syncPeerCleanupRemote.
   ///
   /// In en, this message translates to:
-  /// **'Clean up remote files'**
+  /// **'Clean up cloud files'**
   String get syncPeerCleanupRemote;
 
   /// No description provided for @syncPeerCleanupRemoteHint.
   ///
   /// In en, this message translates to:
-  /// **'Delete its journal and snapshot files on WebDAV'**
+  /// **'Delete this device’s sync files on WebDAV'**
   String get syncPeerCleanupRemoteHint;
 
   /// No description provided for @syncPeerCleanupRemoteConfirm.
   ///
   /// In en, this message translates to:
-  /// **'Deletes this device\'s journal and snapshot files on WebDAV. Local data is untouched and the files are not recreated automatically (only when the peer is online again). LAN connections have no remote storage.'**
+  /// **'Deletes this device’s sync files on WebDAV; local data is unaffected. Files are written again when the device comes back online. LAN connections have no cloud files.'**
   String get syncPeerCleanupRemoteConfirm;
 
   /// No description provided for @syncPeerCleanupRemoteDone.
   ///
   /// In en, this message translates to:
-  /// **'Remote files cleaned up'**
+  /// **'Cloud files cleaned up'**
   String get syncPeerCleanupRemoteDone;
 
   /// No description provided for @syncPeerCleanupRemoteNone.
   ///
   /// In en, this message translates to:
-  /// **'No remote files to clean up'**
+  /// **'No cloud files to clean up'**
   String get syncPeerCleanupRemoteNone;
 
   /// No description provided for @syncPeerCleanupRemoteFailed.
@@ -4602,13 +4602,13 @@ abstract class AppLocalizations {
   /// No description provided for @syncPeerNotContacted.
   ///
   /// In en, this message translates to:
-  /// **'not connected yet — it retries automatically once the peer is online'**
+  /// **'Not connected yet — it retries automatically when the device is online'**
   String get syncPeerNotContacted;
 
   /// No description provided for @syncPeerCandidatesTitle.
   ///
   /// In en, this message translates to:
-  /// **'{count} candidate addresses'**
+  /// **'{count} available addresses'**
   String syncPeerCandidatesTitle(int count);
 
   /// No description provided for @syncPeerCandidatesSubtitle.
@@ -4758,19 +4758,19 @@ abstract class AppLocalizations {
   /// No description provided for @syncLocalAddressesEmptyTitle.
   ///
   /// In en, this message translates to:
-  /// **'No routable address'**
+  /// **'No available network address'**
   String get syncLocalAddressesEmptyTitle;
 
   /// No description provided for @syncLocalAddressesHint.
   ///
   /// In en, this message translates to:
-  /// **'These are the same addresses shared in the pairing code.'**
+  /// **'These addresses are shared with other devices in the pairing code.'**
   String get syncLocalAddressesHint;
 
   /// No description provided for @syncLocalAddressesEmpty.
   ///
   /// In en, this message translates to:
-  /// **'Only loopback / link-local addresses were found; check the network connection.'**
+  /// **'No usable LAN address found; check the network connection.'**
   String get syncLocalAddressesEmpty;
 
   /// No description provided for @syncLocalProbePort.
@@ -4782,7 +4782,7 @@ abstract class AppLocalizations {
   /// No description provided for @syncLocalProbePortUnavailable.
   ///
   /// In en, this message translates to:
-  /// **'Unavailable — broadcast / multicast discovery is degraded; use manual addresses'**
+  /// **'Unavailable; add a device address manually'**
   String get syncLocalProbePortUnavailable;
 
   /// No description provided for @syncLocalProbePortPerFamily.
@@ -4794,13 +4794,13 @@ abstract class AppLocalizations {
   /// No description provided for @syncLocalHttpPort.
   ///
   /// In en, this message translates to:
-  /// **'Direct endpoint port'**
+  /// **'Connection port'**
   String get syncLocalHttpPort;
 
   /// No description provided for @syncLocalHttpPortUnavailable.
   ///
   /// In en, this message translates to:
-  /// **'Not bound yet'**
+  /// **'Not started yet'**
   String get syncLocalHttpPortUnavailable;
 
   /// No description provided for @syncPeerDeviceId.
@@ -4830,7 +4830,7 @@ abstract class AppLocalizations {
   /// No description provided for @syncCategorySubtitle.
   ///
   /// In en, this message translates to:
-  /// **'Turning it off stops pushing and applying this data on this device'**
+  /// **'When off, this device neither uploads nor receives this data'**
   String get syncCategorySubtitle;
 
   /// No description provided for @syncIssueDialogTitle.
@@ -4872,31 +4872,31 @@ abstract class AppLocalizations {
   /// No description provided for @syncIssueAllPeersUnreachable.
   ///
   /// In en, this message translates to:
-  /// **'All peers are unreachable'**
+  /// **'No device can be reached'**
   String get syncIssueAllPeersUnreachable;
 
   /// No description provided for @syncIssuePullFailed.
   ///
   /// In en, this message translates to:
-  /// **'Failed to pull remote snapshots'**
+  /// **'Failed to read sync data'**
   String get syncIssuePullFailed;
 
   /// No description provided for @syncIssuePushFailed.
   ///
   /// In en, this message translates to:
-  /// **'Failed to push local changes'**
+  /// **'Failed to upload local changes'**
   String get syncIssuePushFailed;
 
   /// No description provided for @syncIssueApplyFailed.
   ///
   /// In en, this message translates to:
-  /// **'Failed to apply remote data {count} time(s)'**
+  /// **'Failed to receive sync data {count} time(s)'**
   String syncIssueApplyFailed(int count);
 
   /// No description provided for @syncIssuePeerReadFailed.
   ///
   /// In en, this message translates to:
-  /// **'{peer}: failed to read snapshot'**
+  /// **'{peer}: failed to read sync data'**
   String syncIssuePeerReadFailed(String peer);
 
   /// No description provided for @syncIssuePeerDecryptFailed.
@@ -4908,43 +4908,43 @@ abstract class AppLocalizations {
   /// No description provided for @syncIssuePeerPushFailed.
   ///
   /// In en, this message translates to:
-  /// **'{peer}: push failed'**
+  /// **'{peer}: upload failed'**
   String syncIssuePeerPushFailed(String peer);
 
   /// No description provided for @syncIssueBroadcastUnavailable.
   ///
   /// In en, this message translates to:
-  /// **'Broadcast failed (blocked by network policy)'**
+  /// **'Auto-discovery failed (blocked by network policy)'**
   String get syncIssueBroadcastUnavailable;
 
   /// No description provided for @syncIssueProbePortUnavailable.
   ///
   /// In en, this message translates to:
-  /// **'Probe port unavailable (reserved or occupied by the system) — add peer addresses manually to discover devices'**
+  /// **'Auto-discovery unavailable; add a device address manually'**
   String get syncIssueProbePortUnavailable;
 
   /// No description provided for @syncIssueDiscoverySilent.
   ///
   /// In en, this message translates to:
-  /// **'No device answered during discovery (the network may be isolated)'**
+  /// **'No other device found (the network may be isolated)'**
   String get syncIssueDiscoverySilent;
 
   /// No description provided for @syncIssueWebdavDirFailed.
   ///
   /// In en, this message translates to:
-  /// **'Failed to prepare the WebDAV directory'**
+  /// **'WebDAV folder unavailable'**
   String get syncIssueWebdavDirFailed;
 
   /// No description provided for @syncIssueWebdavListFailed.
   ///
   /// In en, this message translates to:
-  /// **'Failed to list the WebDAV directory'**
+  /// **'Failed to read the WebDAV folder'**
   String get syncIssueWebdavListFailed;
 
   /// No description provided for @syncIssueWebdavReadFailed.
   ///
   /// In en, this message translates to:
-  /// **'{peer}: failed to read snapshot'**
+  /// **'{peer}: failed to read sync data'**
   String syncIssueWebdavReadFailed(String peer);
 
   /// No description provided for @syncIssueWebdavDecryptFailed.
@@ -4956,19 +4956,19 @@ abstract class AppLocalizations {
   /// No description provided for @syncIssueWebdavUploadFailed.
   ///
   /// In en, this message translates to:
-  /// **'Failed to upload the snapshot to WebDAV'**
+  /// **'Failed to upload sync data to WebDAV'**
   String get syncIssueWebdavUploadFailed;
 
   /// No description provided for @syncIssueDeleteRemoteFailed.
   ///
   /// In en, this message translates to:
-  /// **'Failed to delete the remote files of {peer}'**
+  /// **'Failed to clean up cloud files for {peer}'**
   String syncIssueDeleteRemoteFailed(String peer);
 
   /// No description provided for @syncIssueInternal.
   ///
   /// In en, this message translates to:
-  /// **'Internal sync error'**
+  /// **'Sync error'**
   String get syncIssueInternal;
 
   /// No description provided for @syncActionGrantPermission.
@@ -5028,7 +5028,7 @@ abstract class AppLocalizations {
   /// No description provided for @syncPeerHostFormatInvalid.
   ///
   /// In en, this message translates to:
-  /// **'Invalid address (use an IP, IPv6 or hostname, without a port)'**
+  /// **'Invalid address (use an IP or hostname, without a port)'**
   String get syncPeerHostFormatInvalid;
 
   /// No description provided for @syncPeerPortInvalid.
@@ -5052,13 +5052,13 @@ abstract class AppLocalizations {
   /// No description provided for @syncPeerUnreachable.
   ///
   /// In en, this message translates to:
-  /// **'Not reachable — check that the peer is online on the same network, or update its address'**
+  /// **'Not connected: make sure the device is online on the same network, or update its address'**
   String get syncPeerUnreachable;
 
   /// No description provided for @syncPeerProbePortLabel.
   ///
   /// In en, this message translates to:
-  /// **'Probe port'**
+  /// **'Discovery port'**
   String get syncPeerProbePortLabel;
 
   /// No description provided for @syncPeerProbePortHint.
@@ -5082,13 +5082,13 @@ abstract class AppLocalizations {
   /// No description provided for @syncManualConnectSubtitle.
   ///
   /// In en, this message translates to:
-  /// **'Enter the peer address when discovery fails (subnets / firewall / VPN)'**
+  /// **'Enter the device address manually when auto-discovery fails'**
   String get syncManualConnectSubtitle;
 
   /// No description provided for @syncManualConnectHint.
   ///
   /// In en, this message translates to:
-  /// **'After the peer\'s IP changes, paste its pairing code again or update the address here'**
+  /// **'If the device’s address changed, paste its pairing code again or update it here'**
   String get syncManualConnectHint;
 
   /// No description provided for @syncNetworkAddresses.
@@ -5364,7 +5364,7 @@ abstract class AppLocalizations {
   /// No description provided for @updateManifestOverrideTitle.
   ///
   /// In en, this message translates to:
-  /// **'Manifest URL'**
+  /// **'Update information URL'**
   String get updateManifestOverrideTitle;
 
   /// No description provided for @updateManifestOverrideDefault.
@@ -5430,7 +5430,7 @@ abstract class AppLocalizations {
   /// No description provided for @updateErrorManifest.
   ///
   /// In en, this message translates to:
-  /// **'Invalid update manifest'**
+  /// **'Invalid update information'**
   String get updateErrorManifest;
 
   /// No description provided for @updateErrorUnsupported.
@@ -5551,7 +5551,7 @@ abstract class AppLocalizations {
   /// No description provided for @trackInfoCacheResolve.
   ///
   /// In en, this message translates to:
-  /// **'Resolved link cache'**
+  /// **'Playback link cache'**
   String get trackInfoCacheResolve;
 
   /// No description provided for @trackInfoCacheNone.
@@ -5695,7 +5695,7 @@ abstract class AppLocalizations {
   /// No description provided for @localDataAudioPlatformHint.
   ///
   /// In en, this message translates to:
-  /// **'Playback caching is off here; a cache copy is written in the background'**
+  /// **'This platform does not write a playback cache; one is added after playback'**
   String get localDataAudioPlatformHint;
 
   /// No description provided for @trackCacheClearAll.
@@ -5719,7 +5719,7 @@ abstract class AppLocalizations {
   /// No description provided for @trackCacheClearHint.
   ///
   /// In en, this message translates to:
-  /// **'Only cached copies are removed; downloads and playback are unaffected.'**
+  /// **'Only the cache is cleared; downloads and playback are unaffected.'**
   String get trackCacheClearHint;
 
   /// No description provided for @cacheClearPart.
@@ -5803,7 +5803,7 @@ abstract class AppLocalizations {
   /// No description provided for @downloadFromCache.
   ///
   /// In en, this message translates to:
-  /// **'Using local cache'**
+  /// **'Already cached — no download needed'**
   String get downloadFromCache;
 
   /// No description provided for @downloadLyricsDone.
@@ -5899,7 +5899,7 @@ abstract class AppLocalizations {
   /// No description provided for @downloadEmbedTagsSubtitle.
   ///
   /// In en, this message translates to:
-  /// **'Write tags into the audio file (MP3 / FLAC) so other players can read them; sidecar files remain when writing fails'**
+  /// **'Write tags into the audio file (MP3 / FLAC) so other players can read them; the original file is kept if writing fails'**
   String get downloadEmbedTagsSubtitle;
 
   /// No description provided for @downloadPublishToPublicDir.
@@ -5911,7 +5911,7 @@ abstract class AppLocalizations {
   /// No description provided for @downloadPublishToPublicDirSubtitle.
   ///
   /// In en, this message translates to:
-  /// **'Also copy finished downloads into the system Downloads folder (Android public storage) so file managers and other players can see them; playback still uses the in-app copy'**
+  /// **'Also save a copy to the system Downloads folder (Android) so file managers and other players can see it'**
   String get downloadPublishToPublicDirSubtitle;
 
   /// No description provided for @downloadNotifications.
@@ -5923,7 +5923,7 @@ abstract class AppLocalizations {
   /// No description provided for @downloadNotificationsSubtitle.
   ///
   /// In en, this message translates to:
-  /// **'Show download progress in the notification shade and keep downloads running in the background (Android foreground service)'**
+  /// **'Show download progress in the notification shade and keep downloading in the background (Android; notification permission required)'**
   String get downloadNotificationsSubtitle;
 
   /// No description provided for @downloadLocationInfo.
@@ -5947,7 +5947,7 @@ abstract class AppLocalizations {
   /// No description provided for @lyricsEmptyState.
   ///
   /// In en, this message translates to:
-  /// **'No lyrics for this one yet — try another source? (´･ω･`)'**
+  /// **'No lyrics found — try another source?'**
   String get lyricsEmptyState;
 
   /// No description provided for @lyricsDisplaySettingsAction.
@@ -6115,13 +6115,13 @@ abstract class AppLocalizations {
   /// No description provided for @downloadDeleteConfirm.
   ///
   /// In en, this message translates to:
-  /// **'Delete the local copy? Audio, lyrics and cover files will be removed.'**
+  /// **'Delete the download? Audio, lyrics and cover files will be removed.'**
   String get downloadDeleteConfirm;
 
   /// No description provided for @downloadDeleteConfirmMixed.
   ///
   /// In en, this message translates to:
-  /// **'Delete the local copies? Audio, lyrics and cover files will be removed; imported local tracks are only removed from the list.'**
+  /// **'Delete the downloads? Audio, lyrics and cover files will be removed; imported songs are only removed from the list.'**
   String get downloadDeleteConfirmMixed;
 
   /// No description provided for @localSongsCachedTag.
@@ -6139,19 +6139,19 @@ abstract class AppLocalizations {
   /// No description provided for @localSongsCachedRemoveConfirm.
   ///
   /// In en, this message translates to:
-  /// **'Clear this track\'s audio cache? Only the cached copy is removed; downloads and imported files are unaffected.'**
+  /// **'Clear this song’s audio cache? Only the cache is removed; downloads and imported files are unaffected.'**
   String get localSongsCachedRemoveConfirm;
 
   /// No description provided for @localSongsMixedRemoveConfirm.
   ///
   /// In en, this message translates to:
-  /// **'Remove the selected items? Downloads delete files, imported items are only removed from the list, cached copies are cleared.'**
+  /// **'Remove the selected items? Downloads delete files, imported items are only removed from the list, and cached copies are cleared.'**
   String get localSongsMixedRemoveConfirm;
 
   /// No description provided for @downloadShare.
   ///
   /// In en, this message translates to:
-  /// **'Share / export'**
+  /// **'Share file'**
   String get downloadShare;
 
   /// No description provided for @downloadProgressPercent.
@@ -6295,7 +6295,7 @@ abstract class AppLocalizations {
   /// No description provided for @downloadsCleanupPartsSubtitle.
   ///
   /// In en, this message translates to:
-  /// **'Leftover .part files from crashes; finished downloads are untouched'**
+  /// **'Remove temporary files left by interrupted downloads; finished downloads are untouched'**
   String get downloadsCleanupPartsSubtitle;
 
   /// No description provided for @downloadsCleanupPartsDone.
@@ -6307,19 +6307,19 @@ abstract class AppLocalizations {
   /// No description provided for @downloadsCleanupOrphans.
   ///
   /// In en, this message translates to:
-  /// **'Remove orphan files'**
+  /// **'Remove leftover files'**
   String get downloadsCleanupOrphans;
 
   /// No description provided for @downloadsCleanupOrphansSubtitle.
   ///
   /// In en, this message translates to:
-  /// **'Delete files in the download folder that no record references'**
+  /// **'Delete files in the download folder that no record points to'**
   String get downloadsCleanupOrphansSubtitle;
 
   /// No description provided for @downloadsCleanupOrphansDone.
   ///
   /// In en, this message translates to:
-  /// **'Removed {count} orphan file(s)'**
+  /// **'Removed {count} leftover file(s)'**
   String downloadsCleanupOrphansDone(int count);
 
   /// No description provided for @downloadsBatchPlaylist.
@@ -6361,25 +6361,25 @@ abstract class AppLocalizations {
   /// No description provided for @downloadsPublishPublic.
   ///
   /// In en, this message translates to:
-  /// **'Publish to system Downloads'**
+  /// **'Copy to public Downloads folder'**
   String get downloadsPublishPublic;
 
   /// No description provided for @downloadsPublishPublicSubtitle.
   ///
   /// In en, this message translates to:
-  /// **'Copy downloads that have no public copy yet into the system Downloads folder (Android)'**
+  /// **'Copy downloads that are not in the system Downloads folder yet (Android)'**
   String get downloadsPublishPublicSubtitle;
 
   /// No description provided for @downloadsPublishPublicDone.
   ///
   /// In en, this message translates to:
-  /// **'{published} published, {failed} failed'**
+  /// **'Copied {published}, failed {failed}'**
   String downloadsPublishPublicDone(int published, int failed);
 
   /// No description provided for @downloadsNoResume.
   ///
   /// In en, this message translates to:
-  /// **'No resume support: platform links are usually one-time signed URLs; re-downloading is more reliable'**
+  /// **'Failed downloads start over (platform links usually expire quickly).'**
   String get downloadsNoResume;
 
   /// No description provided for @downloadsEmpty.
@@ -6541,25 +6541,25 @@ abstract class AppLocalizations {
   /// No description provided for @shortcutsGlobalHint.
   ///
   /// In en, this message translates to:
-  /// **'System-wide hotkeys that work while unfocused; must include Ctrl / Alt / Shift'**
+  /// **'Global shortcuts work even when the window is in the background; must include Ctrl / Alt / Shift'**
   String get shortcutsGlobalHint;
 
   /// No description provided for @shortcutsGlobalUnsupportedKey.
   ///
   /// In en, this message translates to:
-  /// **'System-wide hotkeys only support letters, digits, F1–F12 and space'**
+  /// **'Global shortcuts only support letters, digits, F1–F12 and space'**
   String get shortcutsGlobalUnsupportedKey;
 
   /// No description provided for @shortcutsGlobalFailed.
   ///
   /// In en, this message translates to:
-  /// **'Some global shortcuts could not be registered: {detail}'**
+  /// **'Some global shortcuts could not be enabled: {detail}'**
   String shortcutsGlobalFailed(String detail);
 
   /// No description provided for @shortcutsGlobalLinuxHint.
   ///
   /// In en, this message translates to:
-  /// **'On Linux these go through the desktop portal (GlobalShortcuts); minimal desktops may not support it and will report a failure'**
+  /// **'On Linux these are provided through the desktop portal; minimal desktops may not support it and will report a failure'**
   String get shortcutsGlobalLinuxHint;
 
   /// No description provided for @shortcutsEnabledSwitch.
@@ -6607,7 +6607,7 @@ abstract class AppLocalizations {
   /// No description provided for @shortcutsSwapDialogMessage.
   ///
   /// In en, this message translates to:
-  /// **'“{action}” already uses this combo. Replacing will swap the two bindings.'**
+  /// **'“{action}” already uses this combination. Replacing will swap the two shortcuts.'**
   String shortcutsSwapDialogMessage(String action);
 
   /// No description provided for @shortcutsSwapConfirm.
@@ -6619,7 +6619,7 @@ abstract class AppLocalizations {
   /// No description provided for @shortcutsSwapDone.
   ///
   /// In en, this message translates to:
-  /// **'Swapped bindings with “{action}”'**
+  /// **'Swapped shortcuts with “{action}”'**
   String shortcutsSwapDone(String action);
 
   /// No description provided for @shortcutActionPlayPause.
@@ -6721,7 +6721,7 @@ abstract class AppLocalizations {
   /// No description provided for @settingsTrayLinuxHint.
   ///
   /// In en, this message translates to:
-  /// **'The tray icon needs a system tray host; GNOME requires the AppIndicator extension. Without one, closing quits'**
+  /// **'GNOME and similar desktops need a tray extension to show the icon; without a tray, closing the window quits the app'**
   String get settingsTrayLinuxHint;
 }
 

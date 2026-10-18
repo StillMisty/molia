@@ -1666,7 +1666,7 @@ void main() {
     await tester.tap(find.byIcon(Icons.delete_rounded));
     await tester.pumpAndSettle();
     expect(
-      find.text('删除本地副本？音频、歌词与封面文件将一并删除；导入的本地歌曲只从列表移除。'),
+      find.text('删除下载？音频、歌词与封面会一起删除；导入的歌曲只从列表移除。'),
       findsOneWidget,
     );
     await tester.tap(find.widgetWithText(M3EButton, '删除'));

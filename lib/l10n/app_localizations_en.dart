@@ -75,7 +75,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get lyricsCopyModeSnackbar =>
-      'Copy lyrics mode: single repeat is on and auto-follow is paused; your previous play mode returns when you exit.';
+      'Copy mode: single repeat is on and auto-follow is paused; your settings return when you exit.';
 
   @override
   String get centerCurrentLine => 'Center Current Line';
@@ -105,7 +105,8 @@ class AppLocalizationsEn extends AppLocalizations {
   String get settingsBaseColor => 'Base colors';
 
   @override
-  String get settingsBaseColorWallpaper => 'System wallpaper';
+  String get settingsBaseColorWallpaper =>
+      'System wallpaper (follows system colors)';
 
   @override
   String get settingsBaseColorCustom => 'Custom color';
@@ -117,14 +118,14 @@ class AppLocalizationsEn extends AppLocalizations {
   String get settingsBaseColorWallpaperActive => 'Source: system wallpaper';
 
   @override
-  String get settingsBaseColorAccentActive => 'Source: system accent color';
+  String get settingsBaseColorAccentActive => 'Source: system theme color';
 
   @override
   String get settingsPureBlack => 'Pure black background';
 
   @override
   String get settingsPureBlackSubtitle =>
-      'Use pure black surfaces in dark mode (OLED)';
+      'Pure black background in dark mode — saves power on OLED';
 
   @override
   String get settingsSeedColor => 'Custom color';
@@ -134,7 +135,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get settingsFollowArtworkSubtitle =>
-      'Follow the current track\'s album art; falls back to base colors without artwork';
+      'Pick colors from the current song’s artwork; base colors when there is none';
 
   @override
   String get settingsAppFont => 'App font';
@@ -146,7 +147,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get fontPickerSearchHint => 'Search fonts';
 
   @override
-  String get fontPickerEmpty => 'No fonts available on this device';
+  String get fontPickerEmpty => 'No available fonts found';
 
   @override
   String get posterFontLabel => 'Font';
@@ -198,7 +199,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get settingsDefaultPlayModeSubtitle =>
-      'Initial mode for new sessions; current playback is unaffected';
+      'Used the next time playback starts; current playback is unaffected';
 
   @override
   String get settingsRestoreSessionTitle => 'Resume last playback';
@@ -212,14 +213,14 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get settingsAutoSourceSwapSubtitle =>
-      'On failure, find the same song in another source and switch (on by default)';
+      'On playback failure, look for the same song in another source (on by default)';
 
   @override
   String get settingsDataSaverTitle => 'Data saver';
 
   @override
   String get settingsDataSaverSubtitle =>
-      'When on, lower audio quality and reduce artwork loading on mobile data';
+      'Lower audio quality and load fewer covers on mobile data';
 
   @override
   String get settingsDataSaverNetworkCellular => 'Mobile data · active';
@@ -238,11 +239,11 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get settingsDataSaverCoversSubtitle =>
-      'Do not request new artwork; show a placeholder when not cached';
+      'Stop loading new artwork; show a placeholder when not cached';
 
   @override
   String get settingsSourcesItemSubtitle =>
-      'Import LX Music source scripts to search third-party platforms';
+      'Import LX Music source scripts to search more platforms';
 
   @override
   String get settingsContentSection => 'Content & sources';
@@ -349,7 +350,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get importDialogMessage =>
-      'Importing data will replace existing recent play entries with the same identifiers. This cannot be undone. Are you sure you want to continue?\n\nEnsure the JSON file is valid and was previously exported from Molia.';
+      'Importing merges the backup with local data; matching entries are replaced by the backup. This cannot be undone.\n\nMake sure the file is a backup exported from Molia.';
 
   @override
   String get importButton => 'Import Data';
@@ -556,11 +557,11 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get anyListenIntroBody =>
-      'any-listen is a self-hosted private music service. Once the server address is set and the source is enabled, its online sources appear in search.';
+      'any-listen is a self-hosted music service. Once enabled, its online sources appear in search.';
 
   @override
   String get anyListenIntroHint =>
-      'Skeleton implementation: the handshake probes (/api/ipc/hello, /api/ipc/id) follow the official source; search / url / lyric / pic endpoints are not yet verified against a real server and may not work.';
+      'This integration has not been tested against a real server and may not work yet.';
 
   @override
   String get anyListenServerSection => 'Server';
@@ -569,8 +570,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get anyListenServerUrl => 'Server address';
 
   @override
-  String get anyListenServerUrlHint =>
-      'Address of a Docker / desktop any-listen deployment';
+  String get anyListenServerUrlHint => 'Address of your any-listen service';
 
   @override
   String get anyListenServerUrlRequired => 'Enter the server address first';
@@ -580,24 +580,24 @@ class AppLocalizationsEn extends AppLocalizations {
       'Enter the server address before enabling';
 
   @override
-  String get anyListenToken => 'Access token (optional)';
+  String get anyListenToken => 'Access password (optional)';
 
   @override
   String get anyListenTokenPlaceholder =>
-      'Paste the token issued by the server after a successful test';
+      'After a successful test, paste the access password provided by the server';
 
   @override
-  String get anyListenTokenShow => 'Show token';
+  String get anyListenTokenShow => 'Show access password';
 
   @override
-  String get anyListenTokenHide => 'Hide token';
+  String get anyListenTokenHide => 'Hide access password';
 
   @override
   String get anyListenEnable => 'Enable any-listen source';
 
   @override
   String get anyListenEnableSubtitle =>
-      'When off, it does not appear in search and makes no requests';
+      'When off, it is hidden from search and makes no network requests';
 
   @override
   String get anyListenSave => 'Save';
@@ -679,7 +679,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get sourcesImportFromUrl => 'Import from URL';
 
   @override
-  String get sourcesImportFromUrlSubtitle => 'Download the script over HTTP(S)';
+  String get sourcesImportFromUrlSubtitle => 'Download a script from a link';
 
   @override
   String get sourcesDefaultQuality => 'Default quality';
@@ -707,7 +707,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get sourcesQualityHint =>
-      'Preferred when resolving a track URL; falls back when unavailable.';
+      'Play at this quality when available; fall back automatically otherwise';
 
   @override
   String get sourcesSortTitle => 'Channel order';
@@ -721,7 +721,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get sourcesSortHint =>
-      'The channel order on the Discover page matches the list below and also controls the search source order. Newly imported channels are appended at the end; turning a channel off removes it from the Discover page and search results.';
+      'Discover and search follow this order; new channels go to the end, and disabled channels disappear.';
 
   @override
   String get sourcesChannelDisabled => 'Disabled';
@@ -782,7 +782,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get sourcesDisclaimerBody =>
-      'Source scripts are executable JavaScript code provided by third-party communities.\nOnce imported, they run in the local JS engine and can make network requests.\nImport only scripts from trusted sources; their availability and legality are the responsibility of the provider.';
+      'Source scripts are executable code from third parties; once imported they run on this device and can access the network.\nOnly import scripts from trusted sources. Their availability and legality are the provider’s responsibility.';
 
   @override
   String get sourcesContinueImport => 'Continue import';
@@ -796,8 +796,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get sourcesPasteTitle => 'Paste source script';
 
   @override
-  String get sourcesPasteHint =>
-      'Paste the full script starting with /** @name ... */';
+  String get sourcesPasteHint => 'Paste the full source script';
 
   @override
   String get sourcesImportAction => 'Import';
@@ -848,7 +847,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get recentlyPlayedEmpty =>
-      'Nothing played recently yet. Albums and playlists you play will show up here.';
+      'Albums and playlists you listen to will show up here.';
 
   @override
   String get libraryRecentPlays => 'Recent Plays';
@@ -1078,7 +1077,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get sourceSwapDuplicateMessage =>
-      'The target playlist already contains this track. Changing the source will remove the duplicate and replace it with the selected version.';
+      'This song is already in the list. Changing the source replaces the existing version.';
 
   @override
   String get sourceSwapDone => 'Source changed';
@@ -1281,7 +1280,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get settingsCacheSubtitle =>
-      'Audio, lyrics and artwork usage and policies';
+      'Audio, lyric and artwork usage and cleanup rules';
 
   @override
   String get cachePartitionAudio => 'Audio cache';
@@ -1304,11 +1303,11 @@ class AppLocalizationsEn extends AppLocalizations {
   String get cachePolicyAudioEnabled => 'Cache audio while playing';
 
   @override
-  String get cachePolicyAudioScope => 'Cache on play';
+  String get cachePolicyAudioScope => 'Cache what you play';
 
   @override
   String get cachePolicyAudioHint =>
-      'Written while playing on mobile; filled in by a background download on desktop. Cached tracks play offline and can be saved as downloads; the size limit and LRU eviction still apply.';
+      'Songs are cached as they play, so they can play offline or be saved as downloads; the oldest cache is cleared when the limit is reached.';
 
   @override
   String get cachePolicyAudioMax => 'Size limit';
@@ -1364,7 +1363,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String cacheAudioMaxSuggested(String value) {
-    return 'Suggested $value (internal storage ÷ 128)';
+    return 'Suggested: $value';
   }
 
   @override
@@ -1380,7 +1379,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get cacheClearAllConfirm =>
-      'Clear all caches (audio / lyrics / artwork)? This cannot be undone.';
+      'Clear all caches (audio, lyrics and artwork)? This cannot be undone.';
 
   @override
   String get lyricsContentTitle => 'Lyrics & outputs';
@@ -1509,10 +1508,10 @@ class AppLocalizationsEn extends AppLocalizations {
   String get lyricsDesktopSchemeArtwork => 'Follow album art';
 
   @override
-  String get lyricsDesktopLock => 'Lock position (click-through)';
+  String get lyricsDesktopLock => 'Lock position (mouse clicks pass through)';
 
   @override
-  String get lyricsDesktopFreeze => 'Freeze while screen off';
+  String get lyricsDesktopFreeze => 'Pause updates while the screen is off';
 
   @override
   String get lyricsDesktopPauseBehavior => 'When paused';
@@ -1526,7 +1525,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get lyricsDesktopPauseFallbackOverridden =>
-      'The window is hidden while paused, so this fallback is inactive';
+      'The whole window is hidden while paused, so this setting has no effect';
 
   @override
   String get lyricsDesktopNoLyrics => 'Without lyrics';
@@ -1539,7 +1538,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get lyricsDesktopScrollModeSubtitle =>
-      'Follow singing: the text moves with the highlight; Constant: steady speed across the line';
+      'Follow singing: text moves with the highlight; Constant: scrolls at a steady speed';
 
   @override
   String get lyricsDesktopScrollFollow => 'Follow singing';
@@ -1598,7 +1597,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get lyricsNotificationEnableSubtitle =>
-      'Writes the current line into media metadata';
+      'Sync the current lyric to system playback controls';
 
   @override
   String get lyricsMetadataTarget => 'Show in';
@@ -1641,7 +1640,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get lyricsBluetoothEnableSubtitle =>
-      'Writes the current line into media metadata (also visible in notification & lock screen)';
+      'Show the current lyric on the car head unit, notification shade and lock screen';
 
   @override
   String get lyricsBluetoothOnlyA2dp =>
@@ -1672,11 +1671,11 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get lyricsNotificationPermissionSubtitle =>
-      'Allow notifications so the media card appears; tap to open system settings';
+      'Allow notifications so media controls can stay visible; tap to open system settings';
 
   @override
   String get lyricsMediaSessionUnavailable =>
-      'System media session unavailable: notification / lock-screen lyrics and playback controls are disabled';
+      'System media controls failed to start: notification/lock-screen lyrics and playback controls are unavailable';
 
   @override
   String get lyricsDisplayUnsupported =>
@@ -1732,7 +1731,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get lyricsDesktopColorThemeHint =>
-      'The color source decides which scheme the theme-role rows use: app theme follows the appearance settings; album art updates live with the current track.';
+      '“Follow app theme” changes with the appearance settings; “Follow artwork” picks colors from the current song and updates live.';
 
   @override
   String get statsTitle => 'Listening Stats';
@@ -1875,7 +1874,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get aiDjSettingsSubtitle =>
-      'AI-powered radio with your own API key (off by default)';
+      'AI radio with your own key (off by default)';
 
   @override
   String get aiDjNotConfigured => 'AI service is not configured yet';
@@ -1912,7 +1911,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get aiDjToggleSubtitle =>
-      'Keeps AI-picked songs coming and extends the queue automatically';
+      'AI keeps picking songs into the queue and continues when it ends';
 
   @override
   String get aiDjFeedMore => 'More';
@@ -1931,7 +1930,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get aiDjConsentBody =>
-      'When enabled, your listening profile (aggregated stats, the latest 200 play events, and the list of already-played tracks) will be sent to the AI service you configure in order to generate recommendations. Data goes straight to that service with no relay through this app, and no bundled API key is provided. Turning the mode off stops continuation; clearing the config disconnects it.';
+      'When enabled, your listening profile (stats summary, the latest 200 plays, and songs already heard) is sent to the AI service you configure to generate recommendations. Data goes directly to that service, not through this app, and no built-in key is provided.\nTurning the mode off stops recommendations; clearing the config disconnects it.';
 
   @override
   String get aiDjAgree => 'Agree & start';
@@ -1971,7 +1970,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String aiDjQueued(int count) {
-    return '$count queued this session';
+    return '$count added to the queue this time';
   }
 
   @override
@@ -2077,12 +2076,12 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String aiDjUpstreamBody(int events, int artists, int exclusions) {
-    return 'Latest $events play events · top $artists artists · $exclusions already-played excluded';
+    return 'Latest $events plays · $artists frequent artists · $exclusions already-heard songs excluded';
   }
 
   @override
   String get aiDjUpstreamHint =>
-      'Only the stats above plus titles/artists — no play URLs, no device info.';
+      'Only the stats above plus song and artist names — no play links or device information.';
 
   @override
   String get aiDjCacheTtlTitle => 'Recommendation cache';
@@ -2097,7 +2096,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get aiDjCacheTtlHint =>
-      'An expired list stops feeding the radio; the next extension generates a new batch (no interruption, no notice).';
+      'After expiry a new batch is generated automatically without interrupting playback.';
 
   @override
   String get aiDjGenerate => 'Generate';
@@ -2117,7 +2116,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get settingsSyncItemSubtitle =>
-      'Playlists, sources, settings and credentials';
+      'Playlists, sources, settings and keys';
 
   @override
   String get syncPairingSection => 'Pair with a device';
@@ -2127,7 +2126,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get syncLocalSectionHint =>
-      'Peers need this information to reach this device; the addresses and ports travel inside the pairing code.';
+      'Other devices need this information to reach this device; the address is shared in the pairing code.';
 
   @override
   String get syncDeviceNameTitle => 'Device name';
@@ -2140,7 +2139,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get syncPassphraseTrustHint =>
-      'Passphrase is the trust root; every holder is fully trusted. Reset it if leaked.';
+      'Any device that knows the passphrase can read and write all synced data; reset it if leaked.';
 
   @override
   String get syncPassphraseCopy => 'Copy passphrase';
@@ -2192,7 +2191,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get syncOutcomeNoChanges => 'No changes';
 
   @override
-  String get syncOutcomeNoPeers => 'No peer found';
+  String get syncOutcomeNoPeers => 'No other device found';
 
   @override
   String get syncOutcomePartial => 'Partly failed';
@@ -2204,13 +2203,13 @@ class AppLocalizationsEn extends AppLocalizations {
   String get syncTriggerStartup => 'startup';
 
   @override
-  String get syncTriggerDebounce => 'data change';
+  String get syncTriggerDebounce => 'data changed';
 
   @override
   String get syncTriggerTimer => 'scheduled';
 
   @override
-  String get syncTriggerIncoming => 'peer push';
+  String get syncTriggerIncoming => 'sent by another device';
 
   @override
   String get syncTriggerResume => 'resumed';
@@ -2229,7 +2228,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String syncActivityRounds(int rounds, int effective, String bytes) {
-    return '$rounds rounds, $effective with transfer, $bytes traffic';
+    return '$rounds runs, $effective with changes · $bytes transferred';
   }
 
   @override
@@ -2273,16 +2272,16 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get syncCellularPauseSubtitle =>
-      'When off, cellular syncs only small categories (settings, playlists, session); statistics and history wait for Wi-Fi';
+      'When off, mobile data syncs only small items (settings, playlists); stats and history wait for Wi-Fi';
 
   @override
   String syncAppliedItems(int applied) {
-    return '$applied applied';
+    return '$applied updated';
   }
 
   @override
   String syncPeerCount(int count) {
-    return '$count peers';
+    return '$count devices';
   }
 
   @override
@@ -2325,17 +2324,17 @@ class AppLocalizationsEn extends AppLocalizations {
   String get syncCategoryHistory => 'Play history';
 
   @override
-  String get syncCategorySession => 'Last playback session';
+  String get syncCategorySession => 'Last playback state';
 
   @override
-  String get syncCategoryCredentials => 'AI DJ & credentials';
+  String get syncCategoryCredentials => 'AI radio and keys';
 
   @override
   String get syncTransportSection => 'Transport';
 
   @override
   String get syncTransportAllOffHint =>
-      'Sync does not run while both transports are off — turn one on to start exchanging data.';
+      'Sync does not run while both methods are off; turn one on to start.';
 
   @override
   String get syncLanTitle => 'LAN direct';
@@ -2356,7 +2355,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get syncWebdavPassword => 'Password';
 
   @override
-  String get syncWebdavRemoteDir => 'Remote directory';
+  String get syncWebdavRemoteDir => 'Cloud folder';
 
   @override
   String get syncWebdavNotConfigured => 'Not configured';
@@ -2402,7 +2401,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get syncPeersHint =>
-      'Enter the same passphrase on another device to join. If no device is ever discovered, check whether LAN sync can run (permission / network isolation) or switch to WebDAV.';
+      'Enter the same passphrase on another device to join. If no device is found, check LAN permission or switch to WebDAV.';
 
   @override
   String get syncPeersEmptyTitle => 'No paired devices yet';
@@ -2428,17 +2427,17 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String syncPeerBehind(int count) {
-    return '$count behind';
+    return '$count pending';
   }
 
   @override
   String syncPeerBehindBytes(int count, String size) {
-    return '$count behind (~$size)';
+    return '$count pending (~$size)';
   }
 
   @override
   String syncPeerClockSkew(int minutes) {
-    return 'clock off by $minutes min';
+    return 'device time differs by $minutes min';
   }
 
   @override
@@ -2490,38 +2489,38 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get syncPeerLostHint =>
-      'No contact for over 180 days (reinstalled or retired). You can ignore it locally or explicitly clean up its remote files — nothing is deleted automatically.';
+      'This device has not connected for over 180 days (it may have been reinstalled or retired). You can ignore it, or clean up its cloud sync files; local data is unaffected.';
 
   @override
-  String get syncPeerIgnore => 'Ignore this device locally';
+  String get syncPeerIgnore => 'Ignore this device';
 
   @override
-  String get syncPeerUnignore => 'Stop ignoring locally';
+  String get syncPeerUnignore => 'Stop ignoring';
 
   @override
   String get syncPeerIgnoreHint =>
-      'No longer pull or merge its payloads (this device only)';
+      'Stop receiving synced data from this device (this device only)';
 
   @override
   String get syncPeerIgnoredHint =>
-      'Ignored locally: its payloads are no longer pulled or merged.';
+      'Ignored: no more synced data is received from this device.';
 
   @override
-  String get syncPeerCleanupRemote => 'Clean up remote files';
+  String get syncPeerCleanupRemote => 'Clean up cloud files';
 
   @override
   String get syncPeerCleanupRemoteHint =>
-      'Delete its journal and snapshot files on WebDAV';
+      'Delete this device’s sync files on WebDAV';
 
   @override
   String get syncPeerCleanupRemoteConfirm =>
-      'Deletes this device\'s journal and snapshot files on WebDAV. Local data is untouched and the files are not recreated automatically (only when the peer is online again). LAN connections have no remote storage.';
+      'Deletes this device’s sync files on WebDAV; local data is unaffected. Files are written again when the device comes back online. LAN connections have no cloud files.';
 
   @override
-  String get syncPeerCleanupRemoteDone => 'Remote files cleaned up';
+  String get syncPeerCleanupRemoteDone => 'Cloud files cleaned up';
 
   @override
-  String get syncPeerCleanupRemoteNone => 'No remote files to clean up';
+  String get syncPeerCleanupRemoteNone => 'No cloud files to clean up';
 
   @override
   String syncPeerCleanupRemoteFailed(Object error) {
@@ -2530,11 +2529,11 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get syncPeerNotContacted =>
-      'not connected yet — it retries automatically once the peer is online';
+      'Not connected yet — it retries automatically when the device is online';
 
   @override
   String syncPeerCandidatesTitle(int count) {
-    return '$count candidate addresses';
+    return '$count available addresses';
   }
 
   @override
@@ -2624,22 +2623,22 @@ class AppLocalizationsEn extends AppLocalizations {
   String get syncLocalAddressCopied => 'Address copied';
 
   @override
-  String get syncLocalAddressesEmptyTitle => 'No routable address';
+  String get syncLocalAddressesEmptyTitle => 'No available network address';
 
   @override
   String get syncLocalAddressesHint =>
-      'These are the same addresses shared in the pairing code.';
+      'These addresses are shared with other devices in the pairing code.';
 
   @override
   String get syncLocalAddressesEmpty =>
-      'Only loopback / link-local addresses were found; check the network connection.';
+      'No usable LAN address found; check the network connection.';
 
   @override
   String get syncLocalProbePort => 'Discovery port';
 
   @override
   String get syncLocalProbePortUnavailable =>
-      'Unavailable — broadcast / multicast discovery is degraded; use manual addresses';
+      'Unavailable; add a device address manually';
 
   @override
   String syncLocalProbePortPerFamily(String v4, String v6) {
@@ -2647,10 +2646,10 @@ class AppLocalizationsEn extends AppLocalizations {
   }
 
   @override
-  String get syncLocalHttpPort => 'Direct endpoint port';
+  String get syncLocalHttpPort => 'Connection port';
 
   @override
-  String get syncLocalHttpPortUnavailable => 'Not bound yet';
+  String get syncLocalHttpPortUnavailable => 'Not started yet';
 
   @override
   String syncPeerDeviceId(String id) {
@@ -2668,7 +2667,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get syncCategorySubtitle =>
-      'Turning it off stops pushing and applying this data on this device';
+      'When off, this device neither uploads nor receives this data';
 
   @override
   String get syncIssueDialogTitle => 'Sync issue';
@@ -2691,22 +2690,22 @@ class AppLocalizationsEn extends AppLocalizations {
   String get syncIssueNoPassphrase => 'No sync passphrase set';
 
   @override
-  String get syncIssueAllPeersUnreachable => 'All peers are unreachable';
+  String get syncIssueAllPeersUnreachable => 'No device can be reached';
 
   @override
-  String get syncIssuePullFailed => 'Failed to pull remote snapshots';
+  String get syncIssuePullFailed => 'Failed to read sync data';
 
   @override
-  String get syncIssuePushFailed => 'Failed to push local changes';
+  String get syncIssuePushFailed => 'Failed to upload local changes';
 
   @override
   String syncIssueApplyFailed(int count) {
-    return 'Failed to apply remote data $count time(s)';
+    return 'Failed to receive sync data $count time(s)';
   }
 
   @override
   String syncIssuePeerReadFailed(String peer) {
-    return '$peer: failed to read snapshot';
+    return '$peer: failed to read sync data';
   }
 
   @override
@@ -2716,31 +2715,30 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String syncIssuePeerPushFailed(String peer) {
-    return '$peer: push failed';
+    return '$peer: upload failed';
   }
 
   @override
   String get syncIssueBroadcastUnavailable =>
-      'Broadcast failed (blocked by network policy)';
+      'Auto-discovery failed (blocked by network policy)';
 
   @override
   String get syncIssueProbePortUnavailable =>
-      'Probe port unavailable (reserved or occupied by the system) — add peer addresses manually to discover devices';
+      'Auto-discovery unavailable; add a device address manually';
 
   @override
   String get syncIssueDiscoverySilent =>
-      'No device answered during discovery (the network may be isolated)';
+      'No other device found (the network may be isolated)';
 
   @override
-  String get syncIssueWebdavDirFailed =>
-      'Failed to prepare the WebDAV directory';
+  String get syncIssueWebdavDirFailed => 'WebDAV folder unavailable';
 
   @override
-  String get syncIssueWebdavListFailed => 'Failed to list the WebDAV directory';
+  String get syncIssueWebdavListFailed => 'Failed to read the WebDAV folder';
 
   @override
   String syncIssueWebdavReadFailed(String peer) {
-    return '$peer: failed to read snapshot';
+    return '$peer: failed to read sync data';
   }
 
   @override
@@ -2750,15 +2748,15 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get syncIssueWebdavUploadFailed =>
-      'Failed to upload the snapshot to WebDAV';
+      'Failed to upload sync data to WebDAV';
 
   @override
   String syncIssueDeleteRemoteFailed(String peer) {
-    return 'Failed to delete the remote files of $peer';
+    return 'Failed to clean up cloud files for $peer';
   }
 
   @override
-  String get syncIssueInternal => 'Internal sync error';
+  String get syncIssueInternal => 'Sync error';
 
   @override
   String get syncActionGrantPermission => 'Grant permission';
@@ -2790,7 +2788,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get syncPeerHostFormatInvalid =>
-      'Invalid address (use an IP, IPv6 or hostname, without a port)';
+      'Invalid address (use an IP or hostname, without a port)';
 
   @override
   String get syncPeerPortInvalid => 'Port must be 1–65535';
@@ -2803,10 +2801,10 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get syncPeerUnreachable =>
-      'Not reachable — check that the peer is online on the same network, or update its address';
+      'Not connected: make sure the device is online on the same network, or update its address';
 
   @override
-  String get syncPeerProbePortLabel => 'Probe port';
+  String get syncPeerProbePortLabel => 'Discovery port';
 
   @override
   String syncPeerProbePortHint(int port) {
@@ -2822,11 +2820,11 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get syncManualConnectSubtitle =>
-      'Enter the peer address when discovery fails (subnets / firewall / VPN)';
+      'Enter the device address manually when auto-discovery fails';
 
   @override
   String get syncManualConnectHint =>
-      'After the peer\'s IP changes, paste its pairing code again or update the address here';
+      'If the device’s address changed, paste its pairing code again or update it here';
 
   @override
   String get syncNetworkAddresses => 'Network addresses';
@@ -2991,7 +2989,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get updateAdvancedSection => 'Advanced';
 
   @override
-  String get updateManifestOverrideTitle => 'Manifest URL';
+  String get updateManifestOverrideTitle => 'Update information URL';
 
   @override
   String get updateManifestOverrideDefault =>
@@ -3027,7 +3025,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get updateErrorNetwork => 'Network error — update check failed';
 
   @override
-  String get updateErrorManifest => 'Invalid update manifest';
+  String get updateErrorManifest => 'Invalid update information';
 
   @override
   String get updateErrorUnsupported =>
@@ -3093,7 +3091,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get localDataTitle => 'Local data';
 
   @override
-  String get trackInfoCacheResolve => 'Resolved link cache';
+  String get trackInfoCacheResolve => 'Playback link cache';
 
   @override
   String get trackInfoCacheNone => 'Not cached';
@@ -3172,7 +3170,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get localDataAudioPlatformHint =>
-      'Playback caching is off here; a cache copy is written in the background';
+      'This platform does not write a playback cache; one is added after playback';
 
   @override
   String get trackCacheClearAll => 'Clear all';
@@ -3188,7 +3186,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get trackCacheClearHint =>
-      'Only cached copies are removed; downloads and playback are unaffected.';
+      'Only the cache is cleared; downloads and playback are unaffected.';
 
   @override
   String cacheClearPart(String part) {
@@ -3234,7 +3232,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get downloadAll => 'Download all';
 
   @override
-  String get downloadFromCache => 'Using local cache';
+  String get downloadFromCache => 'Already cached — no download needed';
 
   @override
   String get downloadLyricsDone => 'Lyrics downloaded';
@@ -3286,21 +3284,21 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get downloadEmbedTagsSubtitle =>
-      'Write tags into the audio file (MP3 / FLAC) so other players can read them; sidecar files remain when writing fails';
+      'Write tags into the audio file (MP3 / FLAC) so other players can read them; the original file is kept if writing fails';
 
   @override
   String get downloadPublishToPublicDir => 'Publish to system Downloads';
 
   @override
   String get downloadPublishToPublicDirSubtitle =>
-      'Also copy finished downloads into the system Downloads folder (Android public storage) so file managers and other players can see them; playback still uses the in-app copy';
+      'Also save a copy to the system Downloads folder (Android) so file managers and other players can see it';
 
   @override
   String get downloadNotifications => 'Download notifications';
 
   @override
   String get downloadNotificationsSubtitle =>
-      'Show download progress in the notification shade and keep downloads running in the background (Android foreground service)';
+      'Show download progress in the notification shade and keep downloading in the background (Android; notification permission required)';
 
   @override
   String get downloadLocationInfo => 'Download folder';
@@ -3313,8 +3311,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get save => 'Save';
 
   @override
-  String get lyricsEmptyState =>
-      'No lyrics for this one yet — try another source? (´･ω･`)';
+  String get lyricsEmptyState => 'No lyrics found — try another source?';
 
   @override
   String get lyricsDisplaySettingsAction => 'Lyrics display settings';
@@ -3414,11 +3411,11 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get downloadDeleteConfirm =>
-      'Delete the local copy? Audio, lyrics and cover files will be removed.';
+      'Delete the download? Audio, lyrics and cover files will be removed.';
 
   @override
   String get downloadDeleteConfirmMixed =>
-      'Delete the local copies? Audio, lyrics and cover files will be removed; imported local tracks are only removed from the list.';
+      'Delete the downloads? Audio, lyrics and cover files will be removed; imported songs are only removed from the list.';
 
   @override
   String get localSongsCachedTag => 'Cached';
@@ -3428,14 +3425,14 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get localSongsCachedRemoveConfirm =>
-      'Clear this track\'s audio cache? Only the cached copy is removed; downloads and imported files are unaffected.';
+      'Clear this song’s audio cache? Only the cache is removed; downloads and imported files are unaffected.';
 
   @override
   String get localSongsMixedRemoveConfirm =>
-      'Remove the selected items? Downloads delete files, imported items are only removed from the list, cached copies are cleared.';
+      'Remove the selected items? Downloads delete files, imported items are only removed from the list, and cached copies are cleared.';
 
   @override
-  String get downloadShare => 'Share / export';
+  String get downloadShare => 'Share file';
 
   @override
   String downloadProgressPercent(int percent) {
@@ -3524,7 +3521,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get downloadsCleanupPartsSubtitle =>
-      'Leftover .part files from crashes; finished downloads are untouched';
+      'Remove temporary files left by interrupted downloads; finished downloads are untouched';
 
   @override
   String downloadsCleanupPartsDone(int count) {
@@ -3532,15 +3529,15 @@ class AppLocalizationsEn extends AppLocalizations {
   }
 
   @override
-  String get downloadsCleanupOrphans => 'Remove orphan files';
+  String get downloadsCleanupOrphans => 'Remove leftover files';
 
   @override
   String get downloadsCleanupOrphansSubtitle =>
-      'Delete files in the download folder that no record references';
+      'Delete files in the download folder that no record points to';
 
   @override
   String downloadsCleanupOrphansDone(int count) {
-    return 'Removed $count orphan file(s)';
+    return 'Removed $count leftover file(s)';
   }
 
   @override
@@ -3566,20 +3563,20 @@ class AppLocalizationsEn extends AppLocalizations {
   }
 
   @override
-  String get downloadsPublishPublic => 'Publish to system Downloads';
+  String get downloadsPublishPublic => 'Copy to public Downloads folder';
 
   @override
   String get downloadsPublishPublicSubtitle =>
-      'Copy downloads that have no public copy yet into the system Downloads folder (Android)';
+      'Copy downloads that are not in the system Downloads folder yet (Android)';
 
   @override
   String downloadsPublishPublicDone(int published, int failed) {
-    return '$published published, $failed failed';
+    return 'Copied $published, failed $failed';
   }
 
   @override
   String get downloadsNoResume =>
-      'No resume support: platform links are usually one-time signed URLs; re-downloading is more reliable';
+      'Failed downloads start over (platform links usually expire quickly).';
 
   @override
   String get downloadsEmpty => 'No downloaded tracks yet';
@@ -3670,20 +3667,20 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get shortcutsGlobalHint =>
-      'System-wide hotkeys that work while unfocused; must include Ctrl / Alt / Shift';
+      'Global shortcuts work even when the window is in the background; must include Ctrl / Alt / Shift';
 
   @override
   String get shortcutsGlobalUnsupportedKey =>
-      'System-wide hotkeys only support letters, digits, F1–F12 and space';
+      'Global shortcuts only support letters, digits, F1–F12 and space';
 
   @override
   String shortcutsGlobalFailed(String detail) {
-    return 'Some global shortcuts could not be registered: $detail';
+    return 'Some global shortcuts could not be enabled: $detail';
   }
 
   @override
   String get shortcutsGlobalLinuxHint =>
-      'On Linux these go through the desktop portal (GlobalShortcuts); minimal desktops may not support it and will report a failure';
+      'On Linux these are provided through the desktop portal; minimal desktops may not support it and will report a failure';
 
   @override
   String get shortcutsEnabledSwitch => 'Enable in-app shortcuts';
@@ -3711,7 +3708,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String shortcutsSwapDialogMessage(String action) {
-    return '“$action” already uses this combo. Replacing will swap the two bindings.';
+    return '“$action” already uses this combination. Replacing will swap the two shortcuts.';
   }
 
   @override
@@ -3719,7 +3716,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String shortcutsSwapDone(String action) {
-    return 'Swapped bindings with “$action”';
+    return 'Swapped shortcuts with “$action”';
   }
 
   @override
@@ -3774,5 +3771,5 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get settingsTrayLinuxHint =>
-      'The tray icon needs a system tray host; GNOME requires the AppIndicator extension. Without one, closing quits';
+      'GNOME and similar desktops need a tray extension to show the icon; without a tray, closing the window quits the app';
 }

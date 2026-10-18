@@ -332,7 +332,10 @@ void main() {
 
     // 壁纸段禁用：点它不产生状态变化。
     await tester.tap(
-      optionOf(const Key('settingsBaseColorItem'), 'System wallpaper'),
+      optionOf(
+        const Key('settingsBaseColorItem'),
+        'System wallpaper (follows system colors)',
+      ),
     );
     await tester.pumpAndSettle();
     expect(themeProvider.baseColorSource, ColorBaseSource.wallpaper);
@@ -363,7 +366,10 @@ void main() {
     await themeProvider.setBaseColorSource(ColorBaseSource.custom);
     await tester.pumpAndSettle();
     await tester.tap(
-      optionOf(const Key('settingsBaseColorItem'), 'System wallpaper'),
+      optionOf(
+        const Key('settingsBaseColorItem'),
+        'System wallpaper (follows system colors)',
+      ),
     );
     await tester.pumpAndSettle();
     expect(themeProvider.baseColorSource, ColorBaseSource.wallpaper);
@@ -375,12 +381,15 @@ void main() {
       buildColorScheme(Colors.pink, Brightness.dark),
     );
     await tester.pumpAndSettle();
-    expect(find.text('Source: system accent color'), findsOneWidget);
+    expect(find.text('Source: system theme color'), findsOneWidget);
 
     await themeProvider.setBaseColorSource(ColorBaseSource.custom);
     await tester.pumpAndSettle();
     await tester.tap(
-      optionOf(const Key('settingsBaseColorItem'), 'System wallpaper'),
+      optionOf(
+        const Key('settingsBaseColorItem'),
+        'System wallpaper (follows system colors)',
+      ),
     );
     await tester.pumpAndSettle();
     expect(themeProvider.baseColorSource, ColorBaseSource.wallpaper);
@@ -448,7 +457,10 @@ void main() {
     await pumpSettingsPage(tester);
 
     // 语义说明常驻（不打断当前播放）。
-    expect(find.textContaining('Initial mode'), findsOneWidget);
+    expect(
+      find.textContaining('Used the next time playback starts'),
+      findsOneWidget,
+    );
 
     await tester.tap(
       optionOf(const Key('settingsDefaultPlayModeItem'), 'Shuffle'),
@@ -734,8 +746,8 @@ void main() {
     expect(find.text('Replace shortcut?'), findsOneWidget);
     expect(
       find.text(
-        '“Play / pause” already uses this combo. '
-        'Replacing will swap the two bindings.',
+        '“Play / pause” already uses this combination. '
+        'Replacing will swap the two shortcuts.',
       ),
       findsOneWidget,
     );
@@ -790,7 +802,7 @@ void main() {
     // 成功反馈经提示出口给出（记录型服务断言文案）。
     expect(
       notifications.messages,
-      contains('Swapped bindings with “Play / pause”'),
+      contains('Swapped shortcuts with “Play / pause”'),
     );
   }, variant: TargetPlatformVariant.only(TargetPlatform.linux));
 
@@ -846,8 +858,8 @@ void main() {
     expect(find.text('Replace shortcut?'), findsOneWidget);
     expect(
       find.text(
-        '“Play / pause” already uses this combo. '
-        'Replacing will swap the two bindings.',
+        '“Play / pause” already uses this combination. '
+        'Replacing will swap the two shortcuts.',
       ),
       findsOneWidget,
     );
@@ -896,7 +908,7 @@ void main() {
     // 回默认这一次也给出互换成功反馈。
     expect(
       notifications.messages,
-      contains('Swapped bindings with “Play / pause”'),
+      contains('Swapped shortcuts with “Play / pause”'),
     );
   }, variant: TargetPlatformVariant.only(TargetPlatform.linux));
 
@@ -1385,7 +1397,7 @@ void main() {
     );
 
     expect(
-      find.textContaining('System media session unavailable'),
+      find.textContaining('System media controls failed to start'),
       findsOneWidget,
     );
   });
