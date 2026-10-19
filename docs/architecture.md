@@ -95,7 +95,11 @@
   分叉，只按路由结果决定通知类别）；恢复态快照与进度覆盖值在这里构造；落盘
   口径（整份 / 轻量进度键 1s 节流 / 满 1min 整份刷新 / `clear` / 可 await 的
   `flushSession`）随 `pendingWrite` 串行化收在一处。系统媒体控制与恢复态切歌键
-  由组合根接到会话模块（不再直连 provider）。
+  由组合根接到会话模块（不再直连 provider）。跨设备同步只经
+  `PlaybackSessionSyncPort`（`lib/domain/ports/playback_session_sync.dart` 的
+  `loadRaw` / `applyRemote` / `clearRemote`）认识会话，唯一实现是协调者：远端
+  应用 / 删除与本地保存 / 清除共用同一个 `PlaybackSessionStore` 与同一条
+  `pendingWrite` 队列，不会出现第二个写队列插队或复活已清除的会话。
   播放副作用的扇出（最后播放 / 播放上下文 / 桌面小组件 / 播放历史 /
   预取 / 补封面 / 通知权限）唯一实现在 `lib/services/playback_observer.dart`
   （Playback observer）：直连 facade 快照通道、由组合根挂接，不经 provider 的
@@ -327,6 +331,12 @@
   调度器进入触发链，生命周期回调由 `main.dart` 的 `AppLifecycleListener` 转发；
   同步后的定向重载经 `PrefsSyncAdapter.onApplied` 接线。设置入口
   `settings_page.dart` → `sync_settings_page.dart`。
+- **对端增量协议**：`lib/data/sync/peer_journal_protocol.dart` 是游标 / 窗口 /
+  分块规则的唯一实现——`chooseJournalServeMode`（游标落后 / 超前转全量）、
+  `consumeJournalDelta`（游标 -1 夹到 0、只接受连续 seq、空窗口不算截断、缺口 /
+  截断要求 bootstrap）、`selectJournalChunks`（WebDAV 分块衔接）与
+  `PeerJournalNames`（协议文件名）；引擎、局域网 / WebDAV 传输与
+  `test/support/sync_network.dart` 共用同一份语义，边界条件只维护一处。
 - **渠道选择**：`DiscoverProvider.channelKey` 是渠道状态的唯一持有者；渠道变化经
   注入的 `onChannelChanged`（组合根）同步搜索源（可搜索渠道才跟随），资料页只
   处理「渠道被停用」的 UI 回退，不再在两个 provider 之间仲裁同步。
@@ -339,6 +349,15 @@
   + 结果缓存）同样收在同目录 `builtin_lyric_dispatch.dart` /
   `builtin_pic_dispatch.dart`；渠道偏好（音质 / 顺序 / 停用）在
   `lib/sources/source_preferences.dart`，`SourceManager` 同名方法为其委托。
+- **内置平台注册表**：`lib/sources/builtin/builtin_platforms.dart` 的
+  `BuiltinPlatforms` 是五平台 × 能力族的唯一声明（规范键、展示名、搜索候选
+  排序位、类型化适配器：搜索 / 歌词搜索 / 评论 / 专辑 / 歌手 / 发现）；能力位
+  由适配器是否存在推导，各 facade 与 `SourceManager.capabilitiesFor` 消费同一条目，
+  新增平台只改这一处（不再维护七份 `supportedKeys` 与 switch）。
+- **内置尝试循环**：`builtin_transport.dart::runBuiltinAttempts` 是
+  「`attempt` 返回 null 即重试、异常直接上抛、耗尽抛 `StateError`」的唯一循环，
+  `cachedRetry` 与无缓存的发现端点共用；`BuiltinRetryBudget` 集中命名
+  `discover` / `leaderboard` / `wyLeaderboard` 预算，平台文件不再各写 3/4/6。
 - **内置检索 runner**：`lib/sources/builtin/builtin_search_runner.dart` 是五个平台
   搜索的执行骨架（`runBuiltinSearch`）：重试预算、分页推断与失败归一各写一次；
   平台变体面（请求方式/URL/body、响应级重试判定、业务码判定、列表路径与解析）
@@ -398,6 +417,13 @@
 - **一次快照**：`PlayStatisticsRepository.snapshot(since:)` 并发取回
   `ListeningStatisticsSnapshot`（汇总 / 榜单 / 日历 / 作息热力图 / 来源分布），
   统计页只渲染它（不再分开读 6 个查询）。
+- **同步存储**：`StatisticsSyncStore`
+  （`lib/domain/ports/statistics_sync_store.dart` +
+  `lib/data/sync/statistics_sync_store.dart`）以类型化 `StatisticsSyncEvent`
+  出 / 入，拥有导出缓存与廉价指纹、存量事件 `syncKey` 回填、本地下载曲目过滤
+  与按 `syncKey` 合并；`StatisticsSyncAdapter` 只做类型化事件 ↔ `SyncRecord`
+  的映射，`PlayStatisticsRepository` 不再 import 同步 wire 模型（列名 / 版本列 /
+  增量日志形状都收在 store）。
 
 ### 资料库（library）
 
@@ -417,6 +443,13 @@
   `PlaylistTrackSyncRecord` / `PlayHistorySyncRecord` / `SyncTombstoneRecord`）；
   同步适配器不再逐字段读列名，记录形状（含 JSON 键）由 record 类承担；
 - **测试假实现**只实现 UI 面窄 port（不再继承真类）：新方法不会静默走真实 SQL。
+- **收藏页合集状态**：`LocalSongsCollection`
+  （`lib/providers/local_songs_collection.dart`）拥有本地歌曲的历史 × 下载 /
+  导入 × 完整音频缓存联结、下载优先去重、输入签名、在途令牌 / 过期丢弃与
+  加载态 · 弹层计数；`CollectionPresenter`（`lib/providers/collection_presenter.dart`）
+  拥有合集身份（kind / 落库 id / 展示名 / 合集键 / 列规范）与可见行投影（过滤 /
+  排序）。收藏页不再用四个布尔值 + 三份可见列表各自判断，也不在 build 里重算
+  联结，只消费 `CollectionView` 与 `LocalSongsCollection.rows`。
 
 ### 本地下载（downloads）
 
