@@ -10,6 +10,7 @@ import 'package:molia/providers/lyrics_provider.dart';
 import 'package:molia/services/lyrics_display/lyrics_display_settings.dart';
 import 'package:molia/services/lyrics_display/lyrics_output.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import '../support/settings_test_support.dart';
 
 /// 调度：启用/停用生命周期、行变化去重、自动取词、控制条动作分发。
 void main() {
@@ -34,7 +35,7 @@ void main() {
 
   test('启用时取词一次、行变化去重、关闭时 clear', () async {
     SharedPreferences.setMockInitialValues({});
-    final settings = LyricsDisplaySettings();
+    final settings = LyricsDisplaySettings(settings: testSettingsRegistry());
     await settings.setDesktopEnabled(true);
     final output = _FakeOutput(LyricsOutputIds.desktop);
     final requested = <String>[];
@@ -87,7 +88,7 @@ void main() {
 
   test('关闭全部输出时不主动取词', () async {
     SharedPreferences.setMockInitialValues({});
-    final settings = LyricsDisplaySettings();
+    final settings = LyricsDisplaySettings(settings: testSettingsRegistry());
     final requested = <String>[];
     final provider = LyricsDisplayProvider(
       settings: settings,
@@ -103,7 +104,7 @@ void main() {
 
   test('无曲目时 clear；控制条动作分发到命令与配置', () async {
     SharedPreferences.setMockInitialValues({});
-    final settings = LyricsDisplaySettings();
+    final settings = LyricsDisplaySettings(settings: testSettingsRegistry());
     await settings.setDesktopEnabled(true);
     final output = _FakeInteractiveOutput(LyricsOutputIds.desktop);
     final commands = <LyricsPlaybackCommand>[];
@@ -143,7 +144,7 @@ void main() {
 
   test('主题变化时重新下发输出配置（跟随主题颜色）', () async {
     SharedPreferences.setMockInitialValues({});
-    final settings = LyricsDisplaySettings();
+    final settings = LyricsDisplaySettings(settings: testSettingsRegistry());
     await settings.setDesktopEnabled(true);
     final output = _FakeOutput(LyricsOutputIds.desktop);
     final theme = ChangeNotifier();
@@ -169,10 +170,11 @@ void main() {
 
   test('匀速滚动模式：跨度取首词到末词，位置带生效时刻', () async {
     SharedPreferences.setMockInitialValues({});
-    final settings = LyricsDisplaySettings();
+    final settings = LyricsDisplaySettings(settings: testSettingsRegistry());
     await settings.setDesktopEnabled(true);
     final output = _FakeOutput(LyricsOutputIds.desktop);
-    final provider = LyricsDisplayProvider(settings: settings, outputs: [output]);
+    final provider =
+        LyricsDisplayProvider(settings: settings, outputs: [output]);
     await pumpEventQueue();
 
     provider.syncPlayback(PlaybackSnapshot(current: track(), isPlaying: true));
@@ -229,20 +231,20 @@ void main() {
     final clamped = output.applied.last;
     expect(clamped.scrollFollowsSinging, isFalse);
     expect(clamped.lineStartMs, 100);
-    expect(clamped.lineEndMs, 5000,
-        reason: '末词越过切行时刻：匀速跨度夹到行时间轴终点');
+    expect(clamped.lineEndMs, 5000, reason: '末词越过切行时刻：匀速跨度夹到行时间轴终点');
 
     provider.dispose();
   });
 
   test('能力查询返回输出自身能力', () async {
     SharedPreferences.setMockInitialValues({});
-    final settings = LyricsDisplaySettings();
+    final settings = LyricsDisplaySettings(settings: testSettingsRegistry());
     final output = _FakeOutput(
       LyricsOutputIds.media,
       capability: LyricsOutputCapability.unsupported,
     );
-    final provider = LyricsDisplayProvider(settings: settings, outputs: [output]);
+    final provider =
+        LyricsDisplayProvider(settings: settings, outputs: [output]);
     await pumpEventQueue();
     expect(
       provider.capabilityOf(LyricsOutputIds.media),

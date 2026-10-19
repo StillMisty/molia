@@ -6,7 +6,7 @@ import 'package:molia/data/library_repository.dart';
 import 'package:molia/data/settings/settings_keys.dart';
 import 'package:molia/data/settings/settings_registry.dart';
 import 'package:molia/data/sync/adapters/prefs_sync_adapter.dart';
-import 'package:molia/data/sync/sync_engine.dart';
+import 'package:molia/data/sync/sync_backup.dart';
 import 'package:molia/data/sync/sync_stamp.dart';
 import 'package:molia/data/sync/sync_state_store.dart';
 import 'package:molia/domain/models/device_sync.dart';
@@ -68,7 +68,8 @@ void main() {
 
   test('吸收超前戳：本机下一次写入必胜', () {
     // 对端时钟 +1 小时，观测后本机（时钟正常）立刻编辑。
-    issuer.observe(const SyncVersion(physical: 1000 + 3600 * 1000, deviceId: 'devB'));
+    issuer.observe(
+        const SyncVersion(physical: 1000 + 3600 * 1000, deviceId: 'devB'));
     final next = issuer.next();
     expect(
       next.isNewerThan(
@@ -225,7 +226,8 @@ void main() {
       );
       await state.init();
       final version = state.stampIssuer.next();
-      state.putSettingStamp('theme_mode', SyncStamp(hash: 'h', version: version));
+      state.putSettingStamp(
+          'theme_mode', SyncStamp(hash: 'h', version: version));
       await state.save();
 
       final rebuilt = SyncStateStore(
@@ -251,23 +253,28 @@ void main() {
         deviceId: 'devA',
       );
       await state.init();
-      final engine = SyncEngine(
+      final adapter = PrefsSyncAdapter(
         state: state,
-        stamps: state.stampIssuer,
-        adapters: [
-          PrefsSyncAdapter(
-            state: state,
-            settings: SettingsRegistry(
-              keys: const [kThemeMode],
-              preferences: prefs,
-              secrets: secrets,
-            ),
-          ),
-        ],
-        transports: const {},
+        settings: SettingsRegistry(
+          keys: const [kThemeMode],
+          preferences: prefs,
+          secrets: secrets,
+        ),
       );
-      addTearDown(engine.dispose);
-      await engine.init();
+      // 备份模块独立于引擎：导出 / 导入不需要传输或轮次；收集动作由测试
+      // 注入（与生产同一适配器 + 类别过滤）。
+      final backupReader = SyncBackup(
+        state: state,
+        adapters: [adapter],
+        stamps: state.stampIssuer,
+        collect: (categories) async {
+          final collected = await adapter.collect();
+          return {
+            for (final entry in collected.entries)
+              if (categories.contains(entry.key)) entry.key: entry.value,
+          };
+        },
+      );
 
       const backupVersion =
           SyncVersion(physical: 999999, counter: 4, deviceId: 'devB');
@@ -290,7 +297,7 @@ void main() {
           },
         },
       });
-      await engine.importBackupJson(backup);
+      await backupReader.importBackupJson(backup);
 
       // 备份里的最大戳被发号器吸收：本机下一次写入严格更大。
       expect(

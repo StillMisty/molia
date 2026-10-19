@@ -5,8 +5,8 @@ import 'package:collection/collection.dart';
 import 'package:crypto/crypto.dart';
 import 'package:flutter/foundation.dart';
 
+import '../data/settings/settings_access.dart';
 import '../data/settings/settings_keys.dart';
-import '../data/settings/settings_registry.dart';
 import 'any_listen/any_listen_config.dart';
 import 'any_listen/any_listen_errors.dart';
 import 'any_listen/any_listen_source.dart';
@@ -80,7 +80,7 @@ class SourceManager extends ChangeNotifier {
   /// 引擎自愈包装：超时/isolate 退出后自动按退避重启。
   /// 构造参数仅用于测试注入（默认创建真实 supervisor，行为不变）。
   final LxEngineSupervisor _engine;
-  final SettingsRegistry _settings;
+  final SettingsAccess _settings;
   final AnyListenSource _anyListenSource;
   final List<StreamSubscription<dynamic>> _subscriptions = [];
 
@@ -93,9 +93,11 @@ class SourceManager extends ChangeNotifier {
   /// 内置平台原生封面回退（同上）。
   final BuiltinPicDispatch _builtinPicFallback = BuiltinPicDispatch();
 
-  SourceManager({LxEngineSupervisor? engine, SettingsRegistry? settings})
-      : _engine = engine ?? LxEngineSupervisor(),
-        _settings = settings ?? SettingsRegistry(keys: kAllSettingsKeys),
+  SourceManager({
+    LxEngineSupervisor? engine,
+    required SettingsAccess settings,
+  })  : _engine = engine ?? LxEngineSupervisor(),
+        _settings = settings,
         _anyListenSource = AnyListenSource(settings: settings) {
     _preferences = SourcePreferences(_settings)..addListener(notifyListeners);
     _engine.onStateChanged = _onEngineStateChanged;
@@ -135,6 +137,12 @@ class SourceManager extends ChangeNotifier {
 
   /// any-listen 适配器（搜索 / 取链 / 歌词 / 封面 / 连接测试）。
   AnyListenSource get anyListenSource => _anyListenSource;
+
+  /// 供连接测试用的独立适配器：复用本管理器的按键作用域，不另建注册表。
+  ///
+  /// 页面可独立打开探测表单值，不要求先 `init()`；配置存取路径用不到，
+  /// 但构造仍要求一个合法的设置来源。
+  AnyListenSource createProbeSource() => AnyListenSource(settings: _settings);
 
   /// any-listen 当前配置。
   AnyListenConfig get anyListenConfig => _anyListenSource.config;

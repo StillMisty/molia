@@ -65,7 +65,7 @@ void main() {
     Widget home, {
     List<SingleChildWidget> extraProviders = const [],
   }) async {
-    themeProvider = ThemeProvider();
+    themeProvider = ThemeProvider(settings: testSettingsRegistry());
     playbackProvider = buildTestPlaybackProvider();
     // 省流模式：注入 fake 探测（Wi-Fi），不触碰 connectivity_plus 通道。
     dataSaver = DataSaverService(
@@ -81,7 +81,7 @@ void main() {
     addTearDown(dataSaver.dispose);
 
     // 底部导航定制：纯本地偏好，测试直接构造。
-    final navProvider = NavProvider();
+    final navProvider = NavProvider(settings: testSettingsRegistry());
     await navProvider.preferencesReady;
     addTearDown(navProvider.dispose);
 

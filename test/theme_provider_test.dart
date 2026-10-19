@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:molia/providers/theme_provider.dart';
 import 'package:molia/theme/scheme_builder.dart';
+import 'support/settings_test_support.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -13,7 +14,7 @@ void main() {
   });
 
   test('初始状态：基础配色=壁纸（无莫奈时回退种子色）、封面覆盖开、纯黑关', () async {
-    final provider = ThemeProvider();
+    final provider = ThemeProvider(settings: testSettingsRegistry());
     await provider.preferencesReady;
     expect(provider.themeMode, ThemeMode.system);
     // 从未配置过 → 新默认壁纸；测试环境无莫奈注入，配色回退种子色。
@@ -36,7 +37,7 @@ void main() {
   test('全局应用字体：持久化、恢复与清除', () async {
     SharedPreferences.setMockInitialValues(
         {'app_font_family': 'Noto Sans CJK SC'});
-    final provider = ThemeProvider();
+    final provider = ThemeProvider(settings: testSettingsRegistry());
     await provider.preferencesReady;
     expect(provider.appFontFamily, 'Noto Sans CJK SC');
 
@@ -53,7 +54,7 @@ void main() {
 
   testWidgets('ThemeProvider updates when system brightness changes',
       (tester) async {
-    final themeProvider = ThemeProvider();
+    final themeProvider = ThemeProvider(settings: testSettingsRegistry());
     await themeProvider.preferencesReady;
 
     Future<void> pumpWithBrightness(Brightness brightness) async {
@@ -93,7 +94,7 @@ void main() {
   });
 
   testWidgets('强制主题模式覆盖平台亮度并持久化', (tester) async {
-    final provider = ThemeProvider();
+    final provider = ThemeProvider(settings: testSettingsRegistry());
     await provider.preferencesReady;
 
     late BuildContext ctx;
@@ -149,7 +150,7 @@ void main() {
   });
 
   test('平台亮度入口（runApp 前首帧同路径）：system 跟随、强制模式覆盖', () async {
-    final provider = ThemeProvider();
+    final provider = ThemeProvider(settings: testSettingsRegistry());
     await provider.preferencesReady;
 
     // 默认 system：直接按平台亮度出方案。
@@ -165,7 +166,7 @@ void main() {
   });
 
   test('封面覆盖：开启时覆盖基础配色，关闭回退且歌词方案仍可用', () async {
-    final provider = ThemeProvider();
+    final provider = ThemeProvider(settings: testSettingsRegistry());
     await provider.preferencesReady;
     final seedScheme = buildColorScheme(Colors.blue, Brightness.light);
 
@@ -198,7 +199,7 @@ void main() {
   });
 
   test('优先级：封面覆盖 > 壁纸 > 自定义种子色', () async {
-    final provider = ThemeProvider();
+    final provider = ThemeProvider(settings: testSettingsRegistry());
     await provider.preferencesReady;
     final monetLight = buildColorScheme(Colors.pink, Brightness.light);
     final monetDark = buildColorScheme(Colors.pink, Brightness.dark);
@@ -244,7 +245,7 @@ void main() {
   });
 
   test('桌面壁纸 seed 层：壁纸 > 强调色，封面 > 壁纸，自定义忽略两者', () async {
-    final provider = ThemeProvider();
+    final provider = ThemeProvider(settings: testSettingsRegistry());
     await provider.preferencesReady;
     expect(provider.systemBaseColorSource, SystemBaseColorSource.unavailable);
 
@@ -298,7 +299,7 @@ void main() {
   });
 
   test('纯黑叠加壁纸 seed：surface 系列黑掉，取色仍来自壁纸', () async {
-    final provider = ThemeProvider();
+    final provider = ThemeProvider(settings: testSettingsRegistry());
     await provider.preferencesReady;
     await provider.setThemeMode(
       ThemeMode.dark,
@@ -317,7 +318,7 @@ void main() {
   });
 
   test('种子色持久化并在重启时加载', () async {
-    final first = ThemeProvider();
+    final first = ThemeProvider(settings: testSettingsRegistry());
     await first.preferencesReady;
     expect(first.seedColor.toARGB32(), Colors.blue.toARGB32());
 
@@ -326,7 +327,7 @@ void main() {
     expect(first.colorScheme, buildColorScheme(Colors.green, Brightness.light));
 
     // 模拟重启：新实例从 SharedPreferences 恢复。
-    final second = ThemeProvider();
+    final second = ThemeProvider(settings: testSettingsRegistry());
     await second.preferencesReady;
     expect(second.seedColor.toARGB32(), Colors.green.toARGB32());
     expect(
@@ -337,7 +338,7 @@ void main() {
   });
 
   test('主题模式与封面覆盖开关在重启时加载', () async {
-    final first = ThemeProvider();
+    final first = ThemeProvider(settings: testSettingsRegistry());
     await first.preferencesReady;
     await first.setThemeMode(
       ThemeMode.dark,
@@ -345,7 +346,7 @@ void main() {
     );
     await first.setFollowArtworkEnabled(false);
 
-    final second = ThemeProvider();
+    final second = ThemeProvider(settings: testSettingsRegistry());
     await second.preferencesReady;
     expect(second.themeMode, ThemeMode.dark);
     expect(second.colorScheme.brightness, Brightness.dark);
@@ -359,7 +360,7 @@ void main() {
       'seed_color': 0xFF00FF00,
       'pure_black_enabled': true,
     });
-    final provider = ThemeProvider();
+    final provider = ThemeProvider(settings: testSettingsRegistry());
     await provider.preferencesReady;
     expect(provider.baseColorSource, ColorBaseSource.wallpaper);
     expect(provider.followArtworkEnabled, isFalse);
@@ -380,7 +381,7 @@ void main() {
       'color_base': 'custom',
       'follow_artwork_enabled': false,
     });
-    final provider = ThemeProvider();
+    final provider = ThemeProvider(settings: testSettingsRegistry());
     await provider.preferencesReady;
     expect(provider.baseColorSource, ColorBaseSource.custom);
     expect(provider.followArtworkEnabled, isFalse);
@@ -392,7 +393,7 @@ void main() {
 
   test('旧键显式关闭莫奈：迁移保持自定义，不吃壁纸默认', () async {
     SharedPreferences.setMockInitialValues({'monet_color_enabled': false});
-    final provider = ThemeProvider();
+    final provider = ThemeProvider(settings: testSettingsRegistry());
     await provider.preferencesReady;
     expect(provider.baseColorSource, ColorBaseSource.custom);
 
@@ -402,7 +403,7 @@ void main() {
   });
 
   test('纯黑背景：仅深色模式覆盖 surface，浅色不生效', () async {
-    final provider = ThemeProvider();
+    final provider = ThemeProvider(settings: testSettingsRegistry());
     await provider.preferencesReady;
 
     await provider.setThemeMode(

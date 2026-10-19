@@ -151,4 +151,22 @@ void main() {
       kThemeMode.name,
     ]);
   });
+
+  test('写入回调只允许绑定一次：第二次覆盖被拒绝，原钩子保留', () async {
+    final written = <String>[];
+    final registry = build()
+      ..onWrite = (key) => written.add('first:${key.name}');
+
+    expect(
+      () => registry.onWrite = (key) => written.add('second:${key.name}'),
+      throwsA(anyOf(isA<AssertionError>(), isA<StateError>())),
+    );
+
+    await registry.write(kThemeMode, 'dark');
+    expect(written, ['first:${kThemeMode.name}']);
+
+    // 显式解除后可重新接线（组合根重建同步栈的测试路径）。
+    registry.onWrite = null;
+    expect(registry.onWrite, isNull);
+  });
 }

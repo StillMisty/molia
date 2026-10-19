@@ -9,6 +9,7 @@ import 'package:molia/data/sync/adapters/history_sync_adapter.dart';
 import 'package:molia/data/sync/adapters/prefs_sync_adapter.dart';
 import 'package:molia/data/sync/peer_journal_protocol.dart';
 import 'package:molia/data/sync/sync_codec_port.dart';
+import 'package:molia/data/sync/sync_control_plane.dart';
 import 'package:molia/data/sync/sync_crypto.dart';
 import 'package:molia/data/sync/sync_engine.dart';
 import 'package:molia/data/sync/sync_journal.dart';
@@ -111,6 +112,7 @@ class SyncNetwork {
 
   Future<void> dispose() async {
     for (final device in devices.values) {
+      device.control.dispose();
       device.engine.dispose();
       await device.db.close();
     }
@@ -157,6 +159,7 @@ class SyncDevice {
   late final HistorySyncAdapter historyAdapter;
   late final SyncTransport transport;
   late final SyncEngine engine;
+  late final SyncControlPlane control;
 
   Future<void> init() async {
     // 每台设备一份独立的前缀存储（先重置静态缓存再取实例）。
@@ -226,6 +229,10 @@ class SyncDevice {
       journal: journal,
       clock: () => DateTime.fromMillisecondsSinceEpoch(state.nowMs()),
       inboundWindow: const Duration(milliseconds: 10),
+    );
+    control = SyncControlPlane(
+      state: state,
+      transports: {transport.kind: transport},
     );
     await engine.init();
   }

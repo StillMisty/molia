@@ -2,6 +2,8 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:molia/sources/any_listen/any_listen_config.dart';
 
+import 'support/settings_test_support.dart';
+
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
@@ -92,12 +94,13 @@ void main() {
 
   group('AnyListenConfigStore', () {
     test('空 prefs 返回默认配置（不抛异常）', () async {
-      final loaded = await AnyListenConfigStore().load();
+      final loaded =
+          await AnyListenConfigStore(settings: testSettingsRegistry()).load();
       expect(loaded, AnyListenConfig.empty);
     });
 
     test('save/load 往返，键名带 any_listen_ 前缀', () async {
-      final store = AnyListenConfigStore();
+      final store = AnyListenConfigStore(settings: testSettingsRegistry());
       const config = AnyListenConfig(
         serverUrl: 'http://127.0.0.1:9500',
         token: 'secret-token',
@@ -114,7 +117,7 @@ void main() {
     });
 
     test('save 时归一化地址；clear 后恢复默认', () async {
-      final store = AnyListenConfigStore();
+      final store = AnyListenConfigStore(settings: testSettingsRegistry());
       await store.save(const AnyListenConfig(
         serverUrl: 'http://host:9500///',
         enabled: true,

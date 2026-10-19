@@ -3,8 +3,8 @@ import 'package:material_ui/material_ui.dart';
 import 'package:flutter/services.dart';
 import 'package:logging/logging.dart';
 
+import '../data/settings/settings_access.dart';
 import '../data/settings/settings_keys.dart';
-import '../data/settings/settings_registry.dart';
 
 final logger = Logger('molia.language_service');
 
@@ -12,55 +12,56 @@ class LanguageService {
   static const MethodChannel _channel = MethodChannel('language_channel');
 
   /// 设置注册表（组合根启动时注入；本服务全静态，reload 也由组合根代绑）。
-  static late final SettingsRegistry _settings;
+  static late final SettingsAccess _settings;
 
-  static void attachSettings(SettingsRegistry settings) => _settings = settings;
+  static void attachSettings(SettingsAccess settings) => _settings = settings;
 
   /// 应用界面语言的运行时通知源。
   ///
   /// null 表示跟随系统；MyThemedApp 订阅它，设置页切换语言后立即生效。
-  static final ValueNotifier<Locale?> localeNotifier = ValueNotifier<Locale?>(null);
+  static final ValueNotifier<Locale?> localeNotifier =
+      ValueNotifier<Locale?>(null);
 
   static const List<Locale> supportedLocales = [
     Locale('en'),
     Locale('zh'),
   ];
-  
+
   /// 获取当前保存的语言设置
   static Future<Locale?> getSavedLocale() async {
     try {
       final languageCode = await _settings.read(kSelectedLanguage);
-      
+
       if (languageCode == null) return null;
-      
+
       final parts = languageCode.split('_');
       if (parts.length == 1) {
         return Locale(parts[0]);
       } else if (parts.length == 2) {
         return Locale(parts[0], parts[1]);
       }
-      
+
       return null;
     } catch (e) {
       logger.fine('Error getting saved locale: $e');
       return null;
     }
   }
-  
+
   /// 保存语言设置
   static Future<void> saveLocale(Locale locale) async {
     try {
-      final languageCode = locale.countryCode != null 
+      final languageCode = locale.countryCode != null
           ? '${locale.languageCode}_${locale.countryCode}'
           : locale.languageCode;
-      
+
       await _settings.write(kSelectedLanguage, languageCode);
       localeNotifier.value = locale;
     } catch (e) {
       logger.fine('Error saving locale: $e');
     }
   }
-  
+
   /// 清除语言设置（跟随系统）
   static Future<void> clearSavedLocale() async {
     try {
@@ -76,7 +77,7 @@ class LanguageService {
   static Future<void> reloadFromPreferences() async {
     localeNotifier.value = await getSavedLocale();
   }
-  
+
   /// 设置应用语言（Android 13+ 使用系统API，其余平台仅应用内切换）
   static Future<void> setAppLocale(Locale? locale) async {
     if (Platform.isAndroid) {
@@ -89,8 +90,8 @@ class LanguageService {
               ? '${locale.languageCode}-${locale.countryCode}'
               : locale.languageCode;
 
-          await _channel.invokeMethod(
-              'setAppLocale', {'languageTag': languageTag});
+          await _channel
+              .invokeMethod('setAppLocale', {'languageTag': languageTag});
         }
       } catch (e) {
         logger.fine('Error setting app locale: $e');
@@ -104,29 +105,29 @@ class LanguageService {
       await clearSavedLocale();
     }
   }
-  
+
   /// 打开系统语言设置页面（Android 13+）
   static Future<void> openSystemLanguageSettings() async {
     if (!Platform.isAndroid) return;
-    
+
     try {
       await _channel.invokeMethod('openSystemLanguageSettings');
     } catch (e) {
       logger.fine('Error opening system language settings: $e');
     }
   }
-  
+
   /// 检查是否支持系统级语言设置（Android 13+）
   static Future<bool> supportsSystemLanguageSettings() async {
     if (!Platform.isAndroid) return false;
-    
+
     try {
-      final result = await _channel.invokeMethod('supportsSystemLanguageSettings');
+      final result =
+          await _channel.invokeMethod('supportsSystemLanguageSettings');
       return result as bool? ?? false;
     } catch (e) {
       logger.fine('Error checking system language support: $e');
       return false;
     }
   }
-  
 }

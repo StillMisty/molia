@@ -350,7 +350,7 @@ void main() {
         ),
       ],
     ));
-    await a.engine.setPeerIgnored('devB', true);
+    await a.control.setPeerIgnored('devB', true);
     network.devices.remove('devB');
 
     // 三次变更超过条数上限：被忽略对端的旧 ack 不参与 minAck → 正常裁剪。

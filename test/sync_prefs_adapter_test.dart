@@ -68,17 +68,45 @@ void main() {
     );
   });
 
+  test('快捷键四键进入设置类别收集结果（跟人走）', () async {
+    final fullAdapter = PrefsSyncAdapter(
+      state: state,
+      settings: SettingsRegistry(
+        keys: kAllSettingsKeys,
+        preferences: prefs,
+        secrets: secrets,
+      ),
+    );
+
+    final collected = await fullAdapter.collect();
+    final settings = collected[SyncCategory.settings]!;
+    final byKey = {for (final record in settings) record.key: record};
+    for (final key in const [
+      kShortcutsEnabled,
+      kGlobalShortcutsEnabled,
+      kShortcutBindings,
+      kGlobalShortcutBindings,
+    ]) {
+      expect(byKey, contains(key.name));
+      expect(
+        byKey[key.name]!.data,
+        {'v': key.defaultValue},
+        reason: '${key.name} 首次登记应按默认值参与同步',
+      );
+    }
+  });
+
   test('本地修改检测：值变化后重新取戳', () async {
     final first = await adapter.collect();
-    final before = first[SyncCategory.settings]!
-        .firstWhere((r) => r.key == 'theme_mode');
+    final before =
+        first[SyncCategory.settings]!.firstWhere((r) => r.key == 'theme_mode');
     expect(before.version, SyncVersion.zero);
 
     now = 5000;
     await prefs.setString('theme_mode', 'light');
     final second = await adapter.collect();
-    final after = second[SyncCategory.settings]!
-        .firstWhere((r) => r.key == 'theme_mode');
+    final after =
+        second[SyncCategory.settings]!.firstWhere((r) => r.key == 'theme_mode');
     expect(after.version.physical, 5000);
     expect(after.version.deviceId, 'devA');
     expect(after.data, {'v': 'light'});

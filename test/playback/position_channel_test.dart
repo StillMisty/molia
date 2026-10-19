@@ -12,6 +12,7 @@ import 'package:molia/widgets/playback_selectors.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import '../support/settings_test_support.dart';
 
 /// 领域端口的 ValueNotifier 实现（与数据层实现同构）。
 class _TestListenable<T> extends ValueNotifier<T>
@@ -173,8 +174,10 @@ void main() {
         () async {
       final backend = FakeBackend();
       final facade = DefaultPlaybackFacade(backend: backend);
-      final provider =
-          PlaybackProvider(facade: facade, messenger: FakeMessenger());
+      final provider = PlaybackProvider(
+          settings: testSettingsRegistry(),
+          facade: facade,
+          messenger: FakeMessenger());
       addTearDown(provider.dispose);
 
       var notifies = 0;
@@ -218,8 +221,10 @@ void main() {
     testWidgets('position 更新仅重建进度条自身，不重建兄弟节点', (tester) async {
       final backend = FakeBackend();
       final facade = DefaultPlaybackFacade(backend: backend);
-      final provider =
-          PlaybackProvider(facade: facade, messenger: FakeMessenger());
+      final provider = PlaybackProvider(
+          settings: testSettingsRegistry(),
+          facade: facade,
+          messenger: FakeMessenger());
       addTearDown(provider.dispose);
 
       final track = _track('a');

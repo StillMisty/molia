@@ -30,6 +30,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import '../support/fake_media_session_backend.dart';
 import '../support/fakes.dart';
+import '../support/settings_test_support.dart';
 
 SourceTrack _source(String id) => SourceTrack(
       sourceKey: 'fake',
@@ -180,12 +181,15 @@ class _Harness {
     facade = DefaultPlaybackFacade(backend: backend);
     store = PlaybackSessionStore();
     observer = PlaybackObserver(facade: facade);
+    final settings = testSettingsRegistry();
     session = PlaybackSessionCoordinator(
+      settings: settings,
       facade: facade,
       store: store,
       onRestoredTrack: observer.showRestoredTrack,
     );
     provider = PlaybackProvider(
+      settings: settings,
       facade: facade,
       messenger: FakeMessenger(),
       observer: observer,

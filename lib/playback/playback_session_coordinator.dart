@@ -17,8 +17,8 @@ import 'dart:async';
 
 import 'package:logging/logging.dart';
 
+import '../data/settings/settings_access.dart';
 import '../data/settings/settings_keys.dart';
-import '../data/settings/settings_registry.dart';
 import '../domain/models/playback.dart';
 import '../domain/models/track.dart';
 import '../domain/ports/playback_facade.dart';
@@ -73,12 +73,12 @@ class PlaybackSessionCoordinator implements PlaybackSessionSyncPort {
   PlaybackSessionCoordinator({
     required PlaybackFacade facade,
     required PlaybackSessionStore store,
-    SettingsRegistry? settings,
+    required SettingsAccess settings,
     RestoredTrackReporter? onRestoredTrack,
     DateTime Function()? clock,
   })  : _facade = facade,
         _store = store,
-        _settings = settings ?? SettingsRegistry(keys: kAllSettingsKeys),
+        _settings = settings,
         _onRestoredTrack = onRestoredTrack,
         _clock = clock ?? DateTime.now {
     _position = _RestoredPositionChannel(_facade.position);
@@ -101,7 +101,7 @@ class PlaybackSessionCoordinator implements PlaybackSessionSyncPort {
 
   final PlaybackFacade _facade;
   final PlaybackSessionStore _store;
-  final SettingsRegistry _settings;
+  final SettingsAccess _settings;
   final RestoredTrackReporter? _onRestoredTrack;
 
   /// 落盘节流判定用的时钟（测试注入）。

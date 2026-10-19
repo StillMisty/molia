@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'dart:convert';
 
 import 'package:flutter/foundation.dart';
 import 'package:logging/logging.dart';
@@ -14,13 +13,17 @@ import 'sync_codec_port.dart';
 import 'sync_fingerprint.dart';
 import 'sync_journal.dart';
 import 'sync_known_store.dart';
-import 'sync_passphrase.dart';
 import 'sync_scheduler.dart';
 import 'sync_stamp.dart';
 import 'sync_state_store.dart';
 
 /// 同步引擎：一轮 = 收集本地视图 → 拉取远端快照 → 逐键合并 → 写回本地 →
 /// 推送合并后视图 → 记录可观察的一轮结果（[SyncRoundReport]）。
+///
+/// 引擎只负责轮次执行与服务端语义（`serveSnapshot` / `serveJournal`）：
+/// UI 面的身份 / 开关 / 传输状态 / 口令在 `sync_control_plane.dart`，完整
+/// 备份在 `sync_backup.dart`；三者共享同一个 `SyncStateStore` 与同一份适配器 /
+/// 传输实例（组合根接线，见 `app/bootstrap/sync_stack.dart`）。
 ///
 /// 成本模型：合并后只把**版本变化**的胜者交给适配器（[SyncKnownStore] 登记
 /// 上一轮交付的版本），因此一轮的落地量、日志计数与适配器内部查询
@@ -142,7 +145,6 @@ class SyncEngine extends ChangeNotifier implements SyncSchedulerHost {
   /// 唯一判据处（见 [PublishLedger]）。
   final Map<String, PublishLedger> _publishLedgers = {};
 
-  SyncStateStore get state => _state;
   bool get syncing => _syncing;
   bool get initialized => _initialized;
 
@@ -228,34 +230,6 @@ class SyncEngine extends ChangeNotifier implements SyncSchedulerHost {
     ).withSnapshotId(snapshotId);
   }
 
-  /// 传输当前状态（UI 呈现「开关开着但没在工作」）；未知 kind 返回 null。
-  /// 与一轮报告同一类型：计数为零、`error` 为启动类失败原因（含诊断细节），
-  /// 避免「状态视图」与「报告」两套字段各自漂移。
-  SyncTransportReport? transportStatus(String kind) {
-    final transport = _transports[kind];
-    if (transport == null) return null;
-    final running = transport.isRunning;
-    final reason = transport.unavailableReason;
-    return SyncTransportReport(
-      kind: kind,
-      enabled: _state.enabledTransports.contains(kind),
-      running: running,
-      unavailableReason: reason,
-      error: running || reason == null
-          ? null
-          : SyncIssue(code: reason, detail: transport.unavailableDetail),
-    );
-  }
-
-  /// 局域网传输本机实际绑定的 UDP 探测端口（分族；0 = 该族未运行 /
-  /// 不可用）。命名映射：传输层是 `SyncTransport.discoveryPorts`（传输不限
-  /// 局域网），引擎 / UI 层带 `lan` 前缀限定。
-  ///
-  /// 配对码与设置页展示用：端口降级后对端要按对应的族取端口，不能假设
-  /// 标准端口或拿另一族的端口。
-  ({int v4, int v6}) get lanDiscoveryPorts =>
-      _transports[SyncTransportKind.lan]?.discoveryPorts ?? (v4: 0, v6: 0);
-
   int _nowMs() => _clock().millisecondsSinceEpoch;
 
   /// 登记的内存视图：首次使用时一次加载（之后由引擎维护）。
@@ -267,125 +241,6 @@ class SyncEngine extends ChangeNotifier implements SyncSchedulerHost {
     await _state.init();
     _initialized = true;
     notifyListeners();
-  }
-
-  /// 启动已启用且未运行的传输（幂等）。
-  ///
-  /// 组合根在**首帧之后**调用它：局域网传输启动要过权限门（Android 17 起是
-  /// 系统对话框）并绑套接字 / 枚举网卡，放在 `runApp` 之前会让首帧等一个
-  /// 用户看不见的对话框。装配期只初始化状态，传输留给首帧收尾或首个轮次。
-  Future<void> startTransports() async {
-    if (!_state.enabled) return;
-    await _ensureTransportsRunning();
-  }
-
-  Future<void> setCategory(SyncCategory category, bool value) async {
-    await _state.setCategory(category, value);
-    notifyListeners();
-  }
-
-  /// 开 / 关一路传输（= 总开关：两路都关时 [syncEnabled] 为假，一切停摆）。
-  Future<void> setTransportEnabled(String kind, bool value) async {
-    await _state.setTransportEnabled(kind, value);
-    final transport = _transports[kind];
-    if (transport != null) {
-      if (value) {
-        await _ensureTransportsRunning();
-      } else if (transport.isRunning) {
-        await transport.stop();
-      }
-    }
-    notifyListeners();
-  }
-
-  Future<void> setDeviceName(String value) async {
-    await _state.setDeviceName(value);
-    notifyListeners();
-  }
-
-  Future<void> setWebdavConfig(WebDavConfig config) async {
-    await _state.setWebdavConfig(config);
-    notifyListeners();
-  }
-
-  // 手动对端地址簿（局域网发现失败时的兜底：AP 隔离 / 多网段 / 防火墙）。
-  // 权限被拒时它同样无效——那是网关级阻断，只能授权或转 WebDAV。
-
-  /// 添加手动对端（地址 + 可选名称）；重复地址按地址合并。
-  ///
-  /// 返回 false 表示该地址已存在（UI 据此提示「已更新」而不是「已添加」）。
-  Future<bool> addManualPeer(ManualPeer peer) async {
-    final added = await _state.addManualPeer(peer);
-    notifyListeners();
-    return added;
-  }
-
-  /// 移除手动对端（只删地址簿条目，已发现的名册不受影响）。
-  Future<void> removeManualPeer(String host) async {
-    await _state.removeManualPeer(host);
-    notifyListeners();
-  }
-
-  /// 本地忽略某台设备：不再拉取 / 合并它的载荷（幽灵 / 已失联设备的处置）。
-  ///
-  /// 只影响本机（对端不知道、其它设备不受影响）；远端文件不自动删除
-  /// （需要时用 [cleanupRemote] 显式清理）。
-  Future<void> setPeerIgnored(String deviceId, bool ignored) async {
-    if (deviceId.isEmpty) return;
-    await _state.setPeerIgnored(deviceId, ignored);
-    if (ignored) _peersById.remove(deviceId);
-    notifyListeners();
-  }
-
-  /// 显式清理某台设备的远端文件（用户动作；**不做自动删除**）。
-  ///
-  /// 返回每个传输的结果；没有可清理内容的传输返回 false（局域网直连无远端
-  /// 存储）。失败原因进日志与返回值，UI 据此提示。
-  Future<({bool removed, SyncIssue? error})> cleanupRemote(
-    String deviceId,
-  ) async {
-    if (deviceId.isEmpty) return (removed: false, error: null);
-    var removed = false;
-    SyncIssue? firstError;
-    for (final entry in _transports.entries) {
-      if (!_state.enabledTransports.contains(entry.key)) continue;
-      try {
-        if (await entry.value.deleteRemote(deviceId)) removed = true;
-      } catch (e) {
-        firstError ??= SyncIssue(
-          code: SyncIssueCode.deleteRemoteFailed,
-          args: {'peer': deviceId},
-          detail: '$e',
-        );
-        _logger.warning('清理远端文件失败（${entry.key}/$deviceId）', e);
-      }
-    }
-    return (removed: removed, error: firstError);
-  }
-
-  Future<String?> readPassphrase() => _state.readPassphrase();
-
-  /// 读取现有口令；不存在时生成并持久化（开启同步的入口）。
-  Future<String> ensurePassphrase() async {
-    final existing = await _state.readPassphrase();
-    if (existing != null && existing.trim().isNotEmpty) return existing;
-    final generated = SyncPassphrase.generate();
-    await _state.writePassphrase(generated);
-    notifyListeners();
-    return generated;
-  }
-
-  Future<void> setPassphrase(String passphrase) async {
-    await _state.writePassphrase(passphrase);
-    notifyListeners();
-  }
-
-  /// 重置口令：全部设备需重新输入（口令即信任根）。
-  Future<String> resetPassphrase() async {
-    final generated = SyncPassphrase.generate();
-    await _state.writePassphrase(generated);
-    notifyListeners();
-    return generated;
   }
 
   /// 对端主动推送的快照：在合流窗口内合并成一轮。
@@ -1417,83 +1272,13 @@ class SyncEngine extends ChangeNotifier implements SyncSchedulerHost {
     return recent;
   }
 
-  // 完整快照备份（导出/导入）：与同步共用 envelope 与适配器，
-  // 但不需要启用同步或口令；凭证类默认排除（密钥不落明文备份文件）。
-
-  static const String backupKind = 'molia_backup';
-  static const int backupVersion = 1;
-
-  /// 导出完整备份 JSON 文本（歌单 / 历史 / 音源 / 设置 / 统计 / 会话）。
-  Future<String> exportBackupJson({bool includeCredentials = false}) async {
-    final categories = _backupCategories(includeCredentials);
-    final records = await _collect(categories);
-    final envelope = _envelopeFrom(records);
-    return const JsonEncoder.withIndent('  ').convert({
-      'kind': backupKind,
-      'v': backupVersion,
-      'producedAt': _nowMs(),
-      'envelope': envelope.toJson(),
-    });
-  }
-
-  /// 导入完整备份：与本地数据逐键合并（LWW，不做整体覆盖）。
-  ///
-  /// 先收集本地现状更新登记，保证本地较新的改动不会被旧备份覆盖。
-  Future<SyncApplyOutcome> importBackupJson(
-    String json, {
-    bool includeCredentials = false,
-  }) async {
-    final Object? decoded;
-    try {
-      decoded = jsonDecode(json);
-    } catch (_) {
-      throw const FormatException('备份文件不是有效 JSON');
-    }
-    if (decoded is! Map || decoded['kind'] != backupKind) {
-      throw const FormatException('不是 Molia 备份文件');
-    }
-    final envelope = SyncEnvelope.fromJson(decoded['envelope']);
-    if (envelope == null) throw const FormatException('备份内容无效');
-    // 导入备份的戳同样要吸收：否则恢复的旧备份会与库内新数据打架。
-    for (final list in envelope.records.values) {
-      for (final record in list) {
-        _stamps.observe(record.version);
-      }
-    }
-
-    final categories = _backupCategories(includeCredentials);
-    await _collect(categories);
-
-    var applied = 0;
-    var skipped = 0;
-    for (final adapter in _adapters) {
-      if (!adapter.ready) continue;
-      final subset = <SyncCategory, List<SyncRecord>>{};
-      for (final category in adapter.categories) {
-        if (!categories.contains(category)) continue;
-        final list = envelope.records[category];
-        if (list == null || list.isEmpty) continue;
-        subset[category] = list;
-      }
-      if (subset.isEmpty) continue;
-      try {
-        final outcome = await adapter.apply(subset);
-        applied += outcome.applied;
-        skipped += outcome.skipped;
-      } catch (e) {
-        _logger.warning('导入 ${adapter.runtimeType} 失败', e);
-      }
-    }
-    await _state.save();
-    notifyListeners();
-    return SyncApplyOutcome(applied: applied, skipped: skipped);
-  }
-
-  Set<SyncCategory> _backupCategories(bool includeCredentials) => {
-        for (final category in SyncCategory.values)
-          if (includeCredentials || category != SyncCategory.credentials)
-            category,
-      };
+  /// 完整备份模块的收集入口：按类别返回适配器聚合视图（与一轮同步同一份
+  /// 类别过滤与缓存语义）。备份不接触轮次状态，只需要这一个读动作。
+  Future<Map<SyncCategory, List<SyncRecord>>> collectRecords(
+    Set<SyncCategory> categories, {
+    bool fresh = false,
+  }) =>
+      _collect(categories, fresh: fresh);
 
   Future<void> _ensureTransportsRunning() async {
     for (final entry in _transports.entries) {

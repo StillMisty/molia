@@ -81,6 +81,16 @@
    **凭证类默认排除**（避免 API Key 落进明文备份文件），调用方可显式包含。
    数据与存储页的导出/导入在同步可用时走完整备份，否则退回旧的最近播放导出。
 
+   > **2026-10-19 修订（仅代码位置）**：备份实现从 `SyncEngine` 移到独立模块
+   > `lib/data/sync/sync_backup.dart`（`SyncBackup.exportBackupJson` /
+   > `importBackupJson`）。本地记录的收集入口由引擎注入
+   > （`SyncEngine.collectRecords`），适配器 / 状态存储 / 版本戳发号器与时钟
+   > 注入不变，**导出内容、凭证排除、LWW 合并、结构校验与错误语义全部不变**；
+   > 这样备份测试不必构造传输与轮次，引擎的 interface 也不再为备份留方法。
+   > 同轮把 UI 面的身份 / 传输开关 / 运行状态 / 口令生命周期收进
+   > `sync_control_plane.dart`（与引擎共享同一状态存储），§7 的「`SyncProvider`
+   > 提供 UI 状态」口径不变——provider 仍是 UI 的唯一门面。
+
 ## 后果
 
 - 加入同步的设备可读全部同步数据（含可执行脚本与 API Key）：口令泄露 = 全部失守，

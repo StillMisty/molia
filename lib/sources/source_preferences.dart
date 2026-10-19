@@ -15,12 +15,12 @@ library;
 
 import 'package:flutter/foundation.dart';
 
+import '../data/settings/settings_access.dart';
 import '../data/settings/settings_keys.dart';
-import '../data/settings/settings_registry.dart';
 import 'source_track.dart' show kLxQualityOrder;
 
 class SourcePreferences extends ChangeNotifier {
-  SourcePreferences(SettingsRegistry settings) : _settings = settings {
+  SourcePreferences(SettingsAccess settings) : _settings = settings {
     // 应用远端设置后的定向重载：三个键共用一个幂等的整表重读。
     _settings.bindReload(kLxDefaultQuality, reload);
     _settings.bindReload(kLxSourceOrder, reload);
@@ -28,11 +28,11 @@ class SourcePreferences extends ChangeNotifier {
   }
 
   /// 音质偏好的默认值（`reload` 的先重置值，与键默认值一致）。
-  static const String _defaultQuality = '320k';
+  static final String _defaultQuality = kLxDefaultQuality.defaultValue;
 
   static const List<String> _supportedQualitys = kLxQualityOrder;
 
-  final SettingsRegistry _settings;
+  final SettingsAccess _settings;
 
   String _preferredQuality = _defaultQuality;
   List<String> _sourceOrder = const [];

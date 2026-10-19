@@ -206,7 +206,7 @@ void main() {
   });
 
   test('SourceManager 委托：同名 API 直达偏好模块并转发通知', () async {
-    final manager = SourceManager();
+    final manager = SourceManager(settings: testSettingsRegistry());
     addTearDown(manager.dispose);
     var notifications = 0;
     manager.addListener(() => notifications++);

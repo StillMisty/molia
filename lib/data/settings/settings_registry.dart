@@ -1,5 +1,6 @@
 import 'package:shared_preferences/shared_preferences.dart';
 
+import 'settings_access.dart';
 import 'settings_key.dart';
 import 'settings_secret_store.dart';
 
@@ -12,7 +13,7 @@ import 'settings_secret_store.dart';
 ///
 /// **「一个键一个家」**：键名字面量只准出现在 `settings_keys.dart`；
 /// 模块与同步适配器都经本类读写，不存在第二份类型转换。
-class SettingsRegistry {
+class SettingsRegistry implements SettingsAccess {
   SettingsRegistry({
     required List<SettingsKey<Object?>> keys,
     SharedPreferences? preferences,
@@ -29,9 +30,32 @@ class SettingsRegistry {
   /// 登记键总表（顺序即同步收集顺序）。
   final List<SettingsKey<Object?>> keys;
 
+  /// 构造一个按键收窄的模块视图：只允许访问 [keys] 里声明的键。
+  ///
+  /// 组合根按模块现有的 reload 绑定 / 读写键传入列表；作用域之外的键在
+  /// debug 断言、release 抛 [StateError]，避免模块悄悄读写别的模块的键。
+  SettingsScope scope(Iterable<SettingsKey<Object?>> keys) =>
+      SettingsScope._(this, List<SettingsKey<Object?>>.of(keys));
+
   /// 写入回调（组合根在同步栈建好后接线：把「这个键属于哪个同步类别」转成
   /// 待外发标记）。在同步栈之前构造，因此留作可后置赋值。
-  void Function(SettingsKey<Object?> key)? onWrite;
+  ///
+  /// 只允许绑定一次：两个钩子共存时后绑的会静默覆盖先绑的，同步会漏标记、
+  /// 增量日志也会漏写，且没有任何可见报错。需要重新接线时先显式置 null。
+  void Function(SettingsKey<Object?> key)? get onWrite => _onWrite;
+  set onWrite(void Function(SettingsKey<Object?> key)? hook) {
+    if (hook == null) {
+      _onWrite = null;
+      return;
+    }
+    assert(_onWrite == null, 'SettingsRegistry.onWrite 只允许绑定一次');
+    if (_onWrite != null) {
+      throw StateError('SettingsRegistry.onWrite 已绑定，拒绝第二次覆盖');
+    }
+    _onWrite = hook;
+  }
+
+  void Function(SettingsKey<Object?> key)? _onWrite;
 
   final SharedPreferences? _preferencesOverride;
   final SettingsSecretStore _secrets;
@@ -54,14 +78,17 @@ class SettingsRegistry {
   }
 
   /// 读取当前值；缺键回退键的默认值（读不到不写回，缺省与默认等价）。
+  @override
   Future<T> read<T extends Object?>(SettingsKey<T> key) async =>
       (await readRaw(key)) as T;
 
   /// 写入并持久化；`null` 表示删除键（回到默认值）。
+  @override
   Future<void> write<T extends Object?>(SettingsKey<T> key, T value) =>
       writeRaw(key, value);
 
   /// 删除键（读回默认值）；用于非空值类型（bool / int / List）。
+  @override
   Future<void> clear(SettingsKey<Object?> key) => writeRaw(key, null);
 
   /// 同步面：读原始值（按 kind 解释；secure 盒保持旧的字符串语义）。
@@ -77,7 +104,8 @@ class SettingsRegistry {
       }
       final prefs = await _prefs();
       return switch (kind) {
-        SettingsValueKind.string => prefs.getString(key.name) ?? key.defaultValue,
+        SettingsValueKind.string =>
+          prefs.getString(key.name) ?? key.defaultValue,
         SettingsValueKind.bool => prefs.getBool(key.name) ?? key.defaultValue,
         SettingsValueKind.int => prefs.getInt(key.name) ?? key.defaultValue,
         SettingsValueKind.stringList =>
@@ -158,6 +186,7 @@ class SettingsRegistry {
   ///
   /// 同一个钩子绑多个键（如主题的 5 个键）只会执行一次：重载是幂等的整表
   /// 读取，按键重复跑没有意义。
+  @override
   void bindReload(SettingsKey<Object?> key, Future<void> Function() reload) {
     _reloads.putIfAbsent(key.name, () => []).add(reload);
   }
@@ -170,5 +199,59 @@ class SettingsRegistry {
     for (final hook in hooks) {
       await hook();
     }
+  }
+}
+
+/// 模块面的按键视图：同一份注册表 / 同一份存储，只开放声明的键。
+///
+/// 不是第二个注册表：读写 / reload 都委托给构造它的 [SettingsRegistry]，
+/// 因此同步写入钩子、密钥盒与远端值的宽容转换对模块完全一致。
+class SettingsScope implements SettingsAccess {
+  SettingsScope._(this._registry, List<SettingsKey<Object?>> keys)
+      : keys = List.unmodifiable(keys),
+        _names = {for (final key in keys) key.name};
+
+  final SettingsRegistry _registry;
+
+  /// 本作用域声明的键（顺序即构造时传入顺序）。
+  final List<SettingsKey<Object?>> keys;
+
+  final Set<String> _names;
+
+  /// 作用域校验：不在声明列表里的键不允许读写 / 绑重载。
+  ///
+  /// debug 先断言给出调用栈；release 继续抛 [StateError]，保证越界访问不会
+  /// 变成「另一个模块的键被静默改写」。
+  void _check(SettingsKey<Object?> key) {
+    if (_names.contains(key.name)) return;
+    assert(_names.contains(key.name), '设置键不在作用域内：${key.name}');
+    throw StateError('设置键不在作用域内：${key.name}');
+  }
+
+  @override
+  Future<T> read<T extends Object?>(SettingsKey<T> key) {
+    _check(key);
+    return _registry.read(key);
+  }
+
+  @override
+  Future<void> write<T extends Object?>(SettingsKey<T> key, T value) {
+    _check(key);
+    return _registry.write(key, value);
+  }
+
+  @override
+  Future<void> clear(SettingsKey<Object?> key) {
+    _check(key);
+    return _registry.clear(key);
+  }
+
+  @override
+  void bindReload(
+    SettingsKey<Object?> key,
+    Future<void> Function() reload,
+  ) {
+    _check(key);
+    _registry.bindReload(key, reload);
   }
 }

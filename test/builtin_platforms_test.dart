@@ -8,6 +8,7 @@ import 'package:molia/sources/builtin/discover_source.dart';
 import 'package:molia/sources/builtin/lyric_search.dart';
 import 'package:molia/sources/source_manager.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'support/settings_test_support.dart';
 
 /// 内置平台能力矩阵：平台只允许在 [BuiltinPlatforms] 声明一次，
 /// 各 facade / SourceManager 的能力位必须从同一份注册表推导。
@@ -74,7 +75,7 @@ void main() {
   });
 
   test('SourceManager.capabilitiesFor 与注册表 + 可取链门一致（无脚本）', () {
-    final manager = SourceManager();
+    final manager = SourceManager(settings: testSettingsRegistry());
     addTearDown(manager.dispose);
 
     for (final key in expectedKeys) {

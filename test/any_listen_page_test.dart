@@ -6,6 +6,7 @@ import 'package:molia/pages/any_listen_page.dart';
 import 'package:molia/providers/sources_provider.dart';
 import 'package:molia/sources/any_listen/any_listen_config.dart';
 import 'package:molia/sources/source_manager.dart';
+import 'support/settings_test_support.dart';
 
 void main() {
   setUp(() {
@@ -35,7 +36,8 @@ void main() {
   }
 
   testWidgets('独立打开：渲染表单且不提示错误', (tester) async {
-    final provider = mountProvider(SourceManager());
+    final provider =
+        mountProvider(SourceManager(settings: testSettingsRegistry()));
     await pumpPage(tester, AnyListenPage(provider: provider));
 
     expect(find.text('any-listen 接入'), findsOneWidget);
@@ -47,7 +49,8 @@ void main() {
   });
 
   testWidgets('保存：校验地址、写入 any_listen_ 前缀的 prefs', (tester) async {
-    final provider = mountProvider(SourceManager());
+    final provider =
+        mountProvider(SourceManager(settings: testSettingsRegistry()));
     await pumpPage(tester, AnyListenPage(provider: provider));
 
     // 启用但不填地址：保存时给出提示且不落盘
@@ -68,7 +71,8 @@ void main() {
   });
 
   testWidgets('连接测试：缺少地址时给出可读提示（不发请求）', (tester) async {
-    final provider = mountProvider(SourceManager());
+    final provider =
+        mountProvider(SourceManager(settings: testSettingsRegistry()));
     await pumpPage(tester, AnyListenPage(provider: provider));
 
     await tester.tap(find.text('连接测试').hitTestable());
@@ -77,7 +81,7 @@ void main() {
   });
 
   testWidgets('传入 manager 时保存同步到 SourceManager 并刷新可见性', (tester) async {
-    final manager = SourceManager();
+    final manager = SourceManager(settings: testSettingsRegistry());
     final provider = mountProvider(manager);
 
     await pumpPage(tester, AnyListenPage(provider: provider));

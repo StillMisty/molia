@@ -8,6 +8,7 @@ import 'package:molia/sources/any_listen/any_listen_config.dart';
 import 'package:molia/sources/any_listen/any_listen_source.dart';
 import 'package:molia/sources/source_manager.dart';
 import 'package:molia/sources/source_track.dart';
+import 'support/settings_test_support.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -36,7 +37,7 @@ void main() {
 
       for (final c in cases) {
         SharedPreferences.setMockInitialValues(c.prefs);
-        final manager = SourceManager();
+        final manager = SourceManager(settings: testSettingsRegistry());
         await manager.init();
 
         expect(manager.anyListenConfig.isConfigured, c.configured);
@@ -52,7 +53,7 @@ void main() {
     });
 
     test('未配置时路由到 any-listen 的能力方法给出领域失败（不吞不崩）', () async {
-      final manager = SourceManager();
+      final manager = SourceManager(settings: testSettingsRegistry());
       await manager.init();
 
       // 跨出 sources 层后是 SourceFailure（未配置 → unsupported），
@@ -88,7 +89,7 @@ void main() {
   group('SourceManager × any-listen：配置与路由', () {
     test('updateAnyListenConfig：持久化、通知、出现在列表末尾；reloadAnyListenConfig 重新加载',
         () async {
-      final manager = SourceManager();
+      final manager = SourceManager(settings: testSettingsRegistry());
       await manager.init();
 
       var notified = 0;
@@ -106,9 +107,8 @@ void main() {
       expect(manager.anyListenConfig.serverUrl, 'http://127.0.0.1:9500');
 
       final options = manager.searchableSources;
-      final anyListen = options
-          .where((o) => o.kind == SourceKind.anyListen)
-          .toList();
+      final anyListen =
+          options.where((o) => o.kind == SourceKind.anyListen).toList();
       expect(anyListen, hasLength(1));
       expect(anyListen.single.key, AnyListenSource.sourceKey);
       expect(anyListen.single.name, AnyListenSource.displayName);
@@ -176,7 +176,7 @@ void main() {
         }
       });
 
-      final manager = SourceManager();
+      final manager = SourceManager(settings: testSettingsRegistry());
       await manager.init();
 
       await manager.updateAnyListenConfig(AnyListenConfig(
@@ -214,7 +214,7 @@ void main() {
         }
       });
 
-      final manager = SourceManager();
+      final manager = SourceManager(settings: testSettingsRegistry());
       await manager.init();
       await manager.updateAnyListenConfig(AnyListenConfig(
         serverUrl: 'http://127.0.0.1:${server.port}',

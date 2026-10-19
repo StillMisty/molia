@@ -5,8 +5,8 @@ import 'package:logging/logging.dart';
 import 'package:material_ui/material_ui.dart';
 
 import '../data/catalog/catalog_service.dart';
+import '../data/settings/settings_access.dart';
 import '../data/settings/settings_keys.dart';
-import '../data/settings/settings_registry.dart';
 import '../data/mapping/track_mapper.dart';
 import '../domain/models/failure.dart';
 import '../domain/models/playback.dart';
@@ -76,7 +76,7 @@ class _StateValueListenable<T> implements ValueListenable<T> {
 ///   挂接），本类只转发 [flushPlaybackSession] 与最后播放信息读取。
 class PlaybackProvider extends ChangeNotifier {
   final PlaybackFacade _facade;
-  final SettingsRegistry _settings;
+  final SettingsAccess _settings;
   final UiMessenger _messenger;
   final SourceManager? _sourceManager;
 
@@ -131,7 +131,7 @@ class PlaybackProvider extends ChangeNotifier {
   final Set<String> _autoSwapping = {};
 
   /// 默认播放模式（设置页配置；启动时无曲目即应用为初始模式）。
-  PlayMode _defaultPlayMode = PlayMode.sequential;
+  PlayMode _defaultPlayMode = _playModeOf(kDefaultPlayMode.defaultValue);
 
   /// 应用内音量（0..1，不含静音状态）；设备本地持久化，不随账号同步。
   double _volume = PlaybackVolumeStore.defaultVolume;
@@ -152,7 +152,7 @@ class PlaybackProvider extends ChangeNotifier {
     PlaybackVolumeStore? volumeStore,
     SourceSwapSettings? autoSwapSettings,
     AutoSourceSwapResolver? autoSwapResolver,
-    SettingsRegistry? settings,
+    required SettingsAccess settings,
   })  : _facade = facade,
         _messenger = messenger,
         _sourceManager = sourceManager,
@@ -161,7 +161,7 @@ class PlaybackProvider extends ChangeNotifier {
         _observer = observer,
         _autoSwapSettings = autoSwapSettings,
         _autoSwapResolver = autoSwapResolver,
-        _settings = settings ?? SettingsRegistry(keys: kAllSettingsKeys),
+        _settings = settings,
         _volumeStore = volumeStore ?? PlaybackVolumeStore() {
     // 会话模块：组合根注入（与系统媒体会话 / 同步栈共用同一实例）；
     // 未注入时自建（测试直建 provider 的路径），恢复曲目展示经观察者接线。
@@ -498,14 +498,19 @@ class PlaybackProvider extends ChangeNotifier {
     }
   }
 
+  /// 默认播放模式：键默认值是唯一来源，模块只把字符串映射成枚举。
+  static PlayMode _playModeOf(String name) => PlayMode.values.firstWhere(
+        (value) => value.name == name,
+        orElse: () => PlayMode.values.firstWhere(
+          (value) => value.name == kDefaultPlayMode.defaultValue,
+        ),
+      );
+
   /// 启动加载默认播放模式；无曲目时应用到 facade（有曲目时不打断当前会话）。
   Future<void> _loadDefaultPlayMode() async {
     try {
       final name = await _settings.read(kDefaultPlayMode);
-      final mode = PlayMode.values.firstWhere(
-        (value) => value.name == name,
-        orElse: () => PlayMode.sequential,
-      );
+      final mode = _playModeOf(name);
       _defaultPlayMode = mode;
       final snapshot = _facade.snapshot.value;
       if (snapshot.current == null && snapshot.mode != mode) {

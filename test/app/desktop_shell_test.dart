@@ -42,6 +42,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../support/fake_library_repository.dart';
 import '../support/fake_music_source.dart';
 import '../support/fakes.dart';
+import '../support/settings_test_support.dart';
 
 /// 桌面骨架（`MyApp(desktopShell: true)`）的挂载测试。
 ///
@@ -93,10 +94,10 @@ void main() {
       tester.view.resetDevicePixelRatio();
     });
 
-    final theme = ThemeProvider();
+    final theme = ThemeProvider(settings: testSettingsRegistry());
     addTearDown(theme.dispose);
     await theme.preferencesReady;
-    nav = NavProvider();
+    nav = NavProvider(settings: testSettingsRegistry());
     addTearDown(nav.dispose);
     await nav.preferencesReady;
 
@@ -106,6 +107,7 @@ void main() {
     await seedLibrary?.call(repository);
     final backend = FakePlaybackBackend();
     final playback = buildTestPlaybackProvider(
+      settings: testSettingsRegistry(),
       backend: backend,
       libraryRepository: repository,
     );
@@ -115,7 +117,7 @@ void main() {
       playbackProvider: playback,
     );
     addTearDown(library.dispose);
-    final sourceManager = SourceManager();
+    final sourceManager = SourceManager(settings: testSettingsRegistry());
     final sources = SourcesProvider(sourceManager);
     addTearDown(() {
       sources.dispose();
@@ -140,7 +142,8 @@ void main() {
     configureSearch?.call(search);
     final lyrics = LyricsProvider();
     addTearDown(lyrics.dispose);
-    final lyricsDisplay = LyricsDisplaySettings();
+    final lyricsDisplay =
+        LyricsDisplaySettings(settings: testSettingsRegistry());
     addTearDown(lyricsDisplay.dispose);
 
     backend.emit(BackendSnapshot(
@@ -238,7 +241,8 @@ void main() {
       tester.widget<M3ETabs>(playerTabs()).selectedIndex;
 
   Future<void> tapPlayerTab(WidgetTester tester, IconData icon) async {
-    await tester.tap(find.descendant(of: playerTabs(), matching: find.byIcon(icon)));
+    await tester
+        .tap(find.descendant(of: playerTabs(), matching: find.byIcon(icon)));
     await settleTransition(tester);
   }
 
@@ -349,7 +353,8 @@ void main() {
   testWidgets('侧栏：恒折叠、标签隐藏、无展开入口', (tester) async {
     await pumpShell(tester, desktopShell: true);
 
-    final rail = tester.widget<M3ENavigationRail>(find.byType(M3ENavigationRail));
+    final rail =
+        tester.widget<M3ENavigationRail>(find.byType(M3ENavigationRail));
     expect(rail.type, M3ENavigationRailType.alwaysCollapse);
     expect(rail.labelBehavior, M3ENavigationRailLabelBehavior.alwaysHide);
     // 窗口宽变化不影响侧栏形态。
@@ -430,7 +435,8 @@ void main() {
       }
       seen = true;
       lastCopy = renderedRect(tester, copy);
-      flightTarget = tester.widget<PlayerMorphFlight>(flight).geometry.pageCover;
+      flightTarget =
+          tester.widget<PlayerMorphFlight>(flight).geometry.pageCover;
     }
     expect(lastCopy, isNotNull, reason: '前提：进入方向出现了飞行副本');
     await settleTransition(tester);
@@ -743,7 +749,9 @@ void main() {
 
     // 输入框在遮罩打开后就持有焦点：立刻输入不会丢字。
     expect(
-      tester.widget<EditableText>(find.byType(EditableText).first).focusNode
+      tester
+          .widget<EditableText>(find.byType(EditableText).first)
+          .focusNode
           .hasFocus,
       isTrue,
       reason: '搜索框打开即聚焦（旧实现要等容器弹簧落定才聚焦，会吞按键）',
@@ -893,8 +901,7 @@ void main() {
     );
   });
 
-  testWidgets('Esc 裁决：音量弹层与队列视图同时在场时，一次 Esc 只关弹层',
-      (tester) async {
+  testWidgets('Esc 裁决：音量弹层与队列视图同时在场时，一次 Esc 只关弹层', (tester) async {
     await pumpShell(tester, desktopShell: true);
     // 前提一：播放页停在队列 tab（Esc 的壳层命令是收起队列视图）。
     await tapPlayerTab(tester, M3EIcons.queue_music_rounded);
@@ -921,8 +928,7 @@ void main() {
     expect(playerTabIndex(tester), nowPlayingLyricsTabIndex);
   });
 
-  testWidgets('Esc 裁决：焦点移出音量弹层后 Esc 仍关闭弹层，不落入按键黑洞',
-      (tester) async {
+  testWidgets('Esc 裁决：焦点移出音量弹层后 Esc 仍关闭弹层，不落入按键黑洞', (tester) async {
     await pumpShell(tester, desktopShell: true);
 
     await tester.tap(find.byKey(Player.volumeButtonKey));
@@ -947,8 +953,7 @@ void main() {
     );
   });
 
-  testWidgets('Esc 裁决：焦点移出音量弹层后，一次 Esc 只关弹层、队列视图仍在',
-      (tester) async {
+  testWidgets('Esc 裁决：焦点移出音量弹层后，一次 Esc 只关弹层、队列视图仍在', (tester) async {
     await pumpShell(tester, desktopShell: true);
 
     // 前提一：播放页停在队列 tab（Esc 的壳层命令是收起队列视图）。

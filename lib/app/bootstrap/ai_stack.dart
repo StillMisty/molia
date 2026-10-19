@@ -32,7 +32,15 @@ AiStack buildAiStack({
   required PlaybackProvider playback,
   required LibraryProvider libraryProvider,
 }) {
-  final aiSettingsStore = AiSettingsStore(settings: catalog.settings);
+  final aiSettings = catalog.settings.scope([
+    kAiDjBaseUrl,
+    kAiDjApiKey,
+    kAiDjModel,
+    kAiDjConsent,
+    kAiDjEnabled,
+    kAiDjCacheTtlDays,
+  ]);
+  final aiSettingsStore = AiSettingsStore(settings: aiSettings);
   final aiRecommendationService = AiRecommendationService(
     llm: LlmClient(),
     catalog: catalog.catalogService,

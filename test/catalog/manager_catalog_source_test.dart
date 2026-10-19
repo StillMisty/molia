@@ -17,6 +17,7 @@ import 'package:molia/sources/source_manager.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../support/mock_dio.dart';
+import '../support/settings_test_support.dart';
 
 /// 适配器测试：真实 SourceManager + any-listen 本地 mock HTTP 服务
 /// （与 any_listen_manager_test.dart 相同手法，不访问真实网络）。
@@ -45,7 +46,8 @@ void main() {
           ContentType('application', 'json', charset: 'utf-8');
       switch (request.uri.path) {
         case '/api/music/search':
-          final limit = int.tryParse(request.uri.queryParameters['limit'] ?? '');
+          final limit =
+              int.tryParse(request.uri.queryParameters['limit'] ?? '');
           if (limit == 1) {
             request.response.write(jsonEncode({
               'list': [
@@ -103,7 +105,7 @@ void main() {
   });
 
   Future<SourceManager> configuredManager() async {
-    final manager = SourceManager();
+    final manager = SourceManager(settings: testSettingsRegistry());
     await manager.init();
     await manager.updateAnyListenConfig(AnyListenConfig(
       serverUrl: 'http://127.0.0.1:$port',
@@ -114,7 +116,7 @@ void main() {
 
   group('SourceManagerMusicSource · 元信息', () {
     test('capabilities 与路由一致：内置平台歌词/封面为原生能力', () async {
-      final manager = SourceManager();
+      final manager = SourceManager(settings: testSettingsRegistry());
       addTearDown(manager.dispose);
 
       final kw = SourceManagerMusicSource('kw', manager);
@@ -154,7 +156,8 @@ void main() {
     test('displayName 从 manager.searchableSources 读取；adopt 按 key', () async {
       final manager = await configuredManager();
       addTearDown(manager.dispose);
-      final source = SourceManagerMusicSource(AnyListenSource.sourceKey, manager);
+      final source =
+          SourceManagerMusicSource(AnyListenSource.sourceKey, manager);
       expect(source.displayName, AnyListenSource.displayName);
 
       final own = Track(
@@ -172,7 +175,7 @@ void main() {
     });
 
     test('collection：无能力（脚本源）抛 SourceFailure(unsupported)', () async {
-      final manager = SourceManager();
+      final manager = SourceManager(settings: testSettingsRegistry());
       addTearDown(manager.dispose);
       final source = SourceManagerMusicSource('lx_custom', manager);
       expect(source.capabilities.collection, isFalse);
@@ -185,7 +188,7 @@ void main() {
     });
 
     test('collection：内置平台仅专辑类型支持（歌单/艺人抛 unsupported）', () async {
-      final manager = SourceManager();
+      final manager = SourceManager(settings: testSettingsRegistry());
       addTearDown(manager.dispose);
       final source = SourceManagerMusicSource('kw', manager);
       expect(source.capabilities.collection, isTrue);
@@ -213,7 +216,7 @@ void main() {
       );
       addTearDown(() => BuiltinSearch.transport = original);
 
-      final manager = SourceManager();
+      final manager = SourceManager(settings: testSettingsRegistry());
       addTearDown(manager.dispose);
       final source = SourceManagerMusicSource('kw', manager);
       final page = await source.collection(
@@ -228,7 +231,7 @@ void main() {
 
   group('SourceManagerMusicSource · 歌手 / 歌词', () {
     test('searchArtists / searchLyrics：非内置源无能力 → unsupported', () async {
-      final manager = SourceManager();
+      final manager = SourceManager(settings: testSettingsRegistry());
       addTearDown(manager.dispose);
       final source = SourceManagerMusicSource('lx_custom', manager);
       expect(source.capabilities.artist, isFalse);
@@ -247,7 +250,7 @@ void main() {
     });
 
     test('searchArtists / searchLyrics：内置平台未配脚本时能力位与搜索同门', () async {
-      final manager = SourceManager();
+      final manager = SourceManager(settings: testSettingsRegistry());
       addTearDown(manager.dispose);
       final source = SourceManagerMusicSource('kw', manager);
       // 与 search 同一门（`_isBuiltinSearchable`：脚本可取链才宣称可用），
@@ -273,7 +276,8 @@ void main() {
     test('search：SourceTrack → Track 映射，hasMore/total 原样透传', () async {
       final manager = await configuredManager();
       addTearDown(manager.dispose);
-      final source = SourceManagerMusicSource(AnyListenSource.sourceKey, manager);
+      final source =
+          SourceManagerMusicSource(AnyListenSource.sourceKey, manager);
 
       final result = await source.search(
         const SearchQuery(keyword: '测试', page: 1, limit: 30),
@@ -305,7 +309,8 @@ void main() {
     test('search：page/limit 透传，total 推断 hasMore', () async {
       final manager = await configuredManager();
       addTearDown(manager.dispose);
-      final source = SourceManagerMusicSource(AnyListenSource.sourceKey, manager);
+      final source =
+          SourceManagerMusicSource(AnyListenSource.sourceKey, manager);
 
       final result = await source.search(
         const SearchQuery(keyword: 'x', page: 2, limit: 1),
@@ -320,7 +325,8 @@ void main() {
     test('search：取消令牌生效（前/后检查都丢弃结果）', () async {
       final manager = await configuredManager();
       addTearDown(manager.dispose);
-      final source = SourceManagerMusicSource(AnyListenSource.sourceKey, manager);
+      final source =
+          SourceManagerMusicSource(AnyListenSource.sourceKey, manager);
 
       // 请求前已取消：不发网络请求。
       final cancelled = CancelToken()..cancel();
@@ -351,7 +357,8 @@ void main() {
     test('resolve：返回 PlayableStream（URL 来自 manager.resolveUrl）', () async {
       final manager = await configuredManager();
       addTearDown(manager.dispose);
-      final source = SourceManagerMusicSource(AnyListenSource.sourceKey, manager);
+      final source =
+          SourceManagerMusicSource(AnyListenSource.sourceKey, manager);
 
       final result = await source.search(const SearchQuery(keyword: 'x'));
       final stream = await source.resolve(
@@ -365,7 +372,8 @@ void main() {
     test('lyrics：LxLyricResult → LyricsDoc（含翻译）', () async {
       final manager = await configuredManager();
       addTearDown(manager.dispose);
-      final source = SourceManagerMusicSource(AnyListenSource.sourceKey, manager);
+      final source =
+          SourceManagerMusicSource(AnyListenSource.sourceKey, manager);
 
       final result = await source.search(const SearchQuery(keyword: 'x'));
       final doc = await source.lyrics(result.items.single);
@@ -377,7 +385,8 @@ void main() {
     test('artwork：URL → Artwork；空 URL 返回 null', () async {
       final manager = await configuredManager();
       addTearDown(manager.dispose);
-      final source = SourceManagerMusicSource(AnyListenSource.sourceKey, manager);
+      final source =
+          SourceManagerMusicSource(AnyListenSource.sourceKey, manager);
 
       final result = await source.search(const SearchQuery(keyword: 'x'));
       final art = await source.artwork(result.items.single);
@@ -396,7 +405,7 @@ void main() {
     });
 
     test('无可用源：lyrics 返回 null，resolve 抛 SourceFailure(scriptError)', () async {
-      final manager = SourceManager();
+      final manager = SourceManager(settings: testSettingsRegistry());
       addTearDown(manager.dispose);
       final source = SourceManagerMusicSource('kw', manager);
       final track = Track(
@@ -415,7 +424,7 @@ void main() {
     });
 
     test('search：manager 异常归一化为 SourceFailure(scriptError)', () async {
-      final manager = SourceManager();
+      final manager = SourceManager(settings: testSettingsRegistry());
       addTearDown(manager.dispose);
       final source = SourceManagerMusicSource('kw', manager);
 

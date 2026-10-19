@@ -62,7 +62,6 @@ String? _coverUrlOf(PlaybackProvider provider) =>
 /// （10dp）低 3dp，play/pause 切换整条跳变。
 const double _shellBarProgressHeight = 10;
 
-
 /// 顶栏底部进度条：播放中波浪、暂停平直（波浪动画不会停，会像还在播放）。
 ///
 /// 槽高固定为 [_shellBarProgressHeight]：两种形态同槽心，play/pause 切换
@@ -271,12 +270,34 @@ class _MyAppState extends State<MyApp>
 
   /// 是否挂载桌面骨架：Linux / Windows / macOS 为真；[MyApp.desktopShell]
   /// 非空时以它为准（测试强制走另一侧骨架）。
-  bool get _desktopShell =>
-      widget.desktopShell ?? isDesktopPlatform();
+  bool get _desktopShell => widget.desktopShell ?? isDesktopPlatform();
 
   /// 当前选中的目的地（与底栏顺序解耦；初值 = 导航偏好的启动首页）。
+  ///
+  /// 这是「存储的选中项」，可能被运行时隐藏（如同步关掉当前底栏项）；
+  /// 壳层渲染与交互一律消费 [_effectiveDestination]，不要直接读它。
   late ShellDestination _selectedDestination;
   late ShellDestination _previousDestination;
+
+  /// 最近一次渲染（或由用户选中）的有效目的地。
+  ///
+  /// 可见性变化（如同步隐藏 / 恢复当前目的地）会绕过 [_selectDestination]
+  /// 改写有效选中项，[didChangeDependencies] 据此识别并同步播放页 morph 状态。
+  late ShellDestination _renderedDestination;
+
+  /// 实际生效的选中目的地：导航 chrome、页面栈与重复点击判定共用的唯一来源。
+  ///
+  /// 存储的选中项被运行时隐藏（如同步应用远端导航设置）时回退到第一个可见
+  /// 目的地。只读计算，不回写 [_selectedDestination]：隐藏项重新可见后天然
+  /// 恢复原选中项，也避免同步应用期间写回造成回环。
+  ShellDestination get _effectiveDestination {
+    final visible = context.read<NavProvider>().visibleDestinations;
+    // NavProvider 保证至少保留 1 个可见项；空列表仅作防御。
+    if (visible.isEmpty) return _selectedDestination;
+    return visible.contains(_selectedDestination)
+        ? _selectedDestination
+        : visible.first;
+  }
 
   @override
   void initState() {
@@ -288,6 +309,7 @@ class _MyAppState extends State<MyApp>
     // 第一个可见目的地。
     _selectedDestination = context.read<NavProvider>().effectiveHomeDestination;
     _previousDestination = _selectedDestination;
+    _renderedDestination = _selectedDestination;
     // 顶栏 / 底栏的曲目信息区必须与「手动进入播放页」后的状态一致（播放页
     // 激活即收起封面）：否则恢复会话后顶栏会重复显示曲目封面/进度。
     _morph.setBarHeaderHidden(
@@ -306,6 +328,20 @@ class _MyAppState extends State<MyApp>
   /// 顶栏曲目信息区跟随 [PlayerMorphController.barHeaderHidden]（飞行起止
   /// 时也由它统一翻转，避免两处各判一次）。
   void _syncBarReveal() => _barReveal.setRevealed(!_morph.barHeaderHidden);
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    // 可见性变化（如同步隐藏当前目的地）会改写有效选中项，但没有经过
+    // [_selectDestination]；把播放页 morph 状态对齐到新的有效选中项，
+    // 避免页面栈已回退、顶栏却仍停留在播放页形态（曲目区/进度条收起）。
+    final effective = _effectiveDestination;
+    if (effective == _renderedDestination) return;
+    _renderedDestination = effective;
+    _completeMorph();
+    _morph.setPageHeaderHidden(false);
+    _morph.setBarHeaderHidden(effective == ShellDestination.nowPlaying);
+  }
 
   @override
   void dispose() {
@@ -347,7 +383,7 @@ class _MyAppState extends State<MyApp>
   /// 进入播放页的飞行期间忽略重复点击：此刻折叠会与飞行副本抢封面
   /// （页内迷你 ⇄ 完整飞行与顶栏飞行同帧竞争），等飞行落定（~0.4s）再切换。
   void _onDestinationSelected(ShellDestination destination) {
-    if (destination != _selectedDestination) {
+    if (destination != _effectiveDestination) {
       _selectDestination(destination);
       return;
     }
@@ -362,13 +398,20 @@ class _MyAppState extends State<MyApp>
   }
 
   void _selectDestination(ShellDestination destination) {
-    if (destination == _selectedDestination) return;
+    final nav = context.read<NavProvider>();
+    // 隐藏目的地不参与导航（与 chrome / 页面栈同一可见集合）：否则 raw
+    // 选中项会再次与有效选中项分叉，页面栈回退到另一个可见项。
+    if (!nav.isVisible(destination)) return;
+    // 过渡的起点必须是当前真正显示的页，而不是被隐藏的 raw 选中项。
+    final current = _effectiveDestination;
+    if (destination == current) return;
     HapticsService.lightImpact();
-    final leavingPlayer = _selectedDestination == ShellDestination.nowPlaying;
+    final leavingPlayer = current == ShellDestination.nowPlaying;
     final enteringPlayer = destination == ShellDestination.nowPlaying;
     setState(() {
-      _previousDestination = _selectedDestination;
+      _previousDestination = current;
       _selectedDestination = destination;
+      _renderedDestination = destination;
     });
     _tabTransition.forward(from: 0);
     if (enteringPlayer) {
@@ -395,7 +438,7 @@ class _MyAppState extends State<MyApp>
   /// 看不到页内 tab，命令按目的地生效 —— 在播放页里把队列视图收成默认页
   /// （停在其它栏时同样回默认页，等于「回默认页」）；其它目的地 no-op。
   void _closeQueuePanel() {
-    if (_selectedDestination != ShellDestination.nowPlaying) return;
+    if (_effectiveDestination != ShellDestination.nowPlaying) return;
     _nowPlaying.showLyricsTab();
   }
 
@@ -419,7 +462,7 @@ class _MyAppState extends State<MyApp>
     _morph.setPageHeaderHidden(true);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
-      if (_selectedDestination != ShellDestination.nowPlaying) {
+      if (_effectiveDestination != ShellDestination.nowPlaying) {
         // 一帧之内又离开了播放页：这次进入被撤销，两端状态按「不在播放页」
         // 对齐（两端真身都可见）。
         _morph.setPageHeaderHidden(false);
@@ -452,7 +495,7 @@ class _MyAppState extends State<MyApp>
     _morph.setPageHeaderHidden(false);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
-      if (_selectedDestination == ShellDestination.nowPlaying) {
+      if (_effectiveDestination == ShellDestination.nowPlaying) {
         // 一帧之内又回到播放页：这次离开被撤销，状态按「在播放页」对齐
         // （底栏封面仍收起，与启动就落在播放页时同一口径）。
         _morph.setBarHeaderHidden(true);
@@ -560,19 +603,20 @@ class _MyAppState extends State<MyApp>
 
   /// 页面分层：选中页在最上层淡入，上一页快速淡出（fade-through）。
   Widget _buildPageStack() {
+    final selectedDestination = _effectiveDestination;
     final ordered = <ShellDestination>[
       for (final destination in ShellDestination.values)
-        if (destination != _selectedDestination) destination,
-      _selectedDestination,
+        if (destination != selectedDestination) destination,
+      selectedDestination,
     ];
     return Stack(
       children: [
         for (final destination in ordered)
           _ShellPageLayer(
             key: ValueKey(destination),
-            selected: destination == _selectedDestination,
+            selected: destination == selectedDestination,
             outgoing: destination == _previousDestination &&
-                destination != _selectedDestination,
+                destination != selectedDestination,
             animation: _tabTransition,
             child: _pages[destination]!,
           ),
@@ -587,12 +631,9 @@ class _MyAppState extends State<MyApp>
     final l10n = AppLocalizations.of(context)!;
     final visibleDestinations =
         context.watch<NavProvider>().visibleDestinations;
-    // 选中项被隐藏时回退到第一个可见目的地（重新显示后自动恢复）。
-    final selectedDestination = visibleDestinations.isEmpty
-        ? _selectedDestination
-        : (visibleDestinations.contains(_selectedDestination)
-            ? _selectedDestination
-            : visibleDestinations.first);
+    // 选中项被隐藏时回退到第一个可见目的地（重新显示后自动恢复）；
+    // chrome、页面栈与点击判定共用同一 resolver。
+    final selectedDestination = _effectiveDestination;
     final selectedIndex = visibleDestinations.indexOf(selectedDestination);
 
     // 导航 / 顶栏 spec：两套骨架共用一份（目的地映射 / 标签 / 设置按钮 /
@@ -1223,8 +1264,10 @@ class _MyThemedAppState extends State<MyThemedApp> with WidgetsBindingObserver {
     AppBrandingService.load();
     // 震动反馈开关（设备本地偏好）：载入后全应用触感立即按它判定。
     HapticsService.load();
-    _peerConnected =
-        context.read<SyncProvider>().peerConnectedNotices.listen(_onPeerConnected);
+    _peerConnected = context
+        .read<SyncProvider>()
+        .peerConnectedNotices
+        .listen(_onPeerConnected);
   }
 
   /// 首次与某台设备真正交换数据：提示一次（名称缺失时用短设备 id 兜底）。
@@ -1282,8 +1325,8 @@ class _MyThemedAppState extends State<MyThemedApp> with WidgetsBindingObserver {
   void _syncLocalizedBranding(Locale? locale) {
     final effective =
         locale ?? WidgetsBinding.instance.platformDispatcher.locale;
-    final resolved = LanguageService.supportedLocales
-            .any((supported) => supported.languageCode == effective.languageCode)
+    final resolved = LanguageService.supportedLocales.any(
+            (supported) => supported.languageCode == effective.languageCode)
         ? effective
         : LanguageService.supportedLocales.first;
     final name = lookupAppLocalizations(resolved).appName;
@@ -1329,88 +1372,87 @@ class _MyThemedAppState extends State<MyThemedApp> with WidgetsBindingObserver {
             _syncLocalizedBranding(locale);
             return Selector<ThemeProvider,
                 ({ColorScheme scheme, String? fontFamily})>(
-            selector: (context, provider) => (
-              scheme: provider.colorScheme,
-              fontFamily: provider.appFontFamily,
-            ),
-            // 方案色变化（切歌取色/莫奈/种子色/亮度）经 AnimatedSchemeBuilder
-            // 平滑过渡，避免整站颜色闪变；只插值 ColorScheme，material_ui 与
-            // M3E 两套主题都由同一插值结果重建，保证过渡期一致。
-            // 字体族变化不参与插值，由同一 Selector 直接触发两套主题重建。
-            builder: (context, themeState, _) => AnimatedSchemeBuilder(
-              scheme: themeState.scheme,
-              builder: (context, animatedScheme) {
-                final systemUiOverlayStyle =
-                    buildSystemUiOverlayStyle(animatedScheme);
-                final themedData = buildAppThemeData(
-                  animatedScheme,
-                  systemUiOverlayStyle: systemUiOverlayStyle,
-                  fontFamily: themeState.fontFamily,
-                );
+              selector: (context, provider) => (
+                scheme: provider.colorScheme,
+                fontFamily: provider.appFontFamily,
+              ),
+              // 方案色变化（切歌取色/莫奈/种子色/亮度）经 AnimatedSchemeBuilder
+              // 平滑过渡，避免整站颜色闪变；只插值 ColorScheme，material_ui 与
+              // M3E 两套主题都由同一插值结果重建，保证过渡期一致。
+              // 字体族变化不参与插值，由同一 Selector 直接触发两套主题重建。
+              builder: (context, themeState, _) => AnimatedSchemeBuilder(
+                scheme: themeState.scheme,
+                builder: (context, animatedScheme) {
+                  final systemUiOverlayStyle =
+                      buildSystemUiOverlayStyle(animatedScheme);
+                  final themedData = buildAppThemeData(
+                    animatedScheme,
+                    systemUiOverlayStyle: systemUiOverlayStyle,
+                    fontFamily: themeState.fontFamily,
+                  );
 
-                return M3EMaterialApp(
-                  title: AppBrandingService.titleNotifier.value,
-                  scaffoldMessengerKey: scaffoldMessengerKey,
-                  navigatorKey: navigatorKey,
-                  locale: locale,
-                  // material_ui 的 delegates 已合并 Material/Widgets/Cupertino 三套文案
-                  localizationsDelegates: const [
-                    AppLocalizations.delegate,
-                    ...GlobalMaterialLocalizations.delegates,
-                  ],
-                  supportedLocales: LanguageService.supportedLocales,
-                  // material_ui 透传：既有组件通过 Theme.of 读到的外观保持现状。
-                  theme: themedData,
-                  darkTheme: themedData,
-                  // M3E 侧数据：颜色/字体从 themedData 映射（按 ThemeData 实例缓存）。
-                  data: M3EThemeData.fromMaterial(themedData),
-                  // 方案色过渡已由 AnimatedSchemeBuilder 逐帧插值完成，
-                  // 关掉 MaterialApp 内置主题动画，避免二次缓动造成两套主题不同步。
-                  themeAnimationStyle: AnimationStyle.noAnimation,
-                  // 系统亮度由 ThemeProvider.updateThemeFromSystem 驱动，
-                  // 封面/莫奈取色由 ThemeProvider 内部优先级决定；不启用 M3E
-                  // 自适应与 OS 动态色，避免双主题源互相覆盖。
-                  autoTheming: false,
-                  dynamicColoring: false,
-                  // targetSdk 37（Android 15+ 强制 edge-to-edge）下保持系统栏透明、
-                  // 内容绘制到系统栏下方，与 settings_page.dart 的 edgeToEdge 行为一致。
-                  drawUnderSystemBars: true,
-                  // appBuilder 只做系统栏 AnnotatedRegion：
-                  // M3E 内部已用 M3ETheme 包裹 child，MaterialApp 的 Theme 又
-                  // 位于 builder 之上（见 material_ui app.dart _materialBuilder），
-                  // 此处不重复包 Theme。
-                  appBuilder: (context, child) {
-                    final themedChild = child ?? const SizedBox.shrink();
-                    final baseMediaQuery = MediaQuery.of(context);
-                    final baseScale = baseMediaQuery.textScaler.scale(1.0);
-                    final mediaData = baseMediaQuery.copyWith(
-                      textScaler: TextScaler.linear(baseScale),
-                    );
+                  return M3EMaterialApp(
+                    title: AppBrandingService.titleNotifier.value,
+                    scaffoldMessengerKey: scaffoldMessengerKey,
+                    navigatorKey: navigatorKey,
+                    locale: locale,
+                    // material_ui 的 delegates 已合并 Material/Widgets/Cupertino 三套文案
+                    localizationsDelegates: const [
+                      AppLocalizations.delegate,
+                      ...GlobalMaterialLocalizations.delegates,
+                    ],
+                    supportedLocales: LanguageService.supportedLocales,
+                    // material_ui 透传：既有组件通过 Theme.of 读到的外观保持现状。
+                    theme: themedData,
+                    darkTheme: themedData,
+                    // M3E 侧数据：颜色/字体从 themedData 映射（按 ThemeData 实例缓存）。
+                    data: M3EThemeData.fromMaterial(themedData),
+                    // 方案色过渡已由 AnimatedSchemeBuilder 逐帧插值完成，
+                    // 关掉 MaterialApp 内置主题动画，避免二次缓动造成两套主题不同步。
+                    themeAnimationStyle: AnimationStyle.noAnimation,
+                    // 系统亮度由 ThemeProvider.updateThemeFromSystem 驱动，
+                    // 封面/莫奈取色由 ThemeProvider 内部优先级决定；不启用 M3E
+                    // 自适应与 OS 动态色，避免双主题源互相覆盖。
+                    autoTheming: false,
+                    dynamicColoring: false,
+                    // targetSdk 37（Android 15+ 强制 edge-to-edge）下保持系统栏透明、
+                    // 内容绘制到系统栏下方，与 settings_page.dart 的 edgeToEdge 行为一致。
+                    drawUnderSystemBars: true,
+                    // appBuilder 只做系统栏 AnnotatedRegion：
+                    // M3E 内部已用 M3ETheme 包裹 child，MaterialApp 的 Theme 又
+                    // 位于 builder 之上（见 material_ui app.dart _materialBuilder），
+                    // 此处不重复包 Theme。
+                    appBuilder: (context, child) {
+                      final themedChild = child ?? const SizedBox.shrink();
+                      final baseMediaQuery = MediaQuery.of(context);
+                      final baseScale = baseMediaQuery.textScaler.scale(1.0);
+                      final mediaData = baseMediaQuery.copyWith(
+                        textScaler: TextScaler.linear(baseScale),
+                      );
 
-                    return AnnotatedRegion<SystemUiOverlayStyle>(
-                      value: systemUiOverlayStyle,
-                      child: MediaQuery(
-                        data: mediaData,
-                        // 用户交互（含弹层 / 菜单，都在 Navigator 之内）→
-                        // 同步调度器续期「最近交互」窗口；只观察不拦截。
-                        child: Listener(
-                          behavior: HitTestBehavior.translucent,
-                          onPointerDown: (_) =>
-                              widget.onUserInteraction?.call(),
-                          child: themedChild,
+                      return AnnotatedRegion<SystemUiOverlayStyle>(
+                        value: systemUiOverlayStyle,
+                        child: MediaQuery(
+                          data: mediaData,
+                          // 用户交互（含弹层 / 菜单，都在 Navigator 之内）→
+                          // 同步调度器续期「最近交互」窗口；只观察不拦截。
+                          child: Listener(
+                            behavior: HitTestBehavior.translucent,
+                            onPointerDown: (_) =>
+                                widget.onUserInteraction?.call(),
+                            child: themedChild,
+                          ),
                         ),
-                      ),
-                    );
-                  },
-                  home: MyApp(key: appRootKey),
-                );
-              },
-            ),
-          );
+                      );
+                    },
+                    home: MyApp(key: appRootKey),
+                  );
+                },
+              ),
+            );
           },
         );
       },
     );
   }
 }
-

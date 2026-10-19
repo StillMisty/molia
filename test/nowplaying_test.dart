@@ -31,6 +31,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'support/fake_library_repository.dart';
 import 'support/fake_music_source.dart';
 import 'support/fakes.dart';
+import 'support/settings_test_support.dart';
 
 /// 播放页 smoke 测试：圆点切换行常显 + Apple Music 式跟手拖拽展开/收起。
 Track _track(String id) => Track(
@@ -96,7 +97,9 @@ void main() {
           // 测试同样注入（真实 LyricsService 在测试 HTTP mock 下快速失败）。
           ChangeNotifierProvider(create: (_) => LyricsProvider()),
           // 歌词页扩展行开关：组合根在 main.dart 提供。
-          ChangeNotifierProvider(create: (_) => LyricsDisplaySettings()),
+          ChangeNotifierProvider(
+              create: (_) =>
+                  LyricsDisplaySettings(settings: testSettingsRegistry())),
           ...extraProviders,
         ],
         child: MaterialApp(
@@ -286,7 +289,9 @@ void main() {
       size: const Size(1400, 900),
     );
     expect(
-      tester.widget<LyricsWidget>(find.byType(LyricsWidget)).quickActionsEnabled,
+      tester
+          .widget<LyricsWidget>(find.byType(LyricsWidget))
+          .quickActionsEnabled,
       isFalse,
       reason: '大屏没有迷你态：歌词页快捷操作应保持关闭',
     );
@@ -297,7 +302,9 @@ void main() {
 
     // 误响应会让 `_isMini` 翻转 → 歌词页快捷操作被启用（页面实例重建）。
     expect(
-      tester.widget<LyricsWidget>(find.byType(LyricsWidget)).quickActionsEnabled,
+      tester
+          .widget<LyricsWidget>(find.byType(LyricsWidget))
+          .quickActionsEnabled,
       isFalse,
       reason: '大屏应忽略重复点击',
     );
@@ -328,8 +335,7 @@ void main() {
     );
   }
 
-  testWidgets('桌面版式：左播放器列 + 右「队列/歌词/详细」三 tab（默认歌词）',
-      (tester) async {
+  testWidgets('桌面版式：左播放器列 + 右「队列/歌词/详细」三 tab（默认歌词）', (tester) async {
     await pumpNowPlaying(
       tester,
       desktopLayout: true,
@@ -348,7 +354,10 @@ void main() {
       ['队列', '歌词', '详细'],
     );
     expect(
-      tabs.tabs.map((tab) => tab.icon).map((icon) => icon is Icon ? icon.icon : null).toList(),
+      tabs.tabs
+          .map((tab) => tab.icon)
+          .map((icon) => icon is Icon ? icon.icon : null)
+          .toList(),
       [
         M3EIcons.queue_music_rounded,
         M3EIcons.lyrics_rounded,
@@ -397,8 +406,7 @@ void main() {
     await tester.pump(const Duration(milliseconds: 50));
   });
 
-  testWidgets('桌面版式：tab 内容与 tab 栏同一内容边距（16），队列无分组小标题',
-      (tester) async {
+  testWidgets('桌面版式：tab 内容与 tab 栏同一内容边距（16），队列无分组小标题', (tester) async {
     await pumpNowPlaying(
       tester,
       desktopLayout: true,
@@ -530,8 +538,7 @@ void main() {
     await tester.pump(const Duration(milliseconds: 50));
   });
 
-  testWidgets('NowPlayingController：挂载前发出的请求在挂载时消费（默认页 = 请求页）',
-      (tester) async {
+  testWidgets('NowPlayingController：挂载前发出的请求在挂载时消费（默认页 = 请求页）', (tester) async {
     final controller = NowPlayingController()..showQueueTab();
     addTearDown(controller.dispose);
 
@@ -563,8 +570,7 @@ void main() {
     await tester.pump(const Duration(milliseconds: 50));
   });
 
-  testWidgets('桌面版式：传输排带音量入口（面板改音量 / 百分比读数 / Esc 关闭）',
-      (tester) async {
+  testWidgets('桌面版式：传输排带音量入口（面板改音量 / 百分比读数 / Esc 关闭）', (tester) async {
     await pumpNowPlaying(
       tester,
       desktopLayout: true,

@@ -39,7 +39,7 @@ void main() {
     Widget home, {
     bool mediaSessionInitFailed = false,
   }) async {
-    themeProvider = ThemeProvider();
+    themeProvider = ThemeProvider(settings: testSettingsRegistry());
     await themeProvider.preferencesReady;
     addTearDown(themeProvider.dispose);
 
@@ -102,7 +102,8 @@ void main() {
       findsOneWidget,
     );
     expect(
-      find.text('Show translation in floating, notification and Bluetooth lyrics'),
+      find.text(
+          'Show translation in floating, notification and Bluetooth lyrics'),
       findsOneWidget,
     );
     expect(find.text('Unsynced lyrics'), findsOneWidget);

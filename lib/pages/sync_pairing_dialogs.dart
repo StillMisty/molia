@@ -185,8 +185,7 @@ Future<_PassphraseConflictChoice?> _confirmPassphraseConflict(
           child: Text(l10n.syncPairingAddressOnly),
         ),
         M3EButton.filled(
-          onPressed: () =>
-              navigator.pop(_PassphraseConflictChoice.replace),
+          onPressed: () => navigator.pop(_PassphraseConflictChoice.replace),
           child: Text(l10n.syncPairingReplacePassphrase),
         ),
       ],
@@ -234,8 +233,7 @@ String syncPeerSubtitle(
 }
 
 /// 传输展示名（名册副标题用）。
-String syncTransportLabel(AppLocalizations l10n, String kind) =>
-    switch (kind) {
+String syncTransportLabel(AppLocalizations l10n, String kind) => switch (kind) {
       SyncTransportKind.lan => l10n.syncLanTitle,
       SyncTransportKind.webdav => l10n.syncWebdavTitle,
       _ => kind,
@@ -264,7 +262,7 @@ Future<void> showSyncPeerDialog(
   final navigator = Navigator.of(context, rootNavigator: true);
   final deviceId = peer?.deviceId ?? '';
   final ignored = deviceId.isNotEmpty && provider.isPeerIgnored(deviceId);
-  final lost = peer != null && peer.isLostAt(provider.engine.state.nowMs());
+  final lost = peer != null && peer.isLostAt(provider.nowMs);
   final entries = _manualEntriesFor(provider, host: host, deviceId: deviceId);
   await M3EDialog.show<void>(
     context,
@@ -373,6 +371,7 @@ Future<void> showSyncPeerDialog(
     ),
   );
 }
+
 /// 该设备在地址簿里的条目：已认领的按 deviceId 取（双栈 / 多网卡候选都在），
 /// 未认领的按 host 取（只有这一条）。
 List<ManualPeer> _manualEntriesFor(
@@ -574,7 +573,8 @@ class _ManualPeerDialogState extends State<_ManualPeerDialog> {
   late final TextEditingController _host =
       TextEditingController(text: widget.editing?.host ?? '');
   late final TextEditingController _port = TextEditingController(
-    text: '${(widget.editing?.probePort ?? 0) > 0 ? widget.editing!.probePort : ManualPeer.defaultProbePort}',
+    text:
+        '${(widget.editing?.probePort ?? 0) > 0 ? widget.editing!.probePort : ManualPeer.defaultProbePort}',
   );
   late final TextEditingController _name =
       TextEditingController(text: widget.editing?.name ?? '');

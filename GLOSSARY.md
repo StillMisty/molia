@@ -465,9 +465,16 @@
   停止 / 切播放顺序）显式 await 会话模块的强制落盘
   （`PlaybackSessionCoordinator.flushSession` → `PlaybackSessionStore.pendingWrite`
   串行化，停止先落盘再清空队列），冷启动恢复不自动起播。
-- **Backup（完整备份）** — `SyncEngine.exportBackupJson` / `importBackupJson`：
-  与同步共用 envelope 与适配器的本地文件备份/合并恢复；不需要启用同步；
-  凭证类默认排除。
+- **Backup（完整备份）** — `lib/data/sync/sync_backup.dart` 的
+  `SyncBackup.exportBackupJson` / `importBackupJson`：与同步共用 envelope、
+  适配器与版本戳（本地记录的收集入口由引擎注入，`SyncEngine.collectRecords`），
+  但**不构造轮次、不经传输**；不需要启用同步；凭证类默认排除。
+- **Sync control plane（同步控制面）** — `lib/data/sync/sync_control_plane.dart`：
+  UI 面的控制 / 身份 / 传输运行时（设备名与设备 id、类别开关、传输开关 +
+  `transportStatus`、手动地址簿、`lanDiscoveryPorts`、口令生命周期、观测快照
+  的只读 getter）；与引擎共用同一 `SyncStateStore` 与同一份传输实例，成功写入
+  后 `notifyListeners`。引擎只保留轮次执行与服务端语义（`sync_engine.dart`），
+  两边的 seam 是「控制面改状态 → 引擎下一轮读到」。
 - **LWW stamp（逐键版本戳）** — 版本戳 `SyncVersion` 三元组：物理分量大者胜，相同时
   `counter` 大者胜，再同按设备 id 字典序决平局（确定性收敛）；物理分量是
   HLC-lite 的 `max(本地墙上时钟, 已观测最大值)`，不再是「最后的墙上时间」。
@@ -492,9 +499,23 @@
   全部事实（名字 / 默认值 / 同步类别 / 存放盒）；只有有「第二消费者」的键才登记
   （同步、备份、应用远端后的重载、整表驱动的测试），设备本地键留在各自模块。
 - **Settings registry（设置注册表）** — `lib/data/settings/settings_registry.dart`：
-  登记键的唯一家（读 / 写 / 同步往返 / 重载钩子）；组合根注入唯一实例，模块在
-  构造时把 reload 钩子绑到自己的键，应用远端值后按变化的键触发；键名字面量只有
-  一份（`settings_keys.dart`），由 `test/architecture/settings_keys_test.dart` 强制。
+  登记键的唯一家（读 / 写 / 同步往返 / 重载钩子）；组合根只构造这一份实例，
+  再按模块分发按键作用域（`SettingsScope`），模块把 reload 钩子绑到自己的键，
+  应用远端值后按变化的键触发。快捷键开关与绑定四键（`kShortcutsEnabled` /
+  `kGlobalShortcutsEnabled` / `kShortcutBindings` / `kGlobalShortcutBindings`）
+  同表登记为「跟人走」。键名字面量只有一份（`settings_keys.dart`），由
+  `test/architecture/settings_keys_test.dart` 强制；私自
+  `SettingsRegistry(keys: kAllSettingsKeys)` 由
+  `test/architecture/settings_registry_usage_test.dart` 扫描拦住。
+- **Settings access（模块设置访问面）** — `lib/data/settings/settings_access.dart`：
+  `SettingsAccess` 只含模块需要的 `read` / `write` / `clear` / `bindReload`；
+  整表、`readRaw` / `writeRaw`（同步宽容转换）、`onWrite`（本地写入钩子）与
+  `reloadKeys` 都留在注册表，不下放给模块。
+- **Settings scope（按键作用域）** — `SettingsRegistry.scope([...])` 返回的
+  `SettingsScope`：同一份注册表 / 同一份存储上的按键视图，只暴露声明过的键；
+  越界访问在 debug 断言、release 抛错。组合根是唯一构造注册表的地方，模块
+  构造参数是 `SettingsAccess` / `SettingsScope`，不再各建私有注册表；模块初始
+  默认值取自 `SettingsKey.defaultValue`，不在字段里复制字面量。
 - **Sync round report（一轮同步报告）** — `SyncRoundReport`：一轮的**可观察**产物。
   五态结论 `ok / noChanges / noPeers / partial / failed`（「没发现对端」与
   「没有变化」必须分开）+ 每传输明细
@@ -540,7 +561,8 @@
   （`not_configured` / `start_failed` / `permission_denied`）：传输启动失败、
   未配置或缺权限时必须显式可见，不能只留在日志里（开关显示「已打开」而实际
   没有监听是排查事故的主要来源）。传输开关同时是同步的总闸：`enabled` 是
-  `enabledTransports` 非空的派生值（没有独立总开关键），两路都关 = 完全停。
+  `enabledTransports` 非空的派生值（没有独立总开关键），两路都关 = 完全停；
+  开关的起停与状态读取归**同步控制面**（`sync_control_plane.dart`）。
 - **Local network permission（局域网权限门）** —
   `transport/local_network_permission.dart`：Android 17 / API 37 起局域网访问
   默认阻断，LAN 传输启动前先过门；**权限被拒时手动对端地址同样无效**

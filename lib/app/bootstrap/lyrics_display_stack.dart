@@ -16,6 +16,7 @@ import '../../providers/nav_provider.dart';
 import '../../providers/playback_provider.dart';
 import '../../providers/theme_provider.dart';
 import '../../playback/local_audio_handler.dart';
+import '../../data/settings/settings_keys.dart';
 import '../../services/artwork_palette_service.dart';
 import '../../services/lyrics_display/audio_route_monitor.dart';
 import '../../services/lyrics_display/desktop_lyrics_output.dart';
@@ -46,10 +47,22 @@ Future<LyricsDisplayStack> buildLyricsDisplayStack({
   required LocalAudioHandler? audioHandler,
 }) async {
   // 主题实例提前创建：封面覆盖 / 桌面歌词「跟随主题」「跟随封面」的颜色
-  // 都从 ThemeProvider 取（取色链路在下方接线）。
-  final themeProvider = ThemeProvider(settings: catalog.settings);
+  // 都从 ThemeProvider 取（取色链路在下方接线）。作用域 = 主题自己的 5 个键。
+  final themeSettings = catalog.settings.scope([
+    kThemeMode,
+    kColorBase,
+    kFollowArtworkEnabled,
+    kPureBlackEnabled,
+    kSeedColor,
+  ]);
+  final themeProvider = ThemeProvider(settings: themeSettings);
   // 导航偏好提前创建：跨设备同步应用远端设置后需要定向重载。
-  final navProvider = NavProvider(settings: catalog.settings);
+  final navSettings = catalog.settings.scope([
+    kShellNavOrder,
+    kShellNavHidden,
+    kShellHomeDestination,
+  ]);
+  final navProvider = NavProvider(settings: navSettings);
   // 封面取色服务：全局主题、桌面歌词、海报共用的唯一取色入口。
   final artworkPaletteService = ArtworkPaletteService();
   final artworkThemeSync = ArtworkThemeSync(
@@ -59,8 +72,9 @@ Future<LyricsDisplayStack> buildLyricsDisplayStack({
   );
   // 歌词显示（桌面歌词 / 通知·锁屏 / 蓝牙）：配置 + 输出 + 调度。
   // 输出端能力由平台决定；媒体输出依赖系统媒体会话（audioHandler）。
-  final lyricsDisplaySettings =
-      LyricsDisplaySettings(settings: catalog.settings);
+  final lyricsDisplaySettings = LyricsDisplaySettings(
+    settings: catalog.settings.scope([kLyricsDisplaySettings]),
+  );
   await lyricsDisplaySettings.init();
   final audioRouteMonitor = AudioRouteMonitor();
   unawaited(audioRouteMonitor.init());
@@ -138,9 +152,11 @@ Future<LyricsDisplayStack> buildLyricsDisplayStack({
   // 再渐变；未命中不等待网络，回退上面的稳态链路（settleDelay 后取色再过渡）。
   // 主题偏好 / 播放偏好（恢复会话解析）/ 导航偏好（启动首页）互不依赖：
   // 并行等待——启动首页必须在首帧前就绪，否则会先亮默认页再跳。
-  await (themeProvider.preferencesReady, playback.preferencesReady,
-          navProvider.preferencesReady)
-      .wait;
+  await (
+    themeProvider.preferencesReady,
+    playback.preferencesReady,
+    navProvider.preferencesReady
+  ).wait;
   themeProvider.applyPlatformBrightness(
     WidgetsBinding.instance.platformDispatcher.platformBrightness,
   );

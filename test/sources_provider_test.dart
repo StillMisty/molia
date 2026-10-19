@@ -12,6 +12,7 @@ import 'package:molia/sources/lx/lx_engine_types.dart';
 import 'package:molia/sources/lx/lx_script_info.dart';
 import 'package:molia/sources/source_manager.dart';
 import 'package:molia/sources/source_track.dart' show kLxQualityOrder;
+import 'support/settings_test_support.dart';
 
 /// SourcesProvider 委托回归：导入 / 激活 / 排序 / 音质 / 在线更新全部经由
 /// fake 引擎 + 本地 mock HTTP 服务验证，不依赖真实 quickjs 桥接。
@@ -51,7 +52,8 @@ void main() {
       engineFactory: () => engine,
       restartDelays: const [Duration(milliseconds: 10)],
     );
-    final manager = SourceManager(engine: supervisor);
+    final manager =
+        SourceManager(engine: supervisor, settings: testSettingsRegistry());
     await manager.init();
     final provider = SourcesProvider(manager);
     addTearDown(provider.dispose);
@@ -93,8 +95,7 @@ void main() {
     expect(f.manager.scripts, isEmpty);
   });
 
-  test('channels / reorderChannel / resetChannelOrder：含内置发现平台且可排序',
-      () async {
+  test('channels / reorderChannel / resetChannelOrder：含内置发现平台且可排序', () async {
     final f = await fixture(sources: {
       'a': const LxSourceDecl(
           key: 'a', name: 'A', actions: ['search'], qualitys: []),
@@ -187,8 +188,7 @@ void main() {
     expect(f.manager.preferredQuality, 'flac');
   });
 
-  test('checkScriptUpdate：脚本不存在 / 无更新地址 → 可读 SourceScriptException',
-      () async {
+  test('checkScriptUpdate：脚本不存在 / 无更新地址 → 可读 SourceScriptException', () async {
     final f = await fixture();
     final info = await f.provider.importScript(_script());
 
@@ -199,8 +199,8 @@ void main() {
     await expectLater(
       f.provider.checkScriptUpdate(info.id),
       throwsA(
-        predicate((e) =>
-            e is SourceScriptException && e.message.contains('更新地址')),
+        predicate(
+            (e) => e is SourceScriptException && e.message.contains('更新地址')),
       ),
     );
   });
@@ -238,15 +238,15 @@ void main() {
     await expectLater(
       f.provider.importFromUrl('ftp://example.com/source.js'),
       throwsA(
-        predicate((e) =>
-            e is SourceScriptException && e.message.contains('HTTP(S)')),
+        predicate(
+            (e) => e is SourceScriptException && e.message.contains('HTTP(S)')),
       ),
     );
     await expectLater(
       f.provider.importFromUrl(server.url('/missing.js')),
       throwsA(
-        predicate((e) =>
-            e is SourceScriptException && e.message.contains('404')),
+        predicate(
+            (e) => e is SourceScriptException && e.message.contains('404')),
       ),
     );
   });

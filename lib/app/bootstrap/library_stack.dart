@@ -10,6 +10,8 @@ import 'dart:async';
 import '../../data/library_repository.dart';
 import '../../data/molia_database.dart';
 import '../../data/play_statistics_repository.dart';
+import '../../data/settings/settings_keys.dart';
+import '../../data/settings/settings_registry.dart';
 import '../../data/sync/statistics_sync_store.dart';
 import '../../data/sync/sync_journal.dart';
 import '../../data/sync/sync_state_store.dart';
@@ -22,6 +24,9 @@ import 'catalog_stack.dart';
 
 /// 资料库栈产物（构造顺序见 [buildLibraryStack]）。
 typedef LibraryStack = ({
+  /// 同步栈构造的注册表（与 catalog / playback 同一实例；组合根测试据此
+  /// 核对「唯一注册表」）。
+  SettingsRegistry settings,
   SyncStateStore syncState,
   SyncJournalRepository syncJournal,
   LibraryRepository libraryRepository,
@@ -75,11 +80,13 @@ Future<LibraryStack> buildLibraryStack({
   );
   final playStatisticsService = PlayStatisticsService(
     repository: playStatisticsRepository,
-    settings: catalog.settings,
+    settings: catalog.settings.scope([kPlayStatisticsEnabled]),
   );
   // 换源偏好（自动换源开关，默认开）与自动换源解析服务：
   // 播放失败同源重试仍失败时，经注入的 resolver 跨音源严格找回并替换。
-  final sourceSwapSettings = SourceSwapSettings(settings: catalog.settings);
+  final sourceSwapSettings = SourceSwapSettings(
+    settings: catalog.settings.scope([kSourceSwapAutoEnabled]),
+  );
   // 统计服务 init / 换源偏好 init / 全库最大戳查询三者互不依赖：
   // 并行执行，启动等待取最大值（串行等待会累加启动耗时）。
   final (_, _, dbMaxVersion) = await (
@@ -102,6 +109,7 @@ Future<LibraryStack> buildLibraryStack({
   );
 
   return (
+    settings: catalog.settings,
     syncState: syncState,
     syncJournal: syncJournal,
     libraryRepository: libraryRepository,

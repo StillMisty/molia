@@ -1,9 +1,11 @@
 /// 跨设备同步栈：同步状态 → 六个数据适配器 → 局域网 / WebDAV 传输 →
-/// SyncEngine → SyncScheduler / SyncProvider，以及运行期的同步触发。
+/// SyncEngine（轮次）+ SyncControlPlane（UI 控制面）→ SyncBackup（导出/导入）→
+/// SyncScheduler / SyncProvider，以及运行期的同步触发。
 ///
 /// 引擎与局域网传输互为依赖（传输要引擎最近一轮快照，引擎要传输列表）。
 /// 把「快照提供者」写在同一个 builder 内、引擎建好后立刻接线
 /// （详见 [buildSyncStack] 注释），不存在跨 builder 回填。
+/// 引擎 / 控制面 / 备份共享同一状态存储与同一批适配器 / 传输实例。
 ///
 /// 触发策略（何时跑、跑什么范围）统一在 [SyncScheduler]：本 builder 只把
 /// 数据变更、播放状态与探针接进去。
@@ -20,7 +22,10 @@ import '../../data/sync/adapters/prefs_sync_adapter.dart';
 import '../../data/sync/adapters/script_sync_adapter.dart';
 import '../../data/sync/adapters/session_sync_adapter.dart';
 import '../../data/sync/adapters/statistics_sync_adapter.dart';
+import '../../data/sync/sync_adapter.dart';
+import '../../data/sync/sync_backup.dart';
 import '../../data/sync/sync_codec_isolate.dart';
+import '../../data/sync/sync_control_plane.dart';
 import '../../data/sync/sync_engine.dart';
 import '../../data/sync/sync_known_store.dart';
 import '../../data/sync/sync_scheduler.dart';
@@ -40,6 +45,8 @@ import 'playback_stack.dart';
 /// 同步栈产物（构造顺序见 [buildSyncStack]）。
 typedef SyncStack = ({
   SyncEngine engine,
+  SyncControlPlane controlPlane,
+  SyncBackup backup,
   SyncScheduler scheduler,
   SyncProvider provider,
 });
@@ -144,20 +151,24 @@ Future<SyncStack> buildSyncStack({
     journalBaseSeqProvider: library.syncJournal.baseSeq,
     ignoredPeersProvider: syncState.isPeerIgnored,
   );
+  // 引擎、控制面与备份共用同一批适配器 / 传输实例（控制面只用传输，备份只用
+  // 适配器）：三个模块对「有哪些类别、哪路传输」不能有各自的副本。
+  final syncAdapters = <SyncAdapter>[
+    playlistSyncAdapter,
+    historySyncAdapter,
+    scriptSyncAdapter,
+    prefsSyncAdapter,
+    statisticsSyncAdapter,
+    sessionSyncAdapter,
+  ];
+  final syncTransports = <String, SyncTransport>{
+    SyncTransportKind.lan: lanSyncTransport,
+    SyncTransportKind.webdav: webdavSyncTransport,
+  };
   final syncEngine = SyncEngine(
     state: syncState,
-    adapters: [
-      playlistSyncAdapter,
-      historySyncAdapter,
-      scriptSyncAdapter,
-      prefsSyncAdapter,
-      statisticsSyncAdapter,
-      sessionSyncAdapter,
-    ],
-    transports: {
-      SyncTransportKind.lan: lanSyncTransport,
-      SyncTransportKind.webdav: webdavSyncTransport,
-    },
+    adapters: syncAdapters,
+    transports: syncTransports,
     // 引擎与各仓库共用同一个发号器（唯一）与同一时钟源。
     stamps: syncState.stampIssuer,
     // 全库指纹也走 worker（一次本地变更就要重算一遍，主 isolate 上会掉帧）。
@@ -177,6 +188,20 @@ Future<SyncStack> buildSyncStack({
   // 接线契约显式化：漏传增量日志会让引擎静默退化为「每轮全量」（全库指纹 +
   // 整库加密推送）。冒烟测试是主守卫，这里再兜一层 debug 断言。
   assert(syncEngine.incrementalEnabled, '同步引擎必须注入 library.syncJournal');
+  // 控制面与引擎共享同一个状态存储：设置页的开关 / 身份写入就是引擎下一轮
+  // 读到的状态，不存在第二份内存副本。
+  final syncControlPlane = SyncControlPlane(
+    state: syncState,
+    transports: syncTransports,
+  );
+  // 备份只需要收集入口 + 适配器 / 状态 / 发号器：不构造轮次，也不经过传输。
+  final syncBackup = SyncBackup(
+    state: syncState,
+    adapters: syncAdapters,
+    stamps: syncState.stampIssuer,
+    collect: syncEngine.collectRecords,
+    clock: () => DateTime.fromMillisecondsSinceEpoch(syncState.nowMs()),
+  );
   // 蜂窝判定用调度器默认的真实探针（connectivity_plus）：省流服务的 onCellular
   // 只是缓存值，Wi-Fi 启动后切蜂窝不会反映到它上面。
   final scheduler = SyncScheduler(
@@ -186,6 +211,8 @@ Future<SyncStack> buildSyncStack({
   );
   final syncProvider = SyncProvider(
     engine: syncEngine,
+    controlPlane: syncControlPlane,
+    backup: syncBackup,
     scheduler: scheduler,
     lanPermission: lanPermission,
     localEndpoints: localEndpoints,
@@ -244,7 +271,13 @@ Future<SyncStack> buildSyncStack({
   // 后，小类别限制 / 「移动数据下暂停」不再等下一次唤醒。
   dataSaver.addListener(() => unawaited(scheduler.refreshEnvironment()));
 
-  return (engine: syncEngine, scheduler: scheduler, provider: syncProvider);
+  return (
+    engine: syncEngine,
+    controlPlane: syncControlPlane,
+    backup: syncBackup,
+    scheduler: scheduler,
+    provider: syncProvider,
+  );
 }
 
 /// 首帧后的同步启动：引擎 init（安全存储读口令）→ 调度器启动。

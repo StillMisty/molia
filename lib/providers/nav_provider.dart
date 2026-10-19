@@ -1,8 +1,8 @@
 import 'package:flutter/foundation.dart';
 import 'package:logging/logging.dart';
 
+import '../data/settings/settings_access.dart';
 import '../data/settings/settings_keys.dart';
-import '../data/settings/settings_registry.dart';
 
 final logger = Logger('molia.nav_provider');
 
@@ -14,29 +14,27 @@ enum ShellDestination { nowPlaying, favorites, library }
 
 /// 底部导航定制：顺序 + 显示/隐藏 + 启动首页，SharedPreferences 持久化。
 class NavProvider extends ChangeNotifier {
-  NavProvider({SettingsRegistry? settings})
-      : _settings = settings ?? SettingsRegistry(keys: kAllSettingsKeys) {
+  NavProvider({required SettingsAccess settings}) : _settings = settings {
     _settings.bindReload(kShellNavOrder, reloadFromPreferences);
     _settings.bindReload(kShellNavHidden, reloadFromPreferences);
     _settings.bindReload(kShellHomeDestination, reloadFromPreferences);
     _preferencesReady = _loadPreferences();
   }
 
-  final SettingsRegistry _settings;
+  final SettingsAccess _settings;
 
-  /// 默认顺序：资料 / 播放 / 收藏。
-  static const List<ShellDestination> defaultOrder = <ShellDestination>[
-    ShellDestination.library,
-    ShellDestination.nowPlaying,
-    ShellDestination.favorites,
-  ];
+  /// 默认顺序来自登记键默认值（资料 / 播放 / 收藏），避免两处各写一份。
+  static List<ShellDestination> get defaultOrder =>
+      List<ShellDestination>.unmodifiable(
+          _orderOf(kShellNavOrder.defaultValue));
 
   List<ShellDestination> _order = List<ShellDestination>.of(defaultOrder);
-  final Set<ShellDestination> _hidden = <ShellDestination>{};
+  final Set<ShellDestination> _hidden = _hiddenOf(kShellNavHidden.defaultValue);
 
   /// 存储的启动首页；同步推来的 hidden 列表可能让它当前不可见（见
   /// [effectiveHomeDestination]）。
-  ShellDestination _homeDestination = ShellDestination.nowPlaying;
+  ShellDestination _homeDestination =
+      _homeOf(kShellHomeDestination.defaultValue);
 
   late final Future<void> _preferencesReady;
 
@@ -106,27 +104,13 @@ class NavProvider extends ChangeNotifier {
     try {
       final names = await _settings.read(kShellNavOrder);
       if (names.isNotEmpty) {
-        final restored = <ShellDestination>[];
-        for (final name in names) {
-          for (final destination in ShellDestination.values) {
-            if (destination.name == name && !restored.contains(destination)) {
-              restored.add(destination);
-            }
-          }
-        }
-        // 补齐旧版本/损坏数据中缺失的目的地。
-        for (final destination in ShellDestination.values) {
-          if (!restored.contains(destination)) restored.add(destination);
-        }
-        _order = restored;
+        _order = _orderOf(names);
       }
       final hiddenNames = await _settings.read(kShellNavHidden);
       if (hiddenNames.isNotEmpty) {
         _hidden
           ..clear()
-          ..addAll(ShellDestination.values.where(
-            (value) => hiddenNames.contains(value.name),
-          ));
+          ..addAll(_hiddenOf(hiddenNames));
         // 至少保留 1 个可见目的地。
         if (visibleDestinations.isEmpty) {
           _hidden.remove(_order.first);
@@ -134,15 +118,42 @@ class NavProvider extends ChangeNotifier {
       }
       // 非法 / 旧版本值回退默认播放页（与键默认值一致）。
       final homeName = await _settings.read(kShellHomeDestination);
-      _homeDestination = ShellDestination.values.firstWhere(
-        (destination) => destination.name == homeName,
-        orElse: () => ShellDestination.nowPlaying,
-      );
+      _homeDestination = _homeOf(homeName);
       notifyListeners();
     } catch (e) {
       logger.severe('加载底部导航偏好失败: $e');
     }
   }
+
+  /// 键默认值 → 枚举列表（补齐旧版本 / 损坏数据缺失的目的地）。
+  static List<ShellDestination> _orderOf(List<String> names) {
+    final restored = <ShellDestination>[];
+    for (final name in names) {
+      for (final destination in ShellDestination.values) {
+        if (destination.name == name && !restored.contains(destination)) {
+          restored.add(destination);
+        }
+      }
+    }
+    for (final destination in ShellDestination.values) {
+      if (!restored.contains(destination)) restored.add(destination);
+    }
+    return restored;
+  }
+
+  static Set<ShellDestination> _hiddenOf(List<String> names) =>
+      ShellDestination.values
+          .where((value) => names.contains(value.name))
+          .toSet();
+
+  static ShellDestination _homeOf(String name) =>
+      ShellDestination.values.firstWhere(
+        (destination) => destination.name == name,
+        orElse: () => ShellDestination.values.firstWhere(
+          (destination) =>
+              destination.name == kShellHomeDestination.defaultValue,
+        ),
+      );
 
   Future<void> _persist() async {
     try {

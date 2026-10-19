@@ -6,6 +6,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:molia/pages/sources_page.dart';
 import 'package:molia/providers/sources_provider.dart';
 import 'package:molia/sources/source_manager.dart';
+import 'support/settings_test_support.dart';
 
 /// 回归：设置弹层内打开的音源页位于嵌套 Navigator 栈顶，而 `M3EDialog.show`
 /// 固定把弹层推入 root Navigator。弹层动作若用页面 context 调 `Navigator.pop`，
@@ -18,8 +19,7 @@ void main() {
     SharedPreferences.setMockInitialValues({});
   });
 
-  testWidgets('链接导入弹层：下载并导入只关弹层，音源页保留并进入免责声明',
-      (tester) async {
+  testWidgets('链接导入弹层：下载并导入只关弹层，音源页保留并进入免责声明', (tester) async {
     tester.view.physicalSize = const Size(1200, 2400);
     tester.view.devicePixelRatio = 1.0;
     addTearDown(() {
@@ -29,7 +29,7 @@ void main() {
 
     late final SourceManager manager;
     await tester.runAsync(() async {
-      manager = SourceManager();
+      manager = SourceManager(settings: testSettingsRegistry());
       await manager.init();
       for (final existing in manager.scripts.toList()) {
         await manager.removeScript(existing.id);

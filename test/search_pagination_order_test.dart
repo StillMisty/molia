@@ -12,6 +12,7 @@ import 'package:molia/sources/source_manager.dart';
 import 'package:molia/sources/lx/lx_search_parse.dart';
 import 'package:molia/sources/source_search_result.dart';
 import 'package:molia/sources/source_track.dart';
+import 'support/settings_test_support.dart';
 
 /// 使用真实平台响应的快照（test/fixtures/*.json）验证 total 提取。
 dynamic _fixture(String name) =>
@@ -139,7 +140,7 @@ void main() {
   });
 
   group('LX 脚本扩展搜索分页解析', () {
-    final manager = SourceManager();
+    final manager = SourceManager(settings: testSettingsRegistry());
     tearDownAll(manager.dispose);
 
     test('列表 + isEnd', () {
@@ -241,7 +242,7 @@ void main() {
 
     test('setSourceOrder 去重并持久化，resetSourceOrder 清空', () async {
       SharedPreferences.setMockInitialValues({});
-      final manager = SourceManager();
+      final manager = SourceManager(settings: testSettingsRegistry());
       expect(manager.sourceOrder, isEmpty);
 
       await manager.setSourceOrder(['tx', 'kw', 'tx', '']);
@@ -256,7 +257,7 @@ void main() {
       SharedPreferences.setMockInitialValues({
         'lx_source_order': ['wy', 'kw'],
       });
-      final manager = SourceManager();
+      final manager = SourceManager(settings: testSettingsRegistry());
       await manager.init();
       expect(manager.sourceOrder, ['wy', 'kw']);
       manager.dispose();

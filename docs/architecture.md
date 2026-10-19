@@ -234,7 +234,11 @@
   **同步口令即信任根**（加入即完全互信，无逐项审批），快照整体加密：根密钥 =
   PBKDF2(口令) 会话内一次派生（按口令缓存），帧密钥 = HKDF(根密钥, 帧 nonce)，
   AES-256-GCM 认证；帧 = `magic + 版本 + nonce`，载荷是列式二进制，编解码与
-  加解密在 worker isolate 内执行（帧与信任边界见 ADR-0003 §1）。引擎（`lib/data/sync/sync_engine.dart`）一轮 = 各 `SyncAdapter`
+  加解密在 worker isolate 内执行（帧与信任边界见 ADR-0003 §1）。
+  **同步控制面**（`sync_control_plane.dart`）承担 UI 面的身份 / 类别与传输开关 /
+  运行状态 / 手动地址簿 / 口令生命周期，与引擎共享同一状态存储与传输实例；
+  引擎（`lib/data/sync/sync_engine.dart`）只做轮次执行与服务端语义
+  （`serveSnapshot` / `serveJournal`）：一轮 = 各 `SyncAdapter`
   收集本地视图（按类别廉价指纹缓存：指纹未变不读行）→ `SyncTransport` 拉取
   变化对端（WebDAV 按 `getetag` / 局域网按探测应答的 `snapshotId` 跳过未变
   文件）→ 逐键 LWW 合并（版本三元组
@@ -316,8 +320,10 @@
   「删除 vs 播放」按真实时间判定；上次播放会话按 `savedAt` 内容时间变化取新戳
   （本地停止不回传删除），应用后经
   `PlaybackProvider.reloadRestoredSessionFromStore` 重载恢复态。**完整备份**
-  （数据与存储页导出/导入）复用同一 envelope（`exportBackupJson` /
-  `importBackupJson`；协议旧版备份拒绝导入），凭证类默认排除。数据变更经
+  （数据与存储页导出/导入）是独立模块（`sync_backup.dart` 的
+  `SyncBackup.exportBackupJson` / `importBackupJson`）：复用同一 envelope、
+  适配器与版本戳，收集入口由引擎注入（`collectRecords`），但不构造轮次也不经
+  传输，凭证类默认排除，协议旧版备份拒绝导入。数据变更经
   调度器进入触发链，生命周期回调由 `main.dart` 的 `AppLifecycleListener` 转发；
   同步后的定向重载经 `PrefsSyncAdapter.onApplied` 接线。设置入口
   `settings_page.dart` → `sync_settings_page.dart`。
@@ -534,19 +540,34 @@
 
 ### 设置注册表（settings registry）
 
-`lib/data/settings/`（键声明 / 注册表 / 密钥盒端口）：
+`lib/data/settings/`（键声明 / 模块访问面 / 注册表 / 密钥盒端口）：
 
 - `settings_keys.dart`：登记键总表 —— 键名、默认值、同步类别（跟人走 / 音源 /
   凭证）、存放盒（prefs / secure）的唯一声明处；设备本地键（省流、缓存策略、
   全局字体、桌面歌词悬浮窗、托盘与关闭行为、AI 待处理批次、播放会话、曲库数据…）
-  不登记，留在各自模块（只有一位消费者，收进来只增加门房面积）；
-- `settings_registry.dart`：`read` / `write` / `clear`（模块面）与 `readRaw` /
-  `writeRaw`（同步面，按值类型宽容转换）＋ `bindReload` / `reloadKeys`
-  （应用远端值后按变化的键触发模块自绑的重载钩子）；读失败回默认值、写失败
-  抛出（由模块决定兜底策略），与迁移前各模块行为一致；
+  不登记，留在各自模块（只有一位消费者，收进来只增加门房面积）。快捷键开关 /
+  绑定四键（`kShortcutsEnabled` / `kGlobalShortcutsEnabled` /
+  `kShortcutBindings` / `kGlobalShortcutBindings`）按「跟人走」登记，此前漏在
+  总表外、现已进入同步范围；
+- `settings_access.dart`：模块面 `SettingsAccess`（`read` / `write` / `clear` /
+  `bindReload`）；整表与同步面（`readRaw` / `writeRaw` / `onWrite` /
+  `reloadKeys`）不下放。`SettingsRegistry.scope([...])` 返回 `SettingsScope`
+  （同一注册表 / 同一存储上的按键视图），只能访问声明过的键，越界在 debug
+  断言、release 抛 `StateError`；模块构造参数只依赖 `SettingsAccess`，漏注入
+  是编译错误；
+- `settings_registry.dart`：登记键的唯一实现（读 / 写 / 同步往返 / 重载钩子）；
+  `onWrite` 只允许组合根绑定一次（第二次绑定断言 / 抛错），避免同步标记被
+  静默覆盖。组合根只在 `catalog_stack.dart` 构造唯一实例，其它 stack builder
+  按模块分发 `scope`（catalog / library / playback / lyrics display / AI）；
+  `CatalogStack` / `LibraryStack` / `PlaybackStack` 的 `settings` 字段指向同一
+  实例，组合根冒烟测试据此核对身份；模块初始默认值取自
+  `SettingsKey.defaultValue`（主题 / 导航 / 快捷键 / 统计等），字段里不再复制
+  一份字面量；
 - 键的名字字面量只准出现在 `settings_keys.dart`
-  （`test/architecture/settings_keys_test.dart` 扫描 `lib/**` 强制）：
-  漏登记 = 显式选择「不同步」，不再是静默漂移。
+  （`test/architecture/settings_keys_test.dart` 扫描 `lib/**` 强制）；
+  整表注册表只准在组合根与设置层构造
+  （`test/architecture/settings_registry_usage_test.dart` 扫描强制）：
+  漏登记 = 显式选择「不同步」，私建注册表 = 漏同步钩子，都不再是静默漂移。
 
 同步适配器（`PrefsSyncAdapter`）不再自带键表与类型转换：键规格、默认值与读写
 都来自注册表；ADR-0003 §6 的「登记哈希」变化检测保留，但适用范围收窄为

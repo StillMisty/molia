@@ -29,6 +29,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'support/fake_discover_api.dart';
 import 'support/fake_library_repository.dart';
 import 'support/fakes.dart';
+import 'support/settings_test_support.dart';
 
 /// 资料页统一渠道测试：渠道下拉框 + tab 显隐 + 搜索源跟随。
 void main() {
@@ -52,6 +53,7 @@ void main() {
     repository = FakeLibraryRepository();
     backend = FakePlaybackBackend();
     playback = buildTestPlaybackProvider(
+      settings: testSettingsRegistry(),
       backend: backend,
       libraryRepository: repository,
     );
@@ -81,7 +83,8 @@ void main() {
       engineFactory: () => engine,
       restartDelays: const [Duration(milliseconds: 10)],
     );
-    manager = SourceManager(engine: supervisor);
+    manager =
+        SourceManager(engine: supervisor, settings: testSettingsRegistry());
     sources = SourcesProvider(manager);
     scriptActive = false;
   });

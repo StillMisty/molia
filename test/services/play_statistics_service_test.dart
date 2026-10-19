@@ -11,6 +11,7 @@ import '../support/sync_test_support.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../support/memory_database.dart';
+import '../support/settings_test_support.dart';
 
 /// 听歌统计采集服务测试：真实仓库（drift in-memory）+ 假时钟，
 /// 以脚本化快照 / 进度序列逐条驱动六条边界规则。
@@ -67,6 +68,7 @@ void main() {
     );
     now = DateTime(2026, 1, 1, 12);
     service = PlayStatisticsService(
+      settings: testSettingsRegistry(),
       repository: repository,
       clock: () => now,
     );
@@ -327,6 +329,7 @@ void main() {
         kPlayStatisticsEnabled.name: false,
       });
       final another = PlayStatisticsService(
+        settings: testSettingsRegistry(),
         repository: repository,
         clock: () => now,
       );

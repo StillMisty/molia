@@ -7,6 +7,7 @@ import 'package:molia/sources/lx/lx_engine_types.dart';
 import 'package:molia/sources/lx/lx_script_info.dart';
 import 'package:molia/sources/source_manager.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'support/settings_test_support.dart';
 
 /// 可编程 fake 引擎：模拟 start 失败、invoke 超时（kill isolate）与重启。
 class _FakeLxEngine implements LxEngine {
@@ -250,8 +251,7 @@ void main() {
       engine.failInvoke = false;
       await _waitUntil(() => supervisor.state == LxEngineState.ready);
       expect(engine.startCalls, 2, reason: '崩溃后应自动重启一次');
-      expect(engine.startedScripts.last.id, 'script-1',
-          reason: '必须重放同一脚本');
+      expect(engine.startedScripts.last.id, 'script-1', reason: '必须重放同一脚本');
       expect(await _musicUrl(supervisor), 'https://example.com/test/320k');
       expect(engine.musicUrlCalls, 2);
       expect(supervisor.restartAttempts, 0, reason: '成功 invoke 后计数清零');
@@ -332,10 +332,12 @@ void main() {
 
       expect(engine.startCalls, 4, reason: '1 次初始 + 3 次重启尝试');
       expect(supervisor.restartAttempts, 3);
-      expect(states, containsAllInOrder([
-        LxEngineState.restarting,
-        LxEngineState.failed,
-      ]));
+      expect(
+          states,
+          containsAllInOrder([
+            LxEngineState.restarting,
+            LxEngineState.failed,
+          ]));
 
       final gaps = [
         for (var i = 1; i < engine.startTimes.length; i++)
@@ -440,8 +442,8 @@ void main() {
       await supervisor.start(_scriptInfo());
 
       engine.running = false;
-      final pending = _musicUrl(supervisor).then<String?>((v) => v,
-          onError: (Object _) => null);
+      final pending = _musicUrl(supervisor)
+          .then<String?>((v) => v, onError: (Object _) => null);
       await _waitUntil(() => supervisor.state == LxEngineState.restarting);
 
       await supervisor.dispose();
@@ -466,7 +468,8 @@ void main() {
         restartDelays: const [Duration(milliseconds: 10)],
       );
       addTearDown(supervisor.close);
-      final manager = SourceManager(engine: supervisor);
+      final manager =
+          SourceManager(engine: supervisor, settings: testSettingsRegistry());
       addTearDown(manager.dispose);
       await manager.init();
 

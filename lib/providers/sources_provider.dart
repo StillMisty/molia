@@ -202,7 +202,7 @@ class SourcesProvider extends ChangeNotifier {
 
   /// 连接测试（用表单当前值探测，不要求先保存；绝不抛异常）。
   Future<AnyListenTestResult> testAnyListenConfig(AnyListenConfig config) {
-    final source = _testSource ??= AnyListenSource();
+    final source = _testSource ??= _manager.createProbeSource();
     return source.testConnection(overrideConfig: config);
   }
 
@@ -246,7 +246,8 @@ class SourcesProvider extends ChangeNotifier {
         homepage: script.homepage,
         updateUrl: script.updateUrl,
         importedAt: script.importedAt,
-        sources: script.sources.map((key, decl) => MapEntry(key, _toDecl(decl))),
+        sources:
+            script.sources.map((key, decl) => MapEntry(key, _toDecl(decl))),
       );
 
   SourceScriptDecl _toDecl(LxSourceDecl decl) => SourceScriptDecl(

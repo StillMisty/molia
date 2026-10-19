@@ -5,13 +5,14 @@ import 'package:molia/services/lyrics_display/lyrics_display_settings.dart';
 import 'package:molia/theme/scheme_builder.dart';
 import 'package:molia/data/settings/settings_keys.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import '../support/settings_test_support.dart';
 
 /// 配置模型：默认值 / JSON 往返 / 缺键合并 / 取值夹取 / 非法枚举回落。
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
   test('默认值：三个输出默认全关，共享开关默认合理', () {
-    final s = LyricsDisplaySettings();
+    final s = LyricsDisplaySettings(settings: testSettingsRegistry());
     expect(s.desktopEnabled, isFalse);
     expect(s.notificationEnabled, isFalse);
     expect(s.bluetoothEnabled, isFalse);
@@ -38,7 +39,7 @@ void main() {
   });
 
   test('toJson → init 往返保持全部配置', () async {
-    final source = LyricsDisplaySettings();
+    final source = LyricsDisplaySettings(settings: testSettingsRegistry());
     await source.setOffsetMs(-150);
     await source.setTranslationEnabled(false);
     await source.setRomaEnabled(true);
@@ -51,8 +52,8 @@ void main() {
     await source.setDesktopPlayedColor(0xFF00FF00);
     await source.setDesktopShadowColor(0xFF123456);
     await source.setDesktopPlayedColorSource(LyricColorSource.primary);
-    await source.setDesktopUnplayedColorSource(
-        LyricColorSource.onSurfaceVariant);
+    await source
+        .setDesktopUnplayedColorSource(LyricColorSource.onSurfaceVariant);
     await source.setDesktopShadowColorSource(LyricColorSource.tertiary);
     await source.setDesktopSchemeSource(SurfaceColorSource.artwork);
     await source.setDesktopWidthPercent(80);
@@ -82,7 +83,7 @@ void main() {
     SharedPreferences.setMockInitialValues({
       kLyricsDisplaySettings.name: jsonEncode(source.toJson()),
     });
-    final restored = LyricsDisplaySettings();
+    final restored = LyricsDisplaySettings(settings: testSettingsRegistry());
     await restored.init();
 
     expect(restored.offsetMs, -150);
@@ -97,8 +98,8 @@ void main() {
     expect(restored.desktopPlayedColor, 0xFF00FF00);
     expect(restored.desktopShadowColor, 0xFF123456);
     expect(restored.desktopPlayedColorSource, LyricColorSource.primary);
-    expect(restored.desktopUnplayedColorSource,
-        LyricColorSource.onSurfaceVariant);
+    expect(
+        restored.desktopUnplayedColorSource, LyricColorSource.onSurfaceVariant);
     expect(restored.desktopShadowColorSource, LyricColorSource.tertiary);
     expect(restored.desktopSchemeSource, SurfaceColorSource.artwork);
     expect(restored.desktopWidthPercent, 80);
@@ -135,7 +136,7 @@ void main() {
         'desktop.maxLines': 99,
       }),
     });
-    final s = LyricsDisplaySettings();
+    final s = LyricsDisplaySettings(settings: testSettingsRegistry());
     await s.init();
     expect(s.offsetMs, 100);
     expect(s.unsyncedBehavior, LyricsDisplaySettings.defaultUnsyncedBehavior);
@@ -146,11 +147,10 @@ void main() {
         LyricsDisplaySettings.defaultPageTranslationEnabled);
     expect(s.pageRomaEnabled, LyricsDisplaySettings.defaultPageRomaEnabled);
     // 旧数据没有 desktop.hideOnPause：回落默认（暂停即整窗隐藏）。
-    expect(s.desktopHideOnPause,
-        LyricsDisplaySettings.defaultDesktopHideOnPause);
+    expect(
+        s.desktopHideOnPause, LyricsDisplaySettings.defaultDesktopHideOnPause);
     // 旧数据没有 desktop.scrollMode：回落默认（跟随演唱）。
-    expect(s.desktopScrollMode,
-        LyricsDisplaySettings.defaultDesktopScrollMode);
+    expect(s.desktopScrollMode, LyricsDisplaySettings.defaultDesktopScrollMode);
   });
 
   test('旧配置兼容：singleLine=true 一次性映射为显示行数 1', () async {
@@ -161,7 +161,7 @@ void main() {
         'desktop.maxLines': 3,
       }),
     });
-    final s = LyricsDisplaySettings();
+    final s = LyricsDisplaySettings(settings: testSettingsRegistry());
     await s.init();
     expect(s.desktopMaxLines, 1);
 
@@ -173,7 +173,7 @@ void main() {
         'desktop.maxLines': 3,
       }),
     });
-    final kept = LyricsDisplaySettings();
+    final kept = LyricsDisplaySettings(settings: testSettingsRegistry());
     await kept.init();
     expect(kept.desktopMaxLines, 3);
   });
@@ -188,7 +188,7 @@ void main() {
         'page.romaEnabled': false,
       }),
     });
-    final s = LyricsDisplaySettings();
+    final s = LyricsDisplaySettings(settings: testSettingsRegistry());
     await s.init();
     expect(s.translationEnabled, isFalse);
     expect(s.romaEnabled, isTrue);
@@ -202,7 +202,7 @@ void main() {
   });
 
   test('范围夹取', () async {
-    final s = LyricsDisplaySettings();
+    final s = LyricsDisplaySettings(settings: testSettingsRegistry());
     await s.setOffsetMs(9999);
     expect(s.offsetMs, LyricsDisplaySettings.offsetRange.last);
     await s.setDesktopFontSize(1);

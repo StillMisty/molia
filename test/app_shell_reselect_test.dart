@@ -23,6 +23,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'support/fake_library_repository.dart';
 import 'support/fake_music_source.dart';
 import 'support/fakes.dart';
+import 'support/settings_test_support.dart';
 
 /// 壳层底栏重复点击的路由测试：挂载真实应用壳（`MyApp`）。
 ///
@@ -48,10 +49,10 @@ void main() {
       tester.view.resetDevicePixelRatio();
     });
 
-    final theme = ThemeProvider();
+    final theme = ThemeProvider(settings: testSettingsRegistry());
     addTearDown(theme.dispose);
     await theme.preferencesReady;
-    nav = NavProvider();
+    nav = NavProvider(settings: testSettingsRegistry());
     addTearDown(nav.dispose);
     await nav.preferencesReady;
 
@@ -59,6 +60,7 @@ void main() {
     addTearDown(repository.dispose);
     final backend = FakePlaybackBackend();
     final playback = buildTestPlaybackProvider(
+      settings: testSettingsRegistry(),
       backend: backend,
       libraryRepository: repository,
     );
@@ -68,7 +70,7 @@ void main() {
       playbackProvider: playback,
     );
     addTearDown(library.dispose);
-    final sourceManager = SourceManager();
+    final sourceManager = SourceManager(settings: testSettingsRegistry());
     final sources = SourcesProvider(sourceManager);
     addTearDown(() {
       sources.dispose();
@@ -88,7 +90,8 @@ void main() {
     addTearDown(search.dispose);
     final lyrics = LyricsProvider();
     addTearDown(lyrics.dispose);
-    final lyricsDisplay = LyricsDisplaySettings();
+    final lyricsDisplay =
+        LyricsDisplaySettings(settings: testSettingsRegistry());
     addTearDown(lyricsDisplay.dispose);
 
     backend.emit(BackendSnapshot(
@@ -190,9 +193,9 @@ void main() {
   double playerHeight(WidgetTester tester) =>
       tester.getSize(find.byType(Player)).height;
 
-  int selectedNavIndex(WidgetTester tester) =>
-      tester.widget<M3ENavigationBar>(find.byType(M3ENavigationBar))
-          .selectedIndex;
+  int selectedNavIndex(WidgetTester tester) => tester
+      .widget<M3ENavigationBar>(find.byType(M3ENavigationBar))
+      .selectedIndex;
 
   int navIndexOf(ShellDestination destination) =>
       nav.visibleDestinations.indexOf(destination);

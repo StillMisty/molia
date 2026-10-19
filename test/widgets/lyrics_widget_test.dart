@@ -25,6 +25,7 @@ import 'package:molia/widgets/lyrics.dart';
 
 import '../support/fake_music_source.dart';
 import '../support/fakes.dart';
+import '../support/settings_test_support.dart';
 
 /// 30 行、每行 5 秒的时间轴歌词：60s 处正好是第 12 行。
 String _buildLrc() {
@@ -135,7 +136,8 @@ void main() {
 
     final controller = ScrollController();
     addTearDown(controller.dispose);
-    final effectiveSettings = settings ?? LyricsDisplaySettings();
+    final effectiveSettings =
+        settings ?? LyricsDisplaySettings(settings: testSettingsRegistry());
     addTearDown(effectiveSettings.dispose);
 
     await tester.pumpWidget(
@@ -340,7 +342,7 @@ void main() {
   });
 
   testWidgets('长行换行时仍按主行顶边锚定（扩展行不影响落点）', (tester) async {
-    final settings = LyricsDisplaySettings();
+    final settings = LyricsDisplaySettings(settings: testSettingsRegistry());
     const longLine = '这是一句特别特别长的歌词要换很多行才能放得下';
     // 12 行引导 + 60s 处的长行（换行多行）+ 扩展行；当前行前要有足够内容，
     // 锚点位置才可达（贴顶时列表无法把行往上推）。
@@ -379,7 +381,7 @@ void main() {
   });
 
   testWidgets('歌词页每行显示自己的翻译，且不受输出侧开关影响', (tester) async {
-    final settings = LyricsDisplaySettings();
+    final settings = LyricsDisplaySettings(settings: testSettingsRegistry());
     await pumpLyrics(
       tester,
       settings: settings,
@@ -410,7 +412,7 @@ void main() {
   });
 
   testWidgets('行切换不改变其他行的翻译（逐行常显）', (tester) async {
-    final settings = LyricsDisplaySettings();
+    final settings = LyricsDisplaySettings(settings: testSettingsRegistry());
     await pumpLyrics(
       tester,
       settings: settings,
@@ -432,7 +434,7 @@ void main() {
   });
 
   testWidgets('罗马音按歌词页开关独立门控', (tester) async {
-    final settings = LyricsDisplaySettings();
+    final settings = LyricsDisplaySettings(settings: testSettingsRegistry());
     await pumpLyrics(
       tester,
       settings: settings,
@@ -463,7 +465,7 @@ void main() {
     // 歌词行的行样式是「替换式」的 DefaultTextStyle：一旦写字面量样式，
     // 字体族就丢成引擎默认字体，与本页其它文字、设置页所选「应用字体」不一致。
     const applied = 'Noto Serif CJK SC';
-    final settings = LyricsDisplaySettings();
+    final settings = LyricsDisplaySettings(settings: testSettingsRegistry());
     await settings.setPageRomaEnabled(true);
     await pumpLyrics(
       tester,

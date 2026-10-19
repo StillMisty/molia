@@ -8,7 +8,7 @@
 /// 取链/歌词/封面请求会把该对象整体回传（与 LX 脚本 `musicInfo` 的约定一致）。
 library;
 
-import '../../data/settings/settings_registry.dart';
+import '../../data/settings/settings_access.dart';
 import '../../domain/models/any_listen.dart';
 import '../source_search_result.dart';
 import '../source_track.dart';
@@ -58,9 +58,13 @@ class AnyListenSource {
   AnyListenSource({
     AnyListenApi? api,
     AnyListenConfigStore? configStore,
-    SettingsRegistry? settings,
-  })  : _api = api ?? AnyListenApi(),
-        _configStore = configStore ?? AnyListenConfigStore(settings: settings);
+    SettingsAccess? settings,
+  })  : assert(
+          configStore != null || settings != null,
+          'AnyListenSource 需要 configStore 或 settings（禁止自建注册表）',
+        ),
+        _api = api ?? AnyListenApi(),
+        _configStore = configStore ?? AnyListenConfigStore(settings: settings!);
 
   AnyListenConfig get config => _config;
 
@@ -95,7 +99,8 @@ class AnyListenSource {
     int limit = 30,
   }) async {
     _ensureUsable();
-    final data = await _api.searchMusic(_config, keyword, page: page, limit: limit);
+    final data =
+        await _api.searchMusic(_config, keyword, page: page, limit: limit);
     return _parseSearch(data, page: page, limit: limit);
   }
 
@@ -150,9 +155,8 @@ class AnyListenSource {
       return AnyListenTestResult(
         ok: true,
         serverId: id,
-        message: (id == null || id.isEmpty)
-            ? '连接成功，服务器已响应握手'
-            : '连接成功，服务器标识：$id',
+        message:
+            (id == null || id.isEmpty) ? '连接成功，服务器已响应握手' : '连接成功，服务器标识：$id',
       );
     } on AnyListenException catch (error) {
       return AnyListenTestResult(
@@ -212,8 +216,10 @@ class AnyListenSource {
         origin: origin,
         title: title,
         artist: _asText(raw['singer'] ?? raw['artist'] ?? meta['singer']) ?? '',
-        album: _asText(meta['albumName'] ?? raw['albumName'] ?? raw['album']) ?? '',
-        coverUrl: _asText(meta['picUrl'] ?? raw['picUrl'] ?? raw['pic'] ?? raw['img']),
+        album: _asText(meta['albumName'] ?? raw['albumName'] ?? raw['album']) ??
+            '',
+        coverUrl: _asText(
+            meta['picUrl'] ?? raw['picUrl'] ?? raw['pic'] ?? raw['img']),
         duration: _parseDuration(raw['interval'] ?? raw['duration']),
         qualities: _parseQualities(meta['qualitys'] ?? raw['qualitys']),
         // 原样透传服务器返回对象：取链/歌词/封面请求会把它整体回传。

@@ -7,6 +7,7 @@ import 'package:molia/pages/sources_page.dart';
 import 'package:molia/providers/sources_provider.dart';
 import 'package:molia/sources/lx/lx_script_info.dart';
 import 'package:molia/sources/source_manager.dart';
+import 'support/settings_test_support.dart';
 
 /// 回归：音源列表的 `M3EMenu` 操作菜单与 `M3EDialog` 删除确认
 /// 仍可通过文本定位并完成「打开 → 选择 → 取消」交互。
@@ -49,7 +50,7 @@ void main() {
     });
     late final SourceManager manager;
     await tester.runAsync(() async {
-      manager = SourceManager();
+      manager = SourceManager(settings: testSettingsRegistry());
       await manager.init();
       for (final existing in manager.scripts.toList()) {
         await manager.removeScript(existing.id);

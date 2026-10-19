@@ -15,6 +15,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'support/fake_library_repository.dart';
 import 'support/fake_music_source.dart';
 import 'support/fakes.dart';
+import 'support/settings_test_support.dart';
 
 /// 换源状态机：并行分组检索 / 失败隔离 / 库内原位替换 / 队列跟随。
 void main() {
@@ -44,6 +45,7 @@ void main() {
     repository = FakeLibraryRepository();
     backend = FakePlaybackBackend();
     playback = PlaybackProvider(
+      settings: testSettingsRegistry(),
       facade: DefaultPlaybackFacade(backend: backend),
       messenger: FakeMessenger(),
     );

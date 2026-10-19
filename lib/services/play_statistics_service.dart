@@ -20,8 +20,8 @@ import 'package:flutter/foundation.dart';
 import 'package:logging/logging.dart';
 
 import '../data/play_statistics_repository.dart';
+import '../data/settings/settings_access.dart';
 import '../data/settings/settings_keys.dart';
-import '../data/settings/settings_registry.dart';
 import '../domain/models/playback.dart';
 import '../domain/models/play_statistics.dart';
 import '../domain/models/track.dart';
@@ -29,14 +29,13 @@ import '../domain/models/track.dart';
 class PlayStatisticsService {
   PlayStatisticsService({
     required PlayStatisticsRepository repository,
-    SettingsRegistry? settings,
+    required SettingsAccess settings,
     DateTime Function()? clock,
   })  : _repository = repository,
-        _settings = settings ?? SettingsRegistry(keys: kAllSettingsKeys),
+        _settings = settings,
         _clock = clock ?? DateTime.now {
     _settings.bindReload(kPlayStatisticsEnabled, reloadFromPreferences);
   }
-
 
   /// 进行中事件的周期落盘间隔（tick 驱动，无 Timer）。
   static const Duration touchInterval = Duration(seconds: 15);
@@ -53,10 +52,11 @@ class PlayStatisticsService {
   final DateTime Function() _clock;
   final Logger _logger = Logger('molia.play_statistics_service');
 
-  final SettingsRegistry _settings;
+  final SettingsAccess _settings;
 
   /// 采集开关的可监听出口（设置页开关绑定；值随 [init]/[setEnabled] 更新）。
-  final ValueNotifier<bool> enabledNotifier = ValueNotifier<bool>(true);
+  final ValueNotifier<bool> enabledNotifier =
+      ValueNotifier<bool>(kPlayStatisticsEnabled.defaultValue);
 
   /// 串行化所有数据库写入（保证 start → touch → finish 顺序）。
   Future<void> _writes = Future<void>.value();
@@ -64,7 +64,7 @@ class PlayStatisticsService {
   /// 待落盘的写入链尾（测试 await 后断言数据库）。
   Future<void> get pendingWrites => _writes;
 
-  bool _enabled = true;
+  bool _enabled = kPlayStatisticsEnabled.defaultValue;
   PlaybackSnapshot _snapshot = PlaybackSnapshot.empty;
   bool _wasPlaying = false;
 
@@ -85,7 +85,7 @@ class PlayStatisticsService {
       _enabled = await _settings.read(kPlayStatisticsEnabled);
     } catch (e) {
       _logger.severe('读取听歌统计开关失败，按默认开启处理', e);
-      _enabled = true;
+      _enabled = kPlayStatisticsEnabled.defaultValue;
     }
     enabledNotifier.value = _enabled;
   }

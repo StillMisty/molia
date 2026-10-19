@@ -4,7 +4,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:molia/data/settings/settings_keys.dart';
 import 'package:molia/data/settings/settings_registry.dart';
 import 'package:molia/data/sync/adapters/prefs_sync_adapter.dart';
-import 'package:molia/data/sync/sync_engine.dart';
+import 'package:molia/data/sync/sync_backup.dart';
 import 'package:molia/data/sync/sync_state_store.dart';
 import 'package:molia/domain/models/device_sync.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -21,7 +21,8 @@ void main() {
   late MemorySyncSecretStore secrets;
   late SyncStateStore state;
   late SettingsRegistry registry;
-  late SyncEngine engine;
+  late PrefsSyncAdapter adapter;
+  late SyncBackup backup;
   var now = 7000;
 
   setUp(() async {
@@ -41,18 +42,23 @@ void main() {
       preferences: prefs,
       secrets: secrets,
     );
-    engine = SyncEngine(
+    adapter = PrefsSyncAdapter(state: state, settings: registry);
+    // 备份只依赖「按类别收集」这一个读动作：测试不构造引擎、传输或轮次，
+    // 收集语义仍与生产一致（同一适配器 + 同一类别过滤）。
+    backup = SyncBackup(
       state: state,
+      adapters: [adapter],
       stamps: state.stampIssuer,
-      adapters: [
-        PrefsSyncAdapter(state: state, settings: registry),
-      ],
-      transports: const {},
+      clock: () => DateTime.fromMillisecondsSinceEpoch(now),
+      collect: (categories) async {
+        final collected = await adapter.collect();
+        return {
+          for (final entry in collected.entries)
+            if (categories.contains(entry.key)) entry.key: entry.value,
+        };
+      },
     );
-    await engine.init();
   });
-
-  tearDown(() => engine.dispose());
 
   /// 一份备份文件（外层 v 是备份文件格式版本，内层 envelope 是协议快照）。
   String backupJson({required Map<String, Object?> records}) => jsonEncode({
@@ -71,7 +77,7 @@ void main() {
     await prefs.setString('theme_mode', 'dark');
     await secrets.write('ai_dj_api_key', 'sk-secret');
 
-    final json = await engine.exportBackupJson();
+    final json = await backup.exportBackupJson();
     expect(json, contains('molia_backup'));
     expect(json, contains('theme_mode'));
     expect(json, contains('dark'));
@@ -83,14 +89,13 @@ void main() {
 
   test('导出：显式要求时凭证随快照进入（由调用方负责密文/保管）', () async {
     await secrets.write('ai_dj_api_key', 'sk-secret');
-    final json =
-        await engine.exportBackupJson(includeCredentials: true);
+    final json = await backup.exportBackupJson(includeCredentials: true);
     expect(json, contains('ai_dj_api_key'));
     expect(json, contains('sk-secret'));
   });
 
   test('导入：与新备份逐键合并，凭证类别忽略；重复导入幂等', () async {
-    final backup = backupJson(records: {
+    final backupText = backupJson(records: {
       'settings': [
         {
           'key': 'theme_mode',
@@ -107,12 +112,12 @@ void main() {
       ],
     });
 
-    final result = await engine.importBackupJson(backup);
+    final result = await backup.importBackupJson(backupText);
     expect(result.applied, 1);
     expect(prefs.getString('theme_mode'), 'light');
     expect(secrets.values['ai_dj_api_key'], isNull);
 
-    final again = await engine.importBackupJson(backup);
+    final again = await backup.importBackupJson(backupText);
     expect(again.applied, 0);
     expect(again.skipped, greaterThanOrEqualTo(1));
   });
@@ -121,7 +126,7 @@ void main() {
     now = 50000;
     await prefs.setString('theme_mode', 'dark');
     // 先登记本地现状（本次改动版本 = 50000）。
-    await engine.exportBackupJson();
+    await backup.exportBackupJson();
 
     final staleBackup = backupJson(records: {
       'settings': [
@@ -132,7 +137,7 @@ void main() {
         },
       ],
     });
-    final result = await engine.importBackupJson(staleBackup);
+    final result = await backup.importBackupJson(staleBackup);
     expect(result.applied, 0);
     expect(prefs.getString('theme_mode'), 'dark');
   });
@@ -146,7 +151,7 @@ void main() {
       'envelope': {'producedAt': 1, 'records': const {}},
     });
     await expectLater(
-      () => engine.importBackupJson(malformed),
+      () => backup.importBackupJson(malformed),
       throwsA(
         isA<FormatException>().having(
           (e) => e.message,
@@ -160,15 +165,15 @@ void main() {
 
   test('导入：非 JSON / 非 Molia 备份拒绝', () async {
     expect(
-      () => engine.importBackupJson('not-json'),
+      () => backup.importBackupJson('not-json'),
       throwsA(isA<FormatException>()),
     );
     expect(
-      () => engine.importBackupJson('{"kind":"other"}'),
+      () => backup.importBackupJson('{"kind":"other"}'),
       throwsA(isA<FormatException>()),
     );
     expect(
-      () => engine.importBackupJson('{"kind":"molia_backup"}'),
+      () => backup.importBackupJson('{"kind":"molia_backup"}'),
       throwsA(isA<FormatException>()),
     );
   });

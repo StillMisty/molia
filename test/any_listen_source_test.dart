@@ -10,6 +10,8 @@ import 'package:molia/sources/any_listen/any_listen_errors.dart';
 import 'package:molia/sources/any_listen/any_listen_source.dart';
 import 'package:molia/sources/source_track.dart';
 
+import 'support/settings_test_support.dart';
+
 /// 本地 HttpServer mock：只允许访问 127.0.0.1，不依赖真实网络。
 class MockAnyListenServer {
   late final HttpServer _server;
@@ -18,7 +20,8 @@ class MockAnyListenServer {
   int get port => _server.port;
   String get baseUrl => 'http://127.0.0.1:$port';
 
-  Future<void> start(FutureOr<void> Function(MockRequest request) handler) async {
+  Future<void> start(
+      FutureOr<void> Function(MockRequest request) handler) async {
     _server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
     _server.listen((request) async {
       try {
@@ -40,7 +43,8 @@ class MockAnyListenServer {
   Future<void> stop() => _server.close(force: true);
 
   MockRequest requestTo(String path) =>
-      requests.firstWhere((r) => r.path == path, orElse: () => throw StateError('未收到请求: $path'));
+      requests.firstWhere((r) => r.path == path,
+          orElse: () => throw StateError('未收到请求: $path'));
 }
 
 class MockRequest {
@@ -60,8 +64,7 @@ class MockRequest {
 void respondJson(MockRequest req, dynamic body, {int status = 200}) {
   req.request.response
     ..statusCode = status
-    ..headers.contentType =
-        ContentType('application', 'json', charset: 'utf-8')
+    ..headers.contentType = ContentType('application', 'json', charset: 'utf-8')
     ..write(jsonEncode(body));
   req.request.response.close();
 }
@@ -73,7 +76,9 @@ void respondText(
   ContentType? contentType,
 }) {
   req.request.response.statusCode = status;
-  if (contentType != null) req.request.response.headers.contentType = contentType;
+  if (contentType != null) {
+    req.request.response.headers.contentType = contentType;
+  }
   req.request.response.write(body);
   req.request.response.close();
 }
@@ -129,7 +134,8 @@ Future<void> handleDefault(MockAnyListenServer server, MockRequest req) async {
         'isFromCache': false,
       });
     case '/api/music/pic':
-      respondJson(req, {'url': '${server.baseUrl}/pic/1.jpg', 'isFromCache': false});
+      respondJson(
+          req, {'url': '${server.baseUrl}/pic/1.jpg', 'isFromCache': false});
     default:
       respondJson(req, {'message': 'not found'}, status: 404);
   }
@@ -140,7 +146,10 @@ Future<AnyListenSource> buildSource(
   Duration timeout = const Duration(seconds: 5),
   AnyListenApi? api,
 }) async {
-  final source = AnyListenSource(api: api ?? AnyListenApi(timeout: timeout));
+  final source = AnyListenSource(
+    api: api ?? AnyListenApi(timeout: timeout),
+    settings: testSettingsRegistry(),
+  );
   await source.updateConfig(AnyListenConfig(
     serverUrl: baseUrl,
     token: 'test-token',
@@ -302,7 +311,7 @@ void main() {
   group('AnyListenSource：错误分支', () {
     test('未配置时给出 notConfigured，且不发起网络请求', () async {
       SharedPreferences.setMockInitialValues({});
-      final source = AnyListenSource();
+      final source = AnyListenSource(settings: testSettingsRegistry());
       await source.init();
       expect(source.isConfigured, isFalse);
       expect(source.isUsable, isFalse);

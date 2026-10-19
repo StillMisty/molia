@@ -2,6 +2,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:molia/data/settings/settings_keys.dart';
 import 'package:molia/data/settings/settings_registry.dart';
 import 'package:molia/data/sync/adapters/prefs_sync_adapter.dart';
+import 'package:molia/data/sync/sync_control_plane.dart';
 import 'package:molia/data/sync/sync_engine.dart';
 import 'package:molia/data/sync/sync_state_store.dart';
 import 'package:molia/domain/models/device_sync.dart';
@@ -19,6 +20,7 @@ void main() {
   late SyncStateStore state;
   late FakeSyncTransport transport;
   late SyncEngine engine;
+  late SyncControlPlane control;
 
   setUp(() async {
     SharedPreferences.setMockInitialValues({});
@@ -33,6 +35,7 @@ void main() {
     await state.setTransportEnabled(SyncTransportKind.lan, true);
     await state.writePassphrase('ABCD-EFGH-JKLM-NPQR-STUV-WXYZ-2345-6789');
     transport = FakeSyncTransport();
+    control = SyncControlPlane(state: state, transports: {'lan': transport});
     engine = SyncEngine(
       state: state,
       stamps: state.stampIssuer,
@@ -52,6 +55,7 @@ void main() {
   });
 
   tearDown(() async {
+    control.dispose();
     engine.dispose();
   });
 
@@ -81,15 +85,18 @@ void main() {
     seedPeer('alive', lastSeenAt: now);
 
     final peers = state.peers;
-    expect(peers.firstWhere((p) => p.deviceId == 'ghost').isLostAt(now), isTrue);
-    expect(peers.firstWhere((p) => p.deviceId == 'alive').isLostAt(now), isFalse);
+    expect(
+        peers.firstWhere((p) => p.deviceId == 'ghost').isLostAt(now), isTrue);
+    expect(
+        peers.firstWhere((p) => p.deviceId == 'alive').isLostAt(now), isFalse);
     // 名册不自动删除失联设备：处置动作由用户显式选择。
     expect(peers, hasLength(2));
   });
 
   test('接触即更新最近接触：未变跳过（探测应答）的对端不误标失联', () async {
-    final ancient =
-        DateTime.now().millisecondsSinceEpoch - SyncPeerState.lostThresholdMs - 1000;
+    final ancient = DateTime.now().millisecondsSinceEpoch -
+        SyncPeerState.lostThresholdMs -
+        1000;
     seedPeer('ghost', lastSeenAt: ancient);
     expect(state.peers.single.isLostAt(state.nowMs()), isTrue);
 
@@ -105,23 +112,24 @@ void main() {
 
   test('本地忽略：跨重启保留，只影响本机', () async {
     expect(state.isPeerIgnored('ghost'), isFalse);
-    await engine.setPeerIgnored('ghost', true);
+    await control.setPeerIgnored('ghost', true);
     expect(state.isPeerIgnored('ghost'), isTrue);
     await state.save();
 
     // 重启后仍在忽略列表里（对端不知道，其它设备不受影响）。
-    final reloaded = SyncStateStore(preferences: prefs, secrets: MemorySyncSecretStore());
+    final reloaded =
+        SyncStateStore(preferences: prefs, secrets: MemorySyncSecretStore());
     await reloaded.init();
     expect(reloaded.isPeerIgnored('ghost'), isTrue);
     expect(reloaded.isPeerIgnored('other'), isFalse);
 
-    await engine.setPeerIgnored('ghost', false);
+    await control.setPeerIgnored('ghost', false);
     expect(state.isPeerIgnored('ghost'), isFalse);
   });
 
   test('显式清理远端文件：调用各启用传输，返回结果不做自动删除', () async {
     transport.deleteRemoteResult = true;
-    final result = await engine.cleanupRemote('ghost');
+    final result = await control.cleanupRemote('ghost');
 
     expect(result.removed, isTrue);
     expect(result.error, isNull);
@@ -129,14 +137,14 @@ void main() {
 
     // 没有可清理内容（局域网直连 / 已清理过）：removed = false，不是错误。
     transport.deleteRemoteResult = false;
-    final again = await engine.cleanupRemote('ghost');
+    final again = await control.cleanupRemote('ghost');
     expect(again.removed, isFalse);
     expect(again.error, isNull);
   });
 
   test('清理远端文件失败：如实上报 delete_remote_failed（不吞成「没有可清理」）', () async {
     transport.deleteRemoteThrows = true;
-    final result = await engine.cleanupRemote('ghost');
+    final result = await control.cleanupRemote('ghost');
 
     expect(result.removed, isFalse);
     expect(result.error?.code, SyncIssueCode.deleteRemoteFailed);

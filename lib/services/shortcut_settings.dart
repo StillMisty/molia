@@ -14,9 +14,9 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:system_hotkeys/system_hotkeys.dart' show HotKey;
 
+import '../data/settings/settings_access.dart';
 import '../data/settings/settings_key.dart';
 import '../data/settings/settings_keys.dart';
-import '../data/settings/settings_registry.dart';
 import 'global_hotkeys.dart';
 import 'shortcut_bindings.dart';
 import 'shortcuts.dart';
@@ -74,18 +74,18 @@ class ShortcutSettings extends ChangeNotifier {
   /// 设置注册表（组合根启动时注入；reload 由组合根代绑，同语言 / 品牌名）。
   ///
   /// 可为 null（测试 / 独立挂载）：此时状态只留在内存，不落盘。
-  static SettingsRegistry? _settings;
+  static SettingsAccess? _settings;
 
   /// 注入注册表并触发一次异步载入（组合根不必 await：读取完成后
   /// [notifyListeners] 驱动 UI 与监听方）。
-  static void attachSettings(SettingsRegistry settings) {
+  static void attachSettings(SettingsAccess settings) {
     _settings = settings;
     unawaited(load());
   }
 
   // 默认值与登记键默认值一致（见 settings_keys.dart）：软件内开、全局关。
-  bool _inAppEnabled = true;
-  bool _globalEnabled = false;
+  bool _inAppEnabled = kShortcutsEnabled.defaultValue;
+  bool _globalEnabled = kGlobalShortcutsEnabled.defaultValue;
   ShortcutBindings _inAppBindings =
       ShortcutBindings(ShortcutScope.inApp, const {});
   ShortcutBindings _globalBindings =

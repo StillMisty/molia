@@ -6,6 +6,7 @@ import 'package:molia/services/lyrics_display/desktop_lyrics_output.dart';
 import 'package:molia/services/lyrics_display/lyrics_channel.dart';
 import 'package:molia/services/lyrics_display/lyrics_display_settings.dart';
 import 'package:molia/services/lyrics_display/lyrics_output.dart';
+import '../support/settings_test_support.dart';
 
 /// 桌面输出：通道协议编解码 + 暂停/无歌词回退映射 + 原生动作事件。
 void main() {
@@ -17,7 +18,8 @@ void main() {
   setUp(() {
     calls = [];
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
-        .setMockMethodCallHandler(const MethodChannel(channelName), (call) async {
+        .setMockMethodCallHandler(const MethodChannel(channelName),
+            (call) async {
       calls.add(call);
       switch (call.method) {
         case 'desktop.canDrawOverlays':
@@ -37,7 +39,7 @@ void main() {
   });
 
   Future<LyricsDisplaySettings> desktopSettings() async {
-    final settings = LyricsDisplaySettings();
+    final settings = LyricsDisplaySettings(settings: testSettingsRegistry());
     await settings.setDesktopEnabled(true);
     return settings;
   }
@@ -109,7 +111,8 @@ void main() {
 
   test('权限未授予：capability=needsPermission 且不 show', () async {
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
-        .setMockMethodCallHandler(const MethodChannel(channelName), (call) async {
+        .setMockMethodCallHandler(const MethodChannel(channelName),
+            (call) async {
       calls.add(call);
       if (call.method == 'desktop.canDrawOverlays') return false;
       return null;
@@ -431,7 +434,8 @@ void main() {
     calls.clear();
     await output.start(settings);
     await pumpEventQueue();
-    expect(calls.map((call) => call.method), isNot(contains('desktop.setConfig')));
+    expect(
+        calls.map((call) => call.method), isNot(contains('desktop.setConfig')));
 
     await output.stop();
   });

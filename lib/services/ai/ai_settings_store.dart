@@ -6,15 +6,14 @@
 /// - 读取失败/缺项一律降级为「未配置」，不抛异常（页面据此引导）。
 library;
 
+import '../../data/settings/settings_access.dart';
 import '../../data/settings/settings_keys.dart';
-import '../../data/settings/settings_registry.dart';
 import '../../domain/models/ai_dj.dart';
 
 class AiSettingsStore {
-  AiSettingsStore({SettingsRegistry? settings})
-      : _settings = settings ?? SettingsRegistry(keys: kAllSettingsKeys);
+  AiSettingsStore({required SettingsAccess settings}) : _settings = settings;
 
-  final SettingsRegistry _settings;
+  final SettingsAccess _settings;
 
   /// 读取配置；缺项/读取失败返回 null（调用方引导填写）。
   Future<LlmConfig?> readConfig() async {
@@ -85,4 +84,3 @@ class AiSettingsStore {
     await _settings.write(kAiDjCacheTtlDays, days);
   }
 }
-

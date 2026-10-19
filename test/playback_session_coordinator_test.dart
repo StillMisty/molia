@@ -11,6 +11,7 @@ import 'dart:async';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:molia/data/playback/default_playback_facade.dart';
+import 'package:molia/data/settings/settings_access.dart';
 import 'package:molia/data/settings/settings_keys.dart';
 import 'package:molia/data/settings/settings_registry.dart';
 import 'package:molia/domain/models/playback.dart';
@@ -21,6 +22,7 @@ import 'package:molia/services/playback_session_store.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'support/fakes.dart';
+import 'support/settings_test_support.dart';
 
 Track _track(String id) => Track(
       id: TrackId('fake', id),
@@ -149,7 +151,7 @@ void main() {
     FakePlaybackBackend? backendOverride,
     bool persistStore = false,
     RestoredTrackReporter? onRestoredTrack,
-    SettingsRegistry? settings,
+    SettingsAccess? settings,
   }) {
     backend = backendOverride ?? FakePlaybackBackend();
     facade = DefaultPlaybackFacade(backend: backend);
@@ -158,7 +160,7 @@ void main() {
     session = PlaybackSessionCoordinator(
       facade: facade,
       store: store,
-      settings: settings,
+      settings: settings ?? testSettingsRegistry(),
       clock: () => now,
       onRestoredTrack: onRestoredTrack,
     );

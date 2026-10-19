@@ -131,8 +131,8 @@ class DataSettingsPage extends StatelessWidget {
     try {
       final bool success;
       if (syncProvider != null) {
-        // 完整备份：同步引擎收集全部类别（凭证类默认不含）。
-        final json = await syncProvider.engine.exportBackupJson();
+        // 完整备份：同步备份模块收集全部类别（凭证类默认不含）。
+        final json = await syncProvider.exportBackupJson();
         success = await localDbProvider.shareJsonBackup(json);
       } else {
         success = await localDbProvider.exportDataToJson();
@@ -184,7 +184,7 @@ class DataSettingsPage extends StatelessWidget {
                 if (syncProvider != null) {
                   final text = await localDbProvider.pickJsonBackup();
                   if (text == null) return; // 用户取消
-                  await syncProvider.engine.importBackupJson(text);
+                  await syncProvider.importBackupJson(text);
                   success = true;
                 } else {
                   success = await localDbProvider.importDataFromJson();

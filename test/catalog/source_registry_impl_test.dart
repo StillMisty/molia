@@ -7,6 +7,7 @@ import 'package:molia/sources/any_listen/any_listen_config.dart';
 import 'package:molia/sources/any_listen/any_listen_source.dart';
 import 'package:molia/sources/source_manager.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import '../support/settings_test_support.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -16,7 +17,7 @@ void main() {
   });
 
   test('无可用源：descriptors 为空；byKey 懒创建（空 key 为 null）', () async {
-    final manager = SourceManager();
+    final manager = SourceManager(settings: testSettingsRegistry());
     await manager.init();
     final registry = SourceRegistryImpl(manager);
     addTearDown(() {
@@ -35,7 +36,7 @@ void main() {
   });
 
   test('descriptors：由 searchableSources 映射（key/名称/kind/order/能力）', () async {
-    final manager = SourceManager();
+    final manager = SourceManager(settings: testSettingsRegistry());
     await manager.init();
     final registry = SourceRegistryImpl(manager);
     addTearDown(() {
@@ -65,7 +66,7 @@ void main() {
   });
 
   test('forTrack 按 track.id.sourceKey 查找', () async {
-    final manager = SourceManager();
+    final manager = SourceManager(settings: testSettingsRegistry());
     await manager.init();
     final registry = SourceRegistryImpl(manager);
     addTearDown(() {
@@ -83,7 +84,7 @@ void main() {
   });
 
   test('local key 路由到 LocalMusicSource（不撞 manager、不进 descriptors）', () async {
-    final manager = SourceManager();
+    final manager = SourceManager(settings: testSettingsRegistry());
     await manager.init();
     final registry = SourceRegistryImpl(manager);
     addTearDown(() {
@@ -110,7 +111,7 @@ void main() {
   });
 
   test('changes 转发 manager 通知；refresh 也广播一次', () async {
-    final manager = SourceManager();
+    final manager = SourceManager(settings: testSettingsRegistry());
     await manager.init();
     final registry = SourceRegistryImpl(manager);
     addTearDown(() {
@@ -135,7 +136,7 @@ void main() {
   });
 
   test('setOrder 转发 manager.setSourceOrder（lx_source_order 语义不变）', () async {
-    final manager = SourceManager();
+    final manager = SourceManager(settings: testSettingsRegistry());
     await manager.init();
     final registry = SourceRegistryImpl(manager);
     addTearDown(() {

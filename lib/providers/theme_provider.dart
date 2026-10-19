@@ -4,8 +4,8 @@ import 'package:material_ui/material_ui.dart';
 import 'package:logging/logging.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../data/settings/settings_access.dart';
 import '../data/settings/settings_keys.dart';
-import '../data/settings/settings_registry.dart';
 import '../theme/scheme_builder.dart';
 
 final logger = Logger('molia.theme_provider');
@@ -59,17 +59,20 @@ class ThemeProvider extends ChangeNotifier {
   static const String _legacyDynamicKey = 'dynamic_color_enabled';
   static const String _legacyMonetKey = 'monet_color_enabled';
 
-  ColorScheme _colorScheme = buildColorScheme(Colors.blue, Brightness.light);
+  ColorScheme _colorScheme = buildColorScheme(
+    Color(kSeedColor.defaultValue),
+    Brightness.light,
+  );
 
-  ThemeMode _themeMode = ThemeMode.system;
+  ThemeMode _themeMode = _themeModeOf(kThemeMode.defaultValue);
 
   /// 基础配色默认壁纸：桌面用真实壁纸图 seed（[updateSystemWallpaperSeed]）、
   /// 平台强调色（[updateMonetSchemes]）兜底；两者都没有时
   /// [_schemeForBrightness] 自然回退自定义种子色。
-  ColorBaseSource _baseColorSource = ColorBaseSource.wallpaper;
-  bool _followArtworkEnabled = true;
-  bool _pureBlackEnabled = false;
-  Color _seedColor = Colors.blue;
+  ColorBaseSource _baseColorSource = _colorBaseOf(kColorBase.defaultValue);
+  bool _followArtworkEnabled = kFollowArtworkEnabled.defaultValue;
+  bool _pureBlackEnabled = kPureBlackEnabled.defaultValue;
+  Color _seedColor = Color(kSeedColor.defaultValue);
 
   /// 全局应用字体族名（设备已装字体）；null 表示系统默认字体。
   String? _appFontFamily;
@@ -90,8 +93,7 @@ class ThemeProvider extends ChangeNotifier {
 
   late final Future<void> _preferencesReady;
 
-  ThemeProvider({SettingsRegistry? settings})
-      : _settings = settings ?? SettingsRegistry(keys: kAllSettingsKeys) {
+  ThemeProvider({required SettingsAccess settings}) : _settings = settings {
     _settings.bindReload(kThemeMode, reloadFromPreferences);
     _settings.bindReload(kColorBase, reloadFromPreferences);
     _settings.bindReload(kFollowArtworkEnabled, reloadFromPreferences);
@@ -100,7 +102,7 @@ class ThemeProvider extends ChangeNotifier {
     _preferencesReady = _loadPreferences();
   }
 
-  final SettingsRegistry _settings;
+  final SettingsAccess _settings;
 
   ColorScheme get colorScheme => _colorScheme;
 
@@ -298,6 +300,22 @@ class ThemeProvider extends ChangeNotifier {
     });
   }
 
+  /// 主题模式 / 基础配色：键默认值是唯一来源，模块只把字符串映射成枚举。
+  static ThemeMode _themeModeOf(String name) => ThemeMode.values.firstWhere(
+        (mode) => mode.name == name,
+        orElse: () => ThemeMode.values.firstWhere(
+          (mode) => mode.name == kThemeMode.defaultValue,
+        ),
+      );
+
+  static ColorBaseSource _colorBaseOf(String name) =>
+      ColorBaseSource.values.firstWhere(
+        (source) => source.name == name,
+        orElse: () => ColorBaseSource.values.firstWhere(
+          (source) => source.name == kColorBase.defaultValue,
+        ),
+      );
+
   /// 当前模式下的有效亮度：非 system 强制覆盖平台亮度。
   Brightness _effectiveBrightness(Brightness platformBrightness) {
     return switch (_themeMode) {
@@ -318,9 +336,8 @@ class ThemeProvider extends ChangeNotifier {
       final wallpaperSeed = brightness == Brightness.dark
           ? _wallpaperDarkSeed
           : _wallpaperLightSeed;
-      final monet = brightness == Brightness.dark
-          ? _monetDarkScheme
-          : _monetLightScheme;
+      final monet =
+          brightness == Brightness.dark ? _monetDarkScheme : _monetLightScheme;
       scheme = wallpaperSeed != null
           ? buildColorScheme(wallpaperSeed, brightness)
           : (monet ?? buildColorScheme(_seedColor, brightness));
@@ -340,10 +357,7 @@ class ThemeProvider extends ChangeNotifier {
   Future<void> _loadPreferences() async {
     try {
       final modeName = await _settings.read(kThemeMode);
-      _themeMode = ThemeMode.values.firstWhere(
-        (mode) => mode.name == modeName,
-        orElse: () => ThemeMode.system,
-      );
+      _themeMode = _themeModeOf(modeName);
 
       // 新键优先；两个新键都不存在时从旧键一次性迁移并清理旧键。
       // 旧键不登记（迁移后即废弃），因此这里仍需直接访问 prefs。
@@ -355,18 +369,16 @@ class ThemeProvider extends ChangeNotifier {
         // 从未配置过（无旧键）→ 吃新默认：壁纸（平台支持时）。
         _baseColorSource = prefs.getBool(_legacyMonetKey) == false
             ? ColorBaseSource.custom
-            : ColorBaseSource.wallpaper;
-        _followArtworkEnabled = prefs.getBool(_legacyDynamicKey) ?? true;
+            : _colorBaseOf(kColorBase.defaultValue);
+        _followArtworkEnabled = prefs.getBool(_legacyDynamicKey) ??
+            kFollowArtworkEnabled.defaultValue;
         await _settings.write(kColorBase, _baseColorSource.name);
         await _settings.write(kFollowArtworkEnabled, _followArtworkEnabled);
         await prefs.remove(_legacyMonetKey);
         await prefs.remove(_legacyDynamicKey);
       } else {
         final baseName = await _settings.read(kColorBase);
-        _baseColorSource = ColorBaseSource.values.firstWhere(
-          (source) => source.name == baseName,
-          orElse: () => ColorBaseSource.wallpaper,
-        );
+        _baseColorSource = _colorBaseOf(baseName);
         _followArtworkEnabled = await _settings.read(kFollowArtworkEnabled);
       }
 

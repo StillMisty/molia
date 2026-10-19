@@ -10,6 +10,8 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:molia/data/settings/settings_keys.dart';
 import 'package:molia/data/settings/settings_registry.dart';
 import 'package:molia/data/sync/adapters/prefs_sync_adapter.dart';
+import 'package:molia/data/sync/sync_backup.dart';
+import 'package:molia/data/sync/sync_control_plane.dart';
 import 'package:molia/data/sync/sync_engine.dart';
 import 'package:molia/data/sync/sync_passphrase.dart';
 import 'package:molia/data/sync/sync_state_store.dart';
@@ -44,6 +46,8 @@ void main() {
   late SyncStateStore state;
   late FakeSyncTransport transport;
   late SyncEngine engine;
+  late SyncControlPlane control;
+  late SyncBackup backup;
   late SyncProvider provider;
   late RecordingNotificationService notifications;
   var nowMs = 7000;
@@ -67,30 +71,43 @@ void main() {
     );
     await state.init();
     transport = FakeSyncTransport();
+    final adapter = PrefsSyncAdapter(
+      state: state,
+      settings: SettingsRegistry(
+        keys: keys,
+        preferences: prefs,
+        secrets: secrets,
+      ),
+    );
     engine = SyncEngine(
       state: state,
       stamps: state.stampIssuer,
-      adapters: [
-        PrefsSyncAdapter(
-          state: state,
-          settings: SettingsRegistry(
-            keys: keys,
-            preferences: prefs,
-            secrets: secrets,
-          ),
-        ),
-      ],
+      adapters: [adapter],
       transports: {'lan': transport},
       // 与状态存储同一时钟源（观测面的窗口过滤依赖时间戳一致）。
       clock: () => DateTime.fromMillisecondsSinceEpoch(state.nowMs()),
     );
-    provider = SyncProvider(engine: engine, localEndpoints: fakeEndpoints());
+    control = SyncControlPlane(state: state, transports: {'lan': transport});
+    backup = SyncBackup(
+      state: state,
+      adapters: [adapter],
+      stamps: state.stampIssuer,
+      collect: engine.collectRecords,
+      clock: () => DateTime.fromMillisecondsSinceEpoch(state.nowMs()),
+    );
+    provider = SyncProvider(
+      engine: engine,
+      controlPlane: control,
+      backup: backup,
+      localEndpoints: fakeEndpoints(),
+    );
     await provider.init();
     notifications = RecordingNotificationService();
   });
 
   tearDown(() async {
     provider.dispose();
+    control.dispose();
     engine.dispose();
   });
 
@@ -696,7 +713,8 @@ void main() {
 
     // 地址已写入地址簿（用户不用重填），但弹层留在原地让用户改地址重试。
     expect(provider.manualPeers.single.host, '192.168.1.23');
-    expect(find.textContaining('make sure the device is online'), findsOneWidget);
+    expect(
+        find.textContaining('make sure the device is online'), findsOneWidget);
     expect(find.text('Save'), findsOneWidget);
 
     // 关掉弹层后：未连上的条目在地址簿里可见（点开可改 / 删）。
@@ -864,11 +882,13 @@ void main() {
       findsOneWidget,
     );
     expect(find.text('3 available addresses'), findsOneWidget);
-    expect(find.byKey(const Key('settingsSyncPeer-192.168.1.24')), findsNothing);
+    expect(
+        find.byKey(const Key('settingsSyncPeer-192.168.1.24')), findsNothing);
 
     await tester.tap(find.byKey(const Key('settingsSyncPeerCandidatesItem')));
     await tester.pumpAndSettle();
-    expect(find.byKey(const Key('settingsSyncPeer-192.168.1.24')), findsOneWidget);
+    expect(
+        find.byKey(const Key('settingsSyncPeer-192.168.1.24')), findsOneWidget);
 
     // 点开单项 → 详情弹层 → 删除。
     await tester.tap(find.byKey(const Key('settingsSyncPeer-192.168.1.24')));
@@ -1100,6 +1120,8 @@ void main() {
     provider.dispose();
     provider = SyncProvider(
       engine: engine,
+      controlPlane: control,
+      backup: backup,
       lanPermission: permission,
       localEndpoints: fakeEndpoints(),
     );
@@ -1133,6 +1155,8 @@ void main() {
     provider.dispose();
     provider = SyncProvider(
       engine: engine,
+      controlPlane: control,
+      backup: backup,
       lanPermission: permission,
       localEndpoints: fakeEndpoints(),
     );

@@ -3,9 +3,12 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 
 import '../data/sync/sync_activity.dart';
+import '../data/sync/sync_adapter.dart';
+import '../data/sync/sync_backup.dart';
+import '../data/sync/sync_codec_port.dart';
+import '../data/sync/sync_control_plane.dart';
 import '../data/sync/sync_engine.dart';
 import '../data/sync/sync_passphrase.dart';
-import '../data/sync/sync_codec_port.dart';
 import '../data/sync/sync_scheduler.dart';
 import '../data/sync/sync_state_store.dart';
 import '../data/sync/transport/local_network_permission.dart';
@@ -15,27 +18,35 @@ import '../domain/ports/sync_transport.dart';
 import '../services/local_endpoints_service.dart';
 import '../utils/peer_address.dart';
 
-/// 跨设备同步的 UI 门面：引擎状态 + 口令管理 + 恢复动作触发 + 策略转发。
+/// 跨设备同步的 UI 门面：控制面（身份 / 开关 / 观测）+ 引擎（轮次 / 报告）
+/// + 备份（导出 / 导入）+ 恢复动作触发 + 策略转发。
 ///
-/// 口令即信任根：显示/复制/重置都在这里管理；UI 不直接接触引擎。
+/// 口令即信任根：显示/复制/重置都在控制面管理；UI 不直接接触引擎或状态存储。
 /// 「什么时候自动同步」由 [SyncScheduler] 决定，本类只做转发；[syncNow]
 /// 只服务恢复动作（添加手动对端 / 失败重试），首屏无手动同步入口。
 class SyncProvider extends ChangeNotifier {
   SyncProvider({
     required SyncEngine engine,
+    required SyncControlPlane controlPlane,
+    required SyncBackup backup,
     SyncScheduler? scheduler,
     LocalNetworkPermission? lanPermission,
     LocalEndpointsService? localEndpoints,
     SyncCodecPort? codec,
   })  : _engine = engine,
+        _controlPlane = controlPlane,
+        _backup = backup,
         _scheduler = scheduler,
         _lanPermission = lanPermission,
         _endpoints = localEndpoints ?? LocalEndpointsService(),
         _codec = codec {
     _engine.addListener(notifyListeners);
+    _controlPlane.addListener(notifyListeners);
   }
 
   final SyncEngine _engine;
+  final SyncControlPlane _controlPlane;
+  final SyncBackup _backup;
   final SyncScheduler? _scheduler;
   final LocalNetworkPermission? _lanPermission;
 
@@ -45,33 +56,32 @@ class SyncProvider extends ChangeNotifier {
   /// 本机地址枚举（设置页列表 / 配对码 / 探测候选三处共用；内部有缓存）。
   final LocalEndpointsService _endpoints;
 
-  String? _passphrase;
-
-  SyncEngine get engine => _engine;
-
-  bool get enabled => _engine.state.enabled;
-  String get deviceId => _engine.state.deviceId;
-  String get deviceName => _engine.state.deviceName;
-  Map<SyncCategory, bool> get categories => _engine.state.categories;
-  Set<String> get enabledTransports => _engine.state.enabledTransports;
-  WebDavConfig get webdav => _engine.state.webdav;
-  int get lastSyncAt => _engine.state.lastSyncAt;
-  List<SyncLogEntry> get log => _engine.state.log;
+  bool get enabled => _controlPlane.enabled;
+  String get deviceId => _controlPlane.deviceId;
+  String get deviceName => _controlPlane.deviceName;
+  Map<SyncCategory, bool> get categories => _controlPlane.categories;
+  Set<String> get enabledTransports => _controlPlane.enabledTransports;
+  WebDavConfig get webdav => _controlPlane.webdav;
+  int get lastSyncAt => _controlPlane.lastSyncAt;
+  List<SyncLogEntry> get log => _controlPlane.log;
 
   /// 设备名册（不含本机；按最近接触时间倒序）。
-  List<SyncPeerState> get peers => _engine.state.peers;
+  List<SyncPeerState> get peers => _controlPlane.peers;
 
   /// 手动对端地址簿（发现失败时的兜底）。
-  List<ManualPeer> get manualPeers => _engine.state.manualPeers;
+  List<ManualPeer> get manualPeers => _controlPlane.manualPeers;
 
   /// 本机局域网探测端口（分族 v4 / v6；0 = 该族未运行 / 不可用）。
   ///
   /// 设置页展示与配对码用：两族可独立降级（端口降级 / 单族不可用），
   /// 配对码里的每个候选地址按其地址族取对应端口。
-  ({int v4, int v6}) get lanDiscoveryPorts => _engine.lanDiscoveryPorts;
+  ({int v4, int v6}) get lanDiscoveryPorts => _controlPlane.lanDiscoveryPorts;
 
   /// 本机局域网直连端点端口（持久化的 HTTP 端口；0 = 尚未绑定过）。
-  int get lanHttpPort => _engine.state.lanHttpPort;
+  int get lanHttpPort => _controlPlane.lanHttpPort;
+
+  /// 设置页相对时间 / 失联判定用的本机时钟。
+  int get nowMs => _controlPlane.nowMs();
 
   /// 失效本机地址缓存（设置页进入时调用；网络切换后重进即可看到新地址）。
   void refreshLocalEndpoints() => _endpoints.invalidate();
@@ -90,7 +100,7 @@ class SyncProvider extends ChangeNotifier {
   }) async {
     final normalized = normalizePeerHost(host);
     if (normalized.isEmpty) return false;
-    return _engine.addManualPeer(ManualPeer(
+    return _controlPlane.addManualPeer(ManualPeer(
       host: normalized,
       name: name.trim(),
       probePort: probePort,
@@ -117,7 +127,7 @@ class SyncProvider extends ChangeNotifier {
         ),
     ].where((entry) => entry.host.isNotEmpty).toList();
     if (addresses.isEmpty) return null;
-    await _engine.state.adoptPeerAddresses(code.deviceId, addresses);
+    await _controlPlane.adoptPeerAddresses(code.deviceId, addresses);
     return addresses.first.host;
   }
 
@@ -130,7 +140,7 @@ class SyncProvider extends ChangeNotifier {
     int? probePort,
     String? name,
   }) =>
-      _engine.state.moveManualPeer(
+      _controlPlane.moveManualPeer(
         normalizePeerHost(fromHost),
         toHost: normalizePeerHost(toHost),
         probePort: probePort,
@@ -143,7 +153,7 @@ class SyncProvider extends ChangeNotifier {
   /// 降级到不同端口，拿错族的端口对端打不通）；HTTP 端口来自持久化状态
   /// （对端拿到它就能纯 HTTP 直连，不依赖 UDP 发现）。
   Future<SyncPairingCode?> pairingCode() async {
-    final passphrase = _passphrase;
+    final passphrase = _controlPlane.passphrase;
     if (passphrase == null || passphrase.trim().isEmpty) return null;
     final endpoints = await _endpoints.list();
     final ports = lanDiscoveryPorts;
@@ -165,23 +175,23 @@ class SyncProvider extends ChangeNotifier {
   /// 本机可路由地址（设置页地址列表展示用；服务内部缓存枚举结果）。
   Future<List<LocalEndpoint>> localEndpoints() => _endpoints.list();
 
-
   /// 移除手动对端。
-  Future<void> removeManualPeer(String host) => _engine.removeManualPeer(host);
+  Future<void> removeManualPeer(String host) =>
+      _controlPlane.removeManualPeer(host);
 
-  bool isPeerIgnored(String deviceId) => _engine.state.isPeerIgnored(deviceId);
+  bool isPeerIgnored(String deviceId) => _controlPlane.isPeerIgnored(deviceId);
 
   /// 本地忽略 / 取消忽略某台设备（只影响本机）。
   Future<void> setPeerIgnored(String deviceId, bool ignored) =>
-      _engine.setPeerIgnored(deviceId, ignored);
+      _controlPlane.setPeerIgnored(deviceId, ignored);
 
   /// 显式清理某台设备的远端文件（不做自动删除）。
   Future<({bool removed, SyncIssue? error})> cleanupRemote(String deviceId) =>
-      _engine.cleanupRemote(deviceId);
+      _controlPlane.cleanupRemote(deviceId);
 
   /// 名册里已失联的设备（超过失联阈值无接触；只提示与提供处置动作）。
   List<SyncPeerState> get lostPeers {
-    final now = _engine.state.nowMs();
+    final now = _controlPlane.nowMs();
     return [
       for (final peer in peers)
         if (peer.isLostAt(now)) peer,
@@ -196,7 +206,7 @@ class SyncProvider extends ChangeNotifier {
   /// 返回 null = 本轮没有真正跑（进行中的轮次把请求排队 / 同步未启用）：
   /// 此时不下结论，调用方按「稍后」处理，等后续轮次给出结果。
   Future<bool?> contactManualPeer(String host) async {
-    final startedAt = _engine.state.nowMs();
+    final startedAt = _controlPlane.nowMs();
     final previous = _engine.lastReport;
     await syncNow(manual: true);
     final report = _engine.lastReport;
@@ -259,29 +269,20 @@ class SyncProvider extends ChangeNotifier {
 
   /// 传输状态（开关开着但不可用时给出原因）；未知 kind 返回 null。
   SyncTransportReport? transportStatus(String kind) =>
-      _engine.transportStatus(kind);
+      _controlPlane.transportStatus(kind);
 
   /// 传输最近一次成功接触对端的时间（0 = 尚未成功过）。
   int transportLastSuccessAt(String kind) =>
-      _engine.state.transportLastSuccessAt(kind);
+      _controlPlane.transportLastSuccessAt(kind);
 
   /// 完整同步口令（显示与复制用；调用方负责提示妥善保管）。
-  String? get passphrase => _passphrase;
+  String? get passphrase => _controlPlane.passphrase;
 
   /// 打码口令（设置行副标题用；保留首组便于用户核对自己输入的是哪台）。
-  String get maskedPassphrase {
-    final value = _passphrase;
-    if (value == null || value.isEmpty) return '';
-    final chars = value.split('');
-    for (var i = 0; i < chars.length; i++) {
-      if (chars[i] == '-') continue;
-      if (i < 4) continue;
-      chars[i] = '*';
-    }
-    return chars.join();
-  }
+  String get maskedPassphrase => _controlPlane.maskedPassphrase;
 
   Future<void> init() async {
+    await _controlPlane.init();
     await _engine.init();
     // 口令即设备身份：初始化就绪，配对码 / 配对信息随时可分享。生成口令没有
     // 网络副作用，不依赖任何传输开关——没有总开关后，不能等「首次开启同步」
@@ -291,42 +292,39 @@ class SyncProvider extends ChangeNotifier {
     // 系统的故障不允许阻断启动（与 `SecureSettingsSecretStore.read` 的容错
     // 同一契约，见 docs/pitfalls.md #31）。
     try {
-      await _engine.ensurePassphrase();
+      await _controlPlane.ensurePassphrase();
     } catch (e) {
       debugPrint('[Molia] 同步口令初始化失败（按未设置继续）: $e');
     }
-    _passphrase = await _engine.readPassphrase();
+    await _controlPlane.readPassphrase();
     notifyListeners();
   }
 
   /// 启动已启用的传输（首帧后调用；幂等）。
-  Future<void> startTransports() => _engine.startTransports();
+  Future<void> startTransports() => _controlPlane.startTransports();
 
   /// 开 / 关一路传输（开关即总闸：两路都关 = 同步完全停）。
   ///
   /// 开传输即启用同步：口令在这里兜一层（正常已由 [init] 生成；init 异常降级
   /// 的路径也能补上），保证「开传输 → 配对 → 分享码」的链路不缺口令。
   Future<void> setTransportEnabled(String kind, bool value) async {
-    if (value) await _engine.ensurePassphrase();
-    await _engine.setTransportEnabled(kind, value);
-    _passphrase = await _engine.readPassphrase();
-    notifyListeners();
+    if (value) await _controlPlane.ensurePassphrase();
+    await _controlPlane.setTransportEnabled(kind, value);
   }
 
   Future<void> setCategory(SyncCategory category, bool value) =>
-      _engine.setCategory(category, value);
+      _controlPlane.setCategory(category, value);
 
-  Future<void> setDeviceName(String value) => _engine.setDeviceName(value);
+  Future<void> setDeviceName(String value) =>
+      _controlPlane.setDeviceName(value);
 
   Future<void> setWebdavConfig(WebDavConfig config) =>
-      _engine.setWebdavConfig(config);
+      _controlPlane.setWebdavConfig(config);
 
-  Future<void> setWebdavPassword(String password) async {
-    await _engine.state.writeWebdavPassword(password);
-    notifyListeners();
-  }
+  Future<void> setWebdavPassword(String password) =>
+      _controlPlane.writeWebdavPassword(password);
 
-  Future<String?> readWebdavPassword() => _engine.state.readWebdavPassword();
+  Future<String?> readWebdavPassword() => _controlPlane.readWebdavPassword();
 
   /// 输入已有口令加入同步（归一化后保存；无效输入抛 [ArgumentError]）。
   Future<void> joinWithPassphrase(String raw) async {
@@ -334,18 +332,11 @@ class SyncProvider extends ChangeNotifier {
     if (normalized.length < 16) {
       throw ArgumentError('口令过短');
     }
-    await _engine.setPassphrase(normalized);
-    _passphrase = normalized;
-    notifyListeners();
+    await _controlPlane.setPassphrase(normalized);
   }
 
   /// 重置口令：所有设备需重新输入新口令。
-  Future<String> resetPassphrase() async {
-    final generated = await _engine.resetPassphrase();
-    _passphrase = generated;
-    notifyListeners();
-    return generated;
-  }
+  Future<String> resetPassphrase() => _controlPlane.resetPassphrase();
 
   /// 跑一轮同步。
   ///
@@ -371,9 +362,28 @@ class SyncProvider extends ChangeNotifier {
       await scheduler.syncStartup();
       return;
     }
-    if (_engine.state.enabled) {
+    if (_controlPlane.enabled) {
       await _engine.syncNow(trigger: SyncTrigger.startup);
     }
+  }
+
+  /// 导出完整备份 JSON（数据与存储页使用；凭证类默认排除）。
+  Future<String> exportBackupJson({bool includeCredentials = false}) =>
+      _backup.exportBackupJson(includeCredentials: includeCredentials);
+
+  /// 导入完整备份（与本地数据逐键 LWW 合并）。
+  ///
+  /// 备份模块不持有 listener：导入落地后由 provider 统一通知 UI。
+  Future<SyncApplyOutcome> importBackupJson(
+    String json, {
+    bool includeCredentials = false,
+  }) async {
+    final outcome = await _backup.importBackupJson(
+      json,
+      includeCredentials: includeCredentials,
+    );
+    notifyListeners();
+    return outcome;
   }
 
   /// 数据变更通知（资料库 / 统计 / 音源 / 设置与凭证 / 会话）。
@@ -404,8 +414,8 @@ class SyncProvider extends ChangeNotifier {
 
   /// 近 24 小时活动汇总（独立于展示日志的 20 条上限）。
   SyncActivitySummary get activity24h => SyncActivitySummary.fromEntries(
-        _engine.state.activity,
-        nowMs: _engine.state.nowMs(),
+        _controlPlane.activity,
+        nowMs: _controlPlane.nowMs(),
       );
 
   /// 当前是否在移动数据上（观测面展示用）。
@@ -415,17 +425,18 @@ class SyncProvider extends ChangeNotifier {
   bool get powerSaveActive => _scheduler?.powerSaveActive ?? false;
 
   /// 蜂窝网络下的自动同步策略。
-  SyncCellularPolicy get cellularPolicy => _engine.state.cellularPolicy;
+  SyncCellularPolicy get cellularPolicy => _controlPlane.cellularPolicy;
 
-  Future<void> setCellularPolicy(SyncCellularPolicy value) async {
-    await _engine.state.setCellularPolicy(value);
-    notifyListeners();
-  }
+  Future<void> setCellularPolicy(SyncCellularPolicy value) =>
+      _controlPlane.setCellularPolicy(value);
 
   @override
   void dispose() {
-    _scheduler?.dispose();
+    // 先摘掉监听再释放被监听对象：调度器 / 引擎在销毁路径里仍可能通知，
+    // 已 dispose 的 provider 不应再把通知转发给 UI。
     _engine.removeListener(notifyListeners);
+    _controlPlane.removeListener(notifyListeners);
+    _scheduler?.dispose();
     // worker isolate 随 provider 释放（进程退出前不留常驻 isolate）。
     unawaited(_codec?.dispose() ?? Future<void>.value());
     super.dispose();

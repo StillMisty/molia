@@ -38,23 +38,42 @@ CatalogStack buildCatalogStack() {
   // 设置注册表（登记键的唯一家）：读 / 写 / 同步往返 / 应用远端后的 reload
   // 钩子都走它；键的声明见 data/settings/settings_keys.dart。
   final settingsRegistry = SettingsRegistry(keys: kAllSettingsKeys);
-  // 全静态服务（语言 / 品牌名 / 快捷键）：attach 注入注册表，reload 由组合根代绑。
-  LanguageService.attachSettings(settingsRegistry);
-  AppBrandingService.attachSettings(settingsRegistry);
+  // 全静态服务（语言 / 品牌名 / 快捷键）：attach 注入按键作用域，模块面
+  // 拿不到整表；reload 由组合根在完整注册表上代绑。
+  LanguageService.attachSettings(
+    settingsRegistry.scope([kSelectedLanguage]),
+  );
+  AppBrandingService.attachSettings(
+    settingsRegistry.scope([kAppDisplayTitle]),
+  );
   // 快捷键：attach 顺带触发一次异步载入；四个键任一被远端同步改写都整表重读
   // （reload 幂等，重复绑定同一钩子只执行一次）。
-  ShortcutSettings.attachSettings(settingsRegistry);
+  final shortcutSettingsScope = settingsRegistry.scope([
+    kShortcutsEnabled,
+    kGlobalShortcutsEnabled,
+    kShortcutBindings,
+    kGlobalShortcutBindings,
+  ]);
+  ShortcutSettings.attachSettings(shortcutSettingsScope);
   settingsRegistry.bindReload(
       kSelectedLanguage, LanguageService.reloadFromPreferences);
   settingsRegistry.bindReload(kAppDisplayTitle, AppBrandingService.load);
   settingsRegistry.bindReload(kShortcutsEnabled, ShortcutSettings.reload);
-  settingsRegistry.bindReload(
-      kGlobalShortcutsEnabled, ShortcutSettings.reload);
+  settingsRegistry.bindReload(kGlobalShortcutsEnabled, ShortcutSettings.reload);
   settingsRegistry.bindReload(kShortcutBindings, ShortcutSettings.reload);
-  settingsRegistry.bindReload(
-      kGlobalShortcutBindings, ShortcutSettings.reload);
+  settingsRegistry.bindReload(kGlobalShortcutBindings, ShortcutSettings.reload);
 
-  final sourceManager = SourceManager(settings: settingsRegistry);
+  // 音源管理器的按键作用域：any-listen 连接 3 键 + 渠道偏好 3 键
+  // （SourcePreferences 在管理器的通知下自绑重载）。
+  final sourceSettings = settingsRegistry.scope([
+    kAnyListenServerUrl,
+    kAnyListenToken,
+    kAnyListenEnabled,
+    kLxDefaultQuality,
+    kLxSourceOrder,
+    kLxChannelDisabled,
+  ]);
+  final sourceManager = SourceManager(settings: sourceSettings);
 
   // 适配层：SourceManager → SourceRegistry → CatalogService。
   // SearchProvider 只依赖后两者（搜索缓存 single-flight + LRU + TTL 5min）。

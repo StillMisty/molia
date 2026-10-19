@@ -17,6 +17,8 @@ import '../../domain/ports/playback_facade.dart';
 import '../../domain/ports/ui_messenger.dart';
 import '../../data/mapping/track_mapper.dart';
 import '../../data/playback/default_playback_facade.dart';
+import '../../data/settings/settings_keys.dart';
+import '../../data/settings/settings_registry.dart';
 import '../../playback/local_audio_handler.dart';
 import '../../playback/local_playback_service.dart';
 import '../../playback/playback_session_coordinator.dart';
@@ -43,6 +45,9 @@ typedef MediaSessionFactory = Future<LocalAudioHandler?> Function(
 /// [localPlaybackService] 仅在构建真实 just_audio 链路时非空——注入
 /// `backend` seam（测试）时没有真实服务，媒体会话也随之跳过。
 typedef PlaybackStack = ({
+  /// 组合根的注册表（与 catalog / library 同一实例；组合根测试据此核对
+  /// 「唯一注册表」）。
+  SettingsRegistry settings,
   LocalPlaybackService? localPlaybackService,
   PlaybackFacade facade,
   PlaybackObserver observer,
@@ -112,11 +117,14 @@ Future<PlaybackStack> buildPlaybackStack({
   final sessionCoordinator = PlaybackSessionCoordinator(
     facade: playbackFacade,
     store: sessionStore,
-    settings: catalog.settings,
+    settings: catalog.settings.scope([kRestoreSessionEnabled]),
     onRestoredTrack: playbackObserver.showRestoredTrack,
   );
   final playbackProvider = PlaybackProvider(
-    settings: catalog.settings,
+    settings: catalog.settings.scope([
+      kDefaultPlayMode,
+      kRestoreSessionEnabled,
+    ]),
     facade: playbackFacade,
     messenger: messenger,
     sourceManager: sourceManager,
@@ -154,6 +162,7 @@ Future<PlaybackStack> buildPlaybackStack({
   }
 
   return (
+    settings: catalog.settings,
     localPlaybackService: localPlaybackService,
     facade: playbackFacade,
     observer: playbackObserver,

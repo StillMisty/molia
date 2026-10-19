@@ -24,6 +24,7 @@ const kThemeMode = SettingsKey<String>(
   'system',
   category: SyncCategory.settings,
 );
+
 /// 基础配色：默认壁纸（桌面优先壁纸图取色，其次系统强调色；都不可用时回退自定义种子色）。
 const kColorBase = SettingsKey<String>(
   'color_base',
@@ -67,30 +68,35 @@ const kShellNavHidden = SettingsKey<List<String>>(
   <String>[],
   category: SyncCategory.settings,
 );
+
 /// 启动首页（跟人走，随设置同步）。值 = ShellDestination.name；非法值回退默认。
 const kShellHomeDestination = SettingsKey<String>(
   'shell_home_destination',
   'nowPlaying',
   category: SyncCategory.settings,
 );
+
 /// 软件内快捷键总开关（窗口聚焦时生效；默认开）。
 const kShortcutsEnabled = SettingsKey<bool>(
   'shortcuts_enabled',
   true,
   category: SyncCategory.settings,
 );
+
 /// 全局快捷键总开关（系统级热键，默认关：避免与系统/其它应用抢热键）。
 const kGlobalShortcutsEnabled = SettingsKey<bool>(
   'global_shortcuts_enabled',
   false,
   category: SyncCategory.settings,
 );
+
 /// 软件内快捷键的自定义绑定（JSON：动作 → 组合；空串 = 全默认）。
 const kShortcutBindings = SettingsKey<String>(
   'shortcut_bindings',
   '',
   category: SyncCategory.settings,
 );
+
 /// 全局快捷键的自定义绑定（同上）。
 const kGlobalShortcutBindings = SettingsKey<String>(
   'global_shortcut_bindings',
@@ -102,6 +108,7 @@ const kDefaultPlayMode = SettingsKey<String>(
   'sequential',
   category: SyncCategory.settings,
 );
+
 /// 启动时恢复上次播放（曲目 / 队列 / 进度）；关闭后冷启动不进入恢复态。
 const kRestoreSessionEnabled = SettingsKey<bool>(
   'restore_session_enabled',
@@ -207,6 +214,10 @@ const List<SettingsKey<Object?>> kAllSettingsKeys = [
   kShellNavOrder,
   kShellNavHidden,
   kShellHomeDestination,
+  kShortcutsEnabled,
+  kGlobalShortcutsEnabled,
+  kShortcutBindings,
+  kGlobalShortcutBindings,
   kDefaultPlayMode,
   kRestoreSessionEnabled,
   kPlayStatisticsEnabled,

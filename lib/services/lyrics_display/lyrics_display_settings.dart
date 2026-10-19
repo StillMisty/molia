@@ -3,8 +3,8 @@ import 'dart:convert';
 
 import 'package:flutter/foundation.dart';
 
+import '../../data/settings/settings_access.dart';
 import '../../data/settings/settings_keys.dart';
-import '../../data/settings/settings_registry.dart';
 import '../../theme/scheme_builder.dart';
 
 /// 未同步歌词（无时间轴）的展示策略。
@@ -77,16 +77,16 @@ abstract final class DesktopControlKeys {
 ///   （Android 侧按 sp 解释，未来桌面窗口按逻辑 px 解释）；
 /// - 悬浮窗位置由原生侧自行持久化（系统级窗口状态），不进本模型。
 class LyricsDisplaySettings extends ChangeNotifier {
-  LyricsDisplaySettings({SettingsRegistry? settings})
-      : _settings = settings ?? SettingsRegistry(keys: kAllSettingsKeys) {
+  LyricsDisplaySettings({required SettingsAccess settings})
+      : _settings = settings {
     _settings.bindReload(kLyricsDisplaySettings, init);
   }
-
 
   static const int defaultOffsetMs = 0;
   static const bool defaultTranslationEnabled = true;
   static const bool defaultRomaEnabled = false;
-  static const UnsyncedBehavior defaultUnsyncedBehavior = UnsyncedBehavior.title;
+  static const UnsyncedBehavior defaultUnsyncedBehavior =
+      UnsyncedBehavior.title;
 
   // 歌词页（应用内）扩展行：与输出侧开关相互独立。
   static const bool defaultPageTranslationEnabled = true;
@@ -118,7 +118,8 @@ class LyricsDisplaySettings extends ChangeNotifier {
   /// 历史配置兼容：旧版「仅显示当前行」开关（`desktop.singleLine`）读到 true
   /// 时一次性映射为 `maxLines = 1`，之后落盘不再写该键。
   static const int defaultDesktopMaxLines = 1;
-  static const DesktopTextAlignX defaultDesktopTextAlignX = DesktopTextAlignX.center;
+  static const DesktopTextAlignX defaultDesktopTextAlignX =
+      DesktopTextAlignX.center;
 
   /// 默认跟随演唱（与历史行为一致）；匀速作为可选项。
   static const DesktopScrollMode defaultDesktopScrollMode =
@@ -131,25 +132,33 @@ class LyricsDisplaySettings extends ChangeNotifier {
   /// 与 [defaultDesktopPauseBehavior] 不同——后者只决定窗口里显示什么内容；
   /// 本开关打开时窗口整体移除（含触摸区），回退策略不生效。
   static const bool defaultDesktopHideOnPause = true;
-  static const LyricsPauseBehavior defaultDesktopPauseBehavior = LyricsPauseBehavior.keep;
-  static const DesktopNoLyricsBehavior defaultDesktopNoLyricsBehavior = DesktopNoLyricsBehavior.title;
+  static const LyricsPauseBehavior defaultDesktopPauseBehavior =
+      LyricsPauseBehavior.keep;
+  static const DesktopNoLyricsBehavior defaultDesktopNoLyricsBehavior =
+      DesktopNoLyricsBehavior.title;
   static const bool defaultDesktopShowToggleAnimation = true;
 
   static const bool defaultNotificationEnabled = false;
   // 第二行写 artist：平台 SystemUI 媒体控件只读 METADATA_KEY_ARTIST
   // （displaySubtitle 是文档定义的「第二行」字段，但 AOSP 实现不消费）。
-  static const LyricsMetadataTarget defaultNotificationTarget = LyricsMetadataTarget.artist;
-  static const LyricsMetadataFormat defaultNotificationFormat = LyricsMetadataFormat.lyric;
+  static const LyricsMetadataTarget defaultNotificationTarget =
+      LyricsMetadataTarget.artist;
+  static const LyricsMetadataFormat defaultNotificationFormat =
+      LyricsMetadataFormat.lyric;
   static const bool defaultNotificationIncludeTranslation = true;
-  static const LyricsPauseBehavior defaultNotificationPauseBehavior = LyricsPauseBehavior.title;
+  static const LyricsPauseBehavior defaultNotificationPauseBehavior =
+      LyricsPauseBehavior.title;
 
   static const bool defaultBluetoothEnabled = false;
   static const bool defaultBluetoothOnlyWhenA2dp = true;
-  static const LyricsMetadataTarget defaultBluetoothTarget = LyricsMetadataTarget.artist;
-  static const LyricsMetadataFormat defaultBluetoothFormat = LyricsMetadataFormat.lyric;
+  static const LyricsMetadataTarget defaultBluetoothTarget =
+      LyricsMetadataTarget.artist;
+  static const LyricsMetadataFormat defaultBluetoothFormat =
+      LyricsMetadataFormat.lyric;
   static const bool defaultBluetoothIncludeTranslation = false;
   static const int defaultBluetoothUpdateIntervalMs = 0;
-  static const LyricsPauseBehavior defaultBluetoothPauseBehavior = LyricsPauseBehavior.title;
+  static const LyricsPauseBehavior defaultBluetoothPauseBehavior =
+      LyricsPauseBehavior.title;
 
   static const List<int> offsetRange = [-500, 500];
   static const List<double> fontSizeRange = [12, 48];
@@ -158,7 +167,7 @@ class LyricsDisplaySettings extends ChangeNotifier {
   static const List<int> maxLinesRange = [1, 5];
   static const List<int> updateIntervalOptions = [0, 1000, 2000];
 
-  final SettingsRegistry _settings;
+  final SettingsAccess _settings;
 
   bool _loaded = false;
   bool get loaded => _loaded;
@@ -180,8 +189,7 @@ class LyricsDisplaySettings extends ChangeNotifier {
   LyricColorSource _desktopPlayedColorSource = defaultDesktopPlayedColorSource;
   LyricColorSource _desktopUnplayedColorSource =
       defaultDesktopUnplayedColorSource;
-  LyricColorSource _desktopShadowColorSource =
-      defaultDesktopShadowColorSource;
+  LyricColorSource _desktopShadowColorSource = defaultDesktopShadowColorSource;
   SurfaceColorSource _desktopSchemeSource = defaultDesktopSchemeSource;
   double _desktopWidthPercent = defaultDesktopWidthPercent;
   int _desktopMaxLines = defaultDesktopMaxLines;
@@ -191,7 +199,8 @@ class LyricsDisplaySettings extends ChangeNotifier {
   bool _desktopFreezeOnScreenOff = defaultDesktopFreezeOnScreenOff;
   bool _desktopHideOnPause = defaultDesktopHideOnPause;
   LyricsPauseBehavior _desktopPauseBehavior = defaultDesktopPauseBehavior;
-  DesktopNoLyricsBehavior _desktopNoLyricsBehavior = defaultDesktopNoLyricsBehavior;
+  DesktopNoLyricsBehavior _desktopNoLyricsBehavior =
+      defaultDesktopNoLyricsBehavior;
   bool _desktopShowToggleAnimation = defaultDesktopShowToggleAnimation;
   Map<String, bool> _desktopControls = {
     for (final key in DesktopControlKeys.all) key: true,
@@ -201,7 +210,8 @@ class LyricsDisplaySettings extends ChangeNotifier {
   LyricsMetadataTarget _notificationTarget = defaultNotificationTarget;
   LyricsMetadataFormat _notificationFormat = defaultNotificationFormat;
   bool _notificationIncludeTranslation = defaultNotificationIncludeTranslation;
-  LyricsPauseBehavior _notificationPauseBehavior = defaultNotificationPauseBehavior;
+  LyricsPauseBehavior _notificationPauseBehavior =
+      defaultNotificationPauseBehavior;
 
   bool _bluetoothEnabled = defaultBluetoothEnabled;
   bool _bluetoothOnlyWhenA2dp = defaultBluetoothOnlyWhenA2dp;
@@ -239,7 +249,8 @@ class LyricsDisplaySettings extends ChangeNotifier {
   bool get desktopFreezeOnScreenOff => _desktopFreezeOnScreenOff;
   bool get desktopHideOnPause => _desktopHideOnPause;
   LyricsPauseBehavior get desktopPauseBehavior => _desktopPauseBehavior;
-  DesktopNoLyricsBehavior get desktopNoLyricsBehavior => _desktopNoLyricsBehavior;
+  DesktopNoLyricsBehavior get desktopNoLyricsBehavior =>
+      _desktopNoLyricsBehavior;
   bool get desktopShowToggleAnimation => _desktopShowToggleAnimation;
   Map<String, bool> get desktopControls => Map.unmodifiable(_desktopControls);
 
@@ -247,7 +258,8 @@ class LyricsDisplaySettings extends ChangeNotifier {
   LyricsMetadataTarget get notificationTarget => _notificationTarget;
   LyricsMetadataFormat get notificationFormat => _notificationFormat;
   bool get notificationIncludeTranslation => _notificationIncludeTranslation;
-  LyricsPauseBehavior get notificationPauseBehavior => _notificationPauseBehavior;
+  LyricsPauseBehavior get notificationPauseBehavior =>
+      _notificationPauseBehavior;
 
   bool get bluetoothEnabled => _bluetoothEnabled;
   bool get bluetoothOnlyWhenA2dp => _bluetoothOnlyWhenA2dp;
@@ -568,8 +580,7 @@ class LyricsDisplaySettings extends ChangeNotifier {
         json['unsyncedBehavior'], UnsyncedBehavior.values, _unsyncedBehavior);
     _pageTranslationEnabled =
         _boolOf(json['page.translationEnabled'], _pageTranslationEnabled);
-    _pageRomaEnabled =
-        _boolOf(json['page.romaEnabled'], _pageRomaEnabled);
+    _pageRomaEnabled = _boolOf(json['page.romaEnabled'], _pageRomaEnabled);
 
     _desktopEnabled = _boolOf(json['desktop.enabled'], _desktopEnabled);
     _desktopFontSize = _doubleOf(json['desktop.fontSize'], _desktopFontSize)
@@ -584,10 +595,8 @@ class LyricsDisplaySettings extends ChangeNotifier {
         _intOf(json['desktop.shadowColor'], _desktopShadowColor);
     _desktopPlayedColorSource = _enumOf(json['desktop.playedColorSource'],
         LyricColorSource.values, _desktopPlayedColorSource);
-    _desktopUnplayedColorSource = _enumOf(
-        json['desktop.unplayedColorSource'],
-        LyricColorSource.values,
-        _desktopUnplayedColorSource);
+    _desktopUnplayedColorSource = _enumOf(json['desktop.unplayedColorSource'],
+        LyricColorSource.values, _desktopUnplayedColorSource);
     _desktopShadowColorSource = _enumOf(json['desktop.shadowColorSource'],
         LyricColorSource.values, _desktopShadowColorSource);
     _desktopSchemeSource = _enumOf(json['desktop.schemeSource'],
@@ -601,8 +610,8 @@ class LyricsDisplaySettings extends ChangeNotifier {
         ? 1
         : _intOf(json['desktop.maxLines'], _desktopMaxLines)
             .clamp(maxLinesRange.first, maxLinesRange.last);
-    _desktopTextAlignX = _enumOf(
-        json['desktop.textAlignX'], DesktopTextAlignX.values, _desktopTextAlignX);
+    _desktopTextAlignX = _enumOf(json['desktop.textAlignX'],
+        DesktopTextAlignX.values, _desktopTextAlignX);
     _desktopScrollMode = _enumOf(json['desktop.scrollMode'],
         DesktopScrollMode.values, _desktopScrollMode);
     _desktopLock = _boolOf(json['desktop.lock'], _desktopLock);
@@ -636,18 +645,17 @@ class LyricsDisplaySettings extends ChangeNotifier {
     _notificationPauseBehavior = _enumOf(json['notification.pauseBehavior'],
         LyricsPauseBehavior.values, _notificationPauseBehavior);
 
-    _bluetoothEnabled =
-        _boolOf(json['bluetooth.enabled'], _bluetoothEnabled);
-    _bluetoothOnlyWhenA2dp = _boolOf(
-        json['bluetooth.onlyWhenA2dp'], _bluetoothOnlyWhenA2dp);
+    _bluetoothEnabled = _boolOf(json['bluetooth.enabled'], _bluetoothEnabled);
+    _bluetoothOnlyWhenA2dp =
+        _boolOf(json['bluetooth.onlyWhenA2dp'], _bluetoothOnlyWhenA2dp);
     _bluetoothTarget = _enumOf(json['bluetooth.target'],
         LyricsMetadataTarget.values, _bluetoothTarget);
     _bluetoothFormat = _enumOf(json['bluetooth.format'],
         LyricsMetadataFormat.values, _bluetoothFormat);
     _bluetoothIncludeTranslation = _boolOf(
         json['bluetooth.includeTranslation'], _bluetoothIncludeTranslation);
-    final interval = _intOf(
-        json['bluetooth.updateIntervalMs'], _bluetoothUpdateIntervalMs);
+    final interval =
+        _intOf(json['bluetooth.updateIntervalMs'], _bluetoothUpdateIntervalMs);
     if (updateIntervalOptions.contains(interval)) {
       _bluetoothUpdateIntervalMs = interval;
     }

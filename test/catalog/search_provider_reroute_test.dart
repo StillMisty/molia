@@ -22,8 +22,10 @@ import 'package:molia/providers/search_provider.dart';
 import 'package:molia/sources/source_manager.dart' show SourceKind;
 import 'package:molia/sources/source_track.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import '../support/settings_test_support.dart';
 
-class _TestListenable<T> extends ValueNotifier<T> implements StateListenable<T> {
+class _TestListenable<T> extends ValueNotifier<T>
+    implements StateListenable<T> {
   _TestListenable(super.value);
 }
 
@@ -303,6 +305,7 @@ void main() {
     SharedPreferences.setMockInitialValues({});
     backend = _FakeBackend();
     playbackProvider = PlaybackProvider(
+      settings: testSettingsRegistry(),
       facade: DefaultPlaybackFacade(backend: backend),
       messenger: _FakeMessenger(),
     );
@@ -448,7 +451,8 @@ void main() {
     await _waitUntil(() => !provider.isSearching);
 
     expect(provider.failure, isNotNull);
-    expect(provider.failure!.message, contains('boom'), reason: '归一化后的 message 保留原始说明');
+    expect(provider.failure!.message, contains('boom'),
+        reason: '归一化后的 message 保留原始说明');
     expect(provider.failure!.kind, FailureKind.unknown,
         reason: 'StateError 归一化为 unknown');
     expect(provider.failure!.retryable, isFalse);
@@ -542,7 +546,8 @@ void main() {
     expect(provider.searchResults, isNotEmpty);
 
     provider.selectSearchKind(SearchKind.artist);
-    await _waitUntil(() => !provider.isSearching && provider.artistResults.isNotEmpty);
+    await _waitUntil(
+        () => !provider.isSearching && provider.artistResults.isNotEmpty);
     expect(source.artistSearchCalls, 1, reason: '切到歌手类型才发起歌手搜索');
     expect(provider.artistResults.single.name, '歌手 周杰伦');
     expect(provider.totalResults, 42, reason: '分页元数据取当前类型');
@@ -627,8 +632,7 @@ void main() {
     addTearDown(registry.dispose);
     final provider = buildProvider(registry);
 
-    expect(provider.supportedSearchKinds,
-        [SearchKind.song, SearchKind.lyric]);
+    expect(provider.supportedSearchKinds, [SearchKind.song, SearchKind.lyric]);
 
     provider.submitSearch('雨下整夜');
     await _waitUntil(() => !provider.isSearching);

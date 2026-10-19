@@ -16,6 +16,7 @@ import 'package:molia/data/downloads/downloads_publisher.dart';
 import 'package:molia/services/window/app_tray.dart';
 import 'package:molia/services/window/window_chrome.dart';
 import 'package:molia/sources/source_manager.dart';
+import '../test/support/settings_test_support.dart';
 
 /// 端到端集成测试：真实 App 运行时 + 真实 LX JS 引擎 + 本地 mock HTTP 服务。
 ///
@@ -85,7 +86,7 @@ void main() {
       await lxScriptsTmp.delete();
     }
 
-    final manager = SourceManager();
+    final manager = SourceManager(settings: testSettingsRegistry());
     await engineCall(manager.init(), 'SourceManager.init');
     return manager;
   }

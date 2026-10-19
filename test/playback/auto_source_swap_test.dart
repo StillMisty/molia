@@ -8,6 +8,7 @@ import 'package:molia/services/source_swap/source_swap_settings.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../support/fakes.dart';
+import '../support/settings_test_support.dart';
 
 /// 播放失败自动换源：同源重试 → 严格找回 → 队列替换；开关/守卫/级联有界。
 void main() {
@@ -41,7 +42,7 @@ void main() {
   setUp(() {
     backend = FakePlaybackBackend();
     facade = DefaultPlaybackFacade(backend: backend);
-    settings = SourceSwapSettings();
+    settings = SourceSwapSettings(settings: testSettingsRegistry());
   });
 
   (PlaybackProvider, List<({String uri, Set<String> exclude})>) buildProvider({
@@ -49,6 +50,7 @@ void main() {
   }) {
     final calls = <({String uri, Set<String> exclude})>[];
     final provider = PlaybackProvider(
+      settings: testSettingsRegistry(),
       facade: facade,
       messenger: FakeMessenger(),
       autoSwapSettings: settings,

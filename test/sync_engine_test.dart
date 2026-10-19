@@ -3,6 +3,7 @@ import 'package:molia/data/settings/settings_keys.dart';
 import 'package:molia/data/settings/settings_registry.dart';
 import 'package:molia/data/sync/adapters/prefs_sync_adapter.dart';
 import 'package:molia/data/sync/sync_adapter.dart';
+import 'package:molia/data/sync/sync_control_plane.dart';
 import 'package:molia/data/sync/sync_engine.dart';
 import 'package:molia/data/sync/sync_state_store.dart';
 import 'package:molia/domain/models/device_sync.dart';
@@ -24,6 +25,7 @@ void main() {
   late SyncStateStore state;
   late FakeSyncTransport transport;
   late SyncEngine engine;
+  late SyncControlPlane control;
 
   setUp(() async {
     SharedPreferences.setMockInitialValues({});
@@ -38,6 +40,7 @@ void main() {
     await state.writePassphrase('ABCD-EFGH-JKLM-NPQR-STUV-WXYZ-2345-6789');
     await state.setTransportEnabled('lan', true);
     transport = FakeSyncTransport();
+    control = SyncControlPlane(state: state, transports: {'lan': transport});
     engine = SyncEngine(
       state: state,
       stamps: state.stampIssuer,
@@ -58,7 +61,10 @@ void main() {
     await engine.init();
   });
 
-  tearDown(() => engine.dispose());
+  tearDown(() {
+    control.dispose();
+    engine.dispose();
+  });
 
   SyncEnvelope remoteTheme(
     String value, {
@@ -249,7 +255,7 @@ void main() {
   });
 
   test('类别关闭：既不应用远端也不推送该类记录', () async {
-    await state.setCategory(SyncCategory.settings, false);
+    await control.setCategory(SyncCategory.settings, false);
     transport.available.add(remoteTheme('dark'));
     final report = await engine.syncNow();
 
@@ -320,16 +326,19 @@ void main() {
       journal: FakeJournalStore(head: 0),
       clock: () => DateTime.fromMillisecondsSinceEpoch(7000),
     );
+    final freshControl =
+        SyncControlPlane(state: state, transports: {'lan': transport});
+    addTearDown(freshControl.dispose);
     addTearDown(fresh.dispose);
 
     await fresh.init();
     expect(transport.isRunning, isFalse, reason: '装配不触发权限门 / 套接字绑定');
 
-    await fresh.startTransports();
+    await freshControl.startTransports();
     expect(transport.isRunning, isTrue);
     // 幂等：重复调用不重启。
     final started = transport.startCount;
-    await fresh.startTransports();
+    await freshControl.startTransports();
     expect(transport.startCount, started);
   });
 
@@ -402,8 +411,8 @@ void main() {
 
   test('传输全关：同步完全停（不启动传输、不跑轮次）', () async {
     // 没有独立总开关：关掉唯一一路传输 = 同步已停。
-    await engine.setTransportEnabled('lan', true);
-    await engine.setTransportEnabled('lan', false);
+    await control.setTransportEnabled('lan', true);
+    await control.setTransportEnabled('lan', false);
     expect(transport.isRunning, isFalse);
 
     transport.available.add(remoteTheme('dark'));
@@ -411,7 +420,7 @@ void main() {
     expect(await engine.syncNow(), isNull);
     expect(prefs.getString('theme_mode'), isNull);
 
-    await engine.setTransportEnabled('lan', true);
+    await control.setTransportEnabled('lan', true);
     expect(transport.isRunning, isTrue);
     await engine.syncNow();
     expect(prefs.getString('theme_mode'), 'dark');
@@ -503,8 +512,8 @@ void main() {
 
   test('首次连通：真正交换过数据才通知一次（探测应答不算、重启不重发）', () async {
     final noticed = <String>[];
-    final subscription =
-        engine.peerConnectedNotices.listen((peer) => noticed.add(peer.deviceId));
+    final subscription = engine.peerConnectedNotices
+        .listen((peer) => noticed.add(peer.deviceId));
     addTearDown(subscription.cancel);
 
     // 只有探测应答（接触但没有数据流转）：不算连通。
@@ -537,8 +546,8 @@ void main() {
 
   test('首次连通：对端主动推送（入站）同样算连通', () async {
     final noticed = <String>[];
-    final subscription =
-        engine.peerConnectedNotices.listen((peer) => noticed.add(peer.deviceId));
+    final subscription = engine.peerConnectedNotices
+        .listen((peer) => noticed.add(peer.deviceId));
     addTearDown(subscription.cancel);
 
     await engine.onIncomingEnvelope(remoteTheme('light'));
@@ -562,7 +571,8 @@ class _FlakyAdapter implements SyncAdapter {
   bool get ready => true;
 
   @override
-  Future<Map<SyncCategory, List<SyncRecord>>> collect({bool fresh = false}) async =>
+  Future<Map<SyncCategory, List<SyncRecord>>> collect(
+          {bool fresh = false}) async =>
       const {};
 
   @override
@@ -574,7 +584,8 @@ class _FlakyAdapter implements SyncAdapter {
       throw StateError('应用失败（测试注入）');
     }
     var applied = 0;
-    for (final record in records[SyncCategory.settings] ?? const <SyncRecord>[]) {
+    for (final record
+        in records[SyncCategory.settings] ?? const <SyncRecord>[]) {
       appliedKeys.add(record.key);
       applied++;
     }

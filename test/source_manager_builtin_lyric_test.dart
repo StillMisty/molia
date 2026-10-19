@@ -10,6 +10,7 @@ import 'package:molia/sources/source_manager.dart';
 import 'package:molia/sources/source_track.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'support/mock_dio.dart';
+import 'support/settings_test_support.dart';
 
 /// SourceManager 内置平台原生取词/取图路由（脚本不可用时的 Dart 实现）。
 void main() {
@@ -49,7 +50,7 @@ void main() {
       );
 
   test('能力位：内置五平台歌词/封面为真（无需脚本声明）', () {
-    final manager = SourceManager();
+    final manager = SourceManager(settings: testSettingsRegistry());
     for (final key in BuiltinPlatforms.keys) {
       final capabilities = manager.capabilitiesFor(key);
       expect(capabilities.lyrics, isTrue, reason: key);
@@ -68,7 +69,7 @@ void main() {
       }),
     );
 
-    final manager = SourceManager();
+    final manager = SourceManager(settings: testSettingsRegistry());
     final lyric = await manager.fetchLyric(kwTrack());
     expect(lyric, isNotNull);
     expect(lyric!.lyric, contains('你好'));
@@ -85,7 +86,7 @@ void main() {
       }),
     );
 
-    final manager = SourceManager();
+    final manager = SourceManager(settings: testSettingsRegistry());
     final pic = await manager.fetchPic(
       kwTrack(coverUrl: 'http://img.example/cover.jpg'),
     );
@@ -102,7 +103,7 @@ void main() {
       }),
     );
 
-    final manager = SourceManager();
+    final manager = SourceManager(settings: testSettingsRegistry());
     final pic = await manager.fetchPic(kwTrack());
     expect(pic, 'http://img.example/228908.jpg');
     manager.dispose();

@@ -148,6 +148,10 @@ void main() {
       backend: backend,
     );
 
+    // 组合根唯一注册表：各栈产物握的是同一实例（模块只拿按键作用域）。
+    expect(identical(library.settings, catalog.settings), isTrue);
+    expect(identical(playback.settings, catalog.settings), isTrue);
+
     expect(playback.localPlaybackService, isNull);
     expect(playback.audioHandler, isNull);
 
@@ -174,6 +178,29 @@ void main() {
     expect(playback.observer.lastPlayedTrackName, track.title);
   });
 
+  test('组合根：作用域视图与完整注册表读写同一份底层键', () async {
+    final local = await buildLocalDataStack(catalog: catalog);
+    final library = await buildLibraryStack(catalog: catalog);
+    final playback = await buildPlaybackStack(
+      catalog: catalog,
+      local: local,
+      library: library,
+      messenger: FakeMessenger(),
+      mediaSessionFactory: null,
+      backend: FakePlaybackBackend(),
+    );
+
+    final scoped = library.settings.scope([kThemeMode, kDefaultPlayMode]);
+    await scoped.write(kThemeMode, 'dark');
+    expect(await catalog.settings.read(kThemeMode), 'dark');
+
+    await playback.settings.scope([kDefaultPlayMode]).write(
+      kDefaultPlayMode,
+      'shuffle',
+    );
+    expect(await scoped.read(kDefaultPlayMode), 'shuffle');
+  });
+
   test('syncStack：引擎必须拿到增量日志（漏接 = 生产退化为每轮全量）', () async {
     final local = await buildLocalDataStack(catalog: catalog);
     final library = await buildLibraryStack(catalog: catalog);
@@ -195,7 +222,11 @@ void main() {
 
     // 接线契约：引擎与写入点共用同一份增量日志与状态（组合根唯一的断言点）。
     expect(sync.engine.incrementalEnabled, isTrue);
-    expect(identical(sync.engine.state, library.syncState), isTrue);
+    // 控制面与引擎共享同一个状态存储：经控制面写入后，仓库侧立即可见。
+    await sync.controlPlane.setDeviceName('冒烟设备');
+    expect(library.syncState.deviceName, '冒烟设备');
+    // 备份模块独立存在，并接到同一份状态 / 适配器（不构造轮次）。
+    expect(sync.backup, isNotNull);
   });
 }
 

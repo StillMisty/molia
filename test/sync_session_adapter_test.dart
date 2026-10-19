@@ -12,6 +12,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import 'support/fakes.dart';
 import 'support/sync_test_support.dart';
+import 'support/settings_test_support.dart';
 
 /// 上次播放会话适配器：版本戳登记、远端应用/删除、本地清空检出。
 void main() {
@@ -61,6 +62,7 @@ void main() {
     // 生产接线：同步适配器只拿到会话端口（协调者），远端写入与本地落盘
     // 共用同一个写队列；这里的 store 只是同一队列的种子 / 断言入口。
     coordinator = PlaybackSessionCoordinator(
+      settings: testSettingsRegistry(),
       facade: DefaultPlaybackFacade(backend: FakePlaybackBackend()),
       store: store,
     );

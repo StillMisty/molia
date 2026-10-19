@@ -166,10 +166,9 @@ class _SyncSettingsPageState extends State<SyncSettingsPage> {
             subtitle: provider.lanPermissionPermanentlyDenied
                 ? l10n.syncLanPermissionPermanentSubtitle
                 : l10n.syncLanPermissionSubtitle,
-            onTap: () => unawaited(
-                provider.lanPermissionPermanentlyDenied
-                    ? provider.openSystemSettings()
-                    : _requestLanPermission(context, provider, l10n)),
+            onTap: () => unawaited(provider.lanPermissionPermanentlyDenied
+                ? provider.openSystemSettings()
+                : _requestLanPermission(context, provider, l10n)),
           ),
         SettingsSwitchTile(
           switchKey: const Key('settingsSyncWebdavSwitch'),
@@ -318,7 +317,8 @@ class _SyncSettingsPageState extends State<SyncSettingsPage> {
             subtitle: l10n.syncPeersEmptySubtitle,
           ),
         for (final peer in provider.peers)
-          _peerRow(context, provider, l10n, peer, manualByDevice[peer.deviceId]),
+          _peerRow(
+              context, provider, l10n, peer, manualByDevice[peer.deviceId]),
       ],
     );
   }
@@ -340,7 +340,7 @@ class _SyncSettingsPageState extends State<SyncSettingsPage> {
         l10n,
         peer,
         manual,
-        nowMs: provider.engine.state.nowMs(),
+        nowMs: provider.nowMs,
       ),
       onTap: () => unawaited(showSyncPeerDialog(
         context,
@@ -398,7 +398,7 @@ class _SyncSettingsPageState extends State<SyncSettingsPage> {
         : syncOutcomeText(l10n, report.outcome);
     return '$conclusion · ${syncRelativeTimeText(
       l10n,
-      nowMs: provider.engine.state.nowMs(),
+      nowMs: provider.nowMs,
       atMs: report.finishedAt,
     )}';
   }
@@ -416,7 +416,7 @@ class _SyncSettingsPageState extends State<SyncSettingsPage> {
     final latest = entries.first;
     return '${syncOutcomeText(l10n, latest.outcome)} · ${syncRelativeTimeText(
       l10n,
-      nowMs: provider.engine.state.nowMs(),
+      nowMs: provider.nowMs,
       atMs: latest.at,
     )}';
   }

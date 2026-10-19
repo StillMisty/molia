@@ -1,5 +1,5 @@
+import '../../data/settings/settings_access.dart';
 import '../../data/settings/settings_keys.dart';
-import '../../data/settings/settings_registry.dart';
 import '../../domain/models/any_listen.dart';
 
 /// 领域模型定义在 `lib/domain/models/any_listen.dart`，这里 export 以保持既有
@@ -12,10 +12,10 @@ export '../../domain/models/any_listen.dart' show AnyListenConfig;
 /// 「零影响」原则：读取失败（如测试环境无插件、存储损坏）静默返回默认配置，
 /// 写入失败返回 false，由调用方决定是否提示，绝不抛出未捕获异常。
 class AnyListenConfigStore {
-  AnyListenConfigStore({SettingsRegistry? settings})
-      : _settings = settings ?? SettingsRegistry(keys: kAllSettingsKeys);
+  AnyListenConfigStore({required SettingsAccess settings})
+      : _settings = settings;
 
-  final SettingsRegistry _settings;
+  final SettingsAccess _settings;
 
   Future<AnyListenConfig> load() async {
     try {
