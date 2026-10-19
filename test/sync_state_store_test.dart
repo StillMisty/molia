@@ -23,6 +23,111 @@ void main() {
     return store;
   }
 
+  test('设备身份独立持久化：状态 JSON 损坏、prefs 键丢失都能恢复', () async {
+    final prefs = await SharedPreferences.getInstance();
+    final secrets = MemorySyncSecretStore();
+    final store = SyncStateStore(
+      preferences: prefs,
+      secrets: secrets,
+      clock: () => 1000,
+    );
+    await store.init();
+    final id = store.deviceId;
+    expect(id, isNotEmpty);
+    expect(prefs.getString(SyncStateStore.deviceIdKey), id);
+    expect(secrets.values[SyncStateStore.deviceIdKey], id);
+
+    // 大状态 JSON 损坏：身份从小键恢复，不生成新设备。
+    await prefs.setString(SyncStateStore.stateKey, '{broken');
+    final recovered = SyncStateStore(
+      preferences: prefs,
+      secrets: secrets,
+      clock: () => 1000,
+    );
+    await recovered.init();
+    expect(recovered.deviceId, id);
+
+    // 状态 JSON 与小键都丢：安全存储备份仍能恢复同一身份。
+    await prefs.remove(SyncStateStore.stateKey);
+    await prefs.remove(SyncStateStore.deviceIdKey);
+    final fromSecret = SyncStateStore(
+      preferences: prefs,
+      secrets: secrets,
+      clock: () => 1000,
+    );
+    await fromSecret.init();
+    expect(fromSecret.deviceId, id);
+  });
+
+  test('旧状态迁移：身份从 sync_state_v1 回填到独立键与安全存储', () async {
+    final prefs = await SharedPreferences.getInstance();
+    final secrets = MemorySyncSecretStore();
+    await prefs.setString(
+      SyncStateStore.stateKey,
+      '{"v":2,"deviceId":"devA","enabled":true,"transports":["lan"]}',
+    );
+    final store = SyncStateStore(
+      preferences: prefs,
+      secrets: secrets,
+      clock: () => 1000,
+    );
+    await store.init();
+
+    expect(store.deviceId, 'devA');
+    expect(prefs.getString(SyncStateStore.deviceIdKey), 'devA');
+    expect(secrets.values[SyncStateStore.deviceIdKey], 'devA');
+  });
+
+  test('所有身份备份都不存在时才生成新 id，之后跨实例保持', () async {
+    final prefs = await SharedPreferences.getInstance();
+    final secrets = MemorySyncSecretStore();
+    final store = SyncStateStore(
+      preferences: prefs,
+      secrets: secrets,
+      clock: () => 1000,
+    );
+    await store.init();
+    final id = store.deviceId;
+    expect(id, isNotEmpty);
+
+    final reloaded = SyncStateStore(
+      preferences: prefs,
+      secrets: secrets,
+      clock: () => 1000,
+    );
+    await reloaded.init();
+    expect(reloaded.deviceId, id);
+  });
+
+  test('移除设备：名册与地址簿一并清理，不写屏蔽标记', () async {
+    final store = await freshStore();
+    store.recordRound(SyncRoundReport(
+      trigger: SyncTrigger.timer,
+      startedAt: 0,
+      finishedAt: 1,
+      outcome: SyncOutcome.ok,
+      peers: const [SyncPeerState(deviceId: 'devB', name: 'B')],
+    ));
+    await store.addManualPeer(
+      const ManualPeer(host: '192.168.1.23', deviceId: 'devB'),
+    );
+    await store
+        .addManualPeer(const ManualPeer(host: '10.0.0.9', deviceId: 'devC'));
+
+    await store.removePeer('devB');
+    expect(store.peers.where((peer) => peer.deviceId == 'devB'), isEmpty);
+    expect(
+      store.manualPeers.where((peer) => peer.deviceId == 'devB'),
+      isEmpty,
+      reason: '该设备的地址簿条目一并移除',
+    );
+    expect(
+      store.manualPeers.where((peer) => peer.deviceId == 'devC'),
+      hasLength(1),
+      reason: '其它设备不受影响',
+    );
+  });
+
   test('传输开关默认两路都关，且没有独立总开关', () async {
     final store = await freshStore();
     // 装机默认：不启动监听 / 不广播（用户开开关才算启用同步）。
@@ -69,7 +174,8 @@ void main() {
       httpPort: 40000,
     ));
     // 另一台设备的地址不受影响。
-    await store.addManualPeer(const ManualPeer(host: '10.0.0.9', deviceId: 'devC'));
+    await store
+        .addManualPeer(const ManualPeer(host: '10.0.0.9', deviceId: 'devC'));
 
     await store.adoptPeerAddresses('devB', const [
       ManualPeer(
@@ -127,10 +233,12 @@ void main() {
     expect(moved.name, '书房');
   });
 
-  test('首次连通标记：登记后持久化；设备最后一条地址删除时清掉', () async {
+  test('首次连通标记：登记后持久化；设备从本机移除时清掉', () async {
     final store = await freshStore();
-    await store.addManualPeer(const ManualPeer(host: '192.168.1.23', deviceId: 'devB'));
-    await store.addManualPeer(const ManualPeer(host: '2409:8a55::9', deviceId: 'devB'));
+    await store.addManualPeer(
+        const ManualPeer(host: '192.168.1.23', deviceId: 'devB'));
+    await store.addManualPeer(
+        const ManualPeer(host: '2409:8a55::9', deviceId: 'devB'));
 
     expect(store.isPeerConnectNotified('devB'), isFalse);
     await store.markPeerConnectNotified('devB');
@@ -141,8 +249,8 @@ void main() {
     await reloaded.removeManualPeer('192.168.1.23');
     expect(reloaded.isPeerConnectNotified('devB'), isTrue);
 
-    // 最后一条也删除 = 解除配对：标记清掉，重新配对值得再提示一次。
-    await reloaded.removeManualPeer('2409:8a55::9');
+    // 从本机移除设备：标记清掉，重新配对值得再提示一次。
+    await reloaded.removePeer('devB');
     expect(reloaded.isPeerConnectNotified('devB'), isFalse);
   });
 

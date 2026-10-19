@@ -48,15 +48,12 @@ class SyncControlPlane extends ChangeNotifier {
   List<SyncLogEntry> get log => _state.log;
   List<SyncPeerState> get peers => _state.peers;
   List<ManualPeer> get manualPeers => _state.manualPeers;
-  Set<String> get ignoredPeers => _state.ignoredPeers;
   int get lanHttpPort => _state.lanHttpPort;
   List<SyncActivityEntry> get activity => _state.activity;
   SyncCellularPolicy get cellularPolicy => _state.cellularPolicy;
 
   /// 本机时钟（设置页的相对时间 / 失联判定）。
   int nowMs() => _state.nowMs();
-
-  bool isPeerIgnored(String deviceId) => _state.isPeerIgnored(deviceId);
 
   /// 传输最近一次成功接触对端的时间（0 = 尚未成功过）。
   int transportLastSuccessAt(String kind) =>
@@ -189,13 +186,13 @@ class SyncControlPlane extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// 本地忽略某台设备：不再拉取 / 合并它的载荷（幽灵 / 已失联设备的处置）。
+  /// 从本机列表移除一台设备（名册 + 地址簿条目）。
   ///
-  /// 只影响本机（对端不知道、其它设备不受影响）；远端文件不自动删除
-  /// （需要时用 [cleanupRemote] 显式清理）。
-  Future<void> setPeerIgnored(String deviceId, bool ignored) async {
+  /// 只做本机记录清理，不撤销同步授权：对方仍持有口令并在线时会被下一次
+  /// 探测重新发现。真正停止与它同步需要更换口令（对所有设备生效）。
+  Future<void> removePeer(String deviceId) async {
     if (deviceId.isEmpty) return;
-    await _state.setPeerIgnored(deviceId, ignored);
+    await _state.removePeer(deviceId);
     notifyListeners();
   }
 

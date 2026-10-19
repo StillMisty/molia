@@ -2379,10 +2379,14 @@ class AppLocalizationsZh extends AppLocalizations {
   String get syncPeerHostInvalid => '地址不能为空';
 
   @override
-  String get syncPeerDelete => '删除设备';
+  String get syncPeerDelete => '移除设备';
 
   @override
-  String get syncPeerDeleteConfirm => '删除后本机不再主动连接该设备（不影响其它设备的同步）。';
+  String get syncPeerDeleteConfirm =>
+      '只从本机列表移除，不撤销对方的同步授权。对方如果仍持有同步口令并在线，会再次出现；要停止与它同步，请更换同步口令。';
+
+  @override
+  String get syncPeerRemoved => '已从本机移除';
 
   @override
   String get syncPeerManual => '手动添加';
@@ -2392,19 +2396,7 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get syncPeerLostHint =>
-      '该设备已超过 180 天没有连接（可能已重装或不再使用）。可以忽略它，或清理它在云端的同步文件；本机数据不受影响。';
-
-  @override
-  String get syncPeerIgnore => '忽略该设备';
-
-  @override
-  String get syncPeerUnignore => '取消忽略';
-
-  @override
-  String get syncPeerIgnoreHint => '不再从该设备接收同步数据（只影响本机）';
-
-  @override
-  String get syncPeerIgnoredHint => '已忽略：不再从该设备接收同步数据。';
+      '该设备已超过 180 天没有连接（可能已重装或不再使用）。可以从本机移除，或清理它在云端的同步文件；本机数据不受影响。';
 
   @override
   String get syncPeerCleanupRemote => '清理云端文件';

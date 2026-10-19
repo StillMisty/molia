@@ -327,7 +327,7 @@ void main() {
     expect(await a.journal.snapshotSeq(), await a.journal.headSeq());
   });
 
-  test('已本地忽略的对端不钉住日志窗口（minAck 跳过它）', () async {
+  test('失联对端不钉住日志窗口（minAck 跳过它）', () async {
     final a = await network.addDevice(
       'devA',
       deviceLimits: const SyncJournalLimits(maxEntries: 2),
@@ -335,7 +335,7 @@ void main() {
     final b = await network.addDevice('devB');
     await a.engine.syncNow();
     await b.engine.syncNow();
-    // B 只 ack 到 0；随后 A 忽略 B（不再合并它的载荷）。
+    // B 只 ack 到 0；随后失联（超过 180 天无接触）。
     a.state.recordRound(SyncRoundReport(
       trigger: SyncTrigger.timer,
       startedAt: 0,
@@ -344,16 +344,15 @@ void main() {
       peers: [
         SyncPeerState(
           deviceId: 'devB',
-          lastSeenAt: a.state.nowMs(),
+          lastSeenAt: a.state.nowMs() - SyncPeerState.lostThresholdMs - 1000,
           cursorSeq: 0,
           ackedSeq: 0,
         ),
       ],
     ));
-    await a.control.setPeerIgnored('devB', true);
     network.devices.remove('devB');
 
-    // 三次变更超过条数上限：被忽略对端的旧 ack 不参与 minAck → 正常裁剪。
+    // 三次变更超过条数上限：失联对端的旧 ack 不参与 minAck → 正常裁剪。
     await a.setSetting('theme_mode', 'dark');
     await a.engine.syncNow();
     await a.setSetting('theme_mode', 'light');
@@ -419,7 +418,7 @@ void main() {
       ackedSeq: 3,
     );
     expect(peer.isLostAt(now), isTrue);
-    // 名册不丢条目：失联设备仍可见（用户可显式忽略 / 清理远端文件）。
+    // 名册不丢条目：失联设备仍可见（用户可从本机移除 / 清理远端文件）。
     expect(trimPeers([peer], 20), hasLength(1));
   });
 }

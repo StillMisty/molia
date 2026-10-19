@@ -200,7 +200,7 @@ String syncPeerDisplayName(SyncPeerState peer, ManualPeer? manual) {
   return peer.name.isEmpty ? shortDeviceId(peer.deviceId) : peer.name;
 }
 
-/// 对端副标题：传输 + 最后同步 + 失联/忽略/落后/时钟偏移/最近失败。
+/// 对端副标题：传输 + 最后同步 + 失联/落后/时钟偏移/最近失败。
 String syncPeerSubtitle(
   AppLocalizations l10n,
   SyncPeerState peer,
@@ -246,11 +246,12 @@ String syncManualPeerSubtitle(AppLocalizations l10n, ManualPeer entry) {
   return '${l10n.syncPeerProbePortLabel} $port';
 }
 
-/// 手动对端详情：地址入口 / 设备 id / 最后同步 + 忽略与清理远端 + 删除。
+/// 对端详情：地址入口 / 设备 id / 最后同步 + 移除本机记录 + 清理远端。
 ///
-/// 多设备处置动作：**本地忽略**（幽灵 / 已失联设备不再参与合并）与
-/// **显式清理远端文件**（不做自动删除）。地址明细收进地址清单弹层——
-/// 一台设备可能有多条候选地址（双栈 / 多网卡），不铺在详情里。
+/// 「移除设备」只清本机名册与地址簿，不撤销同步授权：对方仍持有口令并在线
+/// 时会被下一轮探测重新发现；真正停止与它同步需要更换口令（对所有设备生效）。
+/// 地址明细收进地址清单弹层——一台设备可能有多条候选地址（双栈 / 多网卡），
+/// 不铺在详情里。
 Future<void> showSyncPeerDialog(
   BuildContext context, {
   required SyncProvider provider,
@@ -261,9 +262,10 @@ Future<void> showSyncPeerDialog(
 }) async {
   final navigator = Navigator.of(context, rootNavigator: true);
   final deviceId = peer?.deviceId ?? '';
-  final ignored = deviceId.isNotEmpty && provider.isPeerIgnored(deviceId);
   final lost = peer != null && peer.isLostAt(provider.nowMs);
   final entries = _manualEntriesFor(provider, host: host, deviceId: deviceId);
+  // 自动发现的设备没有地址簿条目，也必须能移除；未认领地址只移除地址本身。
+  final removable = deviceId.isNotEmpty || entries.isNotEmpty;
   await M3EDialog.show<void>(
     context,
     dialog: M3EDialog(
@@ -287,11 +289,6 @@ Future<void> showSyncPeerDialog(
                     .bodySmall
                     ?.copyWith(color: AppSemanticColors.of(context).warning),
               ),
-            if (ignored)
-              Text(
-                l10n.syncPeerIgnoredHint,
-                style: Theme.of(context).textTheme.bodySmall,
-              ),
             if (entries.isNotEmpty) ...[
               const SizedBox(height: kSettingsSmallSpacing),
               SettingsNavTile(
@@ -311,27 +308,17 @@ Future<void> showSyncPeerDialog(
                 },
               ),
             ],
-            if (entries.isNotEmpty) ...[
+            if (removable) ...[
               const SizedBox(height: 12),
               Text(
-                l10n.syncPeerDeleteConfirm,
+                deviceId.isEmpty
+                    ? l10n.syncPeerAddressDeleteConfirm
+                    : l10n.syncPeerDeleteConfirm,
                 style: Theme.of(context).textTheme.bodySmall,
               ),
             ],
             if (deviceId.isNotEmpty) ...[
               const SizedBox(height: 8),
-              SettingsNavTile(
-                key: Key('settingsSyncPeerIgnore-$deviceId'),
-                icon: ignored
-                    ? Icons.visibility_rounded
-                    : Icons.visibility_off_rounded,
-                title: ignored ? l10n.syncPeerUnignore : l10n.syncPeerIgnore,
-                subtitle: l10n.syncPeerIgnoreHint,
-                onTap: () async {
-                  navigator.pop();
-                  await provider.setPeerIgnored(deviceId, !ignored);
-                },
-              ),
               SettingsNavTile(
                 key: Key('settingsSyncPeerCleanup-$deviceId'),
                 icon: Icons.delete_sweep_rounded,
@@ -352,16 +339,27 @@ Future<void> showSyncPeerDialog(
         ),
       ),
       actions: [
-        if (entries.isNotEmpty)
+        if (removable)
           M3EButton.text(
             onPressed: () async {
               navigator.pop();
-              // 「删除设备」= 移除它在本机地址簿里的全部地址（其它设备无关）。
-              for (final entry in entries) {
-                await provider.removeManualPeer(entry.host);
+              if (deviceId.isNotEmpty) {
+                // 已知身份：名册 + 该设备的全部地址簿条目一并移除。
+                await provider.removePeer(deviceId);
+              } else {
+                // 尚未认领的地址：只移除这条地址，不碰名册。
+                for (final entry in entries) {
+                  await provider.removeManualPeer(entry.host);
+                }
               }
+              if (!context.mounted) return;
+              showSyncNotice(context, l10n.syncPeerRemoved);
             },
-            child: Text(l10n.syncPeerDelete),
+            child: Text(
+              deviceId.isEmpty
+                  ? l10n.syncPeerAddressDelete
+                  : l10n.syncPeerDelete,
+            ),
           ),
         M3EButton.text(
           onPressed: () => navigator.pop(),

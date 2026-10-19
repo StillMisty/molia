@@ -11,7 +11,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import 'support/sync_test_support.dart';
 
-/// 多设备名册处置：失联标记、本地忽略（只影响本机、跨重启保留）、
+/// 多设备名册处置：失联标记、从本机移除（只清名册 / 地址簿，不撤销授权）、
 /// 显式清理远端文件（不做自动删除）。
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -110,21 +110,48 @@ void main() {
     expect(peer.lastPullAt, 0, reason: '没有数据流转，不算一次拉取');
   });
 
-  test('本地忽略：跨重启保留，只影响本机', () async {
-    expect(state.isPeerIgnored('ghost'), isFalse);
-    await control.setPeerIgnored('ghost', true);
-    expect(state.isPeerIgnored('ghost'), isTrue);
+  test('移除设备：名册与地址簿一并清理，跨重启保持（离线设备）', () async {
+    seedPeer('ghost', lastSeenAt: state.nowMs());
+    await state.addManualPeer(
+      const ManualPeer(host: '192.168.1.23', deviceId: 'ghost'),
+    );
+    expect(state.peers, hasLength(1));
+
+    // provider 编排：先清引擎内存名册，再清状态。
+    engine.forgetPeer('ghost');
+    await control.removePeer('ghost');
+
+    expect(state.peers, isEmpty);
+    expect(state.manualPeers, isEmpty);
     await state.save();
 
-    // 重启后仍在忽略列表里（对端不知道，其它设备不受影响）。
     final reloaded =
         SyncStateStore(preferences: prefs, secrets: MemorySyncSecretStore());
     await reloaded.init();
-    expect(reloaded.isPeerIgnored('ghost'), isTrue);
-    expect(reloaded.isPeerIgnored('other'), isFalse);
+    expect(reloaded.peers, isEmpty, reason: '移除后重启不出现');
+    expect(reloaded.manualPeers, isEmpty);
+  });
 
-    await control.setPeerIgnored('ghost', false);
-    expect(state.isPeerIgnored('ghost'), isFalse);
+  test('移除不是屏蔽：设备仍在线时下一轮重新出现', () async {
+    seedPeer('ghost', lastSeenAt: state.nowMs());
+    engine.forgetPeer('ghost');
+    await control.removePeer('ghost');
+    expect(state.peers, isEmpty);
+
+    // 下一轮仍能发现它：第一轮压住在途快照，第二轮照常写回。
+    transport.seenIdsOverride = const ['ghost'];
+    await engine.syncNow();
+    expect(
+      state.peers.where((peer) => peer.deviceId == 'ghost'),
+      isEmpty,
+      reason: '删除当轮不被在途报告写回',
+    );
+    await engine.syncNow();
+    expect(
+      state.peers.where((peer) => peer.deviceId == 'ghost'),
+      isNotEmpty,
+      reason: '没有持久化屏蔽：在线设备会被重新发现',
+    );
   });
 
   test('显式清理远端文件：调用各启用传输，返回结果不做自动删除', () async {

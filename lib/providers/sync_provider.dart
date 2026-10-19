@@ -179,11 +179,15 @@ class SyncProvider extends ChangeNotifier {
   Future<void> removeManualPeer(String host) =>
       _controlPlane.removeManualPeer(host);
 
-  bool isPeerIgnored(String deviceId) => _controlPlane.isPeerIgnored(deviceId);
-
-  /// 本地忽略 / 取消忽略某台设备（只影响本机）。
-  Future<void> setPeerIgnored(String deviceId, bool ignored) =>
-      _controlPlane.setPeerIgnored(deviceId, ignored);
+  /// 从本机列表移除一台设备（名册 + 地址簿条目）。
+  ///
+  /// 只清理本机观测，不撤销同步授权：对方仍持有口令并在线时会被下一轮
+  /// 探测重新发现。真正停止与它同步需要更换口令。
+  Future<void> removePeer(String deviceId) async {
+    // 先清引擎内存名册，再落状态：避免正在收尾的一轮从旧名册写回。
+    _engine.forgetPeer(deviceId);
+    await _controlPlane.removePeer(deviceId);
+  }
 
   /// 显式清理某台设备的远端文件（不做自动删除）。
   Future<({bool removed, SyncIssue? error})> cleanupRemote(String deviceId) =>

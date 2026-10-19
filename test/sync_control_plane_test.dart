@@ -48,7 +48,6 @@ void main() {
     expect(control.enabledTransports, isEmpty);
     expect(control.webdav.isConfigured, isFalse);
     expect(control.manualPeers, isEmpty);
-    expect(control.ignoredPeers, isEmpty);
     expect(control.lastSyncAt, 0);
     expect(control.log, isEmpty);
     expect(control.peers, isEmpty);
@@ -57,7 +56,6 @@ void main() {
     expect(control.cellularPolicy, SyncCellularPolicy.auto);
     expect(control.nowMs(), 7000);
     expect(control.transportLastSuccessAt('lan'), 0);
-    expect(control.isPeerIgnored('devB'), isFalse);
   });
 
   test('init 幂等；写入类操作改状态并通知一次', () async {
@@ -177,12 +175,25 @@ void main() {
     expect(control.manualPeers, hasLength(2));
   });
 
-  test('本地忽略与远端清理：只经启用传输动作', () async {
-    await control.setPeerIgnored('ghost', true);
-    expect(control.ignoredPeers, {'ghost'});
-    expect(control.isPeerIgnored('ghost'), isTrue);
-    await control.setPeerIgnored('ghost', false);
-    expect(control.isPeerIgnored('ghost'), isFalse);
+  test('移除设备与远端清理：只经启用传输动作', () async {
+    state.recordRound(SyncRoundReport(
+      trigger: SyncTrigger.timer,
+      startedAt: 0,
+      finishedAt: 1,
+      outcome: SyncOutcome.ok,
+      peers: const [SyncPeerState(deviceId: 'ghost', name: '幽灵')],
+    ));
+    await control.addManualPeer(
+      const ManualPeer(host: '192.168.1.23', deviceId: 'ghost'),
+    );
+    expect(control.peers, hasLength(1));
+
+    var notifications = 0;
+    control.addListener(() => notifications++);
+    await control.removePeer('ghost');
+    expect(control.peers, isEmpty, reason: '名册条目被移除');
+    expect(control.manualPeers, isEmpty, reason: '地址簿条目一并移除');
+    expect(notifications, 1);
 
     // 未启用传输不动作（与旧引擎语义一致：没有通道就没有远端可清）。
     expect((await control.cleanupRemote('ghost')).removed, isFalse);

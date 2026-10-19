@@ -133,7 +133,6 @@ Future<SyncStack> buildSyncStack({
     snapshotIdProvider: () => engineRef?.lastEnvelope?.snapshotId ?? '',
     journalHeadProvider: () => engineRef?.lastEnvelope?.journalHead ?? 0,
     permissionGate: () => lanPermission.ensure(),
-    ignoredPeersProvider: syncState.isPeerIgnored,
     manualPeersProvider: () => syncState.manualPeers,
     onPeerResolved: (learned) => unawaited(syncState.learnManualPeer(learned)),
     httpPortProvider: () => syncState.lanHttpPort,
@@ -149,7 +148,6 @@ Future<SyncStack> buildSyncStack({
     // 块的裁剪边界：本机日志只在所有对端 ack 之后前移 baseSeq，
     // 因此 `end <= baseSeq` 的远端块可以安全删除。
     journalBaseSeqProvider: library.syncJournal.baseSeq,
-    ignoredPeersProvider: syncState.isPeerIgnored,
   );
   // 引擎、控制面与备份共用同一批适配器 / 传输实例（控制面只用传输，备份只用
   // 适配器）：三个模块对「有哪些类别、哪路传输」不能有各自的副本。

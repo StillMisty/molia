@@ -2479,7 +2479,10 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get syncPeerDeleteConfirm =>
-      'This device will no longer connect to that address (other devices are unaffected).';
+      'Removes it from this device only; it does not revoke sync access. If it still has the sync passphrase and is online, it will appear again. To stop syncing with it, change the sync passphrase.';
+
+  @override
+  String get syncPeerRemoved => 'Removed from this device';
 
   @override
   String get syncPeerManual => 'added manually';
@@ -2489,21 +2492,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get syncPeerLostHint =>
-      'This device has not connected for over 180 days (it may have been reinstalled or retired). You can ignore it, or clean up its cloud sync files; local data is unaffected.';
-
-  @override
-  String get syncPeerIgnore => 'Ignore this device';
-
-  @override
-  String get syncPeerUnignore => 'Stop ignoring';
-
-  @override
-  String get syncPeerIgnoreHint =>
-      'Stop receiving synced data from this device (this device only)';
-
-  @override
-  String get syncPeerIgnoredHint =>
-      'Ignored: no more synced data is received from this device.';
+      'This device has not connected for over 180 days (it may have been reinstalled or retired). You can remove it from this device, or clean up its cloud sync files; local data is unaffected.';
 
   @override
   String get syncPeerCleanupRemote => 'Clean up cloud files';

@@ -52,7 +52,6 @@ class WebDavSyncTransport implements SyncTransport {
     required Future<String?> Function() passphraseProvider,
     required WebDavConfig Function() configProvider,
     required Future<String?> Function() passwordProvider,
-    bool Function(String deviceId)? ignoredPeersProvider,
     Future<int> Function()? journalBaseSeqProvider,
     Dio? dio,
     Duration requestTimeout = const Duration(seconds: 15),
@@ -61,7 +60,6 @@ class WebDavSyncTransport implements SyncTransport {
         _passphraseProvider = passphraseProvider,
         _configProvider = configProvider,
         _passwordProvider = passwordProvider,
-        _ignoredPeersProvider = ignoredPeersProvider,
         _dio = dio,
         _ownsDio = dio == null,
         _requestTimeout = requestTimeout;
@@ -91,8 +89,6 @@ class WebDavSyncTransport implements SyncTransport {
   /// 因此 `end <= baseSeq` 的块可以安全删除；未注入时不裁剪自己的旧块。
   final Future<int> Function()? _journalBaseSeqProvider;
 
-  /// 本地忽略的设备（不读它们的远端文件）。
-  final bool Function(String deviceId)? _ignoredPeersProvider;
   final bool _ownsDio;
   final Duration _requestTimeout;
   final StreamController<SyncEnvelope> _incoming =
@@ -393,7 +389,6 @@ class WebDavSyncTransport implements SyncTransport {
       if (parsed == null) continue;
       final device = parsed.deviceId;
       if (device.isEmpty || device == deviceId) continue;
-      if (_ignoredPeersProvider?.call(device) ?? false) continue;
       if (parsed.kind == PeerJournalFileKind.legacy) continue;
       final entry = grouped.putIfAbsent(device, _DeviceFiles.new);
       switch (parsed.kind) {

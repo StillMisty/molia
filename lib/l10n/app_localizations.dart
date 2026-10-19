@@ -4518,8 +4518,14 @@ abstract class AppLocalizations {
   /// No description provided for @syncPeerDeleteConfirm.
   ///
   /// In en, this message translates to:
-  /// **'This device will no longer connect to that address (other devices are unaffected).'**
+  /// **'Removes it from this device only; it does not revoke sync access. If it still has the sync passphrase and is online, it will appear again. To stop syncing with it, change the sync passphrase.'**
   String get syncPeerDeleteConfirm;
+
+  /// No description provided for @syncPeerRemoved.
+  ///
+  /// In en, this message translates to:
+  /// **'Removed from this device'**
+  String get syncPeerRemoved;
 
   /// No description provided for @syncPeerManual.
   ///
@@ -4536,32 +4542,8 @@ abstract class AppLocalizations {
   /// No description provided for @syncPeerLostHint.
   ///
   /// In en, this message translates to:
-  /// **'This device has not connected for over 180 days (it may have been reinstalled or retired). You can ignore it, or clean up its cloud sync files; local data is unaffected.'**
+  /// **'This device has not connected for over 180 days (it may have been reinstalled or retired). You can remove it from this device, or clean up its cloud sync files; local data is unaffected.'**
   String get syncPeerLostHint;
-
-  /// No description provided for @syncPeerIgnore.
-  ///
-  /// In en, this message translates to:
-  /// **'Ignore this device'**
-  String get syncPeerIgnore;
-
-  /// No description provided for @syncPeerUnignore.
-  ///
-  /// In en, this message translates to:
-  /// **'Stop ignoring'**
-  String get syncPeerUnignore;
-
-  /// No description provided for @syncPeerIgnoreHint.
-  ///
-  /// In en, this message translates to:
-  /// **'Stop receiving synced data from this device (this device only)'**
-  String get syncPeerIgnoreHint;
-
-  /// No description provided for @syncPeerIgnoredHint.
-  ///
-  /// In en, this message translates to:
-  /// **'Ignored: no more synced data is received from this device.'**
-  String get syncPeerIgnoredHint;
 
   /// No description provided for @syncPeerCleanupRemote.
   ///

@@ -45,7 +45,6 @@ void main() {
     String deviceId, {
     String password = 'secret',
     String? passphraseOverride,
-    bool ignored = false,
     int? baseSeq,
   }) =>
       WebDavSyncTransport(
@@ -57,7 +56,6 @@ void main() {
           username: 'user',
         ),
         passwordProvider: () async => password,
-        ignoredPeersProvider: (peerId) => ignored && peerId == deviceId,
         journalBaseSeqProvider: baseSeq == null ? null : () async => baseSeq,
         requestTimeout: const Duration(seconds: 5),
       );
@@ -217,8 +215,7 @@ void main() {
     expect(second.skippedUnchanged, 1);
     expect(second.bytesIn, 0);
     expect(server.getCount, getsAfterFirst);
-    expect(codec.decryptions, decryptionsBefore,
-        reason: 'etag 未变：没有解密动作');
+    expect(codec.decryptions, decryptionsBefore, reason: 'etag 未变：没有解密动作');
   });
 
   test('文件 etag 变化后重新拉取', () async {
@@ -236,7 +233,8 @@ void main() {
     await a.push(envelope('devA', value: 'dark'));
     final changed = await b.pull();
     expect(changed.envelopes, hasLength(1));
-    expect(changed.envelopes.single.recordsOf(SyncCategory.settings).single.data,
+    expect(
+        changed.envelopes.single.recordsOf(SyncCategory.settings).single.data,
         {'v': 'dark'});
     expect(changed.skippedUnchanged, 0);
   });
@@ -404,35 +402,13 @@ void main() {
     expect(pulled.failedPeers, 0);
   });
 
-  test('本地忽略的设备：不读取它的远端文件（幽灵设备处置）', () async {
-    final a = transport('devA');
-    final ghost = transport('ghost', ignored: true);
-    addTearDown(() async {
-      await a.stop();
-      await ghost.stop();
-    });
-    await a.start();
-    await ghost.start();
-    await a.push(envelope('devA', value: 'light'));
-    // 幽灵设备的文件（旧 deviceId）留在远端。
-    server.files['ghost.snapshot.msync'] =
-        codec.encrypt(envelope('ghost'), passphrase);
-    server.files['ghost.journal.msync'] =
-        codec.encrypt(envelope('ghost'), passphrase);
-
-    final pulled = await ghost.pull();
-    expect(pulled.envelopes, hasLength(1));
-    expect(pulled.envelopes.single.deviceId, 'devA');
-    expect(pulled.peersSeen, 1, reason: '忽略的设备不算对端');
-  });
-
   test('显式清理远端文件：删除该设备的日志 / 快照 / 其它命名残留', () async {
     final a = transport('devA');
     addTearDown(() => a.stop());
     await a.start();
     await a.push(envelope('devA'));
-    final snapshotName =
-        server.files.keys.firstWhere((name) => name.endsWith('.snapshot.msync'));
+    final snapshotName = server.files.keys
+        .firstWhere((name) => name.endsWith('.snapshot.msync'));
     server.files['devA.journal.msync'] = server.files[snapshotName]!;
     server.files['devA.msync'] = server.files[snapshotName]!;
 

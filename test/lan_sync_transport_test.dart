@@ -91,8 +91,7 @@ void main() {
       deviceId: 'devC',
       deviceName: () => '设备C',
       codec: codecPort,
-      passphraseProvider: () async =>
-          'ZZZZ-ZZZZ-ZZZZ-ZZZZ-ZZZZ-ZZZZ-ZZZZ-ZZZZ',
+      passphraseProvider: () async => 'ZZZZ-ZZZZ-ZZZZ-ZZZZ-ZZZZ-ZZZZ-ZZZZ-ZZZZ',
       snapshotProvider: () async => envelope('devC'),
       probeTargets: const [(host: '127.0.0.1', port: 47893)],
       probeWindow: const Duration(milliseconds: 250),
@@ -154,10 +153,8 @@ void main() {
     expect(second.envelopes, isEmpty);
     expect(second.skippedUnchanged, 1);
     expect(second.bytesIn, 0);
-    expect(codec.decryptions, decryptionsBefore,
-        reason: '未变跳过：没有解密动作');
-    expect(codec.pbkdf2Derivations, derivationsBefore,
-        reason: '未变跳过：没有密钥派生');
+    expect(codec.decryptions, decryptionsBefore, reason: '未变跳过：没有解密动作');
+    expect(codec.pbkdf2Derivations, derivationsBefore, reason: '未变跳过：没有密钥派生');
     expect(transportB.snapshotGetCount, 1, reason: '未变跳过：没有 GET');
 
     // 对端内容变化（新指纹）：重新拉取。
@@ -254,38 +251,6 @@ void main() {
     expect(skipped.skippedUnchanged, 1);
   });
 
-  test('本地忽略的设备：不拉取它的载荷', () async {
-    final transportA = LanSyncTransport(
-      deviceId: 'devA',
-      deviceName: () => '设备A',
-      codec: codecPort,
-      passphraseProvider: () async => passphrase,
-      snapshotProvider: () async => envelope('devA'),
-      udpPort: 47903,
-    );
-    final transportB = LanSyncTransport(
-      deviceId: 'devB',
-      deviceName: () => '设备B',
-      codec: codecPort,
-      passphraseProvider: () async => passphrase,
-      snapshotProvider: () async => envelope('devB'),
-      probeTargets: const [(host: '127.0.0.1', port: 47903)],
-      probeWindow: const Duration(milliseconds: 250),
-      ignoredPeersProvider: (deviceId) => deviceId == 'devA',
-      udpPort: 47904,
-    );
-    addTearDown(() async {
-      await transportA.stop();
-      await transportB.stop();
-    });
-    await transportA.start();
-    await transportB.start();
-
-    final pulled = await transportB.pull();
-    expect(pulled.envelopes, isEmpty);
-    expect(pulled.peersSeen, 0, reason: '忽略的设备不参与本轮');
-  });
-
   test('未启动时 pull/push 为空操作；start/stop 幂等', () async {
     final transport = LanSyncTransport(
       deviceId: 'devX',
@@ -346,11 +311,9 @@ void main() {
     await transportB.start();
 
     expect(transportA.isRunning, isTrue);
-    expect(transportA.unavailableReason, isNull,
-        reason: 'HTTP 端点能起来就不算传输启动失败');
+    expect(transportA.unavailableReason, isNull, reason: 'HTTP 端点能起来就不算传输启动失败');
     expect(transportA.discoveryPorts.v4, greaterThan(0));
-    expect(transportA.discoveryPorts.v4, isNot(47941),
-        reason: '降级后不再用被占端口');
+    expect(transportA.discoveryPorts.v4, isNot(47941), reason: '降级后不再用被占端口');
 
     // A 主动探测 B：B 从非回复探测登记 A，A 从应答的地址候选 / 源地址拉到 B。
     final fromB = await transportA.pull();
@@ -595,11 +558,11 @@ void main() {
     expect(messages, isNotEmpty);
     final probe = jsonDecode(messages.first) as Map<String, dynamic>;
     expect(probe['m'], 'molia-sync.probe');
-    expect(probe['addrs'], ['10.0.0.5'],
-        reason: '可路由判定与去重对注入路径同样生效');
+    expect(probe['addrs'], ['10.0.0.5'], reason: '可路由判定与去重对注入路径同样生效');
   });
 
-  test('候选地址优先尝试：不可达的候选回落到观测源地址', () async {    final transportA = LanSyncTransport(
+  test('候选地址优先尝试：不可达的候选回落到观测源地址', () async {
+    final transportA = LanSyncTransport(
       deviceId: 'devA',
       deviceName: () => '设备A',
       codec: codecPort,

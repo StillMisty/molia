@@ -890,10 +890,10 @@ void main() {
     expect(
         find.byKey(const Key('settingsSyncPeer-192.168.1.24')), findsOneWidget);
 
-    // 点开单项 → 详情弹层 → 删除。
+    // 点开单项 → 详情弹层 → 移除地址。
     await tester.tap(find.byKey(const Key('settingsSyncPeer-192.168.1.24')));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Remove device'));
+    await tester.tap(find.text('Remove address'));
     await tester.pumpAndSettle();
     expect(provider.manualPeers, hasLength(2));
   });
@@ -922,7 +922,7 @@ void main() {
     expect(find.textContaining('Last synced'), findsOneWidget);
   });
 
-  testWidgets('失联设备：名册标记 + 忽略 / 清理远端文件动作', (tester) async {
+  testWidgets('失联设备：名册标记 + 清理远端 / 从本机移除', (tester) async {
     // 注入时钟：失联阈值 = 180 天（与 lostPeers 判定同一时钟源）。
     nowMs = DateTime.now().millisecondsSinceEpoch;
     seedPeer('ghost', lastSeenAt: nowMs - SyncPeerState.lostThresholdMs - 1000);
@@ -930,18 +930,11 @@ void main() {
     await pumpPage(tester);
     expect(find.textContaining('lost'), findsOneWidget);
 
-    // 打开详情：忽略该设备（只影响本机）。
-    await tester.tap(find.byKey(const Key('settingsSyncPeer-ghost')));
-    await tester.pumpAndSettle();
-    expect(find.textContaining('180 days'), findsOneWidget);
-    await tester.tap(find.byKey(const Key('settingsSyncPeerIgnore-ghost')));
-    await tester.pumpAndSettle();
-    expect(provider.isPeerIgnored('ghost'), isTrue);
-
-    // 再打开详情：清理远端文件（二次确认后调用传输）。
+    // 清理远端文件（二次确认后调用传输）。
     transport.deleteRemoteResult = true;
     await tester.tap(find.byKey(const Key('settingsSyncPeer-ghost')));
     await tester.pumpAndSettle();
+    expect(find.textContaining('180 days'), findsOneWidget);
     await tester.tap(find.byKey(const Key('settingsSyncPeerCleanup-ghost')));
     await tester.pumpAndSettle();
     await tester.tap(find.text('Delete'));
@@ -949,6 +942,38 @@ void main() {
 
     expect(transport.deletedRemotes, ['ghost']);
     expect(notifications.last, 'Cloud files cleaned up');
+
+    // 再从本机移除：名册行消失（不写屏蔽，设备在线时仍可能重新出现）。
+    await tester.tap(find.byKey(const Key('settingsSyncPeer-ghost')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Remove device'));
+    await tester.pumpAndSettle();
+    expect(provider.peers, isEmpty);
+    expect(find.byKey(const Key('settingsSyncPeer-ghost')), findsNothing);
+    expect(notifications.last, 'Removed from this device');
+  });
+
+  testWidgets('自动发现的设备也能从本机移除（不依赖地址簿条目）', (tester) async {
+    await provider.setTransportEnabled(SyncTransportKind.lan, true);
+    transport.available.add(SyncEnvelope(
+      deviceId: 'devB',
+      deviceName: 'Device B',
+      producedAt: 9000,
+      records: const {},
+    ));
+    await provider.syncNow(manual: true);
+    await pumpPage(tester);
+    expect(find.byKey(const Key('settingsSyncPeer-devB')), findsOneWidget);
+    expect(provider.manualPeers, isEmpty);
+
+    await tester.tap(find.byKey(const Key('settingsSyncPeer-devB')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Remove device'));
+    await tester.pumpAndSettle();
+
+    expect(provider.peers, isEmpty);
+    expect(find.byKey(const Key('settingsSyncPeer-devB')), findsNothing);
+    expect(notifications.last, 'Removed from this device');
   });
 
   testWidgets('名册展示优先用户命名，对端自报名仅兜底', (tester) async {

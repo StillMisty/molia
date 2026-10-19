@@ -243,6 +243,16 @@ class SyncEngine extends ChangeNotifier implements SyncSchedulerHost {
     notifyListeners();
   }
 
+  /// 从内存名册移除一台设备（用户「从本机移除」）。
+  ///
+  /// 只清观测，不撤销授权：设备下一轮被探测 / 推送时会重新进入名册。落库侧
+  /// 的删除由控制面同步完成；这里先摘掉内存项，避免在途轮次继续引用。
+  void forgetPeer(String deviceId) {
+    if (deviceId.isEmpty) return;
+    _peersById.remove(deviceId);
+    _peersFailedThisRound.remove(deviceId);
+  }
+
   /// 对端主动推送的快照：在合流窗口内合并成一轮。
   ///
   /// 入站轮只消费收到的快照：不拉取全部对端（避免 N 台平方级放大）、不推送
@@ -1091,15 +1101,13 @@ class SyncEngine extends ChangeNotifier implements SyncSchedulerHost {
 
   /// 各对端 ack 的最小值（compact 的裁剪边界）；null = 没有对端 ack 过。
   ///
-  /// 失联设备（超过 [SyncPeerState.lostThresholdMs] 无接触）与**已本地忽略**
-  /// 的设备不参与：它们的位置由硬上限与 bootstrap 兜底，不该让日志无界增长
-  /// （也不该钉住窗口）。
+  /// 失联设备（超过 [SyncPeerState.lostThresholdMs] 无接触）不参与：它们的
+  /// 位置由硬上限与 bootstrap 兜底，不该让日志无界增长（也不该钉住窗口）。
   int? _minPeerAck(int nowMs) {
     int? minAck;
     for (final peer in _allPeers()) {
       if (peer.ackedSeq < 0) continue;
       if (peer.isLostAt(nowMs)) continue;
-      if (_state.isPeerIgnored(peer.deviceId)) continue;
       if (minAck == null || peer.ackedSeq < minAck) minAck = peer.ackedSeq;
     }
     return minAck;

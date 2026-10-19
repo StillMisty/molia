@@ -12,6 +12,7 @@ import 'dart:convert';
 import 'dart:math';
 
 import 'package:flutter/foundation.dart';
+import 'package:logging/logging.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../domain/models/device_sync.dart';
@@ -35,7 +36,8 @@ class WebDavConfig {
 
   bool get isConfigured => baseUrl.trim().isNotEmpty;
 
-  WebDavConfig copyWith({String? baseUrl, String? username, String? remoteDir}) =>
+  WebDavConfig copyWith(
+          {String? baseUrl, String? username, String? remoteDir}) =>
       WebDavConfig(
         baseUrl: baseUrl ?? this.baseUrl,
         username: username ?? this.username,
@@ -53,7 +55,8 @@ class WebDavConfig {
     return WebDavConfig(
       baseUrl: raw['baseUrl'] is String ? raw['baseUrl'] as String : '',
       username: raw['username'] is String ? raw['username'] as String : '',
-      remoteDir: raw['remoteDir'] is String && (raw['remoteDir'] as String).trim().isNotEmpty
+      remoteDir: raw['remoteDir'] is String &&
+              (raw['remoteDir'] as String).trim().isNotEmpty
           ? (raw['remoteDir'] as String).trim()
           : 'molia-sync',
     );
@@ -159,8 +162,8 @@ class SyncLogEntry {
       failed: (raw['failed'] as num?)?.toInt() ?? 0,
       bytesIn: (raw['bytesIn'] as num?)?.toInt() ?? 0,
       bytesOut: (raw['bytesOut'] as num?)?.toInt() ?? 0,
-      transports:
-          (raw['transports'] as List?)?.whereType<String>().toList() ?? const [],
+      transports: (raw['transports'] as List?)?.whereType<String>().toList() ??
+          const [],
       error: SyncIssue.fromJson(raw['error']),
     );
   }
@@ -181,6 +184,13 @@ class SyncStateStore {
         _deviceId = deviceId ?? '';
 
   static const String stateKey = 'sync_state_v1';
+
+  /// 设备身份的独立持久化键（prefs + 安全存储同名）。
+  ///
+  /// 身份不能只放在 `sync_state_v1` 里：那份 JSON 体积大、写入频繁，损坏时
+  /// 若连身份一起丢，对端就会把同一台设备当成新设备（换 IP / 重启后尤其明显）。
+  static const String deviceIdKey = 'sync_device_id_v1';
+
   static const String passphraseSecretKey = 'sync_passphrase_v1';
   static const String webdavPasswordSecretKey = 'sync_webdav_password_v1';
 
@@ -197,6 +207,10 @@ class SyncStateStore {
   final SettingsSecretStore _secrets;
   final Random _random;
   final int Function() _clock;
+
+  final Logger _logger = Logger('molia.sync.state');
+  bool _saveFailureLogged = false;
+  bool _identityBackupFailureLogged = false;
 
   SharedPreferences? _prefs;
   String _deviceId;
@@ -260,8 +274,10 @@ class SyncStateStore {
   /// 读写都只经发布台账（`publish_ledger.dart`，判据唯一处）。
   final Map<String, int> _snapshotPushSeq = {};
 
-  /// 本地忽略的设备 id：不拉取、不合并它们的载荷（幽灵 / 已失联设备的处置）。
-  final Set<String> _ignoredPeers = {};
+  /// 刚被用户从本机移除的设备 id：只压住下一次 `recordRound`，防止正在
+  /// 收尾的一轮把已删除的行写回。**不是持久化屏蔽**——设备如果仍在线且
+  /// 持有同步口令，下一轮探测会重新发现它。
+  final Set<String> _forgottenPeers = {};
 
   /// 设备名册（deviceId → 最近一次接触的观测值）。
   final Map<String, SyncPeerState> _peers = {};
@@ -320,21 +336,10 @@ class SyncStateStore {
     await save();
   }
 
-  /// 本地忽略的设备 id（不拉取、不合并它们的载荷）。
-  Set<String> get ignoredPeers => Set.unmodifiable(_ignoredPeers);
-
-  bool isPeerIgnored(String deviceId) => _ignoredPeers.contains(deviceId);
-
-  Future<void> setPeerIgnored(String deviceId, bool ignored) async {
-    final changed = ignored
-        ? _ignoredPeers.add(deviceId)
-        : _ignoredPeers.remove(deviceId);
-    if (changed) await save();
-  }
-
   int nowMs() => _clock();
 
-  bool isCategoryEnabled(SyncCategory category) => _categories[category] ?? true;
+  bool isCategoryEnabled(SyncCategory category) =>
+      _categories[category] ?? true;
 
   Set<SyncCategory> get enabledCategories => {
         for (final entry in _categories.entries)
@@ -347,22 +352,43 @@ class SyncStateStore {
     if (_initialized) return;
     _prefs = _preferences ?? await SharedPreferences.getInstance();
     final raw = _prefs!.getString(stateKey);
+    var stateCorrupt = false;
     if (raw != null && raw.isNotEmpty) {
       try {
         final json = jsonDecode(raw);
         if (json is Map) _applyJson(json.cast<String, dynamic>());
-      } catch (_) {
-        // 损坏状态按默认处理；deviceId 重新生成（旧口令仍可用，仅设备身份变化）。
+      } catch (e) {
+        // 损坏状态按默认处理，但**设备身份不能跟着重生成**：先尝试独立键
+        // 与安全存储备份，只有全部缺失时才生成新 id（否则对端会多出一台
+        // 同名的“新设备”）。
+        stateCorrupt = true;
+        _logger.warning('同步状态解析失败（设备身份将从独立备份恢复）', e);
       }
     }
-    if (_deviceId.isEmpty) {
-      _deviceId = _generateDeviceId();
-      await save();
+
+    final stateId = _deviceId.trim();
+    var identity = stateId;
+    if (identity.isEmpty) {
+      identity = (_prefs!.getString(deviceIdKey) ?? '').trim();
     }
+    if (identity.isEmpty) {
+      identity = await _readDeviceIdBackup();
+    }
+    if (identity.isEmpty) {
+      identity = _generateDeviceId();
+      _logger.warning('未找到既有同步设备身份，已生成新的设备 id（对端会视为一台新设备）');
+    }
+    _deviceId = identity;
+    // 独立身份键先落盘（小体积），再写大状态 JSON：后者损坏时仍能恢复身份。
+    await _persistDeviceId();
+
+    var dirty =
+        stateCorrupt || raw == null || raw.isEmpty || stateId != identity;
     if (_deviceName.isEmpty) {
       _deviceName = _defaultDeviceName();
-      await save();
+      dirty = true;
     }
+    if (dirty) await save();
     // 发号器基线 = max(持久化基线, 当前时钟)：重启（含时钟回拨）不倒退。
     // 「全库最大戳」由组合根在仓库就绪后经 seed() 补入（见 LibraryRepository
     // .maxVersion）。
@@ -370,8 +396,46 @@ class SyncStateStore {
     _initialized = true;
   }
 
-  Future<String?> readPassphrase() =>
-      _secrets.read(passphraseSecretKey);
+  /// 把身份写进独立 prefs 键与安全存储（仅在缺失 / 不一致时写）。
+  ///
+  /// 正常启动不碰安全存储：只有首次迁移、身份缺失或身份变化才付一次
+  /// keychain / Keystore 的读写成本，避免拖慢启动关键路径。
+  Future<void> _persistDeviceId() async {
+    final current = (_prefs!.getString(deviceIdKey) ?? '').trim();
+    if (current != _deviceId) {
+      try {
+        await _prefs!.setString(deviceIdKey, _deviceId);
+      } catch (e) {
+        _logIdentityBackupFailure('写入', e);
+      }
+    } else {
+      // prefs 键已一致：安全存储备份在上次迁移时写过，正常路径不再读取。
+      return;
+    }
+    if (await _readDeviceIdBackup() == _deviceId) return;
+    try {
+      await _secrets.write(deviceIdKey, _deviceId);
+    } catch (e) {
+      _logIdentityBackupFailure('写入', e);
+    }
+  }
+
+  Future<String> _readDeviceIdBackup() async {
+    try {
+      return (await _secrets.read(deviceIdKey) ?? '').trim();
+    } catch (e) {
+      _logIdentityBackupFailure('读取', e);
+      return '';
+    }
+  }
+
+  void _logIdentityBackupFailure(String action, Object error) {
+    if (_identityBackupFailureLogged) return;
+    _identityBackupFailureLogged = true;
+    _logger.warning('设备身份备份$action失败（仅影响状态损坏后的恢复）', error);
+  }
+
+  Future<String?> readPassphrase() => _secrets.read(passphraseSecretKey);
 
   Future<void> writePassphrase(String passphrase) =>
       _secrets.write(passphraseSecretKey, passphrase);
@@ -421,17 +485,25 @@ class SyncStateStore {
       _upsertManualPeer(peer, overwriteName: true);
 
   /// 移除手动对端（按地址；仅移除地址簿条目，不影响已发现的对端）。
-  ///
-  /// 该设备的条目全部移除 = 解除配对：顺手清掉「已连通」提示标记，
-  /// 重新配对时值得再提示一次。
   Future<void> removeManualPeer(String host) async {
     final index = _manualPeers.indexWhere((entry) => entry.host == host);
     if (index < 0) return;
-    final removed = _manualPeers.removeAt(index);
-    if (removed.deviceId.isNotEmpty &&
-        !_manualPeers.any((entry) => entry.deviceId == removed.deviceId)) {
-      _notifiedPeers.remove(removed.deviceId);
-    }
+    _manualPeers.removeAt(index);
+    await save();
+  }
+
+  /// 从本机列表移除一台设备：名册 + 该设备的地址簿条目 + 首次连通提示。
+  ///
+  /// **只做本机记录清理，不撤销同步授权**：对方如果仍持有同步口令并在线，
+  /// 下一轮探测会重新发现它。真正停止与它同步的唯一方式是更换口令（对
+  /// 所有设备生效）。因此这里不写任何屏蔽 / 忽略标记。
+  Future<void> removePeer(String deviceId) async {
+    if (deviceId.isEmpty) return;
+    _peers.remove(deviceId);
+    _manualPeers.removeWhere((entry) => entry.deviceId == deviceId);
+    _notifiedPeers.remove(deviceId);
+    // 正在收尾的一轮可能带着旧名册快照，压住它一次；下一轮重新发现即恢复。
+    _forgottenPeers.add(deviceId);
     await save();
   }
 
@@ -446,6 +518,8 @@ class SyncStateStore {
     List<ManualPeer> addresses,
   ) async {
     if (deviceId.isEmpty || addresses.isEmpty) return;
+    // 重新配对 = 明确的重新加入意图：解掉上一次移除留下的一次性压制。
+    _forgottenPeers.remove(deviceId);
     final hosts = {for (final entry in addresses) entry.host};
     var carriedName = '';
     for (final entry in _manualPeers) {
@@ -643,7 +717,12 @@ class SyncStateStore {
         _transportLastSuccess[transport.kind] = report.finishedAt;
       }
     }
+    // 用户刚移除的设备：压住本轮的在途快照，避免删除动作被收尾中的一轮
+    // 立刻写回。只影响这一次落库；下一轮重新发现（设备仍在线）会照常写入。
+    final forgotten = Set<String>.of(_forgottenPeers);
+    _forgottenPeers.clear();
     for (final peer in report.peers) {
+      if (forgotten.contains(peer.deviceId)) continue;
       _peers[peer.deviceId] = peer;
     }
     final recent = trimPeers(_peers.values, peerLimit);
@@ -656,8 +735,13 @@ class SyncStateStore {
     try {
       final prefs = _prefs ??= await SharedPreferences.getInstance();
       await prefs.setString(stateKey, jsonEncode(_toJson()));
-    } catch (_) {
-      // 持久化失败只影响下次启动的恢复；本轮内存状态仍可用。
+    } catch (e) {
+      // 持久化失败只影响下次启动的恢复；本轮内存状态仍可用。首次失败记一条
+      // warning：反复静默会让「状态损坏 → 设备身份变化」难以定位。
+      if (!_saveFailureLogged) {
+        _saveFailureLogged = true;
+        _logger.warning('同步状态持久化失败（下次启动可能恢复旧状态）', e);
+      }
     }
   }
 
@@ -675,9 +759,10 @@ class SyncStateStore {
         'cellularPolicy': _cellularPolicy.name,
         if (_manualPeers.isNotEmpty)
           'manualPeers': [for (final peer in _manualPeers) peer.toJson()],
-        if (_notifiedPeers.isNotEmpty)
-          'notifiedPeers': _notifiedPeers.toList(),
+        if (_notifiedPeers.isNotEmpty) 'notifiedPeers': _notifiedPeers.toList(),
         if (_lanHttpPort > 0) 'lanHttpPort': _lanHttpPort,
+        // 设备身份同时写在独立键 deviceIdKey 里；这里保留一份是为了让旧版本
+        // 与备份文件自描述（读取时以独立键 / 状态里的非空值为准）。
         'stampSeq': _stampBaseline.toJson(),
         'settings': {
           for (final entry in _settingStamps.entries)
@@ -699,7 +784,6 @@ class SyncStateStore {
         if (_transportLastSuccess.isNotEmpty)
           'transportLastSuccess': _transportLastSuccess,
         if (_snapshotPushSeq.isNotEmpty) 'snapshotPush': _snapshotPushSeq,
-        if (_ignoredPeers.isNotEmpty) 'ignoredPeers': _ignoredPeers.toList(),
         'log': [for (final entry in _log) entry.toJson()],
         'activity': [for (final entry in _activity) entry.toJson()],
         'peers': [for (final peer in _peers.values) peer.toJson()],
@@ -707,7 +791,8 @@ class SyncStateStore {
 
   void _applyJson(Map<String, dynamic> json) {
     _deviceId = json['deviceId'] is String ? json['deviceId'] as String : '';
-    _deviceName = json['deviceName'] is String ? json['deviceName'] as String : '';
+    _deviceName =
+        json['deviceName'] is String ? json['deviceName'] as String : '';
 
     final categories = json['categories'];
     if (categories is Map) {
@@ -727,7 +812,8 @@ class SyncStateStore {
     // 仍关闭」；`enabled=true` 保留原 transports（派生值自然为真）。
     if (json['enabled'] == false) _enabledTransports.clear();
     _webdav = WebDavConfig.fromJson(json['webdav']);
-    _cellularPolicy = SyncCellularPolicy.parse(json['cellularPolicy'] as String?);
+    _cellularPolicy =
+        SyncCellularPolicy.parse(json['cellularPolicy'] as String?);
 
     _manualPeers.clear();
     final manualPeers = json['manualPeers'];
@@ -739,7 +825,8 @@ class SyncStateStore {
     }
     _notifiedPeers
       ..clear()
-      ..addAll((json['notifiedPeers'] as List?)?.whereType<String>() ?? const []);
+      ..addAll(
+          (json['notifiedPeers'] as List?)?.whereType<String>() ?? const []);
     _lanHttpPort = (json['lanHttpPort'] as num?)?.toInt() ?? 0;
 
     final stampSeq = json['stampSeq'];
@@ -781,13 +868,13 @@ class SyncStateStore {
     }
     _knownScriptIds
       ..clear()
-      ..addAll((json['knownScripts'] as List?)?.whereType<String>() ?? const []);
+      ..addAll(
+          (json['knownScripts'] as List?)?.whereType<String>() ?? const []);
     _activeScriptStamp = SyncStamp.fromJson(json['activeScript']);
     _sessionStamp = SyncStamp.fromJson(json['sessionStamp']);
 
-    _lastSyncAt = json['lastSyncAt'] is num
-        ? (json['lastSyncAt'] as num).toInt()
-        : 0;
+    _lastSyncAt =
+        json['lastSyncAt'] is num ? (json['lastSyncAt'] as num).toInt() : 0;
     _transportLastSuccess.clear();
     final transportLastSuccess = json['transportLastSuccess'];
     if (transportLastSuccess is Map) {
@@ -804,9 +891,6 @@ class SyncStateStore {
         if (seq is num) _snapshotPushSeq[entry.key.toString()] = seq.toInt();
       }
     }
-    _ignoredPeers
-      ..clear()
-      ..addAll((json['ignoredPeers'] as List?)?.whereType<String>() ?? const []);
     _log.clear();
     final log = json['log'];
     if (log is List) {
@@ -830,7 +914,9 @@ class SyncStateStore {
     if (peers is List) {
       for (final item in peers) {
         final peer = SyncPeerState.fromJson(item);
-        if (peer != null && _peers.length < peerLimit) _peers[peer.deviceId] = peer;
+        if (peer != null && _peers.length < peerLimit) {
+          _peers[peer.deviceId] = peer;
+        }
       }
     }
   }

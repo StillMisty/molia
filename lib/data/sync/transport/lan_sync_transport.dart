@@ -63,7 +63,6 @@ class LanSyncTransport implements SyncTransport {
     int Function()? httpPortProvider,
     void Function(int port)? onHttpPortBound,
     Future<bool> Function()? permissionGate,
-    bool Function(String deviceId)? ignoredPeersProvider,
     Future<List<String>> Function()? localAddressesProvider,
     Future<RawDatagramSocket> Function(InternetAddress address, int port)?
         udpBinder,
@@ -83,7 +82,6 @@ class LanSyncTransport implements SyncTransport {
         _httpPortProvider = httpPortProvider,
         _onHttpPortBound = onHttpPortBound,
         _permissionGate = permissionGate,
-        _ignoredPeersProvider = ignoredPeersProvider,
         _localAddressesProvider = localAddressesProvider,
         _udpBinder = udpBinder ?? _bindDatagram,
         _udpPort = udpPort,
@@ -141,9 +139,6 @@ class LanSyncTransport implements SyncTransport {
 
   /// 局域网权限门：返回 false 时传输不启动（原因 = permission_denied）。
   final Future<bool> Function()? _permissionGate;
-
-  /// 本地忽略的设备（不拉取 / 不推送它们的载荷）。
-  final bool Function(String deviceId)? _ignoredPeersProvider;
 
   /// 本机可路由候选地址提供者（组合根注入 `LocalEndpointsService`；
   /// 未注入时按 [NetworkInterface.list] 现算）。
@@ -397,10 +392,7 @@ class LanSyncTransport implements SyncTransport {
       );
     }
 
-    // 本地忽略的设备不参与本轮（幽灵 / 已失联设备的处置）。
-    final peers = (await _discoverPeers())
-        .where((peer) => !(_ignoredPeersProvider?.call(peer.deviceId) ?? false))
-        .toList();
+    final peers = await _discoverPeers();
     final envelopes = <SyncEnvelope>[];
     var failed = 0;
     var skipped = 0;
@@ -677,7 +669,6 @@ class LanSyncTransport implements SyncTransport {
     if (peerId is! String || peerId.isEmpty || peerId == deviceId) return;
     final port = message['port'];
     if (port is! num) return;
-    if (_ignoredPeersProvider?.call(peerId) ?? false) return;
 
     final peer = _Peer(
       deviceId: peerId,
