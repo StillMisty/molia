@@ -36,6 +36,9 @@ void main() {
         songId: id,
         title: title.isEmpty ? 'Song $id' : title,
         artist: artist.isEmpty ? 'Artist $id' : artist,
+        album: 'Album $id',
+        durationMs: 180000,
+        coverUrl: 'https://cover/$id.jpg',
         addedAt: 1,
       );
 
@@ -44,7 +47,25 @@ void main() {
         songId: id,
         title: 'Song $id',
         artist: 'Artist $id',
+        album: 'Album $id',
+        durationMs: 180000,
+        coverUrl: 'https://cover/$id.jpg',
         playedAt: 1,
+      );
+
+  CollectionLocalSong localSong(String id, {bool imported = false}) =>
+      CollectionLocalSong.download(
+        DownloadedTrack(
+          originSourceKey: imported ? kLocalSourceKey : 'wy',
+          originSongId: id,
+          title: imported ? '导入 $id' : '下载 $id',
+          artist: 'Artist $id',
+          album: 'Album $id',
+          durationMs: 180000,
+          filePath: '/downloads/$id.mp3',
+          imported: imported,
+          downloadedAt: 1,
+        ),
       );
 
   group('合集身份', () {
@@ -95,6 +116,43 @@ void main() {
     });
   });
 
+  group('行联合', () {
+    test('曲目行：展示字段 / 稳定 key / 收藏键来自 PlaylistTrack', () {
+      final row = TrackCollectionRow(track('1'));
+
+      expect(row.key, 'wy:1');
+      expect(row.title, 'Song 1');
+      expect(row.artist, 'Artist 1');
+      expect(row.album, 'Album 1');
+      expect(row.durationMs, 180000);
+      expect(row.artworkUrl, 'https://cover/1.jpg');
+      expect(row.favoriteKey, (sourceKey: 'wy', songId: '1'));
+      expect(row.toPlaylistTrack(addedAt: 2), same(row.track));
+    });
+
+    test('历史行：key 带历史前缀，曲目快照按历史项还原', () {
+      final row = HistoryCollectionRow(history('1'));
+
+      expect(row.key, 'h:wy:1');
+      expect(row.playedAt, 1);
+      expect(row.toPlaylistTrack(addedAt: 9).addedAt, 9);
+      expect(row.toPlaylistTrack(addedAt: 9).songId, '1');
+    });
+
+    test('本地歌曲行：key 带本地前缀，缓存 / 导入来源可判定', () {
+      final downloaded = LocalSongCollectionRow(localSong('1'));
+      final imported = LocalSongCollectionRow(localSong('2', imported: true));
+
+      expect(downloaded.key, 'l:wy:1');
+      expect(downloaded.isCached, isFalse);
+      expect(downloaded.isImported, isFalse);
+      expect(imported.key, 'l:local:2');
+      expect(imported.isImported, isTrue);
+      expect(imported.favoriteKey,
+          (sourceKey: kLocalSourceKey, songId: 'local:2'));
+    });
+  });
+
   group('视图投影', () {
     test('曲目合集：排序 + 搜索只作用于可见行，全量用于空态判定', () {
       final presenter = CollectionPresenter();
@@ -110,12 +168,12 @@ void main() {
         sort: CollectionTrackSort.title,
       );
 
-      expect(view.visible.map((row) => row.songId), ['a']);
+      final row = view.visibleRows.single as TrackCollectionRow;
+      expect(row.track.songId, 'a');
+      expect(row.key, 'wy:a');
       expect(view.visibleCount, 1);
       expect(view.tracks, tracks);
       expect(view.hasItems, isTrue);
-      expect(view.visibleHistory, isEmpty);
-      expect(view.visibleLocalSongs, isEmpty);
     });
 
     test('历史合集：可见历史行按标题 / 歌手过滤，曲目列表为空', () {
@@ -131,26 +189,16 @@ void main() {
         sort: CollectionTrackSort.added,
       );
 
-      expect(view.visible, isEmpty);
-      expect(view.visibleHistory.map((row) => row.songId), ['2']);
+      final row = view.visibleRows.single as HistoryCollectionRow;
+      expect(row.entry.songId, '2');
+      expect(row.key, 'h:wy:2');
       expect(view.visibleCount, 1);
       expect(view.hasItems, isTrue);
     });
 
     test('本地歌曲合集：可见本地行参与过滤与计数', () {
       final identity = identityFor(LibraryCollections.downloadsSentinel);
-      final rows = [
-        CollectionLocalSong.download(
-          const DownloadedTrack(
-            originSourceKey: 'wy',
-            originSongId: '1',
-            title: '下载的歌',
-            artist: '歌手',
-            filePath: '/downloads/1.mp3',
-            downloadedAt: 1,
-          ),
-        ),
-      ];
+      final rows = [localSong('1')];
 
       final view = presenter().viewFor(
         identity: identity,
@@ -161,9 +209,9 @@ void main() {
         sort: CollectionTrackSort.added,
       );
 
-      expect(view.visible, isEmpty);
-      expect(view.visibleHistory, isEmpty);
-      expect(view.visibleLocalSongs, hasLength(1));
+      final row = view.visibleRows.single as LocalSongCollectionRow;
+      expect(row.song.title, '下载 1');
+      expect(row.key, 'l:wy:1');
       expect(view.visibleCount, 1);
       expect(view.hasItems, isTrue);
     });
@@ -181,8 +229,116 @@ void main() {
       );
 
       expect(view.hasItems, isFalse);
+      expect(view.visibleRows, isEmpty);
       expect(view.visibleCount, 0);
       expect(view.collectionKey, LibraryCollections.favoritesOrderKey);
+    });
+  });
+
+  group('行动作构成', () {
+    CollectionRowActionSpec add() =>
+        const CollectionRowActionSpec(CollectionRowActionKind.addToPlaylist);
+    CollectionRowActionSpec swap() =>
+        const CollectionRowActionSpec(CollectionRowActionKind.swapSource);
+    CollectionRowActionSpec removePlaylist() => const CollectionRowActionSpec(
+          CollectionRowActionKind.removeFromPlaylist,
+          destructive: true,
+        );
+    CollectionRowActionSpec removeFavorite() => const CollectionRowActionSpec(
+          CollectionRowActionKind.removeFromFavorite,
+          destructive: true,
+        );
+    CollectionRowActionSpec toggleFavorite() =>
+        const CollectionRowActionSpec(CollectionRowActionKind.toggleFavorite);
+    CollectionRowActionSpec deleteHistory() => const CollectionRowActionSpec(
+          CollectionRowActionKind.deleteHistoryEntry,
+          destructive: true,
+        );
+    CollectionRowActionSpec deleteLocal() => const CollectionRowActionSpec(
+          CollectionRowActionKind.deleteLocalSong,
+          destructive: true,
+        );
+
+    test('曲目行：收藏 / 自建列表 / 本地音源的动作集合', () {
+      final presenter = CollectionPresenter();
+      final trackRow = TrackCollectionRow(track('1'));
+
+      expect(
+        presenter.rowActionsFor(
+          trackRow,
+          identityFor(LibraryCollections.favoritesSentinel),
+        ),
+        [add(), swap(), removeFavorite()],
+      );
+      expect(
+        presenter.rowActionsFor(trackRow, identityFor(2)),
+        [add(), swap(), removePlaylist()],
+      );
+      expect(
+        presenter.rowActionsFor(
+          TrackCollectionRow(
+            PlaylistTrack(
+              playlistId: 1,
+              sourceKey: kLocalSourceKey,
+              songId: 'x',
+              title: '本地',
+              addedAt: 1,
+            ),
+          ),
+          identityFor(LibraryCollections.favoritesSentinel),
+        ),
+        [add(), removeFavorite()],
+        reason: '本地音源不提供换源',
+      );
+      // 自建列表 id 尚未落定：只有加入列表（与旧实现一致）。
+      expect(
+        presenter.rowActionsFor(
+          trackRow,
+          const CollectionIdentity(
+            selectedId: 99,
+            kind: CollectionKind.custom,
+            playlistId: null,
+            displayName: '新列表',
+          ),
+        ),
+        [add()],
+      );
+    });
+
+    test('历史行：远端记录有换源，本地记录没有', () {
+      final presenter = CollectionPresenter();
+      final identity = identityFor(LibraryCollections.historySentinel);
+
+      expect(
+        presenter.rowActionsFor(HistoryCollectionRow(history('1')), identity),
+        [add(), swap(), deleteHistory()],
+      );
+      expect(
+        presenter.rowActionsFor(
+          HistoryCollectionRow(
+            PlayHistoryEntry(
+              sourceKey: kLocalSourceKey,
+              songId: 'x',
+              title: '本地',
+              playedAt: 1,
+            ),
+          ),
+          identity,
+        ),
+        [add(), deleteHistory()],
+      );
+    });
+
+    test('本地歌曲行：加入列表 + 收藏开关 + 删除', () {
+      final row = LocalSongCollectionRow(localSong('1'));
+
+      expect(
+        presenter().rowActionsFor(
+          row,
+          identityFor(LibraryCollections.downloadsSentinel),
+        ),
+        [add(), toggleFavorite(), deleteLocal()],
+      );
     });
   });
 }

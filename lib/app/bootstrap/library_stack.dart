@@ -68,7 +68,8 @@ Future<LibraryStack> buildLibraryStack({
   // 启动即收尾为 interrupted。
   //
   // 同步形状（`syncKey` / 版本戳 / 日志 / 导出缓存 / 远端合并）在独立的
-  // 统计同步存储里：仓库只留采集与查询，适配器只映射类型化记录。
+  // 统计同步存储里：仓库只拿它的写入面（`StatisticsSyncWriter`），适配器
+  // 只拿读取面（`StatisticsSyncStore`），具体类只在组合根相遇。
   final statisticsSyncStore = SqliteStatisticsSyncStore(
     databaseProvider: () => MoliaDatabase.instance,
     stamps: syncState.stampIssuer,

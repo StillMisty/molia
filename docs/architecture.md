@@ -354,10 +354,13 @@
   排序位、类型化适配器：搜索 / 歌词搜索 / 评论 / 专辑 / 歌手 / 发现）；能力位
   由适配器是否存在推导，各 facade 与 `SourceManager.capabilitiesFor` 消费同一条目，
   新增平台只改这一处（不再维护七份 `supportedKeys` 与 switch）。
-- **内置尝试循环**：`builtin_transport.dart::runBuiltinAttempts` 是
+- **内置尝试循环 / 发现执行器**：`builtin_transport.dart::runBuiltinAttempts` 是
   「`attempt` 返回 null 即重试、异常直接上抛、耗尽抛 `StateError`」的唯一循环，
   `cachedRetry` 与无缓存的发现端点共用；`BuiltinRetryBudget` 集中命名
   `discover` / `leaderboard` / `wyLeaderboard` 预算，平台文件不再各写 3/4/6。
+  `discover_runner.dart::runDiscoverCall` 是发现端点的唯一执行入口：`DiscoverCall`
+  描述缓存键 / 预算 / 请求 / 无效判定 / 解析（或多步尝试），有 key 走
+  `cachedRetry`、无 key 走共享尝试循环；平台文件只保留 URL / 参数 / parser。
 - **内置检索 runner**：`lib/sources/builtin/builtin_search_runner.dart` 是五个平台
   搜索的执行骨架（`runBuiltinSearch`）：重试预算、分页推断与失败归一各写一次；
   平台变体面（请求方式/URL/body、响应级重试判定、业务码判定、列表路径与解析）
@@ -421,9 +424,11 @@
   （`lib/domain/ports/statistics_sync_store.dart` +
   `lib/data/sync/statistics_sync_store.dart`）以类型化 `StatisticsSyncEvent`
   出 / 入，拥有导出缓存与廉价指纹、存量事件 `syncKey` 回填、本地下载曲目过滤
-  与按 `syncKey` 合并；`StatisticsSyncAdapter` 只做类型化事件 ↔ `SyncRecord`
-  的映射，`PlayStatisticsRepository` 不再 import 同步 wire 模型（列名 / 版本列 /
-  增量日志形状都收在 store）。
+  与按 `syncKey` 合并；写面 `StatisticsSyncWriter` 负责事件行创建
+  （`startEvent`，含 `syncKey` / 来源设备）与收尾取号 / 日志 / 导出缓存维护。
+  `StatisticsSyncAdapter` 只做类型化事件 ↔ `SyncRecord` 的映射，
+  `PlayStatisticsRepository` 只依赖 writer，不再 import 同步 wire 模型或自己
+  拼同步列（列名 / 版本列 / 增量日志形状都收在 store）。
 
 ### 资料库（library）
 
@@ -447,9 +452,11 @@
   （`lib/providers/local_songs_collection.dart`）拥有本地歌曲的历史 × 下载 /
   导入 × 完整音频缓存联结、下载优先去重、输入签名、在途令牌 / 过期丢弃与
   加载态 · 弹层计数；`CollectionPresenter`（`lib/providers/collection_presenter.dart`）
-  拥有合集身份（kind / 落库 id / 展示名 / 合集键 / 列规范）与可见行投影（过滤 /
-  排序）。收藏页不再用四个布尔值 + 三份可见列表各自判断，也不在 build 里重算
-  联结，只消费 `CollectionView` 与 `LocalSongsCollection.rows`。
+  拥有合集身份（kind / 落库 id / 展示名 / 合集键 / 列规范）、可见行投影（过滤 /
+  排序）与行动作构成。`CollectionView.visibleRows` 是统一的 `CollectionRow` 联合
+  （列表曲目 / 播放历史 / 本地歌曲），`rowActionsFor` 按行变体给动作规格；收藏页
+  不再用四个布尔值 + 三份可见列表，也不按 kind 分支拼行或挑动作，只在 build 里
+  重算联结之外消费 `CollectionView` 与 `LocalSongsCollection.rows`。
 
 ### 本地下载（downloads）
 

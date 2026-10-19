@@ -4,6 +4,7 @@ import '../source_search_result.dart';
 import 'builtin_search.dart';
 import 'builtin_transport.dart';
 import 'crypto_utils.dart';
+import 'discover_runner.dart';
 import 'discover_source.dart';
 import 'discover_track_mapper.dart';
 import 'mg_search.dart';
@@ -80,30 +81,33 @@ class MgDiscoverSource extends DiscoverSource {
   }
 
   static Future<List<DiscoverTrack>> _fetchLeaderboard(String bangid) {
-    return BuiltinSearch.transport.cachedRetry(
-      'mg:leaderboard:$bangid',
-      maxTries: BuiltinRetryBudget.leaderboard,
-      attempt: (_) async {
-        final body = await lxHttpGet(
-          'https://app.c.nf.migu.cn/MIGUM2.0/v1.0/content/querycontentbyId.do'
-          '?columnId=$bangid&needAll=0',
-          headers: {
-            'Referer': 'https://app.c.nf.migu.cn/',
-            'User-Agent': _mobileUa,
-            'channel': '0146921',
-          },
-        );
-        if (body is! Map || body['code'] != _successCode) return null;
+    return runDiscoverCall(DiscoverRequestCall<List<DiscoverTrack>>(
+      key: 'mg:leaderboard:$bangid',
+      budget: BuiltinRetryBudget.leaderboard,
+      request: () => lxHttpGet(
+        'https://app.c.nf.migu.cn/MIGUM2.0/v1.0/content/querycontentbyId.do'
+        '?columnId=$bangid&needAll=0',
+        headers: {
+          'Referer': 'https://app.c.nf.migu.cn/',
+          'User-Agent': _mobileUa,
+          'channel': '0146921',
+        },
+      ),
+      isInvalid: (body) {
+        if (body is! Map || body['code'] != _successCode) return true;
         final columnInfo = body['columnInfo'];
         final contents = (columnInfo is Map) ? columnInfo['contents'] : null;
-        if (contents is! List) return null;
+        return contents is! List;
+      },
+      parse: (body) {
+        final contents = (body['columnInfo'] as Map)['contents'] as List;
         final tracks = filterMusicInfoList([
           for (final item in contents)
             if (item is Map && item['objectInfo'] != null) item['objectInfo'],
         ]);
         return [for (final track in tracks) discoverTrackOf(track)];
       },
-    );
+    ));
   }
 
   /// 解析榜单/搜索曲目（`mg/musicInfo.js` filterMusicInfoList）。
@@ -251,16 +255,15 @@ class MgDiscoverSource extends DiscoverSource {
 
   /// 推荐歌单（LX 默认排序 = 推荐）。
   static Future<DiscoverPlaylistPage> _fetchRecommend(int page) {
-    return BuiltinSearch.transport.cachedRetry(
-      'mg:playlists::$page',
-      maxTries: BuiltinRetryBudget.discover,
-      attempt: (_) async {
-        final body = await lxHttpGet(
-          'https://app.c.nf.migu.cn/pc/bmw/page-data/'
-          'playlist-square-recommend/v1.0?templateVersion=2&pageNo=$page',
-          headers: _songListHeaders,
-        );
-        if (body is! Map || body['code'] != _successCode) return null;
+    return runDiscoverCall(DiscoverRequestCall<DiscoverPlaylistPage>(
+      key: 'mg:playlists::$page',
+      request: () => lxHttpGet(
+        'https://app.c.nf.migu.cn/pc/bmw/page-data/'
+        'playlist-square-recommend/v1.0?templateVersion=2&pageNo=$page',
+        headers: _songListHeaders,
+      ),
+      isInvalid: (body) => body is! Map || body['code'] != _successCode,
+      parse: (body) {
         final data = body['data'];
         final contents = (data is Map) ? data['contents'] : null;
         return DiscoverPlaylistPage(
@@ -270,23 +273,22 @@ class MgDiscoverSource extends DiscoverSource {
           total: 99999,
         );
       },
-    );
+    ));
   }
 
   static Future<DiscoverPlaylistPage> _fetchTagList(String tagId, int page) {
-    return BuiltinSearch.transport.cachedRetry(
-      'mg:playlists:$tagId:$page',
-      maxTries: BuiltinRetryBudget.discover,
-      attempt: (_) async {
-        final body = await lxHttpGet(
-          'https://app.c.nf.migu.cn/pc/v1.0/template/'
-          'musiclistplaza-listbytag/release?pageNumber=$page'
-          '&templateVersion=2&tagId=$tagId',
-          headers: _songListHeaders,
-        );
-        if (body is! Map || body['code'] != _successCode) return null;
-        final data = body['data'];
-        if (data is! Map) return null;
+    return runDiscoverCall(DiscoverRequestCall<DiscoverPlaylistPage>(
+      key: 'mg:playlists:$tagId:$page',
+      request: () => lxHttpGet(
+        'https://app.c.nf.migu.cn/pc/v1.0/template/'
+        'musiclistplaza-listbytag/release?pageNumber=$page'
+        '&templateVersion=2&tagId=$tagId',
+        headers: _songListHeaders,
+      ),
+      isInvalid: (body) =>
+          body is! Map || body['code'] != _successCode || body['data'] is! Map,
+      parse: (body) {
+        final data = body['data'] as Map;
         final contents = data['contents'];
         final playlists = contents is List
             ? filterList2(contents)
@@ -298,7 +300,7 @@ class MgDiscoverSource extends DiscoverSource {
           total: 99999,
         );
       },
-    );
+    ));
   }
 
   static List<dynamic> _contentItemList(Map data) {
@@ -477,33 +479,35 @@ class MgDiscoverSource extends DiscoverSource {
   static Future<({List<SourceTrack> tracks, int total})> _fetchDetailList(
     String id,
   ) {
-    return runBuiltinAttempts(
-      maxTries: BuiltinRetryBudget.discover,
-      attempt: (_) async {
-        final tracks = <SourceTrack>[];
-        var total = 0;
-        for (var page = 1; page <= _maxDetailPages; page++) {
-          final body = await lxHttpGet(
-            'https://app.c.nf.migu.cn/MIGUM3.0/resource/playlist/song/v2.0'
-            '?pageNo=$page&pageSize=$_limitSong&playlistId=$id',
-            headers: _songListHeaders,
-          );
-          if (body is! Map || body['code'] != _successCode) {
-            // 首屏失败视为整次失败（重试）；后续页失败保留已取部分。
-            if (page == 1) return null;
-            break;
+    return runDiscoverCall(
+      DiscoverAttemptCall<({List<SourceTrack> tracks, int total})>(
+        key: null,
+        attempt: (_) async {
+          final tracks = <SourceTrack>[];
+          var total = 0;
+          for (var page = 1; page <= _maxDetailPages; page++) {
+            final body = await lxHttpGet(
+              'https://app.c.nf.migu.cn/MIGUM3.0/resource/playlist/song/v2.0'
+              '?pageNo=$page&pageSize=$_limitSong&playlistId=$id',
+              headers: _songListHeaders,
+            );
+            if (body is! Map || body['code'] != _successCode) {
+              // 首屏失败视为整次失败（重试）；后续页失败保留已取部分。
+              if (page == 1) return null;
+              break;
+            }
+            final data = body['data'];
+            if (data is! Map) break;
+            final songList = data['songList'];
+            if (songList is List) {
+              tracks.addAll(filterMusicInfoListV5(songList));
+            }
+            total = parseSourceCount(data['totalCount']) ?? tracks.length;
+            if (tracks.length >= total) break;
           }
-          final data = body['data'];
-          if (data is! Map) break;
-          final songList = data['songList'];
-          if (songList is List) {
-            tracks.addAll(filterMusicInfoListV5(songList));
-          }
-          total = parseSourceCount(data['totalCount']) ?? tracks.length;
-          if (tracks.length >= total) break;
-        }
-        return (tracks: tracks, total: total);
-      },
+          return (tracks: tracks, total: total);
+        },
+      ),
     );
   }
 
@@ -546,17 +550,19 @@ class MgDiscoverSource extends DiscoverSource {
   }
 
   static Future<List<String>> _fetchHotSearch() {
-    return BuiltinSearch.transport.cachedRetry(
-      'mg:hot-search',
-      maxTries: BuiltinRetryBudget.discover,
-      attempt: (_) async {
-        final body = await lxHttpGet(
-          'http://jadeite.migu.cn:7090/music_search/v3/search/hotword',
-        );
-        if (body is! Map || body['code'] != _successCode) return null;
+    return runDiscoverCall(DiscoverRequestCall<List<String>>(
+      key: 'mg:hot-search',
+      request: () => lxHttpGet(
+        'http://jadeite.migu.cn:7090/music_search/v3/search/hotword',
+      ),
+      isInvalid: (body) {
+        if (body is! Map || body['code'] != _successCode) return true;
         final data = body['data'];
         final hotwords = (data is Map) ? data['hotwords'] : null;
-        if (hotwords is! List || hotwords.isEmpty) return null;
+        return hotwords is! List || hotwords.isEmpty;
+      },
+      parse: (body) {
+        final hotwords = (body['data'] as Map)['hotwords'] as List;
         final first = hotwords[0];
         final list = (first is Map) ? first['hotwordList'] : null;
         if (list is! List) return const [];
@@ -568,7 +574,7 @@ class MgDiscoverSource extends DiscoverSource {
               item['word'].toString(),
         ];
       },
-    );
+    ));
   }
 
   static String? _nonEmpty(String? text) =>

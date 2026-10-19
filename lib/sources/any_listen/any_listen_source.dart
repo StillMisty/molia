@@ -59,12 +59,22 @@ class AnyListenSource {
     AnyListenApi? api,
     AnyListenConfigStore? configStore,
     SettingsAccess? settings,
-  })  : assert(
-          configStore != null || settings != null,
-          'AnyListenSource 需要 configStore 或 settings（禁止自建注册表）',
-        ),
-        _api = api ?? AnyListenApi(),
-        _configStore = configStore ?? AnyListenConfigStore(settings: settings!);
+  })  : _api = api ?? AnyListenApi(),
+        _configStore = configStore ??
+            AnyListenConfigStore(settings: _requireSettings(settings));
+
+  /// 注入校验：debug 先断言给出调用栈，release 抛 [StateError]，保证漏注入
+  /// （接线错误）以可读消息显式失败，而不是在后续使用处报 null 检查错误。
+  static SettingsAccess _requireSettings(SettingsAccess? settings) {
+    assert(
+      settings != null,
+      'AnyListenSource 需要 configStore 或 settings（禁止自建注册表）',
+    );
+    if (settings == null) {
+      throw StateError('AnyListenSource 需要 configStore 或 settings（禁止自建注册表）');
+    }
+    return settings;
+  }
 
   AnyListenConfig get config => _config;
 

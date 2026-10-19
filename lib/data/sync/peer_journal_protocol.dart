@@ -73,13 +73,9 @@ class JournalDeltaConsumption {
 /// - `windowEnd == 0` 是空窗口（回执类载荷），不算截断——否则全新对端会被
 ///   推进一次多余的 bootstrap，而快照可能早于本次变更，白丢一窗；
 /// - `seq <= cursor` 的条目忽略：窗口可能从游标之前开始（WebDAV 分块覆盖）。
-///
-/// [windowStart] 是发送方声明，实际起点以条目为准（与旧实现一致）；保留它
-/// 是为了让调用方把完整窗口事实一次交给协议层，而不是各自挑字段。
 JournalDeltaConsumption consumeJournalDelta({
   required int cursor,
   required int baseSeq,
-  required int windowStart,
   required int windowEnd,
   required Iterable<SyncJournalEntry> entries,
 }) {

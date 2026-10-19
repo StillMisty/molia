@@ -4,9 +4,8 @@ import 'package:flutter/services.dart';
 import 'package:material_3_expressive/material_3_expressive.dart';
 import 'package:material_ui/material_ui.dart';
 
-import '../domain/models/download.dart' show kLocalSourceKey;
-import '../domain/models/library.dart';
 import '../l10n/app_localizations.dart';
+import '../providers/collection_presenter.dart';
 import '../utils/responsive.dart';
 import 'swipe_reveal_row.dart';
 import 'track_actions_menu.dart';
@@ -282,116 +281,97 @@ List<M3EListSwipeAction> collectionSwipeActions(
   ];
 }
 
-/// 收藏 / 自建列表曲目行的动作（触摸端左滑胶囊 / 桌面右键菜单共用）：
-/// 加入列表 + 换源（非本地曲目）+ 移除类（自建列表「从本列表移除」/
-/// 收藏「取消收藏」）。
-///
-/// 动作构成 / 图标 / 文案在这一份实现；写入动作（含「谁被移除」）由调用方给，
-/// 回调可以是异步写入（模块负责 fire-and-forget）。
-List<CollectionRowAction> collectionTrackRowActions({
+/// 行动作流程回调：投影器决定一行「有哪些动作」，页面只在这里接上对应流程
+/// （加入列表 / 换源 / 移除 / 收藏开关 / 删除）；回调可为异步写入，模块负责
+/// fire-and-forget。
+class CollectionRowActionWiring {
+  const CollectionRowActionWiring({
+    this.onCopy,
+    this.onSwap,
+    this.onRemoveFromPlaylist,
+    this.onRemoveFromFavorites,
+    this.onToggleFavorite,
+    this.onDeleteHistory,
+    this.onDeleteLocalSong,
+    this.isFavorite = false,
+    this.localSongCached = false,
+    this.localSongImported = false,
+  });
+
+  final Future<void> Function()? onCopy;
+  final Future<void> Function()? onSwap;
+  final Future<void> Function()? onRemoveFromPlaylist;
+  final Future<void> Function()? onRemoveFromFavorites;
+  final Future<void> Function()? onToggleFavorite;
+  final Future<void> Function()? onDeleteHistory;
+  final Future<void> Function()? onDeleteLocalSong;
+
+  /// 本地歌曲行当前是否已收藏（收藏开关的图标与文案）。
+  final bool isFavorite;
+
+  /// 本地歌曲行的来源（删除文案区分清缓存 / 只移出列表 / 删下载）。
+  final bool localSongCached;
+  final bool localSongImported;
+}
+
+/// 把投影器给出的动作声明编译成 [CollectionRowAction]（触摸端左滑胶囊 /
+/// 桌面右键菜单共用）：图标 / 文案 / 移除类配色只有这一份实现。
+List<CollectionRowAction> buildCollectionRowActions({
   required AppLocalizations l10n,
-  required PlaylistTrack track,
-  required bool isFavorites,
-  required bool isCustom,
-  required int? playlistId,
-  required Future<void> Function() onCopy,
-  required Future<void> Function() onSwap,
-  required Future<void> Function() onRemoveFromPlaylist,
-  required Future<void> Function() onRemoveFromFavorites,
+  required List<CollectionRowActionSpec> specs,
+  required CollectionRowActionWiring wiring,
 }) {
   return [
-    CollectionRowAction(
-      icon: Icons.playlist_add_rounded,
-      label: l10n.addToPlaylist,
-      onPressed: () => unawaited(onCopy()),
-    ),
-    if (playlistId != null && track.sourceKey != kLocalSourceKey)
-      CollectionRowAction(
-        icon: Icons.swap_horiz_rounded,
-        label: l10n.sourceSwap,
-        onPressed: () => unawaited(onSwap()),
-      ),
-    if (isCustom && playlistId != null)
-      CollectionRowAction(
-        icon: Icons.playlist_remove_rounded,
-        label: l10n.playlistRemoveTrack,
-        destructive: true,
-        onPressed: () => unawaited(onRemoveFromPlaylist()),
-      )
-    else if (isFavorites)
-      CollectionRowAction(
-        icon: Icons.delete_rounded,
-        label: l10n.favoriteRemove,
-        destructive: true,
-        onPressed: () => unawaited(onRemoveFromFavorites()),
-      ),
+    for (final spec in specs)
+      switch (spec.kind) {
+        CollectionRowActionKind.addToPlaylist => CollectionRowAction(
+            icon: Icons.playlist_add_rounded,
+            label: l10n.addToPlaylist,
+            onPressed: _fire(wiring.onCopy),
+          ),
+        CollectionRowActionKind.swapSource => CollectionRowAction(
+            icon: Icons.swap_horiz_rounded,
+            label: l10n.sourceSwap,
+            onPressed: _fire(wiring.onSwap),
+          ),
+        CollectionRowActionKind.removeFromPlaylist => CollectionRowAction(
+            icon: Icons.playlist_remove_rounded,
+            label: l10n.playlistRemoveTrack,
+            destructive: true,
+            onPressed: _fire(wiring.onRemoveFromPlaylist),
+          ),
+        CollectionRowActionKind.removeFromFavorite => CollectionRowAction(
+            icon: Icons.delete_rounded,
+            label: l10n.favoriteRemove,
+            destructive: true,
+            onPressed: _fire(wiring.onRemoveFromFavorites),
+          ),
+        CollectionRowActionKind.toggleFavorite => CollectionRowAction(
+            icon: wiring.isFavorite
+                ? Icons.heart_broken_rounded
+                : Icons.favorite_border_rounded,
+            label: wiring.isFavorite ? l10n.favoriteRemove : l10n.favoriteAdd,
+            onPressed: _fire(wiring.onToggleFavorite),
+          ),
+        CollectionRowActionKind.deleteHistoryEntry => CollectionRowAction(
+            icon: Icons.delete_rounded,
+            label: l10n.historyDeleteEntry,
+            destructive: true,
+            onPressed: _fire(wiring.onDeleteHistory),
+          ),
+        CollectionRowActionKind.deleteLocalSong => CollectionRowAction(
+            icon: Icons.delete_rounded,
+            label: wiring.localSongCached
+                ? l10n.localSongsCachedRemove
+                : wiring.localSongImported
+                    ? l10n.localSongsRemove
+                    : l10n.downloadDelete,
+            destructive: true,
+            onPressed: _fire(wiring.onDeleteLocalSong),
+          ),
+      },
   ];
 }
 
-/// 播放历史行的动作（触摸端左滑胶囊 / 桌面右键菜单共用）：加入列表 +
-/// 换源（非本地记录）+ 删除单条。
-List<CollectionRowAction> collectionHistoryRowActions({
-  required AppLocalizations l10n,
-  required PlayHistoryEntry entry,
-  required Future<void> Function() onCopy,
-  required Future<void> Function() onSwap,
-  required Future<void> Function() onDelete,
-}) {
-  return [
-    CollectionRowAction(
-      icon: Icons.playlist_add_rounded,
-      label: l10n.addToPlaylist,
-      onPressed: () => unawaited(onCopy()),
-    ),
-    if (entry.sourceKey != kLocalSourceKey)
-      CollectionRowAction(
-        icon: Icons.swap_horiz_rounded,
-        label: l10n.sourceSwap,
-        onPressed: () => unawaited(onSwap()),
-      ),
-    CollectionRowAction(
-      icon: Icons.delete_rounded,
-      label: l10n.historyDeleteEntry,
-      destructive: true,
-      onPressed: () => unawaited(onDelete()),
-    ),
-  ];
-}
-
-/// 本地歌曲行的动作（触摸端左滑胶囊 / 桌面右键菜单共用）：加入列表 +
-/// 收藏开关 + 删除（文案按记录来源区分：缓存行清缓存 / 导入项只移出列表 /
-/// 下载副本删文件）。
-List<CollectionRowAction> localSongRowActions({
-  required AppLocalizations l10n,
-  required bool isFavorite,
-  required bool isCached,
-  required bool isImported,
-  required Future<void> Function() onCopy,
-  required Future<void> Function() onToggleFavorite,
-  required Future<void> Function() onDelete,
-}) {
-  return [
-    CollectionRowAction(
-      icon: Icons.playlist_add_rounded,
-      label: l10n.addToPlaylist,
-      onPressed: () => unawaited(onCopy()),
-    ),
-    CollectionRowAction(
-      icon: isFavorite
-          ? Icons.heart_broken_rounded
-          : Icons.favorite_border_rounded,
-      label: isFavorite ? l10n.favoriteRemove : l10n.favoriteAdd,
-      onPressed: () => unawaited(onToggleFavorite()),
-    ),
-    CollectionRowAction(
-      icon: Icons.delete_rounded,
-      label: isCached
-          ? l10n.localSongsCachedRemove
-          : isImported
-              ? l10n.localSongsRemove
-              : l10n.downloadDelete,
-      destructive: true,
-      onPressed: () => unawaited(onDelete()),
-    ),
-  ];
-}
+VoidCallback _fire(Future<void> Function()? callback) =>
+    callback == null ? () {} : () => unawaited(callback());

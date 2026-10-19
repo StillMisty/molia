@@ -3,6 +3,7 @@ import '../source_track.dart';
 import 'builtin_search.dart';
 import 'builtin_transport.dart';
 import 'crypto_utils.dart';
+import 'discover_runner.dart';
 import 'wy_music_detail.dart';
 
 /// 网易云排行榜（移植自 lx-music-mobile `wy/leaderboard.js`）。
@@ -98,13 +99,12 @@ class WyLeaderboard {
 
   /// 与 LX 一致：详情失败重试至多 6 次，歌曲详情失败同样重试。
   static Future<List<SourceTrack>> _fetch(String bangid) {
-    return BuiltinSearch.transport.cachedRetry(
-      'wy:leaderboard:$bangid',
-      maxTries: BuiltinRetryBudget.wyLeaderboard,
-      attempt: (_) async {
-        dynamic body;
+    return runDiscoverCall(DiscoverRequestCall<List<SourceTrack>>(
+      key: 'wy:leaderboard:$bangid',
+      budget: BuiltinRetryBudget.wyLeaderboard,
+      request: () async {
         try {
-          body = await lxHttpPost(
+          return await lxHttpPost(
             'https://music.163.com/weapi/v3/playlist/detail',
             form: true,
             body: weapiForm({'id': bangid, 'n': 100000, 'p': 1}),
@@ -112,10 +112,14 @@ class WyLeaderboard {
         } catch (_) {
           return null;
         }
-        if (body is! Map || body['code'] != 200) return null;
-        final playlist = body['playlist'];
-        final trackIds = (playlist is Map ? playlist['trackIds'] : null);
-        if (trackIds is! List) return null;
+      },
+      isInvalid: (body) =>
+          body is! Map ||
+          body['code'] != 200 ||
+          (body['playlist'] is! Map) ||
+          ((body['playlist'] as Map)['trackIds']) is! List,
+      parse: (body) async {
+        final trackIds = (body['playlist'] as Map)['trackIds'] as List;
         final ids = <Object>[
           for (final trackId in trackIds)
             if (trackId is Map && trackId['id'] != null) trackId['id'],
@@ -127,6 +131,6 @@ class WyLeaderboard {
           return null;
         }
       },
-    );
+    ));
   }
 }

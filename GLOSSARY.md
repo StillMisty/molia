@@ -14,6 +14,7 @@
 - **Builtin transport（内置传输模块）** — `lib/sources/builtin/builtin_transport.dart`：五个平台搜索/发现共用的 HTTP 入口（客户端可注入、统一请求头/超时、响应级重试 `retryIf`、JSON 解码与 `cached` 结果缓存）。`BuiltinSearch.transport` 是唯一实例，测试注入 `MockClient` 即可覆盖 fetch 路径；HTTP 重试预算统一为 `BuiltinTransport.defaultRetries`（发现端点的业务级预算见 Builtin retry attempts），结果缓存统一为 `defaultCacheTtl`（5 分钟，single-flight + LRU + TTL），发现适配器不再各自持有静态 `RequestCache`。
 - **Builtin platform registry（内置平台注册表）** — `lib/sources/builtin/builtin_platforms.dart`：内置五平台的唯一注册表：规范键 `wy / tx / kg / kw / mg`、展示名、搜索候选排序位，以及类型化能力族适配器（搜索 / 歌词搜索 / 评论 / 专辑 / 歌手 / 发现）。能力位由适配器是否存在推导，各 facade 与 `SourceManager.capabilitiesFor` 读同一条目；新增平台只改这里，不再同步七份 `supportedKeys` 与 switch。
 - **Builtin retry attempts（内置尝试循环）** — `builtin_transport.dart::runBuiltinAttempts` + `BuiltinRetryBudget`：`attempt` 返回 null 表示本次失败、未达上限继续；抛异常直接上抛，耗尽抛 `StateError`；退避与传输层同一条策略。`cachedRetry` 与无缓存的发现端点共用这一循环，`discover` / `leaderboard` / `wyLeaderboard` 预算集中命名，平台文件不再各写 3/4/6。
+- **Discover call runner（发现端点执行器）** — `lib/sources/builtin/discover_runner.dart`：`DiscoverCall`（`DiscoverRequestCall` 一次请求 + 无效判定 + 解析 / `DiscoverAttemptCall` 多步尝试）与 `runDiscoverCall` 是发现端点的唯一执行入口；有稳定 key 走 `BuiltinTransport.cachedRetry`（single-flight，成功才缓存），没有 key 走 `runBuiltinAttempts`。平台文件只保留 URL / 参数 / parser 与端点自己的缓存键，不再各自拼 `cachedRetry` 形状。
 - **Builtin search runner（内置检索 runner）** — `lib/sources/builtin/builtin_search_runner.dart`：五个平台搜索的执行骨架（`runBuiltinSearch`）与策略的唯一实现——重试预算、分页推断、失败归一；平台变体面（请求方式/URL/body、响应级重试判定、业务码判定、列表路径与解析）收进 `BuiltinSearchCall`，各平台文件只剩字面量与 parser。结果语义分界：**平台返回空** = 正常结果（tracks 空、failure 空）；**业务拒绝 / 传输失败** = `SourceSearchResult.failed`（`SourceSearchResult.failure`，不抛异常，UI 收口前只读 tracks）。内置平台「可搜索」判定唯一来源：`SourceManager._isBuiltinSearchable`（channels 候选 / 能力位 / 搜索路由共用）。
 - **LX engine bridge（LX 引擎桥）** — `lib/sources/lx/lx_engine_native.dart`：脚本 isolate 与宿主的唯一通道。投递用 JSInvokable 值直投（`__lxDeliver` / `__lxSetup`，不再把消息拼成 JS 源码 evaluate）；HTTP 响应只下行原文 `raw`，`body` 由 prelude 在 JS 侧还原；任务泵按活动状态自适应（有在途 25ms / 空闲 250ms）；调用超时先探活（`ping`/`pong`，有在途 HTTP 时按脚本声明的超时延长预算），只有无应答才重启——单请求超时抛 `LxEngineTimeoutException` 只失败该请求，`LxEngineSupervisor` 对连续超时熔断（默认 3 次 → `failed` + `failureReason`，成功一次清零）。
 
@@ -386,11 +387,12 @@
   `test/play_statistics_formula_test.dart` 用同一批 fixture 行钉住。
 - **Statistics sync store（统计同步存储）** — `lib/domain/ports/statistics_sync_store.dart`
   + `lib/data/sync/statistics_sync_store.dart`：`StatisticsSyncEvent` 是类型化的已收尾
-  事件（`syncKey` + 版本三元组；`startedAt` / `endedAt` 只是内容时间）；store 拥有
-  导出缓存与廉价指纹、存量事件 `syncKey` 回填、本地下载曲目过滤与按 `syncKey` 的
-  合并应用。`StatisticsSyncAdapter` 只是「类型化事件 ↔ `SyncRecord`」的映射，
-  `PlayStatisticsRepository` 不再 import 同步 wire 模型（列名 / 版本列 / 增量日志
-  形状都收在 store）。
+  事件（`syncKey` + 版本三元组；`startedAt` / `endedAt` 只是内容时间）；读面
+  `StatisticsSyncStore` 拥有导出缓存与廉价指纹、存量事件 `syncKey` 回填、本地下载
+  曲目过滤与按 `syncKey` 的合并应用。写面 `StatisticsSyncWriter` 把事件行的创建
+  （`startEvent`，含 `syncKey` / 来源设备）与收尾取号 / 日志 / 导出缓存维护收进
+  store；`PlayStatisticsRepository` 只依赖 writer，不再 import 同步 wire 模型或
+  自己拼同步列。`StatisticsSyncAdapter` 只是「类型化事件 ↔ `SyncRecord`」的映射。
 
 
 - **Play event（播放事件）** — `play_events` 一行 = 一次播放尝试（append-only）：
@@ -649,7 +651,7 @@
 - **Paged list controller（分页列表状态机）** — `lib/providers/paged_list_controller.dart`：首屏 / 加载更多 / 失败态（首屏清空可重试 vs 追加保留）/ 过期响应丢弃（`reset` 与 `dispose` 都使在途请求过期）/ 跨页去重 / 「追加页去重后无新增即 `hasMore=false`」推断的唯一实现；状态以一个值发布（`PagedListState<T>`，一次请求只发终态），持有方提供 `fetchPage`（平台特有的「取满即结束 / 达到总数」判断留在取数回调）。消费面：`SearchProvider`（按 `SearchKind` 三会话）、评论热门 / 最新 tab、发现页歌单 tab 与曲目页、专辑页、歌手页——不再各自手写 flag 机。
 - **Library collections（合集策略模块）** — `lib/providers/library_collections.dart`：收藏 / 播放历史 / 本地歌曲 / 自建列表的哨兵（`unset` / `favoritesSentinel` / `historySentinel` / `downloadsSentinel`）、默认选择解析（`resolveSelection`，后两者仅显式选择进入）、顺序应用（`applyOrder`）与持久化（顺序 / 选择的唯一实现）；收藏页只保留 UI 状态。滚动位置见 Collection scroll bookkeeping。
 - **Local songs collection（本地歌曲状态机）** — `lib/providers/local_songs_collection.dart`：本地歌曲伪合集的数据状态机：拥有播放历史 × 下载 / 导入记录 × 完整音频缓存的联结、下载优先去重、输入签名（历史键 + 下载记录键 + 缓存 revision）、在途加载令牌（输入变化即丢弃过期结果）与加载态 / 弹层计数；`CollectionLocalSong` 的行形状也从渲染层移到这里。页面每帧只把输入交给 `sync` 并消费 `rows`，不再在 build 里重算联结；缓存列举失败只影响缓存行，不拖垮下载 / 导入行。
-- **Collection presenter（合集投影器）** — `lib/providers/collection_presenter.dart`：收藏页合集身份与可见行的唯一推导：先把选集解析成 `CollectionIdentity`（`CollectionKind` / 落库 `playlistId` / 展示名 / 合集键 / 列规范），再按当前合集做过滤与排序，产出 `CollectionView`（全量、可见曲目 / 历史 / 本地歌曲行与 `hasItems`）；排序结果按源列表身份记忆化。收藏页不再用四个布尔值 + 三份可见列表各自判断，标题 / 滚动键 / 多选栏 / 表头都读同一份视图。
+- **Collection presenter（合集投影器）** — `lib/providers/collection_presenter.dart`：收藏页合集身份、可见行与行动作构成的唯一推导：先把选集解析成 `CollectionIdentity`（`CollectionKind` / 落库 `playlistId` / 展示名 / 合集键 / 列规范），再按当前合集做过滤与排序，产出 `CollectionView.visibleRows`——统一的 `CollectionRow` 联合（`TrackCollectionRow` / `HistoryCollectionRow` / `LocalSongCollectionRow`）与 `hasItems`；排序结果按源列表身份记忆化，`rowActionsFor` 按行变体给出动作规格。收藏页不再用四个布尔值 + 三份可见列表，也不按 `CollectionKind` 分支拼行或挑动作；标题 / 滚动键 / 多选栏 / 表头都读同一份视图。
 
 - **Collection selection（合集多选状态机）** — `lib/widgets/collection_selection.dart`：收藏页收藏 / 历史 / 本地歌曲共用的多选唯一实现（可见行下标选择集、Ctrl 切换、Shift 区间与锚点移动、全选三态、越界提取忽略、`clear` / `clearAnchor`）；页面只保留点播分支与动作实现，Esc 的可见性 / 焦点判定仍属页面（同源规则见 Escape claims）。
 - **Collection list（合集列表模块）** — `lib/widgets/collection_track_list.dart`：收藏页各合集共用的一份列表脚手架（Scrollbar 参数、`itemExtent = TrackRow.extentOf(context, tableColumns: …) + gap`、懒构建、重排模式、空态 / 搜索空态、行动作（触摸端左滑胶囊 / 桌面右键菜单）与行外壳 `CollectionTrackRow`）；行内容由调用方 `itemBuilder` 提供，页内过滤 / 排序口径在 `lib/utils/collection_row_query.dart`（`collectionRowMatches` / `sortCollectionTracks`）。

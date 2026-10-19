@@ -1,11 +1,13 @@
-/// 收藏页合集的视图投影：合集身份、可见行与列规范只在这里推导。
+/// 收藏页合集的视图投影：合集身份、可见行、行动作构成与列规范只在这里推导。
 ///
 /// 为什么单独一层：页面原先用四个布尔值 + 三份可见列表表达「当前合集」，
 /// 标题、列表、多选栏、滚动键各自再判断一次；合集键 / 落库 id / 列规范
 /// 的规则分散后必然出现「标题显示历史、滚动键却是收藏」这类错位。现在页面
-/// 只拿一个类型化的 [CollectionView]，按 [CollectionKind] 分支渲染。
+/// 只拿一个类型化的 [CollectionView]，消费统一的 [CollectionRow] 行联合，
+/// 不再按 [CollectionKind] 分支拼行或挑行动作。
 library;
 
+import '../domain/models/download.dart' show kLocalSourceKey;
 import '../domain/models/library.dart';
 import '../utils/collection_row_query.dart';
 import 'library_collections.dart';
@@ -60,14 +62,176 @@ class CollectionIdentity {
       : CollectionColumnLayout.standard;
 }
 
+/// 合集可见行的统一联合：三种行（列表曲目 / 播放历史 / 本地歌曲）共用同一
+/// 套展示字段与身份键，页面按变体取展示与动作载荷，不再拿三份平行列表。
+///
+/// 稳定 key 保留各合集原有的前缀（历史 `h:`、本地歌曲 `l:`），切换 / 删除 /
+/// 导入后列表原地刷新、不整段重建的语义不变。
+sealed class CollectionRow {
+  const CollectionRow();
+
+  /// 当前列表内的稳定行 key（同一列表内唯一）。
+  String get key;
+
+  String get title;
+  String get artist;
+  String get album;
+  int? get durationMs;
+
+  /// 行封面地址（下载 / 导入副本优先本地封面，缓存行用历史原图）。
+  String? get artworkUrl;
+
+  /// 收藏键（下载副本 = local 音源；缓存行 / 历史 / 曲目 = 原曲键）。
+  ({String sourceKey, String songId}) get favoriteKey;
+
+  /// 加入收藏 / 列表用的曲目快照（缓存行还原为原曲身份）。
+  PlaylistTrack toPlaylistTrack({required int addedAt});
+}
+
+/// 列表曲目行（收藏 / 自建列表）。
+final class TrackCollectionRow extends CollectionRow {
+  const TrackCollectionRow(this.track);
+
+  final PlaylistTrack track;
+
+  @override
+  String get key => '${track.sourceKey}:${track.songId}';
+
+  @override
+  String get title => track.title;
+
+  @override
+  String get artist => track.artist;
+
+  @override
+  String get album => track.album;
+
+  @override
+  int? get durationMs => track.durationMs;
+
+  @override
+  String? get artworkUrl => track.coverUrl;
+
+  @override
+  ({String sourceKey, String songId}) get favoriteKey =>
+      (sourceKey: track.sourceKey, songId: track.songId);
+
+  @override
+  PlaylistTrack toPlaylistTrack({required int addedAt}) => track;
+}
+
+/// 播放历史行。
+final class HistoryCollectionRow extends CollectionRow {
+  const HistoryCollectionRow(this.entry);
+
+  final PlayHistoryEntry entry;
+
+  /// 行内「播放时间」列的毫秒时间戳。
+  int get playedAt => entry.playedAt;
+
+  @override
+  String get key => 'h:${entry.sourceKey}:${entry.songId}';
+
+  @override
+  String get title => entry.title;
+
+  @override
+  String get artist => entry.artist;
+
+  @override
+  String get album => entry.album;
+
+  @override
+  int? get durationMs => entry.durationMs;
+
+  @override
+  String? get artworkUrl => entry.coverUrl;
+
+  @override
+  ({String sourceKey, String songId}) get favoriteKey =>
+      (sourceKey: entry.sourceKey, songId: entry.songId);
+
+  @override
+  PlaylistTrack toPlaylistTrack({required int addedAt}) =>
+      PlaylistTrack.fromHistoryEntry(entry, addedAt: addedAt);
+}
+
+/// 本地歌曲行（下载 / 导入副本，或命中完整音频缓存的曲目）。
+final class LocalSongCollectionRow extends CollectionRow {
+  const LocalSongCollectionRow(this.song);
+
+  final CollectionLocalSong song;
+
+  bool get isCached => song.isCached;
+  bool get isImported => song.isImported;
+
+  @override
+  String get key => 'l:${song.key}';
+
+  @override
+  String get title => song.title;
+
+  @override
+  String get artist => song.artist;
+
+  @override
+  String get album => song.album;
+
+  @override
+  int? get durationMs => song.durationMs;
+
+  @override
+  String? get artworkUrl => song.artworkUri;
+
+  @override
+  ({String sourceKey, String songId}) get favoriteKey => song.favoriteKey;
+
+  @override
+  PlaylistTrack toPlaylistTrack({required int addedAt}) =>
+      song.toPlaylistTrack(addedAt: addedAt);
+}
+
+/// 行动作种类：展示层（图标 / 文案）与流程回调由页面按种类接线，
+/// 「这一行有哪些动作」由投影器决定。
+enum CollectionRowActionKind {
+  addToPlaylist,
+  swapSource,
+  removeFromPlaylist,
+  removeFromFavorite,
+  toggleFavorite,
+  deleteHistoryEntry,
+  deleteLocalSong,
+}
+
+/// 一条行动作的声明（不含图标 / 文案 / 回调）。
+class CollectionRowActionSpec {
+  const CollectionRowActionSpec(this.kind, {this.destructive = false});
+
+  final CollectionRowActionKind kind;
+
+  /// 移除类动作（触摸端套 error 配色、桌面端走 error 语义）。
+  final bool destructive;
+
+  @override
+  bool operator ==(Object other) =>
+      other is CollectionRowActionSpec &&
+      other.kind == kind &&
+      other.destructive == destructive;
+
+  @override
+  int get hashCode => Object.hash(kind, destructive);
+
+  @override
+  String toString() =>
+      'CollectionRowActionSpec($kind, destructive: $destructive)';
+}
+
 /// 当前合集的只读视图（build 计算一次，头部 / 列表 / 多选共用）。
 class CollectionView {
   const CollectionView({
     required this.identity,
     required this.tracks,
-    required this.visible,
-    required this.visibleHistory,
-    required this.visibleLocalSongs,
+    required this.visibleRows,
     required this.hasItems,
   });
 
@@ -85,32 +249,23 @@ class CollectionView {
   bool get isLocalSongs => identity.isLocalSongs;
   bool get isCustom => identity.isCustom;
 
-  /// 全量曲目（历史 / 本地歌曲集合为空）。
+  /// 全量曲目（历史 / 本地歌曲集合为空）；只用于空态与「调整顺序」入口判定。
   final List<PlaylistTrack> tracks;
 
-  /// 搜索 + 排序后的可见曲目（可见顺序即播放队列顺序）。
-  final List<PlaylistTrack> visible;
-
-  /// 搜索过滤后的历史条目。
-  final List<PlayHistoryEntry> visibleHistory;
-
-  /// 搜索过滤后的本地歌曲（下载 / 导入副本 + 缓存行）。
-  final List<CollectionLocalSong> visibleLocalSongs;
+  /// 搜索 + 排序后的可见行（可见顺序即播放队列顺序）；三种合集共用一条
+  /// 有序列表，行本身携带展示字段与动作载荷。
+  final List<CollectionRow> visibleRows;
 
   final bool hasItems;
 
   /// 当前合集可见行数（表格表头只在有可见行时显示）。
-  int get visibleCount => switch (kind) {
-        CollectionKind.history => visibleHistory.length,
-        CollectionKind.localSongs => visibleLocalSongs.length,
-        CollectionKind.favorites || CollectionKind.custom => visible.length,
-      };
+  int get visibleCount => visibleRows.length;
 }
 
-/// 合集投影器：解析选集、投影可见行并缓存排序结果。
+/// 合集投影器：解析选集、投影可见行 / 行动作并缓存排序结果。
 ///
-/// 有状态只是为了复用排序（O(n log n) 与搜索词无关）；身份与过滤都是纯
-/// 函数，单元测试可以直接构造输入断言，不需要挂页面。
+/// 有状态只是为了复用排序（O(n log n) 与搜索词无关）；身份、过滤与动作构成
+/// 都是纯函数，单元测试可以直接构造输入断言，不需要挂页面。
 class CollectionPresenter {
   List<PlaylistTrack>? _sortedSource;
   List<PlaylistTrack> _sorted = const [];
@@ -156,8 +311,8 @@ class CollectionPresenter {
     );
   }
 
-  /// 投影当前合集：只对生效的合集做过滤 / 排序（其余列表给空，避免无谓
-  /// 遍历；页面也据此判断空态与加载态）。
+  /// 投影当前合集的可见行：只对生效的合集做过滤 / 排序（其余列表给空，
+  /// 避免无谓遍历；页面也据此判断空态与加载态）。
   CollectionView viewFor({
     required CollectionIdentity identity,
     required List<PlaylistTrack> tracks,
@@ -166,25 +321,32 @@ class CollectionPresenter {
     required String query,
     required CollectionTrackSort sort,
   }) {
-    final isHistory = identity.kind == CollectionKind.history;
-    final isLocalSongs = identity.kind == CollectionKind.localSongs;
-    final visible = isHistory || isLocalSongs
-        ? const <PlaylistTrack>[]
-        : _filterAndSortTracks(tracks, query: query, sort: sort);
-    final visibleHistory = isHistory
-        ? filterRowsByQuery(
+    final visibleRows = switch (identity.kind) {
+      CollectionKind.history => [
+          for (final entry in filterRowsByQuery(
             history,
             query: query,
             fields: (entry) => (title: entry.title, artist: entry.artist),
-          )
-        : const <PlayHistoryEntry>[];
-    final visibleLocalSongs = isLocalSongs
-        ? filterRowsByQuery(
+          ))
+            HistoryCollectionRow(entry),
+        ],
+      CollectionKind.localSongs => [
+          for (final song in filterRowsByQuery(
             localSongs,
             query: query,
             fields: (song) => (title: song.title, artist: song.artist),
-          )
-        : const <CollectionLocalSong>[];
+          ))
+            LocalSongCollectionRow(song),
+        ],
+      CollectionKind.favorites || CollectionKind.custom => [
+          for (final track in _filterAndSortTracks(
+            tracks,
+            query: query,
+            sort: sort,
+          ))
+            TrackCollectionRow(track),
+        ],
+    };
     final hasItems = switch (identity.kind) {
       CollectionKind.history => history.isNotEmpty,
       CollectionKind.localSongs => localSongs.isNotEmpty,
@@ -192,12 +354,57 @@ class CollectionPresenter {
     };
     return CollectionView(
       identity: identity,
-      tracks: isHistory || isLocalSongs ? const <PlaylistTrack>[] : tracks,
-      visible: visible,
-      visibleHistory: visibleHistory,
-      visibleLocalSongs: visibleLocalSongs,
+      tracks: identity.isHistory || identity.isLocalSongs
+          ? const <PlaylistTrack>[]
+          : tracks,
+      visibleRows: visibleRows,
       hasItems: hasItems,
     );
+  }
+
+  /// 一行应有哪些行动作（顺序 / 是否移除类在这里定；图标 / 文案 / 流程由
+  /// 页面按种类接线）。页面不再按 [CollectionKind] 挑动作集合。
+  List<CollectionRowActionSpec> rowActionsFor(
+    CollectionRow row,
+    CollectionIdentity identity,
+  ) {
+    switch (row) {
+      case TrackCollectionRow(:final track):
+        return [
+          const CollectionRowActionSpec(CollectionRowActionKind.addToPlaylist),
+          if (identity.playlistId != null && track.sourceKey != kLocalSourceKey)
+            const CollectionRowActionSpec(CollectionRowActionKind.swapSource),
+          if (identity.isCustom && identity.playlistId != null)
+            const CollectionRowActionSpec(
+              CollectionRowActionKind.removeFromPlaylist,
+              destructive: true,
+            )
+          else if (identity.isFavorites)
+            const CollectionRowActionSpec(
+              CollectionRowActionKind.removeFromFavorite,
+              destructive: true,
+            ),
+        ];
+      case HistoryCollectionRow(:final entry):
+        return [
+          const CollectionRowActionSpec(CollectionRowActionKind.addToPlaylist),
+          if (entry.sourceKey != kLocalSourceKey)
+            const CollectionRowActionSpec(CollectionRowActionKind.swapSource),
+          const CollectionRowActionSpec(
+            CollectionRowActionKind.deleteHistoryEntry,
+            destructive: true,
+          ),
+        ];
+      case LocalSongCollectionRow():
+        return const [
+          CollectionRowActionSpec(CollectionRowActionKind.addToPlaylist),
+          CollectionRowActionSpec(CollectionRowActionKind.toggleFavorite),
+          CollectionRowActionSpec(
+            CollectionRowActionKind.deleteLocalSong,
+            destructive: true,
+          ),
+        ];
+    }
   }
 
   /// 排序结果记忆化：键 = 源列表身份 + 排序口径。

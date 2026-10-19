@@ -261,41 +261,36 @@ class BuiltinPlatforms {
     byKey.values.toList()..sort((a, b) => a.searchRank.compareTo(b.searchRank)),
   );
 
+  /// 某能力族的非空适配器表：`byKey` 是唯一事实来源，六族键表都从这里推导，
+  /// 选择器为 null 的平台不进表。
+  static Map<String, T> _adaptersOf<T extends Object>(
+    T? Function(BuiltinPlatform platform) select,
+  ) {
+    final adapters = <String, T>{};
+    for (final platform in byKey.values) {
+      final adapter = select(platform);
+      if (adapter != null) adapters[platform.key] = adapter;
+    }
+    return Map.unmodifiable(adapters);
+  }
+
   static final Map<String, BuiltinSearchAdapter> searchAdapters =
-      Map.unmodifiable(<String, BuiltinSearchAdapter>{
-    for (final platform in byKey.values)
-      if (platform.search != null) platform.key: platform.search!,
-  });
+      _adaptersOf((platform) => platform.search);
 
   static final Map<String, BuiltinLyricSearchAdapter> lyricSearchAdapters =
-      Map.unmodifiable(<String, BuiltinLyricSearchAdapter>{
-    for (final platform in byKey.values)
-      if (platform.lyricSearch != null) platform.key: platform.lyricSearch!,
-  });
+      _adaptersOf((platform) => platform.lyricSearch);
 
   static final Map<String, BuiltinCommentAdapter> commentAdapters =
-      Map.unmodifiable(<String, BuiltinCommentAdapter>{
-    for (final platform in byKey.values)
-      if (platform.comments != null) platform.key: platform.comments!,
-  });
+      _adaptersOf((platform) => platform.comments);
 
   static final Map<String, BuiltinAlbumAdapter> albumAdapters =
-      Map.unmodifiable(<String, BuiltinAlbumAdapter>{
-    for (final platform in byKey.values)
-      if (platform.album != null) platform.key: platform.album!,
-  });
+      _adaptersOf((platform) => platform.album);
 
   static final Map<String, BuiltinArtistAdapter> artistAdapters =
-      Map.unmodifiable(<String, BuiltinArtistAdapter>{
-    for (final platform in byKey.values)
-      if (platform.artist != null) platform.key: platform.artist!,
-  });
+      _adaptersOf((platform) => platform.artist);
 
   static final Map<String, DiscoverSource> discoverSources =
-      Map.unmodifiable(<String, DiscoverSource>{
-    for (final platform in byKey.values)
-      if (platform.discover != null) platform.key: platform.discover!,
-  });
+      _adaptersOf((platform) => platform.discover);
 
   static final Set<String> searchKeys = Set.unmodifiable(searchAdapters.keys);
   static final Set<String> lyricSearchKeys =

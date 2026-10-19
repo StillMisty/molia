@@ -269,9 +269,9 @@ class BuiltinTransport {
 /// 数字集中在这里：平台文件按语义引用，避免同一策略在各适配器里漂移成
 /// 3/4/6。预算是首屏失败率的一部分，调整前先看对应条目的来由。
 abstract final class BuiltinRetryBudget {
-  /// 发现端点默认预算：首次 + 2 次重试（与传输层 [BuiltinTransport.defaultRetries]
-  /// 对齐；搜索与发现的业务级重试保持同一数量级）。
-  static const int discover = 3;
+  /// 发现端点默认预算：直接引用传输层的 [BuiltinTransport.defaultRetries]
+  /// （首次 + 2 次重试），同一数字只声明一处；搜索与发现保持同一重试策略。
+  static const int discover = BuiltinTransport.defaultRetries;
 
   /// 榜单端点：榜单是发现页首屏，kw/kg/mg 沿用既有 4 次；
   /// 比默认多一次，不要按默认 3 收紧。

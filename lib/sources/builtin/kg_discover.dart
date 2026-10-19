@@ -6,6 +6,7 @@ import '../source_search_result.dart';
 import 'builtin_search.dart';
 import 'builtin_transport.dart';
 import 'crypto_utils.dart';
+import 'discover_runner.dart';
 import 'discover_source.dart';
 import 'discover_track_mapper.dart';
 import 'kg_search.dart';
@@ -100,25 +101,27 @@ class KgDiscoverSource extends DiscoverSource {
   }
 
   static Future<List<DiscoverTrack>> _fetchLeaderboard(String bangid) {
-    return BuiltinSearch.transport.cachedRetry(
-      'kg:leaderboard:$bangid',
-      maxTries: BuiltinRetryBudget.leaderboard,
-      attempt: (_) async {
-        final body = await lxHttpGet(
-          'http://mobilecdnbj.kugou.com/api/v3/rank/song?version=9108'
-          '&ranktype=1&plat=0&pagesize=$_limitSong&area_code=1&page=1'
-          '&rankid=$bangid&with_res_tag=0&show_portrait_mv=1',
-        );
-        if (body is! Map || body['errcode'] != 0) return null;
-        final data = body['data'];
-        final rawList = (data is Map) ? data['info'] : null;
-        if (rawList is! List) return null;
+    return runDiscoverCall(DiscoverRequestCall<List<DiscoverTrack>>(
+      key: 'kg:leaderboard:$bangid',
+      budget: BuiltinRetryBudget.leaderboard,
+      request: () => lxHttpGet(
+        'http://mobilecdnbj.kugou.com/api/v3/rank/song?version=9108'
+        '&ranktype=1&plat=0&pagesize=$_limitSong&area_code=1&page=1'
+        '&rankid=$bangid&with_res_tag=0&show_portrait_mv=1',
+      ),
+      isInvalid: (body) =>
+          body is! Map ||
+          body['errcode'] != 0 ||
+          body['data'] is! Map ||
+          (body['data'] as Map)['info'] is! List,
+      parse: (body) {
+        final rawList = (body['data'] as Map)['info'] as List;
         return [
           for (final item in rawList)
             if (filterDataItem(item) case final track?) discoverTrackOf(track),
         ];
       },
-    );
+    ));
   }
 
   /// 解析榜单曲目（`kg/leaderboard.js` filterData；独立出来便于单元测试）。
@@ -238,20 +241,17 @@ class KgDiscoverSource extends DiscoverSource {
   }
 
   static Future<List<dynamic>> _fetchSongList(String tagId, int page) {
-    return runBuiltinAttempts(
-      maxTries: BuiltinRetryBudget.discover,
-      attempt: (_) async {
+    return runDiscoverCall(DiscoverRequestCall<List<dynamic>>(
+      key: null,
+      request: () => lxHttpGet(
         // LX 默认排序 = 推荐（t=5）。
-        final body = await lxHttpGet(
-          'http://www2.kugou.kugou.com/yueku/v9/special/getSpecial'
-          '?is_ajax=1&cdn=cdn&t=5&c=$tagId&p=$page',
-        );
-        if (body is! Map || body['status'] != 1) return null;
-        final list = body['special_db'];
-        if (list is! List) return null;
-        return list;
-      },
-    );
+        'http://www2.kugou.kugou.com/yueku/v9/special/getSpecial'
+        '?is_ajax=1&cdn=cdn&t=5&c=$tagId&p=$page',
+      ),
+      isInvalid: (body) =>
+          body is! Map || body['status'] != 1 || body['special_db'] is! List,
+      parse: (body) => body['special_db'] as List,
+    ));
   }
 
   static Future<Map<String, dynamic>?> _fetchListInfo(String tagId) async {
@@ -352,15 +352,15 @@ class KgDiscoverSource extends DiscoverSource {
   }
 
   static Future<DiscoverDetail> _fetchDetailBySpecialId(String id) {
-    return BuiltinSearch.transport.cachedRetry(
-      'kg:playlist-detail:$id',
-      maxTries: BuiltinRetryBudget.discover,
-      attempt: (_) async {
-        final html = await lxHttpGetText(
-          'http://www2.kugou.kugou.com/yueku/v9/special/single/$id-5-9999.html',
-        );
-        final dataMatch = _listDataExp.firstMatch(html);
-        if (dataMatch == null) return null;
+    return runDiscoverCall(DiscoverRequestCall<DiscoverDetail>(
+      key: 'kg:playlist-detail:$id',
+      request: () => lxHttpGetText(
+        'http://www2.kugou.kugou.com/yueku/v9/special/single/$id-5-9999.html',
+      ),
+      isInvalid: (html) => _listDataExp.firstMatch(html as String) == null,
+      parse: (html) async {
+        final text = html as String;
+        final dataMatch = _listDataExp.firstMatch(text)!;
         final rawList = jsonDecode(dataMatch.group(1)!) as List;
         final hashes = <Map<String, dynamic>>[
           for (final item in rawList)
@@ -368,7 +368,7 @@ class KgDiscoverSource extends DiscoverSource {
               {'hash': item['hash'].toString()},
         ];
         final tracks = await _fetchMusicInfos(hashes);
-        final infoMatch = _listInfoExp.firstMatch(html);
+        final infoMatch = _listInfoExp.firstMatch(text);
         return DiscoverDetail(
           info: DiscoverPlaylist(
             id: 'id_$id',
@@ -377,14 +377,14 @@ class KgDiscoverSource extends DiscoverSource {
             author: '',
             playCount: 0,
             trackCount: tracks.length,
-            description: _parseHtmlDesc(html),
+            description: _parseHtmlDesc(text),
           ),
           tracks: [
             for (final track in tracks) discoverTrackOf(track),
           ],
         );
       },
-    );
+    ));
   }
 
   static String? _parseHtmlDesc(String html) {
@@ -405,8 +405,9 @@ class KgDiscoverSource extends DiscoverSource {
     List<Map<String, dynamic>> hashes,
   ) {
     const maxTries = BuiltinRetryBudget.discover;
-    return runBuiltinAttempts(
-      maxTries: maxTries,
+    return runDiscoverCall(DiscoverAttemptCall<List<SourceTrack>>(
+      key: null,
+      budget: maxTries,
       attempt: (tryNum) async {
         final tracks = <SourceTrack>[];
         for (var i = 0; i < hashes.length; i += _limitSong) {
@@ -455,7 +456,7 @@ class KgDiscoverSource extends DiscoverSource {
         }
         return tracks;
       },
-    );
+    ));
   }
 
   /// 解析 gateway 歌曲信息（`kg/songList.js` filterData2；便于单元测试）。
@@ -501,28 +502,29 @@ class KgDiscoverSource extends DiscoverSource {
   }
 
   static Future<List<String>> _fetchHotSearch() {
-    return BuiltinSearch.transport.cachedRetry(
-      'kg:hot-search',
-      maxTries: BuiltinRetryBudget.discover,
-      attempt: (_) async {
-        final body = await lxHttpGet(
-          'http://gateway.kugou.com/api/v3/search/hot_tab'
-          '?signature=ee44edb9d7155821412d220bcaf509dd&appid=1005'
-          '&clientver=10026&plat=0',
-          headers: {
-            'dfid': '1ssiv93oVqMp27cirf2CvoF1',
-            'mid': '156798703528610303473757548878786007104',
-            'clienttime': '1584257267',
-            'x-router': 'msearch.kugou.com',
-            'user-agent':
-                'Android9-AndroidPhone-10020-130-0-searchrecommendprotocol-wifi',
-            'kg-rc': '1',
-          },
-        );
-        if (body is! Map || body['errcode'] != 0) return null;
-        final data = body['data'];
-        final rawList = (data is Map) ? data['list'] : null;
-        if (rawList is! List) return null;
+    return runDiscoverCall(DiscoverRequestCall<List<String>>(
+      key: 'kg:hot-search',
+      request: () => lxHttpGet(
+        'http://gateway.kugou.com/api/v3/search/hot_tab'
+        '?signature=ee44edb9d7155821412d220bcaf509dd&appid=1005'
+        '&clientver=10026&plat=0',
+        headers: {
+          'dfid': '1ssiv93oVqMp27cirf2CvoF1',
+          'mid': '156798703528610303473757548878786007104',
+          'clienttime': '1584257267',
+          'x-router': 'msearch.kugou.com',
+          'user-agent':
+              'Android9-AndroidPhone-10020-130-0-searchrecommendprotocol-wifi',
+          'kg-rc': '1',
+        },
+      ),
+      isInvalid: (body) =>
+          body is! Map ||
+          body['errcode'] != 0 ||
+          body['data'] is! Map ||
+          (body['data'] as Map)['list'] is! List,
+      parse: (body) {
+        final rawList = (body['data'] as Map)['list'] as List;
         final words = <String>[];
         for (final item in rawList) {
           if (item is! Map) continue;
@@ -536,6 +538,6 @@ class KgDiscoverSource extends DiscoverSource {
         }
         return words;
       },
-    );
+    ));
   }
 }

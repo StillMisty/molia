@@ -943,7 +943,6 @@ class SyncEngine extends ChangeNotifier implements SyncSchedulerHost {
         final consumed = consumeJournalDelta(
           cursor: cursor,
           baseSeq: envelope.baseSeq,
-          windowStart: envelope.windowStart,
           windowEnd: envelope.windowEnd,
           entries: envelope.journal ?? const <SyncJournalEntry>[],
         );

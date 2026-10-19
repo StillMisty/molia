@@ -99,6 +99,11 @@ void main() {
     expect(event.toData().containsKey('id'), isFalse, reason: '本机行 id 不出本机');
     expect(event.toData()['syncKey'], event.syncKey);
 
+    // 事件行的同步列由写入点落库（仓库不再自己拼 syncKey / 来源设备）。
+    final row = (await tableRows(db, 'play_events')).single;
+    expect(row['syncKey'], event.syncKey);
+    expect(row['originDeviceId'], 'devA');
+
     // 指纹未变时导出复用同一列表实例（缓存命中不读全表）。
     expect(identical(await store.syncExportEvents(), exported), isTrue);
   });

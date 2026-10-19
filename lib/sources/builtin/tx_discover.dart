@@ -3,8 +3,8 @@ import 'dart:convert';
 import '../../domain/models/discover.dart';
 import '../source_search_result.dart';
 import 'builtin_search.dart';
-import 'builtin_transport.dart';
 import 'crypto_utils.dart';
+import 'discover_runner.dart';
 import 'discover_source.dart';
 import 'discover_track_mapper.dart';
 import 'tx_search.dart';
@@ -112,9 +112,9 @@ class TxDiscoverSource extends DiscoverSource {
   }
 
   static Future<List<DiscoverTagCategory>> _fetchTag() {
-    return runBuiltinAttempts(
-      maxTries: BuiltinRetryBudget.discover,
-      attempt: (_) async {
+    return runDiscoverCall(DiscoverRequestCall<List<DiscoverTagCategory>>(
+      key: null,
+      request: () {
         final data = jsonEncode({
           'tags': {
             'method': 'get_all_categories',
@@ -122,17 +122,22 @@ class TxDiscoverSource extends DiscoverSource {
             'module': 'playlist.PlaylistAllCategoriesServer',
           },
         });
-        final body = await lxHttpGet(
+        return lxHttpGet(
           'https://u.y.qq.com/cgi-bin/musicu.fcg?loginUin=0&hostUin=0&format=json'
           '&inCharset=utf-8&outCharset=utf-8&notice=0&platform=wk_v15.json'
           '&needNewCode=0&data=${Uri.encodeComponent(data)}',
         );
-        if (body is! Map || body['code'] != 0) return null;
-        final groups = ((body['tags'] as Map?)?['data'] as Map?)?['v_group'];
-        if (groups is! List) return null;
-        return filterTagInfo(groups);
       },
-    );
+      isInvalid: (body) {
+        if (body is! Map || body['code'] != 0) return true;
+        final groups = ((body['tags'] as Map?)?['data'] as Map?)?['v_group'];
+        return groups is! List;
+      },
+      parse: (body) {
+        final groups = ((body['tags'] as Map?)?['data'] as Map?)?['v_group'];
+        return filterTagInfo(groups as List);
+      },
+    ));
   }
 
   /// 解析标签目录（独立出来便于单元测试）。
@@ -185,10 +190,9 @@ class TxDiscoverSource extends DiscoverSource {
 
   /// 推荐歌单（LX 默认排序 = 推荐）。
   static Future<DiscoverPlaylistPage> _fetchRecommend(int page) {
-    return BuiltinSearch.transport.cachedRetry(
-      'tx:playlists::$page',
-      maxTries: BuiltinRetryBudget.discover,
-      attempt: (_) async {
+    return runDiscoverCall(DiscoverRequestCall<DiscoverPlaylistPage>(
+      key: 'tx:playlists::$page',
+      request: () {
         final data = jsonEncode({
           'comm': {'cv': 1602, 'ct': 20},
           'playlist': {
@@ -200,12 +204,14 @@ class TxDiscoverSource extends DiscoverSource {
             },
           },
         });
-        final body = await lxHttpGet(
+        return lxHttpGet(
           'https://u.y.qq.com/cgi-bin/musicu.fcg?loginUin=0&hostUin=0&format=json'
           '&inCharset=utf-8&outCharset=utf-8&notice=0&platform=wk_v15.json'
           '&needNewCode=0&data=${Uri.encodeComponent(data)}',
         );
-        if (body is! Map || body['code'] != 0) return null;
+      },
+      isInvalid: (body) => body is! Map || body['code'] != 0,
+      parse: (body) {
         final feed = ((body['playlist'] as Map?)?['data'] as Map?)?['FeedRsp'];
         final items = (feed is Map) ? feed['List'] : null;
         final playlists = <DiscoverPlaylist>[];
@@ -225,15 +231,14 @@ class TxDiscoverSource extends DiscoverSource {
           total: (feed is Map ? parseSourceCount(feed['FromLimit']) : 0) ?? 0,
         );
       },
-    );
+    ));
   }
 
   /// 分类歌单（`get_category_content`）。
   static Future<DiscoverPlaylistPage> _fetchCategory(String tagId, int page) {
-    return BuiltinSearch.transport.cachedRetry(
-      'tx:playlists:$tagId:$page',
-      maxTries: BuiltinRetryBudget.discover,
-      attempt: (_) async {
+    return runDiscoverCall(DiscoverRequestCall<DiscoverPlaylistPage>(
+      key: 'tx:playlists:$tagId:$page',
+      request: () {
         final id = int.tryParse(tagId) ?? tagId;
         final data = jsonEncode({
           'comm': {'cv': 1602, 'ct': 20},
@@ -250,15 +255,19 @@ class TxDiscoverSource extends DiscoverSource {
             'module': 'playlist.PlayListCategoryServer',
           },
         });
-        final body = await lxHttpGet(
+        return lxHttpGet(
           'https://u.y.qq.com/cgi-bin/musicu.fcg?loginUin=0&hostUin=0&format=json'
           '&inCharset=utf-8&outCharset=utf-8&notice=0&platform=wk_v15.json'
           '&needNewCode=0&data=${Uri.encodeComponent(data)}',
         );
-        if (body is! Map || body['code'] != 0) return null;
+      },
+      isInvalid: (body) =>
+          body is! Map ||
+          body['code'] != 0 ||
+          ((body['playlist'] as Map?)?['data'] as Map?)?['content'] is! Map,
+      parse: (body) {
         final content =
-            ((body['playlist'] as Map?)?['data'] as Map?)?['content'];
-        if (content is! Map) return null;
+            ((body['playlist'] as Map?)?['data'] as Map?)?['content'] as Map;
         final items = content['v_item'];
         return DiscoverPlaylistPage(
           playlists: [
@@ -271,7 +280,7 @@ class TxDiscoverSource extends DiscoverSource {
           total: parseSourceCount(content['total_cnt']) ?? 0,
         );
       },
-    );
+    ));
   }
 
   static DiscoverPlaylist _playlistFromBasic(Map basic) {
@@ -479,41 +488,43 @@ class TxDiscoverSource extends DiscoverSource {
   }
 
   static Future<List<String>> _fetchHotSearch() {
-    return BuiltinSearch.transport.cachedRetry(
-      'tx:hot-search',
-      maxTries: BuiltinRetryBudget.discover,
-      attempt: (_) async {
-        final body = await lxHttpPost(
-          'https://u.y.qq.com/cgi-bin/musicu.fcg',
-          headers: {'Referer': 'https://y.qq.com/portal/player.html'},
-          body: {
-            'comm': {
-              'ct': '19',
-              'cv': '1803',
-              'guid': '0',
-              'patch': '118',
-              'psrf_access_token_expiresAt': 0,
-              'psrf_qqaccess_token': '',
-              'psrf_qqopenid': '',
-              'psrf_qqunionid': '',
-              'tmeAppID': 'qqmusic',
-              'tmeLoginType': 0,
-              'uin': '0',
-              'wid': '0',
-            },
-            'hotkey': {
-              'method': 'GetHotkeyForQQMusicPC',
-              'module': 'tencent_musicsoso_hotkey.HotkeyService',
-              'param': {'search_id': '', 'uin': 0},
-            },
+    return runDiscoverCall(DiscoverRequestCall<List<String>>(
+      key: 'tx:hot-search',
+      request: () => lxHttpPost(
+        'https://u.y.qq.com/cgi-bin/musicu.fcg',
+        headers: {'Referer': 'https://y.qq.com/portal/player.html'},
+        body: {
+          'comm': {
+            'ct': '19',
+            'cv': '1803',
+            'guid': '0',
+            'patch': '118',
+            'psrf_access_token_expiresAt': 0,
+            'psrf_qqaccess_token': '',
+            'psrf_qqopenid': '',
+            'psrf_qqunionid': '',
+            'tmeAppID': 'qqmusic',
+            'tmeLoginType': 0,
+            'uin': '0',
+            'wid': '0',
           },
-        );
-        if (body is! Map || body['code'] != 0) return null;
-        final vec = ((body['hotkey'] as Map?)?['data'] as Map?)?['vec_hotkey'];
-        if (vec is! List) return null;
+          'hotkey': {
+            'method': 'GetHotkeyForQQMusicPC',
+            'module': 'tencent_musicsoso_hotkey.HotkeyService',
+            'param': {'search_id': '', 'uin': 0},
+          },
+        },
+      ),
+      isInvalid: (body) =>
+          body is! Map ||
+          body['code'] != 0 ||
+          ((body['hotkey'] as Map?)?['data'] as Map?)?['vec_hotkey'] is! List,
+      parse: (body) {
+        final vec =
+            ((body['hotkey'] as Map?)?['data'] as Map?)?['vec_hotkey'] as List;
         return filterHotSearch(vec);
       },
-    );
+    ));
   }
 
   /// 解析热搜词（独立出来便于单元测试）。

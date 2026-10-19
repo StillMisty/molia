@@ -92,8 +92,59 @@ Future<int> upsertPlayTrackContent(
   return existing.id;
 }
 
+/// 听歌统计的同步写入点：仓库只通过它落同步列与版本戳 / 增量日志。
+///
+/// 为什么单独成 seam：仓库不该知道 `syncKey` / 版本列 / 日志的形状，也不该
+/// 直接写这些列；`stamp*` 又必须在仓库的 drift 事务里执行（版本戳与增量
+/// 日志要和内容写入同事务），所以接口放在数据层、签名带 drift 执行器。
+/// 读取面（导出 / 应用）由 [StatisticsSyncStore] 提供给适配器。
+abstract interface class StatisticsSyncWriter {
+  /// 本机设备 id（事件来源设备，与版本三元组同一来源）。
+  String get deviceId;
+
+  /// 新事件去重键（32 位十六进制随机串）。
+  String newEventSyncKey();
+
+  /// 应用远端记录后通知仓库广播（UI 刷新 / 同步调度标记）。
+  set onChanged(void Function()? callback);
+
+  /// 创建一条进行中事件（含内容行 upsert、`syncKey` 与来源设备），返回行 id。
+  ///
+  /// 事务由实现负责：仓库只表达「开始一次播放」，不再自己拼同步列。
+  Future<int> startEvent({
+    required String sourceKey,
+    required String songId,
+    required String title,
+    required String artist,
+    required String album,
+    required String? coverUrl,
+    required int? durationMs,
+    required Map<String, dynamic> raw,
+    required int startedAt,
+  });
+
+  /// 收尾事件：在数据写入的同一事务里补版本戳并追加增量日志。
+  Future<void> stampFinishedEvent(DatabaseConnectionUser executor, int eventId);
+
+  /// 启动收尾遗留事件：整批取一个版本戳，并在同一事务里为每行追加日志。
+  Future<void> stampClosedEvents(
+    DatabaseConnectionUser executor,
+    List<int> eventIds,
+  );
+
+  /// 单条事件收尾后的导出缓存增量维护（事务提交后调用）。
+  Future<void> noteEventExported(int eventId);
+
+  /// 批量 / 整体改动（清空、裁剪、收尾遗留）后推进指纹并让缓存整体失效。
+  void noteExportInvalidated();
+}
+
 /// 统计同步面的 drift 实现（生产库 / 测试 in-memory 库同一套 SQL）。
-class SqliteStatisticsSyncStore implements StatisticsSyncStore {
+///
+/// 同时实现读取面（适配器）与写入面（仓库）：两个 seam 的调用方各自只
+/// 依赖需要的那个接口，具体类只在组合根相遇。
+class SqliteStatisticsSyncStore
+    implements StatisticsSyncStore, StatisticsSyncWriter {
   SqliteStatisticsSyncStore({
     MoliaDatabase Function()? databaseProvider,
     required SyncStampIssuer stamps,
@@ -115,6 +166,7 @@ class SqliteStatisticsSyncStore implements StatisticsSyncStore {
   /// 应用远端记录后通知仓库广播（UI 刷新 / 同步调度标记）。
   ///
   /// 由 [PlayStatisticsRepository] 在构造时接入；store 不反向依赖仓库。
+  @override
   void Function()? onChanged;
 
   /// 同步导出缓存：`null` = 未加载（下次导出全量读一次）。
@@ -131,9 +183,11 @@ class SqliteStatisticsSyncStore implements StatisticsSyncStore {
   MoliaDatabase get _db => _databaseProvider();
 
   /// 本机设备 id（与发号器同一来源，保证事件来源与版本一致）。
+  @override
   String get deviceId => _stamps.deviceId;
 
   /// 新事件去重键（32 位十六进制随机串）。
+  @override
   String newEventSyncKey() {
     const hex = '0123456789abcdef';
     final buffer = StringBuffer();
@@ -143,10 +197,51 @@ class SqliteStatisticsSyncStore implements StatisticsSyncStore {
     return buffer.toString();
   }
 
+  /// 创建一条进行中事件：同事务 upsert 内容行 + 写入事件行（含同步列）。
+  @override
+  Future<int> startEvent({
+    required String sourceKey,
+    required String songId,
+    required String title,
+    required String artist,
+    required String album,
+    required String? coverUrl,
+    required int? durationMs,
+    required Map<String, dynamic> raw,
+    required int startedAt,
+  }) {
+    final db = _db;
+    return db.transaction(() async {
+      final trackId = await upsertPlayTrackContent(
+        db,
+        sourceKey: sourceKey,
+        songId: songId,
+        title: title,
+        artist: artist,
+        album: album,
+        coverUrl: coverUrl,
+        durationMs: durationMs,
+        payload: jsonEncode(raw),
+        updatedAt: startedAt,
+      );
+      return db.into(db.playEvents).insert(PlayEventsCompanion.insert(
+            trackId: trackId,
+            startedAt: startedAt,
+            endedAt: const Value(null),
+            listenedMs: const Value(0),
+            maxPositionMs: const Value(0),
+            endReason: const Value(null),
+            syncKey: Value(newEventSyncKey()),
+            originDeviceId: Value(deviceId),
+          ));
+    });
+  }
+
   /// 收尾事件：在数据写入的同一事务里补版本戳并追加增量日志。
   ///
   /// 调用前事件内容（`endedAt` / 进度 / 原因）已写好；这里只碰同步列，
   /// 让统计仓库不再 import 发号器与日志模型。
+  @override
   Future<void> stampFinishedEvent(
     DatabaseConnectionUser executor,
     int eventId,
@@ -162,6 +257,7 @@ class SqliteStatisticsSyncStore implements StatisticsSyncStore {
 
   /// 启动收尾遗留事件：整批取一个版本戳（各行键不同，LWW 只在同键间比较），
   /// 并在同一事务里为每行追加日志。
+  @override
   Future<void> stampClosedEvents(
     DatabaseConnectionUser executor,
     List<int> eventIds,
@@ -185,12 +281,14 @@ class SqliteStatisticsSyncStore implements StatisticsSyncStore {
   }
 
   /// 单条事件收尾后的导出缓存增量维护（事务提交后调用）。
+  @override
   Future<void> noteEventExported(int eventId) async {
     _syncRevision++;
     await _exportUpsert(eventId);
   }
 
   /// 批量 / 整体改动（清空、裁剪、收尾遗留）后推进指纹并让缓存整体失效。
+  @override
   void noteExportInvalidated() {
     _syncRevision++;
     _exportInvalidate();

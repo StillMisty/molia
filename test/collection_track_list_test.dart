@@ -8,6 +8,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:molia/domain/models/download.dart';
 import 'package:molia/domain/models/library.dart';
 import 'package:molia/l10n/app_localizations.dart';
+import 'package:molia/providers/collection_presenter.dart';
 import 'package:molia/providers/local_songs_collection.dart';
 import 'package:molia/widgets/collection_track_list.dart';
 import 'package:molia/widgets/empty_state.dart';
@@ -15,6 +16,9 @@ import 'package:molia/widgets/swipe_reveal_row.dart';
 import 'package:molia/widgets/track_row.dart';
 import 'package:material_3_expressive/material_3_expressive.dart';
 import 'package:material_ui/material_ui.dart';
+
+/// 行动作流程桩：本组只断言动作构成 / 图标 / 文案，不触发真实写入。
+Future<void> _noop() async {}
 
 /// 挂载最小宿主（注册 l10n delegate；M3E 主题走包内默认回退）。
 Future<void> pumpHost(WidgetTester tester, Widget child) async {
@@ -362,17 +366,32 @@ void main() {
     testWidgets('曲目行：加入列表 + 换源（非本地）+ 移除类', (tester) async {
       await pumpHost(tester, const SizedBox());
       final l10n = l10nOf(tester);
+      const wiring = CollectionRowActionWiring(
+        onCopy: _noop,
+        onSwap: _noop,
+        onRemoveFromPlaylist: _noop,
+        onRemoveFromFavorites: _noop,
+      );
+      final presenter = CollectionPresenter();
+
+      CollectionIdentity identity(
+        CollectionKind kind, {
+        int? playlistId,
+      }) =>
+          CollectionIdentity(
+            selectedId: playlistId ?? 1,
+            kind: kind,
+            playlistId: playlistId,
+            displayName: '合集',
+          );
 
       List<CollectionRowAction> actionsFor({
-        required bool isFavorites,
-        required bool isCustom,
-        int? playlistId,
+        required CollectionIdentity identity,
         String sourceKey = 'wy',
       }) {
-        return collectionTrackRowActions(
-          l10n: l10n,
-          track: PlaylistTrack(
-            playlistId: playlistId ?? 0,
+        final row = TrackCollectionRow(
+          PlaylistTrack(
+            playlistId: identity.playlistId ?? 0,
             sourceKey: sourceKey,
             songId: '1',
             title: 'Song',
@@ -380,19 +399,18 @@ void main() {
             album: 'Album',
             addedAt: 1,
           ),
-          isFavorites: isFavorites,
-          isCustom: isCustom,
-          playlistId: playlistId,
-          onCopy: () async {},
-          onSwap: () async {},
-          onRemoveFromPlaylist: () async {},
-          onRemoveFromFavorites: () async {},
+        );
+        return buildCollectionRowActions(
+          l10n: l10n,
+          specs: presenter.rowActionsFor(row, identity),
+          wiring: wiring,
         );
       }
 
       // 收藏：加入列表 + 换源 + 取消收藏。
-      final favorites =
-          actionsFor(isFavorites: true, isCustom: false, playlistId: 9);
+      final favorites = actionsFor(
+        identity: identity(CollectionKind.favorites, playlistId: 9),
+      );
       expect(favorites, hasLength(3));
       expect(favorites[0].label, l10n.addToPlaylist);
       expect(favorites[1].label, l10n.sourceSwap);
@@ -400,24 +418,23 @@ void main() {
       expect(favorites[2].label, l10n.favoriteRemove);
       expect(favorites[2].destructive, isTrue);
       // 自建列表：移除类为「从本列表移除」。
-      final custom =
-          actionsFor(isFavorites: false, isCustom: true, playlistId: 9);
+      final custom = actionsFor(
+        identity: identity(CollectionKind.custom, playlistId: 9),
+      );
       expect(custom, hasLength(3));
       expect(custom[2].label, l10n.playlistRemoveTrack);
       expect(custom[2].destructive, isTrue);
       // 本地曲目：无换源。
       expect(
         actionsFor(
-          isFavorites: true,
-          isCustom: false,
-          playlistId: 9,
+          identity: identity(CollectionKind.favorites, playlistId: 9),
           sourceKey: kLocalSourceKey,
         ),
         hasLength(2),
       );
       // 自建列表 id 尚未落定：只有加入列表。
       expect(
-        actionsFor(isFavorites: false, isCustom: true, playlistId: null),
+        actionsFor(identity: identity(CollectionKind.custom)),
         hasLength(1),
       );
     });
@@ -425,11 +442,22 @@ void main() {
     testWidgets('历史行：本地记录无换源', (tester) async {
       await pumpHost(tester, const SizedBox());
       final l10n = l10nOf(tester);
+      final presenter = CollectionPresenter();
+      const identity = CollectionIdentity(
+        selectedId: -3,
+        kind: CollectionKind.history,
+        playlistId: null,
+        displayName: '播放历史',
+      );
+      const wiring = CollectionRowActionWiring(
+        onCopy: _noop,
+        onSwap: _noop,
+        onDeleteHistory: _noop,
+      );
 
       List<CollectionRowAction> actionsFor(String sourceKey) {
-        return collectionHistoryRowActions(
-          l10n: l10n,
-          entry: PlayHistoryEntry(
+        final row = HistoryCollectionRow(
+          PlayHistoryEntry(
             sourceKey: sourceKey,
             songId: '1',
             title: 'Song',
@@ -439,9 +467,11 @@ void main() {
             raw: const {'songId': '1'},
             playedAt: 1,
           ),
-          onCopy: () async {},
-          onSwap: () async {},
-          onDelete: () async {},
+        );
+        return buildCollectionRowActions(
+          l10n: l10n,
+          specs: presenter.rowActionsFor(row, identity),
+          wiring: wiring,
         );
       }
 
@@ -457,20 +487,41 @@ void main() {
     testWidgets('本地歌曲行：删除文案按来源区分，收藏开关切换图标与文案', (tester) async {
       await pumpHost(tester, const SizedBox());
       final l10n = l10nOf(tester);
+      final presenter = CollectionPresenter();
+      const identity = CollectionIdentity(
+        selectedId: -4,
+        kind: CollectionKind.localSongs,
+        playlistId: null,
+        displayName: '本地歌曲',
+      );
+      final row = LocalSongCollectionRow(
+        CollectionLocalSong.download(
+          const DownloadedTrack(
+            originSourceKey: 'wy',
+            originSongId: '1',
+            title: '下载的歌',
+            filePath: '/downloads/1.mp3',
+            downloadedAt: 1,
+          ),
+        ),
+      );
 
       List<CollectionRowAction> actionsFor({
         required bool isFavorite,
         required bool isCached,
         required bool isImported,
       }) {
-        return localSongRowActions(
+        return buildCollectionRowActions(
           l10n: l10n,
-          isFavorite: isFavorite,
-          isCached: isCached,
-          isImported: isImported,
-          onCopy: () async {},
-          onToggleFavorite: () async {},
-          onDelete: () async {},
+          specs: presenter.rowActionsFor(row, identity),
+          wiring: CollectionRowActionWiring(
+            onCopy: _noop,
+            onToggleFavorite: _noop,
+            onDeleteLocalSong: _noop,
+            isFavorite: isFavorite,
+            localSongCached: isCached,
+            localSongImported: isImported,
+          ),
         );
       }
 

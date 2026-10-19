@@ -41,13 +41,13 @@ class PlayStatisticsRepository {
   /// [databaseProvider] 仅测试注入（in-memory drift 库）；生产走
   /// [MoliaDatabase.instance]。
   ///
-  /// [statisticsSync] 承担同步协议形状（`syncKey` / 版本戳 / 增量日志 /
-  /// 导出缓存 / 远端合并），仓库只保留采集与查询；[clock] 提供内容时间
+  /// [statisticsSync] 是同步写入点（`syncKey` / 版本戳 / 增量日志 / 导出
+  /// 缓存），仓库只表达「开始 / 收尾 / 批量变更」；[clock] 提供内容时间
   /// （`endedAt`）——内容时间与版本戳刻意分开（见 ADR-0003 v2 §2）。
   PlayStatisticsRepository({
     MoliaDatabase Function()? databaseProvider,
     int Function()? clock,
-    required SqliteStatisticsSyncStore statisticsSync,
+    required StatisticsSyncWriter statisticsSync,
   })  : _databaseProvider = databaseProvider ?? (() => MoliaDatabase.instance),
         _clock = clock ?? (() => DateTime.now().millisecondsSinceEpoch),
         _sync = statisticsSync {
@@ -57,7 +57,7 @@ class PlayStatisticsRepository {
 
   final MoliaDatabase Function() _databaseProvider;
   final int Function() _clock;
-  final SqliteStatisticsSyncStore _sync;
+  final StatisticsSyncWriter _sync;
   final StreamController<void> _changes = StreamController<void>.broadcast();
 
   /// 统计变更广播（收尾事件 / 清空 / 遗留收尾后触发）。
@@ -98,7 +98,8 @@ class PlayStatisticsRepository {
 
   /// 开始一次播放事件，返回行 id（`endedAt` 为 null = 进行中）。
   ///
-  /// 同一事务里 upsert 曲目内容行（元数据 + 载荷，见 [PlayTracks]）。
+  /// 事件行（含 `syncKey` / 来源设备）与曲目内容行由同步写入点在同一事务里
+  /// 创建：仓库不再自己拼同步列（见 [StatisticsSyncWriter.startEvent]）。
   Future<int> startEvent({
     required String sourceKey,
     required String songId,
@@ -110,30 +111,17 @@ class PlayStatisticsRepository {
     Map<String, dynamic> raw = const {},
     required int startedAt,
   }) {
-    return _db.transaction(() async {
-      final trackId = await upsertPlayTrackContent(
-        _db,
-        sourceKey: sourceKey,
-        songId: songId,
-        title: title,
-        artist: artist,
-        album: album,
-        coverUrl: coverUrl,
-        durationMs: durationMs,
-        payload: jsonEncode(raw),
-        updatedAt: startedAt,
-      );
-      return _db.into(_db.playEvents).insert(PlayEventsCompanion.insert(
-            trackId: trackId,
-            startedAt: startedAt,
-            endedAt: const Value(null),
-            listenedMs: const Value(0),
-            maxPositionMs: const Value(0),
-            endReason: const Value(null),
-            syncKey: Value(_sync.newEventSyncKey()),
-            originDeviceId: Value(_sync.deviceId),
-          ));
-    });
+    return _sync.startEvent(
+      sourceKey: sourceKey,
+      songId: songId,
+      title: title,
+      artist: artist,
+      album: album,
+      coverUrl: coverUrl,
+      durationMs: durationMs,
+      raw: raw,
+      startedAt: startedAt,
+    );
   }
 
   /// 落盘进行中事件的进度（节流调用；不广播变更，进行中事件不影响统计）。

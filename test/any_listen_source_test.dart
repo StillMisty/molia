@@ -309,6 +309,19 @@ void main() {
   });
 
   group('AnyListenSource：错误分支', () {
+    test('configStore 与 settings 都没注入：构造即拒绝，不退化成 null 检查', () {
+      // debug 断言给出调用栈，release 抛 StateError（见 _requireSettings）。
+      expect(
+        () => AnyListenSource(),
+        throwsA(anyOf(
+          isA<AssertionError>()
+              .having((e) => e.message, 'message', contains('configStore')),
+          isA<StateError>()
+              .having((e) => e.message, 'message', contains('configStore')),
+        )),
+      );
+    });
+
     test('未配置时给出 notConfigured，且不发起网络请求', () async {
       SharedPreferences.setMockInitialValues({});
       final source = AnyListenSource(settings: testSettingsRegistry());

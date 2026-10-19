@@ -60,7 +60,6 @@ void main() {
       final result = consumeJournalDelta(
         cursor: -1,
         baseSeq: 0,
-        windowStart: 1,
         windowEnd: 3,
         entries: [entry(1), entry(2), entry(3)],
       );
@@ -75,7 +74,6 @@ void main() {
       final result = consumeJournalDelta(
         cursor: 0,
         baseSeq: 0,
-        windowStart: 0,
         windowEnd: 2,
         entries: [entry(0), entry(1), entry(2)],
       );
@@ -89,7 +87,6 @@ void main() {
       final result = consumeJournalDelta(
         cursor: 5,
         baseSeq: 0,
-        windowStart: 0,
         windowEnd: 0,
         entries: const [],
       );
@@ -104,7 +101,6 @@ void main() {
       final result = consumeJournalDelta(
         cursor: -1,
         baseSeq: 0,
-        windowStart: 0,
         windowEnd: 0,
         entries: const [],
       );
@@ -121,7 +117,6 @@ void main() {
       final result = consumeJournalDelta(
         cursor: 1,
         baseSeq: 4,
-        windowStart: 5,
         windowEnd: 5,
         entries: [entry(5)],
       );
@@ -136,7 +131,6 @@ void main() {
       final result = consumeJournalDelta(
         cursor: 0,
         baseSeq: 0,
-        windowStart: 1,
         windowEnd: 3,
         entries: [entry(1), entry(3)],
       );
@@ -150,7 +144,6 @@ void main() {
       final result = consumeJournalDelta(
         cursor: 0,
         baseSeq: 0,
-        windowStart: 1,
         windowEnd: 3,
         entries: [entry(1)],
       );
@@ -165,7 +158,6 @@ void main() {
       final result = consumeJournalDelta(
         cursor: 2,
         baseSeq: 0,
-        windowStart: 1,
         windowEnd: 3,
         entries: [entry(1), entry(2), entry(3)],
       );

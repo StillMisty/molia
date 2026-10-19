@@ -1,7 +1,6 @@
 import 'dart:convert';
-import 'dart:typed_data';
 
-import 'package:drift/drift.dart' hide isNull;
+import 'package:drift/drift.dart' hide isNull, isNotNull;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:molia/data/molia_database.dart';
 import 'package:molia/data/play_statistics_repository.dart';
@@ -57,7 +56,7 @@ void main() {
 
   setUp(() async {
     db = openMemoryDatabase();
-    statisticsSync = testStatisticsSyncStore(() => db);
+    statisticsSync = testStatisticsSyncStore(() => db, deviceId: 'devA');
     repository = PlayStatisticsRepository(
       databaseProvider: () => db,
       statisticsSync: statisticsSync,
@@ -70,6 +69,19 @@ void main() {
   });
 
   group('写入与收尾', () {
+    test('startEvent 由同步写入点落 syncKey 与来源设备', () async {
+      final id = await repository.startEvent(
+        sourceKey: 'wy',
+        songId: 's1',
+        title: 'T',
+        startedAt: 1000,
+      );
+      expect(id, greaterThan(0));
+      final row = (await tableRows(db, 'play_events')).single;
+      expect(row['syncKey'], isNotEmpty);
+      expect(row['originDeviceId'], 'devA');
+    });
+
     test('startEvent → touchEvent → finishEvent 往返，收尾广播变更', () async {
       final changes = <void>[];
       final subscription = repository.changes.listen(changes.add);
@@ -846,4 +858,91 @@ void main() {
       expect(decodeStatsPayload(track['raw']), '{"v":"new"}');
     });
   });
+
+  group('同步写入点 seam', () {
+    test('仓库可只依赖 fake writer（不触 drift）启动事件', () async {
+      final writer = _FakeStatisticsSyncWriter();
+      final delegated = PlayStatisticsRepository(
+        databaseProvider: () => throw StateError('startEvent 不应触碰仓库自己的查询面'),
+        statisticsSync: writer,
+      );
+      addTearDown(delegated.dispose);
+
+      final id = await delegated.startEvent(
+        sourceKey: 'wy',
+        songId: 's1',
+        title: 'T',
+        raw: const {'rid': 1},
+        startedAt: 1000,
+      );
+      expect(id, writer.nextId);
+      expect(writer.started, hasLength(1));
+      expect(writer.started.single.sourceKey, 'wy');
+      expect(writer.started.single.raw, {'rid': 1});
+      expect(writer.changedCallback, isNotNull, reason: '仓库构造时把变更广播接进写入点');
+    });
+  });
+}
+
+/// 假写入点：只记录仓库委托了什么，不触数据库（验证 seam 可用）。
+class _FakeStatisticsSyncWriter implements StatisticsSyncWriter {
+  int nextId = 42;
+  final List<
+      ({
+        String sourceKey,
+        String songId,
+        String title,
+        Map<String, dynamic> raw,
+        int startedAt,
+      })> started = [];
+  void Function()? changedCallback;
+
+  @override
+  String get deviceId => 'fake-device';
+
+  @override
+  String newEventSyncKey() => 'fake-key';
+
+  @override
+  set onChanged(void Function()? callback) => changedCallback = callback;
+
+  @override
+  Future<int> startEvent({
+    required String sourceKey,
+    required String songId,
+    required String title,
+    required String artist,
+    required String album,
+    required String? coverUrl,
+    required int? durationMs,
+    required Map<String, dynamic> raw,
+    required int startedAt,
+  }) async {
+    started.add((
+      sourceKey: sourceKey,
+      songId: songId,
+      title: title,
+      raw: raw,
+      startedAt: startedAt,
+    ));
+    return nextId;
+  }
+
+  @override
+  Future<void> stampFinishedEvent(
+    DatabaseConnectionUser executor,
+    int eventId,
+  ) async {}
+
+  @override
+  Future<void> stampClosedEvents(
+    DatabaseConnectionUser executor,
+    List<int> eventIds,
+  ) async {}
+
+  @override
+  Future<void> noteEventExported(int eventId) async {}
+
+  @override
+  void noteExportInvalidated() {}
 }

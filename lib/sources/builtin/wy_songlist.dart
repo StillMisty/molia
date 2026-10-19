@@ -4,8 +4,8 @@ import '../../data/http/app_dio.dart';
 import '../../domain/models/discover.dart';
 import '../source_track.dart';
 import 'builtin_search.dart';
-import 'builtin_transport.dart';
 import 'crypto_utils.dart';
+import 'discover_runner.dart';
 import 'discover_track_mapper.dart';
 import 'wy_music_detail.dart';
 
@@ -67,21 +67,19 @@ class WySongList {
 
   /// 标签目录（`weapi/playlist/catalogue`）。
   static Future<List<DiscoverTagCategory>> getTag() {
-    return runBuiltinAttempts(
-      maxTries: BuiltinRetryBudget.discover,
-      attempt: (_) async {
-        final body = await lxHttpPost(
-          'https://music.163.com/weapi/playlist/catalogue',
-          form: true,
-          body: weapiForm(const {}),
-        );
-        if (body is! Map || body['code'] != 200) return null;
-        return filterTagInfo(
-          sub: (body['sub'] as List?) ?? const [],
-          categories: (body['categories'] as Map?) ?? const {},
-        );
-      },
-    );
+    return runDiscoverCall(DiscoverRequestCall<List<DiscoverTagCategory>>(
+      key: null,
+      request: () => lxHttpPost(
+        'https://music.163.com/weapi/playlist/catalogue',
+        form: true,
+        body: weapiForm(const {}),
+      ),
+      isInvalid: (body) => body is! Map || body['code'] != 200,
+      parse: (body) => filterTagInfo(
+        sub: (body['sub'] as List?) ?? const [],
+        categories: (body['categories'] as Map?) ?? const {},
+      ),
+    ));
   }
 
   /// 解析标签目录响应（独立出来便于单元测试）。
@@ -108,18 +106,16 @@ class WySongList {
 
   /// 热门标签（`weapi/playlist/hottags`）。
   static Future<List<DiscoverTag>> getHotTag() {
-    return runBuiltinAttempts(
-      maxTries: BuiltinRetryBudget.discover,
-      attempt: (_) async {
-        final body = await lxHttpPost(
-          'https://music.163.com/weapi/playlist/hottags',
-          form: true,
-          body: weapiForm(const {}),
-        );
-        if (body is! Map || body['code'] != 200) return null;
-        return filterHotTagInfo((body['tags'] as List?) ?? const []);
-      },
-    );
+    return runDiscoverCall(DiscoverRequestCall<List<DiscoverTag>>(
+      key: null,
+      request: () => lxHttpPost(
+        'https://music.163.com/weapi/playlist/hottags',
+        form: true,
+        body: weapiForm(const {}),
+      ),
+      isInvalid: (body) => body is! Map || body['code'] != 200,
+      parse: (body) => filterHotTagInfo((body['tags'] as List?) ?? const []),
+    ));
   }
 
   /// 解析热门标签响应（独立出来便于单元测试）。
@@ -149,30 +145,27 @@ class WySongList {
     String tagId,
     int page,
   ) {
-    return BuiltinSearch.transport.cachedRetry(
-      'wy:playlists:$sortId:$tagId:$page',
-      maxTries: BuiltinRetryBudget.discover,
-      attempt: (_) async {
-        final body = await lxHttpPost(
-          'https://music.163.com/weapi/playlist/list',
-          form: true,
-          body: weapiForm({
-            'cat': tagId.isEmpty ? '全部' : tagId,
-            'order': sortId,
-            'limit': limitList,
-            'offset': limitList * (page - 1),
-            'total': true,
-          }),
-        );
-        if (body is! Map || body['code'] != 200) return null;
-        return DiscoverPlaylistPage(
-          playlists: filterList((body['playlists'] as List?) ?? const []),
-          total: int.tryParse('${body['total']}') ?? 0,
-          page: page,
-          limit: limitList,
-        );
-      },
-    );
+    return runDiscoverCall(DiscoverRequestCall<DiscoverPlaylistPage>(
+      key: 'wy:playlists:$sortId:$tagId:$page',
+      request: () => lxHttpPost(
+        'https://music.163.com/weapi/playlist/list',
+        form: true,
+        body: weapiForm({
+          'cat': tagId.isEmpty ? '全部' : tagId,
+          'order': sortId,
+          'limit': limitList,
+          'offset': limitList * (page - 1),
+          'total': true,
+        }),
+      ),
+      isInvalid: (body) => body is! Map || body['code'] != 200,
+      parse: (body) => DiscoverPlaylistPage(
+        playlists: filterList((body['playlists'] as List?) ?? const []),
+        total: int.tryParse('${body['total']}') ?? 0,
+        page: page,
+        limit: limitList,
+      ),
+    ));
   }
 
   /// 解析歌单概要列表（独立出来便于单元测试）。
@@ -239,12 +232,11 @@ class WySongList {
     final parsed = await parseListId(rawId);
     if (parsed.cookie != null) _cookie = parsed.cookie!;
 
-    return runBuiltinAttempts(
-      maxTries: BuiltinRetryBudget.discover,
-      attempt: (_) async {
-        dynamic body;
+    return runDiscoverCall(DiscoverRequestCall<_WyPlaylistShell>(
+      key: null,
+      request: () async {
         try {
-          body = await lxHttpPost(
+          return await lxHttpPost(
             'https://music.163.com/api/linux/forward',
             form: true,
             headers: {'Cookie': _cookie},
@@ -259,10 +251,11 @@ class WySongList {
         } catch (_) {
           return null;
         }
-        if (body is! Map || body['code'] != 200) return null;
-
-        final playlist = body['playlist'];
-        if (playlist is! Map) return null;
+      },
+      isInvalid: (body) =>
+          body is! Map || body['code'] != 200 || (body['playlist'] is! Map),
+      parse: (body) {
+        final playlist = body['playlist'] as Map;
         final trackIds = (playlist['trackIds'] as List?) ?? const [];
         final privileges = body['privileges'];
 
@@ -292,7 +285,7 @@ class WySongList {
           allTracks: allTracks,
         );
       },
-    );
+    ));
   }
 
   /// 解析歌单详情响应中的曲目（移植自 LX `filterListDetail`）。
@@ -380,25 +373,24 @@ class WySongList {
     int page,
     int limit,
   ) {
-    return BuiltinSearch.transport.cachedRetry(
-      'wy:playlist-search:$text:$page:$limit',
-      maxTries: BuiltinRetryBudget.discover,
-      attempt: (_) async {
-        final body = await lxHttpPost(
-          'http://interface.music.163.com/eapi/batch',
-          form: true,
-          headers: {'origin': 'https://music.163.com'},
-          body: {
-            'params': eapiParams('/api/cloudsearch/pc', {
-              's': text,
-              'type': 1000,
-              'limit': limit,
-              'total': page == 1,
-              'offset': limit * (page - 1),
-            }),
-          },
-        );
-        if (body is! Map || body['code'] != 200) return null;
+    return runDiscoverCall(DiscoverRequestCall<DiscoverPlaylistPage>(
+      key: 'wy:playlist-search:$text:$page:$limit',
+      request: () => lxHttpPost(
+        'http://interface.music.163.com/eapi/batch',
+        form: true,
+        headers: {'origin': 'https://music.163.com'},
+        body: {
+          'params': eapiParams('/api/cloudsearch/pc', {
+            's': text,
+            'type': 1000,
+            'limit': limit,
+            'total': page == 1,
+            'offset': limit * (page - 1),
+          }),
+        },
+      ),
+      isInvalid: (body) => body is! Map || body['code'] != 200,
+      parse: (body) {
         final result = body['result'];
         final playlists = (result is Map ? result['playlists'] : null);
         return DiscoverPlaylistPage(
@@ -410,7 +402,7 @@ class WySongList {
           limit: limit,
         );
       },
-    );
+    ));
   }
 
   /// 解析歌单链接 / ID：`id`、完整链接、`id###MUSIC_U token`。
@@ -436,8 +428,8 @@ class WySongList {
 
   /// 跟随短链/分享链接重定向到最终地址，再解析歌单 id。
   static Future<String> _followRedirect(String link) {
-    return runBuiltinAttempts(
-      maxTries: BuiltinRetryBudget.discover,
+    return runDiscoverCall(DiscoverAttemptCall<String>(
+      key: null,
       message: 'link try max num',
       attempt: (_) async {
         var current = link;
@@ -470,7 +462,7 @@ class WySongList {
         }
         return current.replaceFirstMapped(_listDetailLink2, (m) => m.group(1)!);
       },
-    );
+    ));
   }
 
   /// `formatSingerName`：HTML 实体解码 + `、` 拼接。
