@@ -63,9 +63,10 @@ class _LyricsWidgetState extends State<LyricsWidget>
   /// 激活行锚点相对「可见区域中线」的上移比例（占视口高度）。
   ///
   /// 顶栏（顶部渐隐带 + 圆点带）比底栏高，只按可见区域居中会让激活行
-  /// 视觉偏下；上移一点后上下留白更平衡，也接近主流歌词页的中上排版。
+  /// 视觉偏下；0.14 使主行文本顶边落在视口约 38%–40% 高度（中上排版），
+  /// 上下留白更平衡。
   /// 锚点作用于「主行文本块顶边」（整项还含翻译/罗马音，不参与锚定）。
-  static const double _activeLineUpwardBias = 0.10;
+  static const double _activeLineUpwardBias = 0.14;
 
   /// 歌词会话模块：会话真相的唯一来源（本组件只消费，不维护镜像字段）。
   LyricsProvider? _lyricsProvider;

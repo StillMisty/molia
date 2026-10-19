@@ -1,6 +1,6 @@
 /// 歌词滚动行为测试：
 /// - 手动滚动只暂停跟随，停手静置后自动恢复并滚回当前行（暂停播放时不拽回）；
-/// - 激活行锚点在视口中线偏上（顶栏比底栏高，居中会视觉偏下）。
+/// - 激活行锚点位于视口中上部（顶栏比底栏高，居中会视觉偏下）。
 library;
 
 import 'package:flutter_test/flutter_test.dart';
@@ -319,7 +319,7 @@ void main() {
     );
   });
 
-  testWidgets('激活行锚点位于视口中线偏上', (tester) async {
+  testWidgets('激活行锚点位于视口中上部', (tester) async {
     await pumpLyrics(tester);
 
     final viewport = tester.getRect(find.byType(ListView));
@@ -328,16 +328,16 @@ void main() {
     final textRect = tester.getRect(find.text('Line 12'));
 
     // 自动跟随中底栏隐藏：锚点 = 可见区域中线（40px 顶部渐变带）再上移
-    // 10% 视口高度。
+    // 14% 视口高度（落在约 38%–40% 的中上位置）。
     final double anchorFraction =
-        ((40.0 + viewport.height) / 2.0 - viewport.height * 0.10) /
+        ((40.0 + viewport.height) / 2.0 - viewport.height * 0.14) /
             viewport.height;
     final double expectedTop = viewport.top + anchorFraction * viewport.height;
     expect(textRect.top, closeTo(expectedTop, 1.0));
     expect(
       (textRect.top - viewport.top) / viewport.height,
-      lessThan(0.5),
-      reason: '激活行应位于视口中线偏上（顶栏比底栏高）',
+      inInclusiveRange(0.36, 0.42),
+      reason: '激活行应位于视口中上部（约 38%–40%）',
     );
   });
 
@@ -372,7 +372,7 @@ void main() {
     // 扩展行显示在当前行下方，但落点仍以主行顶边为准。
     expect(find.text('这是当前行的翻译'), findsOneWidget);
     final double anchorFraction =
-        ((40.0 + viewport.height) / 2.0 - viewport.height * 0.10) /
+        ((40.0 + viewport.height) / 2.0 - viewport.height * 0.14) /
             viewport.height;
     expect(
       textRect.top,
