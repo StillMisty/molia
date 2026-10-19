@@ -12,12 +12,8 @@ library;
 
 import '../../domain/models/artist.dart';
 import '../../domain/models/failure.dart';
+import 'builtin_platforms.dart';
 import 'builtin_search.dart';
-import 'kg_artist.dart';
-import 'kw_artist.dart';
-import 'mg_artist.dart';
-import 'tx_artist.dart';
-import 'wy_artist.dart';
 
 /// 歌手搜索的一页结果（对齐 `SearchResult` 语义的源层变体）。
 class ArtistSearchPage {
@@ -45,10 +41,9 @@ SourceFailure artistPlatformFailure(String platform, String reason) =>
 class BuiltinArtists {
   BuiltinArtists._();
 
-  /// 具备内置歌手能力的平台（与 `BuiltinSearch.platforms` 一致）。
-  static const Set<String> supportedKeys = {'kw', 'kg', 'tx', 'wy', 'mg'};
-
-  static bool isSupported(String sourceKey) => supportedKeys.contains(sourceKey);
+  /// 平台矩阵与实现集中在 [BuiltinPlatforms]；这里只保留失败语义。
+  static bool isSupported(String sourceKey) =>
+      BuiltinPlatforms.artistFor(sourceKey) != null;
 
   /// 歌手搜索（搜索页「歌手」类型）；失败抛 [SourceFailure]。
   static Future<ArtistSearchPage> search(
@@ -57,29 +52,14 @@ class BuiltinArtists {
     int page = 1,
     int limit = 30,
   }) async {
-    if (!isSupported(sourceKey)) {
+    final adapter = BuiltinPlatforms.artistFor(sourceKey);
+    if (adapter == null) {
       throw SourceFailure(
         kind: FailureKind.unsupported,
         message: '内置平台不支持歌手搜索: $sourceKey',
       );
     }
-    switch (sourceKey) {
-      case 'kw':
-        return KwArtist.search(keyword, page: page, limit: limit);
-      case 'kg':
-        return KgArtist.search(keyword, page: page, limit: limit);
-      case 'tx':
-        return TxArtist.search(keyword, page: page, limit: limit);
-      case 'wy':
-        return WyArtist.search(keyword, page: page, limit: limit);
-      case 'mg':
-        return MgArtist.search(keyword, page: page, limit: limit);
-      default:
-        throw SourceFailure(
-          kind: FailureKind.unsupported,
-          message: '内置平台不支持歌手搜索: $sourceKey',
-        );
-    }
+    return adapter.search(keyword, page: page, limit: limit);
   }
 
   /// 取一页歌手详情（歌手页）；[artistId] 为平台内歌手 id。
@@ -96,22 +76,13 @@ class BuiltinArtists {
         retryable: true,
       );
     }
-    switch (sourceKey) {
-      case 'kw':
-        return KwArtist.fetch(artistId, page: page, limit: limit);
-      case 'kg':
-        return KgArtist.fetch(artistId, page: page, limit: limit);
-      case 'tx':
-        return TxArtist.fetch(artistId, page: page, limit: limit);
-      case 'wy':
-        return WyArtist.fetch(artistId, page: page, limit: limit);
-      case 'mg':
-        return MgArtist.fetch(artistId, page: page, limit: limit);
-      default:
-        throw SourceFailure(
-          kind: FailureKind.unsupported,
-          message: '内置平台不支持歌手: $sourceKey',
-        );
+    final adapter = BuiltinPlatforms.artistFor(sourceKey);
+    if (adapter == null) {
+      throw SourceFailure(
+        kind: FailureKind.unsupported,
+        message: '内置平台不支持歌手: $sourceKey',
+      );
     }
+    return adapter.fetch(artistId, page: page, limit: limit);
   }
 }

@@ -4,12 +4,8 @@ import 'dart:typed_data';
 import '../../domain/models/failure.dart';
 import '../source_search_result.dart';
 import '../source_track.dart';
+import 'builtin_platforms.dart';
 import 'builtin_transport.dart';
-import 'kg_search.dart';
-import 'kw_search.dart';
-import 'mg_search.dart';
-import 'tx_search.dart';
-import 'wy_search.dart';
 
 /// 内置平台搜索调度（与 lx-music 内置音源一致：kw/kg/tx/wy/mg）。
 ///
@@ -19,17 +15,16 @@ import 'wy_search.dart';
 class BuiltinSearch {
   BuiltinSearch._();
 
-  static const Map<String, String> platforms = {
-    'kw': '酷我音乐',
-    'kg': '酷狗音乐',
-    'tx': 'QQ音乐',
-    'wy': '网易音乐',
-    'mg': '咪咕音乐',
-  };
+  /// 平台展示名（键顺序同 [BuiltinPlatforms.keys]）。
+  ///
+  /// 保留该名字是为了兼容既有调用点；矩阵本体在 [BuiltinPlatforms]。
+  static final Map<String, String> platforms = BuiltinPlatforms.displayNames;
 
-  static bool isBuiltin(String sourceKey) => platforms.containsKey(sourceKey);
+  static bool isBuiltin(String sourceKey) =>
+      BuiltinPlatforms.isSupported(sourceKey);
 
-  static String displayName(String sourceKey) => platforms[sourceKey] ?? sourceKey;
+  static String displayName(String sourceKey) =>
+      BuiltinPlatforms.displayName(sourceKey);
 
   /// 内置请求传输：测试注入 `MockClient` 覆盖 fetch 路径（唯一入口）。
   static BuiltinTransport transport = BuiltinTransport();
@@ -46,20 +41,11 @@ class BuiltinSearch {
     int page = 1,
     int limit = 30,
   }) {
-    switch (sourceKey) {
-      case 'kw':
-        return KwSearch.searchWithMeta(keyword, page: page, limit: limit);
-      case 'kg':
-        return KgSearch.searchWithMeta(keyword, page: page, limit: limit);
-      case 'tx':
-        return TxSearch.searchWithMeta(keyword, page: page, limit: limit);
-      case 'wy':
-        return WySearch.searchWithMeta(keyword, page: page, limit: limit);
-      case 'mg':
-        return MgSearch.searchWithMeta(keyword, page: page, limit: limit);
-      default:
-        throw UnsupportedError('不支持的内置音源: $sourceKey');
+    final adapter = BuiltinPlatforms.searchFor(sourceKey);
+    if (adapter == null) {
+      throw UnsupportedError('不支持的内置音源: $sourceKey');
     }
+    return adapter(keyword, page: page, limit: limit);
   }
 }
 

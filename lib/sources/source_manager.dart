@@ -14,9 +14,9 @@ import 'builtin/album_source.dart';
 import 'builtin/artist_source.dart';
 import 'builtin/builtin_lyric_dispatch.dart';
 import 'builtin/builtin_pic_dispatch.dart';
+import 'builtin/builtin_platforms.dart';
 import 'builtin/builtin_search.dart';
 import 'builtin/comment_source.dart';
-import 'builtin/discover_source.dart';
 import 'builtin/lyric_hit.dart';
 import 'builtin/lyric_search.dart';
 import 'lx/lx_engine_supervisor.dart';
@@ -131,8 +131,7 @@ class SourceManager extends ChangeNotifier {
   Set<String> get disabledChannels => _preferences.disabledChannels;
 
   /// 当前音源是否可用（激活了脚本且引擎就绪）。
-  bool get hasActiveSource =>
-      _engine.isRunning && _activeSources.isNotEmpty;
+  bool get hasActiveSource => _engine.isRunning && _activeSources.isNotEmpty;
 
   /// any-listen 适配器（搜索 / 取链 / 歌词 / 封面 / 连接测试）。
   AnyListenSource get anyListenSource => _anyListenSource;
@@ -156,17 +155,17 @@ class SourceManager extends ChangeNotifier {
           name: option.name,
           kind: option.kind,
           canSearch: option.canSearch,
-          discoverable: BuiltinDiscover.isSupported(option.key),
+          discoverable: BuiltinPlatforms.discoverFor(option.key) != null,
           enabled: !disabled.contains(option.key),
         ),
     ];
     final existing = candidates.map((o) => o.key).toSet();
     // 未出现在可搜索列表中的内置发现平台（无脚本也可浏览热榜/歌单）。
-    for (final key in BuiltinDiscover.sourceKeys) {
+    for (final key in BuiltinPlatforms.keys) {
       if (existing.contains(key)) continue;
       candidates.add(SourceOption(
         key: key,
-        name: BuiltinSearch.displayName(key),
+        name: BuiltinPlatforms.displayName(key),
         kind: SourceKind.builtin,
         canSearch: false,
         discoverable: true,
@@ -200,11 +199,11 @@ class SourceManager extends ChangeNotifier {
         ));
       }
     }
-    for (final entry in BuiltinSearch.platforms.entries) {
-      if (_isBuiltinSearchable(entry.key)) {
+    for (final platform in BuiltinPlatforms.searchCandidates) {
+      if (_isBuiltinSearchable(platform.key)) {
         candidates.add(SourceOption(
-          key: entry.key,
-          name: entry.value,
+          key: platform.key,
+          name: platform.displayName,
           kind: SourceKind.builtin,
           canSearch: true,
         ));
@@ -227,7 +226,7 @@ class SourceManager extends ChangeNotifier {
   /// （channels 的候选列表、[capabilitiesFor] 的能力位与 [searchWithMeta]
   /// 的路由门共用它——三处各算一份会静默漂移）。
   bool _isBuiltinSearchable(String key) =>
-      BuiltinSearch.isBuiltin(key) &&
+      BuiltinPlatforms.isSupported(key) &&
       (_activeSources[key]?.canResolveUrl ?? false);
 
   /// 音源能力：与路由的实际 gating 一致（registry / 领域适配器共用）。
@@ -252,7 +251,8 @@ class SourceManager extends ChangeNotifier {
     // 内置平台（kw/kg/tx/wy/mg）的搜索/分页由 Dart 移植实现（BuiltinSearch），
     // 能力跟随「脚本可取链」；脚本声明的 canSearch 只描述脚本扩展源自身的
     // 社区搜索 action（见 [_isBuiltinSearchable]）。评论同样只由内置实现提供。
-    final builtin = BuiltinSearch.isBuiltin(key);
+    final platform = BuiltinPlatforms.maybeOf(key);
+    final builtin = platform != null;
     final builtinSearchable = _isBuiltinSearchable(key);
     return SourceCapabilities(
       search: builtinSearchable || (decl?.canSearch ?? false),
@@ -260,15 +260,15 @@ class SourceManager extends ChangeNotifier {
       resolveUrl: decl?.canResolveUrl ?? false,
       lyrics: builtin || (decl?.canFetchLyric ?? false),
       artwork: builtin || (decl?.canFetchPic ?? false),
-      comment: BuiltinComments.isSupported(key),
+      comment: platform?.comments != null,
       // 专辑详情同样只由内置实现提供（LX 脚本 / any-listen 无稳定专辑 id）。
-      collection: BuiltinAlbums.isSupported(key),
+      collection: platform?.album != null,
       // 歌手（搜索 + 详情/歌曲）与按歌词搜歌：只由内置实现提供，且与搜索
       // 路由同门（[_isBuiltinSearchable]：脚本可取链才宣称可用——能力位与
       // `searchArtists` / `searchLyrics` 的路由门必须一致，不允许 UI 显示
       // 一个必然失败的入口）。
-      artist: BuiltinArtists.isSupported(key) && builtinSearchable,
-      lyricSearch: BuiltinLyricSearch.isSupported(key) && builtinSearchable,
+      artist: platform?.artist != null && builtinSearchable,
+      lyricSearch: platform?.lyricSearch != null && builtinSearchable,
     );
   }
 
@@ -486,10 +486,10 @@ class SourceManager extends ChangeNotifier {
       }
     }
     final decl = _activeSources[sourceKey];
-    if (BuiltinSearch.isBuiltin(sourceKey)) {
+    if (BuiltinPlatforms.isSupported(sourceKey)) {
       if (!_isBuiltinSearchable(sourceKey)) {
         throw LxEngineException(
-            '当前音源脚本不支持 ${BuiltinSearch.displayName(sourceKey)}，无法播放该平台歌曲');
+            '当前音源脚本不支持 ${BuiltinPlatforms.displayName(sourceKey)}，无法播放该平台歌曲');
       }
       return BuiltinSearch.searchWithMeta(sourceKey, keyword,
           page: page, limit: limit);
@@ -598,7 +598,7 @@ class SourceManager extends ChangeNotifier {
     int page = 1,
     int limit = kCommentPageSize,
   }) async {
-    if (!BuiltinComments.isSupported(track.sourceKey)) {
+    if (BuiltinPlatforms.commentsFor(track.sourceKey) == null) {
       throw SourceFailure(
         kind: FailureKind.unsupported,
         message: '音源 ${track.sourceKey} 不支持评论',
@@ -628,7 +628,7 @@ class SourceManager extends ChangeNotifier {
     int page = 1,
     int limit = kAlbumPageSize,
   }) async {
-    if (!BuiltinAlbums.isSupported(sourceKey)) {
+    if (BuiltinPlatforms.albumFor(sourceKey) == null) {
       throw SourceFailure(
         kind: FailureKind.unsupported,
         message: '音源 $sourceKey 不支持专辑',
@@ -657,7 +657,7 @@ class SourceManager extends ChangeNotifier {
     int page = 1,
     int limit = kArtistPageSize,
   }) async {
-    if (!BuiltinArtists.isSupported(sourceKey)) {
+    if (BuiltinPlatforms.artistFor(sourceKey) == null) {
       throw SourceFailure(
         kind: FailureKind.unsupported,
         message: '音源 $sourceKey 不支持歌手',
@@ -685,7 +685,7 @@ class SourceManager extends ChangeNotifier {
     int page = 1,
     int limit = 30,
   }) async {
-    if (!BuiltinSearch.isBuiltin(sourceKey) ||
+    if (BuiltinPlatforms.artistFor(sourceKey) == null ||
         !_isBuiltinSearchable(sourceKey)) {
       throw SourceFailure(
         kind: FailureKind.unsupported,
@@ -714,7 +714,7 @@ class SourceManager extends ChangeNotifier {
     int page = 1,
     int limit = 30,
   }) async {
-    if (!BuiltinSearch.isBuiltin(sourceKey) ||
+    if (BuiltinPlatforms.lyricSearchFor(sourceKey) == null ||
         !_isBuiltinSearchable(sourceKey)) {
       throw SourceFailure(
         kind: FailureKind.unsupported,

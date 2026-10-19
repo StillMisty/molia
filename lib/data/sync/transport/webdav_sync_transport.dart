@@ -8,6 +8,7 @@ import 'package:logging/logging.dart';
 import '../../../domain/models/device_sync.dart';
 import '../../../domain/ports/sync_transport.dart';
 import '../../http/app_dio.dart';
+import '../peer_journal_protocol.dart';
 import '../sync_codec_port.dart';
 import '../sync_crypto.dart';
 import '../sync_state_store.dart';
@@ -66,16 +67,17 @@ class WebDavSyncTransport implements SyncTransport {
         _requestTimeout = requestTimeout;
 
   /// 回执文件后缀（固定名，可变）：`<deviceId>.acks.msync`。
-  static const String acksSuffix = '.acks.msync';
+  static const String acksSuffix = PeerJournalNames.acksSuffix;
 
   /// 增量块后缀（不可变）：`<deviceId>.<start>-<end>.chunk.msync`。
-  static const String chunkSuffix = '.chunk.msync';
+  static const String chunkSuffix = PeerJournalNames.chunkSuffix;
 
   /// 全量快照后缀（不可变）：`<deviceId>.<coverage>.snapshot.msync`。
-  static const String snapshotSuffix = '.snapshot.msync';
+  static const String snapshotSuffix = PeerJournalNames.snapshotSuffix;
 
   /// v3 之前的增量文件命名（只清理不读）。
-  static const String legacyJournalSuffix = '.journal.msync';
+  static const String legacyJournalSuffix =
+      PeerJournalNames.legacyJournalSuffix;
 
   static const int maxSnapshotBytes = 32 * 1024 * 1024;
 
@@ -124,8 +126,9 @@ class WebDavSyncTransport implements SyncTransport {
   bool get servesLiveSnapshot => false;
 
   @override
-  String? get unavailableReason =>
-      _configProvider().isConfigured ? null : SyncUnavailableReason.notConfigured;
+  String? get unavailableReason => _configProvider().isConfigured
+      ? null
+      : SyncUnavailableReason.notConfigured;
 
   /// 未配置没有额外技术细节（原因码已说明一切）。
   @override
@@ -150,7 +153,8 @@ class WebDavSyncTransport implements SyncTransport {
   }
 
   @override
-  Future<SyncPullResult> pull([SyncPullRequest request = SyncPullRequest.none]) async {
+  Future<SyncPullResult> pull(
+      [SyncPullRequest request = SyncPullRequest.none]) async {
     if (!_running) return SyncPullResult.none;
     final config = _configProvider();
     final passphrase = await _passphraseProvider();
@@ -243,25 +247,23 @@ class WebDavSyncTransport implements SyncTransport {
       // 2) 数据：游标之后必须有**连续**的块（块名自带区间）；缺口 / 落后
       //    超出窗口 / 对端日志重置 / 引擎显式要求全量 → 读最新快照 bootstrap。
       final headKnown = peerHead != SyncPullRequest.noCursor;
-      if (!forceFull && headKnown && peerHead <= cursor) {
+      if (!forceFull &&
+          headKnown &&
+          isPeerUpToDate(cursor: cursor, headSeq: peerHead)) {
         // 已到对端头部：不读块，只把回执带回去。
         seenDevices.add(device);
         if (!skipCounted) skipped++;
         if (acksEnvelope != null) envelopes.add(acksEnvelope);
         continue;
       }
-      final needed = [
-        for (final chunk in deviceFiles.chunks)
-          if (chunk.endSeq > cursor) chunk,
-      ];
-      // 衔接判定：窗口起点要么正好接在游标之后，要么是日志的第一个 seq（1）——
-      // 后者覆盖「本机还没消费过任何条目」（游标 -1 / 0）的情形。
-      final expectedFirst = cursor + 1 < 1 ? 1 : cursor + 1;
-      final contiguous = needed.isNotEmpty &&
-          needed.first.startSeq <= expectedFirst &&
-          _isContiguous(needed);
-      if (!forceFull && contiguous) {
-        for (final chunk in needed) {
+      // 衔接判定（首块可以是 1 的全新对端 / 块间不能有空隙）由协议模块统一
+      // 给出；不连续时下面的快照兜底是唯一正确出路。
+      final selection = selectJournalChunks(
+        cursor: cursor,
+        chunks: deviceFiles.chunks,
+      );
+      if (!forceFull && selection.contiguous) {
+        for (final chunk in selection.needed) {
           final outcome = await _readEnvelope(
             config,
             chunk.file,
@@ -381,41 +383,38 @@ class WebDavSyncTransport implements SyncTransport {
     return _ReadOutcome(envelope: envelope, bytes: bytes.length);
   }
 
-  /// 读到的块是否连续（块名自带区间：后一块起点不越过前一块终点 + 1）。
-  static bool _isContiguous(List<_ChunkFile> chunks) {
-    for (var i = 1; i < chunks.length; i++) {
-      if (chunks[i].startSeq > chunks[i - 1].endSeq + 1) return false;
-    }
-    return true;
-  }
-
   /// 把远端文件按设备归并（非本协议文件名忽略：幽灵文件不参与合并）。
   ///
   /// 本机文件在这里被跳过（只参与 [_pruneOwnFiles] 的裁剪判定）。
   Map<String, _DeviceFiles> _groupDevices(List<_RemoteFile> files) {
     final grouped = <String, _DeviceFiles>{};
     for (final file in files) {
-      final parsed = _parseFileName(file.name);
+      final parsed = PeerJournalNames.parse(file.name);
       if (parsed == null) continue;
-      final device = parsed.device;
+      final device = parsed.deviceId;
       if (device.isEmpty || device == deviceId) continue;
       if (_ignoredPeersProvider?.call(device) ?? false) continue;
-      if (parsed.kind == _FileKind.legacy) continue;
+      if (parsed.kind == PeerJournalFileKind.legacy) continue;
       final entry = grouped.putIfAbsent(device, _DeviceFiles.new);
       switch (parsed.kind) {
-        case _FileKind.acks:
+        case PeerJournalFileKind.acks:
           entry.acks = file;
-        case _FileKind.chunk:
+        case PeerJournalFileKind.chunk:
+          final range = parsed.range!;
           entry.chunks.add(
-            _ChunkFile(file: file, startSeq: parsed.first, endSeq: parsed.second),
+            _ChunkFile(
+              file: file,
+              startSeq: range.startSeq,
+              endSeq: range.endSeq,
+            ),
           );
-        case _FileKind.snapshot:
+        case PeerJournalFileKind.snapshot:
           final current = entry.snapshot;
-          if (current == null || parsed.first > current.coverage) {
+          if (current == null || parsed.coverage > current.coverage) {
             entry.snapshot =
-                _SnapshotFile(file: file, coverage: parsed.first);
+                _SnapshotFile(file: file, coverage: parsed.coverage);
           }
-        case _FileKind.legacy:
+        case PeerJournalFileKind.legacy:
           break;
       }
     }
@@ -425,61 +424,6 @@ class WebDavSyncTransport implements SyncTransport {
     return grouped;
   }
 
-  /// 解析本协议文件名：`<deviceId>.acks.msync` /
-  /// `<deviceId>.<start>-<end>.chunk.msync` / `<deviceId>.<coverage>.snapshot.msync`
-  /// / 旧命名 `<deviceId>.journal.msync`（legacy，只清理不读）。
-  ///
-  /// 设备 id 是本协议自产的 32 位小写十六进制（不含 `.`），按最后一个 `.` 分段
-  /// 解析即可；其它命名（幽灵 / 残留）返回 null。
-  static _ParsedName? _parseFileName(String name) {
-    String strip(String suffix) => name.substring(0, name.length - suffix.length);
-    if (name.endsWith(acksSuffix)) {
-      final device = strip(acksSuffix);
-      if (!device.contains('.')) return _ParsedName(device, _FileKind.acks);
-    } else if (name.endsWith(legacyJournalSuffix)) {
-      final device = strip(legacyJournalSuffix);
-      if (device.isNotEmpty && !device.contains('.')) {
-        return _ParsedName(device, _FileKind.legacy);
-      }
-    } else if (name.endsWith(chunkSuffix)) {
-      final stem = strip(chunkSuffix);
-      final dot = stem.lastIndexOf('.');
-      if (dot > 0) {
-        final range = stem.substring(dot + 1).split('-');
-        if (range.length == 2) {
-          final start = int.tryParse(range[0]);
-          final end = int.tryParse(range[1]);
-          if (start != null && end != null && end >= start) {
-            return _ParsedName(
-              stem.substring(0, dot),
-              _FileKind.chunk,
-              first: start,
-              second: end,
-            );
-          }
-        }
-      }
-    } else if (name.endsWith(snapshotSuffix)) {
-      final stem = strip(snapshotSuffix);
-      final dot = stem.lastIndexOf('.');
-      if (dot > 0) {
-        final coverage = int.tryParse(stem.substring(dot + 1));
-        if (coverage != null) {
-          return _ParsedName(
-            stem.substring(0, dot),
-            _FileKind.snapshot,
-            first: coverage,
-          );
-        }
-        // `<deviceId>.snapshot.msync`（旧命名，无覆盖位置）：只清理不读。
-        if (!stem.contains('.')) {
-          return _ParsedName(stem, _FileKind.legacy);
-        }
-      }
-    }
-    return null;
-  }
-
   /// 裁剪自己的旧文件（best effort；DELETE 失败只记日志，不影响本轮结果）：
   /// - 块：`endSeq <= baseSeq`（baseSeq 只在所有对端 ack 之后前移）；
   /// - 快照：只留覆盖位置最大的那一份；
@@ -487,21 +431,26 @@ class WebDavSyncTransport implements SyncTransport {
   ///
   /// 同名块在日志重置后可能被覆盖（seq 从 1 重新开始）：对端在重置后走
   /// 「游标超前头部 → bootstrap 快照」，不会读到被覆盖的块。
-  Future<void> _pruneOwnFiles(WebDavConfig config, List<_RemoteFile> files) async {
+  Future<void> _pruneOwnFiles(
+      WebDavConfig config, List<_RemoteFile> files) async {
     final baseSeq = await _journalBaseSeqProvider?.call();
     final stale = <String>[];
     final snapshots = <_SnapshotFile>[];
     for (final file in files) {
-      final parsed = _parseFileName(file.name);
-      if (parsed == null || parsed.device != deviceId) continue;
+      final parsed = PeerJournalNames.parse(file.name);
+      if (parsed == null || parsed.deviceId != deviceId) continue;
       switch (parsed.kind) {
-        case _FileKind.acks:
+        case PeerJournalFileKind.acks:
           break;
-        case _FileKind.chunk:
-          if (baseSeq != null && parsed.second <= baseSeq) stale.add(file.name);
-        case _FileKind.snapshot:
-          snapshots.add(_SnapshotFile(file: file, coverage: parsed.first));
-        case _FileKind.legacy:
+        case PeerJournalFileKind.chunk:
+          if (baseSeq != null && parsed.range!.endSeq <= baseSeq) {
+            stale.add(file.name);
+          }
+        case PeerJournalFileKind.snapshot:
+          snapshots.add(
+            _SnapshotFile(file: file, coverage: parsed.coverage),
+          );
+        case PeerJournalFileKind.legacy:
           stale.add(file.name);
       }
     }
@@ -543,16 +492,22 @@ class WebDavSyncTransport implements SyncTransport {
       // 窗口，不必读数据块；空窗口的轮次（只有 ack 变化）只写它。
       final acksPayload =
           await _codec.encrypt(_acksEnvelope(envelope), passphrase);
-      await _putFile(config, '$deviceId$acksSuffix', acksPayload);
+      await _putFile(config, PeerJournalNames.acks(deviceId), acksPayload);
       var bytesOut = acksPayload.length;
       // 数据：快照按覆盖位置命名、增量块按窗口区间命名——都写一次不再改。
       final String? name;
       if (envelope.isDelta) {
         name = envelope.windowEnd > 0
-            ? '$deviceId.${envelope.windowStart}-${envelope.windowEnd}$chunkSuffix'
+            ? PeerJournalNames.chunk(
+                deviceId,
+                JournalSeqRange(
+                  startSeq: envelope.windowStart,
+                  endSeq: envelope.windowEnd,
+                ),
+              )
             : null;
       } else {
-        name = '$deviceId.${envelope.journalHead}$snapshotSuffix';
+        name = PeerJournalNames.snapshot(deviceId, envelope.journalHead);
       }
       if (name != null) {
         final payload = await _codec.encrypt(envelope, passphrase);
@@ -600,11 +555,12 @@ class WebDavSyncTransport implements SyncTransport {
     }
     final targets = <String>[
       for (final file in files)
-        if (_parseFileName(file.name)?.device == deviceId) file.name,
+        if (PeerJournalNames.parse(file.name)?.deviceId == deviceId) file.name,
       // 更早版本的残留命名（无区间 / 无覆盖位置）。
       '$deviceId.msync',
-      if ('$deviceId$legacyJournalSuffix' != '$deviceId.msync')
-        '$deviceId$legacyJournalSuffix',
+      if ('$deviceId${PeerJournalNames.legacyJournalSuffix}' !=
+          '$deviceId.msync')
+        '$deviceId${PeerJournalNames.legacyJournalSuffix}',
     ];
     var removed = false;
     String? failure;
@@ -685,7 +641,7 @@ class WebDavSyncTransport implements SyncTransport {
       if (segments.isEmpty) continue;
       final name = segments.last;
       // 本机文件也列出（裁剪自身旧块要看到它们）；幽灵文件按命名解析排除。
-      if (_parseFileName(name) == null) continue;
+      if (PeerJournalNames.parse(name) == null) continue;
       if (files.any((file) => file.name == name)) continue;
       files.add(_RemoteFile(name: name, version: entry.version));
     }
@@ -772,8 +728,8 @@ class WebDavSyncTransport implements SyncTransport {
     final headers = <String, String>{};
     final password = await _passwordProvider();
     if (config.username.isNotEmpty) {
-      final token = base64Encode(
-          utf8.encode('${config.username}:${password ?? ''}'));
+      final token =
+          base64Encode(utf8.encode('${config.username}:${password ?? ''}'));
       headers['Authorization'] = 'Basic $token';
     }
     return headers;
@@ -824,23 +780,6 @@ class WebDavSyncTransport implements SyncTransport {
   }
 }
 
-/// 本协议文件种类（命名解析结果）。
-enum _FileKind { acks, chunk, snapshot, legacy }
-
-/// `<deviceId>.<数字>[.<数字>].<后缀>` 的解析结果。
-class _ParsedName {
-  const _ParsedName(this.device, this.kind, {this.first = 0, this.second = 0});
-
-  final String device;
-  final _FileKind kind;
-
-  /// 块 = 起点 seq；快照 = 覆盖位置。
-  final int first;
-
-  /// 块 = 终点 seq。
-  final int second;
-}
-
 /// 一台对端的文件集合（回执 / 块 / 最新快照）。
 class _DeviceFiles {
   _RemoteFile? acks;
@@ -849,7 +788,10 @@ class _DeviceFiles {
 }
 
 /// 增量块（名字自带 seq 区间，不可变）。
-class _ChunkFile {
+///
+/// 直接实现 [JournalSeqRange]，分块衔接判定可以把原对象交给协议模块，
+/// 不需要再把区间拆出来映射回文件。
+class _ChunkFile implements JournalSeqRange {
   const _ChunkFile({
     required this.file,
     required this.startSeq,
@@ -857,7 +799,11 @@ class _ChunkFile {
   });
 
   final _RemoteFile file;
+
+  @override
   final int startSeq;
+
+  @override
   final int endSeq;
 }
 

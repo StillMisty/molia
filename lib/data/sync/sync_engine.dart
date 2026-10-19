@@ -7,6 +7,7 @@ import 'package:logging/logging.dart';
 import '../../domain/models/device_sync.dart';
 import '../../domain/ports/sync_known_store.dart';
 import '../../domain/ports/sync_transport.dart';
+import 'peer_journal_protocol.dart';
 import 'publish_ledger.dart';
 import 'sync_adapter.dart';
 import 'sync_codec_port.dart';
@@ -132,8 +133,8 @@ class SyncEngine extends ChangeNotifier implements SyncSchedulerHost {
   int? _localJournalHead;
 
   /// 上一轮各适配器的收集结果（身份）与聚合视图：见 [_collect] 的复用守卫。
-  final Map<SyncAdapter, Map<SyncCategory, List<SyncRecord>>> _lastAdapterCollect =
-      {};
+  final Map<SyncAdapter, Map<SyncCategory, List<SyncRecord>>>
+      _lastAdapterCollect = {};
   Map<SyncCategory, List<SyncRecord>>? _lastAggregate;
   Set<SyncCategory>? _lastAggregateCategories;
 
@@ -164,13 +165,20 @@ class SyncEngine extends ChangeNotifier implements SyncSchedulerHost {
     final journal = _journal;
     if (journal == null) return serveSnapshot();
     final baseSeq = await journal.baseSeq();
-    if (since < baseSeq) return serveSnapshot();
-    // 对端游标超前本机头部 = 本机日志被重置（派生状态随版本重建）：
-    // 继续给增量会让对端等一个永远不会出现的 seq，必须回全量让它重新引导。
-    if (since > await journal.headSeq()) return serveSnapshot();
+    // 窗口取舍（游标落后起点 / 超前头部 → bootstrap）由协议模块统一判定：
+    // 服务端与接收端必须用同一套游标语义，否则缺口会被两边各判一次。
+    if (chooseJournalServeMode(
+          since: since,
+          baseSeq: baseSeq,
+          headSeq: await journal.headSeq(),
+        ) ==
+        JournalServeMode.fullSnapshot) {
+      return serveSnapshot();
+    }
     final snapshot = _lastEnvelope ??
         await _buildLiveSnapshot(categories: _state.enabledCategories);
     final entries = await journal.window(since: since);
+    final bounds = journalWindowBounds(entries);
     return SyncEnvelope(
       deviceId: _state.deviceId,
       deviceName: _state.deviceName,
@@ -178,8 +186,8 @@ class SyncEngine extends ChangeNotifier implements SyncSchedulerHost {
       snapshotId: snapshot.snapshotId,
       journalHead: await journal.headSeq(),
       baseSeq: baseSeq,
-      windowStart: entries.isEmpty ? 0 : entries.first.seq,
-      windowEnd: entries.isEmpty ? 0 : entries.last.seq,
+      windowStart: bounds.windowStart,
+      windowEnd: bounds.windowEnd,
       journal: entries,
       acks: snapshot.acks,
       categories: snapshot.categories,
@@ -246,8 +254,7 @@ class SyncEngine extends ChangeNotifier implements SyncSchedulerHost {
   /// 配对码与设置页展示用：端口降级后对端要按对应的族取端口，不能假设
   /// 标准端口或拿另一族的端口。
   ({int v4, int v6}) get lanDiscoveryPorts =>
-      _transports[SyncTransportKind.lan]?.discoveryPorts ??
-      (v4: 0, v6: 0);
+      _transports[SyncTransportKind.lan]?.discoveryPorts ?? (v4: 0, v6: 0);
 
   int _nowMs() => _clock().millisecondsSinceEpoch;
 
@@ -474,13 +481,12 @@ class SyncEngine extends ChangeNotifier implements SyncSchedulerHost {
     // 入站轮 / 未设置口令等中止轮不外发：待发标记保留给下一轮。
     if (report == null || !push) return SyncRunOutcome.none;
     final enabled = _state.enabledCategories;
-    final categories = onlyCategories == null
-        ? enabled
-        : onlyCategories.intersection(enabled);
+    final categories =
+        onlyCategories == null ? enabled : onlyCategories.intersection(enabled);
     return SyncRunOutcome(
       categories: categories,
-      delivered: report.outcome != SyncOutcome.failed &&
-          report.failedCount == 0,
+      delivered:
+          report.outcome != SyncOutcome.failed && report.failedCount == 0,
     );
   }
 
@@ -570,8 +576,9 @@ class SyncEngine extends ChangeNotifier implements SyncSchedulerHost {
 
       // anti-entropy：对端内容指纹与本机不一致、且本机没有它的新条目时，
       // 主动取一次全量快照修复静默分歧（LWW 只保证「有新数据时收敛」）。
-      final fullFor =
-          antiEntropy ? await _antiEntropyPeers(local, categories) : const <String>{};
+      final fullFor = antiEntropy
+          ? await _antiEntropyPeers(local, categories)
+          : const <String>{};
       if (!inboundOnly) {
         pullContact = await _pullInto(
           accumulators,
@@ -852,8 +859,8 @@ class SyncEngine extends ChangeNotifier implements SyncSchedulerHost {
       );
       final anyTransport =
           transportReports.any((item) => item.enabled && item.running);
-      final remoteCount = remoteRecords.values
-          .fold<int>(0, (sum, list) => sum + list.length);
+      final remoteCount =
+          remoteRecords.values.fold<int>(0, (sum, list) => sum + list.length);
       final contact = peersSeen > 0 ||
           applied > 0 ||
           remoteCount > 0 ||
@@ -1076,47 +1083,22 @@ class SyncEngine extends ChangeNotifier implements SyncSchedulerHost {
       var nextCursor = cursor;
       var gap = false;
       if (envelope.isDelta) {
-        // 游标 -1 = 尚未消费任何条目（全新对端 / 刚引导过）：与窗口起点比较时
-        // 夹到 0——日志 seq 从 1 开始，`-1 < baseSeq(0)` 不是「落后」而是
-        // 「正好从头开始」，按落后处理会白做一次全量 bootstrap（且快照可能
-        // 早于本次变更，白白丢掉这一窗）。
-        final baseline = cursor < 0 ? 0 : cursor;
-        if (baseline < envelope.baseSeq) {
-          // 窗口缺口：本机游标之前的条目已被对端裁剪，窗口不完整。
+        // 游标语义（-1 夹到 0、连续条目、空窗口不算截断、缺口只推进到已接受
+        // 位置）集中在协议模块：这里只把结果落到远端记录与待提交游标。
+        final consumed = consumeJournalDelta(
+          cursor: cursor,
+          baseSeq: envelope.baseSeq,
+          windowStart: envelope.windowStart,
+          windowEnd: envelope.windowEnd,
+          entries: envelope.journal ?? const <SyncJournalEntry>[],
+        );
+        for (final entry in consumed.accepted) {
+          remoteRecords.putIfAbsent(entry.category, () => []).add(entry.record);
+        }
+        nextCursor = consumed.nextCursor;
+        if (consumed.gap) {
           gap = true;
           fullPeers.add(peerId);
-        } else {
-          // 只接受**连续**覆盖本机游标之后的条目：解析层丢掉的坏条目 / 未知
-          // 类别会造成空洞，此时不能把游标推到 windowEnd（会永久跳过它们）。
-          final entries = [...(envelope.journal ?? const <SyncJournalEntry>[])]
-            ..sort((a, b) => a.seq.compareTo(b.seq));
-          // 起点同样夹到 1：游标 -1（全新对端 / 刚被重置）时首条合法 seq 是 1，
-          // 从 0 起算会把每条窗口都判成「首条即空洞」。
-          var expected = baseline + 1;
-          var hole = false;
-          for (final entry in entries) {
-            if (entry.seq <= cursor) continue;
-            if (entry.seq != expected) {
-              hole = true;
-              break;
-            }
-            expected = entry.seq + 1;
-            remoteRecords.putIfAbsent(entry.category, () => []).add(entry.record);
-          }
-          // 缺口判定只对**非空窗口**成立：`windowEnd == 0` 是空窗口（回执
-          // 类载荷），它什么都没带，不该被当成「窗口被裁剪」——否则全新对端
-          // （游标 -1）会被推进一次多余的 bootstrap，而快照可能早于本次变更，
-          // 白丢一窗。
-          final truncated = envelope.windowEnd > 0 &&
-              expected - 1 < envelope.windowEnd &&
-              envelope.windowEnd > cursor;
-          if (hole || truncated) {
-            // 窗口内不连续：标缺口改走 bootstrap（已接受的条目照常应用，
-            // 游标只推进到已接受的最大 seq）。
-            gap = true;
-            fullPeers.add(peerId);
-          }
-          if (expected - 1 > nextCursor) nextCursor = expected - 1;
         }
       } else {
         // 全量快照：记录集整体应用，游标推进到快照覆盖的位置。
@@ -1151,7 +1133,7 @@ class SyncEngine extends ChangeNotifier implements SyncSchedulerHost {
         // 节流间隔不频繁重拉（分歧仍会被修复）。
         if (antiEntropy &&
             envelope.snapshotId.isNotEmpty &&
-            cursor >= envelope.journalHead &&
+            isPeerUpToDate(cursor: cursor, headSeq: envelope.journalHead) &&
             now - fullPulledAt >= antiEntropyIntervalMs &&
             await _fingerprintDiffers(
               peerSnapshotId: envelope.snapshotId,
@@ -1169,13 +1151,11 @@ class SyncEngine extends ChangeNotifier implements SyncSchedulerHost {
         lastSeenAt: now,
         lastPullAt: now,
         // 成功拉取 = 接触成功：清掉上一次的失败；本轮推送失败的对端保留状态。
-        lastError: _peersFailedThisRound.contains(peerId)
-            ? existing.lastError
-            : null,
+        lastError:
+            _peersFailedThisRound.contains(peerId) ? existing.lastError : null,
         clearLastError: !_peersFailedThisRound.contains(peerId),
         ackedSeq: ackedSeq,
-        snapshotId:
-            envelope.snapshotId.isNotEmpty ? envelope.snapshotId : null,
+        snapshotId: envelope.snapshotId.isNotEmpty ? envelope.snapshotId : null,
         categories: envelope.categories.isNotEmpty ? envelope.categories : null,
         fullPulledAt: fullPulledAt > 0 ? fullPulledAt : null,
         clockSkewMs: envelope.producedAt > 0 ? envelope.producedAt - now : null,
@@ -1277,6 +1257,7 @@ class SyncEngine extends ChangeNotifier implements SyncSchedulerHost {
     SyncEnvelope outgoing,
   ) async {
     final entries = await journal.window(since: outgoing.baseSeq);
+    final bounds = journalWindowBounds(entries);
     return SyncEnvelope(
       deviceId: outgoing.deviceId,
       deviceName: outgoing.deviceName,
@@ -1284,8 +1265,8 @@ class SyncEngine extends ChangeNotifier implements SyncSchedulerHost {
       snapshotId: outgoing.snapshotId,
       journalHead: outgoing.journalHead,
       baseSeq: outgoing.baseSeq,
-      windowStart: entries.isEmpty ? 0 : entries.first.seq,
-      windowEnd: entries.isEmpty ? 0 : entries.last.seq,
+      windowStart: bounds.windowStart,
+      windowEnd: bounds.windowEnd,
       journal: entries,
       acks: outgoing.acks,
       categories: outgoing.categories,
@@ -1353,7 +1334,8 @@ class SyncEngine extends ChangeNotifier implements SyncSchedulerHost {
     return SyncOutcome.partial;
   }
 
-  static SyncTrigger _mergeTrigger(SyncTrigger? existing, SyncTrigger incoming) {
+  static SyncTrigger _mergeTrigger(
+      SyncTrigger? existing, SyncTrigger incoming) {
     if (existing == null) return incoming;
     if (existing == SyncTrigger.manual || incoming == SyncTrigger.manual) {
       return SyncTrigger.manual;

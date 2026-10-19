@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:flutter_test/flutter_test.dart';
+import 'package:molia/sources/builtin/builtin_platforms.dart';
 import 'package:molia/sources/builtin/builtin_search.dart';
 import 'package:molia/sources/builtin/builtin_transport.dart';
 import 'package:molia/sources/builtin/zlib_io.dart' as zlib_impl;
@@ -30,8 +31,7 @@ void main() {
     for (var i = 0; i < inner.length; i++) {
       xored[i] = inner[i] ^ key.codeUnitAt(i % key.length);
     }
-    final compressed =
-        zlib_impl.zlibDeflate(utf8.encode(base64.encode(xored)));
+    final compressed = zlib_impl.zlibDeflate(utf8.encode(base64.encode(xored)));
     return [
       ...utf8.encode('TP=content\r\nlrcx=1\r\n\r\n'),
       ...compressed,
@@ -50,7 +50,7 @@ void main() {
 
   test('能力位：内置五平台歌词/封面为真（无需脚本声明）', () {
     final manager = SourceManager();
-    for (final key in ['kw', 'kg', 'tx', 'wy', 'mg']) {
+    for (final key in BuiltinPlatforms.keys) {
       final capabilities = manager.capabilitiesFor(key);
       expect(capabilities.lyrics, isTrue, reason: key);
       expect(capabilities.artwork, isTrue, reason: key);

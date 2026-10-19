@@ -5,24 +5,21 @@
 ///
 /// 与搜索/歌词的差异：评论没有「脚本回传」需求（LX 的 comment 只在内置实现），
 /// 因此解析直接产出领域模型，不再经 sources → data 的映射层。
+///
+/// 平台矩阵、评论 ID 字段与各平台实现集中在 [BuiltinPlatforms]；本文件只做
+/// raw 字段解析与「不支持」的失败语义（抛 [SourceFailure]）。
 library;
 
 import '../../domain/models/comment.dart';
 import '../../domain/models/failure.dart';
+import 'builtin_platforms.dart';
 import 'comment_utils.dart';
-import 'kg_comment.dart';
-import 'kw_comment.dart';
-import 'mg_comment.dart';
-import 'tx_comment.dart';
-import 'wy_comment.dart';
 
 class BuiltinComments {
   BuiltinComments._();
 
-  /// 具备内置评论能力的平台（与 `BuiltinSearch.platforms` 一致）。
-  static const Set<String> supportedKeys = {'kw', 'kg', 'tx', 'wy', 'mg'};
-
-  static bool isSupported(String sourceKey) => supportedKeys.contains(sourceKey);
+  static bool isSupported(String sourceKey) =>
+      BuiltinPlatforms.commentsFor(sourceKey) != null;
 
   /// 取一页评论；[raw] 为 `SourceTrack.raw`（平台字段原样，禁改写）。
   ///
@@ -35,48 +32,19 @@ class BuiltinComments {
     int page = 1,
     int limit = kCommentPageSize,
   }) async {
-    switch (sourceKey) {
-      case 'wy':
-        return WyComment.fetch(
-          _requiredId(sourceKey, raw, const ['songmid', 'id']),
-          kind: kind,
-          page: page,
-          limit: limit,
-        );
-      case 'tx':
-        return TxComment.fetch(
-          _requiredId(sourceKey, raw, const ['songId']),
-          kind: kind,
-          page: page,
-          limit: limit,
-        );
-      case 'kg':
-        return KgComment.fetch(
-          _requiredId(sourceKey, raw, const ['hash']),
-          kind: kind,
-          page: page,
-          limit: limit,
-        );
-      case 'kw':
-        return KwComment.fetch(
-          _requiredId(sourceKey, raw, const ['songmid']),
-          kind: kind,
-          page: page,
-          limit: limit,
-        );
-      case 'mg':
-        return MgComment.fetch(
-          _requiredId(sourceKey, raw, const ['songmid', 'copyrightId']),
-          kind: kind,
-          page: page,
-          limit: limit,
-        );
-      default:
-        throw SourceFailure(
-          kind: FailureKind.unsupported,
-          message: '内置平台不支持评论: $sourceKey',
-        );
+    final adapter = BuiltinPlatforms.commentsFor(sourceKey);
+    if (adapter == null) {
+      throw SourceFailure(
+        kind: FailureKind.unsupported,
+        message: '内置平台不支持评论: $sourceKey',
+      );
     }
+    return adapter.fetch(
+      _requiredId(sourceKey, raw, adapter.rawIdKeys),
+      kind: kind,
+      page: page,
+      limit: limit,
+    );
   }
 
   /// 取评论所需的平台 ID：按候选键依次取第一个非空值。

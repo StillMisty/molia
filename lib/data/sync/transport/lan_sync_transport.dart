@@ -9,6 +9,7 @@ import '../../../domain/models/device_sync.dart';
 import '../../../domain/ports/sync_transport.dart';
 import '../../../utils/device_id.dart';
 import '../../../utils/peer_address.dart';
+import '../peer_journal_protocol.dart';
 import '../sync_codec_port.dart';
 import '../sync_crypto.dart';
 
@@ -379,7 +380,8 @@ class LanSyncTransport implements SyncTransport {
   }
 
   @override
-  Future<SyncPullResult> pull([SyncPullRequest request = SyncPullRequest.none]) async {
+  Future<SyncPullResult> pull(
+      [SyncPullRequest request = SyncPullRequest.none]) async {
     if (!_running) {
       return SyncPullResult(
         error: SyncIssue(
@@ -410,7 +412,10 @@ class LanSyncTransport implements SyncTransport {
       // 内容指纹与本机上次拉到的一致、且本机游标已到对端日志头部：
       // 没有还没消费的条目，跳过 GET + 解密 + 合并（对端清单为空时不可能命中）。
       final cached = _peerSnapshotIds[peer.key];
-      final upToDate = peer.journalHead == null || cursor >= peer.journalHead!;
+      // 头部未自报（null）按「指纹未变即可跳过」处理，与协议模块的
+      // isPeerUpToDate 同一口径（WebDAV 的「未知头部」是 -1 哨兵，另行判空）。
+      final upToDate =
+          isPeerUpToDate(cursor: cursor, headSeq: peer.journalHead);
       if (!needsFull &&
           peer.snapshotId.isNotEmpty &&
           cached == peer.snapshotId &&
@@ -582,7 +587,8 @@ class LanSyncTransport implements SyncTransport {
       addTarget(target.host, target.port);
     }
     for (final manual in manualPeers) {
-      addTarget(manual.host, manual.probePort > 0 ? manual.probePort : _udpPort);
+      addTarget(
+          manual.host, manual.probePort > 0 ? manual.probePort : _udpPort);
     }
     for (final endpoints in _probeEndpoints.values) {
       for (final endpoint in endpoints) {
@@ -638,9 +644,8 @@ class LanSyncTransport implements SyncTransport {
   ) {
     final address = InternetAddress.tryParse(normalizePeerHost(host));
     if (address == null || port <= 0) return;
-    final sockets = address.type == InternetAddressType.IPv6
-        ? [v6, v4]
-        : [v4, v6];
+    final sockets =
+        address.type == InternetAddressType.IPv6 ? [v6, v4] : [v4, v6];
     for (final socket in sockets) {
       if (socket == null) continue;
       try {
@@ -679,8 +684,9 @@ class LanSyncTransport implements SyncTransport {
       host: _observedHost(datagram.address),
       port: port.toInt(),
       name: message['name'] is String ? message['name'] as String : '',
-      snapshotId:
-          message['snapshotId'] is String ? message['snapshotId'] as String : '',
+      snapshotId: message['snapshotId'] is String
+          ? message['snapshotId'] as String
+          : '',
       journalHead: message['journalHead'] is num
           ? (message['journalHead'] as num).toInt()
           : null,
@@ -854,7 +860,8 @@ class LanSyncTransport implements SyncTransport {
   static String _normalizeHost(String host) =>
       InternetAddress.tryParse(host.trim())?.address ?? host.trim();
 
-  Future<Uint8List?> _fetchSnapshot(_Peer peer) => _getPayload(peer, snapshotPath);
+  Future<Uint8List?> _fetchSnapshot(_Peer peer) =>
+      _getPayload(peer, snapshotPath);
 
   /// 拉取增量窗口（带本机游标；对端在游标落后于窗口起点时回全量快照）。
   ///

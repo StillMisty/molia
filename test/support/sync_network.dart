@@ -7,6 +7,7 @@ import 'package:molia/data/settings/settings_keys.dart';
 import 'package:molia/data/settings/settings_registry.dart';
 import 'package:molia/data/sync/adapters/history_sync_adapter.dart';
 import 'package:molia/data/sync/adapters/prefs_sync_adapter.dart';
+import 'package:molia/data/sync/peer_journal_protocol.dart';
 import 'package:molia/data/sync/sync_codec_port.dart';
 import 'package:molia/data/sync/sync_crypto.dart';
 import 'package:molia/data/sync/sync_engine.dart';
@@ -241,8 +242,14 @@ class SyncDevice {
   /// 走引擎的 [SyncEngine.serveJournal]（与局域网端点同一实现）；显式要求
   /// 全量时直接给最近一轮的全量快照。
   Future<SyncEnvelope> serve({required int since, required bool full}) async {
-    final baseSeq = await journal.baseSeq();
-    if (full || since < baseSeq) {
+    // 与生产服务端同一套窗口取舍（游标落后起点 / 超前头部都回全量）；
+    // 计数器只按协议结论分类，不再自己重算 since < baseSeq。
+    final mode = chooseJournalServeMode(
+      since: since,
+      baseSeq: await journal.baseSeq(),
+      headSeq: await journal.headSeq(),
+    );
+    if (full || mode == JournalServeMode.fullSnapshot) {
       network.bootstrapServed++;
       return engine.serveSnapshot();
     }
@@ -304,7 +311,8 @@ class NetworkTransport implements SyncTransport {
   }
 
   @override
-  Future<SyncPullResult> pull([SyncPullRequest request = SyncPullRequest.none]) async {
+  Future<SyncPullResult> pull(
+      [SyncPullRequest request = SyncPullRequest.none]) async {
     final envelopes = <SyncEnvelope>[];
     var bytesIn = 0;
     for (final peer in device.network.devices.values) {
@@ -339,7 +347,8 @@ class NetworkTransport implements SyncTransport {
 
   @override
   Future<SyncPushResult> push(SyncEnvelope envelope) async {
-    final bytes = device.network.codec.encrypt(envelope, device.network.passphrase);
+    final bytes =
+        device.network.codec.encrypt(envelope, device.network.passphrase);
     device.network.encryptions++;
     device.network.bytesTransferred += bytes.length;
     var delivered = 0;
@@ -370,7 +379,8 @@ SyncPeerState peerOf(SyncDevice device, String peerId) =>
     device.state.peers.firstWhere((peer) => peer.deviceId == peerId);
 
 /// 直插数据库的辅助（构造「存量数据」：不进增量日志，只影响全量快照体积）。
-Future<void> seedHistoryRows(MoliaDatabase db, int count, {int from = 0}) async {
+Future<void> seedHistoryRows(MoliaDatabase db, int count,
+    {int from = 0}) async {
   await db.batch((batch) {
     batch.insertAll(
       db.playHistory,

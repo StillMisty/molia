@@ -1,9 +1,5 @@
 import '../../domain/models/discover.dart';
-import 'kg_discover.dart';
-import 'kw_discover.dart';
-import 'mg_discover.dart';
-import 'tx_discover.dart';
-import 'wy_discover.dart';
+import 'builtin_platforms.dart';
 
 /// 内置平台「发现」能力抽象：热榜 / 歌单（标签浏览、搜索、详情）/ 热搜词。
 ///
@@ -44,24 +40,23 @@ abstract class DiscoverSource {
 }
 
 /// 内置平台发现注册表。
+///
+/// 平台顺序/实现由 [BuiltinPlatforms] 的同一份条目提供：发现族不再单独维护
+/// 一份平台表，避免与搜索/评论等能力族静默漂移。
 class BuiltinDiscover {
   BuiltinDiscover._();
 
   /// 平台顺序与内置搜索一致（wy 在前：默认平台）。
-  static const Map<String, DiscoverSource> sources = {
-    'wy': WyDiscoverSource(),
-    'tx': TxDiscoverSource(),
-    'kg': KgDiscoverSource(),
-    'kw': KwDiscoverSource(),
-    'mg': MgDiscoverSource(),
-  };
+  static Map<String, DiscoverSource> get sources =>
+      BuiltinPlatforms.discoverSources;
 
-  static const List<String> sourceKeys = ['wy', 'tx', 'kg', 'kw', 'mg'];
+  static List<String> get sourceKeys => BuiltinPlatforms.keys;
 
-  static bool isSupported(String sourceKey) => sources.containsKey(sourceKey);
+  static bool isSupported(String sourceKey) =>
+      BuiltinPlatforms.discoverFor(sourceKey) != null;
 
   static DiscoverSource of(String sourceKey) {
-    final source = sources[sourceKey];
+    final source = BuiltinPlatforms.discoverFor(sourceKey);
     if (source == null) {
       throw UnsupportedError('不支持的内置发现平台: $sourceKey');
     }
