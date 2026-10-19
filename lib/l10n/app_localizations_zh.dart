@@ -1146,12 +1146,6 @@ class AppLocalizationsZh extends AppLocalizations {
   String get discoverSearchEmpty => '没有找到歌单';
 
   @override
-  String get discoverShowAll => '展开全部';
-
-  @override
-  String get discoverShowLess => '收起';
-
-  @override
   String discoverPlaylistAuthor(String author) {
     return '由 $author';
   }

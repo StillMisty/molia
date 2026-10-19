@@ -1187,12 +1187,6 @@ class AppLocalizationsEn extends AppLocalizations {
   String get discoverSearchEmpty => 'No playlists found';
 
   @override
-  String get discoverShowAll => 'Show all';
-
-  @override
-  String get discoverShowLess => 'Show less';
-
-  @override
   String discoverPlaylistAuthor(String author) {
     return 'by $author';
   }

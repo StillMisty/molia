@@ -17,7 +17,7 @@ import 'support/fake_discover_api.dart';
 import 'support/fake_library_repository.dart';
 import 'support/fakes.dart';
 
-/// 已渲染 chip 占了几行（按 chip 顶边 y 去重）：断言「默认最多两行」用。
+/// 已渲染 chip 占了几行（按 chip 顶边 y 去重）：断言全量渲染（超过两行）用。
 int _chipRows(WidgetTester tester) {
   final chips = find.byType(M3EChip);
   final rows = <double>{};
@@ -205,8 +205,9 @@ void main() {
 
     expect(find.text('热榜'), findsNothing); // tab 名即标题：分区标题不重复出现
     expect(find.text('热歌榜'), findsOneWidget);
-    // 一条榜单放得下两行 → 没有多余的展开入口。
+    // 不做折叠：没有展开 / 收起入口。
     expect(find.text('展开全部'), findsNothing);
+    expect(find.text('收起'), findsNothing);
 
     await tester.tap(find.text('热歌榜'));
     await tester.pumpAndSettle();
@@ -217,7 +218,7 @@ void main() {
     expect(wy.leaderboardCalls, greaterThan(0));
   });
 
-  testWidgets('热榜 tab：30 条榜单默认最多两行，「展开全部」就地展开 / 收起', (tester) async {
+  testWidgets('热榜 tab：30 条榜单全部直接显示，没有折叠入口', (tester) async {
     final many = [
       for (var i = 0; i < 30; i++)
         DiscoverLeaderboard(id: 'b$i', name: '榜单 $i', bangid: '$i'),
@@ -225,46 +226,23 @@ void main() {
     wy.leaderboards = many;
     await pumpTab(tester, const DiscoverLeaderboardsTab());
 
-    // 折叠态：只构建两行内放得下的前缀，靠后的榜单不在树里（不是裁掉）。
+    // 全量渲染：首尾都在树里，行数超过两行也不收起。
     expect(find.text('榜单 0'), findsOneWidget);
-    expect(find.text('榜单 29'), findsNothing);
-    expect(_chipRows(tester), lessThanOrEqualTo(2), reason: '默认最多两行');
+    expect(find.text('榜单 29'), findsOneWidget);
+    expect(find.text('展开全部'), findsNothing);
+    expect(find.text('收起'), findsNothing);
+    expect(_chipRows(tester), greaterThan(2), reason: '不再截断到两行');
 
-    final expand = find.text('展开全部');
-    expect(expand, findsOneWidget);
-    expect(
-      tester
-          .getSize(find.ancestor(of: expand, matching: find.byType(M3EButton)))
-          .height,
-      greaterThanOrEqualTo(48),
-      reason: '展开入口的点击目标不低于 M3 最小触控 48',
-    );
-
-    // 展开：全部榜单可见且不限行，入口变「收起」。
-    await tester.tap(expand);
+    // 换渠道：新渠道的榜单同样直接全量显示。
+    tx.leaderboards = many;
+    discover.selectChannel('tx');
     await tester.pumpAndSettle();
     expect(find.text('榜单 29'), findsOneWidget);
     expect(find.text('展开全部'), findsNothing);
     expect(_chipRows(tester), greaterThan(2));
-
-    // 收起：回到两行。
-    await tester.tap(find.text('收起'));
-    await tester.pumpAndSettle();
-    expect(find.text('榜单 29'), findsNothing);
-    expect(_chipRows(tester), lessThanOrEqualTo(2));
-
-    // 展开态换渠道：新渠道的榜单是另一批，回到折叠。
-    tx.leaderboards = many;
-    await tester.tap(find.text('展开全部'));
-    await tester.pumpAndSettle();
-    expect(_chipRows(tester), greaterThan(2));
-    discover.selectChannel('tx');
-    await tester.pumpAndSettle();
-    expect(find.text('展开全部'), findsOneWidget);
-    expect(_chipRows(tester), lessThanOrEqualTo(2));
   });
 
-  testWidgets('热榜 tab：窄窗 + 长榜单名仍不超两行、不溢出', (tester) async {
+  testWidgets('热榜 tab：窄窗 + 长榜单名自然换行、不溢出', (tester) async {
     wy.leaderboards = const [
       DiscoverLeaderboard(id: 'b0', name: '飙升榜', bangid: '0'),
       DiscoverLeaderboard(
@@ -279,10 +257,9 @@ void main() {
     ];
     await pumpTab(tester, const DiscoverLeaderboardsTab(), width: 420);
 
-    expect(_chipRows(tester), lessThanOrEqualTo(2), reason: '窄窗同样最多两行');
-    expect(find.text('展开全部'), findsOneWidget);
-
-    // 长度估计是上界：可见 chip 不会顶出 chip 云右缘。
+    expect(find.text('展开全部'), findsNothing);
+    expect(_chipRows(tester), greaterThan(1), reason: '窄窗按行自然换行');
+    // 全部 chip 都在 chip 云右缘内（`Wrap` 换行；单条过长由 chip 自身截断）。
     final cloudRight = tester.getRect(find.byType(Wrap)).right;
     final chips = find.byType(M3EChip);
     for (var i = 0; i < chips.evaluate().length; i++) {

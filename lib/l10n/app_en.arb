@@ -555,8 +555,6 @@
   "discoverRetry": "Retry",
   "discoverNoContent": "Nothing here yet",
   "discoverSearchEmpty": "No playlists found",
-  "discoverShowAll": "Show all",
-  "discoverShowLess": "Show less",
   "discoverPlaylistAuthor": "by {author}",
   "discoverAddToPlaylist": "Add to playlist",
   "discoverNoPlaylists": "No playlists yet. Favorite a song first to create one.",

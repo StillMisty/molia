@@ -367,8 +367,6 @@
   "discoverRetry": "重试",
   "discoverNoContent": "暂无内容",
   "discoverSearchEmpty": "没有找到歌单",
-  "discoverShowAll": "展开全部",
-  "discoverShowLess": "收起",
   "discoverPlaylistAuthor": "由 {author}",
   "discoverAddToPlaylist": "加入列表",
   "discoverNoPlaylists": "还没有列表。先在资料库中收藏歌曲创建列表。",

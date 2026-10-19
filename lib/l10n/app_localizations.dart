@@ -2258,18 +2258,6 @@ abstract class AppLocalizations {
   /// **'No playlists found'**
   String get discoverSearchEmpty;
 
-  /// No description provided for @discoverShowAll.
-  ///
-  /// In en, this message translates to:
-  /// **'Show all'**
-  String get discoverShowAll;
-
-  /// No description provided for @discoverShowLess.
-  ///
-  /// In en, this message translates to:
-  /// **'Show less'**
-  String get discoverShowLess;
-
   /// No description provided for @discoverPlaylistAuthor.
   ///
   /// In en, this message translates to:
