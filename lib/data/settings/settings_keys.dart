@@ -145,6 +145,16 @@ const kSourceSwapAutoEnabled = SettingsKey<bool>(
   category: SyncCategory.settings,
 );
 
+// ── 跟人走：资料库（加入收藏 / 列表的位置） ──────────────────────────
+
+/// 新曲目加入收藏 / 自建列表时放的位置：`top` = 列表开头（默认），
+/// `bottom` = 列表末尾。
+const kLibraryAddPosition = SettingsKey<String>(
+  'library_add_position',
+  'top',
+  category: SyncCategory.settings,
+);
+
 // ── 音源：LX 质量 / 顺序 / 停用与 any-listen 连接 ─────────────────────
 const kLxDefaultQuality = SettingsKey<String>(
   'lx_default_quality',
@@ -225,6 +235,7 @@ const List<SettingsKey<Object?>> kAllSettingsKeys = [
   kAiDjEnabled,
   kAiDjCacheTtlDays,
   kSourceSwapAutoEnabled,
+  kLibraryAddPosition,
   kLxDefaultQuality,
   kLxSourceOrder,
   kLxChannelDisabled,

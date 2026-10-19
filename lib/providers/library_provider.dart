@@ -153,13 +153,68 @@ class LibraryProvider extends ChangeNotifier {
   }
 
   /// 历史变化的后台校准：保持当前列表可见，不翻转 loading。
+  ///
+  /// 顺序策略：**已存在的条目保持当前顺序**（只换数据），全新条目插到最前。
+  /// 为什么：播放历史 / 本地歌曲列表在浏览期间不该因重播而即时重排（刚点的
+  /// 歌跳到列表顶部会打断浏览）；要按最新播放顺序刷新时，由收藏页在重新进入
+  /// 合集 / 页面重新可见时调用 [resortHistoryByRecency]。
   Future<void> _reloadHistoryQuietly() async {
     try {
-      _history = await _repository.listHistory();
+      final fresh = await _repository.listHistory();
+      _history = _mergeHistoryOrder(current: _history, fresh: fresh);
       _historyLoaded = true;
     } catch (e) {
       debugPrint('[Library] 重载播放历史失败: $e');
     }
+    _notify();
+  }
+
+  /// 稳定合并：已存在条目保持 [current] 的相对顺序（内容用最新值），全新条目
+  /// 按最近优先插到最前（[fresh] 本身即最近优先）。
+  static List<PlayHistoryEntry> _mergeHistoryOrder({
+    required List<PlayHistoryEntry> current,
+    required List<PlayHistoryEntry> fresh,
+  }) {
+    final freshByKey = {for (final entry in fresh) _historyKey(entry): entry};
+    final ordered = <PlayHistoryEntry>[];
+    for (final entry in current) {
+      final updated = freshByKey.remove(_historyKey(entry));
+      if (updated != null) ordered.add(updated);
+    }
+    if (freshByKey.isEmpty) return ordered;
+    return [
+      for (final entry in fresh)
+        if (freshByKey.containsKey(_historyKey(entry))) entry,
+      ...ordered,
+    ];
+  }
+
+  static String _historyKey(PlayHistoryEntry entry) =>
+      '${entry.sourceKey}:${entry.songId}';
+
+  /// 按最近播放（`playedAt` 倒序）重排内存历史；顺序真变了才通知。
+  ///
+  /// 由收藏页在重新进入播放历史 / 本地歌曲合集、或页面重新可见时调用：
+  /// 停留期间列表顺序冻结（见 [_reloadHistoryQuietly]），只在这一刻刷新。
+  /// 时间相同的条目保持当前相对顺序（内存侧不读 DB rowid）。
+  void resortHistoryByRecency() {
+    if (_history.length < 2) return;
+    final decorated = [
+      for (var i = 0; i < _history.length; i++)
+        (entry: _history[i], index: i),
+    ]..sort((a, b) {
+        final byTime = b.entry.playedAt.compareTo(a.entry.playedAt);
+        return byTime != 0 ? byTime : a.index.compareTo(b.index);
+      });
+    var changed = false;
+    for (var i = 0; i < decorated.length; i++) {
+      if (!identical(decorated[i].entry, _history[i])) {
+        changed = true;
+        break;
+      }
+    }
+    if (!changed) return;
+    _history = [for (final item in decorated) item.entry];
     _notify();
   }
 
@@ -222,6 +277,8 @@ class LibraryProvider extends ChangeNotifier {
   @visibleForTesting
   Future<void>? get pendingReload => _pendingReload;
 
+  /// 显式重载历史（首屏 / 导入后）：直接采用仓库顺序（最近播放倒序），
+  /// 不走停留期间的稳定合并。
   Future<void> refreshHistory({bool force = false}) async {
     if (_historyLoaded && !force) return;
     _isHistoryLoading = true;
@@ -439,6 +496,9 @@ class LibraryProvider extends ChangeNotifier {
   }
 
   /// 批量把列表曲目加入播放历史（最近播放置顶）；返回写入条数。
+  ///
+  /// 只落库：内存顺序按停留期间冻结的口径合并（新条目置前、已有条目不重排），
+  /// 播放历史列表下次进入时由 [resortHistoryByRecency] 刷新到最新顺序。
   Future<int> addTracksToHistory(List<PlaylistTrack> tracks) {
     final now = DateTime.now().millisecondsSinceEpoch;
     var offset = 0;

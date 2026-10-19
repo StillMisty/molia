@@ -203,6 +203,18 @@ class AppLocalizationsZh extends AppLocalizations {
   String get settingsRestoreSessionSubtitle => '启动时恢复上次的曲目、队列与进度（默认开启）';
 
   @override
+  String get settingsLibraryAddPosition => '加入收藏与列表的位置';
+
+  @override
+  String get settingsLibraryAddPositionSubtitle => '收藏和自建列表的新歌放在顶部还是底部（默认顶部）';
+
+  @override
+  String get settingsLibraryAddPositionTop => '顶部';
+
+  @override
+  String get settingsLibraryAddPositionBottom => '底部';
+
+  @override
   String get settingsAutoSourceSwap => '自动换源';
 
   @override
@@ -1132,12 +1144,6 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get discoverSearchEmpty => '没有找到歌单';
-
-  @override
-  String get discoverShowAll => '展开全部';
-
-  @override
-  String get discoverShowLess => '收起';
 
   @override
   String discoverPlaylistAuthor(String author) {

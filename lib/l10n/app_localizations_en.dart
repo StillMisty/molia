@@ -209,6 +209,19 @@ class AppLocalizationsEn extends AppLocalizations {
       'Restore track, queue and position on launch (on by default)';
 
   @override
+  String get settingsLibraryAddPosition => 'Position of added songs';
+
+  @override
+  String get settingsLibraryAddPositionSubtitle =>
+      'Top or bottom of favorites and playlists (top by default)';
+
+  @override
+  String get settingsLibraryAddPositionTop => 'Top';
+
+  @override
+  String get settingsLibraryAddPositionBottom => 'Bottom';
+
+  @override
   String get settingsAutoSourceSwap => 'Auto source switch';
 
   @override
@@ -1172,12 +1185,6 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get discoverSearchEmpty => 'No playlists found';
-
-  @override
-  String get discoverShowAll => 'Show all';
-
-  @override
-  String get discoverShowLess => 'Show less';
 
   @override
   String discoverPlaylistAuthor(String author) {

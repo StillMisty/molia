@@ -85,6 +85,28 @@ void main() {
         addedAt: addedAt,
       );
 
+  /// 列表内曲目按 `sortOrder` 升序（展示顺序）的键序列。
+  Future<List<String>> orderedIds(int playlistId) async {
+    final rows = await (db.select(db.playlistTracks)
+          ..where((t) => t.playlistId.equals(playlistId)))
+        .get();
+    rows.sort((a, b) => a.sortOrder.compareTo(b.sortOrder));
+    return [for (final row in rows) '${row.sourceKey}:${row.songId}'];
+  }
+
+  /// 独立位置偏好的网关实例（与 setUp 的默认实例共用同一库 / 日志）。
+  LibraryWriteEngine engineWithPosition(bool Function() addToTop) {
+    final scoped = LibraryWriteEngine(
+      databaseProvider: () => db,
+      clock: () => clockMs,
+      stamps: testStampIssuer(clock: () => 1000, deviceId: 'devA'),
+      journal: journal,
+      addToTop: addToTop,
+    );
+    addTearDown(scoped.dispose);
+    return scoped;
+  }
+
   test('历史写入 / 删除：行版本 = 日志版本，墓碑按注入时钟，各广播一次', () async {
     await engine.addHistoryEntry(history('1', playedAt: 100));
     await flush();
@@ -173,6 +195,72 @@ void main() {
     await flush();
     expect(events, isEmpty);
     expect(await journal.window(since: head), hasLength(1));
+  });
+
+  group('加入列表位置偏好', () {
+    test('偏好顶部：单条与批次都插到列表开头，批内保持传入顺序', () async {
+      final top = engineWithPosition(() => true);
+      final playlistId = await top.createPlaylist('L');
+
+      await top.addTrackToPlaylist(playlistId, track('1'));
+      final head = await journal.headSeq();
+      await top.addTracksToPlaylist(playlistId, [track('2'), track('3')]);
+
+      expect(await orderedIds(playlistId), ['wy:2', 'wy:3', 'wy:1']);
+      // 日志的 sortOrder 与实际行一致（顶部插入是连续区间）。
+      expect(
+        [for (final entry in await journal.window(since: head))
+          entry.record.data?['sortOrder']],
+        [-2, -1],
+      );
+
+      // 再插一批：新批次整体仍在最前，既有条目顺序不动。
+      await top.addTrackToPlaylist(playlistId, track('4'));
+      expect(await orderedIds(playlistId), ['wy:4', 'wy:2', 'wy:3', 'wy:1']);
+    });
+
+    test('偏好顶部：去重后再取排序位（批内不使用被跳过的名额）', () async {
+      final top = engineWithPosition(() => true);
+      final playlistId = await top.createPlaylist('L');
+      await top.addTrackToPlaylist(playlistId, track('1'));
+
+      final added = await top.addTracksToPlaylist(playlistId, [
+        track('2'),
+        track('2'), // 批内重复
+        track('1'), // 已在列表
+        track('3'),
+      ]);
+
+      expect(added, 2);
+      expect(await orderedIds(playlistId), ['wy:2', 'wy:3', 'wy:1']);
+    });
+
+    test('空列表顶部插入仍从 0 开始（首行排序位口径不变）', () async {
+      final top = engineWithPosition(() => true);
+      final playlistId = await top.createPlaylist('L');
+
+      await top.addTrackToPlaylist(playlistId, track('1'));
+
+      final row = (await db.select(db.playlistTracks).get()).single;
+      expect(row.sortOrder, 0);
+    });
+
+    test('偏好底部：与旧口径一致追加；显式覆盖（表内导入）不受偏好影响', () async {
+      final top = engineWithPosition(() => true);
+      final playlistId = await top.createPlaylist('L');
+      await top.addTracksToPlaylist(playlistId, [track('1'), track('2')]);
+
+      // 显式 false = 导入路径：追加到末尾。
+      await top.addTracksToPlaylist(playlistId, [track('3')], addToTop: false);
+      expect(await orderedIds(playlistId), ['wy:1', 'wy:2', 'wy:3']);
+
+      // 偏好底部的实例与未接线实例都追加。
+      final bottom = engineWithPosition(() => false);
+      final other = await bottom.createPlaylist('L2');
+      await bottom.addTracksToPlaylist(other, [track('1')]);
+      await bottom.addTracksToPlaylist(other, [track('2')]);
+      expect(await orderedIds(other), ['wy:1', 'wy:2']);
+    });
   });
 
   test('批量移除：墓碑与日志一次追加，只广播一次', () async {

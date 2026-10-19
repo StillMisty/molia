@@ -42,20 +42,27 @@ class LibraryWriteEngine {
   ///
   /// [journal] 是增量日志（可选）：本地写入在**同一个 drift 事务**里追加
   /// 日志条目，对端按游标只拉变更。
+  ///
+  /// [addToTop] 是「加入列表」的位置偏好（设置页，默认放开头）：true 时新曲目
+  /// 排到列表开头。缺省 = 追加到末尾——测试与未接线场景保持旧口径，生产由
+  /// 组合根注入 `LibraryAddSettings.addToTop`。
   LibraryWriteEngine({
     required MoliaDatabase Function() databaseProvider,
     required SyncStampIssuer stamps,
     int Function()? clock,
     SyncJournalRepository? journal,
+    bool Function()? addToTop,
   })  : _databaseProvider = databaseProvider,
         _stamps = stamps,
         _clock = clock ?? (() => DateTime.now().millisecondsSinceEpoch),
-        _journal = journal;
+        _journal = journal,
+        _addToTop = addToTop;
 
   final MoliaDatabase Function() _databaseProvider;
   final SyncStampIssuer _stamps;
   final int Function() _clock;
   final SyncJournalRepository? _journal;
+  final bool Function()? _addToTop;
   final Random _random = Random.secure();
   final StreamController<LibraryChange> _changes =
       StreamController<LibraryChange>.broadcast();
@@ -420,10 +427,14 @@ class LibraryWriteEngine {
   ///
   /// [favoriteChange] 为 true 时（收藏切换内部调用）变更类型标记为
   /// [LibraryFavoritesChange]，provider 只做局部刷新。
+  ///
+  /// [addToTop] 覆盖位置偏好（null = 用注入偏好）；表内导入等固定追加的
+  /// 路径显式传 false。
   Future<bool> addTrackToPlaylist(
     int playlistId,
     PlaylistTrack track, {
     bool favoriteChange = false,
+    bool? addToTop,
   }) async {
     final db = _db;
     final existing = await (db.select(db.playlistTracks)
@@ -435,7 +446,12 @@ class LibraryWriteEngine {
         .getSingleOrNull();
     if (existing != null) return false;
 
-    final nextOrder = await _nextSortOrder(db, playlistId);
+    final nextOrder = await _insertionStart(
+      db,
+      playlistId,
+      count: 1,
+      addToTop: addToTop ?? _insertAtTop,
+    );
 
     final version = _nextVersion();
     var inserted = 0;
@@ -484,15 +500,16 @@ class LibraryWriteEngine {
     return true;
   }
 
-  /// 批量加入列表（跳过重复并追加到末尾；返回实际新增数）。
+  /// 批量加入列表（跳过重复并按位置偏好插入；返回实际新增数）。
   ///
   /// [tracks] 来自任意合集（收藏/历史/其他列表）的复制：曲目级字段原样写入，
-  /// `playlistId` 以本方法参数为准。[favoriteChange] 语义同
-  /// [removeTracksFromPlaylist]。
+  /// `playlistId` 以本方法参数为准，批内顺序保持传入顺序。[favoriteChange]
+  /// 语义同 [removeTracksFromPlaylist]；[addToTop] 语义同 [addTrackToPlaylist]。
   Future<int> addTracksToPlaylist(
     int playlistId,
     List<PlaylistTrack> tracks, {
     bool favoriteChange = false,
+    bool? addToTop,
   }) async {
     if (tracks.isEmpty) return 0;
     final db = _db;
@@ -505,13 +522,22 @@ class LibraryWriteEngine {
         '${row.read(db.playlistTracks.sourceKey)}:'
             '${row.read(db.playlistTracks.songId)}',
     };
-    var nextOrder = await _nextSortOrder(db, playlistId);
+    // 先去重再定排序位：顶部插入要按实际新增数取连续序号。
+    final fresh = <PlaylistTrack>[];
+    for (final track in tracks) {
+      if (known.add('${track.sourceKey}:${track.songId}')) fresh.add(track);
+    }
+    if (fresh.isEmpty) return 0;
+    var nextOrder = await _insertionStart(
+      db,
+      playlistId,
+      count: fresh.length,
+      addToTop: addToTop ?? _insertAtTop,
+    );
     var added = 0;
     final rows = <PlaylistTracksCompanion>[];
     final pending = <({PlaylistTrack track, SyncVersion version, int sortOrder})>[];
-    for (final track in tracks) {
-      final key = '${track.sourceKey}:${track.songId}';
-      if (!known.add(key)) continue;
+    for (final track in fresh) {
       final version = _nextVersion();
       final order = nextOrder++;
       rows.add(PlaylistTracksCompanion.insert(
@@ -1222,6 +1248,31 @@ class LibraryWriteEngine {
       'SELECT rowid FROM play_history ORDER BY playedAt DESC, rowid DESC LIMIT ?)',
       [kHistoryLimit],
     );
+  }
+
+  /// 位置偏好（设置页；未接线按追加到末尾）。
+  bool get _insertAtTop => _addToTop?.call() ?? false;
+
+  /// 新曲目的排序位起点：追加接在 `max(sortOrder)` 之后；放开头从
+  /// `min(sortOrder) - count` 起（连续区间、批内保持传入顺序）。
+  ///
+  /// 为什么用负值而不是重写既有行：顶部插入只写新行——不碰旧行的版本戳与
+  /// 同步日志；顺序由 `sortOrder` 升序表达，`reorderPlaylistTracks` 会把位置
+  /// 归一化回 0..n-1。
+  Future<int> _insertionStart(
+    MoliaDatabase db,
+    int playlistId, {
+    required int count,
+    required bool addToTop,
+  }) async {
+    if (!addToTop) return _nextSortOrder(db, playlistId);
+    final minSortOrder = db.playlistTracks.sortOrder.min();
+    final row = await (db.selectOnly(db.playlistTracks)
+          ..addColumns([minSortOrder])
+          ..where(db.playlistTracks.playlistId.equals(playlistId)))
+        .getSingle();
+    // 空列表（min 为空）从 0 开始，保持「首行 sortOrder = 0」的旧口径。
+    return (row.read(minSortOrder) ?? count) - count;
   }
 
   /// 列表内下一个排序位（空列表从 0 开始）。

@@ -19,6 +19,7 @@ import '../../playback/local_audio_handler.dart';
 import '../../providers/library_provider.dart';
 import '../../providers/local_database_provider.dart';
 import '../../providers/playback_provider.dart';
+import '../../services/library/library_add_settings.dart';
 import '../../services/play_statistics_service.dart';
 import '../../services/source_swap/auto_source_swap_service.dart';
 import '../../services/source_swap/source_swap_settings.dart';
@@ -37,6 +38,7 @@ typedef LibraryStack = ({
   PlayStatisticsService playStatisticsService,
   LocalDatabaseProvider localDatabaseProvider,
   SourceSwapSettings sourceSwapSettings,
+  LibraryAddSettings libraryAddSettings,
   AutoSourceSwapService autoSourceSwapService,
 });
 
@@ -53,6 +55,11 @@ Future<LibraryStack> buildLibraryStack({
     databaseProvider: () => MoliaDatabase.instance,
     clock: () => syncState.nowMs(),
   );
+  // 加入收藏 / 列表的位置偏好（默认放开头）：写入网关按它取新曲目的排序位，
+  // 设置页读写同一实例（跟人走，随设置同步）。
+  final libraryAddSettings = LibraryAddSettings(
+    settings: catalog.settings.scope([kLibraryAddPosition]),
+  );
   // 资料库仓库：播放历史 / 我的列表 / 收藏；播放开始时由播放观察者写历史，
   // 资料库页经 LibraryProvider 读取（内存缓存）。版本戳与内容时间分开注入
   // （发号器唯一、时钟管内容时间；见 ADR-0003 v2 §2）。
@@ -60,6 +67,7 @@ Future<LibraryStack> buildLibraryStack({
     clock: () => syncState.nowMs(),
     stamps: syncState.stampIssuer,
     journal: syncJournal,
+    addToTop: () => libraryAddSettings.addToTop,
   );
   // 发号器基线 ≧ 全库最大戳：即使状态存储没来得及落盘（进程被杀）或时钟回拨，
   // 重启后的新写入也不会输给库内已有记录。
@@ -90,11 +98,12 @@ Future<LibraryStack> buildLibraryStack({
   final sourceSwapSettings = SourceSwapSettings(
     settings: catalog.settings.scope([kSourceSwapAutoEnabled]),
   );
-  // 统计服务 init / 换源偏好 init / 全库最大戳查询三者互不依赖：
-  // 并行执行，启动等待取最大值（串行等待会累加启动耗时）。
-  final (_, _, dbMaxVersion) = await (
+  // 统计服务 init / 换源偏好 init / 加入位置偏好 init / 全库最大戳查询互不
+  // 依赖：并行执行，启动一次性等待（串行等待会累加启动耗时）。
+  final (_, _, _, dbMaxVersion) = await (
     playStatisticsService.init(),
     sourceSwapSettings.init(),
+    libraryAddSettings.init(),
     libraryRepository.maxVersion(),
   ).wait;
   syncState.stampIssuer.seed(dbMaxVersion);
@@ -121,6 +130,7 @@ Future<LibraryStack> buildLibraryStack({
     playStatisticsService: playStatisticsService,
     localDatabaseProvider: localDatabaseProvider,
     sourceSwapSettings: sourceSwapSettings,
+    libraryAddSettings: libraryAddSettings,
     autoSourceSwapService: autoSourceSwapService,
   );
 }

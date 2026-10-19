@@ -53,6 +53,18 @@ void main() {
         },
       };
 
+  PlayHistoryEntry entry(String songId, {required int playedAt}) =>
+      PlayHistoryEntry(
+        sourceKey: 'wy',
+        songId: songId,
+        title: 'Song $songId',
+        artist: 'Artist',
+        album: 'Album $songId',
+        durationMs: 1000,
+        raw: {'songId': songId},
+        playedAt: playedAt,
+      );
+
   setUp(() async {
     SharedPreferences.setMockInitialValues({});
     db = openMemoryDatabase();
@@ -103,6 +115,62 @@ void main() {
 
     expect(provider.history, hasLength(1));
     expect(provider.history.single.songId, '1');
+  });
+
+  test('历史重播不即时重排：停留期间顺序冻结，重进时才按最近播放刷新', () async {
+    await repository.addHistoryEntry(entry('1', playedAt: 1));
+    await repository.addHistoryEntry(entry('2', playedAt: 2));
+    await repository.addHistoryEntry(entry('3', playedAt: 3));
+    // 首屏显式重载：采用仓库顺序（最近播放倒序）。
+    await provider.refreshHistory(force: true);
+    expect([for (final item in provider.history) item.songId], ['3', '2', '1']);
+
+    // 重播最旧一条：DB 里它已是最新，内存顺序不动、数据更新。
+    await repository.addHistoryEntry(entry('1', playedAt: 100));
+    await settle();
+    expect([for (final item in provider.history) item.songId], ['3', '2', '1']);
+    expect(provider.history.last.playedAt, 100, reason: '数据要更新，位置不动');
+
+    // 重新进入播放历史 / 本地歌曲合集时刷新。
+    provider.resortHistoryByRecency();
+    expect([for (final item in provider.history) item.songId], ['1', '3', '2']);
+  });
+
+  test('历史合并：全新条目插到最前，已有条目相对顺序不动', () async {
+    await repository.addHistoryEntry(entry('1', playedAt: 1));
+    await repository.addHistoryEntry(entry('2', playedAt: 2));
+    await provider.refreshHistory(force: true);
+    expect([for (final item in provider.history) item.songId], ['2', '1']);
+
+    // 全新条目：按最近优先插到最前。
+    await repository.addHistoryEntry(entry('3', playedAt: 3));
+    await settle();
+    expect([for (final item in provider.history) item.songId], ['3', '2', '1']);
+
+    // 新条目 + 重播旧条目同时发生：新条目在前、旧条目原位。
+    await repository.addHistoryEntry(entry('4', playedAt: 4));
+    await repository.addHistoryEntry(entry('2', playedAt: 50));
+    await settle();
+    expect([for (final item in provider.history) item.songId], ['4', '3', '2', '1']);
+
+    // 「加入列表 → 播放历史」同样只落库：内存顺序等下次重进刷新。
+    await provider.addTracksToHistory([
+      PlaylistTrack(
+        playlistId: 0,
+        sourceKey: 'wy',
+        songId: '2',
+        title: 'Song 2',
+        artist: 'Artist',
+        album: 'Album 2',
+        durationMs: 1000,
+        raw: const {'songId': 2},
+        addedAt: 0,
+      ),
+    ]);
+    await settle();
+    expect([for (final item in provider.history) item.songId], ['4', '3', '2', '1']);
+    provider.resortHistoryByRecency();
+    expect([for (final item in provider.history) item.songId], ['2', '4', '3', '1']);
   });
 
   test('playHistory：还原 SourceTrack（raw/qualities/时长）并委托播放', () async {

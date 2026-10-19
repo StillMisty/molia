@@ -10,6 +10,7 @@ import 'package:molia/data/play_statistics_repository.dart';
 import 'package:molia/data/settings/settings_keys.dart';
 import 'package:molia/providers/nav_provider.dart';
 import 'package:molia/providers/theme_provider.dart';
+import 'package:molia/services/library/library_add_settings.dart';
 import 'package:molia/services/play_statistics_service.dart';
 import 'package:molia/services/shortcut_settings.dart';
 import 'package:molia/services/source_swap/source_swap_settings.dart';
@@ -112,5 +113,15 @@ void main() {
     final settings = SourceSwapSettings(settings: testSettingsRegistry());
     addTearDown(settings.dispose);
     expect(settings.autoEnabled, kSourceSwapAutoEnabled.defaultValue);
+  });
+
+  test('LibraryAddSettings 初始位置来自键默认值（默认放开头）', () async {
+    final settings = LibraryAddSettings(settings: testSettingsRegistry());
+    addTearDown(settings.dispose);
+
+    expect(settings.position.name, kLibraryAddPosition.defaultValue);
+    expect(settings.addToTop, isTrue, reason: '新曲目默认放列表开头');
+    await settings.init();
+    expect(settings.position.name, kLibraryAddPosition.defaultValue);
   });
 }

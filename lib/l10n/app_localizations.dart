@@ -470,6 +470,30 @@ abstract class AppLocalizations {
   /// **'Restore track, queue and position on launch (on by default)'**
   String get settingsRestoreSessionSubtitle;
 
+  /// No description provided for @settingsLibraryAddPosition.
+  ///
+  /// In en, this message translates to:
+  /// **'Position of added songs'**
+  String get settingsLibraryAddPosition;
+
+  /// No description provided for @settingsLibraryAddPositionSubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Top or bottom of favorites and playlists (top by default)'**
+  String get settingsLibraryAddPositionSubtitle;
+
+  /// No description provided for @settingsLibraryAddPositionTop.
+  ///
+  /// In en, this message translates to:
+  /// **'Top'**
+  String get settingsLibraryAddPositionTop;
+
+  /// No description provided for @settingsLibraryAddPositionBottom.
+  ///
+  /// In en, this message translates to:
+  /// **'Bottom'**
+  String get settingsLibraryAddPositionBottom;
+
   /// No description provided for @settingsAutoSourceSwap.
   ///
   /// In en, this message translates to:
@@ -2233,18 +2257,6 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'No playlists found'**
   String get discoverSearchEmpty;
-
-  /// No description provided for @discoverShowAll.
-  ///
-  /// In en, this message translates to:
-  /// **'Show all'**
-  String get discoverShowAll;
-
-  /// No description provided for @discoverShowLess.
-  ///
-  /// In en, this message translates to:
-  /// **'Show less'**
-  String get discoverShowLess;
 
   /// No description provided for @discoverPlaylistAuthor.
   ///

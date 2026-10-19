@@ -23,6 +23,7 @@ import 'package:molia/providers/sources_provider.dart';
 import 'package:molia/providers/theme_provider.dart';
 import 'package:molia/services/data_saver_service.dart';
 import 'package:molia/services/haptics.dart';
+import 'package:molia/services/library/library_add_settings.dart';
 import 'package:molia/services/language_service.dart';
 import 'package:molia/services/lyrics_display/lyrics_display_settings.dart';
 import 'package:molia/services/lyrics_display/lyrics_output.dart';
@@ -638,6 +639,40 @@ void main() {
 
     final prefs = await SharedPreferences.getInstance();
     expect(prefs.getString(kLxDefaultQuality.name), '192k');
+  });
+
+  testWidgets('加入位置：播放区分段行展示默认顶部，切换后持久化', (tester) async {
+    final prefs = await SharedPreferences.getInstance();
+    final libraryAddSettings = LibraryAddSettings(
+      settings: testSettingsRegistry(preferences: prefs),
+    );
+    addTearDown(libraryAddSettings.dispose);
+    await libraryAddSettings.init();
+
+    await pumpSettingsPage(
+      tester,
+      extraProviders: [
+        ChangeNotifierProvider<LibraryAddSettings>.value(
+          value: libraryAddSettings,
+        ),
+      ],
+    );
+
+    final row = find.byKey(const Key('settingsLibraryAddPositionItem'));
+    expect(row, findsOneWidget);
+    expect(libraryAddSettings.addToTop, isTrue, reason: '默认放列表开头');
+    expect(
+      optionOf(const Key('settingsLibraryAddPositionItem'), 'Top'),
+      findsOneWidget,
+    );
+
+    await tester.tap(
+      optionOf(const Key('settingsLibraryAddPositionItem'), 'Bottom'),
+    );
+    await tester.pumpAndSettle();
+
+    expect(libraryAddSettings.position, LibraryAddPosition.bottom);
+    expect(prefs.getString(kLibraryAddPosition.name), 'bottom');
   });
 
   testWidgets('通用子页：弹层内部导航进入，语言行内分段切换并持久化', (tester) async {

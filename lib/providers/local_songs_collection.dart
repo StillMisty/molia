@@ -60,8 +60,9 @@ class LocalSongsInput {
 
   /// 重算签名 = 历史键 + 下载记录键 + 缓存 revision。
   ///
-  /// 顺序敏感：历史按播放时间重排、下载记录顺序变化也值得重算，与页面原
-  /// 实现保持同一口径（签名相同则零等待复用上一轮结果）。
+  /// 顺序敏感：历史在重新进入合集时会按最近播放重排（停留期间冻结）、下载
+  /// 记录顺序变化也值得重算，与页面原实现保持同一口径（签名相同则零等待
+  /// 复用上一轮结果）。
   int get signature => Object.hash(
         Object.hashAll([for (final entry in history) entry.key]),
         Object.hashAll([for (final record in downloads) record.key]),
