@@ -47,6 +47,18 @@ const Map<PlayMode, String> playModeActionIcons = {
   PlayMode.shuffle: 'audio_service_shuffle',
 };
 
+/// 收藏动作的 id：系统控件里切换当前曲目的收藏态。
+///
+/// 与播放顺序同一套机制（Android 通知自定义动作按资源名字符串取图标，release
+/// 的 shrinkResources 靠 `keep.xml` 保留资源）。
+const String favoriteActionId = 'lx.favorite';
+
+/// 收藏态 → 通知动作图标（Android drawable 资源名，不带目录前缀）。
+const Map<bool, String> favoriteActionIcons = {
+  false: 'ic_notification_favorite',
+  true: 'ic_notification_favorite_filled',
+};
+
 /// 当前界面语言的 l10n（通知动作文案）。
 ///
 /// 与托盘菜单同一解析口径：用户选择优先、否则跟随系统，不支持的 locale
@@ -212,6 +224,17 @@ class LocalAudioHandler {
   /// 上次广播的封面 URL（音源补图回写队列后需刷新通知/锁屏封面）。
   String? _lastArtworkUrl;
 
+  /// 收藏能力：读当前曲目的收藏态 + 切换（组合根在 `LibraryProvider` 建好后
+  /// 回填，见 [attachFavoriteActions]；与 [attachSessionPersister] 同样的晚绑定）。
+  bool Function(SourceTrack track)? _isFavoriteFor;
+  Future<void> Function(SourceTrack track)? _toggleFavorite;
+
+  /// 当前曲目的收藏态（决定通知里收藏动作的图标与文案）。
+  bool _favorite = false;
+
+  /// 上次广播的收藏态：曲库里的收藏变化要重发动作（空心 ↔ 实心）。
+  bool? _lastFavorite;
+
   /// 已本地化的封面（源 URL → 平台地址）。
   String? _localArtworkSourceUrl;
   String? _localArtworkUri;
@@ -230,6 +253,31 @@ class LocalAudioHandler {
     if (override == _lyricMetadataOverride) return;
     _lyricMetadataOverride = override;
     _syncFromService(force: true);
+  }
+
+  /// 绑定「收藏」能力（组合根调用；见 [favoriteActionId]）。
+  ///
+  /// 与 [attachSessionPersister] 同样的晚绑定原因：handler 在播放栈里创建，
+  /// 而曲库 provider 之后才建好。收藏态的唯一来源是这里的读回调，通知动作只
+  /// 消费结果（图标空心 / 实心）。
+  void attachFavoriteActions({
+    required bool Function(SourceTrack track) isFavorite,
+    required Future<void> Function(SourceTrack track) toggle,
+  }) {
+    _isFavoriteFor = isFavorite;
+    _toggleFavorite = toggle;
+    refreshFavoriteState();
+  }
+
+  /// 曲库侧收藏态可能变了（组合根监听 `LibraryProvider` 后调用）。
+  ///
+  /// 现查当前曲目的收藏态，值变了才重发动作（图标空心 ↔ 实心）；没绑定读回调
+  /// 或没有曲目时沿用已有值，不产生额外广播。
+  void refreshFavoriteState() {
+    final favorite = _favoriteFor(_service.currentSourceTrack) ?? _favorite;
+    if (favorite == _favorite) return;
+    _favorite = favorite;
+    _syncFromService();
   }
 
   Future<void> play() async {
@@ -256,19 +304,42 @@ class LocalAudioHandler {
     _syncFromService(force: true);
   }
 
-  /// 系统动作「播放顺序」：按 App 内同一顺序循环 顺序 → 单曲循环 → 随机。
+  /// 系统自定义动作：播放顺序（循环切换）与收藏（切换当前曲目）。
   ///
   /// 其它自定义动作保持透传（返回 null，不产生副作用）。
   Future<dynamic> customAction(
     String name, [
     Map<String, dynamic>? extras,
   ]) async {
+    if (name == favoriteActionId) {
+      await _toggleFavoriteTrack();
+      return null;
+    }
     if (name != playModeActionId) return null;
     await _service.toggleMode();
     _syncFromService(force: true);
     // 模式是会话的一部分：系统控制改模式后同样立即落盘。
     await _persistSessionState();
     return null;
+  }
+
+  /// 收藏动作：走组合根注入的曲库写入回调（唯一写路径），完成后立即刷新图标。
+  ///
+  /// 曲库通知本身也会触发一次刷新（组合根监听）；这里补一次是为了不依赖接线
+  /// 顺序，也让「点通知 → 图标变实心」在同一次动作里完成。
+  Future<void> _toggleFavoriteTrack() async {
+    final track = _service.currentSourceTrack;
+    final toggle = _toggleFavorite;
+    if (track == null || toggle == null) return;
+    await toggle(track);
+    refreshFavoriteState();
+  }
+
+  /// 当前曲目的收藏态；没绑定读回调 / 没曲目时返回 null（调用方沿用已有值）。
+  bool? _favoriteFor(SourceTrack? track) {
+    final probe = _isFavoriteFor;
+    if (probe == null || track == null) return null;
+    return probe(track);
   }
 
   /// 落盘当前会话（失败不影响控制链：会话由观察者按节流继续维护）。
@@ -345,6 +416,10 @@ class LocalAudioHandler {
         unawaited(_guardControl(() async {
           await customAction(action.name);
         }));
+      case favoriteActionId:
+        unawaited(_guardControl(() async {
+          await customAction(action.name);
+        }));
     }
   }
 
@@ -371,6 +446,9 @@ class LocalAudioHandler {
     final loadingChanged = loading != _lastLoading;
     // 模式变化要重发状态与动作：图标/文案反映当前模式（App 内切换同样到达这里）。
     final modeChanged = mode != _lastMode;
+    // 收藏态只影响动作（空心 / 实心图标），不进元数据 / 播放状态重建。
+    final favorite = _favoriteFor(track) ?? _favorite;
+    final favoriteChanged = favorite != _lastFavorite;
     final artworkUrl = track?.coverUrl;
     final artworkChanged = artworkUrl != _lastArtworkUrl;
     // 播放器解析出真实时长后补发一次元数据（通知进度条的时长来源）。
@@ -383,6 +461,7 @@ class LocalAudioHandler {
         !playingChanged &&
         !loadingChanged &&
         !modeChanged &&
+        !favoriteChanged &&
         !seeked &&
         !artworkChanged &&
         !durationChanged) {
@@ -398,7 +477,8 @@ class LocalAudioHandler {
         modeChanged ||
         seeked ||
         durationChanged;
-    final actionsNeedRebuild = force || trackChanged || modeChanged;
+    final actionsNeedRebuild =
+        force || trackChanged || modeChanged || favoriteChanged;
 
     _lastTrackId = trackId;
     _lastPlaying = playing;
@@ -406,6 +486,8 @@ class LocalAudioHandler {
     _lastMode = mode;
     _lastPosition = position;
     _lastArtworkUrl = artworkUrl;
+    _favorite = favorite;
+    _lastFavorite = favorite;
     if (duration > Duration.zero) _lastMediaDuration = duration;
 
     if (track == null) {
@@ -485,8 +567,21 @@ class LocalAudioHandler {
         MediaAction.skipToNext,
         MediaAction.stop,
         MediaAction.seekTo,
+        // 收藏在前、播放顺序在后：这是自定义动作之间的相对顺序；标准三键与
+        // 自定义动作的最终位置由系统媒体控件决定（见 ADR-0010）。
+        _favoriteAction(),
         _playModeAction(mode),
       };
+
+  /// 收藏动作：图标与文案反映**当前**收藏态（点按切换）。
+  MediaAction _favoriteAction() {
+    final l10n = _currentLocalizations();
+    return MediaAction.custom(
+      name: favoriteActionId,
+      customLabel: _favorite ? l10n.favoriteRemove : l10n.favoriteAdd,
+      customIconResource: favoriteActionIcons[_favorite]!,
+    );
+  }
 
   /// 播放顺序动作：图标与文案反映**当前**模式（点按循环到下一个模式）。
   MediaAction _playModeAction(PlayMode mode) {

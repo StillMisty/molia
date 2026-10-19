@@ -134,6 +134,12 @@ void main() async {
     repository: library.libraryRepository,
     playbackProvider: playback.playbackProvider,
   );
+  // 系统媒体会话的「收藏」动作：通知点击 ↔ 曲库（与托盘 / 任务栏按钮同一
+  // 写入路径）。必须在 provider 建好之后接线（handler 先于它创建）。
+  wireNotificationFavorite(
+    audioHandler: playback.audioHandler,
+    libraryProvider: libraryProvider,
+  );
   // 全局热键（系统级，默认关）：注册是启动期副作用、不依赖首帧，runApp 前
   // 注册好让窗口一出现热键即可用（含冷启动恢复态）；命令执行器用刚建好的
   // 播放 provider 接线——热键回调不依赖 widget 树。注册失败在层内降级，

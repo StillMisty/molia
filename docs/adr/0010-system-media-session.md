@@ -115,7 +115,7 @@ LocalPlaybackService ──监听──▶ LocalAudioHandler ──▶ MediaSess
   `@drawable/audio_service_*` 资源名保留（播放顺序自定义动作按字符串引用，
   `keep.xml` 继续防 shrinkResources 删除）；通知 small icon / channel 由 Media3
   默认决定（`flutter_media_session` 未暴露自定义 provider）——这是已知且可接受的
-  差异，后续可单独跟进。
+  差异，后续可单独跟进（通知动作的「收藏」与位置约束见 ADR-0013）。
 - **iOS**：`UIBackgroundModes audio` 保留；无 audio_service 专属 AppDelegate 代码。
 - **Windows**：`windows/runner/main.cpp` 在 `wWinMain` 开始处
   `SetCurrentProcessExplicitAppUserModelID(L"top.stillmisty.molia")`，

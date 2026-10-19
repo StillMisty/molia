@@ -130,6 +130,11 @@ class TaskbarThumbBar {
   }
 
   Future<void> _handleCall(MethodCall call) async {
+    // 原生诊断（收到哪条注册消息、每次挂载的 HRESULT）：只进日志不做别的事。
+    if (call.method == 'debug') {
+      _logNativeEvent(call.arguments);
+      return;
+    }
     if (call.method != 'pressed') return;
     switch (call.arguments) {
       case 'previous':
@@ -144,5 +149,19 @@ class TaskbarThumbBar {
         // 未知按钮（原生加了按钮但 Dart 还没跟上）：忽略。
         break;
     }
+  }
+
+  /// 原生诊断事件落日志。
+  ///
+  /// 工具栏只在 Windows 上存在、Linux 测试机跑不到，真出问题（悬浮预览里没有
+  /// 按钮）时靠这行区分「TaskbarButtonCreated 没来」与「调用失败（HRESULT）」。
+  void _logNativeEvent(Object? arguments) {
+    if (arguments is! Map) return;
+    final event = arguments['event'];
+    final hr = arguments['hr'];
+    final code = hr is int && hr != 0
+        ? '0x${hr.toUnsigned(32).toRadixString(16).padLeft(8, '0')}'
+        : 'ok';
+    _logger.fine('任务栏工具栏原生事件：$event / hr=$code');
   }
 }

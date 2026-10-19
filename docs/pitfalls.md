@@ -533,9 +533,17 @@
     启动时写 `HKCU\Software\Classes\AppUserModelId\<AUMID>`（`DisplayName` +
     `IconUri` = exe 全路径），并给窗口类补 `hIconSm`、窗口补 `WM_SETICON`，
     不要让 shell 走「自己派生 / 回退缓存」的路径。
-    同源事实（缩略图工具栏 `ThumbBarAddButtons`）：① 只能在窗口**已经出现在任务栏
-    上**之后挂（`WM_SHOWWINDOW(TRUE)`），返回失败要留给下一次重试；② `explorer.exe`
-    重启会清空工具栏，必须监听 `RegisterWindowMessage("TaskbarCreated")` 重挂；
+    同源事实（缩略图工具栏 `ThumbBarAddButtons`）：① **挂载时机有硬门槛**——任务栏
+    按钮由 shell 异步创建，MSDN 的 ITaskbarList3 页面写明「收到
+    `RegisterWindowMessage("TaskbarButtonCreated")` 之前不得调用任何 ITaskbarList3
+    方法」；早了返回 `E_INVALIDARG`，而且按钮**永远不会**出现（构建、图标、文案全对
+    也一样），真机表现就是「悬浮预览里一个按钮都没有」。实现里用一道「收到过该消息」
+    的门闩把这条规则固化下来，重挂策略与 LX Music 桌面端（每次 show、每次播放状态
+    变化都重下发按钮）等价：`TaskbarButtonCreated` → 复位后重挂；窗口重新显示 / Dart
+    状态变化 → 已挂走 `ThumbBarUpdateButtons`、失败回落 `ThumbBarAddButtons`；挂载
+    失败退避重试两次，耗尽后等下一次触发点自愈；② `explorer.exe` 重启会清空工具栏，
+    靠 `TaskbarCreated` 广播**复位门闩**（不要拿它当「现在可以挂了」的信号——它和
+    `TaskbarButtonCreated` 是两条不同消息，前者只是广播通知，后者才是新按钮就绪）；
     ③ 按钮图标必须是 **32 位、`SM_CXICON`×`SM_CYICON`** 的 HICON（100% 缩放 = 32，
     150% = 48，200% = 64），且任务栏**不随主题反色**——浅色任务栏要另备一套暗字形，
     按 `SystemUsesLightTheme` 切换；④ `/W4 /WX` 下结构体成员别在中间混放
@@ -545,3 +553,23 @@
     品牌名从「Molia 茉咏」改成「Molia」后旧 `.lnk` 不会自动消失，开始菜单 / 桌面会
     各留一个指向同一个 exe 的入口。改快捷方式名时同步补
     `[InstallDelete]`（`{autoprograms}` / `{autodesktop}` 两个位置，见 ADR-0011）。
+61. **Android 媒体通知的按钮位置由「Media3 provider + 系统 UI」共同决定，Dart 侧改不动**：
+    通知由 Media3 `DefaultMediaNotificationProvider` 构建，`getMediaButtons()` 固定先给
+    `[上一首][播放/暂停][下一首]`，再把自定义动作（`lx.playMode` / `lx.favorite`）按 Dart
+    传的顺序追加；`createNotification()` 还会先过滤掉所有非自定义
+    （`COMMAND_CODE_CUSTOM`）按钮，所以 `setCustomLayout` / `setMediaButtonPreferences`
+    里排的标准按钮顺序**一律被丢弃**。唯一的位置旋钮是 `CommandButton` extras 的
+    `COMPACT_VIEW_INDEX`（折叠态 3 个槽），而 `flutter_media_session 3.0.9` 把
+    `customExtras` 塞进 `SessionCommand` 的 extras、不是 `CommandButton` 的，够不到。
+    真正决定位置的是**系统 UI**：ColorOS 17（Android 17）实测通知动作列表是
+    `[上一首][播放][下一首][播放顺序]`，媒体卡片却画成 `[播放顺序][上一首][暂停][下一首]`
+    （自定义动作贴左）。结论：新增自定义动作只能控制「自定义动作之间」的先后；要精确到
+    「收藏最左 / 播放顺序最右」得 vendor 插件覆盖 provider，且系统仍可能重排（见 ADR-0013）。
+62. **`SourceTrack` 的 `songId` 与 `id` 不是一个东西，读收藏 / 缓存 / 历史别拿 `id` 当 songId**：
+    `songId` 是平台内歌曲 id（raw 取键 → 兜底 `标题-歌手`），`id` 是全局唯一包装
+    `'$sourceKey:$songId'`（`lib/sources/source_track.dart`）。凡是要按
+    `(sourceKey, songId)` 成对查的接口（`LibraryProvider.isFavorite`、缓存文件名、
+    下载记录、播放历史）都必须传 `songId`：传 `id` 会算成 `wy:wy:186016`，查不到任何东西
+    且**不报错**——真机表现是「点通知栏收藏没反应」（写路径经 `trackFromSourceTrack`
+    是对的，所以数据其实写进曲库了，只是读不回来）。同类回归测试见
+    `test/playback/local_audio_handler_test.dart` 的「接线后点收藏」。

@@ -6,7 +6,7 @@
   （自定义动作图标为 0 时通知构建中止；见已知坑 34）。
 
   注意：这里是 AAPT 的保留清单，不是代码引用——新增「字符串引用」的资源
-  （如下载通知 small icon、播放顺序自定义动作图标）时都要同步加进来。
+  （如下载通知 small icon、播放顺序 / 收藏自定义动作图标）时都要同步加进来。
 -->
 <resources xmlns:tools="http://schemas.android.com/tools"
-    tools:keep="@drawable/ic_notification,@drawable/audio_service_*" />
+    tools:keep="@drawable/ic_notification,@drawable/ic_notification_favorite,@drawable/ic_notification_favorite_filled,@drawable/audio_service_*" />
