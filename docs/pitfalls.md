@@ -533,9 +533,17 @@
     启动时写 `HKCU\Software\Classes\AppUserModelId\<AUMID>`（`DisplayName` +
     `IconUri` = exe 全路径），并给窗口类补 `hIconSm`、窗口补 `WM_SETICON`，
     不要让 shell 走「自己派生 / 回退缓存」的路径。
-    同源事实（缩略图工具栏 `ThumbBarAddButtons`）：① 只能在窗口**已经出现在任务栏
-    上**之后挂（`WM_SHOWWINDOW(TRUE)`），返回失败要留给下一次重试；② `explorer.exe`
-    重启会清空工具栏，必须监听 `RegisterWindowMessage("TaskbarCreated")` 重挂；
+    同源事实（缩略图工具栏 `ThumbBarAddButtons`）：① **挂载时机有硬门槛**——任务栏
+    按钮由 shell 异步创建，MSDN 的 ITaskbarList3 页面写明「收到
+    `RegisterWindowMessage("TaskbarButtonCreated")` 之前不得调用任何 ITaskbarList3
+    方法」；早了返回 `E_INVALIDARG`，而且按钮**永远不会**出现（构建、图标、文案全对
+    也一样），真机表现就是「悬浮预览里一个按钮都没有」。实现里用一道「收到过该消息」
+    的门闩把这条规则固化下来，重挂策略与 LX Music 桌面端（每次 show、每次播放状态
+    变化都重下发按钮）等价：`TaskbarButtonCreated` → 复位后重挂；窗口重新显示 / Dart
+    状态变化 → 已挂走 `ThumbBarUpdateButtons`、失败回落 `ThumbBarAddButtons`；挂载
+    失败退避重试两次，耗尽后等下一次触发点自愈；② `explorer.exe` 重启会清空工具栏，
+    靠 `TaskbarCreated` 广播**复位门闩**（不要拿它当「现在可以挂了」的信号——它和
+    `TaskbarButtonCreated` 是两条不同消息，前者只是广播通知，后者才是新按钮就绪）；
     ③ 按钮图标必须是 **32 位、`SM_CXICON`×`SM_CYICON`** 的 HICON（100% 缩放 = 32，
     150% = 48，200% = 64），且任务栏**不随主题反色**——浅色任务栏要另备一套暗字形，
     按 `SystemUsesLightTheme` 切换；④ `/W4 /WX` 下结构体成员别在中间混放

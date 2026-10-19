@@ -3,6 +3,7 @@
 #include <combaseapi.h>
 
 #include <cwchar>
+#include <utility>
 
 #include "resource.h"
 
@@ -13,6 +14,9 @@ constexpr UINT kIdPrevious = 1;
 constexpr UINT kIdPlayPause = 2;
 constexpr UINT kIdNext = 3;
 constexpr UINT kIdFavorite = 4;
+
+// 重试定时器 id（WM_TIMER 的 wParam）：只在本窗口内唯一。
+constexpr UINT_PTR kRetryTimerId = 0x4D01;
 
 // 字形 → 图标资源：深色任务栏用亮字形，浅色任务栏用暗字形。
 struct GlyphResources {
@@ -47,6 +51,7 @@ bool ReadSystemUsesLightTheme() {
 TaskbarThumbBar::TaskbarThumbBar() = default;
 
 TaskbarThumbBar::~TaskbarThumbBar() {
+  CancelRetryTimer();
   DestroyIcons();
   if (taskbar_ != nullptr) {
     taskbar_->Release();
@@ -54,40 +59,45 @@ TaskbarThumbBar::~TaskbarThumbBar() {
   }
 }
 
+UINT TaskbarThumbBar::TaskbarButtonCreatedMessage() {
+  static const UINT message = RegisterWindowMessageW(L"TaskbarButtonCreated");
+  return message;
+}
+
 UINT TaskbarThumbBar::TaskbarCreatedMessage() {
   static const UINT message = RegisterWindowMessageW(L"TaskbarCreated");
   return message;
 }
 
-void TaskbarThumbBar::Attach(HWND window, ActionCallback on_action) {
+void TaskbarThumbBar::Attach(HWND window, ActionCallback on_action,
+                             DiagnosticCallback on_diagnostic) {
   window_ = window;
   on_action_ = std::move(on_action);
+  on_diagnostic_ = std::move(on_diagnostic);
 }
 
-void TaskbarThumbBar::AddButtons() {
-  if (window_ == nullptr) {
-    return;
-  }
-  if (taskbar_ == nullptr) {
-    ITaskbarList3* taskbar = nullptr;
-    if (FAILED(CoCreateInstance(CLSID_TaskbarList, nullptr,
-                               CLSCTX_INPROC_SERVER, IID_PPV_ARGS(&taskbar))) ||
-        taskbar == nullptr) {
-      return;
-    }
-    if (FAILED(taskbar->HrInit())) {
-      taskbar->Release();
-      return;
-    }
-    taskbar_ = taskbar;
-  }
-  const bool light = ReadSystemUsesLightTheme();
-  if (light != light_taskbar_) {
-    // 两次挂按钮之间主题变过：缓存里是上一套字形，必须重载。
-    light_taskbar_ = light;
-    DestroyIcons();
-  }
-  ApplyState(/*add=*/true);
+void TaskbarThumbBar::OnTaskbarButtonCreated() {
+  Report("taskbar_button_created", S_OK);
+  // 刚建出来的按钮一定没有工具栏：复位后走一次真正的 Add。
+  button_created_ = true;
+  buttons_added_ = false;
+  ResetRetries();
+  EnsureButtons();
+}
+
+void TaskbarThumbBar::OnShow() {
+  // 隐藏期间任务栏按钮会消失（工具栏随之一并失效），恢复显示后按需重挂：
+  // 已挂上先走 Update，失败自动回落 Add（见 EnsureButtons）。
+  ResetRetries();
+  EnsureButtons();
+}
+
+void TaskbarThumbBar::OnTaskbarRestarted() {
+  Report("taskbar_restarted", S_OK);
+  // 旧任务栏连同工具栏一起没了；新任务栏会再发 TaskbarButtonCreated。
+  button_created_ = false;
+  buttons_added_ = false;
+  ResetRetries();
 }
 
 void TaskbarThumbBar::UpdateState(const State& state) {
@@ -96,9 +106,9 @@ void TaskbarThumbBar::UpdateState(const State& state) {
   }
   state_ = state;
   has_state_ = true;
-  if (buttons_added_) {
-    ApplyState(/*add=*/false);
-  }
+  // 这里同时是一条重试路径：按钮还没挂上时（首发失败 / 等 TaskbarButtonCreated）
+  // 每次状态变化都再试一次——Dart 侧播放、收藏、语言变化都会走到这里。
+  EnsureButtons();
 }
 
 void TaskbarThumbBar::RefreshThemeIcons() {
@@ -108,9 +118,7 @@ void TaskbarThumbBar::RefreshThemeIcons() {
   }
   light_taskbar_ = light;
   DestroyIcons();
-  if (buttons_added_) {
-    ApplyState(/*add=*/false);
-  }
+  EnsureButtons();
 }
 
 bool TaskbarThumbBar::HandleCommand(WPARAM wparam) {
@@ -135,9 +143,58 @@ bool TaskbarThumbBar::HandleCommand(WPARAM wparam) {
   }
 }
 
-void TaskbarThumbBar::ApplyState(bool add) {
-  if (taskbar_ == nullptr || window_ == nullptr) {
+bool TaskbarThumbBar::HandleTimer(WPARAM wparam) {
+  if (wparam != kRetryTimerId) {
+    return false;
+  }
+  // 不在这里复位重试预算：连续失败时预算只会减少，耗尽后等下一次触发点
+  // （新按钮 / 重新显示 / 状态变化），不会变成死循环打定时器。
+  CancelRetryTimer();
+  EnsureButtons();
+  return true;
+}
+
+void TaskbarThumbBar::EnsureButtons() {
+  if (!button_created_ || window_ == nullptr) {
+    // 规范门：还没收到 TaskbarButtonCreated 时调用任务栏接口无效（见类注释）。
     return;
+  }
+  InitializeTaskbar();
+  if (taskbar_ == nullptr) {
+    ScheduleRetry();
+    return;
+  }
+  const bool light = ReadSystemUsesLightTheme();
+  if (light != light_taskbar_) {
+    // 上一次挂按钮之后主题变过：缓存里是上一套字形，必须重载。
+    light_taskbar_ = light;
+    DestroyIcons();
+  }
+  const bool add = !buttons_added_;
+  HRESULT result = ApplyState(add);
+  Report(add ? "thumbar_add" : "thumbar_update", result);
+  if (SUCCEEDED(result)) {
+    buttons_added_ = true;
+    CancelRetryTimer();
+    return;
+  }
+  if (!add) {
+    // 已挂上的工具栏可能已经随任务栏按钮一起没了（隐藏后再显示）：回落重挂。
+    buttons_added_ = false;
+    result = ApplyState(/*add=*/true);
+    Report("thumbar_readd", result);
+    if (SUCCEEDED(result)) {
+      buttons_added_ = true;
+      CancelRetryTimer();
+      return;
+    }
+  }
+  ScheduleRetry();
+}
+
+HRESULT TaskbarThumbBar::ApplyState(bool add) {
+  if (taskbar_ == nullptr || window_ == nullptr) {
+    return E_UNEXPECTED;
   }
   const bool enabled = state_.has_track;
   THUMBBUTTON buttons[kButtonCount] = {};
@@ -161,12 +218,53 @@ void TaskbarThumbBar::ApplyState(bool add) {
         enabled, state_.tooltip_play_pause);
   setup(3, kIdNext, Glyph::kNext, enabled, state_.tooltip_next);
 
-  const HRESULT result =
-      add ? taskbar_->ThumbBarAddButtons(window_, kButtonCount, buttons)
-          : taskbar_->ThumbBarUpdateButtons(window_, kButtonCount, buttons);
-  // 失败（窗口还没进任务栏等）时留 false：下一次 AddButtons（显示 / 任务栏
-  // 重建）会重试；工具栏一旦挂上就不再回退，避免中途把按钮清掉。
-  buttons_added_ = buttons_added_ || SUCCEEDED(result);
+  return add ? taskbar_->ThumbBarAddButtons(window_, kButtonCount, buttons)
+             : taskbar_->ThumbBarUpdateButtons(window_, kButtonCount, buttons);
+}
+
+void TaskbarThumbBar::InitializeTaskbar() {
+  if (taskbar_ != nullptr) {
+    return;
+  }
+  ITaskbarList3* taskbar = nullptr;
+  HRESULT result = CoCreateInstance(CLSID_TaskbarList, nullptr,
+                                    CLSCTX_INPROC_SERVER, IID_PPV_ARGS(&taskbar));
+  if (FAILED(result) || taskbar == nullptr) {
+    Report("taskbar_create_failed", result);
+    return;
+  }
+  result = taskbar->HrInit();
+  if (FAILED(result)) {
+    Report("taskbar_init_failed", result);
+    taskbar->Release();
+    return;
+  }
+  taskbar_ = taskbar;
+}
+
+void TaskbarThumbBar::ScheduleRetry() {
+  if (window_ == nullptr || retries_left_ <= 0) {
+    return;
+  }
+  retries_left_--;
+  SetTimer(window_, kRetryTimerId, kRetryDelayMs, nullptr);
+}
+
+void TaskbarThumbBar::CancelRetryTimer() {
+  if (window_ != nullptr) {
+    KillTimer(window_, kRetryTimerId);
+  }
+}
+
+void TaskbarThumbBar::ResetRetries() {
+  retries_left_ = kMaxRetries;
+  CancelRetryTimer();
+}
+
+void TaskbarThumbBar::Report(const char* event, HRESULT hr) {
+  if (on_diagnostic_ != nullptr) {
+    on_diagnostic_(event, hr);
+  }
 }
 
 HICON TaskbarThumbBar::IconFor(Glyph glyph) {

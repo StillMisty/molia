@@ -45,10 +45,23 @@ shell 按 AUMID 解析并**缓存**的应用身份图标——旧构建（2026-1
 3. **任务栏缩略图工具栏 = Windows 侧播放控制**（`taskbar_thumb_bar.{h,cpp}`，
    `ITaskbarList3::ThumbBarAddButtons`）：4 个按钮「收藏 / 上一首 / 播放暂停 /
    下一首」，悬浮预览浮层里可用。要点：
-   - 按钮只能在窗口**已经出现在任务栏上**之后挂 → `WM_SHOWWINDOW(TRUE)` 时挂，
-     失败留给下一次（`ThumbBarAddButtons` 的返回值决定是否重试）；
-   - Explorer 重启会清空工具栏 → 监听 `RegisterWindowMessage("TaskbarCreated")`
-     重新挂（nativeapi 的托盘 watcher 是另一个窗口，互不影响）；
+   - **挂载时机有硬门槛**：任务栏按钮由 shell 异步创建，MSDN 要求先收到
+     `RegisterWindowMessage("TaskbarButtonCreated")` 再调用任何 `ITaskbarList3`
+     方法；此前调用返回 `E_INVALIDARG`，按钮**永远不会**出现。首版在
+     `WM_SHOWWINDOW(TRUE)` 就挂（见下文「第二轮复核」），真机表现是「一个按钮
+     都没有」；
+   - 重挂策略对齐参考实现 **LX Music 桌面端**（Electron 的 `TaskbarHost`：每次
+     `show`、每次播放状态/收藏变化都重下发一次按钮，注释写明「修复隐藏窗口后再
+     显示时任务栏按钮丢失的问题」）：`TaskbarButtonCreated` 复位门闩后重挂；窗口
+     重新显示 / Dart 状态变化时「已挂走 `ThumbBarUpdateButtons`、失败回落
+     `ThumbBarAddButtons`」；挂载失败退避重试两次（400ms），耗尽后等下一次触发点
+     自愈（Dart 每次状态变化就是一次触发点）；
+   - Explorer 重启：`TaskbarCreated` 广播只用来**复位门闩**，等新任务栏再发
+     `TaskbarButtonCreated`（`TaskbarCreated` 与 `TaskbarButtonCreated` 是两条
+     不同消息，前者只是「任务栏重建了」的广播）；
+   - 诊断：原生把收到的注册消息与每次挂载的 HRESULT 经通道回 Dart 落 fine 日志
+     （`taskbar_button_created` / `thumbar_add` / `thumbar_update` / …），真机出
+     问题时能区分「消息没来」与「调用失败」；
    - 图标必须是 **32 位、`SM_CXICON`×`SM_CYICON`** 的 HICON，从 `Runner.rc`
      资源载入（`.ico` 覆盖 16…64 全档位，避免系统拉伸）；任务栏**不随主题反色**，
      因此准备两套字形（深色任务栏用亮字形 / 浅色用暗字形），按
@@ -106,4 +119,37 @@ shell 按 AUMID 解析并**缓存**的应用身份图标——旧构建（2026-1
 3. 隐藏到托盘再恢复、`explorer.exe` 重启后按钮仍在；
 4. 浅色 / 深色任务栏切换 → 按钮字形跟随主题；
 5. 用安装器升级后：开始菜单只有 `Molia`，旧「Molia 茉咏.lnk」被清掉（ADR-0011）。
+
+## 第二轮复核：按钮不出现的根因与修法
+
+真机复核（Windows 11 build 26300）反馈：悬浮预览里**一个按钮都没有**（其余项未报问题）。
+
+定位（对照 MSDN 与参考实现）：
+
+- 首版把「窗口出现在任务栏上」当成了挂载门槛（`WM_SHOWWINDOW(TRUE)`），但
+  ITaskbarList3 页面的要求是「**收到 `TaskbarButtonCreated` 之前不得调用任何
+  ITaskbarList3 方法**」——任务栏按钮由 shell 异步创建，首发调用落在按钮之前，
+  `ThumbBarAddButtons` 返回 `E_INVALIDARG`；
+- 更糟的是没有自愈路径：`UpdateState()` 在「还没挂上」时直接返回，`AddButtons()`
+  之后只有 explorer 重启广播才会再试一次 → 一次失败等于永久没有按钮；
+- 参考实现（LX Music 桌面端）之所以稳：`ready-to-show` 与**每次 `show`** 都重下发，
+  且**每次播放状态/收藏变化**都重下发（`winMain/index.ts`），任何一次失败都会被
+  后续事件自愈。
+
+修法（本轮）：
+
+1. 门闩 `button_created_`：收到 `TaskbarButtonCreated` 之前不碰任务栏接口；
+2. `OnTaskbarButtonCreated()` → 复位后真正 `ThumbBarAddButtons`；
+   `OnShow()` → 已挂走 Update、失败回落 Add（隐藏到托盘再显示会丢工具栏）；
+   `OnTaskbarRestarted()`（`TaskbarCreated` 广播）→ 只复位门闩，等新按钮的消息；
+3. `EnsureButtons()` 统一入口：失败退避重试两次（`SetTimer` 400ms），耗尽后等下一次
+   触发点；`UpdateState()` 也走它，Dart 每次状态变化都提供一次自愈机会；
+4. 诊断事件（`taskbar_button_created` / `taskbar_restarted` / `thumbar_add` /
+   `thumbar_update` / `thumbar_readd` / `taskbar_create_failed` / `taskbar_init_failed`
+   + HRESULT）经通道回 Dart 落 fine 日志——真机若仍无按钮，日志能直接区分「消息
+   没来」（窗口没进任务栏 / 被壳层拦截）与「调用失败」（HRESULT 给原因）。
+
+验收（本轮）：`gh workflow run ci.yml --ref feat/taskbar-notification-buttons` 的
+`windows-dev` 产物在真机上复核上面第 1–5 项；日志（`molia.*` fine 级）里应出现
+`taskbar_button_created` 与 `thumbar_add / hr=ok` 各一次。
 

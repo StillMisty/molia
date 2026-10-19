@@ -166,6 +166,23 @@ void main() {
     unsupported.dispose();
   });
 
+  test('原生诊断事件只进日志，不触发任何动作', () async {
+    await init();
+    calls.clear();
+
+    await messenger.handlePlatformMessage(
+      channel.name,
+      const StandardMethodCodec().encodeMethodCall(
+        MethodCall('debug', <String, Object>{'event': 'thumbar_add', 'hr': 0}),
+      ),
+      (ByteData? _) {},
+    );
+    await flush();
+
+    expect(calls, isEmpty);
+    expect(playCount + previousCount + nextCount + favoriteCount, 0);
+  });
+
   test('dispose 后不再接收点击', () async {
     await init();
     taskbar.dispose();

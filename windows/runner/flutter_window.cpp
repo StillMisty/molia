@@ -3,6 +3,7 @@
 #include <flutter/method_channel.h>
 #include <flutter/standard_method_codec.h>
 
+#include <cstdint>
 #include <optional>
 #include <string>
 
@@ -108,13 +109,29 @@ bool FlutterWindow::OnCreate() {
       });
 
   thumb_bar_ = std::make_unique<TaskbarThumbBar>();
-  thumb_bar_->Attach(GetHandle(), [this](TaskbarThumbBar::Action action) {
-    if (taskbar_channel_ != nullptr) {
-      taskbar_channel_->InvokeMethod(
-          "pressed",
-          std::make_unique<flutter::EncodableValue>(ActionName(action)));
-    }
-  });
+  thumb_bar_->Attach(
+      GetHandle(),
+      [this](TaskbarThumbBar::Action action) {
+        if (taskbar_channel_ != nullptr) {
+          taskbar_channel_->InvokeMethod(
+              "pressed",
+              std::make_unique<flutter::EncodableValue>(ActionName(action)));
+        }
+      },
+      // 诊断：原生只上报事件名与 HRESULT（文案在 Dart 侧组，原生不碰 l10n）。
+      // 真机排查时靠它区分「TaskbarButtonCreated 没来」与「调用失败」。
+      [this](const char* event, HRESULT hr) {
+        if (taskbar_channel_ == nullptr) {
+          return;
+        }
+        flutter::EncodableMap payload;
+        payload[flutter::EncodableValue("event")] =
+            flutter::EncodableValue(std::string(event));
+        payload[flutter::EncodableValue("hr")] =
+            flutter::EncodableValue(static_cast<int32_t>(hr));
+        taskbar_channel_->InvokeMethod(
+            "debug", std::make_unique<flutter::EncodableValue>(payload));
+      });
 
   SetChildContent(flutter_controller_->view()->GetNativeWindow());
 
@@ -157,19 +174,36 @@ FlutterWindow::MessageHandler(HWND hwnd, UINT const message,
     return 0;
   }
 
-  // Explorer 重启后任务栏按钮会重建，工具栏必须重新挂一次，否则悬浮预览
-  // 里就再也没有那 4 个按钮（注册消息由 TaskbarThumbBar 提供）。
-  const UINT taskbar_created = TaskbarThumbBar::TaskbarCreatedMessage();
-  if (taskbar_created != 0 && message == taskbar_created) {
+  // 任务栏按钮建好（或重建）后 shell 才认工具栏：MSDN 要求先收到这条注册消息，
+  // 此前调用 ThumbBarAddButtons 一律无效（返回 E_INVALIDARG、按钮永不出现）。
+  const UINT taskbar_button_created =
+      TaskbarThumbBar::TaskbarButtonCreatedMessage();
+  if (taskbar_button_created != 0 && message == taskbar_button_created) {
     if (thumb_bar_ != nullptr) {
-      thumb_bar_->AddButtons();
+      thumb_bar_->OnTaskbarButtonCreated();
     }
     return Win32Window::MessageHandler(hwnd, message, wparam, lparam);
   }
 
-  // 窗口第一次显示后才会出现在任务栏上：这时挂按钮才会成功。
+  // Explorer 重启：整个任务栏重建，旧工具栏随旧任务栏一起没了，复位门闩等
+  // 新任务栏再发 TaskbarButtonCreated（注册消息由 TaskbarThumbBar 提供）。
+  const UINT taskbar_created = TaskbarThumbBar::TaskbarCreatedMessage();
+  if (taskbar_created != 0 && message == taskbar_created) {
+    if (thumb_bar_ != nullptr) {
+      thumb_bar_->OnTaskbarRestarted();
+    }
+    return Win32Window::MessageHandler(hwnd, message, wparam, lparam);
+  }
+
+  // 隐藏到托盘再显示：任务栏按钮会重建，工具栏按需重挂（Update 失败回落 Add）。
   if (message == WM_SHOWWINDOW && wparam != 0 && thumb_bar_ != nullptr) {
-    thumb_bar_->AddButtons();
+    thumb_bar_->OnShow();
+  }
+
+  // 挂载失败后的退避重试（只认本工具栏的定时器 id，其余 WM_TIMER 照旧下传）。
+  if (message == WM_TIMER && thumb_bar_ != nullptr &&
+      thumb_bar_->HandleTimer(wparam)) {
+    return 0;
   }
 
   // 任务栏亮暗切换：按钮图标是原样绘制的，要换一套字形。
