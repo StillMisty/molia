@@ -8,11 +8,14 @@ import 'package:provider/provider.dart';
 
 import '../domain/models/download.dart' show DownloadedTrack;
 import '../domain/models/library.dart';
+import '../domain/models/track.dart';
 import '../l10n/app_localizations.dart';
 import '../models/play_mode.dart';
+import '../providers/collection_presenter.dart';
 import '../providers/discover_provider.dart';
 import '../providers/library_collections.dart';
 import '../providers/library_provider.dart';
+import '../providers/local_songs_collection.dart';
 import '../providers/lyrics_provider.dart';
 import '../pages/source_swap_page.dart';
 import '../services/cache_service.dart';
@@ -69,8 +72,11 @@ TrackRowColumns _rowColumns(
 
 /// 当前合集的表格列规范：播放历史多一列「播放时间」，收藏 / 本地歌曲与
 /// 搜索结果同档（唯一来源，表头与行都从这里取）。
-TrackRowColumnSpec _columnSpec(_CollectionView view) =>
-    view.isHistory ? TrackRowColumnSpec.history : TrackRowColumnSpec.standard;
+TrackRowColumnSpec _columnSpec(CollectionColumnLayout layout) =>
+    switch (layout) {
+      CollectionColumnLayout.history => TrackRowColumnSpec.history,
+      CollectionColumnLayout.standard => TrackRowColumnSpec.standard,
+    };
 
 /// 「收藏」页：默认收藏（♥）与已导入/自建列表、播放历史、本地歌曲的
 /// 统一管理入口。
@@ -132,14 +138,6 @@ class _FavoritesPageState extends State<FavoritesPage> {
   int _selectedId = LibraryCollections.unset;
   CollectionTrackSort _sort = CollectionTrackSort.added;
 
-  /// 排序结果记忆化：键 = 源列表身份 + 排序口径。
-  ///
-  /// 排序是 O(n log n) 且与搜索词无关（过滤保序），每次按键/每次通知都重排
-  /// 纯属浪费；搜索只对这份已排序列表做一次 O(n) 过滤。
-  List<PlaylistTrack>? _sortedCache;
-  List<PlaylistTrack>? _sortedCacheSource;
-  CollectionTrackSort? _sortedCacheSort;
-
   /// 搜索栏是否展开（不展开时完全不占行高）。
   bool _searching = false;
 
@@ -170,25 +168,17 @@ class _FavoritesPageState extends State<FavoritesPage> {
   /// 本地数据唯一读取口（可能未注册）：批量判定历史曲目的音频两档状态。
   TrackLocalDataService? _localDataService;
 
-  /// 本地歌曲的缓存行（播放历史 × 完整音频缓存命中；缓存 = 已下载）。
-  List<CollectionLocalSong> _cachedSongRows = const [];
+  /// 本地歌曲伪合集的数据状态机：联结、签名、令牌与加载态都在模块内，
+  /// 页面只请求同步并消费行。
+  late final LocalSongsCollection _localSongs = LocalSongsCollection(
+    loadCachedAudioTrackIds: _loadCachedAudioTrackIds,
+  );
 
-  /// 缓存行最近一次重算的输入签名（历史 + 下载记录 + 缓存 revision）。
-  int? _cachedSongRowsSignature;
-
-  /// 缓存索引加载中（加载期不显示空态，避免闪烁）。
-  bool _cachedSongRowsLoading = false;
-
-  /// 缓存行加载令牌：输入变化后丢弃过期结果。
-  int _cachedSongRowsLoadToken = 0;
-
-  /// 进行中的缓存行加载：同一输入下的重复触发复用同一轮（合集弹层的本地
-  /// 歌曲计数要等它落定，不能读到半旧状态）。
-  Future<void>? _cachedSongRowsLoad;
+  /// 合集视图投影器：身份 / 可见行 / 排序记忆化都在模块内。
+  final CollectionPresenter _presenter = CollectionPresenter();
 
   /// 随机播放起点随机源（测试可注入种子）。
-  late final math.Random _shuffleRandom =
-      widget.shuffleRandom ?? math.Random();
+  late final math.Random _shuffleRandom = widget.shuffleRandom ?? math.Random();
 
   /// 播放历史列表滚动控制器（常显滚动条，支持手拖定位）。
   final ScrollController _historyScrollController = ScrollController();
@@ -202,6 +192,7 @@ class _FavoritesPageState extends State<FavoritesPage> {
   void initState() {
     super.initState();
     _selection.addListener(_onSelectionChanged);
+    _localSongs.addListener(_onLocalSongsChanged);
     // 桌面 Esc 退出多选：页面级键处理器。壳层全局快捷键只把 Esc 交给队列
     // 面板（lib/app/desktop/desktop_shortcuts.dart），多选语义由本页补上；
     // 同时登记 Esc 占用，壳层据此让位（HardwareKeyboard 处理器不短路，不登记
@@ -257,6 +248,8 @@ class _FavoritesPageState extends State<FavoritesPage> {
     _cacheService?.revision.removeListener(_onCacheRevision);
     _selection.removeListener(_onSelectionChanged);
     _selection.dispose();
+    _localSongs.removeListener(_onLocalSongsChanged);
+    _localSongs.dispose();
     _searchController.dispose();
     _searchFocus.dispose();
     // 释放前排空最后一次滚动位置（簿记内部取消节流计时并落盘）。
@@ -271,95 +264,41 @@ class _FavoritesPageState extends State<FavoritesPage> {
     if (mounted) setState(() {});
   }
 
+  /// 本地歌曲合集的一轮落定（下载优先联结 / 过期结果丢弃在模块内）。
+  void _onLocalSongsChanged() {
+    if (mounted) setState(() {});
+  }
+
   /// 缓存变化（清缓存 / LRU 淘汰）：重建以按新签名重算缓存行。
   void _onCacheRevision() {
     if (mounted) setState(() {});
   }
 
-  /// 缓存行输入签名：历史曲目键 + 下载记录键 + 缓存 revision。
-  int _cachedSongRowsInputSignature(
+  /// 当前本地歌曲合集的输入快照：历史键 + 下载记录键 + 缓存 revision
+  /// 共同决定是否需要重算（签名与联结都在 `LocalSongsCollection` 内）。
+  LocalSongsInput _localSongsInput(
     LibraryProvider provider,
     DownloadService? downloads,
-    CacheService? cache,
   ) {
-    return Object.hash(
-      Object.hashAll([for (final entry in provider.history) entry.key]),
-      Object.hashAll([
-        for (final record in downloads?.downloads ?? const <DownloadedTrack>[])
-          record.key,
-      ]),
-      cache?.revision.value ?? -1,
+    final history = provider.history;
+    return LocalSongsInput(
+      history: history,
+      // 惰性转换：签名只读历史键；真正列举缓存时才需要领域曲目。
+      historyTracks: () => [
+        for (final entry in history) provider.trackFromHistoryEntry(entry),
+      ],
+      downloads: downloads?.downloads ?? const <DownloadedTrack>[],
+      supported: downloads?.supported ?? false,
+      initialized: downloads?.initialized ?? false,
+      cacheRevision: _cacheService?.revision.value ?? -1,
     );
   }
 
-  /// 缓存行重算触发：签名变化才重算；返回本轮加载的完成 Future
-  /// （浏览本地歌曲合集时 fire-and-forget，合集弹层计数需要等它落定）。
-  Future<void> _reloadCachedSongRowsIfStale(
-    LibraryProvider provider,
-    DownloadService? downloads,
-  ) {
-    final signature =
-        _cachedSongRowsInputSignature(provider, downloads, _cacheService);
-    if (_cachedSongRowsSignature == signature) {
-      // 签名已同步：若上一轮仍在加载，等它（不能读到半旧结果）。
-      return _cachedSongRowsLoad ?? Future<void>.value();
-    }
-    _cachedSongRowsSignature = signature;
-    _cachedSongRowsLoading = true;
-    final token = ++_cachedSongRowsLoadToken;
-    final load = _reloadCachedSongRows(provider, downloads, signature, token);
-    _cachedSongRowsLoad = load;
-    return load.whenComplete(() {
-      if (identical(_cachedSongRowsLoad, load)) _cachedSongRowsLoad = null;
-    });
-  }
-
-  /// 重算缓存行：历史曲目经唯一读取口批量判定「已缓存」档（一次目录列举、
-  /// 只算音频）；只有「已缓存」进本地歌曲列表——已有音频下载的曲目由下载行
-  /// 承担（下载优先）。
-  Future<void> _reloadCachedSongRows(
-    LibraryProvider provider,
-    DownloadService? downloads,
-    int signature,
-    int token,
-  ) async {
-    var rows = const <CollectionLocalSong>[];
+  /// 缓存索引读取：唯一读取口可能未注册（此时按无缓存行呈现）。
+  Future<Set<TrackId>> _loadCachedAudioTrackIds(List<Track> tracks) {
     final service = _localDataService;
-    try {
-      if (service != null && downloads != null && downloads.supported) {
-        final entries = provider.history;
-        final tracks = [
-          for (final entry in entries) provider.trackFromHistoryEntry(entry),
-        ];
-        final cachedIds = await service.cachedAudioTrackIds(tracks);
-        final result = <CollectionLocalSong>[];
-        for (var i = 0; i < entries.length; i++) {
-          if (cachedIds.contains(tracks[i].id)) {
-            result.add(CollectionLocalSong.cached(entries[i]));
-          }
-        }
-        rows = result;
-      }
-    } catch (_) {
-      // 列举失败按无缓存行呈现（不影响下载 / 导入行）。
-      rows = const [];
-    }
-    if (!mounted || token != _cachedSongRowsLoadToken) return;
-    setState(() {
-      _cachedSongRows = rows;
-      _cachedSongRowsLoading = false;
-    });
-    // 加载期间输入又变了：按最新签名再调度一次。
-    final nowSignature = _cachedSongRowsInputSignature(
-      provider,
-      context.read<DownloadService?>(),
-      _cacheService,
-    );
-    if (nowSignature != signature) {
-      unawaited(
-        _reloadCachedSongRowsIfStale(provider, context.read<DownloadService?>()),
-      );
-    }
+    if (service == null) return Future.value(const <TrackId>{});
+    return service.cachedAudioTrackIds(tracks);
   }
 
   /// 冷启动恢复：合集顺序 + 上次选中的合集 + 各合集滚动位置。
@@ -455,16 +394,20 @@ class _FavoritesPageState extends State<FavoritesPage> {
     return true;
   }
 
-  /// 曲目行点击：桌面修饰键手势优先，其余保持既有语义（多选内切换 / 点播）。
-  void _onTrackRowTap(
-    _CollectionView view,
+  /// 合集行点击：桌面修饰键手势优先，其余保持既有语义（多选内切换 / 点播）。
+  ///
+  /// 三种行（曲目 / 历史 / 本地歌曲）共用同一套下标与选择语义：可见行数由
+  /// [CollectionView.visibleCount] 给出，点播分支按 [CollectionView.kind] 落
+  /// 到唯一的 [_playViewFrom]。
+  void _onRowTap(
+    CollectionView view,
     int index, {
     bool ctrl = false,
     bool shift = false,
   }) {
     if (_selection.applyModifiers(
       index,
-      itemCount: view.visible.length,
+      itemCount: view.visibleCount,
       ctrl: ctrl,
       shift: shift,
     )) {
@@ -473,51 +416,7 @@ class _FavoritesPageState extends State<FavoritesPage> {
     if (_selecting) {
       _selection.toggle(index);
     } else {
-      _playFrom(view.visible, index, view.displayName);
-    }
-  }
-
-  /// 历史行点击（修饰键语义同上；其余走历史点播）。
-  void _onHistoryRowTap(
-    _CollectionView view,
-    int index, {
-    bool ctrl = false,
-    bool shift = false,
-  }) {
-    if (_selection.applyModifiers(
-      index,
-      itemCount: view.visibleHistory.length,
-      ctrl: ctrl,
-      shift: shift,
-    )) {
-      return;
-    }
-    if (_selecting) {
-      _selection.toggle(index);
-    } else {
-      _playHistoryFrom(view.visibleHistory, index, view.displayName);
-    }
-  }
-
-  /// 本地歌曲行点击（修饰键语义同上；其余走本地点播）。
-  void _onLocalSongRowTap(
-    _CollectionView view,
-    int index, {
-    bool ctrl = false,
-    bool shift = false,
-  }) {
-    if (_selection.applyModifiers(
-      index,
-      itemCount: view.visibleLocalSongs.length,
-      ctrl: ctrl,
-      shift: shift,
-    )) {
-      return;
-    }
-    if (_selecting) {
-      _selection.toggle(index);
-    } else {
-      _playLocalSongsFrom(view.visibleLocalSongs, index, view.displayName);
+      unawaited(_playViewFrom(view, index));
     }
   }
 
@@ -537,23 +436,6 @@ class _FavoritesPageState extends State<FavoritesPage> {
   void _exitReorder() {
     if (!_reordering) return;
     setState(() => _reordering = false);
-  }
-
-  String _displayName(
-    AppLocalizations l10n,
-    List<PlaylistInfo> playlists,
-    int? favoritesId,
-    int selected,
-  ) {
-    if (selected == LibraryCollections.historySentinel) return l10n.libraryHistory;
-    if (selected == LibraryCollections.downloadsSentinel) {
-      return l10n.libraryLocalSongs;
-    }
-    if (selected == LibraryCollections.favoritesSentinel) return l10n.favoritesPlaylistName;
-    for (final playlist in playlists) {
-      if (playlist.id == selected) return playlist.name;
-    }
-    return l10n.favoritesPlaylistName;
   }
 
   /// 合集条目：收藏 / 播放历史 / 本地歌曲 / 各列表。按持久化顺序排列，
@@ -602,7 +484,7 @@ class _FavoritesPageState extends State<FavoritesPage> {
           icon: Icons.library_music_rounded,
           // 计数与列表行数同源：下载 / 导入记录 + 播放历史里的缓存行
           //（弹层打开前会先把缓存行重算到当前输入，见 _showCollectionPicker）。
-          trackCount: downloadService!.downloads.length + _cachedSongRows.length,
+          trackCount: _localSongs.count,
           selected: selected == LibraryCollections.downloadsSentinel,
         ),
       for (final playlist in playlists)
@@ -627,7 +509,8 @@ class _FavoritesPageState extends State<FavoritesPage> {
     final ordered = <_CollectionEntry>[];
     // 持久化顺序优先，其次自然顺序；模块只返回自然顺序中存在的键
     //（已删除列表的持久化键自动忽略）。
-    for (final key in LibraryCollections.applyOrder(natural, _collectionOrder)) {
+    for (final key
+        in LibraryCollections.applyOrder(natural, _collectionOrder)) {
       final entry = available.remove(key);
       if (entry != null) ordered.add(entry);
     }
@@ -648,7 +531,7 @@ class _FavoritesPageState extends State<FavoritesPage> {
   ) async {
     final provider = context.read<LibraryProvider>();
     final downloadService = context.read<DownloadService?>();
-    await _reloadCachedSongRowsIfStale(provider, downloadService);
+    await _localSongs.sync(_localSongsInput(provider, downloadService));
     if (!mounted) return;
     final outcome = await M3EBottomSheet.show<_PickerOutcome>(
       context,
@@ -704,82 +587,52 @@ class _FavoritesPageState extends State<FavoritesPage> {
     unawaited(_collections.saveOrder(keys));
   }
 
-  Future<void> _playShuffled(List<PlaylistTrack> tracks, String name) {
-    HapticsService.lightImpact();
-    return context.read<LibraryProvider>().playPlaylistTracks(
-          tracks,
-          _randomStart(tracks.length),
-          contextName: name,
-          mode: PlayMode.shuffle,
-        );
-  }
-
   /// 随机播放起点：在可见列表内随机取一首。
-  int _randomStart(int count) =>
-      count <= 0 ? 0 : _shuffleRandom.nextInt(count);
+  int _randomStart(int count) => count <= 0 ? 0 : _shuffleRandom.nextInt(count);
 
-  Future<void> _playFrom(List<PlaylistTrack> tracks, int index, String name) {
-    HapticsService.lightImpact();
-    return context.read<LibraryProvider>().playPlaylistTracks(
-          tracks,
-          index,
-          contextName: name,
-        );
-  }
-
-  /// 播放历史（可见顺序即播放队列；[mode] 用于「随机播放」）。
-  Future<void> _playHistoryFrom(
-    List<PlayHistoryEntry> entries,
-    int index,
-    String name, {
+  /// 从当前合集可见行的 [index] 起播；[mode] 只由「随机播放」传入。
+  ///
+  /// 历史走 `playHistory`（保留历史语义），本地歌曲把行还原成 `local` 源快照，
+  /// 其余走列表曲目；可见顺序即播放队列顺序。三种合集的点播入口只有这一份。
+  Future<void> _playViewFrom(
+    CollectionView view,
+    int index, {
     PlayMode? mode,
   }) {
     HapticsService.lightImpact();
-    return context.read<LibraryProvider>().playHistory(
-          entries,
+    final provider = context.read<LibraryProvider>();
+    switch (view.kind) {
+      case CollectionKind.history:
+        return provider.playHistory(
+          view.visibleHistory,
           index,
-          contextName: name,
+          contextName: view.displayName,
           mode: mode,
         );
-  }
-
-  /// 历史搜索过滤（title/artist 子串，与列表曲目同一语义）。
-  List<PlayHistoryEntry> _filterHistory(List<PlayHistoryEntry> history) =>
-      filterRowsByQuery(
-        history,
-        query: _searchController.text,
-        fields: (entry) => (title: entry.title, artist: entry.artist),
-      );
-
-  /// 本地歌曲搜索过滤（同一语义：title/artist 子串）。
-  List<CollectionLocalSong> _filterLocalSongs(
-    List<CollectionLocalSong> songs,
-  ) =>
-      filterRowsByQuery(
-        songs,
-        query: _searchController.text,
-        fields: (song) => (title: song.title, artist: song.artist),
-      );
-
-  /// 播放本地歌曲（可见顺序即播放队列；[mode] 用于「随机播放」）。
-  Future<void> _playLocalSongsFrom(
-    List<CollectionLocalSong> songs,
-    int index,
-    String name, {
-    PlayMode? mode,
-  }) {
-    HapticsService.lightImpact();
-    final addedAt = DateTime.now().millisecondsSinceEpoch;
-    return context.read<LibraryProvider>().playPlaylistTracks(
-          [for (final song in songs) song.toPlaylistTrack(addedAt: addedAt)],
+      case CollectionKind.localSongs:
+        final addedAt = DateTime.now().millisecondsSinceEpoch;
+        return provider.playPlaylistTracks(
+          [
+            for (final song in view.visibleLocalSongs)
+              song.toPlaylistTrack(addedAt: addedAt),
+          ],
           index,
-          contextName: name,
+          contextName: view.displayName,
           mode: mode,
         );
+      case CollectionKind.favorites:
+      case CollectionKind.custom:
+        return provider.playPlaylistTracks(
+          view.visible,
+          index,
+          contextName: view.displayName,
+          mode: mode,
+        );
+    }
   }
 
   /// 拖动排序落位：M3E 宿主给的是「直接移动」语义（曲目落在目标下标）。
-  Future<void> _reorderTracks(_CollectionView view, int from, int to) async {
+  Future<void> _reorderTracks(CollectionView view, int from, int to) async {
     final playlistId = view.playlistId;
     final tracks = view.visible;
     if (playlistId == null ||
@@ -945,23 +798,23 @@ class _FavoritesPageState extends State<FavoritesPage> {
     }
   }
 
-  List<PlaylistTrack> _selectedTracks(_CollectionView view) =>
+  List<PlaylistTrack> _selectedTracks(CollectionView view) =>
       _selection.selectedFrom(view.visible);
 
-  List<PlayHistoryEntry> _selectedHistory(_CollectionView view) =>
+  List<PlayHistoryEntry> _selectedHistory(CollectionView view) =>
       _selection.selectedFrom(view.visibleHistory);
 
-  List<CollectionLocalSong> _selectedLocalSongs(_CollectionView view) =>
+  List<CollectionLocalSong> _selectedLocalSongs(CollectionView view) =>
       _selection.selectedFrom(view.visibleLocalSongs);
 
-  Future<void> _favoriteSelected(_CollectionView view) async {
+  Future<void> _favoriteSelected(CollectionView view) async {
     final selected = _selectedTracks(view);
     _selection.clear();
     if (selected.isEmpty) return;
     await context.read<LibraryProvider>().addTracksToFavorites(selected);
   }
 
-  Future<void> _unfavoriteSelectedTracks(_CollectionView view) async {
+  Future<void> _unfavoriteSelectedTracks(CollectionView view) async {
     final selected = _selectedTracks(view);
     _selection.clear();
     if (selected.isEmpty) return;
@@ -971,7 +824,7 @@ class _FavoritesPageState extends State<FavoritesPage> {
     ]);
   }
 
-  Future<void> _removeSelectedFromPlaylist(_CollectionView view) async {
+  Future<void> _removeSelectedFromPlaylist(CollectionView view) async {
     final playlistId = view.playlistId;
     final selected = _selectedTracks(view);
     _selection.clear();
@@ -981,7 +834,7 @@ class _FavoritesPageState extends State<FavoritesPage> {
         .removeTracksFromPlaylist(playlistId, selected);
   }
 
-  Future<void> _favoriteSelectedHistory(_CollectionView view) async {
+  Future<void> _favoriteSelectedHistory(CollectionView view) async {
     final selected = _selectedHistory(view);
     _selection.clear();
     if (selected.isEmpty) return;
@@ -992,7 +845,7 @@ class _FavoritesPageState extends State<FavoritesPage> {
     ]);
   }
 
-  Future<void> _unfavoriteSelectedHistory(_CollectionView view) async {
+  Future<void> _unfavoriteSelectedHistory(CollectionView view) async {
     final selected = _selectedHistory(view);
     _selection.clear();
     if (selected.isEmpty) return;
@@ -1002,7 +855,7 @@ class _FavoritesPageState extends State<FavoritesPage> {
     ]);
   }
 
-  Future<void> _deleteSelectedHistory(_CollectionView view) async {
+  Future<void> _deleteSelectedHistory(CollectionView view) async {
     final selected = _selectedHistory(view);
     _selection.clear();
     if (selected.isEmpty) return;
@@ -1010,7 +863,7 @@ class _FavoritesPageState extends State<FavoritesPage> {
   }
 
   /// 本地歌曲多选的收藏 / 取消收藏（与历史同一写路径）。
-  Future<void> _favoriteSelectedLocalSongs(_CollectionView view) async {
+  Future<void> _favoriteSelectedLocalSongs(CollectionView view) async {
     final selected = _selectedLocalSongs(view);
     _selection.clear();
     if (selected.isEmpty) return;
@@ -1020,7 +873,7 @@ class _FavoritesPageState extends State<FavoritesPage> {
     ]);
   }
 
-  Future<void> _unfavoriteSelectedLocalSongs(_CollectionView view) async {
+  Future<void> _unfavoriteSelectedLocalSongs(CollectionView view) async {
     final selected = _selectedLocalSongs(view);
     _selection.clear();
     if (selected.isEmpty) return;
@@ -1031,7 +884,7 @@ class _FavoritesPageState extends State<FavoritesPage> {
 
   /// 本地歌曲多选删除：下载副本删文件、导入项只移除记录、缓存行清缓存
   /// （统一确认一次）。
-  Future<void> _deleteSelectedLocalSongs(_CollectionView view) async {
+  Future<void> _deleteSelectedLocalSongs(CollectionView view) async {
     final selected = _selectedLocalSongs(view);
     _selection.clear();
     if (selected.isEmpty) return;
@@ -1053,7 +906,8 @@ class _FavoritesPageState extends State<FavoritesPage> {
   Future<bool?> _confirmDeleteLocalSongs(List<CollectionLocalSong> selected) {
     final l10n = _l10n(context);
     final anyCached = selected.any((song) => song.isCached);
-    final anyDownloaded = selected.any((song) => !song.isCached && !song.isImported);
+    final anyDownloaded =
+        selected.any((song) => !song.isCached && !song.isImported);
     final anyImported = selected.any((song) => song.isImported);
     final String title;
     final String content;
@@ -1092,7 +946,7 @@ class _FavoritesPageState extends State<FavoritesPage> {
     );
   }
 
-  Future<void> _copySelectionToPlaylist(_CollectionView view) async {
+  Future<void> _copySelectionToPlaylist(CollectionView view) async {
     final tracks = view.isHistory
         ? null
         : view.isLocalSongs
@@ -1124,64 +978,53 @@ class _FavoritesPageState extends State<FavoritesPage> {
     final l10n = _l10n(context);
     final playlists = provider.playlists;
     final favoritesId = LibraryCollections.favoritesPlaylistId(playlists);
-    final selected = LibraryCollections.resolveSelection(
-      selected: _selectedId,
+    // 合集身份（kind / 落库 id / 展示名 / 滚动键）只在投影器里推导一次；
+    // 已知选集后页面只按 kind 决定订阅与加载。
+    final identity = _presenter.identityFor(
+      selectedId: _selectedId,
       playlists: playlists,
       favoritesId: favoritesId,
+      favoritesName: l10n.favoritesPlaylistName,
+      historyName: l10n.libraryHistory,
+      localSongsName: l10n.libraryLocalSongs,
     );
-    final isHistory = selected == LibraryCollections.historySentinel;
-    final isFavorites = selected == LibraryCollections.favoritesSentinel;
-    final isLocalSongs = selected == LibraryCollections.downloadsSentinel;
-    final isCustom = !isHistory && !isFavorites && !isLocalSongs;
-    final selectedPlaylistId =
-        (isFavorites || isHistory || isLocalSongs) ? favoritesId : selected;
-    final displayName = _displayName(l10n, playlists, favoritesId, selected);
+    final selected = identity.selectedId;
+    final isHistory = identity.isHistory;
+    final isLocalSongs = identity.isLocalSongs;
 
     // 本地歌曲数据来自 DownloadService：只在浏览该合集时订阅，避免下载
     // 进度 tick（32KB 节流）把整页拖进重建；弹层计数的读取在打开时进行。
     final DownloadService? downloadService = isLocalSongs
         ? context.watch<DownloadService?>()
         : context.read<DownloadService?>();
-    final downloadSongs = downloadService?.supported ?? false
-        ? downloadService!.downloads
-        : const <DownloadedTrack>[];
     // 缓存行（缓存 = 已下载）：播放历史 × 完整音频缓存命中，随历史 / 缓存
-    // revision / 下载记录变化重算；只在浏览本地歌曲合集时触发。
-    // 合集弹层打开前会另按需等同一份状态（弹层计数 = 列表行数）。
+    // revision / 下载记录变化重算；只在浏览本地歌曲合集时触发。联结、签名
+    // 与过期丢弃都在 `LocalSongsCollection` 内，页面只消费行。
     if (isLocalSongs) {
-      unawaited(_reloadCachedSongRowsIfStale(provider, downloadService));
+      unawaited(_localSongs.sync(_localSongsInput(provider, downloadService)));
     }
-    final localSongs = isLocalSongs
-        ? <CollectionLocalSong>[
-            for (final song in downloadSongs)
-              CollectionLocalSong.download(song),
-            ..._cachedSongRows,
-          ]
-        : const <CollectionLocalSong>[];
+    final localSongs =
+        isLocalSongs ? _localSongs.rows : const <CollectionLocalSong>[];
 
     // 选中合集的曲目视图：未缓存时 ensurePlaylistTracks 触发加载
     // （provider 统一管理 loading，页面不探测缓存内部）。
-    if (!isHistory && !isLocalSongs && selectedPlaylistId != null) {
+    final selectedPlaylistId = identity.playlistId;
+    if (selectedPlaylistId != null) {
       provider.ensurePlaylistTracks(selectedPlaylistId);
     }
-    final tracksView = (isHistory || isLocalSongs || selectedPlaylistId == null)
+    final tracksView = selectedPlaylistId == null
         ? null
         : provider.playlistTracksView(selectedPlaylistId);
     final tracks = tracksView?.tracks ?? const <PlaylistTrack>[];
-    final visible = (isHistory || isLocalSongs)
-        ? const <PlaylistTrack>[]
-        : _filterAndSort(tracks);
     final history = provider.history;
-    final visibleHistory =
-        isHistory ? _filterHistory(history) : const <PlayHistoryEntry>[];
-    final visibleLocalSongs = isLocalSongs
-        ? _filterLocalSongs(localSongs)
-        : const <CollectionLocalSong>[];
-    final hasItems = isHistory
-        ? history.isNotEmpty
-        : isLocalSongs
-            ? localSongs.isNotEmpty
-            : tracks.isNotEmpty;
+    final view = _presenter.viewFor(
+      identity: identity,
+      tracks: tracks,
+      history: history,
+      localSongs: localSongs,
+      query: _searchController.text,
+      sort: _sort,
+    );
     final isLoading = !isHistory &&
         !isLocalSongs &&
         selectedPlaylistId != null &&
@@ -1190,31 +1033,18 @@ class _FavoritesPageState extends State<FavoritesPage> {
     final isHistoryLoading =
         isHistory && history.isEmpty && provider.isHistoryLoading;
     // 本地歌曲记录 / 缓存索引尚未加载时补加载态（避免空态闪烁）。
-    final isLocalSongsLoading = isLocalSongs &&
-        ((downloadService?.initialized != true) ||
-            (localSongs.isEmpty && _cachedSongRowsLoading));
+    final isLocalSongsLoading = isLocalSongs && _localSongs.loading;
     // 首帧合集列表尚未加载完成：显示加载态，避免空态闪烁。
     final isInitialLoading = playlists.isEmpty && provider.isPlaylistsLoading;
 
-    final view = _CollectionView(
-      isHistory: isHistory,
-      isFavorites: isFavorites,
-      isLocalSongs: isLocalSongs,
-      isCustom: isCustom,
-      playlistId: (isHistory || isLocalSongs) ? null : selectedPlaylistId,
-      displayName: displayName,
-      tracks: tracks,
-      visible: visible,
-      visibleHistory: visibleHistory,
-      visibleLocalSongs: visibleLocalSongs,
-      hasItems: hasItems,
-    );
     final reorderActive =
         _reordering && view.isCustom && !_searching && view.visible.length >= 2;
 
     // 滚动位置恢复：内容就绪后按当前合集键恢复一次（切换合集各自恢复）。
     _bookkeeping.activate(view.collectionKey);
-    if (!isInitialLoading && !isLoading && !isHistoryLoading &&
+    if (!isInitialLoading &&
+        !isLoading &&
+        !isHistoryLoading &&
         !isLocalSongsLoading) {
       _bookkeeping.scheduleRestore();
     }
@@ -1269,7 +1099,6 @@ class _FavoritesPageState extends State<FavoritesPage> {
                 provider,
                 playlists,
                 favoritesId,
-                selected,
                 view,
                 reorderActive: reorderActive,
               ),
@@ -1312,29 +1141,13 @@ class _FavoritesPageState extends State<FavoritesPage> {
     );
   }
 
-  List<PlaylistTrack> _filterAndSort(List<PlaylistTrack> tracks) {
-    // 排序与搜索词无关（过滤保序）：源列表 / 口径不变时复用上一次排序结果，
-    // 每次按键只对已排序列表做一次 O(n) 过滤。
-    if (!identical(tracks, _sortedCacheSource) || _sort != _sortedCacheSort) {
-      _sortedCache = sortCollectionTracks(tracks, _sort);
-      _sortedCacheSource = tracks;
-      _sortedCacheSort = _sort;
-    }
-    return filterRowsByQuery(
-      _sortedCache!,
-      query: _searchController.text,
-      fields: (track) => (title: track.title, artist: track.artist),
-    );
-  }
-
   Widget _buildIdleHeader(
     BuildContext context,
     AppLocalizations l10n,
     LibraryProvider provider,
     List<PlaylistInfo> playlists,
     int? favoritesId,
-    int selected,
-    _CollectionView view, {
+    CollectionView view, {
     required bool reorderActive,
   }) {
     if (reorderActive) return _buildReorderHeader(context, l10n, view);
@@ -1344,7 +1157,6 @@ class _FavoritesPageState extends State<FavoritesPage> {
       l10n,
       playlists,
       favoritesId,
-      selected,
       view,
     );
   }
@@ -1359,8 +1171,7 @@ class _FavoritesPageState extends State<FavoritesPage> {
     AppLocalizations l10n,
     List<PlaylistInfo> playlists,
     int? favoritesId,
-    int selected,
-    _CollectionView view,
+    CollectionView view,
   ) {
     final theme = Theme.of(context);
     final horizontalPadding =
@@ -1383,7 +1194,12 @@ class _FavoritesPageState extends State<FavoritesPage> {
                 borderRadius: BorderRadius.circular(12),
                 onTap: () {
                   HapticsService.lightImpact();
-                  _showCollectionPicker(l10n, playlists, favoritesId, selected);
+                  _showCollectionPicker(
+                    l10n,
+                    playlists,
+                    favoritesId,
+                    view.selectedId,
+                  );
                 },
                 child: Padding(
                   padding: const EdgeInsets.symmetric(vertical: 4),
@@ -1451,28 +1267,19 @@ class _FavoritesPageState extends State<FavoritesPage> {
     );
   }
 
-  Future<void> _playShuffledFor(_CollectionView view) => view.isHistory
-      ? _playHistoryFrom(
-          view.visibleHistory,
-          _randomStart(view.visibleHistory.length),
-          view.displayName,
-          mode: PlayMode.shuffle,
-        )
-      : view.isLocalSongs
-          ? _playLocalSongsFrom(
-              view.visibleLocalSongs,
-              _randomStart(view.visibleLocalSongs.length),
-              view.displayName,
-              mode: PlayMode.shuffle,
-            )
-          : _playShuffled(view.visible, view.displayName);
+  /// 随机播放：在可见行内随机起点，点播分支与普通点击同源。
+  Future<void> _playShuffledFor(CollectionView view) => _playViewFrom(
+        view,
+        _randomStart(view.visibleCount),
+        mode: PlayMode.shuffle,
+      );
 
   /// 搜索行：单胶囊布局——返回键、输入框/清除键与 ⋮（排序 / 调整顺序 /
   /// 清空历史）都收在搜索栏内，日常不展开搜索时不占行高。
   Widget _buildSearchHeader(
     BuildContext context,
     AppLocalizations l10n,
-    _CollectionView view,
+    CollectionView view,
   ) {
     final horizontalPadding =
         context.layoutType(ResponsivePageType.browse).horizontalPadding;
@@ -1509,7 +1316,7 @@ class _FavoritesPageState extends State<FavoritesPage> {
   Widget _buildReorderHeader(
     BuildContext context,
     AppLocalizations l10n,
-    _CollectionView view,
+    CollectionView view,
   ) {
     final theme = Theme.of(context);
     final horizontalPadding =
@@ -1575,7 +1382,7 @@ class _FavoritesPageState extends State<FavoritesPage> {
   Widget _buildOverflowMenu(
     BuildContext context,
     AppLocalizations l10n,
-    _CollectionView view,
+    CollectionView view,
   ) {
     return M3EMenu.entries(
       position: M3EMenuAnchorPosition.bottomEnd,
@@ -1633,7 +1440,7 @@ class _FavoritesPageState extends State<FavoritesPage> {
     BuildContext context,
     AppLocalizations l10n,
     LibraryProvider provider,
-    _CollectionView view,
+    CollectionView view,
   ) {
     final selected = view.isHistory
         ? _selectedHistory(view)
@@ -1717,7 +1524,7 @@ class _FavoritesPageState extends State<FavoritesPage> {
     BuildContext context,
     AppLocalizations l10n,
     LibraryProvider provider,
-    _CollectionView view,
+    CollectionView view,
   ) {
     final m3e = M3ETheme.of(context);
     final selectionTheme = m3e.selectionTheme;
@@ -1778,56 +1585,89 @@ class _FavoritesPageState extends State<FavoritesPage> {
     BuildContext context,
     AppLocalizations l10n,
     LibraryProvider provider,
-    _CollectionView view, {
+    CollectionView view, {
     required bool reorderActive,
   }) {
     // 行 / 表头同一份列规范（历史多一列「播放时间」），表格档判定按规范
     // 取阈值：行内是否给列、表头画哪几列、行高取哪一档都由这一个决定。
-    final spec = _columnSpec(view);
+    final spec = _columnSpec(view.columnLayout);
     final tableColumns = DesktopLayout.of(context).tableColumnsFor(spec);
     final columnSpec = tableColumns ? spec : null;
+    final searchEmpty =
+        CollectionSearchEmpty(message: l10n.favoritesSearchEmpty);
     final Widget body;
-    if (view.isHistory) {
-      body = _buildHistoryBody(
-        context,
-        l10n,
-        provider,
-        view,
-        columnSpec: columnSpec,
-      );
-    } else if (view.isLocalSongs) {
-      body = _buildLocalSongsBody(
-        context,
-        l10n,
-        provider,
-        view,
-        columnSpec: columnSpec,
-      );
-    } else {
-      body = CollectionTrackList<PlaylistTrack>(
-        controller: _scrollControllerForKey(view.collectionKey),
-        rows: view.visible,
-        keyOf: (track) =>
-            ValueKey<String>('${track.sourceKey}:${track.songId}'),
-        // 合集本身为空 → 合集空态；有内容但被搜索过滤掉 → 搜索空态。
-        empty: view.tracks.isEmpty
-            ? _buildEmptyState(context, l10n, view)
-            : CollectionSearchEmpty(message: l10n.favoritesSearchEmpty),
-        onReorder: reorderActive
-            ? (from, to) => unawaited(_reorderTracks(view, from, to))
-            : null,
-        // 行高与行渲染同档（表格 56 / 单列 72）：差一档滚动条拇指与
-        // 拖动定位就落在错误位置上。
-        tableColumns: tableColumns,
-        itemBuilder: (context, track, index) => _buildTrackRow(
-          context,
-          l10n,
+    switch (view.kind) {
+      case CollectionKind.history:
+        body = _buildCollectionList<PlayHistoryEntry>(
           view,
-          index,
-          reorderActive: reorderActive,
-          columnSpec: columnSpec,
-        ),
-      );
+          rows: view.visibleHistory,
+          keyOf: (entry) =>
+              ValueKey<String>('h:${entry.sourceKey}:${entry.songId}'),
+          // 历史为空 → 合集空态；有记录但被搜索过滤掉 → 搜索空态。
+          empty: provider.history.isNotEmpty
+              ? searchEmpty
+              : _buildEmptyState(context, l10n, view),
+          tableColumns: columnSpec != null,
+          itemBuilder: (context, entry, index) => _buildHistoryRow(
+            context,
+            l10n,
+            provider,
+            view,
+            entry,
+            index,
+            columnSpec: columnSpec,
+          ),
+        );
+      case CollectionKind.localSongs:
+        final service = context.read<DownloadService?>();
+        body = service == null
+            ? _buildEmptyState(context, l10n, view)
+            : _buildCollectionList<CollectionLocalSong>(
+                view,
+                rows: view.visibleLocalSongs,
+                keyOf: (song) => ValueKey<String>('l:${song.key}'),
+                // 有内容但被搜索过滤掉：给搜索空态；否则给合集空态。
+                empty: view.hasItems
+                    ? searchEmpty
+                    : _buildEmptyState(context, l10n, view),
+                tableColumns: columnSpec != null,
+                itemBuilder: (context, song, index) => _buildLocalSongRow(
+                  context,
+                  l10n,
+                  provider,
+                  view,
+                  service,
+                  song,
+                  index,
+                  columnSpec: columnSpec,
+                ),
+              );
+      case CollectionKind.favorites:
+      case CollectionKind.custom:
+        body = _buildCollectionList<PlaylistTrack>(
+          view,
+          rows: view.visible,
+          keyOf: (track) =>
+              ValueKey<String>('${track.sourceKey}:${track.songId}'),
+          // 合集本身为空 → 合集空态；有内容但被搜索过滤掉 → 搜索空态。
+          empty: view.tracks.isEmpty
+              ? _buildEmptyState(context, l10n, view)
+              : searchEmpty,
+          onReorder: reorderActive
+              ? (from, to) => unawaited(_reorderTracks(view, from, to))
+              : null,
+          // 行高与行渲染同档（表格 56 / 单列 72）：差一档滚动条拇指与
+          // 拖动定位就落在错误位置上。
+          tableColumns: tableColumns,
+          itemBuilder: (context, track, index) => _buildTrackRow(
+            context,
+            l10n,
+            view,
+            index,
+            reorderActive: reorderActive,
+            columnSpec: columnSpec,
+          ),
+        );
     }
     // 表头固定在滚动区之上（与搜索页同一口径）：列标题不随列表滚走，
     // 列与行内列同宽同左缘。空列表（含被搜索过滤空）不给表头。
@@ -1845,10 +1685,33 @@ class _FavoritesPageState extends State<FavoritesPage> {
     );
   }
 
+  /// 三种合集的列表体共用的脚手架：滚动控制器按合集键取、行 key / 行内容 /
+  /// 空态 / 表格档由调用方给；滚动、行距与懒加载参数只有这一份。
+  Widget _buildCollectionList<T>(
+    CollectionView view, {
+    required List<T> rows,
+    required Key Function(T row) keyOf,
+    required Widget empty,
+    required Widget Function(BuildContext context, T row, int index)
+        itemBuilder,
+    bool tableColumns = false,
+    void Function(int from, int to)? onReorder,
+  }) {
+    return CollectionTrackList<T>(
+      controller: _scrollControllerForKey(view.collectionKey),
+      rows: rows,
+      keyOf: keyOf,
+      empty: empty,
+      onReorder: onReorder,
+      tableColumns: tableColumns,
+      itemBuilder: itemBuilder,
+    );
+  }
+
   Widget _buildTrackRow(
     BuildContext context,
     AppLocalizations l10n,
-    _CollectionView view,
+    CollectionView view,
     int index, {
     required bool reorderActive,
     required TrackRowColumnSpec? columnSpec,
@@ -1875,11 +1738,10 @@ class _FavoritesPageState extends State<FavoritesPage> {
               color: Theme.of(context).colorScheme.onSurfaceVariant,
             )
           : null,
-      onTap: reorderActive ? null : () => _onTrackRowTap(view, index),
+      onTap: reorderActive ? null : () => _onRowTap(view, index),
       onTapWithModifiers: (reorderActive || !isDesktopPlatform())
           ? null
-          : (ctrl, shift) =>
-              _onTrackRowTap(view, index, ctrl: ctrl, shift: shift),
+          : (ctrl, shift) => _onRowTap(view, index, ctrl: ctrl, shift: shift),
       onLongPress: reorderActive ? null : () => _enterSelection(index),
       actions: (reorderActive || _selecting)
           ? null
@@ -1892,7 +1754,7 @@ class _FavoritesPageState extends State<FavoritesPage> {
   List<CollectionRowAction> _trackRowActions(
     BuildContext context,
     AppLocalizations l10n,
-    _CollectionView view,
+    CollectionView view,
     PlaylistTrack track,
   ) {
     final playlistId = view.playlistId;
@@ -1923,40 +1785,11 @@ class _FavoritesPageState extends State<FavoritesPage> {
     );
   }
 
-  Widget _buildHistoryBody(
-    BuildContext context,
-    AppLocalizations l10n,
-    LibraryProvider provider,
-    _CollectionView view, {
-    required TrackRowColumnSpec? columnSpec,
-  }) {
-    return CollectionTrackList<PlayHistoryEntry>(
-      controller: _scrollControllerForKey(view.collectionKey),
-      rows: view.visibleHistory,
-      keyOf: (entry) =>
-          ValueKey<String>('h:${entry.sourceKey}:${entry.songId}'),
-      // 历史为空 → 合集空态；有记录但被搜索过滤掉 → 搜索空态。
-      empty: provider.history.isNotEmpty
-          ? CollectionSearchEmpty(message: l10n.favoritesSearchEmpty)
-          : _buildEmptyState(context, l10n, view),
-      tableColumns: columnSpec != null,
-      itemBuilder: (context, entry, index) => _buildHistoryRow(
-        context,
-        l10n,
-        provider,
-        view,
-        entry,
-        index,
-        columnSpec: columnSpec,
-      ),
-    );
-  }
-
   Widget _buildHistoryRow(
     BuildContext context,
     AppLocalizations l10n,
     LibraryProvider provider,
-    _CollectionView view,
+    CollectionView view,
     PlayHistoryEntry entry,
     int index, {
     required TrackRowColumnSpec? columnSpec,
@@ -1978,10 +1811,9 @@ class _FavoritesPageState extends State<FavoritesPage> {
       trailingText: durationText(entry.durationMs),
       position: calculateCardPosition(index, view.visibleHistory.length),
       selected: _selection.isSelected(index),
-      onTap: () => _onHistoryRowTap(view, index),
+      onTap: () => _onRowTap(view, index),
       onTapWithModifiers: isDesktopPlatform()
-          ? (ctrl, shift) =>
-              _onHistoryRowTap(view, index, ctrl: ctrl, shift: shift)
+          ? (ctrl, shift) => _onRowTap(view, index, ctrl: ctrl, shift: shift)
           : null,
       onLongPress: () => _enterSelection(index),
       actions: _selecting
@@ -2038,53 +1870,16 @@ class _FavoritesPageState extends State<FavoritesPage> {
     final track = context.read<LibraryProvider>().trackFromHistoryEntry(entry);
     final result = await service.clear(track, LocalCachePart.audio);
     if (result.cleared) return;
-    final message = result.skipped > 0
-        ? l10n.trackInfoCachePlaying
-        : l10n.trackCacheEmpty;
+    final message =
+        result.skipped > 0 ? l10n.trackInfoCachePlaying : l10n.trackCacheEmpty;
     messenger?.showSnackBar(message);
-  }
-
-  /// 本地歌曲列表：下载副本与导入的本地文件统一浏览。
-  ///
-  /// 行内点播走 `local` 音源（离线可用）；行动作「加入列表 / 收藏 / 删除」
-  /// （触摸端左滑胶囊 / 桌面右键菜单），删除动作按记录来源区分文案
-  /// （下载副本删文件、导入项只移出列表）。
-  Widget _buildLocalSongsBody(
-    BuildContext context,
-    AppLocalizations l10n,
-    LibraryProvider provider,
-    _CollectionView view, {
-    required TrackRowColumnSpec? columnSpec,
-  }) {
-    final service = context.read<DownloadService?>();
-    if (service == null) return _buildEmptyState(context, l10n, view);
-    return CollectionTrackList<CollectionLocalSong>(
-      controller: _scrollControllerForKey(view.collectionKey),
-      rows: view.visibleLocalSongs,
-      keyOf: (song) => ValueKey<String>('l:${song.key}'),
-      // 有内容但被搜索过滤掉：给搜索空态；否则给合集空态。
-      empty: view.hasItems
-          ? CollectionSearchEmpty(message: l10n.favoritesSearchEmpty)
-          : _buildEmptyState(context, l10n, view),
-      tableColumns: columnSpec != null,
-      itemBuilder: (context, song, index) => _buildLocalSongRow(
-        context,
-        l10n,
-        provider,
-        view,
-        service,
-        song,
-        index,
-        columnSpec: columnSpec,
-      ),
-    );
   }
 
   Widget _buildLocalSongRow(
     BuildContext context,
     AppLocalizations l10n,
     LibraryProvider provider,
-    _CollectionView view,
+    CollectionView view,
     DownloadService service,
     CollectionLocalSong song,
     int index, {
@@ -2120,10 +1915,9 @@ class _FavoritesPageState extends State<FavoritesPage> {
           : null,
       position: calculateCardPosition(index, view.visibleLocalSongs.length),
       selected: _selection.isSelected(index),
-      onTap: () => _onLocalSongRowTap(view, index),
+      onTap: () => _onRowTap(view, index),
       onTapWithModifiers: isDesktopPlatform()
-          ? (ctrl, shift) =>
-              _onLocalSongRowTap(view, index, ctrl: ctrl, shift: shift)
+          ? (ctrl, shift) => _onRowTap(view, index, ctrl: ctrl, shift: shift)
           : null,
       onLongPress: () => _enterSelection(index),
       actions: _selecting
@@ -2170,7 +1964,7 @@ class _FavoritesPageState extends State<FavoritesPage> {
   Widget _buildEmptyState(
     BuildContext context,
     AppLocalizations l10n,
-    _CollectionView view,
+    CollectionView view,
   ) {
     // 页面级空态版式：在可用高度里居中（Center），外边距 24。
     return Center(
@@ -2200,74 +1994,13 @@ class _FavoritesPageState extends State<FavoritesPage> {
                   style: M3EButtonStyle.tonal,
                   icon: const Icon(Icons.audio_file_rounded),
                   label: Text(l10n.libraryImportLocalSongs),
-                  onPressed: () => unawaited(importLocalAudioFilesFlow(context)),
+                  onPressed: () =>
+                      unawaited(importLocalAudioFilesFlow(context)),
                 )
               : null,
         ),
       ),
     );
-  }
-}
-
-/// 当前合集的只读视图（build 计算一次，头部 / 列表 / 多选共用）。
-class _CollectionView {
-  const _CollectionView({
-    required this.isHistory,
-    required this.isFavorites,
-    required this.isLocalSongs,
-    required this.isCustom,
-    required this.playlistId,
-    required this.displayName,
-    required this.tracks,
-    required this.visible,
-    required this.visibleHistory,
-    required this.visibleLocalSongs,
-    required this.hasItems,
-  });
-
-  final bool isHistory;
-  final bool isFavorites;
-
-  /// 本地歌曲伪合集（下载记录 + 导入的本地文件，来自 `DownloadService`）。
-  final bool isLocalSongs;
-  final bool isCustom;
-
-  /// 实际落库的列表 id（收藏集合为收藏列表 id；历史 / 本地歌曲为 null）。
-  final int? playlistId;
-  final String displayName;
-
-  /// 全量曲目（历史 / 本地歌曲集合为空）。
-  final List<PlaylistTrack> tracks;
-
-  /// 搜索 + 排序后的可见曲目（可见顺序即播放队列顺序）。
-  final List<PlaylistTrack> visible;
-
-  /// 搜索过滤后的历史条目。
-  final List<PlayHistoryEntry> visibleHistory;
-
-  /// 搜索过滤后的本地歌曲（下载 / 导入副本 + 缓存行）。
-  final List<CollectionLocalSong> visibleLocalSongs;
-
-  final bool hasItems;
-
-  /// 当前合集可见行数（表格表头只在有可见行时显示）。
-  int get visibleCount => isHistory
-      ? visibleHistory.length
-      : isLocalSongs
-          ? visibleLocalSongs.length
-          : visible.length;
-
-  /// 当前合集的持久化键：收藏 / 历史 / 本地歌曲用固定键，自建列表按 id。
-  ///
-  /// 滚动偏移与合集顺序（弹层排序）共用同一套键。
-  String get collectionKey {
-    if (isHistory) return LibraryCollections.historyOrderKey;
-    if (isLocalSongs) return LibraryCollections.downloadsOrderKey;
-    if (isFavorites) return LibraryCollections.favoritesOrderKey;
-    final id = playlistId;
-    return id == null
-        ? LibraryCollections.favoritesOrderKey
-        : LibraryCollections.playlistOrderKey(id);
   }
 }
 
@@ -2487,8 +2220,8 @@ class _CollectionPickerSheetState extends State<_CollectionPickerSheet> {
                   // selected 高亮（选中容器），不叠对号图标。
                   trailingText: l10n.playlistTrackCount(entry.trackCount),
                   selected: entry.selected,
-                  onTap: () =>
-                      Navigator.of(context).pop(_PickerOutcome.select(entry.id)),
+                  onTap: () => Navigator.of(context)
+                      .pop(_PickerOutcome.select(entry.id)),
                   trailing: Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [

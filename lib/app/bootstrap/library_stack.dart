@@ -10,6 +10,7 @@ import 'dart:async';
 import '../../data/library_repository.dart';
 import '../../data/molia_database.dart';
 import '../../data/play_statistics_repository.dart';
+import '../../data/sync/statistics_sync_store.dart';
 import '../../data/sync/sync_journal.dart';
 import '../../data/sync/sync_state_store.dart';
 import '../../providers/local_database_provider.dart';
@@ -25,6 +26,7 @@ typedef LibraryStack = ({
   SyncJournalRepository syncJournal,
   LibraryRepository libraryRepository,
   PlayStatisticsRepository playStatisticsRepository,
+  SqliteStatisticsSyncStore statisticsSyncStore,
   PlayStatisticsService playStatisticsService,
   LocalDatabaseProvider localDatabaseProvider,
   SourceSwapSettings sourceSwapSettings,
@@ -59,10 +61,17 @@ Future<LibraryStack> buildLibraryStack({
   // 500 条上限）是两套数据。采集是纯观察者（服务不持有 provider），
   // 快照 / 进度经 [wirePlayStatistics] 接线；上次进程被杀遗留的进行中事件
   // 启动即收尾为 interrupted。
-  final playStatisticsRepository = PlayStatisticsRepository(
-    clock: () => syncState.nowMs(),
+  //
+  // 同步形状（`syncKey` / 版本戳 / 日志 / 导出缓存 / 远端合并）在独立的
+  // 统计同步存储里：仓库只留采集与查询，适配器只映射类型化记录。
+  final statisticsSyncStore = SqliteStatisticsSyncStore(
+    databaseProvider: () => MoliaDatabase.instance,
     stamps: syncState.stampIssuer,
     journal: syncJournal,
+  );
+  final playStatisticsRepository = PlayStatisticsRepository(
+    clock: () => syncState.nowMs(),
+    statisticsSync: statisticsSyncStore,
   );
   final playStatisticsService = PlayStatisticsService(
     repository: playStatisticsRepository,
@@ -97,6 +106,7 @@ Future<LibraryStack> buildLibraryStack({
     syncJournal: syncJournal,
     libraryRepository: libraryRepository,
     playStatisticsRepository: playStatisticsRepository,
+    statisticsSyncStore: statisticsSyncStore,
     playStatisticsService: playStatisticsService,
     localDatabaseProvider: localDatabaseProvider,
     sourceSwapSettings: sourceSwapSettings,

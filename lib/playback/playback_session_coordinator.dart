@@ -22,6 +22,7 @@ import '../data/settings/settings_registry.dart';
 import '../domain/models/playback.dart';
 import '../domain/models/track.dart';
 import '../domain/ports/playback_facade.dart';
+import '../domain/ports/playback_session_sync.dart';
 import '../domain/ports/state_listenable.dart';
 import '../models/play_mode.dart';
 import '../services/playback_session_store.dart';
@@ -68,7 +69,7 @@ enum PlaybackCommandRoute {
 /// 输入是 facade（真实播放的事实来源与命令出口），输出是 [resolve]（UI 快照）+
 /// [position]（进度通道）；持久化对上层透明（[flushSession] 只承诺「写完了」）。
 /// 组合根创建它并注入 provider / 系统媒体会话（handler 的落盘回调）。
-class PlaybackSessionCoordinator {
+class PlaybackSessionCoordinator implements PlaybackSessionSyncPort {
   PlaybackSessionCoordinator({
     required PlaybackFacade facade,
     required PlaybackSessionStore store,
@@ -436,6 +437,20 @@ class PlaybackSessionCoordinator {
   }
 
   // ── 落盘（PlaybackSessionStore 的唯一写者） ──────────────
+
+  // 跨设备同步端口：远端应用 / 删除也必须经过本模块持有的 store，
+  // 与本地 save / clear 共用同一个 pendingWrite 队列（顺序即调用顺序）。
+  // 若同步栈另建 store，两个队列会同时写同一组 prefs 键，远端应用可能插进
+  // 「本地保存 → 清除」之间。
+
+  @override
+  Future<Map<String, dynamic>?> loadRaw() => _store.loadRaw();
+
+  @override
+  Future<void> applyRemote(Map<String, dynamic> raw) => _store.saveRaw(raw);
+
+  @override
+  Future<void> clearRemote() => _store.clear();
 
   /// 强制落盘当前会话（进入后台 / 生命周期 paused / 系统媒体控制调用）。
   ///

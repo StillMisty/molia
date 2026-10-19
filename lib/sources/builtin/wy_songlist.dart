@@ -4,8 +4,8 @@ import '../../data/http/app_dio.dart';
 import '../../domain/models/discover.dart';
 import '../source_track.dart';
 import 'builtin_search.dart';
+import 'builtin_transport.dart';
 import 'crypto_utils.dart';
-import 'discover_fetch.dart';
 import 'discover_track_mapper.dart';
 import 'wy_music_detail.dart';
 
@@ -50,11 +50,12 @@ class WySongList {
 
   static final RegExp _listDetailLink =
       RegExp(r'^.+(?:\?|&)id=(\d+)(?:&.*$|#.*$|$)');
-  static final RegExp _listDetailLink2 = RegExp(r'^.+\/playlist\/(\d+)\/\d+\/.+$');
+  static final RegExp _listDetailLink2 =
+      RegExp(r'^.+\/playlist\/(\d+)\/\d+\/.+$');
 
   /// 热门标签 + 完整标签目录（两个接口并行，结果缓存 5 分钟）。
-  static Future<
-      ({List<DiscoverTagCategory> tags, List<DiscoverTag> hotTag})> getTags() {
+  static Future<({List<DiscoverTagCategory> tags, List<DiscoverTag> hotTag})>
+      getTags() {
     return BuiltinSearch.transport.cached('wy:playlist-tags', () async {
       final results = await Future.wait([getTag(), getHotTag()]);
       return (
@@ -66,8 +67,8 @@ class WySongList {
 
   /// 标签目录（`weapi/playlist/catalogue`）。
   static Future<List<DiscoverTagCategory>> getTag() {
-    return retryRequest(
-      maxTries: 3,
+    return runBuiltinAttempts(
+      maxTries: BuiltinRetryBudget.discover,
       attempt: (_) async {
         final body = await lxHttpPost(
           'https://music.163.com/weapi/playlist/catalogue',
@@ -107,8 +108,8 @@ class WySongList {
 
   /// 热门标签（`weapi/playlist/hottags`）。
   static Future<List<DiscoverTag>> getHotTag() {
-    return retryRequest(
-      maxTries: 3,
+    return runBuiltinAttempts(
+      maxTries: BuiltinRetryBudget.discover,
       attempt: (_) async {
         final body = await lxHttpPost(
           'https://music.163.com/weapi/playlist/hottags',
@@ -150,7 +151,7 @@ class WySongList {
   ) {
     return BuiltinSearch.transport.cachedRetry(
       'wy:playlists:$sortId:$tagId:$page',
-      maxTries: 3,
+      maxTries: BuiltinRetryBudget.discover,
       attempt: (_) async {
         final body = await lxHttpPost(
           'https://music.163.com/weapi/playlist/list',
@@ -238,8 +239,8 @@ class WySongList {
     final parsed = await parseListId(rawId);
     if (parsed.cookie != null) _cookie = parsed.cookie!;
 
-    return retryRequest(
-      maxTries: 3,
+    return runBuiltinAttempts(
+      maxTries: BuiltinRetryBudget.discover,
       attempt: (_) async {
         dynamic body;
         try {
@@ -381,7 +382,7 @@ class WySongList {
   ) {
     return BuiltinSearch.transport.cachedRetry(
       'wy:playlist-search:$text:$page:$limit',
-      maxTries: 3,
+      maxTries: BuiltinRetryBudget.discover,
       attempt: (_) async {
         final body = await lxHttpPost(
           'http://interface.music.163.com/eapi/batch',
@@ -435,8 +436,8 @@ class WySongList {
 
   /// 跟随短链/分享链接重定向到最终地址，再解析歌单 id。
   static Future<String> _followRedirect(String link) {
-    return retryRequest(
-      maxTries: 3,
+    return runBuiltinAttempts(
+      maxTries: BuiltinRetryBudget.discover,
       message: 'link try max num',
       attempt: (_) async {
         var current = link;
@@ -467,8 +468,7 @@ class WySongList {
           return current.replaceFirstMapped(
               _listDetailLink, (m) => m.group(1)!);
         }
-        return current.replaceFirstMapped(
-            _listDetailLink2, (m) => m.group(1)!);
+        return current.replaceFirstMapped(_listDetailLink2, (m) => m.group(1)!);
       },
     );
   }

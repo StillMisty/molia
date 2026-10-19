@@ -8,6 +8,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:molia/domain/models/download.dart';
 import 'package:molia/domain/models/library.dart';
 import 'package:molia/l10n/app_localizations.dart';
+import 'package:molia/providers/local_songs_collection.dart';
 import 'package:molia/widgets/collection_track_list.dart';
 import 'package:molia/widgets/empty_state.dart';
 import 'package:molia/widgets/swipe_reveal_row.dart';
@@ -89,7 +90,8 @@ void main() {
       final list = tester.widget<ListView>(find.byType(ListView));
       final context = tester.element(find.byType(ListView));
       final extent = TrackRow.extentOf(context, tableColumns: true);
-      expect(extent, M3EListItemTheme.defaults.minHeight, reason: 'M3E 列表 token');
+      expect(extent, M3EListItemTheme.defaults.minHeight,
+          reason: 'M3E 列表 token');
       expect(list.itemExtent, extent + TrackRow.gapOf(context));
     });
 

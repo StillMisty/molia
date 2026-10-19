@@ -3,6 +3,7 @@ import 'package:molia/data/library_repository.dart';
 import 'package:molia/data/molia_database.dart';
 import 'package:molia/data/play_statistics_repository.dart';
 import 'package:molia/data/sync/adapters/prefs_sync_adapter.dart';
+import 'package:molia/data/sync/statistics_sync_store.dart';
 import 'package:molia/data/sync/sync_journal.dart';
 import 'package:molia/data/sync/sync_state_store.dart';
 import 'package:molia/data/settings/settings_keys.dart';
@@ -10,6 +11,7 @@ import 'package:molia/data/settings/settings_registry.dart';
 import 'package:molia/domain/models/device_sync.dart';
 import 'package:molia/domain/models/library.dart';
 import 'package:molia/domain/models/play_statistics.dart';
+import 'package:molia/domain/ports/statistics_sync_store.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'support/memory_database.dart';
@@ -24,6 +26,7 @@ void main() {
   late SyncJournalRepository journal;
   late LibraryRepository library;
   late PlayStatisticsRepository statistics;
+  late SqliteStatisticsSyncStore statisticsSync;
 
   setUp(() {
     db = openMemoryDatabase();
@@ -38,11 +41,15 @@ void main() {
       stamps: stamps,
       journal: journal,
     );
+    statisticsSync = SqliteStatisticsSyncStore(
+      databaseProvider: () => db,
+      stamps: stamps,
+      journal: journal,
+    );
     statistics = PlayStatisticsRepository(
       databaseProvider: () => db,
       clock: () => 1000,
-      stamps: stamps,
-      journal: journal,
+      statisticsSync: statisticsSync,
     );
   });
 
@@ -134,8 +141,9 @@ void main() {
       hasLength(2),
     );
     // 曲目：加入 ×2 + 排序 ×2 + 移除 = 5 条，最后一条是墓碑。
-    final trackEntries =
-        window.where((entry) => entry.category == SyncCategory.playlistTracks).toList();
+    final trackEntries = window
+        .where((entry) => entry.category == SyncCategory.playlistTracks)
+        .toList();
     expect(trackEntries, hasLength(5));
     expect(trackEntries.first.record.key,
         SyncRecordKeys.playlistTrack(syncId, 'kuwo', 'song-1'));
@@ -194,12 +202,9 @@ void main() {
     expect(window, hasLength(1));
     expect(window.single.category, SyncCategory.statistics);
     expect(window.single.record.deleted, isFalse);
-    final exported = (await statistics.syncExportEvents()).single;
-    expect(window.single.record.key, exported['syncKey']);
-    expect(window.single.record.data, {
-      for (final entry in exported.entries)
-        if (entry.key != 'id') entry.key: entry.value,
-    });
+    final exported = (await statisticsSync.syncExportEvents()).single;
+    expect(window.single.record.key, exported.syncKey);
+    expect(window.single.record.data, exported.toData());
   });
 
   test('统计：进程被杀遗留事件收尾同样进日志', () async {
@@ -281,18 +286,16 @@ void main() {
         deletedAt: 900,
       ),
     ]);
-    await statistics.syncApplyEvents([
-      {
-        'sourceKey': 'kuwo',
-        'songId': 'song-7',
-        'title': '远端',
-        'startedAt': 1,
-        'endedAt': 2,
-        'syncKey': 'remote-event',
-        'versionPhysical': 9000,
-        'versionCounter': 0,
-        'originDeviceId': 'devB',
-      },
+    await statisticsSync.syncApplyEvents([
+      const StatisticsSyncEvent(
+        syncKey: 'remote-event',
+        version: SyncVersion(physical: 9000, deviceId: 'devB'),
+        sourceKey: 'kuwo',
+        songId: 'song-7',
+        title: '远端',
+        startedAt: 1,
+        endedAt: 2,
+      ),
     ]);
 
     expect(await journal.headSeq(), 0);

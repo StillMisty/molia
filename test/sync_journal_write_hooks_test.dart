@@ -8,6 +8,7 @@ import 'package:molia/data/sync/adapters/session_sync_adapter.dart';
 import 'package:molia/data/sync/sync_journal.dart';
 import 'package:molia/data/sync/sync_state_store.dart';
 import 'package:molia/domain/models/device_sync.dart';
+import 'package:molia/domain/ports/playback_session_sync.dart';
 import 'package:molia/services/playback_session_store.dart';
 import 'package:molia/sources/lx/lx_script_info.dart';
 import 'package:molia/sources/lx/lx_script_repository.dart';
@@ -157,9 +158,10 @@ void main() {
   });
 
   test('会话：保存后即时追加；窗口内高频保存合并，窗口外再追加', () async {
-    final store = PlaybackSessionStore(clock: () => DateTime.fromMillisecondsSinceEpoch(now));
+    final store = PlaybackSessionStore(
+        clock: () => DateTime.fromMillisecondsSinceEpoch(now));
     final adapter = SessionSyncAdapter(
-      store: store,
+      port: _StoreSessionPort(store),
       state: state,
       journal: journal,
     );
@@ -197,4 +199,23 @@ void main() {
     await adapter.collect();
     expect(await journal.headSeq(), 2);
   });
+}
+
+/// store → 同步端口的测试适配器。
+///
+/// 生产由 `PlaybackSessionCoordinator` 实现端口（唯一写者）；本测试只关心
+/// 写入点钩子，用一个最小的本地适配器把 store 接到 [SessionSyncAdapter]。
+class _StoreSessionPort implements PlaybackSessionSyncPort {
+  _StoreSessionPort(this._store);
+
+  final PlaybackSessionStore _store;
+
+  @override
+  Future<Map<String, dynamic>?> loadRaw() => _store.loadRaw();
+
+  @override
+  Future<void> applyRemote(Map<String, dynamic> raw) => _store.saveRaw(raw);
+
+  @override
+  Future<void> clearRemote() => _store.clear();
 }

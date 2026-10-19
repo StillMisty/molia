@@ -87,6 +87,12 @@ class _RecordingSessionStore extends PlaybackSessionStore {
   }
 
   @override
+  Future<void> saveRaw(Map<String, dynamic> raw) {
+    calls.add('saveRaw');
+    return persist ? super.saveRaw(raw) : Future<void>.value();
+  }
+
+  @override
   Future<void> clear() {
     calls.add('clear');
     return persist ? super.clear() : Future<void>.value();
@@ -277,8 +283,8 @@ void main() {
     expect(session.hasRestoredSession, isFalse);
 
     // 未命中（恢复队列里没有）：空操作。
-    expect(await session.playQueueItemById('fake:zzz'),
-        PlaybackCommandRoute.none);
+    expect(
+        await session.playQueueItemById('fake:zzz'), PlaybackCommandRoute.none);
   });
 
   test('恢复态：模式 / 换源改写保存的会话并落盘；未命中不算失败', () async {
@@ -360,8 +366,8 @@ void main() {
     gate.complete();
     expect(await resume, PlaybackCommandRoute.restored);
 
-    expect((backend as _LoadingBackend).seeks.last,
-        const Duration(seconds: 60));
+    expect(
+        (backend as _LoadingBackend).seeks.last, const Duration(seconds: 60));
     expect(session.position.value, const Duration(seconds: 60));
     expect(store.saves.last.position, const Duration(seconds: 60));
     expect(observed, isNot(contains(Duration.zero)));
@@ -385,7 +391,8 @@ void main() {
 
     // 暂停：强制落盘最新进度（不等节流窗口）。
     now = now.add(const Duration(milliseconds: 300));
-    backend.emit(_live(a, position: const Duration(seconds: 7), playing: false));
+    backend
+        .emit(_live(a, position: const Duration(seconds: 7), playing: false));
     expect(store.calls, ['save', 'save']);
     expect(store.saves.last.position, const Duration(seconds: 7));
 
@@ -393,6 +400,43 @@ void main() {
     await session.stopPlayback();
     await session.pendingWrite;
     expect(store.calls, ['save', 'save', 'clear']);
+    expect(await PlaybackSessionStore().loadRaw(), isNull);
+  });
+
+  test('同步端口：远端应用 / 删除走同一个 store 写队列，与本地保存在途时按序', () async {
+    build(persistStore: true);
+    backend.emit(_live(_track('a'), position: const Duration(seconds: 1)));
+
+    // 本地强制落盘与远端应用接连入队：pendingWrite 是同一个队列的尾巴，
+    // 远端写入不会插到在途本地保存之前。
+    final local = session.flushSession();
+    final remote = session.applyRemote({
+      PlaybackSessionStore.savedAtKey: 99000,
+      'index': 0,
+      'positionMs': 7000,
+      'mode': 'sequential',
+      'tracks': [
+        {
+          'sourceKey': 'fake',
+          'id': 'b',
+          'title': '远端曲目',
+          'origin': 'lx',
+          'payload': const <String, Object?>{},
+        },
+      ],
+    });
+    await session.pendingWrite;
+    await Future.wait([local, remote]);
+
+    // 切歌一次 + flush 一次 + 远端原样写入一次，顺序即调用顺序。
+    expect(store.calls, ['save', 'save', 'saveRaw']);
+    final raw = await session.loadRaw();
+    expect(raw![PlaybackSessionStore.savedAtKey], 99000);
+    expect((raw['tracks'] as List).single['title'], '远端曲目');
+
+    // 远端删除也入同一队列：清除后不会被在途保存复活。
+    await session.clearRemote();
+    expect(store.calls.last, 'clear');
     expect(await PlaybackSessionStore().loadRaw(), isNull);
   });
 

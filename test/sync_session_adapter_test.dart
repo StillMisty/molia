@@ -1,12 +1,16 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:molia/data/playback/default_playback_facade.dart';
 import 'package:molia/data/sync/adapters/session_sync_adapter.dart';
 import 'package:molia/data/sync/sync_state_store.dart';
 import 'package:molia/domain/models/device_sync.dart';
 import 'package:molia/domain/models/track.dart';
+import 'package:molia/domain/ports/playback_session_sync.dart';
 import 'package:molia/models/play_mode.dart';
+import 'package:molia/playback/playback_session_coordinator.dart';
 import 'package:molia/services/playback_session_store.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import 'support/fakes.dart';
 import 'support/sync_test_support.dart';
 
 /// 上次播放会话适配器：版本戳登记、远端应用/删除、本地清空检出。
@@ -16,6 +20,7 @@ void main() {
   late SharedPreferences prefs;
   late SyncStateStore state;
   late PlaybackSessionStore store;
+  late PlaybackSessionCoordinator coordinator;
   late SessionSyncAdapter adapter;
   var now = 5000;
   var changedCount = 0;
@@ -53,8 +58,15 @@ void main() {
       preferences: prefs,
       clock: () => DateTime.fromMillisecondsSinceEpoch(now),
     );
-    adapter = SessionSyncAdapter(
+    // 生产接线：同步适配器只拿到会话端口（协调者），远端写入与本地落盘
+    // 共用同一个写队列；这里的 store 只是同一队列的种子 / 断言入口。
+    coordinator = PlaybackSessionCoordinator(
+      facade: DefaultPlaybackFacade(backend: FakePlaybackBackend()),
       store: store,
+    );
+    addTearDown(coordinator.dispose);
+    adapter = SessionSyncAdapter(
+      port: coordinator,
       state: state,
       onChanged: () async => changedCount++,
     );
@@ -233,4 +245,84 @@ void main() {
     final collected = await adapter.collect();
     expect(collected, isEmpty);
   });
+
+  test('远端应用/删除只经注入的会话端口，不直连具体存储', () async {
+    final port = _RecordingSessionPort();
+    var changes = 0;
+    final isolated = SessionSyncAdapter(
+      port: port,
+      state: state,
+      onChanged: () async => changes++,
+    );
+
+    // 收集读端口。
+    await isolated.collect();
+    expect(port.calls, ['loadRaw']);
+
+    final remote = SyncRecord(
+      key: SyncRecordKeys.sessionKey,
+      version: const SyncVersion(physical: 20000, deviceId: 'devB'),
+      data: {
+        kPlaybackSessionSavedAtKey: 20000,
+        'index': 0,
+        'positionMs': 12345,
+        'mode': 'sequential',
+        'tracks': [
+          {
+            'sourceKey': 'fake',
+            'id': 'b',
+            'title': 'Remote Song',
+            'origin': 'lx',
+            'payload': {'id': 'b'},
+          },
+        ],
+      },
+    );
+    await isolated.apply({
+      SyncCategory.session: [remote],
+    });
+    expect(port.calls, ['loadRaw', 'applyRemote']);
+    expect(port.raw?[kPlaybackSessionSavedAtKey], 20000);
+    expect(port.raw, isNot(same(remote.data)));
+
+    // 远端删除同样只走端口；具体 store 没有被适配器碰过。
+    await isolated.apply({
+      SyncCategory.session: [
+        SyncRecord.tombstone(
+          key: SyncRecordKeys.sessionKey,
+          version: const SyncVersion(physical: 30000, deviceId: 'devB'),
+        ),
+      ],
+    });
+    expect(port.calls, ['loadRaw', 'applyRemote', 'clearRemote']);
+    expect(port.raw, isNull);
+    expect(await store.loadRaw(), isNull);
+    expect(changes, 2);
+  });
+}
+
+/// 记录调用面的假会话端口：证明适配器只依赖端口，不依赖具体 store。
+class _RecordingSessionPort implements PlaybackSessionSyncPort {
+  final List<String> calls = [];
+  Map<String, dynamic>? raw;
+
+  @override
+  Future<Map<String, dynamic>?> loadRaw() async {
+    calls.add('loadRaw');
+    final value = raw;
+    return value == null ? null : Map<String, dynamic>.from(value);
+  }
+
+  @override
+  Future<void> applyRemote(Map<String, dynamic> value) async {
+    calls.add('applyRemote');
+    // 复制一份：适配器后续不应依赖调用方持有的 map。
+    raw = Map<String, dynamic>.from(value);
+  }
+
+  @override
+  Future<void> clearRemote() async {
+    calls.add('clearRemote');
+    raw = null;
+  }
 }

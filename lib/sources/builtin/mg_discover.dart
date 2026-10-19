@@ -2,8 +2,8 @@ import '../../domain/models/discover.dart';
 import '../source_track.dart';
 import '../source_search_result.dart';
 import 'builtin_search.dart';
+import 'builtin_transport.dart';
 import 'crypto_utils.dart';
-import 'discover_fetch.dart';
 import 'discover_source.dart';
 import 'discover_track_mapper.dart';
 import 'mg_search.dart';
@@ -40,8 +40,7 @@ class MgDiscoverSource extends DiscoverSource {
       'Version/4.0 Mobile Safari/534.30';
 
   static const Map<String, String> _songListHeaders = {
-    'User-Agent':
-        'Mozilla/5.0 (iPhone; CPU iPhone OS 13_2_3 like Mac OS X) '
+    'User-Agent': 'Mozilla/5.0 (iPhone; CPU iPhone OS 13_2_3 like Mac OS X) '
         'AppleWebKit/605.1.15 (KHTML, like Gecko) Version/13.0.3 '
         'Mobile/15E148 Safari/604.1',
     'Referer': 'https://m.music.migu.cn/',
@@ -83,7 +82,7 @@ class MgDiscoverSource extends DiscoverSource {
   static Future<List<DiscoverTrack>> _fetchLeaderboard(String bangid) {
     return BuiltinSearch.transport.cachedRetry(
       'mg:leaderboard:$bangid',
-      maxTries: 4,
+      maxTries: BuiltinRetryBudget.leaderboard,
       attempt: (_) async {
         final body = await lxHttpGet(
           'https://app.c.nf.migu.cn/MIGUM2.0/v1.0/content/querycontentbyId.do'
@@ -154,8 +153,7 @@ class MgDiscoverSource extends DiscoverSource {
       final songId = item['songId']?.toString() ?? '';
       if (songId.isEmpty || !ids.add(songId)) continue;
 
-      final duration =
-          int.tryParse(item['duration']?.toString() ?? '') ?? 0;
+      final duration = int.tryParse(item['duration']?.toString() ?? '') ?? 0;
       list.add(MgSearch.buildTrack(
         songId: songId,
         copyrightId: item['copyrightId']?.toString() ?? '',
@@ -230,16 +228,15 @@ class MgDiscoverSource extends DiscoverSource {
     }
 
     return DiscoverTags(
-      hotTags:
-          rawList.isEmpty ? const [] : parseGroup(rawList.first),
+      hotTags: rawList.isEmpty ? const [] : parseGroup(rawList.first),
       categories: [
         for (final group in rawList.skip(1))
           if (group is Map)
             DiscoverTagCategory(
               name: (group['header'] is Map
-                      ? (group['header'] as Map)['title']
-                      : '')
-                  ?.toString() ??
+                          ? (group['header'] as Map)['title']
+                          : '')
+                      ?.toString() ??
                   '',
               tags: parseGroup(group),
             ),
@@ -256,7 +253,7 @@ class MgDiscoverSource extends DiscoverSource {
   static Future<DiscoverPlaylistPage> _fetchRecommend(int page) {
     return BuiltinSearch.transport.cachedRetry(
       'mg:playlists::$page',
-      maxTries: 3,
+      maxTries: BuiltinRetryBudget.discover,
       attempt: (_) async {
         final body = await lxHttpGet(
           'https://app.c.nf.migu.cn/pc/bmw/page-data/'
@@ -279,7 +276,7 @@ class MgDiscoverSource extends DiscoverSource {
   static Future<DiscoverPlaylistPage> _fetchTagList(String tagId, int page) {
     return BuiltinSearch.transport.cachedRetry(
       'mg:playlists:$tagId:$page',
-      maxTries: 3,
+      maxTries: BuiltinRetryBudget.discover,
       attempt: (_) async {
         final body = await lxHttpGet(
           'https://app.c.nf.migu.cn/pc/v1.0/template/'
@@ -351,11 +348,12 @@ class MgDiscoverSource extends DiscoverSource {
       final contentId = item['logEvent'] is Map
           ? (item['logEvent'] as Map)['contentId']
           : null;
-      final playCount = item['barList'] is List && (item['barList'] as List).isNotEmpty
-          ? ((item['barList'] as List)[0] is Map
-              ? ((item['barList'] as List)[0] as Map)['title']
-              : null)
-          : null;
+      final playCount =
+          item['barList'] is List && (item['barList'] as List).isNotEmpty
+              ? ((item['barList'] as List)[0] is Map
+                  ? ((item['barList'] as List)[0] as Map)['title']
+                  : null)
+              : null;
       list.add(DiscoverPlaylist(
         id: contentId?.toString() ?? '',
         name: (item['title'] ?? '').toString(),
@@ -369,7 +367,8 @@ class MgDiscoverSource extends DiscoverSource {
 
   @override
   Future<DiscoverPlaylistPage> searchPlaylists(String keyword, int page) {
-    return BuiltinSearch.transport.cached('mg:playlist-search:$keyword:$page', () async {
+    return BuiltinSearch.transport.cached('mg:playlist-search:$keyword:$page',
+        () async {
       final time = DateTime.now().millisecondsSinceEpoch.toString();
       final sign = md5Hex(
         '$keyword$_signatureMd5'
@@ -399,8 +398,7 @@ class MgDiscoverSource extends DiscoverSource {
       final resultData = body['songListResultData'];
       final items = (resultData is Map) ? resultData['result'] : null;
       return DiscoverPlaylistPage(
-        playlists: filterSongListResult(
-            items is List ? items : const []),
+        playlists: filterSongListResult(items is List ? items : const []),
         page: page,
         limit: 20,
         total: (resultData is Map
@@ -479,8 +477,8 @@ class MgDiscoverSource extends DiscoverSource {
   static Future<({List<SourceTrack> tracks, int total})> _fetchDetailList(
     String id,
   ) {
-    return retryRequest(
-      maxTries: 3,
+    return runBuiltinAttempts(
+      maxTries: BuiltinRetryBudget.discover,
       attempt: (_) async {
         final tracks = <SourceTrack>[];
         var total = 0;
@@ -510,8 +508,13 @@ class MgDiscoverSource extends DiscoverSource {
   }
 
   static Future<
-      ({String name, String? img, String? desc, String author, int playCount})?>
-      _fetchDetailInfo(String id) async {
+      ({
+        String name,
+        String? img,
+        String? desc,
+        String author,
+        int playCount
+      })?> _fetchDetailInfo(String id) async {
     try {
       final body = await lxHttpGet(
         'https://c.musicapp.migu.cn/MIGUM3.0/resource/playlist/v2.0'
@@ -545,7 +548,7 @@ class MgDiscoverSource extends DiscoverSource {
   static Future<List<String>> _fetchHotSearch() {
     return BuiltinSearch.transport.cachedRetry(
       'mg:hot-search',
-      maxTries: 3,
+      maxTries: BuiltinRetryBudget.discover,
       attempt: (_) async {
         final body = await lxHttpGet(
           'http://jadeite.migu.cn:7090/music_search/v3/search/hotword',

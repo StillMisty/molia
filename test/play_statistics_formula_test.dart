@@ -4,7 +4,6 @@
 /// Dart 判定都从它派生。任何一侧改了阈值而另一侧没跟上，本测试红。
 library;
 
-
 import 'package:flutter_test/flutter_test.dart';
 import 'package:molia/data/molia_database.dart';
 import 'package:molia/data/play_statistics_repository.dart';
@@ -37,7 +36,7 @@ void main() {
     db = openMemoryDatabase();
     repository = PlayStatisticsRepository(
       databaseProvider: () => db,
-      stamps: testStampIssuer(),
+      statisticsSync: testStatisticsSyncStore(() => db),
     );
     var index = 0;
     for (final (listenedMs, durationMs) in cases) {

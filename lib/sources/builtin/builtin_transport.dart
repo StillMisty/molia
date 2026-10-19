@@ -41,8 +41,8 @@ class BuiltinTransport {
   final Future<void> Function(int attempt)? retryDelay;
 
   /// 全局测试钩子（`test/flutter_test_config.dart` 置为 no-op）：不逐个
-  /// 构造函数注入也能让测试不产生真实等待。生产恒为 null；发现适配器的
-  /// `retryRequest` 复用同一钩子（两处退避是同一策略）。
+  /// 构造函数注入也能让测试不产生真实等待。生产恒为 null；发现端点走的
+  /// [runBuiltinAttempts] 复用同一钩子（两处退避是同一策略）。
   static Future<void> Function(int attempt)? retryDelayOverride;
 
   /// 默认重试退避：`base × 2^(n-1)` 封顶 [_retryBackoffMax]，叠加 ±30% 抖动。
@@ -54,8 +54,8 @@ class BuiltinTransport {
   static final math.Random _backoffJitter = math.Random();
 
   static Future<void> retryBackoff(int attempt) {
-    final exponential = retryBackoffBase.inMilliseconds *
-        (1 << (attempt - 1).clamp(0, 5));
+    final exponential =
+        retryBackoffBase.inMilliseconds * (1 << (attempt - 1).clamp(0, 5));
     final capped = math.min(exponential, _retryBackoffMax.inMilliseconds);
     final jitter = 0.7 + 0.6 * _backoffJitter.nextDouble();
     return Future<void>.delayed(
@@ -76,31 +76,30 @@ class BuiltinTransport {
 
   /// 缓存 + 重试的合并入口（发现适配器的唯一取数方式）。
   ///
-  /// 语义：
-  /// - [attempt] 返回 null = 本次尝试失败（平台业务码异常 / 结构不符），继续重试；
-  /// - 抛异常直接向上传播（不吞错、不重试——异常不是「本次尝试失败」）；
-  /// - 用尽 [maxTries] 抛 [StateError]（[message] 是调用方与上游约定的信号，
-  ///   见 `wy_leaderboard` 对 `'try max num'` 的豁免）；
-  /// - 只有成功结果进缓存（失败不缓存）。
+  /// 尝试循环本身在 [runBuiltinAttempts]（唯一实现）；这里只负责把成功结果
+  /// 包进 single-flight 缓存：失败/异常时 [RequestCache] 会移除条目，下一次
+  /// 调用重新尝试（失败不缓存）。
   Future<T> cachedRetry<T>(
     String key, {
     required int maxTries,
     String message = 'try max num',
     required Future<T?> Function(int tryNum) attempt,
   }) {
-    return cached(key, () async {
-      for (var tryNum = 0; tryNum < maxTries; tryNum++) {
-        if (tryNum > 0) await _delayBefore(tryNum);
-        final result = await attempt(tryNum);
-        if (result != null) return result;
-      }
-      throw StateError(message);
-    });
+    return cached(
+      key,
+      () => runBuiltinAttempts(
+        maxTries: maxTries,
+        message: message,
+        attempt: attempt,
+        delay: _delayBefore,
+      ),
+    );
   }
 
   static const Duration defaultTimeout = Duration(seconds: 15);
 
-  /// 统一重试预算（含首次尝试）：平台搜索与发现共用同一策略。
+  /// 统一重试预算（含首次尝试）：平台搜索等 HTTP 取数共用同一策略；
+  /// 发现端点的业务级重试预算见 [BuiltinRetryBudget]。
   static const int defaultRetries = 3;
 
   static const Map<String, String> defaultHeaders = {
@@ -231,9 +230,7 @@ class BuiltinTransport {
       try {
         final response = await send(attempt).timeout(timeout);
         final decoded = await decode(response);
-        if (retryIf != null &&
-            attempt < maxAttempts - 1 &&
-            retryIf(decoded)) {
+        if (retryIf != null && attempt < maxAttempts - 1 && retryIf(decoded)) {
           continue;
         }
         return decoded;
@@ -265,4 +262,51 @@ class BuiltinTransport {
           'HTTP ${response.statusCode}: invalid JSON body');
     }
   }
+}
+
+/// 发现 / 端点重试预算（含首次尝试）。
+///
+/// 数字集中在这里：平台文件按语义引用，避免同一策略在各适配器里漂移成
+/// 3/4/6。预算是首屏失败率的一部分，调整前先看对应条目的来由。
+abstract final class BuiltinRetryBudget {
+  /// 发现端点默认预算：首次 + 2 次重试（与传输层 [BuiltinTransport.defaultRetries]
+  /// 对齐；搜索与发现的业务级重试保持同一数量级）。
+  static const int discover = 3;
+
+  /// 榜单端点：榜单是发现页首屏，kw/kg/mg 沿用既有 4 次；
+  /// 比默认多一次，不要按默认 3 收紧。
+  static const int leaderboard = 4;
+
+  /// 网易云榜单：与 LX 原实现一致（详情 + 批量歌曲详情两段都可能抖动），
+  /// 沿用 6 次；收紧会改变首屏失败率。
+  static const int wyLeaderboard = 6;
+}
+
+/// 内置端点的共享尝试循环（唯一实现）。
+///
+/// - [attempt] 返回 `null` 表示本次尝试失败，未达 [maxTries] 时继续；
+/// - [attempt] 抛异常直接向上传播（异常不是「本次尝试失败」，不重试也不吞）；
+/// - 用尽 [maxTries] 抛 [StateError]（[message] 是调用方与上游约定的信号，
+///   见 `wy_leaderboard` 对 `'try max num'` 的豁免）；
+/// - 重试之间走 [delay]（传输实例注入）→ [BuiltinTransport.retryDelayOverride]
+///   → [BuiltinTransport.retryBackoff]，与传输层同一条指数退避 + 抖动策略。
+///
+/// 需要缓存时用 [BuiltinTransport.cachedRetry]；这里只负责尝试，不碰缓存。
+Future<T> runBuiltinAttempts<T>({
+  required int maxTries,
+  String message = 'try max num',
+  required Future<T?> Function(int tryNum) attempt,
+  Future<void> Function(int attempt)? delay,
+}) async {
+  for (var tryNum = 0; tryNum < maxTries; tryNum++) {
+    if (tryNum > 0) {
+      final wait = delay ??
+          BuiltinTransport.retryDelayOverride ??
+          BuiltinTransport.retryBackoff;
+      await wait(tryNum);
+    }
+    final result = await attempt(tryNum);
+    if (result != null) return result;
+  }
+  throw StateError(message);
 }

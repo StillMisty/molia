@@ -71,7 +71,8 @@ class _FakeSource implements MusicSource {
   SourceCapabilities get capabilities => const SourceCapabilities(search: true);
 
   @override
-  Future<SearchResult<Track>> search(SearchQuery query, {CancelToken? cancel}) async =>
+  Future<SearchResult<Track>> search(SearchQuery query,
+          {CancelToken? cancel}) async =>
       SearchResult(items: results);
 
   @override
@@ -165,7 +166,7 @@ void main() {
     db = openMemoryDatabase();
     statistics = PlayStatisticsRepository(
       databaseProvider: () => db,
-      stamps: testStampIssuer(),
+      statisticsSync: testStatisticsSyncStore(() => db),
     );
     llm = _FakeLlm('{}');
     service = buildService(const []);

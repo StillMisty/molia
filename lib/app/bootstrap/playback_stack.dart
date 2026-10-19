@@ -51,6 +51,9 @@ typedef PlaybackStack = ({
 
   /// 实时会话存储（同步栈据此标记「会话待外发」）。
   PlaybackSessionStore sessionStore,
+
+  /// 播放会话模块（同步栈经它应用远端会话，生产唯一的会话写队列）。
+  PlaybackSessionCoordinator sessionCoordinator,
 });
 
 /// 装配本地播放链路、播放 provider 与系统媒体会话。
@@ -103,8 +106,9 @@ Future<PlaybackStack> buildPlaybackStack({
     },
   );
   // 播放会话模块：恢复态 ↔ live 交接 + 会话落盘唯一写者。组合根创建共享
-  // 存储（同步栈也用同一实例标记「会话待外发」）并注入；恢复曲目的「最后
-  // 播放」展示接观察者。
+  // 存储（同步栈也用同一实例标记「会话待外发」）并注入，恢复曲目的「最后
+  // 播放」展示接观察者；同步栈拿到的是这个协调者（远端应用 / 删除同样走
+  // 它持有的写队列），不再另建 store。
   final sessionCoordinator = PlaybackSessionCoordinator(
     facade: playbackFacade,
     store: sessionStore,
@@ -156,5 +160,6 @@ Future<PlaybackStack> buildPlaybackStack({
     playbackProvider: playbackProvider,
     audioHandler: audioHandler,
     sessionStore: sessionStore,
+    sessionCoordinator: sessionCoordinator,
   );
 }

@@ -3,8 +3,8 @@ import 'dart:convert';
 import '../../domain/models/discover.dart';
 import '../source_search_result.dart';
 import 'builtin_search.dart';
+import 'builtin_transport.dart';
 import 'crypto_utils.dart';
-import 'discover_fetch.dart';
 import 'discover_source.dart';
 import 'discover_track_mapper.dart';
 import 'tx_search.dart';
@@ -50,8 +50,7 @@ class TxDiscoverSource extends DiscoverSource {
     DiscoverLeaderboard(id: 'tx__60', name: '抖快榜', bangid: '60'),
     DiscoverLeaderboard(id: 'tx__29', name: '影视金曲榜', bangid: '29'),
     DiscoverLeaderboard(id: 'tx__17', name: '日本榜', bangid: '17'),
-    DiscoverLeaderboard(
-        id: 'tx__52', name: '腾讯音乐人原创榜', bangid: '52'),
+    DiscoverLeaderboard(id: 'tx__52', name: '腾讯音乐人原创榜', bangid: '52'),
     DiscoverLeaderboard(id: 'tx__36', name: 'K歌金曲榜', bangid: '36'),
     DiscoverLeaderboard(id: 'tx__61', name: '台湾地区榜', bangid: '61'),
     DiscoverLeaderboard(id: 'tx__63', name: 'DJ舞曲榜', bangid: '63'),
@@ -61,8 +60,7 @@ class TxDiscoverSource extends DiscoverSource {
     DiscoverLeaderboard(id: 'tx__72', name: '动漫音乐榜', bangid: '72'),
     DiscoverLeaderboard(id: 'tx__73', name: '游戏音乐榜', bangid: '73'),
     DiscoverLeaderboard(id: 'tx__75', name: '有声榜', bangid: '75'),
-    DiscoverLeaderboard(
-        id: 'tx__131', name: '校园音乐人排行榜', bangid: '131'),
+    DiscoverLeaderboard(id: 'tx__131', name: '校园音乐人排行榜', bangid: '131'),
   ];
 
   @override
@@ -114,8 +112,8 @@ class TxDiscoverSource extends DiscoverSource {
   }
 
   static Future<List<DiscoverTagCategory>> _fetchTag() {
-    return retryRequest(
-      maxTries: 3,
+    return runBuiltinAttempts(
+      maxTries: BuiltinRetryBudget.discover,
       attempt: (_) async {
         final data = jsonEncode({
           'tags': {
@@ -189,7 +187,7 @@ class TxDiscoverSource extends DiscoverSource {
   static Future<DiscoverPlaylistPage> _fetchRecommend(int page) {
     return BuiltinSearch.transport.cachedRetry(
       'tx:playlists::$page',
-      maxTries: 3,
+      maxTries: BuiltinRetryBudget.discover,
       attempt: (_) async {
         final data = jsonEncode({
           'comm': {'cv': 1602, 'ct': 20},
@@ -208,8 +206,7 @@ class TxDiscoverSource extends DiscoverSource {
           '&needNewCode=0&data=${Uri.encodeComponent(data)}',
         );
         if (body is! Map || body['code'] != 0) return null;
-        final feed =
-            ((body['playlist'] as Map?)?['data'] as Map?)?['FeedRsp'];
+        final feed = ((body['playlist'] as Map?)?['data'] as Map?)?['FeedRsp'];
         final items = (feed is Map) ? feed['List'] : null;
         final playlists = <DiscoverPlaylist>[];
         if (items is List) {
@@ -235,7 +232,7 @@ class TxDiscoverSource extends DiscoverSource {
   static Future<DiscoverPlaylistPage> _fetchCategory(String tagId, int page) {
     return BuiltinSearch.transport.cachedRetry(
       'tx:playlists:$tagId:$page',
-      maxTries: 3,
+      maxTries: BuiltinRetryBudget.discover,
       attempt: (_) async {
         final id = int.tryParse(tagId) ?? tagId;
         final data = jsonEncode({
@@ -305,7 +302,8 @@ class TxDiscoverSource extends DiscoverSource {
 
   @override
   Future<DiscoverPlaylistPage> searchPlaylists(String keyword, int page) {
-    return BuiltinSearch.transport.cached('tx:playlist-search:$keyword:$page', () async {
+    return BuiltinSearch.transport.cached('tx:playlist-search:$keyword:$page',
+        () async {
       final body = await lxHttpGet(
         'https://c.y.qq.com/soso/fcgi-bin/client_music_search_songlist'
         '?page_no=${page - 1}&num_per_page=20&format=json'
@@ -483,7 +481,7 @@ class TxDiscoverSource extends DiscoverSource {
   static Future<List<String>> _fetchHotSearch() {
     return BuiltinSearch.transport.cachedRetry(
       'tx:hot-search',
-      maxTries: 3,
+      maxTries: BuiltinRetryBudget.discover,
       attempt: (_) async {
         final body = await lxHttpPost(
           'https://u.y.qq.com/cgi-bin/musicu.fcg',
@@ -511,8 +509,7 @@ class TxDiscoverSource extends DiscoverSource {
           },
         );
         if (body is! Map || body['code'] != 0) return null;
-        final vec =
-            ((body['hotkey'] as Map?)?['data'] as Map?)?['vec_hotkey'];
+        final vec = ((body['hotkey'] as Map?)?['data'] as Map?)?['vec_hotkey'];
         if (vec is! List) return null;
         return filterHotSearch(vec);
       },

@@ -63,7 +63,7 @@ void main() {
     db = openMemoryDatabase();
     repository = PlayStatisticsRepository(
       databaseProvider: () => db,
-      stamps: testStampIssuer(),
+      statisticsSync: testStatisticsSyncStore(() => db),
     );
     now = DateTime(2026, 1, 1, 12);
     service = PlayStatisticsService(

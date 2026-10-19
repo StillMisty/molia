@@ -33,7 +33,6 @@ import '../../domain/ports/sync_transport.dart';
 import '../../providers/sync_provider.dart';
 import '../../services/data_saver_service.dart';
 import '../../services/local_endpoints_service.dart';
-import '../../services/playback_session_store.dart';
 import 'catalog_stack.dart';
 import 'library_stack.dart';
 import 'playback_stack.dart';
@@ -83,12 +82,13 @@ Future<SyncStack> buildSyncStack({
     onApplied: catalog.settings.reloadKeys,
   );
   final statisticsSyncAdapter =
-      StatisticsSyncAdapter(repository: library.playStatisticsRepository);
+      StatisticsSyncAdapter(store: library.statisticsSyncStore);
   final historySyncAdapter =
       HistorySyncAdapter(repository: library.libraryRepository);
   final sessionSyncAdapter = SessionSyncAdapter(
-    // 会话适配器用独立的会话存储实例（与播放栈的实时会话落盘互不影响）。
-    store: PlaybackSessionStore(),
+    // 远端会话写入必须经过播放会话模块：与本地保存 / 清除共用同一个 store
+    // 写队列（另建 store 会在同一组 prefs 键上形成第二个写者）。
+    port: playback.sessionCoordinator,
     state: syncState,
     journal: library.syncJournal,
     onChanged: playback.playbackProvider.reloadRestoredSessionFromStore,

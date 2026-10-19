@@ -4,7 +4,7 @@ import 'package:flutter/services.dart';
 import 'package:material_3_expressive/material_3_expressive.dart';
 import 'package:material_ui/material_ui.dart';
 
-import '../domain/models/download.dart' show DownloadedTrack, kLocalSourceKey;
+import '../domain/models/download.dart' show kLocalSourceKey;
 import '../domain/models/library.dart';
 import '../l10n/app_localizations.dart';
 import '../utils/responsive.dart';
@@ -240,55 +240,6 @@ class CollectionSearchEmpty extends StatelessWidget {
       ),
     );
   }
-}
-
-/// 本地歌曲行：下载 / 导入副本，或命中完整音频缓存的曲目（缓存 = 已下载）。
-///
-/// 缓存行保留原曲身份（`sourceKey` / `songId` / `raw`），播放走正常解析
-/// （命中缓存即 `file://` 离线播放）；删除是「清缓存」，不动下载记录。
-class CollectionLocalSong {
-  const CollectionLocalSong.download(this.record) : history = null;
-
-  const CollectionLocalSong.cached(this.history) : record = null;
-
-  final DownloadedTrack? record;
-  final PlayHistoryEntry? history;
-
-  /// 是否缓存行（无下载 / 导入记录）。
-  bool get isCached => record == null;
-
-  /// 是否本地导入（就地引用）。
-  bool get isImported => record?.imported ?? false;
-
-  /// 稳定行 key。
-  String get key => record?.key ?? '${history!.sourceKey}:${history!.songId}';
-
-  String get title => record?.title ?? history!.title;
-
-  String get artist => record?.artist ?? history!.artist;
-
-  /// 专辑名：下载 / 导入副本取记录快照，缓存行沿用播放历史。
-  String get album => record?.album ?? history!.album;
-
-  int? get durationMs =>
-      record != null ? record!.durationMs : history!.durationMs;
-
-  /// 行封面地址：下载副本优先本地封面文件，缓存行用历史里的原图地址。
-  String? get artworkUri {
-    final record = this.record;
-    if (record != null) return record.artworkUri?.toString();
-    return history!.coverUrl;
-  }
-
-  /// 播放 / 收藏用的曲目快照（下载副本 = local 源；缓存行 = 原曲）。
-  PlaylistTrack toPlaylistTrack({required int addedAt}) => record != null
-      ? record!.toPlaylistTrack(addedAt: addedAt)
-      : PlaylistTrack.fromHistoryEntry(history!, addedAt: addedAt);
-
-  /// 收藏键（下载副本 = local 音源；缓存行 = 原曲键）。
-  ({String sourceKey, String songId}) get favoriteKey => record != null
-      ? (sourceKey: kLocalSourceKey, songId: record!.localSongId)
-      : (sourceKey: history!.sourceKey, songId: history!.songId);
 }
 
 /// 一条行动作的描述（触摸端左滑胶囊 / 桌面右键菜单共用）：图标 + 文案 +

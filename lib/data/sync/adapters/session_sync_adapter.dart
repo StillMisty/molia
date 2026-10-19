@@ -1,6 +1,6 @@
 import '../../../domain/models/device_sync.dart';
 import '../../../domain/models/download.dart' show kLocalSourceKey;
-import '../../../services/playback_session_store.dart';
+import '../../../domain/ports/playback_session_sync.dart';
 import '../sync_adapter.dart';
 import '../sync_journal.dart';
 import '../sync_state_store.dart';
@@ -15,16 +15,18 @@ import '../sync_state_store.dart';
 /// - 应用后经 [onChanged] 让播放器重载恢复态（仅在没有真实播放时生效）。
 class SessionSyncAdapter implements SyncAdapter {
   SessionSyncAdapter({
-    required PlaybackSessionStore store,
+    required PlaybackSessionSyncPort port,
     required SyncStateStore state,
     SyncJournalRepository? journal,
     Future<void> Function()? onChanged,
-  })  : _store = store,
+  })  : _port = port,
         _state = state,
         _journal = journal,
         _onChanged = onChanged;
 
-  final PlaybackSessionStore _store;
+  /// 会话读写端口（生产 = `PlaybackSessionCoordinator`，保证远端写入与本地
+  /// 保存共用同一个 store 写队列；测试也可直接注入 store）。
+  final PlaybackSessionSyncPort _port;
   final SyncStateStore _state;
 
   /// 增量日志（可选）：`savedAt` 变化（会话内容变化）时追加；首次登记
@@ -43,8 +45,9 @@ class SessionSyncAdapter implements SyncAdapter {
   bool get ready => true;
 
   @override
-  Future<Map<SyncCategory, List<SyncRecord>>> collect({bool fresh = false}) async {
-    final loaded = await _store.loadRaw();
+  Future<Map<SyncCategory, List<SyncRecord>>> collect(
+      {bool fresh = false}) async {
+    final loaded = await _port.loadRaw();
     // 本地下载曲目不同步：文件是设备本机的持久副本，其它设备无法播放。
     final raw = loaded == null ? null : _withoutLocalTracks(loaded);
     if (loaded != null && raw == null) {
@@ -61,14 +64,14 @@ class SessionSyncAdapter implements SyncAdapter {
       return const {};
     }
 
-    final savedAt =
-        (raw[PlaybackSessionStore.savedAtKey] as num?)?.toInt() ?? 0;
+    final savedAt = (raw[kPlaybackSessionSavedAtKey] as num?)?.toInt() ?? 0;
     final hash = '$savedAt';
     final SyncStamp effective;
     if (stamp == null || stamp.hash != hash) {
       // 没有 savedAt 的存量会话：零值戳（让新会话胜出），
       // 下次保存带来 savedAt 后自然参与 LWW。
-      final version = savedAt > 0 ? _state.stampIssuer.next() : SyncVersion.zero;
+      final version =
+          savedAt > 0 ? _state.stampIssuer.next() : SyncVersion.zero;
       effective = SyncStamp(hash: hash, version: version);
       _state.setSessionStamp(effective);
       // 首次登记不是变更（初始视图由全量快照覆盖）；真实变化追加日志。
@@ -111,7 +114,7 @@ class SessionSyncAdapter implements SyncAdapter {
         now - _lastImmediateAppendAt < immediateWindowMs) {
       return;
     }
-    final loaded = await _store.loadRaw();
+    final loaded = await _port.loadRaw();
     final raw = loaded == null ? null : _withoutLocalTracks(loaded);
     if (loaded != null && raw == null) return;
     final stamp = _state.sessionStamp;
@@ -119,8 +122,7 @@ class SessionSyncAdapter implements SyncAdapter {
       if (stamp == null) _state.setSessionStamp(const SyncStamp());
       return;
     }
-    final savedAt =
-        (raw[PlaybackSessionStore.savedAtKey] as num?)?.toInt() ?? 0;
+    final savedAt = (raw[kPlaybackSessionSavedAtKey] as num?)?.toInt() ?? 0;
     final hash = '$savedAt';
     if (stamp != null && stamp.hash == hash) return;
     final version = savedAt > 0 ? _state.stampIssuer.next() : SyncVersion.zero;
@@ -156,8 +158,7 @@ class SessionSyncAdapter implements SyncAdapter {
     if (record == null) return SyncApplyOutcome.none;
 
     final data = record.data;
-    final savedAt =
-        (data?[PlaybackSessionStore.savedAtKey] as num?)?.toInt() ?? 0;
+    final savedAt = (data?[kPlaybackSessionSavedAtKey] as num?)?.toInt() ?? 0;
     final stamp = _state.sessionStamp;
     if (stamp != null) {
       if (stamp.version.isNewerThan(record.version)) {
@@ -166,9 +167,9 @@ class SessionSyncAdapter implements SyncAdapter {
       // 同版本（只会来自全量快照的强制交付）：比较**当前会话**与登记——
       // 一致则幂等跳过；不一致（本地会话被直改）用权威视图修回去。
       if (stamp.version == record.version) {
-        final current = await _store.loadRaw();
+        final current = await _port.loadRaw();
         final currentSavedAt =
-            (current?[PlaybackSessionStore.savedAtKey] as num?)?.toInt() ?? 0;
+            (current?[kPlaybackSessionSavedAtKey] as num?)?.toInt() ?? 0;
         if (stamp.hash == '$currentSavedAt') {
           return const SyncApplyOutcome(applied: 0, skipped: 1);
         }
@@ -176,13 +177,13 @@ class SessionSyncAdapter implements SyncAdapter {
     }
 
     if (record.deleted) {
-      await _store.clear();
+      await _port.clearRemote();
       _state.setSessionStamp(SyncStamp(version: record.version));
     } else {
       if (data == null || data.isEmpty) {
         return const SyncApplyOutcome(applied: 0, skipped: 1);
       }
-      await _store.saveRaw(data.map((k, v) => MapEntry(k.toString(), v)));
+      await _port.applyRemote(data.map((k, v) => MapEntry(k.toString(), v)));
       _state.setSessionStamp(SyncStamp(
         hash: '$savedAt',
         version: record.version,

@@ -1,24 +1,22 @@
 import '../../../domain/models/device_sync.dart';
-import '../../../domain/models/download.dart' show kLocalSourceKey;
-import '../../play_statistics_repository.dart';
+import '../../../domain/ports/statistics_sync_store.dart';
 import '../sync_adapter.dart';
 
-/// 听歌统计适配器：`play_events` 已收尾事件的逐条合并。
+/// 听歌统计适配器：类型化事件 ↔ `SyncRecord` 的薄映射。
+///
+/// 导出缓存 / 指纹、存量键回填、本地下载曲目过滤与按 `syncKey` 合并都在
+/// [StatisticsSyncStore] 里；适配器不再认识 `play_events` 的列，也不再直接
+/// 依赖统计仓库。
 ///
 /// append-only 语义：记录键 = `syncKey`（跨设备去重的唯一键），版本 =
 /// 发号器给的三元组（收尾时取号）；`endedAt`（何时结束）是内容时间、
-/// **不参与胜负判定**——同键覆盖只可能来自「先同步了中途收尾的事件、
-/// 之后才真正收尾」的场景，按版本取新。删除不参与同步。
-///
-/// 本地下载曲目（`sourceKey = local`）的事件不同步：文件是设备本机的持久
-/// 副本，其它设备无法复现该曲目；本机统计不受影响。
+/// **不参与胜负判定**。删除不参与同步。
 class StatisticsSyncAdapter implements SyncAdapter {
-  StatisticsSyncAdapter({required PlayStatisticsRepository repository})
-      : _repository = repository;
+  StatisticsSyncAdapter({required StatisticsSyncStore store}) : _store = store;
 
-  final PlayStatisticsRepository _repository;
+  final StatisticsSyncStore _store;
 
-  /// 上轮记录缓存：键 = 已收尾事件的廉价指纹。
+  /// 上轮记录缓存：键 = 导出变更的廉价指纹。
   String? _cacheKey;
   Map<SyncCategory, List<SyncRecord>>? _cached;
 
@@ -29,8 +27,9 @@ class StatisticsSyncAdapter implements SyncAdapter {
   bool get ready => true;
 
   @override
-  Future<Map<SyncCategory, List<SyncRecord>>> collect({bool fresh = false}) async {
-    final key = await _repository.syncFingerprint();
+  Future<Map<SyncCategory, List<SyncRecord>>> collect(
+      {bool fresh = false}) async {
+    final key = await _store.syncFingerprint();
     final cached = _cached;
     if (!fresh && cached != null && _cacheKey == key) return cached;
     final records = await _readRecords();
@@ -40,24 +39,15 @@ class StatisticsSyncAdapter implements SyncAdapter {
   }
 
   Future<Map<SyncCategory, List<SyncRecord>>> _readRecords() async {
-    final events = await _repository.syncExportEvents();
+    final events = await _store.syncExportEvents();
     return {
       SyncCategory.statistics: [
         for (final event in events)
-          if (event['sourceKey'] != kLocalSourceKey &&
-              ((event['syncKey'] as String?)?.isNotEmpty ?? false))
-            SyncRecord(
-              key: event['syncKey'] as String,
-              version: SyncVersion(
-                physical: (event['versionPhysical'] as num?)?.toInt() ?? 0,
-                counter: (event['versionCounter'] as num?)?.toInt() ?? 0,
-                deviceId: event['originDeviceId'] as String? ?? '',
-              ),
-              data: {
-                for (final entry in event.entries)
-                  if (entry.key != 'id') entry.key: entry.value,
-              },
-            ),
+          SyncRecord(
+            key: event.syncKey,
+            version: event.version,
+            data: event.toData(),
+          ),
       ],
     };
   }
@@ -66,7 +56,7 @@ class StatisticsSyncAdapter implements SyncAdapter {
   Future<SyncApplyOutcome> apply(
     Map<SyncCategory, List<SyncRecord>> records,
   ) async {
-    final events = <Map<String, Object?>>[];
+    final events = <StatisticsSyncEvent>[];
     var skipped = 0;
     for (final record
         in records[SyncCategory.statistics] ?? const <SyncRecord>[]) {
@@ -74,21 +64,19 @@ class StatisticsSyncAdapter implements SyncAdapter {
         skipped++;
         continue;
       }
-      // 本地下载曲目的事件不落地（对端文件在本机不存在）。
-      if (record.data!['sourceKey'] == kLocalSourceKey) {
+      // 信封的键 / 版本是权威来源；data 里的版本列只用于自包含备份解析。
+      final event = StatisticsSyncEvent.fromData(
+        key: record.key,
+        version: record.version,
+        data: record.data!,
+      );
+      if (event == null) {
         skipped++;
         continue;
       }
-      // 版本以记录信封为准（data 里的版本列只用于自包含备份文件）。
-      events.add({
-        ...record.data!,
-        'syncKey': record.key,
-        'versionPhysical': record.version.physical,
-        'versionCounter': record.version.counter,
-        'originDeviceId': record.version.deviceId,
-      });
+      events.add(event);
     }
-    final result = await _repository.syncApplyEvents(events);
+    final result = await _store.syncApplyEvents(events);
     // 落地了远端事件：远端版本可能小于本机最大值，缓存显式失效。
     if (result.applied > 0) {
       _cacheKey = null;

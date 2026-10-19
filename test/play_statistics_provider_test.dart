@@ -1,4 +1,3 @@
-
 import 'package:flutter_test/flutter_test.dart';
 import 'package:molia/data/molia_database.dart';
 import 'package:molia/data/play_statistics_repository.dart';
@@ -55,7 +54,7 @@ void main() {
     db = openMemoryDatabase();
     repository = PlayStatisticsRepository(
       databaseProvider: () => db,
-      stamps: testStampIssuer(),
+      statisticsSync: testStatisticsSyncStore(() => db),
     );
     provider = PlayStatisticsProvider(repository: repository);
   });

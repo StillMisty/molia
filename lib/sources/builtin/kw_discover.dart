@@ -6,8 +6,8 @@ import '../source_track.dart';
 import '../source_search_result.dart';
 import 'artist_utils.dart';
 import 'builtin_search.dart';
+import 'builtin_transport.dart';
 import 'crypto_utils.dart';
-import 'discover_fetch.dart';
 import 'discover_source.dart';
 import 'discover_track_mapper.dart';
 import 'kw_search.dart';
@@ -92,7 +92,7 @@ class KwDiscoverSource extends DiscoverSource {
   static Future<List<DiscoverTrack>> _fetchLeaderboard(String bangid) {
     return BuiltinSearch.transport.cachedRetry(
       'kw:leaderboard:$bangid',
-      maxTries: 4,
+      maxTries: BuiltinRetryBudget.leaderboard,
       attempt: (_) async {
         final body = {
           'uid': '',
@@ -136,8 +136,7 @@ class KwDiscoverSource extends DiscoverSource {
         if (types.containsKey(type)) type: types[type]!,
     };
 
-    final duration =
-        int.tryParse(rawItem['duration']?.toString() ?? '') ?? 0;
+    final duration = int.tryParse(rawItem['duration']?.toString() ?? '') ?? 0;
     return KwSearch.buildTrack(
       songId: rawItem['id']?.toString() ?? '',
       name: decodeName(rawItem['name']?.toString()),
@@ -163,8 +162,8 @@ class KwDiscoverSource extends DiscoverSource {
   }
 
   static Future<List<DiscoverTagCategory>> _fetchTag() {
-    return retryRequest(
-      maxTries: 3,
+    return runBuiltinAttempts(
+      maxTries: BuiltinRetryBudget.discover,
       attempt: (_) async {
         final body = await lxHttpGet(
           'http://wapi.kuwo.cn/api/pc/classify/playlist/getTagList'
@@ -196,8 +195,8 @@ class KwDiscoverSource extends DiscoverSource {
       ];
 
   static Future<List<DiscoverTag>> _fetchHotTag() {
-    return retryRequest(
-      maxTries: 3,
+    return runBuiltinAttempts(
+      maxTries: BuiltinRetryBudget.discover,
       attempt: (_) async {
         final body = await lxHttpGet(
           'http://wapi.kuwo.cn/api/pc/classify/playlist/getRcmTagList'
@@ -234,7 +233,7 @@ class KwDiscoverSource extends DiscoverSource {
   static Future<DiscoverPlaylistPage> _fetchRecommend(int page) {
     return BuiltinSearch.transport.cachedRetry(
       'kw:playlists::$page',
-      maxTries: 3,
+      maxTries: BuiltinRetryBudget.discover,
       attempt: (_) async {
         final body = await lxHttpGet(
           'http://wapi.kuwo.cn/api/pc/classify/playlist/getRcmPlayList'
@@ -283,7 +282,7 @@ class KwDiscoverSource extends DiscoverSource {
   ) {
     return BuiltinSearch.transport.cachedRetry(
       'kw:playlists:$tagId:$page',
-      maxTries: 3,
+      maxTries: BuiltinRetryBudget.discover,
       attempt: (_) async {
         final parts = tagId.split('-');
         final id = parts.first;
@@ -352,7 +351,8 @@ class KwDiscoverSource extends DiscoverSource {
 
   @override
   Future<DiscoverPlaylistPage> searchPlaylists(String keyword, int page) {
-    return BuiltinSearch.transport.cached('kw:playlist-search:$keyword:$page', () async {
+    return BuiltinSearch.transport.cached('kw:playlist-search:$keyword:$page',
+        () async {
       final text = await lxHttpGetText(
         'http://search.kuwo.cn/r.s?all=${Uri.encodeComponent(keyword)}'
         '&pn=${page - 1}&rn=20&rformat=json&encoding=utf8&ver=mbox'
@@ -439,8 +439,8 @@ class KwDiscoverSource extends DiscoverSource {
 
   /// digest 8：歌曲类歌单（`nplserver/pl.svc`）。
   static Future<DiscoverDetail> _fetchDetailDigest8(String id) {
-    return retryRequest(
-      maxTries: 3,
+    return runBuiltinAttempts(
+      maxTries: BuiltinRetryBudget.discover,
       attempt: (_) async {
         final body = await lxHttpGet(
           'http://nplserver.kuwo.cn/pl.svc?op=getlistinfo&pid=$id&pn=0'
@@ -448,8 +448,8 @@ class KwDiscoverSource extends DiscoverSource {
           '&vipver=MUSIC_9.0.5.0_W1&newver=1',
         );
         if (body is! Map || body['result'] != 'ok') return null;
-        final tracks =
-            _mapTracks(filterListDetail(body['musiclist'] as List? ?? const []));
+        final tracks = _mapTracks(
+            filterListDetail(body['musiclist'] as List? ?? const []));
         return DiscoverDetail(
           info: DiscoverPlaylist(
             id: id,
@@ -470,8 +470,8 @@ class KwDiscoverSource extends DiscoverSource {
 
   /// digest 5：推荐歌单（先 `qukudata` 换算 sourceid，再取曲目）。
   static Future<DiscoverDetail> _fetchDetailDigest5(String id) {
-    return retryRequest(
-      maxTries: 3,
+    return runBuiltinAttempts(
+      maxTries: BuiltinRetryBudget.discover,
       attempt: (_) async {
         final infoBody = await lxHttpGet(
           'http://qukudata.kuwo.cn/q.k?op=query&cont=ninfo&node=$id&pn=0&rn=1'
@@ -503,8 +503,7 @@ class KwDiscoverSource extends DiscoverSource {
           if (types.containsKey(type)) type: types[type]!,
       };
 
-      final duration =
-          int.tryParse(item['duration']?.toString() ?? '') ?? 0;
+      final duration = int.tryParse(item['duration']?.toString() ?? '') ?? 0;
       list.add(KwSearch.buildTrack(
         songId: item['id']?.toString() ?? '',
         name: decodeName(item['name']?.toString()),
@@ -528,7 +527,7 @@ class KwDiscoverSource extends DiscoverSource {
   static Future<List<String>> _fetchHotSearch() {
     return BuiltinSearch.transport.cachedRetry(
       'kw:hot-search',
-      maxTries: 3,
+      maxTries: BuiltinRetryBudget.discover,
       attempt: (_) async {
         final body = await lxHttpGet(
           'http://hotword.kuwo.cn/hotword.s?prod=kwplayer_ar_9.3.0.1&corp=kuwo'

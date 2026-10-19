@@ -6,7 +6,10 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:molia/data/molia_database.dart';
 import 'package:molia/data/play_statistics_repository.dart';
 import 'package:molia/data/stats_payload_codec.dart';
+import 'package:molia/data/sync/statistics_sync_store.dart';
+import 'package:molia/domain/models/device_sync.dart';
 import 'package:molia/domain/models/play_statistics.dart';
+import 'package:molia/domain/ports/statistics_sync_store.dart';
 import 'support/sync_test_support.dart';
 
 import 'support/memory_database.dart';
@@ -15,6 +18,7 @@ import 'support/memory_database.dart';
 void main() {
   late MoliaDatabase db;
   late PlayStatisticsRepository repository;
+  late SqliteStatisticsSyncStore statisticsSync;
 
   /// 直接插入已收尾 / 进行中事件（查询测试用，绕开采集服务）。
   Future<int> insertEvent({
@@ -53,9 +57,10 @@ void main() {
 
   setUp(() async {
     db = openMemoryDatabase();
+    statisticsSync = testStatisticsSyncStore(() => db);
     repository = PlayStatisticsRepository(
       databaseProvider: () => db,
-      stamps: testStampIssuer(),
+      statisticsSync: statisticsSync,
     );
   });
 
@@ -558,14 +563,15 @@ void main() {
       maxPositionMs: 6000,
       endedAt: 2000,
     );
-    final exported = await repository.syncExportEvents();
+    final exported = await statisticsSync.syncExportEvents();
     expect(exported, hasLength(1));
-    expect(exported.single['songId'], '1');
-    expect(exported.single['syncKey'], isNotEmpty);
+    expect(exported.single.songId, '1');
+    expect(exported.single.syncKey, isNotEmpty);
     // 缓存命中复用同一列表实例。
-    expect(identical(await repository.syncExportEvents(), exported), isTrue);
+    expect(
+        identical(await statisticsSync.syncExportEvents(), exported), isTrue);
 
-    // 增量：新事件收尾后缓存就地更新（含 syncKey / 版本列）。
+    // 增量：新事件收尾后缓存就地更新（含 syncKey / 版本）。
     final second = await repository.startEvent(
       sourceKey: 'kw',
       songId: '2',
@@ -579,13 +585,13 @@ void main() {
       maxPositionMs: 3000,
       endedAt: 4000,
     );
-    final after = await repository.syncExportEvents();
+    final after = await statisticsSync.syncExportEvents();
     expect(after, hasLength(2));
-    expect(after.map((row) => row['songId']), containsAll(['1', '2']));
+    expect(after.map((row) => row.songId), containsAll(['1', '2']));
 
     // clearAll 后缓存失效：导出为空。
     await repository.clearAll();
-    expect(await repository.syncExportEvents(), isEmpty);
+    expect(await statisticsSync.syncExportEvents(), isEmpty);
   });
 
   test('保留策略：超出时长窗口与行数上限的已收尾事件被裁剪', () async {
@@ -607,8 +613,8 @@ void main() {
       retention: const Duration(days: 5),
     );
     expect(removed, 5);
-    final exported = await repository.syncExportEvents();
-    expect(exported.map((row) => row['songId']), ['new']);
+    final exported = await statisticsSync.syncExportEvents();
+    expect(exported.map((row) => row.songId), ['new']);
 
     // 行数上限：再插入两条并保留 1 行 → 只留最新（startedAt 最大）一条。
     await insertEvent(songId: 'a', startedAt: now + 1000, endedAt: now + 2000);
@@ -617,9 +623,9 @@ void main() {
       maxRows: 1,
       retention: const Duration(days: 3650),
     );
-    final trimmed = await repository.syncExportEvents();
+    final trimmed = await statisticsSync.syncExportEvents();
     expect(trimmed, hasLength(1));
-    expect(trimmed.single['songId'], 'b');
+    expect(trimmed.single.songId, 'b');
   });
 
   test('同步指纹：进行中事件不变，收尾后推进', () async {
@@ -629,11 +635,11 @@ void main() {
       title: '曲目',
       startedAt: 1000,
     );
-    final started = await repository.syncFingerprint();
+    final started = await statisticsSync.syncFingerprint();
 
     // 进行中事件不导出：进度更新不影响指纹。
     await repository.touchEvent(id, listenedMs: 5000, maxPositionMs: 5000);
-    expect(await repository.syncFingerprint(), started);
+    expect(await statisticsSync.syncFingerprint(), started);
 
     await repository.finishEvent(
       id,
@@ -642,7 +648,7 @@ void main() {
       maxPositionMs: 6000,
       endedAt: 2000,
     );
-    expect(await repository.syncFingerprint(), isNot(started));
+    expect(await statisticsSync.syncFingerprint(), isNot(started));
   });
 
   group('曲目内容表（play_tracks）', () {
@@ -782,12 +788,11 @@ void main() {
     test('同步导出：每条记录自包含（载荷按曲补齐）', () async {
       await playSameTrack(['v1', 'v2']);
 
-      final exported = await repository.syncExportEvents();
+      final exported = await statisticsSync.syncExportEvents();
       expect(exported, hasLength(2));
       for (final row in exported) {
-        expect((row['raw'] as String? ?? '').isNotEmpty, isTrue,
-            reason: '远端按记录独立落地，raw 必须补齐');
-        expect(jsonDecode(row['raw'] as String), {'v': 'v2'});
+        expect(row.raw.isNotEmpty, isTrue, reason: '远端按记录独立落地，raw 必须补齐');
+        expect(jsonDecode(row.raw), {'v': 'v2'});
       }
     });
 
@@ -807,38 +812,34 @@ void main() {
         endedAt: 5500,
       );
 
-      await repository.syncApplyEvents([
-        {
-          'sourceKey': 'wy',
-          'songId': 'same',
-          'title': '远端旧标题',
-          'raw': '{"v":"old"}',
-          'startedAt': 3000,
-          'endedAt': 3500,
-          'syncKey': 'remote-old',
-          'versionPhysical': 9000,
-          'versionCounter': 0,
-          'originDeviceId': 'devB',
-        },
+      await statisticsSync.syncApplyEvents([
+        StatisticsSyncEvent(
+          syncKey: 'remote-old',
+          version: const SyncVersion(physical: 9000, deviceId: 'devB'),
+          sourceKey: 'wy',
+          songId: 'same',
+          title: '远端旧标题',
+          raw: '{"v":"old"}',
+          startedAt: 3000,
+          endedAt: 3500,
+        ),
       ]);
       expect(await tableRows(db, 'play_events'), hasLength(2), reason: '事件仍落地');
       var track = (await tableRows(db, 'play_tracks')).single;
       expect(track['title'], '本机新标题', reason: '旧事件不覆盖新内容');
       expect(decodeStatsPayload(track['raw']), '{"v":"local"}');
 
-      await repository.syncApplyEvents([
-        {
-          'sourceKey': 'wy',
-          'songId': 'same',
-          'title': '远端新标题',
-          'raw': '{"v":"new"}',
-          'startedAt': 9000,
-          'endedAt': 9500,
-          'syncKey': 'remote-new',
-          'versionPhysical': 9001,
-          'versionCounter': 0,
-          'originDeviceId': 'devB',
-        },
+      await statisticsSync.syncApplyEvents([
+        StatisticsSyncEvent(
+          syncKey: 'remote-new',
+          version: const SyncVersion(physical: 9001, deviceId: 'devB'),
+          sourceKey: 'wy',
+          songId: 'same',
+          title: '远端新标题',
+          raw: '{"v":"new"}',
+          startedAt: 9000,
+          endedAt: 9500,
+        ),
       ]);
       track = (await tableRows(db, 'play_tracks')).single;
       expect(track['title'], '远端新标题');

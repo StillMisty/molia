@@ -1,6 +1,8 @@
 import 'dart:async';
 
+import 'package:molia/data/molia_database.dart';
 import 'package:molia/data/settings/settings_secret_store.dart';
+import 'package:molia/data/sync/statistics_sync_store.dart';
 import 'package:molia/data/sync/sync_journal.dart';
 import 'package:molia/data/sync/sync_stamp.dart';
 import 'package:molia/domain/models/device_sync.dart';
@@ -15,6 +17,19 @@ SyncStampIssuer testStampIssuer({
     SyncStampIssuer(
       clock: clock ?? () => DateTime.now().millisecondsSinceEpoch,
       deviceId: () => deviceId,
+    );
+
+/// 测试用统计同步存储：与仓储共用同一个内存库 / 发号器 / 日志。
+SqliteStatisticsSyncStore testStatisticsSyncStore(
+  MoliaDatabase Function() databaseProvider, {
+  int Function()? clock,
+  String deviceId = '',
+  SyncJournalRepository? journal,
+}) =>
+    SqliteStatisticsSyncStore(
+      databaseProvider: databaseProvider,
+      stamps: testStampIssuer(clock: clock, deviceId: deviceId),
+      journal: journal,
     );
 
 /// 测试用内存密钥存储（替代 flutter_secure_storage）。
@@ -180,7 +195,8 @@ class FakeSyncTransport implements SyncTransport {
   }
 
   @override
-  Future<SyncPullResult> pull([SyncPullRequest request = SyncPullRequest.none]) async {
+  Future<SyncPullResult> pull(
+      [SyncPullRequest request = SyncPullRequest.none]) async {
     pullCount++;
     lastRequest = request;
     await onPull?.call();
@@ -269,7 +285,8 @@ class FakeJournalStore implements SyncJournalStore {
       );
 
   @override
-  Future<List<SyncJournalEntry>> window({int since = -1, int limit = 0}) async =>
+  Future<List<SyncJournalEntry>> window(
+          {int since = -1, int limit = 0}) async =>
       const [];
 
   @override

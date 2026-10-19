@@ -160,11 +160,10 @@ class _FakeStatisticsRepository extends PlayStatisticsRepository {
     this.sourcesData = const [],
   }) : super(
           databaseProvider: _unusedDatabase,
-          stamps: testStampIssuer(),
+          statisticsSync: testStatisticsSyncStore(_unusedDatabase),
         );
 
-  static MoliaDatabase _unusedDatabase() =>
-      throw StateError('测试不访问数据库');
+  static MoliaDatabase _unusedDatabase() => throw StateError('测试不访问数据库');
 
   final PlayStatisticsSummary summaryData;
   final List<PlayStatTrackEntry> topTracksData;

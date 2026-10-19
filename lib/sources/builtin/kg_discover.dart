@@ -4,8 +4,8 @@ import '../../domain/models/discover.dart';
 import '../source_track.dart';
 import '../source_search_result.dart';
 import 'builtin_search.dart';
+import 'builtin_transport.dart';
 import 'crypto_utils.dart';
-import 'discover_fetch.dart';
 import 'discover_source.dart';
 import 'discover_track_mapper.dart';
 import 'kg_search.dart';
@@ -28,8 +28,8 @@ class KgDiscoverSource extends DiscoverSource {
   static const String _gatewayKey = 'OIlwieks28dk2k092lksi2UIkp';
 
   static final RegExp _listDataExp = RegExp(r'global\.data = (\[.+\]);');
-  static final RegExp _listInfoExp = RegExp(
-      r'global = {[\s\S]+?name: "(.+)"[\s\S]+?pic: "(.+)"[\s\S]+?};');
+  static final RegExp _listInfoExp =
+      RegExp(r'global = {[\s\S]+?name: "(.+)"[\s\S]+?pic: "(.+)"[\s\S]+?};');
 
   @override
   String get sourceKey => 'kg';
@@ -102,7 +102,7 @@ class KgDiscoverSource extends DiscoverSource {
   static Future<List<DiscoverTrack>> _fetchLeaderboard(String bangid) {
     return BuiltinSearch.transport.cachedRetry(
       'kg:leaderboard:$bangid',
-      maxTries: 4,
+      maxTries: BuiltinRetryBudget.leaderboard,
       attempt: (_) async {
         final body = await lxHttpGet(
           'http://mobilecdnbj.kugou.com/api/v3/rank/song?version=9108'
@@ -145,8 +145,7 @@ class KgDiscoverSource extends DiscoverSource {
       }
     }
     final singer = singerNames.join('、');
-    final duration =
-        int.tryParse(rawItem['duration']?.toString() ?? '') ?? 0;
+    final duration = int.tryParse(rawItem['duration']?.toString() ?? '') ?? 0;
     return KgSearch.buildTrack(
       songId: rawItem['audio_id']?.toString() ?? '',
       name: decodeName(rawItem['songname']?.toString()),
@@ -220,7 +219,8 @@ class KgDiscoverSource extends DiscoverSource {
 
   @override
   Future<DiscoverPlaylistPage> playlists(String tagId, int page) {
-    return BuiltinSearch.transport.cached('kg:playlists:$tagId:$page', () async {
+    return BuiltinSearch.transport.cached('kg:playlists:$tagId:$page',
+        () async {
       final list = await _fetchSongList(tagId, page);
       final info = tagId.isEmpty ? null : await _fetchListInfo(tagId);
       final total = parseSourceCount(info?['total']) ?? list.length;
@@ -238,8 +238,8 @@ class KgDiscoverSource extends DiscoverSource {
   }
 
   static Future<List<dynamic>> _fetchSongList(String tagId, int page) {
-    return retryRequest(
-      maxTries: 3,
+    return runBuiltinAttempts(
+      maxTries: BuiltinRetryBudget.discover,
       attempt: (_) async {
         // LX 默认排序 = 推荐（t=5）。
         final body = await lxHttpGet(
@@ -261,7 +261,8 @@ class KgDiscoverSource extends DiscoverSource {
         '?is_smarty=1&cdn=cdn&t=5&c=$tagId',
       );
       if (body is! Map || body['status'] != 1) return null;
-      final params = (body['data'] is Map) ? (body['data'] as Map)['params'] : null;
+      final params =
+          (body['data'] is Map) ? (body['data'] as Map)['params'] : null;
       return params is Map ? params.cast<String, dynamic>() : null;
     } catch (_) {
       return null;
@@ -279,7 +280,8 @@ class KgDiscoverSource extends DiscoverSource {
       name: (item['specialname'] ?? '').toString(),
       coverUrl: (img == null || img.isEmpty) ? null : img,
       author: (item['nickname'] ?? '').toString(),
-      playCount: parseSourceCount(item['total_play_count'] ?? item['play_count']) ?? 0,
+      playCount:
+          parseSourceCount(item['total_play_count'] ?? item['play_count']) ?? 0,
       trackCount: parseSourceCount(item['songcount']) ?? 0,
       description: (item['intro']?.toString().isNotEmpty ?? false)
           ? item['intro'].toString()
@@ -289,7 +291,8 @@ class KgDiscoverSource extends DiscoverSource {
 
   @override
   Future<DiscoverPlaylistPage> searchPlaylists(String keyword, int page) {
-    return BuiltinSearch.transport.cached('kg:playlist-search:$keyword:$page', () async {
+    return BuiltinSearch.transport.cached('kg:playlist-search:$keyword:$page',
+        () async {
       final body = await lxHttpGet(
         'http://msearchretry.kugou.com/api/v3/search/special'
         '?keyword=${Uri.encodeComponent(keyword)}&page=$page&pagesize=20'
@@ -351,7 +354,7 @@ class KgDiscoverSource extends DiscoverSource {
   static Future<DiscoverDetail> _fetchDetailBySpecialId(String id) {
     return BuiltinSearch.transport.cachedRetry(
       'kg:playlist-detail:$id',
-      maxTries: 3,
+      maxTries: BuiltinRetryBudget.discover,
       attempt: (_) async {
         final html = await lxHttpGetText(
           'http://www2.kugou.kugou.com/yueku/v9/special/single/$id-5-9999.html',
@@ -401,8 +404,8 @@ class KgDiscoverSource extends DiscoverSource {
   static Future<List<SourceTrack>> _fetchMusicInfos(
     List<Map<String, dynamic>> hashes,
   ) {
-    const maxTries = 3;
-    return retryRequest(
+    const maxTries = BuiltinRetryBudget.discover;
+    return runBuiltinAttempts(
       maxTries: maxTries,
       attempt: (tryNum) async {
         final tracks = <SourceTrack>[];
@@ -476,8 +479,7 @@ class KgDiscoverSource extends DiscoverSource {
     final singer = decodeName(item['author_name']?.toString());
     final albumName =
         decodeName(album is Map ? album['album_name']?.toString() : '');
-    final durationMs =
-        int.tryParse(audio['timelength']?.toString() ?? '') ?? 0;
+    final durationMs = int.tryParse(audio['timelength']?.toString() ?? '') ?? 0;
 
     return KgSearch.buildTrack(
       songId: audio['audio_id']?.toString() ?? '',
@@ -486,9 +488,8 @@ class KgDiscoverSource extends DiscoverSource {
       album: albumName,
       albumId: album is Map ? album['album_id']?.toString() ?? '' : '',
       hash: audio['hash']?.toString() ?? '',
-      intervalText: durationMs > 0
-          ? formatPlayTime((durationMs / 1000).floor())
-          : null,
+      intervalText:
+          durationMs > 0 ? formatPlayTime((durationMs / 1000).floor()) : null,
       duration: durationMs > 0 ? Duration(milliseconds: durationMs) : null,
       types: types,
     );
@@ -502,7 +503,7 @@ class KgDiscoverSource extends DiscoverSource {
   static Future<List<String>> _fetchHotSearch() {
     return BuiltinSearch.transport.cachedRetry(
       'kg:hot-search',
-      maxTries: 3,
+      maxTries: BuiltinRetryBudget.discover,
       attempt: (_) async {
         final body = await lxHttpGet(
           'http://gateway.kugou.com/api/v3/search/hot_tab'

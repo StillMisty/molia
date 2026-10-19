@@ -89,7 +89,9 @@ void main() {
     playStatisticsService = PlayStatisticsService(
       repository: PlayStatisticsRepository(
         databaseProvider: () => throw StateError('测试不访问数据库'),
-        stamps: testStampIssuer(),
+        statisticsSync: testStatisticsSyncStore(
+          () => throw StateError('测试不访问数据库'),
+        ),
       ),
       settings: testSettingsRegistry(
         preferences: await SharedPreferences.getInstance(),
@@ -1609,4 +1611,3 @@ class _FakeMediaOutput implements LyricsOutput {
   @override
   Future<void> stop() async {}
 }
-

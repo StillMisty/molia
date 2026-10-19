@@ -5,6 +5,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import '../domain/models/playback.dart';
 import '../domain/models/track.dart';
+import '../domain/ports/playback_session_sync.dart';
 import '../models/play_mode.dart';
 
 /// 上次播放会话：队列 + 下标 + 进度 + 模式 + 上下文。
@@ -111,7 +112,7 @@ class PlaybackSessionStore {
   static const String _positionKey = 'playback_session_position_v1';
 
   /// 写入时间戳键（跨设备同步用它判断会话新旧；旧数据缺省按 0 处理）。
-  static const String savedAtKey = 'savedAt';
+  static const String savedAtKey = kPlaybackSessionSavedAtKey;
 
   /// [preferences] / [clock] 仅测试注入。
   PlaybackSessionStore({
@@ -281,9 +282,8 @@ Track _trackFromJson(Map<String, dynamic> json) {
             ),
     ],
     album: json['album'] as String?,
-    duration: durationMs is num
-        ? Duration(milliseconds: durationMs.toInt())
-        : null,
+    duration:
+        durationMs is num ? Duration(milliseconds: durationMs.toInt()) : null,
     artwork: artworkUrl != null && artworkUrl.isNotEmpty
         ? Artwork(uri: Uri.parse(artworkUrl))
         : null,

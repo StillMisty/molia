@@ -1,6 +1,7 @@
 import '../../domain/models/discover.dart';
 import '../source_track.dart';
 import 'builtin_search.dart';
+import 'builtin_transport.dart';
 import 'crypto_utils.dart';
 import 'wy_music_detail.dart';
 
@@ -28,10 +29,8 @@ class WyLeaderboard {
     DiscoverLeaderboard(id: 'wy__71385702', name: 'ACG榜', bangid: '71385702'),
     DiscoverLeaderboard(id: 'wy__745956260', name: '韩语榜', bangid: '745956260'),
     DiscoverLeaderboard(id: 'wy__10520166', name: '国电榜', bangid: '10520166'),
-    DiscoverLeaderboard(
-        id: 'wy__180106', name: 'UK排行榜周榜', bangid: '180106'),
-    DiscoverLeaderboard(
-        id: 'wy__60198', name: '美国Billboard榜', bangid: '60198'),
+    DiscoverLeaderboard(id: 'wy__180106', name: 'UK排行榜周榜', bangid: '180106'),
+    DiscoverLeaderboard(id: 'wy__60198', name: '美国Billboard榜', bangid: '60198'),
     DiscoverLeaderboard(
         id: 'wy__3812895', name: 'Beatport全球电子舞曲榜', bangid: '3812895'),
     DiscoverLeaderboard(id: 'wy__21845217', name: 'KTV唛榜', bangid: '21845217'),
@@ -50,25 +49,30 @@ class WyLeaderboard {
         id: 'wy__3001890046', name: 'ACG VOCALOID榜', bangid: '3001890046'),
     DiscoverLeaderboard(
         id: 'wy__3112516681', name: '中国新乡村音乐排行榜', bangid: '3112516681'),
-    DiscoverLeaderboard(id: 'wy__5059644681', name: '日语榜', bangid: '5059644681'),
-    DiscoverLeaderboard(id: 'wy__5059633707', name: '摇滚榜', bangid: '5059633707'),
-    DiscoverLeaderboard(id: 'wy__5059642708', name: '国风榜', bangid: '5059642708'),
+    DiscoverLeaderboard(
+        id: 'wy__5059644681', name: '日语榜', bangid: '5059644681'),
+    DiscoverLeaderboard(
+        id: 'wy__5059633707', name: '摇滚榜', bangid: '5059633707'),
+    DiscoverLeaderboard(
+        id: 'wy__5059642708', name: '国风榜', bangid: '5059642708'),
     DiscoverLeaderboard(
         id: 'wy__5338990334', name: '潜力爆款榜', bangid: '5338990334'),
-    DiscoverLeaderboard(id: 'wy__5059661515', name: '民谣榜', bangid: '5059661515'),
+    DiscoverLeaderboard(
+        id: 'wy__5059661515', name: '民谣榜', bangid: '5059661515'),
     DiscoverLeaderboard(
         id: 'wy__6688069460', name: '听歌识曲榜', bangid: '6688069460'),
     DiscoverLeaderboard(
         id: 'wy__6723173524', name: '网络热歌榜', bangid: '6723173524'),
-    DiscoverLeaderboard(id: 'wy__6732051320', name: '俄语榜', bangid: '6732051320'),
+    DiscoverLeaderboard(
+        id: 'wy__6732051320', name: '俄语榜', bangid: '6732051320'),
     DiscoverLeaderboard(
         id: 'wy__6732014811', name: '越南语榜', bangid: '6732014811'),
-    DiscoverLeaderboard(id: 'wy__6886768100', name: '中文DJ榜', bangid: '6886768100'),
     DiscoverLeaderboard(
-        id: 'wy__6939992364',
-        name: '俄罗斯top hit流行音乐榜',
-        bangid: '6939992364'),
-    DiscoverLeaderboard(id: 'wy__7095271308', name: '泰语榜', bangid: '7095271308'),
+        id: 'wy__6886768100', name: '中文DJ榜', bangid: '6886768100'),
+    DiscoverLeaderboard(
+        id: 'wy__6939992364', name: '俄罗斯top hit流行音乐榜', bangid: '6939992364'),
+    DiscoverLeaderboard(
+        id: 'wy__7095271308', name: '泰语榜', bangid: '7095271308'),
     DiscoverLeaderboard(
         id: 'wy__7356827205', name: 'BEAT排行榜', bangid: '7356827205'),
     DiscoverLeaderboard(
@@ -77,7 +81,8 @@ class WyLeaderboard {
         bangid: '7325478166'),
     DiscoverLeaderboard(
         id: 'wy__7603212484', name: 'LOOK直播歌曲榜', bangid: '7603212484'),
-    DiscoverLeaderboard(id: 'wy__7775163417', name: '赏音榜', bangid: '7775163417'),
+    DiscoverLeaderboard(
+        id: 'wy__7775163417', name: '赏音榜', bangid: '7775163417'),
     DiscoverLeaderboard(
         id: 'wy__7785123708', name: '黑胶VIP新歌榜', bangid: '7785123708'),
     DiscoverLeaderboard(
@@ -95,7 +100,7 @@ class WyLeaderboard {
   static Future<List<SourceTrack>> _fetch(String bangid) {
     return BuiltinSearch.transport.cachedRetry(
       'wy:leaderboard:$bangid',
-      maxTries: 6,
+      maxTries: BuiltinRetryBudget.wyLeaderboard,
       attempt: (_) async {
         dynamic body;
         try {
