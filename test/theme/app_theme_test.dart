@@ -94,23 +94,47 @@ void main() {
       );
     });
 
-    test('未自定义字体时不注入字体族（走平台默认排版），自定义字体优先', () {
-      // 「系统默认」= ThemeData 的平台默认排版（Windows = Segoe UI、
-      // Android/Linux = Roboto——与 Chrome / 其它 Flutter 应用同源）；
-      // 主题层不做平台特判，**不读**系统窗口字体 MessageFont。
+    test('系统默认字体优先于平台排版，自定义字体优先于系统字体', () {
+      // 未注入系统字体时仍走 ThemeData 的平台默认排版（Windows = Segoe UI）；
+      // Windows 的真实系统字体由启动时读取 MessageFont 后显式注入。
       final data = buildAppThemeData(light);
       final defaultFamily =
           ThemeData(colorScheme: light).textTheme.bodyMedium?.fontFamily;
       expect(data.textTheme.bodyMedium?.fontFamily, defaultFamily);
+      expect(data.textTheme.bodyMedium?.fontFamilyFallback, isNull);
       // M3E 侧同步（typeScale 从 ThemeData.textTheme 映射）。
       expect(
         M3EThemeData.fromMaterial(data).typeScale.bodyMedium.fontFamily,
         defaultFamily,
       );
 
-      // 自定义字体直接落到两套主题。
-      final custom = buildAppThemeData(light, fontFamily: 'Noto Sans CJK SC');
+      // 系统默认字体 + 缺字回退链落到两套主题。
+      final system = buildAppThemeData(
+        light,
+        platformDefaultFontFamily: 'Microsoft YaHei UI',
+        platformDefaultFontFallbacks: const ['Segoe UI', 'Microsoft YaHei'],
+      );
+      expect(system.textTheme.bodyMedium?.fontFamily, 'Microsoft YaHei UI');
+      expect(
+        system.textTheme.bodyMedium?.fontFamilyFallback,
+        const ['Segoe UI', 'Microsoft YaHei'],
+      );
+      final systemM3E = M3EThemeData.fromMaterial(system).typeScale.bodyMedium;
+      expect(systemM3E.fontFamily, 'Microsoft YaHei UI');
+      expect(
+        systemM3E.fontFamilyFallback,
+        const ['Segoe UI', 'Microsoft YaHei'],
+      );
+
+      // 自定义字体优先，且不追加系统字体的回退链（尊重用户选择）。
+      final custom = buildAppThemeData(
+        light,
+        fontFamily: 'Noto Sans CJK SC',
+        platformDefaultFontFamily: 'Microsoft YaHei UI',
+        platformDefaultFontFallbacks: const ['Segoe UI', 'Microsoft YaHei'],
+      );
       expect(custom.textTheme.bodyMedium?.fontFamily, 'Noto Sans CJK SC');
+      expect(custom.textTheme.bodyMedium?.fontFamilyFallback, isNull);
       expect(
         M3EThemeData.fromMaterial(custom).typeScale.bodyMedium.fontFamily,
         'Noto Sans CJK SC',

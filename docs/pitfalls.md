@@ -52,12 +52,15 @@
     后缀（`Arial Bold`），不能直接当家族名），海报页可
     独立覆盖（`PosterFontStore`）。不要再向 `pubspec.yaml` 的 `fonts:` 或
     `assets/fonts/` 添加字体，保持包体精简。
-    未自定义「应用字体」时不注入字体族（`fontFamily: null`）= 引擎默认字体
-    （Windows = Segoe UI + 引擎 CJK 回退，与 Chrome / 其它 Flutter 应用同源）。
-    不要改回去读系统「窗口字体」（`WindowMetrics\MessageFont`，中文系统 =
-    Microsoft YaHei UI）：那是原生 Win32 标题栏 / 消息框的口径，拉丁与数字字形
-    和「其它应用」不一致（实测体感就是「字体像另一个应用」）；想要窗口字体的
-    用户在选择器里选 `Microsoft YaHei UI` 即可（枚举里本来就有）。
+    未自定义「应用字体」时 Windows 读取系统 UI 字体
+    （`HKCU\Control Panel\Desktop\WindowMetrics\MessageFont` 的 LOGFONTW
+    face name，中文系统通常是 `Microsoft YaHei UI`；失败才回退引擎默认）。
+    **不能**把 Flutter ThemeData 的 Windows 默认排版当作系统字体：它硬编码
+    Segoe UI（Material Redmond 排版），中文靠 DirectWrite 逐字回退，Flutter
+    官方明确不保证回退结果（flutter/flutter#103811），实测可能不是系统 UI
+    字体。系统字体缺字时才用 `Segoe UI → Microsoft YaHei UI → Microsoft
+    YaHei` 兜底；自定义「应用字体」优先，不追加这条链。其它平台不注入
+    （引擎默认已是系统字体）。
     原生渲染面的跟随范围：Android 桌面歌词悬浮窗能跟（`OverlayConfig.fontFamily`
     → `Typeface.create`，解析不到回退系统默认）；通知 / 锁屏媒体歌词由系统
     （media3 / SystemUI）渲染、主屏小组件是 RemoteViews、托盘菜单与窗口标题栏

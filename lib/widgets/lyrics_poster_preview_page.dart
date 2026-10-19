@@ -11,6 +11,7 @@ import '../services/notification_service.dart';
 import '../services/lyrics_poster_service.dart';
 import '../services/poster_color_store.dart';
 import '../services/poster_font_store.dart';
+import '../services/system_fonts_service.dart';
 import '../l10n/app_localizations.dart';
 import '../models/poster_lyric_line.dart';
 import '../theme/poster_palette.dart';
@@ -143,10 +144,17 @@ class _LyricsPosterPreviewPageState extends State<LyricsPosterPreviewPage> {
     final appName = AppLocalizations.of(context)?.appName ?? 'Molia';
     // 海报字体优先级：海报独立覆盖 > 应用字体（主题注入）> 系统默认；
     // 覆盖值为空串表示显式强制系统默认。
-    final String? uiFontFamily = switch (_posterFontOverride) {
-      null => Theme.of(context).textTheme.bodyMedium?.fontFamily,
-      '' => null,
-      final family => family,
+    final ({String? family, List<String>? fallback}) uiFont =
+        switch (_posterFontOverride) {
+      null => (
+          family: Theme.of(context).textTheme.bodyMedium?.fontFamily,
+          fallback: Theme.of(context).textTheme.bodyMedium?.fontFamilyFallback,
+        ),
+      '' => (
+          family: SystemFontsService.platformDefaultFamily,
+          fallback: SystemFontsService.platformDefaultFontFallbacks,
+        ),
+      final family => (family: family, fallback: null),
     };
 
     // 已有海报：保留旧图（不清 bytes），只标记重生成；首刷才进加载态。
@@ -179,7 +187,8 @@ class _LyricsPosterPreviewPageState extends State<LyricsPosterPreviewPage> {
         extendedColor: palette.extended,
         watermarkColor: palette.watermark,
         separatorColor: palette.separator,
-        fontFamily: uiFontFamily,
+        fontFamily: uiFont.family,
+        fontFamilyFallback: uiFont.fallback,
         watermarkText: appName,
       );
 

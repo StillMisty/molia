@@ -32,6 +32,7 @@ import '../services/data_saver_service.dart';
 import '../services/haptics.dart';
 import '../services/language_service.dart';
 import '../services/play_statistics_service.dart';
+import '../services/system_fonts_service.dart';
 import '../services/window/window_chrome.dart';
 import '../theme/animated_scheme.dart';
 import '../theme/app_theme.dart';
@@ -1389,6 +1390,12 @@ class _MyThemedAppState extends State<MyThemedApp> with WidgetsBindingObserver {
                     animatedScheme,
                     systemUiOverlayStyle: systemUiOverlayStyle,
                     fontFamily: themeState.fontFamily,
+                    // 未自定义「应用字体」时使用启动时解析的系统 UI 字体
+                    // （Windows 读 MessageFont；其它平台为 null）。
+                    platformDefaultFontFamily:
+                        SystemFontsService.platformDefaultFamily,
+                    platformDefaultFontFallbacks:
+                        SystemFontsService.platformDefaultFontFallbacks,
                   );
 
                   return M3EMaterialApp(

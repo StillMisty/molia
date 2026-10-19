@@ -160,6 +160,10 @@ class _FontPickerSheetState extends State<_FontPickerSheet> {
                       ),
                     _FontOptionTile(
                       label: l10n.fontSystemDefault,
+                      // 预览必须是真正的系统默认字体，而不是当前主题里
+                      // 已选中的「应用字体」——否则选了自定义字体后，用户
+                      // 会误以为「系统默认」也是这个字体。
+                      family: SystemFontsService.platformDefaultFamily,
                       selected: _isSelected(const FontChoice.system()),
                       onTap: () => _pop(const FontChoice.system()),
                     ),

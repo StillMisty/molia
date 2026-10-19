@@ -32,6 +32,7 @@ class LyricsPosterService {
     required Color watermarkColor,
     required Color separatorColor,
     String? fontFamily,
+    List<String>? fontFamilyFallback,
     /// 海报水印品牌名（Molia）。
     String watermarkText = 'Molia',
   }) async {
@@ -65,6 +66,7 @@ class LyricsPosterService {
         loadedAlbumImage = await _loadNetworkImage(albumCoverUrl);
         final titleStyle = TextStyle(
             fontFamily: fontFamily,
+            fontFamilyFallback: fontFamilyFallback,
             fontSize: titleFontSize,
             color: titleColor,
             fontWeight: FontWeight.w600);
@@ -75,6 +77,7 @@ class LyricsPosterService {
         );
         final artistStyle = TextStyle(
             fontFamily: fontFamily,
+            fontFamilyFallback: fontFamilyFallback,
             fontSize: artistFontSize,
             color: artistColor,
             fontWeight: FontWeight.w400);
@@ -97,6 +100,7 @@ class LyricsPosterService {
         logger.warning('Failed to load album cover for height calculation: $e');
         final titleStyle = TextStyle(
             fontFamily: fontFamily,
+            fontFamilyFallback: fontFamilyFallback,
             fontSize: titleFontSize,
             color: titleColor,
             fontWeight: FontWeight.w400);
@@ -110,6 +114,7 @@ class LyricsPosterService {
 
         final artistStyle = TextStyle(
             fontFamily: fontFamily,
+            fontFamilyFallback: fontFamilyFallback,
             fontSize: artistFontSize,
             color: artistColor,
             fontWeight: FontWeight.w400);
@@ -125,6 +130,7 @@ class LyricsPosterService {
     } else {
       final titleStyle = TextStyle(
           fontFamily: fontFamily,
+          fontFamilyFallback: fontFamilyFallback,
           fontSize: titleFontSize,
           color: titleColor,
           fontWeight: FontWeight.w600);
@@ -138,6 +144,7 @@ class LyricsPosterService {
 
       final artistStyle = TextStyle(
           fontFamily: fontFamily,
+          fontFamilyFallback: fontFamilyFallback,
           fontSize: artistFontSize,
           color: artistColor,
           fontWeight: FontWeight.w400);
@@ -153,6 +160,7 @@ class LyricsPosterService {
 
     final lyricsStyle = TextStyle(
       fontFamily: fontFamily,
+      fontFamilyFallback: fontFamilyFallback,
       fontSize: lyricsFontSize,
       color: lyricsColor,
       height: 1.3,
@@ -162,6 +170,7 @@ class LyricsPosterService {
     // 字号基数大，比例略收到 0.7 更接近观感层级。
     final extendedLyricsStyle = TextStyle(
       fontFamily: fontFamily,
+      fontFamilyFallback: fontFamilyFallback,
       fontSize: lyricsFontSize * 0.7,
       color: extendedColor,
       height: 1.25,
@@ -230,6 +239,7 @@ class LyricsPosterService {
 
     final watermarkStyle = TextStyle(
         fontFamily: fontFamily,
+        fontFamilyFallback: fontFamilyFallback,
         fontSize: watermarkFontSize,
         color: watermarkColor,
         fontWeight: FontWeight.w400);
@@ -274,6 +284,7 @@ class LyricsPosterService {
     if (loadedAlbumImage != null) {
       final titleStyle = TextStyle(
           fontFamily: fontFamily,
+          fontFamilyFallback: fontFamilyFallback,
           fontSize: titleFontSize,
           color: titleColor,
           fontWeight: FontWeight.w400);
@@ -284,6 +295,7 @@ class LyricsPosterService {
       );
       final artistStyle = TextStyle(
           fontFamily: fontFamily,
+          fontFamilyFallback: fontFamilyFallback,
           fontSize: artistFontSize,
           color: artistColor,
           fontWeight: FontWeight.w400);
@@ -331,11 +343,13 @@ class LyricsPosterService {
     } else {
       final titleStyle = TextStyle(
           fontFamily: fontFamily,
+          fontFamilyFallback: fontFamilyFallback,
           fontSize: titleFontSize,
           color: titleColor,
           fontWeight: FontWeight.w400);
       final artistStyle = TextStyle(
           fontFamily: fontFamily,
+          fontFamilyFallback: fontFamilyFallback,
           fontSize: artistFontSize,
           color: artistColor,
           fontWeight: FontWeight.w400);
