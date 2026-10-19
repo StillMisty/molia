@@ -252,6 +252,62 @@ void main() {
     );
   });
 
+  testWidgets('下拉行：选中值在字段与展开面板里都单行（面板口径留宽 + 单行兜底）',
+      (tester) async {
+    // 面板宽度 = 字段宽度，而面板里的选中条目还要吃面板 8×2 + 条目 16×2 内边距
+    // 与对勾图标，文字又是大一号的 bodyLarge：字段只按自身口径留宽时，
+    // 展开后「Hi-Res」会折行。
+    await pumpRow(
+      tester,
+      Center(
+        child: SettingsDropdownRow<String>(
+          icon: Icons.high_quality_rounded,
+          title: 'Quality',
+          value: 'hires',
+          // 设置页默认音质行的声明宽度。
+          fieldWidth: 112,
+          options: const [('320k', '320K'), ('hires', 'Hi-Res')],
+          onChanged: (_) {},
+        ),
+      ),
+    );
+
+    // 字段侧：选中值自带单行文本（宽度不足由省略号接管，不折行）。
+    final fieldText = tester.widget<Text>(find.text('Hi-Res'));
+    expect(fieldText.maxLines, 1, reason: '字段选中值固定单行');
+    expect(fieldText.softWrap, isFalse);
+
+    // 展开面板：选中条目与其它条目同高（都是单行）。选中条目 = 带对勾图标的
+    // 卡片；条目标签只在展开的面板里存在。
+    await tester.tap(find.byType(M3EDropdownMenu<String>));
+    await tester.pumpAndSettle();
+    final selectedLabel = find.descendant(
+      of: find
+          .ancestor(
+            of: find.byIcon(Icons.check_rounded),
+            matching: find.byType(M3ECard),
+          )
+          .first,
+      matching: find.text('Hi-Res'),
+    );
+    final otherLabel = find.descendant(
+      of: find
+          .ancestor(
+            of: find.text('320K'),
+            matching: find.byType(M3ECard),
+          )
+          .first,
+      matching: find.text('320K'),
+    );
+    expect(selectedLabel, findsOneWidget);
+    expect(otherLabel, findsOneWidget);
+    expect(
+      tester.getSize(selectedLabel).height,
+      tester.getSize(otherLabel).height,
+      reason: '选中 Hi-Res 在面板里折行：字段宽度没有按面板口径留足',
+    );
+  });
+
   testWidgets('标签行：标题 1 行、副标题 2 行封顶（长文案不再折 3 行）',
       (tester) async {
     const longSubtitle =

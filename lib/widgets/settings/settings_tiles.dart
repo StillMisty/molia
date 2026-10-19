@@ -22,6 +22,10 @@ const EdgeInsets kSettingsRowPadding =
 /// 下拉字段自适应宽度的上限：选项文案再长也交给省略号，避免把标题挤没。
 const double _maxAutoFieldWidth = 240.0;
 
+/// 自适应宽度的余量：字段 / 面板 / 条目的可用宽是多次减法算出来的，刚好等于
+/// 量出的文本宽时，浮点舍入可能让条目折行。
+const double _autoFieldWidthSlack = 2.0;
+
 /// 在设置弹层内部打开子页（不新开弹层）。
 ///
 /// [SettingsPage] 内部有一层 Navigator：这里 push 到最近一层 Navigator，
@@ -648,6 +652,11 @@ class SettingsDropdownRow<T> extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final m3e = M3ETheme.of(context);
+    final selectedTextStyle = m3e.dropdownMenuTheme.selectedTextStyle(
+      m3e.typeScale,
+      m3e.colorScheme,
+    );
     return CardListSurface(
       position: SettingsRowPosition.of(context),
       padding: kSettingsRowPadding,
@@ -676,7 +685,20 @@ class SettingsDropdownRow<T> extends StatelessWidget {
                 ],
                 singleSelect: true,
                 showChipAnimation: false,
-                fieldStyle: M3EDropdownFieldStyle(hintText: title),
+                fieldStyle: M3EDropdownFieldStyle(
+                  hintText: title,
+                  selectedTextStyle: selectedTextStyle,
+                ),
+                // M3E 字段的默认选中文本只带省略号、没有 `maxLines`：宽度不足
+                // 时「Hi-Res」会从连字符处折成两行顶高整行。这里自带单行文本，
+                // 折行在结构上不可能发生（宽度不足由省略号接管）。
+                selectedItemBuilder: (item) => Text(
+                  item.label,
+                  maxLines: 1,
+                  softWrap: false,
+                  overflow: TextOverflow.ellipsis,
+                  style: selectedTextStyle,
+                ),
                 onSelectionChanged: (items) {
                   if (items.isNotEmpty) onChanged(items.first.value);
                 },
@@ -690,28 +712,59 @@ class SettingsDropdownRow<T> extends StatelessWidget {
 
   /// 字段实际宽度：放得下最长选项（含系统字体缩放），但不小于 [fieldWidth]。
   ///
-  /// 为什么必须量：M3E 下拉字段的选中文本只带省略号、没有 `maxLines`——
-  /// 宽度不足时折行而不是截断，「Hi-Res」被折成两行会顶高整行。度量口径与
-  /// 字段内部一致：`bodyMedium` + 左右 16 内边距 + 8 间距 + 箭头图标；
-  /// 上限 [_maxAutoFieldWidth] 保证标题不被长选项挤没（超出交给省略号）。
+  /// 为什么必须量：下拉面板宽度 = 字段宽度，而选中值在面板里比字段里**更窄**
+  /// ——面板内容内边距 8×2 + 条目内边距 16×2 + 选中对勾图标，且条目文字大一档
+  /// （`itemTextStyle` = bodyLarge）。宽度不足时 M3E 的文本没有 `maxLines`，
+  /// 「Hi-Res」会从连字符处折成两行（字段侧另见 `selectedItemBuilder` 的单行
+  /// 兜底）。度量口径与字段 / 面板 / 条目内部一致，内边距从默认样式对象取，
+  /// 包升级后不会与实现漂移；上限 [_maxAutoFieldWidth] 保证标题不被长选项挤没。
   double _resolvedFieldWidth(BuildContext context) {
     final m3e = M3ETheme.of(context);
-    final style = m3e.typeScale.bodyMedium;
     final scaler = MediaQuery.textScalerOf(context);
     final direction = Directionality.of(context);
-    var widest = 0.0;
-    for (final (_, label) in options) {
-      final painter = TextPainter(
-        text: TextSpan(text: label, style: style),
-        textDirection: direction,
-        textScaler: scaler,
-      )..layout();
-      widest = math.max(widest, painter.width);
+    double widestOf(TextStyle style) {
+      var widest = 0.0;
+      for (final (_, label) in options) {
+        final painter = TextPainter(
+          text: TextSpan(text: label, style: style),
+          textDirection: direction,
+          textScaler: scaler,
+          maxLines: 1,
+        )..layout();
+        widest = math.max(widest, painter.width);
+      }
+      return widest;
     }
-    // 字段内边距（M3E 默认 16×2）与行尾箭头（图标 + 8 间距）。
-    final icon = m3e.resolvedIconTheme.size ?? 18;
-    final needed = widest + 16 * 2 + 8 + icon;
-    return math.max(fieldWidth, math.min(needed, _maxAutoFieldWidth));
+
+    const fieldStyle = M3EDropdownFieldStyle();
+    const panelStyle = M3EDropdownPanelStyle();
+    const itemStyle = M3EDropdownItemStyle();
+    // 字段箭头 / 条目对勾都是无显式尺寸的 Icon：实际宽度 = 环境 IconTheme 解析
+    // 结果（框架对未设置的尺寸回退 24），M3E 主题的 iconTheme 可能不带尺寸。
+    final icon = IconTheme.of(context).size ?? 24;
+    // 字段：选中文本 + 左右内边距 + 与箭头的 8 间距 + 箭头图标。
+    final fieldNeeded = widestOf(m3e.typeScale.bodyMedium) +
+        fieldStyle.padding.resolve(direction).horizontal +
+        8 +
+        icon;
+    // 面板里的选中条目：面板 / 条目内边距 + 对勾图标，文字用条目样式。
+    final itemNeeded = widestOf(
+          itemStyle.textStyle ??
+              m3e.dropdownMenuTheme.itemTextStyle(
+                m3e.typeScale,
+                m3e.colorScheme,
+              ),
+        ) +
+        panelStyle.contentPadding.resolve(direction).horizontal +
+        itemStyle.itemPadding.resolve(direction).horizontal +
+        icon;
+    return math.max(
+      fieldWidth,
+      math.min(
+        math.max(fieldNeeded, itemNeeded) + _autoFieldWidthSlack,
+        _maxAutoFieldWidth,
+      ),
+    );
   }
 }
 
