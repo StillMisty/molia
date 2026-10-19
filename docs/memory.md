@@ -1,14 +1,17 @@
 # 桌面托盘内存：背景、改动与测量
 
 > 本文只记**可复现的数字**与**为什么这样改**。采样脚本：`tool/agent/memory.sh`
-> （RSS 曲线 + 应用自己的 `molia.memory` 转换日志）；最近一次复测：2026-10-18。
+> （Linux：RSS 曲线 + 应用自己的 `molia.memory` 转换日志）、
+> `tool/agent/memory.ps1`（Windows：专用工作集 / 提交大小）；
+> 最近一次 Linux 复测：2026-10-18，Windows 数字待实机回填。
 
 ## 1. 结论（一行）
 
 关闭到托盘不再把「界面侧」内存挂到重新打开窗口为止：托盘隐藏时清空 Flutter
-图片缓存并把上限临时压低（Linux 上补一次 `malloc_trim` 让释放体现在系统观测
-上）、停掉后台期无展示面的封面预取与取色，界面整棵卸载（等价一次保留播放的
-冷启动）；压测实测关到托盘瞬间 RSS 下降 63–73 MB（98.9 MB 图片缓存场景）。
+图片缓存并把上限临时压低、停掉后台期无展示面的封面预取与取色，界面整棵卸载
+（等价一次保留播放的冷启动）；清理后按平台补一次 trim（Linux `malloc_trim`、
+Windows `EmptyWorkingSet`），让释放体现在系统观测上（Linux 压测实测关到托盘
+瞬间 RSS 下降 63–73 MB，98.9 MB 图片缓存场景；Windows 数字待实机回填）。
 mpv 解复用缓存上限从 64 MiB 降到 32 MiB。
 
 ## 2. 背景：托盘态本来在占什么
@@ -31,18 +34,20 @@ mpv 解复用缓存上限从 64 MiB 降到 32 MiB。
 | 位置 | 行为 |
 | --- | --- |
 | `lib/services/app_presence.dart` | 窗口三态（可见 / 最小化 / 托盘隐藏）；置位只在窗口层，消费者按状态各自应对 |
-| `lib/managers/app_memory_manager.dart` | 托盘隐藏：等休眠帧落定后 `imageCache.clear()` + `clearLiveImages()` + 上限临时 16 MiB + Linux `malloc_trim(0)`；恢复还原；每次翻转打 `molia.memory`（RSS + 缓存占用） |
+| `lib/managers/app_memory_manager.dart` | 托盘隐藏：等休眠帧落定后 `imageCache.clear()` + `clearLiveImages()` + 上限临时 16 MiB + 平台 trim（Linux `malloc_trim(0)` / Windows `EmptyWorkingSet`）；恢复还原；每次翻转打 `molia.memory`（RSS + 缓存占用） |
 | `lib/managers/image_preload_manager.dart` | 后台期不排预取、清空待办；预取途中进入后台的条目立即 `evict` |
 | `lib/services/playback_observer.dart` | 后台期跳过封面预取；恢复后等重建帧落定补一次 |
 | `lib/services/artwork_palette_service.dart` | `ArtworkThemeSync` 后台期只记 URL 不取色；恢复后补一次且同 URL 不重复应用 |
 | `lib/app/tray_dormant_gate.dart` | 托盘隐藏卸载整棵 `MaterialApp`（导航 / 常驻页面 / 弹层），恢复重建 |
 | `lib/playback/desktop_audio_init_io.dart` | `JustAudioMediaKit.bufferSize = 16 MiB`（上限 64 → 32 MiB） |
 
-**为什么还要 `malloc_trim`**：清空图片缓存只是把像素 `free` 回 allocator，空闲页
-留在 arena 里不会自动归还内核，系统观测（RSS / 任务管理器）看不到下降——实测
-「清 40 MB 缓存、RSS 反而 +10 MB」。所以守卫在清理后按 Linux/glibc 补一次
-`malloc_trim(0)`（FFI，符号缺失静默跳过），让「已释放」真正体现在观测上；
-mpv 自带 allocator 与 Dart 堆不受它影响。
+**为什么还要平台 trim**：清空图片缓存只是把像素 `free` 回 allocator，空闲页
+留在 arena / 工作集里不会自动归还内核，系统观测（RSS / 任务管理器）看不到
+下降——Linux 实测「清 40 MB 缓存、RSS 反而 +10 MB」。所以守卫在清理后按平台
+补一次 trim：Linux/glibc 用 `malloc_trim(0)`，Windows 用 `EmptyWorkingSet`
+（`psapi.dll`，符号缺失 / 调用失败时静默跳过）。**trim 只改「内存」（工作集）
+列，不改「提交大小」**：真正释放的仍是 `imageCache.clear()`；mpv 自带
+allocator 与 Dart 堆不受它影响。
 
 恢复语义：页面滚动位置 / 合集选择本就有持久化（`CollectionScrollBookkeeping` /
 `LibraryCollections`），恢复后自然回位；页内瞬时状态（搜索词、展开的弹层、
@@ -58,13 +63,24 @@ mpv 缓冲的取舍：只影响**当前流播曲目**的内存缓冲（弱网抗
 
 ### 4.1 方法
 
+Linux：
+
 ```bash
 tool/agent/app.sh run -d linux          # 或 --window 在真实显示上跑（WSLg 弹窗）
 tool/agent/memory.sh --interval 5       # 另一个终端采样 RSS
 ```
 
+Windows：
+
+```powershell
+flutter run -d windows                  # 或启动 release 包；debug 控制台可见 molia.memory
+powershell -ExecutionPolicy Bypass -File tool/agent/memory.ps1 -Interval 5
+```
+
 托盘隐藏 / 恢复时应用会打 `molia.memory`（RSS + 图片缓存占用），脚本会连同
-RSS 曲线一起打印；结束给出 min / 中位 / max。
+RSS 曲线一起打印；结束给出 min / 中位 / max。Windows 上 release 包没有控制台，
+以 `memory.ps1` 为准：`内存` = 专用工作集（`WorkingSetPrivate`），`提交` =
+`PrivateBytes`。
 
 ### 4.2 基线（2026-10-18，改动前）
 
@@ -108,6 +124,22 @@ RSS 曲线一起打印；结束给出 min / 中位 / max。
 - 托盘挂机 30 分钟的完整 RSS 曲线需在真实显示 + 托盘宿主下用 `memory.sh`
   采样（无头 Xvfb 既没有托盘宿主、也没有窗口管理器，触发不了原生关闭）。
 
+### 4.4 Windows（待实机回填）
+
+代码路径与 Linux 相同（存在态 → 休眠门 + 清缓存），差别只在收尾的 trim：
+Windows 用 `EmptyWorkingSet`。预期：
+
+- 隐藏后「内存」（专用工作集）立即下降，量级接近被清掉的图片缓存 + 可换出页；
+- 「提交大小」下降 ≈ 隐藏前的图片缓存（休眠 UI 的 Dart 对象要等 GC 才还，
+  所以提交不会降到干净进程水平）；
+- 托盘期不再逐曲预取，缓存不会重新堆回 100 MiB。
+
+复现：先滚动浏览几十张封面（让图片缓存涨起来）→ 关闭到托盘 → 用
+`memory.ps1` 记录隐藏前 / 隐藏后 10s / 60s。**空会话（没浏览过封面）隐藏
+前后差只有几 MB，属于预期。**
+
+> 待补：Windows release 实机三组数字（构建版本 + 系统版本）。
+
 ## 5. 验证
 
 - `flutter analyze --no-pub`：0 error / 0 warning；
@@ -119,11 +151,16 @@ RSS 曲线一起打印；结束给出 min / 中位 / max。
 
 ## 6. 未验证 / 已知代价
 
-- **Windows** 未实机验证（本机只有 Linux 产物）；`window_manager` 的最小化 /
-  隐藏事件与 `AppLifecycleState.hidden` 语义相同，但需要真机复核。
+- **Windows** 逻辑已对齐（`EmptyWorkingSet`），但本机只有 Linux 工具链，数字
+  待实机回填；`window_manager` 的最小化 / 隐藏事件与 `AppLifecycleState.hidden`
+  语义需真机复核。
+- `EmptyWorkingSet` 只降工作集（物理驻留），「提交大小」不会跟着大降：托盘期
+  剩余的大头是引擎 / Dart 堆 / libmpv。若以提交为准继续优化，需要 Phase 3
+  （托盘期释放 provider 浏览缓存，恢复时重拉）。
 - 真实托盘宿主（KDE / GNOME + AppIndicator 扩展）下的隐藏 / 唤起观感：关闭
   到托盘前会多渲染一帧休眠占位（窗口随即隐藏，肉眼基本不可见）；恢复时窗口
   映射与界面重建同帧完成。
 - 恢复后列表首次滚到未缓存区可能短暂出现占位（图片从磁盘缓存重解）；当前
   曲目封面由恢复后的补发预取提前解好。
-- `tool/agent/memory.sh` 只支持桌面 Linux（Android 不在范围）。
+- `tool/agent/memory.sh` 只支持桌面 Linux（Android 不在范围）；Windows 用
+  `tool/agent/memory.ps1`。

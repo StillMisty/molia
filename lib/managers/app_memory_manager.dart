@@ -71,20 +71,44 @@ const int kTrayImageCacheLimitBytes = 16 * 1024 * 1024;
 typedef _MallocTrimNative = Int32 Function(IntPtr pad);
 typedef _MallocTrimDart = int Function(int pad);
 
-/// 把已 free 的堆页交还内核（Linux/glibc；其余平台或符号缺失时静默跳过）。
+/// `EmptyWorkingSet(HANDLE)` 的 Dart 签名（BOOL；伪句柄 -1 = 当前进程）。
+typedef _EmptyWorkingSetNative = Int32 Function(IntPtr process);
+typedef _EmptyWorkingSetDart = int Function(int process);
+
+/// 把已 free / 可换出的页交还系统（平台或符号不可用时静默跳过）。
 ///
-/// 为什么需要：清空图片缓存只是把像素 free 回 allocator，空闲页留在 arena
-/// 里不会自动归还，系统观测（RSS / 任务管理器）看不到下降；浏览器 / 播放器
-/// 这类「缩到托盘」的应用普遍在释放后补一次 trim。mpv 自带 allocator 与
-/// Dart 堆不受影响，这里只解决 glibc 这一层。
-void _releaseFreedHeapToOs() {
-  if (!Platform.isLinux) return;
-  try {
-    final trim = DynamicLibrary.process()
-        .lookupFunction<_MallocTrimNative, _MallocTrimDart>('malloc_trim');
-    trim(0);
-  } catch (_) {
-    // musl / 静态链接等场景没有该符号：跳过即可，不影响释放逻辑本身。
+/// 为什么需要：清空图片缓存只是把像素 free 回 allocator，空闲页留在 arena /
+/// 工作集里不会自动归还，系统观测（RSS / 任务管理器）看不到下降；浏览器 /
+/// 播放器这类「缩到托盘」的应用普遍在释放后补一次 trim。
+///
+/// - Linux/glibc：`malloc_trim(0)` 归还 arena 的空闲页；
+/// - Windows：`EmptyWorkingSet` 把工作集里可换出的页移出。任务管理器的
+///   「内存」列是专用工作集（不是已 free 字节数），free 后不会自动缩；
+///   这里只影响工作集，「提交大小」仍由上面的 `imageCache.clear()` 决定。
+///
+/// mpv 自带 allocator 与 Dart 堆不受这里影响，只解决 allocator / 页表这一层。
+void _releaseFreedMemoryToOs() {
+  if (Platform.isLinux) {
+    try {
+      final trim = DynamicLibrary.process()
+          .lookupFunction<_MallocTrimNative, _MallocTrimDart>('malloc_trim');
+      trim(0);
+    } catch (_) {
+      // musl / 静态链接等场景没有该符号：跳过即可，不影响释放逻辑本身。
+    }
+    return;
+  }
+  if (Platform.isWindows) {
+    try {
+      final psapi = DynamicLibrary.open('psapi.dll');
+      final emptyWorkingSet = psapi
+          .lookupFunction<_EmptyWorkingSetNative, _EmptyWorkingSetDart>(
+              'EmptyWorkingSet');
+      // 伪句柄 -1 = 当前进程（GetCurrentProcess）。
+      emptyWorkingSet(-1);
+    } catch (_) {
+      // psapi 不可用 / 符号缺失：跳过；系统仍会在内存压力下自行回收。
+    }
   }
 }
 
@@ -160,8 +184,8 @@ class AppMemoryManager {
     _cache.clearLiveImages();
     _cache.maximumSizeBytes =
         math.min(_fullLimitBytes, kTrayImageCacheLimitBytes);
-    // 清完再 trim：不然日志里的 RSS 还是 arena 里那笔「已释放未归还」的数。
-    _releaseFreedHeapToOs();
+    // 清完再 trim：不然日志里的 RSS / 工作集还是「已释放未归还」的那笔数。
+    _releaseFreedMemoryToOs();
     _log('托盘隐藏完成');
   }
 
