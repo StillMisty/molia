@@ -152,8 +152,11 @@ void wireNotificationFavorite({
   final handler = audioHandler;
   if (handler == null) return;
   handler.attachFavoriteActions(
+    // 键口径：`isFavorite` 收的是裸的 (sourceKey, songId)。`SourceTrack.id` 是
+    // `sourceKey:songId` 复合键，直接传进去会算成 `wy:wy:186016`，读出来永远是
+    // false（表现为「点收藏图标不变」）。
     isFavorite: (track) =>
-        libraryProvider.isFavorite(track.sourceKey, track.id),
+        libraryProvider.isFavorite(track.sourceKey, track.songId),
     toggle: (track) => libraryProvider.toggleFavoriteSourceTrack(track),
   );
   // 收藏变化只影响通知动作的图标：handler 自己现查当前曲目，这里只负责叫醒它。

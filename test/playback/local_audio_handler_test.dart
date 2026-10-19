@@ -4,14 +4,19 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/widgets.dart' show Locale;
 import 'package:flutter_media_session/flutter_media_session.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:molia/app/bootstrap/library_stack.dart';
 import 'package:molia/models/play_mode.dart';
 import 'package:molia/playback/local_audio_handler.dart';
 import 'package:molia/playback/local_playback_service.dart';
+import 'package:molia/providers/library_provider.dart';
 import 'package:molia/services/language_service.dart';
 import 'package:molia/services/lyrics_display/media_lyric_composer.dart';
 import 'package:molia/sources/source_track.dart';
 
+import '../support/fake_library_repository.dart';
 import '../support/fake_media_session_backend.dart';
+import '../support/fakes.dart';
+import '../support/settings_test_support.dart';
 
 SourceTrack _track({String? coverUrl}) => SourceTrack(
       sourceKey: 'wy',
@@ -633,6 +638,42 @@ void main() {
       LanguageService.localeNotifier.value = const Locale('en');
       await pumpEventQueue();
       expect(backend.favoriteAction?.customLabel, 'Add to favorites');
+    });
+
+    test('接线后点收藏：曲库写入 + 通知图标换实心', () async {
+      // 真仓库 + 真 provider：锁住「读收藏用的键」与写入口径一致
+      // （`SourceTrack.id` 是 `sourceKey:songId` 复合键，直接当 songId 传会永远读 false，
+      // 真机表现就是「点收藏没反应」）。
+      final repository = FakeLibraryRepository();
+      addTearDown(repository.dispose);
+      final playback = buildTestPlaybackProvider(
+        settings: testSettingsRegistry(),
+        libraryRepository: repository,
+      );
+      addTearDown(playback.dispose);
+      final library = LibraryProvider(
+        repository: repository,
+        playbackProvider: playback,
+      );
+      addTearDown(library.dispose);
+
+      final track = _track();
+      final service = _FakeService()..trackValue = track;
+      addTearDown(service.dispose);
+      final (handler, backend) = await _handler(service);
+      wireNotificationFavorite(audioHandler: handler, libraryProvider: library);
+      await pumpEventQueue();
+
+      expect(library.isFavorite(track.sourceKey, track.songId), isFalse);
+
+      backend.emit(const MediaAction(favoriteActionId));
+      await pumpEventQueue();
+
+      expect(library.isFavorite(track.sourceKey, track.songId), isTrue);
+      expect(
+        backend.favoriteAction?.customIconResource,
+        'ic_notification_favorite_filled',
+      );
     });
   });
 
