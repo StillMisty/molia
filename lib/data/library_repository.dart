@@ -37,17 +37,22 @@ class LibraryRepository implements LibraryStore, LibrarySyncStore {
   /// [journal] 是增量日志（可选）：本机写入在**同一个 drift 事务**里追加
   /// 日志条目，对端按游标只拉变更；应用远端记录（`syncApply*`）不追加
   /// （远端变更由来源设备广播，本机不做二次转发）。
+  ///
+  /// [addToTop] 是「加入列表」的位置偏好（设置页注入，缺省追加到末尾）：
+  /// 只影响手动加入 / 收藏，表内导入（五平台歌单、`.lxmc`）固定按原顺序追加。
   LibraryRepository({
     MoliaDatabase Function()? databaseProvider,
     int Function()? clock,
     required SyncStampIssuer stamps,
     SyncJournalRepository? journal,
+    bool Function()? addToTop,
   }) : _databaseProvider = databaseProvider ?? (() => MoliaDatabase.instance) {
     _writeEngine = LibraryWriteEngine(
       databaseProvider: _databaseProvider,
       clock: clock,
       stamps: stamps,
       journal: journal,
+      addToTop: addToTop,
     );
   }
 
@@ -340,6 +345,9 @@ class LibraryRepository implements LibraryStore, LibrarySyncStore {
   ///
   /// 返回 `(playlistId, 本次新增数, 曲目总数)`；供五平台链接导入与
   /// 发现页歌单导入使用（总数用于区分空歌单与全部重复）。
+  ///
+  /// 导入保持文件 / 歌单原顺序**追加**到末尾，不受「加入列表位置」偏好影响
+  /// （偏好只作用于手动加入与收藏）。
   @override
   Future<({int playlistId, int added, int total})> importTracks(
     String name,
@@ -348,7 +356,11 @@ class LibraryRepository implements LibraryStore, LibrarySyncStore {
     if (tracks.isEmpty) return (playlistId: -1, added: 0, total: 0);
     final existing = await findPlaylistByName(name);
     final playlistId = existing?.id ?? await createPlaylist(name);
-    final added = await addTracksToPlaylist(playlistId, tracks);
+    final added = await _writeEngine.addTracksToPlaylist(
+      playlistId,
+      tracks,
+      addToTop: false,
+    );
     return (playlistId: playlistId, added: added, total: tracks.length);
   }
 

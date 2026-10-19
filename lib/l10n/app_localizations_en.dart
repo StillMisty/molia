@@ -209,6 +209,19 @@ class AppLocalizationsEn extends AppLocalizations {
       'Restore track, queue and position on launch (on by default)';
 
   @override
+  String get settingsLibraryAddPosition => 'Position of added songs';
+
+  @override
+  String get settingsLibraryAddPositionSubtitle =>
+      'Top or bottom of favorites and playlists (top by default)';
+
+  @override
+  String get settingsLibraryAddPositionTop => 'Top';
+
+  @override
+  String get settingsLibraryAddPositionBottom => 'Bottom';
+
+  @override
   String get settingsAutoSourceSwap => 'Auto source switch';
 
   @override

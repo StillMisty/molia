@@ -14,6 +14,7 @@ import '../providers/sync_provider.dart';
 import '../providers/theme_provider.dart';
 import '../providers/update_provider.dart';
 import '../services/data_saver_service.dart';
+import '../services/library/library_add_settings.dart';
 import '../services/lyrics_display/lyrics_output.dart';
 import '../services/source_swap/source_swap_settings.dart';
 import '../theme/scheme_builder.dart';
@@ -452,6 +453,7 @@ class _SettingsHomeViewState extends State<_SettingsHomeView>
     final syncProvider = context.watch<SyncProvider?>();
     final updateProvider = context.watch<UpdateProvider?>();
     final sourceSwapSettings = context.watch<SourceSwapSettings?>();
+    final libraryAddSettings = context.watch<LibraryAddSettings?>();
     final sources = context.read<SourcesProvider?>();
     final lyricsDisplay = context.watch<LyricsDisplayProvider?>();
     // 两列流式需要比单列舒适行宽（`maxWidth`）更宽的画布：上限取设置弹层
@@ -487,6 +489,7 @@ class _SettingsHomeViewState extends State<_SettingsHomeView>
                     l10n,
                     dataSaver: dataSaver,
                     sourceSwapSettings: sourceSwapSettings,
+                    libraryAddSettings: libraryAddSettings,
                     sources: sources,
                   ),
                   _lyricsSection(context, l10n, lyricsDisplay),
@@ -648,7 +651,8 @@ class _SettingsHomeViewState extends State<_SettingsHomeView>
     );
   }
 
-  /// 播放：默认播放模式 / 启动恢复 / 默认音质 / 自动换源 / 省流（开关与生效子项）。
+  /// 播放：默认播放模式 / 启动恢复 / 加入位置 / 默认音质 / 自动换源 /
+  /// 省流（开关与生效子项）。
   ///
   /// 省流不单开子页：开关行排在分区末位，开启时才展开音质上限与封面省流
   /// （三行共用同一套设置行，行为与独立子页一致）。
@@ -657,6 +661,7 @@ class _SettingsHomeViewState extends State<_SettingsHomeView>
     AppLocalizations l10n, {
     required DataSaverService? dataSaver,
     required SourceSwapSettings? sourceSwapSettings,
+    required LibraryAddSettings? libraryAddSettings,
     required SourcesProvider? sources,
   }) {
     return SettingsSectionCard(
@@ -693,6 +698,27 @@ class _SettingsHomeViewState extends State<_SettingsHomeView>
                 .setRestoreSessionEnabled(value),
           ),
         ),
+        // 加入收藏 / 列表的位置：新曲目放开头还是末尾（默认开头）。
+        if (libraryAddSettings != null)
+          Selector<LibraryAddSettings, LibraryAddPosition>(
+            selector: (context, settings) => settings.position,
+            builder: (context, position, _) =>
+                SettingsChoiceRow<LibraryAddPosition>(
+              key: const Key('settingsLibraryAddPositionItem'),
+              icon: Icons.playlist_add_rounded,
+              title: l10n.settingsLibraryAddPosition,
+              subtitle: l10n.settingsLibraryAddPositionSubtitle,
+              value: position,
+              options: [
+                (LibraryAddPosition.top, l10n.settingsLibraryAddPositionTop),
+                (
+                  LibraryAddPosition.bottom,
+                  l10n.settingsLibraryAddPositionBottom,
+                ),
+              ],
+              onChanged: libraryAddSettings.setPosition,
+            ),
+          ),
         // 音源默认音质：设置页唯一入口。
         if (sources != null)
           Selector<SourcesProvider, String>(

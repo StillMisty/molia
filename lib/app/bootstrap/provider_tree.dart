@@ -166,6 +166,8 @@ List<SingleChildWidget> buildAppProviders({
     ChangeNotifierProvider.value(value: sync.provider),
     // 换源偏好（自动换源开关）：设置页读写；播放链路已在上方接线。
     ChangeNotifierProvider.value(value: library.sourceSwapSettings),
+    // 加入收藏 / 列表的位置偏好：设置页读写；写入网关已按它取排序位。
+    ChangeNotifierProvider.value(value: library.libraryAddSettings),
     // 托盘行为（关闭时最小化到托盘）：设置页读写；关闭策略已在上方接线。
     ChangeNotifierProvider.value(value: desktop.traySettings),
     // 快捷键设置：软件内 / 全局两组开关与绑定（设置页读写并订阅；桌面
