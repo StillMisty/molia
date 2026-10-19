@@ -20,6 +20,7 @@ tool/agent/test.sh android # 同一套跑模拟器（先 emu.sh start）；--win
 tool/agent/seed.sh android|linux <cmd>   # 数据注入：favorites/history/session/mock-source/status/clear/restore
 tool/agent/startup.sh                    # 启动耗时采样（release 冷启动 N 次取中位；基线与结论见 docs/performance.md）
 tool/agent/memory.sh                     # 托盘内存采样（RSS 曲线 + molia.memory 转换日志；见 docs/memory.md）
+tool/agent/memory.ps1                    # Windows 托盘内存采样（专用工作集 / 提交大小；见 docs/memory.md）
 ```
 
 生成物（改对应源码后必跑，产物提交进仓库）：
