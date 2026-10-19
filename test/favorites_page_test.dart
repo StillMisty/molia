@@ -1388,6 +1388,25 @@ void main() {
     expect(await repository.favoriteKeys(), contains('wy:2'));
   });
 
+  testWidgets('播放历史：重播不即时重排，切走再回来按最近播放刷新', (tester) async {
+    await repository.addHistoryEntry(_history('1', playedAt: 1));
+    await repository.addHistoryEntry(_history('2', playedAt: 2));
+    await repository.addHistoryEntry(_history('3', playedAt: 3));
+    await pumpFavorites(tester);
+    await selectCollection(tester, '播放历史');
+    expect(headlines(tester), ['Song 3', 'Song 2', 'Song 1']);
+
+    // 重播最旧一条（真实链路由播放观察者写历史）：停留期间列表顺序冻结。
+    await repository.addHistoryEntry(_history('1', playedAt: 100));
+    await flushLibraryReloads(tester);
+    expect(headlines(tester), ['Song 3', 'Song 2', 'Song 1']);
+
+    // 切走再回来 = 重新进入合集：按最近播放刷新。
+    await selectCollection(tester, '我的收藏');
+    await selectCollection(tester, '播放历史');
+    expect(headlines(tester), ['Song 1', 'Song 3', 'Song 2']);
+  });
+
   testWidgets('播放历史：左滑删除单条记录', (tester) async {
     await repository.addHistoryEntry(_history('1', playedAt: 2));
     await repository.addHistoryEntry(_history('2', playedAt: 1));

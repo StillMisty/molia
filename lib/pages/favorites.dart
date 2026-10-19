@@ -159,6 +159,10 @@ class _FavoritesPageState extends State<FavoritesPage> {
   /// 状态恢复完成前不跑默认合集回退（避免覆盖恢复的选集）。
   bool _restoreDone = false;
 
+  /// 上次观察到的壳层可见性：隐藏 → 可见 = 重新进入收藏页，刷新播放历史
+  /// 顺序（顺序在停留期间冻结，见 LibraryProvider）。未挂壳层的单测按可见。
+  bool _pageVisible = true;
+
   /// 恢复的选集是否已按首次加载的合集列表校准过（失效选集回退一次）。
   bool _restoredSelectionChecked = false;
 
@@ -226,6 +230,16 @@ class _FavoritesPageState extends State<FavoritesPage> {
       cache?.revision.addListener(_onCacheRevision);
     }
     _localDataService = context.read<TrackLocalDataService?>();
+    // 重新可见 = 重新进入本页：刷新历史顺序（改 provider 状态推迟到帧后，
+    // 避免 build 期通知）。
+    final visible = ShellPageVisibility.maybeVisibleOf(context) ?? true;
+    if (visible && !_pageVisible) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        context.read<LibraryProvider>().resortHistoryByRecency();
+      });
+    }
+    _pageVisible = visible;
   }
 
   @override
@@ -577,6 +591,12 @@ class _FavoritesPageState extends State<FavoritesPage> {
       _searchController.clear();
     });
     unawaited(_collections.saveSelection(id));
+    // 重新进入播放历史 / 本地歌曲：顺序按最近播放刷新（停留期间冻结，见
+    // LibraryProvider 的历史合并策略）。
+    if (id == LibraryCollections.historySentinel ||
+        id == LibraryCollections.downloadsSentinel) {
+      context.read<LibraryProvider>().resortHistoryByRecency();
+    }
     // 切换合集后可见列表整体替换：clear 一并让多选锚点失效。
     _selection.clear();
   }
