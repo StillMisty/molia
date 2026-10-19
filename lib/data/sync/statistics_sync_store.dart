@@ -99,12 +99,6 @@ Future<int> upsertPlayTrackContent(
 /// 日志要和内容写入同事务），所以接口放在数据层、签名带 drift 执行器。
 /// 读取面（导出 / 应用）由 [StatisticsSyncStore] 提供给适配器。
 abstract interface class StatisticsSyncWriter {
-  /// 本机设备 id（事件来源设备，与版本三元组同一来源）。
-  String get deviceId;
-
-  /// 新事件去重键（32 位十六进制随机串）。
-  String newEventSyncKey();
-
   /// 应用远端记录后通知仓库广播（UI 刷新 / 同步调度标记）。
   set onChanged(void Function()? callback);
 
@@ -183,12 +177,10 @@ class SqliteStatisticsSyncStore
   MoliaDatabase get _db => _databaseProvider();
 
   /// 本机设备 id（与发号器同一来源，保证事件来源与版本一致）。
-  @override
-  String get deviceId => _stamps.deviceId;
+  String get _deviceId => _stamps.deviceId;
 
   /// 新事件去重键（32 位十六进制随机串）。
-  @override
-  String newEventSyncKey() {
+  String _newEventSyncKey() {
     const hex = '0123456789abcdef';
     final buffer = StringBuffer();
     for (var i = 0; i < 32; i++) {
@@ -231,8 +223,8 @@ class SqliteStatisticsSyncStore
             listenedMs: const Value(0),
             maxPositionMs: const Value(0),
             endReason: const Value(null),
-            syncKey: Value(newEventSyncKey()),
-            originDeviceId: Value(deviceId),
+            syncKey: Value(_newEventSyncKey()),
+            originDeviceId: Value(_deviceId),
           ));
     });
   }

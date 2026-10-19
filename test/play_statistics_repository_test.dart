@@ -898,12 +898,6 @@ class _FakeStatisticsSyncWriter implements StatisticsSyncWriter {
   void Function()? changedCallback;
 
   @override
-  String get deviceId => 'fake-device';
-
-  @override
-  String newEventSyncKey() => 'fake-key';
-
-  @override
   set onChanged(void Function()? callback) => changedCallback = callback;
 
   @override
