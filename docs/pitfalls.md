@@ -565,3 +565,11 @@
     `[上一首][播放][下一首][播放顺序]`，媒体卡片却画成 `[播放顺序][上一首][暂停][下一首]`
     （自定义动作贴左）。结论：新增自定义动作只能控制「自定义动作之间」的先后；要精确到
     「收藏最左 / 播放顺序最右」得 vendor 插件覆盖 provider，且系统仍可能重排（见 ADR-0013）。
+62. **`SourceTrack` 的 `songId` 与 `id` 不是一个东西，读收藏 / 缓存 / 历史别拿 `id` 当 songId**：
+    `songId` 是平台内歌曲 id（raw 取键 → 兜底 `标题-歌手`），`id` 是全局唯一包装
+    `'$sourceKey:$songId'`（`lib/sources/source_track.dart`）。凡是要按
+    `(sourceKey, songId)` 成对查的接口（`LibraryProvider.isFavorite`、缓存文件名、
+    下载记录、播放历史）都必须传 `songId`：传 `id` 会算成 `wy:wy:186016`，查不到任何东西
+    且**不报错**——真机表现是「点通知栏收藏没反应」（写路径经 `trackFromSourceTrack`
+    是对的，所以数据其实写进曲库了，只是读不回来）。同类回归测试见
+    `test/playback/local_audio_handler_test.dart` 的「接线后点收藏」。

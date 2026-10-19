@@ -7,7 +7,7 @@
   （`wireNotificationFavorite`）、`lib/main.dart`、
   `android/app/src/main/res/drawable/ic_notification_favorite{,_filled}.xml`、
   `android/app/src/main/res/raw/keep.xml`、`.github/workflows/release.yml`、
-  ADR-0010、`docs/pitfalls.md` #61
+  ADR-0010、`docs/pitfalls.md` #61 / #62
 
 ## 背景
 
@@ -66,7 +66,8 @@ Android 真机（ColorOS 17 / Android 17）上，通知栏 / 快捷面板的媒�
 - `flutter analyze --no-pub`：0 error / 0 warning；
 - `flutter test --no-pub`：全绿（`local_audio_handler_test.dart` 新增「收藏动作」5 条：
   图标随收藏态、收藏态未变不重发、通知点击落到注入写入并立即换图标、未绑定回调时空操作、
-  语言切换文案跟随）；
+  语言切换文案跟随；另有 1 条**接线回归**——真 `LibraryProvider` + 假仓库走
+  「点收藏 → 曲库写入 + 图标换实心」，锁住读写键口径，见已知坑 #62）；
 - `tool/agent/test.sh linux`：端到端通过（`wireNotificationFavorite` 不改变启动路径）；
 - **待人工**：Android 真机 / 模拟器上展开媒体控制器，确认收藏按钮存在、位置、点击生效，
   且在 release（shrinkResources）包上图标不丢（`release.yml` 的校验在打 tag 时兜底）。
