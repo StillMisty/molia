@@ -40,6 +40,107 @@ class SystemFontsService {
 
   static List<String>? _cache;
 
+  /// Windows 系统 UI 字体族（未自定义「应用字体」时的默认）。
+  ///
+  /// 来源是 `HKCU\Control Panel\Desktop\WindowMetrics\MessageFont` 的
+  /// LOGFONTW face name：中文 Windows 通常是 `Microsoft YaHei UI`，英文
+  /// 系统是 `Segoe UI`。它与原生 Win32 窗口同源，也能跟随用户在系统里
+  /// 改的窗口字体；非 Windows / 解析失败为 null（交给引擎默认排版）。
+  static String? get platformDefaultFamily => _platformDefaultFamily;
+
+  static String? _platformDefaultFamily;
+
+  /// 系统字体缺字时的回退链（仅 Windows）。
+  ///
+  /// DirectWrite 逐字选择，只有主字体没有该字形才会走到这里：CJK 兜底到
+  /// 中文 UI 字体，Latin/符号兜底到 Segoe UI。不要依赖 Flutter 的 CJK
+  /// 回退——它由平台决定且不保证选中系统 UI 字体
+  /// （flutter/flutter#103811）。
+  static const List<String> windowsSystemFontFallbacks = <String>[
+    'Segoe UI',
+    'Microsoft YaHei UI',
+    'Microsoft YaHei',
+  ];
+
+  /// 系统默认字体缺失字形时的回退链；没有系统默认字体时为 null。
+  static List<String>? get platformDefaultFontFallbacks =>
+      _platformDefaultFamily == null ? null : windowsSystemFontFallbacks;
+
+  /// 启动时解析一次 Windows 系统 UI 字体（组合根在 runApp 前 await；
+  /// 其它平台是空操作）。
+  ///
+  /// 失败 / 超时保持 null：回退引擎默认字体，不影响启动。
+  static Future<void> loadPlatformDefaultFamily() async {
+    if (!Platform.isWindows) return;
+    try {
+      _platformDefaultFamily = await _windowsMessageFontFamily().timeout(
+        const Duration(seconds: 1),
+        onTimeout: () => null,
+      );
+    } catch (_) {
+      _platformDefaultFamily = null;
+    }
+  }
+
+  /// 解析 `reg query … /v MessageFont` 的 `REG_BINARY` 输出为字体族名。
+  ///
+  /// `MessageFont` 是 LOGFONTW：前 28 字节是高度/宽度/字重等字段，
+  /// 之后是 32 个 UTF-16LE 字符的 face name（以 NUL 结束）。hex 行可能
+  /// 被 reg.exe 折行，按「后续只含 hex 字符的行」续读。解析不出返回 null
+  /// （回退引擎默认字体）。
+  static String? parseWindowsMessageFontOutput(String output) {
+    final buffer = StringBuffer();
+    var found = false;
+    // reg.exe 在 Windows 上输出 CRLF；按行拆时把 \r 一并吃掉，
+    // 否则续行的纯 hex 正则会被行尾 \r 破坏、只解析到第一段。
+    for (final line in output.split(RegExp(r'\r?\n'))) {
+      if (!found) {
+        final marker = RegExp(r'MessageFont[ \t]{2,}REG_BINARY');
+        final match = marker.firstMatch(line);
+        if (match == null) continue;
+        found = true;
+        buffer.write(_hexDigits(line.substring(match.end)));
+        continue;
+      }
+      // 续行只可能是纯 hex（reg.exe 的折行）；其它行说明值已结束。
+      if (!RegExp(r'^[ \t]*[0-9a-fA-F \t]+$').hasMatch(line)) break;
+      buffer.write(_hexDigits(line));
+    }
+    final hex = buffer.toString();
+    if (hex.length < 60) return null; // 至少要有 face name 的首字符
+    final bytes = <int>[
+      for (var i = 0; i + 1 < hex.length; i += 2)
+        int.parse(hex.substring(i, i + 2), radix: 16),
+    ];
+    // 28 字节头部之后是 UTF-16LE face name（NUL 结束）。
+    final chars = <int>[];
+    for (var i = 28; i + 1 < bytes.length; i += 2) {
+      final unit = bytes[i] | (bytes[i + 1] << 8);
+      if (unit == 0) break;
+      chars.add(unit);
+    }
+    if (chars.isEmpty) return null;
+    final name = String.fromCharCodes(chars).trim();
+    return name.isEmpty ? null : name;
+  }
+
+  static String _hexDigits(String text) =>
+      text.replaceAll(RegExp(r'[^0-9a-fA-F]'), '');
+
+  static Future<String?> _windowsMessageFontFamily() async {
+    final result = await Process.run(
+      'reg.exe',
+      <String>[
+        'query',
+        r'HKCU\Control Panel\Desktop\WindowMetrics',
+        '/v',
+        'MessageFont',
+      ],
+    );
+    if (result.exitCode != 0) return null;
+    return parseWindowsMessageFontOutput('${result.stdout}');
+  }
+
   /// 列出设备字体族名（去重、大小写不敏感排序）；失败或平台不支持时返回空列表。
   static Future<List<String>> listFamilies() async {
     final cached = _cache;

@@ -9,21 +9,30 @@ import 'app_semantic_colors.dart';
 /// 各自覆写造成「同语义不同颜色」。
 ///
 /// 只做与配色契约相关的全局配置；具体组件的颜色覆写应优先靠 M3E 默认值。
-/// [fontFamily] 为设备字体族名（设置页「应用字体」），null 时走 ThemeData 的
-/// 平台默认排版（Windows = Segoe UI、Android/Linux = Roboto、iOS/macOS 系统
-/// 字体——与 Chrome / 其它 Flutter 应用同源，**不读**系统「窗口字体」
-/// MessageFont）；未覆盖的字形（如 CJK）由引擎逐字回退系统字体（Windows 上
-/// 中文即雅黑）。
+///
+/// [fontFamily] 为设置页「应用字体」选中的设备字体族名；为 null 时使用
+/// [platformDefaultFontFamily]（Windows 启动时从系统 `MessageFont` 解析，
+/// 中文系统即微软雅黑 UI），再没有才走 ThemeData 的平台默认排版。
+///
+/// 不能依赖 ThemeData 在 Windows 上的默认排版当作「系统字体」：它硬编码
+/// Segoe UI（Material Redmond 排版），中文靠 DirectWrite 逐字回退，而
+/// Flutter 不保证回退结果（flutter/flutter#103811）。[platformDefaultFontFallbacks]
+/// 只跟系统默认字体一起注入；自定义字体不追加，保持用户选择。
 ThemeData buildAppThemeData(
   ColorScheme scheme, {
   SystemUiOverlayStyle? systemUiOverlayStyle,
   String? fontFamily,
+  String? platformDefaultFontFamily,
+  List<String>? platformDefaultFontFallbacks,
 }) {
+  final useSystemFont =
+      fontFamily == null && platformDefaultFontFamily != null;
   return ThemeData(
     colorScheme: scheme,
     useMaterial3: true,
-    // 自定义字体优先，否则引擎默认（null）。
-    fontFamily: fontFamily,
+    // 自定义字体优先，其次系统 UI 字体，最后引擎默认（null）。
+    fontFamily: fontFamily ?? platformDefaultFontFamily,
+    fontFamilyFallback: useSystemFont ? platformDefaultFontFallbacks : null,
     appBarTheme: AppBarTheme(systemOverlayStyle: systemUiOverlayStyle),
     // Android 页面过渡必须选框架的预测返回 builder：跟手预览只由它插入的
     // 手势 detector 提供，没有观察者接管时 `WidgetsBinding` 会把返回手势
