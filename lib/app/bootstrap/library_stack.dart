@@ -15,6 +15,8 @@ import '../../data/settings/settings_registry.dart';
 import '../../data/sync/statistics_sync_store.dart';
 import '../../data/sync/sync_journal.dart';
 import '../../data/sync/sync_state_store.dart';
+import '../../playback/local_audio_handler.dart';
+import '../../providers/library_provider.dart';
 import '../../providers/local_database_provider.dart';
 import '../../providers/playback_provider.dart';
 import '../../services/play_statistics_service.dart';
@@ -136,4 +138,24 @@ void wirePlayStatistics({
   playback.position
       .addListener(() => service.onPosition(playback.currentPosition));
   service.onSnapshot(playback.snapshot);
+}
+
+/// 系统媒体会话「收藏」动作接线：通知点击 → 曲库改写，曲库变化 → 通知图标。
+///
+/// handler 在播放栈里创建、曲库 provider 之后才建好，所以用 attach 晚绑定
+/// （与 `attachSessionPersister` 同一个原因）。没有媒体会话（平台不支持 /
+/// 初始化失败时 `audioHandler == null`）时是空操作。
+void wireNotificationFavorite({
+  required LocalAudioHandler? audioHandler,
+  required LibraryProvider libraryProvider,
+}) {
+  final handler = audioHandler;
+  if (handler == null) return;
+  handler.attachFavoriteActions(
+    isFavorite: (track) =>
+        libraryProvider.isFavorite(track.sourceKey, track.id),
+    toggle: (track) => libraryProvider.toggleFavoriteSourceTrack(track),
+  );
+  // 收藏变化只影响通知动作的图标：handler 自己现查当前曲目，这里只负责叫醒它。
+  libraryProvider.addListener(handler.refreshFavoriteState);
 }

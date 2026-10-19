@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 系统媒体会话自定义动作「收藏 · 已收藏」的动作图标（按字符串资源名引用，
+     见 raw/keep.xml 的 @drawable/ic_notification_favorite*）。 -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+    <path
+        android:fillColor="#FFFFFFFF"
+        android:pathData="M12,21.55l-1.45,-1.32C5.4,15.56 2,12.48 2,8.7 2,5.62 4.42,3.2 7.5,3.2c1.74,0 3.41,0.81 4.5,2.09C13.09,4.01 14.76,3.2 16.5,3.2 19.58,3.2 22,5.62 22,8.7c0,3.78 -3.4,6.86 -8.55,11.54L12,21.55z" />
+</vector>

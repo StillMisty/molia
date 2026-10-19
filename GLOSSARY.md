@@ -58,6 +58,13 @@
   保存 / 清除共用协调者持有的那一个 `PlaybackSessionStore`（同一条 `pendingWrite`
   队列），同步栈另建 store 会形成第二个写队列，把远端应用插进「本地保存 → 清除」
   之间或复活已清除的会话。
+- **System media session（系统媒体会话）** — `lib/playback/local_audio_handler.dart` +
+  `lib/playback/media_session_backend*.dart`：通知栏 / 锁屏 / 耳机键的会话层
+  （Android/iOS/macOS/Windows 走 `flutter_media_session`，Linux 走 MPRIS，见 ADR-0010）。
+  Android 通知里的两个自定义动作是「收藏」(`lx.favorite`，写路径复用
+  `LibraryProvider.toggleFavoriteSourceTrack`）与「播放顺序」(`lx.playMode`)；
+  **按钮的最终位置由 Media3 provider 与系统 UI 决定**，Dart 侧只能控制自定义动作
+  之间的先后（ADR-0013、已知坑 #61）。
 - **Playback observer（播放观察者模块）** — `lib/services/playback_observer.dart`：播放副作用扇出的唯一实现（最后播放 / 播放上下文 / 桌面小组件 / 播放历史 / 封面预取与补取 / 通知权限），直连 facade 快照通道（不经 provider 的节流通知），由组合根挂接；会话落盘与恢复态属 `PlaybackSessionCoordinator`，睡眠定时属 `PlaybackProvider`（与 `PlayStatisticsService`、`ArtworkThemeSync` 同为观察者形态）。
 - **Sleep timer（定时关闭）** — `lib/providers/sleep_timer.dart`：歌曲信息页入口的
   「到点暂停」。两种模式：倒计时（**仅播放时计时**，暂停冻结；实现为**绝对

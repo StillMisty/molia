@@ -264,8 +264,20 @@ void main() {
         'skipToNext',
         'stop',
         'seekTo',
+        favoriteActionId,
         playModeActionId,
       ]));
+      // 自定义动作之间的相对顺序（Android 通知按这个顺序发给系统）：收藏在前。
+      final names = actions.map((action) => action.name).toList();
+      expect(
+        names.indexOf(favoriteActionId),
+        lessThan(names.indexOf(playModeActionId)),
+      );
+      expect(backend.favoriteAction?.customLabel, '收藏');
+      expect(
+        backend.favoriteAction?.customIconResource,
+        'ic_notification_favorite',
+      );
       expect(backend.playModeAction?.customLabel, '顺序播放');
       expect(
         backend.playModeAction?.customIconResource,
@@ -513,6 +525,114 @@ void main() {
       expect(service.modeValue, PlayMode.shuffle);
       expect(backend.playModeAction?.customLabel, '随机播放');
       expect(persisted, 1);
+    });
+  });
+
+  group('收藏动作（通知栏）', () {
+    test('收藏态驱动图标与文案：未收藏空心 / 已收藏实心', () async {
+      final service = _FakeService()..trackValue = _track();
+      addTearDown(service.dispose);
+      var favorite = false;
+      final (handler, backend) = await _handler(service);
+      handler.attachFavoriteActions(
+        isFavorite: (_) => favorite,
+        toggle: (_) async {},
+      );
+      await pumpEventQueue();
+
+      expect(backend.favoriteAction?.customLabel, '收藏');
+      expect(
+        backend.favoriteAction?.customIconResource,
+        'ic_notification_favorite',
+      );
+
+      favorite = true;
+      final updatesBefore = backend.actionUpdates.length;
+      handler.refreshFavoriteState();
+      await pumpEventQueue();
+
+      expect(
+        backend.actionUpdates.length,
+        updatesBefore + 1,
+        reason: '收藏态变了要重发动作',
+      );
+      expect(backend.favoriteAction?.customLabel, '取消收藏');
+      expect(
+        backend.favoriteAction?.customIconResource,
+        'ic_notification_favorite_filled',
+      );
+    });
+
+    test('收藏态没变：不重发动作', () async {
+      final service = _FakeService()..trackValue = _track();
+      addTearDown(service.dispose);
+      final (handler, backend) = await _handler(service);
+      handler.attachFavoriteActions(
+        isFavorite: (_) => false,
+        toggle: (_) async {},
+      );
+      await pumpEventQueue();
+      final updatesBefore = backend.actionUpdates.length;
+
+      handler.refreshFavoriteState();
+      await pumpEventQueue();
+
+      expect(backend.actionUpdates.length, updatesBefore);
+    });
+
+    test('通知点击：落到注入的曲库写入，并立即换图标', () async {
+      final service = _FakeService()..trackValue = _track();
+      addTearDown(service.dispose);
+      var favorite = false;
+      final toggled = <String>[];
+      final (handler, backend) = await _handler(service);
+      handler.attachFavoriteActions(
+        isFavorite: (_) => favorite,
+        toggle: (track) async {
+          toggled.add(track.title);
+          favorite = !favorite;
+        },
+      );
+
+      backend.emit(const MediaAction(favoriteActionId));
+      await pumpEventQueue();
+
+      expect(toggled, ['晴天']);
+      expect(
+        backend.favoriteAction?.customIconResource,
+        'ic_notification_favorite_filled',
+      );
+    });
+
+    test('没绑定收藏回调（无曲库 / 平台不支持）：点击是空操作', () async {
+      final service = _FakeService()..trackValue = _track();
+      addTearDown(service.dispose);
+      final (handler, backend) = await _handler(service);
+      final updatesBefore = backend.actionUpdates.length;
+
+      backend.emit(const MediaAction(favoriteActionId));
+      await pumpEventQueue();
+
+      expect(backend.actionUpdates.length, updatesBefore);
+      expect(
+        backend.favoriteAction?.customIconResource,
+        'ic_notification_favorite',
+      );
+    });
+
+    test('语言切换后收藏动作文案跟随', () async {
+      final service = _FakeService()..trackValue = _track();
+      addTearDown(service.dispose);
+      final (handler, backend) = await _handler(service);
+      handler.attachFavoriteActions(
+        isFavorite: (_) => false,
+        toggle: (_) async {},
+      );
+      expect(backend.favoriteAction?.customLabel, '收藏');
+
+      LanguageService.localeNotifier.value = const Locale('en');
+      await pumpEventQueue();
+      expect(backend.favoriteAction?.customLabel, 'Add to favorites');
     });
   });
 

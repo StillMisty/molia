@@ -129,8 +129,11 @@ jobs:
           aapt2="$(find "$sdk/build-tools" -name aapt2 | sort -V | tail -1)"
           "$aapt2" dump resources "$apk" > /tmp/release-resources.txt
           missing=0
-          for res in ic_notification audio_service_play_arrow audio_service_pause \
-                     audio_service_skip_previous audio_service_skip_next audio_service_stop; do
+          for res in ic_notification ic_notification_favorite \
+                     ic_notification_favorite_filled \
+                     audio_service_play_arrow audio_service_pause \
+                     audio_service_skip_previous audio_service_skip_next audio_service_stop \
+                     audio_service_repeat_all audio_service_repeat_one audio_service_shuffle; do
             if ! grep -q "drawable/$res" /tmp/release-resources.txt; then
               echo "::error::release 包缺少 @drawable/$res（检查 android/app/src/main/res/raw/keep.xml）"
               missing=1

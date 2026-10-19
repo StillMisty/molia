@@ -31,6 +31,14 @@ class FakeMediaSessionBackend implements MediaSessionBackend {
     return null;
   }
 
+  /// 收藏自定义动作（同上）。
+  MediaAction? get favoriteAction {
+    for (final action in lastActions ?? const <MediaAction>{}) {
+      if (action.name == 'lx.favorite') return action;
+    }
+    return null;
+  }
+
   @override
   Future<void> activate() async {
     activateCalls++;

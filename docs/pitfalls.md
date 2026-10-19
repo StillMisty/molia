@@ -553,3 +553,15 @@
     品牌名从「Molia 茉咏」改成「Molia」后旧 `.lnk` 不会自动消失，开始菜单 / 桌面会
     各留一个指向同一个 exe 的入口。改快捷方式名时同步补
     `[InstallDelete]`（`{autoprograms}` / `{autodesktop}` 两个位置，见 ADR-0011）。
+61. **Android 媒体通知的按钮位置由「Media3 provider + 系统 UI」共同决定，Dart 侧改不动**：
+    通知由 Media3 `DefaultMediaNotificationProvider` 构建，`getMediaButtons()` 固定先给
+    `[上一首][播放/暂停][下一首]`，再把自定义动作（`lx.playMode` / `lx.favorite`）按 Dart
+    传的顺序追加；`createNotification()` 还会先过滤掉所有非自定义
+    （`COMMAND_CODE_CUSTOM`）按钮，所以 `setCustomLayout` / `setMediaButtonPreferences`
+    里排的标准按钮顺序**一律被丢弃**。唯一的位置旋钮是 `CommandButton` extras 的
+    `COMPACT_VIEW_INDEX`（折叠态 3 个槽），而 `flutter_media_session 3.0.9` 把
+    `customExtras` 塞进 `SessionCommand` 的 extras、不是 `CommandButton` 的，够不到。
+    真正决定位置的是**系统 UI**：ColorOS 17（Android 17）实测通知动作列表是
+    `[上一首][播放][下一首][播放顺序]`，媒体卡片却画成 `[播放顺序][上一首][暂停][下一首]`
+    （自定义动作贴左）。结论：新增自定义动作只能控制「自定义动作之间」的先后；要精确到
+    「收藏最左 / 播放顺序最右」得 vendor 插件覆盖 provider，且系统仍可能重排（见 ADR-0013）。
