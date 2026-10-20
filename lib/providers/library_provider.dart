@@ -350,7 +350,7 @@ class LibraryProvider extends ChangeNotifier {
 
   /// 播放音乐历史（[entries] 的可见顺序即播放队列顺序；[index] 为起始下标）。
   ///
-  /// [mode] 非空时先切换播放模式（「播放全部」→顺序、「随机播放」→随机）。
+  /// [mode] 非空时先切换播放模式（「随机播放」→随机）；不传时尊重当前模式。
   Future<void> playHistory(
     List<PlayHistoryEntry> entries,
     int index, {
@@ -371,9 +371,8 @@ class LibraryProvider extends ChangeNotifier {
 
   /// 按给定曲目顺序播放（收藏页搜索/排序后的可见顺序即播放队列顺序）。
   ///
-  /// [mode] 非空时先切换播放模式（「播放全部」→顺序、「随机播放」→随机），
-  /// 保证按钮语义与后续自动切歌行为一致；单曲点击不传 [mode]，尊重用户
-  /// 当前模式。
+  /// [mode] 非空时先切换播放模式（「随机播放」→随机），保证按钮语义与后续
+  /// 自动切歌行为一致；「播放全部」与单曲点击不传 [mode]，尊重用户当前模式。
   Future<void> playPlaylistTracks(
     List<PlaylistTrack> tracks,
     int index, {

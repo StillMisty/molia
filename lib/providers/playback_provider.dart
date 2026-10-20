@@ -190,6 +190,8 @@ class PlaybackProvider extends ChangeNotifier {
     sleepTimer = SleepTimerController(
       snapshot: _facade.snapshot,
       position: _facade.position,
+      trackCompletions: _facade.trackCompletions,
+      setStopAfterCurrentTrack: _facade.setStopAfterCurrentTrack,
       onFire: () => _facade.pause(),
     );
     _facade.snapshot.addListener(_onFacadeSnapshot);
@@ -398,9 +400,7 @@ class PlaybackProvider extends ChangeNotifier {
   }
 
   Future<void> togglePlayMode() async {
-    final next =
-        PlayMode.values[(currentMode.index + 1) % PlayMode.values.length];
-    await setPlayMode(next);
+    await setPlayMode(currentMode.next);
   }
 
   /// 应用内音量（0..1，不含静音；静音由 [muted] 表达）。

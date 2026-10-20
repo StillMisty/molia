@@ -146,7 +146,7 @@ class _FakeService extends LocalPlaybackService {
   @override
   Future<void> toggleMode() async {
     toggleModeCalls++;
-    _mode = PlayMode.values[(_mode.index + 1) % PlayMode.values.length];
+    _mode = _mode.next;
     notifyListeners();
   }
 
@@ -318,11 +318,11 @@ void main() {
     await harness.handler.customAction(playModeActionId);
     expect(harness.service.toggleModeCalls, 1);
     // App 内 UI 读的是同一份快照：通知改模式，界面同步跟随。
-    expect(harness.provider.currentMode, PlayMode.shuffle,
-        reason: '顺序 → 随机（与 PlaybackProvider.togglePlayMode 同一顺序）');
+    expect(harness.provider.currentMode, PlayMode.singleRepeat,
+        reason: '顺序 → 单曲（与 PlaybackProvider.togglePlayMode 同一顺序）');
 
     final stored = await PlaybackSessionStore().load();
-    expect(stored?.mode, PlayMode.shuffle, reason: '模式是会话的一部分');
+    expect(stored?.mode, PlayMode.singleRepeat, reason: '模式是会话的一部分');
   });
 
   test('App 内切换播放模式：立即落盘（重开应用恢复改后的模式）', () async {

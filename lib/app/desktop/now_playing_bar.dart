@@ -414,12 +414,14 @@ class _BarActions extends StatelessWidget {
             builder: (context, mode) => Icon(
               switch (mode) {
                 PlayMode.shuffle => Icons.shuffle_rounded,
-                PlayMode.sequential => Icons.repeat_rounded,
+                PlayMode.listLoop => Icons.repeat_rounded,
+                PlayMode.sequential => Icons.playlist_play_rounded,
                 PlayMode.singleRepeat => Icons.repeat_one_rounded,
               },
             ),
           ),
           semanticLabel: switch (mode) {
+            PlayMode.listLoop => l10n.playModeListLoop,
             PlayMode.sequential => l10n.playModeSequential,
             PlayMode.shuffle => l10n.playModeShuffle,
             PlayMode.singleRepeat => l10n.playModeSingleRepeat,

@@ -57,8 +57,9 @@
   - `Track` / `TrackId(sourceKey,id)` / `Artist` / `Artwork` / `AudioQuality`；
     `Track.payload` 承载源脚本原始对象（原 `SourceTrack.raw`），**只在 data/sources 传递、必须原样回传**；
   - `PlaybackSnapshot` / `BackendSnapshot` / `PlaybackRequest` / `PlaybackContext`；
-    `PlaybackSnapshot.next` 是后端按当前模式解析出的下一首（shuffle 单曲内稳定），
-    `previous` 是实际播放顺序最近一首（无则队列前一位），`upNext` 是队列顺序；
+    `PlaybackSnapshot.next` 是后端按当前模式解析出的下一首（shuffle 单曲内稳定，
+    列表循环队尾回绕），`previous` 是实际播放顺序最近一首（无则队列前一位，
+    列表循环队首回绕），`upNext` 是队列顺序（列表循环回绕）；
   - `SearchQuery` / `SearchResult<T>`；`SourceFailure(kind/l10nKey/retryable)`；
   - `Comment` / `CommentPage`（评论正文 / 时间 / IP 归属 / 点赞 / 引用 / 楼中楼，
     `CommentKind` 区分热门与最新）；
@@ -112,7 +113,10 @@
   （`lib/services/sleep_timer_alarm*.dart` → Android `SleepTimerChannelHandler` /
   iOS `SleepTimerChannelHandler.swift`）：熄屏 / Doze 下 Dart timer 被节流或
   冻结时，由原生定时器到点唤醒 Dart 执行暂停；原生不可用（桌面 / 测试）
-  自动退化为纯 Dart timer。
+  自动退化为纯 Dart timer。「播完当前歌曲」不靠进度通道判定曲末：
+  `LocalPlaybackService` 在 `ProcessingState.completed` 时先发
+  `trackCompletions`，并通过 `setStopAfterCurrentTrack` 在自动切歌前停住；
+  熄屏时位置 tick 被节流也不会把自然播完误判成手动切歌。
 - **Lyrics**：`LyricsProvider`（`lib/providers/lyrics_provider.dart`）是取词 → 缓存 →
   解析 → 预取的唯一实现，对外只暴露 `LyricsState`（idle/loading/ready/empty + isSynced，
   含按时间戳对齐的翻译 / 罗马音扩展行与逐字时间轴）。时间契约统一在
@@ -177,7 +181,8 @@
   `lib/services/notification_permission.dart` 在「首次真正播放 / 首次开启歌词
   输出」时弹窗（每会话一次），被永久拒绝时通知·锁屏设置页给系统设置深链；
   媒体会话初始化失败（平台支持但 `initSystemMediaSession` 返回 null）时歌词显示
-  页给可见提示。通知动作含自定义的**播放顺序**（循环模式：顺序 / 单曲 / 随机，
+  页给可见提示。通知动作含自定义的**播放顺序**（循环模式：列表循环 / 顺序 /
+  单曲 / 随机，
   图标与文案随当前模式，App 内改模式双向一致；`MediaAction.custom('lx.playMode')`，
   Android drawable 名沿用 `audio_service_*`，`keep.xml` 防 shrinkResources 删除）；
   系统控制路径（暂停 / 停止 / 切顺序 / seek）**显式 await 会话落盘**
@@ -812,7 +817,7 @@
   Choice / Dropdown / Slider / ColorValue），按值类型选型：bool → Switch、
   2–5 项短枚举 → Choice（行内分段，显式宽度，防 `M3ESegmentedButton` 零宽溢出；
   短标签行可配逐项图标——选中段的对勾替换图标，M3E 选中形态；长标签行
-  （Sequential / Single repeat）保持纯文字分段，图标或勾都会挤断文案）、
+  （Repeat all / Sequential / Single repeat）保持纯文字分段，图标或勾都会挤断文案）、
   ≥5 项或长文案 → Dropdown（必设 `fieldStyle.hintText`）、区间数值 → Slider、
   大范围绝对量（缓存上限）→ Value + 输入弹层（带常用预设）；
   子页（音源 / 歌词显示〔二级：歌词页 / 歌词输出 / 桌面歌词 / 通知·锁屏 / 蓝牙〕/

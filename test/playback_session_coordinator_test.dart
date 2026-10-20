@@ -220,6 +220,21 @@ void main() {
     expect(session.phase, PlaybackSessionPhase.idle);
   });
 
+  test('恢复态列表循环：next / previous / upNext 按队列回绕', () async {
+    build();
+    await seedSession(PlaybackSession(
+      tracks: [_track('a'), _track('b'), _track('c')],
+      index: 2,
+      mode: PlayMode.listLoop,
+    ));
+    expect(await session.load(), isTrue);
+
+    final restored = session.resolve(facade.snapshot.value);
+    expect(restored.next?.id.id, 'a');
+    expect(restored.previous?.id.id, 'b');
+    expect(restored.upNext.map((track) => track.id.id), ['a', 'b']);
+  });
+
   test('恢复态停止播放：撤下恢复数据、清空持久化会话', () async {
     build(persistStore: true);
     await seedSession(PlaybackSession(

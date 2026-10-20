@@ -88,6 +88,36 @@ void main() {
     expect(loaded.tracks[0].payload['songmid'], 'mid_a');
   });
 
+  test('新会话默认列表循环；旧 sequential 原样保留，未知模式回退列表循环', () async {
+    expect(
+      PlaybackSession(tracks: [_track('a')], index: 0).mode,
+      PlayMode.listLoop,
+    );
+
+    final store = PlaybackSessionStore();
+    Map<String, dynamic> raw(String mode) => {
+          'index': 0,
+          'positionMs': 0,
+          'mode': mode,
+          'tracks': [
+            {
+              'sourceKey': 'fake',
+              'id': 'a',
+              'title': 'Title a',
+              'artists': const <Object?>[],
+              'origin': 'lx',
+              'payload': const <String, Object?>{},
+            },
+          ],
+        };
+
+    await store.saveRaw(raw('sequential'));
+    expect((await store.load())?.mode, PlayMode.sequential);
+
+    await store.saveRaw(raw('unknown'));
+    expect((await store.load())?.mode, PlayMode.listLoop);
+  });
+
   test('进度键拆分：savePosition 不重写会话 JSON，load 合并最新进度', () async {
     final store = PlaybackSessionStore();
     await store.save(PlaybackSession(
@@ -219,15 +249,14 @@ void main() {
 
     // 恢复态切换模式（模式按钮同路径）：UI 立即跟随。
     await provider.togglePlayMode();
-    expect(provider.currentMode, PlayMode.singleRepeat);
-    expect(provider.snapshot.mode, PlayMode.singleRepeat);
-    expect(backend.state.value.mode, PlayMode.singleRepeat);
+    expect(provider.currentMode, PlayMode.listLoop);
+    expect(provider.snapshot.mode, PlayMode.listLoop);
+    expect(backend.state.value.mode, PlayMode.listLoop);
 
     // 新模式写入恢复会话：重启后仍保留。
     await Future<void>.delayed(Duration.zero);
     await Future<void>.delayed(Duration.zero);
-    expect((await PlaybackSessionStore().load())?.mode,
-        PlayMode.singleRepeat);
+    expect((await PlaybackSessionStore().load())?.mode, PlayMode.listLoop);
 
     // 会话模式与后端不一致（启动默认模式覆盖后端）+ 恢复播放：
     // 恢复时应把会话模式带给后端（shuffle 顺序依赖装载前的模式）。

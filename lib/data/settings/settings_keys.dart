@@ -105,7 +105,7 @@ const kGlobalShortcutBindings = SettingsKey<String>(
 );
 const kDefaultPlayMode = SettingsKey<String>(
   'default_play_mode',
-  'sequential',
+  'listLoop',
   category: SyncCategory.settings,
 );
 

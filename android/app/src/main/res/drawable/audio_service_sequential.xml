@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 系统媒体会话「播放顺序 · 顺序播放」自定义动作图标（按字符串资源名引用，
+     资源名沿用历史命名；见 raw/keep.xml 的 @drawable/audio_service_*）。 -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+    <path
+        android:fillColor="#FFFFFFFF"
+        android:pathData="M3,6h11v2H3V6zM3,10h11v2H3V10zM3,14h7v2H3V14zM16,12l6,4 -6,4V12z"/>
+</vector>

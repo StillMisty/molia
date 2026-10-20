@@ -45,6 +45,13 @@ class DefaultPlaybackFacade implements PlaybackFacade {
   @override
   StateListenable<Duration> get position => _position;
 
+  @override
+  Stream<Track> get trackCompletions => _backend.trackCompletions;
+
+  @override
+  void setStopAfterCurrentTrack(bool enabled) =>
+      _backend.setStopAfterCurrentTrack(enabled);
+
   /// 当前只有本地后端。
   @override
   bool get isLocal => true;

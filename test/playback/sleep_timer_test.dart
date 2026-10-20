@@ -78,6 +78,9 @@ void main() {
     timer = SleepTimerController(
       snapshot: facade.snapshot,
       position: facade.position,
+      // 与组合根一致：完成事件 + 停止标志都走 facade。
+      trackCompletions: facade.trackCompletions,
+      setStopAfterCurrentTrack: facade.setStopAfterCurrentTrack,
       // 到点动作：与组合根一致（facade.pause），并记录次数便于断言。
       onFire: () async {
         fired++;
@@ -183,6 +186,36 @@ void main() {
     expect(backend.calls, contains('pause'));
   });
 
+  testWidgets('播完当前歌曲：熄屏后位置 tick 停在半途，仍按完成事件暂停', (tester) async {
+    final a = _track('a');
+    final b = _track('b');
+    backend.emit(_snapshot(
+      current: a,
+      queue: [a, b],
+      duration: a.duration!,
+      position: const Duration(seconds: 10),
+    ));
+
+    timer.startAfterCurrentTrack();
+    expect(backend.stopAfterCurrentTrack, isTrue);
+
+    // 熄屏 / 后台：位置流没有继续 tick，_maxPosition 停在 10s；播放器原生
+    // 完成当前曲目并准备自动切下一首。完成事件必须先于「曲目变了」判定。
+    backend.emitTrackCompletion(a);
+    backend.emit(_snapshot(
+      current: b,
+      queue: [a, b],
+      currentIndex: 1,
+      duration: b.duration!,
+    ));
+    await tester.pump();
+
+    expect(fired, 1, reason: '不能把自然播完误判成手动切歌');
+    expect(timer.value.mode, SleepTimerMode.off);
+    expect(backend.calls, contains('pause'));
+    expect(backend.stopAfterCurrentTrack, isFalse, reason: '一次性标志应撤销');
+  });
+
   testWidgets('播完当前歌曲：手动切歌跟随新曲目继续等待', (tester) async {
     final a = _track('a');
     final b = _track('b');
@@ -199,6 +232,7 @@ void main() {
     ));
     expect(fired, 0);
     expect(timer.value.mode, SleepTimerMode.afterCurrentTrack);
+    expect(backend.stopAfterCurrentTrack, isTrue, reason: '手动切歌应继续等待新曲目');
 
     // 新曲目自然播完（队列末尾：播放停止）→ 无下一首可暂停，撤销定时。
     backend.emit(_snapshot(
@@ -211,6 +245,20 @@ void main() {
     ));
     expect(fired, 0);
     expect(timer.value.mode, SleepTimerMode.off);
+  });
+
+  testWidgets('播完当前歌曲：切到倒计时会撤销后端的停止标志', (tester) async {
+    final a = _track('a');
+    backend.emit(_snapshot(current: a, queue: [a], duration: a.duration!));
+
+    timer.startAfterCurrentTrack();
+    expect(backend.stopAfterCurrentTrack, isTrue);
+
+    timer.startCountdown(const Duration(minutes: 1));
+    expect(timer.value.mode, SleepTimerMode.countdown);
+    expect(backend.stopAfterCurrentTrack, isFalse);
+
+    timer.cancel();
   });
 
   testWidgets('播完当前歌曲：手动暂停保持武装，恢复后照常到点', (tester) async {

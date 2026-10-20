@@ -26,6 +26,7 @@ import '../domain/ports/playback_session_sync.dart';
 import '../domain/ports/state_listenable.dart';
 import '../models/play_mode.dart';
 import '../services/playback_session_store.dart';
+import 'queue_navigation.dart';
 
 final _logger = Logger('molia.playback_session');
 
@@ -530,7 +531,7 @@ class PlaybackSessionCoordinator implements PlaybackSessionSyncPort {
 
   /// 用会话构造恢复态展示快照：当前 / 队列 / 下标 / 模式齐备，isPlaying=false；
   /// 上一首按队列下标回退近似（没有播放顺序栈），`upNext` 按队列顺序近似
-  /// （没有洗牌顺序可还原）。
+  /// （没有洗牌顺序可还原）；列表循环按服务同一口径回绕。
   void _publishRestoredSnapshot() {
     final session = _restoredSession;
     final current = session?.current;
@@ -538,15 +539,31 @@ class PlaybackSessionCoordinator implements PlaybackSessionSyncPort {
       _restoredSnapshot = null;
       return;
     }
+    final wrap = session.mode == PlayMode.listLoop;
+    final length = session.tracks.length;
+    final nextIndex = nextQueueIndex(
+      session.index,
+      length,
+      wrap: wrap,
+    );
+    final previousIndex = previousQueueIndex(
+      session.index,
+      length,
+      wrap: wrap,
+    );
+    final previous =
+        previousIndex == null ? null : session.tracks[previousIndex];
     _restoredSnapshot = PlaybackSnapshot(
       current: current,
       queue: List.unmodifiable(session.tracks),
       currentIndex: session.index,
-      next: session.index + 1 < session.tracks.length
-          ? session.tracks[session.index + 1]
-          : null,
-      previous: session.index > 0 ? session.tracks[session.index - 1] : null,
-      upNext: List.unmodifiable(session.tracks.sublist(session.index + 1)),
+      next: nextIndex == null ? null : session.tracks[nextIndex],
+      previous: previous == null || previous.id == current.id ? null : previous,
+      upNext: List.unmodifiable([
+        for (var i = session.index + 1; i < length; i++) session.tracks[i],
+        if (wrap)
+          for (var i = 0; i < session.index; i++) session.tracks[i],
+      ]),
       isPlaying: false,
       isLoading: false,
       duration: current.duration ?? Duration.zero,

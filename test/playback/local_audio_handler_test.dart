@@ -130,7 +130,7 @@ class _FakeService extends LocalPlaybackService {
   @override
   Future<void> toggleMode() async {
     calls.add('toggleMode');
-    modeValue = PlayMode.values[(modeValue.index + 1) % PlayMode.values.length];
+    modeValue = modeValue.next;
     notifyListeners();
   }
 
@@ -258,7 +258,7 @@ void main() {
       expect(backend.lastMetadata?.title, '晴天');
       expect(backend.lastState?.status, PlaybackStatus.paused);
       expect(backend.lastState?.position, Duration.zero);
-      expect(backend.lastState?.repeatMode, MediaRepeatMode.all);
+      expect(backend.lastState?.repeatMode, MediaRepeatMode.none);
       expect(backend.lastState?.shuffleModeEnabled, isFalse);
 
       final actions = backend.lastActions!;
@@ -286,7 +286,7 @@ void main() {
       expect(backend.playModeAction?.customLabel, '顺序播放');
       expect(
         backend.playModeAction?.customIconResource,
-        'audio_service_repeat_all',
+        'audio_service_sequential',
       );
     });
 
@@ -312,6 +312,20 @@ void main() {
       final service = _FakeService()..trackValue = _track();
       addTearDown(service.dispose);
       final (_, backend) = await _handler(service);
+
+      service.emitMode(PlayMode.listLoop);
+      await pumpEventQueue();
+      expect(backend.lastState?.repeatMode, MediaRepeatMode.all);
+      expect(backend.lastState?.shuffleModeEnabled, isFalse);
+      expect(backend.playModeAction?.customLabel, '列表循环');
+      expect(
+        backend.playModeAction?.customIconResource,
+        'audio_service_repeat_all',
+      );
+
+      service.emitMode(PlayMode.sequential);
+      await pumpEventQueue();
+      expect(backend.lastState?.repeatMode, MediaRepeatMode.none);
 
       service.emitMode(PlayMode.singleRepeat);
       await pumpEventQueue();
@@ -527,8 +541,8 @@ void main() {
       await pumpEventQueue();
 
       expect(service.calls, ['toggleMode']);
-      expect(service.modeValue, PlayMode.shuffle);
-      expect(backend.playModeAction?.customLabel, '随机播放');
+      expect(service.modeValue, PlayMode.singleRepeat);
+      expect(backend.playModeAction?.customLabel, '单曲循环');
       expect(persisted, 1);
     });
   });

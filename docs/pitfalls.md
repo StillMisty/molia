@@ -578,3 +578,12 @@
     且**不报错**——真机表现是「点通知栏收藏没反应」（写路径经 `trackFromSourceTrack`
     是对的，所以数据其实写进曲库了，只是读不回来）。同类回归测试见
     `test/playback/local_audio_handler_test.dart` 的「接线后点收藏」。
+63. **「播完当前歌曲」定时不能靠进度通道判断曲末**：`just_audio` 的
+    `positionStream` 由 Dart `Timer.periodic` 驱动，熄屏 / 后台时可能被节流或整段
+    停更；而播放器原生完成事件仍会到达并继续自动切歌。只靠 `_maxPosition` 会把
+    自动切歌误判成手动切歌，把定时重新武装到下一首，表现为「息屏后永远不暂停、
+    亮屏时下一首还在播」。现在 `LocalPlaybackService` 在
+    `ProcessingState.completed` 时先发 `trackCompletions`，并由
+    `stopAfterCurrentTrack` 一次性标志在自动切歌前停住；`SleepTimerController`
+    优先消费完成事件，位置判定只作远程后端 / 测试的回退。回归用例见
+    `test/playback/sleep_timer_test.dart` 的「熄屏后位置 tick 停在半途」。

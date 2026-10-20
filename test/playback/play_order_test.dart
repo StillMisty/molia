@@ -45,15 +45,33 @@ void main() {
   });
 
   // 默认播放模式（设置项）：持久化 + 启动时无曲目应用。
-  test('默认 sequential：启动不额外下发 setMode', () async {
+  test('默认 listLoop：启动不额外下发 setMode', () async {
     final backend = FakePlaybackBackend();
     final provider = buildTestPlaybackProvider(backend: backend);
     addTearDown(provider.dispose);
 
     await provider.preferencesReady;
-    expect(provider.defaultPlayMode, PlayMode.sequential);
-    expect(provider.currentMode, PlayMode.sequential);
+    expect(provider.defaultPlayMode, PlayMode.listLoop);
+    expect(provider.currentMode, PlayMode.listLoop);
     expect(backend.calls.where((call) => call == 'setMode'), isEmpty);
+  });
+
+  test('togglePlayMode 按 列表循环 → 顺序 → 单曲 → 随机 循环', () async {
+    final backend = FakePlaybackBackend();
+    final provider = buildTestPlaybackProvider(backend: backend);
+    addTearDown(provider.dispose);
+    await provider.preferencesReady;
+
+    final expected = [
+      PlayMode.sequential,
+      PlayMode.singleRepeat,
+      PlayMode.shuffle,
+      PlayMode.listLoop,
+    ];
+    for (final mode in expected) {
+      await provider.togglePlayMode();
+      expect(provider.currentMode, mode);
+    }
   });
 
   test('启动时加载持久化的 shuffle 并应用到 facade（无曲目）', () async {
@@ -99,7 +117,7 @@ void main() {
     await provider.setDefaultPlayMode(PlayMode.shuffle);
 
     expect(provider.defaultPlayMode, PlayMode.shuffle);
-    expect(provider.currentMode, PlayMode.sequential);
+    expect(provider.currentMode, PlayMode.listLoop);
     expect(backend.calls.where((call) => call == 'setMode'), isEmpty);
 
     final prefs = await SharedPreferences.getInstance();

@@ -93,6 +93,7 @@
   "settingsStartupPageTitle": "启动时打开",
   "settingsStartupPageSubtitle": "打开应用时默认进入的页面",
   "settingsStartupPageHidden": "「{page}」已隐藏，启动时实际打开「{effective}」",
+  "playModeListLoop": "列表循环",
   "playModeSequential": "顺序播放",
   "playModeShuffle": "随机播放",
   "playModeSingleRepeat": "单曲循环",
@@ -681,7 +682,7 @@
     }
   },
   "aiDjTitle": "AI 推歌",
-  "aiDjSettingsSubtitle": "自备密钥的 AI 推荐电台（默认关闭）",
+  "aiDjSettingsSubtitle": "自备密钥的 AI 推荐电台",
   "aiDjNotConfigured": "尚未配置 AI 服务",
   "aiDjRequestFailed": "AI 请求失败，请稍后重试",
   "aiDjUnauthorized": "API Key 无效或没有权限",

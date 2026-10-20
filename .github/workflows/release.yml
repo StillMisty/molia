@@ -133,7 +133,8 @@ jobs:
                      ic_notification_favorite_filled \
                      audio_service_play_arrow audio_service_pause \
                      audio_service_skip_previous audio_service_skip_next audio_service_stop \
-                     audio_service_repeat_all audio_service_repeat_one audio_service_shuffle; do
+                     audio_service_repeat_all audio_service_sequential \
+                     audio_service_repeat_one audio_service_shuffle; do
             if ! grep -q "drawable/$res" /tmp/release-resources.txt; then
               echo "::error::release 包缺少 @drawable/$res（检查 android/app/src/main/res/raw/keep.xml）"
               missing=1

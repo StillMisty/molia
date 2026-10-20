@@ -48,6 +48,12 @@ class _FakeBackend implements PlaybackBackend {
   StateListenable<BackendSnapshot> get state => _notifier;
 
   @override
+  Stream<Track> get trackCompletions => const Stream.empty();
+
+  @override
+  void setStopAfterCurrentTrack(bool enabled) {}
+
+  @override
   Future<void> enqueueTracks(List<Track> tracks) async {
     lastEnqueued = tracks;
   }

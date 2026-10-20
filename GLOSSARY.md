@@ -32,6 +32,10 @@
   （`current/previous/next/upNext/context/mode/isPlaying/...`）。`PlaybackProvider.snapshot`
   是其唯一出口：真实播放来自 facade，冷启动恢复态由 `PlaybackSessionCoordinator`
   构造覆盖快照（唯一构造点）；历史兼容 map 形状已删除。
+- **Play mode（播放模式）** — `lib/models/play_mode.dart`：列表循环（队尾回队首）、
+  顺序播放（播完即停）、单曲循环、随机播放；`PlayMode.next` 是按钮与系统媒体动作
+  的循环切换顺序，持久化按枚举 `name`。`lib/playback/queue_navigation.dart` 统一
+  线性队列的下一首 / 上一首与列表循环的回绕口径。
 - **Played order（播放顺序）** — `lib/playback/playback_order.dart`：实际播放过的队列下标栈
   （最近在后、上限 100、`popPrevious` 供上一首消费）。驱动 `PlaybackSnapshot.previous`
   语义（实际播放顺序最近一首 → 队列前一位）；与播放页队列视图的 `upNext`（队列顺序）是两回事。
@@ -70,7 +74,8 @@
   「到点暂停」。两种模式：倒计时（**仅播放时计时**，暂停冻结；实现为**绝对
   deadline** 而非相对累减——tick / 快照变化 / 回前台三路各自比较 `now >= deadline`，
   熄屏节流或进程冻结后首个获得调度的回调立即补触发）与「播完当前歌曲」（纯事件驱动，
-  无定时器）。判定只读 **facade 原始
+  无定时器；以播放后端的自然完成事件为准，不依赖可能被熄屏节流的进度 tick）。
+  判定只读 **facade 原始
   通道**（真实播放），恢复态覆盖值不参与；到点动作经注入的 `onFire` 落地
   （组合根注入 `facade.pause`）。剩余时间每秒走 `ValueListenable`（不进聚合通知），
   不持久化，`stopLocalPlayback` 一并撤销。

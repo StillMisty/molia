@@ -31,18 +31,20 @@ bool get isSystemMediaSessionSupported {
   };
 }
 
-/// 播放顺序动作的 id：系统控件里循环切换「顺序 / 单曲循环 / 随机」。
+/// 播放顺序动作的 id：系统控件里循环切换「列表循环 / 顺序播放 / 单曲循环 /
+/// 随机播放」。
 ///
 /// Android 通知上的自定义动作按字符串 `getIdentifier` 取 drawable
 /// （release 的 shrinkResources 靠 `keep.xml` 的 `@drawable/audio_service_*`
-/// 保留），因此三个模式各配一个矢量图标。资源名沿用历史命名，避免动
+/// 保留），因此四个模式各配一个矢量图标。资源名沿用历史命名，避免动
 /// 发布清单；`flutter_media_session` 的 `customIconResource` 只接受裸资源名
 /// （不带 `drawable/` 前缀）。
 const String playModeActionId = 'lx.playMode';
 
 /// 播放模式 → 通知动作图标（Android drawable 资源名，不带目录前缀）。
 const Map<PlayMode, String> playModeActionIcons = {
-  PlayMode.sequential: 'audio_service_repeat_all',
+  PlayMode.listLoop: 'audio_service_repeat_all',
+  PlayMode.sequential: 'audio_service_sequential',
   PlayMode.singleRepeat: 'audio_service_repeat_one',
   PlayMode.shuffle: 'audio_service_shuffle',
 };
@@ -552,7 +554,8 @@ class LocalAudioHandler {
       bufferedPosition: position,
       speed: 1.0,
       repeatMode: switch (mode) {
-        PlayMode.sequential => MediaRepeatMode.all,
+        PlayMode.listLoop => MediaRepeatMode.all,
+        PlayMode.sequential => MediaRepeatMode.none,
         PlayMode.singleRepeat => MediaRepeatMode.one,
         PlayMode.shuffle => MediaRepeatMode.all,
       },
@@ -589,6 +592,7 @@ class LocalAudioHandler {
     return MediaAction.custom(
       name: playModeActionId,
       customLabel: switch (mode) {
+        PlayMode.listLoop => l10n.playModeListLoop,
         PlayMode.sequential => l10n.playModeSequential,
         PlayMode.singleRepeat => l10n.playModeSingleRepeat,
         PlayMode.shuffle => l10n.playModeShuffle,

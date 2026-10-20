@@ -277,6 +277,9 @@ class AppLocalizationsZh extends AppLocalizations {
   }
 
   @override
+  String get playModeListLoop => '列表循环';
+
+  @override
   String get playModeSequential => '顺序播放';
 
   @override
@@ -1800,7 +1803,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get aiDjTitle => 'AI 推歌';
 
   @override
-  String get aiDjSettingsSubtitle => '自备密钥的 AI 推荐电台（默认关闭）';
+  String get aiDjSettingsSubtitle => '自备密钥的 AI 推荐电台';
 
   @override
   String get aiDjNotConfigured => '尚未配置 AI 服务';

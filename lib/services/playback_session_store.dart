@@ -23,7 +23,7 @@ class PlaybackSession {
     required this.tracks,
     required this.index,
     this.position = Duration.zero,
-    this.mode = PlayMode.sequential,
+    this.mode = PlayMode.listLoop,
     this.context,
   });
 
@@ -80,7 +80,7 @@ class PlaybackSession {
         position: Duration(milliseconds: positionMs < 0 ? 0 : positionMs),
         mode: PlayMode.values.firstWhere(
           (mode) => mode.name == modeName,
-          orElse: () => PlayMode.sequential,
+          orElse: () => PlayMode.listLoop,
         ),
         context: contextJson is Map
             ? PlaybackContext(

@@ -677,9 +677,10 @@ class _SettingsHomeViewState extends State<_SettingsHomeView>
             subtitle: l10n.settingsDefaultPlayModeSubtitle,
             value: defaultPlayMode,
             options: [
+              (PlayMode.listLoop, l10n.playModeListLoop),
               (PlayMode.sequential, l10n.playModeSequential),
-              (PlayMode.shuffle, l10n.playModeShuffle),
               (PlayMode.singleRepeat, l10n.playModeSingleRepeat),
+              (PlayMode.shuffle, l10n.playModeShuffle),
             ],
             onChanged: (mode) =>
                 context.read<PlaybackProvider>().setDefaultPlayMode(mode),

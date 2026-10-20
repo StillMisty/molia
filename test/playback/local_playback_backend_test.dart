@@ -362,6 +362,14 @@ void main() {
     expect(backend.state.value.current, isNull);
   });
 
+  test('stopAfterCurrentTrack：标志转发到服务', () {
+    backend.setStopAfterCurrentTrack(true);
+    expect(service.stopAfterCurrentTrack, isTrue);
+
+    backend.setStopAfterCurrentTrack(false);
+    expect(service.stopAfterCurrentTrack, isFalse);
+  });
+
   test('replaceQueueTrack：转换后替换队列同 id 曲目（快照更新，当前不受影响）', () async {
     service.seed([_source('a'), _source('b')], index: 0, playing: true);
     final replacement = trackFromSourceTrack(_source('b', title: '新版本'));

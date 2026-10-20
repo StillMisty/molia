@@ -100,7 +100,7 @@ class BackendSnapshot {
     this.isLoading = false,
     this.position = Duration.zero,
     this.duration = Duration.zero,
-    this.mode = PlayMode.sequential,
+    this.mode = PlayMode.listLoop,
     this.context,
     this.error,
   });
@@ -181,7 +181,7 @@ class PlaybackSnapshot {
     this.isPlaying = false,
     this.isLoading = false,
     this.duration = Duration.zero,
-    this.mode = PlayMode.sequential,
+    this.mode = PlayMode.listLoop,
     this.context,
     this.backend = PlaybackBackendKind.local,
     this.error,

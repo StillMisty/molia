@@ -21,8 +21,8 @@ abstract class MediaSessionBackend {
 
   Future<void> updatePlaybackState(PlaybackState state);
 
-  /// 更新系统控件可用的动作集合。播放模式（顺序 / 单曲 / 随机）作为
-  /// Android 通知的自定义动作随集合一起下发。
+  /// 更新系统控件可用的动作集合。播放模式（列表循环 / 顺序 / 单曲 / 随机）
+  /// 作为 Android 通知的自定义动作随集合一起下发。
   Future<void> updateAvailableActions(Set<MediaAction> actions);
 
   /// 系统控制（通知 / 锁屏 / 耳机键 / 媒体浮层）发来的动作。

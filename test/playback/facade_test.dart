@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/foundation.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:molia/data/playback/default_playback_facade.dart';
@@ -44,6 +46,12 @@ class FakeBackend implements PlaybackBackend {
 
   @override
   StateListenable<BackendSnapshot> get state => _notifier;
+
+  @override
+  Stream<Track> get trackCompletions => const Stream.empty();
+
+  @override
+  void setStopAfterCurrentTrack(bool enabled) {}
 
   @override
   Future<void> enqueueTracks(List<Track> tracks) async {
@@ -432,7 +440,7 @@ void main() {
       expect(provider.isPlaying, isTrue);
       expect(provider.isLoading, isFalse);
       expect(provider.snapshot.current?.title, 'Title a');
-      expect(provider.currentMode, PlayMode.sequential);
+      expect(provider.currentMode, PlayMode.listLoop);
 
       expect(messenger.failures, hasLength(1));
       expect(messenger.failures.single.kind, FailureKind.scriptError);

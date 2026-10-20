@@ -15,6 +15,7 @@ import 'audio_focus_guard.dart';
 import 'next_track_preloader.dart';
 import 'playback_order.dart';
 import 'playing_track_cache_writer.dart';
+import 'queue_navigation.dart';
 import 'shuffle_order.dart';
 
 /// 将音源曲目解析为可播放 URL 的回调（由 SourceManager 提供）。
@@ -68,7 +69,7 @@ class LocalPlaybackService extends ChangeNotifier {
   int _currentIndex = -1;
   SourceTrack? _currentTrack;
   String? _contextName;
-  PlayMode _mode = PlayMode.sequential;
+  PlayMode _mode = PlayMode.listLoop;
 
   /// 队列内容版本号：任何队列变更（装载 / 追加 / 原地替换 / 补图 / 清空）
   /// 自增。O(1) 的「队列是否真的变了」判定（位置 tick 不算变更）；
@@ -94,6 +95,16 @@ class LocalPlaybackService extends ChangeNotifier {
   Timer? _notifyThrottle;
   bool _notifyPending = false;
   int _playRequestId = 0;
+
+  /// 当前曲目自然播完（自动切歌 / 单曲循环重播之前）的广播事件。
+  ///
+  /// 定时关闭的「播完当前歌曲」不能靠 `positionStream` 判断曲末：息屏 /
+  /// 后台时位置流由 Dart 定时器驱动，可能被节流，而播放器仍会完成当前曲目。
+  final StreamController<SourceTrack> _trackCompletions =
+      StreamController<SourceTrack>.broadcast(sync: true);
+
+  /// 「当前曲目播完即停止」的一次性标志（定时关闭用）。
+  bool _stopAfterCurrentTrack = false;
 
   LocalPlaybackService({
     required SourceUrlResolver resolver,
@@ -168,6 +179,18 @@ class LocalPlaybackService extends ChangeNotifier {
   String? get lastError => _lastError;
   SourceTrack? get currentSourceTrack => _currentTrack;
 
+  /// 当前曲目自然播完的事件（自动切歌 / 单曲循环重播之前发出）。
+  Stream<SourceTrack> get trackCompletions => _trackCompletions.stream;
+
+  /// 武装 / 撤销「当前曲目播完即停止」；曲目完成时自动清除。
+  void setStopAfterCurrentTrack(bool enabled) {
+    _stopAfterCurrentTrack = enabled;
+  }
+
+  /// 当前是否已武装停止标志（测试 / 断点观察用）。
+  @visibleForTesting
+  bool get stopAfterCurrentTrack => _stopAfterCurrentTrack;
+
   /// 最近一次 `playTracks` 传入的上下文名（系统媒体会话/快照映射用）。
   String? get contextName => _contextName;
 
@@ -178,12 +201,18 @@ class LocalPlaybackService extends ChangeNotifier {
     return index < 0 ? null : _queue[index];
   }
 
-  /// 可展示的上一首：播放顺序最近一首（非破坏性 peek）→ 队列前一位；
-  /// 无 / 与当前曲目同 id 为 null（队首的「重播当前」不当作上一首）。
+  /// 可展示的上一首：播放顺序最近一首（非破坏性 peek）→ 队列前一位
+  /// （列表循环队首回绕到队尾）；无 / 与当前曲目同 id 为 null
+  /// （队首的「重播当前」不当作上一首）。
   SourceTrack? get previousSourceTrack {
     if (_currentIndex < 0 || _currentIndex >= _queue.length) return null;
-    final index =
-        _order.peekPrevious() ?? (_currentIndex > 0 ? _currentIndex - 1 : -1);
+    final index = _order.peekPrevious() ??
+        previousQueueIndex(
+          _currentIndex,
+          _queue.length,
+          wrap: _mode == PlayMode.listLoop,
+        ) ??
+        -1;
     if (index < 0 || index >= _queue.length) return null;
     final target = _queue[index];
     final current = _queue[_currentIndex];
@@ -192,7 +221,8 @@ class LocalPlaybackService extends ChangeNotifier {
   }
 
   /// 实际播放顺序中当前曲目之后的曲目（队列页「接下来」展示用）：
-  /// 顺序模式 = 队列下一位起；shuffle = 本轮洗牌排列的剩余。
+  /// 列表循环 = 队列下一位起，队尾后补上队首到当前之前的曲目；
+  /// 顺序播放 = 队列下一位起；shuffle = 本轮洗牌排列的剩余。
   List<SourceTrack> get upNextTracks {
     if (_currentIndex < 0 || _queue.isEmpty) return const [];
     if (_mode == PlayMode.shuffle && _queue.length > 1) {
@@ -202,9 +232,15 @@ class LocalPlaybackService extends ChangeNotifier {
           _queue[index],
       ]);
     }
-    return List.unmodifiable([
+    final upcoming = <SourceTrack>[
       for (var i = _currentIndex + 1; i < _queue.length; i++) _queue[i],
-    ]);
+    ];
+    if (_mode == PlayMode.listLoop) {
+      for (var i = 0; i < _currentIndex; i++) {
+        upcoming.add(_queue[i]);
+      }
+    }
+    return List.unmodifiable(upcoming);
   }
 
   /// 当前播放进度（用于系统媒体会话状态映射）。
@@ -492,9 +528,15 @@ class LocalPlaybackService extends ChangeNotifier {
   Future<void> skipToPrevious() async {
     if (_currentTrack == null || _queue.isEmpty) return;
     // 永远切上一首：滑动/按钮/耳机键同一语义，不做「>3 秒重播本曲」。
-    // 有播放顺序（含 shuffle）消费最近一首；否则回退到队列前一位。
-    final previous =
-        _order.popPrevious() ?? (_currentIndex > 0 ? _currentIndex - 1 : 0);
+    // 有播放顺序（含 shuffle）消费最近一首；否则回退到队列前一位
+    // （列表循环队首回绕到队尾）。
+    final previous = _order.popPrevious() ??
+        previousQueueIndex(
+          _currentIndex,
+          _queue.length,
+          wrap: _mode == PlayMode.listLoop,
+        ) ??
+        0;
     await _playIndex(previous, recordHistory: false);
   }
 
@@ -516,13 +558,13 @@ class LocalPlaybackService extends ChangeNotifier {
   }
 
   Future<void> toggleMode() async {
-    final next = PlayMode.values[(_mode.index + 1) % PlayMode.values.length];
-    await setMode(next);
+    await setMode(_mode.next);
   }
 
   /// 停止本地播放并清空状态。
   Future<void> stop({bool clear = true}) async {
     _playRequestId++;
+    _stopAfterCurrentTrack = false;
     _nextTrackPreloader?.cancelPending();
     _cacheWriter?.cancel();
     try {
@@ -555,7 +597,8 @@ class LocalPlaybackService extends ChangeNotifier {
     return _commitNextIndex(auto: false);
   }
 
-  /// 执行用的下一首下标（自动播完 / 手动切歌共用）：shuffle 走排列，轮末重洗。
+  /// 执行用的下一首下标（自动播完 / 手动切歌共用）：shuffle 走排列，
+  /// 轮末重洗；线性模式由 [nextQueueIndex] 决定是否在队尾回绕。
   int _commitNextIndex({required bool auto}) {
     if (_queue.isEmpty) return -1;
     if (_mode == PlayMode.singleRepeat && auto) {
@@ -566,8 +609,12 @@ class LocalPlaybackService extends ChangeNotifier {
       _ensureShuffleOrder();
       return _shuffleOrder.next(_currentIndex);
     }
-    if (_currentIndex + 1 < _queue.length) return _currentIndex + 1;
-    return -1;
+    return nextQueueIndex(
+          _currentIndex,
+          _queue.length,
+          wrap: _mode == PlayMode.listLoop,
+        ) ??
+        -1;
   }
 
   /// shuffle 排列缺失时按当前曲目置首补齐（正常路径在 playTracks/setMode
@@ -596,16 +643,41 @@ class LocalPlaybackService extends ChangeNotifier {
     if (_handlingCompletion) return;
     _handlingCompletion = true;
     try {
+      // 先捕获并清除一次性标志：完成事件的监听器可能同步调用
+      // setStopAfterCurrentTrack(false)，不能让这次回调影响本次判定。
+      final stopAfterCurrent = _stopAfterCurrentTrack;
+      _stopAfterCurrentTrack = false;
+      final completed = _currentTrack;
+      if (completed != null && !_trackCompletions.isClosed) {
+        _trackCompletions.add(completed);
+      }
+      if (stopAfterCurrent) {
+        // 曲末停在当前曲目，不自动切歌；位置流可能停在半途，这里对齐到
+        // 曲末，通知栏 / 播放页不会显示一个半截进度。
+        if (_duration > Duration.zero) _position = _duration;
+        try {
+          await _player.pause();
+        } catch (e) {
+          debugPrint('[LocalPlayback] 播完当前曲目后暂停失败: $e');
+        }
+        _isPlaying = false;
+        notifyListeners();
+        return;
+      }
       if (_mode == PlayMode.singleRepeat) {
         await _player.seek(Duration.zero);
         _resumeCurrentTrack();
       } else {
         final index = _commitNextIndex(auto: true);
-        if (index >= 0 && index != _currentIndex) {
-          await _playIndex(index);
-        } else {
+        if (index < 0) {
           _isPlaying = false;
           notifyListeners();
+        } else if (index == _currentIndex) {
+          // 列表循环 / 随机只有一首歌：下一首就是自己，按重播处理。
+          await _player.seek(Duration.zero);
+          _resumeCurrentTrack();
+        } else {
+          await _playIndex(index);
         }
       }
     } finally {
@@ -635,10 +707,12 @@ class LocalPlaybackService extends ChangeNotifier {
   @override
   void dispose() {
     _playRequestId++;
+    _stopAfterCurrentTrack = false;
     _notifyThrottle?.cancel();
     _playerStateSubscription?.cancel();
     _positionSubscription?.cancel();
     _cacheWriter?.cancel();
+    unawaited(_trackCompletions.close());
     final guard = _focusGuard;
     if (guard != null) unawaited(guard.detach());
     _player.dispose();

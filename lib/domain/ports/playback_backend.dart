@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import '../../models/play_mode.dart';
 import '../models/failure.dart';
 import '../models/playback.dart';
@@ -55,6 +57,18 @@ abstract interface class PlaybackBackend {
 
   /// 事件驱动快照（低频即可），不保证每次 position 变化都发。
   StateListenable<BackendSnapshot> get state;
+
+  /// 当前曲目自然播完的事件（在自动切下一首 / 单曲循环重播之前发出）。
+  ///
+  /// 定时关闭的「播完当前歌曲」不能依赖进度通道：熄屏 / 后台时位置流由
+  /// Dart 定时器驱动，可能被节流，而播放器仍会继续播放并完成当前曲目。
+  /// 默认空流（远程后端 / 不支持自然完成事件的后端）。
+  Stream<Track> get trackCompletions => const Stream.empty();
+
+  /// 要求当前曲目自然播完后停止，不再自动切歌（定时关闭用）。
+  ///
+  /// 一次性标志：后端在曲目完成时自行清除；默认 no-op。
+  void setStopAfterCurrentTrack(bool enabled) {}
 
   Future<void> load(PlaybackRequest request);
   Future<void> play();

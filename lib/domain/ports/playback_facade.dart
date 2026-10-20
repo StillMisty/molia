@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import '../../models/play_mode.dart';
 import '../models/playback.dart';
 import '../models/track.dart';
@@ -12,6 +14,15 @@ abstract interface class PlaybackFacade {
 
   /// 高频进度（内部 ≥250ms 变化才发）：只让进度条/歌词订阅。
   StateListenable<Duration> get position;
+
+  /// 当前曲目自然播完的事件（自动切歌前发出）。
+  ///
+  /// 定时关闭的「播完当前歌曲」用：熄屏时进度通道可能停更，不能靠它判断
+  /// 曲末；见 `PlaybackBackend.trackCompletions`。
+  Stream<Track> get trackCompletions;
+
+  /// 当前曲目自然播完后停止，不自动切下一首（定时关闭用）。
+  void setStopAfterCurrentTrack(bool enabled);
 
   /// 是否处于“本地流”播放（当前恒 true）。
   bool get isLocal;

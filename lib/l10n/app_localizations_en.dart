@@ -290,6 +290,9 @@ class AppLocalizationsEn extends AppLocalizations {
   }
 
   @override
+  String get playModeListLoop => 'Repeat all';
+
+  @override
   String get playModeSequential => 'Sequential';
 
   @override
@@ -1880,8 +1883,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get aiDjTitle => 'AI DJ';
 
   @override
-  String get aiDjSettingsSubtitle =>
-      'AI radio with your own key (off by default)';
+  String get aiDjSettingsSubtitle => 'AI radio with your own key';
 
   @override
   String get aiDjNotConfigured => 'AI service is not configured yet';

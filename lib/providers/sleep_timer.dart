@@ -5,6 +5,7 @@ import 'package:flutter/widgets.dart';
 import 'package:logging/logging.dart';
 
 import '../domain/models/playback.dart';
+import '../domain/models/track.dart';
 import '../domain/ports/state_listenable.dart';
 import '../services/sleep_timer_alarm.dart';
 
@@ -79,14 +80,19 @@ class SleepTimerController implements ValueListenable<SleepTimerState> {
     required Future<void> Function() onFire,
     DateTime Function() now = DateTime.now,
     SleepTimerAlarm? alarm,
+    Stream<Track>? trackCompletions,
+    void Function(bool enabled)? setStopAfterCurrentTrack,
   })  : _snapshot = snapshot,
         _position = position,
         _onFire = onFire,
-        _now = now {
+        _now = now,
+        _setStopAfterCurrentTrack = setStopAfterCurrentTrack {
     // 原生定时器是熄屏 / Doze 的补触发通道；平台不支持时是 no-op，纯 Dart
     // ticker 仍按原语义工作。
     _alarm = alarm ?? createSleepTimerAlarm();
     _alarm.onFired = _onNativeAlarm;
+    // 曲目自然播完事件：熄屏时位置流可能停更，「播完当前歌曲」靠它判定曲末。
+    _completionSubscription = trackCompletions?.listen(_onTrackCompleted);
     _snapshot.addListener(_onSnapshot);
     _position.addListener(_onPosition);
     _lastKnownDuration = snapshot.value.duration;
@@ -108,6 +114,12 @@ class SleepTimerController implements ValueListenable<SleepTimerState> {
   final Future<void> Function() _onFire;
   final DateTime Function() _now;
   late final SleepTimerAlarm _alarm;
+
+  /// 后端「当前曲目自然播完」事件；null = 后端不支持（走位置回退）。
+  StreamSubscription<Track>? _completionSubscription;
+
+  /// 把「播完当前歌曲」停止标志下发给播放后端（null = 测试 / 旧宿主）。
+  final void Function(bool enabled)? _setStopAfterCurrentTrack;
 
   /// 原生定时器代次：覆盖 / 取消时自增，旧回调直接丢弃。
   int _alarmToken = 0;
@@ -157,6 +169,8 @@ class SleepTimerController implements ValueListenable<SleepTimerState> {
   /// 开启倒计时（到点暂停）。重复调用覆盖旧定时。
   void startCountdown(Duration duration) {
     if (duration <= Duration.zero) return;
+    // 与「播完当前歌曲」互斥：切到倒计时时撤销后端的停止标志。
+    _setStopAfterCurrentTrack?.call(false);
     _mode = SleepTimerMode.countdown;
     _armedTrackUri = null;
     _duration = duration;
@@ -174,6 +188,8 @@ class SleepTimerController implements ValueListenable<SleepTimerState> {
     if (uri == null) return;
     _mode = SleepTimerMode.afterCurrentTrack;
     _armedTrackUri = uri;
+    // 后端在自然播完时停住，不自动切下一首；完成事件负责复位定时。
+    _setStopAfterCurrentTrack?.call(true);
     _duration = null;
     _remaining = null;
     _deadlineAt = null;
@@ -190,6 +206,9 @@ class SleepTimerController implements ValueListenable<SleepTimerState> {
   }
 
   void dispose() {
+    _completionSubscription?.cancel();
+    _completionSubscription = null;
+    _setStopAfterCurrentTrack?.call(false);
     _snapshot.removeListener(_onSnapshot);
     _position.removeListener(_onPosition);
     _cancelTicker();
@@ -209,6 +228,16 @@ class SleepTimerController implements ValueListenable<SleepTimerState> {
         _handleAfterTrackSnapshot(snapshot);
     }
     _lastKnownDuration = snapshot.duration;
+  }
+
+  /// 后端报告当前曲目自然播完。
+  ///
+  /// 不能等位置通道走到曲末：熄屏 / 后台时它可能整段停更，而播放器仍会
+  /// 继续播放并完成曲目；此时若靠「曲目变了」判断，会被误认为手动切歌，
+  /// 把定时重新武装到下一首。
+  void _onTrackCompleted(Track _) {
+    if (_mode != SleepTimerMode.afterCurrentTrack) return;
+    _fire();
   }
 
   void _onPosition() {
@@ -389,6 +418,7 @@ class SleepTimerController implements ValueListenable<SleepTimerState> {
   }
 
   void _reset({required bool notify}) {
+    _setStopAfterCurrentTrack?.call(false);
     _mode = SleepTimerMode.off;
     _remaining = null;
     _duration = null;

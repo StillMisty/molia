@@ -124,6 +124,7 @@
       }
     }
   },
+  "playModeListLoop": "Repeat all",
   "playModeSequential": "Sequential",
   "playModeShuffle": "Shuffle",
   "playModeSingleRepeat": "Single repeat",
@@ -945,7 +946,7 @@
     }
   },
   "aiDjTitle": "AI DJ",
-  "aiDjSettingsSubtitle": "AI radio with your own key (off by default)",
+  "aiDjSettingsSubtitle": "AI radio with your own key",
   "aiDjNotConfigured": "AI service is not configured yet",
   "aiDjRequestFailed": "AI request failed. Try again later.",
   "aiDjUnauthorized": "Invalid API key or permission denied",

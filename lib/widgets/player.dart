@@ -562,6 +562,7 @@ class _PlayerState extends State<Player> with TickerProviderStateMixin {
       BuildContext context, PlayMode mode, VoidCallback onPressed) {
     final l10n = AppLocalizations.of(context);
     final label = switch (mode) {
+      PlayMode.listLoop => l10n?.playModeListLoop,
       PlayMode.sequential => l10n?.playModeSequential,
       PlayMode.shuffle => l10n?.playModeShuffle,
       PlayMode.singleRepeat => l10n?.playModeSingleRepeat,
@@ -692,8 +693,10 @@ class _PlayerState extends State<Player> with TickerProviderStateMixin {
     switch (mode) {
       case PlayMode.shuffle:
         return Icons.shuffle_rounded;
-      case PlayMode.sequential:
+      case PlayMode.listLoop:
         return Icons.repeat_rounded;
+      case PlayMode.sequential:
+        return Icons.playlist_play_rounded;
       case PlayMode.singleRepeat:
         return Icons.repeat_one_rounded;
     }

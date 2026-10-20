@@ -79,7 +79,7 @@ LocalPlaybackService ──监听──▶ LocalAudioHandler ──▶ MediaSess
 - 曲目 / 封面 / 时长变化 → 更新元数据；播放状态 / buffering → 更新 playback state；
   seek（位置跳变 >1s）→ 更新位置；
 - 播放模式 → `repeatMode` / `shuffleModeEnabled` + Android 通知自定义动作
-  「播放顺序」（顺序 / 单曲 / 随机，文案随语言切换重发）；
+  「播放顺序」（列表循环 / 顺序 / 单曲 / 随机，文案随语言切换重发）；
 - 通知/锁屏/耳机键/媒体浮层：play / pause / stop / next / previous / seek；
 - 恢复态无真实曲目时，next/previous 回落到注入的
   `onRestoredSkipToNext/Previous`；

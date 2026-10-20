@@ -71,6 +71,13 @@ class LocalPlaybackBackend implements PlaybackBackend {
   @override
   StateListenable<BackendSnapshot> get state => _state;
 
+  @override
+  Stream<Track> get trackCompletions => _service.trackCompletions.map(_toTrack);
+
+  @override
+  void setStopAfterCurrentTrack(bool enabled) =>
+      _service.setStopAfterCurrentTrack(enabled);
+
   /// 领域解析：Track + 音质 → PlayableStream。
   Future<PlayableStream> resolveStream(Track track, [AudioQuality? quality]) =>
       _resolver(track, quality);

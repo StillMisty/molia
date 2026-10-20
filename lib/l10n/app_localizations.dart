@@ -614,6 +614,12 @@ abstract class AppLocalizations {
   /// **'“{page}” is hidden; the app opens “{effective}” instead'**
   String settingsStartupPageHidden(String page, String effective);
 
+  /// No description provided for @playModeListLoop.
+  ///
+  /// In en, this message translates to:
+  /// **'Repeat all'**
+  String get playModeListLoop;
+
   /// No description provided for @playModeSequential.
   ///
   /// In en, this message translates to:
@@ -3473,7 +3479,7 @@ abstract class AppLocalizations {
   /// No description provided for @aiDjSettingsSubtitle.
   ///
   /// In en, this message translates to:
-  /// **'AI radio with your own key (off by default)'**
+  /// **'AI radio with your own key'**
   String get aiDjSettingsSubtitle;
 
   /// No description provided for @aiDjNotConfigured.

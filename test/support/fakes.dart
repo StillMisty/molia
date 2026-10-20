@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/foundation.dart';
 import 'package:molia/data/catalog/catalog_service.dart';
 import 'package:molia/data/playback/default_playback_facade.dart';
@@ -29,6 +31,26 @@ class FakePlaybackBackend implements PlaybackBackend {
   final List<String> calls = [];
   PlaybackRequest? lastRequest;
   List<Track>? lastEnqueued;
+
+  /// 「播完当前歌曲后停止」标志的最近值（与真实后端一样由定时关闭下发）。
+  bool? stopAfterCurrentTrack;
+  final List<bool> stopAfterCurrentTrackCalls = [];
+
+  // 与真实服务一致用同步广播：完成事件必须在自动切歌的状态更新之前送达。
+  final StreamController<Track> _trackCompletions =
+      StreamController<Track>.broadcast(sync: true);
+
+  /// 模拟后端自然播完当前曲目（自动切歌之前）。
+  void emitTrackCompletion(Track track) => _trackCompletions.add(track);
+
+  @override
+  Stream<Track> get trackCompletions => _trackCompletions.stream;
+
+  @override
+  void setStopAfterCurrentTrack(bool enabled) {
+    stopAfterCurrentTrack = enabled;
+    stopAfterCurrentTrackCalls.add(enabled);
+  }
 
   /// 音量下发记录（provider 音量链路测试用；有效音量含静音时的 0）。
   final List<double> volumes = [];
