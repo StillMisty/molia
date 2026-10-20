@@ -34,7 +34,6 @@
     <uses-feature android:name="android.hardware.camera" android:required="false"/>
 
     <application
-        android:name=".MoliaApplication"
         android:label="@string/app_name"
         android:icon="@mipmap/launcher_icon"
         android:allowBackup="true"
@@ -103,5 +102,20 @@
                 android:name="android.appwidget.provider"
                 android:resource="@xml/music_widget_info" />
         </receiver>
+
+        <!-- EmojiCompat 是给 Android TextView / AppCompat 用的；Flutter 文本由
+             引擎自绘，原生只有 RemoteViews（系统 TextView），不需要它在每次
+             进程启动时初始化并拉 emoji 字体。保留 InitializationProvider 的
+             其余初始化项（ProcessLifecycle / ProfileInstaller）。 -->
+        <provider
+            android:name="androidx.startup.InitializationProvider"
+            android:authorities="${applicationId}.androidx-startup"
+            android:exported="false"
+            tools:node="merge">
+            <meta-data
+                android:name="androidx.emoji2.text.EmojiCompatInitializer"
+                tools:node="remove" />
+        </provider>
+
     </application>
 </manifest>
