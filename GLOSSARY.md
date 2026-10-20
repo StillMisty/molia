@@ -128,8 +128,8 @@
   缓存，不启动切歌入场；首帧三槽位直接按队列渲染。只有空态出现首曲目才走
   `observe` 的入场。
 - **Startup reveal（启动首屏入场）** — `NowPlaying.startupReveal`：仅冷启动且启动
-  首页是播放页、已有当前曲目时播放一次；整页透明度 0.85→1（240ms）+ 标题入场，
-  封面区首帧已是稳态，不做位移/缩放。托盘恢复 / 从其它页进入播放页不播。
+  首页是播放页、已有当前曲目时播放一次；只播标题入场，整页与封面区首帧即稳态，
+  不做透明度/位移/缩放。托盘恢复 / 从其它页进入播放页不播。
 - **Cover swap host（切歌宿主）** — `CoverSwapHost`（实现：deck State）：会话的
   效果面意图接口，决定「怎么做」——控制器编排、post-frame 调度、播放命令与父级
   联动（`startSettle` / `land` / `settleCommit` / `crossfadeCorrection` / `hardReset`

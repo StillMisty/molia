@@ -143,51 +143,13 @@ void main() {
       closeTo(coverCenter.dx, 0.5),
       reason: '首帧之后也不补播入场位移',
     );
-    expect(
-      find.byKey(NowPlaying.startupRevealKey),
-      findsNothing,
-      reason: '非冷启动首页不启用首屏入场',
-    );
   });
 
-  testWidgets('启动首屏入场：封面首帧即可读，240ms 后到终态', (tester) async {
+  testWidgets('启动首屏入场：封面首帧仍按队列稳态', (tester) async {
     final playback = await restoredProvider(tester);
     await pumpNowPlaying(tester, playback, startupReveal: true);
 
-    // 首帧：入场已存在但只把整页压到 85% 不透明度，队列三张图仍可读；
-    // 封面堆叠自身不做位移/缩放（expectSteadyDeck 同时成立）。
+    // 首屏入场只播标题；整页不做透明度，封面堆叠也不参与。
     expectSteadyDeck(tester);
-    expect(
-      _revealOpacity(tester),
-      closeTo(0.85, 0.01),
-      reason: '首屏入场不从全透明开始',
-    );
-
-    await tester.pump(const Duration(milliseconds: 300));
-    expect(_revealOpacity(tester), closeTo(1.0, 0.001));
   });
-
-  testWidgets('启动首屏入场：减弱动效时直接落位', (tester) async {
-    tester.platformDispatcher.accessibilityFeaturesTestValue =
-        const FakeAccessibilityFeatures(disableAnimations: true);
-    addTearDown(
-      tester.platformDispatcher.clearAccessibilityFeaturesTestValue,
-    );
-
-    final playback = await restoredProvider(tester);
-    await pumpNowPlaying(tester, playback, startupReveal: true);
-
-    expectSteadyDeck(tester);
-    expect(
-      _revealOpacity(tester),
-      1.0,
-      reason: '关闭系统动效时不播首屏入场',
-    );
-  });
-}
-
-double _revealOpacity(WidgetTester tester) {
-  final fade =
-      tester.widget<FadeTransition>(find.byKey(NowPlaying.startupRevealKey));
-  return fade.opacity.value;
 }
