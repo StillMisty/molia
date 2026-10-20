@@ -19,7 +19,7 @@ enum SingleInstanceAction {
   /// 既有实例活着（已发出显示请求）。
   secondary,
 
-  /// 既有锁不可达（崩溃残留 / 半写内容）：清掉重抢。
+  /// 陈旧锁（崩溃残留 / 半写内容 / pid 已退出）：清掉重抢。
   retryAcquire,
 
   /// 重试耗尽：保守按主实例继续（宁可多开一个窗口，也不卡死启动）。
@@ -52,11 +52,17 @@ class SingleInstanceLock {
   }
 
   /// 既有实例探测结论 → 下一步动作。
+  ///
+  /// [alive] 是 OS 对锁文件里 pid 的存活判定：pid 已退出时不必再等 loopback
+  /// 连接超时（强杀 / 更新后很常见），直接清锁重抢；pid 存活但连不上才按
+  /// 尝试次数保守处理。
   static SingleInstanceAction decide({
     required bool connected,
+    required bool alive,
     required int attempt,
   }) {
     if (connected) return SingleInstanceAction.secondary;
+    if (!alive) return SingleInstanceAction.retryAcquire;
     return attempt < maxAcquireAttempts
         ? SingleInstanceAction.retryAcquire
         : SingleInstanceAction.fallbackPrimary;

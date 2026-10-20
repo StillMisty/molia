@@ -41,23 +41,54 @@ void main() {
           attempt <= SingleInstanceLock.maxAcquireAttempts;
           attempt++) {
         expect(
-          SingleInstanceLock.decide(connected: true, attempt: attempt),
+          SingleInstanceLock.decide(
+            connected: true,
+            alive: true,
+            attempt: attempt,
+          ),
           SingleInstanceAction.secondary,
         );
       }
     });
 
-    test('连不上：未到上限重抢，达到上限保守按主实例', () {
+    test('pid 已退出：无论第几次尝试都立即重抢（不等连接超时）', () {
+      for (var attempt = 1;
+          attempt <= SingleInstanceLock.maxAcquireAttempts;
+          attempt++) {
+        expect(
+          SingleInstanceLock.decide(
+            connected: false,
+            alive: false,
+            attempt: attempt,
+          ),
+          SingleInstanceAction.retryAcquire,
+        );
+      }
+    });
+
+    test('连不上但 pid 存活：未到上限重抢，达到上限保守按主实例', () {
       expect(
-        SingleInstanceLock.decide(connected: false, attempt: 1),
+        SingleInstanceLock.decide(
+          connected: false,
+          alive: true,
+          attempt: 1,
+        ),
         SingleInstanceAction.retryAcquire,
       );
       expect(
-        SingleInstanceLock.decide(connected: false, attempt: 2),
+        SingleInstanceLock.decide(
+          connected: false,
+          alive: true,
+          attempt: 2,
+        ),
         SingleInstanceAction.retryAcquire,
       );
       expect(
-        SingleInstanceLock.decide(connected: false, attempt: 3),
+        SingleInstanceLock.decide(
+          connected: false,
+          alive: true,
+          attempt: 3,
+        ),
         SingleInstanceAction.fallbackPrimary,
       );
     });
