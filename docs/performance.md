@@ -4,7 +4,8 @@
 > 上采样（release / 冷启动 / 5 次取中位），「首帧」那行即用户可感总时长
 > （`main.dart` 的 `molia.startup` 埋点，release 也输出）。
 >
-> 采样脚本：`tool/agent/startup.sh`（见 §3）。最近一次全表复测：2026-10-18。
+> 采样脚本：`tool/agent/startup.sh`（见 §3）。最近一次全表复测：2026-10-18（Linux）；
+> Windows 基线：2026-10-21（§4.1）。
 
 ---
 
@@ -12,6 +13,9 @@
 
 桌面 release 冷启动「首帧」中位数 **293ms → 207ms（−29%）**，全部改动对用户
 可见行为无影响：装配期串行等待改并行、同步/更新两个可选子系统初始化后移到首帧之后。
+Windows 干净启动应用内首帧 **327ms**、墙钟进程起→窗口可见 **1.39s**，其中约
+1.06s 是引擎 / 进程 / DLL 固定成本；强杀或更新后残留的陈旧单实例锁曾额外等待
+**~2.1s**，已改为 OS 级 pid 存活判定（§5.6）。
 
 改完后剩下的 **~207ms 里有 ~190ms 是进程外的固定成本**：
 GTK 建窗 ~46ms + libmpv `dlopen` ~39ms + 引擎与首帧渲染 ~100ms；我们自己 Dart 侧
@@ -25,9 +29,10 @@ GTK 建窗 ~46ms + libmpv `dlopen` ~39ms + 引擎与首帧渲染 ~100ms；我们
 - **无头显示**：`xvfb-run -a` + `env -u WAYLAND_DISPLAY GDK_BACKEND=x11`（只改
   `DISPLAY` 不够：GDK 见到 `WAYLAND_DISPLAY` 会优先连真实合成器）。
 - **测量机器**：本机 WSL2（Arch，20 vCPU / 23GB），Flutter 3.47.7 / Dart 3.13.5。
-- **Windows 说明**：本机是 WSL2，没有 Windows 侧 Flutter SDK（无 MSVC 也无法构建），
-  所以桌面数据全部来自 Linux 产物。应用代码在桌面两侧同源（差异只在插件实现），
-  可作为 Windows 的代理基线；要精确数字需在 Windows 上跑同一脚本。
+- **Windows 说明**：本机是 WSL2，没有 Windows 侧 Flutter SDK；Windows 数字用 CI
+  `windows-dev` 的 release 产物，在 Windows 上从 `molia.exe` 重定向 stdout 抓
+  `molia.startup`，并用 `MainWindowHandle` 轮询「进程起 → 窗口可见」的墙钟。
+  引擎 / DLL 加载是 Windows 的固定成本，不能拿 Linux 的 207ms 代替。
 
 ## 3. 复测方法
 
@@ -66,6 +71,21 @@ tool/agent/startup.sh --window        # Linux：在真实显示上跑（WSLg 会
 - 「依赖升级后」= `flutter pub upgrade`（17 包）+ Flutter 3.47.7：与基线之差在噪声内，
   **依赖升级没有带来启动回归**。
 - 最后两列之差是 §5.4 的否证实验（撤掉后回到 207ms）。
+
+### 4.1 Windows（2026-10-21，release beta.14）
+
+| 场景 | 应用内首帧 | 墙钟（进程起 → 窗口可见） |
+| --- | ---: | ---: |
+| 干净启动（无陈旧锁） | **327ms**（窗口就绪 163ms） | **1392ms** |
+| 强杀后启动（陈旧锁） | 2662ms（窗口就绪 2445ms） | — |
+
+- 干净启动分段：窗口就绪 163ms → 本地数据/资料库 188ms → 播放栈 204ms →
+  主题/歌词显示 313ms → 首帧 327ms；
+- 应用内 327ms 与墙钟 1392ms 的差 ≈ **1.06s**，是进程启动、Flutter 引擎 /
+  Impeller、插件 DLL（含 ~30MB libmpv）加载的固定成本；
+- 强杀 / 更新器终止应用会在 `single_instance.lock` 留下已退出进程的 pid，旧逻辑
+  仍去连它的 loopback 端口，等满 2s 超时 + 300ms 重抢才继续，额外 **~2.1s**；
+  §5.6 的 OS 存活判定修掉这段。
 
 ## 5. 逐项：改了什么、实测多少
 
@@ -112,6 +132,19 @@ I/O 空档。试法：在后台 isolate 里先 `DynamicLibrary.open` 一次（�
 是引擎/框架/窗口表面的固定成本（Impeller 初始化、首帧光栅化），**与我们构建了
 几个页面无关**，因此不需要动「三个常驻页面同帧构建」这类设计（也就不用牺牲
 播放页共享元素飞行的首帧行为）。
+
+### 5.6 Windows 陈旧单实例锁 + 装配并行（2026-10-21）
+
+- **陈旧锁**：`SingleInstance.acquire()` 抢锁失败后读锁里的 pid / port，旧逻辑直接
+  `Socket.connect`；pid 已退出时 Windows 仍可能等满 `_connectTimeout=2s`，随后
+  `_retryDelay=300ms` 才清锁重抢。新增 `process_liveness.dart`：Windows 用
+  `OpenProcess(SYNCHRONIZE) + WaitForSingleObject(0)`，Linux 用 `kill(pid, 0)` +
+  errno；pid 已退出立即清锁，不为死端口等超时。只动单实例 IO 判定，不改锁协议 /
+  退出路径。
+- **装配并行**：热键注册、桌面壳（tray settings prefs）、歌词显示 / 主题预解析
+  原本串行；三者互不依赖，现并行发起、`runApp` 前统一 await。新增子阶段
+  `sub.hotkeys.attach` / `sub.desktop.build` / `sub.lyricsDisplay.build` 供回归。
+- 改后 dev 包实测：**待回填**（CI `windows-dev`）。
 
 ## 6. 剩下的固定成本（不建议再碰）
 
@@ -185,5 +218,5 @@ I/O 空档。试法：在后台 isolate 里先 `DynamicLibrary.open` 一次（�
 ## 8. 未覆盖
 
 - **iOS**：本机没有对应设备侧采样；做法同 Android（release 构建 + 平台日志）。
-- **Windows / 真机**：本机是 WSL2，没有 Windows 侧 Flutter SDK，Android 只有模拟器；
-  要精确数字需在目标机上跑 `tool/agent/startup.sh`（Linux 分支即可作桌面代理）。
+- **Windows / 真机**：Windows 已用 CI `windows-dev` + 重定向 stdout 采样（§4.1）；
+  仍需覆盖不同机器 / Defender 冷扫描等环境。Android 只有模拟器，真机数据待补。
