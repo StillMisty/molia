@@ -1,11 +1,13 @@
 #include "flutter_window.h"
 
+#include <dwmapi.h>
 #include <flutter/method_channel.h>
 #include <flutter/standard_method_codec.h>
 
 #include <cstdint>
 #include <optional>
 #include <string>
+#include <utility>
 
 #include "flutter/generated_plugin_registrant.h"
 #include "taskbar_thumb_bar.h"
@@ -16,6 +18,17 @@ namespace {
 // 任务栏通道：与 Dart 侧 `lib/services/window/taskbar_thumb_bar_io.dart` 的通道名
 // 成对出现，改一处必须改两处。
 constexpr char kTaskbarChannelName[] = "top.stillmisty.molia/taskbar";
+
+// 窗口显示通道：与 Dart 侧 `lib/services/window/window_chrome_io.dart` 成对。
+constexpr char kWindowChannelName[] = "top.stillmisty.molia/window";
+
+// 首帧没到达时的恢复兜底：避免 DWM cloak 残留导致窗口一直不可见。
+constexpr UINT_PTR kShowFallbackTimerId = 0x4D4F4C49;  // 'MOLI'
+constexpr UINT kShowFallbackTimeoutMs = 300;
+
+#ifndef DWMWA_CLOAK
+#define DWMWA_CLOAK 13
+#endif
 
 bool ReadBool(const flutter::EncodableMap& arguments, const char* key) {
   const auto entry = arguments.find(flutter::EncodableValue(key));
@@ -108,6 +121,23 @@ bool FlutterWindow::OnCreate() {
         result->Success();
       });
 
+  // 窗口显示通道：托盘恢复时 Dart 侧调 showAfterFirstFrame，先 cloak 再
+  // ShowWindow，首帧光栅化后 uncloak（避免白色空窗闪一下）。
+  window_channel_ =
+      std::make_unique<flutter::MethodChannel<flutter::EncodableValue>>(
+          flutter_controller_->engine()->messenger(), kWindowChannelName,
+          &flutter::StandardMethodCodec::GetInstance());
+  window_channel_->SetMethodCallHandler(
+      [this](const flutter::MethodCall<flutter::EncodableValue>& call,
+             std::unique_ptr<flutter::MethodResult<flutter::EncodableValue>>
+                 result) {
+        if (call.method_name() == "showAfterFirstFrame") {
+          ShowAfterFirstFrame(std::move(result));
+        } else {
+          result->NotImplemented();
+        }
+      });
+
   thumb_bar_ = std::make_unique<TaskbarThumbBar>();
   thumb_bar_->Attach(
       GetHandle(),
@@ -155,12 +185,82 @@ void FlutterWindow::OnDestroy() {
     taskbar_channel_->SetMethodCallHandler(nullptr);
     taskbar_channel_.reset();
   }
+  if (window_channel_ != nullptr) {
+    window_channel_->SetMethodCallHandler(nullptr);
+    window_channel_.reset();
+  }
+  if (GetHandle() != nullptr) {
+    ::KillTimer(GetHandle(), kShowFallbackTimerId);
+  }
   thumb_bar_.reset();
   if (flutter_controller_) {
     flutter_controller_ = nullptr;
   }
 
   Win32Window::OnDestroy();
+}
+
+void FlutterWindow::ShowAfterFirstFrame(
+    std::unique_ptr<flutter::MethodResult<flutter::EncodableValue>> result) {
+  HWND window = GetHandle();
+  if (window == nullptr || flutter_controller_ == nullptr ||
+      flutter_controller_->engine() == nullptr) {
+    result->Error("window_unavailable", "窗口尚未就绪");
+    return;
+  }
+
+  if (::IsWindowVisible(window)) {
+    // 启动首帧 / 重复 show：窗口已经可见，不能再 cloak 一次。
+    SetWindowCloaked(false);
+    ::SetForegroundWindow(window);
+    result->Success();
+    return;
+  }
+
+  if (!SetWindowCloaked(true)) {
+    // DWM cloak 不可用：退回直接显示，保留原有行为而不是把窗口藏住。
+    ::ShowWindow(window, SW_SHOW);
+    ::SetForegroundWindow(window);
+    result->Success();
+    return;
+  }
+
+  flutter_controller_->engine()->SetNextFrameCallback(
+      [this]() { FinishShowAfterFirstFrame(); });
+  // SW_SHOW 保留当前最大化状态；不要用 Win32Window::Show() 的 SW_SHOWNORMAL，
+  // 那会把最大化窗口还原成普通尺寸。
+  ::ShowWindow(window, SW_SHOW);
+  if (::SetTimer(window, kShowFallbackTimerId, kShowFallbackTimeoutMs,
+                 nullptr) == 0) {
+    // 定时器都建不起来时至少别把窗口留在 cloak 状态。
+    FinishShowAfterFirstFrame();
+  }
+  result->Success();
+}
+
+void FlutterWindow::FinishShowAfterFirstFrame() {
+  HWND window = GetHandle();
+  if (window == nullptr) {
+    return;
+  }
+  ::KillTimer(window, kShowFallbackTimerId);
+  // 等待首帧期间用户可能又把它关到托盘：这时只解除 cloak，不能再 show。
+  const bool was_visible = ::IsWindowVisible(window) != FALSE;
+  SetWindowCloaked(false);
+  if (was_visible) {
+    ::ShowWindow(window, SW_SHOW);
+    ::SetForegroundWindow(window);
+  }
+}
+
+bool FlutterWindow::SetWindowCloaked(bool cloak) {
+  HWND window = GetHandle();
+  if (window == nullptr) {
+    return false;
+  }
+  BOOL value = cloak ? TRUE : FALSE;
+  return SUCCEEDED(::DwmSetWindowAttribute(window, DWMWA_CLOAK, &value,
+                                           sizeof(value)));
 }
 
 LRESULT
@@ -198,6 +298,12 @@ FlutterWindow::MessageHandler(HWND hwnd, UINT const message,
   // 隐藏到托盘再显示：任务栏按钮会重建，工具栏按需重挂（Update 失败回落 Add）。
   if (message == WM_SHOWWINDOW && wparam != 0 && thumb_bar_ != nullptr) {
     thumb_bar_->OnShow();
+  }
+
+  // 恢复显示的兜底：引擎极端情况下没出帧也不能让窗口一直 cloak。
+  if (message == WM_TIMER && wparam == kShowFallbackTimerId) {
+    FinishShowAfterFirstFrame();
+    return 0;
   }
 
   // 挂载失败后的退避重试（只认本工具栏的定时器 id，其余 WM_TIMER 照旧下传）。

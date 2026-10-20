@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/foundation.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 import 'package:logging/logging.dart';
 import 'package:screen_retriever/screen_retriever.dart';
@@ -237,19 +238,96 @@ class WindowChrome {
   /// （见 [_restoreSavedGeometry]——`getBounds` 在最大化态返回最大化矩形，
   /// 所以几何与最大化分两步恢复）。
   ///
-  /// 置「可见」存在态在原生调用**之前**：隐藏期间帧是停的，提前置位让重建
-  /// 请求排进队列，窗口映射回屏幕、帧恢复时第一帧就是界面（而不是先亮一帧
-  /// 休眠占位）。
+  /// **托盘恢复的白闪**：隐藏期间帧是停的，`AppPresence.markVisible()` 只把
+  /// 休眠门标脏，重建要等下一帧；若先映射窗口，DWM / GTK 会先显示窗口的
+  /// 空白底色（实测 Windows 是白色）。因此桌面端先让窗口「可见但不可见」：
+  /// Windows 用 DWM cloak，Linux 用窗口透明度；等重建首帧落定后再显示 / 恢复
+  /// 不透明。启动首帧路径窗口已经由 runner 显示，不走这条。
+  static const MethodChannel _windowChannel =
+      MethodChannel('top.stillmisty.molia/window');
+
   static Future<void> show() async {
     if (!isSupported) return;
-    AppPresence.instance.markVisible();
-    await windowManager.show();
+    if (Platform.isWindows) {
+      // Windows 原生侧自己判断可见性（并在可见分支清掉可能残留的 cloak），
+      // 这里不再多查一次 isVisible。
+      AppPresence.instance.markVisible();
+      await _showWindowsAfterFirstFrame();
+    } else {
+      // 启动首帧时 Linux runner 可能已经 show，不能再次透明，否则启动反而
+      // 闪一下；先读可见性再决定。
+      final wasVisible = await _isVisible();
+      AppPresence.instance.markVisible();
+      if (!wasVisible) {
+        await _showLinuxWithOpacity();
+      } else {
+        await windowManager.show();
+      }
+    }
     await windowManager.focus();
     if (_restoreMaximized) {
       _restoreMaximized = false;
       await windowManager.maximize();
     }
   }
+
+  static Future<bool> _isVisible() async {
+    try {
+      return await windowManager.isVisible();
+    } catch (_) {
+      return false;
+    }
+  }
+
+  /// Windows：原生侧 cloak → ShowWindow → 首帧回调 uncloak。
+  ///
+  /// cloak 期间窗口已映射、引擎正常出帧，但 DWM 不绘制；重建首帧光栅化后
+  /// 再解除，用户第一次看到的就是新界面。原生异常时退回普通 show。
+  static Future<void> _showWindowsAfterFirstFrame() async {
+    try {
+      await _windowChannel
+          .invokeMethod<void>('showAfterFirstFrame')
+          .timeout(const Duration(milliseconds: 800));
+    } on MissingPluginException {
+      await windowManager.show();
+    } on PlatformException {
+      await windowManager.show();
+    } on TimeoutException {
+      await windowManager.show();
+    }
+  }
+
+  /// Linux：GTK 没有 DWM cloak，用窗口透明度覆盖「映射到首帧」之间。
+  ///
+  /// 隐藏期帧停，`show()` 之后才会重新出帧；等两帧落定再恢复不透明。
+  /// 合成器不支持透明度时保持原行为（直接可见），不阻塞恢复。
+  static Future<void> _showLinuxWithOpacity() async {
+    var opacitySet = false;
+    try {
+      await windowManager.setOpacity(0);
+      opacitySet = true;
+    } catch (_) {
+      // 平台 / 合成器不支持：按原路径直接显示。
+    }
+    try {
+      await windowManager.show();
+      if (opacitySet) {
+        await _waitFrame();
+        await _waitFrame();
+      }
+    } finally {
+      if (opacitySet) {
+        try {
+          await windowManager.setOpacity(1);
+        } catch (_) {
+          // 恢复失败不影响窗口可用性；下一轮 show 会再设置。
+        }
+      }
+    }
+  }
+
+  static Future<void> _waitFrame() => WidgetsBinding.instance.endOfFrame
+      .timeout(const Duration(milliseconds: 500), onTimeout: () {});
 
   /// 无视关闭策略真正退出（托盘「退出」/ 更新安装后的重启替换）：
   /// 先释放单实例锁、解除关闭拦截，再销毁窗口；退出前的落盘由调用方负责。

@@ -602,3 +602,16 @@
     `WindowInfoTracker` 的 extension backend：能碰到这段耗时，但要 shadow
     Flutter 依赖的 AndroidX API，Flutter / AndroidX 一升级就会坏，**不采用**。
     按官方建议只后移非首帧初始化；真机上这段等待通常小得多，需以真机采样为准。
+65. **托盘恢复的白闪是窗口原生底色，不是休眠占位色**：关闭到托盘前会先渲染一帧
+    休眠占位再 `hide()`；恢复时 `WindowChrome.show()` 若先映射窗口，Windows 的
+    `ShowWindow` / GTK 会先把上一张表面或原生白底显示出来，而
+    `TrayDormantGate` 的重建要等下一帧——表现就是白闪一下再出现界面。隐藏期
+    Flutter 帧是停的，**不能**在 `show()` 前 `await endOfFrame`（会等到超时）。
+    现在的做法：Windows runner 收到 `showAfterFirstFrame` 后先
+    `DwmSetWindowAttribute(DWMWA_CLOAK)` 再 `ShowWindow(SW_SHOW)`，首帧光栅化
+    回调里 uncloak（300ms 定时器兜底）；Linux 用 `setOpacity(0)` → show → 等两帧
+    → `setOpacity(1)`。启动首帧路径窗口已由 runner 显示，不再 cloak / 透明。
+    Windows 的 cloak 必须由窗口所属进程调用：跨进程
+    `DwmSetWindowAttribute` 会返回 `E_ACCESSDENIED`。改 `show()` 顺序前先看
+    `lib/services/window/window_chrome_io.dart` 与
+    `windows/runner/flutter_window.cpp`。

@@ -37,6 +37,15 @@ class FlutterWindow : public Win32Window {
   std::unique_ptr<TaskbarThumbBar> thumb_bar_;
   std::unique_ptr<flutter::MethodChannel<flutter::EncodableValue>>
       taskbar_channel_;
+
+  // 窗口显示通道：Dart 侧 `window_chrome_io.dart` 在托盘恢复时先 cloak，
+  // ShowWindow 后等首帧光栅化再 uncloak，避免白色空窗闪一下。
+  void ShowAfterFirstFrame(
+      std::unique_ptr<flutter::MethodResult<flutter::EncodableValue>> result);
+  void FinishShowAfterFirstFrame();
+  bool SetWindowCloaked(bool cloak);
+  std::unique_ptr<flutter::MethodChannel<flutter::EncodableValue>>
+      window_channel_;
 };
 
 #endif  // RUNNER_FLUTTER_WINDOW_H_
