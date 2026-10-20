@@ -75,7 +75,7 @@ void main() {
     return coverCenter.dx - deckCenter.dx;
   }
 
-  /// 挂载固定 `displayTrack = A` 的 deck，等首帧入场动画结束，
+  /// 挂载固定 `displayTrack = A` 的 deck，等首帧落定，
   /// 返回切歌联动回调的记录列表（已清掉首帧入场留下的调用）。
   Future<List<bool>> pumpDeck(WidgetTester tester) async {
     final swaps = <bool>[];
@@ -107,7 +107,7 @@ void main() {
       ),
     );
     await tester.pump();
-    // 首帧入场动画 460ms：等它结束再操作（沿用 Player 测试的节奏）。
+    // 等首帧落定（冷启动恢复态首帧已是稳态）。
     await tester.pump(const Duration(milliseconds: 600));
     swaps.clear();
     return swaps;

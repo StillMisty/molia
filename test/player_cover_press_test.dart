@@ -100,7 +100,7 @@ void main() {
       ),
     );
     await tester.pump();
-    // 首帧切歌入场动画：motor expressive spatial 弹簧（含容差拖尾约 0.7s）
+    // 等首帧落定（冷启动恢复态首帧已是稳态；保留一拍覆盖布局/入场）。
     // 落定后才渲染稳态左右槽位，等它结束再操作。
     await tester.pump(const Duration(milliseconds: 900));
   }

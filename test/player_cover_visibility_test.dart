@@ -106,7 +106,7 @@ void main() {
       ),
     );
     await tester.pump();
-    // 首帧切歌入场动画（320ms）：等它结束再操作。
+    // 等首帧落定（冷启动恢复态首帧已是稳态）。
     await tester.pump(const Duration(milliseconds: 600));
   }
 

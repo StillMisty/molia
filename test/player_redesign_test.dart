@@ -100,8 +100,7 @@ void main() {
       ),
     );
     await tester.pump();
-    // 首帧会触发一次切歌入场动画（motor 弹簧，含容差拖尾约 0.7s，
-    // 大于封面堆叠的 460ms）：等它结束再断言稳态邻位封面的可点状态。
+    // 等首帧落定后再断言稳态邻位封面的可点状态（恢复态首帧已是稳态）。
     await tester.pump(const Duration(milliseconds: 900));
   }
 

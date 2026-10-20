@@ -191,7 +191,7 @@ void main() {
       ),
     );
     await tester.pump();
-    // 首帧切歌入场动画（封面堆叠 460ms）。
+    // 等首帧落定（冷启动恢复态首帧已是稳态）。
     await tester.pump(const Duration(milliseconds: 600));
 
     return (backend: backend, playback: playback);
