@@ -48,9 +48,11 @@ class PlayStatisticsRepository {
     MoliaDatabase Function()? databaseProvider,
     int Function()? clock,
     required StatisticsSyncWriter statisticsSync,
+    Future<void> Function()? beforeWrite,
   })  : _databaseProvider = databaseProvider ?? (() => MoliaDatabase.instance),
         _clock = clock ?? (() => DateTime.now().millisecondsSinceEpoch),
-        _sync = statisticsSync {
+        _sync = statisticsSync,
+        _beforeWrite = beforeWrite {
     // 远端落地后仍需走仓库的变更流：UI 刷新与同步调度都监听这里。
     _sync.onChanged = _notifyChanged;
   }
@@ -58,12 +60,20 @@ class PlayStatisticsRepository {
   final MoliaDatabase Function() _databaseProvider;
   final int Function() _clock;
   final StatisticsSyncWriter _sync;
+
+  /// 写入前的就绪门（版本戳基线种子）；null = 不需要等待（测试）。
+  final Future<void> Function()? _beforeWrite;
   final StreamController<void> _changes = StreamController<void>.broadcast();
 
   /// 统计变更广播（收尾事件 / 清空 / 遗留收尾后触发）。
   Stream<void> get changes => _changes.stream;
 
   MoliaDatabase get _db => _databaseProvider();
+
+  Future<void> _ensureReady() async {
+    final beforeWrite = _beforeWrite;
+    if (beforeWrite != null) await beforeWrite();
+  }
 
   void _notifyChanged() {
     if (!_changes.isClosed) _changes.add(null);
@@ -149,6 +159,7 @@ class PlayStatisticsRepository {
     required int maxPositionMs,
     int? endedAt,
   }) async {
+    await _ensureReady();
     await _db.transaction(() async {
       await (_db.update(_db.playEvents)..where((t) => t.id.equals(id)))
           .write(PlayEventsCompanion(
@@ -170,6 +181,7 @@ class PlayStatisticsRepository {
   /// `endedAt` 取 `startedAt + listenedMs`（最后落盘进度，确定性可测）。
   /// 返回收尾行数。版本戳整批取一个（各行键不同，LWW 只在同键间比较）。
   Future<int> closeStaleEvents() async {
+    await _ensureReady();
     var closed = 0;
     await _db.transaction(() async {
       // 先取遗留行 id：收尾后要按行追加增量日志（内容变化必须可同步）。

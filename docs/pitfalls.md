@@ -587,3 +587,15 @@
     `stopAfterCurrentTrack` 一次性标志在自动切歌前停住；`SleepTimerController`
     优先消费完成事件，位置判定只作远程后端 / 测试的回退。回归用例见
     `test/playback/sleep_timer_test.dart` 的「熄屏后位置 tick 停在半途」。
+64. **Android 模拟器的「第一个平台通道调用」有约 400ms 固定等待，别把它算到
+    prefs / DB / 媒体会话头上**：release 冷启动时，Dart `main()` 开始后第一个
+    `MethodChannel` 往返要等引擎 / 平台线程就绪（临时用现有 `updater` 通道的
+    `supportedAbi` 做首调探针，9 次中位 396ms）。这段等待会落在**第一个 await
+    平台通道的阶段**：改前表现为 prefs 或本地数据栈 400ms，改后表现为省流 prefs
+    或媒体会话 400ms；整体首帧仍在 ~470ms。排查启动阶段前先看
+    `docs/performance.md` §7.1 与 `startup_trace.dart` 的子阶段埋点，不要因为
+    某个阶段偶尔 400ms 就继续挪它。
+    试过并否证：排除 `androidx.window` 依赖（启动直接
+    `ClassNotFoundException: WindowMetricsCalculator`，Flutter 的 `ViewUtils`
+    必需）、移除 `androidx.window.extensions` / `sidecar` 的 uses-library
+    （首调仍是 ~400ms）。真机上这段等待通常小得多，需以真机采样为准。

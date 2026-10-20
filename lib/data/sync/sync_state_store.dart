@@ -8,6 +8,7 @@
 ///   本地修改，避免改造全部写入方。
 library;
 
+import 'dart:async';
 import 'dart:convert';
 import 'dart:math';
 
@@ -246,6 +247,12 @@ class SyncStateStore {
   /// 版本戳发号器基线（`sync_state_v1` 的 `stampSeq`）：重启后不倒退。
   SyncVersion _stampBaseline = SyncVersion.zero;
 
+  /// 全库最大戳种子是否已补入（首帧后由 `LibraryRepository.maxVersion` 完成）。
+  ///
+  /// 首帧前不等这次 DB 打开；写入方在取号前先等这个 Future，保证新戳不会
+  /// 低于库内已有记录（ADR-0003 的基线约束）。
+  final Completer<void> _stampSeedReady = Completer<void>();
+
   /// 本机所有同步戳的唯一发号器（见 [SyncStampIssuer]）。
   ///
   /// 基线经 `onAdvanced` 写回本状态并在 [save] 落盘；初始化时用
@@ -348,6 +355,32 @@ class SyncStateStore {
 
   bool _initialized = false;
 
+  /// 设备 id 的 prefs 键已写、安全存储备份还没写（首装 / 身份迁移）。
+  ///
+  /// 首帧前只写小体积 prefs（设备 id 立即可用）；Keystore 备份放到首帧后，
+  /// 避免首装冷启动在主线程等一次安全存储写入。
+  bool _deviceIdBackupPending = false;
+
+  /// 备份尚未完成的持久标记：进程在首帧后备份前被杀时，下次启动继续补写，
+  /// 避免「prefs 有 id 就以为备份已完成」而永久丢掉安全存储副本。
+  static const String _deviceIdBackupPendingKey =
+      'sync_device_id_backup_pending';
+
+  /// 写入方等待「全库最大戳」种子完成（首帧后的 DB 查询）。
+  Future<void> get stampSeedReady => _stampSeedReady.future;
+
+  /// 首帧后由组合根调用：吸收全库最大戳并放行写入。
+  void seedStampBaseline(SyncVersion dbMax) {
+    stampIssuer.seed(dbMax);
+    if (!_stampSeedReady.isCompleted) _stampSeedReady.complete();
+  }
+
+  /// 读取全库最大戳失败时也要放行写入：沿用持久化基线 / 当前时钟，
+  /// 不能让资料库写入永久挂起（失败已由调用方记录）。
+  void markStampSeedFailed() {
+    if (!_stampSeedReady.isCompleted) _stampSeedReady.complete();
+  }
+
   Future<void> init() async {
     if (_initialized) return;
     _prefs = _preferences ?? await SharedPreferences.getInstance();
@@ -380,7 +413,7 @@ class SyncStateStore {
     }
     _deviceId = identity;
     // 独立身份键先落盘（小体积），再写大状态 JSON：后者损坏时仍能恢复身份。
-    await _persistDeviceId();
+    await _persistDeviceIdToPrefs();
 
     var dirty =
         stateCorrupt || raw == null || raw.isEmpty || stateId != identity;
@@ -396,27 +429,54 @@ class SyncStateStore {
     _initialized = true;
   }
 
-  /// 把身份写进独立 prefs 键与安全存储（仅在缺失 / 不一致时写）。
+  /// 把身份写进独立 prefs 键（首帧前；只在缺失 / 不一致时写）。
   ///
-  /// 正常启动不碰安全存储：只有首次迁移、身份缺失或身份变化才付一次
-  /// keychain / Keystore 的读写成本，避免拖慢启动关键路径。
-  Future<void> _persistDeviceId() async {
+  /// 正常启动 prefs 已一致：不碰安全存储，也不触发任何后续备份。
+  Future<void> _persistDeviceIdToPrefs() async {
     final current = (_prefs!.getString(deviceIdKey) ?? '').trim();
-    if (current != _deviceId) {
+    if (current == _deviceId) {
+      // 上次进程可能没走到首帧后的备份：持久标记还在就继续补写。
+      _deviceIdBackupPending =
+          _prefs!.getBool(_deviceIdBackupPendingKey) ?? false;
+      return;
+    }
+    _deviceIdBackupPending = true;
+    try {
+      await _prefs!.setString(deviceIdKey, _deviceId);
+      await _prefs!.setBool(_deviceIdBackupPendingKey, true);
+    } catch (e) {
+      _logIdentityBackupFailure('写入', e);
+    }
+  }
+
+  /// 把设备 id 备份到安全存储（首帧后调用；正常启动是空操作）。
+  ///
+  /// 首装 / 身份变化时 Keystore 写入可能上百毫秒，放在首帧后避免推后首帧。
+  /// 读取仍留在 [init]：身份缺失时要靠备份恢复既有身份，不能安全后移。
+  Future<void> backupDeviceId() async {
+    if (!_deviceIdBackupPending) return;
+    _deviceIdBackupPending = false;
+    var backedUp = false;
+    if (await _readDeviceIdBackup() == _deviceId) {
+      backedUp = true;
+    } else {
       try {
-        await _prefs!.setString(deviceIdKey, _deviceId);
+        await _secrets.write(deviceIdKey, _deviceId);
+        backedUp = true;
       } catch (e) {
         _logIdentityBackupFailure('写入', e);
       }
-    } else {
-      // prefs 键已一致：安全存储备份在上次迁移时写过，正常路径不再读取。
+    }
+    if (!backedUp) {
+      // 写失败保留内存标记：同进程再次调用还能重试；prefs 标记也留着，
+      // 下次启动继续补写。
+      _deviceIdBackupPending = true;
       return;
     }
-    if (await _readDeviceIdBackup() == _deviceId) return;
     try {
-      await _secrets.write(deviceIdKey, _deviceId);
-    } catch (e) {
-      _logIdentityBackupFailure('写入', e);
+      await _prefs!.setBool(_deviceIdBackupPendingKey, false);
+    } catch (_) {
+      // 清标记失败只影响下次启动多读一次安全存储，不影响正确性。
     }
   }
 

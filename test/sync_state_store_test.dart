@@ -35,6 +35,8 @@ void main() {
     final id = store.deviceId;
     expect(id, isNotEmpty);
     expect(prefs.getString(SyncStateStore.deviceIdKey), id);
+    // 安全存储备份是首帧后的动作：显式触发一次再断言（见 backupDeviceId）。
+    await store.backupDeviceId();
     expect(secrets.values[SyncStateStore.deviceIdKey], id);
 
     // 大状态 JSON 损坏：身份从小键恢复，不生成新设备。
@@ -72,6 +74,7 @@ void main() {
       clock: () => 1000,
     );
     await store.init();
+    await store.backupDeviceId();
 
     expect(store.deviceId, 'devA');
     expect(prefs.getString(SyncStateStore.deviceIdKey), 'devA');

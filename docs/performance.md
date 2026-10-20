@@ -144,6 +144,38 @@ I/O 空档。试法：在后台 isolate 里先 `DynamicLibrary.open` 一次（�
 - 本轮改动（§5.1–5.3）都是平台无关的 Dart 侧装配，Android 同样受益；上面的数字是
   **同一次改动后**的参照值，没有做改动前的 Android A/B（模拟器方差不足以分辨几十毫秒）。
 
+### 7.1 2026-10-20：本地数据 / DB 后移（Android A/B）
+
+同一模拟器、release APK、冷启动、每轮 `am start -W -S`；改前 9 次、改后 15 次，
+构建完成后先停 Gradle / Kotlin daemon 再采样（避免编译进程和模拟器抢 CPU）：
+
+| 口径 | 改前中位 | 改后中位 | 改后最小–最大 |
+| --- | ---: | ---: | ---: |
+| `Activity TotalTime` | 1324 | 1256 | 1190–3366 |
+| 应用内「首帧」 | 477 | 473 | 429–504 |
+| ├ 本地数据/资料库栈 | 425 | 18 | 8–419 |
+| ├ 播放栈（含媒体会话） | 450 | 440 | 385–469 |
+| └ 首帧回调 | 477 | 473 | 429–504 |
+
+改后首帧之后（不再占关键路径）的实测：`maxVersion` 24ms、下载记录加载 27ms、
+省流网络探测 32ms。
+
+**关键发现（比数字本身更重要）**：模拟器上**第一个平台通道调用**本身就要等
+约 **400ms**（临时用 `updater.supportedAbi` 做首调探针测得 396ms 中位）。
+`Activity TotalTime` 的最大值 3366 是宿主负载抖动，中位与最小值更可比。
+这 400ms 会落在「第一个 await 平台通道」的阶段上——改前落在 prefs / DB，
+改后落在省流 prefs 或媒体会话，所以**应用内首帧仍约 470ms**，Dart 侧后移
+并不能消掉它。这不是某个模块的成本；不要因为某个阶段偶尔 400ms 就去优化它。
+
+- 本轮实际改了什么：`DownloadService.init`（含 `.part` 清扫）、
+  `LibraryRepository.maxVersion`（含 drift 打开/迁移）、统计收尾/裁剪、
+  音频缓存命名清理、省流网络探测全部移到首帧后；下载取链经 `ready` 等记录，
+  资料库写入经 `stampSeedReady` 等最大戳种子（保留 ADR-0003 基线约束）。
+- 原生侧同时移除了无效的 `MoliaApplication` / `DynamicColors` 和
+  `EmojiCompatInitializer`（Flutter 自绘文本用不到；原生只有 RemoteViews）。
+- 真机结论仍需真机复测：模拟器的 400ms 固定等待会掩盖 Dart 侧收益；
+  真机上应重点看「首帧之后」的 DB/下载/探测是否消失、以及系统 TotalTime。
+
 ## 8. 未覆盖
 
 - **iOS**：本机没有对应设备侧采样；做法同 Android（release 构建 + 平台日志）。

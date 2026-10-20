@@ -214,6 +214,47 @@ void main() {
       expect(advanced.isNewerThan(dbMax), isTrue);
     });
 
+    test('首帧后种子 barrier：seed 完成前写入不落库，完成后用种子取号', () async {
+      SharedPreferences.setMockInitialValues({});
+      final prefs = await SharedPreferences.getInstance();
+      final state = SyncStateStore(
+        preferences: prefs,
+        secrets: MemorySyncSecretStore(),
+        clock: () => 1000,
+        deviceId: 'devA',
+      );
+      await state.init();
+      final db = openMemoryDatabase();
+      addTearDown(db.close);
+      final repo = LibraryRepository(
+        databaseProvider: () => db,
+        clock: () => 1000,
+        stamps: state.stampIssuer,
+        beforeWrite: () => state.stampSeedReady,
+      );
+      addTearDown(repo.dispose);
+
+      var completed = false;
+      final write = repo
+          .addHistoryEntry(PlayHistoryEntry(
+            sourceKey: 'wy',
+            songId: 's1',
+            title: 'Song',
+            playedAt: 100,
+          ))
+          .then((_) => completed = true);
+      await Future<void>.delayed(Duration.zero);
+      expect(completed, isFalse, reason: '种子前不得取号/落库');
+
+      state.seedStampBaseline(
+        const SyncVersion(physical: 2000, counter: 0, deviceId: 'devB'),
+      );
+      await write;
+      expect(completed, isTrue);
+      final row = (await db.select(db.playHistory).get()).single;
+      expect(row.versionPhysical, greaterThanOrEqualTo(2000));
+    });
+
     test('SyncStateStore 同时持久化设置登记哈希与版本', () async {
       SharedPreferences.setMockInitialValues({});
       final prefs = await SharedPreferences.getInstance();
