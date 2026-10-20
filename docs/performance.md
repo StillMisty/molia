@@ -175,6 +175,12 @@ I/O 空档。试法：在后台 isolate 里先 `DynamicLibrary.open` 一次（�
   `EmojiCompatInitializer`（Flutter 自绘文本用不到；原生只有 RemoteViews）。
 - 真机结论仍需真机复测：模拟器的 400ms 固定等待会掩盖 Dart 侧收益；
   真机上应重点看「首帧之后」的 DB/下载/探测是否消失、以及系统 TotalTime。
+- **不采用引擎 / 系统库替换类 hack**：试过排除 `androidx.window`、影子类、
+  反射清空 `WindowInfoTracker` 的 extension backend——要么直接崩
+  （`WindowMetricsCalculator` 是 Flutter `ViewUtils` 必需），要么能压掉这
+  400ms 但会随 Flutter / AndroidX 升级失效，属于以后每次升级都要还债的
+  适配风险。按 Flutter 官方建议，只做「首帧后初始化非关键子系统」和平台
+  条件分支；剩余部分等 Flutter 引擎 / 真机数据。
 
 ## 8. 未覆盖
 

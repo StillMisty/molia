@@ -598,4 +598,7 @@
     试过并否证：排除 `androidx.window` 依赖（启动直接
     `ClassNotFoundException: WindowMetricsCalculator`，Flutter 的 `ViewUtils`
     必需）、移除 `androidx.window.extensions` / `sidecar` 的 uses-library
-    （首调仍是 ~400ms）。真机上这段等待通常小得多，需以真机采样为准。
+    （首调仍是 ~400ms）。也试过影子类 / 反射 / Unsafe 清空
+    `WindowInfoTracker` 的 extension backend：能碰到这段耗时，但要 shadow
+    Flutter 依赖的 AndroidX API，Flutter / AndroidX 一升级就会坏，**不采用**。
+    按官方建议只后移非首帧初始化；真机上这段等待通常小得多，需以真机采样为准。
