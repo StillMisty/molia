@@ -86,7 +86,7 @@ dependencies {
     // GMS 可用性探测（扫码入口门控）：`mobile_scanner` 用 `implementation`
     // 引入 unbundled ML Kit，传递依赖不暴露到 app 的编译类路径，这里显式声明
     // （与 docs/pitfalls.md 第 48 条的处置一致）。
-    implementation 'com.google.android.gms:play-services-base:18.0.1'
+    implementation 'com.google.android.gms:play-services-base:18.11.1'
 }
 
 repositories {

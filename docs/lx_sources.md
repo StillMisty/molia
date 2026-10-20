@@ -146,7 +146,7 @@ lib/playback/
     - **中文字体**：`sudo pacman -S --needed wqy-microhei`（App 不内置 CJK 字体；否则中文显示方块）
   - Android（用户态安装）：`sdkmanager "platform-tools" "platforms;android-37.0" "build-tools;37.0.0" "ndk;30.0.16248370"`，
     然后 `flutter config --android-sdk "$HOME/Android/Sdk"`
-  - 工程工具链：Gradle 9.8.1 + AGP 9.4.1 + Kotlin 2.4.21 + JDK 27（Flutter 3.47.6 stable），
+  - 工程工具链：Gradle 9.8.2 + AGP 9.4.1 + Kotlin 2.4.21 + JDK 27（Flutter 3.47.7 stable），
     `compileSdk/targetSdk/minSdk = 37`、NDK r30、Java/Kotlin 字节码 target 26（Kotlin 2.4.x JvmTarget 上限）
   - 注意：`minSdk = 37` 意味着只有 Android 17 及以上设备可安装此构建
   - JS 运行时为 quickjs_engine（QuickJS-NG），Linux / Android 原生库由包自身 CMake 从源码

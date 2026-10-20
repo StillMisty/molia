@@ -139,10 +139,10 @@
     `Select`（用 `SettingsDropdownRow`，它统一填标题提示）。
 26. **新 worktree 的 Android 构建先对齐 Gradle wrapper**：`/android/gradle/` 被
     .gitignore 排除，新 worktree 里 Flutter 会按 SDK 模板生成 Gradle 9.3.1，而本项目
-    AGP 要求 ≥ 9.6（工具链表为 9.8.1）。构建前把
+    AGP 要求 ≥ 9.6（工具链表为 9.8.2）。构建前把
     `android/gradle/wrapper/gradle-wrapper.properties` 的 distributionUrl 改为
-    `gradle-9.8.1-bin.zip`；另注意 JDK 27 + Gradle 9.3.1 会因 class file 71 直接
-    失败（Gradle 9.8.1 + JDK 27 已验证可用）。
+    `gradle-9.8.2-bin.zip`；另注意 JDK 27 + Gradle 9.3.1 会因 class file 71 直接
+    失败（Gradle 9.8.2 + JDK 27 已验证可用）。
 27. **16 KB 页对齐是发布硬条件，而且属于「依赖带进来的属性」**：Android 15+ 的 16 KB
     内核设备要求 64 位 .so 的 ELF 段按 16 KB 对齐（Google Play 自 2027-02 起强制）。
     构建侧已满足（AGP ≥ 8.5.1 管 zip 页对齐、NDK r28+ 默认 16 KB 段对齐），但本项目没有
@@ -393,7 +393,7 @@
     另：`PlayServicesChannelHandler` 用的 `play-services-base` 由
     `play-services-mlkit-barcode-scanning` 传递带入；若某天 Gradle 解析不到
     `GoogleApiAvailability`，在 `android/app/build.gradle*` 显式补
-    `implementation("com.google.android.gms:play-services-base:18.0.1")`。
+    `implementation("com.google.android.gms:play-services-base:18.11.1")`。
 49. **桌面歌词：横滚必须在切行前收尾，重建后要等整列布局完成再摆位**：
     两个同源缺陷都来自「滚动只看词轴、摆位只看主行」：
     ① 进度只看词轴：词轴越界（末词时间晚于下一行时间戳）时进度永远到不了 1，
@@ -506,6 +506,8 @@
     处置：钉 `shared_preferences_android: 2.4.28`（JNI 改造前最后一个版本，理由与复评
     条件写在 `pubspec.yaml` 注释里）。补 keep 规则试过——修完 `Continuation` 又缺
     `CoroutineSingletons`，是打地鼠且 APK +1.1MB，放弃；上游补 consumer-rules.pro 后再升。
+    2026-10-20 复评：2.5.1 仍无 consumer-rules.pro，release 包启动仍在
+    `SharedPreferencesApiRegistrar.getAll` 抛同样的 NoSuchMethodError。
     发现路径：Android release APK 装设备启动后 `adb logcat | grep -E
     "NoSuchMethodError|ClassNotFoundException"`；`tool/agent/startup.sh android`
     会构建并安装 release APK 跑采样，顺带当这道冒烟。

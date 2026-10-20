@@ -26,7 +26,8 @@ dependencies:
   # release（minifyEnabled）下 R8 会改名 kotlin.coroutines.Continuation、甚至整个
   # 删掉 kotlin.coroutines.intrinsics.CoroutineSingletons —— 启动读偏好即抛
   # PlatformException（NoSuchMethodError / ClassNotFoundException，安卓 release
-  # 包实测）。插件没有 consumer-rules.pro，堆 keep 规则是打地鼠且 +1.1MB；
+  # 包实测）。插件没有 consumer-rules.pro（2026-10-20 复评 2.5.1，release APK
+  # 仍在启动时抛同样的 NoSuchMethodError），堆 keep 规则是打地鼠且 +1.1MB；
   # 这里钉回 JNI 改造前的最后一个版本。
   # 复评条件：上游给 shared_preferences_android 补上 JNI 的 consumer-rules.pro
   # （或改回平台通道）后再升。
@@ -49,7 +50,8 @@ dependencies:
   # 7.3.2 把 nm 提到 0.6（依赖 dbus 0.8），与 audio_service_mpris 的
   # dbus ^0.7.10 冲突；7.3.1 是同一行为线的上一补丁版，保留 Linux 修复。
   # 复评条件：audio_service_mpris 放出支持 dbus ^0.8 的版本（0.2.1 仍钉 0.7.10），
-  # 或本仓库不再需要它的 Linux 平台接口时，再一起升 nm / dbus / connectivity_plus。
+  # 或本仓库不再需要它的 Linux 平台接口时，再一起升 nm / dbus / connectivity_plus
+  # （2026-10-20 复评：system_hotkeys_linux 0.2.1 也仍钉 dbus ^0.7.15）。
   connectivity_plus: 7.3.1
   just_audio: ^0.10.6
   just_audio_media_kit: ^2.1.0
