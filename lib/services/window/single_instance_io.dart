@@ -6,6 +6,7 @@ import 'package:logging/logging.dart';
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 
+import 'process_liveness.dart';
 import 'single_instance_lock.dart';
 import 'window_chrome.dart';
 
@@ -70,19 +71,23 @@ class SingleInstance {
         return _startPrimary(lockFile);
       }
       final existing = await _readLock(lockFile);
-      final connected =
-          existing != null && await _notifyExisting(existing.port);
+      final alive = existing != null && isProcessAlive(existing.pid);
+      final connected = alive && await _notifyExisting(existing.port);
       switch (SingleInstanceLock.decide(
         connected: connected,
+        alive: alive,
         attempt: attempt,
       )) {
         case SingleInstanceAction.secondary:
           _logger.info('已有实例在运行（pid ${existing!.pid}），请它显示窗口');
           return SingleInstanceRole.secondary;
         case SingleInstanceAction.retryAcquire:
-          // 陈旧锁（崩溃残留 / 半写内容）：清掉后重抢。
+          // pid 已退出时无需等连接超时：清锁后立即重抢（强杀 / 更新后常见）。
+          if (existing != null && !alive) {
+            _logger.info('单实例：锁进程 ${existing.pid} 已退出，立即重抢');
+          }
           await _removeLockFile(lockFile);
-          await Future<void>.delayed(_retryDelay);
+          if (alive) await Future<void>.delayed(_retryDelay);
         case SingleInstanceAction.fallbackPrimary:
           // 重试耗尽：宁可多开一个窗口，也不要卡死启动。
           _logger.warning('单实例锁重试耗尽，按主实例继续（可能多开一个窗口）');

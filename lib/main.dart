@@ -168,15 +168,21 @@ void main() async {
   GlobalHotkeys.bindActions(
     ShortcutActions(playback: playback.playbackProvider),
   );
-  await GlobalHotkeys.attach();
+  // 热键注册（平台通道）不参与首帧内容：与桌面壳 / 主题预解析并行推进，
+  // 在 runApp 前 await 一次即可（窗口出现时热键已就绪）。
+  final hotkeysWatch = Stopwatch()..start();
+  final hotkeysFuture = GlobalHotkeys.attach().whenComplete(
+    () => markStartupStep('sub.hotkeys.attach', hotkeysWatch),
+  );
   // ⑤ 桌面壳（异步：prefs / 托盘落地）与 ⑥ AI 推歌 / ⑦ 歌词会话：
   // 三组互不依赖；桌面壳的异步初始化与后面两组同步装配并行推进
   // （不 await 完桌面壳再开始下一步）。
+  final desktopWatch = Stopwatch()..start();
   final desktopFuture = buildDesktopStack(
     playback: playback.playbackProvider,
     libraryProvider: libraryProvider,
     playStatisticsService: library.playStatisticsService,
-  );
+  ).whenComplete(() => markStartupStep('sub.desktop.build', desktopWatch));
   final ai = buildAiStack(
     catalog: catalog,
     library: library,
@@ -184,15 +190,21 @@ void main() async {
     libraryProvider: libraryProvider,
   );
   final lyrics = buildLyricsStack(local: local);
-  final desktop = await desktopFuture;
   // ⑧ 歌词显示与主题（含 runApp 前的启动预解析：首帧即封面色）。
-  final display = await buildLyricsDisplayStack(
+  // 与桌面壳并行：两者互不依赖，串行会白等 tray settings 的 prefs 读取。
+  final displayWatch = Stopwatch()..start();
+  final displayFuture = buildLyricsDisplayStack(
     catalog: catalog,
     playback: playback.playbackProvider,
     lyricsProvider: lyrics.lyricsProvider,
     audioHandler: playback.audioHandler,
   );
+  final desktop = await desktopFuture;
+  final display = await displayFuture;
+  markStartupStep('sub.lyricsDisplay.build', displayWatch);
   _markStartup('主题/歌词显示', startup);
+  // 热键注册与上面的装配并行；runApp 前确保就绪（含冷启动恢复态）。
+  await hotkeysFuture;
   // ⑨ 听歌统计接线（纯观察者：快照 + 进度 tick）。
   wirePlayStatistics(
     playback: playback.playbackProvider,
