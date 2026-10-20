@@ -8,7 +8,7 @@
 ## 工具链
 
 Flutter / Dart 3.47.7 / 3.13.5；JDK 26+；Gradle 9.8.2 / AGP 9.4.1 / Kotlin 2.4.21；
-compileSdk/targetSdk/minSdk 37；NDK 30.0.16248370。这里是版本来源，改 CI / 发布工作流前先改本行。
+compileSdk/targetSdk 37，minSdk 35；NDK 30.0.16248370。这里是版本来源，改 CI / 发布工作流前先改本行。
 
 ## 常用命令
 

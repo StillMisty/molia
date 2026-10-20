@@ -25,7 +25,7 @@ android {
 
     defaultConfig {
         applicationId = "top.stillmisty.molia"
-        minSdk = 37
+        minSdk = 35
         targetSdk = 37
         versionCode = flutter.versionCode
         versionName = flutter.versionName

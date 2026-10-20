@@ -46,6 +46,8 @@ tool/agent/emu.sh stop     # 停止模拟器（app.sh stop 只停 flutter run）
   均按它操作：`-d linux` 起的桌面会话不会误发给 adb，反之亦然。
 - 模拟器默认 16 KB 页（`google_apis_ps16k` 镜像，`emu.sh status` 会打印页大小）；
   回 4 KB 需另建 AVD（`-k "system-images;android-37.0;google_apis;x86_64"`）并 `AVD_NAME=... emu.sh start`。
+  应用最低支持 API 35；默认镜像仍是 API 37（覆盖 targetSdk 37 的局域网权限等行为），
+  验最低版本时另建 API 35 AVD 并 `AVD_NAME=... emu.sh start`。
 - 日志 / 截图 / pid 统一放在 `/tmp/opencode/molia`（临时目录，重启可清）；集成测试日志为
   `it-<platform>-<时间戳>.log`，失败时脚本自动回显尾部 40 行。Linux 集成测试默认跑在
   Xvfb 虚拟显示上（`test.sh linux --window` 才上真实显示，WSLg 下会弹窗）。

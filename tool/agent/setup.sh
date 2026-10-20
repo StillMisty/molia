@@ -31,7 +31,8 @@ if ! "$ANDROID_CLI" sdk list 2>/dev/null | grep -qE '^\s+emulator\s'; then
   "$ANDROID_CLI" sdk install emulator
 fi
 
-# 2b. API 37 系统镜像（项目 minSdk=37，只能用 API 37 镜像；用 google_apis 而非 playstore 更轻）。
+# 2b. API 37 系统镜像（minSdk=35，API 35+ 镜像均可；默认用 37 覆盖 targetSdk 37 的权限/16KB 行为；
+#     用 google_apis 而非 playstore 更轻）。
 #     取 ps16k 变体：默认环境就跑在 16 KB 页上，依赖的页对齐问题会当场暴露。
 # 包路径两种写法：分号给 avdmanager，斜杠给 sdk list 与 AVD config.ini
 SYS_IMAGE="system-images;android-37.0;google_apis_ps16k;x86_64"

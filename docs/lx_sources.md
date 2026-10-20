@@ -147,8 +147,8 @@ lib/playback/
   - Android（用户态安装）：`sdkmanager "platform-tools" "platforms;android-37.0" "build-tools;37.0.0" "ndk;30.0.16248370"`，
     然后 `flutter config --android-sdk "$HOME/Android/Sdk"`
   - 工程工具链：Gradle 9.8.2 + AGP 9.4.1 + Kotlin 2.4.21 + JDK 27（Flutter 3.47.7 stable），
-    `compileSdk/targetSdk/minSdk = 37`、NDK r30、Java/Kotlin 字节码 target 26（Kotlin 2.4.x JvmTarget 上限）
-  - 注意：`minSdk = 37` 意味着只有 Android 17 及以上设备可安装此构建
+    `compileSdk/targetSdk = 37`、`minSdk = 35`、NDK r30、Java/Kotlin 字节码 target 26（Kotlin 2.4.x JvmTarget 上限）
+  - 注意：`minSdk = 35` 意味着 Android 15 及以上设备可安装此构建
   - JS 运行时为 quickjs_engine（QuickJS-NG），Linux / Android 原生库由包自身 CMake 从源码
     编译（Linux bundle 实测含 `libquickjs_c_bridge_plugin.so`，需 `linux/CMakeLists.txt`
     末端一处导出宏补丁，见 pitfalls #1）

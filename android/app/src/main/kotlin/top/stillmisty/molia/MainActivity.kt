@@ -235,7 +235,7 @@ class MainActivity : FlutterActivity() {
         // 公共下载目录通道（MediaStore Downloads 集合）：把应用私有目录里的
         // 下载副本发布到公共 Downloads，用户在文件管理器 / 其它播放器里可见。
         // API 29+ 走 MediaStore insert + openOutputStream（应用自己创建的行，
-        // 无需任何存储权限）；更低版本返回 null 表示不支持（本应用 minSdk 37，
+        // 无需任何存储权限）；更低版本返回 null 表示不支持（本应用 minSdk 35，
         // 实际不会走到，保留分支只作语义声明）。
         MethodChannel(
             flutterEngine.dartExecutor.binaryMessenger,
