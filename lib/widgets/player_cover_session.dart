@@ -223,6 +223,28 @@ class CoverSwapSession extends ChangeNotifier {
     return true;
   }
 
+  /// 建立初始展示身份（deck 挂载时快照已有当前曲目）。
+  ///
+  /// 冷启动恢复态在首帧前就已有当前曲目与队列：若首帧仍按 [observe] 的
+  /// 切歌路径处理，会把「本来就在展示的曲目」当成一次切歌，中心封面从侧槽
+  /// 入场、邻位迟到——首屏看起来像图片没有按队列就位。这里只建立身份并缓存
+  /// 邻位，不启动任何动画；后续曲目变化仍走 [observe]。
+  ///
+  /// 只在会话尚无身份时生效；没有当前曲目（空态）返回 false，保留「空态 →
+  /// 首次播放」的入场动画。
+  bool adoptInitial(PlaybackSnapshot snapshot) {
+    if (_animatedTrackId != null) return false;
+    final track = snapshot.current;
+    if (track == null) return false;
+    _snapshot = snapshot;
+    _animatedTrackId = trackKeyOf(track);
+    _seenTrack = track;
+    _previous = snapshot.previous;
+    _lastNext = snapshot.next;
+    _cacheDirectionHints(snapshot);
+    return true;
+  }
+
   /// 横滑开始：提交等待 / 对账校正期间不接受新手势。
   ///
   /// 一次拖动只对应一次切歌；校正期间放行会把中心从中间态跳回旧预览目标

@@ -402,9 +402,12 @@ class _PlayerCoverDeckState extends State<PlayerCoverDeck>
     _playback = playback;
     playback.addListener(_handlePlaybackChanged);
     // 首帧（或换 provider）：以 deck 实际展示的曲目建立/校正会话身份，
-    // 并同步一次播放态缩放初始值。
+    // 并同步一次播放态缩放初始值。挂载时快照已有当前曲目（冷启动恢复 /
+    // 系统媒体恢复）按稳态接管，不把「本来就在展示的曲目」当成切歌入场。
+    final snapshot = playback.snapshot;
+    _session.adoptInitial(snapshot);
     _session.observe(
-      snapshot: playback.snapshot,
+      snapshot: snapshot,
       displayTrack: widget.displayTrack,
     );
     // 渲染起点就是当前身份：槽位跟踪对齐，不补身份淡换。
@@ -1050,6 +1053,14 @@ class _PlayerCoverDeckState extends State<PlayerCoverDeck>
                       .transform(_sourceNeighborFade.value.clamp(0.0, 1.0));
                   final double identityFade = Curves.easeOut
                       .transform(_slotIdentityFade.value.clamp(0.0, 1.0));
+                  // 邻位占位只在槽位身份过渡期间借用当前封面：冷启动首帧
+                  // 左右图还没解码完时若也用当前封面，会短暂出现「三张
+                  // 同一封面」的错位闪动；稳态交给各自的中性占位。
+                  final bool sideTransitioning =
+                      _slotIdentityFade.isAnimating ||
+                          _sourceNeighborFade.isAnimating;
+                  final String? sidePlaceholderUrl =
+                      sideTransitioning ? currentImageUrl : null;
                   children.addAll(_idleSideLayers(
                     context,
                     left: true,
@@ -1060,7 +1071,7 @@ class _PlayerCoverDeckState extends State<PlayerCoverDeck>
                     rotation: -sideRotation,
                     sourceFade: dir == -1 ? sourceFade : 1.0,
                     identityFade: identityFade,
-                    placeholderUrl: currentImageUrl,
+                    placeholderUrl: sidePlaceholderUrl,
                     // 左槽点击 = 上一首：只要展示了身份（快照 previous 或
                     // 队列前一位，与后端 skipToPrevious 的回退、拖动预览
                     // 同源）就可点；左槽为空时不渲染卡片，自然不可点。
@@ -1078,7 +1089,7 @@ class _PlayerCoverDeckState extends State<PlayerCoverDeck>
                     rotation: sideRotation,
                     sourceFade: dir == 1 ? sourceFade : 1.0,
                     identityFade: identityFade,
-                    placeholderUrl: currentImageUrl,
+                    placeholderUrl: sidePlaceholderUrl,
                     onTap: playbackProvider.hasTrack
                         ? playbackProvider.skipToNext
                         : null,

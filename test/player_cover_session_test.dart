@@ -140,6 +140,49 @@ void main() {
       expect(host.calls.last, 'adoptSteadySlots');
     });
 
+    test('adoptInitial：挂载时已有曲目按稳态接管，不播入场', () {
+      final adopted = session.adoptInitial(snapshotAt(1));
+
+      expect(adopted, isTrue);
+      expect(session.phase, CoverSwapPhase.idle);
+      expect(host.calls, isEmpty, reason: '初始身份不是切歌，不产生任何效果意图');
+      expect(session.animatedTrackId, b.id.uri);
+      expect(session.previous, a, reason: '左槽身份首帧就该是队列里的上一首');
+
+      // 紧接着的首个快照通知只回填空闲缓存，不重新开会话。
+      expect(
+        session.observe(snapshot: snapshotAt(1), displayTrack: b),
+        isFalse,
+      );
+      expect(session.phase, CoverSwapPhase.idle);
+      expect(host.calls, isEmpty);
+    });
+
+    test('adoptInitial 后首次真正换曲：仍走入场，滑出身份是初始曲目', () {
+      session.adoptInitial(snapshotAt(1));
+      host.clear();
+
+      final changed = session.observe(
+        snapshot: snapshotAt(2),
+        displayTrack: c,
+      );
+
+      expect(changed, isTrue);
+      expect(session.phase, CoverSwapPhase.settling);
+      expect(session.from, b);
+      expect(host.calls, ['startSettle', 'disarmTimeout']);
+    });
+
+    test('adoptInitial：空快照 / 已有身份时不接管', () {
+      expect(session.adoptInitial(PlaybackSnapshot.empty), isFalse);
+      expect(session.phase, CoverSwapPhase.idle);
+
+      expect(session.adoptInitial(snapshotAt(1)), isTrue);
+      expect(session.adoptInitial(snapshotAt(2)), isFalse,
+          reason: '已有身份时后续变化必须走 observe 的切歌路径');
+      expect(session.animatedTrackId, b.id.uri);
+    });
+
     test('同 id 的重复通知：不开启新会话，只回填空闲缓存', () {
       settleAt(0);
       host.clear();

@@ -18,6 +18,15 @@ import '../l10n/app_localizations.dart';
 
 /// 正在播放页：全屏播放器（可折叠为迷你条）+ 队列/歌词/歌曲信息三个 PageView。
 class NowPlaying extends StatefulWidget {
+  /// 冷启动且启动首页是播放页时的首屏入场（一次性）。
+  ///
+  /// 只做整页透明度 0.85→1 与标题入场；封面堆叠自身首帧就是稳态（按恢复
+  /// 队列渲染），不参与位移/缩放——入场不能以「图片还没按队列就位」为代价。
+  final bool startupReveal;
+
+  /// 首屏入场包装层的语义 key（测试定位；未启用时不存在）。
+  static const Key startupRevealKey = ValueKey('nowPlayingStartupReveal');
+
   /// 顶栏共享元素控制器：全屏播放器为其提供封面/歌名/进度锚点。
   final PlayerMorphController? morph;
 
@@ -36,6 +45,7 @@ class NowPlaying extends StatefulWidget {
 
   const NowPlaying({
     super.key,
+    this.startupReveal = false,
     this.morph,
     this.reselect,
     this.controller,
@@ -103,6 +113,18 @@ class _NowPlayingState extends State<NowPlaying>
   bool? _cachedIsLargeScreen;
   Size? _cachedScreenSize;
 
+  /// 首屏入场时长：只动透明度，不拖慢首帧可读性（首帧即有 85% 不透明度）。
+  static const Duration _startupRevealDuration = Duration(milliseconds: 240);
+
+  /// 首屏入场起点透明度：不从 0 开始，队列封面首帧就可见。
+  static const double _startupRevealStartOpacity = 0.85;
+
+  /// 首屏入场控制器（0 = 起点，1 = 终态）；非启动首页时为 1。
+  late final AnimationController _startupRevealController;
+
+  /// 首屏入场透明度：0.85 → 1（effects 走时长 + 曲线，不用弹簧）。
+  late final Animation<double> _startupRevealOpacity;
+
   @override
   void initState() {
     super.initState();
@@ -121,6 +143,30 @@ class _NowPlayingState extends State<NowPlaying>
       initialValue: 0,
     )..value = 1.0;
     _expandController.addListener(_handleExpandProgress);
+    _startupRevealController = AnimationController(
+      vsync: this,
+      duration: _startupRevealDuration,
+      value: widget.startupReveal ? 0 : 1,
+    );
+    _startupRevealOpacity = Tween<double>(
+      begin: _startupRevealStartOpacity,
+      end: 1,
+    ).animate(CurvedAnimation(
+      parent: _startupRevealController,
+      curve: Curves.easeOutCubic,
+    ));
+    if (widget.startupReveal) {
+      // 首帧已经带 85% 不透明度画出来（队列可读），帧末才启动过渡；
+      // 减弱动效时直接落位，不播放。
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        if (MediaQuery.maybeOf(context)?.disableAnimations ?? false) {
+          _startupRevealController.value = 1;
+          return;
+        }
+        _startupRevealController.forward();
+      });
+    }
     widget.reselect?.addListener(_handleReselect);
     widget.controller?.addListener(_handleTabRequest);
   }
@@ -142,6 +188,7 @@ class _NowPlayingState extends State<NowPlaying>
   void dispose() {
     widget.reselect?.removeListener(_handleReselect);
     widget.controller?.removeListener(_handleTabRequest);
+    _startupRevealController.dispose();
     _expandController.dispose();
     _pageController.dispose();
     _queueScrollController.dispose();
@@ -428,6 +475,19 @@ class _NowPlayingState extends State<NowPlaying>
     _contentSwipeDx = 0;
   }
 
+  /// 首屏入场包装：整页只动透明度（不缩放/位移）。
+  ///
+  /// 不给任何共享飞行锚点的祖先加缩放/位移：`anchorRectOf` 会带上祖先变换，
+  /// 入场期间的缩放会让顶栏⇄播放页飞行落错位置（见 architecture §6）。
+  Widget _withStartupReveal(Widget child) {
+    if (!widget.startupReveal) return child;
+    return FadeTransition(
+      key: NowPlaying.startupRevealKey,
+      opacity: _startupRevealOpacity,
+      child: child,
+    );
+  }
+
   Widget _buildCollapsedLargeLayout(BuildContext context) {
     return Scaffold(
       body: Row(
@@ -438,7 +498,11 @@ class _NowPlayingState extends State<NowPlaying>
               child: SizedBox(
                 height: double.infinity,
                 child: Center(
-                  child: Player(isLargeScreen: true, morph: widget.morph),
+                  child: Player(
+                    isLargeScreen: true,
+                    morph: widget.morph,
+                    startupReveal: widget.startupReveal,
+                  ),
                 ),
               ),
             ),
@@ -499,6 +563,7 @@ class _NowPlayingState extends State<NowPlaying>
               isLargeScreen: true,
               desktopLayout: true,
               morph: widget.morph,
+              startupReveal: widget.startupReveal,
             ),
           ),
           Expanded(
@@ -578,7 +643,7 @@ class _NowPlayingState extends State<NowPlaying>
     // 桌面版式由壳层启用：布局与窗口宽度解耦（窄窗口也保持两栏），
     // 不走移动骨架的尺寸分支。
     if (widget.desktopLayout) {
-      return _buildDesktopLayout(context);
+      return _withStartupReveal(_buildDesktopLayout(context));
     }
 
     final bool isLargeScreen = _getIsLargeScreen(context);
@@ -586,12 +651,12 @@ class _NowPlayingState extends State<NowPlaying>
     _isLargeScreen = isLargeScreen;
 
     if (isLargeScreen) {
-      return _buildCollapsedLargeLayout(context);
+      return _withStartupReveal(_buildCollapsedLargeLayout(context));
     }
 
     // 小屏：播放器高度随展开进度连续插值，
     // 下方是歌词/队列圆点切换行与内容区。
-    return Scaffold(
+    final Widget page = Scaffold(
       body: LayoutBuilder(
         builder: (context, constraints) {
           final double playerMaxHeight =
@@ -655,5 +720,6 @@ class _NowPlayingState extends State<NowPlaying>
         },
       ),
     );
+    return _withStartupReveal(page);
   }
 }

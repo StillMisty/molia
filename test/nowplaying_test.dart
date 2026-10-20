@@ -118,7 +118,7 @@ void main() {
       ),
     );
     await tester.pump();
-    // 等首帧切歌入场动画结束（封面堆叠 460ms）。
+    // 等首帧落定（冷启动恢复态首帧不再播封面入场）。
     await tester.pump(const Duration(milliseconds: 600));
   }
 
@@ -457,10 +457,6 @@ void main() {
       queue: [_track('a'), _track('b'), _track('c')],
       size: const Size(1400, 900),
     );
-    // 首帧切歌入场是弹簧动画（容差拖尾 > 0.7s）：动画期间邻位卡不带身份
-    // key，越界断言要等落定后再量。
-    await tester.pump(const Duration(milliseconds: 600));
-
     final column = tester.getRect(find.byType(Player));
     expect(column.width, 480, reason: '桌面播放器列宽');
 

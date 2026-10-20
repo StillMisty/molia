@@ -123,6 +123,13 @@
   唯一状态机（起止身份/方向/旧邻位/阶段/方向提示/6 秒兜底），只决定「什么时候」；
   唯一快照入口 `observe`（切歌检测、空闲缓存与预览目标都从它派生，调用方不再各刷
   一半）；只在离散迁移通知（`ChangeNotifier`），跟手逐帧进度不进会话。
+- **Initial identity（初始身份）** — `CoverSwapSession.adoptInitial`：deck 挂载时
+  快照已有 `current`（冷启动恢复 / 系统媒体恢复）的稳态接管——只建立身份与邻位
+  缓存，不启动切歌入场；首帧三槽位直接按队列渲染。只有空态出现首曲目才走
+  `observe` 的入场。
+- **Startup reveal（启动首屏入场）** — `NowPlaying.startupReveal`：仅冷启动且启动
+  首页是播放页、已有当前曲目时播放一次；整页透明度 0.85→1（240ms）+ 标题入场，
+  封面区首帧已是稳态，不做位移/缩放。托盘恢复 / 从其它页进入播放页不播。
 - **Cover swap host（切歌宿主）** — `CoverSwapHost`（实现：deck State）：会话的
   效果面意图接口，决定「怎么做」——控制器编排、post-frame 调度、播放命令与父级
   联动（`startSettle` / `land` / `settleCommit` / `crossfadeCorrection` / `hardReset`

@@ -135,8 +135,7 @@ void main() {
       ),
     );
     await tester.pump();
-    // 首帧切歌入场动画：motor 弹簧（含容差拖尾约 0.7s）落定后才渲染
-    // 稳态槽位，等它结束再操作。
+    // 等首帧落定（冷启动恢复态首帧已是稳态；保留一拍覆盖布局/入场）。
     await tester.pump(const Duration(milliseconds: 900));
   }
 
@@ -163,8 +162,7 @@ void main() {
       ),
     );
     await tester.pump();
-    // 首帧切歌入场动画：motor 弹簧（含容差拖尾约 0.7s）落定后才渲染
-    // 稳态槽位，等它结束再操作。
+    // 等首帧落定（冷启动恢复态首帧已是稳态；保留一拍覆盖布局/入场）。
     await tester.pump(const Duration(milliseconds: 900));
   }
 
