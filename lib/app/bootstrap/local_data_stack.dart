@@ -27,6 +27,7 @@ import '../../services/download/download_service.dart';
 import '../../services/download/download_settings.dart';
 import '../../services/lyrics_service.dart';
 import 'catalog_stack.dart';
+import 'startup_trace.dart';
 
 /// 本地数据栈产物（构造顺序见 [buildLocalDataStack]）。
 typedef LocalDataStack = ({
@@ -47,9 +48,13 @@ Future<LocalDataStack> buildLocalDataStack({
   // 供取链回调、封面网关与播放 provider 共享同一实例。
   // 下载设置（设备本地：保存位置 / 文件名格式 / 标签嵌入开关）与省流
   // 互不依赖：两者并行初始化（纯 prefs 读，等待时间取最大值）。
+  final dataSaverWatch = Stopwatch()..start();
   final dataSaver = DataSaverService();
   final downloadSettings = DownloadSettings();
-  await (dataSaver.init(), downloadSettings.init()).wait;
+  // 省流只读偏好、不探测网络：connectivity_plus 的探测与订阅由首帧后的
+  // `startMonitoring` 启动（见 post_frame_init.dart）。
+  await (dataSaver.init(monitor: false), downloadSettings.init()).wait;
+  markStartupStep('sub.dataSaver/downloadSettings', dataSaverWatch);
   // 封面统一咽喉：省流生效时只用本地缓存，不发网络请求
   // （AppNetworkImage / artworkImageProvider / 取色共用）。
   ArtworkCache.instance.networkImageBlocked =
@@ -105,8 +110,10 @@ Future<LocalDataStack> buildLocalDataStack({
     preferredQuality: () =>
         dataSaver.effectiveQuality(sourceManager.preferredQuality),
   );
-  await downloadService.init();
-
+  // 下载记录 / `.part` 清扫后移到首帧之后：存储根解析、全量记录读取与目录
+  // 扫描都不参与首帧内容。服务先构造好交给 Provider 树，`post_frame_init`
+  // 调 `init()`；依赖记录的方法经 `ready` 自行等待就绪。
+  //
   // 音频缓存字节写入器：两处复用同一实例——
   // 1) 下一首字节预取（`NextTrackPreloader`，起播后预热下一首）；
   // 2) 当前曲目后台缓存（`PlayingTrackCacheWriter`，桌面等播放侧不写缓存的
@@ -115,16 +122,6 @@ Future<LocalDataStack> buildLocalDataStack({
   final audioCacheWriter = CacheAudioPredownloader(
     cacheService: CacheService.instance,
     allowed: () => !dataSaver.active,
-  );
-
-  // 音频缓存启动维护（不阻断首帧）：旧命名文件一次性清理 + 中断残留的
-  // 半成品（`.part` / `.predl`）清扫——半成品只可能由本进程写出，
-  // 重启后残留的一定是中断产物。
-  unawaited(
-    () async {
-      await CacheService.instance.migrateAudioCacheNamingIfNeeded();
-      await CacheService.instance.cleanupAudioPartials();
-    }(),
   );
 
   return (

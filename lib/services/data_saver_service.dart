@@ -51,12 +51,17 @@ class DataSaverService extends ChangeNotifier {
 
   SharedPreferences? _prefs;
   StreamSubscription<bool>? _subscription;
+  Future<void>? _monitoringFuture;
 
   bool _enabled = defaultEnabled;
   String _quality = defaultQuality;
   bool _coversSaverEnabled = defaultCovers;
   bool _onCellular = false;
   bool _detectionAvailable = true;
+
+  /// 是否已完成过至少一次网络类型探测。首帧前只读偏好、不探测；探测完成前
+  /// 对省流用户按「可能蜂窝」保守处理封面，避免首帧封面请求绕过省流网关。
+  bool _connectivityKnown = false;
 
   /// 是否开启省流模式（用户手动开关；开启不等于已生效）。
   bool get enabled => _enabled;
@@ -83,20 +88,34 @@ class DataSaverService extends ChangeNotifier {
   /// 是否阻止封面发起网络请求（生效 + 封面省流开启）。
   ///
   /// `ArtworkCache` / 播放器取色 / 预加载 / 通知封面 / 桌面小组件共用该判定。
-  bool get blockNetworkArtwork => active && _coversSaverEnabled;
+  bool get blockNetworkArtwork =>
+      _enabled && _coversSaverEnabled && (!_connectivityKnown || _onCellular);
 
-  /// 读取持久化偏好并开始监听网络变化（启动时调用一次）。
-  Future<void> init() async {
+  /// 读取持久化偏好（首帧前）并按需开始网络监听（首帧后）。
+  ///
+  /// [monitor] 为 false 时只读偏好，不触发 connectivity_plus 的平台探测与
+  /// 订阅——这两步是首帧后的启动尾巴；首帧内容只需要本地的省流开关状态。
+  Future<void> init({bool monitor = true}) async {
     await _loadPreferences();
+    if (monitor) await startMonitoring();
+  }
+
+  /// 开始探测网络类型并订阅变化（幂等；首帧后调用）。
+  ///
+  /// 探测完成前 [blockNetworkArtwork] 对省流用户保守按「可能蜂窝」处理，
+  /// 避免首帧封面请求绕过省流网关；探测失败时按「未知网络」放行，与既有
+  /// 降级口径一致。
+  Future<void> startMonitoring() => _monitoringFuture ??= _startMonitoring();
+
+  Future<void> _startMonitoring() async {
     await refreshConnectivity();
     try {
       final changes = _cellularChanges ??
-          Connectivity()
-              .onConnectivityChanged
-              .map(resultsAreCellular);
+          Connectivity().onConnectivityChanged.map(resultsAreCellular);
       _subscription = changes.listen(
         (value) {
           _detectionAvailable = true;
+          _connectivityKnown = true;
           _setOnCellular(value);
         },
         onError: (Object error) {
@@ -137,11 +156,13 @@ class DataSaverService extends ChangeNotifier {
     try {
       final cellular = await (_cellularProbe ?? _probeCellular)();
       _detectionAvailable = true;
+      _connectivityKnown = true;
       _setOnCellular(cellular);
     } catch (e) {
       _logger.warning('省流模式：网络类型检测失败: $e');
       final changed = _detectionAvailable || _onCellular;
       _detectionAvailable = false;
+      _connectivityKnown = true;
       // 检测不到时保守保持「未生效」，避免在未知网络上误降音质。
       _onCellular = false;
       if (changed) notifyListeners();

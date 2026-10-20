@@ -7,6 +7,8 @@ library;
 
 import 'dart:async';
 
+import 'package:flutter/foundation.dart';
+
 import '../../data/library_repository.dart';
 import '../../data/molia_database.dart';
 import '../../data/play_statistics_repository.dart';
@@ -24,6 +26,7 @@ import '../../services/play_statistics_service.dart';
 import '../../services/source_swap/auto_source_swap_service.dart';
 import '../../services/source_swap/source_swap_settings.dart';
 import 'catalog_stack.dart';
+import 'startup_trace.dart';
 
 /// 资料库栈产物（构造顺序见 [buildLibraryStack]）。
 typedef LibraryStack = ({
@@ -43,12 +46,19 @@ typedef LibraryStack = ({
 });
 
 /// 装配资料库 / 统计 / 换源相关的仓库与服务（含各自的启动维护）。
+///
+/// [deferStampSeed] 为 true 时把「全库最大戳」查询留给
+/// [startLibraryAfterFirstFrame]（生产组合根用，避免首帧等 DB 打开）；
+/// 测试默认 false，builder 返回前就把查询跑起来，写入不会永久等种子。
 Future<LibraryStack> buildLibraryStack({
   required CatalogStack catalog,
+  bool deferStampSeed = false,
 }) async {
   // 跨设备同步状态提前初始化：资料库/统计的写路径需要设备 id 打同步戳。
+  final syncStateWatch = Stopwatch()..start();
   final syncState = SyncStateStore();
   await syncState.init();
+  markStartupStep('sub.syncState.init', syncStateWatch);
   // 增量日志：资料库 / 统计的本机写入在**同一个 drift 事务**里追加
   // （对端按游标只拉变更；见 ADR-0003 v2 §5）。
   final syncJournal = SyncJournalRepository(
@@ -68,6 +78,9 @@ Future<LibraryStack> buildLibraryStack({
     stamps: syncState.stampIssuer,
     journal: syncJournal,
     addToTop: () => libraryAddSettings.addToTop,
+    // 全库最大戳的查询后移到首帧（`startLibraryAfterFirstFrame`）；在那之前
+    // 写入方不得取号，否则新戳可能低于库内已有记录。
+    beforeWrite: () => syncState.stampSeedReady,
   );
   // 发号器基线 ≧ 全库最大戳：即使状态存储没来得及落盘（进程被杀）或时钟回拨，
   // 重启后的新写入也不会输给库内已有记录。
@@ -88,6 +101,7 @@ Future<LibraryStack> buildLibraryStack({
   final playStatisticsRepository = PlayStatisticsRepository(
     clock: () => syncState.nowMs(),
     statisticsSync: statisticsSyncStore,
+    beforeWrite: () => syncState.stampSeedReady,
   );
   final playStatisticsService = PlayStatisticsService(
     repository: playStatisticsRepository,
@@ -98,20 +112,18 @@ Future<LibraryStack> buildLibraryStack({
   final sourceSwapSettings = SourceSwapSettings(
     settings: catalog.settings.scope([kSourceSwapAutoEnabled]),
   );
-  // 统计服务 init / 换源偏好 init / 加入位置偏好 init / 全库最大戳查询互不
-  // 依赖：并行执行，启动一次性等待（串行等待会累加启动耗时）。
-  final (_, _, _, dbMaxVersion) = await (
+  // 统计服务 init / 换源偏好 init / 加入位置偏好 init 互不依赖：并行执行。
+  // 全库最大戳查询要打开 drift 库（含迁移），不参与首帧内容，后移到
+  // `startLibraryAfterFirstFrame`。写入方经 `beforeWrite` 等 `stampSeedReady`，
+  // 不会在校验前取号。
+  final settingsWatch = Stopwatch()..start();
+  await (
     playStatisticsService.init(),
     sourceSwapSettings.init(),
     libraryAddSettings.init(),
-    libraryRepository.maxVersion(),
   ).wait;
-  syncState.stampIssuer.seed(dbMaxVersion);
-  unawaited(playStatisticsRepository.closeStaleEvents());
-  // 事件保留裁剪（行数 + 时长上限）与载荷预算：统计查询 / 同步导出与指纹都随
-  // 库龄线性变慢，超出上限的已收尾事件在启动维护时裁掉；载荷（gzip 字节）另按
-  // 最近播放保留一份预算，病态大载荷脚本不会把库顶穿。
-  unawaited(playStatisticsRepository.pruneOldEvents());
+  markStartupStep('sub.library.settingsInit', settingsWatch);
+  // 统计收尾 / 裁剪同属启动维护，也由首帧后统一触发。
   // 最近播放上下文（play_contexts）：提前创建，同一实例既进 Provider 树，
   // 也直接注入 PlaybackProvider / 播放观察者。
   final localDatabaseProvider = LocalDatabaseProvider();
@@ -120,7 +132,7 @@ Future<LibraryStack> buildLibraryStack({
     registry: catalog.sourceRegistry,
   );
 
-  return (
+  final stack = (
     settings: catalog.settings,
     syncState: syncState,
     syncJournal: syncJournal,
@@ -133,6 +145,23 @@ Future<LibraryStack> buildLibraryStack({
     libraryAddSettings: libraryAddSettings,
     autoSourceSwapService: autoSourceSwapService,
   );
+  if (!deferStampSeed) unawaited(_seedStampBaseline(stack));
+  return stack;
+}
+
+/// 查询全库最大戳并放行写入（幂等：种子只前进，不会倒退）。
+Future<void> _seedStampBaseline(LibraryStack library) async {
+  final dbMaxWatch = Stopwatch()..start();
+  try {
+    final version = await library.libraryRepository.maxVersion();
+    library.syncState.seedStampBaseline(version);
+    markStartupStep('sub.db.maxVersion', dbMaxWatch);
+  } catch (error) {
+    // 查询失败也放行写入：沿用持久化基线 / 当前时钟，不能让资料库写入
+    // 永久挂起（与启动维护的「失败不阻断」口径一致）。
+    library.syncState.markStampSeedFailed();
+    debugPrint('[Molia] 全库最大同步戳读取失败（写入沿用持久化基线）: $error');
+  }
 }
 
 /// 听歌统计接线：曲目/播放态快照 + 进度 tick → 采集服务（纯观察者，零改动
@@ -171,4 +200,24 @@ void wireNotificationFavorite({
   );
   // 收藏变化只影响通知动作的图标：handler 自己现查当前曲目，这里只负责叫醒它。
   libraryProvider.addListener(handler.refreshFavoriteState);
+}
+
+/// 首帧后的资料库启动尾巴：补入全库最大戳种子 + 统计收尾/裁剪。
+///
+/// 为什么后移：`maxVersion` 要打开 drift 库（含迁移），统计收尾/裁剪也写
+/// 同一库；它们都不决定首帧内容。写入方在取号前等
+/// [SyncStateStore.stampSeedReady]，因此晚到的种子不会造成「新戳低于库内
+/// 最大戳」的同步回退。
+void startLibraryAfterFirstFrame(LibraryStack library) {
+  unawaited(_seedStampBaseline(library));
+
+  unawaited(() async {
+    await library.syncState.stampSeedReady;
+    try {
+      await library.playStatisticsRepository.closeStaleEvents();
+      await library.playStatisticsRepository.pruneOldEvents();
+    } catch (e) {
+      debugPrint('[Molia] 统计启动维护失败（继续运行）: $e');
+    }
+  }());
 }

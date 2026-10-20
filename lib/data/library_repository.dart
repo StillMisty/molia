@@ -46,6 +46,7 @@ class LibraryRepository implements LibraryStore, LibrarySyncStore {
     required SyncStampIssuer stamps,
     SyncJournalRepository? journal,
     bool Function()? addToTop,
+    Future<void> Function()? beforeWrite,
   }) : _databaseProvider = databaseProvider ?? (() => MoliaDatabase.instance) {
     _writeEngine = LibraryWriteEngine(
       databaseProvider: _databaseProvider,
@@ -53,6 +54,7 @@ class LibraryRepository implements LibraryStore, LibrarySyncStore {
       stamps: stamps,
       journal: journal,
       addToTop: addToTop,
+      beforeWrite: beforeWrite,
     );
   }
 

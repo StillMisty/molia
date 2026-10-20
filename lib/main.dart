@@ -1,6 +1,8 @@
 import 'dart:async';
 import 'dart:io' show exit;
 
+import 'package:flutter/foundation.dart'
+    show TargetPlatform, defaultTargetPlatform;
 import 'package:logging/logging.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:provider/provider.dart';
@@ -17,6 +19,7 @@ import 'app/bootstrap/lyrics_stack.dart';
 import 'app/bootstrap/playback_stack.dart';
 import 'app/bootstrap/post_frame_init.dart';
 import 'app/bootstrap/provider_tree.dart';
+import 'app/bootstrap/startup_trace.dart';
 import 'app/bootstrap/sync_stack.dart';
 import 'app/bootstrap/update_stack.dart';
 import 'managers/app_memory_manager.dart';
@@ -77,11 +80,21 @@ void main() async {
   //   读一次注册表（毫秒级），其它平台是空操作；
   // - 单实例（桌面）：已有实例在跑 → 请它显示主窗口后立即退出；此刻窗口还没
   //   创建，不会闪一下再消失。其余平台 / 抢锁异常按主实例继续。
+  final windowSettingsWatch = Stopwatch()..start();
+  final windowSettingsFuture = defaultTargetPlatform == TargetPlatform.linux ||
+          defaultTargetPlatform == TargetPlatform.windows
+      // 窗口几何只属于桌面；Android/iOS/macOS 不读这个设备键，别让首帧
+      // 等一次用不到的 prefs 读取。
+      ? WindowSettings.load()
+      : Future<void>.value();
+  final windowPrefixWatch = Stopwatch()..start();
   final (_, _, instanceRole) = await (
-    WindowSettings.load(),
+    windowSettingsFuture,
     SystemFontsService.loadPlatformDefaultFamily(),
     SingleInstance.acquire(),
   ).wait;
+  markStartupStep('sub.windowSettings.load', windowSettingsWatch);
+  markStartupStep('sub.window.prefix', windowPrefixWatch);
   if (instanceRole == SingleInstanceRole.secondary) {
     exit(0);
   }
@@ -89,7 +102,9 @@ void main() async {
   // 桌面窗口 chrome（Linux/Windows）：隐藏原生标题栏并恢复几何，**先不显示**
   // （其余平台是空操作）。窗口在首帧回调里才亮出来——见 `window_chrome_io`
   // 的 ensureInitialized 注释（先显示会让用户盯空白窗等待装配）。
+  final chromeWatch = Stopwatch()..start();
   await WindowChrome.ensureInitialized();
+  markStartupStep('sub.windowChrome.init', chromeWatch);
   // 显示兜底：首帧回调是主路径；装配异常 / 卡住时窗口也必须出现（show 幂等）。
   final revealFallback = Timer(
     const Duration(seconds: 5),
@@ -114,7 +129,9 @@ void main() async {
   //    （串行等待是两段相加，实测该段是启动装配里最大的一块）。
   final (local, library) = await (
     buildLocalDataStack(catalog: catalog),
-    buildLibraryStack(catalog: catalog),
+    // 全库最大戳要打开 drift 库；留给首帧后的 startLibraryAfterFirstFrame
+    // （写入方经 stampSeedReady 等种子，不会提前取号）。
+    buildLibraryStack(catalog: catalog, deferStampSeed: true),
   ).wait;
   _markStartup('本地数据/资料库栈', startup);
   // ④ 播放链路 + provider + 观察者 + 系统媒体会话。
@@ -237,6 +254,8 @@ void main() async {
     unawaited(WindowChrome.show());
     initAfterFirstFrame(
       catalog: catalog,
+      local: local,
+      library: library,
       desktop: desktop,
       update: update,
       sync: sync,

@@ -222,6 +222,9 @@ class DownloadService extends ChangeNotifier {
   bool _supported = false;
   bool _initialized = false;
 
+  /// 记录加载只做一次（幂等）；首帧后的启动尾巴与按需调用共用同一 Future。
+  Future<void>? _initFuture;
+
   /// 下载目录是否可用（无文件系统 / 目录解析失败时为 false，UI 隐藏下载
   /// 入口）。
   bool get supported => _supported;
@@ -292,6 +295,7 @@ class DownloadService extends ChangeNotifier {
 
   /// 无记录引用的孤儿文件（删除下载失败 / 手工拷贝残留），返回绝对路径。
   Future<List<String>> orphanFiles() async {
+    await _ensureReady();
     final root = await _storage.downloadsRoot();
     if (root == null) return const [];
     final referenced = <String>{
@@ -313,6 +317,7 @@ class DownloadService extends ChangeNotifier {
 
   /// 删除全部孤儿文件，返回删除数量。
   Future<int> deleteOrphanFiles() async {
+    await _ensureReady();
     final orphans = await orphanFiles();
     for (final path in orphans) {
       await _storage.deleteQuietly(path);
@@ -325,6 +330,7 @@ class DownloadService extends ChangeNotifier {
   /// 逐条记录搬运音频 / 歌词 / 翻译边车 / 封面（相对子目录保持不变），
   /// 更新记录后删除旧文件；单条失败不影响其余。返回 `(迁移数, 失败数)`。
   Future<(int, int)> migrateLegacyDownloads() async {
+    await _ensureReady();
     final newRoot = await _storage.downloadsRoot();
     final legacyRoot = await _storage.legacyDownloadsRoot();
     if (newRoot == null || legacyRoot == null || newRoot == legacyRoot) {
@@ -468,23 +474,39 @@ class DownloadService extends ChangeNotifier {
   /// 缺省下载音质：偏好音质 × 曲目可用音质（下载弹层的预选项）。
   String defaultQualityFor(Track track) => _pickQuality(track);
 
-  /// 加载已有下载记录并探测存储可用性（启动时调用一次）。
-  Future<void> init() async {
+  /// 记录加载完成的信号：首帧后的启动尾巴调用 [init]，播放取链与下载入口
+  /// 在记录就绪前先等这里，避免把已下载曲目误判成在线曲目。
+  Future<void> get ready => _initFuture ??= _init();
+
+  /// 加载已有下载记录并探测存储可用性（幂等；首帧后调用一次）。
+  ///
+  /// 不放在 `runApp` 前：存储根解析、全量记录读取与 `.part` 清扫都是磁盘/DB
+  /// 工作，不参与首帧内容。调用方在首帧后触发，UI 用 [initialized] 展示
+  /// 加载态；[localUriFor] 等依赖记录的方法会自行等待 [ready]。
+  Future<void> init() => ready;
+
+  Future<void> _init() async {
     try {
       _supported = await _storage.downloadsRoot() != null;
       // 存储不可用时不触碰数据库：本机下载整体关闭。
       if (_supported) {
         final records = await _repository.listAll();
         _records = {for (final record in records) record.key: record};
-        // 崩溃遗留的半成品（.part）清扫：不阻断启动，失败仅记日志。
+        // 崩溃遗留的半成品（.part）清扫：失败仅记日志，不影响记录可用。
         final cleaned = await cleanupIncompleteDownloads();
         if (cleaned > 0) _logger.info('清理未完成的下载文件 $cleaned 个');
       }
     } catch (e) {
       _logger.warning('下载初始化失败: $e');
+    } finally {
+      _initialized = true;
+      notifyListeners();
     }
-    _initialized = true;
-    notifyListeners();
+  }
+
+  /// 等待记录加载完成；已就绪时是同步空操作，不额外占用事件循环。
+  Future<void> _ensureReady() async {
+    if (!_initialized) await ready;
   }
 
   /// 下载 [track] 的音频（原音源曲目）；完成后自动落库。
@@ -502,6 +524,7 @@ class DownloadService extends ChangeNotifier {
     bool includeLyrics = true,
     bool includeCover = true,
   }) async {
+    await _ensureReady();
     _guardDownloadable(track);
     final root = await _requireRoot();
     final key = '${track.id.sourceKey}:${track.id.id}';
@@ -686,6 +709,7 @@ class DownloadService extends ChangeNotifier {
 
   /// 单独下载歌词（缓存优先）；无歌词抛 `downloadNoLyrics`。
   Future<void> downloadLyrics(Track track) async {
+    await _ensureReady();
     _guardDownloadable(track);
     final root = await _requireRoot();
     final lyrics = await _resolveLyrics(track);
@@ -725,6 +749,7 @@ class DownloadService extends ChangeNotifier {
 
   /// 单独下载封面（缓存优先）；无封面抛 `downloadNoArtwork`。
   Future<void> downloadCover(Track track) async {
+    await _ensureReady();
     _guardDownloadable(track);
     final root = await _requireRoot();
     final cover = await _resolveCover(track);
@@ -802,6 +827,7 @@ class DownloadService extends ChangeNotifier {
   /// 返回 `(导入数, 跳过数)`：路径为空 / 文件不存在 / 非音频后缀 /
   /// 存储不可用计入跳过。
   Future<(int, int)> importLocalFiles(Iterable<String> paths) async {
+    await _ensureReady();
     var imported = 0;
     var skipped = 0;
     if (!_supported) return (0, paths.length);
@@ -846,6 +872,7 @@ class DownloadService extends ChangeNotifier {
   /// `(发布数, 失败数)`。平台不支持（非 Android）时返回 `(0, 0)`。
   Future<(int, int)> publishMissingPublicCopies() async {
     if (!_publisher.supported) return (0, 0);
+    await _ensureReady();
     var published = 0;
     var failed = 0;
     for (final record in List<DownloadedTrack>.of(_records.values)) {
@@ -881,6 +908,7 @@ class DownloadService extends ChangeNotifier {
   /// 直接返回 `file://`，离线可播、不再取链。
   Future<Uri?> localUriFor(Track track, {String? quality}) async {
     if (track.id.sourceKey == kLocalSourceKey) return null;
+    await _ensureReady();
     final record = _records['${track.id.sourceKey}:${track.id.id}'];
     final path = record?.filePath;
     if (path != null && path.isNotEmpty && await _storage.fileExists(path)) {

@@ -31,6 +31,7 @@ import 'catalog_stack.dart';
 import 'library_stack.dart';
 import 'local_data_stack.dart';
 import 'local_playback_chain.dart';
+import 'startup_trace.dart';
 
 /// 系统媒体会话装配（flutter_media_session / Linux MPRIS，见 ADR-0010）：
 /// 真实本地播放服务链路与会话模块都就绪后调用；恢复态（冷启动未起播）的
@@ -154,7 +155,9 @@ Future<PlaybackStack> buildPlaybackStack({
   final service = localPlaybackService;
   final factory = mediaSessionFactory;
   if (service != null && factory != null) {
+    final mediaSessionWatch = Stopwatch()..start();
     audioHandler = await factory(service, sessionCoordinator);
+    markStartupStep('sub.mediaSession.activate', mediaSessionWatch);
     // 系统控制（通知 / 锁屏 / 耳机键）直接落到播放服务：把暂停 / 停止 /
     // 切播放顺序的会话落盘接到会话模块（handler 由注入的工厂创建，回调随后
     // 回填），保证控制动作返回时会话已在本地、重开应用可恢复暂停态。

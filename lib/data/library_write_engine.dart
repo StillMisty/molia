@@ -52,17 +52,29 @@ class LibraryWriteEngine {
     int Function()? clock,
     SyncJournalRepository? journal,
     bool Function()? addToTop,
+    Future<void> Function()? beforeWrite,
   })  : _databaseProvider = databaseProvider,
         _stamps = stamps,
         _clock = clock ?? (() => DateTime.now().millisecondsSinceEpoch),
         _journal = journal,
-        _addToTop = addToTop;
+        _addToTop = addToTop,
+        _beforeWrite = beforeWrite;
 
   final MoliaDatabase Function() _databaseProvider;
   final SyncStampIssuer _stamps;
   final int Function() _clock;
   final SyncJournalRepository? _journal;
   final bool Function()? _addToTop;
+
+  /// 写入前的就绪门（发号器基线种子）：首帧后 DB 最大戳查询完成前，
+  /// 本机写入不得取号。null = 不需要等待（测试 / 旧调用点）。
+  final Future<void> Function()? _beforeWrite;
+
+  Future<void> _ensureReady() async {
+    final beforeWrite = _beforeWrite;
+    if (beforeWrite != null) await beforeWrite();
+  }
+
   final Random _random = Random.secure();
   final StreamController<LibraryChange> _changes =
       StreamController<LibraryChange>.broadcast();
@@ -92,6 +104,7 @@ class LibraryWriteEngine {
   ///
   /// `playedAt` 是内容时间（上层给的聆听时刻）；版本戳由发号器现取。
   Future<void> addHistoryEntry(PlayHistoryEntry entry) async {
+    await _ensureReady();
     final db = _db;
     final version = _nextVersion();
     final raw = jsonEncode(entry.raw);
@@ -141,6 +154,7 @@ class LibraryWriteEngine {
   /// 供「加入列表 → 播放历史」使用：把曲目记为最近播放。
   Future<int> addHistoryEntries(List<PlayHistoryEntry> entries) async {
     if (entries.isEmpty) return 0;
+    await _ensureReady();
     final db = _db;
     final rows = <PlayHistoryCompanion>[];
     final journalChanges = <SyncJournalChange>[];
@@ -194,6 +208,7 @@ class LibraryWriteEngine {
   }
 
   Future<void> deleteHistoryEntry(String sourceKey, String songId) async {
+    await _ensureReady();
     final db = _db;
     await db.transaction(() async {
       final removed = await (db.delete(db.playHistory)
@@ -216,6 +231,7 @@ class LibraryWriteEngine {
   /// 批量删除历史记录（事务；返回实际删除数，变更只广播一次）。
   Future<int> deleteHistoryEntries(List<TrackKey> keys) async {
     if (keys.isEmpty) return 0;
+    await _ensureReady();
     final db = _db;
     var removed = 0;
     await db.transaction(() async {
@@ -254,6 +270,7 @@ class LibraryWriteEngine {
     TrackKey oldKey,
     PlayHistoryEntry replacement,
   ) async {
+    await _ensureReady();
     final db = _db;
     final version = _nextVersion();
     final raw = jsonEncode(replacement.raw);
@@ -309,6 +326,7 @@ class LibraryWriteEngine {
   }
 
   Future<void> clearHistory() async {
+    await _ensureReady();
     final db = _db;
     await db.transaction(() async {
       final rows = await db.select(db.playHistory).get();
@@ -334,6 +352,7 @@ class LibraryWriteEngine {
   // ── 列表集合 ─────────────────────────────────────────────
 
   Future<int> createPlaylist(String name) async {
+    await _ensureReady();
     final db = _db;
     final now = _nowMs();
     final version = _nextVersion();
@@ -366,6 +385,7 @@ class LibraryWriteEngine {
   }
 
   Future<void> renamePlaylist(int id, String name) async {
+    await _ensureReady();
     final db = _db;
     await db.transaction(() async {
       // 版本在补 syncId **之后**取：补 syncId 本身会为同一个键写一条日志，
@@ -401,6 +421,7 @@ class LibraryWriteEngine {
   }
 
   Future<void> deletePlaylist(int id) async {
+    await _ensureReady();
     final db = _db;
     final syncId = await _playlistSyncIdById(db, id);
     await db.transaction(() async {
@@ -436,6 +457,7 @@ class LibraryWriteEngine {
     bool favoriteChange = false,
     bool? addToTop,
   }) async {
+    await _ensureReady();
     final db = _db;
     final existing = await (db.select(db.playlistTracks)
           ..where((t) =>
@@ -512,6 +534,7 @@ class LibraryWriteEngine {
     bool? addToTop,
   }) async {
     if (tracks.isEmpty) return 0;
+    await _ensureReady();
     final db = _db;
     final knownRows = await (db.selectOnly(db.playlistTracks)
           ..addColumns([db.playlistTracks.sourceKey, db.playlistTracks.songId])
@@ -603,6 +626,7 @@ class LibraryWriteEngine {
     String songId, {
     bool favoriteChange = false,
   }) async {
+    await _ensureReady();
     final db = _db;
     var removed = 0;
     await db.transaction(() async {
@@ -643,6 +667,7 @@ class LibraryWriteEngine {
     bool favoriteChange = false,
   }) async {
     if (keys.isEmpty) return 0;
+    await _ensureReady();
     final db = _db;
     var removed = 0;
     await db.transaction(() async {
@@ -688,6 +713,7 @@ class LibraryWriteEngine {
     List<TrackKey> ordered,
   ) async {
     if (ordered.isEmpty) return;
+    await _ensureReady();
     final db = _db;
     await db.transaction(() async {
       final syncId = await _ensurePlaylistSyncId(db, playlistId);
@@ -764,6 +790,7 @@ class LibraryWriteEngine {
     PlaylistTrack replacement, {
     bool favoriteChange = false,
   }) async {
+    await _ensureReady();
     final db = _db;
     final version = _nextVersion();
     final raw = jsonEncode(replacement.raw);
@@ -836,6 +863,7 @@ class LibraryWriteEngine {
     int? durationMs,
     Map<String, dynamic> raw = const {},
   }) async {
+    await _ensureReady();
     final playlistId = await _ensureFavoritesPlaylist();
     final removed = await removeTrackFromPlaylist(
       playlistId,
@@ -867,6 +895,7 @@ class LibraryWriteEngine {
   /// 批量加入默认收藏（跳过已收藏；返回新增数）。
   Future<int> addFavorites(List<PlaylistTrack> tracks) async {
     if (tracks.isEmpty) return 0;
+    await _ensureReady();
     final playlistId = await _ensureFavoritesPlaylist();
     return addTracksToPlaylist(playlistId, tracks, favoriteChange: true);
   }
@@ -874,6 +903,7 @@ class LibraryWriteEngine {
   /// 批量取消收藏（返回移除数；无收藏列表时为 0）。
   Future<int> removeFavorites(List<TrackKey> keys) async {
     if (keys.isEmpty) return 0;
+    await _ensureReady();
     final playlistId = await _favoritesPlaylistId();
     if (playlistId == null) return 0;
     return removeTracksFromPlaylist(playlistId, keys, favoriteChange: true);
@@ -893,6 +923,7 @@ class LibraryWriteEngine {
     int playlistId,
     List<PlaylistTrack> tracks,
   ) async {
+    await _ensureReady();
     final db = _db;
     final knownRows = await (db.selectOnly(db.playlistTracks)
           ..addColumns([db.playlistTracks.sourceKey, db.playlistTracks.songId])
