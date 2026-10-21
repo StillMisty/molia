@@ -260,8 +260,9 @@ class AiDjProvider extends ChangeNotifier {
       }
     }
     // 冷启动恢复的 AI 队列继续自动补歌，不需要用户再点一次播放。
-    _adoptRestoredRadioIfNeeded();
+    final adopted = _adoptRestoredRadioIfNeeded();
     notifyListeners();
+    if (adopted) _maybeAutoFeed(_playbackProvider.snapshot);
   }
 
   /// 恢复态 / 切回 AI 队列时重新接管电台（显式 stop 后不接管）。
@@ -275,7 +276,25 @@ class AiDjProvider extends ChangeNotifier {
     }
     _setStatus(AiDjStatus.playing);
     _trackedUri = current.id.uri;
+    _registerSnapshotSessionTracks(snapshot);
     return true;
+  }
+
+  /// 恢复队列的曲目也要进入会话跟踪（跳过 / 喜欢判定）。
+  void _registerSnapshotSessionTracks(PlaybackSnapshot snapshot) {
+    _sessionTracks.clear();
+    for (final track in snapshot.queue) {
+      final artist = track.artistLabel;
+      _sessionTracks[track.id.uri] = _SessionTrack(
+        label: artist.isEmpty ? track.title : '${track.title} - $artist',
+        sourceKey: track.id.sourceKey,
+        songId: track.id.id,
+        durationMs: track.duration?.inMilliseconds ?? 0,
+      );
+    }
+    _queuedCount = snapshot.currentIndex < 0
+        ? 0
+        : snapshot.queue.length - snapshot.currentIndex;
   }
 
   Future<void> saveConfig(LlmConfig config) async {
@@ -343,15 +362,11 @@ class AiDjProvider extends ChangeNotifier {
   Future<AiPrompt?> previewPrompt() async {
     if (!hasConfig) return null;
     try {
-      final liked = _unique([
-        ...mergedLikedLabels,
-        ..._collectNewLikes(mark: false),
-      ]);
       return await _recommendationService.buildPromptPreview(
         count: _preferences.batchSize,
         preferences: _snapshotPreferences(),
         skippedLabels: mergedSkippedLabels,
-        likedLabels: liked,
+        likedLabels: _likedLabelsForPrompt(commit: false),
         excludeLabels: const [],
       );
     } catch (e) {
@@ -562,13 +577,13 @@ class AiDjProvider extends ChangeNotifier {
     _lastError = null;
     notifyListeners();
     try {
-      _collectNewLikes();
+      final likedLabels = _likedLabelsForPrompt(commit: true);
       final generated = await _recommendationService.generate(
         config: _config!,
         count: 1,
         preferences: _snapshotPreferences(),
         skippedLabels: mergedSkippedLabels,
-        likedLabels: mergedLikedLabels,
+        likedLabels: likedLabels,
         excludeLabels: [for (final item in batch.items) item.source.label],
       );
       if (generated.items.isEmpty) {
@@ -878,10 +893,7 @@ class AiDjProvider extends ChangeNotifier {
       notifyListeners();
       return;
     }
-    final upcoming = snapshot.queue.length - snapshot.currentIndex - 1;
-    if (upcoming <= lowWatermark) {
-      _maybeAutoFeed(snapshot);
-    }
+    _maybeAutoFeed(snapshot);
   }
 
   /// 进度 tick：记录当前 AI 曲目到达的最大位置（跳过判定用）。
@@ -919,14 +931,14 @@ class AiDjProvider extends ChangeNotifier {
     );
     notifyListeners();
     try {
-      _collectNewLikes();
+      final likedLabels = _likedLabelsForPrompt(commit: true);
       final snapshot = _snapshotPreferences();
       final batch = await _recommendationService.generate(
         config: _config!,
         count: count,
         preferences: snapshot,
         skippedLabels: mergedSkippedLabels,
-        likedLabels: mergedLikedLabels,
+        likedLabels: likedLabels,
         excludeLabels: const [],
         cancelToken: token,
         onProgress: (progress) {
@@ -1003,14 +1015,14 @@ class AiDjProvider extends ChangeNotifier {
     _autoCancelToken = token;
     _autoFeedInFlight = true;
     try {
-      _collectNewLikes();
+      final likedLabels = _likedLabelsForPrompt(commit: true);
       final snapshot = _snapshotPreferences();
       final batch = await _recommendationService.generate(
         config: _config!,
         count: snapshot.batchSize,
         preferences: snapshot,
         skippedLabels: mergedSkippedLabels,
-        likedLabels: mergedLikedLabels,
+        likedLabels: likedLabels,
         excludeLabels: const [],
         cancelToken: token,
       );
@@ -1026,7 +1038,8 @@ class AiDjProvider extends ChangeNotifier {
       final stamped = _stampBatch(batch, AiDjOrigin.autoFeed, snapshot);
       await _playbackProvider
           .enqueueDomainTracks([for (final item in stamped.items) item.track]);
-      if (token.isCancelled) return;
+      // 入队已经发生：即使此时显式操作取消了静默任务，也要补齐历史 /
+      // 计数 / 种子，否则队列里会出现未登记的曲目。
       await _store.saveBatch(_toStored(stamped));
       _rememberHistory(stamped);
       _registerSessionTracks(stamped.items);
@@ -1062,6 +1075,8 @@ class AiDjProvider extends ChangeNotifier {
     if (_status != AiDjStatus.playing) return;
     if (_explicitBusy || _autoFeedInFlight || _autoCancelToken != null) return;
     if (!_isRadioQueue(snapshot)) return;
+    final upcoming = snapshot.queue.length - snapshot.currentIndex - 1;
+    if (upcoming > lowWatermark) return;
     unawaited(_autoFeed());
   }
 
@@ -1231,24 +1246,45 @@ class AiDjProvider extends ChangeNotifier {
     }
   }
 
-  /// 会话内新收藏的曲目（喜欢 = 收藏），只回流一次并写入长期记忆。
-  List<String> _collectNewLikes({bool mark = true}) {
-    final liked = <String>[];
-    for (final entry in _sessionTracks.values) {
-      if (entry.likedReported) continue;
-      if (_libraryProvider.isFavorite(entry.sourceKey, entry.songId)) {
-        liked.add(entry.label);
-        if (!mark) continue;
+  /// 会话内未回流的收藏曲目（喜欢 = 收藏）。
+  List<_SessionTrack> _pendingLikeTracks() => [
+        for (final entry in _sessionTracks.values)
+          if (!entry.likedReported &&
+              _libraryProvider.isFavorite(
+                entry.sourceKey,
+                entry.songId,
+              ))
+            entry,
+      ];
+
+  /// 喜欢标签的 prompt 形状：预览只模拟回流，实际发送才提交。
+  ///
+  /// 两条路径必须共用同一顺序：本轮喜欢在前、长期记忆在后；提交时
+  /// `_feedback.addLiked` 会把新标签前插，所以预览也要按同一变换模拟。
+  List<String> _likedLabelsForPrompt({required bool commit}) {
+    final pending = _pendingLikeTracks();
+    if (pending.isEmpty) return mergedLikedLabels;
+    if (commit) {
+      for (final entry in pending) {
         entry.likedReported = true;
         _likedLabels.add(entry.label);
         _feedback = _feedback.addLiked(entry.label);
       }
-    }
-    if (mark && liked.isNotEmpty) {
       _preferencesRevision++;
       unawaited(_settingsStore.saveFeedbackMemory(_feedback));
+      return mergedLikedLabels;
     }
-    return liked;
+    var simulatedFeedback = _feedback;
+    final pendingLabels = <String>[];
+    for (final entry in pending) {
+      pendingLabels.add(entry.label);
+      simulatedFeedback = simulatedFeedback.addLiked(entry.label);
+    }
+    return _unique([
+      ..._likedLabels,
+      ...pendingLabels,
+      ...simulatedFeedback.liked,
+    ]);
   }
 
   void _trackSwitch(PlaybackSnapshot snapshot) {

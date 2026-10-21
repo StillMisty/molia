@@ -137,9 +137,6 @@ class AiDjBatch {
   /// 实际发送的提示词：只存内存（透明化区块展示）。
   final AiPrompt? prompt;
 
-  /// 所选渠道全部不可用、已回退自动渠道（偏好页提示用）。
-  final bool channelFallback;
-
   const AiDjBatch({
     this.id = '',
     required this.items,
@@ -149,7 +146,6 @@ class AiDjBatch {
     this.preferences,
     this.rawResponse,
     this.prompt,
-    this.channelFallback = false,
   });
 
   bool get isEmpty => items.isEmpty;
@@ -163,7 +159,6 @@ class AiDjBatch {
     AiPreferences? preferences,
     String? rawResponse,
     AiPrompt? prompt,
-    bool? channelFallback,
   }) =>
       AiDjBatch(
         id: id ?? this.id,
@@ -174,7 +169,6 @@ class AiDjBatch {
         preferences: preferences ?? this.preferences,
         rawResponse: rawResponse ?? this.rawResponse,
         prompt: prompt ?? this.prompt,
-        channelFallback: channelFallback ?? this.channelFallback,
       );
 }
 

@@ -200,11 +200,6 @@ class AiRecommendationStore {
   static const String batchKeyPrefix = 'ai_dj_history_batch_v1:';
   static const String legacyStorageKey = 'ai_dj_pending_batch_v1';
 
-  /// 保留策略：最多 20 批 / 400 首 / 30 天，active 永不自动清理。
-  static const int maxBatches = kAiDjHistoryMaxBatches;
-  static const int maxTracks = kAiDjHistoryMaxTracks;
-  static const Duration retention = kAiDjHistoryRetention;
-
   final SharedPreferences? _preferences;
   final DateTime Function() _clock;
 

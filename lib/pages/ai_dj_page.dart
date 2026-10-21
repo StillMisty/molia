@@ -46,6 +46,7 @@ class _AiDjPageState extends State<AiDjPage> {
   final TextEditingController _baseUrlController = TextEditingController();
   final TextEditingController _apiKeyController = TextEditingController();
   final TextEditingController _modelController = TextEditingController();
+  final FocusNode _baseUrlFocus = FocusNode();
 
   /// 配置表单展开态：未配置时默认展开。
   bool _editingConfig = false;
@@ -86,6 +87,7 @@ class _AiDjPageState extends State<AiDjPage> {
     _baseUrlController.dispose();
     _apiKeyController.dispose();
     _modelController.dispose();
+    _baseUrlFocus.dispose();
     super.dispose();
   }
 
@@ -921,9 +923,12 @@ class _AiDjPageState extends State<AiDjPage> {
                 onPressed: () => _applyPreset(preset),
               ),
             M3EChip(
+              key: const Key('aiDjCustomPresetChip'),
               label: l10n.aiDjPresetCustom,
-              type: M3EChipType.assist,
+              type: M3EChipType.filter,
               selected: !_matchesAnyPreset(),
+              // 选「自定义」= 继续编辑地址：把焦点送回 URL 输入框。
+              onPressed: () => _baseUrlFocus.requestFocus(),
             ),
           ],
         ),
@@ -931,9 +936,11 @@ class _AiDjPageState extends State<AiDjPage> {
         M3ETextField(
           key: const Key('aiDjBaseUrlField'),
           controller: _baseUrlController,
+          focusNode: _baseUrlFocus,
           label: l10n.aiDjBaseUrl,
           placeholder: 'https://api.deepseek.com',
           leading: const Icon(Icons.link_rounded),
+          onChanged: (_) => setState(() {}),
         ),
         const SizedBox(height: 12),
         M3ETextField(

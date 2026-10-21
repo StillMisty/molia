@@ -3923,7 +3923,7 @@ abstract class AppLocalizations {
   /// No description provided for @aiDjUnresolvedRetried.
   ///
   /// In en, this message translates to:
-  /// **'Search complete'**
+  /// **'Searched again'**
   String get aiDjUnresolvedRetried;
 
   /// No description provided for @aiDjHistoryTitle.
@@ -4601,7 +4601,7 @@ abstract class AppLocalizations {
   /// No description provided for @aiDjChannelsHint.
   ///
   /// In en, this message translates to:
-  /// **'Leave empty to choose automatically; selected sources are used only, other sources won\'t be tried.'**
+  /// **'Leave empty to choose automatically. Selected sources are used only; other sources won\'t be tried.'**
   String get aiDjChannelsHint;
 
   /// No description provided for @aiDjChannelsUnavailable.

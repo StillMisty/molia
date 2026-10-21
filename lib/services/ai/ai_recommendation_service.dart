@@ -110,7 +110,7 @@ class AiRecommendationService implements AiRecommendationGenerator {
     AiPreferences preferences = AiPreferences.defaults,
   }) async {
     final profile = await _profileBuilder.build(preferences: preferences);
-    final sources = _sourcesFor(preferences).sources;
+    final sources = _sourcesFor(preferences);
     return AiUpstreamSummary(
       recentEvents:
           preferences.sections.contains(AiUpstreamSection.recentEvents)
@@ -230,7 +230,6 @@ class AiRecommendationService implements AiRecommendationGenerator {
       preferences: preferences,
       rawResponse: raw,
       prompt: prompt,
-      channelFallback: resolution.channelFallback,
     );
   }
 
@@ -270,7 +269,6 @@ class AiRecommendationService implements AiRecommendationGenerator {
     return batch.copyWith(
       items: items,
       unresolved: resolution.unresolved,
-      channelFallback: resolution.channelFallback,
     );
   }
 
@@ -474,47 +472,34 @@ class AiRecommendationService implements AiRecommendationGenerator {
 
   /// 解析渠道：空 = 音源页顺序前 3；已选 = 只按音源页顺序过滤所选，不兜底。
   ///
-  /// 所选渠道全部不可用（停用 / 不支持搜索）时回退自动渠道并标记
-  /// [channelFallback]，供偏好页提示。
-  ({List<SourceDescriptor> sources, bool channelFallback}) _sourcesFor(
-    AiPreferences preferences,
-  ) {
+  /// 所选渠道全部不可用时回退自动渠道（偏好页用实时可用性提示）。
+  List<SourceDescriptor> _sourcesFor(AiPreferences preferences) {
     final searchable = aiDjSearchableSourcesInPageOrder(_registry.descriptors);
     final auto = searchable.take(searchSourceLimit).toList();
-    if (preferences.sourceKeys.isEmpty) {
-      return (sources: auto, channelFallback: false);
-    }
+    if (preferences.sourceKeys.isEmpty) return auto;
     final selectedKeys = preferences.sourceKeys.toSet();
     final selected = [
       for (final descriptor in searchable)
         if (selectedKeys.contains(descriptor.key)) descriptor,
     ];
-    if (selected.isNotEmpty) {
-      return (sources: selected, channelFallback: false);
-    }
-    return (
-      sources: auto,
-      channelFallback: auto.isNotEmpty,
-    );
+    return selected.isNotEmpty ? selected : auto;
   }
 
   Future<
       ({
         List<ResolvedRecommendation> resolved,
         List<AiRecommendation> unresolved,
-        bool channelFallback,
       })> _resolveAll(
     List<AiRecommendation> recommendations, {
     required AiPreferences preferences,
     AiGenerationCancelToken? cancelToken,
     void Function(int done)? onResolved,
   }) async {
-    final sourceSelection = _sourcesFor(preferences);
+    final sources = _sourcesFor(preferences);
     if (recommendations.isEmpty) {
       return (
         resolved: <ResolvedRecommendation>[],
         unresolved: <AiRecommendation>[],
-        channelFallback: false,
       );
     }
     final resolved = <ResolvedRecommendation>[];
@@ -527,7 +512,7 @@ class AiRecommendationService implements AiRecommendationGenerator {
       );
       final results = await Future.wait([
         for (final recommendation in chunk)
-          _resolveOne(recommendation, sourceSelection.sources),
+          _resolveOne(recommendation, sources),
       ]);
       _checkCancelled(cancelToken);
       for (var j = 0; j < chunk.length; j++) {
@@ -548,7 +533,6 @@ class AiRecommendationService implements AiRecommendationGenerator {
     return (
       resolved: resolved,
       unresolved: unresolved,
-      channelFallback: sourceSelection.channelFallback,
     );
   }
 

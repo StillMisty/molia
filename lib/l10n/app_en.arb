@@ -1106,7 +1106,7 @@
   "aiDjFeedBatch": "Add a batch to the queue",
   "aiDjSectionsNone": "Preferences only",
   "aiDjFeedDone": "Batch added to the queue",
-  "aiDjUnresolvedRetried": "Search complete",
+  "aiDjUnresolvedRetried": "Searched again",
   "aiDjHistoryTitle": "Recommendation history",
   "aiDjHistoryEntry": "History ({count})",
   "@aiDjHistoryEntry": {
@@ -1284,7 +1284,7 @@
   "aiDjScopePlaylistsConfirm": "This reads the names, titles and artists of up to 10 of your playlists so they are not recommended again.",
   "aiDjChannelsTitle": "Where to find songs",
   "aiDjChannelsAuto": "Auto (first 3 searchable sources on the Sources page)",
-  "aiDjChannelsHint": "Leave empty to choose automatically; selected sources are used only, other sources won't be tried.",
+  "aiDjChannelsHint": "Leave empty to choose automatically. Selected sources are used only; other sources won't be tried.",
   "aiDjChannelsUnavailable": "Selected sources are unavailable right now; auto sources are used instead",
   "aiDjChannelsEmpty": "No searchable sources",
   "aiDjSeedsTitle": "More like these",

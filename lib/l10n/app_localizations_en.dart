@@ -2133,7 +2133,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get aiDjFeedDone => 'Batch added to the queue';
 
   @override
-  String get aiDjUnresolvedRetried => 'Search complete';
+  String get aiDjUnresolvedRetried => 'Searched again';
 
   @override
   String get aiDjHistoryTitle => 'Recommendation history';
@@ -2500,7 +2500,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get aiDjChannelsHint =>
-      'Leave empty to choose automatically; selected sources are used only, other sources won\'t be tried.';
+      'Leave empty to choose automatically. Selected sources are used only; other sources won\'t be tried.';
 
   @override
   String get aiDjChannelsUnavailable =>
