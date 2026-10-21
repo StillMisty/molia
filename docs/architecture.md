@@ -224,8 +224,10 @@
   `SourceFailure`，Key 不进 message）、`AiRecommendationService`（提示词 →
   容错 JSON → 规范化去重 → `CatalogService.search` 按找歌渠道解析，命中无封面
   时经音源 `artwork()` 补取；预览与实际共用同一 `buildPrompt`）。
-  `AiDjProvider` 维护**当前推荐（active batch）**、**历史推荐**与**推歌会话**：
-  历史存储迁移为索引 + 每批一键（`AiRecommendationStore`，启动只读索引 +
+  `AiDjProvider` 负责推歌会话与生成编排；`AiDjHistoryController`
+  （`lib/providers/ai_dj_history_controller.dart`）独占**当前推荐（active batch）**、
+  **历史索引**、按需加载缓存与保留策略，批次与存储形状的转换由 Provider 注入：
+  历史存储为索引 + 每批一键（`AiRecommendationStore`，启动只读索引 +
   active，详情懒加载，20 批 / 400 首 / 30 天、active 不清理），旧单批键首次
   加载迁移；显式「生成推荐 / 换一批」切换 active，旧批留在历史；手动补批与
   低水位**静默补歌**只追加队列 + 写历史（`manualFeed` / `autoFeed`），不切换
