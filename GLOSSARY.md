@@ -51,7 +51,7 @@
   facade 有当前曲目即接管为 live，停止播放 / 关闭恢复开关回 idle）；命令按阶段路由
   （provider 不再分叉，只按路由结果决定通知），恢复态展示快照与进度覆盖值在这里构造。
   落盘口径收在一处：整份会话（曲目切换 / 暂停 / `flushSession` 强制）、轻量进度键
-  （`savePosition`，1s 节流，满 1min 整份刷新）、`clear`，串行化由 store 的
+  （`savePosition`，前台 1s / 后台 15s 节流，满 1min 整份刷新）、`clear`，串行化由 store 的
   `pendingWrite` 承担。系统媒体控制（暂停 / 停止 / 切顺序 / seek）与恢复态切歌键
   经组合根接线进来（不再直连 provider）；「启动时恢复上次播放」开关的跨设备重载钩子
   挂在 provider 上，协调者只回答「恢复态是否变化」（撤下 / 装载成功），UI 通知由调用方发。
@@ -69,6 +69,13 @@
   `LibraryProvider.toggleFavoriteSourceTrack`）与「播放顺序」(`lx.playMode`)；
   **按钮的最终位置由 Media3 provider 与系统 UI 决定**，Dart 侧只能控制自定义动作
   之间的先后（ADR-0013、已知坑 #61）。
+- **Playback power policy（播放功耗策略）** — `lib/playback/playback_power_policy.dart`：
+  移动端按应用前后台 + 桌面歌词是否可能展示决定播放链路的节拍。**与 `AppPresence`
+  完全独立**：后者是桌面窗口可见性的事实源，驱动封面预取 / 取色停产；移动端退后台
+  不写 `AppPresence`，预取 / 取色 / 桌面歌词行为不变。两种节拍：位置采样（前台或
+  桌面歌词开启 = 高频流，后台播放 = 1s 轮询，后台暂停 = 不采样，见
+  `LocalPlaybackService`）；会话落盘（前台 1s / 后台 15s，进入后台先强制整份落盘
+  一次，见 `PlaybackSessionCoordinator`）。桌面端不接生命周期，恒为前台。
 - **Playback observer（播放观察者模块）** — `lib/services/playback_observer.dart`：播放副作用扇出的唯一实现（最后播放 / 播放上下文 / 桌面小组件 / 播放历史 / 封面预取与补取 / 通知权限），直连 facade 快照通道（不经 provider 的节流通知），由组合根挂接；会话落盘与恢复态属 `PlaybackSessionCoordinator`，睡眠定时属 `PlaybackProvider`（与 `PlayStatisticsService`、`ArtworkThemeSync` 同为观察者形态）。
 - **Sleep timer（定时关闭）** — `lib/providers/sleep_timer.dart`：歌曲信息页入口的
   「到点暂停」。两种模式：倒计时（**仅播放时计时**，暂停冻结；实现为**绝对

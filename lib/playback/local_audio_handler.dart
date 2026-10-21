@@ -138,13 +138,16 @@ class LocalAudioHandler {
     Future<String?> Function(String url)? artworkUriResolver,
     Future<void> Function()? onRestoredSkipToNext,
     Future<void> Function()? onRestoredSkipToPrevious,
+    bool? periodicPositionStateUpdates,
   })  : _backend = backend ??
             createSystemMediaSessionBackend() ??
             const NoopMediaSessionBackend(),
         _artworkBlocked = artworkBlocked ?? (() => false),
         _artworkUriResolver = artworkUriResolver ?? _artworkUriFromCache,
         _onRestoredSkipToNext = onRestoredSkipToNext,
-        _onRestoredSkipToPrevious = onRestoredSkipToPrevious {
+        _onRestoredSkipToPrevious = onRestoredSkipToPrevious,
+        _periodicPositionStateUpdates = periodicPositionStateUpdates ??
+            defaultTargetPlatform != TargetPlatform.android {
     _service.addListener(_syncFromService);
     // 界面语言切换后通知动作文案（播放顺序）跟随。
     LanguageService.localeNotifier.addListener(_onLocaleChanged);
@@ -167,6 +170,13 @@ class LocalAudioHandler {
   /// 决定是从保存的会话恢复播放还是转发真实播放，补齐控制链一致性。
   final Future<void> Function()? _onRestoredSkipToNext;
   final Future<void> Function()? _onRestoredSkipToPrevious;
+
+  /// 正常进度推进时是否周期补发播放态（Android 关闭，其余平台开启）。
+  ///
+  /// Android 的 `flutter_media_session` 按 `lastPositionMs + elapsed × speed`
+  /// 自行插值，每秒一次 state 更新只是多余 IPC；Linux MPRIS 的 `GetPosition`
+  /// 不插值，需要周期更新。可注入：常规用例可显式注入，平台默认值另有用例覆盖。
+  final bool _periodicPositionStateUpdates;
 
   /// 会话落盘入口（组合根在 handler 建好后回填
   /// `PlaybackSessionCoordinator.flushSession`）。
@@ -212,12 +222,15 @@ class LocalAudioHandler {
   }
 
   // 上次广播的状态，用于去重：位置每 400ms 都会变化，但系统媒体会话只需要
-  // 在曲目切换 / 播放状态变化 / 明显跳转（seek）时收到更新。
+  // 在曲目切换 / 播放状态变化 / 真实跳转（seek）时收到更新。
   String? _lastTrackId;
   bool? _lastPlaying;
   bool? _lastLoading;
   PlayMode? _lastMode;
   Duration _lastPosition = Duration.zero;
+
+  /// 上次广播时的服务 seek 版本号（Android 只认它判断真实跳转）。
+  int _lastSeekRevision = 0;
 
   /// 上次广播的曲目时长（播放器解析完成后要补发元数据，否则通知进度条
   /// 会用元数据时长）。
@@ -249,12 +262,23 @@ class LocalAudioHandler {
 
   /// 应用歌词覆盖（null = 还原原始元数据）。
   ///
-  /// 调用方（歌词显示调度）只在合成结果变化时调用；本方法触发一次带
-  /// 去重的广播，通知栏 / 锁屏 / AVRCP 随元数据一起更新。
+  /// 调用方（歌词显示调度）只在合成结果变化时调用；通知歌词换行不是
+  /// 播放 / 队列事件，只补发元数据——不重建播放态与可用动作，避免每次
+  /// 换行都把三件套全部推一遍平台通道。没有曲目时跳过。
   void setLyricMetadataOverride(LyricMetadataOverride? override) {
     if (override == _lyricMetadataOverride) return;
     _lyricMetadataOverride = override;
-    _syncFromService(force: true);
+    _sendMetadataOnly();
+  }
+
+  /// 只补发当前曲目的元数据（歌词覆盖 / 封面本地化完成）。
+  ///
+  /// 这两类变化都不影响播放态与动作；位置 / 播放态去重字段也保持不动，
+  /// 让下一次真实事件仍按原口径判定。
+  void _sendMetadataOnly() {
+    final track = _service.currentSourceTrack;
+    if (track == null) return;
+    _send(() => _backend.updateMetadata(_metadataFor(track)));
   }
 
   /// 绑定「收藏」能力（组合根调用；见 [favoriteActionId]）。
@@ -442,6 +466,7 @@ class LocalAudioHandler {
     final mode = _service.mode;
     final position = _service.position;
     final duration = _service.duration;
+    final seekRevision = _service.seekRevision;
 
     final trackChanged = trackId != _lastTrackId;
     final playingChanged = playing != _lastPlaying;
@@ -456,8 +481,9 @@ class LocalAudioHandler {
     // 播放器解析出真实时长后补发一次元数据（通知进度条的时长来源）。
     final durationChanged =
         duration > Duration.zero && duration != _lastMediaDuration;
-    final seeked =
-        (position - _lastPosition).abs() > const Duration(seconds: 1);
+    final seeked = seekRevision != _lastSeekRevision ||
+        (_periodicPositionStateUpdates &&
+            (position - _lastPosition).abs() > const Duration(seconds: 1));
     if (!force &&
         !trackChanged &&
         !playingChanged &&
@@ -487,6 +513,7 @@ class LocalAudioHandler {
     _lastLoading = loading;
     _lastMode = mode;
     _lastPosition = position;
+    _lastSeekRevision = seekRevision;
     _lastArtworkUrl = artworkUrl;
     _favorite = favorite;
     _lastFavorite = favorite;
@@ -602,9 +629,8 @@ class LocalAudioHandler {
   }
 
   MediaMetadata _metadataFor(SourceTrack track) {
-    final duration = _service.duration > Duration.zero
-        ? _service.duration
-        : track.duration;
+    final duration =
+        _service.duration > Duration.zero ? _service.duration : track.duration;
     final metadata = mediaMetadataForTrack(
       track,
       duration: duration,
@@ -647,8 +673,9 @@ class LocalAudioHandler {
       _localArtworkSourceUrl = coverUrl;
       _localArtworkUri = localUri;
       // 解析期间可能已切歌：只刷新仍指向同一封面的当前曲目。
+      // 封面 URI 只是元数据，不重建播放态 / 动作（避免多一次无谓 IPC）。
       if (_service.currentSourceTrack?.coverUrl == coverUrl) {
-        _syncFromService(force: true);
+        _sendMetadataOnly();
       }
     } catch (e) {
       debugPrint('[Molia] 系统媒体会话封面本地化失败: $e');

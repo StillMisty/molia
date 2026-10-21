@@ -48,6 +48,7 @@ class _FakeService extends LocalPlaybackService {
   Duration positionValue = Duration.zero;
   Duration durationValue = Duration.zero;
   int queueRevisionValue = 0;
+  int seekRevisionValue = 0;
 
   /// 控制动作调用台账（断言调用与顺序）。
   final List<String> calls = [];
@@ -85,9 +86,19 @@ class _FakeService extends LocalPlaybackService {
   @override
   int get queueRevision => queueRevisionValue;
 
+  @override
+  int get seekRevision => seekRevisionValue;
+
   /// 模拟播放推进（位置通道 tick）。
   void emitPosition(Duration position) {
     positionValue = position;
+    notifyListeners();
+  }
+
+  /// 模拟真实位置跳转（用户 seek / 内部回跳）：版本号自增。
+  void emitSeek(Duration position) {
+    positionValue = position;
+    seekRevisionValue++;
     notifyListeners();
   }
 
@@ -139,6 +150,7 @@ class _FakeService extends LocalPlaybackService {
     calls.add('seek');
     seeks.add(position);
     positionValue = position;
+    seekRevisionValue++;
     notifyListeners();
   }
 
@@ -165,6 +177,7 @@ Future<(LocalAudioHandler, FakeMediaSessionBackend)> _handler(
   Future<String?> Function(String url)? artworkUriResolver,
   Future<void> Function()? onRestoredSkipToNext,
   Future<void> Function()? onRestoredSkipToPrevious,
+  bool? periodicPositionStateUpdates,
 }) async {
   final backend = FakeMediaSessionBackend();
   final handler = LocalAudioHandler(
@@ -174,6 +187,7 @@ Future<(LocalAudioHandler, FakeMediaSessionBackend)> _handler(
     artworkUriResolver: artworkUriResolver ?? (_) async => null,
     onRestoredSkipToNext: onRestoredSkipToNext,
     onRestoredSkipToPrevious: onRestoredSkipToPrevious,
+    periodicPositionStateUpdates: periodicPositionStateUpdates,
   );
   await handler.activate();
   await pumpEventQueue();
@@ -262,16 +276,18 @@ void main() {
       expect(backend.lastState?.shuffleModeEnabled, isFalse);
 
       final actions = backend.lastActions!;
-      expect(actions.map((action) => action.name), containsAll([
-        'play',
-        'pause',
-        'skipToPrevious',
-        'skipToNext',
-        'stop',
-        'seekTo',
-        favoriteActionId,
-        playModeActionId,
-      ]));
+      expect(
+          actions.map((action) => action.name),
+          containsAll([
+            'play',
+            'pause',
+            'skipToPrevious',
+            'skipToNext',
+            'stop',
+            'seekTo',
+            favoriteActionId,
+            playModeActionId,
+          ]));
       // 自定义动作之间的相对顺序（Android 通知按这个顺序发给系统）：收藏在前。
       final names = actions.map((action) => action.name).toList();
       expect(
@@ -359,10 +375,15 @@ void main() {
       expect(backend.playModeAction?.customLabel, 'Sequential');
     });
 
-    test('位置 tick 只更新状态，不重发元数据', () async {
+    test('位置 tick 只更新状态，不重发元数据（非 Android 平台）', () async {
       final service = _FakeService()..trackValue = _track();
       addTearDown(service.dispose);
-      final (_, backend) = await _handler(service);
+      // Linux MPRIS 的 GetPosition 不插值，非 Android 平台保留按位置差的
+      // 周期 state 判定；Android 关闭（见下方「媒体会话更新节流」组）。
+      final (_, backend) = await _handler(
+        service,
+        periodicPositionStateUpdates: true,
+      );
       final metadataCount = backend.metadataUpdates.length;
       final stateCount = backend.stateUpdates.length;
 
@@ -393,6 +414,147 @@ void main() {
       expect(backend.lastMetadata?.title, isNull);
       expect(backend.lastState?.status, PlaybackStatus.idle);
       expect(backend.lastActions, isEmpty);
+    });
+  });
+
+  group('媒体会话更新节流（Android）', () {
+    tearDown(() {
+      debugDefaultTargetPlatformOverride = null;
+    });
+
+    test('正常进度推进不补发播放态（平台自身插值）', () async {
+      final service = _FakeService()..trackValue = _track();
+      addTearDown(service.dispose);
+      final (_, backend) = await _handler(
+        service,
+        periodicPositionStateUpdates: false,
+      );
+      final metadataCount = backend.metadataUpdates.length;
+      final stateCount = backend.stateUpdates.length;
+      final actionCount = backend.actionUpdates.length;
+
+      service.emitPosition(const Duration(seconds: 2));
+      service.emitPosition(const Duration(seconds: 4));
+      await pumpEventQueue();
+
+      expect(backend.stateUpdates.length, stateCount);
+      expect(backend.metadataUpdates.length, metadataCount);
+      expect(backend.actionUpdates.length, actionCount);
+    });
+
+    test('seekRevision 变化补发播放态（显式 seek / 内部回跳）', () async {
+      final service = _FakeService()..trackValue = _track();
+      addTearDown(service.dispose);
+      final (_, backend) = await _handler(
+        service,
+        periodicPositionStateUpdates: false,
+      );
+      // 正常推进先走一段：不应触发 state。
+      service.emitPosition(const Duration(seconds: 2));
+      await pumpEventQueue();
+      final stateCount = backend.stateUpdates.length;
+
+      service.emitSeek(const Duration(seconds: 42));
+      await pumpEventQueue();
+
+      expect(backend.stateUpdates.length, stateCount + 1);
+      expect(backend.lastState?.position, const Duration(seconds: 42));
+    });
+
+    test('平台默认：Android 关闭周期 state，Linux 保留', () async {
+      debugDefaultTargetPlatformOverride = TargetPlatform.android;
+      final androidService = _FakeService()..trackValue = _track();
+      addTearDown(androidService.dispose);
+      final (_, androidBackend) = await _handler(androidService);
+      final androidStateCount = androidBackend.stateUpdates.length;
+      androidService.emitPosition(const Duration(seconds: 2));
+      await pumpEventQueue();
+      expect(
+        androidBackend.stateUpdates.length,
+        androidStateCount,
+        reason: 'Android 的媒体会话按 lastPositionMs + elapsed 自行插值',
+      );
+
+      debugDefaultTargetPlatformOverride = TargetPlatform.linux;
+      final linuxService = _FakeService()..trackValue = _track();
+      addTearDown(linuxService.dispose);
+      final (_, linuxBackend) = await _handler(linuxService);
+      final linuxStateCount = linuxBackend.stateUpdates.length;
+      linuxService.emitPosition(const Duration(seconds: 2));
+      await pumpEventQueue();
+      expect(
+        linuxBackend.stateUpdates.length,
+        linuxStateCount + 1,
+        reason: 'MPRIS 的 GetPosition 不插值，需保持周期更新',
+      );
+    });
+  });
+
+  group('metadata-only 补发（歌词覆盖 / 封面本地化）', () {
+    test('歌词覆盖只发元数据，不重建播放态与动作', () async {
+      final service = _FakeService()..trackValue = _track();
+      addTearDown(service.dispose);
+      final (handler, backend) = await _handler(service);
+      final metadataCount = backend.metadataUpdates.length;
+      final stateCount = backend.stateUpdates.length;
+      final actionCount = backend.actionUpdates.length;
+
+      handler.setLyricMetadataOverride(
+        const LyricMetadataOverride(title: '晴天 · 从前从前'),
+      );
+      await pumpEventQueue();
+
+      expect(backend.metadataUpdates.length, metadataCount + 1);
+      expect(backend.lastMetadata?.title, '晴天 · 从前从前');
+      expect(backend.stateUpdates.length, stateCount);
+      expect(backend.actionUpdates.length, actionCount);
+
+      handler.setLyricMetadataOverride(null);
+      await pumpEventQueue();
+
+      expect(backend.metadataUpdates.length, metadataCount + 2);
+      expect(backend.lastMetadata?.title, '晴天');
+      expect(backend.stateUpdates.length, stateCount);
+      expect(backend.actionUpdates.length, actionCount);
+    });
+
+    test('无曲目时歌词覆盖不发空元数据', () async {
+      final service = _FakeService();
+      addTearDown(service.dispose);
+      final (handler, backend) = await _handler(service);
+      final metadataCount = backend.metadataUpdates.length;
+
+      handler.setLyricMetadataOverride(
+        const LyricMetadataOverride(title: '不该出现'),
+      );
+      await pumpEventQueue();
+
+      expect(backend.metadataUpdates.length, metadataCount);
+    });
+
+    test('封面本地化完成只补发元数据', () async {
+      const cover = 'https://p1.music.126.net/cover.jpg';
+      final service = _FakeService()..trackValue = _track(coverUrl: cover);
+      addTearDown(service.dispose);
+      final completer = Completer<String?>();
+      final (_, backend) = await _handler(
+        service,
+        artworkUriResolver: (_) => completer.future,
+      );
+      final metadataCount = backend.metadataUpdates.length;
+      final stateCount = backend.stateUpdates.length;
+      final actionCount = backend.actionUpdates.length;
+
+      completer.complete('file:///tmp/molia-artwork/cover.jpg');
+      await pumpEventQueue();
+
+      expect(backend.metadataUpdates.length, metadataCount + 1);
+      expect(
+        backend.lastMetadata?.artworkUri,
+        'file:///tmp/molia-artwork/cover.jpg',
+      );
+      expect(backend.stateUpdates.length, stateCount);
+      expect(backend.actionUpdates.length, actionCount);
     });
   });
 

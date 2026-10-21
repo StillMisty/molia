@@ -21,6 +21,7 @@ import '../../data/settings/settings_keys.dart';
 import '../../data/settings/settings_registry.dart';
 import '../../playback/local_audio_handler.dart';
 import '../../playback/local_playback_service.dart';
+import '../../playback/playback_power_policy.dart';
 import '../../playback/playback_session_coordinator.dart';
 import '../../providers/playback_provider.dart';
 import '../../providers/sleep_timer.dart';
@@ -67,6 +68,9 @@ typedef PlaybackStack = ({
 /// [backend] 与 [mediaSessionFactory] 是测试 seam：前者给假后端（不加载
 /// just_audio 插件），后者传 null 跳过音频会话初始化；生产由 `main()` 注入
 /// `initSystemMediaSession`。
+///
+/// [powerPolicy] 是组合根创建的唯一实例（移动端前后台 / 桌面歌词状态），
+/// 同时传给播放服务与会话模块；测试省略时退化为前台实例。
 Future<PlaybackStack> buildPlaybackStack({
   required CatalogStack catalog,
   required LocalDataStack local,
@@ -74,9 +78,11 @@ Future<PlaybackStack> buildPlaybackStack({
   required UiMessenger messenger,
   MediaSessionFactory? mediaSessionFactory,
   PlaybackBackend? backend,
+  PlaybackPowerPolicy? powerPolicy,
 }) async {
   final sourceManager = catalog.sourceManager;
   final dataSaver = local.dataSaver;
+  final policy = powerPolicy ?? PlaybackPowerPolicy();
 
   final LocalPlaybackService? localPlaybackService;
   final PlaybackFacade playbackFacade;
@@ -87,7 +93,11 @@ Future<PlaybackStack> buildPlaybackStack({
     localPlaybackService = null;
     playbackFacade = DefaultPlaybackFacade(backend: injectedBackend);
   } else {
-    final chain = LocalPlaybackChain(catalog: catalog, local: local);
+    final chain = LocalPlaybackChain(
+      catalog: catalog,
+      local: local,
+      powerPolicy: policy,
+    );
     final service = chain.buildService();
     localPlaybackService = service;
     playbackFacade =
@@ -120,6 +130,7 @@ Future<PlaybackStack> buildPlaybackStack({
     store: sessionStore,
     settings: catalog.settings.scope([kRestoreSessionEnabled]),
     onRestoredTrack: playbackObserver.showRestoredTrack,
+    powerPolicy: policy,
   );
   final playbackProvider = PlaybackProvider(
     settings: catalog.settings.scope([

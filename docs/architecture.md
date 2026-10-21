@@ -94,9 +94,9 @@
   播放会话模块是**恢复态 ↔ live 的唯一交接点与 `PlaybackSessionStore` 的唯一
   写者**：三阶段状态机 `idle / restored / live`，命令按阶段路由（provider 不再
   分叉，只按路由结果决定通知类别）；恢复态快照与进度覆盖值在这里构造；落盘
-  口径（整份 / 轻量进度键 1s 节流 / 满 1min 整份刷新 / `clear` / 可 await 的
-  `flushSession`）随 `pendingWrite` 串行化收在一处。系统媒体控制与恢复态切歌键
-  由组合根接到会话模块（不再直连 provider）。跨设备同步只经
+  口径（整份 / 轻量进度键前台 1s / 后台 15s 节流 / 满 1min 整份刷新 / `clear` /
+  可 await 的 `flushSession`）随 `pendingWrite` 串行化收在一处。系统媒体控制与
+  恢复态切歌键由组合根接到会话模块（不再直连 provider）。跨设备同步只经
   `PlaybackSessionSyncPort`（`lib/domain/ports/playback_session_sync.dart` 的
   `loadRaw` / `applyRemote` / `clearRemote`）认识会话，唯一实现是协调者：远端
   应用 / 删除与本地保存 / 清除共用同一个 `PlaybackSessionStore` 与同一条
@@ -117,6 +117,26 @@
   `LocalPlaybackService` 在 `ProcessingState.completed` 时先发
   `trackCompletions`，并通过 `setStopAfterCurrentTrack` 在自动切歌前停住；
   熄屏时位置 tick 被节流也不会把自然播完误判成手动切歌。
+- **移动端后台功耗策略**：`PlaybackPowerPolicy`
+  （`lib/playback/playback_power_policy.dart`）只回答「播放链路要不要按前台
+  节拍工作」，与 `AppPresence`（桌面窗口可见性 → 封面预取 / 取色停产）**完全
+  独立**：移动端退后台不写入 `AppPresence`，预取 / 取色 / 桌面歌词行为零变化。
+  组合根创建唯一实例并同时注入播放栈与歌词显示栈；`AppLifecycleListener` 只在
+  Android / iOS 接线（`onResume` → 前台，`onPause` / `onHide` → 后台），桌面保持
+  默认前台；启动时若 `lifecycleState` 已是 paused / hidden 先置后台。
+  - 位置采样（`LocalPlaybackService`）：前台或桌面歌词可能展示
+    （`LyricsChannel.isSupportedPlatform && lyricsDisplaySettings.desktopEnabled`，
+    未授予悬浮窗权限也算）→ 订阅 `positionStream`（约 5Hz）；后台其余情形 →
+    1s Timer 读 `_player.position`（值变才通知）；后台暂停 → 不采样。切换档位
+    先取消旧订阅 / Timer，避免双采样。
+  - 会话落盘（`PlaybackSessionCoordinator`）：前台 1s / 后台 15s 节流；进入
+    后台先强制整份落盘一次；暂停 / 切歌 / 系统控制仍立即落盘。满 1min 整份
+    刷新语义不变。
+  - 系统媒体会话（`LocalAudioHandler`）：仅 Android 取消「位置差 > 1s 就补发
+    state」的周期更新（平台按 `lastPositionMs + elapsed × speed` 插值），改由
+    `LocalPlaybackService.seekRevision` 识别显式 seek / 内部回跳；歌词覆盖与
+    封面本地化补发只发 metadata。Linux MPRIS（`GetPosition` 不插值）与
+    iOS / macOS / Windows 保持原周期判定。
 - **Lyrics**：`LyricsProvider`（`lib/providers/lyrics_provider.dart`）是取词 → 缓存 →
   解析 → 预取的唯一实现，对外只暴露 `LyricsState`（idle/loading/ready/empty + isSynced，
   含按时间戳对齐的翻译 / 罗马音扩展行与逐字时间轴）。时间契约统一在
