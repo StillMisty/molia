@@ -26,6 +26,7 @@ import '../domain/ports/playback_session_sync.dart';
 import '../domain/ports/state_listenable.dart';
 import '../models/play_mode.dart';
 import '../services/playback_session_store.dart';
+import 'playback_power_policy.dart';
 import 'queue_navigation.dart';
 
 final _logger = Logger('molia.playback_session');
@@ -77,23 +78,29 @@ class PlaybackSessionCoordinator implements PlaybackSessionSyncPort {
     required SettingsAccess settings,
     RestoredTrackReporter? onRestoredTrack,
     DateTime Function()? clock,
+    PlaybackPowerPolicy? powerPolicy,
   })  : _facade = facade,
         _store = store,
         _settings = settings,
         _onRestoredTrack = onRestoredTrack,
-        _clock = clock ?? DateTime.now {
+        _clock = clock ?? DateTime.now,
+        _powerPolicy = powerPolicy ?? PlaybackPowerPolicy() {
     _position = _RestoredPositionChannel(_facade.position);
     _facade.snapshot.addListener(_onLiveSnapshot);
     _facade.position.addListener(_onPositionTick);
+    _powerPolicy.addListener(_onPowerPolicyChanged);
+    _wasForeground = _powerPolicy.isForeground;
     // 构造时同步一次快照：接线前真实播放可能已恢复曲目（如系统媒体会话），
     // 与观察者 attach 的「立即处理一次」同一口径（`_wasPlaying` 初值也由此对齐，
     // 否则启动即播放时第一次暂停会被当成「本就没在播」而少一次强制落盘）。
     _handleLiveSnapshot(_facade.snapshot.value);
   }
 
-  /// 会话进度落盘节流：正常播放中最多每秒写一次
-  /// （被系统杀进程时最多丢 ~1s 进度；曲目切换 / 暂停 / 后台强制写）。
-  static const Duration _sessionSaveInterval = Duration(seconds: 1);
+  /// 会话进度落盘节流：前台 1s / 后台 15s（[PlaybackPowerPolicy.sessionSaveInterval]）。
+  ///
+  /// 息屏听歌不再每秒重写 prefs 文件，进程被回收最多丢约 15s 进度；曲目
+  /// 切换 / 暂停 / 进入后台仍强制整份落盘。
+  Duration get _sessionSaveInterval => _powerPolicy.sessionSaveInterval;
 
   /// 整份会话（含队列 JSON）的刷新上限：进度 tick 默认只写轻量进度键，
   /// 但每满一分钟整份重写一次——`savedAt` 随之刷新，「正在播放的设备持续
@@ -104,6 +111,12 @@ class PlaybackSessionCoordinator implements PlaybackSessionSyncPort {
   final PlaybackSessionStore _store;
   final SettingsAccess _settings;
   final RestoredTrackReporter? _onRestoredTrack;
+
+  /// 播放功耗策略（组合根注入共享实例；默认前台实例便于单测）。
+  final PlaybackPowerPolicy _powerPolicy;
+
+  /// 上一帧是否前台：只在「前台 → 后台」那一刻强制整份落盘一次。
+  bool _wasForeground = true;
 
   /// 落盘节流判定用的时钟（测试注入）。
   final DateTime Function() _clock;
@@ -478,6 +491,15 @@ class PlaybackSessionCoordinator implements PlaybackSessionSyncPort {
     unawaited(_store.savePosition(_facade.position.value.inMilliseconds));
   }
 
+  /// 前后台切换：进入后台先强制整份落盘一次（节流窗口内也不等），之后
+  /// 进度 tick 改按 15s 节流；回前台恢复 1s 节流（不必额外写一次）。
+  void _onPowerPolicyChanged() {
+    final foreground = _powerPolicy.isForeground;
+    final enteredBackground = _wasForeground && !foreground;
+    _wasForeground = foreground;
+    if (enteredBackground) _maybeSaveSession(force: true);
+  }
+
   /// 真实播放快照变化：真实播放接管时撤下恢复数据，并按口径强制落盘。
   void _onLiveSnapshot() => _handleLiveSnapshot(_facade.snapshot.value);
 
@@ -586,6 +608,7 @@ class PlaybackSessionCoordinator implements PlaybackSessionSyncPort {
 
   /// 拆线（组合根只负责创建；释放与 provider 同生命周期）。
   void dispose() {
+    _powerPolicy.removeListener(_onPowerPolicyChanged);
     _facade.snapshot.removeListener(_onLiveSnapshot);
     _facade.position.removeListener(_onPositionTick);
     _position.dispose();

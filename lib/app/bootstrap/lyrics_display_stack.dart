@@ -16,10 +16,12 @@ import '../../providers/nav_provider.dart';
 import '../../providers/playback_provider.dart';
 import '../../providers/theme_provider.dart';
 import '../../playback/local_audio_handler.dart';
+import '../../playback/playback_power_policy.dart';
 import '../../data/settings/settings_keys.dart';
 import '../../services/artwork_palette_service.dart';
 import '../../services/lyrics_display/audio_route_monitor.dart';
 import '../../services/lyrics_display/desktop_lyrics_output.dart';
+import '../../services/lyrics_display/lyrics_channel.dart';
 import '../../services/lyrics_display/lyrics_display_settings.dart';
 import '../../services/lyrics_display/media_lyric_output.dart';
 import '../../services/system_wallpaper_service.dart';
@@ -41,11 +43,15 @@ typedef LyricsDisplayStack = ({
 /// 装配主题 / 导航 / 取色与歌词显示，并完成 runApp 前的启动预解析。
 ///
 /// [audioHandler] 为系统媒体会话（媒体歌词输出与「初始化失败」提示的判据）。
+///
+/// [powerPolicy] 与播放栈共享同一实例：桌面歌词开关变化要即时反映到
+/// 位置采样（后台开着悬浮窗仍按 5Hz，关掉后降为 1s）。
 Future<LyricsDisplayStack> buildLyricsDisplayStack({
   required CatalogStack catalog,
   required PlaybackProvider playback,
   required LyricsProvider lyricsProvider,
   required LocalAudioHandler? audioHandler,
+  required PlaybackPowerPolicy powerPolicy,
 }) async {
   // 主题实例提前创建：封面覆盖 / 桌面歌词「跟随主题」「跟随封面」的颜色
   // 都从 ThemeProvider 取（取色链路在下方接线）。作用域 = 主题自己的 5 个键。
@@ -77,6 +83,17 @@ Future<LyricsDisplayStack> buildLyricsDisplayStack({
     settings: catalog.settings.scope([kLyricsDisplaySettings]),
   );
   await lyricsDisplaySettings.init();
+  // 桌面歌词是否可能展示 = 平台支持 ∩ 用户开启（未授予悬浮窗权限也算：
+  // 最多多付一次 5Hz 采样，换授权后歌词 / 颜色不必等下一次切换）。
+  // 监听设置在 init 之后挂：设置页开关、跨设备同步应用远端配置都会通知。
+  void syncDesktopLyricsActive() {
+    powerPolicy.setDesktopLyricsActive(
+      LyricsChannel.isSupportedPlatform && lyricsDisplaySettings.desktopEnabled,
+    );
+  }
+
+  syncDesktopLyricsActive();
+  lyricsDisplaySettings.addListener(syncDesktopLyricsActive);
   final audioRouteMonitor = AudioRouteMonitor();
   unawaited(audioRouteMonitor.init());
   final lyricsDisplay = LyricsDisplayProvider(

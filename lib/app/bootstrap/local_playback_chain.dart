@@ -13,6 +13,7 @@ import '../../domain/models/track.dart';
 import '../../domain/ports/music_source.dart' show PlayableStream;
 import '../../playback/local_playback_service.dart';
 import '../../playback/next_track_preloader.dart';
+import '../../playback/playback_power_policy.dart';
 import '../../playback/playing_track_cache_writer.dart';
 import '../../sources/source_track.dart';
 import 'catalog_stack.dart';
@@ -21,10 +22,17 @@ import 'local_data_stack.dart';
 /// 取链装饰 + 服务 / 后端组装（原组合根的 `late final playbackBackend` 绕行
 /// 在这里变成「一个解析函数两个消费者」）。
 class LocalPlaybackChain {
-  LocalPlaybackChain({required this.catalog, required this.local});
+  LocalPlaybackChain({
+    required this.catalog,
+    required this.local,
+    required this.powerPolicy,
+  });
 
   final CatalogStack catalog;
   final LocalDataStack local;
+
+  /// 组合根共享的播放功耗策略（位置采样节拍；与预取 / 取色无关）。
+  final PlaybackPowerPolicy powerPolicy;
 
   /// 取链外层装饰：优先命中本地下载副本 / 完整音频缓存（直接 file://），
   /// 未命中回落既有 CatalogService（single-flight + LRU + TTL 不变）。
@@ -57,6 +65,7 @@ class LocalPlaybackChain {
   LocalPlaybackService buildService() => LocalPlaybackService(
         preferredQuality: preferredQuality,
         resolver: resolveUrl,
+        powerPolicy: powerPolicy,
         // 下一首预载：起播后预热直链（命中取链缓存）+ 音频字节预取到缓存。
         nextTrackPreloader: NextTrackPreloader(
           resolver: resolveUrl,

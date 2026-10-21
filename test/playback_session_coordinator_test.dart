@@ -17,6 +17,7 @@ import 'package:molia/data/settings/settings_registry.dart';
 import 'package:molia/domain/models/playback.dart';
 import 'package:molia/domain/models/track.dart';
 import 'package:molia/models/play_mode.dart';
+import 'package:molia/playback/playback_power_policy.dart';
 import 'package:molia/playback/playback_session_coordinator.dart';
 import 'package:molia/services/playback_session_store.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -146,12 +147,14 @@ void main() {
 
   /// 装配协调者：[backendOverride] 给特殊后端（慢取链装载），
   /// [persistStore] 让假 store 同时写真实存储，[onRestoredTrack] 记录恢复曲目，
-  /// [settings] 给与 provider 同源的设置注册表（重载钩子测试）。
+  /// [settings] 给与 provider 同源的设置注册表（重载钩子测试），
+  /// [powerPolicy] 给共享的功耗策略（前后台落盘节流测试）。
   PlaybackSessionCoordinator build({
     FakePlaybackBackend? backendOverride,
     bool persistStore = false,
     RestoredTrackReporter? onRestoredTrack,
     SettingsAccess? settings,
+    PlaybackPowerPolicy? powerPolicy,
   }) {
     backend = backendOverride ?? FakePlaybackBackend();
     facade = DefaultPlaybackFacade(backend: backend);
@@ -163,6 +166,7 @@ void main() {
       settings: settings ?? testSettingsRegistry(),
       clock: () => now,
       onRestoredTrack: onRestoredTrack,
+      powerPolicy: powerPolicy,
     );
     addTearDown(session.dispose);
     return session;
@@ -482,6 +486,93 @@ void main() {
     backend.emit(_live(a, position: const Duration(seconds: 4)));
     expect(store.saves, hasLength(2));
     expect(store.saves.last.position, const Duration(seconds: 4));
+  });
+
+  test('后台：进入后台先整份落盘，之后进度按 15s 节流', () async {
+    final policy = PlaybackPowerPolicy();
+    addTearDown(policy.dispose);
+    build(powerPolicy: policy);
+    final a = _track('a');
+    backend.emit(_live(a, position: const Duration(seconds: 1)));
+    expect(store.calls, ['save']);
+
+    // 节流窗口内推进：前台口径不落盘。
+    now = now.add(const Duration(milliseconds: 300));
+    backend.emit(_live(a, position: const Duration(seconds: 2)));
+    expect(store.calls, ['save']);
+
+    // 进入后台：不等窗口，立即整份落盘当前进度（被系统杀死最多丢 15s）。
+    policy.markBackground();
+    expect(store.calls, ['save', 'save']);
+    expect(store.saves.last.position, const Duration(seconds: 2));
+    expect(store.saves.last.tracks.single.id.uri, 'fake:a');
+
+    // 后台 14s 内的进度 tick 不写盘。
+    now = now.add(const Duration(seconds: 14));
+    backend.emit(_live(a, position: const Duration(seconds: 16)));
+    expect(store.positions, isEmpty);
+
+    // 满 15s：只写轻量进度键。
+    now = now.add(const Duration(seconds: 1));
+    backend.emit(_live(a, position: const Duration(seconds: 17)));
+    expect(store.positions, [17000]);
+    expect(store.saves, hasLength(2), reason: '进度 tick 不整份重写会话');
+  });
+
+  test('回前台恢复 1s 节流，且回前台不额外落盘', () async {
+    final policy = PlaybackPowerPolicy();
+    addTearDown(policy.dispose);
+    build(powerPolicy: policy);
+    final a = _track('a');
+    backend.emit(_live(a, position: const Duration(seconds: 1)));
+
+    policy.markBackground();
+    final savesOnBackground = store.saves.length;
+    now = now.add(const Duration(seconds: 1));
+    backend.emit(_live(a, position: const Duration(seconds: 2)));
+    expect(store.positions, isEmpty, reason: '后台窗口内不写进度');
+
+    policy.markForeground();
+    expect(store.saves.length, savesOnBackground, reason: '回前台不必再写一次');
+
+    // 距上次整份落盘已过 1s：前台口径恢复写轻量进度键。
+    now = now.add(const Duration(milliseconds: 100));
+    backend.emit(_live(a, position: const Duration(seconds: 3)));
+    expect(store.positions, [3000]);
+  });
+
+  test('后台暂停 / 切歌仍强制整份落盘（不受 15s 节流限制）', () async {
+    final policy = PlaybackPowerPolicy();
+    addTearDown(policy.dispose);
+    build(powerPolicy: policy);
+    final a = _track('a');
+    final b = _track('b');
+    backend.emit(_live(a, position: const Duration(seconds: 1), queue: [a, b]));
+
+    policy.markBackground();
+    final savesBeforePause = store.saves.length;
+    now = now.add(const Duration(milliseconds: 300));
+    backend.emit(_live(
+      a,
+      position: const Duration(seconds: 2),
+      playing: false,
+      queue: [a, b],
+    ));
+    expect(store.saves.length, savesBeforePause + 1);
+    expect(store.saves.last.position, const Duration(seconds: 2));
+
+    // 切歌：同样立即整份落盘（含新曲目 / 下标）。
+    now = now.add(const Duration(milliseconds: 300));
+    backend.emit(_live(
+      b,
+      index: 1,
+      position: Duration.zero,
+      queue: [a, b],
+    ));
+    expect(store.saves.length, savesBeforePause + 2);
+    expect(store.saves.last.tracks.map((track) => track.id.uri),
+        ['fake:a', 'fake:b']);
+    expect(store.saves.last.index, 1);
   });
 
   test('flushSession：节流窗口内强制落盘最新进度并等它写完', () async {

@@ -14,9 +14,35 @@ import 'audio_cache_source.dart';
 import 'audio_focus_guard.dart';
 import 'next_track_preloader.dart';
 import 'playback_order.dart';
+import 'playback_power_policy.dart';
 import 'playing_track_cache_writer.dart';
 import 'queue_navigation.dart';
 import 'shuffle_order.dart';
+
+/// 位置采样档位：播放链路按前后台 / 桌面歌词选择（纯决策，便于单测）。
+enum PositionSamplingMode {
+  /// 跟随 `AudioPlayer.positionStream`（约 5Hz）：前台或桌面歌词可能展示。
+  highFrequency,
+
+  /// 后台播放：1s Timer 读一次 `_player.position`，值变才通知。
+  periodic,
+
+  /// 后台暂停：位置不会变，不建订阅也不建 Timer。
+  none,
+}
+
+/// 后台位置采样决策。
+///
+/// 桌面歌词在后台也要逐字 / 切行，因此 [keepHighFrequency] 优先于播放态；
+/// 暂停时不采样（避免白醒主 isolate）。
+@visibleForTesting
+PositionSamplingMode positionSamplingModeFor({
+  required bool keepHighFrequency,
+  required bool playing,
+}) {
+  if (keepHighFrequency) return PositionSamplingMode.highFrequency;
+  return playing ? PositionSamplingMode.periodic : PositionSamplingMode.none;
+}
 
 /// 将音源曲目解析为可播放 URL 的回调（由 SourceManager 提供）。
 typedef SourceUrlResolver = Future<String> Function(
@@ -43,6 +69,12 @@ class LocalPlaybackService extends ChangeNotifier {
 
   /// 下一首预载器（组合根注入；null = 关闭预载）。
   final NextTrackPreloader? _nextTrackPreloader;
+
+  /// 移动端播放功耗策略（组合根注入共享实例；默认前台实例便于单测）。
+  ///
+  /// 只影响位置采样节拍——本服务不据它停产任何预取 / 取色（那些由
+  /// `PlaybackObserver` 等观察者按各自口径驱动）。
+  final PlaybackPowerPolicy _powerPolicy;
 
   /// 当前曲目后台缓存写入（组合根注入；null = 关闭）。
   ///
@@ -92,9 +124,16 @@ class LocalPlaybackService extends ChangeNotifier {
 
   StreamSubscription<PlayerState>? _playerStateSubscription;
   StreamSubscription<Duration>? _positionSubscription;
+  Timer? _positionSampleTimer;
   Timer? _notifyThrottle;
   bool _notifyPending = false;
   int _playRequestId = 0;
+
+  /// 显式位置跳转版本号：用户 seek 与内部回跳（单曲循环 / 无下一首归零）
+  /// 都自增。系统媒体会话据此区分「正常进度推进」与「真实跳转」——Android
+  /// 不再按位置差补发周期 state（平台自身插值），只认这个版本号。
+  int _seekRevision = 0;
+  int get seekRevision => _seekRevision;
 
   /// 当前曲目自然播完（自动切歌 / 单曲循环重播之前）的广播事件。
   ///
@@ -114,21 +153,80 @@ class LocalPlaybackService extends ChangeNotifier {
     NextTrackPreloader? nextTrackPreloader,
     PlayingTrackCacheWriter? audioCacheWriter,
     Stream<AudioInterruptionEvent>? audioInterruptions,
+    PlaybackPowerPolicy? powerPolicy,
   })  : _resolver = resolver,
         _cacheService = cacheService ?? CacheService.instance,
         _preferredQuality = preferredQuality,
         _nextTrackPreloader = nextTrackPreloader,
         _cacheWriter = audioCacheWriter,
         _interruptionsOverride = audioInterruptions,
+        _powerPolicy = powerPolicy ?? PlaybackPowerPolicy(),
         _shuffleOrder = PlaybackShuffleOrder(random: random) {
     _playerStateSubscription = _player.playerStateStream.listen(_onPlayerState);
-    _positionSubscription = _player.positionStream.listen((position) {
-      _position = position;
-      _scheduleNotify();
-    });
+    // 位置采样按前后台策略选择（前台 / 桌面歌词 = 高频流；后台播放 = 1s
+    // 轮询；后台暂停 = 不采样），切换时先取消旧订阅 / Timer。
+    _powerPolicy.addListener(_syncPositionSampling);
+    _syncPositionSampling();
     // 配置系统音频会话（音乐类型）：iOS 后台播放、Android 音频焦点/duck，
     // 并接入中断事件（其他应用出声 → 暂停）。不阻塞构造；不支持的平台内部跳过。
     unawaited(_configureAudioSession());
+  }
+
+  /// 当前位置采样档位（测试观察用；生产只经 [_syncPositionSampling] 演进）。
+  @visibleForTesting
+  PositionSamplingMode get positionSamplingMode => positionSamplingModeFor(
+        keepHighFrequency: _powerPolicy.keepHighFrequencyPosition,
+        playing: _player.playing,
+      );
+
+  /// 按功耗策略 / 播放态选择位置采样方式。
+  ///
+  /// 前后台与播放态都可能独立变化（息屏、暂停、桌面歌词开关），每次全量
+  /// 重选并取消不需要的通道——不能出现「positionStream 与 Timer 同时采样」。
+  void _syncPositionSampling() {
+    switch (positionSamplingModeFor(
+      keepHighFrequency: _powerPolicy.keepHighFrequencyPosition,
+      playing: _player.playing,
+    )) {
+      case PositionSamplingMode.highFrequency:
+        _stopPositionSampleTimer();
+        _positionSubscription ??=
+            _player.positionStream.listen(_onPlayerPosition);
+      case PositionSamplingMode.periodic:
+        _cancelPositionSubscription();
+        _positionSampleTimer ??= Timer.periodic(
+          const Duration(seconds: 1),
+          (_) => _pollPlayerPosition(),
+        );
+      case PositionSamplingMode.none:
+        _cancelPositionSubscription();
+        _stopPositionSampleTimer();
+    }
+  }
+
+  void _cancelPositionSubscription() {
+    final subscription = _positionSubscription;
+    if (subscription == null) return;
+    _positionSubscription = null;
+    unawaited(subscription.cancel());
+  }
+
+  void _stopPositionSampleTimer() {
+    _positionSampleTimer?.cancel();
+    _positionSampleTimer = null;
+  }
+
+  void _onPlayerPosition(Duration position) {
+    _position = position;
+    _scheduleNotify();
+  }
+
+  /// 后台 1s 轮询：值没变不发通知（暂停 / 缓冲时避免空转唤醒 UI）。
+  void _pollPlayerPosition() {
+    final position = _player.position;
+    if (position == _position) return;
+    _position = position;
+    _scheduleNotify();
   }
 
   /// 音乐会话配置：在 [AudioSessionConfiguration.music] 上声明
@@ -487,7 +585,7 @@ class LocalPlaybackService extends ChangeNotifier {
       await pause();
     } else {
       if (_player.processingState == ProcessingState.completed) {
-        await _player.seek(Duration.zero);
+        await _seekPlayer(Duration.zero);
       }
       unawaited(_player.play().catchError((Object e) {
         _lastError = e.toString();
@@ -499,7 +597,17 @@ class LocalPlaybackService extends ChangeNotifier {
 
   Future<void> seek(Duration position) async {
     if (_currentTrack == null) return;
+    await _seekPlayer(position);
+  }
+
+  /// 真实位置跳转的唯一入口：跳转后版本号自增并立即对齐进度，媒体会话
+  /// 据此补发 state。
+  ///
+  /// 内部回跳（单曲循环 / 队列只有一首的重播 / 无下一首归零）也走这里：
+  /// 它们同样是位置不连续；只靠后台 1s 轮询会让通知按旧锚点插值一整首。
+  Future<void> _seekPlayer(Duration position) async {
     await _player.seek(position);
+    _seekRevision++;
     _position = position;
     _scheduleNotify();
   }
@@ -519,7 +627,7 @@ class LocalPlaybackService extends ChangeNotifier {
     final index = _commitNextIndex(auto: false);
     if (index < 0) {
       await _player.pause();
-      await _player.seek(Duration.zero);
+      await _seekPlayer(Duration.zero);
       return;
     }
     await _playIndex(index);
@@ -631,6 +739,15 @@ class LocalPlaybackService extends ChangeNotifier {
   void _onPlayerState(PlayerState state) {
     _isPlaying =
         state.playing && state.processingState != ProcessingState.completed;
+    // 停采样前对齐一次真实位置：后台 1s 轮询刚取消时 `_position` 可能比
+    // 实际暂停点落后最多 1s，通知栏 / 落盘会记错暂停进度。
+    if (!_isPlaying) {
+      final pausedAt = _player.position;
+      if (pausedAt > _position) _position = pausedAt;
+    }
+    // 播放态变化可能改变采样档位（后台暂停 → 停采样；后台续播 → 1s Timer；
+    // 前台始终高频流，这里是无操作）。
+    _syncPositionSampling();
     if (state.processingState == ProcessingState.completed) {
       _handleTrackCompleted();
     }
@@ -665,7 +782,7 @@ class LocalPlaybackService extends ChangeNotifier {
         return;
       }
       if (_mode == PlayMode.singleRepeat) {
-        await _player.seek(Duration.zero);
+        await _seekPlayer(Duration.zero);
         _resumeCurrentTrack();
       } else {
         final index = _commitNextIndex(auto: true);
@@ -674,7 +791,7 @@ class LocalPlaybackService extends ChangeNotifier {
           notifyListeners();
         } else if (index == _currentIndex) {
           // 列表循环 / 随机只有一首歌：下一首就是自己，按重播处理。
-          await _player.seek(Duration.zero);
+          await _seekPlayer(Duration.zero);
           _resumeCurrentTrack();
         } else {
           await _playIndex(index);
@@ -708,9 +825,11 @@ class LocalPlaybackService extends ChangeNotifier {
   void dispose() {
     _playRequestId++;
     _stopAfterCurrentTrack = false;
+    _powerPolicy.removeListener(_syncPositionSampling);
+    _stopPositionSampleTimer();
     _notifyThrottle?.cancel();
     _playerStateSubscription?.cancel();
-    _positionSubscription?.cancel();
+    _cancelPositionSubscription();
     _cacheWriter?.cancel();
     unawaited(_trackCompletions.close());
     final guard = _focusGuard;

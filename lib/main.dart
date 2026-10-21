@@ -25,6 +25,7 @@ import 'app/bootstrap/update_stack.dart';
 import 'managers/app_memory_manager.dart';
 import 'playback/desktop_audio_init.dart';
 import 'playback/local_audio_handler.dart';
+import 'playback/playback_power_policy.dart';
 import 'providers/library_provider.dart';
 import 'services/app_logging.dart';
 import 'services/global_hotkeys.dart';
@@ -115,6 +116,21 @@ void main() async {
   // 桌面端本地播放后端（Windows/Linux: media_kit）
   initDesktopAudioIfNeeded();
 
+  // 移动端播放功耗策略：与 `AppPresence` 完全独立（后者是桌面窗口可见性，
+  // 驱动预取 / 取色停产，移动端退后台不能写进去）。桌面不接生命周期事件，
+  // 默认一直前台；启动时若系统已把应用放到后台（如从通知恢复的冷启动），
+  // 先按后台节拍采样 / 落盘，首帧后再由生命周期回调纠正。
+  final powerPolicy = PlaybackPowerPolicy();
+  final mobilePowerPolicy = defaultTargetPlatform == TargetPlatform.android ||
+      defaultTargetPlatform == TargetPlatform.iOS;
+  if (mobilePowerPolicy) {
+    final lifecycle = WidgetsBinding.instance.lifecycleState;
+    if (lifecycle == AppLifecycleState.paused ||
+        lifecycle == AppLifecycleState.hidden) {
+      powerPolicy.markBackground();
+    }
+  }
+
   // 提示出口（纯构造，无插件、无 await）：播放 provider 的 UiMessenger
   // 与 Provider 树共用同一实例。
   final notifications = NotificationService(
@@ -140,6 +156,7 @@ void main() async {
     local: local,
     library: library,
     messenger: AppUiMessenger(notifications),
+    powerPolicy: powerPolicy,
     mediaSessionFactory: (service, session) => initSystemMediaSession(
       service,
       artworkBlocked: () => local.dataSaver.blockNetworkArtwork,
@@ -198,6 +215,7 @@ void main() async {
     playback: playback.playbackProvider,
     lyricsProvider: lyrics.lyricsProvider,
     audioHandler: playback.audioHandler,
+    powerPolicy: powerPolicy,
   );
   final desktop = await desktopFuture;
   final display = await displayFuture;
@@ -226,13 +244,22 @@ void main() async {
   // 前台恢复：拉一次（有本地变更时一并推送）并复查更新安装权限——从
   // 「安装未知应用」系统授权页返回后要把按钮从「去授权」切回「立即安装」；
   // 退后台 / 锁屏：同步调度器取消全部定时器并尽力推一次。
+  // 移动端前后台同时喂 `PlaybackPowerPolicy`（桌面不接：托盘 / 最小化另有
+  // `AppPresence`，且桌面播放保持前台节拍）。
   AppLifecycleListener(
     onResume: () {
+      if (mobilePowerPolicy) powerPolicy.markForeground();
       unawaited(sync.provider.onAppResumed());
       unawaited(update.provider.handleAppResumed());
     },
-    onPause: sync.provider.onAppHidden,
-    onHide: sync.provider.onAppHidden,
+    onPause: () {
+      if (mobilePowerPolicy) powerPolicy.markBackground();
+      sync.provider.onAppHidden();
+    },
+    onHide: () {
+      if (mobilePowerPolicy) powerPolicy.markBackground();
+      sync.provider.onAppHidden();
+    },
   );
 
   runApp(
