@@ -265,6 +265,10 @@ class FakeJournalStore implements SyncJournalStore {
   int base = 0;
   int snapshot = -1;
 
+  /// reset 抛错（模拟清理失败）与尝试次数（验证下次启动重试）。
+  bool throwOnReset = false;
+  int resetCount = 0;
+
   @override
   Future<int> headSeq() async => head;
 
@@ -307,6 +311,8 @@ class FakeJournalStore implements SyncJournalStore {
 
   @override
   Future<void> reset() async {
+    resetCount++;
+    if (throwOnReset) throw StateError('清理失败（测试注入）');
     head = 0;
     base = 0;
     snapshot = -1;

@@ -198,6 +198,13 @@ class SyncStateStore {
   static const String passphraseSecretKey = 'sync_passphrase_v2';
   static const String webdavPasswordSecretKey = 'sync_webdav_password_v2';
 
+  /// 派生同步状态（journal / 已知版本登记）已清理的持久标记。
+  ///
+  /// 不能只靠内存 fresh 标志：状态 key 在 [init] 时就已写入，若进程在引擎
+  /// 清理前被杀 / 清理失败，下次启动必须还能判定「仍需清理」。只有 journal
+  /// 与 known 都 reset 成功后才写 true（见 [markFreshHandled]）。
+  static const String derivedResetKey = 'sync_derived_reset_v2';
+
   /// 日志保留条数（设置页只展示最近几条）。
   static const int logLimit = 20;
 
@@ -358,19 +365,28 @@ class SyncStateStore {
 
   bool _initialized = false;
 
-  /// 本次是否首次使用新命名空间（`sync_state_v2` 不存在）。
+  /// 是否需要清空可再生的派生状态。
   ///
-  /// 首次初始化 = 全新安装：引擎据此清空可再生的派生状态（journal / 已知
-  /// 版本登记）。旧键不读不迁移，所以不存在需要保留的旧协议状态。
+  /// 新 key 缺失 / 空 = 全新安装；或持久标记不为 true = 上次清理尚未完成
+  /// （进程在 init 与 reset 之间被杀 / reset 失败），下次启动重试。
+  /// 旧键不读不迁移，所以不存在需要保留的旧协议状态。
   bool _freshInstall = false;
 
+  /// 是否仍需清空派生状态（见 [derivedResetKey]；仅本进程内的判定结果）。
   bool get freshInstall => _freshInstall;
 
-  /// 标记「新命名空间的派生状态已清理」。
+  /// 标记「新命名空间的派生状态已清理」（journal / known 都 reset 成功后）。
   ///
-  /// 清理是一次性的：同一进程内多个引擎实例 / 重复 init 不能反复清空派生
-  /// 状态（否则「登记跨重启保持」会被自己破坏）。
-  void markFreshHandled() => _freshInstall = false;
+  /// 只有持久标记写入成功才清内存标志：写失败 / reset 抛错时保持待清理，
+  /// 下次启动继续重试。清理是一次性的：同一进程内多个引擎实例 / 重复 init
+  /// 不能反复清空派生状态（否则「登记跨重启保持」会被自己破坏）。
+  Future<void> markFreshHandled() async {
+    final prefs = _prefs ??= await SharedPreferences.getInstance();
+    if (!await prefs.setBool(derivedResetKey, true)) {
+      throw StateError('同步派生状态清理标记写入失败');
+    }
+    _freshInstall = false;
+  }
 
   /// 设备 id 的 prefs 键已写、安全存储备份还没写（首装 / 身份迁移）。
   ///
@@ -404,7 +420,9 @@ class SyncStateStore {
     if (_initialized) return;
     _prefs = _preferences ?? await SharedPreferences.getInstance();
     final raw = _prefs!.getString(stateKey);
-    _freshInstall = raw == null || raw.isEmpty;
+    _freshInstall = raw == null ||
+        raw.isEmpty ||
+        _prefs!.getBool(derivedResetKey) != true;
     var stateCorrupt = false;
     if (raw != null && raw.isNotEmpty) {
       try {

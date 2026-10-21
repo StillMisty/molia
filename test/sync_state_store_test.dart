@@ -68,6 +68,7 @@ void main() {
       SyncStateStore.stateKey,
       '{"v":2,"deviceId":"devA","transports":[]}',
     );
+    await prefs.setBool(SyncStateStore.derivedResetKey, true);
     final store = SyncStateStore(
       preferences: prefs,
       secrets: secrets,
@@ -76,7 +77,8 @@ void main() {
     await store.init();
     await store.backupDeviceId();
 
-    expect(store.freshInstall, isFalse, reason: '新 key 已存在 = 不是全新安装');
+    expect(store.freshInstall, isFalse,
+        reason: '新 key 已存在且派生清理标记已完成 = 不是首次清理');
     expect(store.deviceId, 'devA');
     expect(prefs.getString(SyncStateStore.deviceIdKey), 'devA');
     expect(secrets.values[SyncStateStore.deviceIdKey], 'devA');
@@ -114,12 +116,22 @@ void main() {
     expect(secrets.values['sync_webdav_password_v1'], 'old-webdav');
   });
 
-  test('新 key 已存在：不是全新安装', () async {
+  test('派生清理标记缺失：即使新 key 已存在也仍需清理；写入后跨实例保持', () async {
     final first = await freshStore();
     expect(first.freshInstall, isTrue);
 
-    final reloaded = await freshStore();
-    expect(reloaded.freshInstall, isFalse);
+    // init 已写入 sync_state_v2，但派生清理标记还没写：模拟进程在清理前被杀。
+    final prefs = await SharedPreferences.getInstance();
+    expect(prefs.getString(SyncStateStore.stateKey), isNotNull);
+    expect(prefs.getBool(SyncStateStore.derivedResetKey), isNull);
+    final pending = await freshStore();
+    expect(pending.freshInstall, isTrue);
+
+    await pending.markFreshHandled();
+    expect(prefs.getBool(SyncStateStore.derivedResetKey), isTrue);
+
+    final handled = await freshStore();
+    expect(handled.freshInstall, isFalse);
   });
 
   test('所有身份备份都不存在时才生成新 id，之后跨实例保持', () async {

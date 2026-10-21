@@ -321,11 +321,11 @@ void main() {
     expect(prefs.getString('theme_mode'), isNull);
   });
 
-  test('首次使用新状态 key：engine.init 清空派生状态，不动用户数据与墓碑', () async {
-    // 清掉 setUp 写下的新 key / 身份：模拟首次安装（旧 key 不参与判断）。
-    await prefs.remove(SyncStateStore.stateKey);
-    await prefs.remove(SyncStateStore.deviceIdKey);
-    await prefs.remove('sync_device_id_backup_pending_v2');
+  test('新状态 key 已存在但派生清理标记缺失：仍会清理，标记写入后不再清空', () async {
+    // setUp 已写入 sync_state_v2（模拟 key 已落盘），但派生清理标记未写：
+    // 可能是上次进程在 init 与 reset 之间被杀。
+    expect(prefs.getString(SyncStateStore.stateKey), isNotNull);
+    await prefs.remove(SyncStateStore.derivedResetKey);
     final db = openMemoryDatabase();
     addTearDown(db.close);
     final journal = SyncJournalRepository(
@@ -388,10 +388,12 @@ void main() {
     expect(await journal.headSeq(), 0);
     expect(await journal.snapshotSeq(), -1);
     expect(await known.knownVersions(), isEmpty);
+    expect(prefs.getBool(SyncStateStore.derivedResetKey), isTrue,
+        reason: 'journal / known 清理成功后才写持久标记');
     expect(await db.select(db.playHistory).get(), hasLength(1));
     expect(await db.select(db.syncTombstones).get(), hasLength(1));
 
-    // 新 key 已存在：再次初始化（重启）不清派生状态。
+    // 标记已写入：再次初始化（重启）不清派生状态。
     await journal.append(db, [
       (
         category: SyncCategory.settings,
@@ -426,6 +428,53 @@ void main() {
 
     expect(await journal.headSeq(), 1);
     expect(await known.knownVersions(), hasLength(1));
+  });
+
+  test('派生状态清理失败：不写标记，下次启动重试', () async {
+    await prefs.remove(SyncStateStore.derivedResetKey);
+    final journal = FakeJournalStore(head: 5)..throwOnReset = true;
+    final firstState = SyncStateStore(
+      preferences: prefs,
+      secrets: MemorySyncSecretStore(),
+      clock: () => 7000,
+    );
+    final firstEngine = SyncEngine(
+      state: firstState,
+      stamps: firstState.stampIssuer,
+      adapters: const [],
+      transports: const {},
+      journal: journal,
+    );
+    addTearDown(firstEngine.dispose);
+
+    await expectLater(firstEngine.init(), throwsStateError);
+    expect(journal.resetCount, 1);
+    expect(prefs.getBool(SyncStateStore.derivedResetKey), isNot(true));
+    expect(firstState.freshInstall, isTrue, reason: '失败后保持待清理');
+
+    // 重启：同一份 prefs + 新的状态实例；标记仍缺失 → 重新清理。
+    journal.throwOnReset = false;
+    final restartedState = SyncStateStore(
+      preferences: prefs,
+      secrets: MemorySyncSecretStore(),
+      clock: () => 7000,
+    );
+    final restartedEngine = SyncEngine(
+      state: restartedState,
+      stamps: restartedState.stampIssuer,
+      adapters: const [],
+      transports: const {},
+      journal: journal,
+    );
+    addTearDown(restartedEngine.dispose);
+    await restartedState.init();
+    expect(restartedState.freshInstall, isTrue);
+    await restartedEngine.init();
+
+    expect(journal.resetCount, 2);
+    expect(journal.head, 0);
+    expect(prefs.getBool(SyncStateStore.derivedResetKey), isTrue);
+    expect(restartedState.freshInstall, isFalse);
   });
 
   test('装配不启动传输：首帧后的 startTransports 才起（权限门不挡首帧）', () async {
