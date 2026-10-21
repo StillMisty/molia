@@ -1,12 +1,14 @@
 /// AI 推歌生成服务：画像 → 提示词 → LLM → 解析 → 本地搜索解析成可播放曲目。
 ///
 /// 链路（「闭卷生成 + 本地解析」）：
-/// 1. [TasteProfileBuilder] 构建聚合画像 + 最近明细 + 排除清单；
+/// 1. [TasteProfileBuilder] 按发送范围构建画像（收藏/歌单 opt-in）；
 /// 2. [LlmClient] 单轮补全，要求纯 JSON；
 /// 3. 容错解析（首 `{`…末 `}`，兼容数组/字符串条目）；
 /// 4. 与已听排除清单、批内规范化去重；
-/// 5. `CatalogService.search` 在可搜索音源并行解析（并发限流，标题/艺人
-///    规范化打分），解析失败的作为 unresolved 返回（页面折叠展示）。
+/// 5. 按用户选择的找歌渠道（空 = 自动前 3）严格解析，失败项作为 unresolved
+///    返回（页面折叠展示，可只重新搜索、不重新调 LLM）。
+///
+/// 预览与实际请求共用 [buildPrompt]：相同输入下预览文本 == 实际 userPrompt。
 library;
 
 import 'dart:convert';
@@ -28,21 +30,44 @@ import 'taste_profile_builder.dart';
 abstract interface class AiRecommendationGenerator {
   /// 生成一批推荐（[count] 首上限）。
   ///
-  /// [skippedLabels] / [likedLabels] 是本轮反馈；[excludeLabels] 是本次生成
-  /// 额外排除（如「换一首」时排除列表内已有曲目），不进入反馈回流。
+  /// [skippedLabels] / [likedLabels] 是本轮反馈（provider 已合并持久化记忆）；
+  /// [excludeLabels] 是本次生成额外排除（如「换一首」时排除列表内已有曲目），
+  /// 不进入反馈回流。[onProgress] 只在显式生成时传入；静默补歌不传。
   Future<AiDjBatch> generate({
     required LlmConfig config,
     required int count,
-    List<String> skippedLabels,
-    List<String> likedLabels,
-    List<String> excludeLabels,
+    AiPreferences preferences = AiPreferences.defaults,
+    List<String> skippedLabels = const [],
+    List<String> likedLabels = const [],
+    List<String> excludeLabels = const [],
+    AiGenerationCancelToken? cancelToken,
+    void Function(AiDjProgress progress)? onProgress,
+  });
+
+  /// 预览与 [generate] 相同输入下实际会发送的提示词（不触发 LLM 调用）。
+  Future<AiPrompt> buildPromptPreview({
+    required int count,
+    AiPreferences preferences = AiPreferences.defaults,
+    List<String> skippedLabels = const [],
+    List<String> likedLabels = const [],
+    List<String> excludeLabels = const [],
+  });
+
+  /// 未解析项重新搜索（不重新调 LLM）；返回合并后的批次。
+  Future<AiDjBatch> resolveUnresolved({
+    required AiDjBatch batch,
+    AiPreferences preferences = AiPreferences.defaults,
+    AiGenerationCancelToken? cancelToken,
+    void Function(AiDjProgress progress)? onProgress,
   });
 
   /// 连接测试（地址/Key/模型），失败抛 [SourceFailure]。
   Future<void> testConnection(LlmConfig config);
 
   /// 上行数据摘要（「本次发送的数据」；不触发 LLM 调用）。
-  Future<AiUpstreamSummary> summarizeUpstream();
+  Future<AiUpstreamSummary> summarizeUpstream({
+    AiPreferences preferences = AiPreferences.defaults,
+  });
 }
 
 class AiRecommendationService implements AiRecommendationGenerator {
@@ -63,7 +88,7 @@ class AiRecommendationService implements AiRecommendationGenerator {
   final SourceRegistry _registry;
   final TasteProfileBuilder _profileBuilder;
 
-  /// 每首推荐最多尝试的可搜索音源数。
+  /// 自动渠道数（偏好未选渠道时取音源页顺序前 N 个）。
   final int searchSourceLimit;
 
   /// 解析并发（同时搜索的曲目数）。
@@ -81,13 +106,44 @@ class AiRecommendationService implements AiRecommendationGenerator {
 
   /// 上行数据摘要：只统计条数，不发往任何服务。
   @override
-  Future<AiUpstreamSummary> summarizeUpstream() async {
-    final profile = await _profileBuilder.build();
+  Future<AiUpstreamSummary> summarizeUpstream({
+    AiPreferences preferences = AiPreferences.defaults,
+  }) async {
+    final profile = await _profileBuilder.build(preferences: preferences);
+    final sources = _sourcesFor(preferences).sources;
     return AiUpstreamSummary(
-      recentEvents: profile.recentEvents.length,
+      recentEvents:
+          preferences.sections.contains(AiUpstreamSection.recentEvents)
+              ? profile.recentEvents.length
+              : 0,
       topArtists: profile.topArtists.length,
       topTracks: profile.topTracks.length,
       exclusions: profile.exclusionLabels.length,
+      favorites: profile.favorites.length,
+      playlists: [
+        for (final playlist in profile.playlists) playlist.tracks.length,
+      ].fold(0, (sum, value) => sum + value),
+      sourceNames: [for (final source in sources) source.displayName],
+    );
+  }
+
+  /// 预览与 [generate] 相同输入下实际会发送的提示词。
+  @override
+  Future<AiPrompt> buildPromptPreview({
+    required int count,
+    AiPreferences preferences = AiPreferences.defaults,
+    List<String> skippedLabels = const [],
+    List<String> likedLabels = const [],
+    List<String> excludeLabels = const [],
+  }) async {
+    final profile = await _profileBuilder.build(preferences: preferences);
+    return buildPrompt(
+      profile: profile,
+      preferences: preferences,
+      count: count,
+      skippedLabels: skippedLabels,
+      likedLabels: likedLabels,
+      excludeLabels: excludeLabels,
     );
   }
 
@@ -96,25 +152,46 @@ class AiRecommendationService implements AiRecommendationGenerator {
   Future<AiDjBatch> generate({
     required LlmConfig config,
     required int count,
+    AiPreferences preferences = AiPreferences.defaults,
     List<String> skippedLabels = const [],
     List<String> likedLabels = const [],
     List<String> excludeLabels = const [],
+    AiGenerationCancelToken? cancelToken,
+    void Function(AiDjProgress progress)? onProgress,
   }) async {
-    final profile = await _profileBuilder.build();
-    final userPrompt = buildUserPrompt(
+    final startedAt = DateTime.now();
+    void progress(AiDjPhase phase, {int done = 0, int total = 0}) {
+      onProgress?.call(AiDjProgress(
+        phase: phase,
+        done: done,
+        total: total,
+        startedAt: startedAt,
+      ));
+    }
+
+    progress(AiDjPhase.profile);
+    _checkCancelled(cancelToken);
+    final profile = await _profileBuilder.build(preferences: preferences);
+    _checkCancelled(cancelToken);
+
+    final prompt = buildPrompt(
       profile: profile,
+      preferences: preferences,
       count: count,
       skippedLabels: skippedLabels,
       likedLabels: likedLabels,
       excludeLabels: excludeLabels,
     );
-    // 要求服务端返回 JSON 对象（提示词已限定格式；不支持的提供商自动退回）。
+
+    progress(AiDjPhase.model);
     final raw = await _llm.complete(
       config: config,
-      systemPrompt: systemPrompt,
-      userPrompt: userPrompt,
+      systemPrompt: prompt.systemPrompt,
+      userPrompt: prompt.userPrompt,
       jsonMode: true,
     );
+    _checkCancelled(cancelToken);
+
     final parsed = parseRecommendations(raw, limit: count);
     if (parsed.isEmpty) {
       throw const SourceFailure(
@@ -125,7 +202,7 @@ class AiRecommendationService implements AiRecommendationGenerator {
       );
     }
 
-    // 排除已听 + 批内去重（规范化键）。
+    // 排除已听 / 收藏 / 歌单（provider 偏好 opened）+ 批内去重（规范化键）。
     final seen = Set<String>.of(profile.exclusionKeys);
     final candidates = <AiRecommendation>[];
     for (final recommendation in parsed) {
@@ -135,53 +212,122 @@ class AiRecommendationService implements AiRecommendationGenerator {
       candidates.add(recommendation);
     }
 
-    final resolution = await _resolveAll(candidates);
+    progress(AiDjPhase.resolving, total: candidates.length);
+    final resolution = await _resolveAll(
+      candidates,
+      preferences: preferences,
+      cancelToken: cancelToken,
+      onResolved: (done) =>
+          progress(AiDjPhase.resolving, done: done, total: candidates.length),
+    );
+    _checkCancelled(cancelToken);
+
     return AiDjBatch(
+      id: DateTime.now().microsecondsSinceEpoch.toString(),
       items: resolution.resolved,
       unresolved: resolution.unresolved,
       generatedAt: DateTime.now(),
+      preferences: preferences,
+      rawResponse: raw,
+      prompt: prompt,
+      channelFallback: resolution.channelFallback,
     );
   }
 
-  /// 提示词：画像 JSON + 本轮反馈 + 额外排除 + 推荐数量。
-  static String buildUserPrompt({
+  /// 未解析项重新搜索：只走本地搜索，不重新调 LLM；结果合并回原批次。
+  @override
+  Future<AiDjBatch> resolveUnresolved({
+    required AiDjBatch batch,
+    AiPreferences preferences = AiPreferences.defaults,
+    AiGenerationCancelToken? cancelToken,
+    void Function(AiDjProgress progress)? onProgress,
+  }) async {
+    if (batch.unresolved.isEmpty) return batch;
+    final startedAt = DateTime.now();
+    onProgress?.call(AiDjProgress(
+      phase: AiDjPhase.resolving,
+      total: batch.unresolved.length,
+      startedAt: startedAt,
+    ));
+    final resolution = await _resolveAll(
+      batch.unresolved,
+      preferences: preferences,
+      cancelToken: cancelToken,
+      onResolved: (done) => onProgress?.call(AiDjProgress(
+        phase: AiDjPhase.resolving,
+        done: done,
+        total: batch.unresolved.length,
+        startedAt: startedAt,
+      )),
+    );
+    _checkCancelled(cancelToken);
+    final seen = {for (final item in batch.items) item.track.id.uri};
+    final items = [
+      ...batch.items,
+      for (final item in resolution.resolved)
+        if (seen.add(item.track.id.uri)) item,
+    ];
+    return batch.copyWith(
+      items: items,
+      unresolved: resolution.unresolved,
+      channelFallback: resolution.channelFallback,
+    );
+  }
+
+  /// 提示词：按发送范围裁剪的画像 JSON + 偏好 + 种子 + 本轮反馈 + 额外排除。
+  static AiPrompt buildPrompt({
     required TasteProfile profile,
+    required AiPreferences preferences,
     required int count,
     List<String> skippedLabels = const [],
     List<String> likedLabels = const [],
     List<String> excludeLabels = const [],
   }) {
-    final summary = profile.summary;
-    final data = {
-      'summary': {
+    final sections = preferences.sections;
+    final data = <String, dynamic>{};
+    if (sections.contains(AiUpstreamSection.summary)) {
+      final summary = profile.summary;
+      data['summary'] = {
         'playCount': summary.playCount,
         'qualifiedPlayCount': summary.qualifiedPlayCount,
         'totalListenedMinutes': summary.totalListenedMs ~/ 60000,
         'uniqueTrackCount': summary.uniqueTrackCount,
         'completionRate': summary.completionRate,
         'skipRate': summary.skipRate,
-      },
-      'topArtists': [
+      };
+    }
+    if (sections.contains(AiUpstreamSection.topArtists)) {
+      data['topArtists'] = [
         for (final entry in profile.topArtists)
           {'artist': entry.artist, 'plays': entry.playCount},
-      ],
-      'topTracks': [
+      ];
+    }
+    if (sections.contains(AiUpstreamSection.topTracks)) {
+      data['topTracks'] = [
         for (final entry in profile.topTracks)
-          {'title': entry.title, 'artist': entry.artist, 'plays': entry.playCount},
-      ],
-      'listeningByWeekdayHour': [
+          {
+            'title': entry.title,
+            'artist': entry.artist,
+            'plays': entry.playCount
+          },
+      ];
+    }
+    if (sections.contains(AiUpstreamSection.timeAndSource)) {
+      data['listeningByWeekdayHour'] = [
         for (final entry in profile.byWeekdayHour)
           {
             'weekday': entry.weekday,
             'hour': entry.hour,
             'minutes': entry.listenedMs ~/ 60000,
           },
-      ],
-      'sources': [
+      ];
+      data['sources'] = [
         for (final entry in profile.sources)
           {'source': entry.sourceKey, 'minutes': entry.listenedMs ~/ 60000},
-      ],
-      'recentEvents': [
+      ];
+    }
+    if (sections.contains(AiUpstreamSection.recentEvents)) {
+      data['recentEvents'] = [
         for (final event in profile.recentEvents)
           {
             'title': event.title,
@@ -189,12 +335,60 @@ class AiRecommendationService implements AiRecommendationGenerator {
             'listenedSeconds': event.listenedMs ~/ 1000,
             'completed': event.endReason == PlayEventEndReason.completed,
           },
-      ],
-      'alreadyListened': profile.exclusionLabels,
-    };
+      ];
+    }
+    if (sections.contains(AiUpstreamSection.listenedExclusions)) {
+      data['alreadyListened'] = profile.exclusionLabels;
+    }
+    if (sections.contains(AiUpstreamSection.favorites)) {
+      data['favorites'] = [
+        for (final entry in profile.favorites)
+          {'title': entry.title, 'artist': entry.artist},
+      ];
+    }
+    if (sections.contains(AiUpstreamSection.playlists)) {
+      data['playlists'] = [
+        for (final playlist in profile.playlists)
+          {
+            'name': playlist.name,
+            'tracks': [
+              for (final track in playlist.tracks)
+                {'title': track.title, 'artist': track.artist},
+            ],
+          },
+      ];
+    }
+
+    final preferenceJson = <String, dynamic>{};
+    if (preferences.styles.isNotEmpty) {
+      preferenceJson['styles'] = [
+        for (final style in preferences.styles) _styleText(style),
+      ];
+    }
+    if (preferences.scenes.isNotEmpty) {
+      preferenceJson['scenes'] = [
+        for (final scene in preferences.scenes) _sceneText(scene),
+      ];
+    }
+    if (preferences.languages.isNotEmpty) {
+      preferenceJson['languages'] = [
+        for (final language in preferences.languages) _languageText(language),
+      ];
+    }
+    if (preferences.era != kAiEraAny) {
+      preferenceJson['era'] = _eraText(preferences.era);
+    }
+    preferenceJson['exploration'] = _explorationText(preferences.exploration);
+    preferenceJson['onlyUnheard'] = preferences.onlyUnheard;
+    if (preferences.extraPrompt.trim().isNotEmpty) {
+      preferenceJson['extra'] = preferences.extraPrompt.trim();
+    }
+    data['preferences'] = preferenceJson;
 
     final feedback = StringBuffer('本轮反馈：');
-    if (skippedLabels.isEmpty && likedLabels.isEmpty) {
+    if (skippedLabels.isEmpty &&
+        likedLabels.isEmpty &&
+        preferences.seeds.isEmpty) {
       feedback.write('无');
     } else {
       if (skippedLabels.isNotEmpty) {
@@ -204,12 +398,19 @@ class AiRecommendationService implements AiRecommendationGenerator {
         if (skippedLabels.isNotEmpty) feedback.write('；');
         feedback.write('收藏了「${likedLabels.take(20).join('、')}」');
       }
+      if (preferences.seeds.isNotEmpty) {
+        if (skippedLabels.isNotEmpty || likedLabels.isNotEmpty) {
+          feedback.write('；');
+        }
+        feedback.write('多来点这种「${preferences.seeds.take(20).join('、')}」');
+      }
     }
 
-    return '以下是我的听歌数据（JSON）：\n${jsonEncode(data)}\n\n'
+    final userPrompt = '以下是我的听歌数据（JSON）：\n${jsonEncode(data)}\n\n'
         '$feedback\n'
         '${excludeLabels.isEmpty ? '' : '这些不要再推荐：${excludeLabels.take(50).join('、')}。\n'}'
         '请推荐 $count 首我可能喜欢的新歌（只输出 JSON）。';
+    return AiPrompt(systemPrompt: systemPrompt, userPrompt: userPrompt);
   }
 
   /// 容错解析：优先与文本更靠前的 `{`/`[` 配对（`{"songs":[...]}` 或裸数组）。
@@ -271,47 +472,100 @@ class AiRecommendationService implements AiRecommendationGenerator {
     }
   }
 
+  /// 解析渠道：空 = 音源页顺序前 3；已选 = 只按音源页顺序过滤所选，不兜底。
+  ///
+  /// 所选渠道全部不可用（停用 / 不支持搜索）时回退自动渠道并标记
+  /// [channelFallback]，供偏好页提示。
+  ({List<SourceDescriptor> sources, bool channelFallback}) _sourcesFor(
+    AiPreferences preferences,
+  ) {
+    final searchable = [
+      for (final descriptor in _orderedDescriptors())
+        if (descriptor.enabled && descriptor.capabilities.search) descriptor,
+    ];
+    final auto = searchable.take(searchSourceLimit).toList();
+    if (preferences.sourceKeys.isEmpty) {
+      return (sources: auto, channelFallback: false);
+    }
+    final selectedKeys = preferences.sourceKeys.toSet();
+    final selected = [
+      for (final descriptor in searchable)
+        if (selectedKeys.contains(descriptor.key)) descriptor,
+    ];
+    if (selected.isNotEmpty) {
+      return (sources: selected, channelFallback: false);
+    }
+    return (
+      sources: auto,
+      channelFallback: auto.isNotEmpty,
+    );
+  }
+
+  /// 音源页顺序（`order` 升序；同序保留注册表原始顺序）。
+  List<SourceDescriptor> _orderedDescriptors() {
+    final indexed = _registry.descriptors.asMap().entries.toList()
+      ..sort((a, b) {
+        final byOrder = a.value.order.compareTo(b.value.order);
+        return byOrder != 0 ? byOrder : a.key.compareTo(b.key);
+      });
+    return [for (final entry in indexed) entry.value];
+  }
+
   Future<
       ({
         List<ResolvedRecommendation> resolved,
         List<AiRecommendation> unresolved,
-      })> _resolveAll(List<AiRecommendation> recommendations) async {
+        bool channelFallback,
+      })> _resolveAll(
+    List<AiRecommendation> recommendations, {
+    required AiPreferences preferences,
+    AiGenerationCancelToken? cancelToken,
+    void Function(int done)? onResolved,
+  }) async {
+    final sourceSelection = _sourcesFor(preferences);
     if (recommendations.isEmpty) {
       return (
         resolved: <ResolvedRecommendation>[],
         unresolved: <AiRecommendation>[],
+        channelFallback: false,
       );
     }
-    final sources = _registry.descriptors
-        .where((descriptor) => descriptor.enabled && descriptor.capabilities.search)
-        .take(searchSourceLimit)
-        .toList();
     final resolved = <ResolvedRecommendation>[];
     final unresolved = <AiRecommendation>[];
     for (var i = 0; i < recommendations.length; i += resolveConcurrency) {
+      _checkCancelled(cancelToken);
       final chunk = recommendations.sublist(
         i,
         math.min(i + resolveConcurrency, recommendations.length),
       );
       final results = await Future.wait([
         for (final recommendation in chunk)
-          _resolveOne(recommendation, sources),
+          _resolveOne(recommendation, sourceSelection.sources),
       ]);
+      _checkCancelled(cancelToken);
       for (var j = 0; j < chunk.length; j++) {
-        final track = results[j];
-        if (track == null) {
+        final match = results[j];
+        if (match == null) {
           unresolved.add(chunk[j]);
         } else {
-          resolved.add(
-            ResolvedRecommendation(source: chunk[j], track: track),
-          );
+          resolved.add(ResolvedRecommendation(
+            source: chunk[j],
+            track: match.track,
+            sourceName: match.sourceName,
+          ));
         }
       }
+      onResolved
+          ?.call(math.min(i + resolveConcurrency, recommendations.length));
     }
-    return (resolved: resolved, unresolved: unresolved);
+    return (
+      resolved: resolved,
+      unresolved: unresolved,
+      channelFallback: sourceSelection.channelFallback,
+    );
   }
 
-  Future<Track?> _resolveOne(
+  Future<({Track track, String sourceName})?> _resolveOne(
     AiRecommendation recommendation,
     List<SourceDescriptor> sources,
   ) async {
@@ -325,9 +579,14 @@ class AiRecommendationService implements AiRecommendationGenerator {
           SearchQuery(keyword: keyword, limit: 10),
         );
         final best = pickBestMatch(recommendation, result.items);
-        if (best != null) return await _withArtwork(descriptor, best);
+        if (best != null) {
+          return (
+            track: await _withArtwork(descriptor, best),
+            sourceName: descriptor.displayName,
+          );
+        }
       } catch (_) {
-        // 单音源失败（引擎重启/网络）：换下一个；全失败判未解析。
+        // 单音源失败（引擎重启/网络）：按用户渠道顺序换下一个；全失败判未解析。
       }
     }
     return null;
@@ -360,7 +619,8 @@ class AiRecommendationService implements AiRecommendationGenerator {
     var bestScore = 0.0;
     for (final track in items) {
       final title = normalizeAiText(track.title);
-      final artist = normalizeAiText(track.artists.map((a) => a.name).join(' '));
+      final artist =
+          normalizeAiText(track.artists.map((a) => a.name).join(' '));
       var score = 0.0;
       if (title == targetTitle) {
         score += 0.6;
@@ -379,4 +639,64 @@ class AiRecommendationService implements AiRecommendationGenerator {
     }
     return bestScore >= 0.6 ? best : null;
   }
+
+  static void _checkCancelled(AiGenerationCancelToken? token) {
+    if (token?.isCancelled ?? false) {
+      throw const SourceFailure(
+        kind: FailureKind.cancelled,
+        message: 'AI 推荐生成已取消',
+        l10nKey: 'aiDjCancelled',
+      );
+    }
+  }
+
+  static String _styleText(String token) => switch (token) {
+        'pop' => '流行',
+        'rock' => '摇滚',
+        'electronic' => '电子',
+        'folk' => '民谣',
+        'rap' => '说唱',
+        'rnb' => 'R&B',
+        'jazz' => '爵士',
+        'classical' => '古典',
+        'metal' => '金属',
+        'acg' => 'ACG',
+        'instrumental' => '纯音乐',
+        'chineseStyle' => '国风',
+        _ => token,
+      };
+
+  static String _sceneText(String token) => switch (token) {
+        'commute' => '通勤',
+        'focus' => '专注',
+        'relax' => '放松',
+        'workout' => '运动',
+        'sleep' => '睡前',
+        'weekend' => '周末',
+        _ => token,
+      };
+
+  static String _languageText(String token) => switch (token) {
+        'mandarin' => '华语',
+        'cantonese' => '粤语',
+        'english' => '英语',
+        'japanese' => '日语',
+        'korean' => '韩语',
+        'instrumental' => '纯音乐',
+        _ => token,
+      };
+
+  static String _eraText(String token) => switch (token) {
+        kAiEraRecent3 => '近三年',
+        kAiEra2010s => '2010s',
+        kAiEra2000s => '2000s',
+        kAiEraBefore90 => '90 年代及更早',
+        _ => '不限',
+      };
+
+  static String _explorationText(String token) => switch (token) {
+        kAiExplorationSafe => '稳妥（贴近常听风格）',
+        kAiExplorationSurprise => '惊喜（大胆探索新风格）',
+        _ => '均衡',
+      };
 }

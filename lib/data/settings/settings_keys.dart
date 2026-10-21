@@ -138,6 +138,20 @@ const kAiDjCacheTtlDays = SettingsKey<int>(
   category: SyncCategory.settings,
 );
 
+/// 推荐偏好（JSON：批次大小 / 自动补歌 / 风格 / 场景 / 发送范围 / 渠道…）。
+const kAiDjPreferences = SettingsKey<String>(
+  'ai_dj_preferences_v1',
+  '',
+  category: SyncCategory.settings,
+);
+
+/// 跨重启反馈记忆（JSON：不感兴趣 / 喜欢 / 种子）。
+const kAiDjFeedbackMemory = SettingsKey<String>(
+  'ai_dj_feedback_memory_v1',
+  '',
+  category: SyncCategory.settings,
+);
+
 // ── 跟人走：自动换源（播放失败后的自动行为） ────────────────────────
 const kSourceSwapAutoEnabled = SettingsKey<bool>(
   'source_swap_auto_enabled',
@@ -234,6 +248,8 @@ const List<SettingsKey<Object?>> kAllSettingsKeys = [
   kLyricsDisplaySettings,
   kAiDjEnabled,
   kAiDjCacheTtlDays,
+  kAiDjPreferences,
+  kAiDjFeedbackMemory,
   kSourceSwapAutoEnabled,
   kLibraryAddPosition,
   kLxDefaultQuality,

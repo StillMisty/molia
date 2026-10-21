@@ -1,12 +1,18 @@
-/// 听歌画像构建：把统计仓库的数据整理成 LLM 提示词输入。
+/// 听歌画像构建：把统计仓库与资料库的数据整理成 LLM 提示词输入。
 ///
-/// 上行内容：聚合指标 + Top 艺人与曲目 +
-/// 时段/来源分布 + 最近事件明细 + 全量已听排除清单。
-/// **不含 raw payload、不含设备信息**；数量上限集中在这里（token 预算）。
+/// 上行内容按 [AiPreferences.sections] 裁剪：聚合指标 + Top 艺人与曲目 +
+/// 时段/来源分布 + 最近事件明细 + 已听排除清单，可选收藏歌曲与自建歌单。
+/// **不含 raw payload、封面、播放链接、设备信息**；数量上限集中在这里
+/// （token 预算），资料库读取失败降级为空、不阻塞生成。
 library;
 
+import 'package:logging/logging.dart';
+
 import '../../data/play_statistics_repository.dart';
+import '../../domain/models/ai_dj.dart';
+import '../../domain/models/library.dart';
 import '../../domain/models/play_statistics.dart';
+import '../../domain/ports/library_store.dart';
 import 'ai_text.dart';
 
 /// 提示词输入快照。
@@ -17,6 +23,16 @@ class TasteProfile {
   final List<WeekdayHourListened> byWeekdayHour;
   final List<SourceListened> sources;
   final List<PlayEvent> recentEvents;
+
+  /// 收藏歌曲的名称与歌手（仅勾选收藏时读取；上限 [favoritesLimit]）。
+  final List<({String title, String artist})> favorites;
+
+  /// 自建歌单名 + 曲目名称与歌手（仅勾选自建歌单时读取）。
+  final List<
+      ({
+        String name,
+        List<({String title, String artist})> tracks,
+      })> playlists;
 
   /// 已听排除清单（`title - artist` 原始标签，规范化去重、最近优先）。
   final List<String> exclusionLabels;
@@ -33,14 +49,21 @@ class TasteProfile {
     required this.recentEvents,
     required this.exclusionLabels,
     required this.exclusionKeys,
+    this.favorites = const [],
+    this.playlists = const [],
   });
 }
 
 class TasteProfileBuilder {
-  TasteProfileBuilder({required PlayStatisticsRepository repository})
-      : _repository = repository;
+  TasteProfileBuilder({
+    required PlayStatisticsRepository repository,
+    LibraryStore? libraryStore,
+  })  : _repository = repository,
+        _libraryStore = libraryStore;
 
   final PlayStatisticsRepository _repository;
+  final LibraryStore? _libraryStore;
+  final Logger _logger = Logger('molia.ai_taste_profile');
 
   /// token 预算上限（上行「聚合 + 明细」各段的数量约束）。
   static const int topArtistsLimit = 50;
@@ -48,39 +71,179 @@ class TasteProfileBuilder {
   static const int recentEventLimit = 200;
   static const int exclusionLimit = 500;
 
-  Future<TasteProfile> build() async {
-    final results = await Future.wait([
-      _repository.summary(),
-      _repository.topTracks(limit: topTracksLimit),
-      _repository.topArtists(limit: topArtistsLimit),
-      _repository.listenedByWeekdayHour(),
-      _repository.sourceDistribution(),
-      _repository.listEventsForExport(limit: recentEventLimit),
-      _repository.listPlayedTrackNames(),
+  /// 收藏歌曲上限。
+  static const int favoritesLimit = 100;
+
+  /// 自建歌单上限 / 每单曲目上限 / 歌单曲目总上限。
+  static const int playlistLimit = 10;
+  static const int playlistTrackLimit = 20;
+  static const int playlistTotalTrackLimit = 100;
+
+  Future<TasteProfile> build({
+    AiPreferences preferences = AiPreferences.defaults,
+  }) async {
+    final sections = preferences.sections;
+    final includeSummary = sections.contains(AiUpstreamSection.summary);
+    final includeTopTracks = sections.contains(AiUpstreamSection.topTracks);
+    final includeTopArtists = sections.contains(AiUpstreamSection.topArtists);
+    final includeTimeAndSource =
+        sections.contains(AiUpstreamSection.timeAndSource);
+    final includeRecent = sections.contains(AiUpstreamSection.recentEvents);
+    final includeExclusions =
+        sections.contains(AiUpstreamSection.listenedExclusions);
+
+    final results = await Future.wait<Object>([
+      if (includeSummary) _repository.summary(),
+      if (includeTopTracks) _repository.topTracks(limit: topTracksLimit),
+      if (includeTopArtists) _repository.topArtists(limit: topArtistsLimit),
+      if (includeTimeAndSource) _repository.listenedByWeekdayHour(),
+      if (includeTimeAndSource) _repository.sourceDistribution(),
+      if (includeRecent)
+        _repository.listEventsForExport(limit: recentEventLimit),
+      if (preferences.onlyUnheard || includeExclusions)
+        _repository.listPlayedTrackNames(),
     ]);
-    final played = results[6] as List<({String title, String artist})>;
+    var cursor = 0;
+    PlayStatisticsSummary summary = PlayStatisticsSummary.empty;
+    if (includeSummary) {
+      summary = results[cursor++] as PlayStatisticsSummary;
+    }
+    List<PlayStatTrackEntry> topTracks = const [];
+    if (includeTopTracks) {
+      topTracks = results[cursor++] as List<PlayStatTrackEntry>;
+    }
+    List<PlayStatArtistEntry> topArtists = const [];
+    if (includeTopArtists) {
+      topArtists = results[cursor++] as List<PlayStatArtistEntry>;
+    }
+    List<WeekdayHourListened> byWeekdayHour = const [];
+    if (includeTimeAndSource) {
+      byWeekdayHour = results[cursor++] as List<WeekdayHourListened>;
+    }
+    List<SourceListened> sources = const [];
+    if (includeTimeAndSource) {
+      sources = results[cursor++] as List<SourceListened>;
+    }
+    List<PlayEvent> recentEvents = const [];
+    if (includeRecent) {
+      recentEvents = results[cursor++] as List<PlayEvent>;
+    }
+    List<({String title, String artist})> played = const [];
+    if (preferences.onlyUnheard || includeExclusions) {
+      played = results[cursor++] as List<({String title, String artist})>;
+    }
 
     final labels = <String>[];
     final keys = <String>{};
-    for (final entry in played) {
-      final key = aiTrackKey(entry.title, entry.artist);
-      if (key == '|' || key.isEmpty) continue;
-      if (!keys.add(key)) continue;
-      labels.add(
-        entry.artist.isEmpty ? entry.title : '${entry.title} - ${entry.artist}',
-      );
-      if (labels.length >= exclusionLimit) break;
+    void addExclusion(String title, String artist) {
+      final key = aiTrackKey(title, artist);
+      if (key == '|' || key.isEmpty || !keys.add(key)) return;
+      labels.add(artist.isEmpty ? title : '$title - $artist');
+    }
+
+    if (preferences.onlyUnheard) {
+      for (final entry in played) {
+        if (labels.length >= exclusionLimit) break;
+        addExclusion(entry.title, entry.artist);
+      }
+    }
+
+    final favorites = <({String title, String artist})>[];
+    final playlists = <({
+      String name,
+      List<({String title, String artist})> tracks,
+    })>[];
+    if (_libraryStore != null) {
+      if (sections.contains(AiUpstreamSection.favorites)) {
+        favorites.addAll(await _readFavorites());
+        for (final entry in favorites) {
+          addExclusion(entry.title, entry.artist);
+        }
+      }
+      if (sections.contains(AiUpstreamSection.playlists)) {
+        playlists.addAll(await _readPlaylists());
+        for (final playlist in playlists) {
+          for (final entry in playlist.tracks) {
+            addExclusion(entry.title, entry.artist);
+          }
+        }
+      }
     }
 
     return TasteProfile(
-      summary: results[0] as PlayStatisticsSummary,
-      topTracks: results[1] as List<PlayStatTrackEntry>,
-      topArtists: results[2] as List<PlayStatArtistEntry>,
-      byWeekdayHour: results[3] as List<WeekdayHourListened>,
-      sources: results[4] as List<SourceListened>,
-      recentEvents: results[5] as List<PlayEvent>,
+      summary: summary,
+      topTracks: topTracks,
+      topArtists: topArtists,
+      byWeekdayHour: byWeekdayHour,
+      sources: sources,
+      recentEvents: recentEvents,
       exclusionLabels: labels,
       exclusionKeys: keys,
+      favorites: favorites,
+      playlists: playlists,
     );
+  }
+
+  Future<List<({String title, String artist})>> _readFavorites() async {
+    final store = _libraryStore;
+    if (store == null) return const [];
+    try {
+      final playlists = await store.listPlaylists();
+      PlaylistInfo? favorites;
+      for (final playlist in playlists) {
+        if (playlist.isFavorites) {
+          favorites = playlist;
+          break;
+        }
+      }
+      if (favorites == null) return const [];
+      final tracks = await store.listPlaylistTracks(favorites.id);
+      return [
+        for (final track in tracks.take(favoritesLimit))
+          (title: track.title, artist: track.artist),
+      ];
+    } catch (e) {
+      _logger.warning('AI 推歌：读取收藏失败，按空处理 $e');
+      return const [];
+    }
+  }
+
+  Future<
+      List<
+          ({
+            String name,
+            List<({String title, String artist})> tracks,
+          })>> _readPlaylists() async {
+    final store = _libraryStore;
+    if (store == null) return const [];
+    try {
+      final all = await store.listPlaylists();
+      final custom = [
+        for (final playlist in all)
+          if (!playlist.isFavorites) playlist,
+      ].take(playlistLimit);
+      final result = <({
+        String name,
+        List<({String title, String artist})> tracks,
+      })>[];
+      var total = 0;
+      for (final playlist in custom) {
+        if (total >= playlistTotalTrackLimit) break;
+        final room = playlistTotalTrackLimit - total;
+        final limit = playlistTrackLimit < room ? playlistTrackLimit : room;
+        final tracks = await store.listPlaylistTracks(playlist.id);
+        final entries = [
+          for (final track in tracks.take(limit))
+            (title: track.title, artist: track.artist),
+        ];
+        if (entries.isEmpty) continue;
+        total += entries.length;
+        result.add((name: playlist.name, tracks: entries));
+      }
+      return result;
+    } catch (e) {
+      _logger.warning('AI 推歌：读取自建歌单失败，按空处理 $e');
+      return const [];
+    }
   }
 }
