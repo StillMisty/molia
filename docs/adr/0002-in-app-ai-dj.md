@@ -39,7 +39,7 @@
    `min(30s, 50%×时长)`（复用统计口径），**只做曲目级排除**；
    喜欢 = 收藏（回流下一批）；连续 3 次失败自动停止续推；退出电台保留队列。
    列表侧另有单曲「换一首」「不感兴趣（可撤销）」与反馈面板；跨天**不自动生成**
-   （不静默消耗 token），缓存有效期可配（1/3/7 天 / 永久，默认 1 天）。
+   （不静默消耗 token）；缓存有效期设置已由 2026-10 修订移除（见下）。
 6. **播放内核新增 enqueue**：`PlaybackFacade/Backend.enqueueTracks` +
    `LocalPlaybackService.enqueueTracks`——顺序模式追加队尾；洗牌模式把新下标
    扩展到排列尾部（`PlaybackShuffleOrder.extend`），轮末重洗覆盖全队列。
