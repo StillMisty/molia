@@ -256,7 +256,6 @@ class _MyAppState extends State<MyApp>
       morph: _morph,
       reselect: _reselect[ShellDestination.nowPlaying],
       controller: _nowPlaying,
-      startupReveal: _startupReveal,
       // 桌面骨架的播放页换成「封面 + 控制 / 队列·歌词·信息」版式（无迷你态）；
       // 移动 / 平板骨架保持 PageView 版式。
       desktopLayout: _desktopShell,
@@ -273,12 +272,6 @@ class _MyAppState extends State<MyApp>
   /// 是否挂载桌面骨架：Linux / Windows / macOS 为真；[MyApp.desktopShell]
   /// 非空时以它为准（测试强制走另一侧骨架）。
   bool get _desktopShell => widget.desktopShell ?? isDesktopPlatform();
-
-  /// 冷启动且启动首页是播放页、快照已有当前曲目时，播放一次首屏入场。
-  ///
-  /// 只在 [initState] 计算一次：托盘恢复 / 从其它页进入播放页 / 页面重建
-  /// 都不重播（入场是启动语义，不是页面切换语义）。
-  late final bool _startupReveal;
 
   /// 当前选中的目的地（与底栏顺序解耦；初值 = 导航偏好的启动首页）。
   ///
@@ -318,10 +311,6 @@ class _MyAppState extends State<MyApp>
     _selectedDestination = context.read<NavProvider>().effectiveHomeDestination;
     _previousDestination = _selectedDestination;
     _renderedDestination = _selectedDestination;
-    // 首屏入场只服务「冷启动直接落在播放页」：有队列/当前曲目才值得演；
-    // 其它启动首页不播，之后进入播放页也不补播。
-    _startupReveal = _selectedDestination == ShellDestination.nowPlaying &&
-        context.read<PlaybackProvider>().snapshot.current != null;
     // 顶栏 / 底栏的曲目信息区必须与「手动进入播放页」后的状态一致（播放页
     // 激活即收起封面）：否则恢复会话后顶栏会重复显示曲目封面/进度。
     _morph.setBarHeaderHidden(

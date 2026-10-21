@@ -62,9 +62,6 @@ class Player extends StatefulWidget {
   /// （移动/平板大屏版式不显示，纵向空间留给歌词）。
   final bool desktopLayout;
 
-  /// 冷启动首页首屏入场：只播一次标题入场（封面堆叠首帧已是稳态）。
-  final bool startupReveal;
-
   /// 迷你层被点击时请求展开（由宿主翻转 [expandAnimation]）。
   final VoidCallback? onToggleExpand;
 
@@ -72,7 +69,6 @@ class Player extends StatefulWidget {
     super.key,
     this.isLargeScreen = false,
     this.morph,
-    this.startupReveal = false,
     this.expandAnimation,
     this.onToggleExpand,
     this.desktopLayout = false,
@@ -176,21 +172,6 @@ class _PlayerState extends State<Player> with TickerProviderStateMixin {
       vsync: this,
       initialValue: 1,
     );
-    if (widget.startupReveal) {
-      // 首屏入场：标题从入场起点播一次；封面堆叠不参与（首帧已按队列稳态）。
-      // 不可见 / 减弱动效时直接落位，避免回到播放页再补播。
-      _trackEntrance.value = 0;
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (!mounted) return;
-        if (!_tickersEnabled ||
-            (MediaQuery.maybeOf(context)?.disableAnimations ?? false)) {
-          _trackEntrance.value = 1.0;
-          return;
-        }
-        _trackEntrance.animateTo(1, from: 0, withVelocity: 0);
-      });
-    }
-
     widget.expandAnimation?.addStatusListener(_handleExpandStatus);
     widget.expandAnimation?.addListener(_handleExpandValue);
 

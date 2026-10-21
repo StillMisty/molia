@@ -58,9 +58,8 @@ void main() {
 
   Future<void> pumpNowPlaying(
     WidgetTester tester,
-    PlaybackProvider playback, {
-    bool startupReveal = false,
-  }) async {
+    PlaybackProvider playback,
+  ) async {
     tester.view.physicalSize = const Size(420, 900);
     tester.view.devicePixelRatio = 1.0;
     addTearDown(() {
@@ -89,7 +88,7 @@ void main() {
             ...GlobalMaterialLocalizations.delegates,
           ],
           supportedLocales: const [Locale('zh')],
-          home: NowPlaying(startupReveal: startupReveal),
+          home: const NowPlaying(),
         ),
       ),
     );
@@ -143,13 +142,5 @@ void main() {
       closeTo(coverCenter.dx, 0.5),
       reason: '首帧之后也不补播入场位移',
     );
-  });
-
-  testWidgets('启动首屏入场：封面首帧仍按队列稳态', (tester) async {
-    final playback = await restoredProvider(tester);
-    await pumpNowPlaying(tester, playback, startupReveal: true);
-
-    // 首屏入场只播标题；整页不做透明度，封面堆叠也不参与。
-    expectSteadyDeck(tester);
   });
 }
