@@ -666,8 +666,10 @@ class LanSyncTransport
     var succeeded = 0;
     var failed = 0;
     SyncIssue? firstError;
-    // 推送直接使用候选端点，不再依赖「上一轮 pull 留下的 _peers」。
-    _roundStartedAt = _nowMs();
+    // 推送直接使用候选端点，不再依赖「上一轮 pull 留下的 _peers」。本轮起点
+    // 复用 pull 设置的 `_roundStartedAt`：presence 的 lastHeardAt 来自同一次
+    // 轮次的探测窗口，若在 push 里重置，刚在 pull 里听到的对端会被判成
+    // 「非预期」，失败就不计数、不进 failedIds（名册看不到真实推送失败）。
     for (final peer in _candidates()) {
       final host = await _postSnapshot(peer, payload, path);
       if (host != null) {

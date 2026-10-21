@@ -82,6 +82,46 @@ void main() {
     );
   });
 
+  test('pull 发现的对端在随后的 push 里仍是预期对端（失败计数不丢）', () async {
+    final transportA = LanSyncTransport(
+      deviceId: 'devA',
+      deviceName: () => '设备A',
+      codec: codecPort,
+      passphraseProvider: () async => passphrase,
+      snapshotProvider: () async => envelope('devA'),
+      probeTargets: const [(host: '127.0.0.1', port: 47975)],
+      probeWindow: const Duration(milliseconds: 250),
+      udpPort: 47974,
+    );
+    final transportB = LanSyncTransport(
+      deviceId: 'devB',
+      deviceName: () => '设备B',
+      codec: codecPort,
+      passphraseProvider: () async => passphrase,
+      snapshotProvider: () async => envelope('devB'),
+      udpPort: 47975,
+    );
+    addTearDown(() async {
+      await transportA.stop();
+      await transportB.stop();
+    });
+    await transportA.start();
+    await transportB.start();
+
+    // A 在本轮探测窗口里听到 B（presence.lastHeardAt 属于本轮起点之后）。
+    final pulled = await transportA.pull();
+    expect(pulled.peersSeen, 1);
+    expect(transportA.presenceCount, 1);
+
+    // B 掉线后，同一个引擎轮次的 push 仍应把 B 当成预期对端：失败必须
+    // 计入 failedPeers / failedIds，名册才能看到真实推送失败。
+    await transportB.stop();
+    final pushed = await transportA.push(envelope('devA'));
+
+    expect(pushed.failedPeers, 1);
+    expect(pushed.failedIds, contains('devB'));
+  });
+
   test('口令不同的对端返回空结果（解密失败静默跳过）', () async {
     final transportA = LanSyncTransport(
       deviceId: 'devA',
