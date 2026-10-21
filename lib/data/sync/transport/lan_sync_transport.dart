@@ -826,7 +826,9 @@ class LanSyncTransport implements SyncTransport {
   void _verifyPeer(_Peer peer, String host) {
     if (peer.deviceId.isEmpty) return;
     final normalized = normalizePeerHost(host);
-    if (normalized.isEmpty) return;
+    // 只持久化可路由地址：link-local / 带 zone / 回环是当前链路或同机的
+    // 临时观测，写进端点表下次换网必然失效。
+    if (!isRoutablePeerAddress(normalized)) return;
     _onPeerVerified?.call(LanPeerEndpoint(
       deviceId: peer.deviceId,
       host: normalized,

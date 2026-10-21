@@ -10,6 +10,7 @@ import 'package:molia/data/sync/transport/lan_discovery.dart';
 import 'package:molia/data/sync/transport/lan_sync_transport.dart';
 import 'package:molia/domain/models/device_sync.dart';
 import 'package:molia/domain/ports/sync_transport.dart';
+import 'package:molia/utils/peer_address.dart';
 
 /// 局域网直连传输测试：回环上的探测、拉取、推送与口令不匹配跳过。
 void main() {
@@ -684,8 +685,8 @@ void main() {
     expect(first.contacted, isTrue);
     expect(client.snapshotGetCount, 1);
     expect(client.broadcastCount, 0, reason: '有已知端点只单播，不广播');
-    expect(verified, isNotEmpty, reason: 'MAC + HTTP 解密成功后回写端点');
-    expect(verified.last.httpPort, serverHttpPort);
+    // 回环不是可路由地址：即使 HTTP 解密成功也不写回端点表（否则换网必失效）。
+    expect(verified, isEmpty, reason: '只持久化可路由地址');
 
     final second = await client.pull();
     expect(second.envelopes, isEmpty);
@@ -950,5 +951,103 @@ void main() {
     await transport.start();
     expect(transport.isRunning, isTrue);
     expect(transport.unavailableReason, isNull);
+  });
+
+  test('connectivity 事件无条件重绑 UDP（接口指纹未变）', () async {
+    var binds = 0;
+    final transport = LanSyncTransport(
+      deviceId: 'devA',
+      deviceName: () => '设备A',
+      codec: codecPort,
+      passphraseProvider: () async => passphrase,
+      snapshotProvider: () async => envelope('devA'),
+      localAddressesProvider: () async => const ['10.0.0.5'],
+      udpBinder: (address, port) {
+        binds++;
+        return RawDatagramSocket.bind(address, port, reuseAddress: true);
+      },
+      udpPort: 47972,
+    );
+    addTearDown(transport.stop);
+    await transport.start();
+    final baseline = binds;
+    final epoch = transport.networkEpoch;
+    expect(baseline, greaterThan(0));
+
+    await transport.onNetworkChanged();
+
+    expect(binds, greaterThan(baseline), reason: 'Wi-Fi 重连即使 IP 不变也要重绑');
+    expect(transport.networkEpoch, epoch, reason: '指纹未变不升级 epoch');
+    expect(transport.discoveryPorts.v4, greaterThan(0));
+  });
+
+  test('pull 检测到静默换 IP：重绑 UDP 且公告带新地址', () async {
+    var now = 1000000;
+    var cellular = true;
+    var addresses = <String>['10.0.0.5'];
+    var binds = 0;
+    final catcher = await RawDatagramSocket.bind(
+      InternetAddress.anyIPv4,
+      47974,
+      reuseAddress: false,
+    );
+    final packets = <List<int>>[];
+    catcher.listen((event) {
+      if (event != RawSocketEvent.read) return;
+      final datagram = catcher.receive();
+      if (datagram != null) packets.add(datagram.data);
+    });
+    final transport = LanSyncTransport(
+      deviceId: 'devA',
+      deviceName: () => '设备A',
+      codec: codecPort,
+      passphraseProvider: () async => passphrase,
+      snapshotProvider: () async => envelope('devA'),
+      localAddressesProvider: () async => addresses,
+      udpBinder: (address, port) {
+        binds++;
+        return RawDatagramSocket.bind(address, port, reuseAddress: true);
+      },
+      probeTargets: const [(host: '127.0.0.1', port: 47974)],
+      probeWindow: const Duration(milliseconds: 150),
+      nowMs: () => now,
+      isCellular: () => cellular,
+      udpPort: 47973,
+    );
+    addTearDown(() async {
+      await transport.stop();
+      catcher.close();
+    });
+    // 蜂窝启动不公告，避免 start burst 干扰抓包；启动后切回 Wi-Fi 再 pull。
+    await transport.start();
+    cellular = false;
+    packets.clear();
+    final baseline = binds;
+
+    addresses = ['10.0.1.5'];
+    now += 61000;
+    await transport.pull();
+
+    expect(binds, greaterThan(baseline), reason: '静默换 IP 后必须重绑旧 socket');
+    expect(transport.networkEpoch, 2);
+    final key = codec.discoveryKey(passphrase);
+    final announcements = packets
+        .map((packet) => Msd1.decode(Uint8List.fromList(packet), key))
+        .whereType<LanDiscoveryMessage>()
+        .where((message) => message.isAnnounce)
+        .toList();
+    expect(announcements, isNotEmpty);
+    expect(
+      announcements.any((message) => message.addresses.contains('10.0.1.5')),
+      isTrue,
+      reason: '重绑后的公告要带新接口地址',
+    );
+  });
+
+  test('端点持久化只接受可路由地址', () {
+    expect(isRoutablePeerAddress('::1'), isFalse);
+    expect(isRoutablePeerAddress('fe80::1'), isFalse);
+    expect(isRoutablePeerAddress('fe80::1%eth0'), isFalse);
+    expect(isRoutablePeerAddress('192.168.1.7'), isTrue);
   });
 }

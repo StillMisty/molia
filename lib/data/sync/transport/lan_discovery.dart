@@ -570,12 +570,13 @@ class LanDiscovery {
     _cancelBurst();
   }
 
-  /// 换网：立即重扫接口，指纹变化时 epoch++、重绑 UDP、清来源端口缓存。
+  /// 换网：收到 connectivity 事件就重绑 UDP（Wi-Fi 重连可能 IP 不变但旧
+  /// socket 已死）；只有接口指纹变化时才清 presence / nonce，旧端点仍可先试。
   Future<void> onNetworkChanged() async {
     if (!_running) return;
     final changed = await _refreshNetwork(force: true);
+    await _rebindUdp();
     if (changed) {
-      await _rebindUdp();
       _presence.clear();
       _nonces.clear();
     }
@@ -588,7 +589,11 @@ class LanDiscovery {
     if (!_running) return;
     await _ensureKey();
     if (_hidden || _isCellularNow) return;
-    await _refreshNetwork(force: false);
+    final changed = await _refreshNetwork(force: false);
+    // 60s 节流窗口内换网（例如 DHCP 续租 / 静默切 Wi-Fi）时，发现层可能
+    // 先看到新地址但 socket 还绑在旧接口上：立即重绑再发包。presence 保留，
+    // 旧端点仍可先试。
+    if (changed) await _rebindUdp();
     if (_key == null) return;
     final ports = discoveryPorts;
     // 两族都绑不上：不会再有新应答，直接让传输层走候选 HTTP 直连。
@@ -740,18 +745,21 @@ class LanDiscovery {
     final v6 = _udp6;
     if (v4 != null) {
       try {
-        v4.send(packet, InternetAddress('255.255.255.255'), _udpPort);
-        sent = true;
+        if (v4.send(packet, InternetAddress('255.255.255.255'), _udpPort) > 0) {
+          sent = true;
+        }
       } catch (_) {
         // 广播被系统策略拒绝（iOS entitlement / 网络策略）。
       }
       try {
-        v4.send(
-          packet,
-          InternetAddress(Msd1.ipv4MulticastHost),
-          _udpPort,
-        );
-        sent = true;
+        if (v4.send(
+              packet,
+              InternetAddress(Msd1.ipv4MulticastHost),
+              _udpPort,
+            ) >
+            0) {
+          sent = true;
+        }
       } catch (_) {
         // 组播路由 / 权限缺失：保留广播。
       }
