@@ -477,7 +477,7 @@
   命中渠道名；未解析项「重新找一次」只重新搜索、不重新调 LLM。
 - **发送透明化（prompt transparency）** — AI 页展示发送范围/条数/偏好/渠道的
   人话摘要；「查看发送原文」显示系统 + 用户提示词（可复制）。预览与实际请求
-  共用同一个 `AiPromptBuilder`（`buildPrompt`），相同输入下文本必须相等；
+  共用 `AiRecommendationService.buildPrompt`，相同输入下文本必须相等；
   上次实际发送的 prompt 与上次 LLM 原始返回只存内存，不落盘、不打日志。
 - **反馈记忆（feedback memory）** — `AiFeedbackMemory`：不感兴趣 / 跳过标签、
   喜欢标签各上限 200，「多来点这种」种子上限 20；JSON 持久化在

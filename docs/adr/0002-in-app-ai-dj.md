@@ -78,6 +78,8 @@
 10. **进度与取消**：仅显式生成有 `profile → model → resolving` 进度、等待秒数、
     解析 done/total 与取消；首屏脉冲骨架、轮播细进度条、单行换一首局部进度；
     静默补歌不设置 `AiDjProgress`。动画尊重 `MediaQuery.disableAnimations`。
+11. **移除死设置**：多批历史不再消费「推荐缓存有效期」，AI 页删除该行，
+    provider / settings store / 登记键一并删除。
 
 ## 后果
 

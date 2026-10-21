@@ -237,9 +237,8 @@
   生成后消费）。显式生成有 profile → model → resolving 阶段进度与取消，
   首屏脉冲骨架、轮播细进度条；自动补歌不进入任何进度/提示 UI。发送透明化区块
   展示范围摘要、可复制的系统 + 用户提示词，以及仅存内存的上次发送与原始返回。
-  反馈面板含长期记忆与本轮反馈、清空 AI 记忆。缓存有效期
-  （`aiDjCacheTtlDays`，默认 1 天）保留为兼容设置，不再决定新增批量。发现页
-  `AiDjCarousel` 只展示 active 批次，用 carousel 原生槽位展示歌名/歌手
+  反馈面板含长期记忆与本轮反馈、清空 AI 记忆。发现页 `AiDjCarousel` 只展示
+  active 批次，用 carousel 原生槽位展示歌名/歌手
   （`applyDynamicTextContentTransform: false`）：桌面端鼠标拖拽跟手（松手吸附）、
   滚轮翻卡（自接指针信号把 `dy` 转成步进，横向滚动视图默认只吃 `dx`），点卡
   滚到焦点位（`M3ECarouselController.animateToItem`）；卡片流下方信息区只显示
