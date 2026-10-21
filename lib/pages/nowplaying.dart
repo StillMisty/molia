@@ -18,12 +18,6 @@ import '../l10n/app_localizations.dart';
 
 /// 正在播放页：全屏播放器（可折叠为迷你条）+ 队列/歌词/歌曲信息三个 PageView。
 class NowPlaying extends StatefulWidget {
-  /// 冷启动且启动首页是播放页时的首屏入场（一次性）。
-  ///
-  /// 只播标题入场；整页与封面堆叠首帧就是稳态（按恢复队列渲染），不做
-  /// 透明度/缩放/位移——入场不能以「图片还没按队列就位」为代价。
-  final bool startupReveal;
-
   /// 顶栏共享元素控制器：全屏播放器为其提供封面/歌名/进度锚点。
   final PlayerMorphController? morph;
 
@@ -42,7 +36,6 @@ class NowPlaying extends StatefulWidget {
 
   const NowPlaying({
     super.key,
-    this.startupReveal = false,
     this.morph,
     this.reselect,
     this.controller,
@@ -448,7 +441,6 @@ class _NowPlayingState extends State<NowPlaying>
                   child: Player(
                     isLargeScreen: true,
                     morph: widget.morph,
-                    startupReveal: widget.startupReveal,
                   ),
                 ),
               ),
@@ -510,7 +502,6 @@ class _NowPlayingState extends State<NowPlaying>
               isLargeScreen: true,
               desktopLayout: true,
               morph: widget.morph,
-              startupReveal: widget.startupReveal,
             ),
           ),
           Expanded(
