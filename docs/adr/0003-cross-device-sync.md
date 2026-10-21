@@ -534,3 +534,23 @@ body：`id` / `name` / `http` / `probe` / `addrs` / `snap` / `head` / `cats` /
   不被 `deleteRemote` 删除；云端会一直留着，需要时由用户自己清理。
 - 广播被 AP 隔离 / iOS 无 multicast entitlement 时，已同步过的设备靠
   `lanEndpoints` 单播兜底；从未配对过的设备仍需手动地址或 WebDAV。
+
+### 已知限制
+
+1. **发现没有按网卡绑定 socket**：`LanDiscovery` 用 v4 / v6 两个 wildcard
+   `RawDatagramSocket` 发包，广播与组播的出口由系统路由表决定，没有像
+   LocalSend 那样为每个接口绑定 socket，也没有固定 `multicastInterface`。
+   多网卡 / 全隧道 VPN / WSL 等场景下，广播可能只走默认接口（或直接被
+   VPN 黑洞），首次发现因而失败。当前兜底是「v4 广播 + v4/v6 组播 +
+   `lanEndpoints` 单播 + 配对码里的地址候选 / 手动地址」；已同步过的设备
+   可靠单播收敛，未配对设备需要配对码或手动地址。若将来要按接口发现，
+   得为每个接口绑定独立 socket，或在加入组播 / 发送前切换
+   `multicastInterface`，并处理接口上下线。
+2. **探测端口降级后广播到不了它**：标准端口 47825 绑定失败（Windows 宿主
+   保留端口块 / 端口被占用）时 UDP 会改绑系统分配端口（见已知坑 46），而
+   广播 / 组播仍发往固定的 47825——该设备收不到无目标广播。此时只能靠
+   配对码（携带实际 `probe` 端口）/ 手动地址 / 已学到的端点单播。这是既有
+   约束，不是本次发现改造引入的回归；HTTP 端点与数据通道不受影响。
+3. **移动端后台仍不承诺收敛**：Doze / 挂起下定时器与 socket 都不可靠，
+   后台不发公告、不排重连阶梯；回到前台才重绑 UDP、探活 HTTP 并补一轮。
+   产品语义仍是「前台与充电时收敛」，不引入前台服务 / wake lock。
