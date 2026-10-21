@@ -142,7 +142,7 @@ class _AiDjPreferencesPageState extends State<AiDjPreferencesPage> {
             SettingsSectionCard(
               title: l10n.aiDjPrefsGenerationGroup,
               children: [
-                _switchTile(
+                SettingsSwitchTile(
                   key: const Key('aiDjPrefAutoFeedSwitch'),
                   icon: Icons.autorenew_rounded,
                   title: l10n.aiDjAutoFeedTitle,
@@ -152,7 +152,7 @@ class _AiDjPreferencesPageState extends State<AiDjPreferencesPage> {
                     () => _draft = _draft.copyWith(autoFeed: value),
                   ),
                 ),
-                _switchTile(
+                SettingsSwitchTile(
                   key: const Key('aiDjPrefOnlyUnheardSwitch'),
                   icon: Icons.hearing_rounded,
                   title: l10n.aiDjPrefsOnlyUnheardTitle,
@@ -250,10 +250,11 @@ class _AiDjPreferencesPageState extends State<AiDjPreferencesPage> {
               footer: SettingsSectionHint(text: l10n.aiDjScopeHint),
               children: [
                 for (final section in AiUpstreamSection.values)
-                  _switchTile(
+                  SettingsSwitchTile(
                     key: Key('aiDjPrefScope_${section.storageValue}'),
                     icon: _scopeIcon(section),
                     title: aiDjSectionLabel(l10n, section),
+                    subtitle: '',
                     value: _draft.sections.contains(section),
                     onChanged: (value) {
                       unawaited(_toggleScope(section, value));
@@ -412,23 +413,6 @@ class _AiDjPreferencesPageState extends State<AiDjPreferencesPage> {
         if (next.contains(option)) option,
     ];
   }
-
-  Widget _switchTile({
-    required Key key,
-    required IconData icon,
-    required String title,
-    String subtitle = '',
-    required bool value,
-    required ValueChanged<bool> onChanged,
-  }) =>
-      SettingsSwitchTile(
-        key: key,
-        icon: icon,
-        title: title,
-        subtitle: subtitle,
-        value: value,
-        onChanged: onChanged,
-      );
 
   static IconData _scopeIcon(AiUpstreamSection section) => switch (section) {
         AiUpstreamSection.summary => Icons.insights_rounded,
