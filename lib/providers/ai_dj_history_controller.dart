@@ -2,10 +2,9 @@
 ///
 /// 只负责「历史」这一块状态；批次与存储形状之间的转换由组合根注入
 /// （需要 `LibraryProvider` 把 raw 还原成可播放曲目），因此本类不依赖
-/// 播放 / 曲库 provider，可独立单测。
+/// 播放 / 曲库 provider，可独立单测。通知由 `AiDjProvider` 在所有相关状态
+/// 落定后统一发出，本类不持有监听。
 library;
-
-import 'package:flutter/foundation.dart';
 
 import '../domain/models/ai_dj.dart';
 import '../services/ai/ai_recommendation_store.dart';
@@ -17,18 +16,16 @@ typedef AiDjBatchDecoder = AiDjBatch Function(StoredAiBatch stored);
 typedef AiDjBatchEncoder = StoredAiBatch Function(AiDjBatch batch);
 
 /// 推荐历史控制器：Provider 只保留编排，历史读写与保留策略全部在这里。
-///
-/// 通知由本类发出；Provider 只挂一个监听转发，避免出现第二条通知链路。
-class AiDjHistoryController extends ChangeNotifier {
+class AiDjHistoryController {
   AiDjHistoryController({
     required AiRecommendationStore store,
     required AiDjBatchDecoder decode,
     required AiDjBatchEncoder encode,
     DateTime Function()? clock,
-  }) : _store = store,
-       _decode = decode,
-       _encode = encode,
-       _clock = clock ?? DateTime.now;
+  })  : _store = store,
+        _decode = decode,
+        _encode = encode,
+        _clock = clock ?? DateTime.now;
 
   /// 历史详情缓存上限（按需加载；不持久化）。
   ///
@@ -88,7 +85,6 @@ class AiDjHistoryController extends ChangeNotifier {
       // 内存账本继续可用。
     }
     _remember(batch);
-    notifyListeners();
   }
 
   /// 替换 / 不感兴趣 / 重抽未解析后更新当前批并刷新索引。
@@ -100,7 +96,6 @@ class AiDjHistoryController extends ChangeNotifier {
       // 内存账本继续可用。
     }
     _remember(batch);
-    notifyListeners();
   }
 
   /// 按需加载历史详情（不切换 active）。
@@ -127,7 +122,6 @@ class AiDjHistoryController extends ChangeNotifier {
     } catch (_) {
       // 存储失败只影响下次启动恢复，内存切换仍生效。
     }
-    notifyListeners();
     return true;
   }
 
@@ -149,7 +143,6 @@ class AiDjHistoryController extends ChangeNotifier {
       final fallbackId = result.index.activeBatchId;
       _active = fallbackId == null ? null : await load(fallbackId);
     }
-    notifyListeners();
     return true;
   }
 
@@ -167,7 +160,6 @@ class AiDjHistoryController extends ChangeNotifier {
     _entries = result.index.entries;
     final activeId = _active?.id;
     _cache.removeWhere((id, _) => id != activeId);
-    notifyListeners();
     return true;
   }
 

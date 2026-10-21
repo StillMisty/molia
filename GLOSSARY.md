@@ -435,8 +435,10 @@
 
 ## AI 推歌
 
-- **AI DJ mode（AI 推歌模式）** — `lib/providers/ai_dj_provider.dart`：三件事的唯一
-  状态机——**当前推荐（active batch）**、**历史推荐**与**推歌会话（电台）**。
+- **AI DJ mode（AI 推歌模式）** — `lib/providers/ai_dj_provider.dart` 与
+  `lib/providers/ai_dj_history_controller.dart`：`AiDjProvider` 负责推歌会话
+  （电台）、生成编排与通知；`AiDjHistoryController` 独占**当前推荐（active batch）**、
+  **历史推荐**及保留策略。
   `enabled` = 功能启用（持久化；退出队列不关功能）；`status` = 电台状态
   （off/preparing/playing/error：播放全部或点某首才接管队列）。只有显式
   「生成推荐 / 换一批」才切换 active；历史「播放这批 / 设为当前」也会切换。

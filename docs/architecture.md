@@ -224,7 +224,7 @@
   `SourceFailure`，Key 不进 message）、`AiRecommendationService`（提示词 →
   容错 JSON → 规范化去重 → `CatalogService.search` 按找歌渠道解析，命中无封面
   时经音源 `artwork()` 补取；预览与实际共用同一 `buildPrompt`）。
-  `AiDjProvider` 负责推歌会话与生成编排；`AiDjHistoryController`
+  `AiDjProvider` 负责推歌会话、生成编排与通知；`AiDjHistoryController`
   （`lib/providers/ai_dj_history_controller.dart`）独占**当前推荐（active batch）**、
   **历史索引**、按需加载缓存与保留策略，批次与存储形状的转换由 Provider 注入：
   历史存储为索引 + 每批一键（`AiRecommendationStore`，启动只读索引 +

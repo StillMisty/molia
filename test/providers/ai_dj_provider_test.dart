@@ -7,6 +7,7 @@ import 'package:molia/domain/models/track.dart';
 import 'package:molia/providers/ai_dj_provider.dart';
 import 'package:molia/providers/library_provider.dart';
 import 'package:molia/providers/playback_provider.dart';
+import 'package:molia/services/ai/ai_recommendation_store.dart';
 import 'package:molia/services/ai/ai_settings_store.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -74,6 +75,17 @@ class _GatedEnqueueBackend extends FakePlaybackBackend {
   }
 }
 
+/// 删除 / 清空恒失败：验证 Provider 不发通知、不丢内存状态。
+class _FailingHistoryStore extends AiRecommendationStore {
+  @override
+  Future<AiDjHistoryMutationResult> deleteBatch(String id) async =>
+      (ok: false, index: AiDjHistoryIndex.empty);
+
+  @override
+  Future<AiDjHistoryMutationResult> clearHistory() async =>
+      (ok: false, index: AiDjHistoryIndex.empty);
+}
+
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
@@ -87,6 +99,7 @@ void main() {
   Future<void> pumpProvider({
     bool withConfig = true,
     FakeAiDjGenerator? customGenerator,
+    AiRecommendationStore? recommendationStore,
   }) async {
     final prefs = await SharedPreferences.getInstance();
     if (withConfig) {
@@ -109,6 +122,7 @@ void main() {
       recommendationService: customGenerator ?? generator,
       settingsStore: AiSettingsStore(
           settings: testSettingsRegistry(preferences: prefs, secrets: secrets)),
+      recommendationStore: recommendationStore,
     );
     await provider.init();
   }
@@ -827,12 +841,74 @@ void main() {
     await provider.markNotInterested(staleUri);
     expect(provider.notInterestedItems, hasLength(1));
 
+    var staleSeen = false;
+    void listener() {
+      if (provider.activeBatchId == firstId &&
+          provider.notInterestedItems.isNotEmpty) {
+        staleSeen = true;
+      }
+    }
+
+    provider.addListener(listener);
     await provider.setActiveBatch(firstId);
+    provider.removeListener(listener);
+    expect(staleSeen, isFalse);
     expect(provider.notInterestedItems, isEmpty);
 
     await provider.undoNotInterested(staleUri);
     expect(provider.recommendations!.items.map((item) => item.track.id.id),
         ['0', '1', '2']);
+  });
+
+  test('删除 active 清空撤销栈：通知前已移除旧撤销项', () async {
+    await enableWithList();
+    final firstId = provider.activeBatchId!;
+    generator.batchFactory = () => _batch(10, 3);
+    await provider.refreshRecommendations();
+    final secondId = provider.activeBatchId!;
+    final staleUri = provider.recommendations!.items.first.track.id.uri;
+    await provider.markNotInterested(staleUri);
+    expect(provider.notInterestedItems, hasLength(1));
+
+    var staleSeen = false;
+    void listener() {
+      if (provider.activeBatchId == firstId &&
+          provider.notInterestedItems.isNotEmpty) {
+        staleSeen = true;
+      }
+    }
+
+    provider.addListener(listener);
+    await provider.deleteHistoryBatch(secondId);
+    provider.removeListener(listener);
+
+    expect(provider.activeBatchId, firstId);
+    expect(provider.notInterestedItems, isEmpty);
+    expect(staleSeen, isFalse);
+  });
+
+  test('换一批清空撤销栈：通知前已移除旧撤销项', () async {
+    await enableWithList();
+    final oldId = provider.activeBatchId!;
+    final staleUri = provider.recommendations!.items.first.track.id.uri;
+    await provider.markNotInterested(staleUri);
+    expect(provider.notInterestedItems, hasLength(1));
+
+    generator.batchFactory = () => _batch(10, 3);
+    var staleSeen = false;
+    void listener() {
+      if (provider.activeBatchId != oldId &&
+          provider.notInterestedItems.isNotEmpty) {
+        staleSeen = true;
+      }
+    }
+
+    provider.addListener(listener);
+    await provider.refreshRecommendations();
+    provider.removeListener(listener);
+
+    expect(provider.notInterestedItems, isEmpty);
+    expect(staleSeen, isFalse);
   });
 
   test('历史：设为当前只切换浏览列表，不动队列', () async {
@@ -848,7 +924,7 @@ void main() {
     expect(backend.calls, isEmpty);
   });
 
-  test('历史切换只转发一次通知', () async {
+  test('历史切换只通知一次', () async {
     await enableWithList();
     final firstId = provider.activeBatchId!;
     generator.batchFactory = () => _batch(10, 3);
@@ -859,6 +935,25 @@ void main() {
     await provider.setActiveBatch(firstId);
 
     expect(notifications, 1);
+  });
+
+  test('删除 / 清空失败不通知且保留内存状态', () async {
+    provider.dispose();
+    await pumpProvider(recommendationStore: _FailingHistoryStore());
+    await enableWithList();
+    final activeId = provider.activeBatchId;
+    var notifications = 0;
+    provider.addListener(() => notifications++);
+
+    await provider.deleteHistoryBatch(activeId!);
+    expect(notifications, 0);
+    expect(provider.activeBatchId, activeId);
+    expect(provider.historyEntries, hasLength(1));
+
+    await provider.clearHistory();
+    expect(notifications, 0);
+    expect(provider.activeBatchId, activeId);
+    expect(provider.historyEntries, hasLength(1));
   });
 
   test('清空历史保留 active', () async {

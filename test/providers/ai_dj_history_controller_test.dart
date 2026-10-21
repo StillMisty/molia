@@ -152,7 +152,6 @@ void main() {
       encode: _encode,
       clock: clock ?? () => _now,
     );
-    addTearDown(controller.dispose);
     return controller;
   }
 

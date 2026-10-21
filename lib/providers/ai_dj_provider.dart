@@ -75,7 +75,7 @@ class AiDjProvider extends ChangeNotifier {
       store: recommendationStore ?? AiRecommendationStore(),
       decode: _restoreBatch,
       encode: _toStored,
-    )..addListener(_onHistoryChanged);
+    );
   }
 
   final PlaybackProvider _playbackProvider;
@@ -102,9 +102,6 @@ class AiDjProvider extends ChangeNotifier {
 
   AiPreferences _preferences = AiPreferences.defaults;
   AiFeedbackMemory _feedback = AiFeedbackMemory.empty;
-
-  /// 当前推荐（发现页轮播 / AI 页列表）。
-  AiDjBatch? get _active => _history.active;
 
   AiDjStatus _status = AiDjStatus.off;
 
@@ -166,9 +163,9 @@ class AiDjProvider extends ChangeNotifier {
   AiFeedbackMemory get feedbackMemory => _feedback;
   List<String> get seeds => List.unmodifiable(_feedback.seeds);
   bool get preferencesOutdated =>
-      _active?.preferences != null &&
+      recommendations?.preferences != null &&
       !_preferences.copyWith(seeds: _feedback.seeds).sameGenerationInputs(
-            _active!.preferences,
+            recommendations!.preferences,
           );
 
   bool get autoFeedHalted => _autoFeedHalted;
@@ -435,7 +432,7 @@ class AiDjProvider extends ChangeNotifier {
   /// 不跨天自动换批（不静默消耗 token），失败后也不自动重试。
   Future<void> ensureRecommendations() async {
     if (!_enabled || !hasConfig || !_consentGranted) return;
-    if (_active != null) return;
+    if (recommendations != null) return;
     if (_lastError != null) return;
     await refreshRecommendations();
   }
@@ -449,13 +446,10 @@ class AiDjProvider extends ChangeNotifier {
   /// 「生成推荐 / 换一批」：新批成为 active，旧 active 留在历史。
   Future<void> refreshRecommendations() async {
     if (!hasConfig || _explicitBusy) return;
-    final batch = await _runExplicitGeneration(
+    await _runExplicitGeneration(
       origin: AiDjOrigin.refresh,
       count: _preferences.batchSize,
     );
-    if (batch != null) {
-      _notInterested.clear();
-    }
   }
 
   /// 取消显式生成：不写错误、不动列表；晚到结果按 epoch 丢弃。
@@ -472,10 +466,10 @@ class AiDjProvider extends ChangeNotifier {
   /// 开始推歌（电台）：用当前推荐替换当前队列并从 [fromIndex] 起播。
   Future<void> startRadio({int fromIndex = 0}) async {
     if (_explicitBusy) return;
-    if (_active == null) {
+    if (recommendations == null) {
       await ensureRecommendations();
     }
-    final batch = _active;
+    final batch = recommendations;
     if (batch == null || batch.items.isEmpty) return;
     final clamped = fromIndex.clamp(0, batch.items.length - 1).toInt();
     final uri = batch.items[clamped].track.id.uri;
@@ -516,7 +510,7 @@ class AiDjProvider extends ChangeNotifier {
 
   /// 「全部加入队列」：把当前推荐里还没入队的曲目追加到队尾（不打断播放）。
   Future<void> enqueueRecommendations() async {
-    final batch = _active;
+    final batch = recommendations;
     if (batch == null || batch.items.isEmpty || _explicitBusy) return;
     final missing = _missingFromQueue(batch.items);
     if (missing.isEmpty) return;
@@ -552,7 +546,7 @@ class AiDjProvider extends ChangeNotifier {
 
   /// 单曲「换一首」：重新生成一首替换当前推荐项；已在队列则原位跟随替换。
   Future<void> replaceRecommendation(int index) async {
-    final batch = _active;
+    final batch = recommendations;
     if (batch == null ||
         index < 0 ||
         index >= batch.items.length ||
@@ -582,7 +576,7 @@ class AiDjProvider extends ChangeNotifier {
           retryable: true,
         );
       }
-      final latest = _active;
+      final latest = recommendations;
       if (latest == null || latest.id != batch.id) return;
       final items = List<ResolvedRecommendation>.of(latest.items);
       if (index >= items.length) return;
@@ -607,7 +601,7 @@ class AiDjProvider extends ChangeNotifier {
 
   /// 未解析项「重新找一次」：只重新搜索，不重新调 LLM。
   Future<void> retryUnresolved() async {
-    final batch = _active;
+    final batch = recommendations;
     if (batch == null || batch.unresolved.isEmpty || _explicitBusy) return;
     final token = AiGenerationCancelToken();
     final epoch = ++_generationEpoch;
@@ -651,7 +645,7 @@ class AiDjProvider extends ChangeNotifier {
 
   /// 「不感兴趣」：从当前推荐移除 + 长期记忆（下一批不再推荐），可撤销。
   Future<void> markNotInterested(String uri) async {
-    final batch = _active;
+    final batch = recommendations;
     if (batch == null) return;
     final index = batch.items.indexWhere((item) => item.track.id.uri == uri);
     if (index < 0) return;
@@ -676,7 +670,7 @@ class AiDjProvider extends ChangeNotifier {
     final label = entry.item.source.label;
     _skippedLabels.remove(label);
     _feedback = _feedback.removeSkipped(label);
-    final batch = _active;
+    final batch = recommendations;
     if (batch != null) {
       final items = List<ResolvedRecommendation>.of(batch.items);
       items.insert(entry.index.clamp(0, items.length), entry.item);
@@ -721,8 +715,8 @@ class AiDjProvider extends ChangeNotifier {
     final batch = await loadHistoryBatch(id);
     if (batch == null || batch.items.isEmpty || _explicitBusy) return;
     _radioStoppedByUser = false;
+    _clearUndoStack();
     await _history.setActive(id);
-    _notInterested.clear();
     _explicitBusy = true;
     notifyListeners();
     try {
@@ -772,24 +766,29 @@ class AiDjProvider extends ChangeNotifier {
 
   /// 历史「设为当前」：只切换浏览列表，不动队列。
   Future<void> setActiveBatch(String id) async {
-    if (await _history.setActive(id)) _notInterested.clear();
+    if (await _history.load(id) == null) return;
+    _clearUndoStack();
+    if (await _history.setActive(id)) notifyListeners();
   }
 
   /// 历史「删除」：只删历史记录，不动正在播放的队列。
   Future<void> deleteHistoryBatch(String id) async {
-    final wasActive = _active?.id == id;
+    final wasActive = recommendations?.id == id;
     if (!await _history.delete(id)) {
       _logger.warning('AI 推歌：删除历史批次失败，保留内存状态');
       return;
     }
-    if (wasActive) _notInterested.clear();
+    if (wasActive) _clearUndoStack();
+    notifyListeners();
   }
 
   /// 清空历史：默认保留 active（只删记录之外的历史与批次键）。
   Future<void> clearHistory() async {
     if (!await _history.clear()) {
       _logger.warning('AI 推歌：清空历史失败，保留内存状态');
+      return;
     }
+    notifyListeners();
   }
 
   /// 按需加载历史详情（不切换 active）。
@@ -907,6 +906,7 @@ class AiDjProvider extends ChangeNotifier {
         _queuedCount += stamped.items.length;
       }
       await _history.archive(stamped, makeActive: makeActive);
+      if (makeActive) _clearUndoStack();
       _lastSentPrompt = stamped.prompt;
       _lastRawResponse = stamped.rawResponse;
       await _consumeSeeds();
@@ -1127,6 +1127,10 @@ class AiDjProvider extends ChangeNotifier {
     ];
   }
 
+  /// active 换批 / 删除后旧批的撤销项已无意义；先清空再通知，避免同步
+  /// 监听者看到上一批的撤销芯片。
+  void _clearUndoStack() => _notInterested.clear();
+
   void _resetRadioSession() {
     _skippedLabels.clear();
     _likedLabels.clear();
@@ -1231,9 +1235,6 @@ class AiDjProvider extends ChangeNotifier {
 
   bool _disposed = false;
 
-  /// 历史控制器是唯一通知源，这里只做一次转发。
-  void _onHistoryChanged() => notifyListeners();
-
   /// dispose 后不再发通知（未 await 的预取/补歌可能晚于 dispose）。
   @override
   void notifyListeners() {
@@ -1246,8 +1247,6 @@ class AiDjProvider extends ChangeNotifier {
     _disposed = true;
     _cancelToken?.cancel();
     _autoCancelToken?.cancel();
-    _history.removeListener(_onHistoryChanged);
-    _history.dispose();
     super.dispose();
   }
 }
