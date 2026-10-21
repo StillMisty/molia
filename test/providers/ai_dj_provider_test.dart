@@ -848,6 +848,19 @@ void main() {
     expect(backend.calls, isEmpty);
   });
 
+  test('历史切换只转发一次通知', () async {
+    await enableWithList();
+    final firstId = provider.activeBatchId!;
+    generator.batchFactory = () => _batch(10, 3);
+    await provider.refreshRecommendations();
+
+    var notifications = 0;
+    provider.addListener(() => notifications++);
+    await provider.setActiveBatch(firstId);
+
+    expect(notifications, 1);
+  });
+
   test('清空历史保留 active', () async {
     await enableWithList();
     final activeId = provider.activeBatchId!;
