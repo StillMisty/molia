@@ -22,14 +22,19 @@ import kotlin.math.max
  * 放在应用上下文即可：进程存活期间窗口不受 Activity 前后台影响。
  *
  * 坐标空间：`TYPE_APPLICATION_OVERLAY` 默认按 system bars / 刘海 insets 收边
- * （fitTypes），`LayoutParams.x/y` 是「安全区左上角」起的偏移，可用区因此必须
- * 按 [WindowManager.currentWindowMetrics] 减去同类 insets 计算——用 edge-to-edge
+ * （fitTypes），`LayoutParams.x` 从安全区左缘起算、`y` 从安全区**底缘**起算
+ * （[Gravity.BOTTOM]：正数向上偏移），可用区因此必须按
+ * [WindowManager.currentWindowMetrics] 减去同类 insets 计算——用 edge-to-edge
  * Activity 的 `resources.displayMetrics`（≈整屏）会多出状态栏高度，
  * 贴底摆放时窗口被导航栏裁掉。
  *
+ * 底缘对齐交给窗口重力（而不是「顶缘 + 布局后减高度」）：窗口高度要等首次
+ * 布局才有，靠布局回调补位置会让第一帧先画在下面、下一帧再跳上去（单行歌词
+ * 尤其明显）；[Gravity.BOTTOM] 让底缘从第一帧就固定，高度变化由系统向上生长。
+ *
  * 位置以比例持久化（[xFraction] 取左缘、[bottomFraction] 取底缘，理由见字段注释）；
- * 任何会让窗口尺寸或可用区变化的时刻（内容行数、控制条、旋转）都经
- * [anchorIntoArea] 重新落位并夹进可用区。
+ * 宽度 / 可用区变化（旋转、`widthPercent`）仍经 [anchorIntoArea] 重新落位并夹进
+ * 可用区；高度变化只需夹取，不需要搬动窗口。
  */
 internal class LyricsOverlayController(
     private val context: Context,
@@ -57,7 +62,7 @@ internal class LyricsOverlayController(
     /**
      * 纵向位置：窗口**底缘**在可用高中的比例。
      *
-     * 取底缘而非顶缘：窗口高度要等首次布局才有，底缘换算不需要高度；
+     * 取底缘而非顶缘：底缘由 [Gravity.BOTTOM] 直接锚定，窗口高度不参与定位；
      * 且歌词是贴底摆的「字幕」，高度变化（翻译行出现 / 行数调整 / 控制条
      * 弹出）时底缘固定、向上生长，不会被推出可用区；顶到屏幕上方则回夹在顶部。
      */
@@ -165,10 +170,11 @@ internal class LyricsOverlayController(
             baseFlags(config),
             PixelFormat.TRANSLUCENT,
         ).apply {
-            gravity = Gravity.TOP or Gravity.START
+            // 底缘锚定：y 是「可用区底缘到窗口底缘」的距离，与窗口高度无关，
+            // 首次 addView 的坐标就是最终位置（不需要布局回调再补一次）。
+            gravity = Gravity.BOTTOM or Gravity.START
             x = (xFraction * max(0, area.x - width)).toInt()
-            // 高度要等首次布局：先当 0 摆在底缘比例处，布局回调随即按真实高度上移。
-            y = (bottomFraction * area.y).toInt()
+            y = (area.y - bottomFraction * area.y).toInt()
         }
         layoutParams = params
 
@@ -197,7 +203,8 @@ internal class LyricsOverlayController(
      * 布局回调：只有窗口尺寸真的变了才重新落位。
      *
      * 纯移动（拖动）也会触发布局回调，不设防会把窗口拽回旧位置；
-     * 拖动中一律不动，高度变化（翻译行 / 行数 / 控制条）才落位。
+     * 拖动中一律不动。宽度变化要重算 x / 宽度；高度变化在底缘重力下
+     * 不需要搬窗口，只是把可能越过顶缘的位置夹回来。
      */
     private fun maybeAnchorIntoArea() {
         val current = view ?: return
@@ -210,8 +217,9 @@ internal class LyricsOverlayController(
      * 窗口尺寸 / 可用区变化后的唯一权威落点：重算宽度，按比例摆位，夹进可用区。
      *
      * 宽度 = `widthPercent × 可用宽`，旋转后必须跟着变；左缘 = 比例 × 横向可移动
-     * 范围、底缘 = 比例 × 可用高，两端不越界。窗口比可用区还高（极多行 + 大字号）
-     * 时只能贴顶，超出部分由系统裁切。
+     * 范围、底缘 = 比例 × 可用高，两端不越界。`y` 在 [Gravity.BOTTOM] 下是距
+     * 可用区底缘的偏移：0 = 贴底，上限 = 顶边贴可用区顶部。窗口比可用区还高
+     * （极多行 + 大字号）时上限为 0，超出顶部的部分由系统裁切。
      */
     private fun anchorIntoArea() {
         val current = view ?: return
@@ -222,7 +230,9 @@ internal class LyricsOverlayController(
         val width = windowWidthFor(config.widthPercent, area.x)
         val maxX = max(0, area.x - width)
         val x = (xFraction * maxX).toInt().coerceIn(0, maxX)
-        val y = ((bottomFraction * area.y).toInt() - current.height)
+        // 底缘位置换算成「距底缘偏移」后夹取：窗口高度只影响上限，
+        // 不参与底缘定位（高度变化时底缘保持不动）。
+        val y = (area.y - bottomFraction * area.y).toInt()
             .coerceIn(0, max(0, area.y - current.height))
         anchoredWidth = current.width
         anchoredHeight = current.height
@@ -238,12 +248,13 @@ internal class LyricsOverlayController(
 
     /** 拖动结束：把当前矩形换算成比例并持久化（原生直接保存，不经通道回传）。 */
     private fun onDragFinished() {
-        val current = view ?: return
+        if (view == null) return
         val params = layoutParams ?: return
         val area = safeSize()
         val maxX = max(0, area.x - params.width)
         xFraction = if (maxX == 0) DEFAULT_X else (params.x.toFloat() / maxX).coerceIn(0f, 1f)
-        bottomFraction = ((params.y + current.height).toFloat() / area.y).coerceIn(0f, 1f)
+        // params.y 是距可用区底缘的偏移，底缘 = 可用高 − y。
+        bottomFraction = ((area.y - params.y).toFloat() / area.y).coerceIn(0f, 1f)
         prefs.edit()
             .putFloat(KEY_X, xFraction)
             .putFloat(KEY_Y, bottomFraction)

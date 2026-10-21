@@ -83,12 +83,13 @@ Molia 当前只有在播放页内渲染的滚动歌词。桌面悬浮歌词、�
 
 - `TYPE_APPLICATION_OVERLAY` 悬浮窗；透明背景；不抢焦点（`NOT_FOCUSABLE` + `NOT_TOUCH_MODAL`）。
 - 拖动移动；位置以「可用区比例」持久化（左缘 = 横向可移动范围比例、底缘 = 可用高比例），
-  拖动结束由原生直接保存。任何让窗口尺寸或可用区变化的时刻（内容行数、控制条弹出、
-  旋转 / 字号、`widthPercent`）都按比例重新落位并夹进可用区。
+  拖动结束由原生直接保存。旋转 / 字号 / `widthPercent` / 可用区变化时按比例重新落位并
+  夹进可用区；内容高度变化（行数、翻译行、控制条弹出）由底缘重力向上生长，底边不动。
   可用区 = 显示屏尺寸减 system bars / 刘海 insets（`currentWindowMetrics` + insets）：
-  `TYPE_APPLICATION_OVERLAY` 默认按同类 insets 收边（fitTypes），`LayoutParams.x/y`
-  从安全区左上角起算；用 edge-to-edge Activity 的 `displayMetrics`（≈整屏）会多算
-  状态栏高度，贴底摆放时窗口被导航栏裁掉。
+  `TYPE_APPLICATION_OVERLAY` 默认按同类 insets 收边（fitTypes），`LayoutParams.x`
+  从安全区左缘起算、`y` 从安全区底缘起算（`Gravity.BOTTOM`，正数向上）；用
+  edge-to-edge Activity 的 `displayMetrics`（≈整屏）会多算状态栏高度，贴底摆放时
+  窗口被导航栏裁掉。
 - 锁定模式：窗口 `FLAG_NOT_TOUCHABLE`（点击穿透）；解锁才可拖动 / 点按；
   锁定态控制条强制收起（点击穿透下按钮既不可点也不应可见）。
 - 点按弹出控制条（各项可配置显隐）：上一首、播放/暂停、下一首、翻译开关、锁定、关闭。
@@ -300,9 +301,12 @@ abstract class LyricsOutput {
   `MainActivity.kt` 注册通道与 `onResume` 权限回读。
 - 位置持久化：原生 `SharedPreferences`（左缘 = 横向可移动范围比例、底缘 = 可用高比例；
   键名 `x_fraction` / `bottom_fraction`）；拖动结束由原生直接保存。
-- 重新落位：内容尺寸变化、控制条弹出、旋转 / 字号变化都走布局回调与
+- 重新落位：旋转 / 字号 / 可用区 / 宽度变化走布局回调与
   `ComponentCallbacks.onConfigurationChanged`，按比例落位并夹进可用区；
-  底缘固定、向上生长（歌词是贴底字幕，不被导航栏裁掉，顶到屏幕上方回夹顶部）。
+  纵向用 `Gravity.BOTTOM` 锚定底缘（`y` = 距可用区底缘的偏移），窗口高度不参与
+  定位——首帧就是最终位置，内容变高时向上生长（歌词是贴底字幕，不被导航栏裁掉，
+  顶到屏幕上方回夹顶部）。**不要**改成 `Gravity.TOP` + 布局回调按高度补 `y`：
+  首帧会先画在下面、下一帧再跳上去（单行歌词最明显）。
 - 字体：行文本跟随设置页「应用字体」（config 的 `fontFamily` → `Typeface.create`，
   解析不到回退系统默认；`null` = 不覆盖）。字体变化随主题通道重下发配置，
   配置变化按全量重建生效——滚动行宽 / 逐字边界都在重建时用新字形度量重算。

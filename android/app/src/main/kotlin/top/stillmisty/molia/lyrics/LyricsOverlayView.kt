@@ -1157,7 +1157,9 @@ internal class LyricsOverlayView(
                     val area = areaSize()
                     layoutParams.x = (startTouchX + dx.toInt())
                         .coerceIn(0, max(0, area.x - width))
-                    layoutParams.y = (startTouchY + dy.toInt())
+                    // 窗口用 Gravity.BOTTOM：y 是「可用区底缘到窗口底缘」的偏移，
+                    // 向上拖（dy < 0）要让 y 变大，符号与顶缘定位相反。
+                    layoutParams.y = (startTouchY - dy.toInt())
                         .coerceIn(0, max(0, area.y - height))
                     windowManager.updateViewLayout(this, layoutParams)
                 }
