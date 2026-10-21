@@ -171,12 +171,11 @@ class LocalAudioHandler {
   final Future<void> Function()? _onRestoredSkipToNext;
   final Future<void> Function()? _onRestoredSkipToPrevious;
 
-  /// 正常进度推进时是否周期补发播放态（Android 关闭）。
+  /// 正常进度推进时是否周期补发播放态（Android 关闭，其余平台开启）。
   ///
   /// Android 的 `flutter_media_session` 按 `lastPositionMs + elapsed × speed`
   /// 自行插值，每秒一次 state 更新只是多余 IPC；Linux MPRIS 的 `GetPosition`
-  /// 不插值，iOS / macOS / Windows 保持现状，故只对 Android 关闭。
-  /// 可注入：单测不依赖 `debugDefaultTargetPlatformOverride`。
+  /// 不插值，需要周期更新。可注入：常规用例可显式注入，平台默认值另有用例覆盖。
   final bool _periodicPositionStateUpdates;
 
   /// 会话落盘入口（组合根在 handler 建好后回填

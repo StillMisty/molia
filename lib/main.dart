@@ -245,21 +245,20 @@ void main() async {
   // 「安装未知应用」系统授权页返回后要把按钮从「去授权」切回「立即安装」；
   // 退后台 / 锁屏：同步调度器取消全部定时器并尽力推一次。
   // 移动端前后台同时喂 `PlaybackPowerPolicy`（桌面不接：托盘 / 最小化另有
-  // `AppPresence`，且桌面播放保持前台节拍）。
+  // `AppPresence`，且桌面播放保持前台节拍）；`onPause` / `onHide` 是同一动作。
+  void onMobileBackground() {
+    if (mobilePowerPolicy) powerPolicy.markBackground();
+    sync.provider.onAppHidden();
+  }
+
   AppLifecycleListener(
     onResume: () {
       if (mobilePowerPolicy) powerPolicy.markForeground();
       unawaited(sync.provider.onAppResumed());
       unawaited(update.provider.handleAppResumed());
     },
-    onPause: () {
-      if (mobilePowerPolicy) powerPolicy.markBackground();
-      sync.provider.onAppHidden();
-    },
-    onHide: () {
-      if (mobilePowerPolicy) powerPolicy.markBackground();
-      sync.provider.onAppHidden();
-    },
+    onPause: onMobileBackground,
+    onHide: onMobileBackground,
   );
 
   runApp(

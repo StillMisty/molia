@@ -94,9 +94,9 @@
   播放会话模块是**恢复态 ↔ live 的唯一交接点与 `PlaybackSessionStore` 的唯一
   写者**：三阶段状态机 `idle / restored / live`，命令按阶段路由（provider 不再
   分叉，只按路由结果决定通知类别）；恢复态快照与进度覆盖值在这里构造；落盘
-  口径（整份 / 轻量进度键 1s 节流 / 满 1min 整份刷新 / `clear` / 可 await 的
-  `flushSession`）随 `pendingWrite` 串行化收在一处。系统媒体控制与恢复态切歌键
-  由组合根接到会话模块（不再直连 provider）。跨设备同步只经
+  口径（整份 / 轻量进度键前台 1s / 后台 15s 节流 / 满 1min 整份刷新 / `clear` /
+  可 await 的 `flushSession`）随 `pendingWrite` 串行化收在一处。系统媒体控制与
+  恢复态切歌键由组合根接到会话模块（不再直连 provider）。跨设备同步只经
   `PlaybackSessionSyncPort`（`lib/domain/ports/playback_session_sync.dart` 的
   `loadRaw` / `applyRemote` / `clearRemote`）认识会话，唯一实现是协调者：远端
   应用 / 删除与本地保存 / 清除共用同一个 `PlaybackSessionStore` 与同一条

@@ -130,8 +130,8 @@ class LocalPlaybackService extends ChangeNotifier {
   int _playRequestId = 0;
 
   /// 显式位置跳转版本号：用户 seek 与内部回跳（单曲循环 / 无下一首归零）
-  /// 都自增。系统媒体会话据此区分「正常进度推进」与「真实跳转」——Android
-  /// 不再按位置差补发周期 state（平台自身插值），只认这个版本号。
+  /// 都自增。系统媒体会话据此区分「正常进度推进」与「真实跳转」并补发
+  /// 播放态（平台间的进度判定口径见 `LocalAudioHandler`）。
   int _seekRevision = 0;
   int get seekRevision => _seekRevision;
 
@@ -178,6 +178,14 @@ class LocalPlaybackService extends ChangeNotifier {
         keepHighFrequency: _powerPolicy.keepHighFrequencyPosition,
         playing: _player.playing,
       );
+
+  /// 位置流订阅是否活跃（测试观察用）。
+  @visibleForTesting
+  bool get positionStreamActive => _positionSubscription != null;
+
+  /// 后台 1s 采样 Timer 是否活跃（测试观察用）。
+  @visibleForTesting
+  bool get positionSampleTimerActive => _positionSampleTimer != null;
 
   /// 按功耗策略 / 播放态选择位置采样方式。
   ///
@@ -739,12 +747,6 @@ class LocalPlaybackService extends ChangeNotifier {
   void _onPlayerState(PlayerState state) {
     _isPlaying =
         state.playing && state.processingState != ProcessingState.completed;
-    // 停采样前对齐一次真实位置：后台 1s 轮询刚取消时 `_position` 可能比
-    // 实际暂停点落后最多 1s，通知栏 / 落盘会记错暂停进度。
-    if (!_isPlaying) {
-      final pausedAt = _player.position;
-      if (pausedAt > _position) _position = pausedAt;
-    }
     // 播放态变化可能改变采样档位（后台暂停 → 停采样；后台续播 → 1s Timer；
     // 前台始终高频流，这里是无操作）。
     _syncPositionSampling();

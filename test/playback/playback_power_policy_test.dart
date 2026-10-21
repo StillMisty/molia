@@ -119,17 +119,25 @@ void main() {
       addTearDown(service.dispose);
 
       expect(service.positionSamplingMode, PositionSamplingMode.highFrequency);
+      expect(service.positionStreamActive, isTrue);
+      expect(service.positionSampleTimerActive, isFalse);
 
       // 测试环境没有真实播放（playing=false）：后台即「不采样」。
       policy.markBackground();
       expect(service.positionSamplingMode, PositionSamplingMode.none);
+      expect(service.positionStreamActive, isFalse);
+      expect(service.positionSampleTimerActive, isFalse);
 
       // 后台开桌面歌词：回到高频。
       policy.setDesktopLyricsActive(true);
       expect(service.positionSamplingMode, PositionSamplingMode.highFrequency);
+      expect(service.positionStreamActive, isTrue);
+      expect(service.positionSampleTimerActive, isFalse);
 
       policy.markForeground();
       expect(service.positionSamplingMode, PositionSamplingMode.highFrequency);
+      expect(service.positionStreamActive, isTrue);
+      expect(service.positionSampleTimerActive, isFalse);
     });
   });
 }

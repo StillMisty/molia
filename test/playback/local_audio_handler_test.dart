@@ -378,8 +378,8 @@ void main() {
     test('位置 tick 只更新状态，不重发元数据（非 Android 平台）', () async {
       final service = _FakeService()..trackValue = _track();
       addTearDown(service.dispose);
-      // Linux / iOS / macOS / Windows 保留周期 state 判定（Android 见下方
-      // 「媒体会话更新节流」组）；测试环境 defaultTargetPlatform 默认 android。
+      // Linux MPRIS 的 GetPosition 不插值，非 Android 平台保留按位置差的
+      // 周期 state 判定；Android 关闭（见下方「媒体会话更新节流」组）。
       final (_, backend) = await _handler(
         service,
         periodicPositionStateUpdates: true,
@@ -459,22 +459,6 @@ void main() {
 
       expect(backend.stateUpdates.length, stateCount + 1);
       expect(backend.lastState?.position, const Duration(seconds: 42));
-    });
-
-    test('非 Android 保留进度差 >1s 的周期判定（Linux MPRIS）', () async {
-      final service = _FakeService()..trackValue = _track();
-      addTearDown(service.dispose);
-      final (_, backend) = await _handler(
-        service,
-        periodicPositionStateUpdates: true,
-      );
-      final stateCount = backend.stateUpdates.length;
-
-      service.emitPosition(const Duration(seconds: 2));
-      await pumpEventQueue();
-
-      expect(backend.stateUpdates.length, stateCount + 1);
-      expect(backend.lastState?.position, const Duration(seconds: 2));
     });
 
     test('平台默认：Android 关闭周期 state，Linux 保留', () async {
