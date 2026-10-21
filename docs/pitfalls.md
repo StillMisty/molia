@@ -615,3 +615,7 @@
     `DwmSetWindowAttribute` 会返回 `E_ACCESSDENIED`。改 `show()` 顺序前先看
     `lib/services/window/window_chrome_io.dart` 与
     `windows/runner/flutter_window.cpp`。
+    **启动首帧绝不能走这条**：Windows runner 在 `OnCreate` 已经挂了 next-frame
+    `Show`；Dart 首帧回调再调 `showAfterFirstFrame` 会覆盖它，beta.15 实测首帧后
+    崩在 ucrtbase 0xc0000409。现在只有 `AppPresence.isTrayHidden`（真正的托盘恢复）
+    才走 cloak / 透明度；启动 reveal 继续用 `windowManager.show()`。
