@@ -68,6 +68,17 @@ class SyncEngine extends ChangeNotifier implements SyncSchedulerHost {
       _incomingSubscriptions.add(entry.value.incoming.listen(
         (envelope) => unawaited(onIncomingEnvelope(envelope)),
       ));
+      // 发现事件是可选能力（WebDAV 没有）：只订阅实现了窄接口的传输。
+      final transport = entry.value;
+      if (transport is SyncSightingSource) {
+        final source = transport as SyncSightingSource;
+        _sightingSubscriptions.add(source.sightings.listen(
+          _onPeerSighting,
+          onError: (Object error) {
+            _logger.fine(() => '对端公告流错误: $error');
+          },
+        ));
+      }
     }
   }
 
@@ -103,7 +114,15 @@ class SyncEngine extends ChangeNotifier implements SyncSchedulerHost {
   final DateTime Function() _clock;
   final List<SyncEnvelope> _inbound = [];
   final List<StreamSubscription<SyncEnvelope>> _incomingSubscriptions = [];
+  final List<StreamSubscription<LanPeerSighting>> _sightingSubscriptions = [];
   final Logger _logger = Logger('molia.sync');
+
+  /// 对端公告过滤状态（不写进名册：公告观测不该刷新 `lastSeenAt`）。
+  final Map<String, _PeerSightingState> _sightingState = {};
+
+  /// 过滤后的「值得跑一轮」事件流（调度器订阅后去抖 + 冷却）。
+  final StreamController<void> _peerSightings =
+      StreamController<void>.broadcast();
 
   /// 登记的内存视图（首次使用时加载一次，之后只写变化项）。
   Map<SyncKnownKey, SyncVersion>? _knownVersions;
@@ -239,6 +258,15 @@ class SyncEngine extends ChangeNotifier implements SyncSchedulerHost {
   Future<void> init() async {
     if (_initialized) return;
     await _state.init();
+    if (_state.freshInstall) {
+      // 首次使用新命名空间 = 全新安装：日志与已知版本登记都是可再生的派生
+      // 状态，旧命名空间留下的行无法解释（seq / 版本语义已断代），必须清空。
+      // 用户数据表与墓碑不在此列；标记在两者都成功后落盘，失败下次启动重试。
+      await _journal?.reset();
+      await _known.reset();
+      _knownVersions = null;
+      await _state.markFreshHandled();
+    }
     _initialized = true;
     notifyListeners();
   }
@@ -251,7 +279,82 @@ class SyncEngine extends ChangeNotifier implements SyncSchedulerHost {
     if (deviceId.isEmpty) return;
     _peersById.remove(deviceId);
     _peersFailedThisRound.remove(deviceId);
+    _sightingState.remove(deviceId);
   }
+
+  /// 公告「无变化」的去重窗口：同一设备 2 分钟内重复公告不触发轮次。
+  static const int peerSightingWindowMs = 2 * 60 * 1000;
+
+  /// 公告过滤状态上限（公共网络里 deviceId 可以无限多，状态必须有界）。
+  static const int maxSightingPeers = 64;
+
+  /// 当前公告过滤状态条数（测试 / 诊断用；上限 [maxSightingPeers]）。
+  int get sightingStateCount => _sightingState.length;
+
+  /// 过滤认证通过的对端公告：只有真的值得跑一轮时才通知调度器。
+  ///
+  /// 触发条件：新设备 / bootId 变化（对端重启）/ snapshotId 与本机名册不同 /
+  /// head 前进且仍高于本机游标。同一设备 2 分钟内没有变化（且未落后）不触发。
+  /// 观测状态独立保存，**不写名册的 lastSeenAt**：公告只说明对端在线，
+  /// 真正接触成功由一轮的结果更新名册。
+  void _onPeerSighting(LanPeerSighting sighting) {
+    final id = sighting.deviceId;
+    if (id.isEmpty || id == _state.deviceId) return;
+    final now = _nowMs();
+    final prev = _sightingState[id];
+    final roster = _peerOf(id);
+    final head = sighting.journalHead;
+    final bootChanged = prev != null &&
+        sighting.bootId.isNotEmpty &&
+        sighting.bootId != prev.bootId;
+    final previousSnapshot = prev?.snapshotId ?? roster.snapshotId;
+    final snapshotChanged = sighting.snapshotId.isNotEmpty &&
+        sighting.snapshotId != previousSnapshot;
+    final headAdvanced =
+        head != null && (prev?.head == null || head > prev!.head!);
+    final behind = head != null && head > roster.cursorSeq;
+    var notify = prev == null ||
+        bootChanged ||
+        snapshotChanged ||
+        (behind && headAdvanced);
+    if (!notify &&
+        behind &&
+        now - prev.lastTriggeredAt >= peerSightingWindowMs) {
+      // 仍落后且 2 分钟没有变化：允许再唤醒一次（上一轮失败 / 对端还在
+      // 推进时不必等到空闲退避）。
+      notify = true;
+    }
+    _sightingState[id] = _PeerSightingState(
+      lastSightingAt: now,
+      lastTriggeredAt: notify ? now : (prev?.lastTriggeredAt ?? 0),
+      bootId: sighting.bootId,
+      head: head,
+      snapshotId: sighting.snapshotId.isNotEmpty
+          ? sighting.snapshotId
+          : (prev?.snapshotId ?? ''),
+    );
+    _trimSightingState();
+    if (notify && !_peerSightings.isClosed) _peerSightings.add(null);
+  }
+
+  /// 超过 [maxSightingPeers] 时淘汰最久没再公告的设备。
+  void _trimSightingState() {
+    while (_sightingState.length > maxSightingPeers) {
+      String? oldestId;
+      var oldestAt = 1 << 62;
+      for (final entry in _sightingState.entries) {
+        if (entry.value.lastSightingAt < oldestAt) {
+          oldestAt = entry.value.lastSightingAt;
+          oldestId = entry.key;
+        }
+      }
+      if (oldestId == null) return;
+      _sightingState.remove(oldestId);
+    }
+  }
+
+  /// 过滤后的对端公告事件（调度器订阅后去抖 + 冷却）。
+  Stream<void> get peerSightings => _peerSightings.stream;
 
   /// 对端主动推送的快照：在合流窗口内合并成一轮。
   ///
@@ -343,8 +446,24 @@ class SyncEngine extends ChangeNotifier implements SyncSchedulerHost {
       antiEntropy: antiEntropy,
       onlyCategories: onlyCategories,
     );
-    // 入站轮 / 未设置口令等中止轮不外发：待发标记保留给下一轮。
-    if (report == null || !push) return SyncRunOutcome.none;
+    // 未初始化 / 同步关闭：本轮没有真正跑，按「不接触」之外的默认处理
+    // （不触发重连阶梯——没有口令 / 传输关闭不是网络问题）。
+    if (report == null) return SyncRunOutcome.none;
+    // 「零对端」用探测计数判定（noPeers 与「接触过但没变化」必须分开）。
+    final contacted = report.peersSeen > 0;
+    final contactedLan = report.transports.any(
+      (item) => item.kind == SyncTransportKind.lan && item.peersSeen > 0,
+    );
+    // 入站轮 / 只拉不推的轮次同样要回传接触信息：resume 轮没有本地变更时
+    // 不推送，但仍决定是否 arm 重连阶梯。
+    if (!push) {
+      return SyncRunOutcome(
+        categories: const {},
+        delivered: false,
+        contacted: contacted,
+        contactedLan: contactedLan,
+      );
+    }
     final enabled = _state.enabledCategories;
     final categories =
         onlyCategories == null ? enabled : onlyCategories.intersection(enabled);
@@ -352,6 +471,8 @@ class SyncEngine extends ChangeNotifier implements SyncSchedulerHost {
       categories: categories,
       delivered:
           report.outcome != SyncOutcome.failed && report.failedCount == 0,
+      contacted: contacted,
+      contactedLan: contactedLan,
     );
   }
 
@@ -437,6 +558,12 @@ class SyncEngine extends ChangeNotifier implements SyncSchedulerHost {
       final forcedDelivery = <SyncKnownKey>{};
       // 入站轮只消费收到的快照：不主动拉取任何对端。
       final inboundOnly = trigger == SyncTrigger.incoming;
+      // 强制发现：启动 / 回前台 / 换网 / 手动轮要广播 + 组播 + 单播；
+      // 其余轮次只对已有候选单播（空闲轮 0 广播）。
+      final forceDiscovery = trigger == SyncTrigger.manual ||
+          trigger == SyncTrigger.startup ||
+          trigger == SyncTrigger.resume ||
+          trigger == SyncTrigger.network;
       var pullContact = false;
 
       // anti-entropy：对端内容指纹与本机不一致、且本机没有它的新条目时，
@@ -447,7 +574,11 @@ class SyncEngine extends ChangeNotifier implements SyncSchedulerHost {
       if (!inboundOnly) {
         pullContact = await _pullInto(
           accumulators,
-          SyncPullRequest(cursors: _cursors(), fullPeers: fullFor),
+          SyncPullRequest(
+            cursors: _cursors(),
+            fullPeers: fullFor,
+            forceDiscovery: forceDiscovery,
+          ),
           pulledEntries,
         );
       }
@@ -703,6 +834,21 @@ class SyncEngine extends ChangeNotifier implements SyncSchedulerHost {
             await ledger.mark(result);
             _recordPushPeers(result, entry.key);
           }
+        }
+      }
+
+      // 本地变更但本轮 LAN 推送零对端：单次定向公告，唤醒对端来拉（只单播，
+      // 不广播）。失败只记日志：公告是「加速」而不是正确性前提。
+      if (push &&
+          localChanged &&
+          _state.enabledTransports.contains(SyncTransportKind.lan) &&
+          (accumulators[SyncTransportKind.lan]?.pushed ?? 0) == 0) {
+        final lan = _transports[SyncTransportKind.lan];
+        if (lan is SyncLanLifecycle) {
+          final lifecycle = lan as SyncLanLifecycle;
+          unawaited(lifecycle.announceLocalChange().catchError((Object error) {
+            _logger.fine(() => '本地变更公告失败: $error');
+          }));
         }
       }
 
@@ -1392,10 +1538,32 @@ class SyncEngine extends ChangeNotifier implements SyncSchedulerHost {
     for (final subscription in _incomingSubscriptions) {
       unawaited(subscription.cancel());
     }
+    for (final subscription in _sightingSubscriptions) {
+      unawaited(subscription.cancel());
+    }
+    unawaited(_peerSightings.close());
     unawaited(_peerConnected.close());
     unawaited(_stopTransports());
     super.dispose();
   }
+}
+
+/// 每台对端的公告观测（独立于名册：公告不刷新 `lastSeenAt`）。
+class _PeerSightingState {
+  const _PeerSightingState({
+    required this.lastSightingAt,
+    required this.lastTriggeredAt,
+    required this.bootId,
+    required this.head,
+    required this.snapshotId,
+  });
+
+  /// 最近一次收到公告的时间（只用于有界淘汰；触发判据见 `_onPeerSighting`）。
+  final int lastSightingAt;
+  final int lastTriggeredAt;
+  final String bootId;
+  final int? head;
+  final String snapshotId;
 }
 
 /// 一轮内可变的传输累计器（构造报告时转成不可变的 [SyncTransportReport]）。

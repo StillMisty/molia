@@ -106,6 +106,39 @@ class SyncControlPlane extends ChangeNotifier {
     await _ensureTransportsRunning();
   }
 
+  /// 回前台：通知已启用的局域网传输（隐藏过久时重绑 UDP / 探活 HTTP）。
+  ///
+  /// 只对实现了 [SyncLanLifecycle] 的传输调用；WebDAV 没有生命周期动作。
+  /// 失败只记日志：回前台不能因为发现层异常打断调度器拉一轮。
+  Future<void> onAppResumed() async {
+    for (final entry in _transports.entries) {
+      if (!_state.enabledTransports.contains(entry.key)) continue;
+      final transport = entry.value;
+      if (transport is! SyncLanLifecycle) continue;
+      final lifecycle = transport as SyncLanLifecycle;
+      try {
+        await lifecycle.onAppResumed();
+      } catch (e) {
+        _logger.warning('回前台：传输 ${entry.key} 恢复失败', e);
+      }
+    }
+  }
+
+  /// 退后台：通知已启用的局域网传输取消公告 / 重连计时器。
+  void onAppHidden() {
+    for (final entry in _transports.entries) {
+      if (!_state.enabledTransports.contains(entry.key)) continue;
+      final transport = entry.value;
+      if (transport is! SyncLanLifecycle) continue;
+      final lifecycle = transport as SyncLanLifecycle;
+      try {
+        lifecycle.onAppHidden();
+      } catch (e) {
+        _logger.warning('退后台：传输 ${entry.key} 暂停失败', e);
+      }
+    }
+  }
+
   // ---- 设置写入（改状态 + 通知 UI；传输开关额外负责起停） ----
 
   Future<void> setCategory(SyncCategory category, bool value) async {

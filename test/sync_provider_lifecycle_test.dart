@@ -1,0 +1,94 @@
+import 'dart:async';
+
+import 'package:flutter_test/flutter_test.dart';
+import 'package:molia/data/sync/sync_backup.dart';
+import 'package:molia/data/sync/sync_control_plane.dart';
+import 'package:molia/data/sync/sync_engine.dart';
+import 'package:molia/data/sync/sync_scheduler.dart';
+import 'package:molia/data/sync/sync_state_store.dart';
+import 'package:molia/domain/ports/sync_transport.dart';
+import 'package:molia/providers/sync_provider.dart';
+import 'package:molia/services/battery_probe.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+
+import 'support/sync_test_support.dart';
+
+/// 应用生命周期接线：退后台必须先让传输停止发现，再跑 pause 轮。
+void main() {
+  TestWidgetsFlutterBinding.ensureInitialized();
+
+  test('退后台：先隐藏传输，pause 轮不再广播（只走已知端点 HTTP）', () async {
+    SharedPreferences.setMockInitialValues({});
+    final prefs = await SharedPreferences.getInstance();
+    final state = SyncStateStore(
+      preferences: prefs,
+      secrets: MemorySyncSecretStore(),
+      deviceId: 'devA',
+    );
+    await state.init();
+    await state.writePassphrase('ABCD-EFGH-JKLM-NPQR-STUV-WXYZ-2345-6789');
+    await state.setTransportEnabled(SyncTransportKind.lan, true);
+
+    final transport = _OrderTransport();
+    await transport.start();
+    final engine = SyncEngine(
+      state: state,
+      stamps: state.stampIssuer,
+      adapters: const [],
+      transports: {SyncTransportKind.lan: transport},
+    );
+    await engine.init();
+    final control = SyncControlPlane(
+      state: state,
+      transports: {SyncTransportKind.lan: transport},
+    );
+    final backup = SyncBackup(
+      state: state,
+      adapters: const [],
+      stamps: state.stampIssuer,
+      collect: engine.collectRecords,
+    );
+    final scheduler = SyncScheduler(
+      host: engine,
+      state: state,
+      cellularProbe: () async => false,
+      batteryProbe: () async => BatterySnapshot.unknown,
+    );
+    final provider = SyncProvider(
+      engine: engine,
+      controlPlane: control,
+      backup: backup,
+      scheduler: scheduler,
+    );
+    addTearDown(engine.dispose);
+    addTearDown(control.dispose);
+    addTearDown(provider.dispose);
+
+    // 有本地变更才会在退后台时跑 pause 轮。
+    provider.notifyLocalChange();
+    provider.onAppHidden();
+
+    await transport.pulled.future.timeout(const Duration(seconds: 2));
+    expect(transport.hiddenCalls, 1);
+    expect(
+      transport.hiddenAtPull,
+      1,
+      reason: 'pause 轮开始时传输已进入后台：该轮不得广播',
+    );
+  });
+}
+
+/// 记录 pull 时传输是否已经被隐藏的假传输。
+class _OrderTransport extends FakeSightingTransport {
+  final Completer<void> pulled = Completer<void>();
+  int hiddenAtPull = -1;
+
+  @override
+  Future<SyncPullResult> pull([
+    SyncPullRequest request = SyncPullRequest.none,
+  ]) {
+    hiddenAtPull = hiddenCalls;
+    if (!pulled.isCompleted) pulled.complete();
+    return super.pull(request);
+  }
+}

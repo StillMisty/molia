@@ -5,6 +5,10 @@
 - 相关：`lib/domain/models/device_sync.dart`、`lib/domain/ports/sync_transport.dart`、
   `lib/data/sync/**`、`lib/providers/sync_provider.dart`、`lib/pages/sync_settings_page.dart`
 
+> **2026-10-21 起**：状态键 / 配对码 / 局域网发现与 HTTP 路径 / WebDAV 命名已
+> 硬断代，现行口径见文末「v3 修订」；前文中的 `*_v1`、`molia-pair:1:`
+> 与 `/molia-sync/v1/*` 只作历史记录，不代表当前实现。
+
 ## 背景
 
 用户要求把「各个平台」的数据在多设备间同步：**歌单与收藏、音源（LX 脚本与配置）、
@@ -384,3 +388,169 @@
   超限设备收到的是全量快照而不是增量，代价可接受（个人设备场景）；
 - 失联设备（180 天无接触）在名册标记，处置动作由用户显式选择（从本机移除 /
   清理远端文件），本机不自动删除任何远端内容。
+
+---
+
+## v3 修订（2026-10-21）：发现 D1 硬断代 + 事件驱动重连
+
+> 本节取代前文与「局域网探测 / 旧状态迁移 / 协议兼容」相关的口径；更早的文本
+> 保留作历史记录。载荷帧 `MSY/3` 的结构不变，变的是发现、命名空间与触发链。
+
+### 1. 前提：内部迭代期不做兼容
+
+项目仍处于内部快速迭代，**显式不兼容任何历史数据与协议**：旧 JSON 探测包、
+旧状态 / 旧口令、旧配对码、旧局域网 HTTP 路径、旧 WebDAV 文件一律当从未存在，
+不写迁移、识别或双协议分支。代价（升级后要重新开启同步并配对、首轮全量
+bootstrap）小于维护两套协议的成本，也避免「旧数据被误当成新协议」的静默错乱。
+
+### 2. 命名空间切割
+
+| 层 | 旧（作废） | 新 |
+|---|---|---|
+| 同步状态 | `sync_state_v1` | `sync_state_v2` |
+| 设备身份 | `sync_device_id_v1` | `sync_device_id_v2` |
+| 同步口令 | `sync_passphrase_v1` | `sync_passphrase_v2` |
+| WebDAV 密码 | `sync_webdav_password_v1` | `sync_webdav_password_v2` |
+| 局域网发现 | JSON `molia-sync.probe` | 二进制 `MSD` + version 1 + HMAC |
+| 局域网 HTTP | `/molia-sync/v1/*` | `/molia-sync/v2/*` |
+| WebDAV 文件 | `<deviceId>*.msync` | `<deviceId>.p2.*.msync` |
+| 配对码 | `molia-pair:1:` | `molia-pair:2:` |
+| 载荷帧 | `MSY`/3 | `MSY`/3 不变 |
+
+- 新 key 缺失 = 全新安装行为：新设备 id、新口令、传输开关关闭；旧 key
+  不读、不删、不迁移。
+- 首次使用新 key 初始化（`sync_state_v2` 缺失或持久标记
+  `sync_derived_reset_v2` 未置位）时清空派生状态：`sync_journal` /
+  `sync_journal_state` / `sync_known`。只有 journal 与 known 都 reset 成功
+  才写持久标记，进程中途被杀会在下次启动重试。
+- **不动**用户数据：`playlists` / `playlist_tracks` / `play_history` /
+  `play_events` / `sync_tombstones` 与版本三列都保留；派生状态只是索引。
+- 旧配对码 `molia-pair:1:` 解析失败（按无效码处理）；旧 HTTP 路径 404；
+  旧 WebDAV 文件名不被 `PeerJournalNames.parse` 识别（幽灵文件，不读不删）。
+
+### 3. 发现协议 `MSD/1`
+
+```
+magic(3)='MSD' | version(1)=1 | type(1) | mac(16) | bodyLen(2, big-endian) | body(UTF-8 JSON, ≤1024B)
+type: 1=announce, 2=ack
+```
+
+body：`id` / `name` / `http` / `probe` / `addrs` / `snap` / `head` / `cats` /
+`nonce` / `boot`（`name` ≤64 码点、`addrs` ≤8 条；超限按地址 → 分类 →
+指纹 → 名称逐级截断，保证单包不触发 IP 分片）。
+
+- `mac = HMAC-SHA256(discoveryKey, header_without_mac + body)[0..16]`；长度字段
+  参与认证，篡改 bodyLen 直接失败。
+- `discoveryKey = HKDF(PBKDF2(口令), info='molia-sync-discovery-v1', 32B)`：
+  与载荷帧密钥分离，绝不复用帧的 (key, nonce) 空间；根密钥复用 `SyncCodec`
+  的会话缓存，因此每包验 MAC 不需要重复 PBKDF2。
+- **认证顺序是硬约束**：先按来源 IP 限流 → 验 MAC → 再解析 JSON。任何失败
+  （magic / 版本 / 类型 / 长度 / MAC / JSON / 字段）一律返回 null，调用方
+  按未知字节静默丢弃；旧 JSON 包首字节是 `{`，连日志都不记。
+- 重放抑制：同一 burst 复用 nonce，接收端按 `(deviceId, nonce)` 30 秒去重；
+  广播 + 组播重复到达只产生一次 sighting。
+- `boot` 每次进程启动随机生成：对端重启后即使 `head` 未变也视为重新上线。
+- 入站限流：每来源 20 包/10s、全局 100 包/10s；来源记账表有界（64 个来源，
+  淘汰最久未活动的）。presence 上限 32 台，超出淘汰最久没听到的。
+- announce 发送目标：v4 广播 `255.255.255.255` + v4 组播 `224.0.0.169` +
+  v6 组播 `ff02::4d4f:4c49` + ≤8 个已知端点单播；`ack` 只向来源地址 / 端口
+  单播。公告 burst 在启动 / 回前台 / 换网时按 `100 / 500 / 2000ms` 发三次；
+  本地变更但本轮零推送时单次定向公告；其余时间不公告、不心跳。
+
+### 4. UDP 只发现，HTTP 是数据与存活通道
+
+- UDP 公告只携带身份、端点端口、`snap` / `head` / 类别与在线信号，**不传
+  同步数据**。数据只走每设备内置 HTTP：`GET/POST /molia-sync/v2/journal`
+  （增量窗口，游标落后回全量）与 `GET/POST /molia-sync/v2/snapshot`（全量
+  快照 / bootstrap）。HTTP 层不做额外鉴权：载荷是密文，能通过 MAC + 解密
+  的设备即已授权。
+- 「收到公告」不等于「HTTP 可用」：公告只让本机把该设备列入候选，真正可达
+  以 HTTP 请求 + 解密成功为准；反过来 UDP 绑定失败只降级发现，已知端点 /
+  手动地址的 HTTP 直连照常（`probe_port_unavailable`，不是 `start_failed`）。
+- 候选 = 手动地址簿 + 本轮 presence + `lanEndpoints`；正常轮只对候选做
+  ≤8 个单播并等 400ms，全部 HTTP 失败才补一次广播（800ms），不无限重试。
+  单对端最多试 3 个地址、总预算 4s。
+
+### 5. 事件驱动重连链
+
+- **换网**：`connectivity_plus` 原始事件 → `DataSaverService.networkEvents`
+  → `SyncScheduler.onNetworkChanged()`：`refreshEnvironment` → 空闲退避重置
+  → 1.5s 去抖 → `SyncTrigger.network`（强制广播发现）。蜂窝 / 后台 / 省电
+  不排轮次。发现层收到 connectivity 事件**无条件重绑 UDP**（Wi-Fi 重连可能
+  IP 不变但旧 socket 已死），只有接口指纹变化时才清 presence / nonce。
+- **回前台**：隐藏 ≥15s 时 `LanSyncTransport.onAppResumed()` 先做 HTTP
+  loopback 探活（500ms，连不上先重绑同端口、再退随机端口并持久化），再重绑
+  UDP 并发公告 burst；随后调度器跑 `SyncTrigger.resume`。HTTP 重绑失败把
+  传输置为 `start_failed`（UI 可见），下一轮 `start` 可重新绑定。隐藏不足
+  15s 只刷新地址与公告，不重绑。
+- **零对端阶梯**：启动 / 回前台 / 换网后「已配对但本轮零对端」按
+  `5s / 20s / 60s / 180s` 四档重连，任一档 LAN 接触成功（`peersSeen > 0`）
+  立即取消；仅前台、非省电、非蜂窝、LAN 已启用且存在已知端点 / 手动地址时
+  arm；退后台 / 省电取消。
+- **对端公告唤醒**：认证通过的 sighting 经引擎过滤——新设备 / `boot` 变化 /
+  `snap` 变化 / `head` 前进且仍高于本机游标才通知（同一设备 2 分钟无变化不
+  重复触发；最多 64 台观测状态）。调度器 1s 去抖 + 10s 冷却后跑
+  `SyncTrigger.discovery`；冷却未到延后到窗口结束，不并排两轮。公告观测
+  不写名册 `lastSeenAt`，避免「只是听见」被当成「接触成功」。
+
+### 6. `lanEndpoints`：已验证端点
+
+- `SyncStateStore.lanEndpoints`：`deviceId → LanPeerEndpoint{host, httpPort,
+  probePort, verifiedAt}`；`host` 只存可路由 IP 字面量（回环 / link-local /
+  zone 一律拒绝），`verifiedAt <= 0` 的条目不能入表（否则永远命中不了淘汰）。
+- **只在 MAC 验证通过 + HTTP 解密成功后回写**（`onPeerVerified` →
+  `rememberLanEndpoint`）；UDP 听见但 HTTP 解不开、口令不同的对端都不写。
+  端点上的 deviceId 可能与解密后的数据主人不同（DHCP 复用 / 旧记录），此时
+  以解密载荷的 `deviceId` 为准，不把端点记到旧 id 名下。
+- 只存**端点身份**变化或首次出现的落盘；仅 `verifiedAt` 前进只更新内存，
+  随引擎轮末的 `save()` 持久化。上限 32 条，超出按 `verifiedAt` 淘汰最旧；
+  `removePeer` 同时清理该设备的端点；180 天未再验证的端点随名册淘汰。
+- **预期对端 vs 试探性对端**：手动地址与「本轮听到的 presence」是预期对端，
+  失败要计数、可把整轮打成 `partial`；只有持久化端点的是试探性对端，连不上
+  是常态（换网 / 关机），失败不计数、不让整轮变 partial。
+
+### 7. 节电预算
+
+| 场景 | 行为 |
+|---|---|
+| 正常活跃 / 空闲轮（有候选） | ≤8 个单播探测 + HTTP，等 400ms，0 广播 |
+| 冷启动 / 回前台 / 换网 | 3 次公告 ×（v4 广播 + v4/v6 组播 + ≤8 单播），等 1.2s |
+| 已配对但全不可达 | 每轮补一次广播探测 + 800ms，阶梯最多 4 档 |
+| 单对端 HTTP | 最多 3 个地址 / 总预算 4s |
+| 蜂窝 | 0 广播 / 组播；只对已知端点直连 HTTP；不排网络 / 公告 / 阶梯定时器 |
+| 后台 / 省电 | 0 定时器、0 公告、不主动探测 |
+| 入站 | 每来源 20 包/10s、全局 100 包/10s；presence 32 台 |
+
+### 后果（v3）
+
+- **升级后同步是「未配置」**：旧 key 不读，传输开关为空、设备 id 与口令都是
+  新的——需要重新开启同步并重新配对；旧设备名册 / 日志也不可见。
+- **首轮全量 bootstrap**：新命名空间首次初始化清空 journal / known，各对端
+  第一次接触只能收全量快照；用户数据（歌单 / 历史 / 统计）不丢，两端合并后
+  一致。
+- **不支持混版本**：旧客户端发出的 JSON 公告被静默丢弃、旧 HTTP 路径 404、
+  旧配对码解析失败——新旧版本不会互相发现，也不会误同步。
+- **旧 WebDAV 文件是幽灵文件**：旧命名空间的文件不出现在列表、不被读取、
+  不被 `deleteRemote` 删除；云端会一直留着，需要时由用户自己清理。
+- 广播被 AP 隔离 / iOS 无 multicast entitlement 时，已同步过的设备靠
+  `lanEndpoints` 单播兜底；从未配对过的设备仍需手动地址或 WebDAV。
+
+### 已知限制
+
+1. **发现没有按网卡绑定 socket**：`LanDiscovery` 用 v4 / v6 两个 wildcard
+   `RawDatagramSocket` 发包，广播与组播的出口由系统路由表决定，没有像
+   LocalSend 那样为每个接口绑定 socket，也没有固定 `multicastInterface`。
+   多网卡 / 全隧道 VPN / WSL 等场景下，广播可能只走默认接口（或直接被
+   VPN 黑洞），首次发现因而失败。当前兜底是「v4 广播 + v4/v6 组播 +
+   `lanEndpoints` 单播 + 配对码里的地址候选 / 手动地址」；已同步过的设备
+   可靠单播收敛，未配对设备需要配对码或手动地址。若将来要按接口发现，
+   得为每个接口绑定独立 socket，或在加入组播 / 发送前切换
+   `multicastInterface`，并处理接口上下线。
+2. **探测端口降级后广播到不了它**：标准端口 47825 绑定失败（Windows 宿主
+   保留端口块 / 端口被占用）时 UDP 会改绑系统分配端口（见已知坑 46），而
+   广播 / 组播仍发往固定的 47825——该设备收不到无目标广播。此时只能靠
+   配对码（携带实际 `probe` 端口）/ 手动地址 / 已学到的端点单播。这是既有
+   约束，不是本次发现改造引入的回归；HTTP 端点与数据通道不受影响。
+3. **移动端后台仍不承诺收敛**：Doze / 挂起下定时器与 socket 都不可靠，
+   后台不发公告、不排重连阶梯；回到前台才重绑 UDP、探活 HTTP 并补一轮。
+   产品语义仍是「前台与充电时收敛」，不引入前台服务 / wake lock。

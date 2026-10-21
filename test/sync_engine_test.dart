@@ -1,14 +1,18 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:molia/data/molia_database.dart';
 import 'package:molia/data/settings/settings_keys.dart';
 import 'package:molia/data/settings/settings_registry.dart';
 import 'package:molia/data/sync/adapters/prefs_sync_adapter.dart';
 import 'package:molia/data/sync/sync_adapter.dart';
 import 'package:molia/data/sync/sync_control_plane.dart';
 import 'package:molia/data/sync/sync_engine.dart';
+import 'package:molia/data/sync/sync_journal.dart';
+import 'package:molia/data/sync/sync_known_store.dart';
 import 'package:molia/data/sync/sync_state_store.dart';
 import 'package:molia/domain/models/device_sync.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import 'support/memory_database.dart';
 import 'support/sync_test_support.dart';
 
 /// 引擎测试：一轮同步的拉取 → 合并 → 应用 → 推送 → **报告与日志**。
@@ -23,7 +27,7 @@ void main() {
   late SharedPreferences prefs;
   late MemorySyncSecretStore secrets;
   late SyncStateStore state;
-  late FakeSyncTransport transport;
+  late FakeSightingTransport transport;
   late SyncEngine engine;
   late SyncControlPlane control;
 
@@ -39,7 +43,7 @@ void main() {
     await state.init();
     await state.writePassphrase('ABCD-EFGH-JKLM-NPQR-STUV-WXYZ-2345-6789');
     await state.setTransportEnabled('lan', true);
-    transport = FakeSyncTransport();
+    transport = FakeSightingTransport();
     control = SyncControlPlane(state: state, transports: {'lan': transport});
     engine = SyncEngine(
       state: state,
@@ -317,6 +321,162 @@ void main() {
     expect(prefs.getString('theme_mode'), isNull);
   });
 
+  test('新状态 key 已存在但派生清理标记缺失：仍会清理，标记写入后不再清空', () async {
+    // setUp 已写入 sync_state_v2（模拟 key 已落盘），但派生清理标记未写：
+    // 可能是上次进程在 init 与 reset 之间被杀。
+    expect(prefs.getString(SyncStateStore.stateKey), isNotNull);
+    await prefs.remove(SyncStateStore.derivedResetKey);
+    final db = openMemoryDatabase();
+    addTearDown(db.close);
+    final journal = SyncJournalRepository(
+      databaseProvider: () => db,
+      clock: () => 1000,
+    );
+    final known = SyncKnownRepository(databaseProvider: () => db);
+
+    // 上一代命名空间留下的派生状态（旧 key 不读 → 这里按全新安装重建）。
+    await journal.append(db, [
+      (
+        category: SyncCategory.settings,
+        record: SyncRecord(
+          key: 'theme_mode',
+          version: const SyncVersion(physical: 1, deviceId: 'devA'),
+          data: const {'v': 'dark'},
+        ),
+      ),
+    ]);
+    await journal.markSnapshotBuilt(1);
+    await known.putKnownVersions({
+      (category: SyncCategory.settings, key: 'theme_mode'):
+          const SyncVersion(physical: 1, deviceId: 'devA'),
+    });
+    // 真实用户数据与墓碑不是派生状态：清理不能碰。
+    await db.into(db.playHistory).insert(
+          PlayHistoryCompanion.insert(
+            sourceKey: 'kuwo',
+            songId: 's1',
+            title: 'Song',
+            playedAt: 1,
+          ),
+        );
+    await db.into(db.syncTombstones).insert(
+          SyncTombstonesCompanion.insert(
+            category: 'settings',
+            key: 'theme_mode',
+            versionPhysical: 1,
+          ),
+        );
+
+    final freshState = SyncStateStore(
+      preferences: prefs,
+      secrets: MemorySyncSecretStore(),
+      clock: () => 7000,
+    );
+    final freshEngine = SyncEngine(
+      state: freshState,
+      stamps: freshState.stampIssuer,
+      adapters: const [],
+      transports: const {},
+      journal: journal,
+      known: known,
+    );
+    addTearDown(freshEngine.dispose);
+    await freshState.init();
+    expect(freshState.freshInstall, isTrue);
+    await freshEngine.init();
+
+    expect(await journal.headSeq(), 0);
+    expect(await journal.snapshotSeq(), -1);
+    expect(await known.knownVersions(), isEmpty);
+    expect(prefs.getBool(SyncStateStore.derivedResetKey), isTrue,
+        reason: 'journal / known 清理成功后才写持久标记');
+    expect(await db.select(db.playHistory).get(), hasLength(1));
+    expect(await db.select(db.syncTombstones).get(), hasLength(1));
+
+    // 标记已写入：再次初始化（重启）不清派生状态。
+    await journal.append(db, [
+      (
+        category: SyncCategory.settings,
+        record: SyncRecord(
+          key: 'theme_mode',
+          version: const SyncVersion(physical: 2, deviceId: 'devA'),
+          data: const {'v': 'light'},
+        ),
+      ),
+    ]);
+    await known.putKnownVersions({
+      (category: SyncCategory.settings, key: 'theme_mode'):
+          const SyncVersion(physical: 2, deviceId: 'devA'),
+    });
+    final restartedState = SyncStateStore(
+      preferences: prefs,
+      secrets: MemorySyncSecretStore(),
+      clock: () => 7000,
+    );
+    final restartedEngine = SyncEngine(
+      state: restartedState,
+      stamps: restartedState.stampIssuer,
+      adapters: const [],
+      transports: const {},
+      journal: journal,
+      known: known,
+    );
+    addTearDown(restartedEngine.dispose);
+    await restartedState.init();
+    expect(restartedState.freshInstall, isFalse);
+    await restartedEngine.init();
+
+    expect(await journal.headSeq(), 1);
+    expect(await known.knownVersions(), hasLength(1));
+  });
+
+  test('派生状态清理失败：不写标记，下次启动重试', () async {
+    await prefs.remove(SyncStateStore.derivedResetKey);
+    final journal = FakeJournalStore(head: 5)..throwOnReset = true;
+    final firstState = SyncStateStore(
+      preferences: prefs,
+      secrets: MemorySyncSecretStore(),
+      clock: () => 7000,
+    );
+    final firstEngine = SyncEngine(
+      state: firstState,
+      stamps: firstState.stampIssuer,
+      adapters: const [],
+      transports: const {},
+      journal: journal,
+    );
+    addTearDown(firstEngine.dispose);
+
+    await expectLater(firstEngine.init(), throwsStateError);
+    expect(journal.resetCount, 1);
+    expect(prefs.getBool(SyncStateStore.derivedResetKey), isNot(true));
+    expect(firstState.freshInstall, isTrue, reason: '失败后保持待清理');
+
+    // 重启：同一份 prefs + 新的状态实例；标记仍缺失 → 重新清理。
+    journal.throwOnReset = false;
+    final restartedState = SyncStateStore(
+      preferences: prefs,
+      secrets: MemorySyncSecretStore(),
+      clock: () => 7000,
+    );
+    final restartedEngine = SyncEngine(
+      state: restartedState,
+      stamps: restartedState.stampIssuer,
+      adapters: const [],
+      transports: const {},
+      journal: journal,
+    );
+    addTearDown(restartedEngine.dispose);
+    await restartedState.init();
+    expect(restartedState.freshInstall, isTrue);
+    await restartedEngine.init();
+
+    expect(journal.resetCount, 2);
+    expect(journal.head, 0);
+    expect(prefs.getBool(SyncStateStore.derivedResetKey), isTrue);
+    expect(restartedState.freshInstall, isFalse);
+  });
+
   test('装配不启动传输：首帧后的 startTransports 才起（权限门不挡首帧）', () async {
     final fresh = SyncEngine(
       state: state,
@@ -557,7 +717,123 @@ void main() {
     expect(noticed, ['devB']);
     expect(state.isPeerConnectNotified('devB'), isTrue);
   });
+
+  test('公告过滤：新设备 / head 前进 / snap 变化 / boot 变化各触发一次', () async {
+    final events = <void>[];
+    final subscription = engine.peerSightings.listen(events.add);
+    addTearDown(subscription.cancel);
+
+    transport.emitSighting(_sighting());
+    await pumpEventQueue();
+    expect(events, hasLength(1), reason: '新设备触发');
+
+    // 同一份公告（head / snap / boot 都没变）不重复触发。
+    transport.emitSighting(_sighting());
+    await pumpEventQueue();
+    expect(events, hasLength(1), reason: '无变化不重复触发');
+
+    transport.emitSighting(_sighting(head: 6));
+    await pumpEventQueue();
+    expect(events, hasLength(2), reason: 'head 前进触发');
+
+    transport.emitSighting(_sighting(head: 6, snapshotId: 'snap-2'));
+    await pumpEventQueue();
+    expect(events, hasLength(3), reason: 'snapshotId 变化触发');
+
+    transport.emitSighting(
+      _sighting(head: 6, snapshotId: 'snap-2', bootId: 'boot-2'),
+    );
+    await pumpEventQueue();
+    expect(events, hasLength(4), reason: '对端重启（boot 变化）触发');
+  });
+
+  test('公告过滤：公告不写名册 lastSeenAt', () async {
+    transport.emitSighting(_sighting());
+    await pumpEventQueue();
+
+    expect(state.peers, isEmpty, reason: '公告只说明在线，不是接触成功');
+    expect(engine.lastReport, isNull);
+  });
+
+  test('公告过滤状态有界：大量不同设备不超过上限', () async {
+    final events = <void>[];
+    final subscription = engine.peerSightings.listen(events.add);
+    addTearDown(subscription.cancel);
+
+    for (var i = 0; i < SyncEngine.maxSightingPeers + 20; i++) {
+      transport.emitSighting(_sighting(deviceId: 'dev$i'));
+    }
+    await pumpEventQueue();
+
+    expect(engine.sightingStateCount, SyncEngine.maxSightingPeers);
+    expect(events, hasLength(SyncEngine.maxSightingPeers + 20),
+        reason: '每个新设备都值得唤醒一轮');
+  });
+
+  test('contactedLan：LAN 探测到对端才算接触', () async {
+    final noPeer = await engine.runSyncRound(
+      trigger: SyncTrigger.timer,
+      push: true,
+      antiEntropy: false,
+    );
+    expect(noPeer.contacted, isFalse);
+    expect(noPeer.contactedLan, isFalse);
+
+    transport.available.add(remoteTheme('dark'));
+    final withPeer = await engine.runSyncRound(
+      trigger: SyncTrigger.discovery,
+      push: true,
+      antiEntropy: false,
+    );
+    expect(withPeer.contacted, isTrue);
+    expect(withPeer.contactedLan, isTrue);
+  });
+
+  test('forceDiscovery：启动 / 回前台 / 换网 / 手动为 true，其余为 false', () async {
+    await engine.syncNow(trigger: SyncTrigger.timer);
+    expect(transport.lastRequest!.forceDiscovery, isFalse);
+
+    for (final trigger in [
+      SyncTrigger.startup,
+      SyncTrigger.resume,
+      SyncTrigger.network,
+      SyncTrigger.manual,
+    ]) {
+      await engine.syncNow(trigger: trigger);
+      expect(
+        transport.lastRequest!.forceDiscovery,
+        isTrue,
+        reason: '${trigger.name} 轮强制发现',
+      );
+    }
+  });
+
+  test('本地变更但 LAN 推送零对端：单次定向公告', () async {
+    transport.pushFailures = 1;
+    await engine.syncNow(trigger: SyncTrigger.manual);
+    await pumpEventQueue();
+
+    expect(transport.announceCalls, 1);
+  });
 }
+
+LanPeerSighting _sighting({
+  String deviceId = 'devB',
+  int? head = 5,
+  String snapshotId = 'snap-1',
+  String bootId = 'boot-1',
+}) =>
+    LanPeerSighting(
+      deviceId: deviceId,
+      name: 'B',
+      host: '192.168.1.23',
+      httpPort: 40000,
+      probePort: 47825,
+      snapshotId: snapshotId,
+      journalHead: head,
+      bootId: bootId,
+      observedAt: 7000,
+    );
 
 /// 首次 apply 抛异常、之后成功：验证「应用失败不丢入站数据」。
 class _FlakyAdapter implements SyncAdapter {

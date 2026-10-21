@@ -137,7 +137,16 @@ Future<SyncStack> buildSyncStack({
     onPeerResolved: (learned) => unawaited(syncState.learnManualPeer(learned)),
     httpPortProvider: () => syncState.lanHttpPort,
     onHttpPortBound: (port) => unawaited(syncState.setLanHttpPort(port)),
-    localAddressesProvider: localEndpoints.hosts,
+    // 换网 / 回前台重新枚举地址（不用进程缓存：旧 IP 会让探测包打空）。
+    localAddressesProvider: localEndpoints.hostsFresh,
+    // 已验证端点：广播被隔离时靠单播直连；MAC + HTTP 解密成功后才回写。
+    knownPeersProvider: () => syncState.lanEndpoints,
+    onPeerVerified: (endpoint) =>
+        unawaited(syncState.rememberLanEndpoint(endpoint)),
+    // 蜂窝下发现层不发任何 UDP（只直连已知端点）。
+    isCellular: () => dataSaver.onCellular,
+    // 原始 connectivity 事件：Wi-Fi 换网但蜂窝布尔值不变时也要重绑 socket。
+    networkChanges: dataSaver.networkEvents,
   );
   final webdavSyncTransport = WebDavSyncTransport(
     deviceId: syncState.deviceId,
@@ -206,6 +215,10 @@ Future<SyncStack> buildSyncStack({
     host: syncEngine,
     state: syncState,
     isPlaying: () => playback.playbackProvider.snapshot.isPlaying,
+    // 网络变化与对端公告都接到调度器：换网 1.5s 后跑强制发现轮，收到公告
+    // 1s 去抖 + 10s 冷却后跑发现轮；后台 / 蜂窝 / 省电由调度器自己拦住。
+    networkChanges: dataSaver.networkEvents,
+    peerSightings: syncEngine.peerSightings,
   );
   final syncProvider = SyncProvider(
     engine: syncEngine,
@@ -265,9 +278,9 @@ Future<SyncStack> buildSyncStack({
     );
     unawaited(sessionSyncAdapter.noteLocalSave());
   };
-  // 网络类型变化（connectivity_plus）→ 立即重估环境：Wi-Fi 与蜂窝之间切换
-  // 后，小类别限制 / 「移动数据下暂停」不再等下一次唤醒。
-  dataSaver.addListener(() => unawaited(scheduler.refreshEnvironment()));
+  // 网络变化统一由 SyncScheduler.onNetworkChanged 处理（它自己订阅
+  // dataSaver.networkEvents）：这里不再挂 ChangeNotifier 监听，避免同一次
+  // 网络切换触发两次环境重估 / 轮次。
 
   return (
     engine: syncEngine,

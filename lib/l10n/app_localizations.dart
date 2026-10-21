@@ -4862,6 +4862,18 @@ abstract class AppLocalizations {
   /// **'before background'**
   String get syncTriggerPause;
 
+  /// No description provided for @syncTriggerNetwork.
+  ///
+  /// In en, this message translates to:
+  /// **'network changed'**
+  String get syncTriggerNetwork;
+
+  /// No description provided for @syncTriggerDiscovery.
+  ///
+  /// In en, this message translates to:
+  /// **'device found'**
+  String get syncTriggerDiscovery;
+
   /// No description provided for @syncTriggerManual.
   ///
   /// In en, this message translates to:

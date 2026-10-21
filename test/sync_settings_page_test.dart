@@ -429,7 +429,7 @@ void main() {
     expect(byHost['2409:8a55::5'], 51234,
         reason: 'v6 独立降级到 51234：不能拿 v4 的 47825');
     // 分享弹层里的码文本同样是分族端口。
-    expect(code.encode(), contains('molia-pair:1:'));
+    expect(code.encode(), contains('molia-pair:2:'));
   });
 
   testWidgets('本机设备 id：短号可读，点按复制完整 id', (tester) async {
@@ -485,7 +485,7 @@ void main() {
 
     await tester.tap(find.byKey(const Key('settingsSyncPairingShareItem')));
     await tester.pumpAndSettle();
-    expect(clipboard.single, startsWith('molia-pair:1:'));
+    expect(clipboard.single, startsWith('molia-pair:2:'));
     expect(find.text('Pairing info copied (contains the passphrase)'),
         findsOneWidget);
     final decoded = SyncPairingCode.tryParse(clipboard.single)!;
@@ -562,7 +562,7 @@ void main() {
     await pumpPage(tester);
 
     // 前缀对但解析失败：报「配对码无效」，不当普通地址处理。
-    mockClipboardRead(tester, 'molia-pair:1:not-base64!!');
+    mockClipboardRead(tester, 'molia-pair:2:not-base64!!');
     await pastePairingCode(tester);
     expect(notifications.last, contains('Invalid pairing code'));
     expect(provider.manualPeers, isEmpty);

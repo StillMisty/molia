@@ -49,6 +49,13 @@ class DataSaverService extends ChangeNotifier {
   final Stream<bool>? _cellularChanges;
   final Logger _logger = Logger('molia.data_saver_service');
 
+  /// 原始 connectivity 事件（每个事件都发射，即使蜂窝布尔值没变）。
+  ///
+  /// 同步层据此在「Wi-Fi 重连 / 换网但仍是 Wi-Fi」时也重估网络并重绑发现
+  /// socket；[onCellular] 的布尔值只在蜂窝状态变化时通知，覆盖不了这类事件。
+  final StreamController<void> _networkEvents =
+      StreamController<void>.broadcast();
+
   SharedPreferences? _prefs;
   StreamSubscription<bool>? _subscription;
   Future<void>? _monitoringFuture;
@@ -77,6 +84,9 @@ class DataSaverService extends ChangeNotifier {
 
   /// 网络类型检测是否可用（失败时 UI 可提示「无法检测网络类型」）。
   bool get detectionAvailable => _detectionAvailable;
+
+  /// 原始网络事件流：每次 connectivity 回调都发射一次（广播）。
+  Stream<void> get networkEvents => _networkEvents.stream;
 
   /// 省流是否实际生效：已开启且当前为移动数据。
   bool get active => _enabled && _onCellular;
@@ -117,6 +127,8 @@ class DataSaverService extends ChangeNotifier {
           _detectionAvailable = true;
           _connectivityKnown = true;
           _setOnCellular(value);
+          // 蜂窝布尔值没变也要发：Wi-Fi 换网 / 重连同样需要重绑发现 socket。
+          if (!_networkEvents.isClosed) _networkEvents.add(null);
         },
         onError: (Object error) {
           _logger.warning('省流模式：网络变化监听失败: $error');
@@ -171,8 +183,9 @@ class DataSaverService extends ChangeNotifier {
 
   @override
   void dispose() {
-    _subscription?.cancel();
+    unawaited(_subscription?.cancel());
     _subscription = null;
+    unawaited(_networkEvents.close());
     super.dispose();
   }
 

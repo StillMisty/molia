@@ -139,6 +139,32 @@ void main() {
     await controller.close();
   });
 
+  test('networkEvents：蜂窝布尔值没变的连续事件也逐个发射', () async {
+    final controller = StreamController<bool>();
+    final service = DataSaverService(
+      prefs: prefs,
+      cellularProbe: () async => false,
+      cellularChanges: controller.stream,
+    );
+    addTearDown(service.dispose);
+    var events = 0;
+    final subscription = service.networkEvents.listen((_) => events++);
+    addTearDown(subscription.cancel);
+    var notified = 0;
+    service.addListener(() => notified++);
+
+    await service.init();
+    controller.add(false);
+    await Future<void>.delayed(Duration.zero);
+    controller.add(false);
+    await Future<void>.delayed(Duration.zero);
+
+    expect(events, 2, reason: '同一蜂窝值（false）连续两次事件也要发射');
+    expect(notified, 0, reason: '蜂窝布尔值没变不通知省流 UI');
+
+    await controller.close();
+  });
+
   test('探测失败：detectionAvailable=false 且保守不生效', () async {
     final service = DataSaverService(
       prefs: prefs,

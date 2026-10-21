@@ -17,7 +17,7 @@ void main() {
   late SharedPreferences prefs;
   late MemorySyncSecretStore secrets;
   late SyncStateStore state;
-  late FakeSyncTransport lan;
+  late FakeSightingTransport lan;
   late SyncControlPlane control;
   var now = 7000;
 
@@ -34,7 +34,7 @@ void main() {
     );
     await state.init();
     await state.writePassphrase('ABCD-EFGH-JKLM-NPQR-STUV-WXYZ-2345-6789');
-    lan = FakeSyncTransport();
+    lan = FakeSightingTransport();
     control = SyncControlPlane(state: state, transports: {'lan': lan});
   });
 
@@ -263,5 +263,19 @@ void main() {
     expect(await control.readWebdavPassword(), 'dav-secret');
     expect(
         secrets.values[SyncStateStore.webdavPasswordSecretKey], 'dav-secret');
+  });
+
+  test('生命周期：只对已启用且实现 SyncLanLifecycle 的传输调用', () async {
+    // 未启用：不动作（总闸关着就不碰传输运行时）。
+    await control.onAppResumed();
+    control.onAppHidden();
+    expect(lan.resumeCalls, 0);
+    expect(lan.hiddenCalls, 0);
+
+    await control.setTransportEnabled(SyncTransportKind.lan, true);
+    await control.onAppResumed();
+    control.onAppHidden();
+    expect(lan.resumeCalls, 1);
+    expect(lan.hiddenCalls, 1);
   });
 }

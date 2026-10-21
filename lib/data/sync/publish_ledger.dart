@@ -1,14 +1,14 @@
 /// 发布台账：每传输一份，回答「这轮能不能跳过加密 / 上传？journal 能裁到哪？」
 ///
 /// 判据聚合三处事实——**内存指纹**（本进程最近一次成功外发的载荷身份）、
-/// **持久覆盖**（`sync_state_v1` 的 `snapshotPushSeq`）与**能力位**
+/// **持久覆盖**（`sync_state_v2` 的 `snapshotPushSeq`）与**能力位**
 /// （[SyncTransport.servesLiveSnapshot]）——只有这一处回答：
 /// push 循环问 [PublishLedger.plan] / 记 [PublishLedger.mark]，日志裁剪的
 /// 覆盖下限走 [journalCoverage]。引擎只保留轮次编排（拉取 / 合并 / 报告 /
 /// 错误归类）。
 ///
 /// 边界：本模块是 data 层内部实现（`SyncEngine` 与测试所用），不是对外端口；
-/// 持久化复用 `sync_state_v1` 的 `snapshotPushSeq`，不另起存储或键族。
+/// 持久化复用 `sync_state_v2` 的 `snapshotPushSeq`，不另起存储或键族。
 library;
 
 import '../../domain/models/device_sync.dart';
@@ -26,7 +26,7 @@ import 'sync_state_store.dart';
 ///   日志裁剪；文件型传输（WebDAV）的快照是异步读取的，覆盖必须够到窗口
 ///   起点，否则落后 / 新加入的对端无法 bootstrap。
 class PublishLedger {
-  /// [kind] 是传输标识（`sync_state_v1` 的 `snapshotPushSeq` 键）；
+  /// [kind] 是传输标识（`sync_state_v2` 的 `snapshotPushSeq` 键）；
   /// [servesLiveSnapshot] 是能力位读取（构造时传
   /// `() => transport.servesLiveSnapshot`）——判定时即时读取，测试替身可在
   /// 引擎建好后假替；[state] 提供持久覆盖的读写。
@@ -37,7 +37,7 @@ class PublishLedger {
   })  : _state = state,
         _servesLiveSnapshot = servesLiveSnapshot;
 
-  /// 传输标识（`sync_state_v1` 的 `snapshotPushSeq` 键）。
+  /// 传输标识（`sync_state_v2` 的 `snapshotPushSeq` 键）。
   final String kind;
 
   final SyncStateStore _state;

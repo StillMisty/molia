@@ -80,6 +80,11 @@ abstract interface class SyncJournalStore {
     required int coverage,
     int? nowMs,
   });
+
+  /// 清空日志与窗口状态（派生数据：可由本地数据重建）。
+  ///
+  /// 首次使用新命名空间时调用；用户数据表与 `sync_tombstones` 不受影响。
+  Future<void> reset();
 }
 
 /// 一条待追加的本地变更（`seq` 由日志分配）。
@@ -291,6 +296,18 @@ class SyncJournalRepository implements SyncJournalStore {
         await _trim(db, target);
       }
       return target;
+    });
+  }
+
+  /// 清空日志与窗口状态（首次使用新命名空间时重建派生状态）。
+  ///
+  /// 只删可再生的派生数据；用户数据表与 `sync_tombstones` 不动。
+  @override
+  Future<void> reset() async {
+    final db = _db;
+    await db.transaction(() async {
+      await db.delete(db.syncJournal).go();
+      await db.delete(db.syncJournalStates).go();
     });
   }
 

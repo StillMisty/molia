@@ -22,6 +22,9 @@ abstract interface class SyncCodecPort {
   /// 记录集内容指纹（`snapshotId`）：引擎每轮按需重算，也是全库遍历的 CPU 工作。
   Future<String> fingerprint(Map<SyncCategory, List<SyncRecord>> records);
 
+  /// 发现层密钥（HKDF 自根密钥；发现报文 HMAC 用）。
+  Future<Uint8List> discoveryKey(String passphrase);
+
   /// 释放底层资源（worker isolate 等）；重复调用幂等。
   Future<void> dispose();
 }
@@ -43,6 +46,10 @@ class InlineSyncCodecPort implements SyncCodecPort {
   @override
   Future<String> fingerprint(Map<SyncCategory, List<SyncRecord>> records) async =>
       syncFingerprint(records);
+
+  @override
+  Future<Uint8List> discoveryKey(String passphrase) async =>
+      codec.discoveryKey(passphrase);
 
   @override
   Future<void> dispose() async {}

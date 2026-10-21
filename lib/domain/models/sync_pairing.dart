@@ -28,7 +28,7 @@ class SyncPairingAddress {
 /// 配对信息（二维码 / 文本）：把「设备名 + 设备 id + 同步口令 + 地址候选 +
 /// HTTP 端点端口」打包成一段可复制的自包含文本。
 ///
-/// 格式：`molia-pair:1:<base64url(utf8(json))>`，JSON 字段短名：
+/// 格式：`molia-pair:2:<base64url(utf8(json))>`，JSON 字段短名：
 /// - `n` 设备名（展示用，可空）；
 /// - `i` 设备 id（必需）；
 /// - `p` 同步口令（必需）；
@@ -54,7 +54,7 @@ class SyncPairingCode {
   static const String scheme = 'molia-pair';
 
   /// 当前格式版本（不认识的版本一律拒绝，不做「尽力解析」）。
-  static const int version = 1;
+  static const int version = 2;
 
   /// 地址候选上限（与探测包 `addrs` 同口径，防止二维码无限膨胀）。
   static const int maxAddresses = 8;

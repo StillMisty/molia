@@ -16,6 +16,9 @@ class InMemorySyncKnownStore implements SyncKnownStore {
   Future<void> putKnownVersions(Map<SyncKnownKey, SyncVersion> versions) async {
     _versions.addAll(versions);
   }
+
+  @override
+  Future<void> reset() async => _versions.clear();
 }
 
 /// drift 持久化登记（生产）：`sync_known` 表，跨重启保持变更集基线。
@@ -57,5 +60,11 @@ class SyncKnownRepository implements SyncKnownStore {
         ],
       );
     });
+  }
+
+  @override
+  Future<void> reset() async {
+    final db = _databaseProvider();
+    await db.delete(db.syncKnown).go();
   }
 }

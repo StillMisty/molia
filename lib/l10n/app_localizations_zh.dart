@@ -2547,6 +2547,12 @@ class AppLocalizationsZh extends AppLocalizations {
   String get syncTriggerPause => '退后台前';
 
   @override
+  String get syncTriggerNetwork => '网络切换';
+
+  @override
+  String get syncTriggerDiscovery => '发现设备';
+
+  @override
   String get syncTriggerManual => '手动';
 
   @override

@@ -1,6 +1,6 @@
 /// 同步运行状态持久化：设备身份 / 传输开关 / 传输配置 / 变更登记 / 日志。
 ///
-/// - 非敏感状态走 SharedPreferences 单 JSON 键（`sync_state_v1`）；
+/// - 非敏感状态走 SharedPreferences 单 JSON 键（`sync_state_v2`）；
 /// - 敏感项（同步口令、WebDAV 密码）走 [SettingsSecretStore]（生产 =
 ///   flutter_secure_storage），口令即信任根（见 ADR-0003）；
 /// - 变更登记（设置键哈希、脚本墓碑、激活脚本指针）是「变化检测」的基线：
@@ -17,6 +17,7 @@ import 'package:logging/logging.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../domain/models/device_sync.dart';
+import '../../utils/peer_address.dart';
 import '../settings/settings_secret_store.dart';
 import 'sync_activity.dart';
 import 'sync_stamp.dart';
@@ -184,16 +185,26 @@ class SyncStateStore {
         _clock = clock ?? (() => DateTime.now().millisecondsSinceEpoch),
         _deviceId = deviceId ?? '';
 
-  static const String stateKey = 'sync_state_v1';
+  /// 状态键的断代命名空间（见 ADR-0003 的硬断代）。
+  ///
+  /// 旧键不读、不删、不迁移：新键缺失即全新安装行为，旧数据当从未存在。
+  static const String stateKey = 'sync_state_v2';
 
   /// 设备身份的独立持久化键（prefs + 安全存储同名）。
   ///
-  /// 身份不能只放在 `sync_state_v1` 里：那份 JSON 体积大、写入频繁，损坏时
+  /// 身份不能只放在 `sync_state_v2` 里：那份 JSON 体积大、写入频繁，损坏时
   /// 若连身份一起丢，对端就会把同一台设备当成新设备（换 IP / 重启后尤其明显）。
-  static const String deviceIdKey = 'sync_device_id_v1';
+  static const String deviceIdKey = 'sync_device_id_v2';
 
-  static const String passphraseSecretKey = 'sync_passphrase_v1';
-  static const String webdavPasswordSecretKey = 'sync_webdav_password_v1';
+  static const String passphraseSecretKey = 'sync_passphrase_v2';
+  static const String webdavPasswordSecretKey = 'sync_webdav_password_v2';
+
+  /// 派生同步状态（journal / 已知版本登记）已清理的持久标记。
+  ///
+  /// 不能只靠内存 fresh 标志：状态 key 在 [init] 时就已写入，若进程在引擎
+  /// 清理前被杀 / 清理失败，下次启动必须还能判定「仍需清理」。只有 journal
+  /// 与 known 都 reset 成功后才写 true（见 [markFreshHandled]）。
+  static const String derivedResetKey = 'sync_derived_reset_v2';
 
   /// 日志保留条数（设置页只展示最近几条）。
   static const int logLimit = 20;
@@ -203,6 +214,12 @@ class SyncStateStore {
 
   /// 名册保留设备数（按最近接触时间淘汰；避免长期运行后无界增长）。
   static const int peerLimit = 20;
+
+  /// 已验证局域网端点保留条数（MAC + HTTP 解密成功才写入）。
+  static const int lanEndpointLimit = 32;
+
+  /// 已验证局域网端点的保留期：超过该时长没再验证过随名册淘汰。
+  static const int lanEndpointRetentionMs = 180 * 24 * 60 * 60 * 1000;
 
   final SharedPreferences? _preferences;
   final SettingsSecretStore _secrets;
@@ -244,7 +261,7 @@ class SyncStateStore {
   SyncStamp? _activeScriptStamp;
   SyncStamp? _sessionStamp;
 
-  /// 版本戳发号器基线（`sync_state_v1` 的 `stampSeq`）：重启后不倒退。
+  /// 版本戳发号器基线（`sync_state_v2` 的 `stampSeq`）：重启后不倒退。
   SyncVersion _stampBaseline = SyncVersion.zero;
 
   /// 全库最大戳种子是否已补入（首帧后由 `LibraryRepository.maxVersion` 完成）。
@@ -289,6 +306,12 @@ class SyncStateStore {
   /// 设备名册（deviceId → 最近一次接触的观测值）。
   final Map<String, SyncPeerState> _peers = {};
 
+  /// 已验证的局域网端点（deviceId → 最近一次成功连通的地址 / 端口）。
+  ///
+  /// 广播 / 组播被 AP 隔离或 iOS entitlement 挡住时，靠这里的单播兜底；
+  /// 只在 MAC 验证 + HTTP 解密成功后写入（见 `LanSyncTransport`）。
+  final Map<String, LanPeerEndpoint> _lanEndpoints = {};
+
   String get deviceId => _deviceId;
   String get deviceName => _deviceName;
 
@@ -328,13 +351,17 @@ class SyncStateStore {
   List<SyncPeerState> get peers =>
       List.unmodifiable(trimPeers(_peers.values, peerLimit));
 
+  /// 已验证的局域网端点（不可变；上限 [lanEndpointLimit]）。
+  List<LanPeerEndpoint> get lanEndpoints =>
+      List.unmodifiable(_lanEndpoints.values);
+
   /// 传输最近一次成功接触对端的时间（0 = 尚未成功过）。
   int transportLastSuccessAt(String kind) => _transportLastSuccess[kind] ?? 0;
 
   /// 传输最近成功发布的全量快照覆盖位置（-1 = 尚未发布）。
   ///
   /// 判据（谁在什么条件下读它、失败时是否前移）在发布台账里；这里只是
-  /// `sync_state_v1` 的键值与形状。
+  /// `sync_state_v2` 的键值与形状。
   int snapshotPushSeq(String kind) => _snapshotPushSeq[kind] ?? -1;
 
   Future<void> setSnapshotPushSeq(String kind, int seq) async {
@@ -355,6 +382,29 @@ class SyncStateStore {
 
   bool _initialized = false;
 
+  /// 是否需要清空可再生的派生状态。
+  ///
+  /// 新 key 缺失 / 空 = 全新安装；或持久标记不为 true = 上次清理尚未完成
+  /// （进程在 init 与 reset 之间被杀 / reset 失败），下次启动重试。
+  /// 旧键不读不迁移，所以不存在需要保留的旧协议状态。
+  bool _freshInstall = false;
+
+  /// 是否仍需清空派生状态（见 [derivedResetKey]；仅本进程内的判定结果）。
+  bool get freshInstall => _freshInstall;
+
+  /// 标记「新命名空间的派生状态已清理」（journal / known 都 reset 成功后）。
+  ///
+  /// 只有持久标记写入成功才清内存标志：写失败 / reset 抛错时保持待清理，
+  /// 下次启动继续重试。清理是一次性的：同一进程内多个引擎实例 / 重复 init
+  /// 不能反复清空派生状态（否则「登记跨重启保持」会被自己破坏）。
+  Future<void> markFreshHandled() async {
+    final prefs = _prefs ??= await SharedPreferences.getInstance();
+    if (!await prefs.setBool(derivedResetKey, true)) {
+      throw StateError('同步派生状态清理标记写入失败');
+    }
+    _freshInstall = false;
+  }
+
   /// 设备 id 的 prefs 键已写、安全存储备份还没写（首装 / 身份迁移）。
   ///
   /// 首帧前只写小体积 prefs（设备 id 立即可用）；Keystore 备份放到首帧后，
@@ -363,8 +413,10 @@ class SyncStateStore {
 
   /// 备份尚未完成的持久标记：进程在首帧后备份前被杀时，下次启动继续补写，
   /// 避免「prefs 有 id 就以为备份已完成」而永久丢掉安全存储副本。
+  ///
+  /// 同样按命名空间断代：旧标记不读。
   static const String _deviceIdBackupPendingKey =
-      'sync_device_id_backup_pending';
+      'sync_device_id_backup_pending_v2';
 
   /// 写入方等待「全库最大戳」种子完成（首帧后的 DB 查询）。
   Future<void> get stampSeedReady => _stampSeedReady.future;
@@ -385,6 +437,9 @@ class SyncStateStore {
     if (_initialized) return;
     _prefs = _preferences ?? await SharedPreferences.getInstance();
     final raw = _prefs!.getString(stateKey);
+    _freshInstall = raw == null ||
+        raw.isEmpty ||
+        _prefs!.getBool(derivedResetKey) != true;
     var stateCorrupt = false;
     if (raw != null && raw.isNotEmpty) {
       try {
@@ -562,6 +617,7 @@ class SyncStateStore {
     _peers.remove(deviceId);
     _manualPeers.removeWhere((entry) => entry.deviceId == deviceId);
     _notifiedPeers.remove(deviceId);
+    _lanEndpoints.remove(deviceId);
     // 正在收尾的一轮可能带着旧名册快照，压住它一次；下一轮重新发现即恢复。
     _forgottenPeers.add(deviceId);
     await save();
@@ -696,6 +752,65 @@ class SyncStateStore {
     await save();
   }
 
+  /// 记住一个已验证的局域网端点（MAC 验证 + HTTP 解密成功后回写）。
+  ///
+  /// 只在**端点身份**（设备 id / host / httpPort / probePort）真的变化或首次
+  /// 出现时落盘：仅 `verifiedAt` 前进只更新内存，依赖引擎轮末的
+  /// `_state.save()` 持久化——每轮每对端成功都会刷新验证时间，这里若也
+  /// `save()` 会让多对端一轮写多次大状态 JSON。
+  Future<void> rememberLanEndpoint(LanPeerEndpoint endpoint) async {
+    if (!_isValidLanEndpoint(endpoint)) return;
+    final existing = _lanEndpoints[endpoint.deviceId];
+    final next = LanPeerEndpoint(
+      deviceId: endpoint.deviceId,
+      host: normalizePeerHost(endpoint.host),
+      httpPort: endpoint.httpPort,
+      // 新观测没带探测端口时保留已有值：来源端口可能因 NAT / 重启变化，
+      // 旧的持久化端口仍是有效的单播目标。
+      probePort: endpoint.probePort > 0
+          ? endpoint.probePort
+          : (existing?.probePort ?? 0),
+      verifiedAt: endpoint.verifiedAt,
+    );
+    final identityChanged = existing == null ||
+        existing.host != next.host ||
+        existing.httpPort != next.httpPort ||
+        existing.probePort != next.probePort;
+    if (!identityChanged && existing.verifiedAt == next.verifiedAt) return;
+    _lanEndpoints[next.deviceId] = next;
+    _trimLanEndpoints();
+    if (identityChanged) await save();
+  }
+
+  /// 端点合法性：可路由 IP 字面量、非空设备 id、端口在合法范围、有验证时间。
+  ///
+  /// `verifiedAt <= 0` 的端点不能进入表：没有验证时间的条目永远不会被
+  /// 180 天淘汰规则命中，会永久留在状态里。
+  static bool _isValidLanEndpoint(LanPeerEndpoint endpoint) {
+    if (endpoint.deviceId.trim().isEmpty) return false;
+    if (!isRoutablePeerAddress(endpoint.host)) return false;
+    if (endpoint.httpPort <= 0 || endpoint.httpPort > 65535) return false;
+    if (endpoint.probePort < 0 || endpoint.probePort > 65535) return false;
+    if (endpoint.verifiedAt <= 0) return false;
+    return true;
+  }
+
+  /// 超过 [lanEndpointLimit] 时按 `verifiedAt` 淘汰最旧的端点。
+  void _trimLanEndpoints() {
+    while (_lanEndpoints.length > lanEndpointLimit) {
+      String? oldestId;
+      var oldestAt = 1 << 62;
+      for (final entry in _lanEndpoints.entries) {
+        if (entry.value.verifiedAt < oldestAt) {
+          oldestAt = entry.value.verifiedAt;
+          oldestId = entry.key;
+        }
+      }
+      if (oldestId == null) return;
+      _lanEndpoints.remove(oldestId);
+    }
+  }
+
   void putSettingStamp(String key, SyncStamp stamp) {
     _settingStamps[key] = stamp;
   }
@@ -789,6 +904,14 @@ class SyncStateStore {
     _peers
       ..clear()
       ..addEntries(recent.map((peer) => MapEntry(peer.deviceId, peer)));
+    // 180 天没再验证过的端点随名册一起淘汰：换网 / DHCP 变更后旧地址多半
+    // 已失效，留着只会让每轮多试几个连不通的地址。
+    final now = report.finishedAt;
+    _lanEndpoints.removeWhere(
+      (_, endpoint) =>
+          endpoint.verifiedAt > 0 &&
+          now - endpoint.verifiedAt > lanEndpointRetentionMs,
+    );
   }
 
   Future<void> save() async {
@@ -809,8 +932,6 @@ class SyncStateStore {
         'v': 2,
         'deviceId': _deviceId,
         'deviceName': _deviceName,
-        // 派生值照写：旧版本降级读取时按总开关语义理解仍然正确（有传输 = 开）。
-        'enabled': enabled,
         'categories': {
           for (final entry in _categories.entries) entry.key.name: entry.value,
         },
@@ -821,8 +942,8 @@ class SyncStateStore {
           'manualPeers': [for (final peer in _manualPeers) peer.toJson()],
         if (_notifiedPeers.isNotEmpty) 'notifiedPeers': _notifiedPeers.toList(),
         if (_lanHttpPort > 0) 'lanHttpPort': _lanHttpPort,
-        // 设备身份同时写在独立键 deviceIdKey 里；这里保留一份是为了让旧版本
-        // 与备份文件自描述（读取时以独立键 / 状态里的非空值为准）。
+        // 设备身份同时写在独立键 deviceIdKey 里；这里保留一份让状态 JSON
+        // 自描述（读取时以独立键 / 状态里的非空值为准）。
         'stampSeq': _stampBaseline.toJson(),
         'settings': {
           for (final entry in _settingStamps.entries)
@@ -847,6 +968,10 @@ class SyncStateStore {
         'log': [for (final entry in _log) entry.toJson()],
         'activity': [for (final entry in _activity) entry.toJson()],
         'peers': [for (final peer in _peers.values) peer.toJson()],
+        if (_lanEndpoints.isNotEmpty)
+          'lanEndpoints': [
+            for (final endpoint in _lanEndpoints.values) endpoint.toJson(),
+          ],
       };
 
   void _applyJson(Map<String, dynamic> json) {
@@ -867,10 +992,6 @@ class SyncStateStore {
         ..clear()
         ..addAll(transports.whereType<String>());
     }
-    // 迁移旧的总开关键：旧版 `enabled=false` 的用户从未开启过同步，其
-    // transports 默认值（{lan}）不能当作启用信号——清空以保持「升级后同步
-    // 仍关闭」；`enabled=true` 保留原 transports（派生值自然为真）。
-    if (json['enabled'] == false) _enabledTransports.clear();
     _webdav = WebDavConfig.fromJson(json['webdav']);
     _cellularPolicy =
         SyncCellularPolicy.parse(json['cellularPolicy'] as String?);
@@ -891,14 +1012,7 @@ class SyncStateStore {
 
     final stampSeq = json['stampSeq'];
     if (stampSeq is Map) {
-      final baseline = SyncVersion.fromJson(stampSeq) ??
-          // 兼容早期 `{'p','c'}` 形状（当前写 SyncVersion.toJson）。
-          (stampSeq['p'] is num
-              ? SyncVersion(
-                  physical: (stampSeq['p'] as num).toInt(),
-                  counter: (stampSeq['c'] as num?)?.toInt() ?? 0,
-                )
-              : null);
+      final baseline = SyncVersion.fromJson(stampSeq);
       if (baseline != null) _stampBaseline = baseline;
     }
 
@@ -977,6 +1091,18 @@ class SyncStateStore {
         if (peer != null && _peers.length < peerLimit) {
           _peers[peer.deviceId] = peer;
         }
+      }
+    }
+    _lanEndpoints.clear();
+    final lanEndpoints = json['lanEndpoints'];
+    if (lanEndpoints is List) {
+      for (final item in lanEndpoints) {
+        final endpoint = LanPeerEndpoint.fromJson(item);
+        // 非法条目（不可路由地址 / 越界端口 / 空 id）直接丢弃，不拖垮整份状态。
+        if (endpoint != null && _isValidLanEndpoint(endpoint)) {
+          _lanEndpoints[endpoint.deviceId] = endpoint;
+        }
+        if (_lanEndpoints.length >= lanEndpointLimit) break;
       }
     }
   }

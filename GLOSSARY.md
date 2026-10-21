@@ -520,7 +520,7 @@
   一处。
 - **SyncStampIssuer（版本戳发号器）** — `lib/data/sync/sync_stamp.dart`：
   本机所有同步戳的唯一来源，`next()` 严格单调、`observe()` 吸收远端超前戳
-  （记 warning）、`seed()` 接受初始化基线；基线持久化在 `sync_state_v1` 的
+  （记 warning）、`seed()` 接受初始化基线；基线持久化在 `sync_state_v2` 的
   `stampSeq`，初始化 = `max(持久化基线, 当前时钟, 全库最大戳)`，重启不倒退。
 - **Content time separation（内容时间分离）** — `playedAt` / `endedAt` /
   `savedAt` / `importedAt` 与墓碑的真实删除时间是内容语义，进记录 `data`、
@@ -558,7 +558,19 @@
 - **Sync transport（同步传输）** — `lib/domain/ports/sync_transport.dart`：
   `pull` / `push` / `incoming` 三动作；实现为局域网直连
   （`transport/lan_sync_transport.dart`）与用户自备 WebDAV
-  （`transport/webdav_sync_transport.dart`）。
+  （`transport/webdav_sync_transport.dart`）。局域网发现、数据与存活检查分开：
+  UDP 只发现（`MSD/1`），HTTP `/molia-sync/v2/*` 才是数据通道。
+- **LAN discovery（局域网发现）** — `transport/lan_discovery.dart`：`MSD/1`
+  二进制公告（magic / version / type / 截断 HMAC / bodyLen + body），发现密钥
+  = HKDF(口令根密钥, info `molia-sync-discovery-v1`)；先来源限流再验 MAC 再
+  解析，nonce 30 秒去重、boot 标识进程重启、presence 上限 32。公告 burst
+  100/500/2000ms，正常轮只单播 ≤8 个已知端点并等 400ms，蜂窝 0 广播、
+  后台 0 定时器。
+- **LanPeerEndpoint（已验证局域网端点）** — `SyncStateStore.lanEndpoints`：
+  `deviceId → {host, httpPort, probePort, verifiedAt}`，只在 MAC + HTTP 解密
+  成功（`onPeerVerified`）后回写；32 条上限、180 天淘汰、`removePeer` 一并
+  清理。只有持久化端点的对端是「试探性对端」，失败不计数；手动地址与本轮
+  presence 是「预期对端」。
 - **Sync adapter（同步适配器）** — 类别到本地存储的读写桥
   （`lib/data/sync/adapters/**`）：收集本地记录 / 应用合并结果，写入必须幂等；
   设置类用「登记哈希」（`SyncStamp`）做变化检测，不改造散落的写入方。
@@ -595,13 +607,13 @@
   「没有变化」必须分开）+ 每传输明细
   （拉取 / 推送 / 失败数 / 字节 / 耗时 / 不可用原因）+ 每对端名册 + 本轮落地
   变更量（不是全库规模）。
-- **Device identity（设备身份）** — `sync_device_id_v1`：独立的 prefs 小键 +
+- **Device identity（设备身份）** — `sync_device_id_v2`：独立的 prefs 小键 +
   安全存储备份，用来标识「本机是哪台设备」（版本戳 / 探测 / 配对码 / WebDAV
-  文件名）。**不跟着 `sync_state_v1` 一起重生成**：大状态损坏时从小键 / 安全
+  文件名）。**不跟着 `sync_state_v2` 一起重生成**：大状态损坏时从小键 / 安全
   存储恢复，避免手机重启或换 IP 后被对端当成一台新设备。
 - **Sync peer roster（同步名册）** — `SyncPeerState`：每台对端的最近接触观测
   （名称 / 传输 / 最后拉取·推送 / 时钟偏移 / 落后条数 / 最近失败），持久化在
-  `sync_state_v1`，UI 在同步设置页首屏的「设备」区呈现（名册内联）；
+  `sync_state_v2`，UI 在同步设置页首屏的「设备」区呈现（名册内联）；
   地址簿里尚未进名册的条目（未认领候选折叠为一行「候选地址 N 个」）在
   「高级设置」子页；「落后条数」由增量协议填充。**移除设备只清本机名册与
   该设备的地址簿条目，不撤销授权**：对方仍持有口令并在线时会重新出现；真正
@@ -621,10 +633,10 @@
   （`lastPullAt` / `lastPushAt`，入站推送同样计；只探测应答不算）时，由引擎发
   一次性事件（`SyncEngine.peerConnectedNotices`），应用壳（`MyThemedApp`）订阅
   后经 `NotificationService` 弹「已与『设备』连通」：双方各自触发一次，与用户
-  在哪个页面无关。已提示的 deviceId 持久化在 `sync_state_v1.notifiedPeers`，
+  在哪个页面无关。已提示的 deviceId 持久化在 `sync_state_v2.notifiedPeers`，
   重启不重发；设备从本机移除（名册 + 地址簿条目）时标记清掉。
 - **Pairing code（配对码）** — `lib/domain/models/sync_pairing.dart`：
-  `molia-pair:1:<base64url(utf8(json))>`，字段短名 `n` 设备名 / `i` 设备 id /
+  `molia-pair:2:<base64url(utf8(json))>`，字段短名 `n` 设备名 / `i` 设备 id /
   `p` 口令 / `a` 地址候选 `[[host, probePort], …]` / `h` HTTP 端点端口；
   `probePort` 按候选地址的族取（v4 / v6 可独立降级到不同端口，拿错族的端口
   打不通）。可复制、可出二维码（`qr` 纯 Dart 自绘）、移动端可扫
@@ -666,13 +678,13 @@
   ∝ 本轮变更量；登记不随墓碑清理删除（清理后同版本的旧记录不重新判为新记录）。
 - **Transport gating（传输门控）** — 内容未变不传：快照带
   `snapshotId`（记录集规范化哈希，与 `producedAt` 的「时间变」分开），局域网
-  探测应答携带它、WebDAV 用 `getetag` / `getlastmodified`，未变跳过
+  公告携带它、WebDAV 用 `getetag` / `getlastmodified`，未变跳过
   GET + 解密 + 合并；本机内容指纹与上次成功推送一致时跳过加密 + 上传。
 - **Publish ledger（发布台账）** — `lib/data/sync/publish_ledger.dart`：每传输
   一份（局域网 / WebDAV），把「这轮能不能跳过加密 / 上传？journal 能裁到哪」
   的判据收在一处。聚合三处事实：**内存指纹**（本进程成功外发过的载荷身份：
   全量快照按内容指纹、增量窗口按「窗口边界 + ack 集合」）、**持久覆盖**
-  （`sync_state_v1` 的 `snapshotPushSeq` = 该传输成功发布过的快照覆盖位置，
+  （`sync_state_v2` 的 `snapshotPushSeq` = 该传输成功发布过的快照覆盖位置，
   重启不回退）与 **`servesLiveSnapshot` 能力位**。两个动作：`plan(outgoing)`
   回答是否外发，`mark(result)` 记账（成功才记；零对端与失败都遗忘，下轮重发；
   快照成功才推进持久覆盖）；`publishedCoverage` / `journalCoverage` 回答日志

@@ -94,4 +94,13 @@ void main() {
     final decoded = SyncCodec(iterations: 2000).decrypt(bytes, passphrase);
     expect(decoded.recordsOf(SyncCategory.playlistTracks), hasLength(2));
   });
+
+  test('discoveryKey 经 worker 派生，与进程内实现一致', () async {
+    final port = IsolateSyncCodecPort(iterations: 2000);
+    addTearDown(port.dispose);
+    final workerKey = await port.discoveryKey(passphrase);
+    final inlineKey = SyncCodec(iterations: 2000).discoveryKey(passphrase);
+    expect(workerKey, inlineKey);
+    expect(workerKey, hasLength(32));
+  });
 }

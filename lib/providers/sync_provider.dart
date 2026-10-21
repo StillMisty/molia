@@ -407,11 +407,19 @@ class SyncProvider extends ChangeNotifier {
   /// 用户交互（界面操作）。
   void notifyInteraction() => _scheduler?.notifyInteraction();
 
-  /// 回到前台：拉一次（有本地变更时一并推送）。
-  void onAppResumed() => _scheduler?.onAppVisible();
+  /// 回到前台：先让已启用的局域网传输恢复（重绑 / 公告），再拉一次
+  /// （有本地变更时一并推送）。
+  Future<void> onAppResumed() async {
+    await _controlPlane.onAppResumed();
+    _scheduler?.onAppVisible();
+  }
 
-  /// 退后台 / 锁屏：零定时唤醒，有本地变更时尽力推一次。
-  void onAppHidden() => _scheduler?.onAppHidden();
+  /// 退后台 / 锁屏：先让传输停止发现（公告 / 重连计时器），再取消调度器
+  /// 定时器并尽力推一次——pause 轮只走已知端点 HTTP，不再广播。
+  void onAppHidden() {
+    _controlPlane.onAppHidden();
+    _scheduler?.onAppHidden();
+  }
 
   /// 当前同步等级（未注入调度器时为 null）。
   SyncLevel? get syncLevel => _scheduler?.level;

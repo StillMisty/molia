@@ -334,6 +334,29 @@ void main() {
     });
   });
 
+  test('登记 reset：清空后同一版本重新交付（派生状态可重建）', () async {
+    final db = openMemoryDatabase();
+    addTearDown(db.close);
+    final known = SyncKnownRepository(databaseProvider: () => db);
+    final first = engine(known: known);
+    addTearDown(first.dispose);
+    transport.available.add(remoteEnvelope([setting('key-1', 1000)]));
+    await first.syncNow();
+    expect(adapter.lastKeys, ['key-1']);
+
+    await known.reset();
+    expect(await known.knownVersions(), isEmpty);
+
+    adapter.reset();
+    final restarted = engine(
+      known: SyncKnownRepository(databaseProvider: () => db),
+    );
+    addTearDown(restarted.dispose);
+    await restarted.syncNow();
+    expect(adapter.lastKeys, ['key-1'],
+        reason: '登记清空后重新交付，由适配器的新旧判定兜底');
+  });
+
   test('空闲等级端到端（非蜂窝）：无本地变更也周期性拉取', () {
     fakeAsync((async) {
       DateTime clock() => DateTime.fromMillisecondsSinceEpoch(

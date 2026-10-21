@@ -3,9 +3,13 @@ import 'dart:convert';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:molia/domain/models/sync_pairing.dart';
 
-/// 配对码（`molia-pair:1:<base64url(json)>`）：往返 / 严格校验 / 归一。
+/// 配对码（`molia-pair:2:<base64url(json)>`）：往返 / 严格校验 / 归一。
 void main() {
   const passphrase = 'ABCD-EFGH-JKLM-NPQR-STUV-WXYZ-2345-6789';
+
+  String encodePayload(Map<String, Object?> payload, {int version = 2}) =>
+      'molia-pair:$version:'
+      '${base64Url.encode(utf8.encode(jsonEncode(payload)))}';
 
   SyncPairingCode roundTrip(SyncPairingCode code) =>
       SyncPairingCode.tryParse(code.encode())!;
@@ -30,7 +34,7 @@ void main() {
       SyncPairingAddress(host: '192.168.1.10', probePort: 47825),
       SyncPairingAddress(host: '2409:8a55::5', probePort: 51000),
     ]);
-    expect(code.encode(), startsWith('molia-pair:1:'));
+    expect(code.encode(), startsWith('molia-pair:2:'));
   });
 
   test('方括号 IPv6 与空白：归一后解析（首尾空白 / 换行容忍）', () {
@@ -47,11 +51,8 @@ void main() {
   test('非法输入：不是配对码 / 版本不符 / base64 损坏 / JSON 缺必填 → null', () {
     expect(SyncPairingCode.tryParse(''), isNull);
     expect(SyncPairingCode.tryParse('192.168.1.23'), isNull);
-    expect(SyncPairingCode.tryParse('molia-pair:2:AAAA'), isNull);
-    expect(SyncPairingCode.tryParse('molia-pair:1:not-base64!!'), isNull);
-
-    String encodePayload(Map<String, Object?> payload) =>
-        'molia-pair:1:${base64Url.encode(utf8.encode(jsonEncode(payload)))}';
+    expect(SyncPairingCode.tryParse('molia-pair:3:AAAA'), isNull);
+    expect(SyncPairingCode.tryParse('molia-pair:2:not-base64!!'), isNull);
 
     // 缺设备 id / 口令 / 空值。
     expect(
@@ -67,13 +68,20 @@ void main() {
       isNull,
     );
     // 载荷不是 JSON 对象。
-    expect(SyncPairingCode.tryParse('molia-pair:1:WzFd'), isNull);
+    expect(SyncPairingCode.tryParse('molia-pair:2:WzFd'), isNull);
     // addresses 不是数组 → 整体拒绝（结构不对）。
     expect(
       SyncPairingCode.tryParse(
           encodePayload({'i': 'devA', 'p': passphrase, 'a': 'x'})),
       isNull,
     );
+  });
+
+  test('旧版本配对码（molia-pair:1:）解析失败：不做兼容', () {
+    final old = encodePayload({'i': 'devA', 'p': passphrase}, version: 1);
+    expect(SyncPairingCode.tryParse(old), isNull);
+    // 前缀仍可识别为「配对码文本」，但解析不出内容。
+    expect(SyncPairingCode.looksLikeCode(old), isTrue);
   });
 
   test('地址条目校验：非法 host / 端口跳过，去重，最多 8 条', () {
@@ -90,7 +98,7 @@ void main() {
       ],
     };
     final code = SyncPairingCode.tryParse(
-      'molia-pair:1:${base64Url.encode(utf8.encode(jsonEncode(payload)))}',
+      encodePayload(payload),
     )!;
     expect(code.addresses, hasLength(SyncPairingCode.maxAddresses));
     expect(code.addresses.first,
@@ -108,7 +116,7 @@ void main() {
 
   test('HTTP 端口越界按未提供处理；缺省字段给默认值', () {
     final code = SyncPairingCode.tryParse(
-      'molia-pair:1:${base64Url.encode(utf8.encode(jsonEncode({'i': 'devA', 'p': passphrase, 'h': 70000})))}',
+      encodePayload({'i': 'devA', 'p': passphrase, 'h': 70000}),
     )!;
     expect(code.httpPort, 0);
     expect(code.deviceName, '');
@@ -129,9 +137,9 @@ void main() {
   });
 
   test('looksLikeCode 只认前缀（带空白 / 换行）', () {
-    expect(SyncPairingCode.looksLikeCode('molia-pair:1:AAAA'), isTrue);
-    expect(SyncPairingCode.looksLikeCode(' \nmolia-pair:1:AAAA'), isTrue);
-    expect(SyncPairingCode.looksLikeCode('molia-pairx:1:AAAA'), isFalse);
+    expect(SyncPairingCode.looksLikeCode('molia-pair:2:AAAA'), isTrue);
+    expect(SyncPairingCode.looksLikeCode(' \nmolia-pair:2:AAAA'), isTrue);
+    expect(SyncPairingCode.looksLikeCode('molia-pairx:2:AAAA'), isFalse);
     expect(SyncPairingCode.looksLikeCode('192.168.1.23'), isFalse);
   });
 }

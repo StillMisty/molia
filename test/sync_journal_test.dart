@@ -55,6 +55,32 @@ void main() {
     expect(tombstone.record.version.physical, 4);
   });
 
+  test('reset：清空日志与窗口状态，不碰用户数据表', () async {
+    await journal.append(db, [change('a', 1), change('b', 2)]);
+    await journal.markSnapshotBuilt(2);
+    await db.into(db.playHistory).insert(
+          PlayHistoryCompanion.insert(
+            sourceKey: 'kuwo',
+            songId: 'song-1',
+            title: '测试',
+            playedAt: 1,
+          ),
+        );
+
+    await journal.reset();
+
+    expect(await journal.headSeq(), 0);
+    expect(await journal.baseSeq(), 0);
+    expect(await journal.snapshotSeq(), -1);
+    expect(await journal.window(), isEmpty);
+    expect(await db.select(db.playHistory).get(), hasLength(1),
+        reason: '派生状态清空不动真实用户数据');
+
+    // 重建后 seq 从 1 重新开始。
+    await journal.append(db, [change('c', 3)]);
+    expect(await journal.headSeq(), 1);
+  });
+
   test('追加与数据写入同事务：事务回滚后日志与数据都不落', () async {
     try {
       await db.transaction(() async {

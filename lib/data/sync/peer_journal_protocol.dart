@@ -171,7 +171,7 @@ bool isPeerUpToDate({required int cursor, required int? headSeq}) =>
     headSeq == null || cursor >= headSeq;
 
 /// 本协议文件名种类。
-enum PeerJournalFileKind { acks, chunk, snapshot, legacy }
+enum PeerJournalFileKind { acks, chunk, snapshot }
 
 /// 解析后的协议文件名。
 class PeerJournalFileName {
@@ -195,62 +195,57 @@ class PeerJournalFileName {
 /// WebDAV 远端文件命名（协议的一部分：文件名自带设备与 seq 区间）。
 ///
 /// 命名规则集中在这里：块名同时是「窗口区间」的唯一来源，解析与生成分开
-/// 实现很容易一边改了另一边忘掉。
+/// 实现很容易一边改了另一边忘掉。`.p2` 是硬断代后的命名空间：旧文件名不
+/// 识别、不清理（按幽灵文件忽略），因此不存在「误删上一代文件」的路径。
 abstract final class PeerJournalNames {
-  /// 回执文件后缀（固定名，可变）：`<deviceId>.acks.msync`。
-  static const String acksSuffix = '.acks.msync';
+  /// 断代命名空间标记：所有协议文件名都必须带它。
+  static const String namespace = '.p2';
 
-  /// 增量块后缀（不可变）：`<deviceId>.<start>-<end>.chunk.msync`。
+  /// 回执文件后缀（固定名，可变）：`<deviceId>.p2.acks.msync`。
+  static const String acksSuffix = '$namespace.acks.msync';
+
+  /// 增量块后缀（不可变）：`<deviceId>.p2.<start>-<end>.chunk.msync`。
   static const String chunkSuffix = '.chunk.msync';
 
-  /// 全量快照后缀（不可变）：`<deviceId>.<coverage>.snapshot.msync`。
+  /// 全量快照后缀（不可变）：`<deviceId>.p2.<coverage>.snapshot.msync`。
   static const String snapshotSuffix = '.snapshot.msync';
 
-  /// v3 之前的增量文件命名（只清理不读）。
-  static const String legacyJournalSuffix = '.journal.msync';
+  /// 命名空间 + 数据段的分隔标记（`<deviceId>.p2.`）。
+  static const String _marker = '$namespace.';
 
   static String acks(String deviceId) => '$deviceId$acksSuffix';
 
   static String chunk(String deviceId, JournalSeqRange range) =>
-      '$deviceId.${range.startSeq}-${range.endSeq}$chunkSuffix';
+      '$deviceId$namespace.${range.startSeq}-${range.endSeq}$chunkSuffix';
 
   static String snapshot(String deviceId, int coverage) =>
-      '$deviceId.$coverage$snapshotSuffix';
+      '$deviceId$namespace.$coverage$snapshotSuffix';
 
-  /// 解析本协议文件名；其它命名（幽灵 / 残留）返回 null。
+  /// 解析本协议文件名；其它命名（旧命名空间 / 残留）返回 null。
   ///
-  /// 设备 id 是本协议自产的 32 位小写十六进制（不含 `.`），按最后一个 `.`
-  /// 分段解析即可。
+  /// 设备 id 是本协议自产的 32 位小写十六进制（不含 `.`），按命名空间标记
+  /// 分段解析即可。旧文件名在这里统一变成幽灵文件：既不进列表也不被删除。
   static PeerJournalFileName? parse(String name) {
     String strip(String suffix) =>
         name.substring(0, name.length - suffix.length);
     if (name.endsWith(acksSuffix)) {
       final device = strip(acksSuffix);
-      if (!device.contains('.')) {
+      if (device.isNotEmpty && !device.contains('.')) {
         return PeerJournalFileName(
           deviceId: device,
           kind: PeerJournalFileKind.acks,
         );
       }
-    } else if (name.endsWith(legacyJournalSuffix)) {
-      final device = strip(legacyJournalSuffix);
-      if (device.isNotEmpty && !device.contains('.')) {
-        return PeerJournalFileName(
-          deviceId: device,
-          kind: PeerJournalFileKind.legacy,
-        );
-      }
     } else if (name.endsWith(chunkSuffix)) {
-      final stem = strip(chunkSuffix);
-      final dot = stem.lastIndexOf('.');
-      if (dot > 0) {
-        final pieces = stem.substring(dot + 1).split('-');
+      final split = _splitNamespace(strip(chunkSuffix));
+      if (split != null) {
+        final pieces = split.rest.split('-');
         if (pieces.length == 2) {
           final start = int.tryParse(pieces[0]);
           final end = int.tryParse(pieces[1]);
           if (start != null && end != null && end >= start) {
             return PeerJournalFileName(
-              deviceId: stem.substring(0, dot),
+              deviceId: split.deviceId,
               kind: PeerJournalFileKind.chunk,
               range: JournalSeqRange(startSeq: start, endSeq: end),
             );
@@ -258,26 +253,30 @@ abstract final class PeerJournalNames {
         }
       }
     } else if (name.endsWith(snapshotSuffix)) {
-      final stem = strip(snapshotSuffix);
-      final dot = stem.lastIndexOf('.');
-      if (dot > 0) {
-        final coverage = int.tryParse(stem.substring(dot + 1));
+      final split = _splitNamespace(strip(snapshotSuffix));
+      if (split != null) {
+        final coverage = int.tryParse(split.rest);
         if (coverage != null) {
           return PeerJournalFileName(
-            deviceId: stem.substring(0, dot),
+            deviceId: split.deviceId,
             kind: PeerJournalFileKind.snapshot,
             coverage: coverage,
-          );
-        }
-        // `<deviceId>.snapshot.msync`（旧命名，无覆盖位置）：只清理不读。
-        if (!stem.contains('.')) {
-          return PeerJournalFileName(
-            deviceId: stem,
-            kind: PeerJournalFileKind.legacy,
           );
         }
       }
     }
     return null;
+  }
+
+  /// 把 `<deviceId>.p2.<rest>` 拆成设备 id 与数据段；命名空间缺失 / 设备 id
+  /// 非法时返回 null（旧命名与嵌套 `.p2` 都不会被当成协议文件）。
+  static ({String deviceId, String rest})? _splitNamespace(String stem) {
+    final index = stem.indexOf(_marker);
+    if (index <= 0) return null;
+    final device = stem.substring(0, index);
+    if (device.contains('.')) return null;
+    final rest = stem.substring(index + _marker.length);
+    if (rest.isEmpty) return null;
+    return (deviceId: device, rest: rest);
   }
 }

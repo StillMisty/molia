@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
 
@@ -12,42 +11,39 @@ import '../../../utils/peer_address.dart';
 import '../peer_journal_protocol.dart';
 import '../sync_codec_port.dart';
 import '../sync_crypto.dart';
+import 'lan_discovery.dart';
 
-/// 局域网直连传输：UDP 探测（IPv4 广播 + IPv6 组播 + 单播）发现 +
-/// 各设备内置 HTTP 端点。
+/// 局域网直连传输：`MSD/1` 发现 + 各设备内置 HTTP 端点。
 ///
-/// 协议（明文层只有设备名 / 端口 / 地址候选 / 内容指纹与日志头部，数据全部加密）：
-/// - UDP `molia-sync.probe` JSON：`{m, v, deviceId, name, port, udpPort, addrs,
-///   reply, snapshotId, journalHead}`；收到非回复探测时向**来源地址**单播应答
-///   （携带自己的 HTTP 端口、探测端口、可路由地址候选、内容指纹与日志头部），
-///   并把发送方登记为对端——主动探测方也在线，没必要等它先应答；
-/// - HTTP `GET  /molia-sync/v1/journal?since=<游标>`：返回该游标之后的**增量
+/// 职责划分是硬约束：**UDP 只负责发现，HTTP 是数据与存活通道**。
+/// - 发现层（[LanDiscovery]）用二进制 `MSD/1` 公告 + HMAC 认证交换设备 id /
+///   名称 / 端点端口 / 内容指纹；旧 JSON 探测包是未知字节，静默丢弃；
+/// - HTTP `GET  /molia-sync/v2/journal?since=<游标>`：返回该游标之后的**增量
 ///   窗口**；游标落后于窗口起点（条目已被裁剪）时返回全量快照（bootstrap）；
-/// - HTTP `POST /molia-sync/v1/journal`：接收对端的增量窗口；
-/// - HTTP `GET  /molia-sync/v1/snapshot`：返回本机全量快照（anti-entropy
+/// - HTTP `POST /molia-sync/v2/journal`：接收对端的增量窗口；
+/// - HTTP `GET  /molia-sync/v2/snapshot`：返回本机全量快照（anti-entropy
 ///   兜底；未注入增量提供者时增量端点也回它）；
-/// - HTTP `POST /molia-sync/v1/snapshot`：接收对端全量快照。
+/// - HTTP `POST /molia-sync/v2/snapshot`：接收对端全量快照。
+///
+/// 路径是硬断代的一部分：旧版 `/molia-sync/v1/*` 一律 404。
 ///
 /// 端口可降级（Windows 宿主把大段端口标记为系统保留，errno 10013；见
-/// `docs/pitfalls.md`）：UDP 绑定失败改绑系统分配端口（对端按探测包里自报的
-/// `udpPort` 单播回来），HTTP 绑定失败改绑随机端口并持久化。**UDP 不可用不算
-/// 传输失败**：广播 / 组播发现降级，手动地址簿的 HTTP 直连照常。
+/// `docs/pitfalls.md`）：UDP 绑定失败改绑系统分配端口；HTTP 绑定失败改绑
+/// 随机端口并持久化。**UDP 不可用不算传输失败**：广播 / 组播发现降级，
+/// 手动地址与已知端点的 HTTP 直连照常。
 ///
-/// 地址候选（`addrs`）：IPv6 组播的源地址必然是 link-local（不能用于 HTTP），
-/// 所以探测与应答都随包交换本机可路由地址（IPv4 + 全局 / ULA IPv6，排除回环
-/// 与 link-local）；对端按候选地址优先、观测源地址兜底的顺序尝试连接。
+/// 跳过拉取的判据：公告里的 `snap` 与本机缓存的「上次拉到的对端指纹」一致，
+/// 且本机游标已到对端日志头部（没有还没消费的条目）——内容没变就不传、
+/// 不解密、不合并。
 ///
-/// 跳过拉取的判据：探测应答里的 `snapshotId` 与本机缓存的「上次拉到的对端
-/// 指纹」一致，且本机游标已到对端日志头部（没有还没消费的条目）——内容没变
-/// 就不传、不解密、不合并。
+/// 信任模型：发现报文用同步口令派生的独立 discovery key 认证；数据用同步
+/// 口令派生密钥加密。HTTP 层不做额外鉴权（载荷是密文，无法解密者拿不到
+/// 内容）。能通过 MAC + 解密者即已授权。
 ///
-/// 信任模型：数据用同步口令派生密钥加密，能解密者即已授权；HTTP 层不做
-/// 额外鉴权（载荷是密文，无法解密者拿不到内容）。
-///
-/// 发现失败（AP 隔离 / 多网段 / 防火墙 / VPN）时用 [manualPeersProvider]
-/// 提供的手动地址簿做单播探测；权限被拒（Android 17 起局域网默认阻断）时
-/// 传输不启动并把原因记为 `permission_denied`——**手动地址救不了权限**。
-class LanSyncTransport implements SyncTransport {
+/// 耗电预算：正常有候选轮 ≤8 个单播探测 + HTTP、等 400ms、0 广播；蜂窝网
+/// 0 广播 / 组播；后台取消公告与重连计时器，不主动探测。
+class LanSyncTransport
+    implements SyncTransport, SyncSightingSource, SyncLanLifecycle {
   LanSyncTransport({
     required this.deviceId,
     required String Function() deviceName,
@@ -62,54 +58,91 @@ class LanSyncTransport implements SyncTransport {
     void Function(ManualPeer learned)? onPeerResolved,
     int Function()? httpPortProvider,
     void Function(int port)? onHttpPortBound,
+    Future<bool> Function(int port)? httpProbe,
     Future<bool> Function()? permissionGate,
     Future<List<String>> Function()? localAddressesProvider,
     Future<RawDatagramSocket> Function(InternetAddress address, int port)?
         udpBinder,
+    List<LanPeerEndpoint> Function()? knownPeersProvider,
+    void Function(LanPeerEndpoint verified)? onPeerVerified,
+    bool Function()? isCellular,
+    int Function()? nowMs,
+    Stream<void>? networkChanges,
     int udpPort = defaultUdpPort,
     Duration probeWindow = const Duration(milliseconds: 1200),
     Duration requestTimeout = const Duration(seconds: 3),
-  })  : _deviceName = deviceName,
-        _codec = codec,
+  })  : _codec = codec,
         _passphraseProvider = passphraseProvider,
         _snapshotProvider = snapshotProvider,
         _journalProvider = journalProvider,
-        _snapshotIdProvider = snapshotIdProvider,
-        _journalHeadProvider = journalHeadProvider,
         _probeTargets = probeTargets ?? const [],
         _manualPeersProvider = manualPeersProvider,
         _onPeerResolved = onPeerResolved,
         _httpPortProvider = httpPortProvider,
         _onHttpPortBound = onHttpPortBound,
+        _httpProbe = httpProbe,
         _permissionGate = permissionGate,
-        _localAddressesProvider = localAddressesProvider,
-        _udpBinder = udpBinder ?? _bindDatagram,
+        _knownPeersProvider = knownPeersProvider,
+        _onPeerVerified = onPeerVerified,
+        _isCellular = isCellular,
+        _nowMs = nowMs ?? (() => DateTime.now().millisecondsSinceEpoch),
+        _networkChanges = networkChanges,
         _udpPort = udpPort,
-        _probeWindow = probeWindow,
-        _requestTimeout = requestTimeout;
+        _requestTimeout = requestTimeout {
+    _discovery = LanDiscovery(
+      deviceId: deviceId,
+      deviceName: deviceName,
+      discoveryKeyProvider: _ensureDiscoveryKey,
+      httpPortProvider: () => _http?.port ?? 0,
+      probePortProvider: () => _discovery.advertisedProbePort,
+      snapshotIdProvider: snapshotIdProvider,
+      journalHeadProvider: journalHeadProvider,
+      knownPeersProvider: _knownEndpoints,
+      probeTargetsProvider: _probeTargetList,
+      localAddressesProvider: localAddressesProvider,
+      udpBinder: udpBinder,
+      udpPort: udpPort,
+      candidateWindow: probeWindow < const Duration(milliseconds: 400)
+          ? probeWindow
+          : const Duration(milliseconds: 400),
+      fullWindow: probeWindow,
+      nowMs: _nowMs,
+      isCellular: isCellular,
+    );
+  }
 
   static const int defaultUdpPort = ManualPeer.defaultProbePort;
-  static const String snapshotPath = '/molia-sync/v1/snapshot';
-  static const String journalPath = '/molia-sync/v1/journal';
+  static const String snapshotPath = '/molia-sync/v2/snapshot';
+  static const String journalPath = '/molia-sync/v2/journal';
 
-  /// IPv6 组播探测地址（IPv4 `255.255.255.255` 广播的对应物；ff02::/16 是
-  /// 链路本地范围，接口 zone 由内核按发送接口补全）。
-  static const String probeMulticastHost = 'ff02::4d4f:4c49';
+  /// IPv6 组播发现地址（与发现层常量同源，保留给旧调用方）。
+  static const String probeMulticastHost = Msd1.ipv6MulticastHost;
 
-  /// 单个探测 / 应答携带的候选地址上限（无界列表只会撑大包与尝试次数）。
-  static const int maxAdvertisedAddresses = 8;
+  /// 单个公告携带的候选地址上限（与 `MSD/1` 协议常量一致）。
+  static const int maxAdvertisedAddresses = Msd1.maxAddresses;
 
-  /// 单个对端记住的探测端点上限（候选地址可能有多个，全试一遍没必要）。
+  /// 单对端记住的探测端点上限（兼容旧调用方；发现层按 presence 合并）。
   static const int maxProbeEndpointsPerPeer = 4;
 
-  /// 登记的对端 / 探测端点上限（防伪造探测灌爆内存）。
-  static const int maxRememberedPeers = 32;
+  /// 登记的 presence 上限（与发现层一致）。
+  static const int maxRememberedPeers = LanDiscovery.maxPeers;
+
+  /// 单个对端最多尝试的 HTTP 地址数（候选地址可能有多个，全试没必要）。
+  static const int maxHttpAddressesPerPeer = 3;
+
+  /// 单个对端每轮的总请求预算（3 个地址 × 3s 超时会拖住整轮）。
+  static const Duration peerRequestBudget = Duration(seconds: 4);
+
+  /// 后台超过该时长再回前台才重绑 UDP（短切换不值得付重绑成本）。
+  static const Duration resumeRebindThreshold = Duration(seconds: 15);
+
+  /// HTTP 端点 loopback 探活预算。
+  static const Duration loopbackProbeTimeout = Duration(milliseconds: 500);
 
   /// 快照体积上限（含大量统计事件时留足余量；超出视为异常数据丢弃）。
   static const int maxSnapshotBytes = 32 * 1024 * 1024;
 
   final String deviceId;
-  final String Function() _deviceName;
   final SyncCodecPort _codec;
   final Future<String?> Function() _passphraseProvider;
   final Future<SyncEnvelope> Function() _snapshotProvider;
@@ -117,12 +150,6 @@ class LanSyncTransport implements SyncTransport {
   /// 增量窗口提供者：`since` = 请求方游标；返回该游标之后的窗口，或游标
   /// 落后于窗口起点时的全量快照。未注入时只服务全量快照。
   final Future<SyncEnvelope> Function(int since)? _journalProvider;
-
-  /// 本机最近一轮快照的内容指纹（探测应答携带；空 = 尚未产出快照）。
-  final String Function()? _snapshotIdProvider;
-
-  /// 本机 journal 头部（探测应答携带；对端据此判断「有没有还没消费的条目」）。
-  final int Function()? _journalHeadProvider;
 
   /// 测试注入：向指定地址单播探测（空 = 仅广播 / 组播，生产路径）。
   final List<({String host, int port})> _probeTargets;
@@ -137,66 +164,59 @@ class LanSyncTransport implements SyncTransport {
   final int Function()? _httpPortProvider;
   final void Function(int port)? _onHttpPortBound;
 
+  /// 测试注入：HTTP 端点存活探测（默认走 loopback TCP connect）。
+  final Future<bool> Function(int port)? _httpProbe;
+
   /// 局域网权限门：返回 false 时传输不启动（原因 = permission_denied）。
   final Future<bool> Function()? _permissionGate;
 
-  /// 本机可路由候选地址提供者（组合根注入 `LocalEndpointsService`；
-  /// 未注入时按 [NetworkInterface.list] 现算）。
-  final Future<List<String>> Function()? _localAddressesProvider;
+  /// 已通过验证的持久化端点（#42 注入；本 issue 先支持）。
+  final List<LanPeerEndpoint> Function()? _knownPeersProvider;
 
-  /// 测试注入：UDP 绑定实现（模拟系统保留端口 / 网络栈完全不可用）。
-  final Future<RawDatagramSocket> Function(InternetAddress address, int port)
-      _udpBinder;
+  /// 验证成功后回写端点（#42 注入；本 issue 先支持）。
+  final void Function(LanPeerEndpoint verified)? _onPeerVerified;
+
+  /// 当前是否蜂窝网络（蜂窝下 0 广播 / 组播，只直连已知端点）。
+  final bool Function()? _isCellular;
+
+  /// 可注入时钟（测试 nonce 去重 / 限流窗口）。
+  final int Function() _nowMs;
+
+  /// `connectivity_plus` 原始事件（#42 接线；本 issue 支持注入测试）。
+  final Stream<void>? _networkChanges;
 
   final int _udpPort;
-  final Duration _probeWindow;
   final Duration _requestTimeout;
+
+  late final LanDiscovery _discovery;
+  StreamSubscription<LanPeerSighting>? _sightingSub;
+  StreamSubscription<void>? _networkSub;
 
   final StreamController<SyncEnvelope> _incoming =
       StreamController<SyncEnvelope>.broadcast();
-  final List<_Peer> _peers = [];
-
-  /// 上一轮接触过的对端探测端点（去重键 → 该对端的候选探测地址）：
-  /// 端口降级的对端不在标准端口上，广播 / 组播到不了它，只能单播；候选
-  /// 地址（对端自报的可路由地址）在前、观测源地址兜底（v6 组播源是
-  /// link-local，要带 zone 才能用）。
-  ///
-  /// 仅进程内存：观测到的来源端口随 NAT / 重启 / 独立降级变化，**绝不写回
-  /// 地址簿**（用户配置的探测端口保持原样）；进程重启后重新学习。
-  final Map<String, List<({String host, int port})>> _probeEndpoints = {};
 
   /// 上次成功拉到的各对端内容指纹（`deviceId` / 主机 → `snapshotId`）：
-  /// 探测应答一致时跳过 GET。进程内缓存，重启后首轮重新拉一次。
+  /// 公告一致时跳过 GET。进程内缓存，重启后首轮重新拉一次。
   final Map<String, String> _peerSnapshotIds = {};
+
   final Logger _logger = Logger('molia.sync.lan');
 
-  int _broadcastCount = 0;
-  int _snapshotGetCount = 0;
-
-  /// 广播探测发送次数（测试断言「空闲轮不广播」用；广播只在 `pull` 内发出）。
-  int get broadcastCount => _broadcastCount;
-
-  /// 快照 GET 次数（测试断言「未变跳过」用）。
-  int get snapshotGetCount => _snapshotGetCount;
-
-  RawDatagramSocket? _udp4;
-  RawDatagramSocket? _udp6;
   HttpServer? _http;
   bool _running = false;
-
-  /// 本机可路由地址缓存（探测包与应答包共用；`_discoverPeers` 每轮刷新）。
-  List<String> _ownAddresses = const [];
-
-  /// 启动失败的技术细节（HTTP 端点起不来、权限不足等）；null = 未失败。
-  String? _startError;
-  String? _unavailableReason;
-
-  /// 广播 / 组播发送失败（网络策略 / 缺少广播 entitlement）。
-  bool _broadcastUnavailable = false;
+  int? _hiddenAt;
+  int? _roundStartedAt;
+  int _snapshotGetCount = 0;
 
   /// 本进程内发现过对端：用于区分「一直没对端」与「零应答」——
   /// 后者更可能是网络隔离（AP 隔离 / VPN / 防火墙）而不是没人在线。
   bool _everDiscoveredPeer = false;
+
+  String? _keyPassphrase;
+  Uint8List? _cachedDiscoveryKey;
+
+  /// 启动失败的技术细节（HTTP 端点起不来、权限不足等）；null = 未失败。
+  String? _startError;
+  String? _unavailableReason;
 
   @override
   String get kind => SyncTransportKind.lan;
@@ -208,21 +228,25 @@ class LanSyncTransport implements SyncTransport {
   @override
   bool get servesLiveSnapshot => true;
 
-  /// 本机实际绑定的 UDP 探测端口（分族；0 = 该族不可用）：端口降级后
-  /// 广播 / 组播到不了本机，对端要按对应族的端口单播（随探测包自报）。
+  /// 本机实际绑定的 UDP 探测端口（分族；0 = 该族不可用）。
   @override
-  ({int v4, int v6}) get discoveryPorts => (
-        v4: _running ? (_udp4?.port ?? 0) : 0,
-        v6: _running ? (_udp6?.port ?? 0) : 0,
-      );
+  ({int v4, int v6}) get discoveryPorts => _discovery.discoveryPorts;
 
-  /// 探测包自报的单端口（协议只有一格）：取首选族（v4 优先，其次 v6）。
-  /// 分族端口走配对码；探测应答与后续单播都按**观测到的来源地址 / 端口**
-  /// 走，不依赖这个提示字段。
-  int get _advertisedUdpPort {
-    final ports = discoveryPorts;
-    return ports.v4 > 0 ? ports.v4 : ports.v6;
-  }
+  /// 认证通过的公告 / 应答事件（引擎据此唤醒同步轮）。
+  @override
+  Stream<LanPeerSighting> get sightings => _discovery.sightings;
+
+  /// 拉取轮主动广播次数（测试断言「空闲轮 0 广播」用；公告 burst 不计）。
+  int get broadcastCount => _discovery.broadcastCount;
+
+  /// 快照 GET 次数（测试断言「未变跳过」用）。
+  int get snapshotGetCount => _snapshotGetCount;
+
+  /// presence 条数（诊断 / 测试用）。
+  int get presenceCount => _discovery.presence.length;
+
+  /// 网络代次（换网重绑后增加；测试 / 诊断用）。
+  int get networkEpoch => _discovery.networkEpoch;
 
   @override
   String? get unavailableReason => _running ? null : _unavailableReason;
@@ -232,8 +256,6 @@ class LanSyncTransport implements SyncTransport {
 
   @override
   Stream<SyncEnvelope> get incoming => _incoming.stream;
-
-  int get _httpPort => _http?.port ?? 0;
 
   @override
   Future<void> start() async {
@@ -252,44 +274,79 @@ class LanSyncTransport implements SyncTransport {
     // HTTP 是载荷通道（拉取 / 推送 / 手动直连全靠它）：它起不来才是真的
     // 传输失败，原因留在 [unavailableReason] 供 UI 呈现。
     final rememberedPort = _httpPortProvider?.call() ?? 0;
-    try {
-      final http = await _bindHttp(rememberedPort);
-      _http = http;
-      http.listen(_onHttpRequest);
-    } catch (e) {
-      _startError = '$e';
+    final opened = await _openHttpWithLiveness(rememberedPort);
+    if (opened == null) {
+      _startError = '局域网 HTTP 端点绑定失败';
       _unavailableReason = SyncUnavailableReason.startFailed;
-      _logger.warning('局域网传输启动失败（HTTP 端点）', e);
-      await _http?.close(force: true);
-      _http = null;
+      _logger.warning('局域网传输启动失败（HTTP 端点）');
       return;
     }
-
-    // UDP 是可降级的发现能力：端口被系统保留（Windows 镜像模式 WSL 的
-    // 保留块，errno 10013）或占用时改绑系统分配端口；两族都不可用只让发现
-    // 降级（手动地址 / WebDAV 仍可用），传输照常运行。
-    final udp = await _bindUdp(_udpPort);
-    _udp4 = udp.v4;
-    _udp6 = udp.v6;
-    final v4 = _udp4;
-    final v6 = _udp6;
-    if (v4 != null) v4.listen((event) => _onDatagram(v4, event));
-    if (v6 != null) v6.listen((event) => _onDatagram(v6, event));
-    if (v4 == null && v6 == null) {
-      _logger.warning('UDP 探测不可用（IPv4 / IPv6 绑定均失败）：发现只剩手动地址与直连');
-    }
-
+    _http = opened;
     _running = true;
+    _hiddenAt = null;
     _startError = null;
     _unavailableReason = null;
-    if (_http!.port != rememberedPort) _onHttpPortBound?.call(_http!.port);
-    // 首轮探测应答要带地址候选：启动时先刷一次（枚举失败只降级为不带候选）。
-    await _refreshOwnAddresses();
+    if (opened.port != rememberedPort) _onHttpPortBound?.call(opened.port);
+
+    _sightingSub = _discovery.sightings.listen((sighting) {
+      _everDiscoveredPeer = true;
+      _resolveManualPeer(sighting);
+    });
+    _networkSub = _networkChanges?.listen(
+      (_) {
+        unawaited(onNetworkChanged());
+      },
+      onError: (Object _) {},
+    );
+
+    // UDP 是可降级的发现能力：两族都不可用只让发现降级（手动地址 / WebDAV
+    // 仍可用），传输照常运行。启动公告 burst 由发现层调度。
+    await _discovery.start();
+  }
+
+  /// 打开 HTTP 端点并做一次 loopback 探活；失败重绑同一端口，再失败退随机
+  /// 端口（并持久化）。返回的 server 已开始 listen。
+  Future<HttpServer?> _openHttpWithLiveness(int preferredPort) async {
+    var http = await _tryBindHttp(preferredPort);
+    if (http == null) return null;
+    if (await _probeHttp(http.port)) {
+      http.listen(_onHttpRequest);
+      return http;
+    }
+    // 绑上了但 loopback 连不上：常见于挂起恢复后 socket 处于半死状态。
+    // 先重绑同一端口（保持对端记忆），仍不行再退随机端口。
+    await http.close(force: true);
+    http = await _tryBindHttp(preferredPort);
+    if (http != null && await _probeHttp(http.port)) {
+      http.listen(_onHttpRequest);
+      return http;
+    }
+    await http?.close(force: true);
+    http = await _tryBindHttp(0);
+    if (http != null && await _probeHttp(http.port)) {
+      http.listen(_onHttpRequest);
+      return http;
+    }
+    await http?.close(force: true);
+    return null;
+  }
+
+  /// HTTP 端点存活探测：默认 loopback TCP connect（500ms），测试可注入。
+  Future<bool> _probeHttp(int port) =>
+      _httpProbe?.call(port) ?? _loopbackAlive(port);
+
+  Future<HttpServer?> _tryBindHttp(int preferredPort) async {
+    try {
+      return await _bindHttp(preferredPort);
+    } catch (e) {
+      _logger.warning('HTTP 端点绑定失败（preferred=$preferredPort）', e);
+      return null;
+    }
   }
 
   /// 双栈 HTTP 绑定：IPv6（`v6Only: false` 一行同时服务 v4/v6）→ IPv4 →
   /// 端口 0 的同两级。首选端口被占用 / 落在系统保留块时退回随机端口并
-  /// 持久化（对端记不住随机端口，所以端口持久化语义不变）。
+  /// 持久化。
   Future<HttpServer> _bindHttp(int preferredPort) async {
     final attempts = <(InternetAddress, int)>[
       if (preferredPort > 0) ...[
@@ -310,51 +367,26 @@ class LanSyncTransport implements SyncTransport {
     throw lastError ?? StateError('HTTP 端点绑定失败');
   }
 
-  /// 双栈 UDP 绑定；每族独立降级（见 [_bindUdpFamily]），全部失败返回空对。
-  Future<({RawDatagramSocket? v4, RawDatagramSocket? v6})> _bindUdp(
-    int preferredPort,
-  ) async {
-    final v4 = await _bindUdpFamily(InternetAddress.anyIPv4, preferredPort);
-    final v6 = await _bindUdpFamily(InternetAddress.anyIPv6, preferredPort);
-    return (v4: v4, v6: v6);
-  }
-
-  /// 单族 UDP 绑定：先试首选端口（`reuseAddress: true`），失败记警告（含
-  /// 端口与 `SocketException.osError?.errorCode`）后改绑 0；再补上该族的
-  /// 广播 / 组播能力（能力失败只降级能力，不丢单播）。
-  Future<RawDatagramSocket?> _bindUdpFamily(
-    InternetAddress address,
-    int preferredPort,
-  ) async {
-    final ports = preferredPort > 0 ? [preferredPort, 0] : [0];
-    for (final port in ports) {
+  /// loopback TCP 探活（500ms）：能连上说明监听仍在，不必做 HTTP 请求。
+  Future<bool> _loopbackAlive(int port) async {
+    if (port <= 0) return false;
+    for (final address in [
+      InternetAddress.loopbackIPv4,
+      InternetAddress.loopbackIPv6,
+    ]) {
       try {
-        final socket = await _udpBinder(address, port);
-        try {
-          if (address.type == InternetAddressType.IPv4) {
-            socket.broadcastEnabled = true;
-          } else {
-            socket.joinMulticast(InternetAddress(probeMulticastHost));
-            socket.multicastHops = 1;
-          }
-        } catch (e) {
-          // iOS 缺 multicast entitlement / 系统策略拦截时的正常降级：
-          // 该能力不可用（发送会失败），单播与 HTTP 照常。
-          _logger.warning('UDP ${address.address}:$port 探测能力启用失败（继续用单播）', e);
-        }
-        return socket;
-      } on SocketException catch (e) {
-        final fallback = port == preferredPort && preferredPort > 0;
-        _logger.warning(
-          'UDP 绑定 ${address.address}:$port 失败'
-          '（errno=${e.osError?.errorCode}）'
-          '${fallback ? '，改绑系统分配端口' : '，该族探测不可用'}',
+        final socket = await Socket.connect(
+          address,
+          port,
+          timeout: loopbackProbeTimeout,
         );
-      } catch (e) {
-        _logger.warning('UDP 绑定 ${address.address}:$port 失败', e);
+        socket.destroy();
+        return true;
+      } catch (_) {
+        // 换另一族再试。
       }
     }
-    return null;
+    return false;
   }
 
   @override
@@ -364,14 +396,92 @@ class LanSyncTransport implements SyncTransport {
     // start 重新判定可用性。
     _unavailableReason = null;
     _startError = null;
-    _peers.clear();
-    _ownAddresses = const [];
-    _udp4?.close();
-    _udp4 = null;
-    _udp6?.close();
-    _udp6 = null;
+    _hiddenAt = null;
+    _roundStartedAt = null;
+    await _sightingSub?.cancel();
+    _sightingSub = null;
+    await _networkSub?.cancel();
+    _networkSub = null;
+    await _discovery.stop();
+    _peerSnapshotIds.clear();
+    _everDiscoveredPeer = false;
     await _http?.close(force: true);
     _http = null;
+  }
+
+  /// 回前台：隐藏超过 15s 才重绑 UDP + 探活 HTTP；随后公告 burst。
+  @override
+  Future<void> onAppResumed() async {
+    if (!_running) return;
+    final hiddenAt = _hiddenAt;
+    _hiddenAt = null;
+    final longHidden = hiddenAt != null &&
+        _nowMs() - hiddenAt >= resumeRebindThreshold.inMilliseconds;
+    if (longHidden) {
+      await _ensureHttpAlive();
+      // 重绑失败已把传输置为未运行：本轮回前台到此为止，等下一轮
+      // `_ensureTransportsRunning` 重新 start。
+      if (!_running) return;
+    }
+    await _discovery.onAppResumed(rebind: longHidden);
+  }
+
+  /// 退后台：取消公告 / 重连计时器；不主动探测。
+  @override
+  void onAppHidden() {
+    _hiddenAt = _nowMs();
+    _discovery.onAppHidden();
+  }
+
+  /// 换网（connectivity 事件）：重扫接口，指纹变化时重绑 UDP 并公告。
+  @override
+  Future<void> onNetworkChanged() async {
+    if (!_running) return;
+    await _discovery.onNetworkChanged();
+  }
+
+  /// 本地变更但本轮推送零对端：单次定向公告（只单播）。
+  @override
+  Future<void> announceLocalChange() async {
+    if (!_running) return;
+    final key = await _ensureDiscoveryKey();
+    _discovery.updateKey(key);
+    await _discovery.announceLocalChange();
+  }
+
+  Future<void> _ensureHttpAlive() async {
+    final http = _http;
+    if (http == null) return;
+    if (await _probeHttp(http.port)) return;
+    // 挂起恢复后监听可能半死：先重绑同一端口，失败再退随机端口。
+    final port = http.port;
+    await http.close(force: true);
+    _http = null;
+    var rebound = await _tryBindHttp(port);
+    var alive = rebound != null && await _probeHttp(rebound.port);
+    if (!alive) {
+      await rebound?.close(force: true);
+      rebound = await _tryBindHttp(0);
+      alive = rebound != null && await _probeHttp(rebound.port);
+    }
+    if (!alive || rebound == null) {
+      await rebound?.close(force: true);
+      _logger.warning('回前台后 HTTP 端点重绑失败');
+      // 置为未运行：否则 isRunning 仍是 true，unavailableReason 的 getter
+      // 会返回 null，UI / 引擎看不到失败；下一轮 start 可重新绑定。
+      _running = false;
+      _startError = '回前台后局域网 HTTP 端点重绑失败';
+      _unavailableReason = SyncUnavailableReason.startFailed;
+      await _sightingSub?.cancel();
+      _sightingSub = null;
+      await _networkSub?.cancel();
+      _networkSub = null;
+      await _discovery.stop();
+      return;
+    }
+    rebound.listen(_onHttpRequest);
+    _http = rebound;
+    if (rebound.port != port) _onHttpPortBound?.call(rebound.port);
   }
 
   @override
@@ -391,88 +501,149 @@ class LanSyncTransport implements SyncTransport {
         error: SyncIssue(code: SyncIssueCode.noPassphrase),
       );
     }
+    final key = await _ensureDiscoveryKey();
+    _discovery.updateKey(key);
 
-    final peers = await _discoverPeers();
-    final envelopes = <SyncEnvelope>[];
-    var failed = 0;
-    var skipped = 0;
-    var bytesIn = 0;
-    SyncIssue? firstError;
-    for (final peer in peers) {
-      final cursor = request.cursorFor(peer.deviceId);
-      final needsFull = request.fullPeers.contains(peer.deviceId);
-      // 内容指纹与本机上次拉到的一致、且本机游标已到对端日志头部：
-      // 没有还没消费的条目，跳过 GET + 解密 + 合并（对端清单为空时不可能命中）。
-      final cached = _peerSnapshotIds[peer.key];
-      // 头部未自报（null）按「指纹未变即可跳过」处理，与协议模块的
-      // isPeerUpToDate 同一口径（WebDAV 的「未知头部」是 -1 哨兵，另行判空）。
-      final upToDate =
-          isPeerUpToDate(cursor: cursor, headSeq: peer.journalHead);
-      if (!needsFull &&
-          peer.snapshotId.isNotEmpty &&
-          cached == peer.snapshotId &&
-          upToDate) {
-        skipped++;
-        continue;
-      }
-      final bytes = needsFull
-          ? await _fetchSnapshot(peer)
-          : await _fetchJournal(peer, cursor);
-      if (bytes == null) {
-        failed++;
-        firstError ??= SyncIssue(
-          code: SyncIssueCode.peerReadFailed,
-          args: {'peer': peer.label},
-        );
-        continue;
-      }
-      bytesIn += bytes.length;
-      try {
-        final envelope = await _codec.decrypt(bytes, passphrase);
-        envelopes.add(envelope);
-        final fingerprint = envelope.snapshotId.isNotEmpty
-            ? envelope.snapshotId
-            : peer.snapshotId;
-        if (fingerprint.isNotEmpty) {
-          _peerSnapshotIds[peer.key] = fingerprint;
-        }
-      } on SyncCryptoException {
-        // 对端口令不同 / 数据损坏：跳过该对端，不影响其他设备。
-        failed++;
-        firstError ??= SyncIssue(
-          code: SyncIssueCode.peerDecryptFailed,
-          args: {'peer': peer.label},
-        );
-      }
+    _roundStartedAt = _nowMs();
+    await _discovery.discover(force: request.forceDiscovery);
+    final attempted = <String>{};
+    final stats = _PullStats();
+    await _pullCandidates(request, passphrase, attempted, stats);
+
+    // 全部 HTTP 失败且非蜂窝：最多补一次广播探测，不无限重试。
+    if (stats.httpFailedAny > 0 && !stats.contacted && !_isCellularNow) {
+      await _discovery.rediscover();
+      await _pullCandidates(request, passphrase, attempted, stats);
     }
+
     return SyncPullResult(
-      envelopes: envelopes,
-      peersSeen: peers.length,
-      skippedUnchanged: skipped,
-      failedPeers: failed,
-      bytesIn: bytesIn,
-      seenIds: [
-        for (final peer in peers)
-          if (peer.deviceId.isNotEmpty) peer.deviceId,
-      ],
-      // 至少一个对端可达（拉到或未变跳过）才算接触成功；探测到但全部
-      // 读取 / 解密失败仍是「所有对端都不可达」。
-      contacted: peers.length > failed,
-      error: firstError ?? _discoveryIssue(peers),
+      envelopes: stats.envelopes,
+      peersSeen: stats.expectedSeen + stats.tentativeContacted,
+      skippedUnchanged: stats.skipped,
+      failedPeers: stats.failed,
+      bytesIn: stats.bytesIn,
+      seenIds: stats.seenIds,
+      // 至少一个对端可达（拉到或未变跳过）才算接触成功。
+      contacted: stats.contacted,
+      error: stats.expectedSeen > 0
+          ? stats.firstError
+          : (_discoveryIssue() ?? stats.firstError),
     );
   }
 
-  /// 未发现任何对端时的原因（有对端则为 null）。
+  Future<void> _pullCandidates(
+    SyncPullRequest request,
+    String passphrase,
+    Set<String> attempted,
+    _PullStats stats,
+  ) async {
+    for (final peer in _candidates()) {
+      if (!attempted.add(peer.key)) continue;
+      if (peer.expected) stats.expectedSeen++;
+      final cursor = request.cursorFor(peer.deviceId);
+      final needsFull =
+          peer.deviceId.isNotEmpty && request.fullPeers.contains(peer.deviceId);
+      final cached = _peerSnapshotIds[peer.key];
+      final upToDate = isPeerUpToDate(
+        cursor: cursor,
+        headSeq: peer.journalHead,
+      );
+      // 只有本轮探测到的 snap/head 才能作为「未变」依据：上一轮 presence
+      // 在本轮 ack 丢失时会停在旧 head，照旧跳过会漏掉对端新数据。
+      if (!needsFull &&
+          peer.snapshotFresh &&
+          peer.snapshotId.isNotEmpty &&
+          cached == peer.snapshotId &&
+          upToDate) {
+        stats.skipped++;
+        stats.contacted = true;
+        if (!peer.expected) stats.tentativeContacted++;
+        _rememberSeen(stats, peer);
+        continue;
+      }
+
+      final fetched = needsFull
+          ? await _fetchSnapshot(peer)
+          : await _fetchJournal(peer, cursor);
+      if (fetched == null) {
+        stats.httpFailedAny++;
+        // 试探性对端（只有持久化端点）失败不计数，也不把整轮打成 partial。
+        if (peer.expected) {
+          stats.failed++;
+          stats.firstError ??= SyncIssue(
+            code: SyncIssueCode.peerReadFailed,
+            args: {'peer': peer.label},
+          );
+          // 名册的「最近接触」包含读取失败者：本轮确实发现过它。
+          _rememberSeen(stats, peer);
+        }
+        continue;
+      }
+      stats.bytesIn += fetched.bytes.length;
+      try {
+        final envelope = await _codec.decrypt(fetched.bytes, passphrase);
+        stats.envelopes.add(envelope);
+        stats.contacted = true;
+        _everDiscoveredPeer = true;
+        if (!peer.expected) stats.tentativeContacted++;
+        // 端点可能被同组的另一台设备复用（旧持久化记录 / DHCP 复用）：
+        // 解密后的 deviceId 才是数据的主人。不能把端点写回候选的旧 id，
+        // 也不能把这次接触记到旧 id 的 seenIds 上。
+        final identityMismatch = peer.deviceId.isNotEmpty &&
+            envelope.deviceId.isNotEmpty &&
+            peer.deviceId != envelope.deviceId;
+        final fingerprint = envelope.snapshotId.isNotEmpty
+            ? envelope.snapshotId
+            : (identityMismatch || !peer.snapshotFresh ? '' : peer.snapshotId);
+        if (fingerprint.isNotEmpty) {
+          _peerSnapshotIds[identityMismatch ? envelope.deviceId : peer.key] =
+              fingerprint;
+        }
+        if (identityMismatch) {
+          _peerSnapshotIds.remove(peer.key);
+          if (!stats.seenIds.contains(envelope.deviceId)) {
+            stats.seenIds.add(envelope.deviceId);
+          }
+        } else {
+          _rememberSeen(stats, peer);
+          _verifyPeer(peer, fetched.host);
+        }
+      } on SyncCryptoException {
+        // 对端口令不同 / 数据损坏：跳过该对端，不影响其他设备。
+        if (peer.expected) {
+          stats.failed++;
+          stats.firstError ??= SyncIssue(
+            code: SyncIssueCode.peerDecryptFailed,
+            args: {'peer': peer.label},
+          );
+          _rememberSeen(stats, peer);
+        }
+      }
+    }
+  }
+
+  /// 接触成功的对端 id 进 seenIds（名册的「最近接触」据此更新）。
+  void _rememberSeen(_PullStats stats, _Peer peer) {
+    if (peer.deviceId.isEmpty) return;
+    if (!stats.seenIds.contains(peer.deviceId)) {
+      stats.seenIds.add(peer.deviceId);
+    }
+  }
+
+  /// 未发现任何对端时的原因（有对端接触成功则为 null）。
   ///
-  /// UDP 探测完全不可用（两族都绑不上）优先：此时广播 / 组播 / 单播探测都
-  /// 发不出去，出路是手动地址直连与 WebDAV。其次是广播发送失败；最后是
-  /// 「发现过对端、本轮零应答」——后者通常是网络隔离，提示手动地址与 WebDAV。
-  SyncIssue? _discoveryIssue(List<_Peer> peers) {
-    if (peers.isNotEmpty) return null;
-    if (_udp4 == null && _udp6 == null) {
+  /// UDP 发现完全不可用优先：此时广播 / 组播 / 单播公告都发不出去，出路是
+  /// 手动地址直连与 WebDAV。其次是广播发送失败；最后是「发现过对端、本轮
+  /// 零应答」——后者通常是网络隔离，提示手动地址与 WebDAV。
+  SyncIssue? _discoveryIssue() {
+    // 后台 / 蜂窝下发现层被策略跳过：没有候选不代表网络隔离，不能复用
+    // discoverySilent / broadcastUnavailable 误导用户。
+    if (_discovery.isHidden || _isCellularNow) return null;
+    final ports = _discovery.discoveryPorts;
+    if (ports.v4 == 0 && ports.v6 == 0) {
       return const SyncIssue(code: SyncIssueCode.probePortUnavailable);
     }
-    if (_broadcastUnavailable) {
+    if (_discovery.broadcastUnavailable) {
       return const SyncIssue(code: SyncIssueCode.broadcastUnavailable);
     }
     final manual = _manualPeersProvider?.call() ?? const <ManualPeer>[];
@@ -495,24 +666,37 @@ class LanSyncTransport implements SyncTransport {
     final path = envelope.isDelta ? journalPath : snapshotPath;
     final succeededIds = <String>[];
     final failedIds = <String>[];
+    var succeeded = 0;
+    var failed = 0;
     SyncIssue? firstError;
-    for (final peer in List.of(_peers)) {
-      if (await _postSnapshot(peer, payload, path)) {
-        succeededIds.add(peer.deviceId);
-      } else {
-        failedIds.add(peer.deviceId);
-        firstError ??= SyncIssue(
-          code: SyncIssueCode.peerPushFailed,
-          args: {'peer': peer.label},
-        );
+    // 推送直接使用候选端点，不再依赖「上一轮 pull 留下的 _peers」。本轮起点
+    // 复用 pull 设置的 `_roundStartedAt`：presence 的 lastHeardAt 来自同一次
+    // 轮次的探测窗口，若在 push 里重置，刚在 pull 里听到的对端会被判成
+    // 「非预期」，失败就不计数、不进 failedIds（名册看不到真实推送失败）。
+    for (final peer in _candidates()) {
+      final host = await _postSnapshot(peer, payload, path);
+      if (host != null) {
+        succeeded++;
+        _everDiscoveredPeer = true;
+        if (peer.deviceId.isNotEmpty) succeededIds.add(peer.deviceId);
+        _verifyPeer(peer, host);
+        continue;
       }
+      // 试探性对端失败不计数、不把整轮打成 partial。
+      if (!peer.expected) continue;
+      failed++;
+      if (peer.deviceId.isNotEmpty) failedIds.add(peer.deviceId);
+      firstError ??= SyncIssue(
+        code: SyncIssueCode.peerPushFailed,
+        args: {'peer': peer.label},
+      );
     }
     return SyncPushResult(
-      succeededPeers: succeededIds.length,
-      failedPeers: failedIds.length,
+      succeededPeers: succeeded,
+      failedPeers: failed,
       succeededIds: succeededIds,
       failedIds: failedIds,
-      bytesOut: payload.length * succeededIds.length,
+      bytesOut: payload.length * succeeded,
       error: firstError,
     );
   }
@@ -521,328 +705,168 @@ class LanSyncTransport implements SyncTransport {
   @override
   Future<bool> deleteRemote(String deviceId) async => false;
 
-  /// 广播 / 组播探测 + 单播探测（测试注入目标、手动地址簿、上轮学到的
-  /// 对端探测端点），收集应答（清空过期对端；仅保留本轮应答者）。
-  Future<List<_Peer>> _discoverPeers() async {
-    _peers.clear();
-    final manualPeers = _manualPeersProvider?.call() ?? const <ManualPeer>[];
-
-    // 地址簿里已学到端口的对端先入队：即使探测应答被网络策略吞掉也能直连
-    // （端口是学到的、不是猜的；连不上会被如实计为失败）。
-    for (final manual in manualPeers) {
-      if (manual.httpPort <= 0) continue;
-      _rememberPeer(_Peer(
-        deviceId: manual.deviceId,
-        host: normalizePeerHost(manual.host),
-        port: manual.httpPort,
-        name: manual.name,
-        probePort: manual.probePort,
-      ));
-    }
-
-    final v4 = _udp4;
-    final v6 = _udp6;
-    // UDP 不可用不是死路：地址簿里学到过 HTTP 端口的对端照常直连拉取
-    // （降级机器上纯 HTTP 直连必须可用）。
-    if (v4 == null && v6 == null) return List.of(_peers);
-
-    await _refreshOwnAddresses();
-    final probe = utf8.encode(jsonEncode({
-      'm': 'molia-sync.probe',
-      'v': 1,
-      'deviceId': deviceId,
-      'name': _deviceName(),
-      'port': _httpPort,
-      'udpPort': _advertisedUdpPort,
-      'reply': false,
-      if (_ownAddresses.isNotEmpty) 'addrs': _ownAddresses,
-      if (_snapshotIdProvider?.call().isNotEmpty ?? false)
-        'snapshotId': _snapshotIdProvider!.call(),
-      if (_journalHeadProvider != null)
-        'journalHead': _journalHeadProvider.call(),
-    }));
-    if (_probeTargets.isEmpty) {
-      _sendBroadcastProbe(probe, v4, v6);
-    }
-    // 单播目标：测试注入 + 手动地址簿（探测端口缺省用本传输的 UDP 端口，
-    // 生产里所有设备同端口；测试 / 多实例场景可显式指定）+ 上一轮学到的
-    // 对端探测端点（降级端口只有对端自己知道，广播 / 组播到不了它）。
-    final targets = <({String host, int port})>[];
-    void addTarget(String host, int port) {
-      final normalized = normalizePeerHost(host);
-      if (normalized.isEmpty || port <= 0) return;
-      if (targets.any((t) => t.host == normalized && t.port == port)) return;
-      targets.add((host: normalized, port: port));
-    }
-
-    for (final target in _probeTargets) {
-      addTarget(target.host, target.port);
-    }
-    for (final manual in manualPeers) {
-      addTarget(
-          manual.host, manual.probePort > 0 ? manual.probePort : _udpPort);
-    }
-    for (final endpoints in _probeEndpoints.values) {
-      for (final endpoint in endpoints) {
-        addTarget(endpoint.host, endpoint.port);
-      }
-    }
-    for (final target in targets) {
-      _sendProbeTo(probe, v4, v6, target.host, target.port);
-    }
-    await Future<void>.delayed(_probeWindow);
-    return List.of(_peers);
-  }
-
-  /// 广播 + 组播探测：v4 走 255.255.255.255，v6 走 [probeMulticastHost]；
-  /// 与单播目标一样，发送失败只降级（记为「广播不可用」供未发现对端时提示）。
-  void _sendBroadcastProbe(
-    List<int> probe,
-    RawDatagramSocket? v4,
-    RawDatagramSocket? v6,
-  ) {
-    var sent = false;
-    if (v4 != null) {
-      try {
-        v4.send(probe, InternetAddress('255.255.255.255'), _udpPort);
-        sent = true;
-      } catch (_) {
-        // 广播被系统策略拒绝（iOS entitlement / 网络策略）。
-      }
-    }
-    if (v6 != null) {
-      try {
-        final bytes = v6.send(
-          probe,
-          InternetAddress(probeMulticastHost),
-          _udpPort,
-        );
-        if (bytes > 0) sent = true;
-      } catch (_) {
-        // 组播发送失败（无组播路由 / 策略拦截）。
-      }
-    }
-    _broadcastCount++;
-    _broadcastUnavailable = !sent;
-  }
-
-  /// 单播探测：按目标地址的族选 socket（跨族 `send` 会静默返回 0，不是抛错）。
-  void _sendProbeTo(
-    List<int> probe,
-    RawDatagramSocket? v4,
-    RawDatagramSocket? v6,
-    String host,
-    int port,
-  ) {
-    final address = InternetAddress.tryParse(normalizePeerHost(host));
-    if (address == null || port <= 0) return;
-    final sockets =
-        address.type == InternetAddressType.IPv6 ? [v6, v4] : [v4, v6];
-    for (final socket in sockets) {
-      if (socket == null) continue;
-      try {
-        if (socket.send(probe, address, port) > 0) return;
-      } catch (_) {
-        // 换另一族再试（地址族不匹配时换过去也只会失败）。
-      }
-    }
-  }
-
-  /// 收到 datagram：解析探测（应答登记对端、非应答登记对端并单播回包）。
+  /// 候选 = 手动地址簿 + presence + 持久化已知端点。
   ///
-  /// 回包用**收到它的那个 socket**：族一致（v6 的 link-local 源需要 v6
-  /// socket），link-local 的 zone 信息保留在 `datagram.address` 对象里。
-  void _onDatagram(RawDatagramSocket socket, RawSocketEvent event) {
-    if (event != RawSocketEvent.read) return;
-    final datagram = socket.receive();
-    if (datagram == null) return;
-    Map<String, dynamic> message;
-    try {
-      final decoded = jsonDecode(utf8.decode(datagram.data));
-      if (decoded is! Map) return;
-      message = decoded.cast<String, dynamic>();
-    } catch (_) {
-      return;
-    }
-    if (message['m'] != 'molia-sync.probe') return;
-    final peerId = message['deviceId'];
-    if (peerId is! String || peerId.isEmpty || peerId == deviceId) return;
-    final port = message['port'];
-    if (port is! num) return;
-
-    final peer = _Peer(
-      deviceId: peerId,
-      host: _observedHost(datagram.address),
-      port: port.toInt(),
-      name: message['name'] is String ? message['name'] as String : '',
-      snapshotId: message['snapshotId'] is String
-          ? message['snapshotId'] as String
-          : '',
-      journalHead: message['journalHead'] is num
-          ? (message['journalHead'] as num).toInt()
-          : null,
-      addresses: _parseCandidateAddresses(message['addrs']),
-      // 优先用观测到的来源端口：v4 / v6 各自独立降级时两族的端口不同，
-      // 包内自报的是「首选族」的端口，回不到另一族的 socket 上。
-      probePort: datagram.port > 0
-          ? datagram.port
-          : ((message['udpPort'] as num?)?.toInt() ?? 0),
-    );
-
-    if (message['reply'] == true) {
-      _everDiscoveredPeer = true;
-      _rememberPeer(peer);
-      _resolveManualPeer(peer);
-      return;
-    }
-    // 非回复探测：发送方也在线，先登记为对端（HTTP 直连不必等它应答），
-    // 再向来源地址单播应答（携带本机端口 / 探测端口 / 地址候选）。
-    _rememberPeer(peer);
-    _resolveManualPeer(peer);
-    final ownSnapshotId = _snapshotIdProvider?.call() ?? '';
-    final reply = utf8.encode(jsonEncode({
-      'm': 'molia-sync.probe',
-      'v': 1,
-      'deviceId': deviceId,
-      'name': _deviceName(),
-      'port': _httpPort,
-      'udpPort': _advertisedUdpPort,
-      'reply': true,
-      if (_ownAddresses.isNotEmpty) 'addrs': _ownAddresses,
-      if (ownSnapshotId.isNotEmpty) 'snapshotId': ownSnapshotId,
-      if (_journalHeadProvider != null)
-        'journalHead': _journalHeadProvider.call(),
-    }));
-    try {
-      socket.send(reply, datagram.address, datagram.port);
-    } catch (_) {
-      // 应答失败仅让该对端本轮发现不到本机。
-    }
-  }
-
-  /// 观测到的源地址（v6 组播源的 link-local 带 `%zone`；HTTP 兜底时保留）。
-  String _observedHost(InternetAddress address) => address.address.trim();
-
-  /// 解析对端自报的候选地址：只要可路由的 IP 字面量（回环 / link-local /
-  /// zone 由 [isRoutablePeerAddress] 统一排除）、去重、上限
-  /// [maxAdvertisedAddresses]。
-  List<String> _parseCandidateAddresses(Object? raw) {
-    if (raw is! List) return const [];
-    final hosts = <String>[];
-    for (final item in raw) {
-      if (item is! String) continue;
-      final host = normalizePeerHost(item);
-      if (!isRoutablePeerAddress(host)) continue;
-      if (hosts.contains(host)) continue;
-      hosts.add(host);
-      if (hosts.length >= maxAdvertisedAddresses) break;
-    }
-    return hosts;
-  }
-
-  /// 本机可路由地址（IP 字面量、非回环、非 link-local、去重、上限
-  /// [maxAdvertisedAddresses]）：组合根注入的 [LocalEndpointsService]，
-  /// 未注入时按 [NetworkInterface.list] 现算。可路由判定走
-  /// [isRoutablePeerAddress]（与服务侧同一口径，注入路径也兜一层）。
-  Future<void> _refreshOwnAddresses() async {
-    try {
-      final provider = _localAddressesProvider;
-      final addresses =
-          provider != null ? await provider() : await _listLocalAddresses();
-      _ownAddresses = _limitAddresses(addresses);
-    } catch (e) {
-      _logger.fine('枚举本机可路由地址失败（探测包将不带地址候选）', e);
-    }
-  }
-
-  static Future<List<String>> _listLocalAddresses() async {
-    final interfaces = await NetworkInterface.list(
-      includeLoopback: false,
-      type: InternetAddressType.any,
-    );
-    final hosts = <String>[];
-    for (final interface in interfaces) {
-      for (final address in interface.addresses) {
-        final host = address.address.trim();
-        if (!isRoutablePeerAddress(host)) continue;
-        if (!hosts.contains(host)) hosts.add(host);
-      }
-    }
-    return hosts;
-  }
-
-  static List<String> _limitAddresses(Iterable<String> addresses) {
-    final hosts = <String>[];
-    for (final raw in addresses) {
-      final host = normalizePeerHost(raw);
-      if (!isRoutablePeerAddress(host)) continue;
-      if (hosts.contains(host)) continue;
-      hosts.add(host);
-      if (hosts.length >= maxAdvertisedAddresses) break;
-    }
-    return hosts;
-  }
-
-  /// 登记本轮发现的对端（同一 key 覆盖；上限防伪造探测灌爆）。
-  ///
-  /// 认领到设备身份时顺手清掉同端点的未认领条目（地址簿手工条目先入队、
-  /// 探测应答后到达时会各占一条，不清会重复 GET 同一个端点）。
-  void _rememberPeer(_Peer peer) {
-    if (peer.probePort > 0) {
-      final endpoints = <({String host, int port})>[];
-      void add(String host) {
-        final normalized = normalizePeerHost(host);
-        if (normalized.isEmpty) return;
-        if (endpoints.any((existing) => existing.host == normalized)) return;
-        if (endpoints.length >= maxProbeEndpointsPerPeer) return;
-        endpoints.add((host: normalized, port: peer.probePort));
-      }
-
-      for (final address in peer.addresses) {
-        add(address);
-      }
-      add(peer.host);
-      if (endpoints.isNotEmpty) {
-        _probeEndpoints.remove(peer.key);
-        _probeEndpoints[peer.key] = endpoints;
-        while (_probeEndpoints.length > maxRememberedPeers) {
-          _probeEndpoints.remove(_probeEndpoints.keys.first);
+  /// 手动 / presence 是「预期对端」：失败计数并上报；只有持久化端点的是
+  /// 「试探性对端」：连不上是常态（换网 / 关机），不该污染整轮状态。
+  List<_Peer> _candidates() {
+    final peers = <_Peer>[];
+    void add(_Peer peer) {
+      if (peer.port <= 0) return;
+      for (var i = 0; i < peers.length; i++) {
+        final existing = peers[i];
+        final sameDevice = peer.deviceId.isNotEmpty &&
+            existing.deviceId.isNotEmpty &&
+            peer.deviceId == existing.deviceId;
+        final sameEndpoint =
+            _normalizeHost(existing.host) == _normalizeHost(peer.host) &&
+                existing.port == peer.port;
+        if (sameDevice || sameEndpoint) {
+          peers[i] = existing.merge(peer);
+          return;
         }
       }
+      peers.add(peer);
     }
-    _peers.removeWhere((existing) =>
-        existing.key == peer.key ||
-        (peer.deviceId.isNotEmpty &&
-            existing.deviceId.isEmpty &&
-            existing.host == peer.host &&
-            existing.port == peer.port));
-    _peers.add(peer);
-    while (_peers.length > maxRememberedPeers) {
-      _peers.removeAt(0);
+
+    for (final manual in _manualPeersProvider?.call() ?? const <ManualPeer>[]) {
+      if (manual.httpPort <= 0) continue;
+      if (manual.deviceId == deviceId) continue;
+      add(_Peer(
+        deviceId: manual.deviceId,
+        name: manual.name,
+        host: normalizePeerHost(manual.host),
+        port: manual.httpPort,
+        probePort: manual.probePort,
+        expected: true,
+      ));
     }
+    for (final presence in _discovery.presence) {
+      // 本轮没再听到的 presence 只是历史记忆：仍可直连（推送 / 拉取兜底），
+      // 但失败不再计入「预期对端」，否则离线设备会把整轮打成 partial。
+      final roundStart = _roundStartedAt;
+      final fresh = roundStart == null || presence.lastHeardAt >= roundStart;
+      add(_Peer(
+        deviceId: presence.deviceId,
+        name: presence.name,
+        host: presence.host,
+        port: presence.httpPort,
+        probePort: presence.probePort,
+        addresses: presence.addresses,
+        snapshotId: presence.snapshotId,
+        journalHead: presence.journalHead,
+        snapshotFresh: fresh,
+        expected: fresh,
+      ));
+    }
+    for (final endpoint
+        in _knownPeersProvider?.call() ?? const <LanPeerEndpoint>[]) {
+      if (endpoint.deviceId == deviceId) continue;
+      add(_Peer(
+        deviceId: endpoint.deviceId,
+        name: '',
+        host: normalizePeerHost(endpoint.host),
+        port: endpoint.httpPort,
+        probePort: endpoint.probePort,
+        expected: false,
+      ));
+    }
+    return peers;
+  }
+
+  /// 已知端点（持久化 + 手动地址簿里学到 HTTP 端口的条目）。
+  List<LanPeerEndpoint> _knownEndpoints() {
+    final endpoints = <LanPeerEndpoint>[];
+    for (final endpoint
+        in _knownPeersProvider?.call() ?? const <LanPeerEndpoint>[]) {
+      if (endpoint.deviceId == deviceId) continue;
+      endpoints.add(endpoint);
+    }
+    for (final manual in _manualPeersProvider?.call() ?? const <ManualPeer>[]) {
+      if (manual.httpPort <= 0 || manual.deviceId == deviceId) continue;
+      endpoints.add(LanPeerEndpoint(
+        deviceId: manual.deviceId,
+        host: normalizePeerHost(manual.host),
+        httpPort: manual.httpPort,
+        probePort: manual.probePort,
+        verifiedAt: 0,
+      ));
+    }
+    return endpoints;
+  }
+
+  /// 单播探测目标：测试注入 + 手动地址簿 + 已知端点（发现层再并入 presence）。
+  List<LanProbeTarget> _probeTargetList() {
+    final targets = <LanProbeTarget>[];
+    for (final target in _probeTargets) {
+      targets.add((host: normalizePeerHost(target.host), port: target.port));
+    }
+    for (final manual in _manualPeersProvider?.call() ?? const <ManualPeer>[]) {
+      if (manual.deviceId == deviceId) continue;
+      targets.add((
+        host: normalizePeerHost(manual.host),
+        port: manual.probePort > 0 ? manual.probePort : _udpPort,
+      ));
+    }
+    for (final endpoint
+        in _knownPeersProvider?.call() ?? const <LanPeerEndpoint>[]) {
+      if (endpoint.deviceId == deviceId) continue;
+      targets.add((
+        host: normalizePeerHost(endpoint.host),
+        port: endpoint.probePort > 0 ? endpoint.probePort : _udpPort,
+      ));
+    }
+    return targets;
+  }
+
+  bool get _isCellularNow => _isCellular?.call() ?? false;
+
+  Future<Uint8List> _ensureDiscoveryKey() async {
+    final passphrase = await _passphraseProvider();
+    if (passphrase == null || passphrase.trim().isEmpty) {
+      throw const SyncCryptoException('同步口令为空');
+    }
+    if (_keyPassphrase == passphrase && _cachedDiscoveryKey != null) {
+      return _cachedDiscoveryKey!;
+    }
+    final key = await _codec.discoveryKey(passphrase);
+    _keyPassphrase = passphrase;
+    _cachedDiscoveryKey = key;
+    return key;
+  }
+
+  void _verifyPeer(_Peer peer, String host) {
+    if (peer.deviceId.isEmpty) return;
+    final normalized = normalizePeerHost(host);
+    // 只持久化可路由地址：link-local / 带 zone / 回环是当前链路或同机的
+    // 临时观测，写进端点表下次换网必然失效。
+    if (!isRoutablePeerAddress(normalized)) return;
+    _onPeerVerified?.call(LanPeerEndpoint(
+      deviceId: peer.deviceId,
+      host: normalized,
+      httpPort: peer.port,
+      probePort: peer.probePort,
+      verifiedAt: _nowMs(),
+    ));
   }
 
   /// 手动条目首次接触（或地址 / 端点端口变化）后回写学到的信息。
   ///
-  /// host 比较用归一形式（`[2409::1]` 与 `2409::1` / 大小写差异不该让
-  /// 「已存在的手动条目」学不到设备身份）。
-  ///
-  /// **观测到的来源端口不写回**：来源端口是 UDP 包从对端哪个 socket 出来的
-  /// （NAT / 独立降级 / 对端重启都会变），写回会把用户配置的 47825 改成一个
-  /// 下次不一定存在的动态端口；学到 HTTP 端点端口后直连不再依赖 UDP 探测，
-  /// 单播探测端口保持用户配置 / 缺省值即可。
-  void _resolveManualPeer(_Peer peer) {
+  /// **观测到的来源端口不写回**：来源端口随 NAT / 对端重启变化，写回会把
+  /// 用户配置的探测端口改成一个下次不一定存在的动态端口。
+  void _resolveManualPeer(LanPeerSighting sighting) {
     final manualPeers = _manualPeersProvider?.call() ?? const <ManualPeer>[];
-    final peerHost = _normalizeHost(peer.host);
+    final peerHost = _normalizeHost(sighting.host);
     for (final entry in manualPeers) {
       if (_normalizeHost(entry.host) != peerHost) continue;
-      if (entry.deviceId == peer.deviceId && entry.httpPort == peer.port) {
+      if (entry.deviceId == sighting.deviceId &&
+          entry.httpPort == sighting.httpPort) {
         return;
       }
       _onPeerResolved?.call(entry.mergeLearned(
-        httpPort: peer.port,
-        deviceId: peer.deviceId,
-        name: peer.name,
+        httpPort: sighting.httpPort,
+        deviceId: sighting.deviceId,
+        name: sighting.name,
       ));
       return;
     }
@@ -851,36 +875,40 @@ class LanSyncTransport implements SyncTransport {
   static String _normalizeHost(String host) =>
       InternetAddress.tryParse(host.trim())?.address ?? host.trim();
 
-  Future<Uint8List?> _fetchSnapshot(_Peer peer) =>
+  Future<({Uint8List bytes, String host})?> _fetchSnapshot(_Peer peer) =>
       _getPayload(peer, snapshotPath);
 
   /// 拉取增量窗口（带本机游标；对端在游标落后于窗口起点时回全量快照）。
-  ///
-  /// 协议固定走增量端点：对端未注入增量提供者时它自己回全量快照
-  /// （[journalProvider] 是**服务端**能力，不影响请求路径）。
-  Future<Uint8List?> _fetchJournal(_Peer peer, int since) =>
+  Future<({Uint8List bytes, String host})?> _fetchJournal(
+    _Peer peer,
+    int since,
+  ) =>
       _getPayload(peer, journalPath, query: {'since': '$since'});
 
-  /// GET 对端端点：按候选地址 → 观测源地址依次尝试（可路由地址优先；
-  /// IPv6 组播源的 link-local 只在候选都失败后兜底）。
-  Future<Uint8List?> _getPayload(
+  /// GET 对端端点：按候选地址 → 观测源地址依次尝试（最多 3 个地址）。
+  Future<({Uint8List bytes, String host})?> _getPayload(
     _Peer peer,
     String path, {
     Map<String, String>? query,
   }) async {
     _snapshotGetCount++;
+    final deadline = DateTime.now().add(peerRequestBudget);
     for (final host in peer.hosts) {
-      final client = HttpClient()..connectionTimeout = _requestTimeout;
+      final timeout = _remainingBudget(deadline);
+      if (timeout == null) break;
+      final client = HttpClient()..connectionTimeout = timeout;
       try {
         final request = await client
             .getUrl(_peerUri(host, peer.port, path, query))
-            .timeout(_requestTimeout);
-        final response = await request.close().timeout(_requestTimeout);
+            .timeout(timeout);
+        final response = await request.close().timeout(timeout);
         if (response.statusCode != HttpStatus.ok) {
           await response.drain<void>();
           continue;
         }
-        return await _readBody(response);
+        final bytes = await _readBody(response);
+        if (bytes == null) continue;
+        return (bytes: bytes, host: host);
       } catch (_) {
         // 该地址不可达 / 超时：换下一个候选地址。
       } finally {
@@ -890,18 +918,25 @@ class LanSyncTransport implements SyncTransport {
     return null;
   }
 
-  Future<bool> _postSnapshot(_Peer peer, Uint8List payload, String path) async {
+  Future<String?> _postSnapshot(
+    _Peer peer,
+    Uint8List payload,
+    String path,
+  ) async {
+    final deadline = DateTime.now().add(peerRequestBudget);
     for (final host in peer.hosts) {
-      final client = HttpClient()..connectionTimeout = _requestTimeout;
+      final timeout = _remainingBudget(deadline);
+      if (timeout == null) break;
+      final client = HttpClient()..connectionTimeout = timeout;
       try {
         final request = await client
             .postUrl(_peerUri(host, peer.port, path, null))
-            .timeout(_requestTimeout);
+            .timeout(timeout);
         request.headers.contentType = ContentType.binary;
         request.add(payload);
-        final response = await request.close().timeout(_requestTimeout);
+        final response = await request.close().timeout(timeout);
         await response.drain<void>();
-        if (response.statusCode == HttpStatus.ok) return true;
+        if (response.statusCode == HttpStatus.ok) return host;
       } catch (_) {
         // 该地址推送失败：换下一个候选地址。
       } finally {
@@ -909,7 +944,14 @@ class LanSyncTransport implements SyncTransport {
       }
     }
     // 推送失败交由对端下一轮拉取兜底（失败计数上抛给报告）。
-    return false;
+    return null;
+  }
+
+  /// 剩余预算；已耗尽返回 null（不再发起新地址尝试）。
+  Duration? _remainingBudget(DateTime deadline) {
+    final remaining = deadline.difference(DateTime.now());
+    if (remaining <= Duration.zero) return null;
+    return remaining < _requestTimeout ? remaining : _requestTimeout;
   }
 
   /// 对端端点 URI：`Uri` 构造自动给 IPv6 主机加方括号、编码 zone
@@ -996,59 +1038,128 @@ class LanSyncTransport implements SyncTransport {
     }
     return builder.toBytes();
   }
+}
 
-  static Future<RawDatagramSocket> _bindDatagram(
-    InternetAddress address,
-    int port,
-  ) =>
-      RawDatagramSocket.bind(address, port, reuseAddress: true);
+class _PullStats {
+  final List<SyncEnvelope> envelopes = [];
+  final List<String> seenIds = [];
+  var expectedSeen = 0;
+  var tentativeContacted = 0;
+  var skipped = 0;
+  var failed = 0;
+  var httpFailedAny = 0;
+  var bytesIn = 0;
+  var contacted = false;
+  SyncIssue? firstError;
 }
 
 class _Peer {
-  final String deviceId;
-
-  /// 观测到的源地址（UDP 包来源；IPv6 组播源为 link-local，带 zone）。
-  final String host;
-  final int port;
-  final String name;
-
-  /// 对端探测应答携带的内容指纹（空 = 对端未提供 / 尚未产出快照）。
-  final String snapshotId;
-
-  /// 对端探测应答携带的 journal 头部（null = 对端未提供：按指纹判「未变」）。
-  final int? journalHead;
-
-  /// 对端自报的可路由候选地址（`addrs`）。
-  final List<String> addresses;
-
-  /// 用于内存内单播探测的对端 UDP 端口（0 = 未知）。
-  ///
-  /// 填的是**本轮观测到的来源端口**（对端自报的 `udpPort` 只作兜底）：
-  /// 回发包按来源地址 + 端口走；只活在内存与 `_probeEndpoints` 里，
-  /// 不写回地址簿（来源端口随 NAT / 重启 / 独立降级变化）。
-  final int probePort;
-
   const _Peer({
     required this.deviceId,
+    required this.name,
     required this.host,
     required this.port,
-    required this.name,
+    this.probePort = 0,
+    this.addresses = const [],
+    this.alternateHosts = const [],
     this.snapshotId = '',
     this.journalHead,
-    this.addresses = const [],
-    this.probePort = 0,
+    this.snapshotFresh = false,
+    required this.expected,
   });
 
-  /// HTTP 主机尝试顺序：候选地址（IPv4 → 全局 / ULA IPv6，可路由者优先）
-  /// → 观测到的源地址（组播源的 link-local 兜底）。
+  final String deviceId;
+  final String name;
+
+  /// 首选主机（presence 的观测源地址 / 手动地址 / 持久化端点）。
+  final String host;
+
+  /// HTTP 端口。
+  final int port;
+  final int probePort;
+  final List<String> addresses;
+  final List<String> alternateHosts;
+  final String snapshotId;
+  final int? journalHead;
+
+  /// snap/head 是否来自**本轮**探测（presence.lastHeardAt >= 本轮起点）。
+  /// 只有新鲜的指纹才能作为「未变跳过 GET」的依据。
+  final bool snapshotFresh;
+
+  /// 预期对端（manual / presence）失败要计数；试探性对端失败不计数。
+  final bool expected;
+
+  _Peer merge(_Peer other) {
+    final String mergedSnapshotId;
+    final int? mergedJournalHead;
+    if (snapshotFresh && !other.snapshotFresh) {
+      mergedSnapshotId = snapshotId;
+      mergedJournalHead = journalHead;
+    } else if (!snapshotFresh && other.snapshotFresh) {
+      mergedSnapshotId = other.snapshotId;
+      mergedJournalHead = other.journalHead;
+    } else if (snapshotFresh && other.snapshotFresh) {
+      // 两侧都是本轮观测：字段级取非空值（同一轮不应冲突）。
+      mergedSnapshotId =
+          other.snapshotId.isNotEmpty ? other.snapshotId : snapshotId;
+      mergedJournalHead = other.journalHead ?? journalHead;
+    } else {
+      // 都不新鲜：只保留非空值做缓存标记，不用于跳过 GET。
+      mergedSnapshotId = snapshotId.isNotEmpty ? snapshotId : other.snapshotId;
+      mergedJournalHead = journalHead ?? other.journalHead;
+    }
+    return _Peer(
+      deviceId: deviceId.isNotEmpty ? deviceId : other.deviceId,
+      name: name.isNotEmpty ? name : other.name,
+      host: host.isNotEmpty ? host : other.host,
+      port: port > 0 ? port : other.port,
+      probePort: probePort > 0 ? probePort : other.probePort,
+      addresses: _union(addresses, other.addresses),
+      alternateHosts: _union(
+        alternateHosts,
+        [
+          if (other.host.isNotEmpty && other.host != host) other.host,
+          ...other.alternateHosts,
+        ],
+      ),
+      snapshotId: mergedSnapshotId,
+      journalHead: mergedJournalHead,
+      snapshotFresh: snapshotFresh || other.snapshotFresh,
+      expected: expected || other.expected,
+    );
+  }
+
+  /// HTTP 主机尝试顺序：候选地址（IPv4 → 全局 / ULA IPv6）→ 观测源地址
+  /// → 其它已学到的地址；单对端最多 [LanSyncTransport.maxHttpAddressesPerPeer]
+  /// 个，避免长时间离线设备拖慢整轮。
   List<String> get hosts {
-    final ordered = <String>[
-      for (final rank in const [0, 1, 3])
-        for (final host in addresses)
-          if (_hostRank(host) == rank) host,
+    final ordered = <String>[];
+    void add(String value) {
+      final normalized =
+          InternetAddress.tryParse(value.trim())?.address ?? value.trim();
+      if (normalized.isEmpty || ordered.contains(normalized)) return;
+      ordered.add(normalized);
+    }
+
+    for (final address in addresses) {
+      add(address);
+    }
+    add(host);
+    for (final alternate in alternateHosts) {
+      add(alternate);
+    }
+    // 稳定排序：同 rank 保持候选原顺序（观测源地址作为兜底排在候选之后）。
+    final indexed = ordered.indexed.toList()
+      ..sort((a, b) {
+        final byRank = _hostRank(a.$2).compareTo(_hostRank(b.$2));
+        return byRank != 0 ? byRank : a.$1.compareTo(b.$1);
+      });
+    return [
+      for (final (_, value) in indexed.take(
+        LanSyncTransport.maxHttpAddressesPerPeer,
+      ))
+        value,
     ];
-    if (host.isNotEmpty && !ordered.contains(host)) ordered.add(host);
-    return ordered;
   }
 
   /// 地址可达性排序：IPv4 = 0，全局 / ULA IPv6 = 1，其它地址（link-local /
@@ -1063,13 +1174,21 @@ class _Peer {
     return 1;
   }
 
-  /// 去重键：认领到设备 id 后按 id，未认领（手动地址首轮）按主机。
-  String get key => deviceId.isNotEmpty ? deviceId : 'host:$host';
+  /// 去重键：认领到设备 id 后按 id，未认领（手动地址首轮）按端点。
+  String get key => deviceId.isNotEmpty ? deviceId : 'host:$host:$port';
 
   /// 日志 / 错误文案用的人类可读标识（设备名 > 设备 id 短号 > 主机）。
   String get label {
     if (name.isNotEmpty) return name;
     if (deviceId.isNotEmpty) return shortDeviceId(deviceId);
     return host;
+  }
+
+  static List<String> _union(List<String> a, List<String> b) {
+    final values = <String>[...a];
+    for (final value in b) {
+      if (!values.contains(value)) values.add(value);
+    }
+    return values;
   }
 }

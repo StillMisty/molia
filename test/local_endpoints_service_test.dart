@@ -64,4 +64,22 @@ void main() {
     expect(await service.hosts(), ['192.168.1.10']);
     expect(calls, 2);
   });
+
+  test('hostsFresh / listFresh：每次都重新枚举（传输层换网用）', () async {
+    var calls = 0;
+    final service = LocalEndpointsService(enumerate: () async {
+      calls++;
+      return [
+        LocalEndpoint(
+          interfaceName: 'wlan0',
+          address: calls == 1 ? '192.168.1.10' : '192.168.1.20',
+        ),
+      ];
+    });
+    expect(await service.hostsFresh(), ['192.168.1.10']);
+    expect(await service.hosts(), ['192.168.1.10'], reason: 'fresh 结果进缓存');
+    expect(await service.hostsFresh(), ['192.168.1.20']);
+    expect((await service.listFresh()).single.address, '192.168.1.20');
+    expect(calls, 3);
+  });
 }
