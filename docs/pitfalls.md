@@ -315,20 +315,27 @@
     `width` 当视口——拿行视图当视口时行尾会被它自己的边界裁掉。
 44. **悬浮窗位置要按「可用区」算，不能用 `resources.displayMetrics`**：
     `TYPE_APPLICATION_OVERLAY` 默认按 system bars / 刘海 insets 收边（fitTypes），
-    `LayoutParams.x/y` 是安全区左上角起的偏移；edge-to-edge Activity 的
-    `displayMetrics`（≈整屏，模拟器实测 2400 vs 悬浮窗实际可用 2274 + 63px 偏移）
-    把状态栏高度算进可用空间，贴底摆放时被导航栏裁掉。可用区取
-    `WindowManager.currentWindowMetrics` 减 `systemBars | displayCutout` insets，
-    位置相关的四件事都收在 `LyricsOverlayController`，别拆开：
+    `LayoutParams.x` 从安全区左缘起算、`y` 从安全区底缘起算（`Gravity.BOTTOM`，
+    正数向上）；edge-to-edge Activity 的 `displayMetrics`（≈整屏，模拟器实测 2400 vs
+    悬浮窗实际可用 2274 + 63px 偏移）把状态栏高度算进可用空间，贴底摆放时被导航栏
+    裁掉。可用区取 `WindowManager.currentWindowMetrics` 减
+    `systemBars | displayCutout` insets，位置相关的几件事都收在
+    `LyricsOverlayController`，别拆开：
     ① 比例写读同一套公式（历史上写 `y/(H−h)`、读 `H*yf`，每次重建窗口整体下移 ~7%，
-    拖到底部后直接落到屏幕外）；② 纵向用**底缘**比例（窗口高度要等首次布局才有，
-    底缘换算不需要高度），高度变化时底缘固定、向上生长；
-    ③ 内容高度 / 可用区变化（行数、控制条弹出、旋转 / 字号）后按比例重新落位并夹取；
+    拖到底部后直接落到屏幕外）；② 纵向用**底缘**比例 + `Gravity.BOTTOM`：窗口高度
+    要等首次布局才有，底缘锚定不依赖高度，高度变化时底边固定、向上生长；反过来用
+    `Gravity.TOP` 先把 `y` 当顶缘占位、再在布局回调里减高度，会让第一帧先画在下面、
+    下一帧再跳上去（单行歌词最明显，每次窗口重建 / 暂停恢复都复现）；
+    ③ 窗口尺寸 / 可用区变化（行数、控制条弹出、旋转 / 字号）后重算宽度并夹取，
+    底边不因内容高度变化而移动；
     ④ 旧键 `y_fraction` 语义与底缘比例不同，改名 `bottom_fraction` 让旧值自然失效
     （不迁移：旧值按老公式写，直接读会错得更偏）；
     ⑤ 布局回调也会被「纯移动」触发：只认尺寸真的变了（`maybeAnchorIntoArea`），
     且拖动中一律不落位（`isDragging`）——否则每帧 `updateViewLayout` 后立刻被比例
-    拽回原位，表现为「悬浮窗拖不动」。
+    拽回原位，表现为「悬浮窗拖不动」；
+    ⑥ `Gravity.BOTTOM` 下 `LayoutParams.y` 是「可用区底缘到窗口底缘」的偏移：
+    拖动写 `startTouchY − dy`、拖动结束按 `(area.y − y) / area.y` 换算比例；
+    方向写反会拖不动或拖反，四个写入点（创建 / 落位 / 拖动 / 拖动结束）必须同口径。
 45. **一次 Esc 会被多个作用域同时消费，`HardwareKeyboard` 的返回值裁决不了**：
     它的处理器**全部执行、返回值不短路**（SDK 原文：All registered handlers will be
     invoked in order regardless of their return value），壳层可配置快捷键（默认
