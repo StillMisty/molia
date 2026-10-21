@@ -281,6 +281,34 @@ void main() {
     expect(provider.status, AiDjStatus.playing);
   });
 
+  test('恢复的 AI 队列自动接管并静默补歌；显式 stop 后不再接管', () async {
+    await provider.grantConsent();
+    await provider.setEnabled(true);
+    provider.dispose();
+
+    backend.emit(_radioSnapshot(
+      current: _track(18),
+      queue: _tracks(0, 20),
+      currentIndex: 18,
+    ));
+    generator.calls = 0;
+    await pumpProvider();
+
+    expect(provider.status, AiDjStatus.playing);
+    generator.batchFactory = () => _batch(20, 20);
+    provider.onPlaybackChanged();
+    await pumpEventQueue();
+    expect(generator.calls, 1);
+    expect(provider.historyEntries.first.origin, AiDjOrigin.autoFeed);
+
+    await provider.stop();
+    expect(provider.status, AiDjStatus.off);
+    generator.calls = 0;
+    provider.onPlaybackChanged();
+    await pumpEventQueue();
+    expect(generator.calls, 0, reason: '显式停止后恢复队列不再自动接管');
+  });
+
   test('自动补歌关闭 / 非 AI 队列时不触发', () async {
     await enableWithList();
     await startRadio();
@@ -306,6 +334,94 @@ void main() {
     await pumpEventQueue();
     expect(generator.calls, 1);
     expect(provider.status, AiDjStatus.off);
+  });
+
+  test('偏好保存关闭自动补歌会取消在途静默任务；重新打开清除停止态', () async {
+    await enableWithList();
+    await startRadio();
+    final gate = Completer<void>();
+    generator.gate = gate;
+    generator.batchFactory = () => _batch(20, 3);
+
+    backend.emit(_radioSnapshot(
+      current: _track(18),
+      queue: _tracks(0, 20),
+      currentIndex: 18,
+    ));
+    provider.onPlaybackChanged();
+    await pumpEventQueue();
+    expect(generator.calls, 2);
+
+    await provider.savePreferences(
+      provider.preferences.copyWith(autoFeed: false),
+    );
+    gate.complete();
+    await pumpEventQueue();
+    expect(backend.lastEnqueued, isNull, reason: '关闭后取消在途静默批次');
+    expect(provider.preferences.autoFeed, isFalse);
+
+    // 连续失败进入停止态后，用偏好保存重新打开应清除停止态。
+    generator.gate = null;
+    generator.error = StateError('boom');
+    await provider.savePreferences(
+      provider.preferences.copyWith(autoFeed: true),
+    );
+    for (var i = 0; i < 3; i++) {
+      backend.emit(_radioSnapshot(
+        current: _track(18),
+        queue: _tracks(0, 20),
+        currentIndex: 18,
+      ));
+      provider.onPlaybackChanged();
+      await pumpEventQueue();
+    }
+    expect(provider.autoFeedHalted, isTrue);
+
+    await provider.savePreferences(
+      provider.preferences.copyWith(autoFeed: false),
+    );
+    await provider.savePreferences(
+      provider.preferences.copyWith(autoFeed: true),
+    );
+
+    expect(provider.autoFeedHalted, isFalse);
+    expect(provider.autoFeedFailures, 0);
+    expect(provider.autoFeedError, isNull);
+  });
+
+  test('静默自动补歌不改写可见的「上次发送 / 上次返回」', () async {
+    generator.batchFactory = () => _batch(0, 3).copyWith(
+          prompt: const AiPrompt(
+            systemPrompt: 'visible-system',
+            userPrompt: 'visible-user',
+          ),
+          rawResponse: 'visible-raw',
+        );
+    await enableWithList();
+    final sent = provider.lastSentPrompt;
+    final raw = provider.lastRawResponse;
+    expect(sent, isNotNull);
+    expect(raw, 'visible-raw');
+
+    await startRadio();
+    generator.batchFactory = () => _batch(20, 3).copyWith(
+          prompt: const AiPrompt(
+            systemPrompt: 'silent-system',
+            userPrompt: 'silent-user',
+          ),
+          rawResponse: 'silent-raw',
+        );
+    backend.emit(_radioSnapshot(
+      current: _track(18),
+      queue: _tracks(0, 20),
+      currentIndex: 18,
+    ));
+    provider.onPlaybackChanged();
+    await pumpEventQueue();
+
+    expect(provider.historyEntries.first.origin, AiDjOrigin.autoFeed);
+    expect(provider.lastSentPrompt, same(sent));
+    expect(provider.lastRawResponse, raw);
   });
 
   test('自动补歌完成时队列已播完：从新追加的第一首续播', () async {
@@ -502,6 +618,23 @@ void main() {
     expect(generator.lastSkipped, contains('Song 1 - Artist'));
   });
 
+  test('预览提示词只读：不写喜欢反馈、不标记已回流', () async {
+    await enableWithList();
+    await startRadio();
+    await libraryProvider.toggleFavoriteTrack(_track(0));
+
+    await provider.previewPrompt();
+
+    expect(generator.lastPreviewLiked, contains('Song 0 - Artist'));
+    expect(provider.likedLabels, isEmpty);
+    expect(provider.rememberedLikedLabels, isEmpty);
+
+    generator.batchFactory = () => _batch(9, 3);
+    await provider.refreshRecommendations();
+
+    expect(provider.rememberedLikedLabels, contains('Song 0 - Artist'));
+  });
+
   test('喜欢回流并跨重启保留', () async {
     await enableWithList();
     await startRadio();
@@ -581,6 +714,24 @@ void main() {
         ['0', '1', '2']);
   });
 
+  test('切换当前批次清空撤销栈：旧批次撤销不会污染新批次', () async {
+    await enableWithList();
+    final firstId = provider.activeBatchId!;
+    generator.batchFactory = () => _batch(10, 3);
+    await provider.refreshRecommendations();
+
+    final staleUri = provider.recommendations!.items.first.track.id.uri;
+    await provider.markNotInterested(staleUri);
+    expect(provider.notInterestedItems, hasLength(1));
+
+    await provider.setActiveBatch(firstId);
+    expect(provider.notInterestedItems, isEmpty);
+
+    await provider.undoNotInterested(staleUri);
+    expect(provider.recommendations!.items.map((item) => item.track.id.id),
+        ['0', '1', '2']);
+  });
+
   test('历史：设为当前只切换浏览列表，不动队列', () async {
     await enableWithList();
     final firstId = provider.activeBatchId!;
@@ -607,14 +758,6 @@ void main() {
     expect(provider.historyEntries, hasLength(1));
     expect(provider.historyEntries.single.id, newActiveId);
     expect(activeId, isNot(newActiveId));
-  });
-
-  test('缓存过期标记只影响续推消费（不提示）', () async {
-    generator.batchFactory = () => _batch(0, 3);
-    await enableWithList();
-    await startRadio();
-
-    expect(provider.isRecommendationsExpired, isFalse);
   });
 
   test('跳过判定回流：未达有效阈值被切走 → 记入本轮反馈', () async {

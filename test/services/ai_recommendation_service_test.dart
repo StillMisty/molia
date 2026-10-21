@@ -470,6 +470,65 @@ void main() {
       expect(prompt.userPrompt, contains('"preferences"'));
     });
 
+    test('只推荐没听过的关闭、排除清单开启：仍发送已听清单但不本地强制过滤', () async {
+      await insertPlayed('旧歌', '老歌手');
+      llm.response = jsonEncode({
+        'songs': [
+          {'title': '旧歌', 'artist': '老歌手'},
+        ],
+      });
+      service = buildService([
+        _FakeSource('wy', [_track('a', '旧歌', '老歌手')]),
+      ]);
+      final preferences = AiPreferences.defaults.copyWith(
+        onlyUnheard: false,
+      );
+      final preview = await service.buildPromptPreview(
+        count: 20,
+        preferences: preferences,
+      );
+      final batch = await service.generate(
+        config: config,
+        count: 20,
+        preferences: preferences,
+      );
+
+      expect(preview.userPrompt, contains('"alreadyListened"'));
+      expect(preview.userPrompt, contains('旧歌 - 老歌手'));
+      expect(batch.items, hasLength(1), reason: '关闭后不本地强制排除');
+    });
+
+    test('只推荐没听过的开启、排除清单关闭：本地过滤生效但不发送清单', () async {
+      await insertPlayed('晴天', '周杰伦');
+      llm.response = jsonEncode({
+        'songs': [
+          {'title': '晴天', 'artist': '周杰伦'},
+        ],
+      });
+      service = buildService([
+        _FakeSource('wy', [_track('a', '晴天', '周杰伦')]),
+      ]);
+      final preferences = AiPreferences.defaults.copyWith(
+        sections: {
+          for (final section in AiPreferences.defaults.sections)
+            if (section != AiUpstreamSection.listenedExclusions) section,
+        },
+      );
+
+      final preview = await service.buildPromptPreview(
+        count: 20,
+        preferences: preferences,
+      );
+      final batch = await service.generate(
+        config: config,
+        count: 20,
+        preferences: preferences,
+      );
+
+      expect(preview.userPrompt, isNot(contains('"alreadyListened"')));
+      expect(batch.items, isEmpty, reason: '本地仍排除已听曲目');
+    });
+
     test('收藏歌曲进入本地排除集合（即使只勾选收藏）', () async {
       await addFavorite('晴天', '周杰伦');
       llm.response = jsonEncode({
@@ -686,6 +745,9 @@ void main() {
       expect(resolving.first.done, 0);
       expect(resolving.map((progress) => progress.done).toList(), [0, 1, 2]);
       expect(resolving.every((progress) => progress.total == 2), isTrue);
+      expect(resolving.first.fraction, 0);
+      expect(resolving.last.fraction, 1);
+      expect(progresses[1].fraction, isNull);
     });
 
     test('取消令牌：抛 cancelled，不返回批次', () async {

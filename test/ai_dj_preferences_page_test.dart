@@ -258,6 +258,22 @@ void main() {
 
     expect(provider.preferences.sections.contains(AiUpstreamSection.favorites),
         isTrue);
+    expect(
+      provider.preferences.acknowledgedScopes,
+      contains(AiUpstreamSection.favorites),
+    );
+
+    // 再次关闭再开启不应重复弹提示。
+    await tester.tap(switchIn(const Key('aiDjPrefScope_favorites')));
+    await tester.pump();
+    await tester.tap(switchIn(const Key('aiDjPrefScope_favorites')));
+    await tester.pumpAndSettle();
+    expect(
+      find.textContaining('reads the titles and artists'),
+      findsNothing,
+    );
+    expect(provider.preferences.sections.contains(AiUpstreamSection.favorites),
+        isTrue);
   });
 
   testWidgets('渠道：选中后按音源页顺序保存；种子可删除', (tester) async {

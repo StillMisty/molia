@@ -147,13 +147,15 @@ void main() {
     );
 
     final afterDelete = await store.deleteBatch('b');
-    expect(afterDelete.activeBatchId, 'a');
-    expect(afterDelete.entries.map((entry) => entry.id), ['a']);
+    expect(afterDelete.ok, isTrue);
+    expect(afterDelete.index.activeBatchId, 'a');
+    expect(afterDelete.index.entries.map((entry) => entry.id), ['a']);
     expect(prefs.getString('${AiRecommendationStore.batchKeyPrefix}b'), isNull);
 
     final empty = await store.deleteBatch('a');
-    expect(empty.activeBatchId, isNull);
-    expect(empty.entries, isEmpty);
+    expect(empty.ok, isTrue);
+    expect(empty.index.activeBatchId, isNull);
+    expect(empty.index.entries, isEmpty);
   });
 
   test('清空历史保留 active 与其批次键', () async {
@@ -165,10 +167,11 @@ void main() {
       batch('c', generatedAt: now.add(const Duration(minutes: 2))),
     );
 
-    final index = await store.clearHistory();
+    final result = await store.clearHistory();
 
-    expect(index.entries.map((entry) => entry.id), ['a']);
-    expect(index.activeBatchId, 'a');
+    expect(result.ok, isTrue);
+    expect(result.index.entries.map((entry) => entry.id), ['a']);
+    expect(result.index.activeBatchId, 'a');
     expect(
         prefs.getString('${AiRecommendationStore.batchKeyPrefix}a'), isNotNull);
     expect(prefs.getString('${AiRecommendationStore.batchKeyPrefix}b'), isNull);

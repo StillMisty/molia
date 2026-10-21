@@ -28,6 +28,8 @@ class FakeAiDjGenerator implements AiRecommendationGenerator {
   List<String> lastSkipped = const [];
   List<String> lastLiked = const [];
   List<String> lastExcluded = const [];
+  List<String> lastPreviewLiked = const [];
+  AiPreferences? lastPreviewPreferences;
   AiUpstreamSummary summary = AiUpstreamSummary.empty;
   AiPrompt preview = const AiPrompt(systemPrompt: 'System', userPrompt: 'User');
 
@@ -89,8 +91,11 @@ class FakeAiDjGenerator implements AiRecommendationGenerator {
     List<String> skippedLabels = const [],
     List<String> likedLabels = const [],
     List<String> excludeLabels = const [],
-  }) async =>
-      preview;
+  }) async {
+    lastPreviewLiked = likedLabels;
+    lastPreviewPreferences = preferences;
+    return preview;
+  }
 
   @override
   Future<AiDjBatch> resolveUnresolved({

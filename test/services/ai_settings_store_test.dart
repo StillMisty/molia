@@ -94,6 +94,7 @@ void main() {
       },
       sourceKeys: ['wy', 'tx'],
       seeds: ['晴天 - 周杰伦'],
+      acknowledgedScopes: {AiUpstreamSection.favorites},
     );
     await store.savePreferences(preferences);
 
@@ -113,6 +114,7 @@ void main() {
     });
     expect(loaded.sourceKeys, ['wy', 'tx']);
     expect(loaded.seeds, ['晴天 - 周杰伦']);
+    expect(loaded.acknowledgedScopes, {AiUpstreamSection.favorites});
 
     await prefs.setString(kAiDjPreferences.name, jsonEncode({'batchSize': 7}));
     expect((await store.readPreferences()).batchSize, 20);
