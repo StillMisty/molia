@@ -2093,21 +2093,6 @@ class AppLocalizationsEn extends AppLocalizations {
       'Only the stats above plus song and artist names — no play links or device information.';
 
   @override
-  String get aiDjCacheTtlTitle => 'Recommendation cache';
-
-  @override
-  String aiDjCacheTtlDays(int days) {
-    return '$days days';
-  }
-
-  @override
-  String get aiDjCacheTtlForever => 'Forever';
-
-  @override
-  String get aiDjCacheTtlHint =>
-      'After expiry a new batch is generated automatically without interrupting playback.';
-
-  @override
   String get aiDjGenerate => 'Generate';
 
   @override
@@ -2119,6 +2104,443 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get aiDjEnqueueEmpty => 'Everything here is already queued';
+
+  @override
+  String get aiDjPreferencesTitle => 'Recommendation preferences';
+
+  @override
+  String get aiDjPreferencesSubtitle => 'Styles, scenes and what gets sent';
+
+  @override
+  String get aiDjPreferencesOutdated =>
+      'Preferences updated — refresh a batch to apply';
+
+  @override
+  String aiDjBatchSize(int count) {
+    return '$count per batch';
+  }
+
+  @override
+  String get aiDjBatchSizeTitle => 'Batch size';
+
+  @override
+  String get aiDjFeedBatch => 'Add a batch to the queue';
+
+  @override
+  String get aiDjSectionsNone => 'Preferences only';
+
+  @override
+  String get aiDjFeedDone => 'Batch added to the queue';
+
+  @override
+  String get aiDjUnresolvedRetried => 'Searched again';
+
+  @override
+  String get aiDjHistoryTitle => 'Recommendation history';
+
+  @override
+  String aiDjHistoryEntry(int count) {
+    return 'History ($count)';
+  }
+
+  @override
+  String get aiDjHistoryEmpty => 'No batch history yet';
+
+  @override
+  String get aiDjHistoryEmptyHint => 'Every generated batch is kept here.';
+
+  @override
+  String get aiDjHistoryPlay => 'Play this batch';
+
+  @override
+  String get aiDjHistoryEnqueue => 'Add to queue';
+
+  @override
+  String get aiDjHistorySetActive => 'Set as current';
+
+  @override
+  String get aiDjHistoryDelete => 'Delete';
+
+  @override
+  String get aiDjHistoryActive => 'Current';
+
+  @override
+  String get aiDjHistoryClear => 'Clear history';
+
+  @override
+  String get aiDjHistoryClearTitle => 'Clear recommendation history?';
+
+  @override
+  String get aiDjHistoryClearBody =>
+      'Only history records are removed; the playing queue is not affected. The current batch is kept.';
+
+  @override
+  String get aiDjHistoryCleared => 'Recommendation history cleared';
+
+  @override
+  String get aiDjHistoryExpand => 'View tracks';
+
+  @override
+  String get aiDjHistoryCollapse => 'Hide tracks';
+
+  @override
+  String aiDjHistoryItems(int count) {
+    return '$count tracks';
+  }
+
+  @override
+  String aiDjHistoryUnresolved(int count) {
+    return '$count not found';
+  }
+
+  @override
+  String aiDjHistorySource(String origin) {
+    return 'From $origin';
+  }
+
+  @override
+  String get aiDjOriginRefresh => 'a refresh';
+
+  @override
+  String get aiDjOriginAutoFeed => 'auto-feed';
+
+  @override
+  String get aiDjOriginManualFeed => 'a manual top-up';
+
+  @override
+  String get aiDjOriginRestored => 'older picks';
+
+  @override
+  String get aiDjHistoryLoadFailed =>
+      'This batch is damaged and cannot be opened';
+
+  @override
+  String get aiDjMoreLikeThis => 'More like this';
+
+  @override
+  String get aiDjRetryUnresolved => 'Search again';
+
+  @override
+  String get aiDjTransparencyTitle => 'What gets sent to AI';
+
+  @override
+  String get aiDjViewPrompt => 'View exact prompt';
+
+  @override
+  String get aiDjHidePrompt => 'Hide exact prompt';
+
+  @override
+  String get aiDjSystemPrompt => 'System prompt';
+
+  @override
+  String get aiDjUserPrompt => 'User prompt';
+
+  @override
+  String get aiDjCopyPrompt => 'Copy';
+
+  @override
+  String get aiDjPromptCopied => 'Copied';
+
+  @override
+  String get aiDjLastSentPrompt => 'Last prompt sent';
+
+  @override
+  String get aiDjLastRawResponse => 'Last AI response';
+
+  @override
+  String get aiDjNoLastPrompt => 'Nothing sent yet';
+
+  @override
+  String get aiDjNoLastResponse => 'No response yet';
+
+  @override
+  String get aiDjPromptPrivacyHint =>
+      'No play links, device information or API key.';
+
+  @override
+  String aiDjSendSummary(String sections, int count, String sources) {
+    return 'Sending: $sections · $count per batch · Sources: $sources';
+  }
+
+  @override
+  String get aiDjAutoFeedTitle => 'Auto-fill near the end of the queue';
+
+  @override
+  String get aiDjAutoFeedSubtitle =>
+      'Adds a batch automatically with 5 tracks left, without interrupting playback (on by default)';
+
+  @override
+  String get aiDjAutoFeedFailed => 'Auto-fill failed; it will retry later';
+
+  @override
+  String aiDjAutoFeedHalted(int count) {
+    return 'Auto-fill paused after $count failures in a row';
+  }
+
+  @override
+  String get aiDjAutoFeedResume => 'Resume auto-fill';
+
+  @override
+  String get aiDjGenerationStatus => 'Generating recommendations';
+
+  @override
+  String get aiDjPhaseProfile => 'Reading your taste';
+
+  @override
+  String get aiDjPhaseModel => 'AI is picking songs';
+
+  @override
+  String aiDjPhaseResolving(int done, int total) {
+    return 'Finding songs $done/$total';
+  }
+
+  @override
+  String aiDjWaitingSeconds(int seconds) {
+    return 'Waiting ${seconds}s';
+  }
+
+  @override
+  String get aiDjCancelGeneration => 'Stop';
+
+  @override
+  String get aiDjReplacing => 'Swapping…';
+
+  @override
+  String get aiDjPrefsGenerationGroup => 'Generation';
+
+  @override
+  String get aiDjPrefsStylesGroup => 'Styles';
+
+  @override
+  String get aiDjPrefsScenesGroup => 'Scenes';
+
+  @override
+  String get aiDjPrefsLanguagesGroup => 'Languages';
+
+  @override
+  String get aiDjPrefsEraGroup => 'Era';
+
+  @override
+  String get aiDjPrefsExtraGroup => 'Extra request';
+
+  @override
+  String get aiDjPrefsExtraHint =>
+      'Up to 120 characters, sent to AI with your request';
+
+  @override
+  String get aiDjPrefsOnlyUnheardTitle => 'Only unheard tracks';
+
+  @override
+  String get aiDjPrefsOnlyUnheardSubtitle =>
+      'Skip tracks you have already played (on by default)';
+
+  @override
+  String get aiDjPrefsExplorationTitle => 'Exploration';
+
+  @override
+  String get aiDjExplorationSafe => 'Safe';
+
+  @override
+  String get aiDjExplorationBalanced => 'Balanced';
+
+  @override
+  String get aiDjExplorationSurprise => 'Surprise';
+
+  @override
+  String get aiDjStylePop => 'Pop';
+
+  @override
+  String get aiDjStyleRock => 'Rock';
+
+  @override
+  String get aiDjStyleElectronic => 'Electronic';
+
+  @override
+  String get aiDjStyleFolk => 'Folk';
+
+  @override
+  String get aiDjStyleRap => 'Rap';
+
+  @override
+  String get aiDjStyleRnb => 'R&B';
+
+  @override
+  String get aiDjStyleJazz => 'Jazz';
+
+  @override
+  String get aiDjStyleClassical => 'Classical';
+
+  @override
+  String get aiDjStyleMetal => 'Metal';
+
+  @override
+  String get aiDjStyleAcg => 'ACG';
+
+  @override
+  String get aiDjStyleInstrumental => 'Instrumental';
+
+  @override
+  String get aiDjStyleChineseStyle => 'Chinese style';
+
+  @override
+  String get aiDjSceneCommute => 'Commute';
+
+  @override
+  String get aiDjSceneFocus => 'Focus';
+
+  @override
+  String get aiDjSceneRelax => 'Relax';
+
+  @override
+  String get aiDjSceneWorkout => 'Workout';
+
+  @override
+  String get aiDjSceneSleep => 'Sleep';
+
+  @override
+  String get aiDjSceneWeekend => 'Weekend';
+
+  @override
+  String get aiDjLanguageMandarin => 'Mandarin';
+
+  @override
+  String get aiDjLanguageCantonese => 'Cantonese';
+
+  @override
+  String get aiDjLanguageEnglish => 'English';
+
+  @override
+  String get aiDjLanguageJapanese => 'Japanese';
+
+  @override
+  String get aiDjLanguageKorean => 'Korean';
+
+  @override
+  String get aiDjLanguageInstrumental => 'Instrumental';
+
+  @override
+  String get aiDjEraAny => 'Any';
+
+  @override
+  String get aiDjEraRecent3 => 'Last 3 years';
+
+  @override
+  String get aiDjEra2010s => '2010s';
+
+  @override
+  String get aiDjEra2000s => '2000s';
+
+  @override
+  String get aiDjEraBefore90 => 'Before the 90s';
+
+  @override
+  String get aiDjPrefsSave => 'Save preferences';
+
+  @override
+  String get aiDjPrefsSaved => 'Saved — applies to the next batch';
+
+  @override
+  String get aiDjPrefsReset => 'Restore defaults';
+
+  @override
+  String get aiDjPrefsResetTitle => 'Restore default preferences?';
+
+  @override
+  String get aiDjPrefsResetBody =>
+      'Styles, scenes, sending scope and sources return to defaults; saved recommendations are not affected.';
+
+  @override
+  String get aiDjPrefsResetDone => 'Default preferences restored';
+
+  @override
+  String get aiDjPrefsDataScope => 'What gets sent';
+
+  @override
+  String get aiDjScopeHint =>
+      'Unchecked items are not sent; favorites and playlists are off by default.';
+
+  @override
+  String get aiDjScopeSummary => 'Listening summary';
+
+  @override
+  String get aiDjScopeTopArtists => 'Frequent artists';
+
+  @override
+  String get aiDjScopeTopTracks => 'Frequent tracks';
+
+  @override
+  String get aiDjScopeTimeAndSource => 'Time and source breakdown';
+
+  @override
+  String get aiDjScopeRecentEvents => 'Recent plays';
+
+  @override
+  String get aiDjScopeListenedExclusions => 'Already-heard exclusion list';
+
+  @override
+  String get aiDjScopeFavorites => 'Favorite tracks';
+
+  @override
+  String get aiDjScopePlaylists => 'Your playlists';
+
+  @override
+  String get aiDjScopeFavoritesConfirm =>
+      'This reads the titles and artists of up to 100 favorite tracks so they are not recommended again.';
+
+  @override
+  String get aiDjScopePlaylistsConfirm =>
+      'This reads the names, titles and artists of up to 10 of your playlists so they are not recommended again.';
+
+  @override
+  String get aiDjChannelsTitle => 'Where to find songs';
+
+  @override
+  String get aiDjChannelsAuto =>
+      'Auto (first 3 searchable sources on the Sources page)';
+
+  @override
+  String get aiDjChannelsHint =>
+      'Leave empty to choose automatically. Selected sources are used only; other sources won\'t be tried.';
+
+  @override
+  String get aiDjChannelsUnavailable =>
+      'Selected sources are unavailable right now; auto sources are used instead';
+
+  @override
+  String get aiDjChannelsEmpty => 'No searchable sources';
+
+  @override
+  String get aiDjSeedsTitle => 'More like these';
+
+  @override
+  String get aiDjSeedsHint => 'Cleared after the next successful batch';
+
+  @override
+  String get aiDjSeedsEmpty => 'No “More like this” picks yet';
+
+  @override
+  String get aiDjClearMemory => 'Clear AI memory';
+
+  @override
+  String get aiDjClearMemoryTitle => 'Clear AI memory?';
+
+  @override
+  String get aiDjClearMemoryBody =>
+      'This deletes long-term “not interested”, “liked” and “more like these” entries. This round\'s feedback is cleared too.';
+
+  @override
+  String get aiDjMemoryCleared => 'AI memory cleared';
+
+  @override
+  String get aiDjFeedbackMemory => 'Long-term memory';
+
+  @override
+  String get aiDjFeedbackThisRound => 'This round';
+
+  @override
+  String aiDjSeedLabel(String label) {
+    return 'More like · $label';
+  }
 
   @override
   String get settingsSyncTitle => 'Cross-device sync';

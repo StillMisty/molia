@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/gestures.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:material_3_expressive/material_3_expressive.dart';
@@ -6,6 +8,7 @@ import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:molia/domain/models/ai_dj.dart';
+import 'package:molia/domain/models/playback.dart';
 import 'package:molia/domain/models/track.dart';
 import 'package:molia/l10n/app_localizations.dart';
 import 'package:molia/pages/ai_dj_page.dart';
@@ -13,41 +16,15 @@ import 'package:molia/providers/ai_dj_provider.dart';
 import 'package:molia/providers/library_provider.dart';
 import 'package:molia/providers/playback_provider.dart';
 import 'package:molia/providers/search_provider.dart';
-import 'package:molia/services/ai/ai_recommendation_service.dart';
 import 'package:molia/services/ai/ai_settings_store.dart';
 import 'package:molia/widgets/ai_dj_carousel.dart';
+import 'package:molia/widgets/ai_dj_waiting.dart';
 import 'package:molia/widgets/library_search_tab.dart';
 
+import '../support/fake_ai_generator.dart';
 import '../support/fake_library_repository.dart';
 import '../support/fakes.dart';
 import '../support/settings_test_support.dart';
-
-/// 假生成器：脚本化推荐列表（不触碰 LLM/网络）。
-class _FakeGenerator implements AiRecommendationGenerator {
-  _FakeGenerator(this.batchFactory);
-
-  AiDjBatch Function() batchFactory;
-  int calls = 0;
-
-  @override
-  Future<AiDjBatch> generate({
-    required LlmConfig config,
-    required int count,
-    List<String> skippedLabels = const [],
-    List<String> likedLabels = const [],
-    List<String> excludeLabels = const [],
-  }) async {
-    calls++;
-    return batchFactory();
-  }
-
-  @override
-  Future<void> testConnection(LlmConfig config) async {}
-
-  @override
-  Future<AiUpstreamSummary> summarizeUpstream() async =>
-      AiUpstreamSummary.empty;
-}
 
 AiDjBatch _batch(int from, int count) => AiDjBatch(
       items: [
@@ -76,7 +53,7 @@ void main() {
   late FakePlaybackBackend backend;
   late PlaybackProvider playbackProvider;
   late LibraryProvider libraryProvider;
-  late _FakeGenerator generator;
+  late FakeAiDjGenerator generator;
   late MemorySettingsSecretStore secrets;
   late AiDjProvider provider;
   var providerCreated = false;
@@ -150,7 +127,7 @@ void main() {
       repository: FakeLibraryRepository(),
       playbackProvider: playbackProvider,
     );
-    generator = _FakeGenerator(() => _batch(0, 3));
+    generator = FakeAiDjGenerator(batchFactory: () => _batch(0, 3));
   });
 
   tearDown(() {
@@ -224,6 +201,72 @@ void main() {
 
     expect(generator.calls, greaterThan(callsBefore));
     expect(provider.hasRecommendations, isTrue);
+  });
+
+  testWidgets('生成中：保留当前轮播 + 阶段副标题 + 细进度条', (tester) async {
+    await pumpProvider();
+    await provider.grantConsent();
+    await provider.setEnabled(true);
+    await pumpCarousel(tester);
+    expect(find.byKey(const Key('aiDjCarousel')), findsOneWidget);
+
+    generator.emitProgress = true;
+    final gate = Completer<void>();
+    generator.gate = gate;
+    unawaited(provider.refreshRecommendations());
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 50));
+
+    expect(find.byKey(const Key('aiDjCarousel')), findsOneWidget);
+    expect(find.byKey(const Key('aiDjPulsingSkeleton')), findsNothing,
+        reason: '已有列表不打断浏览');
+    expect(find.textContaining('Finding songs'), findsOneWidget);
+    expect(find.byType(AiDjThinProgress), findsOneWidget);
+    expect(find.text('Song 0'), findsOneWidget);
+
+    gate.complete();
+    await tester.pumpAndSettle();
+  });
+
+  testWidgets('静默自动补歌不切换 active：轮播仍显示原批次', (tester) async {
+    generator.batchFactory = () => _batch(0, 20);
+    await pumpProvider();
+    await provider.grantConsent();
+    await provider.setEnabled(true);
+    await pumpCarousel(tester);
+    final activeId = provider.activeBatchId;
+    await provider.startRadio();
+    backend.emit(BackendSnapshot(
+      current: Track(
+        id: const TrackId('wy', '16'),
+        title: 'Song 16',
+        artists: const [Artist(name: 'Artist')],
+        origin: TrackOrigin.builtin,
+      ),
+      queue: [
+        for (var i = 0; i < 20; i++)
+          Track(
+            id: TrackId('wy', '$i'),
+            title: 'Song $i',
+            artists: const [Artist(name: 'Artist')],
+            origin: TrackOrigin.builtin,
+          ),
+      ],
+      currentIndex: 16,
+      isPlaying: true,
+      context: const PlaybackContext(name: kAiDjContextName, uri: 'lx:ai'),
+    ));
+    generator.batchFactory = () => _batch(20, 20);
+    provider.onPlaybackChanged();
+    await tester.pumpAndSettle();
+
+    expect(provider.activeBatchId, activeId);
+    expect(provider.historyEntries.first.origin, AiDjOrigin.autoFeed);
+    expect(find.text('Song 0'), findsOneWidget);
+    expect(find.text('Song 20'), findsNothing);
+    expect(find.textContaining('Auto'), findsNothing, reason: '不展示自动补歌提示');
+    // 播放状态节流器还有一帧定时器，等它收尾再结束用例。
+    await tester.pump(const Duration(milliseconds: 400));
   });
 
   testWidgets('生成失败：展示重试卡，点击触发重新生成', (tester) async {

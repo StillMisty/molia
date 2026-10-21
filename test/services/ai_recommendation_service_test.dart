@@ -7,6 +7,7 @@ import 'package:molia/data/play_statistics_repository.dart';
 import 'package:molia/domain/models/ai_dj.dart';
 import 'package:molia/domain/models/catalog.dart';
 import 'package:molia/domain/models/failure.dart';
+import 'package:molia/domain/models/library.dart';
 import 'package:molia/domain/models/source.dart';
 import 'package:molia/domain/models/track.dart';
 import 'package:molia/domain/ports/music_source.dart';
@@ -14,9 +15,10 @@ import 'package:molia/domain/ports/source_registry.dart';
 import 'package:molia/services/ai/ai_recommendation_service.dart';
 import 'package:molia/services/ai/llm_client.dart';
 import 'package:molia/services/ai/taste_profile_builder.dart';
-import '../support/sync_test_support.dart';
 
+import '../support/fake_library_repository.dart';
 import '../support/memory_database.dart';
+import '../support/sync_test_support.dart';
 
 /// 假 LLM：直接返回预置文本（不触碰网络）。
 class _FakeLlm extends LlmClient {
@@ -25,7 +27,9 @@ class _FakeLlm extends LlmClient {
   String response;
   Object? error;
   String? lastUserPrompt;
+  String? lastSystemPrompt;
   bool? lastJsonMode;
+  int calls = 0;
 
   @override
   Future<String> complete({
@@ -36,7 +40,9 @@ class _FakeLlm extends LlmClient {
     int maxTokens = 4096,
     bool jsonMode = false,
   }) async {
+    calls++;
     lastUserPrompt = userPrompt;
+    lastSystemPrompt = systemPrompt;
     lastJsonMode = jsonMode;
     final failure = error;
     if (failure != null) throw failure;
@@ -46,19 +52,20 @@ class _FakeLlm extends LlmClient {
 
 /// 假音源：search 返回固定结果（其余成员不会被调用）。
 class _FakeSource implements MusicSource {
-  _FakeSource(this.key, this.results);
+  _FakeSource(this.key, this.results, {String? displayName})
+      : displayName = displayName ?? key;
 
   @override
   final String key;
 
+  @override
+  final String displayName;
+
   final List<Track> results;
 
-  /// 封面补取：非空时 `artwork()` 返回它（统计调用次数）。
   String? artworkUrl;
   int artworkCalls = 0;
-
-  @override
-  String get displayName => key;
+  int searchCalls = 0;
 
   @override
   Future<Artwork?> artwork(Track track) async {
@@ -72,35 +79,44 @@ class _FakeSource implements MusicSource {
 
   @override
   Future<SearchResult<Track>> search(SearchQuery query,
-          {CancelToken? cancel}) async =>
-      SearchResult(items: results);
+      {CancelToken? cancel}) async {
+    searchCalls++;
+    return SearchResult(items: results);
+  }
 
   @override
   dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
 }
 
 class _FakeRegistry implements SourceRegistry {
-  _FakeRegistry(this._sources);
+  _FakeRegistry(List<({MusicSource source, int order, bool enabled})> entries)
+      : _entries = entries;
 
-  final Map<String, MusicSource> _sources;
+  final List<({MusicSource source, int order, bool enabled})> _entries;
 
   @override
   List<SourceDescriptor> get descriptors => [
-        for (final entry in _sources.entries)
+        for (final entry in _entries)
           SourceDescriptor(
-            key: entry.key,
-            displayName: entry.key,
+            key: entry.source.key,
+            displayName: entry.source.displayName,
             kind: SourceKind.builtin,
-            capabilities: entry.value.capabilities,
-            enabled: true,
+            capabilities: entry.source.capabilities,
+            enabled: entry.enabled,
+            order: entry.order,
           ),
       ];
 
   @override
-  MusicSource? byKey(String key) => _sources[key];
+  MusicSource? byKey(String key) {
+    for (final entry in _entries) {
+      if (entry.source.key == key) return entry.source;
+    }
+    return null;
+  }
 
   @override
-  MusicSource? forTrack(Track track) => _sources[track.id.sourceKey];
+  MusicSource? forTrack(Track track) => byKey(track.id.sourceKey);
 
   @override
   Future<void> refresh() async {}
@@ -112,12 +128,20 @@ class _FakeRegistry implements SourceRegistry {
   Stream<void> get changes => const Stream.empty();
 }
 
-Track _track(String id, String title, String artist) => Track(
-      id: TrackId('wy', id),
+Track _track(
+  String id,
+  String title,
+  String artist, {
+  String source = 'wy',
+  Map<String, dynamic> raw = const {},
+}) =>
+    Track(
+      id: TrackId(source, id),
       title: title,
       artists: [Artist(name: artist)],
       duration: const Duration(minutes: 4),
       origin: TrackOrigin.builtin,
+      payload: raw,
     );
 
 void main() {
@@ -125,6 +149,7 @@ void main() {
 
   late MoliaDatabase db;
   late PlayStatisticsRepository statistics;
+  late FakeLibraryRepository library;
   late _FakeLlm llm;
   late AiRecommendationService service;
 
@@ -150,16 +175,58 @@ void main() {
     );
   }
 
-  AiRecommendationService buildService(List<MusicSource> sources) {
-    final registry = _FakeRegistry({
-      for (final source in sources) source.key: source,
-    });
+  AiRecommendationService buildService(
+    List<_FakeSource> sources, {
+    Map<String, ({int order, bool enabled})> config = const {},
+    int resolveConcurrency = 3,
+  }) {
+    final registry = _FakeRegistry([
+      for (final source in sources)
+        (
+          source: source,
+          order: config[source.key]?.order ?? 0,
+          enabled: config[source.key]?.enabled ?? true,
+        ),
+    ]);
     return AiRecommendationService(
       llm: llm,
       catalog: CatalogService(registry: registry),
       registry: registry,
-      profileBuilder: TasteProfileBuilder(repository: statistics),
+      profileBuilder: TasteProfileBuilder(
+        repository: statistics,
+        libraryStore: library,
+      ),
+      resolveConcurrency: resolveConcurrency,
     );
+  }
+
+  Future<void> addFavorite(String title, String artist) async {
+    await library.toggleFavorite(
+      sourceKey: 'wy',
+      songId: 'fav-$title',
+      title: title,
+      artist: artist,
+      raw: const {'songmid': 'secret-raw'},
+    );
+  }
+
+  Future<void> createPlaylist(
+      String name, List<(String, String)> tracks) async {
+    final id = await library.createPlaylist(name);
+    for (final (title, artist) in tracks) {
+      await library.addTrackToPlaylist(
+        id,
+        PlaylistTrack(
+          playlistId: id,
+          sourceKey: 'wy',
+          songId: 'pl-$name-$title',
+          title: title,
+          artist: artist,
+          raw: const {'songmid': 'secret-raw'},
+          addedAt: 1,
+        ),
+      );
+    }
   }
 
   setUp(() async {
@@ -168,12 +235,14 @@ void main() {
       databaseProvider: () => db,
       statisticsSync: testStatisticsSyncStore(() => db),
     );
+    library = FakeLibraryRepository();
     llm = _FakeLlm('{}');
     service = buildService(const []);
   });
 
   tearDown(() async {
     await statistics.dispose();
+    await library.dispose();
     await db.close();
   });
 
@@ -198,6 +267,7 @@ void main() {
       expect(batch.items.single.track.title, '晴天');
       expect(batch.items.single.track.id.id, 'a');
       expect(batch.items.single.source.reason, '经典');
+      expect(batch.items.single.sourceName, 'wy');
       expect(batch.unresolved.single.title, '不存在的歌');
     });
 
@@ -295,39 +365,436 @@ void main() {
       expect(llm.lastUserPrompt, contains('已在该列表'));
     });
 
-    test('summarizeUpstream 只统计条数', () async {
+    test('summarizeUpstream 统计发送范围（含收藏 / 歌单）', () async {
       await insertPlayed('晴天', '周杰伦');
+      await addFavorite('收藏歌', '收藏人');
+      await createPlaylist('通勤', [('歌单一', '歌手一'), ('歌单二', '歌手二')]);
 
-      final summary = await service.summarizeUpstream();
+      final summary = await service.summarizeUpstream(
+        preferences: const AiPreferences(
+          sections: {
+            ...kAiDefaultUpstreamSections,
+            AiUpstreamSection.favorites,
+            AiUpstreamSection.playlists,
+          },
+        ),
+      );
 
       expect(summary.recentEvents, 1);
-      expect(summary.exclusions, 1);
+      expect(summary.favorites, 1);
+      expect(summary.playlists, 2);
+    });
+  });
+
+  group('发送范围与提示词', () {
+    test('默认不发送收藏 / 歌单；开启后只发歌名、歌手与歌单名', () async {
+      await addFavorite('收藏歌', '收藏人');
+      await createPlaylist('通勤', [('歌单一', '歌手一')]);
+      llm.response = jsonEncode({
+        'songs': [
+          {'title': '新歌', 'artist': '新人'},
+        ],
+      });
+
+      final previewDefault = await service.buildPromptPreview(
+        count: 20,
+      );
+      expect(previewDefault.userPrompt, isNot(contains('favorites')));
+      expect(previewDefault.userPrompt, isNot(contains('playlists')));
+      expect(previewDefault.userPrompt, isNot(contains('收藏歌')));
+
+      const preferences = AiPreferences(
+        sections: {
+          ...kAiDefaultUpstreamSections,
+          AiUpstreamSection.favorites,
+          AiUpstreamSection.playlists,
+        },
+      );
+      await service.buildPromptPreview(
+        count: 20,
+        preferences: preferences,
+      );
+
+      final prompt = llm.lastUserPrompt;
+      expect(prompt, isNull, reason: '预览不触发 LLM 调用');
+      final preview = await service.buildPromptPreview(
+        count: 20,
+        preferences: preferences,
+      );
+      expect(preview.userPrompt, contains('"favorites"'));
+      expect(preview.userPrompt, contains('收藏歌'));
+      expect(preview.userPrompt, contains('收藏人'));
+      expect(preview.userPrompt, contains('"playlists"'));
+      expect(preview.userPrompt, contains('通勤'));
+      expect(preview.userPrompt, contains('歌单一'));
+      expect(preview.userPrompt, isNot(contains('secret-raw')));
+      expect(preview.userPrompt, isNot(contains('cover')));
     });
 
-    test('提示词包含画像、排除清单与本轮反馈', () async {
+    test('关闭提交范围后对应字段从 prompt 消失；全部关闭仍可仅按偏好生成', () async {
+      const preferences = AiPreferences(
+        styles: ['pop'],
+        scenes: ['commute'],
+        languages: ['mandarin'],
+        era: kAiEra2010s,
+        exploration: kAiExplorationSurprise,
+        extraPrompt: '女声优先',
+        sections: {},
+        sourceKeys: ['wy'],
+      );
+
+      final prompt = await service.buildPromptPreview(
+        count: 30,
+        preferences: preferences,
+      );
+
+      for (final field in [
+        '"summary"',
+        '"topArtists"',
+        '"topTracks"',
+        '"listeningByWeekdayHour"',
+        '"recentEvents"',
+        '"alreadyListened"',
+        '"favorites"',
+        '"playlists"',
+      ]) {
+        expect(prompt.userPrompt, isNot(contains(field)));
+      }
+      expect(prompt.userPrompt, contains('流行'));
+      expect(prompt.userPrompt, contains('通勤'));
+      expect(prompt.userPrompt, contains('华语'));
+      expect(prompt.userPrompt, contains('2010s'));
+      expect(prompt.userPrompt, contains('惊喜'));
+      expect(prompt.userPrompt, contains('女声优先'));
+      expect(prompt.userPrompt, contains('请推荐 30 首'));
+      expect(prompt.userPrompt, contains('"preferences"'));
+    });
+
+    test('只推荐没听过的关闭、排除清单开启：仍发送已听清单但不本地强制过滤', () async {
       await insertPlayed('旧歌', '老歌手');
       llm.response = jsonEncode({
         'songs': [
-          {'title': '新歌', 'artist': '新人', 'reason': 'x'},
+          {'title': '旧歌', 'artist': '老歌手'},
+        ],
+      });
+      service = buildService([
+        _FakeSource('wy', [_track('a', '旧歌', '老歌手')]),
+      ]);
+      final preferences = AiPreferences.defaults.copyWith(
+        onlyUnheard: false,
+      );
+      final preview = await service.buildPromptPreview(
+        count: 20,
+        preferences: preferences,
+      );
+      final batch = await service.generate(
+        config: config,
+        count: 20,
+        preferences: preferences,
+      );
+
+      expect(preview.userPrompt, contains('"alreadyListened"'));
+      expect(preview.userPrompt, contains('旧歌 - 老歌手'));
+      expect(batch.items, hasLength(1), reason: '关闭后不本地强制排除');
+    });
+
+    test('只推荐没听过的开启、排除清单关闭：本地过滤生效但不发送清单', () async {
+      await insertPlayed('晴天', '周杰伦');
+      llm.response = jsonEncode({
+        'songs': [
+          {'title': '晴天', 'artist': '周杰伦'},
+        ],
+      });
+      service = buildService([
+        _FakeSource('wy', [_track('a', '晴天', '周杰伦')]),
+      ]);
+      final preferences = AiPreferences.defaults.copyWith(
+        sections: {
+          for (final section in AiPreferences.defaults.sections)
+            if (section != AiUpstreamSection.listenedExclusions) section,
+        },
+      );
+
+      final preview = await service.buildPromptPreview(
+        count: 20,
+        preferences: preferences,
+      );
+      final batch = await service.generate(
+        config: config,
+        count: 20,
+        preferences: preferences,
+      );
+
+      expect(preview.userPrompt, isNot(contains('"alreadyListened"')));
+      expect(batch.items, isEmpty, reason: '本地仍排除已听曲目');
+    });
+
+    test('收藏歌曲进入本地排除集合（即使只勾选收藏）', () async {
+      await addFavorite('晴天', '周杰伦');
+      llm.response = jsonEncode({
+        'songs': [
+          {'title': '晴天', 'artist': '周杰伦'},
+        ],
+      });
+      service = buildService([
+        _FakeSource('wy', [_track('a', '晴天', '周杰伦')]),
+      ]);
+
+      final batch = await service.generate(
+        config: config,
+        count: 20,
+        preferences: const AiPreferences(
+          sections: {AiUpstreamSection.favorites},
+        ),
+      );
+
+      expect(batch.items, isEmpty);
+      expect(batch.unresolved, isEmpty);
+    });
+
+    test('预览与实际请求共用同一份 userPrompt', () async {
+      await insertPlayed('旧歌', '老歌手');
+      const preferences = AiPreferences(styles: ['jazz'], batchSize: 30);
+      llm.response = jsonEncode({
+        'songs': [
+          {'title': '新歌', 'artist': '新人'},
         ],
       });
       service = buildService([
         _FakeSource('wy', [_track('a', '新歌', '新人')]),
       ]);
+      const skipped = ['跳过歌 - 某'];
+      const liked = ['收藏歌 - 某'];
+      const excluded = ['已有 - 某'];
+
+      final preview = await service.buildPromptPreview(
+        count: preferences.batchSize,
+        preferences: preferences,
+        skippedLabels: skipped,
+        likedLabels: liked,
+        excludeLabels: excluded,
+      );
+      final batch = await service.generate(
+        config: config,
+        count: preferences.batchSize,
+        preferences: preferences,
+        skippedLabels: skipped,
+        likedLabels: liked,
+        excludeLabels: excluded,
+      );
+
+      expect(llm.lastUserPrompt, preview.userPrompt);
+      expect(batch.prompt, preview);
+      expect(batch.rawResponse, llm.response);
+    });
+
+    test('种子进入反馈段落', () async {
+      final prompt = await service.buildPromptPreview(
+        count: 20,
+        preferences: const AiPreferences(seeds: ['晴天 - 周杰伦']),
+      );
+      expect(prompt.userPrompt, contains('多来点这种'));
+      expect(prompt.userPrompt, contains('晴天 - 周杰伦'));
+    });
+  });
+
+  group('找歌渠道', () {
+    test('自动：按音源页顺序取前 3 个可搜索渠道', () async {
+      final s1 = _FakeSource('s1', [_track('a', '歌', '手', source: 's1')]);
+      final s2 = _FakeSource('s2', [_track('a', '歌', '手', source: 's2')]);
+      final s3 = _FakeSource('s3', [_track('a', '歌', '手', source: 's3')]);
+      final s4 = _FakeSource('s4', [_track('a', '歌', '手', source: 's4')]);
+      service = buildService(
+        [s1, s2, s3, s4],
+        config: {
+          's1': (order: 4, enabled: true),
+          's2': (order: 1, enabled: true),
+          's3': (order: 3, enabled: true),
+          's4': (order: 2, enabled: true),
+        },
+      );
+      llm.response = jsonEncode({
+        'songs': [
+          {'title': '歌', 'artist': '手'},
+        ],
+      });
+
+      final batch = await service.generate(config: config, count: 20);
+
+      expect(batch.items.single.track.id.sourceKey, 's2');
+      expect(s2.searchCalls, 1);
+      expect(s1.searchCalls, 0);
+      expect(s3.searchCalls, 0);
+      expect(s4.searchCalls, 0);
+    });
+
+    test('已选渠道：严格按所选顺序，只在这些渠道搜索，不兜底', () async {
+      final s1 = _FakeSource('s1', [_track('a', '歌', '手', source: 's1')]);
+      final s2 = _FakeSource('s2', [_track('a', '歌', '手', source: 's2')]);
+      final s3 = _FakeSource('s3', [_track('a', '歌', '手', source: 's3')]);
+      service = buildService(
+        [s1, s2, s3],
+        config: {
+          's1': (order: 3, enabled: true),
+          's2': (order: 1, enabled: true),
+          's3': (order: 2, enabled: true),
+        },
+      );
+      llm.response = jsonEncode({
+        'songs': [
+          {'title': '歌', 'artist': '手'},
+        ],
+      });
+
+      final batch = await service.generate(
+        config: config,
+        count: 20,
+        preferences: const AiPreferences(sourceKeys: ['s3']),
+      );
+
+      expect(batch.items.single.track.id.sourceKey, 's3');
+      expect(batch.items.single.sourceName, 's3');
+      expect(s3.searchCalls, 1);
+      expect(s1.searchCalls, 0);
+      expect(s2.searchCalls, 0);
+    });
+
+    test('已选渠道找不到 → 未解析，不回退其它渠道', () async {
+      final s1 = _FakeSource('s1', [_track('a', '歌', '手', source: 's1')]);
+      final s2 = _FakeSource('s2', const []);
+      service = buildService([s1, s2]);
+      llm.response = jsonEncode({
+        'songs': [
+          {'title': '歌', 'artist': '手'},
+        ],
+      });
+
+      final batch = await service.generate(
+        config: config,
+        count: 20,
+        preferences: const AiPreferences(sourceKeys: ['s2']),
+      );
+
+      expect(batch.items, isEmpty);
+      expect(batch.unresolved, hasLength(1));
+      expect(s1.searchCalls, 0);
+    });
+
+    test('所选渠道全部不可用 → 回退自动渠道', () async {
+      final s1 = _FakeSource('s1', [_track('a', '歌', '手', source: 's1')]);
+      final s2 = _FakeSource('s2', [_track('a', '歌', '手', source: 's2')]);
+      service = buildService(
+        [s1, s2],
+        config: {
+          's1': (order: 1, enabled: true),
+          's2': (order: 2, enabled: false),
+        },
+      );
+      llm.response = jsonEncode({
+        'songs': [
+          {'title': '歌', 'artist': '手'},
+        ],
+      });
+
+      final batch = await service.generate(
+        config: config,
+        count: 20,
+        preferences: const AiPreferences(sourceKeys: ['s2']),
+      );
+
+      expect(batch.items.single.track.id.sourceKey, 's1');
+    });
+  });
+
+  group('进度 / 取消 / 未解析重试', () {
+    test('进度阶段依次 profile → model → resolving，done 单调递增', () async {
+      final progresses = <AiDjProgress>[];
+      llm.response = jsonEncode({
+        'songs': [
+          {'title': '歌一', 'artist': '手'},
+          {'title': '歌二', 'artist': '手'},
+        ],
+      });
+      service = buildService(
+        [
+          _FakeSource('wy', [
+            _track('a', '歌一', '手'),
+            _track('b', '歌二', '手'),
+          ]),
+        ],
+        resolveConcurrency: 1,
+      );
 
       await service.generate(
         config: config,
-        count: 20,
-        skippedLabels: const ['跳过歌 - 某'],
-        likedLabels: const ['收藏歌 - 某'],
+        count: 2,
+        onProgress: progresses.add,
       );
 
-      final prompt = llm.lastUserPrompt!;
-      expect(prompt, contains('"alreadyListened"'));
-      expect(prompt, contains('旧歌 - 老歌手'));
-      expect(prompt, contains('请推荐 20 首'));
-      expect(prompt, contains('跳过歌'));
-      expect(prompt, contains('收藏歌'));
+      expect(
+        progresses.map((progress) => progress.phase).toSet(),
+        {AiDjPhase.profile, AiDjPhase.model, AiDjPhase.resolving},
+      );
+      expect(progresses.first.phase, AiDjPhase.profile);
+      expect(progresses[1].phase, AiDjPhase.model);
+      final resolving = [
+        for (final progress in progresses)
+          if (progress.phase == AiDjPhase.resolving) progress,
+      ];
+      expect(resolving.first.done, 0);
+      expect(resolving.map((progress) => progress.done).toList(), [0, 1, 2]);
+      expect(resolving.every((progress) => progress.total == 2), isTrue);
+      expect(resolving.first.fraction, 0);
+      expect(resolving.last.fraction, 1);
+      expect(progresses[1].fraction, isNull);
+    });
+
+    test('取消令牌：抛 cancelled，不返回批次', () async {
+      final token = AiGenerationCancelToken();
+      llm.response = jsonEncode({
+        'songs': [
+          {'title': '歌', 'artist': '手'},
+        ],
+      });
+      service = buildService([
+        _FakeSource('wy', [_track('a', '歌', '手')]),
+      ]);
+
+      await expectLater(
+        service.generate(
+          config: config,
+          count: 1,
+          cancelToken: token,
+          onProgress: (progress) {
+            if (progress.phase == AiDjPhase.model) token.cancel();
+          },
+        ),
+        throwsA(isA<SourceFailure>()
+            .having((failure) => failure.kind, 'kind', FailureKind.cancelled)),
+      );
+      expect(llm.calls, 1, reason: '取消后不再继续解析');
+    });
+
+    test('未解析重试只重新搜索，不调用 LLM', () async {
+      llm.response = jsonEncode({
+        'songs': [
+          {'title': '找不到', 'artist': '无人'},
+        ],
+      });
+      service = buildService([_FakeSource('wy', const [])]);
+      final first = await service.generate(config: config, count: 1);
+      expect(first.unresolved, hasLength(1));
+      expect(llm.calls, 1);
+
+      service = buildService([
+        _FakeSource('wy', [_track('a', '找不到', '无人')]),
+      ]);
+      final retried = await service.resolveUnresolved(batch: first);
+
+      expect(retried.unresolved, isEmpty);
+      expect(retried.items.single.track.id.id, 'a');
+      expect(retried.id, first.id);
+      expect(llm.calls, 1, reason: '重试不重新调 LLM');
     });
   });
 

@@ -218,23 +218,32 @@
   （Top 曲目可点播）；导出 JSON 面向 AI 消费（全量汇总 + 最近明细、不含 raw）。
   与 `play_history`（最近播放，500 条上限）是两套数据。
 - **AI 推歌（Phase 2，可选，默认关闭）**：`lib/services/ai/**` 是唯一数据出口与
-  网络层——`TasteProfileBuilder`（聚合画像 + 最近 200 条明细 + 排除清单）、
-  `LlmClient`（OpenAI-compatible，请求带 `response_format: json_object`（不支持时
-  自动退回），错误归一化 `SourceFailure`，Key 不进 message）、
-  `AiRecommendationService`（提示词 → 容错 JSON → 规范化去重 →
-  `CatalogService.search` 并行解析，命中无封面时经音源 `artwork()` 补取）。
-  `AiDjProvider` 维护两件事：**今日推荐列表**（持久化在
-  `AiRecommendationStore`，任何时刻可浏览/播放，「换一批」替换缓存）与
-  **推歌会话**（`enabled` 功能开关 + `status` 电台状态：播放全部/点某首才接管队列，
-  低水位续推只在当前队列就是 AI 队列时触发；退出队列不关功能）。列表带
-  单曲「换一首」「不感兴趣（可撤销）」与反馈面板；缓存有效期
-  （`aiDjCacheTtlDays`，默认 1 天）只影响续推是否消费旧列表，不做过期提示，
-  「上次更新」只在 AI 页与发现页推荐区展示。发现页 `AiDjCarousel` 用 carousel
-  原生槽位展示歌名/歌手（`applyDynamicTextContentTransform: false`）：桌面端
-  鼠标拖拽跟手（松手吸附）、滚轮翻卡（自接指针信号把 `dy` 转成步进，横向滚动
-  视图默认只吃 `dx`），点卡滚到焦点位（`M3ECarouselController.animateToItem`）；
-  卡片流下方信息区只显示焦点卡的推荐理由（歌名 / 歌手由卡片槽位承担，不在
-  信息区重复），随焦点变化更新，理由为空 / 焦点越界不渲染（`aiDjReasonPanel`）。「查看全部」进 AI 页的弹层不带关闭 X
+  网络层——`TasteProfileBuilder`（按发送范围读聚合画像 + 最近 200 条明细 +
+  可选收藏/歌单，上限集中）、`LlmClient`（OpenAI-compatible，请求带
+  `response_format: json_object`（不支持时自动退回），错误归一化
+  `SourceFailure`，Key 不进 message）、`AiRecommendationService`（提示词 →
+  容错 JSON → 规范化去重 → `CatalogService.search` 按找歌渠道解析，命中无封面
+  时经音源 `artwork()` 补取；预览与实际共用同一 `buildPrompt`）。
+  `AiDjProvider` 维护**当前推荐（active batch）**、**历史推荐**与**推歌会话**：
+  历史存储迁移为索引 + 每批一键（`AiRecommendationStore`，启动只读索引 +
+  active，详情懒加载，20 批 / 400 首 / 30 天、active 不清理），旧单批键首次
+  加载迁移；显式「生成推荐 / 换一批」切换 active，旧批留在历史；手动补批与
+  低水位**静默补歌**只追加队列 + 写历史（`manualFeed` / `autoFeed`），不切换
+  active、不显示进度，自动补歌连续 3 次失败停止（显式操作优先并可取消）；
+  历史可播放 / 加队列 / 设为当前 / 删除。生成偏好（批次大小 10/20/30/50、
+  自动补歌、风格 / 场景 / 语言 / 年代 / 探索度 / 只推荐没听过的 / 补充要求、
+  发送范围、找歌渠道）持久化在 `kAiDjPreferences`，保存不自动生成；反馈记忆
+  持久化在 `kAiDjFeedbackMemory`（不感兴趣 / 喜欢 / 种子，重启保留，种子成功
+  生成后消费）。显式生成有 profile → model → resolving 阶段进度与取消，
+  首屏脉冲骨架、轮播细进度条；自动补歌不进入任何进度/提示 UI。发送透明化区块
+  展示范围摘要、可复制的系统 + 用户提示词，以及仅存内存的上次发送与原始返回。
+  反馈面板含长期记忆与本轮反馈、清空 AI 记忆。发现页 `AiDjCarousel` 只展示
+  active 批次，用 carousel 原生槽位展示歌名/歌手
+  （`applyDynamicTextContentTransform: false`）：桌面端鼠标拖拽跟手（松手吸附）、
+  滚轮翻卡（自接指针信号把 `dy` 转成步进，横向滚动视图默认只吃 `dx`），点卡
+  滚到焦点位（`M3ECarouselController.animateToItem`）；卡片流下方信息区只显示
+  焦点卡的推荐理由（歌名 / 歌手由卡片槽位承担，不在信息区重复），理由为空 /
+  焦点越界不渲染（`aiDjReasonPanel`）。「查看全部」进 AI 页的弹层不带关闭 X
   （`showCloseButton: false`：页面自己的标题栏已有返回，避免双层 chrome，
   关闭走遮罩 / Esc / 下滑 / 系统返回）。功能未启用时整条隐藏；播放页不再有
   AI 徽标。首次开启隐私确认；定位与边界见 ADR-0002。启用后搜索 tab 的

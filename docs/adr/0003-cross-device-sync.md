@@ -67,8 +67,8 @@
    > `lib/data/settings/settings_keys.dart`；组合根注入唯一实例，模块在构造时
    > 把 reload 钩子绑到自己的键。本条「不改造写入方」的适用范围收窄为
    > **未登记的设备本地键**；变化检测仍是登记哈希（同步适配器不再自带键表与
-   > 类型转换）。登记表此前已漏掉三个真实键（`ai_dj_enabled` /
-   > `ai_dj_cache_ttl_days` / `source_swap_auto_enabled`），现按「跟人走」登记；
+   > 类型转换）。登记表此前已漏掉真实键（如 `ai_dj_enabled` /
+   > `source_swap_auto_enabled`），现按「跟人走」登记；
    > 漏登记从此等于显式选择不同步，由
    > `test/architecture/settings_keys_test.dart` 守住「一个键一个家」。
 7. **落位与接线**：领域模型 / 端口在 `lib/domain`；引擎、适配器、传输、状态存储在

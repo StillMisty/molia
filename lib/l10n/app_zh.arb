@@ -823,21 +823,223 @@
     }
   },
   "aiDjUpstreamHint": "只发送以上统计与歌名、歌手，不含播放链接与设备信息。",
-  "aiDjCacheTtlTitle": "推荐缓存",
-  "aiDjCacheTtlDays": "{days} 天",
-  "@aiDjCacheTtlDays": {
-    "placeholders": {
-      "days": {
-        "type": "int"
-      }
-    }
-  },
-  "aiDjCacheTtlForever": "永久",
-  "aiDjCacheTtlHint": "过期后会自动生成新一批，不打断播放。",
   "aiDjGenerate": "生成推荐",
   "aiDjEmptyList": "还没有推荐列表",
   "aiDjEmptyListHint": "生成一批今日推荐，之后可随时播放。",
   "aiDjEnqueueEmpty": "列表里的歌都已在队列中",
+  "aiDjPreferencesTitle": "推荐偏好",
+  "aiDjPreferencesSubtitle": "风格、场景与发送范围",
+  "aiDjPreferencesOutdated": "偏好已更新，换一批生效",
+  "aiDjBatchSize": "每批 {count} 首",
+  "@aiDjBatchSize": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "aiDjBatchSizeTitle": "每批数量",
+  "aiDjFeedBatch": "补一批到队尾",
+  "aiDjSectionsNone": "仅偏好",
+  "aiDjFeedDone": "已补一批到队尾",
+  "aiDjUnresolvedRetried": "已重新搜索",
+  "aiDjHistoryTitle": "历史推荐",
+  "aiDjHistoryEntry": "历史推荐（{count}）",
+  "@aiDjHistoryEntry": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "aiDjHistoryEmpty": "还没有历史推荐",
+  "aiDjHistoryEmptyHint": "生成推荐后，这里会保留每一批记录。",
+  "aiDjHistoryPlay": "播放这批",
+  "aiDjHistoryEnqueue": "加入队列",
+  "aiDjHistorySetActive": "设为当前",
+  "aiDjHistoryDelete": "删除",
+  "aiDjHistoryActive": "当前",
+  "aiDjHistoryClear": "清空历史",
+  "aiDjHistoryClearTitle": "清空历史推荐？",
+  "aiDjHistoryClearBody": "只删除历史记录，不影响正在播放的队列。当前推荐会保留。",
+  "aiDjHistoryCleared": "已清空历史推荐",
+  "aiDjHistoryExpand": "查看曲目",
+  "aiDjHistoryCollapse": "收起曲目",
+  "aiDjHistoryItems": "{count} 首",
+  "@aiDjHistoryItems": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "aiDjHistoryUnresolved": "{count} 首未找到",
+  "@aiDjHistoryUnresolved": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "aiDjHistorySource": "来源：{origin}",
+  "@aiDjHistorySource": {
+    "placeholders": {
+      "origin": {
+        "type": "String"
+      }
+    }
+  },
+  "aiDjOriginRefresh": "生成推荐",
+  "aiDjOriginAutoFeed": "自动补歌",
+  "aiDjOriginManualFeed": "手动补歌",
+  "aiDjOriginRestored": "旧推荐",
+  "aiDjHistoryLoadFailed": "这批内容已损坏，无法查看",
+  "aiDjMoreLikeThis": "多来点这种",
+  "aiDjRetryUnresolved": "重新找一次",
+  "aiDjTransparencyTitle": "发送给 AI 的内容",
+  "aiDjViewPrompt": "查看发送原文",
+  "aiDjHidePrompt": "收起发送原文",
+  "aiDjSystemPrompt": "系统提示词",
+  "aiDjUserPrompt": "用户提示词",
+  "aiDjCopyPrompt": "复制",
+  "aiDjPromptCopied": "已复制",
+  "aiDjLastSentPrompt": "上次实际发送",
+  "aiDjLastRawResponse": "上次 AI 返回",
+  "aiDjNoLastPrompt": "还没有发送记录",
+  "aiDjNoLastResponse": "还没有返回记录",
+  "aiDjPromptPrivacyHint": "不含播放链接、设备信息或 API Key。",
+  "aiDjSendSummary": "发送范围：{sections} · 每批 {count} 首 · 渠道：{sources}",
+  "@aiDjSendSummary": {
+    "placeholders": {
+      "sections": {
+        "type": "String"
+      },
+      "count": {
+        "type": "int"
+      },
+      "sources": {
+        "type": "String"
+      }
+    }
+  },
+  "aiDjAutoFeedTitle": "队列快播完时自动补歌",
+  "aiDjAutoFeedSubtitle": "剩余 5 首时自动补一批，不打断播放（默认开启）",
+  "aiDjAutoFeedFailed": "自动补歌失败，稍后会再试",
+  "aiDjAutoFeedHalted": "自动补歌已暂停：连续 {count} 次失败",
+  "@aiDjAutoFeedHalted": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "aiDjAutoFeedResume": "恢复自动补歌",
+  "aiDjGenerationStatus": "正在生成推荐",
+  "aiDjPhaseProfile": "整理听歌偏好",
+  "aiDjPhaseModel": "AI 正在选歌",
+  "aiDjPhaseResolving": "正在找歌 {done}/{total}",
+  "@aiDjPhaseResolving": {
+    "placeholders": {
+      "done": {
+        "type": "int"
+      },
+      "total": {
+        "type": "int"
+      }
+    }
+  },
+  "aiDjWaitingSeconds": "已等待 {seconds} 秒",
+  "@aiDjWaitingSeconds": {
+    "placeholders": {
+      "seconds": {
+        "type": "int"
+      }
+    }
+  },
+  "aiDjCancelGeneration": "停止",
+  "aiDjReplacing": "正在换…",
+  "aiDjPrefsGenerationGroup": "生成",
+  "aiDjPrefsStylesGroup": "风格",
+  "aiDjPrefsScenesGroup": "场景",
+  "aiDjPrefsLanguagesGroup": "语言",
+  "aiDjPrefsEraGroup": "年代",
+  "aiDjPrefsExtraGroup": "补充要求",
+  "aiDjPrefsExtraHint": "最多 120 字，会一起发送给 AI",
+  "aiDjPrefsOnlyUnheardTitle": "只推荐没听过的",
+  "aiDjPrefsOnlyUnheardSubtitle": "排除听过的曲目（默认开启）",
+  "aiDjPrefsExplorationTitle": "探索度",
+  "aiDjExplorationSafe": "稳妥",
+  "aiDjExplorationBalanced": "均衡",
+  "aiDjExplorationSurprise": "惊喜",
+  "aiDjStylePop": "流行",
+  "aiDjStyleRock": "摇滚",
+  "aiDjStyleElectronic": "电子",
+  "aiDjStyleFolk": "民谣",
+  "aiDjStyleRap": "说唱",
+  "aiDjStyleRnb": "R&B",
+  "aiDjStyleJazz": "爵士",
+  "aiDjStyleClassical": "古典",
+  "aiDjStyleMetal": "金属",
+  "aiDjStyleAcg": "ACG",
+  "aiDjStyleInstrumental": "纯音乐",
+  "aiDjStyleChineseStyle": "国风",
+  "aiDjSceneCommute": "通勤",
+  "aiDjSceneFocus": "专注",
+  "aiDjSceneRelax": "放松",
+  "aiDjSceneWorkout": "运动",
+  "aiDjSceneSleep": "睡前",
+  "aiDjSceneWeekend": "周末",
+  "aiDjLanguageMandarin": "华语",
+  "aiDjLanguageCantonese": "粤语",
+  "aiDjLanguageEnglish": "英语",
+  "aiDjLanguageJapanese": "日语",
+  "aiDjLanguageKorean": "韩语",
+  "aiDjLanguageInstrumental": "纯音乐",
+  "aiDjEraAny": "不限",
+  "aiDjEraRecent3": "近三年",
+  "aiDjEra2010s": "2010s",
+  "aiDjEra2000s": "2000s",
+  "aiDjEraBefore90": "90 年代及更早",
+  "aiDjPrefsSave": "保存偏好",
+  "aiDjPrefsSaved": "偏好已保存，下次生成生效",
+  "aiDjPrefsReset": "恢复默认",
+  "aiDjPrefsResetTitle": "恢复默认偏好？",
+  "aiDjPrefsResetBody": "风格、场景、发送范围与渠道都会恢复默认；已保存的推荐不受影响。",
+  "aiDjPrefsResetDone": "已恢复默认偏好",
+  "aiDjPrefsDataScope": "发送范围",
+  "aiDjScopeHint": "关闭的项不会发送；收藏和歌单默认关闭。",
+  "aiDjScopeSummary": "汇总统计",
+  "aiDjScopeTopArtists": "常听歌手",
+  "aiDjScopeTopTracks": "常听歌曲",
+  "aiDjScopeTimeAndSource": "时段与来源分布",
+  "aiDjScopeRecentEvents": "最近播放明细",
+  "aiDjScopeListenedExclusions": "已听歌曲排除清单",
+  "aiDjScopeFavorites": "收藏歌曲",
+  "aiDjScopePlaylists": "自建歌单",
+  "aiDjScopeFavoritesConfirm": "会读取收藏歌曲的歌名与歌手（最多 100 首），用来避免推荐已经收藏的歌。",
+  "aiDjScopePlaylistsConfirm": "会读取自建歌单的名称与曲目歌名、歌手（最多 10 个歌单），用来避免重复推荐。",
+  "aiDjChannelsTitle": "找歌渠道",
+  "aiDjChannelsAuto": "自动（音源页前 3 个可搜索渠道）",
+  "aiDjChannelsHint": "不选则自动；选了就只在这些渠道找歌，找不到不会换别的渠道。",
+  "aiDjChannelsUnavailable": "所选渠道当前都不可用，已改用自动渠道",
+  "aiDjChannelsEmpty": "没有可搜索的音源",
+  "aiDjSeedsTitle": "多来点这种",
+  "aiDjSeedsHint": "下一批生成成功后会清空",
+  "aiDjSeedsEmpty": "还没有「多来点这种」",
+  "aiDjClearMemory": "清空 AI 记忆",
+  "aiDjClearMemoryTitle": "清空 AI 记忆？",
+  "aiDjClearMemoryBody": "会删除长期保留的「不感兴趣」「喜欢」与「多来点这种」，本轮反馈也会清空。",
+  "aiDjMemoryCleared": "已清空 AI 记忆",
+  "aiDjFeedbackMemory": "长期记忆",
+  "aiDjFeedbackThisRound": "本轮",
+  "aiDjSeedLabel": "多来点 · {label}",
+  "@aiDjSeedLabel": {
+    "placeholders": {
+      "label": {
+        "type": "String"
+      }
+    }
+  },
   "settingsSyncTitle": "跨设备同步",
   "settingsSyncItemSubtitle": "歌单、音源、设置与密钥",
   "syncPairingSection": "配对设备",

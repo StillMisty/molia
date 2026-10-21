@@ -1,78 +1,250 @@
+import 'dart:convert';
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:molia/domain/models/ai_dj.dart';
-import 'package:molia/domain/models/track.dart';
 import 'package:molia/services/ai/ai_recommendation_store.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-/// 待播批次持久化：往返、损坏降级、清空。
+/// 推荐历史持久化：迁移、索引 / 多批、删除回退、保留策略、损坏降级。
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
   late SharedPreferences prefs;
   late AiRecommendationStore store;
+  final now = DateTime(2026, 10, 21, 12);
 
   setUp(() async {
     SharedPreferences.setMockInitialValues({});
     prefs = await SharedPreferences.getInstance();
-    store = AiRecommendationStore(preferences: prefs);
+    store = AiRecommendationStore(preferences: prefs, clock: () => now);
   });
 
-  AiDjBatch batch() => AiDjBatch(
+  StoredAiBatch batch(
+    String id, {
+    int count = 1,
+    DateTime? generatedAt,
+    AiDjOrigin origin = AiDjOrigin.refresh,
+    AiPreferences? preferences,
+  }) =>
+      StoredAiBatch(
+        id: id,
         items: [
-          ResolvedRecommendation(
-            source: const AiRecommendation(
-              title: '夜航',
-              artist: '林晚舟',
-              reason: '你常听这个风格',
+          for (var i = 0; i < count; i++)
+            StoredAiBatchItem(
+              sourceKey: 'wy',
+              songId: '$id-$i',
+              title: 'Song $id-$i',
+              artist: 'Artist',
+              album: '',
+              reason: 'reason',
+              sourceName: '网易云音乐',
+              raw: {'songmid': '$id-$i'},
             ),
-            track: Track(
-              id: const TrackId('wy', '42'),
-              title: '夜航',
-              artists: const [Artist(name: '林晚舟')],
-              album: '专辑',
-              duration: const Duration(seconds: 240),
-              origin: TrackOrigin.builtin,
-              payload: const {'songmid': '42', 'qualitys': []},
-            ),
-          ),
         ],
-        unresolved: const [AiRecommendation(title: '找不到的歌', artist: 'X')],
-        generatedAt: DateTime.fromMillisecondsSinceEpoch(1000000),
+        unresolved: const [AiRecommendation(title: 'Ghost', artist: 'X')],
+        generatedAt: generatedAt ?? now,
+        origin: origin,
+        preferences: preferences,
       );
 
-  test('保存 / 读取往返：曲目元数据、raw、未解析项与时间戳', () async {
-    await store.save(batch());
+  test('迁移旧单批键：包装为 restored active，写新格式并删除旧键', () async {
+    final generatedAt = DateTime(2026, 10, 1, 8);
+    await prefs.setString(
+      AiRecommendationStore.legacyStorageKey,
+      jsonEncode({
+        'generatedAt': generatedAt.millisecondsSinceEpoch,
+        'items': [
+          {
+            'sourceKey': 'wy',
+            'songId': 'legacy-1',
+            'title': '旧推荐',
+            'artist': '歌手',
+            'album': '',
+            'reason': '理由',
+            'raw': {'songmid': 'legacy-1'},
+          },
+        ],
+        'unresolved': [
+          {'title': '旧未找到', 'artist': 'X', 'reason': ''},
+        ],
+      }),
+    );
 
-    final stored = await store.load();
+    final index = await store.loadIndex();
 
-    expect(stored, isNotNull);
-    expect(stored!.items, hasLength(1));
-    final item = stored.items.single;
-    expect(item.sourceKey, 'wy');
-    expect(item.songId, '42');
-    expect(item.title, '夜航');
-    expect(item.artist, '林晚舟');
-    expect(item.reason, '你常听这个风格');
-    expect(item.durationMs, 240000);
-    expect(item.raw['songmid'], '42');
-    expect(stored.unresolved.single.title, '找不到的歌');
-    expect(stored.generatedAt.millisecondsSinceEpoch, 1000000);
+    expect(index.entries, hasLength(1));
+    expect(
+        index.activeBatchId, 'restored-${generatedAt.millisecondsSinceEpoch}');
+    expect(index.entries.single.origin, AiDjOrigin.restored);
+    expect(index.entries.single.preferences, isNull);
+    expect(prefs.getString(AiRecommendationStore.legacyStorageKey), isNull);
+    final migrated = await store.loadBatch(index.activeBatchId!);
+    expect(migrated, isNotNull);
+    expect(migrated!.items.single.title, '旧推荐');
+    expect(migrated.unresolved.single.title, '旧未找到');
   });
 
-  test('损坏数据降级为无缓存', () async {
-    await prefs.setString(AiRecommendationStore.storageKey, 'not-json{{{');
-    expect(await store.load(), isNull);
+  test('旧键损坏：不迁移、保留旧键下次再试', () async {
+    await prefs.setString(
+        AiRecommendationStore.legacyStorageKey, 'not-json{{{');
 
-    await prefs.setString(AiRecommendationStore.storageKey, '{"items":[]}');
-    expect(await store.load(), isNull);
+    final index = await store.loadIndex();
+
+    expect(index.entries, isEmpty);
+    expect(prefs.getString(AiRecommendationStore.legacyStorageKey), isNotNull);
   });
 
-  test('clear 后无缓存', () async {
-    await store.save(batch());
-    expect(await store.load(), isNotNull);
+  test('索引 + 每批一键：多批保存；active 切换；详情按需加载', () async {
+    await store.saveBatch(batch('a'), makeActive: true);
+    await store.saveBatch(batch(
+      'b',
+      generatedAt: now.add(const Duration(minutes: 1)),
+      origin: AiDjOrigin.autoFeed,
+    ));
+    await store.saveBatch(
+      batch('c', generatedAt: now.add(const Duration(minutes: 2))),
+      makeActive: true,
+    );
 
-    await store.clear();
+    final index = await store.loadIndex();
+    expect(index.entries.map((entry) => entry.id), ['c', 'b', 'a']);
+    expect(index.activeBatchId, 'c');
+    expect(index.entries[1].origin, AiDjOrigin.autoFeed);
+    expect(
+        prefs.getString('${AiRecommendationStore.batchKeyPrefix}a'), isNotNull);
+    expect((await store.loadBatch('b'))!.items.single.sourceName, '网易云音乐');
+  });
 
-    expect(await store.load(), isNull);
+  test('LLM 原始返回 / 提示词不进入持久化 JSON', () async {
+    await store.saveBatch(batch('a'), makeActive: true);
+    await store.saveBatch(
+      StoredAiBatch(
+        id: 'b',
+        items: const [],
+        unresolved: const [AiRecommendation(title: 'Ghost')],
+        generatedAt: now,
+        origin: AiDjOrigin.refresh,
+      ),
+    );
+    for (final key in [
+      '${AiRecommendationStore.batchKeyPrefix}a',
+      '${AiRecommendationStore.batchKeyPrefix}b',
+      AiRecommendationStore.indexKey,
+    ]) {
+      final raw = prefs.getString(key);
+      expect(raw, isNotNull);
+      expect(raw!.contains('rawResponse'), isFalse);
+      expect(raw.contains('systemPrompt'), isFalse);
+      expect(raw.contains('userPrompt'), isFalse);
+    }
+  });
+
+  test('删除 active：回退到最近一批；删除最后一批清空 active', () async {
+    await store.saveBatch(batch('a'), makeActive: true);
+    await store.saveBatch(
+      batch('b', generatedAt: now.add(const Duration(minutes: 1))),
+      makeActive: true,
+    );
+
+    final afterDelete = await store.deleteBatch('b');
+    expect(afterDelete.ok, isTrue);
+    expect(afterDelete.index.activeBatchId, 'a');
+    expect(afterDelete.index.entries.map((entry) => entry.id), ['a']);
+    expect(prefs.getString('${AiRecommendationStore.batchKeyPrefix}b'), isNull);
+
+    final empty = await store.deleteBatch('a');
+    expect(empty.ok, isTrue);
+    expect(empty.index.activeBatchId, isNull);
+    expect(empty.index.entries, isEmpty);
+  });
+
+  test('清空历史保留 active 与其批次键', () async {
+    await store.saveBatch(batch('a'), makeActive: true);
+    await store.saveBatch(
+      batch('b', generatedAt: now.add(const Duration(minutes: 1))),
+    );
+    await store.saveBatch(
+      batch('c', generatedAt: now.add(const Duration(minutes: 2))),
+    );
+
+    final result = await store.clearHistory();
+
+    expect(result.ok, isTrue);
+    expect(result.index.entries.map((entry) => entry.id), ['a']);
+    expect(result.index.activeBatchId, 'a');
+    expect(
+        prefs.getString('${AiRecommendationStore.batchKeyPrefix}a'), isNotNull);
+    expect(prefs.getString('${AiRecommendationStore.batchKeyPrefix}b'), isNull);
+    expect(prefs.getString('${AiRecommendationStore.batchKeyPrefix}c'), isNull);
+  });
+
+  test('保留策略：最多 20 批，active 永不自动清理', () async {
+    await store.saveBatch(
+      batch('old-active', generatedAt: now.subtract(const Duration(days: 1))),
+      makeActive: true,
+    );
+    for (var i = 0; i < 24; i++) {
+      await store.saveBatch(batch(
+        'b$i',
+        generatedAt: now.add(Duration(minutes: i)),
+      ));
+    }
+
+    final index = await store.loadIndex();
+    expect(index.entries, hasLength(20));
+    expect(index.activeBatchId, 'old-active');
+    expect(index.entries.any((entry) => entry.id == 'old-active'), isTrue);
+    // 最老的非 active 批次键被同步删除。
+    expect(
+        prefs.getString('${AiRecommendationStore.batchKeyPrefix}b0'), isNull);
+  });
+
+  test('保留策略：最多 400 首', () async {
+    for (var i = 0; i < 20; i++) {
+      await store.saveBatch(
+        batch(
+          'b$i',
+          count: 30,
+          generatedAt: now.add(Duration(minutes: i)),
+        ),
+        makeActive: i == 19,
+      );
+    }
+
+    final index = await store.loadIndex();
+    final total = index.entries.fold<int>(
+      0,
+      (sum, entry) => sum + entry.itemCount,
+    );
+    expect(total, lessThanOrEqualTo(400));
+    expect(index.activeBatchId, 'b19');
+  });
+
+  test('保留策略：超过 30 天的非 active 批次被清理', () async {
+    await store.saveBatch(
+      batch('old', generatedAt: now.subtract(const Duration(days: 31))),
+      makeActive: true,
+    );
+    await store.saveBatch(
+      batch('new', generatedAt: now.add(const Duration(minutes: 1))),
+      makeActive: true,
+    );
+
+    final index = await store.loadIndex();
+    expect(index.entries.map((entry) => entry.id), ['new']);
+    expect(
+        prefs.getString('${AiRecommendationStore.batchKeyPrefix}old'), isNull);
+  });
+
+  test('损坏索引 / 批次降级为空，不抛异常', () async {
+    await prefs.setString(AiRecommendationStore.indexKey, 'not-json{{{');
+    expect((await store.loadIndex()).entries, isEmpty);
+
+    await prefs.setString(
+      '${AiRecommendationStore.batchKeyPrefix}bad',
+      '{"items":',
+    );
+    expect(await store.loadBatch('bad'), isNull);
+    expect(await store.loadBatch('missing'), isNull);
   });
 }

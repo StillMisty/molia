@@ -2,9 +2,11 @@
 ///
 /// - Base URL / API Key / 模型走 secure 盒（生产 = `flutter_secure_storage`，
 ///   桌面端依赖系统 keyring），随凭证类别加密同步；
-/// - 确认标记 / 功能开关 / 缓存有效期走普通 prefs（跟人走）；
+/// - 确认标记 / 功能开关 / 推荐偏好 / 反馈记忆走普通 prefs（跟人走）；
 /// - 读取失败/缺项一律降级为「未配置」，不抛异常（页面据此引导）。
 library;
+
+import 'dart:convert';
 
 import '../../data/settings/settings_access.dart';
 import '../../data/settings/settings_keys.dart';
@@ -70,17 +72,33 @@ class AiSettingsStore {
   Future<void> saveEnabled(bool enabled) =>
       _settings.write(kAiDjEnabled, enabled);
 
-  /// 推荐列表缓存有效期（天；非法值回退默认；0 = 永久）。
-  Future<int> readCacheTtlDays() async {
-    final value = await _settings.read(kAiDjCacheTtlDays);
-    if (!kAiCacheTtlDayOptions.contains(value)) {
-      return kAiDefaultCacheTtlDays;
+  /// 推荐偏好（JSON）：读取失败/损坏回退默认（不阻塞生成）。
+  Future<AiPreferences> readPreferences() async {
+    try {
+      final raw = await _settings.read(kAiDjPreferences);
+      if (raw.trim().isEmpty) return AiPreferences.defaults;
+      return AiPreferences.tryFromJson(jsonDecode(raw));
+    } catch (_) {
+      return AiPreferences.defaults;
     }
-    return value;
   }
 
-  Future<void> saveCacheTtlDays(int days) async {
-    if (!kAiCacheTtlDayOptions.contains(days)) return;
-    await _settings.write(kAiDjCacheTtlDays, days);
+  Future<void> savePreferences(AiPreferences preferences) async {
+    await _settings.write(kAiDjPreferences, jsonEncode(preferences.toJson()));
+  }
+
+  /// 跨重启反馈记忆（JSON）：读取失败/损坏回退空记忆。
+  Future<AiFeedbackMemory> readFeedbackMemory() async {
+    try {
+      final raw = await _settings.read(kAiDjFeedbackMemory);
+      if (raw.trim().isEmpty) return AiFeedbackMemory.empty;
+      return AiFeedbackMemory.tryFromJson(jsonDecode(raw));
+    } catch (_) {
+      return AiFeedbackMemory.empty;
+    }
+  }
+
+  Future<void> saveFeedbackMemory(AiFeedbackMemory memory) async {
+    await _settings.write(kAiDjFeedbackMemory, jsonEncode(memory.toJson()));
   }
 }

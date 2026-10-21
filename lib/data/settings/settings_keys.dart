@@ -8,13 +8,12 @@
 /// - **凭证** → [SyncCategory.credentials]：AI Key / any-listen token，
 ///   随快照加密传输（加入同步即互信，见 ADR-0003）；
 /// - **设备相关项不登记**：省流模式、缓存策略、桌面歌词悬浮窗开关、全局字体、
-///   AI 待处理批次、播放会话、曲库数据等 —— 只有一位消费者，留在各自模块。
+///   AI 推荐历史、播放会话、曲库数据等 —— 只有一位消费者，留在各自模块。
 ///
 /// 「一个键一个家」：键名字面量只准出现在本文件（另有 registry 读写与
 /// reload 钩子），由 test/architecture/settings_key_literals_test.dart 扫描强制。
 library;
 
-import '../../domain/models/ai_dj.dart';
 import '../../domain/models/device_sync.dart';
 import 'settings_key.dart';
 
@@ -132,9 +131,18 @@ const kAiDjEnabled = SettingsKey<bool>(
   false,
   category: SyncCategory.settings,
 );
-const kAiDjCacheTtlDays = SettingsKey<int>(
-  'ai_dj_cache_ttl_days',
-  kAiDefaultCacheTtlDays,
+
+/// 推荐偏好（JSON：批次大小 / 自动补歌 / 风格 / 场景 / 发送范围 / 渠道…）。
+const kAiDjPreferences = SettingsKey<String>(
+  'ai_dj_preferences_v1',
+  '',
+  category: SyncCategory.settings,
+);
+
+/// 跨重启反馈记忆（JSON：不感兴趣 / 喜欢 / 种子）。
+const kAiDjFeedbackMemory = SettingsKey<String>(
+  'ai_dj_feedback_memory_v1',
+  '',
   category: SyncCategory.settings,
 );
 
@@ -233,7 +241,8 @@ const List<SettingsKey<Object?>> kAllSettingsKeys = [
   kPlayStatisticsEnabled,
   kLyricsDisplaySettings,
   kAiDjEnabled,
-  kAiDjCacheTtlDays,
+  kAiDjPreferences,
+  kAiDjFeedbackMemory,
   kSourceSwapAutoEnabled,
   kLibraryAddPosition,
   kLxDefaultQuality,

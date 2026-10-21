@@ -631,6 +631,7 @@ class SettingsDropdownRow<T> extends StatelessWidget {
     required this.value,
     required this.options,
     required this.onChanged,
+    this.dropdownKey,
     this.fieldWidth = 170,
   });
 
@@ -649,6 +650,9 @@ class SettingsDropdownRow<T> extends StatelessWidget {
   final List<(T, String)> options;
 
   final ValueChanged<T> onChanged;
+
+  /// 下拉控件自身的 Key（测试 / 定位用；行容器另有调用方 Key）。
+  final Key? dropdownKey;
 
   @override
   Widget build(BuildContext context) {
@@ -675,6 +679,7 @@ class SettingsDropdownRow<T> extends StatelessWidget {
               // 设置弹层窄于屏幕：字段定宽，避免撑挤标题；但不能窄到折行。
               width: _resolvedFieldWidth(context),
               child: M3EDropdownMenu<T>(
+                key: dropdownKey,
                 items: [
                   for (final (optionValue, label) in options)
                     M3EDropdownItem<T>(
