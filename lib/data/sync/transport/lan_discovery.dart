@@ -40,6 +40,7 @@ abstract final class Msd1 {
   static const int maxBodyLength = 1024;
   static const int maxNameRunes = 64;
   static const int maxAddresses = 8;
+  static const int maxDeviceIdLength = 128;
 
   /// IPv4 组播地址（RFC 2365 本地范围；与 v6 的 `ff02::4d4f:4c49` 对应）。
   static const String ipv4MulticastHost = '224.0.0.169';
@@ -113,7 +114,11 @@ abstract final class Msd1 {
     final deviceId = map['id'];
     final nonce = map['nonce'];
     final boot = map['boot'];
-    if (deviceId is! String || deviceId.isEmpty) return null;
+    if (deviceId is! String ||
+        deviceId.isEmpty ||
+        deviceId.length > maxDeviceIdLength) {
+      return null;
+    }
     if (nonce is! String || nonce.isEmpty || nonce.length > 64) return null;
     if (boot is! String || boot.isEmpty || boot.length > 32) return null;
     return LanDiscoveryMessage(
@@ -308,22 +313,38 @@ class DiscoveryNonceCache {
 }
 
 /// 入站限流：每来源 20 包/10s、全局 100 包/10s。先限流再验 MAC。
+///
+/// 来源表必须有界：源 IP 可以伪造，按来源建 map 不能无限增长。超过
+/// [maxSources] 时淘汰最久没有活动的来源（只淘汰记账，不影响已通过限流
+/// 的包）。
 class DiscoveryRateLimiter {
   DiscoveryRateLimiter({
     this.perSourceLimit = 20,
     this.globalLimit = 100,
+    this.maxSources = 64,
     this.window = const Duration(seconds: 10),
   });
 
   final int perSourceLimit;
   final int globalLimit;
+  final int maxSources;
   final Duration window;
   final Map<String, List<int>> _bySource = {};
   final List<int> _global = [];
 
+  /// 当前记账的来源数（测试 / 诊断用；有界）。
+  int get sourceCount => _bySource.length;
+
   bool allow(String source, int nowMs) {
     final cutoff = nowMs - window.inMilliseconds;
-    final sourceEvents = _bySource.putIfAbsent(source, () => <int>[]);
+    var sourceEvents = _bySource[source];
+    if (sourceEvents == null) {
+      // 新来源：先腾出位置。淘汰按“最后活动时间”，没有活动的旧条目优先。
+      _bySource.removeWhere((_, events) => events.isEmpty);
+      if (_bySource.length >= maxSources) _evictOldestSource();
+      sourceEvents = <int>[];
+      _bySource[source] = sourceEvents;
+    }
     sourceEvents.removeWhere((at) => at <= cutoff);
     if (sourceEvents.length >= perSourceLimit) return false;
     _global.removeWhere((at) => at <= cutoff);
@@ -336,6 +357,19 @@ class DiscoveryRateLimiter {
   void clear() {
     _bySource.clear();
     _global.clear();
+  }
+
+  void _evictOldestSource() {
+    String? oldestSource;
+    var oldestAt = 1 << 62;
+    for (final entry in _bySource.entries) {
+      final lastAt = entry.value.isEmpty ? -1 : entry.value.last;
+      if (lastAt < oldestAt) {
+        oldestAt = lastAt;
+        oldestSource = entry.key;
+      }
+    }
+    if (oldestSource != null) _bySource.remove(oldestSource);
   }
 }
 

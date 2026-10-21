@@ -57,6 +57,7 @@ class LanSyncTransport implements SyncTransport {
     void Function(ManualPeer learned)? onPeerResolved,
     int Function()? httpPortProvider,
     void Function(int port)? onHttpPortBound,
+    Future<bool> Function(int port)? httpProbe,
     Future<bool> Function()? permissionGate,
     Future<List<String>> Function()? localAddressesProvider,
     Future<RawDatagramSocket> Function(InternetAddress address, int port)?
@@ -78,6 +79,7 @@ class LanSyncTransport implements SyncTransport {
         _onPeerResolved = onPeerResolved,
         _httpPortProvider = httpPortProvider,
         _onHttpPortBound = onHttpPortBound,
+        _httpProbe = httpProbe,
         _permissionGate = permissionGate,
         _knownPeersProvider = knownPeersProvider,
         _onPeerVerified = onPeerVerified,
@@ -160,6 +162,9 @@ class LanSyncTransport implements SyncTransport {
   /// 本机 HTTP 端口持久化：端口每次随机会让对端记不住本机。
   final int Function()? _httpPortProvider;
   final void Function(int port)? _onHttpPortBound;
+
+  /// 测试注入：HTTP 端点存活探测（默认走 loopback TCP connect）。
+  final Future<bool> Function(int port)? _httpProbe;
 
   /// 局域网权限门：返回 false 时传输不启动（原因 = permission_denied）。
   final Future<bool> Function()? _permissionGate;
@@ -302,7 +307,7 @@ class LanSyncTransport implements SyncTransport {
   Future<HttpServer?> _openHttpWithLiveness(int preferredPort) async {
     var http = await _tryBindHttp(preferredPort);
     if (http == null) return null;
-    if (await _loopbackAlive(http.port)) {
+    if (await _probeHttp(http.port)) {
       http.listen(_onHttpRequest);
       return http;
     }
@@ -310,18 +315,23 @@ class LanSyncTransport implements SyncTransport {
     // 先重绑同一端口（保持对端记忆），仍不行再退随机端口。
     await http.close(force: true);
     http = await _tryBindHttp(preferredPort);
-    if (http != null && await _loopbackAlive(http.port)) {
+    if (http != null && await _probeHttp(http.port)) {
       http.listen(_onHttpRequest);
       return http;
     }
     await http?.close(force: true);
     http = await _tryBindHttp(0);
-    if (http != null) {
+    if (http != null && await _probeHttp(http.port)) {
       http.listen(_onHttpRequest);
       return http;
     }
+    await http?.close(force: true);
     return null;
   }
+
+  /// HTTP 端点存活探测：默认 loopback TCP connect（500ms），测试可注入。
+  Future<bool> _probeHttp(int port) =>
+      _httpProbe?.call(port) ?? _loopbackAlive(port);
 
   Future<HttpServer?> _tryBindHttp(int preferredPort) async {
     try {
@@ -406,6 +416,9 @@ class LanSyncTransport implements SyncTransport {
         _nowMs() - hiddenAt >= resumeRebindThreshold.inMilliseconds;
     if (longHidden) {
       await _ensureHttpAlive();
+      // 重绑失败已把传输置为未运行：本轮回前台到此为止，等下一轮
+      // `_ensureTransportsRunning` 重新 start。
+      if (!_running) return;
     }
     await _discovery.onAppResumed(rebind: longHidden);
   }
@@ -433,19 +446,31 @@ class LanSyncTransport implements SyncTransport {
   Future<void> _ensureHttpAlive() async {
     final http = _http;
     if (http == null) return;
-    if (await _loopbackAlive(http.port)) return;
+    if (await _probeHttp(http.port)) return;
     // 挂起恢复后监听可能半死：先重绑同一端口，失败再退随机端口。
     final port = http.port;
     await http.close(force: true);
     _http = null;
     var rebound = await _tryBindHttp(port);
-    if (rebound == null || !await _loopbackAlive(rebound.port)) {
+    var alive = rebound != null && await _probeHttp(rebound.port);
+    if (!alive) {
       await rebound?.close(force: true);
       rebound = await _tryBindHttp(0);
+      alive = rebound != null && await _probeHttp(rebound.port);
     }
-    if (rebound == null) {
+    if (!alive || rebound == null) {
+      await rebound?.close(force: true);
       _logger.warning('回前台后 HTTP 端点重绑失败');
+      // 置为未运行：否则 isRunning 仍是 true，unavailableReason 的 getter
+      // 会返回 null，UI / 引擎看不到失败；下一轮 start 可重新绑定。
+      _running = false;
+      _startError = '回前台后局域网 HTTP 端点重绑失败';
       _unavailableReason = SyncUnavailableReason.startFailed;
+      await _sightingSub?.cancel();
+      _sightingSub = null;
+      await _networkSub?.cancel();
+      _networkSub = null;
+      await _discovery.stop();
       return;
     }
     rebound.listen(_onHttpRequest);
@@ -552,14 +577,28 @@ class LanSyncTransport implements SyncTransport {
         stats.contacted = true;
         _everDiscoveredPeer = true;
         if (!peer.expected) stats.tentativeContacted++;
+        // 端点可能被同组的另一台设备复用（旧持久化记录 / DHCP 复用）：
+        // 解密后的 deviceId 才是数据的主人。不能把端点写回候选的旧 id，
+        // 也不能把这次接触记到旧 id 的 seenIds 上。
+        final identityMismatch = peer.deviceId.isNotEmpty &&
+            envelope.deviceId.isNotEmpty &&
+            peer.deviceId != envelope.deviceId;
         final fingerprint = envelope.snapshotId.isNotEmpty
             ? envelope.snapshotId
-            : peer.snapshotId;
+            : (identityMismatch ? '' : peer.snapshotId);
         if (fingerprint.isNotEmpty) {
-          _peerSnapshotIds[peer.key] = fingerprint;
+          _peerSnapshotIds[identityMismatch ? envelope.deviceId : peer.key] =
+              fingerprint;
         }
-        _rememberSeen(stats, peer);
-        _verifyPeer(peer, fetched.host);
+        if (identityMismatch) {
+          _peerSnapshotIds.remove(peer.key);
+          if (!stats.seenIds.contains(envelope.deviceId)) {
+            stats.seenIds.add(envelope.deviceId);
+          }
+        } else {
+          _rememberSeen(stats, peer);
+          _verifyPeer(peer, fetched.host);
+        }
       } on SyncCryptoException {
         // 对端口令不同 / 数据损坏：跳过该对端，不影响其他设备。
         if (peer.expected) {
@@ -588,6 +627,9 @@ class LanSyncTransport implements SyncTransport {
   /// 手动地址直连与 WebDAV。其次是广播发送失败；最后是「发现过对端、本轮
   /// 零应答」——后者通常是网络隔离，提示手动地址与 WebDAV。
   SyncIssue? _discoveryIssue() {
+    // 后台 / 蜂窝下发现层被策略跳过：没有候选不代表网络隔离，不能复用
+    // discoverySilent / broadcastUnavailable 误导用户。
+    if (_discovery.isHidden || _isCellularNow) return null;
     final ports = _discovery.discoveryPorts;
     if (ports.v4 == 0 && ports.v6 == 0) {
       return const SyncIssue(code: SyncIssueCode.probePortUnavailable);

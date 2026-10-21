@@ -13,13 +13,14 @@ void main() {
 
   LanDiscoveryMessage message({
     int type = Msd1.typeAnnounce,
+    String deviceId = 'devA',
     String name = '设备A',
     List<String> addresses = const ['192.168.1.7'],
     int? journalHead = 12,
   }) =>
       LanDiscoveryMessage(
         type: type,
-        deviceId: 'devA',
+        deviceId: deviceId,
         name: name,
         httpPort: 43210,
         probePort: 47825,
@@ -133,6 +134,20 @@ void main() {
     expect(Msd1.decode(legacy, key), isNull);
   });
 
+  test('deviceId 超过 128 字符拒绝；128 字符可解析', () {
+    final tooLong = Msd1.encode(
+      message(deviceId: 'd' * (Msd1.maxDeviceIdLength + 1)),
+      key,
+    );
+    expect(Msd1.decode(tooLong, key), isNull);
+
+    final atLimit = Msd1.encode(
+      message(deviceId: 'd' * Msd1.maxDeviceIdLength),
+      key,
+    );
+    expect(Msd1.decode(atLimit, key)?.deviceId.length, Msd1.maxDeviceIdLength);
+  });
+
   test('nonce 去重：同一 (deviceId, nonce) 30 秒内只接受一次', () {
     final cache = DiscoveryNonceCache();
     expect(cache.accept('devA', 'n1', 1000), isTrue);
@@ -159,5 +174,19 @@ void main() {
       expect(global.allow('10.0.1.${i % 40}', 1000 + i), isTrue);
     }
     expect(global.allow('10.0.2.1', 1200), isFalse, reason: '全局到上限');
+  });
+
+  test('来源表有界：大量不同来源不会超过上限，淘汰最久未活动者', () {
+    final limiter = DiscoveryRateLimiter(
+      perSourceLimit: 100,
+      globalLimit: 100000,
+    );
+    for (var i = 0; i < 500; i++) {
+      expect(limiter.allow('source-$i', 1000 + i), isTrue);
+    }
+    expect(limiter.sourceCount, limiter.maxSources);
+    // 最早的来源已被淘汰，再出现时按新来源正常放行。
+    expect(limiter.allow('source-0', 2000), isTrue);
+    expect(limiter.sourceCount, limiter.maxSources);
   });
 }

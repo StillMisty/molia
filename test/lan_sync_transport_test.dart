@@ -831,4 +831,124 @@ void main() {
     expect(sightings.single.deviceId, 'devModern');
     expect(transport.presenceCount, 1);
   });
+
+  test('蜂窝 + 无已知端点：不误报 discoverySilent', () async {
+    final transport = LanSyncTransport(
+      deviceId: 'devA',
+      deviceName: () => '设备A',
+      codec: codecPort,
+      passphraseProvider: () async => passphrase,
+      snapshotProvider: () async => envelope('devA'),
+      isCellular: () => true,
+      localAddressesProvider: () async => const [],
+      udpPort: 47967,
+    );
+    addTearDown(transport.stop);
+    await transport.start();
+
+    final pulled = await transport.pull();
+    expect(pulled.peersSeen, 0);
+    expect(pulled.contacted, isFalse);
+    expect(pulled.error, isNull, reason: '蜂窝跳过发现不是网络隔离');
+  });
+
+  test('后台 + 无候选：不误报 discoverySilent / broadcastUnavailable', () async {
+    final transport = LanSyncTransport(
+      deviceId: 'devA',
+      deviceName: () => '设备A',
+      codec: codecPort,
+      passphraseProvider: () async => passphrase,
+      snapshotProvider: () async => envelope('devA'),
+      localAddressesProvider: () async => const [],
+      udpPort: 47968,
+    );
+    addTearDown(transport.stop);
+    await transport.start();
+    transport.onAppHidden();
+
+    final pulled = await transport.pull();
+    expect(pulled.peersSeen, 0);
+    expect(pulled.contacted, isFalse);
+    expect(pulled.error, isNull, reason: '后台主动探测被策略跳过，不代表对端离线');
+  });
+
+  test('端点被另一台设备复用：按解密后的 deviceId 记 seen，不回调旧 id', () async {
+    var serverHttpPort = 0;
+    final server = LanSyncTransport(
+      deviceId: 'devB',
+      deviceName: () => '设备B',
+      codec: codecPort,
+      passphraseProvider: () async => passphrase,
+      snapshotProvider: () async => envelope('devB', value: 'real'),
+      onHttpPortBound: (port) => serverHttpPort = port,
+      localAddressesProvider: () async => const [],
+      udpPort: 47969,
+    );
+    final verified = <LanPeerEndpoint>[];
+    final client = LanSyncTransport(
+      deviceId: 'devA',
+      deviceName: () => '设备A',
+      codec: codecPort,
+      passphraseProvider: () async => passphrase,
+      snapshotProvider: () async => envelope('devA'),
+      knownPeersProvider: () => [
+        LanPeerEndpoint(
+          deviceId: 'devWrong',
+          host: '127.0.0.1',
+          httpPort: serverHttpPort,
+          verifiedAt: 1,
+        ),
+      ],
+      onPeerVerified: verified.add,
+      localAddressesProvider: () async => const [],
+      udpPort: 47970,
+    );
+    addTearDown(() async {
+      await server.stop();
+      await client.stop();
+    });
+    await server.start();
+    await client.start();
+
+    final pulled = await client.pull();
+    expect(pulled.envelopes.single.deviceId, 'devB', reason: '数据仍交给引擎');
+    expect(pulled.seenIds, contains('devB'));
+    expect(pulled.seenIds, isNot(contains('devWrong')));
+    expect(verified, isEmpty, reason: '不能把复用端点写回错误的 deviceId');
+  });
+
+  test('回前台 HTTP 重绑失败：置为未运行并可重新 start', () async {
+    var now = 1000;
+    var probeAlive = true;
+    final transport = LanSyncTransport(
+      deviceId: 'devA',
+      deviceName: () => '设备A',
+      codec: codecPort,
+      passphraseProvider: () async => passphrase,
+      snapshotProvider: () async => envelope('devA'),
+      httpProbe: (port) async => probeAlive,
+      nowMs: () => now,
+      localAddressesProvider: () async => const [],
+      udpPort: 47971,
+    );
+    addTearDown(transport.stop);
+    await transport.start();
+    expect(transport.isRunning, isTrue);
+    expect(transport.unavailableReason, isNull);
+
+    transport.onAppHidden();
+    now += 16000;
+    probeAlive = false;
+    await transport.onAppResumed();
+
+    expect(transport.isRunning, isFalse, reason: '重绑失败必须让状态面可见');
+    expect(transport.unavailableReason, SyncUnavailableReason.startFailed);
+    expect(transport.unavailableDetail, isNotNull);
+
+    // 下一轮 _ensureTransportsRunning 重新 start：端口恢复后应能恢复运行。
+    probeAlive = true;
+    await transport.start();
+    expect(transport.isRunning, isTrue);
+    expect(transport.unavailableReason, isNull);
+  });
 }
