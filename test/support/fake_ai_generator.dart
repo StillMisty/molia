@@ -33,6 +33,10 @@ class FakeAiDjGenerator implements AiRecommendationGenerator {
   AiUpstreamSummary summary = AiUpstreamSummary.empty;
   AiPrompt preview = const AiPrompt(systemPrompt: 'System', userPrompt: 'User');
 
+  /// 可选：按 likedLabels 生成 prompt（验证预览与实际请求完全一致）。
+  String Function(List<String> likedLabels)? promptForLiked;
+  AiPrompt? lastActualPrompt;
+
   /// 显式生成时模拟三阶段进度（provider 测试用）。
   bool emitProgress = false;
 
@@ -53,6 +57,12 @@ class FakeAiDjGenerator implements AiRecommendationGenerator {
     lastSkipped = skippedLabels;
     lastLiked = likedLabels;
     lastExcluded = excludeLabels;
+    lastActualPrompt = promptForLiked == null
+        ? null
+        : AiPrompt(
+            systemPrompt: preview.systemPrompt,
+            userPrompt: promptForLiked!(likedLabels),
+          );
     final startedAt = DateTime.now();
     if (onProgress != null && emitProgress) {
       onProgress(AiDjProgress(phase: AiDjPhase.profile, startedAt: startedAt));
@@ -94,7 +104,10 @@ class FakeAiDjGenerator implements AiRecommendationGenerator {
   }) async {
     lastPreviewLiked = likedLabels;
     lastPreviewPreferences = preferences;
-    return preview;
+    return AiPrompt(
+      systemPrompt: preview.systemPrompt,
+      userPrompt: promptForLiked?.call(likedLabels) ?? preview.userPrompt,
+    );
   }
 
   @override

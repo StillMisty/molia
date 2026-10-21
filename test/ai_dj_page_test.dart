@@ -448,6 +448,34 @@ void main() {
     variant: TargetPlatformVariant.only(TargetPlatform.linux),
   );
 
+  testWidgets('配置表单：自定义地址时「自定义」筛选芯片可用且选中', (tester) async {
+    await pumpProvider();
+    await pumpPage(tester);
+
+    await tester.tap(find.byKey(const Key('aiDjManageConfigButton')));
+    await tester.pumpAndSettle();
+
+    final chipFinder = find.byKey(const Key('aiDjCustomPresetChip'));
+    expect(chipFinder, findsOneWidget);
+    expect(tester.widget<M3EChip>(chipFinder).selected, isTrue,
+        reason: '测试配置本身就是自定义地址');
+    expect(tester.widget<M3EChip>(chipFinder).onPressed, isNotNull);
+
+    await tester.tap(find.text('DeepSeek'));
+    await tester.pumpAndSettle();
+    expect(tester.widget<M3EChip>(chipFinder).selected, isFalse);
+
+    await tester.enterText(
+      find.byKey(const Key('aiDjBaseUrlField')),
+      'https://custom.example/v1',
+    );
+    await tester.pump();
+
+    final chip = tester.widget<M3EChip>(chipFinder);
+    expect(chip.selected, isTrue);
+    expect(chip.onPressed, isNotNull, reason: '芯片必须可点击');
+  });
+
   testWidgets('测试连接成功：自动保存表单里的新配置并收起表单', (tester) async {
     await pumpProvider();
     await pumpPage(tester);

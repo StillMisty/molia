@@ -680,7 +680,7 @@ void main() {
       expect(s1.searchCalls, 0);
     });
 
-    test('所选渠道全部不可用 → 回退自动并标记 channelFallback', () async {
+    test('所选渠道全部不可用 → 回退自动渠道', () async {
       final s1 = _FakeSource('s1', [_track('a', '歌', '手', source: 's1')]);
       final s2 = _FakeSource('s2', [_track('a', '歌', '手', source: 's2')]);
       service = buildService(
@@ -702,7 +702,6 @@ void main() {
         preferences: const AiPreferences(sourceKeys: ['s2']),
       );
 
-      expect(batch.channelFallback, isTrue);
       expect(batch.items.single.track.id.sourceKey, 's1');
     });
   });

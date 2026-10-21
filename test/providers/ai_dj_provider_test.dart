@@ -62,6 +62,18 @@ BackendSnapshot _radioSnapshot({
           : PlaybackContext(name: contextName, uri: 'lx:$contextName'),
     );
 
+/// 可阻塞 enqueue 的假后端：验证「已入队后被取消仍要补齐账本」。
+class _GatedEnqueueBackend extends FakePlaybackBackend {
+  Completer<void>? enqueueGate;
+
+  @override
+  Future<void> enqueueTracks(List<Track> tracks) async {
+    final gate = enqueueGate;
+    if (gate != null) await gate.future;
+    return super.enqueueTracks(tracks);
+  }
+}
+
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
@@ -236,7 +248,6 @@ void main() {
       queue: [_track(0), ..._tracks(100, 10)],
       currentIndex: 0,
     ));
-    provider.onPlaybackChanged();
 
     await provider.enqueueRecommendations();
 
@@ -281,7 +292,7 @@ void main() {
     expect(provider.status, AiDjStatus.playing);
   });
 
-  test('恢复的 AI 队列自动接管并静默补歌；显式 stop 后不再接管', () async {
+  test('恢复的 AI 队列自动接管并在冷启动补水；显式 stop 后不再接管', () async {
     await provider.grantConsent();
     await provider.setEnabled(true);
     provider.dispose();
@@ -292,13 +303,12 @@ void main() {
       currentIndex: 18,
     ));
     generator.calls = 0;
+    generator.batchFactory = () => _batch(20, 20);
     await pumpProvider();
+    await pumpEventQueue();
 
     expect(provider.status, AiDjStatus.playing);
-    generator.batchFactory = () => _batch(20, 20);
-    provider.onPlaybackChanged();
-    await pumpEventQueue();
-    expect(generator.calls, 1);
+    expect(generator.calls, 1, reason: 'init 接管时直接检查低水位');
     expect(provider.historyEntries.first.origin, AiDjOrigin.autoFeed);
 
     await provider.stop();
@@ -307,6 +317,34 @@ void main() {
     provider.onPlaybackChanged();
     await pumpEventQueue();
     expect(generator.calls, 0, reason: '显式停止后恢复队列不再自动接管');
+  });
+
+  test('恢复队列注册会话跟踪：切走未达阈值会计入跳过', () async {
+    await provider.grantConsent();
+    await provider.setEnabled(true);
+    provider.dispose();
+
+    backend.emit(_radioSnapshot(
+      current: _track(0),
+      queue: _tracks(0, 20),
+      currentIndex: 0,
+      position: const Duration(seconds: 10),
+    ));
+    await pumpProvider();
+
+    expect(provider.status, AiDjStatus.playing);
+    expect(provider.queuedCount, 20);
+
+    provider.onPositionChanged();
+    backend.emit(_radioSnapshot(
+      current: _track(1),
+      queue: _tracks(0, 20),
+      currentIndex: 1,
+    ));
+    provider.onPlaybackChanged();
+    await pumpEventQueue();
+
+    expect(provider.skippedLabels, contains('Song 0 - Artist'));
   });
 
   test('自动补歌关闭 / 非 AI 队列时不触发', () async {
@@ -387,6 +425,48 @@ void main() {
     expect(provider.autoFeedHalted, isFalse);
     expect(provider.autoFeedFailures, 0);
     expect(provider.autoFeedError, isNull);
+  });
+
+  test('自动补歌入队后被取消：仍补齐历史 / 队列计数 / 会话跟踪', () async {
+    final gated = _GatedEnqueueBackend();
+    provider.dispose();
+    libraryProvider.dispose();
+    playbackProvider.dispose();
+    backend = gated;
+    playbackProvider = buildTestPlaybackProvider(backend: gated);
+    await playbackProvider.preferencesReady;
+    libraryProvider = LibraryProvider(
+      repository: FakeLibraryRepository(),
+      playbackProvider: playbackProvider,
+    );
+    await pumpProvider();
+
+    await enableWithList();
+    await startRadio();
+    generator.batchFactory = () => _batch(20, 20);
+    final gate = Completer<void>();
+    gated.enqueueGate = gate;
+
+    backend.emit(_radioSnapshot(
+      current: _track(18),
+      queue: _tracks(0, 20),
+      currentIndex: 18,
+    ));
+    provider.onPlaybackChanged();
+    await pumpEventQueue();
+    expect(generator.calls, 2);
+    expect(provider.historyEntries, hasLength(1));
+
+    // 入队已经发生，但尚未完成；此时显式关闭自动补歌取消静默任务。
+    await provider.savePreferences(
+      provider.preferences.copyWith(autoFeed: false),
+    );
+    gate.complete();
+    await pumpEventQueue();
+
+    expect(provider.historyEntries, hasLength(2));
+    expect(provider.historyEntries.first.origin, AiDjOrigin.autoFeed);
+    expect(provider.queuedCount, 23, reason: '起播 3 首 + 静默补歌 20 首');
   });
 
   test('静默自动补歌不改写可见的「上次发送 / 上次返回」', () async {
@@ -633,6 +713,29 @@ void main() {
     await provider.refreshRecommendations();
 
     expect(provider.rememberedLikedLabels, contains('Song 0 - Artist'));
+  });
+
+  test('预览的喜欢标签顺序与实际请求一致（长期记忆 + 新收藏）', () async {
+    generator.promptForLiked = (liked) => 'LIKED:${liked.join('|')}';
+    await enableWithList();
+    await startRadio();
+
+    // 第一轮收藏 → 写入长期记忆。
+    await libraryProvider.toggleFavoriteTrack(_track(0));
+    generator.batchFactory = () => _batch(9, 3);
+    await provider.refreshRecommendations();
+
+    // 本轮再收藏一首：预览不能提交，但顺序必须与真正发送一致。
+    await libraryProvider.toggleFavoriteTrack(_track(1));
+    final preview = await provider.previewPrompt();
+    expect(preview, isNotNull);
+
+    generator.batchFactory =
+        () => _batch(20, 3).copyWith(prompt: generator.lastActualPrompt);
+    await provider.refreshRecommendations();
+
+    expect(generator.lastLiked, ['Song 0 - Artist', 'Song 1 - Artist']);
+    expect(provider.lastSentPrompt!.userPrompt, preview!.userPrompt);
   });
 
   test('喜欢回流并跨重启保留', () async {
