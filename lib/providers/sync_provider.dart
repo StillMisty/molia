@@ -414,10 +414,11 @@ class SyncProvider extends ChangeNotifier {
     _scheduler?.onAppVisible();
   }
 
-  /// 退后台 / 锁屏：先取消调度器全部定时器，再让传输取消公告 / 重连计时器。
+  /// 退后台 / 锁屏：先让传输停止发现（公告 / 重连计时器），再取消调度器
+  /// 定时器并尽力推一次——pause 轮只走已知端点 HTTP，不再广播。
   void onAppHidden() {
-    _scheduler?.onAppHidden();
     _controlPlane.onAppHidden();
+    _scheduler?.onAppHidden();
   }
 
   /// 当前同步等级（未注入调度器时为 null）。

@@ -754,8 +754,10 @@ class SyncStateStore {
 
   /// 记住一个已验证的局域网端点（MAC 验证 + HTTP 解密成功后回写）。
   ///
-  /// 只在字段真的变化时落盘：每轮结束引擎还会 `save()` 一次，这里避免同一轮
-  /// 多次验证（多台对端）各写一遍大状态 JSON；轮次外调用也能立即持久化。
+  /// 只在**端点身份**（设备 id / host / httpPort / probePort）真的变化或首次
+  /// 出现时落盘：仅 `verifiedAt` 前进只更新内存，依赖引擎轮末的
+  /// `_state.save()` 持久化——每轮每对端成功都会刷新验证时间，这里若也
+  /// `save()` 会让多对端一轮写多次大状态 JSON。
   Future<void> rememberLanEndpoint(LanPeerEndpoint endpoint) async {
     if (!_isValidLanEndpoint(endpoint)) return;
     final existing = _lanEndpoints[endpoint.deviceId];
@@ -770,24 +772,26 @@ class SyncStateStore {
           : (existing?.probePort ?? 0),
       verifiedAt: endpoint.verifiedAt,
     );
-    if (existing != null &&
-        existing.host == next.host &&
-        existing.httpPort == next.httpPort &&
-        existing.probePort == next.probePort &&
-        existing.verifiedAt == next.verifiedAt) {
-      return;
-    }
+    final identityChanged = existing == null ||
+        existing.host != next.host ||
+        existing.httpPort != next.httpPort ||
+        existing.probePort != next.probePort;
+    if (!identityChanged && existing.verifiedAt == next.verifiedAt) return;
     _lanEndpoints[next.deviceId] = next;
     _trimLanEndpoints();
-    await save();
+    if (identityChanged) await save();
   }
 
-  /// 端点合法性：可路由 IP 字面量、非空设备 id、端口在合法范围。
+  /// 端点合法性：可路由 IP 字面量、非空设备 id、端口在合法范围、有验证时间。
+  ///
+  /// `verifiedAt <= 0` 的端点不能进入表：没有验证时间的条目永远不会被
+  /// 180 天淘汰规则命中，会永久留在状态里。
   static bool _isValidLanEndpoint(LanPeerEndpoint endpoint) {
     if (endpoint.deviceId.trim().isEmpty) return false;
     if (!isRoutablePeerAddress(endpoint.host)) return false;
     if (endpoint.httpPort <= 0 || endpoint.httpPort > 65535) return false;
     if (endpoint.probePort < 0 || endpoint.probePort > 65535) return false;
+    if (endpoint.verifiedAt <= 0) return false;
     return true;
   }
 

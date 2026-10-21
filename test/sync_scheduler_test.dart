@@ -551,6 +551,26 @@ void main() {
     });
   });
 
+  test('启动后首轮零对端：同样 arm 重连阶梯', () {
+    fakeAsync((async) {
+      enableLanPeer(async);
+      final env = build(async);
+      env.host.contacted = false;
+      unawaited(env.scheduler.start());
+      async.flushMicrotasks();
+
+      unawaited(env.scheduler.syncStartup());
+      async.flushMicrotasks();
+      expect(env.host.rounds, hasLength(1));
+      expect(env.host.rounds.single.trigger, SyncTrigger.startup);
+
+      async.elapse(const Duration(seconds: 5));
+      expect(env.host.rounds, hasLength(2));
+      expect(env.host.rounds.last.trigger, SyncTrigger.discovery);
+      env.scheduler.dispose();
+    });
+  });
+
   test('轮次串行：上一轮未结束时公告 pending，结束后补一轮', () {
     fakeAsync((async) {
       final env = build(async);

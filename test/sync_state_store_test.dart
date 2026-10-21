@@ -389,6 +389,35 @@ void main() {
     expect(endpoint.verifiedAt, 2);
   });
 
+  test('已知端点：仅 verifiedAt 前进只更新内存，不立即写盘', () async {
+    final prefs = await SharedPreferences.getInstance();
+    final store = await freshStore();
+    const endpoint = LanPeerEndpoint(
+      deviceId: 'devB',
+      host: '192.168.1.23',
+      httpPort: 40000,
+      probePort: 47825,
+      verifiedAt: 1,
+    );
+    await store.rememberLanEndpoint(endpoint);
+    final rawBefore = prefs.getString(SyncStateStore.stateKey);
+    expect(rawBefore, isNotNull);
+
+    await store.rememberLanEndpoint(endpoint.copyWith(verifiedAt: 2));
+
+    expect(store.lanEndpoints.single.verifiedAt, 2, reason: '内存已更新');
+    expect(
+      prefs.getString(SyncStateStore.stateKey),
+      rawBefore,
+      reason: '仅验证时间前进不触发持久化（依赖引擎轮末 save）',
+    );
+
+    // 轮末持久化后跨实例可见。
+    await store.save();
+    final reloaded = await freshStore();
+    expect(reloaded.lanEndpoints.single.verifiedAt, 2);
+  });
+
   test('已知端点：上限 32，按 verifiedAt 淘汰最旧', () async {
     final store = await freshStore();
     for (var i = 0; i < SyncStateStore.lanEndpointLimit + 8; i++) {
@@ -496,6 +525,12 @@ void main() {
         probePort: 70000,
         verifiedAt: 1,
       ),
+      LanPeerEndpoint(
+        deviceId: 'noVerifiedAt',
+        host: '192.168.1.23',
+        httpPort: 40000,
+        verifiedAt: 0,
+      ),
     ]) {
       await store.rememberLanEndpoint(endpoint);
     }
@@ -510,7 +545,10 @@ void main() {
       '{"v":2,"deviceId":"devA","lanEndpoints":['
       '{"deviceId":"ok","host":"192.168.1.23","httpPort":40000,"verifiedAt":1},'
       '{"deviceId":"bad","host":"127.0.0.1","httpPort":40000,"verifiedAt":1},'
-      '{"deviceId":"bad2","host":"192.168.1.24","httpPort":0,"verifiedAt":1}'
+      '{"deviceId":"bad2","host":"192.168.1.24","httpPort":0,"verifiedAt":1},'
+      '{"deviceId":"missingVerified","host":"192.168.1.25","httpPort":40000},'
+      '{"deviceId":"zeroVerified","host":"192.168.1.26","httpPort":40000,'
+      '"verifiedAt":0}'
       ']}',
     );
 

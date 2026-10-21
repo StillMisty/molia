@@ -755,6 +755,21 @@ void main() {
     expect(engine.lastReport, isNull);
   });
 
+  test('公告过滤状态有界：大量不同设备不超过上限', () async {
+    final events = <void>[];
+    final subscription = engine.peerSightings.listen(events.add);
+    addTearDown(subscription.cancel);
+
+    for (var i = 0; i < SyncEngine.maxSightingPeers + 20; i++) {
+      transport.emitSighting(_sighting(deviceId: 'dev$i'));
+    }
+    await pumpEventQueue();
+
+    expect(engine.sightingStateCount, SyncEngine.maxSightingPeers);
+    expect(events, hasLength(SyncEngine.maxSightingPeers + 20),
+        reason: '每个新设备都值得唤醒一轮');
+  });
+
   test('contactedLan：LAN 探测到对端才算接触', () async {
     final noPeer = await engine.runSyncRound(
       trigger: SyncTrigger.timer,

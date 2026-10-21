@@ -366,7 +366,11 @@ class SyncScheduler {
   /// 启动后首轮（受省电与蜂窝暂停策略约束）。
   Future<void> syncStartup() async {
     if (!_canRunAutomatically) return;
-    await _runAndMark(SyncTrigger.startup, push: true);
+    await _runAndMark(
+      SyncTrigger.startup,
+      push: true,
+      armLadderOnZeroPeers: true,
+    );
   }
 
   void dispose() {

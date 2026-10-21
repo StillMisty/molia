@@ -285,6 +285,12 @@ class SyncEngine extends ChangeNotifier implements SyncSchedulerHost {
   /// 公告「无变化」的去重窗口：同一设备 2 分钟内重复公告不触发轮次。
   static const int peerSightingWindowMs = 2 * 60 * 1000;
 
+  /// 公告过滤状态上限（公共网络里 deviceId 可以无限多，状态必须有界）。
+  static const int maxSightingPeers = 64;
+
+  /// 当前公告过滤状态条数（测试 / 诊断用；上限 [maxSightingPeers]）。
+  int get sightingStateCount => _sightingState.length;
+
   /// 过滤认证通过的对端公告：只有真的值得跑一轮时才通知调度器。
   ///
   /// 触发条件：新设备 / bootId 变化（对端重启）/ snapshotId 与本机名册不同 /
@@ -327,7 +333,24 @@ class SyncEngine extends ChangeNotifier implements SyncSchedulerHost {
           ? sighting.snapshotId
           : (prev?.snapshotId ?? ''),
     );
+    _trimSightingState();
     if (notify && !_peerSightings.isClosed) _peerSightings.add(null);
+  }
+
+  /// 超过 [maxSightingPeers] 时淘汰最久没再公告的设备。
+  void _trimSightingState() {
+    while (_sightingState.length > maxSightingPeers) {
+      String? oldestId;
+      var oldestAt = 1 << 62;
+      for (final entry in _sightingState.entries) {
+        if (entry.value.lastSightingAt < oldestAt) {
+          oldestAt = entry.value.lastSightingAt;
+          oldestId = entry.key;
+        }
+      }
+      if (oldestId == null) return;
+      _sightingState.remove(oldestId);
+    }
   }
 
   /// 过滤后的对端公告事件（调度器订阅后去抖 + 冷却）。
@@ -1535,6 +1558,7 @@ class _PeerSightingState {
     required this.snapshotId,
   });
 
+  /// 最近一次收到公告的时间（只用于有界淘汰；触发判据见 `_onPeerSighting`）。
   final int lastSightingAt;
   final int lastTriggeredAt;
   final String bootId;
