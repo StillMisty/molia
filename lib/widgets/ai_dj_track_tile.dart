@@ -30,8 +30,10 @@ class AiDjTrackTile extends StatelessWidget {
     required this.onPlay,
     required this.onReplace,
     required this.onNotInterested,
+    required this.onMoreLikeThis,
     this.isCurrent = false,
     this.busy = false,
+    this.replacing = false,
   });
 
   /// 列表位置（决定卡片静止形状）。
@@ -49,11 +51,17 @@ class AiDjTrackTile extends StatelessWidget {
   /// 「不感兴趣」：从列表移除（可撤销）。
   final VoidCallback onNotInterested;
 
+  /// 「多来点这种」：加入下一批种子。
+  final VoidCallback onMoreLikeThis;
+
   /// 当前播放曲目（标题走 primary 强调）。
   final bool isCurrent;
 
   /// 生成中：行内操作禁用。
   final bool busy;
+
+  /// 该行正在「换一首」：只在本行显示小进度。
+  final bool replacing;
 
   @override
   Widget build(BuildContext context) {
@@ -61,12 +69,14 @@ class AiDjTrackTile extends StatelessWidget {
     final scheme = theme.colorScheme;
     final track = item.track;
     final artist = track.artistLabel;
+    final sourceName = item.resolvedSourceName;
     final reason = item.source.reason;
     final actionMenu = _aiDjActionMenu(
       context,
       item: item,
       onReplace: onReplace,
       onNotInterested: onNotInterested,
+      onMoreLikeThis: onMoreLikeThis,
     );
 
     Widget surface = CardListSurface(
@@ -96,13 +106,23 @@ class AiDjTrackTile extends StatelessWidget {
                     fontWeight: FontWeight.w600,
                   ),
                 ),
-                if (artist.isNotEmpty)
+                if (artist.isNotEmpty || sourceName.isNotEmpty)
                   Text(
-                    artist,
+                    [
+                      if (artist.isNotEmpty) artist,
+                      if (sourceName.isNotEmpty) sourceName,
+                    ].join(' · '),
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                     style: theme.textTheme.bodySmall?.copyWith(
                       color: scheme.onSurfaceVariant,
+                    ),
+                  ),
+                if (replacing)
+                  Text(
+                    AppLocalizations.of(context)!.aiDjReplacing,
+                    style: theme.textTheme.labelSmall?.copyWith(
+                      color: scheme.primary,
                     ),
                   ),
                 if (reason.isNotEmpty) ...[
@@ -120,13 +140,25 @@ class AiDjTrackTile extends StatelessWidget {
             ),
           ),
           // 触摸端行尾 ⋮ 常显；桌面端入口是行表面右键，不再渲染 ⋮。
-          if (!isDesktopPlatform() && actionMenu != null)
+          if (!isDesktopPlatform() && actionMenu != null && !replacing)
             TrackActionsMenu(
               compact: true,
               enabled: !busy,
               semanticLabel: AppLocalizations.of(context)!.aiDjItemActions,
               entries: actionMenu.entries,
               onSelected: actionMenu.onSelected,
+            )
+          else if (replacing)
+            const SizedBox(
+              width: 32,
+              height: 32,
+              child: Center(
+                child: SizedBox(
+                  width: 18,
+                  height: 18,
+                  child: M3ELoadingIndicator(),
+                ),
+              ),
             ),
         ],
       ),
@@ -134,7 +166,7 @@ class AiDjTrackTile extends StatelessWidget {
 
     // 桌面：行表面右键在落点弹同一份菜单。生成中（busy）行内操作禁用，
     // 右键与 ⋮ 一致不可开（[TrackActionsMenu.enabled] 的同一语义）。
-    if (isDesktopPlatform() && !busy && actionMenu != null) {
+    if (isDesktopPlatform() && !busy && !replacing && actionMenu != null) {
       final _AiDjActionMenu menu = actionMenu;
       surface = GestureDetector(
         behavior: HitTestBehavior.opaque,
@@ -172,6 +204,7 @@ _AiDjActionMenu? _aiDjActionMenu(
   required ResolvedRecommendation item,
   required VoidCallback onReplace,
   required VoidCallback onNotInterested,
+  required VoidCallback onMoreLikeThis,
 }) {
   final l10n = AppLocalizations.of(context)!;
   // 订阅收窄到「收藏版本」：菜单只显示收藏开关态，历史写入（每首歌一次）
@@ -198,6 +231,11 @@ _AiDjActionMenu? _aiDjActionMenu(
         value: 'replace',
       ),
       M3EMenuEntry(
+        label: l10n.aiDjMoreLikeThis,
+        leading: const Icon(Icons.auto_awesome_rounded),
+        value: 'moreLikeThis',
+      ),
+      M3EMenuEntry(
         label: l10n.aiDjNotInterested,
         leading: const Icon(Icons.visibility_off_rounded),
         value: 'notInterested',
@@ -209,6 +247,8 @@ _AiDjActionMenu? _aiDjActionMenu(
           library.toggleFavoriteTrack(track);
         case 'replace':
           onReplace();
+        case 'moreLikeThis':
+          onMoreLikeThis();
         case 'notInterested':
           onNotInterested();
       }

@@ -32,6 +32,7 @@ import '../pages/ai_dj_page.dart';
 import '../providers/ai_dj_provider.dart';
 import '../utils/responsive.dart';
 import 'ai_dj_shared.dart';
+import 'ai_dj_waiting.dart';
 import 'app_network_image.dart';
 
 class AiDjCarousel extends StatefulWidget {
@@ -143,6 +144,18 @@ class _AiDjCarouselState extends State<AiDjCarousel> {
               ),
             ),
             const SizedBox(height: 8),
+            if (provider.progress != null && hasCards) ...[
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 16),
+                child: AiDjThinProgress(
+                  value: provider.progress!.phase == AiDjPhase.resolving &&
+                          provider.progress!.total > 0
+                      ? provider.progress!.done / provider.progress!.total
+                      : null,
+                ),
+              ),
+              const SizedBox(height: 6),
+            ],
             _body(context, l10n, provider),
             if (hasCards) _reasonPanel(context, list),
             const SizedBox(height: 8),
@@ -154,6 +167,13 @@ class _AiDjCarouselState extends State<AiDjCarousel> {
 
   String _subtitleText(AppLocalizations l10n, AiDjProvider provider) {
     final list = provider.recommendations;
+    final progress = provider.progress;
+    if (progress != null) {
+      return [
+        aiDjPhaseText(l10n, progress),
+        if (provider.status == AiDjStatus.playing) l10n.aiDjStatusPlaying,
+      ].join(' · ');
+    }
     final parts = <String>[
       if (provider.status == AiDjStatus.playing) l10n.aiDjStatusPlaying,
       if (list != null)
@@ -170,7 +190,7 @@ class _AiDjCarouselState extends State<AiDjCarousel> {
   ) {
     final list = provider.recommendations;
     if (list == null || list.items.isEmpty) {
-      if (provider.isBusy) return _skeleton(context);
+      if (provider.progress != null) return _skeleton(context);
       final error = provider.lastError;
       if (error != null) {
         return _guideCard(
@@ -254,19 +274,21 @@ class _AiDjCarouselState extends State<AiDjCarousel> {
         );
     return SizedBox(
       height: _placeholderWidth,
-      child: ListView(
-        scrollDirection: Axis.horizontal,
-        physics: const NeverScrollableScrollPhysics(),
-        padding: const EdgeInsets.symmetric(horizontal: 16),
-        children: [
-          box(),
-          const SizedBox(width: 10),
-          box(),
-          const SizedBox(width: 10),
-          box(),
-          const SizedBox(width: 10),
-          box(),
-        ],
+      child: AiDjPulse(
+        child: ListView(
+          scrollDirection: Axis.horizontal,
+          physics: const NeverScrollableScrollPhysics(),
+          padding: const EdgeInsets.symmetric(horizontal: 16),
+          children: [
+            box(),
+            const SizedBox(width: 10),
+            box(),
+            const SizedBox(width: 10),
+            box(),
+            const SizedBox(width: 10),
+            box(),
+          ],
+        ),
       ),
     );
   }

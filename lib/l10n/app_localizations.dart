@@ -3896,6 +3896,810 @@ abstract class AppLocalizations {
   /// **'Everything here is already queued'**
   String get aiDjEnqueueEmpty;
 
+  /// No description provided for @aiDjPreferencesTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Recommendation preferences'**
+  String get aiDjPreferencesTitle;
+
+  /// No description provided for @aiDjPreferencesSubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Styles, scenes and what gets sent'**
+  String get aiDjPreferencesSubtitle;
+
+  /// No description provided for @aiDjPreferencesOutdated.
+  ///
+  /// In en, this message translates to:
+  /// **'Preferences updated — refresh a batch to apply'**
+  String get aiDjPreferencesOutdated;
+
+  /// No description provided for @aiDjBatchSize.
+  ///
+  /// In en, this message translates to:
+  /// **'{count} per batch'**
+  String aiDjBatchSize(int count);
+
+  /// No description provided for @aiDjBatchSizeTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Batch size'**
+  String get aiDjBatchSizeTitle;
+
+  /// No description provided for @aiDjFeedBatch.
+  ///
+  /// In en, this message translates to:
+  /// **'Add a batch to the queue'**
+  String get aiDjFeedBatch;
+
+  /// No description provided for @aiDjSectionsNone.
+  ///
+  /// In en, this message translates to:
+  /// **'Preferences only'**
+  String get aiDjSectionsNone;
+
+  /// No description provided for @aiDjFeedDone.
+  ///
+  /// In en, this message translates to:
+  /// **'Batch added to the queue'**
+  String get aiDjFeedDone;
+
+  /// No description provided for @aiDjUnresolvedRetried.
+  ///
+  /// In en, this message translates to:
+  /// **'Search finished'**
+  String get aiDjUnresolvedRetried;
+
+  /// No description provided for @aiDjHistoryTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Recommendation history'**
+  String get aiDjHistoryTitle;
+
+  /// No description provided for @aiDjHistoryEntry.
+  ///
+  /// In en, this message translates to:
+  /// **'History ({count})'**
+  String aiDjHistoryEntry(int count);
+
+  /// No description provided for @aiDjHistoryEmpty.
+  ///
+  /// In en, this message translates to:
+  /// **'No batch history yet'**
+  String get aiDjHistoryEmpty;
+
+  /// No description provided for @aiDjHistoryEmptyHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Every generated batch is kept here.'**
+  String get aiDjHistoryEmptyHint;
+
+  /// No description provided for @aiDjHistoryPlay.
+  ///
+  /// In en, this message translates to:
+  /// **'Play this batch'**
+  String get aiDjHistoryPlay;
+
+  /// No description provided for @aiDjHistoryEnqueue.
+  ///
+  /// In en, this message translates to:
+  /// **'Add to queue'**
+  String get aiDjHistoryEnqueue;
+
+  /// No description provided for @aiDjHistorySetActive.
+  ///
+  /// In en, this message translates to:
+  /// **'Set as current'**
+  String get aiDjHistorySetActive;
+
+  /// No description provided for @aiDjHistoryDelete.
+  ///
+  /// In en, this message translates to:
+  /// **'Delete'**
+  String get aiDjHistoryDelete;
+
+  /// No description provided for @aiDjHistoryActive.
+  ///
+  /// In en, this message translates to:
+  /// **'Current'**
+  String get aiDjHistoryActive;
+
+  /// No description provided for @aiDjHistoryClear.
+  ///
+  /// In en, this message translates to:
+  /// **'Clear history'**
+  String get aiDjHistoryClear;
+
+  /// No description provided for @aiDjHistoryClearTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Clear recommendation history?'**
+  String get aiDjHistoryClearTitle;
+
+  /// No description provided for @aiDjHistoryClearBody.
+  ///
+  /// In en, this message translates to:
+  /// **'Only history records are removed; the playing queue is not affected. The current batch is kept.'**
+  String get aiDjHistoryClearBody;
+
+  /// No description provided for @aiDjHistoryCleared.
+  ///
+  /// In en, this message translates to:
+  /// **'Recommendation history cleared'**
+  String get aiDjHistoryCleared;
+
+  /// No description provided for @aiDjHistoryExpand.
+  ///
+  /// In en, this message translates to:
+  /// **'View tracks'**
+  String get aiDjHistoryExpand;
+
+  /// No description provided for @aiDjHistoryCollapse.
+  ///
+  /// In en, this message translates to:
+  /// **'Hide tracks'**
+  String get aiDjHistoryCollapse;
+
+  /// No description provided for @aiDjHistoryItems.
+  ///
+  /// In en, this message translates to:
+  /// **'{count} tracks'**
+  String aiDjHistoryItems(int count);
+
+  /// No description provided for @aiDjHistoryUnresolved.
+  ///
+  /// In en, this message translates to:
+  /// **'{count} not found'**
+  String aiDjHistoryUnresolved(int count);
+
+  /// No description provided for @aiDjHistorySource.
+  ///
+  /// In en, this message translates to:
+  /// **'From {origin}'**
+  String aiDjHistorySource(String origin);
+
+  /// No description provided for @aiDjOriginRefresh.
+  ///
+  /// In en, this message translates to:
+  /// **'a refresh'**
+  String get aiDjOriginRefresh;
+
+  /// No description provided for @aiDjOriginAutoFeed.
+  ///
+  /// In en, this message translates to:
+  /// **'auto-feed'**
+  String get aiDjOriginAutoFeed;
+
+  /// No description provided for @aiDjOriginManualFeed.
+  ///
+  /// In en, this message translates to:
+  /// **'a manual batch'**
+  String get aiDjOriginManualFeed;
+
+  /// No description provided for @aiDjOriginRestored.
+  ///
+  /// In en, this message translates to:
+  /// **'an older version'**
+  String get aiDjOriginRestored;
+
+  /// No description provided for @aiDjHistoryLoadFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'This batch is damaged and cannot be opened'**
+  String get aiDjHistoryLoadFailed;
+
+  /// No description provided for @aiDjMoreLikeThis.
+  ///
+  /// In en, this message translates to:
+  /// **'More like this'**
+  String get aiDjMoreLikeThis;
+
+  /// No description provided for @aiDjRetryUnresolved.
+  ///
+  /// In en, this message translates to:
+  /// **'Search again'**
+  String get aiDjRetryUnresolved;
+
+  /// No description provided for @aiDjTransparencyTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'What gets sent to AI'**
+  String get aiDjTransparencyTitle;
+
+  /// No description provided for @aiDjViewPrompt.
+  ///
+  /// In en, this message translates to:
+  /// **'View exact prompt'**
+  String get aiDjViewPrompt;
+
+  /// No description provided for @aiDjHidePrompt.
+  ///
+  /// In en, this message translates to:
+  /// **'Hide exact prompt'**
+  String get aiDjHidePrompt;
+
+  /// No description provided for @aiDjSystemPrompt.
+  ///
+  /// In en, this message translates to:
+  /// **'System prompt'**
+  String get aiDjSystemPrompt;
+
+  /// No description provided for @aiDjUserPrompt.
+  ///
+  /// In en, this message translates to:
+  /// **'User prompt'**
+  String get aiDjUserPrompt;
+
+  /// No description provided for @aiDjCopyPrompt.
+  ///
+  /// In en, this message translates to:
+  /// **'Copy'**
+  String get aiDjCopyPrompt;
+
+  /// No description provided for @aiDjPromptCopied.
+  ///
+  /// In en, this message translates to:
+  /// **'Copied'**
+  String get aiDjPromptCopied;
+
+  /// No description provided for @aiDjLastSentPrompt.
+  ///
+  /// In en, this message translates to:
+  /// **'Last prompt sent'**
+  String get aiDjLastSentPrompt;
+
+  /// No description provided for @aiDjLastRawResponse.
+  ///
+  /// In en, this message translates to:
+  /// **'Last AI response'**
+  String get aiDjLastRawResponse;
+
+  /// No description provided for @aiDjNoLastPrompt.
+  ///
+  /// In en, this message translates to:
+  /// **'Nothing sent yet'**
+  String get aiDjNoLastPrompt;
+
+  /// No description provided for @aiDjNoLastResponse.
+  ///
+  /// In en, this message translates to:
+  /// **'No response yet'**
+  String get aiDjNoLastResponse;
+
+  /// No description provided for @aiDjPromptPrivacyHint.
+  ///
+  /// In en, this message translates to:
+  /// **'No play links, device information or API key.'**
+  String get aiDjPromptPrivacyHint;
+
+  /// No description provided for @aiDjSendSummary.
+  ///
+  /// In en, this message translates to:
+  /// **'Sending: {sections} · {count} per batch · Sources: {sources}'**
+  String aiDjSendSummary(String sections, int count, String sources);
+
+  /// No description provided for @aiDjAutoFeedTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Auto-fill near the end of the queue'**
+  String get aiDjAutoFeedTitle;
+
+  /// No description provided for @aiDjAutoFeedSubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Adds a batch in the background with 5 tracks left, without interrupting playback (on by default)'**
+  String get aiDjAutoFeedSubtitle;
+
+  /// No description provided for @aiDjAutoFeedFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Auto-fill failed; it will retry later'**
+  String get aiDjAutoFeedFailed;
+
+  /// No description provided for @aiDjAutoFeedHalted.
+  ///
+  /// In en, this message translates to:
+  /// **'Auto-fill paused after {count} failures in a row'**
+  String aiDjAutoFeedHalted(int count);
+
+  /// No description provided for @aiDjAutoFeedResume.
+  ///
+  /// In en, this message translates to:
+  /// **'Resume auto-fill'**
+  String get aiDjAutoFeedResume;
+
+  /// No description provided for @aiDjGenerationStatus.
+  ///
+  /// In en, this message translates to:
+  /// **'Generating recommendations'**
+  String get aiDjGenerationStatus;
+
+  /// No description provided for @aiDjPhaseProfile.
+  ///
+  /// In en, this message translates to:
+  /// **'Reading your taste'**
+  String get aiDjPhaseProfile;
+
+  /// No description provided for @aiDjPhaseModel.
+  ///
+  /// In en, this message translates to:
+  /// **'AI is picking songs'**
+  String get aiDjPhaseModel;
+
+  /// No description provided for @aiDjPhaseResolving.
+  ///
+  /// In en, this message translates to:
+  /// **'Finding songs {done}/{total}'**
+  String aiDjPhaseResolving(int done, int total);
+
+  /// No description provided for @aiDjWaitingSeconds.
+  ///
+  /// In en, this message translates to:
+  /// **'Waiting {seconds}s'**
+  String aiDjWaitingSeconds(int seconds);
+
+  /// No description provided for @aiDjCancelGeneration.
+  ///
+  /// In en, this message translates to:
+  /// **'Stop'**
+  String get aiDjCancelGeneration;
+
+  /// No description provided for @aiDjReplacing.
+  ///
+  /// In en, this message translates to:
+  /// **'Swapping…'**
+  String get aiDjReplacing;
+
+  /// No description provided for @aiDjPrefsGenerationGroup.
+  ///
+  /// In en, this message translates to:
+  /// **'Generation'**
+  String get aiDjPrefsGenerationGroup;
+
+  /// No description provided for @aiDjPrefsStylesGroup.
+  ///
+  /// In en, this message translates to:
+  /// **'Styles'**
+  String get aiDjPrefsStylesGroup;
+
+  /// No description provided for @aiDjPrefsScenesGroup.
+  ///
+  /// In en, this message translates to:
+  /// **'Scenes'**
+  String get aiDjPrefsScenesGroup;
+
+  /// No description provided for @aiDjPrefsLanguagesGroup.
+  ///
+  /// In en, this message translates to:
+  /// **'Languages'**
+  String get aiDjPrefsLanguagesGroup;
+
+  /// No description provided for @aiDjPrefsEraGroup.
+  ///
+  /// In en, this message translates to:
+  /// **'Era'**
+  String get aiDjPrefsEraGroup;
+
+  /// No description provided for @aiDjPrefsExtraGroup.
+  ///
+  /// In en, this message translates to:
+  /// **'Extra request'**
+  String get aiDjPrefsExtraGroup;
+
+  /// No description provided for @aiDjPrefsExtraHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Up to 120 characters, sent with the prompt'**
+  String get aiDjPrefsExtraHint;
+
+  /// No description provided for @aiDjPrefsOnlyUnheardTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Only unheard tracks'**
+  String get aiDjPrefsOnlyUnheardTitle;
+
+  /// No description provided for @aiDjPrefsOnlyUnheardSubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Skip tracks you have already played (on by default)'**
+  String get aiDjPrefsOnlyUnheardSubtitle;
+
+  /// No description provided for @aiDjPrefsExplorationTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Exploration'**
+  String get aiDjPrefsExplorationTitle;
+
+  /// No description provided for @aiDjExplorationSafe.
+  ///
+  /// In en, this message translates to:
+  /// **'Safe'**
+  String get aiDjExplorationSafe;
+
+  /// No description provided for @aiDjExplorationBalanced.
+  ///
+  /// In en, this message translates to:
+  /// **'Balanced'**
+  String get aiDjExplorationBalanced;
+
+  /// No description provided for @aiDjExplorationSurprise.
+  ///
+  /// In en, this message translates to:
+  /// **'Surprise'**
+  String get aiDjExplorationSurprise;
+
+  /// No description provided for @aiDjStylePop.
+  ///
+  /// In en, this message translates to:
+  /// **'Pop'**
+  String get aiDjStylePop;
+
+  /// No description provided for @aiDjStyleRock.
+  ///
+  /// In en, this message translates to:
+  /// **'Rock'**
+  String get aiDjStyleRock;
+
+  /// No description provided for @aiDjStyleElectronic.
+  ///
+  /// In en, this message translates to:
+  /// **'Electronic'**
+  String get aiDjStyleElectronic;
+
+  /// No description provided for @aiDjStyleFolk.
+  ///
+  /// In en, this message translates to:
+  /// **'Folk'**
+  String get aiDjStyleFolk;
+
+  /// No description provided for @aiDjStyleRap.
+  ///
+  /// In en, this message translates to:
+  /// **'Rap'**
+  String get aiDjStyleRap;
+
+  /// No description provided for @aiDjStyleRnb.
+  ///
+  /// In en, this message translates to:
+  /// **'R&B'**
+  String get aiDjStyleRnb;
+
+  /// No description provided for @aiDjStyleJazz.
+  ///
+  /// In en, this message translates to:
+  /// **'Jazz'**
+  String get aiDjStyleJazz;
+
+  /// No description provided for @aiDjStyleClassical.
+  ///
+  /// In en, this message translates to:
+  /// **'Classical'**
+  String get aiDjStyleClassical;
+
+  /// No description provided for @aiDjStyleMetal.
+  ///
+  /// In en, this message translates to:
+  /// **'Metal'**
+  String get aiDjStyleMetal;
+
+  /// No description provided for @aiDjStyleAcg.
+  ///
+  /// In en, this message translates to:
+  /// **'ACG'**
+  String get aiDjStyleAcg;
+
+  /// No description provided for @aiDjStyleInstrumental.
+  ///
+  /// In en, this message translates to:
+  /// **'Instrumental'**
+  String get aiDjStyleInstrumental;
+
+  /// No description provided for @aiDjStyleChineseStyle.
+  ///
+  /// In en, this message translates to:
+  /// **'Chinese style'**
+  String get aiDjStyleChineseStyle;
+
+  /// No description provided for @aiDjSceneCommute.
+  ///
+  /// In en, this message translates to:
+  /// **'Commute'**
+  String get aiDjSceneCommute;
+
+  /// No description provided for @aiDjSceneFocus.
+  ///
+  /// In en, this message translates to:
+  /// **'Focus'**
+  String get aiDjSceneFocus;
+
+  /// No description provided for @aiDjSceneRelax.
+  ///
+  /// In en, this message translates to:
+  /// **'Relax'**
+  String get aiDjSceneRelax;
+
+  /// No description provided for @aiDjSceneWorkout.
+  ///
+  /// In en, this message translates to:
+  /// **'Workout'**
+  String get aiDjSceneWorkout;
+
+  /// No description provided for @aiDjSceneSleep.
+  ///
+  /// In en, this message translates to:
+  /// **'Sleep'**
+  String get aiDjSceneSleep;
+
+  /// No description provided for @aiDjSceneWeekend.
+  ///
+  /// In en, this message translates to:
+  /// **'Weekend'**
+  String get aiDjSceneWeekend;
+
+  /// No description provided for @aiDjLanguageMandarin.
+  ///
+  /// In en, this message translates to:
+  /// **'Mandarin'**
+  String get aiDjLanguageMandarin;
+
+  /// No description provided for @aiDjLanguageCantonese.
+  ///
+  /// In en, this message translates to:
+  /// **'Cantonese'**
+  String get aiDjLanguageCantonese;
+
+  /// No description provided for @aiDjLanguageEnglish.
+  ///
+  /// In en, this message translates to:
+  /// **'English'**
+  String get aiDjLanguageEnglish;
+
+  /// No description provided for @aiDjLanguageJapanese.
+  ///
+  /// In en, this message translates to:
+  /// **'Japanese'**
+  String get aiDjLanguageJapanese;
+
+  /// No description provided for @aiDjLanguageKorean.
+  ///
+  /// In en, this message translates to:
+  /// **'Korean'**
+  String get aiDjLanguageKorean;
+
+  /// No description provided for @aiDjLanguageInstrumental.
+  ///
+  /// In en, this message translates to:
+  /// **'Instrumental'**
+  String get aiDjLanguageInstrumental;
+
+  /// No description provided for @aiDjEraAny.
+  ///
+  /// In en, this message translates to:
+  /// **'Any'**
+  String get aiDjEraAny;
+
+  /// No description provided for @aiDjEraRecent3.
+  ///
+  /// In en, this message translates to:
+  /// **'Last 3 years'**
+  String get aiDjEraRecent3;
+
+  /// No description provided for @aiDjEra2010s.
+  ///
+  /// In en, this message translates to:
+  /// **'2010s'**
+  String get aiDjEra2010s;
+
+  /// No description provided for @aiDjEra2000s.
+  ///
+  /// In en, this message translates to:
+  /// **'2000s'**
+  String get aiDjEra2000s;
+
+  /// No description provided for @aiDjEraBefore90.
+  ///
+  /// In en, this message translates to:
+  /// **'Before the 90s'**
+  String get aiDjEraBefore90;
+
+  /// No description provided for @aiDjPrefsSave.
+  ///
+  /// In en, this message translates to:
+  /// **'Save preferences'**
+  String get aiDjPrefsSave;
+
+  /// No description provided for @aiDjPrefsSaved.
+  ///
+  /// In en, this message translates to:
+  /// **'Saved — applies to the next batch'**
+  String get aiDjPrefsSaved;
+
+  /// No description provided for @aiDjPrefsReset.
+  ///
+  /// In en, this message translates to:
+  /// **'Restore defaults'**
+  String get aiDjPrefsReset;
+
+  /// No description provided for @aiDjPrefsResetTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Restore default preferences?'**
+  String get aiDjPrefsResetTitle;
+
+  /// No description provided for @aiDjPrefsResetBody.
+  ///
+  /// In en, this message translates to:
+  /// **'Styles, scenes, sending scope and sources return to defaults; saved recommendations are not affected.'**
+  String get aiDjPrefsResetBody;
+
+  /// No description provided for @aiDjPrefsResetDone.
+  ///
+  /// In en, this message translates to:
+  /// **'Default preferences restored'**
+  String get aiDjPrefsResetDone;
+
+  /// No description provided for @aiDjPrefsDataScope.
+  ///
+  /// In en, this message translates to:
+  /// **'What gets sent'**
+  String get aiDjPrefsDataScope;
+
+  /// No description provided for @aiDjScopeHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Unchecked items are not sent; favorites and playlists are off by default.'**
+  String get aiDjScopeHint;
+
+  /// No description provided for @aiDjScopeSummary.
+  ///
+  /// In en, this message translates to:
+  /// **'Listening summary'**
+  String get aiDjScopeSummary;
+
+  /// No description provided for @aiDjScopeTopArtists.
+  ///
+  /// In en, this message translates to:
+  /// **'Frequent artists'**
+  String get aiDjScopeTopArtists;
+
+  /// No description provided for @aiDjScopeTopTracks.
+  ///
+  /// In en, this message translates to:
+  /// **'Frequent tracks'**
+  String get aiDjScopeTopTracks;
+
+  /// No description provided for @aiDjScopeTimeAndSource.
+  ///
+  /// In en, this message translates to:
+  /// **'Time and source breakdown'**
+  String get aiDjScopeTimeAndSource;
+
+  /// No description provided for @aiDjScopeRecentEvents.
+  ///
+  /// In en, this message translates to:
+  /// **'Recent plays'**
+  String get aiDjScopeRecentEvents;
+
+  /// No description provided for @aiDjScopeListenedExclusions.
+  ///
+  /// In en, this message translates to:
+  /// **'Already-heard exclusion list'**
+  String get aiDjScopeListenedExclusions;
+
+  /// No description provided for @aiDjScopeFavorites.
+  ///
+  /// In en, this message translates to:
+  /// **'Favorite tracks'**
+  String get aiDjScopeFavorites;
+
+  /// No description provided for @aiDjScopePlaylists.
+  ///
+  /// In en, this message translates to:
+  /// **'Your playlists'**
+  String get aiDjScopePlaylists;
+
+  /// No description provided for @aiDjScopeFavoritesConfirm.
+  ///
+  /// In en, this message translates to:
+  /// **'This reads the titles and artists of up to 100 favorite tracks so they are not recommended again.'**
+  String get aiDjScopeFavoritesConfirm;
+
+  /// No description provided for @aiDjScopePlaylistsConfirm.
+  ///
+  /// In en, this message translates to:
+  /// **'This reads the names, titles and artists of up to 10 of your playlists so they are not recommended again.'**
+  String get aiDjScopePlaylistsConfirm;
+
+  /// No description provided for @aiDjChannelsTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Where to find songs'**
+  String get aiDjChannelsTitle;
+
+  /// No description provided for @aiDjChannelsAuto.
+  ///
+  /// In en, this message translates to:
+  /// **'Auto (first 3 searchable sources on the Sources page)'**
+  String get aiDjChannelsAuto;
+
+  /// No description provided for @aiDjChannelsHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Leave empty to use auto; selected sources are used exclusively, with no fallback.'**
+  String get aiDjChannelsHint;
+
+  /// No description provided for @aiDjChannelsUnavailable.
+  ///
+  /// In en, this message translates to:
+  /// **'Selected sources are unavailable right now; auto sources are used instead'**
+  String get aiDjChannelsUnavailable;
+
+  /// No description provided for @aiDjChannelsEmpty.
+  ///
+  /// In en, this message translates to:
+  /// **'No searchable sources'**
+  String get aiDjChannelsEmpty;
+
+  /// No description provided for @aiDjSeedsTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'More like these'**
+  String get aiDjSeedsTitle;
+
+  /// No description provided for @aiDjSeedsHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Cleared after the next successful batch'**
+  String get aiDjSeedsHint;
+
+  /// No description provided for @aiDjSeedsEmpty.
+  ///
+  /// In en, this message translates to:
+  /// **'No seeds yet'**
+  String get aiDjSeedsEmpty;
+
+  /// No description provided for @aiDjClearMemory.
+  ///
+  /// In en, this message translates to:
+  /// **'Clear AI memory'**
+  String get aiDjClearMemory;
+
+  /// No description provided for @aiDjClearMemoryTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Clear AI memory?'**
+  String get aiDjClearMemoryTitle;
+
+  /// No description provided for @aiDjClearMemoryBody.
+  ///
+  /// In en, this message translates to:
+  /// **'This deletes long-term “not interested”, “liked” and “more like these” entries. This round\'s feedback is cleared too.'**
+  String get aiDjClearMemoryBody;
+
+  /// No description provided for @aiDjMemoryCleared.
+  ///
+  /// In en, this message translates to:
+  /// **'AI memory cleared'**
+  String get aiDjMemoryCleared;
+
+  /// No description provided for @aiDjFeedbackMemory.
+  ///
+  /// In en, this message translates to:
+  /// **'Long-term memory'**
+  String get aiDjFeedbackMemory;
+
+  /// No description provided for @aiDjFeedbackThisRound.
+  ///
+  /// In en, this message translates to:
+  /// **'This round'**
+  String get aiDjFeedbackThisRound;
+
+  /// No description provided for @aiDjSeedLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'More like · {label}'**
+  String aiDjSeedLabel(String label);
+
   /// No description provided for @settingsSyncTitle.
   ///
   /// In en, this message translates to:

@@ -1102,6 +1102,219 @@
   "aiDjEmptyList": "No recommendations yet",
   "aiDjEmptyListHint": "Generate today's picks — playable any time.",
   "aiDjEnqueueEmpty": "Everything here is already queued",
+  "aiDjPreferencesTitle": "Recommendation preferences",
+  "aiDjPreferencesSubtitle": "Styles, scenes and what gets sent",
+  "aiDjPreferencesOutdated": "Preferences updated — refresh a batch to apply",
+  "aiDjBatchSize": "{count} per batch",
+  "@aiDjBatchSize": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "aiDjBatchSizeTitle": "Batch size",
+  "aiDjFeedBatch": "Add a batch to the queue",
+  "aiDjSectionsNone": "Preferences only",
+  "aiDjFeedDone": "Batch added to the queue",
+  "aiDjUnresolvedRetried": "Search finished",
+  "aiDjHistoryTitle": "Recommendation history",
+  "aiDjHistoryEntry": "History ({count})",
+  "@aiDjHistoryEntry": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "aiDjHistoryEmpty": "No batch history yet",
+  "aiDjHistoryEmptyHint": "Every generated batch is kept here.",
+  "aiDjHistoryPlay": "Play this batch",
+  "aiDjHistoryEnqueue": "Add to queue",
+  "aiDjHistorySetActive": "Set as current",
+  "aiDjHistoryDelete": "Delete",
+  "aiDjHistoryActive": "Current",
+  "aiDjHistoryClear": "Clear history",
+  "aiDjHistoryClearTitle": "Clear recommendation history?",
+  "aiDjHistoryClearBody": "Only history records are removed; the playing queue is not affected. The current batch is kept.",
+  "aiDjHistoryCleared": "Recommendation history cleared",
+  "aiDjHistoryExpand": "View tracks",
+  "aiDjHistoryCollapse": "Hide tracks",
+  "aiDjHistoryItems": "{count} tracks",
+  "@aiDjHistoryItems": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "aiDjHistoryUnresolved": "{count} not found",
+  "@aiDjHistoryUnresolved": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "aiDjHistorySource": "From {origin}",
+  "@aiDjHistorySource": {
+    "placeholders": {
+      "origin": {
+        "type": "String"
+      }
+    }
+  },
+  "aiDjOriginRefresh": "a refresh",
+  "aiDjOriginAutoFeed": "auto-feed",
+  "aiDjOriginManualFeed": "a manual batch",
+  "aiDjOriginRestored": "an older version",
+  "aiDjHistoryLoadFailed": "This batch is damaged and cannot be opened",
+  "aiDjMoreLikeThis": "More like this",
+  "aiDjRetryUnresolved": "Search again",
+  "aiDjTransparencyTitle": "What gets sent to AI",
+  "aiDjViewPrompt": "View exact prompt",
+  "aiDjHidePrompt": "Hide exact prompt",
+  "aiDjSystemPrompt": "System prompt",
+  "aiDjUserPrompt": "User prompt",
+  "aiDjCopyPrompt": "Copy",
+  "aiDjPromptCopied": "Copied",
+  "aiDjLastSentPrompt": "Last prompt sent",
+  "aiDjLastRawResponse": "Last AI response",
+  "aiDjNoLastPrompt": "Nothing sent yet",
+  "aiDjNoLastResponse": "No response yet",
+  "aiDjPromptPrivacyHint": "No play links, device information or API key.",
+  "aiDjSendSummary": "Sending: {sections} · {count} per batch · Sources: {sources}",
+  "@aiDjSendSummary": {
+    "placeholders": {
+      "sections": {
+        "type": "String"
+      },
+      "count": {
+        "type": "int"
+      },
+      "sources": {
+        "type": "String"
+      }
+    }
+  },
+  "aiDjAutoFeedTitle": "Auto-fill near the end of the queue",
+  "aiDjAutoFeedSubtitle": "Adds a batch in the background with 5 tracks left, without interrupting playback (on by default)",
+  "aiDjAutoFeedFailed": "Auto-fill failed; it will retry later",
+  "aiDjAutoFeedHalted": "Auto-fill paused after {count} failures in a row",
+  "@aiDjAutoFeedHalted": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "aiDjAutoFeedResume": "Resume auto-fill",
+  "aiDjGenerationStatus": "Generating recommendations",
+  "aiDjPhaseProfile": "Reading your taste",
+  "aiDjPhaseModel": "AI is picking songs",
+  "aiDjPhaseResolving": "Finding songs {done}/{total}",
+  "@aiDjPhaseResolving": {
+    "placeholders": {
+      "done": {
+        "type": "int"
+      },
+      "total": {
+        "type": "int"
+      }
+    }
+  },
+  "aiDjWaitingSeconds": "Waiting {seconds}s",
+  "@aiDjWaitingSeconds": {
+    "placeholders": {
+      "seconds": {
+        "type": "int"
+      }
+    }
+  },
+  "aiDjCancelGeneration": "Stop",
+  "aiDjReplacing": "Swapping…",
+  "aiDjPrefsGenerationGroup": "Generation",
+  "aiDjPrefsStylesGroup": "Styles",
+  "aiDjPrefsScenesGroup": "Scenes",
+  "aiDjPrefsLanguagesGroup": "Languages",
+  "aiDjPrefsEraGroup": "Era",
+  "aiDjPrefsExtraGroup": "Extra request",
+  "aiDjPrefsExtraHint": "Up to 120 characters, sent with the prompt",
+  "aiDjPrefsOnlyUnheardTitle": "Only unheard tracks",
+  "aiDjPrefsOnlyUnheardSubtitle": "Skip tracks you have already played (on by default)",
+  "aiDjPrefsExplorationTitle": "Exploration",
+  "aiDjExplorationSafe": "Safe",
+  "aiDjExplorationBalanced": "Balanced",
+  "aiDjExplorationSurprise": "Surprise",
+  "aiDjStylePop": "Pop",
+  "aiDjStyleRock": "Rock",
+  "aiDjStyleElectronic": "Electronic",
+  "aiDjStyleFolk": "Folk",
+  "aiDjStyleRap": "Rap",
+  "aiDjStyleRnb": "R&B",
+  "aiDjStyleJazz": "Jazz",
+  "aiDjStyleClassical": "Classical",
+  "aiDjStyleMetal": "Metal",
+  "aiDjStyleAcg": "ACG",
+  "aiDjStyleInstrumental": "Instrumental",
+  "aiDjStyleChineseStyle": "Chinese style",
+  "aiDjSceneCommute": "Commute",
+  "aiDjSceneFocus": "Focus",
+  "aiDjSceneRelax": "Relax",
+  "aiDjSceneWorkout": "Workout",
+  "aiDjSceneSleep": "Sleep",
+  "aiDjSceneWeekend": "Weekend",
+  "aiDjLanguageMandarin": "Mandarin",
+  "aiDjLanguageCantonese": "Cantonese",
+  "aiDjLanguageEnglish": "English",
+  "aiDjLanguageJapanese": "Japanese",
+  "aiDjLanguageKorean": "Korean",
+  "aiDjLanguageInstrumental": "Instrumental",
+  "aiDjEraAny": "Any",
+  "aiDjEraRecent3": "Last 3 years",
+  "aiDjEra2010s": "2010s",
+  "aiDjEra2000s": "2000s",
+  "aiDjEraBefore90": "Before the 90s",
+  "aiDjPrefsSave": "Save preferences",
+  "aiDjPrefsSaved": "Saved — applies to the next batch",
+  "aiDjPrefsReset": "Restore defaults",
+  "aiDjPrefsResetTitle": "Restore default preferences?",
+  "aiDjPrefsResetBody": "Styles, scenes, sending scope and sources return to defaults; saved recommendations are not affected.",
+  "aiDjPrefsResetDone": "Default preferences restored",
+  "aiDjPrefsDataScope": "What gets sent",
+  "aiDjScopeHint": "Unchecked items are not sent; favorites and playlists are off by default.",
+  "aiDjScopeSummary": "Listening summary",
+  "aiDjScopeTopArtists": "Frequent artists",
+  "aiDjScopeTopTracks": "Frequent tracks",
+  "aiDjScopeTimeAndSource": "Time and source breakdown",
+  "aiDjScopeRecentEvents": "Recent plays",
+  "aiDjScopeListenedExclusions": "Already-heard exclusion list",
+  "aiDjScopeFavorites": "Favorite tracks",
+  "aiDjScopePlaylists": "Your playlists",
+  "aiDjScopeFavoritesConfirm": "This reads the titles and artists of up to 100 favorite tracks so they are not recommended again.",
+  "aiDjScopePlaylistsConfirm": "This reads the names, titles and artists of up to 10 of your playlists so they are not recommended again.",
+  "aiDjChannelsTitle": "Where to find songs",
+  "aiDjChannelsAuto": "Auto (first 3 searchable sources on the Sources page)",
+  "aiDjChannelsHint": "Leave empty to use auto; selected sources are used exclusively, with no fallback.",
+  "aiDjChannelsUnavailable": "Selected sources are unavailable right now; auto sources are used instead",
+  "aiDjChannelsEmpty": "No searchable sources",
+  "aiDjSeedsTitle": "More like these",
+  "aiDjSeedsHint": "Cleared after the next successful batch",
+  "aiDjSeedsEmpty": "No seeds yet",
+  "aiDjClearMemory": "Clear AI memory",
+  "aiDjClearMemoryTitle": "Clear AI memory?",
+  "aiDjClearMemoryBody": "This deletes long-term “not interested”, “liked” and “more like these” entries. This round's feedback is cleared too.",
+  "aiDjMemoryCleared": "AI memory cleared",
+  "aiDjFeedbackMemory": "Long-term memory",
+  "aiDjFeedbackThisRound": "This round",
+  "aiDjSeedLabel": "More like · {label}",
+  "@aiDjSeedLabel": {
+    "placeholders": {
+      "label": {
+        "type": "String"
+      }
+    }
+  },
   "settingsSyncTitle": "Cross-device sync",
   "settingsSyncItemSubtitle": "Playlists, sources, settings and keys",
   "syncPairingSection": "Pair with a device",

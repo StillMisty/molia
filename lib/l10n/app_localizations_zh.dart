@@ -2036,6 +2036,430 @@ class AppLocalizationsZh extends AppLocalizations {
   String get aiDjEnqueueEmpty => '列表里的歌都已在队列中';
 
   @override
+  String get aiDjPreferencesTitle => '推荐偏好';
+
+  @override
+  String get aiDjPreferencesSubtitle => '风格、场景与发送范围';
+
+  @override
+  String get aiDjPreferencesOutdated => '偏好已更新，换一批生效';
+
+  @override
+  String aiDjBatchSize(int count) {
+    return '每批 $count 首';
+  }
+
+  @override
+  String get aiDjBatchSizeTitle => '每批数量';
+
+  @override
+  String get aiDjFeedBatch => '补一批到队尾';
+
+  @override
+  String get aiDjSectionsNone => '仅偏好';
+
+  @override
+  String get aiDjFeedDone => '已补一批到队尾';
+
+  @override
+  String get aiDjUnresolvedRetried => '重新找完了';
+
+  @override
+  String get aiDjHistoryTitle => '历史推荐';
+
+  @override
+  String aiDjHistoryEntry(int count) {
+    return '历史推荐（$count）';
+  }
+
+  @override
+  String get aiDjHistoryEmpty => '还没有历史推荐';
+
+  @override
+  String get aiDjHistoryEmptyHint => '生成推荐后，这里会保留每一批记录。';
+
+  @override
+  String get aiDjHistoryPlay => '播放这批';
+
+  @override
+  String get aiDjHistoryEnqueue => '加入队列';
+
+  @override
+  String get aiDjHistorySetActive => '设为当前';
+
+  @override
+  String get aiDjHistoryDelete => '删除';
+
+  @override
+  String get aiDjHistoryActive => '当前';
+
+  @override
+  String get aiDjHistoryClear => '清空历史';
+
+  @override
+  String get aiDjHistoryClearTitle => '清空历史推荐？';
+
+  @override
+  String get aiDjHistoryClearBody => '只删除历史记录，不影响正在播放的队列。当前推荐会保留。';
+
+  @override
+  String get aiDjHistoryCleared => '已清空历史推荐';
+
+  @override
+  String get aiDjHistoryExpand => '查看曲目';
+
+  @override
+  String get aiDjHistoryCollapse => '收起曲目';
+
+  @override
+  String aiDjHistoryItems(int count) {
+    return '$count 首';
+  }
+
+  @override
+  String aiDjHistoryUnresolved(int count) {
+    return '$count 首未找到';
+  }
+
+  @override
+  String aiDjHistorySource(String origin) {
+    return '来源：$origin';
+  }
+
+  @override
+  String get aiDjOriginRefresh => '生成推荐';
+
+  @override
+  String get aiDjOriginAutoFeed => '自动补歌';
+
+  @override
+  String get aiDjOriginManualFeed => '手动补批';
+
+  @override
+  String get aiDjOriginRestored => '旧版恢复';
+
+  @override
+  String get aiDjHistoryLoadFailed => '这批内容已损坏，无法查看';
+
+  @override
+  String get aiDjMoreLikeThis => '多来点这种';
+
+  @override
+  String get aiDjRetryUnresolved => '重新找一次';
+
+  @override
+  String get aiDjTransparencyTitle => '发送给 AI 的内容';
+
+  @override
+  String get aiDjViewPrompt => '查看发送原文';
+
+  @override
+  String get aiDjHidePrompt => '收起发送原文';
+
+  @override
+  String get aiDjSystemPrompt => '系统提示词';
+
+  @override
+  String get aiDjUserPrompt => '用户提示词';
+
+  @override
+  String get aiDjCopyPrompt => '复制';
+
+  @override
+  String get aiDjPromptCopied => '已复制';
+
+  @override
+  String get aiDjLastSentPrompt => '上次实际发送';
+
+  @override
+  String get aiDjLastRawResponse => '上次 AI 返回';
+
+  @override
+  String get aiDjNoLastPrompt => '还没有发送记录';
+
+  @override
+  String get aiDjNoLastResponse => '还没有返回记录';
+
+  @override
+  String get aiDjPromptPrivacyHint => '不含播放链接、设备信息或 API Key。';
+
+  @override
+  String aiDjSendSummary(String sections, int count, String sources) {
+    return '发送范围：$sections · 每批 $count 首 · 渠道：$sources';
+  }
+
+  @override
+  String get aiDjAutoFeedTitle => '队列快播完时自动补歌';
+
+  @override
+  String get aiDjAutoFeedSubtitle => '剩余 5 首时后台补一批，不打断播放（默认开启）';
+
+  @override
+  String get aiDjAutoFeedFailed => '自动补歌失败，稍后会再试';
+
+  @override
+  String aiDjAutoFeedHalted(int count) {
+    return '自动补歌已暂停：连续 $count 次失败';
+  }
+
+  @override
+  String get aiDjAutoFeedResume => '恢复自动补歌';
+
+  @override
+  String get aiDjGenerationStatus => '正在生成推荐';
+
+  @override
+  String get aiDjPhaseProfile => '整理听歌偏好';
+
+  @override
+  String get aiDjPhaseModel => 'AI 正在选歌';
+
+  @override
+  String aiDjPhaseResolving(int done, int total) {
+    return '正在找歌 $done/$total';
+  }
+
+  @override
+  String aiDjWaitingSeconds(int seconds) {
+    return '已等待 $seconds 秒';
+  }
+
+  @override
+  String get aiDjCancelGeneration => '停止';
+
+  @override
+  String get aiDjReplacing => '正在换…';
+
+  @override
+  String get aiDjPrefsGenerationGroup => '生成';
+
+  @override
+  String get aiDjPrefsStylesGroup => '风格';
+
+  @override
+  String get aiDjPrefsScenesGroup => '场景';
+
+  @override
+  String get aiDjPrefsLanguagesGroup => '语言';
+
+  @override
+  String get aiDjPrefsEraGroup => '年代';
+
+  @override
+  String get aiDjPrefsExtraGroup => '补充要求';
+
+  @override
+  String get aiDjPrefsExtraHint => '最多 120 字，会随提示词一起发送';
+
+  @override
+  String get aiDjPrefsOnlyUnheardTitle => '只推荐没听过的';
+
+  @override
+  String get aiDjPrefsOnlyUnheardSubtitle => '排除听过的曲目（默认开启）';
+
+  @override
+  String get aiDjPrefsExplorationTitle => '探索度';
+
+  @override
+  String get aiDjExplorationSafe => '稳妥';
+
+  @override
+  String get aiDjExplorationBalanced => '均衡';
+
+  @override
+  String get aiDjExplorationSurprise => '惊喜';
+
+  @override
+  String get aiDjStylePop => '流行';
+
+  @override
+  String get aiDjStyleRock => '摇滚';
+
+  @override
+  String get aiDjStyleElectronic => '电子';
+
+  @override
+  String get aiDjStyleFolk => '民谣';
+
+  @override
+  String get aiDjStyleRap => '说唱';
+
+  @override
+  String get aiDjStyleRnb => 'R&B';
+
+  @override
+  String get aiDjStyleJazz => '爵士';
+
+  @override
+  String get aiDjStyleClassical => '古典';
+
+  @override
+  String get aiDjStyleMetal => '金属';
+
+  @override
+  String get aiDjStyleAcg => 'ACG';
+
+  @override
+  String get aiDjStyleInstrumental => '纯音乐';
+
+  @override
+  String get aiDjStyleChineseStyle => '国风';
+
+  @override
+  String get aiDjSceneCommute => '通勤';
+
+  @override
+  String get aiDjSceneFocus => '专注';
+
+  @override
+  String get aiDjSceneRelax => '放松';
+
+  @override
+  String get aiDjSceneWorkout => '运动';
+
+  @override
+  String get aiDjSceneSleep => '睡前';
+
+  @override
+  String get aiDjSceneWeekend => '周末';
+
+  @override
+  String get aiDjLanguageMandarin => '华语';
+
+  @override
+  String get aiDjLanguageCantonese => '粤语';
+
+  @override
+  String get aiDjLanguageEnglish => '英语';
+
+  @override
+  String get aiDjLanguageJapanese => '日语';
+
+  @override
+  String get aiDjLanguageKorean => '韩语';
+
+  @override
+  String get aiDjLanguageInstrumental => '纯音乐';
+
+  @override
+  String get aiDjEraAny => '不限';
+
+  @override
+  String get aiDjEraRecent3 => '近三年';
+
+  @override
+  String get aiDjEra2010s => '2010s';
+
+  @override
+  String get aiDjEra2000s => '2000s';
+
+  @override
+  String get aiDjEraBefore90 => '90 年代及更早';
+
+  @override
+  String get aiDjPrefsSave => '保存偏好';
+
+  @override
+  String get aiDjPrefsSaved => '偏好已保存，下次生成生效';
+
+  @override
+  String get aiDjPrefsReset => '恢复默认';
+
+  @override
+  String get aiDjPrefsResetTitle => '恢复默认偏好？';
+
+  @override
+  String get aiDjPrefsResetBody => '风格、场景、发送范围与渠道都会恢复默认；已保存的推荐不受影响。';
+
+  @override
+  String get aiDjPrefsResetDone => '已恢复默认偏好';
+
+  @override
+  String get aiDjPrefsDataScope => '发送范围';
+
+  @override
+  String get aiDjScopeHint => '关闭的项不会发送；收藏和歌单默认关闭。';
+
+  @override
+  String get aiDjScopeSummary => '汇总统计';
+
+  @override
+  String get aiDjScopeTopArtists => '常听歌手';
+
+  @override
+  String get aiDjScopeTopTracks => '常听歌曲';
+
+  @override
+  String get aiDjScopeTimeAndSource => '时段与来源分布';
+
+  @override
+  String get aiDjScopeRecentEvents => '最近播放明细';
+
+  @override
+  String get aiDjScopeListenedExclusions => '已听歌曲排除清单';
+
+  @override
+  String get aiDjScopeFavorites => '收藏歌曲';
+
+  @override
+  String get aiDjScopePlaylists => '自建歌单';
+
+  @override
+  String get aiDjScopeFavoritesConfirm =>
+      '会读取收藏歌曲的歌名与歌手（最多 100 首），用来避免推荐已经收藏的歌。';
+
+  @override
+  String get aiDjScopePlaylistsConfirm =>
+      '会读取自建歌单的名称与曲目歌名、歌手（最多 10 个歌单），用来避免重复推荐。';
+
+  @override
+  String get aiDjChannelsTitle => '找歌渠道';
+
+  @override
+  String get aiDjChannelsAuto => '自动（音源页前 3 个可搜索渠道）';
+
+  @override
+  String get aiDjChannelsHint => '不选则自动；选了就只在这些渠道找歌，找不到不会换别的渠道。';
+
+  @override
+  String get aiDjChannelsUnavailable => '所选渠道当前都不可用，已改用自动渠道';
+
+  @override
+  String get aiDjChannelsEmpty => '没有可搜索的音源';
+
+  @override
+  String get aiDjSeedsTitle => '多来点这种';
+
+  @override
+  String get aiDjSeedsHint => '下一批生成成功后会清空';
+
+  @override
+  String get aiDjSeedsEmpty => '还没有种子';
+
+  @override
+  String get aiDjClearMemory => '清空 AI 记忆';
+
+  @override
+  String get aiDjClearMemoryTitle => '清空 AI 记忆？';
+
+  @override
+  String get aiDjClearMemoryBody => '会删除长期保留的「不感兴趣」「喜欢」与「多来点这种」，本轮反馈也会清空。';
+
+  @override
+  String get aiDjMemoryCleared => '已清空 AI 记忆';
+
+  @override
+  String get aiDjFeedbackMemory => '长期记忆';
+
+  @override
+  String get aiDjFeedbackThisRound => '本轮';
+
+  @override
+  String aiDjSeedLabel(String label) {
+    return '多来点 · $label';
+  }
+
+  @override
   String get settingsSyncTitle => '跨设备同步';
 
   @override

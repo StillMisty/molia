@@ -6,6 +6,7 @@ import 'package:material_3_expressive/material_3_expressive.dart';
 import 'package:material_ui/material_ui.dart';
 
 import '../domain/models/failure.dart';
+import '../domain/models/ai_dj.dart';
 import '../l10n/app_localizations.dart';
 import '../providers/ai_dj_provider.dart';
 
@@ -76,4 +77,119 @@ String aiDjUpdatedText(AppLocalizations l10n, DateTime time) {
     return l10n.aiDjUpdatedYesterday(hhmm);
   }
   return l10n.aiDjUpdatedDate(time.month, time.day);
+}
+
+/// 历史批次来源标签。
+String aiDjOriginText(AppLocalizations l10n, AiDjOrigin origin) =>
+    switch (origin) {
+      AiDjOrigin.refresh => l10n.aiDjOriginRefresh,
+      AiDjOrigin.autoFeed => l10n.aiDjOriginAutoFeed,
+      AiDjOrigin.manualFeed => l10n.aiDjOriginManualFeed,
+      AiDjOrigin.restored => l10n.aiDjOriginRestored,
+    };
+
+/// 显式生成阶段文案（静默补歌不进入该 UI）。
+String aiDjPhaseText(AppLocalizations l10n, AiDjProgress progress) =>
+    switch (progress.phase) {
+      AiDjPhase.profile => l10n.aiDjPhaseProfile,
+      AiDjPhase.model => l10n.aiDjPhaseModel,
+      AiDjPhase.resolving =>
+        l10n.aiDjPhaseResolving(progress.done, progress.total),
+    };
+
+/// 偏好 token → 文案（未知值原样展示，避免旧数据空白）。
+String aiDjStyleLabel(AppLocalizations l10n, String token) => switch (token) {
+      'pop' => l10n.aiDjStylePop,
+      'rock' => l10n.aiDjStyleRock,
+      'electronic' => l10n.aiDjStyleElectronic,
+      'folk' => l10n.aiDjStyleFolk,
+      'rap' => l10n.aiDjStyleRap,
+      'rnb' => l10n.aiDjStyleRnb,
+      'jazz' => l10n.aiDjStyleJazz,
+      'classical' => l10n.aiDjStyleClassical,
+      'metal' => l10n.aiDjStyleMetal,
+      'acg' => l10n.aiDjStyleAcg,
+      'instrumental' => l10n.aiDjStyleInstrumental,
+      'chineseStyle' => l10n.aiDjStyleChineseStyle,
+      _ => token,
+    };
+
+String aiDjSceneLabel(AppLocalizations l10n, String token) => switch (token) {
+      'commute' => l10n.aiDjSceneCommute,
+      'focus' => l10n.aiDjSceneFocus,
+      'relax' => l10n.aiDjSceneRelax,
+      'workout' => l10n.aiDjSceneWorkout,
+      'sleep' => l10n.aiDjSceneSleep,
+      'weekend' => l10n.aiDjSceneWeekend,
+      _ => token,
+    };
+
+String aiDjLanguageLabel(AppLocalizations l10n, String token) =>
+    switch (token) {
+      'mandarin' => l10n.aiDjLanguageMandarin,
+      'cantonese' => l10n.aiDjLanguageCantonese,
+      'english' => l10n.aiDjLanguageEnglish,
+      'japanese' => l10n.aiDjLanguageJapanese,
+      'korean' => l10n.aiDjLanguageKorean,
+      'instrumental' => l10n.aiDjLanguageInstrumental,
+      _ => token,
+    };
+
+String aiDjEraLabel(AppLocalizations l10n, String token) => switch (token) {
+      kAiEraRecent3 => l10n.aiDjEraRecent3,
+      kAiEra2010s => l10n.aiDjEra2010s,
+      kAiEra2000s => l10n.aiDjEra2000s,
+      kAiEraBefore90 => l10n.aiDjEraBefore90,
+      _ => l10n.aiDjEraAny,
+    };
+
+String aiDjExplorationLabel(AppLocalizations l10n, String token) =>
+    switch (token) {
+      kAiExplorationSafe => l10n.aiDjExplorationSafe,
+      kAiExplorationSurprise => l10n.aiDjExplorationSurprise,
+      _ => l10n.aiDjExplorationBalanced,
+    };
+
+String aiDjSectionLabel(AppLocalizations l10n, AiUpstreamSection section) =>
+    switch (section) {
+      AiUpstreamSection.summary => l10n.aiDjScopeSummary,
+      AiUpstreamSection.topArtists => l10n.aiDjScopeTopArtists,
+      AiUpstreamSection.topTracks => l10n.aiDjScopeTopTracks,
+      AiUpstreamSection.timeAndSource => l10n.aiDjScopeTimeAndSource,
+      AiUpstreamSection.recentEvents => l10n.aiDjScopeRecentEvents,
+      AiUpstreamSection.listenedExclusions => l10n.aiDjScopeListenedExclusions,
+      AiUpstreamSection.favorites => l10n.aiDjScopeFavorites,
+      AiUpstreamSection.playlists => l10n.aiDjScopePlaylists,
+    };
+
+/// 偏好人话摘要（AI 页入口行 + 发送范围摘要共用）。
+String aiDjPreferencesSummary(AppLocalizations l10n, AiPreferences prefs) {
+  final parts = <String>[
+    if (prefs.styles.isNotEmpty)
+      prefs.styles.map((value) => aiDjStyleLabel(l10n, value)).join(' / '),
+    if (prefs.scenes.isNotEmpty)
+      prefs.scenes.map((value) => aiDjSceneLabel(l10n, value)).join(' / '),
+    if (prefs.languages.isNotEmpty)
+      prefs.languages
+          .map((value) => aiDjLanguageLabel(l10n, value))
+          .join(' / '),
+    if (prefs.era != kAiEraAny) aiDjEraLabel(l10n, prefs.era),
+    aiDjExplorationLabel(l10n, prefs.exploration),
+  ];
+  return parts.join(' · ');
+}
+
+/// 渠道名（空选择时说明自动）。
+String aiDjChannelsText(
+  AppLocalizations l10n,
+  AiPreferences pref,
+  Map<String, String> sourceNames,
+) {
+  if (pref.sourceKeys.isEmpty) return l10n.aiDjChannelsAuto;
+  final selected = [
+    for (final key in pref.sourceKeys)
+      if (sourceNames.containsKey(key)) sourceNames[key]!,
+  ];
+  if (selected.isEmpty) return l10n.aiDjChannelsUnavailable;
+  return selected.join(' / ');
 }
