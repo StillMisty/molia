@@ -90,7 +90,7 @@ void main() {
 
     await a.push(envelope('devA', value: 'light'));
     // 三类文件：回执（固定名）+ 快照（名字自带覆盖位置）。
-    expect(server.files.keys, contains('devA.acks.msync'));
+    expect(server.files.keys, contains('devA.p2.acks.msync'));
     expect(
       server.files.keys.where((name) => name.endsWith('.snapshot.msync')),
       hasLength(1),
@@ -143,7 +143,7 @@ void main() {
     await a.start();
     await a.push(envelope('devA'));
     expect(server.mkcolCount, greaterThan(0));
-    expect(server.files, contains('devA.acks.msync'));
+    expect(server.files, contains('devA.p2.acks.msync'));
   });
 
   test('目录准备失败：计为失败对端并带原因（不被判成「没发现对端」）', () async {
@@ -263,7 +263,7 @@ void main() {
         ),
       ],
     ));
-    expect(server.files.keys, contains('devA.3-3.chunk.msync'));
+    expect(server.files.keys, contains('devA.p2.3-3.chunk.msync'));
     expect(
       server.files.keys.where((name) => name.endsWith('.snapshot.msync')),
       isEmpty,
@@ -310,7 +310,7 @@ void main() {
 
     // 日常路径：每次变更只写一个新块（名字自带区间，写一次不再改）。
     await a.push(delta([entry(1, 'dark')]));
-    expect(server.files.keys, contains('devA.1-1.chunk.msync'));
+    expect(server.files.keys, contains('devA.p2.1-1.chunk.msync'));
 
     // 首次拉取（游标 -1）：拿到窗口里的条目（解密 + 窗口游标正确）。
     final first = await b.pull();
@@ -327,7 +327,7 @@ void main() {
 
     // 窗口推进：新块（1-2）只带新条目，旧块不再重写。
     await a.push(delta([entry(1, 'dark'), entry(2, 'light')]));
-    expect(server.files.keys, contains('devA.1-2.chunk.msync'));
+    expect(server.files.keys, contains('devA.p2.1-2.chunk.msync'));
     final second = await b.pull(const SyncPullRequest(cursors: {'devA': 1}));
     expect(second.envelopes, hasLength(1));
     expect(second.envelopes.single.journal, hasLength(2));
@@ -378,12 +378,12 @@ void main() {
   });
 
   test('幽灵文件不参与合并；载荷身份不符的文件跳过', () async {
-    // 非本协议命名的残留（幽灵设备遗留）、旧命名（只清理不读）
+    // 非本协议命名的残留（幽灵设备遗留）、旧命名（不识别）
     // 与身份不符的块文件。
     server.files['ghost.msync'] = codec.encrypt(envelope('ghost'), passphrase);
     server.files['fake.journal.msync'] =
         codec.encrypt(envelope('someone-else'), passphrase);
-    server.files['fake.1-1.chunk.msync'] =
+    server.files['fake.p2.1-1.chunk.msync'] =
         codec.encrypt(envelope('someone-else'), passphrase);
     final a = transport('devA');
     final b = transport('devB');
@@ -402,7 +402,7 @@ void main() {
     expect(pulled.failedPeers, 0);
   });
 
-  test('显式清理远端文件：删除该设备的日志 / 快照 / 其它命名残留', () async {
+  test('显式清理远端文件：只删 `.p2` 命名空间，旧命名残留不动', () async {
     final a = transport('devA');
     addTearDown(() => a.stop());
     await a.start();
@@ -414,12 +414,14 @@ void main() {
 
     expect(await a.deleteRemote('devA'), isTrue);
     expect(
-      server.files.keys.where((name) => name.startsWith('devA.')),
+      server.files.keys.where((name) => name.startsWith('devA.p2.')),
       isEmpty,
-      reason: '回执 / 快照 / 旧命名残留都要清掉',
+      reason: '回执 / 快照都要清掉',
     );
-    expect(server.files.keys, isNot(contains('devA.msync')));
-    // 没有文件可删时不算失败。
+    // 旧命名空间不识别，也就不会被误删。
+    expect(server.files.keys, contains('devA.journal.msync'));
+    expect(server.files.keys, contains('devA.msync'));
+    // 没有可删的本协议文件时不算失败。
     expect(await a.deleteRemote('devA'), isFalse);
   });
 
@@ -428,7 +430,7 @@ void main() {
     final a = transport('devA');
     addTearDown(() => a.stop());
     await a.start();
-    server.files['ghost.snapshot.msync'] =
+    server.files['ghost.p2.1.snapshot.msync'] =
         codec.encrypt(envelope('ghost'), passphrase);
 
     await expectLater(
@@ -437,10 +439,12 @@ void main() {
     );
   });
 
-  test('v3 之前的旧命名文件：只清理不读，也不当成对端', () async {
+  test('旧命名空间文件：不读、不删、也不当成对端', () async {
     server.files['devA.journal.msync'] =
         codec.encrypt(envelope('devA'), passphrase);
     server.files['devA.snapshot.msync'] =
+        codec.encrypt(envelope('devA'), passphrase);
+    server.files['devA.acks.msync'] =
         codec.encrypt(envelope('devA'), passphrase);
     final b = transport('devB');
     addTearDown(() => b.stop());
@@ -450,6 +454,10 @@ void main() {
     expect(pulled.envelopes, isEmpty, reason: '旧命名不参与合并');
     expect(pulled.peersSeen, 0);
     expect(pulled.failedPeers, 0);
+    // 旧文件是幽灵文件：列表与清理都不碰它们。
+    expect(server.files.keys, contains('devA.journal.msync'));
+    expect(server.files.keys, contains('devA.snapshot.msync'));
+    expect(server.files.keys, contains('devA.acks.msync'));
   });
 
   test('分块裁剪：baseSeq 之后的旧块被删除，之后的块保留', () async {
@@ -477,13 +485,13 @@ void main() {
     await a.push(delta(1));
     await a.push(delta(2));
     await a.push(delta(3));
-    expect(server.files.keys, contains('devA.1-1.chunk.msync'));
+    expect(server.files.keys, contains('devA.p2.1-1.chunk.msync'));
 
     // 拉取触发裁剪：baseSeq = 2 → 块 1-1 与 2-2 删掉，3-3 保留。
     await a.pull();
-    expect(server.files.keys, isNot(contains('devA.1-1.chunk.msync')));
-    expect(server.files.keys, isNot(contains('devA.2-2.chunk.msync')));
-    expect(server.files.keys, contains('devA.3-3.chunk.msync'));
+    expect(server.files.keys, isNot(contains('devA.p2.1-1.chunk.msync')));
+    expect(server.files.keys, isNot(contains('devA.p2.2-2.chunk.msync')));
+    expect(server.files.keys, contains('devA.p2.3-3.chunk.msync'));
   });
 
   test('快照只留最新一份（旧覆盖位置的快照被裁剪）', () async {
@@ -494,8 +502,8 @@ void main() {
     await a.push(snapshotEnvelope('devA', coverage: 5));
 
     await a.pull();
-    expect(server.files.keys, contains('devA.5.snapshot.msync'));
-    expect(server.files.keys, isNot(contains('devA.3.snapshot.msync')));
+    expect(server.files.keys, contains('devA.p2.5.snapshot.msync'));
+    expect(server.files.keys, isNot(contains('devA.p2.3.snapshot.msync')));
   });
 
   test('服务端不返回版本：照常拉取（不跳过）', () async {

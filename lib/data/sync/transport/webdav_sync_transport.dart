@@ -25,13 +25,16 @@ class WebDavHttpException implements Exception {
 
 /// WebDAV 传输：用户自备 WebDAV，每台设备写自己的三类文件、读其余设备的。
 ///
-/// 文件布局（都在 `<baseUrl>/<remoteDir>/` 下，v3）：
-/// - `<deviceId>.acks.msync`：**回执**（本机游标 / ack / 日志头部 / 基线下标），
-///   固定名、可变、几百字节，每次推送顺手重写；对端按 `etag` 门控读取；
-/// - `<deviceId>.<start>-<end>.chunk.msync`：**增量块**，写一次不再改
+/// 文件布局（都在 `<baseUrl>/<remoteDir>/` 下，`.p2` 命名空间）：
+/// - `<deviceId>.p2.acks.msync`：**回执**（本机游标 / ack / 日志头部 /
+///   基线下标），固定名、可变、几百字节，每次推送顺手重写；对端按 `etag`
+///   门控读取；
+/// - `<deviceId>.p2.<start>-<end>.chunk.msync`：**增量块**，写一次不再改
 ///   （名字自带 seq 区间）；
-/// - `<deviceId>.<coverage>.snapshot.msync`：**全量快照**，按需发布（首次引导 /
-///   日志超硬上限），写一次不再改。
+/// - `<deviceId>.p2.<coverage>.snapshot.msync`：**全量快照**，按需发布（首次
+///   引导 / 日志超硬上限），写一次不再改。
+///
+/// `.p2` 是硬断代后的命名空间：旧命名空间的文件按幽灵文件忽略，不读也不删。
 ///
 /// 为什么分块：单文件写「整个窗口」时，对端长期离线会让窗口涨到硬上限，
 /// 之后**每改一条记录都要重传整个窗口**（MB 量级）；分块后每次变更只写一个
@@ -64,18 +67,14 @@ class WebDavSyncTransport implements SyncTransport {
         _ownsDio = dio == null,
         _requestTimeout = requestTimeout;
 
-  /// 回执文件后缀（固定名，可变）：`<deviceId>.acks.msync`。
+  /// 回执文件后缀（固定名，可变）：`<deviceId>.p2.acks.msync`。
   static const String acksSuffix = PeerJournalNames.acksSuffix;
 
-  /// 增量块后缀（不可变）：`<deviceId>.<start>-<end>.chunk.msync`。
+  /// 增量块后缀（不可变）：`<deviceId>.p2.<start>-<end>.chunk.msync`。
   static const String chunkSuffix = PeerJournalNames.chunkSuffix;
 
-  /// 全量快照后缀（不可变）：`<deviceId>.<coverage>.snapshot.msync`。
+  /// 全量快照后缀（不可变）：`<deviceId>.p2.<coverage>.snapshot.msync`。
   static const String snapshotSuffix = PeerJournalNames.snapshotSuffix;
-
-  /// v3 之前的增量文件命名（只清理不读）。
-  static const String legacyJournalSuffix =
-      PeerJournalNames.legacyJournalSuffix;
 
   static const int maxSnapshotBytes = 32 * 1024 * 1024;
 
@@ -389,7 +388,6 @@ class WebDavSyncTransport implements SyncTransport {
       if (parsed == null) continue;
       final device = parsed.deviceId;
       if (device.isEmpty || device == deviceId) continue;
-      if (parsed.kind == PeerJournalFileKind.legacy) continue;
       final entry = grouped.putIfAbsent(device, _DeviceFiles.new);
       switch (parsed.kind) {
         case PeerJournalFileKind.acks:
@@ -409,8 +407,6 @@ class WebDavSyncTransport implements SyncTransport {
             entry.snapshot =
                 _SnapshotFile(file: file, coverage: parsed.coverage);
           }
-        case PeerJournalFileKind.legacy:
-          break;
       }
     }
     for (final entry in grouped.values) {
@@ -421,8 +417,9 @@ class WebDavSyncTransport implements SyncTransport {
 
   /// 裁剪自己的旧文件（best effort；DELETE 失败只记日志，不影响本轮结果）：
   /// - 块：`endSeq <= baseSeq`（baseSeq 只在所有对端 ack 之后前移）；
-  /// - 快照：只留覆盖位置最大的那一份；
-  /// - v3 之前的旧命名：只清理不读。
+  /// - 快照：只留覆盖位置最大的那一份。
+  ///
+  /// 只处理 `.p2` 命名空间：旧命名的残留解析为 null，不在裁剪范围内。
   ///
   /// 同名块在日志重置后可能被覆盖（seq 从 1 重新开始）：对端在重置后走
   /// 「游标超前头部 → bootstrap 快照」，不会读到被覆盖的块。
@@ -445,8 +442,6 @@ class WebDavSyncTransport implements SyncTransport {
           snapshots.add(
             _SnapshotFile(file: file, coverage: parsed.coverage),
           );
-        case PeerJournalFileKind.legacy:
-          stale.add(file.name);
       }
     }
     if (snapshots.length > 1) {
@@ -535,10 +530,11 @@ class WebDavSyncTransport implements SyncTransport {
 
   /// 显式清理某台对端的远端文件（用户动作；**不做自动删除**）。
   ///
-  /// 删除该设备的日志 / 快照文件（含其它命名的残留）。服务端拒绝或网络故障
-  /// 会抛 [WebDavHttpException] / 原异常：由引擎转成 `delete_remote_failed`
-  /// 失败原因（UI 不能把 403 / 500 显示成「没有可清理的文件」）。
-  /// 404（本来就没有这份文件）不算失败。
+  /// 删除该设备在 `.p2` 命名空间下的回执 / 日志 / 快照文件。旧命名空间的
+  /// 残留不在此列：它们不被识别，也不该被本机误删。
+  /// 服务端拒绝或网络故障会抛 [WebDavHttpException] / 原异常：由引擎转成
+  /// `delete_remote_failed` 失败原因（UI 不能把 403 / 500 显示成「没有可清理
+  /// 的文件」）。404（本来就没有这份文件）不算失败。
   @override
   Future<bool> deleteRemote(String deviceId) async {
     if (!_running) return false;
@@ -551,11 +547,6 @@ class WebDavSyncTransport implements SyncTransport {
     final targets = <String>[
       for (final file in files)
         if (PeerJournalNames.parse(file.name)?.deviceId == deviceId) file.name,
-      // 更早版本的残留命名（无区间 / 无覆盖位置）。
-      '$deviceId.msync',
-      if ('$deviceId${PeerJournalNames.legacyJournalSuffix}' !=
-          '$deviceId.msync')
-        '$deviceId${PeerJournalNames.legacyJournalSuffix}',
     ];
     var removed = false;
     String? failure;

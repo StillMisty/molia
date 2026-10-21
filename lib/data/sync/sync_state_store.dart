@@ -1,6 +1,6 @@
 /// 同步运行状态持久化：设备身份 / 传输开关 / 传输配置 / 变更登记 / 日志。
 ///
-/// - 非敏感状态走 SharedPreferences 单 JSON 键（`sync_state_v1`）；
+/// - 非敏感状态走 SharedPreferences 单 JSON 键（`sync_state_v2`）；
 /// - 敏感项（同步口令、WebDAV 密码）走 [SettingsSecretStore]（生产 =
 ///   flutter_secure_storage），口令即信任根（见 ADR-0003）；
 /// - 变更登记（设置键哈希、脚本墓碑、激活脚本指针）是「变化检测」的基线：
@@ -184,16 +184,19 @@ class SyncStateStore {
         _clock = clock ?? (() => DateTime.now().millisecondsSinceEpoch),
         _deviceId = deviceId ?? '';
 
-  static const String stateKey = 'sync_state_v1';
+  /// 状态键的断代命名空间（见 ADR-0003 的硬断代）。
+  ///
+  /// 旧键不读、不删、不迁移：新键缺失即全新安装行为，旧数据当从未存在。
+  static const String stateKey = 'sync_state_v2';
 
   /// 设备身份的独立持久化键（prefs + 安全存储同名）。
   ///
-  /// 身份不能只放在 `sync_state_v1` 里：那份 JSON 体积大、写入频繁，损坏时
+  /// 身份不能只放在 `sync_state_v2` 里：那份 JSON 体积大、写入频繁，损坏时
   /// 若连身份一起丢，对端就会把同一台设备当成新设备（换 IP / 重启后尤其明显）。
-  static const String deviceIdKey = 'sync_device_id_v1';
+  static const String deviceIdKey = 'sync_device_id_v2';
 
-  static const String passphraseSecretKey = 'sync_passphrase_v1';
-  static const String webdavPasswordSecretKey = 'sync_webdav_password_v1';
+  static const String passphraseSecretKey = 'sync_passphrase_v2';
+  static const String webdavPasswordSecretKey = 'sync_webdav_password_v2';
 
   /// 日志保留条数（设置页只展示最近几条）。
   static const int logLimit = 20;
@@ -244,7 +247,7 @@ class SyncStateStore {
   SyncStamp? _activeScriptStamp;
   SyncStamp? _sessionStamp;
 
-  /// 版本戳发号器基线（`sync_state_v1` 的 `stampSeq`）：重启后不倒退。
+  /// 版本戳发号器基线（`sync_state_v2` 的 `stampSeq`）：重启后不倒退。
   SyncVersion _stampBaseline = SyncVersion.zero;
 
   /// 全库最大戳种子是否已补入（首帧后由 `LibraryRepository.maxVersion` 完成）。
@@ -334,7 +337,7 @@ class SyncStateStore {
   /// 传输最近成功发布的全量快照覆盖位置（-1 = 尚未发布）。
   ///
   /// 判据（谁在什么条件下读它、失败时是否前移）在发布台账里；这里只是
-  /// `sync_state_v1` 的键值与形状。
+  /// `sync_state_v2` 的键值与形状。
   int snapshotPushSeq(String kind) => _snapshotPushSeq[kind] ?? -1;
 
   Future<void> setSnapshotPushSeq(String kind, int seq) async {
@@ -355,6 +358,20 @@ class SyncStateStore {
 
   bool _initialized = false;
 
+  /// 本次是否首次使用新命名空间（`sync_state_v2` 不存在）。
+  ///
+  /// 首次初始化 = 全新安装：引擎据此清空可再生的派生状态（journal / 已知
+  /// 版本登记）。旧键不读不迁移，所以不存在需要保留的旧协议状态。
+  bool _freshInstall = false;
+
+  bool get freshInstall => _freshInstall;
+
+  /// 标记「新命名空间的派生状态已清理」。
+  ///
+  /// 清理是一次性的：同一进程内多个引擎实例 / 重复 init 不能反复清空派生
+  /// 状态（否则「登记跨重启保持」会被自己破坏）。
+  void markFreshHandled() => _freshInstall = false;
+
   /// 设备 id 的 prefs 键已写、安全存储备份还没写（首装 / 身份迁移）。
   ///
   /// 首帧前只写小体积 prefs（设备 id 立即可用）；Keystore 备份放到首帧后，
@@ -363,8 +380,10 @@ class SyncStateStore {
 
   /// 备份尚未完成的持久标记：进程在首帧后备份前被杀时，下次启动继续补写，
   /// 避免「prefs 有 id 就以为备份已完成」而永久丢掉安全存储副本。
+  ///
+  /// 同样按命名空间断代：旧标记不读。
   static const String _deviceIdBackupPendingKey =
-      'sync_device_id_backup_pending';
+      'sync_device_id_backup_pending_v2';
 
   /// 写入方等待「全库最大戳」种子完成（首帧后的 DB 查询）。
   Future<void> get stampSeedReady => _stampSeedReady.future;
@@ -385,6 +404,7 @@ class SyncStateStore {
     if (_initialized) return;
     _prefs = _preferences ?? await SharedPreferences.getInstance();
     final raw = _prefs!.getString(stateKey);
+    _freshInstall = raw == null || raw.isEmpty;
     var stateCorrupt = false;
     if (raw != null && raw.isNotEmpty) {
       try {
@@ -809,8 +829,6 @@ class SyncStateStore {
         'v': 2,
         'deviceId': _deviceId,
         'deviceName': _deviceName,
-        // 派生值照写：旧版本降级读取时按总开关语义理解仍然正确（有传输 = 开）。
-        'enabled': enabled,
         'categories': {
           for (final entry in _categories.entries) entry.key.name: entry.value,
         },
@@ -821,8 +839,8 @@ class SyncStateStore {
           'manualPeers': [for (final peer in _manualPeers) peer.toJson()],
         if (_notifiedPeers.isNotEmpty) 'notifiedPeers': _notifiedPeers.toList(),
         if (_lanHttpPort > 0) 'lanHttpPort': _lanHttpPort,
-        // 设备身份同时写在独立键 deviceIdKey 里；这里保留一份是为了让旧版本
-        // 与备份文件自描述（读取时以独立键 / 状态里的非空值为准）。
+        // 设备身份同时写在独立键 deviceIdKey 里；这里保留一份让状态 JSON
+        // 自描述（读取时以独立键 / 状态里的非空值为准）。
         'stampSeq': _stampBaseline.toJson(),
         'settings': {
           for (final entry in _settingStamps.entries)
@@ -867,10 +885,6 @@ class SyncStateStore {
         ..clear()
         ..addAll(transports.whereType<String>());
     }
-    // 迁移旧的总开关键：旧版 `enabled=false` 的用户从未开启过同步，其
-    // transports 默认值（{lan}）不能当作启用信号——清空以保持「升级后同步
-    // 仍关闭」；`enabled=true` 保留原 transports（派生值自然为真）。
-    if (json['enabled'] == false) _enabledTransports.clear();
     _webdav = WebDavConfig.fromJson(json['webdav']);
     _cellularPolicy =
         SyncCellularPolicy.parse(json['cellularPolicy'] as String?);
@@ -891,14 +905,7 @@ class SyncStateStore {
 
     final stampSeq = json['stampSeq'];
     if (stampSeq is Map) {
-      final baseline = SyncVersion.fromJson(stampSeq) ??
-          // 兼容早期 `{'p','c'}` 形状（当前写 SyncVersion.toJson）。
-          (stampSeq['p'] is num
-              ? SyncVersion(
-                  physical: (stampSeq['p'] as num).toInt(),
-                  counter: (stampSeq['c'] as num?)?.toInt() ?? 0,
-                )
-              : null);
+      final baseline = SyncVersion.fromJson(stampSeq);
       if (baseline != null) _stampBaseline = baseline;
     }
 

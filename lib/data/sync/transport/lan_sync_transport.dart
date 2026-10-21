@@ -21,12 +21,14 @@ import '../sync_crypto.dart';
 ///   reply, snapshotId, journalHead}`；收到非回复探测时向**来源地址**单播应答
 ///   （携带自己的 HTTP 端口、探测端口、可路由地址候选、内容指纹与日志头部），
 ///   并把发送方登记为对端——主动探测方也在线，没必要等它先应答；
-/// - HTTP `GET  /molia-sync/v1/journal?since=<游标>`：返回该游标之后的**增量
+/// - HTTP `GET  /molia-sync/v2/journal?since=<游标>`：返回该游标之后的**增量
 ///   窗口**；游标落后于窗口起点（条目已被裁剪）时返回全量快照（bootstrap）；
-/// - HTTP `POST /molia-sync/v1/journal`：接收对端的增量窗口；
-/// - HTTP `GET  /molia-sync/v1/snapshot`：返回本机全量快照（anti-entropy
+/// - HTTP `POST /molia-sync/v2/journal`：接收对端的增量窗口；
+/// - HTTP `GET  /molia-sync/v2/snapshot`：返回本机全量快照（anti-entropy
 ///   兜底；未注入增量提供者时增量端点也回它）；
-/// - HTTP `POST /molia-sync/v1/snapshot`：接收对端全量快照。
+/// - HTTP `POST /molia-sync/v2/snapshot`：接收对端全量快照。
+///
+/// 路径是硬断代的一部分：旧版 `/molia-sync/v1/*` 一律 404。
 ///
 /// 端口可降级（Windows 宿主把大段端口标记为系统保留，errno 10013；见
 /// `docs/pitfalls.md`）：UDP 绑定失败改绑系统分配端口（对端按探测包里自报的
@@ -89,8 +91,8 @@ class LanSyncTransport implements SyncTransport {
         _requestTimeout = requestTimeout;
 
   static const int defaultUdpPort = ManualPeer.defaultProbePort;
-  static const String snapshotPath = '/molia-sync/v1/snapshot';
-  static const String journalPath = '/molia-sync/v1/journal';
+  static const String snapshotPath = '/molia-sync/v2/snapshot';
+  static const String journalPath = '/molia-sync/v2/journal';
 
   /// IPv6 组播探测地址（IPv4 `255.255.255.255` 广播的对应物；ff02::/16 是
   /// 链路本地范围，接口 zone 由内核按发送接口补全）。

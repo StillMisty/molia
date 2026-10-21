@@ -1,14 +1,18 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:molia/data/molia_database.dart';
 import 'package:molia/data/settings/settings_keys.dart';
 import 'package:molia/data/settings/settings_registry.dart';
 import 'package:molia/data/sync/adapters/prefs_sync_adapter.dart';
 import 'package:molia/data/sync/sync_adapter.dart';
 import 'package:molia/data/sync/sync_control_plane.dart';
 import 'package:molia/data/sync/sync_engine.dart';
+import 'package:molia/data/sync/sync_journal.dart';
+import 'package:molia/data/sync/sync_known_store.dart';
 import 'package:molia/data/sync/sync_state_store.dart';
 import 'package:molia/domain/models/device_sync.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import 'support/memory_database.dart';
 import 'support/sync_test_support.dart';
 
 /// 引擎测试：一轮同步的拉取 → 合并 → 应用 → 推送 → **报告与日志**。
@@ -315,6 +319,113 @@ void main() {
     expect(report.error?.code, SyncIssueCode.noPassphrase);
     expect(state.log.first.outcome, SyncOutcome.failed);
     expect(prefs.getString('theme_mode'), isNull);
+  });
+
+  test('首次使用新状态 key：engine.init 清空派生状态，不动用户数据与墓碑', () async {
+    // 清掉 setUp 写下的新 key / 身份：模拟首次安装（旧 key 不参与判断）。
+    await prefs.remove(SyncStateStore.stateKey);
+    await prefs.remove(SyncStateStore.deviceIdKey);
+    await prefs.remove('sync_device_id_backup_pending_v2');
+    final db = openMemoryDatabase();
+    addTearDown(db.close);
+    final journal = SyncJournalRepository(
+      databaseProvider: () => db,
+      clock: () => 1000,
+    );
+    final known = SyncKnownRepository(databaseProvider: () => db);
+
+    // 上一代命名空间留下的派生状态（旧 key 不读 → 这里按全新安装重建）。
+    await journal.append(db, [
+      (
+        category: SyncCategory.settings,
+        record: SyncRecord(
+          key: 'theme_mode',
+          version: const SyncVersion(physical: 1, deviceId: 'devA'),
+          data: const {'v': 'dark'},
+        ),
+      ),
+    ]);
+    await journal.markSnapshotBuilt(1);
+    await known.putKnownVersions({
+      (category: SyncCategory.settings, key: 'theme_mode'):
+          const SyncVersion(physical: 1, deviceId: 'devA'),
+    });
+    // 真实用户数据与墓碑不是派生状态：清理不能碰。
+    await db.into(db.playHistory).insert(
+          PlayHistoryCompanion.insert(
+            sourceKey: 'kuwo',
+            songId: 's1',
+            title: 'Song',
+            playedAt: 1,
+          ),
+        );
+    await db.into(db.syncTombstones).insert(
+          SyncTombstonesCompanion.insert(
+            category: 'settings',
+            key: 'theme_mode',
+            versionPhysical: 1,
+          ),
+        );
+
+    final freshState = SyncStateStore(
+      preferences: prefs,
+      secrets: MemorySyncSecretStore(),
+      clock: () => 7000,
+    );
+    final freshEngine = SyncEngine(
+      state: freshState,
+      stamps: freshState.stampIssuer,
+      adapters: const [],
+      transports: const {},
+      journal: journal,
+      known: known,
+    );
+    addTearDown(freshEngine.dispose);
+    await freshState.init();
+    expect(freshState.freshInstall, isTrue);
+    await freshEngine.init();
+
+    expect(await journal.headSeq(), 0);
+    expect(await journal.snapshotSeq(), -1);
+    expect(await known.knownVersions(), isEmpty);
+    expect(await db.select(db.playHistory).get(), hasLength(1));
+    expect(await db.select(db.syncTombstones).get(), hasLength(1));
+
+    // 新 key 已存在：再次初始化（重启）不清派生状态。
+    await journal.append(db, [
+      (
+        category: SyncCategory.settings,
+        record: SyncRecord(
+          key: 'theme_mode',
+          version: const SyncVersion(physical: 2, deviceId: 'devA'),
+          data: const {'v': 'light'},
+        ),
+      ),
+    ]);
+    await known.putKnownVersions({
+      (category: SyncCategory.settings, key: 'theme_mode'):
+          const SyncVersion(physical: 2, deviceId: 'devA'),
+    });
+    final restartedState = SyncStateStore(
+      preferences: prefs,
+      secrets: MemorySyncSecretStore(),
+      clock: () => 7000,
+    );
+    final restartedEngine = SyncEngine(
+      state: restartedState,
+      stamps: restartedState.stampIssuer,
+      adapters: const [],
+      transports: const {},
+      journal: journal,
+      known: known,
+    );
+    addTearDown(restartedEngine.dispose);
+    await restartedState.init();
+    expect(restartedState.freshInstall, isFalse);
+    await restartedEngine.init();
+
+    expect(await journal.headSeq(), 1);
+    expect(await known.knownVersions(), hasLength(1));
   });
 
   test('装配不启动传输：首帧后的 startTransports 才起（权限门不挡首帧）', () async {

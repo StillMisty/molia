@@ -15,4 +15,9 @@ abstract interface class SyncKnownStore {
 
   /// 写入/更新登记（只传变化项；实现按主键 upsert）。
   Future<void> putKnownVersions(Map<SyncKnownKey, SyncVersion> versions);
+
+  /// 清空全部登记（派生数据：下次合并会重新交付本地视图的胜者）。
+  ///
+  /// 首次使用新命名空间时调用；用户数据表不受影响。
+  Future<void> reset();
 }

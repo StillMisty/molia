@@ -48,7 +48,7 @@ void main() {
 
     // 首轮：A 发布快照（bootstrap 用）+ 回执；此时还没有增量块。
     await a.engine.syncNow();
-    expect(server.files.keys, contains('devA.acks.msync'));
+    expect(server.files.keys, contains('devA.p2.acks.msync'));
     expect(_names(server, 'devA', '.snapshot.msync'), hasLength(1));
     expect(_names(server, 'devA', '.chunk.msync'), isEmpty);
 
@@ -79,12 +79,13 @@ void main() {
     expect(peer.ackedSeq, greaterThan(0), reason: 'B 的 ack 经回执文件回到 A');
     expect(await a.journal.headSeq(), 3);
 
-    // 命名只有 v3 形态（没有旧命名残留）。
+    // 命名只有 `.p2` 形态（没有旧命名残留）。
     for (final name in server.files.keys) {
       expect(
-        name.endsWith('.acks.msync') ||
-            name.endsWith('.chunk.msync') ||
-            name.endsWith('.snapshot.msync'),
+        name.contains('.p2.') &&
+            (name.endsWith('.acks.msync') ||
+                name.endsWith('.chunk.msync') ||
+                name.endsWith('.snapshot.msync')),
         isTrue,
         reason: '意外文件：$name',
       );

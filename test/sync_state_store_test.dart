@@ -61,12 +61,12 @@ void main() {
     expect(fromSecret.deviceId, id);
   });
 
-  test('旧状态迁移：身份从 sync_state_v1 回填到独立键与安全存储', () async {
+  test('身份从状态 JSON 回填到独立键与安全存储', () async {
     final prefs = await SharedPreferences.getInstance();
     final secrets = MemorySyncSecretStore();
     await prefs.setString(
       SyncStateStore.stateKey,
-      '{"v":2,"deviceId":"devA","enabled":true,"transports":["lan"]}',
+      '{"v":2,"deviceId":"devA","transports":[]}',
     );
     final store = SyncStateStore(
       preferences: prefs,
@@ -76,9 +76,50 @@ void main() {
     await store.init();
     await store.backupDeviceId();
 
+    expect(store.freshInstall, isFalse, reason: '新 key 已存在 = 不是全新安装');
     expect(store.deviceId, 'devA');
     expect(prefs.getString(SyncStateStore.deviceIdKey), 'devA');
     expect(secrets.values[SyncStateStore.deviceIdKey], 'devA');
+  });
+
+  test('旧命名空间完全不读：旧 key 存在也按全新安装处理', () async {
+    final prefs = await SharedPreferences.getInstance();
+    final secrets = MemorySyncSecretStore();
+    await prefs.setString(
+      'sync_state_v1',
+      '{"v":2,"deviceId":"devA","enabled":true,"transports":["lan"]}',
+    );
+    await prefs.setString('sync_device_id_v1', 'devA');
+    await secrets.write('sync_passphrase_v1', 'OLD-PASS');
+    await secrets.write('sync_webdav_password_v1', 'old-webdav');
+
+    final store = SyncStateStore(
+      preferences: prefs,
+      secrets: secrets,
+      clock: () => 1000,
+    );
+    await store.init();
+
+    expect(store.freshInstall, isTrue);
+    expect(store.deviceId, isNotEmpty);
+    expect(store.deviceId, isNot('devA'), reason: '旧身份不读，生成新身份');
+    expect(store.enabled, isFalse, reason: '同步关闭 = 全新安装行为');
+    expect(await store.readPassphrase(), isNull, reason: '旧口令不读');
+    expect(await store.readWebdavPassword(), isNull, reason: '旧密码不读');
+    expect(prefs.getString(SyncStateStore.stateKey), isNotNull);
+    // 旧 key 不删、不改、不迁移。
+    expect(prefs.getString('sync_state_v1'), isNotNull);
+    expect(prefs.getString('sync_device_id_v1'), 'devA');
+    expect(secrets.values['sync_passphrase_v1'], 'OLD-PASS');
+    expect(secrets.values['sync_webdav_password_v1'], 'old-webdav');
+  });
+
+  test('新 key 已存在：不是全新安装', () async {
+    final first = await freshStore();
+    expect(first.freshInstall, isTrue);
+
+    final reloaded = await freshStore();
+    expect(reloaded.freshInstall, isFalse);
   });
 
   test('所有身份备份都不存在时才生成新 id，之后跨实例保持', () async {
@@ -142,30 +183,6 @@ void main() {
     expect(store.enabled, isTrue);
     await store.setTransportEnabled('lan', false);
     expect(store.enabled, isFalse);
-  });
-
-  test('旧状态迁移：enabled=false 的老用户升级后同步保持关闭', () async {
-    // 旧版写入：总开关关着，但 transports 默认已含 lan。
-    await SharedPreferences.getInstance().then((prefs) => prefs.setString(
-          SyncStateStore.stateKey,
-          '{"v":2,"deviceId":"devA","enabled":false,"transports":["lan"]}',
-        ));
-
-    final store = await freshStore();
-    expect(store.enabledTransports, isEmpty,
-        reason: '总开关关过：transport 里的默认值不是启用信号');
-    expect(store.enabled, isFalse);
-  });
-
-  test('旧状态迁移：enabled=true 的原有开启用户保持开启', () async {
-    await SharedPreferences.getInstance().then((prefs) => prefs.setString(
-          SyncStateStore.stateKey,
-          '{"v":2,"deviceId":"devA","enabled":true,"transports":["lan"]}',
-        ));
-
-    final store = await freshStore();
-    expect(store.enabledTransports, contains('lan'));
-    expect(store.enabled, isTrue);
   });
 
   test('地址收敛：导入配对码时同一设备的旧地址退役、命名迁移、双栈保留', () async {
@@ -324,12 +341,12 @@ void main() {
 
   test('读取失败降级为「未设置」：返回 null，不抛异常', () async {
     // 单测环境没有 libsecret 平台实现：修复前这里会抛 MissingPluginException。
-    expect(await store.read('sync_passphrase_v1'), isNull);
+    expect(await store.read('sync_passphrase_v2'), isNull);
   });
 
   test('写入仍然抛出：用户主动操作要知道没存进去', () async {
     await expectLater(
-      store.write('sync_passphrase_v1', 'secret'),
+      store.write('sync_passphrase_v2', 'secret'),
       throwsA(isA<Exception>()),
     );
   });

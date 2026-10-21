@@ -304,4 +304,11 @@ class FakeJournalStore implements SyncJournalStore {
     int? nowMs,
   }) async =>
       base;
+
+  @override
+  Future<void> reset() async {
+    head = 0;
+    base = 0;
+    snapshot = -1;
+  }
 }

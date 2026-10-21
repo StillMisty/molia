@@ -239,6 +239,15 @@ class SyncEngine extends ChangeNotifier implements SyncSchedulerHost {
   Future<void> init() async {
     if (_initialized) return;
     await _state.init();
+    if (_state.freshInstall) {
+      // 首次使用新命名空间 = 全新安装：日志与已知版本登记都是可再生的派生
+      // 状态，旧命名空间留下的行无法解释（seq / 版本语义已断代），必须清空。
+      // 用户数据表与墓碑不在此列。
+      await _journal?.reset();
+      await _known.reset();
+      _knownVersions = null;
+      _state.markFreshHandled();
+    }
     _initialized = true;
     notifyListeners();
   }

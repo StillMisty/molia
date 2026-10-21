@@ -264,7 +264,7 @@ void main() {
       const range = JournalSeqRange(startSeq: 7, endSeq: 9);
       final name = PeerJournalNames.chunk('devA', range);
 
-      expect(name, 'devA.7-9.chunk.msync');
+      expect(name, 'devA.p2.7-9.chunk.msync');
       final parsed = PeerJournalNames.parse(name);
       expect(parsed, isNotNull);
       expect(parsed!.deviceId, 'devA');
@@ -272,26 +272,31 @@ void main() {
       expect(parsed.range, range);
     });
 
-    test('非法区间 / 幽灵命名不参与协议', () {
-      expect(PeerJournalNames.parse('devA.9-7.chunk.msync'), isNull);
-      expect(PeerJournalNames.parse('devA.1-x.chunk.msync'), isNull);
+    test('非法区间 / 幽灵命名 / 旧命名空间不参与协议', () {
+      expect(PeerJournalNames.parse('devA.p2.9-7.chunk.msync'), isNull);
+      expect(PeerJournalNames.parse('devA.p2.1-x.chunk.msync'), isNull);
       expect(PeerJournalNames.parse('ghost.msync'), isNull);
-      expect(PeerJournalNames.parse('devA.1-2.journal.msync'), isNull);
+      expect(PeerJournalNames.parse('devA.journal.msync'), isNull);
+      // 旧命名的块 / 快照 / 回执都是幽灵文件。
+      expect(PeerJournalNames.parse('devA.7-9.chunk.msync'), isNull);
+      expect(PeerJournalNames.parse('devA.snapshot.msync'), isNull);
+      expect(PeerJournalNames.parse('devA.acks.msync'), isNull);
     });
 
-    test('回执 / 快照命名仍按原规则解析', () {
+    test('回执 / 快照命名按 `.p2` 命名空间解析', () {
+      expect(PeerJournalNames.acks('devA'), 'devA.p2.acks.msync');
       final acks = PeerJournalNames.parse(PeerJournalNames.acks('devA'));
       expect(acks?.kind, PeerJournalFileKind.acks);
       expect(acks?.deviceId, 'devA');
 
+      expect(
+        PeerJournalNames.snapshot('devA', 12),
+        'devA.p2.12.snapshot.msync',
+      );
       final snapshot =
           PeerJournalNames.parse(PeerJournalNames.snapshot('devA', 12));
       expect(snapshot?.kind, PeerJournalFileKind.snapshot);
       expect(snapshot?.coverage, 12);
-
-      // v3 之前的命名（`<deviceId>.snapshot.msync`）不是合法协议文件：
-      // 旧实现同样返回 null（固定名残留由清理逻辑按名字显式删）。
-      expect(PeerJournalNames.parse('devA.snapshot.msync'), isNull);
     });
   });
 

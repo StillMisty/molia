@@ -251,6 +251,41 @@ void main() {
     expect(skipped.skippedUnchanged, 1);
   });
 
+  test('HTTP 路径：只服务 /molia-sync/v2/*，旧 v1 路径 404', () async {
+    var httpPort = 0;
+    final transport = LanSyncTransport(
+      deviceId: 'devA',
+      deviceName: () => '设备A',
+      codec: codecPort,
+      passphraseProvider: () async => passphrase,
+      snapshotProvider: () async => envelope('devA'),
+      onHttpPortBound: (port) => httpPort = port,
+      localAddressesProvider: () async => const [],
+      udpPort: 47956,
+    );
+    addTearDown(transport.stop);
+    await transport.start();
+    expect(httpPort, greaterThan(0));
+
+    final client = HttpClient();
+    addTearDown(() => client.close(force: true));
+    Future<int> status(String path) async {
+      final request = await client.getUrl(
+        Uri.parse('http://127.0.0.1:$httpPort$path'),
+      );
+      final response = await request.close();
+      await response.drain<void>();
+      return response.statusCode;
+    }
+
+    // 旧命名空间的路径直接 404，不识别、不提示。
+    expect(await status('/molia-sync/v1/snapshot'), HttpStatus.notFound);
+    expect(await status('/molia-sync/v1/journal'), HttpStatus.notFound);
+    // 新路径照常服务（快照 + 增量端点）。
+    expect(await status(LanSyncTransport.snapshotPath), HttpStatus.ok);
+    expect(await status(LanSyncTransport.journalPath), HttpStatus.ok);
+  });
+
   test('未启动时 pull/push 为空操作；start/stop 幂等', () async {
     final transport = LanSyncTransport(
       deviceId: 'devX',
