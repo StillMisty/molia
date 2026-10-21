@@ -435,29 +435,62 @@
 
 ## AI 推歌
 
-- **AI DJ mode（AI 推歌模式）** — `lib/providers/ai_dj_provider.dart`：两件事的唯一
-  状态机——**今日推荐列表**（持久、可浏览）与**推歌会话（电台）**。
+- **AI DJ mode（AI 推歌模式）** — `lib/providers/ai_dj_provider.dart`：三件事的唯一
+  状态机——**当前推荐（active batch）**、**历史推荐**与**推歌会话（电台）**。
   `enabled` = 功能启用（持久化；退出队列不关功能）；`status` = 电台状态
-  （off/preparing/playing/error：播放全部或点某首才接管队列）。批次 20 首、
-  队列剩余 ≤5 首且当前队列就是 AI 队列时后台续推
-  （`PlaybackProvider.enqueueDomainTracks`）；跳过 = 切走时未达
-  `min(30s, 50%×时长)`（复用统计口径，**只做曲目级排除**）；喜欢 = 收藏；
-  「不感兴趣」= 列表移除 + 会话排除（可撤销）；连续 3 次失败自动停止续推；
-  退出保留队列。播放快照/进度由组合根接进控制器。
-- **Today's picks（今日推荐列表）** —
-  `lib/services/ai/ai_recommendation_store.dart` + `lib/widgets/ai_dj_carousel.dart`：
-  持久化的推荐列表（列表项 = 曲目 + AI 理由），「换一批」替换缓存；
-  `aiDjCacheTtlDays`（默认 1 天）只决定续推是否消费旧列表——过期不提示、不删除、
-  不打断播放，「上次更新」在 AI 页与发现页推荐区展示；
-  **功能未启用时发现页整条隐藏**（开启入口在设置 › 内容 › AI 推歌）。
+  （off/preparing/playing/error：播放全部或点某首才接管队列）。只有显式
+  「生成推荐 / 换一批」才切换 active；历史「播放这批 / 设为当前」也会切换。
+  跳过 = 切走时未达 `min(30s, 50%×时长)`（复用统计口径，**只做曲目级排除**）；
+  喜欢 = 收藏；「不感兴趣」= 列表移除 + 长期记忆（可撤销）；显式生成有
+  阶段进度与取消；退出保留队列。播放快照/进度由组合根接进控制器。
+- **当前推荐（active batch）** — `AiDjBatch` / `AiDjProvider.recommendations`：
+  AI 页与发现页轮播展示的那一批；持久化在推荐历史索引的 `activeBatchId`，
+  启动时只加载它（详情懒加载）。换一批后旧 active 留在历史，不丢数据。
+- **历史推荐（recommendation history）** —
+  `lib/services/ai/ai_recommendation_store.dart` + `lib/pages/ai_dj_history_page.dart`：
+  索引键 `ai_dj_history_index_v1` + 每批一键 `ai_dj_history_batch_v1:<id>`；
+  保留 20 批 / 400 首 / 30 天，active 永不自动清理；删除 active 回退最近一批，
+  清空历史保留 active。旧单批键 `ai_dj_pending_batch_v1` 首次加载迁移为
+  `restored` active；迁移成功才删旧键。历史批次只读（可播放 / 加队列 / 设为
+  当前 / 删除），不在历史里编辑反馈。
+- **批次（batch）大小** — 10 / 20 / 30 / 50，默认 20，存在
+  `AiPreferences.batchSize`；影响 LLM `count`、历史元数据与自动补歌数量，
+  「换一首」固定 1；保存后下一次生成生效。
+- **静默补歌（silent auto-feed）** — 队列剩余 ≤5 首、当前上下文为
+  `kAiDjContextName` 且功能启用时，后台生成一批并追加队尾 + 写历史
+  （`origin=autoFeed`）。不设置 `AiDjProgress`、不显示状态卡 / 骨架 / toast /
+  队列徽标，**不切换 active**；生成完成时队列已播完则从新追加的第一首静默续播。
+  连续 3 次失败停止自动补歌（只留内部错误状态）；显式操作优先并可取消在途
+  静默任务。手动「补一批到队尾」是显式操作（可显示进度），同样不切换 active。
+- **推荐偏好（recommendation preferences）** — `AiPreferences`：批次大小、
+  自动补歌、风格 / 场景 / 语言 / 年代 / 探索度 / 只推荐没听过的 / 补充要求、
+  发送范围、找歌渠道、种子快照；JSON 持久化在 `kAiDjPreferences`
+  （`SyncCategory.settings`）。保存只影响下一次生成，不自动消耗额度。
+- **发送范围（upstream scope）** — `TasteProfileBuilder` 按 `AiPreferences.sections`
+  裁剪上行 JSON：汇总统计 / 常听歌手 / 常听歌曲 / 时段与来源分布 / 最近播放明细
+  / 已听排除清单（默认开），收藏歌曲与自建歌单（默认关，opt-in）。
+  收藏最多 100 首；自建歌单最多 10 个、每单 20 首、总计 100 首；只发歌名、
+  歌手与歌单名，不含 raw payload / 封面 / 播放链接；开启时曲目进入本地排除集合。
+- **找歌渠道（source channels）** — `AiPreferences.sourceKeys` 为空 = 自动取
+  音源页顺序前 3 个可搜索渠道；已选 = 严格只按所选渠道（音源页顺序）解析，
+  **不兜底到其它渠道**。所选渠道全部不可用时回退自动并提示。推荐行展示
+  命中渠道名；未解析项「重新找一次」只重新搜索、不重新调 LLM。
+- **发送透明化（prompt transparency）** — AI 页展示发送范围/条数/偏好/渠道的
+  人话摘要；「查看发送原文」显示系统 + 用户提示词（可复制）。预览与实际请求
+  共用同一个 `AiPromptBuilder`（`buildPrompt`），相同输入下文本必须相等；
+  上次实际发送的 prompt 与上次 LLM 原始返回只存内存，不落盘、不打日志。
+- **反馈记忆（feedback memory）** — `AiFeedbackMemory`：不感兴趣 / 跳过标签、
+  喜欢标签各上限 200，「多来点这种」种子上限 20；JSON 持久化在
+  `kAiDjFeedbackMemory`（`SyncCategory.settings`）。生成时合并长期记忆与本轮
+  反馈；种子在下一批成功生成后消费；「清空 AI 记忆」删除长期记忆与本轮反馈。
 - **Taste profile（听歌画像）** — `lib/services/ai/taste_profile_builder.dart`：
-  上行 LLM 的唯一数据出口（聚合统计 + 最近 200 条明细 + 已听排除清单，
-  上限集中在此）；不含 raw payload / 设备信息；首次开启需隐私确认
-  （`AiSettingsStore.consentKey`）。
+  上行 LLM 的唯一数据出口（按发送范围读聚合统计 + 最近 200 条明细 + 已听排除
+  清单 + 可选收藏/歌单，上限集中在此）；不含 raw payload / 设备信息；首次
+  开启需隐私确认（`AiSettingsStore.consentKey`）。
 - **Closed-book + local resolve（闭卷生成 + 本地解析）** —
   `lib/services/ai/ai_recommendation_service.dart`：LLM 只输出
   `{title, artist, reason}` JSON（容错解析 + 规范化去重），本地
-  `CatalogService.search` 在用户启用音源里解析成可播放曲目（打分阈值 0.6），
+  `CatalogService.search` 在用户启用/所选音源里解析成可播放曲目（打分阈值 0.6），
   失败项折叠展示；推荐结果 100% 来自已启用音源。
 - **LLM config（AI 服务配置）** — `lib/services/ai/ai_settings_store.dart`：
   Base URL / API Key / 模型（OpenAI-compatible，预设 DeepSeek/OpenAI/自定义）；
