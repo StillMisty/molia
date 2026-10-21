@@ -897,6 +897,8 @@
   "syncTriggerIncoming": "其它设备发来",
   "syncTriggerResume": "回前台",
   "syncTriggerPause": "退后台前",
+  "syncTriggerNetwork": "网络切换",
+  "syncTriggerDiscovery": "发现设备",
   "syncTriggerManual": "手动",
   "syncActivitySection": "运行状态",
   "syncActivityTitle": "近 24 小时",

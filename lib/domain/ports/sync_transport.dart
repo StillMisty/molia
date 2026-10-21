@@ -174,6 +174,29 @@ abstract interface class SyncTransport {
   Stream<SyncEnvelope> get incoming;
 }
 
+/// 发现事件能力（局域网传输实现）：认证通过的对端公告 / 应答。
+///
+/// 窄接口而不是往 [SyncTransport] 加方法：WebDAV 没有发现概念，引擎按
+/// 「实现了这个接口才订阅」接线，避免给所有传输伪造空流。
+abstract interface class SyncSightingSource {
+  Stream<LanPeerSighting> get sightings;
+}
+
+/// 局域网生命周期能力（回前台 / 退后台 / 换网 / 本地变更公告）。
+///
+/// 与 [SyncSightingSource] 一样是能力接口：控制面只在传输实现了它时才调用，
+/// WebDAV 传输不受影响。
+abstract interface class SyncLanLifecycle {
+  Future<void> onAppResumed();
+
+  void onAppHidden();
+
+  Future<void> onNetworkChanged();
+
+  /// 本地变更但本轮推送零对端时的单次定向公告（只单播，不广播）。
+  Future<void> announceLocalChange();
+}
+
 /// 传输不可用原因码（[SyncTransport.unavailableReason]）。
 ///
 /// 与 [SyncIssueCode] 同名常量同值：传输状态与一轮失败共用一套文案映射。

@@ -42,9 +42,22 @@ class LocalEndpointsService {
   Future<List<LocalEndpoint>> list() =>
       _cached ??= _enumerate().then(_normalize);
 
+  /// 重新枚举一次（绕过进程缓存）。
+  ///
+  /// 传输层在换网 / 回前台时用：旧地址缓存会让探测包带上已经失效的 IP；
+  /// 设置页仍走 [list] 的缓存（进入页面时才失效）。
+  Future<List<LocalEndpoint>> listFresh() {
+    _cached = null;
+    return list();
+  }
+
   /// 只要地址字符串（局域网探测的 `addrs` 候选）。
   Future<List<String>> hosts() async =>
       [for (final endpoint in await list()) endpoint.address];
+
+  /// 重新枚举后的地址字符串（传输层换网 / 回前台使用）。
+  Future<List<String>> hostsFresh() async =>
+      [for (final endpoint in await listFresh()) endpoint.address];
 
   /// 失效缓存：真实失效点是设置页进入（见类注释），下次读取重新枚举。
   void invalidate() => _cached = null;

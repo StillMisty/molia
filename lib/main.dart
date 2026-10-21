@@ -228,7 +228,7 @@ void main() async {
   // 退后台 / 锁屏：同步调度器取消全部定时器并尽力推一次。
   AppLifecycleListener(
     onResume: () {
-      sync.provider.onAppResumed();
+      unawaited(sync.provider.onAppResumed());
       unawaited(update.provider.handleAppResumed());
     },
     onPause: sync.provider.onAppHidden,

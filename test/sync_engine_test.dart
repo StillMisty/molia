@@ -27,7 +27,7 @@ void main() {
   late SharedPreferences prefs;
   late MemorySyncSecretStore secrets;
   late SyncStateStore state;
-  late FakeSyncTransport transport;
+  late FakeSightingTransport transport;
   late SyncEngine engine;
   late SyncControlPlane control;
 
@@ -43,7 +43,7 @@ void main() {
     await state.init();
     await state.writePassphrase('ABCD-EFGH-JKLM-NPQR-STUV-WXYZ-2345-6789');
     await state.setTransportEnabled('lan', true);
-    transport = FakeSyncTransport();
+    transport = FakeSightingTransport();
     control = SyncControlPlane(state: state, transports: {'lan': transport});
     engine = SyncEngine(
       state: state,
@@ -717,7 +717,108 @@ void main() {
     expect(noticed, ['devB']);
     expect(state.isPeerConnectNotified('devB'), isTrue);
   });
+
+  test('公告过滤：新设备 / head 前进 / snap 变化 / boot 变化各触发一次', () async {
+    final events = <void>[];
+    final subscription = engine.peerSightings.listen(events.add);
+    addTearDown(subscription.cancel);
+
+    transport.emitSighting(_sighting());
+    await pumpEventQueue();
+    expect(events, hasLength(1), reason: '新设备触发');
+
+    // 同一份公告（head / snap / boot 都没变）不重复触发。
+    transport.emitSighting(_sighting());
+    await pumpEventQueue();
+    expect(events, hasLength(1), reason: '无变化不重复触发');
+
+    transport.emitSighting(_sighting(head: 6));
+    await pumpEventQueue();
+    expect(events, hasLength(2), reason: 'head 前进触发');
+
+    transport.emitSighting(_sighting(head: 6, snapshotId: 'snap-2'));
+    await pumpEventQueue();
+    expect(events, hasLength(3), reason: 'snapshotId 变化触发');
+
+    transport.emitSighting(
+      _sighting(head: 6, snapshotId: 'snap-2', bootId: 'boot-2'),
+    );
+    await pumpEventQueue();
+    expect(events, hasLength(4), reason: '对端重启（boot 变化）触发');
+  });
+
+  test('公告过滤：公告不写名册 lastSeenAt', () async {
+    transport.emitSighting(_sighting());
+    await pumpEventQueue();
+
+    expect(state.peers, isEmpty, reason: '公告只说明在线，不是接触成功');
+    expect(engine.lastReport, isNull);
+  });
+
+  test('contactedLan：LAN 探测到对端才算接触', () async {
+    final noPeer = await engine.runSyncRound(
+      trigger: SyncTrigger.timer,
+      push: true,
+      antiEntropy: false,
+    );
+    expect(noPeer.contacted, isFalse);
+    expect(noPeer.contactedLan, isFalse);
+
+    transport.available.add(remoteTheme('dark'));
+    final withPeer = await engine.runSyncRound(
+      trigger: SyncTrigger.discovery,
+      push: true,
+      antiEntropy: false,
+    );
+    expect(withPeer.contacted, isTrue);
+    expect(withPeer.contactedLan, isTrue);
+  });
+
+  test('forceDiscovery：启动 / 回前台 / 换网 / 手动为 true，其余为 false', () async {
+    await engine.syncNow(trigger: SyncTrigger.timer);
+    expect(transport.lastRequest!.forceDiscovery, isFalse);
+
+    for (final trigger in [
+      SyncTrigger.startup,
+      SyncTrigger.resume,
+      SyncTrigger.network,
+      SyncTrigger.manual,
+    ]) {
+      await engine.syncNow(trigger: trigger);
+      expect(
+        transport.lastRequest!.forceDiscovery,
+        isTrue,
+        reason: '${trigger.name} 轮强制发现',
+      );
+    }
+  });
+
+  test('本地变更但 LAN 推送零对端：单次定向公告', () async {
+    transport.pushFailures = 1;
+    await engine.syncNow(trigger: SyncTrigger.manual);
+    await pumpEventQueue();
+
+    expect(transport.announceCalls, 1);
+  });
 }
+
+LanPeerSighting _sighting({
+  String deviceId = 'devB',
+  int? head = 5,
+  String snapshotId = 'snap-1',
+  String bootId = 'boot-1',
+}) =>
+    LanPeerSighting(
+      deviceId: deviceId,
+      name: 'B',
+      host: '192.168.1.23',
+      httpPort: 40000,
+      probePort: 47825,
+      snapshotId: snapshotId,
+      journalHead: head,
+      bootId: bootId,
+      observedAt: 7000,
+    );
 
 /// 首次 apply 抛异常、之后成功：验证「应用失败不丢入站数据」。
 class _FlakyAdapter implements SyncAdapter {

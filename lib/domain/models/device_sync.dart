@@ -734,6 +734,12 @@ enum SyncTrigger {
   /// 退后台前的尽力推送。
   pause,
 
+  /// 网络变化（connectivity 事件）触发的强制发现轮。
+  network,
+
+  /// 收到对端公告（新设备 / 新内容 / 重启）触发的发现轮。
+  discovery,
+
   /// 用户手动。
   manual;
 

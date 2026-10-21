@@ -42,7 +42,8 @@ import 'lan_discovery.dart';
 ///
 /// 耗电预算：正常有候选轮 ≤8 个单播探测 + HTTP、等 400ms、0 广播；蜂窝网
 /// 0 广播 / 组播；后台取消公告与重连计时器，不主动探测。
-class LanSyncTransport implements SyncTransport {
+class LanSyncTransport
+    implements SyncTransport, SyncSightingSource, SyncLanLifecycle {
   LanSyncTransport({
     required this.deviceId,
     required String Function() deviceName,
@@ -232,6 +233,7 @@ class LanSyncTransport implements SyncTransport {
   ({int v4, int v6}) get discoveryPorts => _discovery.discoveryPorts;
 
   /// 认证通过的公告 / 应答事件（引擎据此唤醒同步轮）。
+  @override
   Stream<LanPeerSighting> get sightings => _discovery.sightings;
 
   /// 拉取轮主动广播次数（测试断言「空闲轮 0 广播」用；公告 burst 不计）。
@@ -408,6 +410,7 @@ class LanSyncTransport implements SyncTransport {
   }
 
   /// 回前台：隐藏超过 15s 才重绑 UDP + 探活 HTTP；随后公告 burst。
+  @override
   Future<void> onAppResumed() async {
     if (!_running) return;
     final hiddenAt = _hiddenAt;
@@ -424,18 +427,21 @@ class LanSyncTransport implements SyncTransport {
   }
 
   /// 退后台：取消公告 / 重连计时器；不主动探测。
+  @override
   void onAppHidden() {
     _hiddenAt = _nowMs();
     _discovery.onAppHidden();
   }
 
   /// 换网（connectivity 事件）：重扫接口，指纹变化时重绑 UDP 并公告。
+  @override
   Future<void> onNetworkChanged() async {
     if (!_running) return;
     await _discovery.onNetworkChanged();
   }
 
   /// 本地变更但本轮推送零对端：单次定向公告（只单播）。
+  @override
   Future<void> announceLocalChange() async {
     if (!_running) return;
     final key = await _ensureDiscoveryKey();

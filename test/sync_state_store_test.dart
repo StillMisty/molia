@@ -346,6 +346,179 @@ void main() {
     expect(store.activity.last.at, 5);
   });
 
+  test('已知端点：持久化往返（host / 端口 / 验证时间）', () async {
+    final store = await freshStore();
+    await store.rememberLanEndpoint(const LanPeerEndpoint(
+      deviceId: 'devB',
+      host: '192.168.1.23',
+      httpPort: 40000,
+      probePort: 47825,
+      verifiedAt: 1234,
+    ));
+
+    final reloaded = await freshStore();
+    expect(reloaded.lanEndpoints, hasLength(1));
+    final endpoint = reloaded.lanEndpoints.single;
+    expect(endpoint.deviceId, 'devB');
+    expect(endpoint.host, '192.168.1.23');
+    expect(endpoint.httpPort, 40000);
+    expect(endpoint.probePort, 47825);
+    expect(endpoint.verifiedAt, 1234);
+  });
+
+  test('已知端点：同一设备更新地址与验证时间，保留新观测没带的探测端口', () async {
+    final store = await freshStore();
+    await store.rememberLanEndpoint(const LanPeerEndpoint(
+      deviceId: 'devB',
+      host: '192.168.1.23',
+      httpPort: 40000,
+      probePort: 47825,
+      verifiedAt: 1,
+    ));
+    await store.rememberLanEndpoint(const LanPeerEndpoint(
+      deviceId: 'devB',
+      host: '192.168.1.99',
+      httpPort: 40001,
+      verifiedAt: 2,
+    ));
+
+    final endpoint = store.lanEndpoints.single;
+    expect(endpoint.host, '192.168.1.99');
+    expect(endpoint.httpPort, 40001);
+    expect(endpoint.probePort, 47825, reason: '新观测没带探测端口时保留旧值');
+    expect(endpoint.verifiedAt, 2);
+  });
+
+  test('已知端点：上限 32，按 verifiedAt 淘汰最旧', () async {
+    final store = await freshStore();
+    for (var i = 0; i < SyncStateStore.lanEndpointLimit + 8; i++) {
+      await store.rememberLanEndpoint(LanPeerEndpoint(
+        deviceId: 'dev$i',
+        host: '192.168.1.${i + 1}',
+        httpPort: 40000,
+        probePort: 47825,
+        verifiedAt: i + 1,
+      ));
+    }
+
+    expect(store.lanEndpoints, hasLength(SyncStateStore.lanEndpointLimit));
+    final ids = store.lanEndpoints.map((endpoint) => endpoint.deviceId).toSet();
+    expect(ids.contains('dev0'), isFalse, reason: '最旧的 8 条被淘汰');
+    expect(ids.contains('dev7'), isFalse);
+    expect(ids.contains('dev8'), isTrue);
+    expect(ids.contains('dev39'), isTrue);
+
+    final reloaded = await freshStore();
+    expect(reloaded.lanEndpoints, hasLength(SyncStateStore.lanEndpointLimit));
+  });
+
+  test('已知端点：180 天未验证随名册淘汰，近期验证保留', () async {
+    final store = await freshStore();
+    await store.rememberLanEndpoint(const LanPeerEndpoint(
+      deviceId: 'old',
+      host: '192.168.1.23',
+      httpPort: 40000,
+      verifiedAt: 1000,
+    ));
+    await store.rememberLanEndpoint(const LanPeerEndpoint(
+      deviceId: 'fresh',
+      host: '192.168.1.24',
+      httpPort: 40000,
+      verifiedAt: 1000 + SyncStateStore.lanEndpointRetentionMs,
+    ));
+
+    store.recordRound(SyncRoundReport(
+      trigger: SyncTrigger.timer,
+      startedAt: 0,
+      finishedAt: 1000 + SyncStateStore.lanEndpointRetentionMs + 1,
+      outcome: SyncOutcome.noChanges,
+    ));
+
+    expect(store.lanEndpoints.map((endpoint) => endpoint.deviceId), ['fresh']);
+  });
+
+  test('移除设备：已验证端点一并清理', () async {
+    final store = await freshStore();
+    await store.rememberLanEndpoint(const LanPeerEndpoint(
+      deviceId: 'devB',
+      host: '192.168.1.23',
+      httpPort: 40000,
+      verifiedAt: 1,
+    ));
+
+    await store.removePeer('devB');
+    expect(store.lanEndpoints, isEmpty);
+  });
+
+  test('已知端点：不可路由地址 / 非法端口 / 空设备 id 丢弃', () async {
+    final store = await freshStore();
+    for (final endpoint in const [
+      LanPeerEndpoint(
+        deviceId: 'loopback',
+        host: '127.0.0.1',
+        httpPort: 40000,
+        verifiedAt: 1,
+      ),
+      LanPeerEndpoint(
+        deviceId: 'linkLocal',
+        host: 'fe80::1',
+        httpPort: 40000,
+        verifiedAt: 1,
+      ),
+      LanPeerEndpoint(
+        deviceId: 'hostname',
+        host: 'example.com',
+        httpPort: 40000,
+        verifiedAt: 1,
+      ),
+      LanPeerEndpoint(
+        deviceId: 'noPort',
+        host: '192.168.1.23',
+        httpPort: 0,
+        verifiedAt: 1,
+      ),
+      LanPeerEndpoint(
+        deviceId: 'badPort',
+        host: '192.168.1.23',
+        httpPort: 70000,
+        verifiedAt: 1,
+      ),
+      LanPeerEndpoint(
+        deviceId: '',
+        host: '192.168.1.23',
+        httpPort: 40000,
+        verifiedAt: 1,
+      ),
+      LanPeerEndpoint(
+        deviceId: 'badProbe',
+        host: '192.168.1.23',
+        httpPort: 40000,
+        probePort: 70000,
+        verifiedAt: 1,
+      ),
+    ]) {
+      await store.rememberLanEndpoint(endpoint);
+    }
+    expect(store.lanEndpoints, isEmpty);
+  });
+
+  test('已知端点：读取状态 JSON 时丢弃非法条目', () async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(SyncStateStore.derivedResetKey, true);
+    await prefs.setString(
+      SyncStateStore.stateKey,
+      '{"v":2,"deviceId":"devA","lanEndpoints":['
+      '{"deviceId":"ok","host":"192.168.1.23","httpPort":40000,"verifiedAt":1},'
+      '{"deviceId":"bad","host":"127.0.0.1","httpPort":40000,"verifiedAt":1},'
+      '{"deviceId":"bad2","host":"192.168.1.24","httpPort":0,"verifiedAt":1}'
+      ']}',
+    );
+
+    final store = await freshStore();
+    expect(store.lanEndpoints, hasLength(1));
+    expect(store.lanEndpoints.single.deviceId, 'ok');
+  });
+
   // 安全存储读取容错（回归：WSLg / 容器等无系统钥匙串的环境里 libsecret
   // 抛异常，未捕获会打断 `main()` 的 `runApp` 之前部分，桌面端表现为
   // 「窗口已显示但没有首帧」的永久黑窗，见 pitfalls #31）。

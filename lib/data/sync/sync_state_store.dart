@@ -17,6 +17,7 @@ import 'package:logging/logging.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../domain/models/device_sync.dart';
+import '../../utils/peer_address.dart';
 import '../settings/settings_secret_store.dart';
 import 'sync_activity.dart';
 import 'sync_stamp.dart';
@@ -214,6 +215,12 @@ class SyncStateStore {
   /// 名册保留设备数（按最近接触时间淘汰；避免长期运行后无界增长）。
   static const int peerLimit = 20;
 
+  /// 已验证局域网端点保留条数（MAC + HTTP 解密成功才写入）。
+  static const int lanEndpointLimit = 32;
+
+  /// 已验证局域网端点的保留期：超过该时长没再验证过随名册淘汰。
+  static const int lanEndpointRetentionMs = 180 * 24 * 60 * 60 * 1000;
+
   final SharedPreferences? _preferences;
   final SettingsSecretStore _secrets;
   final Random _random;
@@ -299,6 +306,12 @@ class SyncStateStore {
   /// 设备名册（deviceId → 最近一次接触的观测值）。
   final Map<String, SyncPeerState> _peers = {};
 
+  /// 已验证的局域网端点（deviceId → 最近一次成功连通的地址 / 端口）。
+  ///
+  /// 广播 / 组播被 AP 隔离或 iOS entitlement 挡住时，靠这里的单播兜底；
+  /// 只在 MAC 验证 + HTTP 解密成功后写入（见 `LanSyncTransport`）。
+  final Map<String, LanPeerEndpoint> _lanEndpoints = {};
+
   String get deviceId => _deviceId;
   String get deviceName => _deviceName;
 
@@ -337,6 +350,10 @@ class SyncStateStore {
   /// 名册（按最近接触时间倒序；本机不在其中）。
   List<SyncPeerState> get peers =>
       List.unmodifiable(trimPeers(_peers.values, peerLimit));
+
+  /// 已验证的局域网端点（不可变；上限 [lanEndpointLimit]）。
+  List<LanPeerEndpoint> get lanEndpoints =>
+      List.unmodifiable(_lanEndpoints.values);
 
   /// 传输最近一次成功接触对端的时间（0 = 尚未成功过）。
   int transportLastSuccessAt(String kind) => _transportLastSuccess[kind] ?? 0;
@@ -600,6 +617,7 @@ class SyncStateStore {
     _peers.remove(deviceId);
     _manualPeers.removeWhere((entry) => entry.deviceId == deviceId);
     _notifiedPeers.remove(deviceId);
+    _lanEndpoints.remove(deviceId);
     // 正在收尾的一轮可能带着旧名册快照，压住它一次；下一轮重新发现即恢复。
     _forgottenPeers.add(deviceId);
     await save();
@@ -734,6 +752,61 @@ class SyncStateStore {
     await save();
   }
 
+  /// 记住一个已验证的局域网端点（MAC 验证 + HTTP 解密成功后回写）。
+  ///
+  /// 只在字段真的变化时落盘：每轮结束引擎还会 `save()` 一次，这里避免同一轮
+  /// 多次验证（多台对端）各写一遍大状态 JSON；轮次外调用也能立即持久化。
+  Future<void> rememberLanEndpoint(LanPeerEndpoint endpoint) async {
+    if (!_isValidLanEndpoint(endpoint)) return;
+    final existing = _lanEndpoints[endpoint.deviceId];
+    final next = LanPeerEndpoint(
+      deviceId: endpoint.deviceId,
+      host: normalizePeerHost(endpoint.host),
+      httpPort: endpoint.httpPort,
+      // 新观测没带探测端口时保留已有值：来源端口可能因 NAT / 重启变化，
+      // 旧的持久化端口仍是有效的单播目标。
+      probePort: endpoint.probePort > 0
+          ? endpoint.probePort
+          : (existing?.probePort ?? 0),
+      verifiedAt: endpoint.verifiedAt,
+    );
+    if (existing != null &&
+        existing.host == next.host &&
+        existing.httpPort == next.httpPort &&
+        existing.probePort == next.probePort &&
+        existing.verifiedAt == next.verifiedAt) {
+      return;
+    }
+    _lanEndpoints[next.deviceId] = next;
+    _trimLanEndpoints();
+    await save();
+  }
+
+  /// 端点合法性：可路由 IP 字面量、非空设备 id、端口在合法范围。
+  static bool _isValidLanEndpoint(LanPeerEndpoint endpoint) {
+    if (endpoint.deviceId.trim().isEmpty) return false;
+    if (!isRoutablePeerAddress(endpoint.host)) return false;
+    if (endpoint.httpPort <= 0 || endpoint.httpPort > 65535) return false;
+    if (endpoint.probePort < 0 || endpoint.probePort > 65535) return false;
+    return true;
+  }
+
+  /// 超过 [lanEndpointLimit] 时按 `verifiedAt` 淘汰最旧的端点。
+  void _trimLanEndpoints() {
+    while (_lanEndpoints.length > lanEndpointLimit) {
+      String? oldestId;
+      var oldestAt = 1 << 62;
+      for (final entry in _lanEndpoints.entries) {
+        if (entry.value.verifiedAt < oldestAt) {
+          oldestAt = entry.value.verifiedAt;
+          oldestId = entry.key;
+        }
+      }
+      if (oldestId == null) return;
+      _lanEndpoints.remove(oldestId);
+    }
+  }
+
   void putSettingStamp(String key, SyncStamp stamp) {
     _settingStamps[key] = stamp;
   }
@@ -827,6 +900,14 @@ class SyncStateStore {
     _peers
       ..clear()
       ..addEntries(recent.map((peer) => MapEntry(peer.deviceId, peer)));
+    // 180 天没再验证过的端点随名册一起淘汰：换网 / DHCP 变更后旧地址多半
+    // 已失效，留着只会让每轮多试几个连不通的地址。
+    final now = report.finishedAt;
+    _lanEndpoints.removeWhere(
+      (_, endpoint) =>
+          endpoint.verifiedAt > 0 &&
+          now - endpoint.verifiedAt > lanEndpointRetentionMs,
+    );
   }
 
   Future<void> save() async {
@@ -883,6 +964,10 @@ class SyncStateStore {
         'log': [for (final entry in _log) entry.toJson()],
         'activity': [for (final entry in _activity) entry.toJson()],
         'peers': [for (final peer in _peers.values) peer.toJson()],
+        if (_lanEndpoints.isNotEmpty)
+          'lanEndpoints': [
+            for (final endpoint in _lanEndpoints.values) endpoint.toJson(),
+          ],
       };
 
   void _applyJson(Map<String, dynamic> json) {
@@ -1002,6 +1087,18 @@ class SyncStateStore {
         if (peer != null && _peers.length < peerLimit) {
           _peers[peer.deviceId] = peer;
         }
+      }
+    }
+    _lanEndpoints.clear();
+    final lanEndpoints = json['lanEndpoints'];
+    if (lanEndpoints is List) {
+      for (final item in lanEndpoints) {
+        final endpoint = LanPeerEndpoint.fromJson(item);
+        // 非法条目（不可路由地址 / 越界端口 / 空 id）直接丢弃，不拖垮整份状态。
+        if (endpoint != null && _isValidLanEndpoint(endpoint)) {
+          _lanEndpoints[endpoint.deviceId] = endpoint;
+        }
+        if (_lanEndpoints.length >= lanEndpointLimit) break;
       }
     }
   }

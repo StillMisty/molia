@@ -257,6 +257,51 @@ class FakeSyncTransport implements SyncTransport {
   void emitIncoming(SyncEnvelope envelope) => _incoming.add(envelope);
 }
 
+/// 带发现事件与局域网生命周期的假传输（引擎 / 控制面接线测试用）。
+class FakeSightingTransport extends FakeSyncTransport
+    implements SyncSightingSource, SyncLanLifecycle {
+  FakeSightingTransport({super.kind, super.unavailableReason});
+
+  final StreamController<LanPeerSighting> _sightings =
+      StreamController<LanPeerSighting>.broadcast();
+
+  int announceCalls = 0;
+  int resumeCalls = 0;
+  int hiddenCalls = 0;
+  int networkChangedCalls = 0;
+
+  @override
+  Stream<LanPeerSighting> get sightings => _sightings.stream;
+
+  void emitSighting(LanPeerSighting sighting) => _sightings.add(sighting);
+
+  @override
+  Future<void> announceLocalChange() async {
+    announceCalls++;
+  }
+
+  @override
+  Future<void> onAppResumed() async {
+    resumeCalls++;
+  }
+
+  @override
+  void onAppHidden() {
+    hiddenCalls++;
+  }
+
+  @override
+  Future<void> onNetworkChanged() async {
+    networkChangedCalls++;
+  }
+
+  @override
+  Future<void> stop() async {
+    if (!_sightings.isClosed) await _sightings.close();
+    await super.stop();
+  }
+}
+
 /// 可控 head / base 的日志替身（重置 = 头部归零）。
 class FakeJournalStore implements SyncJournalStore {
   FakeJournalStore({required this.head});

@@ -2227,6 +2227,12 @@ class AppLocalizationsEn extends AppLocalizations {
   String get syncTriggerPause => 'before background';
 
   @override
+  String get syncTriggerNetwork => 'network changed';
+
+  @override
+  String get syncTriggerDiscovery => 'device found';
+
+  @override
   String get syncTriggerManual => 'manual';
 
   @override

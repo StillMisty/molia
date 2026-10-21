@@ -5,6 +5,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:molia/data/sync/sync_scheduler.dart';
 import 'package:molia/data/sync/sync_state_store.dart';
 import 'package:molia/domain/models/device_sync.dart';
+import 'package:molia/domain/ports/sync_transport.dart';
 import 'package:molia/services/battery_probe.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -36,6 +37,14 @@ void main() {
     bool playing = false,
     bool cellular = false,
     BatterySnapshot battery = BatterySnapshot.unknown,
+    Stream<void>? networkChanges,
+    Stream<void>? peerSightings,
+    List<Duration> reconnectLadder = const [
+      Duration(seconds: 5),
+      Duration(seconds: 20),
+      Duration(seconds: 60),
+      Duration(seconds: 180),
+    ],
   }) {
     final host = RecordingSyncSchedulerHost();
     final scheduler = SyncScheduler(
@@ -47,8 +56,25 @@ void main() {
       clock: () => DateTime.fromMillisecondsSinceEpoch(
         async.elapsed.inMilliseconds,
       ),
+      networkChanges: networkChanges,
+      peerSightings: peerSightings,
+      reconnectLadder: reconnectLadder,
     );
     return (scheduler: scheduler, host: host);
+  }
+
+  /// 在 fake_async 里同步地把状态写成「LAN 启用 + 一个已验证端点」。
+  void enableLanPeer(FakeAsync async) {
+    unawaited(state.setTransportEnabled(SyncTransportKind.lan, true));
+    async.flushMicrotasks();
+    unawaited(state.rememberLanEndpoint(const LanPeerEndpoint(
+      deviceId: 'devB',
+      host: '192.168.1.23',
+      httpPort: 40000,
+      probePort: 47825,
+      verifiedAt: 1,
+    )));
+    async.flushMicrotasks();
   }
 
   test('活跃等级：数据变更去抖 4s 后跑一轮（触发原因 debounce）', () {
@@ -346,6 +372,212 @@ void main() {
       env.scheduler.dispose();
     });
   });
+
+  test('网络变化：1.5s 去抖后跑 network 轮；事件来源是原始 connectivity 流', () {
+    fakeAsync((async) {
+      final network = StreamController<void>.broadcast();
+      final env = build(async, networkChanges: network.stream);
+      addTearDown(network.close);
+      unawaited(env.scheduler.start());
+      async.flushMicrotasks();
+
+      network.add(null);
+      async.flushMicrotasks();
+      async.elapse(const Duration(milliseconds: 1400));
+      expect(env.host.rounds, isEmpty, reason: '去抖窗口内不跑');
+
+      async.elapse(const Duration(milliseconds: 200));
+      expect(env.host.rounds, hasLength(1));
+      expect(env.host.rounds.single.trigger, SyncTrigger.network);
+      expect(env.host.rounds.single.push, isTrue);
+      expect(env.scheduler.idleBackoff, const Duration(minutes: 10),
+          reason: '换网重置空闲退避');
+      env.scheduler.dispose();
+    });
+  });
+
+  test('网络变化：后台 / 蜂窝不排轮次、不 arm 阶梯、零定时器', () {
+    fakeAsync((async) {
+      final network = StreamController<void>.broadcast();
+      addTearDown(network.close);
+
+      // 后台：忽略网络事件。
+      final hidden = build(async, networkChanges: network.stream);
+      unawaited(hidden.scheduler.start());
+      async.flushMicrotasks();
+      hidden.scheduler.onAppHidden();
+      async.flushMicrotasks();
+      network.add(null);
+      async.flushMicrotasks();
+      async.elapse(const Duration(seconds: 10));
+      expect(hidden.host.rounds, isEmpty);
+      expect(hidden.scheduler.hasPendingTimer, isFalse);
+      hidden.scheduler.dispose();
+
+      // 蜂窝：不跑网络轮，也不 arm 重连阶梯（0 广播）。
+      final cellular = build(
+        async,
+        cellular: true,
+        networkChanges: network.stream,
+      );
+      unawaited(cellular.scheduler.start());
+      async.flushMicrotasks();
+      network.add(null);
+      async.flushMicrotasks();
+      async.elapse(const Duration(seconds: 10));
+      expect(cellular.host.rounds, isEmpty, reason: '蜂窝 0 广播 / 0 轮次');
+      cellular.scheduler.dispose();
+    });
+  });
+
+  test('对端公告：1s 去抖 + 10s 冷却（窗口内多次只跑一轮）', () {
+    fakeAsync((async) {
+      final sightings = StreamController<void>.broadcast();
+      final env = build(async, peerSightings: sightings.stream);
+      addTearDown(sightings.close);
+      unawaited(env.scheduler.start());
+      async.flushMicrotasks();
+
+      sightings.add(null);
+      async.flushMicrotasks();
+      async.elapse(const Duration(milliseconds: 900));
+      expect(env.host.rounds, isEmpty);
+      async.elapse(const Duration(milliseconds: 200));
+      expect(env.host.rounds, hasLength(1));
+      expect(env.host.rounds.single.trigger, SyncTrigger.discovery);
+
+      // 冷却期内再次公告：延后到 10s 冷却结束，不在窗口内重复跑。
+      sightings.add(null);
+      async.flushMicrotasks();
+      async.elapse(const Duration(seconds: 1));
+      expect(env.host.rounds, hasLength(1), reason: '冷却未到不跑');
+      async.elapse(const Duration(milliseconds: 8500));
+      expect(env.host.rounds, hasLength(1), reason: '仍在 10s 冷却内');
+      async.elapse(const Duration(seconds: 1));
+      expect(env.host.rounds, hasLength(2));
+      expect(env.host.rounds.last.trigger, SyncTrigger.discovery);
+      env.scheduler.dispose();
+    });
+  });
+
+  test('重连阶梯：5s / 20s / 60s / 180s；contactedLan 立即取消', () {
+    fakeAsync((async) {
+      enableLanPeer(async);
+      final env = build(async);
+      env.host.contacted = false;
+      unawaited(env.scheduler.start());
+      async.flushMicrotasks();
+
+      unawaited(env.scheduler.onNetworkChanged());
+      async.flushMicrotasks();
+      // 1.5s 网络轮 + 5s 阶梯第一档。
+      async.elapse(const Duration(milliseconds: 1500));
+      expect(env.host.rounds, hasLength(1));
+      expect(env.host.rounds.single.trigger, SyncTrigger.network);
+
+      async.elapse(const Duration(milliseconds: 3500));
+      expect(env.host.rounds, hasLength(2));
+      expect(env.host.rounds.last.trigger, SyncTrigger.discovery);
+
+      async.elapse(const Duration(seconds: 20));
+      expect(env.host.rounds, hasLength(3), reason: '第二档 20s');
+      async.elapse(const Duration(seconds: 60));
+      expect(env.host.rounds, hasLength(4), reason: '第三档 60s');
+
+      // 下一档（180s）接触到 LAN 对端：阶梯立即取消，不再有后续轮次。
+      env.host.contactedLan = true;
+      async.elapse(const Duration(seconds: 180));
+      expect(env.host.rounds, hasLength(5), reason: '第四档 180s');
+      env.host.contactedLan = false;
+      // 空闲唤醒（≥10 分钟）会允许重新 arm；这里只验证取消后不再有阶梯轮次。
+      async.elapse(const Duration(minutes: 5));
+      expect(env.host.rounds, hasLength(5), reason: 'contactedLan 后取消阶梯');
+      env.scheduler.dispose();
+    });
+  });
+
+  test('重连阶梯：后台取消且零定时器；手动同步不 arm', () {
+    fakeAsync((async) {
+      enableLanPeer(async);
+      final env = build(async);
+      env.host.contacted = false;
+      unawaited(env.scheduler.start());
+      async.flushMicrotasks();
+
+      unawaited(env.scheduler.onNetworkChanged());
+      async.flushMicrotasks();
+      expect(env.scheduler.hasPendingTimer, isTrue);
+
+      env.scheduler.onAppHidden();
+      async.flushMicrotasks();
+      expect(env.scheduler.hasPendingTimer, isFalse, reason: '后台零定时');
+      async.elapse(const Duration(hours: 1));
+      expect(env.host.rounds, isEmpty);
+
+      // 回前台 + 手动同步：resume 轮允许重新 arm，manual 自己不再 arm。
+      env.scheduler.onAppVisible();
+      async.flushMicrotasks();
+      // resume 轮零对端 → 阶梯重新 arm；先取消它，验证 manual 不 arm。
+      env.scheduler.onAppHidden();
+      async.flushMicrotasks();
+      unawaited(env.scheduler.syncNow());
+      async.flushMicrotasks();
+      expect(env.host.rounds.last.trigger, SyncTrigger.manual);
+      env.scheduler.dispose();
+    });
+  });
+
+  test('回前台 resume 零对端：即使没有本地变更（push=false）也重新 arm 阶梯', () {
+    fakeAsync((async) {
+      enableLanPeer(async);
+      final env = build(async);
+      env.host.contacted = false;
+      unawaited(env.scheduler.start());
+      async.flushMicrotasks();
+
+      env.scheduler.onAppHidden();
+      async.flushMicrotasks();
+      env.scheduler.onAppVisible();
+      async.flushMicrotasks();
+      expect(env.host.rounds, hasLength(1));
+      expect(env.host.rounds.single.trigger, SyncTrigger.resume);
+      expect(env.host.rounds.single.push, isFalse, reason: '无本地变更只拉不推');
+
+      // resume 轮的零对端接触结果仍会 arm 阶梯。
+      async.elapse(const Duration(seconds: 5));
+      expect(env.host.rounds, hasLength(2));
+      expect(env.host.rounds.last.trigger, SyncTrigger.discovery);
+      env.scheduler.dispose();
+    });
+  });
+
+  test('轮次串行：上一轮未结束时公告 pending，结束后补一轮', () {
+    fakeAsync((async) {
+      final env = build(async);
+      unawaited(env.scheduler.start());
+      async.flushMicrotasks();
+
+      env.host.roundGate = Completer<void>();
+      unawaited(env.scheduler.syncNow());
+      async.flushMicrotasks();
+      expect(env.host.rounds, isEmpty, reason: '手动轮正在跑');
+
+      env.scheduler.notifyPeerSighted();
+      async.elapse(const Duration(seconds: 1));
+      expect(env.host.rounds, isEmpty, reason: '不并发跑第二轮');
+
+      env.host.roundGate!.complete();
+      async.flushMicrotasks();
+      expect(env.host.rounds, hasLength(1));
+      expect(env.host.rounds.single.trigger, SyncTrigger.manual);
+
+      // pending 的公告在本轮结束后重新走 1s 去抖并补跑。
+      async.elapse(const Duration(seconds: 1));
+      expect(env.host.rounds, hasLength(2));
+      expect(env.host.rounds.last.trigger, SyncTrigger.discovery);
+      env.scheduler.dispose();
+    });
+  });
 }
 
 /// 记录每轮请求的假宿主（不做任何真实同步）。
@@ -362,6 +594,15 @@ class RecordingSyncSchedulerHost implements SyncSchedulerHost {
   /// 下一轮报告失败（验证待发标记保留）。
   bool failNext = false;
 
+  /// 下一轮报告是否接触到对端（默认 true = 不触发零对端阶梯）。
+  bool contacted = true;
+
+  /// 下一轮是否接触到局域网对端（阶梯取消判据）。
+  bool contactedLan = false;
+
+  /// 非空时 `runSyncRound` 先等这个 Completer（验证串行守卫）。
+  Completer<void>? roundGate;
+
   /// 最近一轮的 anti-entropy 开关（验证环境策略）。
   bool lastAntiEntropy = false;
 
@@ -375,6 +616,8 @@ class RecordingSyncSchedulerHost implements SyncSchedulerHost {
     required bool antiEntropy,
     Set<SyncCategory>? onlyCategories,
   }) async {
+    final gate = roundGate;
+    if (gate != null) await gate.future;
     rounds.add((trigger: trigger, push: push, categories: onlyCategories));
     lastAntiEntropy = antiEntropy;
     final failed = failNext;
@@ -382,6 +625,8 @@ class RecordingSyncSchedulerHost implements SyncSchedulerHost {
     return SyncRunOutcome(
       categories: onlyCategories ?? {for (final c in SyncCategory.values) c},
       delivered: !failed,
+      contacted: contacted,
+      contactedLan: contactedLan,
     );
   }
 }

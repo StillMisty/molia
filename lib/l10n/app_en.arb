@@ -1161,6 +1161,8 @@
   "syncTriggerIncoming": "sent by another device",
   "syncTriggerResume": "resumed",
   "syncTriggerPause": "before background",
+  "syncTriggerNetwork": "network changed",
+  "syncTriggerDiscovery": "device found",
   "syncTriggerManual": "manual",
   "syncActivitySection": "Activity",
   "syncActivityTitle": "Last 24 hours",

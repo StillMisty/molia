@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:logging/logging.dart';
 
 import '../../domain/models/device_sync.dart';
+import '../../domain/ports/sync_transport.dart';
 import '../../services/battery_probe.dart';
 import '../../services/data_saver_service.dart';
 import 'sync_state_store.dart';
@@ -23,13 +24,27 @@ abstract interface class SyncSchedulerHost {
 
 /// 一轮同步的外发结果（调度器据此维护「待外发」标记）。
 class SyncRunOutcome {
-  const SyncRunOutcome({required this.categories, required this.delivered});
+  const SyncRunOutcome({
+    required this.categories,
+    required this.delivered,
+    this.contacted = true,
+    this.contactedLan = false,
+  });
 
   /// 本轮实际外发的类别（蜂窝小类别轮不含历史 / 统计）。
   final Set<SyncCategory> categories;
 
   /// 本轮是否无失败（失败时待发标记保留，下轮重试）。
   final bool delivered;
+
+  /// 本轮是否接触到了任何对端（探测 / 拉取 / 推送）。
+  ///
+  /// 默认 true = 不触发「零对端」重连阶梯：测试宿主 / 未提供接触信息的调用
+  /// 方不会被调度器额外排一轮。
+  final bool contacted;
+
+  /// 本轮是否接触到了局域网对端（重连阶梯据此立即取消）。
+  final bool contactedLan;
 
   static const SyncRunOutcome none =
       SyncRunOutcome(categories: {}, delivered: false);
@@ -58,6 +73,17 @@ class SyncScheduler {
     Duration idleBackoffStart = const Duration(minutes: 10),
     Duration idleBackoffMax = const Duration(minutes: 60),
     int lowBatteryPercent = 20,
+    Stream<void>? networkChanges,
+    Stream<void>? peerSightings,
+    Duration networkDebounce = const Duration(milliseconds: 1500),
+    Duration peerSightDebounce = const Duration(seconds: 1),
+    Duration peerSightCooldown = const Duration(seconds: 10),
+    List<Duration> reconnectLadder = const [
+      Duration(seconds: 5),
+      Duration(seconds: 20),
+      Duration(seconds: 60),
+      Duration(seconds: 180),
+    ],
   })  : _host = host,
         _state = state,
         _cellularProbe = cellularProbe ?? _defaultCellularProbe,
@@ -68,7 +94,13 @@ class SyncScheduler {
         _activeWindowMs = activeWindow.inMilliseconds,
         _idleBackoffStart = idleBackoffStart,
         _idleBackoffMax = idleBackoffMax,
-        _lowBatteryPercent = lowBatteryPercent {
+        _lowBatteryPercent = lowBatteryPercent,
+        _networkChanges = networkChanges,
+        _peerSightings = peerSightings,
+        _networkDebounce = networkDebounce,
+        _peerSightDebounce = peerSightDebounce,
+        _peerSightCooldown = peerSightCooldown,
+        _reconnectLadder = List.unmodifiable(reconnectLadder) {
     _backoff = idleBackoffStart;
     _lastInteractionAt = _nowMs();
   }
@@ -95,6 +127,12 @@ class SyncScheduler {
   final Duration _idleBackoffStart;
   final Duration _idleBackoffMax;
   final int _lowBatteryPercent;
+  final Stream<void>? _networkChanges;
+  final Stream<void>? _peerSightings;
+  final Duration _networkDebounce;
+  final Duration _peerSightDebounce;
+  final Duration _peerSightCooldown;
+  final List<Duration> _reconnectLadder;
   final Logger _logger = Logger('molia.sync.scheduler');
 
   SyncLevel _level = SyncLevel.idle;
@@ -115,6 +153,16 @@ class SyncScheduler {
   Timer? _debounceTimer;
   Timer? _idleTimer;
   Timer? _activeTimer;
+  Timer? _networkTimer;
+  Timer? _peerSightTimer;
+  Timer? _peerSightCooldownTimer;
+  Timer? _reconnectTimer;
+  StreamSubscription<void>? _networkSub;
+  StreamSubscription<void>? _peerSightSub;
+  int _reconnectStep = 0;
+  int _lastDiscoveryAt = 0;
+  bool _peerSightPending = false;
+  bool _roundRunning = false;
   bool _started = false;
   bool _disposed = false;
 
@@ -139,15 +187,33 @@ class SyncScheduler {
 
   /// 是否存在调度器定时器（单测断言「后台零定时」用）。
   bool get hasPendingTimer =>
-      _debounceTimer != null || _idleTimer != null || _activeTimer != null;
+      _debounceTimer != null ||
+      _idleTimer != null ||
+      _activeTimer != null ||
+      _networkTimer != null ||
+      _peerSightTimer != null ||
+      _peerSightCooldownTimer != null ||
+      _reconnectTimer != null;
 
   /// 当前空闲退避（观测与测试用；进入空闲等级时重置到起点）。
   Duration get idleBackoff => _backoff;
 
-  /// 启动：探测环境并按等级排定定时器。
+  /// 启动：探测环境、订阅网络 / 对端公告事件并按等级排定定时器。
   Future<void> start() async {
     if (_started) return;
     _started = true;
+    _networkSub = _networkChanges?.listen(
+      (_) => unawaited(onNetworkChanged()),
+      onError: (Object error) {
+        _logger.fine(() => '同步调度：网络事件流错误: $error');
+      },
+    );
+    _peerSightSub = _peerSightings?.listen(
+      (_) => notifyPeerSighted(),
+      onError: (Object error) {
+        _logger.fine(() => '同步调度：对端公告流错误: $error');
+      },
+    );
     await refreshEnvironment();
   }
 
@@ -218,7 +284,65 @@ class SyncScheduler {
     await refreshEnvironment();
     if (_disposed || !_canRunAutomatically) return;
     final push = dirty;
-    await _runAndMark(SyncTrigger.resume, push: push);
+    await _runAndMark(
+      SyncTrigger.resume,
+      push: push,
+      armLadderOnZeroPeers: true,
+    );
+  }
+
+  /// 网络变化（connectivity 原始事件）：重估环境 → 重置退避 → 去抖跑一轮。
+  ///
+  /// 蜂窝布尔值没变（Wi-Fi 重连 / 换网）时也要走这里：退避可能已经退到
+  /// 一小时，回到内网不能等下一次空闲唤醒。后台 / 省电 / 蜂窝下不排轮次，
+  /// 也不 arm 重连阶梯（移动端保持零后台定时器与蜂窝零广播）。
+  Future<void> onNetworkChanged() async {
+    if (_disposed) return;
+    await refreshEnvironment();
+    if (_disposed) return;
+    _backoff = _idleBackoffStart;
+    // 空闲等级下重排唤醒：退避虽已归零，旧 timer 可能还停在 60 分钟处。
+    if (_level == SyncLevel.idle && _canRunAutomatically) _armIdle();
+    if (_visible && _canRunAutomatically && !_onCellular) {
+      _networkTimer?.cancel();
+      _networkTimer = Timer(_networkDebounce, () {
+        _networkTimer = null;
+        if (!_visible || !_canRunAutomatically || _onCellular) return;
+        unawaited(_runAndMark(SyncTrigger.network, push: true));
+      });
+    }
+    _armReconnectLadder();
+  }
+
+  /// 收到认证通过的对端公告：1s 去抖 + 10s 冷却后跑一轮发现。
+  ///
+  /// 冷却未到时延后到冷却结束，不在窗口内重复发轮次；后台 / 省电 / 蜂窝
+  /// 直接忽略。
+  void notifyPeerSighted() {
+    if (_disposed || !_visible || !_canRunAutomatically || _onCellular) return;
+    _peerSightTimer?.cancel();
+    _peerSightTimer = Timer(_peerSightDebounce, _firePeerSight);
+  }
+
+  void _firePeerSight() {
+    _peerSightTimer = null;
+    // 每次重新计算冷却：冷却计时器还在等待时又来了公告，不能排两轮。
+    _peerSightCooldownTimer?.cancel();
+    _peerSightCooldownTimer = null;
+    if (_disposed || !_visible || !_canRunAutomatically || _onCellular) return;
+    final now = _nowMs();
+    final remaining =
+        _lastDiscoveryAt + _peerSightCooldown.inMilliseconds - now;
+    if (_lastDiscoveryAt > 0 && remaining > 0) {
+      _peerSightCooldownTimer = Timer(
+        Duration(milliseconds: remaining),
+        _firePeerSight,
+      );
+      return;
+    }
+    // 冷却起点在真正开跑时由 `_runAndMark` 记录：上一轮未结束时本轮不会
+    // 实际开跑，pending 的公告不能因此被冷却窗口吞掉。
+    unawaited(_runAndMark(SyncTrigger.discovery, push: true));
   }
 
   /// 退后台 / 锁屏：取消全部定时器，有本地变更时尽力推一次。
@@ -226,6 +350,8 @@ class SyncScheduler {
     if (_disposed) return;
     if (!_visible) return;
     _visible = false;
+    _cancelAuxiliaryTimers();
+    _peerSightPending = false;
     _applyLevel(_evaluate());
     if (!_canRunAutomatically || !dirty) return;
     unawaited(_runAndMark(SyncTrigger.pause, push: true));
@@ -251,6 +377,24 @@ class SyncScheduler {
     _idleTimer = null;
     _activeTimer?.cancel();
     _activeTimer = null;
+    _cancelAuxiliaryTimers();
+    unawaited(_networkSub?.cancel());
+    _networkSub = null;
+    unawaited(_peerSightSub?.cancel());
+    _peerSightSub = null;
+  }
+
+  /// 取消网络 / 公告 / 重连阶梯相关定时器（后台、省电、销毁共用）。
+  void _cancelAuxiliaryTimers() {
+    _networkTimer?.cancel();
+    _networkTimer = null;
+    _peerSightTimer?.cancel();
+    _peerSightTimer = null;
+    _peerSightCooldownTimer?.cancel();
+    _peerSightCooldownTimer = null;
+    _reconnectTimer?.cancel();
+    _reconnectTimer = null;
+    _reconnectStep = 0;
   }
 
   /// 自动同步当前是否允许（省电等级与「移动数据下暂停」策略下暂停）。
@@ -284,6 +428,10 @@ class SyncScheduler {
   void _applyLevel(SyncLevel next) {
     final changed = next != _level;
     _level = next;
+    // 后台 / 省电：网络去抖、公告冷却与重连阶梯一并取消（零定时器）。
+    if (next == SyncLevel.background || next == SyncLevel.powerSave) {
+      _cancelAuxiliaryTimers();
+    }
     _debounceTimer?.cancel();
     _debounceTimer = null;
     _idleTimer?.cancel();
@@ -347,7 +495,11 @@ class SyncScheduler {
     }
     _backoff = _idleBackoffStart;
     _armIdle();
-    await _runAndMark(SyncTrigger.timer, push: true);
+    await _runAndMark(
+      SyncTrigger.timer,
+      push: true,
+      armLadderOnZeroPeers: true,
+    );
   }
 
   void _growBackoff() {
@@ -355,10 +507,103 @@ class SyncScheduler {
     _backoff = next > _idleBackoffMax ? _idleBackoffMax : next;
   }
 
-  Future<void> _runAndMark(SyncTrigger trigger, {required bool push}) async {
-    final outcome = await _run(trigger, push: push);
-    if (_disposed) return;
+  Future<SyncRunOutcome?> _runAndMark(
+    SyncTrigger trigger, {
+    required bool push,
+    bool armLadderOnZeroPeers = false,
+  }) async {
+    if (_roundRunning) {
+      // 一轮未结束不并发再跑；对端公告留到本轮结束后补一次（重新走 1s 去抖
+      // + 10s 冷却），其余触发按「本轮已覆盖同一环境」丢弃。
+      if (trigger == SyncTrigger.discovery) _peerSightPending = true;
+      return null;
+    }
+    _roundRunning = true;
+    if (trigger == SyncTrigger.discovery) _lastDiscoveryAt = _nowMs();
+    final SyncRunOutcome outcome;
+    try {
+      outcome = await _run(trigger, push: push);
+    } finally {
+      _roundRunning = false;
+    }
+    if (_disposed) return outcome;
     _markDelivered(outcome);
+    if (outcome.contactedLan) {
+      // 局域网已经看到对端：后续阶梯档位没有意义。
+      _cancelReconnectLadder();
+    } else if (armLadderOnZeroPeers && !outcome.contacted) {
+      // 「已配对但零对端」：从 5s 档开始重连，任何一轮 LAN 接触成功即取消。
+      _armReconnectLadder();
+    }
+    if (_peerSightPending) {
+      _peerSightPending = false;
+      notifyPeerSighted();
+    }
+    return outcome;
+  }
+
+  /// 重连阶梯的前置条件：前台、非省电、非蜂窝、LAN 启用且有已知对端。
+  bool get _reconnectEligible {
+    if (_disposed || !_visible) return false;
+    if (!_host.syncEnabled || powerSaveActive || _onCellular) return false;
+    if (!_state.enabledTransports.contains(SyncTransportKind.lan)) return false;
+    return _state.lanEndpoints.isNotEmpty || _state.manualPeers.isNotEmpty;
+  }
+
+  /// 从第一档（5s）重新 arm 重连阶梯。
+  void _armReconnectLadder() {
+    if (!_reconnectEligible) {
+      _cancelReconnectLadder();
+      return;
+    }
+    _reconnectTimer?.cancel();
+    _reconnectTimer = null;
+    _reconnectStep = 0;
+    _scheduleReconnectStep();
+  }
+
+  void _scheduleReconnectStep() {
+    if (_disposed || !_reconnectEligible) {
+      _cancelReconnectLadder();
+      return;
+    }
+    if (_reconnectStep >= _reconnectLadder.length) {
+      _reconnectTimer = null;
+      return;
+    }
+    final delay = _reconnectLadder[_reconnectStep];
+    _reconnectTimer?.cancel();
+    _reconnectTimer = Timer(delay, () {
+      _reconnectTimer = null;
+      unawaited(_onReconnectTick());
+    });
+  }
+
+  Future<void> _onReconnectTick() async {
+    if (_disposed) return;
+    if (!_reconnectEligible) {
+      _cancelReconnectLadder();
+      return;
+    }
+    final outcome = await _runAndMark(SyncTrigger.discovery, push: true);
+    if (_disposed) return;
+    if (outcome == null) {
+      // 上一轮还没结束：稍后重试同一档，不推进阶梯。
+      _scheduleReconnectStep();
+      return;
+    }
+    if (outcome.contactedLan) {
+      _cancelReconnectLadder();
+      return;
+    }
+    _reconnectStep++;
+    _scheduleReconnectStep();
+  }
+
+  void _cancelReconnectLadder() {
+    _reconnectTimer?.cancel();
+    _reconnectTimer = null;
+    _reconnectStep = 0;
   }
 
   /// 按本轮外发结果清待发标记：只清「本轮外发过」的类别。
