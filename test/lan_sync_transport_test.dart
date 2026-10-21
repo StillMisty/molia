@@ -1090,4 +1090,49 @@ void main() {
     expect(isRoutablePeerAddress('fe80::1%eth0'), isFalse);
     expect(isRoutablePeerAddress('192.168.1.7'), isTrue);
   });
+
+  test('上一轮 presence 无本轮 ack：指纹命中缓存也不能跳过 GET', () async {
+    final envA = envelope('devA', value: 'light').withSnapshotId('hash-1');
+    final transportA = LanSyncTransport(
+      deviceId: 'devA',
+      deviceName: () => '设备A',
+      codec: codecPort,
+      passphraseProvider: () async => passphrase,
+      snapshotProvider: () async => envA,
+      snapshotIdProvider: () => 'hash-1',
+      localAddressesProvider: () async => const [],
+      udpPort: 47977,
+    );
+    var cellular = false;
+    final transportB = LanSyncTransport(
+      deviceId: 'devB',
+      deviceName: () => '设备B',
+      codec: codecPort,
+      passphraseProvider: () async => passphrase,
+      snapshotProvider: () async => envelope('devB'),
+      probeTargets: const [(host: '127.0.0.1', port: 47977)],
+      probeWindow: const Duration(milliseconds: 250),
+      isCellular: () => cellular,
+      localAddressesProvider: () async => const [],
+      udpPort: 47978,
+    );
+    addTearDown(() async {
+      await transportA.stop();
+      await transportB.stop();
+    });
+    await transportA.start();
+    await transportB.start();
+
+    final first = await transportB.pull();
+    expect(first.envelopes.single.deviceId, 'devA');
+    expect(transportB.snapshotGetCount, 1);
+
+    // 第二轮切到蜂窝：不再发探测，也就不可能收到 A 的 ack。presence 仍是
+    // 上一轮的旧 snap/head；即使与缓存一致，也不能据此跳过 GET。
+    cellular = true;
+    final second = await transportB.pull();
+    expect(second.envelopes, hasLength(1));
+    expect(second.skippedUnchanged, 0);
+    expect(transportB.snapshotGetCount, 2, reason: '本轮没有新鲜指纹，必须重新拉取');
+  });
 }

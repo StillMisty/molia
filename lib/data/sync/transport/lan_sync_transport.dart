@@ -548,7 +548,10 @@ class LanSyncTransport
         cursor: cursor,
         headSeq: peer.journalHead,
       );
+      // 只有本轮探测到的 snap/head 才能作为「未变」依据：上一轮 presence
+      // 在本轮 ack 丢失时会停在旧 head，照旧跳过会漏掉对端新数据。
       if (!needsFull &&
+          peer.snapshotFresh &&
           peer.snapshotId.isNotEmpty &&
           cached == peer.snapshotId &&
           upToDate) {
@@ -591,7 +594,7 @@ class LanSyncTransport
             peer.deviceId != envelope.deviceId;
         final fingerprint = envelope.snapshotId.isNotEmpty
             ? envelope.snapshotId
-            : (identityMismatch ? '' : peer.snapshotId);
+            : (identityMismatch || !peer.snapshotFresh ? '' : peer.snapshotId);
         if (fingerprint.isNotEmpty) {
           _peerSnapshotIds[identityMismatch ? envelope.deviceId : peer.key] =
               fingerprint;
@@ -752,6 +755,7 @@ class LanSyncTransport
         addresses: presence.addresses,
         snapshotId: presence.snapshotId,
         journalHead: presence.journalHead,
+        snapshotFresh: fresh,
         expected: fresh,
       ));
     }
@@ -1060,6 +1064,7 @@ class _Peer {
     this.alternateHosts = const [],
     this.snapshotId = '',
     this.journalHead,
+    this.snapshotFresh = false,
     required this.expected,
   });
 
@@ -1077,27 +1082,52 @@ class _Peer {
   final String snapshotId;
   final int? journalHead;
 
+  /// snap/head 是否来自**本轮**探测（presence.lastHeardAt >= 本轮起点）。
+  /// 只有新鲜的指纹才能作为「未变跳过 GET」的依据。
+  final bool snapshotFresh;
+
   /// 预期对端（manual / presence）失败要计数；试探性对端失败不计数。
   final bool expected;
 
-  _Peer merge(_Peer other) => _Peer(
-        deviceId: deviceId.isNotEmpty ? deviceId : other.deviceId,
-        name: name.isNotEmpty ? name : other.name,
-        host: host.isNotEmpty ? host : other.host,
-        port: port > 0 ? port : other.port,
-        probePort: probePort > 0 ? probePort : other.probePort,
-        addresses: _union(addresses, other.addresses),
-        alternateHosts: _union(
-          alternateHosts,
-          [
-            if (other.host.isNotEmpty && other.host != host) other.host,
-            ...other.alternateHosts,
-          ],
-        ),
-        snapshotId: snapshotId.isNotEmpty ? snapshotId : other.snapshotId,
-        journalHead: journalHead ?? other.journalHead,
-        expected: expected || other.expected,
-      );
+  _Peer merge(_Peer other) {
+    final String mergedSnapshotId;
+    final int? mergedJournalHead;
+    if (snapshotFresh && !other.snapshotFresh) {
+      mergedSnapshotId = snapshotId;
+      mergedJournalHead = journalHead;
+    } else if (!snapshotFresh && other.snapshotFresh) {
+      mergedSnapshotId = other.snapshotId;
+      mergedJournalHead = other.journalHead;
+    } else if (snapshotFresh && other.snapshotFresh) {
+      // 两侧都是本轮观测：字段级取非空值（同一轮不应冲突）。
+      mergedSnapshotId =
+          other.snapshotId.isNotEmpty ? other.snapshotId : snapshotId;
+      mergedJournalHead = other.journalHead ?? journalHead;
+    } else {
+      // 都不新鲜：只保留非空值做缓存标记，不用于跳过 GET。
+      mergedSnapshotId = snapshotId.isNotEmpty ? snapshotId : other.snapshotId;
+      mergedJournalHead = journalHead ?? other.journalHead;
+    }
+    return _Peer(
+      deviceId: deviceId.isNotEmpty ? deviceId : other.deviceId,
+      name: name.isNotEmpty ? name : other.name,
+      host: host.isNotEmpty ? host : other.host,
+      port: port > 0 ? port : other.port,
+      probePort: probePort > 0 ? probePort : other.probePort,
+      addresses: _union(addresses, other.addresses),
+      alternateHosts: _union(
+        alternateHosts,
+        [
+          if (other.host.isNotEmpty && other.host != host) other.host,
+          ...other.alternateHosts,
+        ],
+      ),
+      snapshotId: mergedSnapshotId,
+      journalHead: mergedJournalHead,
+      snapshotFresh: snapshotFresh || other.snapshotFresh,
+      expected: expected || other.expected,
+    );
+  }
 
   /// HTTP 主机尝试顺序：候选地址（IPv4 → 全局 / ULA IPv6）→ 观测源地址
   /// → 其它已学到的地址；单对端最多 [LanSyncTransport.maxHttpAddressesPerPeer]
