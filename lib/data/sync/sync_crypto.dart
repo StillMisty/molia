@@ -67,6 +67,15 @@ class SyncCodec {
     utf8.encode('molia-sync-frame-v3'),
   );
 
+  /// 发现层密钥 info（与帧密钥分离：发现报文短、暴露在局域网，绝不能复用
+  /// 载荷帧的 (key, nonce) 空间）。
+  static final Uint8List _discoveryInfo = Uint8List.fromList(
+    utf8.encode('molia-sync-discovery-v1'),
+  );
+
+  /// 发现层 MAC 长度（截断 HMAC-SHA256；报文只有几十到几百字节，16B 足够）。
+  static const int discoveryMacLength = 16;
+
   /// 根密钥缓存：口令 → (迭代数, 密钥)。上限兜底异常输入（对端口令不同的帧）。
   static const int _maxCachedRoots = 4;
   final Map<String, ({int iterations, Uint8List key})> _rootKeys = {};
@@ -164,6 +173,26 @@ class SyncCodec {
     } catch (_) {
       throw const SyncCryptoException('快照内容无法解析');
     }
+  }
+
+  /// 发现层密钥 = HKDF(根密钥, info `molia-sync-discovery-v1`, 32B)。
+  ///
+  /// 与帧密钥共用 [根密钥缓存]，所以同一口令只做一次 PBKDF2；发现报文每包
+  /// 都要验 MAC，不能每包重新派生。
+  Uint8List discoveryKey(String passphrase) {
+    final key = SyncPassphrase.normalize(passphrase);
+    if (key.isEmpty) throw const SyncCryptoException('同步口令为空');
+    final root = _cachedRootKey(key, iterations);
+    final derivator = HKDFKeyDerivator(SHA256Digest())
+      ..init(HkdfParameters(root, 32, Uint8List(0), _discoveryInfo));
+    return derivator.process(Uint8List(0));
+  }
+
+  /// 发现报文的截断 HMAC：`HMAC-SHA256(key, data)[0..16]`。
+  static Uint8List discoveryMac(Uint8List key, List<int> data) {
+    final hmac = HMac(SHA256Digest(), 64)..init(KeyParameter(key));
+    final full = hmac.process(Uint8List.fromList(data));
+    return Uint8List.sublistView(full, 0, discoveryMacLength);
   }
 
   /// 帧密钥 = HKDF(根密钥, 帧 nonce)。

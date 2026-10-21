@@ -10,6 +10,7 @@ class SyncPullRequest {
   const SyncPullRequest({
     this.cursors = const {},
     this.fullPeers = const {},
+    this.forceDiscovery = false,
   });
 
   /// 本机已消费各对端 journal 的位置（对端 id → seq）。
@@ -17,6 +18,11 @@ class SyncPullRequest {
 
   /// 强制走全量快照的对端 id。
   final Set<String> fullPeers;
+
+  /// 强制做一次完整发现（广播 + 组播 + 单播；启动 / 回前台 / 换网 / 手动）。
+  ///
+  /// 普通轮次只对已有候选单播，避免空闲时反复广播耗电。
+  final bool forceDiscovery;
 
   /// 未记录过的对端：尚未消费任何条目。
   static const int noCursor = -1;

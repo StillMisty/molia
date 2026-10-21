@@ -620,6 +620,100 @@ class ManualPeer {
   }
 }
 
+/// 局域网发现层观测到的对端（认证通过的公告 / 应答）。
+///
+/// [host] 是 UDP 来源地址（IPv6 组播源可能是 link-local），[snapshotId] /
+/// [journalHead] 供「内容未变跳过 GET」使用，[bootId] 让对端重启在 head
+/// 未变时也能被识别为重新上线。
+class LanPeerSighting {
+  const LanPeerSighting({
+    required this.deviceId,
+    required this.name,
+    required this.host,
+    required this.httpPort,
+    required this.probePort,
+    required this.snapshotId,
+    required this.journalHead,
+    required this.bootId,
+    required this.observedAt,
+  });
+
+  final String deviceId;
+  final String name;
+  final String host;
+  final int httpPort;
+  final int probePort;
+  final String snapshotId;
+  final int? journalHead;
+  final String bootId;
+
+  /// 观测时间（毫秒时间戳）。
+  final int observedAt;
+}
+
+/// 已通过「MAC 验证 + HTTP 解密成功」的持久化端点（#42 落库）。
+///
+/// 地址只存可路由字面量；[verifiedAt] 用于 180 天淘汰，[probePort] 用于
+/// 广播被隔离时的单播兜底。
+class LanPeerEndpoint {
+  const LanPeerEndpoint({
+    required this.deviceId,
+    required this.host,
+    required this.httpPort,
+    this.probePort = 0,
+    required this.verifiedAt,
+  });
+
+  final String deviceId;
+  final String host;
+  final int httpPort;
+  final int probePort;
+
+  /// 最近一次验证成功（毫秒时间戳）。
+  final int verifiedAt;
+
+  LanPeerEndpoint copyWith({
+    String? deviceId,
+    String? host,
+    int? httpPort,
+    int? probePort,
+    int? verifiedAt,
+  }) =>
+      LanPeerEndpoint(
+        deviceId: deviceId ?? this.deviceId,
+        host: host ?? this.host,
+        httpPort: httpPort ?? this.httpPort,
+        probePort: probePort ?? this.probePort,
+        verifiedAt: verifiedAt ?? this.verifiedAt,
+      );
+
+  Map<String, dynamic> toJson() => {
+        'deviceId': deviceId,
+        'host': host,
+        'httpPort': httpPort,
+        if (probePort > 0) 'probePort': probePort,
+        'verifiedAt': verifiedAt,
+      };
+
+  static LanPeerEndpoint? fromJson(Object? raw) {
+    if (raw is! Map) return null;
+    final deviceId = raw['deviceId'];
+    final host = raw['host'];
+    final httpPort = (raw['httpPort'] as num?)?.toInt() ?? 0;
+    final verifiedAt = (raw['verifiedAt'] as num?)?.toInt() ?? 0;
+    if (deviceId is! String || deviceId.isEmpty) return null;
+    if (host is! String || host.trim().isEmpty) return null;
+    if (httpPort <= 0 || httpPort > 65535) return null;
+    return LanPeerEndpoint(
+      deviceId: deviceId,
+      host: host.trim(),
+      httpPort: httpPort,
+      probePort: (raw['probePort'] as num?)?.toInt() ?? 0,
+      verifiedAt: verifiedAt,
+    );
+  }
+}
+
 /// 一轮同步的触发原因（报告与日志用；用户可从日志看出「为什么现在同步」）。
 enum SyncTrigger {
   /// 启动后首轮。

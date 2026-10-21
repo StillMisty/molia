@@ -27,6 +27,7 @@ abstract final class _CodecOp {
   static const int encrypt = 0;
   static const int decrypt = 1;
   static const int fingerprint = 2;
+  static const int discoveryKey = 3;
 }
 
 class IsolateSyncCodecPort implements SyncCodecPort {
@@ -77,6 +78,15 @@ class IsolateSyncCodecPort implements SyncCodecPort {
       passphrase: '',
     );
     return reply.fingerprint!;
+  }
+
+  @override
+  Future<Uint8List> discoveryKey(String passphrase) async {
+    final reply = await _send(
+      _CodecOp.discoveryKey,
+      passphrase: passphrase,
+    );
+    return reply.bytes!;
   }
 
   @override
@@ -188,6 +198,8 @@ void _codecWorker(List<Object?> args) {
           reply.envelope = codec.decrypt(message.bytes!, message.passphrase);
         case _CodecOp.fingerprint:
           reply.fingerprint = syncFingerprint(message.records!);
+        case _CodecOp.discoveryKey:
+          reply.bytes = codec.discoveryKey(message.passphrase);
       }
     } on SyncCryptoException catch (e) {
       reply.error = e.message;

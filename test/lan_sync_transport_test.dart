@@ -1,9 +1,12 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
+import 'dart:typed_data';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:molia/data/sync/sync_codec_port.dart';
 import 'package:molia/data/sync/sync_crypto.dart';
+import 'package:molia/data/sync/transport/lan_discovery.dart';
 import 'package:molia/data/sync/transport/lan_sync_transport.dart';
 import 'package:molia/domain/models/device_sync.dart';
 import 'package:molia/domain/ports/sync_transport.dart';
@@ -551,19 +554,19 @@ void main() {
     expect(transport.discoveryPorts.v6, 0, reason: 'v6 独立降级不影响 v4');
   });
 
-  test('注入的地址候选走统一可路由过滤：回环 / link-local / zone / 非字面量不进探测包', () async {
-    // 接收端只抓探测包（不实现 peer 协议）：直接看线上载荷里的 addrs。
+  test('注入的地址候选走统一可路由过滤：回环 / link-local / zone / 非字面量不进公告', () async {
+    // 接收端只抓公告（不实现 peer 协议）：直接看线上 MSD/1 载荷里的 addrs。
     final catcher = await RawDatagramSocket.bind(
       InternetAddress.anyIPv4,
       47953,
       reuseAddress: false,
     );
     addTearDown(catcher.close);
-    final messages = <String>[];
+    final packets = <List<int>>[];
     catcher.listen((event) {
       if (event != RawSocketEvent.read) return;
       final datagram = catcher.receive();
-      if (datagram != null) messages.add(utf8.decode(datagram.data));
+      if (datagram != null) packets.add(datagram.data);
     });
 
     final transport = LanSyncTransport(
@@ -590,10 +593,14 @@ void main() {
     await transport.start();
     await transport.pull();
 
-    expect(messages, isNotEmpty);
-    final probe = jsonDecode(messages.first) as Map<String, dynamic>;
-    expect(probe['m'], 'molia-sync.probe');
-    expect(probe['addrs'], ['10.0.0.5'], reason: '可路由判定与去重对注入路径同样生效');
+    expect(packets, isNotEmpty);
+    final key = codec.discoveryKey(passphrase);
+    final announce = packets
+        .map((packet) => Msd1.decode(Uint8List.fromList(packet), key))
+        .whereType<LanDiscoveryMessage>()
+        .firstWhere((message) => message.isAnnounce);
+    expect(announce.deviceId, 'devA');
+    expect(announce.addresses, ['10.0.0.5'], reason: '可路由判定与去重对注入路径同样生效');
   });
 
   test('候选地址优先尝试：不可达的候选回落到观测源地址', () async {
@@ -628,5 +635,200 @@ void main() {
 
     final pulled = (await transportB.pull()).envelopes;
     expect(pulled.single.deviceId, 'devA');
+  });
+
+  // ---- MSD/1 发现层改造 ----
+
+  test('已知端点直连：有候选不广播；第二次未变跳过且 0 广播', () async {
+    var serverHttpPort = 0;
+    final server = LanSyncTransport(
+      deviceId: 'devA',
+      deviceName: () => '设备A',
+      codec: codecPort,
+      passphraseProvider: () async => passphrase,
+      snapshotProvider: () async => envelope('devA', value: 'light'),
+      snapshotIdProvider: () => 'snap-1',
+      onHttpPortBound: (port) => serverHttpPort = port,
+      localAddressesProvider: () async => const [],
+      udpPort: 47961,
+    );
+    final verified = <LanPeerEndpoint>[];
+    final client = LanSyncTransport(
+      deviceId: 'devB',
+      deviceName: () => '设备B',
+      codec: codecPort,
+      passphraseProvider: () async => passphrase,
+      snapshotProvider: () async => envelope('devB'),
+      knownPeersProvider: () => [
+        LanPeerEndpoint(
+          deviceId: 'devA',
+          host: '127.0.0.1',
+          httpPort: serverHttpPort,
+          probePort: 47961,
+          verifiedAt: 1,
+        ),
+      ],
+      onPeerVerified: verified.add,
+      localAddressesProvider: () async => const [],
+      udpPort: 47962,
+    );
+    addTearDown(() async {
+      await server.stop();
+      await client.stop();
+    });
+    await server.start();
+    await client.start();
+
+    final first = await client.pull();
+    expect(first.envelopes.single.deviceId, 'devA');
+    expect(first.contacted, isTrue);
+    expect(client.snapshotGetCount, 1);
+    expect(client.broadcastCount, 0, reason: '有已知端点只单播，不广播');
+    expect(verified, isNotEmpty, reason: 'MAC + HTTP 解密成功后回写端点');
+    expect(verified.last.httpPort, serverHttpPort);
+
+    final second = await client.pull();
+    expect(second.envelopes, isEmpty);
+    expect(second.skippedUnchanged, 1);
+    expect(client.snapshotGetCount, 1, reason: '未变跳过：没有 GET');
+    expect(client.broadcastCount, 0, reason: '空闲轮 0 广播');
+  });
+
+  test('换网事件：接口指纹变化 → epoch++ / 重绑 UDP 后仍可用', () async {
+    var addresses = <String>['10.0.0.5'];
+    final networkChanges = StreamController<void>();
+    final transport = LanSyncTransport(
+      deviceId: 'devA',
+      deviceName: () => '设备A',
+      codec: codecPort,
+      passphraseProvider: () async => passphrase,
+      snapshotProvider: () async => envelope('devA'),
+      localAddressesProvider: () async => addresses,
+      networkChanges: networkChanges.stream,
+      udpPort: 47963,
+    );
+    addTearDown(() async {
+      await transport.stop();
+      await networkChanges.close();
+    });
+    await transport.start();
+    expect(transport.networkEpoch, 1);
+    final ports = transport.discoveryPorts;
+    expect(ports.v4, greaterThan(0));
+
+    addresses = ['10.0.1.5'];
+    networkChanges.add(null);
+    await Future<void>.delayed(const Duration(milliseconds: 300));
+
+    expect(transport.networkEpoch, 2);
+    expect(transport.discoveryPorts.v4, ports.v4, reason: '重绑尽力保持原端口');
+    expect(transport.isRunning, isTrue);
+  });
+
+  test('蜂窝：0 广播 / 组播；已知端点仍可直连 HTTP', () async {
+    var serverHttpPort = 0;
+    final server = LanSyncTransport(
+      deviceId: 'devA',
+      deviceName: () => '设备A',
+      codec: codecPort,
+      passphraseProvider: () async => passphrase,
+      snapshotProvider: () async => envelope('devA', value: 'light'),
+      onHttpPortBound: (port) => serverHttpPort = port,
+      localAddressesProvider: () async => const [],
+      udpPort: 47964,
+    );
+    final client = LanSyncTransport(
+      deviceId: 'devB',
+      deviceName: () => '设备B',
+      codec: codecPort,
+      passphraseProvider: () async => passphrase,
+      snapshotProvider: () async => envelope('devB'),
+      knownPeersProvider: () => [
+        LanPeerEndpoint(
+          deviceId: 'devA',
+          host: '127.0.0.1',
+          httpPort: serverHttpPort,
+          probePort: 47964,
+          verifiedAt: 1,
+        ),
+      ],
+      isCellular: () => true,
+      localAddressesProvider: () async => const [],
+      udpPort: 47965,
+    );
+    addTearDown(() async {
+      await server.stop();
+      await client.stop();
+    });
+    await server.start();
+    await client.start();
+
+    final pulled = await client.pull();
+    expect(pulled.envelopes.single.deviceId, 'devA');
+    expect(client.broadcastCount, 0, reason: '蜂窝不广播');
+    expect(client.presenceCount, 0, reason: '蜂窝连单播公告也不发');
+  });
+
+  test('旧 JSON 包静默丢弃；合法 MSD/1 公告才产生 sighting', () async {
+    final transport = LanSyncTransport(
+      deviceId: 'devA',
+      deviceName: () => '设备A',
+      codec: codecPort,
+      passphraseProvider: () async => passphrase,
+      snapshotProvider: () async => envelope('devA'),
+      localAddressesProvider: () async => const [],
+      udpPort: 47966,
+    );
+    final sightings = <LanPeerSighting>[];
+    final subscription = transport.sightings.listen(sightings.add);
+    final emitter = await RawDatagramSocket.bind(
+      InternetAddress.loopbackIPv4,
+      0,
+    );
+    addTearDown(() async {
+      await subscription.cancel();
+      await transport.stop();
+      emitter.close();
+    });
+    await transport.start();
+    final discoveryPort = transport.discoveryPorts.v4;
+    expect(discoveryPort, greaterThan(0));
+
+    emitter.send(
+      utf8.encode(jsonEncode({
+        'm': 'molia-sync.probe',
+        'v': 1,
+        'deviceId': 'devLegacy',
+        'port': 1234,
+      })),
+      InternetAddress.loopbackIPv4,
+      discoveryPort,
+    );
+    await Future<void>.delayed(const Duration(milliseconds: 200));
+    expect(sightings, isEmpty, reason: '旧 JSON 不识别、不产生 presence');
+    expect(transport.presenceCount, 0);
+
+    final key = codec.discoveryKey(passphrase);
+    final packet = Msd1.encode(
+      LanDiscoveryMessage(
+        type: Msd1.typeAnnounce,
+        deviceId: 'devModern',
+        name: '新设备',
+        httpPort: 43210,
+        probePort: 47825,
+        addresses: const [],
+        snapshotId: '',
+        journalHead: null,
+        categories: const [],
+        nonce: 'nonce-modern',
+        bootId: 'boot-modern',
+      ),
+      key,
+    );
+    emitter.send(packet, InternetAddress.loopbackIPv4, discoveryPort);
+    await Future<void>.delayed(const Duration(milliseconds: 200));
+    expect(sightings, hasLength(1));
+    expect(sightings.single.deviceId, 'devModern');
+    expect(transport.presenceCount, 1);
   });
 }
