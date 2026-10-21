@@ -248,34 +248,22 @@ class WindowChrome {
 
   static Future<void> show() async {
     if (!isSupported) return;
-    if (Platform.isWindows) {
-      // Windows 原生侧自己判断可见性（并在可见分支清掉可能残留的 cloak），
-      // 这里不再多查一次 isVisible。
-      AppPresence.instance.markVisible();
+    // 只有「关闭到托盘后的恢复」才走首帧后显示。启动首帧时 runner 已经挂了
+    // 自己的 next-frame callback（Show），这里再设一次会覆盖它——Windows 上
+    // 实测会在首帧后崩（ucrtbase 0xc0000409）。
+    final fromTray = AppPresence.instance.isTrayHidden;
+    AppPresence.instance.markVisible();
+    if (fromTray && Platform.isWindows) {
       await _showWindowsAfterFirstFrame();
+    } else if (fromTray && Platform.isLinux) {
+      await _showLinuxWithOpacity();
     } else {
-      // 启动首帧时 Linux runner 可能已经 show，不能再次透明，否则启动反而
-      // 闪一下；先读可见性再决定。
-      final wasVisible = await _isVisible();
-      AppPresence.instance.markVisible();
-      if (!wasVisible) {
-        await _showLinuxWithOpacity();
-      } else {
-        await windowManager.show();
-      }
+      await windowManager.show();
     }
     await windowManager.focus();
     if (_restoreMaximized) {
       _restoreMaximized = false;
       await windowManager.maximize();
-    }
-  }
-
-  static Future<bool> _isVisible() async {
-    try {
-      return await windowManager.isVisible();
-    } catch (_) {
-      return false;
     }
   }
 
