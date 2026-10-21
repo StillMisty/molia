@@ -168,6 +168,29 @@ class _AiDjHistoryPageState extends State<AiDjHistoryPage> {
     final active = provider.isActiveBatch(entry.id);
     final expanded = _expanded.contains(entry.id);
     final batch = _batches[entry.id];
+    final actions = <M3EButtonGroupAction>[
+      M3EButtonGroupAction(
+        icon: const Icon(Icons.play_arrow_rounded),
+        label: Text(l10n.aiDjHistoryPlay),
+        enabled: !provider.isBusy,
+      ),
+      M3EButtonGroupAction(
+        icon: const Icon(Icons.playlist_add_rounded),
+        label: Text(l10n.aiDjHistoryEnqueue),
+        enabled: !provider.isBusy,
+      ),
+      if (!active)
+        M3EButtonGroupAction(
+          icon: const Icon(Icons.check_circle_rounded),
+          label: Text(l10n.aiDjHistorySetActive),
+          enabled: !provider.isBusy,
+        ),
+    ];
+    final handlers = <VoidCallback>[
+      () => unawaited(provider.playHistoryBatch(entry.id)),
+      () => unawaited(provider.enqueueHistoryBatch(entry.id)),
+      if (!active) () => unawaited(provider.setActiveBatch(entry.id)),
+    ];
     return CardListSurface(
       key: Key('aiDjHistoryEntry_${entry.id}'),
       position: M3ECardPosition.single,
@@ -228,36 +251,14 @@ class _AiDjHistoryPageState extends State<AiDjHistoryPage> {
                     key: Key('aiDjHistoryActions_${entry.id}'),
                     type: M3EButtonGroupType.standard,
                     style: M3EButtonStyle.tonal,
-                    actions: [
-                      M3EButtonGroupAction(
-                        icon: const Icon(Icons.play_arrow_rounded),
-                        label: Text(l10n.aiDjHistoryPlay),
-                        enabled: !provider.isBusy,
-                      ),
-                      M3EButtonGroupAction(
-                        icon: const Icon(Icons.playlist_add_rounded),
-                        label: Text(l10n.aiDjHistoryEnqueue),
-                        enabled: !provider.isBusy,
-                      ),
-                      if (!active)
-                        M3EButtonGroupAction(
-                          icon: const Icon(Icons.check_circle_rounded),
-                          label: Text(l10n.aiDjHistorySetActive),
-                          enabled: !provider.isBusy,
-                        ),
-                    ],
+                    // 窄屏放不下时收进菜单，尾部动作仍可达。
+                    overflow: M3EButtonGroupOverflow.menu,
+                    overflowIcon: const Icon(Icons.more_horiz_rounded),
+                    actions: actions,
                     // 命令式动作：按下即分发，不保留选中态。
                     selectedIndex: null,
                     onSelectedIndexChanged: (index) {
-                      if (provider.isBusy) return;
-                      switch (index) {
-                        case 0:
-                          unawaited(provider.playHistoryBatch(entry.id));
-                        case 1:
-                          unawaited(provider.enqueueHistoryBatch(entry.id));
-                        case 2 when !active:
-                          unawaited(provider.setActiveBatch(entry.id));
-                      }
+                      if (index != null) handlers[index]();
                     },
                   ),
                 ),
