@@ -15,6 +15,7 @@ import '../l10n/app_localizations.dart';
 import '../providers/ai_dj_provider.dart';
 import '../services/notification_service.dart';
 import '../widgets/ai_dj_shared.dart';
+import '../widgets/settings/settings_tiles.dart';
 
 class AiDjPreferencesPage extends StatefulWidget {
   const AiDjPreferencesPage({super.key});
@@ -49,7 +50,6 @@ class _AiDjPreferencesPageState extends State<AiDjPreferencesPage> {
 
   Future<void> _save() async {
     final l10n = AppLocalizations.of(context)!;
-    setState(() {});
     await _provider.savePreferences(_currentDraft);
     if (!mounted) return;
     _notify(l10n.aiDjPrefsSaved);
@@ -139,36 +139,53 @@ class _AiDjPreferencesPageState extends State<AiDjPreferencesPage> {
         child: ListView(
           padding: const EdgeInsets.fromLTRB(16, 8, 16, 32),
           children: [
-            _sectionTitle(l10n.aiDjPrefsGenerationGroup),
-            _switchRow(
-              key: const Key('aiDjPrefAutoFeedSwitch'),
-              title: l10n.aiDjAutoFeedTitle,
-              subtitle: l10n.aiDjAutoFeedSubtitle,
-              value: _draft.autoFeed,
-              onChanged: (value) => setState(
-                () => _draft = _draft.copyWith(autoFeed: value),
-              ),
+            SettingsSectionCard(
+              title: l10n.aiDjPrefsGenerationGroup,
+              children: [
+                _switchTile(
+                  key: const Key('aiDjPrefAutoFeedSwitch'),
+                  icon: Icons.autorenew_rounded,
+                  title: l10n.aiDjAutoFeedTitle,
+                  subtitle: l10n.aiDjAutoFeedSubtitle,
+                  value: _draft.autoFeed,
+                  onChanged: (value) => setState(
+                    () => _draft = _draft.copyWith(autoFeed: value),
+                  ),
+                ),
+                _switchTile(
+                  key: const Key('aiDjPrefOnlyUnheardSwitch'),
+                  icon: Icons.hearing_rounded,
+                  title: l10n.aiDjPrefsOnlyUnheardTitle,
+                  subtitle: l10n.aiDjPrefsOnlyUnheardSubtitle,
+                  value: _draft.onlyUnheard,
+                  onChanged: (value) => setState(
+                    () => _draft = _draft.copyWith(onlyUnheard: value),
+                  ),
+                ),
+                SettingsDropdownRow<int>(
+                  key: const Key('aiDjPrefBatchSizeRow'),
+                  dropdownKey: const Key('aiDjPrefBatchSizeDropdown'),
+                  icon: Icons.layers_rounded,
+                  title: l10n.aiDjBatchSizeTitle,
+                  value: _draft.batchSize,
+                  options: [
+                    for (final size in kAiBatchSizeOptions)
+                      (size, l10n.aiDjBatchSize(size)),
+                  ],
+                  onChanged: (value) => setState(
+                    () => _draft = _draft.copyWith(batchSize: value),
+                  ),
+                ),
+              ],
             ),
-            const SizedBox(height: 8),
-            _switchRow(
-              key: const Key('aiDjPrefOnlyUnheardSwitch'),
-              title: l10n.aiDjPrefsOnlyUnheardTitle,
-              subtitle: l10n.aiDjPrefsOnlyUnheardSubtitle,
-              value: _draft.onlyUnheard,
-              onChanged: (value) => setState(
-                () => _draft = _draft.copyWith(onlyUnheard: value),
-              ),
-            ),
-            const SizedBox(height: 8),
-            _batchSizeRow(l10n),
             const SizedBox(height: 12),
-            _chipGroup(
-              title: l10n.aiDjPrefsExplorationTitle,
+            _sectionTitle(l10n.aiDjPrefsExplorationTitle),
+            _optionChips(
               options: kAiExplorationOptions,
               selected: {_draft.exploration},
               labelOf: (value) => aiDjExplorationLabel(l10n, value),
               singleSelect: true,
-              onSelected: (value) => setState(
+              onToggle: (value) => setState(
                 () => _draft = _draft.copyWith(exploration: value),
               ),
             ),
@@ -226,27 +243,24 @@ class _AiDjPreferencesPageState extends State<AiDjPreferencesPage> {
               showCounter: true,
               maxLines: 2,
               minLines: 1,
-              onChanged: (_) => setState(() {}),
             ),
-            _sectionTitle(l10n.aiDjPrefsDataScope),
-            Text(
-              l10n.aiDjScopeHint,
-              style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                    color: Theme.of(context).colorScheme.onSurfaceVariant,
+            const SizedBox(height: 24),
+            SettingsSectionCard(
+              title: l10n.aiDjPrefsDataScope,
+              footer: SettingsSectionHint(text: l10n.aiDjScopeHint),
+              children: [
+                for (final section in AiUpstreamSection.values)
+                  _switchTile(
+                    key: Key('aiDjPrefScope_${section.storageValue}'),
+                    icon: _scopeIcon(section),
+                    title: aiDjSectionLabel(l10n, section),
+                    value: _draft.sections.contains(section),
+                    onChanged: (value) {
+                      unawaited(_toggleScope(section, value));
+                    },
                   ),
+              ],
             ),
-            const SizedBox(height: 8),
-            for (final section in AiUpstreamSection.values) ...[
-              _switchRow(
-                key: Key('aiDjPrefScope_${section.storageValue}'),
-                title: aiDjSectionLabel(l10n, section),
-                value: _draft.sections.contains(section),
-                onChanged: (value) {
-                  unawaited(_toggleScope(section, value));
-                },
-              ),
-              const SizedBox(height: 4),
-            ],
             _sectionTitle(l10n.aiDjChannelsTitle),
             Text(
               l10n.aiDjChannelsHint,
@@ -349,16 +363,24 @@ class _AiDjPreferencesPageState extends State<AiDjPreferencesPage> {
   }
 
   Future<void> _toggleScope(AiUpstreamSection section, bool value) async {
-    if (value && !await _confirmScope(section)) return;
+    if (value && !_draft.acknowledgedScopes.contains(section)) {
+      final agreed = await _confirmScope(section);
+      if (!agreed || !mounted) return;
+    }
     if (!mounted) return;
     setState(() {
       final sections = Set<AiUpstreamSection>.of(_draft.sections);
+      final acknowledged = Set<AiUpstreamSection>.of(_draft.acknowledgedScopes);
       if (value) {
         sections.add(section);
+        acknowledged.add(section);
       } else {
         sections.remove(section);
       }
-      _draft = _draft.copyWith(sections: sections);
+      _draft = _draft.copyWith(
+        sections: sections,
+        acknowledgedScopes: acknowledged,
+      );
     });
   }
 
@@ -391,105 +413,39 @@ class _AiDjPreferencesPageState extends State<AiDjPreferencesPage> {
     ];
   }
 
+  Widget _switchTile({
+    required Key key,
+    required IconData icon,
+    required String title,
+    String subtitle = '',
+    required bool value,
+    required ValueChanged<bool> onChanged,
+  }) =>
+      SettingsSwitchTile(
+        key: key,
+        icon: icon,
+        title: title,
+        subtitle: subtitle,
+        value: value,
+        onChanged: onChanged,
+      );
+
+  static IconData _scopeIcon(AiUpstreamSection section) => switch (section) {
+        AiUpstreamSection.summary => Icons.insights_rounded,
+        AiUpstreamSection.topArtists => Icons.people_alt_rounded,
+        AiUpstreamSection.topTracks => Icons.music_note_rounded,
+        AiUpstreamSection.timeAndSource => Icons.schedule_rounded,
+        AiUpstreamSection.recentEvents => Icons.history_rounded,
+        AiUpstreamSection.listenedExclusions => Icons.hearing_disabled_rounded,
+        AiUpstreamSection.favorites => Icons.favorite_rounded,
+        AiUpstreamSection.playlists => Icons.queue_music_rounded,
+      };
+
   Widget _sectionTitle(String title) {
     final theme = Theme.of(context);
     return Padding(
       padding: const EdgeInsets.only(top: 24, bottom: 8),
       child: Text(title, style: theme.textTheme.titleMedium),
-    );
-  }
-
-  Widget _batchSizeRow(AppLocalizations l10n) {
-    return Row(
-      children: [
-        Expanded(child: Text(l10n.aiDjBatchSizeTitle)),
-        SizedBox(
-          width: 132,
-          child: M3EDropdownMenu<int>(
-            key: const Key('aiDjPrefBatchSizeDropdown'),
-            items: [
-              for (final size in kAiBatchSizeOptions)
-                M3EDropdownItem<int>(
-                  label: l10n.aiDjBatchSize(size),
-                  value: size,
-                  selected: _draft.batchSize == size,
-                ),
-            ],
-            singleSelect: true,
-            showChipAnimation: false,
-            onSelectionChanged: (items) {
-              if (items.isEmpty) return;
-              final value = items.first.value;
-              WidgetsBinding.instance.addPostFrameCallback((_) {
-                if (mounted) {
-                  setState(
-                    () => _draft = _draft.copyWith(batchSize: value),
-                  );
-                }
-              });
-            },
-          ),
-        ),
-      ],
-    );
-  }
-
-  Widget _switchRow({
-    required Key key,
-    required String title,
-    String? subtitle,
-    required bool value,
-    required ValueChanged<bool> onChanged,
-  }) {
-    final theme = Theme.of(context);
-    final scheme = theme.colorScheme;
-    return Row(
-      key: key,
-      children: [
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(title, style: theme.textTheme.bodyMedium),
-              if (subtitle != null) ...[
-                const SizedBox(height: 2),
-                Text(
-                  subtitle,
-                  style: theme.textTheme.bodySmall?.copyWith(
-                    color: scheme.onSurfaceVariant,
-                  ),
-                ),
-              ],
-            ],
-          ),
-        ),
-        const SizedBox(width: 12),
-        M3ESwitch(value: value, onChanged: onChanged),
-      ],
-    );
-  }
-
-  Widget _chipGroup({
-    required String title,
-    required List<String> options,
-    required Set<String> selected,
-    required String Function(String) labelOf,
-    required ValueChanged<String> onSelected,
-    bool singleSelect = false,
-  }) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(title, style: Theme.of(context).textTheme.bodyMedium),
-        const SizedBox(height: 8),
-        _optionChips(
-          options: options,
-          selected: selected,
-          labelOf: labelOf,
-          singleSelect: singleSelect,
-          onToggle: onSelected,
-        ),
-      ],
     );
   }
 

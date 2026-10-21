@@ -4,6 +4,7 @@
 /// `lib/services/ai/**`，模式状态机在 `lib/providers/ai_dj_provider.dart`。
 library;
 
+import 'source.dart';
 import 'track.dart';
 
 /// LLM 连接配置（OpenAI-compatible Chat Completions 协议）。
@@ -273,6 +274,12 @@ class AiDjProgress {
         total: total ?? this.total,
         startedAt: startedAt,
       );
+
+  /// 解析进度（0..1）；profile / model 或总数为 0 时为 null。
+  double? get fraction {
+    if (total <= 0) return null;
+    return (done / total).clamp(0.0, 1.0);
+  }
 }
 
 /// 显式生成的取消令牌（服务层在阶段边界与解析分片之间检查）。
@@ -416,6 +423,9 @@ class AiPreferences {
   /// 「多来点这种」种子（快照；持久化归 [AiFeedbackMemory]）。
   final List<String> seeds;
 
+  /// 已确认过的敏感发送范围（收藏 / 自建歌单）只提示一次。
+  final Set<AiUpstreamSection> acknowledgedScopes;
+
   const AiPreferences({
     this.batchSize = kAiDefaultBatchSize,
     this.autoFeed = true,
@@ -429,6 +439,7 @@ class AiPreferences {
     this.sections = kAiDefaultUpstreamSections,
     this.sourceKeys = const [],
     this.seeds = const [],
+    this.acknowledgedScopes = const {},
   });
 
   static const AiPreferences defaults = AiPreferences();
@@ -452,6 +463,7 @@ class AiPreferences {
     Set<AiUpstreamSection>? sections,
     List<String>? sourceKeys,
     List<String>? seeds,
+    Set<AiUpstreamSection>? acknowledgedScopes,
   }) =>
       AiPreferences(
         batchSize: batchSize ?? this.batchSize,
@@ -466,6 +478,7 @@ class AiPreferences {
         sections: sections ?? this.sections,
         sourceKeys: sourceKeys ?? this.sourceKeys,
         seeds: seeds ?? this.seeds,
+        acknowledgedScopes: acknowledgedScopes ?? this.acknowledgedScopes,
       );
 
   /// 生成输入是否与这批快照一致（决定「偏好已更新，换一批生效」）。
@@ -500,24 +513,28 @@ class AiPreferences {
         'sections': [for (final section in sections) section.storageValue],
         'sourceKeys': sourceKeys,
         'seeds': seeds,
+        'acknowledgedScopes': [
+          for (final section in acknowledgedScopes) section.storageValue,
+        ],
       };
 
   /// 宽松解析：缺项/损坏字段回退默认值，不因单个字段丢弃整份偏好。
   static AiPreferences tryFromJson(Object? json) {
     if (json is! Map) return defaults;
-    List<String> strings(Object? value) => value is List
-        ? [
-            for (final entry in value)
-              if (entry?.toString().trim().isNotEmpty ?? false)
-                entry.toString().trim(),
-          ]
-        : const [];
     final sections = <AiUpstreamSection>{};
     final rawSections = json['sections'];
     if (rawSections is List) {
       for (final entry in rawSections) {
         final section = AiUpstreamSection.fromStorage(entry);
         if (section != null) sections.add(section);
+      }
+    }
+    final acknowledged = <AiUpstreamSection>{};
+    final rawAcknowledged = json['acknowledgedScopes'];
+    if (rawAcknowledged is List) {
+      for (final entry in rawAcknowledged) {
+        final section = AiUpstreamSection.fromStorage(entry);
+        if (section != null) acknowledged.add(section);
       }
     }
     final era = json['era']?.toString() ?? kAiEraAny;
@@ -529,9 +546,9 @@ class AiPreferences {
         (json['batchSize'] as num?)?.toInt() ?? kAiDefaultBatchSize,
       ),
       autoFeed: json['autoFeed'] is bool ? json['autoFeed'] as bool : true,
-      styles: strings(json['styles']),
-      scenes: strings(json['scenes']),
-      languages: strings(json['languages']),
+      styles: _aiStringList(json['styles']),
+      scenes: _aiStringList(json['scenes']),
+      languages: _aiStringList(json['languages']),
       era: kAiEraOptions.contains(era) ? era : kAiEraAny,
       exploration: kAiExplorationOptions.contains(exploration)
           ? exploration
@@ -542,11 +559,21 @@ class AiPreferences {
           ? extraPrompt.substring(0, extraPromptLimit)
           : extraPrompt,
       sections: rawSections is List ? sections : kAiDefaultUpstreamSections,
-      sourceKeys: strings(json['sourceKeys']),
-      seeds: strings(json['seeds']),
+      sourceKeys: _aiStringList(json['sourceKeys']),
+      seeds: _aiStringList(json['seeds']),
+      acknowledgedScopes: acknowledged,
     );
   }
 }
+
+/// 宽松读取字符串列表（去空白、丢空项）；偏好与反馈记忆共用。
+List<String> _aiStringList(Object? value) => value is List
+    ? [
+        for (final entry in value)
+          if (entry?.toString().trim().isNotEmpty ?? false)
+            entry.toString().trim(),
+      ]
+    : const [];
 
 /// 跨重启保留的反馈记忆（不感兴趣 / 喜欢 / 种子）。
 class AiFeedbackMemory {
@@ -620,15 +647,78 @@ class AiFeedbackMemory {
 
   static AiFeedbackMemory tryFromJson(Object? json) {
     if (json is! Map) return empty;
-    List<String> strings(Object? value) => value is List
-        ? [for (final entry in value) entry.toString()]
-        : const [];
     return AiFeedbackMemory(
-      skipped: _trim(strings(json['skipped']), skippedLimit),
-      liked: _trim(strings(json['liked']), likedLimit),
-      seeds: _trim(strings(json['seeds']), seedLimit),
+      skipped: _trim(_aiStringList(json['skipped']), skippedLimit),
+      liked: _trim(_aiStringList(json['liked']), likedLimit),
+      seeds: _trim(_aiStringList(json['seeds']), seedLimit),
     );
   }
+}
+
+/// 历史保留策略（唯一实现，store 与 provider 共用）。
+const int kAiDjHistoryMaxBatches = 20;
+const int kAiDjHistoryMaxTracks = 400;
+const Duration kAiDjHistoryRetention = Duration(days: 30);
+
+/// 清理结果：保留项 + 需要同步删除批次键的项。
+typedef AiDjHistoryTrimResult = ({
+  List<AiDjHistoryEntry> kept,
+  List<AiDjHistoryEntry> removed,
+});
+
+/// 按 20 批 / 400 首 / 30 天清理历史；active 永不自动清理。
+AiDjHistoryTrimResult trimAiDjHistory(
+  List<AiDjHistoryEntry> entries, {
+  required String? activeBatchId,
+  required DateTime now,
+}) {
+  final cutoff = now.subtract(kAiDjHistoryRetention);
+  final sorted = [...entries]
+    ..sort((a, b) => b.generatedAt.compareTo(a.generatedAt));
+  final kept = <AiDjHistoryEntry>[];
+  final removed = <AiDjHistoryEntry>[];
+  var tracks = 0;
+  for (final entry in sorted) {
+    final isActive = entry.id == activeBatchId;
+    final expired = entry.generatedAt.isBefore(cutoff);
+    final overCount = kept.length >= kAiDjHistoryMaxBatches;
+    final overTracks = tracks + entry.itemCount > kAiDjHistoryMaxTracks;
+    if (!isActive && (expired || overCount || overTracks)) {
+      removed.add(entry);
+      continue;
+    }
+    kept.add(entry);
+    tracks += entry.itemCount;
+  }
+  bool dropOldestNonActive() {
+    for (var i = kept.length - 1; i >= 0; i--) {
+      if (kept[i].id == activeBatchId) continue;
+      final dropped = kept.removeAt(i);
+      tracks -= dropped.itemCount;
+      removed.add(dropped);
+      return true;
+    }
+    return false;
+  }
+
+  while (kept.length > kAiDjHistoryMaxBatches && dropOldestNonActive()) {}
+  while (tracks > kAiDjHistoryMaxTracks && dropOldestNonActive()) {}
+  return (kept: kept, removed: removed);
+}
+
+/// 可搜索渠道按音源页顺序排序（`order` 升序；同序保留注册表顺序）。
+List<SourceDescriptor> aiDjSearchableSourcesInPageOrder(
+  List<SourceDescriptor> descriptors,
+) {
+  final indexed = descriptors.asMap().entries.toList()
+    ..sort((a, b) {
+      final byOrder = a.value.order.compareTo(b.value.order);
+      return byOrder != 0 ? byOrder : a.key.compareTo(b.key);
+    });
+  return [
+    for (final entry in indexed)
+      if (entry.value.enabled && entry.value.capabilities.search) entry.value,
+  ];
 }
 
 /// 「本次发送的数据」摘要：只统计条数/来源名，不含内容（隐私透明展示用）。
@@ -686,12 +776,3 @@ enum AiDjStatus {
   /// 生成失败（保留当前队列继续播放，可重试）。
   error,
 }
-
-/// 推荐列表缓存有效期选项（天；0 = 永久保留）。
-///
-/// 语义是「缓存本身」而非提示：未过期时续推优先消费这批列表的剩余曲目，
-/// 已过期则直接生成新批（不打断播放，也不弹提示）。
-const List<int> kAiCacheTtlDayOptions = [1, 3, 7, 0];
-
-/// 默认缓存有效期（天）。
-const int kAiDefaultCacheTtlDays = 1;

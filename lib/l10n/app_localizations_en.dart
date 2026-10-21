@@ -2093,21 +2093,6 @@ class AppLocalizationsEn extends AppLocalizations {
       'Only the stats above plus song and artist names — no play links or device information.';
 
   @override
-  String get aiDjCacheTtlTitle => 'Recommendation cache';
-
-  @override
-  String aiDjCacheTtlDays(int days) {
-    return '$days days';
-  }
-
-  @override
-  String get aiDjCacheTtlForever => 'Forever';
-
-  @override
-  String get aiDjCacheTtlHint =>
-      'After expiry a new batch is generated automatically without interrupting playback.';
-
-  @override
   String get aiDjGenerate => 'Generate';
 
   @override
@@ -2148,7 +2133,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get aiDjFeedDone => 'Batch added to the queue';
 
   @override
-  String get aiDjUnresolvedRetried => 'Search finished';
+  String get aiDjUnresolvedRetried => 'Search complete';
 
   @override
   String get aiDjHistoryTitle => 'Recommendation history';
@@ -2220,10 +2205,10 @@ class AppLocalizationsEn extends AppLocalizations {
   String get aiDjOriginAutoFeed => 'auto-feed';
 
   @override
-  String get aiDjOriginManualFeed => 'a manual batch';
+  String get aiDjOriginManualFeed => 'a manual top-up';
 
   @override
-  String get aiDjOriginRestored => 'an older version';
+  String get aiDjOriginRestored => 'older picks';
 
   @override
   String get aiDjHistoryLoadFailed =>
@@ -2282,7 +2267,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get aiDjAutoFeedSubtitle =>
-      'Adds a batch in the background with 5 tracks left, without interrupting playback (on by default)';
+      'Adds a batch automatically with 5 tracks left, without interrupting playback (on by default)';
 
   @override
   String get aiDjAutoFeedFailed => 'Auto-fill failed; it will retry later';
@@ -2339,7 +2324,8 @@ class AppLocalizationsEn extends AppLocalizations {
   String get aiDjPrefsExtraGroup => 'Extra request';
 
   @override
-  String get aiDjPrefsExtraHint => 'Up to 120 characters, sent with the prompt';
+  String get aiDjPrefsExtraHint =>
+      'Up to 120 characters, sent to AI with your request';
 
   @override
   String get aiDjPrefsOnlyUnheardTitle => 'Only unheard tracks';
@@ -2514,7 +2500,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get aiDjChannelsHint =>
-      'Leave empty to use auto; selected sources are used exclusively, with no fallback.';
+      'Leave empty to choose automatically; selected sources are used only, other sources won\'t be tried.';
 
   @override
   String get aiDjChannelsUnavailable =>
@@ -2530,7 +2516,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get aiDjSeedsHint => 'Cleared after the next successful batch';
 
   @override
-  String get aiDjSeedsEmpty => 'No seeds yet';
+  String get aiDjSeedsEmpty => 'No “More like this” picks yet';
 
   @override
   String get aiDjClearMemory => 'Clear AI memory';

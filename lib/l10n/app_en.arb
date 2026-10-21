@@ -1087,17 +1087,6 @@
     }
   },
   "aiDjUpstreamHint": "Only the stats above plus song and artist names — no play links or device information.",
-  "aiDjCacheTtlTitle": "Recommendation cache",
-  "aiDjCacheTtlDays": "{days} days",
-  "@aiDjCacheTtlDays": {
-    "placeholders": {
-      "days": {
-        "type": "int"
-      }
-    }
-  },
-  "aiDjCacheTtlForever": "Forever",
-  "aiDjCacheTtlHint": "After expiry a new batch is generated automatically without interrupting playback.",
   "aiDjGenerate": "Generate",
   "aiDjEmptyList": "No recommendations yet",
   "aiDjEmptyListHint": "Generate today's picks — playable any time.",
@@ -1117,7 +1106,7 @@
   "aiDjFeedBatch": "Add a batch to the queue",
   "aiDjSectionsNone": "Preferences only",
   "aiDjFeedDone": "Batch added to the queue",
-  "aiDjUnresolvedRetried": "Search finished",
+  "aiDjUnresolvedRetried": "Search complete",
   "aiDjHistoryTitle": "Recommendation history",
   "aiDjHistoryEntry": "History ({count})",
   "@aiDjHistoryEntry": {
@@ -1166,8 +1155,8 @@
   },
   "aiDjOriginRefresh": "a refresh",
   "aiDjOriginAutoFeed": "auto-feed",
-  "aiDjOriginManualFeed": "a manual batch",
-  "aiDjOriginRestored": "an older version",
+  "aiDjOriginManualFeed": "a manual top-up",
+  "aiDjOriginRestored": "older picks",
   "aiDjHistoryLoadFailed": "This batch is damaged and cannot be opened",
   "aiDjMoreLikeThis": "More like this",
   "aiDjRetryUnresolved": "Search again",
@@ -1198,7 +1187,7 @@
     }
   },
   "aiDjAutoFeedTitle": "Auto-fill near the end of the queue",
-  "aiDjAutoFeedSubtitle": "Adds a batch in the background with 5 tracks left, without interrupting playback (on by default)",
+  "aiDjAutoFeedSubtitle": "Adds a batch automatically with 5 tracks left, without interrupting playback (on by default)",
   "aiDjAutoFeedFailed": "Auto-fill failed; it will retry later",
   "aiDjAutoFeedHalted": "Auto-fill paused after {count} failures in a row",
   "@aiDjAutoFeedHalted": {
@@ -1239,7 +1228,7 @@
   "aiDjPrefsLanguagesGroup": "Languages",
   "aiDjPrefsEraGroup": "Era",
   "aiDjPrefsExtraGroup": "Extra request",
-  "aiDjPrefsExtraHint": "Up to 120 characters, sent with the prompt",
+  "aiDjPrefsExtraHint": "Up to 120 characters, sent to AI with your request",
   "aiDjPrefsOnlyUnheardTitle": "Only unheard tracks",
   "aiDjPrefsOnlyUnheardSubtitle": "Skip tracks you have already played (on by default)",
   "aiDjPrefsExplorationTitle": "Exploration",
@@ -1295,12 +1284,12 @@
   "aiDjScopePlaylistsConfirm": "This reads the names, titles and artists of up to 10 of your playlists so they are not recommended again.",
   "aiDjChannelsTitle": "Where to find songs",
   "aiDjChannelsAuto": "Auto (first 3 searchable sources on the Sources page)",
-  "aiDjChannelsHint": "Leave empty to use auto; selected sources are used exclusively, with no fallback.",
+  "aiDjChannelsHint": "Leave empty to choose automatically; selected sources are used only, other sources won't be tried.",
   "aiDjChannelsUnavailable": "Selected sources are unavailable right now; auto sources are used instead",
   "aiDjChannelsEmpty": "No searchable sources",
   "aiDjSeedsTitle": "More like these",
   "aiDjSeedsHint": "Cleared after the next successful batch",
-  "aiDjSeedsEmpty": "No seeds yet",
+  "aiDjSeedsEmpty": "No “More like this” picks yet",
   "aiDjClearMemory": "Clear AI memory",
   "aiDjClearMemoryTitle": "Clear AI memory?",
   "aiDjClearMemoryBody": "This deletes long-term “not interested”, “liked” and “more like these” entries. This round's feedback is cleared too.",

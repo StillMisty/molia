@@ -479,10 +479,7 @@ class AiRecommendationService implements AiRecommendationGenerator {
   ({List<SourceDescriptor> sources, bool channelFallback}) _sourcesFor(
     AiPreferences preferences,
   ) {
-    final searchable = [
-      for (final descriptor in _orderedDescriptors())
-        if (descriptor.enabled && descriptor.capabilities.search) descriptor,
-    ];
+    final searchable = aiDjSearchableSourcesInPageOrder(_registry.descriptors);
     final auto = searchable.take(searchSourceLimit).toList();
     if (preferences.sourceKeys.isEmpty) {
       return (sources: auto, channelFallback: false);
@@ -499,16 +496,6 @@ class AiRecommendationService implements AiRecommendationGenerator {
       sources: auto,
       channelFallback: auto.isNotEmpty,
     );
-  }
-
-  /// 音源页顺序（`order` 升序；同序保留注册表原始顺序）。
-  List<SourceDescriptor> _orderedDescriptors() {
-    final indexed = _registry.descriptors.asMap().entries.toList()
-      ..sort((a, b) {
-        final byOrder = a.value.order.compareTo(b.value.order);
-        return byOrder != 0 ? byOrder : a.key.compareTo(b.key);
-      });
-    return [for (final entry in indexed) entry.value];
   }
 
   Future<

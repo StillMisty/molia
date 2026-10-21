@@ -38,7 +38,6 @@ AiStack buildAiStack({
     kAiDjModel,
     kAiDjConsent,
     kAiDjEnabled,
-    kAiDjCacheTtlDays,
     kAiDjPreferences,
     kAiDjFeedbackMemory,
   ]);

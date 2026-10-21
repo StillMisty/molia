@@ -2,7 +2,7 @@
 ///
 /// - Base URL / API Key / 模型走 secure 盒（生产 = `flutter_secure_storage`，
 ///   桌面端依赖系统 keyring），随凭证类别加密同步；
-/// - 确认标记 / 功能开关 / 缓存有效期走普通 prefs（跟人走）；
+/// - 确认标记 / 功能开关 / 推荐偏好 / 反馈记忆走普通 prefs（跟人走）；
 /// - 读取失败/缺项一律降级为「未配置」，不抛异常（页面据此引导）。
 library;
 
@@ -100,19 +100,5 @@ class AiSettingsStore {
 
   Future<void> saveFeedbackMemory(AiFeedbackMemory memory) async {
     await _settings.write(kAiDjFeedbackMemory, jsonEncode(memory.toJson()));
-  }
-
-  /// 推荐列表缓存有效期（天；非法值回退默认；0 = 永久）。
-  Future<int> readCacheTtlDays() async {
-    final value = await _settings.read(kAiDjCacheTtlDays);
-    if (!kAiCacheTtlDayOptions.contains(value)) {
-      return kAiDefaultCacheTtlDays;
-    }
-    return value;
-  }
-
-  Future<void> saveCacheTtlDays(int days) async {
-    if (!kAiCacheTtlDayOptions.contains(days)) return;
-    await _settings.write(kAiDjCacheTtlDays, days);
   }
 }

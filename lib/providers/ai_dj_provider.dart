@@ -95,7 +95,6 @@ class AiDjProvider extends ChangeNotifier {
   LlmConfig? _config;
   bool _consentGranted = false;
   bool _enabled = false;
-  int _cacheTtlDays = kAiDefaultCacheTtlDays;
 
   AiPreferences _preferences = AiPreferences.defaults;
   AiFeedbackMemory _feedback = AiFeedbackMemory.empty;
@@ -108,6 +107,10 @@ class AiDjProvider extends ChangeNotifier {
   final Map<String, AiDjBatch> _historyCache = {};
 
   AiDjStatus _status = AiDjStatus.off;
+
+  /// 用户显式 stop 后，恢复的 AI 队列不再自动接管（start/播放历史清除）。
+  bool _radioStoppedByUser = false;
+
   SourceFailure? _lastError;
   bool _explicitBusy = false;
   AiDjProgress? _progress;
@@ -122,7 +125,6 @@ class AiDjProvider extends ChangeNotifier {
 
   String? _replacingUri;
   int _queuedCount = 0;
-  bool _lastChannelFallback = false;
 
   AiPrompt? _lastSentPrompt;
   String? _lastRawResponse;
@@ -180,29 +182,18 @@ class AiDjProvider extends ChangeNotifier {
     return available.intersection(_preferences.sourceKeys.toSet()).isEmpty;
   }
 
-  /// 当前批次生成时是否发生过渠道回退（提示一次，不弹窗）。
-  bool get lastChannelFallback => _lastChannelFallback;
+  /// 可搜索渠道（按音源页顺序；偏好页多选用）。
+  List<SourceDescriptor> get availableSources {
+    final registry = _registry;
+    if (registry == null) return const [];
+    return aiDjSearchableSourcesInPageOrder(registry.descriptors);
+  }
 
   /// 上次实际发送的提示词（内存；不落盘、不打日志）。
   AiPrompt? get lastSentPrompt => _lastSentPrompt;
 
   /// 上次 LLM 原始返回（内存；不落盘、不打日志）。
   String? get lastRawResponse => _lastRawResponse;
-
-  /// 可搜索渠道（按音源页顺序；偏好页多选用）。
-  List<SourceDescriptor> get availableSources {
-    final registry = _registry;
-    if (registry == null) return const [];
-    final indexed = registry.descriptors.asMap().entries.toList()
-      ..sort((a, b) {
-        final byOrder = a.value.order.compareTo(b.value.order);
-        return byOrder != 0 ? byOrder : a.key.compareTo(b.key);
-      });
-    return [
-      for (final entry in indexed)
-        if (entry.value.enabled && entry.value.capabilities.search) entry.value,
-    ];
-  }
 
   /// 当前推荐（可能为空：未生成 / 已清空）。
   AiDjBatch? get recommendations => _active;
@@ -215,15 +206,6 @@ class AiDjProvider extends ChangeNotifier {
       List.unmodifiable(_historyEntries);
   int get historyCount => _historyEntries.length;
   bool isActiveBatch(String id) => _active?.id == id;
-
-  int get cacheTtlDays => _cacheTtlDays;
-
-  /// 当前列表是否已过缓存有效期（只影响续推是否消费它，不做提示）。
-  bool get isRecommendationsExpired {
-    final batch = _active;
-    if (batch == null) return false;
-    return _isExpired(batch);
-  }
 
   SourceFailure? get lastError => _lastError;
 
@@ -257,7 +239,6 @@ class AiDjProvider extends ChangeNotifier {
     _config = await _settingsStore.readConfig();
     _consentGranted = await _settingsStore.hasConsent();
     _enabled = await _settingsStore.readEnabled();
-    _cacheTtlDays = await _settingsStore.readCacheTtlDays();
     _preferences = await _settingsStore.readPreferences();
     _feedback = await _settingsStore.readFeedbackMemory();
     // 兼容旧偏好里带种子的数据：种子以反馈记忆为准。
@@ -278,7 +259,23 @@ class AiDjProvider extends ChangeNotifier {
         _historyCache[batch.id] = batch;
       }
     }
+    // 冷启动恢复的 AI 队列继续自动补歌，不需要用户再点一次播放。
+    _adoptRestoredRadioIfNeeded();
     notifyListeners();
+  }
+
+  /// 恢复态 / 切回 AI 队列时重新接管电台（显式 stop 后不接管）。
+  bool _adoptRestoredRadioIfNeeded() {
+    if (_status != AiDjStatus.off || _radioStoppedByUser) return false;
+    if (!_enabled || !hasConfig || !_consentGranted) return false;
+    final snapshot = _playbackProvider.snapshot;
+    final current = snapshot.current;
+    if (current == null || snapshot.context?.name != kAiDjContextName) {
+      return false;
+    }
+    _setStatus(AiDjStatus.playing);
+    _trackedUri = current.id.uri;
+    return true;
   }
 
   Future<void> saveConfig(LlmConfig config) async {
@@ -342,16 +339,19 @@ class AiDjProvider extends ChangeNotifier {
     }
   }
 
-  /// 预览实际会发送的提示词（不触发 LLM）。
+  /// 预览实际会发送的提示词（只读：不标记喜欢、不写反馈记忆）。
   Future<AiPrompt?> previewPrompt() async {
     if (!hasConfig) return null;
     try {
-      _collectNewLikes();
+      final liked = _unique([
+        ...mergedLikedLabels,
+        ..._collectNewLikes(mark: false),
+      ]);
       return await _recommendationService.buildPromptPreview(
         count: _preferences.batchSize,
         preferences: _snapshotPreferences(),
         skippedLabels: mergedSkippedLabels,
-        likedLabels: mergedLikedLabels,
+        likedLabels: liked,
         excludeLabels: const [],
       );
     } catch (e) {
@@ -374,14 +374,6 @@ class AiDjProvider extends ChangeNotifier {
     if (value) await ensureRecommendations();
   }
 
-  /// 设置推荐列表缓存有效期（天；0 = 永久）。
-  Future<void> setCacheTtlDays(int days) async {
-    if (!kAiCacheTtlDayOptions.contains(days) || days == _cacheTtlDays) return;
-    _cacheTtlDays = days;
-    await _settingsStore.saveCacheTtlDays(days);
-    notifyListeners();
-  }
-
   /// 保存推荐偏好：只影响下一次生成，不自动生成。
   Future<void> savePreferences(AiPreferences preferences) async {
     final sanitized = preferences.copyWith(
@@ -392,10 +384,17 @@ class AiDjProvider extends ChangeNotifier {
           : preferences.extraPrompt,
       seeds: _feedback.seeds,
     );
+    final autoFeedDisabled = _preferences.autoFeed && !sanitized.autoFeed;
+    final autoFeedEnabled = !_preferences.autoFeed && sanitized.autoFeed;
+    if (autoFeedDisabled) _cancelAutoFeed();
     _preferences = sanitized;
     await _settingsStore.savePreferences(sanitized);
+    if (autoFeedEnabled) {
+      _autoFeedHalted = false;
+      _autoFeedFailures = 0;
+      _autoFeedError = null;
+    }
     _preferencesRevision++;
-    _lastChannelFallback = selectedChannelsUnavailable;
     notifyListeners();
   }
 
@@ -410,17 +409,10 @@ class AiDjProvider extends ChangeNotifier {
     await savePreferences(_preferences.copyWith(batchSize: size));
   }
 
-  /// 自动补歌开关：重新打开时清除「连续失败已停止」状态。
+  /// 自动补歌开关：走统一偏好保存路径（关闭取消在途静默任务，打开清除停止态）。
   Future<void> setAutoFeed(bool value) async {
     if (value == _preferences.autoFeed) return;
-    if (!value) _cancelAutoFeed();
     await savePreferences(_preferences.copyWith(autoFeed: value));
-    if (value) {
-      _autoFeedHalted = false;
-      _autoFeedFailures = 0;
-      _autoFeedError = null;
-      notifyListeners();
-    }
   }
 
   /// 用户手动恢复自动补歌（连续失败停止后）。
@@ -444,17 +436,18 @@ class AiDjProvider extends ChangeNotifier {
   }
 
   void _cancelAutoFeed() {
-    _autoCancelToken?.cancel();
+    _cancelAutoFeedToken();
     _autoCancelToken = null;
     _autoFeedInFlight = false;
   }
+
+  void _cancelAutoFeedToken() => _autoCancelToken?.cancel();
 
   /// 「生成推荐 / 换一批」：新批成为 active，旧 active 留在历史。
   Future<void> refreshRecommendations() async {
     if (!hasConfig || _explicitBusy) return;
     final batch = await _runExplicitGeneration(
       origin: AiDjOrigin.refresh,
-      makeActive: true,
       count: _preferences.batchSize,
     );
     if (batch != null) {
@@ -483,6 +476,7 @@ class AiDjProvider extends ChangeNotifier {
     if (batch == null || batch.items.isEmpty) return;
     final clamped = fromIndex.clamp(0, batch.items.length - 1).toInt();
     final uri = batch.items[clamped].track.id.uri;
+    _radioStoppedByUser = false;
     if (isQueued(uri)) {
       await _playbackProvider.playLocalQueueItemById(uri);
       _trackedUri = uri;
@@ -546,10 +540,7 @@ class AiDjProvider extends ChangeNotifier {
     if (_status != AiDjStatus.playing && _status != AiDjStatus.error) return;
     final batch = await _runExplicitGeneration(
       origin: AiDjOrigin.manualFeed,
-      makeActive: false,
       count: _preferences.batchSize,
-      requireRadio: true,
-      appendToQueue: true,
     );
     if (batch != null) {
       if (_status == AiDjStatus.error) _setStatus(AiDjStatus.playing);
@@ -640,7 +631,6 @@ class AiDjProvider extends ChangeNotifier {
       if (epoch != _generationEpoch || token.isCancelled) return;
       _active = updated;
       await _storeActive(updated);
-      _lastChannelFallback = updated.channelFallback;
     } on SourceFailure catch (failure) {
       if (failure.kind != FailureKind.cancelled && epoch == _generationEpoch) {
         _lastError = failure;
@@ -731,6 +721,7 @@ class AiDjProvider extends ChangeNotifier {
   Future<void> playHistoryBatch(String id) async {
     final batch = await loadHistoryBatch(id);
     if (batch == null || batch.items.isEmpty || _explicitBusy) return;
+    _radioStoppedByUser = false;
     await _switchActive(batch);
     _explicitBusy = true;
     notifyListeners();
@@ -790,15 +781,16 @@ class AiDjProvider extends ChangeNotifier {
   /// 历史「删除」：只删历史记录，不动正在播放的队列。
   Future<void> deleteHistoryBatch(String id) async {
     final wasActive = _active?.id == id;
-    final index = await _store.deleteBatch(id);
-    // 存储失败返回空索引时，保留内存状态（降级为内存）。
-    if (index.entries.isEmpty && _historyEntries.length > 1) {
+    final result = await _store.deleteBatch(id);
+    if (!result.ok) {
       _logger.warning('AI 推歌：删除历史批次失败，保留内存状态');
       return;
     }
+    final index = result.index;
     _historyEntries = index.entries;
     _historyCache.remove(id);
     if (wasActive) {
+      _notInterested.clear();
       final fallbackId = index.activeBatchId;
       if (fallbackId == null) {
         _active = null;
@@ -812,12 +804,12 @@ class AiDjProvider extends ChangeNotifier {
 
   /// 清空历史：默认保留 active（只删记录之外的历史与批次键）。
   Future<void> clearHistory() async {
-    final index = await _store.clearHistory();
-    if (index.entries.isEmpty && _historyEntries.length > 1) {
+    final result = await _store.clearHistory();
+    if (!result.ok) {
       _logger.warning('AI 推歌：清空历史失败，保留内存状态');
       return;
     }
-    _historyEntries = index.entries;
+    _historyEntries = result.index.entries;
     final activeId = _active?.id;
     _historyCache.removeWhere((id, _) => id != activeId);
     notifyListeners();
@@ -840,8 +832,8 @@ class AiDjProvider extends ChangeNotifier {
 
   Future<void> _switchActive(AiDjBatch batch) async {
     _active = batch;
+    _notInterested.clear();
     _historyCache[batch.id] = batch;
-    _lastChannelFallback = batch.channelFallback;
     await _store.setActive(batch.id);
     notifyListeners();
   }
@@ -850,6 +842,7 @@ class AiDjProvider extends ChangeNotifier {
   ///
   /// 功能启用状态与推荐列表不受影响（退出队列 ≠ 关闭功能）。
   Future<void> stop({bool keepQueue = true}) async {
+    _radioStoppedByUser = true;
     if (_status == AiDjStatus.off) return;
     _cancelAutoFeed();
     _setStatus(AiDjStatus.off);
@@ -866,6 +859,7 @@ class AiDjProvider extends ChangeNotifier {
   ///
   /// 播放被停止或队列换成本地内容时只结束「电台」，功能保持启用。
   void onPlaybackChanged() {
+    if (_adoptRestoredRadioIfNeeded()) notifyListeners();
     if (_status != AiDjStatus.playing) return;
     final snapshot = _playbackProvider.snapshot;
     if (snapshot.current == null) {
@@ -900,17 +894,14 @@ class AiDjProvider extends ChangeNotifier {
     if (positionMs > entry.maxPositionMs) entry.maxPositionMs = positionMs;
   }
 
-  // ── 生成 / 持久化 ─────────────────────────────────────────────────────
-
   Future<AiDjBatch?> _runExplicitGeneration({
     required AiDjOrigin origin,
-    required bool makeActive,
     required int count,
-    bool requireRadio = false,
-    bool appendToQueue = false,
   }) async {
+    final makeActive = origin == AiDjOrigin.refresh;
+    final appendToQueue = origin == AiDjOrigin.manualFeed;
     if (!hasConfig) return null;
-    if (requireRadio &&
+    if (origin == AiDjOrigin.manualFeed &&
         _status != AiDjStatus.playing &&
         _status != AiDjStatus.error) {
       return null;
@@ -968,7 +959,6 @@ class AiDjProvider extends ChangeNotifier {
         await _store.saveBatch(_toStored(stamped));
       }
       _rememberHistory(stamped);
-      _lastChannelFallback = stamped.channelFallback;
       _lastSentPrompt = stamped.prompt;
       _lastRawResponse = stamped.rawResponse;
       await _consumeSeeds();
@@ -1043,8 +1033,6 @@ class AiDjProvider extends ChangeNotifier {
       _queuedCount += stamped.items.length;
       _autoFeedFailures = 0;
       _autoFeedError = null;
-      _lastSentPrompt = stamped.prompt;
-      _lastRawResponse = stamped.rawResponse;
       await _consumeSeeds();
       // 队列已经播完：从新追加的第一首静默续播（不提示、不改 active）。
       final after = _playbackProvider.snapshot;
@@ -1132,38 +1120,13 @@ class AiDjProvider extends ChangeNotifier {
   }
 
   void _trimMemoryHistory() {
-    final cutoff = DateTime.now().subtract(
-      Duration(days: AiRecommendationStore.retention.inDays),
+    final result = trimAiDjHistory(
+      _historyEntries,
+      activeBatchId: _active?.id,
+      now: DateTime.now(),
     );
-    final kept = <AiDjHistoryEntry>[];
-    var tracks = 0;
-    for (final entry in _historyEntries) {
-      final isActive = entry.id == _active?.id;
-      final overCount = kept.length >= AiRecommendationStore.maxBatches;
-      final overTracks =
-          tracks + entry.itemCount > AiRecommendationStore.maxTracks;
-      if (!isActive &&
-          (entry.generatedAt.isBefore(cutoff) || overCount || overTracks)) {
-        continue;
-      }
-      kept.add(entry);
-      tracks += entry.itemCount;
-    }
-    bool dropOldestNonActive() {
-      for (var i = kept.length - 1; i >= 0; i--) {
-        if (kept[i].id == _active?.id) continue;
-        final dropped = kept.removeAt(i);
-        tracks -= dropped.itemCount;
-        return true;
-      }
-      return false;
-    }
-
-    while (kept.length > AiRecommendationStore.maxBatches &&
-        dropOldestNonActive()) {}
-    while (tracks > AiRecommendationStore.maxTracks && dropOldestNonActive()) {}
-    _historyEntries = kept;
-    final known = {for (final entry in kept) entry.id};
+    _historyEntries = result.kept;
+    final known = {for (final entry in result.kept) entry.id};
     _historyCache.removeWhere((id, _) => !known.contains(id));
   }
 
@@ -1230,8 +1193,6 @@ class AiDjProvider extends ChangeNotifier {
     return trackFromSourceTrack(source);
   }
 
-  // ── 队列 / 会话 ──────────────────────────────────────────────────────
-
   /// 当前播放队列是否就是 AI 推荐队列（上下文名判定，含恢复态）。
   bool _isRadioQueue(PlaybackSnapshot snapshot) =>
       snapshot.context?.name == kAiDjContextName;
@@ -1248,12 +1209,6 @@ class AiDjProvider extends ChangeNotifier {
       for (final item in items)
         if (!queued.contains(item.track.id.uri)) item,
     ];
-  }
-
-  bool _isExpired(AiDjBatch batch) {
-    if (_cacheTtlDays <= 0) return false;
-    return DateTime.now().difference(batch.generatedAt) >
-        Duration(days: _cacheTtlDays);
   }
 
   void _resetRadioSession() {
@@ -1277,18 +1232,19 @@ class AiDjProvider extends ChangeNotifier {
   }
 
   /// 会话内新收藏的曲目（喜欢 = 收藏），只回流一次并写入长期记忆。
-  List<String> _collectNewLikes() {
+  List<String> _collectNewLikes({bool mark = true}) {
     final liked = <String>[];
     for (final entry in _sessionTracks.values) {
       if (entry.likedReported) continue;
       if (_libraryProvider.isFavorite(entry.sourceKey, entry.songId)) {
-        entry.likedReported = true;
         liked.add(entry.label);
+        if (!mark) continue;
+        entry.likedReported = true;
         _likedLabels.add(entry.label);
         _feedback = _feedback.addLiked(entry.label);
       }
     }
-    if (liked.isNotEmpty) {
+    if (mark && liked.isNotEmpty) {
       _preferencesRevision++;
       unawaited(_settingsStore.saveFeedbackMemory(_feedback));
     }
@@ -1349,9 +1305,7 @@ class AiDjProvider extends ChangeNotifier {
   void dispose() {
     _disposed = true;
     _cancelToken?.cancel();
-    _cancelAutoToken();
+    _cancelAutoFeedToken();
     super.dispose();
   }
-
-  void _cancelAutoToken() => _autoCancelToken?.cancel();
 }

@@ -88,16 +88,62 @@ class AiDjPulsingSkeleton extends StatelessWidget {
   }
 }
 
-/// 细进度条（0..1；未知时显示不确定态动画，受减弱动效约束）。
-class AiDjThinProgress extends StatelessWidget {
+/// 细进度条（0..1；未知时显示不确定态滑动动画，受减弱动效约束）。
+class AiDjThinProgress extends StatefulWidget {
   const AiDjThinProgress({super.key, this.value});
 
   final double? value;
 
   @override
+  State<AiDjThinProgress> createState() => _AiDjThinProgressState();
+}
+
+class _AiDjThinProgressState extends State<AiDjThinProgress>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _controller;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 1200),
+    );
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final disabled = MediaQuery.maybeOf(context)?.disableAnimations ?? false;
+    if (widget.value != null || disabled) {
+      _controller.stop();
+    } else if (!_controller.isAnimating) {
+      _controller.repeat();
+    }
+  }
+
+  @override
+  void didUpdateWidget(covariant AiDjThinProgress oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    final disabled = MediaQuery.maybeOf(context)?.disableAnimations ?? false;
+    if (widget.value != null || disabled) {
+      _controller.stop();
+    } else if (!_controller.isAnimating) {
+      _controller.repeat();
+    }
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
-    final fraction = (value ?? 0).clamp(0.0, 1.0);
+    final fraction = (widget.value ?? 0).clamp(0.0, 1.0);
+    final disabled = MediaQuery.maybeOf(context)?.disableAnimations ?? false;
     return ClipRRect(
       borderRadius: BorderRadius.circular(2),
       child: SizedBox(
@@ -106,17 +152,36 @@ class AiDjThinProgress extends StatelessWidget {
           fit: StackFit.expand,
           children: [
             ColoredBox(color: scheme.surfaceContainerHighest),
-            Align(
-              alignment: Alignment.centerLeft,
-              child: FractionallySizedBox(
-                widthFactor: value == null ? 1 : fraction,
-                child: ColoredBox(
-                  color: value == null
-                      ? scheme.primary.withValues(alpha: 0.35)
-                      : scheme.primary,
+            if (widget.value != null)
+              Align(
+                alignment: Alignment.centerLeft,
+                child: FractionallySizedBox(
+                  widthFactor: fraction,
+                  child: ColoredBox(color: scheme.primary),
+                ),
+              )
+            else if (disabled)
+              Align(
+                alignment: Alignment.centerLeft,
+                child: FractionallySizedBox(
+                  widthFactor: 0.3,
+                  child: ColoredBox(
+                    color: scheme.primary.withValues(alpha: 0.55),
+                  ),
+                ),
+              )
+            else
+              AnimatedBuilder(
+                animation: _controller,
+                builder: (context, child) => Align(
+                  alignment: Alignment(-1.2 + 2.4 * _controller.value, 0),
+                  child: child,
+                ),
+                child: FractionallySizedBox(
+                  widthFactor: 0.3,
+                  child: ColoredBox(color: scheme.primary),
                 ),
               ),
-            ),
           ],
         ),
       ),

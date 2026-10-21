@@ -148,10 +148,7 @@ class _AiDjCarouselState extends State<AiDjCarousel> {
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 16),
                 child: AiDjThinProgress(
-                  value: provider.progress!.phase == AiDjPhase.resolving &&
-                          provider.progress!.total > 0
-                      ? provider.progress!.done / provider.progress!.total
-                      : null,
+                  value: provider.progress!.fraction,
                 ),
               ),
               const SizedBox(height: 6),

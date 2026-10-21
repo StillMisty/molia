@@ -186,6 +186,9 @@ class AiDjHistoryIndex {
       );
 }
 
+/// 历史删除 / 清空的结果：`ok=false` 表示存储失败，调用方保留内存状态。
+typedef AiDjHistoryMutationResult = ({bool ok, AiDjHistoryIndex index});
+
 class AiRecommendationStore {
   /// [preferences] / [clock] 仅测试注入；生产走 SharedPreferences 与系统时钟。
   AiRecommendationStore(
@@ -198,9 +201,9 @@ class AiRecommendationStore {
   static const String legacyStorageKey = 'ai_dj_pending_batch_v1';
 
   /// 保留策略：最多 20 批 / 400 首 / 30 天，active 永不自动清理。
-  static const int maxBatches = 20;
-  static const int maxTracks = 400;
-  static const Duration retention = Duration(days: 30);
+  static const int maxBatches = kAiDjHistoryMaxBatches;
+  static const int maxTracks = kAiDjHistoryMaxTracks;
+  static const Duration retention = kAiDjHistoryRetention;
 
   final SharedPreferences? _preferences;
   final DateTime Function() _clock;
@@ -308,10 +311,13 @@ class AiRecommendationStore {
       });
 
   /// 删除一批（含 active 时回退到最近一批）。
-  Future<AiDjHistoryIndex> deleteBatch(String id) => _serialized(() async {
+  Future<AiDjHistoryMutationResult> deleteBatch(String id) =>
+      _serialized(() async {
         try {
           final prefs = await _prefsOrNull();
-          if (prefs == null) return AiDjHistoryIndex.empty;
+          if (prefs == null) {
+            return (ok: false, index: AiDjHistoryIndex.empty);
+          }
           final index = _decodeIndex(prefs.getString(indexKey)) ??
               const AiDjHistoryIndex(entries: []);
           final remaining = [
@@ -328,17 +334,19 @@ class AiRecommendationStore {
           );
           await prefs.remove('$batchKeyPrefix$id');
           final wrote = await _writeIndex(prefs, updated);
-          return wrote ? updated : index;
+          return (ok: wrote, index: wrote ? updated : index);
         } catch (_) {
-          return AiDjHistoryIndex.empty;
+          return (ok: false, index: AiDjHistoryIndex.empty);
         }
       });
 
   /// 清空历史：默认保留 active（及其批次键）。
-  Future<AiDjHistoryIndex> clearHistory() => _serialized(() async {
+  Future<AiDjHistoryMutationResult> clearHistory() => _serialized(() async {
         try {
           final prefs = await _prefsOrNull();
-          if (prefs == null) return AiDjHistoryIndex.empty;
+          if (prefs == null) {
+            return (ok: false, index: AiDjHistoryIndex.empty);
+          }
           final index = _decodeIndex(prefs.getString(indexKey)) ??
               const AiDjHistoryIndex(entries: []);
           final activeId = index.activeBatchId;
@@ -361,13 +369,11 @@ class AiRecommendationStore {
             activeBatchId: keptEntry == null ? null : activeId,
           );
           final wrote = await _writeIndex(prefs, updated);
-          return wrote ? updated : index;
+          return (ok: wrote, index: wrote ? updated : index);
         } catch (_) {
-          return AiDjHistoryIndex.empty;
+          return (ok: false, index: AiDjHistoryIndex.empty);
         }
       });
-
-  // ── 内部：解码 / 迁移 / 保留策略 ─────────────────────────────────────
 
   AiDjHistoryIndex? _decodeIndex(String? raw) {
     if (raw == null || raw.isEmpty) return null;
@@ -449,42 +455,14 @@ class AiRecommendationStore {
     SharedPreferences prefs,
     AiDjHistoryIndex index,
   ) async {
-    final cutoff = _clock().subtract(retention).millisecondsSinceEpoch;
-    final sorted = [...index.entries]
-      ..sort((a, b) => b.generatedAt.compareTo(a.generatedAt));
-    final kept = <AiDjHistoryEntry>[];
-    final removed = <AiDjHistoryEntry>[];
-    var tracks = 0;
-    for (final entry in sorted) {
-      final isActive = entry.id == index.activeBatchId;
-      final expired = entry.generatedAt.millisecondsSinceEpoch < cutoff;
-      final overCount = kept.length >= maxBatches;
-      final overTracks = tracks + entry.itemCount > maxTracks;
-      if (!isActive && (expired || overCount || overTracks)) {
-        removed.add(entry);
-        continue;
-      }
-      kept.add(entry);
-      tracks += entry.itemCount;
-    }
-    // active 永不自动清理：先保留它，再从最旧的非 active 批次里让位，
-    // 保证批次数 / 总曲目数仍在上限内。
-    bool dropOldestNonActive() {
-      for (var i = kept.length - 1; i >= 0; i--) {
-        if (kept[i].id == index.activeBatchId) continue;
-        final dropped = kept.removeAt(i);
-        tracks -= dropped.itemCount;
-        removed.add(dropped);
-        return true;
-      }
-      return false;
-    }
-
-    while (kept.length > maxBatches && dropOldestNonActive()) {}
-    while (tracks > maxTracks && dropOldestNonActive()) {}
-    for (final entry in removed) {
+    final result = trimAiDjHistory(
+      index.entries,
+      activeBatchId: index.activeBatchId,
+      now: _clock(),
+    );
+    for (final entry in result.removed) {
       await prefs.remove('$batchKeyPrefix${entry.id}');
     }
-    return index.copyWith(entries: kept);
+    return index.copyWith(entries: result.kept);
   }
 }

@@ -3848,30 +3848,6 @@ abstract class AppLocalizations {
   /// **'Only the stats above plus song and artist names — no play links or device information.'**
   String get aiDjUpstreamHint;
 
-  /// No description provided for @aiDjCacheTtlTitle.
-  ///
-  /// In en, this message translates to:
-  /// **'Recommendation cache'**
-  String get aiDjCacheTtlTitle;
-
-  /// No description provided for @aiDjCacheTtlDays.
-  ///
-  /// In en, this message translates to:
-  /// **'{days} days'**
-  String aiDjCacheTtlDays(int days);
-
-  /// No description provided for @aiDjCacheTtlForever.
-  ///
-  /// In en, this message translates to:
-  /// **'Forever'**
-  String get aiDjCacheTtlForever;
-
-  /// No description provided for @aiDjCacheTtlHint.
-  ///
-  /// In en, this message translates to:
-  /// **'After expiry a new batch is generated automatically without interrupting playback.'**
-  String get aiDjCacheTtlHint;
-
   /// No description provided for @aiDjGenerate.
   ///
   /// In en, this message translates to:
@@ -3947,7 +3923,7 @@ abstract class AppLocalizations {
   /// No description provided for @aiDjUnresolvedRetried.
   ///
   /// In en, this message translates to:
-  /// **'Search finished'**
+  /// **'Search complete'**
   String get aiDjUnresolvedRetried;
 
   /// No description provided for @aiDjHistoryTitle.
@@ -4073,13 +4049,13 @@ abstract class AppLocalizations {
   /// No description provided for @aiDjOriginManualFeed.
   ///
   /// In en, this message translates to:
-  /// **'a manual batch'**
+  /// **'a manual top-up'**
   String get aiDjOriginManualFeed;
 
   /// No description provided for @aiDjOriginRestored.
   ///
   /// In en, this message translates to:
-  /// **'an older version'**
+  /// **'older picks'**
   String get aiDjOriginRestored;
 
   /// No description provided for @aiDjHistoryLoadFailed.
@@ -4187,7 +4163,7 @@ abstract class AppLocalizations {
   /// No description provided for @aiDjAutoFeedSubtitle.
   ///
   /// In en, this message translates to:
-  /// **'Adds a batch in the background with 5 tracks left, without interrupting playback (on by default)'**
+  /// **'Adds a batch automatically with 5 tracks left, without interrupting playback (on by default)'**
   String get aiDjAutoFeedSubtitle;
 
   /// No description provided for @aiDjAutoFeedFailed.
@@ -4289,7 +4265,7 @@ abstract class AppLocalizations {
   /// No description provided for @aiDjPrefsExtraHint.
   ///
   /// In en, this message translates to:
-  /// **'Up to 120 characters, sent with the prompt'**
+  /// **'Up to 120 characters, sent to AI with your request'**
   String get aiDjPrefsExtraHint;
 
   /// No description provided for @aiDjPrefsOnlyUnheardTitle.
@@ -4625,7 +4601,7 @@ abstract class AppLocalizations {
   /// No description provided for @aiDjChannelsHint.
   ///
   /// In en, this message translates to:
-  /// **'Leave empty to use auto; selected sources are used exclusively, with no fallback.'**
+  /// **'Leave empty to choose automatically; selected sources are used only, other sources won\'t be tried.'**
   String get aiDjChannelsHint;
 
   /// No description provided for @aiDjChannelsUnavailable.
@@ -4655,7 +4631,7 @@ abstract class AppLocalizations {
   /// No description provided for @aiDjSeedsEmpty.
   ///
   /// In en, this message translates to:
-  /// **'No seeds yet'**
+  /// **'No “More like this” picks yet'**
   String get aiDjSeedsEmpty;
 
   /// No description provided for @aiDjClearMemory.

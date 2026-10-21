@@ -135,16 +135,28 @@ class TasteProfileBuilder {
 
     final labels = <String>[];
     final keys = <String>{};
-    void addExclusion(String title, String artist) {
+    void addExclusion(
+      String title,
+      String artist, {
+      bool excludeLocally = true,
+    }) {
       final key = aiTrackKey(title, artist);
-      if (key == '|' || key.isEmpty || !keys.add(key)) return;
-      labels.add(artist.isEmpty ? title : '$title - $artist');
+      if (key == '|' || key.isEmpty) return;
+      if (excludeLocally) keys.add(key);
+      final label = artist.isEmpty ? title : '$title - $artist';
+      if (!labels.contains(label)) labels.add(label);
     }
 
-    if (preferences.onlyUnheard) {
+    // 勾选「已听歌曲排除清单」就发送清单；是否在本地强制过滤由
+    // 「只推荐没听过的」单独决定（两个开关语义独立）。
+    if (includeExclusions || preferences.onlyUnheard) {
       for (final entry in played) {
         if (labels.length >= exclusionLimit) break;
-        addExclusion(entry.title, entry.artist);
+        addExclusion(
+          entry.title,
+          entry.artist,
+          excludeLocally: preferences.onlyUnheard,
+        );
       }
     }
 

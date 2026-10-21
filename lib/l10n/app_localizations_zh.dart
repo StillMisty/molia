@@ -2010,20 +2010,6 @@ class AppLocalizationsZh extends AppLocalizations {
   String get aiDjUpstreamHint => '只发送以上统计与歌名、歌手，不含播放链接与设备信息。';
 
   @override
-  String get aiDjCacheTtlTitle => '推荐缓存';
-
-  @override
-  String aiDjCacheTtlDays(int days) {
-    return '$days 天';
-  }
-
-  @override
-  String get aiDjCacheTtlForever => '永久';
-
-  @override
-  String get aiDjCacheTtlHint => '过期后会自动生成新一批，不打断播放。';
-
-  @override
   String get aiDjGenerate => '生成推荐';
 
   @override
@@ -2062,7 +2048,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get aiDjFeedDone => '已补一批到队尾';
 
   @override
-  String get aiDjUnresolvedRetried => '重新找完了';
+  String get aiDjUnresolvedRetried => '已重新搜索';
 
   @override
   String get aiDjHistoryTitle => '历史推荐';
@@ -2133,10 +2119,10 @@ class AppLocalizationsZh extends AppLocalizations {
   String get aiDjOriginAutoFeed => '自动补歌';
 
   @override
-  String get aiDjOriginManualFeed => '手动补批';
+  String get aiDjOriginManualFeed => '手动补歌';
 
   @override
-  String get aiDjOriginRestored => '旧版恢复';
+  String get aiDjOriginRestored => '旧推荐';
 
   @override
   String get aiDjHistoryLoadFailed => '这批内容已损坏，无法查看';
@@ -2192,7 +2178,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get aiDjAutoFeedTitle => '队列快播完时自动补歌';
 
   @override
-  String get aiDjAutoFeedSubtitle => '剩余 5 首时后台补一批，不打断播放（默认开启）';
+  String get aiDjAutoFeedSubtitle => '剩余 5 首时自动补一批，不打断播放（默认开启）';
 
   @override
   String get aiDjAutoFeedFailed => '自动补歌失败，稍后会再试';
@@ -2249,7 +2235,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get aiDjPrefsExtraGroup => '补充要求';
 
   @override
-  String get aiDjPrefsExtraHint => '最多 120 字，会随提示词一起发送';
+  String get aiDjPrefsExtraHint => '最多 120 字，会一起发送给 AI';
 
   @override
   String get aiDjPrefsOnlyUnheardTitle => '只推荐没听过的';
@@ -2434,7 +2420,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get aiDjSeedsHint => '下一批生成成功后会清空';
 
   @override
-  String get aiDjSeedsEmpty => '还没有种子';
+  String get aiDjSeedsEmpty => '还没有「多来点这种」';
 
   @override
   String get aiDjClearMemory => '清空 AI 记忆';

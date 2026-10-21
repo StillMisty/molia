@@ -123,8 +123,6 @@ class _AiDjPageState extends State<AiDjPage> {
     );
   }
 
-  // ── 分区标题 ─────────────────────────────────────────────────────────
-
   /// 分区标题行：标题 + 可选副标题（上次更新等）+ 可选行尾动作。
   Widget _sectionHeader(String title, {String? caption, Widget? trailing}) {
     final theme = Theme.of(context);
@@ -150,8 +148,6 @@ class _AiDjPageState extends State<AiDjPage> {
       ],
     );
   }
-
-  // ── 状态：功能开关 + 电台状态 + 自动补歌内部错误状态 ─────────────────────
 
   Widget _statusSection(AppLocalizations l10n, AiDjProvider provider) {
     final theme = Theme.of(context);
@@ -278,8 +274,6 @@ class _AiDjPageState extends State<AiDjPage> {
     );
   }
 
-  // ── 推荐偏好入口 ─────────────────────────────────────────────────────
-
   Widget _preferencesSection(AppLocalizations l10n, AiDjProvider provider) {
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
@@ -330,8 +324,6 @@ class _AiDjPageState extends State<AiDjPage> {
       ),
     );
   }
-
-  // ── 当前推荐：主操作 + 平铺列表 + 未解析脚注 ────────────────────────────
 
   List<Widget> _recommendationsSection(
     BuildContext context,
@@ -534,8 +526,6 @@ class _AiDjPageState extends State<AiDjPage> {
     );
   }
 
-  // ── 反馈：长期记忆 + 本轮反馈 + 种子 ───────────────────────────────────
-
   List<Widget> _feedbackSection(AppLocalizations l10n, AiDjProvider provider) {
     final notInterested = provider.notInterestedItems;
     final manualLabels = {
@@ -650,8 +640,6 @@ class _AiDjPageState extends State<AiDjPage> {
       ],
     ];
   }
-
-  // ── 发送透明化：人话摘要 + 原文预览 + 上次发送 / 返回 ──────────────────
 
   List<Widget> _sendingSection(AppLocalizations l10n, AiDjProvider provider) {
     final theme = Theme.of(context);
@@ -869,8 +857,6 @@ class _AiDjPageState extends State<AiDjPage> {
     _notify(AppLocalizations.of(context)!.aiDjPromptCopied);
   }
 
-  // ── 配置：折叠摘要 + 展开表单 + 缓存有效期 ─────────────────────────────
-
   List<Widget> _configSection(AppLocalizations l10n, AiDjProvider provider) {
     final scheme = Theme.of(context).colorScheme;
     return [
@@ -889,7 +875,6 @@ class _AiDjPageState extends State<AiDjPage> {
       if (_editingConfig) _configForm(l10n) else _configSummary(l10n, provider),
       const SizedBox(height: 12),
       Divider(color: scheme.outlineVariant.withValues(alpha: 0.5)),
-      _cacheTtlRow(l10n, provider),
       const SizedBox(height: 4),
       // 两个配置动作（测试连接 / 清除配置）平级，收进同一组：tonal 统一语气，
       // 按下即分发命令（selectedIndex 恒空、不留选中态）。
@@ -920,57 +905,6 @@ class _AiDjPageState extends State<AiDjPage> {
     ];
   }
 
-  /// 推荐缓存有效期：只影响续推是否消费旧列表，不做过期提示。
-  Widget _cacheTtlRow(AppLocalizations l10n, AiDjProvider provider) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 4),
-      child: Row(
-        children: [
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(l10n.aiDjCacheTtlTitle),
-                const SizedBox(height: 2),
-                Text(
-                  l10n.aiDjCacheTtlHint,
-                  style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                        color: Theme.of(context).colorScheme.onSurfaceVariant,
-                      ),
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(width: 12),
-          SizedBox(
-            width: 132,
-            child: M3EDropdownMenu<int>(
-              items: [
-                for (final days in kAiCacheTtlDayOptions)
-                  M3EDropdownItem<int>(
-                    label: days <= 0
-                        ? l10n.aiDjCacheTtlForever
-                        : l10n.aiDjCacheTtlDays(days),
-                    value: days,
-                    selected: provider.cacheTtlDays == days,
-                  ),
-              ],
-              singleSelect: true,
-              showChipAnimation: false,
-              onSelectionChanged: (items) {
-                if (items.isEmpty) return;
-                final value = items.first.value;
-                WidgetsBinding.instance.addPostFrameCallback((_) {
-                  if (mounted) unawaited(provider.setCacheTtlDays(value));
-                });
-              },
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
   Widget _configForm(AppLocalizations l10n) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -984,13 +918,12 @@ class _AiDjPageState extends State<AiDjPage> {
                 label: preset.name,
                 type: M3EChipType.filter,
                 selected: _baseUrlController.text.trim() == preset.baseUrl,
-                onPressed: () => _applyPreset(l10n, preset),
+                onPressed: () => _applyPreset(preset),
               ),
             M3EChip(
               label: l10n.aiDjPresetCustom,
-              type: M3EChipType.filter,
+              type: M3EChipType.assist,
               selected: !_matchesAnyPreset(),
-              onPressed: () => setState(() {}),
             ),
           ],
         ),
@@ -1059,14 +992,12 @@ class _AiDjPageState extends State<AiDjPage> {
   bool _matchesAnyPreset() => LlmProviderPreset.builtIn
       .any((preset) => preset.baseUrl == _baseUrlController.text.trim());
 
-  void _applyPreset(AppLocalizations l10n, LlmProviderPreset preset) {
+  void _applyPreset(LlmProviderPreset preset) {
     setState(() {
       _baseUrlController.text = preset.baseUrl;
       _modelController.text = preset.model;
     });
   }
-
-  // ── 导航 / 动作 ───────────────────────────────────────────────────────
 
   void _openPage(Widget page) {
     ResponsiveNavigation.showAdaptiveModalPage(
@@ -1350,19 +1281,17 @@ class _GenerationCardState extends State<_GenerationCard> {
                   ],
                 ),
               ),
-              M3EButton.text(
+              M3EIconButton(
                 key: const Key('aiDjCancelGenerationButton'),
+                variant: M3EIconButtonVariant.standard,
+                icon: const Icon(Icons.stop_rounded),
+                semanticLabel: l10n.aiDjCancelGeneration,
                 onPressed: widget.onCancel,
-                child: Text(l10n.aiDjCancelGeneration),
               ),
             ],
           ),
           const SizedBox(height: 10),
-          AiDjThinProgress(
-            value: progress.phase == AiDjPhase.resolving && progress.total > 0
-                ? progress.done / progress.total
-                : null,
-          ),
+          AiDjThinProgress(value: progress.fraction),
         ],
       ),
     );
