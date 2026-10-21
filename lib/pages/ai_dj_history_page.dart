@@ -219,47 +219,71 @@ class _AiDjHistoryPageState extends State<AiDjHistoryPage> {
             ),
           ],
           const SizedBox(height: 8),
-          Wrap(
-            spacing: 4,
-            runSpacing: 4,
+          Row(
             children: [
-              M3EButton.text(
-                key: Key('aiDjHistoryPlay_${entry.id}'),
-                onPressed: provider.isBusy
-                    ? null
-                    : () => unawaited(provider.playHistoryBatch(entry.id)),
-                child: Text(l10n.aiDjHistoryPlay),
-              ),
-              M3EButton.text(
-                key: Key('aiDjHistoryEnqueue_${entry.id}'),
-                onPressed: provider.isBusy
-                    ? null
-                    : () => unawaited(provider.enqueueHistoryBatch(entry.id)),
-                child: Text(l10n.aiDjHistoryEnqueue),
-              ),
-              if (!active)
-                M3EButton.text(
-                  key: Key('aiDjHistorySetActive_${entry.id}'),
-                  onPressed: provider.isBusy
-                      ? null
-                      : () => unawaited(provider.setActiveBatch(entry.id)),
-                  child: Text(l10n.aiDjHistorySetActive),
+              Expanded(
+                child: Align(
+                  alignment: AlignmentDirectional.centerStart,
+                  child: M3EButtonGroup(
+                    key: Key('aiDjHistoryActions_${entry.id}'),
+                    type: M3EButtonGroupType.standard,
+                    style: M3EButtonStyle.tonal,
+                    actions: [
+                      M3EButtonGroupAction(
+                        icon: const Icon(Icons.play_arrow_rounded),
+                        label: Text(l10n.aiDjHistoryPlay),
+                        enabled: !provider.isBusy,
+                      ),
+                      M3EButtonGroupAction(
+                        icon: const Icon(Icons.playlist_add_rounded),
+                        label: Text(l10n.aiDjHistoryEnqueue),
+                        enabled: !provider.isBusy,
+                      ),
+                      if (!active)
+                        M3EButtonGroupAction(
+                          icon: const Icon(Icons.check_circle_rounded),
+                          label: Text(l10n.aiDjHistorySetActive),
+                          enabled: !provider.isBusy,
+                        ),
+                    ],
+                    // 命令式动作：按下即分发，不保留选中态。
+                    selectedIndex: null,
+                    onSelectedIndexChanged: (index) {
+                      if (provider.isBusy) return;
+                      switch (index) {
+                        case 0:
+                          unawaited(provider.playHistoryBatch(entry.id));
+                        case 1:
+                          unawaited(provider.enqueueHistoryBatch(entry.id));
+                        case 2 when !active:
+                          unawaited(provider.setActiveBatch(entry.id));
+                      }
+                    },
+                  ),
                 ),
-              M3EButton.text(
+              ),
+              const SizedBox(width: 4),
+              M3EIconButton(
                 key: Key('aiDjHistoryDelete_${entry.id}'),
+                variant: M3EIconButtonVariant.standard,
+                icon: const Icon(Icons.delete_rounded),
+                semanticLabel: l10n.aiDjHistoryDelete,
                 onPressed: provider.isBusy
                     ? null
                     : () => unawaited(provider.deleteHistoryBatch(entry.id)),
-                child: Text(l10n.aiDjHistoryDelete),
-              ),
-              M3EButton.text(
-                key: Key('aiDjHistoryExpand_${entry.id}'),
-                onPressed: () => unawaited(_toggle(entry.id, provider)),
-                child: Text(
-                  expanded ? l10n.aiDjHistoryCollapse : l10n.aiDjHistoryExpand,
-                ),
               ),
             ],
+          ),
+          const SizedBox(height: 4),
+          Align(
+            alignment: AlignmentDirectional.centerStart,
+            child: M3EButton.text(
+              key: Key('aiDjHistoryExpand_${entry.id}'),
+              onPressed: () => unawaited(_toggle(entry.id, provider)),
+              child: Text(
+                expanded ? l10n.aiDjHistoryCollapse : l10n.aiDjHistoryExpand,
+              ),
+            ),
           ),
           if (expanded) ...[
             const SizedBox(height: 8),

@@ -2159,7 +2159,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get aiDjHistorySetActive => 'Set as current';
 
   @override
-  String get aiDjHistoryDelete => 'Delete';
+  String get aiDjHistoryDelete => 'Delete this batch';
 
   @override
   String get aiDjHistoryActive => 'Current';

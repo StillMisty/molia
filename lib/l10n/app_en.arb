@@ -1121,7 +1121,7 @@
   "aiDjHistoryPlay": "Play this batch",
   "aiDjHistoryEnqueue": "Add to queue",
   "aiDjHistorySetActive": "Set as current",
-  "aiDjHistoryDelete": "Delete",
+  "aiDjHistoryDelete": "Delete this batch",
   "aiDjHistoryActive": "Current",
   "aiDjHistoryClear": "Clear history",
   "aiDjHistoryClearTitle": "Clear recommendation history?",

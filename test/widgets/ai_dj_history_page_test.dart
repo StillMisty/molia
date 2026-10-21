@@ -123,6 +123,10 @@ void main() {
     await tester.pumpAndSettle();
   }
 
+  Finder card(String id) => find.byKey(Key('aiDjHistoryEntry_$id'));
+  Finder action(String id, String label) =>
+      find.descendant(of: card(id), matching: find.text(label));
+
   setUp(() async {
     SharedPreferences.setMockInitialValues({});
     secrets = MemorySettingsSecretStore();
@@ -164,6 +168,40 @@ void main() {
     expect(find.textContaining('Balanced'), findsNWidgets(2));
   });
 
+  testWidgets('动作组：active 2 个平级动作，非 active 3 个 + 行尾删除图标', (tester) async {
+    await pumpWithBatches(tester);
+    final activeId = provider.activeBatchId!;
+    final oldId = provider.historyEntries.last.id;
+
+    expect(action(activeId, 'Play this batch'), findsWidgets);
+    expect(action(activeId, 'Add to queue'), findsWidgets);
+    expect(action(activeId, 'Set as current'), findsNothing);
+    expect(
+      find.descendant(
+        of: card(activeId),
+        matching: find.byIcon(Icons.delete_rounded),
+      ),
+      findsOneWidget,
+    );
+
+    expect(action(oldId, 'Play this batch'), findsWidgets);
+    expect(action(oldId, 'Add to queue'), findsWidgets);
+    expect(action(oldId, 'Set as current'), findsWidgets);
+  });
+
+  testWidgets('删除图标带「删除这批推荐」语义标签', (tester) async {
+    await pumpWithBatches(tester);
+    final activeId = provider.activeBatchId!;
+    final oldId = provider.historyEntries.last.id;
+
+    for (final id in [activeId, oldId]) {
+      final button = tester.widget<M3EIconButton>(
+        find.byKey(Key('aiDjHistoryDelete_$id')),
+      );
+      expect(button.semanticLabel, 'Delete this batch');
+    }
+  });
+
   testWidgets('展开：按需加载曲目（歌名 / 歌手 / 来源 / 理由）', (tester) async {
     await pumpHistory(tester);
     await tester.runAsync(createTwoBatches);
@@ -187,7 +225,7 @@ void main() {
     await tester.pumpAndSettle();
     final oldId = provider.historyEntries.last.id;
 
-    await tester.tap(find.byKey(Key('aiDjHistoryPlay_$oldId')));
+    await tester.tap(action(oldId, 'Play this batch').first);
     await settleAction(tester);
 
     expect(provider.activeBatchId, oldId);
@@ -203,7 +241,7 @@ void main() {
     final oldId = provider.historyEntries.last.id;
     final activeId = provider.activeBatchId;
 
-    await tester.tap(find.byKey(Key('aiDjHistoryEnqueue_$oldId')));
+    await tester.tap(action(oldId, 'Add to queue').first);
     await settleAction(tester);
 
     expect(backend.lastEnqueued?.map((track) => track.id.id).toList(),
@@ -219,7 +257,7 @@ void main() {
     final activeId = provider.activeBatchId;
     backend.calls.clear();
 
-    await tester.tap(find.byKey(Key('aiDjHistorySetActive_$oldId')));
+    await tester.tap(action(oldId, 'Set as current').first);
     await settleAction(tester);
 
     expect(provider.activeBatchId, oldId);
@@ -241,6 +279,18 @@ void main() {
     expect(provider.historyEntries.map((entry) => entry.id), [activeId]);
     expect(find.byKey(Key('aiDjHistoryEntry_$oldId')), findsNothing);
     expect(backend.calls, isEmpty);
+  });
+
+  testWidgets('窄屏：动作组与删除图标不溢出', (tester) async {
+    await pumpHistory(tester);
+    tester.view.physicalSize = const Size(320, 1600);
+    await tester.runAsync(createTwoBatches);
+    await tester.pumpAndSettle();
+
+    expect(tester.takeException(), isNull);
+    final oldId = provider.historyEntries.last.id;
+    expect(find.byKey(Key('aiDjHistoryActions_$oldId')), findsOneWidget);
+    expect(find.byKey(Key('aiDjHistoryDelete_$oldId')), findsOneWidget);
   });
 
   testWidgets('清空历史：确认后保留 active', (tester) async {

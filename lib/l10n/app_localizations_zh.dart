@@ -2074,7 +2074,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get aiDjHistorySetActive => '设为当前';
 
   @override
-  String get aiDjHistoryDelete => '删除';
+  String get aiDjHistoryDelete => '删除这批推荐';
 
   @override
   String get aiDjHistoryActive => '当前';
