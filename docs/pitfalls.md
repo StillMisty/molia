@@ -619,3 +619,58 @@
     `Show`；Dart 首帧回调再调 `showAfterFirstFrame` 会覆盖它，beta.15 实测首帧后
     崩在 ucrtbase 0xc0000409。现在只有 `AppPresence.isTrayHidden`（真正的托盘恢复）
     才走 cloak / 透明度；启动 reveal 继续用 `windowManager.show()`。
+66. **局域网同步已硬断代：旧包静默、旧状态不读、旧文件是幽灵**：
+    内部迭代期显式不兼容历史数据，四层命名空间一起切开——状态
+    `sync_state_v2` / 身份 `sync_device_id_v2` / 口令 `sync_passphrase_v2` /
+    WebDAV 密码 `sync_webdav_password_v2`，配对码 `molia-pair:2:`，局域网 HTTP
+    `/molia-sync/v2/*`，WebDAV 文件名 `<deviceId>.p2.*.msync`。旧 key 不读、
+    不删、不迁移：新 key 缺失就按全新安装处理（新设备 id / 新口令 / 传输开关
+    为空），升级后必须重新开启同步并重新配对。首次用新 key 初始化会清空
+    派生状态 `sync_journal` / `sync_journal_state` / `sync_known`，只有两者都
+    reset 成功才写 `sync_derived_reset_v2`（中途被杀下次重试）；**用户数据表
+    与墓碑不动**，所以歌单 / 历史 / 统计不丢，但各对端首轮只能收全量
+    bootstrap。旧 JSON 探测包（首字节 `{`）与旧 HTTP 路径分别被 `Msd1.decode`
+    静默丢弃、返回 404；旧配对码解析失败；旧 WebDAV 文件不被
+    `PeerJournalNames.parse` 识别，**不列出、不读取、也不被 `deleteRemote`
+    删除**（云端会一直留着）。不要为了「兼容」补迁移 / 双协议分支：混版本
+    本来就不互相发现，补一条旧路径反而会把旧数据重新放进新协议的语义里。
+    回归：`test/sync_state_store_test.dart`、`test/sync_pairing_code_test.dart`、
+    `test/lan_sync_transport_test.dart` 的旧码 / 旧路径 / 旧状态用例。
+67. **`MSD/1` 发现认证有固定顺序：先来源限流 → 验 MAC → 再解析 JSON**：
+    `LanDiscovery._onDatagram` 的顺序是安全边界，不能为了「先看看包内容」调换：
+    ① 先按来源 IP 记限流（每来源 20 包/10s、全局 100 包/10s，来源记账表上限
+    64、淘汰最久未活动）；② 再用 discovery key 验截断 HMAC（头部去掉 mac 后
+    连同 bodyLen 与 body 一起认证）；③ 通过后才 `jsonDecode` 并检查
+    deviceId / nonce / boot / 端口。未通过 MAC 的字节是**未知字节**，不是错误：
+    直接丢，不计数、不写 warning（逐包打日志会在公共网络里被扫描流量刷爆，
+    也会把「有人乱发 UDP」误报成同步故障）；能力类失败（组播加入失败、端口
+    降级）才记 warning。重复 `(deviceId, nonce)` 30 秒内只产生一次 sighting，
+    自身 deviceId、`httpPort <= 0`、非法 body 同样静默丢弃。排查时在发现层看
+    sighting / presence 计数，不要打开逐包日志。
+68. **挂起恢复 / 换网会静默回收 UDP 与 HTTP socket，必须重绑并探活**：
+    移动端挂起、Wi-Fi 重连、DHCP 续租都可能让旧 socket 变成「还在绑定但收发
+    已死」；换网时 IP 甚至可能不变，**不能以「地址没变」为前提跳过重绑**。
+    现在的契约：回前台隐藏 ≥15s 时 `LanSyncTransport.onAppResumed()` 先用
+    loopback TCP connect 探活 HTTP（500ms），失败重绑同一端口，再失败退随机
+    端口并持久化；仍失败就把传输置为未运行 + `start_failed`（只留 `_running
+    = true` 会让 `unavailableReason` 为空，UI 看不到故障），然后重绑 UDP 并发
+    公告 burst；隐藏不足 15s 只刷新地址 / 公告。connectivity 事件走
+    `LanDiscovery.onNetworkChanged()`，**无条件重绑 UDP**；只有接口指纹变化时
+    才清 presence / nonce（旧端点仍可先试）。`discover()` 每 60s 节流重扫本机
+    接口，指纹变化时在发包前重绑；`stop()` 清空进程内发现状态。
+    验证方式：挂起 / 恢复、Wi-Fi ⇄ 蜂窝切换后看同步日志与
+    `lanDiscoveryPorts`，不要只看「开关还开着」。
+69. **`lanEndpoints` 只收「MAC + HTTP 解密都成功」的端点**：
+    `SyncStateStore.rememberLanEndpoint` 的写入条件是发现报文 MAC 验证通过
+    **且** 对端 HTTP 载荷能用本机口令解密成功（`onPeerVerified`）；只听见 UDP
+    公告、HTTP 连不上或口令不同的对端一律不写。端点的 deviceId 以**解密载荷**
+    为准：DHCP 复用 / 旧记录可能让候选端点的 id 与数据主人不同，写回旧 id 会
+    让下一轮继续找错设备。表项要求 `verifiedAt > 0`（否则永远命中不了淘汰），
+    上限 32 条（超出按 `verifiedAt` 淘汰最旧），180 天未再验证随名册淘汰，
+    `removePeer` 同时清理该设备的条目。只有端点身份（host / httpPort /
+    probePort）变化或首次出现才立即落盘；仅验证时间前进只改内存，随轮末
+    `save()` 持久化（否则多对端一轮会反复写大 JSON）。对端分两类：手动地址与
+    **本轮听到的** presence 是「预期对端」，失败要计数、可把整轮打成
+    `partial`；只有持久化端点的是「试探性对端」，连不上是常态，失败不计数。
+    不要把「公告里自报的地址」直接当已验证端点，也不要把试探性失败算进
+    失败对端数。

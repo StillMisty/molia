@@ -255,7 +255,7 @@
   `(versionPhysical, versionCounter, deviceId)`，删除为墓碑）→ 只把版本变化的
   胜者交给适配器（`sync_known` 登记表：交付成功才登记，空闲轮 0 次 apply）→
   按**发布台账**外发与裁剪（`publish_ledger.dart`：每传输一份，聚合内存指纹 /
-  `sync_state_v1` 的 `snapshotPushSeq` 持久覆盖 / `servesLiveSnapshot` 能力位；
+  `sync_state_v2` 的 `snapshotPushSeq` 持久覆盖 / `servesLiveSnapshot` 能力位；
   「跳过加密 + 上传」与「journal 能裁到哪」都在台账里回答，引擎只保留轮次
   编排）；版本戳由唯一发号器
   `SyncStampIssuer`（`sync_stamp.dart`，HLC-lite：吸收远端超前戳、同毫秒
@@ -273,15 +273,31 @@
   首屏不提供「立即同步」主操作，也不导出诊断快照。触发
   策略统一在 `SyncScheduler`（`sync_scheduler.dart`）：**活跃**（可见 + 最近
   交互 / 正在播放，变更去抖 4s）/ **空闲**（退避 10→20→40→60 分钟封顶；
-  蜂窝下无本地变更不广播、不发 PROPFIND，非蜂窝（Wi-Fi / 以太网 / 桌面）
+  蜂窝下 0 广播 / 组播、无本地变更不发轮次，非蜂窝（Wi-Fi / 以太网 / 桌面）
   唤醒照常探测与拉取）/**后台**（零定时唤醒，退后台尽力推、回前台拉）/
   **省电**（低电量未充电或系统省电模式
   暂停自动，只保留恢复动作的手动触发）；电量经平台通道读取（Android `BatteryChannelHandler` /
   iOS `AppDelegate`），移动数据下默认只同步小类别
   （设置 / 音源 / 凭证 / 歌单与曲目 / 会话），可在
-  同步页切换为「暂停自动同步」。传输有两个
-  实现、可分别开关：局域网直连（UDP 探测 + 内置 HTTP 快照端点）与用户自备
-  WebDAV（`<remoteDir>/<deviceId>.msync` 密文文件，PROPFIND/GET/PUT/MKCOL）。
+  同步页切换为「暂停自动同步」。
+  **事件驱动重连**：`DataSaverService.networkEvents` →
+  `SyncScheduler.onNetworkChanged`（重置空闲退避 → 1.5s 去抖 →
+  `SyncTrigger.network` 强制发现）；回前台隐藏 ≥15s 时重绑 UDP + loopback
+  探活 HTTP（失败重绑，再失败置 `start_failed`）；已配对但零对端按
+  `5 / 20 / 60 / 180s` 阶梯重连（仅前台、非省电、非蜂窝）；认证通过的对端
+  公告经引擎过滤（新设备 / boot 变化 / snap 变化 / head 前进且仍落后）→
+  调度器 1s 去抖 + 10s 冷却 → `SyncTrigger.discovery`。传输有两个
+  实现、可分别开关：局域网直连（`MSD/1` 二进制公告发现 + 内置 HTTP
+  `/molia-sync/v2/*` 数据端点；UDP 只发现、HTTP 是数据与存活通道）与用户自备
+  WebDAV（`<remoteDir>/<deviceId>.p2.*.msync` 密文文件，PROPFIND/GET/PUT/MKCOL；
+  `.p2` 是硬断代命名空间，旧文件按幽灵文件忽略、不读不删）。
+  局域网发现报文（`MSD/1`：magic / version / type / HMAC / bodyLen + 认证
+  body）先按来源限流（20 包/10s，全局 100 包/10s）再验 MAC 再解析；正常轮
+  只对 presence / 手动地址 / `lanEndpoints` 做 ≤8 个单播并等 400ms，冷启动 /
+  回前台 / 换网才广播（v4 `255.255.255.255` + `224.0.0.169`、v6
+  `ff02::4d4f:4c49`）并等 1.2s；蜂窝 0 广播、后台 0 定时器。`lanEndpoints`
+  只在 MAC + HTTP 解密成功后回写（32 条上限、180 天淘汰、移除设备一并清理），
+  广播被隔离时用它单播兜底。
   局域网在移动端有平台准入：Android 17 / API 37 起必须声明并运行时申请
   `ACCESS_LOCAL_NETWORK`（未授予时状态 `permission_denied`，UI 给授权入口），
   iOS 广播发现需向 Apple 申请 multicast entitlement（未获批时降级手动地址 /
@@ -302,11 +318,11 @@
   两条路径共用 `importSyncPairingText`，口令随码传递、地址按码收敛，结果只
   用底栏提示分级反馈（首轮就连上时不提示——首次连通通知会单独出现）。
   **没有独立总开关：传输开关就是总闸**，任一开启即启用同步，两路都关 =
-  引擎轮次 / 入站接收 / 调度器一并停摆（旧版 `enabled` 字段只作迁移锚点：
-  升级时 `enabled=false` 的老用户 transports 清空，同步保持关闭）。设备身份
-  `deviceId` 独立持久化在 `sync_device_id_v1`（prefs 小键 + 安全存储备份），
-  `sync_state_v1` 损坏时恢复旧身份而不是重新生成（否则重启 / 换 IP 后对端会
-  多出一台新设备）。口令在初始化即生成（信任根，不依赖任何开关），首次开启
+  引擎轮次 / 入站接收 / 调度器一并停摆（新 key `sync_state_v2` 缺失即全新
+  安装：旧状态不读，升级后 transports 为空、同步保持关闭，需重新开启并
+  配对）。设备身份 `deviceId` 独立持久化在 `sync_device_id_v2`（prefs 小键 +
+  安全存储备份），`sync_state_v2` 损坏时恢复旧身份而不是重新生成（否则重启 /
+  换 IP 后对端会多出一台新设备）。口令在初始化即生成（信任根，不依赖任何开关），首次开启
   同步不再弹口令窗（口令随配对码交给对端）。**首次连通双方各弹一次提示**：
   某设备第一次真正交换过数据（`lastPullAt` / `lastPushAt`，入站推送同样计）时
   引擎发一次性事件（`peerConnectedNotices`，已提示的 deviceId 持久化在
@@ -316,7 +332,7 @@
   （`LocalEndpointsService`：IPv4 + 全局 / ULA IPv6，排除回环 / link-local /
   zone，私网优先排序；过滤判定 `isRoutablePeerAddress` 与服务 / 传输共用）
   是地址列表、配对码与探测 `addrs` 候选的同一口径；
-  **配对码**（`SyncPairingCode`，`molia-pair:1:<base64url(json)>`，含设备名 /
+  **配对码**（`SyncPairingCode`，`molia-pair:2:<base64url(json)>`，含设备名 /
   设备 id / 口令 / 地址候选 `[[host, probePort], …]` / HTTP 端点端口）支持
   复制、二维码（`qr` 纯 Dart + CustomPaint 自绘）与移动端扫码
   （`mobile_scanner`，权限由插件自管；入口 = Android/iOS 平台 × GMS 可用性
@@ -336,7 +352,8 @@
   （数据与存储页导出/导入）是独立模块（`sync_backup.dart` 的
   `SyncBackup.exportBackupJson` / `importBackupJson`）：复用同一 envelope、
   适配器与版本戳，收集入口由引擎注入（`collectRecords`），但不构造轮次也不经
-  传输，凭证类默认排除，协议旧版备份拒绝导入。数据变更经
+  传输，凭证类默认排除，备份只做结构校验（kind / 内层 envelope，不按协议
+  版本判定）。数据变更经
   调度器进入触发链，生命周期回调由 `main.dart` 的 `AppLifecycleListener` 转发；
   同步后的定向重载经 `PrefsSyncAdapter.onApplied` 接线。设置入口
   `settings_page.dart` → `sync_settings_page.dart`。
