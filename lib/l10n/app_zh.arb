@@ -857,7 +857,7 @@
   "aiDjHistoryPlay": "播放这批",
   "aiDjHistoryEnqueue": "加入队列",
   "aiDjHistorySetActive": "设为当前",
-  "aiDjHistoryDelete": "删除",
+  "aiDjHistoryDelete": "删除这批推荐",
   "aiDjHistoryActive": "当前",
   "aiDjHistoryClear": "清空历史",
   "aiDjHistoryClearTitle": "清空历史推荐？",

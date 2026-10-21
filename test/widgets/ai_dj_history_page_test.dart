@@ -123,6 +123,31 @@ void main() {
     await tester.pumpAndSettle();
   }
 
+  Finder card(String id) => find.byKey(Key('aiDjHistoryEntry_$id'));
+  Finder action(String id, String label) =>
+      find.descendant(of: card(id), matching: find.text(label)).hitTestable();
+
+  /// 可见动作直接点；被收进溢出菜单的动作先展开菜单。
+  Future<void> tapAction(
+    WidgetTester tester,
+    String id,
+    String label,
+  ) async {
+    var target = action(id, label);
+    if (target.evaluate().isEmpty) {
+      final overflow = find.descendant(
+        of: card(id),
+        matching: find.byIcon(Icons.more_horiz_rounded),
+      );
+      expect(overflow, findsOneWidget);
+      await tester.tap(overflow);
+      await tester.pumpAndSettle();
+      target = find.text(label).hitTestable();
+    }
+    expect(target, findsOneWidget);
+    await tester.tap(target);
+  }
+
   setUp(() async {
     SharedPreferences.setMockInitialValues({});
     secrets = MemorySettingsSecretStore();
@@ -164,6 +189,44 @@ void main() {
     expect(find.textContaining('Balanced'), findsNWidgets(2));
   });
 
+  testWidgets('动作组：active 2 个平级动作，非 active 3 个 + 行尾删除图标', (tester) async {
+    await pumpWithBatches(tester);
+    final activeId = provider.activeBatchId!;
+    final oldId = provider.historyEntries.last.id;
+    final activeGroup = tester.widget<M3EButtonGroup>(
+      find.byKey(Key('aiDjHistoryActions_$activeId')),
+    );
+    final oldGroup = tester.widget<M3EButtonGroup>(
+      find.byKey(Key('aiDjHistoryActions_$oldId')),
+    );
+
+    expect(activeGroup.actions, hasLength(2));
+    expect(oldGroup.actions, hasLength(3));
+    expect(action(activeId, 'Play this batch'), findsOneWidget);
+    expect(action(activeId, 'Add to queue'), findsOneWidget);
+    expect(action(activeId, 'Set as current'), findsNothing);
+    expect(
+      find.descendant(
+        of: card(activeId),
+        matching: find.byIcon(Icons.delete_rounded),
+      ),
+      findsOneWidget,
+    );
+  });
+
+  testWidgets('删除图标带「删除这批推荐」语义标签', (tester) async {
+    await pumpWithBatches(tester);
+    final activeId = provider.activeBatchId!;
+    final oldId = provider.historyEntries.last.id;
+
+    for (final id in [activeId, oldId]) {
+      final button = tester.widget<M3EIconButton>(
+        find.byKey(Key('aiDjHistoryDelete_$id')),
+      );
+      expect(button.semanticLabel, 'Delete this batch');
+    }
+  });
+
   testWidgets('展开：按需加载曲目（歌名 / 歌手 / 来源 / 理由）', (tester) async {
     await pumpHistory(tester);
     await tester.runAsync(createTwoBatches);
@@ -187,7 +250,7 @@ void main() {
     await tester.pumpAndSettle();
     final oldId = provider.historyEntries.last.id;
 
-    await tester.tap(find.byKey(Key('aiDjHistoryPlay_$oldId')));
+    await tapAction(tester, oldId, 'Play this batch');
     await settleAction(tester);
 
     expect(provider.activeBatchId, oldId);
@@ -203,7 +266,7 @@ void main() {
     final oldId = provider.historyEntries.last.id;
     final activeId = provider.activeBatchId;
 
-    await tester.tap(find.byKey(Key('aiDjHistoryEnqueue_$oldId')));
+    await tapAction(tester, oldId, 'Add to queue');
     await settleAction(tester);
 
     expect(backend.lastEnqueued?.map((track) => track.id.id).toList(),
@@ -219,7 +282,7 @@ void main() {
     final activeId = provider.activeBatchId;
     backend.calls.clear();
 
-    await tester.tap(find.byKey(Key('aiDjHistorySetActive_$oldId')));
+    await tapAction(tester, oldId, 'Set as current');
     await settleAction(tester);
 
     expect(provider.activeBatchId, oldId);
@@ -241,6 +304,35 @@ void main() {
     expect(provider.historyEntries.map((entry) => entry.id), [activeId]);
     expect(find.byKey(Key('aiDjHistoryEntry_$oldId')), findsNothing);
     expect(backend.calls, isEmpty);
+  });
+
+  testWidgets('窄屏：溢出菜单可触达被隐藏动作', (tester) async {
+    await pumpHistory(tester);
+    tester.view.physicalSize = const Size(320, 1600);
+    await tester.runAsync(createTwoBatches);
+    await tester.pumpAndSettle();
+
+    expect(tester.takeException(), isNull);
+    final oldId = provider.historyEntries.last.id;
+    final activeId = provider.activeBatchId;
+    expect(find.byKey(Key('aiDjHistoryActions_$oldId')), findsOneWidget);
+    expect(find.byKey(Key('aiDjHistoryDelete_$oldId')), findsOneWidget);
+
+    final overflow = find.descendant(
+      of: card(oldId),
+      matching: find.byIcon(Icons.more_horiz_rounded),
+    );
+    expect(overflow, findsOneWidget);
+    await tester.tap(overflow);
+    await tester.pumpAndSettle();
+
+    final hidden = find.text('Set as current').hitTestable();
+    expect(hidden, findsOneWidget);
+    await tester.tap(hidden);
+    await settleAction(tester);
+
+    expect(provider.activeBatchId, oldId);
+    expect(activeId, isNot(oldId));
   });
 
   testWidgets('清空历史：确认后保留 active', (tester) async {

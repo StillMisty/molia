@@ -3971,7 +3971,7 @@ abstract class AppLocalizations {
   /// No description provided for @aiDjHistoryDelete.
   ///
   /// In en, this message translates to:
-  /// **'Delete'**
+  /// **'Delete this batch'**
   String get aiDjHistoryDelete;
 
   /// No description provided for @aiDjHistoryActive.
