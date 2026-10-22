@@ -65,6 +65,7 @@ class LanPairingService implements SyncPairingPort, PairingHttpHandler {
     int Function()? nowMs,
     Logger? logger,
     this.requestTtl = const Duration(seconds: 60),
+    this.inviteCompleteTimeout = const Duration(seconds: 5),
     this.statusPollInterval = const Duration(milliseconds: 500),
     this.httpTimeout = const Duration(seconds: 4),
     this.sweepInterval = const Duration(seconds: 1),
@@ -126,6 +127,10 @@ class LanPairingService implements SyncPairingPort, PairingHttpHandler {
   final Logger _logger;
 
   final Duration requestTtl;
+
+  /// invite 接受后等待发起方 `/pair/complete` 的上限；超过只说明「对方还
+  /// 没完成」，请求仍可在 [requestTtl] 内完成，因此不按失败处理。
+  final Duration inviteCompleteTimeout;
   final Duration statusPollInterval;
   final Duration httpTimeout;
   final Duration sweepInterval;
@@ -221,6 +226,9 @@ class LanPairingService implements SyncPairingPort, PairingHttpHandler {
     if (!_nearby.isClosed) _nearby.add(const []);
     _activePromptId = null;
     for (final entry in _requests.values) {
+      // 停止后不会再有 complete：让仍在 respond() 里等待的调用方拿到结论，
+      // 而不是挂到超时。
+      entry.complete(SyncPairingOutcome.unavailable);
       entry.clearSecrets();
     }
     _requests.clear();
@@ -1043,6 +1051,7 @@ class LanPairingService implements SyncPairingPort, PairingHttpHandler {
     }
     _expireIfNeeded(entry, _nowMs());
     if (entry.status == SyncPairingStatus.expired) {
+      entry.complete(SyncPairingOutcome.expired);
       return PairingHttpResponse.json({
         'v': 1,
         'requestId': requestId,
@@ -1054,6 +1063,7 @@ class LanPairingService implements SyncPairingPort, PairingHttpHandler {
       throw const _BadPairingRequest('当前请求不接受 complete');
     }
     if (entry.completed) {
+      entry.complete(SyncPairingOutcome.accepted);
       return PairingHttpResponse.json({
         'v': 1,
         'requestId': requestId,
@@ -1062,47 +1072,56 @@ class LanPairingService implements SyncPairingPort, PairingHttpHandler {
     }
     final keyPair = entry.keyPair;
     if (keyPair == null) {
+      entry.complete(SyncPairingOutcome.expired);
       return PairingHttpResponse.json({
         'v': 1,
         'requestId': requestId,
         'status': SyncPairingStatus.expired.name,
       });
     }
-    final sealed = _decodeTokenField(map, 'sealed');
-    final key = PairingCrypto.deriveSessionKey(
-      privateKey: keyPair.privateKey,
-      peerPublicKey: entry.peerPublicKey,
-      initiatorNonce: entry.peerNonce,
-      receiverNonce: entry.localNonce,
-    );
-    final plaintext = PairingCrypto.open(
-      key: key,
-      sealed: sealed,
-      aad: _aadFor(
-        requestId: requestId,
-        intent: entry.intent,
-        initiatorDeviceId: entry.peerDeviceId,
-        receiverDeviceId: deviceId,
-      ),
-    );
-    final passphrase = utf8.decode(plaintext);
-    if (SyncPassphrase.normalize(passphrase).length < 16) {
-      throw const _BadPairingRequest('口令无效');
+    try {
+      final sealed = _decodeTokenField(map, 'sealed');
+      final key = PairingCrypto.deriveSessionKey(
+        privateKey: keyPair.privateKey,
+        peerPublicKey: entry.peerPublicKey,
+        initiatorNonce: entry.peerNonce,
+        receiverNonce: entry.localNonce,
+      );
+      final plaintext = PairingCrypto.open(
+        key: key,
+        sealed: sealed,
+        aad: _aadFor(
+          requestId: requestId,
+          intent: entry.intent,
+          initiatorDeviceId: entry.peerDeviceId,
+          receiverDeviceId: deviceId,
+        ),
+      );
+      final passphrase = utf8.decode(plaintext);
+      if (SyncPassphrase.normalize(passphrase).length < 16) {
+        throw const _BadPairingRequest('口令无效');
+      }
+      await _writePassphrase(passphrase);
+      entry.completed = true;
+      entry.clearSecrets();
+      await _rememberEndpointFromRequest(
+        peerDeviceId: entry.peerDeviceId,
+        peerHost: entry.peerHost,
+        peerHttpPort: entry.peerHttpPort,
+        peerProbePort: entry.peerProbePort,
+      );
+      entry.complete(SyncPairingOutcome.accepted);
+      return PairingHttpResponse.json({
+        'v': 1,
+        'requestId': requestId,
+        'status': SyncPairingStatus.accepted.name,
+      });
+    } catch (_) {
+      // 密封 / 口令 / 落盘任一失败都不能让等待方误以为已加入；保留 entry
+      // 到 TTL，发起方仍可重试 complete。
+      entry.complete(SyncPairingOutcome.unavailable);
+      rethrow;
     }
-    await _writePassphrase(passphrase);
-    entry.completed = true;
-    entry.clearSecrets();
-    await _rememberEndpointFromRequest(
-      peerDeviceId: entry.peerDeviceId,
-      peerHost: entry.peerHost,
-      peerHttpPort: entry.peerHttpPort,
-      peerProbePort: entry.peerProbePort,
-    );
-    return PairingHttpResponse.json({
-      'v': 1,
-      'requestId': requestId,
-      'status': SyncPairingStatus.accepted.name,
-    });
   }
 
   @override
@@ -1152,6 +1171,19 @@ class LanPairingService implements SyncPairingPort, PairingHttpHandler {
         // invite：等发起方 POST complete；临时私钥保留到收完 / 过期。
         // 端点要等 complete 真正写入口令后再保存，用户点「接受」不算完成。
         entry.status = SyncPairingStatus.accepted;
+        final completion = entry.beginCompletion();
+        _afterPromptResolved(entry);
+        // 有界等待：complete 正常在发起方下一次轮询（≤500ms）到达；5s 仍
+        // 没来只说明对方还没完成，不把已接受改成失败——对端仍可在 TTL 内
+        // 补发 complete，所以按 unavailable 交回 UI 提示「已接受，但对方
+        // 还没完成」，同时释放等待方。
+        return await completion.future.timeout(
+          inviteCompleteTimeout,
+          onTimeout: () {
+            entry.complete(SyncPairingOutcome.unavailable);
+            return SyncPairingOutcome.unavailable;
+          },
+        );
       }
       _afterPromptResolved(entry);
       return SyncPairingOutcome.accepted;
@@ -1281,6 +1313,9 @@ class LanPairingService implements SyncPairingPort, PairingHttpHandler {
 
   void _expireEntry(_IncomingPairing entry) {
     entry.status = SyncPairingStatus.expired;
+    // invite 已接受、正在等 complete：过期就是最终结论，不能只清密钥让
+    // respond() 挂到超时。
+    entry.complete(SyncPairingOutcome.expired);
     entry.clearSecrets();
     if (_activePromptId == entry.requestId) {
       _activePromptId = null;
@@ -1302,8 +1337,17 @@ class LanPairingService implements SyncPairingPort, PairingHttpHandler {
         }
       }
       if (oldestId == null) return;
-      _requests.remove(oldestId)?.clearSecrets();
+      _discardEntry(oldestId);
     }
+  }
+
+  /// 从请求表移除一条 entry：先结束可能仍在等待 complete 的 respond()，
+  /// 再释放密钥 / 密封载荷。
+  void _discardEntry(String requestId) {
+    final entry = _requests.remove(requestId);
+    if (entry == null) return;
+    entry.complete(SyncPairingOutcome.unavailable);
+    entry.clearSecrets();
   }
 
   void _trimRequests(int nowMs) {
@@ -1319,7 +1363,7 @@ class LanPairingService implements SyncPairingPort, PairingHttpHandler {
     for (final id in removable) {
       if (_requests.length <= maxRequests) break;
       // 裁剪同样要释放密封载荷 / 临时私钥：不能只把索引从表里摘掉。
-      _requests.remove(id)?.clearSecrets();
+      _discardEntry(id);
     }
   }
 
@@ -1629,6 +1673,18 @@ class _IncomingPairing {
   int? sealedExpiresAt;
   bool prompted = false;
   bool completed = false;
+
+  /// invite 接受后由 `respond()` 等待、`/pair/complete` 或生命周期事件结束。
+  Completer<SyncPairingOutcome>? _completion;
+
+  Completer<SyncPairingOutcome> beginCompletion() =>
+      _completion ??= Completer<SyncPairingOutcome>();
+
+  void complete(SyncPairingOutcome outcome) {
+    final completion = _completion;
+    if (completion == null || completion.isCompleted) return;
+    completion.complete(outcome);
+  }
 
   void clearKeyPair() {
     keyPair?.destroy();

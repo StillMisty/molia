@@ -120,6 +120,189 @@ void main() {
     expect(a.endpoints.map((e) => e.deviceId), contains('devB'));
   });
 
+  test('invite 接受后等待 complete：complete 成功才返回 accepted', () async {
+    final writes = <String>[];
+    final endpoints = <LanPeerEndpoint>[];
+    final service = await _startService(
+      deviceId: 'devB',
+      passphrase: null,
+      hasGroup: false,
+      client: _FakeHttpClient((path, query, body) async {
+        throw StateError('接收方不应发起 HTTP 请求');
+      }),
+      inviteCompleteTimeout: const Duration(seconds: 2),
+      writes: writes,
+      endpoints: endpoints,
+    );
+    addTearDown(service.dispose);
+
+    final invite = await _beginInvite(service, requestId: 'req-invite001');
+    var resolved = false;
+    final respondFuture =
+        service.respond(invite.prompt.requestId, accept: true);
+    unawaited(respondFuture.whenComplete(() => resolved = true));
+    await Future<void>.delayed(const Duration(milliseconds: 30));
+    expect(resolved, isFalse, reason: '还没收到 complete 不能返回 accepted');
+    expect(writes, isEmpty);
+    expect(endpoints, isEmpty);
+
+    final response = await service.handle(PairingHttpRequest(
+      method: 'POST',
+      path: PairingHttpPaths.complete,
+      sourceHost: '10.0.0.9',
+      body: _completeBody(invite, passphrase: passA),
+    ));
+    expect(response.statusCode, 200);
+    expect(
+      (jsonDecode(response.body) as Map<String, Object?>)['status'],
+      SyncPairingStatus.accepted.name,
+    );
+    expect(
+      await respondFuture.timeout(const Duration(seconds: 1)),
+      SyncPairingOutcome.accepted,
+    );
+    expect(writes, [passA]);
+    expect(endpoints.map((e) => e.deviceId), contains('devA'));
+  });
+
+  test('invite 接受后没有 complete：有界等待后返回 unavailable', () async {
+    final writes = <String>[];
+    final service = await _startService(
+      deviceId: 'devB',
+      passphrase: null,
+      hasGroup: false,
+      client: _FakeHttpClient((path, query, body) async {
+        throw StateError('接收方不应发起 HTTP 请求');
+      }),
+      inviteCompleteTimeout: const Duration(milliseconds: 80),
+      writes: writes,
+    );
+    addTearDown(service.dispose);
+
+    final invite = await _beginInvite(service, requestId: 'req-invite002');
+    final stopwatch = Stopwatch()..start();
+    final outcome = await service
+        .respond(invite.prompt.requestId, accept: true)
+        .timeout(const Duration(seconds: 2));
+    stopwatch.stop();
+    expect(outcome, SyncPairingOutcome.unavailable);
+    expect(
+      stopwatch.elapsed,
+      greaterThanOrEqualTo(const Duration(milliseconds: 60)),
+    );
+    expect(writes, isEmpty);
+
+    // 超时只代表「对方还没完成」：请求仍在 TTL 内，迟到的 complete 仍生效。
+    final response = await service.handle(PairingHttpRequest(
+      method: 'POST',
+      path: PairingHttpPaths.complete,
+      sourceHost: '10.0.0.9',
+      body: _completeBody(invite, passphrase: passA),
+    ));
+    expect(response.statusCode, 200);
+    expect(writes, [passA]);
+  });
+
+  test('invite 接受后 complete 密封载荷损坏：respond 返回 unavailable', () async {
+    final writes = <String>[];
+    final service = await _startService(
+      deviceId: 'devB',
+      passphrase: null,
+      hasGroup: false,
+      client: _FakeHttpClient((path, query, body) async {
+        throw StateError('接收方不应发起 HTTP 请求');
+      }),
+      inviteCompleteTimeout: const Duration(seconds: 2),
+      writes: writes,
+    );
+    addTearDown(service.dispose);
+
+    final invite = await _beginInvite(service, requestId: 'req-invite003');
+    final respondFuture =
+        service.respond(invite.prompt.requestId, accept: true);
+    await Future<void>.delayed(const Duration(milliseconds: 10));
+
+    final response = await service.handle(PairingHttpRequest(
+      method: 'POST',
+      path: PairingHttpPaths.complete,
+      sourceHost: '10.0.0.9',
+      body: utf8.encode(jsonEncode({
+        'v': 1,
+        'requestId': invite.prompt.requestId,
+        'deviceId': 'devA',
+        'sealed': _token(Uint8List(48)),
+      })),
+    ));
+    expect(response.statusCode, 400);
+    expect(
+      await respondFuture.timeout(const Duration(seconds: 1)),
+      SyncPairingOutcome.unavailable,
+    );
+    expect(writes, isEmpty);
+  });
+
+  test('invite 等待 complete 期间过期：respond 返回 expired', () async {
+    final writes = <String>[];
+    final service = await _startService(
+      deviceId: 'devB',
+      passphrase: null,
+      hasGroup: false,
+      client: _FakeHttpClient((path, query, body) async {
+        throw StateError('接收方不应发起 HTTP 请求');
+      }),
+      requestTtl: const Duration(milliseconds: 300),
+      inviteCompleteTimeout: const Duration(seconds: 5),
+      writes: writes,
+    );
+    addTearDown(service.dispose);
+
+    final invite = await _beginInvite(service, requestId: 'req-invite004');
+    final outcome = await service
+        .respond(invite.prompt.requestId, accept: true)
+        .timeout(const Duration(seconds: 2));
+    expect(outcome, SyncPairingOutcome.expired);
+    expect(writes, isEmpty);
+  });
+
+  test('join 不受 invite 等待影响：接受后立即返回 accepted', () async {
+    final writes = <String>[];
+    final service = await _startService(
+      deviceId: 'devB',
+      passphrase: passB,
+      hasGroup: true,
+      client: _FakeHttpClient((path, query, body) async {
+        throw StateError('接收方不应发起 HTTP 请求');
+      }),
+      inviteCompleteTimeout: const Duration(seconds: 30),
+      writes: writes,
+    );
+    addTearDown(service.dispose);
+
+    final promptFuture = service.incomingRequests.first;
+    final response = await service.handle(PairingHttpRequest(
+      method: 'POST',
+      path: PairingHttpPaths.request,
+      sourceHost: '10.0.0.9',
+      body: _requestBody(
+        requestId: 'req-join0001',
+        deviceId: 'devA',
+        deviceName: '设备A',
+        intent: SyncPairingIntent.join,
+        hasGroup: false,
+      ),
+    ));
+    expect(response.statusCode, 200);
+    final prompt = await promptFuture.timeout(const Duration(seconds: 1));
+    final stopwatch = Stopwatch()..start();
+    final outcome = await service
+        .respond(prompt.requestId, accept: true)
+        .timeout(const Duration(seconds: 1));
+    stopwatch.stop();
+    expect(outcome, SyncPairingOutcome.accepted);
+    expect(stopwatch.elapsed, lessThan(const Duration(seconds: 1)));
+    expect(writes, isEmpty, reason: '已有口令时 join 不需要重写');
+  });
+
   test('双方都无组：join 使用接收方已有口令', () async {
     final network = _LoopbackNetwork();
     final a = await _Device.start(
@@ -751,6 +934,8 @@ void main() {
       name: '设备B',
       passphrase: null,
       hasGroup: false,
+      // complete 到不了接收方：接受后只能等到有界超时。
+      inviteCompleteTimeout: const Duration(milliseconds: 200),
     );
     addTearDown(network.dispose);
 
@@ -759,7 +944,7 @@ void main() {
     final prompt = await promptFuture.timeout(const Duration(seconds: 2));
     expect(
       await b.service.respond(prompt.requestId, accept: true),
-      SyncPairingOutcome.accepted,
+      SyncPairingOutcome.unavailable,
     );
     final failed = await resultFuture.timeout(const Duration(seconds: 2));
     expect(failed.outcome, SyncPairingOutcome.unreachable);
@@ -1072,6 +1257,7 @@ Future<LanPairingService> _startService({
   int httpPort = 41000,
   int probePort = 47825,
   Duration requestTtl = const Duration(seconds: 60),
+  Duration inviteCompleteTimeout = const Duration(seconds: 5),
   Duration pollInterval = const Duration(milliseconds: 10),
   int Function()? nowMs,
   List<String>? writes,
@@ -1109,6 +1295,7 @@ Future<LanPairingService> _startService({
     httpClient: client,
     nowMs: nowMs ?? () => DateTime.now().millisecondsSinceEpoch,
     requestTtl: requestTtl,
+    inviteCompleteTimeout: inviteCompleteTimeout,
     statusPollInterval: pollInterval,
     sweepInterval: const Duration(milliseconds: 50),
     logger: Logger('molia.test.pairing.$deviceId'),
@@ -1138,6 +1325,7 @@ class _Device {
     this.canPrompt = true,
     this.cellular = false,
     this.requestTtl = const Duration(seconds: 60),
+    this.inviteCompleteTimeout = const Duration(seconds: 5),
     this.pollInterval = const Duration(milliseconds: 20),
     this.requestRateLimit = 10,
     this.statusRateLimit = 240,
@@ -1153,6 +1341,7 @@ class _Device {
   final int httpPort;
   final bool cellular;
   final Duration requestTtl;
+  final Duration inviteCompleteTimeout;
   final Duration pollInterval;
   final int requestRateLimit;
   final int statusRateLimit;
@@ -1179,6 +1368,7 @@ class _Device {
     bool canPrompt = true,
     bool cellular = false,
     Duration requestTtl = const Duration(seconds: 60),
+    Duration inviteCompleteTimeout = const Duration(seconds: 5),
     Duration pollInterval = const Duration(milliseconds: 20),
     int requestRateLimit = 10,
     int statusRateLimit = 240,
@@ -1198,6 +1388,7 @@ class _Device {
       canPrompt: canPrompt,
       cellular: cellular,
       requestTtl: requestTtl,
+      inviteCompleteTimeout: inviteCompleteTimeout,
       pollInterval: pollInterval,
       requestRateLimit: requestRateLimit,
       statusRateLimit: statusRateLimit,
@@ -1235,6 +1426,7 @@ class _Device {
       httpClient: network.client,
       nowMs: clock ?? () => DateTime.now().millisecondsSinceEpoch,
       requestTtl: requestTtl,
+      inviteCompleteTimeout: inviteCompleteTimeout,
       statusPollInterval: pollInterval,
       sweepInterval: const Duration(milliseconds: 50),
       requestRateLimit: requestRateLimit,
@@ -1258,6 +1450,84 @@ SyncNearbyDevice _nearby(_Device device) => SyncNearbyDevice(
       hasGroup: device.hasGroup,
       lastSeenAt: DateTime.now().millisecondsSinceEpoch,
     );
+
+typedef _InviteHandshake = ({
+  SyncPairingRequest prompt,
+  PairingKeyPair keyPair,
+  Uint8List nonce,
+  Uint8List receiverPublicKey,
+  Uint8List receiverNonce,
+});
+
+/// 直接向接收方投递一条 invite 请求，返回发起方侧密封所需的握手材料。
+Future<_InviteHandshake> _beginInvite(
+  LanPairingService service, {
+  required String requestId,
+}) async {
+  final promptFuture = service.incomingRequests.first;
+  final keyPair = PairingCrypto.generateKeyPair();
+  addTearDown(keyPair.destroy);
+  final nonce = Uint8List.fromList(List<int>.generate(16, (i) => i));
+  final response = await service.handle(PairingHttpRequest(
+    method: 'POST',
+    path: PairingHttpPaths.request,
+    sourceHost: '10.0.0.9',
+    body: utf8.encode(jsonEncode({
+      'v': 1,
+      'requestId': requestId,
+      'deviceId': 'devA',
+      'deviceName': '设备A',
+      'intent': SyncPairingIntent.invite.name,
+      'publicKey': _token(keyPair.publicKey),
+      'nonce': _token(nonce),
+      'group': true,
+      'http': 42000,
+    })),
+  ));
+  expect(response.statusCode, 200);
+  final map = jsonDecode(response.body) as Map<String, Object?>;
+  expect(map['status'], SyncPairingStatus.pending.name);
+  final prompt = await promptFuture.timeout(const Duration(seconds: 1));
+  return (
+    prompt: prompt,
+    keyPair: keyPair,
+    nonce: nonce,
+    receiverPublicKey: _decodeToken(map['publicKey']! as String),
+    receiverNonce: _decodeToken(map['nonce']! as String),
+  );
+}
+
+/// 发起方按握手材料密封口令，构造 `/pair/complete` 请求体。
+Uint8List _completeBody(
+  _InviteHandshake invite, {
+  required String passphrase,
+}) {
+  final key = PairingCrypto.deriveSessionKey(
+    privateKey: invite.keyPair.privateKey,
+    peerPublicKey: invite.receiverPublicKey,
+    initiatorNonce: invite.nonce,
+    receiverNonce: invite.receiverNonce,
+  );
+  final sealed = PairingCrypto.seal(
+    key: key,
+    plaintext: utf8.encode(passphrase),
+    aad: PairingCrypto.aad(
+      requestId: invite.prompt.requestId,
+      intent: SyncPairingIntent.invite,
+      initiatorDeviceId: 'devA',
+      receiverDeviceId: 'devB',
+    ),
+  );
+  return Uint8List.fromList(utf8.encode(jsonEncode({
+    'v': 1,
+    'requestId': invite.prompt.requestId,
+    'deviceId': 'devA',
+    'sealed': _token(sealed),
+  })));
+}
+
+Uint8List _decodeToken(String value) =>
+    Uint8List.fromList(base64Url.decode(base64Url.normalize(value)));
 
 Uint8List _requestBody({
   required String requestId,

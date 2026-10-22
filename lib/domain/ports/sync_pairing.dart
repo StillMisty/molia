@@ -40,6 +40,12 @@ abstract interface class SyncPairingPort {
   Future<SyncPairingResult> requestPairing(SyncNearbyDevice device);
 
   /// 接收方接受 / 拒绝一条请求。
+  ///
+  /// - join：接受即密封本机口令并返回 [SyncPairingOutcome.accepted]；
+  /// - invite：接受后等待发起方 `/pair/complete`（有界，约 5 秒）才算
+  ///   [SyncPairingOutcome.accepted]；超时返回
+  ///   [SyncPairingOutcome.unavailable]（已接受但对方还没完成，请求仍可在
+  ///   TTL 内完成），过期 / 失败分别返回 expired / unavailable。
   Future<SyncPairingOutcome> respond(
     String requestId, {
     required bool accept,
