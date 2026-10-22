@@ -3884,12 +3884,6 @@ abstract class AppLocalizations {
   /// **'Styles, scenes and what gets sent'**
   String get aiDjPreferencesSubtitle;
 
-  /// No description provided for @aiDjPreferencesOutdated.
-  ///
-  /// In en, this message translates to:
-  /// **'Preferences updated — refresh a batch to apply'**
-  String get aiDjPreferencesOutdated;
-
   /// No description provided for @aiDjBatchSize.
   ///
   /// In en, this message translates to:
@@ -4088,12 +4082,6 @@ abstract class AppLocalizations {
   /// **'View exact prompt'**
   String get aiDjViewPrompt;
 
-  /// No description provided for @aiDjHidePrompt.
-  ///
-  /// In en, this message translates to:
-  /// **'Hide exact prompt'**
-  String get aiDjHidePrompt;
-
   /// No description provided for @aiDjSystemPrompt.
   ///
   /// In en, this message translates to:
@@ -4117,6 +4105,30 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Copied'**
   String get aiDjPromptCopied;
+
+  /// No description provided for @aiDjPromptTabPreview.
+  ///
+  /// In en, this message translates to:
+  /// **'This batch'**
+  String get aiDjPromptTabPreview;
+
+  /// No description provided for @aiDjPromptTabLastSent.
+  ///
+  /// In en, this message translates to:
+  /// **'Last sent'**
+  String get aiDjPromptTabLastSent;
+
+  /// No description provided for @aiDjPromptTabLastRaw.
+  ///
+  /// In en, this message translates to:
+  /// **'Last reply'**
+  String get aiDjPromptTabLastRaw;
+
+  /// No description provided for @aiDjPromptUnavailable.
+  ///
+  /// In en, this message translates to:
+  /// **'Preview isn\'t available right now'**
+  String get aiDjPromptUnavailable;
 
   /// No description provided for @aiDjLastSentPrompt.
   ///
@@ -4151,8 +4163,8 @@ abstract class AppLocalizations {
   /// No description provided for @aiDjSendSummary.
   ///
   /// In en, this message translates to:
-  /// **'Sending: {sections} · {count} per batch · Sources: {sources}'**
-  String aiDjSendSummary(String sections, int count, String sources);
+  /// **'Sending: {sections}'**
+  String aiDjSendSummary(String sections);
 
   /// No description provided for @aiDjAutoFeedTitle.
   ///
@@ -4478,17 +4490,11 @@ abstract class AppLocalizations {
   /// **'Before the 90s'**
   String get aiDjEraBefore90;
 
-  /// No description provided for @aiDjPrefsSave.
+  /// No description provided for @aiDjPrefsAutoSaveHint.
   ///
   /// In en, this message translates to:
-  /// **'Save preferences'**
-  String get aiDjPrefsSave;
-
-  /// No description provided for @aiDjPrefsSaved.
-  ///
-  /// In en, this message translates to:
-  /// **'Saved — applies to the next batch'**
-  String get aiDjPrefsSaved;
+  /// **'Changes save automatically and apply to the next batch.'**
+  String get aiDjPrefsAutoSaveHint;
 
   /// No description provided for @aiDjPrefsReset.
   ///
@@ -4505,7 +4511,7 @@ abstract class AppLocalizations {
   /// No description provided for @aiDjPrefsResetBody.
   ///
   /// In en, this message translates to:
-  /// **'Styles, scenes, sending scope and sources return to defaults; saved recommendations are not affected.'**
+  /// **'Styles, scenes and sending scope return to defaults; saved recommendations are not affected.'**
   String get aiDjPrefsResetBody;
 
   /// No description provided for @aiDjPrefsResetDone.
@@ -4585,36 +4591,6 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'This reads the names, titles and artists of up to 10 of your playlists so they are not recommended again.'**
   String get aiDjScopePlaylistsConfirm;
-
-  /// No description provided for @aiDjChannelsTitle.
-  ///
-  /// In en, this message translates to:
-  /// **'Where to find songs'**
-  String get aiDjChannelsTitle;
-
-  /// No description provided for @aiDjChannelsAuto.
-  ///
-  /// In en, this message translates to:
-  /// **'Auto (first 3 searchable sources on the Sources page)'**
-  String get aiDjChannelsAuto;
-
-  /// No description provided for @aiDjChannelsHint.
-  ///
-  /// In en, this message translates to:
-  /// **'Leave empty to choose automatically. Selected sources are used only; other sources won\'t be tried.'**
-  String get aiDjChannelsHint;
-
-  /// No description provided for @aiDjChannelsUnavailable.
-  ///
-  /// In en, this message translates to:
-  /// **'Selected sources are unavailable right now; auto sources are used instead'**
-  String get aiDjChannelsUnavailable;
-
-  /// No description provided for @aiDjChannelsEmpty.
-  ///
-  /// In en, this message translates to:
-  /// **'No searchable sources'**
-  String get aiDjChannelsEmpty;
 
   /// No description provided for @aiDjSeedsTitle.
   ///

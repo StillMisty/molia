@@ -45,7 +45,7 @@ void main() {
     await repository.dispose();
   });
 
-  test('默认平台 wy；榜单表来自数据源；榜单曲目解析为发现曲目', () async {
+  test('默认选中第一个可用平台（仅 wy 时）；榜单表来自数据源；榜单曲目解析为发现曲目', () async {
     expect(discover.channelKey, 'wy');
     expect(discover.sourceKeys, ['wy']);
     expect(discover.leaderboards.single.name, '热歌榜');
@@ -80,7 +80,8 @@ void main() {
     expect(request.startIndex, 0);
     expect(request.context?.name, '热歌榜');
     expect(request.tracks.single.payload['songmid'], 111);
-    expect(request.tracks.single.duration, const Duration(milliseconds: 245000));
+    expect(
+        request.tracks.single.duration, const Duration(milliseconds: 245000));
   });
 
   test('收藏切换写入资料库并更新 isFavorite', () async {
@@ -182,21 +183,24 @@ void main() {
       sources: {'wy': source, 'tx': tx},
     );
     addTearDown(multi.dispose);
-    expect(multi.sourceKeys, ['wy', 'tx']);
+    expect(multi.sourceKeys, ['tx', 'wy']);
+    expect(multi.channelKey, 'tx', reason: '默认选中规范顺序第一个可用平台');
 
+    await multi.loadHotSearches();
+    expect(multi.hotSearches, ['晴天', '夜曲']);
+    expect(tx.hotSearchCalls, 1);
+    expect(source.hotSearchCalls, 0);
+
+    multi.selectChannel('wy');
+    expect(multi.channelKey, 'wy');
+    expect(multi.hotSearches, isEmpty);
     await multi.loadHotSearches();
     expect(multi.hotSearches, ['晴天', '夜曲']);
     expect(source.hotSearchCalls, 1);
 
     multi.selectChannel('tx');
-    expect(multi.channelKey, 'tx');
-    expect(multi.hotSearches, isEmpty);
-    await multi.loadHotSearches();
-    expect(tx.hotSearchCalls, 1);
-
-    multi.selectChannel('wy');
     expect(multi.hotSearches, ['晴天', '夜曲']);
-    expect(source.hotSearchCalls, 1); // 命中缓存
+    expect(tx.hotSearchCalls, 1); // 命中缓存
 
     // 非发现渠道：允许选中但能力全部降级（资料页据此隐藏热榜/歌单）。
     multi.selectChannel('nope');

@@ -69,7 +69,6 @@ class AiDjTrackTile extends StatelessWidget {
     final scheme = theme.colorScheme;
     final track = item.track;
     final artist = track.artistLabel;
-    final sourceName = item.resolvedSourceName;
     final reason = item.source.reason;
     final actionMenu = _aiDjActionMenu(
       context,
@@ -106,12 +105,9 @@ class AiDjTrackTile extends StatelessWidget {
                     fontWeight: FontWeight.w600,
                   ),
                 ),
-                if (artist.isNotEmpty || sourceName.isNotEmpty)
+                if (artist.isNotEmpty)
                   Text(
-                    [
-                      if (artist.isNotEmpty) artist,
-                      if (sourceName.isNotEmpty) sourceName,
-                    ].join(' · '),
+                    artist,
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                     style: theme.textTheme.bodySmall?.copyWith(

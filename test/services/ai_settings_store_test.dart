@@ -73,7 +73,7 @@ void main() {
   });
 
   test('推荐偏好 JSON 往返与默认值（非法值回退）', () async {
-    expect((await store.readPreferences()).batchSize, 20);
+    expect((await store.readPreferences()).batchSize, 10);
     expect((await store.readPreferences()).autoFeed, isTrue);
     expect(
         (await store.readPreferences()).sections, kAiDefaultUpstreamSections);
@@ -92,7 +92,6 @@ void main() {
         AiUpstreamSection.summary,
         AiUpstreamSection.favorites,
       },
-      sourceKeys: ['wy', 'tx'],
       seeds: ['晴天 - 周杰伦'],
       acknowledgedScopes: {AiUpstreamSection.favorites},
     );
@@ -112,14 +111,13 @@ void main() {
       AiUpstreamSection.summary,
       AiUpstreamSection.favorites,
     });
-    expect(loaded.sourceKeys, ['wy', 'tx']);
     expect(loaded.seeds, ['晴天 - 周杰伦']);
     expect(loaded.acknowledgedScopes, {AiUpstreamSection.favorites});
 
     await prefs.setString(kAiDjPreferences.name, jsonEncode({'batchSize': 7}));
-    expect((await store.readPreferences()).batchSize, 20);
+    expect((await store.readPreferences()).batchSize, 10);
     await prefs.setString(kAiDjPreferences.name, 'not-json{{{');
-    expect((await store.readPreferences()).batchSize, 20);
+    expect((await store.readPreferences()).batchSize, 10);
   });
 
   test('反馈记忆 JSON 往返、去重与上限', () async {

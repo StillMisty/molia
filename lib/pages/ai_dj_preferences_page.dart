@@ -1,7 +1,8 @@
-/// AI 推荐偏好页：本地草稿 + 保存（保存只影响下一次生成，不自动生成）。
+/// AI 推荐偏好页：即时保存（所见即所得），没有保存按钮。
 ///
 /// 分组：生成（批次大小 / 自动补歌 / 只推荐没听过的 / 探索度）、风格、场景、
-/// 语言、年代、补充要求、发送范围、找歌渠道、「多来点这种」种子。
+/// 语言、年代、补充要求、发送范围、「多来点这种」种子。
+/// 找歌渠道不在这里出现：解析统一按音源页渠道顺序使用全部可搜索渠道。
 library;
 
 import 'dart:async';
@@ -25,34 +26,48 @@ class AiDjPreferencesPage extends StatefulWidget {
 }
 
 class _AiDjPreferencesPageState extends State<AiDjPreferencesPage> {
+  /// 补充要求的防抖窗口：输入停顿后再落盘，避免逐字写偏好。
+  static const Duration _extraSaveDelay = Duration(milliseconds: 400);
+
   late final AiDjProvider _provider;
-  late AiPreferences _draft;
   late final TextEditingController _extraController;
+  Timer? _extraSaveTimer;
 
   @override
   void initState() {
     super.initState();
     _provider = context.read<AiDjProvider>();
-    _draft = _provider.preferences;
     _extraController =
         TextEditingController(text: _provider.preferences.extraPrompt);
   }
 
   @override
   void dispose() {
+    _extraSaveTimer?.cancel();
+    // 防抖窗口内退出页面：补写一次，避免最后一段输入丢失。放到帧末，
+    // 避免在路由卸载/树重建过程中同步 notify 触发祖先重建。
+    final pending = _extraController.text;
+    if (pending != _provider.preferences.extraPrompt) {
+      final provider = _provider;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        unawaited(provider.savePreferences(
+          provider.preferences.copyWith(extraPrompt: pending),
+        ));
+      });
+    }
     _extraController.dispose();
     super.dispose();
   }
 
-  AiPreferences get _currentDraft => _draft.copyWith(
-        extraPrompt: _extraController.text,
-      );
+  void _update(AiPreferences next) {
+    unawaited(_provider.savePreferences(next));
+  }
 
-  Future<void> _save() async {
-    final l10n = AppLocalizations.of(context)!;
-    await _provider.savePreferences(_currentDraft);
-    if (!mounted) return;
-    _notify(l10n.aiDjPrefsSaved);
+  void _saveExtraSoon(String value) {
+    _extraSaveTimer?.cancel();
+    _extraSaveTimer = Timer(_extraSaveDelay, () {
+      _update(_provider.preferences.copyWith(extraPrompt: value));
+    });
   }
 
   Future<void> _reset() async {
@@ -77,12 +92,10 @@ class _AiDjPreferencesPageState extends State<AiDjPreferencesPage> {
       ),
     );
     if (confirmed != true || !mounted) return;
-    setState(() {
-      _draft = AiPreferences.defaults.copyWith(seeds: _provider.seeds);
-      _extraController.clear();
-    });
-    await _provider.savePreferences(_draft);
+    _extraSaveTimer?.cancel();
+    await _provider.resetPreferences();
     if (!mounted) return;
+    _extraController.clear();
     _notify(l10n.aiDjPrefsResetDone);
   }
 
@@ -129,7 +142,7 @@ class _AiDjPreferencesPageState extends State<AiDjPreferencesPage> {
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context)!;
     final provider = context.watch<AiDjProvider>();
-    final sources = provider.availableSources;
+    final prefs = provider.preferences;
     return Scaffold(
       appBar: M3EAppBar.top(
         title: Text(l10n.aiDjPreferencesTitle),
@@ -139,6 +152,8 @@ class _AiDjPreferencesPageState extends State<AiDjPreferencesPage> {
         child: ListView(
           padding: const EdgeInsets.fromLTRB(16, 8, 16, 32),
           children: [
+            SettingsSectionHint(text: l10n.aiDjPrefsAutoSaveHint),
+            const SizedBox(height: 12),
             SettingsSectionCard(
               title: l10n.aiDjPrefsGenerationGroup,
               children: [
@@ -147,9 +162,9 @@ class _AiDjPreferencesPageState extends State<AiDjPreferencesPage> {
                   icon: Icons.autorenew_rounded,
                   title: l10n.aiDjAutoFeedTitle,
                   subtitle: l10n.aiDjAutoFeedSubtitle,
-                  value: _draft.autoFeed,
-                  onChanged: (value) => setState(
-                    () => _draft = _draft.copyWith(autoFeed: value),
+                  value: prefs.autoFeed,
+                  onChanged: (value) => _update(
+                    _provider.preferences.copyWith(autoFeed: value),
                   ),
                 ),
                 SettingsSwitchTile(
@@ -157,9 +172,9 @@ class _AiDjPreferencesPageState extends State<AiDjPreferencesPage> {
                   icon: Icons.hearing_rounded,
                   title: l10n.aiDjPrefsOnlyUnheardTitle,
                   subtitle: l10n.aiDjPrefsOnlyUnheardSubtitle,
-                  value: _draft.onlyUnheard,
-                  onChanged: (value) => setState(
-                    () => _draft = _draft.copyWith(onlyUnheard: value),
+                  value: prefs.onlyUnheard,
+                  onChanged: (value) => _update(
+                    _provider.preferences.copyWith(onlyUnheard: value),
                   ),
                 ),
                 SettingsDropdownRow<int>(
@@ -167,14 +182,21 @@ class _AiDjPreferencesPageState extends State<AiDjPreferencesPage> {
                   dropdownKey: const Key('aiDjPrefBatchSizeDropdown'),
                   icon: Icons.layers_rounded,
                   title: l10n.aiDjBatchSizeTitle,
-                  value: _draft.batchSize,
+                  value: prefs.batchSize,
                   options: [
                     for (final size in kAiBatchSizeOptions)
                       (size, l10n.aiDjBatchSize(size)),
                   ],
-                  onChanged: (value) => setState(
-                    () => _draft = _draft.copyWith(batchSize: value),
-                  ),
+                  onChanged: (value) {
+                    // 选择回调里同步 notify 会重建并销毁正在收尾的下拉控制器；
+                    // 推迟到本帧结束再写偏好。
+                    WidgetsBinding.instance.addPostFrameCallback((_) {
+                      if (!mounted) return;
+                      _update(
+                        _provider.preferences.copyWith(batchSize: value),
+                      );
+                    });
+                  },
                 ),
               ],
             ),
@@ -182,55 +204,66 @@ class _AiDjPreferencesPageState extends State<AiDjPreferencesPage> {
             _sectionTitle(l10n.aiDjPrefsExplorationTitle),
             _optionChips(
               options: kAiExplorationOptions,
-              selected: {_draft.exploration},
+              selected: {prefs.exploration},
               labelOf: (value) => aiDjExplorationLabel(l10n, value),
               singleSelect: true,
-              onToggle: (value) => setState(
-                () => _draft = _draft.copyWith(exploration: value),
+              onToggle: (value) => _update(
+                _provider.preferences.copyWith(exploration: value),
               ),
             ),
             _sectionTitle(l10n.aiDjPrefsStylesGroup),
             _optionChips(
               options: kAiStyleOptions,
-              selected: _draft.styles.toSet(),
+              selected: prefs.styles.toSet(),
               labelOf: (value) => aiDjStyleLabel(l10n, value),
-              onToggle: (value) => setState(
-                () => _draft = _draft.copyWith(
-                  styles: _toggle(_draft.styles, value, kAiStyleOptions),
+              onToggle: (value) => _update(
+                _provider.preferences.copyWith(
+                  styles: _toggle(
+                    _provider.preferences.styles,
+                    value,
+                    kAiStyleOptions,
+                  ),
                 ),
               ),
             ),
             _sectionTitle(l10n.aiDjPrefsScenesGroup),
             _optionChips(
               options: kAiSceneOptions,
-              selected: _draft.scenes.toSet(),
+              selected: prefs.scenes.toSet(),
               labelOf: (value) => aiDjSceneLabel(l10n, value),
-              onToggle: (value) => setState(
-                () => _draft = _draft.copyWith(
-                  scenes: _toggle(_draft.scenes, value, kAiSceneOptions),
+              onToggle: (value) => _update(
+                _provider.preferences.copyWith(
+                  scenes: _toggle(
+                    _provider.preferences.scenes,
+                    value,
+                    kAiSceneOptions,
+                  ),
                 ),
               ),
             ),
             _sectionTitle(l10n.aiDjPrefsLanguagesGroup),
             _optionChips(
               options: kAiLanguageOptions,
-              selected: _draft.languages.toSet(),
+              selected: prefs.languages.toSet(),
               labelOf: (value) => aiDjLanguageLabel(l10n, value),
-              onToggle: (value) => setState(
-                () => _draft = _draft.copyWith(
-                  languages:
-                      _toggle(_draft.languages, value, kAiLanguageOptions),
+              onToggle: (value) => _update(
+                _provider.preferences.copyWith(
+                  languages: _toggle(
+                    _provider.preferences.languages,
+                    value,
+                    kAiLanguageOptions,
+                  ),
                 ),
               ),
             ),
             _sectionTitle(l10n.aiDjPrefsEraGroup),
             _optionChips(
               options: kAiEraOptions,
-              selected: {_draft.era},
+              selected: {prefs.era},
               labelOf: (value) => aiDjEraLabel(l10n, value),
               singleSelect: true,
-              onToggle: (value) => setState(
-                () => _draft = _draft.copyWith(era: value),
+              onToggle: (value) => _update(
+                _provider.preferences.copyWith(era: value),
               ),
             ),
             _sectionTitle(l10n.aiDjPrefsExtraGroup),
@@ -243,6 +276,7 @@ class _AiDjPreferencesPageState extends State<AiDjPreferencesPage> {
               showCounter: true,
               maxLines: 2,
               minLines: 1,
+              onChanged: _saveExtraSoon,
             ),
             const SizedBox(height: 24),
             SettingsSectionCard(
@@ -255,62 +289,13 @@ class _AiDjPreferencesPageState extends State<AiDjPreferencesPage> {
                     icon: _scopeIcon(section),
                     title: aiDjSectionLabel(l10n, section),
                     subtitle: '',
-                    value: _draft.sections.contains(section),
+                    value: prefs.sections.contains(section),
                     onChanged: (value) {
                       unawaited(_toggleScope(section, value));
                     },
                   ),
               ],
             ),
-            _sectionTitle(l10n.aiDjChannelsTitle),
-            Text(
-              l10n.aiDjChannelsHint,
-              style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                    color: Theme.of(context).colorScheme.onSurfaceVariant,
-                  ),
-            ),
-            const SizedBox(height: 8),
-            if (sources.isEmpty)
-              Text(
-                l10n.aiDjChannelsEmpty,
-                style: Theme.of(context).textTheme.bodySmall,
-              )
-            else
-              Wrap(
-                spacing: 8,
-                runSpacing: 8,
-                children: [
-                  for (final source in sources)
-                    M3EChip(
-                      key: Key('aiDjPrefChannel_${source.key}'),
-                      type: M3EChipType.filter,
-                      label: source.displayName,
-                      selected: _draft.sourceKeys.contains(source.key),
-                      onPressed: () => _toggleChannel(source.key),
-                    ),
-                  M3EChip(
-                    key: const Key('aiDjPrefChannelAuto'),
-                    type: M3EChipType.filter,
-                    label: l10n.aiDjChannelsAuto,
-                    selected: _draft.sourceKeys.isEmpty,
-                    onPressed: () => setState(
-                      () => _draft = _draft.copyWith(sourceKeys: const []),
-                    ),
-                  ),
-                ],
-              ),
-            if (_draft.sourceKeys.isNotEmpty &&
-                !sources.any(
-                  (source) => _draft.sourceKeys.contains(source.key),
-                )) ...[
-              const SizedBox(height: 6),
-              Text(
-                l10n.aiDjChannelsUnavailable,
-                style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                      color: Theme.of(context).colorScheme.error,
-                    ),
-              ),
-            ],
             _sectionTitle(l10n.aiDjSeedsTitle),
             Text(
               l10n.aiDjSeedsHint,
@@ -339,23 +324,13 @@ class _AiDjPreferencesPageState extends State<AiDjPreferencesPage> {
                 ],
               ),
             const SizedBox(height: 24),
-            Wrap(
-              spacing: 8,
-              runSpacing: 8,
-              crossAxisAlignment: WrapCrossAlignment.center,
-              children: [
-                M3EButton.filled(
-                  key: const Key('aiDjPrefsSaveButton'),
-                  onPressed: _save,
-                  icon: const Icon(Icons.check_rounded),
-                  label: Text(l10n.aiDjPrefsSave),
-                ),
-                M3EButton.text(
-                  key: const Key('aiDjPrefsResetButton'),
-                  onPressed: _reset,
-                  child: Text(l10n.aiDjPrefsReset),
-                ),
-              ],
+            Align(
+              alignment: AlignmentDirectional.centerStart,
+              child: M3EButton.text(
+                key: const Key('aiDjPrefsResetButton'),
+                onPressed: _reset,
+                child: Text(l10n.aiDjPrefsReset),
+              ),
             ),
           ],
         ),
@@ -364,41 +339,25 @@ class _AiDjPreferencesPageState extends State<AiDjPreferencesPage> {
   }
 
   Future<void> _toggleScope(AiUpstreamSection section, bool value) async {
-    if (value && !_draft.acknowledgedScopes.contains(section)) {
+    final before = _provider.preferences;
+    if (value && !before.acknowledgedScopes.contains(section)) {
       final agreed = await _confirmScope(section);
       if (!agreed || !mounted) return;
     }
     if (!mounted) return;
-    setState(() {
-      final sections = Set<AiUpstreamSection>.of(_draft.sections);
-      final acknowledged = Set<AiUpstreamSection>.of(_draft.acknowledgedScopes);
-      if (value) {
-        sections.add(section);
-        acknowledged.add(section);
-      } else {
-        sections.remove(section);
-      }
-      _draft = _draft.copyWith(
-        sections: sections,
-        acknowledgedScopes: acknowledged,
-      );
-    });
-  }
-
-  void _toggleChannel(String key) {
-    final ordered = [
-      for (final source in _provider.availableSources)
-        if (source.key == key || _draft.sourceKeys.contains(source.key))
-          source.key,
-    ];
-    // 已选渠道被取消时无法从上面的过滤里区分，单独移除。
-    final next = _draft.sourceKeys.contains(key)
-        ? [
-            for (final value in ordered)
-              if (value != key) value
-          ]
-        : ordered;
-    setState(() => _draft = _draft.copyWith(sourceKeys: next));
+    final latest = _provider.preferences;
+    final sections = Set<AiUpstreamSection>.of(latest.sections);
+    final acknowledged = Set<AiUpstreamSection>.of(latest.acknowledgedScopes);
+    if (value) {
+      sections.add(section);
+      acknowledged.add(section);
+    } else {
+      sections.remove(section);
+    }
+    _update(latest.copyWith(
+      sections: sections,
+      acknowledgedScopes: acknowledged,
+    ));
   }
 
   static List<String> _toggle(

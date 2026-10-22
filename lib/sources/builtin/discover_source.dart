@@ -46,7 +46,7 @@ abstract class DiscoverSource {
 class BuiltinDiscover {
   BuiltinDiscover._();
 
-  /// 平台顺序与内置搜索一致（wy 在前：默认平台）。
+  /// 平台顺序与内置搜索一致（QQ 在前）。
   static Map<String, DiscoverSource> get sources =>
       BuiltinPlatforms.discoverSources;
 

@@ -107,17 +107,17 @@ void main() {
     // 渠道 = 脚本搜索源 + 内置发现平台并集。
     expect(
       f.provider.channels.map((o) => o.key).toList(),
-      ['a', 'b', 'wy', 'tx', 'kg', 'kw', 'mg'],
+      ['a', 'b', 'tx', 'wy', 'kg', 'kw', 'mg'],
     );
     expect(
       f.provider.channels.where((o) => o.discoverable).map((o) => o.key),
-      ['wy', 'tx', 'kg', 'kw', 'mg'],
+      ['tx', 'wy', 'kg', 'kw', 'mg'],
     );
     expect(f.provider.searchableSources.map((o) => o.key).toList(), ['a', 'b']);
 
     // 拖拽语义：onReorderItem 的 newIndex 已校正，直接按下标搬移。
     await f.provider.reorderChannel(1, 0);
-    expect(f.provider.sourceOrder, ['b', 'a', 'wy', 'tx', 'kg', 'kw', 'mg']);
+    expect(f.provider.sourceOrder, ['b', 'a', 'tx', 'wy', 'kg', 'kw', 'mg']);
     expect(f.provider.searchableSources.map((o) => o.key).toList(), ['b', 'a']);
 
     await f.provider.resetChannelOrder();

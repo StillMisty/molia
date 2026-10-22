@@ -5,8 +5,8 @@
 /// 2. [LlmClient] 单轮补全，要求纯 JSON；
 /// 3. 容错解析（首 `{`…末 `}`，兼容数组/字符串条目）；
 /// 4. 与已听排除清单、批内规范化去重；
-/// 5. 按用户选择的找歌渠道（空 = 自动前 3）严格解析，失败项作为 unresolved
-///    返回（页面折叠展示，可只重新搜索、不重新调 LLM）。
+/// 5. 按音源页顺序遍历全部可搜索渠道解析，失败项作为 unresolved 返回
+///    （页面折叠展示，可只重新搜索、不重新调 LLM）。
 ///
 /// 预览与实际请求共用 [buildPrompt]：相同输入下预览文本 == 实际 userPrompt。
 library;
@@ -76,7 +76,6 @@ class AiRecommendationService implements AiRecommendationGenerator {
     required CatalogService catalog,
     required SourceRegistry registry,
     required TasteProfileBuilder profileBuilder,
-    this.searchSourceLimit = 3,
     this.resolveConcurrency = 3,
   })  : _llm = llm,
         _catalog = catalog,
@@ -87,9 +86,6 @@ class AiRecommendationService implements AiRecommendationGenerator {
   final CatalogService _catalog;
   final SourceRegistry _registry;
   final TasteProfileBuilder _profileBuilder;
-
-  /// 自动渠道数（偏好未选渠道时取音源页顺序前 N 个）。
-  final int searchSourceLimit;
 
   /// 解析并发（同时搜索的曲目数）。
   final int resolveConcurrency;
@@ -110,7 +106,7 @@ class AiRecommendationService implements AiRecommendationGenerator {
     AiPreferences preferences = AiPreferences.defaults,
   }) async {
     final profile = await _profileBuilder.build(preferences: preferences);
-    final sources = _sourcesFor(preferences);
+    final sources = _searchableSources();
     return AiUpstreamSummary(
       recentEvents:
           preferences.sections.contains(AiUpstreamSection.recentEvents)
@@ -215,7 +211,6 @@ class AiRecommendationService implements AiRecommendationGenerator {
     progress(AiDjPhase.resolving, total: candidates.length);
     final resolution = await _resolveAll(
       candidates,
-      preferences: preferences,
       cancelToken: cancelToken,
       onResolved: (done) =>
           progress(AiDjPhase.resolving, done: done, total: candidates.length),
@@ -250,7 +245,6 @@ class AiRecommendationService implements AiRecommendationGenerator {
     ));
     final resolution = await _resolveAll(
       batch.unresolved,
-      preferences: preferences,
       cancelToken: cancelToken,
       onResolved: (done) => onProgress?.call(AiDjProgress(
         phase: AiDjPhase.resolving,
@@ -470,20 +464,9 @@ class AiRecommendationService implements AiRecommendationGenerator {
     }
   }
 
-  /// 解析渠道：空 = 音源页顺序前 3；已选 = 只按音源页顺序过滤所选，不兜底。
-  ///
-  /// 所选渠道全部不可用时回退自动渠道（偏好页用实时可用性提示）。
-  List<SourceDescriptor> _sourcesFor(AiPreferences preferences) {
-    final searchable = aiDjSearchableSourcesInPageOrder(_registry.descriptors);
-    final auto = searchable.take(searchSourceLimit).toList();
-    if (preferences.sourceKeys.isEmpty) return auto;
-    final selectedKeys = preferences.sourceKeys.toSet();
-    final selected = [
-      for (final descriptor in searchable)
-        if (selectedKeys.contains(descriptor.key)) descriptor,
-    ];
-    return selected.isNotEmpty ? selected : auto;
-  }
+  /// 解析渠道：按音源页顺序遍历全部可搜索渠道，不设数量上限。
+  List<SourceDescriptor> _searchableSources() =>
+      aiDjSearchableSourcesInPageOrder(_registry.descriptors);
 
   Future<
       ({
@@ -491,11 +474,10 @@ class AiRecommendationService implements AiRecommendationGenerator {
         List<AiRecommendation> unresolved,
       })> _resolveAll(
     List<AiRecommendation> recommendations, {
-    required AiPreferences preferences,
     AiGenerationCancelToken? cancelToken,
     void Function(int done)? onResolved,
   }) async {
-    final sources = _sourcesFor(preferences);
+    final sources = _searchableSources();
     if (recommendations.isEmpty) {
       return (
         resolved: <ResolvedRecommendation>[],

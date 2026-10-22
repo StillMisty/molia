@@ -169,7 +169,7 @@ void main() {
     expect(provider.hasConfig, isTrue);
     expect(provider.consentGranted, isFalse);
     expect(provider.enabled, isFalse);
-    expect(provider.preferences.batchSize, 20);
+    expect(provider.preferences.batchSize, 10);
     expect(provider.preferences.autoFeed, isTrue);
     expect(provider.historyEntries, isEmpty);
 
@@ -227,10 +227,9 @@ void main() {
     expect(provider.historyEntries.single.itemCount, 30);
   });
 
-  test('偏好保存后不自动生成；当前批次偏好不一致时提示换一批', () async {
+  test('偏好保存后不自动生成，active 保持不变', () async {
     await enableWithList();
     final activeId = provider.activeBatchId;
-    expect(provider.preferencesOutdated, isFalse);
 
     await provider.savePreferences(
       provider.preferences.copyWith(styles: ['pop'], autoFeed: false),
@@ -238,7 +237,7 @@ void main() {
 
     expect(generator.calls, 1, reason: '保存不生成');
     expect(provider.activeBatchId, activeId);
-    expect(provider.preferencesOutdated, isTrue);
+    expect(provider.preferences.styles, ['pop']);
   });
 
   test('startRadio：用当前推荐替换队列并从指定首起播', () async {

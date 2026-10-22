@@ -97,7 +97,7 @@ class ResolvedRecommendation {
   final AiRecommendation source;
   final Track track;
 
-  /// 命中的找歌渠道展示名（历史恢复后仍可显示来源）。
+  /// 命中的找歌渠道展示名（历史恢复保留；AI 页面不再展示）。
   final String sourceName;
 
   const ResolvedRecommendation({
@@ -338,11 +338,11 @@ const Set<AiUpstreamSection> kAiDefaultUpstreamSections = {
   AiUpstreamSection.listenedExclusions,
 };
 
-/// 批次大小选项（默认 20）。
+/// 批次大小选项（默认 10）。
 const List<int> kAiBatchSizeOptions = [10, 20, 30, 50];
 
 /// 默认每批数量。
-const int kAiDefaultBatchSize = 20;
+const int kAiDefaultBatchSize = 10;
 
 /// 探索度选项（稳定 token；文案在 l10n）。
 const String kAiExplorationSafe = 'safe';
@@ -400,7 +400,7 @@ const List<String> kAiLanguageOptions = [
   'instrumental',
 ];
 
-/// 生成偏好（持久化 JSON；保存只影响下一次生成）。
+/// 生成偏好（持久化 JSON；改动即时保存，只影响下一次生成）。
 class AiPreferences {
   final int batchSize;
   final bool autoFeed;
@@ -412,7 +412,6 @@ class AiPreferences {
   final bool onlyUnheard;
   final String extraPrompt;
   final Set<AiUpstreamSection> sections;
-  final List<String> sourceKeys;
 
   /// 「多来点这种」种子（快照；持久化归 [AiFeedbackMemory]）。
   final List<String> seeds;
@@ -431,7 +430,6 @@ class AiPreferences {
     this.onlyUnheard = true,
     this.extraPrompt = '',
     this.sections = kAiDefaultUpstreamSections,
-    this.sourceKeys = const [],
     this.seeds = const [],
     this.acknowledgedScopes = const {},
   });
@@ -455,7 +453,6 @@ class AiPreferences {
     bool? onlyUnheard,
     String? extraPrompt,
     Set<AiUpstreamSection>? sections,
-    List<String>? sourceKeys,
     List<String>? seeds,
     Set<AiUpstreamSection>? acknowledgedScopes,
   }) =>
@@ -470,29 +467,9 @@ class AiPreferences {
         onlyUnheard: onlyUnheard ?? this.onlyUnheard,
         extraPrompt: extraPrompt ?? this.extraPrompt,
         sections: sections ?? this.sections,
-        sourceKeys: sourceKeys ?? this.sourceKeys,
         seeds: seeds ?? this.seeds,
         acknowledgedScopes: acknowledgedScopes ?? this.acknowledgedScopes,
       );
-
-  /// 生成输入是否与这批快照一致（决定「偏好已更新，换一批生效」）。
-  bool sameGenerationInputs(AiPreferences? other) {
-    if (other == null) return false;
-    return batchSize == other.batchSize &&
-        _sameSet(styles, other.styles) &&
-        _sameSet(scenes, other.scenes) &&
-        _sameSet(languages, other.languages) &&
-        era == other.era &&
-        exploration == other.exploration &&
-        onlyUnheard == other.onlyUnheard &&
-        extraPrompt.trim() == other.extraPrompt.trim() &&
-        sections.length == other.sections.length &&
-        sections.containsAll(other.sections) &&
-        _sameSet(sourceKeys, other.sourceKeys);
-  }
-
-  static bool _sameSet(List<String> a, List<String> b) =>
-      a.length == b.length && a.toSet().containsAll(b);
 
   Map<String, dynamic> toJson() => {
         'batchSize': batchSize,
@@ -505,7 +482,6 @@ class AiPreferences {
         'onlyUnheard': onlyUnheard,
         'extraPrompt': extraPrompt,
         'sections': [for (final section in sections) section.storageValue],
-        'sourceKeys': sourceKeys,
         'seeds': seeds,
         'acknowledgedScopes': [
           for (final section in acknowledgedScopes) section.storageValue,
@@ -553,7 +529,6 @@ class AiPreferences {
           ? extraPrompt.substring(0, extraPromptLimit)
           : extraPrompt,
       sections: rawSections is List ? sections : kAiDefaultUpstreamSections,
-      sourceKeys: _aiStringList(json['sourceKeys']),
       seeds: _aiStringList(json['seeds']),
       acknowledgedScopes: acknowledged,
     );

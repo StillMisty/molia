@@ -316,7 +316,6 @@ class _AiDjHistoryPageState extends State<AiDjHistoryPage> {
                           [
                             if (item.track.artistLabel.isNotEmpty)
                               item.track.artistLabel,
-                            item.resolvedSourceName,
                           ].join(' · '),
                           style: theme.textTheme.bodySmall?.copyWith(
                             color: scheme.onSurfaceVariant,

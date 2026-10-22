@@ -35,10 +35,17 @@ class DiscoverProvider extends ChangeNotifier {
     required LibraryProvider libraryProvider,
     Map<String, DiscoverSource>? sources,
     void Function(String channelKey)? onChannelChanged,
+    String? initialChannelKey,
   })  : _playback = playbackProvider,
         _library = libraryProvider,
         _sources = sources ?? BuiltinDiscover.sources,
         _onChannelChanged = onChannelChanged {
+    // 默认选中规范顺序里的第一个可用平台（当前为 QQ）；测试/恢复场景可
+    // 显式指定初始渠道。
+    _channelKey =
+        initialChannelKey != null && _sources.containsKey(initialChannelKey)
+            ? initialChannelKey
+            : _firstAvailableChannelKey();
     // 收藏状态 / 我的列表变化时转发通知，让发现页的收藏按钮与「加入列表」
     // 弹层保持响应。历史写入（每首歌一次）不转发——发现页对历史无依赖，
     // 无脑转发会让整页（含全部 tab 与 AI 推荐卡片）随每次切歌重建。
@@ -69,14 +76,21 @@ class DiscoverProvider extends ChangeNotifier {
   /// 渠道变化回调（composition root 注入）：搜索源跟随渠道的唯一规则点。
   final void Function(String channelKey)? _onChannelChanged;
 
-  String _channelKey = 'wy';
+  String _channelKey = '';
 
-  /// 当前渠道 key（默认 `wy`）。
+  /// 当前渠道 key（默认规范顺序里的第一个可用平台，当前为 QQ）。
   ///
   /// 资料页的渠道集合是「可搜索源 + 内置发现平台」的并集：脚本扩展源 /
   /// any-listen 等没有内置发现能力的渠道也可选，此时 `supports*` 全部为
   /// false，UI 自动隐藏热榜 / 歌单（含热搜词）。
   String get channelKey => _channelKey;
+
+  String _firstAvailableChannelKey() {
+    for (final key in BuiltinDiscover.sourceKeys) {
+      if (_sources.containsKey(key)) return key;
+    }
+    return BuiltinDiscover.sourceKeys.first;
+  }
 
   /// 可用平台（保持内置注册顺序，注入的假数据源同样适用）。
   List<String> get sourceKeys => [

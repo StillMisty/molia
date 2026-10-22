@@ -57,7 +57,7 @@
 lib/sources/
   source_track.dart          # 统一曲目模型（raw 原样回传脚本）
   source_manager.dart        # 音源注册与调度（搜索 / 取链 / 歌词 / 封面 / 排序 / 激活）
-  builtin/                   # 内置平台搜索 / 歌手 / 歌词检索（kw/kg/tx/wy/mg）、原生取词/取图与加密工具
+  builtin/                   # 内置平台搜索 / 歌手 / 歌词检索（tx/wy/kg/kw/mg）、原生取词/取图与加密工具
     kg_lyric.dart kg_pic.dart    # 酷狗 KRC 取词 / get_res_privilege 取图
     kw_lyric.dart kw_pic.dart    # 酷我 LRCX 取词（H5 兜底）/ pic.web 取图
     mg_lyric.dart                # 咪咕 MRC（TEA）取词 / 资源封面

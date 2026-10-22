@@ -256,7 +256,7 @@ class SourceManager extends ChangeNotifier {
       );
     }
     final decl = _activeSources[key];
-    // 内置平台（kw/kg/tx/wy/mg）的搜索/分页由 Dart 移植实现（BuiltinSearch），
+    // 内置平台（tx/wy/kg/kw/mg）的搜索/分页由 Dart 移植实现（BuiltinSearch），
     // 能力跟随「脚本可取链」；脚本声明的 canSearch 只描述脚本扩展源自身的
     // 社区搜索 action（见 [_isBuiltinSearchable]）。评论同样只由内置实现提供。
     final platform = BuiltinPlatforms.maybeOf(key);

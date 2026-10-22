@@ -249,8 +249,9 @@
   可选收藏/歌单，上限集中）、`LlmClient`（OpenAI-compatible，请求带
   `response_format: json_object`（不支持时自动退回），错误归一化
   `SourceFailure`，Key 不进 message）、`AiRecommendationService`（提示词 →
-  容错 JSON → 规范化去重 → `CatalogService.search` 按找歌渠道解析，命中无封面
-  时经音源 `artwork()` 补取；预览与实际共用同一 `buildPrompt`）。
+  容错 JSON → 规范化去重 → `CatalogService.search` 按音源页顺序遍历全部可搜索
+  渠道解析，命中无封面时经音源 `artwork()` 补取；预览与实际共用同一
+  `buildPrompt`）。
   `AiDjProvider` 负责推歌会话、通知与对外门面；生成编排收在
   **生成执行器** `AiGenerationExecutor`（`lib/services/ai/ai_generation_executor.dart`）：
   token / epoch / 取消 / 忙碌位 / 可见进度唯一持有，三条 lane——显式（可见、
@@ -271,13 +272,14 @@
   旧批留在历史；手动补批与
   低水位**静默补歌**只追加队列 + 写历史（`manualFeed` / `autoFeed`），不切换
   active、不显示进度，自动补歌连续 3 次失败停止（显式操作优先并可取消）；
-  历史可播放 / 加队列 / 设为当前 / 删除。生成偏好（批次大小 10/20/30/50、
-  自动补歌、风格 / 场景 / 语言 / 年代 / 探索度 / 只推荐没听过的 / 补充要求、
-  发送范围、找歌渠道）持久化在 `kAiDjPreferences`，保存不自动生成；反馈记忆
+  历史可播放 / 加队列 / 设为当前 / 删除。生成偏好（批次大小 10/20/30/50，
+  默认 10；自动补歌、风格 / 场景 / 语言 / 年代 / 探索度 / 只推荐没听过的 /
+  补充要求、发送范围）持久化在 `kAiDjPreferences`，偏好页即时保存、不自动
+  生成；找歌渠道不在 UI 暴露，解析按音源页顺序遍历全部可搜索渠道。反馈记忆
   持久化在 `kAiDjFeedbackMemory`（不感兴趣 / 喜欢 / 种子，重启保留，种子成功
   生成后消费）。显式生成有 profile → model → resolving 阶段进度与取消，
-  首屏脉冲骨架、轮播细进度条；自动补歌不进入任何进度/提示 UI。发送透明化区块
-  展示范围摘要、可复制的系统 + 用户提示词，以及仅存内存的上次发送与原始返回。
+  首屏脉冲骨架、轮播细进度条；自动补歌不进入任何进度/提示 UI。发送透明化
+  收成弹窗（发送范围、本次预览、上次发送与仅存内存的原始返回）。
   反馈面板含长期记忆与本轮反馈、清空 AI 记忆。发现页 `AiDjCarousel` 只展示
   active 批次，用 carousel 原生槽位展示歌名/歌手
   （`applyDynamicTextContentTransform: false`）：桌面端鼠标拖拽跟手（松手吸附）、
