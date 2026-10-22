@@ -227,6 +227,101 @@ void main() {
     });
   });
 
+  test('checkNow：正常跑一轮 check（push），即使环境允许也不做 anti-entropy', () {
+    fakeAsync((async) {
+      final env = build(
+        async,
+        battery: const BatterySnapshot(level: 80, charging: true),
+      );
+      unawaited(env.scheduler.start());
+      async.flushMicrotasks();
+
+      unawaited(env.scheduler.checkNow());
+      async.flushMicrotasks();
+
+      expect(env.host.rounds, hasLength(1));
+      expect(env.host.rounds.single.trigger, SyncTrigger.check);
+      expect(env.host.rounds.single.push, isTrue);
+      expect(
+        env.host.lastAntiEntropy,
+        isFalse,
+        reason: '打开页面的检查轮不做全量兜底（只有 manual 自动允许）',
+      );
+      env.scheduler.dispose();
+    });
+  });
+
+  test('checkNow：同步关闭时不跑', () {
+    fakeAsync((async) {
+      final env = build(async);
+      env.host.enabled = false;
+      unawaited(env.scheduler.start());
+      async.flushMicrotasks();
+
+      unawaited(env.scheduler.checkNow());
+      async.flushMicrotasks();
+      expect(env.host.rounds, isEmpty);
+      env.scheduler.dispose();
+    });
+  });
+
+  test('checkNow：省电等级不跑（自动检查受策略约束）', () {
+    fakeAsync((async) {
+      final env = build(
+        async,
+        battery: const BatterySnapshot(level: 10),
+      );
+      unawaited(env.scheduler.start());
+      async.flushMicrotasks();
+      expect(env.scheduler.powerSaveActive, isTrue);
+
+      unawaited(env.scheduler.checkNow());
+      async.flushMicrotasks();
+      expect(env.host.rounds, isEmpty);
+
+      // 手动同步仍不受限制（检查轮不能把「手动」一起关掉）。
+      unawaited(env.scheduler.syncNow());
+      async.flushMicrotasks();
+      expect(env.host.rounds.single.trigger, SyncTrigger.manual);
+      env.scheduler.dispose();
+    });
+  });
+
+  test('checkNow：移动数据「暂停自动同步」时不跑', () {
+    fakeAsync((async) {
+      unawaited(state.setCellularPolicy(SyncCellularPolicy.pause));
+      final env = build(async, cellular: true);
+      unawaited(env.scheduler.start());
+      async.flushMicrotasks();
+
+      unawaited(env.scheduler.checkNow());
+      async.flushMicrotasks();
+      expect(env.host.rounds, isEmpty);
+      env.scheduler.dispose();
+    });
+  });
+
+  test('checkNow：已有轮次在跑时不排队', () {
+    fakeAsync((async) {
+      final env = build(async);
+      env.host.roundGate = Completer<void>();
+      unawaited(env.scheduler.start());
+      async.flushMicrotasks();
+
+      unawaited(env.scheduler.syncNow());
+      async.flushMicrotasks();
+      unawaited(env.scheduler.checkNow());
+      async.flushMicrotasks();
+      expect(env.host.rounds, isEmpty, reason: '手动轮仍在等 gate');
+
+      env.host.roundGate!.complete();
+      async.flushMicrotasks();
+      expect(env.host.rounds, hasLength(1));
+      expect(env.host.rounds.single.trigger, SyncTrigger.manual);
+      env.scheduler.dispose();
+    });
+  });
+
   test('后台等级：零定时唤醒；退后台尽力推一次、回前台拉一次', () {
     fakeAsync((async) {
       final env = build(async);

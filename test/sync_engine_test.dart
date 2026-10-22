@@ -264,7 +264,12 @@ void main() {
     ));
     transport.peersSeenOverride = 2;
     transport.pullFailures = 1;
-    transport.pullFailedIds = ['devB'];
+    transport.pullFailedIssues = const {
+      'devB': SyncIssue(
+        code: SyncIssueCode.peerReadFailed,
+        args: {'peer': 'B'},
+      ),
+    };
     transport.seenIdsOverride = ['devC', 'devB'];
     final failed = await engine.syncNow();
 
@@ -280,13 +285,38 @@ void main() {
     transport.available.add(remoteTheme('light'));
     transport.seenIdsOverride = null;
     transport.pullFailures = 0;
-    transport.pullFailedIds = const [];
+    transport.pullFailedIssues = const {};
     transport.peersSeenOverride = null;
     await engine.syncNow();
 
     final recovered = state.peers.firstWhere((peer) => peer.deviceId == 'devB');
     expect(recovered.lastSuccessAt, greaterThan(successAt));
     expect(recovered.lastError, isNull);
+  });
+
+  test('两台设备同时失败：各自保留自己的失败原因，不共用第一条错误', () async {
+    transport.available.clear();
+    transport.peersSeenOverride = 2;
+    transport.pullFailures = 2;
+    transport.pullFailedIssues = const {
+      'devB': SyncIssue(
+        code: SyncIssueCode.peerReadFailed,
+        args: {'peer': 'B'},
+      ),
+      'devC': SyncIssue(
+        code: SyncIssueCode.peerDecryptFailed,
+        args: {'peer': 'C'},
+      ),
+    };
+    final report = await engine.syncNow();
+
+    expect(report!.outcome, isNot(SyncOutcome.ok));
+    final failedB = state.peers.firstWhere((peer) => peer.deviceId == 'devB');
+    final failedC = state.peers.firstWhere((peer) => peer.deviceId == 'devC');
+    expect(failedB.lastError?.code, SyncIssueCode.peerReadFailed);
+    expect(failedC.lastError?.code, SyncIssueCode.peerDecryptFailed);
+    expect(failedB.lastSuccessAt, 0);
+    expect(failedC.lastSuccessAt, 0);
   });
 
   test('推送失败只刷新尝试与原因，不刷新上次成功时间', () async {

@@ -740,6 +740,9 @@ enum SyncTrigger {
   /// 收到对端公告（新设备 / 新内容 / 重启）触发的发现轮。
   discovery,
 
+  /// 打开同步页自动检查连接状态（受省电 / 蜂窝策略约束，不是手动轮）。
+  check,
+
   /// 用户手动。
   manual;
 
@@ -1110,6 +1113,9 @@ class SyncPeerState {
   /// 兼容旧状态的有效成功时间：新状态直接用 [lastSuccessAt]；旧状态没有
   /// 该字段时退到最近一次数据流转（拉取 / 推送），再从「没有失败记录的最后
   /// 尝试」兜底——老名册不该因为升级后缺字段就显示成「还没连上」。
+  ///
+  /// 失败尝试不算成功：旧状态只要还有 [lastError]，[lastSeenAt] 就不参与
+  /// 兜底（它可能只是最近一次失败）。返回 0 = 从未成功接触。
   int get effectiveLastSuccessAt {
     if (lastSuccessAt > 0) return lastSuccessAt;
     final lastData = lastPullAt > lastPushAt ? lastPullAt : lastPushAt;
@@ -1145,15 +1151,11 @@ class SyncPeerState {
 
   /// 是否已失联（超过 [lostThresholdMs] 没有**成功**接触）。
   ///
-  /// 失败尝试不续命：只有探测应答 / 未变跳过 / 数据流转成功才会推迟失联。
-  /// 旧状态没有 [lastSuccessAt] 时退到最近数据流转，再退到 [lastSeenAt]，
-  /// 保持升级前的名册判定不变。
+  /// 唯一判据是 [effectiveLastSuccessAt]：失败尝试不续命；从未成功接触过的
+  /// 设备返回 false（界面显示「还没连上 / 未连接」，不是「已失联」）。
   bool isLostAt(int nowMs) {
-    final lastData = lastPullAt > lastPushAt ? lastPullAt : lastPushAt;
-    final lastContact = lastSuccessAt > 0
-        ? lastSuccessAt
-        : (lastData > 0 ? lastData : lastSeenAt);
-    return lastContact > 0 && nowMs - lastContact > lostThresholdMs;
+    final lastSuccess = effectiveLastSuccessAt;
+    return lastSuccess > 0 && nowMs - lastSuccess > lostThresholdMs;
   }
 
   SyncPeerState copyWith({

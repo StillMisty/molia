@@ -149,8 +149,8 @@ class FakeSyncTransport implements SyncTransport {
   int pullFailures = 0;
   int pushFailures = 0;
 
-  /// pull 失败时报告的设备 id（走名册的失败归属路径）。
-  List<String> pullFailedIds = const [];
+  /// pull 失败时报告的设备与原因（走名册的失败归属路径）。
+  Map<String, SyncIssue> pullFailedIssues = const {};
 
   /// pull 被调用的次数（验证入站轮不拉取）。
   int pullCount = 0;
@@ -215,7 +215,7 @@ class FakeSyncTransport implements SyncTransport {
             for (final envelope in available)
               if (envelope.deviceId.isNotEmpty) envelope.deviceId,
           ],
-      failedIds: pullFailedIds,
+      failedIssues: pullFailedIssues,
       error: pullError ??
           (pullFailures > 0
               ? const SyncIssue(

@@ -2640,6 +2640,9 @@ class AppLocalizationsEn extends AppLocalizations {
   String get syncTriggerDiscovery => 'device found';
 
   @override
+  String get syncTriggerCheck => 'opened sync page';
+
+  @override
   String get syncTriggerManual => 'manual';
 
   @override
@@ -2840,11 +2843,6 @@ class AppLocalizationsEn extends AppLocalizations {
   String get syncPeerThisDeviceTitle => 'This device ID';
 
   @override
-  String syncPeerLastSync(String time) {
-    return 'Last synced $time';
-  }
-
-  @override
   String get syncPeerNever => 'Not connected yet';
 
   @override
@@ -2863,6 +2861,26 @@ class AppLocalizationsEn extends AppLocalizations {
   String get syncPeerStatusCloudNotSynced => 'Not synced to cloud';
 
   @override
+  String syncPeerConnectedSince(String time) {
+    return 'Connected · last synced $time';
+  }
+
+  @override
+  String syncPeerDisconnectedSince(String time) {
+    return 'Not connected · last synced $time';
+  }
+
+  @override
+  String syncPeerCloudSyncedSince(String time) {
+    return 'Synced to cloud · last synced $time';
+  }
+
+  @override
+  String syncPeerCloudNotSyncedSince(String time) {
+    return 'Not synced to cloud · last synced $time';
+  }
+
+  @override
   String syncPeerLastSuccess(String time) {
     return 'Last synced $time';
   }
@@ -2873,7 +2891,9 @@ class AppLocalizationsEn extends AppLocalizations {
   }
 
   @override
-  String get syncPeerLostStale => 'no connection for over 180 days';
+  String syncPeerLostSince(String time) {
+    return 'Lost · last synced $time';
+  }
 
   @override
   String get syncPeerNameSeparator => ', ';
@@ -2882,13 +2902,16 @@ class AppLocalizationsEn extends AppLocalizations {
   String get syncRoundNoConnectedPeers => 'No devices connected this round';
 
   @override
-  String syncRoundConnected(String names) {
-    return 'Connected: $names';
+  String get syncRoundNoRecords => 'No connection records yet';
+
+  @override
+  String syncRoundSynced(String names) {
+    return 'Synced this round: $names';
   }
 
   @override
-  String syncRoundConnectedMore(String names, int count) {
-    return 'Connected: $names and $count more';
+  String syncRoundSyncedMore(String names, int count) {
+    return 'Synced this round: $names and $count more';
   }
 
   @override
@@ -2954,7 +2977,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get syncPeerManual => 'added manually';
 
   @override
-  String get syncPeerLost => 'lost';
+  String get syncPeerLost => 'Lost';
 
   @override
   String get syncPeerLostHint =>

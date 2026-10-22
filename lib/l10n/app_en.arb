@@ -1355,6 +1355,7 @@
   "syncTriggerPause": "before background",
   "syncTriggerNetwork": "network changed",
   "syncTriggerDiscovery": "device found",
+  "syncTriggerCheck": "opened sync page",
   "syncTriggerManual": "manual",
   "syncActivitySection": "Activity",
   "syncActivityTitle": "Last 24 hours",
@@ -1492,20 +1493,44 @@
     }
   },
   "syncPeerThisDeviceTitle": "This device ID",
-  "syncPeerLastSync": "Last synced {time}",
-  "@syncPeerLastSync": {
-    "placeholders": {
-      "time": {
-        "type": "String"
-      }
-    }
-  },
   "syncPeerNever": "Not connected yet",
   "syncSyncing": "Syncing…",
   "syncPeerStatusConnected": "Connected",
   "syncPeerStatusDisconnected": "Not connected",
   "syncPeerStatusCloudSynced": "Synced to cloud",
   "syncPeerStatusCloudNotSynced": "Not synced to cloud",
+  "syncPeerConnectedSince": "Connected · last synced {time}",
+  "@syncPeerConnectedSince": {
+    "placeholders": {
+      "time": {
+        "type": "String"
+      }
+    }
+  },
+  "syncPeerDisconnectedSince": "Not connected · last synced {time}",
+  "@syncPeerDisconnectedSince": {
+    "placeholders": {
+      "time": {
+        "type": "String"
+      }
+    }
+  },
+  "syncPeerCloudSyncedSince": "Synced to cloud · last synced {time}",
+  "@syncPeerCloudSyncedSince": {
+    "placeholders": {
+      "time": {
+        "type": "String"
+      }
+    }
+  },
+  "syncPeerCloudNotSyncedSince": "Not synced to cloud · last synced {time}",
+  "@syncPeerCloudNotSyncedSince": {
+    "placeholders": {
+      "time": {
+        "type": "String"
+      }
+    }
+  },
   "syncPeerLastSuccess": "Last synced {time}",
   "@syncPeerLastSuccess": {
     "placeholders": {
@@ -1522,19 +1547,27 @@
       }
     }
   },
-  "syncPeerLostStale": "no connection for over 180 days",
+  "syncPeerLostSince": "Lost · last synced {time}",
+  "@syncPeerLostSince": {
+    "placeholders": {
+      "time": {
+        "type": "String"
+      }
+    }
+  },
   "syncPeerNameSeparator": ", ",
   "syncRoundNoConnectedPeers": "No devices connected this round",
-  "syncRoundConnected": "Connected: {names}",
-  "@syncRoundConnected": {
+  "syncRoundNoRecords": "No connection records yet",
+  "syncRoundSynced": "Synced this round: {names}",
+  "@syncRoundSynced": {
     "placeholders": {
       "names": {
         "type": "String"
       }
     }
   },
-  "syncRoundConnectedMore": "Connected: {names} and {count} more",
-  "@syncRoundConnectedMore": {
+  "syncRoundSyncedMore": "Synced this round: {names} and {count} more",
+  "@syncRoundSyncedMore": {
     "placeholders": {
       "names": {
         "type": "String"
@@ -1585,7 +1618,7 @@
   "syncPeerDeleteConfirm": "Removes it from this device only; it does not revoke sync access. If it still has the sync passphrase and is online, it will appear again. To stop syncing with it, change the sync passphrase.",
   "syncPeerRemoved": "Removed from this device",
   "syncPeerManual": "added manually",
-  "syncPeerLost": "lost",
+  "syncPeerLost": "Lost",
   "syncPeerLostHint": "This device has not connected for over 180 days (it may have been reinstalled or retired). You can remove it from this device, or clean up its cloud sync files; local data is unaffected.",
   "syncPeerCleanupRemote": "Clean up cloud files",
   "syncPeerCleanupRemoteHint": "Delete this device’s sync files on WebDAV",

@@ -68,7 +68,7 @@ void main() {
     final pulled = pullResult.envelopes;
     expect(pulled, hasLength(1));
     expect(pulled.single.deviceId, 'devA');
-    expect(pullResult.failedIds, isEmpty, reason: '读取成功的设备不再标失败');
+    expect(pullResult.failedIssues, isEmpty, reason: '读取成功的设备不再标失败');
     expect(
       pulled.single.recordsOf(SyncCategory.settings).single.data,
       {'v': 'light'},
@@ -198,7 +198,12 @@ void main() {
     final result = await transportC.pull();
     expect(result.envelopes, isEmpty);
     expect(result.failedPeers, 1);
-    expect(result.failedIds, ['devA']);
+    expect(result.failedIssues.keys, ['devA']);
+    expect(
+      result.failedIssues['devA']?.code,
+      SyncIssueCode.peerDecryptFailed,
+      reason: '解密失败不能被笼统记成读取失败',
+    );
     expect(result.seenIds, isNot(contains('devA')));
     expect(result.contacted, isFalse);
   });
@@ -231,7 +236,15 @@ void main() {
     expect(result.envelopes, isEmpty);
     expect(result.failedPeers, 0, reason: '试探性对端失败不把整轮打成 partial');
     expect(result.peersSeen, 0);
-    expect(result.failedIds, ['devGhost'], reason: '失败仍归属到具体设备');
+    expect(
+      result.failedIssues.keys,
+      ['devGhost'],
+      reason: '失败仍归属到具体设备',
+    );
+    expect(
+      result.failedIssues['devGhost']?.code,
+      SyncIssueCode.peerReadFailed,
+    );
     expect(result.seenIds, isEmpty);
   });
 

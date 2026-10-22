@@ -4850,6 +4850,12 @@ abstract class AppLocalizations {
   /// **'device found'**
   String get syncTriggerDiscovery;
 
+  /// No description provided for @syncTriggerCheck.
+  ///
+  /// In en, this message translates to:
+  /// **'opened sync page'**
+  String get syncTriggerCheck;
+
   /// No description provided for @syncTriggerManual.
   ///
   /// In en, this message translates to:
@@ -5205,12 +5211,6 @@ abstract class AppLocalizations {
   /// **'This device ID'**
   String get syncPeerThisDeviceTitle;
 
-  /// No description provided for @syncPeerLastSync.
-  ///
-  /// In en, this message translates to:
-  /// **'Last synced {time}'**
-  String syncPeerLastSync(String time);
-
   /// No description provided for @syncPeerNever.
   ///
   /// In en, this message translates to:
@@ -5247,6 +5247,30 @@ abstract class AppLocalizations {
   /// **'Not synced to cloud'**
   String get syncPeerStatusCloudNotSynced;
 
+  /// No description provided for @syncPeerConnectedSince.
+  ///
+  /// In en, this message translates to:
+  /// **'Connected · last synced {time}'**
+  String syncPeerConnectedSince(String time);
+
+  /// No description provided for @syncPeerDisconnectedSince.
+  ///
+  /// In en, this message translates to:
+  /// **'Not connected · last synced {time}'**
+  String syncPeerDisconnectedSince(String time);
+
+  /// No description provided for @syncPeerCloudSyncedSince.
+  ///
+  /// In en, this message translates to:
+  /// **'Synced to cloud · last synced {time}'**
+  String syncPeerCloudSyncedSince(String time);
+
+  /// No description provided for @syncPeerCloudNotSyncedSince.
+  ///
+  /// In en, this message translates to:
+  /// **'Not synced to cloud · last synced {time}'**
+  String syncPeerCloudNotSyncedSince(String time);
+
   /// No description provided for @syncPeerLastSuccess.
   ///
   /// In en, this message translates to:
@@ -5259,11 +5283,11 @@ abstract class AppLocalizations {
   /// **'Last attempt {time}'**
   String syncPeerLastAttempt(String time);
 
-  /// No description provided for @syncPeerLostStale.
+  /// No description provided for @syncPeerLostSince.
   ///
   /// In en, this message translates to:
-  /// **'no connection for over 180 days'**
-  String get syncPeerLostStale;
+  /// **'Lost · last synced {time}'**
+  String syncPeerLostSince(String time);
 
   /// No description provided for @syncPeerNameSeparator.
   ///
@@ -5277,17 +5301,23 @@ abstract class AppLocalizations {
   /// **'No devices connected this round'**
   String get syncRoundNoConnectedPeers;
 
-  /// No description provided for @syncRoundConnected.
+  /// No description provided for @syncRoundNoRecords.
   ///
   /// In en, this message translates to:
-  /// **'Connected: {names}'**
-  String syncRoundConnected(String names);
+  /// **'No connection records yet'**
+  String get syncRoundNoRecords;
 
-  /// No description provided for @syncRoundConnectedMore.
+  /// No description provided for @syncRoundSynced.
   ///
   /// In en, this message translates to:
-  /// **'Connected: {names} and {count} more'**
-  String syncRoundConnectedMore(String names, int count);
+  /// **'Synced this round: {names}'**
+  String syncRoundSynced(String names);
+
+  /// No description provided for @syncRoundSyncedMore.
+  ///
+  /// In en, this message translates to:
+  /// **'Synced this round: {names} and {count} more'**
+  String syncRoundSyncedMore(String names, int count);
 
   /// No description provided for @syncPeerBehind.
   ///
@@ -5394,7 +5424,7 @@ abstract class AppLocalizations {
   /// No description provided for @syncPeerLost.
   ///
   /// In en, this message translates to:
-  /// **'lost'**
+  /// **'Lost'**
   String get syncPeerLost;
 
   /// No description provided for @syncPeerLostHint.

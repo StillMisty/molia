@@ -16,6 +16,7 @@ import 'package:material_ui/material_ui.dart';
 import '../data/sync/sync_passphrase.dart';
 import '../domain/models/device_sync.dart';
 import '../domain/models/sync_pairing.dart';
+import '../domain/models/sync_peer_status.dart';
 import '../domain/ports/sync_transport.dart';
 import '../l10n/app_localizations.dart';
 import '../providers/sync_provider.dart';
@@ -27,7 +28,6 @@ import '../widgets/settings/settings_tiles.dart';
 import '../widgets/sync_pairing_qr.dart';
 import 'sync_labels.dart';
 import 'sync_notices.dart';
-import 'sync_peer_status.dart';
 
 /// 配对信息分享弹层：二维码 + 可复制文本 + 口令授权警告。
 ///
@@ -219,26 +219,35 @@ String syncPeerSubtitle(
   );
   final lastSuccess = peer.effectiveLastSuccessAt;
   final cloud = peer.transport == SyncTransportKind.webdav;
+  final lastSuccessText =
+      lastSuccess > 0 ? syncTimeText(lastSuccess) : '';
+  // 结论 + 上次成功合成一句：两段独立文案会重复「上次同步」。
+  final statusText = switch (status) {
+    SyncPeerConnectionStatus.lost => lastSuccess > 0
+        ? l10n.syncPeerLostSince(lastSuccessText)
+        : l10n.syncPeerLost,
+    SyncPeerConnectionStatus.never => l10n.syncPeerNever,
+    SyncPeerConnectionStatus.connected => lastSuccess > 0
+        ? (cloud
+            ? l10n.syncPeerCloudSyncedSince(lastSuccessText)
+            : l10n.syncPeerConnectedSince(lastSuccessText))
+        : (cloud
+            ? l10n.syncPeerStatusCloudSynced
+            : l10n.syncPeerStatusConnected),
+    SyncPeerConnectionStatus.unreachable => lastSuccess > 0
+        ? (cloud
+            ? l10n.syncPeerCloudNotSyncedSince(lastSuccessText)
+            : l10n.syncPeerDisconnectedSince(lastSuccessText))
+        : (cloud
+            ? l10n.syncPeerStatusCloudNotSynced
+            : l10n.syncPeerStatusDisconnected),
+    // 本轮没尝试：时间本身就是状态（不再叠一个没信息量的「空闲」）。
+    SyncPeerConnectionStatus.idle => lastSuccess > 0
+        ? l10n.syncPeerLastSuccess(lastSuccessText)
+        : l10n.syncPeerNever,
+  };
   final parts = <String>[
-    switch (status) {
-      SyncPeerConnectionStatus.lost =>
-        '${l10n.syncPeerLost} · ${l10n.syncPeerLostStale}',
-      SyncPeerConnectionStatus.never => l10n.syncPeerNever,
-      SyncPeerConnectionStatus.connected => cloud
-          ? l10n.syncPeerStatusCloudSynced
-          : l10n.syncPeerStatusConnected,
-      SyncPeerConnectionStatus.unreachable => cloud
-          ? l10n.syncPeerStatusCloudNotSynced
-          : l10n.syncPeerStatusDisconnected,
-      // 本轮没尝试：时间本身就是状态（不再叠一个没信息量的「空闲」）。
-      SyncPeerConnectionStatus.idle => lastSuccess > 0
-          ? l10n.syncPeerLastSuccess(syncTimeText(lastSuccess))
-          : l10n.syncPeerNever,
-    },
-    if ((status == SyncPeerConnectionStatus.connected ||
-            status == SyncPeerConnectionStatus.unreachable) &&
-        lastSuccess > 0)
-      l10n.syncPeerLastSuccess(syncTimeText(lastSuccess)),
+    statusText,
     if (peer.transport.isNotEmpty) syncTransportLabel(l10n, peer.transport),
     if (manual != null) l10n.syncPeerManual,
     if (peer.behindBy != null && peer.behindBy! > 0)

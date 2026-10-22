@@ -362,6 +362,14 @@ class SyncProvider extends ChangeNotifier {
     );
   }
 
+  /// 打开同步页时检查连接状态：经调度器（省电 / 蜂窝暂停 / 同步关闭时不跑）。
+  ///
+  /// 未注入调度器（测试 / 非生产接线）时什么都不做：直接跑引擎会绕过策略，
+  /// 这里不提供那条隐式后门。
+  Future<void> checkConnections() async {
+    await _scheduler?.checkNow();
+  }
+
   /// 启动后首轮（音源仓库就绪后调用）：受等级策略约束（省电 / 移动数据暂停
   /// 时不跑；移动数据下只同步小类别）。
   Future<void> startupSync() async {

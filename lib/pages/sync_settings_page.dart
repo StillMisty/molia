@@ -7,6 +7,7 @@ import 'package:provider/provider.dart';
 
 import '../domain/models/device_sync.dart';
 import '../domain/models/sync_pairing.dart';
+import '../domain/models/sync_peer_status.dart';
 import '../domain/ports/sync_transport.dart';
 import '../l10n/app_localizations.dart';
 import '../providers/sync_provider.dart';
@@ -20,7 +21,6 @@ import 'sync_labels.dart';
 import 'sync_log_page.dart';
 import 'sync_notices.dart';
 import 'sync_pairing_dialogs.dart';
-import 'sync_peer_status.dart';
 
 /// 跨设备同步设置页：一页闭环的**配对工作台**。
 ///
@@ -62,14 +62,12 @@ class _SyncSettingsPageState extends State<SyncSettingsPage> {
     // （配对码的地址候选也走这份缓存）。
     context.read<SyncProvider>().refreshLocalEndpoints();
     unawaited(_probeScanAvailability());
-    // 打开同步页自动跑一轮检查：设备行显示的是「最近一轮是否真的接触成功」，
+    // 打开同步页自动检查一轮：设备行显示的是「最近一轮是否真的接触成功」，
     // 不跑一轮就只能是旧状态。首帧后再触发，避免在构建期通知 provider；
-    // 已有轮次在跑时不重复排队（引擎自己的合并只服务变更 / 入站请求）。
+    // 走调度器的 check 轮（省电 / 蜂窝暂停 / 已有轮次在跑时由调度器跳过）。
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
-      final provider = context.read<SyncProvider>();
-      if (!provider.enabled || provider.syncing) return;
-      unawaited(provider.syncNow(manual: true));
+      unawaited(context.read<SyncProvider>().checkConnections());
     });
   }
 
@@ -333,11 +331,13 @@ class _SyncSettingsPageState extends State<SyncSettingsPage> {
     );
   }
 
-  /// 设备区脚注：同步中给「正在同步…」，完成后给本轮已连接设备名（最多
-  /// 两个 + 「等 N 台」）；一台都没有就说「本轮没有连上设备」。
+  /// 设备区脚注：同步中给「正在同步…」，完成后给本轮已同步设备名（最多
+  /// 两个 + 「另有 N 台」）；一台都没有就说「本轮没有连上设备」。
   ///
-  /// 这是设备区自己的状态，不做全局 App 状态条。空名册且从未跑过一轮时保留
-  /// 原来的配对引导，避免首屏出现一句没有上下文的「没有连上设备」。
+  /// 用传输中性的「已同步」而不是「已连接」：WebDAV 设备只是云端同步过，
+  /// 不代表在线（行内状态另有「云端已同步 / 云端未同步」）。这是设备区自己
+  /// 的状态，不做全局 App 状态条。空名册且从未跑过一轮时保留原来的配对引导；
+  /// 有名册但没有报告时只能说「还没有连接记录」，不能断言本轮没连上。
   static String _peersFooter(
     SyncProvider provider,
     AppLocalizations l10n,
@@ -345,8 +345,12 @@ class _SyncSettingsPageState extends State<SyncSettingsPage> {
   ) {
     if (provider.syncing) return l10n.syncSyncing;
     final report = provider.lastReport;
-    if (report == null && provider.peers.isEmpty) return l10n.syncPeersHint;
-    final connected = [
+    if (report == null) {
+      return provider.peers.isEmpty
+          ? l10n.syncPeersHint
+          : l10n.syncRoundNoRecords;
+    }
+    final synced = [
       for (final peer in provider.peers)
         if (resolveSyncPeerConnection(
               peer,
@@ -356,12 +360,12 @@ class _SyncSettingsPageState extends State<SyncSettingsPage> {
             SyncPeerConnectionStatus.connected)
           syncPeerDisplayName(peer, manualByDevice[peer.deviceId]),
     ];
-    if (connected.isEmpty) return l10n.syncRoundNoConnectedPeers;
-    final names = connected.take(2).join(l10n.syncPeerNameSeparator);
-    final remaining = connected.length - 2;
+    if (synced.isEmpty) return l10n.syncRoundNoConnectedPeers;
+    final names = synced.take(2).join(l10n.syncPeerNameSeparator);
+    final remaining = synced.length - 2;
     return remaining > 0
-        ? l10n.syncRoundConnectedMore(names, remaining)
-        : l10n.syncRoundConnected(names);
+        ? l10n.syncRoundSyncedMore(names, remaining)
+        : l10n.syncRoundSynced(names);
   }
 
   /// 名册行：手动添加的对端可点开详情（含删除），广播发现的只读。

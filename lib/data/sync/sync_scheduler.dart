@@ -363,6 +363,17 @@ class SyncScheduler {
     await _runAndMark(SyncTrigger.manual, push: true);
   }
 
+  /// 打开同步页时检查连接状态。
+  ///
+  /// 不是手动轮：同步关闭、已有轮次在跑、省电 / 蜂窝暂停策略生效时都不跑，
+  /// 也不做 anti-entropy 全量兜底（只更新「最近一轮是否接触成功」）。
+  Future<void> checkNow() async {
+    if (_disposed || !_host.syncEnabled) return;
+    if (_roundRunning) return;
+    if (!_canRunAutomatically) return;
+    await _runAndMark(SyncTrigger.check, push: true);
+  }
+
   /// 启动后首轮（受省电与蜂窝暂停策略约束）。
   Future<void> syncStartup() async {
     if (!_canRunAutomatically) return;
@@ -633,8 +644,10 @@ class SyncScheduler {
       return await _host.runSyncRound(
         trigger: trigger,
         push: push,
-        // 手动轮总是允许全量兜底（用户显式要求）；自动轮按环境策略。
-        antiEntropy: trigger == SyncTrigger.manual || _antiEntropyAllowed,
+        // 手动轮总是允许全量兜底（用户显式要求）；打开页面的检查轮不做
+        // 全量兜底；其余自动轮按环境策略。
+        antiEntropy: trigger == SyncTrigger.manual ||
+            (trigger != SyncTrigger.check && _antiEntropyAllowed),
         onlyCategories: cellularRestricted ? smallCategories : null,
       );
     } catch (e) {

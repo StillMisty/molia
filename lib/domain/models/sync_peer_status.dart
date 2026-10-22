@@ -5,7 +5,7 @@
 /// 最新一轮里吗」——因此调用方必须把手边最新的 [SyncRoundReport] 传进来。
 library;
 
-import '../domain/models/device_sync.dart';
+import 'device_sync.dart';
 
 /// 一台设备在当前观测下的连接状态（设置页设备行据此选文案）。
 enum SyncPeerConnectionStatus {

@@ -1091,6 +1091,7 @@
   "syncTriggerPause": "退后台前",
   "syncTriggerNetwork": "网络切换",
   "syncTriggerDiscovery": "发现设备",
+  "syncTriggerCheck": "打开同步页",
   "syncTriggerManual": "手动",
   "syncActivitySection": "运行状态",
   "syncActivityTitle": "近 24 小时",
@@ -1183,13 +1184,44 @@
   "syncPeersEmptySubtitle": "用上面的配对码把设备加进来",
   "syncPeerThisDevice": "本机 · {id}",
   "syncPeerThisDeviceTitle": "本机设备 ID",
-  "syncPeerLastSync": "最后同步 {time}",
   "syncPeerNever": "还没连上",
   "syncSyncing": "正在同步…",
   "syncPeerStatusConnected": "已连接",
   "syncPeerStatusDisconnected": "未连接",
   "syncPeerStatusCloudSynced": "云端已同步",
   "syncPeerStatusCloudNotSynced": "云端未同步",
+  "syncPeerConnectedSince": "已连接 · 上次同步 {time}",
+  "@syncPeerConnectedSince": {
+    "placeholders": {
+      "time": {
+        "type": "String"
+      }
+    }
+  },
+  "syncPeerDisconnectedSince": "未连接 · 上次同步 {time}",
+  "@syncPeerDisconnectedSince": {
+    "placeholders": {
+      "time": {
+        "type": "String"
+      }
+    }
+  },
+  "syncPeerCloudSyncedSince": "云端已同步 · 上次同步 {time}",
+  "@syncPeerCloudSyncedSince": {
+    "placeholders": {
+      "time": {
+        "type": "String"
+      }
+    }
+  },
+  "syncPeerCloudNotSyncedSince": "云端未同步 · 上次同步 {time}",
+  "@syncPeerCloudNotSyncedSince": {
+    "placeholders": {
+      "time": {
+        "type": "String"
+      }
+    }
+  },
   "syncPeerLastSuccess": "上次同步 {time}",
   "@syncPeerLastSuccess": {
     "placeholders": {
@@ -1206,19 +1238,27 @@
       }
     }
   },
-  "syncPeerLostStale": "超过 180 天未连接",
+  "syncPeerLostSince": "已失联 · 上次同步 {time}",
+  "@syncPeerLostSince": {
+    "placeholders": {
+      "time": {
+        "type": "String"
+      }
+    }
+  },
   "syncPeerNameSeparator": "、",
   "syncRoundNoConnectedPeers": "本轮没有连上设备",
-  "syncRoundConnected": "已连接 {names}",
-  "@syncRoundConnected": {
+  "syncRoundNoRecords": "还没有连接记录",
+  "syncRoundSynced": "本轮已同步 {names}",
+  "@syncRoundSynced": {
     "placeholders": {
       "names": {
         "type": "String"
       }
     }
   },
-  "syncRoundConnectedMore": "已连接 {names} 等 {count} 台",
-  "@syncRoundConnectedMore": {
+  "syncRoundSyncedMore": "本轮已同步 {names}，另有 {count} 台",
+  "@syncRoundSyncedMore": {
     "placeholders": {
       "names": {
         "type": "String"

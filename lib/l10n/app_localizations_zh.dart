@@ -2541,6 +2541,9 @@ class AppLocalizationsZh extends AppLocalizations {
   String get syncTriggerDiscovery => '发现设备';
 
   @override
+  String get syncTriggerCheck => '打开同步页';
+
+  @override
   String get syncTriggerManual => '手动';
 
   @override
@@ -2737,11 +2740,6 @@ class AppLocalizationsZh extends AppLocalizations {
   String get syncPeerThisDeviceTitle => '本机设备 ID';
 
   @override
-  String syncPeerLastSync(String time) {
-    return '最后同步 $time';
-  }
-
-  @override
   String get syncPeerNever => '还没连上';
 
   @override
@@ -2760,6 +2758,26 @@ class AppLocalizationsZh extends AppLocalizations {
   String get syncPeerStatusCloudNotSynced => '云端未同步';
 
   @override
+  String syncPeerConnectedSince(String time) {
+    return '已连接 · 上次同步 $time';
+  }
+
+  @override
+  String syncPeerDisconnectedSince(String time) {
+    return '未连接 · 上次同步 $time';
+  }
+
+  @override
+  String syncPeerCloudSyncedSince(String time) {
+    return '云端已同步 · 上次同步 $time';
+  }
+
+  @override
+  String syncPeerCloudNotSyncedSince(String time) {
+    return '云端未同步 · 上次同步 $time';
+  }
+
+  @override
   String syncPeerLastSuccess(String time) {
     return '上次同步 $time';
   }
@@ -2770,7 +2788,9 @@ class AppLocalizationsZh extends AppLocalizations {
   }
 
   @override
-  String get syncPeerLostStale => '超过 180 天未连接';
+  String syncPeerLostSince(String time) {
+    return '已失联 · 上次同步 $time';
+  }
 
   @override
   String get syncPeerNameSeparator => '、';
@@ -2779,13 +2799,16 @@ class AppLocalizationsZh extends AppLocalizations {
   String get syncRoundNoConnectedPeers => '本轮没有连上设备';
 
   @override
-  String syncRoundConnected(String names) {
-    return '已连接 $names';
+  String get syncRoundNoRecords => '还没有连接记录';
+
+  @override
+  String syncRoundSynced(String names) {
+    return '本轮已同步 $names';
   }
 
   @override
-  String syncRoundConnectedMore(String names, int count) {
-    return '已连接 $names 等 $count 台';
+  String syncRoundSyncedMore(String names, int count) {
+    return '本轮已同步 $names，另有 $count 台';
   }
 
   @override

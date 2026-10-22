@@ -201,10 +201,9 @@ class WebDavSyncTransport implements SyncTransport {
     var skipped = 0;
     var bytesIn = 0;
     SyncIssue? firstError;
-    // 失败归属：文件级错误先记到设备，最后剔除「本轮另有数据文件读成功」的
-    // 设备（多块中的一块坏掉不该把整台设备标成未连接）。
-    final failedDevices = <String>{};
-    final dataOkDevices = <String>{};
+    // 失败归属：文件级错误按设备收齐（回执 / 数据文件任一读失败都说明该
+    // 设备本轮没有完整同步，不能因为另一份文件可读就隐藏失败）。
+    final failedIssues = <String, SyncIssue>{};
     for (final entry in devices.entries) {
       final device = entry.key;
       final deviceFiles = entry.value;
@@ -227,8 +226,9 @@ class WebDavSyncTransport implements SyncTransport {
         );
         if (outcome.error != null) {
           failed++;
-          failedDevices.add(device);
-          firstError ??= outcome.error;
+          final issue = _deviceIssue(outcome.error!, device);
+          failedIssues.putIfAbsent(device, () => issue);
+          firstError ??= issue;
         } else if (outcome.ghost) {
           _logger.warning('远端文件 ${acksFile.name} 身份不符，跳过');
         } else if (outcome.skipped) {
@@ -286,8 +286,9 @@ class WebDavSyncTransport implements SyncTransport {
           );
           if (outcome.error != null) {
             failed++;
-            failedDevices.add(device);
-            firstError ??= outcome.error;
+            final issue = _deviceIssue(outcome.error!, device);
+            failedIssues.putIfAbsent(device, () => issue);
+            firstError ??= issue;
             break;
           }
           if (outcome.ghost) {
@@ -297,7 +298,6 @@ class WebDavSyncTransport implements SyncTransport {
           if (outcome.envelope == null) continue;
           bytesIn += outcome.bytes;
           delivered = true;
-          dataOkDevices.add(device);
           seenDevices.add(device);
           _peerHeads[device] = outcome.envelope!.journalHead;
           envelopes.add(outcome.envelope!);
@@ -309,11 +309,12 @@ class WebDavSyncTransport implements SyncTransport {
       if (snapshot == null) {
         // 需要全量但没有可读的快照文件（对端还没发布）：计失败，下轮重试。
         failed++;
-        failedDevices.add(device);
-        firstError ??= SyncIssue(
+        final issue = SyncIssue(
           code: SyncIssueCode.webdavReadFailed,
           args: {'peer': device},
         );
+        failedIssues.putIfAbsent(device, () => issue);
+        firstError ??= issue;
         if (acksEnvelope != null) envelopes.add(acksEnvelope);
         continue;
       }
@@ -325,8 +326,9 @@ class WebDavSyncTransport implements SyncTransport {
       );
       if (outcome.error != null) {
         failed++;
-        failedDevices.add(device);
-        firstError ??= outcome.error;
+        final issue = _deviceIssue(outcome.error!, device);
+        failedIssues.putIfAbsent(device, () => issue);
+        firstError ??= issue;
         continue;
       }
       if (outcome.ghost) {
@@ -337,7 +339,6 @@ class WebDavSyncTransport implements SyncTransport {
         seenDevices.add(device);
         bytesIn += outcome.bytes;
         delivered = true;
-        dataOkDevices.add(device);
         _peerHeads[device] = outcome.envelope!.journalHead;
         envelopes.add(outcome.envelope!);
       }
@@ -351,12 +352,7 @@ class WebDavSyncTransport implements SyncTransport {
       envelopes: envelopes,
       peersSeen: seenDevices.length,
       seenIds: seenDevices.toList(),
-      // 同一设备只要有一份数据文件读成功，就不算失败（回执失败 / 多块中的
-      // 一块坏掉都不该把整台设备标成未连接）。
-      failedIds: [
-        for (final device in failedDevices)
-          if (!dataOkDevices.contains(device)) device,
-      ],
+      failedIssues: failedIssues,
       skippedUnchanged: skipped,
       failedPeers: failed,
       bytesIn: bytesIn,
@@ -366,6 +362,16 @@ class WebDavSyncTransport implements SyncTransport {
       error: firstError,
     );
   }
+
+  /// 文件级错误 → 设备级原因：保留读取 / 解密类型，`peer` 换成正被读取的
+  /// 设备（文件名的前缀），详情弹层才能按设备说清失败原因。
+  SyncIssue _deviceIssue(SyncIssue error, String device) => SyncIssue(
+        code: error.code == SyncIssueCode.webdavDecryptFailed
+            ? SyncIssueCode.webdavDecryptFailed
+            : SyncIssueCode.webdavReadFailed,
+        args: {...error.args, 'peer': device},
+        detail: error.detail,
+      );
 
   /// 读一个远端文件并解密（版本缓存只对可变文件——回执——有意义）。
   Future<_ReadOutcome> _readEnvelope(
