@@ -76,9 +76,12 @@ class FrameStats {
 
   void _onTimings(List<FrameTiming> timings) {
     for (final timing in timings) {
+      final buildMs = timing.buildDuration.inMicroseconds / 1000;
+      final rasterMs = timing.rasterDuration.inMicroseconds / 1000;
       _window.add(
-        buildMs: timing.buildDuration.inMicroseconds / 1000,
-        rasterMs: timing.rasterDuration.inMicroseconds / 1000,
+        buildMs: buildMs,
+        rasterMs: rasterMs,
+        vsyncMs: timing.vsyncOverhead.inMicroseconds / 1000,
         totalMs: timing.totalSpan.inMicroseconds / 1000,
       );
     }
@@ -110,21 +113,31 @@ class FrameStats {
 class FrameWindow {
   final List<double> _build = [];
   final List<double> _raster = [];
+  final List<double> _work = [];
+  final List<double> _vsync = [];
   final List<double> _total = [];
   int _jank16 = 0;
   int _jank33 = 0;
+  int _latency16 = 0;
   double _worst = 0;
 
   void add({
     required double buildMs,
     required double rasterMs,
+    required double vsyncMs,
     required double totalMs,
   }) {
+    final workMs = buildMs + rasterMs;
     _build.add(buildMs);
     _raster.add(rasterMs);
+    _work.add(workMs);
+    _vsync.add(vsyncMs);
     _total.add(totalMs);
-    if (totalMs > 16.7) _jank16++;
-    if (totalMs > 33.3) _jank33++;
+    // 判定「掉帧」看 build + raster（Flutter 官方口径）；totalSpan 还包含
+    // vsync 等待 / 流水线延迟，正常 60Hz 帧也可能到 20ms，不能当卡顿。
+    if (workMs > 16.7) _jank16++;
+    if (workMs > 33.3) _jank33++;
+    if (totalMs > 16.7) _latency16++;
     if (totalMs > _worst) _worst = totalMs;
   }
 
@@ -139,18 +152,26 @@ class FrameWindow {
       'raster_p50': _round(percentile(_raster, 50)),
       'raster_p95': _round(percentile(_raster, 95)),
       'raster_p99': _round(percentile(_raster, 99)),
+      'work_p50': _round(percentile(_work, 50)),
+      'work_p95': _round(percentile(_work, 95)),
+      'work_p99': _round(percentile(_work, 99)),
+      'vsync_p95': _round(percentile(_vsync, 95)),
       'total_p50': _round(percentile(_total, 50)),
       'total_p95': _round(percentile(_total, 95)),
       'total_p99': _round(percentile(_total, 99)),
       'jank16': _jank16,
       'jank33': _jank33,
+      'latency16': _latency16,
       'worst_ms': _round(_worst),
     };
     _build.clear();
     _raster.clear();
+    _work.clear();
+    _vsync.clear();
     _total.clear();
     _jank16 = 0;
     _jank33 = 0;
+    _latency16 = 0;
     _worst = 0;
     return result;
   }

@@ -13,9 +13,10 @@
 - 启动没有回归：Linux release 首帧中位 **191ms**（`docs/performance.md`
   基线 207ms），Windows 应用内首帧中位 **298ms**、进程起→窗口可见
   **1386ms**，与 2026-10-21 的 318–338ms / 1.36–1.45s 同一量级。
-- Windows 真实窗口滚动（收藏 1000+ 首，多轮）：帧总时长 p50 **2.6–2.9ms**、
-  p95 **4.1–4.7ms**、p99 **20.5–24.6ms**；稳定轮次没有 >33ms 的帧，
-  最差 **25–28ms**。不是大面积卡顿，但 p99 的 20ms+ 单帧尖刺仍值得归因。
+- Windows 真实窗口滚动（收藏 1000+ 首，多轮）：按 `work = build + raster`
+  统计，p95 **2.5–2.6ms**、p99 **3.0–3.7ms**，**jank16/33 均为 0**；
+  `totalSpan` 的 p99 **20.9–23.4ms** 是 vsync / 流水线延迟（约 1% 帧），
+  不是掉帧。滚动本身没有需要继续压的 UI 工作量。
 - 图片缓存是滚动里最明显的资源项：不同轮次从 **9MB 到 78MB**，取决于
   播放页预取与滚动经过的封面量；队列 5 首已改为 44dp 缩略预取，但缓存
   仍到 71–78MB，说明大头在当前 / 邻位大封面、取色或其它显示面。
@@ -63,6 +64,19 @@ tool/agent/perf.sh frames windows --real        # release 真实窗口 + 滚轮�
 **重要口径**：`flutter drive` 的 integration_test 在桌面上拿不到
 `rasterDuration`（恒 0），只能看 build；真实窗口的 release 包才有 raster
 与用户可感总时长。Windows 结论一律取 `--real`。
+
+**掉帧判定看 `work = build + raster`**：`totalSpan` 还包含 vsync 等待和
+流水线延迟，60Hz 下正常帧也可能到 20ms；本报告把 `total > 16.7ms` 单列为
+`latency16`，不叫 jank。需要归因时用：
+
+```bash
+# Windows 侧
+flutter run --profile -d windows --trace-to-file=C:\Users\Still\molia-perf\perf-scroll.binpb
+# 另一个终端跑滚轮（脚本只驱动，不启动/退出应用）
+powershell -File tool/agent/scroll_windows.ps1 -Steps 80
+```
+
+结束后停掉应用，Perfetto trace 里按 `work` 找长切片；本轮实测见 §3.2.1。
 
 滚动场景是「默认首页 = 收藏」+ 鼠标滚轮 40 步；截图
 `frames-pre-scroll.png` / `frames-post-scroll.png` 用于确认滚的是收藏列表。
@@ -114,22 +128,36 @@ Android 这轮与 Windows 构建 / Gradle 同时跑，宿主负载偏高；
 
 ### 3.2 Windows 真实窗口帧（release）
 
-收藏列表 1000+ 首，滚轮 40 步 × 6s：
+收藏列表 1000+ 首，滚轮 40 步 × 6s。`work = build + raster` 才是掉帧口径；
+`totalSpan` 包含 vsync 等待与流水线延迟：
 
-| 窗口 | frames | build p95 | raster p95 | total p95 | total p99 | >33ms | 最差 |
-| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
-| 启动 + 空闲 | 167 | 0.74 | 3.70 | 12.10 | 32.47 | 1 | 38.2ms |
-| 滚动（主体） | 621 | 1.17 | 1.62 | 4.18 | 20.46 | 0 | 26.4ms |
-| 滚动（收尾） | 482 | 1.18 | 1.55 | 4.16 | 21.69 | 0 | 27.8ms |
+| 窗口 | frames | work p95 | work p99 | total p95 | total p99 | jank16/33 | latency16 | 最差 |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| 启动 + 空闲 | 171 | 2.96 | 12.28 | 7.86 | 18.16 | 1 / 0 | 2 | 20.4ms |
+| 滚动（主体） | 585 | 2.59 | 3.66 | 4.12 | 23.42 | 0 / 0 | 8 | 26.6ms |
+| 滚动（收尾） | 486 | 2.50 | 3.04 | 4.11 | 20.90 | 0 / 0 | 5 | 29.6ms |
 
-多轮滚动主体 p95 稳定在 4.1–4.7ms、p99 20.5–24.6ms；热身不足的冷缓存
-首轮曾出现 >33ms 帧，稳定轮次不再复现。滚动时图片缓存从 **2.5MB 涨到
-71–78MB**（这一轮从列表顶部开始、封面加载完整；从底部开始的短轮次只有
-9MB 左右），基本落在默认 100MB 上限内。`frames-post-scroll.png` 里仍可见
-少量灰色占位，说明新进入视口的封面还在异步取图。p99 的 20ms+ 单帧需要用
-DevTools timeline 抓一次，确认是解码、布局还是 GC。
+多轮滚动主体 work p95 稳定在 2.5–2.6ms、p99 3.0–3.7ms，**没有一帧
+work >16.7ms**；`totalSpan` 的 20ms+ 是帧请求到呈现的延迟（约 1% 帧），
+不影响动画连续性。滚动时图片缓存从 **2.5MB 涨到 9–78MB**（取决于启动后
+播放页预取是否已经灌满缓存、以及滚动经过多少新封面），基本落在默认
+100MB 上限内；`frames-post-scroll.png` 里仍可见少量灰色占位。
 
-### 3.2.1 integration_test（build 可信，raster 不可用）
+### 3.2.1 帧时间线归因（Windows profile trace）
+
+用 `flutter run --profile -d windows --trace-to-file=...` 抓同一场景，
+解析 Perfetto trace 后：
+
+- **启动阶段（0.04–1.3s）** 的大头是 `impeller::LinkProgram`
+  **52–68ms**（着色器编译，一次性）和 `ImageCache.putIfAbsent`
+  **72–99ms**；对应首帧 / 首屏封面，不是滚动问题。
+- **滚动阶段（5s 之后）** 没有 >5ms 的 Dart / Embedder 应用切片；
+  最大的是 GC `ConcurrentMark` **9–14ms** 和 `Frame Request Pending`
+  **6–9ms**，`GPURasterizer::Draw` 只有 **1.3–1.6ms**。
+- 因此 `totalSpan` 的 p99 是**等待 vsync / 流水线**的延迟，不是
+  build/raster 卡顿；继续压缩 UI 构建不会改善这个 p99。
+
+### 3.2.2 integration_test（build 可信，raster 不可用）
 
 | 平台 / 场景 | frames | build p50 | build p95 | build p99 | total p95 |
 | --- | ---: | ---: | ---: | ---: | ---: |
@@ -157,9 +185,10 @@ DevTools timeline 抓一次，确认是解码、布局还是 GC。
 `test/widgets/app_network_image_test.dart` 覆盖两条路径。
 
 这不会改变显示内容，收益主要在解码 CPU 与图片内存；Windows 同口径复测
-（多轮）没有帧回退：p95 4.1–4.7ms、p99 20.5–24.6ms、稳定轮次无 >33ms 帧。
-它不是本轮 p99 单帧尖刺的主因；队列预取也改成 44dp 缩略后，图片缓存仍在
-71–78MB，说明大头在当前 / 邻位大封面、取色或其它显示面，见问题清单 #2。
+（多轮）没有帧回退：work p95 2.5–2.6ms、p99 3.0–3.7ms、jank 0。
+它不是本轮滚动延迟的主因；队列预取也改成 44dp 缩略后，图片缓存仍在
+9–78MB 区间波动，说明大头在当前 / 邻位大封面、取色或其它显示面，
+见问题清单 #2。
 
 ### 3.4 内存（Windows，本机实测）
 
@@ -187,26 +216,28 @@ DevTools timeline 抓一次，确认是解码、布局还是 GC。
 
 ## 4. 问题清单（按证据排序）
 
-1. **Windows 滚动 p99 单帧尖刺**：p95 4.1–4.7ms，但 p99 20.5–24.6ms、
-   最差 25–28ms；冷缓存首轮曾出现 >33ms 帧，热身后消失。滚动后新行有
-   灰色封面占位，优先怀疑封面取图 / 解码 / 缩略图尺寸；下一步用 DevTools
-   timeline 抓最差帧。`AppNetworkImage` 的本地 `file://` 分支与 96px 头图
-   尺寸已在本轮修复并有单测，但还缺真实下载封面的 A/B。
-2. **封面预取尺寸**：`ImagePreloadManager` 的队列 5 首已改为 44dp 缩略
-   预取（本轮修复），但实测滚动时图片缓存仍到 **71–78MB**，说明大头不在
-   队列预取，而在当前 / 邻位大封面、取色或其它显示面；继续压需要逐个
-   确认缓存键与展示面，避免把播放页大图降质。
-3. **Android 模拟器首帧高**：首个平台通道 + 宿主负载；不是 Dart 侧回归。
+1. **滚动没有掉帧，只有呈现延迟**：work p95 2.5–2.6ms、p99 3.0–3.7ms、
+   jank 0；`totalSpan` p99 20.9–23.4ms 来自 vsync / 流水线等待，
+   时间线里没有 >5ms 的应用切片。除非要压「触摸到呈现」的延迟，
+   否则不需要继续优化列表构建。
+2. **启动阶段的一次性着色器 / 封面解码**：`impeller::LinkProgram`
+   52–68ms、`ImageCache.putIfAbsent` 72–99ms，集中在前 1.3s；这是首帧
+   之后的正常成本，若要再压需要缓存 shader / 缩略预取，收益只影响首屏。
+3. **图片缓存波动**：滚动后图片缓存 **9–78MB**，受播放页预取 / 取色 /
+   当前与邻位大封面影响；队列 5 首已改为 44dp 缩略预取，剩余大头需要
+   逐个展示面确认，避免把播放页大图降质。
+4. **Android 模拟器首帧高**：首个平台通道 + 宿主负载；不是 Dart 侧回归。
    真机复测前不修。
-4. **提交大小高于工作集**：托盘 trim 只降工作集，符合 `docs/memory.md`
+5. **提交大小高于工作集**：托盘 trim 只降工作集，符合 `docs/memory.md`
    的已知结论；要不要做 Phase 3 取决于后续内存预算，不在本轮先动。
 
 ## 5. 未覆盖 / 下一步
 
-- Windows 最差帧的 DevTools timeline 归因（p99 20.5–24.6ms 的单帧）；
+- 图片缓存的 9–78MB 波动来源：当前 / 邻位大封面、`ArtworkThemeSync`
+  取色、播放页预取，逐个用缓存键 / 展示面确认；
 - 本地下载封面的真实数据 A/B（`ResizeImage` 路径已有单测）；
 - 数据路径（搜索 / 取链 / 取词 / DB 写入）本轮只复用了启动与同步既有埋点，
   没有做独立的端到端时延矩阵；
-- 修完 Top 1–2 后，用同一组 `perf.sh` 命令复测并回填本表；
+- 若目标是降低「触摸到呈现」的延迟，再评估 shader 缓存 / 帧调度；
 - 真机 Android / iOS 仍需设备侧采样（模拟器的首个平台通道等待会掩盖
   Dart 侧收益）。
