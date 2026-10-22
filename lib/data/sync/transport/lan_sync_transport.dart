@@ -7,11 +7,13 @@ import 'package:logging/logging.dart';
 import '../../../domain/models/device_sync.dart';
 import '../../../domain/ports/sync_transport.dart';
 import '../../../utils/peer_address.dart';
+import '../pairing/pairing_http.dart';
 import '../sync_codec_port.dart';
 import '../sync_crypto.dart';
 import '../sync_peer_candidate.dart';
 import '../sync_pull_plan.dart';
 import 'lan_discovery.dart';
+import 'lan_pairing_packet.dart';
 
 /// 局域网直连传输：`MSD/1` 发现 + 各设备内置 HTTP 端点。
 ///
@@ -192,6 +194,9 @@ class LanSyncTransport
   StreamSubscription<LanPeerSighting>? _sightingSub;
   StreamSubscription<void>? _networkSub;
 
+  /// 配对 HTTP 处理器（组合根在 start 之前注入；null = 本传输不提供配对）。
+  PairingHttpHandler? _pairing;
+
   final StreamController<SyncEnvelope> _incoming =
       StreamController<SyncEnvelope>.broadcast();
 
@@ -230,6 +235,32 @@ class LanSyncTransport
   /// 本机实际绑定的 UDP 探测端口（分族；0 = 该族不可用）。
   @override
   ({int v4, int v6}) get discoveryPorts => _discovery.discoveryPorts;
+
+  /// 本机 HTTP 端点端口（配对请求携带；0 = 尚未启动）。
+  int get httpPort => _http?.port ?? 0;
+
+  /// 本机公告用的探测端口（单播目标）。
+  int get advertisedProbePort => _discovery.advertisedProbePort;
+
+  /// MSP 配对发现事件（不经过 MSD 的 presence / sightings）。
+  Stream<LanPairingDatagram> get pairingDatagrams =>
+      _discovery.pairingDatagrams;
+
+  /// 发送 MSP 包（host 为空 = 广播 / 组播）。
+  Future<bool> sendPairingDatagram(
+    Uint8List packet, {
+    String? host,
+    int? port,
+  }) =>
+      _discovery.sendPairingPacket(packet, host: host, port: port);
+
+  /// 在启动前注入配对服务；运行中替换会让 HTTP 路由与生命周期脱节。
+  void attachPairing(PairingHttpHandler handler) {
+    if (_running) {
+      throw StateError('局域网传输运行中不能替换配对处理器');
+    }
+    _pairing = handler;
+  }
 
   /// 认证通过的公告 / 应答事件（引擎据此唤醒同步轮）。
   @override
@@ -298,6 +329,13 @@ class LanSyncTransport
       onError: (Object _) {},
     );
 
+    // 配对服务与传输同生命周期：先订阅 MSP 事件，再绑 UDP，避免启动窗口
+    // 内收到探测却没人处理。配对失败只降级配对能力，不阻断同步本体。
+    try {
+      await _pairing?.start();
+    } catch (e) {
+      _logger.warning('配对服务启动失败（同步照常）', e);
+    }
     // UDP 是可降级的发现能力：两族都不可用只让发现降级（手动地址 / WebDAV
     // 仍可用），传输照常运行。启动公告 burst 由发现层调度。
     await _discovery.start();
@@ -400,6 +438,12 @@ class LanSyncTransport
     _sightingSub = null;
     await _networkSub?.cancel();
     _networkSub = null;
+    // 先停配对再停 UDP：配对服务停止时清 pending 密钥，不再依赖发现层。
+    try {
+      await _pairing?.stop();
+    } catch (e) {
+      _logger.warning('配对服务停止失败', e);
+    }
     await _discovery.stop();
     _peerSnapshotIds.clear();
     _everDiscoveredPeer = false;
@@ -422,6 +466,7 @@ class LanSyncTransport
       if (!_running) return;
     }
     await _discovery.onAppResumed(rebind: longHidden);
+    _pairing?.onAppResumed();
   }
 
   /// 退后台：取消公告 / 重连计时器；不主动探测。
@@ -429,6 +474,7 @@ class LanSyncTransport
   void onAppHidden() {
     _hiddenAt = _nowMs();
     _discovery.onAppHidden();
+    _pairing?.onAppHidden();
   }
 
   /// 换网（connectivity 事件）：重扫接口，指纹变化时重绑 UDP 并公告。
@@ -1000,6 +1046,11 @@ class LanSyncTransport
   Future<void> _onHttpRequest(HttpRequest request) async {
     try {
       final path = request.uri.path;
+      if (path == PairingHttpPaths.prefix ||
+          path.startsWith('${PairingHttpPaths.prefix}/')) {
+        await _handlePairingHttp(request);
+        return;
+      }
       if (path != snapshotPath && path != journalPath) {
         request.response.statusCode = HttpStatus.notFound;
       } else if (request.method == 'GET') {
@@ -1049,6 +1100,43 @@ class LanSyncTransport
     }
   }
 
+  /// `/molia-sync/v2/pair/*`：交给配对服务，body 上限 8KB（远小于同步载荷）。
+  ///
+  /// 配对服务未注入 / 已停止时返回 404：旧路径与未启用能力都不做兼容分支。
+  Future<void> _handlePairingHttp(HttpRequest request) async {
+    final handler = _pairing;
+    if (handler == null) {
+      request.response.statusCode = HttpStatus.notFound;
+      return;
+    }
+    Uint8List body = Uint8List(0);
+    if (request.method == 'POST') {
+      final read = await _readBody(
+        request,
+        maxBytes: pairingMaxBodyBytes,
+      );
+      if (read == null) {
+        request.response.statusCode = HttpStatus.requestEntityTooLarge;
+        return;
+      }
+      body = read;
+    }
+    final response = await handler.handle(PairingHttpRequest(
+      method: request.method,
+      path: request.uri.path,
+      sourceHost: request.connectionInfo?.remoteAddress.address ?? '',
+      query: request.uri.queryParameters,
+      body: body,
+    ));
+    request.response.statusCode = response.statusCode;
+    if (response.body.isNotEmpty) {
+      request.response.headers.contentType = ContentType.parse(
+        response.contentType,
+      );
+      request.response.write(response.body);
+    }
+  }
+
   /// 增量端点的服务端语义：请求游标之后的窗口；未注入提供者时回全量快照。
   Future<SyncEnvelope> _journalFor(String? sinceParam) async {
     final provider = _journalProvider;
@@ -1057,11 +1145,14 @@ class LanSyncTransport
     return provider(since);
   }
 
-  Future<Uint8List?> _readBody(Stream<List<int>> stream) async {
+  Future<Uint8List?> _readBody(
+    Stream<List<int>> stream, {
+    int maxBytes = maxSnapshotBytes,
+  }) async {
     final builder = BytesBuilder(copy: false);
     await for (final chunk in stream) {
       builder.add(chunk);
-      if (builder.length > maxSnapshotBytes) return null;
+      if (builder.length > maxBytes) return null;
     }
     return builder.toBytes();
   }

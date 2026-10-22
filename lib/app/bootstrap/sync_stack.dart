@@ -22,6 +22,7 @@ import '../../data/sync/adapters/prefs_sync_adapter.dart';
 import '../../data/sync/adapters/script_sync_adapter.dart';
 import '../../data/sync/adapters/session_sync_adapter.dart';
 import '../../data/sync/adapters/statistics_sync_adapter.dart';
+import '../../data/sync/pairing/lan_pairing_service.dart';
 import '../../data/sync/sync_adapter.dart';
 import '../../data/sync/sync_backup.dart';
 import '../../data/sync/sync_codec_isolate.dart';
@@ -59,6 +60,10 @@ Future<SyncStack> buildSyncStack({
   required LibraryStack library,
   required PlaybackStack playback,
   required DataSaverService dataSaver,
+
+  /// 前台判定由组合根提供（`WidgetsBinding.instance.lifecycleState`）；
+  /// 数据层不直接依赖 Flutter 生命周期。
+  bool Function()? isForeground,
 }) async {
   final sourceManager = catalog.sourceManager;
   final syncState = library.syncState;
@@ -229,6 +234,33 @@ Future<SyncStack> buildSyncStack({
     networkChanges: dataSaver.networkEvents,
     peerSightings: syncEngine.peerSightings,
   );
+  // 局域网一键配对（Phase 2a 后端）：与局域网传输同生命周期。前台 + 非省电
+  // 才应答探测 / 弹接受窗；口令写入必须经控制面（缓存与安全存储一起更新）。
+  final pairing = LanPairingService(
+    deviceId: syncState.deviceId,
+    deviceName: () => syncState.deviceName,
+    readPassphrase: syncControlPlane.readPassphrase,
+    writePassphrase: syncControlPlane.setPassphrase,
+    ensurePassphrase: syncControlPlane.ensurePassphrase,
+    // 「已有同步组」= 名册非空或任一路传输真正接触成功过。只有自动生成、
+    // 从未同步过的口令不算组，否则首次配对被误判成双方不同组。
+    hasGroup: () =>
+        syncState.peers.isNotEmpty ||
+        syncState.transportLastSuccessAt(SyncTransportKind.lan) > 0 ||
+        syncState.transportLastSuccessAt(SyncTransportKind.webdav) > 0,
+    canPrompt: () =>
+        (isForeground?.call() ?? true) && !scheduler.powerSaveActive,
+    isCellular: () => dataSaver.onCellular,
+    httpPortProvider: () => lanSyncTransport.httpPort,
+    probePortProvider: () => lanSyncTransport.advertisedProbePort,
+    localAddressesProvider: localEndpoints.hostsFresh,
+    addPeerEndpoint: syncState.rememberLanEndpoint,
+    discoveryKeyProvider: syncCodec.discoveryKey,
+    packets: lanSyncTransport.pairingDatagrams,
+    sendPacket: lanSyncTransport.sendPairingDatagram,
+    nowMs: syncState.nowMs,
+  );
+  lanSyncTransport.attachPairing(pairing);
   final syncProvider = SyncProvider(
     engine: syncEngine,
     controlPlane: syncControlPlane,
@@ -237,6 +269,7 @@ Future<SyncStack> buildSyncStack({
     lanPermission: lanPermission,
     localEndpoints: localEndpoints,
     codec: syncCodec,
+    pairing: pairing,
   );
 
   // 可选子系统（跨设备同步）初始化失败不允许阻断启动：runApp 之前任何

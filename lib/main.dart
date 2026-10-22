@@ -239,6 +239,9 @@ void main() async {
     library: library,
     playback: playback,
     dataSaver: local.dataSaver,
+    // 配对发现只在前台应答：生命周期判定留在组合根，数据层不碰 WidgetsBinding。
+    isForeground: () =>
+        WidgetsBinding.instance.lifecycleState == AppLifecycleState.resumed,
   );
   _markStartup('同步栈', startup);
   // ⑪ 应用内更新（纯构造；包信息 / 偏好 / 平台信息读取后移到首帧）。

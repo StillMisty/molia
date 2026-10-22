@@ -23,6 +23,7 @@ import 'package:logging/logging.dart';
 import '../../../domain/models/device_sync.dart';
 import '../../../utils/peer_address.dart';
 import '../sync_crypto.dart';
+import 'lan_pairing_packet.dart';
 
 /// `MSD/1` 线上格式与报文编解码。
 abstract final class Msd1 {
@@ -456,9 +457,16 @@ class LanDiscovery {
   final Logger _logger = Logger('molia.sync.discovery');
   final StreamController<LanPeerSighting> _sightings =
       StreamController<LanPeerSighting>.broadcast();
+
+  /// MSP 配对发现事件：与 sightings / presence 完全分开，不写名册。
+  final StreamController<LanPairingDatagram> _pairingDatagrams =
+      StreamController<LanPairingDatagram>.broadcast();
   final Map<String, LanPresence> _presence = {};
   final DiscoveryNonceCache _nonces = DiscoveryNonceCache();
   final DiscoveryRateLimiter _rateLimiter = DiscoveryRateLimiter();
+
+  /// MSP 独立限流：伪造配对包不能挤掉正常同步公告。
+  final MspRateLimiter _pairingRateLimiter = MspRateLimiter();
 
   RawDatagramSocket? _udp4;
   RawDatagramSocket? _udp6;
@@ -479,6 +487,9 @@ class LanDiscovery {
 
   /// 认证通过的公告 / 应答事件（重复 nonce 已抑制）。
   Stream<LanPeerSighting> get sightings => _sightings.stream;
+
+  /// MSP 配对探测 / 应答事件（无 MAC、不进 presence / 名册 / 调度器）。
+  Stream<LanPairingDatagram> get pairingDatagrams => _pairingDatagrams.stream;
 
   List<LanPresence> get presence => List.unmodifiable(_presence.values);
 
@@ -503,6 +514,22 @@ class LanDiscovery {
     return ports.v4 > 0 ? ports.v4 : ports.v6;
   }
 
+  /// 发送一条 MSP 包；[host] 为空时走 v4 广播 + v4/v6 组播，否则单播。
+  ///
+  /// 后台 / 蜂窝下直接拒绝：配对发现不能绕过与 MSD 相同的省电 / 流量策略。
+  /// 返回 false = 未运行 / 策略禁止 / 发送失败。
+  Future<bool> sendPairingPacket(
+    Uint8List packet, {
+    String? host,
+    int? port,
+  }) async {
+    if (!_running || _hidden || _isCellularNow) return false;
+    if (host == null || host.trim().isEmpty) {
+      return _sendBroadcast(packet, trackAvailability: false);
+    }
+    return _sendTo(packet, host, port ?? _udpPort);
+  }
+
   Future<void> start() async {
     if (_running) return;
     _running = true;
@@ -525,6 +552,7 @@ class LanDiscovery {
     _presence.clear();
     _nonces.clear();
     _rateLimiter.clear();
+    _pairingRateLimiter.clear();
     _ownAddresses = const [];
     _interfaceFingerprint = '';
     _interfaceScanned = false;
@@ -739,7 +767,7 @@ class LanDiscovery {
   }
 
   /// v4 广播 + v4 组播 + v6 组播；失败只记「广播不可用」，单播照常。
-  void _sendBroadcast(Uint8List packet, {bool trackAvailability = true}) {
+  bool _sendBroadcast(Uint8List packet, {bool trackAvailability = true}) {
     var sent = false;
     final v4 = _udp4;
     final v6 = _udp6;
@@ -779,22 +807,24 @@ class LanDiscovery {
       }
     }
     if (trackAvailability) _broadcastUnavailable = !sent;
+    return sent;
   }
 
-  void _sendTo(Uint8List packet, String host, int port) {
+  bool _sendTo(Uint8List packet, String host, int port) {
     final address = InternetAddress.tryParse(normalizePeerHost(host));
-    if (address == null || port <= 0) return;
+    if (address == null || port <= 0) return false;
     final sockets = address.type == InternetAddressType.IPv6
         ? [_udp6, _udp4]
         : [_udp4, _udp6];
     for (final socket in sockets) {
       if (socket == null) continue;
       try {
-        if (socket.send(packet, address, port) > 0) return;
+        if (socket.send(packet, address, port) > 0) return true;
       } catch (_) {
         // 换另一族再试；族不匹配时换过去也只会失败。
       }
     }
+    return false;
   }
 
   Future<void> _bindSockets(int v4Port, int v6Port) async {
@@ -876,6 +906,22 @@ class LanDiscovery {
     if (datagram == null) return;
     final now = _nowMs();
     final source = datagram.address.address;
+    // MSP（配对发现）与 MSD（同步发现）是两套独立协议：MSP 没有 MAC，也不
+    // 写 presence / 名册 / 调度器。先按 magic 分派，再各自限流。
+    if (Msp1.looksLike(datagram.data)) {
+      if (!_pairingRateLimiter.allow(source, now)) return;
+      final pairing = Msp1.decode(datagram.data);
+      if (pairing == null || pairing.deviceId == deviceId) return;
+      if (!_pairingDatagrams.isClosed) {
+        _pairingDatagrams.add(LanPairingDatagram(
+          message: pairing,
+          sourceHost: source,
+          sourcePort: datagram.port,
+          receivedAt: now,
+        ));
+      }
+      return;
+    }
     // 顺序是安全边界：先限流，再验 MAC，最后才解析 JSON。
     if (!_rateLimiter.allow(source, now)) return;
     final key = _key;

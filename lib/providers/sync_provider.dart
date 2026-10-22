@@ -13,7 +13,9 @@ import '../data/sync/sync_scheduler.dart';
 import '../data/sync/sync_state_store.dart';
 import '../data/sync/transport/local_network_permission.dart';
 import '../domain/models/device_sync.dart';
+import '../domain/models/sync_nearby_pairing.dart';
 import '../domain/models/sync_pairing.dart';
+import '../domain/ports/sync_pairing.dart';
 import '../domain/ports/sync_transport.dart';
 import '../services/local_endpoints_service.dart';
 import '../utils/peer_address.dart';
@@ -33,13 +35,15 @@ class SyncProvider extends ChangeNotifier {
     LocalNetworkPermission? lanPermission,
     LocalEndpointsService? localEndpoints,
     SyncCodecPort? codec,
+    SyncPairingPort? pairing,
   })  : _engine = engine,
         _controlPlane = controlPlane,
         _backup = backup,
         _scheduler = scheduler,
         _lanPermission = lanPermission,
         _endpoints = localEndpoints ?? LocalEndpointsService(),
-        _codec = codec {
+        _codec = codec,
+        _pairing = pairing {
     _engine.addListener(notifyListeners);
     _controlPlane.addListener(notifyListeners);
   }
@@ -52,6 +56,9 @@ class SyncProvider extends ChangeNotifier {
 
   /// 载荷编解码端口（生产 = worker isolate）：随 provider 释放。
   final SyncCodecPort? _codec;
+
+  /// 局域网附近设备配对（Phase 2a 只暴露后端能力，UI 尚未接线）。
+  final SyncPairingPort? _pairing;
 
   /// 本机地址枚举（设置页列表 / 配对码 / 探测候选三处共用；内部有缓存）。
   final LocalEndpointsService _endpoints;
@@ -90,6 +97,63 @@ class SyncProvider extends ChangeNotifier {
 
   /// 本机局域网直连端点端口（持久化的 HTTP 端口；0 = 尚未绑定过）。
   int get lanHttpPort => _controlPlane.lanHttpPort;
+
+  /// 附近设备（`MSP/1` 候选；未注入配对端口时为空流）。
+  Stream<List<SyncNearbyDevice>> get nearbyDevices =>
+      _pairing?.nearbyDevices ?? Stream<List<SyncNearbyDevice>>.empty();
+
+  /// 待用户确认的配对请求（同一时间只有一个）。
+  Stream<SyncPairingRequest> get incomingPairingRequests =>
+      _pairing?.incomingRequests ?? const Stream<SyncPairingRequest>.empty();
+
+  /// 发起方配对尝试状态（确认码 / 等待 / 最终结局）。
+  Stream<SyncPairingAttempt> get pairingAttempts =>
+      _pairing?.attempts ?? const Stream<SyncPairingAttempt>.empty();
+
+  /// 是否正在主动扫描附近设备。
+  bool get scanningNearby => _pairing?.scanning ?? false;
+
+  /// 本机是否已有同步组。
+  ///
+  /// 判据与配对服务一致：名册里有设备，或任一路传输曾经成功接触过对端。
+  /// 只有自动生成、从未同步过的口令不算「已有同步组」——否则首次配对会被
+  /// 误判成双方不同组。
+  bool get hasGroup =>
+      _controlPlane.peers.isNotEmpty ||
+      transportLastSuccessAt(SyncTransportKind.lan) > 0 ||
+      transportLastSuccessAt(SyncTransportKind.webdav) > 0;
+
+  /// 开始扫描附近设备（同步页打开时调用；后台 / 蜂窝下返回 false）。
+  Future<bool> startNearbyScan() async => await _pairing?.startScan() ?? false;
+
+  /// 停止扫描并清空附近候选（同步页关闭时调用）。
+  void stopNearbyScan() => _pairing?.stopScan();
+
+  /// 向附近设备发起配对；UI 等待期间订阅 [pairingAttempts] 显示确认码。
+  Future<SyncPairingResult> requestPairing(SyncNearbyDevice device) async {
+    final pairing = _pairing;
+    if (pairing == null) {
+      return const SyncPairingResult(
+        outcome: SyncPairingOutcome.unavailable,
+      );
+    }
+    return pairing.requestPairing(device);
+  }
+
+  /// 接受 / 拒绝一条待确认请求。
+  Future<SyncPairingOutcome> respondPairing(
+    String requestId, {
+    required bool accept,
+  }) async {
+    final pairing = _pairing;
+    if (pairing == null) return SyncPairingOutcome.unavailable;
+    return pairing.respond(requestId, accept: accept);
+  }
+
+  /// 取消发起方尚未完成的尝试。
+  Future<void> cancelPairing(String requestId) async {
+    await _pairing?.cancelPairing(requestId);
+  }
 
   /// 设置页相对时间 / 失联判定用的本机时钟。
   int get nowMs => _controlPlane.nowMs();
@@ -468,6 +532,8 @@ class SyncProvider extends ChangeNotifier {
     _engine.removeListener(notifyListeners);
     _controlPlane.removeListener(notifyListeners);
     _scheduler?.dispose();
+    // 配对服务随 provider 释放：清 pending 临时密钥并关闭流。
+    unawaited(_pairing?.dispose() ?? Future<void>.value());
     // worker isolate 随 provider 释放（进程退出前不留常驻 isolate）。
     unawaited(_codec?.dispose() ?? Future<void>.value());
     super.dispose();
