@@ -84,7 +84,8 @@ Molia 当前只有在播放页内渲染的滚动歌词。桌面悬浮歌词、�
 - `TYPE_APPLICATION_OVERLAY` 悬浮窗；透明背景；不抢焦点（`NOT_FOCUSABLE` + `NOT_TOUCH_MODAL`）。
 - 拖动移动；位置以「可用区比例」持久化（左缘 = 横向可移动范围比例、底缘 = 可用高比例），
   拖动结束由原生直接保存。旋转 / 字号 / `widthPercent` / 可用区变化时按比例重新落位并
-  夹进可用区；内容高度变化（行数、翻译行、控制条弹出）由底缘重力向上生长，底边不动。
+  夹进可用区；内容高度变化（`maxLines` / 翻译·罗马音槽开关、控制条弹出）由底缘重力
+  向上生长，底边不动。
   可用区 = 显示屏尺寸减 system bars / 刘海 insets（`currentWindowMetrics` + insets）：
   `TYPE_APPLICATION_OVERLAY` 默认按同类 insets 收边（fitTypes），`LayoutParams.x`
   从安全区左缘起算、`y` 从安全区底缘起算（`Gravity.BOTTOM`，正数向上）；用
@@ -104,10 +105,15 @@ Molia 当前只有在播放页内渲染的滚动歌词。桌面悬浮歌词、�
 
 **渲染**
 
-- 行内容：当前行（主文本）、扩展行（翻译 / 罗马音，字号 = 主字号 × 0.8）、
-  其后 `maxLines - 1` 行 upcoming 主文本；显示行数默认 1（只显示当前行，
-  旧版「仅显示当前行」开关已并入该设置）。滚动行行宽取文本宽（其余行撑满
-  窗口），当前行与扩展行组成同一滚动组。
+- 行内容（固定行模型）：第一主行（当前行 / 前奏首句预览 / 回退歌名）→
+  扩展槽（翻译 / 罗马音，字号 = 主字号 × 0.8，槽数 = 两个开关之和，0..2）→
+  其余 `maxLines - 1` 行 upcoming 主文本；显示行数默认 1（只显示当前行，
+  旧版「仅显示当前行」开关已并入该设置）。某句没有翻译 / 罗马音时，对应槽位
+  补不可见占位（固定行高 + 透明）撑出与真实行一致的高度——窗口行数只由
+  `maxLines` 与开关决定、跨行恒定；底缘锚定下窗口高度变化会让主行上下跳。
+  全空（清空 / 无歌词隐藏）不生成占位，避免留下大块透明触控区。滚动行行宽
+  取文本宽（其余行撑满窗口，占位行不进滚动组），当前行与真实扩展行组成同一
+  滚动组。
 - 水平对齐（`textAlignX`）：文本在窗口内的摆位（宽度 100% 时即屏幕上的水平位置）。
   普通行（upcoming / 回退行）用系统 gravity，滚动组自身强制左对齐、由
   `applyGroupScroll` 的位移统一实现（布局宽度是超大哨兵值，系统居中 / 右对齐
@@ -310,6 +316,14 @@ abstract class LyricsOutput {
 - 字体：行文本跟随设置页「应用字体」（config 的 `fontFamily` → `Typeface.create`，
   解析不到回退系统默认；`null` = 不覆盖）。字体变化随主题通道重下发配置，
   配置变化按全量重建生效——滚动行宽 / 逐字边界都在重建时用新字形度量重算。
+- 固定行数布局：`maxLines` 主行 + `extendedSlots` 扩展槽；槽数随
+  `desktop.update` 投送（与内容同一次重建），缺文本的槽补不可见占位
+  （主占位用主字号、扩展占位用 0.8× 字号）。占位与真实行统一写死行高
+  （按字体 / 字号测量，文本垂直居中）——不能靠空格文本的自然高度，空文本
+  行会少几像素、仍会逐行抖动。占位行不进滚动组、对无障碍不可见。全空时
+  不补占位。
+- 结构比较含 `isCurrent`：前奏首句预览与它变成当前行后的文本完全相同，
+  只比文本会误判「结构没变」，漏建 `CurrentLineView`（不高亮、不绑词轴）。
 
 ### 5.6 A2DP 监测
 
@@ -381,7 +395,7 @@ abstract class LyricsOutput {
 | | `desktop.canDrawOverlays` | → bool | 权限状态。 |
 | | `desktop.openOverlayPermission` | — | 跳系统授权页。 |
 | | `desktop.show` | style config map | 显示悬浮窗（已授权时）。 |
-| | `desktop.update` | `{title,line,extended[],upcoming[],isPlaying,hasLyrics}` | 策略已应用，直接展示。 |
+| | `desktop.update` | `{title,line,extended[],upcoming[],isPlaying,hasLyrics,extendedSlots}` | 策略已应用，直接展示。`extendedSlots` = 翻译 / 罗马音扩展槽数（0..2，按两个开关之和固定）；与内容同一次投送，开关切换只重建一次，不先走 `setConfig`。 |
 | | `desktop.setConfig` | style config map | 样式 + 锁定点击穿透即时生效。 |
 | | | ↑ config 里的 `fontFamily` | 行文本字体族（设置页「应用字体」）；`null` = 不覆盖，原生 `Typeface.create` 解析不到时同样回退系统默认。 |
 | | `desktop.hide` | — | 关闭并释放窗口。 |

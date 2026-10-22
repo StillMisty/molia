@@ -86,8 +86,13 @@ internal class LyricsOverlayController(
     private val configurationCallbacks = object : ComponentCallbacks {
         override fun onConfigurationChanged(newConfig: Configuration) {
             val current = view ?: return
-            // 旋转 / 字号变化：先落一次位，新配置下的重新布局再由布局回调兜底。
-            current.post { anchorIntoArea() }
+            // 旋转 / 字号（含系统字体缩放）变化：固定行高按 SP 测量，字号变了
+            // 必须重新量行高，否则旧行高会把文本裁掉；重排后再落位，新配置下
+            // 的布局回调兜底。
+            current.post {
+                currentConfig?.let { current.applyConfig(it) }
+                anchorIntoArea()
+            }
         }
 
         override fun onLowMemory() {}
