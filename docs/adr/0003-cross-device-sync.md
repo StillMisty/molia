@@ -80,6 +80,17 @@
    启动 / 数据变更去抖 / 每 10 分钟 / 回前台时触发同步。Web 隐藏入口（传输依赖
    dart:io，且无接收端）。同步应用后的定向重载（主题 / 导航 / 语言 / 音源等）
    经 `PrefsSyncAdapter.onApplied` 在组合根接线。
+
+   > **2026-10-22 实现说明（不改变上述决策）**：轮次执行从引擎收进独立编排器
+   > `lib/data/sync/sync_round.dart`（`SyncRoundRunner`：collect / pull /
+   > consume + apply / publish + compact / report 可单独测试），`SyncEngine`
+   > 只保留公共门面；拉取动作（skip / delta / full）由
+   > `sync_pull_plan.dart::decideSyncPull` 统一判定，传输只提供证据（局域网
+   > `snapshotId + snapshotFresh`，WebDAV `etag` / `lastmodified` + 回执头部）；
+   > 传输的 ensure / start / stop / resume / hidden / announce 收进
+   > `sync_transport_runtime.dart`，引擎与控制面共享同一实例。模块仍在
+   > `lib/data/sync`，协议、信任模型与合并语义不变。
+
 8. **完整备份（导出/导入）复用同一 envelope**：`SyncEngine.exportBackupJson` /
    `importBackupJson` 经适配器收集与合并，不要求启用同步或口令；
    **凭证类默认排除**（避免 API Key 落进明文备份文件），调用方可显式包含。
