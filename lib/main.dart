@@ -22,6 +22,7 @@ import 'app/bootstrap/provider_tree.dart';
 import 'app/bootstrap/startup_trace.dart';
 import 'app/bootstrap/sync_stack.dart';
 import 'app/bootstrap/update_stack.dart';
+import 'app/perf/frame_stats.dart';
 import 'managers/app_memory_manager.dart';
 import 'playback/desktop_audio_init.dart';
 import 'playback/local_audio_handler.dart';
@@ -68,6 +69,9 @@ void main() async {
 
   // 日志装配（package:logging 的 handler / level 只在这里和测试配置里设一次）
   initAppLogging();
+
+  // 帧统计：默认编译期关闭；`MOLIA_PERF_TRACE=true` 时才注册回调。
+  FrameStats.instance.install();
 
   // 托盘期内存守卫：窗口隐藏 / 最小化 / 恢复时清理或恢复图片缓存预算
   // （`molia.memory` 日志是托盘内存回归的观测点）。
@@ -289,6 +293,7 @@ void main() async {
   WidgetsBinding.instance.addPostFrameCallback((_) {
     revealFallback.cancel();
     _markStartup('首帧', startup);
+    FrameStats.instance.reportNow('first-frame');
     unawaited(WindowChrome.show());
     initAfterFirstFrame(
       catalog: catalog,

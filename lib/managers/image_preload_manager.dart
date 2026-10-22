@@ -31,19 +31,32 @@ class ImagePreloadManager {
 
   static const int _maxConcurrent = 3;
 
+  /// 队列缩略图的解码边长，与 `TrackRow.defaultCoverSize` / `LibraryCoverThumb`
+  /// 的 44 对齐；这里不 import widget 层，避免管理器反向依赖 UI。
+  static const double _queueThumbSize = 44;
+
   int _currentConcurrent = 0;
 
   /// 入队预加载单张图片（内部使用）；[priority] 数值越大越优先。
+  ///
+  /// [memCacheWidth] 非空时按缩略图解码：队列 / 下一首预览只需要小图，预取
+  /// 原图会白占图片缓存（实测滚动时可把缓存推到 70MB+）。
   void _enqueue(
     String? url,
     BuildContext context, {
     int priority = 0,
+    int? memCacheWidth,
   }) {
     if (url == null || url.isEmpty) return;
     if (_cachedUrls.containsKey(url)) return;
     if (_loadingUrls.contains(url)) return;
 
-    _queue.add(_PreloadTask(url: url, priority: priority, context: context));
+    _queue.add(_PreloadTask(
+      url: url,
+      priority: priority,
+      context: context,
+      memCacheWidth: memCacheWidth,
+    ));
     _queue.sort((a, b) => b.priority.compareTo(a.priority));
 
     _processQueue();
@@ -64,31 +77,44 @@ class ImagePreloadManager {
       return;
     }
     // 先收集任务再统一入队：避免在 async gap 之后使用 context。
-    final tasks = <({String url, int priority})>[];
+    final tasks = <({String url, int priority, int? memCacheWidth})>[];
 
     if (currentAlbumArt != null) {
-      tasks.add((url: currentAlbumArt, priority: 100));
+      tasks.add((url: currentAlbumArt, priority: 100, memCacheWidth: null));
     }
 
     if (nextAlbumArt != null) {
-      tasks.add((url: nextAlbumArt, priority: 90));
+      tasks.add((url: nextAlbumArt, priority: 90, memCacheWidth: null));
     }
 
     if (previousAlbumArt != null) {
-      tasks.add((url: previousAlbumArt, priority: 80));
+      tasks.add((url: previousAlbumArt, priority: 80, memCacheWidth: null));
     }
 
     if (queueAlbumArts != null) {
+      // 列表 / 队列缩略图是 44dp；预取原图会与 Thumb 的 ResizeImage 使用
+      // 不同的 ImageCache 键，既不被列表复用，又占几 MB/张。
+      final dpr = MediaQuery.maybeOf(context)?.devicePixelRatio ?? 1.0;
+      final queueThumbWidth = (_queueThumbSize * dpr).round();
       for (var i = 0; i < queueAlbumArts.length && i < 5; i++) {
         final url = queueAlbumArts[i];
         if (url != null) {
-          tasks.add((url: url, priority: 70 - i * 10));
+          tasks.add((
+            url: url,
+            priority: 70 - i * 10,
+            memCacheWidth: queueThumbWidth,
+          ));
         }
       }
     }
 
     for (final task in tasks) {
-      _enqueue(task.url, context, priority: task.priority);
+      _enqueue(
+        task.url,
+        context,
+        priority: task.priority,
+        memCacheWidth: task.memCacheWidth,
+      );
     }
   }
 
@@ -101,7 +127,8 @@ class ImagePreloadManager {
     while (_currentConcurrent < _maxConcurrent && _queue.isNotEmpty) {
       final task = _queue.removeAt(0);
 
-      if (_cachedUrls.containsKey(task.url) || _loadingUrls.contains(task.url)) {
+      if (_cachedUrls.containsKey(task.url) ||
+          _loadingUrls.contains(task.url)) {
         continue;
       }
 
@@ -126,12 +153,17 @@ class ImagePreloadManager {
 
     final imageProvider = await artworkImageProvider(task.url);
     if (!task.context.mounted) return;
-    await precacheImage(imageProvider, task.context);
+    final provider = ResizeImage.resizeIfNeeded(
+      task.memCacheWidth,
+      null,
+      imageProvider,
+    );
+    await precacheImage(provider, task.context);
 
     // 预取途中进入后台：刚落的 keepAlive 条目马上摘掉——托盘期没有任何
     // 展示面，留着只会占内存（恢复后按需重解）。
     if (_presence.isBackgrounded) {
-      await imageProvider.evict();
+      await provider.evict();
       return;
     }
     _addToCache(task.url);
@@ -153,11 +185,13 @@ class _PreloadTask {
   final String url;
   final int priority;
   final BuildContext context;
+  final int? memCacheWidth;
 
   _PreloadTask({
     required this.url,
     required this.priority,
     required this.context,
+    this.memCacheWidth,
   });
 }
 
@@ -180,8 +214,7 @@ class AlbumArtPreloadStrategy {
     Track? nextTrack,
     List<Track>? upcomingTracks,
   }) async {
-    final queueArts =
-        upcomingTracks?.take(5).map(albumArtOf).toList();
+    final queueArts = upcomingTracks?.take(5).map(albumArtOf).toList();
 
     await _manager.preloadPlaybackImages(
       context: context,

@@ -229,3 +229,10 @@ I/O 空档。试法：在后台 isolate 里先 `DynamicLibrary.open` 一次（�
 - **iOS**：本机没有对应设备侧采样；做法同 Android（release 构建 + 平台日志）。
 - **Windows / 真机**：Windows 已用 CI `windows-dev` + 重定向 stdout 采样（§4.1）；
   仍需覆盖不同机器 / Defender 冷扫描等环境。Android 只有模拟器，真机数据待补。
+
+## 9. 运行时体检（2026-10）
+
+启动之外的帧、交互、内存与体积基线见
+`docs/performance-audit-2026-10.md`；复测入口为 `tool/agent/perf.sh`
+（`frames` / `memory` / `size` / `startup`），Windows 真实窗口帧用
+`tool/agent/perf.sh frames windows --real`。

@@ -72,7 +72,13 @@ class AppNetworkImage extends StatelessWidget {
     if (localProvider != null) {
       return wrap(
         Image(
-          image: localProvider,
+          // FileImage 自身不认 memCacheWidth；不包 ResizeImage 时列表里的
+          // 下载封面会按原图解码（1k 封面 = 数 MB），与远端缩略图路径不一致。
+          image: ResizeImage.resizeIfNeeded(
+            memCacheWidth,
+            memCacheHeight,
+            localProvider,
+          ),
           width: width,
           height: height,
           fit: fit,
@@ -108,6 +114,17 @@ class AppNetworkImage extends StatelessWidget {
     String imageUrl,
     CacheManager? manager,
   ) {
+    // 调用方没显式给尺寸时按布局宽度 / DPR 兜底：96px 的详情页头像、评论区
+    // 头像不应该按 1k 原图解码。显式值优先（列表缩略图已按 44/56 传）。
+    final dpr = MediaQuery.maybeOf(context)?.devicePixelRatio ?? 1.0;
+    final cacheWidth = memCacheWidth ??
+        (width != null && width!.isFinite && width! > 0
+            ? (width! * dpr).round()
+            : null);
+    final cacheHeight = memCacheHeight ??
+        (height != null && height!.isFinite && height! > 0
+            ? (height! * dpr).round()
+            : null);
     return CachedNetworkImage(
       imageUrl: imageUrl,
       cacheManager: manager,
@@ -115,8 +132,8 @@ class AppNetworkImage extends StatelessWidget {
       width: width,
       height: height,
       fit: fit,
-      memCacheWidth: memCacheWidth,
-      memCacheHeight: memCacheHeight,
+      memCacheWidth: cacheWidth,
+      memCacheHeight: cacheHeight,
       placeholder: (_, __) => placeholder ?? _placeholder(context),
       errorWidget: (_, __, ___) => errorWidget ?? _fallback(context),
     );
