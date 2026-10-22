@@ -23,6 +23,7 @@ import '../pages/ai_dj_history_page.dart';
 import '../pages/ai_dj_preferences_page.dart';
 import '../providers/ai_dj_provider.dart';
 import '../providers/playback_provider.dart';
+import '../services/ai/ai_generation_executor.dart';
 import '../services/notification_service.dart';
 import '../utils/responsive.dart';
 import '../widgets/ai_dj_shared.dart';
@@ -432,11 +433,18 @@ class _AiDjPageState extends State<AiDjPage> {
         ],
       ),
       const SizedBox(height: 12),
-      if (provider.progress != null)
-        _GenerationCard(
-          progress: provider.progress!,
-          onCancel: provider.cancelGeneration,
-        ),
+      // 进度分片只重建这张卡，不带走整页列表。
+      ValueListenableBuilder<AiGenerationState>(
+        valueListenable: provider.generationState,
+        builder: (context, generation, _) {
+          final progress = generation.progress;
+          if (progress == null) return const SizedBox.shrink();
+          return _GenerationCard(
+            progress: progress,
+            onCancel: provider.cancelGeneration,
+          );
+        },
+      ),
       if (provider.progress != null && items.isEmpty) ...[
         const SizedBox(height: 12),
         AiDjPulsingSkeleton(rows: 5),

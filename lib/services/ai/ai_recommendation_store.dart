@@ -279,8 +279,12 @@ class AiRecommendationStore {
             entries: entries,
             activeBatchId: makeActive ? batch.id : index.activeBatchId,
           );
-          index = await _trim(prefs, index);
-          await _writeIndex(prefs, index);
+          final trimmed = _trim(index);
+          // 先写索引、后删被裁掉的载荷：索引写失败时旧索引仍能找到自己的
+          // 批次；留下的多余载荷只是无害的孤儿。
+          final wrote = await _writeIndex(prefs, trimmed.index);
+          if (!wrote) return;
+          await _deleteBatchKeys(prefs, trimmed.removed);
         } catch (_) {
           // 持久化失败降级为内存状态。
         }
@@ -327,8 +331,10 @@ class AiRecommendationStore {
             entries: remaining,
             activeBatchId: activeId,
           );
-          await prefs.remove('$batchKeyPrefix$id');
+          // 先写索引、后删载荷：写失败时索引仍引用完整批次，不会出现
+          // 「索引有条目、载荷已没」的坏条目；删失败只留下孤儿载荷。
           final wrote = await _writeIndex(prefs, updated);
+          if (wrote) await _deleteBatchKey(prefs, id);
           return (ok: wrote, index: wrote ? updated : index);
         } catch (_) {
           return (ok: false, index: AiDjHistoryIndex.empty);
@@ -354,16 +360,19 @@ class AiRecommendationStore {
               }
             }
           }
-          for (final entry in index.entries) {
-            if (entry.id != activeId) {
-              await prefs.remove('$batchKeyPrefix${entry.id}');
-            }
-          }
           final updated = AiDjHistoryIndex(
             entries: keptEntry == null ? const [] : [keptEntry],
             activeBatchId: keptEntry == null ? null : activeId,
           );
+          // 同上：先写索引再删非 active 载荷，失败只留孤儿。
           final wrote = await _writeIndex(prefs, updated);
+          if (wrote) {
+            for (final entry in index.entries) {
+              if (entry.id != activeId) {
+                await _deleteBatchKey(prefs, entry.id);
+              }
+            }
+          }
           return (ok: wrote, index: wrote ? updated : index);
         } catch (_) {
           return (ok: false, index: AiDjHistoryIndex.empty);
@@ -446,18 +455,38 @@ class AiRecommendationStore {
     }
   }
 
-  Future<AiDjHistoryIndex> _trim(
-    SharedPreferences prefs,
+  /// 只计算保留后的索引与被裁掉的批次，不碰存储。
+  ///
+  /// 写序由调用方保证「先写索引、后删载荷」：索引写失败时不能先失去载荷。
+  ({AiDjHistoryIndex index, List<AiDjHistoryEntry> removed}) _trim(
     AiDjHistoryIndex index,
-  ) async {
+  ) {
     final result = trimAiDjHistory(
       index.entries,
       activeBatchId: index.activeBatchId,
       now: _clock(),
     );
-    for (final entry in result.removed) {
-      await prefs.remove('$batchKeyPrefix${entry.id}');
+    return (
+      index: index.copyWith(entries: result.kept),
+      removed: result.removed,
+    );
+  }
+
+  Future<void> _deleteBatchKeys(
+    SharedPreferences prefs,
+    Iterable<AiDjHistoryEntry> entries,
+  ) async {
+    for (final entry in entries) {
+      await _deleteBatchKey(prefs, entry.id);
     }
-    return index.copyWith(entries: result.kept);
+  }
+
+  /// 删载荷失败只留下孤儿（索引已经写好），不能反过来把成功写成失败。
+  Future<void> _deleteBatchKey(SharedPreferences prefs, String id) async {
+    try {
+      await prefs.remove('$batchKeyPrefix$id');
+    } catch (_) {
+      // 孤儿载荷无害，下次保存 / 清理会再尝试。
+    }
   }
 }

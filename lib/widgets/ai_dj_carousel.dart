@@ -30,6 +30,7 @@ import '../domain/models/ai_dj.dart';
 import '../l10n/app_localizations.dart';
 import '../pages/ai_dj_page.dart';
 import '../providers/ai_dj_provider.dart';
+import '../services/ai/ai_generation_executor.dart';
 import '../utils/responsive.dart';
 import 'ai_dj_shared.dart';
 import 'ai_dj_waiting.dart';
@@ -121,16 +122,19 @@ class _AiDjCarouselState extends State<AiDjCarousel> {
                           style: Theme.of(context).textTheme.titleSmall,
                         ),
                         const SizedBox(height: 2),
-                        Text(
-                          _subtitleText(l10n, provider),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style:
-                              Theme.of(context).textTheme.bodySmall?.copyWith(
-                                    color: Theme.of(context)
-                                        .colorScheme
-                                        .onSurfaceVariant,
-                                  ),
+                        ValueListenableBuilder<AiGenerationState>(
+                          valueListenable: provider.generationState,
+                          builder: (context, _, __) => Text(
+                            _subtitleText(l10n, provider),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style:
+                                Theme.of(context).textTheme.bodySmall?.copyWith(
+                                      color: Theme.of(context)
+                                          .colorScheme
+                                          .onSurfaceVariant,
+                                    ),
+                          ),
                         ),
                       ],
                     ),
@@ -144,15 +148,25 @@ class _AiDjCarouselState extends State<AiDjCarousel> {
               ),
             ),
             const SizedBox(height: 8),
-            if (provider.progress != null && hasCards) ...[
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 16),
-                child: AiDjThinProgress(
-                  value: provider.progress!.fraction,
-                ),
-              ),
-              const SizedBox(height: 6),
-            ],
+            // 细进度条只订阅生成状态：进度分片不再重建卡片流。
+            ValueListenableBuilder<AiGenerationState>(
+              valueListenable: provider.generationState,
+              builder: (context, generation, _) {
+                final progress = generation.progress;
+                if (progress == null || !hasCards) {
+                  return const SizedBox.shrink();
+                }
+                return Column(
+                  children: [
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 16),
+                      child: AiDjThinProgress(value: progress.fraction),
+                    ),
+                    const SizedBox(height: 6),
+                  ],
+                );
+              },
+            ),
             _body(context, l10n, provider),
             if (hasCards) _reasonPanel(context, list),
             const SizedBox(height: 8),

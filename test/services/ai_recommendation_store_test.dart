@@ -6,6 +6,79 @@ import 'package:molia/services/ai/ai_recommendation_store.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 /// 推荐历史持久化：迁移、索引 / 多批、删除回退、保留策略、损坏降级。
+/// 只让索引写入失败的内存 SharedPreferences：验证「先写索引、后删载荷」。
+class _FailingIndexPrefs implements SharedPreferences {
+  _FailingIndexPrefs(this.values);
+
+  final Map<String, Object> values;
+  bool failIndexWrites = true;
+
+  Future<bool> _set(String key, Object value) async {
+    if (failIndexWrites && key == AiRecommendationStore.indexKey) return false;
+    values[key] = value;
+    return true;
+  }
+
+  @override
+  Set<String> getKeys() => Set.of(values.keys);
+
+  @override
+  Object? get(String key) => values[key];
+
+  @override
+  bool? getBool(String key) => values[key] as bool?;
+
+  @override
+  int? getInt(String key) => values[key] as int?;
+
+  @override
+  double? getDouble(String key) => values[key] as double?;
+
+  @override
+  String? getString(String key) => values[key] as String?;
+
+  @override
+  bool containsKey(String key) => values.containsKey(key);
+
+  @override
+  List<String>? getStringList(String key) =>
+      (values[key] as List<dynamic>?)?.cast<String>();
+
+  @override
+  Future<bool> setBool(String key, bool value) => _set(key, value);
+
+  @override
+  Future<bool> setInt(String key, int value) => _set(key, value);
+
+  @override
+  Future<bool> setDouble(String key, double value) => _set(key, value);
+
+  @override
+  Future<bool> setString(String key, String value) => _set(key, value);
+
+  @override
+  Future<bool> setStringList(String key, List<String> value) =>
+      _set(key, value);
+
+  @override
+  Future<bool> remove(String key) async {
+    values.remove(key);
+    return true;
+  }
+
+  @override
+  Future<bool> commit() async => true;
+
+  @override
+  Future<bool> clear() async {
+    values.clear();
+    return true;
+  }
+
+  @override
+  Future<void> reload() async {}
+}
+
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
@@ -156,6 +229,68 @@ void main() {
     expect(empty.ok, isTrue);
     expect(empty.index.activeBatchId, isNull);
     expect(empty.index.entries, isEmpty);
+  });
+
+  test('删除批次的写序：索引写失败时保留载荷，成功后才删', () async {
+    await store.saveBatch(batch('a'), makeActive: true);
+    await store.saveBatch(
+      batch('b', generatedAt: now.add(const Duration(minutes: 1))),
+      makeActive: true,
+    );
+    final values = <String, Object>{
+      for (final key in prefs.getKeys()) key: prefs.get(key)!,
+    };
+    final failing = _FailingIndexPrefs(values);
+    final failingStore =
+        AiRecommendationStore(preferences: failing, clock: () => now);
+
+    final failed = await failingStore.deleteBatch('a');
+
+    expect(failed.ok, isFalse);
+    expect(
+      failingStore.loadBatch('a'),
+      isNotNull,
+      reason: '索引没写成功，批次载荷不能先被删掉',
+    );
+    expect(
+      (await failingStore.loadIndex()).entries.map((entry) => entry.id),
+      containsAll(['a', 'b']),
+    );
+
+    failing.failIndexWrites = false;
+    final ok = await failingStore.deleteBatch('a');
+
+    expect(ok.ok, isTrue);
+    expect(values['${AiRecommendationStore.batchKeyPrefix}a'], isNull);
+  });
+
+  test('清空历史的写序：索引写失败时保留非 active 载荷', () async {
+    await store.saveBatch(batch('a'), makeActive: true);
+    await store.saveBatch(
+      batch('b', generatedAt: now.add(const Duration(minutes: 1))),
+    );
+    final values = <String, Object>{
+      for (final key in prefs.getKeys()) key: prefs.get(key)!,
+    };
+    final failing = _FailingIndexPrefs(values);
+    final failingStore =
+        AiRecommendationStore(preferences: failing, clock: () => now);
+
+    final failed = await failingStore.clearHistory();
+
+    expect(failed.ok, isFalse);
+    expect(
+      failingStore.loadBatch('b'),
+      isNotNull,
+      reason: '索引没写成功，非 active 载荷不能先被删掉',
+    );
+
+    failing.failIndexWrites = false;
+    final ok = await failingStore.clearHistory();
+
+    expect(ok.ok, isTrue);
+    expect(values['${AiRecommendationStore.batchKeyPrefix}b'], isNull);
+    expect(values['${AiRecommendationStore.batchKeyPrefix}a'], isNotNull);
   });
 
   test('清空历史保留 active 与其批次键', () async {
