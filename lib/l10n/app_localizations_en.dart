@@ -1979,7 +1979,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String aiDjQueued(int count) {
-    return '$count added to the queue this time';
+    return '$count recommendations left in the queue';
   }
 
   @override
