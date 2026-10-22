@@ -138,20 +138,27 @@ class IoPairingHttpClient implements PairingHttpClient {
         request.add(body);
       }
       final response = await request.close().timeout(timeout);
-      final builder = BytesBuilder(copy: false);
-      await for (final chunk in response) {
-        builder.add(chunk);
-        if (builder.length > maxResponseBytes) {
-          throw const FormatException('配对响应过大');
-        }
-      }
+      // 整个响应体的读取共享同一份请求预算：对端只发头部 / 慢慢吐字节都
+      // 不能让调用方挂过超时。超时后 finally 的 force close 会拆掉连接。
+      final payload = await _readBody(response).timeout(timeout);
       return PairingHttpReply(
         statusCode: response.statusCode,
-        body: utf8.decode(builder.toBytes(), allowMalformed: true),
+        body: utf8.decode(payload, allowMalformed: true),
       );
     } finally {
       client.close(force: true);
     }
+  }
+
+  Future<Uint8List> _readBody(HttpClientResponse response) async {
+    final builder = BytesBuilder(copy: false);
+    await for (final chunk in response) {
+      builder.add(chunk);
+      if (builder.length > maxResponseBytes) {
+        throw const FormatException('配对响应过大');
+      }
+    }
+    return builder.toBytes();
   }
 
   @override

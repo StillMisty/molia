@@ -66,6 +66,15 @@ class SyncControlPlane extends ChangeNotifier {
   int transportLastSuccessAt(String kind) =>
       _state.transportLastSuccessAt(kind);
 
+  /// 本机是否已有同步组：名册非空，或任一路传输真正成功接触过对端。
+  ///
+  /// 这是配对服务、`SyncProvider.hasGroup` 与组合根共用的**唯一**判据。
+  /// 只有自动生成、从未同步过的口令不算组——否则首次配对被误判成双方不同组。
+  bool get hasEstablishedGroup =>
+      peers.isNotEmpty ||
+      transportLastSuccessAt(SyncTransportKind.lan) > 0 ||
+      transportLastSuccessAt(SyncTransportKind.webdav) > 0;
+
   /// 局域网传输本机实际绑定的 UDP 探测端口（分族；0 = 该族未运行 /
   /// 不可用）。命名映射：传输层是 `SyncTransport.discoveryPorts`（传输不限
   /// 局域网），控制面 / UI 层带 `lan` 前缀限定。

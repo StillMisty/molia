@@ -113,18 +113,18 @@ class SyncProvider extends ChangeNotifier {
   /// 是否正在主动扫描附近设备。
   bool get scanningNearby => _pairing?.scanning ?? false;
 
-  /// 本机是否已有同步组。
-  ///
-  /// 判据与配对服务一致：名册里有设备，或任一路传输曾经成功接触过对端。
-  /// 只有自动生成、从未同步过的口令不算「已有同步组」——否则首次配对会被
-  /// 误判成双方不同组。
-  bool get hasGroup =>
-      _controlPlane.peers.isNotEmpty ||
-      transportLastSuccessAt(SyncTransportKind.lan) > 0 ||
-      transportLastSuccessAt(SyncTransportKind.webdav) > 0;
+  /// 本机是否已有同步组（判据统一定义在 [SyncControlPlane.hasEstablishedGroup]）。
+  bool get hasGroup => _controlPlane.hasEstablishedGroup;
 
   /// 开始扫描附近设备（同步页打开时调用；后台 / 蜂窝下返回 false）。
   Future<bool> startNearbyScan() async => await _pairing?.startScan() ?? false;
+
+  /// 向手动地址单播 MSP 探测（发现失败时的兜底；未注入配对端口返回 false）。
+  Future<bool> probeAddress(String host, {int probePort = 0}) async {
+    final pairing = _pairing;
+    if (pairing == null) return false;
+    return pairing.probeAddress(host, probePort: probePort);
+  }
 
   /// 停止扫描并清空附近候选（同步页关闭时调用）。
   void stopNearbyScan() => _pairing?.stopScan();

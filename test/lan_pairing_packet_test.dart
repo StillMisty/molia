@@ -34,7 +34,7 @@ void main() {
       expect(utf8.decode(packet.sublist(0, 3)), 'MSP');
       expect(packet[3], Msp1.version);
       expect(packet[4], type);
-      expect(packet[5], 0, reason: 'reserved 字节');
+      expect(Msp1.headerLength, 7, reason: 'magic/version/type/bodyLen，无保留字节');
       final bodyLength = (packet[Msp1.bodyLengthOffset] << 8) |
           packet[Msp1.bodyLengthOffset + 1];
       expect(bodyLength, packet.length - Msp1.headerLength);
@@ -71,10 +71,6 @@ void main() {
     final unknownType = Uint8List.fromList(packet);
     unknownType[4] = 3;
     expect(Msp1.decode(unknownType), isNull);
-
-    final badReserved = Uint8List.fromList(packet);
-    badReserved[5] = 1;
-    expect(Msp1.decode(badReserved), isNull);
 
     final badLength = Uint8List.fromList(packet);
     badLength[Msp1.bodyLengthOffset] = 0x7f;
@@ -196,6 +192,63 @@ void main() {
     expect(candidates, hasLength(PairingCandidateCache().maxCandidates));
   });
 
+  test('候选地址只保留可路由 IP：回环 / link-local / zone / 域名全部丢弃', () {
+    final cache = PairingCandidateCache();
+    cache.upsert(
+      message: message(
+        addresses: [
+          '127.0.0.1',
+          '::1',
+          'fe80::1',
+          'fe80::1%eth0',
+          'molia.local',
+          '[192.168.1.7]',
+          '192.168.1.7',
+        ],
+      ),
+      sourceHost: '10.0.0.9',
+      sourcePort: 47825,
+      nowMs: 1000,
+    );
+    final device = cache.current(1000).single;
+    expect(device.host, '10.0.0.9', reason: 'UDP 来源地址不参与过滤');
+    expect(device.addresses, ['192.168.1.7'], reason: '归一后去重');
+  });
+
+  test('候选变化检测包含 bootId：对端重启即使地址不变也推送', () {
+    final cache = PairingCandidateCache();
+    expect(
+      cache.upsert(
+        message: message(),
+        sourceHost: '192.168.1.10',
+        sourcePort: 47825,
+        nowMs: 1000,
+      ),
+      isTrue,
+    );
+    final restarted = Msp1Message(
+      type: Msp1.typeAnnounce,
+      deviceId: 'devA',
+      name: '设备A',
+      httpPort: 43210,
+      probePort: 47825,
+      addresses: const ['192.168.1.7'],
+      hasGroup: true,
+      bootId: 'boot-2',
+      nonce: 'nonce-2',
+    );
+    expect(
+      cache.upsert(
+        message: restarted,
+        sourceHost: '192.168.1.10',
+        sourcePort: 47825,
+        nowMs: 2000,
+      ),
+      isTrue,
+    );
+    expect(cache.current(2000).single.bootId, 'boot-2');
+  });
+
   test('MSP 走独立通道：不写 presence / sightings，且不需要 discovery key', () async {
     const udpPort = 48041;
     var keyDerivations = 0;
@@ -241,7 +294,6 @@ Uint8List _packet(int type, List<int> body) {
     ..add(ascii.encode('MSP'))
     ..addByte(1)
     ..addByte(type)
-    ..addByte(0)
     ..addByte((body.length >> 8) & 0xff)
     ..addByte(body.length & 0xff)
     ..add(body);

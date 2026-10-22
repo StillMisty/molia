@@ -26,6 +26,12 @@ abstract interface class SyncPairingPort {
   /// 开始扫描（同步页打开时调用）。后台 / 蜂窝 / 传输停止时返回 false。
   Future<bool> startScan();
 
+  /// 向指定地址单播一条 MSP 探测（手动地址兜底）。
+  ///
+  /// [probePort] 为 0 时使用 `ManualPeer.defaultProbePort`；地址 / 端口非法、
+  /// 后台 / 蜂窝策略拒绝或发送失败都返回 false。
+  Future<bool> probeAddress(String host, {int probePort = 0});
+
   /// 停止扫描并清空附近候选（同步页关闭时调用）。
   void stopScan();
 

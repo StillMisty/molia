@@ -1102,7 +1102,8 @@ class LanSyncTransport
 
   /// `/molia-sync/v2/pair/*`：交给配对服务，body 上限 8KB（远小于同步载荷）。
   ///
-  /// 配对服务未注入 / 已停止时返回 404：旧路径与未启用能力都不做兼容分支。
+  /// 配对服务未注入时返回 404（没有可处理的能力）；服务已停止但仍被调用时
+  /// 由服务自己返回 200 + `unavailable`，与「前台 / 策略不可用」同一口径。
   Future<void> _handlePairingHttp(HttpRequest request) async {
     final handler = _pairing;
     if (handler == null) {

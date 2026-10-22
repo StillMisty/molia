@@ -242,12 +242,9 @@ Future<SyncStack> buildSyncStack({
     readPassphrase: syncControlPlane.readPassphrase,
     writePassphrase: syncControlPlane.setPassphrase,
     ensurePassphrase: syncControlPlane.ensurePassphrase,
-    // 「已有同步组」= 名册非空或任一路传输真正接触成功过。只有自动生成、
-    // 从未同步过的口令不算组，否则首次配对被误判成双方不同组。
-    hasGroup: () =>
-        syncState.peers.isNotEmpty ||
-        syncState.transportLastSuccessAt(SyncTransportKind.lan) > 0 ||
-        syncState.transportLastSuccessAt(SyncTransportKind.webdav) > 0,
+    // 「已有同步组」判据只在控制面定义一份（名册非空或任一路传输真正
+    // 接触成功过）；只有自动生成、从未同步过的口令不算组。
+    hasGroup: () => syncControlPlane.hasEstablishedGroup,
     canPrompt: () =>
         (isForeground?.call() ?? true) && !scheduler.powerSaveActive,
     isCellular: () => dataSaver.onCellular,

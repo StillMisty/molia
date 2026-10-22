@@ -30,6 +30,7 @@ import 'package:logging/logging.dart';
 import '../../../domain/models/device_sync.dart';
 import '../../../domain/models/sync_nearby_pairing.dart';
 import '../../../domain/ports/sync_pairing.dart';
+import '../../../utils/peer_address.dart';
 import '../sync_passphrase.dart';
 import '../transport/lan_pairing_packet.dart';
 import 'pairing_crypto.dart';
@@ -64,7 +65,7 @@ class LanPairingService implements SyncPairingPort, PairingHttpHandler {
     int Function()? nowMs,
     Logger? logger,
     this.requestTtl = const Duration(seconds: 60),
-    this.statusPollInterval = const Duration(milliseconds: 250),
+    this.statusPollInterval = const Duration(milliseconds: 500),
     this.httpTimeout = const Duration(seconds: 4),
     this.sweepInterval = const Duration(seconds: 1),
     this.scanProbeDelaysMs = const [100, 500, 1500],
@@ -72,6 +73,8 @@ class LanPairingService implements SyncPairingPort, PairingHttpHandler {
     this.maxRequests = 64,
     this.requestRateLimit = 10,
     this.requestRateWindow = const Duration(seconds: 10),
+    this.statusRateLimit = 240,
+    this.statusRateWindow = const Duration(seconds: 10),
   })  : _deviceName = deviceName,
         _readPassphrase = readPassphrase,
         _writePassphrase = writePassphrase,
@@ -93,6 +96,13 @@ class LanPairingService implements SyncPairingPort, PairingHttpHandler {
       perSourceLimit: requestRateLimit,
       globalLimit: requestRateLimit * 8,
       window: requestRateWindow,
+    );
+    // 状态轮询是发起方的正常读取（500ms 一次），不能和「新建请求」共用
+    // 10/10s 的限流；单独给一份宽松得多的预算，仍按来源隔离。
+    _statusRateLimiter = MspRateLimiter(
+      perSourceLimit: statusRateLimit,
+      globalLimit: statusRateLimit * 8,
+      window: statusRateWindow,
     );
   }
 
@@ -124,8 +134,11 @@ class LanPairingService implements SyncPairingPort, PairingHttpHandler {
   final int maxRequests;
   final int requestRateLimit;
   final Duration requestRateWindow;
+  final int statusRateLimit;
+  final Duration statusRateWindow;
 
   late final MspRateLimiter _rateLimiter;
+  late final MspRateLimiter _statusRateLimiter;
   final PairingCandidateCache _candidates = PairingCandidateCache();
 
   final StreamController<List<SyncNearbyDevice>> _nearby =
@@ -144,8 +157,22 @@ class LanPairingService implements SyncPairingPort, PairingHttpHandler {
 
   bool _running = false;
   bool _scanning = false;
+  bool _hidden = false;
   String? _activePromptId;
   bool _disposed = false;
+
+  /// 仅测试：sweep 定时器是否仍在跑（后台必须为 false）。
+  bool get debugSweepScheduled => _sweepTimer?.isActive ?? false;
+
+  /// 仅测试：当前仍持有密封载荷的请求数（验证过期 / 裁剪会释放）。
+  int get debugSealedPayloadCount =>
+      _requests.values.where((entry) => entry.sealed != null).length;
+
+  /// 仅测试：请求表当前条数。
+  int get debugRequestCount => _requests.length;
+
+  /// 仅测试：直接触发请求表裁剪（不先跑过期清理）。
+  void debugTrimRequests(int nowMs) => _trimRequests(nowMs);
 
   @override
   Stream<List<SyncNearbyDevice>> get nearbyDevices => _nearby.stream;
@@ -166,10 +193,16 @@ class LanPairingService implements SyncPairingPort, PairingHttpHandler {
   Future<void> start() async {
     if (_disposed || _running) return;
     _running = true;
+    _hidden = false;
     _packetSub = _packets?.listen(
       _onPacket,
       onError: (Object _) {},
     );
+    _startSweepTimer();
+  }
+
+  void _startSweepTimer() {
+    _sweepTimer?.cancel();
     _sweepTimer = Timer.periodic(sweepInterval, (_) => _sweep());
   }
 
@@ -178,6 +211,7 @@ class LanPairingService implements SyncPairingPort, PairingHttpHandler {
     if (!_running && _packetSub == null) return;
     _running = false;
     _scanning = false;
+    _hidden = false;
     _cancelScanTimers();
     _sweepTimer?.cancel();
     _sweepTimer = null;
@@ -208,7 +242,8 @@ class LanPairingService implements SyncPairingPort, PairingHttpHandler {
     await _attempts.close();
   }
 
-  bool get _canUsePairing => _running && _canPrompt() && !_isCellular();
+  bool get _canUsePairing =>
+      _running && !_hidden && _canPrompt() && !_isCellular();
 
   bool _ownHasGroup() {
     try {
@@ -250,8 +285,38 @@ class LanPairingService implements SyncPairingPort, PairingHttpHandler {
   }
 
   @override
+  Future<bool> probeAddress(String host, {int probePort = 0}) async {
+    if (!_canUsePairing) return false;
+    final normalized = normalizePeerHost(host);
+    if (!isValidPeerHost(normalized)) return false;
+    final port = probePort == 0 ? ManualPeer.defaultProbePort : probePort;
+    if (!isValidPeerPort(port)) return false;
+    final packet = await _buildProbePacket();
+    if (packet == null) return false;
+    // 手动地址是发现失败时的兜底：打开扫描状态，让随后单播回来的 announce
+    // 能进入候选表（否则 _onPacket 会按「未扫描」丢弃）。
+    if (!_scanning) {
+      _scanning = true;
+      _emitNearby();
+    }
+    try {
+      final sent =
+          await _sendPacket?.call(packet, host: normalized, port: port);
+      return sent ?? false;
+    } catch (e) {
+      _logger.fine('单播配对探测失败', e);
+      return false;
+    }
+  }
+
+  @override
   void onAppHidden() {
+    _hidden = true;
     _cancelScanTimers();
+    // 后台没有候选更新需求：停掉周期 sweep（省电，也避免隐藏期间刷新
+    // 候选 / 清 pending）；回前台时按 _running 重新挂上。
+    _sweepTimer?.cancel();
+    _sweepTimer = null;
     _candidates.clear();
     _emitNearby();
     // 后台不展示 / 不接受待确认请求：直接按过期处理，回前台后重新探测。
@@ -267,6 +332,9 @@ class LanPairingService implements SyncPairingPort, PairingHttpHandler {
 
   @override
   void onAppResumed() {
+    _hidden = false;
+    if (!_running) return;
+    if (!debugSweepScheduled) _startSweepTimer();
     if (!_scanning || !_canUsePairing) return;
     unawaited(_resendProbe());
   }
@@ -324,7 +392,8 @@ class LanPairingService implements SyncPairingPort, PairingHttpHandler {
       }
       return;
     }
-    if (!message.isAnnounce || !_scanning) return;
+    // 后台 / 蜂窝下不应答，也不刷新候选：候选只服务前台配对入口。
+    if (!message.isAnnounce || !_scanning || !_canUsePairing) return;
     final changed = _candidates.upsert(
       message: message,
       sourceHost: datagram.sourceHost,
@@ -379,10 +448,12 @@ class LanPairingService implements SyncPairingPort, PairingHttpHandler {
   }
 
   void _cancelScanTimers() {
-    for (final timer in _scanTimers) {
-      timer.cancel();
-    }
-    _scanTimers.clear();
+    // 用 Timer.isActive 一并清掉已经触发的死条目 + 取消仍在等待的条目；
+    // 新扫描开始时调用，列表不会跨扫描累积。
+    _scanTimers.removeWhere((timer) {
+      if (timer.isActive) timer.cancel();
+      return true;
+    });
   }
 
   // ---- 发起方 ----
@@ -523,6 +594,14 @@ class LanPairingService implements SyncPairingPort, PairingHttpHandler {
       return null;
     }
     if (protocolStatus == SyncPairingStatus.accepted) {
+      // 第一次 POST 就回 accepted = 对端跳过了待确认阶段。没有先拿到接收方
+      // 公钥 / nonce（也就没有给用户看过 6 位确认码）时绝不接受，否则恶意
+      // 接收方可以无提示地把口令塞给发起方。
+      if (outgoing.code.isEmpty ||
+          outgoing.receiverPublicKey == null ||
+          outgoing.receiverNonce == null) {
+        return _finish(outgoing, SyncPairingStatus.unavailable);
+      }
       return _applyAccepted(outgoing, map);
     }
     if (protocolStatus == SyncPairingStatus.sameGroup) {
@@ -533,6 +612,7 @@ class LanPairingService implements SyncPairingPort, PairingHttpHandler {
   }
 
   Future<SyncPairingResult> _pollStatus(_OutgoingPairing outgoing) async {
+    var transportErrors = 0;
     while (!outgoing.cancelled) {
       final now = _nowMs();
       if (now >= outgoing.expiresAt) {
@@ -551,9 +631,19 @@ class LanPairingService implements SyncPairingPort, PairingHttpHandler {
           timeout: httpTimeout,
         );
       } catch (_) {
-        // 短暂网络抖动继续轮询；到 TTL 仍未拿到状态再判不可达。
+        // 连续失败说明对端不可达：不要陪跑到 60s，尽早给用户结论。
+        transportErrors++;
+        if (transportErrors >= 3) {
+          return _finish(
+            outgoing,
+            SyncPairingStatus.unavailable,
+            outcome: SyncPairingOutcome.unreachable,
+          );
+        }
         continue;
       }
+      // 拿到合法 HTTP 响应就重置抖动计数（busy / 404 等仍按状态处理）。
+      transportErrors = 0;
       final status = _statusFromHttp(reply);
       if (status != null) {
         if (status == SyncPairingStatus.busy) continue;
@@ -587,10 +677,15 @@ class LanPairingService implements SyncPairingPort, PairingHttpHandler {
     _OutgoingPairing outgoing,
     Map<String, Object?> map,
   ) async {
-    final receiverPublicKey =
-        outgoing.receiverPublicKey ?? _decodeTokenField(map, 'publicKey');
-    final receiverNonce =
-        outgoing.receiverNonce ?? _decodeTokenField(map, 'nonce');
+    // 只认 pending 阶段已经展示过确认码的材料；accepted 响应不能再补一份
+    // 公钥 / nonce 当兜底（否则可绕过确认码阶段）。
+    final receiverPublicKey = outgoing.receiverPublicKey;
+    final receiverNonce = outgoing.receiverNonce;
+    if (outgoing.code.isEmpty ||
+        receiverPublicKey == null ||
+        receiverNonce == null) {
+      return _finish(outgoing, SyncPairingStatus.unavailable);
+    }
     final key = PairingCrypto.deriveSessionKey(
       privateKey: outgoing.keyPair.privateKey,
       peerPublicKey: receiverPublicKey,
@@ -649,8 +744,25 @@ class LanPairingService implements SyncPairingPort, PairingHttpHandler {
           outcome: SyncPairingOutcome.unreachable,
         );
       }
+      // 200 不等于成功：必须解析 JSON，只有 status=accepted 才算口令已写入。
+      final map = _decodeReplyMap(reply);
+      final completeStatus = SyncPairingStatus.parse(
+        map['status'] is String ? map['status'] as String : null,
+      );
+      if (completeStatus != SyncPairingStatus.accepted) {
+        return _finish(
+          outgoing,
+          completeStatus == SyncPairingStatus.rejected ||
+                  completeStatus == SyncPairingStatus.conflict
+              ? completeStatus
+              : SyncPairingStatus.unavailable,
+        );
+      }
       await _rememberOutgoingEndpoint(outgoing);
       return _finish(outgoing, SyncPairingStatus.accepted);
+    } on _BadPairingRequest {
+      // 200 但 body 结构不对：对端有问题，不是网络不可达。
+      return _finish(outgoing, SyncPairingStatus.unavailable);
     } catch (_) {
       return _finish(
         outgoing,
@@ -888,10 +1000,17 @@ class LanPairingService implements SyncPairingPort, PairingHttpHandler {
     if (request.method != 'GET') {
       return const PairingHttpResponse(statusCode: 405, body: '');
     }
-    final requestId = request.query['id'];
-    if (requestId == null || requestId.isEmpty) {
-      throw const _BadPairingRequest('缺少 requestId');
+    if (!_statusRateLimiter.allow(request.sourceHost, _nowMs())) {
+      return PairingHttpResponse.json(
+        {'v': 1, 'status': SyncPairingStatus.busy.name},
+        statusCode: 429,
+      );
     }
+    final rawId = request.query['id'];
+    if (rawId == null) throw const _BadPairingRequest('缺少 requestId');
+    // 与 request / complete 的 requestId 同一套 token 规则：不允许空串、
+    // 超长或带路径符号的查询值穿透到表查找。
+    final requestId = _validateId(rawId);
     final entry = _requests[requestId];
     if (entry == null) {
       return PairingHttpResponse.json({
@@ -1017,19 +1136,23 @@ class LanPairingService implements SyncPairingPort, PairingHttpHandler {
             receiverDeviceId: deviceId,
           ),
         );
+        // 密封载荷只给发起方留一个 TTL 的读取窗口；过期后必须清掉，
+        // 不能靠原请求的 pending TTL（接受可能发生在 59s）。
+        entry.sealedExpiresAt = _nowMs() + requestTtl.inMilliseconds;
         entry.status = SyncPairingStatus.accepted;
         // sealed 要留给发起方轮询读取；只释放临时私钥。
         entry.clearKeyPair();
+        await _rememberEndpointFromRequest(
+          peerDeviceId: entry.peerDeviceId,
+          peerHost: entry.peerHost,
+          peerHttpPort: entry.peerHttpPort,
+          peerProbePort: entry.peerProbePort,
+        );
       } else {
         // invite：等发起方 POST complete；临时私钥保留到收完 / 过期。
+        // 端点要等 complete 真正写入口令后再保存，用户点「接受」不算完成。
         entry.status = SyncPairingStatus.accepted;
       }
-      await _rememberEndpointFromRequest(
-        peerDeviceId: entry.peerDeviceId,
-        peerHost: entry.peerHost,
-        peerHttpPort: entry.peerHttpPort,
-        peerProbePort: entry.peerProbePort,
-      );
       _afterPromptResolved(entry);
       return SyncPairingOutcome.accepted;
     } on PairingCryptoException {
@@ -1138,11 +1261,20 @@ class LanPairingService implements SyncPairingPort, PairingHttpHandler {
   }
 
   void _expireIfNeeded(_IncomingPairing entry, int nowMs) {
-    if (nowMs < entry.expiresAt) return;
-    if (entry.status == SyncPairingStatus.pending ||
-        (entry.status == SyncPairingStatus.accepted &&
-            entry.intent == SyncPairingIntent.invite &&
-            !entry.completed)) {
+    if (entry.status == SyncPairingStatus.pending) {
+      if (nowMs >= entry.expiresAt) _expireEntry(entry);
+      return;
+    }
+    if (entry.status != SyncPairingStatus.accepted) return;
+    // invite：接受后等 complete，仍受原请求 TTL 约束。
+    if (entry.intent == SyncPairingIntent.invite) {
+      if (!entry.completed && nowMs >= entry.expiresAt) _expireEntry(entry);
+      return;
+    }
+    // join：接受后密封载荷有自己的 TTL（接受时间 + requestTtl），过期即
+    // 清掉，status 不能再吐旧 sealed。
+    final sealedExpiresAt = entry.sealedExpiresAt;
+    if (sealedExpiresAt != null && nowMs >= sealedExpiresAt) {
       _expireEntry(entry);
     }
   }
@@ -1186,7 +1318,8 @@ class LanPairingService implements SyncPairingPort, PairingHttpHandler {
     }
     for (final id in removable) {
       if (_requests.length <= maxRequests) break;
-      _requests.remove(id);
+      // 裁剪同样要释放密封载荷 / 临时私钥：不能只把索引从表里摘掉。
+      _requests.remove(id)?.clearSecrets();
     }
   }
 
@@ -1366,12 +1499,17 @@ class LanPairingService implements SyncPairingPort, PairingHttpHandler {
     return raw.cast<String, Object?>();
   }
 
-  String _readId(Map<String, Object?> map, String key) {
-    final value = _readString(map, key, maxLength: 128);
-    if (value.length < 8 || !RegExp(r'^[A-Za-z0-9_-]+$').hasMatch(value)) {
+  String _readId(Map<String, Object?> map, String key) =>
+      _validateId(_readString(map, key, maxLength: 128));
+
+  String _validateId(String value) {
+    final id = value.trim();
+    if (id.length < 8 ||
+        id.length > 128 ||
+        !RegExp(r'^[A-Za-z0-9_-]+$').hasMatch(id)) {
       throw const _BadPairingRequest('requestId 无效');
     }
-    return value;
+    return id;
   }
 
   String _readString(
@@ -1417,8 +1555,15 @@ class LanPairingService implements SyncPairingPort, PairingHttpHandler {
 
   Iterable<String> _hostsOf(SyncNearbyDevice device) sync* {
     final seen = <String>{};
-    for (final raw in [device.host, ...device.addresses]) {
-      final host = raw.trim();
+    // UDP 来源地址是真实观测值：即使回环 / link-local 也先试（同机回环
+    // 测试与直连场景依赖它）。自报的 addrs 没有认证，只接受可路由 IP。
+    final source = device.host.trim();
+    if (source.isNotEmpty && seen.add(source)) {
+      yield source;
+    }
+    for (final raw in device.addresses) {
+      if (!isRoutablePeerAddress(raw)) continue;
+      final host = normalizePeerHost(raw);
       if (host.isEmpty || !seen.add(host)) continue;
       yield host;
       if (seen.length >= 4) return;
@@ -1479,6 +1624,9 @@ class _IncomingPairing {
   SyncPairingStatus status = SyncPairingStatus.pending;
   String code = '';
   Uint8List? sealed;
+
+  /// join 接受后密封载荷的读取截止时间（仅 accepted + join 有意义）。
+  int? sealedExpiresAt;
   bool prompted = false;
   bool completed = false;
 

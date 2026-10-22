@@ -1,7 +1,7 @@
 /// `MSP/1` 局域网配对发现报文：编解码、独立限流与候选缓存。
 ///
 /// 报文布局：
-/// `magic(3,'MSP') | version(1,=1) | type(1) | reserved(1) | bodyLen(2 BE) | body`。
+/// `magic(3,'MSP') | version(1,=1) | type(1) | bodyLen(2 BE) | body`。
 /// `type`：1 = probe，2 = announce。`body` 是 UTF-8 JSON（≤512B）。
 ///
 /// 与 `MSD/1` 刻意分开：MSP **没有 MAC**，只用于「附近有谁」的候选发现。
@@ -13,6 +13,7 @@ import 'dart:convert';
 import 'dart:typed_data';
 
 import '../../../domain/models/sync_nearby_pairing.dart';
+import '../../../utils/peer_address.dart';
 
 /// `MSP/1` 线上格式与编解码。
 abstract final class Msp1 {
@@ -22,9 +23,9 @@ abstract final class Msp1 {
   static const int typeProbe = 1;
   static const int typeAnnounce = 2;
 
-  /// magic(3) + version(1) + type(1) + reserved(1) + bodyLen(2)。
-  static const int headerLength = 8;
-  static const int bodyLengthOffset = 6;
+  /// magic(3) + version(1) + type(1) + bodyLen(2)。
+  static const int headerLength = 7;
+  static const int bodyLengthOffset = 5;
 
   static const int maxBodyLength = 512;
   static const int maxNameRunes = 64;
@@ -39,7 +40,6 @@ abstract final class Msp1 {
       ..add(ascii.encode(magic))
       ..addByte(version)
       ..addByte(message.type)
-      ..addByte(0)
       ..addByte((body.length >> 8) & 0xff)
       ..addByte(body.length & 0xff)
       ..add(body);
@@ -61,8 +61,6 @@ abstract final class Msp1 {
     if (packet[magic.length] != version) return null;
     final type = packet[magic.length + 1];
     if (type != typeProbe && type != typeAnnounce) return null;
-    // v1 的 reserved 必须为 0：未知标志位按未知协议丢弃，不做前向兼容。
-    if (packet[magic.length + 2] != 0) return null;
     final bodyLength =
         (packet[bodyLengthOffset] << 8) | packet[bodyLengthOffset + 1];
     if (bodyLength > maxBodyLength) return null;
@@ -299,7 +297,9 @@ class PairingCandidateCache {
         host: sourceHost,
         httpPort: message.httpPort,
         probePort: message.probePort > 0 ? message.probePort : sourcePort,
-        addresses: List.unmodifiable(message.addresses),
+        // `addrs` 没有 MAC / 签名：只接受可路由 IP 字面量，回环、link-local
+        //（含 zone）与域名都不进入候选。UDP 来源地址是真实观测值，另行保留。
+        addresses: List.unmodifiable(_routableAddresses(message.addresses)),
         hasGroup: message.hasGroup,
         bootId: message.bootId,
         lastSeenAt: nowMs,
@@ -316,7 +316,21 @@ class PairingCandidateCache {
         before.httpPort != after.httpPort ||
         before.probePort != after.probePort ||
         before.hasGroup != after.hasGroup ||
+        before.bootId != after.bootId ||
         !_sameStrings(before.addresses, after.addresses);
+  }
+
+  static List<String> _routableAddresses(List<String> raw) {
+    final seen = <String>{};
+    final values = <String>[];
+    for (final item in raw) {
+      final host = normalizePeerHost(item);
+      if (host.isEmpty || !isRoutablePeerAddress(host)) continue;
+      if (!seen.add(host)) continue;
+      values.add(host);
+      if (values.length >= Msp1.maxAddresses) break;
+    }
+    return values;
   }
 
   /// 当前候选（已剪掉过期项；最近听到的在前）。

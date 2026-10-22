@@ -178,17 +178,6 @@ class SyncPairingAttempt {
   final SyncPairingStatus status;
   final int expiresAt;
 
-  SyncPairingAttempt copyWith({SyncPairingStatus? status}) =>
-      SyncPairingAttempt(
-        requestId: requestId,
-        peerDeviceId: peerDeviceId,
-        peerName: peerName,
-        intent: intent,
-        code: code,
-        status: status ?? this.status,
-        expiresAt: expiresAt,
-      );
-
   @override
   String toString() =>
       'SyncPairingAttempt($requestId, ${status.name}, ${intent.name})';

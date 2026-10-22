@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:typed_data';
 
@@ -7,6 +8,7 @@ import 'package:molia/data/sync/pairing/lan_pairing_service.dart';
 import 'package:molia/data/sync/pairing/pairing_crypto.dart';
 import 'package:molia/data/sync/pairing/pairing_http.dart';
 import 'package:molia/data/sync/sync_crypto.dart';
+import 'package:molia/data/sync/transport/lan_pairing_packet.dart';
 import 'package:molia/data/sync/sync_passphrase.dart';
 import 'package:molia/domain/models/device_sync.dart';
 import 'package:molia/domain/models/sync_nearby_pairing.dart';
@@ -442,11 +444,546 @@ void main() {
     expect(prompts, hasLength(2));
     expect(prompts.last.peerDeviceId, 'devY');
   });
+
+  test('join 密封载荷按接受时间过期：status 不再吐 sealed，内部也清零', () async {
+    final network = _LoopbackNetwork();
+    var now = 1000;
+    final a = await _Device.start(
+      network,
+      id: 'devA',
+      name: '设备A',
+      passphrase: null,
+      hasGroup: false,
+      requestTtl: const Duration(milliseconds: 1000),
+      pollInterval: const Duration(milliseconds: 10),
+      clock: () => now,
+    );
+    final b = await _Device.start(
+      network,
+      id: 'devB',
+      name: '设备B',
+      passphrase: passB,
+      hasGroup: true,
+      requestTtl: const Duration(milliseconds: 1000),
+      clock: () => now,
+    );
+    addTearDown(network.dispose);
+
+    final promptFuture = b.service.incomingRequests.first;
+    final resultFuture = a.service.requestPairing(_nearby(b));
+    final prompt = await promptFuture.timeout(const Duration(seconds: 2));
+    expect(
+      await b.service.respond(prompt.requestId, accept: true),
+      SyncPairingOutcome.accepted,
+    );
+    expect(
+      (await resultFuture.timeout(const Duration(seconds: 2))).outcome,
+      SyncPairingOutcome.accepted,
+    );
+    expect(b.service.debugSealedPayloadCount, 1);
+
+    now += 1500;
+    final response = await b.service.handle(PairingHttpRequest(
+      method: 'GET',
+      path: PairingHttpPaths.status,
+      sourceHost: '10.0.0.9',
+      query: {'id': prompt.requestId},
+    ));
+    expect(response.statusCode, 200);
+    final body = jsonDecode(response.body) as Map<String, Object?>;
+    expect(body['status'], SyncPairingStatus.expired.name);
+    expect(body.containsKey('sealed'), isFalse);
+    expect(b.service.debugSealedPayloadCount, 0);
+  });
+
+  test('请求表裁剪会释放密封载荷', () async {
+    final network = _LoopbackNetwork();
+    var now = 1000;
+    final b = await _Device.start(
+      network,
+      id: 'devB',
+      name: '设备B',
+      passphrase: passB,
+      hasGroup: true,
+      requestTtl: const Duration(milliseconds: 100),
+      maxRequests: 1,
+      maxPending: 2,
+      clock: () => now,
+    );
+    addTearDown(network.dispose);
+
+    final prompts = <SyncPairingRequest>[];
+    final subscription = b.service.incomingRequests.listen(prompts.add);
+    addTearDown(subscription.cancel);
+
+    Future<void> send(String requestId, String deviceId) async {
+      await b.service.handle(PairingHttpRequest(
+        method: 'POST',
+        path: PairingHttpPaths.request,
+        sourceHost: '10.0.0.9',
+        body: _requestBody(
+          requestId: requestId,
+          deviceId: deviceId,
+          deviceName: deviceId,
+          intent: SyncPairingIntent.join,
+          hasGroup: false,
+        ),
+      ));
+    }
+
+    await send('req-first001', 'devX');
+    await send('req-second02', 'devY');
+    await Future<void>.delayed(const Duration(milliseconds: 20));
+    expect(prompts, hasLength(1));
+
+    expect(
+      await b.service.respond(prompts.first.requestId, accept: true),
+      SyncPairingOutcome.accepted,
+    );
+    expect(b.service.debugSealedPayloadCount, 1);
+
+    // 直接跑裁剪（不先跑过期清理）：确认 removed entry 的 sealed 被清零。
+    b.service.debugTrimRequests(1301);
+    expect(b.service.debugRequestCount, 1);
+    expect(b.service.debugSealedPayloadCount, 0);
+  });
+
+  test('第一次 POST 就 accepted：拒绝，不写口令、不 complete', () async {
+    final receiver = PairingCrypto.generateKeyPair();
+    addTearDown(receiver.destroy);
+    final writes = <String>[];
+    final endpoints = <LanPeerEndpoint>[];
+    final client = _FakeHttpClient((path, query, body) async {
+      expect(path, PairingHttpPaths.request);
+      return PairingHttpReply(
+        statusCode: 200,
+        body: jsonEncode({
+          'v': 1,
+          'status': SyncPairingStatus.accepted.name,
+          'publicKey': _token(receiver.publicKey),
+          'nonce': _token(Uint8List(16)),
+        }),
+      );
+    });
+    final service = await _startService(
+      deviceId: 'devA',
+      passphrase: null,
+      hasGroup: false,
+      client: client,
+      writes: writes,
+      endpoints: endpoints,
+    );
+    addTearDown(service.dispose);
+
+    final result = await service
+        .requestPairing(_nearbyFrom('devB', '127.0.0.1', 41001))
+        .timeout(const Duration(seconds: 2));
+    expect(result.outcome, SyncPairingOutcome.unavailable);
+    expect(writes, isEmpty);
+    expect(client.paths, [PairingHttpPaths.request]);
+    expect(endpoints, isEmpty);
+  });
+
+  test('状态轮询连续 3 次传输错误 → unreachable；成功响应会重置计数', () async {
+    final receiver = PairingCrypto.generateKeyPair();
+    addTearDown(receiver.destroy);
+    final nonce = Uint8List(16);
+    var statusCalls = 0;
+    final client = _FakeHttpClient((path, query, body) async {
+      switch (path) {
+        case PairingHttpPaths.request:
+          return PairingHttpReply(
+            statusCode: 200,
+            body: jsonEncode({
+              'v': 1,
+              'status': SyncPairingStatus.pending.name,
+              'publicKey': _token(receiver.publicKey),
+              'nonce': _token(nonce),
+            }),
+          );
+        case PairingHttpPaths.status:
+          statusCalls++;
+          // 2 次抖动 → 1 次成功 pending（重置计数）→ 再 3 次失败。
+          if (statusCalls == 3) {
+            return PairingHttpReply(
+              statusCode: 200,
+              body: jsonEncode({
+                'v': 1,
+                'status': SyncPairingStatus.pending.name,
+                'publicKey': _token(receiver.publicKey),
+                'nonce': _token(nonce),
+              }),
+            );
+          }
+          throw Exception('模拟网络中断');
+        default:
+          throw StateError('不应调用 $path');
+      }
+    });
+    final service = await _startService(
+      deviceId: 'devA',
+      passphrase: null,
+      hasGroup: false,
+      client: client,
+      requestTtl: const Duration(seconds: 10),
+      pollInterval: const Duration(milliseconds: 5),
+    );
+    addTearDown(service.dispose);
+
+    final result = await service
+        .requestPairing(_nearbyFrom('devB', '127.0.0.1', 41001))
+        .timeout(const Duration(seconds: 2));
+    expect(result.outcome, SyncPairingOutcome.unreachable);
+    expect(statusCalls, 6, reason: '成功 pending 后计数重置，再累计 3 次失败');
+  });
+
+  test('invite complete 返回 200 rejected：不算成功，不保存端点', () async {
+    final receiver = PairingCrypto.generateKeyPair();
+    addTearDown(receiver.destroy);
+    final nonce = Uint8List(16);
+    var completeCalls = 0;
+    final endpoints = <LanPeerEndpoint>[];
+    final client = _FakeHttpClient((path, query, body) async {
+      switch (path) {
+        case PairingHttpPaths.request:
+        case PairingHttpPaths.status:
+          return PairingHttpReply(
+            statusCode: 200,
+            body: jsonEncode({
+              'v': 1,
+              'status': path == PairingHttpPaths.request
+                  ? SyncPairingStatus.pending.name
+                  : SyncPairingStatus.accepted.name,
+              if (path == PairingHttpPaths.request) ...{
+                'publicKey': _token(receiver.publicKey),
+                'nonce': _token(nonce),
+              },
+            }),
+          );
+        case PairingHttpPaths.complete:
+          completeCalls++;
+          return PairingHttpReply(
+            statusCode: 200,
+            body: jsonEncode({
+              'v': 1,
+              'status': SyncPairingStatus.rejected.name,
+            }),
+          );
+        default:
+          throw StateError('不应调用 $path');
+      }
+    });
+    final service = await _startService(
+      deviceId: 'devA',
+      passphrase: passA,
+      hasGroup: true,
+      client: client,
+      endpoints: endpoints,
+      pollInterval: const Duration(milliseconds: 5),
+    );
+    addTearDown(service.dispose);
+
+    final result = await service
+        .requestPairing(_nearbyFrom('devB', '127.0.0.1', 41001))
+        .timeout(const Duration(seconds: 2));
+    expect(result.outcome, SyncPairingOutcome.rejected);
+    expect(completeCalls, 1);
+    expect(endpoints, isEmpty);
+  });
+
+  test('invite complete 返回 200 坏 JSON：unavailable，不保存端点', () async {
+    final receiver = PairingCrypto.generateKeyPair();
+    addTearDown(receiver.destroy);
+    final nonce = Uint8List(16);
+    final endpoints = <LanPeerEndpoint>[];
+    final client = _FakeHttpClient((path, query, body) async {
+      switch (path) {
+        case PairingHttpPaths.request:
+        case PairingHttpPaths.status:
+          return PairingHttpReply(
+            statusCode: 200,
+            body: jsonEncode({
+              'v': 1,
+              'status': path == PairingHttpPaths.request
+                  ? SyncPairingStatus.pending.name
+                  : SyncPairingStatus.accepted.name,
+              if (path == PairingHttpPaths.request) ...{
+                'publicKey': _token(receiver.publicKey),
+                'nonce': _token(nonce),
+              },
+            }),
+          );
+        case PairingHttpPaths.complete:
+          return const PairingHttpReply(statusCode: 200, body: 'not-json');
+        default:
+          throw StateError('不应调用 $path');
+      }
+    });
+    final service = await _startService(
+      deviceId: 'devA',
+      passphrase: passA,
+      hasGroup: true,
+      client: client,
+      endpoints: endpoints,
+      pollInterval: const Duration(milliseconds: 5),
+    );
+    addTearDown(service.dispose);
+
+    final result = await service
+        .requestPairing(_nearbyFrom('devB', '127.0.0.1', 41001))
+        .timeout(const Duration(seconds: 2));
+    expect(result.outcome, SyncPairingOutcome.unavailable);
+    expect(endpoints, isEmpty);
+  });
+
+  test('invite 接受后 complete 失败：双方都不落端点；重试成功才落', () async {
+    final network = _LoopbackNetwork()..failComplete = true;
+    final a = await _Device.start(
+      network,
+      id: 'devA',
+      name: '设备A',
+      passphrase: passA,
+      hasGroup: true,
+    );
+    final b = await _Device.start(
+      network,
+      id: 'devB',
+      name: '设备B',
+      passphrase: null,
+      hasGroup: false,
+    );
+    addTearDown(network.dispose);
+
+    final promptFuture = b.service.incomingRequests.first;
+    final resultFuture = a.service.requestPairing(_nearby(b));
+    final prompt = await promptFuture.timeout(const Duration(seconds: 2));
+    expect(
+      await b.service.respond(prompt.requestId, accept: true),
+      SyncPairingOutcome.accepted,
+    );
+    final failed = await resultFuture.timeout(const Duration(seconds: 2));
+    expect(failed.outcome, SyncPairingOutcome.unreachable);
+    expect(a.endpoints, isEmpty);
+    expect(b.endpoints, isEmpty, reason: '接受 invite 不落端点，等 complete 成功');
+
+    network.failComplete = false;
+    final promptAgain = b.service.incomingRequests.first;
+    final resultAgain = a.service.requestPairing(_nearby(b));
+    final secondPrompt = await promptAgain.timeout(const Duration(seconds: 2));
+    expect(
+      await b.service.respond(secondPrompt.requestId, accept: true),
+      SyncPairingOutcome.accepted,
+    );
+    expect(
+      (await resultAgain.timeout(const Duration(seconds: 2))).outcome,
+      SyncPairingOutcome.accepted,
+    );
+    expect(a.endpoints.map((e) => e.deviceId), contains('devB'));
+    expect(b.endpoints.map((e) => e.deviceId), contains('devA'));
+  });
+
+  test('发起方地址顺序：来源地址优先，自报地址只留可路由 IP', () async {
+    final client = _FakeHttpClient((path, query, body) async {
+      throw Exception('模拟不可达');
+    });
+    final service = await _startService(
+      deviceId: 'devA',
+      passphrase: null,
+      hasGroup: false,
+      client: client,
+    );
+    addTearDown(service.dispose);
+    final device = SyncNearbyDevice(
+      deviceId: 'devB',
+      name: '设备B',
+      host: '127.0.0.1',
+      httpPort: 41001,
+      addresses: const [
+        '127.0.0.2',
+        '::1',
+        'fe80::1',
+        'fe80::1%eth0',
+        'molia.local',
+        '[192.168.1.7]',
+        '192.168.1.7',
+        '10.0.0.8',
+      ],
+      lastSeenAt: 1,
+    );
+    final result = await service
+        .requestPairing(device)
+        .timeout(const Duration(seconds: 2));
+    expect(result.outcome, SyncPairingOutcome.unreachable);
+    expect(client.hosts, ['127.0.0.1', '192.168.1.7', '10.0.0.8']);
+  });
+
+  test('status 非法 id：400；轮询用独立的宽松限流', () async {
+    final network = _LoopbackNetwork();
+    final b = await _Device.start(
+      network,
+      id: 'devB',
+      name: '设备B',
+      passphrase: passB,
+      hasGroup: true,
+      statusRateLimit: 3,
+    );
+    addTearDown(network.dispose);
+
+    Future<int> status(String id) async {
+      final response = await b.service.handle(PairingHttpRequest(
+        method: 'GET',
+        path: PairingHttpPaths.status,
+        sourceHost: '10.0.0.9',
+        query: {'id': id},
+      ));
+      return response.statusCode;
+    }
+
+    expect(await status('bad id'), 400);
+    expect(await status('req-status1'), 200);
+    expect(await status('req-status2'), 200);
+    expect(await status('req-status3'), 429, reason: '独立限流生效');
+  });
+
+  test('手动地址探测：校验 / 归一 host、默认端口、扫描状态与策略拒绝', () async {
+    final packets = StreamController<LanPairingDatagram>.broadcast();
+    final sent = <({String? host, int? port})>[];
+    var canPrompt = true;
+    final service = LanPairingService(
+      deviceId: 'devA',
+      deviceName: () => '设备A',
+      readPassphrase: () async => null,
+      writePassphrase: (value) async {},
+      hasGroup: () => false,
+      canPrompt: () => canPrompt,
+      isCellular: () => false,
+      httpPortProvider: () => 41000,
+      probePortProvider: () => 47825,
+      localAddressesProvider: () async => const [],
+      packets: packets.stream,
+      sendPacket: (packet, {host, port}) async {
+        sent.add((host: host, port: port));
+        return true;
+      },
+      nowMs: () => 1000,
+      sweepInterval: const Duration(milliseconds: 50),
+    );
+    addTearDown(() async {
+      await service.dispose();
+      await packets.close();
+    });
+    await service.start();
+
+    expect(
+        await service.probeAddress('[192.168.1.7]', probePort: 47825), isTrue);
+    expect(service.scanning, isTrue);
+    expect(sent, [(host: '192.168.1.7', port: 47825)]);
+
+    expect(await service.probeAddress('192.168.1.8'), isTrue);
+    expect(sent.last, (host: '192.168.1.8', port: ManualPeer.defaultProbePort));
+
+    expect(await service.probeAddress('not a host'), isFalse);
+    expect(
+        await service.probeAddress('192.168.1.9', probePort: 70000), isFalse);
+    canPrompt = false;
+    expect(await service.probeAddress('192.168.1.9'), isFalse);
+    expect(sent, hasLength(2));
+  });
+
+  test('后台停 sweep / 刷新候选，回前台恢复', () async {
+    final packets = StreamController<LanPairingDatagram>.broadcast();
+    final sent = <({String? host, int? port})>[];
+    var canPrompt = true;
+    var cellular = false;
+    var now = 1000;
+    final service = LanPairingService(
+      deviceId: 'devA',
+      deviceName: () => '设备A',
+      readPassphrase: () async => null,
+      writePassphrase: (value) async {},
+      hasGroup: () => false,
+      canPrompt: () => canPrompt,
+      isCellular: () => cellular,
+      httpPortProvider: () => 41000,
+      probePortProvider: () => 47825,
+      localAddressesProvider: () async => const [],
+      packets: packets.stream,
+      sendPacket: (packet, {host, port}) async {
+        sent.add((host: host, port: port));
+        return true;
+      },
+      nowMs: () => now,
+      sweepInterval: const Duration(milliseconds: 20),
+      scanProbeDelaysMs: const [1000],
+    );
+    addTearDown(() async {
+      await service.dispose();
+      await packets.close();
+    });
+    final nearby = <List<SyncNearbyDevice>>[];
+    final subscription = service.nearbyDevices.listen(nearby.add);
+    addTearDown(subscription.cancel);
+
+    await service.start();
+    expect(service.debugSweepScheduled, isTrue);
+    expect(await service.startScan(), isTrue);
+
+    service.onAppHidden();
+    expect(service.debugSweepScheduled, isFalse);
+
+    final announce = Msp1.encode(Msp1Message(
+      type: Msp1.typeAnnounce,
+      deviceId: 'devB',
+      name: '设备B',
+      httpPort: 41001,
+      probePort: 47825,
+      addresses: const [],
+      hasGroup: false,
+      bootId: 'boot-b',
+      nonce: 'nonce-b',
+    ));
+    packets.add(LanPairingDatagram(
+      message: Msp1.decode(announce)!,
+      sourceHost: '192.168.1.9',
+      sourcePort: 47825,
+      receivedAt: now,
+    ));
+    await Future<void>.delayed(const Duration(milliseconds: 40));
+    expect(nearby.last, isEmpty, reason: '后台不刷新候选');
+
+    canPrompt = true;
+    service.onAppResumed();
+    expect(service.debugSweepScheduled, isTrue);
+    packets.add(LanPairingDatagram(
+      message: Msp1.decode(announce)!,
+      sourceHost: '192.168.1.9',
+      sourcePort: 47825,
+      receivedAt: now,
+    ));
+    await Future<void>.delayed(const Duration(milliseconds: 40));
+    expect(nearby.last.map((d) => d.deviceId), contains('devB'));
+
+    // 蜂窝下同样不再刷新（_canUsePairing=false）。
+    cellular = true;
+    final before = nearby.last.length;
+    packets.add(LanPairingDatagram(
+      message: Msp1.decode(announce)!,
+      sourceHost: '192.168.1.10',
+      sourcePort: 47825,
+      receivedAt: now,
+    ));
+    await Future<void>.delayed(const Duration(milliseconds: 40));
+    expect(nearby.last, hasLength(before), reason: '蜂窝不刷新候选');
+    expect(nearby.last.single.host, '192.168.1.9');
+  });
 }
 
 class _LoopbackNetwork {
   final Map<int, LanPairingService> services = {};
   late final PairingHttpClient client = _LoopbackClient(this);
+
+  /// 模拟目标机收到 request / status 后，complete 端点失败。
+  bool failComplete = false;
 
   Future<void> dispose() async {
     for (final service in services.values) {
@@ -471,6 +1008,9 @@ class _LoopbackClient implements PairingHttpClient {
     List<int>? body,
     required Duration timeout,
   }) async {
+    if (network.failComplete && path == PairingHttpPaths.complete) {
+      return const PairingHttpReply(statusCode: 503, body: '');
+    }
     final service = network.services[port];
     if (service == null) {
       return const PairingHttpReply(statusCode: 404, body: '');
@@ -492,6 +1032,102 @@ class _LoopbackClient implements PairingHttpClient {
   void close() {}
 }
 
+class _FakeHttpClient implements PairingHttpClient {
+  _FakeHttpClient(this.handler);
+
+  final Future<PairingHttpReply> Function(
+    String path,
+    Map<String, String>? query,
+    List<int>? body,
+  ) handler;
+  final List<String> paths = [];
+  final List<String> hosts = [];
+
+  @override
+  Future<PairingHttpReply> send({
+    required String method,
+    required String host,
+    required int port,
+    required String path,
+    Map<String, String>? query,
+    List<int>? body,
+    required Duration timeout,
+  }) {
+    paths.add(path);
+    hosts.add(host);
+    return handler(path, query, body);
+  }
+
+  @override
+  void close() {}
+}
+
+Future<LanPairingService> _startService({
+  required String deviceId,
+  required String? passphrase,
+  required bool hasGroup,
+  required PairingHttpClient client,
+  bool canPrompt = true,
+  bool cellular = false,
+  int httpPort = 41000,
+  int probePort = 47825,
+  Duration requestTtl = const Duration(seconds: 60),
+  Duration pollInterval = const Duration(milliseconds: 10),
+  int Function()? nowMs,
+  List<String>? writes,
+  List<LanPeerEndpoint>? endpoints,
+}) async {
+  var ownPassphrase = passphrase;
+  final service = LanPairingService(
+    deviceId: deviceId,
+    deviceName: () => deviceId,
+    readPassphrase: () async => ownPassphrase,
+    writePassphrase: (value) async {
+      ownPassphrase = value;
+      writes?.add(value);
+    },
+    ensurePassphrase: () async {
+      final existing = ownPassphrase;
+      if (existing != null && SyncPassphrase.normalize(existing).length >= 16) {
+        return existing;
+      }
+      final generated = SyncPassphrase.generate();
+      ownPassphrase = generated;
+      writes?.add(generated);
+      return generated;
+    },
+    hasGroup: () => hasGroup,
+    canPrompt: () => canPrompt,
+    isCellular: () => cellular,
+    httpPortProvider: () => httpPort,
+    probePortProvider: () => probePort,
+    addPeerEndpoint: (endpoint) async {
+      endpoints?.add(endpoint);
+    },
+    discoveryKeyProvider: (value) async =>
+        SyncCodec(iterations: 1000).discoveryKey(value),
+    httpClient: client,
+    nowMs: nowMs ?? () => DateTime.now().millisecondsSinceEpoch,
+    requestTtl: requestTtl,
+    statusPollInterval: pollInterval,
+    sweepInterval: const Duration(milliseconds: 50),
+    logger: Logger('molia.test.pairing.$deviceId'),
+  );
+  await service.start();
+  return service;
+}
+
+SyncNearbyDevice _nearbyFrom(String deviceId, String host, int httpPort) =>
+    SyncNearbyDevice(
+      deviceId: deviceId,
+      name: deviceId,
+      host: host,
+      httpPort: httpPort,
+      lastSeenAt: 1,
+    );
+
+String _token(List<int> bytes) => base64UrlEncode(bytes).replaceAll('=', '');
+
 class _Device {
   _Device({
     required this.id,
@@ -504,6 +1140,12 @@ class _Device {
     this.requestTtl = const Duration(seconds: 60),
     this.pollInterval = const Duration(milliseconds: 20),
     this.requestRateLimit = 10,
+    this.statusRateLimit = 240,
+    this.maxRequests = 64,
+    this.maxPending = 8,
+    this.probePort = 47825,
+    this.clock,
+    this.localAddresses = const [],
   });
 
   final String id;
@@ -513,6 +1155,12 @@ class _Device {
   final Duration requestTtl;
   final Duration pollInterval;
   final int requestRateLimit;
+  final int statusRateLimit;
+  final int maxRequests;
+  final int maxPending;
+  final int probePort;
+  final int Function()? clock;
+  final List<String> localAddresses;
   final List<LanPeerEndpoint> endpoints = [];
   final List<LogRecord> logs = [];
   final SyncCodec codec = SyncCodec(iterations: 1000);
@@ -533,6 +1181,12 @@ class _Device {
     Duration requestTtl = const Duration(seconds: 60),
     Duration pollInterval = const Duration(milliseconds: 20),
     int requestRateLimit = 10,
+    int statusRateLimit = 240,
+    int maxRequests = 64,
+    int maxPending = 8,
+    int probePort = 47825,
+    int Function()? clock,
+    List<String> localAddresses = const [],
   }) async {
     final port = 41000 + network.services.length;
     final device = _Device(
@@ -546,6 +1200,12 @@ class _Device {
       requestTtl: requestTtl,
       pollInterval: pollInterval,
       requestRateLimit: requestRateLimit,
+      statusRateLimit: statusRateLimit,
+      maxRequests: maxRequests,
+      maxPending: maxPending,
+      probePort: probePort,
+      clock: clock,
+      localAddresses: localAddresses,
     );
     final logger = Logger('molia.test.pairing.$id');
     logger.onRecord.listen(device.logs.add);
@@ -568,15 +1228,19 @@ class _Device {
       canPrompt: () => device.canPrompt,
       isCellular: () => device.cellular,
       httpPortProvider: () => device.httpPort,
-      probePortProvider: () => 47825,
+      probePortProvider: () => device.probePort,
+      localAddressesProvider: () async => device.localAddresses,
       addPeerEndpoint: (endpoint) async => device.endpoints.add(endpoint),
       discoveryKeyProvider: (value) async => device.codec.discoveryKey(value),
       httpClient: network.client,
-      nowMs: () => DateTime.now().millisecondsSinceEpoch,
+      nowMs: clock ?? () => DateTime.now().millisecondsSinceEpoch,
       requestTtl: requestTtl,
       statusPollInterval: pollInterval,
       sweepInterval: const Duration(milliseconds: 50),
       requestRateLimit: requestRateLimit,
+      statusRateLimit: statusRateLimit,
+      maxRequests: maxRequests,
+      maxPending: maxPending,
       logger: logger,
     );
     network.services[port] = device.service;

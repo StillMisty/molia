@@ -58,6 +58,38 @@ void main() {
     expect(control.transportLastSuccessAt('lan'), 0);
   });
 
+  test('hasEstablishedGroup：名册非空即成立', () {
+    expect(control.hasEstablishedGroup, isFalse);
+    state.recordRound(const SyncRoundReport(
+      trigger: SyncTrigger.manual,
+      startedAt: 1,
+      finishedAt: 2,
+      outcome: SyncOutcome.noChanges,
+      peers: [SyncPeerState(deviceId: 'devB')],
+    ));
+    expect(control.hasEstablishedGroup, isTrue);
+  });
+
+  test('hasEstablishedGroup：任一路传输成功接触过对端也成立', () {
+    expect(control.hasEstablishedGroup, isFalse);
+    state.recordRound(const SyncRoundReport(
+      trigger: SyncTrigger.manual,
+      startedAt: 1,
+      finishedAt: 2,
+      outcome: SyncOutcome.ok,
+      transports: [
+        SyncTransportReport(
+          kind: SyncTransportKind.lan,
+          running: true,
+          enabled: true,
+          pulled: 1,
+        ),
+      ],
+    ));
+    expect(control.transportLastSuccessAt(SyncTransportKind.lan), 2);
+    expect(control.hasEstablishedGroup, isTrue);
+  });
+
   test('init 幂等；写入类操作改状态并通知一次', () async {
     var notifications = 0;
     control.addListener(() => notifications++);
