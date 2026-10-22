@@ -271,6 +271,11 @@ class DesktopLyricsOutput implements InteractiveLyricsOutput {
     return {
       'title': p.title,
       'line': line,
+      // 扩展槽数固定窗口行数：翻译 / 罗马音开关变化只改槽内容，不改窗口
+      // 高度（原生窗口底缘锚定，高度逐行变化会让主行上下跳）。随内容一起
+      // 投送而不是走 setConfig——开关切换时只重建一次，避免配置重下发先做
+      // 一次无动画重建、紧接着 update 再重建一次的闪烁。
+      'extendedSlots': (s.translationEnabled ? 1 : 0) + (s.romaEnabled ? 1 : 0),
       'extended': replacedLine ? const <String>[] : p.extended,
       'upcoming': replacedLine ? const <String>[] : p.upcoming,
       'isPlaying': p.isPlaying,

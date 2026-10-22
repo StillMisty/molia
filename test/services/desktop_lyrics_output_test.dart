@@ -109,6 +109,69 @@ void main() {
     expect(calls.map((call) => call.method), contains('desktop.hide'));
   });
 
+  test('扩展槽：按翻译 / 罗马音开关固定随内容投送，开关变化不重发配置', () async {
+    final channel = LyricsChannel();
+    final output = DesktopLyricsOutput(channel: channel, supported: true);
+    final settings = await desktopSettings();
+    // 本用例只看槽位布局：关掉暂停隐藏，让 start 直接建窗。
+    await settings.setDesktopHideOnPause(false);
+    expect(settings.translationEnabled, isTrue);
+    expect(settings.romaEnabled, isFalse);
+
+    // 样式配置不带槽位：槽位属于逐行内容布局，随 update 一起投送。
+    await output.start(settings);
+    await output.apply(presentation());
+    await pumpEventQueue();
+    final showCall = calls.firstWhere((call) => call.method == 'desktop.show');
+    expect(
+      (showCall.arguments as Map).containsKey('extendedSlots'),
+      isFalse,
+    );
+    var updateCall = calls.lastWhere((call) => call.method == 'desktop.update');
+    expect((updateCall.arguments as Map)['extendedSlots'], 1);
+
+    // 某句没有翻译 / 罗马音：槽数只由开关决定，apply 不重发配置。
+    calls.clear();
+    await output.apply(presentation(line: 'B'));
+    await pumpEventQueue();
+    final methods = calls.map((call) => call.method).toList();
+    expect(methods, isNot(contains('desktop.setConfig')));
+    expect(methods, isNot(contains('desktop.show')));
+    updateCall = calls.lastWhere((call) => call.method == 'desktop.update');
+    expect((updateCall.arguments as Map)['extendedSlots'], 1);
+
+    // 翻译 + 罗马音都开：2 个槽；开关只改 update，不走 setConfig。
+    await settings.setRomaEnabled(true);
+    calls.clear();
+    await output.start(settings);
+    await output.apply(presentation());
+    await pumpEventQueue();
+    expect(
+        calls.map((call) => call.method), isNot(contains('desktop.setConfig')));
+    updateCall = calls.lastWhere((call) => call.method == 'desktop.update');
+    expect((updateCall.arguments as Map)['extendedSlots'], 2);
+
+    // 关翻译、开罗马音：回到 1 个槽。
+    await settings.setTranslationEnabled(false);
+    calls.clear();
+    await output.start(settings);
+    await output.apply(presentation());
+    await pumpEventQueue();
+    updateCall = calls.lastWhere((call) => call.method == 'desktop.update');
+    expect((updateCall.arguments as Map)['extendedSlots'], 1);
+
+    // 都关：0 个槽（窗口只留主行）。
+    await settings.setRomaEnabled(false);
+    calls.clear();
+    await output.start(settings);
+    await output.apply(presentation());
+    await pumpEventQueue();
+    updateCall = calls.lastWhere((call) => call.method == 'desktop.update');
+    expect((updateCall.arguments as Map)['extendedSlots'], 0);
+
+    await output.stop();
+  });
+
   test('权限未授予：capability=needsPermission 且不 show', () async {
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
         .setMockMethodCallHandler(const MethodChannel(channelName),

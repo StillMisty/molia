@@ -134,6 +134,14 @@ internal data class OverlayPresentation(
     val upcoming: List<String> = emptyList(),
     val isPlaying: Boolean = false,
     val hasLyrics: Boolean = false,
+    /**
+     * 翻译 / 罗马音扩展槽位数（按开关固定，0..2）：空槽也占一行高度。
+     *
+     * 跟随每次内容投送而不是走样式配置：槽位变化与 `extended` 文本同一次
+     * `render` 生效，避免 `setConfig` 先按旧内容重建一次、`update` 再重建
+     * 一次造成的闪烁。
+     */
+    val extendedSlots: Int = 0,
     /** 本次投送时的有效播放位置（已叠加偏移）。 */
     val positionMs: Long = 0L,
     /** [positionMs] 生效的墙上时刻（毫秒；0 = 未知）：延迟补偿用。 */
@@ -169,6 +177,8 @@ internal data class OverlayPresentation(
                 upcoming = stringsOf("upcoming"),
                 isPlaying = map["isPlaying"] as? Boolean ?: false,
                 hasLyrics = map["hasLyrics"] as? Boolean ?: false,
+                extendedSlots = ((map["extendedSlots"] as? Number)?.toInt() ?: 0)
+                    .coerceIn(0, 2),
                 positionMs = (map["positionMs"] as? Number)?.toLong() ?: 0L,
                 positionAtEpochMs =
                     (map["positionAtEpochMs"] as? Number)?.toLong() ?: 0L,
@@ -480,7 +490,7 @@ internal class LyricsOverlayView(
     private var current: OverlayPresentation = OverlayPresentation()
     private var frozen = false
     private var pending: OverlayPresentation? = null
-    private var renderedTexts: List<String> = emptyList()
+    private var renderedStructure: List<EntryKey> = emptyList()
     private var entryViews = mutableListOf<TextView>()
     private var currentLineView: CurrentLineView? = null
     private var playPauseButton: ImageView? = null
@@ -503,6 +513,16 @@ internal class LyricsOverlayView(
      * 生效（含横滚宽度重新测量——字形度量变了）。
      */
     private var lineTypeface: Typeface? = null
+
+    /**
+     * 行高（px）：按字号 / 字体测量后写死。
+     *
+     * 占位行不能靠空格文本测自然高度——空文本行比实际文本行少几个像素，
+     * 逐行切换占位 / 实际内容仍会让窗口高度抖动。所有行统一用固定行高，
+     * 文本垂直居中。
+     */
+    private var mainRowHeight = 0
+    private var extendedRowHeight = 0
 
     /**
      * 播放位置时钟：宿主持有（不随行视图重建）——切行不打断时基。
@@ -548,6 +568,22 @@ internal class LyricsOverlayView(
         val isCurrent: Boolean,
         val isExtended: Boolean,
         val words: List<OverlayWord>?,
+        /** 空槽占位：不可见、不可交互，只负责撑出固定行高。 */
+        val isPlaceholder: Boolean = false,
+    )
+
+    /**
+     * 渲染结构键：只含决定视图结构的字段（词轴变化走 bind，不算结构变化）。
+     *
+     * 必须包含 [isCurrent]：前奏预览与第一句进入当前行的文本完全相同，
+     * 只比较文本会误判「结构没变」，从而错过 `CurrentLineView` 的创建、
+     * 高亮与词轴绑定。
+     */
+    private data class EntryKey(
+        val text: String,
+        val isCurrent: Boolean,
+        val isExtended: Boolean,
+        val isPlaceholder: Boolean,
     )
 
     init {
@@ -585,8 +621,32 @@ internal class LyricsOverlayView(
         lineTypeface = next.fontFamily?.let {
             runCatching { Typeface.create(it, Typeface.NORMAL) }.getOrNull()
         }
+        // 行高与字体 / 字号绑定：先量好再重建，占位行与真实行同高。
+        mainRowHeight = measureRowHeight(next.fontSize)
+        extendedRowHeight = measureRowHeight(next.fontSize * 0.8f)
         rebuildControls()
         render(current, animate = false, force = true)
+    }
+
+    /**
+     * 单行 [TextView] 的自然行高（px）。
+     *
+     * 探针文本覆盖 CJK 与拉丁降部，取当前字体 / 字号下的最大行高；实际文本
+     * 的行高不会超过它，固定行高因此不会裁字。不要换成空格文本测自然高度：
+     * 实测主行空文本比实际文本少约 7px，会重新引入逐行抖动。
+     */
+    private fun measureRowHeight(fontSize: Float): Int {
+        val probe = TextView(context)
+        probe.setTextSize(TypedValue.COMPLEX_UNIT_SP, fontSize)
+        lineTypeface?.let { probe.setTypeface(it) }
+        probe.text = "国Ag"
+        probe.maxLines = 1
+        probe.setSingleLine(true)
+        probe.measure(
+            View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED),
+            View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED),
+        )
+        return probe.measuredHeight
     }
 
     fun setPresentation(presentation: OverlayPresentation) {
@@ -723,10 +783,12 @@ internal class LyricsOverlayView(
     private fun render(presentation: OverlayPresentation, animate: Boolean, force: Boolean) {
         current = presentation
         val entries = buildEntries(presentation)
-        val texts = entries.map { it.text }
+        val structure = entries.map {
+            EntryKey(it.text, it.isCurrent, it.isExtended, it.isPlaceholder)
+        }
         val structureSame = !force &&
-            texts == renderedTexts &&
-            textColumn.childCount == texts.size
+            structure == renderedStructure &&
+            textColumn.childCount == structure.size
         if (structureSame) {
             // 仅进度 / 播放态变化：更新视图内状态，不重建（不打断滚动与动画）。
             currentLineView?.let { line ->
@@ -743,29 +805,60 @@ internal class LyricsOverlayView(
             afterPresentation()
             return
         }
-        renderedTexts = texts
+        renderedStructure = structure
         rebuildLineViews(entries, animate)
         updatePlayPauseIconIfNeeded()
     }
 
+    /**
+     * 固定行模型：第一主行（当前行 / 前奏首句预览 / 回退歌名）→ 扩展槽 →
+     * 其余主行。
+     *
+     * 窗口底缘锚定（`Gravity.BOTTOM`）时高度必须跨行恒定，否则某句没有翻译
+     * 时整窗变矮、主行贴着底缘上移——看起来就是「先在下部、再闪到上部」。
+     * 因此主行与扩展槽都按配置补齐：扩展槽数量只由翻译 / 罗马音开关决定，
+     * 缺文本的槽用不可见占位撑高。全空（清空 / 无歌词隐藏）不补占位，
+     * 避免窗口缩成一大块透明触控区。
+     */
     private fun buildEntries(presentation: OverlayPresentation): List<Entry> {
-        val mainCount = config.maxLines.coerceAtLeast(1)
-        val entries = mutableListOf<Entry>()
+        val mainSlots = config.maxLines.coerceAtLeast(1)
+        val extendedSlots = presentation.extendedSlots.coerceIn(0, 2)
+
+        val mainEntries = mutableListOf<Entry>()
         if (presentation.line.isNotEmpty()) {
-            entries.add(Entry(presentation.line, true, false, presentation.words))
+            mainEntries.add(
+                Entry(presentation.line, true, false, presentation.words),
+            )
         }
-        for (line in presentation.extended) {
-            if (line.isNotEmpty()) entries.add(Entry(line, false, true, null))
-        }
-        var mainAdded = if (presentation.line.isNotEmpty()) 1 else 0
         for (line in presentation.upcoming) {
-            if (mainAdded >= mainCount) break
+            if (mainEntries.size >= mainSlots) break
             if (line.isNotEmpty()) {
-                entries.add(Entry(line, false, false, null))
-                mainAdded++
+                mainEntries.add(Entry(line, false, false, null))
             }
         }
-        return entries
+        if (mainEntries.isEmpty()) return emptyList()
+        // 主行不足：主字号占位（与真实主行同一行高）。
+        while (mainEntries.size < mainSlots) {
+            mainEntries.add(Entry(" ", false, false, null, isPlaceholder = true))
+        }
+
+        val extendedEntries = mutableListOf<Entry>()
+        if (presentation.line.isNotEmpty()) {
+            for (line in presentation.extended) {
+                if (extendedEntries.size >= extendedSlots) break
+                if (line.isNotEmpty()) {
+                    extendedEntries.add(Entry(line, false, true, null))
+                }
+            }
+        }
+        // 当前行没有翻译 / 罗马音（或处于前奏预览）时同样补槽：行数不随
+        // 某句歌词有没有扩展文本变化。前奏预览的第一主行不是当前行，扩展
+        // 槽整组留空，等它变为当前行时再填内容。
+        while (extendedEntries.size < extendedSlots) {
+            extendedEntries.add(Entry(" ", false, true, null, isPlaceholder = true))
+        }
+
+        return listOf(mainEntries.first()) + extendedEntries + mainEntries.drop(1)
     }
 
     /** 构建内容列：当前行挂滚动回调、扩展行并入滚动组；滚动行宽取文本宽，其余撑满窗口。 */
@@ -775,7 +868,12 @@ internal class LyricsOverlayView(
         currentLineView = null
         scrollGroup = mutableListOf()
         for (entry in entries) {
-            val isScrolling = entry.isCurrent || entry.isExtended
+            // 占位行没有横向内容：宽撑满窗口、不进滚动组（否则空文本会被
+            // 按自身 0 宽度参与对齐计算）。
+            val isScrolling =
+                entry.isCurrent || (entry.isExtended && !entry.isPlaceholder)
+            val rowHeight =
+                if (entry.isExtended) extendedRowHeight else mainRowHeight
             val view: TextView =
                 if (entry.isCurrent) {
                     CurrentLineView(context).also {
@@ -787,6 +885,9 @@ internal class LyricsOverlayView(
                 }
             view.apply {
                 text = entry.text
+                // 占位行文本用单个空格（不需要靠它测高，行高由 LayoutParams
+                // 固定）；透明的空槽只负责占位，不能有任何可见 / 可点内容。
+                alpha = if (entry.isPlaceholder) 0f else 1f
                 setTextSize(
                     TypedValue.COMPLEX_UNIT_SP,
                     if (entry.isExtended) config.fontSize * 0.8f else config.fontSize,
@@ -798,8 +899,11 @@ internal class LyricsOverlayView(
                 // 滚动组（当前行 / 扩展行）强制左对齐：横向滚动布局宽度是超大
                 // 哨兵值（实测 1048576），系统「居中/右对齐」会把布局整体滚走
                 // （长文本被推出视口、短文本位置也不受控）；对齐由
-                // applyGroupScroll 的偏移统一实现。
-                gravity = if (isScrolling) Gravity.START else rowGravity
+                // applyGroupScroll 的偏移统一实现。纵向一律居中：行高固定，
+                // 占位 / 实际文本的基线才不会在行内漂移。
+                gravity =
+                    (if (isScrolling) Gravity.START else rowGravity) or
+                        Gravity.CENTER_VERTICAL
                 maxLines = 1
                 setSingleLine(true)
                 isSelected = false
@@ -812,6 +916,11 @@ internal class LyricsOverlayView(
                     // 非当前行不做无限循环滚动：超宽截断省略。
                     ellipsize = TextUtils.TruncateAt.END
                 }
+                if (entry.isPlaceholder) {
+                    // 占位行对读屏不可见（否则会念出空格行或空槽）。
+                    importantForAccessibility =
+                        View.IMPORTANT_FOR_ACCESSIBILITY_NO
+                }
             }
             column.addView(
                 view,
@@ -822,7 +931,12 @@ internal class LyricsOverlayView(
                     } else {
                         LinearLayout.LayoutParams.MATCH_PARENT
                     },
-                    LinearLayout.LayoutParams.WRAP_CONTENT,
+                    // 固定行高：占位行与真实行必须同高，不能各自 WRAP_CONTENT。
+                    if (rowHeight > 0) {
+                        rowHeight
+                    } else {
+                        LinearLayout.LayoutParams.WRAP_CONTENT
+                    },
                 ),
             )
             entryViews.add(view)
