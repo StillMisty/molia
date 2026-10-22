@@ -17,6 +17,7 @@ import 'playback_order.dart';
 import 'playback_power_policy.dart';
 import 'playing_track_cache_writer.dart';
 import 'queue_navigation.dart';
+import 'queue_projection.dart';
 import 'shuffle_order.dart';
 
 /// 位置采样档位：播放链路按前后台 / 桌面歌词选择（纯决策，便于单测）。
@@ -300,54 +301,45 @@ class LocalPlaybackService extends ChangeNotifier {
   /// 最近一次 `playTracks` 传入的上下文名（系统媒体会话/快照映射用）。
   String? get contextName => _contextName;
 
+  /// 队列投影：快照的 next / previous / upNext 唯一推导（纯函数在
+  /// `queue_projection.dart`；恢复态共用同一实现）。
+  ///
+  /// shuffle 排列只在长度 > 1 时需要——单曲队列的「下一首」就是自己，
+  /// 与既有语义一致；排列缺失时按当前曲目置首补齐（正常路径在
+  /// playTracks / setMode 已重置）。
+  QueueProjection<SourceTrack> get queueProjection {
+    if (_queue.isEmpty || _currentIndex < 0 || _currentIndex >= _queue.length) {
+      return const QueueProjection<SourceTrack>();
+    }
+    if (_mode == PlayMode.shuffle && _queue.length > 1) {
+      _ensureShuffleOrder();
+    }
+    return projectQueue(
+      _queue,
+      currentIndex: _currentIndex,
+      mode: _mode,
+      order: QueueOrder(
+        shuffleIndices:
+            _mode == PlayMode.shuffle ? _shuffleOrder.indices : null,
+        previousIndex: _order.peekPrevious(),
+      ),
+      idOf: (track) => track.id,
+    );
+  }
+
   /// 按当前模式解析出的下一首（界面预览；shuffle 为排列中的下一首，
   /// 本轮末尾为空——自动播完/手动切歌时才重洗新一轮）。
-  SourceTrack? get nextSourceTrack {
-    final index = _peekNextIndex();
-    return index < 0 ? null : _queue[index];
-  }
+  SourceTrack? get nextSourceTrack => queueProjection.next;
 
   /// 可展示的上一首：播放顺序最近一首（非破坏性 peek）→ 队列前一位
   /// （列表循环队首回绕到队尾）；无 / 与当前曲目同 id 为 null
   /// （队首的「重播当前」不当作上一首）。
-  SourceTrack? get previousSourceTrack {
-    if (_currentIndex < 0 || _currentIndex >= _queue.length) return null;
-    final index = _order.peekPrevious() ??
-        previousQueueIndex(
-          _currentIndex,
-          _queue.length,
-          wrap: _mode == PlayMode.listLoop,
-        ) ??
-        -1;
-    if (index < 0 || index >= _queue.length) return null;
-    final target = _queue[index];
-    final current = _queue[_currentIndex];
-    if (target.id == current.id) return null;
-    return target;
-  }
+  SourceTrack? get previousSourceTrack => queueProjection.previous;
 
   /// 实际播放顺序中当前曲目之后的曲目（队列页「接下来」展示用）：
   /// 列表循环 = 队列下一位起，队尾后补上队首到当前之前的曲目；
   /// 顺序播放 = 队列下一位起；shuffle = 本轮洗牌排列的剩余。
-  List<SourceTrack> get upNextTracks {
-    if (_currentIndex < 0 || _queue.isEmpty) return const [];
-    if (_mode == PlayMode.shuffle && _queue.length > 1) {
-      _ensureShuffleOrder();
-      return List.unmodifiable([
-        for (final index in _shuffleOrder.remainingAfter(_currentIndex))
-          _queue[index],
-      ]);
-    }
-    final upcoming = <SourceTrack>[
-      for (var i = _currentIndex + 1; i < _queue.length; i++) _queue[i],
-    ];
-    if (_mode == PlayMode.listLoop) {
-      for (var i = 0; i < _currentIndex; i++) {
-        upcoming.add(_queue[i]);
-      }
-    }
-    return List.unmodifiable(upcoming);
-  }
+  List<SourceTrack> get upNextTracks => queueProjection.upNext;
 
   /// 当前播放进度（用于系统媒体会话状态映射）。
   Duration get position => _position;
@@ -701,20 +693,11 @@ class LocalPlaybackService extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// 界面预览用的下一首下标：shuffle 读排列中的下一首（不重洗，稳定），
-  /// 本轮末尾返回 -1（真正切歌时才会重洗新一轮）；其余模式同手动切歌。
-  int _peekNextIndex() {
-    if (_queue.isEmpty || _currentIndex < 0) return -1;
-    if (_mode == PlayMode.shuffle) {
-      if (_queue.length <= 1) return _currentIndex;
-      _ensureShuffleOrder();
-      return _shuffleOrder.peekNext(_currentIndex) ?? -1;
-    }
-    return _commitNextIndex(auto: false);
-  }
-
   /// 执行用的下一首下标（自动播完 / 手动切歌共用）：shuffle 走排列，
   /// 轮末重洗；线性模式由 [nextQueueIndex] 决定是否在队尾回绕。
+  ///
+  /// 与快照的 peek（[queueProjection]）刻意分开：peek 不重洗、轮末返回
+  /// null，commit 才推进轮次。
   int _commitNextIndex({required bool auto}) {
     if (_queue.isEmpty) return -1;
     if (_mode == PlayMode.singleRepeat && auto) {

@@ -9,7 +9,7 @@ import 'dart:async';
 
 import 'package:dynamic_color/dynamic_color.dart';
 import 'package:flutter/foundation.dart'
-    show defaultTargetPlatform, visibleForTesting;
+    show TargetPlatform, defaultTargetPlatform, visibleForTesting;
 import 'package:flutter/services.dart';
 import 'package:material_3_expressive/material_3_expressive.dart';
 import 'package:material_ui/material_ui.dart';
@@ -54,6 +54,15 @@ import 'tray_dormant_gate.dart';
 /// 当前曲目的封面 URL（空串视同无封面）：顶栏真身与共享飞行副本同一份取值。
 String? _coverUrlOf(PlaybackProvider provider) =>
     artworkUrlOf(provider.snapshot.current);
+
+/// 移动端（Android / iOS）是否由组合根把生命周期喂给播放功耗策略。
+///
+/// 只有这两个平台接入了 `PlaybackPowerPolicy` 的 `markBackground`；同一次
+/// paused 里协调者会强制落盘，壳层因此不再重复提交。桌面（含 macOS）恒为
+/// 前台，需要壳层用挂起入口补一次。
+bool get _mobileLifecycleOwnsPlaybackCommit =>
+    defaultTargetPlatform == TargetPlatform.android ||
+    defaultTargetPlatform == TargetPlatform.iOS;
 
 /// 顶栏进度条槽高（= M3E 波浪进度条容器高 `wavyContainerHeight`，振幅有空间）。
 ///
@@ -1292,9 +1301,15 @@ class _MyThemedAppState extends State<MyThemedApp> with WidgetsBindingObserver {
     if (state == AppLifecycleState.resumed && mounted) {
       context.read<DataSaverService>().refreshConnectivity();
     } else if (state == AppLifecycleState.paused) {
-      // 进入后台立即落盘播放会话：被系统杀进程时冷启动恢复进度更准
-      // （平时按 1s 节流保存）。
-      context.read<PlaybackProvider>().flushPlaybackSession();
+      // 播放会话：移动端的「进后台」由 main 把生命周期喂给
+      // `PlaybackPowerPolicy`，协调者据此强制整份落盘——这里再提交一次
+      // 只会把同一次 paused 写两遍。桌面不接生命周期策略（恒前台），
+      // 窗口隐藏 / 系统挂起时用与退出相同的入口提交一次。
+      if (!_mobileLifecycleOwnsPlaybackCommit) {
+        unawaited(
+          context.read<PlaybackProvider>().suspendPlaybackSession(),
+        );
+      }
       // 听歌统计：立即落盘进行中的播放事件（被杀进程最多丢 ~15s 进度）。
       context.read<PlayStatisticsService>().flush();
     }

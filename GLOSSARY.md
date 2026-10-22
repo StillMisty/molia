@@ -39,9 +39,13 @@
 - **Played order（播放顺序）** — `lib/playback/playback_order.dart`：实际播放过的队列下标栈
   （最近在后、上限 100、`popPrevious` 供上一首消费）。驱动 `PlaybackSnapshot.previous`
   语义（实际播放顺序最近一首 → 队列前一位）；与播放页队列视图的 `upNext`（队列顺序）是两回事。
+- **Queue projection（队列投影）** — `lib/playback/queue_projection.dart`：
+  `projectQueue` 是 `next` / `previous` / `upNext` 的唯一实现，`LocalPlaybackService`
+  与恢复态共用。恢复态没有洗牌排列 / 播放顺序栈时显式留空 `QueueOrder`：
+  shuffle 的 `next` 为 null、`upNext` 为空（不拿下标近似），`previous` 回退队列前一位。
 - **Resolved next（下一首解析）** — `PlaybackSnapshot.next`：后端按当前模式解析的下一首
-  （shuffle 在单曲内稳定，切歌/切模式重抽）；peek（展示）与 commit（执行）两个语义在
-  服务内显式命名（`_peekNextIndex` / `_commitNextIndex`），轮末重洗只发生在 commit。
+  （shuffle 在单曲内稳定，切歌/切模式重抽）；peek（展示）与 commit（执行）两个语义
+  在服务内显式分开（`queueProjection` / `_commitNextIndex`），轮末重洗只发生在 commit。
 - **Previous（上一首）** — `PlaybackSnapshot.previous`：可展示的上一首（播放顺序最近一首
   的非破坏性 peek → 队列前一位；无 / 与当前同 id 为 null，队首的「重播当前」不算）。
   封面左槽与切歌会话只读它，不再各自解析。
@@ -52,7 +56,11 @@
   （provider 不再分叉，只按路由结果决定通知），恢复态展示快照与进度覆盖值在这里构造。
   落盘口径收在一处：整份会话（曲目切换 / 暂停 / `flushSession` 强制）、轻量进度键
   （`savePosition`，前台 1s / 后台 15s 节流，满 1min 整份刷新）、`clear`，串行化由 store 的
-  `pendingWrite` 承担。系统媒体控制（暂停 / 停止 / 切顺序 / seek）与恢复态切歌键
+  `pendingWrite` 承担。改变会话的命令（暂停 / seek / 切歌 / 模式 / 停止 / 换源）返回前
+  等 `pendingWrite`（「已提交」语义），live seek 强制整份落盘；系统媒体 handler 只
+  await 注入的提交（不自建串行链）；壳层 paused 与桌面退出共用
+  `PlaybackProvider.suspendPlaybackSession()`，桌面 `quitApp` 有界等待（2s）后继续退出。
+  系统媒体控制（暂停 / 停止 / 切顺序 / seek）与恢复态切歌键
   经组合根接线进来（不再直连 provider）；「启动时恢复上次播放」开关的跨设备重载钩子
   挂在 provider 上，协调者只回答「恢复态是否变化」（撤下 / 装载成功），UI 通知由调用方发。
 - **Playback session sync port（会话同步端口）** — `lib/domain/ports/playback_session_sync.dart`：
@@ -444,14 +452,24 @@
 
 - **AI DJ mode（AI 推歌模式）** — `lib/providers/ai_dj_provider.dart` 与
   `lib/providers/ai_dj_history_controller.dart`：`AiDjProvider` 负责推歌会话
-  （电台）、生成编排与通知；`AiDjHistoryController` 独占**当前推荐（active batch）**、
-  **历史推荐**及保留策略。
+  （电台）、通知与对外门面（生成编排在执行器，见下条）；
+  `AiDjHistoryController` 独占**当前推荐（active batch）**、**历史推荐**及保留策略。
   `enabled` = 功能启用（持久化；退出队列不关功能）；`status` = 电台状态
   （off/preparing/playing/error：播放全部或点某首才接管队列）。只有显式
   「生成推荐 / 换一批」才切换 active；历史「播放这批 / 设为当前」也会切换。
   跳过 = 切走时未达 `min(30s, 50%×时长)`（复用统计口径，**只做曲目级排除**）；
   喜欢 = 收藏；「不感兴趣」= 列表移除 + 长期记忆（可撤销）；显式生成有
   阶段进度与取消；退出保留队列。播放快照/进度由组合根接进控制器。
+- **AI generation executor（生成执行器）** —
+  `lib/services/ai/ai_generation_executor.dart`：token / epoch / 取消 / 忙碌位 /
+  可见进度的唯一持有者。三条 lane：显式（可见、可取消、互斥）、换一首（不可取消、
+  行内进度）、静默补歌（无可见进度、显式操作可抢占）；进度走独立
+  `ValueListenable<AiGenerationState>`，provider 的聚合通知只转发忙碌位 /
+  行内替换的离散变化（进度分片由 `generationState` 自己通知窄订阅者）。
+- **AI radio queue（电台队列视图）** — `lib/services/ai/ai_radio_queue.dart`：
+  每次从 live 快照派生 `upcoming` / `contains` / `missing` / `queuedAmong`，不持有
+  计数器；`queuedCount` = 当前及之后仍在队的 AI 曲目数（页面「队列中还有 {count}
+  首推荐」），随播放递减，不是累计加入数。
 - **当前推荐（active batch）** — `AiDjBatch` / `AiDjProvider.recommendations`：
   AI 页与发现页轮播展示的那一批；持久化在推荐历史索引的 `activeBatchId`，
   启动时只加载它（详情懒加载）。换一批后旧 active 留在历史，不丢数据。
@@ -459,16 +477,17 @@
   `lib/services/ai/ai_recommendation_store.dart` + `lib/pages/ai_dj_history_page.dart`：
   索引键 `ai_dj_history_index_v1` + 每批一键 `ai_dj_history_batch_v1:<id>`；
   保留 20 批 / 400 首 / 30 天，active 永不自动清理；删除 active 回退最近一批，
-  清空历史保留 active。旧单批键 `ai_dj_pending_batch_v1` 首次加载迁移为
-  `restored` active；迁移成功才删旧键。历史批次只读（可播放 / 加队列 / 设为
-  当前 / 删除），不在历史里编辑反馈。
+  清空历史保留 active。索引与批次载荷的写序统一为「先写索引、后删载荷」
+  （删除 / 清空 / 保留裁剪都一样），孤儿载荷无害。旧单批键 `ai_dj_pending_batch_v1`
+  首次加载迁移为 `restored` active；迁移成功才删旧键。历史批次只读（可播放 /
+  加队列 / 设为当前 / 删除），不在历史里编辑反馈。
 - **批次（batch）大小** — 10 / 20 / 30 / 50，默认 20，存在
   `AiPreferences.batchSize`；影响 LLM `count`、历史元数据与自动补歌数量，
   「换一首」固定 1；保存后下一次生成生效。
 - **静默补歌（silent auto-feed）** — 队列剩余 ≤5 首、当前上下文为
   `kAiDjContextName` 且功能启用时，后台生成一批并追加队尾 + 写历史
   （`origin=autoFeed`）。不设置 `AiDjProgress`、不显示状态卡 / 骨架 / toast /
-  队列徽标，**不切换 active**；生成完成时队列已播完则从新追加的第一首静默续播。
+  队列计数，**不切换 active**；生成完成时队列已播完则从新追加的第一首静默续播。
   连续 3 次失败停止自动补歌（只留内部错误状态）；显式操作优先并可取消在途
   静默任务。手动「补一批到队尾」是显式操作（可显示进度），同样不切换 active。
 - **推荐偏好（recommendation preferences）** — `AiPreferences`：批次大小、
@@ -527,6 +546,31 @@
   `selectJournalChunks` 管 WebDAV 分块衔接、`PeerJournalNames` 管协议文件名。引擎、
   局域网 / WebDAV 传输与测试网络共用这一份游标 / 窗口 / 分块语义，边界条件只维护
   一处。
+- **Pull plan（拉取计划）** — 形状在 `lib/domain/models/sync_pull_plan.dart`，
+  判定在 `lib/data/sync/sync_pull_plan.dart`：每次拉取前由
+  `SyncRoundRunner._pullPlan` 现生成一份 `SyncPullPlan`（逐对端
+  `cursor` / `forceFull` + discovery），同一轮的各传输消费同一份；缺口二次
+  拉取会再生成一份，只带需要 bootstrap 的对端。传输只提供证据——局域网
+  `snapshotId + snapshotFresh`，WebDAV `etag` / `lastmodified` + 回执头部；
+  skip / delta / full 统一由 `decideSyncPull` 判定，「只有本轮新鲜证据能跳过」
+  只有这一处实现。
+- **Sync round runner（轮次编排）** — `lib/data/sync/sync_round.dart`：
+  `SyncRoundRunner.runRound` 只剩线性编排，阶段 collect / pull /
+  consume + apply / publish + compact / report 只读写 `SyncRoundContext`，
+  可注入假传输 / 假适配器单独测试。语义保留：应用成功才推进游标、forced
+  delivery、缺口二次拉取、anti-entropy、入站轮；`SyncEngine` 只留公共门面
+  （调度器宿主 / 服务端语义 / 入站合流 / 公告过滤）。
+- **Sync round window（轮次窗口）** — `SyncRoundWindow`（定义在
+  `lib/domain/ports/sync_transport.dart`）：一轮的 `pull` 与 `push` 显式共享
+  同一个窗口，删除局域网私有的 `_roundStartedAt` 隐式耦合。
+- **Sync transport runtime（传输运行时）** — `lib/data/sync/sync_transport_runtime.dart`：
+  唯一拥有 ensure / start / stop / resume / hidden / announce 的模块；组合根把
+  同一实例注入引擎与控制面（`sync_stack.dart`），两边不再各写一份
+  `_ensureTransportsRunning`。
+- **Peer candidate（局域网对端候选）** — `lib/data/sync/sync_peer_candidate.dart`：
+  候选观测的字段级合并（本轮 presence 优先旧记忆，旧指纹不能覆盖新指纹）与
+  HTTP 地址尝试顺序（IPv4 → 全局 / ULA IPv6 → 观测源地址 → link-local 兜底，
+  单对端 ≤3 个），纯数据、不碰 socket / HTTP。
 - **SyncStampIssuer（版本戳发号器）** — `lib/data/sync/sync_stamp.dart`：
   本机所有同步戳的唯一来源，`next()` 严格单调、`observe()` 吸收远端超前戳
   （记 warning）、`seed()` 接受初始化基线；基线持久化在 `sync_state_v2` 的
@@ -553,11 +597,13 @@
   适配器与版本戳（本地记录的收集入口由引擎注入，`SyncEngine.collectRecords`），
   但**不构造轮次、不经传输**；不需要启用同步；凭证类默认排除。
 - **Sync control plane（同步控制面）** — `lib/data/sync/sync_control_plane.dart`：
-  UI 面的控制 / 身份 / 传输运行时（设备名与设备 id、类别开关、传输开关 +
+  UI 面的控制 / 身份 / 传输开关与运行状态（设备名与设备 id、类别开关、传输开关 +
   `transportStatus`、手动地址簿、`lanDiscoveryPorts`、口令生命周期、观测快照
   的只读 getter）；与引擎共用同一 `SyncStateStore` 与同一份传输实例，成功写入
-  后 `notifyListeners`。引擎只保留轮次执行与服务端语义（`sync_engine.dart`），
-  两边的 seam 是「控制面改状态 → 引擎下一轮读到」。
+  后 `notifyListeners`。传输的起停 / 生命周期 / 公告统一归传输运行时
+  （`sync_transport_runtime.dart`），引擎只保留公共门面（调度器宿主 / 服务端
+  语义 / 入站合流 / 公告过滤，`sync_engine.dart`），轮次内阶段编排在
+  `SyncRoundRunner`；两边的 seam 是「控制面改状态 → 引擎下一轮读到」。
 - **LWW stamp（逐键版本戳）** — 版本戳 `SyncVersion` 三元组：物理分量大者胜，相同时
   `counter` 大者胜，再同按设备 id 字典序决平局（确定性收敛）；物理分量是
   HLC-lite 的 `max(本地墙上时钟, 已观测最大值)`，不再是「最后的墙上时间」。
@@ -688,7 +734,8 @@
 - **Transport gating（传输门控）** — 内容未变不传：快照带
   `snapshotId`（记录集规范化哈希，与 `producedAt` 的「时间变」分开），局域网
   公告携带它、WebDAV 用 `getetag` / `getlastmodified`，未变跳过
-  GET + 解密 + 合并；本机内容指纹与上次成功推送一致时跳过加密 + 上传。
+  GET + 解密 + 合并；「未变」是否成立统一由拉取计划的 `decideSyncPull` 判定
+  （只有本轮新鲜证据能跳过）。本机内容指纹与上次成功推送一致时跳过加密 + 上传。
 - **Publish ledger（发布台账）** — `lib/data/sync/publish_ledger.dart`：每传输
   一份（局域网 / WebDAV），把「这轮能不能跳过加密 / 上传？journal 能裁到哪」
   的判据收在一处。聚合三处事实：**内存指纹**（本进程成功外发过的载荷身份：
@@ -698,7 +745,7 @@
   回答是否外发，`mark(result)` 记账（成功才记；零对端与失败都遗忘，下轮重发；
   快照成功才推进持久覆盖）；`publishedCoverage` / `journalCoverage` 回答日志
   裁剪的覆盖下限（按需给实时快照的传输不约束）。push 循环与 journal compact
-  只消费台账，引擎只保留轮次编排。
+  只消费台账，轮次编排只负责调用顺序。
 - **Key derivation cache（密钥派生缓存）** — `SyncCodec`：PBKDF2(口令, 应用级
   固定盐) 得根密钥并按口令会话内缓存一次，帧密钥 = HKDF(根密钥, 帧 nonce)；
   帧不携带盐与迭代数，帧密钥派生与载荷编码在 worker isolate 内执行

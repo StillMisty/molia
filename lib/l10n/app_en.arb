@@ -977,7 +977,7 @@
   "aiDjSaveConfig": "Save",
   "aiDjClearConfig": "Clear",
   "aiDjConfigSaved": "Saved",
-  "aiDjQueued": "{count} added to the queue this time",
+  "aiDjQueued": "{count} recommendations left in the queue",
   "@aiDjQueued": {
     "placeholders": {
       "count": {

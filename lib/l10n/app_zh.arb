@@ -713,7 +713,7 @@
   "aiDjSaveConfig": "保存配置",
   "aiDjClearConfig": "清除配置",
   "aiDjConfigSaved": "已保存",
-  "aiDjQueued": "本次已加入队列 {count} 首",
+  "aiDjQueued": "队列中还有 {count} 首推荐",
   "@aiDjQueued": {
     "placeholders": {
       "count": {

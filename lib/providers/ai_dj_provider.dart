@@ -24,6 +24,8 @@ import '../domain/models/playback.dart';
 import '../domain/models/source.dart';
 import '../domain/models/track.dart';
 import '../domain/ports/source_registry.dart';
+import '../services/ai/ai_generation_executor.dart';
+import '../services/ai/ai_radio_queue.dart';
 import '../services/ai/ai_recommendation_service.dart';
 import '../services/ai/ai_recommendation_store.dart';
 import '../services/ai/ai_settings_store.dart';
@@ -71,6 +73,8 @@ class AiDjProvider extends ChangeNotifier {
         _recommendationService = recommendationService,
         _settingsStore = settingsStore,
         _registry = sourceRegistry {
+    _generation = AiGenerationExecutor();
+    _generation.state.addListener(_onGenerationStateChanged);
     _history = AiDjHistoryController(
       store: recommendationStore ?? AiRecommendationStore(),
       decode: _restoreBatch,
@@ -86,6 +90,19 @@ class AiDjProvider extends ChangeNotifier {
   final Logger _logger = Logger('molia.ai_dj_provider');
 
   late final AiDjHistoryController _history;
+
+  /// 生成执行器：token / epoch / 取消 / 可见进度只在这里维护。
+  late final AiGenerationExecutor _generation;
+
+  /// 队列操作（起播 / 加入 / 历史播放）的互斥位；生成忙碌位在 [_generation]。
+  bool _queueBusy = false;
+
+  /// 上一次转发给聚合通知的生成离散状态（进度分片不转发）。
+  bool _lastGenerationBusy = false;
+  String? _lastReplacingUri;
+
+  /// 上一次在播放快照变化后展示过的派生排队数（用于补一次通知）。
+  int _lastQueuedCount = 0;
 
   /// 队列剩余曲目 ≤ 此值时静默补歌。
   static const int lowWatermark = 5;
@@ -109,19 +126,10 @@ class AiDjProvider extends ChangeNotifier {
   bool _radioStoppedByUser = false;
 
   SourceFailure? _lastError;
-  bool _explicitBusy = false;
-  AiDjProgress? _progress;
-  AiGenerationCancelToken? _cancelToken;
-  int _generationEpoch = 0;
 
-  bool _autoFeedInFlight = false;
-  AiGenerationCancelToken? _autoCancelToken;
   int _autoFeedFailures = 0;
   bool _autoFeedHalted = false;
   SourceFailure? _autoFeedError;
-
-  String? _replacingUri;
-  int _queuedCount = 0;
 
   AiPrompt? _lastSentPrompt;
   String? _lastRawResponse;
@@ -147,13 +155,16 @@ class AiDjProvider extends ChangeNotifier {
       _status == AiDjStatus.preparing || _status == AiDjStatus.playing;
 
   /// 显式操作进行中（生成 / 加入队列 / 重找未解析）。
-  bool get isBusy => _explicitBusy;
+  bool get isBusy => _generation.isBusy || _queueBusy;
+
+  /// 生成状态（独立 ValueListenable）：进度分片只通知它，不触发聚合通知。
+  ValueListenable<AiGenerationState> get generationState => _generation.state;
 
   /// 显式生成的阶段进度；静默补歌永远不设置它。
-  AiDjProgress? get progress => _progress;
+  AiDjProgress? get progress => _generation.progress;
 
   /// 是否正在替换某一行（行内进度，其他行仍可操作）。
-  bool isReplacing(String uri) => _replacingUri == uri;
+  bool isReplacing(String uri) => _generation.replacingUri == uri;
 
   /// 推荐偏好的单调版本（页面据此重载发送原文预览）。
   int get preferencesRevision => _preferencesRevision;
@@ -206,8 +217,8 @@ class AiDjProvider extends ChangeNotifier {
 
   SourceFailure? get lastError => _lastError;
 
-  /// 会话内已入队的 AI 曲目总数。
-  int get queuedCount => _queuedCount;
+  /// 会话内仍在队列「当前及之后」的 AI 曲目数（从 live 快照派生）。
+  int get queuedCount => _radioQueue.queuedAmong(_sessionTracks.keys);
 
   /// 会话内自动判定 + 手动「不感兴趣」的跳过项（本轮）。
   List<String> get skippedLabels => List.unmodifiable(_skippedLabels);
@@ -229,8 +240,10 @@ class AiDjProvider extends ChangeNotifier {
       List.unmodifiable([for (final entry in _notInterested) entry.item]);
 
   /// 列表项是否已在播放队列（页面标记「队列中」）。
-  bool isQueued(String uri) =>
-      _playbackProvider.snapshot.queue.any((track) => track.id.uri == uri);
+  bool isQueued(String uri) => _radioQueue.contains(uri);
+
+  /// 当前 live 快照的队列参与视图（每次现算，不缓存计数）。
+  AiRadioQueue get _radioQueue => AiRadioQueue.of(_playbackProvider.snapshot);
 
   Future<void> init() async {
     _config = await _settingsStore.readConfig();
@@ -279,9 +292,6 @@ class AiDjProvider extends ChangeNotifier {
         durationMs: track.duration?.inMilliseconds ?? 0,
       );
     }
-    _queuedCount = snapshot.currentIndex < 0
-        ? 0
-        : snapshot.queue.length - snapshot.currentIndex;
   }
 
   Future<void> saveConfig(LlmConfig config) async {
@@ -437,15 +447,11 @@ class AiDjProvider extends ChangeNotifier {
     await refreshRecommendations();
   }
 
-  void _cancelAutoFeed() {
-    _autoCancelToken?.cancel();
-    _autoCancelToken = null;
-    _autoFeedInFlight = false;
-  }
+  void _cancelAutoFeed() => _generation.cancelAutoFeed();
 
   /// 「生成推荐 / 换一批」：新批成为 active，旧 active 留在历史。
   Future<void> refreshRecommendations() async {
-    if (!hasConfig || _explicitBusy) return;
+    if (!hasConfig || isBusy) return;
     await _runExplicitGeneration(
       origin: AiDjOrigin.refresh,
       count: _preferences.batchSize,
@@ -453,19 +459,11 @@ class AiDjProvider extends ChangeNotifier {
   }
 
   /// 取消显式生成：不写错误、不动列表；晚到结果按 epoch 丢弃。
-  void cancelGeneration() {
-    if (!_explicitBusy && _progress == null) return;
-    _generationEpoch++;
-    _cancelToken?.cancel();
-    _cancelToken = null;
-    _explicitBusy = false;
-    _progress = null;
-    notifyListeners();
-  }
+  void cancelGeneration() => _generation.cancelExplicit();
 
   /// 开始推歌（电台）：用当前推荐替换当前队列并从 [fromIndex] 起播。
   Future<void> startRadio({int fromIndex = 0}) async {
-    if (_explicitBusy) return;
+    if (isBusy) return;
     if (recommendations == null) {
       await ensureRecommendations();
     }
@@ -480,7 +478,7 @@ class AiDjProvider extends ChangeNotifier {
       return;
     }
 
-    _explicitBusy = true;
+    _queueBusy = true;
     _lastError = null;
     _setStatus(AiDjStatus.preparing);
     notifyListeners();
@@ -492,7 +490,6 @@ class AiDjProvider extends ChangeNotifier {
         contextName: kAiDjContextName,
       );
       _registerSessionTracks(batch.items);
-      _queuedCount = batch.items.length - clamped;
       _setStatus(AiDjStatus.playing);
       _lastError = null;
     } catch (e) {
@@ -500,7 +497,7 @@ class AiDjProvider extends ChangeNotifier {
       _setStatus(AiDjStatus.error);
       _logger.severe('AI 推歌：起播失败', e);
     } finally {
-      _explicitBusy = false;
+      _queueBusy = false;
       notifyListeners();
     }
   }
@@ -511,29 +508,28 @@ class AiDjProvider extends ChangeNotifier {
   /// 「全部加入队列」：把当前推荐里还没入队的曲目追加到队尾（不打断播放）。
   Future<void> enqueueRecommendations() async {
     final batch = recommendations;
-    if (batch == null || batch.items.isEmpty || _explicitBusy) return;
+    if (batch == null || batch.items.isEmpty || isBusy) return;
     final missing = _missingFromQueue(batch.items);
     if (missing.isEmpty) return;
-    _explicitBusy = true;
+    _queueBusy = true;
     _lastError = null;
     notifyListeners();
     try {
       await _playbackProvider
           .enqueueDomainTracks([for (final item in missing) item.track]);
       _registerSessionTracks(missing);
-      _queuedCount += missing.length;
     } catch (e) {
       _lastError = _failureOf(e);
       _logger.severe('AI 推歌：加入队列失败', e);
     } finally {
-      _explicitBusy = false;
+      _queueBusy = false;
       notifyListeners();
     }
   }
 
   /// 手动「补一批到队尾」：显式操作（可显示进度），但**不切换 active**。
   Future<void> feedMore() async {
-    if (_explicitBusy) return;
+    if (isBusy) return;
     if (_status != AiDjStatus.playing && _status != AiDjStatus.error) return;
     final batch = await _runExplicitGeneration(
       origin: AiDjOrigin.manualFeed,
@@ -550,97 +546,87 @@ class AiDjProvider extends ChangeNotifier {
     if (batch == null ||
         index < 0 ||
         index >= batch.items.length ||
-        _explicitBusy ||
-        _replacingUri != null) {
+        isBusy ||
+        _generation.replacingUri != null) {
       return;
     }
     final target = batch.items[index];
-    _replacingUri = target.track.id.uri;
+    final targetUri = target.track.id.uri;
+    final preferences = _snapshotPreferences();
+    final likedLabels = _likedLabelsForPrompt(commit: true);
     _lastError = null;
-    notifyListeners();
-    try {
-      final likedLabels = _likedLabelsForPrompt(commit: true);
-      final generated = await _recommendationService.generate(
+
+    await _generation.run<void>(
+      intent: AiGenerationIntent(
+        origin: AiDjOrigin.refresh,
+        count: 1,
+        lane: AiGenerationLane.replace,
+        replacingUri: targetUri,
+      ),
+      invoke: (token, _) => _recommendationService.generate(
         config: _config!,
         count: 1,
-        preferences: _snapshotPreferences(),
+        preferences: preferences,
         skippedLabels: mergedSkippedLabels,
         likedLabels: likedLabels,
         excludeLabels: [for (final item in batch.items) item.source.label],
-      );
-      if (generated.items.isEmpty) {
-        throw const SourceFailure(
-          kind: FailureKind.unknown,
-          message: '换一首没有生成可播放的曲目',
-          l10nKey: 'aiDjNothingResolved',
-          retryable: true,
-        );
-      }
-      final latest = recommendations;
-      if (latest == null || latest.id != batch.id) return;
-      final items = List<ResolvedRecommendation>.of(latest.items);
-      if (index >= items.length) return;
-      items[index] = generated.items.first;
-      await _history.updateActive(latest.copyWith(items: items));
-      if (_queuedUris().contains(target.track.id.uri)) {
-        await _playbackProvider.replaceQueueTrack(
-            target.track, generated.items.first.track);
-      }
-    } on SourceFailure catch (failure) {
-      if (failure.kind == FailureKind.cancelled) return;
-      _lastError = failure;
-      _logger.warning('AI 推歌：换一首失败 ${failure.message}');
-    } catch (e) {
-      _lastError = _failureOf(e);
-      _logger.severe('AI 推歌：换一首失败', e);
-    } finally {
-      _replacingUri = null;
-      notifyListeners();
-    }
+        cancelToken: token,
+      ),
+      commit: (generated) async {
+        if (generated.items.isEmpty) {
+          throw const SourceFailure(
+            kind: FailureKind.unknown,
+            message: '换一首没有生成可播放的曲目',
+            l10nKey: 'aiDjNothingResolved',
+            retryable: true,
+          );
+        }
+        final replacement = generated.items.first;
+        final latest = recommendations;
+        if (latest == null || latest.id != batch.id) return;
+        final items = List<ResolvedRecommendation>.of(latest.items);
+        if (index >= items.length) return;
+        items[index] = replacement;
+        await _history.updateActive(latest.copyWith(items: items));
+        if (_radioQueue.contains(targetUri)) {
+          await _playbackProvider.replaceQueueTrack(
+            target.track,
+            replacement.track,
+          );
+          // 队列里的旧曲目已被顶替：会话跟踪跟到新曲目，排队数 / 跳过判定
+          // 才能从 live 快照重新派生。
+          _registerSessionTracks([replacement]);
+        }
+      },
+      onFailure: _onGenerationFailure,
+    );
   }
 
   /// 未解析项「重新找一次」：只重新搜索，不重新调 LLM。
   Future<void> retryUnresolved() async {
     final batch = recommendations;
-    if (batch == null || batch.unresolved.isEmpty || _explicitBusy) return;
-    final token = AiGenerationCancelToken();
-    final epoch = ++_generationEpoch;
-    _cancelToken = token;
-    _explicitBusy = true;
-    _progress = AiDjProgress(
-      phase: AiDjPhase.resolving,
-      startedAt: DateTime.now(),
-      total: batch.unresolved.length,
-    );
-    notifyListeners();
-    try {
-      final updated = await _recommendationService.resolveUnresolved(
+    if (batch == null || batch.unresolved.isEmpty || isBusy) return;
+    final preferences = _snapshotPreferences();
+    await _generation.run<void>(
+      intent: AiGenerationIntent(
+        origin: AiDjOrigin.refresh,
+        count: batch.unresolved.length,
+        lane: AiGenerationLane.explicit,
+        initialProgress: AiDjProgress(
+          phase: AiDjPhase.resolving,
+          startedAt: DateTime.now(),
+          total: batch.unresolved.length,
+        ),
+      ),
+      invoke: (token, onProgress) => _recommendationService.resolveUnresolved(
         batch: batch,
-        preferences: _snapshotPreferences(),
+        preferences: preferences,
         cancelToken: token,
-        onProgress: (progress) {
-          if (epoch != _generationEpoch || token.isCancelled) return;
-          _progress = progress;
-          notifyListeners();
-        },
-      );
-      if (epoch != _generationEpoch || token.isCancelled) return;
-      await _history.updateActive(updated);
-    } on SourceFailure catch (failure) {
-      if (failure.kind != FailureKind.cancelled && epoch == _generationEpoch) {
-        _lastError = failure;
-      }
-    } catch (e) {
-      if (epoch == _generationEpoch) _lastError = _failureOf(e);
-      _logger.warning('AI 推歌：重新找未解析失败 $e');
-    } finally {
-      if (epoch == _generationEpoch) {
-        _explicitBusy = false;
-        _progress = null;
-        _cancelToken = null;
-        notifyListeners();
-      }
-    }
+        onProgress: onProgress,
+      ),
+      commit: (updated) => _history.updateActive(updated),
+      onFailure: _onGenerationFailure,
+    );
   }
 
   /// 「不感兴趣」：从当前推荐移除 + 长期记忆（下一批不再推荐），可撤销。
@@ -713,11 +699,11 @@ class AiDjProvider extends ChangeNotifier {
   /// 功能关闭时按普通队列播放（不启动自动补歌）。
   Future<void> playHistoryBatch(String id) async {
     final batch = await loadHistoryBatch(id);
-    if (batch == null || batch.items.isEmpty || _explicitBusy) return;
+    if (batch == null || batch.items.isEmpty || isBusy) return;
     _radioStoppedByUser = false;
     _clearUndoStack();
     await _history.setActive(id);
-    _explicitBusy = true;
+    _queueBusy = true;
     notifyListeners();
     try {
       _resetRadioSession();
@@ -727,7 +713,6 @@ class AiDjProvider extends ChangeNotifier {
         contextName: _enabled ? kAiDjContextName : null,
       );
       _registerSessionTracks(batch.items);
-      _queuedCount = batch.items.length;
       if (_enabled) {
         _setStatus(AiDjStatus.playing);
       } else {
@@ -737,7 +722,7 @@ class AiDjProvider extends ChangeNotifier {
       _lastError = _failureOf(e);
       _logger.severe('AI 推歌：播放历史批次失败', e);
     } finally {
-      _explicitBusy = false;
+      _queueBusy = false;
       notifyListeners();
     }
   }
@@ -745,21 +730,20 @@ class AiDjProvider extends ChangeNotifier {
   /// 历史「加入队列」：只追加未入队曲目，不切换 active。
   Future<void> enqueueHistoryBatch(String id) async {
     final batch = await loadHistoryBatch(id);
-    if (batch == null || _explicitBusy) return;
+    if (batch == null || isBusy) return;
     final missing = _missingFromQueue(batch.items);
     if (missing.isEmpty) return;
-    _explicitBusy = true;
+    _queueBusy = true;
     notifyListeners();
     try {
       await _playbackProvider
           .enqueueDomainTracks([for (final item in missing) item.track]);
       _registerSessionTracks(missing);
-      _queuedCount += missing.length;
     } catch (e) {
       _lastError = _failureOf(e);
       _logger.severe('AI 推歌：历史批次加入队列失败', e);
     } finally {
-      _explicitBusy = false;
+      _queueBusy = false;
       notifyListeners();
     }
   }
@@ -802,7 +786,6 @@ class AiDjProvider extends ChangeNotifier {
     if (_status == AiDjStatus.off) return;
     _cancelAutoFeed();
     _setStatus(AiDjStatus.off);
-    _explicitBusy = false;
     _lastError = null;
     _trackedUri = null;
     notifyListeners();
@@ -815,6 +798,17 @@ class AiDjProvider extends ChangeNotifier {
   ///
   /// 播放被停止或队列换成本地内容时只结束「电台」，功能保持启用。
   void onPlaybackChanged() {
+    _handlePlaybackChanged();
+    // 队列推进会让派生的 queuedCount 变小：这里按「上次展示值」补一次
+    // 通知，页面上的「队列中还有 N 首推荐」才不会停在上一次生成时的数字。
+    final current = queuedCount;
+    if (current != _lastQueuedCount) {
+      _lastQueuedCount = current;
+      notifyListeners();
+    }
+  }
+
+  void _handlePlaybackChanged() {
     if (_adoptRestoredRadioIfNeeded()) notifyListeners();
     if (_status != AiDjStatus.playing) return;
     final snapshot = _playbackProvider.snapshot;
@@ -853,91 +847,64 @@ class AiDjProvider extends ChangeNotifier {
   }) async {
     final makeActive = origin == AiDjOrigin.refresh;
     final appendToQueue = origin == AiDjOrigin.manualFeed;
-    if (!hasConfig) return null;
+    if (!hasConfig || isBusy) return null;
     if (origin == AiDjOrigin.manualFeed &&
         _status != AiDjStatus.playing &&
         _status != AiDjStatus.error) {
       return null;
     }
-    // 显式优先：取消在途静默任务，并用新 epoch 丢弃晚到结果。
-    _cancelAutoFeed();
-    final token = AiGenerationCancelToken();
-    final epoch = ++_generationEpoch;
-    _cancelToken = token;
-    _explicitBusy = true;
+    final likedLabels = _likedLabelsForPrompt(commit: true);
+    final preferences = _snapshotPreferences();
     _lastError = null;
-    _progress = AiDjProgress(
-      phase: AiDjPhase.profile,
-      startedAt: DateTime.now(),
-    );
-    notifyListeners();
-    try {
-      final likedLabels = _likedLabelsForPrompt(commit: true);
-      final snapshot = _snapshotPreferences();
-      final batch = await _recommendationService.generate(
+    return _generation.run<AiDjBatch>(
+      intent: AiGenerationIntent(
+        origin: origin,
+        count: count,
+        lane: AiGenerationLane.explicit,
+      ),
+      invoke: (token, onProgress) => _recommendationService.generate(
         config: _config!,
         count: count,
-        preferences: snapshot,
+        preferences: preferences,
         skippedLabels: mergedSkippedLabels,
         likedLabels: likedLabels,
         excludeLabels: const [],
         cancelToken: token,
-        onProgress: (progress) {
-          if (epoch != _generationEpoch || token.isCancelled) return;
-          _progress = progress;
-          notifyListeners();
-        },
-      );
-      if (epoch != _generationEpoch || token.isCancelled) return null;
-      if (batch.items.isEmpty) {
-        throw const SourceFailure(
-          kind: FailureKind.unknown,
-          message: '本批没有可播放的曲目',
-          l10nKey: 'aiDjNothingResolved',
-          retryable: true,
-        );
-      }
-      final stamped = _stampBatch(batch, origin, snapshot);
-      if (appendToQueue) {
-        await _playbackProvider.enqueueDomainTracks(
-          [for (final item in stamped.items) item.track],
-        );
-        _registerSessionTracks(stamped.items);
-        _queuedCount += stamped.items.length;
-      }
-      await _history.archive(stamped, makeActive: makeActive);
-      if (makeActive) _clearUndoStack();
-      _lastSentPrompt = stamped.prompt;
-      _lastRawResponse = stamped.rawResponse;
-      await _consumeSeeds();
-      if (origin != AiDjOrigin.autoFeed) {
-        _autoFeedHalted = false;
-        _autoFeedFailures = 0;
-        _autoFeedError = null;
-      }
-      return stamped;
-    } on SourceFailure catch (failure) {
-      if (failure.kind == FailureKind.cancelled ||
-          epoch != _generationEpoch ||
-          token.isCancelled) {
-        return null;
-      }
-      _lastError = failure;
-      _logger.warning('AI 推歌：${origin.storageValue} 生成失败 ${failure.message}');
-      return null;
-    } catch (e) {
-      if (epoch != _generationEpoch || token.isCancelled) return null;
-      _lastError = _failureOf(e);
-      _logger.severe('AI 推歌：${origin.storageValue} 生成失败', e);
-      return null;
-    } finally {
-      if (epoch == _generationEpoch) {
-        _explicitBusy = false;
-        _progress = null;
-        _cancelToken = null;
-        notifyListeners();
-      }
-    }
+        onProgress: onProgress,
+      ),
+      commit: (batch) async {
+        if (batch.items.isEmpty) {
+          throw const SourceFailure(
+            kind: FailureKind.unknown,
+            message: '本批没有可播放的曲目',
+            l10nKey: 'aiDjNothingResolved',
+            retryable: true,
+          );
+        }
+        final stamped = _stampBatch(batch, origin, preferences);
+        if (appendToQueue) {
+          final missing = _missingFromQueue(stamped.items);
+          if (missing.isNotEmpty) {
+            await _playbackProvider.enqueueDomainTracks(
+              [for (final item in missing) item.track],
+            );
+          }
+          _registerSessionTracks(stamped.items);
+        }
+        await _history.archive(stamped, makeActive: makeActive);
+        if (makeActive) _clearUndoStack();
+        _lastSentPrompt = stamped.prompt;
+        _lastRawResponse = stamped.rawResponse;
+        await _consumeSeeds();
+        if (origin != AiDjOrigin.autoFeed) {
+          _autoFeedHalted = false;
+          _autoFeedFailures = 0;
+          _autoFeedError = null;
+        }
+        return stamped;
+      },
+      onFailure: _onGenerationFailure,
+    );
   }
 
   /// 静默补歌：不设置进度 / busy / 状态，不切换 active。
@@ -945,74 +912,95 @@ class AiDjProvider extends ChangeNotifier {
     if (!hasConfig || !_enabled || !_preferences.autoFeed || _autoFeedHalted) {
       return;
     }
-    if (_explicitBusy || _autoFeedInFlight) return;
+    if (isBusy || _generation.autoFeedInFlight) return;
     final before = _playbackProvider.snapshot;
-    final token = AiGenerationCancelToken();
-    _autoCancelToken = token;
-    _autoFeedInFlight = true;
-    try {
-      final likedLabels = _likedLabelsForPrompt(commit: true);
-      final snapshot = _snapshotPreferences();
-      final batch = await _recommendationService.generate(
+    final likedLabels = _likedLabelsForPrompt(commit: true);
+    final preferences = _snapshotPreferences();
+    await _generation.run<AiDjBatch>(
+      intent: AiGenerationIntent(
+        origin: AiDjOrigin.autoFeed,
+        count: preferences.batchSize,
+        lane: AiGenerationLane.silent,
+      ),
+      invoke: (token, _) => _recommendationService.generate(
         config: _config!,
-        count: snapshot.batchSize,
-        preferences: snapshot,
+        count: preferences.batchSize,
+        preferences: preferences,
         skippedLabels: mergedSkippedLabels,
         likedLabels: likedLabels,
         excludeLabels: const [],
         cancelToken: token,
-      );
-      if (token.isCancelled) return;
-      if (batch.items.isEmpty) {
-        throw const SourceFailure(
-          kind: FailureKind.unknown,
-          message: '本批没有可播放的曲目',
-          l10nKey: 'aiDjNothingResolved',
-          retryable: true,
-        );
-      }
-      final stamped = _stampBatch(batch, AiDjOrigin.autoFeed, snapshot);
-      await _playbackProvider
-          .enqueueDomainTracks([for (final item in stamped.items) item.track]);
-      // 入队已经发生：即使此时显式操作取消了静默任务，也要补齐历史 /
-      // 计数 / 种子，否则队列里会出现未登记的曲目。
-      await _history.archive(stamped, makeActive: false);
-      _registerSessionTracks(stamped.items);
-      _queuedCount += stamped.items.length;
-      _autoFeedFailures = 0;
-      _autoFeedError = null;
-      await _consumeSeeds();
-      // 队列已经播完：从新追加的第一首静默续播（不提示、不改 active）。
-      final after = _playbackProvider.snapshot;
-      final oldLastIndex = before.queue.length - 1;
-      if (after.current != null &&
-          !after.isPlaying &&
-          after.currentIndex >= oldLastIndex &&
-          stamped.items.isNotEmpty) {
-        await _playbackProvider
-            .playLocalQueueItemById(stamped.items.first.track.id.uri);
-      }
-      notifyListeners();
-    } on SourceFailure catch (failure) {
-      if (failure.kind == FailureKind.cancelled || token.isCancelled) return;
-      _recordAutoFeedFailure(failure);
-    } catch (e) {
-      if (token.isCancelled) return;
-      _recordAutoFeedFailure(_failureOf(e));
-    } finally {
-      if (identical(_autoCancelToken, token)) _autoCancelToken = null;
-      _autoFeedInFlight = false;
-    }
+      ),
+      commit: (batch) async {
+        if (batch.items.isEmpty) {
+          throw const SourceFailure(
+            kind: FailureKind.unknown,
+            message: '本批没有可播放的曲目',
+            l10nKey: 'aiDjNothingResolved',
+            retryable: true,
+          );
+        }
+        final stamped = _stampBatch(batch, AiDjOrigin.autoFeed, preferences);
+        // 静默补歌去重：只追加队列里还没有的曲目，避免生成结果与现有
+        // 队列重叠时把同一首重复塞进队尾。
+        final missing = _missingFromQueue(stamped.items);
+        if (missing.isNotEmpty) {
+          await _playbackProvider.enqueueDomainTracks(
+            [for (final item in missing) item.track],
+          );
+        }
+        // 入队已经发生：即使此时显式操作取消了静默任务，也要补齐历史 /
+        // 计数 / 种子，否则队列里会出现未登记的曲目。
+        await _history.archive(stamped, makeActive: false);
+        _registerSessionTracks(stamped.items);
+        _autoFeedFailures = 0;
+        _autoFeedError = null;
+        await _consumeSeeds();
+        // 队列已经播完：从新追加的第一首静默续播（不提示、不改 active）。
+        final after = _playbackProvider.snapshot;
+        final oldLastIndex = before.queue.length - 1;
+        if (missing.isNotEmpty &&
+            after.current != null &&
+            !after.isPlaying &&
+            after.currentIndex >= oldLastIndex) {
+          await _playbackProvider
+              .playLocalQueueItemById(missing.first.track.id.uri);
+        }
+        notifyListeners();
+        return stamped;
+      },
+      onFailure: _onGenerationFailure,
+    );
   }
 
   void _maybeAutoFeed(PlaybackSnapshot snapshot) {
     if (!_enabled || !_preferences.autoFeed || _autoFeedHalted) return;
     if (_status != AiDjStatus.playing) return;
-    if (_explicitBusy || _autoFeedInFlight || _autoCancelToken != null) return;
+    if (isBusy || _generation.autoFeedInFlight) return;
     if (!_isRadioQueue(snapshot)) return;
-    final upcoming = snapshot.queue.length - snapshot.currentIndex - 1;
-    if (upcoming > lowWatermark) return;
+    if (_radioQueue.upcoming > lowWatermark) return;
     unawaited(_autoFeed());
+  }
+
+  /// 生成失败统一出口：按意图的失败策略分流，取消已在执行器内过滤。
+  void _onGenerationFailure(
+    AiGenerationIntent intent,
+    SourceFailure failure,
+  ) {
+    if (intent.failurePolicy == AiGenerationFailurePolicy.autoFeed) {
+      _recordAutoFeedFailure(failure);
+      return;
+    }
+    _lastError = failure;
+    final String label;
+    if (intent.lane == AiGenerationLane.replace) {
+      label = '换一首';
+    } else if (intent.initialProgress?.phase == AiDjPhase.resolving) {
+      label = '重新找未解析';
+    } else {
+      label = '${intent.origin.storageValue} 生成';
+    }
+    _logger.warning('AI 推歌：$label失败 ${failure.message}');
   }
 
   void _recordAutoFeedFailure(SourceFailure failure) {
@@ -1113,19 +1101,10 @@ class AiDjProvider extends ChangeNotifier {
   bool _isRadioQueue(PlaybackSnapshot snapshot) =>
       snapshot.context?.name == kAiDjContextName;
 
-  Set<String> _queuedUris() => {
-        for (final track in _playbackProvider.snapshot.queue) track.id.uri,
-      };
-
   List<ResolvedRecommendation> _missingFromQueue(
     List<ResolvedRecommendation> items,
-  ) {
-    final queued = _queuedUris();
-    return [
-      for (final item in items)
-        if (!queued.contains(item.track.id.uri)) item,
-    ];
-  }
+  ) =>
+      _radioQueue.missing(items, (item) => item.track.id.uri);
 
   /// active 换批 / 删除后旧批的撤销项已无意义；先清空再通知，避免同步
   /// 监听者看到上一批的撤销芯片。
@@ -1136,7 +1115,6 @@ class AiDjProvider extends ChangeNotifier {
     _likedLabels.clear();
     _sessionTracks.clear();
     _trackedUri = null;
-    _queuedCount = 0;
   }
 
   void _registerSessionTracks(List<ResolvedRecommendation> items) {
@@ -1235,6 +1213,21 @@ class AiDjProvider extends ChangeNotifier {
 
   bool _disposed = false;
 
+  /// 只把生成状态的离散变化（忙碌位 / 行内替换）转成聚合通知。
+  ///
+  /// 进度分片由 `generationState` 自己通知窄订阅者；如果这里每个分片都
+  /// `notifyListeners`，页面与轮播会整块重建（重构前的行为）。
+  void _onGenerationStateChanged() {
+    final state = _generation.stateValue;
+    if (state.busy == _lastGenerationBusy &&
+        state.replacingUri == _lastReplacingUri) {
+      return;
+    }
+    _lastGenerationBusy = state.busy;
+    _lastReplacingUri = state.replacingUri;
+    notifyListeners();
+  }
+
   /// dispose 后不再发通知（未 await 的预取/补歌可能晚于 dispose）。
   @override
   void notifyListeners() {
@@ -1245,8 +1238,8 @@ class AiDjProvider extends ChangeNotifier {
   @override
   void dispose() {
     _disposed = true;
-    _cancelToken?.cancel();
-    _autoCancelToken?.cancel();
+    _generation.state.removeListener(_onGenerationStateChanged);
+    _generation.dispose();
     super.dispose();
   }
 }

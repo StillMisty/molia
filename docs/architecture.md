@@ -86,8 +86,11 @@
   `ValueNotifier`（≥250ms 去重、换曲/seek 直接对齐、**不进快照**）、错误归一化。
   `PlaybackProvider` 对外只暴露领域 `PlaybackSnapshot` + position 通道：
   真实播放取 facade 快照；冷启动恢复态由 `PlaybackSessionCoordinator`
-  （`lib/playback/`）构造覆盖快照（`isPlaying=false`，previous/upNext 为队列
-  下标近似）。恢复播放：会话模式先落到后端（shuffle 洗牌顺序依赖装载前模式）；
+  （`lib/playback/`）构造覆盖快照（`isPlaying=false`）。next / previous /
+  upNext 的唯一推导是 `lib/playback/queue_projection.dart::projectQueue`（真实播放与恢复态
+  共用）：恢复态没有洗牌排列与播放顺序栈，显式留空 `QueueOrder`——shuffle 的
+  next 为 null、upNext 为空（不拿下标近似），previous 回退队列前一位。
+  恢复播放：会话模式先落到后端（shuffle 洗牌顺序依赖装载前模式）；
   seek 落地前进度通道继续显示恢复进度（不闪回 0）；装载期间用户 seek 优先；
   生命周期 `paused` 强制落盘会话。旧「远程播放风格 Map 兼容层」
   （facade `compat*` / service `currentTrackMap` 等）已删除。
@@ -95,9 +98,13 @@
   写者**：三阶段状态机 `idle / restored / live`，命令按阶段路由（provider 不再
   分叉，只按路由结果决定通知类别）；恢复态快照与进度覆盖值在这里构造；落盘
   口径（整份 / 轻量进度键前台 1s / 后台 15s 节流 / 满 1min 整份刷新 / `clear` /
-  可 await 的 `flushSession`）随 `pendingWrite` 串行化收在一处。系统媒体控制与
-  恢复态切歌键由组合根接到会话模块（不再直连 provider）。跨设备同步只经
-  `PlaybackSessionSyncPort`（`lib/domain/ports/playback_session_sync.dart` 的
+  可 await 的 `flushSession`）随 `pendingWrite` 串行化收在一处。改变会话的命令
+  （暂停 / seek / 切歌 / 模式 / 停止 / 换源）返回前等 `pendingWrite`（已提交
+  语义），live seek 强制整份落盘；系统媒体 handler 不自建串行链，只 await
+  注入的提交；壳层 paused 与桌面退出共用
+  `PlaybackProvider.suspendPlaybackSession()`（桌面 `quitApp` 有界等待 2s 后
+  继续退出）。系统媒体控制与恢复态切歌键由组合根接到会话模块（不再直连
+  provider）。跨设备同步只经 `PlaybackSessionSyncPort`（`lib/domain/ports/playback_session_sync.dart` 的
   `loadRaw` / `applyRemote` / `clearRemote`）认识会话，唯一实现是协调者：远端
   应用 / 删除与本地保存 / 清除共用同一个 `PlaybackSessionStore` 与同一条
   `pendingWrite` 队列，不会出现第二个写队列插队或复活已清除的会话。
@@ -206,10 +213,10 @@
   图标与文案随当前模式，App 内改模式双向一致；`MediaAction.custom('lx.playMode')`，
   Android drawable 名沿用 `audio_service_*`，`keep.xml` 防 shrinkResources 删除）；
   系统控制路径（暂停 / 停止 / 切顺序 / seek）**显式 await 会话落盘**
-  （`LocalAudioHandler` 的 `attachSessionPersister` +
-  `PlaybackSessionCoordinator.flushSession` → `PlaybackSessionStore.pendingWrite`
-  串行化；停止先落盘再清空队列），保证「系统暂停 → 冷启动」能恢复上一首 + 队列 +
-  模式 + 进度且不自动起播。
+  （`LocalAudioHandler` 只 await 注入的
+  `PlaybackSessionCoordinator.flushSession`，不自建串行链；写请求统一在
+  `PlaybackSessionStore.pendingWrite` 串行化；停止先落盘再清空队列），保证
+  「系统暂停 → 冷启动」能恢复上一首 + 队列 + 模式 + 进度且不自动起播。
 - **Cache**：`RequestCache`（single-flight + LRU 64 + TTL + 可注入时钟）。
 - **省流**：`DataSaverService`（services 层，默认关闭）持有「开启 + 音质上限 +
   封面省流」策略与 connectivity_plus 网络探测；仅在移动数据（`active`）时生效：
@@ -244,12 +251,24 @@
   `SourceFailure`，Key 不进 message）、`AiRecommendationService`（提示词 →
   容错 JSON → 规范化去重 → `CatalogService.search` 按找歌渠道解析，命中无封面
   时经音源 `artwork()` 补取；预览与实际共用同一 `buildPrompt`）。
-  `AiDjProvider` 负责推歌会话、生成编排与通知；`AiDjHistoryController`
+  `AiDjProvider` 负责推歌会话、通知与对外门面；生成编排收在
+  **生成执行器** `AiGenerationExecutor`（`lib/services/ai/ai_generation_executor.dart`）：
+  token / epoch / 取消 / 忙碌位 / 可见进度唯一持有，三条 lane——显式（可见、
+  可取消、互斥）、换一首（不可取消、行内进度）、静默补歌（无可见进度、显式
+  操作可抢占）；进度走独立 `ValueListenable<AiGenerationState>`，provider 的
+  聚合通知只转发忙碌位 / 行内替换的离散变化（进度分片由 `generationState`
+  自己通知窄订阅者）。**电台队列视图** `AiRadioQueue`
+  （`lib/services/ai/ai_radio_queue.dart`）从 live 快照派生
+  `upcoming` / `contains` / `missing` / `queuedAmong`，不持有计数器：
+  `queuedCount` 是「当前及之后仍在队的 AI 曲目数」，随播放递减。
+  `AiDjHistoryController`
   （`lib/providers/ai_dj_history_controller.dart`）独占**当前推荐（active batch）**、
   **历史索引**、按需加载缓存与保留策略，批次与存储形状的转换由 Provider 注入：
   历史存储为索引 + 每批一键（`AiRecommendationStore`，启动只读索引 +
   active，详情懒加载，20 批 / 400 首 / 30 天、active 不清理），旧单批键首次
-  加载迁移；显式「生成推荐 / 换一批」切换 active，旧批留在历史；手动补批与
+  加载迁移；索引与批次载荷的写序统一为「先写索引、后删载荷」（删除 / 清空 /
+  保留裁剪都一样），孤儿载荷无害；显式「生成推荐 / 换一批」切换 active，
+  旧批留在历史；手动补批与
   低水位**静默补歌**只追加队列 + 写历史（`manualFeed` / `autoFeed`），不切换
   active、不显示进度，自动补歌连续 3 次失败停止（显式操作优先并可取消）；
   历史可播放 / 加队列 / 设为当前 / 删除。生成偏好（批次大小 10/20/30/50、
@@ -278,17 +297,29 @@
   加解密在 worker isolate 内执行（帧与信任边界见 ADR-0003 §1）。
   **同步控制面**（`sync_control_plane.dart`）承担 UI 面的身份 / 类别与传输开关 /
   运行状态 / 手动地址簿 / 口令生命周期，与引擎共享同一状态存储与传输实例；
-  引擎（`lib/data/sync/sync_engine.dart`）只做轮次执行与服务端语义
-  （`serveSnapshot` / `serveJournal`）：一轮 = 各 `SyncAdapter`
-  收集本地视图（按类别廉价指纹缓存：指纹未变不读行）→ `SyncTransport` 拉取
-  变化对端（WebDAV 按 `getetag` / 局域网按探测应答的 `snapshotId` 跳过未变
-  文件）→ 逐键 LWW 合并（版本三元组
+  **传输运行时**（`sync_transport_runtime.dart`）是 ensure / start / stop /
+  resume / hidden / announce 的唯一所有者，组合根把同一实例注入引擎与控制面
+  （不再有两份 `_ensureTransportsRunning`）。
+  引擎（`lib/data/sync/sync_engine.dart`）只保留公共门面：调度器宿主 / 服务端
+  语义（`serveSnapshot` / `serveJournal`）/ 入站合流 / 公告过滤。轮次内的阶段
+  由**轮次编排器**（`sync_round.dart` 的 `SyncRoundRunner`）线性编排：`runRound`
+  = collect → pull → consume + apply → publish + compact → report，阶段只读写
+  `SyncRoundContext`、可脱离整轮单独测试；应用成功才推进游标、forced delivery、
+  缺口二次拉取、anti-entropy 与入站轮语义都不变。
+  拉取前由 `SyncRoundRunner._pullPlan` 生成一份**拉取计划**（`SyncPullPlan`：逐对端
+  `cursor` / `forceFull` + discovery）；局域网与 WebDAV 只提供证据（局域网
+  `snapshotId + snapshotFresh`，WebDAV `etag` / `lastmodified` + 回执头部），
+  skip / delta / full 统一由 `decideSyncPull`（`sync_pull_plan.dart`）判定——
+  「只有本轮新鲜证据能跳过」只有这一处实现。pull 与 push 共享显式
+  **轮次窗口** `SyncRoundWindow`（不再依赖局域网私有的 `_roundStartedAt`）；
+  局域网对端候选的合并与地址尝试顺序在 `sync_peer_candidate.dart`。
+  一轮 = 各 `SyncAdapter` 收集本地视图（按类别廉价指纹缓存：指纹未变不读行）→
+  `SyncTransport` 按计划拉取变化对端 → 逐键 LWW 合并（版本三元组
   `(versionPhysical, versionCounter, deviceId)`，删除为墓碑）→ 只把版本变化的
   胜者交给适配器（`sync_known` 登记表：交付成功才登记，空闲轮 0 次 apply）→
   按**发布台账**外发与裁剪（`publish_ledger.dart`：每传输一份，聚合内存指纹 /
   `sync_state_v2` 的 `snapshotPushSeq` 持久覆盖 / `servesLiveSnapshot` 能力位；
-  「跳过加密 + 上传」与「journal 能裁到哪」都在台账里回答，引擎只保留轮次
-  编排）；版本戳由唯一发号器
+  「跳过加密 + 上传」与「journal 能裁到哪」都在台账里回答）；版本戳由唯一发号器
   `SyncStampIssuer`（`sync_stamp.dart`，HLC-lite：吸收远端超前戳、同毫秒
   counter 递增、基线持久化 + 重启不倒退）发放，内容时间（playedAt / endedAt /
   savedAt / importedAt / 墓碑删除时间）**不参与胜负判定**（见 ADR-0003 v2 §2）。

@@ -221,7 +221,10 @@ class FakeSyncTransport implements SyncTransport {
   }
 
   @override
-  Future<SyncPushResult> push(SyncEnvelope envelope) async {
+  Future<SyncPushResult> push(
+    SyncEnvelope envelope, {
+    SyncRoundWindow? window,
+  }) async {
     pushed.add(envelope);
     if (pushFailures > 0) {
       return SyncPushResult(

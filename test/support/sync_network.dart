@@ -353,7 +353,10 @@ class NetworkTransport implements SyncTransport {
   }
 
   @override
-  Future<SyncPushResult> push(SyncEnvelope envelope) async {
+  Future<SyncPushResult> push(
+    SyncEnvelope envelope, {
+    SyncRoundWindow? window,
+  }) async {
     final bytes =
         device.network.codec.encrypt(envelope, device.network.passphrase);
     device.network.encryptions++;

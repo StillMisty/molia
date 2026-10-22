@@ -73,7 +73,7 @@ class _StateValueListenable<T> implements ValueListenable<T> {
 ///   [PlaybackSessionCoordinator]（恢复态与 live 的交接、恢复态快照构造与会话
 ///   落盘都在那里，本类不再持有恢复态分支）；持久化 / 写库 / 桌面小组件 /
 ///   封面预取与补取 / 历史等副作用由 [PlaybackObserver] 承担（组合根创建并
-///   挂接），本类只转发 [flushPlaybackSession] 与最后播放信息读取。
+///   挂接），本类只转发 [suspendPlaybackSession] 与最后播放信息读取。
 class PlaybackProvider extends ChangeNotifier {
   final PlaybackFacade _facade;
   final SettingsAccess _settings;
@@ -587,12 +587,13 @@ class PlaybackProvider extends ChangeNotifier {
     _maybeRecoverFromPlaybackError();
   }
 
-  /// 强制把当前播放会话写入本地（进入后台 / 生命周期 paused / 系统控制暂停时调用）。
+  /// 挂起 / 退出前提交当前播放会话：应用壳 paused 与桌面退出共用这一个入口。
   ///
-  /// 返回的 Future 在会话落盘后结束：系统媒体控制（通知暂停 / 停止 / 切播放
-  /// 顺序）await 它，保证控制动作返回时会话已在本地——进程随后被系统回收，
-  /// 重开应用仍能恢复上一首 / 队列 / 模式 / 进度。
-  Future<void> flushPlaybackSession() => _session.flushSession();
+  /// 返回的 Future 在会话落盘后结束（协调者 `flushSession` → store 的
+  /// `pendingWrite`）：退出路径必须 await 它再销毁窗口；生命周期回调无法
+  /// await，用 `unawaited` 触发同一个提交。系统媒体控制（通知暂停 / 停止 /
+  /// 切播放顺序）走注入的 `flushSession`，与这里汇入同一条写队列。
+  Future<void> suspendPlaybackSession() => _session.flushSession();
 
   /// 冷启动加载上次播放会话：无真实曲目时进入恢复态。
   ///

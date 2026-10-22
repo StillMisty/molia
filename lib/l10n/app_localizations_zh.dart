@@ -1898,7 +1898,7 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String aiDjQueued(int count) {
-    return '本次已加入队列 $count 首';
+    return '队列中还有 $count 首推荐';
   }
 
   @override

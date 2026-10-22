@@ -9,7 +9,9 @@
 /// - 恢复态展示快照只在这里构造（[_publishRestoredSnapshot]）；
 /// - 落盘（会话 JSON / 轻量进度键 / 清除）全部经本模块，节流口径见
 ///   [_sessionSaveInterval] / [_sessionRefreshInterval]，`pendingWrite` 串行化
-///   随之收进来；
+///   随之收进来；改变会话的命令（seek / 暂停 / 切歌 / 模式 / 停止）返回前
+///   等写队列排空（「已提交」语义），系统媒体控制与壳层挂起 / 退出共用
+///   同一个写队列；
 /// - 「冷启动跳过恢复」的判据（开关关闭 / 无会话 / 已有真实播放）只在这里。
 library;
 
@@ -27,7 +29,7 @@ import '../domain/ports/state_listenable.dart';
 import '../models/play_mode.dart';
 import '../services/playback_session_store.dart';
 import 'playback_power_policy.dart';
-import 'queue_navigation.dart';
+import 'queue_projection.dart';
 
 final _logger = Logger('molia.playback_session');
 
@@ -276,10 +278,17 @@ class PlaybackSessionCoordinator implements PlaybackSessionSyncPort {
   // ── 命令（按阶段路由，provider 不再分叉） ────────────────
 
   /// 播放 / 暂停：恢复态 = 用保存的队列 / 下标重新取链并跳回保存进度；
-  /// live = 转发给 facade。
+  /// live = 转发给 facade，等会话落盘后才返回。
+  ///
+  /// 暂停是会话内容变化（进度 / isPlaying 语义）：快照监听已强制整份落盘，
+  /// 这里再等 `pendingWrite` 排空，让「点通知暂停」与系统媒体路径共享同一个
+  /// 「动作返回时会话已提交」契约。
   Future<PlaybackCommandRoute> togglePlayPause() async {
     if (phase == PlaybackSessionPhase.restored) return resume();
     await _facade.toggle();
+    // 暂停的整份落盘由快照监听（playing → paused）强制触发；这里只等它
+    // 排空。不再额外写一次——同一动作只留一个落盘入口。
+    await _store.pendingWrite;
     return PlaybackCommandRoute.live;
   }
 
@@ -294,6 +303,8 @@ class PlaybackSessionCoordinator implements PlaybackSessionSyncPort {
       return resume(startIndex: next);
     }
     await _facade.next();
+    // 切歌的整份落盘由快照监听触发；等它排空再返回（已提交语义）。
+    await _store.pendingWrite;
     return PlaybackCommandRoute.live;
   }
 
@@ -306,6 +317,7 @@ class PlaybackSessionCoordinator implements PlaybackSessionSyncPort {
       return resume(startIndex: previous);
     }
     await _facade.previous();
+    await _store.pendingWrite;
     return PlaybackCommandRoute.live;
   }
 
@@ -325,11 +337,16 @@ class PlaybackSessionCoordinator implements PlaybackSessionSyncPort {
       return resume(startIndex: restoredIndex);
     }
     await _facade.playQueueIndex(index);
+    await _store.pendingWrite;
     return PlaybackCommandRoute.live;
   }
 
   /// seek：恢复装载期间记下用户目标（恢复流程末尾以它为准），恢复态只更新
-  /// 保存的进度（点播放时再落到真实播放器上），live 转发 facade。
+  /// 保存的进度（点播放时再落到真实播放器上），live 转发 facade 并强制落盘。
+  ///
+  /// live 与系统 seek 同一口径：拖动 / 点歌词行也是一次会话内容变化，
+  /// 不依赖 1s 节流（进程紧接着被杀时重开要落在新位置）。返回的 Future 在
+  /// 写队列排空后结束。
   Future<void> seekToPosition(Duration position) async {
     if (_resumeRestoring) {
       _resumeSeekTarget = position;
@@ -341,22 +358,34 @@ class PlaybackSessionCoordinator implements PlaybackSessionSyncPort {
       _restoredSession = _restoredSession!.copyWith(position: clamped);
       _position.setRestored(clamped);
       _publishRestoredSnapshot();
-      unawaited(_store.save(_restoredSession!));
+      await _store.save(_restoredSession!);
       return;
     }
     await _facade.seek(position);
+    _maybeSaveSession(force: true);
+    await _store.pendingWrite;
   }
 
   /// 换源：把队列中的 [oldTrack] 原地替换为 [newTrack]，返回是否命中。
   ///
   /// facade 队列命中走真实替换（命中当前曲目会重新取链）；恢复态（facade 队列
   /// 为空）替换保存的会话队列并落盘。未命中不算失败：库内换源与队列跟随解耦。
+  /// 返回前等写队列排空（命中才可能产生写入）。
   Future<bool> replaceTrack(Track oldTrack, Track newTrack) async {
     final uri = oldTrack.id.uri;
+    final live = _facade.snapshot.value;
+    // 当前曲目换源会改变 current.id，快照监听（_handleLiveSnapshot）已经
+    // 触发整份落盘；只有「非当前槽位命中」不会改变 current.id，才需要在这里
+    // 补写，否则同一次换源会写两遍。当前 id 未变（同源换元数据）时监听同样
+    // 不会触发，也要补写。
+    final currentHit = live.current?.id.uri == uri;
+    final currentIdChanged = currentHit && newTrack.id.uri != uri;
     var hit = false;
-    if (_facade.snapshot.value.queue.any((track) => track.id.uri == uri)) {
+    var liveHit = false;
+    if (live.queue.any((track) => track.id.uri == uri)) {
       await _facade.replaceQueueTrack(uri, newTrack);
       hit = true;
+      liveHit = true;
     }
     final session = _restoredSession;
     if (session != null && session.tracks.any((track) => track.id.uri == uri)) {
@@ -367,9 +396,13 @@ class PlaybackSessionCoordinator implements PlaybackSessionSyncPort {
         ],
       );
       _publishRestoredSnapshot();
-      unawaited(_store.save(_restoredSession!));
+      await _store.save(_restoredSession!);
       hit = true;
     }
+    // 非当前曲目换源不改变曲目 id，快照监听不会触发整份落盘；显式补一次，
+    // 否则重开应用恢复的还是旧队列（换源写回不该等下一分钟刷新）。
+    if (liveHit && !currentIdChanged) _maybeSaveSession(force: true);
+    if (hit) await _store.pendingWrite;
     return hit;
   }
 
@@ -384,7 +417,7 @@ class PlaybackSessionCoordinator implements PlaybackSessionSyncPort {
     if (session != null) {
       _restoredSession = session.copyWith(mode: mode);
       _publishRestoredSnapshot();
-      unawaited(_store.save(_restoredSession!));
+      await _store.save(_restoredSession!);
       return;
     }
     _maybeSaveSession(force: true);
@@ -392,10 +425,12 @@ class PlaybackSessionCoordinator implements PlaybackSessionSyncPort {
   }
 
   /// 停止播放并清空持久化会话（本次会话结束，避免下次启动又出现）。
+  ///
+  /// 清除等写队列排空后返回：在途的旧保存不会在清除之后把会话复活。
   Future<void> stopPlayback() async {
     await _facade.stop();
     _dropRestoredSession();
-    unawaited(_store.clear());
+    await _store.clear();
   }
 
   /// 恢复上次播放：以保存的队列 / 下标重新装载，再 seek 回保存的进度。
@@ -435,6 +470,7 @@ class PlaybackSessionCoordinator implements PlaybackSessionSyncPort {
       // 立刻把恢复进度写回会话：装载时的强制保存记的是 0，
       // 若在节流窗口内被杀进程，下次冷启动会从 0 开始。
       _maybeSaveSession(force: true);
+      await _store.pendingWrite;
       return PlaybackCommandRoute.restored;
     } catch (e) {
       _logger.severe('恢复上次播放失败', e);
@@ -493,11 +529,14 @@ class PlaybackSessionCoordinator implements PlaybackSessionSyncPort {
 
   /// 前后台切换：进入后台先强制整份落盘一次（节流窗口内也不等），之后
   /// 进度 tick 改按 15s 节流；回前台恢复 1s 节流（不必额外写一次）。
+  ///
+  /// 与壳层 paused / 桌面退出共用 [flushSession] 这个提交入口；生命周期回调
+  /// 不能 await，用 `unawaited` 触发（写队列仍按调用顺序串行）。
   void _onPowerPolicyChanged() {
     final foreground = _powerPolicy.isForeground;
     final enteredBackground = _wasForeground && !foreground;
     _wasForeground = foreground;
-    if (enteredBackground) _maybeSaveSession(force: true);
+    if (enteredBackground) unawaited(flushSession());
   }
 
   /// 真实播放快照变化：真实播放接管时撤下恢复数据，并按口径强制落盘。
@@ -551,9 +590,11 @@ class PlaybackSessionCoordinator implements PlaybackSessionSyncPort {
 
   // ── 恢复态内部 ─────────────────────────────────────────
 
-  /// 用会话构造恢复态展示快照：当前 / 队列 / 下标 / 模式齐备，isPlaying=false；
-  /// 上一首按队列下标回退近似（没有播放顺序栈），`upNext` 按队列顺序近似
-  /// （没有洗牌顺序可还原）；列表循环按服务同一口径回绕。
+  /// 用会话构造恢复态展示快照：当前 / 队列 / 下标 / 模式齐备，isPlaying=false。
+  ///
+  /// 队列投影与真实播放共用 `projectQueue`；恢复态没有播放顺序栈、也没有
+  /// 持久化洗牌排列，因此显式传空 [QueueOrder]——shuffle 的 next 为 null、
+  /// upNext 为空（不拿队列下标冒充洗牌顺序），previous 只回退队列前一位。
   void _publishRestoredSnapshot() {
     final session = _restoredSession;
     final current = session?.current;
@@ -561,31 +602,19 @@ class PlaybackSessionCoordinator implements PlaybackSessionSyncPort {
       _restoredSnapshot = null;
       return;
     }
-    final wrap = session.mode == PlayMode.listLoop;
-    final length = session.tracks.length;
-    final nextIndex = nextQueueIndex(
-      session.index,
-      length,
-      wrap: wrap,
+    final projection = projectQueue(
+      session.tracks,
+      currentIndex: session.index,
+      mode: session.mode,
+      idOf: (track) => track.id,
     );
-    final previousIndex = previousQueueIndex(
-      session.index,
-      length,
-      wrap: wrap,
-    );
-    final previous =
-        previousIndex == null ? null : session.tracks[previousIndex];
     _restoredSnapshot = PlaybackSnapshot(
       current: current,
       queue: List.unmodifiable(session.tracks),
       currentIndex: session.index,
-      next: nextIndex == null ? null : session.tracks[nextIndex],
-      previous: previous == null || previous.id == current.id ? null : previous,
-      upNext: List.unmodifiable([
-        for (var i = session.index + 1; i < length; i++) session.tracks[i],
-        if (wrap)
-          for (var i = 0; i < session.index; i++) session.tracks[i],
-      ]),
+      next: projection.next,
+      previous: projection.previous,
+      upNext: projection.upNext,
       isPlaying: false,
       isLoading: false,
       duration: current.duration ?? Duration.zero,

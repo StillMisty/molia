@@ -6,6 +6,7 @@ import '../../domain/ports/sync_transport.dart';
 import 'sync_activity.dart';
 import 'sync_passphrase.dart';
 import 'sync_state_store.dart';
+import 'sync_transport_runtime.dart';
 
 /// 同步控制面：设备身份 / 配对口令 / 传输开关与运行状态 / 观测快照的
 /// **唯一 UI 写入点**：UI 只经这里的 getter 与 mutator 工作，不再接触
@@ -23,11 +24,17 @@ class SyncControlPlane extends ChangeNotifier {
   SyncControlPlane({
     required SyncStateStore state,
     required Map<String, SyncTransport> transports,
+    SyncTransportRuntime? runtime,
   })  : _state = state,
-        _transports = transports;
+        _transports = transports,
+        _runtime = runtime ??
+            SyncTransportRuntime(state: state, transports: transports);
 
   final SyncStateStore _state;
   final Map<String, SyncTransport> _transports;
+
+  /// 传输运行时（与引擎共享同一实例；组合根注入）。
+  final SyncTransportRuntime _runtime;
   final Logger _logger = Logger('molia.sync');
 
   /// 口令缓存：设置页 / 配对码要同步读取，不能每次都碰安全存储。写入路径
@@ -103,7 +110,7 @@ class SyncControlPlane extends ChangeNotifier {
   /// 用户看不见的对话框。装配期只初始化状态，传输留给首帧收尾或首个轮次。
   Future<void> startTransports() async {
     if (!_state.enabled) return;
-    await _ensureTransportsRunning();
+    await _runtime.ensureRunning();
   }
 
   /// 回前台：通知已启用的局域网传输（隐藏过久时重绑 UDP / 探活 HTTP）。
@@ -111,32 +118,12 @@ class SyncControlPlane extends ChangeNotifier {
   /// 只对实现了 [SyncLanLifecycle] 的传输调用；WebDAV 没有生命周期动作。
   /// 失败只记日志：回前台不能因为发现层异常打断调度器拉一轮。
   Future<void> onAppResumed() async {
-    for (final entry in _transports.entries) {
-      if (!_state.enabledTransports.contains(entry.key)) continue;
-      final transport = entry.value;
-      if (transport is! SyncLanLifecycle) continue;
-      final lifecycle = transport as SyncLanLifecycle;
-      try {
-        await lifecycle.onAppResumed();
-      } catch (e) {
-        _logger.warning('回前台：传输 ${entry.key} 恢复失败', e);
-      }
-    }
+    await _runtime.onAppResumed();
   }
 
   /// 退后台：通知已启用的局域网传输取消公告 / 重连计时器。
   void onAppHidden() {
-    for (final entry in _transports.entries) {
-      if (!_state.enabledTransports.contains(entry.key)) continue;
-      final transport = entry.value;
-      if (transport is! SyncLanLifecycle) continue;
-      final lifecycle = transport as SyncLanLifecycle;
-      try {
-        lifecycle.onAppHidden();
-      } catch (e) {
-        _logger.warning('退后台：传输 ${entry.key} 暂停失败', e);
-      }
-    }
+    _runtime.onAppHidden();
   }
 
   // ---- 设置写入（改状态 + 通知 UI；传输开关额外负责起停） ----
@@ -155,9 +142,9 @@ class SyncControlPlane extends ChangeNotifier {
     final transport = _transports[kind];
     if (transport != null) {
       if (value) {
-        await _ensureTransportsRunning();
-      } else if (transport.isRunning) {
-        await transport.stop();
+        await _runtime.ensureRunning();
+      } else {
+        await _runtime.stop(kind);
       }
     }
     notifyListeners();
@@ -314,15 +301,5 @@ class SyncControlPlane extends ChangeNotifier {
     _passphrase = generated;
     notifyListeners();
     return generated;
-  }
-
-  Future<void> _ensureTransportsRunning() async {
-    for (final entry in _transports.entries) {
-      if (!_state.enabledTransports.contains(entry.key)) continue;
-      if (entry.value.isRunning) continue;
-      // 启动失败由传输自己记录（`unavailableReason`）并进入状态 / 本轮报告：
-      // 「开关打开但没在工作」必须能被用户看到，不能只留在日志里。
-      await entry.value.start();
-    }
   }
 }

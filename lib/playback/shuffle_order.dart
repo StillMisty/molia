@@ -1,3 +1,4 @@
+import 'dart:collection';
 import 'dart:math' as math;
 
 /// 洗牌播放顺序：队列下标的随机排列 + 轮次推进（纯逻辑，可单测）。
@@ -10,13 +11,17 @@ import 'dart:math' as math;
 ///   保证每轮每首恰好一次，且新一轮不会立刻重复当前曲目；
 /// - [remainingAfter]：本轮剩余播放顺序（队列页「接下来」展示用）。
 class PlaybackShuffleOrder {
-  PlaybackShuffleOrder({math.Random? random}) : _random = random ?? math.Random();
+  PlaybackShuffleOrder({math.Random? random})
+      : _random = random ?? math.Random();
 
   final math.Random _random;
 
   List<int> _order = const [];
 
   bool get isEmpty => _order.isEmpty;
+
+  /// 本轮排列的只读视图（队列投影用；不复制、不暴露可写引用）。
+  List<int> get indices => UnmodifiableListView(_order);
 
   /// 生成新排列（新队列 / 进入 shuffle / 新一轮），[startIndex] 置于首位。
   void reset(int length, {int startIndex = 0}) {
@@ -42,7 +47,9 @@ class PlaybackShuffleOrder {
   /// [_order] 为空（未洗牌）或长度不匹配时保守跳过：后续
   /// [reset]（[peekNext]/[next]/ensure）会按新长度重建。
   void extend(int oldLength, int newLength) {
-    if (_order.isEmpty || newLength <= oldLength || _order.length != oldLength) {
+    if (_order.isEmpty ||
+        newLength <= oldLength ||
+        _order.length != oldLength) {
       return;
     }
     final appended = List<int>.generate(

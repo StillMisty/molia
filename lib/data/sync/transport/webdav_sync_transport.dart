@@ -11,6 +11,7 @@ import '../../http/app_dio.dart';
 import '../peer_journal_protocol.dart';
 import '../sync_codec_port.dart';
 import '../sync_crypto.dart';
+import '../sync_pull_plan.dart';
 import '../sync_state_store.dart';
 
 /// WebDAV 请求返回了非预期状态码（调用方按「本轮失败、下轮重试」处理）。
@@ -193,6 +194,7 @@ class WebDavSyncTransport implements SyncTransport {
     }
 
     final devices = _groupDevices(files);
+    final plan = request.plan;
     final envelopes = <SyncEnvelope>[];
     final seenDevices = <String>{};
     var failed = 0;
@@ -202,8 +204,8 @@ class WebDavSyncTransport implements SyncTransport {
     for (final entry in devices.entries) {
       final device = entry.key;
       final deviceFiles = entry.value;
-      final cursor = request.cursorFor(device);
-      final forceFull = request.fullPeers.contains(device);
+      final intent = plan.intentFor(device);
+      final cursor = intent.cursor;
 
       // 1) 回执（可变文件，按版本门控）：对端的头部 / ack / 基线下标。
       var peerHead = _peerHeads[device] ?? SyncPullRequest.noCursor;
@@ -239,25 +241,37 @@ class WebDavSyncTransport implements SyncTransport {
         }
       }
 
-      // 2) 数据：游标之后必须有**连续**的块（块名自带区间）；缺口 / 落后
-      //    超出窗口 / 对端日志重置 / 引擎显式要求全量 → 读最新快照 bootstrap。
-      final headKnown = peerHead != SyncPullRequest.noCursor;
-      if (!forceFull &&
-          headKnown &&
-          isPeerUpToDate(cursor: cursor, headSeq: peerHead)) {
+      // 2.5) 统一判定：头部是否可信、游标是否已到头部、etag 是否与本轮
+      //      一致。只有本轮 PROPFIND 的版本令牌（fresh）才能证明「未变」；
+      //      服务端不提供版本时回执每轮都会读，头部仍是本轮观测。
+      final decision = decideSyncPull(
+        intent: intent,
+        evidence: SyncPeerPullEvidence(
+          token: acksFile?.version ?? '',
+          cachedToken: acksFile == null ? null : _fileVersions[acksFile.name],
+          fresh: acksFile != null && acksFile.version.isNotEmpty,
+          journalHead: peerHead == SyncPullRequest.noCursor ? null : peerHead,
+          headTrusted: peerHead != SyncPullRequest.noCursor,
+        ),
+      );
+      if (decision.action == SyncPullAction.skip) {
         // 已到对端头部：不读块，只把回执带回去。
         seenDevices.add(device);
         if (!skipCounted) skipped++;
         if (acksEnvelope != null) envelopes.add(acksEnvelope);
         continue;
       }
+      final needsFull = decision.action == SyncPullAction.full;
+
+      // 2) 数据：游标之后必须有**连续**的块（块名自带区间）；缺口 / 落后
+      //    超出窗口 / 对端日志重置 / 引擎显式要求全量 → 读最新快照 bootstrap。
       // 衔接判定（首块可以是 1 的全新对端 / 块间不能有空隙）由协议模块统一
       // 给出；不连续时下面的快照兜底是唯一正确出路。
       final selection = selectJournalChunks(
         cursor: cursor,
         chunks: deviceFiles.chunks,
       );
-      if (!forceFull && selection.contiguous) {
+      if (!needsFull && selection.contiguous) {
         for (final chunk in selection.needed) {
           final outcome = await _readEnvelope(
             config,
@@ -461,7 +475,10 @@ class WebDavSyncTransport implements SyncTransport {
   }
 
   @override
-  Future<SyncPushResult> push(SyncEnvelope envelope) async {
+  Future<SyncPushResult> push(
+    SyncEnvelope envelope, {
+    SyncRoundWindow? window,
+  }) async {
     if (!_running) return SyncPushResult.none;
     final config = _configProvider();
     final passphrase = await _passphraseProvider();

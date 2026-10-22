@@ -21,6 +21,9 @@ class FakeAiDjGenerator implements AiRecommendationGenerator {
   /// 非空时 [resolveUnresolved] 返回它（默认原样返回）。
   AiDjBatch Function(AiDjBatch batch)? unresolvedFactory;
 
+  /// 非空时 [resolveUnresolved] 等它完成（测试取消 / 晚到结果）。
+  Completer<void>? unresolvedGate;
+
   int calls = 0;
   int unresolvedCalls = 0;
   int? lastCount;
@@ -118,6 +121,14 @@ class FakeAiDjGenerator implements AiRecommendationGenerator {
     void Function(AiDjProgress progress)? onProgress,
   }) async {
     unresolvedCalls++;
+    final wait = unresolvedGate;
+    if (wait != null) await wait.future;
+    if (cancelToken?.isCancelled ?? false) {
+      throw const SourceFailure(
+        kind: FailureKind.cancelled,
+        message: 'cancelled',
+      );
+    }
     onProgress?.call(AiDjProgress(
       phase: AiDjPhase.resolving,
       startedAt: DateTime.now(),

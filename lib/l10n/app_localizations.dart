@@ -3665,7 +3665,7 @@ abstract class AppLocalizations {
   /// No description provided for @aiDjQueued.
   ///
   /// In en, this message translates to:
-  /// **'{count} added to the queue this time'**
+  /// **'{count} recommendations left in the queue'**
   String aiDjQueued(int count);
 
   /// No description provided for @aiDjSkippedCount.

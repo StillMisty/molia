@@ -82,8 +82,8 @@ void main() {
     expect(loaded.position, const Duration(seconds: 42));
     expect(loaded.mode, PlayMode.shuffle);
     expect(loaded.context?.name, '收藏');
-    expect(loaded.tracks[0].artwork?.uri.toString(),
-        'https://img.example/a.jpg');
+    expect(
+        loaded.tracks[0].artwork?.uri.toString(), 'https://img.example/a.jpg');
     // raw（payload）必须原样保留：恢复播放依赖它重新取链。
     expect(loaded.tracks[0].payload['songmid'], 'mid_a');
   });
@@ -435,7 +435,7 @@ void main() {
         const Duration(seconds: 60));
   });
 
-  test('flushPlaybackSession：后台强制保存最新进度（不等节流窗口）', () async {
+  test('suspendPlaybackSession：后台强制保存最新进度（不等节流窗口）', () async {
     final backend = FakePlaybackBackend();
     final provider = buildTestPlaybackProvider(backend: backend);
     addTearDown(provider.dispose);
@@ -456,7 +456,7 @@ void main() {
 
     // 播放推进到 30s：节流窗口内不会自动落盘（先强制保存 7s 重置窗口，
     // 避免测试时长影响节流判定）。
-    provider.flushPlaybackSession();
+    await provider.suspendPlaybackSession();
     backend.emit(BackendSnapshot(
       current: _track('a'),
       queue: [_track('a')],
@@ -470,9 +470,7 @@ void main() {
         const Duration(seconds: 7));
 
     // 生命周期 paused：强制落盘到最新进度。
-    provider.flushPlaybackSession();
-    await Future<void>.delayed(Duration.zero);
-    await Future<void>.delayed(Duration.zero);
+    await provider.suspendPlaybackSession();
     expect((await PlaybackSessionStore().load())?.position,
         const Duration(seconds: 30));
   });
