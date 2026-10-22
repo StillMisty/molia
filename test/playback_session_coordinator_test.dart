@@ -239,6 +239,23 @@ void main() {
     expect(restored.upNext.map((track) => track.id.id), ['a', 'b']);
   });
 
+  test('恢复态 shuffle：没有洗牌顺序时 next / upNext 为空，不按下标近似', () async {
+    build();
+    await seedSession(PlaybackSession(
+      tracks: [_track('a'), _track('b'), _track('c')],
+      index: 1,
+      mode: PlayMode.shuffle,
+    ));
+    expect(await session.load(), isTrue);
+
+    final restored = session.resolve(facade.snapshot.value);
+    // 洗牌排列不落盘：恢复态不知道「下一首」，不能用 b 的下标 +1 冒充 c。
+    expect(restored.next, isNull);
+    expect(restored.upNext, isEmpty);
+    // 上一首不依赖洗牌顺序：回退队列前一位。
+    expect(restored.previous?.id.id, 'a');
+  });
+
   test('恢复态停止播放：撤下恢复数据、清空持久化会话', () async {
     build(persistStore: true);
     await seedSession(PlaybackSession(
@@ -459,6 +476,39 @@ void main() {
     await session.clearRemote();
     expect(store.calls.last, 'clear');
     expect(await PlaybackSessionStore().loadRaw(), isNull);
+  });
+
+  test('live seek：不靠 1s 节流，强制整份落盘并等写完（与系统 seek 同口径）', () async {
+    build();
+    final a = _track('a');
+    backend.emit(_live(a, position: const Duration(seconds: 5)));
+    expect(store.saves, hasLength(1));
+
+    // 节流窗口内拖动：应用内 seek 也必须立即落盘（进程随后被杀可恢复新位置）。
+    now = now.add(const Duration(milliseconds: 100));
+    await session.seekToPosition(const Duration(seconds: 42));
+
+    expect(backend.calls.last, 'seek');
+    expect(store.saves, hasLength(2));
+    expect(store.saves.last.position, const Duration(seconds: 42));
+  });
+
+  test('live 换源落盘：当前曲目交给快照监听，非当前槽位才补写一次', () async {
+    build();
+    final a = _track('a');
+    final b = _track('b');
+    backend.emit(_live(b, queue: [a, b], index: 1));
+    expect(store.calls, ['save'], reason: '起播切歌一次');
+
+    // 当前曲目换源：新 id 触发快照监听整份落盘，不应再补写一遍。
+    await session.replaceTrack(b, _track('b2'));
+    expect(store.calls, ['save', 'save']);
+    expect(store.saves.last.tracks.map((track) => track.id.id), ['a', 'b2']);
+
+    // 非当前槽位换源：current.id 不变，监听不触发，需要显式补写一次。
+    await session.replaceTrack(a, _track('a2'));
+    expect(store.calls, ['save', 'save', 'save']);
+    expect(store.saves.last.tracks.map((track) => track.id.id), ['a2', 'b2']);
   });
 
   test('进度 tick：1s 节流只写轻量进度键，满一分钟整份刷新', () async {

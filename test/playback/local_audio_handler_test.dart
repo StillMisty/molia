@@ -925,6 +925,25 @@ void main() {
       expect(service.seeks, [const Duration(seconds: 30)]);
     });
 
+    test('等注入的提交完成才返回（不自建串行链，也不提前返回）', () async {
+      final service = _FakeService()..trackValue = _track();
+      addTearDown(service.dispose);
+      final gate = Completer<void>();
+      var persisted = 0;
+      final (handler, _) = await _handler(service);
+      handler.attachSessionPersister(() async {
+        persisted++;
+        await gate.future;
+      });
+
+      final seek = handler.seek(const Duration(seconds: 10));
+      await pumpEventQueue();
+      expect(persisted, 1, reason: '提交已开始');
+      gate.complete();
+      await seek;
+      expect(service.seeks, [const Duration(seconds: 10)]);
+    });
+
     test('自定义播放顺序动作：模式变化后落盘', () async {
       final service = _FakeService()..trackValue = _track();
       addTearDown(service.dispose);

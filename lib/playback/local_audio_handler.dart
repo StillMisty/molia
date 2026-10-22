@@ -183,10 +183,9 @@ class LocalAudioHandler {
   ///
   /// 系统控制动作返回前显式落盘，而不是等中间快照被间接观察到——进程随后
   /// 被系统回收时，「重开应用恢复上一首 / 队列 / 模式 / 进度」才是确定的
-  /// （见 `playback_stack.dart` 的接线）。
+  /// （见 `playback_stack.dart` 的接线）。串行化只在 `PlaybackSessionStore`
+  /// 的 `pendingWrite` 一处：这里直接 await 注入的提交，不自建 Future 链。
   Future<void> Function()? _persistSession;
-
-  Future<void>? _persistingSession;
 
   StreamSubscription<MediaAction>? _actionSubscription;
   bool _activated = false;
@@ -370,18 +369,17 @@ class LocalAudioHandler {
 
   /// 落盘当前会话（失败不影响控制链：会话由观察者按节流继续维护）。
   ///
-  /// 串行化：连续动作（暂停 → 改模式）按顺序落盘，最后写入的是最新状态；
-  /// 链上吞掉失败，一次写失败不会让后续落盘被跳过。
-  Future<void> _persistSessionState() {
+  /// 不再自建串行链：注入的提交（协调者 `flushSession`）本身按调用顺序
+  /// 写入 store 的同一个 `pendingWrite`，连续动作（暂停 → 改模式）的先后
+  /// 由它保证。这里只负责等这一次提交完成，并吞掉异常。
+  Future<void> _persistSessionState() async {
     final persist = _persistSession;
-    if (persist == null) return Future<void>.value();
-    final next = (_persistingSession ?? Future<void>.value())
-        .then((_) => persist())
-        .catchError((Object e) {
+    if (persist == null) return;
+    try {
+      await persist();
+    } catch (e) {
       debugPrint('[Molia] 系统控制路径落盘播放会话失败: $e');
-    });
-    _persistingSession = next;
-    return next;
+    }
   }
 
   /// 界面语言切换：重建通知动作文案（播放顺序）。

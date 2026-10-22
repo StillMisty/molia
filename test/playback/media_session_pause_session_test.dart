@@ -336,7 +336,7 @@ void main() {
     expect(stored?.mode, PlayMode.shuffle);
   });
 
-  test('flushPlaybackSession：返回时会话已落盘（可 await 的落盘契约）', () async {
+  test('suspendPlaybackSession：返回时会话已落盘（可 await 的落盘契约）', () async {
     final harness = _Harness();
     addTearDown(harness.dispose);
     harness.service.seed(
@@ -347,7 +347,7 @@ void main() {
     );
     await harness.provider.preferencesReady;
 
-    await harness.provider.flushPlaybackSession();
+    await harness.provider.suspendPlaybackSession();
     expect((await PlaybackSessionStore().load())?.position,
         const Duration(seconds: 7));
   });

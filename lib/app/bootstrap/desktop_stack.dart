@@ -62,17 +62,16 @@ Future<DesktopStack> buildDesktopStack({
     }
   }
 
-  // 统一退出路径（托盘「退出」/ 更新安装后的重启替换）：先把播放会话与
-  // 统计落盘（等价于 App 进入后台的 flush，两者都是同步的「标记 + 触发」），
-  // 再无视关闭策略销毁窗口。落盘失败不阻断退出（否则窗口已关、进程却退不掉）。
+  // 统一退出路径（托盘「退出」/ 更新安装后的重启替换）：先 await 播放会话
+  // 提交（与壳层 paused 同一个挂起入口，最多等 2s），再触发统计落盘，最后
+  // 销毁窗口。会话提交不 await 就销毁窗口，进程会在写请求落盘前退出——恢复态
+  // 丢掉最后一段进度；平台通道挂起则超时继续退出（见 commitBeforeQuit）。
   Future<void> quitApp() async {
-    try {
-      playback.flushPlaybackSession();
-      playStatisticsService.flush();
-    } catch (e) {
-      debugPrint('[Molia] 退出前落盘失败（继续退出）: $e');
-    }
-    await WindowChrome.quit();
+    await commitBeforeQuit(
+      commitSession: playback.suspendPlaybackSession,
+      flushStatistics: playStatisticsService.flush,
+      quitWindow: WindowChrome.quit,
+    );
   }
 
   // 关闭请求（顶栏关闭键 / 系统关闭按钮）→ 按设置分流：隐藏到托盘或退出。
@@ -161,6 +160,36 @@ Future<DesktopStack> buildDesktopStack({
       );
     },
   );
+}
+
+/// 退出前提交的唯一顺序：先 await 会话提交，再触发统计落盘，最后退出窗口。
+///
+/// 拆成注入面是为了让「会话提交没完成不销毁窗口」可以被测试用 fake 钉住；
+/// 生产调用点只有 [buildDesktopStack] 的 `quitApp`。会话提交有界等待
+/// （[sessionTimeout]，默认 2s）：平台通道挂起时不能把退出流程无限拖住。
+/// 超时 / 落盘失败都继续退出：用户已经点了退出，卡在保存上比丢一次进度更糟。
+@visibleForTesting
+Future<void> commitBeforeQuit({
+  required Future<void> Function() commitSession,
+  required void Function() flushStatistics,
+  required Future<void> Function() quitWindow,
+  Duration sessionTimeout = const Duration(seconds: 2),
+}) async {
+  try {
+    await commitSession().timeout(sessionTimeout);
+  } on TimeoutException {
+    debugPrint(
+      '[Molia] 退出前落盘播放会话超时（${sessionTimeout.inMilliseconds}ms，继续退出）',
+    );
+  } catch (e) {
+    debugPrint('[Molia] 退出前落盘播放会话失败（继续退出）: $e');
+  }
+  try {
+    flushStatistics();
+  } catch (e) {
+    debugPrint('[Molia] 退出前落盘统计失败（继续退出）: $e');
+  }
+  await quitWindow();
 }
 
 /// 托盘菜单文案：按当前界面语言解析（未选择语言时跟随系统；与
