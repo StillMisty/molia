@@ -205,14 +205,21 @@ void main() {
     final reloaded = await freshStore();
     expect(reloaded.peers.single.lastSuccessAt, 800);
 
-    // 旧 JSON 没有 lastSuccessAt：0 = 未知，派生值退到最近数据流转。
+    // 旧 JSON 没有 lastSuccessAt：0 = 未知，派生值取数据时间与最后尝试中
+    // 较新者（900 是后来探测成功的证据，不能被 700 的数据时间盖过）。
     final old = SyncPeerState.fromJson({
       'deviceId': 'devC',
       'lastSeenAt': 900,
       'lastPullAt': 700,
     })!;
     expect(old.lastSuccessAt, 0);
-    expect(old.effectiveLastSuccessAt, 700);
+    expect(old.effectiveLastSuccessAt, 900);
+    // 只有数据时间（没有尝试记录）：仍按最近数据流转兜底。
+    final dataOnly = SyncPeerState.fromJson({
+      'deviceId': 'devE',
+      'lastPullAt': 700,
+    })!;
+    expect(dataOnly.effectiveLastSuccessAt, 700);
     // 只有尝试、没有失败记录：旧名册按「最后尝试」兜底，不显示成从未连上。
     final legacy = SyncPeerState.fromJson({
       'deviceId': 'devD',

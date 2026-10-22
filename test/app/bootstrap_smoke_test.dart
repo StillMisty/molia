@@ -223,6 +223,8 @@ void main() {
 
     // 接线契约：引擎与写入点共用同一份增量日志与状态（组合根唯一的断言点）。
     expect(sync.engine.incrementalEnabled, isTrue);
+    // 生产必须注入调度器（自动同步 / 检查轮完整接线）；测试可省略。
+    expect(sync.provider.hasScheduler, isTrue);
     // 控制面与引擎共享同一个状态存储：经控制面写入后，仓库侧立即可见。
     await sync.controlPlane.setDeviceName('冒烟设备');
     expect(library.syncState.deviceName, '冒烟设备');

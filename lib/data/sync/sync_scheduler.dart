@@ -367,10 +367,10 @@ class SyncScheduler {
   ///
   /// 不是手动轮：同步关闭、已有轮次在跑、省电 / 蜂窝暂停策略生效时都不跑，
   /// 也不做 anti-entropy 全量兜底（只更新「最近一轮是否接触成功」）。
+  /// 「同步关闭 / 已有轮次在跑」由 [_canRunAutomatically] 与 [_runAndMark]
+  /// 统一拦住，这里不重复判断。
   Future<void> checkNow() async {
-    if (_disposed || !_host.syncEnabled) return;
-    if (_roundRunning) return;
-    if (!_canRunAutomatically) return;
+    if (_disposed || !_canRunAutomatically) return;
     await _runAndMark(SyncTrigger.check, push: true);
   }
 

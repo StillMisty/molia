@@ -223,28 +223,20 @@ String syncPeerSubtitle(
       lastSuccess > 0 ? syncTimeText(lastSuccess) : '';
   // 结论 + 上次成功合成一句：两段独立文案会重复「上次同步」。
   final statusText = switch (status) {
-    SyncPeerConnectionStatus.lost => lastSuccess > 0
-        ? l10n.syncPeerLostSince(lastSuccessText)
-        : l10n.syncPeerLost,
+    // 从未成功接触过：失败尝试只能说明「还没连上」，不能说成「未连接 ·
+    // 上次同步 …」，WebDAV 行也不能显示「云端未同步」（那是同步过又失败）。
+    _ when lastSuccess <= 0 => l10n.syncPeerNever,
+    SyncPeerConnectionStatus.lost => l10n.syncPeerLostSince(lastSuccessText),
+    // never 只在没有任何接触证据时返回，已被上一分支覆盖；保留以满足穷尽性。
     SyncPeerConnectionStatus.never => l10n.syncPeerNever,
-    SyncPeerConnectionStatus.connected => lastSuccess > 0
-        ? (cloud
-            ? l10n.syncPeerCloudSyncedSince(lastSuccessText)
-            : l10n.syncPeerConnectedSince(lastSuccessText))
-        : (cloud
-            ? l10n.syncPeerStatusCloudSynced
-            : l10n.syncPeerStatusConnected),
-    SyncPeerConnectionStatus.unreachable => lastSuccess > 0
-        ? (cloud
-            ? l10n.syncPeerCloudNotSyncedSince(lastSuccessText)
-            : l10n.syncPeerDisconnectedSince(lastSuccessText))
-        : (cloud
-            ? l10n.syncPeerStatusCloudNotSynced
-            : l10n.syncPeerStatusDisconnected),
+    SyncPeerConnectionStatus.connected => cloud
+        ? l10n.syncPeerCloudSyncedSince(lastSuccessText)
+        : l10n.syncPeerConnectedSince(lastSuccessText),
+    SyncPeerConnectionStatus.unreachable => cloud
+        ? l10n.syncPeerCloudNotSyncedSince(lastSuccessText)
+        : l10n.syncPeerDisconnectedSince(lastSuccessText),
     // 本轮没尝试：时间本身就是状态（不再叠一个没信息量的「空闲」）。
-    SyncPeerConnectionStatus.idle => lastSuccess > 0
-        ? l10n.syncPeerLastSuccess(lastSuccessText)
-        : l10n.syncPeerNever,
+    SyncPeerConnectionStatus.idle => l10n.syncPeerLastSuccess(lastSuccessText),
   };
   final parts = <String>[
     statusText,

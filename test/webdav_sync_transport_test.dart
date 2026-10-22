@@ -141,7 +141,7 @@ void main() {
     expect(result.seenIds, isNot(contains('devB')));
   });
 
-  test('需要全量但没有快照：设备进入 failedIssues', () async {
+  test('数据读取失败（需要全量但没有快照）：设备进入 failedIssues（webdavReadFailed）', () async {
     final a = transport('devA');
     addTearDown(a.stop);
     await a.start();
@@ -164,7 +164,7 @@ void main() {
     );
   });
 
-  test('回执解密失败但数据文件成功：设备仍算本轮未完整同步', () async {
+  test('回执解密失败但数据文件成功：设备不算失败（只在传输级计数）', () async {
     final a = transport('devA');
     addTearDown(a.stop);
     await a.start();
@@ -174,16 +174,37 @@ void main() {
         codec.encrypt(snapshotEnvelope('devB', coverage: 0), passphrase);
 
     final result = await a.pull();
-    // 数据文件读到了，但回执失败意味着设备本轮没有完整同步：失败仍要
-    // 归属到 devB（seenIds 仍保留「见到过」的事实，名册失败优先）。
+    // 数据已经读到并交付：设备行按成功归属；回执失败仍留在传输级失败计数 /
+    // 错误里（本轮结论可以是部分失败），但不能把设备说成「云端未同步」。
+    expect(result.envelopes, hasLength(1));
+    expect(result.failedPeers, 1);
+    expect(result.failedIssues, isEmpty);
+    expect(result.seenIds, contains('devB'));
+    expect(result.error, isNotNull);
+  });
+
+  test('快照解密失败：设备进入 failedIssues（webdavDecryptFailed）', () async {
+    final a = transport('devA');
+    addTearDown(a.stop);
+    await a.start();
+
+    final acks = SyncEnvelope(
+      deviceId: 'devB',
+      producedAt: 1,
+      journalHead: 0,
+      journal: const [],
+    );
+    server.files['devB.p2.acks.msync'] = codec.encrypt(acks, passphrase);
+    server.files['devB.p2.0.snapshot.msync'] = [4, 5, 6];
+
+    final result = await a.pull();
+    expect(result.envelopes, isEmpty);
     expect(result.failedPeers, 1);
     expect(result.failedIssues.keys, ['devB']);
     expect(
       result.failedIssues['devB']?.code,
       SyncIssueCode.webdavDecryptFailed,
     );
-    expect(result.seenIds, contains('devB'));
-    expect(result.envelopes, hasLength(1));
   });
 
   test('两台设备同时失败：各自拿到自己的错误码', () async {

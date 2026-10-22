@@ -61,6 +61,13 @@ class SyncProvider extends ChangeNotifier {
   /// 是否有一轮同步正在跑（设置页据此显示「正在同步…」并避免重复触发）。
   bool get syncing => _engine.syncing;
 
+  /// 是否注入了调度器（组合根断言用）。
+  ///
+  /// 生产接线必须注入调度器：自动同步、策略转发与打开同步页的检查轮都经它；
+  /// 测试可以省略（省略时相关入口按无操作处理），但不能让生产漏接退化成
+  /// 「只有手动同步」还无人发现。
+  bool get hasScheduler => _scheduler != null;
+
   String get deviceId => _controlPlane.deviceId;
   String get deviceName => _controlPlane.deviceName;
   Map<SyncCategory, bool> get categories => _controlPlane.categories;

@@ -201,9 +201,12 @@ class WebDavSyncTransport implements SyncTransport {
     var skipped = 0;
     var bytesIn = 0;
     SyncIssue? firstError;
-    // 失败归属：文件级错误按设备收齐（回执 / 数据文件任一读失败都说明该
-    // 设备本轮没有完整同步，不能因为另一份文件可读就隐藏失败）。
+    // 失败归属：数据文件读失败先记到设备，最后剔除「本轮已读到数据」的
+    // 设备；回执失败单独挂起——只要数据流通过了，它就只留在传输级计数 /
+    // 错误里，设备行不该显示「未同步」。完全没读到数据的设备才保留原因。
     final failedIssues = <String, SyncIssue>{};
+    final ackFailures = <String, SyncIssue>{};
+    final dataOkDevices = <String>{};
     for (final entry in devices.entries) {
       final device = entry.key;
       final deviceFiles = entry.value;
@@ -227,7 +230,7 @@ class WebDavSyncTransport implements SyncTransport {
         if (outcome.error != null) {
           failed++;
           final issue = _deviceIssue(outcome.error!, device);
-          failedIssues.putIfAbsent(device, () => issue);
+          ackFailures.putIfAbsent(device, () => issue);
           firstError ??= issue;
         } else if (outcome.ghost) {
           _logger.warning('远端文件 ${acksFile.name} 身份不符，跳过');
@@ -298,6 +301,7 @@ class WebDavSyncTransport implements SyncTransport {
           if (outcome.envelope == null) continue;
           bytesIn += outcome.bytes;
           delivered = true;
+          dataOkDevices.add(device);
           seenDevices.add(device);
           _peerHeads[device] = outcome.envelope!.journalHead;
           envelopes.add(outcome.envelope!);
@@ -339,10 +343,22 @@ class WebDavSyncTransport implements SyncTransport {
         seenDevices.add(device);
         bytesIn += outcome.bytes;
         delivered = true;
+        dataOkDevices.add(device);
         _peerHeads[device] = outcome.envelope!.journalHead;
         envelopes.add(outcome.envelope!);
       }
       if (!delivered && acksEnvelope != null) envelopes.add(acksEnvelope);
+    }
+
+    // 同一设备只要有一份数据文件读成功就不算失败（回执失败 / 多块中的一块
+    // 坏掉都不该把整台设备标成未连接）：这些失败只留在传输级计数 / 错误里。
+    // 只有完全没读到数据的设备才保留设备级原因（读取 / 解密 / 缺快照）。
+    failedIssues.removeWhere(
+      (device, _) => dataOkDevices.contains(device),
+    );
+    for (final entry in ackFailures.entries) {
+      if (dataOkDevices.contains(entry.key)) continue;
+      failedIssues.putIfAbsent(entry.key, () => entry.value);
     }
 
     // 3) 裁剪自己的旧块 / 旧快照（best effort）。

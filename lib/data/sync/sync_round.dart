@@ -1151,20 +1151,19 @@ class SyncRoundRunner {
     );
   }
 
-  /// 成功接触：刷新最近尝试与成功时间；[pull] / [push] 标记本次是否真的
-  /// 发生了数据流转（探测应答 / 未变跳过两者都不传）。
+  /// 成功接触：刷新最近尝试与成功时间（探测应答 / 未变跳过 / 推送成功）。
+  ///
+  /// 拉取成功不经过这里：`_consumePayloads` 在载荷落地时推进 `lastPullAt`。
+  /// [push] 标记本次是否真的发生了推送（探测应答 / 未变跳过不传）。
   void _touchPeerSuccess(
     String deviceId,
     String kind, {
-    bool pull = false,
     bool push = false,
   }) {
     if (deviceId.isEmpty) return;
     final existing = _peersById[deviceId] ?? SyncPeerState(deviceId: deviceId);
     final now = _nowMs();
-    if (pull) {
-      _peersPullFailedThisRound.remove(deviceId);
-    } else if (push) {
+    if (push) {
       // 推送成功不代表拉取成功：保留本轮拉取失败标记，避免随后只带回执的
       // 载荷把 lastPullAt 推进成「拉取成功」。
       _peersFailedThisRound.remove(deviceId);
@@ -1177,7 +1176,6 @@ class SyncRoundRunner {
       transport: kind,
       lastSeenAt: now,
       lastSuccessAt: now,
-      lastPullAt: pull ? now : existing.lastPullAt,
       lastPushAt: push ? now : existing.lastPushAt,
       clearLastError: true,
     );

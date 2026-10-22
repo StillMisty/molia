@@ -901,7 +901,7 @@ void main() {
     expect(withPeer.contactedLan, isTrue);
   });
 
-  test('forceDiscovery：启动 / 回前台 / 换网 / 手动为 true，其余为 false', () async {
+  test('forceDiscovery：启动 / 回前台 / 换网 / 手动 / 打开同步页检查为 true，其余为 false', () async {
     await engine.syncNow(trigger: SyncTrigger.timer);
     expect(transport.lastRequest!.forceDiscovery, isFalse);
 
@@ -910,6 +910,7 @@ void main() {
       SyncTrigger.resume,
       SyncTrigger.network,
       SyncTrigger.manual,
+      SyncTrigger.check,
     ]) {
       await engine.syncNow(trigger: trigger);
       expect(

@@ -42,12 +42,7 @@ SyncPeerConnectionStatus resolveSyncPeerConnection(
 
   final successAt = peer.effectiveLastSuccessAt;
   final attemptAt = peer.lastSeenAt;
-  final hasEvidence =
-      successAt > 0 ||
-      attemptAt > 0 ||
-      peer.lastPullAt > 0 ||
-      peer.lastPushAt > 0 ||
-      peer.lastError != null;
+  final hasEvidence = successAt > 0 || attemptAt > 0 || peer.lastError != null;
   if (!hasEvidence) return SyncPeerConnectionStatus.never;
 
   final startedAt = report?.startedAt;

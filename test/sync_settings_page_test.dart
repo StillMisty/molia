@@ -1047,6 +1047,22 @@ void main() {
           lastSuccessAt: startedAt - 5000,
           lastError: const SyncIssue(code: SyncIssueCode.peerReadFailed),
         ),
+        // 只有失败尝试、从未成功过：不能说「未连接 · 上次同步」。
+        SyncPeerState(
+          deviceId: 'failedOnly',
+          name: 'Failed only',
+          transport: SyncTransportKind.lan,
+          lastSeenAt: startedAt + 6,
+          lastError: const SyncIssue(code: SyncIssueCode.peerReadFailed),
+        ),
+        // WebDAV 从未同步成功：也不能说「云端未同步」（那暗示同步过）。
+        SyncPeerState(
+          deviceId: 'webdavNever',
+          name: 'Cloud never',
+          transport: SyncTransportKind.webdav,
+          lastSeenAt: startedAt + 7,
+          lastError: const SyncIssue(code: SyncIssueCode.webdavReadFailed),
+        ),
         SyncPeerState(
           deviceId: 'idle',
           name: 'Idle',
@@ -1075,6 +1091,15 @@ void main() {
     expect(peerSubtitle(tester, 'idle'), contains('Last synced'));
     expect(peerSubtitle(tester, 'idle'), isNot(contains('Connected')));
     expect(peerSubtitle(tester, 'never'), contains('Not connected yet'));
+    // 失败过但从未成功：也是「还没连上」，不是带上次同步时间的「未连接」。
+    expect(peerSubtitle(tester, 'failedOnly'), contains('Not connected yet'));
+    expect(peerSubtitle(tester, 'failedOnly'), isNot(contains('last synced')));
+    // WebDAV 从未同步成功：不能显示「云端未同步」（暗示曾经同步过）。
+    expect(peerSubtitle(tester, 'webdavNever'), contains('Not connected yet'));
+    expect(
+      peerSubtitle(tester, 'webdavNever'),
+      isNot(contains('Not synced to cloud')),
+    );
     // 失联行只给结论 + 上次成功；180 天解释在详情弹层。
     expect(
       peerSubtitle(tester, 'lost'),

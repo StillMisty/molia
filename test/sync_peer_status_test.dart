@@ -114,6 +114,24 @@ void main() {
     expect(failedLegacy.isLostAt(now), isFalse);
   });
 
+  test('旧状态没有 lastSuccessAt：昨天探测成功要盖过 200 天前的数据时间', () {
+    const day = 24 * 60 * 60 * 1000;
+    const now = 2 * SyncPeerState.lostThresholdMs;
+    final peer = SyncPeerState(
+      deviceId: 'devB',
+      lastSeenAt: now - day,
+      lastPullAt: now - 200 * day,
+    );
+    expect(peer.lastSuccessAt, 0);
+    // 成功证据取「数据时间」与「无失败的最后尝试」中较新的一个。
+    expect(peer.effectiveLastSuccessAt, now - day);
+    expect(peer.isLostAt(now), isFalse);
+    expect(
+      resolveSyncPeerConnection(peer, nowMs: now),
+      SyncPeerConnectionStatus.idle,
+    );
+  });
+
   test('旧名册没有 lastSuccessAt：用最近数据流转兜底为 connected', () {
     final peer = SyncPeerState(
       deviceId: 'devB',

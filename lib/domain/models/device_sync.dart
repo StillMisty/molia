@@ -1111,16 +1111,17 @@ class SyncPeerState {
   final SyncIssue? lastError;
 
   /// 兼容旧状态的有效成功时间：新状态直接用 [lastSuccessAt]；旧状态没有
-  /// 该字段时退到最近一次数据流转（拉取 / 推送），再从「没有失败记录的最后
-  /// 尝试」兜底——老名册不该因为升级后缺字段就显示成「还没连上」。
+  /// 该字段时取「最近一次数据流转（拉取 / 推送）」与「没有失败记录的最后
+  /// 尝试」中的较新者——老名册不该因为升级后缺字段就显示成「还没连上」，
+  /// 也不能让 200 天前的数据时间盖过昨天探测成功的证据。
   ///
   /// 失败尝试不算成功：旧状态只要还有 [lastError]，[lastSeenAt] 就不参与
   /// 兜底（它可能只是最近一次失败）。返回 0 = 从未成功接触。
   int get effectiveLastSuccessAt {
     if (lastSuccessAt > 0) return lastSuccessAt;
     final lastData = lastPullAt > lastPushAt ? lastPullAt : lastPushAt;
-    if (lastData > 0) return lastData;
-    return lastError == null ? lastSeenAt : 0;
+    final legacyAttempt = lastError == null ? lastSeenAt : 0;
+    return lastData > legacyAttempt ? lastData : legacyAttempt;
   }
 
   /// 对端落后本机 journal 的条数（本机头部 − 对端已 ack 的位置）；
