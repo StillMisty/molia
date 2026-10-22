@@ -115,8 +115,7 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('manager 已解析：不经过 FutureBuilder（重建不回到占位分支）',
-      (tester) async {
+  testWidgets('manager 已解析：不经过 FutureBuilder（重建不回到占位分支）', (tester) async {
     final manager = _PendingCacheManager();
     addTearDown(manager.close);
     final cache = _cacheWith(manager);
@@ -139,5 +138,39 @@ void main() {
     await tester.pumpWidget(build());
     expect(find.byType(FutureBuilder<CacheManager?>), findsNothing);
     expect(find.byType(CachedNetworkImage), findsOneWidget);
+  });
+
+  testWidgets('file:// 封面也按 memCacheWidth 缩略解码', (tester) async {
+    await tester.pumpWidget(_host(const AppNetworkImage(
+      url: 'file:///tmp/molia-perf-cover.png',
+      width: 44,
+      height: 44,
+      memCacheWidth: 44,
+    )));
+
+    final image = tester.widget<Image>(find.byType(Image));
+    expect(image.image, isA<ResizeImage>());
+  });
+
+  testWidgets('远端封面未显式给尺寸时按布局宽度 × DPR 兜底', (tester) async {
+    final manager = _PendingCacheManager();
+    addTearDown(manager.close);
+    final cache = _cacheWith(manager);
+
+    await tester.pumpWidget(_host(AppNetworkImage(
+      url: 'https://p1.music.126.net/header.jpg',
+      width: 96,
+      height: 96,
+      artworkCache: cache,
+    )));
+
+    final image = tester.widget<CachedNetworkImage>(
+      find.byType(CachedNetworkImage),
+    );
+    final dpr = MediaQuery.devicePixelRatioOf(
+      tester.element(find.byType(CachedNetworkImage)),
+    );
+    expect(image.memCacheWidth, (96 * dpr).round());
+    expect(image.memCacheHeight, (96 * dpr).round());
   });
 }
