@@ -16,7 +16,7 @@ import 'package:molia/sources/source_track.dart';
 void main() {
   group('BuiltinDiscover 注册表', () {
     test('五平台注册且静态榜单表非空', () {
-      expect(BuiltinDiscover.sourceKeys, ['wy', 'tx', 'kg', 'kw', 'mg']);
+      expect(BuiltinDiscover.sourceKeys, ['tx', 'wy', 'kg', 'kw', 'mg']);
       for (final key in BuiltinDiscover.sourceKeys) {
         final source = BuiltinDiscover.of(key);
         expect(source.sourceKey, key);
@@ -125,9 +125,8 @@ void main() {
           'album': '专辑',
           'albumid': 2,
           'duration': 200,
-          'N_MINFO':
-              'level:ff,bitrate:320,format:mp3,size:1.2M;'
-                  'level:f,bitrate:2000,format:flac,size:20M',
+          'N_MINFO': 'level:ff,bitrate:320,format:mp3,size:1.2M;'
+              'level:f,bitrate:2000,format:flac,size:20M',
         },
       ]);
       final track = tracks.single;
@@ -183,8 +182,7 @@ void main() {
         key,
         null,
       );
-      final decoded =
-          kwWbdDecodeData(base64.encode(cipherBytes)) as Map;
+      final decoded = kwWbdDecodeData(base64.encode(cipherBytes)) as Map;
       expect(decoded['code'], 200);
     });
   });
@@ -282,13 +280,17 @@ void main() {
       final tags = MgDiscoverSource.filterTagInfo([
         {
           'content': [
-            {'texts': ['网络热歌', '1001076096', '%E7%BD%91%E7%BB%9C']},
+            {
+              'texts': ['网络热歌', '1001076096', '%E7%BD%91%E7%BB%9C']
+            },
           ],
         },
         {
           'header': {'title': '风格'},
           'content': [
-            {'texts': ['流行', '1000001672']},
+            {
+              'texts': ['流行', '1000001672']
+            },
           ],
         },
       ]);

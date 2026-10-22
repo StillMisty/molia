@@ -2112,10 +2112,6 @@ class AppLocalizationsEn extends AppLocalizations {
   String get aiDjPreferencesSubtitle => 'Styles, scenes and what gets sent';
 
   @override
-  String get aiDjPreferencesOutdated =>
-      'Preferences updated — refresh a batch to apply';
-
-  @override
   String aiDjBatchSize(int count) {
     return '$count per batch';
   }
@@ -2227,9 +2223,6 @@ class AppLocalizationsEn extends AppLocalizations {
   String get aiDjViewPrompt => 'View exact prompt';
 
   @override
-  String get aiDjHidePrompt => 'Hide exact prompt';
-
-  @override
   String get aiDjSystemPrompt => 'System prompt';
 
   @override
@@ -2240,6 +2233,18 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get aiDjPromptCopied => 'Copied';
+
+  @override
+  String get aiDjPromptTabPreview => 'This batch';
+
+  @override
+  String get aiDjPromptTabLastSent => 'Last sent';
+
+  @override
+  String get aiDjPromptTabLastRaw => 'Last reply';
+
+  @override
+  String get aiDjPromptUnavailable => 'Preview isn\'t available right now';
 
   @override
   String get aiDjLastSentPrompt => 'Last prompt sent';
@@ -2258,8 +2263,8 @@ class AppLocalizationsEn extends AppLocalizations {
       'No play links, device information or API key.';
 
   @override
-  String aiDjSendSummary(String sections, int count, String sources) {
-    return 'Sending: $sections · $count per batch · Sources: $sources';
+  String aiDjSendSummary(String sections) {
+    return 'Sending: $sections';
   }
 
   @override
@@ -2434,10 +2439,8 @@ class AppLocalizationsEn extends AppLocalizations {
   String get aiDjEraBefore90 => 'Before the 90s';
 
   @override
-  String get aiDjPrefsSave => 'Save preferences';
-
-  @override
-  String get aiDjPrefsSaved => 'Saved — applies to the next batch';
+  String get aiDjPrefsAutoSaveHint =>
+      'Changes save automatically and apply to the next batch.';
 
   @override
   String get aiDjPrefsReset => 'Restore defaults';
@@ -2447,7 +2450,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get aiDjPrefsResetBody =>
-      'Styles, scenes, sending scope and sources return to defaults; saved recommendations are not affected.';
+      'Styles, scenes and sending scope return to defaults; saved recommendations are not affected.';
 
   @override
   String get aiDjPrefsResetDone => 'Default preferences restored';
@@ -2490,24 +2493,6 @@ class AppLocalizationsEn extends AppLocalizations {
   @override
   String get aiDjScopePlaylistsConfirm =>
       'This reads the names, titles and artists of up to 10 of your playlists so they are not recommended again.';
-
-  @override
-  String get aiDjChannelsTitle => 'Where to find songs';
-
-  @override
-  String get aiDjChannelsAuto =>
-      'Auto (first 3 searchable sources on the Sources page)';
-
-  @override
-  String get aiDjChannelsHint =>
-      'Leave empty to choose automatically. Selected sources are used only; other sources won\'t be tried.';
-
-  @override
-  String get aiDjChannelsUnavailable =>
-      'Selected sources are unavailable right now; auto sources are used instead';
-
-  @override
-  String get aiDjChannelsEmpty => 'No searchable sources';
 
   @override
   String get aiDjSeedsTitle => 'More like these';

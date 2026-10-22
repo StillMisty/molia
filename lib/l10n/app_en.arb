@@ -1093,7 +1093,6 @@
   "aiDjEnqueueEmpty": "Everything here is already queued",
   "aiDjPreferencesTitle": "Recommendation preferences",
   "aiDjPreferencesSubtitle": "Styles, scenes and what gets sent",
-  "aiDjPreferencesOutdated": "Preferences updated — refresh a batch to apply",
   "aiDjBatchSize": "{count} per batch",
   "@aiDjBatchSize": {
     "placeholders": {
@@ -1162,26 +1161,23 @@
   "aiDjRetryUnresolved": "Search again",
   "aiDjTransparencyTitle": "What gets sent to AI",
   "aiDjViewPrompt": "View exact prompt",
-  "aiDjHidePrompt": "Hide exact prompt",
   "aiDjSystemPrompt": "System prompt",
   "aiDjUserPrompt": "User prompt",
   "aiDjCopyPrompt": "Copy",
   "aiDjPromptCopied": "Copied",
+  "aiDjPromptTabPreview": "This batch",
+  "aiDjPromptTabLastSent": "Last sent",
+  "aiDjPromptTabLastRaw": "Last reply",
+  "aiDjPromptUnavailable": "Preview isn't available right now",
   "aiDjLastSentPrompt": "Last prompt sent",
   "aiDjLastRawResponse": "Last AI response",
   "aiDjNoLastPrompt": "Nothing sent yet",
   "aiDjNoLastResponse": "No response yet",
   "aiDjPromptPrivacyHint": "No play links, device information or API key.",
-  "aiDjSendSummary": "Sending: {sections} · {count} per batch · Sources: {sources}",
+  "aiDjSendSummary": "Sending: {sections}",
   "@aiDjSendSummary": {
     "placeholders": {
       "sections": {
-        "type": "String"
-      },
-      "count": {
-        "type": "int"
-      },
-      "sources": {
         "type": "String"
       }
     }
@@ -1264,11 +1260,10 @@
   "aiDjEra2010s": "2010s",
   "aiDjEra2000s": "2000s",
   "aiDjEraBefore90": "Before the 90s",
-  "aiDjPrefsSave": "Save preferences",
-  "aiDjPrefsSaved": "Saved — applies to the next batch",
+  "aiDjPrefsAutoSaveHint": "Changes save automatically and apply to the next batch.",
   "aiDjPrefsReset": "Restore defaults",
   "aiDjPrefsResetTitle": "Restore default preferences?",
-  "aiDjPrefsResetBody": "Styles, scenes, sending scope and sources return to defaults; saved recommendations are not affected.",
+  "aiDjPrefsResetBody": "Styles, scenes and sending scope return to defaults; saved recommendations are not affected.",
   "aiDjPrefsResetDone": "Default preferences restored",
   "aiDjPrefsDataScope": "What gets sent",
   "aiDjScopeHint": "Unchecked items are not sent; favorites and playlists are off by default.",
@@ -1282,11 +1277,6 @@
   "aiDjScopePlaylists": "Your playlists",
   "aiDjScopeFavoritesConfirm": "This reads the titles and artists of up to 100 favorite tracks so they are not recommended again.",
   "aiDjScopePlaylistsConfirm": "This reads the names, titles and artists of up to 10 of your playlists so they are not recommended again.",
-  "aiDjChannelsTitle": "Where to find songs",
-  "aiDjChannelsAuto": "Auto (first 3 searchable sources on the Sources page)",
-  "aiDjChannelsHint": "Leave empty to choose automatically. Selected sources are used only; other sources won't be tried.",
-  "aiDjChannelsUnavailable": "Selected sources are unavailable right now; auto sources are used instead",
-  "aiDjChannelsEmpty": "No searchable sources",
   "aiDjSeedsTitle": "More like these",
   "aiDjSeedsHint": "Cleared after the next successful batch",
   "aiDjSeedsEmpty": "No “More like this” picks yet",

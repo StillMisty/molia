@@ -16,10 +16,15 @@ void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
   setUp(() => SharedPreferences.setMockInitialValues({}));
 
-  const expectedKeys = ['wy', 'tx', 'kg', 'kw', 'mg'];
+  const expectedKeys = ['tx', 'wy', 'kg', 'kw', 'mg'];
 
   test('平台键只在注册表声明一次：规范顺序 / 显示名 / isSupported', () {
     expect(BuiltinPlatforms.keys, expectedKeys);
+    expect(
+      BuiltinPlatforms.searchCandidates.map((platform) => platform.key),
+      expectedKeys,
+      reason: '音源页/搜索解析与发现页共用同一顺序',
+    );
     expect(BuiltinPlatforms.keySet, expectedKeys.toSet());
     for (final key in expectedKeys) {
       final platform = BuiltinPlatforms.maybeOf(key);

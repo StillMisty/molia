@@ -6,12 +6,12 @@
 /// 入口：发现页「今日推荐」区的「查看全部」+ 设置 › 内容 › AI 推歌。
 ///
 /// 版式：M3E 分区式（与收藏 / 队列页同一种形状语言）——分区标题 + 平铺
-/// 分段列表直接铺在页面表面，不再「卡片套卡片」。
+/// 分段列表直接铺在页面表面，不再「卡片套卡片」。发送原文收进弹窗，
+/// 避免长提示词把页面撑成长列表。
 library;
 
 import 'dart:async';
 
-import 'package:flutter/services.dart';
 import 'package:material_3_expressive/material_3_expressive.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:provider/provider.dart';
@@ -26,6 +26,7 @@ import '../providers/playback_provider.dart';
 import '../services/ai/ai_generation_executor.dart';
 import '../services/notification_service.dart';
 import '../utils/responsive.dart';
+import '../widgets/ai_dj_prompt_dialog.dart';
 import '../widgets/ai_dj_shared.dart';
 import '../widgets/ai_dj_track_tile.dart';
 import '../widgets/ai_dj_waiting.dart';
@@ -52,16 +53,6 @@ class _AiDjPageState extends State<AiDjPage> {
   /// 配置表单展开态：未配置时默认展开。
   bool _editingConfig = false;
   bool _busy = false;
-
-  /// 发送原文预览（展开时懒加载；偏好变化后失效重载）。
-  bool _showPrompt = false;
-  bool _promptLoading = false;
-  AiPrompt? _prompt;
-  int _promptRevision = -1;
-
-  /// 上次发送 / 上次返回的展开态。
-  bool _showLastPrompt = false;
-  bool _showLastRaw = false;
 
   @override
   void initState() {
@@ -105,6 +96,15 @@ class _AiDjPageState extends State<AiDjPage> {
       appBar: M3EAppBar.top(
         title: Text(l10n.aiDjTitle),
         automaticallyImplyLeading: true,
+        actions: [
+          M3EIconButton(
+            key: const Key('aiDjHistoryButton'),
+            variant: M3EIconButtonVariant.standard,
+            icon: const Icon(Icons.history_rounded),
+            semanticLabel: l10n.aiDjHistoryTitle,
+            onPressed: () => _openPage(const AiDjHistoryPage()),
+          ),
+        ],
       ),
       body: SafeArea(
         child: Consumer<AiDjProvider>(
@@ -311,16 +311,6 @@ class _AiDjPageState extends State<AiDjPage> {
                 ],
               ),
             ),
-            if (provider.preferencesOutdated)
-              Padding(
-                padding: const EdgeInsets.only(left: 8),
-                child: Text(
-                  l10n.aiDjPreferencesOutdated,
-                  style: theme.textTheme.labelSmall?.copyWith(
-                    color: scheme.tertiary,
-                  ),
-                ),
-              ),
             Icon(Icons.chevron_right_rounded, color: scheme.onSurfaceVariant),
           ],
         ),
@@ -350,88 +340,51 @@ class _AiDjPageState extends State<AiDjPage> {
         caption: batch == null
             ? null
             : l10n.aiDjLastUpdated(aiDjUpdatedText(l10n, batch.generatedAt)),
-        trailing: M3EIconButton(
-          key: const Key('aiDjRefreshBatchButton'),
-          variant: M3EIconButtonVariant.standard,
-          icon: const Icon(Icons.refresh_rounded),
-          semanticLabel: l10n.aiDjRefreshBatch,
-          onPressed:
-              busy ? null : () => unawaited(provider.refreshRecommendations()),
+        trailing: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            if (radioActive)
+              M3EIconButton(
+                key: const Key('aiDjFeedBatchButton'),
+                variant: M3EIconButtonVariant.standard,
+                icon: const Icon(Icons.queue_music_rounded),
+                semanticLabel: l10n.aiDjFeedBatch,
+                onPressed: busy ? null : _feedBatch,
+              ),
+            M3EIconButton(
+              key: const Key('aiDjRefreshBatchButton'),
+              variant: M3EIconButtonVariant.standard,
+              icon: const Icon(Icons.refresh_rounded),
+              semanticLabel: l10n.aiDjRefreshBatch,
+              onPressed: busy
+                  ? null
+                  : () => unawaited(provider.refreshRecommendations()),
+            ),
+          ],
         ),
       ),
-      if (provider.preferencesOutdated) ...[
-        const SizedBox(height: 4),
-        Text(
-          l10n.aiDjPreferencesOutdated,
-          style: theme.textTheme.labelSmall?.copyWith(color: scheme.tertiary),
+      if (items.isNotEmpty) ...[
+        const SizedBox(height: 8),
+        Wrap(
+          spacing: 8,
+          runSpacing: 8,
+          crossAxisAlignment: WrapCrossAlignment.center,
+          children: [
+            M3EButton.filled(
+              key: const Key('aiDjPlayAllButton'),
+              onPressed: busy ? null : () => unawaited(provider.startRadio()),
+              icon: const Icon(Icons.play_arrow_rounded),
+              label: Text(l10n.aiDjPlayAll),
+            ),
+            M3EButton.tonal(
+              key: const Key('aiDjEnqueueAllButton'),
+              onPressed: busy ? null : _enqueueAll,
+              icon: const Icon(Icons.playlist_add_rounded),
+              label: Text(l10n.aiDjEnqueueAll),
+            ),
+          ],
         ),
       ],
-      const SizedBox(height: 8),
-      Wrap(
-        spacing: 8,
-        runSpacing: 8,
-        crossAxisAlignment: WrapCrossAlignment.center,
-        children: [
-          M3EButton.filled(
-            key: const Key('aiDjPlayAllButton'),
-            onPressed: busy || items.isEmpty
-                ? null
-                : () => unawaited(provider.startRadio()),
-            icon: const Icon(Icons.play_arrow_rounded),
-            label: Text(l10n.aiDjPlayAll),
-          ),
-          M3EButton.tonal(
-            key: const Key('aiDjEnqueueAllButton'),
-            onPressed: busy || items.isEmpty ? null : _enqueueAll,
-            icon: const Icon(Icons.playlist_add_rounded),
-            label: Text(l10n.aiDjEnqueueAll),
-          ),
-          if (radioActive)
-            M3EButton.tonal(
-              key: const Key('aiDjFeedBatchButton'),
-              onPressed: busy ? null : _feedBatch,
-              icon: const Icon(Icons.queue_music_rounded),
-              label: Text(l10n.aiDjFeedBatch),
-            ),
-          SizedBox(
-            width: 132,
-            child: M3EDropdownMenu<int>(
-              key: const Key('aiDjBatchSizeDropdown'),
-              items: [
-                for (final size in kAiBatchSizeOptions)
-                  M3EDropdownItem<int>(
-                    label: l10n.aiDjBatchSize(size),
-                    value: size,
-                    selected: provider.preferences.batchSize == size,
-                  ),
-              ],
-              singleSelect: true,
-              showChipAnimation: false,
-              onSelectionChanged: (selected) {
-                if (selected.isEmpty) return;
-                final value = selected.first.value;
-                // 选择回调里同步 notify 会重建并销毁正在收尾的下拉控制器；
-                // 推迟到本帧结束再写偏好。
-                WidgetsBinding.instance.addPostFrameCallback((_) {
-                  if (mounted) unawaited(provider.setBatchSize(value));
-                });
-              },
-            ),
-          ),
-          M3EButton.text(
-            key: const Key('aiDjHistoryButton'),
-            onPressed: () => _openPage(const AiDjHistoryPage()),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                const Icon(Icons.history_rounded, size: 18),
-                const SizedBox(width: 6),
-                Text(l10n.aiDjHistoryEntry(provider.historyCount)),
-              ],
-            ),
-          ),
-        ],
-      ),
       const SizedBox(height: 12),
       // 进度分片只重建这张卡，不带走整页列表。
       ValueListenableBuilder<AiGenerationState>(
@@ -654,217 +607,44 @@ class _AiDjPageState extends State<AiDjPage> {
   List<Widget> _sendingSection(AppLocalizations l10n, AiDjProvider provider) {
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
-    // 偏好变化后预览失效：展开态下重新拉取（同一份 builder，预览 = 实际）。
-    if (_showPrompt &&
-        _promptRevision != provider.preferencesRevision &&
-        !_promptLoading) {
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (mounted) unawaited(_loadPrompt(provider));
-      });
-    }
-    final sourceNames = {
-      for (final source in provider.availableSources)
-        source.key: source.displayName,
-    };
-    final sections = [
-      for (final section in AiPreferences.defaults.sections)
-        if (provider.preferences.sections.contains(section))
-          aiDjSectionLabel(l10n, section),
-      for (final section in [
-        AiUpstreamSection.favorites,
-        AiUpstreamSection.playlists,
-      ])
-        if (provider.preferences.sections.contains(section))
-          aiDjSectionLabel(l10n, section),
-    ].join('、');
-    final channels = aiDjChannelsText(
-      l10n,
-      provider.preferences,
-      sourceNames,
-    );
-    final lastPrompt = provider.lastSentPrompt;
-    final lastRaw = provider.lastRawResponse;
     return [
       const SizedBox(height: _sectionGap),
       _sectionHeader(l10n.aiDjTransparencyTitle),
       const SizedBox(height: 8),
-      Text(
-        l10n.aiDjSendSummary(
-          sections.isEmpty ? l10n.aiDjSectionsNone : sections,
-          provider.preferences.batchSize,
-          channels,
+      CardListSurface(
+        key: const Key('aiDjPromptRow'),
+        position: M3ECardPosition.single,
+        onPressed: () => unawaited(showAiDjPromptDialog(context, provider)),
+        padding: const EdgeInsets.fromLTRB(16, 10, 12, 10),
+        child: Row(
+          children: [
+            Icon(Icons.visibility_rounded, size: 22, color: scheme.tertiary),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    l10n.aiDjViewPrompt,
+                    style: theme.textTheme.titleSmall,
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    l10n.aiDjPromptPrivacyHint,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: theme.textTheme.bodySmall?.copyWith(
+                      color: scheme.onSurfaceVariant,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            Icon(Icons.chevron_right_rounded, color: scheme.onSurfaceVariant),
+          ],
         ),
-        style: theme.textTheme.bodySmall,
-      ),
-      const SizedBox(height: 2),
-      Text(
-        aiDjPreferencesSummary(l10n, provider.preferences),
-        style: theme.textTheme.bodySmall?.copyWith(
-          color: scheme.onSurfaceVariant,
-        ),
-      ),
-      const SizedBox(height: 4),
-      Text(
-        l10n.aiDjPromptPrivacyHint,
-        style: theme.textTheme.labelSmall?.copyWith(
-          color: scheme.onSurfaceVariant,
-        ),
-      ),
-      const SizedBox(height: 4),
-      M3EButton.text(
-        key: const Key('aiDjViewPromptButton'),
-        onPressed: () => _togglePrompt(provider),
-        child: Text(_showPrompt ? l10n.aiDjHidePrompt : l10n.aiDjViewPrompt),
-      ),
-      if (_showPrompt) ...[
-        if (_promptLoading)
-          const Padding(
-            padding: EdgeInsets.symmetric(vertical: 12),
-            child: Center(child: M3ELoadingIndicator()),
-          )
-        else if (_prompt != null) ...[
-          _promptBlock(l10n.aiDjSystemPrompt, _prompt!.systemPrompt),
-          const SizedBox(height: 8),
-          _promptBlock(
-            l10n.aiDjUserPrompt,
-            _prompt!.userPrompt,
-            copy: true,
-          ),
-        ],
-      ],
-      const SizedBox(height: 4),
-      _collapsiblePrompt(
-        key: const Key('aiDjLastSentToggle'),
-        title: l10n.aiDjLastSentPrompt,
-        expanded: _showLastPrompt,
-        onToggle: () => setState(() => _showLastPrompt = !_showLastPrompt),
-        content: lastPrompt == null
-            ? l10n.aiDjNoLastPrompt
-            : '${lastPrompt.systemPrompt}\n\n${lastPrompt.userPrompt}',
-      ),
-      _collapsiblePrompt(
-        key: const Key('aiDjLastRawToggle'),
-        title: l10n.aiDjLastRawResponse,
-        expanded: _showLastRaw,
-        onToggle: () => setState(() => _showLastRaw = !_showLastRaw),
-        content: lastRaw == null || lastRaw.trim().isEmpty
-            ? l10n.aiDjNoLastResponse
-            : lastRaw,
       ),
     ];
-  }
-
-  Widget _promptBlock(String title, String content, {bool copy = false}) {
-    final theme = Theme.of(context);
-    final scheme = theme.colorScheme;
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: scheme.surfaceContainerHigh,
-        borderRadius: BorderRadius.circular(12),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Expanded(
-                child: Text(title, style: theme.textTheme.labelMedium),
-              ),
-              if (copy)
-                M3EButton.text(
-                  key: const Key('aiDjCopyPromptButton'),
-                  onPressed: () => _copyPrompt(),
-                  child: Text(AppLocalizations.of(context)!.aiDjCopyPrompt),
-                ),
-            ],
-          ),
-          const SizedBox(height: 4),
-          SelectableText(
-            content,
-            style: theme.textTheme.bodySmall?.copyWith(
-              fontFamily: 'monospace',
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _collapsiblePrompt({
-    required Key key,
-    required String title,
-    required bool expanded,
-    required VoidCallback onToggle,
-    required String content,
-  }) {
-    final theme = Theme.of(context);
-    final scheme = theme.colorScheme;
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        M3EButton.text(
-          key: key,
-          onPressed: onToggle,
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(
-                expanded
-                    ? Icons.expand_less_rounded
-                    : Icons.expand_more_rounded,
-                size: 18,
-              ),
-              const SizedBox(width: 6),
-              Text(title),
-            ],
-          ),
-        ),
-        if (expanded)
-          Padding(
-            padding: const EdgeInsets.only(left: 12, right: 12, bottom: 8),
-            child: SelectableText(
-              content,
-              style: theme.textTheme.bodySmall?.copyWith(
-                color: scheme.onSurfaceVariant,
-                fontFamily: 'monospace',
-              ),
-            ),
-          ),
-      ],
-    );
-  }
-
-  void _togglePrompt(AiDjProvider provider) {
-    setState(() => _showPrompt = !_showPrompt);
-    if (_showPrompt &&
-        (_prompt == null || _promptRevision != provider.preferencesRevision)) {
-      unawaited(_loadPrompt(provider));
-    }
-  }
-
-  Future<void> _loadPrompt(AiDjProvider provider) async {
-    final revision = provider.preferencesRevision;
-    setState(() {
-      _promptLoading = true;
-      _promptRevision = revision;
-      _prompt = null;
-    });
-    final prompt = await provider.previewPrompt();
-    if (!mounted) return;
-    setState(() {
-      _prompt = prompt;
-      _promptLoading = false;
-    });
-  }
-
-  Future<void> _copyPrompt() async {
-    final prompt = _prompt;
-    if (prompt == null) return;
-    await Clipboard.setData(ClipboardData(text: prompt.combined));
-    if (!mounted) return;
-    _notify(AppLocalizations.of(context)!.aiDjPromptCopied);
   }
 
   List<Widget> _configSection(AppLocalizations l10n, AiDjProvider provider) {

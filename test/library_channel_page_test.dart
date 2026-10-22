@@ -70,6 +70,7 @@ void main() {
         for (final key in const ['tx', 'kg', 'kw', 'mg'])
           key: FakeDiscoverSource(sourceKey: key),
       },
+      initialChannelKey: 'wy',
       // 与 composition root 相同的跟随规则：可搜索渠道 → 搜索源跟随。
       onChannelChanged: (key) {
         if (search.sourceOptions

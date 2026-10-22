@@ -7,7 +7,7 @@ import '../source_track.dart';
 import 'builtin_platforms.dart';
 import 'builtin_transport.dart';
 
-/// 内置平台搜索调度（与 lx-music 内置音源一致：kw/kg/tx/wy/mg）。
+/// 内置平台搜索调度（与 lx-music 内置音源一致：tx/wy/kg/kw/mg）。
 ///
 /// 说明：官方 LX 自定义源只负责取链（musicUrl/lyric/pic），搜索由宿主内置实现，
 /// 因此这里把 lx-music 的平台搜索接口移植为 Dart，产出与 LX `musicInfo` 一致的

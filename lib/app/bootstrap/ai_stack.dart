@@ -57,7 +57,6 @@ AiStack buildAiStack({
     libraryProvider: libraryProvider,
     recommendationService: aiRecommendationService,
     settingsStore: aiSettingsStore,
-    sourceRegistry: catalog.sourceRegistry,
   );
   // AI 凭证属同步类别：远端应用后要立即回读，否则测试连接/生成仍用旧配置。
   catalog.settings.bindReload(kAiDjBaseUrl, aiDjProvider.reloadConfig);

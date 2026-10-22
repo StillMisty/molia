@@ -239,7 +239,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('Song 0'), findsOneWidget);
-    expect(find.text('Artist · 网易云音乐'), findsNWidgets(3));
+    expect(find.text('Artist'), findsNWidgets(3));
     expect(find.text('reason 0'), findsOneWidget);
     expect(find.text('Hide tracks'), findsOneWidget);
   });

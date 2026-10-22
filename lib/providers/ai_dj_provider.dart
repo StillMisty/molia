@@ -21,9 +21,7 @@ import '../domain/models/ai_dj.dart';
 import '../domain/models/failure.dart';
 import '../domain/models/play_statistics.dart';
 import '../domain/models/playback.dart';
-import '../domain/models/source.dart';
 import '../domain/models/track.dart';
-import '../domain/ports/source_registry.dart';
 import '../services/ai/ai_generation_executor.dart';
 import '../services/ai/ai_radio_queue.dart';
 import '../services/ai/ai_recommendation_service.dart';
@@ -67,12 +65,10 @@ class AiDjProvider extends ChangeNotifier {
     required AiRecommendationGenerator recommendationService,
     required AiSettingsStore settingsStore,
     AiRecommendationStore? recommendationStore,
-    SourceRegistry? sourceRegistry,
   })  : _playbackProvider = playbackProvider,
         _libraryProvider = libraryProvider,
         _recommendationService = recommendationService,
-        _settingsStore = settingsStore,
-        _registry = sourceRegistry {
+        _settingsStore = settingsStore {
     _generation = AiGenerationExecutor();
     _generation.state.addListener(_onGenerationStateChanged);
     _history = AiDjHistoryController(
@@ -86,7 +82,6 @@ class AiDjProvider extends ChangeNotifier {
   final LibraryProvider _libraryProvider;
   final AiRecommendationGenerator _recommendationService;
   final AiSettingsStore _settingsStore;
-  final SourceRegistry? _registry;
   final Logger _logger = Logger('molia.ai_dj_provider');
 
   late final AiDjHistoryController _history;
@@ -173,29 +168,10 @@ class AiDjProvider extends ChangeNotifier {
   AiPreferences get preferences => _preferences;
   AiFeedbackMemory get feedbackMemory => _feedback;
   List<String> get seeds => List.unmodifiable(_feedback.seeds);
-  bool get preferencesOutdated =>
-      recommendations?.preferences != null &&
-      !_preferences.copyWith(seeds: _feedback.seeds).sameGenerationInputs(
-            recommendations!.preferences,
-          );
 
   bool get autoFeedHalted => _autoFeedHalted;
   int get autoFeedFailures => _autoFeedFailures;
   SourceFailure? get autoFeedError => _autoFeedError;
-
-  /// 所选渠道当前全部不可用（已回退自动渠道）；偏好页提示用。
-  bool get selectedChannelsUnavailable {
-    if (_preferences.sourceKeys.isEmpty) return false;
-    final available = {for (final source in availableSources) source.key};
-    return available.intersection(_preferences.sourceKeys.toSet()).isEmpty;
-  }
-
-  /// 可搜索渠道（按音源页顺序；偏好页多选用）。
-  List<SourceDescriptor> get availableSources {
-    final registry = _registry;
-    if (registry == null) return const [];
-    return aiDjSearchableSourcesInPageOrder(registry.descriptors);
-  }
 
   /// 上次实际发送的提示词（内存；不落盘、不打日志）。
   AiPrompt? get lastSentPrompt => _lastSentPrompt;
@@ -386,7 +362,7 @@ class AiDjProvider extends ChangeNotifier {
     if (value) await ensureRecommendations();
   }
 
-  /// 保存推荐偏好：只影响下一次生成，不自动生成。
+  /// 保存推荐偏好：改动即时生效，只影响下一次生成，不自动生成。
   Future<void> savePreferences(AiPreferences preferences) async {
     final sanitized = preferences.copyWith(
       batchSize: AiPreferences.sanitizeBatchSize(preferences.batchSize),
@@ -400,26 +376,23 @@ class AiDjProvider extends ChangeNotifier {
     final autoFeedEnabled = !_preferences.autoFeed && sanitized.autoFeed;
     if (autoFeedDisabled) _cancelAutoFeed();
     _preferences = sanitized;
-    await _settingsStore.savePreferences(sanitized);
     if (autoFeedEnabled) {
       _autoFeedHalted = false;
       _autoFeedFailures = 0;
       _autoFeedError = null;
     }
     _preferencesRevision++;
+    // 偏好页是即时保存：先让 UI 用上新值，再落盘。
     notifyListeners();
+    try {
+      await _settingsStore.savePreferences(sanitized);
+    } catch (e) {
+      _logger.warning('AI 推歌：保存推荐偏好失败 $e');
+    }
   }
 
   Future<void> resetPreferences() =>
       savePreferences(AiPreferences.defaults.copyWith(seeds: _feedback.seeds));
-
-  /// 每批数量（下一次生成生效，不消耗额度）。
-  Future<void> setBatchSize(int size) async {
-    if (!kAiBatchSizeOptions.contains(size) || size == _preferences.batchSize) {
-      return;
-    }
-    await savePreferences(_preferences.copyWith(batchSize: size));
-  }
 
   /// 自动补歌开关：走统一偏好保存路径（关闭取消在途静默任务，打开清除停止态）。
   Future<void> setAutoFeed(bool value) async {

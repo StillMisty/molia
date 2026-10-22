@@ -440,7 +440,6 @@ void main() {
         exploration: kAiExplorationSurprise,
         extraPrompt: '女声优先',
         sections: {},
-        sourceKeys: ['wy'],
       );
 
       final prompt = await service.buildPromptPreview(
@@ -599,11 +598,11 @@ void main() {
   });
 
   group('找歌渠道', () {
-    test('自动：按音源页顺序取前 3 个可搜索渠道', () async {
+    test('按音源页顺序遍历全部可搜索渠道，首个命中即停止', () async {
       final s1 = _FakeSource('s1', [_track('a', '歌', '手', source: 's1')]);
-      final s2 = _FakeSource('s2', [_track('a', '歌', '手', source: 's2')]);
+      final s2 = _FakeSource('s2', const []);
       final s3 = _FakeSource('s3', [_track('a', '歌', '手', source: 's3')]);
-      final s4 = _FakeSource('s4', [_track('a', '歌', '手', source: 's4')]);
+      final s4 = _FakeSource('s4', const []);
       service = buildService(
         [s1, s2, s3, s4],
         config: {
@@ -619,25 +618,27 @@ void main() {
         ],
       });
 
-      final batch = await service.generate(config: config, count: 20);
+      final batch = await service.generate(config: config, count: 10);
 
-      expect(batch.items.single.track.id.sourceKey, 's2');
+      expect(batch.items.single.track.id.sourceKey, 's3');
       expect(s2.searchCalls, 1);
-      expect(s1.searchCalls, 0);
-      expect(s3.searchCalls, 0);
-      expect(s4.searchCalls, 0);
+      expect(s4.searchCalls, 1);
+      expect(s3.searchCalls, 1);
+      expect(s1.searchCalls, 0, reason: '命中后不再尝试后续渠道');
     });
 
-    test('已选渠道：严格按所选顺序，只在这些渠道搜索，不兜底', () async {
-      final s1 = _FakeSource('s1', [_track('a', '歌', '手', source: 's1')]);
-      final s2 = _FakeSource('s2', [_track('a', '歌', '手', source: 's2')]);
-      final s3 = _FakeSource('s3', [_track('a', '歌', '手', source: 's3')]);
+    test('前 3 个渠道都没有结果时继续尝试后续渠道（不限制数量）', () async {
+      final s1 = _FakeSource('s1', const []);
+      final s2 = _FakeSource('s2', const []);
+      final s3 = _FakeSource('s3', const []);
+      final s4 = _FakeSource('s4', [_track('a', '歌', '手', source: 's4')]);
       service = buildService(
-        [s1, s2, s3],
+        [s1, s2, s3, s4],
         config: {
-          's1': (order: 3, enabled: true),
-          's2': (order: 1, enabled: true),
-          's3': (order: 2, enabled: true),
+          's1': (order: 1, enabled: true),
+          's2': (order: 2, enabled: true),
+          's3': (order: 3, enabled: true),
+          's4': (order: 4, enabled: true),
         },
       );
       llm.response = jsonEncode({
@@ -646,48 +647,23 @@ void main() {
         ],
       });
 
-      final batch = await service.generate(
-        config: config,
-        count: 20,
-        preferences: const AiPreferences(sourceKeys: ['s3']),
-      );
+      final batch = await service.generate(config: config, count: 10);
 
-      expect(batch.items.single.track.id.sourceKey, 's3');
-      expect(batch.items.single.sourceName, 's3');
+      expect(batch.items.single.track.id.sourceKey, 's4');
+      expect(s1.searchCalls, 1);
+      expect(s2.searchCalls, 1);
       expect(s3.searchCalls, 1);
-      expect(s1.searchCalls, 0);
-      expect(s2.searchCalls, 0);
+      expect(s4.searchCalls, 1);
     });
 
-    test('已选渠道找不到 → 未解析，不回退其它渠道', () async {
-      final s1 = _FakeSource('s1', [_track('a', '歌', '手', source: 's1')]);
-      final s2 = _FakeSource('s2', const []);
-      service = buildService([s1, s2]);
-      llm.response = jsonEncode({
-        'songs': [
-          {'title': '歌', 'artist': '手'},
-        ],
-      });
-
-      final batch = await service.generate(
-        config: config,
-        count: 20,
-        preferences: const AiPreferences(sourceKeys: ['s2']),
-      );
-
-      expect(batch.items, isEmpty);
-      expect(batch.unresolved, hasLength(1));
-      expect(s1.searchCalls, 0);
-    });
-
-    test('所选渠道全部不可用 → 回退自动渠道', () async {
+    test('停用渠道不参与解析', () async {
       final s1 = _FakeSource('s1', [_track('a', '歌', '手', source: 's1')]);
       final s2 = _FakeSource('s2', [_track('a', '歌', '手', source: 's2')]);
       service = buildService(
         [s1, s2],
         config: {
-          's1': (order: 1, enabled: true),
-          's2': (order: 2, enabled: false),
+          's1': (order: 1, enabled: false),
+          's2': (order: 2, enabled: true),
         },
       );
       llm.response = jsonEncode({
@@ -696,13 +672,11 @@ void main() {
         ],
       });
 
-      final batch = await service.generate(
-        config: config,
-        count: 20,
-        preferences: const AiPreferences(sourceKeys: ['s2']),
-      );
+      final batch = await service.generate(config: config, count: 10);
 
-      expect(batch.items.single.track.id.sourceKey, 's1');
+      expect(batch.items.single.track.id.sourceKey, 's2');
+      expect(s1.searchCalls, 0);
+      expect(s2.searchCalls, 1);
     });
   });
 

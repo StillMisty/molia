@@ -166,11 +166,12 @@ void main() {
     expect(find.text('Song 0'), findsOneWidget);
     expect(find.text('reason 0'), findsOneWidget);
     expect(find.textContaining('1 not found'), findsOneWidget);
-    // 行尾来源渠道名（artist · source）。
-    expect(find.text('Artist · wy'), findsWidgets);
+    // 行尾只显示歌手，不再暴露命中渠道。
+    expect(find.text('Artist'), findsWidgets);
+    expect(find.text('Artist · wy'), findsNothing);
   });
 
-  testWidgets('播放全部 / 加入队列 / 换一批 / 每批数量 / 历史入口', (tester) async {
+  testWidgets('播放全部 / 加入队列 / 换一批 / 历史入口', (tester) async {
     await pumpProvider();
     await pumpPage(tester);
     await provider.grantConsent();
@@ -187,29 +188,22 @@ void main() {
     await tester.pumpAndSettle();
     expect(backend.lastEnqueued, hasLength(3));
 
-    // 每批数量下拉：只保存偏好，不生成。
-    final callsBefore = generator.calls;
-    await tester.tap(find.byKey(const Key('aiDjBatchSizeDropdown')));
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('30 per batch').last);
-    await tester.pumpAndSettle();
-    expect(provider.preferences.batchSize, 30);
-    expect(generator.calls, callsBefore);
+    // 每批数量只在推荐偏好页，主页面不再有下拉。
+    expect(find.byKey(const Key('aiDjBatchSizeDropdown')), findsNothing);
 
     generator.batchFactory = () => _batch(9, 3);
     await tester.tap(find.byKey(const Key('aiDjRefreshBatchButton')));
     await tester.pumpAndSettle();
     expect(generator.calls, greaterThanOrEqualTo(2));
-    expect(generator.lastCount, 30);
+    expect(generator.lastCount, 10);
     expect(find.text('Song 9'), findsOneWidget);
 
-    expect(find.text('History (2)'), findsOneWidget);
     await tester.tap(find.byKey(const Key('aiDjHistoryButton')));
     await tester.pumpAndSettle();
     expect(find.byType(AiDjHistoryPage), findsOneWidget);
   });
 
-  testWidgets('推荐偏好行：摘要 + 偏好已更新提示 + 进入偏好页', (tester) async {
+  testWidgets('推荐偏好行：摘要 + 进入偏好页', (tester) async {
     await pumpProvider();
     await pumpPage(tester);
     await provider.grantConsent();
@@ -223,10 +217,9 @@ void main() {
       provider.preferences.copyWith(styles: ['pop'], autoFeed: false),
     );
     await tester.pumpAndSettle();
-    expect(
-      find.textContaining('Preferences updated — refresh a batch to apply'),
-      findsWidgets,
-    );
+    // 偏好即时保存，不再提示“换一批生效”。
+    expect(find.textContaining('Preferences updated'), findsNothing);
+    expect(find.textContaining('Pop'), findsOneWidget);
 
     await tester.tap(find.byKey(const Key('aiDjPreferencesRow')));
     await tester.pumpAndSettle();
@@ -308,7 +301,7 @@ void main() {
     expect(find.byKey(const Key('aiDjBaseUrlField')), findsNothing);
   });
 
-  testWidgets('发送透明化：摘要 / 原文预览 / 上次发送 / 上次返回', (tester) async {
+  testWidgets('发送透明化：页面只留入口，内容在弹窗里切换', (tester) async {
     generator.preview = const AiPrompt(
       systemPrompt: 'SYSTEM PROMPT',
       userPrompt: 'USER PROMPT',
@@ -327,26 +320,25 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('What gets sent to AI'), findsOneWidget);
-    expect(find.textContaining('Sending:'), findsOneWidget);
-
-    await tester.tap(find.byKey(const Key('aiDjViewPromptButton')));
-    await tester.pumpAndSettle();
-    expect(find.text('SYSTEM PROMPT'), findsOneWidget);
-    expect(find.text('USER PROMPT'), findsOneWidget);
-
-    await tester.ensureVisible(find.byKey(const Key('aiDjLastSentToggle')));
-    await tester.tap(find.byKey(const Key('aiDjLastSentToggle')));
-    await tester.pumpAndSettle();
-    expect(find.textContaining('LAST USER'), findsOneWidget);
-
-    await tester.ensureVisible(find.byKey(const Key('aiDjLastRawToggle')));
-    await tester.tap(find.byKey(const Key('aiDjLastRawToggle')));
-    await tester.pumpAndSettle();
-    expect(find.text('RAW RESPONSE'), findsOneWidget);
+    expect(find.byKey(const Key('aiDjPromptRow')), findsOneWidget);
     expect(
       find.textContaining('No play links, device information or API key.'),
       findsOneWidget,
     );
+
+    await tester.tap(find.byKey(const Key('aiDjPromptRow')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('aiDjPromptDialog')), findsOneWidget);
+    expect(find.text('SYSTEM PROMPT'), findsOneWidget);
+    expect(find.text('USER PROMPT'), findsOneWidget);
+
+    await tester.tap(find.text('Last sent'));
+    await tester.pumpAndSettle();
+    expect(find.textContaining('LAST USER'), findsOneWidget);
+
+    await tester.tap(find.text('Last reply'));
+    await tester.pumpAndSettle();
+    expect(find.text('RAW RESPONSE'), findsOneWidget);
   });
 
   testWidgets('显式生成：状态卡（阶段 / 等待 / 停止）', (tester) async {

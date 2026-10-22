@@ -178,18 +178,3 @@ String aiDjPreferencesSummary(AppLocalizations l10n, AiPreferences prefs) {
   ];
   return parts.join(' · ');
 }
-
-/// 渠道名（空选择时说明自动）。
-String aiDjChannelsText(
-  AppLocalizations l10n,
-  AiPreferences pref,
-  Map<String, String> sourceNames,
-) {
-  if (pref.sourceKeys.isEmpty) return l10n.aiDjChannelsAuto;
-  final selected = [
-    for (final key in pref.sourceKeys)
-      if (sourceNames.containsKey(key)) sourceNames[key]!,
-  ];
-  if (selected.isEmpty) return l10n.aiDjChannelsUnavailable;
-  return selected.join(' / ');
-}

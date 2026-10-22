@@ -829,7 +829,6 @@
   "aiDjEnqueueEmpty": "列表里的歌都已在队列中",
   "aiDjPreferencesTitle": "推荐偏好",
   "aiDjPreferencesSubtitle": "风格、场景与发送范围",
-  "aiDjPreferencesOutdated": "偏好已更新，换一批生效",
   "aiDjBatchSize": "每批 {count} 首",
   "@aiDjBatchSize": {
     "placeholders": {
@@ -898,26 +897,23 @@
   "aiDjRetryUnresolved": "重新找一次",
   "aiDjTransparencyTitle": "发送给 AI 的内容",
   "aiDjViewPrompt": "查看发送原文",
-  "aiDjHidePrompt": "收起发送原文",
   "aiDjSystemPrompt": "系统提示词",
   "aiDjUserPrompt": "用户提示词",
   "aiDjCopyPrompt": "复制",
   "aiDjPromptCopied": "已复制",
+  "aiDjPromptTabPreview": "本次发送",
+  "aiDjPromptTabLastSent": "上次发送",
+  "aiDjPromptTabLastRaw": "上次返回",
+  "aiDjPromptUnavailable": "暂时无法生成预览",
   "aiDjLastSentPrompt": "上次实际发送",
   "aiDjLastRawResponse": "上次 AI 返回",
   "aiDjNoLastPrompt": "还没有发送记录",
   "aiDjNoLastResponse": "还没有返回记录",
   "aiDjPromptPrivacyHint": "不含播放链接、设备信息或 API Key。",
-  "aiDjSendSummary": "发送范围：{sections} · 每批 {count} 首 · 渠道：{sources}",
+  "aiDjSendSummary": "发送范围：{sections}",
   "@aiDjSendSummary": {
     "placeholders": {
       "sections": {
-        "type": "String"
-      },
-      "count": {
-        "type": "int"
-      },
-      "sources": {
         "type": "String"
       }
     }
@@ -1000,11 +996,10 @@
   "aiDjEra2010s": "2010s",
   "aiDjEra2000s": "2000s",
   "aiDjEraBefore90": "90 年代及更早",
-  "aiDjPrefsSave": "保存偏好",
-  "aiDjPrefsSaved": "偏好已保存，下次生成生效",
+  "aiDjPrefsAutoSaveHint": "修改会立即保存，下一批生成时生效。",
   "aiDjPrefsReset": "恢复默认",
   "aiDjPrefsResetTitle": "恢复默认偏好？",
-  "aiDjPrefsResetBody": "风格、场景、发送范围与渠道都会恢复默认；已保存的推荐不受影响。",
+  "aiDjPrefsResetBody": "风格、场景与发送范围会恢复默认；已保存的推荐不受影响。",
   "aiDjPrefsResetDone": "已恢复默认偏好",
   "aiDjPrefsDataScope": "发送范围",
   "aiDjScopeHint": "关闭的项不会发送；收藏和歌单默认关闭。",
@@ -1018,11 +1013,6 @@
   "aiDjScopePlaylists": "自建歌单",
   "aiDjScopeFavoritesConfirm": "会读取收藏歌曲的歌名与歌手（最多 100 首），用来避免推荐已经收藏的歌。",
   "aiDjScopePlaylistsConfirm": "会读取自建歌单的名称与曲目歌名、歌手（最多 10 个歌单），用来避免重复推荐。",
-  "aiDjChannelsTitle": "找歌渠道",
-  "aiDjChannelsAuto": "自动（音源页前 3 个可搜索渠道）",
-  "aiDjChannelsHint": "不选则自动；选了就只在这些渠道找歌，找不到不会换别的渠道。",
-  "aiDjChannelsUnavailable": "所选渠道当前都不可用，已改用自动渠道",
-  "aiDjChannelsEmpty": "没有可搜索的音源",
   "aiDjSeedsTitle": "多来点这种",
   "aiDjSeedsHint": "下一批生成成功后会清空",
   "aiDjSeedsEmpty": "还没有「多来点这种」",

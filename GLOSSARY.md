@@ -481,9 +481,9 @@
   （删除 / 清空 / 保留裁剪都一样），孤儿载荷无害。旧单批键 `ai_dj_pending_batch_v1`
   首次加载迁移为 `restored` active；迁移成功才删旧键。历史批次只读（可播放 /
   加队列 / 设为当前 / 删除），不在历史里编辑反馈。
-- **批次（batch）大小** — 10 / 20 / 30 / 50，默认 20，存在
+- **批次（batch）大小** — 10 / 20 / 30 / 50，默认 10，存在
   `AiPreferences.batchSize`；影响 LLM `count`、历史元数据与自动补歌数量，
-  「换一首」固定 1；保存后下一次生成生效。
+  「换一首」固定 1；改动只对下一次生成生效。
 - **静默补歌（silent auto-feed）** — 队列剩余 ≤5 首、当前上下文为
   `kAiDjContextName` 且功能启用时，后台生成一批并追加队尾 + 写历史
   （`origin=autoFeed`）。不设置 `AiDjProgress`、不显示状态卡 / 骨架 / toast /
@@ -492,20 +492,22 @@
   静默任务。手动「补一批到队尾」是显式操作（可显示进度），同样不切换 active。
 - **推荐偏好（recommendation preferences）** — `AiPreferences`：批次大小、
   自动补歌、风格 / 场景 / 语言 / 年代 / 探索度 / 只推荐没听过的 / 补充要求、
-  发送范围、找歌渠道、种子快照；JSON 持久化在 `kAiDjPreferences`
-  （`SyncCategory.settings`）。保存只影响下一次生成，不自动消耗额度。
+  发送范围、种子快照；JSON 持久化在 `kAiDjPreferences`
+  （`SyncCategory.settings`）。偏好页即时保存（没有保存按钮），改动只影响
+  下一次生成，不自动消耗额度。
 - **发送范围（upstream scope）** — `TasteProfileBuilder` 按 `AiPreferences.sections`
   裁剪上行 JSON：汇总统计 / 常听歌手 / 常听歌曲 / 时段与来源分布 / 最近播放明细
   / 已听排除清单（默认开），收藏歌曲与自建歌单（默认关，opt-in）。
   收藏最多 100 首；自建歌单最多 10 个、每单 20 首、总计 100 首；只发歌名、
   歌手与歌单名，不含 raw payload / 封面 / 播放链接；开启时曲目进入本地排除集合。
-- **找歌渠道（source channels）** — `AiPreferences.sourceKeys` 为空 = 自动取
-  音源页顺序前 3 个可搜索渠道；已选 = 严格只按所选渠道（音源页顺序）解析，
-  **不兜底到其它渠道**。所选渠道全部不可用时回退自动并提示。推荐行展示
-  命中渠道名；未解析项「重新找一次」只重新搜索、不重新调 LLM。
-- **发送透明化（prompt transparency）** — AI 页展示发送范围/条数/偏好/渠道的
-  人话摘要；「查看发送原文」显示系统 + 用户提示词（可复制）。预览与实际请求
-  共用 `AiRecommendationService.buildPrompt`，相同输入下文本必须相等；
+- **找歌渠道（source channels）** — 不在用户界面暴露：解析统一按音源页渠道
+  顺序遍历全部可搜索渠道，不设数量上限；一个渠道找不到就继续下一个，停用
+  渠道不参与。推荐行不显示命中渠道名；未解析项「重新找一次」只重新搜索、
+  不重新调 LLM。
+- **发送透明化（prompt transparency）** — AI 页只保留「发送给 AI 的内容」
+  入口，点击后用弹窗展示发送范围、本次预览、上次实际发送与上次 LLM 原始
+  返回；用户提示词、上次发送与原始返回可复制。预览与实际请求共用
+  `AiRecommendationService.buildPrompt`，相同输入下文本必须相等；
   上次实际发送的 prompt 与上次 LLM 原始返回只存内存，不落盘、不打日志。
 - **反馈记忆（feedback memory）** — `AiFeedbackMemory`：不感兴趣 / 跳过标签、
   喜欢标签各上限 200，「多来点这种」种子上限 20；JSON 持久化在

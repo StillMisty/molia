@@ -2028,9 +2028,6 @@ class AppLocalizationsZh extends AppLocalizations {
   String get aiDjPreferencesSubtitle => '风格、场景与发送范围';
 
   @override
-  String get aiDjPreferencesOutdated => '偏好已更新，换一批生效';
-
-  @override
   String aiDjBatchSize(int count) {
     return '每批 $count 首';
   }
@@ -2140,9 +2137,6 @@ class AppLocalizationsZh extends AppLocalizations {
   String get aiDjViewPrompt => '查看发送原文';
 
   @override
-  String get aiDjHidePrompt => '收起发送原文';
-
-  @override
   String get aiDjSystemPrompt => '系统提示词';
 
   @override
@@ -2153,6 +2147,18 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get aiDjPromptCopied => '已复制';
+
+  @override
+  String get aiDjPromptTabPreview => '本次发送';
+
+  @override
+  String get aiDjPromptTabLastSent => '上次发送';
+
+  @override
+  String get aiDjPromptTabLastRaw => '上次返回';
+
+  @override
+  String get aiDjPromptUnavailable => '暂时无法生成预览';
 
   @override
   String get aiDjLastSentPrompt => '上次实际发送';
@@ -2170,8 +2176,8 @@ class AppLocalizationsZh extends AppLocalizations {
   String get aiDjPromptPrivacyHint => '不含播放链接、设备信息或 API Key。';
 
   @override
-  String aiDjSendSummary(String sections, int count, String sources) {
-    return '发送范围：$sections · 每批 $count 首 · 渠道：$sources';
+  String aiDjSendSummary(String sections) {
+    return '发送范围：$sections';
   }
 
   @override
@@ -2343,10 +2349,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get aiDjEraBefore90 => '90 年代及更早';
 
   @override
-  String get aiDjPrefsSave => '保存偏好';
-
-  @override
-  String get aiDjPrefsSaved => '偏好已保存，下次生成生效';
+  String get aiDjPrefsAutoSaveHint => '修改会立即保存，下一批生成时生效。';
 
   @override
   String get aiDjPrefsReset => '恢复默认';
@@ -2355,7 +2358,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get aiDjPrefsResetTitle => '恢复默认偏好？';
 
   @override
-  String get aiDjPrefsResetBody => '风格、场景、发送范围与渠道都会恢复默认；已保存的推荐不受影响。';
+  String get aiDjPrefsResetBody => '风格、场景与发送范围会恢复默认；已保存的推荐不受影响。';
 
   @override
   String get aiDjPrefsResetDone => '已恢复默认偏好';
@@ -2397,21 +2400,6 @@ class AppLocalizationsZh extends AppLocalizations {
   @override
   String get aiDjScopePlaylistsConfirm =>
       '会读取自建歌单的名称与曲目歌名、歌手（最多 10 个歌单），用来避免重复推荐。';
-
-  @override
-  String get aiDjChannelsTitle => '找歌渠道';
-
-  @override
-  String get aiDjChannelsAuto => '自动（音源页前 3 个可搜索渠道）';
-
-  @override
-  String get aiDjChannelsHint => '不选则自动；选了就只在这些渠道找歌，找不到不会换别的渠道。';
-
-  @override
-  String get aiDjChannelsUnavailable => '所选渠道当前都不可用，已改用自动渠道';
-
-  @override
-  String get aiDjChannelsEmpty => '没有可搜索的音源';
 
   @override
   String get aiDjSeedsTitle => '多来点这种';

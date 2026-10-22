@@ -57,6 +57,9 @@ void main() {
       playbackProvider: playback,
       libraryProvider: library,
       sources: {'wy': wy, 'tx': tx},
+      // 这一组 widget 用例聚焦 wy 的展示细节；默认平台切换由
+      // discover_provider_test 覆盖，这里显式指定 wy。
+      initialChannelKey: 'wy',
     );
   });
 

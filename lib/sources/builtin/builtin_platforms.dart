@@ -125,10 +125,6 @@ class BuiltinPlatform {
   final String key;
   final String displayName;
 
-  /// 搜索渠道候选的展示序（保持拆分前的 kw→kg→tx→wy→mg）。
-  /// 发现页与默认渠道顺序使用 [BuiltinPlatforms.keys] 的规范顺序。
-  final int searchRank;
-
   final BuiltinSearchAdapter? search;
   final BuiltinLyricSearchAdapter? lyricSearch;
   final BuiltinCommentAdapter? comments;
@@ -139,7 +135,6 @@ class BuiltinPlatform {
   const BuiltinPlatform({
     required this.key,
     required this.displayName,
-    required this.searchRank,
     this.search,
     this.lyricSearch,
     this.comments,
@@ -153,30 +148,15 @@ class BuiltinPlatform {
 class BuiltinPlatforms {
   BuiltinPlatforms._();
 
-  /// 规范平台顺序：wy 在前（默认平台），与发现页/渠道默认顺序一致。
+  /// 规范平台顺序：QQ → 网易 → 酷狗 → 酷我 → 咪咕。
+  ///
+  /// 音源页渠道、搜索/取链解析与发现页共用这一份顺序；用户可在音源页
+  /// 自定义排序，重置后回到这里。
   static final Map<String, BuiltinPlatform> byKey =
       Map.unmodifiable(<String, BuiltinPlatform>{
-    'wy': BuiltinPlatform(
-      key: 'wy',
-      displayName: '网易音乐',
-      searchRank: 3,
-      search: WySearch.searchWithMeta,
-      lyricSearch: WyLyricSearch.search,
-      comments: BuiltinCommentAdapter(
-        rawIdKeys: const ['songmid', 'id'],
-        fetch: WyComment.fetch,
-      ),
-      album: WyAlbum.fetch,
-      artist: BuiltinArtistAdapter(
-        search: WyArtist.search,
-        fetch: WyArtist.fetch,
-      ),
-      discover: const WyDiscoverSource(),
-    ),
     'tx': BuiltinPlatform(
       key: 'tx',
       displayName: 'QQ音乐',
-      searchRank: 2,
       search: TxSearch.searchWithMeta,
       lyricSearch: TxLyricSearch.search,
       comments: BuiltinCommentAdapter(
@@ -190,10 +170,25 @@ class BuiltinPlatforms {
       ),
       discover: const TxDiscoverSource(),
     ),
+    'wy': BuiltinPlatform(
+      key: 'wy',
+      displayName: '网易音乐',
+      search: WySearch.searchWithMeta,
+      lyricSearch: WyLyricSearch.search,
+      comments: BuiltinCommentAdapter(
+        rawIdKeys: const ['songmid', 'id'],
+        fetch: WyComment.fetch,
+      ),
+      album: WyAlbum.fetch,
+      artist: BuiltinArtistAdapter(
+        search: WyArtist.search,
+        fetch: WyArtist.fetch,
+      ),
+      discover: const WyDiscoverSource(),
+    ),
     'kg': BuiltinPlatform(
       key: 'kg',
       displayName: '酷狗音乐',
-      searchRank: 1,
       search: KgSearch.searchWithMeta,
       lyricSearch: KgLyricSearch.search,
       comments: BuiltinCommentAdapter(
@@ -210,7 +205,6 @@ class BuiltinPlatforms {
     'kw': BuiltinPlatform(
       key: 'kw',
       displayName: '酷我音乐',
-      searchRank: 0,
       search: KwSearch.searchWithMeta,
       lyricSearch: KwLyricSearch.search,
       comments: BuiltinCommentAdapter(
@@ -227,7 +221,6 @@ class BuiltinPlatforms {
     'mg': BuiltinPlatform(
       key: 'mg',
       displayName: '咪咕音乐',
-      searchRank: 4,
       search: MgSearch.searchWithMeta,
       lyricSearch: MgLyricSearch.search,
       comments: BuiltinCommentAdapter(
@@ -256,10 +249,9 @@ class BuiltinPlatforms {
     },
   );
 
-  /// 搜索渠道候选顺序：保持拆分前 kw→kg→tx→wy→mg 的既有展示顺序。
-  static final List<BuiltinPlatform> searchCandidates = List.unmodifiable(
-    byKey.values.toList()..sort((a, b) => a.searchRank.compareTo(b.searchRank)),
-  );
+  /// 搜索渠道候选顺序：与 [keys] 的规范顺序一致。
+  static final List<BuiltinPlatform> searchCandidates =
+      List.unmodifiable(byKey.values);
 
   /// 某能力族的非空适配器表：`byKey` 是唯一事实来源，六族键表都从这里推导，
   /// 选择器为 null 的平台不进表。
