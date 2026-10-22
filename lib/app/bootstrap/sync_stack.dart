@@ -29,6 +29,7 @@ import '../../data/sync/sync_control_plane.dart';
 import '../../data/sync/sync_engine.dart';
 import '../../data/sync/sync_known_store.dart';
 import '../../data/sync/sync_scheduler.dart';
+import '../../data/sync/sync_transport_runtime.dart';
 import '../../data/sync/transport/lan_sync_transport.dart';
 import '../../data/sync/transport/local_network_permission.dart';
 import '../../data/sync/transport/webdav_sync_transport.dart';
@@ -172,6 +173,12 @@ Future<SyncStack> buildSyncStack({
     SyncTransportKind.lan: lanSyncTransport,
     SyncTransportKind.webdav: webdavSyncTransport,
   };
+  // 传输运行时的唯一所有者：引擎（每轮 ensure、释放 stop、本地变更公告）与
+  // 控制面（设置开关、App 生命周期）共享同一实例，避免两份启动循环。
+  final syncTransportRuntime = SyncTransportRuntime(
+    state: syncState,
+    transports: syncTransports,
+  );
   final syncEngine = SyncEngine(
     state: syncState,
     adapters: syncAdapters,
@@ -189,6 +196,7 @@ Future<SyncStack> buildSyncStack({
     // 「每轮全量快照」：全库指纹、整库加密推送、日志永不裁剪；
     // 组合根冒烟测试（`test/app/bootstrap_smoke_test.dart`）守住这条接线。
     journal: library.syncJournal,
+    runtime: syncTransportRuntime,
     clock: () => DateTime.fromMillisecondsSinceEpoch(syncState.nowMs()),
   );
   engineRef = syncEngine;
@@ -200,6 +208,7 @@ Future<SyncStack> buildSyncStack({
   final syncControlPlane = SyncControlPlane(
     state: syncState,
     transports: syncTransports,
+    runtime: syncTransportRuntime,
   );
   // 备份只需要收集入口 + 适配器 / 状态 / 发号器：不构造轮次，也不经过传输。
   final syncBackup = SyncBackup(

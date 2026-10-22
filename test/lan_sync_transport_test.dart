@@ -109,14 +109,19 @@ void main() {
     await transportB.start();
 
     // A 在本轮探测窗口里听到 B（presence.lastHeardAt 属于本轮起点之后）。
-    final pulled = await transportA.pull();
+    // 轮次窗口显式传给 pull 与 push：两者共享同一个起点，不依赖传输内部
+    // 「pull 刚跑过」的隐藏状态。
+    final window = SyncRoundWindow(
+      startedAt: DateTime.now().millisecondsSinceEpoch,
+    );
+    final pulled = await transportA.pull(SyncPullRequest(window: window));
     expect(pulled.peersSeen, 1);
     expect(transportA.presenceCount, 1);
 
     // B 掉线后，同一个引擎轮次的 push 仍应把 B 当成预期对端：失败必须
     // 计入 failedPeers / failedIds，名册才能看到真实推送失败。
     await transportB.stop();
-    final pushed = await transportA.push(envelope('devA'));
+    final pushed = await transportA.push(envelope('devA'), window: window);
 
     expect(pushed.failedPeers, 1);
     expect(pushed.failedIds, contains('devB'));
@@ -986,7 +991,7 @@ void main() {
     expect(transport.unavailableReason, SyncUnavailableReason.startFailed);
     expect(transport.unavailableDetail, isNotNull);
 
-    // 下一轮 _ensureTransportsRunning 重新 start：端口恢复后应能恢复运行。
+    // 下一轮 SyncTransportRuntime.ensureRunning 重新 start：端口恢复后应能恢复运行。
     probeAlive = true;
     await transport.start();
     expect(transport.isRunning, isTrue);

@@ -1,35 +1,89 @@
 import '../models/device_sync.dart';
+import '../models/sync_pull_plan.dart';
+
+/// 一轮的显式时间窗口（pull 与 push 共用同一个起点）。
+///
+/// 局域网按 `presence.lastHeardAt >= 窗口起点` 判定「本轮听到的对端」：
+/// 过去这个起点藏在传输的 `_roundStartedAt` 字段里，由 pull 写入、push 读取，
+/// push 的正确性隐式依赖「本轮刚跑过 pull」。改成由引擎每轮创建一次并显式
+/// 传给两个动作后，传输不再保存跨动作状态，单独调用 push 也有确定语义。
+class SyncRoundWindow {
+  const SyncRoundWindow({required this.startedAt});
+
+  /// 本轮开始时间（毫秒时间戳）。
+  final int startedAt;
+}
 
 /// 一次拉取的请求参数（增量协议：本机游标 + 需要全量兜底的对端）。
 ///
-/// 传输实现按 [cursors] 请求「游标之后的增量窗口」（局域网带查询参数；
-/// WebDAV 本地过滤文件里的窗口），并在对端日志窗口已不含本机游标时改取
-/// bootstrap 全量快照；[fullPeers] 是引擎显式要求全量的对端（anti-entropy
-/// 发现指纹不一致，或上一轮发现窗口缺口）。
+/// 引擎生成一份类型化的 [plan]（逐对端意图 + 发现策略），传输只负责取证据
+/// 与载荷；「跳过 / 增量 / 全量」由 `decideSyncPull` 统一判定。
+///
+/// [cursors] / [fullPeers] / [forceDiscovery] 是旧构造方式，仍会转成同一份
+/// 计划（测试与外部调用方可以继续按游标描述请求）。
 class SyncPullRequest {
   const SyncPullRequest({
-    this.cursors = const {},
-    this.fullPeers = const {},
-    this.forceDiscovery = false,
-  });
+    Map<String, int> cursors = const {},
+    Set<String> fullPeers = const {},
+    bool forceDiscovery = false,
+    this.window,
+    SyncPullPlan? plan,
+  })  : _cursors = cursors,
+        _fullPeers = fullPeers,
+        _forceDiscovery = forceDiscovery,
+        _plan = plan;
+
+  final Map<String, int> _cursors;
+  final Set<String> _fullPeers;
+  final bool _forceDiscovery;
 
   /// 本机已消费各对端 journal 的位置（对端 id → seq）。
-  final Map<String, int> cursors;
+  Map<String, int> get cursors => _plan?.cursors ?? _cursors;
 
   /// 强制走全量快照的对端 id。
-  final Set<String> fullPeers;
+  Set<String> get fullPeers => _plan?.fullPeers ?? _fullPeers;
 
   /// 强制做一次完整发现（广播 + 组播 + 单播；启动 / 回前台 / 换网 / 手动）。
   ///
   /// 普通轮次只对已有候选单播，避免空闲时反复广播耗电。
-  final bool forceDiscovery;
+  bool get forceDiscovery => _plan?.forceDiscovery ?? _forceDiscovery;
+
+  /// 本轮时间窗口（pull → push 显式共享；null = 传输自行取当前时间）。
+  final SyncRoundWindow? window;
+
+  final SyncPullPlan? _plan;
 
   /// 未记录过的对端：尚未消费任何条目。
-  static const int noCursor = -1;
+  static const int noCursor = SyncPullRequestCursor.none;
 
   static const SyncPullRequest none = SyncPullRequest();
 
-  int cursorFor(String deviceId) => cursors[deviceId] ?? noCursor;
+  /// 类型化拉取计划：引擎显式给计划时原样使用，否则按旧字段构造。
+  SyncPullPlan get plan =>
+      _plan ??
+      SyncPullPlan.fromIntents(
+        discovery: _forceDiscovery
+            ? SyncPullDiscovery.full
+            : SyncPullDiscovery.knownOnly,
+        intents: [
+          for (final entry in _cursors.entries)
+            SyncPeerPullIntent(
+              deviceId: entry.key,
+              cursor: entry.value,
+              forceFull: _fullPeers.contains(entry.key),
+            ),
+          for (final id in _fullPeers)
+            if (!_cursors.containsKey(id))
+              SyncPeerPullIntent(
+                deviceId: id,
+                cursor: noCursor,
+                forceFull: true,
+              ),
+        ],
+      );
+
+  int cursorFor(String deviceId) =>
+      _plan?.cursorFor(deviceId) ?? _cursors[deviceId] ?? noCursor;
 }
 
 /// 一次拉取的结果。
@@ -162,7 +216,15 @@ abstract interface class SyncTransport {
   Future<SyncPullResult> pull([SyncPullRequest request]);
 
   /// 推送本地载荷（增量窗口 / 需要发布的全量快照；对端后续轮次拉取可见）。
-  Future<SyncPushResult> push(SyncEnvelope envelope);
+  ///
+  /// [window] 与同一轮的 [pull] 使用同一个 [SyncRoundWindow]：需要按
+  /// 「本轮观测」判定预期对端的传输（局域网）据此计数，不能依赖
+  /// 「本轮一定刚跑过 pull」的隐式状态。缺省 = 传输取当前时间，单独调用
+  /// push（测试 / 手动补偿）仍有确定语义。
+  Future<SyncPushResult> push(
+    SyncEnvelope envelope, {
+    SyncRoundWindow? window,
+  });
 
   /// 显式清理某个对端的远端文件（用户动作；**不做自动删除**）。
   ///
