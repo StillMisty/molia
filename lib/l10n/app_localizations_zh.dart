@@ -2723,13 +2723,134 @@ class AppLocalizationsZh extends AppLocalizations {
   String get syncPeersSection => '设备';
 
   @override
-  String get syncPeersHint => '在其它设备输入同一口令即可加入。如果一直找不到设备，请检查局域网权限，或改用 WebDAV。';
+  String get syncPeersHint => '打开局域网同步后，在「附近设备」里点击设备即可配对；找不到时请检查局域网权限，或改用手动地址。';
 
   @override
   String get syncPeersEmptyTitle => '还没有配对设备';
 
   @override
-  String get syncPeersEmptySubtitle => '用上面的配对码把设备加进来';
+  String get syncPeersEmptySubtitle => '在「附近设备」里点击配对，或用上方的配对码加入';
+
+  @override
+  String get syncNearbySection => '附近设备';
+
+  @override
+  String get syncNearbyTapToPair => '点击配对';
+
+  @override
+  String get syncNearbyHasGroup => '对方已有同步组';
+
+  @override
+  String get syncNearbyLanOffTitle => '局域网同步未开启';
+
+  @override
+  String get syncNearbyLanOffHint => '打开上方的「局域网」开关后，附近设备会显示在这里。';
+
+  @override
+  String get syncNearbySearching => '正在查找附近设备…';
+
+  @override
+  String get syncNearbySearchHint => '请确认对方已打开 Molia 并开启局域网同步';
+
+  @override
+  String get syncNearbyRescan => '重新查找';
+
+  @override
+  String get syncNearbyEmptyTitle => '没有发现设备';
+
+  @override
+  String get syncNearbyEmptyHint => '让对方打开 Molia 并开启局域网同步';
+
+  @override
+  String get syncNearbyFooter =>
+      '只接受你认识的设备；接受后对方可读取全部同步数据（含密钥）。找不到时可在高级设置手动添加地址。';
+
+  @override
+  String syncNearbyPairTitle(String name) {
+    return '与「$name」配对';
+  }
+
+  @override
+  String get syncNearbyContacting => '正在联系对方…';
+
+  @override
+  String get syncNearbyCodeLabel => '确认码';
+
+  @override
+  String get syncNearbyCheckCode => '请核对对方屏幕上的数字一致';
+
+  @override
+  String get syncNearbyWaiting => '等待对方接受…';
+
+  @override
+  String get syncNearbyJoined => '已加入同步组';
+
+  @override
+  String get syncNearbySameGroup => '已在同一同步组';
+
+  @override
+  String get syncNearbyResultRejected => '对方拒绝了配对请求，可以稍后重试。';
+
+  @override
+  String get syncNearbyResultExpired => '配对请求已过期，请重新点击设备配对。';
+
+  @override
+  String get syncNearbyResultConflict => '两台设备已在不同的同步组，请先重置其中一台的同步口令再试。';
+
+  @override
+  String get syncNearbyResultUnreachable => '连不上这台设备，请确认两台设备在同一网络且都开启了局域网同步。';
+
+  @override
+  String get syncNearbyResultBusy => '对方正在处理另一条配对请求，请稍后再试。';
+
+  @override
+  String get syncNearbyResultUnsupported => '这台设备暂不支持一键配对，请更新 Molia 后重试。';
+
+  @override
+  String get syncNearbyResultUnavailable => '配对暂时不可用，请确认两台设备都开启了局域网同步后重试。';
+
+  @override
+  String get syncNearbyResultCancelled => '已取消配对，需要时可以重新点击设备。';
+
+  @override
+  String syncNearbyIncomingJoinTitle(String name) {
+    return '「$name」请求加入同步组';
+  }
+
+  @override
+  String syncNearbyIncomingInviteTitle(String name) {
+    return '「$name」邀请你加入同步组';
+  }
+
+  @override
+  String get syncNearbyIncomingJoinWarning =>
+      '接受后，对方可读取全部同步数据（含音源脚本和密钥）。只接受你认识的设备。';
+
+  @override
+  String get syncNearbyIncomingInviteWarning =>
+      '接受后将加入对方的同步组，本机改用对方的同步口令；对方可读取全部同步数据（含音源脚本和密钥）。';
+
+  @override
+  String get syncNearbyAccept => '接受';
+
+  @override
+  String get syncNearbyReject => '拒绝';
+
+  @override
+  String get syncNearbyIncomingRejected => '已拒绝配对请求';
+
+  @override
+  String get syncNearbyIncomingExpired => '配对请求已过期';
+
+  @override
+  String get syncNearbyIncomingFailed => '配对没有完成，让对方重新发起。';
+
+  @override
+  String get syncNearbyIncomingNotCompleted =>
+      '已接受，但对方还没有完成配对；如果对方没加入，请让对方重新发起。';
+
+  @override
+  String get syncNearbyManualProbeSent => '正在查找这台设备；出现在「附近设备」后点击即可配对';
 
   @override
   String syncPeerThisDevice(String id) {
@@ -3166,7 +3287,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get syncManualConnectSubtitle => '自动发现失败时，手动填写设备地址';
 
   @override
-  String get syncManualConnectHint => '设备换了地址后：重新粘贴它的配对码，或在这里更新地址';
+  String get syncManualConnectHint => '自动发现失败时在这里填写地址；未配对的设备会出现在「附近设备」，点击即可配对。';
 
   @override
   String get syncNetworkAddresses => '网络地址';

@@ -6,7 +6,9 @@ import 'package:molia/data/sync/statistics_sync_store.dart';
 import 'package:molia/data/sync/sync_journal.dart';
 import 'package:molia/data/sync/sync_stamp.dart';
 import 'package:molia/domain/models/device_sync.dart';
+import 'package:molia/domain/models/sync_nearby_pairing.dart';
 import 'package:molia/domain/ports/library_sync_store.dart';
+import 'package:molia/domain/ports/sync_pairing.dart';
 import 'package:molia/domain/ports/sync_transport.dart';
 
 /// 测试用发号器（固定/可注入时钟 + 设备 id）：给不关心同步语义的仓库测试用。
@@ -368,5 +370,150 @@ class FakeJournalStore implements SyncJournalStore {
     head = 0;
     base = 0;
     snapshot = -1;
+  }
+}
+
+/// 测试用附近设备配对端口：候选 / 请求 / 确认码都由用例手动驱动。
+///
+/// 默认 `probeAddress` 返回 false（手动地址回退到旧的「立即接触」路径），
+/// 避免不关心配对的既有用例被新路径改变行为；需要验证附近设备的用例
+/// 自行打开 [probeResult] 并 emit 候选项。
+class FakeSyncPairingPort implements SyncPairingPort {
+  final StreamController<List<SyncNearbyDevice>> _nearby =
+      StreamController<List<SyncNearbyDevice>>.broadcast();
+  final StreamController<SyncPairingRequest> _incoming =
+      StreamController<SyncPairingRequest>.broadcast();
+  final StreamController<SyncPairingAttempt> _attempts =
+      StreamController<SyncPairingAttempt>.broadcast();
+
+  /// 当前候选（[emitNearby] 会整体替换）。
+  final List<SyncNearbyDevice> nearby = [];
+
+  bool _scanning = false;
+
+  @override
+  bool get scanning => _scanning;
+
+  @override
+  bool hasGroup = false;
+
+  /// startScan 的返回值（false = 后台 / 蜂窝 / 传输未运行）。
+  bool startScanResult = true;
+
+  int startScanCalls = 0;
+  int stopScanCalls = 0;
+
+  /// probeAddress 的返回值与调用记录。
+  bool probeResult = false;
+  final List<({String host, int probePort})> probes = [];
+
+  /// requestPairing 的调用记录与可注入结局。
+  final List<SyncNearbyDevice> requestedDevices = [];
+  SyncPairingResult? requestResult;
+  Completer<SyncPairingResult>? _requestCompleter;
+
+  /// respond 的返回值 / 挂起门（busy 态用例）。
+  SyncPairingOutcome respondResult = SyncPairingOutcome.accepted;
+  Completer<SyncPairingOutcome>? respondCompleter;
+  final List<({String requestId, bool accept})> responses = [];
+
+  final List<String> cancelledRequests = [];
+  bool disposed = false;
+
+  @override
+  Stream<List<SyncNearbyDevice>> get nearbyDevices => _nearby.stream;
+
+  @override
+  Stream<SyncPairingRequest> get incomingRequests => _incoming.stream;
+
+  @override
+  Stream<SyncPairingAttempt> get attempts => _attempts.stream;
+
+  @override
+  Future<bool> startScan() async {
+    startScanCalls++;
+    if (!startScanResult) return false;
+    _scanning = true;
+    _emitNearby();
+    return true;
+  }
+
+  @override
+  Future<bool> probeAddress(String host, {int probePort = 0}) async {
+    probes.add((host: host, probePort: probePort));
+    return probeResult;
+  }
+
+  @override
+  void stopScan() {
+    stopScanCalls++;
+    _scanning = false;
+    nearby.clear();
+    _emitNearby();
+  }
+
+  @override
+  Future<SyncPairingResult> requestPairing(SyncNearbyDevice device) {
+    requestedDevices.add(device);
+    final immediate = requestResult;
+    if (immediate != null) return Future.value(immediate);
+    return (_requestCompleter ??= Completer<SyncPairingResult>()).future;
+  }
+
+  @override
+  Future<SyncPairingOutcome> respond(
+    String requestId, {
+    required bool accept,
+  }) {
+    responses.add((requestId: requestId, accept: accept));
+    final gate = respondCompleter;
+    if (gate != null) return gate.future;
+    return Future.value(respondResult);
+  }
+
+  @override
+  Future<void> cancelPairing(String requestId) async {
+    cancelledRequests.add(requestId);
+    completeRequest(
+      const SyncPairingResult(outcome: SyncPairingOutcome.cancelled),
+    );
+  }
+
+  void emitNearby(List<SyncNearbyDevice> devices) {
+    nearby
+      ..clear()
+      ..addAll(devices);
+    _emitNearby();
+  }
+
+  void emitAttempt(SyncPairingAttempt attempt) => _attempts.add(attempt);
+
+  void emitIncoming(SyncPairingRequest request) => _incoming.add(request);
+
+  void completeRequest(SyncPairingResult result) {
+    final completer = _requestCompleter;
+    if (completer == null || completer.isCompleted) return;
+    completer.complete(result);
+    _requestCompleter = null;
+  }
+
+  void completeRespond(SyncPairingOutcome outcome) {
+    final completer = respondCompleter;
+    if (completer == null || completer.isCompleted) return;
+    completer.complete(outcome);
+    respondCompleter = null;
+  }
+
+  void _emitNearby() {
+    if (!_nearby.isClosed) _nearby.add(List.unmodifiable(nearby));
+  }
+
+  @override
+  Future<void> dispose() async {
+    if (disposed) return;
+    disposed = true;
+    await _nearby.close();
+    await _incoming.close();
+    await _attempts.close();
   }
 }

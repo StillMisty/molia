@@ -2826,13 +2826,149 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get syncPeersHint =>
-      'Enter the same passphrase on another device to join. If no device is found, check LAN permission or switch to WebDAV.';
+      'Turn on LAN sync, then tap a device under Nearby devices to pair. If nothing appears, check LAN permission or use a manual address.';
 
   @override
   String get syncPeersEmptyTitle => 'No paired devices yet';
 
   @override
-  String get syncPeersEmptySubtitle => 'Add one with the pairing code above';
+  String get syncPeersEmptySubtitle =>
+      'Tap a device under Nearby devices, or use the pairing code above';
+
+  @override
+  String get syncNearbySection => 'Nearby devices';
+
+  @override
+  String get syncNearbyTapToPair => 'Tap to pair';
+
+  @override
+  String get syncNearbyHasGroup => 'Has a sync group';
+
+  @override
+  String get syncNearbyLanOffTitle => 'LAN sync is off';
+
+  @override
+  String get syncNearbyLanOffHint =>
+      'Turn on LAN sync above and nearby devices will appear here.';
+
+  @override
+  String get syncNearbySearching => 'Looking for nearby devices…';
+
+  @override
+  String get syncNearbySearchHint =>
+      'Make sure the other device has Molia open and LAN sync on';
+
+  @override
+  String get syncNearbyRescan => 'Search again';
+
+  @override
+  String get syncNearbyEmptyTitle => 'No devices found';
+
+  @override
+  String get syncNearbyEmptyHint =>
+      'Ask the other device to open Molia and turn on LAN sync';
+
+  @override
+  String get syncNearbyFooter =>
+      'Only accept devices you know. Accepting lets the other device read all synced data (including keys). If nothing appears, add an address in Advanced settings.';
+
+  @override
+  String syncNearbyPairTitle(String name) {
+    return 'Pair with “$name”';
+  }
+
+  @override
+  String get syncNearbyContacting => 'Contacting the other device…';
+
+  @override
+  String get syncNearbyCodeLabel => 'Confirmation code';
+
+  @override
+  String get syncNearbyCheckCode =>
+      'Check that the other device shows the same numbers';
+
+  @override
+  String get syncNearbyWaiting => 'Waiting for the other device to accept…';
+
+  @override
+  String get syncNearbyJoined => 'Joined the sync group';
+
+  @override
+  String get syncNearbySameGroup => 'Already in the same sync group';
+
+  @override
+  String get syncNearbyResultRejected =>
+      'The other device rejected the request. You can try again later.';
+
+  @override
+  String get syncNearbyResultExpired =>
+      'The pairing request expired. Tap the device to try again.';
+
+  @override
+  String get syncNearbyResultConflict =>
+      'The devices are in different sync groups. Reset one device’s passphrase and try again.';
+
+  @override
+  String get syncNearbyResultUnreachable =>
+      'Couldn’t reach the device. Make sure both devices are on the same network with LAN sync on.';
+
+  @override
+  String get syncNearbyResultBusy =>
+      'The other device is handling another request. Try again shortly.';
+
+  @override
+  String get syncNearbyResultUnsupported =>
+      'This device doesn’t support one-tap pairing yet. Update Molia and try again.';
+
+  @override
+  String get syncNearbyResultUnavailable =>
+      'Pairing is unavailable. Make sure both devices have LAN sync on and try again.';
+
+  @override
+  String get syncNearbyResultCancelled =>
+      'Pairing cancelled. Tap the device to try again.';
+
+  @override
+  String syncNearbyIncomingJoinTitle(String name) {
+    return '“$name” wants to join your sync group';
+  }
+
+  @override
+  String syncNearbyIncomingInviteTitle(String name) {
+    return '“$name” invited you to join their sync group';
+  }
+
+  @override
+  String get syncNearbyIncomingJoinWarning =>
+      'If you accept, the other device can read all synced data (including scripts and keys). Only accept devices you know.';
+
+  @override
+  String get syncNearbyIncomingInviteWarning =>
+      'Accepting joins their sync group and switches this device to their passphrase. The other device can then read all synced data (including scripts and keys).';
+
+  @override
+  String get syncNearbyAccept => 'Accept';
+
+  @override
+  String get syncNearbyReject => 'Reject';
+
+  @override
+  String get syncNearbyIncomingRejected => 'Pairing request rejected';
+
+  @override
+  String get syncNearbyIncomingExpired => 'The pairing request expired';
+
+  @override
+  String get syncNearbyIncomingFailed =>
+      'Pairing didn’t finish. Ask the other device to try again.';
+
+  @override
+  String get syncNearbyIncomingNotCompleted =>
+      'Accepted, but the other device hasn’t finished pairing. If it doesn’t join, ask it to try again.';
+
+  @override
+  String get syncNearbyManualProbeSent =>
+      'Looking for this device; tap it under Nearby devices to pair';
 
   @override
   String syncPeerThisDevice(String id) {
@@ -3302,7 +3438,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get syncManualConnectHint =>
-      'If the device’s address changed, paste its pairing code again or update it here';
+      'Enter an address here when auto-discovery fails. Unpaired devices appear under Nearby devices and pair with one tap.';
 
   @override
   String get syncNetworkAddresses => 'Network addresses';

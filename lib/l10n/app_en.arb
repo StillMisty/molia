@@ -1481,9 +1481,67 @@
   "syncAdvancedTitle": "Advanced",
   "syncAdvancedSubtitle": "Device name, passphrase, and network addresses",
   "syncPeersSection": "Devices",
-  "syncPeersHint": "Enter the same passphrase on another device to join. If no device is found, check LAN permission or switch to WebDAV.",
+  "syncPeersHint": "Turn on LAN sync, then tap a device under Nearby devices to pair. If nothing appears, check LAN permission or use a manual address.",
   "syncPeersEmptyTitle": "No paired devices yet",
-  "syncPeersEmptySubtitle": "Add one with the pairing code above",
+  "syncPeersEmptySubtitle": "Tap a device under Nearby devices, or use the pairing code above",
+  "syncNearbySection": "Nearby devices",
+  "syncNearbyTapToPair": "Tap to pair",
+  "syncNearbyHasGroup": "Has a sync group",
+  "syncNearbyLanOffTitle": "LAN sync is off",
+  "syncNearbyLanOffHint": "Turn on LAN sync above and nearby devices will appear here.",
+  "syncNearbySearching": "Looking for nearby devices…",
+  "syncNearbySearchHint": "Make sure the other device has Molia open and LAN sync on",
+  "syncNearbyRescan": "Search again",
+  "syncNearbyEmptyTitle": "No devices found",
+  "syncNearbyEmptyHint": "Ask the other device to open Molia and turn on LAN sync",
+  "syncNearbyFooter": "Only accept devices you know. Accepting lets the other device read all synced data (including keys). If nothing appears, add an address in Advanced settings.",
+  "syncNearbyPairTitle": "Pair with “{name}”",
+  "@syncNearbyPairTitle": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "syncNearbyContacting": "Contacting the other device…",
+  "syncNearbyCodeLabel": "Confirmation code",
+  "syncNearbyCheckCode": "Check that the other device shows the same numbers",
+  "syncNearbyWaiting": "Waiting for the other device to accept…",
+  "syncNearbyJoined": "Joined the sync group",
+  "syncNearbySameGroup": "Already in the same sync group",
+  "syncNearbyResultRejected": "The other device rejected the request. You can try again later.",
+  "syncNearbyResultExpired": "The pairing request expired. Tap the device to try again.",
+  "syncNearbyResultConflict": "The devices are in different sync groups. Reset one device’s passphrase and try again.",
+  "syncNearbyResultUnreachable": "Couldn’t reach the device. Make sure both devices are on the same network with LAN sync on.",
+  "syncNearbyResultBusy": "The other device is handling another request. Try again shortly.",
+  "syncNearbyResultUnsupported": "This device doesn’t support one-tap pairing yet. Update Molia and try again.",
+  "syncNearbyResultUnavailable": "Pairing is unavailable. Make sure both devices have LAN sync on and try again.",
+  "syncNearbyResultCancelled": "Pairing cancelled. Tap the device to try again.",
+  "syncNearbyIncomingJoinTitle": "“{name}” wants to join your sync group",
+  "@syncNearbyIncomingJoinTitle": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "syncNearbyIncomingInviteTitle": "“{name}” invited you to join their sync group",
+  "@syncNearbyIncomingInviteTitle": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "syncNearbyIncomingJoinWarning": "If you accept, the other device can read all synced data (including scripts and keys). Only accept devices you know.",
+  "syncNearbyIncomingInviteWarning": "Accepting joins their sync group and switches this device to their passphrase. The other device can then read all synced data (including scripts and keys).",
+  "syncNearbyAccept": "Accept",
+  "syncNearbyReject": "Reject",
+  "syncNearbyIncomingRejected": "Pairing request rejected",
+  "syncNearbyIncomingExpired": "The pairing request expired",
+  "syncNearbyIncomingFailed": "Pairing didn’t finish. Ask the other device to try again.",
+  "syncNearbyIncomingNotCompleted": "Accepted, but the other device hasn’t finished pairing. If it doesn’t join, ask it to try again.",
+  "syncNearbyManualProbeSent": "Looking for this device; tap it under Nearby devices to pair",
   "syncPeerThisDevice": "This device · {id}",
   "@syncPeerThisDevice": {
     "placeholders": {
@@ -1783,7 +1841,7 @@
   "syncPeerAlreadyAdded": "Already in the list — name and port updated",
   "syncManualConnect": "Connect manually",
   "syncManualConnectSubtitle": "Enter the device address manually when auto-discovery fails",
-  "syncManualConnectHint": "If the device’s address changed, paste its pairing code again or update it here",
+  "syncManualConnectHint": "Enter an address here when auto-discovery fails. Unpaired devices appear under Nearby devices and pair with one tap.",
   "syncNetworkAddresses": "Network addresses",
   "syncNetworkAddressesCount": "{count} available",
   "@syncNetworkAddressesCount": {

@@ -219,8 +219,7 @@ String syncPeerSubtitle(
   );
   final lastSuccess = peer.effectiveLastSuccessAt;
   final cloud = peer.transport == SyncTransportKind.webdav;
-  final lastSuccessText =
-      lastSuccess > 0 ? syncTimeText(lastSuccess) : '';
+  final lastSuccessText = lastSuccess > 0 ? syncTimeText(lastSuccess) : '';
   // 结论 + 上次成功合成一句：两段独立文案会重复「上次同步」。
   final statusText = switch (status) {
     // 从未成功接触过：失败尝试只能说明「还没连上」，不能说成「未连接 ·
@@ -649,6 +648,8 @@ class _ManualPeerDialogState extends State<_ManualPeerDialog> {
       _busy = true;
     });
     final editing = widget.editing;
+    // 已认领过身份的地址 = 已配对设备换地址 / 重连：沿用原来的「立即接触」。
+    final paired = _isKnownPairedHost(host, editing);
     final added = editing == null
         ? await widget.provider.addManualPeer(
             host,
@@ -663,6 +664,14 @@ class _ManualPeerDialogState extends State<_ManualPeerDialog> {
         probePort: port,
         name: _name.text.trim(),
       );
+    }
+    // 同一路径也发一条附近设备探测：未配对设备会以候选形式出现在「附近
+    // 设备」，点击即走一键配对，不需要在这里输入 / 粘贴配对信息。
+    final probed = await widget.provider.probeAddress(host, probePort: port);
+    if (!mounted) return;
+    if (!paired && probed) {
+      showSyncNoticeAndClose(context, l10n.syncNearbyManualProbeSent);
+      return;
     }
     final contacted = await widget.provider.contactManualPeer(host);
     if (!mounted) return;
@@ -683,6 +692,15 @@ class _ManualPeerDialogState extends State<_ManualPeerDialog> {
       _duplicate = editing == null && !added;
       _contactError = l10n.syncPeerUnreachable;
     });
+  }
+
+  /// 该地址是否已认领过设备身份（编辑态自身或地址簿里的同地址条目）。
+  bool _isKnownPairedHost(String host, ManualPeer? editing) {
+    if (editing != null && editing.deviceId.isNotEmpty) return true;
+    for (final entry in widget.provider.manualPeers) {
+      if (entry.host == host && entry.deviceId.isNotEmpty) return true;
+    }
+    return false;
   }
 
   /// 删除该地址（仅编辑态）：从地址簿移除，二次确认（不影响其它设备）。

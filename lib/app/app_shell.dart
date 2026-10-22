@@ -17,11 +17,13 @@ import 'package:motor/motor.dart';
 import 'package:provider/provider.dart';
 
 import '../domain/models/device_sync.dart';
+import '../domain/models/sync_nearby_pairing.dart';
 import '../l10n/app_localizations.dart';
 import '../pages/favorites.dart';
 import '../pages/library.dart';
 import '../pages/nowplaying.dart';
 import '../pages/settings_page.dart';
+import '../pages/sync_nearby_pairing_dialogs.dart';
 import '../pages/sync_notices.dart';
 import '../providers/nav_provider.dart';
 import '../providers/playback_provider.dart';
@@ -1264,6 +1266,12 @@ class _MyThemedAppState extends State<MyThemedApp> with WidgetsBindingObserver {
   /// 「首次连通」通知订阅：与在哪个页面无关，双方各自弹一次底栏提示。
   StreamSubscription<SyncPeerState>? _peerConnected;
 
+  /// 附近设备配对请求订阅：接收方在任意页面都要弹确认窗。
+  StreamSubscription<SyncPairingRequest>? _incomingPairing;
+
+  /// 同一条请求只允许一个确认窗（服务本身已串行；这里防流重放 / 重入）。
+  bool _incomingPairingOpen = false;
+
   @override
   void initState() {
     super.initState();
@@ -1274,10 +1282,9 @@ class _MyThemedAppState extends State<MyThemedApp> with WidgetsBindingObserver {
     AppBrandingService.load();
     // 震动反馈开关（设备本地偏好）：载入后全应用触感立即按它判定。
     HapticsService.load();
-    _peerConnected = context
-        .read<SyncProvider>()
-        .peerConnectedNotices
-        .listen(_onPeerConnected);
+    final sync = context.read<SyncProvider>();
+    _peerConnected = sync.peerConnectedNotices.listen(_onPeerConnected);
+    _incomingPairing = sync.incomingPairingRequests.listen(_onIncomingPairing);
   }
 
   /// 首次与某台设备真正交换数据：提示一次（名称缺失时用短设备 id 兜底）。
@@ -1291,6 +1298,37 @@ class _MyThemedAppState extends State<MyThemedApp> with WidgetsBindingObserver {
     final hostContext = navigatorKey.currentContext;
     if (hostContext == null) return;
     showSyncPeerConnectedNotice(hostContext, peer);
+  }
+
+  /// 收到配对请求：弹接收方确认窗（含确认码与授权警告）。
+  ///
+  /// 没有宿主 context 或已有确认窗时不排队：直接拒绝，让发起方立刻拿到
+  /// 结论，而不是等满 60 秒 TTL。
+  Future<void> _onIncomingPairing(SyncPairingRequest request) async {
+    if (!mounted) return;
+    final provider = context.read<SyncProvider>();
+    if (_incomingPairingOpen) {
+      await provider.respondPairing(request.requestId, accept: false);
+      return;
+    }
+    final hostContext = navigatorKey.currentContext;
+    if (hostContext == null) {
+      await provider.respondPairing(request.requestId, accept: false);
+      return;
+    }
+    _incomingPairingOpen = true;
+    try {
+      await showSyncIncomingPairingDialog(
+        hostContext,
+        provider: provider,
+        request: request,
+      );
+    } catch (_) {
+      // 弹窗本身失败（主题 / 路由异常）也要给发起方结论，不能让请求悬着。
+      await provider.respondPairing(request.requestId, accept: false);
+    } finally {
+      _incomingPairingOpen = false;
+    }
   }
 
   @override
@@ -1324,6 +1362,7 @@ class _MyThemedAppState extends State<MyThemedApp> with WidgetsBindingObserver {
     WidgetsBinding.instance.removeObserver(this);
     AppBrandingService.titleNotifier.removeListener(_onBrandingChanged);
     unawaited(_peerConnected?.cancel());
+    unawaited(_incomingPairing?.cancel());
     super.dispose();
   }
 

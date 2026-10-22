@@ -1179,9 +1179,67 @@
   "syncAdvancedTitle": "高级设置",
   "syncAdvancedSubtitle": "设备名、口令与网络地址",
   "syncPeersSection": "设备",
-  "syncPeersHint": "在其它设备输入同一口令即可加入。如果一直找不到设备，请检查局域网权限，或改用 WebDAV。",
+  "syncPeersHint": "打开局域网同步后，在「附近设备」里点击设备即可配对；找不到时请检查局域网权限，或改用手动地址。",
   "syncPeersEmptyTitle": "还没有配对设备",
-  "syncPeersEmptySubtitle": "用上面的配对码把设备加进来",
+  "syncPeersEmptySubtitle": "在「附近设备」里点击配对，或用上方的配对码加入",
+  "syncNearbySection": "附近设备",
+  "syncNearbyTapToPair": "点击配对",
+  "syncNearbyHasGroup": "对方已有同步组",
+  "syncNearbyLanOffTitle": "局域网同步未开启",
+  "syncNearbyLanOffHint": "打开上方的「局域网」开关后，附近设备会显示在这里。",
+  "syncNearbySearching": "正在查找附近设备…",
+  "syncNearbySearchHint": "请确认对方已打开 Molia 并开启局域网同步",
+  "syncNearbyRescan": "重新查找",
+  "syncNearbyEmptyTitle": "没有发现设备",
+  "syncNearbyEmptyHint": "让对方打开 Molia 并开启局域网同步",
+  "syncNearbyFooter": "只接受你认识的设备；接受后对方可读取全部同步数据（含密钥）。找不到时可在高级设置手动添加地址。",
+  "syncNearbyPairTitle": "与「{name}」配对",
+  "@syncNearbyPairTitle": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "syncNearbyContacting": "正在联系对方…",
+  "syncNearbyCodeLabel": "确认码",
+  "syncNearbyCheckCode": "请核对对方屏幕上的数字一致",
+  "syncNearbyWaiting": "等待对方接受…",
+  "syncNearbyJoined": "已加入同步组",
+  "syncNearbySameGroup": "已在同一同步组",
+  "syncNearbyResultRejected": "对方拒绝了配对请求，可以稍后重试。",
+  "syncNearbyResultExpired": "配对请求已过期，请重新点击设备配对。",
+  "syncNearbyResultConflict": "两台设备已在不同的同步组，请先重置其中一台的同步口令再试。",
+  "syncNearbyResultUnreachable": "连不上这台设备，请确认两台设备在同一网络且都开启了局域网同步。",
+  "syncNearbyResultBusy": "对方正在处理另一条配对请求，请稍后再试。",
+  "syncNearbyResultUnsupported": "这台设备暂不支持一键配对，请更新 Molia 后重试。",
+  "syncNearbyResultUnavailable": "配对暂时不可用，请确认两台设备都开启了局域网同步后重试。",
+  "syncNearbyResultCancelled": "已取消配对，需要时可以重新点击设备。",
+  "syncNearbyIncomingJoinTitle": "「{name}」请求加入同步组",
+  "@syncNearbyIncomingJoinTitle": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "syncNearbyIncomingInviteTitle": "「{name}」邀请你加入同步组",
+  "@syncNearbyIncomingInviteTitle": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "syncNearbyIncomingJoinWarning": "接受后，对方可读取全部同步数据（含音源脚本和密钥）。只接受你认识的设备。",
+  "syncNearbyIncomingInviteWarning": "接受后将加入对方的同步组，本机改用对方的同步口令；对方可读取全部同步数据（含音源脚本和密钥）。",
+  "syncNearbyAccept": "接受",
+  "syncNearbyReject": "拒绝",
+  "syncNearbyIncomingRejected": "已拒绝配对请求",
+  "syncNearbyIncomingExpired": "配对请求已过期",
+  "syncNearbyIncomingFailed": "配对没有完成，让对方重新发起。",
+  "syncNearbyIncomingNotCompleted": "已接受，但对方还没有完成配对；如果对方没加入，请让对方重新发起。",
+  "syncNearbyManualProbeSent": "正在查找这台设备；出现在「附近设备」后点击即可配对",
   "syncPeerThisDevice": "本机 · {id}",
   "syncPeerThisDeviceTitle": "本机设备 ID",
   "syncPeerNever": "还没连上",
@@ -1429,7 +1487,7 @@
   "syncPeerAlreadyAdded": "该地址已在列表中，已更新名称与端口",
   "syncManualConnect": "手动连接",
   "syncManualConnectSubtitle": "自动发现失败时，手动填写设备地址",
-  "syncManualConnectHint": "设备换了地址后：重新粘贴它的配对码，或在这里更新地址",
+  "syncManualConnectHint": "自动发现失败时在这里填写地址；未配对的设备会出现在「附近设备」，点击即可配对。",
   "syncNetworkAddresses": "网络地址",
   "syncNetworkAddressesCount": "{count} 个可用地址",
   "syncPeerAddressCount": "{count} 条地址",

@@ -5184,7 +5184,7 @@ abstract class AppLocalizations {
   /// No description provided for @syncPeersHint.
   ///
   /// In en, this message translates to:
-  /// **'Enter the same passphrase on another device to join. If no device is found, check LAN permission or switch to WebDAV.'**
+  /// **'Turn on LAN sync, then tap a device under Nearby devices to pair. If nothing appears, check LAN permission or use a manual address.'**
   String get syncPeersHint;
 
   /// No description provided for @syncPeersEmptyTitle.
@@ -5196,8 +5196,230 @@ abstract class AppLocalizations {
   /// No description provided for @syncPeersEmptySubtitle.
   ///
   /// In en, this message translates to:
-  /// **'Add one with the pairing code above'**
+  /// **'Tap a device under Nearby devices, or use the pairing code above'**
   String get syncPeersEmptySubtitle;
+
+  /// No description provided for @syncNearbySection.
+  ///
+  /// In en, this message translates to:
+  /// **'Nearby devices'**
+  String get syncNearbySection;
+
+  /// No description provided for @syncNearbyTapToPair.
+  ///
+  /// In en, this message translates to:
+  /// **'Tap to pair'**
+  String get syncNearbyTapToPair;
+
+  /// No description provided for @syncNearbyHasGroup.
+  ///
+  /// In en, this message translates to:
+  /// **'Has a sync group'**
+  String get syncNearbyHasGroup;
+
+  /// No description provided for @syncNearbyLanOffTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'LAN sync is off'**
+  String get syncNearbyLanOffTitle;
+
+  /// No description provided for @syncNearbyLanOffHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Turn on LAN sync above and nearby devices will appear here.'**
+  String get syncNearbyLanOffHint;
+
+  /// No description provided for @syncNearbySearching.
+  ///
+  /// In en, this message translates to:
+  /// **'Looking for nearby devices…'**
+  String get syncNearbySearching;
+
+  /// No description provided for @syncNearbySearchHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Make sure the other device has Molia open and LAN sync on'**
+  String get syncNearbySearchHint;
+
+  /// No description provided for @syncNearbyRescan.
+  ///
+  /// In en, this message translates to:
+  /// **'Search again'**
+  String get syncNearbyRescan;
+
+  /// No description provided for @syncNearbyEmptyTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'No devices found'**
+  String get syncNearbyEmptyTitle;
+
+  /// No description provided for @syncNearbyEmptyHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Ask the other device to open Molia and turn on LAN sync'**
+  String get syncNearbyEmptyHint;
+
+  /// No description provided for @syncNearbyFooter.
+  ///
+  /// In en, this message translates to:
+  /// **'Only accept devices you know. Accepting lets the other device read all synced data (including keys). If nothing appears, add an address in Advanced settings.'**
+  String get syncNearbyFooter;
+
+  /// No description provided for @syncNearbyPairTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Pair with “{name}”'**
+  String syncNearbyPairTitle(String name);
+
+  /// No description provided for @syncNearbyContacting.
+  ///
+  /// In en, this message translates to:
+  /// **'Contacting the other device…'**
+  String get syncNearbyContacting;
+
+  /// No description provided for @syncNearbyCodeLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Confirmation code'**
+  String get syncNearbyCodeLabel;
+
+  /// No description provided for @syncNearbyCheckCode.
+  ///
+  /// In en, this message translates to:
+  /// **'Check that the other device shows the same numbers'**
+  String get syncNearbyCheckCode;
+
+  /// No description provided for @syncNearbyWaiting.
+  ///
+  /// In en, this message translates to:
+  /// **'Waiting for the other device to accept…'**
+  String get syncNearbyWaiting;
+
+  /// No description provided for @syncNearbyJoined.
+  ///
+  /// In en, this message translates to:
+  /// **'Joined the sync group'**
+  String get syncNearbyJoined;
+
+  /// No description provided for @syncNearbySameGroup.
+  ///
+  /// In en, this message translates to:
+  /// **'Already in the same sync group'**
+  String get syncNearbySameGroup;
+
+  /// No description provided for @syncNearbyResultRejected.
+  ///
+  /// In en, this message translates to:
+  /// **'The other device rejected the request. You can try again later.'**
+  String get syncNearbyResultRejected;
+
+  /// No description provided for @syncNearbyResultExpired.
+  ///
+  /// In en, this message translates to:
+  /// **'The pairing request expired. Tap the device to try again.'**
+  String get syncNearbyResultExpired;
+
+  /// No description provided for @syncNearbyResultConflict.
+  ///
+  /// In en, this message translates to:
+  /// **'The devices are in different sync groups. Reset one device’s passphrase and try again.'**
+  String get syncNearbyResultConflict;
+
+  /// No description provided for @syncNearbyResultUnreachable.
+  ///
+  /// In en, this message translates to:
+  /// **'Couldn’t reach the device. Make sure both devices are on the same network with LAN sync on.'**
+  String get syncNearbyResultUnreachable;
+
+  /// No description provided for @syncNearbyResultBusy.
+  ///
+  /// In en, this message translates to:
+  /// **'The other device is handling another request. Try again shortly.'**
+  String get syncNearbyResultBusy;
+
+  /// No description provided for @syncNearbyResultUnsupported.
+  ///
+  /// In en, this message translates to:
+  /// **'This device doesn’t support one-tap pairing yet. Update Molia and try again.'**
+  String get syncNearbyResultUnsupported;
+
+  /// No description provided for @syncNearbyResultUnavailable.
+  ///
+  /// In en, this message translates to:
+  /// **'Pairing is unavailable. Make sure both devices have LAN sync on and try again.'**
+  String get syncNearbyResultUnavailable;
+
+  /// No description provided for @syncNearbyResultCancelled.
+  ///
+  /// In en, this message translates to:
+  /// **'Pairing cancelled. Tap the device to try again.'**
+  String get syncNearbyResultCancelled;
+
+  /// No description provided for @syncNearbyIncomingJoinTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'“{name}” wants to join your sync group'**
+  String syncNearbyIncomingJoinTitle(String name);
+
+  /// No description provided for @syncNearbyIncomingInviteTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'“{name}” invited you to join their sync group'**
+  String syncNearbyIncomingInviteTitle(String name);
+
+  /// No description provided for @syncNearbyIncomingJoinWarning.
+  ///
+  /// In en, this message translates to:
+  /// **'If you accept, the other device can read all synced data (including scripts and keys). Only accept devices you know.'**
+  String get syncNearbyIncomingJoinWarning;
+
+  /// No description provided for @syncNearbyIncomingInviteWarning.
+  ///
+  /// In en, this message translates to:
+  /// **'Accepting joins their sync group and switches this device to their passphrase. The other device can then read all synced data (including scripts and keys).'**
+  String get syncNearbyIncomingInviteWarning;
+
+  /// No description provided for @syncNearbyAccept.
+  ///
+  /// In en, this message translates to:
+  /// **'Accept'**
+  String get syncNearbyAccept;
+
+  /// No description provided for @syncNearbyReject.
+  ///
+  /// In en, this message translates to:
+  /// **'Reject'**
+  String get syncNearbyReject;
+
+  /// No description provided for @syncNearbyIncomingRejected.
+  ///
+  /// In en, this message translates to:
+  /// **'Pairing request rejected'**
+  String get syncNearbyIncomingRejected;
+
+  /// No description provided for @syncNearbyIncomingExpired.
+  ///
+  /// In en, this message translates to:
+  /// **'The pairing request expired'**
+  String get syncNearbyIncomingExpired;
+
+  /// No description provided for @syncNearbyIncomingFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Pairing didn’t finish. Ask the other device to try again.'**
+  String get syncNearbyIncomingFailed;
+
+  /// No description provided for @syncNearbyIncomingNotCompleted.
+  ///
+  /// In en, this message translates to:
+  /// **'Accepted, but the other device hasn’t finished pairing. If it doesn’t join, ask it to try again.'**
+  String get syncNearbyIncomingNotCompleted;
+
+  /// No description provided for @syncNearbyManualProbeSent.
+  ///
+  /// In en, this message translates to:
+  /// **'Looking for this device; tap it under Nearby devices to pair'**
+  String get syncNearbyManualProbeSent;
 
   /// No description provided for @syncPeerThisDevice.
   ///
@@ -5958,7 +6180,7 @@ abstract class AppLocalizations {
   /// No description provided for @syncManualConnectHint.
   ///
   /// In en, this message translates to:
-  /// **'If the device’s address changed, paste its pairing code again or update it here'**
+  /// **'Enter an address here when auto-discovery fails. Unpaired devices appear under Nearby devices and pair with one tap.'**
   String get syncManualConnectHint;
 
   /// No description provided for @syncNetworkAddresses.
