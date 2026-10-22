@@ -1185,6 +1185,49 @@
   "syncPeerThisDeviceTitle": "本机设备 ID",
   "syncPeerLastSync": "最后同步 {time}",
   "syncPeerNever": "还没连上",
+  "syncSyncing": "正在同步…",
+  "syncPeerStatusConnected": "已连接",
+  "syncPeerStatusDisconnected": "未连接",
+  "syncPeerStatusCloudSynced": "云端已同步",
+  "syncPeerStatusCloudNotSynced": "云端未同步",
+  "syncPeerLastSuccess": "上次同步 {time}",
+  "@syncPeerLastSuccess": {
+    "placeholders": {
+      "time": {
+        "type": "String"
+      }
+    }
+  },
+  "syncPeerLastAttempt": "上次尝试 {time}",
+  "@syncPeerLastAttempt": {
+    "placeholders": {
+      "time": {
+        "type": "String"
+      }
+    }
+  },
+  "syncPeerLostStale": "超过 180 天未连接",
+  "syncPeerNameSeparator": "、",
+  "syncRoundNoConnectedPeers": "本轮没有连上设备",
+  "syncRoundConnected": "已连接 {names}",
+  "@syncRoundConnected": {
+    "placeholders": {
+      "names": {
+        "type": "String"
+      }
+    }
+  },
+  "syncRoundConnectedMore": "已连接 {names} 等 {count} 台",
+  "@syncRoundConnectedMore": {
+    "placeholders": {
+      "names": {
+        "type": "String"
+      },
+      "count": {
+        "type": "int"
+      }
+    }
+  },
   "syncPeerBehind": "待同步 {count} 项",
   "syncPeerBehindBytes": "待同步 {count} 项（约 {size}）",
   "@syncPeerBehindBytes": {

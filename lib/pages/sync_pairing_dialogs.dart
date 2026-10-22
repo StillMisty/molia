@@ -27,6 +27,7 @@ import '../widgets/settings/settings_tiles.dart';
 import '../widgets/sync_pairing_qr.dart';
 import 'sync_labels.dart';
 import 'sync_notices.dart';
+import 'sync_peer_status.dart';
 
 /// 配对信息分享弹层：二维码 + 可复制文本 + 口令授权警告。
 ///
@@ -200,23 +201,46 @@ String syncPeerDisplayName(SyncPeerState peer, ManualPeer? manual) {
   return peer.name.isEmpty ? shortDeviceId(peer.deviceId) : peer.name;
 }
 
-/// 对端副标题：传输 + 最后同步 + 失联/落后/时钟偏移/最近失败。
+/// 对端副标题：状态词 + 上次成功 + 传输 / 落后 / 时钟偏移。
+///
+/// 行首必须是可读结论（已连接 / 未连接 / 云端已同步 / 上次同步 / 还没连上 /
+/// 已失联），失败原因不铺在行里——详情弹层会给出上次尝试与最近失败。
 String syncPeerSubtitle(
   AppLocalizations l10n,
   SyncPeerState peer,
   ManualPeer? manual, {
   required int nowMs,
+  SyncRoundReport? report,
 }) {
+  final status = resolveSyncPeerConnection(
+    peer,
+    report: report,
+    nowMs: nowMs,
+  );
+  final lastSuccess = peer.effectiveLastSuccessAt;
+  final cloud = peer.transport == SyncTransportKind.webdav;
   final parts = <String>[
-    if (manual != null) l10n.syncPeerManual,
+    switch (status) {
+      SyncPeerConnectionStatus.lost =>
+        '${l10n.syncPeerLost} · ${l10n.syncPeerLostStale}',
+      SyncPeerConnectionStatus.never => l10n.syncPeerNever,
+      SyncPeerConnectionStatus.connected => cloud
+          ? l10n.syncPeerStatusCloudSynced
+          : l10n.syncPeerStatusConnected,
+      SyncPeerConnectionStatus.unreachable => cloud
+          ? l10n.syncPeerStatusCloudNotSynced
+          : l10n.syncPeerStatusDisconnected,
+      // 本轮没尝试：时间本身就是状态（不再叠一个没信息量的「空闲」）。
+      SyncPeerConnectionStatus.idle => lastSuccess > 0
+          ? l10n.syncPeerLastSuccess(syncTimeText(lastSuccess))
+          : l10n.syncPeerNever,
+    },
+    if ((status == SyncPeerConnectionStatus.connected ||
+            status == SyncPeerConnectionStatus.unreachable) &&
+        lastSuccess > 0)
+      l10n.syncPeerLastSuccess(syncTimeText(lastSuccess)),
     if (peer.transport.isNotEmpty) syncTransportLabel(l10n, peer.transport),
-    if (peer.lastPullAt > 0 || peer.lastPushAt > 0)
-      l10n.syncPeerLastSync(syncTimeText(peer.lastPullAt > peer.lastPushAt
-          ? peer.lastPullAt
-          : peer.lastPushAt))
-    else
-      l10n.syncPeerNever,
-    if (peer.isLostAt(nowMs)) l10n.syncPeerLost,
+    if (manual != null) l10n.syncPeerManual,
     if (peer.behindBy != null && peer.behindBy! > 0)
       peer.behindBytes != null && peer.behindBytes! > 0
           ? l10n.syncPeerBehindBytes(
@@ -226,8 +250,6 @@ String syncPeerSubtitle(
           : l10n.syncPeerBehind(peer.behindBy!),
     if (peer.clockSkewMs != null && peer.clockSkewMs!.abs() > 60 * 1000)
       l10n.syncPeerClockSkew((peer.clockSkewMs!.abs() / 60000).round()),
-    if (peer.lastError != null)
-      l10n.syncPeerLastError(syncIssueText(l10n, peer.lastError!)),
   ];
   return parts.join(' · ');
 }
@@ -279,8 +301,20 @@ Future<void> showSyncPeerDialog(
           children: [
             if (peer != null && peer.deviceId.isNotEmpty)
               Text(l10n.syncPeerDeviceId(shortDeviceId(peer.deviceId))),
-            if (peer != null && peer.lastPullAt > 0)
-              Text(l10n.syncPeerLastSync(syncTimeText(peer.lastPullAt))),
+            if (peer != null && peer.effectiveLastSuccessAt > 0)
+              Text(l10n.syncPeerLastSuccess(
+                syncTimeText(peer.effectiveLastSuccessAt),
+              )),
+            if (peer != null && peer.lastSeenAt > 0)
+              Text(l10n.syncPeerLastAttempt(syncTimeText(peer.lastSeenAt))),
+            if (peer?.lastError != null)
+              Text(
+                l10n.syncPeerLastError(syncIssueText(l10n, peer!.lastError!)),
+                style: Theme.of(context)
+                    .textTheme
+                    .bodySmall
+                    ?.copyWith(color: AppSemanticColors.of(context).warning),
+              ),
             if (lost)
               Text(
                 l10n.syncPeerLostHint,

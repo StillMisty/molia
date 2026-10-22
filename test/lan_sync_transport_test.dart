@@ -64,9 +64,11 @@ void main() {
     await transportB.start();
     expect(transportA.isRunning, isTrue);
 
-    final pulled = (await transportB.pull()).envelopes;
+    final pullResult = await transportB.pull();
+    final pulled = pullResult.envelopes;
     expect(pulled, hasLength(1));
     expect(pulled.single.deviceId, 'devA');
+    expect(pullResult.failedIds, isEmpty, reason: '读取成功的设备不再标失败');
     expect(
       pulled.single.recordsOf(SyncCategory.settings).single.data,
       {'v': 'light'},
@@ -157,6 +159,80 @@ void main() {
     expect(mismatched.envelopes, isEmpty);
     // 唯一对端解密失败 = 不可达：不算接触成功。
     expect(mismatched.contacted, isFalse);
+  });
+
+  test('解密失败归属到具体设备：不进 seenIds，但失败不伪装成成功', () async {
+    var portA = 0;
+    final transportA = LanSyncTransport(
+      deviceId: 'devA',
+      deviceName: () => '设备A',
+      codec: codecPort,
+      passphraseProvider: () async => passphrase,
+      snapshotProvider: () async => envelope('devA'),
+      onHttpPortBound: (port) => portA = port,
+      localAddressesProvider: () async => const [],
+      udpPort: 47881,
+    );
+    final transportC = LanSyncTransport(
+      deviceId: 'devC',
+      deviceName: () => '设备C',
+      codec: codecPort,
+      passphraseProvider: () async => 'ZZZZ-ZZZZ-ZZZZ-ZZZZ-ZZZZ-ZZZZ-ZZZZ-ZZZZ',
+      snapshotProvider: () async => envelope('devC'),
+      // 手动地址是「预期对端」：发现层拿不到对端（口令不同 MAC 验不过），
+      // 仍能走 HTTP 直连并由解密失败触发归属。
+      manualPeersProvider: () => [
+        ManualPeer(host: '127.0.0.1', httpPort: portA, deviceId: 'devA'),
+      ],
+      localAddressesProvider: () async => const [],
+      udpPort: 47882,
+      probeWindow: const Duration(milliseconds: 100),
+    );
+    addTearDown(() async {
+      await transportA.stop();
+      await transportC.stop();
+    });
+    await transportA.start();
+    await transportC.start();
+
+    final result = await transportC.pull();
+    expect(result.envelopes, isEmpty);
+    expect(result.failedPeers, 1);
+    expect(result.failedIds, ['devA']);
+    expect(result.seenIds, isNot(contains('devA')));
+    expect(result.contacted, isFalse);
+  });
+
+  test('试探性端点读取失败：有失败归属，但不计入 failedPeers / partial', () async {
+    final transport = LanSyncTransport(
+      deviceId: 'devA',
+      deviceName: () => '设备A',
+      codec: codecPort,
+      passphraseProvider: () async => passphrase,
+      snapshotProvider: () async => envelope('devA'),
+      // 只有持久化端点（没有本轮 manual / presence）：失败不计数，但 UI
+      // 仍要知道是哪台没连上。
+      knownPeersProvider: () => const [
+        LanPeerEndpoint(
+          deviceId: 'devGhost',
+          host: '127.0.0.1',
+          httpPort: 1,
+          verifiedAt: 1,
+        ),
+      ],
+      localAddressesProvider: () async => const [],
+      udpPort: 47883,
+      probeWindow: const Duration(milliseconds: 100),
+    );
+    addTearDown(transport.stop);
+    await transport.start();
+
+    final result = await transport.pull();
+    expect(result.envelopes, isEmpty);
+    expect(result.failedPeers, 0, reason: '试探性对端失败不把整轮打成 partial');
+    expect(result.peersSeen, 0);
+    expect(result.failedIds, ['devGhost'], reason: '失败仍归属到具体设备');
+    expect(result.seenIds, isEmpty);
   });
 
   test('对端 snapshotId 未变：跳过 GET 并计入 skippedUnchanged', () async {

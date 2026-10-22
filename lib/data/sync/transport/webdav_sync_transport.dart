@@ -201,6 +201,10 @@ class WebDavSyncTransport implements SyncTransport {
     var skipped = 0;
     var bytesIn = 0;
     SyncIssue? firstError;
+    // 失败归属：文件级错误先记到设备，最后剔除「本轮另有数据文件读成功」的
+    // 设备（多块中的一块坏掉不该把整台设备标成未连接）。
+    final failedDevices = <String>{};
+    final dataOkDevices = <String>{};
     for (final entry in devices.entries) {
       final device = entry.key;
       final deviceFiles = entry.value;
@@ -223,6 +227,7 @@ class WebDavSyncTransport implements SyncTransport {
         );
         if (outcome.error != null) {
           failed++;
+          failedDevices.add(device);
           firstError ??= outcome.error;
         } else if (outcome.ghost) {
           _logger.warning('远端文件 ${acksFile.name} 身份不符，跳过');
@@ -281,6 +286,7 @@ class WebDavSyncTransport implements SyncTransport {
           );
           if (outcome.error != null) {
             failed++;
+            failedDevices.add(device);
             firstError ??= outcome.error;
             break;
           }
@@ -291,6 +297,7 @@ class WebDavSyncTransport implements SyncTransport {
           if (outcome.envelope == null) continue;
           bytesIn += outcome.bytes;
           delivered = true;
+          dataOkDevices.add(device);
           seenDevices.add(device);
           _peerHeads[device] = outcome.envelope!.journalHead;
           envelopes.add(outcome.envelope!);
@@ -302,6 +309,7 @@ class WebDavSyncTransport implements SyncTransport {
       if (snapshot == null) {
         // 需要全量但没有可读的快照文件（对端还没发布）：计失败，下轮重试。
         failed++;
+        failedDevices.add(device);
         firstError ??= SyncIssue(
           code: SyncIssueCode.webdavReadFailed,
           args: {'peer': device},
@@ -317,6 +325,7 @@ class WebDavSyncTransport implements SyncTransport {
       );
       if (outcome.error != null) {
         failed++;
+        failedDevices.add(device);
         firstError ??= outcome.error;
         continue;
       }
@@ -328,6 +337,7 @@ class WebDavSyncTransport implements SyncTransport {
         seenDevices.add(device);
         bytesIn += outcome.bytes;
         delivered = true;
+        dataOkDevices.add(device);
         _peerHeads[device] = outcome.envelope!.journalHead;
         envelopes.add(outcome.envelope!);
       }
@@ -341,6 +351,12 @@ class WebDavSyncTransport implements SyncTransport {
       envelopes: envelopes,
       peersSeen: seenDevices.length,
       seenIds: seenDevices.toList(),
+      // 同一设备只要有一份数据文件读成功，就不算失败（回执失败 / 多块中的
+      // 一块坏掉都不该把整台设备标成未连接）。
+      failedIds: [
+        for (final device in failedDevices)
+          if (!dataOkDevices.contains(device)) device,
+      ],
       skippedUnchanged: skipped,
       failedPeers: failed,
       bytesIn: bytesIn,

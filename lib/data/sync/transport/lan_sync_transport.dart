@@ -522,6 +522,12 @@ class LanSyncTransport
       failedPeers: stats.failed,
       bytesIn: stats.bytesIn,
       seenIds: stats.seenIds,
+      // 成功读取过（含另一地址 / 另一轮重试）的设备不记失败：先按 id 收齐，
+      // 结果里再剔除成功者，避免同一设备既算成功又算失败。
+      failedIds: [
+        for (final id in stats.failedIds)
+          if (!stats.seenIds.contains(id)) id,
+      ],
       // 至少一个对端可达（拉到或未变跳过）才算接触成功。
       contacted: stats.contacted,
       error: stats.expectedSeen > 0
@@ -568,6 +574,9 @@ class LanSyncTransport
           : await _fetchJournal(peer, decision.cursor);
       if (fetched == null) {
         stats.httpFailedAny++;
+        // 失败归属到具体设备（含试探性对端：UI 仍要能看出是哪台没连上），
+        // 但不进 seenIds——读取失败不是成功接触。
+        _rememberFailure(stats, peer);
         // 试探性对端（只有持久化端点）失败不计数，也不把整轮打成 partial。
         if (peer.expected) {
           stats.failed++;
@@ -575,8 +584,6 @@ class LanSyncTransport
             code: SyncIssueCode.peerReadFailed,
             args: {'peer': peer.label},
           );
-          // 名册的「最近接触」包含读取失败者：本轮确实发现过它。
-          _rememberSeen(stats, peer);
         }
         continue;
       }
@@ -611,13 +618,13 @@ class LanSyncTransport
         }
       } on SyncCryptoException {
         // 对端口令不同 / 数据损坏：跳过该对端，不影响其他设备。
+        _rememberFailure(stats, peer);
         if (peer.expected) {
           stats.failed++;
           stats.firstError ??= SyncIssue(
             code: SyncIssueCode.peerDecryptFailed,
             args: {'peer': peer.label},
           );
-          _rememberSeen(stats, peer);
         }
       }
     }
@@ -628,6 +635,14 @@ class LanSyncTransport
     if (peer.deviceId.isEmpty) return;
     if (!stats.seenIds.contains(peer.deviceId)) {
       stats.seenIds.add(peer.deviceId);
+    }
+  }
+
+  /// 读取 / 解密失败落到具体设备（结果里再剔除同一设备已成功的记录）。
+  void _rememberFailure(_PullStats stats, SyncPeerCandidate peer) {
+    if (peer.deviceId.isEmpty) return;
+    if (!stats.failedIds.contains(peer.deviceId)) {
+      stats.failedIds.add(peer.deviceId);
     }
   }
 
@@ -1047,6 +1062,7 @@ class LanSyncTransport
 class _PullStats {
   final List<SyncEnvelope> envelopes = [];
   final List<String> seenIds = [];
+  final List<String> failedIds = [];
   var expectedSeen = 0;
   var tentativeContacted = 0;
   var skipped = 0;

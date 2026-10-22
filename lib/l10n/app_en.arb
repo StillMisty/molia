@@ -1501,6 +1501,49 @@
     }
   },
   "syncPeerNever": "Not connected yet",
+  "syncSyncing": "Syncing…",
+  "syncPeerStatusConnected": "Connected",
+  "syncPeerStatusDisconnected": "Not connected",
+  "syncPeerStatusCloudSynced": "Synced to cloud",
+  "syncPeerStatusCloudNotSynced": "Not synced to cloud",
+  "syncPeerLastSuccess": "Last synced {time}",
+  "@syncPeerLastSuccess": {
+    "placeholders": {
+      "time": {
+        "type": "String"
+      }
+    }
+  },
+  "syncPeerLastAttempt": "Last attempt {time}",
+  "@syncPeerLastAttempt": {
+    "placeholders": {
+      "time": {
+        "type": "String"
+      }
+    }
+  },
+  "syncPeerLostStale": "no connection for over 180 days",
+  "syncPeerNameSeparator": ", ",
+  "syncRoundNoConnectedPeers": "No devices connected this round",
+  "syncRoundConnected": "Connected: {names}",
+  "@syncRoundConnected": {
+    "placeholders": {
+      "names": {
+        "type": "String"
+      }
+    }
+  },
+  "syncRoundConnectedMore": "Connected: {names} and {count} more",
+  "@syncRoundConnectedMore": {
+    "placeholders": {
+      "names": {
+        "type": "String"
+      },
+      "count": {
+        "type": "int"
+      }
+    }
+  },
   "syncPeerBehind": "{count} pending",
   "syncPeerBehindBytes": "{count} pending (~{size})",
   "@syncPeerBehindBytes": {

@@ -184,6 +184,61 @@ void main() {
     );
   });
 
+  test('名册 lastSuccessAt：持久化往返；旧状态缺字段按 0 兼容兜底', () async {
+    final store = await freshStore();
+    store.recordRound(SyncRoundReport(
+      trigger: SyncTrigger.timer,
+      startedAt: 500,
+      finishedAt: 1000,
+      outcome: SyncOutcome.ok,
+      peers: const [
+        SyncPeerState(
+          deviceId: 'devB',
+          lastSeenAt: 900,
+          lastSuccessAt: 800,
+          lastPullAt: 700,
+        ),
+      ],
+    ));
+    await store.save();
+
+    final reloaded = await freshStore();
+    expect(reloaded.peers.single.lastSuccessAt, 800);
+
+    // 旧 JSON 没有 lastSuccessAt：0 = 未知，派生值退到最近数据流转。
+    final old = SyncPeerState.fromJson({
+      'deviceId': 'devC',
+      'lastSeenAt': 900,
+      'lastPullAt': 700,
+    })!;
+    expect(old.lastSuccessAt, 0);
+    expect(old.effectiveLastSuccessAt, 700);
+    // 只有尝试、没有失败记录：旧名册按「最后尝试」兜底，不显示成从未连上。
+    final legacy = SyncPeerState.fromJson({
+      'deviceId': 'devD',
+      'lastSeenAt': 900,
+    })!;
+    expect(legacy.effectiveLastSuccessAt, 900);
+  });
+
+  test('失联按最后一次成功接触计算，失败尝试不续命', () {
+    const now = 2 * SyncPeerState.lostThresholdMs;
+    final failedRecently = SyncPeerState(
+      deviceId: 'devB',
+      lastSeenAt: now,
+      lastSuccessAt: now - SyncPeerState.lostThresholdMs - 1,
+      lastError: const SyncIssue(code: SyncIssueCode.peerReadFailed),
+    );
+    expect(failedRecently.isLostAt(now), isTrue);
+
+    final succeededRecently = SyncPeerState(
+      deviceId: 'devC',
+      lastSeenAt: now - SyncPeerState.lostThresholdMs - 1,
+      lastSuccessAt: now,
+    );
+    expect(succeededRecently.isLostAt(now), isFalse);
+  });
+
   test('传输开关默认两路都关，且没有独立总开关', () async {
     final store = await freshStore();
     // 装机默认：不启动监听 / 不广播（用户开开关才算启用同步）。

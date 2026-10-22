@@ -164,6 +164,10 @@ class SyncRoundRunner {
   /// 本轮推送失败过的对端：名册重建时据此保留失败状态。
   final Set<String> _peersFailedThisRound = {};
 
+  /// 本轮拉取失败过的对端：同一轮即使收到只带回执的载荷，也不能把失败
+  /// 伪装成成功接触（成功时间不前进、上次失败原因保留）。
+  final Set<String> _peersPullFailedThisRound = {};
+
   /// 内存名册（本轮观测优先；落库状态在 [allPeers] 里合并进来）。
   final Map<String, SyncPeerState> _peersById = {};
 
@@ -275,6 +279,7 @@ class SyncRoundRunner {
     if (deviceId.isEmpty) return;
     _peersById.remove(deviceId);
     _peersFailedThisRound.remove(deviceId);
+    _peersPullFailedThisRound.remove(deviceId);
   }
 
   SyncPeerState peerOf(String deviceId) {
@@ -373,6 +378,7 @@ class SyncRoundRunner {
     context.passphrase = passphrase;
     await _runtime.ensureRunning();
     _peersFailedThisRound.clear();
+    _peersPullFailedThisRound.clear();
 
     final journal = _journal;
     // 日志头部在收集本地视图**之前**读取：本轮快照覆盖到的位置不会漏掉
@@ -842,10 +848,22 @@ class SyncRoundRunner {
         ..durationMs += watch.elapsedMilliseconds
         ..error ??= result.error;
       contact = contact || result.contacted;
-      // 任何接触（含未变跳过 / 探测应答）都更新「最近接触」：在线但长期
-      // 没有内容变化的对端不该被误标失联。
+      // 失败优先于同名成功：传输明确报告某台设备读取失败时，即使它同时
+      // 出现在 seenIds（旧实现 / 回执文件成功），也不能算成功接触。
+      final failedIds = result.failedIds.toSet();
+      // 任何成功接触（含未变跳过 / 探测应答）都更新「最近接触」与
+      // lastSuccessAt：在线但长期没有内容变化的对端不该被误标失联。
       for (final id in result.seenIds) {
-        _touchPeer(id, entry.key, seen: true);
+        if (failedIds.contains(id)) continue;
+        _touchPeerSeen(id, entry.key);
+      }
+      // 失败只刷新「最近尝试」与 lastError，不动 lastSuccessAt。
+      for (final id in result.failedIds) {
+        _touchPeerPullFailed(
+          id,
+          entry.key,
+          _pullFailureIssue(result, id),
+        );
       }
       for (final envelope in result.envelopes) {
         out.add((entry.key, envelope));
@@ -882,11 +900,24 @@ class SyncRoundRunner {
 
   void _recordPushPeers(SyncPushResult result, String kind) {
     for (final id in result.succeededIds) {
-      _touchPeer(id, kind, pushOk: true);
+      _touchPeerPushOk(id, kind);
     }
     for (final id in result.failedIds) {
-      _touchPeer(id, kind, pushOk: false);
+      _touchPeerPushFailed(id, kind);
     }
+  }
+
+  /// 拉取失败的逐设备原因：能识别为解密失败时保留更具体的原因，否则按
+  /// 读取失败处理；`peer` 参数换成设备 id，详情弹层才能说清是哪台。
+  SyncIssue _pullFailureIssue(SyncPullResult result, String deviceId) {
+    final error = result.error;
+    final code = switch (error?.code) {
+      SyncIssueCode.peerDecryptFailed ||
+      SyncIssueCode.webdavDecryptFailed =>
+        error!.code,
+      _ => SyncIssueCode.peerReadFailed,
+    };
+    return SyncIssue(code: code, args: {'peer': deviceId});
   }
 
   Future<Set<String>> _consumePayloads(
@@ -988,11 +1019,19 @@ class SyncRoundRunner {
         name: envelope.deviceName.isNotEmpty ? envelope.deviceName : null,
         transport: kind.isNotEmpty ? kind : null,
         lastSeenAt: now,
-        lastPullAt: now,
-        // 成功拉取 = 接触成功：清掉上一次的失败；本轮推送失败的对端保留状态。
-        lastError:
-            _peersFailedThisRound.contains(peerId) ? existing.lastError : null,
-        clearLastError: !_peersFailedThisRound.contains(peerId),
+        // 本轮拉取失败过的设备：即使随后收到只带回执的载荷，也不刷新成功
+        // 时间（失败不能伪装成成功接触）；游标 / ack 照常推进。
+        lastPullAt: _peersPullFailedThisRound.contains(peerId) ? null : now,
+        lastSuccessAt:
+            _peersPullFailedThisRound.contains(peerId) ? null : now,
+        // 成功拉取 = 接触成功：清掉上一次的失败；本轮推送失败 / 拉取失败的
+        // 对端保留状态。
+        lastError: _peersFailedThisRound.contains(peerId) ||
+                _peersPullFailedThisRound.contains(peerId)
+            ? existing.lastError
+            : null,
+        clearLastError: !_peersFailedThisRound.contains(peerId) &&
+            !_peersPullFailedThisRound.contains(peerId),
         ackedSeq: ackedSeq,
         snapshotId: envelope.snapshotId.isNotEmpty ? envelope.snapshotId : null,
         categories: envelope.categories.isNotEmpty ? envelope.categories : null,
@@ -1120,38 +1159,56 @@ class SyncRoundRunner {
     );
   }
 
-  void _touchPeer(
-    String deviceId,
-    String kind, {
-    bool pushOk = false,
-    bool seen = false,
-  }) {
+  /// 成功接触（探测应答 / 未变跳过）：刷新最近尝试与成功时间，清除失败。
+  void _touchPeerSeen(String deviceId, String kind) {
     if (deviceId.isEmpty) return;
     final existing = _peersById[deviceId] ?? SyncPeerState(deviceId: deviceId);
     final now = _nowMs();
-    if (seen) {
-      _peersFailedThisRound.remove(deviceId);
-      _peersById[deviceId] = existing.copyWith(
-        transport: kind,
-        lastSeenAt: now,
-        clearLastError: true,
-      );
-      return;
-    }
-    if (pushOk) {
-      _peersFailedThisRound.remove(deviceId);
-      _peersById[deviceId] = existing.copyWith(
-        transport: kind,
-        lastSeenAt: now,
-        lastPushAt: now,
-        clearLastError: true,
-      );
-      return;
-    }
-    _peersFailedThisRound.add(deviceId);
+    _peersFailedThisRound.remove(deviceId);
+    _peersPullFailedThisRound.remove(deviceId);
     _peersById[deviceId] = existing.copyWith(
       transport: kind,
       lastSeenAt: now,
+      lastSuccessAt: now,
+      clearLastError: true,
+    );
+  }
+
+  /// 推送成功：一次真正交换数据，同时刷新最近尝试与成功时间。
+  void _touchPeerPushOk(String deviceId, String kind) {
+    if (deviceId.isEmpty) return;
+    final existing = _peersById[deviceId] ?? SyncPeerState(deviceId: deviceId);
+    final now = _nowMs();
+    _peersFailedThisRound.remove(deviceId);
+    _peersById[deviceId] = existing.copyWith(
+      transport: kind,
+      lastSeenAt: now,
+      lastSuccessAt: now,
+      lastPushAt: now,
+      clearLastError: true,
+    );
+  }
+
+  /// 拉取失败：只刷新最近尝试与失败原因，lastSuccessAt 保持不变。
+  void _touchPeerPullFailed(String deviceId, String kind, SyncIssue issue) {
+    if (deviceId.isEmpty) return;
+    final existing = _peersById[deviceId] ?? SyncPeerState(deviceId: deviceId);
+    _peersPullFailedThisRound.add(deviceId);
+    _peersById[deviceId] = existing.copyWith(
+      transport: kind,
+      lastSeenAt: _nowMs(),
+      lastError: issue,
+    );
+  }
+
+  /// 推送失败：只刷新最近尝试与失败原因，lastSuccessAt 保持不变。
+  void _touchPeerPushFailed(String deviceId, String kind) {
+    if (deviceId.isEmpty) return;
+    final existing = _peersById[deviceId] ?? SyncPeerState(deviceId: deviceId);
+    _peersFailedThisRound.add(deviceId);
+    _peersById[deviceId] = existing.copyWith(
+      transport: kind,
+      lastSeenAt: _nowMs(),
       lastError: const SyncIssue(code: SyncIssueCode.pushFailed),
     );
   }

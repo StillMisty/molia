@@ -57,6 +57,10 @@ class SyncProvider extends ChangeNotifier {
   final LocalEndpointsService _endpoints;
 
   bool get enabled => _controlPlane.enabled;
+
+  /// 是否有一轮同步正在跑（设置页据此显示「正在同步…」并避免重复触发）。
+  bool get syncing => _engine.syncing;
+
   String get deviceId => _controlPlane.deviceId;
   String get deviceName => _controlPlane.deviceName;
   Map<SyncCategory, bool> get categories => _controlPlane.categories;

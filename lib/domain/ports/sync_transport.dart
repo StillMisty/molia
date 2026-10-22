@@ -92,6 +92,10 @@ class SyncPullRequest {
 /// 其余对端的结果照常返回。[peersSeen] 是本轮实际探测到 / 列出的对端数——
 /// 「一个对端都没发现」与「没有变化」必须能被上层区分开。
 ///
+/// [failedIds] 把失败落到具体设备（名册据此写 `lastError` 且不刷新成功时间）；
+/// [failedPeers] 保持「预期对端失败计数」的旧语义，二者不是同一件事：只有
+/// 持久化端点的试探性对端失败会进 [failedIds]，但不计入 [failedPeers]。
+///
 /// [envelopes] 同时承载两种载荷：增量窗口（`isDelta`）与 bootstrap 全量快照；
 /// 引擎按载荷形态分别推进游标与合并。
 class SyncPullResult {
@@ -103,6 +107,7 @@ class SyncPullResult {
     this.bytesIn = 0,
     this.contacted = false,
     this.seenIds = const [],
+    this.failedIds = const [],
     this.error,
   });
 
@@ -120,11 +125,18 @@ class SyncPullResult {
 
   final int bytesIn;
 
-  /// 本轮**接触过**的对端 id（含未变跳过、读取失败者；不含幽灵文件）。
+  /// 本轮**接触过**的对端 id（含未变跳过；不含读取 / 解密失败者）。
   ///
   /// 名册的「最近接触」据此更新：在线但长期没有内容变化的对端不该被误标
-  /// 失联。
+  /// 失联。失败者进 [failedIds]——读取失败不能伪装成成功接触。
   final List<String> seenIds;
+
+  /// 本轮读取 / 解密失败的具体设备 id（可含只有持久化端点的试探性对端）。
+  ///
+  /// 与 [failedPeers] 解耦：后者只统计预期对端、决定整轮 partial / failed；
+  /// 这里只做名册归属，即使整轮仍是 noPeers 也要让用户知道是哪台没连上。
+  /// 同一设备只要有任何一次数据读取成功就不应出现在这里。
+  final List<String> failedIds;
 
   /// 本轮是否接触到了远端（WebDAV 目录可读、局域网有对端可达）。
   ///

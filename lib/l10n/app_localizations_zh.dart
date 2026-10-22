@@ -2745,6 +2745,50 @@ class AppLocalizationsZh extends AppLocalizations {
   String get syncPeerNever => '还没连上';
 
   @override
+  String get syncSyncing => '正在同步…';
+
+  @override
+  String get syncPeerStatusConnected => '已连接';
+
+  @override
+  String get syncPeerStatusDisconnected => '未连接';
+
+  @override
+  String get syncPeerStatusCloudSynced => '云端已同步';
+
+  @override
+  String get syncPeerStatusCloudNotSynced => '云端未同步';
+
+  @override
+  String syncPeerLastSuccess(String time) {
+    return '上次同步 $time';
+  }
+
+  @override
+  String syncPeerLastAttempt(String time) {
+    return '上次尝试 $time';
+  }
+
+  @override
+  String get syncPeerLostStale => '超过 180 天未连接';
+
+  @override
+  String get syncPeerNameSeparator => '、';
+
+  @override
+  String get syncRoundNoConnectedPeers => '本轮没有连上设备';
+
+  @override
+  String syncRoundConnected(String names) {
+    return '已连接 $names';
+  }
+
+  @override
+  String syncRoundConnectedMore(String names, int count) {
+    return '已连接 $names 等 $count 台';
+  }
+
+  @override
   String syncPeerBehind(int count) {
     return '待同步 $count 项';
   }

@@ -2848,6 +2848,50 @@ class AppLocalizationsEn extends AppLocalizations {
   String get syncPeerNever => 'Not connected yet';
 
   @override
+  String get syncSyncing => 'Syncing…';
+
+  @override
+  String get syncPeerStatusConnected => 'Connected';
+
+  @override
+  String get syncPeerStatusDisconnected => 'Not connected';
+
+  @override
+  String get syncPeerStatusCloudSynced => 'Synced to cloud';
+
+  @override
+  String get syncPeerStatusCloudNotSynced => 'Not synced to cloud';
+
+  @override
+  String syncPeerLastSuccess(String time) {
+    return 'Last synced $time';
+  }
+
+  @override
+  String syncPeerLastAttempt(String time) {
+    return 'Last attempt $time';
+  }
+
+  @override
+  String get syncPeerLostStale => 'no connection for over 180 days';
+
+  @override
+  String get syncPeerNameSeparator => ', ';
+
+  @override
+  String get syncRoundNoConnectedPeers => 'No devices connected this round';
+
+  @override
+  String syncRoundConnected(String names) {
+    return 'Connected: $names';
+  }
+
+  @override
+  String syncRoundConnectedMore(String names, int count) {
+    return 'Connected: $names and $count more';
+  }
+
+  @override
   String syncPeerBehind(int count) {
     return '$count pending';
   }

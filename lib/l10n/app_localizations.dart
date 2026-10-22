@@ -5217,6 +5217,78 @@ abstract class AppLocalizations {
   /// **'Not connected yet'**
   String get syncPeerNever;
 
+  /// No description provided for @syncSyncing.
+  ///
+  /// In en, this message translates to:
+  /// **'Syncing…'**
+  String get syncSyncing;
+
+  /// No description provided for @syncPeerStatusConnected.
+  ///
+  /// In en, this message translates to:
+  /// **'Connected'**
+  String get syncPeerStatusConnected;
+
+  /// No description provided for @syncPeerStatusDisconnected.
+  ///
+  /// In en, this message translates to:
+  /// **'Not connected'**
+  String get syncPeerStatusDisconnected;
+
+  /// No description provided for @syncPeerStatusCloudSynced.
+  ///
+  /// In en, this message translates to:
+  /// **'Synced to cloud'**
+  String get syncPeerStatusCloudSynced;
+
+  /// No description provided for @syncPeerStatusCloudNotSynced.
+  ///
+  /// In en, this message translates to:
+  /// **'Not synced to cloud'**
+  String get syncPeerStatusCloudNotSynced;
+
+  /// No description provided for @syncPeerLastSuccess.
+  ///
+  /// In en, this message translates to:
+  /// **'Last synced {time}'**
+  String syncPeerLastSuccess(String time);
+
+  /// No description provided for @syncPeerLastAttempt.
+  ///
+  /// In en, this message translates to:
+  /// **'Last attempt {time}'**
+  String syncPeerLastAttempt(String time);
+
+  /// No description provided for @syncPeerLostStale.
+  ///
+  /// In en, this message translates to:
+  /// **'no connection for over 180 days'**
+  String get syncPeerLostStale;
+
+  /// No description provided for @syncPeerNameSeparator.
+  ///
+  /// In en, this message translates to:
+  /// **', '**
+  String get syncPeerNameSeparator;
+
+  /// No description provided for @syncRoundNoConnectedPeers.
+  ///
+  /// In en, this message translates to:
+  /// **'No devices connected this round'**
+  String get syncRoundNoConnectedPeers;
+
+  /// No description provided for @syncRoundConnected.
+  ///
+  /// In en, this message translates to:
+  /// **'Connected: {names}'**
+  String syncRoundConnected(String names);
+
+  /// No description provided for @syncRoundConnectedMore.
+  ///
+  /// In en, this message translates to:
+  /// **'Connected: {names} and {count} more'**
+  String syncRoundConnectedMore(String names, int count);
+
   /// No description provided for @syncPeerBehind.
   ///
   /// In en, this message translates to:

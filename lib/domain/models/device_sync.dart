@@ -1064,6 +1064,7 @@ class SyncPeerState {
     this.name = '',
     this.transport = '',
     this.lastSeenAt = 0,
+    this.lastSuccessAt = 0,
     this.lastPullAt = 0,
     this.lastPushAt = 0,
     this.lastError,
@@ -1085,8 +1086,17 @@ class SyncPeerState {
   final String name;
   final String transport;
 
-  /// 最近一次接触（拉取或推送尝试）的时间。
+  /// 最近一次接触（成功或失败的尝试）的时间。
+  ///
+  /// 失败尝试也刷新它：界面用「本轮是否尝试过」区分「未连接」与「本轮没
+  /// 尝试」；失联判定不看它（见 [isLostAt]）。
   final int lastSeenAt;
+
+  /// 最近一次真正接触成功的时间（探测应答 / 未变跳过 / 拉取或推送成功）。
+  ///
+  /// 0 = 未知（旧状态没有这个字段，或从未成功过）。判断「已连接 / 失联」
+  /// 一律以它为准，失败尝试不续命；旧状态用 [effectiveLastSuccessAt] 兜底。
+  final int lastSuccessAt;
 
   /// 最近一次成功拉取该对端快照的时间。
   final int lastPullAt;
@@ -1094,8 +1104,18 @@ class SyncPeerState {
   /// 最近一次成功推送的时间。
   final int lastPushAt;
 
-  /// 最近一次接触的失败原因；成功接触时清除（见 `SyncEngine._roster`）。
+  /// 最近一次接触的失败原因；成功接触时清除（见 `SyncRoundRunner`）。
   final SyncIssue? lastError;
+
+  /// 兼容旧状态的有效成功时间：新状态直接用 [lastSuccessAt]；旧状态没有
+  /// 该字段时退到最近一次数据流转（拉取 / 推送），再从「没有失败记录的最后
+  /// 尝试」兜底——老名册不该因为升级后缺字段就显示成「还没连上」。
+  int get effectiveLastSuccessAt {
+    if (lastSuccessAt > 0) return lastSuccessAt;
+    final lastData = lastPullAt > lastPushAt ? lastPullAt : lastPushAt;
+    if (lastData > 0) return lastData;
+    return lastError == null ? lastSeenAt : 0;
+  }
 
   /// 对端落后本机 journal 的条数（本机头部 − 对端已 ack 的位置）；
   /// null = 对端尚未 ack 过（无观测）。
@@ -1123,14 +1143,24 @@ class SyncPeerState {
   /// 最近一次为该对端做全量兜底的时间（节流：同一对端不频繁重拉）。
   final int fullPulledAt;
 
-  /// 是否已失联（超过 [lostThresholdMs] 无接触；无接触时间视为未知，不标记）。
-  bool isLostAt(int nowMs) =>
-      lastSeenAt > 0 && nowMs - lastSeenAt > lostThresholdMs;
+  /// 是否已失联（超过 [lostThresholdMs] 没有**成功**接触）。
+  ///
+  /// 失败尝试不续命：只有探测应答 / 未变跳过 / 数据流转成功才会推迟失联。
+  /// 旧状态没有 [lastSuccessAt] 时退到最近数据流转，再退到 [lastSeenAt]，
+  /// 保持升级前的名册判定不变。
+  bool isLostAt(int nowMs) {
+    final lastData = lastPullAt > lastPushAt ? lastPullAt : lastPushAt;
+    final lastContact = lastSuccessAt > 0
+        ? lastSuccessAt
+        : (lastData > 0 ? lastData : lastSeenAt);
+    return lastContact > 0 && nowMs - lastContact > lostThresholdMs;
+  }
 
   SyncPeerState copyWith({
     String? name,
     String? transport,
     int? lastSeenAt,
+    int? lastSuccessAt,
     int? lastPullAt,
     int? lastPushAt,
     SyncIssue? lastError,
@@ -1150,6 +1180,7 @@ class SyncPeerState {
         name: name ?? this.name,
         transport: transport ?? this.transport,
         lastSeenAt: lastSeenAt ?? this.lastSeenAt,
+        lastSuccessAt: lastSuccessAt ?? this.lastSuccessAt,
         lastPullAt: lastPullAt ?? this.lastPullAt,
         lastPushAt: lastPushAt ?? this.lastPushAt,
         lastError: clearLastError ? null : (lastError ?? this.lastError),
@@ -1168,6 +1199,7 @@ class SyncPeerState {
         if (name.isNotEmpty) 'name': name,
         if (transport.isNotEmpty) 'transport': transport,
         if (lastSeenAt > 0) 'lastSeenAt': lastSeenAt,
+        if (lastSuccessAt > 0) 'lastSuccessAt': lastSuccessAt,
         if (lastPullAt > 0) 'lastPullAt': lastPullAt,
         if (lastPushAt > 0) 'lastPushAt': lastPushAt,
         if (lastError != null) 'lastError': lastError!.toJson(),
@@ -1190,6 +1222,8 @@ class SyncPeerState {
       name: raw['name'] as String? ?? '',
       transport: raw['transport'] as String? ?? '',
       lastSeenAt: (raw['lastSeenAt'] as num?)?.toInt() ?? 0,
+      // 缺失 = 旧状态：0 让 effectiveLastSuccessAt 走兼容兜底。
+      lastSuccessAt: (raw['lastSuccessAt'] as num?)?.toInt() ?? 0,
       lastPullAt: (raw['lastPullAt'] as num?)?.toInt() ?? 0,
       lastPushAt: (raw['lastPushAt'] as num?)?.toInt() ?? 0,
       lastError: SyncIssue.fromJson(raw['lastError']),

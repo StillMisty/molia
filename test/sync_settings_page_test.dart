@@ -337,8 +337,10 @@ void main() {
   });
 
   testWidgets('传输卡片 footer：未同步说「尚未同步」；跑完一轮给结论与相对时间', (tester) async {
-    await provider.setTransportEnabled(SyncTransportKind.lan, true);
+    // 先以「两路都关」打开：页面不会自动跑轮次，footer 才能停在初始态。
     await pumpPage(tester);
+    await provider.setTransportEnabled(SyncTransportKind.lan, true);
+    await tester.pumpAndSettle();
     expect(transportFooter(tester), 'Never synced');
 
     // 跑一轮（页面无手动主操作，这里直接驱动 provider）：无对端 →
@@ -760,6 +762,11 @@ void main() {
 
   testWidgets('手动连接：连上后关闭并提示已添加；重复地址提示已更新', (tester) async {
     transport.onPull = () async {
+      // 只有地址已入簿后才回写身份：页面打开时的自动检查不应提前把测试
+      // 地址学进地址簿（否则第一次「添加」会变成「已更新」）。
+      if (!provider.manualPeers.any((entry) => entry.host == '192.168.1.23')) {
+        return;
+      }
       await state.learnManualPeer(const ManualPeer(
         host: '192.168.1.23',
         deviceId: 'devB',
@@ -922,6 +929,144 @@ void main() {
     expect(find.textContaining('Last synced'), findsOneWidget);
   });
 
+  /// 设备卡片 footer（同步中 / 本轮已连接设备名）。
+  String peersFooter(WidgetTester tester) {
+    final card = find.ancestor(
+      of: find.text('Devices'),
+      matching: find.byType(SettingsSectionCard),
+    );
+    return tester
+        .widget<SettingsSectionHint>(
+          find.descendant(of: card, matching: find.byType(SettingsSectionHint)),
+        )
+        .text;
+  }
+
+  String peerSubtitle(WidgetTester tester, String deviceId) => tester
+      .widget<SettingsNavTile>(
+        find.byKey(Key('settingsSyncPeer-$deviceId')),
+      )
+      .subtitle;
+
+  testWidgets('打开同步页自动跑一轮检查（任一路传输开启时）', (tester) async {
+    await provider.setTransportEnabled(SyncTransportKind.lan, true);
+    final before = transport.pullCount;
+    expect(provider.lastReport, isNull);
+
+    await pumpPage(tester);
+
+    expect(transport.pullCount, before + 1);
+    expect(provider.lastReport, isNotNull);
+  });
+
+  testWidgets('设备区脚注：同步中显示「正在同步…」，完成后给本轮结论', (tester) async {
+    await provider.setTransportEnabled(SyncTransportKind.lan, true);
+    final gate = Completer<void>();
+    transport.onPull = () => gate.future;
+    final inFlight = provider.syncNow(manual: true);
+
+    await pumpPage(tester);
+    expect(peersFooter(tester), 'Syncing…');
+
+    gate.complete();
+    await inFlight;
+    await tester.pumpAndSettle();
+    expect(peersFooter(tester), 'No devices connected this round');
+  });
+
+  testWidgets('设备行五态：已连接 / 未连接 / 上次同步 / 还没连上 / 已失联；WebDAV 不冒充已连接',
+      (tester) async {
+    // 失联阈值是 180 天：用真实纪元时钟，才能表达「成功在阈值之前」。
+    nowMs = DateTime.now().millisecondsSinceEpoch;
+    // 先跑一轮拿到「本轮起点」，再关掉传输阻止页面自动再跑一轮。
+    await provider.setTransportEnabled(SyncTransportKind.lan, true);
+    await provider.syncNow(manual: true);
+    final startedAt = provider.lastReport!.startedAt;
+    await provider.setTransportEnabled(SyncTransportKind.lan, false);
+
+    final now = provider.nowMs;
+    state.recordRound(SyncRoundReport(
+      trigger: SyncTrigger.manual,
+      startedAt: startedAt,
+      finishedAt: startedAt + 1,
+      outcome: SyncOutcome.ok,
+      peers: [
+        SyncPeerState(
+          deviceId: 'connectedA',
+          name: 'Device A',
+          transport: SyncTransportKind.lan,
+          lastSeenAt: startedAt + 4,
+          lastSuccessAt: startedAt + 4,
+        ),
+        SyncPeerState(
+          deviceId: 'connectedB',
+          name: 'Device B',
+          transport: SyncTransportKind.lan,
+          lastSeenAt: startedAt + 3,
+          lastSuccessAt: startedAt + 3,
+        ),
+        SyncPeerState(
+          deviceId: 'connectedC',
+          name: 'Device C',
+          transport: SyncTransportKind.lan,
+          lastSeenAt: startedAt + 2,
+          lastSuccessAt: startedAt + 2,
+        ),
+        SyncPeerState(
+          deviceId: 'webdav',
+          name: 'Cloud',
+          transport: SyncTransportKind.webdav,
+          lastSeenAt: startedAt + 1,
+          lastSuccessAt: startedAt + 1,
+        ),
+        SyncPeerState(
+          deviceId: 'unreachable',
+          name: 'Offline',
+          transport: SyncTransportKind.lan,
+          lastSeenAt: startedAt + 5,
+          lastSuccessAt: startedAt - 5000,
+          lastError: const SyncIssue(code: SyncIssueCode.peerReadFailed),
+        ),
+        SyncPeerState(
+          deviceId: 'idle',
+          name: 'Idle',
+          transport: SyncTransportKind.lan,
+          lastSeenAt: startedAt - 5000,
+          lastSuccessAt: startedAt - 5000,
+        ),
+        SyncPeerState(deviceId: 'never', name: 'Never'),
+        SyncPeerState(
+          deviceId: 'lost',
+          name: 'Lost',
+          transport: SyncTransportKind.lan,
+          // 最近尝试是刚刚，但最近成功超过 180 天：失败尝试不续命。
+          lastSeenAt: now,
+          lastSuccessAt: now - SyncPeerState.lostThresholdMs - 1,
+        ),
+      ],
+    ));
+    provider.notifyListeners();
+    await pumpPage(tester);
+
+    expect(peerSubtitle(tester, 'connectedA'),
+        allOf(contains('Connected'), contains('Last synced')));
+    expect(peerSubtitle(tester, 'unreachable'),
+        allOf(contains('Not connected'), contains('Last synced')));
+    expect(peerSubtitle(tester, 'idle'), contains('Last synced'));
+    expect(peerSubtitle(tester, 'idle'), isNot(contains('Connected')));
+    expect(peerSubtitle(tester, 'never'), contains('Not connected yet'));
+    expect(peerSubtitle(tester, 'lost'), allOf(contains('lost'), contains('180 days')));
+    // WebDAV 设备只可能是「云端已同步」，不能说「已连接」。
+    expect(peerSubtitle(tester, 'webdav'), contains('Synced to cloud'));
+    expect(peerSubtitle(tester, 'webdav'), isNot(contains('Connected')));
+
+    // 脚注：最多两个名字 + 等 N 台（本轮连上 4 台，含云端设备）。
+    expect(
+      peersFooter(tester),
+      'Connected: Device A, Device B and 2 more',
+    );
+  });
+
   testWidgets('失联设备：名册标记 + 清理远端 / 从本机移除', (tester) async {
     // 注入时钟：失联阈值 = 180 天（与 lostPeers 判定同一时钟源）。
     nowMs = DateTime.now().millisecondsSinceEpoch;
@@ -934,7 +1079,10 @@ void main() {
     transport.deleteRemoteResult = true;
     await tester.tap(find.byKey(const Key('settingsSyncPeer-ghost')));
     await tester.pumpAndSettle();
-    expect(find.textContaining('180 days'), findsOneWidget);
+    expect(
+      find.textContaining('This device has not connected for over 180 days'),
+      findsOneWidget,
+    );
     await tester.tap(find.byKey(const Key('settingsSyncPeerCleanup-ghost')));
     await tester.pumpAndSettle();
     await tester.tap(find.text('Delete'));
@@ -1061,7 +1209,7 @@ void main() {
 
   testWidgets('日志与诊断子页：24h 动态行与环境行', (tester) async {
     await provider.setTransportEnabled(SyncTransportKind.lan, true);
-    // 手动一轮：日志里出现一条无对端轮次（0 字节、0 落地）。
+    // 手动一轮 + 打开页面自动一轮：日志里出现 2 条无对端轮次。
     await provider.syncNow(manual: true);
     await pumpPage(tester);
     expect(find.byKey(const Key('settingsSyncActivityItem')), findsNothing);
@@ -1069,7 +1217,7 @@ void main() {
     await openSubPage(tester, 'settingsSyncLogItem');
     expect(find.text('Last 24 hours'), findsOneWidget);
     expect(
-      find.textContaining('1 runs, 0 with changes'),
+      find.textContaining('2 runs, 0 with changes'),
       findsOneWidget,
     );
     // 环境行：未注入调度器 → 等级「未运行」；非移动数据；非省电。
@@ -1091,14 +1239,16 @@ void main() {
     expect(find.text('Sync log'), findsOneWidget);
 
     await openSubPage(tester, 'settingsSyncLogItem');
-    expect(find.byType(SyncLogRow), findsNWidgets(7));
+    // 7 次手动 + 打开页面自动 1 次。
+    expect(find.byType(SyncLogRow), findsNWidgets(8));
   });
 
   testWidgets('日志入口副文案：无记录说「暂无记录」，有记录给最近结论', (tester) async {
-    await provider.setTransportEnabled(SyncTransportKind.lan, true);
+    // 两路关闭时打开：页面不自动跑轮次，才能验证「暂无记录」。
     await pumpPage(tester);
     expect(find.text('No records yet'), findsOneWidget);
 
+    await provider.setTransportEnabled(SyncTransportKind.lan, true);
     await provider.syncNow(manual: true);
     await tester.pumpAndSettle();
     expect(find.text('No records yet'), findsNothing);
@@ -1201,10 +1351,11 @@ void main() {
     await pumpPage(tester);
 
     await openSubPage(tester, 'settingsSyncLogItem');
-    // 零应答（区别于从未发现）：日志行可点开下一步动作。
-    expect(find.byType(SyncLogRow), findsOneWidget);
+    // 零应答（区别于从未发现）：日志行可点开下一步动作。打开页面自动跑的
+    // 一轮会留下第二条同样的失败记录，点最新一条即可。
+    expect(find.byType(SyncLogRow), findsWidgets);
     expect(find.textContaining('the network may be isolated'), findsWidgets);
-    await tester.tap(find.byType(SyncLogRow));
+    await tester.tap(find.byType(SyncLogRow).first);
     await tester.pumpAndSettle();
 
     expect(find.text('Add manual address'), findsOneWidget);
@@ -1231,7 +1382,7 @@ void main() {
     await pumpPage(tester);
 
     await openSubPage(tester, 'settingsSyncLogItem');
-    await tester.tap(find.byType(SyncLogRow));
+    await tester.tap(find.byType(SyncLogRow).first);
     await tester.pumpAndSettle();
     expect(find.textContaining('Auto-discovery unavailable'), findsWidgets);
     expect(find.text('Add manual address'), findsOneWidget);

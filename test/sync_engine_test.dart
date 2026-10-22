@@ -245,6 +245,88 @@ void main() {
     expect(state.peers.single.lastError, isNull);
   });
 
+  test('拉取失败归属到设备：记录尝试与原因，保留上次成功时间', () async {
+    // 第一轮成功：lastSuccessAt / lastPullAt 有值。
+    transport.available.add(remoteTheme('dark'));
+    await engine.syncNow();
+    final before = state.peers.single;
+    expect(before.lastSuccessAt, greaterThan(0));
+    final successAt = before.lastSuccessAt;
+    final pullAt = before.lastPullAt;
+
+    // 第二轮：devB 读取失败，devC 正常（保证整轮有成功面，结论是 partial）。
+    transport.available.clear();
+    transport.available.add(SyncEnvelope(
+      deviceId: 'devC',
+      deviceName: 'C',
+      producedAt: 6000,
+      records: const {},
+    ));
+    transport.peersSeenOverride = 2;
+    transport.pullFailures = 1;
+    transport.pullFailedIds = ['devB'];
+    transport.seenIdsOverride = ['devC', 'devB'];
+    final failed = await engine.syncNow();
+
+    expect(failed!.outcome, SyncOutcome.partial);
+    final after = state.peers.firstWhere((peer) => peer.deviceId == 'devB');
+    expect(after.lastError?.code, SyncIssueCode.peerReadFailed);
+    expect(after.lastSeenAt, greaterThanOrEqualTo(successAt));
+    expect(after.lastSuccessAt, successAt, reason: '失败尝试不刷新成功时间');
+    expect(after.lastPullAt, pullAt, reason: '没有数据流转就不算一次拉取');
+
+    // 第三轮成功：成功时间前进，失败原因清除。
+    transport.available.clear();
+    transport.available.add(remoteTheme('light'));
+    transport.seenIdsOverride = null;
+    transport.pullFailures = 0;
+    transport.pullFailedIds = const [];
+    transport.peersSeenOverride = null;
+    await engine.syncNow();
+
+    final recovered = state.peers.firstWhere((peer) => peer.deviceId == 'devB');
+    expect(recovered.lastSuccessAt, greaterThan(successAt));
+    expect(recovered.lastError, isNull);
+  });
+
+  test('推送失败只刷新尝试与原因，不刷新上次成功时间', () async {
+    transport.available.add(remoteTheme('dark'));
+    await engine.syncNow();
+    final before = state.peers.single;
+    expect(before.lastSuccessAt, greaterThan(0));
+
+    // 本地变化触发推送；推送失败。
+    transport.available.clear();
+    await prefs.setString('theme_mode', 'light');
+    transport.pushFailures = 1;
+    transport.pushFailedIds = ['devB'];
+    await engine.syncNow();
+
+    final after = state.peers.single;
+    expect(after.lastError?.code, SyncIssueCode.pushFailed);
+    expect(after.lastSuccessAt, before.lastSuccessAt);
+    expect(after.lastSeenAt, greaterThanOrEqualTo(before.lastSeenAt));
+  });
+
+  test('探测应答 / 未变跳过也算成功接触：lastSuccessAt 前进', () async {
+    transport.available.add(remoteTheme('dark'));
+    await engine.syncNow();
+    final before = state.peers.single;
+    final successAt = before.lastSuccessAt;
+
+    // 本轮没有数据流转，但传输报告接触过（未变跳过 / 探测应答）。
+    transport.available.clear();
+    transport.seenIdsOverride = ['devB'];
+    transport.peersSeenOverride = 1;
+    final report = await engine.syncNow();
+
+    expect(report!.outcome, SyncOutcome.noChanges);
+    final after = state.peers.single;
+    expect(after.lastSuccessAt, greaterThanOrEqualTo(successAt));
+    expect(after.lastSeenAt, greaterThanOrEqualTo(successAt));
+    expect(after.lastPullAt, before.lastPullAt, reason: '未变跳过没有拉取数据');
+  });
+
   test('传输异常不冒泡，报告里可见', () async {
     transport.peersSeenOverride = 1;
     transport.throwOnPull = true;

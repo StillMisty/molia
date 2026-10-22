@@ -121,6 +121,59 @@ void main() {
     expect((await c.pull()).envelopes, isEmpty);
   });
 
+  test('解密失败的设备进入 failedIds，且不计入 seenIds', () async {
+    final a = transport('devA');
+    addTearDown(a.stop);
+    await a.start();
+
+    // 回执与快照都是坏密文：读取 / 解密失败要归属到 devB。
+    server.files['devB.p2.acks.msync'] = [1, 2, 3];
+    server.files['devB.p2.0.snapshot.msync'] = [4, 5, 6];
+
+    final result = await a.pull();
+    expect(result.envelopes, isEmpty);
+    expect(result.failedPeers, greaterThan(0));
+    expect(result.failedIds, ['devB']);
+    expect(result.seenIds, isNot(contains('devB')));
+  });
+
+  test('需要全量但没有快照：设备进入 failedIds', () async {
+    final a = transport('devA');
+    addTearDown(a.stop);
+    await a.start();
+
+    // 只有回执、没有块 / 快照：本轮无法拿到数据，失败要落到 devB。
+    final acks = SyncEnvelope(
+      deviceId: 'devB',
+      producedAt: 1,
+      journalHead: 0,
+      journal: const [],
+    );
+    server.files['devB.p2.acks.msync'] = codec.encrypt(acks, passphrase);
+
+    final result = await a.pull();
+    expect(result.failedPeers, 1);
+    expect(result.failedIds, ['devB']);
+  });
+
+  test('回执读取失败但数据文件成功：不把设备标成失败', () async {
+    final a = transport('devA');
+    addTearDown(a.stop);
+    await a.start();
+
+    server.files['devB.p2.acks.msync'] = [1, 2, 3];
+    server.files['devB.p2.0.snapshot.msync'] =
+        codec.encrypt(snapshotEnvelope('devB', coverage: 0), passphrase);
+
+    final result = await a.pull();
+    // 回执失败仍保留旧的失败计数（传输级明细），但数据已经读到了：
+    // 名册不能把 devB 标成未连接。
+    expect(result.failedPeers, 1);
+    expect(result.failedIds, isEmpty);
+    expect(result.seenIds, contains('devB'));
+    expect(result.envelopes, hasLength(1));
+  });
+
   test('未配置 / 未启动时为空操作', () async {
     final unconfigured = WebDavSyncTransport(
       deviceId: 'devX',
