@@ -8,6 +8,7 @@ void main() {
       window.add(
         buildMs: i.toDouble(),
         rasterMs: i / 2,
+        vsyncMs: 1,
         totalMs: i.toDouble(),
       );
     }
@@ -17,16 +18,17 @@ void main() {
     expect(stats['build_p50'], 50);
     expect(stats['build_p95'], 95);
     expect(stats['build_p99'], 99);
-    expect(stats['jank16'], 84); // 17..100
-    expect(stats['jank33'], 67); // 34..100
+    expect(stats['jank16'], 89); // work = 1.5i > 16.7
+    expect(stats['jank33'], 78); // work = 1.5i > 33.3
+    expect(stats['latency16'], 84); // total = i > 16.7
     expect(stats['worst_ms'], 100);
     expect(window.take(), isNull);
   });
 
   test('小样本分位数不越界', () {
     final window = FrameWindow();
-    window.add(buildMs: 8, rasterMs: 4, totalMs: 12);
-    window.add(buildMs: 20, rasterMs: 10, totalMs: 30);
+    window.add(buildMs: 8, rasterMs: 4, vsyncMs: 1, totalMs: 12);
+    window.add(buildMs: 20, rasterMs: 10, vsyncMs: 2, totalMs: 30);
 
     final stats = window.take()!;
     expect(stats['build_p50'], 8);

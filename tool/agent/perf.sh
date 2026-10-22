@@ -182,8 +182,9 @@ if not rows:
 
 keys = [
     'scenario', 'label', 'frames', 'build_p50', 'build_p95', 'build_p99',
-    'raster_p50', 'raster_p95', 'raster_p99', 'total_p50', 'total_p95',
-    'total_p99', 'jank16', 'jank33', 'worst_ms', 'image_cache_mb',
+    'raster_p50', 'raster_p95', 'raster_p99', 'work_p50', 'work_p95',
+    'work_p99', 'vsync_p95', 'total_p50', 'total_p95', 'total_p99',
+    'jank16', 'jank33', 'latency16', 'worst_ms', 'image_cache_mb',
 ]
 summary = {}
 for row in rows:
