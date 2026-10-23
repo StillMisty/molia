@@ -1662,6 +1662,8 @@
   "syncLanPermissionTitle": "Grant LAN permission",
   "syncLanPermissionSubtitle": "Android 17+ needs the nearby-devices permission to reach other devices",
   "syncLanPermissionDenied": "Permission not granted: LAN sync is unavailable (manual addresses cannot work around it). Switch to WebDAV instead.",
+  "syncLanPermissionNeeded": "LAN permission required",
+  "syncLanPermissionGrant": "Grant",
   "syncOpenSystemSettings": "Open settings",
   "syncPeerHostLabel": "Address",
   "syncPeerHostHint": "e.g. 192.168.1.23 or 2409:8a55::5",

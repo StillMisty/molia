@@ -230,7 +230,11 @@
 
 - **Android 17 / API 37（本项目 targetSdk 37）**：局域网访问默认阻断，必须声明
   并在建立 socket 前运行时申请 `ACCESS_LOCAL_NETWORK`（Android 自有 MethodChannel，
-  见 `LocalNetworkPermission`），否则 Dart socket 直接抛 `SocketException`；
+  见 `LocalNetworkPermission`），否则 Dart socket 直接抛 `SocketException`。
+  **申请时机只跟用户动作走**：打开局域网开关或点「去授权」时
+  `ensure(retry: true)` 先复查再申请；被拒则开关回到关闭，底栏 + 开关下常驻
+  警告行（与桌面歌词未授权提示同款）引导再次授权 / 去系统设置。启动与每轮
+  同步只 `refresh()` 查询状态，不自动弹窗；授权后启动传输并重扫附近设备；
 - **关键区分**：权限被拒时「手动填对端地址」也无效（官方明确对外 TCP / 收发
   UDP 单播·组播·广播均需该权限）——权限被拒只引导授权或转 WebDAV；
   **发现失败**（AP 隔离 / 多网段 / 防火墙 / VPN）才用手动对端地址簿；

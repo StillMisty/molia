@@ -26,8 +26,9 @@ enum LocalNetworkPermissionStatus {
 ///
 /// 设计要点：
 /// - 只在需要该权限的平台申请（Android）；其它平台恒为允许；
-/// - 一个会话内被拒后不自动重复弹窗（否则每轮同步都弹），
-///   用户显式点「授予权限」时走 `ensure(retry: true)`；
+/// - 一个会话内被拒后不自动重复弹窗（否则每轮同步都弹）；
+///   用户打开局域网开关或点「去授权」时走 `ensure(retry: true)`，
+///   先复查系统状态，仍未授权才请求；
 /// - 永久拒绝时 `ensure` 不再请求（系统不会弹窗），UI 直接给「去系统设置」；
 /// - 生产实现走 Android 自有通道（`top.stillmisty.molia/local_network`），
 ///   不引入权限库：项目只需要这一个 Android 运行时权限，而 `permission_handler`
@@ -66,9 +67,12 @@ class LocalNetworkPermission {
   /// 系统层面不允许申请；`limited` / `provisional` 视为已授予）。
   static LocalNetworkPermissionStatus _statusOf(String? status) =>
       switch (status) {
-        'granted' || 'limited' || 'provisional' =>
+        'granted' ||
+        'limited' ||
+        'provisional' =>
           LocalNetworkPermissionStatus.granted,
-        'permanentlyDenied' || 'restricted' =>
+        'permanentlyDenied' ||
+        'restricted' =>
           LocalNetworkPermissionStatus.permanentlyDenied,
         _ => LocalNetworkPermissionStatus.denied,
       };
@@ -107,17 +111,30 @@ class LocalNetworkPermission {
   bool get permanentlyDenied =>
       status == LocalNetworkPermissionStatus.permanentlyDenied;
 
+  /// 被拒但系统仍允许再申请（可展示「去授权」入口）。
+  bool get denied =>
+      needsPermission && status == LocalNetworkPermissionStatus.denied;
+
+  /// 需要用户处理（被拒或永久拒绝）：设置页常驻警告行的显示条件。
+  bool get needsUserAction => denied || permanentlyDenied;
+
   /// 申请权限（幂等）。
   ///
-  /// [retry] = true 表示用户显式请求（「授予权限」按钮），即使本会话已拒过也再问；
+  /// [retry] = true 表示用户显式请求（开关打开 / 「去授权」按钮）：
+  /// 先复查系统状态（用户可能刚在系统设置里开过），仍未授权才请求。
   /// 自动路径不会重复弹窗。永久拒绝时不再请求（系统不会弹窗），返回 false。
   Future<bool> ensure({bool retry = false}) async {
     if (!needsPermission) return true;
+    if (retry) {
+      final check = _check;
+      if (check != null) _status = await check();
+    }
+    if (status == LocalNetworkPermissionStatus.granted) return true;
     if (permanentlyDenied) return false;
     final request = _request;
     if (request == null) return granted;
     if (_status != LocalNetworkPermissionStatus.notRequested && !retry) {
-      return granted;
+      return false;
     }
     _status = await request();
     return granted;

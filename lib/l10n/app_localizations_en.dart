@@ -3071,6 +3071,12 @@ class AppLocalizationsEn extends AppLocalizations {
       'Permission not granted: LAN sync is unavailable (manual addresses cannot work around it). Switch to WebDAV instead.';
 
   @override
+  String get syncLanPermissionNeeded => 'LAN permission required';
+
+  @override
+  String get syncLanPermissionGrant => 'Grant';
+
+  @override
   String get syncOpenSystemSettings => 'Open settings';
 
   @override

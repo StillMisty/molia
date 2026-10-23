@@ -1136,13 +1136,17 @@ void main() {
     expect(find.text('Diagnostics'), findsNothing);
   });
 
-  testWidgets('局域网权限被永久拒绝：动作是「去系统设置」', (tester) async {
+  testWidgets('局域网权限被永久拒绝：警告行动作是「去系统设置」', (tester) async {
     await provider.setTransportEnabled(SyncTransportKind.lan, true);
     transport.unavailableReason = SyncUnavailableReason.permissionDenied;
     var opened = 0;
+    var requested = 0;
     final permission = LocalNetworkPermission(
       needsPermission: true,
-      request: () async => LocalNetworkPermissionStatus.permanentlyDenied,
+      request: () async {
+        requested++;
+        return LocalNetworkPermissionStatus.permanentlyDenied;
+      },
       check: () async => LocalNetworkPermissionStatus.permanentlyDenied,
       openSettings: () async => opened++,
     );
@@ -1162,17 +1166,55 @@ void main() {
       find.byKey(const Key('settingsSyncLanPermissionItem')),
       findsOneWidget,
     );
-    // 永久拒绝时系统不弹窗：UI 不给「授予权限」，直接指去系统设置。
+    // 与桌面歌词未授权提示同款：常驻警告行 + 去授权动作。
+    expect(find.text('LAN permission required'), findsOneWidget);
+    // 永久拒绝时系统不弹窗：动作改为去系统设置。
     expect(find.text('Open settings'), findsOneWidget);
-    expect(find.text('Grant LAN permission'), findsNothing);
-    await tester.tap(find.byKey(const Key('settingsSyncLanPermissionItem')));
+    expect(find.text('Grant'), findsNothing);
+    expect(requested, 0, reason: '永久拒绝不应再向系统请求');
+    await tester.tap(
+      find.byKey(const Key('settingsSyncLanPermissionGrant')),
+    );
     await tester.pumpAndSettle();
     expect(opened, 1);
   });
 
-  testWidgets('局域网权限可再申请：动作是「授予权限」', (tester) async {
+  testWidgets('局域网权限可再申请：警告行动作是「去授权」', (tester) async {
     await provider.setTransportEnabled(SyncTransportKind.lan, true);
-    transport.unavailableReason = SyncUnavailableReason.permissionDenied;
+    var requested = 0;
+    final permission = LocalNetworkPermission(
+      needsPermission: true,
+      request: () async {
+        requested++;
+        return LocalNetworkPermissionStatus.granted;
+      },
+      check: () async => LocalNetworkPermissionStatus.denied,
+    );
+    await permission.refresh();
+    provider.dispose();
+    provider = SyncProvider(
+      engine: engine,
+      controlPlane: control,
+      backup: backup,
+      lanPermission: permission,
+      localEndpoints: fakeEndpoints(),
+    );
+    await provider.init();
+    await pumpPage(tester);
+
+    expect(find.text('LAN permission required'), findsOneWidget);
+    await tester.tap(
+      find.byKey(const Key('settingsSyncLanPermissionGrant')),
+    );
+    await tester.pumpAndSettle();
+    expect(requested, 1);
+    expect(
+      find.byKey(const Key('settingsSyncLanPermissionItem')),
+      findsNothing,
+    );
+  });
+
+  testWidgets('开启局域网开关：先申请权限，授权后启用', (tester) async {
     var requested = 0;
     final permission = LocalNetworkPermission(
       needsPermission: true,
@@ -1193,10 +1235,110 @@ void main() {
     await provider.init();
     await pumpPage(tester);
 
-    expect(find.text('Grant LAN permission'), findsOneWidget);
-    await tester.tap(find.byKey(const Key('settingsSyncLanPermissionItem')));
+    await tester.tap(find.byKey(const Key('settingsSyncLanSwitch')));
     await tester.pumpAndSettle();
+
+    expect(requested, 1, reason: '开关即申请，不等传输启动时才问');
+    expect(provider.enabledTransports, contains(SyncTransportKind.lan));
+    expect(
+      find.byKey(const Key('settingsSyncLanPermissionItem')),
+      findsNothing,
+    );
+    expect(notifications.isEmpty, isTrue, reason: '授权成功不弹错误提示');
+  });
+
+  testWidgets('开启局域网被拒：开关回到关闭，底栏提示并可重试', (tester) async {
+    var requested = 0;
+    var granted = false;
+    final permission = LocalNetworkPermission(
+      needsPermission: true,
+      request: () async {
+        requested++;
+        return granted
+            ? LocalNetworkPermissionStatus.granted
+            : LocalNetworkPermissionStatus.denied;
+      },
+      check: () async => LocalNetworkPermissionStatus.denied,
+    );
+    provider.dispose();
+    provider = SyncProvider(
+      engine: engine,
+      controlPlane: control,
+      backup: backup,
+      lanPermission: permission,
+      localEndpoints: fakeEndpoints(),
+    );
+    await provider.init();
+    await pumpPage(tester);
+
+    await tester.tap(find.byKey(const Key('settingsSyncLanSwitch')));
+    await tester.pumpAndSettle();
+
     expect(requested, 1);
+    expect(provider.enabledTransports, isNot(contains(SyncTransportKind.lan)));
+    expect(notifications.last, 'LAN permission required');
+    expect(notifications.lastActionLabel, 'Grant');
+    // 底栏提示之外，开关下保留与桌面歌词同款的常驻警告行。
+    expect(
+      find.byKey(const Key('settingsSyncLanPermissionItem')),
+      findsOneWidget,
+    );
+    expect(
+      find.byKey(const Key('settingsSyncLanPermissionGrant')),
+      findsOneWidget,
+    );
+
+    // 底栏「去授权」重试：这次授予，开关打开、警告行消失。
+    granted = true;
+    notifications.lastAction!.call();
+    await tester.pumpAndSettle();
+    expect(requested, 2);
+    expect(provider.enabledTransports, contains(SyncTransportKind.lan));
+    expect(
+      find.byKey(const Key('settingsSyncLanPermissionItem')),
+      findsNothing,
+    );
+  });
+
+  testWidgets('开启局域网永久拒绝：开关关闭，提示动作去系统设置', (tester) async {
+    var requested = 0;
+    var opened = 0;
+    final permission = LocalNetworkPermission(
+      needsPermission: true,
+      request: () async {
+        requested++;
+        return LocalNetworkPermissionStatus.denied;
+      },
+      check: () async => LocalNetworkPermissionStatus.permanentlyDenied,
+      openSettings: () async => opened++,
+    );
+    provider.dispose();
+    provider = SyncProvider(
+      engine: engine,
+      controlPlane: control,
+      backup: backup,
+      lanPermission: permission,
+      localEndpoints: fakeEndpoints(),
+    );
+    await provider.init();
+    await pumpPage(tester);
+
+    await tester.tap(find.byKey(const Key('settingsSyncLanSwitch')));
+    await tester.pumpAndSettle();
+
+    expect(requested, 0, reason: '永久拒绝时系统不再弹窗，不应请求');
+    expect(provider.enabledTransports, isNot(contains(SyncTransportKind.lan)));
+    expect(notifications.last, 'LAN permission required');
+    expect(notifications.lastActionLabel, 'Open settings');
+    expect(
+      find.byKey(const Key('settingsSyncLanPermissionItem')),
+      findsOneWidget,
+    );
+    await tester.tap(
+      find.byKey(const Key('settingsSyncLanPermissionGrant')),
+    );
+    await tester.pumpAndSettle();
+    expect(opened, 1);
   });
 
   testWidgets('失败行按原因给可点动作：手动地址 / WebDAV / 重试', (tester) async {

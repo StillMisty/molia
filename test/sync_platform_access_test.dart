@@ -84,7 +84,67 @@ void main() {
       final permission = LocalNetworkPermission(needsPermission: true);
       expect(permission.status, LocalNetworkPermissionStatus.notRequested);
       expect(permission.granted, isTrue);
+      expect(permission.denied, isFalse);
+      expect(permission.needsUserAction, isFalse);
       expect(permission.permanentlyDenied, isFalse);
+    });
+
+    test('显式申请先复查系统状态：已授权不再请求', () async {
+      var requested = 0;
+      var checked = 0;
+      final permission = LocalNetworkPermission(
+        needsPermission: true,
+        request: () async {
+          requested++;
+          return LocalNetworkPermissionStatus.denied;
+        },
+        check: () async {
+          checked++;
+          return LocalNetworkPermissionStatus.granted;
+        },
+      );
+
+      expect(await permission.ensure(retry: true), isTrue);
+      expect(checked, 1, reason: '用户可能刚在系统设置里授权');
+      expect(requested, 0);
+    });
+
+    test('显式申请复查仍被拒：再次请求', () async {
+      var requested = 0;
+      var checked = 0;
+      final permission = LocalNetworkPermission(
+        needsPermission: true,
+        request: () async {
+          requested++;
+          return LocalNetworkPermissionStatus.denied;
+        },
+        check: () async {
+          checked++;
+          return LocalNetworkPermissionStatus.denied;
+        },
+      );
+
+      expect(await permission.ensure(retry: true), isFalse);
+      expect(checked, 1);
+      expect(requested, 1);
+      expect(permission.denied, isTrue);
+      expect(permission.needsUserAction, isTrue);
+    });
+
+    test('refresh 只查询：不触发权限请求', () async {
+      var requested = 0;
+      final permission = LocalNetworkPermission(
+        needsPermission: true,
+        request: () async {
+          requested++;
+          return LocalNetworkPermissionStatus.granted;
+        },
+        check: () async => LocalNetworkPermissionStatus.denied,
+      );
+
+      expect(await permission.refresh(), isFalse);
+      expect(requested, 0);
+      expect(permission.denied, isTrue);
     });
 
     test('永久拒绝：ensure 不再请求，UI 动作是去系统设置', () async {
@@ -132,7 +192,8 @@ void main() {
     });
 
     test('添加 / 学到信息合并 / 删除，跨重启保留', () async {
-      await state.addManualPeer(const ManualPeer(host: '192.168.1.23', name: '书房'));
+      await state
+          .addManualPeer(const ManualPeer(host: '192.168.1.23', name: '书房'));
       expect(state.manualPeers.single.name, '书房');
 
       // 首次接触学到 deviceId 与端点端口（同名地址合并，不新增条目）；
@@ -148,15 +209,15 @@ void main() {
       expect(state.manualPeers.single.name, '书房', reason: '用户命名优先');
 
       // 用户再次提交同一地址 = 显式改名。
-      await state.addManualPeer(
-          const ManualPeer(host: '192.168.1.23', name: '新名字'));
+      await state
+          .addManualPeer(const ManualPeer(host: '192.168.1.23', name: '新名字'));
       expect(state.manualPeers.single.name, '新名字');
       expect(state.manualPeers.single.deviceId, 'devB');
 
       // 未命名条目才吸收学到的名称。
       await state.addManualPeer(const ManualPeer(host: '10.0.0.9'));
-      await state.learnManualPeer(
-          const ManualPeer(host: '10.0.0.9', name: '设备C'));
+      await state
+          .learnManualPeer(const ManualPeer(host: '10.0.0.9', name: '设备C'));
       expect(
         state.manualPeers.firstWhere((p) => p.host == '10.0.0.9').name,
         '设备C',
@@ -170,7 +231,9 @@ void main() {
       await reloaded.init();
       expect(reloaded.manualPeers, hasLength(2));
       expect(
-        reloaded.manualPeers.firstWhere((p) => p.host == '192.168.1.23').deviceId,
+        reloaded.manualPeers
+            .firstWhere((p) => p.host == '192.168.1.23')
+            .deviceId,
         'devB',
       );
       expect(reloaded.lanHttpPort, 42000);

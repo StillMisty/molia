@@ -5559,6 +5559,18 @@ abstract class AppLocalizations {
   /// **'Permission not granted: LAN sync is unavailable (manual addresses cannot work around it). Switch to WebDAV instead.'**
   String get syncLanPermissionDenied;
 
+  /// No description provided for @syncLanPermissionNeeded.
+  ///
+  /// In en, this message translates to:
+  /// **'LAN permission required'**
+  String get syncLanPermissionNeeded;
+
+  /// No description provided for @syncLanPermissionGrant.
+  ///
+  /// In en, this message translates to:
+  /// **'Grant'**
+  String get syncLanPermissionGrant;
+
   /// No description provided for @syncOpenSystemSettings.
   ///
   /// In en, this message translates to:

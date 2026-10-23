@@ -363,7 +363,9 @@
   只在 MAC + HTTP 解密成功后回写（32 条上限、180 天淘汰、移除设备一并清理），
   广播被隔离时用它单播兜底。
   局域网在移动端有平台准入：Android 17 / API 37 起必须声明并运行时申请
-  `ACCESS_LOCAL_NETWORK`（未授予时状态 `permission_denied`，UI 给授权入口），
+  `ACCESS_LOCAL_NETWORK`（未授予时状态 `permission_denied`；申请只在用户开
+  局域网开关 / 点「去授权」时触发，启动与轮次只查状态不弹窗，被拒开关回退
+  关闭并给底栏 + 常驻警告行），
   iOS 广播发现需向 Apple 申请 multicast entitlement（未获批时降级手动地址 /
   WebDAV）；发现失败可用手动对端地址簿兜底（单播探测后认领 deviceId 与端点
   端口），本机端点端口持久化避免对端记不住本机。学习路径（广播 / 单播观测）

@@ -110,7 +110,8 @@ enum SyncIssueAction {
 /// 按失败原因给动作，不留死胡同；未知原因至少给「重试」。
 ///
 /// 列表最后一项是主推荐（弹层的 filled 确认按钮），其余收进内容区。
-List<SyncIssueAction> syncIssueActions(SyncIssue? issue) => switch (issue?.code) {
+List<SyncIssueAction> syncIssueActions(SyncIssue? issue) =>
+    switch (issue?.code) {
       SyncIssueCode.permissionDenied => const [
           SyncIssueAction.useWebdav,
           SyncIssueAction.grantPermission,
@@ -186,7 +187,9 @@ Future<void> showSyncIssueDialog(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
-              issue == null ? l10n.syncIssueUnknown : syncIssueText(l10n, issue),
+              issue == null
+                  ? l10n.syncIssueUnknown
+                  : syncIssueText(l10n, issue),
             ),
             if (secondary.isNotEmpty) const SizedBox(height: 8),
             for (final action in secondary)
@@ -289,12 +292,16 @@ Future<void> _grantLanPermission(
 ) async {
   final granted = await provider.requestLanPermission();
   if (granted || !context.mounted) return;
+  final permanent = provider.lanPermissionPermanentlyDenied;
   showSyncNotice(
     context,
-    l10n.syncLanPermissionDenied,
+    l10n.syncLanPermissionNeeded,
     isError: true,
-    actionLabel: l10n.syncOpenSystemSettings,
-    onAction: () => unawaited(provider.openSystemSettings()),
+    actionLabel:
+        permanent ? l10n.syncOpenSystemSettings : l10n.syncLanPermissionGrant,
+    onAction: () => unawaited(permanent
+        ? provider.openSystemSettings()
+        : _grantLanPermission(context, provider, l10n)),
   );
 }
 

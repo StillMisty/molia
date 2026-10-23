@@ -2950,6 +2950,12 @@ class AppLocalizationsZh extends AppLocalizations {
   String get syncLanPermissionDenied => '未获得权限：局域网同步不可用（手动填地址同样无效），可改用 WebDAV';
 
   @override
+  String get syncLanPermissionNeeded => '需要局域网权限';
+
+  @override
+  String get syncLanPermissionGrant => '去授权';
+
+  @override
   String get syncOpenSystemSettings => '去系统设置';
 
   @override
