@@ -8,6 +8,7 @@ import android.graphics.Point
 import android.graphics.Typeface
 import android.graphics.drawable.GradientDrawable
 import android.graphics.drawable.RippleDrawable
+import android.os.PowerManager
 import android.os.SystemClock
 import android.text.Layout
 import android.text.SpannableStringBuilder
@@ -490,6 +491,10 @@ internal class LyricsOverlayView(
     private var current: OverlayPresentation = OverlayPresentation()
     private var frozen = false
     private var pending: OverlayPresentation? = null
+
+    /** 屏幕是否交互：屏幕状态广播在进程 cached 时可能延迟 / 丢失，用系统事实兜底。 */
+    private val powerManager =
+        context.getSystemService(Context.POWER_SERVICE) as? PowerManager
     private var renderedStructure: List<EntryKey> = emptyList()
     private var entryViews = mutableListOf<TextView>()
     private var currentLineView: CurrentLineView? = null
@@ -652,6 +657,18 @@ internal class LyricsOverlayView(
     fun setPresentation(presentation: OverlayPresentation) {
         if (frozen && config.freezeOnScreenOff) {
             pending = presentation
+            // 息屏广播在进程 cached / 息屏动画期间可能延迟甚至丢失；设备
+            // 已经交互时直接解冻渲染，否则悬浮窗会永久停在息屏前那一行
+            // （表现为旧歌词卡住，直到暂停/恢复重建窗口）。
+            if (powerManager?.isInteractive == true) {
+                frozen = false
+                pending = null
+                render(
+                    presentation,
+                    animate = config.showToggleAnimation,
+                    force = false,
+                )
+            }
             return
         }
         render(presentation, animate = config.showToggleAnimation, force = false)
@@ -663,9 +680,16 @@ internal class LyricsOverlayView(
         frozen = value
         if (value) {
             // 冻结关（freezeOnScreenOff=false）保持原行为：息屏照常重绘。
-            if (config.freezeOnScreenOff) stopFrames()
+            if (config.freezeOnScreenOff) {
+                // 息屏会暂停 View 动画：先把滚入滚出收尾，否则旧列可能留在
+                // 视口里，亮屏后与新歌词重叠。
+                finishPendingRoll()
+                stopFrames()
+            }
             return
         }
+        // 亮屏：无论冻结开关，先收尾可能被系统暂停的滚入滚出。
+        finishPendingRoll()
         val next = pending
         if (next != null) {
             pending = null
@@ -959,7 +983,15 @@ internal class LyricsOverlayView(
         val newColumn = buildColumn(entries)
         val holderParams = contentHolder.layoutParams as? LinearLayout.LayoutParams
 
-        if (!animate || previousColumn.childCount == 0 || contentHolder.width <= 0) {
+        val oldHeight = previousColumn.height
+        // 宽度 / 高度未就绪（首次布局、刚建列）时直切：oldHeight = 0 会让
+        // 旧列原地淡出，与滚入的新列叠在一起。
+        val canAnimate = animate &&
+            previousColumn.childCount > 0 &&
+            contentHolder.width > 0 &&
+            oldHeight > 0
+        val newHeight = if (canAnimate) measureColumnHeight(newColumn) else 0
+        if (!canAnimate || newHeight <= 0) {
             holderParams?.height = LinearLayout.LayoutParams.WRAP_CONTENT
             contentHolder.removeAllViews()
             contentHolder.addView(
@@ -973,9 +1005,6 @@ internal class LyricsOverlayView(
             currentLineView?.let { bindCurrentLine(it) }
             return
         }
-
-        val oldHeight = previousColumn.height
-        val newHeight = measureColumnHeight(newColumn)
         // 过渡期间视口固定为新内容高度：旧块高出部分裁掉，窗口高度不抖。
         holderParams?.height = newHeight
         newColumn.translationY = newHeight.toFloat()
@@ -1016,6 +1045,15 @@ internal class LyricsOverlayView(
             .setDuration(ROLL_DURATION_MS)
             .setInterpolator(EASE_DECELERATE)
             .start()
+        // 防御：窗口不可见 / 系统暂停 View 动画时 withEndAction 不保证执行，
+        // 旧列会永久留在视口里与当前歌词重叠。正常动画早已结束；兜底时长
+        // 留足系统动画缩放（最高 10×）的余量。
+        newColumn.postDelayed(
+            {
+                if (textColumn === newColumn) finishPendingRoll()
+            },
+            ROLL_DURATION_MS + ROLL_CLEANUP_GRACE_MS,
+        )
     }
 
     /** 结束未完成的滚入滚出：旧块直接移除、视口回到跟随内容。 */
@@ -1304,6 +1342,9 @@ internal class LyricsOverlayView(
     private companion object {
         /** 行内容滚入滚出时长（M3 强调缓动 decelerate 段）。 */
         const val ROLL_DURATION_MS = 240L
+
+        /** 滚入滚出结束后的兜底清理余量（毫秒）：覆盖系统 10× 动画缩放。 */
+        const val ROLL_CLEANUP_GRACE_MS = 3000L
 
         /** 样本延迟夹取上限（毫秒）：防御墙上时钟被调整 / 异常数据。 */
         const val MAX_TRANSIT_MS = 1000L

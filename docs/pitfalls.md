@@ -755,3 +755,27 @@
     还在关闭动画里；接收方请求必须排队（`IncomingPairingQueue`）等当前窗
     真正关闭后再逐条展示，不能因为 `_incomingPairingOpen` 仍为真就把下一条
     直接拒绝。
+74. **桌面歌词滚入滚出的旧块不能只靠 `withEndAction` 移除**：滚入滚出把旧列
+    留在 `contentHolder` 里做位移动画、靠 `ViewPropertyAnimator.withEndAction`
+    移除。息屏 / 窗口不可见 / 系统暂停动画时 end action 不保证执行；若这时
+    又刚好切行，旧列会永久卡在视口里，与新歌词重叠显示（尤其息屏再亮屏后）。
+    收尾必须由宿主主动兜底：
+    ① `setFrozen(true)`（冻结开时）和 `setFrozen(false)` 都先
+    `finishPendingRoll()`——取消动画、移除旧列、把当前列复位到终态；
+    ② 滚入滚出启动后 `postDelayed` 一个兜底（`ROLL_DURATION_MS + 3s`，
+    覆盖系统最高 10× 动画缩放），若 `textColumn` 仍是这次的新列就收尾；
+    ③ 旧列高度未就绪（`previousColumn.height <= 0`）时不要走动画分支，
+    否则旧列原地淡出、与滚入的新列叠在一起；直接直切。
+    收尾逻辑要幂等（end action / 兜底 / 下一次重建都可能触发），只操作
+    `contentHolder` 的非 `textColumn` 子项，并复位 `textColumn` 的
+    `translationY` / `alpha`。
+75. **桌面歌词息屏冻结不能只靠 `ACTION_SCREEN_ON` 解冻**：屏幕 receiver 用
+    `RECEIVER_NOT_EXPORTED` 时收不到高权限进程（SystemUI 等）发出的部分系统
+    广播，典型是息屏能收到、亮屏收不到：原生 `frozen = true` 后解不开，新投送
+    只写进 `pending`，悬浮窗永久停在息屏前那一行——表现为旧歌词卡住，直到
+    暂停/恢复重建窗口才恢复。`ACTION_SCREEN_ON/OFF` 都是 **protected** 系统
+    广播，应使用 `ContextCompat.RECEIVER_EXPORTED`（其他应用无法伪造，安全性
+    不受影响），不要用 `RECEIVER_NOT_EXPORTED`。另外 `setPresentation` 的
+    `frozen` 分支必须用 `PowerManager.isInteractive` 兜底：设备已经交互就清
+    `frozen` + `pending` 并立即 `render`；`setFrozen(false)` 也先
+    `finishPendingRoll()`。不要用「屏幕广播一定到达」作为解冻前提。

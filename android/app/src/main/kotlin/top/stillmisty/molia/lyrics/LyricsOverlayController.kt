@@ -301,11 +301,16 @@ internal class LyricsOverlayController(
                 addAction(Intent.ACTION_SCREEN_OFF)
             }
             try {
+                // 屏幕状态是系统广播（ACTION_SCREEN_ON/OFF 为 protected）。
+                // RECEIVER_NOT_EXPORTED 收不到高权限进程（SystemUI 等）发出的
+                // 系统广播：息屏能收到、亮屏收不到时 frozen 永远解不开，悬浮窗
+                // 停在息屏前那一行。系统广播用 EXPORTED；其他应用无法伪造
+                // protected broadcast，安全性不受影响。
                 ContextCompat.registerReceiver(
                     context,
                     screenReceiver,
                     filter,
-                    ContextCompat.RECEIVER_NOT_EXPORTED,
+                    ContextCompat.RECEIVER_EXPORTED,
                 )
                 receiverRegistered = true
             } catch (_: Exception) {

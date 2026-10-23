@@ -101,7 +101,11 @@ Molia 当前只有在播放页内渲染的滚动歌词。桌面悬浮歌词、�
   未授权跳 `ACTION_MANAGE_OVERLAY_PERMISSION`；未授权不自动开启；回前台重读状态；
   权限被撤销时自动关闭开关并提示。
 - 息屏：`freezeOnScreenOff`（默认开）——原生上报屏幕状态，息屏期间停止下发与重绘，
-  亮屏恢复并立即刷新（对齐 LX `isAutoPause` 语义，不暂停音频）。
+  亮屏恢复并立即刷新（对齐 LX `isAutoPause` 语义，不暂停音频）。屏幕 receiver
+  用 `ContextCompat.RECEIVER_EXPORTED`（`ACTION_SCREEN_ON/OFF` 是 protected
+  系统广播；`NOT_EXPORTED` 会漏掉高权限进程发出的部分系统广播，息屏后解冻不
+  回来）。广播在进程 cached 时还可能延迟 / 丢失：冻结期间收到新投送时用
+  `PowerManager.isInteractive` 兜底，设备已交互就立即解冻渲染。
 
 **渲染**
 
@@ -161,6 +165,8 @@ Molia 当前只有在播放页内渲染的滚动歌词。桌面悬浮歌词、�
 - 行切换动画：`showToggleAnimation`（默认开）——内容结构变化时整块滚入滚出
   （旧块上移滚出、新块自下滚入，视口高度按新内容固定，M3 强调缓动 ~240ms）；
   同结构更新（逐字进度 / 播放态）不重建视图，不打断滚动与动画；关闭则直切。
+  息屏冻结 / 亮屏恢复先收尾未完成的滚入滚出（并超时兜底），否则系统暂停
+  View 动画时旧块可能卡在视口里，与新歌词重叠。
 - 无歌词：`noLyricsBehavior = title | hide`（默认 `title`，显示歌名）。
 - 暂停：`hideOnPause`（默认开）＝**整窗隐藏**——暂停即 `desktop.hide` 移除悬浮窗
   （含触摸区），恢复播放时重建窗口 + 回投内容，位置由原生持久化（回到原处）；
