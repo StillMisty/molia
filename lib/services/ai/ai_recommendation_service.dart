@@ -11,6 +11,7 @@
 /// 预览与实际请求共用 [buildPrompt]：相同输入下预览文本 == 实际 userPrompt。
 library;
 
+import 'dart:async';
 import 'dart:convert';
 import 'dart:math' as math;
 
@@ -77,7 +78,9 @@ class AiRecommendationService implements AiRecommendationGenerator {
     required SourceRegistry registry,
     required TasteProfileBuilder profileBuilder,
     this.resolveConcurrency = 3,
-  })  : _llm = llm,
+    this.resolveHedgeDelay = const Duration(milliseconds: 250),
+  })  : assert(!resolveHedgeDelay.isNegative),
+        _llm = llm,
         _catalog = catalog,
         _registry = registry,
         _profileBuilder = profileBuilder;
@@ -89,6 +92,13 @@ class AiRecommendationService implements AiRecommendationGenerator {
 
   /// 解析并发（同时搜索的曲目数）。
   final int resolveConcurrency;
+
+  /// 单曲找歌的对冲延时：先序音源超过该时长仍未返回时，提前启动下一个。
+  ///
+  /// 只影响「启动时机」，不改变优先级：命中必须按音源页顺序接受，后序源再快
+  /// 也要等先序源确认无命中；先序源命中时取消后续启动（已发出的请求无法撤销，
+  /// 结果直接丢弃）。
+  final Duration resolveHedgeDelay;
 
   static const String systemPrompt =
       '你是一名中文音乐推荐助手。只输出 JSON，不要输出解释或 Markdown 代码块。'
@@ -518,31 +528,129 @@ class AiRecommendationService implements AiRecommendationGenerator {
     );
   }
 
+  /// 按音源页顺序找歌：对冲启动 + 严格优先级接受。
+  ///
+  /// 串行探测时，一个迟迟不返回的音源会挡住后面所有渠道；这里先启动 index 0，
+  /// 超过 [resolveHedgeDelay] 仍未完成才启动 index 1，之后每个延时窗口再放一个。
+  /// 已启动音源全部快速完成且未命中时立即启动下一个（不白等延时），因此正常
+  /// 快速返回的场景与串行行为一致。
+  ///
+  /// 命中按 index 顺序接受：index i 的结果只有在其前面所有音源都已完成且未命中
+  /// 后才能返回；先序源仍可能在途时继续等待。任一音源命中后不再启动新音源，
+  /// 已在途的探测结果直接丢弃。
   Future<({Track track, String sourceName})?> _resolveOne(
     AiRecommendation recommendation,
     List<SourceDescriptor> sources,
-  ) async {
+  ) {
+    if (sources.isEmpty) return Future.value(null);
     final keyword = [recommendation.title, recommendation.artist]
         .where((value) => value.trim().isNotEmpty)
         .join(' ');
-    for (final descriptor in sources) {
-      try {
-        final result = await _catalog.search(
-          descriptor.key,
-          SearchQuery(keyword: keyword, limit: 10),
-        );
-        final best = pickBestMatch(recommendation, result.items);
-        if (best != null) {
-          return (
-            track: await _withArtwork(descriptor, best),
-            sourceName: descriptor.displayName,
-          );
-        }
-      } catch (_) {
-        // 单音源失败（引擎重启/网络）：按用户渠道顺序换下一个；全失败判未解析。
-      }
+
+    final results =
+        List<({Track track, String sourceName})?>.filled(sources.length, null);
+    final completed = List<bool>.filled(sources.length, false);
+    final completer = Completer<({Track track, String sourceName})?>();
+    Timer? hedge;
+    var next = 0;
+    var settled = false;
+
+    void finish(({Track track, String sourceName})? match) {
+      if (settled) return;
+      settled = true;
+      hedge?.cancel();
+      completer.complete(match);
     }
-    return null;
+
+    // launch / schedule 互相调用（探测完成前排下一个），用 late 变量声明。
+    late void Function() launch;
+    late void Function() schedule;
+
+    void drain() {
+      if (settled) return;
+      var i = 0;
+      for (; i < next; i++) {
+        if (!completed[i]) break;
+        final match = results[i];
+        if (match != null) {
+          finish(match);
+          return;
+        }
+      }
+      if (i < next) {
+        // 还有在途音源：若后面已有候选命中，就停掉计时器等先序确认；
+        // 否则保留计时器，到下个窗口再对冲放行下一个。
+        for (var j = i; j < next; j++) {
+          if (completed[j] && results[j] != null) {
+            hedge?.cancel();
+            return;
+          }
+        }
+        return;
+      }
+      if (next >= sources.length) {
+        finish(null);
+        return;
+      }
+      // 已启动音源都没有命中：继续下一个不必再等对冲延时。
+      hedge?.cancel();
+      launch();
+      schedule();
+    }
+
+    void record(int index, ({Track track, String sourceName})? match) {
+      if (settled) return;
+      results[index] = match;
+      completed[index] = true;
+      drain();
+    }
+
+    launch = () {
+      if (settled || next >= sources.length) return;
+      final index = next++;
+      _probeSource(recommendation, keyword, sources[index]).then(
+        (match) => record(index, match),
+        // 探测内部已兜底；双保险，保证被丢弃的在途失败也不会冒泡。
+        onError: (Object _) => record(index, null),
+      );
+    };
+
+    schedule = () {
+      hedge?.cancel();
+      if (settled || next >= sources.length) return;
+      hedge = Timer(resolveHedgeDelay, () {
+        if (settled || next >= sources.length) return;
+        launch();
+        schedule();
+      });
+    };
+
+    launch();
+    schedule();
+    return completer.future;
+  }
+
+  /// 单个音源探测；异常按「该音源无命中」处理，保证丢弃结果或在途失败不冒泡。
+  Future<({Track track, String sourceName})?> _probeSource(
+    AiRecommendation recommendation,
+    String keyword,
+    SourceDescriptor descriptor,
+  ) async {
+    try {
+      final result = await _catalog.search(
+        descriptor.key,
+        SearchQuery(keyword: keyword, limit: 10),
+      );
+      final best = pickBestMatch(recommendation, result.items);
+      if (best == null) return null;
+      return (
+        track: await _withArtwork(descriptor, best),
+        sourceName: descriptor.displayName,
+      );
+    } catch (_) {
+      // 单音源失败（引擎重启/网络）：按用户渠道顺序换下一个；全失败判未解析。
+      return null;
+    }
   }
 
   /// 封面补取：解析命中但无封面时经音源 `artwork()`（脚本 `pic` action /

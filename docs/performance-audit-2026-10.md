@@ -273,6 +273,23 @@ Xvfb 软件光栅的帧耗时不用于结论，只对比图片缓存。Windows 1
 验证：相关 cache / `.lxmc` / 仓库测试通过；`flutter analyze --no-pub` 无问题；
 全量 `flutter test --no-pub` 通过。
 
+### 3.3.4 AI 推歌与歌词缓存（2026-10-23）
+
+- **资料画像**：`LibraryStore.listPlaylistTracks` 增加可选 `limit` 并下推到
+  Drift；收藏只读前 100 首、最多 10 个自建歌单各读前 20 首且并发执行，
+  保持歌单顺序与 100 首总量上限。已听排除查询从 1000 降到实际使用的 500。
+  单个歌单读取失败只丢该段。
+- **找歌渠道**：从严格串行改为「先序源 + 250ms 对冲」：先启动首个音源，
+  超时才启动下一个；命中仍严格按音源页顺序接受，后序源先返回只能作为候选，
+  先序源最终命中优先。快速返回时与串行一致，不额外请求后续渠道。
+- **歌词缓存**：生产组合根经 `LyricsCache.appSupport()` 接入
+  `<appSupport>/lyrics_cache`，一条歌词一个 md5 文件、临时文件 + rename
+  原子写；旧 `lyrics_cache_*` prefs 条目首次读取懒迁移，`usage` 目录扫描
+  走短命 isolate。默认 `LyricsCache()` 仍走 prefs，避免 widget 测试的
+  fake async 等待文件 Future。
+
+验证：AI / 歌词 / 全量测试通过；`flutter analyze --no-pub` 无问题。
+
 ### 3.4 内存（Windows，本机实测）
 
 | 状态 | 专用工作集 | 提交 |
@@ -326,8 +343,8 @@ Xvfb 软件光栅的帧耗时不用于结论，只对比图片缓存。Windows 1
 - 生产组合根已把歌词缓存迁到按曲目单文件（`LyricsCache.appSupport()` + 旧
   prefs 懒迁移，目录占用扫描走短命 isolate；默认实例仍走 prefs），待补
   release 口径的前后对比；
-- AI DJ 的串行取源、搜索/取链的端到端时延仍会拉长等待；`.lxmc` 大文件
-  解码与缓存目录扫描已由 §3.3.3 移出 UI isolate；
+- AI DJ 的找歌已做优先级对冲（§3.3.4），搜索/取链的端到端时延矩阵仍待补；
+  `.lxmc` 大文件解码与缓存目录扫描已由 §3.3.3 移出 UI isolate；
 - 若目标是降低「触摸到呈现」的延迟，再评估 shader 缓存 / 帧调度；
 - 真机 Android / iOS 仍需设备侧采样（模拟器的首个平台通道等待会掩盖
   Dart 侧收益）。

@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter_test/flutter_test.dart';
@@ -52,8 +53,12 @@ class _FakeLlm extends LlmClient {
 
 /// 假音源：search 返回固定结果（其余成员不会被调用）。
 class _FakeSource implements MusicSource {
-  _FakeSource(this.key, this.results, {String? displayName})
-      : displayName = displayName ?? key;
+  _FakeSource(
+    this.key,
+    this.results, {
+    String? displayName,
+    this.searchGate,
+  }) : displayName = displayName ?? key;
 
   @override
   final String key;
@@ -62,6 +67,9 @@ class _FakeSource implements MusicSource {
   final String displayName;
 
   final List<Track> results;
+
+  /// 测试用闸门：非空时 search 等待其完成后再返回（模拟慢音源）。
+  final Completer<void>? searchGate;
 
   String? artworkUrl;
   int artworkCalls = 0;
@@ -81,6 +89,8 @@ class _FakeSource implements MusicSource {
   Future<SearchResult<Track>> search(SearchQuery query,
       {CancelToken? cancel}) async {
     searchCalls++;
+    final gate = searchGate;
+    if (gate != null) await gate.future;
     return SearchResult(items: results);
   }
 
@@ -144,6 +154,21 @@ Track _track(
       payload: raw,
     );
 
+/// 轮询等待条件成立（真实计时器场景用；超时直接失败，避免挂住测试）。
+Future<void> _waitUntil(
+  bool Function() condition, {
+  Duration timeout = const Duration(seconds: 2),
+  String? reason,
+}) async {
+  final deadline = DateTime.now().add(timeout);
+  while (!condition()) {
+    if (DateTime.now().isAfter(deadline)) {
+      fail(reason ?? '等待条件超时');
+    }
+    await Future<void>.delayed(const Duration(milliseconds: 5));
+  }
+}
+
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
@@ -179,6 +204,7 @@ void main() {
     List<_FakeSource> sources, {
     Map<String, ({int order, bool enabled})> config = const {},
     int resolveConcurrency = 3,
+    Duration resolveHedgeDelay = const Duration(milliseconds: 250),
   }) {
     final registry = _FakeRegistry([
       for (final source in sources)
@@ -197,6 +223,7 @@ void main() {
         libraryStore: library,
       ),
       resolveConcurrency: resolveConcurrency,
+      resolveHedgeDelay: resolveHedgeDelay,
     );
   }
 
@@ -654,6 +681,97 @@ void main() {
       expect(s2.searchCalls, 1);
       expect(s3.searchCalls, 1);
       expect(s4.searchCalls, 1);
+    });
+
+    test('先序源立即命中：不启动后序源（对冲计时器不改变原有行为）', () async {
+      final s1 = _FakeSource('s1', [_track('a', '歌', '手', source: 's1')]);
+      final s2 = _FakeSource('s2', [_track('a', '歌', '手', source: 's2')]);
+      service = buildService(
+        [s1, s2],
+        resolveHedgeDelay: const Duration(milliseconds: 50),
+      );
+      llm.response = jsonEncode({
+        'songs': [
+          {'title': '歌', 'artist': '手'},
+        ],
+      });
+
+      final batch = await service.generate(config: config, count: 10);
+
+      expect(batch.items.single.track.id.sourceKey, 's1');
+      expect(s1.searchCalls, 1);
+      expect(s2.searchCalls, 0, reason: '先序命中后不再启动后续渠道');
+    });
+
+    test('慢源对冲：后序源先返回也不抢先序源最终命中', () async {
+      final slowGate = Completer<void>();
+      final slow = _FakeSource(
+        's1',
+        [_track('a', '歌', '手', source: 's1')],
+        searchGate: slowGate,
+      );
+      final fast = _FakeSource('s2', [_track('a', '歌', '手', source: 's2')]);
+      service = buildService(
+        [slow, fast],
+        resolveHedgeDelay: const Duration(milliseconds: 100),
+      );
+      llm.response = jsonEncode({
+        'songs': [
+          {'title': '歌', 'artist': '手'},
+        ],
+      });
+
+      final pending = service.generate(config: config, count: 10);
+      await _waitUntil(() => slow.searchCalls == 1);
+      expect(fast.searchCalls, 0, reason: '对冲延时未到，不提前启动后序源');
+      await _waitUntil(
+        () => fast.searchCalls == 1,
+        reason: '先序源超过对冲延时未返回，应启动后序源',
+      );
+
+      slowGate.complete();
+      final batch = await pending;
+
+      expect(
+        batch.items.single.track.id.sourceKey,
+        's1',
+        reason: '后序源先返回也只算候选；先序源最终命中必须优先',
+      );
+    });
+
+    test('后序源命中需等先序源确认未命中后才采用', () async {
+      final slowGate = Completer<void>();
+      final slow = _FakeSource('s1', const [], searchGate: slowGate);
+      final fast = _FakeSource('s2', [_track('a', '歌', '手', source: 's2')]);
+      final later = _FakeSource('s3', [_track('a', '歌', '手', source: 's3')]);
+      service = buildService(
+        [slow, fast, later],
+        resolveHedgeDelay: const Duration(milliseconds: 20),
+      );
+      llm.response = jsonEncode({
+        'songs': [
+          {'title': '歌', 'artist': '手'},
+        ],
+      });
+
+      var done = false;
+      final pending =
+          service.generate(config: config, count: 10).whenComplete(() {
+        done = true;
+      });
+      await _waitUntil(() => fast.searchCalls == 1);
+      await Future<void>.delayed(const Duration(milliseconds: 30));
+      expect(done, isFalse, reason: '先序源仍在途，后序命中不能提前返回');
+
+      slowGate.complete();
+      final batch = await pending;
+
+      expect(
+        batch.items.single.track.id.sourceKey,
+        's2',
+        reason: '先序源最终无命中后，采用后序源命中',
+      );
+      expect(later.searchCalls, 0, reason: '已有候选命中，不再浪费后续请求');
     });
 
     test('停用渠道不参与解析', () async {

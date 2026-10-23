@@ -316,6 +316,100 @@ void main() {
       expect(artists[1].listenedMs, 120000);
     });
 
+    test('topArtists SQL 分组与逐事件语义一致（混合无效事件 + 多歌手串）', () async {
+      final base = DateTime(2026, 3, 4, 9).millisecondsSinceEpoch;
+      // 同一原始串「A, B」：一条达到阈值（skipped 也按阈值算有效），
+      // 一条未达阈值（completed 也不算有效）。
+      await insertEvent(
+        songId: 'duet-qualified',
+        artist: 'A, B',
+        listenedMs: 60000,
+        durationMs: 200000,
+        endReason: 'skipped',
+        startedAt: base,
+        endedAt: base + 60000,
+      );
+      await insertEvent(
+        songId: 'duet-unqualified',
+        artist: 'A, B',
+        listenedMs: 10000,
+        durationMs: 200000,
+        endReason: 'completed',
+        startedAt: base + 1000,
+        endedAt: base + 11000,
+      );
+      // 与上面的原始串不同、但拆出同名歌手：合并到同一歌手。
+      await insertEvent(
+        songId: 'solo-b',
+        artist: 'B',
+        listenedMs: 60000,
+        durationMs: 200000,
+        endReason: 'completed',
+        startedAt: base + 2000,
+        endedAt: base + 62000,
+      );
+      // 只有未达阈值事件的歌手不出现在榜单里。
+      await insertEvent(
+        songId: 'only-skipped',
+        artist: 'C',
+        listenedMs: 1000,
+        durationMs: 200000,
+        endReason: 'skipped',
+        startedAt: base + 3000,
+        endedAt: base + 4000,
+      );
+      // 空 artist 串不产生空名字条目。
+      await insertEvent(
+        songId: 'no-artist',
+        artist: '',
+        listenedMs: 60000,
+        durationMs: 200000,
+        endReason: 'completed',
+        startedAt: base + 4000,
+        endedAt: base + 64000,
+      );
+
+      final artists = await repository.topArtists();
+
+      expect(artists.map((entry) => entry.artist).toList(), ['B', 'A']);
+      expect(artists[0].playCount, 2);
+      expect(artists[0].listenedMs, 120000, reason: '无效事件的时长不计入');
+      expect(artists[1].playCount, 1);
+      expect(artists[1].listenedMs, 60000);
+
+      // limit 在拆分合并之后生效（按歌手名而非原始串取前 N）。
+      final topOne = await repository.topArtists(limit: 1);
+      expect(topOne.map((entry) => entry.artist).toList(), ['B']);
+    });
+
+    test('topArtists 的 since 只统计窗口内的有效播放', () async {
+      final base = DateTime(2026, 3, 11, 12).millisecondsSinceEpoch;
+      await insertEvent(
+        songId: 'old',
+        artist: 'Old',
+        listenedMs: 60000,
+        durationMs: 200000,
+        endReason: 'completed',
+        startedAt: base - 100000,
+        endedAt: base - 40000,
+      );
+      await insertEvent(
+        songId: 'new',
+        artist: 'New',
+        listenedMs: 60000,
+        durationMs: 200000,
+        endReason: 'completed',
+        startedAt: base,
+        endedAt: base + 60000,
+      );
+
+      final artists = await repository.topArtists(since: base);
+
+      expect(artists.map((entry) => entry.artist).toList(), ['New']);
+      expect(artists.single.playCount, 1);
+      expect(artists.single.listenedMs, 60000);
+    });
+
     test('splitArtistNames 纯函数（含中西分隔符）', () {
       expect(
         PlayStatisticsRepository.splitArtistNames('A, B/C&D、E;F；G，H'),
