@@ -305,7 +305,7 @@ class LibraryRepository implements LibraryStore, LibrarySyncStore {
     Uint8List bytes, {
     String? fileName,
   }) async {
-    final decoded = decodeLxmcBytes(bytes, fileName: fileName);
+    final decoded = await decodeLxmcBytesOffThread(bytes, fileName: fileName);
     if (decoded.tracks.isEmpty) {
       throw const LxmcDecodeException('no_tracks');
     }

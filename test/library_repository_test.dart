@@ -1,10 +1,13 @@
 import 'dart:convert';
 import 'dart:io';
+import 'dart:math';
 import 'dart:typed_data';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:molia/data/library_repository.dart';
 import 'package:molia/data/lxmc_decoder.dart';
+import 'package:molia/data/lxmc_decoder_io.dart'
+    show lxmcDecodeIsolateThreshold, shouldDecodeLxmcBytesOffThread;
 import 'package:molia/data/molia_database.dart';
 import 'package:molia/domain/models/device_sync.dart';
 import 'package:molia/domain/models/library.dart';
@@ -48,6 +51,25 @@ void main() {
           },
         },
       };
+
+  /// 超过 isolate 阈值的错误输入：确保仓库导入走异步解码路径。
+  Uint8List largeInvalidJson() {
+    final random = Random(7);
+    final noise = List<int>.generate(
+      lxmcDecodeIsolateThreshold + 1024,
+      (_) => random.nextInt(256),
+    );
+    return Uint8List.fromList(gzip.encode(noise));
+  }
+
+  Uint8List largeWrongRoot() => lxmcBytes({
+        'type': 'playList_v2',
+        'data': {
+          'id': 'x',
+          'name': 'x',
+          'list': [for (var i = 0; i < 4000; i++) track(i)],
+        },
+      });
 
   setUp(() async {
     db = openMemoryDatabase();
@@ -480,13 +502,20 @@ void main() {
 
   group('.lxmc 导入', () {
     test('真实夹具导入 1018 首 + 重复导入幂等', () async {
-      final bytes =
-          File('test/fixtures/lx_list_love.lxmc').readAsBytesSync();
+      final bytes = Uint8List.fromList(
+          File('test/fixtures/lx_list_love.lxmc').readAsBytesSync());
+      // 夹具压缩后 >64KB：走异步解码，与同步结果对齐后再落库。
+      expect(bytes.length, greaterThan(lxmcDecodeIsolateThreshold));
+      expect(shouldDecodeLxmcBytesOffThread(bytes), isTrue);
+      final decoded = decodeLxmcBytes(bytes, fileName: 'lx_list_love.lxmc');
 
       final result = await repository.importLxmcBytes(
-        Uint8List.fromList(bytes),
+        bytes,
         fileName: 'lx_list_love.lxmc',
       );
+      expect(result.playlistName, decoded.name);
+      expect(result.total, decoded.tracks.length);
+      expect(result.skipped, decoded.skipped);
       expect(result.playlistName, 'love');
       expect(result.total, 1018);
       expect(result.imported, 1018);
@@ -500,7 +529,7 @@ void main() {
 
       // 重复导入：同名列表复用，唯一约束保证 0 新增
       final again = await repository.importLxmcBytes(
-        Uint8List.fromList(bytes),
+        bytes,
         fileName: 'lx_list_love.lxmc',
       );
       expect(again.playlistId, result.playlistId);
@@ -532,6 +561,22 @@ void main() {
         throwsA(isA<LxmcDecodeException>()
             .having((e) => e.reason, 'reason', 'no_tracks')),
       );
+    });
+
+    test('大文件错误原因经仓库导入保持', () async {
+      final cases = <(Uint8List, String)>[
+        (Uint8List(lxmcDecodeIsolateThreshold), 'not_gzip'),
+        (largeInvalidJson(), 'invalid_json'),
+        (largeWrongRoot(), 'not_play_list'),
+      ];
+      for (final (bytes, reason) in cases) {
+        expect(shouldDecodeLxmcBytesOffThread(bytes), isTrue);
+        await expectLater(
+          repository.importLxmcBytes(bytes),
+          throwsA(isA<LxmcDecodeException>()
+              .having((e) => e.reason, 'reason', reason)),
+        );
+      }
     });
   });
 

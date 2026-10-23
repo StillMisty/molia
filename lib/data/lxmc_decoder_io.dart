@@ -11,13 +11,93 @@ library;
 
 import 'dart:convert';
 import 'dart:io';
+import 'dart:isolate';
 import 'dart:typed_data';
+
+import 'package:flutter/foundation.dart' show visibleForTesting;
 
 import '../sources/raw_track.dart';
 import 'lxmc_decoder_models.dart';
 
 /// 导出名称前缀（`list__name_love` → `love`）。
 const String _namePrefix = 'list__name_';
+
+/// 走 worker isolate 的压缩字节阈值（64KB）。
+///
+/// 低于阈值的文件 gzip/JSON 解码是毫秒级，isolate 启停开销反而更贵；
+/// 达到阈值（数千首的导出）才把解码与逐条映射挪出 UI isolate。
+@visibleForTesting
+const int lxmcDecodeIsolateThreshold = 64 * 1024;
+
+/// 本次输入是否走 isolate（与 [decodeLxmcBytesOffThread] 共用同一判定；
+/// 测试据此锁定小文件仍走同步快路径）。
+@visibleForTesting
+bool shouldDecodeLxmcBytesOffThread(Uint8List bytes) =>
+    bytes.lengthInBytes >= lxmcDecodeIsolateThreshold;
+
+/// 异步解码入口：大文件在 worker isolate 完成 gzip + UTF-8 + JSON + 映射，
+/// 小文件仍走 [decodeLxmcBytes] 同步快路径。
+///
+/// 调用方是顶层函数，[Isolate.run] 的闭包只捕获 [bytes] / [fileName]，
+/// 不捕获 `this` 或平台对象。异常对象不跨边界：worker 内把
+/// [LxmcDecodeException] 转成可发送的结果，调用侧再重建同样的异常类型；
+/// 非预期异常回传文本与远端栈，调用侧以 [StateError] 重建（保留原因）。
+Future<LxmcDecodedPlaylist> decodeLxmcBytesOffThread(
+  Uint8List bytes, {
+  String? fileName,
+}) async {
+  if (!shouldDecodeLxmcBytesOffThread(bytes)) {
+    return decodeLxmcBytes(bytes, fileName: fileName);
+  }
+
+  final outcome = await Isolate.run(
+    () => _decodeLxmcInIsolate(bytes, fileName),
+    debugName: 'molia-lxmc-decode',
+  );
+  return switch (outcome) {
+    _LxmcDecodeSuccess(:final playlist) => playlist,
+    _LxmcDecodeFailure(:final reason) => throw LxmcDecodeException(reason),
+    _LxmcDecodeCrash(:final error, :final stack) => Error.throwWithStackTrace(
+        StateError('lxmc 解码失败：$error'),
+        StackTrace.fromString(stack),
+      ),
+  };
+}
+
+/// worker 主函数：只做纯 CPU 解码，返回可发送的结果（不含异常对象）。
+_LxmcDecodeOutcome _decodeLxmcInIsolate(Uint8List bytes, String? fileName) {
+  try {
+    return _LxmcDecodeSuccess(decodeLxmcBytes(bytes, fileName: fileName));
+  } on LxmcDecodeException catch (e) {
+    return _LxmcDecodeFailure(e.reason);
+  } catch (e, stack) {
+    return _LxmcDecodeCrash('$e', '$stack');
+  }
+}
+
+/// isolate 回传结果：全部字段可发送。
+sealed class _LxmcDecodeOutcome {
+  const _LxmcDecodeOutcome();
+}
+
+final class _LxmcDecodeSuccess extends _LxmcDecodeOutcome {
+  const _LxmcDecodeSuccess(this.playlist);
+
+  final LxmcDecodedPlaylist playlist;
+}
+
+final class _LxmcDecodeFailure extends _LxmcDecodeOutcome {
+  const _LxmcDecodeFailure(this.reason);
+
+  final String reason;
+}
+
+final class _LxmcDecodeCrash extends _LxmcDecodeOutcome {
+  const _LxmcDecodeCrash(this.error, this.stack);
+
+  final String error;
+  final String stack;
+}
 
 LxmcDecodedPlaylist decodeLxmcBytes(Uint8List bytes, {String? fileName}) {
   final List<int> decompressed;

@@ -15,3 +15,11 @@ export 'lxmc_decoder_models.dart';
 /// / `not_play_list`）。
 LxmcDecodedPlaylist decodeLxmcBytes(Uint8List bytes, {String? fileName}) =>
     impl.decodeLxmcBytes(bytes, fileName: fileName);
+
+/// 异步解码入口（导入路径使用）：大文件解码与映射移到 worker isolate，
+/// 小文件仍走同步快路径；异常原因与 [decodeLxmcBytes] 一致。
+Future<LxmcDecodedPlaylist> decodeLxmcBytesOffThread(
+  Uint8List bytes, {
+  String? fileName,
+}) =>
+    impl.decodeLxmcBytesOffThread(bytes, fileName: fileName);

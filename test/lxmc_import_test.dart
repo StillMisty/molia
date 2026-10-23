@@ -1,9 +1,12 @@
 import 'dart:convert';
 import 'dart:io';
+import 'dart:math';
 import 'dart:typed_data';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:molia/data/lxmc_decoder.dart';
+import 'package:molia/data/lxmc_decoder_io.dart'
+    show lxmcDecodeIsolateThreshold, shouldDecodeLxmcBytesOffThread;
 
 /// `.lxmc` 解码测试：真实 LX Music 导出夹具（1018 首）+ 合成异常夹具。
 void main() {
@@ -14,6 +17,48 @@ void main() {
   Map<String, dynamic> wrap(List<dynamic> list, {String name = 'list__name_x'}) => {
         'type': 'playListPart_v2',
         'data': {'id': 'x', 'name': name, 'list': list},
+      };
+
+  /// 超过 isolate 阈值的合成列表（压缩后 > 64KB）。
+  List<Map<String, dynamic>> largeTracks([int count = 4000]) => [
+        for (var i = 0; i < count; i++)
+          {
+            'id': 'wy_$i',
+            'name': 'Song $i',
+            'singer': 'Artist $i',
+            'source': 'wy',
+            'interval': '03:00',
+            'meta': {
+              'songId': i,
+              'albumName': 'Album $i',
+              'picUrl': 'https://img.example/$i.jpg',
+              'qualitys': [
+                {'type': '128k', 'size': '1 MiB'},
+              ],
+              '_qualitys': {
+                '320k': {'size': '2 MiB'},
+              },
+            },
+          },
+      ];
+
+  /// 可发送模型 → 纯数据描述，便于比较同步 / isolate 两条路径的结果。
+  Map<String, Object?> describe(LxmcDecodedPlaylist playlist) => {
+        'name': playlist.name,
+        'skipped': playlist.skipped,
+        'tracks': [
+          for (final track in playlist.tracks)
+            {
+              'sourceKey': track.sourceKey,
+              'songId': track.songId,
+              'title': track.title,
+              'artist': track.artist,
+              'album': track.album,
+              'coverUrl': track.coverUrl,
+              'durationMs': track.durationMs,
+              'raw': track.raw,
+            },
+        ],
       };
 
   group('真实夹具（test/fixtures/lx_list_love.lxmc）', () {
@@ -153,6 +198,91 @@ void main() {
         fileName: 'lx_list_part_list__name_love.lxmc',
       );
       expect(decoded.name, 'list__name_love');
+    });
+  });
+
+  group('异步解码（>64KB 走 isolate，小文件保持同步）', () {
+    test('阈值判定：低于 64KB 同步，达到阈值走 isolate', () {
+      expect(
+        shouldDecodeLxmcBytesOffThread(
+          Uint8List(lxmcDecodeIsolateThreshold - 1),
+        ),
+        isFalse,
+      );
+      expect(
+        shouldDecodeLxmcBytesOffThread(Uint8List(lxmcDecodeIsolateThreshold)),
+        isTrue,
+      );
+    });
+
+    test('大文件异步解码与同步结果一致（含 fileName 与 raw 保真）', () async {
+      const fileName = 'lx_list_part_list__name_big.lxmc';
+      final bytes = lxmc(wrap(largeTracks(), name: ''));
+      expect(bytes.length, greaterThan(lxmcDecodeIsolateThreshold));
+
+      final sync = decodeLxmcBytes(bytes, fileName: fileName);
+      final offThread = await decodeLxmcBytesOffThread(
+        bytes,
+        fileName: fileName,
+      );
+      expect(offThread.name, 'list__name_big');
+      expect(describe(offThread), describe(sync));
+    });
+
+    test('小文件仍走同步快路径：结果与同步入口一致', () async {
+      final bytes = lxmc(wrap([
+        {
+          'id': 'wy_1',
+          'name': 'Small',
+          'singer': 'A',
+          'source': 'wy',
+          'meta': {'songId': 1},
+        },
+      ]));
+      expect(shouldDecodeLxmcBytesOffThread(bytes), isFalse);
+
+      final sync = decodeLxmcBytes(bytes);
+      final offThread = await decodeLxmcBytesOffThread(bytes);
+      expect(describe(offThread), describe(sync));
+    });
+
+    test('大文件非 gzip 字节 → not_gzip', () async {
+      final bytes = Uint8List(lxmcDecodeIsolateThreshold);
+      await expectLater(
+        decodeLxmcBytesOffThread(bytes),
+        throwsA(isA<LxmcDecodeException>()
+            .having((e) => e.reason, 'reason', 'not_gzip')),
+      );
+    });
+
+    test('大文件 gzip 内非法 JSON → invalid_json', () async {
+      final random = Random(7);
+      final noise = List<int>.generate(
+        lxmcDecodeIsolateThreshold + 1024,
+        (_) => random.nextInt(256),
+      );
+      final bytes = Uint8List.fromList(gzip.encode(noise));
+      expect(bytes.length, greaterThan(lxmcDecodeIsolateThreshold));
+
+      await expectLater(
+        decodeLxmcBytesOffThread(bytes),
+        throwsA(isA<LxmcDecodeException>()
+            .having((e) => e.reason, 'reason', 'invalid_json')),
+      );
+    });
+
+    test('大文件根节点错误 → not_play_list', () async {
+      final bytes = lxmc({
+        'type': 'playList_v2',
+        'data': {'name': 'x', 'list': largeTracks()},
+      });
+      expect(bytes.length, greaterThan(lxmcDecodeIsolateThreshold));
+
+      await expectLater(
+        decodeLxmcBytesOffThread(bytes),
+        throwsA(isA<LxmcDecodeException>()
+            .having((e) => e.reason, 'reason', 'not_play_list')),
+      );
     });
   });
 
