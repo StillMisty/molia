@@ -337,7 +337,7 @@ void main() {
     await tester.tap(
       optionOf(
         const Key('settingsBaseColorItem'),
-        'System wallpaper (follows system colors)',
+        'System wallpaper',
       ),
     );
     await tester.pumpAndSettle();
@@ -371,7 +371,7 @@ void main() {
     await tester.tap(
       optionOf(
         const Key('settingsBaseColorItem'),
-        'System wallpaper (follows system colors)',
+        'System wallpaper',
       ),
     );
     await tester.pumpAndSettle();
@@ -391,7 +391,7 @@ void main() {
     await tester.tap(
       optionOf(
         const Key('settingsBaseColorItem'),
-        'System wallpaper (follows system colors)',
+        'System wallpaper',
       ),
     );
     await tester.pumpAndSettle();
@@ -641,7 +641,7 @@ void main() {
     expect(prefs.getString(kLxDefaultQuality.name), '192k');
   });
 
-  testWidgets('加入位置：播放区分段行展示默认顶部，切换后持久化', (tester) async {
+  testWidgets('加入位置：分段行默认选中顶部，切换后持久化', (tester) async {
     final prefs = await SharedPreferences.getInstance();
     final libraryAddSettings = LibraryAddSettings(
       settings: testSettingsRegistry(preferences: prefs),

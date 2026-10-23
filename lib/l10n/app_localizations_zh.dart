@@ -104,7 +104,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get settingsBaseColor => '基础配色';
 
   @override
-  String get settingsBaseColorWallpaper => '系统壁纸（跟随系统取色）';
+  String get settingsBaseColorWallpaper => '系统壁纸';
 
   @override
   String get settingsBaseColorCustom => '自定义颜色';
@@ -200,13 +200,13 @@ class AppLocalizationsZh extends AppLocalizations {
   String get settingsRestoreSessionTitle => '启动时恢复上次播放';
 
   @override
-  String get settingsRestoreSessionSubtitle => '启动时恢复上次的曲目、队列与进度（默认开启）';
+  String get settingsRestoreSessionSubtitle => '恢复上次的曲目、队列与进度';
 
   @override
   String get settingsLibraryAddPosition => '加入收藏与列表的位置';
 
   @override
-  String get settingsLibraryAddPositionSubtitle => '收藏和自建列表的新歌放在顶部还是底部（默认顶部）';
+  String get settingsLibraryAddPositionSubtitle => '收藏和自建列表的新歌放在顶部还是底部';
 
   @override
   String get settingsLibraryAddPositionTop => '顶部';
@@ -218,7 +218,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get settingsAutoSourceSwap => '自动换源';
 
   @override
-  String get settingsAutoSourceSwapSubtitle => '播放失败时自动换到其它音源找同一首歌（默认开启）';
+  String get settingsAutoSourceSwapSubtitle => '播放失败时自动换到其它音源找同一首歌';
 
   @override
   String get settingsDataSaverTitle => '省流模式';
@@ -295,7 +295,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get settingsHapticsTitle => '震动反馈';
 
   @override
-  String get settingsHapticsSubtitle => '点按导航、播放等操作时给出轻震动（默认开启）';
+  String get settingsHapticsSubtitle => '点按导航、播放等操作时给出轻震动';
 
   @override
   String get settingsGeneralTitle => '通用设置';
@@ -2184,7 +2184,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get aiDjAutoFeedTitle => '队列快播完时自动补歌';
 
   @override
-  String get aiDjAutoFeedSubtitle => '剩余 5 首时自动补一批，不打断播放（默认开启）';
+  String get aiDjAutoFeedSubtitle => '剩余 5 首时自动补一批，不打断播放';
 
   @override
   String get aiDjAutoFeedFailed => '自动补歌失败，稍后会再试';
@@ -2247,7 +2247,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get aiDjPrefsOnlyUnheardTitle => '只推荐没听过的';
 
   @override
-  String get aiDjPrefsOnlyUnheardSubtitle => '排除听过的曲目（默认开启）';
+  String get aiDjPrefsOnlyUnheardSubtitle => '排除听过的曲目';
 
   @override
   String get aiDjPrefsExplorationTitle => '探索度';
@@ -4110,8 +4110,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get settingsRememberWindowBounds => '记住窗口位置与大小';
 
   @override
-  String get settingsRememberWindowBoundsSubtitle =>
-      '下次启动时恢复上次的位置、大小与最大化状态（默认开启）';
+  String get settingsRememberWindowBoundsSubtitle => '下次启动时恢复上次的位置、大小与最大化状态';
 
   @override
   String get settingsTrayLinuxHint =>

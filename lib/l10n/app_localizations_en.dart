@@ -105,8 +105,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get settingsBaseColor => 'Base colors';
 
   @override
-  String get settingsBaseColorWallpaper =>
-      'System wallpaper (follows system colors)';
+  String get settingsBaseColorWallpaper => 'System wallpaper';
 
   @override
   String get settingsBaseColorCustom => 'Custom color';
@@ -206,14 +205,14 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get settingsRestoreSessionSubtitle =>
-      'Restore track, queue and position on launch (on by default)';
+      'Remembers track, queue and position';
 
   @override
   String get settingsLibraryAddPosition => 'Position of added songs';
 
   @override
   String get settingsLibraryAddPositionSubtitle =>
-      'Top or bottom of favorites and playlists (top by default)';
+      'Top or bottom of favorites and playlists';
 
   @override
   String get settingsLibraryAddPositionTop => 'Top';
@@ -226,7 +225,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get settingsAutoSourceSwapSubtitle =>
-      'On playback failure, look for the same song in another source (on by default)';
+      'On playback failure, look for the same song in another source';
 
   @override
   String get settingsDataSaverTitle => 'Data saver';
@@ -309,7 +308,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get settingsHapticsSubtitle =>
-      'Light vibration on taps such as navigation and playback (on by default)';
+      'Light vibration on taps such as navigation and playback';
 
   @override
   String get settingsGeneralTitle => 'General settings';
@@ -2272,7 +2271,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get aiDjAutoFeedSubtitle =>
-      'Adds a batch automatically with 5 tracks left, without interrupting playback (on by default)';
+      'Adds a batch automatically with 5 tracks left, without interrupting playback';
 
   @override
   String get aiDjAutoFeedFailed => 'Auto-fill failed; it will retry later';
@@ -2337,7 +2336,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get aiDjPrefsOnlyUnheardSubtitle =>
-      'Skip tracks you have already played (on by default)';
+      'Skip tracks you have already played';
 
   @override
   String get aiDjPrefsExplorationTitle => 'Exploration';
@@ -4294,7 +4293,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get settingsRememberWindowBoundsSubtitle =>
-      'Reopen at the last position, size and maximized state (on by default)';
+      'Reopen at the last position, size and maximized state';
 
   @override
   String get settingsTrayLinuxHint =>

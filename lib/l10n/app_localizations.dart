@@ -275,7 +275,7 @@ abstract class AppLocalizations {
   /// No description provided for @settingsBaseColorWallpaper.
   ///
   /// In en, this message translates to:
-  /// **'System wallpaper (follows system colors)'**
+  /// **'System wallpaper'**
   String get settingsBaseColorWallpaper;
 
   /// No description provided for @settingsBaseColorCustom.
@@ -467,7 +467,7 @@ abstract class AppLocalizations {
   /// No description provided for @settingsRestoreSessionSubtitle.
   ///
   /// In en, this message translates to:
-  /// **'Restore track, queue and position on launch (on by default)'**
+  /// **'Remembers track, queue and position'**
   String get settingsRestoreSessionSubtitle;
 
   /// No description provided for @settingsLibraryAddPosition.
@@ -479,7 +479,7 @@ abstract class AppLocalizations {
   /// No description provided for @settingsLibraryAddPositionSubtitle.
   ///
   /// In en, this message translates to:
-  /// **'Top or bottom of favorites and playlists (top by default)'**
+  /// **'Top or bottom of favorites and playlists'**
   String get settingsLibraryAddPositionSubtitle;
 
   /// No description provided for @settingsLibraryAddPositionTop.
@@ -503,7 +503,7 @@ abstract class AppLocalizations {
   /// No description provided for @settingsAutoSourceSwapSubtitle.
   ///
   /// In en, this message translates to:
-  /// **'On playback failure, look for the same song in another source (on by default)'**
+  /// **'On playback failure, look for the same song in another source'**
   String get settingsAutoSourceSwapSubtitle;
 
   /// No description provided for @settingsDataSaverTitle.
@@ -653,7 +653,7 @@ abstract class AppLocalizations {
   /// No description provided for @settingsHapticsSubtitle.
   ///
   /// In en, this message translates to:
-  /// **'Light vibration on taps such as navigation and playback (on by default)'**
+  /// **'Light vibration on taps such as navigation and playback'**
   String get settingsHapticsSubtitle;
 
   /// No description provided for @settingsGeneralTitle.
@@ -4175,7 +4175,7 @@ abstract class AppLocalizations {
   /// No description provided for @aiDjAutoFeedSubtitle.
   ///
   /// In en, this message translates to:
-  /// **'Adds a batch automatically with 5 tracks left, without interrupting playback (on by default)'**
+  /// **'Adds a batch automatically with 5 tracks left, without interrupting playback'**
   String get aiDjAutoFeedSubtitle;
 
   /// No description provided for @aiDjAutoFeedFailed.
@@ -4289,7 +4289,7 @@ abstract class AppLocalizations {
   /// No description provided for @aiDjPrefsOnlyUnheardSubtitle.
   ///
   /// In en, this message translates to:
-  /// **'Skip tracks you have already played (on by default)'**
+  /// **'Skip tracks you have already played'**
   String get aiDjPrefsOnlyUnheardSubtitle;
 
   /// No description provided for @aiDjPrefsExplorationTitle.
@@ -7657,7 +7657,7 @@ abstract class AppLocalizations {
   /// No description provided for @settingsRememberWindowBoundsSubtitle.
   ///
   /// In en, this message translates to:
-  /// **'Reopen at the last position, size and maximized state (on by default)'**
+  /// **'Reopen at the last position, size and maximized state'**
   String get settingsRememberWindowBoundsSubtitle;
 
   /// No description provided for @settingsTrayLinuxHint.
